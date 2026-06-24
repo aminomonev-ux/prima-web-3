@@ -76,6 +76,22 @@ export const AdminUsersPatchBodySchema = z.discriminatedUnion('action', [
 
 export type AdminUsersPatchBody = z.infer<typeof AdminUsersPatchBodySchema>;
 
+/**
+ * INTRANET EDITION (D9 · docs/INTRANET-DELTA.md): body create-user via admin/users POST.
+ * Registrasi publik dimatikan → Super Admin satu-satunya jalur pembuatan akun.
+ * Role reuse AssignableRoleEnum (tanpa SUPER_ADMIN). Kuota di-enforce di handler.
+ */
+export const AdminUserCreateBodySchema = z.object({
+  username:     z.string().min(3, 'Username minimal 3 karakter').max(50)
+                 .regex(/^[a-zA-Z0-9_\-\.]+$/, 'Username hanya huruf, angka, _ - .'),
+  email:        z.string().email('Format email tidak valid'),
+  password:     StrongPasswordSchema,
+  role:         AssignableRoleEnum,
+  nama_lengkap: z.string().max(100).optional(),
+});
+
+export type AdminUserCreateBody = z.infer<typeof AdminUserCreateBodySchema>;
+
 // ─── Config schema ──────────────────────────────────────────────────────────
 
 /**

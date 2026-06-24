@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql, sqlInt, safeInt, escapeLike } from '@/lib/data/db';
 import { getSession, hashPassword } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { AdminUsersPatchBodySchema } from '@/lib/data/admin-schemas';
+import { AdminUsersPatchBodySchema, AdminUserCreateBodySchema } from '@/lib/data/admin-schemas';
 import { assertQuotaAvailable } from '@/lib/security/promotion';
 
 export async function GET(req: NextRequest) {
@@ -46,6 +46,50 @@ export async function GET(req: NextRequest) {
 
   } catch (error) {
     console.error('[Admin Users GET Error]', error);
+    return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 });
+  }
+}
+
+// INTRANET EDITION (D9 · docs/INTRANET-DELTA.md): pembuatan akun oleh SUPER_ADMIN.
+// Registrasi publik dimatikan → ini satu-satunya jalur create. Akun langsung AKTIF
+// + email_verified (tanpa alur email). Kuota role di-enforce (V4D-1/L55 reuse).
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN yang dapat membuat akun.' }, { status: 403 });
+    }
+
+    const raw    = await req.json().catch(() => null);
+    const parsed = AdminUserCreateBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? 'Body tidak valid.' }, { status: 400 });
+    }
+    const { username, email, password, role, nama_lengkap } = parsed.data;
+
+    const dupUser  = await sql`SELECT id FROM users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
+    const dupEmail = await sql`SELECT id FROM users WHERE LOWER(email) = LOWER(${email}) LIMIT 1`;
+    if (dupUser.length || dupEmail.length) {
+      return NextResponse.json({ ok: false, message: 'Username atau email sudah terdaftar.' }, { status: 409 });
+    }
+
+    try {
+      await assertQuotaAvailable(role);
+    } catch {
+      return NextResponse.json({ ok: false, message: `Kuota role ${role} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
+    }
+
+    const hash = await hashPassword(password);
+    await sql`
+      INSERT INTO users (username, email, password_hash, role, status, email_verified, nama_lengkap)
+      VALUES (${username}, ${email.toLowerCase()}, ${hash}, ${role}, 'AKTIF', TRUE, ${nama_lengkap ?? null})
+    `;
+    await writeAuditLog({ req, eventType: 'USER_CREATE', userId: session.userId, username: session.username, detail: `Buat akun ${username} role=${role}` });
+
+    return NextResponse.json({ ok: true, message: `Akun ${username} dibuat & langsung aktif.` });
+
+  } catch (error) {
+    console.error('[Admin Users POST Error]', error);
     return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 });
   }
 }

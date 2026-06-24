@@ -23,14 +23,14 @@ LAN kantor, tanpa IP publik, lingkungan tepercaya. Outbound internet TERSEDIA (v
 |---|---|---|---|---|
 | D1 | Email | `sendEmail` → no-op aman (log `SKIPPED_NO_PROVIDER`) saat provider `None` | `lib/services/email.ts` | ✅ DONE |
 | D2 | Turnstile | Guard fatal prod dibuang; `verifyTurnstile` selalu pass | `lib/security/recaptcha.ts` | ✅ DONE |
-| D3 | Login UI | Lepas widget Turnstile + tombol Daftar/Lupa Password | `app/(auth)/login/page.tsx` | ⬜ TODO |
-| D4 | Promotion UI | Lepas widget Turnstile | `components/promotion/PromotionRequestModal.tsx` | ⬜ TODO |
-| D5 | Registrasi | Endpoint register di-retire (registrasi publik mati) | `app/api/auth/register` | ⬜ TODO |
-| D6 | Verifikasi email | Endpoint verify-email & resend-verification di-retire | `app/api/auth/verify-email`, `resend-verification` | ⬜ TODO |
-| D7 | Reset password | Endpoint forgot-password di-retire (reset via admin) | `app/api/auth/forgot-password` | ⬜ TODO |
-| D8 | Halaman auth | register/verify-email/reset-password dihapus/redirect ke `/login` | `app/(auth)/*` | ⬜ TODO |
-| D9 | Kuota role | Enforce kuota (`FOR UPDATE`) dipindah dari verify-email ke create-user admin | `app/api/admin/users` | ⬜ TODO |
-| D10 | Admin Panel | "Tambah User" + "Reset Password" jadi jalur utama | `app/(dashboard)/admin/admin-client.tsx` | ⬜ TODO |
+| D3 | Login UI | Rewrite login-only: lepas Turnstile + view signup/forgot/resend; tombol "Hubungi Super Admin" | `app/(auth)/login/page.tsx` | ✅ DONE |
+| D4 | Promotion UI | Lepas widget Turnstile; `turnstileToken` placeholder konstan (schema utuh, D2 no-op) | `components/promotion/PromotionRequestModal.tsx` | ✅ DONE |
+| D5 | Registrasi | Endpoint register → 410 Gone (registrasi publik mati) | `app/api/auth/register/route.ts` | ✅ DONE |
+| D6 | Verifikasi email | verify-email & resend-verification → 410 Gone | `app/api/auth/verify-email`, `resend-verification` | ✅ DONE |
+| D7 | Reset password | forgot-password & reset-password (consumer) → 410 Gone | `app/api/auth/forgot-password`, `reset-password` | ✅ DONE |
+| D8 | Halaman auth | reset-password & verify-email page → server redirect ke `/login` | `app/(auth)/reset-password`, `app/verify-email` | ✅ DONE |
+| D9 | Create-user admin | Endpoint POST `admin/users` (SUPER_ADMIN): buat akun AKTIF+verified, enforce kuota via `assertQuotaAvailable` + Zod `AdminUserCreateBodySchema` | `app/api/admin/users/route.ts`, `lib/data/admin-schemas.ts` | ✅ DONE |
+| D10 | Admin Panel UI | Form "Tambah User" (POST create) di panel User Management; Reset Password sudah ada | `app/(dashboard)/admin/admin-client.tsx` | ⬜ TODO |
 | D11 | Env | `.env.example` versi LAN (hapus GMAIL/TURNSTILE/UPSTASH; tambah REDIS_URL) | `.env.example` | ✅ DONE |
 | D12 | Rate-limit | Pakai Redis lokal (`REDIS_URL`), bukan Upstash — nol perubahan kode | `lib/security/ratelimit.ts` | ✅ by-config |
 

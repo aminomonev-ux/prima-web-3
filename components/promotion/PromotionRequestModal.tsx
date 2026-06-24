@@ -2,13 +2,15 @@
 
 // Modal "Permohonan Upgrade Role" — dipakai dari menu user badge dropdown.
 // Konsep: docs/session/ROLE_PROMOTION_CONCEPT.md §9B.
+// INTRANET EDITION (D4 · docs/INTRANET-DELTA.md): Turnstile dilepas. Field
+// turnstileToken tetap dikirim sebagai placeholder konstan agar kontrak schema
+// utuh — server verifyTurnstile sudah no-op pass (D2). Lapisan L1 (re-auth
+// password), L2 (secret code), L4 (rate-lock) tetap aktif.
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { X, ChevronDown, ShieldCheck } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { ROLE_LABELS } from '@/lib/constants';
-
-// NB: Window.turnstile global type declared di app/(auth)/login/page.tsx — reuse.
 
 interface Props {
   currentRole: string;
@@ -17,8 +19,6 @@ interface Props {
   onSuccess: () => void;
 }
 
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? '';
-
 export function PromotionRequestModal({ currentRole, eligibleTargets, onClose, onSuccess }: Props) {
   const [toRole, setToRole]       = useState(eligibleTargets[0] ?? '');
   const [password, setPassword]   = useState('');
@@ -26,54 +26,6 @@ export function PromotionRequestModal({ currentRole, eligibleTargets, onClose, o
   const [reason, setReason]       = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg]   = useState('');
-
-  const tsContainerRef = useRef<HTMLDivElement>(null);
-  const tsWidgetRef    = useRef<string>('');
-  const tsTokenRef     = useRef<string>('');
-
-  // Turnstile render + cleanup (pattern sama dengan login/page.tsx).
-  useEffect(() => {
-    if (!TURNSTILE_SITE_KEY) return;
-    function renderWidget() {
-      if (!tsContainerRef.current || !window.turnstile) return;
-      if (tsWidgetRef.current) {
-        try { window.turnstile.remove(tsWidgetRef.current); } catch {}
-      }
-      tsTokenRef.current = '';
-      tsWidgetRef.current = window.turnstile.render(tsContainerRef.current, {
-        sitekey:            TURNSTILE_SITE_KEY,
-        appearance:         'always',
-        size:               'compact',
-        callback:           (token: string) => { tsTokenRef.current = token; },
-        'expired-callback': () => { tsTokenRef.current = ''; },
-        'error-callback':   () => { tsTokenRef.current = ''; },
-      });
-    }
-    if (!document.getElementById('ts-script')) {
-      const s = document.createElement('script');
-      s.id = 'ts-script';
-      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-      s.async = true;
-      s.onload = renderWidget;
-      document.head.appendChild(s);
-    } else if (window.turnstile) {
-      renderWidget();
-    }
-    return () => {
-      if (tsWidgetRef.current && window.turnstile) {
-        try { window.turnstile.remove(tsWidgetRef.current); } catch {}
-        tsWidgetRef.current = '';
-      }
-    };
-  }, []);
-
-  async function waitForTsToken(maxMs = 4000): Promise<string> {
-    const t0 = Date.now();
-    while (!tsTokenRef.current && Date.now() - t0 < maxMs) {
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return tsTokenRef.current;
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,25 +40,15 @@ export function PromotionRequestModal({ currentRole, eligibleTargets, onClose, o
     }
     setSubmitting(true);
     try {
-      const turnstileToken = await waitForTsToken();
-      if (!turnstileToken) {
-        setErrorMsg('Captcha belum siap. Tunggu beberapa detik lalu coba lagi.');
-        setSubmitting(false);
-        return;
-      }
       const res = await fetch('/api/auth/promotion/submit', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ toRole, password, secret, reason: reason.trim(), turnstileToken }),
+        body:    JSON.stringify({ toRole, password, secret, reason: reason.trim(), turnstileToken: 'intranet' }),
       });
       let json: { ok: boolean; message?: string; data?: { reqId: number; bootstrap: boolean } };
       try { json = await res.json(); } catch { json = { ok: false, message: `HTTP ${res.status}` }; }
       if (!res.ok || !json.ok) {
         setErrorMsg(json.message ?? 'Gagal submit permohonan.');
-        if (tsWidgetRef.current && window.turnstile) {
-          window.turnstile.reset(tsWidgetRef.current);
-          tsTokenRef.current = '';
-        }
         return;
       }
       onSuccess();
@@ -200,8 +142,6 @@ export function PromotionRequestModal({ currentRole, eligibleTargets, onClose, o
               {reason.trim().length} / 1000 karakter
             </div>
           </div>
-
-          {TURNSTILE_SITE_KEY && <div ref={tsContainerRef} style={{ minHeight: 65 }} />}
 
           {errorMsg && <div className="promo-error">{errorMsg}</div>}
 
