@@ -3,7 +3,7 @@
 > Repo ini adalah **fork intranet** dari `prima-web` (remote `upstream`). Dokumen ini mencatat SEMUA delta yang sengaja diterapkan, supaya saat sync bug-fix dari `upstream` (`git fetch upstream` + cherry-pick) jelas bagian mana yang harus dipertahankan dan tidak ketimpa.
 >
 > Blueprint lengkap: `docs/session/intranet/CONCEPT-prima-web-3.md`
-> Status keseluruhan: **SCAFFOLD selesai · patch kode BELUM diterapkan** (lihat checklist).
+> Status keseluruhan: **SELESAI — D1–D12 diterapkan & CI hijau** (tsc/ESLint/Semgrep/npm-audit/gitleaks).
 
 ## Remote
 ```
