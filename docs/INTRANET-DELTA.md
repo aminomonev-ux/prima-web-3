@@ -7,10 +7,9 @@
 
 ## Remote
 ```
-origin   → https://github.com/aminomonev-ux/prima-web-3.git   (repo intranet ini, PRIVATE)
-upstream → https://github.com/aminomonev-ux/prima-web.git     (asal, untuk tarik bug-fix)
+origin → https://github.com/aminomonev-ux/prima-web-3.git   (repo PUBLIC ini · branch default: main)
 ```
-Sync bug-fix: `git fetch upstream` → cherry-pick commit yang relevan → resolusi konflik dengan mempertahankan delta di bawah.
+Hanya ada `origin`. Remote ke repo privat sengaja **tidak disimpan** (cegah pull/merge tak sengaja membocorkan dokumen internal). Sync bug-fix dari privat dilakukan **manual & selektif** (cherry-pick file kode saja, jangan merge/pull penuh) dengan mempertahankan delta di bawah.
 
 ## Premis
 LAN kantor, tanpa IP publik, lingkungan tepercaya. Outbound internet TERSEDIA (via NAT) — mematikan email & Turnstile adalah **pilihan desain** (intranet mandiri), bukan keterpaksaan teknis.

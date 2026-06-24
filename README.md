@@ -137,14 +137,14 @@ Menemukan kerentanan? Lihat [`SECURITY.md`](SECURITY.md).
 
 Repo ini adalah **mirror publik tersensor**. Alur kerja menjaga agar dokumen internal & rahasia tidak pernah bocor ke publik:
 
-- **Update kode** → edit di folder repo ini, lalu commit & push biasa:
+- **Update kode** → edit di folder repo ini, lalu commit & push biasa (branch default: `main`):
   ```bash
   git add -A
   git commit -m "pesan perubahan"
-  git push origin mysql
+  git push origin main
   ```
-- **JANGAN tarik/merge dari remote `upstream`** (`git pull upstream` / `git merge upstream/...`). Remote privat berisi dokumen audit/keamanan/deployment yang **tidak boleh** masuk ke repo publik — menariknya akan membocorkannya beserta history.
-- Perbaikan dari repo privat dibawa ke sini **secara selektif (cherry-pick file kode saja)**, bukan merge penuh.
+- Repo ini **tidak menyimpan remote ke repo privat** — tidak ada jalur otomatis maupun manual yang gampang membocorkan dokumen internal. Hanya ada satu remote: `origin` (repo publik ini).
+- Perbaikan dari repo privat dibawa ke sini **secara selektif (cherry-pick file kode saja)**, bukan merge/pull penuh — supaya dokumen audit/keamanan/deployment tidak pernah ikut.
 
 ---
 
