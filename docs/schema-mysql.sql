@@ -64,7 +64,7 @@ VALUES (
 -- ─── APP CONFIG ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS app_config (
   `key`      VARCHAR(100)  NOT NULL PRIMARY KEY,
-  value      TEXT          NOT NULL DEFAULT '',
+  value      TEXT          NOT NULL DEFAULT (''),
   updated_at DATETIME      DEFAULT NOW() ON UPDATE NOW()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -128,10 +128,10 @@ CREATE TABLE IF NOT EXISTS usulan_items (
   prioritas         VARCHAR(10)     NOT NULL DEFAULT 'SEDANG',
   status            VARCHAR(30)     NOT NULL DEFAULT 'DRAFT',
   file_url          TEXT            DEFAULT NULL,
-  alasan            TEXT            DEFAULT '',
-  url_merk1         TEXT            DEFAULT '',
-  url_merk2         TEXT            DEFAULT '',
-  url_merk3         TEXT            DEFAULT '',
+  alasan            TEXT            DEFAULT (''),
+  url_merk1         TEXT            DEFAULT (''),
+  url_merk2         TEXT            DEFAULT (''),
+  url_merk3         TEXT            DEFAULT (''),
   -- Review Bidang
   bidang_by         VARCHAR(100)    DEFAULT NULL,
   bidang_tgl        DATE            DEFAULT NULL,
