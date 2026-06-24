@@ -752,6 +752,11 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
   const [quotaStats,   setQS]      = useState<Record<string,{count:number;quota:number;full:boolean}>>({});
   // Tick per 30 detik untuk auto-hide tombol UNLOCK/REVOKE saat lock/probation lewat (React 19 purity).
   const [now,          setNow]     = useState(() => Date.now());
+  // INTRANET (D10): form Tambah User — registrasi publik mati, SA buat akun di sini.
+  const [createOpen,   setCO]      = useState(false);
+  const [cuU, setCuU] = useState(''); const [cuN, setCuN] = useState('');
+  const [cuE, setCuE] = useState(''); const [cuP, setCuP] = useState('');
+  const [cuR, setCuR] = useState(''); const [cuErr, setCuErr] = useState(''); const [cuLd, setCuLd] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -815,6 +820,20 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
     } finally { setDelLoad(false); }
   }
 
+  async function doCreate() {
+    setCuErr('');
+    if (cuU.trim().length < 3) { setCuErr('Username minimal 3 karakter'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cuE.trim())) { setCuErr('Format email tidak valid'); return; }
+    if (cuP.length < 8) { setCuErr('Password minimal 8 karakter'); return; }
+    if (!cuR) { setCuErr('Pilih role'); return; }
+    setCuLd(true);
+    try {
+      const j = await fetchJson('/api/admin/users',{method:'POST',body:JSON.stringify({username:cuU.trim(),email:cuE.trim(),password:cuP,role:cuR,nama_lengkap:cuN.trim()||undefined})});
+      if (j.ok) { setOk(j.message ?? 'Akun dibuat.'); setCO(false); setCuU('');setCuN('');setCuE('');setCuP('');setCuR(''); load(1); }
+      else setCuErr(j.message);
+    } finally { setCuLd(false); }
+  }
+
   async function doResetPw() {
     if (!pwModal||!newPw) return;
     setPwErr('');
@@ -869,6 +888,7 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
           <option value="MENUNGGU">MENUNGGU</option>
         </select>
         <button className="ap-btn ap-btn-cyan" onClick={()=>load(1)} disabled={loading}><RefreshCw size={12}/> CARI</button>
+        {isSA && <button className="ap-btn ap-btn-green" onClick={()=>{setCO(true);setCuErr('');}} style={{marginLeft:'auto'}}>+ TAMBAH USER</button>}
       </div>
 
       <div className="ap-table-wrap">
@@ -999,6 +1019,37 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
       )}
 
       {/* Modal: Ubah Role */}
+      {/* Modal: Tambah User (INTRANET D10) */}
+      {createOpen && (
+        <div className="modal-bg" onClick={e=>{if(e.target===e.currentTarget)setCO(false);}}>
+          <div className="modal-box">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div className="modal-title">TAMBAH USER</div>
+              <button style={{background:'none',border:'none',color:'#5a8ea8',cursor:'pointer'}} onClick={()=>setCO(false)}><X size={18}/></button>
+            </div>
+            {cuErr && <div className="msg-err" style={{marginBottom:10}}>{cuErr}</div>}
+            <input className="ap-input" placeholder="Username (min 3 — huruf/angka/_-.)" value={cuU} onChange={e=>setCuU(e.target.value)} style={{marginBottom:10,width:'100%'}}/>
+            <input className="ap-input" placeholder="Nama lengkap (opsional)" value={cuN} onChange={e=>setCuN(e.target.value)} style={{marginBottom:10,width:'100%'}}/>
+            <input className="ap-input" type="email" placeholder="Email" value={cuE} onChange={e=>setCuE(e.target.value)} style={{marginBottom:10,width:'100%'}}/>
+            <input className="ap-input" type="password" placeholder="Password (min 8, A-Z, a-z, 0-9)" value={cuP} onChange={e=>setCuP(e.target.value)} style={{marginBottom:10,width:'100%'}}/>
+            <select className="ap-select" value={cuR} onChange={e=>setCuR(e.target.value)} style={{width:'100%',marginBottom:12}}>
+              <option value="">-- Pilih Role --</option>
+              {ALL_ROLES.filter(r=>r!=='SUPER_ADMIN').map(r=>{
+                const q = quotaStats[r];
+                const suffix = q && q.quota > 0 ? ` (${q.count}/${q.quota})` : '';
+                const disabled = q?.full === true;
+                return <option key={r} value={r} disabled={disabled}>{r}{suffix}{disabled?' — penuh':''}</option>;
+              })}
+            </select>
+            <div style={{fontSize:10,color:'#5a8ea8',marginBottom:14}}>Akun dibuat langsung AKTIF (edisi intranet — tanpa verifikasi email).</div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button className="ap-btn ap-btn-cyan" onClick={()=>setCO(false)} disabled={cuLd}>Batal</button>
+              <button className="ap-btn ap-btn-green" onClick={doCreate} disabled={cuLd}>{cuLd?'Menyimpan...':'Buat Akun'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {roleModal && (
         <div className="modal-bg" onClick={e=>{if(e.target===e.currentTarget)setRM(null);}}>
           <div className="modal-box">

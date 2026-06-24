@@ -30,7 +30,7 @@ LAN kantor, tanpa IP publik, lingkungan tepercaya. Outbound internet TERSEDIA (v
 | D7 | Reset password | forgot-password & reset-password (consumer) → 410 Gone | `app/api/auth/forgot-password`, `reset-password` | ✅ DONE |
 | D8 | Halaman auth | reset-password & verify-email page → server redirect ke `/login` | `app/(auth)/reset-password`, `app/verify-email` | ✅ DONE |
 | D9 | Create-user admin | Endpoint POST `admin/users` (SUPER_ADMIN): buat akun AKTIF+verified, enforce kuota via `assertQuotaAvailable` + Zod `AdminUserCreateBodySchema` | `app/api/admin/users/route.ts`, `lib/data/admin-schemas.ts` | ✅ DONE |
-| D10 | Admin Panel UI | Form "Tambah User" (POST create) di panel User Management; Reset Password sudah ada | `app/(dashboard)/admin/admin-client.tsx` | ⬜ TODO |
+| D10 | Admin Panel UI | Form modal "Tambah User" (POST create, role+kuota inline) di panel User Management; Reset Password sudah ada | `app/(dashboard)/admin/admin-client.tsx` | ✅ DONE |
 | D11 | Env | `.env.example` versi LAN (hapus GMAIL/TURNSTILE/UPSTASH; tambah REDIS_URL) | `.env.example` | ✅ DONE |
 | D12 | Rate-limit | Pakai Redis lokal (`REDIS_URL`), bukan Upstash — nol perubahan kode | `lib/security/ratelimit.ts` | ✅ by-config |
 
