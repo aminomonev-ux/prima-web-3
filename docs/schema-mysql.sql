@@ -54,7 +54,7 @@ INSERT IGNORE INTO users (username, email, password_hash, nama_lengkap, role, st
 VALUES (
   'superadmin',
   'admin@example.com',
-  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMqJqhCangelrMZJQnVKaVWULm',
+  '$2b$12$JdkLIuK90kXrde1X3xTmGu05C.vJcOzJDRHuEcnYg6bLMltXjhUta',
   'Super Administrator',
   'SUPER_ADMIN',
   'AKTIF',
