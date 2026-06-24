@@ -1,0 +1,26 @@
+# PRIMA — gitleaks config (secret scanning)
+# Pakai ruleset default gitleaks + allowlist path yang bukan source code aktif.
+# Tujuan: tangkap JWT_SECRET / password DB / API key yang tak sengaja ter-commit.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist global PRIMA — folder generated / arsip / lockfile"
+paths = [
+  '''node_modules/''',
+  '''\.next/''',
+  '''graphify-out/''',
+  '''_archive/''',
+  '''package-lock\.json''',
+  # Dokumentasi = contoh perintah (curl -H "Authorization: Bearer YOUR_..._FROM_ENV"),
+  # bukan runtime secret. Kode & .env (gitignored) tetap dipindai.
+  '''docs/''',
+]
+# Placeholder/contoh & referensi env-var (bukan secret asli)
+regexes = [
+  '''(?i)(fallback|example|contoh|dummy|placeholder)''',
+  '''(?i)your[_-]?[a-z_]*''',          # YOUR_CRON_SECRET, your-token, dst
+  '''(?i)from_env''',                  # *_FROM_ENV
+  '''\$\{?[A-Za-z_][A-Za-z0-9_]*\}?''',# ${VAR} / $VAR env reference
+]

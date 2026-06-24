@@ -1,0 +1,2674 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Baseline global: popup native <select> Windows di-paint pakai palet color-scheme
+   UA (default light) -> select dark + teks terang tak terbaca di paint pertama.
+   Scoped ke select saja — JANGAN di html/root (scrollbar/date-picker/checkbox). */
+select { color-scheme: dark; }
+[data-theme="light"] select { color-scheme: light; }
+select option { background: #042C53; color: #E6F1FB; }
+[data-theme="light"] select option { background: #FFFFFF; color: #1E293B; }
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ PRIMA Brand: Biru RS ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+  --font-jakarta: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --background: oklch(0.99 0.002 247);
+  --foreground: oklch(0.13 0.02 264);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.02 264);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0.02 264);
+  --primary: oklch(0.488 0.243 264.376);   /* blue-700 */
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.96 0.01 247);
+  --secondary-foreground: oklch(0.2 0.03 264);
+  --muted: oklch(0.96 0.005 247);
+  --muted-foreground: oklch(0.51 0.02 264);
+  --accent: oklch(0.93 0.02 247);
+  --accent-foreground: oklch(0.2 0.03 264);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.9 0.008 247);
+  --input: oklch(0.9 0.008 247);
+  --ring: oklch(0.488 0.243 264.376);
+  /* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Charts (status warna) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+  --chart-1: oklch(0.488 0.243 264.376);   /* biru ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â diajukan */
+  --chart-2: oklch(0.72 0.219 149.579);    /* hijau ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â disetujui */
+  --chart-3: oklch(0.78 0.184 86.047);     /* kuning ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â proses */
+  --chart-4: oklch(0.577 0.245 27.325);    /* merah ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ditolak */
+  --chart-5: oklch(0.6 0.2 300);           /* ungu ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ditelaah */
+  --radius: 0.625rem;
+  /* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Sidebar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+  --sidebar: oklch(0.17 0.03 264);
+  --sidebar-foreground: oklch(0.92 0.01 264);
+  --sidebar-primary: oklch(0.546 0.245 262.881);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.25 0.04 264);
+  --sidebar-accent-foreground: oklch(0.92 0.01 264);
+  --sidebar-border: oklch(0.3 0.03 264);
+  --sidebar-ring: oklch(0.488 0.243 264.376);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+/* PRIMA ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â body bg dark navy by default (cegah putih muncul saat horizontal scroll
+   di tabel wide). Halaman public (login, reset-password) punya gradient wrapper
+   sendiri di div root, jadi body bg tidak terlihat di sana. */
+html, body { background-color: #020F1C; }
+
+/* Light theme override ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â WAJIB ada agar saat inline-script di <head> set
+   data-theme="light", body langsung berubah ke light sebelum React mount.
+   Cegah FOCT (Flash Of Wrong Theme) saat reload di light mode. */
+html[data-theme="light"], html[data-theme="light"] body { background-color: #ECEEF3; }
+html[data-theme="light"], html[data-theme="light"] body, html[data-theme="light"] * { scrollbar-color: #C7CCD4 #ECEEF3; scrollbar-width: thin; }
+/* Match scrollbar di html/body SELF + semua descendant (no space + with space) */
+html[data-theme="light"]::-webkit-scrollbar,
+html[data-theme="light"] ::-webkit-scrollbar { width: 10px; height: 10px; background: #ECEEF3; }
+html[data-theme="light"]::-webkit-scrollbar-track,
+html[data-theme="light"] ::-webkit-scrollbar-track { background: #ECEEF3; }
+html[data-theme="light"]::-webkit-scrollbar-thumb,
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #C7CCD4; border: 2px solid #ECEEF3; border-radius: 6px; }
+html[data-theme="light"]::-webkit-scrollbar-thumb:hover,
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #A0A6B0; }
+html[data-theme="light"]::-webkit-scrollbar-corner,
+html[data-theme="light"] ::-webkit-scrollbar-corner { background: #ECEEF3; }
+
+/* PRIMA ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â dark scrollbar theme (default browser scrollbar putih = nyala di tema navy) */
+/* Firefox */
+html { scrollbar-color: #0C447C #020F1C; scrollbar-width: thin; }
+/* Chrome / Edge / Safari (webkit) */
+::-webkit-scrollbar { width: 12px; height: 12px; background: #020F1C; }
+::-webkit-scrollbar-track { background: #020F1C; }
+::-webkit-scrollbar-thumb { background: #0C447C; border-radius: 6px; border: 2px solid #020F1C; }
+::-webkit-scrollbar-thumb:hover { background: #185FA5; }
+::-webkit-scrollbar-corner { background: #020F1C; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Info banner BLUD (kode-besar + penanggung-jawab) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â theme-aware text color.
+   Dark theme: putih (kontras tinggi di atas bg violet .28 opacity).
+   Light theme: hitam (kontras tinggi di atas bg violet .28 opacity di white canvas). */
+.blud-info-banner { color: #FFFFFF; }
+[data-theme="light"] .blud-info-banner { color: #0F0F12; }
+
+/* Sentinel Swap ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â checkbox row di DPA table (theme-aware).
+   Compact 14px native checkbox + accent-color theme primary.
+   Per docs/SESSION-NOTES-2026-05-22-sentinel-swap.md. */
+.dpa-row-checkbox {
+  width: 14px; height: 14px;
+  cursor: pointer;
+  accent-color: #FBBF24;
+  margin: 0;
+  flex-shrink: 0;
+}
+[data-theme="light"] .dpa-row-checkbox { accent-color: #5B21B6; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ PROJECT-WIDE ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Table column header MUST be center-aligned (no exception).
+   Per DESIGN-SYSTEM.md "Table Header Alignment Rule". Applies ke semua <table>
+   di seluruh app (DPA BLUD, E-Anggaran, Usulan, Admin, dll).
+   Body cells (<td>) TIDAK terpengaruh ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â tetap pakai alignment masing-masing
+   (right untuk numeric, left untuk text).
+   Specificity tinggi (html body) + !important agar override inline style
+   `<th style={{textAlign:'...'}}>` di komponen E-Anggaran (MasterTab dll). */
+html body table thead th,
+html body table tr th,
+html body th {
+  text-align: center !important;
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ BLUD DPA ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â warna baris hierarki (dark navy) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Palet hierarki dark ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â distinct hue per level + left accent border untuk depth.
+   Hierarchy: L1 amber (top) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ L2 emerald ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ L3 violet ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ L4 cyan ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ L5 orange ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ L6 rose.
+   Parent solid + saturated; child tinted dari hue parent. */
+
+/* L1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â GRANDMASTER (Total) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â amber solid */
+.row-grandmaster td {
+  background: #B45309 !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #FCD34D !important;
+}
+.row-grandmaster td input[type="text"],
+.row-grandmaster td input[type="number"] {
+  background: rgba(0,0,0,0.15) !important; color: #FFFFFF !important;
+  border-color: rgba(255,255,255,0.35) !important; font-weight: 600;
+}
+.row-grandmaster td input::placeholder { color: rgba(255,255,255,.65) !important; }
+
+/* L2 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â MASTER (Kelompok Belanja) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â emerald solid */
+.row-master      td {
+  background: rgba(16,185,129,.34) !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #34D399 !important;
+}
+.row-master      td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L2.1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â CHILD (baris leaf langsung) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â slate lebih terang */
+.row-child       td {
+  background: #334155 !important; color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #64748B !important;
+}
+.row-child       td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L3 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â LEADER (Ketua Grup) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â violet lighter */
+.row-leader      td {
+  background: rgba(139,92,246,.34) !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #A78BFA !important;
+}
+.row-leader      td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L3.1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â MEMBER (anggota grup) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â fuchsia lighter tint */
+.row-member      td {
+  background: rgba(217,70,239,.22) !important; color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 rgba(232,121,249,.70) !important;
+}
+.row-member      td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L4 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â PLETON-LEADER (sub-ketua) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â cyan lighter */
+.row-pleton-leader  td {
+  background: rgba(6,182,212,.28) !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #22D3EE !important;
+}
+.row-pleton-leader  td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L4.1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â PLETON-MEMBER (anggota sub-ketua) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â sky lighter tint */
+/* L4.1 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â PLETON-MEMBER (anggota sub-ketua) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â TEAL (beda dari L4 cyan, lebih cerah/saturasi) */
+.row-pleton-member  td {
+  background: rgba(20,184,166,.32) !important; color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 rgba(94,234,212,.75) !important;
+}
+.row-pleton-member  td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L5 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â KETUA-KELOMPOK-A ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â orange lighter */
+.row-ketua-a     td {
+  background: rgba(249,115,22,.28) !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #FB923C !important;
+}
+.row-ketua-a     td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L5.1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ANGGOTA-KELOMPOK-A ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â orange lighter tint */
+.row-anggota-a   td {
+  background: rgba(249,115,22,.18) !important; color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 rgba(251,146,60,.60) !important;
+}
+.row-anggota-a   td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L6 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â KETUA-KELOMPOK-B ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â rose lighter */
+.row-ketua-b     td {
+  background: rgba(244,63,94,.28) !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #FB7185 !important;
+}
+.row-ketua-b     td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L6.1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ANGGOTA-KELOMPOK-B ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â rose lighter tint */
+/* L6.1 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ANGGOTA-KELOMPOK-B ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â LIME (warm yellow-green, distinct dari L5.1 orange & L6 rose) */
+.row-anggota-b   td {
+  background: rgba(132,204,22,.24) !important; color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 rgba(163,230,53,.65) !important;
+}
+.row-anggota-b   td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L7 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â L7-HEAD ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â indigo (beda dari L2 emerald & L4 cyan) */
+.row-l7-head     td {
+  background: rgba(99,102,241,.30) !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #818CF8 !important;
+}
+.row-l7-head     td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L7.1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â L7-SUB ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â indigo lighter tint */
+.row-l7-sub      td {
+  background: rgba(99,102,241,.18) !important; color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 rgba(129,140,248,.60) !important;
+}
+.row-l7-sub      td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L8 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â L8-HEAD ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â slate lighter */
+.row-l8-head     td {
+  background: rgba(100,116,139,.30) !important;
+  color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 #94A3B8 !important;
+}
+.row-l8-head     td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* L8.1 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â L8-SUB (leaf maksimum) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â slate lighter tint */
+/* L8.1 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â L8-SUB (leaf maksimum) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â STONE (warm gray, distinct dari L2.1 slate cool & L8 slate) */
+.row-l8-sub      td {
+  background: rgba(120,113,108,.30) !important; color: #FFFFFF !important; font-weight: 700;
+  box-shadow: inset 4px 0 0 rgba(168,162,158,.65) !important;
+}
+.row-l8-sub      td input { color: #FFFFFF !important; font-weight: 700; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Sentinel PJ ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â banner konflik di atas tabel DPA + per-row icon ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â .
+   Banner: warna danger translucent, sticky di top wrapper. */
+.pj-sentinel-banner {
+  /* DIPISAH dari scroll-wrapper (2026-05-22) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â tidak perlu sticky, ada di atas
+     scroll area sebagai standalone alert bar. Mencegah overlap dgn thead sticky. */
+  background: rgba(226,75,74,.16);
+  border: 1px solid rgba(226,75,74,.55);
+  border-radius: 8px;
+  color: #FFE3E2;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+}
+[data-theme="light"] .pj-sentinel-banner {
+  background: rgba(226,75,74,.10);
+  color: #8C1C1A;
+  border-bottom: 1px solid rgba(226,75,74,.45);
+}
+.pj-sentinel-banner button.pj-jump {
+  border: 1px solid rgba(226,75,74,.55);
+  background: rgba(226,75,74,.18);
+  color: inherit;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+}
+.pj-sentinel-banner button.pj-jump:hover {
+  background: rgba(226,75,74,.32);
+}
+.pj-sentinel-row-flash td {
+  animation: pjFlash 1.6s ease-out;
+}
+@keyframes pjFlash {
+  0%   { box-shadow: inset 0 0 0 2px #E24B4A; }
+  100% { box-shadow: inset 0 0 0 0 transparent; }
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ DPA/Pergeseran scroll wrapper ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â sticky thead + sticky L1 (TOTAL) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Wrapper bungkus <table> supaya tbody bisa scroll vertikal dengan thead +
+   baris L1 (GRANDMASTER = TOTAL BELANJA BLUD) tetap visible saat scroll jauh. */
+.blud-scroll-wrapper {
+  max-height: 65vh;
+  overflow-y: auto;
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #0C447C;
+  background: #042C53;
+}
+.blud-scroll-wrapper > table { margin: 0; width: 100%; }
+/* Thead sticky di top */
+.blud-scroll-wrapper thead th {
+  position: sticky; top: 0; z-index: 3;
+  background: #0C447C !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.08);
+}
+/* Baris L1 (GRANDMASTER) sticky tepat di bawah thead.
+   top: 36px = perkiraan tinggi thead (12px font + padding). Sesuaikan kalau perlu. */
+.blud-scroll-wrapper tbody .row-grandmaster td {
+  position: sticky; top: 36px; z-index: 2;
+}
+[data-theme="light"] .blud-scroll-wrapper {
+  border-color: rgba(139,92,246,.18); background: #F5F5F7;
+}
+[data-theme="light"] .blud-scroll-wrapper thead th {
+  /* Standardized soft pastel pattern ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â match E-Anggaran, Usulan, Master Akun.
+     Per DESIGN-SYSTEM.md "Table Header Light Theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Unified Pattern". */
+  background: linear-gradient(135deg, rgba(139,92,246,.49), rgba(236,72,153,.45)) !important;
+  color: #0F0F12 !important;
+  border-bottom: 1px solid rgba(139,92,246,.22) !important;
+}
+/* Row highlight animation ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â flash kuning saat di-jump via search */
+@keyframes blud-row-flash {
+  0%   { box-shadow: inset 0 0 0 3px #FBBF24, 0 0 24px rgba(251,191,36,.5); }
+  100% { box-shadow: inset 0 0 0 0 transparent, 0 0 0 transparent; }
+}
+.blud-scroll-wrapper tr.row-highlight td {
+  animation: blud-row-flash 2.5s ease-out;
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Legend filter ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â checkbox functional (DPA + Pergeseran) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Toggle-pill style (iOS-like) — knob circle colored per level + label kanan.
+   Tooltip via [data-tooltip] tetap jalan (CSS pseudo standar). */
+.blud-legend-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px 4px 5px;
+  border-radius: 20px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+  cursor: pointer; font-size: 11.5px; font-weight: 600; font-family: inherit;
+  color: #E6F1FB; transition: background .12s, border-color .12s, opacity .12s;
+  user-select: none;
+}
+.blud-legend-chip:hover {
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.20);
+}
+.blud-legend-chip .swatch {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid #FFFFFF;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.35);
+  transition: background .12s;
+}
+.blud-legend-chip.is-active {
+  background: rgba(255,255,255,.10);
+  color: #FFFFFF;
+}
+.blud-legend-chip.is-hidden { opacity: .45; }
+.blud-legend-chip.is-hidden .swatch {
+  background: #6B7280 !important;  /* override inline bg level color saat off */
+  border-color: rgba(255,255,255,.30);
+}
+/* Light mode */
+[data-theme="light"] .blud-legend-chip {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.08);
+  color: #1F2937;
+}
+[data-theme="light"] .blud-legend-chip:hover {
+  background: rgba(0,0,0,.07);
+  border-color: rgba(0,0,0,.14);
+}
+[data-theme="light"] .blud-legend-chip .swatch {
+  border-color: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18);
+}
+[data-theme="light"] .blud-legend-chip.is-active {
+  background: rgba(0,0,0,.06);
+  color: #111827;
+}
+[data-theme="light"] .blud-legend-chip.is-hidden .swatch {
+  background: #D1D5DB !important;
+  border-color: #FFFFFF;
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ CRUD grid scroll wrapper (Master Akun + Kode Besar) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+.ma-scroll-wrapper {
+  max-height: 60vh; overflow-y: auto; overflow-x: auto;
+  border: 1px solid #0C447C; border-radius: 10px;
+  background: #042C53;
+}
+.ma-scroll-wrapper table { margin: 0; width: 100%; }
+.ma-scroll-wrapper thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: #0C447C !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.08);
+}
+[data-theme="light"] .ma-scroll-wrapper {
+  border-color: rgba(139,92,246,.18); background: #F5F5F7;
+}
+[data-theme="light"] .ma-scroll-wrapper thead th {
+  /* Standardized soft pastel pattern ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â match DPA BLUD, E-Anggaran, Usulan.
+     Per DESIGN-SYSTEM.md "Table Header Light Theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Unified Pattern". */
+  background: linear-gradient(135deg, rgba(139,92,246,.49), rgba(236,72,153,.45)) !important;
+  color: #0F0F12 !important;
+  border-bottom: 1px solid rgba(139,92,246,.22) !important;
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ CRUD grid table (Master Akun + Kode Besar) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â input/select styling ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Shared antar Master Akun dan Kode Besar. Override row-color global rules
+   karena tabel CRUD ini pakai plain style (bukan hierarki belanja). */
+.master-akun-table tbody td {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.master-akun-table input[type="text"],
+.master-akun-table select {
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  background: rgba(4,44,83,.6) !important;
+}
+.master-akun-table input[type="text"]::placeholder {
+  color: rgba(229,241,251,.4) !important;
+}
+[data-theme="light"] .master-akun-table input[type="text"],
+[data-theme="light"] .master-akun-table select {
+  color: #1E293B !important;
+  background: #F5F5F7 !important;
+  border-color: rgba(139,92,246,.30) !important;
+  font-weight: 600 !important;
+}
+[data-theme="light"] .master-akun-table input[type="text"]::placeholder {
+  color: #9CA3AF !important;
+}
+/* Select khusus Level (di Kode Besar) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â pakai bg dari inline style (LEVEL_COLOR),
+   biarkan override agar warna level chip tetap visible */
+.master-akun-table td select[data-kb-level] {
+  color: #FFFFFF !important;
+  /* background di-set inline via LEVEL_COLOR */
+}
+/* Action buttons (shared: Master Akun + Kode Besar) */
+.ma-del-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: #FCA5A5; padding: 4px; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.ma-del-btn:hover { background: rgba(226,75,74,.18); color: #FECACA; }
+[data-theme="light"] .ma-del-btn { color: #DC2626; }
+[data-theme="light"] .ma-del-btn:hover { background: rgba(226,75,74,.10); color: #B91C1C; }
+
+/* Move (up/down) buttons di Kode Besar */
+.kb-move-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: #85B7EB; padding: 2px; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all .12s;
+  margin: 0 1px;
+}
+.kb-move-btn:hover:not(:disabled) { background: rgba(139,92,246,.18); color: #C4B5FD; }
+.kb-move-btn:disabled { opacity: .25; cursor: not-allowed; }
+[data-theme="light"] .kb-move-btn { color: #6B7280; }
+[data-theme="light"] .kb-move-btn:hover:not(:disabled) { background: rgba(139,92,246,.12); color: #6D28D9; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Number input spinner ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â DISEMBUNYIKAN PROJECT-WIDE di kedua tema ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Decision (2026-05-21, extended 2026-05-22 ke project-wide): native spinner
+   numeric input merusak readability ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â di .dpa-table kolom sempit overlap
+   teks, di .form-control (Usulan, app baru) spinner tidak match design system
+   light theme (icon cream vs canvas cream = invisible).
+   User ketik manual atau pakai keyboard ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ/ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ saat focus ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â increment tetap fungsional. */
+/* Revert ke scope .dpa-table only ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â di form input (Usulan QTY dll) user
+   expect native spinner tetap visible. Light theme spinner cream akan
+   di-warnai via accent-color theme-aware di bawah. */
+.dpa-table input[type="number"] {
+  -moz-appearance: textfield !important;  /* Firefox */
+  appearance: textfield !important;
+}
+.dpa-table input[type="number"]::-webkit-inner-spin-button,
+.dpa-table input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  margin: 0 !important;
+  display: none !important;
+}
+/* Form context: spinner native visible, accent-color theme-aware supaya
+   panah ter-warnai sesuai tema (mengatasi cream-on-cream invisibility). */
+input[type="number"] {
+  accent-color: #5B21B6;  /* default purple (light theme primary) */
+}
+[data-theme="light"] input[type="number"] { accent-color: #5B21B6; }
+:not([data-theme="light"]) input[type="number"] { accent-color: #FBBF24; }
+/* Caret (text cursor) theme-aware untuk semua input/textarea. Default browser
+   pakai currentColor yg bisa terlihat aneh (mis. orange di light theme dari
+   accent inherited). Force ke theme-appropriate. */
+input, textarea { caret-color: #FBBF24; }
+[data-theme="light"] input,
+[data-theme="light"] textarea { caret-color: #5B21B6; }
+
+/* PrimaNumberField — WARNA saja (layout = Tailwind utilities di komponen), theme-aware via data-theme.
+   Default = dark (navy PRIMA), [data-theme="light"] = putih. components/ui/PrimaNumberField.tsx */
+.prima-numfield { border-color: #185FA5; background: rgba(12, 68, 124, .40); box-shadow: 0 1px 2px rgba(0, 0, 0, .18); }
+.prima-numfield:focus-within { border-color: #FBBF24; box-shadow: 0 0 0 3px rgba(251, 191, 36, .22); }
+.prima-numfield__input {
+  font-family: var(--font-geist-mono), 'JetBrains Mono', ui-monospace, monospace;
+  color: #E6F1FB; -moz-appearance: textfield; appearance: textfield;
+}
+.prima-numfield__input::-webkit-inner-spin-button,
+.prima-numfield__input::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
+.prima-numfield__input::placeholder { color: #85B7EB; opacity: .7; }
+.prima-numfield__input:disabled { cursor: not-allowed; }
+.prima-numfield__spin { border-left-color: #185FA5; }
+.prima-numfield__btn { color: #85B7EB; cursor: pointer; }
+.prima-numfield__btn:hover:not(:disabled) { background: rgba(255, 255, 255, .08); color: #E6F1FB; }
+.prima-numfield__btn + .prima-numfield__btn { border-top: 1px solid #185FA5; }
+
+[data-theme="light"] .prima-numfield { border-color: rgba(0, 0, 0, .15); background: #FFFFFF; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+[data-theme="light"] .prima-numfield:focus-within { border-color: #5B21B6; box-shadow: 0 0 0 3px rgba(91, 33, 182, .18); }
+[data-theme="light"] .prima-numfield__input { color: #0F0F12; }
+[data-theme="light"] .prima-numfield__input::placeholder { color: #9AA0A6; opacity: 1; }
+[data-theme="light"] .prima-numfield__spin { border-left-color: rgba(0, 0, 0, .12); }
+[data-theme="light"] .prima-numfield__btn { color: #6B7280; }
+[data-theme="light"] .prima-numfield__btn:hover:not(:disabled) { background: rgba(0, 0, 0, .05); color: #111111; }
+[data-theme="light"] .prima-numfield__btn + .prima-numfield__btn { border-top-color: rgba(0, 0, 0, .12); }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Versi Dropdown (pill + LATEST badge) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+.versi-dropdown { position: relative; display: inline-block; }
+.versi-trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600;
+  background: rgba(12,68,124,.55);
+  border: 1px solid rgba(133,183,235,.35);
+  color: #E6F1FB;
+  transition: background .15s, border-color .15s, transform .08s;
+  min-width: 260px;
+  white-space: nowrap;
+}
+.versi-trigger:hover {
+  background: rgba(24,95,165,.65);
+  border-color: rgba(133,183,235,.55);
+}
+.versi-trigger:focus-visible {
+  outline: 2px solid rgba(133,183,235,.55); outline-offset: 2px;
+}
+.versi-icon { color: #85B7EB; flex-shrink: 0; }
+.versi-label { flex: 1; text-align: left; letter-spacing: .1px; }
+.versi-meta { color: #85B7EB; font-weight: 500; font-size: 11.5px; }
+.versi-placeholder { color: rgba(230,241,251,.55); font-weight: 500; }
+.versi-chevron { color: #85B7EB; transition: transform .18s; flex-shrink: 0; }
+.versi-chevron.open { transform: rotate(180deg); }
+
+.versi-menu {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  min-width: 280px; max-height: 320px; overflow-y: auto;
+  background: #042C53;
+  border: 1px solid rgba(133,183,235,.30);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.50);
+  z-index: 50;
+  padding: 4px;
+  white-space: nowrap;
+}
+.versi-empty {
+  padding: 12px 14px; font-size: 12px; color: #85B7EB; text-align: center;
+}
+.versi-item {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12.5px; font-weight: 500; text-align: left;
+  background: transparent; border: none; color: #E6F1FB;
+  transition: background .12s;
+}
+.versi-item:hover { background: rgba(24,95,165,.40); }
+.versi-item.active { background: rgba(239,159,39,.20); color: #FBBF24; font-weight: 700; }
+.versi-item-icon { color: #85B7EB; flex-shrink: 0; }
+.versi-item.active .versi-item-icon { color: #FBBF24; }
+.versi-item-date { letter-spacing: .1px; white-space: nowrap; }
+.versi-item-meta { color: #85B7EB; font-size: 11.5px; white-space: nowrap; }
+.versi-item.active .versi-item-meta { color: rgba(251,191,36,.85); }
+.versi-item-check { color: #FBBF24; margin-left: auto; flex-shrink: 0; }
+.versi-badge-latest {
+  margin-left: auto;
+  font-size: 9px; font-weight: 800; letter-spacing: .4px;
+  padding: 2px 6px; border-radius: 999px;
+  background: #10B981; color: #FFFFFF;
+  flex-shrink: 0;
+}
+.versi-item.active .versi-badge-latest { margin-left: 4px; }
+/* Badge LATEST di dalam pill trigger ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â sedikit beda biar nggak terlalu lebar */
+.versi-badge-latest--trigger {
+  margin-left: 4px;
+  padding: 1px 5px;
+  font-size: 8.5px;
+}
+
+/* ─── Neo-Brutalist variant (E-Anggaran VersiPickerKinerja only) ─────────────
+   Outline-only, floating-card style. Activated via .versi-dropdown--brutalist
+   wrapper class. Tidak mempengaruhi BLUD VersiDropdown.
+   Adapt #6 "The Outline Only" → PRIMA token (purple #7C5CFC + amber #EF9F27). */
+.versi-dropdown--brutalist .versi-trigger {
+  border-radius: 4px;
+  border: 2px solid #7C5CFC;
+  background: rgba(4,44,83,.55);
+  box-shadow: 3px 3px 0 rgba(124,92,252,.40);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 6px 11px;
+  font-size: 11px;
+  min-width: 220px;
+  transition: transform .08s, box-shadow .12s, background .12s;
+}
+.versi-dropdown--brutalist .versi-trigger:hover {
+  background: rgba(124,92,252,.18);
+  border-color: #9B82FF;
+}
+.versi-dropdown--brutalist .versi-trigger:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 rgba(124,92,252,.40);
+}
+.versi-dropdown--brutalist .versi-icon,
+.versi-dropdown--brutalist .versi-chevron { color: #B8A7FE; }
+.versi-dropdown--brutalist .versi-meta {
+  color: #B8A7FE; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  text-transform: none; letter-spacing: 0;
+}
+
+/* Floating cards menu — no container bg, each item is its own card */
+.versi-dropdown--brutalist .versi-menu {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 5px 0 0 0;
+  min-width: 240px;
+}
+.versi-dropdown--brutalist .versi-item {
+  border-radius: 4px;
+  border: 2px solid rgba(124,92,252,.55);
+  background: #042C53;
+  box-shadow: 2px 2px 0 rgba(124,92,252,.35);
+  margin-bottom: 5px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  transition: transform .08s, box-shadow .12s, background .12s, border-color .12s;
+}
+.versi-dropdown--brutalist .versi-item:last-child { margin-bottom: 0; }
+.versi-dropdown--brutalist .versi-item:hover {
+  background: #7C5CFC;
+  border-color: #7C5CFC;
+  color: #FFFFFF;
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 rgba(124,92,252,.45);
+}
+.versi-dropdown--brutalist .versi-item.active {
+  background: #042C53;
+  border-color: #EF9F27;
+  color: #FBBF24;
+  box-shadow: 3px 3px 0 rgba(239,159,39,.45);
+}
+.versi-dropdown--brutalist .versi-item.active .versi-item-icon { color: #EF9F27; }
+.versi-dropdown--brutalist .versi-item-meta {
+  color: #B8A7FE; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  text-transform: none; letter-spacing: 0;
+}
+.versi-dropdown--brutalist .versi-item.active .versi-item-meta { color: rgba(251,191,36,.85); }
+.versi-dropdown--brutalist .versi-item.versi-item-create {
+  background: #042C53;
+  border-color: rgba(124,92,252,.55) !important;
+  border-top: 2px solid rgba(124,92,252,.55) !important;
+  margin-top: 8px !important;
+  padding-top: 9px !important;
+  color: #B8A7FE !important;
+}
+.versi-dropdown--brutalist .versi-item.versi-item-create:hover {
+  background: #7C5CFC;
+  color: #FFFFFF !important;
+}
+
+/* LATEST badge — kotak tajam, amber solid */
+.versi-dropdown--brutalist .versi-badge-latest {
+  border-radius: 2px;
+  background: #EF9F27;
+  color: #020F1C;
+  font-weight: 900;
+  letter-spacing: .4px;
+  padding: 1px 5px;
+  border: 1px solid #020F1C;
+  font-size: 8px;
+}
+.versi-dropdown--brutalist .versi-badge-latest--trigger {
+  padding: 1px 4px; font-size: 7.5px;
+}
+
+/* ─── Soft Brutalist Select (Cetak helper dropdowns) ──────────────────────
+   Native <select> styled subtle untuk dropdown helper (bulan, scope, depth).
+   Sharp corners + purple outline, TANPA hard shadow — biar tidak compete
+   dengan preview cetak yang formal. */
+.select-brutalist-soft {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border-radius: 4px;
+  border: 1.5px solid #7C5CFC;
+  background-color: rgba(4,44,83,.55);
+  padding: 6px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: #E6F1FB;
+  cursor: pointer;
+  transition: border-color .12s, background-color .12s;
+  font-family: inherit;
+}
+.select-brutalist-soft:hover:not(:disabled) {
+  border-color: #9B82FF;
+  background-color: rgba(124,92,252,.12);
+}
+.select-brutalist-soft:focus-visible {
+  outline: 2px solid rgba(124,92,252,.5);
+  outline-offset: 2px;
+}
+.select-brutalist-soft:disabled {
+  opacity: .5; cursor: not-allowed;
+}
+
+/* ─── PrimaButton (Concept 4 Sci-Fi Engraved) ─────────────────────────────
+   Primary toolbar button. Chamfered corner via clip-path + 3px left accent
+   stripe per variant. JANGAN dipakai untuk row action button kecil.
+   Pakai via <PrimaButton variant="..." iconLeft={...}>Label</PrimaButton>. */
+.btn-prima {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  letter-spacing: .01em;
+  padding: 8px 16px;
+  background: #042C53;
+  border: 1px solid rgba(133,183,235,.30);
+  color: #E6F1FB;
+  cursor: pointer;
+  white-space: nowrap;
+  clip-path: polygon(5px 0%, 100% 0%, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0% 100%, 0% 5px);
+  transition: background .12s, color .12s, border-color .12s, transform .08s;
+}
+.btn-prima:hover:not(:disabled) { background: rgba(124,92,252,.10); }
+.btn-prima:active:not(:disabled) { transform: translateY(1px); }
+.btn-prima:disabled { opacity: .45; cursor: not-allowed; }
+.btn-prima:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(124,92,252,.55);
+}
+.btn-prima-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
+.btn-prima-label { display: inline-flex; align-items: center; }
+
+/* Variant — left border 3px stripe + tinted text */
+.btn-prima[data-variant="primary"] { border-left: 3px solid #EF9F27; color: #FBBF24; }
+.btn-prima[data-variant="success"] { border-left: 3px solid #1D9E75; color: #4ADE80; }
+.btn-prima[data-variant="danger"]  { border-left: 3px solid #E24B4A; color: #FCA5A5; }
+.btn-prima[data-variant="purple"]  { border-left: 3px solid #7C5CFC; color: #B8A7FE; }
+.btn-prima[data-variant="warning"] { border-left: 3px solid #BA7517; color: #FBBF24; }
+
+/* Variant hover tint match accent */
+.btn-prima[data-variant="primary"]:hover:not(:disabled) { background: rgba(239,159,39,.12); }
+.btn-prima[data-variant="success"]:hover:not(:disabled) { background: rgba(29,158,117,.14); }
+.btn-prima[data-variant="danger"]:hover:not(:disabled)  { background: rgba(226,75,74,.14); }
+.btn-prima[data-variant="purple"]:hover:not(:disabled)  { background: rgba(124,92,252,.14); }
+.btn-prima[data-variant="warning"]:hover:not(:disabled) { background: rgba(186,117,23,.14); }
+
+/* Sizes */
+.btn-prima[data-size="sm"] { padding: 6px 12px; font-size: 11px; gap: 6px; }
+.btn-prima[data-size="lg"] { padding: 10px 22px; font-size: 13px; gap: 10px; }
+
+/* Light theme */
+[data-theme="light"] .btn-prima {
+  background: #FAFAFA;
+  border-color: rgba(15,15,18,.10);
+  color: #1F2937;
+}
+[data-theme="light"] .btn-prima:hover:not(:disabled) { background: rgba(124,92,252,.06); }
+[data-theme="light"] .btn-prima[data-variant="primary"] { color: #B45309; }
+[data-theme="light"] .btn-prima[data-variant="success"] { color: #047857; }
+[data-theme="light"] .btn-prima[data-variant="danger"]  { color: #B91C1C; }
+[data-theme="light"] .btn-prima[data-variant="purple"]  { color: #5B21B6; }
+[data-theme="light"] .btn-prima[data-variant="warning"] { color: #8B5710; }
+
+/* SoftSelect custom dropdown (replaces native <option> popup) */
+.soft-select { position: relative; display: inline-block; }
+.soft-select-trigger {
+  display: inline-flex; align-items: center; justify-content: space-between;
+  gap: 8px; width: 100%; text-align: left;
+}
+.soft-select-label {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.soft-select-chevron {
+  color: #B8A7FE; flex-shrink: 0; transition: transform .18s;
+}
+.soft-select-chevron.open { transform: rotate(180deg); }
+.soft-select-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  min-width: 100%; max-height: 280px; overflow-y: auto;
+  background: #042C53;
+  border: 1.5px solid #7C5CFC;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 rgba(124,92,252,.30);
+  padding: 4px;
+  z-index: 60;
+}
+.soft-select-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 6px; width: 100%; padding: 6px 10px; border: none;
+  background: transparent; border-radius: 3px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+  color: #E6F1FB; cursor: pointer; text-align: left;
+  transition: background .12s, color .12s;
+  font-family: inherit;
+}
+.soft-select-item:hover { background: rgba(124,92,252,.20); color: #FFFFFF; }
+.soft-select-item.active {
+  background: rgba(239,159,39,.15);
+  color: #FBBF24;
+  font-weight: 700;
+}
+.soft-select-item-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.soft-select-item-check { color: #EF9F27; flex-shrink: 0; }
+
+/* Light theme */
+[data-theme="light"] .select-brutalist-soft {
+  background-color: #FFFFFF;
+  color: #1F2937;
+  border-color: #7C5CFC;
+}
+[data-theme="light"] .select-brutalist-soft:hover:not(:disabled) {
+  background-color: rgba(124,92,252,.06);
+}
+[data-theme="light"] .soft-select-chevron { color: #7C5CFC; }
+[data-theme="light"] .soft-select-menu {
+  background: #FAFAFA;
+  border-color: #7C5CFC;
+  box-shadow: 2px 2px 0 rgba(124,92,252,.25);
+}
+[data-theme="light"] .soft-select-item { color: #1F2937; }
+[data-theme="light"] .soft-select-item:hover { background: rgba(124,92,252,.10); color: #5B21B6; }
+[data-theme="light"] .soft-select-item.active {
+  background: rgba(239,159,39,.18);
+  color: #B45309;
+}
+
+/* Light theme override — brutalist tetap punchy tapi inverted */
+[data-theme="light"] .versi-dropdown--brutalist .versi-trigger {
+  background: #FAFAFA;
+  border-color: #7C5CFC;
+  color: #1F2937;
+  box-shadow: 4px 4px 0 rgba(124,92,252,.30);
+}
+[data-theme="light"] .versi-dropdown--brutalist .versi-trigger:hover {
+  background: rgba(124,92,252,.08);
+}
+[data-theme="light"] .versi-dropdown--brutalist .versi-icon,
+[data-theme="light"] .versi-dropdown--brutalist .versi-chevron { color: #7C5CFC; }
+[data-theme="light"] .versi-dropdown--brutalist .versi-meta { color: #6D45F0; }
+[data-theme="light"] .versi-dropdown--brutalist .versi-item {
+  background: #FAFAFA;
+  border-color: rgba(124,92,252,.55);
+  color: #1F2937;
+  box-shadow: 3px 3px 0 rgba(124,92,252,.25);
+}
+[data-theme="light"] .versi-dropdown--brutalist .versi-item:hover {
+  background: #7C5CFC;
+  color: #FFFFFF;
+}
+[data-theme="light"] .versi-dropdown--brutalist .versi-item.active {
+  background: #FAFAFA;
+  border-color: #EF9F27;
+  color: #B45309;
+  box-shadow: 3px 3px 0 rgba(239,159,39,.40);
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Pergeseran action buttons ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Konsep A (Semantik kuat) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Generate (Buat Pergeseran): ghost purple ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â aksi kreasi (sekali per sesi).
+   Inject  (Sinkronkan DPA):    solid amber ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â aksi sync data. */
+.btn-generate, .btn-inject {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, box-shadow .15s, transform .08s;
+  font-family: inherit;
+}
+.btn-generate:active:not(:disabled),
+.btn-inject:active:not(:disabled) { transform: translateY(1px); }
+.btn-generate:disabled, .btn-inject:disabled {
+  opacity: .45; cursor: not-allowed;
+}
+
+/* Generate ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ghost purple #7C5CFC */
+.btn-generate {
+  background: transparent;
+  border: 1px solid rgba(124,92,252,.55);
+  color: #B8A7FE;
+}
+.btn-generate:hover:not(:disabled) {
+  background: rgba(124,92,252,.14);
+  border-color: rgba(124,92,252,.85);
+  color: #D8CCFF;
+}
+.btn-generate:focus-visible {
+  outline: 2px solid rgba(124,92,252,.55); outline-offset: 2px;
+}
+
+/* Inject ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â solid amber #EF9F27 */
+.btn-inject {
+  background: #EF9F27;
+  border: 1px solid #EF9F27;
+  color: #1A0F02;
+  box-shadow: 0 1px 2px rgba(239,159,39,.25);
+}
+.btn-inject:hover:not(:disabled) {
+  background: #FBB13D;
+  border-color: #FBB13D;
+  box-shadow: 0 2px 8px rgba(239,159,39,.40);
+}
+.btn-inject:focus-visible {
+  outline: 2px solid rgba(239,159,39,.65); outline-offset: 2px;
+}
+
+/* Light theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â sesuaikan kontras */
+[data-theme="light"] .btn-generate {
+  border-color: rgba(124,92,252,.45);
+  color: #6D45F0;
+}
+[data-theme="light"] .btn-generate:hover:not(:disabled) {
+  background: rgba(124,92,252,.08);
+  border-color: rgba(124,92,252,.75);
+  color: #5B21B6;
+}
+[data-theme="light"] .btn-inject {
+  color: #FFFFFF;
+}
+
+/* Light theme override */
+[data-theme="light"] .versi-trigger {
+  background: #F5F5F7;
+  border: 1px solid rgba(139,92,246,.30);
+  color: #1F2937;
+  box-shadow: 0 1px 2px rgba(15,15,18,.06);
+}
+[data-theme="light"] .versi-trigger:hover {
+  background: #F9FAFB;
+  border-color: rgba(139,92,246,.55);
+}
+[data-theme="light"] .versi-icon,
+[data-theme="light"] .versi-chevron { color: #8B5CF6; }
+[data-theme="light"] .versi-meta { color: #6B7280; }
+[data-theme="light"] .versi-placeholder { color: #9CA3AF; }
+[data-theme="light"] .versi-menu {
+  background: #F5F5F7;
+  border: 1px solid rgba(139,92,246,.25);
+  box-shadow: 0 10px 28px rgba(15,15,18,.15);
+}
+[data-theme="light"] .versi-empty { color: #6B7280; }
+[data-theme="light"] .versi-item { color: #1F2937; }
+[data-theme="light"] .versi-item:hover { background: rgba(139,92,246,.10); }
+[data-theme="light"] .versi-item.active {
+  background: rgba(139,92,246,.49); color: #5B21B6;
+}
+[data-theme="light"] .versi-item-icon { color: #8B5CF6; }
+[data-theme="light"] .versi-item.active .versi-item-icon { color: #5B21B6; }
+[data-theme="light"] .versi-item-meta { color: #6B7280; }
+[data-theme="light"] .versi-item.active .versi-item-meta { color: rgba(91,33,182,.75); }
+[data-theme="light"] .versi-item-check { color: #5B21B6; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Level badge L1/L2/... di kolom aksi kiri ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+.blud-level-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: .3px;
+  padding: 2px 5px; border-radius: 3px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  /* Dark theme default ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â translucent + warm amber text agar match navy canvas */
+  background: rgba(255,255,255,.10);
+  color: #FAC775;
+  border: 1px solid rgba(255,255,255,.20);
+}
+/* Light theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â putih solid + dark text + shadow */
+[data-theme="light"] .blud-level-badge {
+  background: #F5F5F7 !important;
+  color: #0F0F12 !important;
+  border: 1px solid rgba(0,0,0,.15) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18);
+  font-weight: 800;
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Action buttons +/=/hapus di tabel DPA & Pergeseran ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Ukuran kompak supaya 3 tombol (+, =, hapus) muat di kolom AKSI tanpa overflow.
+   3 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â 22px + 2 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â 2px gap = 70px ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ fit di kolom 80px dengan padding wajar. */
+.blud-act {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px; cursor: pointer;
+  flex-shrink: 0;
+  transition: background .12s, transform .08s, box-shadow .12s;
+}
+.blud-act:hover { transform: scale(1.08); }
+.blud-act > svg { width: 13px; height: 13px; }
+
+/* Dark theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â tinted bg + colored border (default) */
+/* `+` Tambah anak ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â gold-yellow, distinct dari hue rows manapun */
+.blud-act-add {
+  background: rgba(250,204,21,.20);
+  border: 1px solid rgba(250,204,21,.55);
+  color: #FBBF24;
+}
+.blud-act-sibling {
+  background: rgba(59,130,246,.22);
+  border: 1px solid rgba(59,130,246,.45);
+  color: #60A5FA;
+}
+.blud-act-del {
+  background: rgba(244,63,94,.22);
+  border: 1px solid rgba(244,63,94,.45);
+  color: #FB7185;
+}
+
+/* Light theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â putih solid + warna ikon kuat + shadow biar pop di atas heads */
+[data-theme="light"] .blud-act {
+  background: #F5F5F7 !important;
+  box-shadow: 0 1px 3px rgba(15,15,18,.18);
+}
+[data-theme="light"] .blud-act-add     { border: 1px solid #059669 !important; color: #047857 !important; }
+[data-theme="light"] .blud-act-sibling { border: 1px solid #2563EB !important; color: #1D4ED8 !important; }
+[data-theme="light"] .blud-act-del     { border: 1px solid #DC2626 !important; color: #B91C1C !important; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Row Actions Kebab Menu (Konsep C ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â pengganti 3-tombol cluster) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Tombol kebab di kolom AKSI: 1 ikon ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¹ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â® ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ klik buka dropdown 3 opsi.
+   Lebih kompak (kolom AKSI cuma 44px), no overflow ke kolom lain.
+   Dropdown position absolute right:0 top:100% supaya nempel di kanan. */
+.blud-act-kebab-wrap {
+  position: relative; display: inline-block;
+}
+.blud-act-kebab {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 5px;
+  background: transparent; border: 1px solid rgba(255,255,255,.15);
+  color: #B5D4F4; cursor: pointer;
+  transition: all .12s;
+  padding: 0;
+}
+.blud-act-kebab:hover {
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.30);
+  color: #FFFFFF;
+}
+[data-theme="light"] .blud-act-kebab {
+  background: #F5F5F7; border: 1px solid rgba(0,0,0,.12);
+  color: #4B5563;
+  box-shadow: 0 1px 2px rgba(15,15,18,.10);
+}
+[data-theme="light"] .blud-act-kebab:hover {
+  background: #F3F4F6; border-color: rgba(139,92,246,.45); color: #6D28D9;
+}
+
+/* Dropdown popup ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â horizontal flex (toolbar style) berisi 3 tombol icon
+   yang sama dengan .blud-act lama. Tidak ada text label, cuma icon.
+   Di-render via createPortal ke document.body ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ position: fixed (lihat inline). */
+.blud-act-menu {
+  background: #042C53;
+  border: 1px solid rgba(133,183,235,.30);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.50);
+  z-index: 1000;
+  padding: 5px;
+  display: flex; flex-direction: row; gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+[data-theme="light"] .blud-act-menu {
+  background: #F5F5F7;
+  border: 1px solid rgba(139,92,246,.22);
+  box-shadow: 0 10px 28px rgba(15,15,18,.18);
+}
+
+/* Portal tooltip (untuk trigger di dalam scroll-wrapper yang clip pseudo).
+   Render via createPortal ke document.body dengan position: fixed.
+   Theme-aware: dark = gradient amber gold, light = gradient ungu-pink. */
+.blud-tip-portal {
+  background: linear-gradient(135deg, #EF9F27, #FAC775);
+  color: #020F1C;
+  font-size: 11px; font-weight: 700; letter-spacing: .2px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(239,159,39,.35), 0 2px 6px rgba(0,0,0,.4);
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  z-index: 1100;
+  animation: blud-tip-fade .18s ease-out;
+}
+@keyframes blud-tip-fade {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 4px)); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+[data-theme="light"] .blud-tip-portal {
+  background: linear-gradient(135deg, #8B5CF6, #EC4899);
+  color: #FFFFFF;
+  box-shadow: 0 6px 20px rgba(139,92,246,.40), 0 2px 6px rgba(0,0,0,.12);
+}
+
+/* Tooltip universal via data-tooltip ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â STANDAR TUNGGAL (docs/DESIGN-SYSTEM.md).
+   Match style ribbon collapsed tile. Apply ke SEMUA element dengan attribute
+   [data-tooltip] kecuali form fields (select/input/textarea pseudo tidak
+   reliable cross-browser). */
+[data-tooltip]:not(select):not(input):not(textarea) {
+  position: relative;
+}
+[data-tooltip]:not(select):not(input):not(textarea)::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  background: linear-gradient(135deg, #EF9F27, #FAC775);
+  color: #020F1C;
+  font-size: 11px; font-weight: 700; letter-spacing: .2px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(239,159,39,.35), 0 2px 6px rgba(0,0,0,.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 1100;
+}
+[data-tooltip]:not(select):not(input):not(textarea)::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid #EF9F27;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 1101;
+}
+[data-tooltip]:not(select):not(input):not(textarea):hover::after,
+[data-tooltip]:not(select):not(input):not(textarea):hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Empty data-tooltip ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ suppress (untuk conditional tooltip yang berisi '') */
+[data-tooltip=""]::after,
+[data-tooltip=""]::before { display: none !important; }
+
+/* Variant: data-tooltip-pos="below" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â tooltip muncul DI BAWAH bukan di atas.
+   Pakai untuk tombol di top bar / sticky atas yang tooltip atasnya ke-clip
+   oleh viewport top. */
+[data-tooltip][data-tooltip-pos="below"]::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+[data-tooltip][data-tooltip-pos="below"]::before {
+  bottom: auto;
+  top: calc(100% + 2px);
+  border-top: none;
+  border-bottom: 7px solid #EF9F27;
+}
+[data-theme="light"] [data-tooltip][data-tooltip-pos="below"]::before {
+  border-bottom-color: #8B5CF6;
+}
+
+/* Variant: data-tooltip-pos="right" — tooltip muncul DI KANAN trigger.
+   Pakai untuk sidebar collapsed / vertical-stacked icons. */
+[data-tooltip][data-tooltip-pos="right"]::after {
+  bottom: auto;
+  top: 50%;
+  left: calc(100% + 10px);
+  transform: translateY(-50%) translateX(-4px);
+}
+[data-tooltip][data-tooltip-pos="right"]:hover::after {
+  transform: translateY(-50%) translateX(0);
+}
+[data-tooltip][data-tooltip-pos="right"]::before {
+  bottom: auto;
+  top: 50%;
+  left: calc(100% + 4px);
+  transform: translateY(-50%) translateX(-4px);
+  border-left: none;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 7px solid #EF9F27;
+}
+[data-tooltip][data-tooltip-pos="right"]:hover::before {
+  transform: translateY(-50%) translateX(0);
+}
+[data-theme="light"] [data-tooltip][data-tooltip-pos="right"]::before {
+  border-right-color: #8B5CF6;
+}
+
+/* Variant: data-tooltip-pos="left" — tooltip muncul DI KIRI trigger.
+   Pakai untuk row-action di pojok kanan (PK Riwayat, RA Cetak modal) +
+   kebab tree LKJIP (tepi kanan container ber-overflow, tooltip atas ter-clip x). */
+[data-tooltip][data-tooltip-pos="left"]::after {
+  bottom: auto;
+  top: 50%;
+  left: auto;
+  right: calc(100% + 10px);
+  transform: translateY(-50%) translateX(4px);
+}
+[data-tooltip][data-tooltip-pos="left"]:hover::after {
+  transform: translateY(-50%) translateX(0);
+}
+[data-tooltip][data-tooltip-pos="left"]::before {
+  bottom: auto;
+  top: 50%;
+  left: auto;
+  right: calc(100% + 3px);
+  transform: translateY(-50%) translateX(4px);
+  /* segitiga lancip ke kanan — eksplisit & simetris (sayap atas=bawah 6px, ujung 8px) */
+  border-width: 6px 0 6px 8px;
+  border-style: solid;
+  border-color: transparent transparent transparent #EF9F27;
+}
+[data-tooltip][data-tooltip-pos="left"]:hover::before {
+  transform: translateY(-50%) translateX(0);
+}
+[data-theme="light"] [data-tooltip][data-tooltip-pos="left"]::before {
+  /* WAJIB set 4 sisi: override light dasar (border-top-color #8B5CF6) lebih
+     spesifik dari shorthand varian → kalau cuma border-left-color, sayap atas
+     bocor ungu (asimetris). Pink hanya di kiri (ujung), sisanya transparan. */
+  border-color: transparent transparent transparent #EC4899;
+}
+
+/* ─── Rencana Aksi year select — neo-brutalist outline (match E-Anggaran VersiPicker) ───
+   Native <select> styled brutalist: rectangle radius 4px + 2px purple border
+   + hard shadow + UPPERCASE + JetBrains Mono. */
+.ra-year-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: rgba(4,44,83,.55);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23B8A7FE' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 6px;
+  border: 2px solid #7C5CFC;
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 rgba(124,92,252,.40);
+  color: #E6F1FB;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 4px 22px 4px 10px;
+  cursor: pointer;
+  outline: none;
+  transition: transform .08s, box-shadow .12s, background .12s, border-color .12s;
+}
+.ra-year-select:hover {
+  background-color: rgba(124,92,252,.18);
+  border-color: #9B82FF;
+}
+.ra-year-select:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 rgba(124,92,252,.40);
+}
+.ra-year-select:focus-visible {
+  border-color: #EF9F27;
+  box-shadow: 3px 3px 0 rgba(239,159,39,.40);
+}
+.ra-year-select option {
+  background: #042C53;
+  color: #E6F1FB;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  text-transform: none;
+}
+[data-theme="light"] .ra-year-select {
+  background-color: #FFFFFF;
+  color: #1E293B;
+  border-color: #7C5CFC;
+  box-shadow: 3px 3px 0 rgba(124,92,252,.30);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236D45F0' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+[data-theme="light"] .ra-year-select:hover {
+  background-color: rgba(124,92,252,.08);
+}
+[data-theme="light"] .ra-year-select option {
+  background: #FFFFFF;
+  color: #1E293B;
+}
+
+/* Light theme override */
+[data-theme="light"] [data-tooltip]:not(select):not(input):not(textarea)::after {
+  background: linear-gradient(135deg, #8B5CF6, #EC4899);
+  color: #FFFFFF;
+  box-shadow: 0 6px 20px rgba(139,92,246,.40), 0 2px 6px rgba(0,0,0,.12);
+}
+[data-theme="light"] [data-tooltip]:not(select):not(input):not(textarea)::before {
+  border-top-color: #8B5CF6;
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Master Akun Combobox ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â light theme override ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+[data-theme="light"] .ma-combo-dropdown {
+  background: #F5F5F7 !important;
+  border: 1px solid rgba(139,92,246,.22) !important;
+  box-shadow: 0 8px 24px rgba(15,15,18,.15) !important;
+}
+[data-theme="light"] .ma-combo-item {
+  color: #374151 !important;
+  border-bottom-color: rgba(139,92,246,.08) !important;
+}
+[data-theme="light"] .ma-combo-item[data-active="1"] {
+  background: rgba(139,92,246,.10) !important;
+}
+[data-theme="light"] .ma-combo-item span:first-child { color: #6B7280 !important; }
+[data-theme="light"] .ma-combo-item[data-active="1"] span:first-child { color: #0F0F12 !important; }
+[data-theme="light"] .ma-combo-item span:last-child { color: #0F0F12 !important; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Penanggung Jawab Combobox ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â theme-aware styling (color/bg purely CSS) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Inline style di komponen hanya struktur (layout/padding/font-size). */
+/* Default (dark theme): canvas dark + amber highlight. */
+.pj-combo-item {
+  color: #E6F1FB;
+  background: transparent;
+}
+.pj-combo-item[data-active="1"] {
+  color: #FFFFFF;
+  background: rgba(239,159,39,.18);
+}
+/* Light theme override: white canvas + purple highlight. */
+[data-theme="light"] .pj-combo-dropdown {
+  background: #F5F5F7 !important;
+  border: 1px solid rgba(139,92,246,.22) !important;
+  box-shadow: 0 8px 24px rgba(15,15,18,.15) !important;
+  color: #1F2937 !important;
+}
+[data-theme="light"] .pj-combo-item {
+  color: #1F2937;
+  background: transparent;
+  border-bottom-color: rgba(139,92,246,.08) !important;
+}
+[data-theme="light"] .pj-combo-item[data-active="1"] {
+  color: #5B21B6;
+  background: rgba(139,92,246,.12);
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ BLUD Modal ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â theme-aware (Tambah Baris Anak, BlockedModal) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Overlay z-index >110 supaya tidak ketutup brand strip BLUD */
+.blud-modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+}
+/* Dark theme (default) */
+.blud-modal-card {
+  background: #042C53 !important;
+  border: 1px solid #0C447C !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,.55) !important;
+  color: #E6F1FB !important;
+}
+.blud-modal-header {
+  border-bottom: 1px solid #0C447C !important;
+  background: rgba(239,159,39,.08) !important;
+  border-top-left-radius: 12px; border-top-right-radius: 12px;
+}
+.blud-modal-title { color: #E6F1FB !important; }
+.blud-modal-subtitle { color: #85B7EB !important; }
+.blud-modal-subtitle strong, .blud-modal-card strong { color: #E6F1FB !important; }
+.blud-modal-close {
+  color: #85B7EB !important; background: transparent !important; border: none !important; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px; transition: all .15s;
+}
+.blud-modal-close:hover { color: #E6F1FB !important; background: rgba(255,255,255,.06) !important; }
+.blud-modal-option {
+  border: 1px solid #185FA5 !important;
+  background: rgba(12,68,124,.30) !important;
+  color: #E6F1FB !important;
+}
+.blud-modal-option:hover {
+  background: rgba(239,159,39,.14) !important;
+  border-color: #EF9F27 !important;
+  color: #FAC775 !important;
+}
+/* BlockedModal nested boxes ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â dark theme */
+.blud-modal-card .blud-modal-info-box {
+  background: rgba(12,68,124,.30) !important; border: 1px solid #0C447C !important;
+  border-radius: 8px; padding: 12px;
+}
+.blud-modal-card .blud-modal-info-label { color: #85B7EB !important; }
+.blud-modal-card .blud-modal-row-target {
+  background: rgba(226,75,74,.12) !important; border: 1px solid rgba(226,75,74,.30) !important;
+  border-radius: 6px;
+}
+.blud-modal-card .blud-modal-row-self {
+  background: rgba(59,130,246,.12) !important; border: 1px solid rgba(59,130,246,.30) !important;
+  border-radius: 6px;
+}
+.blud-modal-card .blud-modal-hint {
+  background: rgba(59,130,246,.12) !important; border: 1px solid rgba(59,130,246,.25) !important;
+  color: #93C5FD !important; border-radius: 6px;
+}
+
+/* Light theme overrides */
+[data-theme="light"] .blud-modal-card {
+  background: #F5F5F7 !important;
+  border: 1px solid rgba(139,92,246,.18) !important;
+  box-shadow: 0 24px 64px rgba(15,15,18,.18) !important;
+  color: #374151 !important;
+}
+[data-theme="light"] .blud-modal-header {
+  border-bottom-color: rgba(139,92,246,.18) !important;
+  background: rgba(139,92,246,.05) !important;
+}
+[data-theme="light"] .blud-modal-title { color: #0F0F12 !important; }
+[data-theme="light"] .blud-modal-subtitle { color: #6B7280 !important; }
+[data-theme="light"] .blud-modal-subtitle strong,
+[data-theme="light"] .blud-modal-card strong { color: #0F0F12 !important; }
+[data-theme="light"] .blud-modal-close { color: #9CA3AF !important; }
+[data-theme="light"] .blud-modal-close:hover { color: #4B5563 !important; background: rgba(0,0,0,.04) !important; }
+[data-theme="light"] .blud-modal-option {
+  border: 1px solid rgba(139,92,246,.20) !important;
+  background: #F5F5F7 !important;
+  color: #374151 !important;
+}
+[data-theme="light"] .blud-modal-option:hover {
+  background: rgba(139,92,246,.06) !important;
+  border-color: #8B5CF6 !important;
+  color: #0F0F12 !important;
+}
+[data-theme="light"] .blud-modal-card .blud-modal-info-box {
+  background: #F9FAFB !important; border-color: rgba(139,92,246,.15) !important;
+}
+[data-theme="light"] .blud-modal-card .blud-modal-info-label { color: #9CA3AF !important; }
+[data-theme="light"] .blud-modal-card .blud-modal-row-target {
+  background: #FEF2F2 !important; border-color: #FECACA !important;
+}
+[data-theme="light"] .blud-modal-card .blud-modal-row-self {
+  background: #EFF6FF !important; border-color: #BFDBFE !important;
+}
+[data-theme="light"] .blud-modal-card .blud-modal-hint {
+  background: #EFF6FF !important; border-color: #DBEAFE !important; color: #1E40AF !important;
+}
+
+/* ── Import Usulan workbench modal (CONCEPT-import-usulan-dpa-v2) ── */
+.blud-imp-text  { color: #E6F1FB; }
+.blud-imp-muted { color: #85B7EB; }
+.blud-imp-input {
+  background: rgba(2,15,28,.5); border: 1px solid #185FA5; color: #E6F1FB;
+  border-radius: 8px; font-size: 12px; outline: none;
+}
+.blud-imp-input:focus { border-color: #EF9F27; }
+.blud-imp-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 12px; border-radius: 99px; font-size: 11px; cursor: pointer;
+  background: transparent; border: 1px solid #185FA5; color: #B5D4F4;
+}
+.blud-imp-pill.on-purple { background: rgba(124,92,252,.25); border-color: #7C5CFC; color: #CECBF6; font-weight: 700; }
+.blud-imp-pill.on-amber  { background: rgba(239,159,39,.22); border-color: #EF9F27; color: #FAC775; font-weight: 700; }
+.blud-imp-pill:disabled  { opacity: .45; cursor: not-allowed; }
+.blud-imp-rail { background: rgba(2,15,28,.35); border-right: 1px solid rgba(255,255,255,.08); }
+.blud-imp-rail-item {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 6px 12px; background: none; border: none; border-left: 2px solid transparent;
+  cursor: pointer; color: #B5D4F4; font-family: inherit;
+}
+.blud-imp-rail-item:hover  { background: rgba(55,138,221,.12); }
+.blud-imp-rail-item.active { background: rgba(124,92,252,.22); border-left-color: #7C5CFC; color: #E6F1FB; }
+.blud-imp-row     { border-bottom: 1px solid rgba(255,255,255,.05); }
+.blud-imp-row:hover { background: rgba(55,138,221,.08); }
+.blud-imp-row.sel { background: rgba(55,138,221,.13); }
+.blud-imp-hl      { background: rgba(239,159,39,.3); border-radius: 2px; color: inherit; }
+.blud-imp-link {
+  background: none; border: none; cursor: pointer; padding: 0; margin-left: 6px;
+  color: #85B7EB; text-decoration: underline; font-size: inherit; font-family: inherit;
+}
+.blud-imp-dock { background: rgba(2,15,28,.35); border-left: 1px solid rgba(255,255,255,.08); }
+.blud-imp-dock-title { font-size: 10.5px; font-weight: 800; letter-spacing: .4px; }
+.blud-imp-ent {
+  background: rgba(4,44,83,.85); border: 1px solid rgba(24,95,165,.6); border-radius: 8px;
+}
+.blud-imp-ent.err   { border-color: #E24B4A; }
+.blud-imp-ent.after { border-color: #EF9F27; background: rgba(239,159,39,.1); }
+.blud-imp-lv {
+  font-family: var(--font-mono, monospace); font-size: 9.5px; flex-shrink: 0;
+  background: rgba(124,92,252,.25); color: #CECBF6; border-radius: 4px; padding: 1px 5px;
+}
+.blud-imp-ctl {
+  display: inline-flex; align-items: center; padding: 2px;
+  background: none; border: none; cursor: pointer; color: #85B7EB;
+}
+.blud-imp-ctl:hover    { color: #E6F1FB; }
+.blud-imp-ctl:disabled { opacity: .25; cursor: default; }
+.blud-imp-badge-warn { background: rgba(186,117,23,.25); color: #FAC775; }
+
+[data-theme="light"] .blud-imp-text  { color: #0F0F12; }
+[data-theme="light"] .blud-imp-muted { color: #6B7280; }
+[data-theme="light"] .blud-imp-input { background: #fff; border-color: #D1D5DB; color: #111827; }
+[data-theme="light"] .blud-imp-pill  { border-color: #D1D5DB; color: #4B5563; }
+[data-theme="light"] .blud-imp-pill.on-purple { background: rgba(124,92,252,.12); border-color: #7C5CFC; color: #534AB7; }
+[data-theme="light"] .blud-imp-pill.on-amber  { background: rgba(239,159,39,.15); border-color: #EF9F27; color: #854F0B; }
+[data-theme="light"] .blud-imp-rail { background: #F4F6F8; border-right-color: #E5E7EB; }
+[data-theme="light"] .blud-imp-rail-item { color: #4B5563; }
+[data-theme="light"] .blud-imp-rail-item:hover  { background: #EEF2F7; }
+[data-theme="light"] .blud-imp-rail-item.active { background: rgba(124,92,252,.12); color: #1F2937; }
+[data-theme="light"] .blud-imp-row     { border-bottom-color: #F0F2F5; }
+[data-theme="light"] .blud-imp-row:hover { background: #F3F7FC; }
+[data-theme="light"] .blud-imp-row.sel { background: #EAF1FA; }
+[data-theme="light"] .blud-imp-hl     { background: rgba(239,159,39,.25); }
+[data-theme="light"] .blud-imp-link   { color: #185FA5; }
+[data-theme="light"] .blud-imp-dock   { background: #F7F9FB; border-left-color: #E5E7EB; }
+[data-theme="light"] .blud-imp-ent    { background: #fff; border-color: #D6E3F0; }
+[data-theme="light"] .blud-imp-ent.after { background: rgba(239,159,39,.08); border-color: #EF9F27; }
+[data-theme="light"] .blud-imp-lv     { background: rgba(124,92,252,.15); color: #534AB7; }
+[data-theme="light"] .blud-imp-ctl    { color: #6B7280; }
+[data-theme="light"] .blud-imp-ctl:hover { color: #111827; }
+[data-theme="light"] .blud-imp-badge-warn { background: rgba(239,159,39,.18); color: #854F0B; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ BLUD tabel ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+.dpa-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.dpa-table th {
+  background: rgba(4,44,83,.95); color: #E6F1FB; padding: 8px 10px;
+  text-align: center; font-weight: 700; font-size: 11px;
+  letter-spacing: .4px; text-transform: uppercase;
+  border-right: 1px solid #0C447C; white-space: nowrap;
+}
+.dpa-table th:last-child { border-right: none; }
+.dpa-table td { padding: 4px 6px; border: 1px solid rgba(12,68,124,.3); vertical-align: middle; }
+.dpa-table input[type="number"], .dpa-table input[type="text"] {
+  border: 1px solid rgba(12,68,124,.4); border-radius: 4px; padding: 2px 6px;
+  width: 100%; font-size: 12px; background: rgba(4,44,83,.6);
+}
+.dpa-table input[type="number"]:focus, .dpa-table input[type="text"]:focus {
+  outline: none; border-color: #EF9F27; background: rgba(239,159,39,.08);
+}
+.table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #0C447C; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ BLUD tabel ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â LIGHT THEME overrides ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+[data-theme="light"] .dpa-table th {
+  background: linear-gradient(135deg, rgba(139,92,246,.49), rgba(236,72,153,.45)) !important;
+  color: #0F0F12 !important; border-right-color: rgba(139,92,246,.22) !important;
+}
+[data-theme="light"] .dpa-table td {
+  border-color: rgba(139,92,246,.12) !important;
+}
+[data-theme="light"] .dpa-table input[type="number"],
+[data-theme="light"] .dpa-table input[type="text"] {
+  background: #F5F5F7 !important; color: #0F0F12 !important;
+  border-color: rgba(139,92,246,.22) !important;
+}
+[data-theme="light"] .dpa-table input[type="number"]:focus,
+[data-theme="light"] .dpa-table input[type="text"]:focus {
+  border-color: #8B5CF6 !important; background: rgba(139,92,246,.04) !important;
+  box-shadow: 0 0 0 2px rgba(139,92,246,.12) !important;
+}
+[data-theme="light"] .table-wrapper { border-color: rgba(139,92,246,.22) !important; }
+
+/* Row hierarki ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â light variants (gradasi pastel, kontras teks gelap) */
+[data-theme="light"] .row-grandmaster td {
+  background: linear-gradient(135deg, #8B5CF6, #6D28D9) !important;
+  color: #FFFFFF !important;
+}
+[data-theme="light"] .row-grandmaster td input {
+  background: rgba(255,255,255,.18) !important; color: #FFFFFF !important;
+  border-color: rgba(255,255,255,.35) !important;
+}
+[data-theme="light"] .row-grandmaster td input::placeholder { color: rgba(255,255,255,.7) !important; }
+/* HEADS L2-L8 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â solid mid-saturated, di bawah L1 gradient. White text. */
+[data-theme="light"] .row-master      td { background: #10B981 !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-master      td input { color: #FFFFFF !important; }
+[data-theme="light"] .row-leader      td { background: #7C3AED !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-leader      td input { color: #FFFFFF !important; }
+[data-theme="light"] .row-pleton-leader td { background: #06B6D4 !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-pleton-leader td input { color: #FFFFFF !important; }
+[data-theme="light"] .row-ketua-a     td { background: #F97316 !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-ketua-a     td input { color: #FFFFFF !important; }
+[data-theme="light"] .row-ketua-b     td { background: #F43F5E !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-ketua-b     td input { color: #FFFFFF !important; }
+[data-theme="light"] .row-l7-head     td { background: #6366F1 !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-l7-head     td input { color: #FFFFFF !important; }
+[data-theme="light"] .row-l8-head     td { background: #475569 !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-l8-head     td input { color: #FFFFFF !important; }
+
+/* SUB / leaf-mode (X.1) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â tetap pastel, kontras teks gelap */
+/* L3.1 MEMBER ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â di-solidkan supaya kontras dengan L3 violet & L4 cyan (request user) */
+[data-theme="light"] .row-member      td { background: #C026D3 !important; color: #FFFFFF !important; }
+[data-theme="light"] .row-member      td input { color: #FFFFFF !important; font-weight: 700; }
+[data-theme="light"] .row-child       td { background: #F1F5F9 !important; color: #1E293B !important; }
+[data-theme="light"] .row-child       td input { color: #1E293B !important; font-weight: 600; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Row hover (DPA + Pergeseran + Master Akun + Kode Besar) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Slate-600 medium overlay ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â "agak light dark", feedback JELAS tapi tidak
+   overpowering hitam (request user 2026-05-22, revisi dari gray-800/900).
+   Pakai !important supaya override row-color yang juga !important. */
+.dpa-table tbody tr:hover td {
+  background: #64748B !important;   /* slate-500 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â lebih terang dari slate-600 (request user) */
+  color: #FFFFFF !important;
+  box-shadow: inset 4px 0 0 #FBBF24 !important;  /* amber strip kiri sebagai indicator */
+  transition: background .12s, color .12s;
+}
+.dpa-table tbody tr:hover td input,
+.dpa-table tbody tr:hover td select {
+  color: #FFFFFF !important;
+  background: rgba(255,255,255,.10) !important;
+  border-color: rgba(255,255,255,.35) !important;
+}
+[data-theme="light"] .dpa-table tbody tr:hover td {
+  background: #64748B !important;   /* slate-500 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â lebih terang utk light theme (request user) */
+  color: #FFFFFF !important;
+  box-shadow: inset 4px 0 0 #EF9F27 !important;
+}
+[data-theme="light"] .dpa-table tbody tr:hover td input,
+[data-theme="light"] .dpa-table tbody tr:hover td select {
+  color: #FFFFFF !important;
+  background: rgba(255,255,255,.12) !important;
+  border-color: rgba(255,255,255,.40) !important;
+}
+[data-theme="light"] .row-pleton-member td { background: #FAF5FF !important; color: #6B21A8 !important; }
+[data-theme="light"] .row-pleton-member td input { color: #6B21A8 !important; }
+[data-theme="light"] .row-anggota-a   td { background: #FFF7ED !important; color: #9A3412 !important; }
+[data-theme="light"] .row-anggota-a   td input { color: #9A3412 !important; }
+[data-theme="light"] .row-anggota-b   td { background: #FFF7ED !important; color: #C2410C !important; }
+[data-theme="light"] .row-anggota-b   td input { color: #C2410C !important; }
+[data-theme="light"] .row-l7-sub      td { background: #E0E7FF !important; color: #4338CA !important; }
+[data-theme="light"] .row-l7-sub      td input { color: #4338CA !important; }
+[data-theme="light"] .row-l8-sub      td { background: #F1F5F9 !important; color: #334155 !important; }
+[data-theme="light"] .row-l8-sub      td input { color: #334155 !important; }
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ E-Anggaran Print styles ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+@media print {
+  /* Sembunyikan semua konten dengan visibility (bukan display)
+     agar Next.js nested DOM tidak block #cetak-area */
+  body * { visibility: hidden !important; }
+  #cetak-area,
+  #cetak-area * { visibility: visible !important; }
+  #cetak-area {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    z-index: 99999 !important;
+    background: white !important;
+    padding: 16px !important;
+  }
+  #cetak-area .no-print,
+  #cetak-area .no-print * { visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }
+  .print-page { page-break-after: always; box-shadow: none !important; border: 1px solid #ccc !important; }
+  .print-page:last-child { page-break-after: auto; }
+}
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ PRIMA Light Theme (data-theme="light") ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+:root[data-theme='light'] {
+  /* Canvas */
+  --bg-base:    #F5F5F7;
+  --bg-surface: #FFFFFF;
+  --bg-subtle:  #F4F4F7;
+  --bg-hover:   #EEEEF2;
+
+  /* Text */
+  --text-primary:   #0F0F12;
+  --text-secondary: #3A3A42;
+  --text-muted:     #8A8A95;
+
+  /* Brand */
+  --brand-gradient: linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%);
+  --brand-tint-50:  #F5F0FF;
+  --brand-tint-100: #EDE4FF;
+
+  /* Action buttons */
+  --action-danger:  #E53E3E;
+  --action-success: #0B8A63;
+  --action-purple:  #7C5CFC;
+  --action-warning: #B45309;
+
+  /* Financial */
+  --financial-up:   #059669;
+  --financial-down: #DC2626;
+
+  /* Shadows */
+  --shadow-sm:  0 2px 8px rgba(15,15,18,.06);
+  --shadow-md:  0 4px 16px rgba(15,15,18,.08);
+  --shadow-lg:  0 8px 32px rgba(15,15,18,.10);
+  --shadow-xl:  0 16px 48px rgba(15,15,18,.12);
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* Theme toggle overrides */
+  --theme-toggle-track:         rgba(15,15,18,.07);
+  --theme-toggle-border:        rgba(15,15,18,.14);
+  --theme-toggle-inactive-text: rgba(15,15,18,.35);
+}
+
+/* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ PRIMA Light Theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Menu Page Overrides ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
+/* Semua class di menu-client.tsx pakai hardcoded hex, override via          */
+/* [data-theme='light'] selector. Tokens dari DESIGN-SYSTEM.md ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§12.         */
+
+[data-theme='light'] .menu-body {
+  background-color: #F5F5F7;
+  background-image:
+    linear-gradient(rgba(15,15,18,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15,15,18,0.03) 1px, transparent 1px);
+  color: #0F0F12;
+}
+
+[data-theme='light'] .orb-1 { background: radial-gradient(ellipse, rgba(139,92,246,0.09), transparent 70%); }
+[data-theme='light'] .orb-2 { background: radial-gradient(ellipse, rgba(236,72,153,0.09), transparent 70%); }
+[data-theme='light'] .orb-3 { background: radial-gradient(ellipse, rgba(139,92,246,0.05), transparent 70%); }
+
+[data-theme='light'] .m-header {
+  background: rgba(250,250,250,0.92);
+  border-bottom: 1px solid #E5E5EA;
+  box-shadow: 0 1px 0 #E5E5EA, 0 2px 8px rgba(15,15,18,0.06);
+}
+[data-theme='light'] .m-header::after {
+  background: linear-gradient(90deg, transparent, rgba(139,92,246,0.35), transparent);
+}
+
+[data-theme='light'] .m-subtitle { color: #8A8A95; }
+
+[data-theme='light'] .user-trigger {
+  border-color: rgba(139,92,246,0.2);
+  background: rgba(139,92,246,0.04);
+}
+[data-theme='light'] .user-trigger:hover {
+  border-color: rgba(139,92,246,0.4);
+  background: rgba(139,92,246,0.08);
+}
+[data-theme='light'] .user-name  { color: #0F0F12; }
+[data-theme='light'] .user-role  { color: #8A8A95; }
+
+[data-theme='light'] .dropdown {
+  background: rgba(250,250,250,0.98);
+  border-color: #E5E5EA;
+  box-shadow: 0 16px 48px rgba(15,15,18,.12), 0 0 0 1px rgba(139,92,246,.05);
+}
+[data-theme='light'] .drop-header  { border-bottom-color: #E5E5EA; }
+[data-theme='light'] .drop-item    { color: #3A3A42; }
+[data-theme='light'] .drop-item:hover { background: rgba(139,92,246,0.05); color: #0F0F12; }
+[data-theme='light'] .drop-item.danger       { color: #E53E3E; }
+[data-theme='light'] .drop-item.danger:hover { background: rgba(229,62,62,0.06); color: #C53030; }
+[data-theme='light'] .drop-divider { background: #E5E5EA; }
+
+[data-theme='light'] .m-welcome-tag {
+  color: transparent;
+  background: linear-gradient(135deg, #8B5CF6, #EC4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  border-color: rgba(139,92,246,0.2);
+  background-color: rgba(139,92,246,0.06);
+  /* override background shorthand conflict */
+  background: rgba(139,92,246,0.06);
+  color: #7C5CFC;
+}
+[data-theme='light'] .m-welcome h2 { color: #0F0F12; }
+[data-theme='light'] .m-welcome h2 span {
+  background: linear-gradient(135deg,#8B5CF6,#EC4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+[data-theme='light'] .m-welcome p { color: #8A8A95; }
+
+[data-theme='light'] .m-section-title { color: #8A8A95; }
+[data-theme='light'] .m-section-title::after { background: #E5E5EA; }
+
+[data-theme='light'] .app-card {
+  background: #F5F5F7;
+  border-color: #E5E5EA;
+  box-shadow: 0 2px 8px rgba(15,15,18,.06);
+}
+[data-theme='light'] .app-card::before {
+  background: linear-gradient(135deg, rgba(139,92,246,0.03), transparent);
+}
+[data-theme='light'] .app-card:hover {
+  background: #F4F4F7;
+  border-color: rgba(139,92,246,0.25);
+  box-shadow: 0 8px 24px rgba(15,15,18,.08), 0 0 0 1px rgba(139,92,246,.12);
+}
+[data-theme='light'] .card-name  { color: #0F0F12; }
+[data-theme='light'] .card-desc  { color: #8A8A95; }
+[data-theme='light'] .card-arrow { color: #D0D0D8; }
+[data-theme='light'] .app-card:hover .card-arrow { color: rgba(139,92,246,0.55); }
+
+[data-theme='light'] .stat-chip {
+  background: rgba(139,92,246,0.05);
+  border-color: rgba(139,92,246,0.15);
+  box-shadow: 0 1px 4px rgba(15,15,18,.05);
+}
+[data-theme='light'] .stat-chip-val {
+  background: linear-gradient(135deg,#8B5CF6,#EC4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+[data-theme='light'] .stat-chip-lbl { color: #8A8A95; }
+
+[data-theme='light'] .m-footer { color: #8A8A95; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   BLUD v2 — Spec-faithful redesign (Opsi D-4).
+   Apply via className="blud-scroll-wrapper v2" + className="dpa-table v2".
+   TIPE_ROW_CLASS map ke lv-l1 .. lv-l81 (mirror TIPE_LABEL urutan).
+   Per-level: border-left 4px + padding-left 16px + ::before glow 80px gradient.
+   ─────────────────────────────────────────────────────────────────────*/
+
+.blud-scroll-wrapper.v2 {
+  background: #0F172A;
+  border-color: #1E293B;
+  padding: 4px 8px;
+}
+
+.dpa-table.v2 {
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+.dpa-table.v2 thead th {
+  background: #0C447C !important;  /* SOLID navy supaya saat sticky-scroll tidak bleed dari row di bawahnya */
+  color: #FAC775 !important;
+  border: none !important;
+  border-bottom: 1px solid #185FA5 !important;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  /* Shadow tebal di bawah thead utk cover gap 6px (border-spacing) saat sticky */
+  box-shadow: 0 6px 0 #0F172A, 0 8px 8px rgba(0,0,0,.25);
+}
+.dpa-table.v2 tbody tr {
+  background: #042C53;  /* PRIMA navy surface (Varian B) — ganti ke rgba(124,92,252,.12) kalau mau ungu */
+  transition: background .15s, color .15s;
+}
+.dpa-table.v2 tbody tr:hover { background: #334155; }
+.dpa-table.v2 tbody tr:hover td { color: #FFFFFF !important; }
+.dpa-table.v2 tbody td {
+  background: transparent !important;
+  border: none !important;
+  padding: 8px;
+  color: rgba(255,255,255,.85);
+}
+.dpa-table.v2 tbody td input[type="text"],
+.dpa-table.v2 tbody td input[type="number"] {
+  color: rgba(255,255,255,.92) !important;
+  font-weight: 600;
+}
+.dpa-table.v2 tbody td:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  border-left: 4px solid transparent !important;
+  padding-left: 16px !important;
+  position: relative;
+}
+.dpa-table.v2 tbody td:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+.dpa-table.v2 tbody td:first-child::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 80px;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 8px 0 0 8px;
+}
+.dpa-table.v2 tbody td:first-child > * { position: relative; z-index: 1; }
+
+/* Per-level border-left + glow (PRIMA palette utk L1-L4.1, accent palette utk L5+) */
+.dpa-table.v2 tbody tr.lv-l1  td:first-child { border-left-color: #EF9F27 !important; }
+.dpa-table.v2 tbody tr.lv-l1  td:first-child::before { background: linear-gradient(90deg, rgba(239,159,39,.20), rgba(239,159,39,0)); }
+.dpa-table.v2 tbody tr.lv-l2  td:first-child { border-left-color: #1D9E75 !important; }
+.dpa-table.v2 tbody tr.lv-l2  td:first-child::before { background: linear-gradient(90deg, rgba(29,158,117,.20), rgba(29,158,117,0)); }
+.dpa-table.v2 tbody tr.lv-l21 td:first-child { border-left-color: #7C5CFC !important; }
+.dpa-table.v2 tbody tr.lv-l21 td:first-child::before { background: linear-gradient(90deg, rgba(124,92,252,.20), rgba(124,92,252,0)); }
+.dpa-table.v2 tbody tr.lv-l3  td:first-child { border-left-color: #BA7517 !important; }
+.dpa-table.v2 tbody tr.lv-l3  td:first-child::before { background: linear-gradient(90deg, rgba(186,117,23,.20), rgba(186,117,23,0)); }
+.dpa-table.v2 tbody tr.lv-l31 td:first-child { border-left-color: #D946EF !important; }
+.dpa-table.v2 tbody tr.lv-l31 td:first-child::before { background: linear-gradient(90deg, rgba(217,70,239,.20), rgba(217,70,239,0)); }
+.dpa-table.v2 tbody tr.lv-l4  td:first-child { border-left-color: #06B6D4 !important; }
+.dpa-table.v2 tbody tr.lv-l4  td:first-child::before { background: linear-gradient(90deg, rgba(6,182,212,.20), rgba(6,182,212,0)); }
+.dpa-table.v2 tbody tr.lv-l41 td:first-child { border-left-color: #38BDF8 !important; }
+.dpa-table.v2 tbody tr.lv-l41 td:first-child::before { background: linear-gradient(90deg, rgba(56,189,248,.20), rgba(56,189,248,0)); }
+.dpa-table.v2 tbody tr.lv-l5  td:first-child { border-left-color: #F97316 !important; }
+.dpa-table.v2 tbody tr.lv-l5  td:first-child::before { background: linear-gradient(90deg, rgba(249,115,22,.20), rgba(249,115,22,0)); }
+.dpa-table.v2 tbody tr.lv-l51 td:first-child { border-left-color: #FB923C !important; }
+.dpa-table.v2 tbody tr.lv-l51 td:first-child::before { background: linear-gradient(90deg, rgba(251,146,60,.20), rgba(251,146,60,0)); }
+.dpa-table.v2 tbody tr.lv-l6  td:first-child { border-left-color: #F43F5E !important; }
+.dpa-table.v2 tbody tr.lv-l6  td:first-child::before { background: linear-gradient(90deg, rgba(244,63,94,.20), rgba(244,63,94,0)); }
+.dpa-table.v2 tbody tr.lv-l61 td:first-child { border-left-color: #FB7185 !important; }
+.dpa-table.v2 tbody tr.lv-l61 td:first-child::before { background: linear-gradient(90deg, rgba(251,113,133,.20), rgba(251,113,133,0)); }
+.dpa-table.v2 tbody tr.lv-l7  td:first-child { border-left-color: #6366F1 !important; }
+.dpa-table.v2 tbody tr.lv-l7  td:first-child::before { background: linear-gradient(90deg, rgba(99,102,241,.20), rgba(99,102,241,0)); }
+.dpa-table.v2 tbody tr.lv-l71 td:first-child { border-left-color: #818CF8 !important; }
+.dpa-table.v2 tbody tr.lv-l71 td:first-child::before { background: linear-gradient(90deg, rgba(129,140,248,.20), rgba(129,140,248,0)); }
+.dpa-table.v2 tbody tr.lv-l8  td:first-child { border-left-color: #94A3B8 !important; }
+.dpa-table.v2 tbody tr.lv-l8  td:first-child::before { background: linear-gradient(90deg, rgba(148,163,184,.20), rgba(148,163,184,0)); }
+.dpa-table.v2 tbody tr.lv-l81 td:first-child { border-left-color: #CBD5E1 !important; }
+.dpa-table.v2 tbody tr.lv-l81 td:first-child::before { background: linear-gradient(90deg, rgba(203,213,225,.20), rgba(203,213,225,0)); }
+
+/* Sticky L1 row di bawah thead (replace .row-grandmaster sticky lama) */
+.blud-scroll-wrapper.v2 tbody tr.lv-l1 td {
+  position: sticky; top: 36px; z-index: 2;
+  background: #042C53;  /* SOLID, opaque saat sticky-scroll */
+  /* Shadow bawah cover gap 6px antar row + drop shadow halus utk pisahkan dari row scroll */
+  box-shadow: 0 6px 0 #0F172A, 0 10px 12px rgba(0,0,0,.35);
+}
+.blud-scroll-wrapper.v2 tbody tr.lv-l1:hover td { background: #334155; }
+
+/* Light mode override — bg terang, border-left tetap colored per level */
+[data-theme="light"] .blud-scroll-wrapper.v2 { background: #F5F5F7; border-color: rgba(139,92,246,.18); }
+[data-theme="light"] .dpa-table.v2 thead th {
+  background: linear-gradient(135deg, #8B5CF6, #EC4899) !important;  /* SOLID purple-pink mix */
+  color: #FFFFFF !important;
+  border-bottom: 1px solid rgba(139,92,246,.5) !important;
+  text-shadow: 0 1px 1px rgba(0,0,0,.18);
+  /* Override dark-mode shadow yg pakai #0F172A — bocor hitam di light mode */
+  box-shadow: 0 6px 0 #F5F5F7, 0 8px 8px rgba(0,0,0,.08) !important;
+}
+[data-theme="light"] .dpa-table.v2 tbody tr { background: #FAFAFA; }
+[data-theme="light"] .dpa-table.v2 tbody tr:hover { background: #F1F5F9; }
+[data-theme="light"] .dpa-table.v2 tbody tr:hover td { color: #0F0F12 !important; }
+[data-theme="light"] .dpa-table.v2 tbody td { color: #0F0F12; }
+[data-theme="light"] .dpa-table.v2 tbody td input[type="text"],
+[data-theme="light"] .dpa-table.v2 tbody td input[type="number"] { color: #0F0F12 !important; }
+[data-theme="light"] .blud-scroll-wrapper.v2 tbody tr.lv-l1 td {
+  background: #FAFAFA !important;
+  /* Override dark-mode shadow utk light theme — putih + drop shadow lembut */
+  box-shadow: 0 6px 0 #F5F5F7, 0 10px 12px rgba(0,0,0,.10) !important;
+}
+[data-theme="light"] .blud-scroll-wrapper.v2 tbody tr.lv-l1:hover td { background: #F1F5F9 !important; }
+
+/* ─── Promotion Ladder modals (P-OPT-1 fix — pindah dari inline style) ──── */
+.promo-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(2,15,28,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; padding: 16px;
+  /* z-index 9999 supaya cover sticky .ap-header (z-100) di Admin Panel */
+}
+.promo-modal-box {
+  background: #042C53; border-radius: 14px; padding: 24px;
+  width: 100%; max-width: 520px; color: #E6F1FB;
+  border: 1px solid rgba(124,92,252,0.3);
+  max-height: calc(100vh - 32px); overflow-y: auto;
+}
+.promo-modal-box::-webkit-scrollbar { width: 8px; }
+.promo-modal-box::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
+.promo-modal-box::-webkit-scrollbar-thumb { background: rgba(124,92,252,0.4); border-radius: 4px; }
+.promo-modal-box::-webkit-scrollbar-thumb:hover { background: rgba(124,92,252,0.6); }
+.promo-modal-box.compact { max-width: 460px; }
+.promo-modal-box.wide    { max-width: 560px; }
+.promo-modal-box.danger  { border-color: rgba(226,75,74,0.3); }
+.promo-modal-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.promo-modal-title  { margin: 0; font-size: 18px; font-weight: 700; flex: 1; }
+.promo-modal-close  { background: transparent; border: 0; color: #85B7EB; cursor: pointer; padding: 4px; }
+.promo-modal-form   { display: flex; flex-direction: column; gap: 12px; }
+.promo-label        { font-size: 12px; color: #85B7EB; margin-bottom: 4px; display: block; }
+.promo-input,
+.promo-textarea,
+.promo-select {
+  width: 100%; padding: 10px; border-radius: 6px;
+  background: #020F1C; color: #E6F1FB;
+  border: 1px solid rgba(133,183,235,0.2);
+  font-family: 'Inter', sans-serif; font-size: 14px;
+}
+/* Modal promo dark-only: select.promo-select (specificity sama + urutan belakang)
+   menang tie-break vs baseline [data-theme="light"] select. */
+.promo-select   { padding-right: 32px; appearance: none; }
+select.promo-select { color-scheme: dark; }
+select.promo-select option { background: #020F1C; color: #E6F1FB; }
+.promo-textarea { resize: vertical; }
+.promo-hint       { font-size: 11px; color: #85B7EB; margin-top: 4px; }
+.promo-hint.warn  { color: #BA7517; }
+.promo-error {
+  background: rgba(226,75,74,0.15); color: #E24B4A;
+  padding: 10px 12px; border-radius: 6px; font-size: 13px;
+  border: 1px solid rgba(226,75,74,0.3);
+}
+.promo-info-pending {
+  background: rgba(186,117,23,0.1); border-radius: 8px; padding: 12px;
+  font-size: 12px; color: #BA7517; border: 1px solid rgba(186,117,23,0.3);
+}
+.promo-info-cooldown {
+  background: rgba(124,92,252,0.1); border-radius: 8px; padding: 14px;
+  border: 1px solid rgba(124,92,252,0.3);
+  display: flex; align-items: center; gap: 12px;
+}
+.promo-countdown {
+  font-size: 22px; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace; color: #7C5CFC;
+}
+.promo-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.promo-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px; border-radius: 8px;
+  background: rgba(186,117,23,0.12);
+  border: 1px solid rgba(186,117,23,0.35);
+  color: #BA7517; font-size: 13px;
+  font-family: 'Inter', sans-serif;
+}
+
+/* -- Delete: animated trash icon + round button (Uiverse vinodjangid07 adapted ke token PRIMA) --
+   Ikon = 2 svg: lid (.prima-del-top) + body (.prima-del-bottom). Lid rotate 160deg saat tombol
+   induk di-hover -> dipakai DeleteIcon (di PrimaButton danger) & DeleteButton bulat (row-action).
+   Reference: components/ui/DeleteIcon.tsx - DeleteButton.tsx - DESIGN-SYSTEM.md "DeleteButton". */
+.prima-del-ico {
+  display: inline-flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 1px; line-height: 0;
+  vertical-align: middle;
+}
+.prima-del-svg { display: block; transition: transform .3s; }
+.prima-del-top { transform-origin: bottom right; transition: transform .5s; }
+button:hover .prima-del-top { transform: rotate(160deg); }
+.prima-del-btn:hover:not(:disabled) .prima-del-ico { gap: 0; }
+
+.prima-del-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #13202F; color: #E6F1FB; border: none; cursor: pointer; flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(0,0,0,.18);
+  transition: background .3s, color .3s, transform .12s, box-shadow .3s;
+}
+.prima-del-btn:hover:not(:disabled) {
+  background: #E24B4A; color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(226,75,74,.40);
+}
+.prima-del-btn:active:not(:disabled) { transform: scale(.92); }
+.prima-del-btn:disabled { opacity: .4; cursor: not-allowed; }
+[data-theme="light"] .prima-del-btn {
+  background: #1F2937; color: #F3F4F6; box-shadow: 0 1px 4px rgba(15,15,18,.22);
+}
+[data-theme="light"] .prima-del-btn:hover:not(:disabled) { background: #E24B4A; color: #FFFFFF; }
+
+/* -- Edit & Realisasi: row-action bulat keluarga DeleteButton (bentuk sama, warna aksi beda) --
+   Edit: pensil miring ke posisi menulis + underline ter-gambar; hover bg ungu token.
+   Realisasi: koin jatuh masuk dompet; hover bg hijau token (Setujui/finansial).
+   Reference: components/ui/EditButton.tsx - RealisasiButton.tsx - DESIGN-SYSTEM.md "Row-Action Buttons". */
+.prima-edit-btn, .prima-real-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #13202F; color: #E6F1FB; border: none; cursor: pointer; flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(0,0,0,.18);
+  transition: background .3s, color .3s, transform .12s, box-shadow .3s;
+}
+.prima-edit-btn:active:not(:disabled), .prima-real-btn:active:not(:disabled) { transform: scale(.92); }
+.prima-edit-btn:disabled, .prima-real-btn:disabled { opacity: .4; cursor: not-allowed; }
+[data-theme="light"] .prima-edit-btn, [data-theme="light"] .prima-real-btn {
+  background: #1F2937; color: #F3F4F6; box-shadow: 0 1px 4px rgba(15,15,18,.22);
+}
+
+.prima-edit-btn:hover:not(:disabled) {
+  background: #7C5CFC; color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(124,92,252,.40);
+}
+[data-theme="light"] .prima-edit-btn:hover:not(:disabled) { background: #7C5CFC; color: #FFFFFF; }
+.prima-edit-pencil { transform-origin: 40% 60%; transition: transform .4s; }
+.prima-edit-btn:hover:not(:disabled) .prima-edit-pencil { transform: rotate(-38deg) translate(-2px, -1px); }
+.prima-edit-line { stroke-dasharray: 16; stroke-dashoffset: 16; transition: stroke-dashoffset .4s .08s; }
+.prima-edit-btn:hover:not(:disabled) .prima-edit-line { stroke-dashoffset: 0; }
+
+.prima-real-btn:hover:not(:disabled) {
+  background: #1D9E75; color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(29,158,117,.40);
+}
+[data-theme="light"] .prima-real-btn:hover:not(:disabled) { background: #1D9E75; color: #FFFFFF; }
+.prima-real-coin { opacity: 0; transform: translateY(-3px); transition: opacity .3s, transform .4s; }
+.prima-real-btn:hover:not(:disabled) .prima-real-coin { opacity: 1; transform: translateY(3px); }
+.prima-real-body { transition: transform .3s .15s; }
+.prima-real-btn:hover:not(:disabled) .prima-real-body { transform: translateY(.8px); }
+
+/* -- DownloadButton (Uiverse animated download adapted ke token PRIMA) — export Rencana Aksi --
+   Face = badan tombol (surface tema). Slide = layer warna (PDF #E24B4A / Excel #1D9E75) nyembul
+   ~3px di bawah face, turun + box-shadow saat hover, panah bounce. Reference: DownloadButton.tsx. */
+.prima-dl-btn {
+  position: relative; border: 0; padding: 0 0 3px; background: transparent;
+  font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px;
+  z-index: 1; font-family: inherit; line-height: 1;
+}
+.prima-dl-btn:disabled { opacity: .45; cursor: not-allowed; }
+.prima-dl-face {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 36px; padding: 0 14px; border-radius: 6px; position: relative; z-index: 1;
+  background: #1E2733; color: #E6F1FB; border: 1px solid rgba(232,232,232,.16);
+  white-space: nowrap; transition: all .5s cubic-bezier(0.77,0,0.175,1);
+}
+.prima-dl-slide {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  max-width: 90%; margin: 0 auto; z-index: -1; border-radius: 6px;
+  transform: translateY(0%); color: #FFFFFF;
+  transition: all .5s cubic-bezier(0.77,0,0.175,1);
+}
+.prima-dl-slide[data-variant="pdf"]   { background: #E24B4A; border: 1px solid rgba(226,75,74,.20); }
+.prima-dl-slide[data-variant="excel"] { background: #1D9E75; border: 1px solid rgba(29,158,117,.20); }
+.prima-dl-slide[data-variant="word"]  { background: #2B579A; border: 1px solid rgba(43,87,154,.20); }
+/* size sm — toolbar padat (kinerja tabs, usulan panel) biar tidak kebesaran */
+.prima-dl-btn--sm { font-size: 12px; }
+.prima-dl-btn--sm .prima-dl-face { min-height: 30px; padding: 0 11px; gap: 6px; }
+.prima-dl-btn--sm .prima-dl-face svg { width: 15px; height: 15px; }
+.prima-dl-btn:hover:not(:disabled) .prima-dl-slide { transform: translateY(100%); }
+.prima-dl-btn:hover:not(:disabled) {
+  box-shadow: rgba(0,0,0,.25) 0 30px 35px, rgba(0,0,0,.12) 0 -8px 20px,
+              rgba(0,0,0,.12) 0 4px 6px, rgba(0,0,0,.17) 0 10px 12px, rgba(0,0,0,.09) 0 -3px 5px;
+}
+.prima-dl-slide svg polyline, .prima-dl-slide svg line { animation: prima-dl-bounce 1s infinite; }
+@keyframes prima-dl-bounce {
+  0% { transform: translateY(0%); } 50% { transform: translateY(-15%); } 100% { transform: translateY(0%); }
+}
+[data-theme="light"] .prima-dl-face {
+  background: #FFFFFF; color: #1F2937; border: 1px solid rgba(15,15,18,.12);
+  box-shadow: 0 1px 3px rgba(15,15,18,.06);
+}
+
+/* -- Glow Menu bar (adaptasi shadcn glow-menu ke token PRIMA) — container quick-actions Rencana Aksi --
+   Kaca rounded + glow radial multi-warna (PDF merah / Excel hijau / Reset amber) fade-in saat hover. */
+.prima-glowbar {
+  position: relative; overflow: visible; padding: 8px; border-radius: 16px;
+  box-shadow: 0 12px 34px rgba(0,0,0,.35);
+  transition: box-shadow .4s cubic-bezier(.4,0,.2,1);
+}
+/* Glass + glow di layer terpisah (overflow:hidden). backdrop-filter di host bikin
+   descendant ke-clip ke border-box → animasi DownloadButton ketutupan. Pindah ke clip. */
+.prima-glowbar-clip {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  overflow: hidden; border-radius: 16px;
+  background: linear-gradient(to bottom, rgba(4,44,83,.55), rgba(2,15,28,.35));
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(133,183,235,.18);
+}
+.prima-glowbar-glow {
+  position: absolute; inset: -10px; z-index: 0; pointer-events: none; border-radius: 26px;
+  opacity: 0; transition: opacity .5s cubic-bezier(.4,0,.2,1);
+  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(226,75,74,.30) 28%, rgba(29,158,117,.30) 55%, rgba(239,159,39,.30) 82%, transparent 100%);
+  filter: blur(6px);
+}
+.prima-glowbar:hover .prima-glowbar-glow { opacity: 1; }
+.prima-glowbar:hover { box-shadow: 0 18px 48px rgba(0,0,0,.45); }
+.prima-glowbar-row { position: relative; z-index: 10; display: flex; align-items: center; gap: 6px; }
+.prima-glowbar-sep { width: 1px; height: 16px; background: rgba(133,183,235,.25); flex-shrink: 0; }
+[data-theme="light"] .prima-glowbar {
+  box-shadow: 0 10px 28px rgba(15,15,18,.12);
+}
+[data-theme="light"] .prima-glowbar-clip {
+  background: linear-gradient(to bottom, rgba(255,255,255,.85), rgba(255,255,255,.45));
+  border: 1px solid rgba(15,15,18,.10);
+}
+[data-theme="light"] .prima-glowbar:hover { box-shadow: 0 16px 40px rgba(15,15,18,.18); }
+[data-theme="light"] .prima-glowbar-glow {
+  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(226,75,74,.20) 28%, rgba(29,158,117,.20) 55%, rgba(239,159,39,.20) 82%, transparent 100%);
+}
+[data-theme="light"] .prima-glowbar-sep { background: rgba(15,15,18,.12); }
+
+/* ─── RIMA — Sentinel Bot F1 (CONCEPT-sentinel-bot.md §3-§4) ─────────────────
+   Maskot SVG + bubble + panel temuan. Animasi murni CSS (GPU compositor).
+   z-index 900: di atas FloatingDock (400), di bawah modal (1000+) & confirmDialog
+   (4000) — bot tidak boleh menutupi konfirmasi destruktif (G7). */
+.rima-root {
+  position: fixed; right: 18px; bottom: 86px; z-index: 900;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  font-family: Inter, sans-serif;
+}
+@media print { .rima-root { display: none !important; } }
+
+.rima-toggle {
+  background: none; border: none; padding: 0; cursor: pointer; position: relative;
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,.40));
+  transition: transform .2s ease;
+}
+.rima-toggle:hover { transform: translateY(-2px) scale(1.04); }
+.rima-badge {
+  position: absolute; top: 0; right: -2px;
+  min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  background: #E24B4A; color: #FFFFFF; font-size: 11px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #020F1C;
+  font-family: 'JetBrains Mono', monospace;
+}
+.rima-badge.warn { background: #BA7517; }
+[data-theme="light"] .rima-badge { border-color: #FFFFFF; }
+
+/* Animasi maskot — transform-box supaya transform-origin SVG per-elemen akurat */
+.rima-avatar .rima-eye, .rima-avatar .rima-glow, .rima-avatar .rima-antena,
+.rima-avatar .rima-arm, .rima-avatar .rima-mouth, .rima-avatar .rima-finger,
+.rima-avatar .rima-glow-dot {
+  transform-box: fill-box; transform-origin: center;
+}
+.rima-float  { animation: rimaFloat 3.4s ease-in-out infinite; }
+@keyframes rimaFloat  { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.rima-shadow { animation: rimaShadow 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes rimaShadow { 0%, 100% { transform: scaleX(1); opacity: .22; } 50% { transform: scaleX(.82); opacity: .14; } }
+.rima-avatar .rima-eye { animation: rimaBlink 4.6s ease-in-out infinite; }
+/* A3 kedip ganda: dua kejap cepat tiap siklus — terasa lebih hidup, tetap 1 animasi */
+@keyframes rimaBlink  { 0%, 89%, 100% { transform: scaleY(1); } 91.5%, 96% { transform: scaleY(.12); } 93.5% { transform: scaleY(1); } }
+.rima-avatar .rima-glow, .rima-avatar .rima-glow-dot { animation: rimaGlow 2.4s ease-in-out infinite; }
+@keyframes rimaGlow   { 0%, 100% { opacity: .22; } 50% { opacity: .5; } }
+.rima-avatar .rima-antena { animation: rimaSway 3.8s ease-in-out infinite; transform-origin: bottom center; }
+.rima-avatar .rima-antena-r { animation-delay: .4s; }
+@keyframes rimaSway   { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+
+/* Gesture lengan — rotasi CSS murah (CONCEPT §3); pivot = bahu (top bbox lengan,
+   fill-box). BUKAN "center 82px" — itu ~48px di bawah lengan → lengan mengorbit
+   lepas dari badan (bug "tangan error"). overflow visible: lengan terangkat
+   boleh keluar viewBox 120px saat melambai. */
+.rima-avatar { overflow: visible; }
+.rima-avatar .rima-arm { transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); transform-origin: center top; }
+.rima-avatar .rima-finger { opacity: 0; transition: opacity .2s; }
+.rima-g-point-left .rima-arm-l  { transform: rotate(70deg); }
+.rima-g-point-left .rima-arm-l .rima-finger { opacity: 1; }
+.rima-g-point-right .rima-arm-r { transform: rotate(-70deg); }
+.rima-g-point-right .rima-arm-r .rima-finger { opacity: 1; }
+.rima-g-point-up .rima-arm-r    { transform: rotate(-150deg); }
+.rima-g-point-up .rima-arm-r .rima-finger { opacity: 1; }
+.rima-g-think .rima-arm-r       { transform: rotate(-115deg) translateY(2px); }
+.rima-g-wave .rima-arm-r        { animation: rimaWave 1.2s ease-in-out 2; }
+@keyframes rimaWave { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(-135deg); } 55% { transform: rotate(-105deg); } 80% { transform: rotate(-135deg); } }
+
+/* F4d gesture ekspresif (saat sapaan/celetukan/chat). Lengan pivot bahu (fill-box). */
+.rima-g-wave-l .rima-arm-l { animation: rimaWaveL 1.2s ease-in-out 2; }
+@keyframes rimaWaveL { 0%, 100% { transform: rotate(0deg); } 30% { transform: rotate(135deg); } 55% { transform: rotate(105deg); } 80% { transform: rotate(135deg); } }
+/* cheer: dua tangan terangkat + bob singkat */
+.rima-g-cheer .rima-arm-l { animation: rimaCheerL .6s ease-in-out 2; }
+.rima-g-cheer .rima-arm-r { animation: rimaCheerR .6s ease-in-out 2; }
+@keyframes rimaCheerL { 0% { transform: rotate(0deg); } 50% { transform: rotate(155deg); } 100% { transform: rotate(140deg); } }
+@keyframes rimaCheerR { 0% { transform: rotate(0deg); } 50% { transform: rotate(-155deg); } 100% { transform: rotate(-140deg); } }
+/* hop: loncat kecil — override float sementara (pola .rima-flying .rima-float) */
+.rima-g-hop .rima-float { animation: rimaHop .5s ease-in-out 2 !important; }
+@keyframes rimaHop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-9px); } }
+/* stretch: menggeliat saat bangun tidur — dua tangan terangkat tahan singkat */
+.rima-g-stretch .rima-arm-l { animation: rimaStretchL .6s ease-in-out 1; }
+.rima-g-stretch .rima-arm-r { animation: rimaStretchR .6s ease-in-out 1; }
+@keyframes rimaStretchL { 0%, 100% { transform: rotate(0deg); } 35%, 70% { transform: rotate(150deg); } }
+@keyframes rimaStretchR { 0%, 100% { transform: rotate(0deg); } 35%, 70% { transform: rotate(-150deg); } }
+
+/* Mulut — denyut hanya saat bicara (bubble tampil) */
+.rima-avatar .rima-mouth { opacity: 0; }
+.rima-talking .rima-mouth { opacity: 1; animation: rimaTalk .55s ease-in-out infinite; }
+@keyframes rimaTalk { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1.5); } }
+
+/* Istirahat (F4d): mata terpejam + glow redup + zzz mengambang — dipakai DOZE (ngantuk
+   berdiri, chat-idle) MAUPUN SLEEP (rebah di kasur, page-idle). Kasur+rotasi khusus sleep. */
+.rima-avatar .rima-zzz { opacity: 0; transition: opacity .4s; }
+.rima-sleeping .rima-zzz, .rima-dozing .rima-zzz { opacity: 1; }
+.rima-sleeping .rima-zzz text, .rima-dozing .rima-zzz text { transform-box: fill-box; transform-origin: center; animation: rimaZzz 2.4s ease-in-out infinite; }
+.rima-sleeping .rima-zzz .rima-zzz-2, .rima-dozing .rima-zzz .rima-zzz-2 { animation-delay: 1.2s; }
+@keyframes rimaZzz { 0% { transform: translate(0, 0); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(5px, -9px); opacity: 0; } }
+.rima-sleeping .rima-eye, .rima-dozing .rima-eye { transform: scaleY(.08); animation: none; }
+.rima-sleeping .rima-glow, .rima-sleeping .rima-glow-dot,
+.rima-dozing .rima-glow, .rima-dozing .rima-glow-dot { animation: none; opacity: .1; }
+/* doze: tetap BERDIRI (tanpa kasur/rotasi), cuma float lebih lambat — kesan mengantuk */
+.rima-dozing .rima-float { animation-duration: 6s; }
+/* F4d rebah di kasur: kasur/bantal/selimut fade-in; badan diputar ~82° (pivot torso)
+   + digeser pas di atas kasur. transform-box view-box → origin akurat di koordinat viewBox. */
+.rima-avatar .rima-bed, .rima-avatar .rima-blanket { opacity: 0; transition: opacity .4s; }
+.rima-sleeping .rima-bed { opacity: 1; }
+.rima-sleeping .rima-float {
+  animation: none;
+  transform-box: view-box; transform-origin: 60px 90px;
+  transform: translate(-4px, 30px) rotate(-90deg) scale(.42); /* mengecil & rebah — kepala kiri di bantal, badan muat di atas kasur */
+  transition: transform .5s ease;
+}
+/* Satu tangan menjuntai keluar tepi depan kasur (lengan sisi-depan saat badan rebah -90°) */
+.rima-sleeping .rima-arm-l {
+  transform-box: fill-box; transform-origin: center top;
+  transform: rotate(90deg); transition: transform .5s ease;
+}
+
+/* Berpikir (chat memproses, gesture think): mata menyipit + titik pikir berurut +
+   glow berdenyut lebih cepat. Lengan ke dagu sudah via .rima-g-think. */
+.rima-avatar .rima-think-dots { opacity: 0; transition: opacity .25s; }
+.rima-thinking .rima-think-dots { opacity: 1; }
+.rima-thinking .rima-eye { animation: none; transform: scaleY(.5); }
+.rima-thinking .rima-glow, .rima-thinking .rima-glow-dot { animation-duration: 1s; }
+.rima-thinking .rima-think-dot {
+  transform-box: fill-box; transform-origin: center;
+  animation: rimaThinkDot 1.4s ease-in-out infinite;
+}
+.rima-thinking .rima-think-dot-2 { animation-delay: .22s; }
+.rima-thinking .rima-think-dot-3 { animation-delay: .44s; }
+@keyframes rimaThinkDot { 0%, 100% { opacity: .2; transform: scale(.75); } 50% { opacity: 1; transform: scale(1.1); } }
+
+/* Alert kritis (entri ganda PASTI — pre-save gate): badan tersentak + mata
+   membelalak 3× untuk menarik perhatian, lalu kembali tenang (bukan loop abadi). */
+.rima-alert .rima-float { animation: rimaFloat 3.4s ease-in-out infinite, rimaAlertShake .5s ease-in-out 3; }
+.rima-alert .rima-eye { animation: rimaAlertEye .5s ease-in-out 3; }
+@keyframes rimaAlertShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+@keyframes rimaAlertEye { 0%, 100% { transform: scaleY(1); } 50% { transform: scale(1.3); } }
+
+/* A1 reaksi chat: angguk (jawaban yakin) · geleng halus (fallback). Transform di
+   root <svg> — independen dari .rima-float, tak bentrok alert/think; pivot di kaki. */
+.rima-avatar.rima-react-nod   { animation: rimaNod .5s ease-in-out 2; transform-origin: center bottom; }
+.rima-avatar.rima-react-shake { animation: rimaShakeH .5s ease-in-out 2; transform-origin: center bottom; }
+@keyframes rimaNod    { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+@keyframes rimaShakeH { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+
+/* ─── RIMA — Roket "Lepas Landas" (drag F4) ───────────────────────────────────
+   Maskot bisa di-drag ke segala arah: kaki & tangan jadi nozzle ber-api, seluruh
+   badan berputar menghadap arah gerak, boost (api membesar + trail) saat cepat,
+   lepas → mendarat tegak di posisi baru (persist localStorage rima_pos).
+   Visual penerbangan di-drive imperatif via kelas .rima-flying / .rima-boosting di
+   .rima-pose (ancestor avatar) + CSS var --rima-rot → nol re-render React saat drag
+   (60fps GPU compositor). Token api: #FFD27A→#EF9F27→#E24B4A · inti #FFFFFF→#BFE0FF. */
+.rima-pose {
+  display: block; position: relative; line-height: 0;
+  transform: rotate(var(--rima-rot, 0deg)); transform-origin: 50% 48%;
+  transition: transform .16s ease-out;
+}
+.rima-avatar .rima-nozzle, .rima-avatar .rima-flame-g { opacity: 0; transition: opacity .12s; }
+.rima-avatar .rima-flame-g, .rima-avatar .rima-flame { transform-box: view-box; }
+.rima-flying .rima-nozzle { opacity: 1; }
+.rima-flying .rima-flame-foot-l, .rima-flying .rima-flame-foot-r,
+.rima-flying .rima-flame-hand-l, .rima-flying .rima-flame-hand-r { opacity: 1; }
+/* kaki & tangan "berubah jadi nozzle" → anggota asli disembunyikan saat terbang */
+.rima-flying .rima-foot, .rima-flying .rima-hand, .rima-flying .rima-finger { opacity: 0; }
+.rima-flying .rima-float { animation: none !important; }
+
+/* Flicker api per-nozzle (fase beda) — transform di path inti/luar, origin = mulut nozzle */
+.rima-flame-foot-l { transform-origin: 48.5px 131px; }
+.rima-flame-foot-r { transform-origin: 71.5px 131px; }
+.rima-flame-hand-l { transform-origin: 24.5px 114px; }
+.rima-flame-hand-r { transform-origin: 95.5px 114px; }
+.rima-flame-boost  { transform-origin: 60px 128px; }
+.rima-flying .rima-flame-foot-l .rima-flame { animation: rimaFlame .16s linear infinite;     transform-origin: 48.5px 131px; }
+.rima-flying .rima-flame-foot-r .rima-flame { animation: rimaFlame .16s linear infinite .08s; transform-origin: 71.5px 131px; }
+.rima-flying .rima-flame-hand-l .rima-flame { animation: rimaFlame .16s linear infinite .04s; transform-origin: 24.5px 114px; }
+.rima-flying .rima-flame-hand-r .rima-flame { animation: rimaFlame .16s linear infinite .12s; transform-origin: 95.5px 114px; }
+@keyframes rimaFlame { 0% { transform: scaleY(.8); } 50% { transform: scaleY(1.25); } 100% { transform: scaleY(.86); } }
+
+/* Boost (drag cepat): api pusat menyala + semua api membesar + glow terang */
+.rima-boosting .rima-flame-boost { opacity: 1; }
+.rima-boosting .rima-flame-boost .rima-flame { animation: rimaFlame .12s linear infinite; transform-origin: 60px 128px; }
+.rima-flying .rima-flame-g   { transform: scale(1.2); }            /* api +20% biar gagah */
+.rima-boosting .rima-flame-g { transform: scale(1.2) scaleY(1.4); }
+.rima-boosting .rima-glow, .rima-boosting .rima-glow-dot { opacity: .65; }
+
+/* Trail kecepatan (semburan ke belakang badan — ikut berputar dgn .rima-pose).
+   z-index:-1 → di BELAKANG maskot (cocok preview html); top:100% → menyembur dari
+   bawah (kaki/nozzle) ke belakang, bukan menutupi badan. */
+.rima-streaks { position: absolute; left: 50%; top: 100%; width: 10px; height: 60px; margin-left: -5px; opacity: 0; transition: opacity .15s; pointer-events: none; z-index: -1; }
+.rima-flying .rima-streaks { opacity: 1; }
+.rima-streaks i { position: absolute; left: 50%; width: 3px; border-radius: 2px; background: linear-gradient(#7FB6F0, transparent); animation: rimaTrail .5s linear infinite; }
+.rima-streaks i:nth-child(1) { height: 28px; margin-left: -7px; animation-delay: 0s; }
+.rima-streaks i:nth-child(2) { height: 42px; margin-left: -1px; animation-delay: .16s; background: linear-gradient(#EF9F27, transparent); }
+.rima-streaks i:nth-child(3) { height: 24px; margin-left: 5px;  animation-delay: .3s; }
+@keyframes rimaTrail { 0% { transform: translateY(-14px); opacity: 0; } 30% { opacity: .85; } 100% { transform: translateY(34px); opacity: 0; } }
+
+/* Affordance drag (roket lepas landas) */
+.rima-toggle { cursor: grab; }
+.rima-toggle.rima-dragging { cursor: grabbing; }
+
+/* Bubble bicara */
+.rima-bubble {
+  max-width: 300px; padding: 10px 12px;
+  background: #042C53; border: 1px solid #0C447C; color: #E6F1FB;
+  border-radius: 14px 14px 4px 14px;
+  font-size: 12.5px; line-height: 1.55;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+  animation: rimaPop .22s ease-out;
+}
+@keyframes rimaPop { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: none; } }
+.rima-bubble-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+/* Chip aksi (row-action inline — bukan CTA utama, skip-rule PrimaButton) */
+.rima-chip {
+  border: 1px solid rgba(239,159,39,.55); background: rgba(239,159,39,.14);
+  color: #FBD38D; border-radius: 6px; padding: 3px 10px;
+  font-size: 11.5px; font-weight: 600; cursor: pointer;
+  font-family: Inter, sans-serif;
+}
+.rima-chip:hover { background: rgba(239,159,39,.28); }
+.rima-chip.ghost { border-color: rgba(230,241,251,.25); background: transparent; color: inherit; opacity: .85; }
+.rima-chip.ghost:hover { background: rgba(230,241,251,.08); }
+/* §23 Lampirkan: tombol 📎 di baris input — kompak, tak ikut melebar */
+.rima-attach { flex: 0 0 auto; padding: 3px 8px; font-size: 14px; line-height: 1; }
+.rima-attach:disabled { opacity: .5; cursor: default; }
+
+/* Panel temuan.
+   overflow: visible — supaya tooltip (data-tooltip ::after) di area NON-scroll
+   (header "Sembunyikan", input row 📎) tidak ke-clip oleh kotak panel. Scroll
+   sebenarnya ada di anak (.rima-list / .rima-chat-list, masing-masing overflow-y).
+   Pembulatan sudut dipindah ke head (atas) + input row (bawah) agar tetap rapi. */
+.rima-panel {
+  width: 340px; max-height: 420px; overflow: visible;
+  display: flex; flex-direction: column;
+  background: #042C53; border: 1px solid #0C447C; color: #E6F1FB;
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(0,0,0,.5);
+  animation: rimaPop .22s ease-out;
+}
+.rima-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; background: #03203D; border-bottom: 1px solid #0C447C;
+  border-radius: 14px 14px 0 0;
+}
+.rima-panel-title { font-weight: 700; font-size: 13px; }
+.rima-panel-close {
+  background: none; border: none; color: inherit; opacity: .6; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 2px 4px;
+}
+.rima-panel-close:hover { opacity: 1; }
+/* F4g — tombol Sembunyikan Rima di header panel (preferensi user) */
+.rima-panel-hide {
+  background: none; border: 1px solid rgba(230,241,251,.22); color: inherit;
+  opacity: .7; cursor: pointer; font-size: 10.5px; font-weight: 600;
+  padding: 2px 8px; border-radius: 6px; font-family: Inter, sans-serif;
+}
+.rima-panel-hide:hover { opacity: 1; background: rgba(230,241,251,.08); }
+[data-theme="light"] .rima-panel-hide { border-color: rgba(31,42,55,.2); }
+[data-theme="light"] .rima-panel-hide:hover { background: rgba(31,42,55,.06); }
+/* F4g — pil restore saat Rima disembunyikan user (di bawah kanan, mungil) */
+.rima-restore {
+  position: fixed; right: 18px; bottom: 86px; z-index: 900;
+  width: 40px; height: 40px; border-radius: 999px; cursor: pointer;
+  border: 1px solid #0C447C; background: #042C53; color: #E6F1FB;
+  font-size: 19px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 10px 24px rgba(0,0,0,.4); opacity: .8; transition: opacity .2s, transform .2s;
+}
+.rima-restore:hover { opacity: 1; transform: scale(1.08); }
+[data-theme="light"] .rima-restore { background: #FFFFFF; border-color: rgba(139,92,246,.25); }
+@media print { .rima-restore { display: none !important; } }
+.rima-tabs { display: flex; gap: 4px; padding: 8px 10px 0; }
+.rima-tab {
+  flex: 1; border: none; background: transparent; color: inherit; opacity: .55;
+  padding: 6px 4px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.rima-tab.on { opacity: 1; border-bottom-color: #EF9F27; }
+.rima-list { overflow-y: auto; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.rima-item {
+  border: 1px solid rgba(230,241,251,.10); border-radius: 10px;
+  padding: 8px 10px; font-size: 12px; line-height: 1.5;
+  background: rgba(255,255,255,.03);
+}
+.rima-item.critical { border-color: rgba(226,75,74,.55);  background: rgba(226,75,74,.10); }
+.rima-item.warning  { border-color: rgba(186,117,23,.55); background: rgba(186,117,23,.10); }
+.rima-sev {
+  display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px;
+  background: rgba(12,68,124,.85); color: #BBD8F2;
+}
+.rima-sev.critical { background: #E24B4A; color: #FFFFFF; }
+.rima-sev.warning  { background: #BA7517; color: #FFFFFF; }
+.rima-item-actions { display: flex; gap: 6px; margin-top: 6px; }
+.rima-empty { padding: 18px 12px; text-align: center; font-size: 12px; opacity: .7; line-height: 1.6; }
+
+/* Chat F2 (CONCEPT §5): riwayat bubble dua arah + chips + input — G4 plain-text */
+.rima-chat-host { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.rima-chat { display: flex; flex-direction: column; flex: 1; min-height: 280px; }
+.rima-chat-list {
+  flex: 1; overflow-y: auto; padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.rima-msg { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.rima-msg.user { align-items: flex-end; }
+.rima-msg-text {
+  max-width: 86%; padding: 8px 10px; border-radius: 10px;
+  font-size: 12px; line-height: 1.55;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(230,241,251,.10);
+  white-space: pre-wrap; word-break: break-word;
+}
+.rima-msg.user .rima-msg-text { background: rgba(239,159,39,.16); border-color: rgba(239,159,39,.45); }
+.rima-chat-chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 92%; }
+.rima-chat-inputrow {
+  display: flex; gap: 6px; padding: 8px 10px;
+  border-top: 1px solid #0C447C; background: #03203D;
+  border-radius: 0 0 14px 14px;
+}
+.rima-chat-input {
+  flex: 1; min-width: 0; padding: 7px 9px;
+  background: rgba(12,68,124,.40); border: 1px solid #185FA5; border-radius: 6px;
+  color: inherit; font-size: 12px; outline: none;
+}
+.rima-chat-input:focus { border-color: #FBBF24; box-shadow: 0 0 0 3px rgba(251,191,36,.18); }
+.rima-chat-input::placeholder { color: #85B7EB; opacity: .7; }
+.rima-typing { display: inline-flex; gap: 4px; align-items: center; min-height: 12px; }
+.rima-typing span {
+  width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .45;
+  animation: rimaTypingDot 1s ease-in-out infinite;
+}
+.rima-typing span:nth-child(2) { animation-delay: .18s; }
+.rima-typing span:nth-child(3) { animation-delay: .36s; }
+@keyframes rimaTypingDot {
+  0%, 100% { transform: translateY(0); opacity: .35; }
+  50%      { transform: translateY(-3px); opacity: .9; }
+}
+
+/* Tur F3 (CONCEPT §6): spotlight 4 panel + bot terbang + bubble step.
+   z-index 3400-3600 — DI BAWAH confirmDialog 4000 (G7). */
+.rima-tour { position: fixed; inset: 0; z-index: 3400; pointer-events: none; }
+.rima-spot {
+  position: fixed; background: rgba(2, 15, 28, .62); z-index: 3400;
+  pointer-events: auto; transition: all .35s ease;
+}
+.rima-tour-bot {
+  position: fixed; z-index: 3600; width: 76px; pointer-events: none;
+  transition: left .6s cubic-bezier(.34, 1.2, .5, 1), top .6s cubic-bezier(.34, 1.2, .5, 1);
+  filter: drop-shadow(0 12px 22px rgba(0, 0, 0, .45));
+}
+.rima-tour-bubble {
+  position: fixed; z-index: 3600; width: 320px; max-width: 92vw;
+  background: #042C53; border: 1px solid #0C447C; color: #E6F1FB;
+  border-radius: 14px; padding: 12px 14px; font-size: 12px; line-height: 1.55;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .5);
+  pointer-events: auto; animation: rimaPop .22s ease-out;
+}
+.rima-tour-bubble.caution { border-color: rgba(186, 117, 23, .75); box-shadow: 0 0 0 2px rgba(186, 117, 23, .25), 0 18px 44px rgba(0, 0, 0, .5); }
+.rima-tour-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.rima-tour-title { font-weight: 700; font-size: 12px; }
+.rima-tour-progress {
+  font-size: 10px; font-weight: 800; padding: 1px 8px; border-radius: 999px;
+  background: rgba(239, 159, 39, .18); color: #EF9F27; border: 1px solid rgba(239, 159, 39, .45);
+}
+.rima-tour-note { opacity: .65; font-style: italic; }
+.rima-tour-controls { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+[data-theme="light"] .rima-spot { background: rgba(31, 42, 55, .45); }
+[data-theme="light"] .rima-tour-bubble {
+  background: #FFFFFF; border-color: rgba(139, 92, 246, .25); color: #1F2A37;
+  box-shadow: 0 18px 44px rgba(31, 42, 55, .18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rima-tour-bot, .rima-spot { transition: none !important; }
+  .rima-tour-bubble { animation: none !important; }
+}
+@media (max-width: 768px) {
+  .rima-tour-bot { display: none; } /* K5: tanpa terbang — spotlight + bubble saja */
+  .rima-tour-bubble { left: 4vw !important; right: 4vw; width: 92vw; top: auto !important; bottom: 16px !important; transform: none !important; }
+}
+
+/* Light theme */
+[data-theme="light"] .rima-bubble,
+[data-theme="light"] .rima-panel {
+  background: #FFFFFF; border-color: rgba(139,92,246,.25); color: #1F2A37;
+  box-shadow: 0 18px 44px rgba(31,42,55,.18);
+}
+[data-theme="light"] .rima-panel-head { background: #F5F3FF; border-bottom-color: rgba(139,92,246,.25); }
+[data-theme="light"] .rima-chip { color: #92400E; }
+[data-theme="light"] .rima-chip.ghost { border-color: rgba(31,42,55,.20); color: inherit; }
+[data-theme="light"] .rima-chip.ghost:hover { background: rgba(31,42,55,.06); }
+[data-theme="light"] .rima-item { background: rgba(31,42,55,.03); border-color: rgba(31,42,55,.12); }
+[data-theme="light"] .rima-item.critical { background: rgba(226,75,74,.08); }
+[data-theme="light"] .rima-item.warning  { background: rgba(186,117,23,.08); }
+[data-theme="light"] .rima-sev { background: rgba(139,92,246,.15); color: #5B21B6; }
+[data-theme="light"] .rima-sev.critical { background: #E24B4A; color: #FFFFFF; }
+[data-theme="light"] .rima-sev.warning  { background: #BA7517; color: #FFFFFF; }
+[data-theme="light"] .rima-toggle { filter: drop-shadow(0 10px 18px rgba(31,42,55,.25)); }
+[data-theme="light"] .rima-msg-text { background: rgba(31,42,55,.04); border-color: rgba(31,42,55,.12); }
+[data-theme="light"] .rima-msg.user .rima-msg-text { background: rgba(124,92,252,.10); border-color: rgba(124,92,252,.35); }
+[data-theme="light"] .rima-chat-inputrow { background: #F5F3FF; border-top-color: rgba(139,92,246,.25); }
+[data-theme="light"] .rima-chat-input { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
+[data-theme="light"] .rima-chat-input:focus { border-color: #5B21B6; box-shadow: 0 0 0 3px rgba(91,33,182,.15); }
+[data-theme="light"] .rima-chat-input::placeholder { color: #9AA0A6; opacity: 1; }
+
+/* Aksesibilitas (K4): reduced motion → semua animasi RIMA mati */
+@media (prefers-reduced-motion: reduce) {
+  .rima-float, .rima-shadow,
+  .rima-avatar .rima-eye, .rima-avatar .rima-glow, .rima-avatar .rima-glow-dot,
+  .rima-avatar .rima-antena, .rima-avatar .rima-mouth,
+  .rima-g-wave .rima-arm-r,
+  .rima-g-wave-l .rima-arm-l,
+  .rima-g-cheer .rima-arm-l, .rima-g-cheer .rima-arm-r, .rima-g-hop .rima-float,
+  .rima-g-stretch .rima-arm-l, .rima-g-stretch .rima-arm-r,
+  .rima-typing span,
+  .rima-sleeping .rima-zzz text, .rima-dozing .rima-zzz text,
+  .rima-thinking .rima-think-dot,
+  .rima-alert .rima-float, .rima-alert .rima-eye,
+  .rima-avatar.rima-react-nod, .rima-avatar.rima-react-shake,
+  .rima-bubble, .rima-panel,
+  .rima-flying .rima-flame-foot-l .rima-flame, .rima-flying .rima-flame-foot-r .rima-flame,
+  .rima-flying .rima-flame-hand-l .rima-flame, .rima-flying .rima-flame-hand-r .rima-flame,
+  .rima-boosting .rima-flame-boost .rima-flame, .rima-streaks i { animation: none !important; }
+  /* drag tetap fungsional — rotasi diperlambat, api/trail statis (HANDOFF K4) */
+  .rima-pose { transition: transform .25s ease-out; }
+  .rima-avatar .rima-arm, .rima-toggle { transition: none !important; }
+  /* tidur: pose rebah + kasur tampil statis (tanpa transisi) */
+  .rima-sleeping .rima-float { transition: none; }
+  .rima-avatar .rima-bed, .rima-avatar .rima-blanket { transition: none; }
+}
+
+/* Layar sempit (K5): avatar menyusut, panel selebar layar */
+@media (max-width: 768px) {
+  .rima-root { right: 10px; bottom: 78px; }
+  .rima-toggle svg { width: 44px; height: 55px; }
+  .rima-panel, .rima-bubble { width: min(92vw, 340px); max-width: 92vw; }
+}

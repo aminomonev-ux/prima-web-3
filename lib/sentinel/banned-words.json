@@ -1,0 +1,22 @@
+{
+  "_comment": "Mirror machine-readable PERSONA.md §3 (bentuk penuh tanpa masking — satu-satunya tempat kata kasar boleh tertulis penuh di repo, untuk lint scripts/rima-lint-templates.mjs). Tambah entri lewat PR.",
+  "words": [
+    "anjing", "anjir", "bangsat", "bajingan", "brengsek", "keparat", "kontol",
+    "memek", "ngentot", "jancok", "jembut", "peler", "tai", "taik", "perek",
+    "lonte", "babi", "monyet",
+    "sialan", "kampret", "setan", "bego", "goblok", "tolol", "dongo", "dungu",
+    "idiot", "oon", "bebal", "budek", "norak", "kampungan", "udik", "lelet", "lemot",
+    "gila", "sinting", "sarap", "edan",
+    "bodoh", "payah", "amatir", "cupu", "ceroboh", "teledor", "pemalas",
+    "memalukan", "ngeyel", "bandel", "cerewet", "bawel",
+    "hadeh", "terserah"
+  ],
+  "phrases": [
+    "nggak waras", "gak waras", "otaknya miring",
+    "salah sendiri", "salahmu", "makanya baca", "makanya dengerin",
+    "gitu aja gak bisa", "gitu aja tidak bisa", "kan sudah kubilang",
+    "sudah dibilangin", "tidak becus", "nggak becus", "gak becus",
+    "tidak berguna", "dasar kamu", "emang dasar",
+    "ya jelas lah", "masa gitu aja", "capek deh", "bodo amat", "ya gitu deh"
+  ]
+}

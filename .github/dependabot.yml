@@ -1,0 +1,49 @@
+# ─── PRIMA — Dependabot Config ───────────────────────────────────────────────
+# SDL-Audit v1.1 — ISO 27001 A.8.8 (Vulnerability Management).
+# Auto-PR untuk update dep kalau ada CVE security baru.
+# Companion ke .github/workflows/security-scan.yml.
+version: 2
+updates:
+  # ─── NPM packages (root project) ───
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Asia/Jakarta"
+    target-branch: "mysql"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+    # Group minor + patch updates jadi 1 PR per kategori (tidak overwhelming)
+    groups:
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-minor-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    # Major version updates individual PR (perlu review manual)
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # ─── GitHub Actions ───
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "ci"
+      - "security"
+    commit-message:
+      prefix: "chore(ci)"

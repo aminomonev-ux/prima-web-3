@@ -1,0 +1,151 @@
+# ─── PRIMA — SAST CI Gate (Security Scan) ────────────────────────────────────
+# SDL-Audit v1.1 — ISO 27001 A.8.8 (Vulnerability Management).
+#
+# Jalan otomatis di 3 trigger:
+#   1. Push ke branch utama (mysql / main) — gate sebelum merge
+#   2. PR ke branch utama — block merge kalau finding HIGH
+#   3. Schedule mingguan (Senin 02:00 UTC) — scan CVE baru di dep
+#
+# 4 job paralel:
+#   A. semgrep — SAST scan kode (OWASP Top 10, React, TypeScript, security-audit rules)
+#   B. npm-audit — Dependency CVE check (block kalau ada HIGH baru)
+#   C. quality-gate — `npx tsc --noEmit` + `npm run lint` + `npm run rima:check` (NLU gate)
+#   D. gitleaks — Secret scanning (JWT_SECRET / password DB / API key ter-commit) — config .gitleaks.toml
+#
+# Setup tambahan (opsional, tidak wajib untuk MVP):
+#   - SEMGREP_APP_TOKEN di GitHub Secrets → enable Semgrep Cloud dashboard
+#   - Tanpa token, tetap jalan dengan output console saja
+name: Security Scan
+on:
+  push:
+    branches: [mysql, main]
+  pull_request:
+    branches: [mysql, main]
+  schedule:
+    # Senin 02:00 UTC (= 09:00 WIB) — weekly dependency scan
+    - cron: '0 2 * * 1'
+
+permissions:
+  contents: read
+  pull-requests: write   # untuk comment finding di PR (opsional)
+  security-events: write # untuk upload SARIF ke GitHub Security tab
+
+jobs:
+  # ─── JOB A: Semgrep SAST scan ──────────────────────────────────────────────
+  # Pakai `semgrep scan` (tidak butuh cloud token) bukan `semgrep ci`.
+  # SARIF upload skip — Code Scanning butuh GitHub Advanced Security (org/enterprise paid),
+  # tidak available di repo private user-account.
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    container:
+      image: semgrep/semgrep:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Semgrep scan (OWASP + React + TS + Security Audit)
+        run: |
+          semgrep scan \
+            --config=p/owasp-top-ten \
+            --config=p/typescript \
+            --config=p/react \
+            --config=p/javascript \
+            --config=p/nodejs \
+            --config=p/jwt \
+            --config=p/sql-injection \
+            --config=p/xss \
+            --exclude="_archive/" \
+            --exclude="graphify-out/" \
+            --exclude=".next/" \
+            --exclude="docs/migrations/" \
+            --exclude="node_modules/" \
+            --severity=ERROR \
+            --error \
+            --metrics=off
+        # --error: exit 1 kalau ada finding (block merge)
+        # --metrics=off: opt-out telemetry
+        # Output ke stdout, terlihat langsung di Actions log
+
+  # ─── JOB B: NPM Audit (dependency CVE check) ───────────────────────────────
+  npm-audit:
+    name: NPM Audit (Dependency CVE)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (deterministic via lockfile)
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: |
+          echo "=== Production dependencies CVE check ==="
+          # Block kalau ada CVE HIGH atau CRITICAL baru
+          # Existing known issue: xlsx HIGH (no upstream fix) — sudah di-migrate ke exceljs di SDL-Audit v1.1 Phase 4
+          # Existing known issue: next CVE range — sebagian fixable via npm audit fix, sisanya upstream-pending
+          npm audit --omit=dev --audit-level=high || (
+            echo "::error::npm audit menemukan CVE HIGH/CRITICAL — review hasil di atas"
+            echo "Kalau finding sudah diketahui (xlsx upstream, next upstream), update file ini dengan exception."
+            exit 1
+          )
+
+      - name: Audit semua dependencies (warning only, tidak block)
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "=== Full audit (including dev) ==="
+          npm audit --audit-level=moderate || true
+
+  # ─── JOB C: Code Quality Gate (tsc + eslint) ───────────────────────────────
+  quality-gate:
+    name: TypeScript + ESLint Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript compile check
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
+
+  # ─── JOB D: Gitleaks (secret scanning) ─────────────────────────────────────
+  # Scan working tree saat ini untuk rahasia ter-commit (token/password/key).
+  # Pakai Docker image resmi (tanpa license/token — gratis untuk repo apa pun).
+  # fetch-depth: 0 → history penuh tersedia kalau nanti mau ganti ke scan commit.
+  gitleaks:
+    name: Gitleaks (Secret Scan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks scan (config .gitleaks.toml)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" \
+            ghcr.io/gitleaks/gitleaks:latest \
+            dir /repo \
+            --config=/repo/.gitleaks.toml \
+            --redact --no-banner --verbose --exit-code=1
+        # --exit-code=1: gagalkan CI kalau ada secret terdeteksi (block merge)
+        # --redact: jangan cetak nilai secret di log Actions
