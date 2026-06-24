@@ -1,8 +1,10 @@
-# PRIMA — Sistem Perencanaan & Kinerja RSJD Dr. Amino Gondohutomo
+# PRIMA — Sistem Perencanaan & Kinerja RSJD Dr. Amino Gondohutomo · **Edisi Intranet**
 
 Aplikasi web internal RSJD Dr. Amino Gondohutomo Semarang untuk manajemen perencanaan, penganggaran, dan kinerja: **Usulan Kebutuhan Aset**, **E-Anggaran (eControlling)**, **BLUD**, **Perjanjian Kinerja**, **LKjIP**, **Buku Besar Aset**, dan **Rencana Aksi**. Dibangun dengan Next.js 16 (App Router) dan MySQL 8.
 
 > ⚠️ Repositori ini berisi kode aplikasi saja. Konfigurasi rahasia (kredensial DB, JWT secret, token API) **tidak** disertakan — lihat `.env.example` untuk daftar variabel yang harus diisi sendiri.
+
+> 🏢 **Edisi Intranet (LAN-only).** Versi ini dirancang untuk deployment di jaringan lokal kantor tanpa IP publik. Dependensi eksternal yang tidak relevan **dimatikan**: **email (Gmail SMTP)**, **CAPTCHA (Cloudflare Turnstile)**, dan **Upstash Redis cloud**. Konsekuensinya: **registrasi publik nonaktif** — akun dibuat oleh Super Admin lewat Admin Panel, dan reset password juga admin-driven. Detail perbedaan vs edisi penuh ada di [`docs/INTRANET-DELTA.md`](docs/INTRANET-DELTA.md).
 
 ---
 
@@ -13,11 +15,12 @@ Aplikasi web internal RSJD Dr. Amino Gondohutomo Semarang untuk manajemen perenc
 | Framework | Next.js 16 (App Router) · React 19 · TypeScript |
 | Database | MySQL 8 via `mysql2` (raw SQL, tagged template) |
 | Auth | JWT (`jose`) · bcryptjs · HTTP-only cookie |
-| Keamanan | Redis/Upstash (rate limiting) · Cloudflare Turnstile · Audit Log · CSP nonce |
-| Storage | Google Drive API (arsip dokumen & file pendukung) |
-| Email | Nodemailer / Gmail SMTP |
+| Keamanan | Redis lokal (rate limiting) · login lockout · Audit Log · CSP nonce |
+| Storage | Google Drive API — opsional (butuh internet outbound dari server) |
+| Email | — (dinonaktifkan di edisi intranet) |
+| CAPTCHA | — (dinonaktifkan di edisi intranet) |
 | UI | Tailwind CSS · shadcn/ui · Lucide Icons |
-| Deployment | Server (Linux/Windows) + PM2 + Nginx + MySQL EVENT (cron) |
+| Deployment | Server LAN (Linux/Windows) + PM2 + Nginx + MySQL EVENT (cron) |
 
 ---
 
@@ -30,7 +33,7 @@ Aplikasi web internal RSJD Dr. Amino Gondohutomo Semarang untuk manajemen perenc
 - **LKjIP** — penyusun Laporan Kinerja tahunan berbasis outline-tree + generator Word
 - **Buku Besar Aset** — register belanja modal lintas-tahun + lifecycle realisasi
 - **Rencana Aksi** — turunan target kinerja
-- **Manajemen User** — RBAC bertingkat, aktivasi, reset password, app access control, role promotion
+- **Manajemen User** — RBAC bertingkat; **pembuatan akun & reset password oleh Super Admin** (registrasi publik nonaktif); app access control; role promotion
 - **Audit Trail & Notifikasi** — semua aksi kritis tercatat; notifikasi real-time per user/role
 
 ---
@@ -39,19 +42,20 @@ Aplikasi web internal RSJD Dr. Amino Gondohutomo Semarang untuk manajemen perenc
 
 ```
 app/
-├── (auth)/          # Login, reset password, verify email
+├── (auth)/          # Login (edisi intranet: reset-password & verify-email redirect ke /login)
 ├── (dashboard)/     # Modul: usulan, kinerja, blud, perjanjian-kinerja, lkjip, dll
 └── api/             # API routes per modul
 
 lib/
 ├── data/            # db.ts (MySQL pool), data layer per modul
-├── security/        # auth.ts, auditlog.ts, ratelimit.ts
-└── services/        # email.ts, notifications.ts, drive.ts
+├── security/        # auth.ts, auditlog.ts, ratelimit.ts, recaptcha.ts (no-op di intranet)
+└── services/        # email.ts (no-op di intranet), notifications.ts, drive.ts
 
 docs/
 ├── schema-mysql.sql # Skema database
 ├── migrations/      # Skrip migrasi (MySQL)
-└── design/          # Design system
+├── design/          # Design system
+└── INTRANET-DELTA.md# Daftar perbedaan edisi intranet vs edisi penuh
 
 proxy.ts             # Edge Runtime — route guard & CSP (BUKAN middleware.ts)
 types/index.ts       # Definisi TypeScript types
@@ -65,8 +69,8 @@ lib/constants.ts     # Roles, status, mapping bidang
 ### 1. Clone & install dependencies
 
 ```bash
-git clone https://github.com/aminomonev-ux/prima-web-2.git
-cd prima-web-2
+git clone https://github.com/aminomonev-ux/prima-web-3.git
+cd prima-web-3
 npm install
 ```
 
@@ -78,7 +82,7 @@ Salin `.env.example` menjadi `.env.local`, lalu isi nilai sebenarnya:
 cp .env.example .env.local
 ```
 
-Variabel wajib: `MYSQL_*`, `JWT_SECRET` (min 32 char), `CRON_SECRET`. Selengkapnya ada di `.env.example` beserta cara generate masing-masing.
+Variabel wajib: `MYSQL_*`, `JWT_SECRET` (min 32 char), `CRON_SECRET`, `PROMOTION_*`. Rekomendasi: `REDIS_URL` (Redis lokal). Variabel email/Turnstile/Upstash **tidak dipakai** di edisi ini. Selengkapnya ada di `.env.example`.
 
 ### 3. Setup database
 
@@ -94,7 +98,7 @@ Lalu jalankan migrasi di `docs/migrations/` sesuai urutan jika diperlukan.
 npm run dev
 ```
 
-Buka [http://localhost:3000](http://localhost:3000).
+Buka [http://localhost:3000](http://localhost:3000). Untuk deployment LAN, set `NEXT_PUBLIC_APP_URL` ke hostname internal (mis. `http://prima.kantor.local`), bukan IP mentah.
 
 ---
 
@@ -107,14 +111,15 @@ BIDANG_* (4 bidang)
 SUB_BIDANG (18 role)
 ```
 
-Detail mapping role → bidang ada di `lib/constants.ts`.
+Detail mapping role → bidang ada di `lib/constants.ts`. **Pembuatan akun**: Admin Panel → User Management → **Tambah User** (khusus Super Admin).
 
 ---
 
 ## Keamanan
 
 - Session JWT di HTTP-only cookie (`prima_session`)
-- Rate limiting (login max 5x → lock 15 menit; session timeout 60 menit)
+- **Login lockout** (max 5x salah → kunci 15 menit, atomik) · session timeout 60 menit
+- Rate limiting via Redis lokal (`REDIS_URL`); fail-open kalau Redis tidak dipasang
 - CSP nonce per-request dikelola di `proxy.ts`
 - HTTP security headers di `next.config.ts` (HSTS, X-Frame-Options, nosniff, dll)
 - `JWT_SECRET` wajib diisi — aplikasi gagal start jika kosong
@@ -122,7 +127,24 @@ Detail mapping role → bidang ada di `lib/constants.ts`.
 - CI keamanan otomatis: SAST (Semgrep), npm-audit, secret-scan (Gitleaks), tsc + ESLint
 - **Jangan rename `proxy.ts` ke `middleware.ts`** — konflik fatal di Next.js
 
+> Catatan edisi intranet: CAPTCHA (Turnstile) dimatikan karena LAN tepercaya tanpa IP publik — lapisan login lain (lockout, rate-limit, anti-enumeration) tetap aktif. Lihat [`docs/INTRANET-DELTA.md`](docs/INTRANET-DELTA.md).
+
 Menemukan kerentanan? Lihat [`SECURITY.md`](SECURITY.md).
+
+---
+
+## Pengembangan & Sinkronisasi Repo
+
+Repo ini adalah **mirror publik tersensor**. Alur kerja menjaga agar dokumen internal & rahasia tidak pernah bocor ke publik:
+
+- **Update kode** → edit di folder repo ini, lalu commit & push biasa:
+  ```bash
+  git add -A
+  git commit -m "pesan perubahan"
+  git push origin mysql
+  ```
+- **JANGAN tarik/merge dari remote `upstream`** (`git pull upstream` / `git merge upstream/...`). Remote privat berisi dokumen audit/keamanan/deployment yang **tidak boleh** masuk ke repo publik — menariknya akan membocorkannya beserta history.
+- Perbaikan dari repo privat dibawa ke sini **secara selektif (cherry-pick file kode saja)**, bukan merge penuh.
 
 ---
 
