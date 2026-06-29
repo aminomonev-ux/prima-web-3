@@ -51,4 +51,10 @@ LAN kantor, tanpa IP publik, lingkungan tepercaya. Outbound internet TERSEDIA (v
 | SEC-C5 (hash reset_token at-rest) | Tak berlaku | Reset password via email dihapus |
 
 ## Audit findings yang WAJIB tetap (jangan ikut dilonggarkan)
-SEC-C1 (JWT throw kalau env kosong) · V3-5 (lockout login atomik) · V3-4 (kuota `FOR UPDATE` — dipindah ke create-user admin, jangan hilang) · SEC-W1 (anti-enumeration login) · L55 (counter atomik).
+SEC-C1 (JWT throw kalau env kosong) · V3-5 (lockout login atomik) · V3-4 (kuota `FOR UPDATE` — **diimplementasikan** di create-user admin POST + PATCH ubah-role via `assertQuotaAvailableTx` dalam `withTransaction`, lihat `lib/security/promotion.ts`) · SEC-W1 (anti-enumeration login) · L55 (counter atomik).
+
+## Hardening tambahan (audit fork, 2026-06-27)
+- **L-1**: kuota create-user & ubah-role kini transaksional (`COUNT … FOR UPDATE`) — anti-race lewati cap. UNIQUE(username/email) = backstop.
+- **L-2**: endpoint `POST /api/admin/users` (create-user) diberi rate-limit (`admin-create:<uid>:<ip>`).
+- **CSP**: origin `challenges.cloudflare.com` dibuang dari `script/connect/frame-src` di `proxy.ts` (Turnstile mati → izin mati).
+- **Doc**: wording "fail-open" diselaraskan → fallback throttle in-memory per-proses (V5-AUTH-04) di README/.env.example/ratelimit.ts.

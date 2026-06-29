@@ -1,10 +1,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, sqlInt, safeInt, escapeLike } from '@/lib/data/db';
+import { sql, sqlInt, safeInt, escapeLike, withTransaction } from '@/lib/data/db';
 import { getSession, hashPassword } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { AdminUsersPatchBodySchema, AdminUserCreateBodySchema } from '@/lib/data/admin-schemas';
-import { assertQuotaAvailable } from '@/lib/security/promotion';
+import { assertQuotaAvailableTx, QuotaFullError } from '@/lib/security/promotion';
+import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
+import { RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants';
+
+// Marker untuk membedakan konflik dup (409) dari error lain di dalam transaksi create-user.
+class DuplicateUserError extends Error {}
 
 export async function GET(req: NextRequest) {
   try {
@@ -60,6 +65,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN yang dapat membuat akun.' }, { status: 403 });
     }
 
+    // L-2: throttle endpoint create-user (defense-in-depth bila sesi SA disalahgunakan).
+    const rl = await checkRateLimit(`admin-create:${session.userId}:${getClientIp(req)}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS);
+    if (!rl.allowed) {
+      return NextResponse.json({ ok: false, message: `Terlalu banyak pembuatan akun. Coba lagi dalam ${rl.resetIn} detik.` }, { status: 429, headers: { 'Retry-After': String(rl.resetIn) } });
+    }
+
     const raw    = await req.json().catch(() => null);
     const parsed = AdminUserCreateBodySchema.safeParse(raw);
     if (!parsed.success) {
@@ -67,23 +78,31 @@ export async function POST(req: NextRequest) {
     }
     const { username, email, password, role, nama_lengkap } = parsed.data;
 
-    const dupUser  = await sql`SELECT id FROM users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
-    const dupEmail = await sql`SELECT id FROM users WHERE LOWER(email) = LOWER(${email}) LIMIT 1`;
-    if (dupUser.length || dupEmail.length) {
-      return NextResponse.json({ ok: false, message: 'Username atau email sudah terdaftar.' }, { status: 409 });
-    }
-
-    try {
-      await assertQuotaAvailable(role);
-    } catch {
-      return NextResponse.json({ ok: false, message: `Kuota role ${role} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
-    }
-
+    // Hash di luar transaksi — bcrypt lambat, jangan tahan koneksi/lock.
     const hash = await hashPassword(password);
-    await sql`
-      INSERT INTO users (username, email, password_hash, role, status, email_verified, nama_lengkap)
-      VALUES (${username}, ${email.toLowerCase()}, ${hash}, ${role}, 'AKTIF', TRUE, ${nama_lengkap ?? null})
-    `;
+
+    // L-1 (V3-4): dup-check + kuota FOR UPDATE + INSERT dalam satu transaksi —
+    // serialisasi anti-race lewati cap. UNIQUE(username/email) jadi backstop terakhir.
+    try {
+      await withTransaction(async ({ tx }) => {
+        const dupUser  = await tx`SELECT id FROM users WHERE LOWER(username) = LOWER(${username}) LIMIT 1`;
+        const dupEmail = await tx`SELECT id FROM users WHERE LOWER(email) = LOWER(${email}) LIMIT 1`;
+        if (dupUser.length || dupEmail.length) throw new DuplicateUserError();
+        await assertQuotaAvailableTx(role, tx);
+        await tx`
+          INSERT INTO users (username, email, password_hash, role, status, email_verified, nama_lengkap)
+          VALUES (${username}, ${email.toLowerCase()}, ${hash}, ${role}, 'AKTIF', TRUE, ${nama_lengkap ?? null})
+        `;
+      });
+    } catch (e) {
+      if (e instanceof DuplicateUserError) {
+        return NextResponse.json({ ok: false, message: 'Username atau email sudah terdaftar.' }, { status: 409 });
+      }
+      if (e instanceof QuotaFullError) {
+        return NextResponse.json({ ok: false, message: `Kuota role ${role} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
+      }
+      throw e;
+    }
     await writeAuditLog({ req, eventType: 'USER_CREATE', userId: session.userId, username: session.username, detail: `Buat akun ${username} role=${role}` });
 
     return NextResponse.json({ ok: true, message: `Akun ${username} dibuat & langsung aktif.` });
@@ -145,22 +164,26 @@ export async function PATCH(req: NextRequest) {
           { status: 403 }
         );
       }
-      // V4D-1: enforce ROLE_QUOTA juga di entry point ini (CLAUDE.md §Role Quota
-      // sebut "edit role (User Management Admin Panel)" sebagai entry point). Hanya
-      // saat pindah MASUK ke role lain. assertQuotaAvailable no-op untuk role tak ber-cap.
-      if (role !== targetCurrentRole) {
-        try {
-          await assertQuotaAvailable(role);
-        } catch {
-          return NextResponse.json({ ok: false, message: `Kuota role ${role} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
-        }
-      }
+      // V4D-1 + L-1: enforce ROLE_QUOTA di entry point ini (CLAUDE.md §Role Quota
+      // sebut "edit role (User Management Admin Panel)"). Kuota FOR UPDATE + UPDATE
+      // role dalam satu transaksi → anti-race lewati cap. assertQuotaAvailableTx
+      // no-op untuk role tak ber-cap.
       // Ubah-role manual = override otoritatif → batalkan probation promosi yang
       // sedang berjalan: `from_role` lama jadi basi (rollback REVOKE akan lompat ke
       // role 2 langkah ke belakang). promotion_locked_until SENGAJA tidak di-clear —
       // itu penalti rate-limit perilaku (Tahap 15 L4), punya tombol UNLOCK sendiri.
       const probationWasActive = targetProbationUntil != null && new Date(targetProbationUntil).getTime() > Date.now();
-      await sql`UPDATE users SET role = ${role}, probationary_until = NULL, probationary_from_role = NULL, updated_at = NOW() WHERE id = ${id}`;
+      try {
+        await withTransaction(async ({ tx }) => {
+          if (role !== targetCurrentRole) await assertQuotaAvailableTx(role, tx);
+          await tx`UPDATE users SET role = ${role}, probationary_until = NULL, probationary_from_role = NULL, updated_at = NOW() WHERE id = ${id}`;
+        });
+      } catch (e) {
+        if (e instanceof QuotaFullError) {
+          return NextResponse.json({ ok: false, message: `Kuota role ${role} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
+        }
+        throw e;
+      }
       await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Ubah role user id=${id} (${targetCurrentRole} → ${role})${probationWasActive ? ' [probation dibatalkan]' : ''}` });
       return NextResponse.json({ ok: true, message: `Role diubah ke ${role}.` });
     }

@@ -5,7 +5,8 @@ import IORedis from 'ioredis';
 // Backend dipilih SEKALI saat start dari env (bukan 2 Redis nyala bareng):
 //  · UPSTASH_REDIS_REST_URL terisi → Upstash (cloud, dev/laptop)
 //  · selain itu REDIS_URL terisi   → Redis lokal via ioredis (server kantor, tanpa kuota)
-//  · dua-duanya kosong             → fail-open (rate-limit non-aktif, app tetap jalan)
+//  · dua-duanya kosong             → fallback throttle in-memory per-proses (V5-AUTH-04),
+//                                     BUKAN fail-open — throttle minimal tetap berlaku
 type Backend = 'upstash' | 'local' | 'none';
 const backend: Backend =
   process.env.UPSTASH_REDIS_REST_URL ? 'upstash'

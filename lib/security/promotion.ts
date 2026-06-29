@@ -4,7 +4,7 @@
 // Konsep: docs/session/ROLE_PROMOTION_CONCEPT.md §3-§4
 
 import { timingSafeEqual } from 'crypto';
-import { sql, sqlInt, toMysqlDatetime } from '@/lib/data/db';
+import { sql, sqlInt, toMysqlDatetime, type TxSql } from '@/lib/data/db';
 import { verifyPassword } from '@/lib/security/auth';
 import {
   ADMIN_QUOTA,
@@ -176,14 +176,36 @@ export async function getActiveRoleCount(role: string): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
+/** Error kuota — caller bisa narrow `instanceof` untuk map ke HTTP 409. */
+export class QuotaFullError extends Error {
+  constructor(public readonly role: string, public readonly count: number, public readonly quota: number) {
+    super(`Quota role ${role} sudah penuh (${count}/${quota}).`);
+    this.name = 'QuotaFullError';
+  }
+}
+
 /** Throw kalau target role sudah penuh (untuk dipakai sebelum approve). */
 export async function assertQuotaAvailable(role: string): Promise<void> {
   const quota = getRoleQuota(role);
   if (quota === null) return;
   const count = await getActiveRoleCount(role);
-  if (count >= quota) {
-    throw new Error(`Quota role ${role} sudah penuh (${count}/${quota}).`);
-  }
+  if (count >= quota) throw new QuotaFullError(role, count, quota);
+}
+
+/**
+ * Versi transaksional (V3-4 / L-1): COUNT ... FOR UPDATE di dalam withTransaction
+ * supaya create-user & ubah-role tidak race melewati cap. Lock baris AKTIF role
+ * target (+ gap lock RR) menyerialisasi dua admin yang menulis role sama barengan.
+ * WAJIB dipanggil dengan `tx` dari withTransaction, dan INSERT/UPDATE-nya di tx yang sama.
+ */
+export async function assertQuotaAvailableTx(role: string, tx: TxSql): Promise<void> {
+  const quota = getRoleQuota(role);
+  if (quota === null) return;
+  const rows = await tx`
+    SELECT COUNT(*) AS n FROM users WHERE role = ${role} AND status = 'AKTIF' FOR UPDATE
+  ` as Array<{ n: number | string }>;
+  const count = Number(rows[0]?.n ?? 0);
+  if (count >= quota) throw new QuotaFullError(role, count, quota);
 }
 
 /** Snapshot semua quota — untuk GET /api/admin/role-quota-stats. */

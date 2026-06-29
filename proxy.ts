@@ -40,11 +40,12 @@ function buildCSP(nonce: string): string {
   // + nonce, browser modern sudah mengabaikannya; menghapusnya menutup celah di
   // browser lawas (tanpa strict-dynamic) yang menerima inline script.
   // style-src TETAP 'unsafe-inline' (app penuh inline style={{}} — by design).
+  // INTRANET EDITION (D2): origin challenges.cloudflare.com DIBUANG dari script/
+  // connect/frame-src — Turnstile dimatikan, jadi izin itu mati. Surface menyempit.
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
-    "https://challenges.cloudflare.com/",
     ...(isProd ? [] : ["'unsafe-eval'"]),
   ].join(' ');
   return [
@@ -53,8 +54,8 @@ function buildCSP(nonce: string): string {
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data: blob:",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://challenges.cloudflare.com/",
-    "frame-src 'self' blob: https://challenges.cloudflare.com/",
+    "connect-src 'self'",
+    "frame-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

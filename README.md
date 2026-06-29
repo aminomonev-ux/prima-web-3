@@ -119,7 +119,7 @@ Detail mapping role → bidang ada di `lib/constants.ts`. **Pembuatan akun**: Ad
 
 - Session JWT di HTTP-only cookie (`prima_session`)
 - **Login lockout** (max 5x salah → kunci 15 menit, atomik) · session timeout 60 menit
-- Rate limiting via Redis lokal (`REDIS_URL`); fail-open kalau Redis tidak dipasang
+- Rate limiting via Redis lokal (`REDIS_URL`); kalau Redis tidak dipasang/`REDIS_URL` kosong → fallback throttle **in-memory per-proses** (V5-AUTH-04), bukan fail-open total — login throttle/lockout tetap aktif
 - CSP nonce per-request dikelola di `proxy.ts`
 - HTTP security headers di `next.config.ts` (HSTS, X-Frame-Options, nosniff, dll)
 - `JWT_SECRET` wajib diisi — aplikasi gagal start jika kosong
