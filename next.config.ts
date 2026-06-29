@@ -12,7 +12,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['192.168.4.64', 'snarl-wand-dominoes.ngrok-free.dev'],
+  allowedDevOrigins: ['192.168.4.64', '10.24.100.240', 'snarl-wand-dominoes.ngrok-free.dev'],
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
