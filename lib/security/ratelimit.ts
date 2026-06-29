@@ -42,7 +42,11 @@ function getLocal(): IORedis {
   if (!local) {
     local = new IORedis(process.env.REDIS_URL!, {
       maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
+      // enableOfflineQueue: true (default) — request pertama setelah cold-start
+      // buffer ~ratusan ms sampai connection ready, alih-alih langsung throw
+      // "Stream isn't writeable" yang memaksa fallback in-memory di request perdana.
+      // Saat Redis benar-benar down, maxRetriesPerRequest:1 tetap menjamin fail-fast.
+      enableOfflineQueue: true,
     });
     local.on('error', () => {}); // swallow — checkRateLimit fail-open menangani down/error
   }
