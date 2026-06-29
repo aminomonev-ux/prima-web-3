@@ -54,16 +54,19 @@ export async function POST(req: NextRequest) {
   await withTransaction(async ({ tx }) => {
     // Realisasi dihapus DULU supaya tidak ada FK orphan
     if (scope === 'realisasi' || scope === 'both') {
+      // L53: sql/tx wrapper return non-SELECT hasil sebagai Array<{affectedRows}>,
+      // BUKAN object — akses lewat [0]. Cast object langsung diam-diam selalu 0
+      // → audit log + UI tampilkan "0 baris dihapus" padahal data benar terhapus.
       const rRes = versiSpecified
         ? await tx`
             DELETE FROM kinerja_realisasi
             WHERE tahun = ${tahun} AND sumber = ${sumber}
               AND ssk_versi_tipe = ${versi_tipe} AND ssk_versi_seq = ${versi_seq}
-          ` as { affectedRows?: number }
+          ` as unknown as Array<{ affectedRows: number }>
         : await tx`
             DELETE FROM kinerja_realisasi WHERE tahun = ${tahun} AND sumber = ${sumber}
-          ` as { affectedRows?: number };
-      deletedRealisasi = Number(rRes?.affectedRows ?? 0);
+          ` as unknown as Array<{ affectedRows: number }>;
+      deletedRealisasi = Number(rRes[0]?.affectedRows ?? 0);
     }
     if (scope === 'ssk' || scope === 'both') {
       const sRes = versiSpecified
@@ -71,11 +74,11 @@ export async function POST(req: NextRequest) {
             DELETE FROM kinerja_ssk
             WHERE tahun = ${tahun} AND sumber = ${sumber}
               AND versi_tipe = ${versi_tipe} AND versi_seq = ${versi_seq}
-          ` as { affectedRows?: number }
+          ` as unknown as Array<{ affectedRows: number }>
         : await tx`
             DELETE FROM kinerja_ssk WHERE tahun = ${tahun} AND sumber = ${sumber}
-          ` as { affectedRows?: number };
-      deletedSsk = Number(sRes?.affectedRows ?? 0);
+          ` as unknown as Array<{ affectedRows: number }>;
+      deletedSsk = Number(sRes[0]?.affectedRows ?? 0);
 
       // BUGFIX: setelah hapus versi PERUBAHAN, latest yang tersisa harus di-unlock
       // supaya bisa di-edit lagi. Cari (versi_tipe, versi_seq) tertinggi yang tersisa
