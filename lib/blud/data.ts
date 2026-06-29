@@ -170,11 +170,13 @@ export async function deleteDpaVersi(versiTanggal: string): Promise<{
   let rekapCount = 0
   await withTransaction(async ({ tx }) => {
     // 1. Hapus rekap_pk dulu (FK ref ke versi_dpa — soft, table standalone)
-    const rekapRes = await tx`DELETE FROM rekap_pk WHERE versi_dpa = ${versiTanggal}`
-    rekapCount = Number((rekapRes as { affectedRows?: number }).affectedRows ?? 0)
+    // L53: tx wrapper return Array<{affectedRows}>, BUKAN object. Cast object
+    // langsung → diam-diam selalu 0 (audit log + response palsu "0 baris dihapus").
+    const rekapRes = await tx`DELETE FROM rekap_pk WHERE versi_dpa = ${versiTanggal}` as unknown as Array<{ affectedRows: number }>
+    rekapCount = Number(rekapRes[0]?.affectedRows ?? 0)
     // 2. Hapus baris dpa_blud
-    const dpaRes = await tx`DELETE FROM dpa_blud WHERE versi_tanggal = ${versiTanggal}`
-    dpaCount = Number((dpaRes as { affectedRows?: number }).affectedRows ?? 0)
+    const dpaRes = await tx`DELETE FROM dpa_blud WHERE versi_tanggal = ${versiTanggal}` as unknown as Array<{ affectedRows: number }>
+    dpaCount = Number(dpaRes[0]?.affectedRows ?? 0)
     // 3. Drop lock row (cleanup, cegah orphan)
     await dropBludVersion(tx, 'dpa_blud', versiTanggal)
     await dropBludVersion(tx, 'rekap_pk', versiTanggal)
@@ -271,8 +273,9 @@ export async function deletePergeseranVersi(versiTanggal: string): Promise<{
   }
   let count = 0
   await withTransaction(async ({ tx }) => {
-    const res = await tx`DELETE FROM pergeseran_dpa WHERE versi_tanggal = ${versiTanggal}`
-    count = Number((res as { affectedRows?: number }).affectedRows ?? 0)
+    // L53: tx wrapper return Array<{affectedRows}>, akses lewat [0].
+    const res = await tx`DELETE FROM pergeseran_dpa WHERE versi_tanggal = ${versiTanggal}` as unknown as Array<{ affectedRows: number }>
+    count = Number(res[0]?.affectedRows ?? 0)
     await dropBludVersion(tx, 'pergeseran_dpa', versiTanggal)
   })
   return { pergeseran_rows: count }
