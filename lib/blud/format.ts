@@ -12,8 +12,10 @@ export function hitungJumlah(vol: number | null, harga: number | null): number {
   return Math.round(vol * harga)
 }
 
-/** Generate row ID unik. O4: pakai crypto.randomUUID() yang collision-free
- *  (vs Math.random 5-char yang bisa collision pada bulk paste >1000 rows). */
+import { safeRandomUUID } from '@/lib/shared/uuid';
+
+/** Generate row ID unik. Pakai safeRandomUUID() — jalan di HTTP non-localhost
+ *  (intranet) karena crypto.randomUUID() native dibatasi ke secure context. */
 // Tipe label mapping — shared antara dpa-client + pergeseran-client + BlockedModal.
 // Sebelumnya di-duplicate di 2 file (L22 violation), sekarang sentral di sini.
 // Format: 'Level N' / 'Level N.1' sesuai chain hierarchy strict L1→L8.1.
@@ -38,5 +40,5 @@ export const TIPE_LABEL: Record<_TipeBaris, string> = {
 }
 
 export function genRowId(): string {
-  return `row_${crypto.randomUUID()}`;
+  return `row_${safeRandomUUID()}`;
 }

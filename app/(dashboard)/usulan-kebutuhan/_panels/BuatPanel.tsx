@@ -17,6 +17,7 @@ import Tip from '@/components/ui/Tip';
 import type { ItemForm } from '../_types';
 import { fmtRp } from '../_types';
 import { ClockCard, JENIS_BELANJA_LIST, newItem } from '../_utils';
+import { safeRandomUUID } from '@/lib/shared/uuid';
 import SatuanCombobox from '@/components/shared/SatuanCombobox';
 
 interface Props {
@@ -148,7 +149,7 @@ export function BuatPanel({
       setItems(prev => prev.map((it, i) => i === editingIdx ? { ...currentItem, sub_bidang: fSubBidang, jenis_belanja: fJenisBelanja } : it));
       setEditingIdx(-1);
     } else {
-      setItems(prev => [...prev, { ...currentItem, id: crypto.randomUUID(), sub_bidang: fSubBidang, jenis_belanja: fJenisBelanja }]);
+      setItems(prev => [...prev, { ...currentItem, id: safeRandomUUID(), sub_bidang: fSubBidang, jenis_belanja: fJenisBelanja }]);
     }
     setCurrentItem(newItem());
   }

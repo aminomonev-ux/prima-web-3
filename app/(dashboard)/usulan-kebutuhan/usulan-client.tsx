@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Tip from '@/components/ui/Tip';
 import DeleteIcon from '@/components/ui/DeleteIcon';
+import { safeRandomUUID } from '@/lib/shared/uuid';
 import { APP_NAME, ROLE_LABELS, SUBBIDANG_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG, ROLE_SUBBIDANG_OPTIONS } from '@/lib/constants';
 import type { Role } from '@/types';
 import { DetailModal } from './_modals/DetailModal';
@@ -723,7 +724,7 @@ export default function UsulanClient({ userId, role, username, themePreference }
 
       
       const loadedItems: ItemForm[] = rawItems.map(it => ({
-        id:          crypto.randomUUID(),
+        id:          safeRandomUUID(),
         nama_barang: it.nama_barang  || '',
         spesifikasi: it.spesifikasi  || '',
         qty:         it.qty          || 1,

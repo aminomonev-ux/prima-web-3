@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { BIDANG_ROLES, SUBBIDANG_ROLES, SATUAN_OPTIONS } from '@/lib/constants';
+import { safeRandomUUID } from '@/lib/shared/uuid';
 import type { Role } from '@/types';
 import {
   STATUS_BADGE, STATUS_GROUPS, fmtRp,
@@ -30,10 +31,10 @@ export const JENIS_BELANJA_LIST = [
 
 // ─── Pure helpers ───────────────────────────────────────────────────────────
 
-// O4 (Tahap 10): crypto.randomUUID() ganti Math.random() — collision-free.
+// Pakai safeRandomUUID — crypto.randomUUID native crash di HTTP non-localhost.
 export function newItem(): ItemForm {
   return {
-    id: crypto.randomUUID(), nama_barang: '', spesifikasi: '', qty: 1, satuan: '',
+    id: safeRandomUUID(), nama_barang: '', spesifikasi: '', qty: 1, satuan: '',
     harga_est: 0, prioritas: 'SEDANG', alasan: '',
     url_merk1: '', url_merk2: '', url_merk3: '', file_url: '', sub_bidang: '', jenis_belanja: '',
   };
