@@ -102,7 +102,7 @@ export async function setSessionCookie(token: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,           // tidak bisa diakses JS (XSS proof)
-    secure: process.env.NODE_ENV === 'production', // HTTPS only di production
+    secure: process.env.COOKIE_SECURE !== 'false' && process.env.NODE_ENV === 'production', // HTTPS only; set COOKIE_SECURE=false utk intranet HTTP
     sameSite: 'lax',          // CSRF protection
     maxAge: SESSION_DURATION_HOURS * 60 * 60,
     path: '/',
