@@ -85,6 +85,17 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   void currentTheme; // theme dipakai ThemeToggle setter saja, tidak untuk render.
   const dropRef = useRef<HTMLDivElement>(null);
 
+  // Apply theme dari DB ke <html> + sync cookie. Selaras menu-client.tsx —
+  // cegah Admin Panel pakai cookie stale (mis. light) saat DB preference dark.
+  useEffect(() => {
+    if (themePreference === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    document.cookie = `prima_theme=${themePreference};path=/;max-age=31536000;SameSite=Lax`;
+  }, [themePreference]);
+
   useEffect(() => {
     if (!dropOpen) return;
     const h = (e: MouseEvent) => { if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDrop(false); };

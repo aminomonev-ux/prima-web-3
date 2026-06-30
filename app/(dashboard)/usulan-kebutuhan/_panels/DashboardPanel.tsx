@@ -54,20 +54,23 @@ export function DashboardPanel({
               })()}
             </div>
             {(() => {
-              const pct = kpi.pagu > 0 ? Math.min(100, (kpi.nilai_aktif / kpi.pagu) * 100) : 0;
-              const ok = kpi.nilai_aktif <= kpi.pagu;
+              const paguUnset = !kpi.pagu || kpi.pagu <= 0;
+              const pct = paguUnset ? 0 : Math.min(100, (kpi.nilai_aktif / kpi.pagu) * 100);
+              const ok = !paguUnset && kpi.nilai_aktif <= kpi.pagu;
               return (
                 <>
                   <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
                     <span style={{fontSize:12,fontWeight:700,color:'#0a2e18'}}>Pagu BLUD</span>
-                    <span style={{fontSize:12,fontWeight:800,color:ok?'#0d7a3a':'#dc2626'}}>{pct.toFixed(1)}%</span>
+                    <span style={{fontSize:12,fontWeight:800,color:paguUnset?'#a16207':ok?'#0d7a3a':'#dc2626'}}>{paguUnset?'—':`${pct.toFixed(1)}%`}</span>
                   </div>
-                  <div className="pagu-bar-track"><div className="pagu-bar-fill" style={{width:`${pct}%`,background:ok?undefined:'linear-gradient(90deg,#ef4444,#dc2626)'}}/></div>
+                  <div className="pagu-bar-track"><div className="pagu-bar-fill" style={{width:`${pct}%`,background:paguUnset?'#9ca3af':ok?undefined:'linear-gradient(90deg,#ef4444,#dc2626)'}}/></div>
                   <div className="pagu-bar-meta">
                     <span>Pagu: {fmtRp(kpi.pagu)}</span>
                     <span>|</span>
                     <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
-                    <span style={{fontWeight:700,color:ok?'#4ADE80':'#FCA5A5'}}>{ok?'✓ Dalam batas pagu':'⚠ Melebihi pagu'}</span>
+                    {paguUnset
+                      ? <span style={{fontWeight:700,color:'#FBBF24'}}>ⓘ Pagu belum diatur</span>
+                      : <span style={{fontWeight:700,color:ok?'#4ADE80':'#FCA5A5'}}>{ok?'✓ Dalam batas pagu':'⚠ Melebihi pagu'}</span>}
                   </div>
                 </>
               );

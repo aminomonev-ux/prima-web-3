@@ -126,8 +126,9 @@ export const PaguKpiBar = React.memo(function PaguKpiBar({ kpi, loading }: { kpi
     {label:'Sedang Ditelaah', val:kpi.nilai_telaah,     bg:'rgba(239,159,39,.12)',  lc:'#EF9F27', vc:'#FAC775'},
     {label:'Disetujui Kabag', val:kpi.nilai_disetujui,  bg:'rgba(74,222,128,.12)',  lc:'#4ADE80', vc:'#86EFAC'},
   ];
-  const pct = kpi.pagu > 0 ? Math.min(100, (kpi.nilai_aktif / kpi.pagu) * 100) : 0;
-  const ok  = kpi.nilai_aktif <= kpi.pagu;
+  const paguUnset = !kpi.pagu || kpi.pagu <= 0;
+  const pct = paguUnset ? 0 : Math.min(100, (kpi.nilai_aktif / kpi.pagu) * 100);
+  const ok  = !paguUnset && kpi.nilai_aktif <= kpi.pagu;
   return (
     <div className="pagu-bar-wrap">
       <div className="pagu-kpi-grid">
@@ -139,18 +140,20 @@ export const PaguKpiBar = React.memo(function PaguKpiBar({ kpi, loading }: { kpi
         ))}
       </div>
       <div className="pagu-progress-label" style={{display:'flex',justifyContent:'space-between',fontSize:11,fontWeight:600,color:'#B5D4F4',marginBottom:4}}>
-        <span>Pagu BLUD</span><span>{pct.toFixed(1)}%</span>
+        <span>Pagu BLUD</span><span>{paguUnset?'—':`${pct.toFixed(1)}%`}</span>
       </div>
       <div className="pagu-bar-track">
-        <div className="pagu-bar-fill" style={{width:`${pct}%`, background: ok ? undefined : 'linear-gradient(90deg,#ef4444,#dc2626)'}}/>
+        <div className="pagu-bar-fill" style={{width:`${pct}%`, background: paguUnset?'#64748b':ok ? undefined : 'linear-gradient(90deg,#ef4444,#dc2626)'}}/>
       </div>
       <div className="pagu-bar-meta">
         <span>Pagu: {fmtRp(kpi.pagu)}</span>
         <span style={{color:'#475569'}}>|</span>
         <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
-        {ok
-          ? <span style={{color:'#4ADE80',fontWeight:600}}>✓ Dalam batas pagu</span>
-          : <span style={{color:'#FCA5A5',fontWeight:600}}>⚠ Melebihi pagu</span>}
+        {paguUnset
+          ? <span style={{color:'#FBBF24',fontWeight:600}}>ⓘ Pagu belum diatur</span>
+          : ok
+            ? <span style={{color:'#4ADE80',fontWeight:600}}>✓ Dalam batas pagu</span>
+            : <span style={{color:'#FCA5A5',fontWeight:600}}>⚠ Melebihi pagu</span>}
       </div>
     </div>
   );
