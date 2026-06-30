@@ -242,7 +242,7 @@ const CrrRowSchema = z.object({
 });
 
 const PendRowSchema = z.object({
-  urut:         z.number().int(),
+  urut:         z.number().int().optional().default(0), // di-overwrite savePendapatanBatch via index (i+1)
   keterangan:   z.string(),
   target:       z.number(),
   realisasi:    z.number(),
