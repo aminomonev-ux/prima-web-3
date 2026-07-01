@@ -3,6 +3,8 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import BludShell from './blud-shell'
 import { sql, queryOne } from '@/lib/data/db'
+import { isBludRole } from '@/lib/blud/schemas'
+import { hasAppAccess } from '@/lib/security/guard'
 import type { Role } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -14,6 +16,7 @@ export default async function BludLayout({ children }: { children: React.ReactNo
   const role     = h.get('x-user-role') as Role | null
 
   if (!userId || !username || !role) redirect('/login')
+  if (!(await hasAppAccess(Number(userId), role, isBludRole))) redirect('/menu')
 
   const row = await queryOne<{ theme_preference: string }>(
     sql`SELECT theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`

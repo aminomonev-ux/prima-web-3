@@ -32,7 +32,7 @@ export const AssignableRoleEnum = z.enum(ASSIGNABLE_ROLES);
  * Sebelumnya `apps: string[]` di-`JSON.stringify` tanpa cek isi → DB pollution.
  */
 export const AppAccessKeyEnum = z.enum([
-  'blud', 'rencana_aksi', 'perjanjian_kinerja',
+  'dashboard', 'blud', 'rencana_aksi', 'perjanjian_kinerja',
   'usulan_aset', 'new_econtrolling', 'admin',
   'buku_besar_aset', 'lkjip',
 ]);
