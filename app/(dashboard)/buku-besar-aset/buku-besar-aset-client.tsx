@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Package, Layers, BarChart3, LayoutGrid, Plus, Search, RefreshCw, Download } from 'lucide-react';
+import { Package, Layers, LayoutGrid, Plus, Search, RefreshCw, Download } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import DeleteButton from '@/components/ui/DeleteButton';
@@ -424,7 +424,6 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         nav={[
           { icon: <Package size={17} />, label: 'Aset', onClick: () => {}, current: true },
           { icon: <Layers size={17} />, label: 'Master', onClick: () => { window.location.href = '/buku-besar-aset/master'; } },
-          { icon: <BarChart3 size={17} />, label: 'Kinerja', onClick: () => { window.location.href = '/kinerja'; } },
           { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => { window.location.href = '/menu'; } },
         ]}
         actions={[

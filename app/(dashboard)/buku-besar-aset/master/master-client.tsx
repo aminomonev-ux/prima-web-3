@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Package, Layers, BarChart3, LayoutGrid } from 'lucide-react';
+import { Package, Layers, LayoutGrid } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteButton from '@/components/ui/DeleteButton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -97,7 +97,6 @@ export default function MasterClient({ username, role, themePreference, initialK
         nav={[
           { icon: <Package size={17} />, label: 'Aset', onClick: () => { window.location.href = '/buku-besar-aset'; } },
           { icon: <Layers size={17} />, label: 'Master', onClick: () => {}, current: true },
-          { icon: <BarChart3 size={17} />, label: 'Kinerja', onClick: () => { window.location.href = '/kinerja'; } },
           { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => { window.location.href = '/menu'; } },
         ]}
       />
