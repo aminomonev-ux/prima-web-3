@@ -115,13 +115,18 @@ export async function proxy(req: NextRequest) {
 
   // Cek session token dari cookie
   const token = req.cookies.get(COOKIE_NAME)?.value;
+  // API tanpa sesi valid → 401 JSON, bukan redirect 302 (fetch klien dapat status jelas).
+  const isApi = pathname.startsWith('/api/');
   if (!token) {
+    if (isApi) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
   const session = await verifyToken(token);
   if (!session) {
-    const response = NextResponse.redirect(new URL('/login', req.url));
+    const response = isApi
+      ? NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
+      : NextResponse.redirect(new URL('/login', req.url));
     response.cookies.delete(COOKIE_NAME);
     return response;
   }

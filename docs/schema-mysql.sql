@@ -862,6 +862,7 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
   file_id      VARCHAR(64)  NOT NULL,
   uploaded_by  INT          NULL,
   context      VARCHAR(40)  NULL,
+  sniff_ok     TINYINT(1)   NOT NULL DEFAULT 1,
   created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (file_id),
   CONSTRAINT fk_uploaded_files_user FOREIGN KEY (uploaded_by)

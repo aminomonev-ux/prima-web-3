@@ -47,11 +47,11 @@ export async function GET(req: NextRequest) {
   //  · BIDANG verifikator → hanya file dari sub-bidang DALAM kelompoknya
   //  · sub-bidang biasa → hanya file miliknya sendiri
   //  · file legacy/tak terlacak (atau lookup gagal) → admin tier saja (fail-closed)
-  let owner: { uploaded_by: number | null; uploader_role: string | null } | null = null;
+  let owner: { uploaded_by: number | null; uploader_role: string | null; sniff_ok: number | null } | null = null;
   let lookupFailed = false;
   try {
-    owner = await queryOne<{ uploaded_by: number | null; uploader_role: string | null }>(
-      sql`SELECT f.uploaded_by, u.role AS uploader_role
+    owner = await queryOne<{ uploaded_by: number | null; uploader_role: string | null; sniff_ok: number | null }>(
+      sql`SELECT f.uploaded_by, u.role AS uploader_role, f.sniff_ok
             FROM uploaded_files f
             LEFT JOIN users u ON u.id = f.uploaded_by
            WHERE f.file_id = ${id} LIMIT 1`,
@@ -97,11 +97,15 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Residual SDL-L3: file yang gagal sniff magic-number (sniff_ok=0) jangan
+    // di-render inline — paksa download supaya browser tak pernah interpret kontennya.
+    const disposition = owner?.sniff_ok === 0 ? 'attachment' : 'inline';
+
     return new NextResponse(webStream, {
       status: 200,
       headers: {
         'Content-Type':        mime,
-        'Content-Disposition': `inline; filename="${encodeURIComponent(name)}"`,
+        'Content-Disposition': `${disposition}; filename="${encodeURIComponent(name)}"`,
         'Cache-Control':       'private, max-age=60',
         // Prevent browser from sniffing into other content types
         'X-Content-Type-Options': 'nosniff',

@@ -108,8 +108,9 @@ export async function POST(req: NextRequest) {
     if (sniffed && !ALLOWED_TYPES.includes(sniffed)) {
       return NextResponse.json({ ok: false, message: 'Konten file tidak cocok dengan ekstensi (magic-number mismatch).' }, { status: 400 });
     }
-    // Note: kalau `sniffed === null` (mis. text/plain TXT yang tidak di allow list),
-    // declared file.type yang sudah lewat ALLOWED_TYPES check di atas adalah final.
+    // Kalau `sniffed === null` declared file.type (sudah lolos ALLOWED_TYPES) diterima,
+    // tapi ditandai sniff_ok=0 → /api/upload/download serve attachment, bukan inline.
+    const sniffOk = sniffed !== null;
 
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
     if (!folderId) throw new Error('GOOGLE_DRIVE_FOLDER_ID belum dikonfigurasi di .env');
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
     // (jangan gagalkan upload kalau insert tracking error).
     const context = (formData.get('context') as string | null)?.slice(0, 40) || null;
     try {
-      await sql`INSERT INTO uploaded_files (file_id, uploaded_by, context) VALUES (${fileId}, ${session.userId}, ${context})`;
+      await sql`INSERT INTO uploaded_files (file_id, uploaded_by, context, sniff_ok) VALUES (${fileId}, ${session.userId}, ${context}, ${sniffOk ? 1 : 0})`;
     } catch (e) { console.error('[Upload] tracking insert failed', e); }
     // SDL-H4: file Drive SENGAJA tidak di-set public. Akses lewat proxy
     // /api/upload/download?id=<fileId> yang verify session sebelum stream.
