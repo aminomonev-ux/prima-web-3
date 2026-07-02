@@ -80,7 +80,7 @@ async function createEncryptedDump(outFile) {
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
   const key = crypto.scryptSync(encPassword, salt, 32);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
 
   // MYSQL_PWD via env — jangan taruh password di argumen CLI (kelihatan di task list)
   const dump = spawn(mysqldump, [

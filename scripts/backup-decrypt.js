@@ -54,7 +54,7 @@ const authTag = buf.subarray(buf.length - 16);
 const ciphertext = buf.subarray(36, buf.length - 16);
 
 const key = crypto.scryptSync(password, salt, 32);
-const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
 decipher.setAuthTag(authTag);
 
 let gz;
