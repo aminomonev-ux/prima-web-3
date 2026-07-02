@@ -81,3 +81,7 @@ graphify-out/.needs_update
 # lean-ctx cache files
 *.lean-ctx
 .lean-ctx/
+
+# backup DB (scripts/backup-db.js) - jangan commit dump/log
+backups-pending/
+scripts/backup-db.log
