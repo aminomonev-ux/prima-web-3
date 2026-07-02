@@ -73,7 +73,8 @@ async function createEncryptedDump(outFile) {
   const port = process.env.MYSQL_PORT ?? '3306';
   const user = requireEnv('MYSQL_USER');
   const database = requireEnv('MYSQL_DATABASE');
-  const password = requireEnv('MYSQL_PASSWORD');
+  // MYSQL_PASSWORD boleh kosong (Laragon intranet default tanpa password root)
+  const password = process.env.MYSQL_PASSWORD ?? '';
   const encPassword = requireEnv('BACKUP_ENC_PASSWORD', 16);
   const mysqldump = process.env.MYSQLDUMP_PATH?.trim() || 'mysqldump';
 
