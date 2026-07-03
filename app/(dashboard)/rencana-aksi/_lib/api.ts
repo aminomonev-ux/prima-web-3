@@ -49,6 +49,8 @@ export interface UpsertPayload {
   q1_target: number; q2_target: number; q3_target: number; q4_target: number;
   anggaran_nominal?: number | null;
   bulan_target?: number[] | null;
+  // L51: wajib diisi saat edit by id — server CAS versi baris.
+  expected_version?: number | null;
 }
 
 export async function apiUpsert(p: UpsertPayload): Promise<number> {

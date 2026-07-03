@@ -118,7 +118,10 @@ export async function upsertRencanaAksi(
     : [data.q1_target, data.q2_target, data.q3_target, data.q4_target];
 
   if (data.id) {
-    await sql`
+    // L51: CAS via version (bila klien kirim expected_version) + selalu bump version
+    // supaya editor kuartal/target yang pegang versi lama ikut terdeteksi konflik.
+    const hasCas = typeof data.expected_version === 'number';
+    const res = await sql`
       UPDATE rencana_aksi SET
         sasaran              = ${data.sasaran ?? null},
         tujuan               = ${data.tujuan ?? null},
@@ -139,9 +142,12 @@ export async function upsertRencanaAksi(
         q4_target            = ${dq4},
         anggaran_nominal     = ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null},
         bulan_target         = ${bulanTargetJson},
+        version              = version + 1,
         updated_by           = ${userId}
       WHERE id = ${data.id}
+        AND (${hasCas ? 0 : 1} = 1 OR version = ${data.expected_version ?? 0})
     `;
+    assertUpdated(res);
     return data.id;
   }
 
@@ -172,12 +178,15 @@ export async function upsertRencanaAksi(
         q4_target            = ${dq4},
         anggaran_nominal     = ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null},
         bulan_target         = ${bulanTargetJson},
+        version              = version + 1,
         updated_by           = ${userId}
       WHERE id = ${existing.id}
     `;
     return existing.id;
   }
 
+  // Race SELECT-lalu-INSERT ditutup uk_tahun_level_ind: submit kembar jatuh ke
+  // ODKU (update, bukan ER_DUP_ENTRY 500). LAST_INSERT_ID(id) → insertId = id existing.
   const res = await sql`
     INSERT INTO rencana_aksi
       (tahun, level, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
@@ -194,7 +203,29 @@ export async function upsertRencanaAksi(
       ${dq1}, ${dq2}, ${dq3}, ${dq4},
       ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null}, ${bulanTargetJson},
       ${userId}, ${userId}
-    )
+    ) AS new
+    ON DUPLICATE KEY UPDATE
+      id                   = LAST_INSERT_ID(rencana_aksi.id),
+      sasaran              = new.sasaran,
+      tujuan               = new.tujuan,
+      outcome_program      = new.outcome_program,
+      outcome_kegiatan     = new.outcome_kegiatan,
+      outcome_sub_kegiatan = new.outcome_sub_kegiatan,
+      program              = new.program,
+      kegiatan             = new.kegiatan,
+      sub_kegiatan         = new.sub_kegiatan,
+      jenis                = new.jenis,
+      satuan               = new.satuan,
+      target_rpjmd         = new.target_rpjmd,
+      target_tahunan       = new.target_tahunan,
+      q1_target            = new.q1_target,
+      q2_target            = new.q2_target,
+      q3_target            = new.q3_target,
+      q4_target            = new.q4_target,
+      anggaran_nominal     = new.anggaran_nominal,
+      bulan_target         = new.bulan_target,
+      version              = rencana_aksi.version + 1,
+      updated_by           = new.updated_by
   ` as unknown as Array<{ insertId: number }>;
   return res[0]?.insertId ?? 0;
 }

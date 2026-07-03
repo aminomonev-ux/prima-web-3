@@ -75,6 +75,8 @@ export const UpsertRencanaAksiSchema = z.object({
   // Opsi A: 12 target bulanan (sub-kegiatan) → sumber derive q1-q4 target server-side.
   // null/absent untuk level non-sub-kegiatan & data legacy.
   bulan_target: z.array(z.coerce.number().int().min(0)).length(12).nullable().optional(),
+  // L51: optimistic lock untuk edit by id (form Data Entry). null/absent = create/legacy.
+  expected_version: z.coerce.number().int().min(0).nullable().optional(),
 }).superRefine((v, ctx) => {
   if (v.level === 'sasaran' && !v.tujuan?.trim()) {
     ctx.addIssue({ code: 'custom', path: ['tujuan'], message: 'Tujuan wajib untuk level sasaran' });

@@ -76,6 +76,9 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ ok: true, id });
   } catch (e) {
+    if (e instanceof RaVersionConflictError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'VERSION_CONFLICT' }, { status: 409 });
+    }
     console.error('[RA POST]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });
   }

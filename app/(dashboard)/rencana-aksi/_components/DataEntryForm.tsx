@@ -14,7 +14,7 @@ import Tip from '@/components/ui/Tip';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS } from '../_lib/types';
-import { apiUpsert, apiDelete, apiList } from '../_lib/api';
+import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
 
 interface Props {
@@ -46,6 +46,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const [anggaranNominal, setAnggaranNominal] = useState(0);
   const [bulanTarget, setBulanTarget] = useState<number[]>(() => Array(12).fill(0));
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<RaRow | null>(null);
 
@@ -109,6 +110,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setAnggaranNominal(0);
     setBulanTarget(Array(12).fill(0));
     setEditingId(null);
+    setEditingVersion(null);
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -136,6 +138,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     try {
       await apiUpsert({
         id: editingId,
+        expected_version: editingVersion,
         tahun: selectedYear,
         level,
         sasaran: level === 'program' ? sasaran.trim() : null,
@@ -158,6 +161,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
       await onReload();
     } catch (err) {
       notify((err as Error).message || 'Gagal menyimpan', 'error');
+      // L51: versi baris berubah di server — refresh list; form dibiarkan terisi
+      // supaya user bisa banding & terapkan ulang perubahannya.
+      if (err instanceof VersionConflictError) await onReload();
     } finally {
       setBusy(false);
     }
@@ -165,6 +171,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
 
   const handleEdit = (row: RaRow) => {
     setEditingId(row.id);
+    setEditingVersion(row.version);
     setSasaran(row.sasaran ?? '');
     setTujuan(row.tujuan ?? '');
     setOutcomeProgram(row.outcome_program ?? '');
