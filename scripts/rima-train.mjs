@@ -39,6 +39,11 @@ function hashStr(s) {
 }
 
 // ─── 1. Parse GOLDEN-QUESTIONS.md ────────────────────────────────────────────
+if (!existsSync(SRC)) {
+  console.error(`GAGAL: sumber latih tidak ada: ${SRC}\n` +
+    'Workspace ini tidak menyertakan docs/session/sentinel/ — copy dari repo prima-web asli dulu.')
+  process.exit(1)
+}
 const raw = readFileSync(SRC, 'utf8')
 const LINE_RE = /^-\s*([★◇])?\s*"(.+?)"\s*(?:→|->)\s*`([a-z0-9.\-*]+)`/u
 const originals = []
@@ -56,6 +61,42 @@ for (const line of raw.split('\n')) {
 if (originals.length < 100) {
   console.error(`GAGAL: cuma ${originals.length} pertanyaan terparse — format GOLDEN-QUESTIONS.md berubah?`)
   process.exit(1)
+}
+
+// ─── 1b. RAL-4 — dataset berlabel dari workbench admin (CONCEPT-rima-v4-learning.md)
+// Export JSONL panel "Rima Feedback" ({text,intent,weak}) ikut dilatih: label admin
+// (weak:false) diaugmentasi penuh seperti pertanyaan golden; label lemah dari klik
+// kandidat user (weak:true) masuk 1 contoh polos tanpa augmentasi (bobot rendah,
+// anti label berisik). Intent harus sudah ada di GOLDEN-QUESTIONS.md — intent asing
+// dilewati (KB belum punya jawabannya; tambah dulu lewat PR KB).
+const labArgIdx = process.argv.indexOf('--labeled')
+const LABELED = labArgIdx > -1
+  ? process.argv[labArgIdx + 1]
+  : path.join(ROOT, 'docs', 'session', 'sentinel', 'rima-labeled.jsonl')
+let labeledRaw = ''
+if (LABELED && existsSync(LABELED)) {
+  labeledRaw = readFileSync(LABELED, 'utf8')
+  const knownIntents = new Set(originals.map(o => o.intent))
+  let addedL = 0
+  let skippedL = 0
+  for (const line of labeledRaw.split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    let row
+    try { row = JSON.parse(t) } catch { skippedL++; continue }
+    const { text, intent, weak } = row ?? {}
+    if (typeof text !== 'string' || typeof intent !== 'string') { skippedL++; continue }
+    if (!knownIntents.has(intent)) {
+      console.warn(`  lewati label (intent belum ada di golden): ${intent} — "${text}"`)
+      skippedL++; continue
+    }
+    const key = `${text}||${intent}`
+    if (seenQ.has(key)) { skippedL++; continue }
+    seenQ.add(key)
+    originals.push({ q: text, intent, star: 0, weak: !!weak })
+    addedL++
+  }
+  console.log(`Label workbench: +${addedL} contoh (${skippedL} dilewati) ← ${LABELED}`)
 }
 
 // ─── 2+3. Normalisasi + augmentasi (M1): sinonim balik + typo deterministik ──
@@ -107,7 +148,8 @@ for (const [intent, items] of byIntent) {
   const variants = new Map() // tokenJoin → star
   for (const o of items) {
     const norm = normalize(o.q)
-    const texts = [norm, ...synVariants(norm, 4), ...typoVariants(norm, rand, 6)]
+    // RAL-4: label lemah (weak) TANPA augmentasi — 1 contoh polos, bobot kecil
+    const texts = o.weak ? [norm] : [norm, ...synVariants(norm, 4), ...typoVariants(norm, rand, 6)]
     for (const t of texts) {
       const toks = tokenize(t)
       if (toks.length === 0) continue
@@ -242,7 +284,8 @@ if (accEns < GATE_TOTAL || accStar < GATE_STAR) {
 const nbFull = trainNB([...train, ...test])
 const model = {
   v: 1,
-  srcHash: hashStr(raw),
+  // srcHash mencakup dataset label (RAL-4) supaya --check mendeteksi model basi
+  srcHash: hashStr(raw + ' ' + labeledRaw),
   nb: nbFull,
   idf,
   docs: docTokens.filter(d => d.toks.length > 0).map(d => [d.toks.join(' '), d.intent, d.star]),

@@ -21,7 +21,7 @@ import { ROLE_LABELS } from '@/lib/constants'
 import { getProfile, patchProfile } from '@/lib/sentinel/profile'
 import { useLampir, type LampirStash } from '@/lib/sentinel/lampir-store'
 import { redactPii } from '@/lib/sentinel/redact'
-import { detectRimaDataQuery, fetchRimaData, formatRimaAnswer } from '@/lib/sentinel/data-query'
+import { detectRimaDataQuery, fetchRimaData, formatRimaAnswer, hasDataSignalNoModule, mergeWithContext, type RimaQuery } from '@/lib/sentinel/data-query'
 import type { RimaTourApi } from './SentinelBot'
 import type { RimaReaction } from './RimaAvatar'
 import type { RimaModel } from '@/lib/sentinel/nlu/engine.mjs'
@@ -43,6 +43,8 @@ interface ChatChip extends RimaChip {
   action?: 'skip-tutorial' | 'whats-new'
   /** F5c — tunjuk anchor (id) di layar lewat micro-tour locate. */
   locate?: string
+  /** RAL-2 — telemetri CANDIDATE_PICK saat chip diklik (label implisit training). */
+  pick?: { q: string; intent: string }
 }
 
 interface ChatMsg {
@@ -50,6 +52,8 @@ interface ChatMsg {
   who: 'rima' | 'user'
   text: string
   chips?: ChatChip[]
+  /** RAL-2 — jawaban yang bisa dinilai 👍/👎 (pertanyaan asal + intent terjawab). */
+  fb?: { q: string; intent: string }
 }
 
 interface Nlu {
@@ -136,6 +140,19 @@ function reportUnanswered(q: string, page: string): void {
   } catch { /* G12: telemetri best-effort */ }
 }
 
+// RAL-2 active learning — klik kandidat A5 & 👍/👎 = label implisit (bahan
+// retrain RAL-4). Sama seperti reportUnanswered: telemetri best-effort,
+// PII di-redaksi klien+server, read-only terhadap data modul (G16).
+function reportFeedback(q: string, kind: 'CANDIDATE_PICK' | 'THUMBS_UP' | 'THUMBS_DOWN', intent: string): void {
+  try {
+    void fetch('/api/rima/feedback', { // rima-readonly-allow: telemetri belajar (RAL-2), bukan mutasi data modul
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: redactPii(q).slice(0, 200), kind, chosen_intent: intent }),
+    }).catch(() => { /* G12 */ })
+  } catch { /* G12: telemetri best-effort */ }
+}
+
 export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, userName }: {
   onThinking?: (thinking: boolean) => void
   /** A1: pasca-jawaban → angguk (yakin) / geleng (fallback). Dipakai SentinelBot. */
@@ -157,6 +174,10 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
   // B3 — deteksi kebingungan: hitung pertanyaan gagal beruntun, tawarkan tur 1×/sesi
   const fallbackStreakRef = useRef(0)
   const confusionOfferedRef = useRef(false)
+  // RAL-6 — konteks pertanyaan-data terakhir (multi-turn); TTL 5 menit, murni klien (G13)
+  const lastDataQRef = useRef<{ q: RimaQuery; at: number } | null>(null)
+  // RAL-2 — pesan yang sudah dinilai 👍/👎 (sekali per jawaban)
+  const [voted, setVoted] = useState<Set<number>>(new Set())
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const attachRef = useRef<HTMLInputElement>(null)
@@ -226,7 +247,7 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [msgs, typedLen])
 
-  const answerIntent = useCallback((nlu: Nlu, intent: string, alsoAsked: string | null): void => {
+  const answerIntent = useCallback((nlu: Nlu, intent: string, alsoAsked: string | null, askedText?: string): void => {
     // Penolakan/de-eskalasi bukan "topik" — jangan jadi konteks B1
     if (!intent.startsWith('deny.') && !intent.startsWith('sopan.')) lastIntentRef.current = intent
     const set = nlu.kb.resolveAnswer(intent)
@@ -242,7 +263,14 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
     if (alsoAsked && alsoAsked !== intent) {
       chips.unshift({ l: `Lanjut: ${nlu.kb.intentTitle(alsoAsked)}`, q: '', intent: alsoAsked })
     }
-    pushMsg({ who: 'rima', text: pickAnswer(intent, set), chips: chips.slice(0, 4) })
+    // RAL-2 — jawaban KB yang diketik user bisa dinilai 👍/👎 (deny/sopan tidak dinilai)
+    const canRate = !!askedText && !intent.startsWith('deny.') && !intent.startsWith('sopan.')
+    pushMsg({
+      who: 'rima',
+      text: pickAnswer(intent, set),
+      chips: chips.slice(0, 4),
+      fb: canRate ? { q: askedText, intent } : undefined,
+    })
   }, [onReact, pickAnswer, pushMsg])
 
   // F3 — chip tur: tawarkan resume bila ada progres tersimpan; halaman beda →
@@ -431,16 +459,44 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
       // read-only ber-guard (akses ditentukan server dari role — L60/G20). Angka
       // dari server, bukan klien/LLM. Rima tetap read-only (GET, tak menulis — G16).
       if (text && !directIntent) {
-        const q = detectRimaDataQuery(text)
+        let q = detectRimaDataQuery(text)
+        // RAL-6 — lanjutan anaforis ("kalau 2025?", "yang ditolak?") mewarisi slot
+        // pertanyaan-data terakhir; kedaluwarsa 5 menit (reset agresif anti salah sambung).
+        const ctx = lastDataQRef.current
+        if (!q && ctx && Date.now() - ctx.at < 5 * 60_000) q = mergeWithContext(text, ctx.q)
         if (q) {
           const r = await fetchRimaData(q)
-          onReact?.(r.ok && !r.denied && r.data ? 'nod' : 'shake')
-          pushMsg({ who: 'rima', text: formatRimaAnswer(q.app, r), chips: [
-            { l: 'Tugasku', q: 'apa tugasku' },
-            { l: 'Usulan termahal', q: '5 usulan termahal' },
-            { l: 'Rekap aset', q: 'rekap bba tahun ini' },
-            { l: 'Kemampuan Rima', q: 'kamu bisa apa saja' },
-          ] })
+          const ok = !!(r.ok && !r.denied && r.data)
+          onReact?.(ok ? 'nod' : 'shake')
+          if (ok) lastDataQRef.current = { q, at: Date.now() }
+          pushMsg({
+            who: 'rima',
+            text: formatRimaAnswer(q.app, r, q.status),
+            // RAL-2 — jawaban data bisa dinilai 👍/👎 (👎 = sinyal salah-paham G-F)
+            fb: ok ? { q: text, intent: `${q.app}.${q.intent}` } : undefined,
+            chips: [
+              { l: 'Tugasku', q: 'apa tugasku' },
+              { l: 'Usulan termahal', q: '5 usulan termahal' },
+              { l: 'Rekap aset', q: 'rekap bba tahun ini' },
+              { l: 'Kemampuan Rima', q: 'kamu bisa apa saja' },
+            ],
+          })
+          return
+        }
+        // RAL-5 — sinyal data kuat tapi modul tak disebut → tanya balik modulnya.
+        // Jawaban chip terekam sebagai CANDIDATE_PICK (label implisit, RAL-2).
+        if (hasDataSignalNoModule(text)) {
+          onReact?.('nod')
+          pushMsg({
+            who: 'rima',
+            text: 'Datanya dari modul mana nih? 😊 Pilih salah satu ya:',
+            chips: ([
+              ['Usulan', 'usulan', 'usulan'],
+              ['Aset (BBA)', 'bba', 'bba'],
+              ['Perjanjian Kinerja', 'pk', 'pk'],
+              ['Rencana Aksi', 'rencana aksi', 'rencana_aksi'],
+            ] as const).map(([l, kw, app]) => ({ l, q: `${text} ${kw}`, pick: { q: text, intent: `data.${app}` } })),
+          })
           return
         }
       }
@@ -471,7 +527,7 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
       }
       const result = nlu.classify(text, nlu.model, nlu.keywords)
       if (result.intent) {
-        answerIntent(nlu, result.intent, result.alsoAsked)
+        answerIntent(nlu, result.intent, result.alsoAsked, text)
         return
       }
       logFailedQuestion(text)
@@ -496,7 +552,8 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
           who: 'rima',
           text: 'Aku belum yakin maksudmu 🙏 Mungkin salah satu ini?',
           chips: [
-            ...result.candidates.map(c => ({ l: nlu.kb.intentTitle(c.intent), q: '', intent: c.intent })),
+            // RAL-2 — pick: klik kandidat = label implisit utk training (CANDIDATE_PICK)
+            ...result.candidates.map(c => ({ l: nlu.kb.intentTitle(c.intent), q: '', intent: c.intent, pick: { q: text, intent: c.intent } })),
             ...ctxChip,
           ].slice(0, 4),
         })
@@ -587,6 +644,23 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
               <div className="rima-msg-text">
                 {stillTyping ? m.text.slice(0, typedLen) : m.text}
               </div>
+              {/* RAL-2 — nilai jawaban 👍/👎 (sekali per jawaban; 👎 = bahan belajar) */}
+              {isLast && m.who === 'rima' && !stillTyping && m.fb && (
+                <div className="rima-chat-chips" aria-label="Nilai jawaban Rima">
+                  {voted.has(m.id) ? (
+                    <span style={{ fontSize: 11, opacity: 0.7 }}>Makasih atas masukannya 🙏</span>
+                  ) : (
+                    <>
+                      <button type="button" className="rima-chip" disabled={busy} aria-label="Jawaban membantu"
+                        onClick={() => { reportFeedback(m.fb!.q, 'THUMBS_UP', m.fb!.intent); setVoted(v => new Set(v).add(m.id)) }}
+                      >👍</button>
+                      <button type="button" className="rima-chip" disabled={busy} aria-label="Jawaban kurang tepat"
+                        onClick={() => { reportFeedback(m.fb!.q, 'THUMBS_DOWN', m.fb!.intent); setVoted(v => new Set(v).add(m.id)) }}
+                      >👎</button>
+                    </>
+                  )}
+                </div>
+              )}
               {isLast && m.who === 'rima' && !stillTyping && m.chips && m.chips.length > 0 && (
                 <div className="rima-chat-chips">
                   {m.chips.map((c, i) => (
@@ -599,6 +673,8 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
                         className="rima-chip"
                         disabled={busy}
                         onClick={() => {
+                          // RAL-2 — telemetri label implisit; tidak mengubah perilaku chip
+                          if (c.pick) reportFeedback(c.pick.q, 'CANDIDATE_PICK', c.pick.intent)
                           if (c.action) void handleAction(c.action)
                           else if (c.locate) tourApi?.locate(c.locate)
                           else if (c.tour) handleTourChip(c.tour, c.tourFrom)

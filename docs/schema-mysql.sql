@@ -212,21 +212,30 @@ CREATE INDEX idx_audit_log_created ON audit_log (created_at DESC);
 CREATE INDEX idx_audit_log_event   ON audit_log (event_type);
 CREATE INDEX idx_audit_log_user    ON audit_log (user_id);
 
--- ─── RIMA UNANSWERED (#2 fail-log mining) ─────────────────────────────────────
--- Pertanyaan Rima yang gagal dijawab classifier; bahan tumbuh KB. Teks di-redaksi
--- PII di klien + server (R4/G27). Migration: migration-rima-unanswered.sql.
+-- ─── RIMA UNANSWERED (#2 fail-log mining + RAL-2/3 active learning) ──────────
+-- Pertanyaan Rima yang gagal dijawab classifier + telemetri belajar (klik
+-- kandidat A5, thumbs, label admin). Teks di-redaksi PII di klien + server
+-- (R4/G27). Migration: migration-rima-unanswered.sql + migration-rima-feedback-v4.sql.
 CREATE TABLE IF NOT EXISTS rima_unanswered (
-  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  question    VARCHAR(200)    NOT NULL,
-  page        VARCHAR(120)    NULL,
-  user_id     INT             NULL,
-  role        VARCHAR(40)     NULL,
-  created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  question      VARCHAR(200)    NOT NULL,
+  kind          ENUM('UNANSWERED','CANDIDATE_PICK','THUMBS_UP','THUMBS_DOWN') NOT NULL DEFAULT 'UNANSWERED',
+  chosen_intent VARCHAR(64)     NULL,
+  label_intent  VARCHAR(64)     NULL,
+  label_status  ENUM('BARU','DILABELI','DIABAIKAN') NOT NULL DEFAULT 'BARU',
+  labeled_by    INT             NULL,
+  labeled_at    DATETIME        NULL,
+  page          VARCHAR(120)    NULL,
+  user_id       INT             NULL,
+  role          VARCHAR(40)     NULL,
+  created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_rima_unans_created (created_at),
-  CONSTRAINT fk_rima_unans_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  KEY idx_rima_unans_label (label_status, kind),
+  CONSTRAINT fk_rima_unans_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_rima_unans_labeler FOREIGN KEY (labeled_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='Pertanyaan Rima tak terjawab — bahan tumbuh KB (#2 fail-log mining)';
+  COMMENT='Telemetri belajar Rima — fail-log + active learning (RAL-2/3)';
 
 -- ─── USER SESSIONS ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS user_sessions (

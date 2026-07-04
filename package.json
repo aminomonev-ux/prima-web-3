@@ -9,7 +9,9 @@
     "lint": "eslint",
     "rima:train": "node scripts/rima-train.mjs",
     "rima:mine": "node scripts/rima-mine-faillog.mjs",
-    "rima:check": "node scripts/rima-train.mjs --check && node scripts/rima-nlu-test.mjs && node scripts/rima-lint-templates.mjs && node scripts/rima-anchor-check.mjs && node scripts/rima-readonly-check.mjs"
+    "rima:eval": "npx tsx scripts/rima-eval.mts",
+    "rima:detect-test": "npx tsx scripts/rima-detect-test.mts",
+    "rima:check": "node scripts/rima-train.mjs --check && node scripts/rima-nlu-test.mjs && node scripts/rima-lint-templates.mjs && node scripts/rima-anchor-check.mjs && node scripts/rima-readonly-check.mjs && npx tsx scripts/rima-detect-test.mts && npx tsx scripts/rima-eval.mts"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.2.8",

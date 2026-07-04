@@ -4,12 +4,13 @@
 // menentukan akses (L60/G20). Render jawaban di RimaChat (text node, G4); angka
 // dari server (anti halusinasi, tak ada LLM). Pisah fetch/.json + try/catch.
 
-import { SYNONYMS } from '@/lib/sentinel/nlu/normalize.mjs';
+import { SYNONYMS, levenshtein } from '@/lib/sentinel/nlu/normalize.mjs';
 
 export type RimaApp = 'usulan' | 'bba' | 'pk' | 'lkjip' | 'blud' | 'kinerja' | 'rencana_aksi';
 /** target klien: app modul tunggal, atau 'summary' (Tugasku lintas-modul). */
 export type RimaTarget = RimaApp | 'summary';
-export interface RimaQuery { app: RimaTarget; intent: string; tahun?: string; no?: string; jenis?: string; topn?: string }
+/** `status` = slot RAL-5, KLIEN-ONLY (fokus jawaban di formatter) — tak dikirim ke server. */
+export interface RimaQuery { app: RimaTarget; intent: string; tahun?: string; no?: string; jenis?: string; topn?: string; status?: string }
 
 interface RekapRow { status: string; label: string; count: number; nilai?: number; rencana?: number; realisasi?: number; sub_bidang?: string; sumber?: string }
 interface RimaData {
@@ -37,10 +38,20 @@ export interface RimaDataResult { ok: boolean; denied?: boolean; message?: strin
 
 // Sinyal "ini pertanyaan-data" — dipakai semua modul. Konservatif: ragu → null
 // (biar classifier KB yang jawab, bukan salah panggil endpoint).
-const DATA_SIGNAL = /\b(data|daftar|list|semua|seluruh|tampil(?:kan)?|lihat|tunjuk(?:kan)?|ada\s+berapa|berapa|jumlah|total|rekap(?:itulasi)?|ringkas(?:an)?|status|disetujui|ditolak|ditelaah|diproses|realisasi|sampai mana|posisi|sudah\s+(final|disetujui))\b/i;
+const DATA_SIGNAL = /\b(data|daftar(?:nya)?|list|semua|seluruh|tampil(?:kan)?|lihat|tunjuk(?:kan)?|ada\s+berapa|berapa(?:kah)?|banyak(?:nya)?|jumlah(?:nya)?|total(?:nya)?|hitung|cek|info(?:rmasi)?|rekap(?:itulasi)?|ringkas(?:an)?|laporan|kondisi|progres|perkembangan|capaian|nominal|anggaran|nilai|pagu|status(?:nya)?|posisi(?:nya)?|disetujui|ditolak|ditelaah|diproses|realisasi|sampai mana|sudah\s+(final|disetujui))\b/i;
 const NO_HINT = /\b(no|nomor)\b/i;
 
-function tahunOf(low: string): string | undefined { return low.match(/\b(20\d{2})\b/)?.[1]; }
+// B2 — tahun relatif ("tahun ini/lalu/depan") diabsolutkan di klien; server tetap
+// menerima 4 digit saja (Zod provider tidak berubah).
+function tahunOf(low: string): string | undefined {
+  const abs = low.match(/\b(20\d{2})\b/)?.[1];
+  if (abs) return abs;
+  const now = new Date().getFullYear();
+  if (/\b(?:tahun|ta)\s+(?:ini|sekarang|berjalan)\b/.test(low)) return String(now);
+  if (/\btahun\s+(?:lalu|kemarin|sebelumnya)\b/.test(low)) return String(now - 1);
+  if (/\btahun\s+depan\b/.test(low)) return String(now + 1);
+  return undefined;
+}
 
 /** Token no_usulan: ber-slash (001/PROGRAM/2026) atau setelah "no/nomor". */
 function extractNo(low: string): string | undefined {
@@ -53,22 +64,52 @@ function extractNo(low: string): string | undefined {
   return undefined;
 }
 
-const TOP_SIGNAL  = /\b(termahal|terbesar|tertinggi|paling\s+mahal|top\s*\d{0,2})\b/;
-// #B3 — rekap per DIMENSI (sub-bidang), bukan per status.
-const RINCIAN_SIGNAL = /\b(per\s+(sub[\s-]*)?bidang|per\s+sumber|per\s+kategori|rincian|breakdown|pecahan|sebaran|per\s+bagian)\b/;
-const TREN_SIGNAL = /\b(tren|antar\s*tahun|tahun\s+ke\s+tahun|per\s*tahun|riwayat\s+tahun)\b/;
+const TOP_SIGNAL  = /\b(termahal|terbesar|tertinggi|terbanyak|paling\s+(?:mahal|besar|tinggi|banyak)|ranking|peringkat|urut(?:an|kan)?|top\s*\d{0,2})\b/;
+// #B3 — rekap per DIMENSI (sub-bidang), bukan per status. "detail" ikut karena
+// SYNONYMS memetakan rincian/perincian→detail SEBELUM regex ini dites (B1).
+const RINCIAN_SIGNAL = /\b(per\s+(sub[\s-]*)?bidang|per\s+sumber|per\s+kategori|per\s+bagian|per\s+unit|rincian|detail(?:nya)?|breakdown|pecahan|sebaran|komposisi|distribusi)\b/;
+const TREN_SIGNAL = /\b(tren(?:d|nya)?|antar\s*tahun|tahun\s+ke\s+tahun|per\s*tahun|tiap\s+tahun|setiap\s+tahun|riwayat\s+tahun|perbandingan\s+tahun|dibanding(?:kan)?\s+tahun|histori(?:s)?)\b/;
 // #4 — sinyal "tugas/antrian" yang menunggu aksi user (proaktif).
-const TASK_SIGNAL = /\b(tugas(ku)?|antrian(ku)?|inbox|kerjaan(ku)?|ada\s+apa|yang\s+(harus|perlu|menunggu)|menunggu\s+(aku|saya|ku)|to-?do)\b/;
-const USULAN_KW = /\busulan\b/;
-const BBA_KW = /\b(bba|buku\s+besar\s+aset|aset|belanja\s+modal)\b/;
+const TASK_SIGNAL = /\b(tugas(?:ku)?|antrian(?:ku)?|inbox|kerjaan(?:ku)?|pekerjaan(?:ku)?|pending(?:an)?|ada\s+apa|yang\s+(harus|perlu|menunggu)|menunggu\s+(aku|saya|ku|aksi|persetujuan)|belum\s+(?:ku|aku|saya)\s*(?:proses|kerjakan|setujui)|to-?do)\b/;
+const USULAN_KW = /\b(usulan(?:ku|nya|mu)?|pengajuan)\b/;
+const BBA_KW = /\b(bba|buku\s+besar\s+aset|aset(?:ku|nya)?|belanja\s+modal|inventaris)\b/;
 const PK_KW = /\b(perjanjian\s+kinerja|\bpk\b)\b/;
-const LKJIP_KW = /\b(lkjip|laporan\s+kinerja)\b/;
+const LKJIP_KW = /\b(lkjip|lakip|laporan\s+kinerja)\b/;
 const BLUD_KW = /\b(blud|dpa)\b/;
 const RA_KW = /\b(rencana\s+aksi|renaksi)\b/;
 const KINERJA_KW = /\b(kinerja|e-?controlling|econtrolling|e-?anggaran)\b/;
 // gabungan keyword modul — dipakai detectSummary utk tahu "ada sebut modul atau tidak".
 const ANY_MODULE_KW = [USULAN_KW, BBA_KW, PK_KW, LKJIP_KW, BLUD_KW, RA_KW, KINERJA_KW];
 const topnOf = (low: string) => low.match(/\b(\d{1,2})\b/)?.[1];
+
+// RAL-5 — slot status (KLIEN-only): fokuskan jawaban rekap ke status yang disebut.
+// Pencocokan ke label baris rekap dilakukan di formatter — server tak berubah.
+const STATUS_SLOT = /\b(disetujui|ditolak|ditelaah|diproses|diajukan|draf(?:t)?|final|direncanakan|terealisasi|selesai)\b/;
+const statusOf = (low: string) => low.match(STATUS_SLOT)?.[1];
+
+// RAL-5 — leksikon fuzzy: keyword modul + kata sinyal inti. Token ≥5 huruf yang
+// tidak dikenal dicoba koreksi jarak-edit ≤1 ("usulen"→usulan, "jumlha"→jumlah).
+// Konservatif (P4): hanya dipakai sebagai retry saat deteksi pertama gagal.
+const FUZZ_LEXICON = [
+  'usulan', 'pengajuan', 'aset', 'inventaris', 'lkjip', 'lakip', 'kinerja', 'renaksi',
+  'rekap', 'berapa', 'jumlah', 'total', 'status', 'rincian', 'daftar', 'realisasi',
+  'disetujui', 'ditolak', 'anggaran', 'tahun', 'termahal', 'terbesar', 'tugasku',
+];
+function fuzzTokens(low: string): string {
+  return low.split(' ').map(w => {
+    if (w.length < 5 || !/^[a-z]+$/.test(w) || FUZZ_LEXICON.includes(w)) return w;
+    for (const cand of FUZZ_LEXICON) {
+      if (Math.abs(cand.length - w.length) <= 1 && levenshtein(w, cand, 1) <= 1) return cand;
+    }
+    // Transposisi huruf bersebelahan ("jumlha"→jumlah) — Levenshtein murni hitung 2,
+    // padahal ini typo keyboard paling umum. Cek swap eksplisit, tetap ketat.
+    for (let i = 0; i < w.length - 1; i++) {
+      const swapped = w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2);
+      if (FUZZ_LEXICON.includes(swapped)) return swapped;
+    }
+    return w;
+  }).join(' ');
+}
 
 function detectUsulan(low: string): RimaQuery | null {
   if (!USULAN_KW.test(low)) return null;
@@ -80,7 +121,7 @@ function detectUsulan(low: string): RimaQuery | null {
   if (TOP_SIGNAL.test(low)) return { app: 'usulan', intent: 'top', tahun, topn: topnOf(low) };
   if (TREN_SIGNAL.test(low)) return { app: 'usulan', intent: 'tren' };
   if (RINCIAN_SIGNAL.test(low)) return { app: 'usulan', intent: 'rincian', tahun };
-  if (DATA_SIGNAL.test(low)) return { app: 'usulan', intent: 'rekap', tahun };
+  if (DATA_SIGNAL.test(low)) return { app: 'usulan', intent: 'rekap', tahun, status: statusOf(low) };
   return null;
 }
 
@@ -93,7 +134,7 @@ function detectBba(low: string): RimaQuery | null {
   if (TOP_SIGNAL.test(low)) return { app: 'bba', intent: 'top', tahun, topn: topnOf(low) };
   if (TREN_SIGNAL.test(low)) return { app: 'bba', intent: 'tren' };
   if (RINCIAN_SIGNAL.test(low)) return { app: 'bba', intent: 'rincian', tahun };
-  if (DATA_SIGNAL.test(low)) return { app: 'bba', intent: 'rekap', tahun };
+  if (DATA_SIGNAL.test(low)) return { app: 'bba', intent: 'rekap', tahun, status: statusOf(low) };
   return null;
 }
 
@@ -103,7 +144,7 @@ function detectPk(low: string): RimaQuery | null {
   const jenis = /\bperubahan\b/.test(low) ? 'PERUBAHAN' : /\bmurni\b/.test(low) ? 'MURNI' : undefined;
   if (TASK_SIGNAL.test(low)) return { app: 'pk', intent: 'inbox', tahun };
   if (TREN_SIGNAL.test(low)) return { app: 'pk', intent: 'tren', jenis };
-  if (DATA_SIGNAL.test(low)) return { app: 'pk', intent: 'rekap', tahun, jenis };
+  if (DATA_SIGNAL.test(low)) return { app: 'pk', intent: 'rekap', tahun, jenis, status: statusOf(low) };
   return null;
 }
 
@@ -114,7 +155,7 @@ function detectLkjip(low: string): RimaQuery | null {
   if (canon) return { app: 'lkjip', intent: 'lookup', no: canon.toUpperCase(), tahun };
   if (TASK_SIGNAL.test(low)) return { app: 'lkjip', intent: 'inbox', tahun };
   if (TREN_SIGNAL.test(low)) return { app: 'lkjip', intent: 'tren' };
-  if (DATA_SIGNAL.test(low)) return { app: 'lkjip', intent: 'rekap', tahun };
+  if (DATA_SIGNAL.test(low)) return { app: 'lkjip', intent: 'rekap', tahun, status: statusOf(low) };
   return null;
 }
 
@@ -123,7 +164,7 @@ function detectRencanaAksi(low: string): RimaQuery | null {
   const tahun = tahunOf(low);
   if (TOP_SIGNAL.test(low)) return { app: 'rencana_aksi', intent: 'top', tahun, topn: topnOf(low) };
   if (TREN_SIGNAL.test(low)) return { app: 'rencana_aksi', intent: 'tren' };
-  if (DATA_SIGNAL.test(low)) return { app: 'rencana_aksi', intent: 'rekap', tahun };
+  if (DATA_SIGNAL.test(low)) return { app: 'rencana_aksi', intent: 'rekap', tahun, status: statusOf(low) };
   return null;
 }
 
@@ -157,15 +198,92 @@ function detectSummary(low: string): RimaQuery | null {
 // pertanyaan-data gaya daerah ("piro/ndelok/gawe") ikut terdeteksi. Hanya menukar
 // surface-form slang; angka, no_usulan, & nama modul (usulan/bba/dpa/…) tetap utuh.
 function canonicalize(low: string): string {
-  return low.split(/\s+/).map(w => SYNONYMS[w] ?? w).join(' ');
+  // Buang tanda baca yang menempel di kata ("piro?" → "piro") supaya lookup SYNONYMS
+  // kena. JANGAN buang / . - _ — dipakai token no_usulan (extractNo).
+  return low
+    .replace(/[?!,;:"'()]+/g, ' ')
+    .split(/\s+/).filter(Boolean).map(w => SYNONYMS[w] ?? w).join(' ');
 }
 
-export function detectRimaDataQuery(text: string): RimaQuery | null {
-  const low = canonicalize(text.toLowerCase());
+// B4 — pertanyaan how-to ("cara buat usulan") bukan pertanyaan-data: serahkan ke
+// classifier KB, kecuali ada sinyal angka eksplisit (berapa/jumlah/total/rekap).
+const HOWTO_SIGNAL = /\b(cara|tutorial|panduan|langkah(?:nya)?)\b/;
+const HARD_DATA_SIGNAL = /\b(berapa(?:kah)?|jumlah(?:nya)?|total(?:nya)?|rekap(?:itulasi)?)\b/;
+// Pertanyaan MEKANISME ("kolom jumlah dihitung gimana", "rumus deviasi") = KB
+// hitung.*, bukan pertanyaan-data — menang bahkan atas sinyal keras "jumlah".
+const MECHANISM_SIGNAL = /\b(dihitung|rumus|formula|perhitungan)\b/;
+
+function detectAll(low: string): RimaQuery | null {
   return detectSummary(low)
     ?? detectUsulan(low) ?? detectBba(low)
     ?? detectLkjip(low) ?? detectPk(low)
     ?? detectRencanaAksi(low) ?? detectBlud(low) ?? detectKinerja(low);
+}
+
+export function detectRimaDataQuery(text: string): RimaQuery | null {
+  const low = canonicalize(text.toLowerCase());
+  if (MECHANISM_SIGNAL.test(low)) return null;
+  if (HOWTO_SIGNAL.test(low) && !HARD_DATA_SIGNAL.test(low)) return null;
+  const direct = detectAll(low);
+  if (direct) return direct;
+  // RAL-5 — retry dengan koreksi typo fuzzy ("usulen sing disetujui piro").
+  const fuzzed = fuzzTokens(low);
+  return fuzzed !== low ? detectAll(fuzzed) : null;
+}
+
+// RAL-5 — sinyal data kuat ada tapi modul tidak disebut → RimaChat menawarkan
+// chips klarifikasi modul (jawaban chip masuk telemetri CANDIDATE_PICK, RAL-2).
+// Sengaja pakai sinyal KERAS saja supaya tidak mengganggu pertanyaan KB biasa.
+export function hasDataSignalNoModule(text: string): boolean {
+  const low = fuzzTokens(canonicalize(text.toLowerCase()));
+  if (HOWTO_SIGNAL.test(low)) return false;
+  if (ANY_MODULE_KW.some(re => re.test(low))) return false;
+  if (TASK_SIGNAL.test(low)) return false; // "apa tugasku" sudah ditangani summary
+  return HARD_DATA_SIGNAL.test(low) || TOP_SIGNAL.test(low) || TREN_SIGNAL.test(low) || RINCIAN_SIGNAL.test(low);
+}
+
+// RAL-6 — konteks multi-turn: kalimat lanjutan anaforis ("kalau 2025?", "yang
+// ditolak?", "per bidang dong") mewarisi slot pertanyaan-data terakhir. Murni
+// klien (TTL di RimaChat); server & guard tak berubah (P2). Intent baru hanya
+// dari daftar yang didukung provider modul tsb — jangan kirim intent asing.
+const APP_INTENTS: Record<RimaApp, string[]> = {
+  usulan: ['lookup', 'inbox', 'top', 'tren', 'rincian', 'rekap'],
+  bba: ['lookup', 'inbox', 'top', 'tren', 'rincian', 'rekap'],
+  pk: ['inbox', 'tren', 'rekap'],
+  lkjip: ['lookup', 'inbox', 'tren', 'rekap'],
+  blud: ['rekap'],
+  kinerja: ['tren', 'rekap'],
+  rencana_aksi: ['top', 'tren', 'rekap'],
+};
+const FOLLOWUP_HEAD = /^(kalau|yang|bagaimana(?:\s+(dengan|kalau))?|terus|dan|coba)\b/;
+
+export function mergeWithContext(text: string, prev: RimaQuery | null): RimaQuery | null {
+  if (!prev || prev.app === 'summary') return null;
+  const low = fuzzTokens(canonicalize(text.toLowerCase()));
+  const words = low.split(' ').filter(Boolean);
+  if (words.length === 0 || words.length > 8) return null; // follow-up itu pendek
+  const tahun = tahunOf(low);
+  const status = statusOf(low);
+  const allowed = APP_INTENTS[prev.app as RimaApp] ?? ['rekap'];
+  let intent: string | undefined;
+  if (TOP_SIGNAL.test(low) && allowed.includes('top')) intent = 'top';
+  else if (TREN_SIGNAL.test(low) && allowed.includes('tren')) intent = 'tren';
+  else if (RINCIAN_SIGNAL.test(low) && allowed.includes('rincian')) intent = 'rincian';
+  else if (TASK_SIGNAL.test(low) && allowed.includes('inbox')) intent = 'inbox';
+  if (!tahun && !status && !intent) return null; // tak ada slot baru → bukan lanjutan data
+  // Tanpa kepala anafora, wajib sangat pendek ("2025?", "per bidang") — anti salah sambung.
+  if (!FOLLOWUP_HEAD.test(low) && words.length > 4) return null;
+  // lookup/inbox tak punya kombinasi slot bebas → turunkan ke rekap saat hanya ganti slot.
+  const nextIntent = intent
+    ?? ((prev.intent === 'lookup' || prev.intent === 'inbox') ? 'rekap' : prev.intent);
+  return {
+    app: prev.app,
+    intent: nextIntent,
+    tahun: tahun ?? (nextIntent === 'tren' ? undefined : prev.tahun),
+    jenis: prev.jenis,
+    topn: intent === 'top' ? topnOf(low) : undefined,
+    status: status ?? prev.status,
+  };
 }
 
 /** Panggil endpoint baca-data. Tak melempar — balikkan {ok:false} saat gagal. */
@@ -347,15 +465,38 @@ function formatSummary(d: RimaData): string {
   return `Ada ${total} hal yang menunggu aksimu:\n${lines}`;
 }
 
-export function formatRimaAnswer(app: RimaTarget, r: RimaDataResult): string {
+// RAL-5 — fokus slot status: sorot baris rekap yang cocok dgn status yang user
+// sebut ("berapa usulan yang DITOLAK") tanpa mengubah server. Cocokkan longgar
+// ke label & kode status baris (case-insensitive contains).
+const SATUAN: Record<string, string> = {
+  usulan: 'usulan', bba: 'aset', pk: 'dokumen PK', lkjip: 'dokumen LKJIP',
+  rencana_aksi: 'indikator', kinerja: 'baris', blud: 'baris',
+};
+function statusFocus(d: RimaData, status: string, satuan: string): string | null {
+  if (d.kind !== 'rekap') return null;
+  const s = status.toLowerCase();
+  const hit = (d.rows ?? []).filter(x =>
+    (x.label ?? '').toLowerCase().includes(s) || (x.status ?? '').toLowerCase().includes(s));
+  if (!hit.length) return `Untuk status "${status}" tidak ada yang cocok di rekap ini 🙂`;
+  const n = hit.reduce((a, x) => a + (x.count ?? 0), 0);
+  const nilai = hit.reduce((a, x) => a + (x.nilai ?? 0), 0);
+  return `📌 Yang ${status}: ${n} ${satuan}${nilai > 0 ? ` · ${rupiah(nilai)}` : ''}.`;
+}
+
+export function formatRimaAnswer(app: RimaTarget, r: RimaDataResult, status?: string): string {
   if (r.denied) return 'Sepertinya kamu belum punya akses ke data itu 🙏 Coba lewat atasanmu ya.';
   if (!r.data) return r.message || 'Maaf, aku belum bisa mengambil datanya sekarang 🙏 Coba lagi ya.';
-  if (app === 'summary') return formatSummary(r.data);
-  if (app === 'bba') return formatBba(r.data);
-  if (app === 'pk') return formatPk(r.data);
-  if (app === 'lkjip') return formatLkjip(r.data);
-  if (app === 'blud') return formatBlud(r.data);
-  if (app === 'kinerja') return formatKinerja(r.data);
-  if (app === 'rencana_aksi') return formatRencanaAksi(r.data);
-  return formatUsulan(r.data);
+  const base = app === 'summary' ? formatSummary(r.data)
+    : app === 'bba' ? formatBba(r.data)
+    : app === 'pk' ? formatPk(r.data)
+    : app === 'lkjip' ? formatLkjip(r.data)
+    : app === 'blud' ? formatBlud(r.data)
+    : app === 'kinerja' ? formatKinerja(r.data)
+    : app === 'rencana_aksi' ? formatRencanaAksi(r.data)
+    : formatUsulan(r.data);
+  if (status && app !== 'summary') {
+    const focus = statusFocus(r.data, status, SATUAN[app] ?? 'baris');
+    if (focus) return `${focus}\n${base}`;
+  }
+  return base;
 }

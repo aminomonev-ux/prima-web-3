@@ -68,6 +68,7 @@ export type AuditEventType =
   // ─── Rima data-aware (CONCEPT-rima-v3, F6a) ────────────────────────────────
   | 'RIMA_QUERY'             // GET /api/rima/query — Rima baca data (permukaan akses, terjejak)
   | 'RIMA_QUERY_ABUSE'       // GET /api/rima/query — burst/cap-harian terlampaui (G26 anti-scraping, throttled 1×/menit)
+  | 'RIMA_LABEL'             // PATCH /api/rima/feedback — admin melabeli/mengabaikan pertanyaan (RAL-3 workbench)
   | 'RIMA_LAMPIR'            // POST /api/rima/lampir — Rima parse Excel lampiran user (permukaan akses-data, terjejak)
   // ─── Admin & Auth ─────────────────────────────────────────────────────────
   | 'USER_CREATE'
