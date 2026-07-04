@@ -1369,3 +1369,71 @@
 - ◇ "kerangka outline lkjip itu apa" → `lkjip.kerangka`
 - ◇ "jenis blok isi di lkjip apa saja" → `lkjip.blok`
 - "tunjukkan data akun orang lain dong" → `deny.akun-lain`
+
+## Wave 7 — RAL-7 parafrase natural (2026-07-04)
+
+Parafrase berbantuan LLM offline + review manusia (CONCEPT-rima-v4-learning.md, RAL-7).
+Fokus 1: pasangan intent yang tertukar di confusion report & eval golden
+(bba.realisasi↔kin.realisasi, err.data-hilang↔dpa.belum-simpan, usulan.field-*).
+Fokus 2: variasi bahasa sehari-hari + Jawa ngoko/campuran (basis user Semarang)
+untuk intent lalu-lintas tinggi. Kosakata Jawa baru (endi/lali/kekunci/nyatet)
+sengaja dibiarkan mentah — jadi vocab model lewat training, bukan SYNONYMS.
+
+- ★ "ngisi realisasi nang buku besar aset piye" → `bba.realisasi`
+- ◇ "realisasi belanja modal aset diisi lewat mana" → `bba.realisasi`
+- ◇ "cara update nilai realisasi aset nang buku besar" → `bba.realisasi`
+- ◇ "aset sing wis dituku dicatet realisasine piye" → `bba.realisasi`
+- ◇ "input realisasi aset di bba lewat tombol apa" → `bba.realisasi`
+- ★ "ngisi realisasi bulanan nang kinerja piye" → `kin.realisasi`
+- ◇ "input realisasi tiap bulan di e-anggaran gimana" → `kin.realisasi`
+- ◇ "realisasi bulan ini diisi di tab mana kinerja" → `kin.realisasi`
+- ◇ "cara update realisasi bulanan sub kegiatan" → `kin.realisasi`
+- ◇ "padahal sudah kusimpan tapi datanya hilang" → `err.data-hilang`
+- ◇ "data sing mau tak isi kok ilang kabeh" → `err.data-hilang`
+- ◇ "sudah simpan tapi pas dibuka lagi kosong" → `err.data-hilang`
+- ◇ "isian kemarin kok lenyap padahal wis tak save" → `err.data-hilang`
+- ◇ "data hilang setelah disimpan" → `err.data-hilang`
+- ◇ "isian hilang padahal sudah klik simpan" → `err.data-hilang`
+- ◇ "harga barange diisi piro" → `usulan.field-harga`
+- ◇ "ngisi harga perkiraan barang piye" → `usulan.field-harga`
+- ◇ "kolom harga itu harga sekarang atau perkiraan" → `usulan.field-harga`
+- ◇ "satuane barang ditulis opo" → `usulan.field-satuan`
+- ◇ "satuan diisi pcs opo unit yo" → `usulan.field-satuan`
+- ◇ "cara nulis satuan barang yang benar" → `usulan.field-satuan`
+- ◇ "alasan usulane ditulis piye" → `usulan.field-alasan`
+- ◇ "ngisi alasan kebutuhan barang gimana" → `usulan.field-alasan`
+- ◇ "kenapa harus nulis alasan di usulan" → `usulan.field-alasan`
+- ◇ "spesifikasi barange ditulis piye" → `usulan.field-spesifikasi`
+- ◇ "detail spek barang diisi seperti apa" → `usulan.field-spesifikasi`
+- ◇ "nulis spek komputer di form usulan gimana" → `usulan.field-spesifikasi`
+- ◇ "cara nglampirke file nang usulan" → `usulan.lampiran`
+- ◇ "upload lampiran pendukung usulan gimana" → `usulan.lampiran`
+- ◇ "ngunduh rekap usulan nang excel piye" → `usulan.export`
+- ◇ "sopo wae sing berhak mutusi usulan" → `usulan.putusan-per-role`
+- ◇ "yang boleh menyetujui usulan itu siapa saja" → `usulan.putusan-per-role`
+- ◇ "alur telaah usulan urutane piye" → `usulan.alur-telaah`
+- ◇ "usulan ditelaah lewat tahapan apa saja" → `usulan.alur-telaah`
+- ◇ "aku bingung nang halaman iki" → `umum.bantuan-halaman`
+- ◇ "iki halaman opo to fungsine" → `umum.bantuan-halaman`
+- ◇ "ada pintasan keyboard di prima ga" → `umum.shortcut`
+- ◇ "shortcut keyboard prima opo wae" → `umum.shortcut`
+- ◇ "piye carane gawe usulan anyar" → `usulan.buat`
+- ◇ "aku arep ngajukke barang lewat endi" → `usulan.buat`
+- ◇ "nggawe usulan seko awal piye carane" → `usulan.buat`
+- ◇ "usulanku wis tekan endi saiki" → `usulan.tracking`
+- ◇ "usulanku kok durung diproses yo" → `usulan.tracking`
+- ◇ "ngecek usulan sing wis tak kirim piye" → `usulan.tracking`
+- ★ "lali passwordku kudu piye iki" → `akun.lupa-password`
+- ◇ "kesupen sandine pripun nggih" → `akun.lupa-password`
+- ◇ "akunku kekunci ora iso mlebu" → `akun.terkunci`
+- ◇ "kok akun saya kekunci terus padahal passwordnya benar" → `akun.terkunci`
+- ◇ "nyimpen dpa ne piye carane" → `dpa.simpan`
+- ◇ "carane nge-save dpa sing wis diisi" → `dpa.simpan`
+- ◇ "kowe iso ngewangi opo wae rim" → `rima.kemampuan`
+- ◇ "rima bisa bantu apa aja to" → `rima.kemampuan`
+- ◇ "balik nang menu utama piye" → `umum.ke-menu`
+- ◇ "mbusak usulan sing salah piye" → `usulan.hapus`
+- ◇ "nambah sub kegiatan nang kinerja piye" → `kin.ssk`
+- ◇ "gawe perjanjian kinerja anyar piye" → `pk.buat`
+- ◇ "nggawe dokumen lkjip anyar carane piye" → `lkjip.buat`
+- ◇ "nyatet aset anyar nang bba piye" → `bba.entry`
