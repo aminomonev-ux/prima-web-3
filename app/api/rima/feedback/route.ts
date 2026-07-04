@@ -63,28 +63,33 @@ export async function GET(req: NextRequest) {
 
   const view = req.nextUrl.searchParams.get('view');
   try {
-    // RAL-3 export: dataset training {text, intent, weak}. Label admin = kuat;
-    // klik kandidat user (CANDIDATE_PICK) = label lemah (bobot kecil di RAL-4).
+    // RAL-3/7c export: dataset training {text, intent, weak}. Label admin = kuat;
+    // label AUTO dari validasi user = lemah (bobot kecil di RAL-4): klik kandidat
+    // (CANDIDATE_PICK) + jawaban yang di-👍 (THUMBS_UP = user konfirmasi benar).
+    // Intent berprefiks "data." (jawaban data-query) dikecualikan — bukan kelas
+    // classifier KB. THUMBS_DOWN sengaja TIDAK auto (tahu salah ≠ tahu benarnya).
     if (view === 'export') {
       const labeled = await sql`
         SELECT DISTINCT question AS text, label_intent AS intent
           FROM rima_unanswered
          WHERE label_status = 'DILABELI' AND label_intent IS NOT NULL`;
-      const picks = await sql`
+      const autoWeak = await sql`
         SELECT DISTINCT question AS text, chosen_intent AS intent
           FROM rima_unanswered
-         WHERE kind = 'CANDIDATE_PICK' AND chosen_intent IS NOT NULL
+         WHERE kind IN ('CANDIDATE_PICK', 'THUMBS_UP') AND chosen_intent IS NOT NULL
+           AND chosen_intent NOT LIKE ${'data.%'}
            AND label_status <> 'DIABAIKAN'`;
       const seen = new Set((labeled as { text: string }[]).map(r => r.text));
       const data = [
         ...(labeled as { text: string; intent: string }[]).map(r => ({ ...r, weak: false })),
-        ...(picks as { text: string; intent: string }[])
+        ...(autoWeak as { text: string; intent: string }[])
           .filter(r => !seen.has(r.text))
           .map(r => ({ ...r, weak: true })),
       ];
       return NextResponse.json({ ok: true, data });
     }
     // RAL-3 workbench: agregat BARU per pertanyaan + sinyal thumbs-down & pick.
+    // THUMBS_UP dikecualikan — sudah auto-label (RAL-7c), tak perlu antre.
     if (view === 'label') {
       const rows = await sql`
         SELECT question,
@@ -94,7 +99,7 @@ export async function GET(req: NextRequest) {
                SUM(kind = 'CANDIDATE_PICK') AS dipilih,
                MAX(CASE WHEN kind = 'CANDIDATE_PICK' THEN chosen_intent END) AS usul_intent
           FROM rima_unanswered
-         WHERE label_status = 'BARU'
+         WHERE label_status = 'BARU' AND kind <> 'THUMBS_UP'
          GROUP BY question
          ORDER BY jumlah DESC, terakhir DESC
          LIMIT ${sqlInt(200)}`;

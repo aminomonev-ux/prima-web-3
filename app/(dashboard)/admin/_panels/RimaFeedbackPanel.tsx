@@ -25,6 +25,13 @@ export function RimaFeedbackPanel() {
   const [intents, setIntents] = useState<string[]>([]);
   const [draft, setDraft]     = useState<Record<string, string>>({});
   const [saving, setSaving]   = useState<string | null>(null);
+  // RAL-7c — auto-saran: classifier Rima mengusulkan intent per pertanyaan
+  const [nlu, setNlu]         = useState<{
+    classify: typeof import('@/lib/sentinel/nlu/engine.mjs').classify;
+    model: import('@/lib/sentinel/nlu/engine.mjs').RimaModel;
+    kw: Record<string, string[]>;
+  } | null>(null);
+  const [suggest, setSuggest] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -47,16 +54,35 @@ export function RimaFeedbackPanel() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Daftar intent utk datalist — lazy dari model.json (sekali per buka panel)
+  // Daftar intent (datalist) + otak NLU utk auto-saran — lazy, sekali per buka panel
   useEffect(() => {
     let cancelled = false;
-    import('@/lib/sentinel/model.json').then(mod => {
+    Promise.all([
+      import('@/lib/sentinel/model.json'),
+      import('@/lib/sentinel/nlu/engine.mjs'),
+      import('@/lib/sentinel/knowledge.mjs'),
+    ]).then(([mod, eng, kb]) => {
       if (cancelled) return;
-      const model = (mod as { default?: { nb?: { classes?: Record<string, unknown> } } }).default;
+      const model = (mod as { default?: unknown }).default as import('@/lib/sentinel/nlu/engine.mjs').RimaModel;
       setIntents(Object.keys(model?.nb?.classes ?? {}).sort());
-    }).catch(() => { /* datalist kosong → input bebas tetap jalan */ });
+      setNlu({ classify: eng.classify, model, kw: kb.kbKeywords() });
+    }).catch(() => { /* datalist/saran kosong → input bebas tetap jalan */ });
     return () => { cancelled = true };
   }, []);
+
+  // RAL-7c — hitung saran classifier utk baris tanpa usul dari klik user.
+  // deny.* tak pernah disarankan; classifier ragu (null) → biarkan kosong.
+  useEffect(() => {
+    if (!nlu || rows.length === 0) { setSuggest({}); return; }
+    const s: Record<string, string> = {};
+    for (const r of rows) {
+      if (r.usul_intent) continue;
+      const res = nlu.classify(r.question, nlu.model, nlu.kw);
+      const intent = res.intent ?? res.candidates[0]?.intent;
+      if (intent && !intent.startsWith('deny.')) s[r.question] = intent;
+    }
+    setSuggest(s);
+  }, [nlu, rows]);
 
   const patchLabel = useCallback(async (question: string, action: 'LABEL' | 'ABAIKAN', intent?: string) => {
     setSaving(question);
@@ -86,10 +112,10 @@ export function RimaFeedbackPanel() {
   }, []);
 
   const onLabel = useCallback((r: LabelRow) => {
-    const intent = (draft[r.question] ?? r.usul_intent ?? '').trim();
+    const intent = (draft[r.question] ?? r.usul_intent ?? suggest[r.question] ?? '').trim();
     if (!intent) { toast.error('Isi intent tujuan dulu ya.'); return; }
     void patchLabel(r.question, 'LABEL', intent);
-  }, [draft, patchLabel]);
+  }, [draft, patchLabel, suggest]);
 
   const onAbaikan = useCallback(async (r: LabelRow) => {
     if (!(await confirmDialog({
@@ -187,7 +213,7 @@ export function RimaFeedbackPanel() {
                   <td style={td}>
                     <input
                       list="rima-intent-list"
-                      value={draft[r.question] ?? r.usul_intent ?? ''}
+                      value={draft[r.question] ?? r.usul_intent ?? suggest[r.question] ?? ''}
                       placeholder="mis. usulan.buat"
                       onChange={e => setDraft(prev => ({ ...prev, [r.question]: e.target.value }))}
                       style={{
@@ -196,6 +222,12 @@ export function RimaFeedbackPanel() {
                         border: '1px solid rgba(0,212,255,0.25)', color: '#e0f7ff',
                       }}
                     />
+                    {draft[r.question] === undefined && !r.usul_intent && suggest[r.question] && (
+                      <div style={{ fontSize: 10, color: '#5a8ea8', marginTop: 3 }}>✨ saran otomatis Rima — koreksi bila keliru</div>
+                    )}
+                    {draft[r.question] === undefined && r.usul_intent && (
+                      <div style={{ fontSize: 10, color: '#5a8ea8', marginTop: 3 }}>👆 dari pilihan user (klik kandidat)</div>
+                    )}
                   </td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 6 }}>

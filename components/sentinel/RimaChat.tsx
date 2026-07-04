@@ -472,8 +472,10 @@ export default function RimaChat({ onThinking, onReact, tourApi, navSnapshot, us
           pushMsg({
             who: 'rima',
             text: formatRimaAnswer(q.app, r, q.status),
-            // RAL-2 — jawaban data bisa dinilai 👍/👎 (👎 = sinyal salah-paham G-F)
-            fb: ok ? { q: text, intent: `${q.app}.${q.intent}` } : undefined,
+            // RAL-2 — jawaban data bisa dinilai 👍/👎 (👎 = sinyal salah-paham G-F).
+            // Prefiks "data." membedakannya dari intent KB senama (usulan.rekap KB
+            // vs data usulan.rekap) — export training otomatis mengecualikannya.
+            fb: ok ? { q: text, intent: `data.${q.app}.${q.intent}` } : undefined,
             chips: [
               { l: 'Tugasku', q: 'apa tugasku' },
               { l: 'Usulan termahal', q: '5 usulan termahal' },
