@@ -32,7 +32,7 @@ export class BludReplaceSafetyError extends Error {
 // ISO string mewakili midnight UTC dari DATE asli.
 const JAKARTA_OFFSET_MS = 7 * 60 * 60 * 1000
 
-function toDateStr(v: unknown): string {
+export function toDateStr(v: unknown): string {
   if (!v) return ''
   if (v instanceof Date) {
     return new Date(v.getTime() + JAKARTA_OFFSET_MS).toISOString().slice(0, 10)

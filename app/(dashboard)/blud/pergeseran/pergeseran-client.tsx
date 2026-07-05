@@ -700,6 +700,15 @@ export default function PergeseranClient() {
         setRows(json.data)
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
         showToast('Inject berhasil — kolom DPA diperbarui')
+        // B5: match tier heuristik longgar bisa salah tempel vol_p/harga_p — minta user periksa
+        const low = (json.low_confidence ?? []) as { kode_rekening: string; uraian: string }[]
+        if (low.length > 0) {
+          const contoh = low.slice(0, 3).map(l => l.uraian || l.kode_rekening).join(', ')
+          toast.warning(
+            `${low.length} baris di-match dengan heuristik longgar — periksa hasilnya: ${contoh}${low.length > 3 ? ', …' : ''}`,
+            { duration: 8000 },
+          )
+        }
       } else {
         showToast(json.error || json.message || 'Gagal inject', false)
       }
@@ -716,6 +725,17 @@ export default function PergeseranClient() {
       const gate = await sentinelPreSave()
       if (!gate.ok) return
       sentinelAckRef.current = gate.ack
+      // B6: pergeseran idealnya berimbang (geser antar rekening, pagu tetap) —
+      // warning non-blocking kalau total root berubah, save tetap jalan
+      const gmRows = rows.filter(r => r.tipe_baris === 'GRANDMASTER')
+      const rootRows = gmRows.length > 0 ? gmRows : rows.filter(r => !r.parent_id)
+      const rootDelta = rootRows.reduce((s, r) => s + (r.bertambah_berkurang ?? 0), 0)
+      if (rootDelta !== 0) {
+        toast.warning(
+          `Pergeseran tidak berimbang: total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(rootDelta))} terhadap DPA. Pastikan memang disengaja.`,
+          { duration: 8000 },
+        )
+      }
       setSaving(true)
       const today = new Date().toISOString().split('T')[0]
       await doSimpanInternal(today, false)

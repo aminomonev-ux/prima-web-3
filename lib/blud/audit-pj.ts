@@ -48,6 +48,24 @@ export interface AuditBelumEntry {
 
 export type AuditStatusSaldo = 'ok' | 'lebih' | 'kurang'
 
+// B3: definisi Total DPA seragam dgn dashboard getDpaTotal() — struktural
+// (GRANDMASTER → fallback root parent NULL), lookup uraian 'BELANJA DAERAH'
+// hanya fallback terakhir. Root bernama lain tidak lagi bikin totalDPA = 0.
+export function totalDpaBlud(
+  rows: Array<Pick<DpaBaris, 'tipe_baris' | 'parent_id' | 'uraian' | 'jumlah'>>,
+): number {
+  let grand = 0
+  let roots = 0
+  for (const r of rows) {
+    const j = Number(r.jumlah) || 0
+    if (r.tipe_baris === 'GRANDMASTER') grand += j
+    else if (!r.parent_id) roots += j
+  }
+  if (grand > 0) return grand
+  if (roots > 0) return roots
+  return Number(rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0)
+}
+
 export interface AuditResult {
   grandTotal:    number
   totalDPA:      number
@@ -99,15 +117,19 @@ export function auditRekapPJ(dpaRows: DpaBaris[]): AuditResult {
     }))
 
   // ── 4. Stats audit-specific (selisih saldo + totalPJ) ──
+  // B4: baris chain-conflict (ancestor juga ber-PJ) di-skip dari grand total —
+  // nominalnya sudah tercakup di ancestor, tanpa skip totalnya dobel-hitung
+  const conflictedIds = new Set(doubleEntries.map(d => d.rowId))
   let grandTotal = 0
   const uniquePJ = new Set<string>()
   for (const r of dpaRows) {
     const pj = (r.penanggung_jawab ?? '').trim()
     if (!pj || pj === '-') continue
-    grandTotal += Number(r.jumlah) || 0
     uniquePJ.add(pj)
+    if (conflictedIds.has(r.row_id)) continue
+    grandTotal += Number(r.jumlah) || 0
   }
-  const totalDPA = dpaRows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0
+  const totalDPA = totalDpaBlud(dpaRows)
   const selisih  = grandTotal - totalDPA
   const statusSaldo: AuditStatusSaldo =
     Math.abs(selisih) < 1 ? 'ok' : selisih > 0 ? 'lebih' : 'kurang'

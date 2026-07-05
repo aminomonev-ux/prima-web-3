@@ -2,6 +2,7 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { sql, queryOne, queryMany } from '@/lib/data/db'
+import { toDateStr } from '@/lib/blud/data'
 import DashboardClient from './dashboard-client'
 
 export const dynamic = 'force-dynamic'
@@ -46,18 +47,9 @@ async function getPergeseranDelta(versi: string | null): Promise<number> {
   return Number(fb?.total ?? 0)
 }
 
-// Helper: format MySQL DATE (Date object atau string) → 'YYYY-MM-DD'
-function toIsoDate(v: unknown): string {
-  if (!v) return ''
-  if (v instanceof Date) {
-    const y = v.getFullYear()
-    const m = String(v.getMonth() + 1).padStart(2, '0')
-    const d = String(v.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
-  }
-  const s = String(v)
-  return s.length >= 10 ? s.slice(0, 10) : s
-}
+// B2: reuse toDateStr dari data.ts (offset +07:00, fix B-CQ-1) — getter lokal
+// server menghasilkan tanggal mundur 1 hari saat server ber-TZ UTC
+const toIsoDate = toDateStr
 
 export default async function BludLandingPage() {
   const h = await headers()

@@ -61,22 +61,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `Tidak ada DPA untuk ${dpaTanggal}` }, { status: 404 })
     }
 
-    // 16-level inject matching + recalc otomatis
-    const injected = injectDpaKePergeseran(pergeseran_rows, dpaRows as unknown as DpaBarisInput[])
+    // 16-level inject matching + recalc otomatis (B5: + daftar match heuristik longgar)
+    const { rows: injected, lowConfidence } = injectDpaKePergeseran(pergeseran_rows, dpaRows as unknown as DpaBarisInput[])
 
     await writeAuditLog({
       req,
       eventType: 'BLUD_INJECT_DPA',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Inject DPA ${dpaTanggal} (v${dpaVersion}) ke Pergeseran (${pergeseran_rows.length} baris client → ${injected.length} hasil)`,
+      detail:    `Inject DPA ${dpaTanggal} (v${dpaVersion}) ke Pergeseran (${pergeseran_rows.length} baris client → ${injected.length} hasil, ${lowConfidence.length} match heuristik longgar)`,
     })
 
     return NextResponse.json({
-      ok:          true,
-      data:        injected,
-      dpa_versi:   dpaTanggal,
-      dpa_version: dpaVersion,
+      ok:             true,
+      data:           injected,
+      dpa_versi:      dpaTanggal,
+      dpa_version:    dpaVersion,
+      low_confidence: lowConfidence,
     })
   } catch (err) {
     console.error('[API /blud/pergeseran/inject POST]', err)

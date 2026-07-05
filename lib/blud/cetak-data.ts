@@ -52,8 +52,9 @@ function esc(s: unknown): string {
     .replace(/'/g, '&#39;')
 }
 
+// B7: 0 tetap dicetak "0" — hanya null/belum diisi yang blank (bedakan di cetak/export)
 function fmt(n: number | null | undefined): string {
-  return n == null || n === 0 ? '' : formatRupiah(n)
+  return n == null ? '' : formatRupiah(n)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -150,12 +151,11 @@ function renderPjView(rows: DpaBaris[], versi: string | null): RenderResult {
     grouped.get(r.pj)!.push(r)
   }
 
-  // Total DPA = row 'BELANJA DAERAH' (header level 1, biasanya GRANDMASTER)
-  const totalDpa = rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0
-  let grandTotal = 0
-  for (const items of grouped.values()) {
-    for (const it of items) grandTotal += it.jumlah
-  }
+  // B3+B4: total DPA struktural + grand total bersih dobel-hitung — satu sumber
+  // dari auditRekapPJ (subtotal per-PJ tetap mentah; selisihnya dijelaskan panel audit)
+  const audit = auditRekapPJ(rows)
+  const totalDpa = audit.totalDPA
+  const grandTotal = audit.grandTotal
 
   // Build table data + export rows
   const exportRows: ExportRow[] = []
@@ -175,6 +175,9 @@ function renderPjView(rows: DpaBaris[], versi: string | null): RenderResult {
   html += `Total Rekap PJ: <strong style="color:#FAC775;">${formatRupiah(grandTotal)}</strong> · `
   const diff = totalDpa - grandTotal
   html += `Selisih: <strong style="color:${diff === 0 ? '#6EE7B7' : '#FCA5A5'};">${formatRupiah(diff)}</strong>`
+  if (audit.doubleEntries.length > 0) {
+    html += ` · <span style="color:#FCA5A5;">${audit.doubleEntries.length} baris dobel-hitung dikecualikan dari total</span>`
+  }
   html += `</div>`
 
   html += `<table><thead><tr>`
@@ -194,7 +197,7 @@ function renderPjView(rows: DpaBaris[], versi: string | null): RenderResult {
   html += `</tbody></table>`
 
   // Panel audit hybrid (rule-based, no AI)
-  html += renderAuditPanel(auditRekapPJ(rows))
+  html += renderAuditPanel(audit)
 
   return { html, rows: exportRows, meta: { title, columns } }
 }

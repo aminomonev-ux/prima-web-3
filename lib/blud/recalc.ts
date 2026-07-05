@@ -344,10 +344,16 @@ export function geserBlock<T extends {
         },
       }
     }
-    // Block B end: scan untuk next sibling (commonParent) atau end of array
-    let blockBEnd = rows.length - 1
+    // Block B end = akhir subtree sibling (scan descendant kontigu DFS).
+    // Dulu scan "sampai sibling berikutnya" — saat sibling adalah anak terakhir,
+    // pembatas tak ketemu → blockBEnd jatuh ke akhir array dan menelan subtree
+    // cabang lain (urutan DFS rusak & tersimpan via kolom urutan).
+    const blockBIds = new Set<string>([rows[siblingIdx].row_id])
+    let blockBEnd = siblingIdx
     for (let i = siblingIdx + 1; i < rows.length; i++) {
-      if (rows[i].parent_id === commonParent) { blockBEnd = i - 1; break }
+      const pid = rows[i].parent_id
+      if (pid && blockBIds.has(pid)) { blockBIds.add(rows[i].row_id); blockBEnd = i }
+      else break
     }
     const before = rows.slice(0, blockAStart)
     const blockA = rows.slice(blockAStart, blockAEnd + 1)
@@ -397,10 +403,24 @@ class FifoMatcher<V> {
   }
 }
 
+// B5: tier fallback longgar (uraian 1 kata / prefix kode 2 segmen / posisi
+// absolut) bisa salah tempel vol_p/harga_p secara diam-diam — laporkan ke
+// caller supaya user bisa periksa baris hasil match heuristik.
+export interface InjectLowConfidence {
+  kode_rekening: string
+  uraian:        string
+  tier:          'uraian-1-kata' | 'kode-prefix-2' | 'posisi-absolut'
+}
+
+export interface InjectResult {
+  rows:          PergeseranBarisInput[]
+  lowConfidence: InjectLowConfidence[]
+}
+
 export function injectDpaKePergeseran(
   pergeseranRows: PergeseranBarisInput[],
   dpaRows:        DpaBarisInput[]
-): PergeseranBarisInput[] {
+): InjectResult {
   const byRowId           = new Map<string, PergeseranBarisInput>()
   const byTipeKode        = new Map<string, PergeseranBarisInput[]>()
   const byTipeUraian      = new Map<string, PergeseranBarisInput[]>()
@@ -451,6 +471,7 @@ export function injectDpaKePergeseran(
   const fifo    = new FifoMatcher<PergeseranBarisInput>()
   const absUsed = { idx: 0 }
   const finalOrder: PergeseranBarisInput[] = []
+  const lowConfidence: InjectLowConfidence[] = []
 
   for (const dpa of dpaRows) {
     const kode   = normKode(dpa.kode_rekening)
@@ -465,6 +486,7 @@ export function injectDpaKePergeseran(
     const kp2    = kodePrefix(kode, 2)
 
     let found: PergeseranBarisInput | null = null
+    let lowTier: InjectLowConfidence['tier'] | null = null
 
     if (!found && dpa.row_id)            found = byRowId.get(dpa.row_id) ?? null
     if (!found && kode)                  found = fifo.next(byTipeKode,        `${tipe}||${kode}`,  matched)
@@ -479,15 +501,15 @@ export function injectDpaKePergeseran(
     if (!found && kode && kp3)           found = fifo.next(byKodePrefix3,     kp3,                 matched)
     if (!found && u3w)                   found = fifo.next(byGrupUraian3w,    `${grup}||${u3w}`,   matched)
     if (!found && unorm)                 found = fifo.next(byUraianNormMap,   unorm,               matched)
-    if (!found && u1w)                   found = fifo.next(byTipeUraian1w,    `${tipe}||${u1w}`,   matched)
-    if (!found && kode && kp2)           found = fifo.next(byTipeKodePrefix2, `${tipe}||${kp2}`,   matched)
+    if (!found && u1w)                 { found = fifo.next(byTipeUraian1w,    `${tipe}||${u1w}`,   matched); if (found) lowTier = 'uraian-1-kata' }
+    if (!found && kode && kp2)         { found = fifo.next(byTipeKodePrefix2, `${tipe}||${kp2}`,   matched); if (found) lowTier = 'kode-prefix-2' }
     if (!found) {
       for (let i = absUsed.idx; i < byPosisiAbsolut.length; i++) {
         const c = byPosisiAbsolut[i]
         if (!matched.has(c)) {
           const ct = c.tipe_baris
           if (ct === tipe || tipeGroup(ct) === grup) {
-            absUsed.idx = i + 1; found = c; break
+            absUsed.idx = i + 1; found = c; lowTier = 'posisi-absolut'; break
           }
         }
       }
@@ -495,6 +517,7 @@ export function injectDpaKePergeseran(
 
     if (found) {
       matched.add(found)
+      if (lowTier) lowConfidence.push({ kode_rekening: dpa.kode_rekening, uraian: dpa.uraian, tier: lowTier })
       finalOrder.push({
         ...found,
         kode_rekening: dpa.kode_rekening,
@@ -534,7 +557,10 @@ export function injectDpaKePergeseran(
   const siblingHint = new Map<string, number>()
   pergeseranRows.forEach((r, i) => { if (r.row_id) siblingHint.set(r.row_id, i) })
   const sorted = sortTreeDFS(finalOrder, siblingHint)
-  return recalcPergeseranJumlah(sorted.map((r, i) => ({ ...r, urutan: i })))
+  return {
+    rows: recalcPergeseranJumlah(sorted.map((r, i) => ({ ...r, urutan: i }))),
+    lowConfidence,
+  }
 }
 
 /**
