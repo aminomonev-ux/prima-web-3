@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Package, Layers, LayoutGrid, Plus, Search, RefreshCw, Download } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -16,7 +16,7 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { InputNominal } from '@/components/ui/input-nominal';
 import SatuanCombobox from '@/components/shared/SatuanCombobox';
 import { fetchJson } from '@/lib/shared/api';
-import type { BbaRow, BbaListResult, BbaImportCandidate } from '@/lib/data/buku-besar-aset';
+import type { BbaRow, BbaListResult, BbaKpi, BbaImportCandidate } from '@/lib/data/buku-besar-aset';
 import type { BbaStatus } from '@/lib/data/buku-besar-aset-schemas';
 
 const STATUSES: BbaStatus[] = ['DIRENCANAKAN', 'REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'];
@@ -28,7 +28,7 @@ const STATUS_COLOR: Record<BbaStatus, string> = {
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 
-type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialTahun: number; initialResult: BbaListResult; kategori: string[] };
+type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialTahun: number; initialResult: BbaListResult; initialKpi: BbaKpi; kategori: string[] };
 
 type FormState = {
   id?: number; expected_version?: number;
@@ -48,7 +48,7 @@ const emptyForm = (tahun: number): FormState => ({
   vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '',
 });
 
-export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, kategori }: Props) {
+export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, initialKpi, kategori }: Props) {
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
   const searchRef = useRef<HTMLInputElement>(null);
@@ -61,6 +61,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
 
   const [rows, setRows] = useState<BbaRow[]>(initialResult.rows);
   const [total, setTotal] = useState(initialResult.total);
+  // A1: KPI dari server (SUM SQL seluruh data ter-filter) — bukan dihitung dari page
+  const [kpi, setKpi] = useState<BbaKpi>(initialKpi);
   const [loading, setLoading] = useState(false);
   const [tahun, setTahun] = useState(initialTahun);
   const [fStatus, setFStatus] = useState('');
@@ -86,8 +88,9 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       if (q.trim()) params.set('q', q.trim());
       const d = await fetchJson<unknown>(`/api/buku-besar-aset?${params}`);
       if (d.ok) {
-        const r = d as unknown as BbaListResult;
+        const r = d as unknown as BbaListResult & { kpi?: BbaKpi };
         setRows(r.rows); setTotal(r.total);
+        if (r.kpi) setKpi(r.kpi);
       } else toast.error(d.message || 'Gagal memuat');
     } finally { setLoading(false); }
   }, [tahun, fStatus, fSumber, fOrigin, tab, q]);
@@ -101,17 +104,6 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tahun, fStatus, fSumber, fOrigin, tab]);
-
-  const kpi = useMemo(() => {
-    // Baris usulan DITOLAK = catatan sejarah, dikecualikan dari KPI rencana/realisasi/backlog.
-    const active = rows.filter(r => r.usulan_keputusan !== 'DITOLAK');
-    const rencana = active.reduce((s, r) => s + r.nilai_rencana, 0);
-    const realisasi = active.reduce((s, r) => s + r.nilai_realisasi, 0);
-    const backlog = active.filter(r => r.status === 'DIRENCANAKAN' || r.status === 'TIDAK_TEREALISASI').length;
-    const volRencana = active.reduce((s, r) => s + r.vol, 0);
-    const volReal    = active.reduce((s, r) => s + r.vol_realisasi, 0);
-    return { rencana, realisasi, pct: rencana > 0 ? Math.round((realisasi / rencana) * 1000) / 10 : 0, backlog, volRencana, volReal };
-  }, [rows]);
 
   async function saveForm() {
     if (!form) return;
@@ -134,6 +126,9 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   async function saveRealisasi() {
     if (!realForm) return;
     if (realForm.vol < 0 || realForm.vol > realForm.row.vol) { toast.error(`Unit realisasi harus 0 – ${realForm.row.vol}`); return; }
+    // A3: pre-check konsistensi status ↔ angka (server juga menolak)
+    if (realForm.status === 'REALISASI_PENUH' && realForm.vol !== realForm.row.vol) { toast.error(`Status Realisasi Penuh mengharuskan unit realisasi = ${realForm.row.vol}`); return; }
+    if (realForm.status === 'TIDAK_TEREALISASI' && (realForm.vol !== 0 || realForm.nilai !== 0)) { toast.error('Status Tidak Terealisasi mengharuskan unit & nilai realisasi 0'); return; }
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/buku-besar-aset/realisasi', {
@@ -205,7 +200,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📦 Buku Besar Aset</h1>
-          <div style={{ fontSize: 12.5, color: c.sub }}>Register belanja modal lintas-tahun · {total} item</div>
+          <div style={{ fontSize: 12.5, color: c.sub }}>Register belanja modal lintas-tahun · {total} item{rows.length < total ? ` (menampilkan ${rows.length} — KPI tetap dihitung dari seluruh data)` : ''}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {canImport && <PrimaButton variant="purple" data-rima="bba.tarik-usulan" onClick={openImportPreview} disabled={saving}><Download size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Tarik dari Usulan Kebutuhan</PrimaButton>}
@@ -278,7 +273,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                 <td style={td}>{r.sumber_anggaran}</td>
                 <td style={tdNum}>{fmtRp(r.nilai_rencana)}</td>
                 <td style={tdNum}>{fmtRp(r.nilai_realisasi)}</td>
-                <td style={tdNum}>{fmtRp(r.sisa)}</td>
+                <td style={r.sisa < 0 ? { ...tdNum, color: '#E24B4A' } : tdNum}>{fmtRp(r.sisa)}</td>
                 <td style={{ ...td, fontFamily: MONO, textAlign: 'center', whiteSpace: 'nowrap' }}>{isRejected ? '—' : `${r.vol_realisasi} / ${r.vol}`}</td>
                 <td style={td}>
                   {isRejected

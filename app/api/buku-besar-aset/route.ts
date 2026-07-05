@@ -4,8 +4,9 @@ import {
   BbaQuerySchema, BbaCreateSchema, BbaUpdateSchema, BbaDeleteSchema, bbaRateLimit,
 } from '@/lib/data/buku-besar-aset-schemas';
 import {
-  listAset, createAset, updateAset, deleteAset,
+  listAset, getAsetKpi, createAset, updateAset, deleteAset,
   BbaVersionConflictError, BbaTransitionError, BbaNotFoundError, BbaUsulanLockedError,
+  BbaRealisasiRangeError, BbaStatusMismatchError,
 } from '@/lib/data/buku-besar-aset';
 import { guard } from './_guard';
 
@@ -26,8 +27,9 @@ export async function GET(req: NextRequest) {
     limit:    searchParams.get('limit')    ?? undefined,
   });
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Parameter tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const result = await listAset(parsed.data);
-  return NextResponse.json({ ok: true, ...result });
+  // A1: kpi dihitung SQL atas seluruh data ter-filter, bukan dari page
+  const [result, kpi] = await Promise.all([listAset(parsed.data), getAsetKpi(parsed.data)]);
+  return NextResponse.json({ ok: true, ...result, kpi });
 }
 
 export async function POST(req: NextRequest) {
@@ -49,16 +51,19 @@ export async function PATCH(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = BbaUpdateSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
+  let koreksiMundur = false;
   try {
-    await updateAset(parsed.data, g.session.userId);
+    ({ koreksiMundur } = await updateAset(parsed.data, g.session.userId, g.session.role === 'SUPER_ADMIN'));
   } catch (err) {
     if (err instanceof BbaVersionConflictError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
     if (err instanceof BbaTransitionError)      return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaUsulanLockedError)    return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaRealisasiRangeError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaStatusMismatchError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
     throw err;
   }
-  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${parsed.data.status ? ' status=' + parsed.data.status : ''}` });
+  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${parsed.data.status ? ' status=' + parsed.data.status : ''}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh SUPER_ADMIN)' : ''}` });
   return NextResponse.json({ ok: true });
 }
 

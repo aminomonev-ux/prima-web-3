@@ -20,6 +20,17 @@ export class BbaUsulanLockedError extends Error {
 export class BbaRealisasiRangeError extends Error {
   constructor(volReal: number, vol: number) { super(`Unit realisasi (${volReal}) melebihi volume rencana (${vol}).`); this.name = 'BbaRealisasiRangeError'; }
 }
+export class BbaStatusMismatchError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'BbaStatusMismatchError'; }
+}
+
+// A3: status & angka realisasi tidak boleh saling bertentangan
+function assertStatusConsistent(status: BbaStatus, vol: number, volReal: number, nilaiReal: number): void {
+  if (status === 'REALISASI_PENUH' && volReal !== vol)
+    throw new BbaStatusMismatchError(`Status REALISASI PENUH mengharuskan unit realisasi (${volReal}) sama dengan volume rencana (${vol}).`);
+  if (status === 'TIDAK_TEREALISASI' && (volReal !== 0 || nilaiReal !== 0))
+    throw new BbaStatusMismatchError('Status TIDAK TEREALISASI mengharuskan unit & nilai realisasi 0.');
+}
 
 export interface BbaRow {
   id: number;
@@ -91,7 +102,8 @@ function mapRow(r: Record<string, unknown>): BbaRow {
     tgl_realisasi: r.tgl_realisasi ? String(r.tgl_realisasi) : null,
     penanggung_jawab: r.penanggung_jawab as string | null, keterangan: r.keterangan as string | null,
     version: Number(r.version ?? 0),
-    sisa: Math.max(0, nilai_rencana - nilai_realisasi),
+    // A3: over-realisasi tampil sisa minus apa adanya (konsisten dgn pct >100%), tidak disembunyikan jadi 0
+    sisa: nilai_rencana - nilai_realisasi,
     pct_realisasi: nilai_rencana > 0 ? Math.round((nilai_realisasi / nilai_rencana) * 10000) / 100 : 0,
     pengusul: r.pengusul as string | null,
     catatan_penolakan: r.catatan_penolakan as string | null,
@@ -100,7 +112,7 @@ function mapRow(r: Record<string, unknown>): BbaRow {
 
 export interface BbaListResult { rows: BbaRow[]; total: number; page: number; limit: number }
 
-export async function listAset(f: BbaQuery): Promise<BbaListResult> {
+function buildWhere(f: BbaQuery) {
   let where = sql`WHERE 1=1`;
   if (f.tahun)     where = sql`${where} AND b.tahun_anggaran = ${f.tahun}`;
   if (f.status)    where = sql`${where} AND b.status = ${f.status}`;
@@ -113,6 +125,39 @@ export async function listAset(f: BbaQuery): Promise<BbaListResult> {
     const term = `%${escapeLike(f.q)}%`;
     where = sql`${where} AND (b.uraian LIKE ${term} OR b.kode_rekening LIKE ${term} OR b.canonical_id LIKE ${term} OR b.usulan_no LIKE ${term})`;
   }
+  return where;
+}
+
+export interface BbaKpi { rencana: number; realisasi: number; pct: number; backlog: number; volRencana: number; volReal: number }
+
+// A1: KPI dihitung SQL atas SELURUH data ter-filter — bukan dari page yang
+// ter-cap 200 baris. Baris usulan DITOLAK = catatan sejarah, dikecualikan
+// (mirror aturan KPI client). NULL keputusan (MANUAL) tetap ikut.
+export async function getAsetKpi(f: BbaQuery): Promise<BbaKpi> {
+  const where = buildWhere(f);
+  const r = await queryOne<Record<string, unknown>>(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN b.usulan_keputusan = 'DITOLAK' THEN 0 ELSE b.nilai_rencana END), 0)   AS rencana,
+      COALESCE(SUM(CASE WHEN b.usulan_keputusan = 'DITOLAK' THEN 0 ELSE b.nilai_realisasi END), 0) AS realisasi,
+      COALESCE(SUM(CASE WHEN b.usulan_keputusan = 'DITOLAK' THEN 0 ELSE b.vol END), 0)             AS vol_rencana,
+      COALESCE(SUM(CASE WHEN b.usulan_keputusan = 'DITOLAK' THEN 0 ELSE b.vol_realisasi END), 0)   AS vol_real,
+      COALESCE(SUM(CASE WHEN (b.usulan_keputusan IS NULL OR b.usulan_keputusan <> 'DITOLAK')
+                         AND b.status IN ('DIRENCANAKAN', 'TIDAK_TEREALISASI') THEN 1 ELSE 0 END), 0) AS backlog
+    FROM buku_besar_aset b ${where}
+  `);
+  const rencana   = Number(r?.rencana ?? 0);
+  const realisasi = Number(r?.realisasi ?? 0);
+  return {
+    rencana, realisasi,
+    pct: rencana > 0 ? Math.round((realisasi / rencana) * 1000) / 10 : 0,
+    backlog: Number(r?.backlog ?? 0),
+    volRencana: Number(r?.vol_rencana ?? 0),
+    volReal: Number(r?.vol_real ?? 0),
+  };
+}
+
+export async function listAset(f: BbaQuery): Promise<BbaListResult> {
+  const where = buildWhere(f);
   const offset = (f.page - 1) * f.limit;
   const rows = await queryMany<Record<string, unknown>>(sql`
     SELECT ${SELECT_COLS} ${FROM_JOIN} ${where}
@@ -164,42 +209,49 @@ function assertUsulanEditable(cur: BbaRow, input: BbaUpdateInput): void {
     throw new BbaUsulanLockedError('Baris usulan DITOLAK: status realisasi terkunci.');
 }
 
-export async function updateAset(input: BbaUpdateInput, userId: number): Promise<void> {
+export async function updateAset(input: BbaUpdateInput, userId: number, isSuperAdmin = false): Promise<{ koreksiMundur: boolean }> {
   const cur = await getAsetById(input.id);
   if (!cur) throw new BbaNotFoundError();
   assertUsulanEditable(cur, input);
-  if (input.status && !isValidStatusTransition(cur.status, input.status)) throw new BbaTransitionError(cur.status, input.status);
+  if (input.status && !isValidStatusTransition(cur.status, input.status, isSuperAdmin)) throw new BbaTransitionError(cur.status, input.status);
+  // A2: vol rencana tidak boleh turun di bawah realisasi tersimpan ("5/2 unit")
+  const volBaru = input.vol ?? cur.vol;
+  if (volBaru < cur.vol_realisasi) throw new BbaRealisasiRangeError(cur.vol_realisasi, volBaru);
+  // A3: status akhir harus konsisten dgn angka realisasi tersimpan
+  assertStatusConsistent(input.status ?? cur.status, volBaru, cur.vol_realisasi, cur.nilai_realisasi);
   // nilai_rencana USULAN = nominal putusan (bisa ≠ vol×harga) → jangan dihitung ulang.
-  const nilaiRencana = cur.origin === 'USULAN' ? cur.nilai_rencana : (input.vol ?? cur.vol) * (input.harga ?? cur.harga);
-  // COALESCE: field undefined → null → pertahankan nilai lama. version CAS (L48).
+  const nilaiRencana = cur.origin === 'USULAN' ? cur.nilai_rencana : volBaru * (input.harga ?? cur.harga);
+  // A5: undefined = pertahankan, null = kosongkan — jangan dilipat ke COALESCE. version CAS (L48).
+  let set = sql`nilai_rencana = ${nilaiRencana}, version = version + 1, updated_by = ${userId}`;
+  if (input.kode_rekening !== undefined)    set = sql`${set}, kode_rekening = ${input.kode_rekening}`;
+  if (input.uraian !== undefined)           set = sql`${set}, uraian = ${input.uraian}`;
+  if (input.kategori_aset !== undefined)    set = sql`${set}, kategori_aset = ${input.kategori_aset}`;
+  if (input.sumber_anggaran !== undefined)  set = sql`${set}, sumber_anggaran = ${input.sumber_anggaran}`;
+  if (input.vol !== undefined)              set = sql`${set}, vol = ${input.vol}`;
+  if (input.satuan !== undefined)           set = sql`${set}, satuan = ${input.satuan}`;
+  if (input.harga !== undefined)            set = sql`${set}, harga = ${input.harga}`;
+  if (input.penanggung_jawab !== undefined) set = sql`${set}, penanggung_jawab = ${input.penanggung_jawab}`;
+  if (input.keterangan !== undefined)       set = sql`${set}, keterangan = ${input.keterangan}`;
+  if (input.status !== undefined)           set = sql`${set}, status = ${input.status}`;
   const res = await sql`
-    UPDATE buku_besar_aset SET
-      kode_rekening    = COALESCE(${input.kode_rekening ?? null}, kode_rekening),
-      uraian           = COALESCE(${input.uraian ?? null}, uraian),
-      kategori_aset    = COALESCE(${input.kategori_aset ?? null}, kategori_aset),
-      sumber_anggaran  = COALESCE(${input.sumber_anggaran ?? null}, sumber_anggaran),
-      vol              = COALESCE(${input.vol ?? null}, vol),
-      satuan           = COALESCE(${input.satuan ?? null}, satuan),
-      harga            = COALESCE(${input.harga ?? null}, harga),
-      nilai_rencana    = ${nilaiRencana},
-      penanggung_jawab = COALESCE(${input.penanggung_jawab ?? null}, penanggung_jawab),
-      keterangan       = COALESCE(${input.keterangan ?? null}, keterangan),
-      status           = COALESCE(${input.status ?? null}, status),
-      version          = version + 1,
-      updated_by       = ${userId}
+    UPDATE buku_besar_aset SET ${set}
     WHERE id = ${input.id} AND version = ${input.expected_version}
   `;
   assertCas(res);
+  // A4: jejak koreksi mundur dari terminal (caller tulis ke audit log)
+  return { koreksiMundur: cur.status === 'REALISASI_PENUH' && input.status !== undefined && input.status !== 'REALISASI_PENUH' };
 }
 
-export async function setRealisasi(input: BbaRealisasiInput, userId: number): Promise<void> {
+export async function setRealisasi(input: BbaRealisasiInput, userId: number, isSuperAdmin = false): Promise<{ koreksiMundur: boolean }> {
   const cur = await getAsetById(input.id);
   if (!cur) throw new BbaNotFoundError();
   if (cur.origin === 'USULAN' && cur.usulan_keputusan === 'DITOLAK')
     throw new BbaUsulanLockedError('Baris usulan DITOLAK: realisasi terkunci (catatan sejarah).');
   if (input.vol_realisasi > cur.vol)
     throw new BbaRealisasiRangeError(input.vol_realisasi, cur.vol);
-  if (!isValidStatusTransition(cur.status, input.status)) throw new BbaTransitionError(cur.status, input.status);
+  if (!isValidStatusTransition(cur.status, input.status, isSuperAdmin)) throw new BbaTransitionError(cur.status, input.status);
+  // A3: REALISASI_PENUH ⇒ vol_realisasi = vol; TIDAK_TEREALISASI ⇒ realisasi 0
+  assertStatusConsistent(input.status, cur.vol, input.vol_realisasi, input.nilai_realisasi);
   const res = await sql`
     UPDATE buku_besar_aset SET
       nilai_realisasi = ${input.nilai_realisasi},
@@ -211,6 +263,8 @@ export async function setRealisasi(input: BbaRealisasiInput, userId: number): Pr
     WHERE id = ${input.id} AND version = ${input.expected_version}
   `;
   assertCas(res);
+  // A4: jejak koreksi mundur dari terminal (caller tulis ke audit log)
+  return { koreksiMundur: cur.status === 'REALISASI_PENUH' && input.status !== 'REALISASI_PENUH' };
 }
 
 export async function deleteAset(id: number): Promise<boolean> {
