@@ -9,10 +9,10 @@
 //   - Semua kolom turunan (pagu_awal, target_fisik, pct, akum, deviasi) DIHITUNG
 //     di sini berdasarkan SSK versi aktif yang user pilih.
 //   - Formula audit-sensitive — perubahan WAJIB sinkron dengan _utils.ts.
-//   - Review 2026-07-05: konvensi deviasi disatukan `target − real` (positif =
-//     tertinggal) untuk fisik DAN keuangan; deviasi dihitung dari akumulasi
-//     mentah (belum dibulatkan) supaya tidak drift ±0,01; group key pakai
-//     ssk_canonical_id bila ada (fallback keterangan+uraian_ssk).
+//   - Review 2026-07-05: konvensi deviasi disatukan `realisasi − target`
+//     (rumus umum; positif = melampaui target) untuk fisik DAN keuangan;
+//     deviasi dihitung dari akumulasi mentah (belum dibulatkan) supaya tidak
+//     drift ±0,01; group key pakai ssk_canonical_id (fallback legacy).
 
 import type { MonthKey, SskMonths } from '@/app/(dashboard)/kinerja/_types';
 
@@ -126,12 +126,13 @@ export function recalcAllRealisasiServer(
       const akum_pct_fisik    = pagu > 0 ? Math.round((akumRealFisik     / pagu) * 10000) / 100 : 0;
       const pct_keuangan      = pagu > 0 ? Math.round((row.real_keuangan / pagu) * 10000) / 100 : 0;
       const akum_pct_keuangan = pagu > 0 ? Math.round((akumKeuangan      / pagu) * 10000) / 100 : 0;
-      // #5/#6: konvensi seragam `target − real` (positif = tertinggal) untuk fisik
-      // & keuangan. E3: deviasi dari akum mentah (belum dibulatkan), bulatkan sekali.
+      // #5/#6: konvensi seragam `realisasi − target` (rumus deviasi umum; positif
+      // = melampaui target, negatif = tertinggal) untuk fisik & keuangan.
+      // E3: deviasi dari akum mentah (belum dibulatkan), bulatkan sekali.
       const akumPctFisikRaw   = pagu > 0 ? (akumRealFisik / pagu) * 100 : 0;
       const akumPctKeuRaw     = pagu > 0 ? (akumKeuangan  / pagu) * 100 : 0;
-      const deviasi_fisik     = Math.round((akumTargetPct - akumPctFisikRaw) * 100) / 100;
-      const deviasi_keuangan  = Math.round((akumTargetPct - akumPctKeuRaw)   * 100) / 100;
+      const deviasi_fisik     = Math.round((akumPctFisikRaw - akumTargetPct) * 100) / 100;
+      const deviasi_keuangan  = Math.round((akumPctKeuRaw   - akumTargetPct) * 100) / 100;
       resultMap.set(origIdx, {
         ...row,
         pct_fisik,

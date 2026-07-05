@@ -116,13 +116,14 @@ export function recalcAllRealisasi(rows: RealRow[]): RealRow[] {
       const akum_pct_fisik    = pagu > 0 ? Math.round((akumRealFisik     / pagu) * 10000) / 100 : 0;
       const pct_keuangan      = pagu > 0 ? Math.round((row.real_keuangan / pagu) * 10000) / 100 : 0;
       const akum_pct_keuangan = pagu > 0 ? Math.round((akumKeuangan      / pagu) * 10000) / 100 : 0;
-      // #5/#6: konvensi seragam `target − real` (positif = tertinggal/under-pace,
-      // negatif = melampaui target) untuk fisik & keuangan. E3: dihitung dari akum
-      // mentah (belum dibulatkan) supaya tidak drift ±0,01. Sinkron kinerja-calc.ts.
+      // #5/#6: konvensi seragam `realisasi − target` (rumus deviasi umum; positif
+      // = melampaui target, negatif = tertinggal) untuk fisik & keuangan.
+      // E3: dihitung dari akum mentah (belum dibulatkan) supaya tidak drift
+      // ±0,01. Sinkron kinerja-calc.ts.
       const akumPctFisikRaw   = pagu > 0 ? (akumRealFisik / pagu) * 100 : 0;
       const akumPctKeuRaw     = pagu > 0 ? (akumKeuangan  / pagu) * 100 : 0;
-      const deviasi_fisik     = Math.round((akumTargetPct - akumPctFisikRaw) * 100) / 100;
-      const deviasi_keuangan  = Math.round((akumTargetPct - akumPctKeuRaw)   * 100) / 100;
+      const deviasi_fisik     = Math.round((akumPctFisikRaw - akumTargetPct) * 100) / 100;
+      const deviasi_keuangan  = Math.round((akumPctKeuRaw   - akumTargetPct) * 100) / 100;
       resultMap.set(origIdx, {
         ...row,
         pct_fisik,

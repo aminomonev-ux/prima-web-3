@@ -375,8 +375,8 @@ export default function RealisasiTab({
                   <td style={{ ...roCell, color: row.pct_keuangan>=100?'#16a34a':row.pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.pct_keuangan.toFixed(2)}%</td>
                   <td style={{ ...roCell }}>{fmtNum(row.akum_keuangan)}</td>
                   <td style={{ ...roCell, color: row.akum_pct_keuangan>=100?'#16a34a':row.akum_pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.akum_pct_keuangan.toFixed(2)}%</td>
-                  <td style={{ ...roCell, color: row.deviasi_fisik>0?'#dc2626':'#16a34a', fontWeight:600 }}>{row.deviasi_fisik.toFixed(2)}%</td>
-                  <td style={{ ...roCell, color: row.deviasi_keuangan>0?'#dc2626':'#16a34a', fontWeight:600 }}>{row.deviasi_keuangan.toFixed(2)}%</td>
+                  <td style={{ ...roCell, color: row.deviasi_fisik>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{row.deviasi_fisik.toFixed(2)}%</td>
+                  <td style={{ ...roCell, color: row.deviasi_keuangan>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{row.deviasi_keuangan.toFixed(2)}%</td>
                   {canEdit && (
                     <td style={{ padding:'5px 8px', borderBottom:cBorderHair, textAlign:'center', position:'sticky', right:0, zIndex:1, background: ri%2===0 ? cRowEven : cRowOdd }}>
                       <Tip label="Hapus realisasi dimatikan untuk menjaga integritas histori. Untuk menonaktifkan item, Nol-kan target di SSK Perubahan."><button
