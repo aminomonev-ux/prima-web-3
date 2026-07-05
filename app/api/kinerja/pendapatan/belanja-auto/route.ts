@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { sql } from '@/lib/data/db';
-import { isKinerjaRole, KinerjaQuerySchema } from '@/lib/data/kinerja-schemas';
+import { isKinerjaRole, KinerjaQuerySchema, kinerjaRateLimit } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 
 /**
@@ -15,6 +15,10 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
   // C-SEC-1 (Tahap 12): read endpoint juga butuh role guard — sama dengan PUT.
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+
+  // #12: satu-satunya endpoint kinerja tanpa rate limit — samakan dgn endpoint lain.
+  const limited = await kinerjaRateLimit(session.userId, 'belanja-auto', 60);
+  if (limited) return limited;
 
   // C-WORK-1/4 (Tahap 12): validate tahun range + bulan 1-12 via Zod
   const { searchParams } = new URL(req.url);

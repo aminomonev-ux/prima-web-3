@@ -265,9 +265,11 @@ export default function CetakTab({
           const apf  = pct(akumR, pagu);                              // Real Fisik %
           const apk  = pct(akumK, pagu);                              // Real Keu %
           const tgtKeuRp = pagu > 0 ? Math.round(akumTgt/100*pagu) : 0; // Target Keu (Rp)
-          // Deviasi = Realisasi% - Target% (GAS formula: devFisik = akPctFisik - akTargetPct)
-          const devF = Math.round((apf - akumTgt)*100)/100;
-          const devK = Math.round((apk - akumTgt)*100)/100;
+          // #5: konvensi deviasi seragam dgn server (target − real, positif =
+          // tertinggal) — sebelumnya view ini terbalik (real − target) sehingga
+          // angka sama tampil beda tanda antara Rekap vs detail per-bulan.
+          const devF = Math.round((akumTgt - apf)*100)/100;
+          const devK = Math.round((akumTgt - apk)*100)/100;
           rows.push(
             <tr key={`${label}-${no}`} style={{ background: bg }}>
               <td style={{ ...tdR('center'), fontWeight: bold?800:400 }}>{no ?? ''}</td>
@@ -276,11 +278,11 @@ export default function CetakTab({
               <td style={{ ...tdR(), fontWeight: bold?700:400 }}>{akumTgt.toFixed(2)}%</td>
               <td style={{ ...tdR(), fontWeight: bold?700:400 }}>{fmtNum(akumR)}</td>
               <td style={{ ...tdR(), fontWeight: bold?700:400, color: color(apf) }}>{apf.toFixed(2)}%</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400, color: devF>=0?'#16a34a':'#dc2626' }}>{devF.toFixed(2)}%</td>
+              <td style={{ ...tdR(), fontWeight: bold?700:400, color: devF>0?'#dc2626':'#16a34a' }}>{devF.toFixed(2)}%</td>
               <td style={{ ...tdR(), fontWeight: bold?700:400, color: '#b45309' }}>{fmtNum(tgtKeuRp)}</td>
               <td style={{ ...tdR(), fontWeight: bold?700:400 }}>{fmtNum(akumK)}</td>
               <td style={{ ...tdR(), fontWeight: bold?700:400, color: color(apk) }}>{apk.toFixed(2)}%</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400, color: devK>=0?'#16a34a':'#dc2626' }}>{devK.toFixed(2)}%</td>
+              <td style={{ ...tdR(), fontWeight: bold?700:400, color: devK>0?'#dc2626':'#16a34a' }}>{devK.toFixed(2)}%</td>
             </tr>
           );
         };
@@ -364,18 +366,25 @@ export default function CetakTab({
             if (!rows || rows.length === 0) return null;
             // Totals
             const totPagu    = rows.reduce((s,r) => s + r.pagu_awal, 0);
-            const totTgt     = rows.reduce((s,r) => s + r.target_fisik, 0);
+            // #3: total target % WAJIB weighted by pagu (Σ % antar-item beda pagu
+            // tidak valid) — pola sama dgn agg() di view Rekap.
+            const totTgtRp   = rows.reduce((s,r) => s + Math.round((r.target_fisik / 100) * r.pagu_awal), 0);
+            const totTgt     = totPagu > 0 ? Math.round((totTgtRp / totPagu) * 10000) / 100 : 0;
             const totReal    = rows.reduce((s,r) => s + r.real_fisik, 0);
             const totPctF    = totPagu > 0 ? Math.round((totReal / totPagu) * 10000) / 100 : 0;
-            const totAkumTgt = rows.length > 0 ? rows[rows.length-1].akum_target_fisik : 0;
+            // #4: akum target total = weighted agregat, bukan nilai baris terakhir.
+            const totAkumTgtRp = rows.reduce((s,r) => s + Math.round((r.akum_target_fisik / 100) * r.pagu_awal), 0);
+            const totAkumTgt   = totPagu > 0 ? Math.round((totAkumTgtRp / totPagu) * 10000) / 100 : 0;
             const totAkumR   = rows.reduce((s,r) => s + r.akum_real_fisik, 0);
             const totAkumPF  = totPagu > 0 ? Math.round((totAkumR / totPagu) * 10000) / 100 : 0;
             const totRealKeu = rows.reduce((s,r) => s + r.real_keuangan, 0);
             const totPctKeu  = totPagu > 0 ? Math.round((totRealKeu / totPagu) * 10000) / 100 : 0;
             const totAkumKeu = rows.reduce((s,r) => s + r.akum_keuangan, 0);
             const totAkumPK  = totPagu > 0 ? Math.round((totAkumKeu / totPagu) * 10000) / 100 : 0;
-            const totDevF    = totPagu > 0 ? Math.round(((totAkumTgt - totAkumR) / totPagu) * 10000) / 100 : 0;
-            const totDevKeu  = totPagu - totAkumKeu;
+            // #2/#7: deviasi total satu satuan (%) & satu konvensi (target − real,
+            // positif = tertinggal) — sebelumnya campur % dgn Rp.
+            const totDevF    = Math.round((totAkumTgt - totAkumPF) * 100) / 100;
+            const totDevKeu  = Math.round((totAkumTgt - totAkumPK) * 100) / 100;
 
             return (
               <div key={b} className="print-page" style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'20px', marginBottom:'20px', boxShadow: isLight?'0 4px 16px rgba(0,0,0,.06)':'0 4px 16px rgba(0,0,0,.3)' }}>
@@ -416,7 +425,8 @@ export default function CetakTab({
                             <td style={{ ...tdP('center'), width:'30px' }}>{ri+1}</td>
                             <td style={{ ...tdP('left'), minWidth:'200px', fontWeight:500 }}>{r.keterangan||'-'}</td>
                             <td style={tdP()}>{fmtNum(r.pagu_awal)}</td>
-                            <td style={tdP()}>{fmtNum(r.target_fisik)}</td>
+                            {/* #7: target_fisik satuannya % — format konsisten dgn baris JUMLAH */}
+                            <td style={tdP()}>{r.target_fisik.toFixed(2)}%</td>
                             <td style={{ ...tdP(), color:'#16a34a', fontWeight:700 }}>{fmtNum(r.real_fisik)}</td>
                             <td style={{ ...tdP(), color:pctF, fontWeight:700 }}>{r.pct_fisik.toFixed(2)}%</td>
                             <td style={tdP()}>{r.akum_target_fisik.toFixed(2)}%</td>
@@ -426,8 +436,9 @@ export default function CetakTab({
                             <td style={{ ...tdP(), color: r.pct_keuangan>=100?'#16a34a':r.pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{r.pct_keuangan.toFixed(2)}%</td>
                             <td style={tdP()}>{fmtNum(r.akum_keuangan)}</td>
                             <td style={{ ...tdP(), color:apctK, fontWeight:700 }}>{r.akum_pct_keuangan.toFixed(2)}%</td>
-                            <td style={{ ...tdP(), color:'#dc2626', fontWeight:600 }}>{r.deviasi_fisik.toFixed(2)}%</td>
-                            <td style={{ ...tdP(), color: r.deviasi_keuangan >= 0 ? '#16a34a' : '#dc2626', fontWeight:600 }}>{r.deviasi_keuangan.toFixed(2)}%</td>
+                            {/* #12: warna deviasi ikut tanda (positif = tertinggal = merah) */}
+                            <td style={{ ...tdP(), color: r.deviasi_fisik > 0 ? '#dc2626' : '#16a34a', fontWeight:600 }}>{r.deviasi_fisik.toFixed(2)}%</td>
+                            <td style={{ ...tdP(), color: r.deviasi_keuangan > 0 ? '#dc2626' : '#16a34a', fontWeight:600 }}>{r.deviasi_keuangan.toFixed(2)}%</td>
                           </tr>
                         );
                       })}
@@ -445,8 +456,8 @@ export default function CetakTab({
                         <td style={{ ...tdP(), fontWeight:800, color: totPctKeu>=100?'#16a34a':totPctKeu>=50?'#f59e0b':'#dc2626' }}>{totPctKeu.toFixed(2)}%</td>
                         <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(totAkumKeu)}</td>
                         <td style={{ ...tdP(), fontWeight:800, color: totAkumPK>=100?'#16a34a':totAkumPK>=50?'#f59e0b':'#dc2626' }}>{totAkumPK.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color:'#dc2626' }}>{totDevF.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: totDevKeu<=0?'#16a34a':'#dc2626' }}>{fmtNum(totDevKeu)}</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: totDevF>0?'#dc2626':'#16a34a' }}>{totDevF.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: totDevKeu>0?'#dc2626':'#16a34a' }}>{totDevKeu.toFixed(2)}%</td>
                       </tr>
                     </tbody>
                   </table>

@@ -91,7 +91,12 @@ export function calcTotalPct(total: number, pagu: number): number {
 export function recalcAllRealisasi(rows: RealRow[]): RealRow[] {
   const groups = new Map<string, { row: RealRow; origIdx: number }[]>();
   rows.forEach((r, i) => {
-    const groupKey = `${r.keterangan || ''}||${r.uraian_ssk || ''}`;
+    // #9: canonical_id = identitas item paling presisi (nama kembar lintas
+    // sub-kegiatan tidak tercampur). Fallback legacy: keterangan+uraian_ssk.
+    // Sinkron dengan lib/data/kinerja-calc.ts.
+    const groupKey = r.ssk_canonical_id
+      ? `cid:${r.ssk_canonical_id}`
+      : `${r.keterangan || ''}||${r.uraian_ssk || ''}`;
     if (!groups.has(groupKey)) groups.set(groupKey, []);
     groups.get(groupKey)!.push({ row: { ...r }, origIdx: i });
   });
@@ -111,11 +116,13 @@ export function recalcAllRealisasi(rows: RealRow[]): RealRow[] {
       const akum_pct_fisik    = pagu > 0 ? Math.round((akumRealFisik     / pagu) * 10000) / 100 : 0;
       const pct_keuangan      = pagu > 0 ? Math.round((row.real_keuangan / pagu) * 10000) / 100 : 0;
       const akum_pct_keuangan = pagu > 0 ? Math.round((akumKeuangan      / pagu) * 10000) / 100 : 0;
-      const deviasi_fisik     = Math.round((akumTargetPct - akum_pct_fisik)    * 100) / 100;
-      // Deviasi keuangan dalam % (bukan Rp): akum % keu - akum tgt fisik %.
-      // Konsisten dengan deviasi_fisik yang juga %. Negative = realisasi keuangan
-      // lebih cepat dari target fisik (over-pace), positive = under-pace.
-      const deviasi_keuangan  = Math.round((akum_pct_keuangan - akumTargetPct) * 100) / 100;
+      // #5/#6: konvensi seragam `target − real` (positif = tertinggal/under-pace,
+      // negatif = melampaui target) untuk fisik & keuangan. E3: dihitung dari akum
+      // mentah (belum dibulatkan) supaya tidak drift ±0,01. Sinkron kinerja-calc.ts.
+      const akumPctFisikRaw   = pagu > 0 ? (akumRealFisik / pagu) * 100 : 0;
+      const akumPctKeuRaw     = pagu > 0 ? (akumKeuangan  / pagu) * 100 : 0;
+      const deviasi_fisik     = Math.round((akumTargetPct - akumPctFisikRaw) * 100) / 100;
+      const deviasi_keuangan  = Math.round((akumTargetPct - akumPctKeuRaw)   * 100) / 100;
       resultMap.set(origIdx, {
         ...row,
         pct_fisik,
@@ -135,7 +142,7 @@ export function recalcAllRealisasi(rows: RealRow[]): RealRow[] {
 
 // ─── Pure transform: Recalculate s/d (sampai dengan) columns + CRR % ────────
 //
-// CRR = Capital Recovery Ratio. Kumulatif sampai bulan berjalan.
+// CRR = Cost Recovery Rate. Kumulatif sampai bulan berjalan.
 //   crr_parsial = sumPend_sd / sumBlud_sd   × 100   (vs belanja BLUD only)
 //   crr_total   = sumPend_sd / sumDaerah_sd × 100   (vs total belanja daerah)
 //
@@ -155,8 +162,10 @@ export function recalcCrr(rows: CrrRow[]): CrrRow[] {
       pendapatan_sd:     akumPend,
       belanja_blud_sd:   akumBlud,
       belanja_daerah_sd: akumDaerah,
-      crr_parsial_pct: hasData && akumBlud   > 0 ? Math.round((akumPend / akumBlud)   * 10000) / 100 : 0,
-      crr_total_pct:   hasData && akumDaerah > 0 ? Math.round((akumPend / akumDaerah) * 10000) / 100 : 0,
+      // #11: bulan kosong carry-forward CRR kumulatif terakhir (konsisten kolom
+      // _sd) — bukan 0, supaya nilai tersimpan tidak menyesatkan konsumen lain.
+      crr_parsial_pct: akumBlud   > 0 ? Math.round((akumPend / akumBlud)   * 10000) / 100 : 0,
+      crr_total_pct:   akumDaerah > 0 ? Math.round((akumPend / akumDaerah) * 10000) / 100 : 0,
     };
   });
 }

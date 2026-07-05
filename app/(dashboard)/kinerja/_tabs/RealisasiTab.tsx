@@ -146,16 +146,10 @@ export default function RealisasiTab({
             subkegiatan:  s.subkegiatan  || '',
             uraian_ssk:   s.uraian_ssk   || '',
             pagu_awal:    s.pagu         || 0,
-            target_fisik: (() => {
-              if (!s.pagu) return 0;
-              if (b < 12) {
-                return s.pagu > 0 ? (s.months?.[mk] || 0) / s.pagu * 100 : 0;
-              } else {
-                const prev11 = (['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov'] as const)
-                  .reduce((sum, m) => sum + (s.pagu > 0 ? (s.months?.[m] || 0) / s.pagu * 100 : 0), 0);
-                return Math.round((100 - prev11) * 100) / 100;
-              }
-            })(),
+            // #10: pakai months_pct langsung — sumber yang SAMA dgn server saat
+            // hydrate reload (kinerja-calc.ts). Rumus lama memaksa Des = 100 − Σ11
+            // bulan → nilai beda sebelum vs sesudah simpan (bahkan bisa negatif).
+            target_fisik: s.months_pct?.[mk] ?? 0,
             real_fisik: 0, pct_fisik: 0,
             akum_target_fisik: 0, akum_real_fisik: 0, akum_pct_fisik: 0,
             real_keuangan: 0, pct_keuangan: 0, akum_keuangan: 0, akum_pct_keuangan: 0,
@@ -381,8 +375,8 @@ export default function RealisasiTab({
                   <td style={{ ...roCell, color: row.pct_keuangan>=100?'#16a34a':row.pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.pct_keuangan.toFixed(2)}%</td>
                   <td style={{ ...roCell }}>{fmtNum(row.akum_keuangan)}</td>
                   <td style={{ ...roCell, color: row.akum_pct_keuangan>=100?'#16a34a':row.akum_pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.akum_pct_keuangan.toFixed(2)}%</td>
-                  <td style={{ ...roCell, color:'#dc2626', fontWeight:600 }}>{row.deviasi_fisik.toFixed(2)}%</td>
-                  <td style={{ ...roCell, color: row.deviasi_keuangan>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{row.deviasi_keuangan.toFixed(2)}%</td>
+                  <td style={{ ...roCell, color: row.deviasi_fisik>0?'#dc2626':'#16a34a', fontWeight:600 }}>{row.deviasi_fisik.toFixed(2)}%</td>
+                  <td style={{ ...roCell, color: row.deviasi_keuangan>0?'#dc2626':'#16a34a', fontWeight:600 }}>{row.deviasi_keuangan.toFixed(2)}%</td>
                   {canEdit && (
                     <td style={{ padding:'5px 8px', borderBottom:cBorderHair, textAlign:'center', position:'sticky', right:0, zIndex:1, background: ri%2===0 ? cRowEven : cRowOdd }}>
                       <Tip label="Hapus realisasi dimatikan untuk menjaga integritas histori. Untuk menonaktifkan item, Nol-kan target di SSK Perubahan."><button

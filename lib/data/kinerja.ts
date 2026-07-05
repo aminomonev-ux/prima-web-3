@@ -331,12 +331,13 @@ export async function saveSskBatch(
         AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
     `;
     if (rows.length > 0) {
-      // Generate canonical_id baru via prefix + timestamp untuk row baru yg belum punya.
-      let pseudoSeq = Date.now() % 100000;
+      // #8: canonical_id anti-tabrakan — timestamp base36 + suffix acak kripto
+      // (generator lama Date.now()%100000 bersiklus ~100 detik → dua sesi simpan
+      // bisa kembar → realisasi ter-link ke SSK salah). Max 17 char (VARCHAR(20)).
       const values = rows.map((r, i) => {
         const canonical = r.canonical_id && r.canonical_id.length > 0
           ? r.canonical_id
-          : `K-${String(pseudoSeq++).padStart(6, '0')}`;
+          : `K-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 6)}`;
         return [
           tahun, sumber,
           versiTipe, versiSeq, canonical, /* parent_versi_id */ null, /* is_nullified */ r.is_nullified ? 1 : 0,
@@ -741,15 +742,34 @@ export interface LaporanSumber {
   trend: LaporanTrend[];
 }
 
+// #1: agregat pagu/target WAJIB discope ke SATU versi aktif per sumber —
+// ssk/perubahan meng-copy seluruh baris (versi_tipe/seq lain) ke tabel yang
+// sama; tanpa filter, SUM(pagu) terhitung ganda tiap versi PERUBAHAN dibuat.
+// Versi aktif = PERUBAHAN seq tertinggi bila ada, selain itu MURNI seq
+// tertinggi. Baris is_nullified dikecualikan (konsisten getRealisasiHydrated).
+function pickVersiAktif<T extends { versi_tipe?: unknown; versi_seq?: unknown }>(rows: T[]): T | null {
+  let best: T | null = null;
+  for (const r of rows) {
+    if (!best) { best = r; continue; }
+    const rp = r.versi_tipe === 'PERUBAHAN' ? 1 : 0;
+    const bp = best.versi_tipe === 'PERUBAHAN' ? 1 : 0;
+    if (rp > bp || (rp === bp && Number(r.versi_seq ?? 0) > Number(best.versi_seq ?? 0))) best = r;
+  }
+  return best;
+}
+
 export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<LaporanSumber> {
-  // Pagu & target dari SSK
-  const [sskAgg] = await sql`
+  // Pagu & target dari SSK — agregat per versi, lalu pilih versi aktif (#1)
+  const sskVersiAgg = await sql`
     SELECT
+      versi_tipe, versi_seq,
       COALESCE(SUM(pagu), 0)  AS total_pagu,
       COALESCE(SUM(total), 0) AS total_target_fisik
     FROM kinerja_ssk
-    WHERE tahun = ${tahun} AND sumber = ${sumber}
+    WHERE tahun = ${tahun} AND sumber = ${sumber} AND is_nullified = FALSE
+    GROUP BY versi_tipe, versi_seq
   ` as Record<string, unknown>[];
+  const sskAgg = pickVersiAktif(sskVersiAgg);
 
   // Realisasi keuangan & fisik total semua bulan
   const [realAgg] = await sql`
@@ -823,15 +843,15 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
  *   tanpa filter sumber.
  */
 export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
-  // Query 1: agregat SSK per sumber (total_pagu, total_target_fisik)
+  // Query 1: agregat SSK per sumber+versi → pilih versi aktif per sumber (#1)
   const sskRows = await sql`
     SELECT
-      sumber,
+      sumber, versi_tipe, versi_seq,
       COALESCE(SUM(pagu), 0)  AS total_pagu,
       COALESCE(SUM(total), 0) AS total_target_fisik
     FROM kinerja_ssk
-    WHERE tahun = ${tahun}
-    GROUP BY sumber
+    WHERE tahun = ${tahun} AND is_nullified = FALSE
+    GROUP BY sumber, versi_tipe, versi_seq
   ` as Record<string, unknown>[];
 
   // Query 2: agregat realisasi per sumber (SUM + bulan_terakhir)
@@ -862,12 +882,19 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
     ORDER BY sumber, bulan
   ` as Record<string, unknown>[];
 
-  // Index hasil per sumber untuk lookup O(1)
-  const sskBySumber = new Map<string, { total_pagu: number; total_target_fisik: number }>();
+  // Index hasil per sumber untuk lookup O(1) — pilih versi aktif per sumber (#1)
+  const sskVersiBySumber = new Map<string, Record<string, unknown>[]>();
   for (const r of sskRows) {
-    sskBySumber.set(String(r.sumber), {
-      total_pagu:         Number(r.total_pagu ?? 0),
-      total_target_fisik: Number(r.total_target_fisik ?? 0),
+    const key = String(r.sumber);
+    if (!sskVersiBySumber.has(key)) sskVersiBySumber.set(key, []);
+    sskVersiBySumber.get(key)!.push(r);
+  }
+  const sskBySumber = new Map<string, { total_pagu: number; total_target_fisik: number }>();
+  for (const [key, list] of sskVersiBySumber) {
+    const aktif = pickVersiAktif(list);
+    sskBySumber.set(key, {
+      total_pagu:         Number(aktif?.total_pagu ?? 0),
+      total_target_fisik: Number(aktif?.total_target_fisik ?? 0),
     });
   }
   const realBySumber = new Map<string, { total_real_keuangan: number; total_real_fisik: number; bulan_terakhir: number }>();
@@ -931,22 +958,38 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
 // ─── Dashboard KPI ────────────────────────────────────────────────────────────
 
 export async function getKinerjaKpi(tahun: string) {
-  const [ssk] = await sql`
-    SELECT
+  // #1: agregat per sumber+versi → pilih versi aktif per sumber, baru dijumlah.
+  // Tanpa ini pagu & jumlah baris terhitung ganda begitu ada versi PERUBAHAN.
+  const sskVersiRows = await sql`
+    SELECT sumber, versi_tipe, versi_seq,
       COUNT(*) AS total_ssk_rows,
-      COALESCE(SUM(pagu), 0) AS total_pagu
-    FROM kinerja_ssk WHERE tahun = ${tahun}
-  ` as { total_ssk_rows: unknown; total_pagu: unknown }[];
+      COALESCE(SUM(pagu), 0) AS pagu
+    FROM kinerja_ssk WHERE tahun = ${tahun} AND is_nullified = FALSE
+    GROUP BY sumber, versi_tipe, versi_seq
+  ` as Record<string, unknown>[];
+  const kpiVersiBySumber = new Map<string, Record<string, unknown>[]>();
+  for (const r of sskVersiRows) {
+    const key = String(r.sumber);
+    if (!kpiVersiBySumber.has(key)) kpiVersiBySumber.set(key, []);
+    kpiVersiBySumber.get(key)!.push(r);
+  }
+  const perSumber: { sumber: SumberSSK; pagu: number; rows: number }[] = [];
+  for (const [key, list] of kpiVersiBySumber) {
+    const aktif = pickVersiAktif(list);
+    perSumber.push({
+      sumber: key as SumberSSK,
+      pagu:   Number(aktif?.pagu ?? 0),
+      rows:   Number(aktif?.total_ssk_rows ?? 0),
+    });
+  }
+  const ssk = {
+    total_ssk_rows: perSumber.reduce((s, r) => s + r.rows, 0),
+    total_pagu:     perSumber.reduce((s, r) => s + r.pagu, 0),
+  };
 
   const [rek] = await sql`
     SELECT COUNT(*) AS total_rekening FROM kinerja_rekening WHERE tahun = ${tahun}
   ` as { total_rekening: unknown }[];
-
-  const perSumber = await sql`
-    SELECT sumber, COALESCE(SUM(pagu), 0) AS pagu
-    FROM kinerja_ssk WHERE tahun = ${tahun}
-    GROUP BY sumber
-  ` as { sumber: SumberSSK; pagu: unknown }[];
 
   // Realisasi agregat untuk dashboard
   const [real] = await sql`
