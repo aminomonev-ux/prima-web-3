@@ -364,6 +364,21 @@ export function geserBlock<T extends {
   }
 }
 
+// ─── PERGESERAN BERIMBANG ────────────────────────────────────────────────────
+
+/**
+ * B6: pergeseran WAJIB berimbang — geser antar rekening, pagu total tetap.
+ * Return delta root (GRANDMASTER, fallback baris tanpa parent); ≠ 0 = tidak
+ * berimbang → save ditolak (client + server POST /api/blud/pergeseran).
+ */
+export function hitungDeltaPergeseranRoot(
+  rows: Array<Pick<PergeseranBarisInput, 'tipe_baris' | 'parent_id' | 'bertambah_berkurang'>>,
+): number {
+  const gm = rows.filter(r => r.tipe_baris === 'GRANDMASTER')
+  const roots = gm.length > 0 ? gm : rows.filter(r => !r.parent_id)
+  return roots.reduce((s, r) => s + (r.bertambah_berkurang ?? 0), 0)
+}
+
 // ─── INJECT — 16 LEVEL MATCHING ──────────────────────────────────────────────
 
 const normKode   = (s: string | null | undefined) =>

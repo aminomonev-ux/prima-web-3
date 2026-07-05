@@ -9,7 +9,7 @@ import {
   getPergeseranLatestDate, getPergeseranVersion, savePergeseran, deletePergeseranVersi, BludReplaceSafetyError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
-import { recalcPergeseranJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
+import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { isBludRole, PergeseranBodySchema, TanggalSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { hasAppAccess } from '@/lib/security/guard'
 
@@ -107,6 +107,21 @@ export async function POST(req: NextRequest) {
     }
 
     const recalced = recalcPergeseranJumlah(rows)
+
+    // B6: pergeseran WAJIB berimbang — pagu total tidak boleh berubah
+    const rootDelta = hitungDeltaPergeseranRoot(recalced)
+    if (rootDelta !== 0) {
+      return NextResponse.json(
+        {
+          ok:    false,
+          code:  'PERGESERAN_TIDAK_BERIMBANG',
+          error: `Pergeseran tidak berimbang: total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} Rp ${Math.abs(rootDelta).toLocaleString('id-ID')} terhadap DPA. Sesuaikan dulu — pergeseran wajib berimbang (pagu tetap).`,
+          delta: rootDelta,
+        },
+        { status: 400 },
+      )
+    }
+
     const result = await savePergeseran(versi_tanggal, dpaVersi, recalced, session.userId, expected_version, force)
 
     await writeAuditLog({

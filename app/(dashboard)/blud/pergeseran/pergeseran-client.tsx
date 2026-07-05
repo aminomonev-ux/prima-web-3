@@ -14,7 +14,7 @@ import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import RowActionsMenu from '@/components/blud/RowActionsMenu'
 import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
-import { partialRecalcPergeseran, recalcPergeseranJumlah } from '@/lib/blud/recalc'
+import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
@@ -725,16 +725,15 @@ export default function PergeseranClient() {
       const gate = await sentinelPreSave()
       if (!gate.ok) return
       sentinelAckRef.current = gate.ack
-      // B6: pergeseran idealnya berimbang (geser antar rekening, pagu tetap) —
-      // warning non-blocking kalau total root berubah, save tetap jalan
-      const gmRows = rows.filter(r => r.tipe_baris === 'GRANDMASTER')
-      const rootRows = gmRows.length > 0 ? gmRows : rows.filter(r => !r.parent_id)
-      const rootDelta = rootRows.reduce((s, r) => s + (r.bertambah_berkurang ?? 0), 0)
+      // B6: pergeseran WAJIB berimbang (geser antar rekening, pagu tetap) —
+      // blokir save; server juga menolak (PERGESERAN_TIDAK_BERIMBANG)
+      const rootDelta = hitungDeltaPergeseranRoot(rows)
       if (rootDelta !== 0) {
-        toast.warning(
-          `Pergeseran tidak berimbang: total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(rootDelta))} terhadap DPA. Pastikan memang disengaja.`,
+        toast.error(
+          `Pergeseran tidak berimbang: total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(rootDelta))} terhadap DPA. Sesuaikan dulu — pergeseran wajib berimbang.`,
           { duration: 8000 },
         )
+        return
       }
       setSaving(true)
       const today = new Date().toISOString().split('T')[0]
