@@ -48,7 +48,7 @@ export interface UpsertPayload {
   target_tahunan: number;
   q1_target: number; q2_target: number; q3_target: number; q4_target: number;
   anggaran_nominal?: number | null;
-  bulan_target?: number[] | null;
+  bulan_target?: (number | null)[] | null;
   // L51: wajib diisi saat edit by id — server CAS versi baris.
   expected_version?: number | null;
 }
@@ -77,7 +77,7 @@ export async function apiUpdateQuarter(id: number, quarter: 1 | 2 | 3 | 4, targe
   await jsonOrThrow(r);
 }
 
-export async function apiUpdateBulanRealisasi(id: number, bulan_realisasi: number[], expected_version: number): Promise<void> {
+export async function apiUpdateBulanRealisasi(id: number, bulan_realisasi: (number | null)[], expected_version: number): Promise<void> {
   const r = await fetch('/api/rencana-aksi', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -100,6 +100,31 @@ export async function apiUpdateJenis(id: number, jenis: RaJenis, expected_versio
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'jenis', payload: { id, jenis, expected_version } }),
+  });
+  await jsonOrThrow(r);
+}
+
+export async function apiDuplikasiTahun(dariTahun: number, keTahun: number): Promise<number> {
+  const r = await fetch('/api/rencana-aksi/duplikasi', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dari_tahun: dariTahun, ke_tahun: keTahun }),
+  });
+  const body = await jsonOrThrow<{ ok: true; inserted: number }>(r);
+  return body.inserted;
+}
+
+export async function apiGetLock(tahun: number): Promise<number> {
+  const r = await fetch(`/api/rencana-aksi/lock?tahun=${tahun}`, { cache: 'no-store' });
+  const body = await jsonOrThrow<{ ok: true; bulan: number }>(r);
+  return body.bulan;
+}
+
+export async function apiSetLock(tahun: number, bulan: number): Promise<void> {
+  const r = await fetch('/api/rencana-aksi/lock', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tahun, bulan }),
   });
   await jsonOrThrow(r);
 }

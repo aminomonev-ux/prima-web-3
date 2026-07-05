@@ -7,7 +7,7 @@ import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import SoftSelect from '@/components/ui/SoftSelect';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
-import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS } from '../_lib/types';
+import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, BULAN_LABELS } from '../_lib/types';
 
 interface Props {
   level: RaLevel;
@@ -27,7 +27,7 @@ interface Props {
   onOpenTargetsModal: () => void;
   onOpenDetailModal: () => void;
   onChangeJenis: (jenis: RaJenis) => void;
-  onSaveBulanRealisasi: (months: number[]) => Promise<void>;
+  onSaveBulanRealisasi: (months: (number | null)[]) => Promise<void>;
   anggaran: number | null;
 }
 
@@ -93,13 +93,14 @@ export default function MainDashboard({
   // Realisasi bulanan (sub-kegiatan, Opsi A) — sync dari activeRow saat ganti indikator.
   // Pola "adjust state on prop change" saat render (bukan useEffect) → hindari cascading
   // render + lint set-state-in-effect. Ref: react.dev/learn/you-might-not-need-an-effect
-  const [bulanRealisasi, setBulanRealisasi] = useState<number[]>(() => Array(12).fill(0));
+  // R3: null = belum diisi, 0 = nol nyata
+  const [bulanRealisasi, setBulanRealisasi] = useState<(number | null)[]>(() => Array(12).fill(null));
   const [savingBulan, setSavingBulan] = useState(false);
   const [syncedRow, setSyncedRow] = useState(activeRow);
   if (activeRow !== syncedRow) {
     setSyncedRow(activeRow);
     const src = activeRow?.bulan_realisasi;
-    setBulanRealisasi(Array.isArray(src) && src.length === 12 ? src.slice() : Array(12).fill(0));
+    setBulanRealisasi(Array.isArray(src) && src.length === 12 ? src.slice() : Array(12).fill(null));
   }
 
   // L49: cascading dropdown reset child ke '' saat parent berubah. TIDAK auto-pick
@@ -174,16 +175,17 @@ export default function MainDashboard({
   } as RaRow;
 
   const realAkhir = activeRow ? realisasiAkhirTahun(activeRow) : 0;
-  const nilaiAkhirTahun = data.target_tahunan > 0 ? (realAkhir / data.target_tahunan) * 100 : 0;
-  const nilaiRpjmd      = data.target_rpjmd > 0 ? (realAkhir / data.target_rpjmd) * 100 : 0;
+  // R4: Progres Negatif dibalik via hitungCapaianPct — over-target tampil merah
+  const nilaiAkhirTahun = hitungCapaianPct(data.target_tahunan, realAkhir, data.jenis);
+  const nilaiRpjmd      = hitungCapaianPct(data.target_rpjmd, realAkhir, data.jenis);
   const colorAkhirTahun = getColors(nilaiAkhirTahun);
   const colorRpjmd      = getColors(nilaiRpjmd);
 
   const derivedRealisasi = deriveQuartersFromMonthly(bulanRealisasi, data.jenis);
   const bulanDirty = (() => {
     const src = activeRow?.bulan_realisasi;
-    const base = Array.isArray(src) && src.length === 12 ? src : Array(12).fill(0);
-    return bulanRealisasi.some((v, i) => v !== base[i]);
+    const base: (number | null)[] = Array.isArray(src) && src.length === 12 ? src : Array(12).fill(null);
+    return bulanRealisasi.some((v, i) => (v ?? null) !== (base[i] ?? null));
   })();
 
   const handleSaveBulan = async () => {
@@ -470,11 +472,12 @@ export default function MainDashboard({
                   size="sm"
                   min={0}
                   disabled={!activeRow}
-                  value={bulanRealisasi[i] === 0 ? '' : bulanRealisasi[i]}
-                  placeholder="0"
+                  value={bulanRealisasi[i] == null ? '' : bulanRealisasi[i]}
+                  placeholder="—"
                   inputClassName="text-right"
                   onChange={(e) => {
-                    const v = e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0);
+                    // R3: kosong = belum diisi (null); "0" = nol nyata. R6: desimal boleh.
+                    const v = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
                     setBulanRealisasi(prev => prev.map((x, idx) => (idx === i ? v : x)));
                   }}
                 />
@@ -518,8 +521,8 @@ export default function MainDashboard({
       {/* Quarter cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {quartersOf(data).map((q) => {
-          // Semua jenis: nilai = realisasi/target*100 (tidak ada pembalikan untuk Negatif).
-          const pct = q.target > 0 ? (q.realisasi / q.target) * 100 : 0;
+          // R4: Progres Negatif dibalik (2 − real/target) — over-target = merah
+          const pct = hitungCapaianPct(q.target, q.realisasi, data.jenis);
           const c = getColors(pct);
           return (
             <div key={q.id} className="group relative rounded-2xl bg-white p-5 shadow-xs hover:shadow-md transition-all duration-300 border border-slate-100 flex flex-col justify-between">

@@ -44,7 +44,8 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const [q1, setQ1] = useState(25); const [q2, setQ2] = useState(25);
   const [q3, setQ3] = useState(25); const [q4, setQ4] = useState(25);
   const [anggaranNominal, setAnggaranNominal] = useState(0);
-  const [bulanTarget, setBulanTarget] = useState<number[]>(() => Array(12).fill(0));
+  // R3: null = belum diisi, 0 = nol nyata
+  const [bulanTarget, setBulanTarget] = useState<(number | null)[]>(() => Array(12).fill(null));
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -187,7 +188,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setQ3(row.q3_target); setQ4(row.q4_target);
     setAnggaranNominal(row.anggaran_nominal ?? 0);
     setBulanTarget(Array.isArray(row.bulan_target) && row.bulan_target.length === 12
-      ? row.bulan_target.slice() : Array(12).fill(0));
+      ? row.bulan_target.slice() : Array(12).fill(null));
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
@@ -500,7 +501,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                   required
                   value={targetRpjmd === 0 ? '' : targetRpjmd}
                   placeholder="0"
-                  onChange={(e) => setTargetRpjmd(e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0))}
+                  onChange={(e) => setTargetRpjmd(e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))}
                 />
               </div>
               <div className="space-y-1">
@@ -511,7 +512,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                   required
                   value={targetTahunan === 0 ? '' : targetTahunan}
                   placeholder="0"
-                  onChange={(e) => setTargetTahunan(e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0))}
+                  onChange={(e) => setTargetTahunan(e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))}
                 />
               </div>
             </div>
@@ -546,7 +547,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           min={0}
                           value={val === 0 ? '' : val}
                           placeholder="0"
-                          onChange={(e) => set(e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0))}
+                          onChange={(e) => set(e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))}
                         />
                       </div>
                     ))}
@@ -854,7 +855,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 </div>
                 <button
                   type="button"
-                  onClick={() => setBulanTarget(Array(12).fill(0))}
+                  onClick={() => setBulanTarget(Array(12).fill(null))}
                   className="text-[10px] font-bold text-[#E24B4A] hover:underline self-start sm:self-auto"
                 >
                   Kosongkan
@@ -869,11 +870,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                       <PrimaNumberField
                         size="sm"
                         min={0}
-                        value={bulanTarget[i] === 0 ? '' : bulanTarget[i]}
-                        placeholder="0"
+                        value={bulanTarget[i] == null ? '' : bulanTarget[i]}
+                        placeholder="—"
                         inputClassName="text-right"
                         onChange={(e) => {
-                          const v = e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0);
+                          // R3: kosong = belum diisi (null); "0" = nol nyata. R6: desimal boleh.
+                          const v = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
                           setBulanTarget(prev => prev.map((x, idx) => (idx === i ? v : x)));
                         }}
                       />
@@ -901,7 +903,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                       <span className="text-sm font-bold text-[#7C5CFC]" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
                         {jenis === 'Akumulatif'
                           ? derivedQ.reduce((a, b) => a + b, 0)
-                          : (() => { for (let i = 11; i >= 0; i--) if (bulanTarget[i] > 0) return bulanTarget[i]; return 0; })()}
+                          : (() => { for (let i = 11; i >= 0; i--) { const v = bulanTarget[i]; if (v != null) return v; } return 0; })()}
                       </span>
                     </div>
                   </div>

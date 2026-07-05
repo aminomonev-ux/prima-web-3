@@ -41,8 +41,8 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submittingRef.current) return;
-    const targetNum = parseInt(target) || 0;
-    const realisasiNum = parseInt(realisasi) || 0;
+    const targetNum = parseFloat(target) || 0;
+    const realisasiNum = parseFloat(realisasi) || 0;
     if (targetNum < 0 || realisasiNum < 0) { setErrorMsg('Nilai Target dan Realisasi tidak boleh negatif.'); return; }
     submittingRef.current = true;
     setBusy(true);
@@ -150,8 +150,8 @@ export function TargetsModal({ row, isOpen, onClose, onSaved, notify }: TargetsM
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submittingRef.current) return;
-    const rpjmdNum = parseInt(rpjmd) || 0;
-    const tahunanNum = parseInt(tahunan) || 0;
+    const rpjmdNum = parseFloat(rpjmd) || 0;
+    const tahunanNum = parseFloat(tahunan) || 0;
     if (rpjmdNum <= 0 || tahunanNum <= 0) { setErrorMsg('Target Jangka Panjang dan Tahunan harus lebih dari 0.'); return; }
     submittingRef.current = true;
     setBusy(true);
@@ -435,7 +435,7 @@ export function ResetRealisasiModal({ row, isOpen, onClose, onConfirmed, notify 
               </div>
             </div>
             <p className="text-[#E24B4A] font-medium">
-              ⚠️ Realisasi TW I–IV akan dikembalikan ke 0. Target tahunan, RPJMD, dan target triwulan tetap. Tindakan ini permanen.
+              ⚠️ Realisasi TW I–IV akan dikembalikan ke 0 dan <strong>data realisasi bulanan ikut terhapus</strong>. Target tahunan, RPJMD, dan target triwulan tetap. Tindakan ini permanen.
             </p>
           </div>
 

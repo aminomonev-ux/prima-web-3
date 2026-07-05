@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LogOut, ShieldCheck, Home } from 'lucide-react';
+import { ChevronDown, LogOut, ShieldCheck, Home, Copy, Lock } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import PrimaButton from '@/components/ui/PrimaButton';
 import { ROLE_LABELS } from '@/lib/constants';
-import { YEAR_RANGE } from '../_lib/types';
+import { YEAR_RANGE, BULAN_LABELS } from '../_lib/types';
+import { apiDuplikasiTahun, apiGetLock, apiSetLock } from '../_lib/api';
 
 interface Props {
   onToggleSidebar: () => void;
@@ -16,17 +18,66 @@ interface Props {
   initials: string;
   themePreference: 'dark' | 'light';
   onLogout: () => void;
+  notify?: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
 }
 
 export default function Header({
   onToggleSidebar, selectedYear, onYearChange,
-  username, role, initials, themePreference, onLogout,
+  username, role, initials, themePreference, onLogout, notify,
 }: Props) {
   const router = useRouter();
   const [dropOpen, setDropOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
   const roleLabel = ROLE_LABELS[role] ?? role;
+
+  // Alat admin: Duplikasi Tahun + Kunci Periode (khusus ADMIN/SUPER_ADMIN)
+  const isAdminTools = role === 'ADMIN' || role === 'SUPER_ADMIN';
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupDari, setDupDari] = useState(selectedYear);
+  const [dupKe, setDupKe] = useState(selectedYear + 1);
+  const [dupBusy, setDupBusy] = useState(false);
+  const [lockOpen, setLockOpen] = useState(false);
+  const [lockBulan, setLockBulan] = useState(0);
+  const [lockBusy, setLockBusy] = useState(false);
+
+  const openDup = () => {
+    setDupDari(selectedYear);
+    setDupKe(Math.min(selectedYear + 1, YEAR_RANGE[YEAR_RANGE.length - 1]));
+    setDupOpen(true);
+  };
+
+  const openLock = async () => {
+    setLockOpen(true);
+    try { setLockBulan(await apiGetLock(selectedYear)); } catch { setLockBulan(0); }
+  };
+
+  const handleDuplikasi = async () => {
+    if (dupBusy || dupDari === dupKe) return;
+    setDupBusy(true);
+    try {
+      const inserted = await apiDuplikasiTahun(dupDari, dupKe);
+      setDupOpen(false);
+      notify?.(`${inserted} indikator tersalin dari ${dupDari} ke ${dupKe} — realisasi mulai dari kosong`, 'success');
+      onYearChange(dupKe);
+    } catch (e) {
+      notify?.((e as Error).message || 'Gagal duplikasi tahun', 'error');
+    } finally { setDupBusy(false); }
+  };
+
+  const handleSimpanLock = async () => {
+    if (lockBusy) return;
+    setLockBusy(true);
+    try {
+      await apiSetLock(selectedYear, lockBulan);
+      setLockOpen(false);
+      notify?.(lockBulan === 0
+        ? `Kunci periode ${selectedYear} dibuka — semua bulan bisa diedit`
+        : `Periode ${selectedYear} terkunci s.d. ${BULAN_LABELS[lockBulan - 1]} — realisasi bulan terkunci tidak bisa diubah`, 'warning');
+    } catch (e) {
+      notify?.((e as Error).message || 'Gagal menyimpan kunci periode', 'error');
+    } finally { setLockBusy(false); }
+  };
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -78,6 +129,37 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-2">
+        {isAdminTools && (
+          <>
+            <button
+              onClick={openDup}
+              className="ra-menu-btn hidden sm:inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
+              style={{
+                border: '1.5px solid var(--ra-menu-border, rgba(0,0,0,0.15))',
+                color: 'var(--ra-menu-text, #374151)',
+                background: 'transparent',
+              }}
+              data-tooltip="Salin struktur + target ke tahun kosong"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              <span>Duplikasi Tahun</span>
+            </button>
+            <button
+              onClick={() => { void openLock(); }}
+              className="ra-menu-btn hidden sm:inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
+              style={{
+                border: '1.5px solid var(--ra-menu-border, rgba(0,0,0,0.15))',
+                color: 'var(--ra-menu-text, #374151)',
+                background: 'transparent',
+              }}
+              data-tooltip="Kunci/buka realisasi periode yang sudah final"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span>Kunci Periode</span>
+            </button>
+          </>
+        )}
+
         {/* Tombol Menu — seragam dengan BLUD/PK shell */}
         <button
           onClick={() => router.push('/menu')}
@@ -152,6 +234,85 @@ export default function Header({
           )}
         </div>
       </div>
+
+      {/* Modal Duplikasi Tahun */}
+      {dupOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#0f172a]/70" onClick={() => setDupOpen(false)} />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
+            <div className="h-1.5 w-full bg-gradient-to-r from-[#7C5CFC] to-[#378ADD]" />
+            <div className="p-6 space-y-4">
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">Duplikasi ke Tahun Baru</h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Menyalin seluruh struktur (Tujuan s.d. Sub Kegiatan) beserta target dari tahun sumber
+                  ke tahun tujuan yang <strong>masih kosong</strong>. Realisasi mulai dari nol.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-semibold text-slate-600 space-y-1 block">
+                  <span>Dari tahun</span>
+                  <select value={dupDari} onChange={(e) => setDupDari(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-bold text-slate-800 focus:border-[#7C5CFC] focus:outline-none">
+                    {YEAR_RANGE.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-600 space-y-1 block">
+                  <span>Ke tahun (kosong)</span>
+                  <select value={dupKe} onChange={(e) => setDupKe(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-bold text-slate-800 focus:border-[#7C5CFC] focus:outline-none">
+                    {YEAR_RANGE.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </label>
+              </div>
+              {dupDari === dupKe && (
+                <p className="text-[11px] text-[#E24B4A] font-medium">Tahun sumber dan tujuan harus berbeda.</p>
+              )}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <PrimaButton variant="ghost" size="sm" onClick={() => setDupOpen(false)}>Batal</PrimaButton>
+                <PrimaButton variant="purple" size="sm" disabled={dupBusy || dupDari === dupKe} onClick={() => { void handleDuplikasi(); }}>
+                  {dupBusy ? 'Menyalin…' : 'Duplikasi'}
+                </PrimaButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Kunci Periode */}
+      {lockOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#0f172a]/70" onClick={() => setLockOpen(false)} />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
+            <div className="h-1.5 w-full bg-gradient-to-r from-[#EF9F27] to-[#BA7517]" />
+            <div className="p-6 space-y-4">
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">Kunci Periode {selectedYear}</h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Realisasi bulan yang terkunci tidak bisa diubah/direset oleh siapa pun sampai kunci dibuka —
+                  pakai setelah laporan periode itu final. Kunci &amp; buka tercatat di audit log.
+                </p>
+              </div>
+              <label className="text-xs font-semibold text-slate-600 space-y-1 block">
+                <span>Kunci sampai dengan</span>
+                <select value={lockBulan} onChange={(e) => setLockBulan(Number(e.target.value))}
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-bold text-slate-800 focus:border-[#EF9F27] focus:outline-none">
+                  <option value={0}>— Terbuka (tanpa kunci) —</option>
+                  {BULAN_LABELS.map((b, i) => (
+                    <option key={b} value={i + 1}>{b} (bulan 1–{i + 1} terkunci)</option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <PrimaButton variant="ghost" size="sm" onClick={() => setLockOpen(false)}>Batal</PrimaButton>
+                <PrimaButton variant="warning" size="sm" disabled={lockBusy} onClick={() => { void handleSimpanLock(); }}>
+                  {lockBusy ? 'Menyimpan…' : 'Simpan Kunci'}
+                </PrimaButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .ra-menu-btn { --ra-menu-text: #B5D4F4; --ra-menu-border: #185FA5; }

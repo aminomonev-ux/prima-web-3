@@ -179,7 +179,7 @@ export default function RaClient({
   };
 
   const bulanRealisasiSubmittingRef = useRef(false);
-  const handleSaveBulanRealisasi = async (months: number[]) => {
+  const handleSaveBulanRealisasi = async (months: (number | null)[]) => {
     if (!activeRow || bulanRealisasiSubmittingRef.current) return;
     bulanRealisasiSubmittingRef.current = true;
     try {
@@ -478,6 +478,7 @@ export default function RaClient({
           initials={initials}
           themePreference={themePreference}
           onLogout={handleLogout}
+          notify={notify}
         />
 
         {/* Centered quick actions pill — Posisi sama dengan source's "Reporting + Reset Data".

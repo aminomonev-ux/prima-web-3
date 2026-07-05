@@ -1,7 +1,7 @@
 'use client';
 
 import type { RaRow } from './types';
-import { realisasiAkhirTahun, quartersOf, LEVEL_LABELS, outcomeOf } from './types';
+import { realisasiAkhirTahun, quartersOf, LEVEL_LABELS, outcomeOf, hitungCapaianPct } from './types';
 import type { CetakFilter } from './cetak-filter';
 import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader } from './cetak-filter';
 import { sanitizeCell } from '@/lib/shared/excel-export';
@@ -236,8 +236,9 @@ export async function exportIndikatorPdf(row: RaRow) {
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const realAkhir = realisasiAkhirTahun(row);
-  const pctTh = row.target_tahunan > 0 ? (realAkhir / row.target_tahunan) * 100 : 0;
-  const pctRp = row.target_rpjmd > 0 ? (realAkhir / row.target_rpjmd) * 100 : 0;
+  // R4: Progres Negatif dibalik via hitungCapaianPct
+  const pctTh = hitungCapaianPct(row.target_tahunan, realAkhir, row.jenis);
+  const pctRp = hitungCapaianPct(row.target_rpjmd, realAkhir, row.jenis);
 
   doc.setFontSize(13);
   doc.text(`${LEVEL_LABELS[row.level]} — Tahun ${row.tahun}`, 14, 14);
@@ -268,7 +269,7 @@ export async function exportIndikatorPdf(row: RaRow) {
     startY: qStart,
     head: [['Triwulan', 'Target', 'Realisasi', 'Capaian (%)']],
     body: quartersOf(row).map(q => {
-      const pct = q.target > 0 ? (q.realisasi / q.target) * 100 : null;
+      const pct = q.target > 0 ? hitungCapaianPct(q.target, q.realisasi, row.jenis) : null;
       return [`TW ${q.id}`, q.target, q.realisasi, pct === null ? '-' : pct.toFixed(2) + '%'];
     }),
     styles: { fontSize: 9 },
@@ -307,7 +308,7 @@ export async function exportIndikatorXlsx(row: RaRow) {
   head.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF9F27' } };
   quartersOf(row).forEach(q => {
-    const pct = q.target > 0 ? (q.realisasi / q.target) * 100 : 0;
+    const pct = hitungCapaianPct(q.target, q.realisasi, row.jenis);
     ws.addRow([`TW ${q.id}`, q.target, q.realisasi, pct]);
   });
   ws.getColumn(1).width = 25;

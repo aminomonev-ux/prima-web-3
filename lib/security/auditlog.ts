@@ -129,6 +129,8 @@ export type AuditEventType =
   | 'RA_UPDATE_TARGETS'       // PATCH /api/rencana-aksi/targets
   | 'RA_UPDATE_JENIS'         // PATCH /api/rencana-aksi/jenis
   | 'RA_RESET_REALISASI'      // POST /api/rencana-aksi/reset-realisasi (destructive — kode 4-digit)
+  | 'RA_DUPLIKASI_TAHUN'      // POST /api/rencana-aksi/duplikasi (salin struktur+target ke tahun kosong)
+  | 'RA_KUNCI_PERIODE'        // POST /api/rencana-aksi/lock (kunci/buka realisasi periode)
   | 'RA_EXPORT_PDF'           // GET /api/rencana-aksi/export?format=pdf
   | 'RA_EXPORT_XLSX'          // GET /api/rencana-aksi/export?format=excel
   // ─── Role Promotion Ladder (migration 037) ────────────────────────────────

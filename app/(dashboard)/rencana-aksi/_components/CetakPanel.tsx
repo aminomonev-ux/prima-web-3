@@ -351,6 +351,9 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
   const showReal = filter.colMode !== 'target';
   const twSpan = (showT && showR) ? 2 : 1;
   const quarters: (1 | 2 | 3 | 4)[] = filter.showTw ? [1, 2, 3, 4] : [];
+  // R7: hierarki match by nama — rename induk memutus rantai → baris jatuh
+  // sebagai orphan. Tampilkan banner supaya rollup yang tak lengkap ketahuan.
+  const orphanCount = rows.filter(h => h.isOrphan).length;
 
   return (
     <div className="rounded-2xl bg-white border border-slate-100 shadow-xs overflow-hidden">
@@ -360,6 +363,11 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
         </h3>
         <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Periode {tahun}</span>
       </div>
+      {orphanCount > 0 && (
+        <div className="border-b border-[#E24B4A]/20 bg-[#E24B4A]/5 px-5 py-2.5 text-[11px] text-[#B91C1C] font-medium">
+          ⚠️ {orphanCount} baris tidak terhubung ke induknya (ditandai &quot;orphan&quot;) — biasanya karena nama Tujuan/Sasaran/Program/Kegiatan induk diubah tanpa memperbarui baris turunannya. Baris ini tidak ikut rollup hierarki &amp; anggaran; perbaiki lewat menu Data Entry (samakan nama induknya).
+        </div>
+      )}
       <div className="overflow-auto max-h-[65vh]">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-600 sticky top-0 z-10">

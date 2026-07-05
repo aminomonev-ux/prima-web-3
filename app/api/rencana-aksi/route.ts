@@ -22,6 +22,8 @@ import {
   resetRealisasi,
   getRencanaAksiById,
   RaVersionConflictError,
+  RaMonthlyManagedError,
+  RaPeriodLockedError,
 } from '@/lib/data/rencana-aksi';
 import { guard } from './_guard';
 
@@ -192,6 +194,12 @@ export async function PATCH(req: NextRequest) {
   } catch (e) {
     if (e instanceof RaVersionConflictError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'VERSION_CONFLICT' }, { status: 409 });
+    }
+    if (e instanceof RaMonthlyManagedError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'MONTHLY_MANAGED' }, { status: 400 });
+    }
+    if (e instanceof RaPeriodLockedError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'PERIOD_LOCKED' }, { status: 400 });
     }
     console.error('[RA PATCH]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });

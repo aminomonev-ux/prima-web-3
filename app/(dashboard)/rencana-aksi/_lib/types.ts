@@ -23,10 +23,13 @@ export interface RaRow {
   q3_target: number;  q3_realisasi: number;
   q4_target: number;  q4_realisasi: number;
   anggaran_nominal: number | null;
-  bulan_target: number[] | null;
-  bulan_realisasi: number[] | null;
+  bulan_target: (number | null)[] | null;
+  bulan_realisasi: (number | null)[] | null;
   version: number;
 }
+
+/** R3: null = bulan belum diisi, 0 = nol nyata (capaian terbaik Progres Negatif). */
+export type MonthVal = number | null;
 
 export const BULAN_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'] as const;
 
@@ -36,14 +39,26 @@ export const BULAN_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'A
  *   Akumulatif            → TWn = SUM 3 bulan triwulan itu
  *   Progres Pos/Neg/Ulang → TWn = bulan TERAKHIR terisi (>0) dalam triwulan itu
  */
-export function deriveQuartersFromMonthly(months: number[], jenis: RaJenis): [number, number, number, number] {
+export function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [number, number, number, number] {
   const seg = (start: number): number => {
     const part = months.slice(start, start + 3);
-    if (jenis === 'Akumulatif') return part.reduce((a, b) => a + b, 0);
-    for (let i = part.length - 1; i >= 0; i--) if (part[i] > 0) return part[i];
+    if (jenis === 'Akumulatif') return part.reduce((a: number, b) => a + (b ?? 0), 0);
+    // R3: "terisi" = non-null — 0 nyata ikut terekam
+    for (let i = part.length - 1; i >= 0; i--) { const v = part[i]; if (v != null) return v; }
     return 0;
   };
   return [seg(0), seg(3), seg(6), seg(9)];
+}
+
+/**
+ * R4: rumus capaian per jenis. Progres Negatif = makin kecil makin baik —
+ * rumus standar LAKIP: (2 − realisasi/target) × 100 (dibatasi bawah 0),
+ * jadi realisasi melampaui target tampil MERAH, bukan hijau.
+ */
+export function hitungCapaianPct(target: number, realisasi: number, jenis: RaJenis): number {
+  if (target <= 0) return 0;
+  if (jenis === 'Progres Negatif') return Math.max(0, (2 - realisasi / target) * 100);
+  return (realisasi / target) * 100;
 }
 
 export const LEVEL_LABELS: Record<RaLevel, string> = {
@@ -195,9 +210,16 @@ export function quartersOf(row: RaRow): { id: 1 | 2 | 3 | 4; name: string; targe
 export function realisasiAkhirTahun(row: RaRow): number {
   const qs = [row.q1_realisasi, row.q2_realisasi, row.q3_realisasi, row.q4_realisasi];
   if (row.jenis === 'Akumulatif') return qs.reduce((a, b) => a + b, 0);
-  // Progres Positif/Negatif/Pengulangan: ambil realisasi triwulan TERAKHIR yang diisi
-  // (snapshot terbaru), bukan max/min/rata-rata. realisasi>0 = "terisi" (0 nyata tidak
-  // terekam — konvensi existing). Sync dengan lib/data/rencana-aksi.ts.
+  // Progres Positif/Negatif/Pengulangan: snapshot terbaru.
+  // R3: kalau ada data bulanan, pakai bulan TERAKHIR non-null (0 nyata terekam).
+  if (Array.isArray(row.bulan_realisasi)) {
+    for (let i = row.bulan_realisasi.length - 1; i >= 0; i--) {
+      const v = row.bulan_realisasi[i];
+      if (v != null) return v;
+    }
+    return 0;
+  }
+  // Tanpa bulanan: fallback kuartal terakhir >0 (konvensi lama, 0 tak terekam).
   for (let i = qs.length - 1; i >= 0; i--) {
     if (qs[i] > 0) return qs[i];
   }

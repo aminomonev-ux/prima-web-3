@@ -64,17 +64,18 @@ export const UpsertRencanaAksiSchema = z.object({
   indikator: z.string().trim().min(1, 'Indikator wajib').max(500),
   jenis: JenisSchema.default('Akumulatif'),
   satuan: z.string().trim().min(1).max(50).default('Persen'),
-  target_rpjmd: z.coerce.number().int().min(0).default(0),
-  target_tahunan: z.coerce.number().int().min(0).default(0),
-  q1_target: z.coerce.number().int().min(0).default(0),
-  q2_target: z.coerce.number().int().min(0).default(0),
-  q3_target: z.coerce.number().int().min(0).default(0),
-  q4_target: z.coerce.number().int().min(0).default(0),
+  // R6: desimal diizinkan (rasio 99,5 dll) — kolom DECIMAL(14,2) migration 043
+  target_rpjmd: z.coerce.number().min(0).default(0),
+  target_tahunan: z.coerce.number().min(0).default(0),
+  q1_target: z.coerce.number().min(0).default(0),
+  q2_target: z.coerce.number().min(0).default(0),
+  q3_target: z.coerce.number().min(0).default(0),
+  q4_target: z.coerce.number().min(0).default(0),
   // Info pagu — hanya relevan untuk level sub-kegiatan (null untuk level lain).
   anggaran_nominal: z.coerce.number().int().min(0).nullable().optional(),
   // Opsi A: 12 target bulanan (sub-kegiatan) → sumber derive q1-q4 target server-side.
-  // null/absent untuk level non-sub-kegiatan & data legacy.
-  bulan_target: z.array(z.coerce.number().int().min(0)).length(12).nullable().optional(),
+  // R3: elemen null = bulan belum diisi, 0 = nol nyata. JANGAN z.coerce (null→0).
+  bulan_target: z.array(z.number().min(0).nullable()).length(12).nullable().optional(),
   // L51: optimistic lock untuk edit by id (form Data Entry). null/absent = create/legacy.
   expected_version: z.coerce.number().int().min(0).nullable().optional(),
 }).superRefine((v, ctx) => {
@@ -100,8 +101,8 @@ export type UpsertRencanaAksiInput = z.infer<typeof UpsertRencanaAksiSchema>;
 export const UpdateQuarterSchema = z.object({
   id: z.number().int().positive(),
   quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
-  target: z.coerce.number().int().min(0),
-  realisasi: z.coerce.number().int().min(0),
+  target: z.coerce.number().min(0),
+  realisasi: z.coerce.number().min(0),
   expected_version: z.coerce.number().int().min(0),
 });
 
@@ -110,7 +111,8 @@ export const UpdateQuarterSchema = z.object({
 
 export const UpdateBulanRealisasiSchema = z.object({
   id: z.number().int().positive(),
-  bulan_realisasi: z.array(z.coerce.number().int().min(0)).length(12),
+  // R3: null = belum diisi, 0 = nol nyata. JANGAN z.coerce (null→0).
+  bulan_realisasi: z.array(z.number().min(0).nullable()).length(12),
   expected_version: z.coerce.number().int().min(0),
 });
 
@@ -118,9 +120,26 @@ export const UpdateBulanRealisasiSchema = z.object({
 
 export const UpdateTargetsSchema = z.object({
   id: z.number().int().positive(),
-  target_rpjmd: z.coerce.number().int().min(0),
-  target_tahunan: z.coerce.number().int().min(0),
+  target_rpjmd: z.coerce.number().min(0),
+  target_tahunan: z.coerce.number().min(0),
   expected_version: z.coerce.number().int().min(0),
+});
+
+// ─── Duplikasi struktur + target ke tahun baru ──────────────────────────────
+
+export const DuplikasiTahunSchema = z.object({
+  dari_tahun: TahunSchema,
+  ke_tahun: TahunSchema,
+}).refine((v) => v.dari_tahun !== v.ke_tahun, {
+  message: 'Tahun sumber dan tujuan harus berbeda',
+  path: ['ke_tahun'],
+});
+
+// ─── Kunci Periode (0 = terbuka, 1-12 = terkunci s.d. bulan itu) ────────────
+
+export const RaLockSchema = z.object({
+  tahun: TahunSchema,
+  bulan: z.coerce.number().int().min(0).max(12),
 });
 
 // ─── Update jenis only ─────────────────────────────────────────────────────
