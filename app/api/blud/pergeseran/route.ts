@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { versi_tanggal, dpa_versi_tanggal, rows, force, expected_version, sentinel_ack } = parsed.data
+  const { versi_tanggal, dpa_versi_tanggal, rows, force, draft, expected_version, sentinel_ack } = parsed.data
 
   // B-1: tolak pohon rusak (parent orphan / row_id duplikat / siklus) sebelum simpan
   const treeErrors = validateTreeIntegrity(rows)
@@ -108,9 +108,11 @@ export async function POST(req: NextRequest) {
 
     const recalced = recalcPergeseranJumlah(rows)
 
-    // B6: pergeseran WAJIB berimbang — pagu total tidak boleh berubah
+    // B6: pergeseran WAJIB berimbang — pagu total tidak boleh berubah.
+    // Kecuali draft=true: simpan progres dgn pengakuan eksplisit, status draft
+    // tidak disimpan tapi diturunkan dari delta (konsisten Checkpoint D).
     const rootDelta = hitungDeltaPergeseranRoot(recalced)
-    if (rootDelta !== 0) {
+    if (rootDelta !== 0 && !draft) {
       return NextResponse.json(
         {
           ok:    false,
@@ -129,7 +131,7 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_SAVE_PERGESERAN',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan Pergeseran versi ${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}`,
+      detail:    `Simpan Pergeseran versi ${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`,
     })
     // RIMA F1 (G8): jejak "user sudah diperingatkan" — log only, tidak block
     if (sentinel_ack && (sentinel_ack.dismissed.length > 0 || sentinel_ack.active_warning > 0)) {

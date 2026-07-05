@@ -11,6 +11,7 @@
 import type { DpaBaris, PergeseranBaris } from '@/types'
 import type { MasterAkun } from './master-akun-data'
 import { formatRupiah } from './format'
+import { hitungDeltaPergeseranRoot } from './recalc'
 import { auditRekapPJ } from './audit-pj'
 import type { AuditResult } from './audit-pj'
 
@@ -285,7 +286,9 @@ function kartu(label: string, value: string, color: string): string {
 // ──────────────────────────────────────────────────────────────────────────
 function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): RenderResult {
   const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang']
-  const title = `Rekap Pergeseran${versi ? `: ${versi}` : ' (Terakhir)'}`
+  // B6: status DRAFT diturunkan dari delta root — tandai dokumen belum berimbang
+  const deltaRoot = hitungDeltaPergeseranRoot(rows)
+  const title = `Rekap Pergeseran${versi ? `: ${versi}` : ' (Terakhir)'}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
 
   const sorted = [...rows].sort((a, b) => a.urutan - b.urutan)
 
@@ -296,6 +299,10 @@ function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): Re
   ])
 
   let html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
+  if (deltaRoot !== 0) {
+    html += `<div style="margin-bottom:10px;padding:8px 12px;border:1.5px solid #F59E0B;background:rgba(245,158,11,.15);border-radius:8px;color:#FCD34D;font-weight:700;font-size:12px;">`
+      + `⚠️ DRAFT — belum berimbang: total anggaran ${deltaRoot > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(deltaRoot))} terhadap DPA. Bukan dokumen final.</div>`
+  }
   html += `<table><thead><tr>`
   for (const c of columns) html += `<th>${esc(c)}</th>`
   html += `</tr></thead><tbody>`

@@ -613,6 +613,8 @@ export default function PergeseranClient() {
   useSentinelFeed('blud/pergeseran', rows, 'perg-row-')
   const sentinelPreSave = useSentinelPreSave()
   const sentinelAckRef  = useRef<SentinelAckPayload | null>(null)
+  // B6 draft: di-ref supaya ikut terbawa saat retry force=true (SAFETY_THRESHOLD)
+  const draftRef        = useRef(false)
 
   const loadPergeseran = useCallback(async (tanggal?: string) => {
     loadCtrlRef.current?.abort()
@@ -725,15 +727,20 @@ export default function PergeseranClient() {
       const gate = await sentinelPreSave()
       if (!gate.ok) return
       sentinelAckRef.current = gate.ack
-      // B6: pergeseran WAJIB berimbang (geser antar rekening, pagu tetap) —
-      // blokir save; server juga menolak (PERGESERAN_TIDAK_BERIMBANG)
+      // B6: pergeseran WAJIB berimbang (pagu tetap). Belum berimbang → tawarkan
+      // simpan DRAFT (pengakuan eksplisit, flag ke server); status draft
+      // diturunkan dari delta, tidak disimpan di DB
       const rootDelta = hitungDeltaPergeseranRoot(rows)
+      draftRef.current = false
       if (rootDelta !== 0) {
-        toast.error(
-          `Pergeseran tidak berimbang: total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(rootDelta))} terhadap DPA. Sesuaikan dulu — pergeseran wajib berimbang.`,
-          { duration: 8000 },
-        )
-        return
+        const simpanDraft = await confirmDialog({
+          title: 'Pergeseran belum berimbang',
+          message: `Total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(rootDelta))} terhadap DPA — pergeseran final wajib berimbang (pagu tetap). Simpan sebagai DRAFT untuk dilanjutkan nanti?`,
+          confirmLabel: 'Simpan sebagai Draft',
+          variant: 'warning',
+        })
+        if (!simpanDraft) return
+        draftRef.current = true
       }
       setSaving(true)
       const today = new Date().toISOString().split('T')[0]
@@ -749,7 +756,7 @@ export default function PergeseranClient() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versi_tanggal: versiTanggal, dpa_versi_tanggal: dpaVersi || versiTanggal,
-          rows, force, expected_version: version,
+          rows, force, draft: draftRef.current, expected_version: version,
           sentinel_ack: sentinelAckRef.current ?? undefined,
         }),
       })
@@ -771,6 +778,9 @@ export default function PergeseranClient() {
       if (json.ok) {
         showToast(json.message); setVersi(versiTanggal); loadHistory()
         if (typeof json.version === 'number') setVersion(json.version)
+        if (draftRef.current) {
+          toast.warning('Tersimpan sebagai DRAFT — lanjutkan pengisian sampai berimbang', { duration: 6000 })
+        }
       } else {
         showToast(json.error || json.message || 'Gagal simpan', false)
       }
@@ -778,6 +788,10 @@ export default function PergeseranClient() {
   }
 
   useEffect(() => { void (async () => { await loadPergeseran(); await loadHistory() })() }, [loadPergeseran, loadHistory])
+
+  // B6: status DRAFT diturunkan dari delta root (tidak disimpan) — badge live,
+  // hilang sendiri begitu angka berimbang
+  const deltaBerimbang = rows.length > 0 ? hitungDeltaPergeseranRoot(rows) : 0
 
   return (
     <div className="space-y-4">
@@ -837,6 +851,13 @@ export default function PergeseranClient() {
         {dpaVersi && (
           <span data-rima="pergeseran.sumber-dpa" style={{ fontSize:11, color:'#85B7EB', display:'flex', alignItems:'center', gap:4 }}>
             <Calendar style={{ width:12, height:12 }} /> Sumber DPA: {dpaVersi}
+          </span>
+        )}
+
+        {deltaBerimbang !== 0 && (
+          <span style={{ fontSize:11, fontWeight:800, color:'#FCD34D', background:'rgba(245,158,11,.15)', border:'1px solid #F59E0B', borderRadius:999, padding:'3px 10px', display:'inline-flex', alignItems:'center', gap:5 }}>
+            <AlertTriangle style={{ width:12, height:12 }} />
+            DRAFT — belum berimbang ({deltaBerimbang > 0 ? '+' : '−'}{formatRupiah(Math.abs(deltaBerimbang))})
           </span>
         )}
       </div>

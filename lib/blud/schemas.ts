@@ -157,6 +157,9 @@ export const PergeseranBodySchema = z.object({
   dpa_versi_tanggal: TanggalSchema.optional(),
   rows:              z.array(PergeseranBarisInputSchema).min(1, 'Minimal 1 baris').max(700, 'Maksimal 700 baris'),
   force:             z.boolean().optional().default(false),
+  // B6 draft: simpan progres belum berimbang — pengakuan eksplisit user,
+  // tanpa flag ini delta root != 0 ditolak PERGESERAN_TIDAK_BERIMBANG
+  draft:             z.boolean().optional().default(false),
   expected_version:  z.coerce.number().int().min(0).default(0),
   sentinel_ack:      SentinelAckSchema.optional(),
 });
