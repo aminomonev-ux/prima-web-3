@@ -125,6 +125,17 @@ export const UpdateTargetsSchema = z.object({
   expected_version: z.coerce.number().int().min(0),
 });
 
+// ─── Matriks Bulanan: simpan massal (per-item CAS + cek Kunci Periode) ───────
+
+export const BulanBulkSchema = z.object({
+  items: z.array(z.object({
+    id: z.number().int().positive(),
+    // R3: null = belum diisi, 0 = nol nyata. JANGAN z.coerce (null→0).
+    bulan_realisasi: z.array(z.number().min(0).nullable()).length(12),
+    expected_version: z.coerce.number().int().min(0),
+  })).min(1, 'Tidak ada baris untuk disimpan').max(300, 'Maksimal 300 baris sekali simpan'),
+});
+
 // ─── Duplikasi struktur + target ke tahun baru ──────────────────────────────
 
 export const DuplikasiTahunSchema = z.object({

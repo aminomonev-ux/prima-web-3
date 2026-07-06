@@ -405,6 +405,32 @@ export async function resetRealisasi(id: number, userId: number): Promise<void> 
   `;
 }
 
+// ─── Matriks Bulanan: simpan massal ──────────────────────────────────────────
+
+export interface BulanBulkItem { id: number; bulan_realisasi: MonthVal[]; expected_version: number }
+export interface BulanBulkResult { saved: number; failed: { id: number; error: string }[] }
+
+/**
+ * Simpan realisasi bulanan banyak indikator sekaligus (Matriks Bulanan).
+ * Per-item independen (BUKAN all-or-nothing): tiap baris tetap lewat CAS versi
+ * + cek Kunci Periode via updateBulanRealisasi; kegagalan dilaporkan per id.
+ */
+export async function updateBulanRealisasiBulk(
+  items: BulanBulkItem[], userId: number,
+): Promise<BulanBulkResult> {
+  let saved = 0;
+  const failed: { id: number; error: string }[] = [];
+  for (const it of items) {
+    try {
+      await updateBulanRealisasi(it.id, it.bulan_realisasi, userId, it.expected_version);
+      saved++;
+    } catch (e) {
+      failed.push({ id: it.id, error: e instanceof Error ? e.message : 'Gagal menyimpan' });
+    }
+  }
+  return { saved, failed };
+}
+
 // ─── Kunci Periode (system_settings kv: ra_lock_{tahun} = 0..12) ────────────
 
 export async function getRaLock(tahun: number): Promise<number> {

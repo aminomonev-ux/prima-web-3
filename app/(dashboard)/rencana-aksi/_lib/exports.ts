@@ -319,3 +319,73 @@ export async function exportIndikatorXlsx(row: RaRow) {
   const buf = await wb.xlsx.writeBuffer();
   saveBlob(new Blob([buf]), `rencana-aksi-${row.level}-${row.tahun}-detail.xlsx`);
 }
+
+// ─── Matriks Bulanan: export template + parse import ────────────────────────
+// Layout tetap (kolom A..R): ID | Program | Kegiatan | Sub Kegiatan | Indikator |
+// Satuan | Jan..Des. Import mencocokkan baris via kolom ID.
+
+const MATRIX_HEAD = ['ID', 'Program', 'Kegiatan', 'Sub Kegiatan', 'Indikator', 'Satuan',
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+export async function exportMatrixBulananXlsx(rows: RaRow[], tahun: number) {
+  const ExcelJS = await loadXlsx();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(`Realisasi Bulanan ${tahun}`);
+  const head = ws.addRow(MATRIX_HEAD);
+  head.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C5CFC' } };
+  for (const r of rows) {
+    const months = Array.isArray(r.bulan_realisasi) && r.bulan_realisasi.length === 12
+      ? r.bulan_realisasi : Array(12).fill(null);
+    ws.addRow([
+      r.id, sanitizeCell(r.program), sanitizeCell(r.kegiatan ?? ''), sanitizeCell(r.sub_kegiatan ?? ''),
+      sanitizeCell(r.indikator), sanitizeCell(r.satuan),
+      // R3: sel kosong = belum diisi, 0 = nol nyata
+      ...months.map(m => (m == null ? null : m)),
+    ]);
+  }
+  ws.getColumn(1).width = 8;
+  [2, 3, 4].forEach(c => { ws.getColumn(c).width = 28; });
+  ws.getColumn(5).width = 45;
+  ws.getColumn(6).width = 10;
+  for (let c = 7; c <= 18; c++) ws.getColumn(c).width = 8;
+  const buf = await wb.xlsx.writeBuffer();
+  saveBlob(new Blob([buf]), `rencana-aksi-${tahun}-realisasi-bulanan.xlsx`);
+}
+
+/**
+ * Parse file import Matriks Bulanan → Map id → 12 nilai (null = kosong).
+ * Guard: ≤5MB, sheet pertama saja + cap jumlah sheet (L67 anti zip-bomb),
+ * header wajib sama dengan template.
+ */
+export async function parseMatrixBulananXlsx(file: File): Promise<Map<number, (number | null)[]>> {
+  if (file.size > 5 * 1024 * 1024) throw new Error('File terlalu besar (maks 5 MB)');
+  const ExcelJS = await loadXlsx();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await file.arrayBuffer());
+  if (wb.worksheets.length > 10) throw new Error('File tidak valid (terlalu banyak sheet)');
+  const ws = wb.worksheets[0];
+  if (!ws) throw new Error('Sheet pertama tidak ditemukan');
+  const h = ws.getRow(1);
+  if (String(h.getCell(1).value ?? '').trim().toUpperCase() !== 'ID'
+    || String(h.getCell(7).value ?? '').trim() !== 'Jan') {
+    throw new Error('Format tidak dikenali — pakai file hasil "Unduh Excel" dari matriks ini');
+  }
+  const out = new Map<number, (number | null)[]>();
+  const maxRow = Math.min(ws.rowCount, 1001);
+  for (let i = 2; i <= maxRow; i++) {
+    const row = ws.getRow(i);
+    const id = Number(row.getCell(1).value);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    const months: (number | null)[] = [];
+    for (let c = 7; c <= 18; c++) {
+      const v = row.getCell(c).value;
+      if (v == null || v === '') { months.push(null); continue; }
+      const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+      months.push(Number.isFinite(n) && n >= 0 ? n : null);
+    }
+    out.set(id, months);
+  }
+  if (out.size === 0) throw new Error('Tidak ada baris data yang bisa dibaca dari file');
+  return out;
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Eye, Pencil, Save } from 'lucide-react';
+import { Eye, Pencil, Save, Grid3x3 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import SoftSelect from '@/components/ui/SoftSelect';
@@ -29,6 +29,7 @@ interface Props {
   onChangeJenis: (jenis: RaJenis) => void;
   onSaveBulanRealisasi: (months: (number | null)[]) => Promise<void>;
   anggaran: number | null;
+  onOpenMatrix?: () => void;
 }
 
 function getColors(pct: number) {
@@ -41,7 +42,7 @@ export default function MainDashboard({
   level, rows, selectedYear,
   selectedSasaran, selectedProgram, selectedKegiatan, selectedSubKegiatan, selectedIndicator,
   setSelectedSasaran, setSelectedProgram, setSelectedKegiatan, setSelectedSubKegiatan, setSelectedIndicator,
-  onOpenQuarterModal, onOpenTargetsModal, onOpenDetailModal, onChangeJenis, onSaveBulanRealisasi, anggaran,
+  onOpenQuarterModal, onOpenTargetsModal, onOpenDetailModal, onChangeJenis, onSaveBulanRealisasi, anggaran, onOpenMatrix,
 }: Props) {
   const [isEditingJenis, setIsEditingJenis] = useState(false);
 
@@ -453,15 +454,22 @@ export default function MainDashboard({
                 Isi realisasi tiap bulan — Triwulan terhitung otomatis sesuai jenis (<strong>{data.jenis}</strong>).
               </p>
             </div>
-            <PrimaButton
-              variant="success"
-              size="sm"
-              iconLeft={<Save size={13} />}
-              disabled={!activeRow || savingBulan || !bulanDirty}
-              onClick={handleSaveBulan}
-            >
-              {savingBulan ? 'Menyimpan…' : 'Simpan Realisasi'}
-            </PrimaButton>
+            <div className="flex items-center gap-2">
+              {onOpenMatrix && (
+                <PrimaButton variant="purple" size="sm" iconLeft={<Grid3x3 size={13} />} onClick={onOpenMatrix}>
+                  Matriks Bulanan
+                </PrimaButton>
+              )}
+              <PrimaButton
+                variant="success"
+                size="sm"
+                iconLeft={<Save size={13} />}
+                disabled={!activeRow || savingBulan || !bulanDirty}
+                onClick={handleSaveBulan}
+              >
+                {savingBulan ? 'Menyimpan…' : 'Simpan Realisasi'}
+              </PrimaButton>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">

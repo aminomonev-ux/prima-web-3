@@ -10,6 +10,7 @@ import MainDashboard from './_components/MainDashboard';
 import DataEntryForm from './_components/DataEntryForm';
 import CetakPanel from './_components/CetakPanel';
 import { QuarterModal, TargetsModal, DetailModal, ResetRealisasiModal } from './_components/Modals';
+import MatrixBulananModal from './_components/MatrixBulananModal';
 import type { RaRow, RaLevel, RaJenis } from './_lib/types';
 import { LEVEL_LABELS, anggaranRollup } from './_lib/types';
 import { apiList, apiUpdateJenis, apiUpdateBulanRealisasi, VersionConflictError } from './_lib/api';
@@ -51,6 +52,7 @@ export default function RaClient({
   const [isTargetsOpen, setIsTargetsOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen]   = useState(false);
   const [isResetOpen, setIsResetOpen]     = useState(false);
+  const [isMatrixOpen, setIsMatrixOpen]   = useState(false);
 
   const initials = (username || 'U').slice(0, 2).toUpperCase();
 
@@ -581,6 +583,7 @@ export default function RaClient({
             onChangeJenis={handleChangeJenis}
             onSaveBulanRealisasi={handleSaveBulanRealisasi}
             anggaran={activeAnggaran}
+            onOpenMatrix={level === 'sub-kegiatan' ? () => setIsMatrixOpen(true) : undefined}
           />
         )}
 
@@ -626,6 +629,15 @@ export default function RaClient({
         isOpen={isResetOpen}
         onClose={() => setIsResetOpen(false)}
         onConfirmed={async () => { setIsResetOpen(false); await reloadRows(tahun, level); }}
+        notify={notify}
+      />
+
+      <MatrixBulananModal
+        isOpen={isMatrixOpen}
+        tahun={tahun}
+        rows={rows.filter(r => r.level === 'sub-kegiatan')}
+        onClose={() => setIsMatrixOpen(false)}
+        onSaved={async () => { await reloadRows(tahun, level); }}
         notify={notify}
       />
     </div>

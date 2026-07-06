@@ -104,6 +104,19 @@ export async function apiUpdateJenis(id: number, jenis: RaJenis, expected_versio
   await jsonOrThrow(r);
 }
 
+export interface BulanBulkItem { id: number; bulan_realisasi: (number | null)[]; expected_version: number }
+export interface BulanBulkResult { saved: number; failed: { id: number; error: string }[] }
+
+export async function apiUpdateBulanBulk(items: BulanBulkItem[]): Promise<BulanBulkResult> {
+  const r = await fetch('/api/rencana-aksi', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'bulan-bulk', payload: { items } }),
+  });
+  const body = await jsonOrThrow<{ ok: true; saved: number; failed: { id: number; error: string }[] }>(r);
+  return { saved: body.saved, failed: body.failed };
+}
+
 export async function apiDuplikasiTahun(dariTahun: number, keTahun: number): Promise<number> {
   const r = await fetch('/api/rencana-aksi/duplikasi', {
     method: 'POST',

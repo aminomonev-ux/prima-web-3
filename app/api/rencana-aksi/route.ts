@@ -6,6 +6,7 @@ import {
   UpsertRencanaAksiSchema,
   UpdateQuarterSchema,
   UpdateBulanRealisasiSchema,
+  BulanBulkSchema,
   UpdateTargetsSchema,
   UpdateJenisSchema,
   ResetRealisasiSchema,
@@ -17,6 +18,7 @@ import {
   deleteRencanaAksi,
   updateQuarter,
   updateBulanRealisasi,
+  updateBulanRealisasiBulk,
   updateTargets,
   updateJenis,
   resetRealisasi,
@@ -120,6 +122,7 @@ export async function DELETE(req: NextRequest) {
 const PatchBodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('quarter'), payload: UpdateQuarterSchema }),
   z.object({ action: z.literal('bulan-realisasi'), payload: UpdateBulanRealisasiSchema }),
+  z.object({ action: z.literal('bulan-bulk'), payload: BulanBulkSchema }),
   z.object({ action: z.literal('targets'), payload: UpdateTargetsSchema }),
   z.object({ action: z.literal('jenis'), payload: UpdateJenisSchema }),
   z.object({ action: z.literal('reset-realisasi'), payload: ResetRealisasiSchema }),
@@ -142,7 +145,7 @@ export async function PATCH(req: NextRequest) {
   const limited = await rencanaAksiRateLimit(
     g.session.userId,
     action,
-    action === 'reset-realisasi' ? 10 : 30,
+    action === 'reset-realisasi' || action === 'bulan-bulk' ? 10 : 30,
   );
   if (limited) return limited;
 
@@ -163,6 +166,15 @@ export async function PATCH(req: NextRequest) {
         userId: g.session.userId, username: g.session.username,
         detail: `id=${p.id} realisasi bulanan=[${p.bulan_realisasi.join(',')}]`,
       });
+    } else if (action === 'bulan-bulk') {
+      const p = parsed.data.payload;
+      const result = await updateBulanRealisasiBulk(p.items, g.session.userId);
+      await writeAuditLog({
+        req, eventType: 'RA_UPDATE_BULAN_REALISASI',
+        userId: g.session.userId, username: g.session.username,
+        detail: `Matriks bulanan: ${result.saved}/${p.items.length} baris tersimpan${result.failed.length ? ` · gagal id=[${result.failed.slice(0, 10).map(f => f.id).join(',')}${result.failed.length > 10 ? ',…' : ''}]` : ''}`,
+      });
+      return NextResponse.json({ ok: true, ...result });
     } else if (action === 'targets') {
       const p = parsed.data.payload;
       await updateTargets(p.id, p.target_rpjmd, p.target_tahunan, g.session.userId, p.expected_version);
