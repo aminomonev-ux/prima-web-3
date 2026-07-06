@@ -5,6 +5,7 @@ import { Eye, Pencil, Save, Grid3x3 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import SoftSelect from '@/components/ui/SoftSelect';
+import Sparkline12 from './Sparkline12';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, BULAN_LABELS } from '../_lib/types';
@@ -508,6 +509,19 @@ export default function MainDashboard({
               ))}
             </div>
           </div>
+
+          {bulanRealisasi.some(v => v != null) && (
+            <div className="mt-4 rounded-xl border border-slate-100 p-3">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-widest block mb-1">
+                Tren 12 Bulan — garis putus = target · titik hijau/merah = capaian bulan vs target
+              </span>
+              <Sparkline12
+                realisasi={bulanRealisasi}
+                target={activeRow?.bulan_target ?? null}
+                jenis={data.jenis}
+              />
+            </div>
+          )}
         </div>
       )}
 
