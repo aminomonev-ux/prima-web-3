@@ -4,7 +4,7 @@ import { safeInt } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { FinalizeSchema, ikiRateLimit } from '@/lib/data/iki-schemas';
 import {
-  finalizeDokumen, unfinalizeDokumen,
+  finalizeDokumen, unfinalizeDokumen, snapshotVersi,
   IkiVersionConflictError, IkiNotFoundError,
 } from '@/lib/data/iki';
 import { guard } from '../../_guard';
@@ -35,6 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     console.error('[IKI Finalize Error]', err);
     return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 });
   }
+  // Riwayat: abadikan isi yang difinalkan — best-effort, jangan gagalkan finalize
+  try { await snapshotVersi(id, 'FINALIZE', g.session.userId); }
+  catch (err) { console.error('[IKI Snapshot Versi Error]', err); }
   await writeAuditLog({
     req, eventType: 'IKI_FINALIZE', userId: g.session.userId, username: g.session.username,
     detail: `Finalisasi dokumen IKI id=${id}`,
@@ -60,6 +63,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     console.error('[IKI Unfinalize Error]', err);
     return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 });
   }
+  // Riwayat: abadikan kondisi FINAL sebelum dibuka — best-effort
+  try { await snapshotVersi(id, 'UNFINALIZE', g.session.userId); }
+  catch (err) { console.error('[IKI Snapshot Versi Error]', err); }
   await writeAuditLog({
     req, eventType: 'IKI_UNFINALIZE', userId: g.session.userId, username: g.session.username,
     detail: `Buka kembali (FINAL→DRAFT) dokumen IKI id=${id}`,

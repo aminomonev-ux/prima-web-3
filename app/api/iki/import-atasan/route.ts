@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, queryOne } from '@/lib/data/db';
 import { ImportAtasanQuerySchema, ikiRateLimit } from '@/lib/data/iki-schemas';
+import { writeAuditLog } from '@/lib/security/auditlog';
 import { guard } from '../_guard';
 
 export const dynamic = 'force-dynamic';
@@ -30,5 +31,9 @@ export async function GET(req: NextRequest) {
     WHERE dokumen_id = ${atasan.id}
     ORDER BY no_urut ASC, urutan ASC
   `;
+  await writeAuditLog({
+    req, eventType: 'IKI_IMPORT_ATASAN', userId: g.session.userId, username: g.session.username,
+    detail: `Import RHK dari IKI atasan id=${atasan.id} (${atasan.jabatan}) tahun ${atasan.tahun}`,
+  });
   return NextResponse.json({ ok: true, atasan, rows });
 }

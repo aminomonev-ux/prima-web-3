@@ -142,6 +142,10 @@ export const FinalizeSchema = z.object({
   expected_version: z.number().int().min(0),
 });
 
+export const DuplicateSchema = z.object({
+  tahun_target: TahunSchema,
+});
+
 export const ImportRenaksiQuerySchema = z.object({
   tahun: z.coerce.number().int().min(2020).max(2100),
 });

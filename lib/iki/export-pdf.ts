@@ -10,6 +10,17 @@ const GREY: [number, number, number] = [217, 217, 217];
 const BLACK: [number, number, number] = [0, 0, 0];
 
 export async function exportIkiPdf(doc: IkiGridDokumen, tahun: string): Promise<void> {
+  const pdf = await buildIkiPdf(doc);
+  pdf.save(ikiFilename(doc, tahun, 'pdf'));
+}
+
+/** Bytes PDF untuk export massal zip — tanpa auto-save. */
+export async function buildIkiPdfBytes(doc: IkiGridDokumen): Promise<ArrayBuffer> {
+  const pdf = await buildIkiPdf(doc);
+  return pdf.output('arraybuffer') as ArrayBuffer;
+}
+
+async function buildIkiPdf(doc: IkiGridDokumen) {
   if (doc.rhk.length === 0) throw new Error('Belum ada baris RHK — tidak ada yang bisa di-export');
 
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([
@@ -148,5 +159,5 @@ export async function exportIkiPdf(doc: IkiGridDokumen, tahun: string): Promise<
   if (kiri) drawBlock(kiri, pageW * 0.25);
   drawBlock(kanan, kiri ? pageW * 0.75 : pageW * 0.72);
 
-  pdf.save(ikiFilename(doc, tahun, 'pdf'));
+  return pdf;
 }

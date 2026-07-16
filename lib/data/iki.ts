@@ -62,7 +62,19 @@ export type IkiRhkRow = {
   triwulan: IkiTriwulanRow[];
 };
 
-export type IkiDokumenDetail = IkiDokumenRow & { rhk: IkiRhkRow[] };
+export type IkiDokumenDetail = IkiDokumenRow & {
+  rhk: IkiRhkRow[];
+  // Dokumen atasan diubah setelah save terakhir dokumen ini (peringatan lunak, DRAFT saja)
+  atasan_stale: boolean;
+};
+
+export type IkiVersiMeta = {
+  id: number;
+  versi_ke: number;
+  pemicu: 'FINALIZE' | 'UNFINALIZE';
+  created_by_nama: string | null;
+  created_at: string;
+};
 
 export async function listDokumen(tahun?: string) {
   const rows = tahun
@@ -137,10 +149,97 @@ export async function getDokumen(id: number): Promise<IkiDokumenDetail | null> {
     list.push({ triwulan: t.triwulan, target_tw: t.target_tw, uraian: t.uraian, target_aksi: t.target_aksi });
     twByRhk.set(t.rhk_id, list);
   }
+  // Banding di SQL (bukan JS) supaya bebas urusan timezone parsing
+  let atasanStale = false;
+  if (doc.atasan_dokumen_id && doc.status === 'DRAFT') {
+    const stale = await queryOne<{ stale: number }>(
+      sql`SELECT (a.updated_at > d.updated_at) AS stale
+          FROM iki_dokumen d JOIN iki_dokumen a ON a.id = d.atasan_dokumen_id
+          WHERE d.id = ${id} LIMIT 1`,
+    );
+    atasanStale = Number(stale?.stale ?? 0) === 1;
+  }
   return {
     ...doc,
     rhk: rhkRows.map((r) => ({ ...r, triwulan: twByRhk.get(r.id) ?? [] })),
+    atasan_stale: atasanStale,
   };
+}
+
+/**
+ * Duplikasi dokumen ke tahun lain: header + seluruh RHK & triwulan disalin,
+ * status/version/tanggal_ttd di-reset. renaksi_id & atasan_rhk_id di-NULL-kan
+ * (id milik tahun lama, pasti basi). atasan_dokumen_id di-resolve best-effort
+ * via NIP dokumen atasan lama di tahun target.
+ */
+export async function duplicateDokumen(id: number, tahunTarget: string, userId: number): Promise<number> {
+  const src = await getDokumen(id);
+  if (!src) throw new IkiNotFoundError();
+  if (src.tahun === tahunTarget) throw new Error('Tahun tujuan sama dengan tahun sumber.');
+  const dup = await queryOne<{ id: number }>(
+    sql`SELECT id FROM iki_dokumen WHERE nip = ${src.nip} AND tahun = ${tahunTarget} LIMIT 1`,
+  );
+  if (dup) throw new Error(`Dokumen IKI untuk NIP ${src.nip} tahun ${tahunTarget} sudah ada.`);
+
+  let atasanTarget: number | null = null;
+  if (src.atasan_dokumen_id) {
+    const found = await queryOne<{ id: number }>(
+      sql`SELECT b.id FROM iki_dokumen a
+          JOIN iki_dokumen b ON b.nip = a.nip AND b.tahun = ${tahunTarget}
+          WHERE a.id = ${src.atasan_dokumen_id} LIMIT 1`,
+    );
+    atasanTarget = found?.id ?? null;
+  }
+
+  let newId = 0;
+  try {
+    await withTransaction(async ({ tx, conn }) => {
+      const ins = await tx`
+        INSERT INTO iki_dokumen (tahun, varian, opd, nama, nip, jabatan, pangkat, ikhtisar,
+          nama_atasan, nip_atasan, jabatan_atasan, pangkat_atasan, kota_ttd,
+          atasan_dokumen_id, created_by, updated_by)
+        VALUES (${tahunTarget}, ${src.varian}, ${src.opd}, ${src.nama}, ${src.nip}, ${src.jabatan},
+          ${src.pangkat}, ${src.ikhtisar}, ${src.nama_atasan}, ${src.nip_atasan},
+          ${src.jabatan_atasan}, ${src.pangkat_atasan}, ${src.kota_ttd},
+          ${atasanTarget}, ${userId}, ${userId})
+      ` as unknown as Array<{ insertId: number }>;
+      newId = Number(ins[0]?.insertId ?? 0);
+      if (!newId) throw new Error('Gagal membuat dokumen duplikat.');
+
+      if (src.rhk.length > 0) {
+        const rhkRows = src.rhk.map((r, i) => [
+          newId, r.no_urut, r.rhk_intervensi, r.rhk, r.aspek_a, r.aspek_b, r.aspek_c,
+          r.indikator, r.target_tahunan, r.formulasi, r.ekspektasi, null, null, i,
+        ]);
+        await bulkInsert('iki_rhk', [
+          'dokumen_id', 'no_urut', 'rhk_intervensi', 'rhk', 'aspek_a', 'aspek_b', 'aspek_c',
+          'indikator', 'target_tahunan', 'formulasi', 'ekspektasi', 'renaksi_id', 'atasan_rhk_id', 'urutan',
+        ], rhkRows, conn);
+        const inserted = await tx`
+          SELECT id, urutan FROM iki_rhk WHERE dokumen_id = ${newId} ORDER BY urutan ASC
+        ` as unknown as { id: number; urutan: number }[];
+        const idByUrutan = new Map(inserted.map(r => [r.urutan, r.id]));
+        const twRows: unknown[][] = [];
+        src.rhk.forEach((r, i) => {
+          const rhkId = idByUrutan.get(i);
+          if (!rhkId) throw new Error('Gagal memetakan baris RHK duplikat.');
+          for (const t of r.triwulan) {
+            twRows.push([rhkId, t.triwulan, t.target_tw, t.uraian, t.target_aksi]);
+          }
+        });
+        if (twRows.length) {
+          await bulkInsert('iki_rhk_triwulan',
+            ['rhk_id', 'triwulan', 'target_tw', 'uraian', 'target_aksi'], twRows, conn);
+        }
+      }
+    });
+  } catch (err) {
+    if ((err as { code?: string }).code === 'ER_DUP_ENTRY') {
+      throw new Error(`Dokumen IKI untuk NIP ${src.nip} tahun ${tahunTarget} sudah ada.`);
+    }
+    throw err;
+  }
+  return newId;
 }
 
 /**
@@ -278,4 +377,104 @@ export async function unfinalizeDokumen(id: number, userId: number): Promise<voi
     WHERE id = ${id} AND status = 'FINAL'
   `);
   if (res.affectedRows === 0) throw new IkiNotFoundError();
+}
+
+// ─── Riwayat versi (snapshot JSON, pola ringkas lkjip_versi) ─────────────────
+
+const VERSI_RETENTION = 20;
+
+/**
+ * Snapshot isi dokumen ke iki_versi. Dipanggil setelah FINALIZE/UNFINALIZE
+ * sukses (terserialisasi oleh CAS di caller). Best-effort: gagal snapshot
+ * tidak boleh menggagalkan aksi utamanya — caller membungkus try/catch.
+ */
+export async function snapshotVersi(
+  dokumenId: number,
+  pemicu: 'FINALIZE' | 'UNFINALIZE',
+  userId: number,
+): Promise<void> {
+  const detail = await getDokumen(dokumenId);
+  if (!detail) return;
+  const next = await queryOne<{ n: number }>(
+    sql`SELECT COALESCE(MAX(versi_ke), 0) + 1 AS n FROM iki_versi WHERE dokumen_id = ${dokumenId}`,
+  );
+  await execWrite(sql`
+    INSERT INTO iki_versi (dokumen_id, versi_ke, pemicu, snapshot, created_by)
+    VALUES (${dokumenId}, ${next?.n ?? 1}, ${pemicu}, ${JSON.stringify(detail)}, ${userId})
+  `);
+  await execWrite(sql`
+    DELETE FROM iki_versi WHERE dokumen_id = ${dokumenId} AND id NOT IN (
+      SELECT id FROM (
+        SELECT id FROM iki_versi WHERE dokumen_id = ${dokumenId}
+        ORDER BY versi_ke DESC LIMIT ${VERSI_RETENTION}
+      ) keep
+    )
+  `);
+}
+
+/** List riwayat metadata-only (anti-lemot — snapshot JSON tidak ikut). */
+export async function listVersi(dokumenId: number): Promise<IkiVersiMeta[]> {
+  return queryMany<IkiVersiMeta>(
+    sql`SELECT v.id, v.versi_ke, v.pemicu, u.username AS created_by_nama, v.created_at
+        FROM iki_versi v
+        LEFT JOIN users u ON u.id = v.created_by
+        WHERE v.dokumen_id = ${dokumenId}
+        ORDER BY v.versi_ke DESC`,
+  );
+}
+
+/**
+ * Pulihkan isi dokumen dari snapshot — hanya DRAFT, replace-all lewat jalur
+ * saveDokumen yang sudah ber-CAS (data ikut tervalidasi guard yang sama).
+ */
+export async function restoreVersi(dokumenId: number, versiId: number, userId: number): Promise<number> {
+  const row = await queryOne<{ snapshot: string | object }>(
+    sql`SELECT snapshot FROM iki_versi WHERE id = ${versiId} AND dokumen_id = ${dokumenId} LIMIT 1`,
+  );
+  if (!row) throw new Error('Versi tidak ditemukan.');
+  const cur = await queryOne<{ version: number }>(
+    sql`SELECT version FROM iki_dokumen WHERE id = ${dokumenId} LIMIT 1`,
+  );
+  if (!cur) throw new IkiNotFoundError();
+  // mysql2 kolom JSON bisa datang sudah ter-parse
+  const snap = (typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot) as IkiDokumenDetail;
+  const input: SaveDokumenInput = {
+    expected_version: cur.version,
+    varian: snap.varian,
+    opd: snap.opd,
+    nama: snap.nama,
+    nip: snap.nip,
+    jabatan: snap.jabatan,
+    pangkat: snap.pangkat,
+    ikhtisar: snap.ikhtisar,
+    nama_atasan: snap.nama_atasan,
+    nip_atasan: snap.nip_atasan,
+    jabatan_atasan: snap.jabatan_atasan,
+    pangkat_atasan: snap.pangkat_atasan,
+    kota_ttd: snap.kota_ttd,
+    tanggal_ttd: snap.tanggal_ttd,
+    atasan_dokumen_id: snap.atasan_dokumen_id,
+    rhk: snap.rhk.map((r) => ({
+      no_urut: r.no_urut,
+      rhk_intervensi: r.rhk_intervensi,
+      rhk: r.rhk,
+      aspek_a: r.aspek_a,
+      aspek_b: r.aspek_b,
+      aspek_c: r.aspek_c,
+      indikator: r.indikator,
+      target_tahunan: r.target_tahunan,
+      formulasi: r.formulasi,
+      ekspektasi: r.ekspektasi,
+      renaksi_id: r.renaksi_id,
+      atasan_rhk_id: r.atasan_rhk_id,
+      urutan: r.urutan,
+      triwulan: r.triwulan.map((t) => ({
+        triwulan: t.triwulan,
+        target_tw: t.target_tw,
+        uraian: t.uraian,
+        target_aksi: t.target_aksi,
+      })),
+    })),
+  };
+  return saveDokumen(dokumenId, input, userId);
 }

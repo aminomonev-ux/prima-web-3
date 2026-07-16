@@ -63,6 +63,8 @@ export type IkiDokumen = {
   atasan_dokumen_id: number | null;
   status: 'DRAFT' | 'FINAL';
   version: number;
+  /** Server-computed: dokumen atasan diubah setelah save terakhir (banner lunak, DRAFT saja) */
+  atasan_stale?: boolean;
   rhk: IkiRhk[];
 };
 

@@ -8,7 +8,9 @@ import { toast } from 'sonner';
 import {
   ClipboardCheck, ArrowLeft, Save, Lock, Unlock, Plus, Download,
   FileSpreadsheet, FileText, Import, LayoutGrid, X,
+  AlertTriangle, History,
 } from 'lucide-react';
+import { validateRhkTargets } from '@/lib/iki/validate';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -28,6 +30,14 @@ interface Props {
   initialDoc: IkiDokumen;
 }
 
+type VersiRow = {
+  id: number;
+  versi_ke: number;
+  pemicu: 'FINALIZE' | 'UNFINALIZE';
+  created_by_nama: string | null;
+  created_at: string;
+};
+
 export default function EditorClient({ username, role, themePreference, initialDoc }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
@@ -38,6 +48,9 @@ export default function EditorClient({ username, role, themePreference, initialD
   const [showImport, setShowImport] = useState(false);
   const [pejabat, setPejabat] = useState<PejabatSuggest[]>([]);
   const [atasanCandidates, setAtasanCandidates] = useState<IkiListRow[]>([]);
+  const [staleDismissed, setStaleDismissed] = useState(false);
+  const [showRiwayat, setShowRiwayat] = useState(false);
+  const [riwayat, setRiwayat] = useState<VersiRow[] | null>(null);
 
   const readOnly = doc.status === 'FINAL';
   const isDir = doc.varian === 'DIREKTUR';
@@ -87,6 +100,9 @@ export default function EditorClient({ username, role, themePreference, initialD
     });
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
   }, [doc.rhk]);
+
+  const targetWarnings = useMemo(() => validateRhkTargets(doc.rhk), [doc.rhk]);
+  const warnByGroup = useMemo(() => new Set(targetWarnings.map(w => w.no_urut)), [targetWarnings]);
 
   function nextNoUrut() {
     return doc.rhk.length ? Math.max(...doc.rhk.map(r => r.no_urut)) + 1 : 1;
@@ -181,9 +197,15 @@ export default function EditorClient({ username, role, themePreference, initialD
 
   async function handleFinalize() {
     if (dirty && !(await handleSave(true))) return;
+    // Validasi lunak (lib/iki/validate) — daftar peringatan ikut dialog, tidak memblokir
+    const warnMsg = targetWarnings.length
+      ? `\n\n⚠ Peringatan target (${targetWarnings.length}):\n` +
+        targetWarnings.slice(0, 5).map(w => `• ${w.message}`).join('\n') +
+        (targetWarnings.length > 5 ? `\n… dan ${targetWarnings.length - 5} lainnya` : '')
+      : '';
     if (!(await confirmDialog({
       title: 'Finalisasi dokumen',
-      message: 'Dokumen FINAL tidak bisa diubah lagi (hanya SUPER_ADMIN yang bisa membuka kembali). Lanjutkan?',
+      message: `Dokumen FINAL tidak bisa diubah lagi (hanya SUPER_ADMIN yang bisa membuka kembali). Lanjutkan?${warnMsg}`,
       variant: 'danger',
     }))) return;
     setBusy(true);
@@ -230,9 +252,41 @@ export default function EditorClient({ username, role, themePreference, initialD
         await exportIkiExcel(doc, doc.tahun);
       }
       toast.success(format === 'pdf' ? 'PDF diunduh' : 'Excel diunduh');
+      // Audit IKI_DOWNLOAD — fire-and-forget (export digenerate client-side)
+      fetch('/api/iki/export-log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format, dokumen_id: doc.id }),
+      }).catch(() => {});
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Gagal export');
     } finally { setBusy(false); }
+  }
+
+  async function openRiwayat() {
+    setShowRiwayat(true);
+    setRiwayat(null);
+    try {
+      const res = await fetch(`/api/iki/${doc.id}/versi`);
+      const json = await res.json();
+      setRiwayat(json.ok ? json.rows : []);
+    } catch { setRiwayat([]); }
+  }
+
+  async function handleRestore(v: VersiRow) {
+    if (!(await confirmDialog({
+      title: 'Pulihkan versi',
+      message: `Ganti seluruh isi dokumen dengan snapshot versi #${v.versi_ke} (${v.pemicu === 'FINALIZE' ? 'saat finalisasi' : 'sebelum dibuka kembali'})? Isi saat ini akan tertimpa.`,
+      variant: 'warning',
+    }))) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/iki/${doc.id}/versi/${v.id}/restore`, { method: 'POST' });
+      const json = await res.json();
+      if (!json.ok) { toast.error(json.message ?? 'Gagal memulihkan'); return; }
+      toast.success(`Versi #${v.versi_ke} dipulihkan`);
+      window.location.reload();
+    } catch { toast.error('Gagal terhubung ke server'); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -260,6 +314,15 @@ export default function EditorClient({ username, role, themePreference, initialD
             {role === 'SUPER_ADMIN' && (
               <PrimaButton variant="warning" size="sm" iconLeft={<Unlock size={14} />} onClick={handleUnfinalize} disabled={busy}>Buka Kembali</PrimaButton>
             )}
+          </div>
+        )}
+
+        {!readOnly && doc.atasan_stale && !staleDismissed && (
+          <div className="iki-stale-banner">
+            <AlertTriangle size={15} />
+            <span>Dokumen IKI <b>atasan berubah</b> setelah save terakhir dokumen ini — tinjau ulang kolom &ldquo;RHK yang diintervensi&rdquo;.</span>
+            <PrimaButton variant="warning" size="sm" onClick={() => setShowImport(true)}>Tinjau Import Atasan</PrimaButton>
+            <button className="iki-stale-x" data-tooltip="Abaikan" data-tooltip-pos="below" onClick={() => setStaleDismissed(true)}><X size={14} /></button>
           </div>
         )}
 
@@ -352,6 +415,16 @@ export default function EditorClient({ username, role, themePreference, initialD
             )}
           </div>
 
+          {!readOnly && targetWarnings.length > 0 && (
+            <div className="iki-warn-box">
+              <AlertTriangle size={14} />
+              <div>
+                <b>Target triwulan tidak konsisten ({targetWarnings.length}):</b>
+                {targetWarnings.map((w, i) => <div key={i} className="iki-warn-item">{w.message}</div>)}
+              </div>
+            </div>
+          )}
+
           {groups.length === 0 && (
             <div className="iki-empty-rhk">Belum ada baris RHK. Tambahkan manual atau ambil dari Rencana Aksi / IKI Atasan.</div>
           )}
@@ -360,6 +433,9 @@ export default function EditorClient({ username, role, themePreference, initialD
             <div key={noUrut} className="iki-group">
               <div className="iki-group-head">
                 <span className="iki-group-no">{noUrut}</span>
+                {!readOnly && warnByGroup.has(noUrut) && (
+                  <span className="iki-warn-ico" data-tooltip="Target TW tidak konsisten dengan target tahunan" data-tooltip-pos="above"><AlertTriangle size={14} /></span>
+                )}
                 {!isDir && (
                   <label className="iki-f grow"><span>Rencana Hasil Kerja yang diintervensi (RHK atasan)</span>
                     <textarea rows={2} value={items[0].rhk.rhk_intervensi ?? ''} disabled={readOnly}
@@ -445,6 +521,7 @@ export default function EditorClient({ username, role, themePreference, initialD
           <div className="iki-actions-left">
             <PrimaButton variant="success" size="sm" iconLeft={<FileText size={15} />} onClick={() => handleExport('pdf')} disabled={busy}>Unduh PDF</PrimaButton>
             <PrimaButton variant="success" size="sm" iconLeft={<FileSpreadsheet size={15} />} onClick={() => handleExport('xlsx')} disabled={busy}>Unduh Excel</PrimaButton>
+            <PrimaButton variant="ghost" size="sm" iconLeft={<History size={15} />} onClick={openRiwayat} disabled={busy}>Riwayat</PrimaButton>
           </div>
           {!readOnly && (
             <div className="iki-actions-right">
@@ -480,6 +557,36 @@ export default function EditorClient({ username, role, themePreference, initialD
             toast.success(`${rows.length} grup RHK ditambahkan`);
           }}
         />
+      )}
+
+      {showRiwayat && (
+        <div className="iki-modal-bg" onClick={() => setShowRiwayat(false)}>
+          <div className="iki-modal" onClick={e => e.stopPropagation()}>
+            <div className="iki-versi-head">
+              <h3><History size={16} /> Riwayat Versi</h3>
+              <button className="iki-act" onClick={() => setShowRiwayat(false)}><X size={15} /></button>
+            </div>
+            {riwayat === null ? (
+              <p className="iki-versi-hint">Memuat…</p>
+            ) : riwayat.length === 0 ? (
+              <p className="iki-versi-hint">Belum ada versi tersimpan. Snapshot dibuat otomatis saat dokumen difinalisasi atau dibuka kembali dari FINAL.</p>
+            ) : (
+              riwayat.map(v => (
+                <div key={v.id} className="iki-versi-row">
+                  <div>
+                    <b>#{v.versi_ke}</b> · {v.pemicu === 'FINALIZE' ? 'Finalisasi' : 'Dibuka kembali'}
+                    <div className="iki-versi-meta">
+                      {new Date(v.created_at).toLocaleString('id-ID')}{v.created_by_nama ? ` · ${v.created_by_nama}` : ''}
+                    </div>
+                  </div>
+                  {!readOnly && (
+                    <PrimaButton variant="warning" size="sm" onClick={() => handleRestore(v)} disabled={busy}>Pulihkan</PrimaButton>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -661,6 +768,19 @@ const ED_CSS = `
   .iki-badge.dir { background: rgba(239,159,39,0.14); color: #F5C77E; border: 1px solid rgba(239,159,39,0.4); }
   .iki-ed-main { max-width: 1120px; margin: 0 auto; padding: 26px 22px; }
   .iki-final-banner { display: flex; align-items: center; gap: 10px; background: rgba(29,158,117,0.1); border: 1px solid rgba(29,158,117,0.4); color: #7BE0BD; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; font-weight: 600; margin-bottom: 18px; }
+  .iki-stale-banner { display: flex; align-items: center; gap: 10px; background: rgba(186,117,23,0.12); border: 1px solid rgba(186,117,23,0.45); color: #F5C77E; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 18px; }
+  .iki-stale-banner span { flex: 1; line-height: 1.5; }
+  .iki-stale-x { background: transparent; border: none; color: inherit; cursor: pointer; display: inline-flex; padding: 4px; border-radius: 6px; }
+  .iki-stale-x:hover { background: rgba(255,255,255,0.08); }
+  .iki-warn-box { display: flex; gap: 10px; background: rgba(186,117,23,0.1); border: 1px solid rgba(186,117,23,0.4); color: #F5C77E; border-radius: 10px; padding: 10px 14px; font-size: 12px; margin-bottom: 14px; line-height: 1.6; }
+  .iki-warn-box svg { flex-shrink: 0; margin-top: 2px; }
+  .iki-warn-item { color: #E8C9A0; }
+  .iki-warn-ico { display: inline-flex; align-items: center; color: #F5C77E; }
+  .iki-versi-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .iki-versi-head h3 { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 800; }
+  .iki-versi-hint { font-size: 12px; color: #85B7EB; line-height: 1.6; margin: 6px 0; }
+  .iki-versi-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid #0C447C; border-radius: 8px; margin-bottom: 8px; font-size: 12.5px; }
+  .iki-versi-meta { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #85B7EB; margin-top: 3px; }
   .iki-sec { background: #042C53; border: 1px solid #0C447C; border-radius: 12px; padding: 18px; margin-bottom: 18px; }
   .iki-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
   .iki-sec-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -744,4 +864,10 @@ const ED_CSS = `
   [data-theme="light"] .iki-modal-row:hover { background: #F3F4F6; }
   [data-theme="light"] .iki-modal-row-sub, [data-theme="light"] .iki-modal-info, [data-theme="light"] .iki-hint { color: #6B7280; }
   [data-theme="light"] .iki-src { color: #067154; }
+  [data-theme="light"] .iki-stale-banner { background: #FEF6E7; border-color: rgba(186,117,23,0.4); color: #92610A; }
+  [data-theme="light"] .iki-warn-box { background: #FEF6E7; border-color: rgba(186,117,23,0.4); color: #92610A; }
+  [data-theme="light"] .iki-warn-item { color: #A16207; }
+  [data-theme="light"] .iki-warn-ico { color: #B26B00; }
+  [data-theme="light"] .iki-versi-hint, [data-theme="light"] .iki-versi-meta { color: #6B7280; }
+  [data-theme="light"] .iki-versi-row { border-color: rgba(0,0,0,.12); }
 `;

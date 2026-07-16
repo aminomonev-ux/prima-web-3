@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ClipboardCheck, FileText, Plus, LayoutGrid, RefreshCw } from 'lucide-react';
+import { ClipboardCheck, Copy, FileText, FolderDown, Plus, LayoutGrid, RefreshCw } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -37,6 +37,16 @@ export default function IkiClient({ username, role, themePreference, initialRows
   const tahunList = [...new Set(rows.map(r => r.tahun))].sort().reverse();
   const [filterTahun, setFilterTahun] = useState<string>('');
   const shown = filterTahun ? rows.filter(r => r.tahun === filterTahun) : rows;
+
+  const [dupTarget, setDupTarget] = useState<IkiListRow | null>(null);
+  const [dupTahun, setDupTahun] = useState('');
+  const [dupBusy, setDupBusy] = useState(false);
+
+  const [showZip, setShowZip] = useState(false);
+  const [zipTahun, setZipTahun] = useState('');
+  const [zipOnlyFinal, setZipOnlyFinal] = useState(true);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipProgress, setZipProgress] = useState('');
 
   async function load() {
     try {
@@ -80,6 +90,69 @@ export default function IkiClient({ username, role, themePreference, initialRows
     } catch { toast.error('Gagal terhubung ke server'); }
   }
 
+  async function handleDuplicate() {
+    if (!dupTarget) return;
+    if (!/^\d{4}$/.test(dupTahun)) { toast.error('Tahun tujuan 4 digit'); return; }
+    setDupBusy(true);
+    try {
+      const res = await fetch(`/api/iki/${dupTarget.id}/duplicate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tahun_target: dupTahun }),
+      });
+      const json = await res.json();
+      if (!json.ok) { toast.error(json.message ?? 'Gagal menduplikasi'); return; }
+      toast.success(`Dokumen diduplikasi ke tahun ${dupTahun}`);
+      setDupTarget(null);
+      router.push(`/iki/${json.id}`);
+    } catch { toast.error('Gagal terhubung ke server'); }
+    finally { setDupBusy(false); }
+  }
+
+  const MAX_ZIP = 100;
+
+  async function handleZipExport() {
+    const tahun = zipTahun || tahunList[0];
+    if (!tahun) return;
+    const list = rows
+      .filter(r => r.tahun === tahun && (!zipOnlyFinal || r.status === 'FINAL'))
+      .slice(0, MAX_ZIP);
+    if (list.length === 0) { toast.error(`Tidak ada dokumen${zipOnlyFinal ? ' FINAL' : ''} di tahun ${tahun}`); return; }
+    setZipBusy(true);
+    try {
+      const [{ default: PizZip }, { buildIkiPdfBytes }, { ikiFilename }] = await Promise.all([
+        import('pizzip'),
+        import('@/lib/iki/export-pdf'),
+        import('@/lib/iki/layout'),
+      ]);
+      const zip = new PizZip();
+      let done = 0, skipped = 0;
+      for (const r of list) {
+        setZipProgress(`${done + skipped + 1}/${list.length} — ${r.jabatan}`);
+        try {
+          const res = await fetch(`/api/iki/${r.id}`);
+          const json = await res.json();
+          if (!json.ok || !json.data?.rhk?.length) { skipped++; continue; }
+          const bytes = await buildIkiPdfBytes(json.data);
+          zip.file(`${r.status === 'DRAFT' ? 'DRAFT_' : ''}${ikiFilename(json.data, r.tahun, 'pdf')}`, bytes);
+          done++;
+        } catch { skipped++; }
+      }
+      if (done === 0) { toast.error('Tidak ada dokumen yang bisa di-export (RHK kosong?)'); return; }
+      const blob = zip.generate({ type: 'blob', compression: 'DEFLATE' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `IKI_${tahun}.zip`; a.click();
+      URL.revokeObjectURL(url);
+      fetch('/api/iki/export-log', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format: 'pdf', mode: 'massal', tahun, jumlah: done }),
+      }).catch(() => {});
+      toast.success(`${done} PDF di-zip${skipped ? `, ${skipped} dilewati (RHK kosong/gagal)` : ''}`);
+      setShowZip(false);
+    } catch { toast.error('Gagal membuat zip'); }
+    finally { setZipBusy(false); setZipProgress(''); }
+  }
+
   return (
     <div className={`iki-list-body${isLight ? ' light' : ''}`}>
       <style>{LIST_CSS}</style>
@@ -105,6 +178,12 @@ export default function IkiClient({ username, role, themePreference, initialRows
                 {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             )}
+            {rows.length > 0 && (
+              <PrimaButton variant="success" iconLeft={<FolderDown size={16} />}
+                onClick={() => { setZipTahun(filterTahun || tahunList[0] || ''); setShowZip(true); }}>
+                Unduh Semua (Zip)
+              </PrimaButton>
+            )}
             <PrimaButton variant="purple" iconLeft={<Plus size={16} />} onClick={() => setShowCreate(true)}>Buat IKI</PrimaButton>
           </div>
         </div>
@@ -126,6 +205,10 @@ export default function IkiClient({ username, role, themePreference, initialRows
                 <div className="iki-card-nama">{d.nama}</div>
                 <div className="iki-card-meta">NIP {d.nip} · {d.jumlah_rhk} RHK</div>
                 <div className="iki-card-actions" onClick={e => e.stopPropagation()}>
+                  <button className="iki-act" data-tooltip="Duplikat ke tahun lain" data-tooltip-pos="above"
+                    onClick={() => { setDupTarget(d); setDupTahun(String(Number(d.tahun) + 1)); }}>
+                    <Copy size={15} />
+                  </button>
                   {d.status !== 'FINAL' && (
                     <button className="iki-act danger" data-tooltip="Hapus dokumen" data-tooltip-pos="above" onClick={() => handleDelete(d)}><DeleteIcon size={15} /></button>
                   )}
@@ -183,6 +266,58 @@ export default function IkiClient({ username, role, themePreference, initialRows
             <div className="iki-modal-actions">
               <PrimaButton variant="ghost" size="sm" onClick={() => setShowCreate(false)} disabled={busy}>Batal</PrimaButton>
               <PrimaButton variant="purple" size="sm" onClick={handleCreate} disabled={busy}>{busy ? 'Membuat…' : 'Buat'}</PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dupTarget && (
+        <div className="iki-modal-bg" onClick={() => !dupBusy && setDupTarget(null)}>
+          <div className="iki-modal" onClick={e => e.stopPropagation()}>
+            <h3>Duplikat ke Tahun Lain</h3>
+            <p className="iki-hint">
+              Menyalin seluruh isi <b>{dupTarget.jabatan}</b> ({dupTarget.nama}) tahun {dupTarget.tahun}:
+              data pribadi, atasan, dan semua RHK + target triwulan. Hasil duplikat berstatus DRAFT,
+              tanggal ttd dikosongkan — tinggal sesuaikan target tahun baru.
+            </p>
+            <label className="iki-field">
+              <span>Tahun Tujuan</span>
+              <input value={dupTahun} inputMode="numeric" maxLength={4}
+                onChange={e => setDupTahun(e.target.value.replace(/\D/g, ''))} />
+            </label>
+            <div className="iki-modal-actions">
+              <PrimaButton variant="ghost" size="sm" onClick={() => setDupTarget(null)} disabled={dupBusy}>Batal</PrimaButton>
+              <PrimaButton variant="purple" size="sm" onClick={handleDuplicate} disabled={dupBusy}>{dupBusy ? 'Menduplikasi…' : 'Duplikat'}</PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showZip && (
+        <div className="iki-modal-bg" onClick={() => !zipBusy && setShowZip(false)}>
+          <div className="iki-modal" onClick={e => e.stopPropagation()}>
+            <h3>Unduh Semua PDF (Zip)</h3>
+            <label className="iki-field">
+              <span>Tahun</span>
+              <select className="iki-filter" value={zipTahun} onChange={e => setZipTahun(e.target.value)} disabled={zipBusy}>
+                {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+            <label className="iki-field">
+              <span>Dokumen yang diikutkan</span>
+              <div className="iki-tpl">
+                <button type="button" className={`iki-tpl-opt${zipOnlyFinal ? ' on' : ''}`} onClick={() => setZipOnlyFinal(true)} disabled={zipBusy}>
+                  <b>Hanya FINAL</b><span>dokumen resmi yang sudah dikunci</span>
+                </button>
+                <button type="button" className={`iki-tpl-opt${!zipOnlyFinal ? ' on' : ''}`} onClick={() => setZipOnlyFinal(false)} disabled={zipBusy}>
+                  <b>Semua</b><span>DRAFT ikut, diberi prefix DRAFT_</span>
+                </button>
+              </div>
+            </label>
+            {zipBusy && <p className="iki-hint">Menyusun… {zipProgress}</p>}
+            <div className="iki-modal-actions">
+              <PrimaButton variant="ghost" size="sm" onClick={() => setShowZip(false)} disabled={zipBusy}>Batal</PrimaButton>
+              <PrimaButton variant="success" size="sm" onClick={handleZipExport} disabled={zipBusy}>{zipBusy ? 'Memproses…' : 'Unduh Zip'}</PrimaButton>
             </div>
           </div>
         </div>
