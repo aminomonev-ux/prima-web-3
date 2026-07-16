@@ -21,6 +21,7 @@ export const NAV_MODULES: NavModule[] = [
   { id: 'rencana_aksi',       label: 'Renaksi & Kinerja',  href: '/rencana-aksi',      aliases: ['rencana aksi', 'renaksi', 'renaksi & kinerja'] },
   { id: 'buku_besar_aset',    label: 'Buku Besar Aset',    href: '/buku-besar-aset',   aliases: ['buku besar aset', 'bba', 'belanja modal'] },
   { id: 'lkjip',              label: 'E-LKJIP',            href: '/lkjip',             aliases: ['lkjip', 'e-lkjip', 'laporan kinerja'] },
+  { id: 'iki',                label: 'IKI',                href: '/iki',               aliases: ['iki', 'indikator kinerja individu', 'kinerja individu'] },
   { id: 'admin',              label: 'Admin Panel',        href: '/admin',             aliases: ['admin panel', 'admin'], adminOnly: true },
 ]
 

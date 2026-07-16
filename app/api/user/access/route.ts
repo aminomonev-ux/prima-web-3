@@ -8,6 +8,7 @@ import { isPkRole } from '@/lib/data/pk-schemas';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { isLkjipRole } from '@/lib/lkjip/schemas';
 import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
+import { isIkiRole } from '@/lib/data/iki-schemas';
 
 // AC-1: per app card id → checker yang SAMA dengan guard halaman/API-nya,
 // supaya kunci di menu tidak pernah beda arti dengan satpam di belakang.
@@ -18,6 +19,7 @@ const APP_CHECKS: Array<[string, (role: string, appAccess: string[] | null) => b
   ['buku_besar_aset',    isAsetRole],
   ['lkjip',              isLkjipRole],
   ['rencana_aksi',       isRencanaAksiRole],
+  ['iki',                isIkiRole],
 ];
 
 export async function GET() {

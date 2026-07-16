@@ -46,6 +46,7 @@ const APP_STATUS_LABELS: Record<string,string> = {
   app_status_blud:              'BLUD',
   app_status_perjanjian_kinerja:'Perjanjian Kinerja',
   app_status_rencana_aksi:      'Renaksi & Kinerja',
+  app_status_iki:               'IKI',
   app_status_new_econtrolling:  'E-Anggaran',
   app_status_buku_besar_aset:  'Buku Besar Aset',
   app_status_sentinel_bot:      'RIMA — Seluruh Bot',
@@ -63,6 +64,7 @@ const APP_ACCESS_LIST = [
   { id:'new_econtrolling',   name:'E-Anggaran' },
   { id:'buku_besar_aset',    name:'Buku Besar Aset' },
   { id:'lkjip',              name:'LKJIP' },
+  { id:'iki',                name:'IKI (Indikator Kinerja Individu)' },
 ];
 
 function fmtTs(ts: string) {

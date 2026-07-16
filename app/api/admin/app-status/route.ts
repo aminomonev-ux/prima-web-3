@@ -11,6 +11,7 @@ const APP_KEYS = [
   'app_status_rencana_aksi',
   'app_status_new_econtrolling',
   'app_status_buku_besar_aset',
+  'app_status_iki',
   'app_status_sentinel_bot',   // RIMA F4g — kill switch global (SUPER_ADMIN). 'maintenance' = bot mati (chat+avatar).
   'app_status_rima_query',     // RIMA G30 — kill switch BACA-DATA saja. 'maintenance' = Q&A data mati, chat/tur tetap hidup.
 ];

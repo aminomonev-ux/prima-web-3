@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronDown, LogOut, Settings, User,
-  BarChart3, ClipboardList, FileText, BookText,
+  BarChart3, ClipboardList, ClipboardCheck, FileText, BookText,
   Handshake, Building2, ShieldCheck, ArrowRight, Lock,
   ArrowUpCircle, Clock, LayoutDashboard,
 } from 'lucide-react';
@@ -72,6 +72,17 @@ const APP_CARDS = [
     accentBg: 'rgba(124,92,252,0.12)',
     badge: 'LIVE',
     href: '/perjanjian-kinerja',
+    roles: null,
+  },
+  {
+    id: 'iki',
+    name: 'IKI',
+    desc: 'Indikator Kinerja Individu',
+    icon: ClipboardCheck,
+    accent: '#7C5CFC',
+    accentBg: 'rgba(124,92,252,0.12)',
+    badge: 'LIVE',
+    href: '/iki',
     roles: null,
   },
   {

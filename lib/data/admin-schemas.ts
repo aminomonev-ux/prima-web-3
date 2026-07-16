@@ -34,7 +34,7 @@ export const AssignableRoleEnum = z.enum(ASSIGNABLE_ROLES);
 export const AppAccessKeyEnum = z.enum([
   'dashboard', 'blud', 'rencana_aksi', 'perjanjian_kinerja',
   'usulan_aset', 'new_econtrolling', 'admin',
-  'buku_besar_aset', 'lkjip',
+  'buku_besar_aset', 'lkjip', 'iki',
 ]);
 
 // ─── User ID ────────────────────────────────────────────────────────────────
