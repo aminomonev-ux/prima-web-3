@@ -92,11 +92,19 @@ export async function createDokumen(input: {
     sql`SELECT id FROM iki_dokumen WHERE nip = ${input.nip} AND tahun = ${input.tahun} LIMIT 1`,
   );
   if (dup) throw new Error(`Dokumen IKI untuk NIP ${input.nip} tahun ${input.tahun} sudah ada.`);
-  const res = await execWrite(sql`
-    INSERT INTO iki_dokumen (tahun, varian, nama, nip, jabatan, created_by, updated_by)
-    VALUES (${input.tahun}, ${input.varian}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${userId}, ${userId})
-  `);
-  return res.insertId;
+  try {
+    const res = await execWrite(sql`
+      INSERT INTO iki_dokumen (tahun, varian, nama, nip, jabatan, created_by, updated_by)
+      VALUES (${input.tahun}, ${input.varian}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${userId}, ${userId})
+    `);
+    return res.insertId;
+  } catch (err) {
+    // Race SELECT→INSERT: UNIQUE uk_iki_nip_tahun penjaga terakhir → pesan ramah, bukan 500
+    if ((err as { code?: string }).code === 'ER_DUP_ENTRY') {
+      throw new Error(`Dokumen IKI untuk NIP ${input.nip} tahun ${input.tahun} sudah ada.`);
+    }
+    throw err;
+  }
 }
 
 export async function getDokumen(id: number): Promise<IkiDokumenDetail | null> {
@@ -164,6 +172,16 @@ export async function saveDokumen(id: number, input: SaveDokumenInput, userId: n
     );
     if (found.length !== renaksiIds.length) throw new Error('Sebagian referensi Rencana Aksi tidak ditemukan.');
   }
+  // L68: atasan_rhk_id hanya jejak; id RHK atasan berubah tiap save replace-all
+  // dokumen atasan, jadi referensi basi di-NULL-kan (bukan reject) agar save tidak macet
+  const atasanRhkIds = [...new Set(input.rhk.map(r => r.atasan_rhk_id).filter((v): v is number => !!v))];
+  const validAtasanRhk = new Set<number>();
+  if (atasanRhkIds.length) {
+    const found = await queryMany<{ id: number }>(
+      sql`SELECT id FROM iki_rhk WHERE id IN (${atasanRhkIds})`,
+    );
+    for (const f of found) validAtasanRhk.add(f.id);
+  }
 
   const newVersion = input.expected_version + 1;
   await withTransaction(async ({ tx, conn }) => {
@@ -199,7 +217,8 @@ export async function saveDokumen(id: number, input: SaveDokumenInput, userId: n
         r.rhk, r.aspek_a, r.aspek_b, r.aspek_c, r.indikator, r.target_tahunan,
         r.formulasi ?? null,
         input.varian === 'DIREKTUR' ? null : (r.ekspektasi ?? null),
-        r.renaksi_id ?? null, r.atasan_rhk_id ?? null, i,
+        r.renaksi_id ?? null,
+        r.atasan_rhk_id && validAtasanRhk.has(r.atasan_rhk_id) ? r.atasan_rhk_id : null, i,
       ]);
       await bulkInsert('iki_rhk', [
         'dokumen_id', 'no_urut', 'rhk_intervensi', 'rhk', 'aspek_a', 'aspek_b', 'aspek_c',
@@ -229,12 +248,13 @@ export async function saveDokumen(id: number, input: SaveDokumenInput, userId: n
 }
 
 export async function deleteDokumen(id: number): Promise<void> {
-  const current = await queryOne<{ status: string }>(
-    sql`SELECT status FROM iki_dokumen WHERE id = ${id} LIMIT 1`,
-  );
-  if (!current) throw new IkiNotFoundError();
-  if (current.status === 'FINAL') throw new IkiFinalError();
-  await sql`DELETE FROM iki_dokumen WHERE id = ${id}`;
+  // Anti-TOCTOU: guard FINAL di klausa DELETE (pola sama dgn finalizeDokumen)
+  const res = await execWrite(sql`DELETE FROM iki_dokumen WHERE id = ${id} AND status <> 'FINAL'`);
+  if (res.affectedRows === 0) {
+    const exists = await queryOne<{ id: number }>(sql`SELECT id FROM iki_dokumen WHERE id = ${id} LIMIT 1`);
+    if (!exists) throw new IkiNotFoundError();
+    throw new IkiFinalError();
+  }
 }
 
 export async function finalizeDokumen(id: number, expectedVersion: number, userId: number): Promise<void> {

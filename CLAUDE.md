@@ -48,7 +48,7 @@ Anti-pattern terbaru (2026-06-15): **L66** `sqlInt()` utk `LIMIT`/`OFFSET` (mysq
 - Setiap kolom/tabel baru: **WAJIB** tambahkan ke `docs/schema-mysql.sql` + buat `docs/migrations/migration-*.sql` (MySQL syntax, tanpa `IF NOT EXISTS` pada `ADD COLUMN`)
 - Client fetch: pisah `fetch()` dan `.json()`, bungkus try/catch
 - **Multi-statement write WAJIB `withTransaction`** (CQ-01/V5): setiap INSERT/UPDATE/DELETE >1 statement yang harus all-or-nothing dibungkus `withTransaction({tx,conn})` + `bulkInsert`; recompute turunan (mis. `updateHeaderStats`) setelah commit. Jangan loop `await sql` lepas.
-- **Modul kolaboratif tanpa ownership per-record** (AUTHZ-02/V5): BLUD/Kinerja/LKJIP/BBA/Rencana-Aksi sengaja akses berbasis role+`app_access` (semua pemegang akses bisa edit semua record) — BUKAN IDOR. Konsekuensinya: pemberian `app_access` harus konservatif & direview berkala. Modul yang butuh batasan sub-bidang (mis. unduh file Usulan) menerapkan scoping eksplisit (lihat `upload/download/route.ts`).
+- **Modul kolaboratif tanpa ownership per-record** (AUTHZ-02/V5): BLUD/Kinerja/LKJIP/BBA/Rencana-Aksi/IKI sengaja akses berbasis role+`app_access` (semua pemegang akses bisa edit semua record) — BUKAN IDOR. Konsekuensinya: pemberian `app_access` harus konservatif & direview berkala. Modul yang butuh batasan sub-bidang (mis. unduh file Usulan) menerapkan scoping eksplisit (lihat `upload/download/route.ts`).
 
 ## 🚨 WAJIB — Comment Style (Minimal Comments)
 

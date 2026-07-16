@@ -49,10 +49,13 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ ok: true, id });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Terjadi kesalahan server.';
-    const isDup = message.includes('sudah ada');
+    const isDup = err instanceof Error && err.message.includes('sudah ada');
     if (!isDup) console.error('[IKI POST Error]', err);
-    return NextResponse.json({ ok: false, message }, { status: isDup ? 409 : 500 });
+    // Jangan bocorkan err.message mentah (bisa berisi pesan MySQL) ke klien
+    return NextResponse.json(
+      { ok: false, message: isDup ? (err as Error).message : 'Terjadi kesalahan server.' },
+      { status: isDup ? 409 : 500 },
+    );
   }
 }
 
