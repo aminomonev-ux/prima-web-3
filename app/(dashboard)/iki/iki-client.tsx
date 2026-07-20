@@ -11,6 +11,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { stripGolongan } from '@/lib/iki/layout';
+import { pejabatOptionValue, resolvePejabat } from './_lib/types';
 import type { IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
 
 interface Props {
@@ -53,7 +54,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
   }, [showCreate, form.tahun]);
 
   function pickPejabat(nama: string) {
-    const p = pejabat.find(x => x.nama === nama);
+    const p = resolvePejabat(nama, pejabat);
     // Non-match = ketik manual → pangkat bawaan suggest sebelumnya di-reset biar tidak nyasar
     if (!p) { setForm(f => ({ ...f, nama, pangkat: '' })); return; }
     setForm(f => ({
@@ -288,7 +289,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
                 onChange={e => pickPejabat(e.target.value)}
                 placeholder={pejabat.length > 0 ? 'ketik nama — pilih dari Master Pejabat PK' : 'dr. FULAN, M.Kes'} />
               <datalist id="iki-create-pejabat">
-                {pejabat.map((p, i) => <option key={i} value={p.nama}>{p.jabatan}</option>)}
+                {pejabat.map((p, i) => <option key={i} value={pejabatOptionValue(p)} />)}
               </datalist>
               {pejabat.length > 0 && (
                 <span className="iki-suggest-hint">✦ {pejabat.length} pejabat tersedia dari Master Pejabat PK tahun {form.tahun} — pilih nama untuk isi NIP + jabatan otomatis</span>

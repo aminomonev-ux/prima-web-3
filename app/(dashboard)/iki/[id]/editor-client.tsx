@@ -22,6 +22,7 @@ import {
   type IkiDokumen, type IkiRhk, type IkiListRow, type PejabatSuggest,
   type RenaksiImportRow, type AtasanRhkRow,
   ASPEK_B_OPTIONS, ASPEK_C_OPTIONS, emptyRhk, emptyTriwulan,
+  pejabatOptionValue, resolvePejabat,
 } from '../_lib/types';
 
 interface Props {
@@ -352,11 +353,11 @@ export default function EditorClient({ username, role, themePreference, initialD
             </label>
             <label className="iki-f"><span>Nama (+ gelar)</span>
               <input value={doc.nama} disabled={readOnly} list="iki-pejabat-nama" onChange={e => {
-                const p = pejabat.find(x => x.nama === e.target.value);
+                const p = resolvePejabat(e.target.value, pejabat);
                 if (p) applyPejabat(p, 'diri'); else patchDoc({ nama: e.target.value });
               }} />
               <datalist id="iki-pejabat-nama">
-                {pejabat.map((p, i) => <option key={i} value={p.nama}>{p.jabatan}</option>)}
+                {pejabat.map((p, i) => <option key={i} value={pejabatOptionValue(p)} />)}
               </datalist>
             </label>
             <label className="iki-f"><span>NIP</span>
@@ -404,11 +405,11 @@ export default function EditorClient({ username, role, themePreference, initialD
               </label>
               <label className="iki-f"><span>Nama Atasan</span>
                 <input value={doc.nama_atasan ?? ''} disabled={readOnly} list="iki-pejabat-atasan" onChange={e => {
-                  const p = pejabat.find(x => x.nama === e.target.value);
+                  const p = resolvePejabat(e.target.value, pejabat);
                   if (p) applyPejabat(p, 'atasan'); else patchDoc({ nama_atasan: e.target.value || null });
                 }} />
                 <datalist id="iki-pejabat-atasan">
-                  {pejabat.map((p, i) => <option key={i} value={p.nama}>{p.jabatan}</option>)}
+                  {pejabat.map((p, i) => <option key={i} value={pejabatOptionValue(p)} />)}
                 </datalist>
               </label>
               <label className="iki-f"><span>NIP Atasan</span>

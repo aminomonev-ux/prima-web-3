@@ -99,6 +99,23 @@ export type AtasanRhkRow = {
   aspek_b: IkiAspekB;
 };
 
+/** Label option datalist — unik per orang+jabatan (1 orang bisa 2 jabatan: asli + Plt.) */
+export function pejabatOptionValue(p: PejabatSuggest): string {
+  return `${p.nama} — ${p.jabatan}`;
+}
+
+/**
+ * Resolve input datalist → pejabat. Tahap 1: match "NAMA — JABATAN" persis
+ * (klik dari dropdown). Tahap 2: nama polos, HANYA kalau kandidat tunggal —
+ * nama ganda (kasus Plt.) tidak ditebak, biar user memilih dari dropdown.
+ */
+export function resolvePejabat(input: string, pejabat: PejabatSuggest[]): PejabatSuggest | null {
+  const byCombo = pejabat.find(p => pejabatOptionValue(p) === input);
+  if (byCombo) return byCombo;
+  const byName = pejabat.filter(p => p.nama === input);
+  return byName.length === 1 ? byName[0] : null;
+}
+
 export function emptyTriwulan(): IkiTriwulan[] {
   return [1, 2, 3, 4].map(t => ({ triwulan: t as 1 | 2 | 3 | 4, target_tw: '0', uraian: null, target_aksi: '0' }));
 }
