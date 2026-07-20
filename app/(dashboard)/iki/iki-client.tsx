@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ClipboardCheck, Copy, FileText, FolderDown, Plus, LayoutGrid, RefreshCw } from 'lucide-react';
@@ -10,7 +10,7 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
-import type { IkiListRow, IkiVarian } from './_lib/types';
+import type { IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
 
 interface Props {
   username: string;
@@ -33,6 +33,34 @@ export default function IkiClient({ username, role, themePreference, initialRows
     nip: '',
     jabatan: '',
   });
+
+  // Suggest dari pk_pejabat (Master Pejabat PK) — pola sama dengan editor,
+  // best-effort: gagal fetch = form tetap manual.
+  const [pejabat, setPejabat] = useState<PejabatSuggest[]>([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!showCreate || !/^\d{4}$/.test(form.tahun)) { if (alive) setPejabat([]); return; }
+      try {
+        const res = await fetch(`/api/iki/pejabat?tahun=${form.tahun}`);
+        const json = await res.json();
+        if (alive && json.ok) setPejabat(json.rows ?? []);
+      } catch { /* suggest opsional */ }
+    })();
+    return () => { alive = false; };
+  }, [showCreate, form.tahun]);
+
+  function pickPejabat(nama: string) {
+    const p = pejabat.find(x => x.nama === nama);
+    if (!p) { setForm(f => ({ ...f, nama })); return; }
+    setForm(f => ({
+      ...f,
+      nama: p.nama,
+      nip: p.nip ?? f.nip,
+      jabatan: p.jabatan || f.jabatan,
+      varian: p.jabatan?.trim().toUpperCase() === 'DIREKTUR' ? 'DIREKTUR' : f.varian,
+    }));
+  }
 
   const tahunList = [...new Set(rows.map(r => r.tahun))].sort().reverse();
   const [filterTahun, setFilterTahun] = useState<string>('');
@@ -252,7 +280,15 @@ export default function IkiClient({ username, role, themePreference, initialRows
             </label>
             <label className="iki-field">
               <span>Nama Pejabat (+ gelar)</span>
-              <input value={form.nama} onChange={e => setForm(f => ({ ...f, nama: e.target.value }))} placeholder="dr. FULAN, M.Kes" />
+              <input value={form.nama} list="iki-create-pejabat"
+                onChange={e => pickPejabat(e.target.value)}
+                placeholder={pejabat.length > 0 ? 'ketik nama — pilih dari Master Pejabat PK' : 'dr. FULAN, M.Kes'} />
+              <datalist id="iki-create-pejabat">
+                {pejabat.map((p, i) => <option key={i} value={p.nama}>{p.jabatan}</option>)}
+              </datalist>
+              {pejabat.length > 0 && (
+                <span className="iki-suggest-hint">✦ {pejabat.length} pejabat tersedia dari Master Pejabat PK tahun {form.tahun} — pilih nama untuk isi NIP + jabatan otomatis</span>
+              )}
             </label>
             <label className="iki-field">
               <span>NIP</span>
@@ -365,6 +401,7 @@ const LIST_CSS = `
   .iki-field input { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 9px 11px; color: #E6F1FB; font-size: 13px; }
   .iki-field input:focus { outline: none; border-color: #185FA5; }
   .iki-hint { font-size: 11.5px; color: #85B7EB; line-height: 1.5; margin: 0 0 18px; }
+  .iki-suggest-hint { font-size: 10.5px; color: #7BE0BD; line-height: 1.4; }
   .iki-tpl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .iki-tpl-opt { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 9px 11px; background: #020F1C; border: 1px solid #0C447C; border-radius: 8px; color: #B5D4F4; cursor: pointer; transition: border-color .15s, background .15s; }
   .iki-tpl-opt b { font-size: 12.5px; color: #E6F1FB; }
@@ -391,6 +428,7 @@ const LIST_CSS = `
   [data-theme="light"] .iki-empty p { color: #374151; }
   [data-theme="light"] .iki-modal { background: #FFFFFF; border-color: rgba(0,0,0,.1); }
   [data-theme="light"] .iki-field, [data-theme="light"] .iki-hint { color: #6B7280; }
+  [data-theme="light"] .iki-suggest-hint { color: #0F8A63; }
   [data-theme="light"] .iki-field input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
   [data-theme="light"] .iki-tpl-opt { background: #F9FAFB; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .iki-tpl-opt b { color: #111827; }
