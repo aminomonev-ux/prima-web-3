@@ -11,6 +11,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { stripGolongan } from '@/lib/iki/layout';
+import ImportIkiModal from './ImportIkiModal';
 import { pejabatOptionValue, resolvePejabat } from './_lib/types';
 import type { IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
 
@@ -27,6 +28,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
   const isLight = theme === 'light';
   const [rows, setRows] = useState<IkiListRow[]>(initialRows);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImportExcel, setShowImportExcel] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     tahun: String(new Date().getFullYear()),
@@ -217,6 +219,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
                 Unduh Semua (Zip)
               </PrimaButton>
             )}
+            <PrimaButton variant="success" iconLeft={<FileText size={16} />} onClick={() => setShowImportExcel(true)}>Import Excel</PrimaButton>
             <PrimaButton variant="purple" iconLeft={<Plus size={16} />} onClick={() => setShowCreate(true)}>Buat IKI</PrimaButton>
           </div>
         </div>
@@ -262,6 +265,14 @@ export default function IkiClient({ username, role, themePreference, initialRows
           { icon: <RefreshCw size={17} />, label: 'Muat Ulang', onClick: () => void load() },
         ]}
       />
+
+      {showImportExcel && (
+        <ImportIkiModal
+          rows={rows}
+          onClose={() => setShowImportExcel(false)}
+          onDone={(id) => { setShowImportExcel(false); router.push(`/iki/${id}`); }}
+        />
+      )}
 
       {showCreate && (
         <div className="iki-modal-bg" onClick={() => !busy && setShowCreate(false)}>

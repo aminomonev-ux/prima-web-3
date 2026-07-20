@@ -1095,7 +1095,7 @@ CREATE TABLE IF NOT EXISTS iki_dokumen (
   updated_by        INT NULL,
   created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_iki_nip_tahun (nip, tahun),
+  UNIQUE KEY uk_iki_nip_tahun_jabatan (nip, tahun, jabatan),
   INDEX idx_iki_tahun_status (tahun, status),
   CONSTRAINT fk_iki_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_iki_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE

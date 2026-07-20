@@ -116,6 +116,41 @@ export function resolvePejabat(input: string, pejabat: PejabatSuggest[]): Pejaba
   return byName.length === 1 ? byName[0] : null;
 }
 
+// Fuzzy match jabatan teks bebas → pejabat Master PK (client-safe, tanpa import server).
+// Sinonim struktural sama dengan matcher import Master Pejabat (Kabag=Kepala Bagian, dst).
+function jabatanTokens(s: string): Set<string> {
+  let t = ' ' + s.toLowerCase() + ' ';
+  t = t
+    .replace(/\bkepala\s+sub\s*bagian\b/g, ' kasubbag ')
+    .replace(/\bkasubag\b/g, ' kasubbag ')
+    .replace(/\bkepala\s+bagian\b/g, ' kabag ')
+    .replace(/\bkepala\s+bidang\b/g, ' kabid ')
+    .replace(/\bkepala\s+seksi\b/g, ' kasi ')
+    .replace(/\bkasie\b/g, ' kasi ')
+    .replace(/\bwakil\s+direktur\b/g, ' wadir ')
+    .replace(/\bplt\.?\b/g, ' plt ')
+    .replace(/\btata\s+usaha\b/g, ' tu ')
+    .replace(/\bhubungan\s+masyarakat\b/g, ' humas ');
+  t = t.replace(/[^a-z0-9]+/g, ' ');
+  return new Set(t.split(' ').filter(w => w && w !== 'dan'));
+}
+
+export function matchPejabatByJabatan(jabatan: string, list: PejabatSuggest[]): { p: PejabatSuggest; score: number } | null {
+  const t = jabatanTokens(jabatan);
+  if (t.size === 0) return null;
+  let best: PejabatSuggest | null = null;
+  let bestScore = 0;
+  for (const p of list) {
+    const pt = jabatanTokens(p.jabatan);
+    if (pt.size === 0) continue;
+    let inter = 0;
+    for (const w of t) if (pt.has(w)) inter++;
+    const s = (2 * inter) / (t.size + pt.size);
+    if (s > bestScore) { bestScore = s; best = p; }
+  }
+  return best && bestScore >= 0.6 ? { p: best, score: bestScore } : null;
+}
+
 export function emptyTriwulan(): IkiTriwulan[] {
   return [1, 2, 3, 4].map(t => ({ triwulan: t as 1 | 2 | 3 | 4, target_tw: '0', uraian: null, target_aksi: '0' }));
 }

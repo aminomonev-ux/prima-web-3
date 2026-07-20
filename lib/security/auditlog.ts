@@ -42,6 +42,7 @@ export type AuditEventType =
   | 'IKI_UNFINALIZE'
   | 'IKI_IMPORT_RENAKSI'
   | 'IKI_IMPORT_ATASAN'
+  | 'IKI_IMPORT_EXCEL'        // POST /api/iki/import-excel (preview parse file — bulk PII)
   | 'IKI_DOWNLOAD'
   | 'IKI_RESTORE_VERSI'
   | 'PASSWORD_RESET'

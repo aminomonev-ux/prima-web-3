@@ -100,10 +100,11 @@ export async function createDokumen(input: {
   tahun: string; varian: 'STANDAR' | 'DIREKTUR';
   nama: string; nip: string; jabatan: string; pangkat?: string | null;
 }, userId: number): Promise<number> {
+  // UNIQUE (nip, tahun, jabatan) — 1 orang boleh dokumen per jabatan (kasus Plt.)
   const dup = await queryOne<{ id: number }>(
-    sql`SELECT id FROM iki_dokumen WHERE nip = ${input.nip} AND tahun = ${input.tahun} LIMIT 1`,
+    sql`SELECT id FROM iki_dokumen WHERE nip = ${input.nip} AND tahun = ${input.tahun} AND jabatan = ${input.jabatan} LIMIT 1`,
   );
-  if (dup) throw new Error(`Dokumen IKI untuk NIP ${input.nip} tahun ${input.tahun} sudah ada.`);
+  if (dup) throw new Error(`Dokumen IKI untuk NIP ${input.nip} jabatan ${input.jabatan} tahun ${input.tahun} sudah ada.`);
   try {
     const res = await execWrite(sql`
       INSERT INTO iki_dokumen (tahun, varian, nama, nip, jabatan, pangkat, created_by, updated_by)
@@ -111,9 +112,9 @@ export async function createDokumen(input: {
     `);
     return res.insertId;
   } catch (err) {
-    // Race SELECT→INSERT: UNIQUE uk_iki_nip_tahun penjaga terakhir → pesan ramah, bukan 500
+    // Race SELECT→INSERT: UNIQUE uk_iki_nip_tahun_jabatan penjaga terakhir → pesan ramah, bukan 500
     if ((err as { code?: string }).code === 'ER_DUP_ENTRY') {
-      throw new Error(`Dokumen IKI untuk NIP ${input.nip} tahun ${input.tahun} sudah ada.`);
+      throw new Error(`Dokumen IKI untuk NIP ${input.nip} jabatan ${input.jabatan} tahun ${input.tahun} sudah ada.`);
     }
     throw err;
   }
@@ -177,9 +178,9 @@ export async function duplicateDokumen(id: number, tahunTarget: string, userId: 
   if (!src) throw new IkiNotFoundError();
   if (src.tahun === tahunTarget) throw new Error('Tahun tujuan sama dengan tahun sumber.');
   const dup = await queryOne<{ id: number }>(
-    sql`SELECT id FROM iki_dokumen WHERE nip = ${src.nip} AND tahun = ${tahunTarget} LIMIT 1`,
+    sql`SELECT id FROM iki_dokumen WHERE nip = ${src.nip} AND tahun = ${tahunTarget} AND jabatan = ${src.jabatan} LIMIT 1`,
   );
-  if (dup) throw new Error(`Dokumen IKI untuk NIP ${src.nip} tahun ${tahunTarget} sudah ada.`);
+  if (dup) throw new Error(`Dokumen IKI untuk NIP ${src.nip} jabatan ${src.jabatan} tahun ${tahunTarget} sudah ada.`);
 
   let atasanTarget: number | null = null;
   if (src.atasan_dokumen_id) {
