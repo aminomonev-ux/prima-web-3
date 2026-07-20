@@ -105,10 +105,20 @@ export async function POST(req: NextRequest) {
 
   let insertedCount = 0;
   let updatedCount  = 0;
+  const renames: Array<{ from: string; to: string }> = [];
 
   await withTransaction(async ({ tx, conn }) => {
     for (const u of units) {
       if (u.id) {
+        // Deteksi rename → cascade referensi string (pk_pejabat + mapping BLUD).
+        // FOR UPDATE: kunci row biar nama lama tidak berubah di bawah kaki (anti-TOCTOU).
+        const existing = await tx`
+          SELECT nama_unit FROM pk_unit_kerja WHERE id = ${u.id} FOR UPDATE
+        ` as { nama_unit: string }[];
+        const oldName = existing[0]?.nama_unit;
+        if (oldName && oldName !== u.nama_unit.trim()) {
+          renames.push({ from: oldName, to: u.nama_unit.trim() });
+        }
         await tx`
           UPDATE pk_unit_kerja SET
             nama_unit             = ${u.nama_unit.trim()},
@@ -130,6 +140,14 @@ export async function POST(req: NextRequest) {
         `;
         insertedCount += 1;
       }
+    }
+
+    // Cascade rename: pk_pejabat (semua tahun — data referensi hidup) ikut nama baru.
+    // pk_dokumen sengaja TIDAK disentuh (snapshot arsip — nama lama benar historis).
+    // Mapping BLUD nama lama dihapus (payload sudah bawa set lengkap di nama baru).
+    for (const r of renames) {
+      await tx`UPDATE pk_pejabat SET unit_kerja = ${r.to} WHERE unit_kerja = ${r.from}`;
+      await tx`DELETE FROM pk_unit_kerja_blud_pj WHERE unit_pk = ${r.from}`;
     }
 
     // Replace BLUD mapping per-unit (preserve mapping untuk unit lain)
@@ -155,7 +173,8 @@ export async function POST(req: NextRequest) {
     eventType: 'PK_SAVE_UNIT_KERJA',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Save Master Unit Kerja: ${updatedCount} updated, ${insertedCount} inserted, ${bludMapping.length} BLUD mappings`,
+    detail:    `Save Master Unit Kerja: ${updatedCount} updated, ${insertedCount} inserted, ${bludMapping.length} BLUD mappings`
+               + (renames.length ? `, rename: ${renames.map(r => `"${r.from}"→"${r.to}"`).join(', ')}` : ''),
   });
 
   return NextResponse.json({

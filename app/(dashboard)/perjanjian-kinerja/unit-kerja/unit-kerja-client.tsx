@@ -8,6 +8,7 @@ import {
   ShieldCheck, RefreshCw, AlertCircle, Plus, Save, CheckCircle2, RotateCcw, X,
 } from 'lucide-react'
 import { fetchJson } from '@/lib/shared/api'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { useAbortableEffect } from '@/lib/shared/hooks'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
 import PrimaNumberField from '@/components/ui/PrimaNumberField'
@@ -88,8 +89,28 @@ export default function UnitKerjaClient() {
   }, [reloadKey])
 
   const updateField = useCallback(<K extends keyof PkUnitKerja>(idx: number, key: K, val: PkUnitKerja[K]) => {
+    // Rename cascade: semua relasi pakai string nama unit — atasan_default baris lain
+    // + key mapping BLUD PJ ikut di-rename supaya tidak jadi referensi yatim.
+    if (key === 'nama_unit') {
+      const oldName = units[idx]?.nama_unit ?? ''
+      const newName = String(val)
+      setUnits(prev => prev.map((u, i) =>
+        i === idx ? { ...u, nama_unit: newName, _dirty: true }
+        : (oldName && u.atasan_default === oldName) ? { ...u, atasan_default: newName, _dirty: true }
+        : u))
+      if (oldName && oldName !== newName) {
+        setMapping(prev => {
+          if (!prev[oldName]) return prev
+          const next = { ...prev }
+          next[newName] = next[oldName]
+          delete next[oldName]
+          return next
+        })
+      }
+      return
+    }
     setUnits(prev => prev.map((u, i) => i === idx ? { ...u, [key]: val, _dirty: true } : u))
-  }, [])
+  }, [units])
 
   const addRow = useCallback(() => {
     setUnits(prev => [...prev, emptyUnit(prev.length + 10)])
@@ -149,8 +170,12 @@ export default function UnitKerjaClient() {
     }
 
     setSaving(true)
+    // Mapping yatim (key tidak match unit mana pun — sisa rename lama) dibuang,
+    // kalau ikut dikirim server tolak 400 "tidak terdaftar di payload".
     const bludMappingArr: Array<{ unit_pk: string; blud_pj_label: string }> = []
+    let orphanCount = 0
     for (const [unitPk, labelSet] of Object.entries(mapping)) {
+      if (!names.has(unitPk.trim())) { orphanCount += labelSet.size; continue }
       for (const label of labelSet) bludMappingArr.push({ unit_pk: unitPk, blud_pj_label: label })
     }
     const payload = {
@@ -172,7 +197,8 @@ export default function UnitKerjaClient() {
     setSaving(false)
     if (d.ok) {
       const r = d as unknown as { updated: number; inserted: number; mappings: number }
-      showToast('ok', `Tersimpan: ${r.updated} updated, ${r.inserted} baru, ${r.mappings} mapping BLUD`)
+      showToast('ok', `Tersimpan: ${r.updated} updated, ${r.inserted} baru, ${r.mappings} mapping BLUD`
+        + (orphanCount > 0 ? ` (${orphanCount} mapping yatim dibuang)` : ''))
       setReloadKey(k => k + 1)
     } else {
       showToast('err', d.message)
@@ -317,7 +343,7 @@ export default function UnitKerjaClient() {
                         <button
                           onClick={() => setMappingModalUnit(u.nama_unit)}
                           disabled={!u.active || !u.nama_unit.trim()}
-                          data-tooltip={u.nama_unit ? 'Atur mapping BLUD PJ' : 'Isi nama unit dulu'}
+                          data-tooltip={u.nama_unit ? `${mappingCount} label PJ untuk agregasi auto-fill nominal — bukan data DPA BLUD` : 'Isi nama unit dulu'}
                           data-tooltip-pos="left"
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -424,6 +450,21 @@ export default function UnitKerjaClient() {
               })}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+              {modalLabels.size > 0 && (
+                <PrimaButton variant="danger" onClick={async () => {
+                  const unitPk = mappingModalUnit
+                  if (!unitPk) return
+                  if (!(await confirmDialog({
+                    title: 'Kosongkan Mapping BLUD PJ',
+                    message: `Hapus ${modalLabels.size} label PJ dari unit "${unitPk}"? Auto-fill nominal BLUD untuk unit ini akan berhenti. Perubahan tersimpan setelah klik Simpan.`,
+                    variant: 'danger',
+                  }))) return
+                  setMapping(prev => ({ ...prev, [unitPk]: new Set() }))
+                  setMappingDirty(true)
+                }}>
+                  Kosongkan Semua
+                </PrimaButton>
+              )}
               <PrimaButton variant="primary" onClick={() => setMappingModalUnit(null)}>
                 Selesai ({modalLabels.size})
               </PrimaButton>
