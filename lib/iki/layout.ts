@@ -129,6 +129,10 @@ export function buildIkiGrid(doc: IkiGridDokumen): IkiGrid {
   const sortedGroups = [...groups.entries()].sort((a, b) => a[0] - b[0]);
   for (const [noUrut, rhkList] of sortedGroups) {
     const groupRows = rhkList.length * 4;
+    // Auto-merge kolom RHK se-grup kalau seluruh teksnya identik (pola dokumen
+    // manual Direktur: 1 nomor + 1 RHK + banyak indikator). Teks beda = merge per-RHK.
+    const rhkNorm = rhkList.map(r => r.rhk.replace(/\s+/g, ' ').trim());
+    const mergeRhk = rhkList.length > 1 && rhkNorm[0] !== '' && rhkNorm.every(t => t === rhkNorm[0]);
     rhkList.forEach((r, ri) => {
       const tws = [...r.triwulan].sort((a, b) => a.triwulan - b.triwulan);
       for (let ti = 0; ti < 4; ti++) {
@@ -146,7 +150,12 @@ export function buildIkiGrid(doc: IkiGridDokumen): IkiGrid {
 
         // Kolom per-RHK hanya di baris TW pertama RHK itu
         if (ti === 0) {
-          row.push({ text: r.rhk, rowSpan: 4, valign: 'top' });
+          if (mergeRhk) {
+            if (ri === 0) row.push({ text: r.rhk, rowSpan: groupRows, valign: 'top' });
+            else row.push(null);
+          } else {
+            row.push({ text: r.rhk, rowSpan: 4, valign: 'top' });
+          }
           row.push({ text: aspekText(r), rowSpan: 4, valign: 'top' });
           row.push({ text: r.indikator, rowSpan: 4, valign: 'top' });
           row.push({ text: r.target_tahunan, rowSpan: 4, align: 'center', valign: 'top' });
