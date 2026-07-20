@@ -10,6 +10,7 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
+import { stripGolongan } from '@/lib/iki/layout';
 import type { IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
 
 interface Props {
@@ -32,6 +33,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
     nama: '',
     nip: '',
     jabatan: '',
+    pangkat: '',
   });
 
   // Suggest dari pk_pejabat (Master Pejabat PK) — pola sama dengan editor,
@@ -52,12 +54,14 @@ export default function IkiClient({ username, role, themePreference, initialRows
 
   function pickPejabat(nama: string) {
     const p = pejabat.find(x => x.nama === nama);
-    if (!p) { setForm(f => ({ ...f, nama })); return; }
+    // Non-match = ketik manual → pangkat bawaan suggest sebelumnya di-reset biar tidak nyasar
+    if (!p) { setForm(f => ({ ...f, nama, pangkat: '' })); return; }
     setForm(f => ({
       ...f,
       nama: p.nama,
       nip: p.nip ?? f.nip,
       jabatan: p.jabatan || f.jabatan,
+      pangkat: stripGolongan(p.pangkat),
       varian: p.jabatan?.trim().toUpperCase() === 'DIREKTUR' ? 'DIREKTUR' : f.varian,
     }));
   }

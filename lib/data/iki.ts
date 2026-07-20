@@ -98,7 +98,7 @@ export async function listDokumen(tahun?: string) {
 
 export async function createDokumen(input: {
   tahun: string; varian: 'STANDAR' | 'DIREKTUR';
-  nama: string; nip: string; jabatan: string;
+  nama: string; nip: string; jabatan: string; pangkat?: string | null;
 }, userId: number): Promise<number> {
   const dup = await queryOne<{ id: number }>(
     sql`SELECT id FROM iki_dokumen WHERE nip = ${input.nip} AND tahun = ${input.tahun} LIMIT 1`,
@@ -106,8 +106,8 @@ export async function createDokumen(input: {
   if (dup) throw new Error(`Dokumen IKI untuk NIP ${input.nip} tahun ${input.tahun} sudah ada.`);
   try {
     const res = await execWrite(sql`
-      INSERT INTO iki_dokumen (tahun, varian, nama, nip, jabatan, created_by, updated_by)
-      VALUES (${input.tahun}, ${input.varian}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${userId}, ${userId})
+      INSERT INTO iki_dokumen (tahun, varian, nama, nip, jabatan, pangkat, created_by, updated_by)
+      VALUES (${input.tahun}, ${input.varian}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${input.pangkat || null}, ${userId}, ${userId})
     `);
     return res.insertId;
   } catch (err) {

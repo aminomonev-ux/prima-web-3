@@ -83,6 +83,7 @@ export const CreateDokumenSchema = z.object({
   nama: z.string().trim().min(1, 'Nama wajib').max(255),
   nip: z.string().trim().min(1, 'NIP wajib').max(50),
   jabatan: z.string().trim().min(1, 'Jabatan wajib').max(255),
+  pangkat: z.string().trim().max(100).nullable().optional(),
 });
 
 // ─── Save dokumen (header + seluruh RHK, replace-all) ────────────────────────

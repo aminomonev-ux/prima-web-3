@@ -203,6 +203,11 @@ export function tanggalIndo(iso: string | null): string {
 
 export type TtdBlock = { lines: string[]; nama: string; pangkat: string; nip: string };
 
+/** Buang golongan "(IV/b)" dst — TTD & form cukup nama pangkat (keputusan 2026-07-20). */
+export function stripGolongan(pangkat: string | null | undefined): string {
+  return (pangkat ?? '').replace(/\s*\(\s*[IVX]+\s*\/\s*[a-e]\s*\)/gi, '').replace(/\s+/g, ' ').trim();
+}
+
 /** Blok tanda tangan per varian (docs/CONCEPT-iki.md §2.4). */
 export function buildTtd(doc: IkiGridDokumen): { kiri: TtdBlock | null; kanan: TtdBlock } {
   const tgl = tanggalIndo(doc.tanggal_ttd);
@@ -212,7 +217,7 @@ export function buildTtd(doc: IkiGridDokumen): { kiri: TtdBlock | null; kanan: T
       kanan: {
         lines: [`Mengetahui, ${tgl}`.trim().replace(/,\s*$/, ','), doc.jabatan, doc.opd],
         nama: doc.nama,
-        pangkat: doc.pangkat ?? '',
+        pangkat: stripGolongan(doc.pangkat),
         nip: `NIP. ${doc.nip}`,
       },
     };
@@ -221,13 +226,13 @@ export function buildTtd(doc: IkiGridDokumen): { kiri: TtdBlock | null; kanan: T
     kiri: {
       lines: ['Mengetahui', doc.jabatan_atasan ?? ''],
       nama: doc.nama_atasan ?? '',
-      pangkat: doc.pangkat_atasan ?? '',
+      pangkat: stripGolongan(doc.pangkat_atasan),
       nip: doc.nip_atasan ? `NIP. ${doc.nip_atasan}` : '',
     },
     kanan: {
       lines: [`${doc.kota_ttd}, ${tgl}`.replace(/,\s*$/, ','), doc.jabatan],
       nama: doc.nama,
-      pangkat: doc.pangkat ?? '',
+      pangkat: stripGolongan(doc.pangkat),
       nip: `NIP. ${doc.nip}`,
     },
   };

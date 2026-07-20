@@ -11,6 +11,7 @@ import {
   AlertTriangle, History,
 } from 'lucide-react';
 import { validateRhkTargets } from '@/lib/iki/validate';
+import { stripGolongan } from '@/lib/iki/layout';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -144,10 +145,11 @@ export default function EditorClient({ username, role, themePreference, initialD
   }
 
   function applyPejabat(p: PejabatSuggest, target: 'diri' | 'atasan') {
+    const pangkat = stripGolongan(p.pangkat) || null;
     if (target === 'diri') {
-      patchDoc({ nama: p.nama, nip: p.nip ?? '', jabatan: p.jabatan, pangkat: p.pangkat });
+      patchDoc({ nama: p.nama, nip: p.nip ?? '', jabatan: p.jabatan, pangkat });
     } else {
-      patchDoc({ nama_atasan: p.nama, nip_atasan: p.nip ?? '', jabatan_atasan: p.jabatan, pangkat_atasan: p.pangkat });
+      patchDoc({ nama_atasan: p.nama, nip_atasan: p.nip ?? '', jabatan_atasan: p.jabatan, pangkat_atasan: pangkat });
     }
   }
 
