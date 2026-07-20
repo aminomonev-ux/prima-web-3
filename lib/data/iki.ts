@@ -79,7 +79,7 @@ export type IkiVersiMeta = {
 export async function listDokumen(tahun?: string) {
   const rows = tahun
     ? await sql`
-        SELECT d.id, d.tahun, d.varian, d.nama, d.nip, d.jabatan, d.status, d.version,
+        SELECT d.id, d.tahun, d.varian, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
                d.updated_at, COUNT(r.id) AS jumlah_rhk
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id
@@ -87,7 +87,7 @@ export async function listDokumen(tahun?: string) {
         GROUP BY d.id
         ORDER BY d.tahun DESC, d.varian = 'DIREKTUR' DESC, d.jabatan ASC`
     : await sql`
-        SELECT d.id, d.tahun, d.varian, d.nama, d.nip, d.jabatan, d.status, d.version,
+        SELECT d.id, d.tahun, d.varian, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
                d.updated_at, COUNT(r.id) AS jumlah_rhk
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id

@@ -15,6 +15,7 @@ export type IkiListRow = {
   nama: string;
   nip: string;
   jabatan: string;
+  pangkat: string | null;
   status: 'DRAFT' | 'FINAL';
   version: number;
   updated_at: string;

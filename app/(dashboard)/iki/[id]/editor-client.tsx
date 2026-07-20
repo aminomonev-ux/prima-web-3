@@ -105,12 +105,21 @@ export default function EditorClient({ username, role, themePreference, initialD
   const targetWarnings = useMemo(() => validateRhkTargets(doc.rhk), [doc.rhk]);
   const warnByGroup = useMemo(() => new Set(targetWarnings.map(w => w.no_urut)), [targetWarnings]);
 
-  function nextNoUrut() {
-    return doc.rhk.length ? Math.max(...doc.rhk.map(r => r.no_urut)) + 1 : 1;
-  }
+  // No grup dihitung DI DALAM functional updater — nextNoUrut dari closure doc
+  // stale kalau dipanggil beruntun dalam 1 event (bug import: semua jadi 1 grup).
   function addGroup(prefill?: Partial<IkiRhk>) {
-    const no = nextNoUrut();
-    setDoc(d => ({ ...d, rhk: [...d.rhk, { ...emptyRhk(no), ...prefill, no_urut: no }] }));
+    addGroups([prefill ? [prefill] : [{}]]);
+  }
+  function addGroups(groups: Partial<IkiRhk>[][]) {
+    setDoc(d => {
+      let no = d.rhk.length ? Math.max(...d.rhk.map(r => r.no_urut)) : 0;
+      const added: IkiRhk[] = [];
+      for (const grup of groups) {
+        no += 1;
+        for (const prefill of grup) added.push({ ...emptyRhk(no), ...prefill, no_urut: no });
+      }
+      return { ...d, rhk: [...d.rhk, ...added] };
+    });
     setDirty(true);
   }
   function addRhkToGroup(noUrut: number) {
@@ -372,7 +381,23 @@ export default function EditorClient({ username, role, themePreference, initialD
             {!isDir && (<>
               <label className="iki-f"><span>Dokumen IKI Atasan (kaskade)</span>
                 <select value={doc.atasan_dokumen_id ?? ''} disabled={readOnly}
-                  onChange={e => patchDoc({ atasan_dokumen_id: e.target.value ? Number(e.target.value) : null })}>
+                  onChange={e => {
+                    const id = e.target.value ? Number(e.target.value) : null;
+                    const a = id ? atasanCandidates.find(c => c.id === id) : undefined;
+                    // Pilih dokumen = aksi eksplisit → blok atasan ikut terisi;
+                    // lepas tautan TIDAK menghapus isian (mungkin diisi manual).
+                    if (a) {
+                      patchDoc({
+                        atasan_dokumen_id: id,
+                        nama_atasan: a.nama,
+                        nip_atasan: a.nip,
+                        jabatan_atasan: a.jabatan,
+                        pangkat_atasan: stripGolongan(a.pangkat) || null,
+                      });
+                    } else {
+                      patchDoc({ atasan_dokumen_id: id });
+                    }
+                  }}>
                   <option value="">— tidak ditautkan —</option>
                   {atasanCandidates.map(a => <option key={a.id} value={a.id}>{a.jabatan} · {a.nama}</option>)}
                 </select>
@@ -553,10 +578,10 @@ export default function EditorClient({ username, role, themePreference, initialD
           atasanDokumenId={doc.atasan_dokumen_id}
           atasanCandidates={atasanCandidates}
           onClose={() => setShowImport(false)}
-          onImport={(rows) => {
-            for (const r of rows) addGroup(r);
+          onImport={(groups) => {
+            addGroups(groups);
             setShowImport(false);
-            toast.success(`${rows.length} grup RHK ditambahkan`);
+            toast.success(`${groups.length} grup RHK ditambahkan`);
           }}
         />
       )}
@@ -601,7 +626,7 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
   atasanDokumenId: number | null;
   atasanCandidates: IkiListRow[];
   onClose: () => void;
-  onImport: (rows: Partial<IkiRhk>[]) => void;
+  onImport: (groups: Partial<IkiRhk>[][]) => void;
 }) {
   const [tab, setTab] = useState<'renaksi' | 'atasan'>('renaksi');
   const [loading, setLoading] = useState(false);
@@ -655,11 +680,11 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
   }
 
   function submit() {
-    const out: Partial<IkiRhk>[] = [];
+    const groups: Partial<IkiRhk>[][] = [];
     if (tab === 'renaksi') {
       for (const r of renaksiRows ?? []) {
         if (!selected.has(`r${r.renaksi_id}`)) continue;
-        out.push({
+        groups.push([{
           rhk_intervensi: r.sasaran_induk || r.parent || null,
           rhk: r.rhk,
           indikator: r.indikator,
@@ -667,20 +692,28 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
           target_tahunan: r.target_tahunan,
           renaksi_id: r.renaksi_id,
           triwulan: emptyTriwulan().map((t, i) => ({ ...t, target_tw: r.target_tw[i] ?? '0' })),
-        });
+        }]);
       }
     } else {
+      // Grup ikut struktur atasan: item se-no_urut atasan → 1 grup (share RHK-diintervensi),
+      // no_urut atasan beda → grup terpisah.
+      const byNoUrut = new Map<number, AtasanRhkRow[]>();
       for (const a of atasanRows ?? []) {
         if (!selected.has(`a${a.atasan_rhk_id}`)) continue;
-        out.push({
+        const list = byNoUrut.get(a.no_urut) ?? [];
+        list.push(a);
+        byNoUrut.set(a.no_urut, list);
+      }
+      for (const [, list] of [...byNoUrut.entries()].sort((x, y) => x[0] - y[0])) {
+        groups.push(list.map(a => ({
           rhk_intervensi: a.rhk,
           atasan_rhk_id: a.atasan_rhk_id,
           aspek_b: a.aspek_b,
-        });
+        })));
       }
     }
-    if (out.length === 0) { toast.error('Belum ada baris dipilih'); return; }
-    onImport(out);
+    if (groups.length === 0) { toast.error('Belum ada baris dipilih'); return; }
+    onImport(groups);
   }
 
   const q = search.trim().toLowerCase();
