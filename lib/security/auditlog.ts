@@ -131,6 +131,7 @@ export type AuditEventType =
   | 'PK_DOKUMEN_GENERATE'     // sub-event finalize — generate Word docx
   | 'PK_DOKUMEN_DOWNLOAD'     // GET /api/perjanjian-kinerja/dokumen/[id]/download
   | 'PK_VIEW_LIST'            // GET /api/perjanjian-kinerja/dokumen (bulk PII — UU PDP Pasal 39)
+  | 'PK_IMPORT_PEJABAT'       // POST /api/perjanjian-kinerja/pejabat/import (preview parse file — bulk PII)
   // ─── Rencana Aksi (modul baru) ────────────────────────────────────────────
   | 'RA_UPSERT'               // POST /api/rencana-aksi
   | 'RA_DELETE'               // DELETE /api/rencana-aksi

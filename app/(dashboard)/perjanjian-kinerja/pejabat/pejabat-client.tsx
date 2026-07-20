@@ -3,8 +3,9 @@
 // Pattern sama dengan sasaran-client: replace-all per tahun via POST.
 
 import { useState, useCallback } from 'react'
-import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, X } from 'lucide-react'
+import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, X, FileUp } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
+import ImportPejabatModal, { type ImportedPejabatRow } from '@/components/pk/ImportPejabatModal'
 import { fetchJson } from '@/lib/shared/api'
 import { useAbortableEffect } from '@/lib/shared/hooks'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
@@ -31,6 +32,7 @@ export default function PejabatClient() {
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [confirmDel, setConfirmDel] = useState<{ mode: 'single'; idx: number; preview: string } | { mode: 'bulk'; count: number } | { mode: 'wipe'; count: number } | null>(null)
+  const [showImport, setShowImport] = useState(false)
 
   function showToast(kind: 'ok' | 'err', msg: string) {
     setToast({ kind, msg })
@@ -108,6 +110,28 @@ export default function PejabatClient() {
     }
     setConfirmDel(null)
   }, [confirmDel])
+
+  const applyImport = useCallback((imported: ImportedPejabatRow[], mode: 'replace' | 'merge') => {
+    let updated = 0
+    let added = 0
+    setRows(prev => {
+      if (mode === 'replace') {
+        added = imported.length
+        return imported.map(r => ({ ...r, _dirty: true, _selected: false }))
+      }
+      const next = [...prev]
+      for (const r of imported) {
+        const idx = next.findIndex(x => x.unit_kerja === r.unit_kerja)
+        if (idx >= 0) { next[idx] = { ...next[idx], ...r, _dirty: true }; updated++ }
+        else { next.push({ ...r, _dirty: true, _selected: false }); added++ }
+      }
+      return next
+    })
+    setShowImport(false)
+    showToast('ok', mode === 'replace'
+      ? `${imported.length} baris diimport (ganti semua) — review lalu klik Simpan.`
+      : `Import digabung: ${updated} di-update, ${added} baru — review lalu klik Simpan.`)
+  }, [])
 
   const dirtyCount    = rows.filter(r => r._dirty).length
   const selectedCount = rows.filter(r => r._selected).length
@@ -195,6 +219,10 @@ export default function PejabatClient() {
           <PrimaButton variant="ghost" iconLeft={<RefreshCw size={14} />}
             onClick={() => setReloadKey(k => k + 1)} disabled={loading || saving}>
             Muat Ulang
+          </PrimaButton>
+          <PrimaButton variant="success" iconLeft={<FileUp size={14} />}
+            onClick={() => setShowImport(true)} disabled={loading || saving}>
+            Import File
           </PrimaButton>
           <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
             onClick={addRow} disabled={loading || saving}>
@@ -318,6 +346,15 @@ export default function PejabatClient() {
         UNIQUE KEY <code style={mono}>(unit_kerja, tahun, is_active)</code> — duplikat akan ditolak backend.
         Pejabat dipakai untuk auto-fill di Form Perjanjian Kinerja.
       </p>
+
+      {showImport && (
+        <ImportPejabatModal
+          tahun={tahun}
+          unitOptions={units.map(u => ({ id: u.id, nama_unit: u.nama_unit }))}
+          onClose={() => setShowImport(false)}
+          onApply={applyImport}
+        />
+      )}
 
       {confirmDel && (
         <div onClick={() => setConfirmDel(null)} style={modalBackdrop}>
