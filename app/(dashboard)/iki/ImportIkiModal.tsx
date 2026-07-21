@@ -10,7 +10,7 @@ import { AlertCircle, FileUp, Upload } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { stripGolongan } from '@/lib/iki/layout';
 import { matchPejabatByJabatan, pejabatOptionValue } from './_lib/types';
-import type { IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
+import type { AtasanRhkRow, IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
 
 interface ImpTw { triwulan: 1 | 2 | 3 | 4; target_tw: string; uraian: string | null; target_aksi: string }
 interface ImpRhk {
@@ -139,6 +139,42 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
     ? rows.find(r => r.tahun === tahun && r.nip === pemilik.nip && r.jabatan === pemilik.jabatan)
     : undefined;
 
+  // Kaskade otomatis: dokumen IKI milik atasan terpilih (nip+jabatan+tahun,
+  // aman utk jabatan ganda Plt.) → atasan_dokumen_id + match RHK intervensi
+  const atasanDoc = useMemo(() => {
+    if (!parsed || parsed.varian !== 'STANDAR' || !atasan?.nip) return undefined;
+    return rows.find(r => r.tahun === tahun && r.nip === atasan.nip && r.jabatan === atasan.jabatan);
+  }, [parsed, atasan, rows, tahun]);
+
+  const [atasanRhkRows, setAtasanRhkRows] = useState<AtasanRhkRow[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!atasanDoc) { if (alive) setAtasanRhkRows(null); return; }
+      try {
+        const res = await fetch(`/api/iki/import-atasan?dokumen_id=${atasanDoc.id}`);
+        const json = await res.json();
+        if (alive) setAtasanRhkRows(json.ok ? (json.rows ?? []) : null);
+      } catch { if (alive) setAtasanRhkRows(null); }
+    })();
+    return () => { alive = false; };
+  }, [atasanDoc]);
+
+  const groupLinks = useMemo<(number | null)[]>(() => {
+    if (!parsed) return [];
+    if (!atasanDoc || !atasanRhkRows) return parsed.groups.map(() => null);
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    return parsed.groups.map(g => {
+      const t = norm(g.rhk_intervensi ?? '');
+      if (!t) return null;
+      const exact = atasanRhkRows.find(r => norm(r.rhk) === t);
+      if (exact) return exact.atasan_rhk_id;
+      const contains = atasanRhkRows.filter(r => { const a = norm(r.rhk); return a.includes(t) || t.includes(a); });
+      return contains.length === 1 ? contains[0].atasan_rhk_id : null;
+    });
+  }, [parsed, atasanDoc, atasanRhkRows]);
+  const linkedCount = groupLinks.filter(x => x !== null).length;
+
   const totalRhk = parsed?.groups.reduce((s, g) => s + g.rhkList.length, 0) ?? 0;
   const canApply = !!parsed && !!pemilik && !!pemilik.nama && !!pemilik.nip && /^\d{4}$/.test(tahun)
     && (parsed.varian !== 'STANDAR' || !!atasan)
@@ -166,15 +202,17 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
       if (!dJson.ok) { toast.error('Gagal memuat dokumen tujuan'); return; }
       const version: number = dJson.data.version;
 
+      // Kaskade: tautkan dokumen atasan kalau ketemu — kecuali menaut ke diri
+      // sendiri (timpa dokumen yang sama; server menolak self-atasan)
+      const linkDocId = atasanDoc && atasanDoc.id !== id ? atasanDoc.id : null;
+
       // '-' placeholder utk field wajib yang kosong di file — warning parser sudah
       // menandai, user rapikan di editor (dokumen tetap DRAFT).
       const rhk: unknown[] = [];
-      let no = 0;
-      for (const g of parsed.groups) {
-        no += 1;
+      parsed.groups.forEach((g, gi) => {
         for (const r of g.rhkList) {
           rhk.push({
-            no_urut: no,
+            no_urut: gi + 1,
             rhk_intervensi: parsed.varian === 'STANDAR' ? (g.rhk_intervensi || '-') : null,
             rhk: r.rhk || '-',
             aspek_a: r.aspek_a || 'Kuantitatif',
@@ -185,11 +223,11 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
             formulasi: r.formulasi,
             ekspektasi: parsed.varian === 'STANDAR' ? r.ekspektasi : null,
             renaksi_id: null,
-            atasan_rhk_id: null,
+            atasan_rhk_id: linkDocId ? (groupLinks[gi] ?? null) : null,
             triwulan: r.triwulan,
           });
         }
-      }
+      });
 
       const putRes = await fetch(`/api/iki/${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -205,7 +243,7 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
           pangkat_atasan: atasan?.pangkat ?? null,
           kota_ttd: 'Semarang',
           tanggal_ttd: null,
-          atasan_dokumen_id: null,
+          atasan_dokumen_id: linkDocId,
           rhk,
         }),
       });
@@ -271,6 +309,14 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
                 {parsed.atasanJabatanHint && (
                   <span className="iki-imp-note">Di file: &quot;{parsed.atasanJabatanHint}&quot;{atasanMatch ? '' : ' — tidak ketemu padanan otomatis, pilih manual.'}</span>
                 )}
+                {atasan && (atasanDoc ? (
+                  <span className="iki-imp-link-note">
+                    🔗 Ditautkan ke Dokumen IKI atasan: <b>{atasanDoc.jabatan}</b> ({atasanDoc.status})
+                    {atasanRhkRows !== null && <> — {linkedCount}/{parsed.groups.length} grup RHK cocok otomatis{linkedCount < parsed.groups.length ? ', sisanya tautkan manual di editor' : ''}</>}
+                  </span>
+                ) : (
+                  <span className="iki-imp-note">Atasan belum punya dokumen IKI tahun {tahun} — kaskade dokumen dibiarkan kosong.</span>
+                ))}
               </label>
             )}
 
@@ -335,6 +381,7 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
                   <div className="iki-imp-group-head">
                     <span className="iki-imp-no">{gi + 1}</span>
                     {parsed.varian === 'STANDAR' && <span className="iki-imp-interv">{g.rhk_intervensi ?? <em>(intervensi kosong)</em>}</span>}
+                    {groupLinks[gi] !== null && <span className="iki-imp-linked">🔗 kaskade</span>}
                   </div>
                   {g.rhkList.map((r, ri) => (
                     <div key={ri} className="iki-imp-rhk">
@@ -374,6 +421,10 @@ const IMP_CSS = `
   .iki-imp-relink { background: transparent; border: 1px solid rgba(181,212,244,.35); color: #B5D4F4; border-radius: 12px; font-size: 10.5px; padding: 1px 8px; cursor: pointer; }
   .iki-imp-warn { font-size: 10.5px; color: #FAC775; line-height: 1.5; }
   .iki-imp-note { font-size: 10.5px; color: #85B7EB; line-height: 1.5; }
+  .iki-imp-link-note { font-size: 10.5px; color: #4CC39A; line-height: 1.5; }
+  .iki-imp-linked { margin-left: auto; font-size: 9.5px; font-weight: 700; white-space: nowrap; border-radius: 10px; padding: 1px 8px; background: rgba(29,158,117,.14); border: 1px solid rgba(29,158,117,.4); color: #4CC39A; }
+  [data-theme="light"] .iki-imp-link-note { color: #157A5B; }
+  [data-theme="light"] .iki-imp-linked { background: #E7F6F0; border-color: rgba(29,158,117,.35); color: #157A5B; }
   .iki-imp-cols { border: 1px solid rgba(12,68,124,.6); border-radius: 8px; padding: 7px 11px; margin-bottom: 10px; background: rgba(2,15,28,.3); }
   .iki-imp-cols summary { cursor: pointer; font-size: 11.5px; font-weight: 700; color: #B5D4F4; display: flex; align-items: center; gap: 8px; user-select: none; }
   .iki-imp-colgrid { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
