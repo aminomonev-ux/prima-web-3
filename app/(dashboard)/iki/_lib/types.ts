@@ -145,7 +145,12 @@ export function matchPejabatByJabatan(jabatan: string, list: PejabatSuggest[]): 
     if (pt.size === 0) continue;
     let inter = 0;
     for (const w of t) if (pt.has(w)) inter++;
-    const s = (2 * inter) / (t.size + pt.size);
+    const dice = (2 * inter) / (t.size + pt.size);
+    // Containment: jabatan master utuh di dalam teks file = match — blok TTD sering
+    // pakai bentuk panjang ("DIREKTUR RSJD dr. AMINO ..." vs master "DIREKTUR").
+    // Aman dari "Wakil Direktur" karena sinonim wadir dinormalkan lebih dulu.
+    const contained = inter === Math.min(t.size, pt.size) ? 0.95 : 0;
+    const s = Math.max(dice, contained);
     if (s > bestScore) { bestScore = s; best = p; }
   }
   return best && bestScore >= 0.6 ? { p: best, score: bestScore } : null;
