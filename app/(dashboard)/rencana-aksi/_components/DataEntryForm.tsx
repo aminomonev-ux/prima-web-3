@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import {
-  Database, Plus, Edit, Sliders, Tag, AlertCircle, FolderOpen,
+  Database, Plus, Edit, Sliders, Tag, AlertCircle, FolderOpen, FileUp,
 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
@@ -16,16 +16,21 @@ import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS } from '../_lib/types';
 import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
+import ImportRenaksiModal from './ImportRenaksiModal';
 
 interface Props {
   level: RaLevel;
   rows: RaRow[];
   selectedYear: number;
+  role: string;
   onReload: () => Promise<void>;
   notify: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
 }
 
-export default function DataEntryForm({ level, rows, selectedYear, onReload, notify }: Props) {
+export default function DataEntryForm({ level, rows, selectedYear, role, onReload, notify }: Props) {
+  // Import = operasi borongan, sekelas Duplikasi Tahun di Header
+  const canImport = role === 'ADMIN' || role === 'SUPER_ADMIN';
+  const [importOpen, setImportOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [sasaran, setSasaran]       = useState('');
@@ -599,6 +604,18 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {canImport && (
+                  <Tip label={`Import file untuk level ${level.replace('-', ' ')}`}>
+                    <button
+                      type="button"
+                      onClick={() => setImportOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#7C5CFC]/45 px-2.5 py-1.5 text-[11px] font-bold text-[#6D28D9] transition-colors hover:bg-[#7C5CFC]/8 cursor-pointer"
+                    >
+                      <FileUp className="h-3.5 w-3.5" />
+                      Import
+                    </button>
+                  </Tip>
+                )}
                 <DownloadButton
                   variant="excel"
                   label="Excel"
@@ -929,6 +946,16 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
           </div>
         </div>
       </div>
+
+      {importOpen && (
+        <ImportRenaksiModal
+          tahun={selectedYear}
+          levelHint={level}
+          onClose={() => setImportOpen(false)}
+          onDone={() => { setImportOpen(false); void onReload(); }}
+          notify={notify}
+        />
+      )}
 
       {/* Delete confirm */}
       {confirmDelete && (

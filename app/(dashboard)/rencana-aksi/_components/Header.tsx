@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LogOut, ShieldCheck, Home, Copy, Lock } from 'lucide-react';
+import { ChevronDown, LogOut, ShieldCheck, Home, Copy, Lock, FileUp } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { ROLE_LABELS } from '@/lib/constants';
 import { YEAR_RANGE, BULAN_LABELS } from '../_lib/types';
 import { apiDuplikasiTahun, apiGetLock, apiSetLock } from '../_lib/api';
+import ImportRenaksiModal from './ImportRenaksiModal';
 
 interface Props {
   onToggleSidebar: () => void;
@@ -19,11 +20,13 @@ interface Props {
   themePreference: 'dark' | 'light';
   onLogout: () => void;
   notify?: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
+  /** Muat ulang data setelah import massal */
+  onDataChanged?: () => void;
 }
 
 export default function Header({
   onToggleSidebar, selectedYear, onYearChange,
-  username, role, initials, themePreference, onLogout, notify,
+  username, role, initials, themePreference, onLogout, notify, onDataChanged,
 }: Props) {
   const router = useRouter();
   const [dropOpen, setDropOpen] = useState(false);
@@ -40,6 +43,7 @@ export default function Header({
   const [lockOpen, setLockOpen] = useState(false);
   const [lockBulan, setLockBulan] = useState(0);
   const [lockBusy, setLockBusy] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const openDup = () => {
     setDupDari(selectedYear);
@@ -131,6 +135,19 @@ export default function Header({
       <div className="flex items-center gap-2">
         {isAdminTools && (
           <>
+            <button
+              onClick={() => setImportOpen(true)}
+              className="ra-menu-btn hidden sm:inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
+              style={{
+                border: '1.5px solid var(--ra-menu-border, rgba(0,0,0,0.15))',
+                color: 'var(--ra-menu-text, #374151)',
+                background: 'transparent',
+              }}
+              data-tooltip="Isi struktur & target dari file Excel/CSV/PDF"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+              <span>Import File</span>
+            </button>
             <button
               onClick={openDup}
               className="ra-menu-btn hidden sm:inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
@@ -234,6 +251,15 @@ export default function Header({
           )}
         </div>
       </div>
+
+      {importOpen && (
+        <ImportRenaksiModal
+          tahun={selectedYear}
+          onClose={() => setImportOpen(false)}
+          onDone={() => { setImportOpen(false); onDataChanged?.(); }}
+          notify={(m, t) => notify?.(m, t)}
+        />
+      )}
 
       {/* Modal Duplikasi Tahun */}
       {dupOpen && (

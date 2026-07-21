@@ -179,6 +179,46 @@ export const ListQuerySchema = z.object({
   level: LevelSchema,
 });
 
+// ─── Import file (xlsx/csv/pdf) ────────────────────────────────────────────
+// Preview = parse saja (tanpa tulis DB). Commit memakai baris hasil preview yang
+// sudah dikoreksi user di modal — server tetap memvalidasi ulang (jangan percaya
+// klien) + cek keberadaan induk sebelum menyimpan.
+
+export const IMPORT_COL_FIELDS = [
+  'tujuan', 'sasaran', 'kode', 'program', 'kegiatan', 'sub_kegiatan',
+  'outcome', 'indikator', 'satuan', 'target_tahunan', 'anggaran', 'jenis',
+] as const;
+
+export const ImportColOverridesSchema = z.record(
+  z.enum(IMPORT_COL_FIELDS),
+  z.coerce.number().int().min(1).max(60),
+);
+
+export const ImportModeSchema = z.enum(['tambah', 'upsert', 'ganti']);
+
+export const ImportCommitRowSchema = z.object({
+  level: LevelSchema,
+  nama: z.string().trim().min(1, 'Nama entitas wajib').max(255),
+  induk_tujuan: z.string().trim().max(255).nullable().default(null),
+  induk_sasaran: z.string().trim().max(255).nullable().default(null),
+  induk_program: z.string().trim().max(255).nullable().default(null),
+  induk_kegiatan: z.string().trim().max(255).nullable().default(null),
+  outcome: z.string().trim().max(500).nullable().default(null),
+  indikator: z.string().trim().min(1, 'Indikator wajib').max(500),
+  satuan: z.string().trim().min(1).max(50).default('Persen'),
+  jenis: JenisSchema.default('Akumulatif'),
+  target_tahunan: z.coerce.number().min(0).default(0),
+  q: z.tuple([z.coerce.number().min(0), z.coerce.number().min(0), z.coerce.number().min(0), z.coerce.number().min(0)]),
+  bulan: z.array(z.number().min(0).nullable()).length(12).nullable().default(null),
+  anggaran: z.coerce.number().int().min(0).nullable().default(null),
+});
+
+export const ImportCommitSchema = z.object({
+  tahun: TahunSchema,
+  mode: ImportModeSchema,
+  rows: z.array(ImportCommitRowSchema).min(1, 'Tidak ada baris untuk disimpan').max(500, 'Maksimal 500 baris sekali impor'),
+});
+
 export const ExportQuerySchema = z.object({
   tahun: TahunSchema,
   level: LevelSchema,

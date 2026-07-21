@@ -481,6 +481,7 @@ export default function RaClient({
           themePreference={themePreference}
           onLogout={handleLogout}
           notify={notify}
+          onDataChanged={() => { void reloadRows(tahun, level); }}
         />
 
         {/* Centered quick actions pill — Posisi sama dengan source's "Reporting + Reset Data".
@@ -559,6 +560,7 @@ export default function RaClient({
             level={level}
             rows={rows}
             selectedYear={tahun}
+            role={role}
             onReload={() => reloadRows(tahun, level)}
             notify={notify}
           />
