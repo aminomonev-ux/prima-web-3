@@ -34,6 +34,21 @@ export interface ImportIkiGroup {
   rhk_intervensi: string | null;
   rhkList: ImportIkiRhk[];
 }
+export type ImportColField =
+  | 'no' | 'rhk_intervensi' | 'rhk' | 'aspek' | 'indikator' | 'target_tahunan'
+  | 'formulasi' | 'romawi' | 'target_tw' | 'uraian' | 'target_aksi';
+export type ImportColSource = 'anchor' | 'header' | 'manual' | 'fallback';
+export interface ImportColReport {
+  field: ImportColField;
+  /** Nomor kolom Excel 1-based (null = tidak terdeteksi) */
+  col: number | null;
+  header: string;
+  sample: string;
+  source: ImportColSource;
+}
+export interface ImportColOption { col: number; header: string; sample: string }
+export type ImportColOverrides = Partial<Record<ImportColField, number>>;
+
 export interface ImportIkiResult {
   varian: 'STANDAR' | 'DIREKTUR';
   opd: string;
@@ -44,6 +59,10 @@ export interface ImportIkiResult {
   /** Jabatan atasan dari blok "Mengetahui" — hint matching Master PK, bukan sumber data */
   atasanJabatanHint: string | null;
   groups: ImportIkiGroup[];
+  /** Hasil deteksi kolom per field — bahan panel pemetaan di preview */
+  columns: ImportColReport[];
+  /** Semua kolom yang punya header/isi — pilihan override manual */
+  columnOptions: ImportColOption[];
   warnings: string[];
   source: string;
 }
@@ -96,6 +115,8 @@ const RE_ASPEK_CELL = /a\.?\s*(.+?)\s*b\.?\s*(.+?)\s*c\.?\s*(.+)$/i;
 const RE_ASPEK_B = /(akumulatif|progres\s*positif|progres\s*negatif|pengulangan)/i;
 // "Ekspetasi" = typo konsisten di file asli
 const RE_EKSPEKTASI = /eksp[ea]ktasi(\s+pimpinan)?\s*:?\s*/i;
+// Pola nilai target: "1 Dokumen" / "100%" / "12" / "3,5" — untuk content voting
+const RE_TARGETISH = /^\d+([.,]\d+)?\s*(%|\p{L}[\s\S]{0,24})?$/u;
 
 function normalizeAspekB(raw: string): string | null {
   const m = raw.match(RE_ASPEK_B);
@@ -109,17 +130,27 @@ function normalizeAspekB(raw: string): string | null {
 
 type Grid = string[][];
 
-function sheetGrid(ws: ExcelJS.Worksheet): Grid {
+// grid = nilai warisan merge (data dibaca dari sini); raw = hanya sel master
+// merge (untuk hierarki header & baris penomoran — teks induk tidak "menular")
+function sheetGrid(ws: ExcelJS.Worksheet): { grid: Grid; raw: Grid } {
   const grid: Grid = [];
+  const raw: Grid = [];
   const maxR = Math.min(ws.rowCount || 0, MAX_SCAN_ROWS);
   const maxC = Math.min(ws.columnCount || 0, MAX_SCAN_COLS);
   for (let r = 1; r <= maxR; r++) {
     const row = ws.getRow(r);
     const arr: string[] = [];
-    for (let c = 1; c <= maxC; c++) arr.push(cellText(row.getCell(c)));
+    const arrRaw: string[] = [];
+    for (let c = 1; c <= maxC; c++) {
+      const cell = row.getCell(c);
+      const t = cellText(cell);
+      arr.push(t);
+      arrRaw.push(!cell.isMerged || cell.master === cell ? t : '');
+    }
     grid.push(arr);
+    raw.push(arrRaw);
   }
-  return grid;
+  return { grid, raw };
 }
 
 function findRow(grid: Grid, re: RegExp, from = 0): number {
@@ -161,23 +192,59 @@ interface ColMap {
   targetTahunan: number; formulasi: number; caraHitung: number | null;
   romawi: number; targetTw: number; uraian: number; targetAksi: number;
 }
+type InternalKey = Exclude<keyof ColMap, 'caraHitung'>;
 
-function headerTexts(grid: Grid, rHead: number): Map<number, string> {
-  const out = new Map<number, string>();
-  for (let r = rHead; r < Math.min(rHead + 2, grid.length); r++) {
-    grid[r].forEach((v, c) => {
-      if (v && !out.has(c)) out.set(c, v);
-      else if (v && out.has(c) && !out.get(c)!.includes(v)) out.set(c, out.get(c) + ' ' + v);
-    });
-  }
-  return out;
+const FIELD_META: Array<{ key: InternalKey; pub: ImportColField; verify?: RegExp; required?: boolean }> = [
+  { key: 'no',            pub: 'no',              verify: /^\d+$/, required: true },
+  { key: 'rhki',          pub: 'rhk_intervensi' },
+  { key: 'rhk',           pub: 'rhk',             required: true },
+  { key: 'aspek',         pub: 'aspek',           verify: RE_ASPEK_CELL },
+  { key: 'indikator',     pub: 'indikator',       required: true },
+  { key: 'targetTahunan', pub: 'target_tahunan',  verify: RE_TARGETISH },
+  { key: 'formulasi',     pub: 'formulasi' },
+  { key: 'romawi',        pub: 'romawi',          verify: /^(I|II|III|IV)$/ },
+  { key: 'targetTw',      pub: 'target_tw',       verify: RE_TARGETISH, required: true },
+  { key: 'uraian',        pub: 'uraian' },
+  { key: 'targetAksi',    pub: 'target_aksi',     verify: RE_TARGETISH },
+];
+
+// Jangkar baris penomoran kolom "1 2 … 11" — layout baku VERSI BPSDMD STANDAR
+const ANCHOR_STANDAR: Record<number, InternalKey> = {
+  1: 'no', 2: 'rhki', 3: 'rhk', 4: 'aspek', 5: 'indikator', 6: 'targetTahunan',
+  7: 'formulasi', 8: 'romawi', 9: 'targetTw', 10: 'uraian', 11: 'targetAksi',
+};
+
+interface ResolvedColumns {
+  cols: ColMap;
+  report: ImportColReport[];
+  options: ImportColOption[];
 }
 
-function resolveColumns(grid: Grid, rHead: number, dataStart: number, warnings: string[]): ColMap | null {
-  const heads = headerTexts(grid, rHead);
+function resolveColumns(
+  grid: Grid, raw: Grid, rHead: number, rNum: number, dataStart: number,
+  warnings: string[], overrides?: ImportColOverrides,
+): ResolvedColumns | null {
+  // Header sadar-merge: induk = baris rHead (warisan merge OK), anak = baris
+  // rHead+1 HANYA sel master — teks induk merge tidak menular ke label anak
+  const maxC = Math.max(...grid.slice(rHead, rHead + 2).map(r => r.length), 0);
+  const label = (c: number): string => {
+    const parent = grid[rHead]?.[c] ?? '';
+    const childRaw = rHead + 1 !== rNum ? (raw[rHead + 1]?.[c] ?? '') : '';
+    const child = /^\d+$/.test(childRaw) ? '' : childRaw;
+    if (child && child !== parent) return parent ? `${parent} › ${child}` : child;
+    return parent;
+  };
+  const heads = new Map<number, string>();
+  for (let c = 0; c < maxC; c++) { const t = label(c); if (t) heads.set(c, t); }
+
   const colsBy = (re: RegExp, exclude?: RegExp) =>
     [...heads.entries()].filter(([, t]) => re.test(t) && !(exclude && exclude.test(t))).map(([c]) => c);
 
+  // Bedakan kolom dalam span dari pola isi (sampel 30 baris data pertama)
+  const sample = grid.slice(dataStart, dataStart + 30);
+  const score = (col: number, re: RegExp) => sample.filter(row => re.test(row[col] ?? '')).length;
+
+  // ── Lapis 1: deteksi header + content voting (fallback universal) ──
   const noCol = colsBy(/^no\.?\s*$/i)[0];
   const rhkiCols = colsBy(/diintervensi/i);
   const rhkCols = colsBy(/rencana hasil kerja/i, /diintervensi/i);
@@ -186,54 +253,119 @@ function resolveColumns(grid: Grid, rHead: number, dataStart: number, warnings: 
   const formCol = colsBy(/formulasi/i)[0];
   const twSpan = colsBy(/target triwulan/i);
   const aksiSpan = colsBy(/rencana aksi/i);
-  const uraianCol = colsBy(/^.*\buraian\b.*$/i).find(c => aksiSpan.includes(c) || c > (twSpan[twSpan.length - 1] ?? 0));
+  const uraianCol = colsBy(/\buraian\b/i).find(c => aksiSpan.includes(c) || c > (twSpan[twSpan.length - 1] ?? 0));
 
   if (noCol === undefined || rhkCols.length === 0 || indSpan.length === 0 || twSpan.length === 0) {
     warnings.push('Header FORM tidak lengkap (butuh kolom No / Rencana Hasil Kerja / Indikator / Target Triwulan).');
     return null;
   }
 
-  // Bedakan kolom dalam span dari pola isi (sampel 30 baris data pertama)
-  const sample = grid.slice(dataStart, dataStart + 30);
-  const score = (col: number, re: RegExp) => sample.filter(row => re.test(row[col] ?? '')).length;
-
   const aspekCol = [...indSpan, ...rhkCols].sort((a, b) => score(b, RE_ASPEK_CELL) - score(a, RE_ASPEK_CELL))[0];
   const indikatorCol = indSpan.filter(c => c !== aspekCol).sort((a, b) => score(b, /\S/) - score(a, /\S/))[0] ?? indSpan[0];
   const rhkCol = rhkCols.filter(c => c !== aspekCol)[0] ?? rhkCols[0];
-
   const romawiCol = twSpan.sort((a, b) => score(b, /^(I|II|III|IV)$/) - score(a, /^(I|II|III|IV)$/))[0];
   const caraCol = twSpan.filter(c => c !== romawiCol).sort((a, b) => score(b, RE_ASPEK_B) - score(a, RE_ASPEK_B))[0];
   const targetTwCol = twSpan.filter(c => c !== romawiCol && c !== caraCol).sort((a, b) => score(b, /\S/) - score(a, /\S/))[0];
-
   const uraian = uraianCol ?? aksiSpan[0];
-  const targetAksiCol = [...heads.entries()]
-    .filter(([c, t]) => c !== uraian && c > (romawiCol ?? 0) && /target/i.test(t) && !/tahunan|triwulan/i.test(t))
-    .map(([c]) => c)
-    .sort((a, b) => b - a)[0] ?? Math.max(...aksiSpan, uraian ?? 0) + 1;
+  const targetAksiCol = aksiSpan.find(c => c !== uraian && /target/i.test(heads.get(c) ?? ''))
+    ?? [...heads.entries()]
+      .filter(([c, t]) => c !== uraian && c > (romawiCol ?? 0) && /target/i.test(t) && !/tahunan|triwulan/i.test(t))
+      .map(([c]) => c)
+      .sort((a, b) => b - a)[0]
+    ?? aksiSpan.filter(c => c !== uraian).sort((a, b) => score(b, RE_TARGETISH) - score(a, RE_TARGETISH))[0];
 
-  if (score(romawiCol, /^(I|II|III|IV)$/) === 0) {
+  const headerPick: Partial<Record<InternalKey, number>> = {
+    no: noCol, rhki: rhkiCols[0], rhk: rhkCol, aspek: aspekCol, indikator: indikatorCol,
+    targetTahunan: ttCol, formulasi: formCol, romawi: romawiCol, targetTw: targetTwCol,
+    uraian, targetAksi: targetAksiCol,
+  };
+
+  // ── Lapis 2: jangkar penomoran kolom (baris "1 2 … 11", sel master saja) ──
+  const anchorPick: Partial<Record<InternalKey, number>> = {};
+  if (rNum >= 0) {
+    const numToCol = new Map<number, number>();
+    (raw[rNum] ?? []).forEach((v, c) => {
+      if (/^\d+$/.test(v)) { const n = Number(v); if (!numToCol.has(n)) numToCol.set(n, c); }
+    });
+    const nums = [...numToCol.keys()];
+    if (nums.length >= 10 && Math.max(...nums) === 11) {
+      for (const [n, key] of Object.entries(ANCHOR_STANDAR)) {
+        const col = numToCol.get(Number(n));
+        if (col !== undefined) anchorPick[key] = col;
+      }
+    }
+  }
+
+  // ── Komposisi: manual > jangkar > header; kandidat wajib lolos verifikasi isi
+  // (field ber-regex: pola cocok; lainnya: minimal ada isi — sel master merge
+  // horizontal bisa kosong padahal datanya di kolom sebelah) ──
+  const verified = (col: number | undefined, re?: RegExp) =>
+    col !== undefined && score(col, re ?? /\S/) > 0;
+  const resolved: Partial<Record<InternalKey, number>> = {};
+  const report: ImportColReport[] = [];
+  for (const f of FIELD_META) {
+    let col: number | undefined;
+    let source: ImportColSource;
+    const ovr = overrides?.[f.pub];
+    if (ovr !== undefined) { col = ovr - 1; source = 'manual'; }
+    else if (verified(anchorPick[f.key], f.verify)) { col = anchorPick[f.key]; source = 'anchor'; }
+    else if (verified(headerPick[f.key], f.verify)) { col = headerPick[f.key]; source = 'header'; }
+    else {
+      col = headerPick[f.key] ?? anchorPick[f.key];
+      source = 'fallback';
+      if (col !== undefined && f.verify) warnings.push(`Kolom ${f.pub} (kolom Excel ${col + 1}) tidak cocok pola isi — periksa pemetaan kolom.`);
+    }
+    resolved[f.key] = col;
+    const sampleVal = col !== undefined ? (sample.map(row => row[col!] ?? '').find(v => v) ?? '') : '';
+    report.push({
+      field: f.pub,
+      col: col !== undefined ? col + 1 : null,
+      header: col !== undefined ? (heads.get(col) ?? '') : '',
+      sample: sanitize(sampleVal, 60),
+      source,
+    });
+    if (f.required && col === undefined) {
+      warnings.push(`Kolom wajib ${f.pub} tidak terdeteksi.`);
+      return null;
+    }
+  }
+
+  if (resolved.romawi !== undefined && score(resolved.romawi, /^(I|II|III|IV)$/) === 0) {
     warnings.push('Kolom romawi triwulan tidak terdeteksi isinya — TW akan diinfer dari posisi baris.');
   }
 
+  // Pilihan kolom untuk override manual di preview
+  const options: ImportColOption[] = [];
+  const optMax = Math.max(maxC, ...sample.map(r => r.length));
+  for (let c = 0; c < optMax; c++) {
+    const h = heads.get(c) ?? '';
+    const s = sample.map(row => row[c] ?? '').find(v => v) ?? '';
+    if (h || s) options.push({ col: c + 1, header: sanitize(h, 80), sample: sanitize(s, 60) });
+  }
+
   return {
-    no: noCol,
-    rhki: rhkiCols[0] ?? null,
-    rhk: rhkCol,
-    aspek: aspekCol,
-    indikator: indikatorCol,
-    targetTahunan: ttCol ?? -1,
-    formulasi: formCol ?? -1,
-    caraHitung: caraCol ?? null,
-    romawi: romawiCol,
-    targetTw: targetTwCol ?? -1,
-    uraian: uraian ?? -1,
-    targetAksi: targetAksiCol,
+    cols: {
+      no: resolved.no!,
+      rhki: resolved.rhki ?? null,
+      rhk: resolved.rhk!,
+      aspek: resolved.aspek ?? -1,
+      indikator: resolved.indikator!,
+      targetTahunan: resolved.targetTahunan ?? -1,
+      formulasi: resolved.formulasi ?? -1,
+      caraHitung: caraCol ?? null,
+      romawi: resolved.romawi ?? -1,
+      targetTw: resolved.targetTw!,
+      uraian: resolved.uraian ?? -1,
+      targetAksi: resolved.targetAksi ?? -1,
+    },
+    report,
+    options,
   };
 }
 
 // ─── Entry point ────────────────────────────────────────────────────────────
 
-export async function parseIkiExcel(buf: Buffer): Promise<ImportIkiResult> {
+export async function parseIkiExcel(buf: Buffer, overrides?: ImportColOverrides): Promise<ImportIkiResult> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf as unknown as ArrayBuffer);
   if ((wb.worksheets?.length ?? 0) > MAX_SHEETS)
@@ -242,11 +374,12 @@ export async function parseIkiExcel(buf: Buffer): Promise<ImportIkiResult> {
   // Pilih sheet yang punya blok FORM INDIKATOR (kalibrasi: selalu sheet "Langsung")
   let ws: ExcelJS.Worksheet | undefined;
   let grid: Grid | null = null;
+  let raw: Grid | null = null;
   for (const w of wb.worksheets) {
     const g = sheetGrid(w);
-    if (findRow(g, /FORM INDIKATOR/i) >= 0) { ws = w; grid = g; break; }
+    if (findRow(g.grid, /FORM INDIKATOR/i) >= 0) { ws = w; grid = g.grid; raw = g.raw; break; }
   }
-  if (!ws || !grid) throw new Error('Blok "FORM INDIKATOR KINERJA INDIVIDU" tidak ditemukan di sheet mana pun. Pastikan file berformat IKI.');
+  if (!ws || !grid || !raw) throw new Error('Blok "FORM INDIKATOR KINERJA INDIVIDU" tidak ditemukan di sheet mana pun. Pastikan file berformat IKI.');
 
   const warnings: string[] = [];
   const rForm = findRow(grid, /FORM INDIKATOR/i);
@@ -263,8 +396,9 @@ export async function parseIkiExcel(buf: Buffer): Promise<ImportIkiResult> {
   }
   const dataStart = (rNum >= 0 ? rNum : rHead + 1) + 1;
 
-  const cols = resolveColumns(grid, rHead, dataStart, warnings);
-  if (!cols) throw new Error('Struktur kolom FORM tidak dikenali. ' + warnings[warnings.length - 1]);
+  const resolvedCols = resolveColumns(grid, raw, rHead, rNum, dataStart, warnings, overrides);
+  if (!resolvedCols) throw new Error('Struktur kolom FORM tidak dikenali. ' + warnings[warnings.length - 1]);
+  const { cols, report, options } = resolvedCols;
   const varian: 'STANDAR' | 'DIREKTUR' = cols.rhki !== null ? 'STANDAR' : 'DIREKTUR';
 
   // Batas bawah data = blok TTD
@@ -383,6 +517,8 @@ export async function parseIkiExcel(buf: Buffer): Promise<ImportIkiResult> {
     ikhtisar: sanitize(dpRaw.ikhtisar, LEN.ikhtisar) || null,
     atasanJabatanHint,
     groups,
+    columns: report,
+    columnOptions: options,
     warnings,
     source: `Sheet "${ws.name}"`,
   };

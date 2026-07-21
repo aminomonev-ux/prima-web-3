@@ -19,11 +19,34 @@ interface ImpRhk {
   triwulan: ImpTw[];
 }
 interface ImpGroup { rhk_intervensi: string | null; rhkList: ImpRhk[] }
+interface ImpColReport { field: string; col: number | null; header: string; sample: string; source: 'anchor' | 'header' | 'manual' | 'fallback' }
+interface ImpColOption { col: number; header: string; sample: string }
 interface Parsed {
   varian: IkiVarian; opd: string; nama: string; nip: string; jabatan: string;
   ikhtisar: string | null; atasanJabatanHint: string | null;
-  groups: ImpGroup[]; warnings: string[]; source: string;
+  groups: ImpGroup[]; columns: ImpColReport[]; columnOptions: ImpColOption[];
+  warnings: string[]; source: string;
 }
+
+const COL_FIELD_LABEL: Record<string, string> = {
+  no: 'No',
+  rhk_intervensi: 'RHK yang Diintervensi',
+  rhk: 'Rencana Hasil Kerja',
+  aspek: 'Aspek (a/b/c)',
+  indikator: 'Indikator Kinerja',
+  target_tahunan: 'Target Tahunan',
+  formulasi: 'Formulasi & Ekspektasi',
+  romawi: 'Triwulan (romawi)',
+  target_tw: 'Target Triwulan',
+  uraian: 'Uraian Rencana Aksi',
+  target_aksi: 'Target Rencana Aksi',
+};
+const COL_SOURCE_BADGE: Record<ImpColReport['source'], { label: string; warn: boolean }> = {
+  anchor:   { label: 'auto · nomor kolom', warn: false },
+  header:   { label: 'auto · header',      warn: false },
+  manual:   { label: 'manual',             warn: false },
+  fallback: { label: 'perlu cek',          warn: true },
+};
 interface Identity { nama: string; nip: string; jabatan: string; pangkat: string | null }
 
 interface Props {
@@ -35,6 +58,8 @@ interface Props {
 export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [ovr, setOvr] = useState<Record<string, number>>({});
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [tahun, setTahun] = useState(String(new Date().getFullYear()));
   const [pejabat, setPejabat] = useState<PejabatSuggest[]>([]);
@@ -74,18 +99,30 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
   const pemilikSelEff = pemilikSel ?? (namaBeda && pemilikMatch ? pejabatOptionValue(pemilikMatch.p) : '');
   const atasanSelEff = atasanSel ?? (atasanMatch ? pejabatOptionValue(atasanMatch.p) : '');
 
-  async function handleFile(file: File) {
+  async function handleFile(f: File, overrides?: Record<string, number>) {
     setBusy(true);
-    setFileName(file.name);
+    setFileName(f.name);
     const fd = new FormData();
-    fd.append('file', file);
+    fd.append('file', f);
+    if (overrides && Object.keys(overrides).length > 0) fd.append('overrides', JSON.stringify(overrides));
     try {
       const res = await fetch('/api/iki/import-excel', { method: 'POST', body: fd });
       const json = await res.json();
-      if (!json.ok) { toast.error(json.message ?? 'Gagal membaca file.'); setParsed(null); }
-      else { setParsed(json as Parsed); setPemilikSel(null); setAtasanSel(null); setTimpa(false); }
+      if (!json.ok) { toast.error(json.message ?? 'Gagal membaca file.'); if (!overrides) setParsed(null); }
+      else {
+        setParsed(json as Parsed);
+        setFile(f);
+        if (!overrides) { setOvr({}); setPemilikSel(null); setAtasanSel(null); setTimpa(false); }
+      }
     } catch { toast.error('Gagal terhubung ke server.'); }
     finally { setBusy(false); }
+  }
+
+  function remapColumn(field: string, col: number) {
+    if (!file) return;
+    const next = { ...ovr, [field]: col };
+    setOvr(next);
+    void handleFile(file, next);
   }
 
   const fromCombo = (combo: string): Identity | null => {
@@ -201,7 +238,7 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
           <>
             <p className="iki-hint" style={{ marginBottom: 10 }}>
               <b>{fileName}</b> · {parsed.source} · varian {parsed.varian} · {parsed.groups.length} grup / {totalRhk} RHK
-              {' '}<button type="button" className="iki-imp-relink" onClick={() => { setParsed(null); }}>ganti file</button>
+              {' '}<button type="button" className="iki-imp-relink" onClick={() => { setParsed(null); setFile(null); setOvr({}); }}>ganti file</button>
             </p>
 
             <label className="iki-field">
@@ -250,6 +287,40 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
                 )}
               </div>
             )}
+
+            <details className="iki-imp-cols" open={parsed.columns.some(c => c.source === 'fallback' && c.col !== null)}>
+              <summary>
+                Pemetaan kolom
+                {parsed.columns.some(c => c.source === 'fallback' && c.col !== null)
+                  ? <span className="iki-imp-colbadge warn">perlu dicek</span>
+                  : <span className="iki-imp-colbadge">otomatis OK</span>}
+              </summary>
+              <div className="iki-imp-colgrid">
+                {parsed.columns
+                  .filter(c => parsed.varian === 'STANDAR' || c.field !== 'rhk_intervensi')
+                  .map(c => {
+                    const badge = COL_SOURCE_BADGE[c.source];
+                    return (
+                      <div key={c.field} className="iki-imp-colrow">
+                        <span className="iki-imp-colname">{COL_FIELD_LABEL[c.field] ?? c.field}</span>
+                        <select
+                          value={c.col ?? ''}
+                          disabled={busy}
+                          onChange={e => { const v = Number(e.target.value); if (v >= 1) remapColumn(c.field, v); }}
+                        >
+                          {c.col === null && <option value="">— tidak terdeteksi —</option>}
+                          {parsed.columnOptions.map(o => (
+                            <option key={o.col} value={o.col}>
+                              Kol {o.col}{o.header ? ` — ${o.header.slice(0, 40)}` : ''}{o.sample ? ` (${o.sample.slice(0, 25)})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <span className={`iki-imp-colbadge${badge.warn && c.col !== null ? ' warn' : ''}`}>{badge.label}</span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </details>
 
             {parsed.warnings.length > 0 && (
               <div className="iki-imp-box warn" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
@@ -303,6 +374,20 @@ const IMP_CSS = `
   .iki-imp-relink { background: transparent; border: 1px solid rgba(181,212,244,.35); color: #B5D4F4; border-radius: 12px; font-size: 10.5px; padding: 1px 8px; cursor: pointer; }
   .iki-imp-warn { font-size: 10.5px; color: #FAC775; line-height: 1.5; }
   .iki-imp-note { font-size: 10.5px; color: #85B7EB; line-height: 1.5; }
+  .iki-imp-cols { border: 1px solid rgba(12,68,124,.6); border-radius: 8px; padding: 7px 11px; margin-bottom: 10px; background: rgba(2,15,28,.3); }
+  .iki-imp-cols summary { cursor: pointer; font-size: 11.5px; font-weight: 700; color: #B5D4F4; display: flex; align-items: center; gap: 8px; user-select: none; }
+  .iki-imp-colgrid { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+  .iki-imp-colrow { display: grid; grid-template-columns: 150px 1fr auto; align-items: center; gap: 8px; }
+  .iki-imp-colname { font-size: 11px; color: #85B7EB; }
+  .iki-imp-colrow select { width: 100%; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 5px 8px; color: #E6F1FB; font-size: 11px; }
+  .iki-imp-colbadge { font-size: 9.5px; font-weight: 700; letter-spacing: .03em; border-radius: 10px; padding: 1px 8px; white-space: nowrap; background: rgba(29,158,117,.14); border: 1px solid rgba(29,158,117,.4); color: #4CC39A; }
+  .iki-imp-colbadge.warn { background: rgba(186,117,23,.13); border-color: rgba(186,117,23,.4); color: #FAC775; }
+  [data-theme="light"] .iki-imp-cols { border-color: rgba(0,0,0,.1); background: #F9FAFB; }
+  [data-theme="light"] .iki-imp-cols summary { color: #374151; }
+  [data-theme="light"] .iki-imp-colname { color: #6B7280; }
+  [data-theme="light"] .iki-imp-colrow select { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .iki-imp-colbadge { background: #E7F6F0; border-color: rgba(29,158,117,.35); color: #157A5B; }
+  [data-theme="light"] .iki-imp-colbadge.warn { background: #FEF3E2; border-color: rgba(186,117,23,.35); color: #92610E; }
   .iki-imp-box { display: flex; align-items: center; gap: 7px; font-size: 11.5px; border-radius: 8px; padding: 8px 11px; margin-bottom: 10px; line-height: 1.5; }
   .iki-imp-box.warn { background: rgba(186,117,23,.13); border: 1px solid rgba(186,117,23,.4); color: #FAC775; }
   .iki-imp-box.err { background: rgba(226,75,74,.14); border: 1px solid rgba(226,75,74,.4); color: #FCA5A5; }

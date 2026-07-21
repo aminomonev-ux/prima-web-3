@@ -154,3 +154,13 @@ export const ImportRenaksiQuerySchema = z.object({
 export const ImportAtasanQuerySchema = z.object({
   dokumen_id: z.coerce.number().int().positive(),
 });
+
+// Override pemetaan kolom import Excel (field → nomor kolom Excel 1-based)
+export const IMPORT_COL_FIELDS = [
+  'no', 'rhk_intervensi', 'rhk', 'aspek', 'indikator', 'target_tahunan',
+  'formulasi', 'romawi', 'target_tw', 'uraian', 'target_aksi',
+] as const;
+export const ImportExcelOverridesSchema = z.record(
+  z.enum(IMPORT_COL_FIELDS),
+  z.coerce.number().int().min(1).max(30),
+);

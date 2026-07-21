@@ -5,8 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { ikiRateLimit } from '@/lib/data/iki-schemas';
-import { parseIkiExcel } from '@/lib/iki/import-excel';
+import { ikiRateLimit, ImportExcelOverridesSchema } from '@/lib/data/iki-schemas';
+import { parseIkiExcel, type ImportColOverrides } from '@/lib/iki/import-excel';
 import { guard } from '../_guard';
 
 export const runtime = 'nodejs';
@@ -46,8 +46,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, message: 'Isi file bukan Excel (.xlsx) yang valid.' }, { status: 400 });
   }
 
+  // Override pemetaan kolom manual dari panel preview (opsional)
+  let overrides: ImportColOverrides | undefined;
+  const ovrRaw = form?.get('overrides');
+  if (typeof ovrRaw === 'string' && ovrRaw) {
+    let parsedOvr: unknown;
+    try { parsedOvr = JSON.parse(ovrRaw); } catch {
+      return NextResponse.json({ ok: false, message: 'Pemetaan kolom tidak valid.' }, { status: 400 });
+    }
+    const check = ImportExcelOverridesSchema.safeParse(parsedOvr);
+    if (!check.success) return NextResponse.json({ ok: false, message: 'Pemetaan kolom tidak valid.' }, { status: 400 });
+    overrides = check.data as ImportColOverrides;
+  }
+
   try {
-    const result = await parseIkiExcel(buf);
+    const result = await parseIkiExcel(buf, overrides);
 
     await writeAuditLog({
       req,
