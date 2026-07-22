@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ClipboardCheck, Copy, FileText, FolderDown, Plus, LayoutGrid, RefreshCw, CheckSquare, Check, Trash2, Search, List, Lock } from 'lucide-react';
+import { ClipboardCheck, Copy, FileText, FolderDown, Plus, LayoutGrid, RefreshCw, CheckSquare, Check, Trash2, Search, List, Lock, Folder, ArrowRight, ChevronLeft } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -75,17 +75,26 @@ export default function IkiClient({ username, role, themePreference, initialRows
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
+  const [folder, setFolder] = useState<IkiJenisDokumen | null>(null);
+
   const byYear = filterTahun ? rows.filter(r => r.tahun === filterTahun) : rows;
+  const byFolder = folder ? byYear.filter(r => r.jenis === folder) : byYear;
   const q = search.trim().toLowerCase();
   const shown = q
-    ? byYear.filter(r => r.jabatan.toLowerCase().includes(q) || r.nama.toLowerCase().includes(q) || r.nip.toLowerCase().includes(q))
-    : byYear;
+    ? byFolder.filter(r => r.jabatan.toLowerCase().includes(q) || r.nama.toLowerCase().includes(q) || r.nip.toLowerCase().includes(q))
+    : byFolder;
   const kpi = {
-    total: byYear.length,
-    draft: byYear.filter(r => r.status === 'DRAFT').length,
-    final: byYear.filter(r => r.status === 'FINAL').length,
-    ubah: byYear.filter(r => r.jenis === 'PERUBAHAN').length,
+    total: byFolder.length,
+    draft: byFolder.filter(r => r.status === 'DRAFT').length,
+    final: byFolder.filter(r => r.status === 'FINAL').length,
   };
+  const folderStat = (j: IkiJenisDokumen) => {
+    const s = byYear.filter(r => r.jenis === j);
+    return { total: s.length, draft: s.filter(r => r.status === 'DRAFT').length, final: s.filter(r => r.status === 'FINAL').length };
+  };
+  function openFolder(j: IkiJenisDokumen) { setFolder(j); setSearch(''); exitSelect(); }
+  function backToFolders() { setFolder(null); setSearch(''); exitSelect(); }
+  function openCreate() { setForm(f => ({ ...f, jenis: folder ?? 'MURNI' })); setShowCreate(true); }
 
   const [dupTarget, setDupTarget] = useState<IkiListRow | null>(null);
   const [dupTahun, setDupTahun] = useState('');
@@ -207,7 +216,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
     const tahun = zipTahun || tahunList[0];
     if (!tahun) return;
     const list = rows
-      .filter(r => r.tahun === tahun && (!zipOnlyFinal || r.status === 'FINAL'))
+      .filter(r => r.tahun === tahun && (!folder || r.jenis === folder) && (!zipOnlyFinal || r.status === 'FINAL'))
       .slice(0, MAX_ZIP);
     if (list.length === 0) { toast.error(`Tidak ada dokumen${zipOnlyFinal ? ' FINAL' : ''} di tahun ${tahun}`); return; }
     setZipBusy(true);
@@ -234,7 +243,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
       const blob = zip.generate({ type: 'blob', compression: 'DEFLATE' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `IKI_${tahun}.zip`; a.click();
+      a.href = url; a.download = `IKI_${folder ? `${folder}_` : ''}${tahun}.zip`; a.click();
       URL.revokeObjectURL(url);
       fetch('/api/iki/export-log', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -261,52 +270,96 @@ export default function IkiClient({ username, role, themePreference, initialRows
       <main className="iki-main">
         <div className="iki-main-head">
           <div>
-            <h1 className="iki-h1"><ClipboardCheck size={22} /> Dokumen IKI</h1>
-            <p className="iki-sub">Beranda · per pejabat per tahun · {shown.length} dokumen</p>
+            {folder === null ? (
+              <>
+                <h1 className="iki-h1"><ClipboardCheck size={22} /> Dokumen IKI</h1>
+                <p className="iki-sub">Beranda · pilih jenis dokumen untuk mulai</p>
+              </>
+            ) : (
+              <div className="iki-back-row">
+                <button className="iki-backbtn" onClick={backToFolders} data-tooltip="Kembali ke pilihan jenis" data-tooltip-pos="below" aria-label="Kembali ke pilihan jenis"><ChevronLeft size={18} /></button>
+                <div>
+                  <h1 className="iki-h1">IKI {folder === 'PERUBAHAN' ? 'Perubahan' : 'Murni'}</h1>
+                  <p className="iki-sub">{shown.length} dokumen{filterTahun ? ` · tahun ${filterTahun}` : ''}</p>
+                </div>
+              </div>
+            )}
           </div>
           <div className="iki-head-actions">
-            {rows.length > 0 && !selectMode && (
-              <PrimaButton variant="ghost" iconLeft={<CheckSquare size={16} />} onClick={() => setSelectMode(true)}>Pilih</PrimaButton>
+            {folder === null ? (
+              tahunList.length > 1 && (
+                <select className="iki-filter" value={filterTahun} onChange={e => setFilterTahun(e.target.value)}>
+                  <option value="">Semua tahun</option>
+                  {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )
+            ) : (
+              <>
+                {byFolder.length > 0 && !selectMode && (
+                  <PrimaButton variant="ghost" iconLeft={<CheckSquare size={16} />} onClick={() => setSelectMode(true)}>Pilih</PrimaButton>
+                )}
+                {byFolder.length > 0 && (
+                  <PrimaButton variant="success" iconLeft={<FolderDown size={16} />}
+                    onClick={() => { setZipTahun(filterTahun || tahunList[0] || ''); setShowZip(true); }}>
+                    Unduh Zip
+                  </PrimaButton>
+                )}
+                <PrimaButton variant="success" iconLeft={<FileText size={16} />} onClick={() => setShowImportExcel(true)}>Import Excel</PrimaButton>
+                <PrimaButton variant="purple" iconLeft={<Plus size={16} />} onClick={openCreate}>Buat IKI</PrimaButton>
+              </>
             )}
-            {rows.length > 0 && (
-              <PrimaButton variant="success" iconLeft={<FolderDown size={16} />}
-                onClick={() => { setZipTahun(filterTahun || tahunList[0] || ''); setShowZip(true); }}>
-                Unduh Semua (Zip)
-              </PrimaButton>
-            )}
-            <PrimaButton variant="success" iconLeft={<FileText size={16} />} onClick={() => setShowImportExcel(true)}>Import Excel</PrimaButton>
-            <PrimaButton variant="purple" iconLeft={<Plus size={16} />} onClick={() => setShowCreate(true)}>Buat IKI</PrimaButton>
           </div>
         </div>
 
-        {rows.length > 0 && (
-          <div className="iki-kpi">
-            <div className="iki-kpi-tile"><span className="iki-kpi-lbl total"><FileText size={13} /> Total</span><b>{kpi.total}</b></div>
-            <div className="iki-kpi-tile"><span className="iki-kpi-lbl draft"><FileText size={13} /> Draft</span><b>{kpi.draft}</b></div>
-            <div className="iki-kpi-tile"><span className="iki-kpi-lbl final"><Lock size={13} /> Final</span><b>{kpi.final}</b></div>
-            <div className="iki-kpi-tile"><span className="iki-kpi-lbl ubah"><RefreshCw size={13} /> Perubahan</span><b>{kpi.ubah}</b></div>
+        {folder === null ? (
+          <div className="iki-folders">
+            {(['MURNI', 'PERUBAHAN'] as const).map(j => {
+              const st = folderStat(j);
+              return (
+                <button key={j} className={`iki-folder ${j === 'PERUBAHAN' ? 'ubah' : 'murni'}`} onClick={() => openFolder(j)}>
+                  <div className="iki-folder-top">
+                    <span className="iki-folder-ic"><Folder size={26} /></span>
+                    <ArrowRight size={20} className="iki-folder-arrow" />
+                  </div>
+                  <div className="iki-folder-name">
+                    IKI {j === 'PERUBAHAN' ? 'Perubahan' : 'Murni'}
+                    {j === 'PERUBAHAN' && <span className="iki-badge ubah">PERUBAHAN</span>}
+                  </div>
+                  <div className="iki-folder-sub">{j === 'PERUBAHAN' ? 'Dokumen revisi — judul + kata "PERUBAHAN"' : 'Dokumen indikator kinerja awal tahun'}</div>
+                  <div className="iki-folder-stat">
+                    <span><b>{st.total}</b> dokumen</span>
+                    <span className="d"><b>{st.draft}</b> draft</span>
+                    <span className="f"><b>{st.final}</b> final</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        )}
+        ) : (
+        <>
+        <div className="iki-kpi kpi3">
+          <div className="iki-kpi-tile"><span className="iki-kpi-lbl total"><FileText size={13} /> Total</span><b>{kpi.total}</b></div>
+          <div className="iki-kpi-tile"><span className="iki-kpi-lbl draft"><FileText size={13} /> Draft</span><b>{kpi.draft}</b></div>
+          <div className="iki-kpi-tile"><span className="iki-kpi-lbl final"><Lock size={13} /> Final</span><b>{kpi.final}</b></div>
+        </div>
 
-        {rows.length > 0 && (
-          <div className="iki-toolbar">
-            <div className="iki-searchbox">
-              <Search size={15} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari jabatan, nama, atau NIP…" />
-              {search && <button className="iki-search-clear" onClick={() => setSearch('')} aria-label="Kosongkan pencarian">×</button>}
-            </div>
-            {tahunList.length > 1 && (
-              <select className="iki-filter" value={filterTahun} onChange={e => setFilterTahun(e.target.value)}>
-                <option value="">Semua tahun</option>
-                {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            )}
-            <div className="iki-viewtoggle" role="group" aria-label="Tampilan">
-              <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')} data-tooltip="Kartu" data-tooltip-pos="above"><LayoutGrid size={15} /></button>
-              <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')} data-tooltip="Daftar" data-tooltip-pos="above"><List size={15} /></button>
-            </div>
+        <div className="iki-toolbar">
+          <div className="iki-searchbox">
+            <Search size={15} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari jabatan, nama, atau NIP…" />
+            {search && <button className="iki-search-clear" onClick={() => setSearch('')} aria-label="Kosongkan pencarian">×</button>}
           </div>
-        )}
+          {tahunList.length > 1 && (
+            <select className="iki-filter" value={filterTahun} onChange={e => setFilterTahun(e.target.value)}>
+              <option value="">Semua tahun</option>
+              {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+          <div className="iki-viewtoggle" role="group" aria-label="Tampilan">
+            <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')} data-tooltip="Kartu" data-tooltip-pos="above"><LayoutGrid size={15} /></button>
+            <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')} data-tooltip="Daftar" data-tooltip-pos="above"><List size={15} /></button>
+          </div>
+        </div>
 
         {selectMode && (
           <div className="iki-selbar">
@@ -323,8 +376,8 @@ export default function IkiClient({ username, role, themePreference, initialRows
         )}
 
         {shown.length === 0 ? (
-          rows.length === 0 ? (
-            <div className="iki-empty"><FileText size={28} /><p>Belum ada dokumen IKI.</p><span>Klik <b>Buat IKI</b> untuk mulai menyusun.</span></div>
+          byFolder.length === 0 ? (
+            <div className="iki-empty"><FileText size={28} /><p>Belum ada dokumen {folder === 'PERUBAHAN' ? 'Perubahan' : 'Murni'}.</p><span>Klik <b>Buat IKI</b> untuk mulai menyusun.</span></div>
           ) : (
             <div className="iki-empty"><Search size={28} /><p>Tidak ada dokumen yang cocok.</p><span>Ubah kata kunci atau filter tahun.</span></div>
           )
@@ -401,6 +454,8 @@ export default function IkiClient({ username, role, themePreference, initialRows
             ))}
           </div>
         )}
+        </>
+        )}
       </main>
 
       <FloatingDock isLight={isLight} limelight
@@ -409,7 +464,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
           { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={[
-          { icon: <Plus size={17} />, label: 'Buat', onClick: () => setShowCreate(true) },
+          { icon: <Plus size={17} />, label: 'Buat', onClick: openCreate },
           { icon: <RefreshCw size={17} />, label: 'Muat Ulang', onClick: () => void load() },
         ]}
       />
@@ -417,6 +472,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
       {showImportExcel && (
         <ImportIkiModal
           rows={rows}
+          initialJenis={folder ?? 'MURNI'}
           onClose={() => setShowImportExcel(false)}
           onDone={(id) => { setShowImportExcel(false); router.push(`/iki/${id}`); }}
         />
@@ -548,7 +604,24 @@ const LIST_CSS = `
   .iki-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #85B7EB; padding: 80px 20px; border: 1px dashed #0C447C; border-radius: 14px; }
   .iki-empty p { font-size: 15px; font-weight: 600; margin: 4px 0 0; color: #B5D4F4; }
   .iki-empty span { font-size: 12.5px; }
+  .iki-back-row { display: flex; align-items: center; gap: 12px; }
+  .iki-backbtn { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .12s; flex-shrink: 0; }
+  .iki-backbtn:hover { border-color: #185FA5; color: #E6F1FB; background: rgba(255,255,255,0.09); }
+  .iki-folders { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .iki-folder { text-align: left; background: #042C53; border: 1px solid #0C447C; border-radius: 14px; padding: 22px; cursor: pointer; color: #E6F1FB; font-family: inherit; transition: transform .12s, border-color .12s, box-shadow .12s; }
+  .iki-folder:hover { transform: translateY(-3px); border-color: #185FA5; box-shadow: 0 12px 28px rgba(0,0,0,.35); }
+  .iki-folder-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .iki-folder-ic { width: 52px; height: 52px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; background: rgba(239,159,39,0.14); color: #F5C77E; }
+  .iki-folder.ubah .iki-folder-ic { background: rgba(186,117,23,0.16); color: #FAC775; }
+  .iki-folder-arrow { color: #85B7EB; }
+  .iki-folder-name { font-size: 17px; font-weight: 800; margin-bottom: 3px; display: flex; align-items: center; gap: 8px; }
+  .iki-folder-sub { font-size: 12px; color: #85B7EB; margin-bottom: 14px; }
+  .iki-folder-stat { display: flex; gap: 16px; font-size: 11.5px; border-top: 1px solid rgba(12,68,124,0.6); padding-top: 12px; color: #B5D4F4; }
+  .iki-folder-stat b { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 800; color: #E6F1FB; margin-right: 3px; }
+  .iki-folder-stat .d b { color: #B9A6FF; }
+  .iki-folder-stat .f b { color: #7BE0BD; }
   .iki-kpi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .iki-kpi.kpi3 { grid-template-columns: repeat(3, 1fr); }
   .iki-kpi-tile { background: #042C53; border: 1px solid #0C447C; border-radius: 10px; padding: 12px 14px; }
   .iki-kpi-tile b { display: block; font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 800; margin-top: 3px; color: #E6F1FB; }
   .iki-kpi-lbl { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; }
@@ -586,7 +659,7 @@ const LIST_CSS = `
   .iki-row-act { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
   .iki-act.locked { color: #5f86ad; cursor: default; background: none; border-color: transparent; }
   .iki-act.locked:hover { color: #5f86ad; background: none; border-color: transparent; }
-  @media (max-width: 640px) { .iki-kpi { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .iki-kpi { grid-template-columns: repeat(2, 1fr); } .iki-folders { grid-template-columns: 1fr; } }
   .iki-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
   .iki-card { background: #042C53; border: 1px solid #0C447C; border-radius: 12px; padding: 16px; cursor: pointer; transition: transform .12s, border-color .12s, box-shadow .12s; position: relative; display: flex; flex-direction: column; min-height: 176px; }
   .iki-card:hover { transform: translateY(-3px); border-color: #185FA5; box-shadow: 0 12px 28px rgba(0,0,0,.35); }
@@ -668,6 +741,14 @@ const LIST_CSS = `
   [data-theme="light"] .iki-row:nth-child(even) { background: rgba(0,0,0,.012); }
   [data-theme="light"] .iki-row:hover { background: #EEF4FB; }
   [data-theme="light"] .iki-row-txt .nm, [data-theme="light"] .iki-row .iki-cnip { color: #6B7280; }
+  [data-theme="light"] .iki-backbtn { background: #F3F4F6; border-color: rgba(0,0,0,.1); color: #4B5563; }
+  [data-theme="light"] .iki-backbtn:hover { border-color: #8B5CF6; color: #0F0F12; background: #EDE9FE; }
+  [data-theme="light"] .iki-folder { background: #FFFFFF; border-color: rgba(0,0,0,.1); box-shadow: 0 1px 3px rgba(15,15,18,.06); color: #0F0F12; }
+  [data-theme="light"] .iki-folder:hover { border-color: #8B5CF6; box-shadow: 0 12px 28px rgba(15,15,18,.12); }
+  [data-theme="light"] .iki-folder-ic { background: rgba(178,107,0,.12); color: #B26B00; }
+  [data-theme="light"] .iki-folder.ubah .iki-folder-ic { background: rgba(186,117,23,.14); color: #8a5a12; }
+  [data-theme="light"] .iki-folder-sub, [data-theme="light"] .iki-folder-stat { color: #6B7280; }
+  [data-theme="light"] .iki-folder-stat b { color: #0F0F12; }
   [data-theme="light"] .iki-card-jabatan { color: #0F0F12; }
   [data-theme="light"] .iki-card-nama { color: #4B5563; }
   [data-theme="light"] .iki-year { color: #B26B00; }

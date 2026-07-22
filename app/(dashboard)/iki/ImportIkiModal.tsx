@@ -53,16 +53,17 @@ interface Props {
   rows: IkiListRow[];
   onClose(): void;
   onDone(id: number): void;
+  initialJenis?: 'MURNI' | 'PERUBAHAN';
 }
 
-export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
+export default function ImportIkiModal({ rows, onClose, onDone, initialJenis = 'MURNI' }: Props) {
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [ovr, setOvr] = useState<Record<string, number>>({});
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [tahun, setTahun] = useState(String(new Date().getFullYear()));
-  const [jenis, setJenis] = useState<'MURNI' | 'PERUBAHAN'>('MURNI');
+  const [jenis, setJenis] = useState<'MURNI' | 'PERUBAHAN'>(initialJenis);
   const [pejabat, setPejabat] = useState<PejabatSuggest[]>([]);
   // null = belum disentuh user → default otomatis (derived, bukan setState di effect);
   // '' = eksplisit "dari file" / belum pilih atasan
