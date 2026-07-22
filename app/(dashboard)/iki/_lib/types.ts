@@ -2,6 +2,7 @@
 // JANGAN import dari lib/data/iki.ts di client (module server, tarik mysql2).
 
 export type IkiVarian = 'STANDAR' | 'DIREKTUR';
+export type IkiJenisDokumen = 'MURNI' | 'PERUBAHAN';
 export type IkiAspekB = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
 export type IkiAspekC = 'Utama' | 'Penunjang';
 
@@ -12,6 +13,7 @@ export type IkiListRow = {
   id: number;
   tahun: string;
   varian: IkiVarian;
+  jenis: IkiJenisDokumen;
   nama: string;
   nip: string;
   jabatan: string;
@@ -49,6 +51,7 @@ export type IkiDokumen = {
   id: number;
   tahun: string;
   varian: IkiVarian;
+  jenis: IkiJenisDokumen;
   opd: string;
   nama: string;
   nip: string;
@@ -176,6 +179,16 @@ export function emptyRhk(noUrut: number): IkiRhk {
     atasan_rhk_id: null,
     triwulan: emptyTriwulan(),
   };
+}
+
+/** Inisial avatar dari nama pejabat: buang gelar (setelah koma) + honorifik, ambil huruf awal kata pertama+terakhir. "Rr. RETNO AVRILLIA N, S.IP" → "RN". */
+export function nameInitials(nama: string): string {
+  const base = (nama.split(',')[0] || nama).trim();
+  const skip = new Set(['dr', 'drg', 'ir', 'h', 'hj', 'r', 'rr', 'prof', 'drs', 'dra', 'hi']);
+  const words = base.split(/\s+/).map(w => w.replace(/\./g, '')).filter(w => w && !skip.has(w.toLowerCase()));
+  if (words.length === 0) return base.slice(0, 2).toUpperCase() || '?';
+  const pick = words.length >= 2 ? words[0][0] + words[words.length - 1][0] : words[0].slice(0, 2);
+  return pick.toUpperCase();
 }
 
 /** Format tanggal ttd Indonesia: 2026-01-15 → "15 Januari 2026". */

@@ -7,9 +7,16 @@
 // Pure module tanpa import server — aman dipakai client component.
 
 export type IkiVarian = 'STANDAR' | 'DIREKTUR';
+export type IkiJenisDokumen = 'MURNI' | 'PERUBAHAN';
+
+/** Judul dokumen — sumber tunggal PDF/Excel/editor. PERUBAHAN → suffix " PERUBAHAN". */
+export function docTitle(jenis: IkiJenisDokumen | null | undefined): string {
+  return jenis === 'PERUBAHAN' ? 'INDIKATOR KINERJA INDIVIDU PERUBAHAN' : 'INDIKATOR KINERJA INDIVIDU';
+}
 
 export type IkiGridDokumen = {
   varian: IkiVarian;
+  jenis: IkiJenisDokumen;
   opd: string;
   nama: string;
   nip: string;

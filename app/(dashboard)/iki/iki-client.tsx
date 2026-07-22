@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ClipboardCheck, Copy, FileText, FolderDown, Plus, LayoutGrid, RefreshCw } from 'lucide-react';
+import { ClipboardCheck, Copy, FileText, FolderDown, Plus, LayoutGrid, RefreshCw, CheckSquare, Check, Trash2, Search, List, Lock } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -12,8 +12,8 @@ import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { stripGolongan } from '@/lib/iki/layout';
 import ImportIkiModal from './ImportIkiModal';
-import { pejabatOptionValue, resolvePejabat } from './_lib/types';
-import type { IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
+import { pejabatOptionValue, resolvePejabat, nameInitials } from './_lib/types';
+import type { IkiJenisDokumen, IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
 
 interface Props {
   username: string;
@@ -33,6 +33,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
   const [form, setForm] = useState({
     tahun: String(new Date().getFullYear()),
     varian: 'STANDAR' as IkiVarian,
+    jenis: 'MURNI' as IkiJenisDokumen,
     nama: '',
     nip: '',
     jabatan: '',
@@ -71,7 +72,20 @@ export default function IkiClient({ username, role, themePreference, initialRows
 
   const tahunList = [...new Set(rows.map(r => r.tahun))].sort().reverse();
   const [filterTahun, setFilterTahun] = useState<string>('');
-  const shown = filterTahun ? rows.filter(r => r.tahun === filterTahun) : rows;
+  const [search, setSearch] = useState('');
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+
+  const byYear = filterTahun ? rows.filter(r => r.tahun === filterTahun) : rows;
+  const q = search.trim().toLowerCase();
+  const shown = q
+    ? byYear.filter(r => r.jabatan.toLowerCase().includes(q) || r.nama.toLowerCase().includes(q) || r.nip.toLowerCase().includes(q))
+    : byYear;
+  const kpi = {
+    total: byYear.length,
+    draft: byYear.filter(r => r.status === 'DRAFT').length,
+    final: byYear.filter(r => r.status === 'FINAL').length,
+    ubah: byYear.filter(r => r.jenis === 'PERUBAHAN').length,
+  };
 
   const [dupTarget, setDupTarget] = useState<IkiListRow | null>(null);
   const [dupTahun, setDupTahun] = useState('');
@@ -82,6 +96,50 @@ export default function IkiClient({ username, role, themePreference, initialRows
   const [zipOnlyFinal, setZipOnlyFinal] = useState(true);
   const [zipBusy, setZipBusy] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  function toggleSelect(id: number) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function exitSelect() { setSelectMode(false); setSelected(new Set()); }
+
+  async function handleBulkDelete() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const chosen = rows.filter(r => selected.has(r.id));
+    const isSA = role === 'SUPER_ADMIN';
+    const finalCount = chosen.filter(r => r.status === 'FINAL').length;
+    const finalNote = finalCount === 0 ? '' : isSA
+      ? ` Termasuk ${finalCount} dokumen FINAL.`
+      : ` ${finalCount} dokumen FINAL akan DILEWATI — hanya SUPER_ADMIN yang bisa menghapus FINAL.`;
+    if (!(await confirmDialog({
+      title: `Hapus ${ids.length} dokumen IKI`,
+      message: `Menghapus ${ids.length} dokumen terpilih beserta seluruh isinya secara permanen.${finalNote} Lanjutkan?`,
+      variant: 'danger',
+    }))) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch('/api/iki', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const json = await res.json();
+      if (!json.ok) { toast.error(json.message ?? 'Gagal menghapus'); return; }
+      // Cocokkan penghapusan lokal dgn logika server: non-SA melewati FINAL.
+      const removed = new Set(chosen.filter(r => isSA || r.status !== 'FINAL').map(r => r.id));
+      setRows(prev => prev.filter(r => !removed.has(r.id)));
+      toast.success(`${json.deleted} dokumen dihapus${json.skippedFinal ? `, ${json.skippedFinal} FINAL dilewati` : ''}`);
+      exitSelect();
+    } catch { toast.error('Gagal terhubung ke server'); }
+    finally { setBulkBusy(false); }
+  }
 
   async function load() {
     try {
@@ -204,14 +262,11 @@ export default function IkiClient({ username, role, themePreference, initialRows
         <div className="iki-main-head">
           <div>
             <h1 className="iki-h1"><ClipboardCheck size={22} /> Dokumen IKI</h1>
-            <p className="iki-sub">Indikator Kinerja Individu per pejabat per tahun · {shown.length} dokumen</p>
+            <p className="iki-sub">Beranda · per pejabat per tahun · {shown.length} dokumen</p>
           </div>
           <div className="iki-head-actions">
-            {tahunList.length > 1 && (
-              <select className="iki-filter" value={filterTahun} onChange={e => setFilterTahun(e.target.value)}>
-                <option value="">Semua tahun</option>
-                {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+            {rows.length > 0 && !selectMode && (
+              <PrimaButton variant="ghost" iconLeft={<CheckSquare size={16} />} onClick={() => setSelectMode(true)}>Pilih</PrimaButton>
             )}
             {rows.length > 0 && (
               <PrimaButton variant="success" iconLeft={<FolderDown size={16} />}
@@ -224,31 +279,124 @@ export default function IkiClient({ username, role, themePreference, initialRows
           </div>
         </div>
 
+        {rows.length > 0 && (
+          <div className="iki-kpi">
+            <div className="iki-kpi-tile"><span className="iki-kpi-lbl total"><FileText size={13} /> Total</span><b>{kpi.total}</b></div>
+            <div className="iki-kpi-tile"><span className="iki-kpi-lbl draft"><FileText size={13} /> Draft</span><b>{kpi.draft}</b></div>
+            <div className="iki-kpi-tile"><span className="iki-kpi-lbl final"><Lock size={13} /> Final</span><b>{kpi.final}</b></div>
+            <div className="iki-kpi-tile"><span className="iki-kpi-lbl ubah"><RefreshCw size={13} /> Perubahan</span><b>{kpi.ubah}</b></div>
+          </div>
+        )}
+
+        {rows.length > 0 && (
+          <div className="iki-toolbar">
+            <div className="iki-searchbox">
+              <Search size={15} />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari jabatan, nama, atau NIP…" />
+              {search && <button className="iki-search-clear" onClick={() => setSearch('')} aria-label="Kosongkan pencarian">×</button>}
+            </div>
+            {tahunList.length > 1 && (
+              <select className="iki-filter" value={filterTahun} onChange={e => setFilterTahun(e.target.value)}>
+                <option value="">Semua tahun</option>
+                {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+            <div className="iki-viewtoggle" role="group" aria-label="Tampilan">
+              <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')} data-tooltip="Kartu" data-tooltip-pos="above"><LayoutGrid size={15} /></button>
+              <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')} data-tooltip="Daftar" data-tooltip-pos="above"><List size={15} /></button>
+            </div>
+          </div>
+        )}
+
+        {selectMode && (
+          <div className="iki-selbar">
+            <span>{selected.size} dipilih</span>
+            <button className="iki-sellink" onClick={() => setSelected(new Set(shown.map(r => r.id)))}>Pilih semua ({shown.length})</button>
+            <button className="iki-sellink" onClick={() => setSelected(new Set())}>Kosongkan</button>
+            <span className="iki-sel-spacer" />
+            <PrimaButton variant="danger" size="sm" iconLeft={<Trash2 size={15} />}
+              disabled={selected.size === 0 || bulkBusy} onClick={handleBulkDelete}>
+              {bulkBusy ? 'Menghapus…' : `Hapus Terpilih (${selected.size})`}
+            </PrimaButton>
+            <PrimaButton variant="ghost" size="sm" onClick={exitSelect} disabled={bulkBusy}>Selesai</PrimaButton>
+          </div>
+        )}
+
         {shown.length === 0 ? (
-          <div className="iki-empty"><FileText size={28} /><p>Belum ada dokumen IKI.</p><span>Klik <b>Buat IKI</b> untuk mulai menyusun.</span></div>
-        ) : (
+          rows.length === 0 ? (
+            <div className="iki-empty"><FileText size={28} /><p>Belum ada dokumen IKI.</p><span>Klik <b>Buat IKI</b> untuk mulai menyusun.</span></div>
+          ) : (
+            <div className="iki-empty"><Search size={28} /><p>Tidak ada dokumen yang cocok.</p><span>Ubah kata kunci atau filter tahun.</span></div>
+          )
+        ) : view === 'grid' ? (
           <div className="iki-grid">
             {shown.map(d => (
-              <div key={d.id} className="iki-card" onClick={() => router.push(`/iki/${d.id}`)}>
+              <div key={d.id} className={`iki-card${selectMode ? ' selectable' : ''}${selected.has(d.id) ? ' selected' : ''}`}
+                onClick={() => selectMode ? toggleSelect(d.id) : router.push(`/iki/${d.id}`)}>
                 <div className="iki-card-top">
-                  <span className="iki-year">{d.tahun}</span>
+                  <span className={`iki-avatar${d.varian === 'DIREKTUR' ? ' dir' : ''}`}>{nameInitials(d.nama)}</span>
+                  <span className="iki-cyear">{d.tahun}</span>
                   <div className="iki-badges">
+                    {selectMode && <span className={`iki-check${selected.has(d.id) ? ' on' : ''}`}>{selected.has(d.id) && <Check size={13} strokeWidth={3} />}</span>}
                     {d.varian === 'DIREKTUR' && <span className="iki-badge dir">DIREKTUR</span>}
+                    {d.jenis === 'PERUBAHAN' && <span className="iki-badge ubah">PERUBAHAN</span>}
                     <span className={`iki-badge ${d.status === 'FINAL' ? 'final' : 'draft'}`}>{d.status}</span>
                   </div>
                 </div>
                 <div className="iki-card-jabatan">{d.jabatan}</div>
                 <div className="iki-card-nama">{d.nama}</div>
-                <div className="iki-card-meta">NIP {d.nip} · {d.jumlah_rhk} RHK</div>
-                <div className="iki-card-actions" onClick={e => e.stopPropagation()}>
-                  <button className="iki-act" data-tooltip="Duplikat ke tahun lain" data-tooltip-pos="above"
-                    onClick={() => { setDupTarget(d); setDupTahun(String(Number(d.tahun) + 1)); }}>
-                    <Copy size={15} />
-                  </button>
-                  {d.status !== 'FINAL' && (
-                    <button className="iki-act danger" data-tooltip="Hapus dokumen" data-tooltip-pos="above" onClick={() => handleDelete(d)}><DeleteIcon size={15} /></button>
-                  )}
+                <div className="iki-card-foot">
+                  <span className="iki-cnip">NIP {d.nip}</span>
+                  <span className="iki-rhk">{d.jumlah_rhk} RHK</span>
                 </div>
+                {!selectMode && (
+                  <div className="iki-card-actions" onClick={e => e.stopPropagation()}>
+                    <button className="iki-act" data-tooltip="Duplikat ke tahun lain" data-tooltip-pos="above"
+                      onClick={() => { setDupTarget(d); setDupTahun(String(Number(d.tahun) + 1)); }}>
+                      <Copy size={15} />
+                    </button>
+                    {d.status !== 'FINAL' && (
+                      <button className="iki-act danger" data-tooltip="Hapus dokumen" data-tooltip-pos="above" onClick={() => handleDelete(d)}><DeleteIcon size={15} /></button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="iki-list">
+            <div className="iki-list-head">
+              <span>Pejabat</span><span>NIP</span><span className="c">RHK</span><span>Status</span><span className="r">{selectMode ? '' : 'Aksi'}</span>
+            </div>
+            {shown.map(d => (
+              <div key={d.id} className={`iki-row${selectMode ? ' selectable' : ''}${selected.has(d.id) ? ' selected' : ''}`}
+                onClick={() => selectMode ? toggleSelect(d.id) : router.push(`/iki/${d.id}`)}>
+                <div className="iki-row-pej">
+                  {selectMode && <span className={`iki-check${selected.has(d.id) ? ' on' : ''}`}>{selected.has(d.id) && <Check size={12} strokeWidth={3} />}</span>}
+                  <span className={`iki-avatar sm${d.varian === 'DIREKTUR' ? ' dir' : ''}`}>{nameInitials(d.nama)}</span>
+                  <div className="iki-row-txt">
+                    <div className="jab">{d.jabatan}</div>
+                    <div className="nm">{d.nama}</div>
+                  </div>
+                </div>
+                <span className="iki-cnip mono">{d.nip}</span>
+                <span className="c mono">{d.jumlah_rhk}</span>
+                <span className="iki-row-badges">
+                  {d.varian === 'DIREKTUR' && <span className="iki-badge dir">DIREKTUR</span>}
+                  {d.jenis === 'PERUBAHAN' && <span className="iki-badge ubah">PERUBAHAN</span>}
+                  <span className={`iki-badge ${d.status === 'FINAL' ? 'final' : 'draft'}`}>{d.status}</span>
+                </span>
+                {!selectMode ? (
+                  <span className="iki-row-act" onClick={e => e.stopPropagation()}>
+                    <button className="iki-act" data-tooltip="Duplikat ke tahun lain" data-tooltip-pos="above"
+                      onClick={() => { setDupTarget(d); setDupTahun(String(Number(d.tahun) + 1)); }}>
+                      <Copy size={14} />
+                    </button>
+                    {d.status !== 'FINAL'
+                      ? <button className="iki-act danger" data-tooltip="Hapus dokumen" data-tooltip-pos="above" onClick={() => handleDelete(d)}><DeleteIcon size={14} /></button>
+                      : <span className="iki-act locked" data-tooltip="FINAL — terkunci" data-tooltip-pos="above"><Lock size={13} /></span>}
+                  </span>
+                ) : <span className="iki-row-act" />}
               </div>
             ))}
           </div>
@@ -293,6 +441,13 @@ export default function IkiClient({ username, role, themePreference, initialRows
                   <b>Direktur</b><span>8 kolom, ttd tunggal (pejabat puncak)</span>
                 </button>
               </div>
+            </label>
+            <label className="iki-field">
+              <span>Jenis Dokumen</span>
+              <select value={form.jenis} onChange={e => setForm(f => ({ ...f, jenis: e.target.value as IkiJenisDokumen }))}>
+                <option value="MURNI">Murni — judul &quot;INDIKATOR KINERJA INDIVIDU&quot;</option>
+                <option value="PERUBAHAN">Perubahan — judul + &quot;PERUBAHAN&quot;</option>
+              </select>
             </label>
             <label className="iki-field">
               <span>Nama Pejabat (+ gelar)</span>
@@ -393,20 +548,73 @@ const LIST_CSS = `
   .iki-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #85B7EB; padding: 80px 20px; border: 1px dashed #0C447C; border-radius: 14px; }
   .iki-empty p { font-size: 15px; font-weight: 600; margin: 4px 0 0; color: #B5D4F4; }
   .iki-empty span { font-size: 12.5px; }
+  .iki-kpi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .iki-kpi-tile { background: #042C53; border: 1px solid #0C447C; border-radius: 10px; padding: 12px 14px; }
+  .iki-kpi-tile b { display: block; font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 800; margin-top: 3px; color: #E6F1FB; }
+  .iki-kpi-lbl { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; }
+  .iki-kpi-lbl.total { color: #85B7EB; }
+  .iki-kpi-lbl.draft { color: #B9A6FF; }
+  .iki-kpi-lbl.final { color: #7BE0BD; }
+  .iki-kpi-lbl.ubah { color: #FAC775; }
+  .iki-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .iki-searchbox { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 8px; background: #042C53; border: 1px solid #0C447C; border-radius: 8px; padding: 0 11px; height: 38px; color: #85B7EB; }
+  .iki-searchbox input { flex: 1; background: none; border: none; outline: none; color: #E6F1FB; font-size: 12.5px; font-family: 'Inter', sans-serif; }
+  .iki-searchbox input::placeholder { color: #5f86ad; }
+  .iki-search-clear { background: none; border: none; color: #85B7EB; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+  .iki-search-clear:hover { color: #E6F1FB; }
+  .iki-viewtoggle { display: flex; background: #042C53; border: 1px solid #0C447C; border-radius: 8px; padding: 3px; gap: 2px; }
+  .iki-viewtoggle button { background: none; border: none; color: #85B7EB; width: 32px; height: 30px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .12s; }
+  .iki-viewtoggle button:hover { color: #E6F1FB; }
+  .iki-viewtoggle button.on { background: #185FA5; color: #fff; }
+  .iki-list { background: #042C53; border: 1px solid #0C447C; border-radius: 12px; overflow: hidden; }
+  .iki-list-head, .iki-row { display: grid; grid-template-columns: minmax(0,2.5fr) 1.3fr 52px 1.4fr 74px; gap: 12px; align-items: center; padding: 11px 16px; }
+  .iki-list-head { background: rgba(12,68,124,0.35); font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #85B7EB; }
+  .iki-list-head .c { text-align: center; }
+  .iki-list-head .r { text-align: right; }
+  .iki-row { border-top: 1px solid rgba(12,68,124,0.5); cursor: pointer; transition: background .12s; }
+  .iki-row:nth-child(even) { background: rgba(255,255,255,0.015); }
+  .iki-row:hover { background: rgba(24,95,165,0.16); }
+  .iki-row.selected { background: rgba(124,92,252,0.14); }
+  .iki-row-pej { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .iki-row-txt { min-width: 0; }
+  .iki-row-txt .jab { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .iki-row-txt .nm { font-size: 11px; color: #B5D4F4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .iki-row .mono { font-family: 'JetBrains Mono', monospace; }
+  .iki-row .iki-cnip { font-size: 11px; color: #85B7EB; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .iki-row .c { text-align: center; font-size: 12px; }
+  .iki-row-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+  .iki-row-act { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+  .iki-act.locked { color: #5f86ad; cursor: default; background: none; border-color: transparent; }
+  .iki-act.locked:hover { color: #5f86ad; background: none; border-color: transparent; }
+  @media (max-width: 640px) { .iki-kpi { grid-template-columns: repeat(2, 1fr); } }
   .iki-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
-  .iki-card { background: #042C53; border: 1px solid #0C447C; border-radius: 12px; padding: 16px; cursor: pointer; transition: transform .12s, border-color .12s, box-shadow .12s; position: relative; }
+  .iki-card { background: #042C53; border: 1px solid #0C447C; border-radius: 12px; padding: 16px; cursor: pointer; transition: transform .12s, border-color .12s, box-shadow .12s; position: relative; display: flex; flex-direction: column; min-height: 176px; }
   .iki-card:hover { transform: translateY(-3px); border-color: #185FA5; box-shadow: 0 12px 28px rgba(0,0,0,.35); }
-  .iki-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .iki-year { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 800; color: #EF9F27; }
-  .iki-badges { display: flex; gap: 6px; }
+  .iki-card.selected { border-color: #7C5CFC; box-shadow: 0 0 0 2px rgba(124,92,252,.4); }
+  .iki-check { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #185FA5; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.04); color: #fff; flex-shrink: 0; }
+  .iki-check.on { background: #7C5CFC; border-color: #7C5CFC; }
+  .iki-selbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding: 10px 14px; background: #042C53; border: 1px solid #0C447C; border-radius: 10px; flex-wrap: wrap; position: sticky; top: 66px; z-index: 100; }
+  .iki-selbar > span:first-child { font-size: 13px; font-weight: 700; color: #E6F1FB; }
+  .iki-sellink { background: none; border: none; color: #85B7EB; font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0; }
+  .iki-sellink:hover { color: #E6F1FB; }
+  .iki-sel-spacer { flex: 1; }
+  .iki-card-top { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+  .iki-avatar { width: 40px; height: 40px; border-radius: 10px; background: rgba(239,159,39,0.14); color: #F5C77E; font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .iki-avatar.dir { background: rgba(29,158,117,0.14); color: #7BE0BD; }
+  .iki-avatar.sm { width: 32px; height: 32px; border-radius: 8px; font-size: 11.5px; }
+  .iki-cyear { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 700; color: #EF9F27; }
+  .iki-badges { display: flex; gap: 6px; margin-left: auto; align-items: center; }
   .iki-badge { font-size: 10px; font-weight: 800; letter-spacing: .07em; padding: 3px 9px; border-radius: 99px; }
   .iki-badge.draft { background: rgba(124,92,252,0.16); color: #B9A6FF; border: 1px solid rgba(124,92,252,0.4); }
   .iki-badge.final { background: rgba(29,158,117,0.16); color: #7BE0BD; border: 1px solid rgba(29,158,117,0.4); }
   .iki-badge.dir { background: rgba(239,159,39,0.14); color: #F5C77E; border: 1px solid rgba(239,159,39,0.4); }
-  .iki-card-jabatan { font-size: 13.5px; font-weight: 700; line-height: 1.4; margin-bottom: 4px; }
-  .iki-card-nama { font-size: 12.5px; color: #B5D4F4; margin-bottom: 6px; }
-  .iki-card-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #85B7EB; }
-  .iki-card-actions { display: flex; gap: 6px; margin-top: 14px; min-height: 32px; }
+  .iki-badge.ubah { background: rgba(186,117,23,0.16); color: #FAC775; border: 1px solid rgba(186,117,23,0.45); }
+  .iki-card-jabatan { font-size: 13px; font-weight: 700; line-height: 1.35; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 35px; }
+  .iki-card-nama { font-size: 12px; color: #B5D4F4; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .iki-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid rgba(12,68,124,0.55); }
+  .iki-cnip { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #85B7EB; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .iki-rhk { font-size: 10.5px; color: #7BE0BD; background: rgba(29,158,117,0.12); padding: 2px 8px; border-radius: 99px; white-space: nowrap; flex-shrink: 0; }
+  .iki-card-actions { display: flex; gap: 6px; margin-top: 10px; min-height: 32px; }
   .iki-act { background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .12s; }
   .iki-act:hover { border-color: #185FA5; color: #E6F1FB; background: rgba(255,255,255,0.09); }
   .iki-act.danger:hover { border-color: #E24B4A; color: #FCA5A5; background: rgba(226,75,74,0.1); }
@@ -435,6 +643,31 @@ const LIST_CSS = `
   [data-theme="light"] .iki-filter { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #0F0F12; }
   [data-theme="light"] .iki-card { background: #FFFFFF; border-color: rgba(0,0,0,.1); box-shadow: 0 1px 3px rgba(15,15,18,.06); }
   [data-theme="light"] .iki-card:hover { border-color: #8B5CF6; box-shadow: 0 12px 28px rgba(15,15,18,.12); }
+  [data-theme="light"] .iki-card.selected { border-color: #7C5CFC; box-shadow: 0 0 0 2px rgba(124,92,252,.3); }
+  [data-theme="light"] .iki-selbar { background: #FFFFFF; border-color: rgba(0,0,0,.1); box-shadow: 0 1px 3px rgba(15,15,18,.06); }
+  [data-theme="light"] .iki-selbar > span:first-child { color: #0F0F12; }
+  [data-theme="light"] .iki-sellink { color: #6B7280; }
+  [data-theme="light"] .iki-sellink:hover { color: #0F0F12; }
+  [data-theme="light"] .iki-check { border-color: rgba(0,0,0,.2); background: #F3F4F6; }
+  [data-theme="light"] .iki-check.on { background: #7C5CFC; border-color: #7C5CFC; }
+  [data-theme="light"] .iki-kpi-tile { background: #FFFFFF; border-color: rgba(0,0,0,.1); box-shadow: 0 1px 3px rgba(15,15,18,.06); }
+  [data-theme="light"] .iki-kpi-tile b { color: #0F0F12; }
+  [data-theme="light"] .iki-searchbox, [data-theme="light"] .iki-viewtoggle { background: #FFFFFF; border-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .iki-searchbox input { color: #0F0F12; }
+  [data-theme="light"] .iki-searchbox input::placeholder { color: #9aa3af; }
+  [data-theme="light"] .iki-viewtoggle button { color: #6B7280; }
+  [data-theme="light"] .iki-viewtoggle button.on { background: #185FA5; color: #fff; }
+  [data-theme="light"] .iki-avatar { background: rgba(178,107,0,.12); color: #B26B00; }
+  [data-theme="light"] .iki-avatar.dir { background: rgba(15,138,99,.12); color: #0F8A63; }
+  [data-theme="light"] .iki-cyear { color: #B26B00; }
+  [data-theme="light"] .iki-cnip { color: #6B7280; }
+  [data-theme="light"] .iki-card-foot { border-top-color: rgba(0,0,0,.08); }
+  [data-theme="light"] .iki-list { background: #FFFFFF; border-color: rgba(0,0,0,.1); }
+  [data-theme="light"] .iki-list-head { background: #F3F4F6; color: #6B7280; }
+  [data-theme="light"] .iki-row { border-top-color: rgba(0,0,0,.07); }
+  [data-theme="light"] .iki-row:nth-child(even) { background: rgba(0,0,0,.012); }
+  [data-theme="light"] .iki-row:hover { background: #EEF4FB; }
+  [data-theme="light"] .iki-row-txt .nm, [data-theme="light"] .iki-row .iki-cnip { color: #6B7280; }
   [data-theme="light"] .iki-card-jabatan { color: #0F0F12; }
   [data-theme="light"] .iki-card-nama { color: #4B5563; }
   [data-theme="light"] .iki-year { color: #B26B00; }

@@ -45,6 +45,9 @@ export const TahunSchema = z.string().regex(/^\d{4}$/, 'Tahun 4 digit').refine(
 export const VarianSchema = z.enum(['STANDAR', 'DIREKTUR']);
 export type IkiVarian = z.infer<typeof VarianSchema>;
 
+export const JenisDokumenSchema = z.enum(['MURNI', 'PERUBAHAN']);
+export type IkiJenisDokumen = z.infer<typeof JenisDokumenSchema>;
+
 export const AspekBSchema = z.enum(['Akumulatif', 'Progres Positif', 'Progres Negatif', 'Pengulangan']);
 export const AspekCSchema = z.enum(['Utama', 'Penunjang']);
 
@@ -80,6 +83,7 @@ export const RhkSchema = z.object({
 export const CreateDokumenSchema = z.object({
   tahun: TahunSchema,
   varian: VarianSchema.default('STANDAR'),
+  jenis: JenisDokumenSchema.default('MURNI'),
   nama: z.string().trim().min(1, 'Nama wajib').max(255),
   nip: z.string().trim().min(1, 'NIP wajib').max(50),
   jabatan: z.string().trim().min(1, 'Jabatan wajib').max(255),
@@ -91,6 +95,7 @@ export const CreateDokumenSchema = z.object({
 export const SaveDokumenSchema = z.object({
   expected_version: z.number().int().min(0),
   varian: VarianSchema,
+  jenis: JenisDokumenSchema.default('MURNI'),
   opd: z.string().trim().min(1).max(255),
   nama: z.string().trim().min(1, 'Nama wajib').max(255),
   nip: z.string().trim().min(1, 'NIP wajib').max(50),
@@ -138,6 +143,10 @@ export const ListQuerySchema = z.object({
 });
 
 export const IdSchema = z.coerce.number().int().positive();
+
+export const BulkDeleteSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1, 'Minimal 1 dokumen').max(200, 'Maksimal 200 dokumen sekaligus'),
+});
 
 export const FinalizeSchema = z.object({
   expected_version: z.number().int().min(0),

@@ -62,6 +62,7 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
   const [ovr, setOvr] = useState<Record<string, number>>({});
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [tahun, setTahun] = useState(String(new Date().getFullYear()));
+  const [jenis, setJenis] = useState<'MURNI' | 'PERUBAHAN'>('MURNI');
   const [pejabat, setPejabat] = useState<PejabatSuggest[]>([]);
   // null = belum disentuh user → default otomatis (derived, bukan setState di effect);
   // '' = eksplisit "dari file" / belum pilih atasan
@@ -136,7 +137,7 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
   const atasan: Identity | null = atasanSelEff ? fromCombo(atasanSelEff) : null;
 
   const dupRow = parsed && pemilik
-    ? rows.find(r => r.tahun === tahun && r.nip === pemilik.nip && r.jabatan === pemilik.jabatan)
+    ? rows.find(r => r.tahun === tahun && r.nip === pemilik.nip && r.jabatan === pemilik.jabatan && r.jenis === jenis)
     : undefined;
 
   // Kaskade otomatis: dokumen IKI milik atasan terpilih (nip+jabatan+tahun,
@@ -190,7 +191,7 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
       } else {
         const res = await fetch('/api/iki', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tahun, varian: parsed.varian, nama: pemilik.nama, nip: pemilik.nip, jabatan: pemilik.jabatan, pangkat: pemilik.pangkat }),
+          body: JSON.stringify({ tahun, varian: parsed.varian, jenis, nama: pemilik.nama, nip: pemilik.nip, jabatan: pemilik.jabatan, pangkat: pemilik.pangkat }),
         });
         const json = await res.json();
         if (!json.ok) { toast.error(json.message ?? 'Gagal membuat dokumen'); return; }
@@ -234,6 +235,7 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
         body: JSON.stringify({
           expected_version: version,
           varian: parsed.varian,
+          jenis,
           opd: parsed.opd || 'RSJD dr. Amino Gondohutomo Provinsi Jawa Tengah',
           nama: pemilik.nama, nip: pemilik.nip, jabatan: pemilik.jabatan, pangkat: pemilik.pangkat,
           ikhtisar: parsed.ikhtisar,
@@ -283,6 +285,14 @@ export default function ImportIkiModal({ rows, onClose, onDone }: Props) {
               <span>Tahun Dokumen</span>
               <input value={tahun} inputMode="numeric" maxLength={4} style={{ maxWidth: 120 }}
                 onChange={e => setTahun(e.target.value.replace(/\D/g, ''))} />
+            </label>
+
+            <label className="iki-field">
+              <span>Jenis Dokumen</span>
+              <select value={jenis} onChange={e => setJenis(e.target.value as 'MURNI' | 'PERUBAHAN')}>
+                <option value="MURNI">Murni</option>
+                <option value="PERUBAHAN">Perubahan (judul + &quot;PERUBAHAN&quot;)</option>
+              </select>
             </label>
 
             <label className="iki-field">

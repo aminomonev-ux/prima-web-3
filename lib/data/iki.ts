@@ -20,6 +20,7 @@ export type IkiDokumenRow = {
   id: number;
   tahun: string;
   varian: 'STANDAR' | 'DIREKTUR';
+  jenis: 'MURNI' | 'PERUBAHAN';
   opd: string;
   nama: string;
   nip: string;
@@ -79,42 +80,45 @@ export type IkiVersiMeta = {
 export async function listDokumen(tahun?: string) {
   const rows = tahun
     ? await sql`
-        SELECT d.id, d.tahun, d.varian, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
+        SELECT d.id, d.tahun, d.varian, d.jenis, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
                d.updated_at, COUNT(r.id) AS jumlah_rhk
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id
         WHERE d.tahun = ${tahun}
         GROUP BY d.id
-        ORDER BY d.tahun DESC, d.varian = 'DIREKTUR' DESC, d.jabatan ASC`
+        ORDER BY d.tahun DESC, d.varian = 'DIREKTUR' DESC, d.jabatan ASC, d.jenis ASC`
     : await sql`
-        SELECT d.id, d.tahun, d.varian, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
+        SELECT d.id, d.tahun, d.varian, d.jenis, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
                d.updated_at, COUNT(r.id) AS jumlah_rhk
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id
         GROUP BY d.id
-        ORDER BY d.tahun DESC, d.varian = 'DIREKTUR' DESC, d.jabatan ASC`;
+        ORDER BY d.tahun DESC, d.varian = 'DIREKTUR' DESC, d.jabatan ASC, d.jenis ASC`;
   return rows;
 }
 
 export async function createDokumen(input: {
-  tahun: string; varian: 'STANDAR' | 'DIREKTUR';
+  tahun: string; varian: 'STANDAR' | 'DIREKTUR'; jenis?: 'MURNI' | 'PERUBAHAN';
   nama: string; nip: string; jabatan: string; pangkat?: string | null;
 }, userId: number): Promise<number> {
-  // UNIQUE (nip, tahun, jabatan) — 1 orang boleh dokumen per jabatan (kasus Plt.)
+  const jenis = input.jenis ?? 'MURNI';
+  const label = jenis === 'PERUBAHAN' ? ' (Perubahan)' : '';
+  // UNIQUE (nip, tahun, jabatan, jenis) — 1 orang boleh dokumen per jabatan (Plt.)
+  // + Murni/Perubahan berdampingan
   const dup = await queryOne<{ id: number }>(
-    sql`SELECT id FROM iki_dokumen WHERE nip = ${input.nip} AND tahun = ${input.tahun} AND jabatan = ${input.jabatan} LIMIT 1`,
+    sql`SELECT id FROM iki_dokumen WHERE nip = ${input.nip} AND tahun = ${input.tahun} AND jabatan = ${input.jabatan} AND jenis = ${jenis} LIMIT 1`,
   );
-  if (dup) throw new Error(`Dokumen IKI untuk NIP ${input.nip} jabatan ${input.jabatan} tahun ${input.tahun} sudah ada.`);
+  if (dup) throw new Error(`Dokumen IKI${label} untuk NIP ${input.nip} jabatan ${input.jabatan} tahun ${input.tahun} sudah ada.`);
   try {
     const res = await execWrite(sql`
-      INSERT INTO iki_dokumen (tahun, varian, nama, nip, jabatan, pangkat, created_by, updated_by)
-      VALUES (${input.tahun}, ${input.varian}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${input.pangkat || null}, ${userId}, ${userId})
+      INSERT INTO iki_dokumen (tahun, varian, jenis, nama, nip, jabatan, pangkat, created_by, updated_by)
+      VALUES (${input.tahun}, ${input.varian}, ${jenis}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${input.pangkat || null}, ${userId}, ${userId})
     `);
     return res.insertId;
   } catch (err) {
-    // Race SELECT→INSERT: UNIQUE uk_iki_nip_tahun_jabatan penjaga terakhir → pesan ramah, bukan 500
+    // Race SELECT→INSERT: UNIQUE uk_iki_nip_tahun_jabatan_jenis penjaga terakhir → pesan ramah, bukan 500
     if ((err as { code?: string }).code === 'ER_DUP_ENTRY') {
-      throw new Error(`Dokumen IKI untuk NIP ${input.nip} jabatan ${input.jabatan} tahun ${input.tahun} sudah ada.`);
+      throw new Error(`Dokumen IKI${label} untuk NIP ${input.nip} jabatan ${input.jabatan} tahun ${input.tahun} sudah ada.`);
     }
     throw err;
   }
@@ -122,7 +126,7 @@ export async function createDokumen(input: {
 
 export async function getDokumen(id: number): Promise<IkiDokumenDetail | null> {
   const doc = await queryOne<IkiDokumenRow>(
-    sql`SELECT id, tahun, varian, opd, nama, nip, jabatan, pangkat, ikhtisar,
+    sql`SELECT id, tahun, varian, jenis, opd, nama, nip, jabatan, pangkat, ikhtisar,
                nama_atasan, nip_atasan, jabatan_atasan, pangkat_atasan, kota_ttd,
                DATE_FORMAT(tanggal_ttd, '%Y-%m-%d') AS tanggal_ttd,
                atasan_dokumen_id, status, version
@@ -178,7 +182,7 @@ export async function duplicateDokumen(id: number, tahunTarget: string, userId: 
   if (!src) throw new IkiNotFoundError();
   if (src.tahun === tahunTarget) throw new Error('Tahun tujuan sama dengan tahun sumber.');
   const dup = await queryOne<{ id: number }>(
-    sql`SELECT id FROM iki_dokumen WHERE nip = ${src.nip} AND tahun = ${tahunTarget} AND jabatan = ${src.jabatan} LIMIT 1`,
+    sql`SELECT id FROM iki_dokumen WHERE nip = ${src.nip} AND tahun = ${tahunTarget} AND jabatan = ${src.jabatan} AND jenis = ${src.jenis} LIMIT 1`,
   );
   if (dup) throw new Error(`Dokumen IKI untuk NIP ${src.nip} jabatan ${src.jabatan} tahun ${tahunTarget} sudah ada.`);
 
@@ -196,10 +200,10 @@ export async function duplicateDokumen(id: number, tahunTarget: string, userId: 
   try {
     await withTransaction(async ({ tx, conn }) => {
       const ins = await tx`
-        INSERT INTO iki_dokumen (tahun, varian, opd, nama, nip, jabatan, pangkat, ikhtisar,
+        INSERT INTO iki_dokumen (tahun, varian, jenis, opd, nama, nip, jabatan, pangkat, ikhtisar,
           nama_atasan, nip_atasan, jabatan_atasan, pangkat_atasan, kota_ttd,
           atasan_dokumen_id, created_by, updated_by)
-        VALUES (${tahunTarget}, ${src.varian}, ${src.opd}, ${src.nama}, ${src.nip}, ${src.jabatan},
+        VALUES (${tahunTarget}, ${src.varian}, ${src.jenis}, ${src.opd}, ${src.nama}, ${src.nip}, ${src.jabatan},
           ${src.pangkat}, ${src.ikhtisar}, ${src.nama_atasan}, ${src.nip_atasan},
           ${src.jabatan_atasan}, ${src.pangkat_atasan}, ${src.kota_ttd},
           ${atasanTarget}, ${userId}, ${userId})
@@ -288,6 +292,7 @@ export async function saveDokumen(id: number, input: SaveDokumenInput, userId: n
     const upd = await tx`
       UPDATE iki_dokumen SET
         varian = ${input.varian},
+        jenis = ${input.jenis ?? 'MURNI'},
         opd = ${input.opd},
         nama = ${input.nama},
         nip = ${input.nip},
@@ -343,6 +348,12 @@ export async function saveDokumen(id: number, input: SaveDokumenInput, userId: n
           ['rhk_id', 'triwulan', 'target_tw', 'uraian', 'target_aksi'], twRows, conn);
       }
     }
+  }).catch((err: unknown) => {
+    // Ganti jenis/jabatan bentrok dgn dokumen lain (UNIQUE nip+tahun+jabatan+jenis)
+    if ((err as { code?: string }).code === 'ER_DUP_ENTRY') {
+      throw new Error('Sudah ada dokumen IKI lain dengan NIP, tahun, jabatan, dan jenis yang sama.');
+    }
+    throw err;
   });
   return newVersion;
 }
@@ -355,6 +366,27 @@ export async function deleteDokumen(id: number): Promise<void> {
     if (!exists) throw new IkiNotFoundError();
     throw new IkiFinalError();
   }
+}
+
+/**
+ * Hapus banyak dokumen sekaligus. `allowFinal` (SUPER_ADMIN) menghapus DRAFT+FINAL;
+ * kalau false, FINAL dilewati dan dilaporkan. Anak (iki_rhk/triwulan/versi) ikut
+ * terhapus via ON DELETE CASCADE. Satu statement DELETE = atomik, tak perlu transaksi.
+ */
+export async function bulkDeleteDokumen(
+  ids: number[],
+  allowFinal: boolean,
+): Promise<{ deleted: number; skippedFinal: number }> {
+  if (ids.length === 0) return { deleted: 0, skippedFinal: 0 };
+  if (allowFinal) {
+    const res = await execWrite(sql`DELETE FROM iki_dokumen WHERE id IN (${ids})`);
+    return { deleted: res.affectedRows, skippedFinal: 0 };
+  }
+  const finalRows = await queryMany<{ id: number }>(
+    sql`SELECT id FROM iki_dokumen WHERE id IN (${ids}) AND status = 'FINAL'`,
+  );
+  const res = await execWrite(sql`DELETE FROM iki_dokumen WHERE id IN (${ids}) AND status <> 'FINAL'`);
+  return { deleted: res.affectedRows, skippedFinal: finalRows.length };
 }
 
 export async function finalizeDokumen(id: number, expectedVersion: number, userId: number): Promise<void> {
@@ -442,6 +474,7 @@ export async function restoreVersi(dokumenId: number, versiId: number, userId: n
   const input: SaveDokumenInput = {
     expected_version: cur.version,
     varian: snap.varian,
+    jenis: snap.jenis,
     opd: snap.opd,
     nama: snap.nama,
     nip: snap.nip,

@@ -1076,6 +1076,7 @@ CREATE TABLE IF NOT EXISTS iki_dokumen (
   id                INT AUTO_INCREMENT PRIMARY KEY,
   tahun             VARCHAR(4) NOT NULL,
   varian            ENUM('STANDAR','DIREKTUR') NOT NULL DEFAULT 'STANDAR',
+  jenis             ENUM('MURNI','PERUBAHAN') NOT NULL DEFAULT 'MURNI' COMMENT 'PERUBAHAN → judul + " PERUBAHAN" (migration-iki-jenis.sql)',
   opd               VARCHAR(255) NOT NULL DEFAULT 'RSJD dr. Amino Gondohutomo Provinsi Jawa Tengah',
   nama              VARCHAR(255) NOT NULL,
   nip               VARCHAR(50)  NOT NULL,
@@ -1095,7 +1096,7 @@ CREATE TABLE IF NOT EXISTS iki_dokumen (
   updated_by        INT NULL,
   created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_iki_nip_tahun_jabatan (nip, tahun, jabatan),
+  UNIQUE KEY uk_iki_nip_tahun_jabatan_jenis (nip, tahun, jabatan, jenis),
   INDEX idx_iki_tahun_status (tahun, status),
   CONSTRAINT fk_iki_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_iki_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE

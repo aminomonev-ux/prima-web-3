@@ -4,7 +4,7 @@
 // landscape, header abu-abu + baris penomoran, border thin hitam, rowspan grup,
 // blok ttd per varian (STANDAR 2 ttd / DIREKTUR 1 ttd kanan).
 import type { CellDef, RowInput } from 'jspdf-autotable';
-import { buildIkiGrid, buildTtd, ikiFilename, type IkiGridDokumen, type TtdBlock } from './layout';
+import { buildIkiGrid, buildTtd, docTitle, ikiFilename, type IkiGridDokumen, type TtdBlock } from './layout';
 
 const GREY: [number, number, number] = [217, 217, 217];
 const BLACK: [number, number, number] = [0, 0, 0];
@@ -37,7 +37,7 @@ async function buildIkiPdf(doc: IkiGridDokumen) {
   // ── Judul ──
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(11);
-  pdf.text('INDIKATOR KINERJA INDIVIDU', pageW / 2, 12, { align: 'center' });
+  pdf.text(docTitle(doc.jenis), pageW / 2, 12, { align: 'center' });
 
   // ── I. DATA PRIBADI ──
   pdf.setFontSize(8.5);

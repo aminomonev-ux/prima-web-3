@@ -2,8 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { safeInt } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { CreateDokumenSchema, TahunSchema, ikiRateLimit } from '@/lib/data/iki-schemas';
-import { listDokumen, createDokumen, deleteDokumen, IkiFinalError, IkiNotFoundError } from '@/lib/data/iki';
+import { CreateDokumenSchema, TahunSchema, BulkDeleteSchema, ikiRateLimit } from '@/lib/data/iki-schemas';
+import { listDokumen, createDokumen, deleteDokumen, bulkDeleteDokumen, IkiFinalError, IkiNotFoundError } from '@/lib/data/iki';
 import { guard } from './_guard';
 
 export const dynamic = 'force-dynamic';
@@ -65,7 +65,30 @@ export async function DELETE(req: NextRequest) {
   const limited = await ikiRateLimit(g.session.userId, 'delete', 20);
   if (limited) return limited;
 
-  const id = safeInt(new URL(req.url).searchParams.get('id'), 0);
+  const idParam = new URL(req.url).searchParams.get('id');
+
+  // Bulk delete: tanpa ?id= → baca body { ids: [...] }. FINAL hanya boleh dihapus SUPER_ADMIN.
+  if (!idParam) {
+    const raw = await req.json().catch(() => null);
+    const parsed = BulkDeleteSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
+    }
+    const allowFinal = g.session.role === 'SUPER_ADMIN';
+    try {
+      const { deleted, skippedFinal } = await bulkDeleteDokumen(parsed.data.ids, allowFinal);
+      await writeAuditLog({
+        req, eventType: 'IKI_DELETE', userId: g.session.userId, username: g.session.username,
+        detail: `Hapus massal ${deleted} dokumen IKI id=[${parsed.data.ids.join(',')}]${skippedFinal ? ` (${skippedFinal} FINAL dilewati, bukan SUPER_ADMIN)` : ''}`,
+      });
+      return NextResponse.json({ ok: true, deleted, skippedFinal });
+    } catch (err) {
+      console.error('[IKI BULK DELETE Error]', err);
+      return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 });
+    }
+  }
+
+  const id = safeInt(idParam, 0);
   if (id <= 0) return NextResponse.json({ ok: false, message: 'ID tidak valid' }, { status: 400 });
   try {
     await deleteDokumen(id);

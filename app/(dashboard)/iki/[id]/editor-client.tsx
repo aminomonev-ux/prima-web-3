@@ -169,6 +169,7 @@ export default function EditorClient({ username, role, themePreference, initialD
       const payload = {
         expected_version: doc.version,
         varian: doc.varian,
+        jenis: doc.jenis,
         opd: doc.opd,
         nama: doc.nama,
         nip: doc.nip,
@@ -312,6 +313,7 @@ export default function EditorClient({ username, role, themePreference, initialD
           <span className="iki-brand-sub">{doc.jabatan || '—'}</span>
           <span className={`iki-badge ${readOnly ? 'final' : 'draft'}`}>{doc.status}</span>
           {isDir && <span className="iki-badge dir">DIREKTUR</span>}
+          {doc.jenis === 'PERUBAHAN' && <span className="iki-badge ubah">PERUBAHAN</span>}
         </div>
         <div className="iki-topbar-right">
           <ThemeToggle initialTheme={themePreference} onThemeChange={setTheme} />
@@ -349,6 +351,12 @@ export default function EditorClient({ username, role, themePreference, initialD
               <select value={doc.varian} disabled={readOnly} onChange={e => patchDoc({ varian: e.target.value as IkiDokumen['varian'] })}>
                 <option value="STANDAR">STANDAR (11 kolom)</option>
                 <option value="DIREKTUR">DIREKTUR (8 kolom)</option>
+              </select>
+            </label>
+            <label className="iki-f"><span>Jenis Dokumen</span>
+              <select value={doc.jenis} disabled={readOnly} onChange={e => patchDoc({ jenis: e.target.value as IkiDokumen['jenis'] })}>
+                <option value="MURNI">Murni</option>
+                <option value="PERUBAHAN">Perubahan</option>
               </select>
             </label>
             <label className="iki-f"><span>Nama (+ gelar)</span>
@@ -802,6 +810,7 @@ const ED_CSS = `
   .iki-badge.draft { background: rgba(124,92,252,0.16); color: #B9A6FF; border: 1px solid rgba(124,92,252,0.4); }
   .iki-badge.final { background: rgba(29,158,117,0.16); color: #7BE0BD; border: 1px solid rgba(29,158,117,0.4); }
   .iki-badge.dir { background: rgba(239,159,39,0.14); color: #F5C77E; border: 1px solid rgba(239,159,39,0.4); }
+  .iki-badge.ubah { background: rgba(186,117,23,0.16); color: #FAC775; border: 1px solid rgba(186,117,23,0.45); }
   .iki-ed-main { max-width: 1120px; margin: 0 auto; padding: 26px 22px; }
   .iki-final-banner { display: flex; align-items: center; gap: 10px; background: rgba(29,158,117,0.1); border: 1px solid rgba(29,158,117,0.4); color: #7BE0BD; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; font-weight: 600; margin-bottom: 18px; }
   .iki-stale-banner { display: flex; align-items: center; gap: 10px; background: rgba(186,117,23,0.12); border: 1px solid rgba(186,117,23,0.45); color: #F5C77E; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 18px; }

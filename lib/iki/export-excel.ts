@@ -5,7 +5,7 @@
 // blok Data Pribadi & ttd tanpa border, print setup landscape fitToWidth.
 import type ExcelJS from 'exceljs';
 import { loadExcelJs, sanitizeCell, downloadWorkbook } from '@/lib/shared/excel-export';
-import { buildIkiGrid, buildTtd, ikiFilename, type IkiGridDokumen, type TtdBlock } from './layout';
+import { buildIkiGrid, buildTtd, docTitle, ikiFilename, type IkiGridDokumen, type TtdBlock } from './layout';
 
 const THIN: Partial<ExcelJS.Borders> = {
   top: { style: 'thin' }, bottom: { style: 'thin' },
@@ -49,7 +49,7 @@ export async function exportIkiExcel(doc: IkiGridDokumen, tahun: string): Promis
   // ── Judul ──
   let row = 1;
   ws.mergeCells(row, 1, row, grid.colCount);
-  setCell(row, 1, 'INDIKATOR KINERJA INDIVIDU', { bold: true, center: true, middle: true });
+  setCell(row, 1, docTitle(doc.jenis), { bold: true, center: true, middle: true });
   row += 2;
 
   // ── I. DATA PRIBADI (tanpa border) ──
