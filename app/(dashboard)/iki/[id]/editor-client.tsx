@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import {
   ClipboardCheck, ArrowLeft, Save, Lock, Unlock, Plus, Download,
   FileSpreadsheet, FileText, Import, LayoutGrid, X,
-  AlertTriangle, History,
+  AlertTriangle, History, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { validateRhkTargets } from '@/lib/iki/validate';
 import { stripGolongan } from '@/lib/iki/layout';
@@ -150,6 +150,34 @@ export default function EditorClient({ username, role, themePreference, initialD
       const order = [...new Set(next.map(x => x.no_urut))].sort((a, b) => a - b);
       const renum = new Map(order.map((no, i) => [no, i + 1]));
       return { ...d, rhk: next.map(x => ({ ...x, no_urut: renum.get(x.no_urut) ?? x.no_urut })) };
+    });
+    setDirty(true);
+  }
+
+  // Pindah GRUP (dir -1 naik / +1 turun): tukar no_urut dgn grup tetangga → No. otomatis
+  // ikut bertukar (groups di-sort by no_urut). Seluruh baris RH dalam grup ikut sbg 1 blok.
+  function moveGroup(noUrut: number, dir: -1 | 1) {
+    setDoc(d => {
+      const order = [...new Set(d.rhk.map(r => r.no_urut))].sort((a, b) => a - b);
+      const pos = order.indexOf(noUrut);
+      const swap = pos + dir;
+      if (swap < 0 || swap >= order.length) return d;
+      const a = noUrut, b = order[swap];
+      return { ...d, rhk: d.rhk.map(r => ({ ...r, no_urut: r.no_urut === a ? b : r.no_urut === b ? a : r.no_urut })) };
+    });
+    setDirty(true);
+  }
+
+  // Pindah BARIS RH DI DALAM grup (dir -1 naik / +1 turun). Baris se-grup kontiguous di
+  // array, jadi tetangga index±1 yg no_urut sama = tetangga dlm grup. Tak lintas grup.
+  function moveRhkInGroup(index: number, dir: -1 | 1) {
+    setDoc(d => {
+      const swap = index + dir;
+      if (swap < 0 || swap >= d.rhk.length) return d;
+      if (d.rhk[swap].no_urut !== d.rhk[index].no_urut) return d;
+      const next = [...d.rhk];
+      [next[index], next[swap]] = [next[swap], next[index]];
+      return { ...d, rhk: next };
     });
     setDirty(true);
   }
@@ -465,10 +493,16 @@ export default function EditorClient({ username, role, themePreference, initialD
             <div className="iki-empty-rhk">Belum ada baris RHK. Tambahkan manual atau ambil dari Rencana Aksi / IKI Atasan.</div>
           )}
 
-          {groups.map(([noUrut, items]) => (
+          {groups.map(([noUrut, items], gi) => (
             <div key={noUrut} className="iki-group">
               <div className="iki-group-head">
                 <span className="iki-group-no">{noUrut}</span>
+                {!readOnly && (
+                  <span className="iki-move">
+                    <button className="iki-move-btn" disabled={gi === 0} data-tooltip="Pindah grup ke atas" data-tooltip-pos="above" onClick={() => moveGroup(noUrut, -1)}><ChevronUp size={15} /></button>
+                    <button className="iki-move-btn" disabled={gi === groups.length - 1} data-tooltip="Pindah grup ke bawah" data-tooltip-pos="above" onClick={() => moveGroup(noUrut, 1)}><ChevronDown size={15} /></button>
+                  </span>
+                )}
                 {!readOnly && warnByGroup.has(noUrut) && (
                   <span className="iki-warn-ico" data-tooltip="Target TW tidak konsisten dengan target tahunan" data-tooltip-pos="above"><AlertTriangle size={14} /></span>
                 )}
@@ -488,7 +522,7 @@ export default function EditorClient({ username, role, themePreference, initialD
                 )}
               </div>
 
-              {items.map(({ rhk: r, index }) => (
+              {items.map(({ rhk: r, index }, ri) => (
                 <div key={index} className="iki-rhk">
                   <div className="iki-rhk-grid">
                     <label className="iki-f wide"><span>Rencana Hasil Kerja</span>
@@ -543,6 +577,12 @@ export default function EditorClient({ username, role, themePreference, initialD
                     <div className="iki-rhk-foot">
                       {r.renaksi_id && <span className="iki-src">↳ dari Renaksi #{r.renaksi_id}</span>}
                       {r.atasan_rhk_id && <span className="iki-src">↳ dari IKI Atasan #{r.atasan_rhk_id}</span>}
+                      {items.length > 1 && (
+                        <span className="iki-move">
+                          <button className="iki-move-btn" disabled={ri === 0} data-tooltip="Naikkan RHK dalam grup" data-tooltip-pos="above" onClick={() => moveRhkInGroup(index, -1)}><ChevronUp size={14} /></button>
+                          <button className="iki-move-btn" disabled={ri === items.length - 1} data-tooltip="Turunkan RHK dalam grup" data-tooltip-pos="above" onClick={() => moveRhkInGroup(index, 1)}><ChevronDown size={14} /></button>
+                        </span>
+                      )}
                       <button className="iki-act danger" data-tooltip="Hapus baris RHK" data-tooltip-pos="above" onClick={() => removeRhk(index)}><DeleteIcon size={15} /></button>
                     </div>
                   )}
@@ -843,6 +883,11 @@ const ED_CSS = `
   .iki-group { border: 1px solid #0C447C; border-radius: 10px; padding: 14px; margin-bottom: 14px; background: rgba(2,15,28,0.45); }
   .iki-group-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
   .iki-group-no { flex: none; width: 30px; height: 30px; border-radius: 8px; background: rgba(239,159,39,0.14); border: 1px solid rgba(239,159,39,0.4); color: #F5C77E; font-family: 'JetBrains Mono', monospace; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; margin-top: 18px; }
+  .iki-move { display: inline-flex; gap: 3px; }
+  .iki-group-head .iki-move { flex-direction: column; gap: 2px; margin-top: 15px; }
+  .iki-move-btn { width: 26px; height: 19px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; cursor: pointer; transition: all .12s; }
+  .iki-move-btn:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; background: rgba(255,255,255,0.09); }
+  .iki-move-btn:disabled { opacity: .35; cursor: not-allowed; }
   .iki-rhk { border: 1px solid rgba(12,68,124,.6); border-radius: 8px; padding: 12px; margin-bottom: 10px; background: rgba(4,44,83,0.35); }
   .iki-rhk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
   .iki-rhk-grid .iki-f.wide { grid-column: span 2; }
@@ -901,6 +946,8 @@ const ED_CSS = `
   [data-theme="light"] .iki-tw td input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
   [data-theme="light"] .iki-empty-rhk { border-color: rgba(0,0,0,.12); color: #6B7280; }
   [data-theme="light"] .iki-act { background: #F3F4F6; border-color: rgba(0,0,0,.1); color: #4B5563; }
+  [data-theme="light"] .iki-move-btn { background: #F3F4F6; border-color: rgba(0,0,0,.1); color: #4B5563; }
+  [data-theme="light"] .iki-move-btn:hover:not(:disabled) { border-color: #185FA5; color: #0F0F12; background: #E8EEF6; }
   [data-theme="light"] .iki-modal { background: #FFFFFF; border-color: rgba(0,0,0,.1); }
   [data-theme="light"] .iki-tab { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #4B5563; }
   [data-theme="light"] .iki-tab.on { border-color: #1D9E75; color: #067154; background: rgba(29,158,117,0.08); }
