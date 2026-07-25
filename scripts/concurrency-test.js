@@ -59,6 +59,11 @@ function record(name, pass, detail) {
 async function cleanup(pool) {
   await pool.query(`DELETE FROM users WHERE role = ? OR username LIKE ?`, [TEST_ROLE, PREFIX + '%']);
   await pool.query(`DELETE FROM blud_locks WHERE entity LIKE ?`, [PREFIX + '%']);
+  // Realisasi BLUD (T7/T8) — alokasi dulu, baru tx (FK), baru baris anggaran & lock pagu.
+  await pool.query(`DELETE FROM blud_realisasi_alokasi WHERE anggaran_key LIKE ?`, [PREFIX + '%']);
+  await pool.query(`DELETE FROM blud_realisasi_tx WHERE uraian LIKE ?`, [PREFIX + '%']);
+  await pool.query(`DELETE FROM dpa_blud WHERE anggaran_key LIKE ?`, [PREFIX + '%']);
+  await pool.query(`DELETE FROM blud_locks WHERE key_id LIKE ?`, ['%' + PREFIX + '%']);
 }
 
 // Mirror login-fail ATOMIK (fix V3-5): satu statement increment + conditional lock.
@@ -258,6 +263,102 @@ async function testKinerjaLostUpdate(pool) {
   return { graceful, errored: errored.length, errSample: errored[0] || '', surviving: rows.length };
 }
 
+// ─── Realisasi BLUD (CONCEPT-blud-realisasi §5.2 & §5.3) ─────────────────────
+// Bahaya khas modul ini: dua orang mencatat transaksi BERBEDA ke rekening SAMA.
+// CAS per-baris tidak menolong — barisnya memang beda. Yang bocor adalah pagunya.
+
+const R_TAHUN = 2099;
+const R_BULAN = 12;
+const PAGU_ENTITY = 'realisasi_pagu';
+
+async function seedBarisAnggaran(pool, keySuffix, pagu) {
+  const key = `${PREFIX}${keySuffix}`;
+  await pool.query(
+    `INSERT INTO dpa_blud (tahun_anggaran, versi_tanggal, kode_rekening, uraian, jumlah, tipe_baris, row_id, anggaran_key, urutan)
+     VALUES (?, '2099-01-01', ?, ?, ?, 'CHILD', ?, ?, 1)`,
+    [R_TAHUN, `5.1.${keySuffix}`, `${PREFIX}baris ${keySuffix}`, pagu, `${PREFIX}row_${keySuffix}`, key]
+  );
+  return key;
+}
+
+// Mirror kunciDanPeriksaPagu + INSERT di realisasi-data.ts.
+// pakaiKunci=false → baseline "baca sisa lalu tulis" (anti-pattern L55).
+async function catatBelanja(pool, key, nilai, pakaiKunci) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [p] = await conn.query(
+      `SELECT jumlah FROM dpa_blud WHERE tahun_anggaran = ? AND anggaran_key = ?`, [R_TAHUN, key]
+    );
+    const pagu = Number(p[0]?.jumlah ?? 0);
+    if (pakaiKunci) {
+      await conn.query(`INSERT IGNORE INTO blud_locks (entity, key_id, version) VALUES (?, ?, 0)`,
+        [PAGU_ENTITY, `${R_TAHUN}:${key}`]);
+      await conn.query(`SELECT version FROM blud_locks WHERE entity = ? AND key_id = ? FOR UPDATE`,
+        [PAGU_ENTITY, `${R_TAHUN}:${key}`]);
+    }
+    // FOR UPDATE bukan sekadar mengunci: di REPEATABLE READ, SELECT biasa membaca
+    // snapshot dari pembacaan pertama transaksi (sebelum kunci didapat) → angka basi.
+    const [s] = await conn.query(
+      `SELECT COALESCE(SUM(nilai), 0) AS n FROM blud_realisasi_alokasi WHERE tahun_anggaran = ? AND anggaran_key = ?${pakaiKunci ? ' FOR UPDATE' : ''}`,
+      [R_TAHUN, key]
+    );
+    const terserap = Number(s[0].n);
+    await new Promise(r => setTimeout(r, 15)); // window race
+    if (terserap + nilai > pagu) { await conn.rollback(); return 'ditolak'; }
+    const [ins] = await conn.query(
+      `INSERT INTO blud_realisasi_tx (tahun_anggaran, bulan, tanggal, jenis, uraian, kas_keluar)
+       VALUES (?, ?, '2099-12-01', 'BELANJA', ?, ?)`,
+      [R_TAHUN, R_BULAN, `${PREFIX}tx ${nilai}`, nilai]
+    );
+    await conn.query(
+      `INSERT INTO blud_realisasi_alokasi (tx_id, tahun_anggaran, anggaran_key, nilai) VALUES (?, ?, ?, ?)`,
+      [ins.insertId, R_TAHUN, key, nilai]
+    );
+    await conn.commit();
+    return 'tersimpan';
+  } catch (e) { await conn.rollback(); throw e; }
+  finally { conn.release(); }
+}
+
+async function testPaguRace(pool, pakaiKunci) {
+  await cleanup(pool);
+  const key = await seedBarisAnggaran(pool, 'pagu', 5000000);
+  const out = await Promise.all([4000000, 3000000].map(n => catatBelanja(pool, key, n, pakaiKunci)));
+  const [s] = await pool.query(
+    `SELECT COALESCE(SUM(nilai), 0) AS n FROM blud_realisasi_alokasi WHERE tahun_anggaran = ? AND anggaran_key = ?`,
+    [R_TAHUN, key]
+  );
+  return { tersimpan: out.filter(x => x === 'tersimpan').length, terserap: Number(s[0].n), pagu: 5000000 };
+}
+
+// §5.3 — satu transaksi bisa mengunci beberapa rekening (alokasi terbagi).
+// Urutan kunci acak → lingkaran tunggu → InnoDB melempar 1213. Urutan menaik → mustahil.
+async function kunciBanyak(pool, keys) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const k of keys) {
+      await conn.query(`INSERT IGNORE INTO blud_locks (entity, key_id, version) VALUES (?, ?, 0)`, [PAGU_ENTITY, `${R_TAHUN}:${k}`]);
+      await conn.query(`SELECT version FROM blud_locks WHERE entity = ? AND key_id = ? FOR UPDATE`, [PAGU_ENTITY, `${R_TAHUN}:${k}`]);
+      await new Promise(r => setTimeout(r, 60));
+    }
+    await conn.commit();
+    return 'ok';
+  } catch (e) { await conn.rollback(); return `err:${e.code || e.message}`; }
+  finally { conn.release(); }
+}
+
+async function testUrutanKunci(pool, urutkan) {
+  await cleanup(pool);
+  const a = await seedBarisAnggaran(pool, 'aaa', 1000000);
+  const b = await seedBarisAnggaran(pool, 'zzz', 1000000);
+  const sesi1 = urutkan ? [a, b].sort() : [a, b];
+  const sesi2 = urutkan ? [b, a].sort() : [b, a];
+  const out = await Promise.all([kunciBanyak(pool, sesi1), kunciBanyak(pool, sesi2)]);
+  return { deadlock: out.filter(x => String(x).includes('ER_LOCK_DEADLOCK')).length, out };
+}
+
 (async () => {
   const pool = await mysql.createPool({ ...cfg, connectionLimit: 12, waitForConnections: true });
   try {
@@ -334,6 +435,38 @@ async function testKinerjaLostUpdate(pool) {
       'T6 Kinerja SSK optimistic-lock (fix V3-6)',
       t6.graceful === 1 && t6.errored === 1 && t6.errSample.includes('VERSION_CONFLICT') && t6.surviving === 1,
       `2 save barengan versi sama → ${t6.graceful} commit, ${t6.errored} conflict(${t6.errSample}), surviving=${t6.surviving}. Diharapkan 1 commit / 1 VERSION_CONFLICT anggun (≠ deadlock/lost-update).`
+    );
+
+    // T7a: pagu Realisasi TANPA kunci (baseline — dua-duanya lolos, pagu jebol)
+    const t7a = await testPaguRace(pool, false);
+    record(
+      'T7a Pagu Realisasi TANPA kunci (baseline race)',
+      t7a.tersimpan === 2 && t7a.terserap > t7a.pagu,
+      `pagu 5jt, dua transaksi 4jt+3jt barengan → ${t7a.tersimpan} tersimpan, terserap=${t7a.terserap}. Diharapkan 2 tersimpan & terserap > pagu → membuktikan lost-update baca-lalu-tulis.`
+    );
+
+    // T7b: pagu Realisasi DENGAN kunci per-anggaran_key (§5.2 — tepat 1 lolos)
+    const t7b = await testPaguRace(pool, true);
+    record(
+      'T7b Pagu Realisasi DENGAN FOR UPDATE per rekening (§5.2)',
+      t7b.tersimpan === 1 && t7b.terserap <= t7b.pagu,
+      `pagu 5jt, dua transaksi 4jt+3jt barengan → ${t7b.tersimpan} tersimpan, terserap=${t7b.terserap}. Diharapkan 1 tersimpan & terserap ≤ pagu.`
+    );
+
+    // T8a: urutan kunci ACAK (baseline — lingkaran tunggu → 1213)
+    const t8a = await testUrutanKunci(pool, false);
+    record(
+      'T8a Urutan kunci ACAK (baseline deadlock)',
+      t8a.deadlock >= 1,
+      `2 sesi mengunci 2 rekening dengan urutan terbalik → ${t8a.deadlock} deadlock (${t8a.out.join(', ')}). Diharapkan ≥1 → membuktikan urutan acak berbahaya.`
+    );
+
+    // T8b: urutan kunci MENAIK (§5.3 — lingkaran mustahil, 0 deadlock)
+    const t8b = await testUrutanKunci(pool, true);
+    record(
+      'T8b Urutan kunci MENAIK (§5.3)',
+      t8b.deadlock === 0,
+      `2 sesi mengunci 2 rekening dgn urutan key menaik → ${t8b.deadlock} deadlock (${t8b.out.join(', ')}). Diharapkan 0.`
     );
 
     console.log('\n=== RINGKASAN ===');

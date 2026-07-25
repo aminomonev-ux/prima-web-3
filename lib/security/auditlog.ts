@@ -118,6 +118,10 @@ export type AuditEventType =
   | 'BLUD_PJ_CHAIN_CONFLICT'        // POST /api/blud/dpa, log only (tidak block)
   // RIMA F1 (G8): user simpan dgn temuan Sentinel diabaikan/aktif — jejak "sudah diperingatkan"
   | 'BLUD_SENTINEL_ACK'             // POST /api/blud/dpa + /api/blud/pergeseran, log only
+  // Realisasi / Buku Kas (CONCEPT-blud-realisasi Fase 2) — jejak uang, wajib lengkap
+  | 'BLUD_REALISASI_TX_CREATE'      // POST /api/blud/realisasi/tx
+  | 'BLUD_REALISASI_TX_UPDATE'      // PATCH /api/blud/realisasi/tx
+  | 'BLUD_REALISASI_TX_DELETE'      // DELETE /api/blud/realisasi/tx?id=
   // ─── Perjanjian Kinerja (Sprint 1, 2026-05-23) ────────────────────────────
   | 'PK_SAVE_SASARAN'         // POST /api/perjanjian-kinerja/sasaran
   | 'PK_SAVE_PROGRAM'         // POST /api/perjanjian-kinerja/program

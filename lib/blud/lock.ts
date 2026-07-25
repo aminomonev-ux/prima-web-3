@@ -78,6 +78,31 @@ export async function bumpBludVersion(
   `
 }
 
+/** Entity lock pagar pagu realisasi — satu baris per (tahun, anggaran_key). */
+export const BLUD_PAGU_ENTITY = 'realisasi_pagu'
+/** Entity lock penomoran kuitansi — satu baris per (tahun, bulan). */
+export const BLUD_KWT_ENTITY = 'realisasi_kwt'
+
+export const bludPaguKey = (tahun: number, anggaranKey: string) => `${tahun}:${anggaranKey}`
+export const bludKwtKey = (tahun: number, bulan: number) => `${tahun}:${bulan}`
+
+/**
+ * Pastikan baris lock ADA lalu kunci eksklusif.
+ *
+ * WHY bukan assertBludVersion: `SELECT ... FOR UPDATE` pada baris yang BELUM ADA
+ * tidak mengunci apa pun — dua transaksi sama-sama lolos lalu sama-sama menulis.
+ * Pagar pagu realisasi (CONCEPT-blud-realisasi §5.2) sering menyentuh rekening yang
+ * belum punya baris lock, jadi INSERT IGNORE dulu baru FOR UPDATE.
+ *
+ * Kuncinya per-key, bukan per-aplikasi: mencatat belanja telepon & listrik tidak
+ * saling menunggu. Pemanggil WAJIB mengunci dalam urutan key MENAIK (§5.3) —
+ * dengan urutan seragam, lingkaran tunggu (deadlock 1213) mustahil terbentuk.
+ */
+export async function acquireBludLock(tx: TxSql, entity: string, keyId: string): Promise<void> {
+  await tx`INSERT IGNORE INTO blud_locks (entity, key_id, version) VALUES (${entity}, ${keyId}, 0)`
+  await tx`SELECT version FROM blud_locks WHERE entity = ${entity} AND key_id = ${keyId} FOR UPDATE`
+}
+
 /**
  * Drop lock saat versi entitas dihapus (cleanup, cegah orphan lock row).
  * Dipakai di delete*Versi() functions.

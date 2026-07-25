@@ -399,8 +399,8 @@ CAS tidak menolong; barisnya memang beda. Masalahnya: keduanya **membaca sisa ya
 ```
 withTransaction:
   1. urutkan daftar anggaran_key (menaik)          ← §5.3
-  2. untuk tiap key berurutan: SELECT … FOR UPDATE pada blud_locks
-  3. SELECT SUM(nilai) FROM blud_realisasi_alokasi WHERE tahun=? AND anggaran_key=?
+  2. untuk tiap key berurutan: INSERT IGNORE lalu SELECT … FOR UPDATE pada blud_locks
+  3. SELECT SUM(nilai) FROM blud_realisasi_alokasi WHERE tahun=? AND anggaran_key=? FOR UPDATE
   4. bila SUM + nilai_baru > pagu efektif → ROLLBACK, lempar PAGU_TERLAMPAUI
   5. INSERT transaksi + alokasi
   COMMIT
@@ -415,6 +415,20 @@ saling menunggu. Antrenya milidetik — tidak terasa. Bila ditolak, modal §4.1 
 
 Pola ini sudah terbukti di repo: V3-4 (kuota verify-email `FOR UPDATE`) dan V3-5 (lockout login atomik, L55).
 Tempat kuncinya memakai `blud_locks` yang sudah berdiri: `entity='realisasi_pagu'`, `key_id='<tahun>:<anggaran_key>'`.
+
+**Dua jebakan yang baru ketahuan saat diuji, bukan saat dibaca:**
+
+1. **`SELECT … FOR UPDATE` pada baris yang belum ada tidak mengunci apa pun.** Rekening yang belum pernah
+   dipakai belum punya baris lock, jadi dua transaksi sama-sama lolos. Obatnya `INSERT IGNORE` dulu baru
+   `FOR UPDATE` — itu isi `acquireBludLock()` di `lib/blud/lock.ts`.
+2. **`FOR UPDATE` pada SUM-nya juga wajib.** Isolasi bawaan MySQL (REPEATABLE READ) membuat `SELECT` biasa
+   membaca **snapshot** yang diambil pada pembacaan pertama transaksi — yaitu **sebelum** kunci didapat.
+   Kuncinya menang, tapi angkanya basi: alokasi transaksi lain yang baru commit tidak terlihat, dan pagu
+   tetap jebol. Locking read selalu membaca commit terakhir.
+
+   Ini bukan teori. Uji `T7b` di `scripts/concurrency-test.js` **gagal** persis di titik ini — dua transaksi
+   4 jt + 3 jt lolos bersama dari pagu 5 jt walau penguncian sudah benar. Sesudah `FOR UPDATE` dipasang di
+   SUM: 1 tersimpan, 1 ditolak.
 
 **Yang haram — dua-duanya anti-pattern CLAUDE.md:**
 
@@ -652,10 +666,14 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
 - Nilai: fondasi. Tanpa ini fase berikutnya runtuh di pergeseran pertama.
 
 ### Fase 2 — Buku Kas (input)
-- [ ] 3 tabel: `blud_realisasi_tx`, `blud_realisasi_alokasi`, `blud_periode`.
-- [ ] Data layer + Zod + route `tx/`, layar Buku Kas, pilih baris anggaran, bagi alokasi.
-- [ ] Kunci pagu §5.2 + urutan kunci §5.3 + nomor kuitansi server §5.4.
-- [ ] **DoD**: `scripts/concurrency-test.js` skenario baru lolos; saldo berjalan cocok dengan hitung tangan.
+- [x] 3 tabel: `blud_realisasi_tx`, `blud_realisasi_alokasi`, `blud_periode` (`migration-blud-realisasi-tx.sql`).
+- [x] `pagu.ts` (pagu efektif + serapan) · `realisasi-schemas.ts` (Zod + error domain) ·
+      `realisasi-data.ts` (CRUD + kunci pagu) · route `tx/` + `_guard.ts` · 3 event audit.
+- [x] Kunci pagu §5.2 + urutan kunci §5.3 + nomor kuitansi server §5.4.
+- [x] **DoD sebagian**: `scripts/concurrency-test.js` **13/13 PASS** (T7a/T7b pagu, T8a/T8b urutan kunci);
+      `tsc` + ESLint bersih.
+- [ ] Layar Buku Kas: tabel harian, pilih baris anggaran, bagi alokasi, saldo berjalan.
+- [ ] **DoD sisa**: saldo berjalan di layar cocok dengan hitung tangan.
 
 ### Fase 3 — Realisasi (pantau)
 - [ ] `pagu.ts` + route `pagu/`, layar Realisasi (pohon seperti DPA/Pergeseran + 6 kolom serapan).
