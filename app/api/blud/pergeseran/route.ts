@@ -6,11 +6,11 @@ import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import {
   getPergeseranHistory, getPergeseranByDate, getDpaByDate, getDpaLatestDate,
-  getPergeseranLatestDate, getPergeseranVersion, savePergeseran, deletePergeseranVersi, BludReplaceSafetyError,
+  getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi, BludReplaceSafetyError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
-import { isBludRole, PergeseranBodySchema, TanggalSchema, bludRateLimit } from '@/lib/blud/schemas'
+import { isBludRole, PergeseranBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { hasAppAccess } from '@/lib/security/guard'
 
 export const dynamic = 'force-dynamic'
@@ -22,10 +22,24 @@ function forbidden() {
   return NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 })
 }
 
+/** Resolve tahun dari `?tahun=` — sama pola dpa/route.ts (§9 keputusan #1). */
+async function resolveTahun(searchParams: URLSearchParams): Promise<{ tahun: number } | { error: string }> {
+  const raw = searchParams.get('tahun')
+  if (raw != null && raw !== '') {
+    const parsed = TahunSchema.safeParse(raw)
+    if (!parsed.success) return { error: 'Parameter `tahun` tidak valid (2000–2100)' }
+    return { tahun: parsed.data }
+  }
+  const list = await getTahunList()
+  const current = new Date().getFullYear()
+  return { tahun: list.includes(current) ? current : (list[0] ?? current) }
+}
+
 // GET /api/blud/pergeseran
-// ?mode=history   → daftar semua versi
-// ?tanggal=yyyy   → baris versi tertentu
-// (tanpa param)   → baris versi terbaru
+// ?mode=tahun-list → daftar tahun (union DPA+Pergeseran)
+// ?mode=history&tahun=  → daftar versi pergeseran dalam tahun
+// ?tahun=&tanggal=yyyy  → baris versi tertentu dalam tahun
+// ?tahun=               → baris versi terbaru dalam tahun
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
@@ -36,23 +50,32 @@ export async function GET(req: NextRequest) {
   const tanggal = searchParams.get('tanggal')
 
   try {
-    if (mode === 'history') {
-      const data = await getPergeseranHistory()
-      return NextResponse.json({ ok: true, data })
+    if (mode === 'tahun-list') {
+      const data = await getTahunList()
+      return NextResponse.json({ ok: true, data, current: new Date().getFullYear() })
     }
 
-    const versi = tanggal ?? await getPergeseranLatestDate()
-    if (!versi) return NextResponse.json({ ok: true, data: [], versi_tanggal: null })
+    const resolved = await resolveTahun(searchParams)
+    if ('error' in resolved) return NextResponse.json({ ok: false, error: resolved.error }, { status: 400 })
+    const { tahun } = resolved
 
-    const [data, version] = await Promise.all([getPergeseranByDate(versi), getPergeseranVersion(versi)])
+    if (mode === 'history') {
+      const data = await getPergeseranHistory(tahun)
+      return NextResponse.json({ ok: true, data, tahun })
+    }
+
+    const versi = tanggal ?? await getPergeseranLatestDate(tahun)
+    if (!versi) return NextResponse.json({ ok: true, data: [], versi_tanggal: null, tahun })
+
+    const [data, version] = await Promise.all([getPergeseranByDate(tahun, versi), getPergeseranVersion(tahun, versi)])
     await writeAuditLog({
       req,
       eventType: 'BLUD_VIEW_PERGESERAN',
       userId:    session.userId,
       username:  session.username,
-      detail:    `View Pergeseran versi ${versi}: ${data.length} baris`,
+      detail:    `View Pergeseran ${tahun}/${versi}: ${data.length} baris`,
     })
-    return NextResponse.json({ ok: true, data, versi_tanggal: versi, version })
+    return NextResponse.json({ ok: true, data, versi_tanggal: versi, tahun, version })
   } catch (err) {
     console.error('[API /blud/pergeseran GET]', err)
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
@@ -78,7 +101,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { versi_tanggal, dpa_versi_tanggal, rows, force, draft, expected_version, sentinel_ack } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, expected_version, sentinel_ack } = parsed.data
 
   // B-1: tolak pohon rusak (parent orphan / row_id duplikat / siklus) sebelum simpan
   const treeErrors = validateTreeIntegrity(rows)
@@ -90,18 +113,20 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // B-BUG-2: resolve DPA versi acuan (body > latest). Selalu validasi exist.
-    const dpaVersi = dpa_versi_tanggal || (await getDpaLatestDate())
+    // B-BUG-2: resolve DPA versi acuan (body > latest DALAM TAHUN SAMA). Selalu
+    // validasi exist. Coupling ketat (§2.1 Opsi A): pergeseran hanya boleh acuan
+    // DPA tahun yang sama — tak boleh lintas-tahun.
+    const dpaVersi = dpa_versi_tanggal || (await getDpaLatestDate(tahun_anggaran))
     if (!dpaVersi) {
       return NextResponse.json(
-        { ok: false, error: 'Tidak ada versi DPA tersedia untuk dijadikan acuan' },
+        { ok: false, error: `Belum ada DPA untuk tahun ${tahun_anggaran} — buat DPA ${tahun_anggaran} dulu di menu DPA BLUD` },
         { status: 400 },
       )
     }
-    const dpaRows = await getDpaByDate(dpaVersi)
+    const dpaRows = await getDpaByDate(tahun_anggaran, dpaVersi)
     if (!dpaRows.length) {
       return NextResponse.json(
-        { ok: false, error: `Versi DPA ${dpaVersi} tidak ditemukan` },
+        { ok: false, error: `Versi DPA ${tahun_anggaran}/${dpaVersi} tidak ditemukan` },
         { status: 400 },
       )
     }
@@ -124,14 +149,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const result = await savePergeseran(versi_tanggal, dpaVersi, recalced, session.userId, expected_version, force)
+    const result = await savePergeseran(tahun_anggaran, versi_tanggal, dpaVersi, recalced, session.userId, expected_version, force)
 
     await writeAuditLog({
       req,
       eventType: 'BLUD_SAVE_PERGESERAN',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan Pergeseran versi ${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`,
+      detail:    `Simpan Pergeseran ${tahun_anggaran}/${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`,
     })
     // RIMA F1 (G8): jejak "user sudah diperingatkan" — log only, tidak block
     if (sentinel_ack && (sentinel_ack.dismissed.length > 0 || sentinel_ack.active_warning > 0)) {
@@ -147,6 +172,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: `Pergeseran berhasil disimpan (${result.replaced} baris)`,
+      tahun: tahun_anggaran,
       versi: versi_tanggal,
       dpa_versi: dpaVersi,
       existing: result.existing,
@@ -195,15 +221,22 @@ export async function DELETE(req: NextRequest) {
       { status: 400 },
     )
   }
+  const parsedTahun = TahunSchema.safeParse(searchParams.get('tahun'))
+  if (!parsedTahun.success) {
+    return NextResponse.json(
+      { ok: false, error: 'Parameter `tahun` wajib (2000–2100)' },
+      { status: 400 },
+    )
+  }
 
   try {
-    const result = await deletePergeseranVersi(parsed.data)
+    const result = await deletePergeseranVersi(parsedTahun.data, parsed.data)
     await writeAuditLog({
       req,
       eventType: 'BLUD_DELETE_PERGESERAN_VERSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Hapus Pergeseran versi ${parsed.data}: ${result.pergeseran_rows} baris`,
+      detail:    `Hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${result.pergeseran_rows} baris`,
     })
     return NextResponse.json({
       ok: true,

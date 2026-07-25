@@ -72,6 +72,12 @@ export const TanggalSchema = z
   .refine((v) => !Number.isNaN(new Date(v).getTime()), 'Tanggal tidak valid');
 
 /**
+ * Tahun anggaran — dimensi di atas versi_tanggal (CONCEPT-blud-tahun-anggaran).
+ * `z.coerce` supaya query string `?tahun=2027` diterima sebagai number.
+ */
+export const TahunSchema = z.coerce.number().int().gte(2000).lte(2100);
+
+/**
  * TipeBaris enum — match type di `types/index.ts`.
  */
 export const TipeBarisSchema = z.enum([
@@ -144,6 +150,7 @@ export const SentinelAckSchema = z.object({
 
 /** POST /api/blud/dpa — Audit BLUD v1.2 (B-NEW-3): force + L51 expected_version */
 export const DpaBodySchema = z.object({
+  tahun_anggaran:   TahunSchema,
   versi_tanggal:    TanggalSchema,
   rows:             z.array(DpaBarisInputSchema).min(1, 'Minimal 1 baris').max(700, 'Maksimal 700 baris'),
   force:            z.boolean().optional().default(false),
@@ -153,6 +160,7 @@ export const DpaBodySchema = z.object({
 
 /** POST /api/blud/pergeseran */
 export const PergeseranBodySchema = z.object({
+  tahun_anggaran:    TahunSchema,
   versi_tanggal:     TanggalSchema,
   dpa_versi_tanggal: TanggalSchema.optional(),
   rows:              z.array(PergeseranBarisInputSchema).min(1, 'Minimal 1 baris').max(700, 'Maksimal 700 baris'),
@@ -166,6 +174,7 @@ export const PergeseranBodySchema = z.object({
 
 /** POST /api/blud/pergeseran/inject */
 export const InjectBodySchema = z.object({
+  tahun_anggaran:  TahunSchema,
   pergeseran_rows: z.array(PergeseranBarisInputSchema).min(1, 'Data pergeseran kosong').max(700, 'Maksimal 700 baris'),
 });
 
@@ -180,6 +189,7 @@ export const RekapPKItemSchema = z.tuple([
 ]);
 
 export const RekapPKBodySchema = z.object({
-  versi: TanggalSchema.nullable().optional(),    // null/undefined → pakai latest DPA date
+  tahun_anggaran: TahunSchema,
+  versi: TanggalSchema.nullable().optional(),    // null/undefined → pakai latest DPA date dalam tahun
   rows:  z.array(RekapPKItemSchema).min(1, 'Minimal 1 baris').max(500, 'Maksimal 500 baris'),
 });

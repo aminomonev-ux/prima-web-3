@@ -4,10 +4,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, saveDpa, deleteDpaVersi, BludReplaceSafetyError } from '@/lib/blud/data'
+import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
-import { isBludRole, DpaBodySchema, TanggalSchema, bludRateLimit } from '@/lib/blud/schemas'
+import { isBludRole, DpaBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { hasAppAccess } from '@/lib/security/guard'
 import { validateAllPj } from '@/lib/blud/pj-conflict'
 
@@ -20,10 +20,28 @@ function forbidden() {
   return NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 })
 }
 
+/**
+ * Resolve tahun dari query `?tahun=`. Kalau kosong → tahun berjalan bila punya
+ * data, kalau tidak → tahun LATEST yang ada data (§9 keputusan #1).
+ * Return `{ error }` kalau param ada tapi invalid.
+ */
+async function resolveTahun(searchParams: URLSearchParams): Promise<{ tahun: number } | { error: string }> {
+  const raw = searchParams.get('tahun')
+  if (raw != null && raw !== '') {
+    const parsed = TahunSchema.safeParse(raw)
+    if (!parsed.success) return { error: 'Parameter `tahun` tidak valid (2000–2100)' }
+    return { tahun: parsed.data }
+  }
+  const list = await getTahunList()
+  const current = new Date().getFullYear()
+  return { tahun: list.includes(current) ? current : (list[0] ?? current) }
+}
+
 // GET /api/blud/dpa
-// ?mode=history  → daftar semua versi
-// ?tanggal=yyyy  → baris versi tertentu
-// (tanpa param)  → baris versi terbaru
+// ?mode=tahun-list → daftar tahun anggaran yang punya data
+// ?mode=history&tahun=  → daftar versi dalam tahun
+// ?tahun=&tanggal=yyyy  → baris versi tertentu dalam tahun
+// ?tahun=               → baris versi terbaru dalam tahun
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
@@ -34,24 +52,33 @@ export async function GET(req: NextRequest) {
   const tanggal = searchParams.get('tanggal')
 
   try {
-    if (mode === 'history') {
-      const data = await getDpaHistory()
-      return NextResponse.json({ ok: true, data })
+    if (mode === 'tahun-list') {
+      const data = await getTahunList()
+      return NextResponse.json({ ok: true, data, current: new Date().getFullYear() })
     }
 
-    const versi = tanggal ?? await getDpaLatestDate()
-    if (!versi) return NextResponse.json({ ok: true, data: [], versi_tanggal: null })
+    const resolved = await resolveTahun(searchParams)
+    if ('error' in resolved) return NextResponse.json({ ok: false, error: resolved.error }, { status: 400 })
+    const { tahun } = resolved
 
-    const [data, version] = await Promise.all([getDpaByDate(versi), getDpaVersion(versi)])
+    if (mode === 'history') {
+      const data = await getDpaHistory(tahun)
+      return NextResponse.json({ ok: true, data, tahun })
+    }
+
+    const versi = tanggal ?? await getDpaLatestDate(tahun)
+    if (!versi) return NextResponse.json({ ok: true, data: [], versi_tanggal: null, tahun })
+
+    const [data, version] = await Promise.all([getDpaByDate(tahun, versi), getDpaVersion(tahun, versi)])
     // Audit BLUD v1.2 (B-NEW-2): log view event untuk data sensitif keuangan
     await writeAuditLog({
       req,
       eventType: 'BLUD_VIEW_DPA',
       userId:    session.userId,
       username:  session.username,
-      detail:    `View DPA versi ${versi}: ${data.length} baris`,
+      detail:    `View DPA ${tahun}/${versi}: ${data.length} baris`,
     })
-    return NextResponse.json({ ok: true, data, versi_tanggal: versi, version })
+    return NextResponse.json({ ok: true, data, versi_tanggal: versi, tahun, version })
   } catch (err) {
     console.error('[API /blud/dpa GET]', err)
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
@@ -77,7 +104,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { versi_tanggal, rows, force, expected_version, sentinel_ack } = parsed.data
+  const { tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack } = parsed.data
 
   // B-1: tolak pohon rusak (parent orphan / row_id duplikat / siklus) sebelum simpan
   const treeErrors = validateTreeIntegrity(rows)
@@ -96,14 +123,14 @@ export async function POST(req: NextRequest) {
     // (transition data, dll). audit-pj.ts catch post-facto di Cetak BLUD untuk review.
     const pjConflicts = validateAllPj(recalced)
 
-    const result = await saveDpa(versi_tanggal, recalced, session.userId, expected_version, force)
+    const result = await saveDpa(tahun_anggaran, versi_tanggal, recalced, session.userId, expected_version, force)
 
     await writeAuditLog({
       req,
       eventType: 'BLUD_SAVE_DPA',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan DPA versi ${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`,
+      detail:    `Simpan DPA ${tahun_anggaran}/${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`,
     })
     if (pjConflicts.length > 0) {
       await writeAuditLog({
@@ -128,6 +155,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: `Data DPA berhasil disimpan (${result.replaced} baris)`,
+      tahun: tahun_anggaran,
       versi: versi_tanggal,
       existing: result.existing,
       replaced: result.replaced,
@@ -158,7 +186,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/blud/dpa?versi=YYYY-MM-DD
+// DELETE /api/blud/dpa?tahun=YYYY&versi=YYYY-MM-DD
 // Hapus permanen versi DPA + cascade ke rekap_pk. Role guard: BLUD_ALLOWED_ROLES.
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
@@ -178,15 +206,22 @@ export async function DELETE(req: NextRequest) {
       { status: 400 },
     )
   }
+  const parsedTahun = TahunSchema.safeParse(searchParams.get('tahun'))
+  if (!parsedTahun.success) {
+    return NextResponse.json(
+      { ok: false, error: 'Parameter `tahun` wajib (2000–2100)' },
+      { status: 400 },
+    )
+  }
 
   try {
-    const result = await deleteDpaVersi(parsed.data)
+    const result = await deleteDpaVersi(parsedTahun.data, parsed.data)
     await writeAuditLog({
       req,
       eventType: 'BLUD_DELETE_DPA_VERSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Hapus DPA versi ${parsed.data}: ${result.dpa_rows} baris dpa_blud + ${result.rekap_pk_rows} baris rekap_pk`,
+      detail:    `Hapus DPA ${parsedTahun.data}/${parsed.data}: ${result.dpa_rows} baris dpa_blud + ${result.rekap_pk_rows} baris rekap_pk`,
     })
     return NextResponse.json({
       ok: true,

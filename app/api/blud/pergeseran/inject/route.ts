@@ -41,12 +41,13 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { pergeseran_rows } = parsed.data
+  const { tahun_anggaran, pergeseran_rows } = parsed.data
 
   try {
-    const dpaTanggal = await getDpaLatestDate()
+    // Coupling ketat (§2.1): inject selalu ambil DPA terbaru DALAM TAHUN SAMA.
+    const dpaTanggal = await getDpaLatestDate(tahun_anggaran)
     if (!dpaTanggal) {
-      return NextResponse.json({ ok: false, error: 'Tidak ada data DPA tersedia' }, { status: 404 })
+      return NextResponse.json({ ok: false, error: `Tidak ada data DPA untuk tahun ${tahun_anggaran}` }, { status: 404 })
     }
 
     // L51 transparency (B1): baca DPA + version paralel — kalau user lain edit
@@ -54,11 +55,11 @@ export async function POST(req: NextRequest) {
     // save Pergeseran. Data integrity Pergeseran tetap dijaga via save endpoint
     // sendiri (expected_version pergeseran_dpa).
     const [dpaRows, dpaVersion] = await Promise.all([
-      getDpaByDate(dpaTanggal),
-      getDpaVersion(dpaTanggal),
+      getDpaByDate(tahun_anggaran, dpaTanggal),
+      getDpaVersion(tahun_anggaran, dpaTanggal),
     ])
     if (!dpaRows.length) {
-      return NextResponse.json({ ok: false, error: `Tidak ada DPA untuk ${dpaTanggal}` }, { status: 404 })
+      return NextResponse.json({ ok: false, error: `Tidak ada DPA untuk ${tahun_anggaran}/${dpaTanggal}` }, { status: 404 })
     }
 
     // 16-level inject matching + recalc otomatis (B5: + daftar match heuristik longgar)
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_INJECT_DPA',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Inject DPA ${dpaTanggal} (v${dpaVersion}) ke Pergeseran (${pergeseran_rows.length} baris client → ${injected.length} hasil, ${lowConfidence.length} match heuristik longgar)`,
+      detail:    `Inject DPA ${tahun_anggaran}/${dpaTanggal} (v${dpaVersion}) ke Pergeseran (${pergeseran_rows.length} baris client → ${injected.length} hasil, ${lowConfidence.length} match heuristik longgar)`,
     })
 
     return NextResponse.json({

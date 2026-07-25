@@ -16,6 +16,15 @@ import type { TxSql } from '@/lib/data/db'
  */
 export const BLUD_SINGLETON_KEY = 'singleton'
 
+/**
+ * Key lock per-versi ber-dimensi tahun: `${tahun}:${versi}`.
+ * WHY: tanpa tahun, DPA 2 tahun berbeda yang disimpan pada tanggal kalender sama
+ * akan berbagi lock → lost-update lintas-tahun (CONCEPT-blud-tahun-anggaran §1).
+ */
+export function bludVersiKey(tahun: number, versiTanggal: string): string {
+  return `${tahun}:${versiTanggal}`
+}
+
 export class BludVersionConflictError extends Error {
   constructor(public entity: string, public keyId: string, public expected: number, public actual: number) {
     super(`Data ${entity} (${keyId}) sudah diubah pengguna lain. Memuat versi terbaru.`)

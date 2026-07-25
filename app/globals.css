@@ -663,6 +663,22 @@ input, textarea { caret-color: #FBBF24; }
 .versi-item-meta { color: #85B7EB; font-size: 11.5px; white-space: nowrap; }
 .versi-item.active .versi-item-meta { color: rgba(251,191,36,.85); }
 .versi-item-check { color: #FBBF24; margin-left: auto; flex-shrink: 0; }
+/* TahunDropdown — input inline "Tahun Baru" */
+.versi-add-input {
+  flex: 1; min-width: 0; width: 100%;
+  background: rgba(2,15,28,.55); color: #E6F1FB;
+  border: 1px solid rgba(133,183,235,.35); border-radius: 6px;
+  padding: 4px 8px; font-size: 13px; font-family: var(--font-mono, monospace);
+}
+.versi-add-input:focus { outline: none; border-color: #EF9F27; }
+.versi-add-ok {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex-shrink: 0;
+  background: #1D9E75; color: #fff; border: none; border-radius: 6px; cursor: pointer;
+}
+.versi-add-ok:hover { background: #17845f; }
+[data-theme="light"] .versi-add-input { background: #FFFFFF; color: #1F2937; border-color: rgba(124,92,252,.30); }
+[data-theme="light"] .versi-add-input:focus { border-color: #7C5CFC; }
 .versi-badge-latest {
   margin-left: auto;
   font-size: 9px; font-weight: 800; letter-spacing: .4px;

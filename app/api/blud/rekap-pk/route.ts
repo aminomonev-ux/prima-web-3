@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { versi, rows } = parsed.data
+  const { tahun_anggaran, versi, rows } = parsed.data
 
   // Map ExportRow tuple → {label, nominal}. Filter row "uraian-only" (label kosong).
   // Client kirim format dari cetak-data renderPjView: [label, uraian, nominal]
@@ -56,13 +56,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await saveRekapPK(versi ?? null, items, session.userId)
+    const result = await saveRekapPK(tahun_anggaran, versi ?? null, items, session.userId)
     await writeAuditLog({
       req,
       eventType: 'BLUD_SAVE_REKAP_PK',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan Rekap PK versi ${result.versi_dpa}: ${result.affected} baris`,
+      detail:    `Simpan Rekap PK ${tahun_anggaran}/${result.versi_dpa}: ${result.affected} baris`,
     })
     return NextResponse.json({
       ok: true,

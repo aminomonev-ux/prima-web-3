@@ -450,6 +450,7 @@ CREATE INDEX idx_krm_tahun ON kinerja_realisasi_map (tahun);
 
 CREATE TABLE IF NOT EXISTS dpa_blud (
   id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tahun_anggaran   SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Tahun anggaran versi DPA (dimensi di atas versi_tanggal)',
   versi_tanggal    DATE          NOT NULL COMMENT 'Tanggal versi/history DPA',
   is_latest        TINYINT       NOT NULL DEFAULT 1,
   kode_rekening    VARCHAR(64)   NOT NULL DEFAULT '',
@@ -470,6 +471,7 @@ CREATE TABLE IF NOT EXISTS dpa_blud (
   created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_versi_latest (versi_tanggal, is_latest),
+  INDEX idx_tahun_versi  (tahun_anggaran, versi_tanggal),
   INDEX idx_row_id       (row_id),
   INDEX idx_parent_id    (parent_id),
   INDEX idx_urutan       (versi_tanggal, urutan),
@@ -478,6 +480,7 @@ CREATE TABLE IF NOT EXISTS dpa_blud (
 
 CREATE TABLE IF NOT EXISTS pergeseran_dpa (
   id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tahun_anggaran      SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Tahun anggaran versi pergeseran',
   versi_tanggal       DATE          NOT NULL COMMENT 'Tanggal versi pergeseran',
   dpa_versi_tanggal   DATE          NOT NULL COMMENT 'Versi DPA yang menjadi acuan',
   is_latest           TINYINT(1)    NOT NULL DEFAULT 1,
@@ -498,6 +501,7 @@ CREATE TABLE IF NOT EXISTS pergeseran_dpa (
   created_at          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_versi_latest (versi_tanggal, is_latest),
+  INDEX idx_tahun_versi  (tahun_anggaran, versi_tanggal),
   INDEX idx_dpa_versi    (dpa_versi_tanggal),
   INDEX idx_row_id       (row_id),
   INDEX idx_parent_id    (parent_id),
@@ -505,12 +509,14 @@ CREATE TABLE IF NOT EXISTS pergeseran_dpa (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Pergeseran DPA - perubahan anggaran';
 
 CREATE OR REPLACE VIEW v_dpa_history AS
-  SELECT versi_tanggal, COUNT(*) AS jumlah_baris
-  FROM dpa_blud GROUP BY versi_tanggal ORDER BY versi_tanggal DESC;
+  SELECT tahun_anggaran, versi_tanggal, COUNT(*) AS jumlah_baris
+  FROM dpa_blud GROUP BY tahun_anggaran, versi_tanggal
+  ORDER BY tahun_anggaran DESC, versi_tanggal DESC;
 
 CREATE OR REPLACE VIEW v_pergeseran_history AS
-  SELECT versi_tanggal, dpa_versi_tanggal, COUNT(*) AS jumlah_baris
-  FROM pergeseran_dpa GROUP BY versi_tanggal, dpa_versi_tanggal ORDER BY versi_tanggal DESC;
+  SELECT tahun_anggaran, versi_tanggal, dpa_versi_tanggal, COUNT(*) AS jumlah_baris
+  FROM pergeseran_dpa GROUP BY tahun_anggaran, versi_tanggal, dpa_versi_tanggal
+  ORDER BY tahun_anggaran DESC, versi_tanggal DESC;
 
 -- ─── BLUD — MASTER AKUN ──────────────────────────────────────────────────────
 -- Tabel master daftar kode rekening + uraian. Dipakai sebagai source-of-truth
@@ -566,11 +572,13 @@ CREATE TABLE IF NOT EXISTS kode_besar (
 CREATE TABLE IF NOT EXISTS rekap_pk (
   id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   versi_dpa    DATE           NOT NULL                COMMENT 'Versi DPA yang di-rekap',
+  tahun_anggaran SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Tahun anggaran DPA yang di-rekap',
   label        VARCHAR(255)   NOT NULL                COMMENT 'Nama PJ atau label total (e.g. "TOTAL BELANJA BLUD")',
   nominal      DECIMAL(18,2)  NOT NULL DEFAULT 0      COMMENT 'Total nominal per PJ',
   saved_at     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Waktu snapshot disimpan',
   saved_by     INT                NULL               COMMENT 'User id yang menyimpan; SET NULL kalau user dihapus (match users.id signed INT)',
   INDEX idx_versi    (versi_dpa),
+  INDEX idx_tahun_versi (tahun_anggaran, versi_dpa),
   INDEX idx_saved_at (saved_at),
   CONSTRAINT fk_rekap_pk_user FOREIGN KEY (saved_by)
     REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE

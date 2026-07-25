@@ -14,18 +14,20 @@ import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 
 interface DpaVersi {
+  tahun_anggaran: number
   versi_tanggal: string
   jumlah_baris:  number
 }
 interface PergeseranVersi {
+  tahun_anggaran:    number
   versi_tanggal:     string
   dpa_versi_tanggal: string
   jumlah_baris:      number
 }
 
 type DeleteTarget =
-  | { kind: 'dpa'; versi: string; baris: number }
-  | { kind: 'pergeseran'; versi: string; baris: number; dpaVersi: string }
+  | { kind: 'dpa'; tahun: number; versi: string; baris: number }
+  | { kind: 'pergeseran'; tahun: number; versi: string; baris: number; dpaVersi: string }
 
 // Generate kode konfirmasi 4-digit random (1000-9999)
 function generateConfirmCode(): string {
@@ -57,15 +59,24 @@ export default function PengaturanClient() {
     setLoading(true)
     setErr(null)
     try {
-      const [dRes, pRes] = await Promise.all([
-        fetch('/api/blud/dpa?mode=history', { cache: 'no-store' }),
-        fetch('/api/blud/pergeseran?mode=history', { cache: 'no-store' }),
-      ])
-      const [dJson, pJson] = await Promise.all([dRes.json(), pRes.json()])
-      if (!dRes.ok || !dJson.ok) throw new Error(dJson.error || 'Gagal load DPA history')
-      if (!pRes.ok || !pJson.ok) throw new Error(pJson.error || 'Gagal load Pergeseran history')
-      setDpaList(dJson.data ?? [])
-      setPergList(pJson.data ?? [])
+      // History kini per-tahun → ambil daftar tahun dulu, lalu gabung semua tahun
+      // (urut DESC). Tiap item ditandai tahun-nya utk grouping + DELETE.
+      const tRes  = await fetch('/api/blud/dpa?mode=tahun-list', { cache: 'no-store' })
+      const tJson = await tRes.json()
+      const years: number[] = (tRes.ok && tJson.ok && Array.isArray(tJson.data)) ? tJson.data : []
+      const dpaAll:  DpaVersi[]        = []
+      const pergAll: PergeseranVersi[] = []
+      for (const y of years) {
+        const [dRes, pRes] = await Promise.all([
+          fetch(`/api/blud/dpa?mode=history&tahun=${y}`, { cache: 'no-store' }),
+          fetch(`/api/blud/pergeseran?mode=history&tahun=${y}`, { cache: 'no-store' }),
+        ])
+        const [dJson, pJson] = await Promise.all([dRes.json(), pRes.json()])
+        if (dRes.ok && dJson.ok) for (const v of (dJson.data ?? [])) dpaAll.push({ ...v, tahun_anggaran: y })
+        if (pRes.ok && pJson.ok) for (const v of (pJson.data ?? [])) pergAll.push({ ...v, tahun_anggaran: y })
+      }
+      setDpaList(dpaAll)
+      setPergList(pergAll)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -88,7 +99,7 @@ export default function PengaturanClient() {
     setDeleting(true)
     try {
       const path = target.kind === 'dpa' ? '/api/blud/dpa' : '/api/blud/pergeseran'
-      const res  = await fetch(`${path}?versi=${encodeURIComponent(target.versi)}`, { method: 'DELETE' })
+      const res  = await fetch(`${path}?tahun=${target.tahun}&versi=${encodeURIComponent(target.versi)}`, { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok || !json.ok) {
         if (res.status === 429) throw new Error(json.error || 'Terlalu banyak permintaan')
@@ -110,12 +121,12 @@ export default function PengaturanClient() {
     setTypedCode('')
   }
   function openDeleteDpa(v: DpaVersi) {
-    setTarget({ kind: 'dpa', versi: v.versi_tanggal, baris: v.jumlah_baris })
+    setTarget({ kind: 'dpa', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris })
     setExpectCode(generateConfirmCode())
     setTypedCode('')
   }
   function openDeletePerg(v: PergeseranVersi) {
-    setTarget({ kind: 'pergeseran', versi: v.versi_tanggal, baris: v.jumlah_baris, dpaVersi: v.dpa_versi_tanggal })
+    setTarget({ kind: 'pergeseran', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris, dpaVersi: v.dpa_versi_tanggal })
     setExpectCode(generateConfirmCode())
     setTypedCode('')
   }
@@ -169,7 +180,7 @@ export default function PengaturanClient() {
         loading={loading}
         rows={dpaList.map(v => ({
           versi: v.versi_tanggal,
-          meta:  `${v.jumlah_baris} baris`,
+          meta:  `Tahun ${v.tahun_anggaran} · ${v.jumlah_baris} baris`,
         }))}
         onDelete={(idx) => openDeleteDpa(dpaList[idx])}
       />
@@ -182,7 +193,7 @@ export default function PengaturanClient() {
         loading={loading}
         rows={pergList.map(v => ({
           versi: v.versi_tanggal,
-          meta:  `${v.jumlah_baris} baris · acuan DPA ${formatTanggal(v.dpa_versi_tanggal)}`,
+          meta:  `Tahun ${v.tahun_anggaran} · ${v.jumlah_baris} baris · acuan DPA ${formatTanggal(v.dpa_versi_tanggal)}`,
         }))}
         onDelete={(idx) => openDeletePerg(pergList[idx])}
         deleteDisabled={pergList.length === 0}  // pergeseran boleh kosong total (DPA tetap ada)

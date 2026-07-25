@@ -17,6 +17,7 @@ import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/for
 import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
+import TahunDropdown from '@/components/blud/TahunDropdown'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
 import type { PergeseranBarisInput, PergeseranBaris, DpaBaris, TipeBaris } from '@/types'
@@ -543,6 +544,10 @@ export default function PergeseranClient() {
   const [history,   setHistory]   = useState<{ versi_tanggal: string }[]>([])
   const [versi,     setVersi]     = useState('')
   const [dpaVersi,  setDpaVersi]  = useState('')
+  // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §2.1) — pilih tahun dulu, sama pola DPA.
+  const CURRENT_YEAR = new Date().getFullYear()
+  const [tahun,     setTahun]     = useState<number>(CURRENT_YEAR)
+  const [tahunList, setTahunList] = useState<number[]>([])
   const [loading,   setLoading]   = useState(false)
   const [injecting, setInjecting] = useState(false)
   const [saving,    setSaving]    = useState(false)
@@ -597,10 +602,23 @@ export default function PergeseranClient() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const res  = await fetch('/api/blud/pergeseran?mode=history')
+      const res  = await fetch(`/api/blud/pergeseran?mode=history&tahun=${tahun}`)
       const json = await res.json()
       if (json.ok) setHistory(json.data)
     } catch { /* skip */ }
+  }, [tahun])
+
+  const loadTahunList = useCallback(async () => {
+    try {
+      const res  = await fetch('/api/blud/pergeseran?mode=tahun-list')
+      const json = await res.json()
+      if (!json.ok) return
+      const list: number[] = Array.isArray(json.data) ? json.data : []
+      setTahunList(list)
+      const cur = Number(json.current) || CURRENT_YEAR
+      setTahun(prev => (list.includes(prev) ? prev : list.includes(cur) ? cur : (list[0] ?? cur)))
+    } catch { /* skip */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // L51 optimistic locking + R2 abort + R3 double-submit guard
@@ -622,8 +640,9 @@ export default function PergeseranClient() {
     loadCtrlRef.current = ctrl
     setLoading(true)
     try {
-      const url  = tanggal ? `/api/blud/pergeseran?tanggal=${tanggal}` : '/api/blud/pergeseran'
-      const res  = await fetch(url, { signal: ctrl.signal })
+      const qs = new URLSearchParams({ tahun: String(tahun) })
+      if (tanggal) qs.set('tanggal', tanggal)
+      const res  = await fetch(`/api/blud/pergeseran?${qs.toString()}`, { signal: ctrl.signal })
       if (ctrl.signal.aborted) return
       const json = await res.json()
       if (json.ok && json.data?.length) {
@@ -653,15 +672,19 @@ export default function PergeseranClient() {
       showToast('Gagal memuat data Pergeseran', false)
     }
     finally  { setLoading(false) }
-  }, [])
+  }, [tahun])
 
-  // Generate: ambil DPA terbaru, jadikan tabel pergeseran baru
+  // Generate: ambil DPA terbaru DALAM TAHUN TERPILIH, jadikan tabel pergeseran baru.
+  // Empty-state (§2.1): kalau tahun itu belum punya DPA → guard arahkan buat DPA dulu.
   const generate = useCallback(async () => {
     setLoading(true)
     try {
-      const res  = await fetch('/api/blud/dpa')
+      const res  = await fetch(`/api/blud/dpa?tahun=${tahun}`)
       const json = await res.json()
-      if (!json.ok || !json.data?.length) { showToast('Data DPA tidak ditemukan', false); return }
+      if (!json.ok || !json.data?.length) {
+        showToast(`Belum ada DPA untuk tahun ${tahun} — buat DPA ${tahun} dulu di menu DPA BLUD`, false)
+        return
+      }
 
       const generated: PergeseranBarisInput[] = (json.data as DpaBaris[]).map((d, i) => ({
         kode_rekening:       d.kode_rekening,
@@ -683,10 +706,10 @@ export default function PergeseranClient() {
       setRows(generated)
       setDpaVersi(json.versi_tanggal || '')
       setVersi('')
-      showToast('Tabel berhasil di-generate dari DPA terbaru')
+      showToast(`Tabel di-generate dari DPA terbaru tahun ${tahun}`)
     } catch { showToast('Gagal generate', false) }
     finally  { setLoading(false) }
-  }, [])
+  }, [tahun])
 
   // Inject: update kolom 0-5 dari DPA terbaru tanpa ubah vol_p/harga_p
   const inject = useCallback(async () => {
@@ -695,7 +718,7 @@ export default function PergeseranClient() {
     try {
       const res  = await fetch('/api/blud/pergeseran/inject', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pergeseran_rows: rows }),
+        body: JSON.stringify({ tahun_anggaran: tahun, pergeseran_rows: rows }),
       })
       const json = await res.json()
       if (json.ok) {
@@ -716,7 +739,7 @@ export default function PergeseranClient() {
       }
     } catch { showToast('Gagal inject', false) }
     finally  { setInjecting(false); setConfirmInject(false) }
-  }, [rows])
+  }, [rows, tahun])
 
   async function simpan() {
     if (!rows.length) { showToast('Tidak ada data untuk disimpan', false); return }
@@ -755,7 +778,7 @@ export default function PergeseranClient() {
       const res  = await fetch('/api/blud/pergeseran', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          versi_tanggal: versiTanggal, dpa_versi_tanggal: dpaVersi || versiTanggal,
+          tahun_anggaran: tahun, versi_tanggal: versiTanggal, dpa_versi_tanggal: dpaVersi || undefined,
           rows, force, draft: draftRef.current, expected_version: version,
           sentinel_ack: sentinelAckRef.current ?? undefined,
         }),
@@ -776,7 +799,8 @@ export default function PergeseranClient() {
         return
       }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); loadHistory()
+        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList()
+        if (json.dpa_versi) setDpaVersi(json.dpa_versi)
         if (typeof json.version === 'number') setVersion(json.version)
         if (draftRef.current) {
           toast.warning('Tersimpan sebagai DRAFT — lanjutkan pengisian sampai berimbang', { duration: 6000 })
@@ -787,6 +811,8 @@ export default function PergeseranClient() {
     } catch { showToast('Gagal menyimpan', false) }
   }
 
+  useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
+  // loadPergeseran/loadHistory ber-dep [tahun] → efek refire saat tahun berganti.
   useEffect(() => { void (async () => { await loadPergeseran(); await loadHistory() })() }, [loadPergeseran, loadHistory])
 
   // B6: status DRAFT diturunkan dari delta root (tidak disimpan) — badge live,
@@ -818,9 +844,19 @@ export default function PergeseranClient() {
       <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'10px 16px', display:'flex', flexWrap:'wrap', alignItems:'center', gap:10 }}>
         <h1 style={{ fontWeight:800, fontSize:14, color:'#E6F1FB' }}>Pergeseran DPA</h1>
 
+        {/* Tahun Anggaran — pilih tahun dulu (§2.1) */}
+        <div data-rima="pergeseran.tahun-dropdown" style={{ display:'inline-flex' }}>
+          <TahunDropdown
+            value={tahun}
+            items={tahunList}
+            current={CURRENT_YEAR}
+            onChange={t => { setTahun(t); setVersi(''); setRows([]) }}
+          />
+        </div>
+
         <PrimaButton variant="purple" iconLeft={<Sparkles className="w-3.5 h-3.5" />}
           disabled={loading} onClick={generate}
-          data-tooltip="Buat tabel pergeseran dari snapshot DPA terbaru" data-rima="pergeseran.buat">
+          data-tooltip="Buat tabel pergeseran dari snapshot DPA terbaru tahun terpilih" data-rima="pergeseran.buat">
           Buat Pergeseran
         </PrimaButton>
 

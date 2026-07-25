@@ -30,6 +30,7 @@ import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAku
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import SatuanCombobox from '@/components/shared/SatuanCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
+import TahunDropdown from '@/components/blud/TahunDropdown'
 import { PjConflictDialog, PjMutationDialog } from '@/components/blud/PjGuardDialogs'
 import { findAncestorPjOnAdd } from '@/lib/blud/pj-conflict'
 import { useSentinelPjGuard } from '@/lib/blud/use-sentinel-pj-guard'
@@ -888,6 +889,10 @@ export default function DpaClient() {
 
   // L51: optimistic locking version state (R1 prevent lost update)
   const [version, setVersion] = useState<number>(0)
+  // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §7) — dimensi di atas versi.
+  const CURRENT_YEAR = new Date().getFullYear()
+  const [tahun, setTahun] = useState<number>(CURRENT_YEAR)
+  const [tahunList, setTahunList] = useState<number[]>([])
   // R2: abort pending load saat user switch versi cepat
   const loadCtrlRef = useRef<AbortController | null>(null)
   // R3: hard-guard double submit (useRef lebih cepat dari setState window)
@@ -905,8 +910,9 @@ export default function DpaClient() {
     loadCtrlRef.current = ctrl
     setLoading(true)
     try {
-      const url  = tanggal ? `/api/blud/dpa?tanggal=${tanggal}` : '/api/blud/dpa'
-      const res  = await fetch(url, { signal: ctrl.signal })
+      const qs = new URLSearchParams({ tahun: String(tahun) })
+      if (tanggal) qs.set('tanggal', tanggal)
+      const res  = await fetch(`/api/blud/dpa?${qs.toString()}`, { signal: ctrl.signal })
       if (ctrl.signal.aborted) return
       const json = await res.json()
       if (json.ok) {
@@ -932,16 +938,33 @@ export default function DpaClient() {
       showToast('Gagal memuat data DPA', false)
     }
     finally   { setLoading(false) }
-  }, [])
+  }, [tahun])
 
   const loadHistory = useCallback(async () => {
     try {
-      const res  = await fetch('/api/blud/dpa?mode=history')
+      const res  = await fetch(`/api/blud/dpa?mode=history&tahun=${tahun}`)
       const json = await res.json()
       if (json.ok) setHistory(json.data)
     } catch { /* skip */ }
+  }, [tahun])
+
+  const loadTahunList = useCallback(async () => {
+    try {
+      const res  = await fetch('/api/blud/dpa?mode=tahun-list')
+      const json = await res.json()
+      if (!json.ok) return
+      const list: number[] = Array.isArray(json.data) ? json.data : []
+      setTahunList(list)
+      const cur = Number(json.current) || CURRENT_YEAR
+      // Default (§9 #1): pertahankan pilihan user kalau masih ada data; else tahun
+      // berjalan bila ada data; else tahun LATEST yang ada data.
+      setTahun(prev => (list.includes(prev) ? prev : list.includes(cur) ? cur : (list[0] ?? cur)))
+    } catch { /* skip */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
+  // loadDpa/loadHistory ber-dep [tahun] → efek ini refire saat tahun berganti.
   useEffect(() => { void (async () => { await loadDpa(); await loadHistory() })() }, [loadDpa, loadHistory])
 
   async function simpan() {
@@ -966,7 +989,7 @@ export default function DpaClient() {
       const res  = await fetch('/api/blud/dpa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          versi_tanggal: versiTanggal, rows, force, expected_version: version,
+          tahun_anggaran: tahun, versi_tanggal: versiTanggal, rows, force, expected_version: version,
           sentinel_ack: sentinelAckRef.current ?? undefined,
         }),
       })
@@ -986,7 +1009,7 @@ export default function DpaClient() {
         return
       }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); loadHistory()
+        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList()
         if (typeof json.version === 'number') setVersion(json.version)
       } else {
         showToast(json.error || json.message || 'Gagal simpan', false)
@@ -1063,6 +1086,16 @@ export default function DpaClient() {
       {/* Header / Toolbar */}
       <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'10px 16px', display:'flex', flexWrap:'wrap', alignItems:'center', gap:12 }}>
         <h1 style={{ fontWeight:800, fontSize:14, color:'#E6F1FB' }}>Form BLUD — DPA BLUD</h1>
+
+        {/* Tahun Anggaran — dimensi di atas versi (pilih tahun dulu) */}
+        <div data-rima="dpa.tahun-dropdown" style={{ display:'inline-flex' }}>
+          <TahunDropdown
+            value={tahun}
+            items={tahunList}
+            current={CURRENT_YEAR}
+            onChange={t => { setTahun(t); setVersi('') }}
+          />
+        </div>
 
         {/* History selector — custom pill dropdown */}
         {/* data-rima: anchor tur RIMA F3 — wrapper inline-flex (display:contents rect-nya kosong) */}

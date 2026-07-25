@@ -54,6 +54,10 @@ export default function CetakClient() {
   const [loading, setLoading] = useState(false)
   const [renderedHtml, setRenderedHtml] = useState<string>('')  // tabel hasil Cetak
   const [renderedData, setRenderedData] = useState<unknown>(null) // raw rows untuk export
+  // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §7) — scoping cetak per tahun.
+  const CURRENT_YEAR = new Date().getFullYear()
+  const [tahun, setTahun] = useState<number>(CURRENT_YEAR)
+  const [tahunList, setTahunList] = useState<number[]>([])
 
   // Reset view+state saat menu berubah — pakai handler (bukan effect)
   // untuk hindari cascading render (react-hooks/set-state-in-effect).
@@ -68,15 +72,31 @@ export default function CetakClient() {
     setHistoryList([])
   }, [])
 
-  // Load history dropdown saat menu = dpa atau pergeseran.
+  // Load daftar tahun sekali di mount (union DPA+Pergeseran).
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/blud/dpa?mode=tahun-list')
+        const j = await r.json() as { ok?: boolean; data?: number[]; current?: number }
+        if (!j.ok) return
+        const list = Array.isArray(j.data) ? j.data : []
+        setTahunList(list)
+        const cur = Number(j.current) || CURRENT_YEAR
+        setTahun(prev => (list.includes(prev) ? prev : list.includes(cur) ? cur : (list[0] ?? cur)))
+      } catch { /* skip */ }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load history dropdown saat menu = dpa atau pergeseran (dalam tahun terpilih).
   // setState dalam async callback (post-await) — tidak trigger set-state-in-effect.
   useEffect(() => {
     if (menu === 'master-akun') return
     const ctrl = new AbortController()
     ;(async () => {
       try {
-        const path = menu === 'dpa' ? '/api/blud/dpa?mode=history' : '/api/blud/pergeseran?mode=history'
-        const r = await fetch(path, { signal: ctrl.signal })
+        const base = menu === 'dpa' ? '/api/blud/dpa' : '/api/blud/pergeseran'
+        const r = await fetch(`${base}?mode=history&tahun=${tahun}`, { signal: ctrl.signal })
         if (!r.ok) return
         const j = await r.json() as { ok: boolean; data?: Array<{ versi_tanggal: string; jumlah_baris: number }> }
         if (!j.ok || !j.data) return
@@ -84,7 +104,7 @@ export default function CetakClient() {
       } catch { /* abort */ }
     })()
     return () => ctrl.abort()
-  }, [menu])
+  }, [menu, tahun])
 
   // ── Action: Cetak (fetch raw data + render tabel client-side) ──
   const onCetak = useCallback(async () => {
@@ -94,12 +114,12 @@ export default function CetakClient() {
     try {
       // Pilih endpoint per menu — reuse existing API
       let path = ''
-      if (menu === 'dpa') {
+      if (menu === 'dpa' || menu === 'pergeseran') {
+        const base = menu === 'dpa' ? '/api/blud/dpa' : '/api/blud/pergeseran'
+        const qs = new URLSearchParams({ tahun: String(tahun) })
         const tgl = tanggal || historyVersi
-        path = tgl ? `/api/blud/dpa?tanggal=${encodeURIComponent(tgl)}` : '/api/blud/dpa'
-      } else if (menu === 'pergeseran') {
-        const tgl = tanggal || historyVersi
-        path = tgl ? `/api/blud/pergeseran?tanggal=${encodeURIComponent(tgl)}` : '/api/blud/pergeseran'
+        if (tgl) qs.set('tanggal', tgl)
+        path = `${base}?${qs.toString()}`
       } else { // master-akun
         path = '/api/blud/master-akun'
       }
@@ -119,7 +139,7 @@ export default function CetakClient() {
     } finally {
       setLoading(false)
     }
-  }, [menu, view, tanggal, historyVersi])
+  }, [menu, view, tanggal, historyVersi, tahun])
 
   // Audit BLUD v1.2 (B-NEW-2): log export event ke audit trail (fire-and-forget).
   const logExport = useCallback(async (type: 'pdf' | 'xlsx') => {
@@ -166,7 +186,7 @@ export default function CetakClient() {
       const r = await fetch('/api/blud/rekap-pk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ versi: historyVersi || null, rows: renderedData }),
+        body: JSON.stringify({ tahun_anggaran: tahun, versi: historyVersi || null, rows: renderedData }),
       })
       const data = await r.json() as { ok?: boolean; message?: string }
       if (!r.ok || !data.ok) {
@@ -177,7 +197,7 @@ export default function CetakClient() {
     } catch (e) {
       toast.error('Error: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, menu, view, historyVersi])
+  }, [renderedData, menu, view, historyVersi, tahun])
 
   const showSimpanPK = menu === 'dpa' && view === 'penanggungJawab'
 
@@ -260,6 +280,19 @@ export default function CetakClient() {
               {VIEW_OPTIONS[menu].map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
             </select>
           </div>
+          {menu !== 'master-akun' && (
+            <div>
+              <div className="cetak-field-label">
+                <Calendar size={11} style={{ display: 'inline', verticalAlign: '-1px' }} /> Tahun
+              </div>
+              <select className="cetak-select" value={tahun}
+                onChange={e => { setTahun(Number(e.target.value)); setHistoryVersi(''); setTanggal('') }}>
+                {(tahunList.includes(tahun) ? tahunList : [tahun, ...tahunList]).map(t => (
+                  <option key={t} value={t}>Tahun {t}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {menu !== 'master-akun' && (
             <div>
               <div className="cetak-field-label">

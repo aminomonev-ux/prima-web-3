@@ -7,7 +7,7 @@ import { sql } from '@/lib/data/db';
 import { getKinerjaKpi, SUMBER_LIST } from './kinerja';
 import { listRencanaAksi } from './rencana-aksi';
 import type { RaLevel } from './rencana-aksi-schemas';
-import { getDpaLatestDate, getDpaByDate } from '@/lib/blud/data';
+import { getDpaLatest, getDpaByDate } from '@/lib/blud/data';
 
 export interface UsulanSummary {
   total: number;
@@ -112,9 +112,10 @@ async function getEanggaranSummary(tahun: string): Promise<EanggaranSummary> {
 }
 
 async function getBludSummary(): Promise<BludSummary> {
-  const versi_tanggal = await getDpaLatestDate();
-  if (!versi_tanggal) return { versi_tanggal: null, total_pagu: 0, total_baris: 0, leaf_baris: 0 };
-  const rows = await getDpaByDate(versi_tanggal);
+  const latest = await getDpaLatest();
+  if (!latest) return { versi_tanggal: null, total_pagu: 0, total_baris: 0, leaf_baris: 0 };
+  const versi_tanggal = latest.versi;
+  const rows = await getDpaByDate(latest.tahun, latest.versi);
   // Total pagu = baris induk 'BELANJA DAERAH' (konvensi cetak-data.ts).
   const total_pagu = rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0;
   const leaf_baris = rows.filter(r => (r.vol ?? 0) > 0 || (r.harga ?? 0) > 0).length;
@@ -284,9 +285,10 @@ async function getEanggaranDetail(tahun: string): Promise<EanggaranDetail> {
 }
 
 async function getBludDetail(): Promise<BludDetail> {
-  const versi_tanggal = await getDpaLatestDate();
-  if (!versi_tanggal) return { kpi: { versi_tanggal: null, total_pagu: 0, leaf_baris: 0, total_baris: 0 }, kelompokPie: [], table: [] };
-  const rows = await getDpaByDate(versi_tanggal);
+  const latest = await getDpaLatest();
+  if (!latest) return { kpi: { versi_tanggal: null, total_pagu: 0, leaf_baris: 0, total_baris: 0 }, kelompokPie: [], table: [] };
+  const versi_tanggal = latest.versi;
+  const rows = await getDpaByDate(latest.tahun, latest.versi);
   const total_pagu = rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0;
   const uraianByKode = new Map(rows.map(r => [r.kode_rekening, r.uraian]));
   const leaf = rows.filter(r => (r.vol ?? 0) > 0 || (r.harga ?? 0) > 0);

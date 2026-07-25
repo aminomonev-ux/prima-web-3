@@ -4,11 +4,16 @@
 // Theme-aware via [data-theme="light"] CSS selectors (no isLight prop needed).
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { FileText, Shuffle, History, Clock, TrendingUp, Layers } from 'lucide-react'
 import { fmtRp } from '@/lib/shared/utils'
+import TahunDropdown from '@/components/blud/TahunDropdown'
 
 type HistoryItem = { versi_tanggal: string; jumlah_baris: number; total_jumlah: number }
 type Props = {
+  tahun:          number
+  tahunList:      number[]
+  currentYear:    number
   dpaLatestVersi: string | null
   dpaLatestRows:  number
   dpaLatestTotal: number
@@ -28,6 +33,7 @@ function fmtTgl(d: string | null): string {
 }
 
 export default function DashboardClient(p: Props) {
+  const router = useRouter()
   // KPI cards definition — warna fixed per metric, container theme-aware via CSS
   const cards = [
     {
@@ -123,9 +129,17 @@ export default function DashboardClient(p: Props) {
         [data-theme="light"] .blud-empty      { color: #6B7280; }
       `}</style>
 
-      <div>
-        <div className="blud-dash-title">Dashboard BLUD</div>
-        <div className="blud-dash-sub">Ringkasan anggaran BLUD & pergeseran terkini</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div className="blud-dash-title">Dashboard BLUD</div>
+          <div className="blud-dash-sub">Ringkasan anggaran BLUD & pergeseran — Tahun {p.tahun}</div>
+        </div>
+        <TahunDropdown
+          value={p.tahun}
+          items={p.tahunList}
+          current={p.currentYear}
+          onChange={t => router.push(`/blud?tahun=${t}`)}
+        />
       </div>
 
       {/* KPI Cards */}

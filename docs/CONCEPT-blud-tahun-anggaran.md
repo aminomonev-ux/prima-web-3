@@ -1,7 +1,11 @@
 # KONSEP — BLUD: Dimensi Tahun Anggaran (Opsi B)
 
-> Status: **KONSEP** (belum eksekusi). Menambahkan **Tahun Anggaran** sebagai dimensi di atas versi DPA & Pergeseran.
+> Status: **SUDAH DIEKSEKUSI** (2026-07-25). Menambahkan **Tahun Anggaran** sebagai dimensi di atas versi DPA & Pergeseran.
 > Alur baru: **pilih Tahun → pilih Versi → tabel muncul**. Buat baru = pilih Tahun dulu, lalu alur seperti sekarang.
+>
+> **⚠️ Deploy**: jalankan `docs/migrations/migration-blud-tahun-anggaran.sql` di DB server sebelum rilis (backfill `YEAR(versi_tanggal)` → data lama aman). Tanpa migrasi, kolom `tahun_anggaran` belum ada → error saat query.
+>
+> **File terdampak**: `schema-mysql.sql` · `lib/blud/{lock,data,rekap-pk-data,schemas}.ts` · `lib/data/dashboard.ts` · `app/api/blud/{dpa,pergeseran,pergeseran/inject,rekap-pk}/route.ts` · `components/blud/TahunDropdown.tsx` (baru) · `app/(dashboard)/blud/{page,dashboard-client,dpa/dpa-client,pergeseran/pergeseran-client,cetak/cetak-client,pengaturan/pengaturan-client}.tsx` · `app/globals.css`. Gate: tsc + ESLint hijau.
 
 ---
 
