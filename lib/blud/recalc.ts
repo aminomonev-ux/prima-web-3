@@ -541,6 +541,9 @@ export function injectDpaKePergeseran(
         satuan:        dpa.satuan,
         harga:         dpa.harga,
         jumlah:        dpa.jumlah,
+        // Jangkar realisasi ikut baris DPA-nya, bukan baris pergeseran lama yang
+        // kebetulan cocok — DPA yang memegang identitas (CONCEPT-blud-realisasi §2.3).
+        anggaran_key:  dpa.anggaran_key ?? found.anggaran_key ?? null,
       })
     } else {
       finalOrder.push({
@@ -556,6 +559,7 @@ export function injectDpaKePergeseran(
         bertambah_berkurang: 0,
         tipe_baris:          dpa.tipe_baris,
         row_id:              dpa.row_id ?? '',
+        anggaran_key:        dpa.anggaran_key ?? null,
         parent_id:           dpa.parent_id,
         urutan:              dpa.urutan,
       })

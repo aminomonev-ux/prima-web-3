@@ -108,6 +108,9 @@ export const DpaBarisInputSchema = z.object({
   keterangan:       z.string().max(2000, 'Keterangan maks 2000 karakter').nullable().optional(),
   tipe_baris:       TipeBarisSchema,
   row_id:           z.string().max(64),
+  // Jangkar realisasi (CONCEPT-blud-realisasi §2.3) — dibuat server saat baris lahir,
+  // klien hanya memantulkannya kembali. Kosong = baris baru, server yang isi.
+  anggaran_key:     z.string().max(64).nullable().optional(),
   parent_id:        z.string().max(64).nullable(),
   urutan:           z.number().int(),
   // Jejak import usulan (CONCEPT-import-usulan-dpa §4) — optional, default MANUAL
@@ -132,6 +135,7 @@ export const PergeseranBarisInputSchema = z.object({
   bertambah_berkurang:  z.number().min(-1e15).max(1e15),
   tipe_baris:           TipeBarisSchema,
   row_id:               z.string().max(64),
+  anggaran_key:         z.string().max(64).nullable().optional(),
   parent_id:            z.string().max(64).nullable(),
   urutan:               z.number().int(),
 }).passthrough();

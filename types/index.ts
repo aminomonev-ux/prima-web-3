@@ -232,6 +232,8 @@ export interface DpaBaris {
   keterangan: string | null
   tipe_baris: TipeBaris
   row_id: string
+  /** Jangkar realisasi — stabil lintas-versi (CONCEPT-blud-realisasi §2.3) */
+  anggaran_key: string | null
   parent_id: string | null
   urutan: number
   origin: 'MANUAL' | 'USULAN'
@@ -250,6 +252,7 @@ export interface DpaBarisInput {
   keterangan?: string | null
   tipe_baris: TipeBaris
   row_id: string
+  anggaran_key?: string | null
   parent_id: string | null
   urutan: number
   origin?: 'MANUAL' | 'USULAN'
@@ -274,6 +277,8 @@ export interface PergeseranBaris {
   bertambah_berkurang: number
   tipe_baris: TipeBaris
   row_id: string
+  /** Jangkar realisasi — diwarisi dari baris DPA asalnya (CONCEPT-blud-realisasi §2.3) */
+  anggaran_key: string | null
   parent_id: string | null
   urutan: number
 }
@@ -291,6 +296,7 @@ export interface PergeseranBarisInput {
   bertambah_berkurang: number
   tipe_baris: TipeBaris
   row_id: string
+  anggaran_key?: string | null
   parent_id: string | null
   urutan: number
 }

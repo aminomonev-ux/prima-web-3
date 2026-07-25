@@ -10,6 +10,7 @@
 
 import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
 import { assertBludVersion, bumpBludVersion, dropBludVersion, getBludVersion, bludVersiKey } from './lock'
+import { ensureAnggaranKey } from './anggaran-key'
 import type {
   DpaBaris, DpaBarisInput,
   PergeseranBaris, PergeseranBarisInput,
@@ -54,7 +55,9 @@ function normDpa(r: Record<string, unknown>): DpaBaris {
     penanggung_jawab: r.penanggung_jawab != null ? String(r.penanggung_jawab) : null,
     keterangan: r.keterangan != null ? String(r.keterangan) : null,
     tipe_baris: String(r.tipe_baris) as DpaBaris['tipe_baris'],
-    row_id: String(r.row_id ?? ''), parent_id: r.parent_id != null ? String(r.parent_id) : null,
+    row_id: String(r.row_id ?? ''),
+    anggaran_key: r.anggaran_key != null ? String(r.anggaran_key) : null,
+    parent_id: r.parent_id != null ? String(r.parent_id) : null,
     urutan: Number(r.urutan ?? 0),
     origin: (r.origin === 'USULAN' ? 'USULAN' : 'MANUAL'),
     usulan_item_id: r.usulan_item_id != null ? Number(r.usulan_item_id) : null,
@@ -73,7 +76,9 @@ function normPergeseran(r: Record<string, unknown>): PergeseranBaris {
     harga_p: r.harga_p != null ? Number(r.harga_p) : null,
     pergeseran: Number(r.pergeseran ?? 0), bertambah_berkurang: Number(r.bertambah_berkurang ?? 0),
     tipe_baris: String(r.tipe_baris) as PergeseranBaris['tipe_baris'],
-    row_id: String(r.row_id ?? ''), parent_id: r.parent_id != null ? String(r.parent_id) : null,
+    row_id: String(r.row_id ?? ''),
+    anggaran_key: r.anggaran_key != null ? String(r.anggaran_key) : null,
+    parent_id: r.parent_id != null ? String(r.parent_id) : null,
     urutan: Number(r.urutan ?? 0),
   }
 }
@@ -127,7 +132,7 @@ export async function getDpaVersion(tahun: number, versiTanggal: string): Promis
 
 const DPA_COLUMNS = [
   'tahun_anggaran', 'versi_tanggal', 'kode_rekening', 'uraian', 'vol', 'satuan', 'harga', 'jumlah',
-  'penanggung_jawab', 'keterangan', 'tipe_baris', 'row_id', 'parent_id', 'urutan',
+  'penanggung_jawab', 'keterangan', 'tipe_baris', 'row_id', 'anggaran_key', 'parent_id', 'urutan',
   'origin', 'usulan_item_id', 'usulan_no',
 ]
 
@@ -160,7 +165,7 @@ export async function saveDpa(
   const values = rows.map(r => [
     tahun, versiTanggal, r.kode_rekening, r.uraian, r.vol ?? null, r.satuan ?? null,
     r.harga ?? null, r.jumlah, r.penanggung_jawab ?? null, r.keterangan ?? null,
-    r.tipe_baris, r.row_id, r.parent_id ?? null, r.urutan,
+    r.tipe_baris, r.row_id, ensureAnggaranKey(r.anggaran_key), r.parent_id ?? null, r.urutan,
     r.origin ?? 'MANUAL', r.usulan_item_id ?? null, r.usulan_no ?? null,
   ])
   let existing = 0
@@ -240,7 +245,7 @@ export async function getPergeseranVersion(tahun: number, versiTanggal: string):
 const PERGESERAN_COLUMNS = [
   'tahun_anggaran', 'versi_tanggal', 'dpa_versi_tanggal', 'kode_rekening', 'uraian', 'vol', 'satuan',
   'harga', 'jumlah', 'vol_p', 'harga_p', 'pergeseran', 'bertambah_berkurang',
-  'tipe_baris', 'row_id', 'parent_id', 'urutan',
+  'tipe_baris', 'row_id', 'anggaran_key', 'parent_id', 'urutan',
 ]
 
 export async function savePergeseran(
@@ -272,7 +277,8 @@ export async function savePergeseran(
   const values = rows.map(r => [
     tahun, versiTanggal, dpaVersiTanggal, r.kode_rekening, r.uraian, r.vol ?? null,
     r.satuan ?? null, r.harga ?? null, r.jumlah, r.vol_p ?? null, r.harga_p ?? null,
-    r.pergeseran, r.bertambah_berkurang, r.tipe_baris, r.row_id, r.parent_id ?? null,
+    r.pergeseran, r.bertambah_berkurang, r.tipe_baris, r.row_id,
+    ensureAnggaranKey(r.anggaran_key), r.parent_id ?? null,
     r.urutan,
   ])
   let existing = 0

@@ -463,6 +463,7 @@ CREATE TABLE IF NOT EXISTS dpa_blud (
   keterangan       TEXT              NULL,
   tipe_baris       ENUM('GRANDMASTER','MASTER','CHILD','LEADER','MEMBER','PLETON-LEADER','PLETON-MEMBER','KETUA-KELOMPOK-A','ANGGOTA-KELOMPOK-A','KETUA-KELOMPOK-B','ANGGOTA-KELOMPOK-B','L7-HEAD','L7-SUB','L8-HEAD','L8-SUB') NOT NULL DEFAULT 'CHILD',
   row_id           VARCHAR(64)       NULL COMMENT 'UUID baris, unik per versi',
+  anggaran_key     VARCHAR(64)       NULL COMMENT 'Identitas stabil baris anggaran lintas-versi (jangkar realisasi)',
   parent_id        VARCHAR(64)       NULL COMMENT 'row_id parent',
   urutan           INT UNSIGNED  NOT NULL DEFAULT 0,
   origin           ENUM('MANUAL','USULAN') NOT NULL DEFAULT 'MANUAL' COMMENT 'Asal baris: input manual atau import usulan',
@@ -473,6 +474,7 @@ CREATE TABLE IF NOT EXISTS dpa_blud (
   INDEX idx_versi_latest (versi_tanggal, is_latest),
   INDEX idx_tahun_versi  (tahun_anggaran, versi_tanggal),
   INDEX idx_row_id       (row_id),
+  INDEX idx_anggaran_key (tahun_anggaran, anggaran_key),
   INDEX idx_parent_id    (parent_id),
   INDEX idx_urutan       (versi_tanggal, urutan),
   INDEX idx_dpa_usulan_item (usulan_item_id)
@@ -496,6 +498,7 @@ CREATE TABLE IF NOT EXISTS pergeseran_dpa (
   bertambah_berkurang DECIMAL(18,2) NOT NULL DEFAULT 0,
   tipe_baris          ENUM('GRANDMASTER','MASTER','CHILD','LEADER','MEMBER','PLETON-LEADER','PLETON-MEMBER','KETUA-KELOMPOK-A','ANGGOTA-KELOMPOK-A','KETUA-KELOMPOK-B','ANGGOTA-KELOMPOK-B','L7-HEAD','L7-SUB','L8-HEAD','L8-SUB') NOT NULL DEFAULT 'CHILD',
   row_id              VARCHAR(64)       NULL,
+  anggaran_key        VARCHAR(64)       NULL COMMENT 'Identitas stabil baris anggaran lintas-versi (jangkar realisasi)',
   parent_id           VARCHAR(64)       NULL,
   urutan              INT UNSIGNED  NOT NULL DEFAULT 0,
   created_at          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -504,6 +507,7 @@ CREATE TABLE IF NOT EXISTS pergeseran_dpa (
   INDEX idx_tahun_versi  (tahun_anggaran, versi_tanggal),
   INDEX idx_dpa_versi    (dpa_versi_tanggal),
   INDEX idx_row_id       (row_id),
+  INDEX idx_anggaran_key (tahun_anggaran, anggaran_key),
   INDEX idx_parent_id    (parent_id),
   INDEX idx_urutan       (versi_tanggal, urutan)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Pergeseran DPA - perubahan anggaran';
