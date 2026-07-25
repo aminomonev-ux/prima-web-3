@@ -87,15 +87,28 @@ jobs:
 
       - name: Audit production dependencies
         run: |
-          echo "=== Production dependencies CVE check ==="
-          # Block kalau ada CVE HIGH atau CRITICAL baru
-          # Existing known issue: xlsx HIGH (no upstream fix) — sudah di-migrate ke exceljs di SDL-Audit v1.1 Phase 4
-          # Existing known issue: next CVE range — sebagian fixable via npm audit fix, sisanya upstream-pending
-          npm audit --omit=dev --audit-level=high || (
-            echo "::error::npm audit menemukan CVE HIGH/CRITICAL — review hasil di atas"
-            echo "Kalau finding sudah diketahui (xlsx upstream, next upstream), update file ini dengan exception."
+          echo "=== Production dependencies CVE check (HIGH/CRITICAL) ==="
+          # Block kalau ada CVE HIGH/CRITICAL baru DI LUAR allowlist.
+          # Allowlist advisory yang sudah di-review (false-positive / unfixable-aman):
+          #   GHSA-mh99-v99m-4gvg (brace-expansion DoS) — npm audit meng-collapse range
+          #   multi-branch jadi "<=5.0.7", salah tandai versi maintenance PATCHED 1.1.16 /
+          #   2.1.2 (patched di 1.1.12 / 2.0.2). Satu-satunya versi >5.0.7 (5.0.8) ESM-only
+          #   → memecah require CJS di rantai exceljs/archiver/googleapis saat runtime.
+          #   Production tetap pakai versi patched. Advisory baru lain tetap mem-block.
+          ALLOW="GHSA-mh99-v99m-4gvg"
+          AUDIT=$(npm audit --omit=dev --audit-level=high --json || true)
+          BLOCK=$(echo "$AUDIT" | jq -r --arg allow "$ALLOW" '
+            [ .vulnerabilities[]?
+              | select(.severity=="high" or .severity=="critical")
+              | .via[]? | objects | .url // empty ]
+            | unique | map(select(test($allow) | not)) | .[]')
+          if [ -n "$BLOCK" ]; then
+            echo "::error::npm audit menemukan CVE HIGH/CRITICAL baru (di luar allowlist):"
+            echo "$BLOCK"
+            npm audit --omit=dev --audit-level=high || true
             exit 1
-          )
+          fi
+          echo "OK — hanya advisory allowlist (brace-expansion false-positive) yang tersisa."
 
       - name: Audit semua dependencies (warning only, tidak block)
         if: always()
