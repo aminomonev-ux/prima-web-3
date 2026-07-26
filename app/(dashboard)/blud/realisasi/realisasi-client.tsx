@@ -217,9 +217,12 @@ export default function RealisasiClient() {
     terserap: akar.reduce((s, r) => s + r.terserap, 0),
   }), [akar])
 
-  const adaSetelahBulanIni = total.terserap - total.sd > 0.005
+  const setelahBulanIni = total.terserap - total.sd
   const tanpaDpa = sumber?.sumber === 'KOSONG'
-  const minus = rows.filter(r => r.sisa < -0.005)
+  // Lebih pagu dinilai dari serapan SETAHUN: baris yang jebol di Agustus tetap
+  // harus terlihat merah saat pengguna menengok laporan Juni.
+  const lebihPagu = (r: BarisRealisasi) => r.pagu - r.terserap < -0.005
+  const minus = rows.filter(lebihPagu)
 
   function toggle(key: string) {
     setTutup(prev => {
@@ -354,11 +357,12 @@ export default function RealisasiClient() {
         </div>
       )}
 
-      {adaSetelahBulanIni && (
+      {setelahBulanIni > 0.005 && (
         <div className="bk-warn">
-          Ada realisasi Rp {rp(total.terserap - total.sd)} di bulan setelah {NAMA_BULAN[bulan - 1]}.
-          Kolom <b>Sisa</b> memakai serapan setahun penuh — itulah angka yang menentukan
-          boleh-tidaknya belanja lagi.
+          Tabel ini menunjukkan keadaan <b>sampai {NAMA_BULAN[bulan - 1]}</b> saja.
+          Ada realisasi <b className="bk-num-inline">Rp {rp(setelahBulanIni)}</b> di bulan
+          sesudahnya, jadi sisa anggaran yang sebenarnya masih bisa dibelanjakan hari ini
+          adalah <b className="bk-num-inline">Rp {rp(total.pagu - total.terserap)}</b>.
         </div>
       )}
 
@@ -372,7 +376,7 @@ export default function RealisasiClient() {
               <th style={{ width: 120 }}>{NAMA_BULAN[bulan - 1]}</th>
               <th style={{ width: 120 }}>s.d. Bln Lalu</th>
               <th style={{ width: 130 }}>s.d. {NAMA_BULAN[bulan - 1]}</th>
-              <th style={{ width: 130 }}>Sisa</th>
+              <th style={{ width: 130 }}>Sisa s.d. {NAMA_BULAN[bulan - 1]}</th>
               <th style={{ width: 64 }}>%</th>
             </tr>
           </thead>
@@ -389,7 +393,7 @@ export default function RealisasiClient() {
               const c = chip(r.kode_rekening)
               return (
                 <tr key={r.anggaran_key}
-                  className={`${induk ? 'rl-induk' : ''} ${r.sisa < -0.005 ? 'rl-row-minus' : ''}`}>
+                  className={`${induk ? 'rl-induk' : ''} ${r.sisa < -0.005 || lebihPagu(r) ? 'rl-row-minus' : ''}`}>
                   <td className="bk-kode" style={{ paddingLeft: 8 + d * 14 }}>
                     {induk && (
                       <button className="rl-toggle" onClick={() => toggle(r.anggaran_key)}
@@ -432,9 +436,9 @@ export default function RealisasiClient() {
                 <td className="bk-r bk-num-inline">{rpKosong(total.ini)}</td>
                 <td className="bk-r bk-num-inline">{rpKosong(total.lalu)}</td>
                 <td className="bk-r bk-num-inline">{rpKosong(total.sd)}</td>
-                <td className="bk-r bk-num-inline">{rp(total.pagu - total.terserap)}</td>
+                <td className="bk-r bk-num-inline">{rp(total.pagu - total.sd)}</td>
                 <td className="bk-c bk-num-inline">
-                  {total.pagu > 0 ? Math.round((total.terserap / total.pagu) * 100) : '—'}
+                  {total.pagu > 0 ? Math.round((total.sd / total.pagu) * 100) : '—'}
                 </td>
               </tr>
             </tfoot>

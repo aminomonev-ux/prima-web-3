@@ -782,6 +782,7 @@ Tidak ada lagi yang menunggu konfirmasi. Sisa pertanyaan lapangan (mis. format n
 | 25 | **Tutup Kas wajib seimbang**: sisi buku (dihitung) = sisi nyata (diketik). Selisih ≠ 0 → bulan tidak bisa ditutup. Tanpa kotak "penyesuaian" bebas |
 | 26 | Realisasi menumpang **Tahun Anggaran**: tahun tanpa DPA tidak punya baris anggaran → Buku Kas tidak bisa dibuka untuk tahun itu |
 | 27 | Kolom **Sisa** tampil di layar Realisasi & di modal input, dihitung saat dibaca — bukan kolom simpanan |
+| 28 | **Layar Realisasi = laporan per bulan terpilih.** Sisa & % ikut bulan itu, seperti kolom lainnya — bukan serapan setahun. Angka "boleh belanja berapa lagi hari ini" pindah ke keterangan di bawah tabel, muncul hanya bila ada realisasi di bulan sesudahnya. Pemilih rekening di Buku Kas tetap memakai serapan setahun: di sana pertanyaannya memang berbeda |
 
 > Referensi: `docs/CONCEPT-blud-tahun-anggaran.md` (sudah dieksekusi) · `docs/CONCEPT-menu-access-control.md`
 > (Fase 0) · `docs/TUTORIAL-blud.md` · pola L48 CAS, L51 optimistic lock, L55 atomik, L58 ConfirmDialog.

@@ -55,17 +55,20 @@ export async function GET(req: NextRequest) {
       const dipakai = setahun.get(b.anggaran_key) ?? 0
       const ini = bulanIni?.get(b.anggaran_key) ?? 0
       const lalu = bulanLalu?.get(b.anggaran_key) ?? 0
+      const sd = bulanIni ? ini + lalu : null
+      // Sisa & persen mengikuti bulan yang diminta — layar Realisasi adalah
+      // laporan, jadi seluruh kolomnya harus menunjuk titik waktu yang sama.
+      // Tanpa `bulan` (pemilih rekening di Buku Kas) jatuh ke serapan setahun:
+      // di sana yang ditanya justru "boleh belanja berapa lagi sekarang".
+      const acuan = sd ?? dipakai
       return {
         ...b,
         terserap: dipakai,
         bulan_ini: bulanIni ? ini : null,
         bulan_lalu: bulanLalu ? lalu : null,
-        sd_bulan: bulanIni ? ini + lalu : null,
-        // Sisa memakai serapan SETAHUN, bukan s.d. bulan terpilih: inilah angka
-        // yang menentukan boleh-tidaknya belanja lagi, dan angka yang dipakai
-        // penjaga pagu saat menyimpan transaksi.
-        sisa: b.pagu - dipakai,
-        persen: b.pagu > 0 ? (dipakai / b.pagu) * 100 : 0,
+        sd_bulan: sd,
+        sisa: b.pagu - acuan,
+        persen: b.pagu > 0 ? (acuan / b.pagu) * 100 : 0,
       }
     })
 
