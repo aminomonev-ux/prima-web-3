@@ -751,10 +751,30 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
       SPJ · TUTUP KAS · setor BPD.
 - [x] `blud_gu_periode` (`migration-blud-gu-periode.sql`, sudah dijalankan) + panel
       **Pengajuan GU bulan ini** di layar Tutup Kas.
-- [ ] **DoD sebagian**: berkas asli `docs/06. BKU Juni 2026.xlsx` sudah ada dan sudah dibaca —
-      daftar lembar, kop, dan susunan kolom ` Realisasi BP`/`GU` sudah dicocokkan. Yang belum:
-      banding angka hasil unduhan sistem dengan berkas asli (butuh data realisasi Juni 2026 nyata
-      di basis data). `tsc` + ESLint bersih, `next build` lolos, seluruh SQL Fase 5 diuji ke MySQL 8.4.
+- [x] **Bentuk 10 lembar disamakan dengan berkas asli** `docs/06. BKU Juni 2026.xlsx`: kop, urutan &
+      penomoran kolom, baris nomor kolom (`7(5+6)`, `10(7+10)`, `6(4 + 5)`), lampiran BEND-12, dan
+      blok tanda tangan. `BKU` & `SPI` kini satu fungsi (SPI = BKU tanpa kolom Total) — mustahil
+      melenceng lagi. `TUTUP KAS` memakai penomoran A.1–A.4 / B.1–B.3.
+- [ ] **DoD sebagian**: perakitan workbook sudah diuji jalan (harness data palsu: 10 lembar terbentuk,
+      2 lembar GU, tidak ada galat merge exceljs). Yang belum: banding **angka** hasil unduhan dengan
+      berkas asli — butuh data realisasi Juni 2026 nyata di basis data. `tsc` + ESLint bersih,
+      `next build` lolos, seluruh SQL Fase 5 diuji ke MySQL 8.4.
+
+**Dua cacat yang tertangkap uji rakit (2026-07-26), bukan oleh `tsc`:**
+
+1. **`SPJ` memakai arus kas keluar, bukan realisasi.** Di berkas asli `pengantar` dan `SPJ` memuat
+   angka yang **sama persis** (6.361.975.087). Arus kas keluar berbeda dari itu: pemindahan bank→kas
+   dan transaksi yang masih diparkir ikut mengurangi kas tapi tidak dipertanggungjawabkan ke baris
+   anggaran mana pun. Keduanya kini memakai satu sumber, `Konteks.belanja` (jumlah alokasi).
+2. **`pengantar` mencetak `No. 900.1.6/900.1.6/1234`** — awalan ditempel dua kali karena nomor surat
+   dari Tutup Kas sudah lengkap.
+
+**Keputusan #32 — arus kas bersih di Tutup Kas.** `A.2 Kas Masuk` / `A.3 Kas Keluar` (dan dua baris
+yang sama di layar) menghitung arus **dari/ke luar saja**; pemindahan bank↔kas dibersihkan lewat
+`SUM(GREATEST(masuk − keluar, 0))` per baris. Mengambil Rp 440 juta dari bank ke brankas bukan
+penerimaan — uangnya milik sendiri, cuma pindah tempat. Saldo akhirnya identik; yang berbeda adalah
+kejujuran dua angka yang ikut ditandatangani. Cara ini juga tidak bergantung pada kolom `jenis`,
+jadi transaksi campuran pun ikut bersih sendiri.
 
 **Keputusan #31 — rentang GU dicatat, bukan diterka.** Berkas asli punya lembar `GU 1-26 Juni 2026`:
 tanggal 1 s/d 26, bukan sebulan penuh. Bulan lain bisa dua-tiga pengajuan. Tidak ada penanda apa pun
@@ -869,6 +889,8 @@ Tidak ada lagi yang menunggu konfirmasi. Sisa pertanyaan lapangan (mis. format n
 | 29 | **Pejabat SPJ disalin, bukan dirujuk.** `pk_pejabat` = sumber isian ("Ambil dari PK"); yang tersimpan salinan nama/NIP/pangkat. Tanpa FK, tanpa JOIN saat cetak — ganti pejabat tahun depan tidak boleh mengubah SPJ yang sudah ditandatangani |
 | 30 | **Tutup bulan berurutan dari depan.** Bulan sebelumnya yang masih terbuka jadi penghalang, sejajar baki "Perlu Rekening" — saldo awal bulan ini diturunkan dari bulan-bulan sebelumnya (§4.6) |
 | 31 | **Rentang GU dicatat manusia** (`blud_gu_periode`), tidak diterka dari transaksi. Satu bulan boleh beberapa pengajuan; rentang tak boleh tindih; nomor urut ditentukan server dari tanggal mulai |
+| 32 | **Arus kas bersih di Tutup Kas**: pemindahan bank↔kas tidak dihitung sebagai penerimaan/pengeluaran (`SUM(GREATEST(masuk − keluar, 0))` per baris). Saldo akhir identik, dua angka yang ditandatangani jadi jujur |
+| 33 | **`pengantar` & `SPJ` memakai jumlah ALOKASI**, bukan arus kas keluar — di berkas asli keduanya angka yang sama persis. Transaksi terparkir & pemindahan bank tidak ikut |
 
 > Referensi: `docs/CONCEPT-blud-tahun-anggaran.md` (sudah dieksekusi) · `docs/CONCEPT-menu-access-control.md`
 > (Fase 0) · `docs/TUTORIAL-blud.md` · pola L48 CAS, L51 optimistic lock, L55 atomik, L58 ConfirmDialog.

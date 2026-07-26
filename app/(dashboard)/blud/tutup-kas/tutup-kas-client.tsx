@@ -34,6 +34,8 @@ interface Neraca {
   masuk_bank: number
   keluar_kas: number
   keluar_bank: number
+  masuk_luar: number
+  keluar_luar: number
   saldo_buku: number
   kas_fisik: number | null
   bank_koran: number | null
@@ -279,8 +281,10 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
               </header>
               <Baris label="Saldo awal kas tunai" nilai={data.saldo_awal_kas} />
               <Baris label="Saldo awal bank" nilai={data.saldo_awal_bank} />
-              <Baris label="Penerimaan bulan ini" nilai={data.masuk_kas + data.masuk_bank} tanda="+" />
-              <Baris label="Pengeluaran bulan ini" nilai={data.keluar_kas + data.keluar_bank} tanda="−" />
+              {/* Pemindahan bank↔kas tidak dihitung: uang sendiri yang pindah
+                  tempat bukan penerimaan maupun pengeluaran. */}
+              <Baris label="Penerimaan bulan ini" nilai={data.masuk_luar} tanda="+" />
+              <Baris label="Pengeluaran bulan ini" nilai={data.keluar_luar} tanda="−" />
               <div className="tk-total">
                 <span>Saldo akhir menurut buku</span>
                 <span className={`bk-num-inline ${data.saldo_buku < 0 ? 'rl-neg' : ''}`}>Rp {rp(data.saldo_buku)}</span>

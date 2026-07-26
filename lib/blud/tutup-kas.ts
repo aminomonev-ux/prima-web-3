@@ -26,6 +26,15 @@ export interface NeracaKas {
   masuk_bank: number
   keluar_kas: number
   keluar_bank: number
+  /**
+   * Arus dari/ke LUAR — pemindahan bank↔kas sudah dibersihkan (§4.7).
+   * Mengambil Rp 440 juta dari bank ke brankas bukan penerimaan: uangnya milik
+   * sendiri, cuma pindah tempat. Kalau ikut dihitung, berita acara memuat
+   * "Kas Masuk 440 juta" yang tidak pernah terjadi. Saldo akhirnya sama saja —
+   * yang berbeda cuma kejujuran dua angka yang ditandatangani.
+   */
+  masuk_luar: number
+  keluar_luar: number
   saldo_buku: number
   // Sisi B — diketik
   kas_fisik: number | null
@@ -89,11 +98,16 @@ async function kumpulkanPenghalang(tahun: number, bulan: number): Promise<{ pesa
 export async function getNeracaKas(tahun: number, bulan: number): Promise<NeracaKas> {
   const awal = await getSaldoAwal(tahun, bulan)
 
+  // GREATEST(...) per baris = arus bersih tiap transaksi. Transaksi pemindahan
+  // bank↔kas punya masuk = keluar, jadi hasilnya nol di kedua kolom — hilang
+  // sendiri tanpa perlu menebak dari kolom `jenis`.
   const arus = await sql`
     SELECT COALESCE(SUM(kas_masuk), 0)   AS mk,
            COALESCE(SUM(bank_masuk), 0)  AS mb,
            COALESCE(SUM(kas_keluar), 0)  AS kk,
-           COALESCE(SUM(bank_keluar), 0) AS kb
+           COALESCE(SUM(bank_keluar), 0) AS kb,
+           COALESCE(SUM(GREATEST((kas_masuk + bank_masuk) - (kas_keluar + bank_keluar), 0)), 0) AS ml,
+           COALESCE(SUM(GREATEST((kas_keluar + bank_keluar) - (kas_masuk + bank_masuk), 0)), 0) AS kl
     FROM blud_realisasi_tx
     WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
   ` as Record<string, unknown>[]
@@ -111,7 +125,9 @@ export async function getNeracaKas(tahun: number, bulan: number): Promise<Neraca
   const masukBank = Number(arus[0]?.mb ?? 0)
   const keluarKas = Number(arus[0]?.kk ?? 0)
   const keluarBank = Number(arus[0]?.kb ?? 0)
-  const saldoBuku = awal.kas + awal.bank + masukKas + masukBank - keluarKas - keluarBank
+  const masukLuar = Number(arus[0]?.ml ?? 0)
+  const keluarLuar = Number(arus[0]?.kl ?? 0)
+  const saldoBuku = awal.kas + awal.bank + masukLuar - keluarLuar
 
   const kasFisik = row?.kas_fisik != null ? Number(row.kas_fisik) : null
   const bankKoran = row?.bank_koran != null ? Number(row.bank_koran) : null
@@ -130,6 +146,8 @@ export async function getNeracaKas(tahun: number, bulan: number): Promise<Neraca
     masuk_bank: masukBank,
     keluar_kas: keluarKas,
     keluar_bank: keluarBank,
+    masuk_luar: masukLuar,
+    keluar_luar: keluarLuar,
     saldo_buku: saldoBuku,
     kas_fisik: kasFisik,
     bank_koran: bankKoran,
@@ -193,16 +211,12 @@ export async function tutupPeriode(
 
     const awal = await getSaldoAwal(tahun, bulan)
     const arus = await tx`
-      SELECT COALESCE(SUM(kas_masuk), 0)   AS mk,
-             COALESCE(SUM(bank_masuk), 0)  AS mb,
-             COALESCE(SUM(kas_keluar), 0)  AS kk,
-             COALESCE(SUM(bank_keluar), 0) AS kb
+      SELECT COALESCE(SUM(GREATEST((kas_masuk + bank_masuk) - (kas_keluar + bank_keluar), 0)), 0) AS ml,
+             COALESCE(SUM(GREATEST((kas_keluar + bank_keluar) - (kas_masuk + bank_masuk), 0)), 0) AS kl
       FROM blud_realisasi_tx
       WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
     ` as Record<string, unknown>[]
-    const saldoBuku = awal.kas + awal.bank
-      + Number(arus[0]?.mk ?? 0) + Number(arus[0]?.mb ?? 0)
-      - Number(arus[0]?.kk ?? 0) - Number(arus[0]?.kb ?? 0)
+    const saldoBuku = awal.kas + awal.bank + Number(arus[0]?.ml ?? 0) - Number(arus[0]?.kl ?? 0)
 
     const saldoNyata = input.kas_fisik + input.bank_koran
     const selisih = saldoNyata - saldoBuku
