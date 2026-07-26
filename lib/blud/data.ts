@@ -53,6 +53,23 @@ export class BludJangkarHilangError extends Error {
 }
 
 /**
+ * Hasil simpan DPA/Pergeseran. `jangkar` = peta `row_id → anggaran_key` versi
+ * yang baru saja ditulis, WAJIB dikembalikan ke klien.
+ *
+ * Kunci dicetak server untuk baris yang baru lahir. Kalau petanya tidak pulang,
+ * state di layar tetap tanpa jangkar — dan simpan KEDUA (tanpa muat ulang)
+ * terlihat persis seperti klien yang membuang jangkar, lalu ditolak
+ * `periksaJangkar` padahal tidak ada yang salah. Itu betul-betul terjadi saat
+ * pagar ini pertama kali dicoba.
+ */
+export interface SimpanHasil {
+  existing: number
+  replaced: number
+  newVersion: number
+  jangkar: Record<string, string>
+}
+
+/**
  * Dijalankan DI DALAM transaksi simpan, sebelum DELETE. Pembandingnya versi
  * TERBARU tahun itu — bukan versi yang sedang ditimpa — supaya versi baru yang
  * lahir tanpa jangkar pun ketahuan.
@@ -199,7 +216,7 @@ export async function saveDpa(
   userId: number,
   expectedVersion: number,
   force = false,
-): Promise<{ existing: number; replaced: number; newVersion: number }> {
+): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
 
@@ -213,17 +230,22 @@ export async function saveDpa(
         await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
       })
-      return { existing, replaced: 0, newVersion: expectedVersion + 1 }
+      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {} }
     }
-    return { existing, replaced: 0, newVersion: expectedVersion }
+    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {} }
   }
 
-  const values = rows.map(r => [
-    tahun, versiTanggal, r.kode_rekening, r.uraian, r.vol ?? null, r.satuan ?? null,
-    r.harga ?? null, r.jumlah, r.penanggung_jawab ?? null, r.keterangan ?? null,
-    r.tipe_baris, r.row_id, ensureAnggaranKey(r.anggaran_key), r.parent_id ?? null, r.urutan,
-    r.origin ?? 'MANUAL', r.usulan_item_id ?? null, r.usulan_no ?? null,
-  ])
+  const jangkar: Record<string, string> = {}
+  const values = rows.map(r => {
+    const key = ensureAnggaranKey(r.anggaran_key)
+    jangkar[r.row_id] = key
+    return [
+      tahun, versiTanggal, r.kode_rekening, r.uraian, r.vol ?? null, r.satuan ?? null,
+      r.harga ?? null, r.jumlah, r.penanggung_jawab ?? null, r.keterangan ?? null,
+      r.tipe_baris, r.row_id, key, r.parent_id ?? null, r.urutan,
+      r.origin ?? 'MANUAL', r.usulan_item_id ?? null, r.usulan_no ?? null,
+    ]
+  })
   let existing = 0
   await withTransaction(async ({ tx, conn }) => {
     await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
@@ -241,7 +263,7 @@ export async function saveDpa(
     await bulkInsert('dpa_blud', DPA_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
   })
-  return { existing, replaced: incoming, newVersion: expectedVersion + 1 }
+  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar }
 }
 
 /**
@@ -315,7 +337,7 @@ export async function savePergeseran(
   userId: number,
   expectedVersion: number,
   force = false,
-): Promise<{ existing: number; replaced: number; newVersion: number }> {
+): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
 
@@ -328,18 +350,23 @@ export async function savePergeseran(
         await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
       })
-      return { existing, replaced: 0, newVersion: expectedVersion + 1 }
+      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {} }
     }
-    return { existing, replaced: 0, newVersion: expectedVersion }
+    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {} }
   }
 
-  const values = rows.map(r => [
-    tahun, versiTanggal, dpaVersiTanggal, r.kode_rekening, r.uraian, r.vol ?? null,
-    r.satuan ?? null, r.harga ?? null, r.jumlah, r.vol_p ?? null, r.harga_p ?? null,
-    r.pergeseran, r.bertambah_berkurang, r.tipe_baris, r.row_id,
-    ensureAnggaranKey(r.anggaran_key), r.parent_id ?? null,
-    r.urutan,
-  ])
+  const jangkar: Record<string, string> = {}
+  const values = rows.map(r => {
+    const key = ensureAnggaranKey(r.anggaran_key)
+    jangkar[r.row_id] = key
+    return [
+      tahun, versiTanggal, dpaVersiTanggal, r.kode_rekening, r.uraian, r.vol ?? null,
+      r.satuan ?? null, r.harga ?? null, r.jumlah, r.vol_p ?? null, r.harga_p ?? null,
+      r.pergeseran, r.bertambah_berkurang, r.tipe_baris, r.row_id,
+      key, r.parent_id ?? null,
+      r.urutan,
+    ]
+  })
   let existing = 0
   await withTransaction(async ({ tx, conn }) => {
     await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
@@ -354,7 +381,7 @@ export async function savePergeseran(
     await bulkInsert('pergeseran_dpa', PERGESERAN_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
   })
-  return { existing, replaced: incoming, newVersion: expectedVersion + 1 }
+  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar }
 }
 
 /**

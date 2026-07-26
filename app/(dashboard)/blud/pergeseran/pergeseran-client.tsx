@@ -818,6 +818,12 @@ export default function PergeseranClient() {
         showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList()
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
         if (typeof json.version === 'number') setVersion(json.version)
+        // Jangkar baris baru dicetak server saat simpan — tanpa diserap ke state,
+        // simpan KEDUA tanpa muat ulang akan ditolak `periksaJangkar` tanpa sebab.
+        if (json.jangkar) {
+          const peta = json.jangkar as Record<string, string>
+          setRows(prev => prev.map(r => (r.anggaran_key ? r : { ...r, anggaran_key: peta[r.row_id] ?? null })))
+        }
         if (draftRef.current) {
           toast.warning('Tersimpan sebagai DRAFT — lanjutkan pengisian sampai berimbang', { duration: 6000 })
         }

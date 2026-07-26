@@ -680,6 +680,16 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
          → simpan **ditolak** (`JANGKAR_HILANG`, 409). Sengaja tidak bisa ditembus `force`:
          kehilangan jangkar tidak pernah disengaja. Baris yang benar-benar baru punya
          `row_id` baru, jadi impor besar atau susun-ulang dari nol tidak ikut tertahan.
+- [x] **Pagar itu langsung menyala palsu saat pertama dicoba — dan itu berguna.** Uji nyata:
+      Form Baru → Simpan → Simpan lagi → ditolak "8 dari 8 baris tanpa `anggaran_key`",
+      padahal DPA-nya baru dan belum punya realisasi sama sekali. Sebabnya bukan pagarnya:
+      **kunci dicetak server tapi tidak pernah dikembalikan ke klien**, jadi state di layar
+      tetap tanpa jangkar dan simpan kedua betul-betul mengirim baris tanpa jangkar.
+      Muat ulang halaman membuatnya normal — persis gejala yang dilaporkan.
+      Perbaikan: `saveDpa`/`savePergeseran` mengembalikan peta `row_id → anggaran_key`
+      (`SimpanHasil.jangkar`), kedua klien menyerapnya ke state setelah simpan berhasil.
+      Pelajaran: mencetak identitas di server itu benar, tapi belum selesai sampai
+      identitasnya pulang ke pemegang state.
 - Nilai: fondasi. Tanpa ini fase berikutnya runtuh di pergeseran pertama.
 
 ### Fase 2 — Buku Kas (input)

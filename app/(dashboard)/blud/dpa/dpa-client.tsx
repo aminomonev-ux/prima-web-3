@@ -972,6 +972,16 @@ export default function DpaClient() {
 
   // Audit BLUD v1.2 (B-NEW-3): split jadi internal supaya bisa di-retry dengan force=true
   // L51: kirim expected_version + handle VERSION_CONFLICT
+  /**
+   * Jangkar baris baru dicetak server saat simpan. Tanpa menyerapnya ke state,
+   * simpan KEDUA (tanpa muat ulang halaman) mengirim baris yang sama tanpa
+   * jangkar dan ditolak `periksaJangkar` — padahal tidak ada yang salah.
+   */
+  function serapJangkar(peta: Record<string, string> | undefined) {
+    if (!peta) return
+    setRows(prev => prev.map(r => (r.anggaran_key ? r : { ...r, anggaran_key: peta[r.row_id] ?? null })))
+  }
+
   async function doSimpanInternal(versiTanggal: string, force: boolean) {
     try {
       const res  = await fetch('/api/blud/dpa', {
@@ -999,6 +1009,7 @@ export default function DpaClient() {
       if (json.ok) {
         showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList()
         if (typeof json.version === 'number') setVersion(json.version)
+        serapJangkar(json.jangkar)
       } else {
         showToast(json.error || json.message || 'Gagal simpan', false)
       }

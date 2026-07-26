@@ -244,6 +244,9 @@ export async function POST(req: NextRequest) {
       existing: result.existing,
       replaced: result.replaced,
       version: result.newVersion,
+      // Peta row_id → anggaran_key baris yang baru ditulis. Klien WAJIB
+      // menempelkannya ke state, kalau tidak simpan berikutnya kena JANGKAR_HILANG.
+      jangkar: result.jangkar,
     })
   } catch (err) {
     if (err instanceof BludVersionConflictError) {
