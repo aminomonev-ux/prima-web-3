@@ -125,6 +125,10 @@ export type AuditEventType =
   // §4.3: pagu diturunkan di bawah realisasi yang sudah terjadi, atas keputusan
   // sadar pemegang izin DPA. Alasannya wajib dan ikut tercatat di sini.
   | 'BLUD_PAGU_DIBAWAH_REALISASI'   // POST /api/blud/pergeseran (turunkan_paksa)
+  // Permintaan pergeseran / rekening baru dari bendahara (§4.1, §4.2)
+  | 'BLUD_PERMINTAAN_CREATE'        // POST /api/blud/realisasi/permintaan
+  | 'BLUD_PERMINTAAN_TOLAK'         // PATCH /api/blud/realisasi/permintaan
+  | 'BLUD_PERMINTAAN_SELESAI'       // otomatis setelah Pergeseran memenuhi permintaan
   // ─── Perjanjian Kinerja (Sprint 1, 2026-05-23) ────────────────────────────
   | 'PK_SAVE_SASARAN'         // POST /api/perjanjian-kinerja/sasaran
   | 'PK_SAVE_PROGRAM'         // POST /api/perjanjian-kinerja/program

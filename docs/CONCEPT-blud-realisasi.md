@@ -663,6 +663,13 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
 - [x] `scripts/check-anggaran-key.mjs` — pemeriksa baca-saja, 4 pemeriksaan.
 - [x] **DoD**: `tsc` bersih. Sisa uji hidup (simpan versi kedua → key tetap; inject → key terbawa)
       dijalankan lewat pemeriksa begitu ada data DPA nyata.
+- [x] **Cacat yang ketahuan di Fase 4 & sudah diperbaiki**: `dpa-client.tsx` dan
+      `pergeseran-client.tsx` menyusun ulang baris dengan daftar kolom tetap saat memuat —
+      `anggaran_key` ikut terbuang di situ. Akibatnya setiap Simpan mengirim baris tanpa jangkar,
+      `ensureAnggaranKey` menganggapnya baris baru, dan **seluruh realisasi jadi yatim di
+      penyimpanan berikutnya**. Zod `.passthrough()` tidak menolong karena kliennya yang
+      membuang, bukan servernya. Kini dipantulkan di 3 titik: muat DPA, muat Pergeseran, dan
+      Generate. Pelajaran: `.passthrough()` di server hanya menjaga separuh jalan.
 - Nilai: fondasi. Tanpa ini fase berikutnya runtuh di pergeseran pertama.
 
 ### Fase 2 — Buku Kas (input)
@@ -696,8 +703,21 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
       pernah dibandingkan dengan data nyata.
 
 ### Fase 4 — Permintaan & baki rekening
-- [ ] `blud_permintaan` + route + modal §4.1 + baki §4.2 + tautan `?fokus=`.
-- [ ] **DoD**: alur lengkap tolak → ajukan → geser → notifikasi balik → transaksi lanjut.
+- [x] Tabel `blud_permintaan` (`migration-blud-permintaan.sql`, sudah jalan di DB lokal) +
+      `lib/blud/permintaan-data.ts` + route `permintaan/` (GET/POST/PATCH) + 3 event audit.
+      Permintaan kembar untuk rekening yang sama tidak menumpuk — yang lama diperbarui.
+- [x] §4.1: tombol **Ajukan Pergeseran** muncul di modal transaksi begitu server menolak
+      `PAGU_TERLAMPAUI`. Membuat catatan + notifikasi ke `__ADMIN__` berisi tautan
+      `?fokus=<anggaran_key>`. **Pagu tidak disentuh** — angkanya tetap ditentukan manusia.
+- [x] §4.2: `BakiRekeningPanel` — daftar transaksi diparkir SETAHUN penuh, dua jalan keluar
+      per baris (**Sambungkan** ke baris yang ada · **Minta rekening** baru). Dibuka dari
+      banner di Buku Kas.
+- [x] `?fokus=` di `pergeseran-client.tsx`: baris disorot + auto-scroll, **tetap kosong**.
+- [x] Penutupan otomatis: setelah Pergeseran tersimpan, permintaan yang pagunya sudah cukup
+      ditandai SELESAI + notifikasi balik ke peminta. Dijalankan **setelah** commit dan
+      dibungkus try sendiri — gagal menutup permintaan tidak boleh membatalkan pergeseran.
+- [ ] **DoD — belum bisa diuji**: alur lengkap tolak → ajukan → geser → notifikasi balik →
+      transaksi lanjut. `tsc` + ESLint bersih, `next build` lolos.
 
 ### Fase 5 — Tutup Kas & keluaran Excel
 - [ ] `blud_pejabat` + panel Pengaturan. Layar Tutup Kas + kunci periode §4.5.

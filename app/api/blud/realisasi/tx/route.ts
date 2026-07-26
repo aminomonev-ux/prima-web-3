@@ -9,7 +9,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
-import { getBukuKas, countBelumBerrekening, createTx, updateTx, deleteTx } from '@/lib/blud/realisasi-data'
+import {
+  getBukuKas, countBelumBerrekening, listBelumBerrekening, createTx, updateTx, deleteTx,
+} from '@/lib/blud/realisasi-data'
 import { getPaguSumber } from '@/lib/blud/pagu'
 import {
   CreateTxBodySchema, UpdateTxBodySchema, ListTxQuerySchema,
@@ -58,6 +60,12 @@ export async function GET(req: NextRequest) {
   const bulan = parsed.data.bulan ?? new Date().getMonth() + 1
 
   try {
+    // Baki "Perlu Rekening" (§4.2) melihat SATU TAHUN penuh, bukan bulan berjalan:
+    // transaksi yang diparkir di Mei tetap memblokir Tutup Kas di Juli.
+    if (searchParams.get('mode') === 'parkir') {
+      return NextResponse.json({ ok: true, data: await listBelumBerrekening(tahun) })
+    }
+
     const [data, sumber, diparkir] = await Promise.all([
       getBukuKas(tahun, bulan),
       getPaguSumber(tahun),

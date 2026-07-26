@@ -101,6 +101,35 @@ export const ListTxQuerySchema = z.object({
   bulan: BulanSchema.optional(),
 })
 
+// ─── Body: permintaan pergeseran / rekening baru (§4.1, §4.2) ───────────────
+
+/**
+ * `anggaran_key` wajib untuk PERGESERAN (barisnya ada, pagunya kurang) dan
+ * dilarang untuk REKENING_BARU (barisnya memang belum ada — itu justru
+ * permintaannya). Dipisah di sini supaya route tidak perlu bercabang.
+ */
+export const PermintaanBodySchema = z.object({
+  tahun_anggaran: z.coerce.number().int().gte(2000).lte(2100),
+  jenis: z.enum(['PERGESERAN', 'REKENING_BARU']),
+  anggaran_key: AnggaranKeySchema.nullish(),
+  kode_rekening: z.string().max(64).nullish(),
+  uraian: z.string().trim().min(3, 'Uraian minimal 3 karakter').max(2000),
+  kekurangan: RupiahSchema.default(0),
+  tx_id: z.coerce.number().int().positive().nullish(),
+}).superRefine((v, ctx) => {
+  if (v.jenis === 'PERGESERAN' && !v.anggaran_key) {
+    ctx.addIssue({ code: 'custom', message: 'Permintaan pergeseran wajib menunjuk baris anggaran' })
+  }
+  if (v.jenis === 'REKENING_BARU' && !v.tx_id) {
+    ctx.addIssue({ code: 'custom', message: 'Permintaan rekening baru wajib menyebut transaksi pemicunya' })
+  }
+})
+
+export const PatchPermintaanSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  aksi: z.enum(['TOLAK']),
+})
+
 // ─── Error domain ───────────────────────────────────────────────────────────
 
 export class BludPeriodeTertutupError extends Error {

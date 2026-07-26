@@ -25,6 +25,17 @@ export interface BarisPaguUI {
   is_leaf: boolean
 }
 
+/** Isi `detail` pada respons 409 PAGU_TERLAMPAUI dari route tx. */
+export interface PaguTerlampauiDetail {
+  anggaran_key: string
+  kode_rekening: string
+  uraian: string
+  pagu: number
+  terserap: number
+  nilai: number
+  kekurangan: number
+}
+
 export interface TransaksiAwal {
   id: number
   version: number
@@ -78,6 +89,9 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
   const [pickerFor, setPickerFor] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [galat, setGalat] = useState<string | null>(null)
+  const [paguGagal, setPaguGagal] = useState<PaguTerlampauiDetail | null>(null)
+  const [mengajukan, setMengajukan] = useState(false)
+  const [diajukan, setDiajukan] = useState(false)
 
   const byKey = useMemo(() => new Map(baris.map(b => [b.anggaran_key, b])), [baris])
   const beban = kasKeluar + bankKeluar
@@ -107,8 +121,36 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
     setPickerFor(alokasi.length)
   }
 
+  /** §4.1: membuat catatan permintaan + notifikasi. TIDAK menyentuh pagu. */
+  async function ajukanPergeseran() {
+    if (!paguGagal) return
+    setMengajukan(true)
+    try {
+      const res = await fetch('/api/blud/realisasi/permintaan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tahun_anggaran: tahun,
+          jenis: 'PERGESERAN',
+          anggaran_key: paguGagal.anggaran_key,
+          kode_rekening: paguGagal.kode_rekening,
+          uraian: `${paguGagal.uraian} — untuk transaksi "${uraian.trim() || '(tanpa uraian)'}"`,
+          kekurangan: paguGagal.kekurangan,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.ok) { setGalat(json.error ?? 'Gagal mengirim permintaan.'); return }
+      setDiajukan(true)
+    } catch {
+      setGalat('Tidak bisa menghubungi server. Coba lagi.')
+    } finally {
+      setMengajukan(false)
+    }
+  }
+
   async function simpan() {
     setGalat(null)
+    setPaguGagal(null)
+    setDiajukan(false)
     if (!uraian.trim()) { setGalat('Uraian wajib diisi.'); return }
     if (perluAlokasi && alokasi.some(a => !a.anggaran_key)) { setGalat('Masih ada alokasi yang belum dipilih rekeningnya.'); return }
     if (perluAlokasi && Math.abs(selisih) > 0.005) {
@@ -132,12 +174,13 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
           ? { id: awal.id, expected_version: awal.version, transaksi }
           : { tahun_anggaran: tahun, bulan, transaksi }),
       })
-      let json: { ok?: boolean; error?: string; code?: string; detail?: Record<string, number | string> } = {}
+      let json: { ok?: boolean; error?: string; code?: string; detail?: PaguTerlampauiDetail } = {}
       try { json = await res.json() } catch { /* respons bukan JSON — tangani lewat status */ }
 
       if (!res.ok) {
         if (json.code === 'PAGU_TERLAMPAUI' && json.detail) {
           const d = json.detail
+          setPaguGagal(d)
           setGalat(
             `Melebihi pagu ${d.kode_rekening} — ${d.uraian}\n` +
             `Pagu Rp ${rp(Number(d.pagu))} · terserap Rp ${rp(Number(d.terserap))} · ` +
@@ -275,6 +318,26 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
             <div className="bk-galat">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span style={{ whiteSpace: 'pre-line' }}>{galat}</span>
+            </div>
+          )}
+
+          {/* §4.1: sistem hanya mengantar permintaan ke pemegang DPA — pagunya
+              TIDAK disentuh dari sini. Angkanya tetap ditentukan manusia. */}
+          {paguGagal && (
+            <div className="bk-jalan-keluar">
+              {diajukan ? (
+                <span>
+                  Permintaan sudah dikirim ke pemegang DPA. Anda akan diberi tahu begitu pagunya
+                  ditambah. Sementara ini transaksinya bisa <b>diparkir</b> supaya saldo kas tetap benar.
+                </span>
+              ) : (
+                <>
+                  <span>Uangnya sudah telanjur keluar?</span>
+                  <PrimaButton variant="purple" size="sm" disabled={mengajukan} onClick={ajukanPergeseran}>
+                    {mengajukan ? 'Mengirim…' : 'Ajukan Pergeseran'}
+                  </PrimaButton>
+                </>
+              )}
             </div>
           )}
         </div>

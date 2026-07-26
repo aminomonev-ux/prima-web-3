@@ -927,6 +927,10 @@ export default function DpaClient() {
           keterangan:       d.keterangan ?? '',
           tipe_baris:       d.tipe_baris,
           row_id:           d.row_id || `row_${d.id}`,
+          // Jangkar realisasi WAJIB dipantulkan kembali saat simpan
+          // (CONCEPT-blud-realisasi §2.3). Kalau tidak, server menganggap tiap
+          // baris lahir baru dan seluruh realisasi kehilangan jangkarnya.
+          anggaran_key:     d.anggaran_key ?? null,
           parent_id:        d.parent_id,
           urutan:           d.urutan,
         })))

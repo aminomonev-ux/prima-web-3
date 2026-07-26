@@ -2708,6 +2708,7 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 }
 .bk-warn { background: rgba(239,159,39,.12); border: 1px solid #EF9F27; color: #FAC775; }
 .bk-parkir-banner { background: rgba(124,92,252,.14); border: 1px solid #7C5CFC; color: #CECBF6; }
+.bk-parkir-banner > button { margin-left: auto; flex-shrink: 0; align-self: center; }
 
 .bk-table td { font-size: 12.5px; }
 .bk-table .bk-c { text-align: center; }
@@ -2795,6 +2796,14 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .bk-galat { background: rgba(226,75,74,.08); color: #A32E2D; }
 [data-theme="light"] .bk-picker { background: #fff; border-color: #E1E7EE; }
 [data-theme="light"] .bk-picker-head { border-bottom-color: #E5E7EB; }
+
+/* Jalan keluar §4.1 — muncul di bawah pesan lebih pagu, di dalam modal transaksi */
+.bk-jalan-keluar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.6;
+  background: rgba(124,92,252,.14); color: #C9BDFF;
+}
+[data-theme="light"] .bk-jalan-keluar { background: rgba(124,92,252,.09); color: #534AB7; }
 
 /* ── Realisasi BLUD (CONCEPT-blud-realisasi §3, §4.3, §4.4) ───────────────── */
 .rl-cari { display: inline-flex; align-items: center; gap: 6px; color: #8FA9C4; }

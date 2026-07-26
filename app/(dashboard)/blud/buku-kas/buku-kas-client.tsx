@@ -16,6 +16,7 @@ import DeleteButton from '@/components/ui/DeleteButton'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import TransaksiModal, { type BarisPaguUI, type TransaksiAwal } from '@/components/blud/TransaksiModal'
+import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -61,6 +62,7 @@ export default function BukuKasClient() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [edit, setEdit] = useState<TransaksiAwal | null>(null)
+  const [bakiOpen, setBakiOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -194,6 +196,9 @@ export default function BukuKasClient() {
             Tambahkan rekeningnya lewat menu Pergeseran, lalu sambungkan transaksinya.
             Selama masih ada yang terparkir, <b>Tutup Kas tidak bisa dijalankan</b>.
           </span>
+          <PrimaButton variant="warning" size="sm" onClick={() => setBakiOpen(true)}>
+            Buka Baki
+          </PrimaButton>
         </div>
       )}
 
@@ -286,11 +291,21 @@ export default function BukuKasClient() {
         </table>
       </div>
 
+      {tahun != null && bakiOpen && (
+        <BakiRekeningPanel
+          tahun={tahun}
+          onClose={() => setBakiOpen(false)}
+          onSambungkan={(awal) => { setBakiOpen(false); setEdit(awal); setModalOpen(true) }}
+        />
+      )}
+
       {tahun != null && modalOpen && (
         <TransaksiModal
           key={edit ? `ubah-${edit.id}-${edit.version}` : 'baru'}
           tahun={tahun}
-          bulan={bulan}
+          // Dari baki bisa datang transaksi bulan lain — ikutkan bulan aslinya
+          // supaya judul modal tidak menyebut bulan yang sedang dilihat.
+          bulan={edit ? Number(edit.tanggal.slice(5, 7)) || bulan : bulan}
           baris={baris}
           awal={edit}
           onClose={() => setModalOpen(false)}

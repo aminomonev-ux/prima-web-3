@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Save, Sparkles, RefreshCw, Calendar, X, AlertTriangle, Search } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
@@ -590,6 +591,33 @@ export default function PergeseranClient() {
     setTimeout(() => setHighlightId(null), 2600)
   }, [rows, searchQ])
 
+  // §4.1: notifikasi permintaan menautkan ke ?fokus=<anggaran_key>. Barisnya
+  // disorot + di-scroll, tapi TETAP KOSONG — angkanya ditentukan pengelola,
+  // sistem hanya mengantar ke tempat yang benar. Sekali sorot per tautan.
+  const searchParams = useSearchParams()
+  const fokus = searchParams.get('fokus')
+  const fokusSudah = useRef<string | null>(null)
+  useEffect(() => {
+    if (!fokus || !rows.length || fokusSudah.current === fokus) return
+    const match = rows.find(r => r.anggaran_key === fokus)
+    fokusSudah.current = fokus
+    const sorot = setTimeout(() => {
+      if (!match) {
+        toast.warning('Baris yang diminta tidak ada di versi ini — mungkin sudah berubah')
+        return
+      }
+      setHiddenLevels(prev => {
+        const label = TIPE_LABEL[match.tipe_baris]
+        if (!prev.has(label)) return prev
+        const next = new Set(prev); next.delete(label); return next
+      })
+      setHighlightId(match.row_id)
+      document.getElementById(`perg-row-${match.row_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 60)
+    const padam = setTimeout(() => setHighlightId(null), 6000)
+    return () => { clearTimeout(sorot); clearTimeout(padam) }
+  }, [fokus, rows])
+
   // Fetch master akun list utk dropdown Uraian di baris baru
   useEffect(() => {
     let alive = true
@@ -668,6 +696,10 @@ export default function PergeseranClient() {
           bertambah_berkurang: d.bertambah_berkurang,
           tipe_baris:          d.tipe_baris,
           row_id:              d.row_id || `row_${d.id}`,
+          // Jangkar realisasi WAJIB dipantulkan kembali saat simpan
+          // (CONCEPT-blud-realisasi §2.3). Kalau tidak, server menganggap tiap
+          // baris lahir baru dan seluruh realisasi kehilangan jangkarnya.
+          anggaran_key:        d.anggaran_key ?? null,
           parent_id:           d.parent_id,
           urutan:              d.urutan,
         })))
@@ -708,6 +740,8 @@ export default function PergeseranClient() {
         bertambah_berkurang: 0,
         tipe_baris:          d.tipe_baris,
         row_id:              d.row_id || `row_${i}`,
+        // Generate = salinan DPA, jadi jangkarnya ikut terbawa — bukan lahir baru.
+        anggaran_key:        d.anggaran_key ?? null,
         parent_id:           d.parent_id,
         urutan:              i,
       }))

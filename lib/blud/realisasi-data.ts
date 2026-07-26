@@ -251,6 +251,39 @@ export async function getRegister(
   }
 }
 
+/**
+ * Isi baki "Perlu Rekening" (§4.2) — seluruh tahun, bukan per bulan: transaksi
+ * yang diparkir di Mei tetap harus terlihat saat bendahara sedang di Juli, sebab
+ * ia memblokir Tutup Kas sampai rekeningnya ada.
+ */
+export async function listBelumBerrekening(tahun: number): Promise<RealisasiTx[]> {
+  const rows = await sql`
+    SELECT id, tahun_anggaran, bulan, tanggal, no_kwt, jenis, uraian,
+           kas_masuk, kas_keluar, bank_masuk, bank_keluar, status, version
+    FROM blud_realisasi_tx
+    WHERE tahun_anggaran = ${tahun} AND status = 'BELUM_BERREKENING'
+    ORDER BY tanggal ASC, id ASC
+  ` as Record<string, unknown>[]
+  return rows.map((r) => ({
+    id: Number(r.id),
+    tahun_anggaran: Number(r.tahun_anggaran),
+    bulan: Number(r.bulan),
+    tanggal: toDate(r.tanggal),
+    no_kwt: r.no_kwt != null ? Number(r.no_kwt) : null,
+    jenis: String(r.jenis) as JenisTransaksi,
+    uraian: String(r.uraian ?? ''),
+    kas_masuk: Number(r.kas_masuk ?? 0),
+    kas_keluar: Number(r.kas_keluar ?? 0),
+    bank_masuk: Number(r.bank_masuk ?? 0),
+    bank_keluar: Number(r.bank_keluar ?? 0),
+    status: 'BELUM_BERREKENING',
+    version: Number(r.version ?? 0),
+    alokasi: [],
+    saldo_kas: 0,
+    saldo_bank: 0,
+  }))
+}
+
 /** Transaksi diparkir — memblokir Tutup Kas sampai rekeningnya ada (§4.2). */
 export async function countBelumBerrekening(tahun: number): Promise<number> {
   const rows = await sql`

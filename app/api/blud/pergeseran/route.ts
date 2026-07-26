@@ -10,6 +10,8 @@ import {
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { cekPaguDibawahRealisasi } from '@/lib/blud/pagu'
+import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
+import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { isBludRole, PergeseranBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { hasAppAccess } from '@/lib/security/guard'
@@ -194,6 +196,33 @@ export async function POST(req: NextRequest) {
       username:  session.username,
       detail:    `Simpan Pergeseran ${tahun_anggaran}/${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`,
     })
+    // §4.1/§4.2: permintaan bendahara yang sudah terpenuhi ditutup sendiri +
+    // notifikasi balik. Sengaja SETELAH commit dan dibungkus try sendiri —
+    // gagal menutup permintaan tidak boleh membatalkan pergeseran yang benar.
+    try {
+      const selesai = await selesaikanPermintaanTerpenuhi(tahun_anggaran)
+      for (const p of selesai) {
+        if (!p.diminta_username) continue
+        await addNotif(
+          p.diminta_username,
+          'BLUD',
+          'BLUD_PERMINTAAN_SELESAI',
+          `Permintaan Anda untuk <b>${p.kode_rekening ?? p.uraian}</b> sudah dipenuhi lewat Pergeseran ${versi_tanggal}. Transaksinya bisa dilanjutkan.`,
+        )
+      }
+      if (selesai.length > 0) {
+        await writeAuditLog({
+          req,
+          eventType: 'BLUD_PERMINTAAN_SELESAI',
+          userId:    session.userId,
+          username:  session.username,
+          detail:    `Pergeseran ${tahun_anggaran}/${versi_tanggal} memenuhi ${selesai.length} permintaan: ${selesai.map(p => `${p.kode_rekening ?? p.jenis} (${p.diminta_username ?? '-'})`).join('; ')}`,
+        })
+      }
+    } catch (e) {
+      console.error('[pergeseran → selesaikan permintaan]', e)
+    }
+
     // RIMA F1 (G8): jejak "user sudah diperingatkan" — log only, tidak block
     if (sentinel_ack && (sentinel_ack.dismissed.length > 0 || sentinel_ack.active_warning > 0)) {
       await writeAuditLog({
