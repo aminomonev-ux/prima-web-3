@@ -3,7 +3,8 @@
 // Shell layout BLUD: TOP RIBBON nav (icon-on-top tile + section grouping) + sticky brand strip.
 // Replace vertical sidebar lama — content full-width karena cuma 3 menu.
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -46,6 +47,12 @@ export default function BludShell({ username, role, themePreference, children }:
   const [dropOpen, setDropOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
+  // Panel "Lainnya" dipasang lewat portal + position:fixed. Ribbon expanded
+  // ber-`overflow-x: auto`, dan begitu satu sumbu bukan `visible`, sumbu satunya
+  // ikut jadi `auto` — panel absolute di dalamnya terpotong lalu memunculkan
+  // scrollbar di dalam ribbon, bukan melayang di atas halaman.
+  const overflowPanelRef = useRef<HTMLDivElement>(null)
+  const [overflowPos, setOverflowPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
   const overflowRef = useRef<HTMLDivElement>(null)
   const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>(themePreference)
@@ -70,16 +77,44 @@ export default function BludShell({ username, role, themePreference, children }:
   const roleLabel = ROLE_LABELS[role] ?? role
   const initials  = username.slice(0, 2).toUpperCase()
 
-  // Tutup dropdown user + overflow saat klik luar
+  const OVERFLOW_LEBAR = 264
+
+  /** Sandarkan panel ke tombolnya dalam koordinat viewport (position: fixed). */
+  const posisikanOverflow = useCallback(() => {
+    const r = overflowRef.current?.getBoundingClientRect()
+    if (!r) return
+    const left = Math.max(8, Math.min(r.right - OVERFLOW_LEBAR, window.innerWidth - OVERFLOW_LEBAR - 8))
+    const top = r.bottom + 6
+    setOverflowPos({ top, left, maxHeight: Math.max(160, window.innerHeight - top - 16) })
+  }, [])
+
+  // Tutup dropdown user + overflow saat klik luar. Panel overflow hidup di
+  // portal, jadi `overflowRef` tidak memuatnya — tanpa cek ref kedua, klik menu
+  // menutup panel di mousedown dan tautannya tidak pernah sempat ter-klik.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const target = e.target as Node
       if (dropRef.current && !dropRef.current.contains(target)) setDropOpen(false)
-      if (overflowRef.current && !overflowRef.current.contains(target)) setOverflowOpen(false)
+      const diTombol = overflowRef.current?.contains(target) ?? false
+      const diPanel = overflowPanelRef.current?.contains(target) ?? false
+      if (!diTombol && !diPanel) setOverflowOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // Ribbon bisa digeser mendatar dan halaman bisa di-scroll — tombolnya pindah,
+  // panelnya harus ikut. `capture` supaya scroll di dalam ribbon ikut terdengar.
+  useEffect(() => {
+    if (!overflowOpen) return
+    const ikut = () => posisikanOverflow()
+    window.addEventListener('scroll', ikut, true)
+    window.addEventListener('resize', ikut)
+    return () => {
+      window.removeEventListener('scroll', ikut, true)
+      window.removeEventListener('resize', ikut)
+    }
+  }, [overflowOpen, posisikanOverflow])
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -366,7 +401,7 @@ export default function BludShell({ username, role, themePreference, children }:
           <div ref={overflowRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => setOverflowOpen(v => !v)}
+                onClick={() => { posisikanOverflow(); setOverflowOpen(v => !v) }}
                 className={`blud-tile${overflowOpen ? ' active' : ''}`}
                 data-label={`Lainnya (+${overflowTiles.length})`}
                 data-light={isLight ? '1' : '0'}
@@ -417,17 +452,17 @@ export default function BludShell({ username, role, themePreference, children }:
               }}>+{overflowTiles.length} menu</div>
             )}
 
-            {/* Dropdown panel */}
-            {overflowOpen && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 4px)', right: 0,
-                minWidth: 240, maxWidth: 320,
+            {/* Dropdown panel — di portal supaya lolos dari clipping ribbon */}
+            {overflowOpen && overflowPos && createPortal(
+              <div ref={overflowPanelRef} style={{
+                position: 'fixed', top: overflowPos.top, left: overflowPos.left,
+                width: OVERFLOW_LEBAR, maxHeight: overflowPos.maxHeight, overflowY: 'auto',
                 background: isLight ? '#FAFAFA' : 'rgba(4,44,83,.98)',
                 backdropFilter: 'blur(20px)',
                 border: isLight ? '1px solid rgba(139,92,246,0.18)' : '1px solid #0C447C',
                 borderRadius: 12,
                 boxShadow: isLight ? '0 16px 48px rgba(0,0,0,.15)' : '0 16px 48px rgba(0,0,0,.5)',
-                padding: '8px 6px', zIndex: 200,
+                padding: '8px 6px', zIndex: 1000,
               }}>
                 {overflowGroups.map((og, ogi) => (
                   <div key={og.name}>
@@ -470,7 +505,8 @@ export default function BludShell({ username, role, themePreference, children }:
                     })}
                   </div>
                 ))}
-              </div>
+              </div>,
+              document.body,
             )}
           </div>
         )}
