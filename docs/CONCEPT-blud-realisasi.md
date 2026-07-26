@@ -672,8 +672,11 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
 - [x] Kunci pagu §5.2 + urutan kunci §5.3 + nomor kuitansi server §5.4.
 - [x] **DoD sebagian**: `scripts/concurrency-test.js` **13/13 PASS** (T7a/T7b pagu, T8a/T8b urutan kunci);
       `tsc` + ESLint bersih.
-- [ ] Layar Buku Kas: tabel harian, pilih baris anggaran, bagi alokasi, saldo berjalan.
-- [ ] **DoD sisa**: saldo berjalan di layar cocok dengan hitung tangan.
+- [x] Layar `/blud/buku-kas` + `TransaksiModal` (pilih baris anggaran, bagi alokasi, parkir,
+      pesan PAGU_TERLAMPAUI utuh) + tile grup PENATAUSAHAAN + kelas `.bk-*` dark & light.
+- [ ] **DoD sisa — belum bisa diuji**: saldo berjalan & alur input hanya bisa dicoba setelah ada
+      data DPA nyata dan login. `next build` lolos, `tsc` + ESLint bersih, tapi layarnya
+      **belum pernah dijalankan dengan data**.
 
 ### Fase 3 — Realisasi (pantau)
 - [ ] `pagu.ts` + route `pagu/`, layar Realisasi (pohon seperti DPA/Pergeseran + 6 kolom serapan).
