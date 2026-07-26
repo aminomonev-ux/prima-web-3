@@ -703,6 +703,26 @@ CREATE TABLE IF NOT EXISTS blud_pejabat (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='BLUD - Pejabat penanda tangan dokumen SPJ (salinan beku dari pk_pejabat)';
 
+-- Rentang tanggal pengajuan GU per bulan — migration-blud-gu-periode.sql
+-- Berkas Juni asli punya lembar `GU 1-26 Juni 2026` (bukan sebulan penuh). Bulan
+-- lain bisa 2-3 pengajuan. Rentangnya tidak bisa diterka dari transaksi, jadi
+-- dicatat; angka realisasinya tetap dihitung saat lembar dibuat.
+CREATE TABLE IF NOT EXISTS blud_gu_periode (
+  id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tahun_anggaran SMALLINT UNSIGNED NOT NULL,
+  bulan          TINYINT UNSIGNED  NOT NULL,
+  urutan         TINYINT UNSIGNED  NOT NULL DEFAULT 1 COMMENT 'GU ke-berapa dalam bulan itu',
+  tgl_awal       DATE          NOT NULL,
+  tgl_akhir      DATE          NOT NULL,
+  no_surat       VARCHAR(64)       NULL,
+  updated_by     INT               NULL,
+  updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_gu (tahun_anggaran, bulan, urutan),
+  INDEX idx_periode (tahun_anggaran, bulan, tgl_awal),
+  CONSTRAINT fk_bgu_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='BLUD - Rentang tanggal pengajuan GU per bulan';
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Rencana Aksi (modul baru — Migration 032)
 -- ═══════════════════════════════════════════════════════════════════════════

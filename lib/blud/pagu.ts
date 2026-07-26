@@ -182,6 +182,28 @@ export async function getSerapanPeriode(tahun: number, bulan: number): Promise<M
 }
 
 /**
+ * Serapan dalam rentang tanggal — untuk lembar GU yang memotong sebagian bulan
+ * (berkas asli: `GU 1-26 Juni 2026`, bukan sebulan penuh).
+ *
+ * Batasnya inklusif di kedua ujung; `tanggal` bertipe DATE jadi tidak ada jam
+ * yang bisa membuat transaksi tanggal terakhir terlewat.
+ */
+export async function getSerapanRentang(
+  tahun: number, dari: string, sampai: string,
+): Promise<Map<string, number>> {
+  const rows = await sql`
+    SELECT a.anggaran_key AS k, COALESCE(SUM(a.nilai), 0) AS n
+    FROM blud_realisasi_alokasi a
+    JOIN blud_realisasi_tx t ON t.id = a.tx_id
+    WHERE a.tahun_anggaran = ${tahun} AND t.tanggal BETWEEN ${dari} AND ${sampai}
+    GROUP BY a.anggaran_key
+  ` as Record<string, unknown>[]
+  const map = new Map<string, number>()
+  for (const r of rows) map.set(String(r.k), Number(r.n ?? 0))
+  return map
+}
+
+/**
  * Angka anak dinaikkan ke seluruh leluhurnya. Alokasi hanya menempel di baris
  * terbawah, jadi tanpa ini semua baris induk tampil nol dan total layar
  * Realisasi tidak akan pernah cocok dengan Buku Kas.

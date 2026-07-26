@@ -135,6 +135,7 @@ export type AuditEventType =
   | 'BLUD_PERIODE_BUKA'             // DELETE /api/blud/realisasi/periode (SUPER_ADMIN)
   | 'BLUD_PEJABAT_SIMPAN'           // POST /api/blud/pejabat
   | 'BLUD_SPJ_UNDUH'                // GET /api/blud/realisasi/export
+  | 'BLUD_GU_SIMPAN'                // POST /api/blud/realisasi/gu
   // ─── Perjanjian Kinerja (Sprint 1, 2026-05-23) ────────────────────────────
   | 'PK_SAVE_SASARAN'         // POST /api/perjanjian-kinerja/sasaran
   | 'PK_SAVE_PROGRAM'         // POST /api/perjanjian-kinerja/program

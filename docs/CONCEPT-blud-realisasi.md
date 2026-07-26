@@ -746,12 +746,32 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
       tombol "Tutup Bulan" mati saat selisih ≠ 0 atau masih ada penghalang.
 - [x] Kunci periode §4.5: penulisan ke bulan TUTUP sudah ditolak `realisasi-data.ts` sejak Fase 2;
       pembukaan kembali hanya SUPER_ADMIN, wajib beralasan ≥10 karakter, tercatat `BLUD_PERIODE_BUKA`.
-- [x] `spj-excel.ts` — 9 lembar (BKU · SPI · register · ` Realisasi BP` · `GU <bulan>` · pengantar ·
-      SPJ · TUTUP KAS · setor BPD), dibangun di server lewat `GET /api/blud/realisasi/export`.
-- [ ] **DoD — belum bisa diuji**: unduh Juni 2026 dibanding berkas asli lembar demi lembar.
-      Berkas Juni aslinya **tidak ada di workspace ini** (`prima-web-3`), jadi pembandingan
-      itu menunggu berkasnya disalin ke sini. `tsc` + ESLint bersih, `next build` lolos,
-      seluruh SQL Fase 5 diuji langsung ke MySQL 8.4.
+- [x] `spj-excel.ts` — dibangun di server lewat `GET /api/blud/realisasi/export`:
+      ` Realisasi BP` · BKU · SPI · register · **GU (satu lembar per pengajuan)** · pengantar ·
+      SPJ · TUTUP KAS · setor BPD.
+- [x] `blud_gu_periode` (`migration-blud-gu-periode.sql`, sudah dijalankan) + panel
+      **Pengajuan GU bulan ini** di layar Tutup Kas.
+- [ ] **DoD sebagian**: berkas asli `docs/06. BKU Juni 2026.xlsx` sudah ada dan sudah dibaca —
+      daftar lembar, kop, dan susunan kolom ` Realisasi BP`/`GU` sudah dicocokkan. Yang belum:
+      banding angka hasil unduhan sistem dengan berkas asli (butuh data realisasi Juni 2026 nyata
+      di basis data). `tsc` + ESLint bersih, `next build` lolos, seluruh SQL Fase 5 diuji ke MySQL 8.4.
+
+**Keputusan #31 — rentang GU dicatat, bukan diterka.** Berkas asli punya lembar `GU 1-26 Juni 2026`:
+tanggal 1 s/d 26, bukan sebulan penuh. Bulan lain bisa dua-tiga pengajuan. Tidak ada penanda apa pun
+di transaksi yang bisa dipakai menebak "GU ke-2 mulai di sini", jadi rentangnya diisi manusia di layar
+Tutup Kas. Yang disimpan **hanya rentang tanggalnya** — angka tiap lembar tetap dihitung saat berkas
+dibuat. Rentang wajib berada di dalam bulannya dan **tidak boleh saling tindih**: dua lembar GU yang
+beririsan berarti belanja yang sama diajukan penggantiannya dua kali. Nomor urut GU ditentukan server
+dari tanggal mulai, bukan diterima dari klien, supaya "GU 2" tidak bisa mendahului "GU 1".
+Kalau belum ada rentang dicatat, berkas tetap memuat satu lembar GU sebulan penuh — lembarnya tidak
+hilang hanya karena rentangnya belum diisi.
+
+**Temuan dari berkas asli (2026-07-26).** Selisih `TUTUP KAS` Juni = B.3 − A.4 =
+4.883.802.451 − (−650.471.561) = **5.534.274.012** — angka yang **sama persis** dengan realisasi
+bulan ini di lembar `GU 1-26 Juni 2026` (bandingkan ` Realisasi BP` yang 6.361.975.087). Kecocokan
+sampai rupiah terakhir itu bukan kebetulan: penerimaan penggantian uang persediaan sebesar itu tampak
+**belum tercatat** sebagai transaksi masuk. Persis yang diramalkan §4.7 — selisih ≠ 0 berarti ada
+transaksi yang hilang, bukan rumus yang perlu ditambal. Perlu dipastikan ke bendahara.
 
 **Keputusan #29 — pejabat SPJ disalin, bukan dirujuk.** `pk_pejabat` boleh jadi sumber isian,
 tapi yang tersimpan di `blud_pejabat` adalah salinan nama/NIP/pangkat pada saat penetapan. Tidak ada
@@ -848,6 +868,7 @@ Tidak ada lagi yang menunggu konfirmasi. Sisa pertanyaan lapangan (mis. format n
 | 28 | **Layar Realisasi = laporan per bulan terpilih.** Sisa & % ikut bulan itu, seperti kolom lainnya — bukan serapan setahun. Angka "boleh belanja berapa lagi hari ini" pindah ke keterangan di bawah tabel, muncul hanya bila ada realisasi di bulan sesudahnya. Pemilih rekening di Buku Kas tetap memakai serapan setahun: di sana pertanyaannya memang berbeda |
 | 29 | **Pejabat SPJ disalin, bukan dirujuk.** `pk_pejabat` = sumber isian ("Ambil dari PK"); yang tersimpan salinan nama/NIP/pangkat. Tanpa FK, tanpa JOIN saat cetak — ganti pejabat tahun depan tidak boleh mengubah SPJ yang sudah ditandatangani |
 | 30 | **Tutup bulan berurutan dari depan.** Bulan sebelumnya yang masih terbuka jadi penghalang, sejajar baki "Perlu Rekening" — saldo awal bulan ini diturunkan dari bulan-bulan sebelumnya (§4.6) |
+| 31 | **Rentang GU dicatat manusia** (`blud_gu_periode`), tidak diterka dari transaksi. Satu bulan boleh beberapa pengajuan; rentang tak boleh tindih; nomor urut ditentukan server dari tanggal mulai |
 
 > Referensi: `docs/CONCEPT-blud-tahun-anggaran.md` (sudah dieksekusi) · `docs/CONCEPT-menu-access-control.md`
 > (Fase 0) · `docs/TUTORIAL-blud.md` · pola L48 CAS, L51 optimistic lock, L55 atomik, L58 ConfirmDialog.

@@ -2909,6 +2909,13 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 }
 .tk-halang { margin: 6px 0 0 18px; list-style: disc; display: flex; flex-direction: column; gap: 3px; }
 
+.tk-gu-baris { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding: 6px 0; }
+.tk-gu-nomor {
+  font-weight: 800; font-size: 11.5px; color: #7C5CFC; min-width: 44px;
+  padding-bottom: 8px; letter-spacing: .03em;
+}
+.tk-gu-kosong { font-size: 12px; color: #8FA9C4; padding: 6px 0; line-height: 1.6; }
+
 .tk-modal { width: min(520px, 94vw); border-radius: 14px; overflow: hidden; }
 .tk-modal-head { padding: 14px 18px; border-bottom: 1px solid #0C447C; background: rgba(239,159,39,.08); }
 .tk-modal-head h2 { font-weight: 800; font-size: 14px; color: #E6F1FB; }
@@ -2925,6 +2932,7 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .tk-selisih.seimbang { background: rgba(29,158,117,.10); color: #0F7355; }
 [data-theme="light"] .tk-selisih.jomplang { background: rgba(226,75,74,.09); color: #A32E2D; }
 [data-theme="light"] .tk-tutup-banner { background: rgba(239,159,39,.10); color: #854F0B; }
+[data-theme="light"] .tk-gu-kosong { color: #5B7392; }
 [data-theme="light"] .tk-modal-head { border-bottom-color: #E1E7EE; }
 [data-theme="light"] .tk-modal-head h2 { color: #0F0F12; }
 [data-theme="light"] .tk-modal-teks { color: #374151; }

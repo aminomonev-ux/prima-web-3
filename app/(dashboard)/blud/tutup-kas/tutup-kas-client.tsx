@@ -12,8 +12,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Lock, LockOpen, Check, TriangleAlert, Save, Download } from 'lucide-react'
+import { Lock, LockOpen, Check, TriangleAlert, Save, Download, Plus } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
+import DeleteButton from '@/components/ui/DeleteButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -47,6 +48,8 @@ interface Neraca {
   jumlah_baki: number
 }
 
+interface GuBaris { tgl_awal: string; tgl_akhir: string; no_surat: string }
+
 export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
@@ -64,6 +67,10 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
 
   const [bukaModal, setBukaModal] = useState(false)
   const [alasanBuka, setAlasanBuka] = useState('')
+
+  // Rentang pengajuan GU bulan ini — satu bulan boleh beberapa kali (§3.2).
+  const [gu, setGu] = useState<GuBaris[]>([])
+  const [guSibuk, setGuSibuk] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -85,7 +92,10 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
   const muat = useCallback(async (th: number, bl: number) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/blud/realisasi/periode?tahun=${th}&bulan=${bl}`)
+      const [res, resGu] = await Promise.all([
+        fetch(`/api/blud/realisasi/periode?tahun=${th}&bulan=${bl}`),
+        fetch(`/api/blud/realisasi/gu?tahun=${th}&bulan=${bl}`),
+      ])
       const json = await res.json()
       if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat Tutup Kas'); return }
       const d: Neraca = json.data
@@ -94,6 +104,12 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
       setBankKoran(d.bank_koran != null ? rp(d.bank_koran) : '')
       setNoSurat(d.no_surat ?? '')
       setTglSurat(d.tgl_surat ?? '')
+      const jsonGu = await resGu.json()
+      if (resGu.ok && jsonGu.ok) {
+        setGu((jsonGu.data ?? []).map((g: { tgl_awal: string; tgl_akhir: string; no_surat: string | null }) => ({
+          tgl_awal: g.tgl_awal, tgl_akhir: g.tgl_akhir, no_surat: g.no_surat ?? '',
+        })))
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Gagal memuat')
     } finally {
@@ -145,6 +161,36 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
       toast.error(e instanceof Error ? e.message : 'Gagal menyimpan')
     } finally {
       setSibuk(false)
+    }
+  }
+
+  const awalBulan = tahun != null ? `${tahun}-${String(bulan).padStart(2, '0')}-01` : ''
+  const akhirBulan = tahun != null
+    ? `${tahun}-${String(bulan).padStart(2, '0')}-${String(new Date(tahun, bulan, 0).getDate()).padStart(2, '0')}`
+    : ''
+
+  async function simpanGu() {
+    if (tahun == null) return
+    setGuSibuk(true)
+    try {
+      const res = await fetch('/api/blud/realisasi/gu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tahun_anggaran: tahun, bulan,
+          periode: gu.map(g => ({ tgl_awal: g.tgl_awal, tgl_akhir: g.tgl_akhir, no_surat: g.no_surat.trim() || null })),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal menyimpan periode GU'); return }
+      setGu((json.data ?? []).map((g: { tgl_awal: string; tgl_akhir: string; no_surat: string | null }) => ({
+        tgl_awal: g.tgl_awal, tgl_akhir: g.tgl_akhir, no_surat: g.no_surat ?? '',
+      })))
+      toast.success('Periode GU tersimpan.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Gagal menyimpan periode GU')
+    } finally {
+      setGuSibuk(false)
     }
   }
 
@@ -314,6 +360,64 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
               </div>
             )}
           </div>
+
+          {/* Periode GU — satu bulan boleh beberapa pengajuan (§3.2). Rentangnya
+              tidak bisa diterka dari transaksi, jadi dicatat di sini; tiap baris
+              jadi satu lembar `GU <awal>-<akhir>` di berkas SPJ. */}
+          <section className="tk-card">
+            <header className="tk-card-head">
+              <span className="tk-card-judul">Pengajuan GU bulan ini</span>
+              <span className="tk-card-sub">
+                Ganti Uang Persediaan — tiap rentang jadi satu lembar tersendiri di berkas SPJ.
+                Kosongkan kalau bulan ini hanya sekali pengajuan untuk sebulan penuh.
+              </span>
+            </header>
+
+            {gu.length === 0 ? (
+              <div className="tk-gu-kosong">
+                Belum ada rentang dicatat — berkas SPJ akan berisi satu lembar GU untuk sebulan penuh.
+              </div>
+            ) : gu.map((g, i) => (
+              <div key={i} className="tk-gu-baris">
+                <span className="tk-gu-nomor">GU {i + 1}</span>
+                <label className="tk-isian">
+                  <span>Dari</span>
+                  <input className="blud-imp-input" type="date" value={g.tgl_awal}
+                    min={awalBulan} max={akhirBulan} disabled={terkunci}
+                    onChange={e => setGu(p => p.map((x, j) => j === i ? { ...x, tgl_awal: e.target.value } : x))} />
+                </label>
+                <label className="tk-isian">
+                  <span>Sampai</span>
+                  <input className="blud-imp-input" type="date" value={g.tgl_akhir}
+                    min={awalBulan} max={akhirBulan} disabled={terkunci}
+                    onChange={e => setGu(p => p.map((x, j) => j === i ? { ...x, tgl_akhir: e.target.value } : x))} />
+                </label>
+                <label className="tk-isian" style={{ flex: 1, minWidth: 160 }}>
+                  <span>Nomor pengajuan</span>
+                  <input className="blud-imp-input" value={g.no_surat} disabled={terkunci}
+                    placeholder="opsional"
+                    onChange={e => setGu(p => p.map((x, j) => j === i ? { ...x, no_surat: e.target.value } : x))} />
+                </label>
+                {!terkunci && (
+                  <DeleteButton onClick={() => setGu(p => p.filter((_, j) => j !== i))}
+                    data-tooltip="Hapus rentang ini" />
+                )}
+              </div>
+            ))}
+
+            {!terkunci && (
+              <div className="tk-aksi" style={{ marginTop: 4 }}>
+                <PrimaButton variant="purple" size="sm" iconLeft={<Plus size={13} />}
+                  onClick={() => setGu(p => [...p, { tgl_awal: awalBulan, tgl_akhir: akhirBulan, no_surat: '' }])}>
+                  Tambah Rentang
+                </PrimaButton>
+                <PrimaButton variant="primary" size="sm" iconLeft={<Save size={13} />}
+                  onClick={simpanGu} disabled={guSibuk}>
+                  Simpan Periode GU
+                </PrimaButton>
+              </div>
+            )}
+          </section>
         </>
       )}
 

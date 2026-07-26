@@ -155,6 +155,46 @@ export const BukaPeriodeQuerySchema = z.object({
   alasan: z.string().trim().min(10, 'Alasan membuka periode minimal 10 karakter').max(500),
 })
 
+// ─── Body: periode GU (§3.2) ────────────────────────────────────────────────
+
+/**
+ * Satu bulan boleh punya beberapa pengajuan GU. Rentang wajib berada di dalam
+ * bulan yang bersangkutan dan tidak boleh saling tindih — dua lembar GU yang
+ * beririsan berarti belanja yang sama diajukan penggantiannya dua kali.
+ */
+export const GuPeriodeSchema = z.object({
+  tgl_awal: TanggalTxSchema,
+  tgl_akhir: TanggalTxSchema,
+  no_surat: z.string().trim().max(64).nullish(),
+}).refine((v) => v.tgl_awal <= v.tgl_akhir, {
+  message: 'Tanggal akhir tidak boleh mendahului tanggal mulai', path: ['tgl_akhir'],
+})
+
+export const SimpanGuBodySchema = z.object({
+  tahun_anggaran: z.coerce.number().int().gte(2000).lte(2100),
+  bulan: BulanSchema,
+  periode: z.array(GuPeriodeSchema).max(10, 'Maksimal 10 pengajuan GU per bulan'),
+}).superRefine((v, ctx) => {
+  const bl = String(v.bulan).padStart(2, '0')
+  const awalan = `${v.tahun_anggaran}-${bl}-`
+  for (const p of v.periode) {
+    if (!p.tgl_awal.startsWith(awalan) || !p.tgl_akhir.startsWith(awalan)) {
+      ctx.addIssue({ code: 'custom', path: ['periode'], message: 'Rentang GU harus berada di dalam bulan yang dipilih' })
+      return
+    }
+  }
+  const urut = [...v.periode].sort((a, b) => a.tgl_awal.localeCompare(b.tgl_awal))
+  for (let i = 1; i < urut.length; i++) {
+    if (urut[i].tgl_awal <= urut[i - 1].tgl_akhir) {
+      ctx.addIssue({
+        code: 'custom', path: ['periode'],
+        message: `Rentang GU saling tindih (${urut[i - 1].tgl_awal}–${urut[i - 1].tgl_akhir} dan ${urut[i].tgl_awal}–${urut[i].tgl_akhir})`,
+      })
+      return
+    }
+  }
+})
+
 // ─── Body: pejabat penanda tangan SPJ ───────────────────────────────────────
 
 export const JabatanSpjSchema = z.enum(['DIREKTUR', 'BENDAHARA', 'PPK'])

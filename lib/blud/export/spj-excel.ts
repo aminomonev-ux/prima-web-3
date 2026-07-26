@@ -9,15 +9,18 @@
 // Keluarannya .xlsx — exceljs tidak bisa MENULIS format .xls lama (BIFF).
 import type ExcelJS from 'exceljs'
 import { getBukuKas } from '../realisasi-data'
-import { getPaguEfektif, getSerapanPeriode, gulungKeAtas } from '../pagu'
+import { getPaguEfektif, getSerapanPeriode, getSerapanRentang, gulungKeAtas } from '../pagu'
 import { getNeracaKas } from '../tutup-kas'
 import { getPejabatCetak } from '../pejabat-data'
 import type { PejabatSpj } from '../pejabat-data'
+import { listGuPeriode } from '../gu-data'
+import type { GuPeriode } from '../gu-data'
 
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 
 const NAMA_INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO PROVINSI JAWA TENGAH'
+const NAMA_INSTANSI_PENDEK = 'RSJD. Dr. Amino Gondohutomo Semarang'
 const RUPIAH = '#,##0'
 
 /**
@@ -46,34 +49,46 @@ interface Konteks {
   buku: Awaited<ReturnType<typeof getBukuKas>>
   baris: Awaited<ReturnType<typeof getPaguEfektif>>
   serapanBulan: Map<string, number>
+  serapanLalu: Map<string, number>
   serapanSd: Map<string, number>
   neraca: Awaited<ReturnType<typeof getNeracaKas>>
   pejabat: Record<string, PejabatSpj>
 }
 
+/** `GU 1-26 Juni 2026` — persis penamaan berkas asli. */
+function namaSheetGu(p: GuPeriode, bulan: number, tahun: number): string {
+  const hari = (iso: string) => String(Number(iso.slice(8, 10)))
+  const nama = `GU ${hari(p.tgl_awal)}-${hari(p.tgl_akhir)} ${NAMA_BULAN[bulan - 1]} ${tahun}`
+  return nama.slice(0, 31)  // batas keras nama sheet Excel
+}
+
 export async function buatWorkbookSpj(tahun: number, bulan: number): Promise<ExcelJS.Buffer> {
   const ExcelJSLib = (await import('exceljs')).default
 
-  const [buku, baris, serapan, neraca, pejabat] = await Promise.all([
+  const [buku, baris, serapan, neraca, pejabat, guPeriode] = await Promise.all([
     getBukuKas(tahun, bulan),
     getPaguEfektif(tahun),
     getSerapanPeriode(tahun, bulan),
     getNeracaKas(tahun, bulan),
     getPejabatCetak(tahun),
+    listGuPeriode(tahun, bulan),
   ])
 
   // Serapan digulung ke induk di sini juga — supaya total lembar Realisasi BP
   // sama persis dengan total BKU. Dua angka itu berbeda = ada yang nyangkut.
   const bulanIni = new Map<string, number>()
+  const bulanLalu = new Map<string, number>()
   const sdBulan = new Map<string, number>()
   for (const [k, v] of serapan) {
     bulanIni.set(k, v.bulan_ini)
+    bulanLalu.set(k, v.bulan_lalu)
     sdBulan.set(k, v.bulan_ini + v.bulan_lalu)
   }
 
   const ctx: Konteks = {
     tahun, bulan, buku, baris, neraca, pejabat,
     serapanBulan: gulungKeAtas(baris, bulanIni),
+    serapanLalu: gulungKeAtas(baris, bulanLalu),
     serapanSd: gulungKeAtas(baris, sdBulan),
   }
 
@@ -81,11 +96,23 @@ export async function buatWorkbookSpj(tahun: number, bulan: number): Promise<Exc
   wb.creator = 'PRIMA'
   wb.created = new Date()
 
+  sheetRealisasiBp(wb, ctx, ' Realisasi BP', ctx.serapanBulan)
   sheetBku(wb, ctx)
   sheetSpi(wb, ctx)
   sheetRegister(wb, ctx)
-  sheetRealisasiBp(wb, ctx, ' Realisasi BP', null)
-  sheetRealisasiBp(wb, ctx, `GU ${NAMA_BULAN[bulan - 1]}`, 'bulan')
+
+  // Satu lembar per pengajuan GU. Kalau belum ada yang dicatat, jatuh ke satu
+  // lembar sebulan penuh — supaya berkasnya tetap lengkap, bukan kehilangan
+  // lembar hanya karena rentangnya belum diisi.
+  if (guPeriode.length === 0) {
+    sheetRealisasiBp(wb, ctx, `GU ${NAMA_BULAN[bulan - 1]} ${tahun}`.slice(0, 31), ctx.serapanBulan)
+  } else {
+    for (const p of guPeriode) {
+      const mentah = await getSerapanRentang(tahun, p.tgl_awal, p.tgl_akhir)
+      sheetRealisasiBp(wb, ctx, namaSheetGu(p, bulan, tahun), gulungKeAtas(baris, mentah))
+    }
+  }
+
   sheetPengantar(wb, ctx)
   sheetSpj(wb, ctx)
   sheetTutupKas(wb, ctx)
@@ -282,37 +309,97 @@ function sheetRegister(wb: ExcelJS.Workbook, ctx: Konteks) {
 }
 
 /**
- * Realisasi BP — pohon anggaran + pagu efektif + serapan. `lingkup` menentukan
- * kolom terakhir: null = s/d bulan ini (lembar tahunan), 'bulan' = bulan ini
- * saja (lembar GU).
+ * Realisasi BP & GU — bentuknya SAMA PERSIS, mengikuti berkas Juni asli: kop
+ * identitas + 9 kolom berkepala tiga baris (Kode · Uraian · Pagu · Realisasi
+ * Bulan Ini / Bulan Lalu / s/d Bln Ini · Sisa · Prosen).
+ *
+ * Bedanya cuma isi kolom "BULAN INI":
+ *   - Realisasi BP → seluruh bulan
+ *   - GU           → hanya rentang tanggal pengajuan itu
+ * Di berkas asli bedanya terlihat jelas: Realisasi BP 6.361.975.087 vs
+ * `GU 1-26 Juni 2026` 5.534.274.012 pada baris BELANJA DAERAH.
+ *
+ * Kolom "BULAN LALU" tetap bulan-bulan sebelumnya — tidak ikut dipotong, sebab
+ * yang dipertanggungjawabkan lewat GU hanyalah belanja di rentang ini.
  */
-function sheetRealisasiBp(wb: ExcelJS.Workbook, ctx: Konteks, nama: string, lingkup: 'bulan' | null) {
+function sheetRealisasiBp(
+  wb: ExcelJS.Workbook, ctx: Konteks, nama: string, bulanIni: Map<string, number>,
+) {
   const ws = wb.addWorksheet(nama)
-  ws.columns = [{ width: 20 }, { width: 52 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 10 }]
-  kop(ws, 6, ['LAPORAN REALISASI BELANJA', lingkup === 'bulan' ? 'GANTI UANG PERSEDIAAN' : 'BLUD'], ctx)
-  barisJudulKolom(ws, [
-    'Kode Rekening', 'Uraian', 'Pagu',
-    lingkup === 'bulan' ? 'Realisasi Bulan Ini' : 'Realisasi s/d Bulan Ini',
-    'Sisa', '%',
-  ])
+  ws.columns = [
+    { width: 30 }, { width: 34 }, { width: 18 }, { width: 17 },
+    { width: 17 }, { width: 17 }, { width: 17 }, { width: 17 }, { width: 10 },
+  ]
 
-  const dipakai = lingkup === 'bulan' ? ctx.serapanBulan : ctx.serapanSd
-  for (const b of ctx.baris) {
-    const nilai = dipakai.get(b.anggaran_key) ?? 0
-    const r = isiBaris(ws, [
-      b.kode_rekening, b.uraian, b.pagu, nilai, b.pagu - nilai,
-      b.pagu > 0 ? Number(((nilai / b.pagu) * 100).toFixed(2)) : 0,
-    ], { angka: [3, 4, 5], tebal: !b.is_leaf })
-    r.getCell(6).numFmt = '0.00'
-    r.getCell(6).alignment = { horizontal: 'right' }
-    // Lebih pagu ditandai di berkas juga — bukan cuma di layar. Yang memeriksa
-    // di Keuangan/BPKAD membaca lembar ini, bukan aplikasinya.
-    if (b.pagu - nilai < -0.005) {
-      r.eachCell((c) => { c.font = { ...(c.font ?? {}), color: { argb: 'FFC00000' } } })
+  const rJudul = ws.addRow(['LAPORAN PERTANGGUNGJAWABAN BENDAHARA PENGELUARAN'])
+  ws.mergeCells(rJudul.number, 1, rJudul.number, 9)
+  rJudul.getCell(1).font = { bold: true, size: 12 }
+  rJudul.getCell(1).alignment = { horizontal: 'center' }
+  const rBulan = ws.addRow([`BULAN  : ${NAMA_BULAN[ctx.bulan - 1].toUpperCase()} ${ctx.tahun}`])
+  ws.mergeCells(rBulan.number, 1, rBulan.number, 9)
+  rBulan.getCell(1).font = { bold: true, size: 11 }
+  rBulan.getCell(1).alignment = { horizontal: 'center' }
+  ws.addRow([])
+
+  for (const [label, isi] of [
+    ['O P D', `:  ${NAMA_INSTANSI_PENDEK}`],
+    ['Direktur', `:  ${ctx.pejabat.DIREKTUR?.nama ?? ''}`],
+    ['Bendahara Pengeluaran', `:  ${ctx.pejabat.BENDAHARA?.nama ?? ''}`],
+    ['Tahun Anggaran', `:  ${ctx.tahun}`],
+    ['Bulan', `:  ${NAMA_BULAN[ctx.bulan - 1]}`],
+  ] as const) {
+    const r = ws.addRow([label, '', isi])
+    r.getCell(1).font = { size: 10 }
+    r.getCell(3).font = { size: 10 }
+  }
+  ws.addRow([])
+
+  // Kepala 3 baris bertumpuk — bentuk baku berkas asli, jangan diratakan jadi
+  // satu baris: yang memeriksa di Keuangan membaca bentuk ini, bukan isinya saja.
+  const b1 = ws.addRow(['KODE REKENING', 'URAIAN', '', 'PAGU', 'REALISASI', 'REALISASI', 'REALISASI', 'SISA', 'PROSEN'])
+  const b2 = ws.addRow(['', '', '', 'ANGGARAN', 'BULAN', 'BULAN', ' S/D ', 'ANGGARAN', '( %)'])
+  const b3 = ws.addRow(['', '', '', 'BELANJA', 'INI', 'LALU', 'BLN INI', '', ''])
+  // Kolom 4-9 SENGAJA tidak digabung vertikal: di berkas asli tiap barisnya
+  // teks tersendiri ("PAGU" / "ANGGARAN" / "BELANJA"), bukan satu sel tinggi.
+  // Menggabungnya akan membuang dua baris label bawahnya.
+  ws.mergeCells(b1.number, 1, b3.number, 1)
+  ws.mergeCells(b1.number, 2, b3.number, 3)
+  for (const r of [b1, b2, b3]) {
+    for (let c = 1; c <= 9; c++) {
+      const cell = r.getCell(c)
+      cell.font = { bold: true, size: 10 }
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+      cell.border = garis()
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF7' } }
     }
   }
 
-  tandaTangan(ws, ctx, 'PPK', 'BENDAHARA', 6)
+  for (const b of ctx.baris) {
+    const ini = bulanIni.get(b.anggaran_key) ?? 0
+    const lalu = ctx.serapanLalu.get(b.anggaran_key) ?? 0
+    const sd = ini + lalu
+    const r = ws.addRow([b.kode_rekening, b.uraian, '', b.pagu, ini, lalu, sd, b.pagu - sd,
+      b.pagu > 0 ? Number(((sd / b.pagu) * 100).toFixed(2)) : 0])
+    ws.mergeCells(r.number, 2, r.number, 3)
+    for (let c = 1; c <= 9; c++) {
+      const cell = r.getCell(c)
+      cell.font = { size: 10, bold: !b.is_leaf }
+      cell.border = garis()
+      if (c >= 4 && c <= 8) { cell.numFmt = RUPIAH; cell.alignment = { horizontal: 'right' } }
+      else if (c === 9) { cell.numFmt = '0.00'; cell.alignment = { horizontal: 'right' } }
+      else cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+    }
+    // Lebih pagu ditandai di berkas juga — bukan cuma di layar. Yang memeriksa
+    // di Keuangan/BPKAD membaca lembar ini, bukan aplikasinya.
+    if (b.pagu - sd < -0.005) {
+      for (let c = 1; c <= 9; c++) {
+        const cell = r.getCell(c)
+        cell.font = { ...(cell.font ?? {}), color: { argb: 'FFC00000' } }
+      }
+    }
+  }
+
+  tandaTangan(ws, ctx, 'DIREKTUR', 'BENDAHARA', 9)
 }
 
 /** pengantar — 3 angka besar: Pegawai · Barang-Jasa · Modal. */
