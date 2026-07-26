@@ -110,6 +110,52 @@ jobs:
           fi
           echo "OK — hanya advisory allowlist (brace-expansion false-positive) yang tersisa."
 
+      - name: Guard brace-expansion — allowlist sadar-versi (tutup celah)
+        run: |
+          echo "=== Guard: verifikasi versi brace-expansion terpasang BUKAN yang rentan ==="
+          # Allowlist di step atas sengaja membungkam false-positive npm audit (range asli
+          # GHSA-mh99-v99m-4gvg di-collapse jadi "<=5.0.7", ikut menandai versi maintenance
+          # PATCHED 1.1.16 / 2.1.2). Guard ini menutup celah allowlist-by-ID: baca versi
+          # brace-expansion yang BENAR-BENAR terpasang di production, dan gagalkan build kalau
+          # ada yang jatuh di rentang RENTAN asli advisory:
+          #   <1.1.12 | >=2.0.0 <2.0.2 | =3.0.0 | =4.0.0 | >=5.0.0 <5.0.8
+          # Jadi kalau suatu saat dependency baru menarik mis. 5.0.7, CI tetap menangkapnya.
+          npm ls brace-expansion --all --omit=dev --json > be.json 2>/dev/null || true
+          node -e '
+            const fs = require("fs");
+            const tree = JSON.parse(fs.readFileSync("be.json", "utf8") || "{}");
+            const found = new Set();
+            const walk = (deps) => {
+              if (!deps) return;
+              for (const [name, node] of Object.entries(deps)) {
+                if (name === "brace-expansion" && node && node.version) found.add(node.version);
+                if (node && node.dependencies) walk(node.dependencies);
+              }
+            };
+            walk(tree.dependencies);
+            const cmp = (a, b) => {
+              const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+              for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
+              return 0;
+            };
+            const vulnerable = (v) => {
+              const maj = Number(v.split(".")[0]);
+              if (maj === 1) return cmp(v, "1.1.12") < 0;
+              if (maj === 2) return cmp(v, "2.0.2") < 0;
+              if (maj === 3) return cmp(v, "3.0.1") < 0;
+              if (maj === 4) return cmp(v, "4.0.1") < 0;
+              if (maj === 5) return cmp(v, "5.0.8") < 0;
+              return false;
+            };
+            const bad = [...found].filter(vulnerable);
+            if (bad.length) {
+              console.error("::error::brace-expansion versi RENTAN terpasang: " + bad.join(", "));
+              console.error("GHSA-mh99-v99m-4gvg berlaku nyata utk versi ini — allowlist tak boleh membungkamnya. Naikkan/override ke versi patched.");
+              process.exit(1);
+            }
+            console.log("OK — brace-expansion terpasang [" + ([...found].sort(cmp).join(", ") || "none") + "] semuanya patched.");
+          '
+
       - name: Audit semua dependencies (warning only, tidak block)
         if: always()
         continue-on-error: true
