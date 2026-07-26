@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { AlertTriangle, FileText, Shuffle, RefreshCw, X } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
+import PejabatSpjPanel from '@/components/blud/PejabatSpjPanel'
 
 interface DpaVersi {
   tahun_anggaran: number
@@ -143,7 +144,7 @@ export default function PengaturanClient() {
         <div style={{ flex: 1 }}>
           <h1 style={{ fontWeight: 800, fontSize: 15, color: '#E6F1FB', marginBottom: 2 }}>Pengaturan</h1>
           <p style={{ fontSize: 11.5, color: '#85B7EB' }}>
-            Kelola versi tabel DPA &amp; Pergeseran — hapus permanen versi lama yang tidak diperlukan.
+            Pejabat penanda tangan SPJ &amp; pengelolaan versi tabel DPA/Pergeseran.
           </p>
         </div>
         <PrimaButton variant="purple" iconLeft={<RefreshCw size={13} className={loading ? 'animate-spin' : ''} />}
@@ -151,6 +152,8 @@ export default function PengaturanClient() {
           Refresh
         </PrimaButton>
       </div>
+
+      <PejabatSpjPanel />
 
       {/* Warning banner — solid red full (request user: merah full, text putih) */}
       <div style={{

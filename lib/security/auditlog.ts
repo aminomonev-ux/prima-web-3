@@ -129,6 +129,12 @@ export type AuditEventType =
   | 'BLUD_PERMINTAAN_CREATE'        // POST /api/blud/realisasi/permintaan
   | 'BLUD_PERMINTAAN_TOLAK'         // PATCH /api/blud/realisasi/permintaan
   | 'BLUD_PERMINTAAN_SELESAI'       // otomatis setelah Pergeseran memenuhi permintaan
+  // Tutup Kas (§4.5, §4.7) — menutup & membuka bulan wajib berjejak: yang ditutup
+  // adalah dokumen bertanda tangan, dan membukanya kembali mengubah angka resmi.
+  | 'BLUD_PERIODE_TUTUP'            // POST /api/blud/realisasi/periode (tutup=true)
+  | 'BLUD_PERIODE_BUKA'             // DELETE /api/blud/realisasi/periode (SUPER_ADMIN)
+  | 'BLUD_PEJABAT_SIMPAN'           // POST /api/blud/pejabat
+  | 'BLUD_SPJ_UNDUH'                // GET /api/blud/realisasi/export
   // ─── Perjanjian Kinerja (Sprint 1, 2026-05-23) ────────────────────────────
   | 'PK_SAVE_SASARAN'         // POST /api/perjanjian-kinerja/sasaran
   | 'PK_SAVE_PROGRAM'         // POST /api/perjanjian-kinerja/program

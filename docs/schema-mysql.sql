@@ -682,6 +682,27 @@ CREATE TABLE IF NOT EXISTS blud_permintaan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='BLUD - Permintaan pergeseran / penambahan rekening dari bendahara';
 
+-- Pejabat penanda tangan dokumen SPJ — migration-blud-pejabat.sql
+-- Keputusan #29: nilainya DISALIN dari pk_pejabat, bukan di-JOIN hidup. Ganti
+-- pejabat tahun depan tidak boleh mengubah SPJ tahun ini yang sudah bertanda
+-- tangan — karena itu tidak ada FK ke pk_pejabat, `pk_pejabat_id` cuma jejak asal.
+CREATE TABLE IF NOT EXISTS blud_pejabat (
+  id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tahun_anggaran SMALLINT UNSIGNED NOT NULL,
+  jabatan        ENUM('DIREKTUR','BENDAHARA','PPK') NOT NULL COMMENT 'peran di dokumen SPJ',
+  nama           VARCHAR(128) NOT NULL,
+  nip            VARCHAR(32)      NULL,
+  pangkat        VARCHAR(64)      NULL,
+  jabatan_teks   VARCHAR(191)     NULL COMMENT 'bunyi jabatan yang dicetak di blok tanda tangan',
+  pk_pejabat_id  INT              NULL COMMENT 'jejak asal salinan — SENGAJA tanpa FK',
+  disalin_at     DATETIME         NULL,
+  updated_by     INT              NULL,
+  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_tahun_jabatan (tahun_anggaran, jabatan),
+  CONSTRAINT fk_bpj_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='BLUD - Pejabat penanda tangan dokumen SPJ (salinan beku dari pk_pejabat)';
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Rencana Aksi (modul baru — Migration 032)
 -- ═══════════════════════════════════════════════════════════════════════════

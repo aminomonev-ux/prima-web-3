@@ -130,6 +130,61 @@ export const PatchPermintaanSchema = z.object({
   aksi: z.enum(['TOLAK']),
 })
 
+// ─── Body: Tutup Kas (§4.7) ─────────────────────────────────────────────────
+
+/**
+ * Yang diterima dari klien HANYA sisi B (dua angka hasil pemeriksaan nyata) dan
+ * kelengkapan surat. Sisi A tidak pernah dikirim — dihitung ulang di server dari
+ * transaksi. Menerima saldo buku dari klien = membiarkan bulan jomplang ditutup
+ * lewat satu panggilan curl.
+ */
+export const TutupKasBodySchema = z.object({
+  tahun_anggaran: z.coerce.number().int().gte(2000).lte(2100),
+  bulan: BulanSchema,
+  kas_fisik: RupiahSchema,
+  bank_koran: RupiahSchema,
+  no_surat: z.string().trim().max(64).nullish(),
+  tgl_surat: TanggalTxSchema.nullish(),
+  /** false = simpan sisi nyata saja (belum berkomitmen menutup bulan). */
+  tutup: z.boolean().default(false),
+})
+
+export const BukaPeriodeQuerySchema = z.object({
+  tahun: z.coerce.number().int().gte(2000).lte(2100),
+  bulan: BulanSchema,
+  alasan: z.string().trim().min(10, 'Alasan membuka periode minimal 10 karakter').max(500),
+})
+
+// ─── Body: pejabat penanda tangan SPJ ───────────────────────────────────────
+
+export const JabatanSpjSchema = z.enum(['DIREKTUR', 'BENDAHARA', 'PPK'])
+export type JabatanSpj = z.infer<typeof JabatanSpjSchema>
+
+export const PEJABAT_SPJ_LABEL: Record<JabatanSpj, string> = {
+  DIREKTUR: 'Direktur',
+  BENDAHARA: 'Bendahara Pengeluaran',
+  PPK: 'PPK-BLUD',
+}
+
+/**
+ * Nilainya SALINAN, bukan rujukan ke pk_pejabat (keputusan #29). `pk_pejabat_id`
+ * hanya jejak asal — tidak pernah dipakai untuk JOIN saat mencetak, supaya SPJ
+ * yang sudah ditandatangani tidak ikut berubah waktu master PK diperbarui.
+ */
+export const PejabatSpjSchema = z.object({
+  jabatan: JabatanSpjSchema,
+  nama: z.string().trim().min(2, 'Nama pejabat wajib diisi').max(128),
+  nip: z.string().trim().max(32).nullish(),
+  pangkat: z.string().trim().max(64).nullish(),
+  jabatan_teks: z.string().trim().max(191).nullish(),
+  pk_pejabat_id: z.coerce.number().int().positive().nullish(),
+})
+
+export const SimpanPejabatBodySchema = z.object({
+  tahun_anggaran: z.coerce.number().int().gte(2000).lte(2100),
+  pejabat: z.array(PejabatSpjSchema).max(10),
+})
+
 // ─── Error domain ───────────────────────────────────────────────────────────
 
 export class BludPeriodeTertutupError extends Error {
@@ -167,6 +222,20 @@ export class BludPaguTerlampauiError extends Error {
   constructor(public detail: PaguTerlampauiDetail) {
     super(`Melebihi pagu ${detail.kode_rekening}: kurang ${detail.kekurangan}.`)
     this.name = 'BludPaguTerlampauiError'
+  }
+}
+
+export class BludTutupTidakSeimbangError extends Error {
+  constructor(public saldoBuku: number, public saldoNyata: number, public selisih: number) {
+    super(`Sisi buku (${saldoBuku}) tidak sama dengan sisi nyata (${saldoNyata}). Selisih ${selisih}.`)
+    this.name = 'BludTutupTidakSeimbangError'
+  }
+}
+
+export class BludTutupTerhalangError extends Error {
+  constructor(public penghalang: string[]) {
+    super(penghalang.join(' '))
+    this.name = 'BludTutupTerhalangError'
   }
 }
 

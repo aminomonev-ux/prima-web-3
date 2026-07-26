@@ -2867,3 +2867,109 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .rl-diff { background: #fff; border: 1px solid #E1E7EE; }
 [data-theme="light"] .rl-diff-judul { color: #5B7392; }
 [data-theme="light"] .rl-reg-ringkas { color: #5B7392; }
+
+/* ── Tutup Kas (§4.7) — dua sisi berdampingan + selisih besar-besar ────────── */
+.tk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.tk-card {
+  background: #042C53; border: 1px solid #0C447C; border-radius: 10px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+}
+.tk-card-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.tk-card-judul { font-weight: 800; font-size: 13px; color: #E6F1FB; }
+.tk-card-sub { font-size: 11px; color: #8FA9C4; }
+.tk-baris, .tk-total {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 12.5px; color: #B5D4F4;
+}
+.tk-total {
+  margin-top: 6px; padding-top: 10px; border-top: 1px dashed #0C447C;
+  font-weight: 800; color: #E6F1FB; font-size: 13.5px;
+}
+.tk-isian { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #8FA9C4; }
+.tk-isian input, .tk-isian textarea { width: 100%; }
+.bk-num-input { font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; }
+
+/* Satu-satunya angka yang menentukan boleh atau tidaknya menutup bulan. */
+.tk-selisih {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+}
+.tk-selisih.netral   { background: rgba(133,183,235,.10); border: 1px solid #0C447C; color: #8FA9C4; }
+.tk-selisih.seimbang { background: rgba(29,158,117,.14); border: 1px solid #1D9E75; color: #6EE7B7; }
+.tk-selisih.jomplang { background: rgba(226,75,74,.14); border: 1px solid #E24B4A; color: #FCA5A5; }
+.tk-selisih b { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+.tk-surat { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.tk-surat .tk-isian { min-width: 200px; }
+.tk-aksi { margin-left: auto; display: flex; gap: 8px; }
+
+.tk-tutup-banner {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px;
+  font-size: 12.5px; background: rgba(239,159,39,.12); border: 1px solid #EF9F27; color: #FAC775;
+}
+.tk-halang { margin: 6px 0 0 18px; list-style: disc; display: flex; flex-direction: column; gap: 3px; }
+
+.tk-modal { width: min(520px, 94vw); border-radius: 14px; overflow: hidden; }
+.tk-modal-head { padding: 14px 18px; border-bottom: 1px solid #0C447C; background: rgba(239,159,39,.08); }
+.tk-modal-head h2 { font-weight: 800; font-size: 14px; color: #E6F1FB; }
+.tk-modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.tk-modal-teks { font-size: 12.5px; line-height: 1.6; color: #B5D4F4; }
+.tk-modal-foot { padding: 12px 18px; border-top: 1px solid #0C447C; display: flex; justify-content: flex-end; gap: 8px; }
+
+[data-theme="light"] .tk-card { background: #fff; border-color: #E1E7EE; }
+[data-theme="light"] .tk-card-judul { color: #0F0F12; }
+[data-theme="light"] .tk-card-sub, [data-theme="light"] .tk-isian { color: #5B7392; }
+[data-theme="light"] .tk-baris { color: #374151; }
+[data-theme="light"] .tk-total { color: #0F0F12; border-top-color: #E1E7EE; }
+[data-theme="light"] .tk-selisih.netral   { background: #F3F6FA; border-color: #E1E7EE; color: #5B7392; }
+[data-theme="light"] .tk-selisih.seimbang { background: rgba(29,158,117,.10); color: #0F7355; }
+[data-theme="light"] .tk-selisih.jomplang { background: rgba(226,75,74,.09); color: #A32E2D; }
+[data-theme="light"] .tk-tutup-banner { background: rgba(239,159,39,.10); color: #854F0B; }
+[data-theme="light"] .tk-modal-head { border-bottom-color: #E1E7EE; }
+[data-theme="light"] .tk-modal-head h2 { color: #0F0F12; }
+[data-theme="light"] .tk-modal-teks { color: #374151; }
+[data-theme="light"] .tk-modal-foot { border-top-color: #E1E7EE; }
+
+/* ── Pejabat penanda tangan SPJ (panel di Pengaturan BLUD) ────────────────── */
+.pj-panel { background: #042C53; border: 1px solid #0C447C; border-radius: 10px; overflow: hidden; }
+.pj-head {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  border-bottom: 1px solid #0C447C; background: linear-gradient(90deg, rgba(245,158,11,.14), transparent);
+}
+.pj-ikon {
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(245,158,11,.18); color: #F59E0B;
+}
+.pj-judul { font-weight: 800; font-size: 13px; color: #E6F1FB; }
+.pj-sub { font-size: 11.5px; color: #85B7EB; margin-top: 2px; line-height: 1.5; }
+.pj-isi { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.pj-peran { border: 1px solid rgba(12,68,124,.7); border-radius: 9px; padding: 10px 12px; }
+.pj-peran-kepala { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.pj-peran-label { font-weight: 700; font-size: 12.5px; color: #E6F1FB; }
+.pj-peran-petunjuk { font-size: 11px; color: #8FA9C4; margin-top: 1px; }
+.pj-peran-kepala > :last-child { margin-left: auto; }
+.pj-baris { display: flex; gap: 10px; flex-wrap: wrap; }
+.pj-aksi { display: flex; justify-content: flex-end; }
+.pj-kosong { padding: 24px 16px; text-align: center; font-size: 12px; color: #85B7EB; line-height: 1.6; }
+
+.pj-modal { width: min(560px, 94vw); border-radius: 14px; overflow: hidden; }
+.pj-daftar { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+.pj-item {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+  text-align: left; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  background: transparent; border: 1px solid transparent; color: #E6F1FB; font-family: inherit;
+}
+.pj-item:hover { background: rgba(124,92,252,.10); border-color: rgba(124,92,252,.35); }
+.pj-item-nama { font-weight: 700; font-size: 12.5px; }
+.pj-item-meta { grid-column: 1; font-size: 11px; color: #8FA9C4; }
+.pj-item-nip { grid-row: 1 / span 2; align-self: center; font-size: 11px; color: #8FA9C4; }
+
+[data-theme="light"] .pj-panel { background: #fff; border-color: #E1E7EE; }
+[data-theme="light"] .pj-head { border-bottom-color: #E1E7EE; }
+[data-theme="light"] .pj-judul, [data-theme="light"] .pj-peran-label { color: #0F0F12; }
+[data-theme="light"] .pj-sub { color: #5B7392; }
+[data-theme="light"] .pj-peran { border-color: #E1E7EE; }
+[data-theme="light"] .pj-peran-petunjuk, [data-theme="light"] .pj-kosong,
+[data-theme="light"] .pj-item-meta, [data-theme="light"] .pj-item-nip { color: #5B7392; }
+[data-theme="light"] .pj-item { color: #0F0F12; }

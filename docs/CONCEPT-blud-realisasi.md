@@ -740,10 +740,33 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
       transaksi lanjut. `tsc` + ESLint bersih, `next build` lolos.
 
 ### Fase 5 — Tutup Kas & keluaran Excel
-- [ ] `blud_pejabat` + panel Pengaturan. Layar Tutup Kas + kunci periode §4.5.
-- [ ] Uji keseimbangan §4.7: sisi A dihitung, sisi B diketik, tombol tutup mati saat selisih ≠ 0.
-- [ ] `spj-excel.ts` — 8 sheet. **DoD**: unduh untuk Juni 2026 dibanding berkas asli sheet demi sheet;
-      `TUTUP KAS` hasil sistem **seimbang** (berkas asli tidak — itu justru buktinya bekerja).
+- [x] `blud_pejabat` (`migration-blud-pejabat.sql`, sudah dijalankan ke `prima_db_3`) + panel
+      **Pejabat Penanda Tangan SPJ** di Pengaturan BLUD, lengkap dengan tombol **Ambil dari PK**.
+- [x] Layar **Tutup Kas** (`/blud/tutup-kas`) — dua sisi berdampingan, selisih besar-besar,
+      tombol "Tutup Bulan" mati saat selisih ≠ 0 atau masih ada penghalang.
+- [x] Kunci periode §4.5: penulisan ke bulan TUTUP sudah ditolak `realisasi-data.ts` sejak Fase 2;
+      pembukaan kembali hanya SUPER_ADMIN, wajib beralasan ≥10 karakter, tercatat `BLUD_PERIODE_BUKA`.
+- [x] `spj-excel.ts` — 9 lembar (BKU · SPI · register · ` Realisasi BP` · `GU <bulan>` · pengantar ·
+      SPJ · TUTUP KAS · setor BPD), dibangun di server lewat `GET /api/blud/realisasi/export`.
+- [ ] **DoD — belum bisa diuji**: unduh Juni 2026 dibanding berkas asli lembar demi lembar.
+      Berkas Juni aslinya **tidak ada di workspace ini** (`prima-web-3`), jadi pembandingan
+      itu menunggu berkasnya disalin ke sini. `tsc` + ESLint bersih, `next build` lolos,
+      seluruh SQL Fase 5 diuji langsung ke MySQL 8.4.
+
+**Keputusan #29 — pejabat SPJ disalin, bukan dirujuk.** `pk_pejabat` boleh jadi sumber isian,
+tapi yang tersimpan di `blud_pejabat` adalah salinan nama/NIP/pangkat pada saat penetapan. Tidak ada
+FK dan tidak ada JOIN ke `pk_pejabat` di jalur cetak: kalau tahun depan pejabatnya berganti di master
+PK, SPJ tahun ini yang sudah dicetak & ditandatangani tidak boleh ikut berubah. Begitu kolom diketik
+tangan, jejak `pk_pejabat_id` dilepas supaya `disalin_at` tidak mengaku salinan padahal bukan.
+Catatan: `pk_pejabat` hanya memuat jabatan **struktural** — Bendahara Pengeluaran & PPK-BLUD tidak ada
+di sana, jadi peran BLUD tetap didefinisikan sendiri dan bunyi jabatannya diketik.
+
+**Keputusan #30 — tutup bulan harus berurutan dari depan.** Saldo awal sebuah bulan diturunkan dari
+arus kas bulan-bulan sebelumnya (§4.6). Menutup Juni sementara Mei masih terbuka berarti
+menandatangani angka yang masih bisa berubah esok hari. Karena itu bulan yang masih terbuka di
+depannya ikut jadi penghalang, sejajar dengan baki "Perlu Rekening" (§4.2). Daftar penghalang
+dikumpulkan di satu fungsi (`kumpulkanPenghalang`) supaya layar dan server memakai aturan yang sama
+persis — UI tidak boleh punya versi aturannya sendiri.
 
 ### Fase 6 — Menyusul (tidak menghalangi)
 - [ ] Menu Audit khusus BLUD.
@@ -823,6 +846,8 @@ Tidak ada lagi yang menunggu konfirmasi. Sisa pertanyaan lapangan (mis. format n
 | 26 | Realisasi menumpang **Tahun Anggaran**: tahun tanpa DPA tidak punya baris anggaran → Buku Kas tidak bisa dibuka untuk tahun itu |
 | 27 | Kolom **Sisa** tampil di layar Realisasi & di modal input, dihitung saat dibaca — bukan kolom simpanan |
 | 28 | **Layar Realisasi = laporan per bulan terpilih.** Sisa & % ikut bulan itu, seperti kolom lainnya — bukan serapan setahun. Angka "boleh belanja berapa lagi hari ini" pindah ke keterangan di bawah tabel, muncul hanya bila ada realisasi di bulan sesudahnya. Pemilih rekening di Buku Kas tetap memakai serapan setahun: di sana pertanyaannya memang berbeda |
+| 29 | **Pejabat SPJ disalin, bukan dirujuk.** `pk_pejabat` = sumber isian ("Ambil dari PK"); yang tersimpan salinan nama/NIP/pangkat. Tanpa FK, tanpa JOIN saat cetak — ganti pejabat tahun depan tidak boleh mengubah SPJ yang sudah ditandatangani |
+| 30 | **Tutup bulan berurutan dari depan.** Bulan sebelumnya yang masih terbuka jadi penghalang, sejajar baki "Perlu Rekening" — saldo awal bulan ini diturunkan dari bulan-bulan sebelumnya (§4.6) |
 
 > Referensi: `docs/CONCEPT-blud-tahun-anggaran.md` (sudah dieksekusi) · `docs/CONCEPT-menu-access-control.md`
 > (Fase 0) · `docs/TUTORIAL-blud.md` · pola L48 CAS, L51 optimistic lock, L55 atomik, L58 ConfirmDialog.
