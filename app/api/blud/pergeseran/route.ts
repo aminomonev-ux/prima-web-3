@@ -9,6 +9,7 @@ import {
   getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi, BludReplaceSafetyError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
+import { cekPaguDibawahRealisasi } from '@/lib/blud/pagu'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { isBludRole, PergeseranBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { hasAppAccess } from '@/lib/security/guard'
@@ -101,7 +102,15 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, expected_version, sentinel_ack } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack } = parsed.data
+
+  // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
+  if (turunkan_paksa && !alasan_turun) {
+    return NextResponse.json(
+      { ok: false, error: 'Alasan wajib diisi untuk menurunkan pagu di bawah realisasi' },
+      { status: 400 },
+    )
+  }
 
   // B-1: tolak pohon rusak (parent orphan / row_id duplikat / siklus) sebelum simpan
   const treeErrors = validateTreeIntegrity(rows)
@@ -149,7 +158,34 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // §4.3: pagu tidak boleh turun di bawah realisasi yang SUDAH terjadi, dan
+    // baris yang masih dipakai transaksi tidak boleh hilang. Arah kebalikan §4.1
+    // — belum pernah dijaga di Excel, dan justru yang membuat Realisasi minus.
+    const bentrok = await cekPaguDibawahRealisasi(tahun_anggaran, recalced)
+    if (bentrok.length > 0 && !turunkan_paksa) {
+      const t = bentrok[0]
+      return NextResponse.json(
+        {
+          ok:    false,
+          code:  'PAGU_DIBAWAH_REALISASI',
+          error: `${bentrok.length} baris jadi minus: ${t.kode_rekening} ${t.hilang ? 'dihapus padahal' : 'turun ke Rp ' + t.pagu_baru.toLocaleString('id-ID') + ' padahal'} sudah terserap Rp ${t.terserap.toLocaleString('id-ID')}.`,
+          detail: bentrok,
+        },
+        { status: 409 },
+      )
+    }
+
     const result = await savePergeseran(tahun_anggaran, versi_tanggal, dpaVersi, recalced, session.userId, expected_version, force)
+
+    if (bentrok.length > 0) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_PAGU_DIBAWAH_REALISASI',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `Pergeseran ${tahun_anggaran}/${versi_tanggal} disimpan PAKSA — ${bentrok.length} baris di bawah realisasi (total minus Rp ${bentrok.reduce((s, b) => s + b.minus, 0).toLocaleString('id-ID')}): ${bentrok.slice(0, 5).map(b => `${b.kode_rekening} pagu ${b.pagu_baru.toLocaleString('id-ID')} < terserap ${b.terserap.toLocaleString('id-ID')}${b.hilang ? ' (baris dihapus)' : ''}`).join('; ')}${bentrok.length > 5 ? '; …' : ''} · Alasan: ${alasan_turun}`,
+      })
+    }
 
     await writeAuditLog({
       req,

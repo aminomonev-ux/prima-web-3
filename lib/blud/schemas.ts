@@ -172,6 +172,10 @@ export const PergeseranBodySchema = z.object({
   // B6 draft: simpan progres belum berimbang — pengakuan eksplisit user,
   // tanpa flag ini delta root != 0 ditolak PERGESERAN_TIDAK_BERIMBANG
   draft:             z.boolean().optional().default(false),
+  // CONCEPT-blud-realisasi §4.3: menurunkan pagu di bawah realisasi ditolak.
+  // Boleh dilanjutkan, tapi harus disengaja dan beralasan — alasannya masuk audit.
+  turunkan_paksa:    z.boolean().optional().default(false),
+  alasan_turun:      z.string().trim().min(10, 'Alasan minimal 10 karakter').max(500).optional(),
   expected_version:  z.coerce.number().int().min(0).default(0),
   sentinel_ack:      SentinelAckSchema.optional(),
 });

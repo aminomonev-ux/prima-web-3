@@ -553,6 +553,12 @@ export default function PergeseranClient() {
   const [saving,    setSaving]    = useState(false)
   // Audit BLUD v1.2 (B-NEW-3): modal konfirmasi kalau save drop >50% baris
   const [safetyWarning, setSafetyWarning] = useState<{ versiTanggal: string; existing: number; incoming: number; dropPct: number } | null>(null)
+  // CONCEPT-blud-realisasi §4.3: pagu turun di bawah realisasi yang sudah terjadi
+  const [bentrokPagu, setBentrokPagu] = useState<{
+    versiTanggal: string
+    detail: { kode_rekening: string; uraian: string; pagu_baru: number; terserap: number; minus: number; hilang: boolean }[]
+  } | null>(null)
+  const [alasanTurun, setAlasanTurun] = useState('')
   const [confirmInject, setConfirmInject] = useState(false)
   const [akunOptions,   setAkunOptions]   = useState<AkunOption[]>([])
   // Filter level (B) + search jump (C)
@@ -633,6 +639,9 @@ export default function PergeseranClient() {
   const sentinelAckRef  = useRef<SentinelAckPayload | null>(null)
   // B6 draft: di-ref supaya ikut terbawa saat retry force=true (SAFETY_THRESHOLD)
   const draftRef        = useRef(false)
+  // §4.3: alasan menurunkan pagu di bawah realisasi — ref, sebab satu penyimpanan
+  // bisa kena dua penolakan berturut-turut (safety threshold lalu pagu minus).
+  const paksaTurunRef   = useRef<string | null>(null)
 
   const loadPergeseran = useCallback(async (tanggal?: string) => {
     loadCtrlRef.current?.abort()
@@ -755,6 +764,7 @@ export default function PergeseranClient() {
       // diturunkan dari delta, tidak disimpan di DB
       const rootDelta = hitungDeltaPergeseranRoot(rows)
       draftRef.current = false
+      paksaTurunRef.current = null
       if (rootDelta !== 0) {
         const simpanDraft = await confirmDialog({
           title: 'Pergeseran belum berimbang',
@@ -780,10 +790,17 @@ export default function PergeseranClient() {
         body: JSON.stringify({
           tahun_anggaran: tahun, versi_tanggal: versiTanggal, dpa_versi_tanggal: dpaVersi || undefined,
           rows, force, draft: draftRef.current, expected_version: version,
+          turunkan_paksa: !!paksaTurunRef.current,
+          alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
         }),
       })
       const json = await res.json()
+      if (res.status === 409 && json.code === 'PAGU_DIBAWAH_REALISASI') {
+        setAlasanTurun('')
+        setBentrokPagu({ versiTanggal, detail: json.detail ?? [] })
+        return
+      }
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
         showToast('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', false)
         await loadPergeseran(versiTanggal)
@@ -1009,6 +1026,76 @@ export default function PergeseranClient() {
               <PrimaButton variant="danger" onClick={() => { const v = safetyWarning.versiTanggal; setSafetyWarning(null); setSaving(true); void doSimpanInternal(v, true).finally(() => setSaving(false)) }} disabled={saving}>
                 Ya, Tetap Simpan
               </PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* §4.3: pagu turun di bawah realisasi. Boleh ditembus, tapi harus beralasan
+          dan alasannya masuk audit log — yang menanggung risiko yang memutuskan. */}
+      {bentrokPagu && (
+        <div className="blud-modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setBentrokPagu(null) }}>
+          <div className="blud-modal-card rl-reg" role="dialog" aria-modal="true">
+            <div className="blud-modal-header">
+              <div>
+                <div className="blud-modal-title">Pagu turun di bawah realisasi</div>
+                <div className="blud-modal-subtitle">
+                  {bentrokPagu.detail.length} baris · versi {bentrokPagu.versiTanggal}
+                </div>
+              </div>
+              <button className="blud-modal-close" onClick={() => setBentrokPagu(null)} aria-label="Tutup">✕</button>
+            </div>
+
+            <div className="rl-reg-body">
+              <div className="bk-warn">
+                Uangnya sudah keluar. Menyimpan pergeseran ini membuat baris di bawah jadi minus di layar
+                Realisasi sampai diperbaiki.
+              </div>
+
+              <table className="dpa-table rl-reg-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 170 }}>Kode</th>
+                    <th>Uraian</th>
+                    <th style={{ width: 130 }}>Pagu baru</th>
+                    <th style={{ width: 130 }}>Terserap</th>
+                    <th style={{ width: 130 }}>Minus</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bentrokPagu.detail.map((d, i) => (
+                    <tr key={i}>
+                      <td className="bk-kode">{d.kode_rekening}</td>
+                      <td>{d.uraian}{d.hilang && <span className="bk-tag-parkir">baris dihapus</span>}</td>
+                      <td className="bk-r bk-num-inline">{formatRupiah(d.pagu_baru)}</td>
+                      <td className="bk-r bk-num-inline">{formatRupiah(d.terserap)}</td>
+                      <td className="bk-r bk-num-inline rl-neg">{formatRupiah(d.minus)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <label className="bk-field">
+                <span className="blud-imp-muted">Alasan (wajib, minimal 10 karakter — tercatat di audit log)</span>
+                <textarea className="blud-imp-input" rows={3} value={alasanTurun}
+                  onChange={e => setAlasanTurun(e.target.value)}
+                  placeholder="Contoh: pagu dipindah ke belanja obat atas disposisi Direktur tanggal …" />
+              </label>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <PrimaButton variant="ghost" onClick={() => setBentrokPagu(null)} disabled={saving}>
+                  Batal
+                </PrimaButton>
+                <PrimaButton variant="danger" disabled={saving || alasanTurun.trim().length < 10}
+                  onClick={() => {
+                    const v = bentrokPagu.versiTanggal
+                    paksaTurunRef.current = alasanTurun.trim()
+                    setBentrokPagu(null); setSaving(true)
+                    void doSimpanInternal(v, false).finally(() => setSaving(false))
+                  }}>
+                  Tetap Lanjut
+                </PrimaButton>
+              </div>
             </div>
           </div>
         </div>

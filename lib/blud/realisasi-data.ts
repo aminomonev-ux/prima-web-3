@@ -172,6 +172,85 @@ export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas>
   }
 }
 
+export interface RegisterRow {
+  id: number
+  tanggal: string
+  bulan: number
+  no_kwt: number | null
+  uraian: string
+  jenis: JenisTransaksi
+  nilai: number
+  /** Sisa anggaran setelah transaksi ini — dihitung saat dibaca, seperti §2.7. */
+  saldo: number
+}
+
+export interface Register {
+  anggaran_key: string
+  kode_rekening: string
+  uraian: string
+  pagu: number
+  rows: RegisterRow[]
+  total: number
+  sisa: number
+}
+
+/**
+ * Isi sheet `register` untuk satu baris anggaran: transaksi yang membebaninya
+ * + saldo anggaran berjalan. Keluaran, bukan masukan — karena itu tidak
+ * dibuatkan menu sendiri, hanya panel di layar Realisasi (§3.1).
+ */
+export async function getRegister(
+  tahun: number,
+  anggaranKey: string,
+  sampaiBulan?: number,
+): Promise<Register> {
+  const pagu = await getPaguMap(tahun)
+  const baris = pagu.get(anggaranKey)
+  const rows = sampaiBulan == null
+    ? await sql`
+        SELECT t.id, t.tanggal, t.bulan, t.no_kwt, t.uraian, t.jenis, a.nilai
+        FROM blud_realisasi_alokasi a
+        JOIN blud_realisasi_tx t ON t.id = a.tx_id
+        WHERE a.tahun_anggaran = ${tahun} AND a.anggaran_key = ${anggaranKey}
+        ORDER BY t.tanggal ASC, t.id ASC
+      `
+    : await sql`
+        SELECT t.id, t.tanggal, t.bulan, t.no_kwt, t.uraian, t.jenis, a.nilai
+        FROM blud_realisasi_alokasi a
+        JOIN blud_realisasi_tx t ON t.id = a.tx_id
+        WHERE a.tahun_anggaran = ${tahun} AND a.anggaran_key = ${anggaranKey}
+          AND t.bulan <= ${sampaiBulan}
+        ORDER BY t.tanggal ASC, t.id ASC
+      `
+  const paguNilai = baris?.pagu ?? 0
+  let sisa = paguNilai
+  let total = 0
+  const daftar: RegisterRow[] = (rows as Record<string, unknown>[]).map((r) => {
+    const nilai = Number(r.nilai ?? 0)
+    sisa -= nilai
+    total += nilai
+    return {
+      id: Number(r.id),
+      tanggal: toDate(r.tanggal),
+      bulan: Number(r.bulan),
+      no_kwt: r.no_kwt != null ? Number(r.no_kwt) : null,
+      uraian: String(r.uraian ?? ''),
+      jenis: String(r.jenis) as JenisTransaksi,
+      nilai,
+      saldo: sisa,
+    }
+  })
+  return {
+    anggaran_key: anggaranKey,
+    kode_rekening: baris?.kode_rekening ?? '',
+    uraian: baris?.uraian ?? '(baris anggaran tidak ada di versi terbaru)',
+    pagu: paguNilai,
+    rows: daftar,
+    total,
+    sisa,
+  }
+}
+
 /** Transaksi diparkir — memblokir Tutup Kas sampai rekeningnya ada (§4.2). */
 export async function countBelumBerrekening(tahun: number): Promise<number> {
   const rows = await sql`

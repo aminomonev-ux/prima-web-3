@@ -679,9 +679,21 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
       **belum pernah dijalankan dengan data**.
 
 ### Fase 3 — Realisasi (pantau)
-- [ ] `pagu.ts` + route `pagu/`, layar Realisasi (pohon seperti DPA/Pergeseran + 6 kolom serapan).
-- [ ] Panel drill-down `register`. Penanda perubahan pagu §4.4. Guard §4.3 di route pergeseran.
-- [ ] **DoD**: total layar Realisasi = total Buku Kas bulan itu, sampai rupiah terakhir.
+- [x] `getSerapanPeriode` (bulan ini · bulan lalu · setahun, satu query) + `gulungKeAtas`
+      (serapan anak naik ke induk — tanpa ini semua baris induk nol) di `pagu.ts`;
+      route `pagu/` menerima `?bulan=` dan `?mode=cap`.
+- [x] Layar `/blud/realisasi` — pohon ciut/buka + cari, 6 kolom serapan, baris minus merah,
+      tile grup PENATAUSAHAAN, kelas `.rl-*` dark & light.
+- [x] Panel drill-down `register` (`getRegister` + route `register/` + `RegisterPanel`).
+- [x] Penanda perubahan pagu §4.4 tiga lapis: chip ▲▼/baru per baris + banner ringkas & panel
+      diff + toast, disulut sidik jari `getPaguCap` (CRC32 per baris — **bukan** SUM pagu,
+      sebab pergeseran wajib berimbang jadi totalnya justru tidak berubah) tiap 30 detik.
+- [x] Guard §4.3 `cekPaguDibawahRealisasi` di route pergeseran + modal "Tetap Lanjut" dengan
+      alasan wajib → audit `BLUD_PAGU_DIBAWAH_REALISASI`. Baris yatim (rekening dihapus
+      padahal masih terpakai) ikut tertangkap.
+- [ ] **DoD — belum bisa diuji**: total layar Realisasi = total Buku Kas bulan itu sampai
+      rupiah terakhir. `tsc` + ESLint bersih dan `next build` lolos, tapi angkanya belum
+      pernah dibandingkan dengan data nyata.
 
 ### Fase 4 — Permintaan & baki rekening
 - [ ] `blud_permintaan` + route + modal §4.1 + baki §4.2 + tautan `?fokus=`.

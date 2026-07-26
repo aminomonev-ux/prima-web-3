@@ -2795,3 +2795,66 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .bk-galat { background: rgba(226,75,74,.08); color: #A32E2D; }
 [data-theme="light"] .bk-picker { background: #fff; border-color: #E1E7EE; }
 [data-theme="light"] .bk-picker-head { border-bottom-color: #E5E7EB; }
+
+/* ── Realisasi BLUD (CONCEPT-blud-realisasi §3, §4.3, §4.4) ───────────────── */
+.rl-cari { display: inline-flex; align-items: center; gap: 6px; color: #8FA9C4; }
+.rl-cari .blud-imp-input { width: 220px; }
+
+.rl-table td { vertical-align: middle; }
+.rl-induk td { font-weight: 700; background: rgba(55,138,221,.06); }
+.rl-row-minus td { background: rgba(226,75,74,.14); }
+.rl-row-minus .rl-sisa { color: #E24B4A; font-weight: 700; }
+.rl-neg { color: #E24B4A; }
+
+.rl-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-right: 4px; vertical-align: -3px;
+  border: none; background: transparent; color: #8FA9C4; cursor: pointer;
+}
+.rl-toggle:hover { color: #E6F1FB; }
+
+.rl-uraian {
+  border: none; background: transparent; padding: 0; text-align: left;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.rl-uraian:hover { color: #EF9F27; text-decoration: underline; }
+
+.rl-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 6px; border-radius: 6px; vertical-align: -3px;
+}
+.rl-chip-naik  { background: rgba(29,158,117,.18); color: #1D9E75; }
+.rl-chip-turun { background: rgba(186,117,23,.20); color: #BA7517; }
+.rl-chip-baru  { background: rgba(124,92,252,.18); color: #7C5CFC; }
+
+.rl-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: 10px; font-size: 12.5px;
+  background: rgba(124,92,252,.14); color: #C9BDFF;
+}
+.rl-banner .blud-imp-link { border: none; background: transparent; cursor: pointer; margin-left: auto; }
+
+.rl-minus-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.6;
+  background: rgba(226,75,74,.14); color: #F0B3B2;
+}
+
+.rl-diff { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-radius: 10px; background: #042C53; }
+.rl-diff-judul { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #8FA9C4; margin-bottom: 6px; }
+.rl-diff-baris { display: grid; grid-template-columns: 170px 1fr auto; gap: 10px; font-size: 12.5px; padding: 3px 0; }
+.rl-diff-uraian { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rl-reg { width: min(880px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.rl-reg-body { padding: 14px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.rl-reg-ringkas { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12.5px; color: #8FA9C4; }
+
+[data-theme="light"] .rl-cari { color: #5B7392; }
+[data-theme="light"] .rl-induk td { background: #EEF3F9; }
+[data-theme="light"] .rl-row-minus td { background: rgba(226,75,74,.10); }
+[data-theme="light"] .rl-toggle:hover { color: #10243B; }
+[data-theme="light"] .rl-banner { background: rgba(124,92,252,.09); color: #534AB7; }
+[data-theme="light"] .rl-minus-banner { background: rgba(226,75,74,.08); color: #A32E2D; }
+[data-theme="light"] .rl-diff { background: #fff; border: 1px solid #E1E7EE; }
+[data-theme="light"] .rl-diff-judul { color: #5B7392; }
+[data-theme="light"] .rl-reg-ringkas { color: #5B7392; }

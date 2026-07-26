@@ -122,6 +122,9 @@ export type AuditEventType =
   | 'BLUD_REALISASI_TX_CREATE'      // POST /api/blud/realisasi/tx
   | 'BLUD_REALISASI_TX_UPDATE'      // PATCH /api/blud/realisasi/tx
   | 'BLUD_REALISASI_TX_DELETE'      // DELETE /api/blud/realisasi/tx?id=
+  // §4.3: pagu diturunkan di bawah realisasi yang sudah terjadi, atas keputusan
+  // sadar pemegang izin DPA. Alasannya wajib dan ikut tercatat di sini.
+  | 'BLUD_PAGU_DIBAWAH_REALISASI'   // POST /api/blud/pergeseran (turunkan_paksa)
   // ─── Perjanjian Kinerja (Sprint 1, 2026-05-23) ────────────────────────────
   | 'PK_SAVE_SASARAN'         // POST /api/perjanjian-kinerja/sasaran
   | 'PK_SAVE_PROGRAM'         // POST /api/perjanjian-kinerja/program
