@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, FileText, Shuffle, LogOut, ShieldCheck, ChevronDown, Menu as MenuIcon,
-  MoreHorizontal, BookText, Printer, Settings, Home, ListTree, Users, Landmark,
+  MoreHorizontal, BookText, Printer, Settings, Home, ListTree, Users, Landmark, Wallet,
 } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -23,6 +23,7 @@ const TILES: Tile[] = [
   { href: '/blud/penanggung-jawab', label: 'Penanggung Jawab', icon: Users,    color: '#F59E0B', group: 'DATA INDUK' },
   { href: '/blud/dpa',         label: 'DPA BLUD',       icon: FileText,        color: '#8B5CF6', group: 'ANGGARAN' },
   { href: '/blud/pergeseran',  label: 'Pergeseran DPA', icon: Shuffle,         color: '#EC4899', group: 'ANGGARAN' },
+  { href: '/blud/buku-kas',    label: 'Buku Kas',       icon: Wallet,          color: '#1D9E75', group: 'PENATAUSAHAAN' },
   { href: '/blud/cetak',       label: 'Cetak',          icon: Printer,         color: '#0891b2', group: 'OUTPUT' },
   { href: '/blud/pengaturan',  label: 'Pengaturan',     icon: Settings,        color: '#64748B', group: 'SISTEM' },
 ]

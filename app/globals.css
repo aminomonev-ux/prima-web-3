@@ -2688,3 +2688,110 @@ button:hover .prima-del-top { transform: rotate(160deg); }
   .rima-toggle svg { width: 44px; height: 55px; }
   .rima-panel, .rima-bubble { width: min(92vw, 340px); max-width: 92vw; }
 }
+
+/* ─── BLUD Buku Kas (modul Realisasi) ─────────────────────────────────────── */
+/* CONCEPT-blud-realisasi.md §3. Panel & tabel theme-aware — toolbar tidak
+   di-hardcode gelap supaya layar ini benar di light mode juga. */
+
+.bk-panel {
+  background: #042C53; border: 1px solid #0C447C; border-radius: 10px;
+  padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+}
+.bk-title { font-weight: 800; font-size: 14px; color: #E6F1FB; }
+.bk-bulan { min-width: 140px; }
+.bk-saldo { padding: 8px 16px; font-size: 12px; }
+.bk-num-inline { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+.bk-warn, .bk-parkir-banner {
+  display: flex; align-items: flex-start; gap: 10px; border-radius: 10px;
+  padding: 10px 14px; font-size: 12.5px; line-height: 1.5;
+}
+.bk-warn { background: rgba(239,159,39,.12); border: 1px solid #EF9F27; color: #FAC775; }
+.bk-parkir-banner { background: rgba(124,92,252,.14); border: 1px solid #7C5CFC; color: #CECBF6; }
+
+.bk-table td { font-size: 12.5px; }
+.bk-table .bk-c { text-align: center; }
+.bk-table .bk-r { text-align: right; }
+.bk-table .bk-kosong { text-align: center; padding: 28px 10px; color: #85B7EB; font-size: 12.5px; }
+.bk-saldo-sel { background: rgba(55,138,221,.10); font-weight: 700; }
+.bk-rek-item { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.bk-rek-nilai { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #85B7EB; }
+.bk-kode { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #85B7EB; }
+.bk-row-parkir td { background: rgba(124,92,252,.10); }
+.bk-tag-parkir {
+  margin-left: 8px; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
+  background: rgba(124,92,252,.25); color: #CECBF6; border: 1px solid #7C5CFC;
+}
+.bk-total td { background: rgba(4,44,83,.6); font-weight: 800; font-size: 12px; }
+.bk-aksi { display: inline-flex; gap: 6px; align-items: center; }
+
+/* Modal transaksi */
+.bk-modal { width: min(760px, 94vw); max-height: 92vh; display: flex; flex-direction: column; position: relative; }
+.bk-modal-body { padding: 14px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.bk-modal-foot {
+  padding: 12px 18px; border-top: 1px solid rgba(255,255,255,.08);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+.bk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.bk-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.bk-field { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; }
+.bk-num { font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; }
+.bk-parkir { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+.bk-note {
+  font-size: 12px; line-height: 1.5; padding: 8px 12px; border-radius: 8px;
+  background: rgba(124,92,252,.12); border: 1px solid #7C5CFC; color: #CECBF6;
+}
+.bk-alokasi { border-top: 1px solid rgba(255,255,255,.08); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bk-alokasi-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bk-alokasi-row { display: grid; grid-template-columns: 1fr 150px auto; gap: 8px; align-items: center; }
+.bk-alokasi-row .bk-sisa { grid-column: 1 / -1; font-size: 11px; margin-top: -4px; }
+.bk-alokasi-nilai { width: 100%; }
+.bk-pick {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left;
+  padding: 6px 10px; border-radius: 6px; font-size: 12px;
+  background: rgba(2,15,28,.35); border: 1px solid rgba(255,255,255,.10); width: 100%;
+}
+.bk-pick:hover { border-color: #EF9F27; }
+.bk-seimbang { font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.bk-seimbang.pas { color: #1D9E75; }
+.bk-seimbang.timpang { color: #E24B4A; font-weight: 700; }
+.bk-galat {
+  display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.5;
+  background: rgba(226,75,74,.12); border: 1px solid #E24B4A; color: #F0A9A8;
+  border-radius: 8px; padding: 10px 12px;
+}
+
+/* Pemilih baris anggaran — overlay di dalam modal, bukan modal kedua */
+.bk-picker {
+  position: absolute; inset: 0; border-radius: 14px; display: flex; flex-direction: column;
+  background: #042C53; border: 1px solid #0C447C; z-index: 2;
+}
+.bk-picker-head { display: flex; gap: 8px; align-items: center; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.bk-picker-head .blud-imp-input { flex: 1; }
+.bk-picker-list { overflow-y: auto; flex: 1; }
+.bk-picker-item {
+  display: grid; grid-template-columns: 190px 1fr 130px; gap: 10px; align-items: center;
+  width: 100%; padding: 7px 14px; text-align: left; font-size: 12px;
+}
+.bk-picker-uraian { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-picker-sisa { text-align: right; font-family: 'JetBrains Mono', ui-monospace, monospace; color: #1D9E75; }
+.bk-picker-sisa.habis { color: #E24B4A; }
+.bk-picker-kosong { padding: 24px 16px; font-size: 12.5px; line-height: 1.6; }
+
+[data-theme="light"] .bk-panel { background: #fff; border-color: #E1E7EE; }
+[data-theme="light"] .bk-title { color: #0F0F12; }
+[data-theme="light"] .bk-warn { background: rgba(239,159,39,.10); color: #854F0B; }
+[data-theme="light"] .bk-parkir-banner { background: rgba(124,92,252,.10); color: #534AB7; }
+[data-theme="light"] .bk-table .bk-kosong { color: #6B7280; }
+[data-theme="light"] .bk-saldo-sel { background: rgba(55,138,221,.07); }
+[data-theme="light"] .bk-kode, [data-theme="light"] .bk-rek-nilai { color: #6B7280; }
+[data-theme="light"] .bk-row-parkir td { background: rgba(124,92,252,.07); }
+[data-theme="light"] .bk-tag-parkir { background: rgba(124,92,252,.12); color: #534AB7; }
+[data-theme="light"] .bk-total td { background: #F4F6F8; }
+[data-theme="light"] .bk-modal-foot { border-top-color: #E5E7EB; }
+[data-theme="light"] .bk-note { background: rgba(124,92,252,.09); color: #534AB7; }
+[data-theme="light"] .bk-alokasi { border-top-color: #E5E7EB; }
+[data-theme="light"] .bk-pick { background: #fff; border-color: #D6E3F0; }
+[data-theme="light"] .bk-galat { background: rgba(226,75,74,.08); color: #A32E2D; }
+[data-theme="light"] .bk-picker { background: #fff; border-color: #E1E7EE; }
+[data-theme="light"] .bk-picker-head { border-bottom-color: #E5E7EB; }
