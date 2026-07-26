@@ -670,6 +670,16 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
       penyimpanan berikutnya**. Zod `.passthrough()` tidak menolong karena kliennya yang
       membuang, bukan servernya. Kini dipantulkan di 3 titik: muat DPA, muat Pergeseran, dan
       Generate. Pelajaran: `.passthrough()` di server hanya menjaga separuh jalan.
+      Kolom `origin`/`usulan_item_id`/`usulan_no` ternyata ikut terbuang di jalur yang sama —
+      cacat yang sudah ada sejak sebelum modul ini, ikut sembuh oleh perbaikan yang sama.
+- [x] **Pagar kelas cacatnya** (bukan cuma tambalannya):
+      1. `lib/blud/row-map.ts` — satu-satunya tempat baris server diubah jadi baris klien.
+         Tambah kolom = ubah satu berkas; tempat pemetaan baru otomatis ikut benar.
+      2. `periksaJangkar()` di `saveDpa`/`savePergeseran` — baris yang **terbukti sama**
+         (`row_id` yang di versi terbaru sudah berjangkar) tapi datang tanpa `anggaran_key`
+         → simpan **ditolak** (`JANGKAR_HILANG`, 409). Sengaja tidak bisa ditembus `force`:
+         kehilangan jangkar tidak pernah disengaja. Baris yang benar-benar baru punya
+         `row_id` baru, jadi impor besar atau susun-ulang dari nol tidak ikut tertahan.
 - Nilai: fondasi. Tanpa ini fase berikutnya runtuh di pergeseran pertama.
 
 ### Fase 2 — Buku Kas (input)

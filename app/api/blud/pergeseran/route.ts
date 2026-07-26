@@ -6,7 +6,8 @@ import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import {
   getPergeseranHistory, getPergeseranByDate, getDpaByDate, getDpaLatestDate,
-  getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi, BludReplaceSafetyError,
+  getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi,
+  BludReplaceSafetyError, BludJangkarHilangError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { cekPaguDibawahRealisasi } from '@/lib/blud/pagu'
@@ -249,6 +250,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: false, code: 'VERSION_CONFLICT', error: err.message,
         expected: err.expected, actual: err.actual,
+      }, { status: 409 })
+    }
+    if (err instanceof BludJangkarHilangError) {
+      return NextResponse.json({
+        ok: false, code: 'JANGKAR_HILANG', error: err.message,
+        yatim: err.yatim, berjangkar: err.berjangkar,
       }, { status: 409 })
     }
     if (err instanceof BludReplaceSafetyError) {

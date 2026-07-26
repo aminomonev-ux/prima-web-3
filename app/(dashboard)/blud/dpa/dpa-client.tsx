@@ -18,6 +18,7 @@ import Tip from '@/components/ui/Tip'
 import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcDpa, recalcDpaJumlah } from '@/lib/blud/recalc'
+import { dpaKeInput } from '@/lib/blud/row-map'
 import { buildDpaRowsFromKodeBesar } from '@/lib/blud/dpa-skeleton-builder'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import BlockedModal, { type BlockedInfo } from '@/components/blud/BlockedModal'
@@ -916,24 +917,7 @@ export default function DpaClient() {
       if (ctrl.signal.aborted) return
       const json = await res.json()
       if (json.ok) {
-        setRows((json.data as DpaBaris[]).map(d => ({
-          kode_rekening:    d.kode_rekening,
-          uraian:           d.uraian,
-          vol:              d.vol,
-          satuan:           d.satuan,
-          harga:            d.harga,
-          jumlah:           d.jumlah,
-          penanggung_jawab: d.penanggung_jawab ?? '',
-          keterangan:       d.keterangan ?? '',
-          tipe_baris:       d.tipe_baris,
-          row_id:           d.row_id || `row_${d.id}`,
-          // Jangkar realisasi WAJIB dipantulkan kembali saat simpan
-          // (CONCEPT-blud-realisasi §2.3). Kalau tidak, server menganggap tiap
-          // baris lahir baru dan seluruh realisasi kehilangan jangkarnya.
-          anggaran_key:     d.anggaran_key ?? null,
-          parent_id:        d.parent_id,
-          urutan:           d.urutan,
-        })))
+        setRows((json.data as DpaBaris[]).map(dpaKeInput))
         setVersi(json.versi_tanggal || '')
         setVersion(typeof json.version === 'number' ? json.version : 0)
       }

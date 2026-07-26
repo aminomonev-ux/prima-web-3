@@ -16,6 +16,7 @@ import RowActionsMenu from '@/components/blud/RowActionsMenu'
 import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
+import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
@@ -683,26 +684,7 @@ export default function PergeseranClient() {
       if (ctrl.signal.aborted) return
       const json = await res.json()
       if (json.ok && json.data?.length) {
-        setRows((json.data as PergeseranBaris[]).map(d => ({
-          kode_rekening:       d.kode_rekening,
-          uraian:              d.uraian,
-          vol:                 d.vol,
-          satuan:              d.satuan,
-          harga:               d.harga,
-          jumlah:              d.jumlah,
-          vol_p:               d.vol_p,
-          harga_p:             d.harga_p,
-          pergeseran:          d.pergeseran,
-          bertambah_berkurang: d.bertambah_berkurang,
-          tipe_baris:          d.tipe_baris,
-          row_id:              d.row_id || `row_${d.id}`,
-          // Jangkar realisasi WAJIB dipantulkan kembali saat simpan
-          // (CONCEPT-blud-realisasi §2.3). Kalau tidak, server menganggap tiap
-          // baris lahir baru dan seluruh realisasi kehilangan jangkarnya.
-          anggaran_key:        d.anggaran_key ?? null,
-          parent_id:           d.parent_id,
-          urutan:              d.urutan,
-        })))
+        setRows((json.data as PergeseranBaris[]).map(pergeseranKeInput))
         setVersi(json.versi_tanggal || '')
         setVersion(typeof json.version === 'number' ? json.version : 0)
         const firstRow = json.data[0] as PergeseranBaris
@@ -727,24 +709,7 @@ export default function PergeseranClient() {
         return
       }
 
-      const generated: PergeseranBarisInput[] = (json.data as DpaBaris[]).map((d, i) => ({
-        kode_rekening:       d.kode_rekening,
-        uraian:              d.uraian,
-        vol:                 d.vol,
-        satuan:              d.satuan,
-        harga:               d.harga,
-        jumlah:              d.jumlah,
-        vol_p:               null,
-        harga_p:             null,
-        pergeseran:          0,
-        bertambah_berkurang: 0,
-        tipe_baris:          d.tipe_baris,
-        row_id:              d.row_id || `row_${i}`,
-        // Generate = salinan DPA, jadi jangkarnya ikut terbawa — bukan lahir baru.
-        anggaran_key:        d.anggaran_key ?? null,
-        parent_id:           d.parent_id,
-        urutan:              i,
-      }))
+      const generated: PergeseranBarisInput[] = (json.data as DpaBaris[]).map(dpaKePergeseranInput)
 
       setRows(generated)
       setDpaVersi(json.versi_tanggal || '')

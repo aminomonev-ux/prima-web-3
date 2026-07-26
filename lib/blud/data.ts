@@ -9,6 +9,7 @@
 //   kalau tidak 2 tahun disimpan tanggal sama saling menimpa (§1).
 
 import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
+import type { TxSql } from '@/lib/data/db'
 import { assertBludVersion, bumpBludVersion, dropBludVersion, getBludVersion, bludVersiKey } from './lock'
 import { ensureAnggaranKey } from './anggaran-key'
 import type {
@@ -28,6 +29,61 @@ export class BludReplaceSafetyError extends Error {
     )
     this.name = 'BludReplaceSafetyError'
   }
+}
+
+/**
+ * Pagar jangkar (CONCEPT-blud-realisasi §2.3). Baris yang SAMA — terbukti dari
+ * `row_id` yang sudah pernah berjangkar — tidak boleh datang tanpa jangkarnya.
+ * Kalau dibiarkan, `ensureAnggaranKey` mencetak kunci baru dan seluruh realisasi
+ * yang menempel di baris itu jadi yatim tanpa satu pun pesan galat.
+ *
+ * Ini pernah terjadi sungguhan: klien DPA & Pergeseran menyusun ulang baris
+ * dengan daftar kolom tetap dan `anggaran_key` tidak masuk daftar. Zod
+ * `.passthrough()` tidak menolong — yang membuang kliennya, bukan servernya.
+ */
+export class BludJangkarHilangError extends Error {
+  constructor(public table: string, public yatim: number, public berjangkar: number) {
+    super(
+      `Simpan dibatalkan: ${yatim} dari ${berjangkar} baris berjangkar dikirim tanpa anggaran_key. ` +
+      `Baris itu sudah punya realisasi yang menempel — menyimpannya sekarang akan memutus tautannya. ` +
+      `Muat ulang halaman lalu ulangi; kalau tetap muncul, ada jalur simpan yang membuang anggaran_key.`,
+    )
+    this.name = 'BludJangkarHilangError'
+  }
+}
+
+/**
+ * Dijalankan DI DALAM transaksi simpan, sebelum DELETE. Pembandingnya versi
+ * TERBARU tahun itu — bukan versi yang sedang ditimpa — supaya versi baru yang
+ * lahir tanpa jangkar pun ketahuan.
+ */
+async function periksaJangkar(
+  tx: TxSql,
+  table: 'dpa_blud' | 'pergeseran_dpa',
+  tahun: number,
+  rows: { row_id: string; anggaran_key?: string | null }[],
+): Promise<void> {
+  const lama = table === 'dpa_blud'
+    ? await tx`
+        SELECT row_id FROM dpa_blud
+        WHERE tahun_anggaran = ${tahun} AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+          AND versi_tanggal = (SELECT MAX(versi_tanggal) FROM dpa_blud WHERE tahun_anggaran = ${tahun})
+      `
+    : await tx`
+        SELECT row_id FROM pergeseran_dpa
+        WHERE tahun_anggaran = ${tahun} AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+          AND versi_tanggal = (SELECT MAX(versi_tanggal) FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun})
+      `
+  const berjangkar = new Set(
+    (lama as { row_id?: unknown }[]).map(r => String(r.row_id ?? '')).filter(Boolean),
+  )
+  if (!berjangkar.size) return
+  // Baris yang benar-benar baru punya row_id baru pula, jadi tidak pernah cocok
+  // di sini — impor besar atau susun ulang dari nol tidak akan ikut tertahan.
+  const yatim = rows.filter(
+    r => berjangkar.has(r.row_id) && !String(r.anggaran_key ?? '').trim(),
+  ).length
+  if (yatim > 0) throw new BludJangkarHilangError(table, yatim, berjangkar.size)
 }
 
 // Pool config `timezone: '+07:00'` → mysql2 interpret DATE column sebagai
@@ -178,6 +234,9 @@ export async function saveDpa(
     if (!force && existing > 0 && incoming < existing * SAFE_DROP_THRESHOLD) {
       throw new BludReplaceSafetyError('dpa_blud', existing, incoming, ((existing - incoming) / existing) * 100)
     }
+    // Sengaja TIDAK bisa ditembus `force`: kehilangan jangkar tidak pernah
+    // disengaja, dan akibatnya (realisasi yatim) tidak terlihat di layar mana pun.
+    await periksaJangkar(tx, 'dpa_blud', tahun, rows)
     await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('dpa_blud', DPA_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
@@ -290,6 +349,7 @@ export async function savePergeseran(
     if (!force && existing > 0 && incoming < existing * SAFE_DROP_THRESHOLD) {
       throw new BludReplaceSafetyError('pergeseran_dpa', existing, incoming, ((existing - incoming) / existing) * 100)
     }
+    await periksaJangkar(tx, 'pergeseran_dpa', tahun, rows)
     await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('pergeseran_dpa', PERGESERAN_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)

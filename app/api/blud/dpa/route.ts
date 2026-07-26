@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError } from '@/lib/blud/data'
+import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
 import { isBludRole, DpaBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
@@ -169,6 +169,15 @@ export async function POST(req: NextRequest) {
         error:    err.message,
         expected: err.expected,
         actual:   err.actual,
+      }, { status: 409 })
+    }
+    if (err instanceof BludJangkarHilangError) {
+      return NextResponse.json({
+        ok:         false,
+        code:       'JANGKAR_HILANG',
+        error:      err.message,
+        yatim:      err.yatim,
+        berjangkar: err.berjangkar,
       }, { status: 409 })
     }
     if (err instanceof BludReplaceSafetyError) {
