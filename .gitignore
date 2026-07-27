@@ -3,6 +3,13 @@
 # Local archive (file sementara, tidak perlu di-track)
 /_archive
 
+# Repositori ini PUBLIK. Dua jenis berkas berikut sengaja hanya hidup di
+# komputer lokal — bukan karena sementara, tapi karena isinya tidak boleh
+# terbit: data keuangan nyata dan laporan temuan keamanan yang belum ditutup.
+/docs/*.xls
+/docs/*.xlsx
+/docs/AUDIT-*.md
+
 # dependencies
 /node_modules
 /.pnp
