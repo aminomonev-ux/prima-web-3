@@ -10,7 +10,14 @@
 
 import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
 import type { TxSql } from '@/lib/data/db'
-import { assertBludVersion, bumpBludVersion, dropBludVersion, getBludVersion, bludVersiKey } from './lock'
+import {
+  assertBludVersion, bumpBludVersion, dropBludVersion, getBludVersion, bludVersiKey,
+  acquireBludLock, BLUD_PAGU_ENTITY, bludPaguKey,
+} from './lock'
+// Tipe saja — `pagu.ts` mengimpor `toDateStr` dari berkas ini, jadi impor nilai
+// akan membuat lingkaran modul. Bentuk hasilnya sengaja sama dengan pagar §4.3
+// supaya panel bentrok di layar Pengaturan bisa memakai komponen yang sama.
+import type { BentrokPagu } from './pagu'
 import { ensureAnggaranKey } from './anggaran-key'
 import type {
   DpaBaris, DpaBarisInput,
@@ -49,6 +56,175 @@ export class BludJangkarHilangError extends Error {
       `Muat ulang halaman lalu ulangi; kalau tetap muncul, ada jalur simpan yang membuang anggaran_key.`,
     )
     this.name = 'BludJangkarHilangError'
+  }
+}
+
+/**
+ * T1 — versi yang dihapus masih menyangga realisasi. Jalur SIMPAN dijaga tiga
+ * lapis (`periksaJangkar`, `cekPaguDibawahRealisasi`, ambang penurunan baris);
+ * jalur HAPUS dulu tidak punya satu pun, padahal akibatnya identik dan justru
+ * lebih senyap: `getPaguEfektif` selalu mengambil versi TERBARU, jadi menghapus
+ * versi teratas memundurkan pagu SETAHUN penuh sementara alokasinya tetap tinggal.
+ */
+export class BludVersiTerpakaiError extends Error {
+  constructor(public bentrok: BentrokPagu[], public penerus: string | null) {
+    const t = bentrok[0]
+    const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
+    super(
+      `Versi ini masih menyangga ${bentrok.length} baris anggaran yang sudah dipakai transaksi — `
+      + `${t.kode_rekening} ${t.hilang ? 'hilang' : `turun ke ${rp(t.pagu_baru)}`} padahal sudah terserap ${rp(t.terserap)}. `
+      + (penerus
+        ? `Sesudah dihapus, pagu setahun mundur ke versi ${penerus}.`
+        : 'Sesudah dihapus, tahun ini tidak punya pagu sama sekali dan seluruh realisasinya jadi yatim.'),
+    )
+    this.name = 'BludVersiTerpakaiError'
+  }
+}
+
+/** T1 — DPA yang masih jadi acuan sebuah Pergeseran (soft-FK `dpa_versi_tanggal`). */
+export class BludVersiDirujukError extends Error {
+  constructor(public versi: string, public perujuk: string[]) {
+    super(
+      `Versi DPA ${versi} masih jadi acuan ${perujuk.length} versi Pergeseran `
+      + `(${perujuk.join(', ')}). Hapus pergeserannya dulu.`,
+    )
+    this.name = 'BludVersiDirujukError'
+  }
+}
+
+interface BarisPaguVersi { kode_rekening: string; uraian: string; pagu: number }
+
+async function barisBerjangkar(
+  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
+): Promise<Map<string, BarisPaguVersi>> {
+  const rows = table === 'dpa_blud'
+    ? await tx`
+        SELECT anggaran_key, kode_rekening, uraian, jumlah AS pagu FROM dpa_blud
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
+          AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+      `
+    : await tx`
+        SELECT anggaran_key, kode_rekening, uraian, pergeseran AS pagu FROM pergeseran_dpa
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
+          AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+      `
+  const map = new Map<string, BarisPaguVersi>()
+  for (const r of rows as Record<string, unknown>[]) {
+    map.set(String(r.anggaran_key), {
+      kode_rekening: String(r.kode_rekening ?? ''),
+      uraian: String(r.uraian ?? ''),
+      pagu: Number(r.pagu ?? 0),
+    })
+  }
+  return map
+}
+
+async function versiSebelum(
+  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
+): Promise<string | null> {
+  const rows = table === 'dpa_blud'
+    ? await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal < ${versi}`
+    : await tx`SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal < ${versi}`
+  const v = (rows as { v?: unknown }[])[0]?.v
+  return v ? toDateStr(v) : null
+}
+
+/**
+ * Pagu tahun itu SESUDAH versi ini hilang. `null` = versi ini bukan sumber pagu
+ * yang sedang berlaku, jadi menghapusnya tidak menggeser pagu sama sekali
+ * (mis. versi DPA lama di tahun yang sudah punya Pergeseran).
+ *
+ * Aturan penerusnya persis `getPaguSumber`: Pergeseran terbaru menang atas DPA,
+ * dan yang dipakai selalu `MAX(versi_tanggal)`.
+ */
+async function paguPenerus(
+  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
+): Promise<{ rows: Map<string, BarisPaguVersi>; versi: string | null } | null> {
+  const pgs = await tx`SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
+  const maxPergeseran = pgs[0]?.v ? toDateStr(pgs[0].v) : null
+
+  if (table === 'dpa_blud') {
+    if (maxPergeseran) return null // pagu diambil dari Pergeseran, DPA tidak menyentuhnya
+    const dpa = await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
+    if (!dpa[0]?.v || toDateStr(dpa[0].v) !== versi) return null
+    const penerus = await versiSebelum(tx, 'dpa_blud', tahun, versi)
+    return {
+      rows: penerus ? await barisBerjangkar(tx, 'dpa_blud', tahun, penerus) : new Map(),
+      versi: penerus,
+    }
+  }
+
+  if (maxPergeseran !== versi) return null
+  const penerus = await versiSebelum(tx, 'pergeseran_dpa', tahun, versi)
+  if (penerus) {
+    return { rows: await barisBerjangkar(tx, 'pergeseran_dpa', tahun, penerus), versi: penerus }
+  }
+  // Pergeseran terakhir hilang → pagu jatuh kembali ke DPA terbaru.
+  const dpa = await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
+  const dpaVersi = dpa[0]?.v ? toDateStr(dpa[0].v) : null
+  return {
+    rows: dpaVersi ? await barisBerjangkar(tx, 'dpa_blud', tahun, dpaVersi) : new Map(),
+    versi: dpaVersi,
+  }
+}
+
+/**
+ * T1 — dijalankan DI DALAM transaksi hapus, sebelum DELETE.
+ *
+ * Kunci pagu diambil untuk setiap `anggaran_key` yang punya alokasi, urut MENAIK
+ * — entity & urutan yang sama dengan `kunciDanPeriksaPagu`, jadi jaminan
+ * bebas-deadlock §5.3 tetap utuh dan transaksi realisasi yang sedang berjalan
+ * tidak bisa menyelinap di antara pemeriksaan ini dan DELETE-nya.
+ *
+ * Sisa risiko yang diterima sadar: rekening yang BELUM pernah punya alokasi tidak
+ * ikut dikunci, jadi transaksi pertama untuk rekening itu masih bisa berbarengan
+ * dengan penghapusan versi. Mengunci seluruh baris DPA (ratusan) untuk menutup
+ * celah itu membuat operasi hapus jadi ratusan round-trip — harganya tidak sepadan.
+ */
+async function pagarHapusVersi(
+  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
+): Promise<void> {
+  const penerus = await paguPenerus(tx, table, tahun, versi)
+  if (!penerus) return
+
+  const kunciRows = await tx`
+    SELECT DISTINCT anggaran_key FROM blud_realisasi_alokasi
+    WHERE tahun_anggaran = ${tahun} AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+  ` as { anggaran_key?: unknown }[]
+  const kunci = kunciRows.map(r => String(r.anggaran_key ?? '')).filter(Boolean).sort((a, b) => a.localeCompare(b))
+  if (!kunci.length) return
+
+  for (const k of kunci) await acquireBludLock(tx, BLUD_PAGU_ENTITY, bludPaguKey(tahun, k))
+
+  const lama = await barisBerjangkar(tx, table, tahun, versi)
+  const bentrok: BentrokPagu[] = []
+  for (const k of kunci) {
+    // FOR UPDATE, bukan SELECT biasa: pada REPEATABLE READ snapshot dibaca dari
+    // pernyataan pertama transaksi ini — yaitu sebelum kuncinya didapat (L55).
+    const rows = await tx`
+      SELECT COALESCE(SUM(nilai), 0) AS n FROM blud_realisasi_alokasi
+      WHERE tahun_anggaran = ${tahun} AND anggaran_key = ${k} FOR UPDATE
+    ` as { n?: unknown }[]
+    const terserap = Number(rows[0]?.n ?? 0)
+    if (terserap <= 0) continue
+
+    const b = penerus.rows.get(k)
+    const paguBaru = b?.pagu ?? 0
+    if (paguBaru >= terserap) continue
+    const l = lama.get(k)
+    bentrok.push({
+      anggaran_key:  k,
+      kode_rekening: b?.kode_rekening || l?.kode_rekening || '(tidak diketahui)',
+      uraian:        b?.uraian || l?.uraian || '',
+      pagu_baru:     paguBaru,
+      terserap,
+      minus:         terserap - paguBaru,
+      hilang:        !b,
+    })
+  }
+  if (bentrok.length) {
+    bentrok.sort((a, b) => b.minus - a.minus)
+    throw new BludVersiTerpakaiError(bentrok, penerus.versi)
   }
 }
 
@@ -285,6 +461,18 @@ export async function deleteDpaVersi(tahun: number, versiTanggal: string): Promi
   let dpaCount = 0
   let rekapCount = 0
   await withTransaction(async ({ tx }) => {
+    // T1: dua pagar sebelum apa pun terhapus — realisasi yang menggantung, dan
+    // soft-FK `pergeseran_dpa.dpa_versi_tanggal` yang akan menunjuk ke ruang kosong.
+    const perujuk = await tx`
+      SELECT DISTINCT versi_tanggal FROM pergeseran_dpa
+      WHERE tahun_anggaran = ${tahun} AND dpa_versi_tanggal = ${versiTanggal}
+      ORDER BY versi_tanggal
+    ` as { versi_tanggal?: unknown }[]
+    if (perujuk.length) {
+      throw new BludVersiDirujukError(versiTanggal, perujuk.map(r => toDateStr(r.versi_tanggal)))
+    }
+    await pagarHapusVersi(tx, 'dpa_blud', tahun, versiTanggal)
+
     // 1. Hapus rekap_pk dulu (FK ref ke versi_dpa — soft, table standalone)
     // L53: tx wrapper return Array<{affectedRows}>, BUKAN object. Cast object
     // langsung → diam-diam selalu 0 (audit log + response palsu "0 baris dihapus").
@@ -399,6 +587,9 @@ export async function deletePergeseranVersi(tahun: number, versiTanggal: string)
   const lockKey = bludVersiKey(tahun, versiTanggal)
   let count = 0
   await withTransaction(async ({ tx }) => {
+    // T1: menghapus Pergeseran TERBARU memundurkan pagu setahun penuh ke versi
+    // sebelumnya (atau jatuh ke DPA) sementara alokasinya tetap tinggal.
+    await pagarHapusVersi(tx, 'pergeseran_dpa', tahun, versiTanggal)
     // L53: tx wrapper return Array<{affectedRows}>, akses lewat [0].
     const res = await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as unknown as Array<{ affectedRows: number }>
     count = Number(res[0]?.affectedRows ?? 0)

@@ -163,6 +163,39 @@ for (const [nama, body, harapLolos] of KASUS_SKEMA) {
   periksa(nama.padEnd(46), benar, ` ${pesan}`)
 }
 
-const total = KASUS.length + 4 + KASUS_SKEMA.length
+// ─── Lapis 3: S1 — tanggal terikat ke (tahun, bulan) ────────────────────────
+// BKU & Tutup Kas mengelompokkan dari kolom `bulan`, lembar GU & register dari
+// kolom `tanggal`. Selama keduanya lepas, dua lembar dari data yang sama bisa
+// tidak cocok — dan tanggal di bulan yang sudah ditutup bisa disusupkan lewat
+// bulan yang masih buka.
+const { CreateTxBodySchema } = skema
+const txSah = { ...txDasar, jenis: 'BELANJA', kas_keluar: 1e6, alokasi: [{ anggaran_key: KEY, nilai: 1e6 }] }
+
+/** [nama, body, apakah skema harus MENERIMA] */
+const KASUS_TANGGAL = [
+  ['Tanggal di dalam bulannya diterima',
+    { tahun_anggaran: 2026, bulan: 6, transaksi: { ...txSah, tanggal: '2026-06-15' } }, true],
+  ['Tanggal bulan lain ditolak',
+    { tahun_anggaran: 2026, bulan: 7, transaksi: { ...txSah, tanggal: '2026-06-30' } }, false],
+  ['Tanggal tahun lain ditolak',
+    { tahun_anggaran: 2026, bulan: 7, transaksi: { ...txSah, tanggal: '2025-07-15' } }, false],
+  // Awalan wajib ber-padding: tanpa itu `2026-1-` cocok dengan Oktober–Desember.
+  ['Oktober tidak lolos sebagai Januari',
+    { tahun_anggaran: 2026, bulan: 1, transaksi: { ...txSah, tanggal: '2026-10-01' } }, false],
+  ['Bulan satu digit tetap cocok',
+    { tahun_anggaran: 2026, bulan: 9, transaksi: { ...txSah, tanggal: '2026-09-05' } }, true],
+  ['Tanggal terakhir bulan diterima',
+    { tahun_anggaran: 2026, bulan: 2, transaksi: { ...txSah, tanggal: '2026-02-28' } }, true],
+]
+
+console.log('\n── Lapis 3: CreateTxBodySchema — tanggal ↔ (tahun, bulan) ──')
+for (const [nama, body, harapLolos] of KASUS_TANGGAL) {
+  const hasil = CreateTxBodySchema.safeParse(body)
+  const benar = hasil.success === harapLolos
+  const pesan = hasil.success ? 'diterima' : `ditolak: ${hasil.error.issues[0]?.message?.slice(0, 58) ?? ''}`
+  periksa(nama.padEnd(46), benar, ` ${pesan}`)
+}
+
+const total = KASUS.length + 4 + KASUS_SKEMA.length + KASUS_TANGGAL.length
 console.log(gagal === 0 ? `\n${total} pemeriksaan LULUS` : `\n${gagal} dari ${total} pemeriksaan GAGAL`)
 process.exit(gagal === 0 ? 0 : 1)

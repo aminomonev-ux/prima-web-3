@@ -92,7 +92,12 @@ interface PotonganUI { jenis: JenisPotongan; keterangan: string; nilai: number }
 // cukup diambil dari prop saat mount — tanpa effect yang me-reset state
 // (react-hooks/set-state-in-effect).
 export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onSaved }: Props) {
-  const [tanggal, setTanggal] = useState(awal?.tanggal ?? `${tahun}-${String(bulan).padStart(2, '0')}-01`)
+  // S1: transaksi tercatat di (tahun, bulan) yang sedang dibuka, jadi tanggalnya
+  // dikurung di bulan itu. Server tetap menolak yang di luar — ini supaya orangnya
+  // tidak sampai mengetiknya.
+  const awalBulan = `${tahun}-${String(bulan).padStart(2, '0')}-01`
+  const akhirBulan = `${tahun}-${String(bulan).padStart(2, '0')}-${String(new Date(tahun, bulan, 0).getDate()).padStart(2, '0')}`
+  const [tanggal, setTanggal] = useState(awal?.tanggal ?? awalBulan)
   const [jenis, setJenis] = useState<JenisTransaksi>((awal?.jenis as JenisTransaksi) ?? 'BELANJA')
   const [uraian, setUraian] = useState(awal?.uraian ?? '')
   const [kasKeluar, setKasKeluar] = useState(awal?.kas_keluar ?? 0)
@@ -290,7 +295,8 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
           <div className="bk-grid">
             <label className="bk-field">
               <span className="blud-imp-muted">Tanggal</span>
-              <input type="date" className="blud-imp-input" value={tanggal} onChange={e => setTanggal(e.target.value)} />
+              <input type="date" className="blud-imp-input" value={tanggal} min={awalBulan} max={akhirBulan}
+                onChange={e => setTanggal(e.target.value)} />
             </label>
             <div className="bk-field">
               <span className="blud-imp-muted">Jenis</span>

@@ -7,7 +7,7 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import {
   getPergeseranHistory, getPergeseranByDate, getDpaByDate, getDpaLatestDate,
   getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi,
-  BludReplaceSafetyError, BludJangkarHilangError,
+  BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { cekPaguDibawahRealisasi } from '@/lib/blud/pagu'
@@ -319,6 +319,21 @@ export async function DELETE(req: NextRequest) {
       ...result,
     })
   } catch (err) {
+    // T1: menghapus pergeseran terbaru memundurkan pagu setahun — ditahan kalau
+    // ada baris yang jadi minus. Bentuk `detail` sama dengan §4.3 di jalur simpan.
+    if (err instanceof BludVersiTerpakaiError) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_DELETE_PERGESERAN_VERSI',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `DITOLAK — hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${err.message}`,
+      })
+      return NextResponse.json({
+        ok: false, code: 'VERSI_TERPAKAI', error: err.message,
+        detail: err.bentrok, penerus: err.penerus,
+      }, { status: 409 })
+    }
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes('tidak ditemukan')) {
       return NextResponse.json({ ok: false, error: msg }, { status: 404 })

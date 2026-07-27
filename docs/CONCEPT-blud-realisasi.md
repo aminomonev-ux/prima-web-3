@@ -891,6 +891,8 @@ Tidak ada lagi yang menunggu konfirmasi. Sisa pertanyaan lapangan (mis. format n
 | 31 | **Rentang GU dicatat manusia** (`blud_gu_periode`), tidak diterka dari transaksi. Satu bulan boleh beberapa pengajuan; rentang tak boleh tindih; nomor urut ditentukan server dari tanggal mulai |
 | 32 | **Arus kas bersih di Tutup Kas**: pemindahan bank↔kas tidak dihitung sebagai penerimaan/pengeluaran (`SUM(GREATEST(masuk − keluar, 0))` per baris). Saldo akhir identik, dua angka yang ditandatangani jadi jujur |
 | 33 | **`pengantar` & `SPJ` memakai jumlah ALOKASI**, bukan arus kas keluar — di berkas asli keduanya angka yang sama persis. Transaksi terparkir & pemindahan bank tidak ikut |
+| 37 | **Versi anggaran yang menyangga realisasi tidak bisa dihapus** (audit T1). Pagu selalu dari `MAX(versi_tanggal)`, jadi menghapus versi teratas memundurkan pagu setahun penuh sementara alokasinya tetap tinggal. Tidak ada `force`: pergeseran yang dipaksa turun masih meninggalkan barisnya, versi yang dihapus tidak. DPA yang masih jadi acuan Pergeseran juga ditolak |
+| 38 | **`tanggal` transaksi terikat ke `(tahun_anggaran, bulan)` barisnya** (audit S1). BKU & Tutup Kas mengelompokkan dari `bulan`, lembar GU & register dari `tanggal` — selama keduanya lepas, dua lembar dari data yang sama bisa tidak cocok, dan bulan yang sudah ditutup bisa disusupi lewat bulan yang masih buka |
 
 > Referensi: `docs/CONCEPT-blud-tahun-anggaran.md` (sudah dieksekusi) · `docs/CONCEPT-menu-access-control.md`
 > (Fase 0) · `docs/TUTORIAL-blud.md` · pola L48 CAS, L51 optimistic lock, L55 atomik, L58 ConfirmDialog.

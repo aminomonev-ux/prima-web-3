@@ -47,6 +47,11 @@ export const TanggalTxSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal harus format YYYY-MM-DD')
   .refine((v) => !Number.isNaN(new Date(v).getTime()), 'Tanggal tidak valid')
 
+/** Awalan `YYYY-MM-` sebuah periode — pengikat `tanggal` ke `(tahun, bulan)`. */
+export function awalanBulan(tahun: number, bulan: number): string {
+  return `${tahun}-${String(bulan).padStart(2, '0')}-`
+}
+
 /**
  * `nilai` bertanda: positif membebani pagu, negatif mengembalikannya (jenis
  * PENGEMBALIAN). Tandanya diperiksa terhadap sifat transaksi di superRefine —
@@ -174,10 +179,24 @@ export const TransaksiInputSchema = z.object({
 })
 export type TransaksiInput = z.infer<typeof TransaksiInputSchema>
 
+/**
+ * S1: `tanggal` diikat ke `(tahun_anggaran, bulan)`. Tanpa ini keduanya jadi dua
+ * nilai lepas, dan dua kelompok lembar SPJ mengelompokkan dari sumber berbeda —
+ * BKU/Tutup Kas dari kolom `bulan`, lembar GU & register dari kolom `tanggal`.
+ * Cukup satu salah ketik untuk membuat dua lembar dari data yang sama tak cocok,
+ * atau menyusupkan tanggal ke bulan yang sudah ditutup lewat bulan yang buka.
+ */
 export const CreateTxBodySchema = z.object({
   tahun_anggaran: z.coerce.number().int().gte(2000).lte(2100),
   bulan: BulanSchema,
   transaksi: TransaksiInputSchema,
+}).superRefine((v, ctx) => {
+  if (!v.transaksi.tanggal.startsWith(awalanBulan(v.tahun_anggaran, v.bulan))) {
+    ctx.addIssue({
+      code: 'custom', path: ['transaksi', 'tanggal'],
+      message: `Tanggal harus berada di dalam bulan ${v.bulan}/${v.tahun_anggaran} — periode itu yang sedang dibuka.`,
+    })
+  }
 })
 
 export const UpdateTxBodySchema = z.object({
@@ -265,8 +284,7 @@ export const SimpanGuBodySchema = z.object({
   bulan: BulanSchema,
   periode: z.array(GuPeriodeSchema).max(10, 'Maksimal 10 pengajuan GU per bulan'),
 }).superRefine((v, ctx) => {
-  const bl = String(v.bulan).padStart(2, '0')
-  const awalan = `${v.tahun_anggaran}-${bl}-`
+  const awalan = awalanBulan(v.tahun_anggaran, v.bulan)
   for (const p of v.periode) {
     if (!p.tgl_awal.startsWith(awalan) || !p.tgl_akhir.startsWith(awalan)) {
       ctx.addIssue({ code: 'custom', path: ['periode'], message: 'Rentang GU harus berada di dalam bulan yang dipilih' })
@@ -321,6 +339,22 @@ export class BludPeriodeTertutupError extends Error {
   constructor(public tahun: number, public bulan: number) {
     super(`Periode ${bulan}/${tahun} sudah ditutup. Minta SUPER_ADMIN membuka kembali.`)
     this.name = 'BludPeriodeTertutupError'
+  }
+}
+
+/**
+ * S1 — pasangan pagar Zod di sisi data layer. Jalur PATCH tidak pernah menerima
+ * `bulan` dari klien (diambil dari baris DB), jadi pemeriksaannya memang hanya
+ * bisa dilakukan di sini, sesudah bulan aslinya terbaca.
+ */
+export class BludTanggalDiLuarBulanError extends Error {
+  constructor(public tahun: number, public bulan: number, public tanggal: string) {
+    super(
+      `Tanggal ${tanggal} berada di luar bulan ${bulan}/${tahun}. `
+      + 'Transaksi tercatat di bulan itu, jadi tanggalnya harus ikut — kalau memang bulan lain, '
+      + 'buka bulan tersebut lalu catat di sana.',
+    )
+    this.name = 'BludTanggalDiLuarBulanError'
   }
 }
 

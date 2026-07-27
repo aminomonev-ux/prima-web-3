@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError } from '@/lib/blud/data'
+import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
 import { isBludRole, DpaBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
@@ -241,6 +241,27 @@ export async function DELETE(req: NextRequest) {
       ...result,
     })
   } catch (err) {
+    // T1: ditahan pagar hapus — 409 dengan daftar barisnya, bentuk sama dengan
+    // §4.3 di jalur simpan supaya panel bentrok di klien bisa dipakai ulang.
+    if (err instanceof BludVersiTerpakaiError || err instanceof BludVersiDirujukError) {
+      // Percobaan hapus yang ditahan tetap dicatat: yang gagal hari ini biasanya
+      // dicoba lagi besok lewat jalan lain.
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_DELETE_DPA_VERSI',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `DITOLAK — hapus DPA ${parsedTahun.data}/${parsed.data}: ${err.message}`,
+      })
+      return err instanceof BludVersiTerpakaiError
+        ? NextResponse.json({
+            ok: false, code: 'VERSI_TERPAKAI', error: err.message,
+            detail: err.bentrok, penerus: err.penerus,
+          }, { status: 409 })
+        : NextResponse.json({
+            ok: false, code: 'VERSI_DIRUJUK', error: err.message, perujuk: err.perujuk,
+          }, { status: 409 })
+    }
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes('tidak ditemukan')) {
       return NextResponse.json({ ok: false, error: msg }, { status: 404 })

@@ -283,7 +283,7 @@ Tabel BKU: `No · Tanggal · Kwt · Uraian · Rekening · Kas Masuk · Kas Kelua
 #### Modal "Transaksi Baru"
 | No | Elemen PERSIS | Aturan |
 |---|---|---|
-| 1 | **Tanggal** | `YYYY-MM-DD`, wajib |
+| 1 | **Tanggal** | `YYYY-MM-DD`, wajib, dan **harus di dalam bulan yang sedang dibuka** — kalender dibatasi, server menolak yang di luar (S1). Alasannya: BKU & Tutup Kas mengelompokkan dari kolom `bulan`, sedangkan lembar GU & register dari kolom `tanggal`. Kalau keduanya boleh beda, dua lembar dari data yang sama bisa tidak cocok |
 | 2 | **Jenis** (`OpsiDropdown`) | `BELANJA` · `AMBIL_BANK` · `SETOR_BANK` · `PENERIMAAN` · `PENGEMBALIAN` · `LAIN` |
 | 3 | **Uraian** | 1–2000 karakter, wajib |
 | 4 | **Kas keluar / Bank keluar / Kas masuk / Bank masuk** | Minimal salah satu > 0. Kas masuk **dan** kas keluar bersamaan → ditolak (idem bank). `AMBIL_BANK`/`SETOR_BANK` wajib **netral**: nilai masuk = nilai keluar |
@@ -482,6 +482,17 @@ Dua bagian: **Pejabat penanda tangan SPJ** (§3.4) dan **pengelolaan versi**.
 | 1 | Section **Versi DPA** / **Versi Pergeseran** | Lihat daftar versi | Riwayat lengkap |
 | 2 | Ikon hapus versi | Klik → modal | Muncul **kode konfirmasi** acak |
 | 3 | Ketik kode → konfirmasi | Klik | Versi dihapus · rate-limited · audit `BLUD_DELETE_DPA_VERSI` / `BLUD_DELETE_PERGESERAN_VERSI` |
+| 4 | Panel **"Hapus ditahan"** | Muncul sendiri | Versi yang masih menyangga realisasi **tidak bisa dihapus** — panel menampilkan tiap baris beserta pagu penerus, serapan, dan selisih minusnya |
+
+> **Kenapa hapus bisa ditahan (T1).** Pagu selalu diambil dari versi TERBARU. Menghapus
+> versi teratas memundurkan pagu **setahun penuh** ke versi sebelumnya, sementara
+> transaksi yang sudah dicatat tetap menempel di baris anggaran lamanya — serapan bisa
+> langsung melampaui pagu tanpa satu pun peringatan. Tidak ada tombol paksa di sini:
+> pergeseran yang dipaksa turun masih meninggalkan barisnya, tapi versi yang dihapus
+> hilang selamanya. Kalau memang harus dihapus, hapus dulu transaksi yang memakainya.
+>
+> Versi DPA yang masih jadi **acuan** sebuah Pergeseran juga ditolak — hapus
+> pergeserannya lebih dulu.
 
 ---
 

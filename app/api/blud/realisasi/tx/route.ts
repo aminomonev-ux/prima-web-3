@@ -17,7 +17,7 @@ import {
   CreateTxBodySchema, UpdateTxBodySchema, ListTxQuerySchema,
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
   BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
-  BludSerapanNegatifError, BludPotonganTidakSahError,
+  BludSerapanNegatifError, BludPotonganTidakSahError, BludTanggalDiLuarBulanError,
 } from '@/lib/blud/realisasi-schemas'
 import { bolehInput, bolehLihat, forbidden, unauthorized } from '../_guard'
 
@@ -48,6 +48,9 @@ function petakanError(err: unknown): NextResponse | null {
   }
   if (err instanceof BludSerapanNegatifError) {
     return NextResponse.json({ ok: false, code: 'SERAPAN_NEGATIF', error: err.message }, { status: 409 })
+  }
+  if (err instanceof BludTanggalDiLuarBulanError) {
+    return NextResponse.json({ ok: false, code: 'TANGGAL_LUAR_BULAN', error: err.message }, { status: 400 })
   }
   return null
 }

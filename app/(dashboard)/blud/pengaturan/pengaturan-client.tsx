@@ -30,6 +30,20 @@ type DeleteTarget =
   | { kind: 'dpa'; tahun: number; versi: string; baris: number }
   | { kind: 'pergeseran'; tahun: number; versi: string; baris: number; dpaVersi: string }
 
+/** Baris yang jadi minus kalau versi ini dihapus — bentuknya sama dgn pagar §4.3. */
+interface BentrokPagu {
+  kode_rekening: string
+  uraian:        string
+  pagu_baru:     number
+  terserap:      number
+  minus:         number
+  hilang:        boolean
+}
+/** T1: hapus ditahan server. Daftar barisnya tidak muat di toast — dipanel-kan. */
+type Tertahan =
+  | { kode: 'VERSI_TERPAKAI'; pesan: string; detail: BentrokPagu[]; penerus: string | null }
+  | { kode: 'VERSI_DIRUJUK';  pesan: string; perujuk: string[] }
+
 // Generate kode konfirmasi 4-digit random (1000-9999)
 function generateConfirmCode(): string {
   return String(Math.floor(1000 + Math.random() * 9000))
@@ -53,6 +67,7 @@ export default function PengaturanClient() {
   const [expectCode, setExpectCode] = useState('')           // kode random yang harus diketik user
   const [typedCode,  setTypedCode]  = useState('')           // input user
   const [deleting,   setDeleting]   = useState(false)
+  const [tertahan,   setTertahan]   = useState<Tertahan | null>(null)
   const codeMatches = useMemo(() => typedCode === expectCode && expectCode !== '', [typedCode, expectCode])
 
   // ─── Data fetch ────────────────────────────────────────────────────────────
@@ -98,12 +113,24 @@ export default function PengaturanClient() {
   async function executeDelete() {
     if (!target || !codeMatches) return
     setDeleting(true)
+    setTertahan(null)
     try {
       const path = target.kind === 'dpa' ? '/api/blud/dpa' : '/api/blud/pergeseran'
       const res  = await fetch(`${path}?tahun=${target.tahun}&versi=${encodeURIComponent(target.versi)}`, { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok || !json.ok) {
         if (res.status === 429) throw new Error(json.error || 'Terlalu banyak permintaan')
+        // T1: ditahan pagar hapus. Tidak ada tombol paksa — versi yang menyangga
+        // realisasi memang tidak boleh hilang, jadi yang ditampilkan adalah
+        // barisnya, bukan tawaran untuk menembusnya.
+        if (res.status === 409 && json.code === 'VERSI_TERPAKAI') {
+          setTertahan({ kode: 'VERSI_TERPAKAI', pesan: json.error, detail: json.detail ?? [], penerus: json.penerus ?? null })
+          return
+        }
+        if (res.status === 409 && json.code === 'VERSI_DIRUJUK') {
+          setTertahan({ kode: 'VERSI_DIRUJUK', pesan: json.error, perujuk: json.perujuk ?? [] })
+          return
+        }
         throw new Error(json.error || 'Gagal hapus')
       }
       showToast(json.message || 'Versi berhasil dihapus', true)
@@ -120,16 +147,19 @@ export default function PengaturanClient() {
     setTarget(null)
     setExpectCode('')
     setTypedCode('')
+    setTertahan(null)
   }
   function openDeleteDpa(v: DpaVersi) {
     setTarget({ kind: 'dpa', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris })
     setExpectCode(generateConfirmCode())
     setTypedCode('')
+    setTertahan(null)
   }
   function openDeletePerg(v: PergeseranVersi) {
     setTarget({ kind: 'pergeseran', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris, dpaVersi: v.dpa_versi_tanggal })
     setExpectCode(generateConfirmCode())
     setTypedCode('')
+    setTertahan(null)
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -257,6 +287,10 @@ export default function PengaturanClient() {
               )}
             </div>
 
+            {tertahan ? (
+              <TertahanPanel data={tertahan} />
+            ) : (
+            <>
             {/* Konfirmasi via kode random — anti mis-click */}
             <div style={{ marginBottom: 4, fontSize: 12, color: '#B5D4F4', fontWeight: 600 }}>
               Untuk konfirmasi, ketik kode berikut:
@@ -301,15 +335,19 @@ export default function PengaturanClient() {
                 Kode tidak cocok. Periksa lagi 4 digit di kotak merah.
               </div>
             )}
+            </>
+            )}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
               <PrimaButton variant="ghost" onClick={closeModal} disabled={deleting}>
-                Batal
+                {tertahan ? 'Tutup' : 'Batal'}
               </PrimaButton>
-              <PrimaButton variant="danger" iconLeft={<DeleteIcon size={13} />}
-                onClick={executeDelete} disabled={!codeMatches || deleting}>
-                {deleting ? 'Menghapus...' : 'Hapus Permanen'}
-              </PrimaButton>
+              {!tertahan && (
+                <PrimaButton variant="danger" iconLeft={<DeleteIcon size={13} />}
+                  onClick={executeDelete} disabled={!codeMatches || deleting}>
+                  {deleting ? 'Menghapus...' : 'Hapus Permanen'}
+                </PrimaButton>
+              )}
             </div>
           </div>
         </div>
@@ -319,6 +357,48 @@ export default function PengaturanClient() {
         @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
         @keyframes fadeInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
       `}</style>
+    </div>
+  )
+}
+
+// ─── Sub: TertahanPanel (T1) ──────────────────────────────────────────────────
+const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
+
+function TertahanPanel({ data }: { data: Tertahan }) {
+  return (
+    <div style={{
+      background: 'rgba(239,68,68,.10)', border: '1px solid rgba(239,68,68,.35)',
+      borderRadius: 10, padding: 12,
+    }}>
+      <div style={{ fontSize: 12.5, color: '#FCA5A5', fontWeight: 700, marginBottom: 6 }}>
+        Hapus ditahan
+      </div>
+      <div style={{ fontSize: 12, color: '#E6F1FB', lineHeight: 1.6, marginBottom: data.kode === 'VERSI_TERPAKAI' ? 10 : 0 }}>
+        {data.pesan}
+      </div>
+
+      {data.kode === 'VERSI_TERPAKAI' && data.detail.length > 0 && (
+        <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {data.detail.map((b) => (
+            <div key={b.kode_rekening + b.uraian} style={{
+              background: 'rgba(0,0,0,.25)', borderRadius: 8, padding: '7px 10px', fontSize: 11.5,
+            }}>
+              <div style={{
+                color: '#FBBF24', fontWeight: 700,
+                fontFamily: 'var(--font-jetbrains-mono, ui-monospace, monospace)',
+              }}>{b.kode_rekening}</div>
+              <div style={{ color: '#B5D4F4', marginBottom: 3 }}>{b.uraian}</div>
+              <div style={{ color: '#E6F1FB' }}>
+                {b.hilang ? 'Hilang di versi penerus' : `Pagu jadi ${rp(b.pagu_baru)}`}
+                {' · terserap '}
+                <strong style={{ fontFamily: 'var(--font-jetbrains-mono, ui-monospace, monospace)' }}>{rp(b.terserap)}</strong>
+                {' · minus '}
+                <strong style={{ color: '#FCA5A5', fontFamily: 'var(--font-jetbrains-mono, ui-monospace, monospace)' }}>{rp(b.minus)}</strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

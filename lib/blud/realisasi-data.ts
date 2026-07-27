@@ -17,7 +17,8 @@ import { getPaguMap } from './pagu'
 import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
   BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
-  BludSerapanNegatifError, BludPotonganTidakSahError,
+  BludSerapanNegatifError, BludPotonganTidakSahError, BludTanggalDiLuarBulanError,
+  awalanBulan,
   nilaiBebanPagu, sifatAlokasi, nilaiAlokasiSeharusnya, alasanAlokasiDilarang, bolehBerpotongan,
   type TransaksiInput, type JenisTransaksi, type JenisPotongan,
 } from './realisasi-schemas'
@@ -418,6 +419,18 @@ function periksaKeseimbangan(input: TransaksiInput): void {
 }
 
 /**
+ * S1 — `tanggal` wajib jatuh di dalam `(tahun, bulan)` barisnya. Dipasang di sini
+ * dan bukan hanya di Zod karena jalur PATCH memang tidak bisa memeriksanya di sana:
+ * `bulan` sengaja tidak diterima dari klien, jadi baru diketahui sesudah baris DB
+ * terbaca.
+ */
+function periksaTanggalBulan(tahun: number, bulan: number, input: TransaksiInput): void {
+  if (!input.tanggal.startsWith(awalanBulan(tahun, bulan))) {
+    throw new BludTanggalDiLuarBulanError(tahun, bulan, input.tanggal)
+  }
+}
+
+/**
  * Potongan hanya sah menempel pada pembayaran belanja, dan tidak boleh melebihi
  * yang dibayarkan — kalau tidak, ia berubah jadi arus keluar terselubung yang
  * tidak membebani anggaran mana pun.
@@ -475,6 +488,7 @@ export async function createTx(
   input: TransaksiInput,
   userId: number,
 ): Promise<{ id: number; no_kwt: number | null }> {
+  periksaTanggalBulan(tahun, bulan, input)
   periksaKeseimbangan(input)
   periksaPotongan(input)
 
@@ -537,6 +551,7 @@ export async function updateTx(
     const bulan = Number(cur[0].bulan)
     const version = Number(cur[0].version ?? 0)
     if (version !== expectedVersion) throw new BludTxConflictError(id, expectedVersion, version)
+    periksaTanggalBulan(tahun, bulan, input)
 
     const per = await tx`
       SELECT status FROM blud_periode
