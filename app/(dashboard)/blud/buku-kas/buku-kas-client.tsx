@@ -18,6 +18,7 @@ import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import { formatTanggalId } from '@/lib/blud/tanggal'
 import TransaksiModal, { type BarisPaguUI, type TransaksiAwal } from '@/components/blud/TransaksiModal'
+import { LABEL_POTONGAN, type JenisPotongan } from '@/lib/blud/alokasi-rule'
 import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -40,6 +41,7 @@ interface TxRow {
   status: string
   version: number
   alokasi: { anggaran_key: string; nilai: number; kode_rekening: string; uraian: string }[]
+  potongan: { jenis: JenisPotongan; keterangan: string | null; nilai: number }[]
   saldo_kas: number
   saldo_bank: number
 }
@@ -126,6 +128,7 @@ export default function BukuKasClient() {
       bank_masuk: r.bank_masuk, bank_keluar: r.bank_keluar,
       status: r.status,
       alokasi: r.alokasi.map(a => ({ anggaran_key: a.anggaran_key, nilai: a.nilai })),
+      potongan: (r.potongan ?? []).map(p => ({ jenis: p.jenis, keterangan: p.keterangan, nilai: p.nilai })),
     })
     setModalOpen(true)
   }
@@ -252,6 +255,11 @@ export default function BukuKasClient() {
                 <td>
                   {r.uraian}
                   {r.status === 'BELUM_BERREKENING' && <span className="bk-tag-parkir">diparkir</span>}
+                  {(r.potongan ?? []).map((p, j) => (
+                    <span key={j} className="bk-tag-potongan">
+                      {LABEL_POTONGAN[p.jenis]} {rp(p.nilai)}
+                    </span>
+                  ))}
                 </td>
                 <td className="bk-rek">
                   {r.alokasi.length === 0 && <span className="blud-imp-muted">—</span>}

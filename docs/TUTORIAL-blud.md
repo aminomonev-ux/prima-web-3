@@ -20,7 +20,7 @@ Rincian gerbang akses per-endpoint → [§9 Guard & Keamanan](#9-guard--keamanan
 | **ANGGARAN** | Pergeseran DPA | `/blud/pergeseran` | Geser anggaran antar-baris (pagu tetap) |
 | **PENATAUSAHAAN** 🆕 | Buku Kas | `/blud/buku-kas` | Catat transaksi kas/bank harian (BKU) + pembebanan ke baris anggaran |
 | **PENATAUSAHAAN** 🆕 | Realisasi | `/blud/realisasi` | Pantau pagu vs serapan per rekening + register per baris |
-| **PENATAUSAHAAN** 🆕 | Tutup Kas | `/blud/tutup-kas` | Berita Acara Pemeriksaan Kas + periode GU + unduh SPJ 10 lembar |
+| **PENATAUSAHAAN** 🆕 | Tutup Kas | `/blud/tutup-kas` | Berita Acara Pemeriksaan Kas + periode GU + unduh SPJ 11 lembar |
 | **OUTPUT** | Cetak | `/blud/cetak` | Preview + cetak/ekspor DPA, PJ, Rekap Pergeseran, Master Akun |
 | **SISTEM** | Pengaturan | `/blud/pengaturan` | Pejabat penanda tangan SPJ + hapus/kelola versi DPA & Pergeseran |
 
@@ -100,7 +100,7 @@ flowchart TD
         T3 -->|Selisih ≠ 0| T6[Cocokkan lagi — tidak ada kotak penyesuaian] --> T1
         T3 -->|Bersih| T7[Catat Periode GU opsional] --> T8[Tutup Bulan]
         T8 --> T9[(blud_periode = TUTUP<br/>semua tulis ke bulan itu ditolak)]
-        T9 --> T10[Unduh SPJ Bulanan · 10 lembar .xlsx]
+        T9 --> T10[Unduh SPJ Bulanan · 11 lembar .xlsx]
     end
     TUT --> OUT
 
@@ -283,7 +283,7 @@ Tabel BKU: `No · Tanggal · Kwt · Uraian · Rekening · Kas Masuk · Kas Kelua
 | No | Elemen PERSIS | Aturan |
 |---|---|---|
 | 1 | **Tanggal** | `YYYY-MM-DD`, wajib |
-| 2 | **Jenis** (`OpsiDropdown`) | `BELANJA` · `AMBIL_BANK` · `SETOR_BANK` · `PENERIMAAN` · `LAIN` |
+| 2 | **Jenis** (`OpsiDropdown`) | `BELANJA` · `AMBIL_BANK` · `SETOR_BANK` · `PENERIMAAN` · `PENGEMBALIAN` · `LAIN` |
 | 3 | **Uraian** | 1–2000 karakter, wajib |
 | 4 | **Kas keluar / Bank keluar / Kas masuk / Bank masuk** | Minimal salah satu > 0. Kas masuk **dan** kas keluar bersamaan → ditolak (idem bank). `AMBIL_BANK`/`SETOR_BANK` wajib **netral**: nilai masuk = nilai keluar |
 | 5 | Centang **"Rekeningnya belum ada di DPA — parkir transaksi ini"** | Muncul untuk **semua** jenis yang mengeluarkan uang. Transaksi masuk baki "Perlu Rekening"; **tidak boleh punya alokasi** |
@@ -293,17 +293,38 @@ Tabel BKU: `No · Tanggal · Kwt · Uraian · Rekening · Kas Masuk · Kas Kelua
 
 > **No. Kwt tidak diketik.** Nomor kuitansi diberikan **server** berurutan per (tahun, bulan) dan hanya untuk jenis `BELANJA` — supaya dua penginput tidak pernah mendapat nomor yang sama (§5.4).
 
-#### Aturan tunggal: uang keluar wajib punya rekening
-| Keadaan | Wajib dibebankan? |
-|---|---|
-| Arus keluar jenis apa pun (`BELANJA`, `LAIN`, `PENERIMAAN`, …) | **Ya** |
-| `AMBIL_BANK` / `SETOR_BANK` yang **netral** (masuk = keluar) | Tidak — cuma pindah tempat |
-| `AMBIL_BANK` / `SETOR_BANK` yang **timpang** | **Ya** — itu bukan pemindahan, jenisnya salah pilih |
-| Transaksi **diparkir** | Tidak — tapi memblokir Tutup Kas sampai dibereskan |
-| Arus murni masuk | Tidak |
+#### Aturan tunggal: `sifatAlokasi()` — dua arah, satu predikat
+| Keadaan | Sifat | Artinya |
+|---|---|---|
+| Arus keluar jenis apa pun (`BELANJA`, `LAIN`, `PENERIMAAN`, …) | `WAJIB` | Harus dibebankan, alokasi **positif** |
+| `AMBIL_BANK` / `SETOR_BANK` yang **timpang** | `WAJIB` | Itu bukan pemindahan — jenisnya salah pilih |
+| `PENGEMBALIAN` dengan uang masuk | `WAJIB_KEMBALI` | Wajib menunjuk baris anggaran, alokasi **negatif** |
+| `AMBIL_BANK` / `SETOR_BANK` yang **netral** (masuk = keluar) | `DILARANG` | Cuma pindah tempat |
+| Transaksi **diparkir** | `DILARANG` | Memblokir Tutup Kas sampai dibereskan |
+| Arus murni masuk | `DILARANG` | Tidak ada yang dibelanjakan |
 
 > **Kenapa tidak cukup "hanya BELANJA yang dicek"** — itu bentuk lamanya, dan bocor: satu transaksi `LAIN` dengan kas keluar besar dan alokasi kosong lolos seluruh pagar pagu, tersimpan berstatus `NORMAL` (jadi **tidak** menghalangi Tutup Kas seperti transaksi terparkir), dan tidak pernah muncul di layar Realisasi. Uang keluar yang tidak membebani anggaran mana pun.
-> Aturannya sekarang hidup di satu berkas — `lib/blud/alokasi-rule.ts` — dan dipakai **bersama** oleh Zod, data layer, serta modal Buku Kas, supaya ketiganya tidak bisa berbeda pendapat. Regresi: `node scripts/test-blud-alokasi.mjs`.
+> **Dan kenapa arah sebaliknya ikut dijaga** — menambal hanya arah "wajib" meninggalkan kebalikannya menganga: alokasi yang menempel pada transaksi yang **tidak** mengeluarkan uang tetap mengunci dan menggerus pagu. Serapan naik tanpa belanja. Karena itu `DILARANG` **menolak** alokasi, bukan sekadar tidak mewajibkannya.
+> Aturannya hidup di satu berkas — `lib/blud/alokasi-rule.ts` — dipakai **bersama** oleh Zod, `periksaKeseimbangan` di data layer, dan modal Buku Kas. Dipasang di data layer juga, bukan cuma Zod: `createTx`/`updateTx` fungsi terekspor yang bisa dipanggil skrip lain tanpa melewati skema. Regresi 2 lapis: `node scripts/test-blud-alokasi.mjs`.
+
+#### Potongan pihak ketiga — PPN · PPh · koperasi · Baznas · BPJS TK 🆕
+Pada transaksi **belanja**, dock **"POTONGAN PIHAK KETIGA"** menerima rincian pajak/potongan yang ditahan dari pembayaran lalu langsung disetorkan.
+
+| Aturan | Alasan |
+|---|---|
+| **Tidak** mengurangi serapan, **tidak** menyentuh pagu | Pagunya sudah habis di baris belanja induknya — mencatatnya lagi = satu belanja menggerus anggaran dua kali |
+| Hanya menempel pada transaksi bersifat `WAJIB` | Tidak ada yang bisa ditahan dari uang yang tidak dibayarkan |
+| Jumlah potongan ≤ nilai pembayaran | Kalau lebih, ia berubah jadi arus keluar terselubung |
+| Baris masuk/keluar di BKU/SPI **dibangkitkan saat cetak** | Sepasang, nilainya sama, lewat kolom yang sama dengan pembayaran induknya, tanpa no. kuitansi & tanpa kode rekening |
+
+> **Kenapa bukan transaksi tersendiri** — di berkas asli tiap potongan ditulis dua baris (`ppn` masuk, `setor ppn` keluar) di hari yang sama, saldo naik lalu kembali ke angka semula. Itu satu kejadian uang, bukan tiga. Menyimpannya sebagai **rincian** membuat pasangannya mustahil pincang, ketikan berkurang lima kali lipat, dan **tidak perlu satu pun pengecualian** pada pagar di atas.
+
+#### Pengembalian belanja 🆕
+Jenis `PENGEMBALIAN`: uang kembali ke kas (kelebihan bayar, sisa panjar, barang batal). Alokasinya disimpan **negatif**, sehingga `SUM(nilai)` langsung mengurangi serapan tanpa cabang khusus di mana pun — termasuk di `pengantar`, `SPJ`, dan register.
+
+- Di layar nilainya diketik **positif**; tandanya diberikan saat kirim.
+- Kolom kas/bank **keluar** harus kosong — pengembalian hanya menerima uang.
+- Pagar `SERAPAN_NEGATIF`: tidak boleh melebihi yang pernah terserap di baris itu, kalau tidak sisa anggaran melampaui pagunya sendiri.
 
 #### Kalau pagu tidak cukup → 409 `PAGU_TERLAMPAUI`
 Muncul panel jalan keluar:
@@ -361,7 +382,7 @@ SISI B  menurut nyata  = uang tunai di brankas + saldo rekening koran ← DIKETI
 | 4 | **Nomor surat** (mis. `900/BA-001/2026`) + **Tanggal surat** | Kelengkapan berita acara |
 | 5 | **"Simpan Pemeriksaan"** (ghost) | Simpan sisi B **tanpa** menutup — supaya bisa menghitung uang bertahap sambil melihat selisih |
 | 6 | **"Tutup Bulan"** (hijau) | Aktif hanya kalau selisih Rp 0 **dan** tanpa penghalang · audit `BLUD_PERIODE_TUTUP` |
-| 7 | **"Unduh SPJ Bulanan"** (hijau) | Unduh `.xlsx` 10 lembar · audit `BLUD_SPJ_UNDUH` |
+| 7 | **"Unduh SPJ Bulanan"** (hijau) | Unduh `.xlsx` 11 lembar · audit `BLUD_SPJ_UNDUH` |
 | 8 | **"Buka Kembali"** (amber) | **SUPER_ADMIN saja**, alasan ≥10 karakter · audit `BLUD_PERIODE_BUKA` |
 
 ### 7.3 Penghalang tutup — daftarnya satu, dipakai layar **dan** server
@@ -393,7 +414,8 @@ Dirakit di **server** (`buatWorkbookSpj`), bukan di browser.
 | 2 | `BKU` | Buku Kas Umum bulan itu |
 | 3 | `SPI` | Varian BKU |
 | 4 | `register` | Register per baris anggaran |
-| 5.. | `GU ‹awal›-‹akhir›` | **Satu lembar per pengajuan GU** (jumlahnya mengikuti §7.4) |
+| 5 | `rekap potongan` 🆕 | Pajak & potongan pihak ketiga, dikelompokkan per jenis + total pajak / non-pajak |
+| 6.. | `GU ‹awal›-‹akhir›` | **Satu lembar per pengajuan GU** (jumlahnya mengikuti §7.4) |
 | n−3 | `pengantar` | Surat pengantar |
 | n−2 | `SPJ` | Rekap SPJ |
 | n−1 | `TUTUP KAS` | Berita Acara Pemeriksaan Kas |
@@ -482,7 +504,10 @@ Lewat kuota → **429** + `resetIn` (detik).
 | HTTP | `code` | Arti | Yang harus dilakukan |
 |---|---|---|---|
 | 400 | — (pesan Zod) | Isian tidak valid | Perbaiki isian |
-| 400 | `ALOKASI_TIDAK_SEIMBANG` | Total alokasi ≠ nilai belanja | Samakan angkanya |
+| 400 | `ALOKASI_TIDAK_SEIMBANG` | Total alokasi ≠ nilai transaksi | Samakan angkanya |
+| 400 | `ALOKASI_TERLARANG` 🆕 | Alokasi menempel pada transaksi yang tidak mengeluarkan uang | Hapus pembebanannya, atau ganti jenis transaksinya |
+| 400 | `POTONGAN_TIDAK_SAH` 🆕 | Potongan bukan pada belanja, atau melebihi nilai pembayaran | Pindahkan ke transaksi belanja induknya / perkecil nilainya |
+| 409 | `SERAPAN_NEGATIF` 🆕 | Pengembalian melebihi yang pernah terserap di baris itu | Perkecil nilainya, atau perbaiki transaksi belanja aslinya |
 | 401 | — | Belum login / sesi habis | Login ulang |
 | 403 | — | Tidak punya akses BLUD | Minta grant di Admin Panel |
 | 409 | `PAGU_TERLAMPAUI` | Pagu baris tidak cukup | **Ajukan Pergeseran** atau parkir |
@@ -525,7 +550,8 @@ Lewat kuota → **429** + `resetIn` (detik).
 | `rekap_pk` | Snapshot rekap Penanggung Jawab BLUD | `-024` |
 | `blud_locks` | Kunci optimistik/advisory generik (L51) | `-036-blud-locks.sql` |
 | **`blud_realisasi_tx`** | Satu baris = satu baris BKU | `migration-blud-realisasi-tx.sql` |
-| **`blud_realisasi_alokasi`** | Pembebanan transaksi ke baris anggaran (FK CASCADE) | idem, + `-realisasi-anggaran-key.sql` |
+| **`blud_realisasi_alokasi`** | Pembebanan transaksi ke baris anggaran (FK CASCADE). `nilai` **bertanda**: positif membebani, negatif mengembalikan | idem, + `-realisasi-anggaran-key.sql`, `-blud-potongan-pengembalian.sql` |
+| **`blud_realisasi_potongan`** 🆕 | Potongan pihak ketiga per transaksi belanja — pajak + non-pajak (FK CASCADE) | `migration-blud-potongan-pengembalian.sql` |
 | **`blud_periode`** | Periode bulanan: saldo awal, sisi nyata, status BUKA/TUTUP | idem |
 | **`blud_permintaan`** | Permintaan pergeseran / rekening baru dari bendahara | `migration-blud-permintaan.sql` |
 | **`blud_gu_periode`** | Rentang pengajuan GU per bulan | `migration-blud-gu-periode.sql` |
@@ -596,7 +622,7 @@ Lewat kuota → **429** + `resetIn` (detik).
 - API: `app/api/blud/realisasi/{tx,pagu,register,periode,permintaan,gu,export}/route.ts` · `_guard.ts`
 - Data layer: `lib/blud/realisasi-data.ts` · `pagu.ts` · `tutup-kas.ts` · `permintaan-data.ts` · `gu-data.ts` · `pejabat-data.ts`
 - Zod + guard + error domain: `lib/blud/realisasi-schemas.ts` · rate limit & role: `lib/blud/schemas.ts`
-- Aturan alokasi (modul daun, dipakai server + klien): `lib/blud/alokasi-rule.ts` · regresi `scripts/test-blud-alokasi.mjs`
+- Aturan alokasi & potongan (modul daun, dipakai server + klien): `lib/blud/alokasi-rule.ts` · konsep `docs/CONCEPT-blud-potongan.md` · regresi 2 lapis `scripts/test-blud-alokasi.mjs`
 - Kunci: `lib/blud/lock.ts` (`acquireBludLock`, `BLUD_PAGU_ENTITY`, `BLUD_KWT_ENTITY`)
 - SPJ: `lib/blud/export/spj-excel.ts` (`buatWorkbookSpj`)
 

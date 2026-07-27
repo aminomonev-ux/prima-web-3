@@ -16,9 +16,10 @@ import {
 import { getPaguMap } from './pagu'
 import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
-  BludPaguTerlampauiError, BludTxConflictError,
-  nilaiBebanPagu, wajibBeralokasi,
-  type TransaksiInput, type JenisTransaksi,
+  BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
+  BludSerapanNegatifError, BludPotonganTidakSahError,
+  nilaiBebanPagu, sifatAlokasi, nilaiAlokasiSeharusnya, alasanAlokasiDilarang, bolehBerpotongan,
+  type TransaksiInput, type JenisTransaksi, type JenisPotongan,
 } from './realisasi-schemas'
 
 export interface RealisasiAlokasi {
@@ -26,6 +27,12 @@ export interface RealisasiAlokasi {
   nilai: number
   kode_rekening: string
   uraian: string
+}
+
+export interface RealisasiPotongan {
+  jenis: JenisPotongan
+  keterangan: string | null
+  nilai: number
 }
 
 export interface RealisasiTx {
@@ -43,6 +50,7 @@ export interface RealisasiTx {
   status: 'NORMAL' | 'BELUM_BERREKENING'
   version: number
   alokasi: RealisasiAlokasi[]
+  potongan: RealisasiPotongan[]
   /** Dihitung saat dibaca — TIDAK disimpan (§2.7). */
   saldo_kas: number
   saldo_bank: number
@@ -117,9 +125,26 @@ export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas>
     WHERE t.tahun_anggaran = ${tahun} AND t.bulan = ${bulan}
     ORDER BY a.id ASC
   ` as Record<string, unknown>[]
+  const potRows = await sql`
+    SELECT p.tx_id, p.jenis, p.keterangan, p.nilai
+    FROM blud_realisasi_potongan p
+    JOIN blud_realisasi_tx t ON t.id = p.tx_id
+    WHERE t.tahun_anggaran = ${tahun} AND t.bulan = ${bulan}
+    ORDER BY p.urutan ASC, p.id ASC
+  ` as Record<string, unknown>[]
   const saldoAwal = await getSaldoAwal(tahun, bulan)
   const status = await getPeriodeStatus(tahun, bulan)
   const pagu = await getPaguMap(tahun)
+  const potonganByTx = new Map<number, RealisasiPotongan[]>()
+  for (const p of potRows) {
+    const txId = Number(p.tx_id)
+    if (!potonganByTx.has(txId)) potonganByTx.set(txId, [])
+    potonganByTx.get(txId)!.push({
+      jenis: String(p.jenis) as JenisPotongan,
+      keterangan: p.keterangan != null ? String(p.keterangan) : null,
+      nilai: Number(p.nilai ?? 0),
+    })
+  }
   const alokasiByTx = new Map<number, RealisasiAlokasi[]>()
   for (const a of alokRows) {
     const txId = Number(a.tx_id)
@@ -155,6 +180,7 @@ export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas>
       status: r.status === 'BELUM_BERREKENING' ? 'BELUM_BERREKENING' : 'NORMAL',
       version: Number(r.version ?? 0),
       alokasi: alokasiByTx.get(id) ?? [],
+      potongan: potonganByTx.get(id) ?? [],
       saldo_kas: kas,
       saldo_bank: bank,
     }
@@ -277,6 +303,7 @@ export async function listBelumBerrekening(tahun: number): Promise<RealisasiTx[]
     status: 'BELUM_BERREKENING',
     version: Number(r.version ?? 0),
     alokasi: [],
+    potongan: [],
     saldo_kas: 0,
     saldo_bank: 0,
   }))
@@ -346,6 +373,11 @@ async function kunciDanPeriksaPagu(
           FOR UPDATE
         `
     const terserap = Number((rows as { n?: unknown }[])[0]?.n ?? 0)
+    // Pengembalian tidak boleh menarik serapan ke bawah nol: sisa anggaran akan
+    // melampaui pagunya sendiri dan register jadi mustahil dibaca.
+    if (terserap + a.nilai < -0.005) {
+      throw new BludSerapanNegatifError(baris.kode_rekening, terserap, a.nilai)
+    }
     if (terserap + a.nilai > baris.pagu) {
       throw new BludPaguTerlampauiError({
         anggaran_key: a.anggaran_key,
@@ -361,20 +393,64 @@ async function kunciDanPeriksaPagu(
 }
 
 /**
- * Pagar terakhir sebelum tulis. Aturannya diambil dari `wajibBeralokasi` — sumber
+ * Pagar terakhir sebelum tulis. Aturannya diambil dari `sifatAlokasi` — sumber
  * yang sama dipakai Zod dan modal Buku Kas, supaya tidak ada jenis transaksi yang
  * kebetulan lolos hanya di satu lapis.
+ *
+ * Dipasang di sini, bukan cuma di Zod: `createTx`/`updateTx` fungsi terekspor yang
+ * bisa dipanggil skrip atau route lain tanpa melewati skema, dan begitu lolos ke
+ * sini `kunciDanPeriksaPagu` + `bulkInsert` jalan tanpa syarat.
  */
 function periksaKeseimbangan(input: TransaksiInput): void {
-  if (!wajibBeralokasi(input)) return
-  const beban = nilaiBebanPagu(input)
+  const sifat = sifatAlokasi(input)
+  if (sifat === 'DILARANG') {
+    if (input.alokasi.length) throw new BludAlokasiTerlarangError(alasanAlokasiDilarang(input))
+    return
+  }
+  const harap = nilaiAlokasiSeharusnya(input)
   const total = input.alokasi.reduce((s, a) => s + a.nilai, 0)
-  if (Math.abs(total - beban) > 0.005) {
-    throw new BludAlokasiTidakSeimbangError(beban, total)
+  if (Math.abs(total - harap) > 0.005) {
+    throw new BludAlokasiTidakSeimbangError(harap, total)
+  }
+}
+
+/**
+ * Potongan hanya sah menempel pada pembayaran belanja, dan tidak boleh melebihi
+ * yang dibayarkan — kalau tidak, ia berubah jadi arus keluar terselubung yang
+ * tidak membebani anggaran mana pun.
+ */
+function periksaPotongan(input: TransaksiInput): void {
+  if (!input.potongan.length) return
+  if (!bolehBerpotongan(input)) {
+    throw new BludPotonganTidakSahError(
+      'Potongan hanya bisa ditahan dari pembayaran belanja yang dibebankan ke baris anggaran.',
+    )
+  }
+  const total = input.potongan.reduce((s, p) => s + p.nilai, 0)
+  if (total > nilaiBebanPagu(input) + 0.005) {
+    throw new BludPotonganTidakSahError(
+      'Jumlah potongan melebihi nilai pembayaran — yang ditahan tidak bisa lebih besar dari yang dibayarkan.',
+    )
   }
 }
 
 const ALOKASI_COLUMNS = ['tx_id', 'tahun_anggaran', 'anggaran_key', 'nilai'] as const
+const POTONGAN_COLUMNS = ['tx_id', 'tahun_anggaran', 'jenis', 'keterangan', 'nilai', 'urutan'] as const
+
+async function tulisPotongan(
+  conn: Parameters<typeof bulkInsert>[3],
+  id: number,
+  tahun: number,
+  potongan: TransaksiInput['potongan'],
+): Promise<void> {
+  if (!potongan.length) return
+  await bulkInsert(
+    'blud_realisasi_potongan',
+    POTONGAN_COLUMNS,
+    potongan.map((p, i) => [id, tahun, p.jenis, p.keterangan ?? null, p.nilai, i]),
+    conn,
+  )
+}
 
 /**
  * Nomor kuitansi berurutan per (tahun, bulan), diberikan SERVER (§5.4).
@@ -397,10 +473,15 @@ export async function createTx(
   userId: number,
 ): Promise<{ id: number; no_kwt: number | null }> {
   periksaKeseimbangan(input)
+  periksaPotongan(input)
 
   return withTransaction(async ({ tx, conn }) => {
+    // `FOR UPDATE` bukan hiasan: tanpanya Tutup Kas bisa commit di sela antara
+    // pemeriksaan ini dan INSERT di bawah, dan transaksi baru menyelinap masuk ke
+    // bulan yang sudah ditutup — neraca yang sudah ditandatangani jadi salah.
     const per = await tx`
-      SELECT status FROM blud_periode WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
+      SELECT status FROM blud_periode
+      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
     ` as { status?: unknown }[]
     if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
 
@@ -427,6 +508,7 @@ export async function createTx(
         conn,
       )
     }
+    await tulisPotongan(conn, id, tahun, input.potongan)
     return { id, no_kwt: noKwt }
   })
 }
@@ -438,6 +520,7 @@ export async function updateTx(
   userId: number,
 ): Promise<{ version: number }> {
   periksaKeseimbangan(input)
+  periksaPotongan(input)
 
   return withTransaction(async ({ tx, conn }) => {
     // L48: baca baris sendiri dengan FOR UPDATE — CAS harus melihat angka segar.
@@ -453,7 +536,8 @@ export async function updateTx(
     if (version !== expectedVersion) throw new BludTxConflictError(id, expectedVersion, version)
 
     const per = await tx`
-      SELECT status FROM blud_periode WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
+      SELECT status FROM blud_periode
+      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
     ` as { status?: unknown }[]
     if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
 
@@ -477,6 +561,8 @@ export async function updateTx(
         conn,
       )
     }
+    await tx`DELETE FROM blud_realisasi_potongan WHERE tx_id = ${id}`
+    await tulisPotongan(conn, id, tahun, input.potongan)
     return { version: version + 1 }
   })
 }
@@ -491,11 +577,12 @@ export async function deleteTx(id: number): Promise<{ deleted: number }> {
     const tahun = Number(cur[0].tahun_anggaran)
     const bulan = Number(cur[0].bulan)
     const per = await tx`
-      SELECT status FROM blud_periode WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
+      SELECT status FROM blud_periode
+      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
     ` as { status?: unknown }[]
     if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
 
-    // Alokasi ikut terhapus lewat FK ON DELETE CASCADE.
+    // Alokasi & potongan ikut terhapus lewat FK ON DELETE CASCADE.
     const res = await tx`DELETE FROM blud_realisasi_tx WHERE id = ${id}` as unknown as Array<{ affectedRows: number }>
     return { deleted: Number(res[0]?.affectedRows ?? 0) }
   })

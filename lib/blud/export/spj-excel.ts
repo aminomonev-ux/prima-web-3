@@ -13,6 +13,7 @@
 //
 // Keluarannya .xlsx — exceljs tidak bisa MENULIS format .xls lama (BIFF).
 import type ExcelJS from 'exceljs'
+import { JENIS_POTONGAN, LABEL_POTONGAN, potonganPajak } from '../alokasi-rule'
 import { getBukuKas } from '../realisasi-data'
 import { getPaguEfektif, getSerapanPeriode, getSerapanRentang, gulungKeAtas } from '../pagu'
 import { getNeracaKas } from '../tutup-kas'
@@ -146,6 +147,7 @@ export async function buatWorkbookSpj(tahun: number, bulan: number): Promise<Exc
   sheetBukuKas(wb, ctx, 'BKU', true)
   sheetBukuKas(wb, ctx, 'SPI', false)
   sheetRegister(wb, ctx)
+  sheetRekapPotongan(wb, ctx)
 
   // Satu lembar per pengajuan GU. Kalau belum ada yang dicatat, jatuh ke satu
   // lembar sebulan penuh — supaya berkasnya tetap lengkap, bukan kehilangan
@@ -384,15 +386,7 @@ function sheetBukuKas(wb: ExcelJS.Workbook, ctx: Konteks, nama: string, denganTo
   rAwal.font = { size: 10, bold: true }
   bingkai(rAwal, 1, kolAkhir)
 
-  for (const t of ctx.buku.rows) {
-    const kode = t.alokasi.map((a) => a.kode_rekening).filter(Boolean).join(' + ')
-    const uraian = t.status === 'BELUM_BERREKENING' ? `${t.uraian}  [belum berrekening]` : t.uraian
-    const r = ws.addRow([
-      t.no_kwt ?? '', hariDari(t.tanggal), uraian, kode,
-      t.kas_masuk || '', t.kas_keluar || '', t.saldo_kas,
-      t.bank_masuk || '', t.bank_keluar || '', t.saldo_bank,
-      denganTotal ? t.saldo_kas + t.saldo_bank : undefined,
-    ])
+  function gayaBaris(r: ExcelJS.Row) {
     for (let c = 1; c <= kolAkhir; c++) {
       const cell = r.getCell(c)
       cell.font = { size: 10 }
@@ -403,10 +397,60 @@ function sheetBukuKas(wb: ExcelJS.Workbook, ctx: Konteks, nama: string, denganTo
     }
   }
 
+  /**
+   * Baris memo potongan: uang ditahan dari pembayaran lalu langsung disetorkan,
+   * jadi selalu SEPASANG masuk-keluar bernilai sama dan saldo kembali ke angka
+   * semula. Lewat kolom yang sama dengan pembayaran induknya, tanpa nomor
+   * kuitansi dan tanpa kode rekening — ia bukan transaksi tersendiri.
+   */
+  function barisMemo(
+    t: (typeof ctx.buku.rows)[number], teks: string, nilai: number,
+    arah: 'MASUK' | 'KELUAR', lewatBank: boolean,
+  ): unknown[] {
+    const geser = arah === 'MASUK' ? nilai : 0
+    const saldoKas = lewatBank ? t.saldo_kas : t.saldo_kas + geser
+    const saldoBank = lewatBank ? t.saldo_bank + geser : t.saldo_bank
+    return [
+      '', hariDari(t.tanggal), teks, '',
+      !lewatBank && arah === 'MASUK' ? nilai : '',
+      !lewatBank && arah === 'KELUAR' ? nilai : '',
+      saldoKas,
+      lewatBank && arah === 'MASUK' ? nilai : '',
+      lewatBank && arah === 'KELUAR' ? nilai : '',
+      saldoBank,
+      denganTotal ? saldoKas + saldoBank : undefined,
+    ]
+  }
+
+  let potKas = 0
+  let potBank = 0
+
+  for (const t of ctx.buku.rows) {
+    const kode = t.alokasi.map((a) => a.kode_rekening).filter(Boolean).join(' + ')
+    const uraian = t.status === 'BELUM_BERREKENING' ? `${t.uraian}  [belum berrekening]` : t.uraian
+    gayaBaris(ws.addRow([
+      t.no_kwt ?? '', hariDari(t.tanggal), uraian, kode,
+      t.kas_masuk || '', t.kas_keluar || '', t.saldo_kas,
+      t.bank_masuk || '', t.bank_keluar || '', t.saldo_bank,
+      denganTotal ? t.saldo_kas + t.saldo_bank : undefined,
+    ]))
+
+    const lewatBank = t.bank_keluar > 0
+    for (const p of t.potongan) {
+      const label = LABEL_POTONGAN[p.jenis]
+      gayaBaris(ws.addRow(barisMemo(t, label, p.nilai, 'MASUK', lewatBank)))
+      gayaBaris(ws.addRow(barisMemo(t, `setor ${label}`, p.nilai, 'KELUAR', lewatBank)))
+      if (lewatBank) potBank += p.nilai
+      else potKas += p.nilai
+    }
+  }
+
+  // Baris memo ikut dijumlah supaya JUMLAH benar-benar sama dengan penjumlahan
+  // kolom di atasnya. Karena selalu sepasang, saldonya tidak ikut bergeser.
   const jml = ctx.buku.rows.reduce((a, t) => ({
     km: a.km + t.kas_masuk, kk: a.kk + t.kas_keluar,
     bm: a.bm + t.bank_masuk, bk: a.bk + t.bank_keluar,
-  }), { km: 0, kk: 0, bm: 0, bk: 0 })
+  }), { km: potKas, kk: potKas, bm: potBank, bk: potBank })
   const rJml = ws.addRow(['', '', 'JUMLAH', '', jml.km, jml.kk, '', jml.bm, jml.bk, '',
     denganTotal ? ctx.neraca.saldo_buku : undefined])
   for (let c = 1; c <= kolAkhir; c++) {
@@ -499,6 +543,79 @@ function sheetRegister(wb: ExcelJS.Workbook, ctx: Konteks) {
   if (urut.length === 0) taruh(ws, [[4, 'Belum ada pengeluaran berrekening pada bulan ini.']])
 
   tandaTangan(ws, ctx, { peran: 'PPK', prakata: 'Mengetahui' }, { peran: 'BENDAHARA' }, 2, 6)
+}
+
+// ─── Lembar: rekap potongan ─────────────────────────────────────────────────
+
+/**
+ * Rekap potongan — lembar baru, tidak ada di berkas asli. Di sana rekap pajak
+ * disusun manual dari baris "ppn"/"pph" yang berserak di BKU, sehingga jumlahnya
+ * bisa melenceng dari BKU tanpa ketahuan. Di sini sumbernya rincian transaksi yang
+ * sama, jadi selalu cocok. Pajak dan non-pajak dipisah totalnya: yang pertama
+ * dilaporkan ke kantor pajak, yang kedua diteruskan ke pihak ketiga.
+ */
+function sheetRekapPotongan(wb: ExcelJS.Workbook, ctx: Konteks) {
+  const ws = wb.addWorksheet('rekap potongan')
+  ws.columns = [
+    { width: 5 }, { width: 6 }, { width: 10 }, { width: 50 }, { width: 28 }, { width: 20 },
+  ]
+
+  judul(ws, 'REKAP POTONGAN PIHAK KETIGA', 2, 6, 12)
+  judul(ws, `${INSTANSI_PENDEK} — BULAN ${ctx.namaBulan.toUpperCase()} ${ctx.tahun}`, 2, 6, 11, false)
+  ws.addRow([])
+
+  const h = ws.addRow(['', 'NO', 'TGL', 'URAIAN BELANJA', 'KETERANGAN', 'JUMLAH'])
+  for (let c = 2; c <= 6; c++) {
+    h.getCell(c).font = { bold: true, size: 10 }
+    h.getCell(c).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    h.getCell(c).border = garis()
+    h.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF7' } }
+  }
+
+  const perJenis = new Map<string, { tanggal: string; uraian: string; keterangan: string; nilai: number }[]>()
+  for (const t of ctx.buku.rows) {
+    for (const p of t.potongan) {
+      if (!perJenis.has(p.jenis)) perJenis.set(p.jenis, [])
+      perJenis.get(p.jenis)!.push({
+        tanggal: t.tanggal, uraian: t.uraian, keterangan: p.keterangan ?? '', nilai: p.nilai,
+      })
+    }
+  }
+
+  let totalPajak = 0
+  let totalLain = 0
+
+  for (const jenis of JENIS_POTONGAN) {
+    const daftar = perJenis.get(jenis)
+    if (!daftar?.length) continue
+
+    ws.addRow([])
+    taruh(ws, [[4, LABEL_POTONGAN[jenis]]], { tebal: true })
+
+    let sub = 0
+    daftar.forEach((d, i) => {
+      sub += d.nilai
+      bingkai(taruh(ws, [
+        [2, i + 1], [3, `${hariDari(d.tanggal)}-${ctx.bulan}`], [4, d.uraian], [5, d.keterangan], [6, d.nilai],
+      ], { angka: [6] }), 2, 6)
+    })
+    taruh(ws, [[4, `Jumlah ${LABEL_POTONGAN[jenis]}`], [6, sub]], { tebal: true, angka: [6] })
+
+    if (potonganPajak(jenis)) totalPajak += sub
+    else totalLain += sub
+  }
+
+  if (perJenis.size === 0) {
+    ws.addRow([])
+    taruh(ws, [[4, 'Belum ada potongan yang dicatat pada bulan ini.']])
+  } else {
+    ws.addRow([])
+    bingkai(taruh(ws, [[4, 'JUMLAH PAJAK'], [6, totalPajak]], { tebal: true, angka: [6] }), 2, 6)
+    bingkai(taruh(ws, [[4, 'JUMLAH POTONGAN LAIN'], [6, totalLain]], { tebal: true, angka: [6] }), 2, 6)
+    bingkai(taruh(ws, [[4, 'JUMLAH SELURUHNYA'], [6, totalPajak + totalLain]], { tebal: true, angka: [6] }), 2, 6)
+  }
+
+  tandaTangan(ws, ctx, { peran: 'PPK', prakata: 'Mengetahui' }, { peran: 'BENDAHARA' }, 2, 5)
 }
 
 // ─── Lembar: pengantar ──────────────────────────────────────────────────────

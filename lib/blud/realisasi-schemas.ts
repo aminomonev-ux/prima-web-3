@@ -8,15 +8,21 @@
 import { z } from 'zod'
 import { isBludRole } from './schemas'
 import {
-  JENIS_TRANSAKSI, JENIS_PEMINDAHAN, nilaiBebanPagu, transferNetral, wajibBeralokasi,
+  JENIS_TRANSAKSI, JENIS_PEMINDAHAN, JENIS_POTONGAN, POTONGAN_PAJAK, LABEL_POTONGAN,
+  nilaiBebanPagu, nilaiArusMasuk, transferNetral,
+  sifatAlokasi, wajibBeralokasi, bolehBeralokasi, nilaiAlokasiSeharusnya,
+  alasanAlokasiDilarang, bolehBerpotongan, potonganPajak,
 } from './alokasi-rule'
 
 // Aturan alokasi hidup di modul daun `alokasi-rule.ts` supaya modal Buku Kas
 // (klien) bisa memakainya tanpa ikut menarik `next/server` lewat `./schemas`.
 export {
-  JENIS_TRANSAKSI, JENIS_PEMINDAHAN, nilaiBebanPagu, transferNetral, wajibBeralokasi,
+  JENIS_TRANSAKSI, JENIS_PEMINDAHAN, JENIS_POTONGAN, POTONGAN_PAJAK, LABEL_POTONGAN,
+  nilaiBebanPagu, nilaiArusMasuk, transferNetral,
+  sifatAlokasi, wajibBeralokasi, bolehBeralokasi, nilaiAlokasiSeharusnya,
+  alasanAlokasiDilarang, bolehBerpotongan, potonganPajak,
 }
-export type { JenisTransaksi, ArusKas } from './alokasi-rule'
+export type { JenisTransaksi, JenisPotongan, SifatAlokasi, ArusKas } from './alokasi-rule'
 
 export const BLUD_REALISASI_APP_FLAG = 'app_status_blud_realisasi'
 
@@ -41,9 +47,23 @@ export const TanggalTxSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal harus format YYYY-MM-DD')
   .refine((v) => !Number.isNaN(new Date(v).getTime()), 'Tanggal tidak valid')
 
+/**
+ * `nilai` bertanda: positif membebani pagu, negatif mengembalikannya (jenis
+ * PENGEMBALIAN). Tandanya diperiksa terhadap sifat transaksi di superRefine —
+ * di sini cukup dipastikan bukan nol, karena alokasi nol tidak berarti apa pun.
+ */
 export const AlokasiSchema = z.object({
   anggaran_key: AnggaranKeySchema,
-  nilai: z.number().gt(0, 'Nilai alokasi harus lebih dari 0').max(1e15),
+  nilai: z.number().min(-1e15).max(1e15)
+    .refine((n) => Math.abs(n) > 0.005, 'Nilai alokasi tidak boleh nol'),
+})
+
+export const JenisPotonganSchema = z.enum(JENIS_POTONGAN)
+
+export const PotonganSchema = z.object({
+  jenis: JenisPotonganSchema,
+  keterangan: z.string().trim().max(191).nullish(),
+  nilai: z.number().gt(0, 'Nilai potongan harus lebih dari 0').max(1e15),
 })
 
 // ─── Body: simpan transaksi ─────────────────────────────────────────────────
@@ -64,6 +84,8 @@ export const TransaksiInputSchema = z.object({
   bank_masuk: RupiahSchema.default(0),
   bank_keluar: RupiahSchema.default(0),
   alokasi: z.array(AlokasiSchema).max(200, 'Maksimal 200 alokasi per transaksi').default([]),
+  /** Pajak/potongan yang ditahan dari pembayaran ini lalu langsung disetorkan. */
+  potongan: z.array(PotonganSchema).max(20, 'Maksimal 20 potongan per transaksi').default([]),
   /** Diparkir: uang sudah keluar tapi rekeningnya belum ada di DPA (§4.2). */
   belum_berrekening: z.boolean().default(false),
 }).superRefine((v, ctx) => {
@@ -77,9 +99,6 @@ export const TransaksiInputSchema = z.object({
   if (v.bank_masuk > 0 && v.bank_keluar > 0) {
     ctx.addIssue({ code: 'custom', path: ['bank_keluar'], message: 'Satu transaksi tidak boleh bank masuk dan bank keluar sekaligus' })
   }
-  if (v.belum_berrekening && v.alokasi.length) {
-    ctx.addIssue({ code: 'custom', path: ['alokasi'], message: 'Transaksi diparkir tidak boleh punya alokasi' })
-  }
   if (JENIS_PEMINDAHAN.includes(v.jenis) && !transferNetral(v)) {
     ctx.addIssue({
       code: 'custom', path: ['jenis'],
@@ -87,13 +106,46 @@ export const TransaksiInputSchema = z.object({
         + 'Kalau ini pengeluaran sungguhan, pilih jenis lain dan bebankan ke baris anggaran.',
     })
   }
-  if (wajibBeralokasi(v) && !v.alokasi.length) {
+  if (v.jenis === 'PENGEMBALIAN' && nilaiBebanPagu(v) > 0) {
+    ctx.addIssue({
+      code: 'custom', path: ['jenis'],
+      message: 'Pengembalian belanja hanya menerima uang masuk — kolom keluar harus kosong.',
+    })
+  }
+
+  // Dua arah dijawab satu predikat: yang wajib tidak boleh kosong, yang dilarang
+  // tidak boleh terisi. Menjaga satu arah saja meninggalkan yang lain menganga —
+  // alokasi pada transaksi tanpa belanja menggerus pagu tanpa uang keluar.
+  const sifat = sifatAlokasi(v)
+  if (sifat === 'DILARANG' && v.alokasi.length) {
+    ctx.addIssue({ code: 'custom', path: ['alokasi'], message: alasanAlokasiDilarang(v) })
+  }
+  if (sifat === 'WAJIB' && !v.alokasi.length) {
     ctx.addIssue({
       code: 'custom', path: ['alokasi'],
       message: 'Uang keluar wajib dibebankan ke baris anggaran. '
         + 'Kalau rekeningnya memang belum ada di DPA, centang "parkir" supaya tercatat sebagai utang pekerjaan.',
     })
   }
+  if (sifat === 'WAJIB_KEMBALI' && !v.alokasi.length) {
+    ctx.addIssue({
+      code: 'custom', path: ['alokasi'],
+      message: 'Pengembalian belanja wajib menunjuk baris anggaran mana yang serapannya dikurangi.',
+    })
+  }
+  if (sifat === 'WAJIB' && v.alokasi.some((a) => a.nilai < 0)) {
+    ctx.addIssue({
+      code: 'custom', path: ['alokasi'],
+      message: 'Alokasi belanja tidak boleh negatif — untuk mengembalikan belanja, pilih jenis "Pengembalian belanja".',
+    })
+  }
+  if (sifat === 'WAJIB_KEMBALI' && v.alokasi.some((a) => a.nilai > 0)) {
+    ctx.addIssue({
+      code: 'custom', path: ['alokasi'],
+      message: 'Alokasi pengembalian harus bernilai negatif — ia mengurangi serapan, bukan menambah.',
+    })
+  }
+
   const kunci = new Set<string>()
   for (const a of v.alokasi) {
     if (kunci.has(a.anggaran_key)) {
@@ -101,6 +153,23 @@ export const TransaksiInputSchema = z.object({
       break
     }
     kunci.add(a.anggaran_key)
+  }
+
+  if (v.potongan.length) {
+    if (!bolehBerpotongan(v)) {
+      ctx.addIssue({
+        code: 'custom', path: ['potongan'],
+        message: 'Potongan hanya bisa ditahan dari pembayaran belanja yang dibebankan ke baris anggaran.',
+      })
+    } else {
+      const totalPotongan = v.potongan.reduce((s, p) => s + p.nilai, 0)
+      if (totalPotongan > nilaiBebanPagu(v) + 0.005) {
+        ctx.addIssue({
+          code: 'custom', path: ['potongan'],
+          message: 'Jumlah potongan melebihi nilai pembayaran — yang ditahan tidak bisa lebih besar dari yang dibayarkan.',
+        })
+      }
+    }
   }
 })
 export type TransaksiInput = z.infer<typeof TransaksiInputSchema>
@@ -266,6 +335,32 @@ export class BludAlokasiTidakSeimbangError extends Error {
   constructor(public nilaiTransaksi: number, public totalAlokasi: number) {
     super(`Total alokasi (${totalAlokasi}) tidak sama dengan nilai transaksi (${nilaiTransaksi}).`)
     this.name = 'BludAlokasiTidakSeimbangError'
+  }
+}
+
+/** Alokasi menempel pada transaksi yang tidak boleh membebani anggaran. */
+export class BludAlokasiTerlarangError extends Error {
+  constructor(alasan: string) {
+    super(alasan)
+    this.name = 'BludAlokasiTerlarangError'
+  }
+}
+
+/**
+ * Pengembalian lebih besar daripada yang pernah terserap di baris itu. Dibiarkan
+ * lolos, serapan jadi negatif dan sisa anggaran melampaui pagunya sendiri.
+ */
+export class BludSerapanNegatifError extends Error {
+  constructor(public kodeRekening: string, public terserap: number, public nilai: number) {
+    super(`Pengembalian ${Math.abs(nilai)} melebihi serapan ${kodeRekening} yang baru ${terserap}.`)
+    this.name = 'BludSerapanNegatifError'
+  }
+}
+
+export class BludPotonganTidakSahError extends Error {
+  constructor(alasan: string) {
+    super(alasan)
+    this.name = 'BludPotonganTidakSahError'
   }
 }
 

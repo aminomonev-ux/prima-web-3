@@ -16,7 +16,8 @@ import { getPaguSumber } from '@/lib/blud/pagu'
 import {
   CreateTxBodySchema, UpdateTxBodySchema, ListTxQuerySchema,
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
-  BludPaguTerlampauiError, BludTxConflictError,
+  BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
+  BludSerapanNegatifError, BludPotonganTidakSahError,
 } from '@/lib/blud/realisasi-schemas'
 import { bolehInput, bolehLihat, forbidden, unauthorized } from '../_guard'
 
@@ -38,6 +39,15 @@ function petakanError(err: unknown): NextResponse | null {
   }
   if (err instanceof BludAlokasiTidakSeimbangError) {
     return NextResponse.json({ ok: false, code: 'ALOKASI_TIDAK_SEIMBANG', error: err.message }, { status: 400 })
+  }
+  if (err instanceof BludAlokasiTerlarangError) {
+    return NextResponse.json({ ok: false, code: 'ALOKASI_TERLARANG', error: err.message }, { status: 400 })
+  }
+  if (err instanceof BludPotonganTidakSahError) {
+    return NextResponse.json({ ok: false, code: 'POTONGAN_TIDAK_SAH', error: err.message }, { status: 400 })
+  }
+  if (err instanceof BludSerapanNegatifError) {
+    return NextResponse.json({ ok: false, code: 'SERAPAN_NEGATIF', error: err.message }, { status: 409 })
   }
   return null
 }

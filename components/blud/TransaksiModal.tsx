@@ -1,22 +1,30 @@
 'use client'
 // components/blud/TransaksiModal.tsx — form satu transaksi Buku Kas BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §2.4, §2.5, §4.1, §4.2
+// Konsep: docs/CONCEPT-blud-realisasi.md §2.4, §2.5, §4.1, §4.2 · docs/CONCEPT-blud-potongan.md
 //
-// Dua hal yang membedakan form ini dari form biasa:
+// Tiga hal yang membedakan form ini dari form biasa:
 //   1. Rekening DIPILIH dari pohon DPA/Pergeseran terbaru, tidak diketik (§2.4).
 //      Kode rekening di BKU jadi sama dengan di DPA karena sumbernya sama.
 //   2. Satu transaksi boleh dibagi ke beberapa baris anggaran (§2.5) — satu kuitansi
 //      belanja modal sering memuat beberapa barang. Tombol "Bagi" baru muncul saat
 //      dibutuhkan supaya tampilan tetap sederhana untuk kasus umum.
+//   3. Pajak/potongan diisi sebagai RINCIAN pembayaran, bukan transaksi tersendiri.
+//      Nilainya tidak menyentuh pagu — pagu sudah habis di baris belanjanya.
+//
+// Nilai alokasi selalu POSITIF di layar. Tanda diberikan saat kirim: pengembalian
+// belanja dikirim negatif supaya `SUM(nilai)` di server langsung mengurangi serapan
+// tanpa cabang khusus di mana pun.
 
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X, Plus, AlertTriangle, ArrowRightLeft } from 'lucide-react'
+import { Search, X, Plus, AlertTriangle, ArrowRightLeft, Scissors } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DeleteButton from '@/components/ui/DeleteButton'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import {
-  JENIS_PEMINDAHAN, transferNetral, wajibBeralokasi, type JenisTransaksi,
+  JENIS_PEMINDAHAN, JENIS_POTONGAN, LABEL_POTONGAN,
+  transferNetral, sifatAlokasi, alasanAlokasiDilarang,
+  type JenisTransaksi, type JenisPotongan, type SifatAlokasi,
 } from '@/lib/blud/alokasi-rule'
 
 export interface BarisPaguUI {
@@ -52,6 +60,7 @@ export interface TransaksiAwal {
   bank_keluar: number
   status: string
   alokasi: { anggaran_key: string; nilai: number }[]
+  potongan: { jenis: JenisPotongan; keterangan: string | null; nilai: number }[]
 }
 
 interface Props {
@@ -68,11 +77,16 @@ const JENIS_OPSI: { v: JenisTransaksi; t: string }[] = [
   { v: 'AMBIL_BANK', t: 'Ambil dari bank' },
   { v: 'SETOR_BANK', t: 'Setor ke bank' },
   { v: 'PENERIMAAN', t: 'Penerimaan' },
+  { v: 'PENGEMBALIAN', t: 'Pengembalian belanja' },
   { v: 'LAIN', t: 'Lain-lain' },
 ]
 
+const POTONGAN_OPSI = JENIS_POTONGAN.map((j) => ({ value: j, label: LABEL_POTONGAN[j] }))
+
 const rp = (n: number) => new Intl.NumberFormat('id-ID').format(Math.round(n))
 const angka = (s: string) => Number(String(s).replace(/[^\d-]/g, '') || 0)
+
+interface PotonganUI { jenis: JenisPotongan; keterangan: string; nilai: number }
 
 // Dirender hanya saat modal dibuka dan diberi `key` oleh pemanggil, jadi state
 // cukup diambil dari prop saat mount — tanpa effect yang me-reset state
@@ -86,7 +100,10 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
   const [kasMasuk, setKasMasuk] = useState(awal?.kas_masuk ?? 0)
   const [bankMasuk, setBankMasuk] = useState(awal?.bank_masuk ?? 0)
   const [alokasi, setAlokasi] = useState<{ anggaran_key: string; nilai: number }[]>(
-    () => awal?.alokasi.map(a => ({ ...a })) ?? [],
+    () => awal?.alokasi.map(a => ({ anggaran_key: a.anggaran_key, nilai: Math.abs(a.nilai) })) ?? [],
+  )
+  const [potongan, setPotongan] = useState<PotonganUI[]>(
+    () => awal?.potongan.map(p => ({ jenis: p.jenis, keterangan: p.keterangan ?? '', nilai: p.nilai })) ?? [],
   )
   const [parkir, setParkir] = useState(awal?.status === 'BELUM_BERREKENING')
   const [cari, setCari] = useState('')
@@ -99,16 +116,30 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
 
   const byKey = useMemo(() => new Map(baris.map(b => [b.anggaran_key, b])), [baris])
   const beban = kasKeluar + bankKeluar
-  const totalAlokasi = alokasi.reduce((s, a) => s + a.nilai, 0)
+  const masuk = kasMasuk + bankMasuk
   const arus = { jenis, kas_masuk: kasMasuk, bank_masuk: bankMasuk, kas_keluar: kasKeluar, bank_keluar: bankKeluar }
+
   // Aturan dari `lib/blud/alokasi-rule.ts` — sama persis dengan yang dipakai Zod
   // dan data layer, supaya layar tidak pernah menjanjikan yang ditolak server.
-  const wajibAlokasi = wajibBeralokasi(arus)
-  const perluAlokasi = wajibAlokasi && !parkir
+  // Sifat dihitung dua kali: tanpa parkir untuk memutuskan apakah centangnya
+  // pantas ditawarkan, dengan parkir untuk menentukan isi form yang sebenarnya.
+  const sifatTanpaParkir = sifatAlokasi(arus)
+  const sifat: SifatAlokasi = parkir ? 'DILARANG' : sifatTanpaParkir
+  const bisaParkir = sifatTanpaParkir === 'WAJIB'
+  const perluAlokasi = sifat !== 'DILARANG'
+  const kembali = sifat === 'WAJIB_KEMBALI'
+  const bisaPotongan = sifat === 'WAJIB'
+
+  const targetAlokasi = kembali ? masuk : beban
+  const totalAlokasi = alokasi.reduce((s, a) => s + a.nilai, 0)
+  const selisih = targetAlokasi - totalAlokasi
+  const totalPotongan = potongan.reduce((s, p) => s + p.nilai, 0)
+  const potonganKelebihan = bisaPotongan && totalPotongan > beban + 0.005
+
   // Pemindahan bank↔kas yang tidak netral bukan pemindahan — biasanya jenisnya
   // salah pilih. Ditandai di layar sebelum server menolaknya.
   const transferTimpang = JENIS_PEMINDAHAN.includes(jenis) && !transferNetral(arus) && beban > 0
-  const selisih = beban - totalAlokasi
+  const pengembalianTimpang = jenis === 'PENGEMBALIAN' && beban > 0
 
   const hasilCari = useMemo(() => {
     const q = cari.trim().toLowerCase()
@@ -126,10 +157,14 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
   }
 
   function tambahAlokasi() {
-    // Alokasi pertama otomatis mengambil seluruh nilai belanja — kasus umum satu
+    // Alokasi pertama otomatis mengambil seluruh nilai transaksi — kasus umum satu
     // kuitansi = satu rekening tidak perlu mengetik nominal dua kali.
-    setAlokasi(prev => [...prev, { anggaran_key: '', nilai: prev.length === 0 ? beban : Math.max(0, selisih) }])
+    setAlokasi(prev => [...prev, { anggaran_key: '', nilai: prev.length === 0 ? targetAlokasi : Math.max(0, selisih) }])
     setPickerFor(alokasi.length)
+  }
+
+  function tambahPotongan() {
+    setPotongan(prev => [...prev, { jenis: 'PPN', keterangan: '', nilai: 0 }])
   }
 
   /** §4.1: membuat catatan permintaan + notifikasi. TIDAK menyentuh pagu. */
@@ -167,20 +202,38 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
       setGalat('Ambil/setor bank hanya memindahkan uang — nilai masuk harus sama dengan nilai keluar. '
         + 'Kalau ini pengeluaran sungguhan, pilih jenis lain lalu bebankan ke baris anggaran.'); return
     }
+    if (pengembalianTimpang) {
+      setGalat('Pengembalian belanja hanya menerima uang masuk — kosongkan kolom kas/bank keluar.'); return
+    }
     if (perluAlokasi && !alokasi.length) {
-      setGalat('Uang keluar wajib dibebankan ke baris anggaran. '
-        + 'Kalau rekeningnya belum ada di DPA, centang "parkir" di bawah.'); return
+      setGalat(kembali
+        ? 'Pengembalian belanja wajib menunjuk baris anggaran mana yang serapannya dikurangi.'
+        : 'Uang keluar wajib dibebankan ke baris anggaran. '
+          + 'Kalau rekeningnya belum ada di DPA, centang "parkir" di bawah.'); return
     }
     if (perluAlokasi && alokasi.some(a => !a.anggaran_key)) { setGalat('Masih ada alokasi yang belum dipilih rekeningnya.'); return }
     if (perluAlokasi && Math.abs(selisih) > 0.005) {
-      setGalat(`Total alokasi Rp ${rp(totalAlokasi)} tidak sama dengan nilai belanja Rp ${rp(beban)}.`); return
+      setGalat(`Total alokasi Rp ${rp(totalAlokasi)} tidak sama dengan nilai transaksi Rp ${rp(targetAlokasi)}.`); return
+    }
+    if (potonganKelebihan) {
+      setGalat('Jumlah potongan melebihi nilai pembayaran — yang ditahan tidak bisa lebih besar dari yang dibayarkan.'); return
     }
 
+    // Dikirim dari sifat, bukan dari isi state: alokasi yang terlanjur diketik saat
+    // jenisnya masih BELANJA tetap tersimpan di layar setelah jenis diganti, dan
+    // tanpa penyaring ini ia ikut terkirim lalu membebani pagu tanpa uang keluar.
     const transaksi = {
       tanggal, jenis, uraian: uraian.trim(),
       kas_masuk: kasMasuk, kas_keluar: kasKeluar,
       bank_masuk: bankMasuk, bank_keluar: bankKeluar,
-      alokasi: parkir ? [] : alokasi,
+      alokasi: perluAlokasi
+        ? alokasi.map(a => ({ anggaran_key: a.anggaran_key, nilai: kembali ? -a.nilai : a.nilai }))
+        : [],
+      potongan: bisaPotongan
+        ? potongan.filter(p => p.nilai > 0).map(p => ({
+          jenis: p.jenis, keterangan: p.keterangan.trim() || null, nilai: p.nilai,
+        }))
+        : [],
       belum_berrekening: parkir,
     }
 
@@ -291,10 +344,24 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
             </div>
           )}
 
+          {pengembalianTimpang && (
+            <div className="bk-note">
+              <b>Pengembalian belanja hanya menerima uang masuk.</b> Kosongkan kolom kas/bank keluar —
+              yang dicatat di sini adalah uang yang kembali ke kas dan mengurangi serapan.
+            </div>
+          )}
+
+          {kembali && (
+            <div className="bk-note">
+              Serapan baris anggaran yang dipilih akan <b>berkurang</b> sebesar nilai ini, dan sisa
+              pagunya bertambah. Nilainya tidak boleh melebihi yang pernah terserap di baris itu.
+            </div>
+          )}
+
           {/* Centang parkir mengikuti aturan yang sama dengan kewajiban alokasi —
               dulu hanya muncul untuk BELANJA, sehingga pengeluaran berjenis lain
               tidak punya jalan keluar sah selain lolos tanpa pembebanan. */}
-          {wajibAlokasi && (
+          {bisaParkir && (
             <>
               <label className="bk-parkir">
                 <input type="checkbox" checked={parkir} onChange={e => setParkir(e.target.checked)} />
@@ -311,10 +378,18 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
             </>
           )}
 
+          {!perluAlokasi && !parkir && alokasi.length > 0 && (
+            <div className="bk-note">
+              {alasanAlokasiDilarang(arus)} Pembebanan yang sudah diketik <b>tidak akan ikut disimpan</b>.
+            </div>
+          )}
+
           {perluAlokasi && (
             <div className="bk-alokasi">
               <div className="bk-alokasi-head">
-                <span className="blud-imp-dock-title blud-imp-muted">PEMBEBANAN KE BARIS ANGGARAN</span>
+                <span className="blud-imp-dock-title blud-imp-muted">
+                  {kembali ? 'PENGEMBALIAN KE BARIS ANGGARAN' : 'PEMBEBANAN KE BARIS ANGGARAN'}
+                </span>
                 <PrimaButton size="sm" variant="purple" iconLeft={<Plus className="w-3.5 h-3.5" />} onClick={tambahAlokasi}>
                   {alokasi.length === 0 ? 'Pilih Rekening' : 'Bagi ke Baris Lain'}
                 </PrimaButton>
@@ -334,7 +409,9 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
                     <DeleteButton onClick={() => setAlokasi(prev => prev.filter((_, j) => j !== i))} />
                     {b && (
                       <div className="bk-sisa blud-imp-muted">
-                        sisa sekarang Rp {rp(b.sisa)} dari pagu Rp {rp(b.pagu)}
+                        {kembali
+                          ? `terserap sekarang Rp ${rp(b.terserap)}`
+                          : `sisa sekarang Rp ${rp(b.sisa)} dari pagu Rp ${rp(b.pagu)}`}
                       </div>
                     )}
                   </div>
@@ -343,8 +420,52 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
 
               {alokasi.length > 0 && (
                 <div className={`bk-seimbang ${Math.abs(selisih) > 0.005 ? 'timpang' : 'pas'}`}>
-                  Belanja Rp {rp(beban)} · dialokasikan Rp {rp(totalAlokasi)}
+                  {kembali ? 'Kembali' : 'Belanja'} Rp {rp(targetAlokasi)} · dialokasikan Rp {rp(totalAlokasi)}
                   {Math.abs(selisih) > 0.005 ? ` · selisih Rp ${rp(Math.abs(selisih))}` : ' · pas'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {bisaPotongan && (
+            <div className="bk-alokasi">
+              <div className="bk-alokasi-head">
+                <span className="blud-imp-dock-title blud-imp-muted">POTONGAN PIHAK KETIGA</span>
+                <PrimaButton size="sm" variant="purple" iconLeft={<Scissors className="w-3.5 h-3.5" />} onClick={tambahPotongan}>
+                  Tambah Potongan
+                </PrimaButton>
+              </div>
+
+              {potongan.length === 0 && (
+                <div className="bk-potongan-kosong blud-imp-muted">
+                  Pajak yang dipungut/dipotong dari pembayaran ini lalu langsung disetorkan — PPN, PPh,
+                  koperasi, Baznas. Tidak mengurangi serapan: pagunya sudah habis di baris belanja di atas.
+                </div>
+              )}
+
+              {potongan.map((p, i) => (
+                <div key={i} className="bk-potongan-row">
+                  <OpsiDropdown
+                    value={p.jenis}
+                    items={POTONGAN_OPSI}
+                    onChange={(v) => setPotongan(prev => prev.map((x, j) => j === i ? { ...x, jenis: v } : x))}
+                    block
+                    portal
+                    ariaLabel="Jenis potongan"
+                  />
+                  <input className="blud-imp-input" value={p.keterangan} maxLength={191}
+                    placeholder="keterangan (opsional)"
+                    onChange={e => setPotongan(prev => prev.map((x, j) => j === i ? { ...x, keterangan: e.target.value } : x))} />
+                  <input className="blud-imp-input bk-num" inputMode="numeric" value={rp(p.nilai)}
+                    onChange={e => setPotongan(prev => prev.map((x, j) => j === i ? { ...x, nilai: angka(e.target.value) } : x))} />
+                  <DeleteButton onClick={() => setPotongan(prev => prev.filter((_, j) => j !== i))} />
+                </div>
+              ))}
+
+              {potongan.length > 0 && (
+                <div className={`bk-seimbang ${potonganKelebihan ? 'timpang' : 'pas'}`}>
+                  Potongan Rp {rp(totalPotongan)} · diterima rekanan Rp {rp(beban - totalPotongan)}
+                  {potonganKelebihan ? ' · melebihi nilai pembayaran' : ''}
                 </div>
               )}
             </div>

@@ -153,7 +153,7 @@ export default function BakiRekeningPanel({ tahun, onClose, onSambungkan }: Prop
                           id: t.id, version: t.version, tanggal: t.tanggal, jenis: t.jenis, uraian: t.uraian,
                           kas_masuk: t.kas_masuk, kas_keluar: t.kas_keluar,
                           bank_masuk: t.bank_masuk, bank_keluar: t.bank_keluar,
-                          status: t.status, alokasi: [],
+                          status: t.status, alokasi: [], potongan: [],
                         })}>
                           Sambungkan
                         </PrimaButton>
