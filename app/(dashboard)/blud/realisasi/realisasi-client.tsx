@@ -11,9 +11,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ChevronRight, ChevronDown, Search, TriangleAlert, ArrowUp, ArrowDown, Plus } from 'lucide-react'
+import { ChevronRight, ChevronDown, Search, TriangleAlert, ArrowUp, ArrowDown, Plus, CalendarDays } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import OpsiDropdown from '@/components/blud/OpsiDropdown'
+import { formatTanggalId } from '@/lib/blud/tanggal'
 import RegisterPanel from '@/components/blud/RegisterPanel'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -255,13 +257,17 @@ export default function RealisasiClient() {
           <TahunDropdown value={tahun} items={tahunList} current={CURRENT_YEAR} onChange={setTahun} />
         </div>
 
-        <select className="blud-imp-input bk-bulan" value={bulan} onChange={e => setBulan(Number(e.target.value))}>
-          {NAMA_BULAN.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
-        </select>
+        <OpsiDropdown
+          value={bulan}
+          items={NAMA_BULAN.map((n, i) => ({ value: i + 1, label: n }))}
+          onChange={setBulan}
+          icon={<CalendarDays className="w-3.5 h-3.5 versi-icon" />}
+          ariaLabel="Pilih bulan"
+        />
 
         {sumber && sumber.sumber !== 'KOSONG' && (
           <span className="blud-imp-pill on-purple">
-            Pagu dari {sumber.sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {sumber.versi}
+            Pagu dari {sumber.sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {formatTanggalId(sumber.versi)}
           </span>
         )}
 

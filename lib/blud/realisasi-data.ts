@@ -17,6 +17,7 @@ import { getPaguMap } from './pagu'
 import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
   BludPaguTerlampauiError, BludTxConflictError,
+  nilaiBebanPagu, wajibBeralokasi,
   type TransaksiInput, type JenisTransaksi,
 } from './realisasi-schemas'
 
@@ -63,9 +64,6 @@ const toDate = (v: unknown): string => {
   }
   return String(v ?? '').slice(0, 10)
 }
-
-/** Nilai yang dibebankan ke pagu — hanya arus keluar. */
-const nilaiBebanPagu = (t: TransaksiInput): number => t.kas_keluar + t.bank_keluar
 
 // ─── Periode ────────────────────────────────────────────────────────────────
 
@@ -362,9 +360,13 @@ async function kunciDanPeriksaPagu(
   }
 }
 
+/**
+ * Pagar terakhir sebelum tulis. Aturannya diambil dari `wajibBeralokasi` — sumber
+ * yang sama dipakai Zod dan modal Buku Kas, supaya tidak ada jenis transaksi yang
+ * kebetulan lolos hanya di satu lapis.
+ */
 function periksaKeseimbangan(input: TransaksiInput): void {
-  if (input.belum_berrekening) return
-  if (input.jenis !== 'BELANJA') return
+  if (!wajibBeralokasi(input)) return
   const beban = nilaiBebanPagu(input)
   const total = input.alokasi.reduce((s, a) => s + a.nilai, 0)
   if (Math.abs(total - beban) > 0.005) {

@@ -12,10 +12,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Lock, LockOpen, Check, TriangleAlert, Save, Download, Plus } from 'lucide-react'
+import { Lock, LockOpen, Check, TriangleAlert, Save, Download, Plus, CalendarDays } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DeleteButton from '@/components/ui/DeleteButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import OpsiDropdown from '@/components/blud/OpsiDropdown'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -224,9 +225,13 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
           <TahunDropdown value={tahun} items={tahunList} current={CURRENT_YEAR} onChange={setTahun} />
         </div>
 
-        <select className="blud-imp-input bk-bulan" value={bulan} onChange={e => setBulan(Number(e.target.value))}>
-          {NAMA_BULAN.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
-        </select>
+        <OpsiDropdown
+          value={bulan}
+          items={NAMA_BULAN.map((n, i) => ({ value: i + 1, label: n }))}
+          onChange={setBulan}
+          icon={<CalendarDays className="w-3.5 h-3.5 versi-icon" />}
+          ariaLabel="Pilih bulan"
+        />
 
         {data && (
           <span className={`blud-imp-pill ${terkunci ? 'on-amber' : 'on-purple'}`}>

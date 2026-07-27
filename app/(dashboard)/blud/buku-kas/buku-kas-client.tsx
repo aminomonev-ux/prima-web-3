@@ -10,11 +10,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Inbox, Lock } from 'lucide-react'
+import { Plus, Pencil, Inbox, Lock, CalendarDays } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DeleteButton from '@/components/ui/DeleteButton'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import OpsiDropdown from '@/components/blud/OpsiDropdown'
+import { formatTanggalId } from '@/lib/blud/tanggal'
 import TransaksiModal, { type BarisPaguUI, type TransaksiAwal } from '@/components/blud/TransaksiModal'
 import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
 
@@ -160,13 +162,17 @@ export default function BukuKasClient() {
           <TahunDropdown value={tahun} items={tahunList} current={CURRENT_YEAR} onChange={setTahun} />
         </div>
 
-        <select className="blud-imp-input bk-bulan" value={bulan} onChange={e => setBulan(Number(e.target.value))}>
-          {NAMA_BULAN.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
-        </select>
+        <OpsiDropdown
+          value={bulan}
+          items={NAMA_BULAN.map((n, i) => ({ value: i + 1, label: n }))}
+          onChange={setBulan}
+          icon={<CalendarDays className="w-3.5 h-3.5 versi-icon" />}
+          ariaLabel="Pilih bulan"
+        />
 
         {sumber && sumber.sumber !== 'KOSONG' && (
           <span className="blud-imp-pill on-purple">
-            Pagu dari {sumber.sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {sumber.versi}
+            Pagu dari {sumber.sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {formatTanggalId(sumber.versi)}
           </span>
         )}
         {terkunci && (

@@ -780,6 +780,18 @@ input, textarea { caret-color: #FBBF24; }
   color: #FFFFFF !important;
 }
 
+/* Varian "block": dropdown mengisi penuh kolom form (mis. Jenis di TransaksiModal).
+   Tingginya disamakan dengan .blud-imp-input supaya sebaris rapi dengan input lain. */
+.versi-dropdown--block { display: block; width: 100%; }
+.versi-dropdown--block .versi-trigger {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 34px;
+  font-size: 11.5px;
+  padding: 8px 10px;
+}
+.versi-dropdown--block .versi-chevron { margin-left: auto; }
+
 /* LATEST badge — kotak tajam, amber solid */
 .versi-dropdown--brutalist .versi-badge-latest {
   border-radius: 2px;
@@ -1463,18 +1475,30 @@ input, textarea { caret-color: #FBBF24; }
   box-shadow: 0 24px 64px rgba(0,0,0,.55) !important;
   color: #E6F1FB !important;
 }
+/* Judul di kiri, tombol tutup di kanan. Tanpa flex+padding tombol X jatuh ke
+   baris sendiri di bawah subjudul — bentuk yang tampak "belum jadi". */
 .blud-modal-header {
   border-bottom: 1px solid #0C447C !important;
   background: rgba(239,159,39,.08) !important;
   border-top-left-radius: 12px; border-top-right-radius: 12px;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 14px; padding: 14px 18px;
 }
-.blud-modal-title { color: #E6F1FB !important; }
-.blud-modal-subtitle { color: #85B7EB !important; }
+.blud-modal-header > div:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.blud-modal-title {
+  color: #E6F1FB !important;
+  font-size: 14.5px; font-weight: 800; letter-spacing: -.15px; line-height: 1.25;
+}
+.blud-modal-subtitle {
+  color: #85B7EB !important;
+  font-size: 11.5px; line-height: 1.45;
+}
 .blud-modal-subtitle strong, .blud-modal-card strong { color: #E6F1FB !important; }
 .blud-modal-close {
   color: #85B7EB !important; background: transparent !important; border: none !important; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border-radius: 6px; transition: all .15s;
+  flex-shrink: 0; margin-top: -1px;
 }
 .blud-modal-close:hover { color: #E6F1FB !important; background: rgba(255,255,255,.06) !important; }
 .blud-modal-option {
@@ -1552,9 +1576,22 @@ input, textarea { caret-color: #FBBF24; }
 .blud-imp-muted { color: #85B7EB; }
 .blud-imp-input {
   background: rgba(2,15,28,.5); border: 1px solid #185FA5; color: #E6F1FB;
-  border-radius: 8px; font-size: 12px; outline: none;
+  border-radius: 8px; font-size: 12.5px; outline: none;
+  /* Tanpa ini tinggi input jadi 18px dan teksnya menempel ke garis — sumber
+     "kolom form kurang rapi". Inline padding di ImportUsulanModal tetap menang. */
+  font-family: inherit; line-height: 1.45;
+  padding: 8px 10px; min-height: 34px;
+  transition: border-color .14s, box-shadow .14s, background .14s;
 }
-.blud-imp-input:focus { border-color: #EF9F27; }
+.blud-imp-input::placeholder { color: #6E93B8; }
+.blud-imp-input:hover:not(:focus):not(:disabled) { border-color: #2C7AC4; }
+.blud-imp-input:focus {
+  border-color: #EF9F27; box-shadow: 0 0 0 3px rgba(239,159,39,.16);
+}
+.blud-imp-input:disabled { opacity: .55; cursor: not-allowed; }
+/* Ikon kalender/jam bawaan browser ikut gelap kalau color-scheme tidak diberi tahu */
+.blud-imp-input[type="date"] { color-scheme: dark; }
+[data-theme="light"] .blud-imp-input[type="date"] { color-scheme: light; }
 .blud-imp-pill {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 5px 12px; border-radius: 99px; font-size: 11px; cursor: pointer;
@@ -1601,6 +1638,9 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .blud-imp-text  { color: #0F0F12; }
 [data-theme="light"] .blud-imp-muted { color: #6B7280; }
 [data-theme="light"] .blud-imp-input { background: #fff; border-color: #D1D5DB; color: #111827; }
+[data-theme="light"] .blud-imp-input::placeholder { color: #9AA4B2; }
+[data-theme="light"] .blud-imp-input:hover:not(:focus):not(:disabled) { border-color: #A8B4C4; }
+[data-theme="light"] .blud-imp-input:focus { border-color: #8B5CF6; box-shadow: 0 0 0 3px rgba(139,92,246,.14); }
 [data-theme="light"] .blud-imp-pill  { border-color: #D1D5DB; color: #4B5563; }
 [data-theme="light"] .blud-imp-pill.on-purple { background: rgba(124,92,252,.12); border-color: #7C5CFC; color: #534AB7; }
 [data-theme="light"] .blud-imp-pill.on-amber  { background: rgba(239,159,39,.15); border-color: #EF9F27; color: #854F0B; }
@@ -1622,7 +1662,13 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .blud-imp-badge-warn { background: rgba(239,159,39,.18); color: #854F0B; }
 
 /* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ BLUD tabel ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
-.dpa-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+/* Warna teks WAJIB ditegaskan di sini. Token --foreground gelap hanya didefinisikan
+   di kelas `.dark`, sedangkan PRIMA berganti tema lewat [data-theme="dark"] — jadi
+   sel yang tidak punya warna sendiri mewarisi teks nyaris hitam dan hilang di tema
+   gelap. Ditaruh di <table> (bukan td) supaya kelas per-sel spt .bk-kode tetap menang:
+   deklarasi langsung selalu mengalahkan warisan. */
+.dpa-table { border-collapse: collapse; width: 100%; font-size: 13px; color: #E6F1FB; }
+[data-theme="light"] .dpa-table { color: #1F2937; }
 .dpa-table th {
   background: rgba(4,44,83,.95); color: #E6F1FB; padding: 8px 10px;
   text-align: center; font-weight: 700; font-size: 11px;
@@ -2698,7 +2744,6 @@ button:hover .prima-del-top { transform: rotate(160deg); }
   padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
 }
 .bk-title { font-weight: 800; font-size: 14px; color: #E6F1FB; }
-.bk-bulan { min-width: 140px; }
 .bk-saldo { padding: 8px 16px; font-size: 12px; }
 .bk-num-inline { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 
@@ -2728,15 +2773,26 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 
 /* Modal transaksi */
 .bk-modal { width: min(760px, 94vw); max-height: 92vh; display: flex; flex-direction: column; position: relative; }
-.bk-modal-body { padding: 14px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.bk-modal-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 .bk-modal-foot {
   padding: 12px 18px; border-top: 1px solid rgba(255,255,255,.08);
   display: flex; justify-content: flex-end; gap: 8px;
 }
-.bk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.bk-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.bk-field { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; }
-.bk-num { font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; }
+.bk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.bk-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.bk-field { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; min-width: 0; }
+/* Label kolom: sekelas dengan header tabel (uppercase + tracking) supaya
+   form dan tabel terbaca sebagai satu bahasa visual. */
+.bk-field > span:first-child {
+  font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+}
+.bk-num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right;
+  font-weight: 600; letter-spacing: -.2px; font-variant-numeric: tabular-nums;
+}
+@media (max-width: 720px) {
+  .bk-grid, .bk-grid-4 { grid-template-columns: 1fr 1fr; }
+}
 .bk-parkir { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
 .bk-note {
   font-size: 12px; line-height: 1.5; padding: 8px 12px; border-radius: 8px;
@@ -2885,8 +2941,16 @@ button:hover .prima-del-top { transform: rotate(160deg); }
   margin-top: 6px; padding-top: 10px; border-top: 1px dashed #0C447C;
   font-weight: 800; color: #E6F1FB; font-size: 13.5px;
 }
-.tk-isian { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #8FA9C4; }
+.tk-isian { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #8FA9C4; }
+.tk-isian > span:first-child {
+  font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+}
 .tk-isian input, .tk-isian textarea { width: 100%; }
+/* Angka hasil hitung uang: mono + rata kanan, sejajar dengan kolom sisi buku. */
+.tk-isian input[inputmode="numeric"] {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
+}
 .bk-num-input { font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; }
 
 /* Satu-satunya angka yang menentukan boleh atau tidaknya menutup bulan. */

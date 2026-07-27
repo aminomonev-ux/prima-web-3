@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { History, ChevronDown, Check } from 'lucide-react'
+import { formatTanggalId } from '@/lib/blud/tanggal'
 
 export interface VersiItem {
   versi_tanggal: string         // YYYY-MM-DD
@@ -18,13 +19,7 @@ interface Props {
   placeholder?: string
 }
 
-// Format tanggal YYYY-MM-DD → "DD Mon YYYY" ID
-const ID_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-function formatTanggal(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
-  if (!m) return iso
-  return `${m[3]} ${ID_MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`
-}
+const formatTanggal = formatTanggalId
 
 export default function VersiDropdown({ value, items, onChange, placeholder = '— Pilih Versi —' }: Props) {
   const [open, setOpen] = useState(false)

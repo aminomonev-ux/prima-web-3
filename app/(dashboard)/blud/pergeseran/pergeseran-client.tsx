@@ -20,6 +20,7 @@ import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import { formatTanggalId } from '@/lib/blud/tanggal'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
 import type { PergeseranBarisInput, PergeseranBaris, DpaBaris, TipeBaris } from '@/types'
@@ -1045,7 +1046,7 @@ export default function PergeseranClient() {
               <div>
                 <div className="blud-modal-title">Pagu turun di bawah realisasi</div>
                 <div className="blud-modal-subtitle">
-                  {bentrokPagu.detail.length} baris · versi {bentrokPagu.versiTanggal}
+                  {bentrokPagu.detail.length} baris · versi {formatTanggalId(bentrokPagu.versiTanggal)}
                 </div>
               </div>
               <button className="blud-modal-close" onClick={() => setBentrokPagu(null)} aria-label="Tutup">✕</button>

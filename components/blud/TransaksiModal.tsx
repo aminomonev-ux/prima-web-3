@@ -11,9 +11,13 @@
 
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X, Plus, AlertTriangle } from 'lucide-react'
+import { Search, X, Plus, AlertTriangle, ArrowRightLeft } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DeleteButton from '@/components/ui/DeleteButton'
+import OpsiDropdown from '@/components/blud/OpsiDropdown'
+import {
+  JENIS_PEMINDAHAN, transferNetral, wajibBeralokasi, type JenisTransaksi,
+} from '@/lib/blud/alokasi-rule'
 
 export interface BarisPaguUI {
   anggaran_key: string
@@ -59,7 +63,7 @@ interface Props {
   onSaved: () => void
 }
 
-const JENIS_OPSI = [
+const JENIS_OPSI: { v: JenisTransaksi; t: string }[] = [
   { v: 'BELANJA', t: 'Belanja' },
   { v: 'AMBIL_BANK', t: 'Ambil dari bank' },
   { v: 'SETOR_BANK', t: 'Setor ke bank' },
@@ -75,7 +79,7 @@ const angka = (s: string) => Number(String(s).replace(/[^\d-]/g, '') || 0)
 // (react-hooks/set-state-in-effect).
 export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onSaved }: Props) {
   const [tanggal, setTanggal] = useState(awal?.tanggal ?? `${tahun}-${String(bulan).padStart(2, '0')}-01`)
-  const [jenis, setJenis] = useState(awal?.jenis ?? 'BELANJA')
+  const [jenis, setJenis] = useState<JenisTransaksi>((awal?.jenis as JenisTransaksi) ?? 'BELANJA')
   const [uraian, setUraian] = useState(awal?.uraian ?? '')
   const [kasKeluar, setKasKeluar] = useState(awal?.kas_keluar ?? 0)
   const [bankKeluar, setBankKeluar] = useState(awal?.bank_keluar ?? 0)
@@ -96,7 +100,14 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
   const byKey = useMemo(() => new Map(baris.map(b => [b.anggaran_key, b])), [baris])
   const beban = kasKeluar + bankKeluar
   const totalAlokasi = alokasi.reduce((s, a) => s + a.nilai, 0)
-  const perluAlokasi = jenis === 'BELANJA' && !parkir
+  const arus = { jenis, kas_masuk: kasMasuk, bank_masuk: bankMasuk, kas_keluar: kasKeluar, bank_keluar: bankKeluar }
+  // Aturan dari `lib/blud/alokasi-rule.ts` — sama persis dengan yang dipakai Zod
+  // dan data layer, supaya layar tidak pernah menjanjikan yang ditolak server.
+  const wajibAlokasi = wajibBeralokasi(arus)
+  const perluAlokasi = wajibAlokasi && !parkir
+  // Pemindahan bank↔kas yang tidak netral bukan pemindahan — biasanya jenisnya
+  // salah pilih. Ditandai di layar sebelum server menolaknya.
+  const transferTimpang = JENIS_PEMINDAHAN.includes(jenis) && !transferNetral(arus) && beban > 0
   const selisih = beban - totalAlokasi
 
   const hasilCari = useMemo(() => {
@@ -152,6 +163,14 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
     setPaguGagal(null)
     setDiajukan(false)
     if (!uraian.trim()) { setGalat('Uraian wajib diisi.'); return }
+    if (transferTimpang) {
+      setGalat('Ambil/setor bank hanya memindahkan uang — nilai masuk harus sama dengan nilai keluar. '
+        + 'Kalau ini pengeluaran sungguhan, pilih jenis lain lalu bebankan ke baris anggaran.'); return
+    }
+    if (perluAlokasi && !alokasi.length) {
+      setGalat('Uang keluar wajib dibebankan ke baris anggaran. '
+        + 'Kalau rekeningnya belum ada di DPA, centang "parkir" di bawah.'); return
+    }
     if (perluAlokasi && alokasi.some(a => !a.anggaran_key)) { setGalat('Masih ada alokasi yang belum dipilih rekeningnya.'); return }
     if (perluAlokasi && Math.abs(selisih) > 0.005) {
       setGalat(`Total alokasi Rp ${rp(totalAlokasi)} tidak sama dengan nilai belanja Rp ${rp(beban)}.`); return
@@ -220,12 +239,18 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
               <span className="blud-imp-muted">Tanggal</span>
               <input type="date" className="blud-imp-input" value={tanggal} onChange={e => setTanggal(e.target.value)} />
             </label>
-            <label className="bk-field">
+            <div className="bk-field">
               <span className="blud-imp-muted">Jenis</span>
-              <select className="blud-imp-input" value={jenis} onChange={e => setJenis(e.target.value)}>
-                {JENIS_OPSI.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}
-              </select>
-            </label>
+              <OpsiDropdown
+                value={jenis}
+                items={JENIS_OPSI.map(o => ({ value: o.v, label: o.t }))}
+                onChange={setJenis}
+                icon={<ArrowRightLeft className="w-3.5 h-3.5 versi-icon" />}
+                block
+                portal
+                ariaLabel="Jenis transaksi"
+              />
+            </div>
           </div>
 
           <label className="bk-field">
@@ -258,7 +283,18 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
             </label>
           </div>
 
-          {jenis === 'BELANJA' && (
+          {transferTimpang && (
+            <div className="bk-note">
+              <b>Nilai masuk dan keluar belum sama.</b> Ambil/setor bank hanya memindahkan uang milik
+              sendiri, jadi keduanya harus sama besar. Kalau ini pengeluaran sungguhan, pilih jenis
+              lain lalu bebankan ke baris anggaran.
+            </div>
+          )}
+
+          {/* Centang parkir mengikuti aturan yang sama dengan kewajiban alokasi —
+              dulu hanya muncul untuk BELANJA, sehingga pengeluaran berjenis lain
+              tidak punya jalan keluar sah selain lolos tanpa pembebanan. */}
+          {wajibAlokasi && (
             <>
               <label className="bk-parkir">
                 <input type="checkbox" checked={parkir} onChange={e => setParkir(e.target.checked)} />

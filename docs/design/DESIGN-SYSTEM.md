@@ -1623,6 +1623,29 @@ BLUD DPA & Pergeseran client (`dpa-client.tsx`, `pergeseran-client.tsx`) masih p
 | Pakai `icon.X` palette untuk CTA tombol | CTA tetap `colors.primary` (#EF9F27 dark) / gradient `#8B5CF6→#EC4899` (light) |
 | Hardcode hex di inline style baru | Pakai `Tile.color` per metric (sudah didefinisi di `TILES[]` constant) |
 | Pakai sidebar vertical di modul BLUD | BLUD layout adalah top ribbon — konsisten dengan pattern di section ini |
+| `<select>` bawaan browser untuk pilihan | `components/blud/OpsiDropdown.tsx` (lihat 12.8) |
+| Andalkan warna teks warisan di dalam tabel | Tegaskan warna di elemen `<table>`, lihat 12.8 |
+
+### 12.8 OpsiDropdown — pengganti `<select>` (STANDAR TUNGGAL)
+
+> File: `components/blud/OpsiDropdown.tsx`. Sebentuk dengan `TahunDropdown` (reuse `.versi-*` + `--brutalist`).
+
+**DILARANG `<select>` bawaan browser.** Daftar opsinya digambar OS, bukan CSS — di tema
+gelap tulisannya ikut warna sistem dan hilang, dan tingginya tidak bisa disamakan dengan
+input lain. Dipakai di Buku Kas, Realisasi, Tutup Kas (pilih bulan) dan TransaksiModal (Jenis).
+
+| Prop | Kapan dipakai |
+|---|---|
+| `icon` | Ikon lucide 3.5 di kiri label — beri kelas `versi-icon` biar ikut warna tema |
+| `prefix` | Kata di depan nilai, mis. `Tahun` → "Tahun **2026**" |
+| `block` | Dropdown mengisi penuh kolom form; tinggi disamakan `.blud-imp-input` (34px) |
+| `portal` | **WAJIB** kalau induknya ber-`overflow:auto` (mis. `.bk-modal-body`) — kalau tidak, menunya terpotong |
+
+**Catatan warna teks tabel.** Token `--foreground` versi gelap hanya didefinisikan di kelas
+`.dark`, sedangkan PRIMA berganti tema lewat `[data-theme="dark"]`. Akibatnya elemen yang
+tidak punya warna sendiri mewarisi teks nyaris hitam dan **hilang di tema gelap**. Karena itu
+`.dpa-table` menegaskan `color` di level `<table>` — bukan di `td`, supaya kelas per-sel
+seperti `.bk-kode` tetap menang (deklarasi langsung selalu mengalahkan warisan).
 
 ### 12.7 Menu Cetak — Toolbar + Render + Export
 

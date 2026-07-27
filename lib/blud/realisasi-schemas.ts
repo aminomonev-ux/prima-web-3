@@ -7,6 +7,16 @@
 // yang berubah cuma isi dua fungsi ini, bukan route-nya (§7.4).
 import { z } from 'zod'
 import { isBludRole } from './schemas'
+import {
+  JENIS_TRANSAKSI, JENIS_PEMINDAHAN, nilaiBebanPagu, transferNetral, wajibBeralokasi,
+} from './alokasi-rule'
+
+// Aturan alokasi hidup di modul daun `alokasi-rule.ts` supaya modal Buku Kas
+// (klien) bisa memakainya tanpa ikut menarik `next/server` lewat `./schemas`.
+export {
+  JENIS_TRANSAKSI, JENIS_PEMINDAHAN, nilaiBebanPagu, transferNetral, wajibBeralokasi,
+}
+export type { JenisTransaksi, ArusKas } from './alokasi-rule'
 
 export const BLUD_REALISASI_APP_FLAG = 'app_status_blud_realisasi'
 
@@ -24,10 +34,7 @@ export const BulanSchema = z.coerce.number().int().gte(1).lte(12)
 export const RupiahSchema = z.number().min(0).max(1e15)
 export const AnggaranKeySchema = z.string().min(1).max(64)
 
-export const JenisTransaksiSchema = z.enum([
-  'BELANJA', 'AMBIL_BANK', 'SETOR_BANK', 'PENERIMAAN', 'LAIN',
-])
-export type JenisTransaksi = z.infer<typeof JenisTransaksiSchema>
+export const JenisTransaksiSchema = z.enum(JENIS_TRANSAKSI)
 
 export const TanggalTxSchema = z
   .string()
@@ -72,6 +79,20 @@ export const TransaksiInputSchema = z.object({
   }
   if (v.belum_berrekening && v.alokasi.length) {
     ctx.addIssue({ code: 'custom', path: ['alokasi'], message: 'Transaksi diparkir tidak boleh punya alokasi' })
+  }
+  if (JENIS_PEMINDAHAN.includes(v.jenis) && !transferNetral(v)) {
+    ctx.addIssue({
+      code: 'custom', path: ['jenis'],
+      message: 'Ambil/setor bank hanya memindahkan uang: nilai masuk harus sama dengan nilai keluar. '
+        + 'Kalau ini pengeluaran sungguhan, pilih jenis lain dan bebankan ke baris anggaran.',
+    })
+  }
+  if (wajibBeralokasi(v) && !v.alokasi.length) {
+    ctx.addIssue({
+      code: 'custom', path: ['alokasi'],
+      message: 'Uang keluar wajib dibebankan ke baris anggaran. '
+        + 'Kalau rekeningnya memang belum ada di DPA, centang "parkir" supaya tercatat sebagai utang pekerjaan.',
+    })
   }
   const kunci = new Set<string>()
   for (const a of v.alokasi) {

@@ -11,6 +11,7 @@
 // Kolom `pergeseran` = pagu SESUDAH digeser (bukan nilai deltanya — itu
 // `bertambah_berkurang`). Lihat recalcPergeseranJumlah di recalc.ts.
 import { sql } from '@/lib/data/db'
+import { toDateStr } from './data'
 import type { TipeBaris } from '@/types'
 
 export interface BarisPagu {
@@ -70,17 +71,25 @@ function susun(rows: BarisMentah[]): BarisPagu[] {
   return hasil
 }
 
-/** Dari mana pagu tahun ini diambil — dipakai UI untuk memberi tahu pengguna. */
+/**
+ * Dari mana pagu tahun ini diambil — dipakai UI untuk memberi tahu pengguna.
+ *
+ * `toDateStr` WAJIB, jangan `String(v).slice(0,10)`: kolom DATE dikembalikan
+ * mysql2 sebagai objek Date, dan `String(Date)` berbunyi "Sun Jul 26 2026 …"
+ * sehingga potongannya jadi "Sun Jul 26". Selain salah di layar, string itu
+ * dipakai lagi sebagai parameter DATE di getPaguCap → MySQL menolak dengan
+ * ER_WRONG_VALUE dan deteksi perubahan pagu §4.4 mati diam-diam.
+ */
 export async function getPaguSumber(tahun: number): Promise<PaguSumber> {
   const pgs = await sql`
     SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}
   ` as { v?: unknown }[]
-  if (pgs[0]?.v) return { sumber: 'PERGESERAN', versi: String(pgs[0].v).slice(0, 10) }
+  if (pgs[0]?.v) return { sumber: 'PERGESERAN', versi: toDateStr(pgs[0].v) }
 
   const dpa = await sql`
     SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}
   ` as { v?: unknown }[]
-  if (dpa[0]?.v) return { sumber: 'DPA', versi: String(dpa[0].v).slice(0, 10) }
+  if (dpa[0]?.v) return { sumber: 'DPA', versi: toDateStr(dpa[0].v) }
 
   return { sumber: 'KOSONG', versi: null }
 }
