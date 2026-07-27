@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Inbox, Lock, CalendarDays } from 'lucide-react'
+import { Plus, Pencil, Inbox, Lock, CalendarDays, Eye } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DeleteButton from '@/components/ui/DeleteButton'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
@@ -20,6 +20,7 @@ import { formatTanggalId } from '@/lib/blud/tanggal'
 import TransaksiModal, { type BarisPaguUI, type TransaksiAwal } from '@/components/blud/TransaksiModal'
 import { LABEL_POTONGAN, type JenisPotongan } from '@/lib/blud/alokasi-rule'
 import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
+import DetailTransaksiModal from '@/components/blud/DetailTransaksiModal'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -66,6 +67,7 @@ export default function BukuKasClient() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [edit, setEdit] = useState<TransaksiAwal | null>(null)
+  const [detail, setDetail] = useState<TxRow | null>(null)
   const [bakiOpen, setBakiOpen] = useState(false)
 
   useEffect(() => {
@@ -278,6 +280,13 @@ export default function BukuKasClient() {
                 <td className="bk-r bk-num-inline bk-saldo-sel">{rp(r.saldo_bank)}</td>
                 <td className="bk-c">
                   <div className="bk-aksi">
+                    {/* Selalu hidup, termasuk saat bulannya sudah ditutup: tanpa ini
+                        rincian potongan & pembebanan bulan lama tidak bisa dilihat
+                        sama sekali, karena satu-satunya jalan ke sana tombol Ubah. */}
+                    <button className="blud-act blud-act-lihat"
+                      onClick={() => setDetail(r)} data-tooltip="Lihat rincian" aria-label="Lihat rincian">
+                      <Eye />
+                    </button>
                     <button className="blud-act blud-act-add" disabled={terkunci}
                       onClick={() => bukaUbah(r)} data-tooltip="Ubah" aria-label="Ubah">
                       <Pencil />
@@ -325,6 +334,10 @@ export default function BukuKasClient() {
           onClose={() => setModalOpen(false)}
           onSaved={() => { toast.success('Transaksi tersimpan'); muat(tahun, bulan); muatPagu(tahun) }}
         />
+      )}
+
+      {detail && (
+        <DetailTransaksiModal tx={detail} terkunci={terkunci} onClose={() => setDetail(null)} />
       )}
     </div>
   )

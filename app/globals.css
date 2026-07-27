@@ -1134,6 +1134,13 @@ input, textarea { caret-color: #FBBF24; }
   border: 1px solid rgba(244,63,94,.45);
   color: #FB7185;
 }
+/* Lihat rincian — sengaja netral (batu, bukan warna aksi): tombol ini tidak
+   mengubah apa pun, jadi tidak boleh bersaing perhatian dengan Ubah & Hapus. */
+.blud-act-lihat {
+  background: rgba(148,163,184,.18);
+  border: 1px solid rgba(148,163,184,.42);
+  color: #CBD5E1;
+}
 
 /* Light theme ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â putih solid + warna ikon kuat + shadow biar pop di atas heads */
 [data-theme="light"] .blud-act {
@@ -1143,6 +1150,7 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .blud-act-add     { border: 1px solid #059669 !important; color: #047857 !important; }
 [data-theme="light"] .blud-act-sibling { border: 1px solid #2563EB !important; color: #1D4ED8 !important; }
 [data-theme="light"] .blud-act-del     { border: 1px solid #DC2626 !important; color: #B91C1C !important; }
+[data-theme="light"] .blud-act-lihat   { border: 1px solid #64748B !important; color: #475569 !important; }
 
 /* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Row Actions Kebab Menu (Konsep C ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â pengganti 3-tombol cluster) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
 /* Tombol kebab di kolom AKSI: 1 ikon ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¹ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â® ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ klik buka dropdown 3 opsi.
@@ -2849,6 +2857,50 @@ button:hover .prima-del-top { transform: rotate(160deg); }
   margin-left: 8px; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
   background: rgba(29,158,117,.18); color: #59C7A4;
 }
+/* ── Rincian transaksi (baca-saja, dari kolom Aksi Buku Kas) ──────────────── */
+.bk-detail-card { max-width: 560px; width: 100%; }
+.bk-detail-body {
+  padding: 14px 18px; display: flex; flex-direction: column; gap: 10px;
+  max-height: 65vh; overflow-y: auto;
+}
+.bk-detail-kunci {
+  display: flex; align-items: center; gap: 8px; font-size: 11.5px;
+  background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.35);
+  color: #7DD3FC; border-radius: 8px; padding: 7px 10px;
+}
+.bk-detail-baris { display: grid; grid-template-columns: 92px 1fr; gap: 10px; font-size: 12.5px; line-height: 1.5; }
+.bk-detail-judul {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+  color: #85B7EB; margin-top: 6px;
+}
+.bk-detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.bk-detail-sel {
+  display: flex; flex-direction: column; gap: 2px; font-size: 11.5px;
+  background: rgba(0,0,0,.20); border-radius: 8px; padding: 8px 10px;
+}
+.bk-detail-daftar { display: flex; flex-direction: column; gap: 6px; }
+.bk-detail-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  background: rgba(0,0,0,.20); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+}
+.bk-detail-jumlah {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  font-size: 12.5px; padding: 6px 10px 0; border-top: 1px solid rgba(12,68,124,.6);
+}
+.bk-detail-angka { font-family: 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; }
+.bk-detail-kosong { font-size: 12px; color: #85B7EB; }
+.bk-detail-catatan { font-size: 11.5px; line-height: 1.55; color: #85B7EB; }
+.bk-detail-foot { padding: 12px 18px; border-top: 1px solid #0C447C; display: flex; justify-content: flex-end; }
+
+[data-theme="light"] .bk-detail-kunci { background: rgba(14,165,233,.10); border-color: rgba(14,165,233,.30); color: #0369A1; }
+[data-theme="light"] .bk-detail-judul { color: #6B7280; }
+[data-theme="light"] .bk-detail-sel,
+[data-theme="light"] .bk-detail-item { background: #F3F6FA; }
+[data-theme="light"] .bk-detail-jumlah { border-top-color: #E1E7EE; }
+[data-theme="light"] .bk-detail-kosong,
+[data-theme="light"] .bk-detail-catatan { color: #5B7392; }
+[data-theme="light"] .bk-detail-foot { border-top-color: #E1E7EE; }
+
 .bk-seimbang { font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .bk-seimbang.pas { color: #1D9E75; }
 .bk-seimbang.timpang { color: #E24B4A; font-weight: 700; }

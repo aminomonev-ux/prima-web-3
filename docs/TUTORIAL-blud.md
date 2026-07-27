@@ -280,6 +280,19 @@ Toolbar: **TahunDropdown** · **dropdown bulan** · pil **"Pagu dari DPA/Pergese
 
 Tabel BKU: `No · Tanggal · Kwt · Uraian · Rekening · Kas Masuk · Kas Keluar · Saldo Kas · Bank Masuk · Bank Keluar · Saldo Bank · Aksi`, ditutup baris **JUMLAH BULAN INI**.
 
+#### Kolom Aksi tiap baris
+| Tombol | Aktif kapan | Isi |
+|---|---|---|
+| 👁 **Lihat rincian** (abu) | **selalu**, termasuk saat bulannya sudah ditutup | Jendela baca-saja: jenis, uraian, arus kas, pembebanan per baris anggaran, dan **rincian potongan** (PPN/PPh + keterangan) beserta *"Diterima rekanan"* |
+| ✏️ **Ubah** (kuning) | bulan masih terbuka | Membuka form transaksi |
+| 🗑 **Hapus** (merah) | bulan masih terbuka | Konfirmasi dulu |
+
+> **Kenapa Lihat tetap hidup saat bulan tertutup.** Sebelum tombol ini ada, satu-satunya
+> jalan melihat rincian transaksi adalah tombol Ubah — dan tombol itu mati begitu bulannya
+> ditutup. Akibatnya bulan yang paling sering diperiksa ulang ("PPh-nya waktu itu berapa?")
+> justru yang paling tidak bisa dilihat. Jendelanya murni baca: tidak ada satu pun isian di
+> dalamnya, jadi bulan tertutup tetap tidak bisa berubah dari sini.
+
 #### Modal "Transaksi Baru"
 | No | Elemen PERSIS | Aturan |
 |---|---|---|
