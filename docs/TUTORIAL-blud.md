@@ -417,7 +417,7 @@ SISI B  menurut nyata  = uang tunai di brankas + saldo rekening koran ← DIKETI
 | 5 | **"Simpan Pemeriksaan"** (ghost) | Simpan sisi B **tanpa** menutup — supaya bisa menghitung uang bertahap sambil melihat selisih |
 | 6 | **"Tutup Bulan"** (hijau) | Aktif hanya kalau selisih Rp 0 **dan** tanpa penghalang · audit `BLUD_PERIODE_TUTUP` |
 | 7 | **"Unduh SPJ Bulanan"** (hijau) | Unduh `.xlsx` 11 lembar · audit `BLUD_SPJ_UNDUH` |
-| 8 | **"Buka Kembali"** (amber) | **SUPER_ADMIN saja**, alasan ≥10 karakter · audit `BLUD_PERIODE_BUKA` |
+| 8 | **"Buka Kembali"** (amber) | **SUPER_ADMIN saja** (`bolehBukaPeriode`), alasan ≥10 karakter · audit `BLUD_PERIODE_BUKA` · **wajib urut dari belakang** — lihat §7.3 |
 
 ### 7.3 Penghalang tutup — daftarnya satu, dipakai layar **dan** server
 `kumpulkanPenghalang()` adalah sumber tunggalnya; UI tidak punya versi aturannya sendiri.
@@ -428,6 +428,17 @@ SISI B  menurut nyata  = uang tunai di brankas + saldo rekening koran ← DIKETI
 | Bulan sebelumnya masih terbuka | *"Bulan 3, 4 belum ditutup — saldo awal bulan ini masih bisa berubah. Tutup dari bulan terdepan."* | Tutup berurutan dari bulan terdepan |
 
 > **Kenapa harus berurutan (§4.6)**: saldo awal Januari diisi manual sekali; bulan berikutnya **diturunkan** dari arus kas bulan-bulan sebelumnya — tidak disimpan. Menutup Juni sementara Mei masih terbuka = menandatangani saldo yang masih bisa berubah esok hari. Sebaliknya, koreksi transaksi bulan lalu otomatis merambat ke seluruh bulan sesudahnya.
+
+**Membuka pun berurutan — dari belakang (S2).** Alasannya sisi lain dari koin yang
+sama: kalau Januari dibuka sementara Februari–Juni sudah ditandatangani, satu koreksi
+di Januari menggeser saldo kelimanya tanpa ada yang memberi tahu. Jadi:
+
+> ❌ *"Tidak bisa membuka Mei. Tutup kas Juni perlu dibuka lebih dulu — saldo awal
+> bulan-bulan itu dihitung dari bulan ini, jadi ikut bergeser begitu isinya berubah."*
+
+Urutannya: buka bulan **terbelakang** dulu, mundur sampai bulan yang dituju. Bulan yang
+belum pernah ditutup sama sekali tidak menghalangi. Repot di sini disengaja — yang
+dibuka dokumen bertanda tangan, bukan draf.
 
 ### 7.4 Periode GU (Ganti Uang Persediaan) — §3.2 / keputusan #31
 Satu bulan boleh punya beberapa pengajuan GU (berkas asli: `GU 1-26 Juni 2026`, bukan sebulan penuh). Rentangnya **tidak bisa diterka** dari transaksi — tidak ada penanda "GU ke-2 mulai di sini" di data mana pun — jadi dicatat manual. Yang dicatat **hanya rentangnya**; angka realisasinya tetap dihitung saat lembar dibuat.
@@ -481,8 +492,14 @@ Dua bagian: **Pejabat penanda tangan SPJ** (§3.4) dan **pengelolaan versi**.
 |---|---|---|---|
 | 1 | Section **Versi DPA** / **Versi Pergeseran** | Lihat daftar versi | Riwayat lengkap |
 | 2 | Ikon hapus versi | Klik → modal | Muncul **kode konfirmasi** acak |
-| 3 | Ketik kode → konfirmasi | Klik | Versi dihapus · rate-limited · audit `BLUD_DELETE_DPA_VERSI` / `BLUD_DELETE_PERGESERAN_VERSI` |
-| 4 | Panel **"Hapus ditahan"** | Muncul sendiri | Versi yang masih menyangga realisasi **tidak bisa dihapus** — panel menampilkan tiap baris beserta pagu penerus, serapan, dan selisih minusnya |
+| 3 | Isian **Alasan** (min. 10 karakter) | Ketik | Wajib. Tombol Hapus baru hidup kalau kode **dan** alasan terpenuhi; alasannya ikut masuk audit log |
+| 4 | Ketik kode → konfirmasi | Klik | Versi dihapus · rate-limited · audit `BLUD_DELETE_DPA_VERSI` / `BLUD_DELETE_PERGESERAN_VERSI` |
+| 5 | Panel **"Hapus ditahan"** | Muncul sendiri | Versi yang masih menyangga realisasi **tidak bisa dihapus** — panel menampilkan tiap baris beserta pagu penerus, serapan, dan selisih minusnya |
+
+> **Siapa yang boleh menghapus versi (S5):** hanya **Super Admin** dan **Admin
+> Staff**. Pemegang grant `app_access: 'blud'` lain (mis. bendahara) tetap bisa
+> membuka layar ini dan melihat daftar versinya, tapi tombol Hapus tidak muncul.
+> Akses modul membuka pintu masuk; membuang anggaran setahun perkara lain.
 
 > **Kenapa hapus bisa ditahan (T1).** Pagu selalu diambil dari versi TERBARU. Menghapus
 > versi teratas memundurkan pagu **setahun penuh** ke versi sebelumnya, sementara
@@ -525,9 +542,12 @@ flowchart TD
 | `isBludRole(role, appAccess)` | `SUPER_ADMIN` / `ADMIN`, **atau** `users.app_access` memuat `'blud'` |
 | `bolehLihat` → `canViewRealisasi` | Saat ini = `isBludRole` |
 | `bolehInput` → `canInputRealisasi` | Saat ini = `isBludRole` |
-| **Buka kembali periode** (`DELETE /realisasi/periode`) | **`SUPER_ADMIN` saja** — sengaja lebih ketat dari guard modul, + alasan ≥10 karakter |
+| `bolehBukaPeriode(role)` (`DELETE /realisasi/periode`) | `BLUD_BUKA_PERIODE_ROLES = ['SUPER_ADMIN']` — sengaja lebih ketat dari guard modul, + alasan ≥10 karakter |
+| `canHapusVersi(role)` (`DELETE /dpa`, `DELETE /pergeseran`) | `BLUD_HAPUS_VERSI_ROLES = ['SUPER_ADMIN','ADMIN']` — grant `app_access` **tidak** cukup, + alasan ≥10 karakter |
 
 > Pemisahan **lihat** vs **input** sudah dipasang sejak awal walau isinya sama (§7.4). Saat pembagian role diaktifkan nanti, yang berubah hanya isi **dua fungsi** itu di `lib/blud/realisasi-schemas.ts` — bukan route-nya.
+>
+> Dua fungsi izin terakhir sengaja berbentuk **daftar peran**, bukan perbandingan `=== 'SUPER_ADMIN'` yang ditulis di dalam route. Menambah peran nanti = satu nama di daftar, tanpa menyentuh route mana pun. Uji `scripts/test-blud-izin-periode.mjs` mengunci isi kedua daftar itu — jadi melonggarkannya selalu jadi keputusan sadar.
 >
 > **AUTHZ-02/V5**: BLUD sengaja **tanpa ownership per-record** — semua pemegang akses bisa mengubah semua record. Itu keputusan, bukan IDOR. Konsekuensinya pemberian `app_access: 'blud'` harus konservatif dan direview berkala.
 

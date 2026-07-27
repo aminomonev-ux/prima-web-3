@@ -3028,6 +3028,14 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 .tk-modal-teks { font-size: 12.5px; line-height: 1.6; color: #B5D4F4; }
 .tk-modal-foot { padding: 12px 18px; border-top: 1px solid #0C447C; display: flex; justify-content: flex-end; gap: 8px; }
 
+/* S2 — buka periode ditahan karena bulan sesudahnya masih tertutup. */
+.tk-buka-tertahan {
+  background: rgba(226,75,74,.10); border: 1px solid rgba(226,75,74,.35);
+  border-radius: 10px; padding: 12px 14px;
+}
+.tk-tertahan-judul { display: block; font-size: 12.5px; font-weight: 700; color: #FCA5A5; margin-bottom: 6px; }
+.tk-buka-tertahan p { font-size: 12.5px; line-height: 1.6; color: #E6F1FB; }
+
 [data-theme="light"] .tk-card { background: #fff; border-color: #E1E7EE; }
 [data-theme="light"] .tk-card-judul { color: #0F0F12; }
 [data-theme="light"] .tk-card-sub, [data-theme="light"] .tk-isian { color: #5B7392; }
@@ -3042,6 +3050,9 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .tk-modal-head h2 { color: #0F0F12; }
 [data-theme="light"] .tk-modal-teks { color: #374151; }
 [data-theme="light"] .tk-modal-foot { border-top-color: #E1E7EE; }
+[data-theme="light"] .tk-buka-tertahan { background: rgba(226,75,74,.09); border-color: rgba(226,75,74,.30); }
+[data-theme="light"] .tk-tertahan-judul { color: #A32E2D; }
+[data-theme="light"] .tk-buka-tertahan p { color: #374151; }
 
 /* ── Pejabat penanda tangan SPJ (panel di Pengaturan BLUD) ────────────────── */
 .pj-panel { background: #042C53; border: 1px solid #0C447C; border-radius: 10px; overflow: hidden; }

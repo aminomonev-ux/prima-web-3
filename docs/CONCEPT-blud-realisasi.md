@@ -893,6 +893,8 @@ Tidak ada lagi yang menunggu konfirmasi. Sisa pertanyaan lapangan (mis. format n
 | 33 | **`pengantar` & `SPJ` memakai jumlah ALOKASI**, bukan arus kas keluar — di berkas asli keduanya angka yang sama persis. Transaksi terparkir & pemindahan bank tidak ikut |
 | 37 | **Versi anggaran yang menyangga realisasi tidak bisa dihapus** (audit T1). Pagu selalu dari `MAX(versi_tanggal)`, jadi menghapus versi teratas memundurkan pagu setahun penuh sementara alokasinya tetap tinggal. Tidak ada `force`: pergeseran yang dipaksa turun masih meninggalkan barisnya, versi yang dihapus tidak. DPA yang masih jadi acuan Pergeseran juga ditolak |
 | 38 | **`tanggal` transaksi terikat ke `(tahun_anggaran, bulan)` barisnya** (audit S1). BKU & Tutup Kas mengelompokkan dari `bulan`, lembar GU & register dari `tanggal` — selama keduanya lepas, dua lembar dari data yang sama bisa tidak cocok, dan bulan yang sudah ditutup bisa disusupi lewat bulan yang masih buka |
+| 39 | **Membuka periode wajib urut dari belakang** (audit S2). Sisi lain dari keputusan #30: saldo awal tidak disimpan, jadi membuka bulan lama menggeser seluruh bulan sesudahnya. Bulan yang belum pernah ditutup tidak menghalangi |
+| 40 | **Izin berbentuk daftar peran, bukan perbandingan di dalam route** (audit S5). `BLUD_HAPUS_VERSI_ROLES` & `BLUD_BUKA_PERIODE_ROLES`; akses modul (`app_access`) membuka pintu masuk, bukan wewenang merusak dokumen resmi. Setiap aksi perusak juga wajib beralasan ≥10 karakter yang masuk audit log |
 
 > Referensi: `docs/CONCEPT-blud-tahun-anggaran.md` (sudah dieksekusi) · `docs/CONCEPT-menu-access-control.md`
 > (Fase 0) · `docs/TUTORIAL-blud.md` · pola L48 CAS, L51 optimistic lock, L55 atomik, L58 ConfirmDialog.

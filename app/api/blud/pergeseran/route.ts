@@ -14,7 +14,7 @@ import { cekPaguDibawahRealisasi } from '@/lib/blud/pagu'
 import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
-import { isBludRole, PergeseranBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
+import { isBludRole, canHapusVersi, PergeseranBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { hasAppAccess } from '@/lib/security/guard'
 
 export const dynamic = 'force-dynamic'
@@ -276,18 +276,32 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/blud/pergeseran?versi=YYYY-MM-DD
-// Hapus permanen versi Pergeseran (standalone, tanpa cascade).
+// DELETE /api/blud/pergeseran?versi=YYYY-MM-DD&alasan=…
+// Hapus permanen versi Pergeseran (standalone). S5: SUPER_ADMIN/ADMIN + alasan wajib.
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
   if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  // S5: sama dengan jalur DPA — akses modul membuka pintu, bukan wewenang hapus.
+  if (!canHapusVersi(session.role)) {
+    return NextResponse.json({
+      ok: false, code: 'HAPUS_TERBATAS',
+      error: 'Hapus versi anggaran hanya boleh dilakukan Super Admin atau Admin Staff.',
+    }, { status: 403 })
+  }
 
   // Rate limit destructive: 10/menit/user
   const limited = await bludRateLimit(session.userId, 'delete-pergeseran', 10)
   if (limited) return limited
 
   const { searchParams } = new URL(req.url)
+  const parsedAlasan = AlasanHapusSchema.safeParse(searchParams.get('alasan') ?? '')
+  if (!parsedAlasan.success) {
+    return NextResponse.json(
+      { ok: false, error: parsedAlasan.error.issues[0]?.message ?? 'Alasan tidak valid' },
+      { status: 400 },
+    )
+  }
   const versi = searchParams.get('versi')
   const parsed = TanggalSchema.safeParse(versi)
   if (!parsed.success) {
@@ -311,7 +325,7 @@ export async function DELETE(req: NextRequest) {
       eventType: 'BLUD_DELETE_PERGESERAN_VERSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${result.pergeseran_rows} baris`,
+      detail:    `Hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${result.pergeseran_rows} baris · Alasan: ${parsedAlasan.data}`,
     })
     return NextResponse.json({
       ok: true,
@@ -327,7 +341,7 @@ export async function DELETE(req: NextRequest) {
         eventType: 'BLUD_DELETE_PERGESERAN_VERSI',
         userId:    session.userId,
         username:  session.username,
-        detail:    `DITOLAK — hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${err.message}`,
+        detail:    `DITOLAK — hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${err.message} · Alasan: ${parsedAlasan.data}`,
       })
       return NextResponse.json({
         ok: false, code: 'VERSI_TERPAKAI', error: err.message,

@@ -10,7 +10,10 @@
 // (A = −650.471.561 vs B = 4.883.802.451).
 import { sql, withTransaction } from '@/lib/data/db'
 import { getSaldoAwal } from './realisasi-data'
-import { BludPeriodeTertutupError, BludTutupTidakSeimbangError, BludTutupTerhalangError } from './realisasi-schemas'
+import {
+  BludPeriodeTertutupError, BludTutupTidakSeimbangError, BludTutupTerhalangError,
+  BludBukaTerhalangError,
+} from './realisasi-schemas'
 
 /** Toleransi pembulatan DECIMAL(18,2) — bukan izin selisih. */
 const NOL = 0.005
@@ -236,8 +239,28 @@ export async function tutupPeriode(
   return getNeracaKas(tahun, bulan)
 }
 
-/** Buka kembali — SUPER_ADMIN saja (dijaga di route) + audit (§4.5). */
+/**
+ * Buka kembali — izin dijaga di route + audit (§4.5).
+ *
+ * S2: arah ini kebalikan `kumpulkanPenghalang`, dan dulu tidak dijaga sama sekali.
+ * Saldo awal sebuah bulan TIDAK disimpan — dihitung ulang dari arus kas bulan-bulan
+ * sebelumnya (§4.6). Jadi membuka Januari lalu mengoreksi satu transaksi di situ
+ * ikut menggeser saldo Februari sampai Juni, termasuk bulan yang berita acaranya
+ * sudah ditandatangani, dan tidak ada apa pun di layar yang memberi tahu.
+ *
+ * Karena itu urutannya wajib dari belakang: buka Juni dulu, baru Mei, baru April.
+ * Repot di sini memang disengaja — yang dibuka dokumen bertanda tangan, bukan draf.
+ */
 export async function bukaPeriode(tahun: number, bulan: number): Promise<NeracaKas> {
+  const sesudah = await sql`
+    SELECT bulan FROM blud_periode
+    WHERE tahun_anggaran = ${tahun} AND bulan > ${bulan} AND status = 'TUTUP'
+    ORDER BY bulan
+  ` as Record<string, unknown>[]
+  if (sesudah.length) {
+    throw new BludBukaTerhalangError(bulan, sesudah.map((r) => Number(r.bulan)))
+  }
+
   await sql`
     UPDATE blud_periode SET status = 'BUKA', ditutup_oleh = NULL, ditutup_at = NULL
     WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}

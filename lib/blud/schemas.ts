@@ -32,6 +32,24 @@ export function isBludRole(role: string, appAccess: string[] | null | undefined)
 }
 
 /**
+ * S5 — hapus PERMANEN satu versi DPA/Pergeseran. Sengaja lebih ketat dari akses
+ * modul: grant `app_access: 'blud'` membuka pintu masuk, bukan wewenang membuang
+ * anggaran setahun. Dulu keduanya sama, padahal dampaknya jauh berbeda —
+ * bandingkan dengan buka periode yang sejak awal hanya SUPER_ADMIN.
+ *
+ * Ini BUKAN tombol hapus baris di dalam tabel DPA/Pergeseran: mengubah isi versi
+ * bagian dari menyimpan, dan tetap milik siapa pun yang boleh mengedit.
+ *
+ * Daftarnya sengaja berbentuk array, bukan satu perbandingan `=== 'SUPER_ADMIN'`.
+ * Menambah peran nanti cukup satu nama di sini, tanpa menyentuh route mana pun.
+ */
+export const BLUD_HAPUS_VERSI_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+
+export function canHapusVersi(role: string): boolean {
+  return (BLUD_HAPUS_VERSI_ROLES as readonly string[]).includes(role);
+}
+
+/**
  * Rate limit helper untuk endpoint BLUD. Pakai key `blud-<action>:<userId>`
  * supaya isolasi per-user (1 user spam tidak block user lain).
  *
@@ -76,6 +94,18 @@ export const TanggalSchema = z
  * `z.coerce` supaya query string `?tahun=2027` diterima sebagai number.
  */
 export const TahunSchema = z.coerce.number().int().gte(2000).lte(2100);
+
+/**
+ * S5 — alasan hapus versi, wajib. Bentuknya sama dengan `BukaPeriodeQuerySchema`
+ * di realisasi-schemas: dua aksi yang sama-sama merusak dokumen resmi sebaiknya
+ * terasa sama beratnya. Kode konfirmasi 4-digit membuktikan "tidak salah klik";
+ * alasan menjawab "kenapa" — dan enam bulan lagi hanya yang kedua yang berguna.
+ */
+export const AlasanHapusSchema = z
+  .string()
+  .trim()
+  .min(10, 'Alasan hapus versi minimal 10 karakter')
+  .max(500, 'Alasan hapus versi maksimal 500 karakter');
 
 /**
  * TipeBaris enum — match type di `types/index.ts`.

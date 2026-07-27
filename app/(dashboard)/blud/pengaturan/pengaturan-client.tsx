@@ -56,7 +56,7 @@ function formatTanggal(iso: string): string {
   return `${m[3]} ${ID_MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`
 }
 
-export default function PengaturanClient() {
+export default function PengaturanClient({ bolehHapus }: { bolehHapus: boolean }) {
   const [dpaList,   setDpaList]   = useState<DpaVersi[]>([])
   const [pergList,  setPergList]  = useState<PergeseranVersi[]>([])
   const [loading,   setLoading]   = useState(true)
@@ -68,7 +68,9 @@ export default function PengaturanClient() {
   const [typedCode,  setTypedCode]  = useState('')           // input user
   const [deleting,   setDeleting]   = useState(false)
   const [tertahan,   setTertahan]   = useState<Tertahan | null>(null)
+  const [alasan,     setAlasan]     = useState('')
   const codeMatches = useMemo(() => typedCode === expectCode && expectCode !== '', [typedCode, expectCode])
+  const alasanCukup = alasan.trim().length >= 10
 
   // ─── Data fetch ────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -111,12 +113,14 @@ export default function PengaturanClient() {
 
   // ─── Delete action ─────────────────────────────────────────────────────────
   async function executeDelete() {
-    if (!target || !codeMatches) return
+    if (!target || !codeMatches || !alasanCukup) return
     setDeleting(true)
     setTertahan(null)
     try {
       const path = target.kind === 'dpa' ? '/api/blud/dpa' : '/api/blud/pergeseran'
-      const res  = await fetch(`${path}?tahun=${target.tahun}&versi=${encodeURIComponent(target.versi)}`, { method: 'DELETE' })
+      const q = `tahun=${target.tahun}&versi=${encodeURIComponent(target.versi)}`
+        + `&alasan=${encodeURIComponent(alasan.trim())}`
+      const res  = await fetch(`${path}?${q}`, { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok || !json.ok) {
         if (res.status === 429) throw new Error(json.error || 'Terlalu banyak permintaan')
@@ -148,18 +152,21 @@ export default function PengaturanClient() {
     setExpectCode('')
     setTypedCode('')
     setTertahan(null)
+    setAlasan('')
   }
   function openDeleteDpa(v: DpaVersi) {
     setTarget({ kind: 'dpa', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris })
     setExpectCode(generateConfirmCode())
     setTypedCode('')
     setTertahan(null)
+    setAlasan('')
   }
   function openDeletePerg(v: PergeseranVersi) {
     setTarget({ kind: 'pergeseran', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris, dpaVersi: v.dpa_versi_tanggal })
     setExpectCode(generateConfirmCode())
     setTypedCode('')
     setTertahan(null)
+    setAlasan('')
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -193,8 +200,18 @@ export default function PengaturanClient() {
       }}>
         <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
         <div>
-          <strong style={{ color: '#FFFFFF' }}>Peringatan:</strong> Hapus versi bersifat <strong>permanen</strong> dan tidak bisa di-undo.
-          Hapus DPA juga otomatis menghapus Rekap Penanggung Jawab terkait versi tsb.
+          {bolehHapus ? (
+            <>
+              <strong style={{ color: '#FFFFFF' }}>Peringatan:</strong> Hapus versi bersifat <strong>permanen</strong> dan tidak bisa di-undo.
+              Hapus DPA juga otomatis menghapus Rekap Penanggung Jawab terkait versi tsb.
+              Versi yang masih dipakai transaksi akan ditolak sistem.
+            </>
+          ) : (
+            <>
+              <strong style={{ color: '#FFFFFF' }}>Catatan:</strong> Hapus versi anggaran hanya bisa dilakukan
+              <strong> Super Admin</strong> atau <strong>Admin Staff</strong>. Daftar di bawah tetap bisa Anda lihat.
+            </>
+          )}
         </div>
       </div>
 
@@ -216,6 +233,7 @@ export default function PengaturanClient() {
           meta:  `Tahun ${v.tahun_anggaran} · ${v.jumlah_baris} baris`,
         }))}
         onDelete={(idx) => openDeleteDpa(dpaList[idx])}
+        bolehHapus={bolehHapus}
       />
 
       {/* Pergeseran section */}
@@ -229,6 +247,7 @@ export default function PengaturanClient() {
           meta:  `Tahun ${v.tahun_anggaran} · ${v.jumlah_baris} baris · acuan DPA ${formatTanggal(v.dpa_versi_tanggal)}`,
         }))}
         onDelete={(idx) => openDeletePerg(pergList[idx])}
+        bolehHapus={bolehHapus}
         deleteDisabled={pergList.length === 0}  // pergeseran boleh kosong total (DPA tetap ada)
       />
 
@@ -335,6 +354,33 @@ export default function PengaturanClient() {
                 Kode tidak cocok. Periksa lagi 4 digit di kotak merah.
               </div>
             )}
+
+            {/* Kode membuktikan "tidak salah klik"; alasan menjawab "kenapa" —
+                dan enam bulan lagi hanya yang kedua yang masih berguna. */}
+            <div style={{ marginBottom: 4, fontSize: 12, color: '#B5D4F4', fontWeight: 600 }}>
+              Alasan menghapus <span style={{ fontWeight: 400 }}>(minimal 10 karakter, masuk audit log)</span>
+            </div>
+            <textarea
+              rows={2}
+              value={alasan}
+              onChange={(e) => setAlasan(e.target.value)}
+              disabled={deleting}
+              placeholder="mis. versi salah simpan, tertukar dengan DPA murni 2027"
+              style={{
+                width: '100%', padding: '8px 10px', borderRadius: 8, resize: 'vertical',
+                background: '#020F1C', border: '1.5px solid #185FA5',
+                color: '#E6F1FB', fontSize: 12.5, lineHeight: 1.5, outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+            {/* Sisa karakter ditulis, bukan diwarnai: tema terang menimpa warna
+                border tiap input lewat aturan global ber-!important, jadi isyarat
+                warna di sini tidak akan pernah terlihat. */}
+            {!alasanCukup && (
+              <div style={{ fontSize: 11.5, color: '#85B7EB', marginTop: 4 }}>
+                Kurang {10 - alasan.trim().length} karakter lagi.
+              </div>
+            )}
             </>
             )}
 
@@ -344,7 +390,7 @@ export default function PengaturanClient() {
               </PrimaButton>
               {!tertahan && (
                 <PrimaButton variant="danger" iconLeft={<DeleteIcon size={13} />}
-                  onClick={executeDelete} disabled={!codeMatches || deleting}>
+                  onClick={executeDelete} disabled={!codeMatches || !alasanCukup || deleting}>
                   {deleting ? 'Menghapus...' : 'Hapus Permanen'}
                 </PrimaButton>
               )}
@@ -405,13 +451,15 @@ function TertahanPanel({ data }: { data: Tertahan }) {
 
 // ─── Sub: VersiSection ────────────────────────────────────────────────────────
 interface SectionRow { versi: string; meta: string }
-function VersiSection({ title, icon, color, loading, rows, onDelete, deleteDisabled, disabledReason }: {
+function VersiSection({ title, icon, color, loading, rows, onDelete, bolehHapus, deleteDisabled, disabledReason }: {
   title:   string
   icon:    React.ReactNode
   color:   string
   loading: boolean
   rows:    SectionRow[]
   onDelete: (idx: number) => void
+  /** S5 — tombolnya tidak dirender sama sekali, bukan sekadar dinonaktifkan. */
+  bolehHapus: boolean
   deleteDisabled?: boolean
   disabledReason?: string
 }) {
@@ -426,6 +474,7 @@ function VersiSection({ title, icon, color, loading, rows, onDelete, deleteDisab
         <h2 style={{ fontWeight: 700, fontSize: 13, color: '#E6F1FB' }}>{title}</h2>
         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#85B7EB', fontWeight: 500 }}>
           {loading ? '—' : `${rows.length} versi`}
+          {!bolehHapus && ' · hanya bisa dilihat'}
         </span>
       </div>
       {loading ? (
@@ -464,6 +513,7 @@ function VersiSection({ title, icon, color, loading, rows, onDelete, deleteDisab
                 </div>
                 <div style={{ fontSize: 11, color: '#85B7EB', marginTop: 2 }}>{r.meta}</div>
               </div>
+              {bolehHapus && (
               <button
                 onClick={() => !deleteDisabled && onDelete(i)}
                 disabled={deleteDisabled}
@@ -493,6 +543,7 @@ function VersiSection({ title, icon, color, loading, rows, onDelete, deleteDisab
                 }}>
                 <DeleteIcon size={12} /> Hapus
               </button>
+              )}
             </div>
           ))}
         </div>

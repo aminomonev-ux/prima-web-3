@@ -13,8 +13,9 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
 import { getNeracaKas, simpanSisiNyata, tutupPeriode, bukaPeriode } from '@/lib/blud/tutup-kas'
 import {
-  TutupKasBodySchema, BukaPeriodeQuerySchema,
+  TutupKasBodySchema, BukaPeriodeQuerySchema, bolehBukaPeriode,
   BludPeriodeTertutupError, BludTutupTidakSeimbangError, BludTutupTerhalangError,
+  BludBukaTerhalangError,
 } from '@/lib/blud/realisasi-schemas'
 import { TahunSchema } from '@/lib/blud/schemas'
 import { bolehInput, bolehLihat, forbidden, unauthorized } from '../_guard'
@@ -110,7 +111,7 @@ export async function DELETE(req: NextRequest) {
   if (!session) return unauthorized()
   // §4.5 — membuka bulan yang sudah ditandatangani hanya boleh SUPER_ADMIN, dan
   // selalu meninggalkan jejak. Sengaja lebih ketat dari guard modul.
-  if (session.role !== 'SUPER_ADMIN') {
+  if (!bolehBukaPeriode(session.role)) {
     return NextResponse.json({ ok: false, error: 'Hanya SUPER_ADMIN yang boleh membuka periode yang sudah ditutup' }, { status: 403 })
   }
 
@@ -139,6 +140,20 @@ export async function DELETE(req: NextRequest) {
     })
     return NextResponse.json({ ok: true, data })
   } catch (err) {
+    // S2: bulan sesudahnya masih tertutup. Percobaannya ikut dicatat — yang
+    // ditahan hari ini biasanya dicoba lagi lewat jalan lain.
+    if (err instanceof BludBukaTerhalangError) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_PERIODE_BUKA',
+        userId: session.userId,
+        username: session.username,
+        detail: `DITOLAK — buka ${bulan}/${tahun}: bulan ${err.bulanTutup.join(', ')} masih tertutup · Alasan: ${alasan}`,
+      })
+      return NextResponse.json({
+        ok: false, code: 'BUKA_TERHALANG', error: err.message, bulan_tutup: err.bulanTutup,
+      }, { status: 409 })
+    }
     console.error('[API /blud/realisasi/periode DELETE]', err)
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
   }

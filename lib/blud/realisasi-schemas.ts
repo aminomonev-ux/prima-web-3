@@ -34,6 +34,22 @@ export function canInputRealisasi(role: string, appAccess: string[] | null | und
   return isBludRole(role, appAccess)
 }
 
+/**
+ * Membuka bulan yang sudah ditutup (§4.5). Sengaja lebih ketat dari akses modul:
+ * yang dibuka dokumen bertanda tangan, dan §4.6 membuat akibatnya merembet ke
+ * seluruh bulan sesudahnya.
+ *
+ * Isinya hari ini sama persis dengan perbandingan `role !== 'SUPER_ADMIN'` yang
+ * dulu ditulis langsung di route — tidak ada perubahan perilaku. Bedanya, saat
+ * peran keuangan nanti ikut diberi wewenang ini, yang berubah cukup satu nama di
+ * daftar bawah, bukan perbandingan yang tersebar di route.
+ */
+export const BLUD_BUKA_PERIODE_ROLES = ['SUPER_ADMIN'] as const
+
+export function bolehBukaPeriode(role: string): boolean {
+  return (BLUD_BUKA_PERIODE_ROLES as readonly string[]).includes(role)
+}
+
 // ─── Primitives ─────────────────────────────────────────────────────────────
 
 export const BulanSchema = z.coerce.number().int().gte(1).lte(12)
@@ -50,6 +66,14 @@ export const TanggalTxSchema = z
 /** Awalan `YYYY-MM-` sebuah periode — pengikat `tanggal` ke `(tahun, bulan)`. */
 export function awalanBulan(tahun: number, bulan: number): string {
   return `${tahun}-${String(bulan).padStart(2, '0')}-`
+}
+
+const BULAN_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'] as const
+
+/** Nama bulan 1–12 untuk pesan galat; di luar rentang dikembalikan apa adanya. */
+export function namaBulan(bulan: number): string {
+  return BULAN_ID[bulan - 1] ?? String(bulan)
 }
 
 /**
@@ -426,6 +450,22 @@ export class BludTutupTerhalangError extends Error {
   constructor(public penghalang: string[]) {
     super(penghalang.join(' '))
     this.name = 'BludTutupTerhalangError'
+  }
+}
+
+/**
+ * S2 — arah kebalikan `BludTutupTerhalangError`. Saldo awal sebuah bulan tidak
+ * disimpan, dihitung ulang dari bulan-bulan sebelumnya (§4.6); membuka bulan lama
+ * berarti seluruh bulan sesudahnya ikut bergeser tanpa pemberitahuan.
+ */
+export class BludBukaTerhalangError extends Error {
+  constructor(public bulan: number, public bulanTutup: number[]) {
+    super(
+      `Tidak bisa membuka ${namaBulan(bulan)}. `
+      + `Tutup kas ${bulanTutup.map(namaBulan).join(', ')} perlu dibuka lebih dulu — `
+      + 'saldo awal bulan-bulan itu dihitung dari bulan ini, jadi ikut bergeser begitu isinya berubah.',
+    )
+    this.name = 'BludBukaTerhalangError'
   }
 }
 

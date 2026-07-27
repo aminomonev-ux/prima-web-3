@@ -7,7 +7,7 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
-import { isBludRole, DpaBodySchema, TanggalSchema, TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
+import { isBludRole, canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { hasAppAccess } from '@/lib/security/guard'
 import { validateAllPj } from '@/lib/blud/pj-conflict'
 
@@ -198,18 +198,33 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/blud/dpa?tahun=YYYY&versi=YYYY-MM-DD
-// Hapus permanen versi DPA + cascade ke rekap_pk. Role guard: BLUD_ALLOWED_ROLES.
+// DELETE /api/blud/dpa?tahun=YYYY&versi=YYYY-MM-DD&alasan=…
+// Hapus permanen versi DPA + cascade ke rekap_pk. S5: SUPER_ADMIN/ADMIN + alasan wajib.
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
   if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  // S5: akses modul ≠ wewenang membuang anggaran setahun. Pagar sungguhannya di
+  // sini, bukan di tombol yang disembunyikan klien.
+  if (!canHapusVersi(session.role)) {
+    return NextResponse.json({
+      ok: false, code: 'HAPUS_TERBATAS',
+      error: 'Hapus versi anggaran hanya boleh dilakukan Super Admin atau Admin Staff.',
+    }, { status: 403 })
+  }
 
   // Rate limit destructive: 10/menit/user (lebih ketat dari save)
   const limited = await bludRateLimit(session.userId, 'delete-dpa', 10)
   if (limited) return limited
 
   const { searchParams } = new URL(req.url)
+  const parsedAlasan = AlasanHapusSchema.safeParse(searchParams.get('alasan') ?? '')
+  if (!parsedAlasan.success) {
+    return NextResponse.json(
+      { ok: false, error: parsedAlasan.error.issues[0]?.message ?? 'Alasan tidak valid' },
+      { status: 400 },
+    )
+  }
   const versi = searchParams.get('versi')
   const parsed = TanggalSchema.safeParse(versi)
   if (!parsed.success) {
@@ -233,7 +248,7 @@ export async function DELETE(req: NextRequest) {
       eventType: 'BLUD_DELETE_DPA_VERSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Hapus DPA ${parsedTahun.data}/${parsed.data}: ${result.dpa_rows} baris dpa_blud + ${result.rekap_pk_rows} baris rekap_pk`,
+      detail:    `Hapus DPA ${parsedTahun.data}/${parsed.data}: ${result.dpa_rows} baris dpa_blud + ${result.rekap_pk_rows} baris rekap_pk · Alasan: ${parsedAlasan.data}`,
     })
     return NextResponse.json({
       ok: true,
@@ -251,7 +266,7 @@ export async function DELETE(req: NextRequest) {
         eventType: 'BLUD_DELETE_DPA_VERSI',
         userId:    session.userId,
         username:  session.username,
-        detail:    `DITOLAK — hapus DPA ${parsedTahun.data}/${parsed.data}: ${err.message}`,
+        detail:    `DITOLAK — hapus DPA ${parsedTahun.data}/${parsed.data}: ${err.message} · Alasan: ${parsedAlasan.data}`,
       })
       return err instanceof BludVersiTerpakaiError
         ? NextResponse.json({

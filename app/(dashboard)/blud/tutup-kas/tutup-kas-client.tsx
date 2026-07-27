@@ -69,6 +69,7 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
   const [tglSurat, setTglSurat] = useState('')
 
   const [bukaModal, setBukaModal] = useState(false)
+  const [bukaGagal, setBukaGagal] = useState<string | null>(null)
   const [alasanBuka, setAlasanBuka] = useState('')
 
   // Rentang pengajuan GU bulan ini — satu bulan boleh beberapa kali (§3.2).
@@ -204,10 +205,18 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
       const q = `tahun=${tahun}&bulan=${bulan}&alasan=${encodeURIComponent(alasanBuka.trim())}`
       const res = await fetch(`/api/blud/realisasi/periode?${q}`, { method: 'DELETE' })
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal membuka periode'); return }
+      if (!res.ok || !json.ok) {
+        // S2: ditahan karena bulan sesudahnya masih tertutup. Ditampilkan di dalam
+        // modal, bukan toast — pesannya menyebut urutan bulan yang harus dibuka
+        // dulu, dan itu perlu dibaca pelan-pelan, bukan lewat dalam 3 detik.
+        if (res.status === 409 && json.code === 'BUKA_TERHALANG') { setBukaGagal(json.error); return }
+        toast.error(json.error ?? 'Gagal membuka periode')
+        return
+      }
       setData(json.data)
       setBukaModal(false)
       setAlasanBuka('')
+      setBukaGagal(null)
       toast.success(`${NAMA_BULAN[bulan - 1]} ${tahun} dibuka kembali.`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Gagal membuka periode')
@@ -246,7 +255,7 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
             Unduh SPJ Bulanan
           </PrimaButton>
           {terkunci && superAdmin && (
-            <PrimaButton variant="warning" size="sm" onClick={() => setBukaModal(true)}>
+            <PrimaButton variant="warning" size="sm" onClick={() => { setBukaGagal(null); setBukaModal(true) }}>
               Buka Kembali
             </PrimaButton>
           )}
@@ -432,30 +441,45 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
 
       {bukaModal && (
         <div className="blud-modal-overlay" role="dialog" aria-modal="true"
-          onClick={e => { if (e.target === e.currentTarget && !sibuk) setBukaModal(false) }}>
+          onClick={e => { if (e.target === e.currentTarget && !sibuk) { setBukaModal(false); setBukaGagal(null) } }}>
           <div className="blud-modal-card tk-modal">
             <header className="tk-modal-head">
               <h2>Buka kembali {NAMA_BULAN[bulan - 1]} {tahun}?</h2>
             </header>
             <div className="tk-modal-body">
-              <p className="tk-modal-teks">
-                Bulan ini sudah ditutup dan berita acaranya bisa jadi sudah ditandatangani.
-                Membukanya kembali memungkinkan angka resmi berubah — alasannya dicatat di audit log
-                atas nama Anda.
-              </p>
-              <label className="tk-isian">
-                <span>Alasan (minimal 10 karakter)</span>
-                <textarea className="blud-imp-input" rows={3} value={alasanBuka}
-                  onChange={e => setAlasanBuka(e.target.value)}
-                  placeholder="mis. koreksi kuitansi listrik tertinggal atas permintaan Kabag Keuangan" />
-              </label>
+              {bukaGagal ? (
+                <div className="tk-buka-tertahan">
+                  {/* Bukan <strong>: `.blud-modal-card strong` menetapkan warnanya
+                      dengan !important, jadi judul merah di sini akan tertimpa. */}
+                  <span className="tk-tertahan-judul">Buka ditahan</span>
+                  <p>{bukaGagal}</p>
+                </div>
+              ) : (
+                <>
+                  <p className="tk-modal-teks">
+                    Bulan ini sudah ditutup dan berita acaranya bisa jadi sudah ditandatangani.
+                    Membukanya kembali memungkinkan angka resmi berubah — alasannya dicatat di audit log
+                    atas nama Anda.
+                  </p>
+                  <label className="tk-isian">
+                    <span>Alasan (minimal 10 karakter)</span>
+                    <textarea className="blud-imp-input" rows={3} value={alasanBuka}
+                      onChange={e => setAlasanBuka(e.target.value)}
+                      placeholder="mis. koreksi kuitansi listrik tertinggal atas permintaan Kabag Keuangan" />
+                  </label>
+                </>
+              )}
             </div>
             <footer className="tk-modal-foot">
-              <PrimaButton variant="ghost" onClick={() => setBukaModal(false)} disabled={sibuk}>Batal</PrimaButton>
-              <PrimaButton variant="warning" onClick={bukaKembali}
-                disabled={sibuk || alasanBuka.trim().length < 10}>
-                Buka Kembali
+              <PrimaButton variant="ghost" onClick={() => { setBukaModal(false); setBukaGagal(null) }} disabled={sibuk}>
+                {bukaGagal ? 'Tutup' : 'Batal'}
               </PrimaButton>
+              {!bukaGagal && (
+                <PrimaButton variant="warning" onClick={bukaKembali}
+                  disabled={sibuk || alasanBuka.trim().length < 10}>
+                  Buka Kembali
+                </PrimaButton>
+              )}
             </footer>
           </div>
         </div>
