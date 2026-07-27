@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehLihat(session.userId, session.role))) return forbidden()
+  if (!(await bolehLihat(session.userId, session.role, 'realisasi'))) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))

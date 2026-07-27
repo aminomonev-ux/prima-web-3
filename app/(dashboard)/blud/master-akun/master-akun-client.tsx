@@ -8,13 +8,14 @@ import { toast } from 'sonner'
 import { Plus, Save, Search, Upload, FileSpreadsheet, HelpCircle, Download, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import DeleteButton from '@/components/ui/DeleteButton'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 import { cellNum, cellSampleHead, cellSample, pagerBtn } from '@/lib/shared/blud-table-styles'
 
 const PAGE_SIZE = 50
 
 interface Row { kode: string; uraian: string }
 
-export default function MasterAkunClient() {
+export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [rows,     setRows]     = useState<Row[]>([])
   const [search,   setSearch]   = useState('')
   const [loading,  setLoading]  = useState(false)
@@ -182,16 +183,22 @@ export default function MasterAkunClient() {
             data-tooltip="Lihat format & download template">
             Format
           </PrimaButton>
-          <PrimaButton variant="success" iconLeft={<Upload size={14} />}
-            onClick={() => fileRef.current?.click()} disabled={importing}>
-            {importing ? 'Memproses...' : 'Impor Excel'}
-          </PrimaButton>
-          <PrimaButton variant="primary" iconLeft={<Save size={14} />}
-            onClick={() => simpan()} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Simpan'}
-          </PrimaButton>
+          {bolehUbah && (
+            <>
+              <PrimaButton variant="success" iconLeft={<Upload size={14} />}
+                onClick={() => fileRef.current?.click()} disabled={importing}>
+                {importing ? 'Memproses...' : 'Impor Excel'}
+              </PrimaButton>
+              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+                onClick={() => simpan()} disabled={saving}>
+                {saving ? 'Menyimpan...' : 'Simpan'}
+              </PrimaButton>
+            </>
+          )}
         </div>
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="master-akun" />}
 
       {/* Toolbar search + tambah */}
       <div style={{
@@ -214,9 +221,11 @@ export default function MasterAkunClient() {
             }}
           />
         </div>
-        <PrimaButton variant="purple" iconLeft={<Plus size={14} />} onClick={addRowAndJump}>
-          Tambah Baris
-        </PrimaButton>
+        {bolehUbah && (
+          <PrimaButton variant="purple" iconLeft={<Plus size={14} />} onClick={addRowAndJump}>
+            Tambah Baris
+          </PrimaButton>
+        )}
       </div>
 
       {/* Grid — scroll vertikal max ~60vh, header sticky */}
@@ -226,14 +235,14 @@ export default function MasterAkunClient() {
             <tr>
               <th style={{ width: 200 }}>Kode</th>
               <th>Uraian</th>
-              <th style={{ width: 64, textAlign: 'center' }}>Aksi</th>
+              {bolehUbah && <th style={{ width: 64, textAlign: 'center' }}>Aksi</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={3} style={{ textAlign: 'center', padding: '32px 12px', color: '#85B7EB' }}>
-                  {loading ? 'Memuat...' : search ? 'Tidak ada hasil pencarian' : 'Belum ada data. Klik "Tambah Baris" atau "Impor Excel".'}
+                <td colSpan={bolehUbah ? 3 : 2} style={{ textAlign: 'center', padding: '32px 12px', color: '#85B7EB' }}>
+                  {loading ? 'Memuat...' : search ? 'Tidak ada hasil pencarian' : bolehUbah ? 'Belum ada data. Klik "Tambah Baris" atau "Impor Excel".' : 'Belum ada data.'}
                 </td>
               </tr>
             )}
@@ -243,24 +252,30 @@ export default function MasterAkunClient() {
               return (
                 <tr key={realIdx}>
                   <td>
-                    <input
-                      type="text"
-                      value={r.kode}
-                      onChange={e => updateRow(realIdx, 'kode', e.target.value)}
-                      placeholder="510199"
-                    />
+                    {bolehUbah ? (
+                      <input
+                        type="text"
+                        value={r.kode}
+                        onChange={e => updateRow(realIdx, 'kode', e.target.value)}
+                        placeholder="510199"
+                      />
+                    ) : r.kode}
                   </td>
                   <td>
-                    <input
-                      type="text"
-                      value={r.uraian}
-                      onChange={e => updateRow(realIdx, 'uraian', e.target.value)}
-                      placeholder="Belanja Pegawai BLUD"
-                    />
+                    {bolehUbah ? (
+                      <input
+                        type="text"
+                        value={r.uraian}
+                        onChange={e => updateRow(realIdx, 'uraian', e.target.value)}
+                        placeholder="Belanja Pegawai BLUD"
+                      />
+                    ) : r.uraian}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <DeleteButton onClick={() => deleteRow(realIdx)} data-tooltip="Hapus baris" iconSize={13} />
-                  </td>
+                  {bolehUbah && (
+                    <td style={{ textAlign: 'center' }}>
+                      <DeleteButton onClick={() => deleteRow(realIdx)} data-tooltip="Hapus baris" iconSize={13} />
+                    </td>
+                  )}
                 </tr>
               )
             })}

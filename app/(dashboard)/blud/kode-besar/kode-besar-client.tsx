@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { Plus, Save, Search, Upload, FileSpreadsheet, HelpCircle, Download, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown } from 'lucide-react'
 import DeleteButton from '@/components/ui/DeleteButton'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 import { cellNum, cellSampleHead, cellSample, pagerBtn } from '@/lib/shared/blud-table-styles'
 
 type Level = 'L1' | 'L2' | 'L2.1'
@@ -21,7 +22,7 @@ const LEVEL_COLOR: Record<Level, string> = {
   'L2.1': '#334155',          // slate (CHILD)
 }
 
-export default function KodeBesarClient() {
+export default function KodeBesarClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [rows,     setRows]     = useState<Row[]>([])
   const [search,   setSearch]   = useState('')
   const [loading,  setLoading]  = useState(false)
@@ -215,16 +216,22 @@ export default function KodeBesarClient() {
             data-tooltip="Lihat format & download template">
             Format
           </PrimaButton>
-          <PrimaButton variant="success" iconLeft={<Upload size={14} />}
-            onClick={() => fileRef.current?.click()} disabled={importing}>
-            {importing ? 'Memproses...' : 'Impor Excel'}
-          </PrimaButton>
-          <PrimaButton variant="primary" iconLeft={<Save size={14} />}
-            onClick={() => simpan()} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Simpan'}
-          </PrimaButton>
+          {bolehUbah && (
+            <>
+              <PrimaButton variant="success" iconLeft={<Upload size={14} />}
+                onClick={() => fileRef.current?.click()} disabled={importing}>
+                {importing ? 'Memproses...' : 'Impor Excel'}
+              </PrimaButton>
+              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+                onClick={() => simpan()} disabled={saving}>
+                {saving ? 'Menyimpan...' : 'Simpan'}
+              </PrimaButton>
+            </>
+          )}
         </div>
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="kode-besar" />}
 
       {/* Info banner — fungsi menu. Theme-aware text via .blud-info-banner class. */}
       <div className="blud-info-banner" style={{
@@ -261,9 +268,11 @@ export default function KodeBesarClient() {
             }}
           />
         </div>
-        <PrimaButton variant="purple" iconLeft={<Plus size={14} />} onClick={addRowAndJump}>
-          Tambah Baris
-        </PrimaButton>
+        {bolehUbah && (
+          <PrimaButton variant="purple" iconLeft={<Plus size={14} />} onClick={addRowAndJump}>
+            Tambah Baris
+          </PrimaButton>
+        )}
       </div>
 
       {/* Grid — scroll vertikal + sticky thead */}
@@ -271,19 +280,19 @@ export default function KodeBesarClient() {
         <table className="dpa-table master-akun-table">
           <thead>
             <tr>
-              <th style={{ width: 64, textAlign: 'center' }}>Geser</th>
+              {bolehUbah && <th style={{ width: 64, textAlign: 'center' }}>Geser</th>}
               <th style={{ width: 160 }}>Kode</th>
               <th>Uraian</th>
               <th style={{ width: 90, textAlign: 'center' }}>Level</th>
               <th style={{ width: 140 }}>Parent (untuk L2.1)</th>
-              <th style={{ width: 64, textAlign: 'center' }}>Aksi</th>
+              {bolehUbah && <th style={{ width: 64, textAlign: 'center' }}>Aksi</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '32px 12px', color: '#85B7EB' }}>
-                  {loading ? 'Memuat...' : search ? 'Tidak ada hasil pencarian' : 'Belum ada data. Klik "Tambah Baris" atau "Impor Excel".'}
+                <td colSpan={bolehUbah ? 6 : 4} style={{ textAlign: 'center', padding: '32px 12px', color: '#85B7EB' }}>
+                  {loading ? 'Memuat...' : search ? 'Tidak ada hasil pencarian' : bolehUbah ? 'Belum ada data. Klik "Tambah Baris" atau "Impor Excel".' : 'Belum ada data.'}
                 </td>
               </tr>
             )}
@@ -293,58 +302,78 @@ export default function KodeBesarClient() {
               const l2Options = rows.filter(x => x.level === 'L2' && x.kode.trim() !== '')
               return (
                 <tr key={realIdx}>
-                  <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    <button
-                      onClick={() => moveRow(realIdx, 'up')}
-                      disabled={realIdx === 0}
-                      className="kb-move-btn"
-                      data-tooltip="Pindah ke atas"
-                    >
-                      <ChevronUp size={13} />
-                    </button>
-                    <button
-                      onClick={() => moveRow(realIdx, 'down')}
-                      disabled={realIdx === rows.length - 1}
-                      className="kb-move-btn"
-                      data-tooltip="Pindah ke bawah"
-                    >
-                      <ChevronDown size={13} />
-                    </button>
+                  {bolehUbah && (
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <button
+                        onClick={() => moveRow(realIdx, 'up')}
+                        disabled={realIdx === 0}
+                        className="kb-move-btn"
+                        data-tooltip="Pindah ke atas"
+                      >
+                        <ChevronUp size={13} />
+                      </button>
+                      <button
+                        onClick={() => moveRow(realIdx, 'down')}
+                        disabled={realIdx === rows.length - 1}
+                        className="kb-move-btn"
+                        data-tooltip="Pindah ke bawah"
+                      >
+                        <ChevronDown size={13} />
+                      </button>
+                    </td>
+                  )}
+                  <td>
+                    {bolehUbah ? (
+                      <input
+                        type="text"
+                        value={r.kode}
+                        onChange={e => updateRow(realIdx, 'kode', e.target.value)}
+                        placeholder="5.1"
+                      />
+                    ) : r.kode}
                   </td>
                   <td>
-                    <input
-                      type="text"
-                      value={r.kode}
-                      onChange={e => updateRow(realIdx, 'kode', e.target.value)}
-                      placeholder="5.1"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      value={r.uraian}
-                      onChange={e => updateRow(realIdx, 'uraian', e.target.value)}
-                      placeholder="Belanja Operasi BLUD"
-                    />
+                    {bolehUbah ? (
+                      <input
+                        type="text"
+                        value={r.uraian}
+                        onChange={e => updateRow(realIdx, 'uraian', e.target.value)}
+                        placeholder="Belanja Operasi BLUD"
+                      />
+                    ) : r.uraian}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <select
-                      value={r.level}
-                      onChange={e => updateLevel(realIdx, e.target.value as Level)}
-                      style={{
-                        width: '100%', padding: '4px 6px', borderRadius: 4,
-                        border: '1px solid #185FA5', background: LEVEL_COLOR[r.level],
-                        color: '#FFFFFF', fontSize: 11, fontWeight: 700,
-                        textAlign: 'center', cursor: 'pointer',
-                      }}
-                    >
-                      <option value="L1">L1</option>
-                      <option value="L2">L2</option>
-                      <option value="L2.1">L2.1</option>
-                    </select>
+                    {bolehUbah ? (
+                      <select
+                        value={r.level}
+                        onChange={e => updateLevel(realIdx, e.target.value as Level)}
+                        style={{
+                          width: '100%', padding: '4px 6px', borderRadius: 4,
+                          border: '1px solid #185FA5', background: LEVEL_COLOR[r.level],
+                          color: '#FFFFFF', fontSize: 11, fontWeight: 700,
+                          textAlign: 'center', cursor: 'pointer',
+                        }}
+                      >
+                        <option value="L1">L1</option>
+                        <option value="L2">L2</option>
+                        <option value="L2.1">L2.1</option>
+                      </select>
+                    ) : (
+                      <span style={{
+                        display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+                        background: LEVEL_COLOR[r.level], color: '#FFFFFF',
+                        fontSize: 11, fontWeight: 700,
+                      }}>{r.level}</span>
+                    )}
                   </td>
                   <td>
-                    {r.level === 'L2.1' ? (
+                    {r.level !== 'L2.1' ? (
+                      <span style={{ fontSize: 10.5, color: '#85B7EB', fontStyle: 'italic', display: 'block', textAlign: 'center' }}>
+                        {r.level === 'L1' ? 'root' : 'auto'}
+                      </span>
+                    ) : !bolehUbah ? (
+                      <span style={{ fontSize: 11 }}>{r.parent_kode ?? '—'}</span>
+                    ) : (
                       <select
                         value={r.parent_kode ?? ''}
                         onChange={e => updateParent(realIdx, e.target.value || null)}
@@ -363,15 +392,13 @@ export default function KodeBesarClient() {
                           </option>
                         ))}
                       </select>
-                    ) : (
-                      <span style={{ fontSize: 10.5, color: '#85B7EB', fontStyle: 'italic', display: 'block', textAlign: 'center' }}>
-                        {r.level === 'L1' ? 'root' : 'auto'}
-                      </span>
                     )}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <DeleteButton onClick={() => deleteRow(realIdx)} data-tooltip="Hapus baris" iconSize={13} />
-                  </td>
+                  {bolehUbah && (
+                    <td style={{ textAlign: 'center' }}>
+                      <DeleteButton onClick={() => deleteRow(realIdx)} data-tooltip="Hapus baris" iconSize={13} />
+                    </td>
+                  )}
                 </tr>
               )
             })}

@@ -14,23 +14,24 @@ import {
 } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import { bolehBuka, type MenuBlud } from '@/lib/blud/peran'
 import type { Role } from '@/types'
 
 // Tile = icon-on-top + label-bottom. `group` jadi section label di bawah grup.
-type Tile = { href: string; label: string; icon: React.ElementType; color: string; group: string }
-const TILES: Tile[] = [
-  { href: '/blud',             label: 'Beranda',        icon: LayoutDashboard, color: '#3B82F6', group: 'NAVIGASI' },
-  { href: '/blud/master-akun', label: 'Master Akun',    icon: BookText,        color: '#10B981', group: 'DATA INDUK' },
-  { href: '/blud/kode-besar',  label: 'Kode Besar',     icon: ListTree,        color: '#14B8A6', group: 'DATA INDUK' },
-  { href: '/blud/penanggung-jawab', label: 'Penanggung Jawab', icon: Users,    color: '#F59E0B', group: 'DATA INDUK' },
-  { href: '/blud/dpa',         label: 'DPA BLUD',       icon: FileText,        color: '#8B5CF6', group: 'ANGGARAN' },
-  { href: '/blud/pergeseran',  label: 'Pergeseran DPA', icon: Shuffle,         color: '#EC4899', group: 'ANGGARAN' },
-  { href: '/blud/buku-kas',    label: 'Buku Kas',       icon: Wallet,          color: '#1D9E75', group: 'PENATAUSAHAAN' },
-  { href: '/blud/bukti-setor', label: 'Bukti Setor',    icon: Receipt,         color: '#22C55E', group: 'PENATAUSAHAAN' },
-  { href: '/blud/realisasi',   label: 'Realisasi',      icon: TrendingUp,      color: '#F59E0B', group: 'PENATAUSAHAAN' },
-  { href: '/blud/tutup-kas',   label: 'Tutup Kas',      icon: Lock,            color: '#0EA5E9', group: 'PENATAUSAHAAN' },
-  { href: '/blud/cetak',       label: 'Cetak',          icon: Printer,         color: '#0891b2', group: 'OUTPUT' },
-  { href: '/blud/pengaturan',  label: 'Pengaturan',     icon: Settings,        color: '#64748B', group: 'SISTEM' },
+type Tile = { href: string; label: string; icon: React.ElementType; color: string; group: string; menu: MenuBlud }
+const SEMUA_TILE: Tile[] = [
+  { href: '/blud',             label: 'Beranda',        icon: LayoutDashboard, color: '#3B82F6', group: 'NAVIGASI', menu: 'beranda' },
+  { href: '/blud/master-akun', label: 'Master Akun',    icon: BookText,        color: '#10B981', group: 'DATA INDUK', menu: 'master-akun' },
+  { href: '/blud/kode-besar',  label: 'Kode Besar',     icon: ListTree,        color: '#14B8A6', group: 'DATA INDUK', menu: 'kode-besar' },
+  { href: '/blud/penanggung-jawab', label: 'Penanggung Jawab', icon: Users,    color: '#F59E0B', group: 'DATA INDUK', menu: 'penanggung-jawab' },
+  { href: '/blud/dpa',         label: 'DPA BLUD',       icon: FileText,        color: '#8B5CF6', group: 'ANGGARAN', menu: 'dpa' },
+  { href: '/blud/pergeseran',  label: 'Pergeseran DPA', icon: Shuffle,         color: '#EC4899', group: 'ANGGARAN', menu: 'pergeseran' },
+  { href: '/blud/buku-kas',    label: 'Buku Kas',       icon: Wallet,          color: '#1D9E75', group: 'PENATAUSAHAAN', menu: 'buku-kas' },
+  { href: '/blud/bukti-setor', label: 'Bukti Setor',    icon: Receipt,         color: '#22C55E', group: 'PENATAUSAHAAN', menu: 'bukti-setor' },
+  { href: '/blud/realisasi',   label: 'Realisasi',      icon: TrendingUp,      color: '#F59E0B', group: 'PENATAUSAHAAN', menu: 'realisasi' },
+  { href: '/blud/tutup-kas',   label: 'Tutup Kas',      icon: Lock,            color: '#0EA5E9', group: 'PENATAUSAHAAN', menu: 'tutup-kas' },
+  { href: '/blud/cetak',       label: 'Cetak',          icon: Printer,         color: '#0891b2', group: 'OUTPUT', menu: 'cetak' },
+  { href: '/blud/pengaturan',  label: 'Pengaturan',     icon: Settings,        color: '#64748B', group: 'SISTEM', menu: 'pengaturan' },
 ]
 
 // Overflow handling — kalau total tile > MAX_INLINE, tampilkan (MAX_INLINE - 1) tile + "Lainnya" dropdown.
@@ -81,6 +82,10 @@ export default function BludShell({ username, role, themePreference, children }:
 
   const roleLabel = ROLE_LABELS[role] ?? role
   const initials  = username.slice(0, 2).toUpperCase()
+
+  // Menu yang tertutup bagi peran ini tidak dipasang sama sekali — bukan disabled.
+  // Tile mati hanya memancing klik lalu 403; pagar sebenarnya tetap di route.
+  const TILES = SEMUA_TILE.filter(t => bolehBuka(role, t.menu))
 
   const OVERFLOW_LEBAR = 264
 

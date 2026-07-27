@@ -21,6 +21,7 @@ import TransaksiModal, { type BarisPaguUI, type TransaksiAwal } from '@/componen
 import { LABEL_POTONGAN, type JenisPotongan } from '@/lib/blud/alokasi-rule'
 import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
 import DetailTransaksiModal from '@/components/blud/DetailTransaksiModal'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -56,7 +57,7 @@ interface BukuKasData {
   rows: TxRow[]
 }
 
-export default function BukuKasClient() {
+export default function BukuKasClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
@@ -184,13 +185,17 @@ export default function BukuKasClient() {
           <span className="blud-imp-pill on-amber"><Lock className="w-3 h-3" style={{ display: 'inline', marginRight: 4 }} />Periode ditutup</span>
         )}
 
-        <div style={{ marginLeft: 'auto' }}>
-          <PrimaButton variant="purple" size="sm" iconLeft={<Plus className="w-3.5 h-3.5" />}
-            disabled={terkunci || tanpaDpa || tahun == null} onClick={bukaBaru}>
-            Transaksi Baru
-          </PrimaButton>
-        </div>
+        {bolehUbah && (
+          <div style={{ marginLeft: 'auto' }}>
+            <PrimaButton variant="purple" size="sm" iconLeft={<Plus className="w-3.5 h-3.5" />}
+              disabled={terkunci || tanpaDpa || tahun == null} onClick={bukaBaru}>
+              Transaksi Baru
+            </PrimaButton>
+          </div>
+        )}
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="buku-kas" />}
 
       {tanpaDpa && (
         <div className="bk-warn">
@@ -207,9 +212,11 @@ export default function BukuKasClient() {
             Tambahkan rekeningnya lewat menu Pergeseran, lalu sambungkan transaksinya.
             Selama masih ada yang terparkir, <b>Tutup Kas tidak bisa dijalankan</b>.
           </span>
-          <PrimaButton variant="warning" size="sm" onClick={() => setBakiOpen(true)}>
-            Buka Baki
-          </PrimaButton>
+          {bolehUbah && (
+            <PrimaButton variant="warning" size="sm" onClick={() => setBakiOpen(true)}>
+              Buka Baki
+            </PrimaButton>
+          )}
         </div>
       )}
 
@@ -287,11 +294,15 @@ export default function BukuKasClient() {
                       onClick={() => setDetail(r)} data-tooltip="Lihat rincian" aria-label="Lihat rincian">
                       <Eye />
                     </button>
-                    <button className="blud-act blud-act-add" disabled={terkunci}
-                      onClick={() => bukaUbah(r)} data-tooltip="Ubah" aria-label="Ubah">
-                      <Pencil />
-                    </button>
-                    <DeleteButton disabled={terkunci} onClick={() => hapus(r)} />
+                    {bolehUbah && (
+                      <>
+                        <button className="blud-act blud-act-add" disabled={terkunci}
+                          onClick={() => bukaUbah(r)} data-tooltip="Ubah" aria-label="Ubah">
+                          <Pencil />
+                        </button>
+                        <DeleteButton disabled={terkunci} onClick={() => hapus(r)} />
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

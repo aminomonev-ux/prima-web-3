@@ -48,7 +48,7 @@ interface SaranPk {
 
 const kosong = (): Isian => ({ nama: '', nip: '', pangkat: '', jabatan_teks: '', pk_pejabat_id: null })
 
-export default function PejabatSpjPanel() {
+export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [isi, setIsi] = useState<Record<Jabatan, Isian>>({
@@ -208,39 +208,43 @@ export default function PejabatSpjPanel() {
                   <div className="pj-peran-label">{p.label}</div>
                   <div className="pj-peran-petunjuk">{p.petunjuk}</div>
                 </div>
-                <PrimaButton variant="ghost" size="sm" onClick={() => bukaSaran(p.key)}>
-                  Ambil dari PK
-                </PrimaButton>
+                {bolehUbah && (
+                  <PrimaButton variant="ghost" size="sm" onClick={() => bukaSaran(p.key)}>
+                    Ambil dari PK
+                  </PrimaButton>
+                )}
               </div>
               <div className="pj-baris">
                 <label className="tk-isian" style={{ flex: 2, minWidth: 200 }}>
                   <span>Nama</span>
-                  <input className="blud-imp-input" value={isi[p.key].nama}
+                  <input className="blud-imp-input" value={isi[p.key].nama} disabled={!bolehUbah}
                     onChange={e => ubah(p.key, { nama: e.target.value })} placeholder="Nama lengkap + gelar" />
                 </label>
                 <label className="tk-isian" style={{ flex: 1.4, minWidth: 170 }}>
                   <span>NIP</span>
-                  <input className="blud-imp-input bk-num-input" value={isi[p.key].nip}
+                  <input className="blud-imp-input bk-num-input" value={isi[p.key].nip} disabled={!bolehUbah}
                     onChange={e => ubah(p.key, { nip: e.target.value })} placeholder="18 digit" />
                 </label>
                 <label className="tk-isian" style={{ flex: .8, minWidth: 90 }}>
                   <span>Pangkat</span>
-                  <input className="blud-imp-input" value={isi[p.key].pangkat}
+                  <input className="blud-imp-input" value={isi[p.key].pangkat} disabled={!bolehUbah}
                     onChange={e => ubah(p.key, { pangkat: e.target.value })} placeholder="IV/b" />
                 </label>
                 <label className="tk-isian" style={{ flex: 2, minWidth: 200 }}>
                   <span>Bunyi jabatan yang dicetak</span>
-                  <input className="blud-imp-input" value={isi[p.key].jabatan_teks}
+                  <input className="blud-imp-input" value={isi[p.key].jabatan_teks} disabled={!bolehUbah}
                     onChange={e => ubah(p.key, { jabatan_teks: e.target.value })} placeholder={p.label} />
                 </label>
               </div>
             </div>
           ))}
-          <div className="pj-aksi">
-            <PrimaButton variant="primary" iconLeft={<Save size={13} />} onClick={simpan} disabled={sibuk}>
-              Simpan Pejabat
-            </PrimaButton>
-          </div>
+          {bolehUbah && (
+            <div className="pj-aksi">
+              <PrimaButton variant="primary" iconLeft={<Save size={13} />} onClick={simpan} disabled={sibuk}>
+                Simpan Pejabat
+              </PrimaButton>
+            </div>
+          )}
         </div>
       )}
 

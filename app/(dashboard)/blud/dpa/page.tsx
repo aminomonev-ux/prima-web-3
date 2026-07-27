@@ -1,12 +1,11 @@
 // app/(dashboard)/blud/dpa/page.tsx
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+// Pintu modul dijaga `layout.tsx`; di sini tinggal izin per-menu (Fase C).
 import DpaClient from './dpa-client'
+import { izinLayar } from '../_izin'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DpaPage() {
-  const h = await headers()
-  if (!h.get('x-user-id')) redirect('/login')
-  return <DpaClient />
+  const { bolehUbah } = await izinLayar('dpa')
+  return <DpaClient bolehUbah={bolehUbah} />
 }

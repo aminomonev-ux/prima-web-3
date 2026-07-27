@@ -1,12 +1,11 @@
 // app/(dashboard)/blud/bukti-setor/page.tsx
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+// Pintu modul dijaga `layout.tsx`; di sini tinggal izin per-menu (Fase C).
 import BuktiSetorClient from './bukti-setor-client'
+import { izinLayar } from '../_izin'
 
 export const dynamic = 'force-dynamic'
 
 export default async function BuktiSetorPage() {
-  const h = await headers()
-  if (!h.get('x-user-id')) redirect('/login')
-  return <BuktiSetorClient />
+  const { bolehUbah } = await izinLayar('bukti-setor')
+  return <BuktiSetorClient bolehUbah={bolehUbah} />
 }

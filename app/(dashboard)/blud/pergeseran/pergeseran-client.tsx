@@ -20,6 +20,7 @@ import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 import { formatTanggalId } from '@/lib/blud/tanggal'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
@@ -94,12 +95,15 @@ function PergeseranTable({
   akunOptions,
   hiddenLevels,
   highlightId,
+  bolehUbah,
 }: {
   rows: PergeseranBarisInput[]
   onChange: (rows: PergeseranBarisInput[]) => void
   akunOptions: AkunOption[]
   hiddenLevels: Set<string>
   highlightId:  string | null
+  /** LIHAT: seluruh isian jadi teks, kolom aksi & checkbox tidak dirender. */
+  bolehUbah:    boolean
 }) {
   const [addParent, setAddParent] = useState<PergeseranBarisInput | null>(null)
   const [delGuard,  setDelGuard]  = useState<{ uraian: string; childCount: number } | null>(null)
@@ -278,15 +282,17 @@ function PergeseranTable({
         <table className="dpa-table v2">
           <thead>
             <tr>
-              <th style={{ width: 36, textAlign: 'center' }}>
-                <input
-                  type="checkbox"
-                  className="dpa-row-checkbox"
-                  checked={allNewSelected}
-                  disabled={newRowIds.length === 0}
-                  onChange={() => allNewSelected ? clearSelection() : selectAll(newRowIds)}
-                  data-tooltip={allNewSelected ? 'Uncheck semua' : 'Check semua baris baru (utk multi-hapus)'}
-                />
+              <th style={{ width: bolehUbah ? 36 : 20, textAlign: 'center' }}>
+                {bolehUbah && (
+                  <input
+                    type="checkbox"
+                    className="dpa-row-checkbox"
+                    checked={allNewSelected}
+                    disabled={newRowIds.length === 0}
+                    onChange={() => allNewSelected ? clearSelection() : selectAll(newRowIds)}
+                    data-tooltip={allNewSelected ? 'Uncheck semua' : 'Check semua baris baru (utk multi-hapus)'}
+                  />
+                )}
               </th>
               <th style={{ width: 48, textAlign: 'center' }}>Level</th>
               <th style={{ width: 150 }}>Kode Rekening</th>
@@ -299,7 +305,7 @@ function PergeseranTable({
               <th data-rima="pergeseran.kolom-harga-p" style={{ width: 150, textAlign: 'right' }}>Harga P</th>
               <th data-rima="pergeseran.kolom-selisih" style={{ width: 150, textAlign: 'right' }}>Pergeseran</th>
               <th style={{ width: 150, textAlign: 'right' }}>+/−</th>
-              <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>
+              {bolehUbah && <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>}
             </tr>
           </thead>
           <tbody>
@@ -307,7 +313,7 @@ function PergeseranTable({
               if (hiddenLevels.has(TIPE_LABEL[row.tipe_baris])) return null
               const _isHighlighted = row.row_id === highlightId
               const isAgg    = (childCount.get(row.row_id) ?? 0) > 0
-              const editable = EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
+              const editable = bolehUbah && EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
               const isBold   = ['GRANDMASTER','MASTER','LEADER','PLETON-LEADER','KETUA-KELOMPOK-A','KETUA-KELOMPOK-B','L7-HEAD','L8-HEAD'].includes(row.tipe_baris)
               const isGM     = row.tipe_baris === 'GRANDMASTER'
               const bb       = row.bertambah_berkurang ?? 0
@@ -320,7 +326,7 @@ function PergeseranTable({
                     className={`${TIPE_ROW_CLASS[row.tipe_baris]}${_isHighlighted ? ' row-highlight' : ''}`}>
                   {/* Checkbox multi-hapus — hanya baris baru */}
                   <td style={{ padding: '2px 4px', textAlign: 'center' }}>
-                    {isNew && (
+                    {bolehUbah && isNew && (
                       <input
                         type="checkbox"
                         className="dpa-row-checkbox"
@@ -360,7 +366,7 @@ function PergeseranTable({
 
                   {/* Uraian — combobox kalau baris baru, span kalau dari DPA */}
                   <td>
-                    {isNew ? (
+                    {isNew && bolehUbah ? (
                       <MasterAkunCombobox
                         value={row.uraian}
                         options={akunOptions}
@@ -445,6 +451,7 @@ function PergeseranTable({
                   </td>
 
                   {/* Aksi — kebab menu */}
+                  {bolehUbah && (
                   <td style={{ textAlign: 'center', padding: '2px 4px' }}>
                     <RowActionsMenu
                       canAdd={canAdd}
@@ -456,6 +463,7 @@ function PergeseranTable({
                       title={isAgg ? 'Aggregator: hapus anak dulu' : 'Hapus baris (hanya untuk baris baru)'}
                     />
                   </td>
+                  )}
                 </tr>
               )
             })}
@@ -542,7 +550,7 @@ function AddPergeseranBarisModal({
 
 // ─── PERGESERAN PAGE ──────────────────────────────────────────────────────────
 
-export default function PergeseranClient() {
+export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [rows,      setRows]      = useState<PergeseranBarisInput[]>([])
   const [history,   setHistory]   = useState<{ versi_tanggal: string }[]>([])
   const [versi,     setVersi]     = useState('')
@@ -877,18 +885,22 @@ export default function PergeseranClient() {
           />
         </div>
 
-        <PrimaButton variant="purple" iconLeft={<Sparkles className="w-3.5 h-3.5" />}
-          disabled={loading} onClick={generate}
-          data-tooltip="Buat tabel pergeseran dari snapshot DPA terbaru tahun terpilih" data-rima="pergeseran.buat">
-          Buat Pergeseran
-        </PrimaButton>
+        {bolehUbah && (
+          <>
+            <PrimaButton variant="purple" iconLeft={<Sparkles className="w-3.5 h-3.5" />}
+              disabled={loading} onClick={generate}
+              data-tooltip="Buat tabel pergeseran dari snapshot DPA terbaru tahun terpilih" data-rima="pergeseran.buat">
+              Buat Pergeseran
+            </PrimaButton>
 
-        <PrimaButton variant="success" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
-          disabled={injecting || !rows.length}
-          onClick={() => setConfirmInject(true)}
-          data-tooltip="Sinkronkan kolom kode/uraian/vol/harga dari DPA terbaru" data-rima="pergeseran.sinkron-dpa">
-          Sinkronkan DPA
-        </PrimaButton>
+            <PrimaButton variant="success" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
+              disabled={injecting || !rows.length}
+              onClick={() => setConfirmInject(true)}
+              data-tooltip="Sinkronkan kolom kode/uraian/vol/harga dari DPA terbaru" data-rima="pergeseran.sinkron-dpa">
+              Sinkronkan DPA
+            </PrimaButton>
+          </>
+        )}
 
         {/* data-rima: anchor tur RIMA F3 — wrapper inline-flex (display:contents rect-nya kosong) */}
         <div data-rima="pergeseran.versi-dropdown" style={{ display:'inline-flex' }}>
@@ -900,12 +912,14 @@ export default function PergeseranClient() {
           />
         </div>
 
-        <div style={{ marginLeft: 'auto' }}>
-          <PrimaButton variant="primary" iconLeft={<Save className="w-3.5 h-3.5" />}
-            disabled={saving} onClick={simpan} data-rima="pergeseran.simpan">
-            {saving ? 'Menyimpan...' : 'Simpan'}
-          </PrimaButton>
-        </div>
+        {bolehUbah && (
+          <div style={{ marginLeft: 'auto' }}>
+            <PrimaButton variant="primary" iconLeft={<Save className="w-3.5 h-3.5" />}
+              disabled={saving} onClick={simpan} data-rima="pergeseran.simpan">
+              {saving ? 'Menyimpan...' : 'Simpan'}
+            </PrimaButton>
+          </div>
+        )}
 
         {dpaVersi && (
           <span data-rima="pergeseran.sumber-dpa" style={{ fontSize:11, color:'#85B7EB', display:'flex', alignItems:'center', gap:4 }}>
@@ -920,6 +934,8 @@ export default function PergeseranClient() {
           </span>
         )}
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="pergeseran" />}
 
       {/* Search bar + Legenda functional (filter level) */}
       <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'8px 16px', display:'flex', flexWrap:'wrap', gap:10, alignItems:'center' }}>
@@ -1010,7 +1026,7 @@ export default function PergeseranClient() {
           <p style={{ fontSize:11, marginTop:4 }}>Klik Generate untuk membuat dari DPA terbaru.</p>
         </div>
       ) : (
-        <PergeseranTable rows={rows} onChange={setRows} akunOptions={akunOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} />
+        <PergeseranTable rows={rows} onChange={setRows} akunOptions={akunOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
       )}
 
       {/* Audit BLUD v1.2 (B-NEW-3): modal konfirmasi safety threshold drop >50% */}

@@ -44,7 +44,7 @@ const VIEW_OPTIONS: Record<Menu, Array<{ value: View; label: string }>> = {
   ],
 }
 
-export default function CetakClient() {
+export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: boolean }) {
   // ── State ──
   const [menu, setMenu] = useState<Menu>('dpa')
   const [view, setView] = useState<View>('dpa')
@@ -199,7 +199,7 @@ export default function CetakClient() {
     }
   }, [renderedData, menu, view, historyVersi, tahun])
 
-  const showSimpanPK = menu === 'dpa' && view === 'penanggungJawab'
+  const showSimpanPK = bolehSimpanRekap && menu === 'dpa' && view === 'penanggungJawab'
 
   // ── Toolbar ──
   return (

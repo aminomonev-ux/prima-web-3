@@ -13,6 +13,7 @@ import { AlertTriangle, FileText, Shuffle, RefreshCw, X } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import PejabatSpjPanel from '@/components/blud/PejabatSpjPanel'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 
 interface DpaVersi {
   tahun_anggaran: number
@@ -56,7 +57,9 @@ function formatTanggal(iso: string): string {
   return `${m[3]} ${ID_MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`
 }
 
-export default function PengaturanClient({ bolehHapus }: { bolehHapus: boolean }) {
+export default function PengaturanClient(
+  { bolehHapus, bolehUbah }: { bolehHapus: boolean; bolehUbah: boolean },
+) {
   const [dpaList,   setDpaList]   = useState<DpaVersi[]>([])
   const [pergList,  setPergList]  = useState<PergeseranVersi[]>([])
   const [loading,   setLoading]   = useState(true)
@@ -190,7 +193,9 @@ export default function PengaturanClient({ bolehHapus }: { bolehHapus: boolean }
         </PrimaButton>
       </div>
 
-      <PejabatSpjPanel />
+      {!bolehUbah && <SpandukLihat menu="pengaturan" />}
+
+      <PejabatSpjPanel bolehUbah={bolehUbah} />
 
       {/* Warning banner — solid red full (request user: merah full, text putih) */}
       <div style={{

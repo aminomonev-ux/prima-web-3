@@ -6,26 +6,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { isBludRole, bludRateLimit } from '@/lib/blud/schemas'
-import { hasAppAccess } from '@/lib/security/guard'
+import { bludRateLimit } from '@/lib/blud/schemas'
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized } from '../_guard'
 import { KodeBesarBodySchema } from '@/lib/blud/kode-besar-schemas'
 import { getKodeBesar, getKodeBesarVersion, saveKodeBesar, KodeBesarSafetyError } from '@/lib/blud/kode-besar-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 
 export const dynamic = 'force-dynamic'
 
-function unauthorized() {
-  return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-}
-function forbidden() {
-  return NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 })
-}
-
 // GET /api/blud/kode-besar?q=search
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  if (!(await bolehBukaMenu(session.userId, session.role, 'kode-besar'))) return forbidden()
 
   try {
     const q = new URL(req.url).searchParams.get('q') ?? ''
@@ -41,7 +34,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  if (!(await bolehEditMenu(session.userId, session.role, 'kode-besar'))) return tolakEdit('kode-besar')
 
   // Rate limit save: 30/menit/user
   const limited = await bludRateLimit(session.userId, 'save-kode-besar', 30)

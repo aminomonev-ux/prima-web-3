@@ -92,12 +92,15 @@ for (const [nama, teks, harap] of [
   periksa(nama, AlasanHapusSchema.safeParse(teks).success === harap)
 }
 
-// Perilaku hari ini sengaja dikunci di uji: daftar buka periode masih satu nama.
-// Kalau nanti peran keuangan ditambahkan, baris ini yang harus ikut diperbarui —
-// supaya pelonggaran izin tidak pernah terjadi tanpa disadari.
+// Daftar pemegang kunci dikunci di uji supaya pelonggarannya tidak pernah terjadi
+// diam-diam. PERBENDAHARAAN sengaja di luar: yang menutup dan yang membuka lagi
+// tidak boleh orang yang sama — itu inti pemisahannya, bukan kelalaian.
 periksa('bolehBukaPeriode: SUPER_ADMIN', bolehBukaPeriode('SUPER_ADMIN') === true)
-periksa('bolehBukaPeriode: ADMIN belum termasuk', bolehBukaPeriode('ADMIN') === false)
-periksa('bolehBukaPeriode: KEUANGAN belum termasuk', bolehBukaPeriode('KEUANGAN') === false)
+periksa('bolehBukaPeriode: ADMIN', bolehBukaPeriode('ADMIN') === true)
+periksa('bolehBukaPeriode: KEUANGAN', bolehBukaPeriode('KEUANGAN') === true)
+periksa('bolehBukaPeriode: PERBENDAHARAAN ditolak', bolehBukaPeriode('PERBENDAHARAAN') === false)
+periksa('bolehBukaPeriode: PROGRAM ditolak', bolehBukaPeriode('PROGRAM') === false)
+periksa('bolehBukaPeriode: peran tak terdaftar ditolak', bolehBukaPeriode('AKUNTANSI') === false)
 
 // ─── Lapis 2: pagar buka periode (S2) ───────────────────────────────────────
 const TAHUN = 2099

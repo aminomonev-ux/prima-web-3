@@ -5,18 +5,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { isBludRole, RekapPKBodySchema, bludRateLimit } from '@/lib/blud/schemas'
-import { hasAppAccess } from '@/lib/security/guard'
+import { RekapPKBodySchema, bludRateLimit } from '@/lib/blud/schemas'
+import { bolehEditMenu, tolakEdit, unauthorized } from '../_guard'
 import { saveRekapPK } from '@/lib/blud/rekap-pk-data'
 
 export const dynamic = 'force-dynamic'
-
-function unauthorized() {
-  return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
-}
-function forbidden() {
-  return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 })
-}
 
 // POST /api/blud/rekap-pk
 // Body: { versi: string | null, rows: [[label, uraianFiller, nominal], ...] }
@@ -25,7 +18,7 @@ function forbidden() {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session)                       return unauthorized()
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole)))      return forbidden()
+  if (!(await bolehEditMenu(session.userId, session.role, 'dpa'))) return tolakEdit('dpa')
 
   // Rate limit save: 30/menit/user
   const limited = await bludRateLimit(session.userId, 'save-rekap-pk', 30)

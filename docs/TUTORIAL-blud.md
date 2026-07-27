@@ -109,7 +109,7 @@ flowchart TD
         direction TB
         O1[Cetak → pilih Menu + View → Cetak] --> O2[Ekspor PDF / Excel]
         O3[Pengaturan → Pejabat SPJ + hapus/kelola versi]
-        O4[SUPER_ADMIN: Buka Kembali periode<br/>wajib alasan ≥10 karakter → audit]
+        O4[SUPER_ADMIN/ADMIN/KEUANGAN: Buka Kembali periode<br/>wajib alasan ≥10 karakter → audit]
     end
     OUT --> Z([Selesai])
 ```
@@ -430,7 +430,7 @@ SISI B  menurut nyata  = uang tunai di brankas + saldo rekening koran ← DIKETI
 | 5 | **"Simpan Pemeriksaan"** (ghost) | Simpan sisi B **tanpa** menutup — supaya bisa menghitung uang bertahap sambil melihat selisih |
 | 6 | **"Tutup Bulan"** (hijau) | Aktif hanya kalau selisih Rp 0 **dan** tanpa penghalang · audit `BLUD_PERIODE_TUTUP` |
 | 7 | **"Unduh SPJ Bulanan"** (hijau) | Unduh `.xlsx` 11 lembar · audit `BLUD_SPJ_UNDUH` |
-| 8 | **"Buka Kembali"** (amber) | **SUPER_ADMIN saja** (`bolehBukaPeriode`), alasan ≥10 karakter · audit `BLUD_PERIODE_BUKA` · **wajib urut dari belakang** — lihat §7.3 |
+| 8 | **"Buka Kembali"** (amber) | **SUPER_ADMIN · ADMIN · KEUANGAN** (`bolehBukaPeriode`) — PERBENDAHARAAN sengaja di luar meski boleh menutup; alasan ≥10 karakter · audit `BLUD_PERIODE_BUKA` · **wajib urut dari belakang** — lihat §7.3 |
 
 ### 7.3 Penghalang tutup — daftarnya satu, dipakai layar **dan** server
 `kumpulkanPenghalang()` adalah sumber tunggalnya; UI tidak punya versi aturannya sendiri.
@@ -549,18 +549,34 @@ flowchart TD
 
 > **Guard ditaruh di SETIAP route, bukan hanya di UI.** Menyembunyikan tombol bukan keamanan — endpoint tetap bisa dipanggil lewat `curl` (pelajaran V3-1).
 
-### 9.2 Siapa boleh apa
+### 9.2 Siapa boleh apa — izin dua sumbu (peran × menu)
+Konsep lengkap: `docs/CONCEPT-blud-peran.md`. Tabelnya hidup di **satu** berkas,
+`lib/blud/peran.ts`, dan dibaca dua pihak: ribbon dan setiap route.
+
+| Peran | Ringkasnya |
+|---|---|
+| `SUPER_ADMIN` · `ADMIN` | EDIT seluruh menu |
+| `PROGRAM` | EDIT data induk + DPA + Pergeseran + Pengaturan · sisanya LIHAT |
+| `KEUANGAN` | EDIT Tutup Kas + Pengaturan · sisanya LIHAT · **memegang kunci "Buka Kembali"** |
+| `PERBENDAHARAAN` | EDIT Buku Kas · Bukti Setor · Realisasi · Tutup Kas + Pengaturan · sisanya LIHAT · **tidak boleh membuka periode** |
+| peran ber-grant lain | `LIHAT` semua menu (bawaan aman §5.3) — bukan EDIT, bukan TIDAK |
+
 | Fungsi | Aturan |
 |---|---|
-| `isBludRole(role, appAccess)` | `SUPER_ADMIN` / `ADMIN`, **atau** `users.app_access` memuat `'blud'` |
-| `bolehLihat` → `canViewRealisasi` | Saat ini = `isBludRole` |
-| `bolehInput` → `canInputRealisasi` | Saat ini = `isBludRole` |
-| `bolehBukaPeriode(role)` (`DELETE /realisasi/periode`) | `BLUD_BUKA_PERIODE_ROLES = ['SUPER_ADMIN']` — sengaja lebih ketat dari guard modul, + alasan ≥10 karakter |
+| `isBludRole(role, appAccess)` | `SUPER_ADMIN` / `ADMIN`, **atau** `users.app_access` memuat `'blud'` — pintu masuk modul |
+| `bolehBukaMenu(uid, role, menu)` | `bolehBuka` (peran) **dan** `hasAppAccess` — dipakai semua GET |
+| `bolehEditMenu(uid, role, menu)` | `bolehEdit` (peran) **dan** `hasAppAccess` — dipakai semua POST/PATCH/DELETE |
+| `bolehLihat` / `bolehInput` (`realisasi/_guard`) | Nama lama, sekarang meneruskan ke dua fungsi di atas; `menu` wajib diisi |
+| `bolehBukaPeriode(role)` (`DELETE /realisasi/periode`) | `BLUD_BUKA_PERIODE_ROLES = ['SUPER_ADMIN','ADMIN','KEUANGAN']` — lebih sempit dari pemegang EDIT Tutup Kas, + alasan ≥10 karakter |
 | `canHapusVersi(role)` (`DELETE /dpa`, `DELETE /pergeseran`) | `BLUD_HAPUS_VERSI_ROLES = ['SUPER_ADMIN','ADMIN']` — grant `app_access` **tidak** cukup, + alasan ≥10 karakter |
 
-> Pemisahan **lihat** vs **input** sudah dipasang sejak awal walau isinya sama (§7.4). Saat pembagian role diaktifkan nanti, yang berubah hanya isi **dua fungsi** itu di `lib/blud/realisasi-schemas.ts` — bukan route-nya.
+> **LIHAT termasuk mengunduh.** Yang membedakan bukan metode HTTP-nya, melainkan
+> apakah angka resminya berubah: `export-log` memakai POST tapi bersifat baca, jadi
+> pemegang LIHAT harus lolos — kalau tidak, unduhan mereka tidak berjejak.
 >
-> Dua fungsi izin terakhir sengaja berbentuk **daftar peran**, bukan perbandingan `=== 'SUPER_ADMIN'` yang ditulis di dalam route. Menambah peran nanti = satu nama di daftar, tanpa menyentuh route mana pun. Uji `scripts/test-blud-izin-periode.mjs` mengunci isi kedua daftar itu — jadi melonggarkannya selalu jadi keputusan sadar.
+> Dua fungsi izin terakhir sengaja berbentuk **daftar peran**, bukan perbandingan `=== 'SUPER_ADMIN'` yang ditulis di dalam route. Menambah peran = satu nama di daftar, tanpa menyentuh route mana pun. Uji `scripts/test-blud-izin-periode.mjs` + `scripts/test-blud-peran.mjs` mengunci isi daftar itu — jadi melonggarkannya selalu jadi keputusan sadar.
+>
+> Di sisi layar, `app/(dashboard)/blud/_izin.ts` (`izinLayar(menu)`) yang menerjemahkan tabel jadi prop `bolehUbah`. Layar LIHAT **menyembunyikan** tombol dan mengubah isian jadi teks, bukan menonaktifkannya — plus spanduk `SpandukLihat`.
 >
 > **AUTHZ-02/V5**: BLUD sengaja **tanpa ownership per-record** — semua pemegang akses bisa mengubah semua record. Itu keputusan, bukan IDOR. Konsekuensinya pemberian `app_access: 'blud'` harus konservatif dan direview berkala.
 
@@ -677,7 +693,7 @@ Lewat kuota → **429** + `resetIn` (detik).
 14. **Tutup Kas** → isi uang tunai + saldo rekening koran → **"Simpan Pemeriksaan"** → pastikan **selisih Rp 0**.
 15. Catat **Periode GU** (kalau bulan itu lebih dari satu pengajuan) → **"Simpan Periode GU"**.
 16. **"Tutup Bulan"** → **"Unduh SPJ Bulanan"**.
-17. Salah? → **SUPER_ADMIN** → **"Buka Kembali"** + alasan ≥10 karakter.
+17. Salah? → minta **SUPER_ADMIN / ADMIN / KEUANGAN** → **"Buka Kembali"** + alasan ≥10 karakter.
 
 **Kapan saja**
 18. **Cetak** → pilih Menu + View → **Cetak** → ekspor **PDF/Excel**.

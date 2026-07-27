@@ -1,12 +1,11 @@
 // app/(dashboard)/blud/master-akun/page.tsx
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+// Pintu modul dijaga `layout.tsx`; di sini tinggal izin per-menu (Fase C).
 import MasterAkunClient from './master-akun-client'
+import { izinLayar } from '../_izin'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MasterAkunPage() {
-  const h = await headers()
-  if (!h.get('x-user-id')) redirect('/login')
-  return <MasterAkunClient />
+  const { bolehUbah } = await izinLayar('master-akun')
+  return <MasterAkunClient bolehUbah={bolehUbah} />
 }

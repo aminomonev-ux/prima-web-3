@@ -17,7 +17,7 @@ import {
   BludBuktiSetorConflictError, BludBuktiSetorTidakAdaError,
 } from '@/lib/blud/bukti-setor-schemas'
 import { BludPeriodeTertutupError } from '@/lib/blud/realisasi-schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized } from '../realisasi/_guard'
+import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit } from '../realisasi/_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +37,7 @@ function petakanError(err: unknown): NextResponse | null {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehLihat(session.userId, session.role))) return forbidden()
+  if (!(await bolehLihat(session.userId, session.role, 'bukti-setor'))) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const parsed = ListBuktiSetorQuerySchema.safeParse({
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehInput(session.userId, session.role))) return forbidden()
+  if (!(await bolehInput(session.userId, session.role, 'bukti-setor'))) return tolakEdit('bukti-setor')
 
   const limited = await bludRateLimit(session.userId, 'bukti-setor', 60)
   if (limited) return limited
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehInput(session.userId, session.role))) return forbidden()
+  if (!(await bolehInput(session.userId, session.role, 'bukti-setor'))) return tolakEdit('bukti-setor')
 
   const limited = await bludRateLimit(session.userId, 'bukti-setor-delete', 20)
   if (limited) return limited

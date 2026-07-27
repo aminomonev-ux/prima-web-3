@@ -7,18 +7,11 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
-import { isBludRole, canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit } from '@/lib/blud/schemas'
-import { hasAppAccess } from '@/lib/security/guard'
+import { canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit } from '@/lib/blud/schemas'
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized } from '../_guard'
 import { validateAllPj } from '@/lib/blud/pj-conflict'
 
 export const dynamic = 'force-dynamic'
-
-function unauthorized() {
-  return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-}
-function forbidden() {
-  return NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 })
-}
 
 /**
  * Resolve tahun dari query `?tahun=`. Kalau kosong → tahun berjalan bila punya
@@ -45,7 +38,7 @@ async function resolveTahun(searchParams: URLSearchParams): Promise<{ tahun: num
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  if (!(await bolehBukaMenu(session.userId, session.role, 'dpa'))) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const mode    = searchParams.get('mode')
@@ -90,7 +83,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  if (!(await bolehEditMenu(session.userId, session.role, 'dpa'))) return tolakEdit('dpa')
 
   // Rate limit save: 30/menit/user
   const limited = await bludRateLimit(session.userId, 'save-dpa', 30)
@@ -203,7 +196,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  if (!(await bolehBukaMenu(session.userId, session.role, 'dpa'))) return forbidden()
   // S5: akses modul ≠ wewenang membuang anggaran setahun. Pagar sungguhannya di
   // sini, bukan di tombol yang disembunyikan klien.
   if (!canHapusVersi(session.role)) {

@@ -16,6 +16,7 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import BuktiSetorModal, { type BuktiSetorAwal, type BarisUI } from '@/components/blud/BuktiSetorModal'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -39,7 +40,7 @@ interface BuktiSetorRow {
   peringatan: string[]
 }
 
-export default function BuktiSetorClient() {
+export default function BuktiSetorClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
@@ -147,13 +148,17 @@ export default function BuktiSetorClient() {
           </span>
         )}
 
-        <div style={{ marginLeft: 'auto' }}>
-          <PrimaButton variant="purple" size="sm" iconLeft={<Plus className="w-3.5 h-3.5" />}
-            disabled={terkunci || tahun == null} onClick={() => { setEdit(null); setModalOpen(true) }}>
-            Bukti Setor Baru
-          </PrimaButton>
-        </div>
+        {bolehUbah && (
+          <div style={{ marginLeft: 'auto' }}>
+            <PrimaButton variant="purple" size="sm" iconLeft={<Plus className="w-3.5 h-3.5" />}
+              disabled={terkunci || tahun == null} onClick={() => { setEdit(null); setModalOpen(true) }}>
+              Bukti Setor Baru
+            </PrimaButton>
+          </div>
+        )}
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="bukti-setor" />}
 
       {loading && <div className="bk-panel bk-kosong">Memuat…</div>}
 
@@ -177,13 +182,15 @@ export default function BuktiSetorClient() {
                 {r.n_ketik > 0 && ` · ${r.n_ketik} diketik lepas senilai Rp ${rp(r.nilai_ketik)}`}
               </div>
             </div>
-            <div className="bs-kartu-aksi">
-              <button className="blud-act blud-act-add" disabled={terkunci}
-                onClick={() => bukaUbah(r)} data-tooltip="Ubah" aria-label="Ubah">
-                <Pencil />
-              </button>
-              <DeleteButton disabled={terkunci} onClick={() => hapus(r)} />
-            </div>
+            {bolehUbah && (
+              <div className="bs-kartu-aksi">
+                <button className="blud-act blud-act-add" disabled={terkunci}
+                  onClick={() => bukaUbah(r)} data-tooltip="Ubah" aria-label="Ubah">
+                  <Pencil />
+                </button>
+                <DeleteButton disabled={terkunci} onClick={() => hapus(r)} />
+              </div>
+            )}
           </div>
 
           <div className="bs-kartu-angka">

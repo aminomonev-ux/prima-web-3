@@ -1,12 +1,11 @@
 // app/(dashboard)/blud/pergeseran/page.tsx
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+// Pintu modul dijaga `layout.tsx`; di sini tinggal izin per-menu (Fase C).
 import PergeseranClient from './pergeseran-client'
+import { izinLayar } from '../_izin'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PergeseranPage() {
-  const h = await headers()
-  if (!h.get('x-user-id')) redirect('/login')
-  return <PergeseranClient />
+  const { bolehUbah } = await izinLayar('pergeseran')
+  return <PergeseranClient bolehUbah={bolehUbah} />
 }

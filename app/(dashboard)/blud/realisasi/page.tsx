@@ -1,12 +1,12 @@
 // app/(dashboard)/blud/realisasi/page.tsx
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+// Layar pantau — tidak ada tombol tulis sama sekali, jadi hanya izin buka yang
+// diperiksa. `bolehUbah` sengaja tidak diteruskan: tak ada yang bisa disembunyikan.
 import RealisasiClient from './realisasi-client'
+import { izinLayar } from '../_izin'
 
 export const dynamic = 'force-dynamic'
 
 export default async function RealisasiPage() {
-  const h = await headers()
-  if (!h.get('x-user-id')) redirect('/login')
+  await izinLayar('realisasi')
   return <RealisasiClient />
 }

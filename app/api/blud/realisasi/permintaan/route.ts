@@ -15,7 +15,7 @@ import { bludRateLimit } from '@/lib/blud/schemas'
 import { listPermintaan, countMenunggu, createPermintaan, tolakPermintaan } from '@/lib/blud/permintaan-data'
 import { PermintaanBodySchema, PatchPermintaanSchema } from '@/lib/blud/realisasi-schemas'
 import { TahunSchema } from '@/lib/blud/schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized } from '../_guard'
+import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +24,11 @@ const STATUS_VALID = new Set(['MENUNGGU', 'SELESAI', 'DITOLAK'])
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehLihat(session.userId, session.role))) return forbidden()
+  // Daftar permintaan tampil di dua tempat sekaligus (baki Buku Kas & layar
+  // Pergeseran), jadi cukup salah satunya boleh dibuka.
+  const bolehBaca = await bolehLihat(session.userId, session.role, 'buku-kas')
+    || await bolehLihat(session.userId, session.role, 'pergeseran')
+  if (!bolehBaca) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))
@@ -49,7 +53,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehInput(session.userId, session.role))) return forbidden()
+  // MENGAJUKAN permintaan itu pekerjaan bendahara — pemicunya kekurangan pagu yang
+  // ia temui saat mengisi Buku Kas. Jadi izinnya ikut menu Buku Kas, bukan menu
+  // Pergeseran yang jadi tujuan permintaannya.
+  if (!(await bolehInput(session.userId, session.role, 'buku-kas'))) return tolakEdit('buku-kas')
 
   const limited = await bludRateLimit(session.userId, 'realisasi-permintaan', 20)
   if (limited) return limited
@@ -107,7 +114,11 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehInput(session.userId, session.role))) return forbidden()
+  // MENOLAK permintaan itu keputusan pemegang Pergeseran — dialah yang bisa
+  // memenuhinya, jadi dialah yang berhak bilang tidak. Dulu memakai izin yang sama
+  // dengan mengajukan, sehingga bendahara bisa menolak permintaannya sendiri
+  // (temuan audit R2). Perbedaan menu di sini yang menutupnya.
+  if (!(await bolehInput(session.userId, session.role, 'pergeseran'))) return tolakEdit('pergeseran')
 
   const limited = await bludRateLimit(session.userId, 'realisasi-permintaan', 20)
   if (limited) return limited

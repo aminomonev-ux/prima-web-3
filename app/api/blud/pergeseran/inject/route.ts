@@ -7,18 +7,11 @@ import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { getDpaByDate, getDpaLatestDate, getDpaVersion } from '@/lib/blud/data'
 import { injectDpaKePergeseran } from '@/lib/blud/recalc'
-import { isBludRole, InjectBodySchema, bludRateLimit } from '@/lib/blud/schemas'
-import { hasAppAccess } from '@/lib/security/guard'
+import { InjectBodySchema, bludRateLimit } from '@/lib/blud/schemas'
+import { bolehEditMenu, tolakEdit, unauthorized } from '../../_guard'
 import type { DpaBarisInput } from '@/types'
 
 export const dynamic = 'force-dynamic'
-
-function unauthorized() {
-  return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-}
-function forbidden() {
-  return NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 })
-}
 
 // POST /api/blud/pergeseran/inject
 // Body: { pergeseran_rows: PergeseranBarisInput[] }
@@ -27,7 +20,7 @@ function forbidden() {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole))) return forbidden()
+  if (!(await bolehEditMenu(session.userId, session.role, 'pergeseran'))) return tolakEdit('pergeseran')
 
   // S-3: matching 16-level lumayan berat — batasi 30/menit/user spt endpoint save lain
   const limited = await bludRateLimit(session.userId, 'inject-dpa', 30)

@@ -1,22 +1,14 @@
 // app/(dashboard)/blud/cetak/page.tsx
-// Server component — auth guard + role check. Data fetching dilakukan client-side
-// (toolbar interaktif, user pilih versi sebelum fetch).
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+// Cetak selalu baca-saja (MENU_BACA_SAJA di lib/blud/peran.ts) — cukup izin buka.
+// Satu pengecualian: "Simpan Rekap PK" menulis ke tabel `rekap_pk`, dan route-nya
+// dijaga izin tulis menu DPA. Tombolnya ikut izin itu, bukan izin menu Cetak.
 import CetakClient from './cetak-client'
-import { isBludRole } from '@/lib/blud/schemas'
-import { hasAppAccess } from '@/lib/security/guard'
-import type { Role } from '@/types'
+import { izinLayar } from '../_izin'
+import { bolehEdit } from '@/lib/blud/peran'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CetakPage() {
-  const h    = await headers()
-  const uid  = h.get('x-user-id')
-  const role = h.get('x-user-role') as Role | null
-
-  if (!uid || !role) redirect('/login')
-  if (!(await hasAppAccess(Number(uid), role, isBludRole))) redirect('/menu')
-
-  return <CetakClient />
+  const { role } = await izinLayar('cetak')
+  return <CetakClient bolehSimpanRekap={bolehEdit(role, 'dpa')} />
 }

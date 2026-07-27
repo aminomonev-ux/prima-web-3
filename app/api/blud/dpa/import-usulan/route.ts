@@ -6,18 +6,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { isBludRole, bludRateLimit } from '@/lib/blud/schemas'
-import { hasAppAccess } from '@/lib/security/guard'
+import { bludRateLimit } from '@/lib/blud/schemas'
+import { bolehEditMenu, tolakEdit, unauthorized } from '../../_guard'
 import { listDpaImportCandidates } from '@/lib/blud/import-usulan-data'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
-  if (!session) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-  if (!(await hasAppAccess(session.userId, session.role, isBludRole))) {
-    return NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 })
-  }
+  if (!session) return unauthorized()
+  // GET, tapi satu-satunya gunanya menyiapkan tulisan ke DPA — jadi izinnya izin tulis
+  // menu DPA, bukan izin baca. Pemegang LIHAT tak punya tombolnya, dan tak perlu daftarnya.
+  if (!(await bolehEditMenu(session.userId, session.role, 'dpa'))) return tolakEdit('dpa')
 
   const limited = await bludRateLimit(session.userId, 'import-usulan-list', 30)
   if (limited) return limited

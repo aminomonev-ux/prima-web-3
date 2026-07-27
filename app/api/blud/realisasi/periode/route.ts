@@ -18,7 +18,7 @@ import {
   BludBukaTerhalangError,
 } from '@/lib/blud/realisasi-schemas'
 import { TahunSchema } from '@/lib/blud/schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized } from '../_guard'
+import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,7 @@ function bacaBulan(v: string | null): number | null {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehLihat(session.userId, session.role))) return forbidden()
+  if (!(await bolehLihat(session.userId, session.role, 'tutup-kas'))) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const tahun = TahunSchema.safeParse(searchParams.get('tahun'))
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehInput(session.userId, session.role))) return forbidden()
+  if (!(await bolehInput(session.userId, session.role, 'tutup-kas'))) return tolakEdit('tutup-kas')
 
   const limited = await bludRateLimit(session.userId, 'realisasi-periode', 20)
   if (limited) return limited
@@ -109,10 +109,16 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  // §4.5 — membuka bulan yang sudah ditandatangani hanya boleh SUPER_ADMIN, dan
-  // selalu meninggalkan jejak. Sengaja lebih ketat dari guard modul.
+  // §4.5 — dua pagar sekaligus, dan keduanya perlu. Yang pertama memastikan
+  // orangnya memang pemakai modul BLUD; yang kedua bahwa perannya termasuk yang
+  // memegang kunci — daftar yang sengaja lebih sempit dari pemegang EDIT
+  // Tutup Kas, karena penutup dan pembuka tidak boleh orang yang sama.
+  if (!(await bolehLihat(session.userId, session.role, 'tutup-kas'))) return forbidden()
   if (!bolehBukaPeriode(session.role)) {
-    return NextResponse.json({ ok: false, error: 'Hanya SUPER_ADMIN yang boleh membuka periode yang sudah ditutup' }, { status: 403 })
+    return NextResponse.json({
+      ok: false,
+      error: 'Peran Anda tidak berwenang membuka periode yang sudah ditutup — mintakan ke atasan bidang keuangan atau admin.',
+    }, { status: 403 })
   }
 
   const limited = await bludRateLimit(session.userId, 'realisasi-periode', 20)

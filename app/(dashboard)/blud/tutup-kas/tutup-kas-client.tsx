@@ -17,6 +17,7 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import DeleteButton from '@/components/ui/DeleteButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -53,7 +54,9 @@ interface Neraca {
 
 interface GuBaris { tgl_awal: string; tgl_akhir: string; no_surat: string }
 
-export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) {
+export default function TutupKasClient(
+  { bolehUbah, bolehBukaKembali }: { bolehUbah: boolean; bolehBukaKembali: boolean },
+) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
@@ -127,6 +130,9 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
   }, [tahun, bulan, muat])
 
   const terkunci = data?.status === 'TUTUP'
+  // Dua alasan berbeda untuk isian yang mati, dan keduanya berujung sama di sini:
+  // bulannya sudah ditandatangani, atau peran ini memang hanya boleh menonton.
+  const bekuIsian = terkunci || !bolehUbah
   const nyata = bacaAngka(kasFisik) + bacaAngka(bankKoran)
   const terisi = kasFisik.trim() !== '' && bankKoran.trim() !== ''
   const selisih = data && terisi ? nyata - data.saldo_buku : null
@@ -254,7 +260,7 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
             onClick={() => { window.location.href = `/api/blud/realisasi/export?tahun=${tahun}&bulan=${bulan}` }}>
             Unduh SPJ Bulanan
           </PrimaButton>
-          {terkunci && superAdmin && (
+          {terkunci && bolehBukaKembali && (
             <PrimaButton variant="warning" size="sm" onClick={() => { setBukaGagal(null); setBukaModal(true) }}>
               Buka Kembali
             </PrimaButton>
@@ -262,13 +268,15 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
         </div>
       </div>
 
+      {!bolehUbah && <SpandukLihat menu="tutup-kas" />}
+
       {terkunci && data && (
         <div className="tk-tutup-banner">
           <Lock size={14} />
           <span>
             Bulan ini sudah ditutup{data.ditutup_oleh ? ` oleh ${data.ditutup_oleh}` : ''}. Semua penulisan
             transaksi ke {NAMA_BULAN[bulan - 1]} {tahun} ditolak server.
-            {!superAdmin && ' Minta SUPER_ADMIN kalau perlu dibuka kembali.'}
+            {!bolehBukaKembali && ' Minta atasan bidang keuangan atau admin kalau perlu dibuka kembali.'}
           </span>
         </div>
       )}
@@ -313,13 +321,13 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
               </header>
               <label className="tk-isian">
                 <span>Uang tunai di brankas</span>
-                <input className="blud-imp-input bk-num-input" inputMode="numeric" disabled={terkunci}
+                <input className="blud-imp-input bk-num-input" inputMode="numeric" disabled={bekuIsian}
                   value={kasFisik} placeholder="0"
                   onChange={e => setKasFisik(e.target.value === '' ? '' : rp(bacaAngka(e.target.value)))} />
               </label>
               <label className="tk-isian">
                 <span>Saldo rekening koran</span>
-                <input className="blud-imp-input bk-num-input" inputMode="numeric" disabled={terkunci}
+                <input className="blud-imp-input bk-num-input" inputMode="numeric" disabled={bekuIsian}
                   value={bankKoran} placeholder="0"
                   onChange={e => setBankKoran(e.target.value === '' ? '' : rp(bacaAngka(e.target.value)))} />
               </label>
@@ -351,15 +359,15 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
           <div className="tk-surat">
             <label className="tk-isian">
               <span>Nomor surat</span>
-              <input className="blud-imp-input" disabled={terkunci} value={noSurat}
+              <input className="blud-imp-input" disabled={bekuIsian} value={noSurat}
                 placeholder="mis. 900/BA-001/2026" onChange={e => setNoSurat(e.target.value)} />
             </label>
             <label className="tk-isian">
               <span>Tanggal surat</span>
-              <input className="blud-imp-input" type="date" disabled={terkunci} value={tglSurat}
+              <input className="blud-imp-input" type="date" disabled={bekuIsian} value={tglSurat}
                 onChange={e => setTglSurat(e.target.value)} />
             </label>
-            {!terkunci && (
+            {!bekuIsian && (
               <div className="tk-aksi">
                 <PrimaButton variant="ghost" iconLeft={<Save size={13} />} disabled={sibuk || !terisi}
                   onClick={() => kirim(false)}>
@@ -401,29 +409,29 @@ export default function TutupKasClient({ superAdmin }: { superAdmin: boolean }) 
                 <label className="tk-isian">
                   <span>Dari</span>
                   <input className="blud-imp-input" type="date" value={g.tgl_awal}
-                    min={awalBulan} max={akhirBulan} disabled={terkunci}
+                    min={awalBulan} max={akhirBulan} disabled={bekuIsian}
                     onChange={e => setGu(p => p.map((x, j) => j === i ? { ...x, tgl_awal: e.target.value } : x))} />
                 </label>
                 <label className="tk-isian">
                   <span>Sampai</span>
                   <input className="blud-imp-input" type="date" value={g.tgl_akhir}
-                    min={awalBulan} max={akhirBulan} disabled={terkunci}
+                    min={awalBulan} max={akhirBulan} disabled={bekuIsian}
                     onChange={e => setGu(p => p.map((x, j) => j === i ? { ...x, tgl_akhir: e.target.value } : x))} />
                 </label>
                 <label className="tk-isian" style={{ flex: 1, minWidth: 160 }}>
                   <span>Nomor pengajuan</span>
-                  <input className="blud-imp-input" value={g.no_surat} disabled={terkunci}
+                  <input className="blud-imp-input" value={g.no_surat} disabled={bekuIsian}
                     placeholder="opsional"
                     onChange={e => setGu(p => p.map((x, j) => j === i ? { ...x, no_surat: e.target.value } : x))} />
                 </label>
-                {!terkunci && (
+                {!bekuIsian && (
                   <DeleteButton onClick={() => setGu(p => p.filter((_, j) => j !== i))}
                     data-tooltip="Hapus rentang ini" />
                 )}
               </div>
             ))}
 
-            {!terkunci && (
+            {!bekuIsian && (
               <div className="tk-aksi" style={{ marginTop: 4 }}>
                 <PrimaButton variant="purple" size="sm" iconLeft={<Plus size={13} />}
                   onClick={() => setGu(p => [...p, { tgl_awal: awalBulan, tgl_akhir: akhirBulan, no_surat: '' }])}>

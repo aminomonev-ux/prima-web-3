@@ -32,6 +32,7 @@ import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import SatuanCombobox from '@/components/shared/SatuanCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 import { PjConflictDialog, PjMutationDialog } from '@/components/blud/PjGuardDialogs'
 import { findAncestorPjOnAdd } from '@/lib/blud/pj-conflict'
 import { useSentinelPjGuard } from '@/lib/blud/use-sentinel-pj-guard'
@@ -146,7 +147,7 @@ function _initSkeleton(): DpaBarisInput[] {
 // RowActionsMenu extracted ke components/blud/RowActionsMenu.tsx (shared dgn pergeseran)
 
 function DpaTable({
-  rows, onChange, akunOptions, pjOptions, hiddenLevels, highlightId,
+  rows, onChange, akunOptions, pjOptions, hiddenLevels, highlightId, bolehUbah,
 }: {
   rows: DpaBarisInput[]
   onChange: (rows: DpaBarisInput[]) => void
@@ -154,6 +155,8 @@ function DpaTable({
   pjOptions:   string[]               // master list Penanggung Jawab utk dropdown
   hiddenLevels: Set<string>
   highlightId:  string | null
+  /** LIHAT: seluruh isian jadi teks, kolom aksi & checkbox tidak dirender. */
+  bolehUbah:    boolean
 }) {
   const [blocked,   setBlocked]   = useState<BlockedInfo | null>(null)
   const [addParent, setAddParent] = useState<DpaBarisInput | null>(null)
@@ -511,15 +514,17 @@ function DpaTable({
         <table className="dpa-table v2">
           <thead>
             <tr>
-              <th style={{ width: 90, textAlign: 'center' }}>
-                <input
-                  type="checkbox"
-                  className="dpa-row-checkbox"
-                  checked={allSelected}
-                  disabled={selectableIds.length === 0}
-                  onChange={() => allSelected ? clearSelection() : selectAll(selectableIds)}
-                  data-tooltip={allSelected ? 'Uncheck semua' : 'Check semua (utk multi-hapus / geser blok)'}
-                />
+              <th style={{ width: bolehUbah ? 90 : 28, textAlign: 'center' }}>
+                {bolehUbah && (
+                  <input
+                    type="checkbox"
+                    className="dpa-row-checkbox"
+                    checked={allSelected}
+                    disabled={selectableIds.length === 0}
+                    onChange={() => allSelected ? clearSelection() : selectAll(selectableIds)}
+                    data-tooltip={allSelected ? 'Uncheck semua' : 'Check semua (utk multi-hapus / geser blok)'}
+                  />
+                )}
               </th>
               <th style={{ width: 48, textAlign: 'center' }}>Level</th>
               <th style={{ width: 140 }}>Kode Rekening</th>
@@ -529,7 +534,7 @@ function DpaTable({
               <th style={{ width: 148, textAlign: 'right' }}>Harga (Rp)</th>
               <th style={{ width: 158, textAlign: 'right' }}>Jumlah (Rp)</th>
               <th data-rima="dpa.kolom-pj" style={{ width: 136 }}>Penanggung Jawab</th>{/* was 124, +10% */}
-              <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>
+              {bolehUbah && <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>}
             </tr>
           </thead>
           <tbody>
@@ -542,7 +547,7 @@ function DpaTable({
               // CHAIN: row di EDITABLE_TYPES jadi AGGREGATOR (vol/harga read-only)
               // saat punya minimal 1 anak. Revert ke LEAF saat anak habis.
               const isAgg     = (childCount.get(row.row_id) ?? 0) > 0
-              const editable  = EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
+              const editable  = bolehUbah && EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
               const locked    = LOCKED_TYPES.has(row.tipe_baris)
               const canAdd    = !!TIPE_CHILD_OPTIONS[row.tipe_baris]
               const canSibling = !locked && !!row.parent_id  // bisa tambah saudara
@@ -561,8 +566,8 @@ function DpaTable({
                       const isChecked   = selectedRowIds.has(row.row_id)
                       const inBlock     = selectedRowIds.size > 0 && isChecked
                       const geserEnabled = !hasChildren || isChecked
-                      const showCheckbox = !locked && row.tipe_baris !== 'MASTER'
-                      const showArrows = !locked && row.tipe_baris !== 'MASTER'
+                      const showCheckbox = bolehUbah && !locked && row.tipe_baris !== 'MASTER'
+                      const showArrows = bolehUbah && !locked && row.tipe_baris !== 'MASTER'
                       return (
                         <div className="flex gap-1 justify-center items-center">
                           {showCheckbox && (
@@ -617,21 +622,27 @@ function DpaTable({
 
                   {/* ─ Uraian ─ */}
                   <td>
-                    <MasterAkunCombobox
-                      value={row.uraian ?? ''}
-                      options={akunOptions}
-                      onChange={v => updateRow(row.row_id, 'uraian', v)}
-                      onSelect={akun => {
-                        // Atomic update — 1× map set 2 field, hindari stale-closure race
-                        onChange(rows.map(r => r.row_id === row.row_id
-                          ? { ...r, uraian: akun.uraian, kode_rekening: akun.kode }
-                          : r))
-                      }}
-                      style={{
-                        fontWeight: isBold ? 700 : 400,
-                        color: isGM ? '#fff' : undefined,
-                      } as React.CSSProperties}
-                    />
+                    {bolehUbah ? (
+                      <MasterAkunCombobox
+                        value={row.uraian ?? ''}
+                        options={akunOptions}
+                        onChange={v => updateRow(row.row_id, 'uraian', v)}
+                        onSelect={akun => {
+                          // Atomic update — 1× map set 2 field, hindari stale-closure race
+                          onChange(rows.map(r => r.row_id === row.row_id
+                            ? { ...r, uraian: akun.uraian, kode_rekening: akun.kode }
+                            : r))
+                        }}
+                        style={{
+                          fontWeight: isBold ? 700 : 400,
+                          color: isGM ? '#fff' : undefined,
+                        } as React.CSSProperties}
+                      />
+                    ) : (
+                      <span style={{ fontSize: 12, fontWeight: isBold ? 700 : 400, color: isGM ? '#fff' : undefined }}>
+                        {row.uraian ?? ''}
+                      </span>
+                    )}
                   </td>
 
                   {/* ─ Vol ─ */}
@@ -682,13 +693,19 @@ function DpaTable({
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <PenanggungJawabCombobox
-                          value={row.penanggung_jawab ?? ''}
-                          options={pjOptions}
-                          onChange={v => handlePjChange(row, v ?? '')}
-                          style={{ color: isGM ? '#fff' : undefined }}
-                          placeholder="— Pilih PJ —"
-                        />
+                        {bolehUbah ? (
+                          <PenanggungJawabCombobox
+                            value={row.penanggung_jawab ?? ''}
+                            options={pjOptions}
+                            onChange={v => handlePjChange(row, v ?? '')}
+                            style={{ color: isGM ? '#fff' : undefined }}
+                            placeholder="— Pilih PJ —"
+                          />
+                        ) : (
+                          <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                            {row.penanggung_jawab ?? ''}
+                          </span>
+                        )}
                       </div>
                       {(() => {
                         const partners = row.penanggung_jawab ? pjConflictPartners.get(row.row_id) : undefined
@@ -716,6 +733,7 @@ function DpaTable({
                   </td>
 
                   {/* ─ Kolom aksi kanan: Tambah anak / saudara / Hapus ─ */}
+                  {bolehUbah && (
                   <td style={{ textAlign: 'center', padding: '2px' }}>
                     <RowActionsMenu
                       canAdd={canAdd}
@@ -727,6 +745,7 @@ function DpaTable({
                       onDelete={!locked ? () => deleteBaris(row.row_id) : undefined}
                     />
                   </td>
+                  )}
                 </tr>
               )
             })}
@@ -817,7 +836,7 @@ function DpaTable({
 
 // ─── DPA PAGE ─────────────────────────────────────────────────────────────────
 
-export default function DpaClient() {
+export default function DpaClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [rows,        setRows]        = useState<DpaBarisInput[]>([])
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
   const [versi,       setVersi]       = useState('')
@@ -1107,18 +1126,22 @@ export default function DpaClient() {
           />
         </div>
 
-        <div style={{ display:'flex', gap:8, marginLeft:'auto' }}>
-          <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
-            onClick={mulaiFormBaru} data-rima="dpa.form-baru">
-            Form Baru
-          </PrimaButton>
+        {bolehUbah && (
+          <div style={{ display:'flex', gap:8, marginLeft:'auto' }}>
+            <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
+              onClick={mulaiFormBaru} data-rima="dpa.form-baru">
+              Form Baru
+            </PrimaButton>
 
-          <PrimaButton variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
-            disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
-            {saving ? 'Menyimpan...' : 'Simpan'}
-          </PrimaButton>
-        </div>
+            <PrimaButton variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
+              disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
+              {saving ? 'Menyimpan...' : 'Simpan'}
+            </PrimaButton>
+          </div>
+        )}
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="dpa" />}
 
       {/* Search bar + Legenda functional (filter level via chip toggle) */}
       <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'8px 16px', display:'flex', flexWrap:'wrap', gap:10, alignItems:'center' }}>
@@ -1218,14 +1241,17 @@ export default function DpaClient() {
           <div>
             <p style={{ color:'#E6F1FB', fontWeight:700, fontSize:15, marginBottom:4 }}>Belum ada data DPA</p>
             <p style={{ fontSize:13, color:'#85B7EB', maxWidth:360 }}>
-              Klik <strong style={{ color:'#B5D4F4' }}>Mulai Form DPA Baru</strong> untuk membuat struktur awal,
-              atau pilih versi dari history di atas.
+              {bolehUbah
+                ? <>Klik <strong style={{ color:'#B5D4F4' }}>Mulai Form DPA Baru</strong> untuk membuat struktur awal, atau pilih versi dari history di atas.</>
+                : 'Pilih versi dari history di atas. Penyusunan DPA bukan wewenang peran Anda.'}
             </p>
           </div>
-          <PrimaButton variant="primary" iconLeft={<FilePlus className="w-4 h-4" />}
-            onClick={mulaiFormBaru}>
-            Mulai Form DPA Baru
-          </PrimaButton>
+          {bolehUbah && (
+            <PrimaButton variant="primary" iconLeft={<FilePlus className="w-4 h-4" />}
+              onClick={mulaiFormBaru}>
+              Mulai Form DPA Baru
+            </PrimaButton>
+          )}
 
           {/* Panduan singkat hierarki */}
           <div style={{ marginTop:8, textAlign:'left', background:'rgba(12,68,124,.2)', border:'1px solid #0C447C', borderRadius:10, padding:16, fontSize:11, color:'#85B7EB', maxWidth:420 }}>
@@ -1240,7 +1266,7 @@ export default function DpaClient() {
           </div>
         </div>
       ) : (
-        <DpaTable rows={rows} onChange={setRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} />
+        <DpaTable rows={rows} onChange={setRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
       )}
 
       {/* Audit BLUD v1.2 (B-NEW-3): modal konfirmasi safety threshold drop >50% */}

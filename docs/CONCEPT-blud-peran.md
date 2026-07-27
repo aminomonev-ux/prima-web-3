@@ -181,7 +181,8 @@ guard-nya membaca tabel — bukan menulis daftar peran sendiri.
 | `realisasi/register` | `realisasi` | baca saja |
 | `realisasi/periode` · `realisasi/gu` | `tutup-kas` | `bolehEdit` + `bolehBukaPeriode` utk DELETE |
 | `realisasi/permintaan` | `buku-kas` (POST) / `pergeseran` (PATCH tolak) | dua menu berbeda dalam satu berkas |
-| `realisasi/export` · `export-log` · `rekap-pk` | `cetak` | `bolehBuka` — unduh boleh saat LIHAT |
+| `realisasi/export` · `export-log` | `cetak` | `bolehBuka` — unduh boleh saat LIHAT |
+| `rekap-pk` | `dpa` | `bolehEdit` — POST-nya menulis tabel `rekap_pk`, bukan mengunduh |
 | `pejabat` | `pengaturan` | `bolehEdit` |
 
 > `realisasi/permintaan` satu-satunya berkas yang izinnya berbeda antar-metode:
@@ -247,3 +248,30 @@ keadaan yang paling menyesatkan: kelihatan aman, padahal belum.
 Uji regresi fase A menembak tabelnya langsung (`izinMenu` untuk 5 peran × 12 menu =
 60 pemeriksaan), ditambah kasus peran tak terdaftar. Pola berkasnya mengikuti
 `scripts/test-blud-izin-periode.mjs` yang sudah ada.
+
+---
+
+## 9. Status pelaksanaan — SELESAI (2026-07-27)
+
+| Fase | Status | Bekasnya di kode |
+|---|---|---|
+| **A** | ✅ | `lib/blud/peran.ts` · `scripts/test-blud-peran.mjs` (34 pemeriksaan) |
+| **B** | ✅ | `app/api/blud/_guard.ts` + 18 berkas route memakainya; tak ada lagi `hasAppAccess` telanjang di `app/api/blud/` |
+| **C** | ✅ | `blud-shell.tsx` menyaring tile · `app/(dashboard)/blud/_izin.ts` · `components/blud/SpandukLihat.tsx` · 10 layar menerima `bolehUbah` |
+
+Catatan yang muncul saat pelaksanaan, bukan saat perancangan:
+
+- **`bolehBukaPeriode` ikut melebar.** Semula hanya `SUPER_ADMIN`; sekarang
+  `SUPER_ADMIN · ADMIN · KEUANGAN` sesuai §4. `PERBENDAHARAAN` sengaja tetap di luar
+  meski `tutup-kas` baginya EDIT — dialah yang menutup, jadi bukan dia yang membuka.
+  Route `DELETE /realisasi/periode` sekarang memakai **dua** pagar: `bolehLihat(...,
+  'tutup-kas')` untuk memastikan orangnya pemakai modul, lalu `bolehBukaPeriode`.
+  Sebelumnya hanya yang kedua — aman selama isinya cuma `SUPER_ADMIN`, tidak lagi
+  begitu peran lain masuk.
+- **`izinLayar()` menggantikan pemeriksaan tempelan di tiap `page.tsx`.** Beberapa
+  halaman dulu mengulang `hasAppAccess`, beberapa lagi hanya memeriksa `x-user-id`.
+  Sekarang satu pemanggilan: `layout.tsx` menjaga pintu modul, `izinLayar` menjaga
+  menunya, dan yang ditolak dilempar ke `/blud` — bukan keluar modul.
+- **Layar `LIHAT` mengubah isian jadi teks, bukan `disabled`.** Kotak abu-abu penuh
+  di layar DPA/Pergeseran terbaca seperti aplikasi rusak; teks polos terbaca seperti
+  laporan. Kolom checkbox dan kolom Aksi tidak dirender sama sekali.

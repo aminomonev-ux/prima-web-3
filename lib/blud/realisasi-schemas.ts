@@ -39,12 +39,11 @@ export function canInputRealisasi(role: string, appAccess: string[] | null | und
  * yang dibuka dokumen bertanda tangan, dan §4.6 membuat akibatnya merembet ke
  * seluruh bulan sesudahnya.
  *
- * Isinya hari ini sama persis dengan perbandingan `role !== 'SUPER_ADMIN'` yang
- * dulu ditulis langsung di route — tidak ada perubahan perilaku. Bedanya, saat
- * peran keuangan nanti ikut diberi wewenang ini, yang berubah cukup satu nama di
- * daftar bawah, bukan perbandingan yang tersebar di route.
+ * PERBENDAHARAAN sengaja TIDAK di sini meski `tutup-kas` baginya EDIT: yang
+ * menutup dan yang boleh membuka lagi tidak boleh orang yang sama. Kunci itu
+ * dipegang atasannya — KEUANGAN — atau admin sistem.
  */
-export const BLUD_BUKA_PERIODE_ROLES = ['SUPER_ADMIN'] as const
+export const BLUD_BUKA_PERIODE_ROLES = ['SUPER_ADMIN', 'ADMIN', 'KEUANGAN'] as const
 
 export function bolehBukaPeriode(role: string): boolean {
   return (BLUD_BUKA_PERIODE_ROLES as readonly string[]).includes(role)

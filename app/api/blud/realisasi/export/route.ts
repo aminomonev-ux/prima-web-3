@@ -19,7 +19,7 @@ const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (!(await bolehLihat(session.userId, session.role))) return forbidden()
+  if (!(await bolehLihat(session.userId, session.role, 'cetak'))) return forbidden()
 
   const limited = await bludRateLimit(session.userId, 'realisasi-export', 10)
   if (limited) return limited

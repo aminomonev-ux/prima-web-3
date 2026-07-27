@@ -6,12 +6,13 @@ import { toast } from 'sonner'
 import { Plus, Save, Users, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import DeleteButton from '@/components/ui/DeleteButton'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/blud/SpandukLihat'
 import { pagerBtn } from '@/lib/shared/blud-table-styles'
 
 interface Row { label: string }
 const PAGE_SIZE = 50
 
-export default function PenanggungJawabClient() {
+export default function PenanggungJawabClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [rows,    setRows]    = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
   const [saving,  setSaving]  = useState(false)
@@ -123,13 +124,17 @@ export default function PenanggungJawabClient() {
           {rows.length} baris {loading && '(memuat...)'}
         </span>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <PrimaButton variant="primary" iconLeft={<Save size={14} />}
-            onClick={() => simpan()} disabled={saving}>
-            {saving ? 'Menyimpan...' : 'Simpan'}
-          </PrimaButton>
-        </div>
+        {bolehUbah && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+              onClick={() => simpan()} disabled={saving}>
+              {saving ? 'Menyimpan...' : 'Simpan'}
+            </PrimaButton>
+          </div>
+        )}
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="penanggung-jawab" />}
 
       {/* Info banner — fungsi menu. Theme-aware text via .blud-info-banner class. */}
       <div className="blud-info-banner" style={{
@@ -144,29 +149,31 @@ export default function PenanggungJawabClient() {
         </div>
       </div>
 
-      <div style={{
-        background: '#042C53', border: '1px solid #0C447C', borderRadius: 10,
-        padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
-      }}>
-        <PrimaButton variant="purple" iconLeft={<Plus size={14} />} onClick={addRowAndJump}>
-          Tambah Baris
-        </PrimaButton>
-      </div>
+      {bolehUbah && (
+        <div style={{
+          background: '#042C53', border: '1px solid #0C447C', borderRadius: 10,
+          padding: '10px 16px', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+        }}>
+          <PrimaButton variant="purple" iconLeft={<Plus size={14} />} onClick={addRowAndJump}>
+            Tambah Baris
+          </PrimaButton>
+        </div>
+      )}
 
       <div className="ma-scroll-wrapper">
         <table className="dpa-table master-akun-table">
           <thead>
             <tr>
-              <th style={{ width: 64, textAlign: 'center' }}>Geser</th>
+              {bolehUbah && <th style={{ width: 64, textAlign: 'center' }}>Geser</th>}
               <th>Penanggung Jawab</th>
-              <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>
+              {bolehUbah && <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={3} style={{ textAlign: 'center', padding: '32px 12px', color: '#85B7EB' }}>
-                  {loading ? 'Memuat...' : 'Belum ada data. Klik "Tambah Baris".'}
+                <td colSpan={bolehUbah ? 3 : 1} style={{ textAlign: 'center', padding: '32px 12px', color: '#85B7EB' }}>
+                  {loading ? 'Memuat...' : bolehUbah ? 'Belum ada data. Klik "Tambah Baris".' : 'Belum ada data.'}
                 </td>
               </tr>
             )}
@@ -174,25 +181,31 @@ export default function PenanggungJawabClient() {
               const realIdx = rows.indexOf(r)
               return (
                 <tr key={realIdx}>
-                  <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => moveRow(realIdx, 'up')} disabled={realIdx === 0} className="kb-move-btn" data-tooltip="Pindah ke atas">
-                      <ChevronUp size={13} />
-                    </button>
-                    <button onClick={() => moveRow(realIdx, 'down')} disabled={realIdx === rows.length - 1} className="kb-move-btn" data-tooltip="Pindah ke bawah">
-                      <ChevronDown size={13} />
-                    </button>
-                  </td>
+                  {bolehUbah && (
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => moveRow(realIdx, 'up')} disabled={realIdx === 0} className="kb-move-btn" data-tooltip="Pindah ke atas">
+                        <ChevronUp size={13} />
+                      </button>
+                      <button onClick={() => moveRow(realIdx, 'down')} disabled={realIdx === rows.length - 1} className="kb-move-btn" data-tooltip="Pindah ke bawah">
+                        <ChevronDown size={13} />
+                      </button>
+                    </td>
+                  )}
                   <td>
-                    <input
-                      type="text"
-                      value={r.label}
-                      onChange={e => updateRow(realIdx, e.target.value)}
-                      placeholder="e.g. Kasubbag Perbendaharaan"
-                    />
+                    {bolehUbah ? (
+                      <input
+                        type="text"
+                        value={r.label}
+                        onChange={e => updateRow(realIdx, e.target.value)}
+                        placeholder="e.g. Kasubbag Perbendaharaan"
+                      />
+                    ) : r.label}
                   </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <DeleteButton onClick={() => deleteRow(realIdx)} data-tooltip="Hapus baris" iconSize={13} />
-                  </td>
+                  {bolehUbah && (
+                    <td style={{ textAlign: 'center' }}>
+                      <DeleteButton onClick={() => deleteRow(realIdx)} data-tooltip="Hapus baris" iconSize={13} />
+                    </td>
+                  )}
                 </tr>
               )
             })}
