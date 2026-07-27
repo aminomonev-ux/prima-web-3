@@ -658,6 +658,41 @@ CREATE TABLE IF NOT EXISTS blud_realisasi_potongan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='BLUD - Potongan pihak ketiga pada transaksi belanja (pajak + non-pajak)';
 
+CREATE TABLE IF NOT EXISTS blud_bukti_setor (
+  id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tahun_anggaran SMALLINT UNSIGNED NOT NULL,
+  bulan          TINYINT UNSIGNED  NOT NULL COMMENT '1..12',
+  tanggal        DATE          NOT NULL,
+  no_bukti       VARCHAR(64)       NULL,
+  ambil_tx_id    BIGINT UNSIGNED   NULL COMMENT 'transaksi AMBIL_BANK sumber dana — diutamakan',
+  ambil_manual   DECIMAL(18,2)     NULL COMMENT 'hanya dipakai kalau tarikannya memang tidak ada di BKU',
+  version        INT           NOT NULL DEFAULT 0 COMMENT 'CAS per-baris (L48)',
+  created_by     INT               NULL,
+  created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_periode (tahun_anggaran, bulan, tanggal, id),
+  CONSTRAINT fk_bbs_tx   FOREIGN KEY (ambil_tx_id) REFERENCES blud_realisasi_tx(id) ON DELETE SET NULL,
+  CONSTRAINT fk_bbs_user FOREIGN KEY (created_by)  REFERENCES users(id)             ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='BLUD - Bukti setor ke bank (lembar `setor BPD`), satu baris = satu slip';
+
+CREATE TABLE IF NOT EXISTS blud_bukti_setor_baris (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  bukti_id    BIGINT UNSIGNED NOT NULL,
+  urutan      SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  asal        ENUM('BKU','POTONGAN','KETIK') NOT NULL,
+  tx_id       BIGINT UNSIGNED NULL COMMENT 'asal = BKU',
+  potongan_id BIGINT UNSIGNED NULL COMMENT 'asal = POTONGAN',
+  uraian      VARCHAR(255)    NULL COMMENT 'asal = KETIK saja; sisanya dibaca hidup dari sumber',
+  nilai       DECIMAL(18,2)   NULL COMMENT 'asal = KETIK saja',
+  INDEX idx_bukti (bukti_id, urutan),
+  INDEX idx_tx    (tx_id),
+  CONSTRAINT fk_bbsb_bukti FOREIGN KEY (bukti_id)    REFERENCES blud_bukti_setor(id)        ON DELETE CASCADE,
+  CONSTRAINT fk_bbsb_tx    FOREIGN KEY (tx_id)       REFERENCES blud_realisasi_tx(id)       ON DELETE SET NULL,
+  CONSTRAINT fk_bbsb_pot   FOREIGN KEY (potongan_id) REFERENCES blud_realisasi_potongan(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='BLUD - Baris bukti setor; asal menentukan apakah dibaca hidup atau ketikan';
+
 CREATE TABLE IF NOT EXISTS blud_periode (
   tahun_anggaran  SMALLINT UNSIGNED NOT NULL,
   bulan           TINYINT UNSIGNED  NOT NULL,

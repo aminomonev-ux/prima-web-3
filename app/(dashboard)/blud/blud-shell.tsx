@@ -10,6 +10,7 @@ import Link from 'next/link'
 import {
   LayoutDashboard, FileText, Shuffle, LogOut, ShieldCheck, ChevronDown, Menu as MenuIcon,
   MoreHorizontal, BookText, Printer, Settings, Home, ListTree, Users, Landmark, Wallet, TrendingUp, Lock,
+  Receipt,
 } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -25,6 +26,7 @@ const TILES: Tile[] = [
   { href: '/blud/dpa',         label: 'DPA BLUD',       icon: FileText,        color: '#8B5CF6', group: 'ANGGARAN' },
   { href: '/blud/pergeseran',  label: 'Pergeseran DPA', icon: Shuffle,         color: '#EC4899', group: 'ANGGARAN' },
   { href: '/blud/buku-kas',    label: 'Buku Kas',       icon: Wallet,          color: '#1D9E75', group: 'PENATAUSAHAAN' },
+  { href: '/blud/bukti-setor', label: 'Bukti Setor',    icon: Receipt,         color: '#22C55E', group: 'PENATAUSAHAAN' },
   { href: '/blud/realisasi',   label: 'Realisasi',      icon: TrendingUp,      color: '#F59E0B', group: 'PENATAUSAHAAN' },
   { href: '/blud/tutup-kas',   label: 'Tutup Kas',      icon: Lock,            color: '#0EA5E9', group: 'PENATAUSAHAAN' },
   { href: '/blud/cetak',       label: 'Cetak',          icon: Printer,         color: '#0891b2', group: 'OUTPUT' },
@@ -35,7 +37,7 @@ const TILES: Tile[] = [
 // Pembagian murni urutan TILES: 10 slot inline = s/d Tutup Kas, sisanya (Cetak,
 // Pengaturan) turun ke "Lainnya". Angka ini dinaikkan bersama tile PENATAUSAHAAN
 // baru supaya satu grup tidak terbelah — separuh di ribbon, separuh di "Lainnya".
-const MAX_INLINE_TILES = 10
+const MAX_INLINE_TILES = 11
 
 interface Props {
   username: string

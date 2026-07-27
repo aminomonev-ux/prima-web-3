@@ -136,6 +136,11 @@ export type AuditEventType =
   | 'BLUD_PEJABAT_SIMPAN'           // POST /api/blud/pejabat
   | 'BLUD_SPJ_UNDUH'                // GET /api/blud/realisasi/export
   | 'BLUD_GU_SIMPAN'                // POST /api/blud/realisasi/gu
+  // Bukti Setor (CONCEPT-blud-bukti-setor) — dokumen yang dirakit, sebagian
+  // barisnya boleh diketik lepas; justru karena itu jejaknya wajib lengkap.
+  | 'BLUD_BUKTI_SETOR_CREATE'       // POST /api/blud/bukti-setor (tanpa id)
+  | 'BLUD_BUKTI_SETOR_UPDATE'       // POST /api/blud/bukti-setor (dengan id)
+  | 'BLUD_BUKTI_SETOR_DELETE'       // DELETE /api/blud/bukti-setor?id=
   // ─── Perjanjian Kinerja (Sprint 1, 2026-05-23) ────────────────────────────
   | 'PK_SAVE_SASARAN'         // POST /api/perjanjian-kinerja/sasaran
   | 'PK_SAVE_PROGRAM'         // POST /api/perjanjian-kinerja/program

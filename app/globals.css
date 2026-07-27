@@ -2809,6 +2809,40 @@ button:hover .prima-del-top { transform: rotate(160deg); }
   background: rgba(2,15,28,.35); border: 1px solid rgba(255,255,255,.10); width: 100%;
 }
 .bk-pick:hover { border-color: #EF9F27; }
+/* ── Bukti Setor (CONCEPT-blud-bukti-setor) ─────────────────────────────── */
+.bs-ambil { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 12px; }
+.bs-ambil-terpilih, .bs-ambil-pilih { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.bs-ambil-nilai { width: 160px; }
+.bs-baris { display: grid; grid-template-columns: auto 1fr 150px 110px auto; gap: 8px; align-items: center; }
+.bs-baris-urut { display: flex; flex-direction: column; gap: 2px; }
+.bs-baris-urut .blud-act { width: 20px; height: 16px; font-size: 10px; line-height: 1; }
+.bs-baris-uraian { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.bs-baris-nilai { text-align: right; font-size: 12px; }
+.bs-hilang { color: #E24B4A; font-style: italic; }
+.bs-tag { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-align: center; }
+.bs-tag-bku { background: rgba(29,158,117,.18); color: #59C7A4; }
+.bs-tag-ketik { background: rgba(239,159,39,.18); color: #FAC775; }
+.bs-hitung {
+  display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700;
+  padding: 4px 0; border-top: 1px solid rgba(255,255,255,.06);
+}
+.bs-cash { color: #1D9E75; }
+.bs-cash.timpang { color: #E24B4A; }
+.bs-cash-timpang { color: #E24B4A; font-weight: 700; }
+.bs-kartu { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.bs-kartu-kepala { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.bs-kartu-judul { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.bs-kartu-no { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #85B7EB; }
+.bs-kartu-ringkas { font-size: 11.5px; margin-top: 2px; }
+.bs-kartu-aksi { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.bs-kartu-angka { display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: baseline; font-size: 12.5px; }
+
+[data-theme="light"] .bs-ambil { border-top-color: #E5E7EB; }
+[data-theme="light"] .bs-hitung { border-top-color: #E5E7EB; }
+[data-theme="light"] .bs-tag-bku { background: rgba(29,158,117,.12); color: #15795A; }
+[data-theme="light"] .bs-tag-ketik { background: rgba(239,159,39,.14); color: #854F0B; }
+[data-theme="light"] .bs-kartu-no { color: #6B7280; }
+
 .bk-potongan-row { display: grid; grid-template-columns: 170px 1fr 140px auto; gap: 8px; align-items: center; }
 .bk-potongan-kosong { font-size: 11.5px; line-height: 1.5; }
 .bk-tag-potongan {

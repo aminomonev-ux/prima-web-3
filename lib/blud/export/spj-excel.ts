@@ -15,6 +15,7 @@
 import type ExcelJS from 'exceljs'
 import { JENIS_POTONGAN, LABEL_POTONGAN, potonganPajak } from '../alokasi-rule'
 import { getBukuKas } from '../realisasi-data'
+import { listBuktiSetor } from '../bukti-setor-data'
 import { getPaguEfektif, getSerapanPeriode, getSerapanRentang, gulungKeAtas } from '../pagu'
 import { getNeracaKas } from '../tutup-kas'
 import { getPejabatCetak } from '../pejabat-data'
@@ -73,6 +74,7 @@ interface Konteks {
   serapanLalu: Map<string, number>
   serapanSd: Map<string, number>
   neraca: Awaited<ReturnType<typeof getNeracaKas>>
+  buktiSetor: Awaited<ReturnType<typeof listBuktiSetor>>
   pejabat: Record<string, PejabatSpj>
   /** Belanja yang dipertanggungjawabkan — dipakai `pengantar` DAN `SPJ`. */
   belanja: { PEGAWAI: number; BARANG_JASA: number; MODAL: number; total: number }
@@ -109,13 +111,14 @@ function namaSheetGu(p: GuPeriode, bulan: number, tahun: number): string {
 export async function buatWorkbookSpj(tahun: number, bulan: number): Promise<ExcelJS.Buffer> {
   const ExcelJSLib = (await import('exceljs')).default
 
-  const [buku, baris, serapan, neraca, pejabat, guPeriode] = await Promise.all([
+  const [buku, baris, serapan, neraca, pejabat, guPeriode, buktiSetor] = await Promise.all([
     getBukuKas(tahun, bulan),
     getPaguEfektif(tahun),
     getSerapanPeriode(tahun, bulan),
     getNeracaKas(tahun, bulan),
     getPejabatCetak(tahun),
     listGuPeriode(tahun, bulan),
+    listBuktiSetor(tahun, bulan),
   ])
 
   // Serapan digulung ke induk di sini juga — supaya total lembar Realisasi BP
@@ -130,7 +133,7 @@ export async function buatWorkbookSpj(tahun: number, bulan: number): Promise<Exc
   }
 
   const ctx: Konteks = {
-    tahun, bulan, buku, baris, neraca, pejabat,
+    tahun, bulan, buku, baris, neraca, pejabat, buktiSetor,
     namaBulan: NAMA_BULAN[bulan - 1],
     hariAkhir: new Date(tahun, bulan, 0).getDate(),
     belanja: hitungBelanja(buku, baris),
@@ -802,35 +805,35 @@ function sheetTutupKas(wb: ExcelJS.Workbook, ctx: Konteks) {
 // ─── Lembar: setor BPD ──────────────────────────────────────────────────────
 
 /**
- * setor BPD — daftar setoran/transfer ke bank, dikelompokkan per tanggal setor
- * seperti berkas asli ("BUKTI SETOR KE BANK BPD TGL. …").
+ * setor BPD — satu blok per slip yang dirakit di menu Bukti Setor, bentuknya sama
+ * dengan berkas asli sampai baris `Ambil Uang` · `Total` · `Cash`.
  *
- * Di berkas asli lembar ini ditulis tangan dan angkanya berdesimal pecahan
- * (hasil hitung di luar sistem). Di sini isinya diambil dari transaksi bank
- * yang sudah tercatat — jadi jumlahnya selalu cocok dengan BKU.
+ * Dulu lembar ini DITEBAK dari jenis transaksi (`SETOR_BANK || bank_masuk > 0`).
+ * Penelusuran ke berkas asli membuktikan itu keliru: sebelas barisnya angka
+ * ketikan, hanya `Total` (=SUM) dan `Cash` (=Ambil Uang − Total) yang berupa rumus,
+ * dan pengelompokan "sebelas pembayaran ini berasal dari tarikan itu" adalah
+ * keputusan manusia yang tidak berjejak di data mana pun.
+ *
+ * Penyaring lama sengaja TIDAK dipertahankan sebagai cadangan: dua sumber untuk
+ * satu lembar berarti tidak ada yang tahu angkanya datang dari mana.
  */
 function sheetSetorBpd(wb: ExcelJS.Workbook, ctx: Konteks) {
   const ws = wb.addWorksheet('setor BPD')
   ws.columns = [{ width: 4 }, { width: 6 }, { width: 52 }, { width: 22 }]
 
-  const setoran = ctx.buku.rows.filter((t) => t.jenis === 'SETOR_BANK' || t.bank_masuk > 0)
-  const perTanggal = new Map<string, typeof setoran>()
-  for (const t of setoran) {
-    if (!perTanggal.has(t.tanggal)) perTanggal.set(t.tanggal, [])
-    perTanggal.get(t.tanggal)!.push(t)
-  }
-
-  if (perTanggal.size === 0) {
+  if (ctx.buktiSetor.length === 0) {
     ws.addRow([])
     judul(ws, `BUKTI SETOR KE BANK BPD — ${ctx.namaBulan} ${ctx.tahun}`, 2, 4, 12)
     ws.addRow([])
-    taruh(ws, [[3, 'Tidak ada setoran ke bank pada bulan ini.']])
+    taruh(ws, [[3, 'Belum ada bukti setor dicatat pada bulan ini.']])
+    taruh(ws, [[3, 'Rakit di menu Bukti Setor — lembar ini terisi dari sana.']])
     return
   }
 
-  for (const [tgl, daftar] of [...perTanggal.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  for (const bs of ctx.buktiSetor) {
     ws.addRow([])
-    judul(ws, `BUKTI SETOR KE BANK BPD TGL. ${hariDari(tgl)}-${ctx.bulan}-${ctx.tahun}`, 2, 4, 12)
+    judul(ws, `BUKTI SETOR KE BANK BPD TGL. ${hariDari(bs.tanggal)}-${ctx.bulan}-${ctx.tahun}`, 2, 4, 12)
+    if (bs.no_bukti) taruh(ws, [[3, `No. ${bs.no_bukti}`]])
     ws.addRow([])
 
     const h = ws.addRow(['', 'NO', 'URAIAN', 'JUMLAH'])
@@ -841,13 +844,15 @@ function sheetSetorBpd(wb: ExcelJS.Workbook, ctx: Konteks) {
       h.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF7' } }
     }
 
-    let total = 0
-    daftar.forEach((t, i) => {
-      const nilai = t.bank_masuk || t.kas_keluar
-      total += nilai
-      bingkai(taruh(ws, [[2, i + 1], [3, t.uraian], [4, nilai]], { angka: [4] }), 2, 4)
+    bs.baris.forEach((b, i) => {
+      bingkai(taruh(ws, [[2, i + 1], [3, b.uraian], [4, b.nilai]], { angka: [4] }), 2, 4)
     })
-    bingkai(taruh(ws, [[3, 'Total'], [4, total]], { tebal: true, angka: [4] }), 2, 4)
+
+    // Urutan tiga baris penutup mengikuti berkas asli persis: Ambil Uang, Total,
+    // lalu Cash sebagai sisanya.
+    bingkai(taruh(ws, [[3, 'Ambil Uang'], [4, bs.ambil_uang]], { angka: [4] }), 2, 4)
+    bingkai(taruh(ws, [[3, 'Total'], [4, bs.total]], { tebal: true, angka: [4] }), 2, 4)
+    bingkai(taruh(ws, [[3, 'Cash'], [4, bs.cash]], { tebal: true, angka: [4] }), 2, 4)
   }
 
   tandaTangan(ws, ctx, null, { peran: 'BENDAHARA' }, 2, 3)

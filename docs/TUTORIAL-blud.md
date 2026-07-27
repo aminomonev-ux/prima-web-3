@@ -19,12 +19,13 @@ Rincian gerbang akses per-endpoint → [§9 Guard & Keamanan](#9-guard--keamanan
 | **ANGGARAN** | DPA BLUD | `/blud/dpa` | Susun Dokumen Pelaksanaan Anggaran (pohon L1→L8.1) |
 | **ANGGARAN** | Pergeseran DPA | `/blud/pergeseran` | Geser anggaran antar-baris (pagu tetap) |
 | **PENATAUSAHAAN** 🆕 | Buku Kas | `/blud/buku-kas` | Catat transaksi kas/bank harian (BKU) + pembebanan ke baris anggaran |
+| **PENATAUSAHAAN** 🆕 | Bukti Setor | `/blud/bukti-setor` | Rakit slip "BUKTI SETOR KE BANK BPD" — baris dari BKU atau ketikan lepas |
 | **PENATAUSAHAAN** 🆕 | Realisasi | `/blud/realisasi` | Pantau pagu vs serapan per rekening + register per baris |
 | **PENATAUSAHAAN** 🆕 | Tutup Kas | `/blud/tutup-kas` | Berita Acara Pemeriksaan Kas + periode GU + unduh SPJ 11 lembar |
 | **OUTPUT** | Cetak | `/blud/cetak` | Preview + cetak/ekspor DPA, PJ, Rekap Pergeseran, Master Akun |
 | **SISTEM** | Pengaturan | `/blud/pengaturan` | Pejabat penanda tangan SPJ + hapus/kelola versi DPA & Pergeseran |
 
-> **Ribbon**: tile ke-10 dan seterusnya masuk dropdown **"Lainnya"** (`MAX_INLINE_TILES = 10` di `blud-shell.tsx`). Saat ini **Cetak** & **Pengaturan** ada di sana. Tile yang sedang aktif selalu dipromosikan ke ribbon walau posisinya di overflow.
+> **Ribbon**: 12 tile, `MAX_INLINE_TILES = 11` di `blud-shell.tsx` — satu slot selalu disisakan untuk tombol "Lainnya", jadi 10 tile pertama tampil dan tepat **Cetak** & **Pengaturan** yang turun ke dropdown. Tile yang sedang aktif selalu dipromosikan ke ribbon walau posisinya di overflow.
 
 > **Urutan pemakaian yang benar**: **Data Induk** (sekali di awal) → **DPA** → **Pergeseran** → **Buku Kas** (harian) → **Realisasi** (pantau) → **Tutup Kas** (akhir bulan) → **Cetak / SPJ**.
 
@@ -336,7 +337,40 @@ Muncul panel jalan keluar:
 #### Baki "Perlu Rekening"
 Banner **"n transaksi diparkir"** + tombol **"Buka Baki"**. Bakinya melihat **satu tahun penuh**, bukan bulan berjalan — transaksi yang diparkir di Mei tetap memblokir Tutup Kas di Juli. Dari baki: klik → modal terbuka dengan transaksi itu, tinggal dipilih rekeningnya dan centang parkir dilepas.
 
-### 6.2 Realisasi (`/blud/realisasi`) — layar pantau, read-only
+### 6.2 Bukti Setor (`/blud/bukti-setor`) 🆕 — satu-satunya layar yang menerima ketikan lepas
+
+Lembar `setor BPD` **bukan laporan turunan**. Penelusuran ke berkas asli membuktikan: sebelas barisnya angka ketikan, hanya `Total` (`=SUM(D8:D18)`) dan `Cash` (`=D19-D20`) yang berupa rumus, dan tak satu pun nominalnya muncul di lembar lain. Pengelompokan *"sebelas pembayaran ini berasal dari tarikan itu"* adalah keputusan manusia yang tidak berjejak di data mana pun.
+
+Karena itu ia diberi masukannya sendiri — **dipisah dari Buku Kas dengan sengaja**. Buku Kas catatan resmi (tiap barisnya fakta, semua lembar lain diturunkan darinya); layar ini merakit dokumen yang sebagian barisnya boleh diketik lepas. Menaruh keduanya di satu layar berarti baris "boleh ngarang" duduk bersebelahan dengan sumber kebenaran.
+
+| Bagian | Cara isi |
+|---|---|
+| Tanggal · No. bukti | No. bukti opsional; tanggal wajib di dalam bulan yang dipilih |
+| **Ambil Uang** | **"Pilih dari BKU"** (transaksi `AMBIL_BANK`) · ketik hanya kalau tarikannya memang tidak ada. Memilih **dan** mengetik sekaligus ditolak |
+| Rincian | **"Ambil dari BKU"** (transaksi **dan** potongan di dalamnya) · **"Ketik Baris"** · urutan digeser ↑↓ |
+| **Total** · **Cash** | Otomatis, tidak bisa diketik — meniru rumus aslinya |
+
+#### Yang membuat ketikan lepas aman
+Setiap baris membawa `asal`, dan di bawah tabel sistem menyatakannya terang-terangan:
+
+> *9 baris terhubung ke BKU · 2 baris diketik lepas senilai Rp 607.764*
+
+Ketikan lepas tetap boleh — tapi tidak pernah tersembunyi. Tanpa kalimat itu, kita mengembalikan penyakit yang justru dibasmi modul ini: lembar berpenampilan resmi yang angkanya bisa melenceng dari BKU tanpa ada yang curiga.
+
+#### Baris terhubung dibaca HIDUP, tidak disalin
+Uraian & nominal baris ber-penunjuk diambil dari sumbernya **saat dibaca** (§2.7). Kalau transaksinya dihapus, barisnya berbunyi `(transaksi terhapus)`, nilainya dihitung 0, dan muncul peringatan — bukan diam-diam mempertahankan angka basi. FK-nya sengaja `ON DELETE SET NULL`, bukan CASCADE.
+
+| Pagar | Sikap |
+|---|---|
+| Satu transaksi/potongan dipakai dua kali **di slip yang sama** | **Ditolak** — dobel hitung murni |
+| Dipakai di **dua slip berbeda** dalam satu bulan | Diperingatkan, tidak diblokir (pembayaran dicicil itu sah) |
+| `Cash` negatif — pemakaian melebihi tarikan | Diperingatkan, tidak diblokir; itu sinyal nyata |
+| Periode bulan itu `TUTUP` | Slip jadi baca-saja (`FOR UPDATE`, sama seperti transaksi) |
+| Akses | `isBludRole` + `canInputRealisasi` — **tanpa** kunci `app_access` baru |
+
+Regresi: `node scripts/test-blud-bukti-setor.mjs` (11 pemeriksaan).
+
+### 6.3 Realisasi (`/blud/realisasi`) — layar pantau, read-only
 
 Kolom: `Kode Rekening · Uraian · Pagu · ‹Bulan› · s.d. Bln Lalu · s.d. ‹Bulan› · Sisa s.d. ‹Bulan› · %`.
 
@@ -419,7 +453,7 @@ Dirakit di **server** (`buatWorkbookSpj`), bukan di browser.
 | n−3 | `pengantar` | Surat pengantar |
 | n−2 | `SPJ` | Rekap SPJ |
 | n−1 | `TUTUP KAS` | Berita Acara Pemeriksaan Kas |
-| n | `setor BPD` | Setoran ke bank |
+| n | `setor BPD` | **Satu blok per slip dari menu Bukti Setor** — bernomor, ditutup `Ambil Uang` · `Total` · `Cash`. Bulan tanpa slip menghasilkan lembar kosong; penyaring lama **tidak** dipertahankan sebagai cadangan (dua sumber untuk satu lembar = tidak ada yang tahu angkanya dari mana) |
 
 > **Keputusan #33**: `pengantar` dan `SPJ` memakai **total alokasi** (`ctx.belanja.total`), bukan kas keluar — supaya angka dua lembar itu sama dengan lembar Realisasi BP.
 > Total BKU dan total Realisasi BP **wajib sama**; berbeda = ada yang nyangkut.
@@ -552,6 +586,8 @@ Lewat kuota → **429** + `resetIn` (detik).
 | **`blud_realisasi_tx`** | Satu baris = satu baris BKU | `migration-blud-realisasi-tx.sql` |
 | **`blud_realisasi_alokasi`** | Pembebanan transaksi ke baris anggaran (FK CASCADE). `nilai` **bertanda**: positif membebani, negatif mengembalikan | idem, + `-realisasi-anggaran-key.sql`, `-blud-potongan-pengembalian.sql` |
 | **`blud_realisasi_potongan`** 🆕 | Potongan pihak ketiga per transaksi belanja — pajak + non-pajak (FK CASCADE) | `migration-blud-potongan-pengembalian.sql` |
+| **`blud_bukti_setor`** 🆕 | Satu baris = satu slip "BUKTI SETOR KE BANK BPD" | `migration-blud-bukti-setor.sql` |
+| **`blud_bukti_setor_baris`** 🆕 | Baris slip; `asal` menentukan dibaca hidup atau ketikan (FK `SET NULL`, bukan CASCADE) | idem |
 | **`blud_periode`** | Periode bulanan: saldo awal, sisi nyata, status BUKA/TUTUP | idem |
 | **`blud_permintaan`** | Permintaan pergeseran / rekening baru dari bendahara | `migration-blud-permintaan.sql` |
 | **`blud_gu_periode`** | Rentang pengajuan GU per bulan | `migration-blud-gu-periode.sql` |
@@ -617,6 +653,7 @@ Lewat kuota → **429** + `resetIn` (detik).
 
 **Penatausahaan 🆕**
 - Buku Kas: `blud/buku-kas/buku-kas-client.tsx` · `components/blud/TransaksiModal.tsx` · `components/blud/BakiRekeningPanel.tsx`
+- Bukti Setor: `blud/bukti-setor/bukti-setor-client.tsx` · `components/blud/BuktiSetorModal.tsx` · `lib/blud/bukti-setor-{data,schemas}.ts` · `app/api/blud/bukti-setor/route.ts` · konsep `docs/CONCEPT-blud-bukti-setor.md` · regresi `scripts/test-blud-bukti-setor.mjs`
 - Realisasi: `blud/realisasi/realisasi-client.tsx` · `components/blud/RegisterPanel.tsx`
 - Tutup Kas: `blud/tutup-kas/tutup-kas-client.tsx`
 - API: `app/api/blud/realisasi/{tx,pagu,register,periode,permintaan,gu,export}/route.ts` · `_guard.ts`

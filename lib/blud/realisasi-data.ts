@@ -30,6 +30,8 @@ export interface RealisasiAlokasi {
 }
 
 export interface RealisasiPotongan {
+  /** Dipakai Bukti Setor untuk menunjuk potongan ini sebagai barisnya. */
+  id: number
   jenis: JenisPotongan
   keterangan: string | null
   nilai: number
@@ -126,7 +128,7 @@ export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas>
     ORDER BY a.id ASC
   ` as Record<string, unknown>[]
   const potRows = await sql`
-    SELECT p.tx_id, p.jenis, p.keterangan, p.nilai
+    SELECT p.id, p.tx_id, p.jenis, p.keterangan, p.nilai
     FROM blud_realisasi_potongan p
     JOIN blud_realisasi_tx t ON t.id = p.tx_id
     WHERE t.tahun_anggaran = ${tahun} AND t.bulan = ${bulan}
@@ -140,6 +142,7 @@ export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas>
     const txId = Number(p.tx_id)
     if (!potonganByTx.has(txId)) potonganByTx.set(txId, [])
     potonganByTx.get(txId)!.push({
+      id: Number(p.id),
       jenis: String(p.jenis) as JenisPotongan,
       keterangan: p.keterangan != null ? String(p.keterangan) : null,
       nilai: Number(p.nilai ?? 0),
