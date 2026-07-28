@@ -158,6 +158,17 @@ export const SESSION_DURATION_HOURS = 8;   // durasi session (jam)
 export const SESSION_ABSOLUTE_LIFETIME_HOURS = 24 * 7;
 export const RATE_LIMIT_REQUESTS = 10;      // max request per window
 export const RATE_LIMIT_WINDOW_SECONDS = 60; // window rate limit (detik)
+
+/**
+ * Rem KASAR login per sumber, dipasang sebelum body dibaca. Gunanya menjaga CPU
+ * dari bcrypt bertubi-tubi (cost 12 — sengaja lambat), BUKAN menjaga akun; itu
+ * tugas `MAX_LOGIN_ATTEMPTS` yang per-pengguna dan tersimpan di MySQL.
+ *
+ * Sengaja jauh lebih longgar dari RATE_LIMIT_REQUESTS: tanpa reverse-proxy,
+ * `getClientIp` mengembalikan 'unknown' untuk SEMUA orang, sehingga satu ember
+ * ini ditanggung sekantor. Angka 10 di sana akan memblokir antrean login pagi.
+ */
+export const LOGIN_IP_BURST = 100;
 export const SESSION_INACTIVE_MINUTES = 60;  // inactivity timeout (menit)
 export const RESET_PW_RATE_LIMIT_REQUESTS = 3;   // max forgot-password per window
 export const RESET_PW_RATE_LIMIT_WINDOW   = 600; // window 10 menit (detik)

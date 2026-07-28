@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sql, sqlInt, toMysqlDatetime, execWrite } from '@/lib/data/db';
 import { verifyPassword, createToken, setSessionCookie } from '@/lib/security/auth';
-import { MAX_LOGIN_ATTEMPTS, LOCK_DURATION_MINUTES, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants';
+import { MAX_LOGIN_ATTEMPTS, LOCK_DURATION_MINUTES, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, LOGIN_IP_BURST } from '@/lib/constants';
 import { verifyTurnstile } from '@/lib/security/recaptcha';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
@@ -29,13 +29,19 @@ const loginSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const ip    = getClientIp(req);
-    const rl    = await checkRateLimit(`login:${ip}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS);
-    if (!rl.allowed) {
-      await writeAuditLog({ req, eventType: 'LOGIN_BLOCKED', detail: `IP rate limited` });
+    const ip = getClientIp(req);
+
+    // ── Rem 1 (KASAR, sebelum body dibaca) ────────────────────────────────────
+    // Menahan banjir permintaan dari satu sumber supaya CPU tidak habis oleh
+    // bcrypt yang memang sengaja lambat. Longgar (LOGIN_IP_BURST) karena tanpa
+    // reverse-proxy `getClientIp` mengembalikan 'unknown' untuk semua orang —
+    // embernya ditanggung sekantor.
+    const rlIp = await checkRateLimit(`login-ip:${ip}`, LOGIN_IP_BURST, RATE_LIMIT_WINDOW_SECONDS);
+    if (!rlIp.allowed) {
+      await writeAuditLog({ req, eventType: 'LOGIN_BLOCKED', detail: `IP burst limited (${ip})` });
       return NextResponse.json(
-        { ok: false, message: `Terlalu banyak percobaan. Coba lagi dalam ${rl.resetIn} detik.` },
-        { status: 429, headers: { 'Retry-After': String(rl.resetIn) } }
+        { ok: false, message: `Terlalu banyak percobaan. Coba lagi dalam ${rlIp.resetIn} detik.` },
+        { status: 429, headers: { 'Retry-After': String(rlIp.resetIn) } }
       );
     }
 
@@ -49,6 +55,28 @@ export async function POST(req: NextRequest) {
       );
     }
     const { username, password, turnstile_token } = parsed.data;
+
+    // ── Rem 2 (HALUS, per orang) ──────────────────────────────────────────────
+    // Kuncinya memuat username, bukan IP saja. Dulu `login:${ip}` membuat jatah
+    // 10/menit ditanggung bersama: tanpa proxy semua orang ber-IP 'unknown',
+    // jadi antrean login pagi bisa saling menghabiskan jatah padahal sandinya
+    // benar. Sekarang yang boros jatah hanya orang yang memang salah berkali-kali.
+    //
+    // Di-lowercase supaya 'Admin' dan 'admin' tidak dapat dua ember terpisah —
+    // pencarian usernya sendiri juga LOWER() (lihat query di bawah).
+    const rlUser = await checkRateLimit(
+      `login:${ip}:${username.toLowerCase()}`, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS,
+    );
+    if (!rlUser.allowed) {
+      await writeAuditLog({
+        req, eventType: 'LOGIN_BLOCKED', username,
+        detail: `Rate limited per-user (${rlUser.resetIn}s)`,
+      });
+      return NextResponse.json(
+        { ok: false, message: `Terlalu banyak percobaan. Coba lagi dalam ${rlUser.resetIn} detik.` },
+        { status: 429, headers: { 'Retry-After': String(rlUser.resetIn) } }
+      );
+    }
 
     const rc = await verifyTurnstile(turnstile_token ?? '');
     if (!rc.ok) {

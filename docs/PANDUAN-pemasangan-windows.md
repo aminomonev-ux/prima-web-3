@@ -128,9 +128,17 @@ PROMOTION_OWNER_EMAILS=admin@rsjdamino.go.id
 # ── Alamat aplikasi — SALAH DI SINI TIDAK MENIMBULKAN ERROR ──
 # Dipakai untuk tautan di email verifikasi & reset sandi. Kalau keliru,
 # emailnya tetap terkirim tapi tautannya mengarah ke tempat yang salah.
-NEXT_PUBLIC_APP_URL=https://prima.rsjdamino.go.id
+# Samakan persis dengan yang diketik pemakai di address bar, termasuk http/https.
+NEXT_PUBLIC_APP_URL=http://192.168.x.x:3000
 
 NODE_ENV=production
+
+# ── WAJIB kalau aplikasi diakses lewat HTTP polos (LAN tanpa HTTPS) ──
+# Cookie sesi bawaannya `secure` saat NODE_ENV=production, artinya browser
+# HANYA mau menyimpannya lewat HTTPS. Lewat HTTP, cookie-nya dibuang diam-diam:
+# login "berhasil" lalu langsung balik ke halaman login, tanpa pesan error.
+# Kalau nanti sudah pakai HTTPS, hapus baris ini.
+COOKIE_SECURE=false
 
 # ── Google Drive (arsip LKJIP & backup) — opsional ──────────
 # Kalau dikosongkan, fitur arsip gagal DIAM-DIAM (best-effort, tidak error).
@@ -259,9 +267,32 @@ endpoint HTTP, bukan mengubah tabel langsung.
 
 ---
 
-## §6 Nginx & HTTPS
+## §6 Reverse proxy & HTTPS — **opsional**
 
-Aplikasi mendengarkan di `localhost:3000`. Nginx yang menghadap ke jaringan.
+**Aplikasi bisa jalan tanpa ini.** `npm start` sudah melayani HTTP sendiri di port
+3000; pemakai LAN cukup membuka `http://<ip-server>:3000`. Kalau itu yang dipilih,
+lewati bagian ini — pastikan saja `COOKIE_SECURE=false` sudah diisi (§3) dan port
+3000 terbuka di Windows Firewall.
+
+Yang Anda lepas dengan tidak memakai proxy:
+
+| | Tanpa proxy | Dengan proxy |
+|---|---|---|
+| Alamat | `http://192.168.x.x:3000` | `http://prima.rsjdamino.go.id` |
+| HTTPS | tidak ada — sandi & angka anggaran lewat jaringan **tanpa terenkripsi** | ada |
+| IP pemakai di log & rem laju | semua tercatat `unknown` | IP asli masing-masing |
+
+> Poin kedua yang perlu dipertimbangkan serius, bahkan di LAN: siapa pun yang bisa
+> menyadap jaringan kantor (Wi-Fi, switch, atau laptop yang sudah disusupi) bisa
+> membaca sandi login dan seluruh isi anggaran apa adanya. LAN bukan berarti aman —
+> hanya berarti penyadapnya harus di dalam gedung.
+>
+> Poin ketiga sudah tidak lagi mengganggu pemakaian sejak rem login dibuat
+> per-orang (2026-07-28). Yang tersisa hanya soal ketelusuran: log audit tidak bisa
+> menunjukkan komputer mana yang melakukan apa.
+
+Kalau memakai proxy — aplikasi tetap di `localhost:3000`, Nginx yang menghadap
+jaringan.
 
 ```nginx
 server {
@@ -355,8 +386,9 @@ perlu dicek sesekali.
 Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
 
 - [ ] `pm2 status` → `prima` berstatus **online**
-- [ ] Buka `https://<domain>` → halaman login muncul, gembok HTTPS hijau
-- [ ] Login `superadmin` / `Admin@Prima2025` → **langsung ganti sandinya**
+- [ ] Buka alamat aplikasi dari **komputer lain**, bukan dari server → halaman login muncul
+- [ ] Login `superadmin` / `Admin@Prima2025` → masuk dan **tetap masuk** setelah pindah halaman
+      (kalau balik ke halaman login: `COOKIE_SECURE=false` belum diisi) → **langsung ganti sandinya**
 - [ ] Buat satu akun uji, lalu salah sandi 5× → **akun terkunci 15 menit**
       (ini membuktikan pengaman login bekerja)
 - [ ] Buka `/menu` → kartu aplikasi muncul sesuai hak akses
@@ -377,9 +409,10 @@ Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
 |---|---|
 | `npm ci` gagal `EUSAGE` | npm bukan 10.8.2 (**L57**) |
 | Build berhenti menyebut `JWT_SECRET` | `.env.local` belum ada / kunci kosong — **ini disengaja** |
-| Login berhasil tapi langsung terlempar keluar | `X-Forwarded-Proto` belum diteruskan Nginx (§6) |
-| Jam sibuk: *"Coba lagi dalam N detik"* padahal sandi benar | `X-Real-IP` belum diteruskan Nginx — jatah per-IP ditanggung bersama (§6) |
-| Satu akun tidak bisa login 15 menit | Normal: 5× salah sandi. Hanya akun itu, tidak menular. SUPER_ADMIN dapat notifikasi `BRUTE_FORCE` |
+| **Login "berhasil" tapi balik lagi ke halaman login** | **`COOKIE_SECURE=false` belum diisi** padahal aksesnya HTTP (§3). Ini penyebab nomor satu di pemasangan LAN |
+| Login terlempar keluar padahal sudah HTTPS | `X-Forwarded-Proto` belum diteruskan proxy (§6) |
+| Satu akun tidak bisa login 15 menit | Normal: 5× salah sandi. Hanya akun itu, **tidak menular** ke rekan. SUPER_ADMIN dapat notifikasi `BRUTE_FORCE` |
+| *"Coba lagi dalam N detik"* padahal sandi benar | Jatah 10 login/menit **untuk akun itu** sudah habis — tunggu sebentar. Sejak 2026-07-28 jatah ini per-orang, jadi tidak lagi menyeret rekan sekantor |
 | Tautan di email verifikasi salah alamat | `NEXT_PUBLIC_APP_URL` keliru |
 | Promosi peran menggantung, tak ada error | Tugas terjadwal belum dipasang (§5) |
 | Arsip LKJIP tidak muncul di Drive | Kredensial Google kosong — gagalnya memang diam |
