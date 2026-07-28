@@ -2856,7 +2856,11 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 .bs-cash { color: #1D9E75; }
 .bs-cash.timpang { color: #E24B4A; }
 .bs-cash-timpang { color: #E24B4A; font-weight: 700; }
-.bs-kartu { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+/* Warna teks disetel di induk kartu, bukan di `.bk-num-inline`: kelas itu dipakai
+   juga di tabel Buku Kas yang sudah punya warnanya sendiri. `.bk-panel` tidak
+   menyetel warna sama sekali, jadi judul & angka di sini mewarisi foreground
+   gelap dari body — navy di atas navy, praktis tak terbaca. */
+.bs-kartu { display: flex; flex-direction: column; gap: 10px; align-items: stretch; color: #E6F1FB; }
 .bs-kartu-kepala { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .bs-kartu-judul { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .bs-kartu-no { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #85B7EB; }
@@ -2868,6 +2872,7 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .bs-hitung { border-top-color: #E5E7EB; }
 [data-theme="light"] .bs-tag-bku { background: rgba(29,158,117,.12); color: #15795A; }
 [data-theme="light"] .bs-tag-ketik { background: rgba(239,159,39,.14); color: #854F0B; }
+[data-theme="light"] .bs-kartu { color: #0F0F12; }
 [data-theme="light"] .bs-kartu-no { color: #6B7280; }
 
 .bk-potongan-row { display: grid; grid-template-columns: 170px 1fr 140px auto; gap: 8px; align-items: center; }

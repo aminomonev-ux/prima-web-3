@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { Plus, Pencil, Inbox, Lock, CalendarDays, Eye } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DeleteButton from '@/components/ui/DeleteButton'
+import Tip from '@/components/ui/Tip'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
@@ -290,16 +291,23 @@ export default function BukuKasClient({ bolehUbah }: { bolehUbah: boolean }) {
                     {/* Selalu hidup, termasuk saat bulannya sudah ditutup: tanpa ini
                         rincian potongan & pembebanan bulan lama tidak bisa dilihat
                         sama sekali, karena satu-satunya jalan ke sana tombol Ubah. */}
-                    <button className="blud-act blud-act-lihat"
-                      onClick={() => setDetail(r)} data-tooltip="Lihat rincian" aria-label="Lihat rincian">
-                      <Eye />
-                    </button>
+                    {/* <Tip>, bukan `data-tooltip`: tabel ini duduk di dalam
+                        .blud-scroll-wrapper, dan pseudo-element-nya terpotong tepi
+                        wrapper — kolom Aksi paling kanan yang paling parah. */}
+                    <Tip label="Lihat rincian">
+                      <button className="blud-act blud-act-lihat"
+                        onClick={() => setDetail(r)} aria-label="Lihat rincian">
+                        <Eye />
+                      </button>
+                    </Tip>
                     {bolehUbah && (
                       <>
-                        <button className="blud-act blud-act-add" disabled={terkunci}
-                          onClick={() => bukaUbah(r)} data-tooltip="Ubah" aria-label="Ubah">
-                          <Pencil />
-                        </button>
+                        <Tip label="Ubah">
+                          <button className="blud-act blud-act-add" disabled={terkunci}
+                            onClick={() => bukaUbah(r)} aria-label="Ubah">
+                            <Pencil />
+                          </button>
+                        </Tip>
                         <DeleteButton disabled={terkunci} onClick={() => hapus(r)} />
                       </>
                     )}
