@@ -294,9 +294,15 @@ server {
 
 Dua baris yang **wajib** ada dan sering dilupakan:
 
-- **`X-Real-IP`** — dipakai untuk mengenali IP pengguna. Tanpa ini, semua pemakai
-  terlihat berasal dari satu IP yang sama, dan pembatas laju per-IP jadi salah
-  sasaran: satu orang yang salah sandi berulang kali bisa memblokir seluruh kantor.
+- **`X-Real-IP`** — dipakai untuk mengenali IP pengguna. Tanpa ini semua pemakai
+  terlihat datang dari satu IP (IP Nginx), sehingga jatah **10 permintaan login per
+  menit per IP** ditanggung bersama sekantor. Gejalanya: jam sibuk pagi, sebagian
+  orang dapat pesan *"Coba lagi dalam N detik"* padahal sandinya benar.
+
+  > Ini **bukan** penguncian akun. Kunci akun (5× salah → 15 menit) disimpan
+  > per-pengguna di MySQL dan tidak pernah menular ke orang lain — salah sandi
+  > siapa pun tidak bisa mengunci akun rekannya. Yang terpengaruh `X-Real-IP` hanya
+  > rem per-IP, dan efeknya antrean beberapa detik yang hilang sendiri.
 - **`X-Forwarded-Proto`** — tanpa ini aplikasi mengira dirinya berjalan di HTTP,
   dan cookie sesi bisa gagal dipasang.
 
@@ -372,7 +378,8 @@ Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
 | `npm ci` gagal `EUSAGE` | npm bukan 10.8.2 (**L57**) |
 | Build berhenti menyebut `JWT_SECRET` | `.env.local` belum ada / kunci kosong — **ini disengaja** |
 | Login berhasil tapi langsung terlempar keluar | `X-Forwarded-Proto` belum diteruskan Nginx (§6) |
-| Semua pemakai terlihat dari IP sama | `X-Real-IP` belum diteruskan Nginx (§6) |
+| Jam sibuk: *"Coba lagi dalam N detik"* padahal sandi benar | `X-Real-IP` belum diteruskan Nginx — jatah per-IP ditanggung bersama (§6) |
+| Satu akun tidak bisa login 15 menit | Normal: 5× salah sandi. Hanya akun itu, tidak menular. SUPER_ADMIN dapat notifikasi `BRUTE_FORCE` |
 | Tautan di email verifikasi salah alamat | `NEXT_PUBLIC_APP_URL` keliru |
 | Promosi peran menggantung, tak ada error | Tugas terjadwal belum dipasang (§5) |
 | Arsip LKJIP tidak muncul di Drive | Kredensial Google kosong — gagalnya memang diam |

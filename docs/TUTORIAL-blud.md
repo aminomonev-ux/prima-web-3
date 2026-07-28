@@ -1,7 +1,9 @@
 # TUTORIAL & ALUR APLIKASI BLUD — PRIMA
 > RSJD Dr. Amino Gondohutomo · Modul **BLUD** (`/blud`)
 > Panduan A–Z dari login sampai output cetak & SPJ bulanan. Nama tombol di bawah **persis** seperti di aplikasi.
-> Terakhir diperbarui: 2026-07-27 (setelah Fase 5 — Penatausahaan Bendahara Pengeluaran).
+> Terakhir diperbarui: **2026-07-28** — pembagian peran × menu, saldo awal tahun (R3),
+> sakelar mati modul (S4), dan rem GET + throttle audit-view (R4). Seluruh temuan
+> audit BLUD v1.2 sudah ditutup.
 
 **Akses**: `SUPER_ADMIN` / `ADMIN` (`isBludRole`), atau role lain yang diberi `app_access: 'blud'` lewat Admin Panel.
 Rincian gerbang akses per-endpoint → [§9 Guard & Keamanan](#9-guard--keamanan-lengkap).
@@ -35,7 +37,11 @@ Rincian gerbang akses per-endpoint → [§9 Guard & Keamanan](#9-guard--keamanan
 
 ```mermaid
 flowchart TD
-    A([Login]) --> B[Menu utama → kartu BLUD] --> C[/blud · Beranda/]
+    A([Login]) --> B[Menu utama → kartu BLUD]
+    B --> S4{Modul dimatikan admin?<br/>app_status_blud}
+    S4 -->|Ya, dan bukan SUPER_ADMIN| MT[/maintenance<br/>kartu abu · URL langsung ikut dibelokkan<br/>API balas 503 MODUL_MATI/]
+    S4 -->|Tidak| PR{Peran ini boleh<br/>menu apa saja?}
+    PR --> C[/blud · Beranda<br/>ribbon hanya memasang tile yang terbuka/]
 
     C --> F0{Data Induk<br/>sudah lengkap?}
     F0 -->|Belum| SETUP
@@ -88,19 +94,24 @@ flowchart TD
         K5 -->|409 PAGU_TERLAMPAUI| K6[Ajukan Pergeseran → notif ke pemegang DPA<br/>atau centang 'parkir' transaksi]
         K6 --> PG
         K5 -->|Cukup| K7[Simpan → server beri No. Kwt berurutan]
-        K7 --> K8[Realisasi: pantau pagu vs serapan<br/>klik uraian → panel Register]
+        K7 --> BS[Bukti Setor: rakit slip setor BPD<br/>baris dari BKU atau ketikan lepas]
+        BS --> K8[Realisasi: pantau pagu vs serapan<br/>klik uraian → panel Register]
     end
     PEN --> TUT
 
     subgraph TUT [FASE 5 · TUTUP BULAN 🆕 · /blud/tutup-kas]
         direction TB
+        T0{Bulan Januari DAN<br/>belum ada bulan yang ditutup?}
+        T0 -->|Ya| T0A[Sisi A jadi isian: saldo awal tahun<br/>Simpan saldo awal → audit lama → baru]
+        T0 -->|Tidak| T1
+        T0A --> T1
         T1[Isi sisi nyata: uang tunai + saldo rekening koran] --> T2[Simpan Pemeriksaan]
         T2 --> T3{Selisih = Rp 0<br/>DAN tanpa penghalang?}
         T3 -->|Ada baki 'Perlu Rekening'| T4[Sambungkan transaksi terparkir] --> T1
         T3 -->|Bulan sebelumnya belum ditutup| T5[Tutup dari bulan terdepan] --> T1
         T3 -->|Selisih ≠ 0| T6[Cocokkan lagi — tidak ada kotak penyesuaian] --> T1
         T3 -->|Bersih| T7[Catat Periode GU opsional] --> T8[Tutup Bulan]
-        T8 --> T9[(blud_periode = TUTUP<br/>semua tulis ke bulan itu ditolak)]
+        T8 --> T9[(blud_periode = TUTUP<br/>semua tulis ke bulan itu ditolak<br/>saldo awal tahun ikut BEKU)]
         T9 --> T10[Unduh SPJ Bulanan · 11 lembar .xlsx]
     end
     TUT --> OUT
@@ -424,6 +435,7 @@ SISI B  menurut nyata  = uang tunai di brankas + saldo rekening koran ← DIKETI
 | No | Elemen PERSIS | Fungsi |
 |---|---|---|
 | 1 | Kartu **"Menurut buku"** (*dihitung dari transaksi — tidak bisa diketik*) | Saldo awal kas & bank · Penerimaan bulan ini (+) · Pengeluaran bulan ini (−) · **Saldo akhir menurut buku** |
+| 1b 🆕 R3 | Di **Januari yang belum ditutup**, dua baris saldo awal berubah jadi **isian** + tombol **"Simpan saldo awal"** | Sub-judul kartu ikut berubah jadi *"saldo awal tahun diketik sekali; sisanya dihitung dari transaksi"* — lihat §7.2b |
 | 2 | Kartu sisi nyata: **"Uang tunai di brankas"** + **"Saldo rekening koran"** | Dua angka satu-satunya yang diketik → **Saldo akhir menurut kenyataan** |
 | 3 | Pita hasil | **"Seimbang — selisih Rp 0. Bulan boleh ditutup."** atau selisihnya |
 | 4 | **Nomor surat** (mis. `900/BA-001/2026`) + **Tanggal surat** | Kelengkapan berita acara |
@@ -431,6 +443,30 @@ SISI B  menurut nyata  = uang tunai di brankas + saldo rekening koran ← DIKETI
 | 6 | **"Tutup Bulan"** (hijau) | Aktif hanya kalau selisih Rp 0 **dan** tanpa penghalang · audit `BLUD_PERIODE_TUTUP` |
 | 7 | **"Unduh SPJ Bulanan"** (hijau) | Unduh `.xlsx` 11 lembar · audit `BLUD_SPJ_UNDUH` |
 | 8 | **"Buka Kembali"** (amber) | **SUPER_ADMIN · ADMIN · KEUANGAN** (`bolehBukaPeriode`) — PERBENDAHARAAN sengaja di luar meski boleh menutup; alasan ≥10 karakter · audit `BLUD_PERIODE_BUKA` · **wajib urut dari belakang** — lihat §7.3 |
+
+### 7.2b Saldo awal tahun 🆕 (R3) — satu-satunya angka sisi A yang diketik
+
+Sebelum ini kolomnya hanya bisa diisi lewat SQL manual, **tanpa jejak** — padahal ia
+dasar dari tiap saldo yang ditandatangani sepanjang tahun.
+
+| | |
+|---|---|
+| Di mana | Kartu sisi A layar Tutup Kas, **hanya bulan Januari**. Bukan panel terpisah: angkanya memang sudah tampil di baris itu, dan kotak kedua untuk angka yang sama membuat orang bertanya mana yang berlaku |
+| Kapan boleh | Selama **belum ada satu pun bulan tahun itu ditutup**. Sesudahnya beku → 409 `SALDO_AWAL_TERKUNCI` |
+| Siapa | Menu `tutup-kas` izin EDIT — **tanpa daftar peran tersendiri**. Setelah beku, satu-satunya jalan mengubahnya adalah membuka kembali Januari, dan pintu itu sudah dijaga `bolehBukaPeriode` yang sempit |
+| Tanpa alasan wajib | Beda dari buka periode & hapus versi yang merusak dokumen bertanda tangan. Di sini, selama masih boleh diubah, belum ada apa pun yang ditandatangani |
+| Jejak | Audit `BLUD_SALDO_AWAL_SET` memuat **lama → baru**, mis. `tunai 24025146 → 30000000` |
+| Endpoint | `POST /api/blud/realisasi/saldo-awal` — route sendiri, bukan menumpang `POST /realisasi/periode` yang artinya "satu bulan" |
+
+> **Kuncinya dikirim server, bukan ditebak layar.** `NeracaKas.saldo_awal_terkunci`
+> dihitung di server dari "ada bulan mana pun yang tertutup". Layar hanya memegang
+> satu bulan, jadi kalau ia menyimpulkan sendiri, isian bisa tampak hidup lalu
+> ditolak 409. Satu fungsi `bulanTertutup()` dibaca layar dan pagar tulis sekaligus
+> — prinsip yang sama dengan `kumpulkanPenghalang` di §7.3.
+
+> **Mengubahnya menggeser seluruh tahun.** Saldo awal Februari–Desember diturunkan
+> dari angka ini plus arus kas bulan-bulan sebelumnya (§4.6), tidak disimpan. Karena
+> itu ia dibekukan begitu ada satu berita acara — bukan begitu Januari saja ditutup.
 
 ### 7.3 Penghalang tutup — daftarnya satu, dipakai layar **dan** server
 `kumpulkanPenghalang()` adalah sumber tunggalnya; UI tidak punya versi aturannya sendiri.
@@ -528,18 +564,33 @@ Dua bagian: **Pejabat penanda tangan SPJ** (§3.4) dan **pengelolaan versi**.
 
 ## 9. Guard & Keamanan (lengkap)
 
-### 9.1 Tiga lapis akses
+### 9.1 Lapis-lapis akses
 
 ```mermaid
 flowchart TD
     R[Request] --> P[proxy.ts · Edge<br/>strip header x-user-* dari klien<br/>set ulang di request header · V3-1/L54]
-    P --> L{layout.tsx server<br/>hasAppAccess userId, role, isBludRole}
+
+    P --> SISI{Yang diminta<br/>halaman atau API?}
+
+    SISI -->|Halaman /blud/**| L{layout.tsx server<br/>hasAppAccess uid, role, isBludRole}
     L -->|gagal| M[redirect /menu]
-    L -->|lolos| U[Halaman render]
-    U --> A[fetch ke /api/blud/**]
-    A --> G{Guard route<br/>getSession → bolehLihat / bolehInput}
-    G -->|tanpa sesi| E401[401 Unauthorized]
-    G -->|tanpa akses| E403[403 Akses ditolak]
+    L -->|lolos| LS{modulSedangMati app_status_blud<br/>SUPER_ADMIN dikecualikan · S4}
+    LS -->|mati| MT[redirect /maintenance]
+    LS -->|hidup| IZ{izinLayar menu<br/>_izin.ts → tabel peran}
+    IZ -->|menu tertutup| MB[redirect /blud · Beranda<br/>bukan keluar modul: orangnya berhak masuk]
+    IZ -->|EDIT| UE[Halaman penuh]
+    IZ -->|LIHAT| UL[Halaman baca-saja<br/>SpandukLihat · isian jadi teks · tombol hilang]
+    UE --> A
+    UL --> A[fetch ke /api/blud/**]
+
+    SISI -->|Langsung ke API<br/>curl / tab lama| A
+    A --> G0{getSession}
+    G0 -->|tanpa sesi| E401[401 Unauthorized]
+    G0 -->|ada sesi| KS{bludMati / realisasiMati<br/>fail-closed · S4}
+    KS -->|mati / gagal baca| E503[503 MODUL_MATI]
+    KS -->|hidup| G{bolehBukaMenu / bolehEditMenu<br/>peran × menu + hasAppAccess}
+    G -->|tanpa akses modul| E403[403 Akses ditolak]
+    G -->|LIHAT tapi mencoba menulis| E403M[403 MENU_BACA_SAJA<br/>pesannya menyebut nama menunya]
     G -->|lolos| RL{bludRateLimit}
     RL -->|lewat kuota| E429[429 + resetIn]
     RL -->|aman| Z[Zod safeParse → data layer]
@@ -548,6 +599,10 @@ flowchart TD
 ```
 
 > **Guard ditaruh di SETIAP route, bukan hanya di UI.** Menyembunyikan tombol bukan keamanan — endpoint tetap bisa dipanggil lewat `curl` (pelajaran V3-1).
+>
+> **Perhatikan jalur kanan pada bagan.** Menutup pintu di layar saja tidak cukup, karena ada dua cara masuk yang melewatinya: `curl`, dan **tab yang sudah telanjur terbuka** sebelum admin menekan maintenance. Itu sebabnya sakelar mati diperiksa di dua tempat — `layout.tsx` untuk yang baru masuk, dan tiap route untuk yang sudah di dalam.
+>
+> **503 sengaja dibedakan dari 403.** "Modul sedang dimatikan admin" akan hilang sendiri; "Anda tidak berhak" perlu minta akses. Kalau keduanya dijawab 403, pemakai tidak tahu harus menunggu atau menghubungi admin.
 
 ### 9.2 Siapa boleh apa — izin dua sumbu (peran × menu)
 Konsep lengkap: `docs/CONCEPT-blud-peran.md`. Tabelnya hidup di **satu** berkas,
@@ -580,6 +635,37 @@ Konsep lengkap: `docs/CONCEPT-blud-peran.md`. Tabelnya hidup di **satu** berkas,
 >
 > **AUTHZ-02/V5**: BLUD sengaja **tanpa ownership per-record** — semua pemegang akses bisa mengubah semua record. Itu keputusan, bukan IDOR. Konsekuensinya pemberian `app_access: 'blud'` harus konservatif dan direview berkala.
 
+### 9.2b Sakelar mati modul 🆕 (S4)
+
+Toggle di **Admin Panel → App Status**. Dua kunci, **berjenjang**:
+
+| Kunci | Mematikan | Efeknya |
+|---|---|---|
+| `app_status_blud` | seluruh modul BLUD | Kartu di `/menu` jadi abu · `/blud/**` dilempar ke `/maintenance` · semua `/api/blud/**` balas **503** |
+| `app_status_blud_realisasi` | sub-modul Penatausahaan saja | Buku Kas · Bukti Setor · Realisasi · Tutup Kas mati; DPA, Pergeseran, dan data induk tetap jalan |
+
+Mematikan BLUD ikut mematikan Realisasi. **Sebaliknya tidak.**
+
+**`SUPER_ADMIN` dikecualikan** dari pembelokan halaman — yang mematikan modul tetap
+harus bisa masuk memeriksanya. Route API tetap 503 untuk semua, termasuk SUPER_ADMIN.
+
+> **Fail-closed.** Gagal membaca `app_config` = **tolak**, bukan lanjut diam-diam.
+> Sakelar pengaman yang menyala hanya kalau semuanya lancar bukan sakelar pengaman.
+> Risikonya kecil: kalau MySQL bermasalah, modulnya toh sudah tidak bisa apa-apa.
+>
+> **Diperiksa di dua tempat, dan keduanya perlu.** `layout.tsx` menutup yang baru
+> masuk (termasuk URL yang diketik langsung dan FloatingDock antar-modul); tiap route
+> menutup **tab yang sudah telanjur terbuka** sebelum admin menekan maintenance. Tanpa
+> yang kedua, orang yang sedang di layar DPA masih bisa menekan Simpan.
+>
+> **Sengaja tidak dilebur ke `bolehBukaMenu`.** Hasilnya akan jadi 403 padahal ini
+> 503, dan lebih halus: `bolehBukaMenu` menjawab *"siapa Anda"*, sakelar ini menjawab
+> *"apakah modulnya sedang hidup"*. Dua pertanyaan berbeda tidak boleh diwakili satu
+> jawaban boolean.
+>
+> Uji: `node scripts/test-blud-killswitch.mjs` — termasuk sifat berjenjangnya, yang
+> justru paling mudah rusak.
+
 ### 9.3 Rate limit per endpoint (`bludRateLimit`, per-user per-menit)
 | Aksi | Kuota | Endpoint |
 |---|---|---|
@@ -590,9 +676,25 @@ Konsep lengkap: `docs/CONCEPT-blud-peran.md`. Tabelnya hidup di **satu** berkas,
 | `realisasi-gu` | 20 | POST `/realisasi/gu` |
 | `blud-pejabat` | 20 | POST `/blud/pejabat` |
 | `realisasi-export` | 10 | GET `/realisasi/export` |
+| `realisasi-saldo-awal` | 20 | POST `/realisasi/saldo-awal` 🆕 |
+| `view-dpa` · `view-pergeseran` | 60 | GET `/dpa`, GET `/pergeseran` 🆕 R4 |
+| `view-tx` · `view-register` · `view-periode` | 60 | GET `/realisasi/tx`, `/register`, `/periode` 🆕 R4 |
 | default lain | 30 | — |
 
 Lewat kuota → **429** + `resetIn` (detik).
+
+> 🆕 **R4 — GET juga dibatasi.** Dulu hanya tulis yang direm; membaca satu tahun DPA
+> tidak murah, dan skrip yang berputar bisa memanggilnya ribuan kali. 60/menit
+> longgar untuk pemakaian wajar (pindah versi, pindah tahun, pindah bulan).
+>
+> **Audit "melihat" ikut diperlonggar penulisannya.** `BLUD_VIEW_DPA` /
+> `BLUD_VIEW_PERGESERAN` dicatat **sekali per menit per user per versi**
+> (`bolehCatatView` di `lib/blud/schemas.ts`), bukan tiap panggilan. Yang ingin
+> dijawab audit view adalah *"siapa pernah melihat versi ini"*, bukan *"berapa kali
+> komponennya me-render"* — dan tanpa throttle, jejak yang penting tenggelam.
+>
+> `realisasi/pagu?mode=cap` **tidak** ikut dibatasi maupun diaudit: ia dipanggil
+> otomatis tiap ~30 detik untuk menyegarkan pil pagu.
 
 ### 9.4 Kode error yang dilihat pengguna
 | HTTP | `code` | Arti | Yang harus dilakukan |
@@ -604,6 +706,10 @@ Lewat kuota → **429** + `resetIn` (detik).
 | 409 | `SERAPAN_NEGATIF` 🆕 | Pengembalian melebihi yang pernah terserap di baris itu | Perkecil nilainya, atau perbaiki transaksi belanja aslinya |
 | 401 | — | Belum login / sesi habis | Login ulang |
 | 403 | — | Tidak punya akses BLUD | Minta grant di Admin Panel |
+| 403 | `MENU_BACA_SAJA` | Peran Anda hanya boleh **melihat** menu itu | Pesannya menyebut nama menunya — minta Admin kalau memang perlu mengubah |
+| 503 | `MODUL_MATI` 🆕 S4 | Modul dimatikan admin untuk pemeliharaan | **Tunggu** — ini akan hilang sendiri, bukan soal hak akses |
+| 409 | `SALDO_AWAL_TERKUNCI` 🆕 R3 | Saldo awal tahun sudah tidak bisa diubah | Sudah ada bulan yang ditutup di atasnya — buka kembali Januari dulu |
+| 409 | `BUKAN_MENUNGGU` 🆕 R1 | Permintaan sudah ditolak/selesai orang lain | Muat ulang daftarnya |
 | 409 | `PAGU_TERLAMPAUI` | Pagu baris tidak cukup | **Ajukan Pergeseran** atau parkir |
 | 409 | `VERSION_CONFLICT` | Transaksi diubah orang lain | Muat ulang versi terbaru |
 | 409 | `PERIODE_TUTUP` / `PERIODE_TERTUTUP` | Bulannya sudah ditutup | Minta SUPER_ADMIN membuka |
