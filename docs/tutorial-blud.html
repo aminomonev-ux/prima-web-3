@@ -260,12 +260,17 @@
     <header class="hero">
       <span class="eyebrow"><span class="mark">🏛</span> PRIMA · Modul BLUD</span>
       <h1>Alur &amp; Tutorial Aplikasi BLUD</h1>
-      <p class="lead">Panduan A–Z penyusunan anggaran BLUD RSJD Dr. Amino Gondohutomo — dari login sampai output cetak. Nama tombol di bawah persis seperti di aplikasi.</p>
+      <p class="lead">Panduan A–Z BLUD RSJD Dr. Amino Gondohutomo — dari login, susun anggaran, catat penatausahaan harian, sampai tutup kas &amp; SPJ bulanan. Nama tombol di bawah persis seperti di aplikasi.</p>
       <div class="meta-row">
         <span class="chip"><span class="dot" style="background:var(--accent)"></span> Akses: <code>SUPER_ADMIN</code> / <code>ADMIN</code></span>
         <span class="chip"><span class="dot" style="background:var(--c-setup)"></span> atau grant <code>app_access: 'blud'</code></span>
-        <span class="chip"><span class="dot" style="background:var(--c-dpa)"></span> 8 menu · 5 grup · 4 fase kerja</span>
+        <span class="chip"><span class="dot" style="background:var(--c-dpa)"></span> 12 menu · 6 grup · 6 fase kerja</span>
+        <span class="chip"><span class="dot" style="background:#0F9E6E"></span> diperbarui 2026-07-28</span>
       </div>
+      <p class="lead" style="font-size:13px;opacity:.85">
+        Halaman ini <b>ringkasan visual</b>. Rincian per tombol, tabel izin peran, kode error,
+        dan jaminan integritas data ada di <code>docs/TUTORIAL-blud.md</code>.
+      </p>
     </header>
 
     <!-- ── Peta Modul ── -->
@@ -274,7 +279,7 @@
         <span class="sec-num">01</span>
         <div>
           <h2>Peta Modul</h2>
-          <p class="sec-sub">Delapan menu terbagi dalam lima grup. Siapkan <b>Data Induk</b> dulu sekali di awal, lalu susun anggaran di grup <b>Anggaran</b>.</p>
+          <p class="sec-sub">Dua belas menu dalam enam grup. Urutan pemakaian yang benar: <b>Data Induk</b> (sekali di awal) → <b>DPA</b> → <b>Pergeseran</b> → <b>Buku Kas</b> (harian) → <b>Realisasi</b> (pantau) → <b>Tutup Kas</b> (akhir bulan) → <b>Cetak / SPJ</b>.</p>
         </div>
       </div>
       <div class="menu-grid">
@@ -312,6 +317,25 @@
           </div>
         </div>
         <div class="grp-card">
+          <div class="grp-label"><span class="bar" style="background:#0EA5E9"></span> Penatausahaan</div>
+          <div class="menu-item">
+            <div class="m-ico" style="background:#0EA5E9">📒</div>
+            <div class="m-body"><div class="m-name">Buku Kas <code>/blud/buku-kas</code></div><div class="m-desc"><b>Satu-satunya tempat mengetik.</b> Transaksi kas/bank harian (BKU) + pembebanan ke baris anggaran</div></div>
+          </div>
+          <div class="menu-item">
+            <div class="m-ico" style="background:#38BDF8">🧾</div>
+            <div class="m-body"><div class="m-name">Bukti Setor <code>/blud/bukti-setor</code></div><div class="m-desc">Rakit slip “BUKTI SETOR KE BANK BPD” — baris dari BKU atau ketikan lepas</div></div>
+          </div>
+          <div class="menu-item">
+            <div class="m-ico" style="background:#0284C7">📊</div>
+            <div class="m-body"><div class="m-name">Realisasi <code>/blud/realisasi</code></div><div class="m-desc">Pantau pagu vs serapan per rekening + register per baris (baca-saja)</div></div>
+          </div>
+          <div class="menu-item">
+            <div class="m-ico" style="background:#075985">🔒</div>
+            <div class="m-body"><div class="m-name">Tutup Kas <code>/blud/tutup-kas</code></div><div class="m-desc">Berita Acara Pemeriksaan Kas + periode GU + unduh SPJ 11 lembar</div></div>
+          </div>
+        </div>
+        <div class="grp-card">
           <div class="grp-label"><span class="bar" style="background:var(--c-out)"></span> Output &amp; Sistem</div>
           <div class="menu-item">
             <div class="m-ico" style="background:#0891B2">🖨</div>
@@ -331,14 +355,18 @@
         <span class="sec-num">02</span>
         <div>
           <h2>Flowchart Alur Besar (A–Z)</h2>
-          <p class="sec-sub">Empat fase berurutan: setup data induk → susun DPA → pergeseran → output. Cek server (versi &amp; ambang aman) berdiri di antara "Simpan" dan versi tersimpan.</p>
+          <p class="sec-sub">Enam fase berurutan: setup data induk → susun DPA → pergeseran → penatausahaan harian → tutup bulan → output. Cek server (versi &amp; ambang aman) berdiri di antara “Simpan” dan versi tersimpan. Dua penjaga baru di pintu depan: <b>sakelar mati modul</b> dan <b>pembagian peran × menu</b> — ribbon hanya memasang tile yang memang terbuka bagi peran itu.</p>
         </div>
       </div>
       <div class="diagram">
 <pre class="mermaid">
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif','fontSize':'13px','lineColor':'#8aa0b8','primaryTextColor':'#0F172A','clusterBkg':'transparent','clusterBorder':'#8aa0b8'}}}%%
 flowchart TD
-    A([Login]):::start --> B[Menu utama, kartu BLUD] --> C[/blud &middot; Beranda/]:::nav
+    A([Login]):::start --> B[Menu utama, kartu BLUD]
+    B --> KS{Modul dimatikan admin?<br/>app_status_blud}:::dec
+    KS -->|Ya, dan bukan SUPER_ADMIN| MT["Halaman Sedang Dalam Perbaikan<br/>kartu abu &middot; URL langsung ikut dibelokkan<br/>API balas 503"]:::warn
+    KS -->|Tidak| PR{Peran ini boleh<br/>menu apa saja?}:::dec
+    PR --> C[/blud &middot; Beranda<br/>ribbon hanya memasang tile yang terbuka/]:::nav
     C --> Q{Data Induk<br/>lengkap?}:::dec
     Q -->|Belum| S1
     Q -->|Sudah| D1
@@ -346,6 +374,7 @@ flowchart TD
     subgraph SETUP [FASE 1 &middot; SETUP DATA INDUK]
       direction LR
       S1[Master Akun]:::setup --> S2[Kode Besar]:::setup --> S3[Penanggung Jawab]:::setup
+      S3 --> S4["Pengaturan: Pejabat SPJ"]:::setup
     end
     SETUP --> D1
 
@@ -373,11 +402,46 @@ flowchart TD
       P4 -->|Belum| P5[Simpan sebagai Draft]:::warn --> P2
       P4 -->|Ya| P6[(Simpan, versi Pergeseran)]:::store
     end
-    PERG --> O1
+    PERG --> PGC{Pagu turun di bawah<br/>realisasi yang sudah terjadi?}:::dec
+    PGC -->|Ya| PGD["Alasan wajib, masuk audit"]:::warn --> K1
+    PGC -->|Tidak| K1
 
-    subgraph OUT [FASE 4 &middot; OUTPUT]
+    subgraph PEN [FASE 4 &middot; PENATAUSAHAAN HARIAN]
+      direction TB
+      K1["Buku Kas: Transaksi Baru"]:::pen --> K2["Tanggal / jenis / uraian + kas &amp; bank"]:::pen
+      K2 --> K3{Jenis = BELANJA?}:::dec
+      K3 -->|Tidak| K7
+      K3 -->|Ya| K4["Bebankan ke baris anggaran<br/>bisa dibagi ke beberapa baris"]:::pen
+      K4 --> K5{Pagu cukup?}:::dec
+      K5 -->|Tidak, 409| K6["Ajukan Pergeseran, notif ke pemegang DPA<br/>atau parkir di baki Perlu Rekening"]:::warn
+      K6 --> P1
+      K5 -->|Cukup| K7["Simpan, server beri No. Kwt berurutan"]:::pen
+      K7 --> BS["Bukti Setor: rakit slip setor BPD"]:::pen
+      BS --> K8["Realisasi: pantau pagu vs serapan<br/>klik uraian untuk panel Register"]:::pen
+    end
+    PEN --> T0
+
+    subgraph TUT [FASE 5 &middot; TUTUP BULAN]
+      direction TB
+      T0{Bulan Januari DAN<br/>belum ada bulan yang ditutup?}:::dec
+      T0 -->|Ya| T0A["Sisi A jadi isian: saldo awal tahun<br/>Simpan saldo awal, audit lama ke baru"]:::tut
+      T0 -->|Tidak| T1
+      T0A --> T1["Isi sisi nyata: uang tunai + rekening koran"]:::tut
+      T1 --> T2[Simpan Pemeriksaan]:::tut
+      T2 --> T3{Selisih Rp 0<br/>DAN tanpa penghalang?}:::dec
+      T3 -->|Ada baki Perlu Rekening| T4[Sambungkan transaksi terparkir]:::warn --> T1
+      T3 -->|Bulan sebelumnya belum ditutup| T5[Tutup dari bulan terdepan]:::warn --> T1
+      T3 -->|Selisih bukan nol| T6["Cocokkan lagi, tidak ada kotak penyesuaian"]:::warn --> T1
+      T3 -->|Bersih| T7[Catat Periode GU, opsional]:::tut --> T8[Tutup Bulan]:::tut
+      T8 --> T9[("Periode TUTUP: semua tulis ditolak<br/>saldo awal tahun ikut beku")]:::store
+      T9 --> T10[Unduh SPJ Bulanan, 11 lembar xlsx]:::tut
+    end
+    TUT --> O1
+
+    subgraph OUT [FASE 6 &middot; OUTPUT &amp; PEMELIHARAAN]
       direction LR
       O1["Cetak: pilih Menu + View"]:::out --> O2[Ekspor PDF / Excel]:::out
+      O3["Buka Kembali periode: SUPER_ADMIN / ADMIN / KEUANGAN<br/>alasan wajib, urut dari belakang"]:::out
     end
     OUT --> Z([Selesai]):::start
 
@@ -387,6 +451,8 @@ flowchart TD
     classDef dpa fill:#8B5CF6,stroke:#6d3fd6,color:#fff;
     classDef perg fill:#DB2777,stroke:#a81a5c,color:#fff;
     classDef out fill:#0E7490,stroke:#0a5567,color:#fff;
+    classDef pen fill:#0EA5E9,stroke:#0678aa,color:#fff;
+    classDef tut fill:#075985,stroke:#04384f,color:#fff;
     classDef dec fill:#FEF3C7,stroke:#D9A404,color:#7c5306;
     classDef warn fill:#F5B041,stroke:#c2740a,color:#3d2606;
     classDef store fill:#0F9E6E,stroke:#0b7d55,color:#fff;
