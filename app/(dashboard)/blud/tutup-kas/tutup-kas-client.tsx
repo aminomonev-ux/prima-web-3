@@ -71,6 +71,11 @@ export default function TutupKasClient(
   const [noSurat, setNoSurat] = useState('')
   const [tglSurat, setTglSurat] = useState('')
 
+  // R3 — saldo awal tahun, satu-satunya angka sisi A yang diketik. Hanya di bulan 1;
+  // bulan lain diturunkan dari arus kas dan tidak disimpan (§4.6).
+  const [awalKas, setAwalKas] = useState('')
+  const [awalBank, setAwalBank] = useState('')
+
   const [bukaModal, setBukaModal] = useState(false)
   const [bukaGagal, setBukaGagal] = useState<string | null>(null)
   const [alasanBuka, setAlasanBuka] = useState('')
@@ -111,6 +116,8 @@ export default function TutupKasClient(
       setBankKoran(d.bank_koran != null ? rp(d.bank_koran) : '')
       setNoSurat(d.no_surat ?? '')
       setTglSurat(d.tgl_surat ?? '')
+      setAwalKas(rp(d.saldo_awal_kas))
+      setAwalBank(rp(d.saldo_awal_bank))
       const jsonGu = await resGu.json()
       if (resGu.ok && jsonGu.ok) {
         setGu((jsonGu.data ?? []).map((g: { tgl_awal: string; tgl_akhir: string; no_surat: string | null }) => ({
@@ -169,6 +176,41 @@ export default function TutupKasClient(
       toast.success(tutup ? `${NAMA_BULAN[bulan - 1]} ${tahun} ditutup.` : 'Hasil pemeriksaan tersimpan.')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Gagal menyimpan')
+    } finally {
+      setSibuk(false)
+    }
+  }
+
+  // Bulan 1 yang masih terbuka = tahunnya belum punya berita acara sama sekali.
+  // Urutan tutup wajib dari depan, jadi tidak ada keadaan "Januari terbuka tapi
+  // Maret sudah ditutup" — server tetap memeriksanya ulang.
+  const bolehSetAwal = bulan === 1 && !bekuIsian
+  const awalBerubah = data != null
+    && (bacaAngka(awalKas) !== Math.round(data.saldo_awal_kas)
+      || bacaAngka(awalBank) !== Math.round(data.saldo_awal_bank))
+
+  async function simpanSaldoAwal() {
+    if (tahun == null) return
+    setSibuk(true)
+    try {
+      const res = await fetch('/api/blud/realisasi/saldo-awal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tahun_anggaran: tahun,
+          saldo_awal_kas: bacaAngka(awalKas), saldo_awal_bank: bacaAngka(awalBank),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.ok) {
+        toast.error(json.error ?? 'Gagal menyimpan saldo awal')
+        await muat(tahun, bulan)
+        return
+      }
+      setData(json.data)
+      toast.success(`Saldo awal ${tahun} tersimpan.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Gagal menyimpan saldo awal')
     } finally {
       setSibuk(false)
     }
@@ -299,10 +341,46 @@ export default function TutupKasClient(
             <section className="tk-card">
               <header className="tk-card-head">
                 <span className="tk-card-judul">Menurut buku</span>
-                <span className="tk-card-sub">dihitung dari transaksi — tidak bisa diketik</span>
+                <span className="tk-card-sub">
+                  {bolehSetAwal
+                    ? 'saldo awal tahun diketik sekali; sisanya dihitung dari transaksi'
+                    : 'dihitung dari transaksi — tidak bisa diketik'}
+                </span>
               </header>
-              <Baris label="Saldo awal kas tunai" nilai={data.saldo_awal_kas} />
-              <Baris label="Saldo awal bank" nilai={data.saldo_awal_bank} />
+              {/* R3 — dua baris ini jadi isian HANYA di Januari yang belum ditutup.
+                  Ditaruh di sini, bukan di panel sendiri: angkanya memang sudah
+                  tampil di baris ini, dan kotak kedua untuk angka yang sama membuat
+                  orang bertanya mana yang berlaku. */}
+              {bolehSetAwal ? (
+                <>
+                  <label className="tk-isian">
+                    <span>Saldo awal kas tunai</span>
+                    <input className="blud-imp-input bk-num-input" inputMode="numeric"
+                      value={awalKas} placeholder="0"
+                      onChange={e => setAwalKas(e.target.value === '' ? '' : rp(bacaAngka(e.target.value)))} />
+                  </label>
+                  <label className="tk-isian">
+                    <span>Saldo awal bank</span>
+                    <input className="blud-imp-input bk-num-input" inputMode="numeric"
+                      value={awalBank} placeholder="0"
+                      onChange={e => setAwalBank(e.target.value === '' ? '' : rp(bacaAngka(e.target.value)))} />
+                  </label>
+                  <div className="tk-awal-aksi">
+                    <span className="tk-card-sub">
+                      Sisa tahun lalu menurut berita acara Desember. Terkunci begitu Januari ditutup.
+                    </span>
+                    <PrimaButton variant="primary" size="sm" iconLeft={<Save size={13} />}
+                      disabled={sibuk || !awalBerubah} onClick={() => void simpanSaldoAwal()}>
+                      Simpan saldo awal
+                    </PrimaButton>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Baris label="Saldo awal kas tunai" nilai={data.saldo_awal_kas} />
+                  <Baris label="Saldo awal bank" nilai={data.saldo_awal_bank} />
+                </>
+              )}
               {/* Pemindahan bank↔kas tidak dihitung: uang sendiri yang pindah
                   tempat bukan penerimaan maupun pengeluaran. */}
               <Baris label="Penerimaan bulan ini" nilai={data.masuk_luar} tanda="+" />

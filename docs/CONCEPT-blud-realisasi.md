@@ -299,6 +299,20 @@ sudah merekam semuanya, jadi datanya tidak hilang selama menunggu.
 
 Otomatis dari saldo akhir bulan sebelumnya. Pengecualian: **bulan pertama tahun anggaran** diisi sekali manual.
 
+Saldo awal bulan ke-2 dan seterusnya **tidak disimpan** — dihitung ulang tiap kali dibaca dari arus kas bulan-bulan sebelumnya. Itu disengaja: mengoreksi satu transaksi Maret harus langsung merambat ke saldo April sampai Desember. Kalau disimpan, koreksinya berhenti di Maret dan sisa tahun diam-diam salah.
+
+**Jalur tulisnya** (R3, 2026-07-28) — sebelum ini kolomnya hanya bisa diisi lewat SQL manual, tanpa jejak:
+
+| | |
+|---|---|
+| Di mana | Layar Tutup Kas **Januari**, di kartu sisi A — dua barisnya berubah jadi isian. Bukan panel sendiri: angkanya memang sudah tampil di baris itu. |
+| Kapan boleh | Selama **belum ada satu pun bulan tahun itu ditutup**. Sesudahnya beku — angkanya sudah jadi dasar berita acara bertanda tangan. |
+| Siapa | Menu `tutup-kas` izin EDIT. **Tanpa daftar peran tersendiri**: setelah beku, satu-satunya jalan mengubahnya adalah membuka kembali Januari, dan pintu itu sudah dijaga `bolehBukaPeriode` yang sempit. |
+| Jalur | `POST /api/blud/realisasi/saldo-awal` → `setSaldoAwalTahun()` (`withTransaction` + `FOR UPDATE`) → audit `BLUD_SALDO_AWAL_SET` berisi **lama → baru**. |
+| Uji | `node scripts/test-blud-saldo-awal.mjs` (tahun kotak pasir 2099). |
+
+Sengaja **tanpa** `alasan` wajib, berbeda dari buka periode & hapus versi: keduanya merusak dokumen yang sudah ditandatangani, sedangkan di sini — selama masih boleh diubah — belum ada apa pun yang ditandatangani.
+
 ### 4.7 Tutup Kas wajib seimbang — sisi buku = sisi nyata
 
 `TUTUP KAS` adalah Berita Acara Pemeriksaan Kas. Bentuk bakunya dua sisi yang **wajib bertemu di angka yang

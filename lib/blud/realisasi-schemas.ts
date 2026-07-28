@@ -281,6 +281,18 @@ export const TutupKasBodySchema = z.object({
   tutup: z.boolean().default(false),
 })
 
+/**
+ * R3 — saldo awal tahun. Nomor bulan sengaja tidak diterima: yang dimaksud selalu
+ * awal tahun (§4.6 — bulan lain diturunkan, tidak disimpan). Kalau bulan ikut
+ * dikirim, cepat atau lambat ada yang mengirim `bulan: 6` dan mengira ia sedang
+ * membetulkan Juni.
+ */
+export const SaldoAwalBodySchema = z.object({
+  tahun_anggaran: z.coerce.number().int().gte(2000).lte(2100),
+  saldo_awal_kas: RupiahSchema,
+  saldo_awal_bank: RupiahSchema,
+})
+
 export const BukaPeriodeQuerySchema = z.object({
   tahun: z.coerce.number().int().gte(2000).lte(2100),
   bulan: BulanSchema,
@@ -465,6 +477,22 @@ export class BludBukaTerhalangError extends Error {
       + 'saldo awal bulan-bulan itu dihitung dari bulan ini, jadi ikut bergeser begitu isinya berubah.',
     )
     this.name = 'BludBukaTerhalangError'
+  }
+}
+
+/**
+ * R3 — saldo awal tahun sudah tidak boleh disentuh. Bukan soal siapa: begitu satu
+ * bulan ditutup, angka ini jadi dasar berita acara yang sudah ditandatangani, dan
+ * menggesernya menggeser seluruh saldo tahun itu tanpa ada yang tahu.
+ */
+export class BludSaldoAwalTerkunciError extends Error {
+  constructor(public tahun: number, public bulanTutup: number[]) {
+    super(
+      `Saldo awal ${tahun} tidak bisa diubah lagi — `
+      + `tutup kas ${bulanTutup.map(namaBulan).join(', ')} sudah ditandatangani atasnya. `
+      + 'Buka kembali Januari lebih dulu bila angkanya memang keliru.',
+    )
+    this.name = 'BludSaldoAwalTerkunciError'
   }
 }
 

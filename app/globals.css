@@ -3068,6 +3068,16 @@ button:hover .prima-del-top { transform: rotate(160deg); }
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
 }
+/* R3 — kaki isian saldo awal tahun: keterangan di kiri, tombolnya di kanan.
+   Sengaja punya tombol Simpan sendiri, terpisah dari Simpan sisi B: yang satu
+   angka satu bulan, yang ini menggeser saldo seluruh tahun. */
+.tk-awal-aksi {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  margin-top: 6px; padding-top: 10px; border-top: 1px dashed #0C447C;
+}
+.tk-awal-aksi .tk-card-sub { max-width: 260px; line-height: 1.45; }
+[data-theme="light"] .tk-awal-aksi { border-top-color: #E1E7EE; }
+
 .bk-num-input { font-family: 'JetBrains Mono', ui-monospace, monospace; text-align: right; }
 
 /* Satu-satunya angka yang menentukan boleh atau tidaknya menutup bulan. */

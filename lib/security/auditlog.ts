@@ -133,6 +133,7 @@ export type AuditEventType =
   // adalah dokumen bertanda tangan, dan membukanya kembali mengubah angka resmi.
   | 'BLUD_PERIODE_TUTUP'            // POST /api/blud/realisasi/periode (tutup=true)
   | 'BLUD_PERIODE_BUKA'             // DELETE /api/blud/realisasi/periode (SUPER_ADMIN)
+  | 'BLUD_SALDO_AWAL_SET'           // POST /api/blud/realisasi/saldo-awal (R3) — mencatat lama → baru
   | 'BLUD_PEJABAT_SIMPAN'           // POST /api/blud/pejabat
   | 'BLUD_SPJ_UNDUH'                // GET /api/blud/realisasi/export
   | 'BLUD_GU_SIMPAN'                // POST /api/blud/realisasi/gu

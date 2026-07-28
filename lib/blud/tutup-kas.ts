@@ -12,7 +12,7 @@ import { sql, withTransaction } from '@/lib/data/db'
 import { getSaldoAwal } from './realisasi-data'
 import {
   BludPeriodeTertutupError, BludTutupTidakSeimbangError, BludTutupTerhalangError,
-  BludBukaTerhalangError,
+  BludBukaTerhalangError, BludSaldoAwalTerkunciError,
 } from './realisasi-schemas'
 
 /** Toleransi pembulatan DECIMAL(18,2) — bukan izin selisih. */
@@ -192,6 +192,56 @@ export async function simpanSisiNyata(tahun: number, bulan: number, input: Tutup
       no_surat = VALUES(no_surat), tgl_surat = VALUES(tgl_surat)
   `
   return getNeracaKas(tahun, bulan)
+}
+
+export interface SaldoAwalTahun { kas: number; bank: number }
+
+/**
+ * R3 — satu-satunya jalur tulis saldo awal tahun. Sebelum ini kolomnya hanya bisa
+ * diisi lewat SQL manual, tanpa jejak, padahal ia dasar dari tiap saldo yang
+ * ditandatangani sepanjang tahun.
+ *
+ * Terkunci begitu ADA bulan yang tertutup — bukan khusus bulan 1. Praktisnya sama
+ * (urutan tutup wajib dari depan), tapi yang ingin dijaga memang "sudah ada yang
+ * ditandatangani", bukan nomor bulannya.
+ *
+ * Mengembalikan nilai LAMA supaya pemanggilnya bisa mencatat lama → baru di audit;
+ * tanpa itu jejaknya cuma berisi angka yang sekarang, dan pertanyaan "berubah dari
+ * berapa" tidak pernah bisa dijawab.
+ */
+export async function setSaldoAwalTahun(
+  tahun: number, input: SaldoAwalTahun,
+): Promise<{ lama: SaldoAwalTahun; neraca: NeracaKas }> {
+  const lama = await withTransaction(async ({ tx }) => {
+    // T2 — dikunci dulu, baru diperiksa. Tanpa FOR UPDATE, dua orang bisa
+    // sama-sama lolos pemeriksaan "belum ada yang tutup" lalu menimpa bergantian.
+    const baris = await tx`
+      SELECT saldo_awal_kas, saldo_awal_bank FROM blud_periode
+      WHERE tahun_anggaran = ${tahun} AND bulan = 1 FOR UPDATE
+    ` as Record<string, unknown>[]
+
+    const tertutup = await tx`
+      SELECT bulan FROM blud_periode
+      WHERE tahun_anggaran = ${tahun} AND status = 'TUTUP' ORDER BY bulan
+    ` as Record<string, unknown>[]
+    if (tertutup.length) {
+      throw new BludSaldoAwalTerkunciError(tahun, tertutup.map((r) => Number(r.bulan)))
+    }
+
+    await tx`
+      INSERT INTO blud_periode (tahun_anggaran, bulan, status, saldo_awal_kas, saldo_awal_bank)
+      VALUES (${tahun}, 1, 'BUKA', ${input.kas}, ${input.bank})
+      ON DUPLICATE KEY UPDATE
+        saldo_awal_kas = VALUES(saldo_awal_kas), saldo_awal_bank = VALUES(saldo_awal_bank)
+    `
+
+    return {
+      kas: Number(baris[0]?.saldo_awal_kas ?? 0),
+      bank: Number(baris[0]?.saldo_awal_bank ?? 0),
+    }
+  })
+
+  return { lama, neraca: await getNeracaKas(tahun, 1) }
 }
 
 /**

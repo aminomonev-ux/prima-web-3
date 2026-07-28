@@ -697,6 +697,10 @@ CREATE TABLE IF NOT EXISTS blud_periode (
   tahun_anggaran  SMALLINT UNSIGNED NOT NULL,
   bulan           TINYINT UNSIGNED  NOT NULL,
   status          ENUM('BUKA','TUTUP') NOT NULL DEFAULT 'BUKA',
+  -- Hanya baris bulan=1 yang berarti: saldo awal TAHUN. Bulan lain diturunkan dari
+  -- arus kas bulan sebelumnya (§4.6), tidak disimpan. Ditulis dari layar Tutup Kas
+  -- Januari lewat POST /api/blud/realisasi/saldo-awal (R3) — beku begitu ada bulan
+  -- yang ditutup. Jangan diisi lewat SQL manual: jejaknya hilang.
   saldo_awal_kas  DECIMAL(18,2) NOT NULL DEFAULT 0,
   saldo_awal_bank DECIMAL(18,2) NOT NULL DEFAULT 0,
   kas_fisik       DECIMAL(18,2)     NULL COMMENT 'sisi B Tutup Kas: hasil hitung uang tunai',
