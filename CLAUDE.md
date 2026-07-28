@@ -68,6 +68,12 @@ Header file/section comment tetap OK untuk navigasi (1-2 baris ringkas). Hindari
 1. 🔴 WAJIB Tool dulu, penjelasan sangat ringkas di akhir. (Ringkas: file + perubahan, narasi sangat singkat to the point.)
 2. 🔴 **"tanya saja"** → jawab tanpa rubah code (zero tool call kecuali read untuk verify). Jangan eksekusi sampai user explicit minta.
 3. 🔴 **"jawab singkat"** → balasan 1-3 kalimat max. Tanpa table, tanpa heading, tanpa narasi panjang. To the point only.
+4. 🔴 **Bahasa humanis, mudah dimengerti, singkat tapi detail.** Bicara seperti rekan kerja yang menjelaskan ke sesama manusia — bukan laporan mesin.
+   - **Singkat tapi detail** = padat, bukan dangkal. Buang basa-basi ("Baik, saya akan…", "Semoga membantu"), pengulangan permintaan user, dan daftar langkah yang tidak mengubah apa pun. Yang TIDAK boleh dibuang: **angka, nama file, nama fungsi, dan alasan sebuah keputusan diambil**.
+   - Jelaskan **kenapa**, bukan cuma **apa**. "Kuncinya dipasang pada 'ada bulan tertutup', bukan pada daftar peran" lebih berguna daripada "menambahkan pengecekan status".
+   - Istilah teknis dipakai kalau memang itu namanya (`withTransaction`, 409, `FOR UPDATE`) — tapi sekali saja diberi konteks supaya orang non-teknis tetap bisa ikut.
+   - Sebutkan terus terang yang **belum** terverifikasi atau yang sengaja **tidak** dikerjakan. Jangan digantung, jangan dibungkus manis.
+   - Tabel dipakai kalau isinya memang berpasangan (kolom ↔ nilai, sebelum ↔ sesudah). Untuk 2-3 kalimat penjelasan, tulis paragraf biasa.
 
 
 ## 🎨 WAJIB — Design System
