@@ -13,9 +13,33 @@
 // keamanan — endpoint tetap bisa dipanggil lewat curl (pelajaran V3-1, dan baru
 // saja diulang di S5).
 import { NextResponse } from 'next/server'
-import { hasAppAccess } from '@/lib/security/guard'
+import { hasAppAccess, modulMati } from '@/lib/security/guard'
 import { isBludRole } from '@/lib/blud/schemas'
 import { bolehBuka, bolehEdit, LABEL_MENU, type MenuBlud } from '@/lib/blud/peran'
+
+export const FLAG_BLUD = 'app_status_blud'
+export const FLAG_BLUD_REALISASI = 'app_status_blud_realisasi'
+
+/**
+ * S4 — sakelar mati modul. Dipanggil di TIAP route, sesudah `getSession()` dan
+ * sebelum apa pun yang menyentuh data:
+ *
+ *   const mati = await bludMati()             // route umum BLUD
+ *   const mati = await bludMati('realisasi')  // route di bawah realisasi/
+ *   if (mati) return mati
+ *
+ * Sengaja TIDAK dilebur ke `bolehBukaMenu`. Dua alasannya: hasilnya akan jadi 403
+ * padahal ini 503, dan lebih halus — `bolehBukaMenu` menjawab "siapa Anda",
+ * sedangkan ini menjawab "apakah modulnya sedang hidup". Menggabung dua pertanyaan
+ * berbeda ke satu jawaban boolean membuat keduanya sulit diperbaiki terpisah.
+ *
+ * Berjenjang: mematikan BLUD ikut mematikan Realisasi, tidak sebaliknya.
+ */
+export function bludMati(lingkup?: 'realisasi') {
+  return lingkup === 'realisasi'
+    ? modulMati(FLAG_BLUD, FLAG_BLUD_REALISASI)
+    : modulMati(FLAG_BLUD)
+}
 
 export function unauthorized() {
   return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })

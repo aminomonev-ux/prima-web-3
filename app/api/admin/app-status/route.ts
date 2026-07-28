@@ -7,6 +7,7 @@ const APP_KEYS = [
   'app_status_dashboard',
   'app_status_usulan_aset',
   'app_status_blud',
+  'app_status_blud_realisasi', // S4 — sub-modul Realisasi saja; mematikan BLUD ikut mematikannya.
   'app_status_perjanjian_kinerja',
   'app_status_rencana_aksi',
   'app_status_new_econtrolling',

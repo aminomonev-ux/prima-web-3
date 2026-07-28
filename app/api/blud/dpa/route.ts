@@ -7,8 +7,8 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
-import { canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized } from '../_guard'
+import { canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { validateAllPj } from '@/lib/blud/pj-conflict'
 
 export const dynamic = 'force-dynamic'
@@ -38,7 +38,15 @@ async function resolveTahun(searchParams: URLSearchParams): Promise<{ tahun: num
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'dpa'))) return forbidden()
+
+  // R4 — membaca satu tahun DPA tidak murah. 60/menit longgar untuk pemakaian
+  // wajar (pindah versi, pindah tahun) tapi menutup skrip yang berputar.
+  const limited = await bludRateLimit(session.userId, 'view-dpa', 60)
+  if (limited) return limited
 
   const { searchParams } = new URL(req.url)
   const mode    = searchParams.get('mode')
@@ -63,14 +71,18 @@ export async function GET(req: NextRequest) {
     if (!versi) return NextResponse.json({ ok: true, data: [], versi_tanggal: null, tahun })
 
     const [data, version] = await Promise.all([getDpaByDate(tahun, versi), getDpaVersion(tahun, versi)])
-    // Audit BLUD v1.2 (B-NEW-2): log view event untuk data sensitif keuangan
-    await writeAuditLog({
-      req,
-      eventType: 'BLUD_VIEW_DPA',
-      userId:    session.userId,
-      username:  session.username,
-      detail:    `View DPA ${tahun}/${versi}: ${data.length} baris`,
-    })
+    // Audit BLUD v1.2 (B-NEW-2): log view event untuk data sensitif keuangan.
+    // R4 — sekali per menit per user per versi. Yang ingin dijawab "siapa pernah
+    // melihat versi ini", bukan "berapa kali layarnya me-render".
+    if (await bolehCatatView(session.userId, `dpa:${tahun}:${versi}`)) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_VIEW_DPA',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `View DPA ${tahun}/${versi}: ${data.length} baris`,
+      })
+    }
     return NextResponse.json({ ok: true, data, versi_tanggal: versi, tahun, version })
   } catch (err) {
     console.error('[API /blud/dpa GET]', err)
@@ -83,6 +95,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'dpa'))) return tolakEdit('dpa')
 
   // Rate limit save: 30/menit/user
@@ -196,6 +211,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'dpa'))) return forbidden()
   // S5: akses modul ≠ wewenang membuang anggaran setahun. Pagar sungguhannya di
   // sini, bukan di tombol yang disembunyikan klien.

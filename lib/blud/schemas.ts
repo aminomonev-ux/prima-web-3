@@ -78,6 +78,31 @@ export async function bludRateLimit(
   return null;
 }
 
+/**
+ * R4 — apakah peristiwa "melihat" ini layak dicatat sekali lagi.
+ *
+ * `GET /dpa` dan `GET /pergeseran` menulis audit SETIAP panggilan. Layar yang
+ * nyangkut di loop render, atau skrip sederhana, bisa menggelembungkan `audit_log`
+ * sampai jejak yang benar-benar penting tenggelam di antaranya. Yang ingin dijawab
+ * audit view sebenarnya "siapa pernah melihat versi ini", bukan "berapa kali
+ * komponennya me-render".
+ *
+ * Menumpang pembatas laju yang sudah ada: jatah 1 per 60 detik untuk tiap
+ * kombinasi user × versi. Tidak perlu tabel maupun mekanisme baru.
+ *
+ * Gagal membaca Redis → `true` (tetap dicatat). Kebalikan dari kill-switch yang
+ * fail-closed: di sana ragu berarti tutup pintu, di sini ragu berarti tetap
+ * meninggalkan jejak. Kehilangan jejak lebih mahal daripada satu baris berlebih.
+ */
+export async function bolehCatatView(userId: number, penanda: string): Promise<boolean> {
+  try {
+    const rl = await checkRateLimit(`blud-audit-view:${penanda}:${userId}`, 1, 60);
+    return rl.allowed;
+  } catch {
+    return true;
+  }
+}
+
 // ─── Primitive Schemas ──────────────────────────────────────────────────────
 
 /**

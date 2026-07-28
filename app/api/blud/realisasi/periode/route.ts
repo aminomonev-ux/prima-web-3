@@ -18,7 +18,7 @@ import {
   BludBukaTerhalangError,
 } from '@/lib/blud/realisasi-schemas'
 import { TahunSchema } from '@/lib/blud/schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit } from '../_guard'
+import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,14 @@ function bacaBulan(v: string | null): number | null {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'tutup-kas'))) return forbidden()
+
+  // R4 — neraca dua sisi menghitung ulang arus sebulan penuh tiap dipanggil.
+  const limited = await bludRateLimit(session.userId, 'view-periode', 60)
+  if (limited) return limited
 
   const { searchParams } = new URL(req.url)
   const tahun = TahunSchema.safeParse(searchParams.get('tahun'))
@@ -50,6 +57,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   if (!(await bolehInput(session.userId, session.role, 'tutup-kas'))) return tolakEdit('tutup-kas')
 
   const limited = await bludRateLimit(session.userId, 'realisasi-periode', 20)
@@ -109,6 +119,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   // §4.5 — dua pagar sekaligus, dan keduanya perlu. Yang pertama memastikan
   // orangnya memang pemakai modul BLUD; yang kedua bahwa perannya termasuk yang
   // memegang kunci — daftar yang sengaja lebih sempit dari pemegang EDIT

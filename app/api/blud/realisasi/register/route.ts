@@ -7,15 +7,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { getRegister } from '@/lib/blud/realisasi-data'
-import { TahunSchema } from '@/lib/blud/schemas'
-import { bolehLihat, forbidden, unauthorized } from '../_guard'
+import { TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
+import { bolehLihat, forbidden, unauthorized, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'realisasi'))) return forbidden()
+
+  // R4 — register menelusuri seluruh transaksi satu baris anggaran setahun.
+  const limited = await bludRateLimit(session.userId, 'view-register', 60)
+  if (limited) return limited
 
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))

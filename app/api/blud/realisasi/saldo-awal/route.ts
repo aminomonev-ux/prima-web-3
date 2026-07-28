@@ -12,13 +12,15 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
 import { setSaldoAwalTahun } from '@/lib/blud/tutup-kas'
 import { SaldoAwalBodySchema, BludSaldoAwalTerkunciError } from '@/lib/blud/realisasi-schemas'
-import { bolehInput, tolakEdit, unauthorized } from '../_guard'
+import { bolehInput, tolakEdit, unauthorized, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+  const mati = await realisasiMati()
+  if (mati) return mati
   // Ikut menu `tutup-kas`, tanpa daftar peran tersendiri. Wewenang yang benar-benar
   // berbahaya — mengubahnya setelah ada berita acara — sudah terjaga sendirinya:
   // jalannya cuma lewat buka periode, dan itu punya `bolehBukaPeriode` yang sempit.

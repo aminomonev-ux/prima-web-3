@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS app_config (
 INSERT IGNORE INTO app_config (`key`, value) VALUES
   ('app_status_usulan_aset',        'online'),
   ('app_status_blud',               'online'),
+  ('app_status_blud_realisasi',     'online'),  -- kill-switch sub-modul Realisasi (fail-closed, S4)
   ('app_status_perjanjian_kinerja', 'online'),
   ('app_status_probis',             'online'),
   ('app_status_rencana_aksi',       'online'),
@@ -622,12 +623,14 @@ CREATE TABLE IF NOT EXISTS blud_realisasi_tx (
   status         ENUM('NORMAL','BELUM_BERREKENING') NOT NULL DEFAULT 'NORMAL' COMMENT 'BELUM_BERREKENING = uang keluar tapi rekening belum ada di DPA',
   version        INT           NOT NULL DEFAULT 0 COMMENT 'CAS per-baris (L48)',
   created_by     INT               NULL,
+  updated_by     INT               NULL COMMENT 'R5 migration-blud-tx-updated-by. Pengubah terakhir, menempel di baris karena audit_log berretensi',
   created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_kwt (tahun_anggaran, bulan, no_kwt),
   INDEX idx_periode (tahun_anggaran, bulan, tanggal, id),
   INDEX idx_status  (status),
-  CONSTRAINT fk_brt_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  CONSTRAINT fk_brt_user    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_brt_updater FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='BLUD - Transaksi kas/bank (sumber BKU & seluruh sheet turunan)';
 

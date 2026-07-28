@@ -7,8 +7,18 @@
 // Karena itu `menu` jadi parameter wajib — bukan demi keluwesan, melainkan supaya
 // tsc menunjukkan setiap tempat yang harus memutuskan miliknya menu apa.
 export { unauthorized, forbidden, tolakEdit } from '../_guard'
-import { bolehBukaMenu, bolehEditMenu } from '../_guard'
+import { bolehBukaMenu, bolehEditMenu, bludMati } from '../_guard'
 import type { MenuBlud } from '@/lib/blud/peran'
+
+/**
+ * S4 — sakelar mati untuk route Realisasi: memeriksa flag BLUD *dan* flag
+ * Realisasi sekaligus. Diekspor ulang di sini supaya route di folder ini tidak
+ * perlu mengingat harus menyebut lingkupnya — lupa menyebut = sub-modul ini tidak
+ * bisa dimatikan sendiri, dan itu jenis kelalaian yang tidak menimbulkan error.
+ */
+export function realisasiMati() {
+  return bludMati('realisasi')
+}
 
 export async function bolehLihat(userId: number, role: string, menu: MenuBlud): Promise<boolean> {
   return bolehBukaMenu(userId, role, menu)

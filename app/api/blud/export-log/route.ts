@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { bolehBukaMenu, forbidden, unauthorized } from '../_guard'
+import { bolehBukaMenu, forbidden, unauthorized, bludMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +23,9 @@ const BodySchema = z.object({
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   // Mengunduh bukan menulis: pemegang LIHAT justru HARUS lolos di sini, kalau tidak
   // unduhan mereka tak berjejak. Izinnya ikut menu Cetak — baca-saja bagi semua peran.
   if (!(await bolehBukaMenu(session.userId, session.role, 'cetak'))) return forbidden()

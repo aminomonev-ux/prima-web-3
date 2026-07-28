@@ -8,7 +8,7 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { getDpaByDate, getDpaLatestDate, getDpaVersion } from '@/lib/blud/data'
 import { injectDpaKePergeseran } from '@/lib/blud/recalc'
 import { InjectBodySchema, bludRateLimit } from '@/lib/blud/schemas'
-import { bolehEditMenu, tolakEdit, unauthorized } from '../../_guard'
+import { bolehEditMenu, tolakEdit, unauthorized, bludMati } from '../../_guard'
 import type { DpaBarisInput } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -20,6 +20,9 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'pergeseran'))) return tolakEdit('pergeseran')
 
   // S-3: matching 16-level lumayan berat — batasi 30/menit/user spt endpoint save lain

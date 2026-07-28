@@ -14,8 +14,8 @@ import { cekPaguDibawahRealisasi } from '@/lib/blud/pagu'
 import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
-import { canHapusVersi, PergeseranBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized } from '../_guard'
+import { canHapusVersi, PergeseranBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +40,14 @@ async function resolveTahun(searchParams: URLSearchParams): Promise<{ tahun: num
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'pergeseran'))) return forbidden()
+
+  // R4 — sepasang dengan GET /dpa: sama-sama membaca satu tahun penuh.
+  const limited = await bludRateLimit(session.userId, 'view-pergeseran', 60)
+  if (limited) return limited
 
   const { searchParams } = new URL(req.url)
   const mode    = searchParams.get('mode')
@@ -65,13 +72,16 @@ export async function GET(req: NextRequest) {
     if (!versi) return NextResponse.json({ ok: true, data: [], versi_tanggal: null, tahun })
 
     const [data, version] = await Promise.all([getPergeseranByDate(tahun, versi), getPergeseranVersion(tahun, versi)])
-    await writeAuditLog({
-      req,
-      eventType: 'BLUD_VIEW_PERGESERAN',
-      userId:    session.userId,
-      username:  session.username,
-      detail:    `View Pergeseran ${tahun}/${versi}: ${data.length} baris`,
-    })
+    // R4 — sekali per menit per user per versi (lihat `bolehCatatView`).
+    if (await bolehCatatView(session.userId, `pergeseran:${tahun}:${versi}`)) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_VIEW_PERGESERAN',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `View Pergeseran ${tahun}/${versi}: ${data.length} baris`,
+      })
+    }
     return NextResponse.json({ ok: true, data, versi_tanggal: versi, tahun, version })
   } catch (err) {
     console.error('[API /blud/pergeseran GET]', err)
@@ -84,6 +94,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'pergeseran'))) return tolakEdit('pergeseran')
 
   // Rate limit save: 30/menit/user
@@ -274,6 +287,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'pergeseran'))) return forbidden()
   // S5: sama dengan jalur DPA — akses modul membuka pintu, bukan wewenang hapus.
   if (!canHapusVersi(session.role)) {

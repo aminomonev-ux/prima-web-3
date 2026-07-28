@@ -9,7 +9,7 @@ import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit, TahunSchema } from '@/lib/blud/schemas'
 import { buatWorkbookSpj } from '@/lib/blud/export/spj-excel'
-import { bolehLihat, forbidden, unauthorized } from '../_guard'
+import { bolehLihat, forbidden, unauthorized, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +19,9 @@ const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'cetak'))) return forbidden()
 
   const limited = await bludRateLimit(session.userId, 'realisasi-export', 10)

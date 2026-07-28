@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { RekapPKBodySchema, bludRateLimit } from '@/lib/blud/schemas'
-import { bolehEditMenu, tolakEdit, unauthorized } from '../_guard'
+import { bolehEditMenu, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { saveRekapPK } from '@/lib/blud/rekap-pk-data'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +18,9 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session)                       return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'dpa'))) return tolakEdit('dpa')
 
   // Rate limit save: 30/menit/user

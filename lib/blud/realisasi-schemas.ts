@@ -496,6 +496,18 @@ export class BludSaldoAwalTerkunciError extends Error {
   }
 }
 
+/**
+ * R1 — permintaan sudah tidak berstatus MENUNGGU, jadi tidak ada yang berubah.
+ * Dibedakan dari "tidak ditemukan" supaya route bisa membalas 409 (bukan 404)
+ * dan yang lebih penting: TIDAK mengirim notifikasi dan TIDAK menulis audit.
+ */
+export class BludPermintaanTidakMenungguError extends Error {
+  constructor(public id: number, public status: string) {
+    super(`Permintaan ini sudah berstatus ${status} — tidak ada yang bisa ditolak lagi.`)
+    this.name = 'BludPermintaanTidakMenungguError'
+  }
+}
+
 export class BludTxConflictError extends Error {
   constructor(public id: number, public expected: number, public actual: number) {
     super('Transaksi ini sudah diubah pengguna lain. Memuat versi terbaru.')

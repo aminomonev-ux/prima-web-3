@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized } from '../_guard'
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { PenanggungJawabBodySchema } from '@/lib/blud/penanggung-jawab-schemas'
 import { getPenanggungJawab, getPenanggungJawabVersion, savePenanggungJawab, PenanggungJawabSafetyError } from '@/lib/blud/penanggung-jawab-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
@@ -12,6 +12,9 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'penanggung-jawab'))) return forbidden()
   try {
     const [data, version] = await Promise.all([getPenanggungJawab(), getPenanggungJawabVersion()])
@@ -25,6 +28,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'penanggung-jawab'))) return tolakEdit('penanggung-jawab')
 
   const limited = await bludRateLimit(session.userId, 'save-penanggung-jawab', 30)

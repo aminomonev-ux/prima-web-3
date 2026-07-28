@@ -6,7 +6,8 @@
 // ada jejak siapa meminta apa. Angkanya tetap ditentukan manusia di menu
 // Pergeseran — keputusan eksplisit §4.1, bukan pengisian otomatis.
 
-import { sql } from '@/lib/data/db'
+import { sql, execWrite } from '@/lib/data/db'
+import { BludPermintaanTidakMenungguError } from './realisasi-schemas'
 import { getPaguMap, getTerserap } from './pagu'
 
 export type JenisPermintaan = 'PERGESERAN' | 'REKENING_BARU'
@@ -137,6 +138,18 @@ export async function createPermintaan(
   return { id: Number(res[0]?.insertId ?? 0), baru: true }
 }
 
+/**
+ * R1 — yang menentukan hasil adalah UPDATE-nya, bukan SELECT sebelumnya.
+ *
+ * Dulu baris dibaca lalu dikembalikan tanpa memeriksa apakah UPDATE mengenai
+ * sesuatu. Permintaan yang sudah `SELESAI`/`DITOLAK` tetap dibalas sukses, tetap
+ * mengirim notifikasi "permintaan Anda ditolak" ke pengaju, dan tetap menulis
+ * audit — padahal tidak ada yang berubah. Jejak palsu lebih buruk daripada tidak
+ * ada jejak: yang membacanya nanti percaya sesuatu memang terjadi.
+ *
+ * `null` = barisnya tidak ada. Statusnya sudah bukan MENUNGGU = melempar, bukan
+ * `null` — dua keadaan berbeda tidak boleh diwakili satu nilai.
+ */
 export async function tolakPermintaan(id: number): Promise<Permintaan | null> {
   const rows = await sql`
     SELECT id, tahun_anggaran, jenis, anggaran_key, kode_rekening, uraian, kekurangan,
@@ -144,7 +157,15 @@ export async function tolakPermintaan(id: number): Promise<Permintaan | null> {
     FROM blud_permintaan WHERE id = ${id}
   ` as Record<string, unknown>[]
   if (!rows.length) return null
-  await sql`UPDATE blud_permintaan SET status = 'DITOLAK', selesai_at = NOW() WHERE id = ${id} AND status = 'MENUNGGU'`
+
+  const { affectedRows } = await execWrite(sql`
+    UPDATE blud_permintaan SET status = 'DITOLAK', selesai_at = NOW()
+    WHERE id = ${id} AND status = 'MENUNGGU'
+  `)
+  if (affectedRows === 0) {
+    throw new BludPermintaanTidakMenungguError(id, String(rows[0]?.status ?? '-'))
+  }
+
   return normalisasi(rows[0])
 }
 

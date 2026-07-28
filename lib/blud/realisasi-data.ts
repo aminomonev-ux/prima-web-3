@@ -562,12 +562,16 @@ export async function updateTx(
     await kunciDanPeriksaPagu(tx, tahun, input.alokasi, id)
 
     const status = input.belum_berrekening ? 'BELUM_BERREKENING' : 'NORMAL'
+    // R5: pembuat asli dipertahankan, pengubah terakhir dicatat terpisah. Sebelum
+    // ini jejak pengubah cuma ada di `audit_log` — tabel berretensi yang bisa
+    // dipangkas, sementara baris transaksinya sendiri hidup terus.
     await tx`
       UPDATE blud_realisasi_tx SET
         tanggal = ${input.tanggal}, jenis = ${input.jenis}, uraian = ${input.uraian},
         kas_masuk = ${input.kas_masuk}, kas_keluar = ${input.kas_keluar},
         bank_masuk = ${input.bank_masuk}, bank_keluar = ${input.bank_keluar},
-        status = ${status}, version = version + 1, created_by = COALESCE(created_by, ${userId})
+        status = ${status}, version = version + 1,
+        created_by = COALESCE(created_by, ${userId}), updated_by = ${userId}
       WHERE id = ${id}
     `
     await tx`DELETE FROM blud_realisasi_alokasi WHERE tx_id = ${id}`

@@ -12,13 +12,16 @@ import {
   getPaguEfektif, getPaguSumber, getTerserap, getSerapanPeriode, getPaguCap, gulungKeAtas,
 } from '@/lib/blud/pagu'
 import { TahunSchema } from '@/lib/blud/schemas'
-import { bolehLihat, forbidden, unauthorized } from '../_guard'
+import { bolehLihat, forbidden, unauthorized, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'buku-kas'))) return forbidden()
 
   const { searchParams } = new URL(req.url)

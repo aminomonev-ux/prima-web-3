@@ -12,13 +12,16 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit, TahunSchema } from '@/lib/blud/schemas'
 import { listGuPeriode, simpanGuPeriode } from '@/lib/blud/gu-data'
 import { SimpanGuBodySchema } from '@/lib/blud/realisasi-schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit } from '../_guard'
+import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'tutup-kas'))) return forbidden()
 
   const { searchParams } = new URL(req.url)
@@ -39,6 +42,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   if (!(await bolehInput(session.userId, session.role, 'tutup-kas'))) return tolakEdit('tutup-kas')
 
   const limited = await bludRateLimit(session.userId, 'realisasi-gu', 20)

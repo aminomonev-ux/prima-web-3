@@ -51,6 +51,61 @@ export async function hasAppAccess(
   return check(role, row?.app_access ?? null);
 }
 
+/**
+ * S4 — kill-switch modul. Membaca `app_config` dan menolak kalau flagnya bukan
+ * 'online'. Meniru `app/api/rima/query/route.ts` yang sudah bersikap begini.
+ *
+ * **503, bukan 403.** "Modul sedang dimatikan admin" dan "Anda tidak berhak" dua
+ * hal berbeda, dan yang menerimanya harus bisa membedakan — yang pertama akan
+ * hilang sendiri, yang kedua perlu minta akses. Karena itu pula ini TIDAK
+ * diselipkan ke dalam `hasAppAccess`: hasilnya akan jadi 403 dengan pesan keliru.
+ *
+ * **Fail-closed.** Gagal membaca `app_config` = tolak, bukan lanjut diam-diam.
+ * Sakelar keamanan yang menyala hanya kalau semuanya lancar bukan sakelar.
+ * Risikonya kecil: kalau MySQL bermasalah, modulnya toh sudah tidak bisa apa-apa.
+ *
+ * Mengembalikan `NextResponse | null` supaya jadi early-return satu baris, pola
+ * yang sama dengan `bludRateLimit`:
+ *   const mati = await modulMati('app_status_blud')
+ *   if (mati) return mati
+ */
+export async function modulMati(...keys: string[]): Promise<NextResponse | null> {
+  let nyala: Set<string>;
+  try {
+    const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
+    nyala = new Set(
+      (rows as { key: string; value: string }[])
+        .filter((r) => r.value !== 'online')
+        .map((r) => r.key),
+    );
+  } catch {
+    return NextResponse.json(
+      { ok: false, code: 'MODUL_MATI', error: 'Modul sedang tidak tersedia. Coba lagi beberapa saat lagi.' },
+      { status: 503 },
+    );
+  }
+  // Kunci yang belum ada barisnya dianggap 'online' — sama seperti GET app-status
+  // yang mengisi default. Modul baru tidak boleh mati hanya karena seed tertinggal.
+  if (nyala.size === 0) return null;
+  return NextResponse.json(
+    { ok: false, code: 'MODUL_MATI', error: 'Modul ini sedang dimatikan admin untuk pemeliharaan.' },
+    { status: 503 },
+  );
+}
+
+/**
+ * Versi untuk server component / layout: cukup tahu mati atau tidak, tanpa
+ * membentuk respons. Gagal baca = dianggap mati, sejalan dengan `modulMati`.
+ */
+export async function modulSedangMati(...keys: string[]): Promise<boolean> {
+  try {
+    const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
+    return (rows as { value: string }[]).some((r) => r.value !== 'online');
+  } catch {
+    return true;
+  }
+}
+
 // Untuk modul "milik bersama" yang aksesnya bisa diberikan manual lewat users.app_access.
 export async function requireAccess(
   check: (role: string, appAccess: string[] | null) => boolean,

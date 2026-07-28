@@ -13,9 +13,11 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { addNotif } from '@/lib/services/notifications'
 import { bludRateLimit } from '@/lib/blud/schemas'
 import { listPermintaan, countMenunggu, createPermintaan, tolakPermintaan } from '@/lib/blud/permintaan-data'
-import { PermintaanBodySchema, PatchPermintaanSchema } from '@/lib/blud/realisasi-schemas'
+import {
+  PermintaanBodySchema, PatchPermintaanSchema, BludPermintaanTidakMenungguError,
+} from '@/lib/blud/realisasi-schemas'
 import { TahunSchema } from '@/lib/blud/schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit } from '../_guard'
+import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +26,9 @@ const STATUS_VALID = new Set(['MENUNGGU', 'SELESAI', 'DITOLAK'])
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   // Daftar permintaan tampil di dua tempat sekaligus (baki Buku Kas & layar
   // Pergeseran), jadi cukup salah satunya boleh dibuka.
   const bolehBaca = await bolehLihat(session.userId, session.role, 'buku-kas')
@@ -53,6 +58,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   // MENGAJUKAN permintaan itu pekerjaan bendahara — pemicunya kekurangan pagu yang
   // ia temui saat mengisi Buku Kas. Jadi izinnya ikut menu Buku Kas, bukan menu
   // Pergeseran yang jadi tujuan permintaannya.
@@ -114,6 +122,9 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await realisasiMati()
+  if (mati) return mati
   // MENOLAK permintaan itu keputusan pemegang Pergeseran — dialah yang bisa
   // memenuhinya, jadi dialah yang berhak bilang tidak. Dulu memakai izin yang sama
   // dengan mengajukan, sehingga bendahara bisa menolak permintaannya sendiri
@@ -154,6 +165,12 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (err) {
+    // R1 — sampai di sini berarti UPDATE tidak mengenai apa pun. Balasannya 409,
+    // dan yang penting: blok di atas tidak pernah jalan, jadi tidak ada notifikasi
+    // "permintaan Anda ditolak" maupun audit untuk sesuatu yang tidak terjadi.
+    if (err instanceof BludPermintaanTidakMenungguError) {
+      return NextResponse.json({ ok: false, code: 'BUKAN_MENUNGGU', error: err.message }, { status: 409 })
+    }
     console.error('[API /blud/realisasi/permintaan PATCH]', err)
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
   }

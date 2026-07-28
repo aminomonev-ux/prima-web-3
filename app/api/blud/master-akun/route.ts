@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized } from '../_guard'
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { MasterAkunBodySchema } from '@/lib/blud/master-akun-schemas'
 import { getMasterAkun, getMasterAkunVersion, saveMasterAkun, MasterAkunSafetyError } from '@/lib/blud/master-akun-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
@@ -17,6 +17,9 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'master-akun'))) return forbidden()
 
   try {
@@ -33,6 +36,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
+
+  const mati = await bludMati()
+  if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'master-akun'))) return tolakEdit('master-akun')
 
   // Rate limit save: 30/menit/user
