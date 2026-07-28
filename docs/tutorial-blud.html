@@ -637,6 +637,110 @@ flowchart TD
         <div class="callout ok"><div class="ic">Δ</div><div class="ct"><b>Δ Pergeseran Net di Beranda</b>Selisih total pergeseran terhadap DPA. Untuk versi <b>final</b> harus <b>0</b> (berimbang); yang belum imbang → <b>Draft</b>.</div></div>
       </div>
 
+      <!-- SENTINEL GUARD -->
+      <div class="phase">
+        <div class="phase-num" style="background:#7C5CFC">S</div>
+        <div class="phase-title">Sentinel Guard — pemeriksa yang menemani saat mengetik</div>
+        <div class="phase-url">berlaku di /blud/dpa &amp; /blud/pergeseran</div>
+        <p class="phase-note">
+          Sentinel <b>bukan tombol dan bukan langkah</b> — ia berjalan terus di latar selama Anda mengisi DPA atau
+          Pergeseran. Tiap kali baris berubah, ia membaca ulang <b>seluruh isi form</b> dan mencari enam pola
+          kekeliruan yang sudah terbukti sering terjadi. Ia <b>tidak pernah memperbaiki sendiri</b>: yang
+          dilakukannya cuma memberi tahu, karena yang tahu mana yang benar tetap Anda.
+        </p>
+
+        <div class="callout ok"><div class="ic">✓</div><div class="ct"><b>Kenapa perlu ada</b>Kekeliruan di DPA jarang berupa angka yang salah hitung — lebih sering barang yang sama terketik dua kali dengan ejaan sedikit berbeda, atau baris yang lupa diberi kode rekening. Dua-duanya lolos dari pemeriksaan biasa dan baru ketahuan berbulan-bulan kemudian, saat anggarannya sudah dipakai.</div></div>
+
+        <div class="diagram" style="margin-bottom:14px">
+<pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif','fontSize':'13px','lineColor':'#8aa0b8','primaryTextColor':'#0F172A'}}}%%
+flowchart TD
+    A["Anda mengetik / mengubah baris"]:::sen --> B["Sentinel membaca SALINAN seluruh baris<br/>hanya baca, tak bisa mengubah isian Anda"]:::sen
+    B --> C["Enam aturan dijalankan"]:::sen
+    C --> D{Ada temuan?}:::dec
+    D -->|Tidak| E["Diam. Tidak ada gangguan"]:::sen
+    D -->|Ya| F["Muncul chip di banner<br/>klik chip untuk melompat ke barisnya"]:::sen
+    F --> G{Seberapa berat?}:::dec
+
+    G -->|MERAH kritis| H["Simpan DIBLOKIR sampai dibereskan<br/>tidak bisa diabaikan"]:::bad
+    G -->|KUNING peringatan| I["Boleh diabaikan, tapi Simpan minta konfirmasi dulu"]:::warn
+    G -->|BIRU info| J["Sekadar pemberitahuan, boleh dilewati"]:::sen
+
+    I --> K["Yang diabaikan DICATAT<br/>audit BLUD_SENTINEL_ACK saat Simpan"]:::store
+    J --> K
+    H --> L[Perbaiki barisnya]:::warn --> A
+    K --> M[(Tersimpan)]:::store
+    E --> M
+
+    classDef sen fill:#7C5CFC,stroke:#5b3fd6,color:#fff;
+    classDef bad fill:#DC2626,stroke:#991b1b,color:#fff;
+    classDef dec fill:#FEF3C7,stroke:#D9A404,color:#7c5306;
+    classDef warn fill:#F5B041,stroke:#c2740a,color:#3d2606;
+    classDef store fill:#0F9E6E,stroke:#0b7d55,color:#fff;
+</pre>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="tag" style="background:#7C5CFC"></span> Enam hal yang diawasi</div>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th>Berat</th><th>Nama</th><th>Yang dicari — dan kenapa itu masalah</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="step" style="color:#DC2626">■</td>
+                <td><b>Entri kembar pasti</b><br><code class="inline">dup-hard</code></td>
+                <td>Satu item usulan yang <b>sama persis</b> ditarik dua kali ke dalam form. Bukan mirip — memang item yang itu juga. Kalau lolos, satu barang dianggarkan dua kali. <b>Memblokir Simpan.</b></td>
+              </tr>
+              <tr>
+                <td class="step" style="color:#D9A404">■</td>
+                <td><b>Entri kembar dugaan</b><br><code class="inline">dup-heuristic</code></td>
+                <td>Dua baris dengan <b>uraian, satuan, dan harga sama</b>. Bisa jadi memang sengaja (dua unit terpisah), bisa jadi kelupaan. Karena itu diperingatkan, bukan diblokir.</td>
+              </tr>
+              <tr>
+                <td class="step" style="color:#D9A404">■</td>
+                <td><b>Kembar beda ejaan</b><br><code class="inline">dup-fuzzy</code></td>
+                <td>Uraiannya <b>mirip tapi tidak persis</b> — beda spasi, tanda hubung, atau salah ketik satu huruf — sementara satuan &amp; harganya identik. Inilah yang paling sering lolos dari mata manusia: <i>“Kertas HVS A4”</i> versus <i>“Kertas HVS-A4”</i>.</td>
+              </tr>
+              <tr>
+                <td class="step" style="color:#3B82F6">■</td>
+                <td><b>Induk sama dengan anak</b><br><code class="inline">dup-parent-child</code></td>
+                <td>Baris induk dan anaknya ber-uraian sama. Kadang wajar (satu rincian tunggal), kadang tanda salah tempel. Cuma diberi tahu.</td>
+              </tr>
+              <tr>
+                <td class="step" style="color:#D9A404">■</td>
+                <td><b>Penanggung jawab bentrok</b><br><code class="inline">pj-conflict</code></td>
+                <td>Dalam satu jalur hierarki, induk dan anaknya diberi <b>penanggung jawab berbeda</b>. Saat dicetak, laporan jadi menyebut dua nama untuk anggaran yang sama.</td>
+              </tr>
+              <tr>
+                <td class="step" style="color:#D9A404">■</td>
+                <td><b>Baris belum lengkap</b><br><code class="inline">row-incomplete</code></td>
+                <td>Baris yang <b>sudah diisi uraiannya</b> tapi belum punya kode rekening, belum ada penanggung jawab, atau vol × harga masih nol. Baris yang masih kosong sama sekali <b>tidak</b> diganggu — supaya tidak berisik saat Anda baru mulai mengetik.</td>
+              </tr>
+              <tr>
+                <td class="step" style="color:#D9A404">■</td>
+                <td><b>Susunan pohon rusak</b><br><code class="inline">swap</code></td>
+                <td>Ada baris yang induknya tidak ada, atau urutan anak terpotong dari induknya. Normalnya <b>tidak pernah muncul</b>; kalau muncul, artinya ada yang tidak beres pada susunan baris — bukan pada isinya.</td>
+              </tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="tag" style="background:#7C5CFC"></span> Tiga janji Sentinel</div>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th></th><th>Janji</th><th>Artinya bagi Anda</th></tr></thead>
+            <tbody>
+              <tr><td class="step">1</td><td><b>Tidak pernah mengubah isian</b></td><td>Aturannya hanya menerima <b>salinan</b> baris dan mengembalikan daftar temuan. Secara teknis ia tidak punya cara menulis ke form — jadi tidak mungkin “membetulkan” sesuatu diam-diam lalu Anda tidak sadar.</td></tr>
+              <tr><td class="step">2</td><td><b>Rusaknya Sentinel tidak merusak form</b></td><td>Kalau satu aturan bermasalah, aturan itu dilewati dan sisanya jalan terus. Layar tidak ikut mati. Lebih baik kehilangan satu peringatan daripada kehilangan pekerjaan yang sedang diketik.</td></tr>
+              <tr><td class="step">3</td><td><b>Mengabaikan boleh, tapi tercatat</b></td><td>Peringatan kuning bisa Anda lewati kalau memang sengaja. Yang dilewati ikut tersimpan di jejak audit <code class="inline">BLUD_SENTINEL_ACK</code> — bukan untuk mencari salah, tapi supaya saat ada yang bertanya “kenapa dobel?”, jawabannya ada.</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="callout warn"><div class="ic">!</div><div class="ct"><b>Sentinel bukan RIMA, walau muncul lewat wajah yang sama</b><b>Sentinel</b> = mesin aturannya, hidup di dalam form DPA &amp; Pergeseran. <b>RIMA</b> = asisten yang menyampaikannya — avatar mengambang yang juga bisa memandu tur dan menjawab pertanyaan data. Mematikan RIMA lewat Admin Panel tidak mematikan Sentinel: pagar Simpan tetap bekerja, hanya cara penyampaiannya yang berubah.</div></div>
+
+        <div class="callout ok"><div class="ic">✓</div><div class="ct"><b>Khusus Import dari Usulan — tiga lapis, bukan satu</b>(1) Item yang sudah ada di form otomatis <b>dimatikan</b> di daftar pilihan. (2) Kalau masih lolos, banner Sentinel menangkapnya secara langsung. (3) Kalau tetap lolos juga, <b>server menolak</b> saat Simpan. Tiga lapis untuk satu kesalahan yang sama karena akibatnya — satu barang dianggarkan dua kali — mahal dan sulit ditemukan belakangan.</div></div>
+      </div>
+
       <!-- FASE 4 -->
       <div class="phase">
         <div class="phase-num" style="background:#0EA5E9">4</div>
