@@ -55,7 +55,7 @@ Module._resolveFilename = function (permintaan, ...sisa) {
 }
 
 const { sql } = require(path.join(outDir, 'lib/data/db.js'))
-const { setSaldoAwalTahun, tutupPeriode, bukaPeriode } = require(path.join(outDir, 'lib/blud/tutup-kas.js'))
+const { setSaldoAwalTahun, tutupPeriode, bukaPeriode, getNeracaKas } = require(path.join(outDir, 'lib/blud/tutup-kas.js'))
 const { getSaldoAwal } = require(path.join(outDir, 'lib/blud/realisasi-data.js'))
 const { SaldoAwalBodySchema } = require(path.join(outDir, 'lib/blud/realisasi-schemas.js'))
 
@@ -145,6 +145,23 @@ try {
   await bukaPeriode(TAHUN, 1)
   periksa('Sesudah Januari dibuka kembali → boleh lagi',
     await tangkap(() => setSaldoAwalTahun(TAHUN, { kas: 4_000_000, bank: 1 })) === null)
+
+  // Layar HARUS memakai jawaban server, bukan menyimpulkan dari status bulan yang
+  // sedang dibuka. Keadaan "Januari terbuka tapi bulan lain tertutup" tidak bisa
+  // dicapai lewat aplikasi (bukaPeriode menolaknya), tapi ADA di DB — dan waktu itu
+  // terjadi, isian yang tampak hidup lalu ditolak 409 adalah cacat layar.
+  await sql`
+    INSERT INTO blud_periode (tahun_anggaran, bulan, status) VALUES (${TAHUN}, 5, 'TUTUP')
+    ON DUPLICATE KEY UPDATE status = 'TUTUP'
+  `
+  const neraca = await getNeracaKas(TAHUN, 1)
+  periksa('Januari terbuka tapi Mei tertutup → saldo_awal_terkunci', neraca.saldo_awal_terkunci === true)
+  periksa('…dan set memang ditolak, sejalan dengan yang dikirim ke layar',
+    await tangkap(() => setSaldoAwalTahun(TAHUN, { kas: 5, bank: 5 })) === 'BludSaldoAwalTerkunciError')
+
+  await sql`DELETE FROM blud_periode WHERE tahun_anggaran = ${TAHUN} AND bulan = 5`
+  periksa('Tanpa bulan tertutup → saldo_awal_terkunci false',
+    (await getNeracaKas(TAHUN, 1)).saldo_awal_terkunci === false)
 } finally {
   await bersihkan()
   const sisaP = await sql`SELECT COUNT(*) AS n FROM blud_periode WHERE tahun_anggaran = ${TAHUN}`

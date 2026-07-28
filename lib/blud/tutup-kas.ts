@@ -53,6 +53,14 @@ export interface NeracaKas {
   /** Penghalang tutup — kosong berarti tombol boleh hidup (§4.2, §4.6). */
   penghalang: string[]
   jumlah_baki: number
+  /**
+   * R3 — apakah saldo awal tahun masih boleh diubah. DIKIRIM SERVER, bukan
+   * disimpulkan layar dari `status` bulan ini: aturannya "ada bulan mana pun yang
+   * tertutup", dan layar hanya memegang satu bulan. Menyimpulkannya sendiri
+   * membuat isian tampak hidup lalu ditolak 409 — persis yang harus dihindari
+   * `kumpulkanPenghalang`: satu daftar aturan, dibaca dua pihak.
+   */
+  saldo_awal_terkunci: boolean
 }
 
 const toIso = (v: unknown): string | null => {
@@ -98,6 +106,25 @@ async function kumpulkanPenghalang(tahun: number, bulan: number): Promise<{ pesa
   return { pesan, baki: jumlahBaki }
 }
 
+/**
+ * Bulan-bulan tahun ini yang sudah ditutup. Satu fungsi dipakai dua arah: layar
+ * memakainya untuk memutuskan isian saldo awal hidup atau tidak, `setSaldoAwalTahun`
+ * memakainya untuk menolak. Kalau dipisah, cepat atau lambat keduanya berbeda
+ * pendapat dan isian tampak hidup lalu ditolak 409.
+ *
+ * Menerima `tx` supaya pemeriksaan di dalam transaksi ikut memakai koneksi yang
+ * sama — kalau tidak, `FOR UPDATE` di atasnya tidak menjaga apa pun.
+ */
+type Penanya = (strings: TemplateStringsArray, ...values: (string | number)[]) => PromiseLike<unknown[]>
+
+async function bulanTertutup(tahun: number, q: Penanya = sql): Promise<number[]> {
+  const rows = await q`
+    SELECT bulan FROM blud_periode
+    WHERE tahun_anggaran = ${tahun} AND status = 'TUTUP' ORDER BY bulan
+  ` as Record<string, unknown>[]
+  return rows.map((r) => Number(r.bulan))
+}
+
 export async function getNeracaKas(tahun: number, bulan: number): Promise<NeracaKas> {
   const awal = await getSaldoAwal(tahun, bulan)
 
@@ -138,6 +165,7 @@ export async function getNeracaKas(tahun: number, bulan: number): Promise<Neraca
   const selisih = saldoNyata != null ? saldoNyata - saldoBuku : null
 
   const { pesan, baki } = await kumpulkanPenghalang(tahun, bulan)
+  const tertutup = await bulanTertutup(tahun)
 
   return {
     tahun_anggaran: tahun,
@@ -163,6 +191,7 @@ export async function getNeracaKas(tahun: number, bulan: number): Promise<Neraca
     ditutup_at: row?.ditutup_at != null ? String(row.ditutup_at) : null,
     penghalang: pesan,
     jumlah_baki: baki,
+    saldo_awal_terkunci: tertutup.length > 0,
   }
 }
 
@@ -220,13 +249,8 @@ export async function setSaldoAwalTahun(
       WHERE tahun_anggaran = ${tahun} AND bulan = 1 FOR UPDATE
     ` as Record<string, unknown>[]
 
-    const tertutup = await tx`
-      SELECT bulan FROM blud_periode
-      WHERE tahun_anggaran = ${tahun} AND status = 'TUTUP' ORDER BY bulan
-    ` as Record<string, unknown>[]
-    if (tertutup.length) {
-      throw new BludSaldoAwalTerkunciError(tahun, tertutup.map((r) => Number(r.bulan)))
-    }
+    const tertutup = await bulanTertutup(tahun, tx)
+    if (tertutup.length) throw new BludSaldoAwalTerkunciError(tahun, tertutup)
 
     await tx`
       INSERT INTO blud_periode (tahun_anggaran, bulan, status, saldo_awal_kas, saldo_awal_bank)

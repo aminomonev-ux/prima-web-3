@@ -309,6 +309,7 @@ Saldo awal bulan ke-2 dan seterusnya **tidak disimpan** — dihitung ulang tiap 
 | Kapan boleh | Selama **belum ada satu pun bulan tahun itu ditutup**. Sesudahnya beku — angkanya sudah jadi dasar berita acara bertanda tangan. |
 | Siapa | Menu `tutup-kas` izin EDIT. **Tanpa daftar peran tersendiri**: setelah beku, satu-satunya jalan mengubahnya adalah membuka kembali Januari, dan pintu itu sudah dijaga `bolehBukaPeriode` yang sempit. |
 | Jalur | `POST /api/blud/realisasi/saldo-awal` → `setSaldoAwalTahun()` (`withTransaction` + `FOR UPDATE`) → audit `BLUD_SALDO_AWAL_SET` berisi **lama → baru**. |
+| Layar tahu dari mana | `NeracaKas.saldo_awal_terkunci`, **dikirim server**. Layar tidak boleh menyimpulkannya dari `status` bulan yang sedang dibuka — ia cuma memegang satu bulan, aturannya soal seluruh tahun. Satu fungsi `bulanTertutup()` dibaca layar dan pagar tulis sekaligus. |
 | Uji | `node scripts/test-blud-saldo-awal.mjs` (tahun kotak pasir 2099). |
 
 Sengaja **tanpa** `alasan` wajib, berbeda dari buka periode & hapus versi: keduanya merusak dokumen yang sudah ditandatangani, sedangkan di sini — selama masih boleh diubah — belum ada apa pun yang ditandatangani.

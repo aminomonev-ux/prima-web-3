@@ -50,6 +50,7 @@ interface Neraca {
   ditutup_at: string | null
   penghalang: string[]
   jumlah_baki: number
+  saldo_awal_terkunci: boolean
 }
 
 interface GuBaris { tgl_awal: string; tgl_akhir: string; no_surat: string }
@@ -181,10 +182,11 @@ export default function TutupKasClient(
     }
   }
 
-  // Bulan 1 yang masih terbuka = tahunnya belum punya berita acara sama sekali.
-  // Urutan tutup wajib dari depan, jadi tidak ada keadaan "Januari terbuka tapi
-  // Maret sudah ditutup" — server tetap memeriksanya ulang.
-  const bolehSetAwal = bulan === 1 && !bekuIsian
+  // `saldo_awal_terkunci` datang dari server, TIDAK disimpulkan dari `status`
+  // bulan ini: aturannya "ada bulan mana pun yang tertutup", dan layar cuma
+  // memegang satu bulan. Menyimpulkannya sendiri membuat isian tampak hidup lalu
+  // ditolak 409 — ketahuan saat menguji Januari dibuka sementara Feb–Jun tertutup.
+  const bolehSetAwal = bulan === 1 && bolehUbah && !(data?.saldo_awal_terkunci ?? true)
   const awalBerubah = data != null
     && (bacaAngka(awalKas) !== Math.round(data.saldo_awal_kas)
       || bacaAngka(awalBank) !== Math.round(data.saldo_awal_bank))
