@@ -639,7 +639,166 @@ flowchart TD
 
       <!-- FASE 4 -->
       <div class="phase">
-        <div class="phase-num" style="background:var(--c-out)">4</div>
+        <div class="phase-num" style="background:#0EA5E9">4</div>
+        <div class="phase-title">Penatausahaan Harian</div>
+        <div class="phase-url">/blud/buku-kas · /blud/bukti-setor · /blud/realisasi</div>
+        <p class="phase-note">Tiga menu ini menggantikan berkas Excel BKU. <b>Satu-satunya titik input adalah Buku Kas</b>; Realisasi, register, pengantar, SPJ, dan Tutup Kas semuanya <b>turunan</b> — tidak ada ketik ulang di mana pun.</p>
+
+        <div class="card">
+          <div class="card-h"><span class="tag" style="background:#0EA5E9"></span> Buku Kas — satu-satunya tempat mengetik</div>
+        </div>
+
+        <div class="diagram" style="margin-bottom:14px">
+<pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif','fontSize':'13px','lineColor':'#8aa0b8','primaryTextColor':'#0F172A'}}}%%
+flowchart TD
+    A[Transaksi Baru]:::pen --> B["Tanggal, jenis, uraian, nilai kas &amp; bank"]:::pen
+    B --> C{Tanggal di dalam<br/>bulan yang dipilih?}:::dec
+    C -->|Tidak| C1["400 TANGGAL_LUAR_BULAN"]:::warn --> B
+    C -->|Ya| D{Periode bulan itu<br/>sudah ditutup?}:::dec
+    D -->|Ya| D1["409 PERIODE_TUTUP, tulis ditolak"]:::warn
+    D -->|Belum| E{Jenis transaksi?}:::dec
+
+    E -->|Pemindahan bank ke kas| F["Tanpa alokasi: uang sendiri pindah tempat<br/>alokasi justru DILARANG"]:::pen --> M
+    E -->|Penerimaan / lain| M
+    E -->|Belanja| G["Bebankan ke baris anggaran<br/>boleh dibagi ke beberapa baris"]:::pen
+    G --> H{Total alokasi sama dengan<br/>nilai transaksi?}:::dec
+    H -->|Tidak| H1["400 ALOKASI_TIDAK_SEIMBANG"]:::warn --> G
+    H -->|Ya| I{Ada potongan pajak?}:::dec
+    I -->|Ya| I1["PPN / PPh, tidak boleh melebihi pembayaran<br/>Diterima rekanan = nilai dikurangi potongan"]:::pen --> J
+    I -->|Tidak| J{Pagu baris cukup?}:::dec
+    J -->|Tidak| K["409 PAGU_TERLAMPAUI"]:::warn
+    K --> K1["Ajukan Pergeseran, notif ke pemegang DPA"]:::warn
+    K --> K2["atau parkir: baki Perlu Rekening"]:::warn
+    J -->|Cukup| M["Simpan"]:::pen
+    M --> N[("Server beri No. Kwt berurutan<br/>kunci pagu FOR UPDATE, anti balapan")]:::store
+    N --> O["Saldo kas &amp; bank berjalan dihitung ulang<br/>tidak disimpan, jadi koreksi ikut merambat"]:::pen
+
+    classDef pen fill:#0EA5E9,stroke:#0678aa,color:#fff;
+    classDef dec fill:#FEF3C7,stroke:#D9A404,color:#7c5306;
+    classDef warn fill:#F5B041,stroke:#c2740a,color:#3d2606;
+    classDef store fill:#0F9E6E,stroke:#0b7d55,color:#fff;
+</pre>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="tag" style="background:#0EA5E9"></span> Langkah Buku Kas</div>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th></th><th>Elemen persis</th><th>Aksi → Hasil</th></tr></thead>
+            <tbody>
+              <tr><td class="step">1</td><td><b>TahunDropdown</b> + <b>dropdown bulan</b></td><td>Pilih periode kerja; pil <kbd>Pagu dari DPA/Pergeseran ‹tanggal›</kbd> menunjukkan sumber pagu yang berlaku</td></tr>
+              <tr><td class="step">2</td><td><kbd>Transaksi Baru</kbd> (ungu)</td><td>Buka form; mati kalau bulannya sudah ditutup</td></tr>
+              <tr><td class="step">3</td><td>Kolom <b>Jenis</b></td><td>BELANJA · AMBIL_BANK · SETOR_BANK · PENERIMAAN · PENGEMBALIAN · LAIN</td></tr>
+              <tr><td class="step">4</td><td>Dock <b>Pembebanan</b></td><td>Pilih baris anggaran → nilai; wajib untuk belanja, dilarang untuk pemindahan bank↔kas</td></tr>
+              <tr><td class="step">5</td><td>Dock <b>Potongan</b></td><td>PPN / PPh + keterangan → <b>Diterima rekanan</b> terhitung otomatis</td></tr>
+              <tr><td class="step">6</td><td>👁 <b>Lihat rincian</b> (abu)</td><td><b>Selalu hidup</b>, termasuk saat bulan sudah ditutup — satu-satunya jalan melihat rincian potongan &amp; pembebanan bulan lama</td></tr>
+              <tr><td class="step">7</td><td>✏️ <b>Ubah</b> / 🗑 <b>Hapus</b></td><td>Hanya saat bulan masih terbuka</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="callout warn"><div class="ic">!</div><div class="ct"><b>Baki “Perlu Rekening” bukan tempat sampah</b>Transaksi yang diparkir tetap <b>memblokir Tutup Kas</b> — dan baki dilihat satu tahun penuh, bukan bulan berjalan. Transaksi yang diparkir di Mei tetap menahan penutupan Juli.</div></div>
+
+        <div class="card">
+          <div class="card-h"><span class="tag" style="background:#38BDF8"></span> Bukti Setor — satu-satunya layar yang menerima ketikan lepas</div>
+        </div>
+
+        <div class="diagram" style="margin-bottom:14px">
+<pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif','fontSize':'13px','lineColor':'#8aa0b8','primaryTextColor':'#0F172A'}}}%%
+flowchart TD
+    A[Bukti Setor Baru]:::pen --> B["Tanggal slip + No. bukti"]:::pen
+    B --> C{Baris ini asalnya<br/>dari mana?}:::dec
+    C -->|Terhubung ke BKU| D["Pilih transaksi Buku Kas<br/>nilai ikut hidup: berubah kalau BKU dikoreksi"]:::pen
+    C -->|Diketik lepas| E["Ketik uraian + nilai sendiri<br/>dipakai untuk setoran yang tak lewat BKU"]:::warn
+    D --> F["Ambil Uang, Total, Cash terhitung"]:::pen
+    E --> F
+    F --> G{Cash negatif?}:::dec
+    G -->|Ya| G1["Peringatan timpang: yang disetor<br/>melebihi yang diambil"]:::warn --> F
+    G -->|Tidak| H[(Slip tersimpan)]:::store
+    H --> I["Masuk lembar setor BPD di SPJ bulanan<br/>satu blok per slip, bernomor"]:::pen
+
+    classDef pen fill:#38BDF8,stroke:#0678aa,color:#08304a;
+    classDef dec fill:#FEF3C7,stroke:#D9A404,color:#7c5306;
+    classDef warn fill:#F5B041,stroke:#c2740a,color:#3d2606;
+    classDef store fill:#0F9E6E,stroke:#0b7d55,color:#fff;
+</pre>
+        </div>
+
+        <div class="callout warn"><div class="ic">!</div><div class="ct"><b>Bulan tanpa slip menghasilkan lembar kosong</b>Penyaring lama sengaja <b>tidak</b> dipertahankan sebagai cadangan. Dua sumber untuk satu lembar berarti tidak ada yang tahu angkanya datang dari mana.</div></div>
+
+        <div class="card">
+          <div class="card-h"><span class="tag" style="background:#0284C7"></span> Realisasi — memantau, tidak mengetik</div>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th></th><th>Elemen</th><th>Aksi → Hasil</th></tr></thead>
+            <tbody>
+              <tr><td class="step">1</td><td>Tabel pagu vs serapan</td><td>Per baris anggaran: pagu · terserap · sisa · % — semua dihitung server, tak ada yang disimpan</td></tr>
+              <tr><td class="step">2</td><td>Klik <b>uraian</b> baris</td><td>Panel <b>Register</b>: seluruh transaksi yang membebani baris itu, urut tanggal</td></tr>
+              <tr><td class="step">3</td><td>Sisa negatif</td><td>Tanda pagu jebol — perbaiki lewat Pergeseran, bukan di layar ini</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- FASE 5 -->
+      <div class="phase">
+        <div class="phase-num" style="background:#075985">5</div>
+        <div class="phase-title">Tutup Bulan</div>
+        <div class="phase-url">/blud/tutup-kas</div>
+        <p class="phase-note">Berita Acara Pemeriksaan Kas: dua sisi yang <b>wajib bertemu di angka yang sama</b>. Sisi kiri dihitung dari transaksi dan tidak punya satu pun kotak isian; sisi kanan cuma dua angka hasil pemeriksaan nyata. <b>Tidak ada kotak “penyesuaian”</b> — itu persis cara berkas Juni 2026 bisa ditutup dengan selisih miliaran tanpa ada yang menyadarinya.</p>
+
+        <div class="diagram" style="margin-bottom:14px">
+<pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif','fontSize':'13px','lineColor':'#8aa0b8','primaryTextColor':'#0F172A'}}}%%
+flowchart TD
+    A[Buka Tutup Kas, pilih bulan]:::tut --> B{Bulan Januari DAN<br/>belum ada bulan ditutup?}:::dec
+    B -->|Ya| B1["Sisi A jadi isian: saldo awal tahun<br/>Simpan saldo awal, audit lama ke baru"]:::tut
+    B -->|Tidak| C
+    B1 --> C["Sisi A dihitung server:<br/>saldo awal + penerimaan - pengeluaran"]:::tut
+    C --> D["Sisi B diketik: uang tunai + rekening koran"]:::tut
+    D --> E[Simpan Pemeriksaan, belum menutup]:::tut
+    E --> F{Selisih Rp 0?}:::dec
+    F -->|Tidak| F1["Cocokkan lagi lewat Buku Kas<br/>angka di layar ini tidak boleh ditambal"]:::warn --> D
+    F -->|Ya| G{Ada penghalang?}:::dec
+    G -->|Transaksi diparkir| G1[Sambungkan dari baki Perlu Rekening]:::warn --> D
+    G -->|Bulan sebelumnya terbuka| G2["Tutup dari bulan terdepan:<br/>saldo awal bulan ini masih bisa berubah"]:::warn --> D
+    G -->|Bersih| H[Catat Periode GU, opsional]:::tut
+    H --> I[Tutup Bulan]:::tut
+    I --> J[("Periode TUTUP: semua tulis ke bulan itu ditolak<br/>saldo awal tahun ikut beku")]:::store
+    J --> K[Unduh SPJ Bulanan, 11 lembar xlsx]:::tut
+    J --> L{Perlu dibuka lagi?}:::dec
+    L -->|SUPER_ADMIN / ADMIN / KEUANGAN| M["Alasan wajib, urut dari BELAKANG<br/>buka Juni dulu, baru Mei"]:::warn --> C
+    L -->|PERBENDAHARAAN| N["Ditolak: yang menutup dan yang membuka<br/>tidak boleh orang yang sama"]:::warn
+
+    classDef tut fill:#075985,stroke:#04384f,color:#fff;
+    classDef dec fill:#FEF3C7,stroke:#D9A404,color:#7c5306;
+    classDef warn fill:#F5B041,stroke:#c2740a,color:#3d2606;
+    classDef store fill:#0F9E6E,stroke:#0b7d55,color:#fff;
+</pre>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="tag" style="background:#075985"></span> Langkah Tutup Kas</div>
+          <div class="tbl-scroll"><table>
+            <thead><tr><th></th><th>Elemen persis</th><th>Aksi → Hasil</th></tr></thead>
+            <tbody>
+              <tr><td class="step">1</td><td>Kartu <b>“Menurut buku”</b></td><td>Dihitung dari transaksi — tidak bisa diketik. <b>Kecuali Januari yang belum ditutup</b>: dua baris saldo awal jadi isian + <kbd>Simpan saldo awal</kbd></td></tr>
+              <tr><td class="step">2</td><td><b>“Uang tunai di brankas”</b> + <b>“Saldo rekening koran”</b></td><td>Dua angka satu-satunya yang diketik → Saldo akhir menurut kenyataan</td></tr>
+              <tr><td class="step">3</td><td>Pita hasil</td><td><kbd>Seimbang — selisih Rp 0. Bulan boleh ditutup.</kbd> atau nilai selisihnya</td></tr>
+              <tr><td class="step">4</td><td><kbd>Simpan Pemeriksaan</kbd> (ghost)</td><td>Simpan sisi B <b>tanpa</b> menutup — supaya bisa menghitung uang bertahap sambil melihat selisih</td></tr>
+              <tr><td class="step">5</td><td><kbd>Tutup Bulan</kbd> (hijau)</td><td>Hidup hanya kalau selisih Rp 0 <b>dan</b> tanpa penghalang · audit <code class="inline">BLUD_PERIODE_TUTUP</code></td></tr>
+              <tr><td class="step">6</td><td><kbd>Unduh SPJ Bulanan</kbd> (hijau)</td><td>11 lembar <code class="inline">.xlsx</code> · audit <code class="inline">BLUD_SPJ_UNDUH</code></td></tr>
+              <tr><td class="step">7</td><td><kbd>Buka Kembali</kbd> (amber)</td><td>SUPER_ADMIN · ADMIN · KEUANGAN saja, alasan ≥10 karakter · <b>wajib urut dari belakang</b></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="callout danger"><div class="ic">✕</div><div class="ct"><b>Menutup dari depan, membuka dari belakang</b>Saldo awal sebuah bulan <b>tidak disimpan</b> — dihitung ulang dari arus kas bulan-bulan sebelumnya. Karena itu membuka Januari yang sudah ditandatangani ikut menggeser saldo Februari sampai Juni, dan tidak ada apa pun di layar yang memberi tahu. Repot di sini memang disengaja: yang dibuka dokumen bertanda tangan, bukan draf.</div></div>
+      </div>
+
+      <!-- FASE 6 -->
+      <div class="phase">
+        <div class="phase-num" style="background:var(--c-out)">6</div>
         <div class="phase-title">Output &amp; Pemeliharaan</div>
         <div class="phase-url">/blud/cetak · /blud/pengaturan</div>
         <p class="phase-note">Cetak untuk menghasilkan dokumen; Pengaturan untuk membersihkan versi lama.</p>
