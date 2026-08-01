@@ -13,7 +13,7 @@ import type { TxSql } from '@/lib/data/db'
 import { LABEL_POTONGAN, type JenisPotongan } from './alokasi-rule'
 import { BludPeriodeTertutupError } from './realisasi-schemas'
 import {
-  BludBuktiSetorConflictError, BludBuktiSetorTidakAdaError,
+  BludBuktiSetorConflictError, BludBuktiSetorTidakAdaError, BludPenunjukTidakSahError,
   type AsalBaris, type SimpanBuktiSetorInput,
 } from './bukti-setor-schemas'
 
@@ -243,12 +243,70 @@ async function pastikanPeriodeBuka(tx: TxSql, tahun: number, bulan: number): Pro
   if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
 }
 
+/**
+ * N3/L68 — tiap penunjuk wajib menyasar baris yang ADA dan milik (tahun, bulan)
+ * slip ini. Dijalankan di dalam transaksi yang sama dengan penulisannya, setelah
+ * periode dikunci: kalau diperiksa di luar, transaksi yang dituju masih bisa
+ * dipindah bulan atau dihapus di sela pemeriksaan dan penulisan.
+ *
+ * Lewat layar ini sulit terjadi — daftar pilihannya memang sebulan. Tapi ini
+ * endpoint yang bisa dipanggil langsung, dan "UI-nya sudah benar" bukan pagar.
+ */
+async function pastikanPenunjukSah(tx: TxSql, input: SimpanBuktiSetorInput): Promise<void> {
+  const txIds = new Set<number>()
+  const potIds = new Set<number>()
+  for (const b of input.baris) {
+    if (b.asal === 'BKU' && b.tx_id) txIds.add(b.tx_id)
+    if (b.asal === 'POTONGAN' && b.potongan_id) potIds.add(b.potongan_id)
+  }
+  if (input.ambil_tx_id) txIds.add(input.ambil_tx_id)
+  if (!txIds.size && !potIds.size) return
+
+  const rincian: string[] = []
+
+  if (txIds.size) {
+    const ada = await tx`
+      SELECT id FROM blud_realisasi_tx
+      WHERE id IN (${[...txIds]})
+        AND tahun_anggaran = ${input.tahun_anggaran} AND bulan = ${input.bulan}
+    ` as { id?: unknown }[]
+    const sah = new Set(ada.map((r) => Number(r.id)))
+    const nakal = [...txIds].filter((id) => !sah.has(id))
+    if (nakal.length) {
+      rincian.push(
+        `Transaksi ${nakal.join(', ')} tidak ada di Buku Kas bulan ${input.bulan}/${input.tahun_anggaran}.`,
+      )
+    }
+  }
+
+  if (potIds.size) {
+    // Bulan potongan diambil dari transaksi INDUKNYA — `blud_realisasi_potongan`
+    // menyimpan tahun, tapi bulannya hanya ada di baris transaksinya.
+    const ada = await tx`
+      SELECT p.id FROM blud_realisasi_potongan p
+      JOIN blud_realisasi_tx t ON t.id = p.tx_id
+      WHERE p.id IN (${[...potIds]})
+        AND t.tahun_anggaran = ${input.tahun_anggaran} AND t.bulan = ${input.bulan}
+    ` as { id?: unknown }[]
+    const sah = new Set(ada.map((r) => Number(r.id)))
+    const nakal = [...potIds].filter((id) => !sah.has(id))
+    if (nakal.length) {
+      rincian.push(
+        `Potongan ${nakal.join(', ')} tidak ada di bulan ${input.bulan}/${input.tahun_anggaran}.`,
+      )
+    }
+  }
+
+  if (rincian.length) throw new BludPenunjukTidakSahError(rincian)
+}
+
 export async function simpanBuktiSetor(
   input: SimpanBuktiSetorInput,
   userId: number,
 ): Promise<{ id: number; version: number }> {
   return withTransaction(async ({ tx, conn }) => {
     await pastikanPeriodeBuka(tx, input.tahun_anggaran, input.bulan)
+    await pastikanPenunjukSah(tx, input)
 
     let id = input.id ?? 0
     let version = 0

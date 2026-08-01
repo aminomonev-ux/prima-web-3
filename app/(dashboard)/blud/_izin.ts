@@ -8,7 +8,8 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { bolehBuka, bolehEdit, type MenuBlud } from '@/lib/blud/peran'
+import { bolehBuka, bolehEdit, MENU_REALISASI, LABEL_MENU, type MenuBlud } from '@/lib/blud/peran'
+import { modulSedangMati } from '@/lib/security/guard'
 import type { Role } from '@/types'
 
 export async function izinLayar(menu: MenuBlud): Promise<{ role: Role; bolehUbah: boolean }> {
@@ -20,6 +21,18 @@ export async function izinLayar(menu: MenuBlud): Promise<{ role: Role; bolehUbah
   // Ke Beranda BLUD, bukan /menu — orangnya berhak masuk modul, cuma tidak
   // ke menu ini. Melemparnya keluar modul akan terasa seperti kehilangan akses.
   if (!bolehBuka(role, menu)) redirect('/blud')
+
+  // N4 — sakelar sub-modul Realisasi. Diperiksa di sini, bukan di `layout.tsx`:
+  // layout tidak tahu layar mana yang sedang dibuka, sedangkan fungsi ini memang
+  // dipanggil dengan nama menunya. Satu tempat, tidak diulang di 4 halaman.
+  //
+  // Sengaja TIDAK digabung ke `bolehBuka`: "modul dimatikan" itu keadaan sementara
+  // yang hilang sendiri, "Anda tidak berhak" harus ditanyakan ke admin. Menyatukan
+  // keduanya membuat pesan yang satu terbaca sebagai yang lain.
+  if (role !== 'SUPER_ADMIN' && MENU_REALISASI.includes(menu)
+      && await modulSedangMati('app_status_blud_realisasi')) {
+    redirect(`/maintenance?app=${encodeURIComponent(`BLUD - ${LABEL_MENU[menu]}`)}`)
+  }
 
   return { role, bolehUbah: bolehEdit(role, menu) }
 }

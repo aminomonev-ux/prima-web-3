@@ -127,6 +127,11 @@ try {
 
   const pertama = await tolakPermintaan(id)
   periksa('Tolak pertama berhasil', pertama?.id === id)
+  // Yang dikembalikan harus keadaan SESUDAH aksi. Dulu ia potret sebelum UPDATE,
+  // jadi masih berisi MENUNGGU + selesai_at kosong — pemanggil yang suatu saat
+  // meneruskannya ke klien akan menampilkan "menunggu" untuk yang barusan ditolak.
+  periksa('…yang dikembalikan sudah keadaan sesudah',
+    pertama?.status === 'DITOLAK' && !!pertama?.selesai_at)
   periksa('…statusnya jadi DITOLAK', (await sql`
     SELECT status FROM blud_permintaan WHERE id = ${id}
   `)[0]?.status === 'DITOLAK')

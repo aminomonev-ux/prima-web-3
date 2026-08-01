@@ -64,6 +64,10 @@ async function cleanup(pool) {
   await pool.query(`DELETE FROM blud_realisasi_tx WHERE uraian LIKE ?`, [PREFIX + '%']);
   await pool.query(`DELETE FROM dpa_blud WHERE anggaran_key LIKE ?`, [PREFIX + '%']);
   await pool.query(`DELETE FROM blud_locks WHERE key_id LIKE ?`, ['%' + PREFIX + '%']);
+  // Periode BLUD (T9) — tak punya kolom teks untuk di-prefix, jadi dibatasi
+  // TAHUN KOTAK PASIR 2099 yang memang sudah jadi kesepakatan di seluruh repo.
+  await pool.query(`DELETE FROM blud_periode WHERE tahun_anggaran = ?`, [R_TAHUN]);
+  await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [PERIODE_ENTITY, String(R_TAHUN)]);
 }
 
 // Mirror login-fail ATOMIK (fix V3-5): satu statement increment + conditional lock.
@@ -359,6 +363,96 @@ async function testUrutanKunci(pool, urutkan) {
   return { deadlock: out.filter(x => String(x).includes('ER_LOCK_DEADLOCK')).length, out };
 }
 
+// ─── Periode BLUD (N1 — audit putaran 4) ────────────────────────────────────
+// Bahaya khas di sini beda dari pagu: yang berebut BUKAN baris yang sama.
+// A membuka Mei, B menutup Juni — dua baris berbeda, jadi kunci per-baris tidak
+// menolong sama sekali. Yang dilanggar aturan yang jangkauannya SETAHUN:
+// "tidak boleh ada bulan tertutup di atas bulan yang terbuka".
+//
+// Karena itu perbaikannya kunci per-TAHUN (`BLUD_PERIODE_ENTITY`), bukan per-bulan.
+const PERIODE_ENTITY = 'realisasi_periode';
+
+async function seedPeriode(pool, tutupSampai) {
+  await pool.query(`DELETE FROM blud_periode WHERE tahun_anggaran = ?`, [R_TAHUN]);
+  await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [PERIODE_ENTITY, String(R_TAHUN)]);
+  const rows = [];
+  for (let b = 1; b <= 6; b++) rows.push([R_TAHUN, b, b <= tutupSampai ? 'TUTUP' : 'BUKA']);
+  await pool.query(`INSERT INTO blud_periode (tahun_anggaran, bulan, status) VALUES ?`, [rows]);
+}
+
+// Mirror `kunciPeriode` di lib/blud/tutup-kas.ts.
+async function kunciTahun(conn) {
+  await conn.query(`INSERT IGNORE INTO blud_locks (entity, key_id, version) VALUES (?, ?, 0)`,
+    [PERIODE_ENTITY, String(R_TAHUN)]);
+  await conn.query(`SELECT version FROM blud_locks WHERE entity = ? AND key_id = ? FOR UPDATE`,
+    [PERIODE_ENTITY, String(R_TAHUN)]);
+}
+
+// Mirror `bukaPeriode`: tolak selama masih ada bulan > N yang TUTUP (S2).
+async function bukaBulan(pool, bulan, pakaiKunci) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (pakaiKunci) await kunciTahun(conn);
+    const [s] = await conn.query(
+      `SELECT bulan FROM blud_periode WHERE tahun_anggaran = ? AND bulan > ? AND status = 'TUTUP'`,
+      [R_TAHUN, bulan]
+    );
+    if (s.length) { await conn.rollback(); return 'ditolak'; }
+    await new Promise(r => setTimeout(r, 20)); // window race
+    await conn.query(`UPDATE blud_periode SET status = 'BUKA' WHERE tahun_anggaran = ? AND bulan = ?`,
+      [R_TAHUN, bulan]);
+    await conn.commit();
+    return 'dibuka';
+  } catch (e) { await conn.rollback(); return `err:${e.code || e.message}`; }
+  finally { conn.release(); }
+}
+
+// Mirror `tutupPeriode` + `kumpulkanPenghalang`: tolak kalau ada bulan < N yang
+// belum tutup — saldo awal bulan ini diturunkan dari bulan-bulan itu (§4.6).
+async function tutupBulan(pool, bulan, pakaiKunci) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (pakaiKunci) await kunciTahun(conn);
+    const [s] = await conn.query(
+      `SELECT bulan FROM blud_periode WHERE tahun_anggaran = ? AND bulan < ? AND status <> 'TUTUP'`,
+      [R_TAHUN, bulan]
+    );
+    if (s.length) { await conn.rollback(); return 'ditolak'; }
+    await new Promise(r => setTimeout(r, 20)); // window race
+    await conn.query(`UPDATE blud_periode SET status = 'TUTUP' WHERE tahun_anggaran = ? AND bulan = ?`,
+      [R_TAHUN, bulan]);
+    await conn.commit();
+    return 'ditutup';
+  } catch (e) { await conn.rollback(); return `err:${e.code || e.message}`; }
+  finally { conn.release(); }
+}
+
+/** Invarian §4.6: tidak boleh ada bulan TUTUP yang di bawahnya masih ada bulan BUKA. */
+async function periodeBolong(pool) {
+  const [rows] = await pool.query(
+    `SELECT bulan, status FROM blud_periode WHERE tahun_anggaran = ? ORDER BY bulan`, [R_TAHUN]
+  );
+  const bolong = [];
+  for (const r of rows) {
+    if (r.status !== 'TUTUP') continue;
+    const lebihAwalTerbuka = rows.filter(x => x.bulan < r.bulan && x.status !== 'TUTUP').map(x => x.bulan);
+    if (lebihAwalTerbuka.length) bolong.push(`${r.bulan} TUTUP di atas ${lebihAwalTerbuka.join('/')} BUKA`);
+  }
+  return { bolong, peta: rows.map(r => `${r.bulan}:${r.status === 'TUTUP' ? 'T' : 'B'}`).join(' ') };
+}
+
+async function testPeriodeRace(pool, pakaiKunci) {
+  await seedPeriode(pool, 5); // 1–5 TUTUP, 6 BUKA
+  const out = await Promise.all([
+    bukaBulan(pool, 5, pakaiKunci),   // A: membuka Mei
+    tutupBulan(pool, 6, pakaiKunci),  // B: menutup Juni
+  ]);
+  const { bolong, peta } = await periodeBolong(pool);
+  return { out, lolos: out.filter(x => x === 'dibuka' || x === 'ditutup').length, bolong, peta };
+}
+
 (async () => {
   const pool = await mysql.createPool({ ...cfg, connectionLimit: 12, waitForConnections: true });
   try {
@@ -467,6 +561,24 @@ async function testUrutanKunci(pool, urutkan) {
       'T8b Urutan kunci MENAIK (§5.3)',
       t8b.deadlock === 0,
       `2 sesi mengunci 2 rekening dgn urutan key menaik → ${t8b.deadlock} deadlock (${t8b.out.join(', ')}). Diharapkan 0.`
+    );
+
+    // T9a: periode TANPA kunci setahun (baseline — dua-duanya lolos, urutan bolong)
+    const t9a = await testPeriodeRace(pool, false);
+    record(
+      'T9a Periode TANPA kunci setahun (baseline race)',
+      t9a.lolos === 2 && t9a.bolong.length > 0,
+      `buka Mei + tutup Juni barengan → ${t9a.out.join(', ')}; peta ${t9a.peta}; bolong: ${t9a.bolong.join('; ') || '-'}. `
+      + `Diharapkan 2 lolos & bolong ≥1 → membuktikan kunci per-BARIS tak menolong (barisnya memang beda).`
+    );
+
+    // T9b: periode DENGAN kunci setahun (N1 — tepat 1 lolos, urutan tetap utuh)
+    const t9b = await testPeriodeRace(pool, true);
+    record(
+      'T9b Periode DENGAN kunci setahun (N1)',
+      t9b.lolos === 1 && t9b.bolong.length === 0,
+      `buka Mei + tutup Juni barengan → ${t9b.out.join(', ')}; peta ${t9b.peta}; bolong: ${t9b.bolong.join('; ') || '-'}. `
+      + `Diharapkan 1 lolos & 0 bolong → yang kedua membaca ulang setelah yang pertama commit, lalu ditolak.`
     );
 
     console.log('\n=== RINGKASAN ===');

@@ -9,6 +9,8 @@
 // itu persis cara berkas Juni 2026 jadi tidak seimbang tanpa ada yang tahu
 // (A = −650.471.561 vs B = 4.883.802.451).
 import { sql, withTransaction } from '@/lib/data/db'
+import type { Penanya, TxSql } from '@/lib/data/db'
+import { acquireBludLock, BLUD_PERIODE_ENTITY, bludPeriodeKey } from './lock'
 import { getSaldoAwal } from './realisasi-data'
 import {
   BludPeriodeTertutupError, BludTutupTidakSeimbangError, BludTutupTerhalangError,
@@ -75,10 +77,12 @@ const toIso = (v: unknown): string | null => {
  * Penghalang tutup — dikumpulkan di satu tempat supaya layar dan server memakai
  * daftar yang sama persis; UI tidak boleh punya versi aturannya sendiri.
  */
-async function kumpulkanPenghalang(tahun: number, bulan: number): Promise<{ pesan: string[]; baki: number }> {
+async function kumpulkanPenghalang(
+  tahun: number, bulan: number, q: Penanya = sql,
+): Promise<{ pesan: string[]; baki: number }> {
   const pesan: string[] = []
 
-  const baki = await sql`
+  const baki = await q`
     SELECT COUNT(*) AS n FROM blud_realisasi_tx
     WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} AND status = 'BELUM_BERREKENING'
   ` as Record<string, unknown>[]
@@ -91,7 +95,7 @@ async function kumpulkanPenghalang(tahun: number, bulan: number): Promise<{ pesa
   // Menutup Juni sementara Mei masih terbuka berarti menandatangani saldo yang
   // masih bisa berubah esok hari — urutannya wajib dari depan.
   if (bulan > 1) {
-    const sebelum = await sql`
+    const sebelum = await q`
       SELECT bulan FROM blud_periode
       WHERE tahun_anggaran = ${tahun} AND bulan < ${bulan} AND status = 'TUTUP'
     ` as Record<string, unknown>[]
@@ -115,7 +119,24 @@ async function kumpulkanPenghalang(tahun: number, bulan: number): Promise<{ pesa
  * Menerima `tx` supaya pemeriksaan di dalam transaksi ikut memakai koneksi yang
  * sama — kalau tidak, `FOR UPDATE` di atasnya tidak menjaga apa pun.
  */
-type Penanya = (strings: TemplateStringsArray, ...values: (string | number)[]) => PromiseLike<unknown[]>
+/**
+ * N1 — pembuka wajib tiap perpindahan status periode. Dua hal sekaligus:
+ * (1) memastikan baris `blud_periode` bulan sasaran ADA, supaya `FOR UPDATE` di
+ *     atasnya benar-benar mengunci sesuatu — pada baris yang belum ada, kunci baris
+ *     tidak menjaga apa pun (lihat `acquireBludLock`);
+ * (2) mengambil kunci setahun, karena aturannya memang bicara tentang bulan lain.
+ *
+ * Urutannya seragam di keempat pemanggil: kunci tahun dulu, baru baris bulan —
+ * syarat bebas-deadlock yang sama seperti §5.3.
+ */
+async function kunciPeriode(tx: TxSql, tahun: number, bulan?: number): Promise<void> {
+  await acquireBludLock(tx, BLUD_PERIODE_ENTITY, bludPeriodeKey(tahun))
+  if (bulan != null) {
+    await tx`
+      INSERT IGNORE INTO blud_periode (tahun_anggaran, bulan, status) VALUES (${tahun}, ${bulan}, 'BUKA')
+    `
+  }
+}
 
 async function bulanTertutup(tahun: number, q: Penanya = sql): Promise<number[]> {
   const rows = await q`
@@ -207,19 +228,27 @@ export interface TutupInput {
  * hitung uang bertahap dan melihat selisihnya sebelum berkomitmen.
  */
 export async function simpanSisiNyata(tahun: number, bulan: number, input: TutupInput): Promise<NeracaKas> {
-  const status = await sql`
-    SELECT status FROM blud_periode WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
-  ` as Record<string, unknown>[]
-  if (status[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
+  await withTransaction(async ({ tx }) => {
+    // N1 — dikunci, bukan sekadar dibaca. Tanpa ini Tutup Kas bisa commit di sela
+    // pemeriksaan dan penulisan di bawah, lalu simpan-sisi-B ini menimpa
+    // `kas_fisik`/`bank_koran` pada berita acara yang sudah ditandatangani —
+    // angkanya berubah, tanda tangannya tidak.
+    await kunciPeriode(tx, tahun, bulan)
+    const status = await tx`
+      SELECT status FROM blud_periode
+      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
+    ` as Record<string, unknown>[]
+    if (status[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
 
-  await sql`
-    INSERT INTO blud_periode (tahun_anggaran, bulan, status, kas_fisik, bank_koran, no_surat, tgl_surat)
-    VALUES (${tahun}, ${bulan}, 'BUKA', ${input.kas_fisik}, ${input.bank_koran},
-            ${input.no_surat ?? null}, ${input.tgl_surat ?? null})
-    ON DUPLICATE KEY UPDATE
-      kas_fisik = VALUES(kas_fisik), bank_koran = VALUES(bank_koran),
-      no_surat = VALUES(no_surat), tgl_surat = VALUES(tgl_surat)
-  `
+    await tx`
+      INSERT INTO blud_periode (tahun_anggaran, bulan, status, kas_fisik, bank_koran, no_surat, tgl_surat)
+      VALUES (${tahun}, ${bulan}, 'BUKA', ${input.kas_fisik}, ${input.bank_koran},
+              ${input.no_surat ?? null}, ${input.tgl_surat ?? null})
+      ON DUPLICATE KEY UPDATE
+        kas_fisik = VALUES(kas_fisik), bank_koran = VALUES(bank_koran),
+        no_surat = VALUES(no_surat), tgl_surat = VALUES(tgl_surat)
+    `
+  })
   return getNeracaKas(tahun, bulan)
 }
 
@@ -242,8 +271,10 @@ export async function setSaldoAwalTahun(
   tahun: number, input: SaldoAwalTahun,
 ): Promise<{ lama: SaldoAwalTahun; neraca: NeracaKas }> {
   const lama = await withTransaction(async ({ tx }) => {
-    // T2 — dikunci dulu, baru diperiksa. Tanpa FOR UPDATE, dua orang bisa
-    // sama-sama lolos pemeriksaan "belum ada yang tutup" lalu menimpa bergantian.
+    // T2/N1 — dikunci dulu, baru diperiksa. Tanpa itu dua orang bisa sama-sama lolos
+    // pemeriksaan "belum ada yang tutup" lalu menimpa bergantian. Kuncinya setahun,
+    // karena yang diperiksa memang seluruh bulan — bukan hanya bulan 1.
+    await kunciPeriode(tx, tahun, 1)
     const baris = await tx`
       SELECT saldo_awal_kas, saldo_awal_bank FROM blud_periode
       WHERE tahun_anggaran = ${tahun} AND bulan = 1 FOR UPDATE
@@ -277,16 +308,20 @@ export async function tutupPeriode(
   tahun: number, bulan: number, input: TutupInput, userId: number,
 ): Promise<NeracaKas> {
   await withTransaction(async ({ tx }) => {
+    await kunciPeriode(tx, tahun, bulan)
     const cek = await tx`
       SELECT status FROM blud_periode
       WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
     ` as Record<string, unknown>[]
     if (cek[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
 
-    const { pesan } = await kumpulkanPenghalang(tahun, bulan)
+    // N1 — keduanya lewat `tx`. Penghalang dan saldo awal adalah dasar dari angka
+    // yang akan ditandatangani; dibaca lewat pool artinya dibaca dari koneksi lain
+    // di luar `FOR UPDATE` barusan, dan transaksi yang commit di sela ikut terbaca.
+    const { pesan } = await kumpulkanPenghalang(tahun, bulan, tx)
     if (pesan.length) throw new BludTutupTerhalangError(pesan)
 
-    const awal = await getSaldoAwal(tahun, bulan)
+    const awal = await getSaldoAwal(tahun, bulan, tx)
     const arus = await tx`
       SELECT COALESCE(SUM(GREATEST((kas_masuk + bank_masuk) - (kas_keluar + bank_keluar), 0)), 0) AS ml,
              COALESCE(SUM(GREATEST((kas_keluar + bank_keluar) - (kas_masuk + bank_masuk), 0)), 0) AS kl
@@ -326,18 +361,25 @@ export async function tutupPeriode(
  * Repot di sini memang disengaja — yang dibuka dokumen bertanda tangan, bukan draf.
  */
 export async function bukaPeriode(tahun: number, bulan: number): Promise<NeracaKas> {
-  const sesudah = await sql`
-    SELECT bulan FROM blud_periode
-    WHERE tahun_anggaran = ${tahun} AND bulan > ${bulan} AND status = 'TUTUP'
-    ORDER BY bulan
-  ` as Record<string, unknown>[]
-  if (sesudah.length) {
-    throw new BludBukaTerhalangError(bulan, sesudah.map((r) => Number(r.bulan)))
-  }
+  await withTransaction(async ({ tx }) => {
+    // N1 — dikunci dulu, baru diperiksa. Ini satu-satunya jalur tulis periode yang
+    // terlewat saat T2. Dua orang berbarengan: A membuka Mei, B menutup Juni.
+    // Masing-masing lolos pemeriksaannya sendiri, keduanya commit, dan hasilnya
+    // Juni TUTUP di atas Mei BUKA — persis keadaan yang aturan ini larang.
+    await kunciPeriode(tx, tahun, bulan)
+    const sesudah = await tx`
+      SELECT bulan FROM blud_periode
+      WHERE tahun_anggaran = ${tahun} AND bulan > ${bulan} AND status = 'TUTUP'
+      ORDER BY bulan
+    ` as Record<string, unknown>[]
+    if (sesudah.length) {
+      throw new BludBukaTerhalangError(bulan, sesudah.map((r) => Number(r.bulan)))
+    }
 
-  await sql`
-    UPDATE blud_periode SET status = 'BUKA', ditutup_oleh = NULL, ditutup_at = NULL
-    WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
-  `
+    await tx`
+      UPDATE blud_periode SET status = 'BUKA', ditutup_oleh = NULL, ditutup_at = NULL
+      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan}
+    `
+  })
   return getNeracaKas(tahun, bulan)
 }

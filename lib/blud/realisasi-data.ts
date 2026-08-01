@@ -9,7 +9,7 @@
 // Memecahnya jadi "baca sisa di JS lalu INSERT" = lost update (L55), pagu jebol
 // tanpa jejak. Urutan penguncian selalu key MENAIK supaya deadlock 1213 mustahil (§5.3).
 import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
-import type { TxSql } from '@/lib/data/db'
+import type { TxSql, Penanya } from '@/lib/data/db'
 import {
   acquireBludLock, BLUD_PAGU_ENTITY, BLUD_KWT_ENTITY, bludPaguKey, bludKwtKey,
 } from './lock'
@@ -89,9 +89,17 @@ export async function getPeriodeStatus(tahun: number, bulan: number): Promise<'B
  * Saldo awal bulan: bulan pertama tahun anggaran diisi manual sekali, bulan
  * berikutnya DITURUNKAN dari arus kas bulan-bulan sebelumnya (§4.6) — bukan
  * disimpan, supaya koreksi transaksi bulan lalu langsung merambat ke bawah.
+ *
+ * N1 — menerima `tx`. `tutupPeriode` memakainya untuk angka yang akan
+ * DITANDATANGANI; kalau dibaca lewat pool, angka itu datang dari koneksi lain di
+ * luar `FOR UPDATE` yang baru saja diambil, dan transaksi yang commit di sela
+ * pemeriksaan ikut terbaca. Yang dijaga di sini bukan sekadar konsistensi: yang
+ * dijaga isi berita acara.
  */
-export async function getSaldoAwal(tahun: number, bulan: number): Promise<{ kas: number; bank: number }> {
-  const p = await sql`
+export async function getSaldoAwal(
+  tahun: number, bulan: number, q: Penanya = sql,
+): Promise<{ kas: number; bank: number }> {
+  const p = await q`
     SELECT saldo_awal_kas, saldo_awal_bank FROM blud_periode
     WHERE tahun_anggaran = ${tahun} AND bulan = 1
   ` as Record<string, unknown>[]
@@ -99,7 +107,7 @@ export async function getSaldoAwal(tahun: number, bulan: number): Promise<{ kas:
   const awalBank = Number(p[0]?.saldo_awal_bank ?? 0)
   if (bulan <= 1) return { kas: awalKas, bank: awalBank }
 
-  const f = await sql`
+  const f = await q`
     SELECT COALESCE(SUM(kas_masuk - kas_keluar), 0) AS kas,
            COALESCE(SUM(bank_masuk - bank_keluar), 0) AS bank
     FROM blud_realisasi_tx
@@ -535,7 +543,7 @@ export async function updateTx(
   expectedVersion: number,
   input: TransaksiInput,
   userId: number,
-): Promise<{ version: number }> {
+): Promise<{ version: number; no_kwt: number | null }> {
   periksaKeseimbangan(input)
   periksaPotongan(input)
 
@@ -559,6 +567,18 @@ export async function updateTx(
     ` as { status?: unknown }[]
     if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
 
+    // N2 — nomor kuitansi ikut pindah waktu `jenis` diubah. Sebelum ini `no_kwt`
+    // hanya diberikan `createTx`, jadi mengubah PENERIMAAN → BELANJA meninggalkan
+    // baris belanja tanpa nomor (di SPJ selnya kosong), dan arah sebaliknya
+    // menyisakan nomor yatim pada baris non-belanja yang masih ikut terhitung di
+    // `MAX(no_kwt)` — nomor berikutnya melompat tanpa ada yang tahu sebabnya.
+    // Nomor yang sudah dipegang baris belanja TIDAK diberi ulang: begitu tercetak
+    // di kuitansi, ia bukan lagi milik aplikasi.
+    const kwtLama = cur[0].no_kwt != null ? Number(cur[0].no_kwt) : null
+    const noKwt = input.jenis === 'BELANJA'
+      ? kwtLama ?? await nomorKuitansiBerikut(tx, tahun, bulan)
+      : null
+
     await kunciDanPeriksaPagu(tx, tahun, input.alokasi, id)
 
     const status = input.belum_berrekening ? 'BELUM_BERREKENING' : 'NORMAL'
@@ -568,6 +588,7 @@ export async function updateTx(
     await tx`
       UPDATE blud_realisasi_tx SET
         tanggal = ${input.tanggal}, jenis = ${input.jenis}, uraian = ${input.uraian},
+        no_kwt = ${noKwt},
         kas_masuk = ${input.kas_masuk}, kas_keluar = ${input.kas_keluar},
         bank_masuk = ${input.bank_masuk}, bank_keluar = ${input.bank_keluar},
         status = ${status}, version = version + 1,
@@ -585,7 +606,7 @@ export async function updateTx(
     }
     await tx`DELETE FROM blud_realisasi_potongan WHERE tx_id = ${id}`
     await tulisPotongan(conn, id, tahun, input.potongan)
-    return { version: version + 1 }
+    return { version: version + 1, no_kwt: noKwt }
   })
 }
 

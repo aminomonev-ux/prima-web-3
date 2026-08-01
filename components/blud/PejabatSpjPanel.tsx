@@ -56,6 +56,10 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
   })
   const [loading, setLoading] = useState(true)
   const [sibuk, setSibuk] = useState(false)
+  // N4-lanjutan: panel ini duduk di layar Pengaturan (yang TIDAK ikut mati), tapi
+  // API-nya dijaga `realisasiMati()`. Tanpa keadaan tersendiri, mematikan sub-modul
+  // Realisasi membuat panelnya sekadar gagal memuat — terbaca seperti aplikasi rusak.
+  const [dimatikan, setDimatikan] = useState(false)
 
   const [pilihUntuk, setPilihUntuk] = useState<Jabatan | null>(null)
   const [saran, setSaran] = useState<SaranPk[]>([])
@@ -83,6 +87,11 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
     setLoading(true)
     try {
       const res = await fetch(`/api/blud/pejabat?tahun=${th}`)
+      // 503 bukan galat, melainkan keadaan: sakelar sub-modul Realisasi sedang mati.
+      // Dijawab dengan tampilan sendiri, bukan toast merah — tidak ada yang perlu
+      // diperbaiki pengguna, dan ia akan hilang sendiri.
+      if (res.status === 503) { setDimatikan(true); return }
+      setDimatikan(false)
       const json = await res.json()
       if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat pejabat'); return }
       const next: Record<Jabatan, Isian> = { DIREKTUR: kosong(), BENDAHARA: kosong(), PPK: kosong() }
@@ -199,6 +208,12 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
 
       {loading ? (
         <div className="pj-kosong">Memuat…</div>
+      ) : dimatikan ? (
+        <div className="pj-kosong">
+          Menu Penatausahaan sedang dimatikan admin untuk pemeliharaan.<br />
+          Pejabat penanda tangan SPJ ikut terkunci sampai menu itu dihidupkan lagi —
+          pengaturan lain di halaman ini tetap bisa dipakai.
+        </div>
       ) : (
         <div className="pj-isi">
           {PERAN.map(p => (

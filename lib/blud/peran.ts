@@ -19,6 +19,21 @@ export const MENU_BLUD = [
 ] as const
 export type MenuBlud = typeof MENU_BLUD[number]
 
+/**
+ * N4 — menu yang ikut mati kalau sakelar `app_status_blud_realisasi` dimatikan.
+ *
+ * Daftarnya cerminan sisi API: yang dijaga `realisasiMati()` adalah seluruh
+ * `/api/blud/realisasi/*` plus `bukti-setor` dan `pejabat`. Tanpa daftar ini
+ * layarnya tetap terbuka dan bisa diklik, lalu tiap panggilan API balas 503 —
+ * pengguna melihat layar rusak, bukan halaman pemeliharaan. Sakelarnya berfungsi,
+ * cuma separuh.
+ *
+ * `cetak` sengaja TIDAK ikut: layar itu tidak memanggil satu pun endpoint
+ * realisasi, dan mematikannya akan ikut mematikan cetakan DPA yang tak ada
+ * urusannya dengan penatausahaan harian.
+ */
+export const MENU_REALISASI: readonly MenuBlud[] = ['buku-kas', 'bukti-setor', 'realisasi', 'tutup-kas']
+
 /** EDIT = boleh mengubah · LIHAT = boleh membuka & MENGUNDUH · TIDAK = ditolak. */
 export type Izin = 'EDIT' | 'LIHAT' | 'TIDAK'
 

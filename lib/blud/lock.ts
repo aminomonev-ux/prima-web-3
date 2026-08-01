@@ -83,8 +83,24 @@ export const BLUD_PAGU_ENTITY = 'realisasi_pagu'
 /** Entity lock penomoran kuitansi — satu baris per (tahun, bulan). */
 export const BLUD_KWT_ENTITY = 'realisasi_kwt'
 
+/**
+ * Entity lock perpindahan status periode — satu baris per TAHUN, bukan per bulan.
+ *
+ * N1: aturan tutup/buka/saldo-awal semuanya bicara tentang bulan LAIN ("tidak ada
+ * bulan sesudahnya yang tertutup", "semua bulan sebelumnya sudah tutup", "belum ada
+ * bulan mana pun yang tertutup"). Mengunci baris bulannya sendiri tidak menjaga
+ * aturan yang jangkauannya setahun: A membuka Mei dan B menutup Juni memegang baris
+ * berbeda, keduanya lolos, dan hasilnya Juni TUTUP di atas Mei BUKA.
+ *
+ * Sengaja TIDAK dipakai `createTx`/`updateTx`/`deleteTx`: mencatat transaksi harian
+ * cukup dijaga kunci baris `blud_periode` bulan itu, dan menyeretnya ke kunci
+ * setahun akan membuat seluruh entri satu tahun antre di belakang satu sama lain.
+ */
+export const BLUD_PERIODE_ENTITY = 'realisasi_periode'
+
 export const bludPaguKey = (tahun: number, anggaranKey: string) => `${tahun}:${anggaranKey}`
 export const bludKwtKey = (tahun: number, bulan: number) => `${tahun}:${bulan}`
+export const bludPeriodeKey = (tahun: number) => String(tahun)
 
 /**
  * Pastikan baris lock ADA lalu kunci eksklusif.

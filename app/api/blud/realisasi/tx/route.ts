@@ -163,7 +163,7 @@ export async function PATCH(req: NextRequest) {
       eventType: 'BLUD_REALISASI_TX_UPDATE',
       userId: session.userId,
       username: session.username,
-      detail: `Ubah transaksi id=${id} → v${hasil.version}: ${transaksi.uraian.slice(0, 80)}`,
+      detail: `Ubah transaksi id=${id} → v${hasil.version} kwt=${hasil.no_kwt ?? '-'}: ${transaksi.uraian.slice(0, 80)}`,
     })
     return NextResponse.json({ ok: true, ...hasil })
   } catch (err) {

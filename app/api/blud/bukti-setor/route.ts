@@ -14,7 +14,7 @@ import { bludRateLimit } from '@/lib/blud/schemas'
 import { listBuktiSetor, getBuktiSetor, simpanBuktiSetor, hapusBuktiSetor } from '@/lib/blud/bukti-setor-data'
 import {
   SimpanBuktiSetorSchema, ListBuktiSetorQuerySchema,
-  BludBuktiSetorConflictError, BludBuktiSetorTidakAdaError,
+  BludBuktiSetorConflictError, BludBuktiSetorTidakAdaError, BludPenunjukTidakSahError,
 } from '@/lib/blud/bukti-setor-schemas'
 import { BludPeriodeTertutupError } from '@/lib/blud/realisasi-schemas'
 import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit, realisasiMati } from '../realisasi/_guard'
@@ -30,6 +30,11 @@ function petakanError(err: unknown): NextResponse | null {
   }
   if (err instanceof BludBuktiSetorTidakAdaError) {
     return NextResponse.json({ ok: false, code: 'TIDAK_DITEMUKAN', error: err.message }, { status: 404 })
+  }
+  // N3 — 400, bukan 404: yang tidak ditemukan bukan slip-nya, melainkan isian yang
+  // dikirim. Slipnya sendiri ada dan bisa diperbaiki.
+  if (err instanceof BludPenunjukTidakSahError) {
+    return NextResponse.json({ ok: false, code: 'PENUNJUK_TIDAK_SAH', error: err.message }, { status: 400 })
   }
   return null
 }

@@ -150,23 +150,34 @@ export async function createPermintaan(
  * `null` = barisnya tidak ada. Statusnya sudah bukan MENUNGGU = melempar, bukan
  * `null` — dua keadaan berbeda tidak boleh diwakili satu nilai.
  */
-export async function tolakPermintaan(id: number): Promise<Permintaan | null> {
+async function bacaPermintaan(id: number): Promise<Record<string, unknown> | null> {
   const rows = await sql`
     SELECT id, tahun_anggaran, jenis, anggaran_key, kode_rekening, uraian, kekurangan,
            status, tx_id, diminta_username, diminta_at, selesai_at
     FROM blud_permintaan WHERE id = ${id}
   ` as Record<string, unknown>[]
-  if (!rows.length) return null
+  return rows[0] ?? null
+}
+
+export async function tolakPermintaan(id: number): Promise<Permintaan | null> {
+  const sebelum = await bacaPermintaan(id)
+  if (!sebelum) return null
 
   const { affectedRows } = await execWrite(sql`
     UPDATE blud_permintaan SET status = 'DITOLAK', selesai_at = NOW()
     WHERE id = ${id} AND status = 'MENUNGGU'
   `)
   if (affectedRows === 0) {
-    throw new BludPermintaanTidakMenungguError(id, String(rows[0]?.status ?? '-'))
+    throw new BludPermintaanTidakMenungguError(id, String(sebelum.status ?? '-'))
   }
 
-  return normalisasi(rows[0])
+  // Dibaca ULANG, bukan mengembalikan potret sebelum UPDATE. Yang lama masih
+  // berisi `status: 'MENUNGGU'` dan `selesai_at: null` — pemanggil yang suatu saat
+  // meneruskannya ke klien akan menampilkan "menunggu" untuk permintaan yang baru
+  // saja ditolak, lalu orangnya menekan Tolak lagi dan dapat 409. `selesai_at`
+  // juga harus datang dari `NOW()` MySQL, bukan ditebak dengan jam JS.
+  const sesudah = await bacaPermintaan(id)
+  return normalisasi(sesudah ?? sebelum)
 }
 
 /**

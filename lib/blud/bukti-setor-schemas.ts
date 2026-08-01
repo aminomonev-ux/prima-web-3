@@ -103,3 +103,21 @@ export class BludBuktiSetorTidakAdaError extends Error {
     this.name = 'BludBuktiSetorTidakAdaError'
   }
 }
+
+/**
+ * N3/L68 — penunjuk baris menyasar ke luar slip ini.
+ *
+ * Zod hanya bisa memastikan `tx_id`/`potongan_id` ADA ISINYA; bahwa angkanya
+ * menunjuk baris yang benar-benar ada dan milik bulan yang sama cuma bisa
+ * ditanyakan ke DB. Sisi bacanya sengaja `JOIN` hidup ke sumbernya, jadi tanpa
+ * pemeriksaan ini transaksi bulan lain ikut masuk ke slip LENGKAP dengan uraian
+ * dan nilai aslinya, lalu ikut terhitung di Total & Cash. Baris yang sumbernya
+ * terhapus sudah ditangani rapi ("(transaksi terhapus)", nilai 0) — yang salah
+ * bulan justru lolos mulus, dan itu yang lebih berbahaya: kelihatan benar.
+ */
+export class BludPenunjukTidakSahError extends Error {
+  constructor(public rincian: string[]) {
+    super(rincian.join(' '))
+    this.name = 'BludPenunjukTidakSahError'
+  }
+}

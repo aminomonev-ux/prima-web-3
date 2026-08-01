@@ -152,6 +152,15 @@ export async function execWrite(fragment: SqlFragment): Promise<{ affectedRows: 
 
 export type TxSql = (strings: TemplateStringsArray, ...values: SqlValue[]) => Promise<unknown[]>;
 
+/**
+ * Pembaca yang menerima `sql` (pool) MAUPUN `tx` — untuk fungsi baca yang dipanggil
+ * dari dua tempat: sendirian, dan dari dalam transaksi. Tanpa ini fungsi tersebut
+ * diam-diam memakai koneksi lain, sehingga `FOR UPDATE` di pemanggilnya tidak
+ * menjaga apa pun (N1). `PromiseLike` karena `sql` mengembalikan SqlFragment yang
+ * thenable, bukan Promise.
+ */
+export type Penanya = (strings: TemplateStringsArray, ...values: SqlValue[]) => PromiseLike<unknown[]>;
+
 function buildQuery(strings: TemplateStringsArray, values: SqlValue[]): { query: string; params: unknown[] } {
   let query = '';
   const params: unknown[] = [];

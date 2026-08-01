@@ -6,7 +6,9 @@
 
 ## 🛡️ AUDIT-AWARE DEVELOPMENT
 
-> ⚠️ **Catatan prima-web-3**: folder dokumentasi audit (`docs/audit/`, `docs/security-audit/`, `docs/audit-v3/`) **tidak ikut ter-copas** ke workspace ini. Referensi kode di bawah (SEC-C1, L45, V3-1, dll) tetap dipakai sebagai konvensi, tapi file cheatsheet-nya ada di repo `prima-web` asli. Kalau butuh detail, copy folder tersebut ke sini dulu.
+> 📖 **Cheatsheet-nya: `docs/AUDIT-LESSONS-LEARNED.md`** — L1–L70 lengkap + status tiap pelajaran di lingkungan intranet + rangkuman 4 putaran audit BLUD. Baca itu dulu sebelum menyentuh kode. Berkasnya **hanya hidup di komputer lokal** (`.gitignore` → `/docs/AUDIT-*.md`, karena repo ini publik dan isinya temuan keamanan); kalau tidak ada di workspace Anda, mintakan salinannya — jangan di-commit.
+>
+> ⚠️ **Catatan prima-web-3**: folder dokumentasi audit asli (`docs/audit/`, `docs/security-audit/`, `docs/audit-v3/`, `docs/audit-V5/`) **tidak ikut ter-copas** ke workspace ini — yang ada di sini versi ringkasnya. Kalau butuh narasi panjang + potongan kode sebelum/sesudah tiap temuan, sumbernya di repo `prima-web` asli.
 
 PRIMA punya 102 findings audit dari multiple wave (Audit v1.0, Tahap 11/12/14/15, SDL-Audit v1.1, BLUD v1.2, Audit V3 V3-1..V3-6). Ringkasan anti-pattern kritis di tabel bawah.
 
@@ -24,6 +26,8 @@ PRIMA punya 102 findings audit dari multiple wave (Audit v1.0, Tahap 11/12/14/15
 | Counter baca-lalu-tulis di JS (`x = col+1` → `UPDATE SET col=${x}`) | Atomik `UPDATE SET col = col + 1` (lost-update) | **V3-5 / L55** |
 
 Anti-pattern terbaru (2026-06-15): **L66** `sqlInt()` utk `LIMIT`/`OFFSET` (mysql2 tolak `LIMIT ?` — lolos tsc, ketahuan saat live), **L67** cap jumlah sheet exceljs anti zip-bomb (di parser bersama), **L68** Zod + cek-eksistensi soft-FK di SEMUA cabang tulis termasuk tabel peta/lookup.
+
+**L69** (2026-08-01, audit BLUD N1–N4): perbaikan itu belum selesai sampai SEMUA jalur tulis kena. Tiga dari empat temuan putaran 4 adalah sisa perbaikan lama — `FOR UPDATE` dipasang tapi 1 fungsi terlewat, nomor urut diberikan di `create` tapi tidak di `update`, kill-switch dipasang di API tapi tidak di layar. Tiga turunannya: (a) `SELECT … FOR UPDATE` pada baris yang **belum ada** tidak mengunci apa pun — `INSERT IGNORE` dulu (pola `acquireBludLock`); (b) fungsi baca yang dipanggil dari dalam transaksi WAJIB menerima `tx` (tipe `Penanya` di `db.ts`), kalau tidak ia diam-diam memakai koneksi lain dan kunci di atasnya sia-sia; (c) aturan yang jangkauannya **setahun** butuh kunci setahun (`BLUD_PERIODE_ENTITY`) — mengunci baris bulannya sendiri tidak menjaganya.
 
 ## 🚨 WAJIB — Navigasi Codebase (lean-ctx)
 **DILARANG** membaca file sembarangan atau grep membabi buta. Gunakan tool lean-ctx.
