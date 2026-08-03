@@ -103,32 +103,59 @@ const TABEL: Record<string, AturanPeran> = {
  */
 const BAWAAN_TAK_TERDAFTAR: Izin = 'LIHAT'
 
-/** Beranda cuma ringkasan; tidak ada apa pun yang bisa diubah dari sana. */
-const MENU_BACA_SAJA: readonly MenuBlud[] = ['beranda', 'cetak']
+/**
+ * Menu yang tidak punya jalur tulis sama sekali — bukan kebijakan, melainkan
+ * kenyataan: tidak ada route yang mengubah angka resmi dari sana. Beranda cuma
+ * ringkasan; Cetak & Realisasi hanya menyajikan (`realisasi/register` cuma `GET`).
+ *
+ * Aturan untuk menu baru: sebuah menu boleh bertingkat `EDIT` hanya kalau ada route
+ * yang benar-benar mengubah angka resmi. Penentunya bukan metode HTTP dan bukan
+ * namanya — `export-log` POST tapi baca, `rekap-pk` terdengar cetakan tapi menulis.
+ */
+export const MENU_BACA_SAJA: readonly MenuBlud[] = ['beranda', 'cetak', 'realisasi']
 
-export function izinMenu(role: string, menu: MenuBlud): Izin {
+/**
+ * Tidak pernah bisa disembunyikan, siapa pun dan apa pun yang dicentang admin.
+ * Alasannya bukan teknis melainkan pengalaman pakai: orang yang berhak masuk modul
+ * tapi dilempar keluar dari halaman depannya akan mengira akunnya rusak — dan
+ * `izinLayar` melempar ke Beranda, jadi Beranda yang tertutup berarti lingkaran.
+ */
+const MENU_SELALU_TERBUKA: readonly MenuBlud[] = ['beranda']
+
+/**
+ * `penimpa` = izin yang diatur admin lewat Admin Panel untuk orang/peran ini
+ * (perkecualian orang menang atas aturan peran — diselesaikan di sisi server oleh
+ * `lib/blud/izin-server.ts`). `null`/tidak diisi berarti belum diatur: pakai `TABEL`.
+ *
+ * Argumennya dioper masuk, TIDAK dicari sendiri. Itu yang menjaga berkas ini tetap
+ * modul daun — lihat catatan di kepala berkas.
+ */
+export function izinMenu(role: string, menu: MenuBlud, penimpa?: Izin | null): Izin {
   const aturan = TABEL[role]
-  const izin = aturan ? (aturan.khusus?.[menu] ?? aturan.bawaan) : BAWAAN_TAK_TERDAFTAR
-  // Menu tanpa jalur tulis tidak pernah `EDIT`, siapa pun perannya. Menyatakannya
-  // di sini menutup satu kelas salah paham: "SUPER_ADMIN EDIT di Cetak" akan
-  // membuat orang mencari tombol simpan yang memang tidak pernah ada.
+  const bawaan = aturan ? (aturan.khusus?.[menu] ?? aturan.bawaan) : BAWAAN_TAK_TERDAFTAR
+  const izin = penimpa ?? bawaan
+  // Menu tanpa jalur tulis tidak pernah `EDIT`, siapa pun perannya dan apa pun yang
+  // dicentang admin. Menyatakannya di sini menutup satu kelas salah paham:
+  // "SUPER_ADMIN EDIT di Cetak" akan membuat orang mencari tombol simpan yang
+  // memang tidak pernah ada. Dievaluasi SESUDAH penimpa — jadi tidak bisa ditembus.
   if (izin === 'EDIT' && MENU_BACA_SAJA.includes(menu)) return 'LIHAT'
+  if (izin === 'TIDAK' && MENU_SELALU_TERBUKA.includes(menu)) return 'LIHAT'
   return izin
 }
 
 /** Boleh mengubah isi menu ini. */
-export function bolehEdit(role: string, menu: MenuBlud): boolean {
-  return izinMenu(role, menu) === 'EDIT'
+export function bolehEdit(role: string, menu: MenuBlud, penimpa?: Izin | null): boolean {
+  return izinMenu(role, menu, penimpa) === 'EDIT'
 }
 
 /** Boleh membuka layarnya — termasuk mengunduh. Unduh BUKAN aksi tulis (§3). */
-export function bolehBuka(role: string, menu: MenuBlud): boolean {
-  return izinMenu(role, menu) !== 'TIDAK'
+export function bolehBuka(role: string, menu: MenuBlud, penimpa?: Izin | null): boolean {
+  return izinMenu(role, menu, penimpa) !== 'TIDAK'
 }
 
-/** Menu yang layak muncul di ribbon untuk peran ini, urut sesuai MENU_BLUD. */
-export function menuTerbuka(role: string): MenuBlud[] {
-  return MENU_BLUD.filter((m) => bolehBuka(role, m))
+/** Menu yang layak muncul di ribbon, urut sesuai MENU_BLUD. */
+export function menuTerbuka(role: string, penimpa?: Partial<Record<MenuBlud, Izin>>): MenuBlud[] {
+  return MENU_BLUD.filter((m) => bolehBuka(role, m, penimpa?.[m] ?? null))
 }
 
 export function isMenuBlud(v: unknown): v is MenuBlud {

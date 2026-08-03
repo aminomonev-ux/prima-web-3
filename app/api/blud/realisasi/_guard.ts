@@ -6,7 +6,7 @@
 // realisasi, cetak), dan `realisasi/permintaan` bahkan dua menu dalam satu berkas.
 // Karena itu `menu` jadi parameter wajib — bukan demi keluwesan, melainkan supaya
 // tsc menunjukkan setiap tempat yang harus memutuskan miliknya menu apa.
-export { unauthorized, forbidden, tolakEdit } from '../_guard'
+export { unauthorized, forbidden, tolakEdit, bolehLihatSalahSatu } from '../_guard'
 import { bolehBukaMenu, bolehEditMenu, bludMati } from '../_guard'
 import type { MenuBlud } from '@/lib/blud/peran'
 

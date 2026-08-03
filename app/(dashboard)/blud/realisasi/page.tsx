@@ -7,6 +7,11 @@ import { izinLayar } from '../_izin'
 export const dynamic = 'force-dynamic'
 
 export default async function RealisasiPage() {
-  await izinLayar('realisasi')
-  return <RealisasiClient />
+  const { peta } = await izinLayar('realisasi')
+  return (
+    <RealisasiClient
+      bolehDpa={peta.dpa !== 'TIDAK'}
+      bolehPergeseran={peta.pergeseran !== 'TIDAK'}
+    />
+  )
 }

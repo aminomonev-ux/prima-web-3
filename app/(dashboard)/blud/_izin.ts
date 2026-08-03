@@ -8,19 +8,41 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { bolehBuka, bolehEdit, MENU_REALISASI, LABEL_MENU, type MenuBlud } from '@/lib/blud/peran'
+import { MENU_REALISASI, LABEL_MENU, type Izin, type MenuBlud } from '@/lib/blud/peran'
+import { petaIzinBlud, type PetaIzinBlud } from '@/lib/blud/izin-server'
 import { modulSedangMati } from '@/lib/security/guard'
 import type { Role } from '@/types'
 
-export async function izinLayar(menu: MenuBlud): Promise<{ role: Role; bolehUbah: boolean }> {
+export type IzinLayar = {
+  role: Role
+  bolehUbah: boolean
+  izin: Izin
+  /**
+   * Izin 12 menu sekaligus. Dipakai layar yang MENUNJUK menu lain — mis. Realisasi
+   * yang menulis "susun DPA lebih dulu di menu DPA BLUD". Tautan ke menu yang bagi
+   * orang itu `TIDAK` harus turun jadi teks biasa: mengarahkan orang ke pintu yang
+   * akan melemparnya balik lebih membingungkan daripada tidak menawarkan pintunya.
+   */
+  peta: PetaIzinBlud
+}
+
+export async function izinLayar(menu: MenuBlud): Promise<IzinLayar> {
   const h    = await headers()
   const uid  = h.get('x-user-id')
   const role = h.get('x-user-role') as Role | null
 
   if (!uid || !role) redirect('/login')
+
+  // Izin hasil resolusi dua lapis (perkecualian orang > aturan peran > bawaan kode),
+  // bukan dihitung dari role saja — kalau tidak, pengaturan per-orang di Admin Panel
+  // tidak akan berpengaruh pada layar, dan layar akan berbeda pendapat dengan route.
+  // Dua belas menu sekali baca: `layout.tsx` sudah memanggilnya, jadi ini kena cache.
+  const peta = await petaIzinBlud(Number(uid), role)
+  const izin = peta[menu]
+
   // Ke Beranda BLUD, bukan /menu — orangnya berhak masuk modul, cuma tidak
   // ke menu ini. Melemparnya keluar modul akan terasa seperti kehilangan akses.
-  if (!bolehBuka(role, menu)) redirect('/blud')
+  if (izin === 'TIDAK') redirect('/blud')
 
   // N4 — sakelar sub-modul Realisasi. Diperiksa di sini, bukan di `layout.tsx`:
   // layout tidak tahu layar mana yang sedang dibuka, sedangkan fungsi ini memang
@@ -34,5 +56,5 @@ export async function izinLayar(menu: MenuBlud): Promise<{ role: Role; bolehUbah
     redirect(`/maintenance?app=${encodeURIComponent(`BLUD - ${LABEL_MENU[menu]}`)}`)
   }
 
-  return { role, bolehUbah: bolehEdit(role, menu) }
+  return { role, bolehUbah: izin === 'EDIT', izin, peta }
 }

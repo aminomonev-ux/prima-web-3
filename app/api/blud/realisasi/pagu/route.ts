@@ -12,7 +12,7 @@ import {
   getPaguEfektif, getPaguSumber, getTerserap, getSerapanPeriode, getPaguCap, gulungKeAtas,
 } from '@/lib/blud/pagu'
 import { TahunSchema } from '@/lib/blud/schemas'
-import { bolehLihat, forbidden, unauthorized, realisasiMati } from '../_guard'
+import { bolehLihatSalahSatu, forbidden, unauthorized, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +22,8 @@ export async function GET(req: NextRequest) {
 
   const mati = await realisasiMati()
   if (mati) return mati
-  if (!(await bolehLihat(session.userId, session.role, 'buku-kas'))) return forbidden()
+  // Pagu tampil di layar Buku Kas DAN Realisasi — cukup salah satunya terbuka.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['buku-kas', 'realisasi']))) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))

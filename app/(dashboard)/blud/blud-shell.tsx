@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import { bolehBuka, type MenuBlud } from '@/lib/blud/peran'
+import { bolehBuka, type Izin, type MenuBlud } from '@/lib/blud/peran'
 import type { Role } from '@/types'
 
 // Tile = icon-on-top + label-bottom. `group` jadi section label di bawah grup.
@@ -43,11 +43,15 @@ const MAX_INLINE_TILES = 11
 interface Props {
   username: string
   role:     Role
+  /** Peta izin 12 menu yang SUDAH diselesaikan di server (orang > peran > bawaan).
+   *  Dioper jadi, bukan dihitung ulang di sini: satu tempat yang menghitung, jadi
+   *  ribbon tidak punya kesempatan berbeda pendapat dengan route. */
+  izin:     Partial<Record<MenuBlud, Izin>>
   themePreference: 'dark' | 'light'
   children: React.ReactNode
 }
 
-export default function BludShell({ username, role, themePreference, children }: Props) {
+export default function BludShell({ username, role, izin, themePreference, children }: Props) {
   const pathname  = usePathname()
   const router    = useRouter()
   const [dropOpen, setDropOpen] = useState(false)
@@ -85,7 +89,7 @@ export default function BludShell({ username, role, themePreference, children }:
 
   // Menu yang tertutup bagi peran ini tidak dipasang sama sekali — bukan disabled.
   // Tile mati hanya memancing klik lalu 403; pagar sebenarnya tetap di route.
-  const TILES = SEMUA_TILE.filter(t => bolehBuka(role, t.menu))
+  const TILES = SEMUA_TILE.filter(t => bolehBuka(role, t.menu, izin[t.menu] ?? null))
 
   const OVERFLOW_LEBAR = 264
 

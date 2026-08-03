@@ -51,7 +51,7 @@ const MATRIKS = {
   'pergeseran':       [E, E, E, L, L],
   'buku-kas':         [E, E, L, L, E],
   'bukti-setor':      [E, E, L, L, E],
-  'realisasi':        [E, E, L, L, E],
+  'realisasi':        [L, L, L, L, L],   // layar pantau — `realisasi/register` cuma GET
   'tutup-kas':        [E, E, L, E, E],
   'cetak':            [L, L, L, L, L],   // unduh saja
   'pengaturan':       [E, E, E, E, E],   // hapus versi dijaga terpisah

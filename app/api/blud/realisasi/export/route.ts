@@ -9,7 +9,7 @@ import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit, TahunSchema } from '@/lib/blud/schemas'
 import { buatWorkbookSpj } from '@/lib/blud/export/spj-excel'
-import { bolehLihat, forbidden, unauthorized, realisasiMati } from '../_guard'
+import { bolehLihatSalahSatu, forbidden, unauthorized, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +22,9 @@ export async function GET(req: NextRequest) {
 
   const mati = await realisasiMati()
   if (mati) return mati
-  if (!(await bolehLihat(session.userId, session.role, 'cetak'))) return forbidden()
+  // Tombol "Unduh SPJ Bulanan" duduk di layar Tutup Kas — SPJ itu dokumen yang lahir
+  // dari menutup bulan, jadi letaknya mengikuti alur kerja dan pagarnya yang mengikuti.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['cetak', 'tutup-kas']))) return forbidden()
 
   const limited = await bludRateLimit(session.userId, 'realisasi-export', 10)
   if (limited) return limited

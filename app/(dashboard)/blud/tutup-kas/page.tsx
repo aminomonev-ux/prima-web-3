@@ -9,6 +9,13 @@ import { bolehBukaPeriode } from '@/lib/blud/realisasi-schemas'
 export const dynamic = 'force-dynamic'
 
 export default async function TutupKasPage() {
-  const { role, bolehUbah } = await izinLayar('tutup-kas')
-  return <TutupKasClient bolehUbah={bolehUbah} bolehBukaKembali={bolehBukaPeriode(role)} />
+  const { role, bolehUbah, peta } = await izinLayar('tutup-kas')
+  return (
+    <TutupKasClient
+      bolehUbah={bolehUbah}
+      bolehBukaKembali={bolehBukaPeriode(role)}
+      bolehBukuKas={peta['buku-kas'] !== 'TIDAK'}
+      bolehUnduhSpj={peta.cetak !== 'TIDAK' || peta['tutup-kas'] !== 'TIDAK'}
+    />
+  )
 }

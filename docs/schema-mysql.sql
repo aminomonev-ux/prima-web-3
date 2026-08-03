@@ -569,6 +569,41 @@ CREATE TABLE IF NOT EXISTS kode_besar (
   INDEX idx_parent_kode (parent_kode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='BLUD - Daftar Kode Besar (template awal DPA)';
 
+-- ─── AKSES MENU (lintas modul) ───────────────────────────────────────────────
+-- Pengaturan izin menu dari Admin Panel. Dua lapis: aturan peran + perkecualian
+-- per orang. Baris yang TIDAK ADA berarti "pakai bawaan dari kode"
+-- (lib/blud/peran.ts) — karena itu kedua tabel sah dalam keadaan kosong, dan
+-- memang dibuat kosong. Konsep: docs/CONCEPT-menu-access-control.md §4.5.
+-- Migration: migration-menu-access.sql
+CREATE TABLE IF NOT EXISTS menu_role_access (
+  app_key    VARCHAR(32)  NOT NULL                COMMENT 'Key modul, mis. "blud"',
+  role       VARCHAR(32)  NOT NULL                COMMENT 'Nama peran, mis. "PERBENDAHARAAN"',
+  menu_key   VARCHAR(64)  NOT NULL                COMMENT 'Key menu, mis. "blud.tutup_kas"',
+  izin       ENUM('EDIT','LIHAT','TIDAK') NOT NULL,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_by INT              NULL,
+  PRIMARY KEY (app_key, role, menu_key),
+  INDEX idx_mra_app_role (app_key, role),
+  CONSTRAINT fk_mra_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Aturan izin menu per PERAN — kosong = pakai bawaan dari kode';
+
+CREATE TABLE IF NOT EXISTS menu_user_access (
+  user_id    INT          NOT NULL,
+  app_key    VARCHAR(32)  NOT NULL,
+  menu_key   VARCHAR(64)  NOT NULL,
+  izin       ENUM('EDIT','LIHAT','TIDAK') NOT NULL,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_by INT              NULL,
+  PRIMARY KEY (user_id, app_key, menu_key),
+  INDEX idx_mua_user_app (user_id, app_key),
+  CONSTRAINT fk_mua_user       FOREIGN KEY (user_id)    REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_mua_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Perkecualian izin menu per ORANG — menang atas menu_role_access';
+
 -- ─── BLUD — REKAP PENANGGUNG JAWAB ───────────────────────────────────────────
 -- Snapshot rekap PJ — output dari menu Cetak BLUD. Pattern replace-latest:
 -- DELETE old snapshot per versi_dpa + bulkInsert new rows, dibungkus

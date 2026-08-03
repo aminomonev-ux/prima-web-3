@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
+import { bolehLihatSalahSatu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { PenanggungJawabBodySchema } from '@/lib/blud/penanggung-jawab-schemas'
 import { getPenanggungJawab, getPenanggungJawabVersion, savePenanggungJawab, PenanggungJawabSafetyError } from '@/lib/blud/penanggung-jawab-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
@@ -15,7 +15,8 @@ export async function GET() {
 
   const mati = await bludMati()
   if (mati) return mati
-  if (!(await bolehBukaMenu(session.userId, session.role, 'penanggung-jawab'))) return forbidden()
+  // Mengisi kolom Penanggung Jawab di layar DPA juga.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['penanggung-jawab', 'dpa']))) return forbidden()
   try {
     const [data, version] = await Promise.all([getPenanggungJawab(), getPenanggungJawabVersion()])
     return NextResponse.json({ ok: true, data, version })

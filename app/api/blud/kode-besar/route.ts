@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
+import { bolehLihatSalahSatu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { KodeBesarBodySchema } from '@/lib/blud/kode-besar-schemas'
 import { getKodeBesar, getKodeBesarVersion, saveKodeBesar, KodeBesarSafetyError } from '@/lib/blud/kode-besar-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
 
   const mati = await bludMati()
   if (mati) return mati
-  if (!(await bolehBukaMenu(session.userId, session.role, 'kode-besar'))) return forbidden()
+  // Template awal "Form Baru" di layar DPA membacanya juga.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['kode-besar', 'dpa']))) return forbidden()
 
   try {
     const q = new URL(req.url).searchParams.get('q') ?? ''

@@ -15,7 +15,7 @@ import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { canHapusVersi, PergeseranBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
+import { bolehBukaMenu, bolehEditMenu, bolehLihatSalahSatu, bolehModulBlud, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,15 +43,22 @@ export async function GET(req: NextRequest) {
 
   const mati = await bludMati()
   if (mati) return mati
-  if (!(await bolehBukaMenu(session.userId, session.role, 'pergeseran'))) return forbidden()
-
-  // R4 — sepasang dengan GET /dpa: sama-sama membaca satu tahun penuh.
-  const limited = await bludRateLimit(session.userId, 'view-pergeseran', 60)
-  if (limited) return limited
 
   const { searchParams } = new URL(req.url)
   const mode    = searchParams.get('mode')
   const tanggal = searchParams.get('tanggal')
+
+  // Pagar per-MODE — sepasang dengan GET /dpa, alasannya sama.
+  const boleh = mode === 'tahun-list'
+    ? await bolehModulBlud(session.userId, session.role)
+    : mode === 'history'
+      ? await bolehLihatSalahSatu(session.userId, session.role, ['pergeseran', 'cetak', 'pengaturan'])
+      : await bolehBukaMenu(session.userId, session.role, 'pergeseran')
+  if (!boleh) return forbidden()
+
+  // R4 — sepasang dengan GET /dpa: sama-sama membaca satu tahun penuh.
+  const limited = await bludRateLimit(session.userId, 'view-pergeseran', 60)
+  if (limited) return limited
 
   try {
     if (mode === 'tahun-list') {

@@ -19,7 +19,7 @@ import {
   BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
   BludSerapanNegatifError, BludPotonganTidakSahError, BludTanggalDiLuarBulanError,
 } from '@/lib/blud/realisasi-schemas'
-import { bolehInput, bolehLihat, forbidden, unauthorized, tolakEdit, realisasiMati } from '../_guard'
+import { bolehInput, bolehLihatSalahSatu, forbidden, unauthorized, tolakEdit, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,7 +61,9 @@ export async function GET(req: NextRequest) {
 
   const mati = await realisasiMati()
   if (mati) return mati
-  if (!(await bolehLihat(session.userId, session.role, 'buku-kas'))) return forbidden()
+  // Daftar transaksi sebulan juga dibaca layar Bukti Setor (memilih transaksi yang
+  // akan disetor) — cukup salah satu menu terbuka. Tulisnya tetap milik Buku Kas.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['buku-kas', 'bukti-setor']))) return forbidden()
 
   // R4 — Buku Kas memuat transaksi sebulan berikut alokasi & potongannya.
   const limited = await bludRateLimit(session.userId, 'view-tx', 60)

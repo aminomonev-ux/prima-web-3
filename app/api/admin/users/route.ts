@@ -6,6 +6,8 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { AdminUsersPatchBodySchema, AdminUserCreateBodySchema } from '@/lib/data/admin-schemas';
 import { assertQuotaAvailableTx, QuotaFullError } from '@/lib/security/promotion';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
+import { hapusIzinOrang } from '@/lib/data/menu-access';
+import { MENU_APP_KEYS } from '@/lib/registry/menu-apps';
 import { RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants';
 
 // Marker untuk membedakan konflik dup (409) dari error lain di dalam transaksi create-user.
@@ -34,8 +36,12 @@ export async function GET(req: NextRequest) {
     const [countRows, dataRows] = await Promise.all([
       sql`SELECT COUNT(*) as total FROM users u WHERE 1=1 ${whereStatus} ${whereSearch}`,
       sql`
-        SELECT id, username, nama_lengkap, email, role, status, email_verified, app_access, created_at, updated_at,
-               promotion_locked_until, probationary_until, probationary_from_role
+        SELECT u.id, u.username, u.nama_lengkap, u.email, u.role, u.status, u.email_verified, u.app_access,
+               u.created_at, u.updated_at,
+               u.promotion_locked_until, u.probationary_until, u.probationary_from_role,
+               -- Dipakai modal ROLE untuk memperingatkan bahwa perkecualian akses menu
+               -- akan ikut terhapus. Subquery, bukan JOIN + GROUP BY: ONLY_FULL_GROUP_BY.
+               (SELECT COUNT(*) FROM menu_user_access ma WHERE ma.user_id = u.id) AS menu_exceptions
         FROM users u WHERE 1=1 ${whereStatus} ${whereSearch}
         ORDER BY
           CASE status WHEN 'MENUNGGU' THEN 0 WHEN 'AKTIF' THEN 1 ELSE 2 END,
@@ -173,10 +179,16 @@ export async function PATCH(req: NextRequest) {
       // role 2 langkah ke belakang). promotion_locked_until SENGAJA tidak di-clear —
       // itu penalti rate-limit perilaku (Tahap 15 L4), punya tombol UNLOCK sendiri.
       const probationWasActive = targetProbationUntil != null && new Date(targetProbationUntil).getTime() > Date.now();
+      // Perkecualian akses menu diberikan dalam konteks jabatan tertentu ("boleh ubah
+      // DPA selagi ia PROGRAM"). Dibiarkan menempel saat orangnya pindah jabatan, ia
+      // jadi kewenangan yang ikut berpindah diam-diam. Dihapus di transaksi yang sama
+      // dengan perubahan perannya supaya tidak pernah ada keadaan setengah jalan.
+      let izinDihapus = 0;
       try {
         await withTransaction(async ({ tx }) => {
           if (role !== targetCurrentRole) await assertQuotaAvailableTx(role, tx);
           await tx`UPDATE users SET role = ${role}, probationary_until = NULL, probationary_from_role = NULL, updated_at = NOW() WHERE id = ${id}`;
+          if (role !== targetCurrentRole) izinDihapus = await hapusIzinOrang(tx, id);
         });
       } catch (e) {
         if (e instanceof QuotaFullError) {
@@ -184,8 +196,13 @@ export async function PATCH(req: NextRequest) {
         }
         throw e;
       }
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Ubah role user id=${id} (${targetCurrentRole} → ${role})${probationWasActive ? ' [probation dibatalkan]' : ''}` });
-      return NextResponse.json({ ok: true, message: `Role diubah ke ${role}.` });
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Ubah role user id=${id} (${targetCurrentRole} → ${role})${probationWasActive ? ' [probation dibatalkan]' : ''}${izinDihapus ? ` [${izinDihapus} perkecualian akses menu dihapus]` : ''}` });
+      return NextResponse.json({
+        ok: true,
+        message: `Role diubah ke ${role}.`
+          + (izinDihapus ? ` ${izinDihapus} pengaturan menu khusus miliknya ikut terhapus.` : ''),
+        izinDihapus,
+      });
     }
 
     if (data.action === 'set-app-access') {
@@ -193,12 +210,22 @@ export async function PATCH(req: NextRequest) {
       if (targetCurrentRole === 'SUPER_ADMIN') {
         return NextResponse.json({ ok: false, message: 'Akses SUPER_ADMIN tidak dapat dibatasi.' }, { status: 403 });
       }
-      if (apps === null || apps.length === 0) {
-        await sql`UPDATE users SET app_access = NULL, updated_at = NOW() WHERE id = ${id}`;
-      } else {
-        await sql`UPDATE users SET app_access = ${JSON.stringify(apps)}, updated_at = NOW() WHERE id = ${id}`;
-      }
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Set app_access user id=${id}: ${JSON.stringify(apps)}` });
+      // Modul yang grant-nya dicabut ikut membawa perkecualian menunya. Kalau
+      // ditinggal, barisnya jadi yatim — tidak berbahaya (pintu modulnya menutup),
+      // tapi hidup kembali tanpa ada yang ingat kalau grant-nya diberikan lagi nanti.
+      let izinDihapus = 0;
+      await withTransaction(async ({ tx }) => {
+        if (apps === null || apps.length === 0) {
+          await tx`UPDATE users SET app_access = NULL, updated_at = NOW() WHERE id = ${id}`;
+        } else {
+          await tx`UPDATE users SET app_access = ${JSON.stringify(apps)}, updated_at = NOW() WHERE id = ${id}`;
+          const punya = new Set<string>(apps);
+          for (const app of MENU_APP_KEYS) {
+            if (!punya.has(app)) izinDihapus += await hapusIzinOrang(tx, id, app);
+          }
+        }
+      });
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Set app_access user id=${id}: ${JSON.stringify(apps)}${izinDihapus ? ` [${izinDihapus} perkecualian akses menu dihapus]` : ''}` });
       return NextResponse.json({ ok: true, message: 'Akses aplikasi berhasil diperbarui.' });
     }
 

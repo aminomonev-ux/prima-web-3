@@ -41,6 +41,7 @@ try {
   execSync(
     `npx tsc "${path.join(repo, 'lib/security/guard.ts')}"`
     + ` "${path.join(repo, 'lib/blud/permintaan-data.ts')}" "${path.join(repo, 'lib/data/db.ts')}"`
+    + ` "${path.join(repo, 'lib/data/locks.ts')}"`
     + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
     + ' --esModuleInterop --skipLibCheck --moduleResolution node',
     { cwd: repo, stdio: 'pipe' },

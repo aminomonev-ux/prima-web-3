@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { bludRateLimit } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
+import { bolehLihatSalahSatu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { MasterAkunBodySchema } from '@/lib/blud/master-akun-schemas'
 import { getMasterAkun, getMasterAkunVersion, saveMasterAkun, MasterAkunSafetyError } from '@/lib/blud/master-akun-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
 
   const mati = await bludMati()
   if (mati) return mati
-  if (!(await bolehBukaMenu(session.userId, session.role, 'master-akun'))) return forbidden()
+  // Daftar akun mengisi combobox di layar DPA & Pergeseran, bukan cuma layar Master Akun.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['master-akun', 'dpa', 'pergeseran']))) return forbidden()
 
   try {
     const q = new URL(req.url).searchParams.get('q') ?? ''

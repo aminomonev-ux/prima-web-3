@@ -122,7 +122,7 @@ Branch aktif: **mysql** — referensi schema: `docs/schema-mysql.sql` (bukan sch
 ### 🚧 Audit status — semua tahap DONE
 - **Tahap 4** ✅ split `usulan-client.tsx` (-58.1%) · **Tahap 11/12** ✅ audit 5-pilar BLUD + Kinerja API (Zod sentral + getSession + bulkInsert/transaction)
 - **Tahap 14** ✅ audit 5-pilar PK (`isPkRole` + Zod sentral) · **Tahap 15** ✅ Role Promotion Ladder (anti-pattern L52)
-- **BLUD** ✅ Chain Hierarchy L1→L8.1 (mig 019) · Pengaturan Hapus Versi (`bludRateLimit`) · optimistic lock generic (L51, `lib/blud/lock.ts`)
+- **BLUD** ✅ Chain Hierarchy L1→L8.1 (mig 019) · Pengaturan Hapus Versi (`bludRateLimit`) · optimistic lock generic (L51, `lib/data/locks.ts` — `lib/blud/lock.ts` re-export + key khas BLUD)
 - **E-Anggaran/Kinerja** ✅ Versi MURNI/PERUBAHAN (`canonical_id`, mig 020-022) · Checkpoint D drop 10 kolom turunan (mig 031) · Sumber +3 tab (mig 030) · kolom % Real Keu · bugfix unlock-latest
 - **Audit V3** ✅ (2026-05-31..06-01) Auth surface + Fase A–E: V3-1 anti header-spoof `x-user-*` (L54) · V3-2 register anti-enumeration (`SIGNUP_BLOCKED`) · V3-3 kuota `AKTIF` · V3-4 kuota enforce di verify-email (`FOR UPDATE`) · V3-5 lockout login atomik (L55) · V3-6 Kinerja SSK/Realisasi optimistic-lock (L51 reuse `blud_locks`, live-verified). Fase A race (harness `scripts/concurrency-test.js` 9/9) · B state-machine · C/D/E 0 defect
 

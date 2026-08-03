@@ -11,7 +11,7 @@ import {
   Radio, Search, FileText, Mail, LogOut,
   RefreshCw, AlertTriangle, ChevronLeft, ChevronRight,
   Trash2, Power, ChevronDown, X, Send,
-  ShieldCheck, Unlock, Undo2, MessageSquareWarning,
+  ShieldCheck, Unlock, Undo2, MessageSquareWarning, ListChecks,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import { fetchJson } from '@/lib/shared/api';
@@ -20,10 +20,11 @@ import Tip from '@/components/ui/Tip';
 import type { Role } from '@/types';
 import { PromotionRequestsPanel } from '@/app/(dashboard)/admin/_panels/PromotionRequestsPanel';
 import { RimaFeedbackPanel } from '@/app/(dashboard)/admin/_panels/RimaFeedbackPanel';
+import { MenuAccessModal, MenuAccessRoleTab } from '@/app/(dashboard)/admin/_panels/MenuAccessPanel';
 
 interface Props { userId: number; username: string; role: Role; sessionId: string; themePreference: 'dark' | 'light'; }
 
-type Tab = 'sessions'|'app-control'|'attack-monitor'|'user-mgmt'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback';
+type Tab = 'sessions'|'app-control'|'attack-monitor'|'user-mgmt'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback';
 
 interface SessionRow { id:number; session_id:string; user_id:number; username:string; role:string; ip_address:string|null; user_agent:string|null; created_at:string; last_active:string; idle_seconds:number; }
 interface UserRow {
@@ -32,6 +33,8 @@ interface UserRow {
   promotion_locked_until?: string|null;
   probationary_until?: string|null;
   probationary_from_role?: string|null;
+  /** Jumlah perkecualian akses menu — dipakai peringatan di modal UBAH ROLE. */
+  menu_exceptions?: number;
 }
 interface AppStatus { [key:string]: string }
 interface ChartSlot { label:string; login:number; failed:number; blocked:number; }
@@ -119,6 +122,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
     { id:'app-control',    label:'APP CONTROL',       icon:<Power size={13}/> },
     { id:'attack-monitor', label:'ATTACK MONITOR',    icon:<Activity size={13}/> },
     { id:'user-mgmt',      label:'USER MANAGEMENT',   icon:<Users size={13}/> },
+    { id:'menu-access',    label:'AKSES MENU',        icon:<ListChecks size={13}/> },
     { id:'security-status',label:'SECURITY STATUS',   icon:<Shield size={13}/> },
     { id:'broadcast',      label:'BROADCAST',         icon:<Radio size={13}/> },
     { id:'audit-trail',    label:'AUDIT TRAIL',        icon:<Search size={13}/> },
@@ -336,6 +340,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
           {tab === 'app-control'     && <TabAppControl   isSA={isSA}/>}
           {tab === 'attack-monitor'  && <TabAttackMonitor/>}
           {tab === 'user-mgmt'       && <TabUserMgmt     isSA={isSA}/>}
+          {tab === 'menu-access'     && <MenuAccessRoleTab isSA={isSA}/>}
           {tab === 'security-status' && <TabSecurityStatus/>}
           {tab === 'broadcast'       && <TabBroadcast    isSA={isSA}/>}
           {tab === 'audit-trail'     && <TabAuditTrail/>}
@@ -756,6 +761,7 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
   const [newPw,        setNP]      = useState('');
   const [pwErr,        setPwErr]   = useState('');
   const [accessModal,  setAM]      = useState<UserRow|null>(null);
+  const [menuModal,    setMenuModal] = useState<UserRow|null>(null);
   const [selAccess,    setSel]     = useState<string[]>([]);
   const [accessAll,    setAccAll]  = useState(true);
   const [accLoading,   setAccLoad] = useState(false);
@@ -806,6 +812,11 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
   },[search,filterStatus]);
 
   useEffect(()=>{ load(1); },[load]);
+
+  /** `app_access` kosong/null = akses semua modul (lihat /api/user/access). */
+  function punyaBlud(u: UserRow) {
+    return !u.app_access || u.app_access.length === 0 || u.app_access.includes('blud');
+  }
 
   function openAccessModal(u: UserRow) {
     setAM(u);
@@ -928,6 +939,12 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
                         ATUR
                       </button>
                     )}
+                    {/* Akses per-menu hanya berarti bagi yang memang bisa masuk modulnya. */}
+                    {u.role !== 'SUPER_ADMIN' && punyaBlud(u) && (
+                      <button className="ap-btn ap-btn-cyan" style={{padding:'2px 8px',fontSize:9}} onClick={()=>setMenuModal(u)}>
+                        MENU
+                      </button>
+                    )}
                   </div>
                 </td>
                 <td>
@@ -975,6 +992,14 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
           <span style={{fontSize:11,color:'#5a8ea8',alignSelf:'center'}}>Hal {page}/{totalPages}</span>
           <button className="ap-btn ap-btn-cyan" disabled={page>=totalPages} onClick={()=>load(page+1)}><ChevronRight size={12}/></button>
         </div>
+      )}
+
+      {menuModal && (
+        <MenuAccessModal
+          userId={menuModal.id}
+          username={menuModal.username}
+          onClose={()=>setMenuModal(null)}
+        />
       )}
 
       {/* Modal: Atur Akses Aplikasi */}
@@ -1083,6 +1108,19 @@ function TabUserMgmt({ isSA }: { isSA:boolean }) {
                 );
               })}
             </select>
+
+            {/* Perkecualian akses menu diberikan dalam konteks jabatan tertentu.
+                Ikut terhapus saat perannya berubah — disampaikan SEBELUM disetujui,
+                bukan diberitahukan sesudah terjadi. */}
+            {!!roleModal.menu_exceptions && newRole !== roleModal.role && (
+              <div style={{padding:'10px 12px',marginBottom:14,borderRadius:6,fontSize:11,lineHeight:1.7,
+                background:'rgba(255,153,68,.06)',border:'1px solid rgba(255,153,68,.25)',color:'#ffb066'}}>
+                <b>{roleModal.username}</b> sekarang punya <b>{roleModal.menu_exceptions} pengaturan menu khusus</b> yang
+                dibuat waktu dia masih {roleModal.role}. Begitu rolenya diganti, pengaturan itu ikut
+                terhapus. Kalau di jabatan barunya masih dibutuhkan, atur lagi lewat tombol MENU.
+              </div>
+            )}
+
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <button className="ap-btn ap-btn-cyan" onClick={()=>setRM(null)}>Batal</button>
               <button className="ap-btn ap-btn-green" onClick={()=>doAction(roleModal.id,'ubah-role',newRole)}>Simpan</button>

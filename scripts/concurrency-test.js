@@ -68,6 +68,9 @@ async function cleanup(pool) {
   // TAHUN KOTAK PASIR 2099 yang memang sudah jadi kesepakatan di seluruh repo.
   await pool.query(`DELETE FROM blud_periode WHERE tahun_anggaran = ?`, [R_TAHUN]);
   await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [PERIODE_ENTITY, String(R_TAHUN)]);
+  // Izin menu (T10) — peran uji saja; peran asli tidak pernah disentuh.
+  await pool.query(`DELETE FROM menu_role_access WHERE role = ?`, [TEST_ROLE]);
+  await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [IZIN_ENTITY, IZIN_KEY]);
 }
 
 // Mirror login-fail ATOMIK (fix V3-5): satu statement increment + conditional lock.
@@ -453,6 +456,82 @@ async function testPeriodeRace(pool, pakaiKunci) {
   return { out, lolos: out.filter(x => x === 'dibuka' || x === 'ditutup').length, bolong, peta };
 }
 
+// ─── Izin menu (Fase 2 menu-access) ─────────────────────────────────────────
+// Bahaya khas di sini: keadaan awalnya KOSONG. Dua admin membuka layar yang sama,
+// dua-duanya membaca "belum ada pengaturan", lalu dua-duanya menyimpan peta yang
+// BERBEDA. Sidik jari saja tidak cukup — pada tabel kosong `SELECT … FOR UPDATE`
+// tidak mengunci baris apa pun (L69-a), jadi barisnya harus di-INSERT IGNORE dulu.
+// Yang diuji: apakah admin kedua ditolak 409, atau perubahan admin pertama hilang
+// tanpa suara.
+const IZIN_ENTITY = 'menu_access';
+const IZIN_APP = 'blud';
+const IZIN_KEY = `${IZIN_APP}:role:${TEST_ROLE}`;
+
+function sidikJari(peta) {
+  const isi = Object.entries(peta);
+  if (isi.length === 0) return '-';
+  return isi.sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join(',');
+}
+
+// Mirror `simpanIzinPeran` di lib/data/menu-access.ts.
+// pakaiKunci=false → baseline "baca sidik jari lalu ganti-semua" tanpa kunci.
+async function simpanIzin(pool, peta, harap, jeda, pakaiKunci) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (pakaiKunci) {
+      await conn.query(`INSERT IGNORE INTO blud_locks (entity, key_id, version) VALUES (?, ?, 0)`,
+        [IZIN_ENTITY, IZIN_KEY]);
+      await conn.query(`SELECT version FROM blud_locks WHERE entity = ? AND key_id = ? FOR UPDATE`,
+        [IZIN_ENTITY, IZIN_KEY]);
+    }
+    const [rows] = await conn.query(
+      `SELECT menu_key, izin FROM menu_role_access WHERE app_key = ? AND role = ? ${pakaiKunci ? 'FOR UPDATE' : ''}`,
+      [IZIN_APP, TEST_ROLE]
+    );
+    const kini = {};
+    for (const r of rows) kini[r.menu_key] = r.izin;
+    if (sidikJari(kini) !== harap) { await conn.rollback(); return 'berubah'; }
+    await new Promise(r => setTimeout(r, jeda)); // window race — baca dulu, tulis belakangan
+    await conn.query(`DELETE FROM menu_role_access WHERE app_key = ? AND role = ?`, [IZIN_APP, TEST_ROLE]);
+    const baris = Object.entries(peta).map(([k, v]) => [IZIN_APP, TEST_ROLE, k, v, null]);
+    if (baris.length) {
+      await conn.query(
+        `INSERT INTO menu_role_access (app_key, role, menu_key, izin, updated_by) VALUES ?`, [baris]
+      );
+    }
+    await conn.commit();
+    return 'tersimpan';
+  } catch (e) { await conn.rollback(); return `err:${e.code || e.message}`; }
+  finally { conn.release(); }
+}
+
+async function testIzinRace(pool, pakaiKunci) {
+  await pool.query(`DELETE FROM menu_role_access WHERE role = ?`, [TEST_ROLE]);
+  await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [IZIN_ENTITY, IZIN_KEY]);
+  const petaA = { 'blud.dpa': 'EDIT' };
+  const petaB = { 'blud.buku_kas': 'EDIT', 'blud.tutup_kas': 'LIHAT' };
+  // Dua-duanya berangkat dari sidik jari '-' (tabel kosong) — persis keadaan sesudah
+  // migration. Jeda berbeda supaya urutan tulis pasti, bukan diundi InnoDB.
+  const out = await Promise.all([
+    simpanIzin(pool, petaA, '-', 0, pakaiKunci),
+    simpanIzin(pool, petaB, '-', 150, pakaiKunci),
+  ]);
+  const [rows] = await pool.query(
+    `SELECT menu_key, izin FROM menu_role_access WHERE app_key = ? AND role = ?`, [IZIN_APP, TEST_ROLE]
+  );
+  const kini = {};
+  for (const r of rows) kini[r.menu_key] = r.izin;
+  return {
+    out,
+    tersimpan: out.filter(x => x === 'tersimpan').length,
+    berubah: out.filter(x => x === 'berubah').length,
+    akhir: sidikJari(kini),
+    hrpA: sidikJari(petaA),
+    hrpB: sidikJari(petaB),
+  };
+}
+
 (async () => {
   const pool = await mysql.createPool({ ...cfg, connectionLimit: 12, waitForConnections: true });
   try {
@@ -579,6 +658,24 @@ async function testPeriodeRace(pool, pakaiKunci) {
       t9b.lolos === 1 && t9b.bolong.length === 0,
       `buka Mei + tutup Juni barengan → ${t9b.out.join(', ')}; peta ${t9b.peta}; bolong: ${t9b.bolong.join('; ') || '-'}. `
       + `Diharapkan 1 lolos & 0 bolong → yang kedua membaca ulang setelah yang pertama commit, lalu ditolak.`
+    );
+
+    // T10a: izin menu TANPA kunci (baseline — dua-duanya "tersimpan", satu hilang senyap)
+    const t10a = await testIzinRace(pool, false);
+    record(
+      'T10a Izin menu TANPA kunci (baseline lost-update)',
+      t10a.tersimpan === 2 && t10a.berubah === 0 && t10a.akhir === t10a.hrpB,
+      `dua admin menyimpan peta berbeda dari tabel kosong → ${t10a.out.join(', ')}; akhir "${t10a.akhir}". `
+      + `Diharapkan 2 tersimpan & yang bertahan hanya peta kedua → pengaturan admin pertama hilang tanpa 409.`
+    );
+
+    // T10b: izin menu DENGAN acquireBludLock (L69-a — tepat 1 lolos, 1 ditolak 409)
+    const t10b = await testIzinRace(pool, true);
+    record(
+      'T10b Izin menu DENGAN acquireBludLock (L69-a)',
+      t10b.tersimpan === 1 && t10b.berubah === 1 && t10b.akhir === t10b.hrpA,
+      `dua admin menyimpan peta berbeda dari tabel kosong → ${t10b.out.join(', ')}; akhir "${t10b.akhir}". `
+      + `Diharapkan 1 tersimpan / 1 berubah & peta pertama utuh → INSERT IGNORE lebih dulu bikin barisnya ADA, jadi FOR UPDATE punya yang dikunci.`
     );
 
     console.log('\n=== RINGKASAN ===');

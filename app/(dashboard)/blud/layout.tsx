@@ -5,6 +5,7 @@ import BludShell from './blud-shell'
 import { sql, queryOne } from '@/lib/data/db'
 import { isBludRole } from '@/lib/blud/schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { petaIzinBlud } from '@/lib/blud/izin-server'
 import type { Role } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -32,8 +33,12 @@ export default async function BludLayout({ children }: { children: React.ReactNo
   )
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light'
 
+  // Dua belas menu diselesaikan sekali di sini, bukan per tile — layout ini dilewati
+  // semua layar BLUD, jadi ribbon tidak pernah memicu 12 pemeriksaan terpisah.
+  const izin = await petaIzinBlud(Number(userId), role)
+
   return (
-    <BludShell username={username} role={role} themePreference={themePreference}>
+    <BludShell username={username} role={role} izin={izin} themePreference={themePreference}>
       {children}
     </BludShell>
   )

@@ -22,6 +22,11 @@ type Props = {
   pgLatestDelta:  number
   dpaHistory:     HistoryItem[]
   pgHistory:      HistoryItem[]
+  /** Kartu KPI menuju menu lain. Kalau menunya tertutup bagi orang ini, kartunya
+   *  tetap tampil (angkanya tetap berguna) tapi tidak bisa diklik — mengarahkannya
+   *  ke pintu yang akan melemparnya balik lebih membingungkan. */
+  bolehDpa:        boolean
+  bolehPergeseran: boolean
 }
 
 function fmtTgl(d: string | null): string {
@@ -146,8 +151,14 @@ export default function DashboardClient(p: Props) {
       <div className="blud-kpi-grid">
         {cards.map(c => {
           const Icon = c.Icon
+          const bisaKlik = c.href === '/blud/dpa' ? p.bolehDpa : p.bolehPergeseran
+          const Kotak = bisaKlik
+            ? ({ children }: { children: React.ReactNode }) =>
+                <Link href={c.href} className="blud-kpi-card" style={{ color: c.color }}>{children}</Link>
+            : ({ children }: { children: React.ReactNode }) =>
+                <div className="blud-kpi-card" style={{ color: c.color, cursor: 'default' }}>{children}</div>
           return (
-            <Link key={c.label} href={c.href} className="blud-kpi-card" style={{ color: c.color }}>
+            <Kotak key={c.label}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="blud-kpi-label" style={{ color: c.color }}>{c.label}</div>
@@ -158,7 +169,7 @@ export default function DashboardClient(p: Props) {
                   <Icon size={20} strokeWidth={2.2} />
                 </div>
               </div>
-            </Link>
+            </Kotak>
           )
         })}
       </div>

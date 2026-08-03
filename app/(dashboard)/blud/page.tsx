@@ -1,9 +1,8 @@
 // app/(dashboard)/blud/page.tsx — landing dashboard BLUD (KPI + history)
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { sql, queryOne, queryMany } from '@/lib/data/db'
 import { toDateStr } from '@/lib/blud/data'
 import DashboardClient from './dashboard-client'
+import { izinLayar } from './_izin'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,8 +51,9 @@ async function getPergeseranDelta(tahun: number, versi: string | null): Promise<
 const toIsoDate = toDateStr
 
 export default async function BludLandingPage({ searchParams }: { searchParams: Promise<{ tahun?: string }> }) {
-  const h = await headers()
-  if (!h.get('x-user-id')) redirect('/login')
+  // Beranda tidak pernah bisa ditutup (MENU_SELALU_TERBUKA), jadi ini tidak akan
+  // melempar siapa pun — yang dibutuhkan cuma petanya, untuk kartu KPI di bawah.
+  const { peta } = await izinLayar('beranda')
 
   // Daftar tahun (union) + resolve tahun terpilih (§9 #1: berjalan → LATEST data)
   const tahunRows = await queryMany<{ tahun_anggaran: string | number }>(
@@ -141,6 +141,8 @@ export default async function BludLandingPage({ searchParams }: { searchParams: 
       pgLatestDelta={pgLatestDelta}
       dpaHistory={dpaHistory}
       pgHistory={pgHistory}
+      bolehDpa={peta.dpa !== 'TIDAK'}
+      bolehPergeseran={peta.pergeseran !== 'TIDAK'}
     />
   )
 }

@@ -18,6 +18,7 @@ import DeleteButton from '@/components/ui/DeleteButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import SpandukLihat from '@/components/blud/SpandukLihat'
+import TautanMenu from '@/components/blud/TautanMenu'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -56,7 +57,9 @@ interface Neraca {
 interface GuBaris { tgl_awal: string; tgl_akhir: string; no_surat: string }
 
 export default function TutupKasClient(
-  { bolehUbah, bolehBukaKembali }: { bolehUbah: boolean; bolehBukaKembali: boolean },
+  { bolehUbah, bolehBukaKembali, bolehBukuKas, bolehUnduhSpj }: {
+    bolehUbah: boolean; bolehBukaKembali: boolean; bolehBukuKas: boolean; bolehUnduhSpj: boolean
+  },
 ) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
@@ -299,11 +302,15 @@ export default function TutupKasClient(
         )}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <PrimaButton variant="success" size="sm" iconLeft={<Download size={13} />}
-            disabled={tahun == null}
-            onClick={() => { window.location.href = `/api/blud/realisasi/export?tahun=${tahun}&bulan=${bulan}` }}>
-            Unduh SPJ Bulanan
-          </PrimaButton>
+          {/* Unduhan ini dijaga menu Cetak ATAU Tutup Kas (§11) — tombolnya ikut
+              aturan yang sama supaya tidak menawarkan sesuatu yang akan ditolak. */}
+          {bolehUnduhSpj && (
+            <PrimaButton variant="success" size="sm" iconLeft={<Download size={13} />}
+              disabled={tahun == null}
+              onClick={() => { window.location.href = `/api/blud/realisasi/export?tahun=${tahun}&bulan=${bulan}` }}>
+              Unduh SPJ Bulanan
+            </PrimaButton>
+          )}
           {terkunci && bolehBukaKembali && (
             <PrimaButton variant="warning" size="sm" onClick={() => { setBukaGagal(null); setBukaModal(true) }}>
               Buka Kembali
@@ -429,7 +436,7 @@ export default function TutupKasClient(
                 <TriangleAlert size={20} />
                 <span>
                   Selisih <b>Rp {rp(Math.abs(selisih!))}</b> {selisih! > 0 ? '(uang nyata lebih banyak dari buku)' : '(uang nyata lebih sedikit dari buku)'}.
-                  Perbaiki dengan mencatat transaksi yang belum masuk di <a href="/blud/buku-kas" className="blud-imp-link">Buku Kas</a> —
+                  Perbaiki dengan mencatat transaksi yang belum masuk di <TautanMenu href="/blud/buku-kas" boleh={bolehBukuKas}>Buku Kas</TautanMenu> —
                   angka di layar ini tidak boleh ditambal.
                 </span>
               </>

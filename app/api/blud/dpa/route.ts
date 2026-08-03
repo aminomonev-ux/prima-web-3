@@ -8,7 +8,7 @@ import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunL
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
 import { canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
+import { bolehBukaMenu, bolehEditMenu, bolehLihatSalahSatu, bolehModulBlud, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 import { validateAllPj } from '@/lib/blud/pj-conflict'
 
 export const dynamic = 'force-dynamic'
@@ -41,16 +41,25 @@ export async function GET(req: NextRequest) {
 
   const mati = await bludMati()
   if (mati) return mati
-  if (!(await bolehBukaMenu(session.userId, session.role, 'dpa'))) return forbidden()
+
+  const { searchParams } = new URL(req.url)
+  const mode    = searchParams.get('mode')
+  const tanggal = searchParams.get('tanggal')
+
+  // Pagar per-MODE, bukan per-handler — satu handler ini melayani tiga bentuk data
+  // dengan kepekaan berbeda. Melebarkan seluruh GET demi dropdown tahun akan ikut
+  // membuka pohon DPA lengkap, dan itu kebocoran sungguhan.
+  const boleh = mode === 'tahun-list'
+    ? await bolehModulBlud(session.userId, session.role)
+    : mode === 'history'
+      ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'cetak', 'pengaturan'])
+      : await bolehBukaMenu(session.userId, session.role, 'dpa')
+  if (!boleh) return forbidden()
 
   // R4 — membaca satu tahun DPA tidak murah. 60/menit longgar untuk pemakaian
   // wajar (pindah versi, pindah tahun) tapi menutup skrip yang berputar.
   const limited = await bludRateLimit(session.userId, 'view-dpa', 60)
   if (limited) return limited
-
-  const { searchParams } = new URL(req.url)
-  const mode    = searchParams.get('mode')
-  const tanggal = searchParams.get('tanggal')
 
   try {
     if (mode === 'tahun-list') {

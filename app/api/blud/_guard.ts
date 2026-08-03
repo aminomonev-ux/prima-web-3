@@ -15,7 +15,8 @@
 import { NextResponse } from 'next/server'
 import { hasAppAccess, modulMati } from '@/lib/security/guard'
 import { isBludRole } from '@/lib/blud/schemas'
-import { bolehBuka, bolehEdit, LABEL_MENU, type MenuBlud } from '@/lib/blud/peran'
+import { LABEL_MENU, type MenuBlud } from '@/lib/blud/peran'
+import { izinBlud, petaIzinBlud } from '@/lib/blud/izin-server'
 
 export const FLAG_BLUD = 'app_status_blud'
 export const FLAG_BLUD_REALISASI = 'app_status_blud_realisasi'
@@ -55,13 +56,43 @@ export function forbidden() {
  * yang menentukan bukan metode HTTP, melainkan apakah angka resminya berubah.
  */
 export async function bolehBukaMenu(userId: number, role: string, menu: MenuBlud): Promise<boolean> {
-  if (!bolehBuka(role, menu)) return false
-  return hasAppAccess(userId, role, isBludRole)
+  if (!(await hasAppAccess(userId, role, isBludRole))) return false
+  return (await izinBlud(userId, role, menu)) !== 'TIDAK'
 }
 
 /** Menu ini boleh diubah isinya. */
 export async function bolehEditMenu(userId: number, role: string, menu: MenuBlud): Promise<boolean> {
-  if (!bolehEdit(role, menu)) return false
+  if (!(await hasAppAccess(userId, role, isBludRole))) return false
+  return (await izinBlud(userId, role, menu)) === 'EDIT'
+}
+
+/**
+ * Endpoint BACA yang datanya ditampilkan beberapa layar. Cukup salah satu menu terbuka.
+ *
+ * Guard sebuah endpoint baca menyebut menu yang **menampilkan** datanya, bukan yang
+ * "memiliki"-nya — kepemilikan itu asumsi yang tidak pernah benar. `pagu` dipakai layar
+ * Buku Kas DAN Realisasi; `master-akun` dipakai layar Master Akun, DPA, dan Pergeseran.
+ * Menolak pemegang menu Realisasi membaca `pagu` tidak menjaga apa pun — angkanya toh
+ * sudah tampil di layarnya; yang terjadi cuma layar sah yang rusak begitu menu lain
+ * disembunyikan. Pola `||` ini sudah dipakai `realisasi/permintaan` sejak awal.
+ *
+ * Hanya untuk BACA. Pagar tulis tetap satu menu — pemiliknya.
+ */
+export async function bolehLihatSalahSatu(userId: number, role: string, menus: readonly MenuBlud[]): Promise<boolean> {
+  if (!(await hasAppAccess(userId, role, isBludRole))) return false
+  const peta = await petaIzinBlud(userId, role)
+  return menus.some((m) => peta[m] !== 'TIDAK')
+}
+
+/**
+ * Metadata modul yang dipakai hampir semua layar — hari ini cuma daftar tahun
+ * (`?mode=tahun-list`), isi dropdown yang ada di 7 dari 12 layar BLUD.
+ *
+ * Sengaja TIDAK terikat menu mana pun. Menempelkannya ke menu DPA adalah kekeliruan
+ * penggolongan: yang dijawab bukan "apa isi DPA" melainkan "tahun berapa saja yang ada
+ * datanya". Mengikatnya ke DPA membuat menyembunyikan menu DPA merusak enam layar lain.
+ */
+export async function bolehModulBlud(userId: number, role: string): Promise<boolean> {
   return hasAppAccess(userId, role, isBludRole)
 }
 

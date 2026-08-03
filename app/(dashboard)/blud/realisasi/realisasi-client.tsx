@@ -17,6 +17,7 @@ import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import { formatTanggalId } from '@/lib/blud/tanggal'
 import RegisterPanel from '@/components/blud/RegisterPanel'
+import TautanMenu from '@/components/blud/TautanMenu'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -53,7 +54,9 @@ interface Perubahan {
 const capSama = (a: Cap | null, b: Cap | null) =>
   !!a && !!b && a.versi === b.versi && a.baris === b.baris && a.sidik === b.sidik
 
-export default function RealisasiClient() {
+export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
+  bolehDpa: boolean; bolehPergeseran: boolean
+}) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
@@ -289,7 +292,7 @@ export default function RealisasiClient() {
       {tanpaDpa && (
         <div className="bk-warn">
           Tahun {tahun} belum punya DPA, jadi belum ada pagu yang bisa dipantau.
-          Susun DPA lebih dulu di menu <a href="/blud/dpa" className="blud-imp-link">DPA BLUD</a>.
+          Susun DPA lebih dulu di menu <TautanMenu href="/blud/dpa" boleh={bolehDpa}>DPA BLUD</TautanMenu>.
         </div>
       )}
 
@@ -357,7 +360,7 @@ export default function RealisasiClient() {
           <TriangleAlert className="w-4 h-4 shrink-0" />
           <span>
             <b>{minus.length} baris terserap melebihi pagunya</b> — pagu diturunkan setelah uangnya
-            terlanjur keluar (§4.3). Perbaiki lewat menu <a href="/blud/pergeseran" className="blud-imp-link">Pergeseran</a>,
+            terlanjur keluar (§4.3). Perbaiki lewat menu <TautanMenu href="/blud/pergeseran" boleh={bolehPergeseran}>Pergeseran</TautanMenu>,
             atau koreksi transaksinya di Buku Kas.
           </span>
         </div>

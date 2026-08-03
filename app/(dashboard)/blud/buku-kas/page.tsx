@@ -6,6 +6,6 @@ import { izinLayar } from '../_izin'
 export const dynamic = 'force-dynamic'
 
 export default async function BukuKasPage() {
-  const { bolehUbah } = await izinLayar('buku-kas')
-  return <BukuKasClient bolehUbah={bolehUbah} />
+  const { bolehUbah, peta } = await izinLayar('buku-kas')
+  return <BukuKasClient bolehUbah={bolehUbah} bolehDpa={peta.dpa !== 'TIDAK'} />
 }

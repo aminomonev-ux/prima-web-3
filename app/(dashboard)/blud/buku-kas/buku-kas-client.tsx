@@ -21,6 +21,7 @@ import { formatTanggalId } from '@/lib/blud/tanggal'
 import TransaksiModal, { type BarisPaguUI, type TransaksiAwal } from '@/components/blud/TransaksiModal'
 import { LABEL_POTONGAN, type JenisPotongan } from '@/lib/blud/alokasi-rule'
 import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
+import TautanMenu from '@/components/blud/TautanMenu'
 import DetailTransaksiModal from '@/components/blud/DetailTransaksiModal'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 
@@ -58,7 +59,9 @@ interface BukuKasData {
   rows: TxRow[]
 }
 
-export default function BukuKasClient({ bolehUbah }: { bolehUbah: boolean }) {
+export default function BukuKasClient({ bolehUbah, bolehDpa }: {
+  bolehUbah: boolean; bolehDpa: boolean
+}) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
@@ -201,7 +204,7 @@ export default function BukuKasClient({ bolehUbah }: { bolehUbah: boolean }) {
       {tanpaDpa && (
         <div className="bk-warn">
           Tahun {tahun} belum punya DPA, jadi belum ada baris anggaran yang bisa dibebani.
-          Susun DPA lebih dulu di menu <a href="/blud/dpa" className="blud-imp-link">DPA BLUD</a>.
+          Susun DPA lebih dulu di menu <TautanMenu href="/blud/dpa" boleh={bolehDpa}>DPA BLUD</TautanMenu>.
         </div>
       )}
 
