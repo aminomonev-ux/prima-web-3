@@ -4,8 +4,12 @@
 -- Copy-paste langsung ke HeidiSQL / MySQL Workbench untuk DB baru
 -- ═══════════════════════════════════════════════════════════════════════════
 
-CREATE DATABASE IF NOT EXISTS prima_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE prima_db;
+-- Nama database TIDAK di-hardcode: pilih/buat database dulu di client
+-- (HeidiSQL: klik database target → Run SQL file), lalu jalankan file ini.
+-- App connect ke database sesuai MYSQL_DATABASE di .env.local (lib/data/db.ts).
+-- Aktifkan 2 baris di bawah HANYA kalau mau instalasi default cepat bernama prima_db.
+-- CREATE DATABASE IF NOT EXISTS prima_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE prima_db;
 
 -- ─── USERS ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
