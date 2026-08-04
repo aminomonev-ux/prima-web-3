@@ -1098,6 +1098,62 @@ Light mode mengganti canvas, surface, text, brand accent, dan action button tone
 
 ---
 
+## Warna Ditulis Langsung (hex) — Aturan & Cara Memeriksanya
+
+**Keadaan hari ini, diukur bukan ditaksir (2026-08-04):** ada **4.443 kode hex** ditulis
+langsung di berkas `.tsx`, sementara `app/globals.css` sudah menyediakan **133 token**
+dan cuma **20 berkas** yang benar-benar memakai `var(--…)`.
+
+Menyapunya sekaligus BUKAN rencana yang disarankan: ribuan suntingan berisiko dengan
+imbalan yang tidak langsung terasa. Yang berlaku dua hal berikut.
+
+### Aturan untuk kode baru
+
+1. **Warna yang menyesuaikan tema WAJIB lewat variabel CSS**, bukan hex inline. Alasannya
+   mekanis, bukan selera: aturan `[data-theme="light"]` menyasar *kelas*, sedangkan
+   *style* inline hanya kalah oleh `!important`. Hex inline karena itu tidak akan pernah
+   berganti saat tema diganti. Contoh pemakaiannya ada di `app/(dashboard)/admin/admin.css`
+   (kelompok `--ma-*`).
+2. **Hex inline masih boleh** untuk warna yang memang sama di kedua tema — token aksi
+   seperti `#E24B4A` (danger) dan `#1D9E75` (success) dengan teks putih penuh.
+3. **Dilarang memakai warna di luar daftar token.** Contoh pelanggaran yang sudah terjadi:
+   `#9CA3AF` (abu Tailwind) dipakai sebagai teks bantu di 11 berkas, padahal token tema
+   terang untuk itu adalah `{colors.text-muted-light}`.
+
+### Cara memeriksa satu layar (tempel di Console peramban)
+
+Bukan pengganti mata, tapi menemukan yang benar-benar tak terbaca dalam hitungan detik.
+Ambangnya 3.0 — di bawah itu praktis tak terbaca; AA untuk teks normal 4.5.
+
+```js
+(()=>{const P=c=>{const m=(c||'').match(/[\d.]+/g);if(!m)return null;return{r:+m[0],g:+m[1],b:+m[2],a:m.length>3?+m[3]:1}},
+L=c=>{const f=[c.r,c.g,c.b].map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*f[0]+.7152*f[1]+.0722*f[2]},
+T=(a,b)=>({r:a.r*a.a+b.r*(1-a.a),g:a.g*a.a+b.g*(1-a.a),b:a.b*a.a+b.b*(1-a.a),a:1}),
+BG=el=>{let h={r:255,g:255,b:255,a:1},ch=[];for(let n=el;n&&n.nodeType===1;n=n.parentElement){const s=getComputedStyle(n);if(s.backgroundImage!=='none')return null;const c=P(s.backgroundColor);if(c&&c.a>0)ch.push(c);if(c&&c.a===1)break}for(let i=ch.length-1;i>=0;i--)h=T(ch[i],h);return h},
+R=(f,b)=>{const x=L(f),y=L(b),[hi,lo]=x>y?[x,y]:[y,x];return (hi+.05)/(lo+.05)},out=new Map();
+for(const el of document.querySelectorAll('body *')){const t=[...el.childNodes].filter(n=>n.nodeType===3&&n.textContent.trim()).map(n=>n.textContent.trim()).join(' ');if(!t)continue;
+const cs=getComputedStyle(el);if(cs.visibility==='hidden'||cs.display==='none'||+cs.opacity<.15)continue;const r=el.getBoundingClientRect();if(r.width<4||r.height<4)continue;
+const fg=P(cs.color);if(!fg||fg.a<.15)continue;const bg=BG(el);if(!bg)continue;const k=R(fg,bg);if(k>=3)continue;
+const key=((el.className||'')+'').split(' ')[0]+'|'+cs.color;if(out.has(key)){out.get(key).n++;continue}
+out.set(key,{n:1,rasio:+k.toFixed(2),warna:cs.color,contoh:t.slice(0,30),kelas:((el.className||'')+'').slice(0,40)})}
+console.table([...out.values()].sort((a,b)=>a.rasio-b.rasio))})()
+```
+
+Batasnya jujur disebut: elemen berlatar **gradien** dilewati (`return null`) karena latar
+efektifnya tidak bisa dihitung dari satu nilai — jadi tombol utama dan avatar tidak akan
+muncul di daftar walau kontrasnya rendah.
+
+### Hasil pemeriksaan 2026-08-04 (tema terang)
+
+| layar | temuan terburuk | rasio |
+|---|---|---|
+| `/menu` | `.card-handle` `#9CA3AF` di atas putih (10 titik) | 2.54 |
+| `/usulan-kebutuhan` | `.kpi-sub` `#9CA3AF` (6 titik) · badge `#FBBF24` "Pagu belum diatur" | 2.43 · **1.60** |
+| `/admin` | — sudah dibereskan (dulu 1.10, sekarang 16.15) | — |
+
+Tidak ada layar yang serusak Admin Panel sebelum diperbaiki. Yang tersisa bersifat
+"kurang terbaca", bukan "hilang".
+
 ## Known Gaps
 
 - Animation and transition timings (row highlight flash on inject, table sort transitions) are not in scope for this version.
