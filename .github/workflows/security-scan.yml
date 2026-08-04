@@ -88,43 +88,38 @@ jobs:
       - name: Audit production dependencies
         run: |
           echo "=== Production dependencies CVE check (HIGH/CRITICAL) ==="
-          # Block kalau ada CVE HIGH/CRITICAL baru DI LUAR allowlist.
-          # Allowlist advisory yang sudah di-review (false-positive / unfixable-aman):
-          #   GHSA-mh99-v99m-4gvg (brace-expansion DoS) — npm audit meng-collapse range
-          #   multi-branch jadi "<=5.0.7", salah tandai versi maintenance PATCHED 1.1.16 /
-          #   2.1.2 (patched di 1.1.12 / 2.0.2). Satu-satunya versi >5.0.7 (5.0.8) ESM-only
-          #   → memecah require CJS di rantai exceljs/archiver/googleapis saat runtime.
-          #   Production tetap pakai versi patched. Advisory baru lain tetap mem-block.
-          ALLOW="GHSA-mh99-v99m-4gvg"
-          AUDIT=$(npm audit --omit=dev --audit-level=high --json || true)
-          BLOCK=$(echo "$AUDIT" | jq -r --arg allow "$ALLOW" '
-            [ .vulnerabilities[]?
-              | select(.severity=="high" or .severity=="critical")
-              | .via[]? | objects | .url // empty ]
-            | unique | map(select(test($allow) | not)) | .[]')
-          if [ -n "$BLOCK" ]; then
-            echo "::error::npm audit menemukan CVE HIGH/CRITICAL baru (di luar allowlist):"
-            echo "$BLOCK"
-            npm audit --omit=dev --audit-level=high || true
-            exit 1
-          fi
-          echo "OK — hanya advisory allowlist (brace-expansion false-positive) yang tersisa."
+          # TANPA allowlist — sengaja. Dulu ada `ALLOW="GHSA-mh99-v99m-4gvg"` dengan alasan
+          # advisory itu false-positive: npm audit meng-collapse range multi-branch jadi
+          # "<=5.0.7" sehingga ikut menandai 1.1.16 / 2.1.2 yang saat itu dicatat PATCHED
+          # (1.1.12 / 2.0.2). 2026-08-04 ketahuan alasan itu gugur: advisory-nya direvisi
+          # naik jadi ">=2.0.0 <2.1.3" — 2.1.2 memang RENTAN, jadi allowlist itu selama
+          # beberapa waktu membungkam temuan nyata, bukan false-positive.
+          # Sekarang semua jalur brace-expansion sudah di-override ke versi patched
+          # (1.1.18 / 2.1.4 / 5.0.9), jadi tidak ada lagi yang perlu dibungkam. Advisory
+          # apa pun yang HIGH/CRITICAL di dependensi produksi mem-block build.
+          #
+          # Kalau suatu hari muncul advisory yang benar-benar tidak bisa diperbaiki:
+          # JANGAN allowlist-by-ID. Pakai pola guard sadar-versi di step berikutnya —
+          # ID bisa berubah cakupannya, versi terpasang tidak bisa berbohong.
+          npm audit --omit=dev --audit-level=high
+          echo "OK — tidak ada CVE HIGH/CRITICAL di dependensi produksi."
 
-      - name: Guard brace-expansion — allowlist sadar-versi (tutup celah)
+      - name: Guard brace-expansion — sadar-versi (tak bergantung ID advisory)
         run: |
           echo "=== Guard: verifikasi versi brace-expansion terpasang BUKAN yang rentan ==="
-          # Allowlist di step atas sengaja membungkam false-positive npm audit (range asli
-          # GHSA-mh99-v99m-4gvg di-collapse jadi "<=5.0.7", ikut menandai versi maintenance
-          # PATCHED 1.1.16 / 2.1.2). Guard ini menutup celah allowlist-by-ID: baca versi
-          # brace-expansion yang BENAR-BENAR terpasang di production, dan gagalkan build kalau
-          # ada yang jatuh di rentang RENTAN gabungan dua advisory:
-          #   GHSA-mh99-v99m-4gvg  → patched 1.1.12 / 2.0.2 / 3.0.1 / 4.0.1 / 5.0.8
+          # Baca versi brace-expansion yang BENAR-BENAR terpasang di production, dan gagalkan
+          # build kalau ada yang jatuh di rentang RENTAN gabungan dua advisory:
+          #   GHSA-mh99-v99m-4gvg  → patched 1.1.12 / 2.1.3 / 3.0.1 / 4.0.1 / 5.0.8
+          #                          (angka 2.x pernah tercatat 2.0.2; advisory-nya direvisi
+          #                           naik ke 2.1.3 — itu sebabnya allowlist lama gugur)
           #   GHSA-rgw5-rvv9-x895  → patched 1.1.18 / 2.1.4 / 5.0.9 (menembus mitigasi di atas;
           #                          SELURUH 4.x rentan, tidak ada 4.x yang aman)
           # Ambang di bawah memakai yang lebih ketat. 2026-08-04: 1.1.16 / 2.1.2 / 5.0.8 yang
-          # dulu dianggap aman jadi RENTAN oleh advisory kedua — dinaikkan lewat `overrides`
-          # ber-kunci-versi di package.json supaya tiap major tetap di major-nya (5.x ESM-only,
-          # menariknya ke rantai CJS exceljs/archiver/googleapis akan memecah require).
+          # dulu dianggap aman ternyata rentan — dinaikkan lewat `overrides` ber-kunci-versi di
+          # package.json supaya tiap major tetap di major-nya (5.x ESM-only, menariknya ke
+          # rantai CJS exceljs/archiver/googleapis akan memecah require).
+          # Guard ini sengaja dipertahankan meski allowlist sudah dihapus: ia menangkap versi
+          # rentan yang terpasang bahkan sebelum ada ID advisory untuknya.
           npm ls brace-expansion --all --omit=dev --json > be.json 2>/dev/null || true
           node -e '
             const fs = require("fs");
