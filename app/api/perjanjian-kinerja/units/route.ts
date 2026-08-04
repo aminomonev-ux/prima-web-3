@@ -10,9 +10,12 @@ import { withTransaction, bulkInsert } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import {
-  isPkRole, pkRateLimit, PkQuerySchema, UnitKerjaBodySchema,
+  pkRateLimit, PkQuerySchema, UnitKerjaBodySchema,
 } from '@/lib/data/pk-schemas';
-import { hasAppAccess } from '@/lib/security/guard';
+import { lantaiEditMenghalangi } from '@/lib/pk/peran';
+import {
+  bolehBukaMenu, bolehEditMenu, bolehModulPk, forbidden, tolakEdit, tolakLantai,
+} from '../_guard';
 import { getPkUnitKerjaList, getAllPkUnitKerjaWithMapping } from '@/lib/data/pk';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +23,11 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  // Daftar unit kerja adalah isi dropdown di Form PK, Master Pejabat, dan Riwayat —
+  // bukan cuma di layar Master Unit. Sengaja TIDAK diikat ke menu `unit-kerja`:
+  // menempelkannya ke sana akan merusak tiga layar lain begitu menu itu disembunyikan.
+  // Cukup punya akses modulnya. (Pelajaran `pagu`/`master-akun` di BLUD.)
+  if (!(await bolehModulPk(session.userId, session.role))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'units-list', 60);
   if (limited) return limited;
@@ -40,10 +47,11 @@ export async function GET(req: NextRequest) {
   const includeInactive = searchParams.get('include_inactive') === 'true';
   const withMapping     = searchParams.get('with_mapping') === 'true';
 
+  // Tampilan admin Master Unit (termasuk unit nonaktif + pemetaan BLUD) — ini isi layar
+  // Master Unit, jadi pagarnya menu itu, bukan cek peran mentah. Bedanya nyata: sejak
+  // ada matriks, SUPER_ADMIN bisa membukanya untuk satu orang tanpa mengubah kode.
   if (includeInactive) {
-    if (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN/ADMIN' }, { status: 403 });
-    }
+    if (!(await bolehBukaMenu(session.userId, session.role, 'unit-kerja'))) return forbidden();
     const data = await getAllPkUnitKerjaWithMapping();
     return NextResponse.json({
       ok: true,
@@ -60,9 +68,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN') {
-    return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN/ADMIN yang dapat edit Master Unit' }, { status: 403 });
-  }
+  // Lantai peran, bukan sekadar izin menu: mengganti nama unit meng-cascade ke
+  // `pk_pejabat` dan pemetaan BLUD di bawah — satu salah ketik menulis ulang rujukan
+  // di banyak tempat sekaligus. Matriks Admin Panel tidak bisa membukanya.
+  if (lantaiEditMenghalangi(session.role, 'unit-kerja')) return tolakLantai('unit-kerja');
+  if (!(await bolehEditMenu(session.userId, session.role, 'unit-kerja'))) return tolakEdit('unit-kerja');
 
   const limited = await pkRateLimit(session.userId, 'save-unit-kerja', 10);
   if (limited) return limited;

@@ -13,6 +13,7 @@ import { useAbortableEffect } from '@/lib/shared/hooks'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
 import PrimaNumberField from '@/components/ui/PrimaNumberField'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/pk/SpandukLihat'
 import { pkInputTable as inputStyle, pkMono as mono } from '@/lib/shared/pk-styles'
 import type { PkUnitKerja, PkLevel } from '../_utils/pk-types'
 
@@ -31,7 +32,7 @@ function emptyUnit(seq: number): UnitRow {
   }
 }
 
-export default function UnitKerjaClient() {
+export default function UnitKerjaClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [units, setUnits] = useState<UnitRow[]>([])
   // BLUD mapping per unit_pk → set of pj labels
   const [mapping, setMapping] = useState<Record<string, Set<string>>>({})
@@ -233,16 +234,22 @@ export default function UnitKerjaClient() {
             onClick={() => setReloadKey(k => k + 1)} disabled={loading || saving}>
             Muat Ulang
           </PrimaButton>
-          <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
-            onClick={addRow} disabled={loading || saving}>
-            Tambah Unit
-          </PrimaButton>
-          <PrimaButton variant="primary" iconLeft={<Save size={14} />}
-            onClick={handleSave} disabled={loading || saving || dirtyCount === 0}>
-            {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
-          </PrimaButton>
+          {bolehUbah && (
+            <>
+              <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
+                onClick={addRow} disabled={loading || saving}>
+                Tambah Unit
+              </PrimaButton>
+              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+                onClick={handleSave} disabled={loading || saving || dirtyCount === 0}>
+                {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
+              </PrimaButton>
+            </>
+          )}
         </div>
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="unit-kerja" />}
 
       {toast && (
         <div style={{

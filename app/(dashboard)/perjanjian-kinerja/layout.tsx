@@ -10,6 +10,7 @@ import { PkYearProvider } from './_context/PkYearContext'
 import { sql, queryOne } from '@/lib/data/db'
 import { isPkRole } from '@/lib/data/pk-schemas'
 import { hasAppAccess } from '@/lib/security/guard'
+import { petaIzinPk } from '@/lib/pk/izin-server'
 import type { Role } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -28,9 +29,13 @@ export default async function PerjanjianKinerjaLayout({ children }: { children: 
   )
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light'
 
+  // Tujuh menu sekali baca di sini, lalu dipakai ulang oleh `izinLayarPk` tiap halaman
+  // lewat cache — kalau ribbon menghitung sendiri, ribbon dan halaman bisa berbeda.
+  const izin = await petaIzinPk(Number(userId), role)
+
   return (
     <PkYearProvider>
-      <PkShell username={username} role={role} themePreference={themePreference}>
+      <PkShell username={username} role={role} izin={izin} themePreference={themePreference}>
         {children}
       </PkShell>
     </PkYearProvider>

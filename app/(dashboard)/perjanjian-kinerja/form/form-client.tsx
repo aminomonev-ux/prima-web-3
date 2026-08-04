@@ -19,9 +19,10 @@ import PihakPertamaForm from './_components/PihakPertamaForm'
 import PihakKeduaForm from './_components/PihakKeduaForm'
 import LampiranAnggaranSplit from './_components/LampiranAnggaranSplit'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/pk/SpandukLihat'
 import DownloadButton from '@/components/ui/DownloadButton'
 
-interface Props { editId: number | null }
+interface Props { editId: number | null; bolehUbah: boolean }
 
 function emptyForm(tahun: string): PkFormState {
   const today = new Date().toISOString().slice(0, 10)
@@ -34,7 +35,7 @@ function emptyForm(tahun: string): PkFormState {
   }
 }
 
-export default function FormClient({ editId }: Props) {
+export default function FormClient({ editId, bolehUbah }: Props) {
   const { tahun } = usePkYear()
   const router = useRouter()
 
@@ -380,25 +381,32 @@ export default function FormClient({ editId }: Props) {
             <DownloadButton variant="word" label="Unduh Word" onClick={handleDownload}
               data-tooltip="Unduh dokumen Word" data-tooltip-pos="below" />
           )}
-          <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
-            onClick={handleDelete} disabled={deleting || isFinal}
-            data-tooltip={isFinal ? 'Dokumen FINAL — hubungi SUPER_ADMIN' : 'Hapus dokumen / reset form'} data-tooltip-pos="below">
-            {deleting ? 'Menghapus…' : (form.id ? 'Hapus' : 'Reset')}
-          </PrimaButton>
-          <PrimaButton variant="primary" iconLeft={<Save size={14} />}
-            onClick={handleSave} disabled={saving || isFinal || isLoading}
-            data-tooltip={isFinal ? 'Dokumen sudah FINAL — tidak dapat diedit' : 'Simpan ke server'} data-tooltip-pos="below">
-            {saving ? 'Menyimpan…' : 'Simpan'}
-          </PrimaButton>
-          {form.id && !isFinal && (
-            <PrimaButton variant="success" iconLeft={<FileCheck2 size={14} />}
-              onClick={handleFinalize} disabled={finalizing || isLoading}
-              data-tooltip="Generate Word + kunci dokumen FINAL" data-tooltip-pos="below">
-              {finalizing ? 'Memproses…' : 'Finalisasi'}
-            </PrimaButton>
+          {bolehUbah && (
+            <>
+              <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
+                onClick={handleDelete} disabled={deleting || isFinal}
+                data-tooltip={isFinal ? 'Dokumen FINAL — hubungi SUPER_ADMIN' : 'Hapus dokumen / reset form'} data-tooltip-pos="below">
+                {deleting ? 'Menghapus…' : (form.id ? 'Hapus' : 'Reset')}
+              </PrimaButton>
+              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+                onClick={handleSave} disabled={saving || isFinal || isLoading}
+                data-tooltip={isFinal ? 'Dokumen sudah FINAL — tidak dapat diedit' : 'Simpan ke server'} data-tooltip-pos="below">
+                {saving ? 'Menyimpan…' : 'Simpan'}
+              </PrimaButton>
+              {form.id && !isFinal && (
+                <PrimaButton variant="success" iconLeft={<FileCheck2 size={14} />}
+                  onClick={handleFinalize} disabled={finalizing || isLoading}
+                  data-tooltip="Generate Word + kunci dokumen FINAL" data-tooltip-pos="below">
+                  {finalizing ? 'Memproses…' : 'Finalisasi'}
+                </PrimaButton>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {/* Unduh Word tetap ada di atas — mengunduh bukan mengubah. */}
+      {!bolehUbah && <SpandukLihat menu="form" />}
 
       {toast && (
         <div style={{

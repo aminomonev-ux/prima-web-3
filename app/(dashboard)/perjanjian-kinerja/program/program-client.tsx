@@ -10,6 +10,7 @@ import { fetchJson } from '@/lib/shared/api'
 import { useAbortableEffect } from '@/lib/shared/hooks'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/pk/SpandukLihat'
 import { pkInputTable as inputStyle, pkCheckbox as checkboxStyle, pkModalBackdrop as modalBackdrop, pkMono as mono } from '@/lib/shared/pk-styles'
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkProgramRow, PkLevel } from '../_utils/pk-types'
@@ -50,7 +51,7 @@ const LEVEL_LABEL: Record<PkLevel, { txt: string; color: string }> = {
   subkegiatan: { txt: 'SUB-KEG',  color: '#EF9F27' },
 }
 
-export default function ProgramClient() {
+export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
   const { tahun } = usePkYear()
   const [rows, setRows] = useState<PkProgramRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -259,28 +260,34 @@ export default function ProgramClient() {
             onClick={() => setReloadKey(k => k + 1)} disabled={loading || saving}>
             Muat Ulang
           </PrimaButton>
-          <PrimaButton variant="success" iconLeft={<Download size={14} />}
-            onClick={handleImportFetch} disabled={loading || saving || importBusy}
-            data-tooltip="Tarik hierarki Program → Kegiatan → Sub-Kegiatan dari aplikasi Renaksi & Kinerja"
-            data-tooltip-pos="bottom">
-            {importBusy ? 'Memuat…' : 'Import Renaksi'}
-          </PrimaButton>
-          <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
-            onClick={() => setLevelPickerOpen(true)} disabled={loading || saving}>
-            Tambah Baris
-          </PrimaButton>
-          {selectedCount > 0 && (
-            <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
-              onClick={requestDeleteBulk} disabled={loading || saving}>
-              Hapus Terpilih ({selectedCount})
-            </PrimaButton>
+          {bolehUbah && (
+            <>
+              <PrimaButton variant="success" iconLeft={<Download size={14} />}
+                onClick={handleImportFetch} disabled={loading || saving || importBusy}
+                data-tooltip="Tarik hierarki Program → Kegiatan → Sub-Kegiatan dari aplikasi Renaksi & Kinerja"
+                data-tooltip-pos="bottom">
+                {importBusy ? 'Memuat…' : 'Import Renaksi'}
+              </PrimaButton>
+              <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
+                onClick={() => setLevelPickerOpen(true)} disabled={loading || saving}>
+                Tambah Baris
+              </PrimaButton>
+              {selectedCount > 0 && (
+                <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
+                  onClick={requestDeleteBulk} disabled={loading || saving}>
+                  Hapus Terpilih ({selectedCount})
+                </PrimaButton>
+              )}
+              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+                onClick={handleSave} disabled={loading || saving}>
+                {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
+              </PrimaButton>
+            </>
           )}
-          <PrimaButton variant="primary" iconLeft={<Save size={14} />}
-            onClick={handleSave} disabled={loading || saving}>
-            {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
-          </PrimaButton>
         </div>
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="program" />}
 
       {toast && (
         <div style={{
@@ -384,13 +391,15 @@ export default function ProgramClient() {
         )}
       </div>
 
-      <p style={{ fontSize: 11, color: '#85B7EB', marginTop: 10, lineHeight: 1.6 }}>
-        💡 <strong>Level otomatis</strong> dari isi field: hanya Program → <code style={mono}>PROGRAM</code>;
-        + Kegiatan → <code style={mono}>KEGIATAN</code>; + Sub-Kegiatan → <code style={mono}>SUB-KEG</code>.
-        Pola simpan: replace-all per tahun (sama dengan Master Sasaran).
-        <br />
-        📥 <strong>Import Renaksi</strong>: tarik hierarki Program → Kegiatan → Sub-Kegiatan dari aplikasi Renaksi & Kinerja. Hasil populate form (belum auto-save) — masih bisa diedit sebelum klik Simpan.
-      </p>
+      {bolehUbah && (
+        <p style={{ fontSize: 11, color: '#85B7EB', marginTop: 10, lineHeight: 1.6 }}>
+          💡 <strong>Level otomatis</strong> dari isi field: hanya Program → <code style={mono}>PROGRAM</code>;
+          + Kegiatan → <code style={mono}>KEGIATAN</code>; + Sub-Kegiatan → <code style={mono}>SUB-KEG</code>.
+          Pola simpan: replace-all per tahun (sama dengan Master Sasaran).
+          <br />
+          📥 <strong>Import Renaksi</strong>: tarik hierarki Program → Kegiatan → Sub-Kegiatan dari aplikasi Renaksi &amp; Kinerja. Hasil populate form (belum auto-save) — masih bisa diedit sebelum klik Simpan.
+        </p>
+      )}
 
       {importModal && (
         <div onClick={() => setImportModal(null)} style={modalBackdrop}>

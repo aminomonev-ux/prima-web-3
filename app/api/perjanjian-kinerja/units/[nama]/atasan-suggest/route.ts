@@ -5,8 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { isPkRole, pkRateLimit } from '@/lib/data/pk-schemas';
-import { hasAppAccess } from '@/lib/security/guard';
+import { pkRateLimit } from '@/lib/data/pk-schemas';
+import { bolehModulPk, forbidden } from '../../../_guard';
 import { getAtasanDefault } from '@/lib/data/pk';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ nama: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  // Satu nama atasan bawaan untuk sebuah unit — metadata isian Form PK, sekelas dengan
+  // daftar unit di `units/route.ts`. Tidak diikat menu mana pun, alasan yang sama.
+  if (!(await bolehModulPk(session.userId, session.role))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'atasan-suggest', 60);
   if (limited) return limited;

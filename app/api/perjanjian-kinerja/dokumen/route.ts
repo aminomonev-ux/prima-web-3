@@ -7,13 +7,11 @@ import { sql, withTransaction, bulkInsert, sqlInt, safeInt } from '@/lib/data/db
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import {
-  isPkRole,
-  isPkEditRole,
   pkRateLimit,
   PkQuerySchema,
   DokumenCreateBodySchema,
 } from '@/lib/data/pk-schemas';
-import { hasAppAccess } from '@/lib/security/guard';
+import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit } from '../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -37,7 +35,10 @@ type DokumenListRow = {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  // Daftar dokumen tampil di tiga layar sekaligus — Beranda (ringkasan), Form (dokumen
+  // yang sedang disusun), dan Riwayat. Mengikatnya ke satu menu akan mematikan dua
+  // layar lain begitu menu itu disembunyikan.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['beranda', 'form', 'riwayat']))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'dokumen-list', 30);
   if (limited) return limited;
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkEditRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  if (!(await bolehEditMenu(session.userId, session.role, 'form'))) return tolakEdit('form');
 
   const limited = await pkRateLimit(session.userId, 'create-dokumen', 20);
   if (limited) return limited;

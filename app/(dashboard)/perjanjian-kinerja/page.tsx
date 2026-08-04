@@ -1,19 +1,27 @@
 // app/(dashboard)/perjanjian-kinerja/page.tsx — Beranda landing PK
 import Link from 'next/link'
 import { Target, ListTree, FilePlus, ClipboardList, Users, Building2 } from 'lucide-react'
+import type { MenuPk } from '@/lib/pk/peran'
+import { izinLayarPk } from './_izin'
 
 export const dynamic = 'force-dynamic'
 
-const CARDS = [
-  { href: '/perjanjian-kinerja/sasaran',    title: 'Master Sasaran', desc: 'Indikator + target per program/kegiatan/sub-kegiatan', icon: Target,        color: '#10B981' },
-  { href: '/perjanjian-kinerja/program',    title: 'Master Program', desc: 'Hierarki Program → Kegiatan → Sub-kegiatan',           icon: ListTree,      color: '#14B8A6' },
-  { href: '/perjanjian-kinerja/form',       title: 'Form PK',        desc: 'Buat dokumen Perjanjian Kinerja baru',                 icon: FilePlus,      color: '#EF9F27' },
-  { href: '/perjanjian-kinerja/riwayat',    title: 'Riwayat',        desc: 'Daftar dokumen PK + unduh Word',                       icon: ClipboardList, color: '#8B5CF6' },
-  { href: '/perjanjian-kinerja/pejabat',    title: 'Master Pejabat', desc: 'Nama, jabatan, NIP per unit kerja',                    icon: Users,         color: '#F59E0B' },
-  { href: '/perjanjian-kinerja/unit-kerja', title: 'Master Unit',    desc: 'Daftar unit + atasan default + mapping BLUD',          icon: Building2,     color: '#64748B' },
+const CARDS: Array<{ href: string; title: string; desc: string; icon: React.ElementType; color: string; menu: MenuPk }> = [
+  { href: '/perjanjian-kinerja/sasaran',    title: 'Master Sasaran', desc: 'Indikator + target per program/kegiatan/sub-kegiatan', icon: Target,        color: '#10B981', menu: 'sasaran' },
+  { href: '/perjanjian-kinerja/program',    title: 'Master Program', desc: 'Hierarki Program → Kegiatan → Sub-kegiatan',           icon: ListTree,      color: '#14B8A6', menu: 'program' },
+  { href: '/perjanjian-kinerja/form',       title: 'Form PK',        desc: 'Buat dokumen Perjanjian Kinerja baru',                 icon: FilePlus,      color: '#EF9F27', menu: 'form' },
+  { href: '/perjanjian-kinerja/riwayat',    title: 'Riwayat',        desc: 'Daftar dokumen PK + unduh Word',                       icon: ClipboardList, color: '#8B5CF6', menu: 'riwayat' },
+  { href: '/perjanjian-kinerja/pejabat',    title: 'Master Pejabat', desc: 'Nama, jabatan, NIP per unit kerja',                    icon: Users,         color: '#F59E0B', menu: 'pejabat' },
+  { href: '/perjanjian-kinerja/unit-kerja', title: 'Master Unit',    desc: 'Daftar unit + atasan default + mapping BLUD',          icon: Building2,     color: '#64748B', menu: 'unit-kerja' },
 ]
 
-export default function PkBerandaPage() {
+export default async function PkBerandaPage() {
+  // Kartu ke menu yang tertutup ikut hilang, bukan cuma tile di ribbon. Menawarkan
+  // pintu yang akan memantulkan orang balik ke sini lebih membingungkan daripada
+  // tidak menawarkannya.
+  const { peta } = await izinLayarPk('beranda')
+  const kartu = CARDS.filter(c => peta[c.menu] !== 'TIDAK')
+
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
@@ -31,7 +39,7 @@ export default function PkBerandaPage() {
         display: 'grid', gap: 14,
         gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
       }}>
-        {CARDS.map(c => {
+        {kartu.map(c => {
           const Icon = c.icon
           return (
             <Link key={c.href} href={c.href} style={{

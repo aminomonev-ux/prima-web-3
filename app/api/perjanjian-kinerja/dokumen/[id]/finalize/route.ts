@@ -6,8 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql, safeInt, withTransaction } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { isPkEditRole, pkRateLimit } from '@/lib/data/pk-schemas';
-import { hasAppAccess } from '@/lib/security/guard';
+import { pkRateLimit } from '@/lib/data/pk-schemas';
+import { bolehEditMenu, tolakEdit } from '../../../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 import { generatePkDocument } from '@/lib/pk/docgen';
 
@@ -17,7 +17,7 @@ export const runtime = 'nodejs'; // perlu fs untuk template file
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkEditRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  if (!(await bolehEditMenu(session.userId, session.role, 'form'))) return tolakEdit('form');
 
   const limited = await pkRateLimit(session.userId, 'finalize-dokumen', 10);
   if (limited) return limited;

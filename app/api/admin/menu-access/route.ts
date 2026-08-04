@@ -13,13 +13,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { queryOne, sql } from '@/lib/data/db'
-import { MENU_BLUD, izinMenu, type Izin, type MenuBlud } from '@/lib/blud/peran'
-import { petaIzinBawaan } from '@/lib/blud/izin-server'
-import { aplikasiMenu, infoMenu, keyMenuBlud } from '@/lib/registry/menu-apps'
 import {
-  APP_BLUD, IzinBerubahError, getIzinOrang, getIzinPeran, sidikJariIzin,
+  MENU_APP_KEYS, aplikasiMenu, infoMenu, izinMenuRegistry, type Izin,
+} from '@/lib/registry/menu-apps'
+import {
+  APP_BLUD, APP_PK, IzinBerubahError, getIzinOrang, getIzinPeran, sidikJariIzin,
   simpanIzinOrang, simpanIzinPeran,
 } from '@/lib/data/menu-access'
+import { LANTAI_EDIT, LABEL_MENU_PK, type MenuPk } from '@/lib/pk/peran'
 import { MenuAccessBodySchema } from '@/lib/data/menu-access-schemas'
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit'
 import { RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants'
@@ -42,11 +43,22 @@ function daftarMenu(appKey: string) {
  * terkunci: admin yang melihat siapa pemegangnya tahu kenapa toggle-nya tidak ada,
  * alih-alih mengira fiturnya lupa dibuat.
  */
-function aksiTerkunci() {
-  return [
-    { label: 'Hapus versi DPA / Pergeseran', peran: [...BLUD_HAPUS_VERSI_ROLES] },
-    { label: 'Buka kembali periode yang sudah ditutup', peran: [...BLUD_BUKA_PERIODE_ROLES] },
-  ]
+function aksiTerkunci(appKey: string) {
+  if (appKey === APP_BLUD) {
+    return [
+      { label: 'Hapus versi DPA / Pergeseran', peran: [...BLUD_HAPUS_VERSI_ROLES] },
+      { label: 'Buka kembali periode yang sudah ditutup', peran: [...BLUD_BUKA_PERIODE_ROLES] },
+    ]
+  }
+  if (appKey === APP_PK) {
+    // Pasangan dari `editHanyaPeran` di registry: sel EDIT-nya mati, dan baris ini
+    // yang menjelaskan kenapa. Satu tanpa yang lain menyisakan saklar mati tanpa sebab.
+    return (Object.keys(LANTAI_EDIT) as MenuPk[]).map((m) => ({
+      label: `Ubah ${LABEL_MENU_PK[m]}`,
+      peran: [...(LANTAI_EDIT[m] ?? [])],
+    }))
+  }
+  return []
 }
 
 function keluarkan(peta: Map<string, Izin>) {
@@ -59,8 +71,12 @@ export async function GET(req: NextRequest) {
   if (session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') return forbidden()
 
   const p = req.nextUrl.searchParams
+  // Bawaannya BLUD demi klien lama yang memanggil tanpa `appKey`. Yang sah = apa pun
+  // yang terdaftar di registry — modul baru tidak perlu menyentuh berkas ini lagi.
   const appKey = p.get('appKey') ?? APP_BLUD
-  if (appKey !== APP_BLUD) return NextResponse.json({ ok: false, message: 'Modul tidak dikenal' }, { status: 400 })
+  if (!MENU_APP_KEYS.includes(appKey)) {
+    return NextResponse.json({ ok: false, message: 'Modul tidak dikenal' }, { status: 400 })
+  }
 
   try {
     const userIdRaw = p.get('userId')
@@ -75,10 +91,16 @@ export async function GET(req: NextRequest) {
       if (!u) return NextResponse.json({ ok: false, message: 'User tidak ditemukan' }, { status: 404 })
 
       const [peran, orang] = await Promise.all([getIzinPeran(appKey, u.role), getIzinOrang(userId, appKey)])
+      const menus = daftarMenu(appKey)
       const efektif = {} as Record<string, Izin>
-      for (const menu of MENU_BLUD) {
-        const k = keyMenuBlud(menu)
-        efektif[k] = izinMenu(u.role, menu, orang.get(k) ?? peran.get(k) ?? null)
+      const bawaanPeran = {} as Record<string, Izin>
+      for (const { key } of menus) {
+        const hasil = izinMenuRegistry(appKey, key, u.role, orang.get(key) ?? peran.get(key) ?? null)
+        // "Bawaan peran" = kode + apa pun yang sudah admin atur untuk peran itu.
+        // Itulah yang dipulihkan tombol "Ikut bawaan peran", jadi angkanya harus sama.
+        const bawaan = izinMenuRegistry(appKey, key, u.role, peran.get(key) ?? null)
+        if (hasil) efektif[key] = hasil
+        if (bawaan) bawaanPeran[key] = bawaan
       }
 
       return NextResponse.json({
@@ -86,15 +108,11 @@ export async function GET(req: NextRequest) {
         scope: 'user',
         versi: sidikJariIzin(orang),
         user: { id: u.id, username: u.username, role: u.role },
-        menus: daftarMenu(appKey),
-        // "Bawaan peran" = kode + apa pun yang sudah admin atur untuk peran itu.
-        // Itulah yang dipulihkan tombol "Ikut bawaan peran", jadi angkanya harus sama.
-        bawaanPeran: Object.fromEntries(MENU_BLUD.map((m) => [
-          keyMenuBlud(m), izinMenu(u.role, m, peran.get(keyMenuBlud(m)) ?? null),
-        ])),
+        menus,
+        bawaanPeran,
         orang: keluarkan(orang),
         efektif,
-        terkunci: aksiTerkunci(),
+        terkunci: aksiTerkunci(appKey),
       })
     }
 
@@ -102,10 +120,14 @@ export async function GET(req: NextRequest) {
     if (!role) return NextResponse.json({ ok: false, message: 'Sebutkan userId atau role' }, { status: 400 })
 
     const peran = await getIzinPeran(appKey, role)
+    const menus = daftarMenu(appKey)
     const efektif = {} as Record<string, Izin>
-    for (const menu of MENU_BLUD) {
-      const k = keyMenuBlud(menu)
-      efektif[k] = izinMenu(role, menu, peran.get(k) ?? null)
+    const bawaanKode = {} as Record<string, Izin>
+    for (const { key } of menus) {
+      const hasil = izinMenuRegistry(appKey, key, role, peran.get(key) ?? null)
+      const bawaan = izinMenuRegistry(appKey, key, role, null)
+      if (hasil) efektif[key] = hasil
+      if (bawaan) bawaanKode[key] = bawaan
     }
     const jumlah = await queryOne<{ n: number }>(
       sql`SELECT COUNT(*) AS n FROM users WHERE role = ${role} AND status = 'AKTIF'`
@@ -116,24 +138,17 @@ export async function GET(req: NextRequest) {
       scope: 'role',
       versi: sidikJariIzin(peran),
       role,
-      menus: daftarMenu(appKey),
-      bawaanKode: petaIzinBawaanKey(role),
+      menus,
+      bawaanKode,
       tersimpan: keluarkan(peran),
       efektif,
       jumlahUser: Number(jumlah?.n ?? 0),
-      terkunci: aksiTerkunci(),
+      terkunci: aksiTerkunci(appKey),
     })
   } catch (err) {
     console.error('[API /admin/menu-access GET]', err)
     return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 })
   }
-}
-
-function petaIzinBawaanKey(role: string): Record<string, Izin> {
-  const dariMenu = petaIzinBawaan(role)
-  return Object.fromEntries(
-    (Object.keys(dariMenu) as MenuBlud[]).map((m) => [keyMenuBlud(m), dariMenu[m]])
-  )
 }
 
 export async function POST(req: NextRequest) {
@@ -174,6 +189,26 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           ok: false,
           message: `Di menu ${info.label} memang tidak ada yang bisa diubah, jadi izin ubah tidak ada gunanya di sana.`,
+        }, { status: 400 })
+      }
+    }
+
+    /**
+     * Sasaran peran untuk memeriksa `editHanyaPeran`. Untuk lingkup orang, yang menentukan
+     * adalah peran ORANG ITU, bukan peran admin yang menyimpan — lantai PII di route
+     * membaca `session.role` pemanggilnya nanti, dan itu si pengguna.
+     */
+    const peranSasaran = b.scope === 'role'
+      ? b.role
+      : (await queryOne<{ role: string }>(sql`SELECT role FROM users WHERE id = ${b.userId} LIMIT 1`))?.role
+    for (const [k, v] of peta) {
+      const info = infoMenu(b.appKey, k)
+      if (v === 'EDIT' && info?.editHanyaPeran && peranSasaran
+          && !info.editHanyaPeran.includes(peranSasaran)) {
+        return NextResponse.json({
+          ok: false,
+          message: `Menu ${info.label} memuat data pribadi — yang boleh mengubahnya hanya `
+            + `${info.editHanyaPeran.join(' & ')}. Izin ubah di sini tidak akan berlaku.`,
         }, { status: 400 })
       }
     }

@@ -144,8 +144,8 @@ Branch aktif: **mysql** — referensi schema: `docs/schema-mysql.sql` (bukan sch
 - `app/(dashboard)/blud/` — modul BLUD (hub, DPA, Pergeseran)
 - `app/api/blud/` — API DPA & Pergeseran DPA
 - `lib/blud/data.ts` + `lib/blud/recalc.ts` — kalkulasi hierarki DPA BLUD
-- `app/(dashboard)/perjanjian-kinerja/` — modul PK (form + 5 tab master + riwayat)
-- `app/api/perjanjian-kinerja/` — 8 route file (units/sasaran/program/pejabat/dokumen/finalize/download/blud-nominal)
+- `app/(dashboard)/perjanjian-kinerja/` — modul PK (form + 5 tab master + riwayat). Akses **per-menu** (7 menu) sejak 2026-08-03 — modul kedua setelah BLUD: `lib/pk/peran.ts` (tabel peran, modul daun) + `lib/pk/izin-server.ts` (resolusi 2 lapis) + `_izin.ts` (guard halaman) + ribbon disaring izin. `LANTAI_EDIT` = Master Pejabat (PII) & Master Unit (rename cascade) hanya SUPER_ADMIN/ADMIN, **tidak bisa ditembus matriks Admin Panel**. Konsep: `docs/CONCEPT-pk-peran.md`
+- `app/api/perjanjian-kinerja/` — 13 route file + `_guard.ts` (`bolehBukaMenu`/`bolehEditMenu`/`bolehLihatSalahSatu`/`bolehModulPk`/`tolakEdit`/`tolakLantai`) — cermin `app/api/blud/_guard.ts`. Pagar baca endpoint lintas-layar (`units`, `pejabat`, `dokumen`) sengaja longgar: guard menyebut menu yang MENAMPILKAN datanya, bukan yang "memiliki"
 - `lib/data/pk.ts` + `lib/data/pk-schemas.ts` — PK data layer + Zod sentral + `pkRateLimit`
 - `lib/pk/docgen.ts` + `lib/pk/templates/*.docx` — Word generator (docxtemplater + escapeXml + dynamic import)
 - `app/(dashboard)/buku-besar-aset/` — modul BBA (Buku Besar Aset): page + client (tabel/filter/KPI/entry/realisasi) + UserBadge + FloatingDock

@@ -3,8 +3,9 @@
 //
 // Dua lapis, urutan menang: perkecualian orang > aturan peran > bawaan di kode.
 // Baris yang TIDAK ADA bukan "tidak boleh" melainkan "belum diatur" — jawabannya
-// diambil dari `TABEL` di lib/blud/peran.ts. Karena itu tabel kosong = perilaku
-// hari ini, dan itulah keadaan sesudah migration dijalankan.
+// diambil dari `TABEL` di `peran.ts` modul yang bersangkutan (`lib/blud/peran.ts`,
+// `lib/pk/peran.ts`). Karena itu tabel kosong = perilaku hari ini, dan itulah
+// keadaan sesudah migration dijalankan.
 //
 // Berkas ini SERVER-ONLY. Ia mengimpor `peran.ts` (modul daun) tapi TIDAK BOLEH
 // diimpor sebaliknya — begitu `peran.ts` menyeret data layer, bundel klien ikut
@@ -15,6 +16,7 @@ import { infoMenu } from '@/lib/registry/menu-apps'
 import { acquireBludLock } from '@/lib/data/locks'
 
 export const APP_BLUD = 'blud'
+export const APP_PK = 'perjanjian_kinerja'
 
 const IZIN_SAH: readonly Izin[] = ['EDIT', 'LIHAT', 'TIDAK']
 
@@ -176,6 +178,23 @@ export class IzinBerubahError extends Error {
  * sama-sama menulis — dan yang belakangan menghapus pekerjaan yang duluan tanpa suara.
  */
 const KUNCI_IZIN = 'menu_access'
+
+/**
+ * URUTAN PENGUNCIAN, kalau suatu saat satu transaksi menyentuh KEDUA tabel:
+ * **peran dulu, baru orang** — `${appKey}:role:*` sebelum `${appKey}:user:*`.
+ *
+ * Hari ini aturan itu belum berlaku: tiap penyimpanan mengambil TEPAT SATU kunci, jadi
+ * lingkaran tunggu mustahil dengan sendirinya. Ia baru berlaku pada hari ada aksi
+ * gabungan — misalnya "terapkan aturan peran ini, lalu bersihkan perkecualian orang di
+ * bawahnya". Ditulis sekarang, saat alasannya masih segar, bukan nanti saat orang
+ * sudah harus menebak kenapa urutannya penting.
+ *
+ * Kenapa urutan itu: searah dengan pewarisan izin (perkecualian orang menang atas
+ * aturan peran, jadi peran ditetapkan lebih dulu), dan kebetulan juga urutan key
+ * menaik — `role` < `user` secara leksikal. Mengunci menurut urutan key menaik itu
+ * yang membuat dua transaksi tidak pernah bisa saling menunggu (dibuktikan T8a/T8b di
+ * `scripts/concurrency-test.js`).
+ */
 const kunciPeran = (appKey: string, role: string) => `${appKey}:role:${role}`
 const kunciOrang = (appKey: string, userId: number) => `${appKey}:user:${userId}`
 

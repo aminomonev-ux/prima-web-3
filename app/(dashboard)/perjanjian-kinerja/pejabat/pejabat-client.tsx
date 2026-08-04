@@ -10,6 +10,7 @@ import { fetchJson } from '@/lib/shared/api'
 import { useAbortableEffect } from '@/lib/shared/hooks'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/pk/SpandukLihat'
 import { pkInputTable as inputStyle, pkCheckbox as checkboxStyle, pkModalBackdrop as modalBackdrop, pkMono as mono } from '@/lib/shared/pk-styles'
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkPejabat, PkUnitKerja } from '../_utils/pk-types'
@@ -23,7 +24,7 @@ function emptyRow(): PejabatRow {
   return { unit_kerja: '', nama: '', jabatan: '', pangkat: null, nip: null, _dirty: true }
 }
 
-export default function PejabatClient() {
+export default function PejabatClient({ bolehUbah }: { bolehUbah: boolean }) {
   const { tahun } = usePkYear()
   const [rows, setRows] = useState<PejabatRow[]>([])
   const [units, setUnits] = useState<PkUnitKerja[]>([])
@@ -220,26 +221,32 @@ export default function PejabatClient() {
             onClick={() => setReloadKey(k => k + 1)} disabled={loading || saving}>
             Muat Ulang
           </PrimaButton>
-          <PrimaButton variant="success" iconLeft={<FileUp size={14} />}
-            onClick={() => setShowImport(true)} disabled={loading || saving}>
-            Import File
-          </PrimaButton>
-          <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
-            onClick={addRow} disabled={loading || saving}>
-            Tambah Baris
-          </PrimaButton>
-          {selectedCount > 0 && (
-            <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
-              onClick={requestDeleteBulk} disabled={loading || saving}>
-              Hapus Terpilih ({selectedCount})
-            </PrimaButton>
+          {bolehUbah && (
+            <>
+              <PrimaButton variant="success" iconLeft={<FileUp size={14} />}
+                onClick={() => setShowImport(true)} disabled={loading || saving}>
+                Import File
+              </PrimaButton>
+              <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
+                onClick={addRow} disabled={loading || saving}>
+                Tambah Baris
+              </PrimaButton>
+              {selectedCount > 0 && (
+                <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
+                  onClick={requestDeleteBulk} disabled={loading || saving}>
+                  Hapus Terpilih ({selectedCount})
+                </PrimaButton>
+              )}
+              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+                onClick={handleSave} disabled={loading || saving}>
+                {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
+              </PrimaButton>
+            </>
           )}
-          <PrimaButton variant="primary" iconLeft={<Save size={14} />}
-            onClick={handleSave} disabled={loading || saving}>
-            {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
-          </PrimaButton>
         </div>
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="pejabat" />}
 
       {toast && (
         <div style={{
@@ -341,11 +348,13 @@ export default function PejabatClient() {
         )}
       </div>
 
+      {bolehUbah && (
       <p style={{ fontSize: 11, color: '#85B7EB', marginTop: 10, lineHeight: 1.6 }}>
         💡 Pola simpan: <strong>replace-all per tahun</strong> — semua data pejabat untuk tahun {tahun} akan ditimpa.
         UNIQUE KEY <code style={mono}>(unit_kerja, tahun, is_active)</code> — duplikat akan ditolak backend.
         Pejabat dipakai untuk auto-fill di Form Perjanjian Kinerja.
       </p>
+      )}
 
       {showImport && (
         <ImportPejabatModal

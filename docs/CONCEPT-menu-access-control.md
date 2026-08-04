@@ -753,27 +753,36 @@ Yang tersentuh: 2 berkas kode + 4 skrip uji (daftar berkas yang di-`tsc` bertamb
 Nol perubahan data, nol perubahan perilaku — `tsc` bersih, 5 rangkaian uji lulus, dan
 jalur simpan→409→kembalikan-bawaan diuji langsung di peramban.
 
-### Ditunda ke modul kedua — keputusannya sudah diambil, tinggal dikerjakan
+### Ditunda ke modul kedua — ✅ LUNAS 2026-08-03 (modul kedua = PK)
 
-Yang ditunda **pekerjaannya**, bukan keputusannya — supaya nanti tidak diputuskan ulang
-dari nol.
-
-- [ ] **Urutan penguncian: peran dulu, baru orang.** `lib/blud/lock.ts` mewajibkan
+- [x] **Urutan penguncian: peran dulu, baru orang.** `lib/blud/lock.ts` mewajibkan
       mengunci menurut urutan key menaik supaya tidak ada lingkaran tunggu (dibuktikan
       T8a/T8b di `concurrency-test.js`). Hari ini aturan itu belum berlaku — tiap
       penyimpanan izin mengambil **tepat satu** kunci. Ia baru berlaku kalau nanti ada
       satu transaksi yang menyentuh `menu_role_access` **dan** `menu_user_access`
       sekaligus (mis. "terapkan aturan peran ini, lalu bersihkan perkecualian di
-      bawahnya"). Urutannya: `blud:role:*` dulu, baru `blud:user:*` — searah dengan
-      pewarisan izin, dan kebetulan juga urutan key menaik. Tulis sebagai komentar di
-      `lib/data/menu-access.ts` dekat `kunciPeran`/`kunciOrang` saat modul kedua digarap.
+      bawahnya"). Urutannya: `${appKey}:role:*` dulu, baru `${appKey}:user:*` — searah
+      dengan pewarisan izin, dan kebetulan juga urutan key menaik. **Sudah ditulis** di
+      `lib/data/menu-access.ts` dekat `kunciPeran`/`kunciOrang`.
 
 **Yang diputuskan TIDAK dikerjakan:** menyatukan pola "INSERT IGNORE → FOR UPDATE →
-cocokkan sidik jari → ganti-semua" jadi satu helper bersama. Baru ada satu wujudnya;
-abstraksi yang bentuknya ditebak dari satu contoh biasanya salah bentuk. Tinjau ulang
-kalau modul kedua ternyata butuh bentuk yang persis sama. Baris kunci yang menumpuk di
-`blud_locks` juga dibiarkan — plafonnya di bawah 80 baris (22 peran + ±50 orang, kunci
-dipakai ulang bukan ditambah), dan membersihkannya berarti menambah jalur kode.
+cocokkan sidik jari → ganti-semua" jadi satu helper bersama. **Ditinjau ulang saat PK
+digarap, dan keputusannya tetap: tidak.** Bukan karena masih satu wujud — melainkan
+karena PK ternyata **tidak menambah wujud sama sekali**: ia memakai `simpanIzinPeran`
+dan `simpanIzinOrang` yang sudah ada, apa adanya, cuma dengan `appKey` berbeda. Pola itu
+sudah jadi satu helper sejak awal; yang dulu dikira "baru satu contoh" ternyata memang
+satu-satunya bentuk yang dibutuhkan.
+
+Yang sama nasibnya: `lib/blud/peran.ts` dan `lib/pk/peran.ts` **sengaja tidak** dilebur
+jadi satu tabel bertipe generik. Bentuknya mirip, isinya tidak: PK punya lantai peran
+(`LANTAI_EDIT`) yang BLUD tidak punya, BLUD punya `MENU_REALISASI` untuk sakelar
+sub-modul yang PK tidak punya. Yang dilebur justru bagian yang memang sama — resolusi
+dua lapis, kunci, cache, panel Admin — dan itu sudah terjadi.
+
+Baris kunci yang menumpuk di `blud_locks` juga dibiarkan — plafonnya di bawah 80 baris
+(22 peran + ±50 orang, kunci dipakai ulang bukan ditambah), dan membersihkannya berarti
+menambah jalur kode. PK ikut memakai tabel yang sama, jadi angkanya bertambah tapi tetap
+sekelas.
 
 ### Fase 3 — Usulan Kebutuhan (Pola B)
 - [ ] Registry `children` untuk 15 panel `usulan-kebutuhan/_panels/`.
@@ -784,7 +793,20 @@ dipakai ulang bukan ditambah), dan membersihkannya berarti menambah jalur kode.
       disembunyikan, yang dibuat dekorasi.
 
 ### Fase 4 — sisanya, kalau memang dibutuhkan
-- [ ] Perjanjian Kinerja (7 menu) — perlu tabel peran dulu, meniru `lib/blud/peran.ts`.
+- [x] Perjanjian Kinerja (7 menu) — **✅ SELESAI 2026-08-03**, dinaikkan jadi modul kedua
+      mendahului Fase 3. Alasannya: bentuknya sama persis dengan BLUD, jadi ia menguji
+      "polanya bisa dipakai ulang?" tanpa mencampur pertanyaan "pola baru ini jalan?"
+      yang dibawa Usulan. Konsep + hasil: **`docs/CONCEPT-pk-peran.md`**.
+
+      Jawabannya: **bisa** — nol migration, nol tabel baru, `lib/data/menu-access.ts` dan
+      `lib/data/locks.ts` tidak disentuh selain komentar. Yang ternyata BELUM siap dan
+      ikut dibereskan: endpoint `admin/menu-access` masih menolak `appKey` selain `blud`
+      (400), dan `MenuAccessPanel.tsx` masih `const APP_KEY = 'blud'`. Keduanya kini
+      jalan dari registry + pemilih modul, jadi klaim "tambah modul = satu baris registry"
+      baru sekarang benar-benar berlaku.
+
+      Utang urutan penguncian (peran dulu, baru orang) ikut lunas — komentarnya sudah di
+      `lib/data/menu-access.ts` dekat `kunciPeran`/`kunciOrang`.
 - [ ] E-Anggaran (9 tab), Admin Panel (10 tab) — belum ada permintaan; jangan dikerjakan
       sebelum ada.
 

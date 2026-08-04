@@ -7,12 +7,12 @@ import { sql, withTransaction, bulkInsert } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import {
-  isPkRole,
   pkRateLimit,
   PkQuerySchema,
   PejabatBodySchema,
 } from '@/lib/data/pk-schemas';
-import { hasAppAccess } from '@/lib/security/guard';
+import { lantaiEditMenghalangi } from '@/lib/pk/peran';
+import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit, tolakLantai } from '../_guard';
 import { getPejabatByUnit } from '@/lib/data/pk';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +31,10 @@ type PejabatRow = {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  // Nama & jabatan pejabat ikut mengisi Form PK (pihak pertama/kedua), bukan cuma layar
+  // Master Pejabat. Mengikat baca ini ke menu `pejabat` saja akan merusak Form PK untuk
+  // penyusun — yang justru pekerjaan utamanya.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['form', 'pejabat']))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'pejabat-list', 60);
   if (limited) return limited;
@@ -72,10 +75,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  // Pejabat = sensitif (PII), edit hanya SUPER_ADMIN + ADMIN (lebih ketat dari isPkEditRole)
-  if (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN') {
-    return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN/ADMIN yang dapat edit pejabat' }, { status: 403 });
-  }
+  // Pejabat = sensitif (PII). Lantai perannya DAN, bukan pengganti izin menu: matriks
+  // Admin Panel tidak bisa membukanya untuk peran lain, dan izin EDIT dari matriks
+  // tetap wajib untuk yang perannya lolos. Dua pesan berbeda karena jalan keluarnya
+  // berbeda — yang satu tidak akan pernah bisa diminta, yang satu bisa.
+  if (lantaiEditMenghalangi(session.role, 'pejabat')) return tolakLantai('pejabat');
+  if (!(await bolehEditMenu(session.userId, session.role, 'pejabat'))) return tolakEdit('pejabat');
 
   const limited = await pkRateLimit(session.userId, 'save-pejabat', 30);
   if (limited) return limited;

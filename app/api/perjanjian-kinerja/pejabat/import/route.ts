@@ -9,6 +9,8 @@ import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit } from '@/lib/data/pk-schemas';
+import { lantaiEditMenghalangi } from '@/lib/pk/peran';
+import { bolehEditMenu, tolakEdit, tolakLantai } from '../../_guard';
 import { parsePejabatImport, type ImportFormat } from '@/lib/pk/import-pejabat';
 
 export const runtime = 'nodejs';
@@ -32,9 +34,10 @@ async function sniffMime(buf: Buffer): Promise<string | null> {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN') {
-    return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN/ADMIN yang dapat import pejabat' }, { status: 403 });
-  }
+  // Pratinjau saja, tapi pagarnya tetap sama ketat dengan POST pejabat: yang diparsir
+  // berkas berisi nama & NIP orang, dan hasilnya langsung terbaca di layar.
+  if (lantaiEditMenghalangi(session.role, 'pejabat')) return tolakLantai('pejabat');
+  if (!(await bolehEditMenu(session.userId, session.role, 'pejabat'))) return tolakEdit('pejabat');
 
   const limited = await pkRateLimit(session.userId, 'import-pejabat', 20);
   if (limited) return limited;

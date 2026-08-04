@@ -13,29 +13,36 @@ import {
 } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import { bolehBuka, type Izin, type MenuPk } from '@/lib/pk/peran'
 import type { Role } from '@/types'
 import { usePkYear } from './_context/PkYearContext'
 import { tahunRange } from './_utils/pk-format'
 
-type Tile = { href: string; label: string; icon: React.ElementType; color: string; group: string }
-const TILES: Tile[] = [
-  { href: '/perjanjian-kinerja',            label: 'Beranda',        icon: LayoutDashboard, color: '#3B82F6', group: 'NAVIGASI' },
-  { href: '/perjanjian-kinerja/sasaran',    label: 'Master Sasaran', icon: Target,          color: '#10B981', group: 'PENCIPTAAN ARSIP' },
-  { href: '/perjanjian-kinerja/program',    label: 'Master Program', icon: ListTree,        color: '#14B8A6', group: 'PENCIPTAAN ARSIP' },
-  { href: '/perjanjian-kinerja/form',       label: 'Form PK',        icon: FilePlus,        color: '#EF9F27', group: 'DOKUMEN PK' },
-  { href: '/perjanjian-kinerja/riwayat',    label: 'Riwayat',        icon: ClipboardList,   color: '#8B5CF6', group: 'DOKUMEN PK' },
-  { href: '/perjanjian-kinerja/pejabat',    label: 'Master Pejabat', icon: Users,           color: '#F59E0B', group: 'SISTEM' },
-  { href: '/perjanjian-kinerja/unit-kerja', label: 'Master Unit',    icon: Building2,       color: '#64748B', group: 'SISTEM' },
+type Tile = { href: string; label: string; icon: React.ElementType; color: string; group: string; menu: MenuPk }
+const SEMUA_TILE: Tile[] = [
+  { href: '/perjanjian-kinerja',            label: 'Beranda',        icon: LayoutDashboard, color: '#3B82F6', group: 'NAVIGASI',          menu: 'beranda' },
+  { href: '/perjanjian-kinerja/sasaran',    label: 'Master Sasaran', icon: Target,          color: '#10B981', group: 'PENCIPTAAN ARSIP',  menu: 'sasaran' },
+  { href: '/perjanjian-kinerja/program',    label: 'Master Program', icon: ListTree,        color: '#14B8A6', group: 'PENCIPTAAN ARSIP',  menu: 'program' },
+  { href: '/perjanjian-kinerja/form',       label: 'Form PK',        icon: FilePlus,        color: '#EF9F27', group: 'DOKUMEN PK',        menu: 'form' },
+  { href: '/perjanjian-kinerja/riwayat',    label: 'Riwayat',        icon: ClipboardList,   color: '#8B5CF6', group: 'DOKUMEN PK',        menu: 'riwayat' },
+  { href: '/perjanjian-kinerja/pejabat',    label: 'Master Pejabat', icon: Users,           color: '#F59E0B', group: 'SISTEM',            menu: 'pejabat' },
+  { href: '/perjanjian-kinerja/unit-kerja', label: 'Master Unit',    icon: Building2,       color: '#64748B', group: 'SISTEM',            menu: 'unit-kerja' },
 ]
 
 interface Props {
   username: string
   role:     Role
+  izin:     Partial<Record<MenuPk, Izin>>
   themePreference: 'dark' | 'light'
   children: React.ReactNode
 }
 
-export default function PkShell({ username, role, themePreference, children }: Props) {
+export default function PkShell({ username, role, izin, themePreference, children }: Props) {
+  // Menu yang tertutup bagi orang ini tidak dipasang sama sekali — bukan disabled.
+  // Tile mati hanya memancing klik lalu memantul; pagar sebenarnya tetap di route.
+  // Sebelum ini Master Pejabat & Master Unit tetap tampil untuk semua peran padahal
+  // halamannya `redirect` — pintu yang kelihatan tapi selalu tertutup.
+  const TILES = SEMUA_TILE.filter(t => bolehBuka(role, t.menu, izin[t.menu] ?? null))
   const pathname  = usePathname()
   const router    = useRouter()
   const { tahun, setTahun } = usePkYear()

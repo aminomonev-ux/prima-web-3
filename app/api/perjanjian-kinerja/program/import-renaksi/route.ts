@@ -9,8 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/data/db'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { isPkEditRole, pkRateLimit, TahunSchema } from '@/lib/data/pk-schemas'
-import { hasAppAccess } from '@/lib/security/guard'
+import { pkRateLimit, TahunSchema } from '@/lib/data/pk-schemas'
+import { bolehEditMenu, tolakEdit } from '../../_guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +31,7 @@ type ImportRow = {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
-  if (!(await hasAppAccess(session.userId, session.role, isPkEditRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 })
+  if (!(await bolehEditMenu(session.userId, session.role, 'program'))) return tolakEdit('program')
 
   const limited = await pkRateLimit(session.userId, 'import-program', 10)
   if (limited) return limited

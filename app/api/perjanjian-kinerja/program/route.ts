@@ -7,13 +7,11 @@ import { sql, withTransaction, bulkInsert } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import {
-  isPkRole,
-  isPkEditRole,
   pkRateLimit,
   PkQuerySchema,
   ProgramBodySchema,
 } from '@/lib/data/pk-schemas';
-import { hasAppAccess } from '@/lib/security/guard';
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit } from '../_guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +27,7 @@ type ProgramRow = {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  if (!(await bolehBukaMenu(session.userId, session.role, 'program'))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'program-list', 60);
   if (limited) return limited;
@@ -86,7 +84,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkEditRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  if (!(await bolehEditMenu(session.userId, session.role, 'program'))) return tolakEdit('program');
 
   const limited = await pkRateLimit(session.userId, 'save-program', 30);
   if (limited) return limited;

@@ -164,7 +164,14 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         .ap-tab{display:flex;align-items:center;gap:6px;padding:13px 15px;font-size:10.5px;font-weight:700;letter-spacing:1.2px;color:#5a8ea8;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;font-family:var(--font-jakarta),sans-serif;}
         .ap-tab:hover{color:#a0cfe0;}
         .ap-tab.active{color:#00d4ff;border-bottom-color:#00d4ff;text-shadow:0 0 8px rgba(0,212,255,.4);}
-        .ap-content{padding:24px;max-width:1400px;margin:0 auto;position:relative;z-index:1;}
+        /* TANPA z-index — sengaja. Nilai apa pun di sini membentuk stacking context,
+           dan modal hidup DI DALAM elemen ini: z-index 500 pada .modal-bg lalu hanya
+           berlaku di antara sesama isi .ap-content, sehingga seluruh modal terkubur di
+           bawah .ap-header (100) dan .ap-tabs (10) — bagian atas modal tertutup bilah
+           nav. position:relative tetap dipertahankan (dipakai anak yang absolute) dan
+           urutan gambar terhadap .ap-body::before tidak berubah: keduanya di level yang
+           sama, dan yang belakangan di pohon menang. */
+        .ap-content{padding:24px;max-width:1400px;margin:0 auto;position:relative;}
         .ap-card{background:rgba(7,21,37,.92);border:1px solid rgba(0,212,255,.14);border-radius:10px;padding:20px;position:relative;overflow:hidden;}
         .ap-card::after{content:'';position:absolute;bottom:0;right:0;width:80px;height:80px;background:radial-gradient(circle at bottom right,rgba(0,212,255,.07),transparent 70%);pointer-events:none;}
         .ap-card-title{font-size:10px;font-weight:700;letter-spacing:2px;color:#5a8ea8;margin-bottom:14px;display:flex;align-items:center;gap:8px;text-transform:uppercase;}
@@ -208,6 +215,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         .ap-select{background:#071525;border:1px solid rgba(0,212,255,.2);border-radius:6px;padding:8px 12px;color:#a0cfe0;font-size:12px;font-family:var(--font-jakarta),sans-serif;outline:none;}
         .ap-select:focus{border-color:rgba(0,212,255,.55);}
         .ap-select option{background:#071525;color:#e0f7ff;}
+        .ap-select optgroup{background:#071525;color:#5a8ea8;font-style:normal;font-weight:700;}
         .ap-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
         .ap-section-title{font-size:12px;font-weight:800;letter-spacing:1.5px;color:#00d4ff;margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid rgba(0,212,255,.12);text-transform:uppercase;font-family:var(--font-jakarta),sans-serif;}
         .ap-toggle{position:relative;width:44px;height:22px;cursor:pointer;}
@@ -218,8 +226,13 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         .ap-toggle input:checked ~ .ap-toggle-thumb{left:25px;background:#00ffc8;}
         .ap-toggle:has(input:disabled){cursor:not-allowed;opacity:.35;}
         .ap-toggle-row-disabled{opacity:.4;pointer-events:none;}
-        .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(5px);}
-        .modal-box{background:#0a1220;border:1px solid rgba(0,212,255,.3);border-radius:12px;padding:28px;width:100%;max-width:420px;box-shadow:0 28px 60px rgba(0,0,0,.7);}
+        /* Isi modal yang lebih tinggi dari layar digulung DI DALAM kotaknya. Tanpa
+           max-height, kotak tumbuh melewati batas viewport dan bagian bawahnya —
+           termasuk tombol Simpan — tidak bisa dicapai: penggulung halaman di belakang
+           tidak menggulung isi modal. Kena ke semua modal Admin Panel, bukan cuma
+           Akses Menu. */
+        .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px);}
+        .modal-box{background:#0a1220;border:1px solid rgba(0,212,255,.3);border-radius:12px;padding:28px;width:100%;max-width:420px;max-height:calc(100vh - 48px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 28px 60px rgba(0,0,0,.7);}
         .modal-box.danger{border-color:rgba(255,68,102,.4);box-shadow:0 28px 60px rgba(0,0,0,.7),0 0 30px rgba(255,68,102,.08);}
         .modal-title{font-size:13px;font-weight:800;color:#00d4ff;letter-spacing:1.5px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-family:var(--font-jakarta),sans-serif;}
         .msg-ok{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(0,255,200,.07);border:1px solid rgba(0,255,200,.2);border-radius:6px;font-size:12px;color:#00ffc8;margin-bottom:12px;}
@@ -284,6 +297,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         [data-theme="light"] .ap-input:focus{border-color:rgba(124,92,246,0.5)!important;background:#FFFFFF!important;}
         [data-theme="light"] .ap-select{background:#FFFFFF!important;border-color:rgba(0,0,0,0.15)!important;color:#374151!important;}
         [data-theme="light"] .ap-select option{background:#FFFFFF;color:#374151;}
+        [data-theme="light"] .ap-select optgroup{background:#FFFFFF;color:#6B7280;}
         [data-theme="light"] .ap-section-title{color:#7C3AED!important;border-bottom:1px solid rgba(124,92,246,0.15)!important;}
         [data-theme="light"] .modal-bg{background:rgba(0,0,0,0.5)!important;}
         [data-theme="light"] .modal-box{background:#FAFAFA!important;border-color:rgba(0,0,0,0.12)!important;box-shadow:0 28px 60px rgba(0,0,0,0.2)!important;}

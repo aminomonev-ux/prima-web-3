@@ -6,8 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql, safeInt } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { isPkRole, pkRateLimit } from '@/lib/data/pk-schemas';
-import { hasAppAccess } from '@/lib/security/guard';
+import { pkRateLimit } from '@/lib/data/pk-schemas';
+import { bolehLihatSalahSatu, forbidden } from '../../../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,9 @@ type FileRow = {
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (!(await hasAppAccess(session.userId, session.role, isPkRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
+  // LIHAT, bukan EDIT: mengunduh tidak mengubah angka resmi mana pun. Tombolnya ada di
+  // Riwayat maupun Form, jadi cukup salah satunya terbuka.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['form', 'riwayat']))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'download-dokumen', 30);
   if (limited) return limited;

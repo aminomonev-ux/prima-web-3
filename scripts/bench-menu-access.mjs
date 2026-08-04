@@ -39,6 +39,7 @@ try {
     `npx tsc "${path.join(repo, 'lib/data/menu-access.ts')}"`
     + ` "${path.join(repo, 'lib/blud/peran.ts')}" "${path.join(repo, 'lib/data/db.ts')}"`
     + ` "${path.join(repo, 'lib/registry/menu-apps.ts')}" "${path.join(repo, 'lib/data/locks.ts')}"`
+    + ` "${path.join(repo, 'lib/pk/peran.ts')}"`
     + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
     + ' --esModuleInterop --skipLibCheck --moduleResolution node',
     { cwd: repo, stdio: 'pipe' },

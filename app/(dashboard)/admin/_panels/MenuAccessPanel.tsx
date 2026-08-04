@@ -15,9 +15,16 @@ import { X, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { ROLE_LABELS } from '@/lib/constants';
+import { MENU_APPS } from '@/lib/registry/menu-apps';
 
 type Izin = 'EDIT' | 'LIHAT' | 'TIDAK';
-type MenuInfo = { key: string; label: string; bacaSaja: boolean };
+type MenuInfo = {
+  key: string;
+  label: string;
+  bacaSaja: boolean;
+  /** Menu berlantai peran — EDIT di luar daftar ini tidak akan pernah berlaku. */
+  editHanyaPeran?: string[];
+};
 type Terkunci = { label: string; peran: string[] };
 
 interface DataUmum {
@@ -40,10 +47,68 @@ interface DataRole extends DataUmum {
 }
 type Data = DataUser | DataRole;
 
-const APP_KEY = 'blud';
-
 function bawaanDari(d: Data): Record<string, Izin> {
   return d.scope === 'user' ? d.bawaanPeran : d.bawaanKode;
+}
+
+/** Peran yang jadi SASARAN pengaturan — bukan peran admin yang sedang membukanya. */
+function peranSasaran(d: Data): string {
+  return d.scope === 'user' ? d.user.role : d.role;
+}
+
+/**
+ * Sel EDIT yang tidak akan berlaku: menu berlantai peran, dan peran sasarannya di luar
+ * lantai itu. Route menolaknya lewat cek peran langsung, jadi menawarkan saklarnya sama
+ * saja dengan menjanjikan sesuatu yang tidak akan terjadi (L69).
+ */
+function editTakBerlaku(m: MenuInfo, d: Data): boolean {
+  return !!m.editHanyaPeran && !m.editHanyaPeran.includes(peranSasaran(d));
+}
+
+/**
+ * Peran yang bisa diatur untuk sebuah modul: SEMUA peran, dikelompokkan.
+ *
+ * Dulu daftarnya dipotong sebatas `peranUtama` supaya yang penting tidak tenggelam.
+ * Ternyata itu memotong terlalu banyak: peran yang tidak biasa memakai sebuah modul
+ * tetap kadang perlu diatur, dan menutup pilihannya berarti kembali meminta developer.
+ * Sekarang semuanya muncul — yang biasa dipakai di grup atas, sisanya di bawah.
+ *
+ * Menampilkannya aman: baris peran tidak memberi akses apa pun. Pintu modul tetap
+ * `app_access` (tombol ATUR), dan peran tanpa grant tetap ditolak walau barisnya
+ * dicentang penuh. Bawaan peran di luar tabel juga `LIHAT` di semua modul — muncul
+ * dengan kotak kosong, bukan tercentang.
+ *
+ * SUPER_ADMIN sengaja tidak ada di daftar mana pun (§4.5.4 nomor 5) — kalau barisnya
+ * bisa diedit, cepat atau lambat ada yang mengunci dirinya sendiri di luar.
+ */
+function grupPeran(peranUtama: readonly string[]) {
+  const utama = peranUtama.filter(r => r !== 'SUPER_ADMIN');
+  const lain = Object.keys(ROLE_LABELS).filter(r => r !== 'SUPER_ADMIN' && !utama.includes(r));
+  return [
+    { label: 'Biasa dipakai di modul ini', peran: utama },
+    { label: 'Peran lain', peran: lain },
+  ];
+}
+
+/** Pemilih modul. Isinya dari registry — modul baru muncul sendiri di sini. */
+function PilihModul({ nilai, ubah }: { nilai: string; ubah: (v: string) => void }) {
+  if (MENU_APPS.length < 2) return null;
+  return (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+      {MENU_APPS.map(a => (
+        <button
+          key={a.key}
+          onClick={() => ubah(a.key)}
+          style={{
+            padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+            border: `1px solid ${nilai === a.key ? 'rgba(0,212,255,.45)' : 'rgba(0,212,255,.12)'}`,
+            background: nilai === a.key ? 'rgba(0,212,255,.12)' : 'transparent',
+            color: nilai === a.key ? '#e0f7ff' : '#5a8ea8',
+          }}
+        >{a.label}</button>
+      ))}
+    </div>
+  );
 }
 
 /** Daftar menu + opsi lanjutan + pratinjau hasil. Dipakai modal per-orang & tab matriks. */
@@ -61,7 +126,11 @@ function DaftarMenu({
     setNilai({ ...nilai, [key]: izin });
   }
 
-  const bisaUbah = data.menus.filter(m => nilai[m.key] === 'EDIT').map(m => m.label);
+  // Menu berlantai tidak ikut dihitung "bisa ubah" walau nilainya EDIT — pratinjau ini
+  // dibaca sebagai janji, dan janji itu tidak akan ditepati route-nya.
+  const bisaUbah = data.menus
+    .filter(m => nilai[m.key] === 'EDIT' && !editTakBerlaku(m, data))
+    .map(m => m.label);
   const disembunyikan = data.menus.filter(m => nilai[m.key] === 'TIDAK').map(m => m.label);
   const jumlahLihat = data.menus.length - bisaUbah.length - disembunyikan.length;
 
@@ -78,10 +147,12 @@ function DaftarMenu({
           const izin = nilai[m.key] ?? 'LIHAT';
           const tersembunyi = izin === 'TIDAK';
           const dicentang = izin === 'EDIT';
+          const berlantai = editTakBerlaku(m, data);
+          const mati = m.bacaSaja || tersembunyi || berlantai;
           return (
             <label key={m.key} style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6,
-              cursor: m.bacaSaja || tersembunyi ? 'default' : 'pointer',
+              cursor: mati ? 'default' : 'pointer',
               opacity: tersembunyi ? .45 : 1,
               background: dicentang ? 'rgba(0,212,255,.08)' : 'rgba(0,212,255,.02)',
               border: `1px solid ${dicentang ? 'rgba(0,212,255,.3)' : 'rgba(0,212,255,.1)'}`,
@@ -89,8 +160,8 @@ function DaftarMenu({
             }}>
               <input
                 type="checkbox"
-                checked={dicentang}
-                disabled={m.bacaSaja || tersembunyi}
+                checked={dicentang && !berlantai}
+                disabled={mati}
                 onChange={() => ubah(m.key, dicentang ? 'LIHAT' : 'EDIT')}
                 style={{ width: 13, height: 13, accentColor: '#00d4ff', flexShrink: 0 }}
               />
@@ -98,8 +169,13 @@ function DaftarMenu({
               {m.bacaSaja && (
                 <span style={{ fontSize: 9, color: '#5a8ea8' }}>memang tidak ada yang bisa diubah</span>
               )}
+              {berlantai && (
+                <span style={{ fontSize: 9, color: '#5a8ea8' }}>
+                  hanya {(m.editHanyaPeran ?? []).map(r => ROLE_LABELS[r] ?? r).join(' & ')} yang boleh mengubah
+                </span>
+              )}
               {tersembunyi && <span style={{ fontSize: 9, color: '#ff9944' }}>disembunyikan</span>}
-              {!m.bacaSaja && !tersembunyi && bawaan[m.key] !== izin && (
+              {!m.bacaSaja && !berlantai && !tersembunyi && bawaan[m.key] !== izin && (
                 <span style={{ fontSize: 9, color: '#ffcc00' }}>
                   {data.scope === 'user' ? 'beda dari perannya' : 'diubah dari asalnya'}
                 </span>
@@ -167,7 +243,7 @@ function DaftarMenu({
   );
 }
 
-function useMenuAccess(query: string) {
+function useMenuAccess(appKey: string, query: string) {
   const [data, setData]   = useState<Data | null>(null);
   const [nilai, setNilai] = useState<Record<string, Izin>>({});
   const [muat, setMuat]   = useState(true);
@@ -175,7 +251,7 @@ function useMenuAccess(query: string) {
   const load = useCallback(async () => {
     setMuat(true);
     try {
-      const res = await fetch(`/api/admin/menu-access?appKey=${APP_KEY}&${query}`);
+      const res = await fetch(`/api/admin/menu-access?appKey=${appKey}&${query}`);
       const j = await res.json() as { ok: boolean; message?: string } & Partial<Data>;
       if (!j.ok) { toast.error(j.message ?? 'Gagal memuat akses menu'); return; }
       const d = j as unknown as Data;
@@ -186,7 +262,7 @@ function useMenuAccess(query: string) {
     } finally {
       setMuat(false);
     }
-  }, [query]);
+  }, [appKey, query]);
 
   // Lewat microtask: `load()` menyetel state di baris pertamanya, dan memanggilnya
   // langsung di dalam effect memicu render berantai (react-hooks/set-state-in-effect).
@@ -205,7 +281,8 @@ function selisih(nilai: Record<string, Izin>, bawaan: Record<string, Izin>) {
 export function MenuAccessModal({ userId, username, onClose }: {
   userId: number; username: string; onClose: () => void;
 }) {
-  const { data, nilai, setNilai, muat, reload } = useMenuAccess(`userId=${userId}`);
+  const [appKey, setAppKey] = useState(MENU_APPS[0].key);
+  const { data, nilai, setNilai, muat, reload } = useMenuAccess(appKey, `userId=${userId}`);
   const [simpan, setSimpan] = useState(false);
 
   async function kirim(kosongkan = false) {
@@ -215,7 +292,7 @@ export function MenuAccessModal({ userId, username, onClose }: {
       const izin = kosongkan ? {} : selisih(nilai, bawaanDari(data));
       const res = await fetch('/api/admin/menu-access', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: 'user', appKey: APP_KEY, userId, izin, versi: data.versi }),
+        body: JSON.stringify({ scope: 'user', appKey, userId, izin, versi: data.versi }),
       });
       const j = await res.json() as { ok: boolean; message?: string; code?: string };
       if (!j.ok) {
@@ -237,7 +314,7 @@ export function MenuAccessModal({ userId, username, onClose }: {
     <div className="modal-bg" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box" style={{ maxWidth: 560 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div className="modal-title">AKSES MENU BLUD</div>
+          <div className="modal-title">AKSES MENU</div>
           <button style={{ background: 'none', border: 'none', color: '#5a8ea8', cursor: 'pointer' }} onClick={onClose}>
             <X size={18} />
           </button>
@@ -246,6 +323,10 @@ export function MenuAccessModal({ userId, username, onClose }: {
           {username}
           {data?.scope === 'user' && <> · <span style={{ color: '#00d4ff' }}>{ROLE_LABELS[data.user.role] ?? data.user.role}</span></>}
         </div>
+
+        {/* Pengaturan disimpan per modul: pindah tab lalu Simpan hanya menyentuh modul
+            yang sedang dibuka, tidak menghapus setelan modul lain. */}
+        <PilihModul nilai={appKey} ubah={setAppKey} />
 
         {muat || !data ? (
           <div style={{ fontSize: 12, color: '#5a8ea8', padding: '20px 0' }}>Memuat…</div>
@@ -273,9 +354,15 @@ export function MenuAccessModal({ userId, username, onClose }: {
  * tidak ada yang bisa mencabut akses dirinya sendiri lalu terkurung di luar.
  */
 export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
-  const PERAN_UTAMA = ['ADMIN', 'PROGRAM', 'KEUANGAN', 'PERBENDAHARAAN'];
-  const [role, setRole] = useState(PERAN_UTAMA[0]);
-  const { data, nilai, setNilai, muat, reload } = useMenuAccess(`role=${role}`);
+  const [appKey, setAppKey] = useState(MENU_APPS[0].key);
+  const aplikasi = MENU_APPS.find(a => a.key === appKey) ?? MENU_APPS[0];
+  const GRUP = grupPeran(aplikasi.peranUtama);
+  const [role, setRole] = useState<string>(aplikasi.peranUtama[0]);
+  // Semua peran sah untuk semua modul, jadi pilihan lama tidak perlu direset saat
+  // modul diganti — cukup dipastikan masih dikenal. Yang berubah cuma grupnya:
+  // PERBENDAHARAAN pindah dari "biasa dipakai" ke "peran lain" saat berpindah ke PK.
+  const roleAktif = GRUP.some(g => g.peran.includes(role)) ? role : aplikasi.peranUtama[0];
+  const { data, nilai, setNilai, muat, reload } = useMenuAccess(appKey, `role=${roleAktif}`);
   const [simpan, setSimpan] = useState(false);
 
   async function kirim(kosongkan = false) {
@@ -285,14 +372,14 @@ export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
       const izin = kosongkan ? {} : selisih(nilai, bawaanDari(data));
       const res = await fetch('/api/admin/menu-access', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: 'role', appKey: APP_KEY, role, izin, versi: data.versi }),
+        body: JSON.stringify({ scope: 'role', appKey, role: roleAktif, izin, versi: data.versi }),
       });
       const j = await res.json() as { ok: boolean; message?: string; code?: string };
       if (!j.ok) {
         if (j.code === 'BERUBAH') { toast.error(`${j.message} Ini yang terbaru — cek dulu sebelum menyimpan lagi.`); await reload(); return; }
         toast.error(j.message ?? 'Gagal menyimpan'); return;
       }
-      toast.success(kosongkan ? `Aturan ${role} kembali seperti semula` : `Aturan ${role} tersimpan`);
+      toast.success(kosongkan ? `Aturan ${roleAktif} kembali seperti semula` : `Aturan ${roleAktif} tersimpan`);
       await reload();
     } catch {
       toast.error('Gagal menyimpan');
@@ -304,14 +391,20 @@ export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
   return (
     <div style={{ maxWidth: 620 }}>
       <div style={{ fontSize: 11, color: '#5a8ea8', marginBottom: 12, lineHeight: 1.7 }}>
-        Aturan yang berlaku untuk semua orang dengan peran ini di modul BLUD. Kalau cuma
-        satu orang yang perlu beda, atur lewat tombol <b style={{ color: '#00d4ff' }}>MENU</b> di
+        Aturan yang berlaku untuk semua orang dengan peran ini di modul {aplikasi.label}. Kalau
+        cuma satu orang yang perlu beda, atur lewat tombol <b style={{ color: '#00d4ff' }}>MENU</b> di
         tab User Management.
       </div>
 
+      <PilihModul nilai={appKey} ubah={setAppKey} />
+
       <div className="ap-row" style={{ marginBottom: 14 }}>
-        <select className="ap-select" value={role} onChange={e => setRole(e.target.value)}>
-          {PERAN_UTAMA.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
+        <select className="ap-select" value={roleAktif} onChange={e => setRole(e.target.value)}>
+          {GRUP.map(g => (
+            <optgroup key={g.label} label={g.label}>
+              {g.peran.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
+            </optgroup>
+          ))}
         </select>
         {data?.scope === 'role' && (
           <span style={{ fontSize: 11, color: '#5a8ea8', alignSelf: 'center' }}>

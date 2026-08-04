@@ -11,6 +11,7 @@ import { fetchJson } from '@/lib/shared/api'
 import { useAbortableEffect } from '@/lib/shared/hooks'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
 import PrimaButton from '@/components/ui/PrimaButton'
+import SpandukLihat from '@/components/pk/SpandukLihat'
 import { pkInputTable as inputStyle } from '@/lib/shared/pk-styles'
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkSasaranRow } from '../_utils/pk-types'
@@ -41,7 +42,7 @@ function emptyRow(): PkSasaranRow {
 
 type ImportRenaksiResp = { ok: boolean; tahun: string; rows: Omit<PkSasaranRow, '_dirty' | '_deleted' | 'id' | 'tahun'>[]; message?: string }
 
-export default function SasaranClient() {
+export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
   const { tahun } = usePkYear()
   const [rows, setRows] = useState<PkSasaranRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -199,35 +200,41 @@ export default function SasaranClient() {
             data-tooltip-pos="below">
             Muat Ulang
           </PrimaButton>
-          <PrimaButton
-            variant="purple"
-            iconLeft={<Sparkles size={14} />}
-            onClick={handleImportRenaksi}
-            disabled={loading || saving || importing}
-            data-tooltip={`Tarik Sasaran + Indikator + Target dari Renaksi & Kinerja tahun ${tahun}`}
-            data-tooltip-pos="below">
-            {importing ? 'Memuat…' : 'Import Renaksi'}
-          </PrimaButton>
-          <PrimaButton
-            variant="purple"
-            iconLeft={<Plus size={14} />}
-            onClick={addRow}
-            disabled={loading || saving}
-            data-tooltip="Tambah baris kosong di bawah"
-            data-tooltip-pos="below">
-            Tambah Baris
-          </PrimaButton>
-          <PrimaButton
-            variant="primary"
-            iconLeft={<Save size={14} />}
-            onClick={handleSave}
-            disabled={loading || saving || dirtyCount === 0}
-            data-tooltip={dirtyCount === 0 ? 'Tidak ada perubahan' : `Simpan ${dirtyCount} perubahan ke server`}
-            data-tooltip-pos="below">
-            {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
-          </PrimaButton>
+          {bolehUbah && (
+            <>
+              <PrimaButton
+                variant="purple"
+                iconLeft={<Sparkles size={14} />}
+                onClick={handleImportRenaksi}
+                disabled={loading || saving || importing}
+                data-tooltip={`Tarik Sasaran + Indikator + Target dari Renaksi & Kinerja tahun ${tahun}`}
+                data-tooltip-pos="below">
+                {importing ? 'Memuat…' : 'Import Renaksi'}
+              </PrimaButton>
+              <PrimaButton
+                variant="purple"
+                iconLeft={<Plus size={14} />}
+                onClick={addRow}
+                disabled={loading || saving}
+                data-tooltip="Tambah baris kosong di bawah"
+                data-tooltip-pos="below">
+                Tambah Baris
+              </PrimaButton>
+              <PrimaButton
+                variant="primary"
+                iconLeft={<Save size={14} />}
+                onClick={handleSave}
+                disabled={loading || saving || dirtyCount === 0}
+                data-tooltip={dirtyCount === 0 ? 'Tidak ada perubahan' : `Simpan ${dirtyCount} perubahan ke server`}
+                data-tooltip-pos="below">
+                {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
+              </PrimaButton>
+            </>
+          )}
         </div>
       </div>
+
+      {!bolehUbah && <SpandukLihat menu="sasaran" />}
 
       {/* Toast */}
       {toast && (
@@ -309,10 +316,14 @@ export default function SasaranClient() {
         )}
       </div>
 
-      <p style={{ fontSize: 11, color: '#85B7EB', marginTop: 10, lineHeight: 1.6 }}>
-        💡 Pola simpan: <strong>replace-all per tahun</strong> — semua baris untuk tahun {tahun} akan ditimpa dengan
-        data yang Anda lihat sekarang. Tandai baris untuk dihapus (ikon merah) lalu klik Simpan.
-      </p>
+      {/* Petunjuk cara menyimpan tidak ditampilkan ke pemegang LIHAT — menyuruh orang
+          "klik Simpan" saat tombolnya sengaja tidak ada justru membuat layar terasa rusak. */}
+      {bolehUbah && (
+        <p style={{ fontSize: 11, color: '#85B7EB', marginTop: 10, lineHeight: 1.6 }}>
+          💡 Pola simpan: <strong>replace-all per tahun</strong> — semua baris untuk tahun {tahun} akan ditimpa dengan
+          data yang Anda lihat sekarang. Tandai baris untuk dihapus (ikon merah) lalu klik Simpan.
+        </p>
+      )}
 
       {/* Modal konfirmasi Import Renaksi — muncul kalau tabel sudah ada row aktif (proteksi double-append) */}
       {importConfirm && (

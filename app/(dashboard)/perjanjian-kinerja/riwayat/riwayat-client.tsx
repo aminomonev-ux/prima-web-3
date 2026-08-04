@@ -32,9 +32,9 @@ type RiwayatRow = {
   created_by: number | null
 }
 
-interface Props { role: Role }
+interface Props { role: Role; bolehUbah: boolean }
 
-export default function RiwayatClient({ role }: Props) {
+export default function RiwayatClient({ role, bolehUbah }: Props) {
   const { tahun } = usePkYear()
   const router = useRouter()
   const [statusFilter, setStatusFilter] = useState<'' | 'DRAFT' | 'FINAL'>('')
@@ -226,17 +226,19 @@ export default function RiwayatClient({ role }: Props) {
                             </button>
                           </>
                         )}
-                        <button onClick={() => handleDelete(r)}
-                          disabled={r.status === 'FINAL' && !canDeleteFinal}
-                          data-tooltip={
-                            r.status === 'FINAL'
-                              ? (canDeleteFinal ? 'Hapus dokumen FINAL (admin)' : 'Final — hanya SUPER_ADMIN/ADMIN')
-                              : 'Hapus dokumen'
-                          }
-                          data-tooltip-pos="left"
-                          style={btnIconDanger(r.status === 'FINAL' && !canDeleteFinal)}>
-                          <DeleteIcon size={12} />
-                        </button>
+                        {bolehUbah && (
+                          <button onClick={() => handleDelete(r)}
+                            disabled={r.status === 'FINAL' && !canDeleteFinal}
+                            data-tooltip={
+                              r.status === 'FINAL'
+                                ? (canDeleteFinal ? 'Hapus dokumen FINAL (admin)' : 'Final — hanya SUPER_ADMIN/ADMIN')
+                                : 'Hapus dokumen'
+                            }
+                            data-tooltip-pos="left"
+                            style={btnIconDanger(r.status === 'FINAL' && !canDeleteFinal)}>
+                            <DeleteIcon size={12} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
