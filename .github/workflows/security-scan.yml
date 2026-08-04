@@ -117,9 +117,14 @@ jobs:
           # GHSA-mh99-v99m-4gvg di-collapse jadi "<=5.0.7", ikut menandai versi maintenance
           # PATCHED 1.1.16 / 2.1.2). Guard ini menutup celah allowlist-by-ID: baca versi
           # brace-expansion yang BENAR-BENAR terpasang di production, dan gagalkan build kalau
-          # ada yang jatuh di rentang RENTAN asli advisory:
-          #   <1.1.12 | >=2.0.0 <2.0.2 | =3.0.0 | =4.0.0 | >=5.0.0 <5.0.8
-          # Jadi kalau suatu saat dependency baru menarik mis. 5.0.7, CI tetap menangkapnya.
+          # ada yang jatuh di rentang RENTAN gabungan dua advisory:
+          #   GHSA-mh99-v99m-4gvg  → patched 1.1.12 / 2.0.2 / 3.0.1 / 4.0.1 / 5.0.8
+          #   GHSA-rgw5-rvv9-x895  → patched 1.1.18 / 2.1.4 / 5.0.9 (menembus mitigasi di atas;
+          #                          SELURUH 4.x rentan, tidak ada 4.x yang aman)
+          # Ambang di bawah memakai yang lebih ketat. 2026-08-04: 1.1.16 / 2.1.2 / 5.0.8 yang
+          # dulu dianggap aman jadi RENTAN oleh advisory kedua — dinaikkan lewat `overrides`
+          # ber-kunci-versi di package.json supaya tiap major tetap di major-nya (5.x ESM-only,
+          # menariknya ke rantai CJS exceljs/archiver/googleapis akan memecah require).
           npm ls brace-expansion --all --omit=dev --json > be.json 2>/dev/null || true
           node -e '
             const fs = require("fs");
@@ -140,17 +145,17 @@ jobs:
             };
             const vulnerable = (v) => {
               const maj = Number(v.split(".")[0]);
-              if (maj === 1) return cmp(v, "1.1.12") < 0;
-              if (maj === 2) return cmp(v, "2.0.2") < 0;
+              if (maj === 1) return cmp(v, "1.1.18") < 0;
+              if (maj === 2) return cmp(v, "2.1.4") < 0;
               if (maj === 3) return cmp(v, "3.0.1") < 0;
-              if (maj === 4) return cmp(v, "4.0.1") < 0;
-              if (maj === 5) return cmp(v, "5.0.8") < 0;
+              if (maj === 4) return true;
+              if (maj === 5) return cmp(v, "5.0.9") < 0;
               return false;
             };
             const bad = [...found].filter(vulnerable);
             if (bad.length) {
               console.error("::error::brace-expansion versi RENTAN terpasang: " + bad.join(", "));
-              console.error("GHSA-mh99-v99m-4gvg berlaku nyata utk versi ini — allowlist tak boleh membungkamnya. Naikkan/override ke versi patched.");
+              console.error("GHSA-mh99-v99m-4gvg / GHSA-rgw5-rvv9-x895 berlaku nyata utk versi ini — allowlist tak boleh membungkamnya. Naikkan/override ke versi patched.");
               process.exit(1);
             }
             console.log("OK — brace-expansion terpasang [" + ([...found].sort(cmp).join(", ") || "none") + "] semuanya patched.");
