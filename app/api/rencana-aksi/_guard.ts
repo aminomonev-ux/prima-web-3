@@ -1,30 +1,13 @@
-import { NextResponse } from 'next/server';
-import { sql, queryOne } from '@/lib/data/db';
-import { getSession } from '@/lib/security/auth';
+import { buatGuardModul, type GuardedSession } from '@/lib/security/app-guard';
 import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
 
-export type GuardedSession = {
-  userId: number;
-  username: string;
-  role: string;
-};
+export type { GuardedSession };
 
-export async function guard(): Promise<
-  | { ok: true; session: GuardedSession }
-  | { ok: false; response: NextResponse }
-> {
-  const session = await getSession();
-  if (!session) {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 }) };
-  }
-  const row = await queryOne<{ app_access: string[] | null }>(
-    sql`SELECT app_access FROM users WHERE id = ${session.userId} LIMIT 1`,
-  );
-  if (!isRencanaAksiRole(session.role, row?.app_access ?? null)) {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 }) };
-  }
-  return {
-    ok: true,
-    session: { userId: session.userId, username: session.username, role: session.role },
-  };
-}
+// Akses: SUPER_ADMIN/ADMIN, atau role lain yang punya app_access 'rencana_aksi'
+// (diatur Admin Panel → User Management).
+//
+// Field pesannya `error`, bukan `message` — bentuk balasan dipertahankan supaya klien
+// tidak perlu disentuh. Yang DIseragamkan cuma nama kunci hasilnya: dulu `response`,
+// sekarang `res` seperti tiga modul lain, supaya tidak ada lagi dua ejaan untuk hal
+// yang sama. tsc menandai tiap pemakaian lama.
+export const guard = buatGuardModul(isRencanaAksiRole, 'error');

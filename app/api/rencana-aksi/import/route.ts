@@ -35,7 +35,7 @@ const ALLOWED_MIME: Record<string, string[]> = {
 
 export async function POST(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
   if (!ADMIN_ROLES.includes(g.session.role)) {
     return NextResponse.json({ ok: false, error: 'Import hanya untuk Admin.' }, { status: 403 });
   }

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 // tahun kosong (realisasi 0 / bulan_realisasi NULL). Khusus ADMIN/SUPER_ADMIN.
 export async function POST(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
   if (g.session.role !== 'ADMIN' && g.session.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ ok: false, error: 'Duplikasi tahun khusus Admin' }, { status: 403 });
   }

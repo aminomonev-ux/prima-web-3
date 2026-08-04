@@ -12,12 +12,12 @@
 // Jumlah query dihitung dari `SHOW GLOBAL STATUS LIKE 'Questions'`. Global, bukan
 // per-sesi, karena pool memakai banyak koneksi. Konsekuensinya: kalau ada proses
 // lain memakai DB yang sama saat skrip jalan, angkanya ikut terhitung.
-import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import Module from 'node:module'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { BERKAS_MESIN, BERKAS_PERAN, kompilasi } from './_kompilasi-izin.mjs'
 
 const require = createRequire(import.meta.url)
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -33,18 +33,9 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
   if (!(t.slice(0, i).trim() in process.env)) process.env[t.slice(0, i).trim()] = v
 }
 
-fs.mkdirSync(outDir, { recursive: true })
-try {
-  execSync(
-    `npx tsc "${path.join(repo, 'lib/data/menu-access.ts')}"`
-    + ` "${path.join(repo, 'lib/blud/peran.ts')}" "${path.join(repo, 'lib/data/db.ts')}"`
-    + ` "${path.join(repo, 'lib/registry/menu-apps.ts')}" "${path.join(repo, 'lib/data/locks.ts')}"`
-    + ` "${path.join(repo, 'lib/pk/peran.ts')}"`
-    + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
-    + ' --esModuleInterop --skipLibCheck --moduleResolution node',
-    { cwd: repo, stdio: 'pipe' },
-  )
-} catch { /* impor `@/...` tak ter-resolve saat compile — .js tetap ditulis */ }
+// Impor `@/...` tak ter-resolve saat compile — .js tetap ditulis, dan jalurnya
+// dibelokkan saat runtime di bawah.
+kompilasi(repo, outDir, [...BERKAS_MESIN, ...BERKAS_PERAN], { abaikanGagal: true })
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {

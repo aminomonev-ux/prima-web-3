@@ -33,7 +33,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
 
   const u = new URL(req.url);
   const parsed = ListQuerySchema.safeParse({
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
 
   const limited = await rencanaAksiRateLimit(g.session.userId, 'upsert', 30);
   if (limited) return limited;
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
 
   const limited = await rencanaAksiRateLimit(g.session.userId, 'delete', 30);
   if (limited) return limited;
@@ -130,7 +130,7 @@ const PatchBodySchema = z.discriminatedUnion('action', [
 
 export async function PATCH(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
 
   const raw = await req.json().catch(() => null);
   const parsed = PatchBodySchema.safeParse(raw);

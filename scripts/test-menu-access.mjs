@@ -10,26 +10,16 @@
 //
 // Tiga babak berikutnya menguji arah sebaliknya: penimpa memang berlaku, TAPI
 // pagar atas tidak bisa ditembus olehnya.
-import { execSync } from 'node:child_process'
-import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { BERKAS_PERAN, kompilasi } from './_kompilasi-izin.mjs'
 
 const require = createRequire(import.meta.url)
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = path.join(repo, 'node_modules', '.cache', 'menu-access-test')
 
-fs.mkdirSync(outDir, { recursive: true })
-// `--rootDir` wajib sejak ada modul kedua: dua berkas sama-sama bernama `peran.ts`, dan
-// tanpa itu keduanya menulis ke `outDir/peran.js` — yang belakangan menimpa yang duluan
-// dan uji BLUD diam-diam menguji tabel PK.
-execSync(
-  `npx tsc "${path.join(repo, 'lib/blud/peran.ts')}" "${path.join(repo, 'lib/pk/peran.ts')}"`
-  + ` --outDir "${outDir}" --rootDir "${repo}"`
-  + ' --module commonjs --target es2020 --esModuleInterop --skipLibCheck',
-  { cwd: repo, stdio: 'pipe' },
-)
+kompilasi(repo, outDir, BERKAS_PERAN)
 
 const { izinMenu, menuTerbuka, MENU_BLUD, MENU_BACA_SAJA } = require(path.join(outDir, 'lib/blud/peran.js'))
 const pk = require(path.join(outDir, 'lib/pk/peran.js'))

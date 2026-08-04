@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/rencana-aksi/lock?tahun= — status kunci periode (0 = terbuka).
 export async function GET(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
   const u = new URL(req.url);
   const parsed = TahunSchema.safeParse(u.searchParams.get('tahun'));
   if (!parsed.success) {
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 // Khusus ADMIN/SUPER_ADMIN; kunci & buka sama-sama tercatat audit log.
 export async function POST(req: NextRequest) {
   const g = await guard();
-  if (!g.ok) return g.response;
+  if (!g.ok) return g.res;
   if (g.session.role !== 'ADMIN' && g.session.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ ok: false, error: 'Kunci periode khusus Admin' }, { status: 403 });
   }
