@@ -93,7 +93,7 @@ export default function CetakTab({
           return (
             <button key={s}
               onClick={() => { setRealisasiSumber(s); setCetakView('detail'); }}
-              style={{ padding:'6px 16px', borderRadius:'50px', border:`1.5px solid ${active ? SSK_THEME[s].color : (isLight?'rgba(139,92,246,.25)':'rgba(12,68,124,.5)')}`, fontSize:'11px', fontWeight:700, cursor:'pointer', background: active ? SSK_THEME[s].grad : (isLight?'#FFFFFF':'rgba(4,44,83,.5)'), color: active ? 'white': cetakView==='rekap' ? (isLight?'#9CA3AF':'#4B7BA8') : SSK_THEME[s].color, transition:'all .18s', opacity: cetakView==='rekap' ? 0.5 : 1 }}>
+              style={{ padding:'6px 16px', borderRadius:'50px', border:`1.5px solid ${active ? SSK_THEME[s].color : (isLight?'rgba(139,92,246,.25)':'rgba(12,68,124,.5)')}`, fontSize:'11px', fontWeight:700, cursor:'pointer', background: active ? SSK_THEME[s].grad : (isLight?'#FFFFFF':'rgba(4,44,83,.5)'), color: active ? 'white': cetakView==='rekap' ? (isLight?'#6B7280':'#4B7BA8') : SSK_THEME[s].color, transition:'all .18s', opacity: cetakView==='rekap' ? 0.5 : 1 }}>
               {SSK_THEME[s].label.replace('SSK ','')}
             </button>
           );

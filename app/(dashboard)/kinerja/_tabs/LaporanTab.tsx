@@ -252,7 +252,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                     return (
                       <tr key={i} style={{ background: isEmpty ? (isLight?'rgba(139,92,246,.03)':'rgba(4,44,83,.3)') : i%2===0?cRowEven:cRowOdd, opacity: isEmpty?.6:1 }}>
                         <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', textAlign:'center', color:cTextSub }}>{i+1}</td>
-                        <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', fontWeight:700, color: isEmpty ? (isLight?'#9CA3AF':'#94a3b8') : SSK_THEME[laporanSumber].color }}>{bulanLabel}</td>
+                        <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', fontWeight:700, color: isEmpty ? (isLight?'#6B7280':'#94a3b8') : SSK_THEME[laporanSumber].color }}>{bulanLabel}</td>
                         <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', textAlign:'right', color:cTextPrimary, fontWeight:600 }}>{isEmpty?'-':fmtRp(t.real_keuangan)}</td>
                         <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', textAlign:'right', color:cTextSub }}>{isEmpty?'-':fmtRp(t.akum_keuangan)}</td>
                         <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', textAlign:'right' }}>

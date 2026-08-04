@@ -566,7 +566,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
         [data-theme="light"] .app-card:hover  { box-shadow: 8px 8px 0 rgba(15,15,18,.22); }
         [data-theme="light"] .app-card:active { box-shadow: 3px 3px 0 rgba(15,15,18,.18); }
         [data-theme="light"] .card-name   { color: #0F0F12; }
-        [data-theme="light"] .card-handle { color: #9CA3AF; }
+        [data-theme="light"] .card-handle { color: #6B7280; }
         [data-theme="light"] .card-desc   { color: #4B5563; }
         /* Light: band lebih lembut (tint accent), border + CTA tetap solid accent */
         [data-theme="light"] .card-band { background: color-mix(in srgb, var(--cardc) 16%, #fff); }
@@ -717,6 +717,9 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
 
               const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : card.badge;
               // Warna badge status (brutalist: teks gelap + border hitam): hijau=LIVE, merah=admin, amber=maint, abu=locked
+              // `#9CA3AF` di sini LATAR badge, bukan warna teks — sengaja tidak ikut
+              // dinaikkan ke #6B7280 seperti teks bantu lainnya. Teksnya gelap di atasnya,
+              // jadi menggelapkan latarnya justru menurunkan kontras.
               const stColor = locked ? '#9CA3AF' : (isMaint || isMaintSA) ? '#EF9F27' : card.id === 'admin' ? '#E24B4A' : '#2BD46A';
               const initials = card.name.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase();
 

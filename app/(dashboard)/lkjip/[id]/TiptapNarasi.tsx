@@ -172,5 +172,5 @@ const TT_CSS = `
   [data-theme="light"] .lk-tt-btn:hover { background: rgba(0,0,0,.06); color: #0F0F12; }
   [data-theme="light"] .lk-tt-sep { background: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-tt-content .ProseMirror { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #0F0F12; }
-  [data-theme="light"] .lk-tt-content .ProseMirror p.is-editor-empty:first-child::before { color: #9CA3AF; }
+  [data-theme="light"] .lk-tt-content .ProseMirror p.is-editor-empty:first-child::before { color: #6B7280; }
 `;

@@ -387,7 +387,7 @@ export default function PkShell({ username, role, izin, themePreference, childre
             {!ribbonCollapsed && (
               <div style={{
                 fontSize: 9, fontWeight: 800, letterSpacing: '1.4px',
-                color: isLight ? '#9CA3AF' : '#85B7EB',
+                color: isLight ? '#6B7280' : '#85B7EB',
                 opacity: .7, marginTop: 6, textTransform: 'uppercase',
               }}>{grp.name}</div>
             )}

@@ -470,17 +470,17 @@ export default function MasterTab({
                     <td style={{ padding:'10px 14px', borderBottom:cBorderHair, textAlign:'center', color:cTextSub, fontWeight:600 }}>{i+1}</td>
                     {['kegiatan','subkegiatan','uraian_ssk'].includes(masterTipe) && (
                       <td style={{ padding:'10px 14px', borderBottom:cBorderHair }}>
-                        {r.program_ref ? <span style={badgeStyle(isLight?'#B45309':'#FAC775', isLight?'rgba(239,159,39,.12)':'rgba(239,159,39,.15)')}>{r.program_ref}</span> : <span style={{ color: isLight?'#9CA3AF':'#64748b', fontSize:'11px' }}>—</span>}
+                        {r.program_ref ? <span style={badgeStyle(isLight?'#B45309':'#FAC775', isLight?'rgba(239,159,39,.12)':'rgba(239,159,39,.15)')}>{r.program_ref}</span> : <span style={{ color: isLight?'#6B7280':'#64748b', fontSize:'11px' }}>—</span>}
                       </td>
                     )}
                     {['subkegiatan','uraian_ssk'].includes(masterTipe) && (
                       <td style={{ padding:'10px 14px', borderBottom:cBorderHair }}>
-                        {r.kegiatan_ref ? <span style={badgeStyle(isLight?'#0369A1':'#7DD3FC', isLight?'rgba(125,211,252,.18)':'rgba(125,211,252,.1)')}>{r.kegiatan_ref}</span> : <span style={{ color: isLight?'#9CA3AF':'#64748b', fontSize:'11px' }}>—</span>}
+                        {r.kegiatan_ref ? <span style={badgeStyle(isLight?'#0369A1':'#7DD3FC', isLight?'rgba(125,211,252,.18)':'rgba(125,211,252,.1)')}>{r.kegiatan_ref}</span> : <span style={{ color: isLight?'#6B7280':'#64748b', fontSize:'11px' }}>—</span>}
                       </td>
                     )}
                     {masterTipe === 'uraian_ssk' && (
                       <td style={{ padding:'10px 14px', borderBottom:cBorderHair }}>
-                        {r.subkegiatan_ref ? <span style={badgeStyle(isLight?'#047857':'#86EFAC', isLight?'rgba(134,239,172,.18)':'rgba(134,239,172,.1)')}>{r.subkegiatan_ref}</span> : <span style={{ color: isLight?'#9CA3AF':'#64748b', fontSize:'11px' }}>—</span>}
+                        {r.subkegiatan_ref ? <span style={badgeStyle(isLight?'#047857':'#86EFAC', isLight?'rgba(134,239,172,.18)':'rgba(134,239,172,.1)')}>{r.subkegiatan_ref}</span> : <span style={{ color: isLight?'#6B7280':'#64748b', fontSize:'11px' }}>—</span>}
                       </td>
                     )}
                     <td style={{ padding:'10px 14px', borderBottom:cBorderHair, color:cTextPrimary, fontWeight:500, fontSize:'14px' }}>

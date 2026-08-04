@@ -515,7 +515,7 @@ html body th {
   font-weight: 600 !important;
 }
 [data-theme="light"] .master-akun-table input[type="text"]::placeholder {
-  color: #9CA3AF !important;
+  color: #6B7280 !important;
 }
 /* Select khusus Level (di Kode Besar) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â pakai bg dari inline style (LEVEL_COLOR),
    biarkan override agar warna level chip tetap visible */
@@ -1068,7 +1068,7 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .versi-icon,
 [data-theme="light"] .versi-chevron { color: #8B5CF6; }
 [data-theme="light"] .versi-meta { color: #6B7280; }
-[data-theme="light"] .versi-placeholder { color: #9CA3AF; }
+[data-theme="light"] .versi-placeholder { color: #6B7280; }
 [data-theme="light"] .versi-menu {
   background: #F5F5F7;
   border: 1px solid rgba(139,92,246,.25);
@@ -1572,7 +1572,7 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .blud-modal-subtitle { color: #6B7280 !important; }
 [data-theme="light"] .blud-modal-subtitle strong,
 [data-theme="light"] .blud-modal-card strong { color: #0F0F12 !important; }
-[data-theme="light"] .blud-modal-close { color: #9CA3AF !important; }
+[data-theme="light"] .blud-modal-close { color: #6B7280 !important; }
 [data-theme="light"] .blud-modal-close:hover { color: #4B5563 !important; background: rgba(0,0,0,.04) !important; }
 [data-theme="light"] .blud-modal-option {
   border: 1px solid rgba(139,92,246,.20) !important;
@@ -1587,7 +1587,7 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .blud-modal-card .blud-modal-info-box {
   background: #F9FAFB !important; border-color: rgba(139,92,246,.15) !important;
 }
-[data-theme="light"] .blud-modal-card .blud-modal-info-label { color: #9CA3AF !important; }
+[data-theme="light"] .blud-modal-card .blud-modal-info-label { color: #6B7280 !important; }
 [data-theme="light"] .blud-modal-card .blud-modal-row-target {
   background: #FEF2F2 !important; border-color: #FECACA !important;
 }

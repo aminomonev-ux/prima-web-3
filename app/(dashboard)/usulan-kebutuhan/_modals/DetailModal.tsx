@@ -123,7 +123,7 @@ export function DetailModal({
                   ['Status',     null],
                 ] as [string, string | null][]).map(([k, v], i) => (
                   <div key={i} style={{ background: isLight ? 'rgba(0,0,0,.03)' : 'rgba(12,68,124,.3)', border: isLight ? '1px solid rgba(0,0,0,.08)' : '1px solid #0C447C', borderRadius: 8, padding: '8px 12px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: isLight ? '#9CA3AF' : '#85B7EB', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 3 }}>{k}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: isLight ? '#6B7280' : '#85B7EB', textTransform: 'uppercase', letterSpacing: .4, marginBottom: 3 }}>{k}</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: isLight ? '#0F0F12' : '#E6F1FB' }}>
                       {v === null ? <StatusBadgesFromItems items={data.items} /> : v}
                     </div>

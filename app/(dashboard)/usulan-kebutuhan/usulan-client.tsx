@@ -1401,7 +1401,7 @@ export default function UsulanClient({ userId, role, username, themePreference }
         [data-theme="light"] .ua-sidebar-sub{color:#6B7280;}
         [data-theme="light"] .ua-close-btn{color:#6B7280;}
         [data-theme="light"] .ua-close-btn:hover{color:#0F0F12;}
-        [data-theme="light"] .sb-group-label{color:#9CA3AF;}
+        [data-theme="light"] .sb-group-label{color:#6B7280;}
         [data-theme="light"] .sb-item{color:#374151;}
         [data-theme="light"] .sb-item:hover{background:rgba(139,92,246,0.06);color:#5B21B6;}
         [data-theme="light"] .sb-item.active{font-weight:800;}
@@ -1450,13 +1450,13 @@ export default function UsulanClient({ userId, role, username, themePreference }
         [data-theme="light"] .notif-item:hover{background:rgba(0,0,0,0.02);}
         [data-theme="light"] .notif-item.unread{background:rgba(239,159,39,0.05);}
         [data-theme="light"] .notif-pesan{color:#374151;}
-        [data-theme="light"] .notif-meta{color:#9CA3AF;}
-        [data-theme="light"] .notif-empty{color:#9CA3AF;}
+        [data-theme="light"] .notif-meta{color:#6B7280;}
+        [data-theme="light"] .notif-empty{color:#6B7280;}
         /* KPI */
         [data-theme="light"] .kpi-card{background:#FAFAFA;border:1px solid rgba(0,0,0,0.08);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
         [data-theme="light"] .kpi-label{color:#6B7280;}
         [data-theme="light"] .kpi-value{color:#0F0F12;}
-        [data-theme="light"] .kpi-sub{color:#9CA3AF;}
+        [data-theme="light"] .kpi-sub{color:#6B7280;}
         /* Table */
         [data-theme="light"] .ua-table-wrap{background:#FAFAFA;border:1px solid rgba(139,92,246,0.15);}
         [data-theme="light"] .ua-table th{background:linear-gradient(135deg,rgba(139,92,246,.14),rgba(236,72,153,.10));color:#5B21B6;border-bottom:1px solid rgba(139,92,246,0.22);font-weight:700;}
@@ -1470,7 +1470,7 @@ export default function UsulanClient({ userId, role, username, themePreference }
         [data-theme="light"] .filter-input{background:#FAFAFA;border-color:rgba(139,92,246,0.25);color:#0F0F12;}
         [data-theme="light"] .filter-input:hover{border-color:#8B5CF6;}
         [data-theme="light"] .filter-input:focus{border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.15);}
-        [data-theme="light"] .filter-input::placeholder{color:#9CA3AF;}
+        [data-theme="light"] .filter-input::placeholder{color:#6B7280;}
         /* Avatar — ungu-pink gradient di light mode */
         [data-theme="light"] .user-avatar-sm{background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#FFFFFF;}
         /* Buttons */
@@ -1513,7 +1513,7 @@ export default function UsulanClient({ userId, role, username, themePreference }
         [data-theme="light"] .form-label{color:#374151;}
         [data-theme="light"] .form-control{background:#FAFAFA;border-color:rgba(139,92,246,0.25);color:#0F0F12;}
         [data-theme="light"] .form-control:hover{border-color:rgba(139,92,246,0.45);}
-        [data-theme="light"] .form-control::placeholder{color:#9CA3AF;}
+        [data-theme="light"] .form-control::placeholder{color:#6B7280;}
         [data-theme="light"] .form-control:focus{background:#FAFAFA;border-color:#8B5CF6;box-shadow:0 0 0 3px rgba(139,92,246,0.15);}
         [data-theme="light"] select.form-control{color:#5B21B6;}
         [data-theme="light"] .form-control:read-only{background:#F9FAFB;color:#6B7280;}

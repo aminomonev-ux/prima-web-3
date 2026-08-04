@@ -418,7 +418,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
         [data-theme="light"] .kinerja-sidebar{background:rgba(255,255,255,0.98)!important;border-right:1px solid rgba(0,0,0,0.08)!important;}
         [data-theme="light"] .kinerja-sidebar-head{border-bottom:1px solid rgba(0,0,0,0.08)!important;}
         [data-theme="light"] .kinerja-sidebar-sub{color:#6B7280!important;}
-        [data-theme="light"] .kinerja-section-label{color:#9CA3AF!important;}
+        [data-theme="light"] .kinerja-section-label{color:#6B7280!important;}
         [data-theme="light"] .kinerja-nav-item{color:#374151!important;}
         [data-theme="light"] .kinerja-nav-item:hover{background:rgba(139,92,246,0.06)!important;color:#5B21B6!important;}
         [data-theme="light"] .kinerja-nav-item.active{background:linear-gradient(90deg,rgba(139,92,246,.28),rgba(236,72,153,.20))!important;color:#5B21B6!important;font-weight:800!important;border-right:3px solid #8B5CF6!important;}

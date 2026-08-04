@@ -403,7 +403,7 @@ export default function BludShell({ username, role, izin, themePreference, child
             {!ribbonCollapsed && (
               <div style={{
                 fontSize: 9, fontWeight: 800, letterSpacing: '1.4px',
-                color: isLight ? '#9CA3AF' : '#85B7EB',
+                color: isLight ? '#6B7280' : '#85B7EB',
                 opacity: .7, marginTop: 6, textTransform: 'uppercase',
               }}>{grp.name}</div>
             )}
@@ -461,7 +461,7 @@ export default function BludShell({ username, role, izin, themePreference, child
             {!ribbonCollapsed && (
               <div style={{
                 fontSize: 9, fontWeight: 800, letterSpacing: '1.4px',
-                color: isLight ? '#9CA3AF' : '#85B7EB',
+                color: isLight ? '#6B7280' : '#85B7EB',
                 opacity: .7, marginTop: 6, textTransform: 'uppercase',
               }}>+{overflowTiles.length} menu</div>
             )}
@@ -483,7 +483,7 @@ export default function BludShell({ username, role, izin, themePreference, child
                     {ogi > 0 && <div style={{ height: 1, background: isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)', margin: '6px 8px' }} />}
                     <div style={{
                       fontSize: 9, fontWeight: 800, letterSpacing: '1.2px',
-                      color: isLight ? '#9CA3AF' : '#85B7EB',
+                      color: isLight ? '#6B7280' : '#85B7EB',
                       padding: '6px 10px 4px', textTransform: 'uppercase', opacity: .8,
                     }}>{og.name}</div>
                     {og.tiles.map(t => {

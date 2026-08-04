@@ -447,7 +447,7 @@ export function BuatPanel({
           return (
             <div style={{marginTop:16}}>
               {items.length===0 ? (
-                <div style={{textAlign:'center',padding:'28px 0',color:isLight?'#9CA3AF':'#85B7EB',fontSize:13,border:isLight?'1.5px dashed rgba(0,0,0,.12)':'1.5px dashed rgba(181,212,244,.15)',borderRadius:10}}>
+                <div style={{textAlign:'center',padding:'28px 0',color:isLight?'#6B7280':'#85B7EB',fontSize:13,border:isLight?'1.5px dashed rgba(0,0,0,.12)':'1.5px dashed rgba(181,212,244,.15)',borderRadius:10}}>
                   <div style={{fontSize:28,marginBottom:6}}>📥</div>
                 </div>
               ) : (
