@@ -152,17 +152,17 @@ export function RimaFeedbackPanel() {
     toast.success(`Export ${data.length} baris dataset.`);
   }, []);
 
-  const th = { padding: '10px 14px', color: '#7fb8d0', fontWeight: 600, letterSpacing: 0.5 } as const;
+  const th = { padding: '10px 14px', color: 'var(--ma-dim)', fontWeight: 600, letterSpacing: 0.5 } as const;
   const td = { padding: '10px 14px' } as const;
 
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <MessageSquareWarning size={18} style={{ color: '#00d4ff' }} />
+          <MessageSquareWarning size={18} style={{ color: 'var(--ma-aksen)' }} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#e0f7ff', letterSpacing: 0.5 }}>Rima Feedback — Labeling Workbench</div>
-            <div style={{ fontSize: 11, color: '#5a8ea8', marginTop: 2 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ma-fg)', letterSpacing: 0.5 }}>Rima Feedback — Labeling Workbench</div>
+            <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginTop: 2 }}>
               Label pertanyaan gagal → dataset training (jalankan <code>npm run rima:train</code>). Sudah diredaksi privasi.
             </div>
           </div>
@@ -182,16 +182,16 @@ export function RimaFeedbackPanel() {
       </datalist>
 
       {error && <div style={{ padding: 14, borderRadius: 8, background: 'rgba(226,75,74,0.12)', color: '#E24B4A', fontSize: 13 }}>{error}</div>}
-      {!error && loading && <div style={{ padding: 24, color: '#5a8ea8', fontSize: 13 }}>Memuat…</div>}
+      {!error && loading && <div style={{ padding: 24, color: 'var(--ma-dim)', fontSize: 13 }}>Memuat…</div>}
       {!error && !loading && rows.length === 0 && (
-        <div style={{ padding: 24, color: '#5a8ea8', fontSize: 13 }}>Tidak ada antrian label — semua feedback sudah diproses 🎉</div>
+        <div style={{ padding: 24, color: 'var(--ma-dim)', fontSize: 13 }}>Tidak ada antrian label — semua feedback sudah diproses 🎉</div>
       )}
 
       {!error && !loading && rows.length > 0 && (
-        <div style={{ overflowX: 'auto', border: '1px solid rgba(0,212,255,0.18)', borderRadius: 10 }}>
+        <div style={{ overflowX: 'auto', border: '1px solid var(--ma-line)', borderRadius: 10 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: 'rgba(0,212,255,0.06)', textAlign: 'left' }}>
+              <tr style={{ background: 'var(--ma-bg)', textAlign: 'left' }}>
                 <th style={th}>Pertanyaan</th>
                 <th style={{ ...th, width: 70, textAlign: 'right' }}>Jumlah</th>
                 <th style={{ ...th, width: 90, textAlign: 'right' }}>👎 / Pick</th>
@@ -201,15 +201,15 @@ export function RimaFeedbackPanel() {
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.question} style={{ borderTop: '1px solid rgba(0,212,255,0.1)' }}>
-                  <td style={{ ...td, color: '#dceefa' }}>
+                <tr key={r.question} style={{ borderTop: '1px solid var(--ma-line)' }}>
+                  <td style={{ ...td, color: 'var(--ma-fg)' }}>
                     {r.question}
-                    <div style={{ fontSize: 11, color: '#5a8ea8', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginTop: 2 }}>
                       {r.terakhir ? new Date(r.terakhir).toLocaleString('id-ID') : '-'}
                     </div>
                   </td>
-                  <td style={{ ...td, color: '#00ffc8', fontWeight: 700, fontFamily: 'monospace', textAlign: 'right' }}>{r.jumlah}</td>
-                  <td style={{ ...td, color: '#8fb3c8', fontFamily: 'monospace', textAlign: 'right' }}>{r.buruk} / {r.dipilih}</td>
+                  <td style={{ ...td, color: 'var(--ma-ok)', fontWeight: 700, fontFamily: 'monospace', textAlign: 'right' }}>{r.jumlah}</td>
+                  <td style={{ ...td, color: 'var(--ma-dim)', fontFamily: 'monospace', textAlign: 'right' }}>{r.buruk} / {r.dipilih}</td>
                   <td style={td}>
                     <input
                       list="rima-intent-list"
@@ -218,15 +218,15 @@ export function RimaFeedbackPanel() {
                       onChange={e => setDraft(prev => ({ ...prev, [r.question]: e.target.value }))}
                       style={{
                         width: '100%', padding: '6px 8px', borderRadius: 6, fontSize: 12,
-                        fontFamily: 'monospace', background: 'rgba(0,212,255,0.06)',
-                        border: '1px solid rgba(0,212,255,0.25)', color: '#e0f7ff',
+                        fontFamily: 'monospace', background: 'var(--ma-bg)',
+                        border: '1px solid var(--ma-line-on)', color: 'var(--ma-fg)',
                       }}
                     />
                     {draft[r.question] === undefined && !r.usul_intent && suggest[r.question] && (
-                      <div style={{ fontSize: 10, color: '#5a8ea8', marginTop: 3 }}>✨ saran otomatis Rima — koreksi bila keliru</div>
+                      <div style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 3 }}>✨ saran otomatis Rima — koreksi bila keliru</div>
                     )}
                     {draft[r.question] === undefined && r.usul_intent && (
-                      <div style={{ fontSize: 10, color: '#5a8ea8', marginTop: 3 }}>👆 dari pilihan user (klik kandidat)</div>
+                      <div style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 3 }}>👆 dari pilihan user (klik kandidat)</div>
                     )}
                   </td>
                   <td style={td}>
@@ -248,7 +248,7 @@ export function RimaFeedbackPanel() {
                         data-tooltip="Buang dari antrian (bukan bahan training)"
                         style={{
                           padding: '5px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-                          background: 'transparent', color: '#8fb3c8', border: '1px solid rgba(143,179,200,0.4)',
+                          background: 'transparent', color: 'var(--ma-dim)', border: '1px solid var(--ma-line-on)',
                         }}
                       >Abaikan</button>
                     </div>

@@ -140,6 +140,13 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         @keyframes scan{0%{transform:translateY(0)}100%{transform:translateY(100vh)}}
         @keyframes pls{0%,100%{box-shadow:0 0 10px rgba(0,212,255,.5),0 0 3px rgba(0,212,255,.3)}50%{box-shadow:0 0 22px rgba(0,212,255,.9),0 0 8px rgba(0,212,255,.6)}}
         @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+        /* Warna panel Akses Menu lewat variabel, bukan hex langsung. Panel itu digambar
+           dengan style inline, dan style inline hanya kalah oleh !important — sementara
+           aturan light theme di bawah menyasar kelas, bukan elemennya. Variabel memutus
+           simpul itu: satu nilai dibaca style inline, satu lagi ditimpa per tema.
+           .modal-bg ikut disebut supaya modal tetap dapat nilainya walau suatu saat
+           dipindah ke portal di luar .ap-body. */
+        .ap-body,.modal-bg{--ma-fg:#e0f7ff;--ma-dim:#5a8ea8;--ma-aksen:#00d4ff;--ma-ok:#00ffc8;--ma-warn:#ff9944;--ma-beda:#ffcc00;--ma-line:rgba(0,212,255,.12);--ma-line-on:rgba(0,212,255,.3);--ma-bg:rgba(0,212,255,.03);--ma-bg-on:rgba(0,212,255,.08);--ma-warn-bg:rgba(255,153,68,.05);--ma-warn-line:rgba(255,153,68,.2);}
         .ap-body{min-height:100vh;background:#020b14;background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);background-size:40px 40px;color:#e0f7ff;font-family:var(--font-jakarta),sans-serif;position:relative;overflow-x:hidden;}
         .ap-body::before{content:'';position:fixed;top:-100vh;left:0;right:0;height:200vh;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none;z-index:0;animation:scan 12s linear infinite;}
         .ap-header{position:sticky;top:0;z-index:100;background:linear-gradient(135deg,rgba(0,212,255,.07),rgba(0,255,200,.04)),rgba(2,11,20,0.96);backdrop-filter:blur(14px);border-bottom:1px solid rgba(0,212,255,0.2);padding:0 24px;height:76px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 0 40px rgba(0,212,255,.08);}
@@ -304,6 +311,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         [data-theme="light"] .modal-box.danger{border-color:rgba(220,38,38,0.3)!important;}
         [data-theme="light"] .modal-title{color:#7C3AED!important;}
         [data-theme="light"] .ap-chevron{color:#6B7280!important;}
+        [data-theme="light"] .ap-body,[data-theme="light"] .modal-bg{--ma-fg:#0F172A;--ma-dim:#6B7280;--ma-aksen:#7C3AED;--ma-ok:#059669;--ma-warn:#D97706;--ma-beda:#B45309;--ma-line:rgba(0,0,0,.1);--ma-line-on:rgba(124,92,246,.35);--ma-bg:#F5F7FA;--ma-bg-on:rgba(124,92,246,.08);--ma-warn-bg:rgba(217,119,6,.07);--ma-warn-line:rgba(217,119,6,.25);}
       `}</style>
 
       <div className="ap-body">

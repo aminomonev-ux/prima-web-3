@@ -423,7 +423,31 @@ Keduanya bawaan lama yang baru kelihatan karena modal Akses Menu isinya paling p
    terkubur di bawah `.ap-header` (100). `z-index` dibuang dari `.ap-content`
    (`position:relative` tetap). Kedua perbaikan kena ke **semua** modal Admin Panel.
 
-### Sisa yang belum dikerjakan
+### Putaran 4 — tema terang panel Akses Menu (2026-08-04)
 
-- **Panel Admin belum ramah tema terang** (bawaan lama): baris menu yang tercentang
-  memakai teks `#e0f7ff` sehingga tidak terbaca di tema terang. Berlaku juga untuk BLUD.
+Baris menu yang tercentang memakai teks `#e0f7ff` di atas latar putih: rasio kontras
+terukur **1,1:1** — praktis tak terbaca. Sebabnya bukan warna yang salah pilih, tapi
+panel ini digambar dengan *style* inline sementara seluruh aturan tema terang Admin
+Panel menyasar kelas; style inline hanya kalah oleh `!important`, dan tidak ada kelas
+yang bisa disasar.
+
+Perbaikannya lewat **variabel CSS**, bukan menambah `!important` atau memindahkan
+semua ke kelas: `.ap-body,.modal-bg` mendeklarasikan `--ma-fg/--ma-dim/--ma-aksen/
+--ma-ok/--ma-warn/--ma-beda` + latar & garis, dan `[data-theme="light"]` menimpa
+nilainya. Style inline cukup membaca `var(...)`. `.modal-bg` ikut disebut supaya modal
+tetap dapat nilainya kalau suatu saat dipindah ke portal di luar `.ap-body`.
+
+Hasil terukur: baris tercentang **1,1 → 16,15:1**, baris tak tercentang **4,5:1** (lolos
+AA). Tema gelap tidak berubah — nilai variabelnya persis warna lama. Satu-satunya
+selisih: latar baris tak tercentang `.02 → .03` dan garisnya `.1 → .12`, karena dua
+pasang nilai yang nyaris sama digabung jadi satu variabel.
+
+`RimaFeedbackPanel.tsx` kena cacat yang sama (16 warna hardcoded: `#7fb8d0`, `#dceefa`,
+`#8fb3c8`, dst.) dan ikut diperbaiki dengan variabel yang sama. Dua warna sengaja
+**tidak** dijadikan variabel: `#E24B4A` (kotak error) dan `#1D9E75` (tombol Label) —
+keduanya token design system yang memang sama di terang & gelap, teksnya putih/merah
+penuh, bukan warna yang menyesuaikan tema.
+
+Yang belum terbukti dengan mata: badan tabel Rima Feedback tidak sempat dilihat karena
+antrian labelnya kosong di dev. Yang diverifikasi adalah nilai variabelnya diselesaikan
+benar di dalam `.ap-content` — subpohon tempat tabel itu digambar.

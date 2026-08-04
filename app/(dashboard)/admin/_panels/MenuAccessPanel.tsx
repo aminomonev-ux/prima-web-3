@@ -101,9 +101,9 @@ function PilihModul({ nilai, ubah }: { nilai: string; ubah: (v: string) => void 
           onClick={() => ubah(a.key)}
           style={{
             padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700,
-            border: `1px solid ${nilai === a.key ? 'rgba(0,212,255,.45)' : 'rgba(0,212,255,.12)'}`,
-            background: nilai === a.key ? 'rgba(0,212,255,.12)' : 'transparent',
-            color: nilai === a.key ? '#e0f7ff' : '#5a8ea8',
+            border: `1px solid ${nilai === a.key ? 'var(--ma-line-on)' : 'var(--ma-line)'}`,
+            background: nilai === a.key ? 'var(--ma-bg-on)' : 'transparent',
+            color: nilai === a.key ? 'var(--ma-fg)' : 'var(--ma-dim)',
           }}
         >{a.label}</button>
       ))}
@@ -136,7 +136,7 @@ function DaftarMenu({
 
   return (
     <>
-      <div style={{ fontSize: 10, color: '#5a8ea8', marginBottom: 8 }}>
+      <div style={{ fontSize: 10, color: 'var(--ma-dim)', marginBottom: 8 }}>
         {data.scope === 'user'
           ? 'Centang menu yang boleh dia ubah. Yang tidak dicentang tetap bisa dia buka dan unduh, cuma tidak bisa diubah isinya.'
           : 'Centang menu yang boleh diubah. Yang tidak dicentang tetap bisa dibuka dan diunduh, cuma tidak bisa diubah isinya.'}
@@ -154,29 +154,29 @@ function DaftarMenu({
               display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6,
               cursor: mati ? 'default' : 'pointer',
               opacity: tersembunyi ? .45 : 1,
-              background: dicentang ? 'rgba(0,212,255,.08)' : 'rgba(0,212,255,.02)',
-              border: `1px solid ${dicentang ? 'rgba(0,212,255,.3)' : 'rgba(0,212,255,.1)'}`,
-              fontSize: 12, color: dicentang ? '#e0f7ff' : '#5a8ea8',
+              background: dicentang ? 'var(--ma-bg-on)' : 'var(--ma-bg)',
+              border: `1px solid ${dicentang ? 'var(--ma-line-on)' : 'var(--ma-line)'}`,
+              fontSize: 12, color: dicentang ? 'var(--ma-fg)' : 'var(--ma-dim)',
             }}>
               <input
                 type="checkbox"
                 checked={dicentang && !berlantai}
                 disabled={mati}
                 onChange={() => ubah(m.key, dicentang ? 'LIHAT' : 'EDIT')}
-                style={{ width: 13, height: 13, accentColor: '#00d4ff', flexShrink: 0 }}
+                style={{ width: 13, height: 13, accentColor: 'var(--ma-aksen)', flexShrink: 0 }}
               />
               <span style={{ flex: 1 }}>{m.label}</span>
               {m.bacaSaja && (
-                <span style={{ fontSize: 9, color: '#5a8ea8' }}>memang tidak ada yang bisa diubah</span>
+                <span style={{ fontSize: 9, color: 'var(--ma-dim)' }}>memang tidak ada yang bisa diubah</span>
               )}
               {berlantai && (
-                <span style={{ fontSize: 9, color: '#5a8ea8' }}>
+                <span style={{ fontSize: 9, color: 'var(--ma-dim)' }}>
                   hanya {(m.editHanyaPeran ?? []).map(r => ROLE_LABELS[r] ?? r).join(' & ')} yang boleh mengubah
                 </span>
               )}
-              {tersembunyi && <span style={{ fontSize: 9, color: '#ff9944' }}>disembunyikan</span>}
+              {tersembunyi && <span style={{ fontSize: 9, color: 'var(--ma-warn)' }}>disembunyikan</span>}
               {!m.bacaSaja && !berlantai && !tersembunyi && bawaan[m.key] !== izin && (
-                <span style={{ fontSize: 9, color: '#ffcc00' }}>
+                <span style={{ fontSize: 9, color: 'var(--ma-beda)' }}>
                   {data.scope === 'user' ? 'beda dari perannya' : 'diubah dari asalnya'}
                 </span>
               )}
@@ -187,7 +187,7 @@ function DaftarMenu({
 
       <button
         onClick={() => setLanjutanBuka(v => !v)}
-        style={{ background: 'none', border: 'none', color: '#5a8ea8', cursor: 'pointer',
+        style={{ background: 'none', border: 'none', color: 'var(--ma-dim)', cursor: 'pointer',
           fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, padding: 0, marginBottom: 8 }}
       >
         {lanjutanBuka ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -196,8 +196,8 @@ function DaftarMenu({
 
       {lanjutanBuka && (
         <div style={{ padding: '8px 10px', marginBottom: 12, borderRadius: 6,
-          background: 'rgba(255,153,68,.05)', border: '1px solid rgba(255,153,68,.2)' }}>
-          <div style={{ fontSize: 10, color: '#ff9944', marginBottom: 6 }}>
+          background: 'var(--ma-warn-bg)', border: '1px solid var(--ma-warn-line)' }}>
+          <div style={{ fontSize: 10, color: 'var(--ma-warn)', marginBottom: 6 }}>
             Menu yang disembunyikan tidak akan muncul sama sekali
             {data.scope === 'user' ? ' buat orang ini' : ' buat orang dengan peran ini'}. Pakai
             seperlunya: orang yang tampilan menunya beda sendiri biasanya malah mengira akunnya
@@ -206,12 +206,12 @@ function DaftarMenu({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
             {data.menus.map(m => (
               <label key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 11, color: '#5a8ea8', cursor: 'pointer' }}>
+                fontSize: 11, color: 'var(--ma-dim)', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={nilai[m.key] === 'TIDAK'}
                   onChange={() => ubah(m.key, nilai[m.key] === 'TIDAK' ? 'LIHAT' : 'TIDAK')}
-                  style={{ width: 12, height: 12, accentColor: '#ff9944' }}
+                  style={{ width: 12, height: 12, accentColor: 'var(--ma-warn)' }}
                 />
                 {m.label}
               </label>
@@ -222,17 +222,17 @@ function DaftarMenu({
 
       {/* Pratinjau: admin melihat AKIBAT kliknya, bukan menebaknya. */}
       <div style={{ padding: '10px 12px', borderRadius: 6, marginBottom: 14,
-        background: 'rgba(0,212,255,.04)', border: '1px solid rgba(0,212,255,.15)' }}>
-        <div style={{ fontSize: 10, color: '#5a8ea8', letterSpacing: 1, marginBottom: 6 }}>JADINYA BEGINI</div>
-        <div style={{ fontSize: 11, color: '#e0f7ff', lineHeight: 1.7 }}>
-          <div><span style={{ color: '#00ffc8' }}>Bisa ubah:</span> {bisaUbah.length ? bisaUbah.join(' · ') : '—'}</div>
-          <div><span style={{ color: '#5a8ea8' }}>Lihat saja:</span> {jumlahLihat} menu</div>
+        background: 'var(--ma-bg)', border: '1px solid var(--ma-line)' }}>
+        <div style={{ fontSize: 10, color: 'var(--ma-dim)', letterSpacing: 1, marginBottom: 6 }}>JADINYA BEGINI</div>
+        <div style={{ fontSize: 11, color: 'var(--ma-fg)', lineHeight: 1.7 }}>
+          <div><span style={{ color: 'var(--ma-ok)' }}>Bisa ubah:</span> {bisaUbah.length ? bisaUbah.join(' · ') : '—'}</div>
+          <div><span style={{ color: 'var(--ma-dim)' }}>Lihat saja:</span> {jumlahLihat} menu</div>
           {disembunyikan.length > 0 && (
-            <div><span style={{ color: '#ff9944' }}>Disembunyikan:</span> {disembunyikan.join(' · ')}</div>
+            <div><span style={{ color: 'var(--ma-warn)' }}>Disembunyikan:</span> {disembunyikan.join(' · ')}</div>
           )}
         </div>
         {data.terkunci.map(t => (
-          <div key={t.label} style={{ fontSize: 10, color: '#5a8ea8', marginTop: 6,
+          <div key={t.label} style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 6,
             display: 'flex', alignItems: 'center', gap: 5 }}>
             <ShieldCheck size={11} style={{ flexShrink: 0 }} />
             {t.label}: {t.peran.join(' · ')} — sudah ditetapkan dari awal, tidak bisa diubah di sini
@@ -315,13 +315,13 @@ export function MenuAccessModal({ userId, username, onClose }: {
       <div className="modal-box" style={{ maxWidth: 560 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <div className="modal-title">AKSES MENU</div>
-          <button style={{ background: 'none', border: 'none', color: '#5a8ea8', cursor: 'pointer' }} onClick={onClose}>
+          <button style={{ background: 'none', border: 'none', color: 'var(--ma-dim)', cursor: 'pointer' }} onClick={onClose}>
             <X size={18} />
           </button>
         </div>
-        <div style={{ fontSize: 11, color: '#5a8ea8', marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginBottom: 14 }}>
           {username}
-          {data?.scope === 'user' && <> · <span style={{ color: '#00d4ff' }}>{ROLE_LABELS[data.user.role] ?? data.user.role}</span></>}
+          {data?.scope === 'user' && <> · <span style={{ color: 'var(--ma-aksen)' }}>{ROLE_LABELS[data.user.role] ?? data.user.role}</span></>}
         </div>
 
         {/* Pengaturan disimpan per modul: pindah tab lalu Simpan hanya menyentuh modul
@@ -329,7 +329,7 @@ export function MenuAccessModal({ userId, username, onClose }: {
         <PilihModul nilai={appKey} ubah={setAppKey} />
 
         {muat || !data ? (
-          <div style={{ fontSize: 12, color: '#5a8ea8', padding: '20px 0' }}>Memuat…</div>
+          <div style={{ fontSize: 12, color: 'var(--ma-dim)', padding: '20px 0' }}>Memuat…</div>
         ) : (
           <>
             <DaftarMenu data={data} nilai={nilai} setNilai={setNilai} />
@@ -390,9 +390,9 @@ export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
 
   return (
     <div style={{ maxWidth: 620 }}>
-      <div style={{ fontSize: 11, color: '#5a8ea8', marginBottom: 12, lineHeight: 1.7 }}>
+      <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginBottom: 12, lineHeight: 1.7 }}>
         Aturan yang berlaku untuk semua orang dengan peran ini di modul {aplikasi.label}. Kalau
-        cuma satu orang yang perlu beda, atur lewat tombol <b style={{ color: '#00d4ff' }}>MENU</b> di
+        cuma satu orang yang perlu beda, atur lewat tombol <b style={{ color: 'var(--ma-aksen)' }}>MENU</b> di
         tab User Management.
       </div>
 
@@ -407,25 +407,25 @@ export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
           ))}
         </select>
         {data?.scope === 'role' && (
-          <span style={{ fontSize: 11, color: '#5a8ea8', alignSelf: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--ma-dim)', alignSelf: 'center' }}>
 Berlaku untuk {data.jumlahUser} orang yang aktif dengan peran ini
           </span>
         )}
       </div>
 
-      <div style={{ padding: '8px 12px', marginBottom: 14, borderRadius: 6, fontSize: 11, color: '#5a8ea8',
-        background: 'rgba(0,212,255,.03)', border: '1px solid rgba(0,212,255,.12)' }}>
+      <div style={{ padding: '8px 12px', marginBottom: 14, borderRadius: 6, fontSize: 11, color: 'var(--ma-dim)',
+        background: 'var(--ma-bg)', border: '1px solid var(--ma-line)' }}>
         <b>SUPER_ADMIN</b> sengaja tidak bisa diatur dari sini. Kalau bisa, suatu saat ada yang
         tanpa sengaja mencabut aksesnya sendiri, dan tidak ada lagi yang bisa membetulkannya.
       </div>
 
       {muat || !data ? (
-        <div style={{ fontSize: 12, color: '#5a8ea8' }}>Memuat…</div>
+        <div style={{ fontSize: 12, color: 'var(--ma-dim)' }}>Memuat…</div>
       ) : (
         <>
           <DaftarMenu data={data} nilai={nilai} setNilai={setNilai} />
           {!isSA ? (
-            <div style={{ fontSize: 11, color: '#ff9944' }}>
+            <div style={{ fontSize: 11, color: 'var(--ma-warn)' }}>
               Yang boleh mengubah aturan peran hanya SUPER_ADMIN, karena perubahannya kena ke
               semua orang dengan peran ini sekaligus.
             </div>
