@@ -99,8 +99,8 @@ export function MilikPanel({
                   <span>|</span>
                   <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
                   {paguUnset
-                    ? <span style={{fontWeight:700,color:'#ca8a04'}}>ⓘ Pagu belum diatur</span>
-                    : <span style={{fontWeight:700,color:ok?'#15803d':'#dc2626'}}>{ok?'✓ Dalam batas pagu':'⚠ Melebihi pagu'}</span>}
+                    ? <span className="pagu-flag warn">ⓘ Pagu belum diatur</span>
+                    : <span className={`pagu-flag ${ok?'ok':'over'}`}>{ok?'✓ Dalam batas pagu':'⚠ Melebihi pagu'}</span>}
                 </div>
               </>
             );

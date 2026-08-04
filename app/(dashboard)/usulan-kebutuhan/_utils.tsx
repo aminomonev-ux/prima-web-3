@@ -150,10 +150,10 @@ export const PaguKpiBar = React.memo(function PaguKpiBar({ kpi, loading }: { kpi
         <span style={{color:'#475569'}}>|</span>
         <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
         {paguUnset
-          ? <span style={{color:'#FBBF24',fontWeight:600}}>ⓘ Pagu belum diatur</span>
+          ? <span className="pagu-flag warn">ⓘ Pagu belum diatur</span>
           : ok
-            ? <span style={{color:'#4ADE80',fontWeight:600}}>✓ Dalam batas pagu</span>
-            : <span style={{color:'#FCA5A5',fontWeight:600}}>⚠ Melebihi pagu</span>}
+            ? <span className="pagu-flag ok">✓ Dalam batas pagu</span>
+            : <span className="pagu-flag over">⚠ Melebihi pagu</span>}
       </div>
     </div>
   );

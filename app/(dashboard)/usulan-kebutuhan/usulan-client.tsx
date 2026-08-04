@@ -1283,6 +1283,17 @@ export default function UsulanClient({ userId, role, username, themePreference }
         .pagu-bar-track{height:10px;background:#0C447C;border-radius:99px;overflow:hidden;margin-bottom:6px;}
         .pagu-bar-fill{height:100%;background:linear-gradient(90deg,#EF9F27,#FAC775);border-radius:99px;transition:width .6s;}
         .pagu-bar-meta{font-size:11px;color:#85B7EB;display:flex;gap:12px;}
+        /* Status pagu: badge TERISI, bukan teks berwarna. Sebelumnya tiga pemanggilnya
+           menulis warna langsung di style inline — dan style inline tidak pernah kalah
+           oleh aturan [data-theme="light"], jadi "Pagu belum diatur" tetap kuning muda
+           di atas latar putih (kontras terukur 1,6). Kuning di atas putih memang tidak
+           bisa dibetulkan dengan mengganti warna teksnya saja; yang benar memberinya
+           latar sendiri. Ketiga pemanggil sekarang memakai kelas ini, jadi tampilannya
+           juga tidak lagi berbeda-beda antar panel. */
+        .pagu-flag{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:99px;font-size:10.5px;font-weight:700;line-height:1.6;white-space:nowrap;}
+        .pagu-flag.warn{background:rgba(250,199,117,.16);color:#FAC775;border:1px solid rgba(250,199,117,.35);}
+        .pagu-flag.ok{background:rgba(74,222,128,.14);color:#4ADE80;border:1px solid rgba(74,222,128,.32);}
+        .pagu-flag.over{background:rgba(252,165,165,.14);color:#FCA5A5;border:1px solid rgba(252,165,165,.32);}
         @media(max-width:768px){.pagu-kpi-grid{grid-template-columns:repeat(2,1fr);}}
         /* ── FORM ── */
         .form-card{background:#042C53;border-radius:14px;border:1px solid #0C447C;padding:20px;margin-bottom:16px;}
@@ -1491,6 +1502,11 @@ export default function UsulanClient({ userId, role, username, themePreference }
         [data-theme="light"] .pagu-bar-track{background:#E5E7EB;}
         [data-theme="light"] .pagu-progress-label{color:#374151!important;}
         [data-theme="light"] .pagu-bar-meta{color:#6B7280;}
+        /* Teks tua di atas latar muda — ketiganya lewat AA di atas kartu putih:
+           #92400E 6,4 · #166534 7,4 · #991B1B 7,0. */
+        [data-theme="light"] .pagu-flag.warn{background:#FEF3C7;color:#92400E;border-color:#FDE68A;}
+        [data-theme="light"] .pagu-flag.ok{background:#DCFCE7;color:#166534;border-color:#BBF7D0;}
+        [data-theme="light"] .pagu-flag.over{background:#FEE2E2;color:#991B1B;border-color:#FECACA;}
         /* Form */
         [data-theme="light"] .form-card{background:#FAFAFA;border:1px solid rgba(0,0,0,0.08);}
         [data-theme="light"] .form-card-title{color:#0F0F12;border-bottom:1px solid rgba(0,0,0,0.08);}

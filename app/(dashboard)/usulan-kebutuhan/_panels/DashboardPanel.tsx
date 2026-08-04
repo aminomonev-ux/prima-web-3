@@ -69,8 +69,8 @@ export function DashboardPanel({
                     <span>|</span>
                     <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
                     {paguUnset
-                      ? <span style={{fontWeight:700,color:'#FBBF24'}}>ⓘ Pagu belum diatur</span>
-                      : <span style={{fontWeight:700,color:ok?'#4ADE80':'#FCA5A5'}}>{ok?'✓ Dalam batas pagu':'⚠ Melebihi pagu'}</span>}
+                      ? <span className="pagu-flag warn">ⓘ Pagu belum diatur</span>
+                      : <span className={`pagu-flag ${ok?'ok':'over'}`}>{ok?'✓ Dalam batas pagu':'⚠ Melebihi pagu'}</span>}
                   </div>
                 </>
               );
