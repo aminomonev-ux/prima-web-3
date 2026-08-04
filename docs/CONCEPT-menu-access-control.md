@@ -784,13 +784,21 @@ Baris kunci yang menumpuk di `blud_locks` juga dibiarkan — plafonnya di bawah 
 menambah jalur kode. PK ikut memakai tabel yang sama, jadi angkanya bertambah tapi tetap
 sekelas.
 
-### Fase 3 — Usulan Kebutuhan (Pola B)
-- [ ] Registry `children` untuk 15 panel `usulan-kebutuhan/_panels/`.
-- [ ] `getPanels(role)` jadi **bibit** `menu_role_access` untuk `app_key='usulan_aset'` (§3.2).
-- [ ] Sembunyikan panel di klien **+** guard tiap route `app/api/usulan/*` — panel bukan
-      route, jadi lapis API satu-satunya pagar sungguhan.
-- [ ] **DoD:** panel disembunyikan **dan** endpoint-nya menolak `curl`. Kalau cuma
-      disembunyikan, yang dibuat dekorasi.
+### Fase 3 — Usulan Kebutuhan (Pola B) — **⛔ DIBATALKAN 2026-08-04**
+
+Konsepnya ditulis lengkap dulu (`docs/CONCEPT-usulan-peran.md`), lalu dibatalkan:
+pembagian panel lewat `getPanels(role)` sudah pas, tidak ada kasus "satu orang perlu
+beda sendiri" yang menunggu. Yang dipindahkan ke Admin Panel cuma kemampuan mengubah
+sesuatu yang tidak perlu diubah.
+
+Yang menguatkan justru DoD yang ditulis di baris ini sendiri — *"panel disembunyikan
+**dan** endpoint-nya menolak `curl`"*. Ternyata itu tidak bisa dipenuhi untuk sebagian
+besar panel: mereka berbagi satu endpoint `/api/usulan?scope=…` yang menurunkan hak baca
+dari peran (L60), jadi tidak ada pintu per-panel untuk ditutup. Cuma 5 panel yang punya
+endpoint sendiri. Dengan kata lain, di Usulan penyembunyian panel adalah keputusan
+tampilan — nilainya lebih kecil daripada di BLUD/PK.
+
+Usulan tetap memakai `getPanels(role)` di kode.
 
 ### Fase 4 — sisanya, kalau memang dibutuhkan
 - [x] Perjanjian Kinerja (7 menu) — **✅ SELESAI 2026-08-03**, dinaikkan jadi modul kedua
@@ -807,7 +815,14 @@ sekelas.
 
       Utang urutan penguncian (peran dulu, baru orang) ikut lunas — komentarnya sudah di
       `lib/data/menu-access.ts` dekat `kunciPeran`/`kunciOrang`.
-- [ ] E-Anggaran (9 tab), Admin Panel (10 tab) — belum ada permintaan; jangan dikerjakan
+- [x] E-Anggaran / Kinerja (9 tab) — **⛔ DITOLAK 2026-08-04, sengaja.** Konsepnya
+      ditulis lengkap dulu (`docs/CONCEPT-kinerja-peran.md`) dan justru konsep itu yang
+      membuktikan modul ini tidak membutuhkannya: tabel perannya keluar datar — ketujuh
+      peran `EDIT` di semua menu — karena Kinerja memang tidak membedakan satu peran pun
+      (allow-list GET = PUT, keputusan audit Tahap 12). Pemegang grant `new_econtrolling`
+      di DB 0 orang, dan dua aksi tajamnya sudah berpagar (reset = SUPER_ADMIN, hapus
+      master = SUPER_ADMIN/ADMIN). Tetap pakai buka/tutup setingkat aplikasi.
+- [ ] Admin Panel (10 tab) — belum ada permintaan; jangan dikerjakan
       sebelum ada.
 
 ---
