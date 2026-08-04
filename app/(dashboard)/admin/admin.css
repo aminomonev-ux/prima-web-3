@@ -1,0 +1,204 @@
+/* app/(dashboard)/admin/admin.css — tampilan Admin Panel.
+ *
+ * Dulu 178 baris ini hidup sebagai <style>{`…`} di dalam admin-client.tsx. Dua masalah
+ * lahir dari situ dalam satu minggu: satu tanda backtick di dalam komentar CSS memutus
+ * template literal dan membuat halaman 500, lalu bug z-index yang mengubur modal di
+ * balik bilah nav bersembunyi di tengah tembok CSS yang tak bisa dibaca alat apa pun.
+ * Sebagai berkas .css sungguhan, keduanya tidak bisa terulang.
+ *
+ * ATURAN BERKAS INI: setiap pemilih WAJIB berawalan `.ap-` atau dipagari `.ap-body `.
+ * Waktu masih inline, aturannya ikut lenyap begitu komponennya lepas; sebagai berkas
+ * CSS ia bertahan selama sesi peramban, jadi nama umum akan bocor ke modul lain setelah
+ * pindah halaman tanpa muat ulang. Itu bukan kekhawatiran teoretis: `.msg-err` dan
+ * `.msg-ok` di sini bentrok dengan versi milik Usulan Kebutuhan dan Profil, yang
+ * tampilannya berbeda. Kelas modal ikut diberi awalan (`.ap-modal-bg` dst.) karena
+ * alasan yang sama.
+ *
+ * N-1: @import Google Fonts dibuang — diblok CSP (style-src/font-src tanpa
+ * fonts.googleapis/gstatic) & langgar DESIGN-SYSTEM. Pakai font app yg sudah 'self'.
+ */
+
+/* Reset SENGAJA dipagari ke subpohon Admin Panel. Waktu masih inline, aturannya ikut
+   hilang begitu komponennya lepas; sebagai berkas CSS ia bertahan selama sesi, dan
+   `*{margin:0;padding:0}` yang lolos ke halaman lain akan merusak modul yang tidak
+   pernah meminta reset itu. `.ap-body` membungkus seluruh isi Admin Panel, modal
+   termasuk. html/body sendiri sudah di-reset preflight Tailwind. */
+.ap-body,
+.ap-body *,
+.ap-body *::before,
+.ap-body *::after{box-sizing:border-box;margin:0;padding:0;}
+@keyframes scan{0%{transform:translateY(0)}100%{transform:translateY(100vh)}}
+@keyframes pls{0%,100%{box-shadow:0 0 10px rgba(0,212,255,.5),0 0 3px rgba(0,212,255,.3)}50%{box-shadow:0 0 22px rgba(0,212,255,.9),0 0 8px rgba(0,212,255,.6)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+/* Warna panel Akses Menu lewat variabel, bukan hex langsung. Panel itu digambar
+   dengan style inline, dan style inline hanya kalah oleh !important — sementara
+   aturan light theme di bawah menyasar kelas, bukan elemennya. Variabel memutus
+   simpul itu: satu nilai dibaca style inline, satu lagi ditimpa per tema.
+   .ap-modal-bg ikut disebut supaya modal tetap dapat nilainya walau suatu saat
+   dipindah ke portal di luar .ap-body. */
+.ap-body,.ap-modal-bg{--ma-fg:#e0f7ff;--ma-dim:#5a8ea8;--ma-aksen:#00d4ff;--ma-ok:#00ffc8;--ma-warn:#ff9944;--ma-beda:#ffcc00;--ma-line:rgba(0,212,255,.12);--ma-line-on:rgba(0,212,255,.3);--ma-bg:rgba(0,212,255,.03);--ma-bg-on:rgba(0,212,255,.08);--ma-warn-bg:rgba(255,153,68,.05);--ma-warn-line:rgba(255,153,68,.2);}
+.ap-body{min-height:100vh;background:#020b14;background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);background-size:40px 40px;color:#e0f7ff;font-family:var(--font-jakarta),sans-serif;position:relative;overflow-x:hidden;}
+.ap-body::before{content:'';position:fixed;top:-100vh;left:0;right:0;height:200vh;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none;z-index:0;animation:scan 12s linear infinite;}
+.ap-header{position:sticky;top:0;z-index:100;background:linear-gradient(135deg,rgba(0,212,255,.07),rgba(0,255,200,.04)),rgba(2,11,20,0.96);backdrop-filter:blur(14px);border-bottom:1px solid rgba(0,212,255,0.2);padding:0 24px;height:76px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 0 40px rgba(0,212,255,.08);}
+.ap-brand{display:flex;align-items:center;gap:14px;border:1px solid rgba(0,212,255,.55);border-radius:12px;padding:12px 20px 12px 12px;background:rgba(0,212,255,.06);box-shadow:0 0 20px rgba(0,212,255,.12),inset 0 0 20px rgba(0,212,255,.03);}
+.ap-brand-icon{width:42px;height:42px;border-radius:10px;border:1px solid rgba(0,212,255,.6);display:flex;align-items:center;justify-content:center;color:#00d4ff;background:rgba(0,212,255,.08);animation:pls 2.5s ease-in-out infinite;flex-shrink:0;}
+.ap-brand-title{font-size:17px;font-weight:800;color:#e0f7ff;letter-spacing:2.5px;font-family:var(--font-jakarta),sans-serif;text-shadow:0 0 20px rgba(0,212,255,.5);}
+.ap-brand-sub{font-size:9px;color:#5a8ea8;letter-spacing:1px;margin-top:4px;font-family:'JetBrains Mono',monospace;}
+.ap-clock{font-size:22px;font-weight:400;color:#00d4ff;letter-spacing:3px;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px rgba(0,212,255,.4);}
+.ap-user{display:flex;align-items:center;gap:10px;cursor:pointer;padding:5px 14px 5px 5px;border-radius:10px;border:1px solid rgba(0,212,255,.3);background:rgba(0,212,255,.05);transition:all .2s;user-select:none;}
+.ap-user:hover{border-color:rgba(0,212,255,.65);background:rgba(0,212,255,.1);box-shadow:0 0 14px rgba(0,212,255,.15);}
+.ap-avatar{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#00d4ff,#00ffc8);color:#020b14;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(0,212,255,.4);font-family:var(--font-jakarta),sans-serif;}
+.ap-uname{font-size:12px;font-weight:700;color:#e0f7ff;letter-spacing:.8px;}
+.ap-urole{font-size:9px;font-weight:700;background:linear-gradient(90deg,#00d4ff,#00ffc8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.8px;}
+.ap-chevron{transition:transform .2s;color:#00d4ff;flex-shrink:0;}
+.ap-chevron.open{transform:rotate(180deg);}
+.ap-dropdown{position:absolute;top:calc(100%+10px);right:0;width:210px;background:#0a0e14;border:1px solid rgba(0,212,255,.2);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.6);overflow:hidden;z-index:300;}
+.ap-ddi{display:flex;align-items:center;gap:9px;padding:11px 16px;font-size:12px;color:#a0cfe0;cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:var(--font-jakarta),sans-serif;transition:background .15s;letter-spacing:.3px;}
+.ap-ddi:hover{background:rgba(0,212,255,.08);color:#00d4ff;}
+.ap-ddi.danger{color:#ff4466;}
+.ap-ddi.danger:hover{background:rgba(255,68,102,.08);}
+.ap-tabs{display:flex;align-items:center;gap:0;padding:0 20px;background:rgba(2,11,20,.92);border-bottom:1px solid rgba(0,212,255,.1);overflow-x:auto;position:relative;z-index:10;}
+.ap-tab{display:flex;align-items:center;gap:6px;padding:13px 15px;font-size:10.5px;font-weight:700;letter-spacing:1.2px;color:#5a8ea8;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;font-family:var(--font-jakarta),sans-serif;}
+.ap-tab:hover{color:#a0cfe0;}
+.ap-tab.active{color:#00d4ff;border-bottom-color:#00d4ff;text-shadow:0 0 8px rgba(0,212,255,.4);}
+/* TANPA z-index — sengaja. Nilai apa pun di sini membentuk stacking context,
+   dan modal hidup DI DALAM elemen ini: z-index 500 pada .ap-modal-bg lalu hanya
+   berlaku di antara sesama isi .ap-content, sehingga seluruh modal terkubur di
+   bawah .ap-header (100) dan .ap-tabs (10) — bagian atas modal tertutup bilah
+   nav. position:relative tetap dipertahankan (dipakai anak yang absolute) dan
+   urutan gambar terhadap .ap-body::before tidak berubah: keduanya di level yang
+   sama, dan yang belakangan di pohon menang. */
+.ap-content{padding:24px;max-width:1400px;margin:0 auto;position:relative;}
+.ap-card{background:rgba(7,21,37,.92);border:1px solid rgba(0,212,255,.14);border-radius:10px;padding:20px;position:relative;overflow:hidden;}
+.ap-card::after{content:'';position:absolute;bottom:0;right:0;width:80px;height:80px;background:radial-gradient(circle at bottom right,rgba(0,212,255,.07),transparent 70%);pointer-events:none;}
+.ap-card-title{font-size:10px;font-weight:700;letter-spacing:2px;color:#5a8ea8;margin-bottom:14px;display:flex;align-items:center;gap:8px;text-transform:uppercase;}
+.ap-card-title::before{content:'';display:inline-block;width:3px;height:13px;background:linear-gradient(180deg,#00d4ff,#00ffc8);border-radius:2px;}
+.ap-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+.ap-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+.ap-kpi{background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.1);border-radius:8px;padding:16px 18px;position:relative;overflow:hidden;}
+.ap-kpi::after{content:'';position:absolute;top:-20px;right:-20px;width:70px;height:70px;background:radial-gradient(circle,rgba(0,212,255,.08),transparent 70%);pointer-events:none;}
+.ap-kpi-label{font-size:9px;letter-spacing:1.8px;color:#5a8ea8;margin-bottom:8px;text-transform:uppercase;font-family:var(--font-jakarta),sans-serif;}
+.ap-kpi-value{font-size:30px;font-weight:400;font-family:'JetBrains Mono',monospace;}
+.ap-kpi-sub{font-size:10px;color:#5a8ea8;margin-top:4px;}
+.ap-body .cyan{color:#00d4ff;}
+.ap-body .green{color:#00ffc8;}
+.ap-body .yellow{color:#ffcc00;}
+.ap-body .red{color:#ff4466;}
+.ap-table-wrap{background:rgba(7,21,37,.92);border:1px solid rgba(0,212,255,.12);border-radius:10px;overflow:hidden;}
+.ap-table{width:100%;border-collapse:collapse;font-size:12px;}
+.ap-table thead tr{background:linear-gradient(90deg,rgba(0,212,255,.08),rgba(0,255,200,.04));}
+.ap-table th{padding:11px 14px;text-align:left;font-size:9.5px;font-weight:700;letter-spacing:1.5px;color:#5a8ea8;border-bottom:1px solid rgba(0,212,255,.12);font-family:var(--font-jakarta),sans-serif;}
+.ap-table td{padding:9px 14px;border-bottom:1px solid rgba(0,212,255,.05);color:#a0cfe0;vertical-align:middle;font-family:var(--font-jakarta),sans-serif;}
+.ap-table td.mono{font-family:'JetBrains Mono',monospace;}
+.ap-table tr:hover td{background:rgba(0,212,255,.04);}
+.ap-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;border:1px solid;transition:all .2s;font-family:var(--font-jakarta),sans-serif;}
+.ap-btn-cyan{border-color:rgba(0,212,255,.4);color:#00d4ff;background:rgba(0,212,255,.08);}
+.ap-btn-cyan:hover{background:rgba(0,212,255,.15);border-color:#00d4ff;box-shadow:0 0 10px rgba(0,212,255,.2);}
+.ap-btn-red{border-color:rgba(255,68,102,.4);color:#ff4466;background:rgba(255,68,102,.08);}
+.ap-btn-red:hover{background:rgba(255,68,102,.15);border-color:#ff4466;box-shadow:0 0 10px rgba(255,68,102,.2);}
+.ap-btn-green{border-color:rgba(0,255,200,.4);color:#00ffc8;background:rgba(0,255,200,.08);}
+.ap-btn-green:hover{background:rgba(0,255,200,.15);border-color:#00ffc8;box-shadow:0 0 10px rgba(0,255,200,.2);}
+.ap-btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;}
+.ap-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;font-family:var(--font-jakarta),sans-serif;}
+.ap-body .badge-green{background:rgba(0,255,200,.1);color:#00ffc8;border:1px solid rgba(0,255,200,.28);}
+.ap-body .badge-yellow{background:rgba(255,204,0,.1);color:#ffcc00;border:1px solid rgba(255,204,0,.28);}
+.ap-body .badge-red{background:rgba(255,68,102,.1);color:#ff4466;border:1px solid rgba(255,68,102,.28);}
+.ap-body .badge-cyan{background:rgba(0,212,255,.1);color:#00d4ff;border:1px solid rgba(0,212,255,.28);}
+.ap-body .badge-gray{background:rgba(90,142,168,.1);color:#5a8ea8;border:1px solid rgba(90,142,168,.28);}
+.ap-body .dot-active{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00ffc8;animation:blink 1.8s ease-in-out infinite;}
+.ap-body .dot-idle{display:inline-block;width:6px;height:6px;border-radius:50%;background:#ffcc00;}
+.ap-input{background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:6px;padding:8px 12px;color:#e0f7ff;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;width:100%;}
+.ap-input:focus{border-color:rgba(0,212,255,.55);background:rgba(0,212,255,.08);}
+.ap-select{background:#071525;border:1px solid rgba(0,212,255,.2);border-radius:6px;padding:8px 12px;color:#a0cfe0;font-size:12px;font-family:var(--font-jakarta),sans-serif;outline:none;}
+.ap-select:focus{border-color:rgba(0,212,255,.55);}
+.ap-select option{background:#071525;color:#e0f7ff;}
+.ap-select optgroup{background:#071525;color:#5a8ea8;font-style:normal;font-weight:700;}
+.ap-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.ap-section-title{font-size:12px;font-weight:800;letter-spacing:1.5px;color:#00d4ff;margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid rgba(0,212,255,.12);text-transform:uppercase;font-family:var(--font-jakarta),sans-serif;}
+.ap-toggle{position:relative;width:44px;height:22px;cursor:pointer;}
+.ap-toggle input{opacity:0;width:0;height:0;position:absolute;}
+.ap-toggle-track{position:absolute;inset:0;border-radius:11px;background:rgba(255,68,102,.25);border:1px solid rgba(255,68,102,.4);transition:all .3s;}
+.ap-toggle input:checked + .ap-toggle-track{background:rgba(0,255,200,.18);border-color:rgba(0,255,200,.5);}
+.ap-toggle-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#ff4466;transition:all .3s;}
+.ap-toggle input:checked ~ .ap-toggle-thumb{left:25px;background:#00ffc8;}
+.ap-toggle:has(input:disabled){cursor:not-allowed;opacity:.35;}
+.ap-toggle-row-disabled{opacity:.4;pointer-events:none;}
+/* Isi modal yang lebih tinggi dari layar digulung DI DALAM kotaknya. Tanpa
+   max-height, kotak tumbuh melewati batas viewport dan bagian bawahnya —
+   termasuk tombol Simpan — tidak bisa dicapai: penggulung halaman di belakang
+   tidak menggulung isi modal. Kena ke semua modal Admin Panel, bukan cuma
+   Akses Menu. */
+.ap-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px);}
+.ap-modal-box{background:#0a1220;border:1px solid rgba(0,212,255,.3);border-radius:12px;padding:28px;width:100%;max-width:420px;max-height:calc(100vh - 48px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 28px 60px rgba(0,0,0,.7);}
+.ap-modal-box.danger{border-color:rgba(255,68,102,.4);box-shadow:0 28px 60px rgba(0,0,0,.7),0 0 30px rgba(255,68,102,.08);}
+.ap-modal-title{font-size:13px;font-weight:800;color:#00d4ff;letter-spacing:1.5px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-family:var(--font-jakarta),sans-serif;}
+.ap-body .msg-ok{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(0,255,200,.07);border:1px solid rgba(0,255,200,.2);border-radius:6px;font-size:12px;color:#00ffc8;margin-bottom:12px;}
+.ap-body .msg-err{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,68,102,.07);border:1px solid rgba(255,68,102,.2);border-radius:6px;font-size:12px;color:#ff4466;margin-bottom:12px;}
+@media(max-width:1100px){.ap-grid5{grid-template-columns:repeat(3,1fr)!important;}.sec-grid{grid-template-columns:1fr!important;}.sec-span2{grid-column:span 1!important;}.email-grid{grid-template-columns:1fr!important;}}
+@media(max-width:900px){.ap-grid4{grid-template-columns:repeat(2,1fr);}.ap-grid3{grid-template-columns:1fr 1fr;}.ap-grid5{grid-template-columns:repeat(2,1fr)!important;}}
+@media(max-width:600px){.ap-grid4,.ap-grid3{grid-template-columns:1fr;}.ap-grid5{grid-template-columns:1fr!important;}}
+
+/* ═══════════════════════════════════════
+   LIGHT THEME OVERRIDES — Admin Panel
+═══════════════════════════════════════ */
+[data-theme="light"] .ap-body{background:#F0F4F8!important;background-image:linear-gradient(rgba(0,0,0,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,0.03) 1px,transparent 1px)!important;color:#0F172A!important;}
+[data-theme="light"] .ap-body::before{display:none;}
+[data-theme="light"] .ap-header{background:rgba(250,250,250,0.97)!important;border-bottom:1px solid rgba(0,0,0,0.1)!important;box-shadow:0 2px 12px rgba(0,0,0,0.06)!important;}
+[data-theme="light"] .ap-brand{border:1px solid rgba(139,92,246,0.3)!important;background:rgba(139,92,246,0.05)!important;box-shadow:none!important;}
+[data-theme="light"] .ap-brand-icon{border-color:rgba(139,92,246,0.4)!important;color:#7C3AED!important;background:rgba(139,92,246,0.08)!important;animation:none!important;}
+[data-theme="light"] .ap-brand-title{color:#0F172A!important;text-shadow:none!important;}
+[data-theme="light"] .ap-brand-sub{color:#6B7280!important;}
+[data-theme="light"] .ap-clock{color:#7C3AED!important;text-shadow:none!important;}
+[data-theme="light"] .ap-user{border-color:rgba(139,92,246,0.25)!important;background:rgba(139,92,246,0.05)!important;}
+[data-theme="light"] .ap-user:hover{border-color:rgba(139,92,246,0.5)!important;background:rgba(139,92,246,0.1)!important;box-shadow:none!important;}
+[data-theme="light"] .ap-avatar{background:linear-gradient(135deg,#7C3AED,#EC4899)!important;color:#fff!important;box-shadow:none!important;}
+[data-theme="light"] .ap-uname{color:#0F172A!important;}
+[data-theme="light"] .ap-urole{background:linear-gradient(90deg,#7C3AED,#EC4899)!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent!important;}
+[data-theme="light"] .ap-dropdown{background:#FAFAFA!important;border:1px solid rgba(0,0,0,0.1)!important;box-shadow:0 16px 40px rgba(0,0,0,0.15)!important;}
+[data-theme="light"] .ap-ddi{color:#374151!important;}
+[data-theme="light"] .ap-ddi:hover{background:rgba(0,0,0,0.04)!important;color:#0F172A!important;}
+[data-theme="light"] .ap-ddi.danger{color:#DC2626!important;}
+[data-theme="light"] .ap-ddi.danger:hover{background:rgba(226,75,74,0.08)!important;}
+[data-theme="light"] .ap-tabs{background:rgba(250,250,250,0.95)!important;border-bottom:1px solid rgba(0,0,0,0.08)!important;}
+[data-theme="light"] .ap-tab{color:#6B7280!important;}
+[data-theme="light"] .ap-tab:hover{color:#374151!important;}
+[data-theme="light"] .ap-tab.active{color:#7C3AED!important;border-bottom-color:#7C3AED!important;text-shadow:none!important;}
+[data-theme="light"] .ap-card{background:#FAFAFA!important;border:1px solid rgba(0,0,0,0.08)!important;}
+[data-theme="light"] .ap-card::after{display:none;}
+[data-theme="light"] .ap-card-title{color:#6B7280!important;}
+[data-theme="light"] .ap-card-title::before{background:linear-gradient(180deg,#7C3AED,#EC4899)!important;}
+[data-theme="light"] .ap-kpi{background:#F5F7FA!important;border:1px solid rgba(0,0,0,0.08)!important;}
+[data-theme="light"] .ap-kpi::after{display:none;}
+[data-theme="light"] .ap-kpi-label{color:#6B7280!important;}
+[data-theme="light"] .ap-kpi-value{color:#0F172A!important;}
+[data-theme="light"] .ap-kpi-sub{color:#9CA3AF!important;}
+[data-theme="light"] .ap-body .cyan{color:#7C3AED!important;}
+[data-theme="light"] .ap-body .green{color:#059669!important;}
+[data-theme="light"] .ap-body .yellow{color:#D97706!important;}
+[data-theme="light"] .ap-body .red{color:#DC2626!important;}
+[data-theme="light"] .ap-table-wrap{background:#FAFAFA!important;border:1px solid rgba(0,0,0,0.08)!important;}
+[data-theme="light"] .ap-table thead tr{background:#F3F4F6!important;}
+[data-theme="light"] .ap-table th{color:#6B7280!important;border-bottom:1px solid rgba(0,0,0,0.1)!important;}
+[data-theme="light"] .ap-table td{color:#374151!important;border-bottom:1px solid rgba(0,0,0,0.06)!important;}
+[data-theme="light"] .ap-table tr:hover td{background:rgba(0,0,0,0.02)!important;}
+[data-theme="light"] .ap-btn-cyan{border-color:rgba(124,92,246,0.35)!important;color:#7C3AED!important;background:rgba(124,92,246,0.08)!important;}
+[data-theme="light"] .ap-btn-cyan:hover{background:rgba(124,92,246,0.15)!important;border-color:#7C3AED!important;box-shadow:none!important;}
+[data-theme="light"] .ap-btn-green{border-color:rgba(5,150,105,0.3)!important;color:#059669!important;background:rgba(5,150,105,0.08)!important;}
+[data-theme="light"] .ap-btn-red{border-color:rgba(220,38,38,0.3)!important;color:#DC2626!important;background:rgba(220,38,38,0.08)!important;}
+[data-theme="light"] .ap-body .badge-green{background:rgba(5,150,105,0.1)!important;color:#059669!important;border-color:rgba(5,150,105,0.25)!important;}
+[data-theme="light"] .ap-body .badge-cyan{background:rgba(124,92,246,0.1)!important;color:#7C3AED!important;border-color:rgba(124,92,246,0.25)!important;}
+[data-theme="light"] .ap-body .badge-yellow{background:rgba(217,119,6,0.1)!important;color:#D97706!important;border-color:rgba(217,119,6,0.25)!important;}
+[data-theme="light"] .ap-body .badge-red{background:rgba(220,38,38,0.1)!important;color:#DC2626!important;border-color:rgba(220,38,38,0.25)!important;}
+[data-theme="light"] .ap-body .badge-gray{background:rgba(107,114,128,0.1)!important;color:#6B7280!important;border-color:rgba(107,114,128,0.25)!important;}
+[data-theme="light"] .ap-input{background:#FFFFFF!important;border-color:rgba(0,0,0,0.15)!important;color:#0F172A!important;}
+[data-theme="light"] .ap-input:focus{border-color:rgba(124,92,246,0.5)!important;background:#FFFFFF!important;}
+[data-theme="light"] .ap-select{background:#FFFFFF!important;border-color:rgba(0,0,0,0.15)!important;color:#374151!important;}
+[data-theme="light"] .ap-select option{background:#FFFFFF;color:#374151;}
+[data-theme="light"] .ap-select optgroup{background:#FFFFFF;color:#6B7280;}
+[data-theme="light"] .ap-section-title{color:#7C3AED!important;border-bottom:1px solid rgba(124,92,246,0.15)!important;}
+[data-theme="light"] .ap-modal-bg{background:rgba(0,0,0,0.5)!important;}
+[data-theme="light"] .ap-modal-box{background:#FAFAFA!important;border-color:rgba(0,0,0,0.12)!important;box-shadow:0 28px 60px rgba(0,0,0,0.2)!important;}
+[data-theme="light"] .ap-modal-box.danger{border-color:rgba(220,38,38,0.3)!important;}
+[data-theme="light"] .ap-modal-title{color:#7C3AED!important;}
+[data-theme="light"] .ap-chevron{color:#6B7280!important;}
+[data-theme="light"] .ap-body,[data-theme="light"] .ap-modal-bg{--ma-fg:#0F172A;--ma-dim:#6B7280;--ma-aksen:#7C3AED;--ma-ok:#059669;--ma-warn:#D97706;--ma-beda:#B45309;--ma-line:rgba(0,0,0,.1);--ma-line-on:rgba(124,92,246,.35);--ma-bg:#F5F7FA;--ma-bg-on:rgba(124,92,246,.08);--ma-warn-bg:rgba(217,119,6,.07);--ma-warn-line:rgba(217,119,6,.25);}

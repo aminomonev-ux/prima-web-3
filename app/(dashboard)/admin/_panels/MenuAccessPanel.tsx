@@ -311,10 +311,10 @@ export function MenuAccessModal({ userId, username, onClose }: {
   }
 
   return (
-    <div className="modal-bg" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-box" style={{ maxWidth: 560 }}>
+    <div className="ap-modal-bg" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ap-modal-box" style={{ maxWidth: 560 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div className="modal-title">AKSES MENU</div>
+          <div className="ap-modal-title">AKSES MENU</div>
           <button style={{ background: 'none', border: 'none', color: 'var(--ma-dim)', cursor: 'pointer' }} onClick={onClose}>
             <X size={18} />
           </button>
