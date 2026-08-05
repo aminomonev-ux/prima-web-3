@@ -60,17 +60,10 @@ export function canImporDpa(role: string): boolean {
   return (BLUD_IMPOR_DPA_ROLES as readonly string[]).includes(role);
 }
 
-/**
- * Batas baris untuk jalur IMPOR — lebih longgar dari batas 700 pada simpan
- * manual, karena satu berkas DPA provinsi wajar berisi ratusan sampai ribuan
- * baris (yang asli: 453, 466, 558). Angka ini WAJIB sama dengan batas di
- * parser: kalau pratinjau menjanjikan "Simpan 1.200 baris" lalu simpannya
- * ditolak Zod, orang sudah terlanjur memeriksa seluruh isinya.
- *
- * 2.000 dipilih karena `bulkInsert` menulis satu INSERT tunggal tanpa memecah
- * bongkahan — 2.000 × 18 kolom masih jauh di bawah `max_allowed_packet`.
- */
-export const BLUD_IMPOR_MAKS_BARIS = 2000;
+// Batas baris impor tinggal di `import-dpa-shared.ts` — satu angka dipakai
+// parser DAN Zod, dan berkas itu sengaja bebas dependensi server.
+export { BLUD_IMPOR_MAKS_BARIS } from './import-dpa-shared';
+import { BLUD_IMPOR_MAKS_BARIS as MAKS_BARIS_IMPOR } from './import-dpa-shared';
 
 /**
  * Rate limit helper untuk endpoint BLUD. Pakai key `blud-<action>:<userId>`
@@ -244,7 +237,7 @@ export const DpaBodySchema = z.object({
 export const DpaImportBodySchema = DpaBodySchema.extend({
   rows: z.array(DpaBarisInputSchema)
     .min(1, 'Minimal 1 baris')
-    .max(BLUD_IMPOR_MAKS_BARIS, `Maksimal ${BLUD_IMPOR_MAKS_BARIS} baris per impor`),
+    .max(MAKS_BARIS_IMPOR, `Maksimal ${MAKS_BARIS_IMPOR} baris per impor`),
 });
 
 /** POST /api/blud/pergeseran */

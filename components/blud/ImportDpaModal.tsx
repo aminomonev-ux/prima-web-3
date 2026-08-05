@@ -15,7 +15,12 @@ import { toast } from 'sonner'
 import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { TIPE_LABEL } from '@/lib/blud/format'
-import { keDpaBarisInput, type BarisTerbaca, type PetaKolom } from '@/lib/blud/import-dpa'
+// Tipe di-impor secara TYPE-ONLY (terhapus saat kompilasi); pemetanya diambil
+// dari modul ringan. Mengambil keduanya dari `import-dpa.ts` akan menyeret
+// parser + `schemas.ts` + `ioredis` ke bundel browser dan build Next gagal
+// dengan "Module not found: Can't resolve 'dns'".
+import type { BarisTerbaca, PetaKolom } from '@/lib/blud/import-dpa'
+import { keDpaBarisInput } from '@/lib/blud/import-dpa-shared'
 
 interface JangkarTerdampak {
   anggaran_key: string
@@ -154,6 +159,17 @@ export default function ImportDpaModal({
           </button>
         </div>
 
+        {/* Input sengaja SELALU terpasang, bukan hanya saat berkas belum dipilih:
+            kalau disembunyikan setelah pratinjau muncul, satu-satunya cara
+            mencoba berkas lain adalah menutup lalu membuka lagi modalnya. */}
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx"
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) void unggah(f) }}
+        />
+
         <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!hasil && (
             <div style={{ textAlign: 'center', padding: '28px 12px' }}>
@@ -162,13 +178,6 @@ export default function ImportDpaModal({
                 unduhan PRIMA. Hierarkinya dibaca dari rumus atau kolom Level di dalam berkas;
                 <strong> tidak ada yang ditulis ke basis data</strong> sampai Anda menekan Simpan.
               </p>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".xlsx"
-                style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) void unggah(f) }}
-              />
               <PrimaButton variant="purple" iconLeft={<Upload size={14} />} disabled={sibuk}
                 onClick={() => inputRef.current?.click()}>
                 {sibuk ? 'Membaca berkas…' : 'Pilih Berkas'}
@@ -274,6 +283,12 @@ export default function ImportDpaModal({
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,.08)' }}>
           <PrimaButton variant="ghost" onClick={onTutup} disabled={sibuk}>Batal</PrimaButton>
+          {hasil && (
+            <PrimaButton variant="ghost" iconLeft={<Upload size={13} />} disabled={sibuk}
+              onClick={() => inputRef.current?.click()}>
+              Ganti Berkas
+            </PrimaButton>
+          )}
           {hasil && (
             <PrimaButton variant="primary" disabled={sibuk || !versiTanggal} onClick={() => void simpan(false)}>
               {sibuk ? 'Menyimpan…' : `Simpan ${hasil.baris.length} baris`}

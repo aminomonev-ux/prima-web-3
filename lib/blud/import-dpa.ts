@@ -12,9 +12,9 @@
 //
 // Sumber 2 dan 3 saling memeriksa. Baris yang keduanya sepakat dianggap pasti;
 // yang berselisih ditandai supaya naik ke modal konfirmasi.
-import type { DpaBarisInput, TipeBaris } from '@/types'
-import { genRowId, hitungJumlah, LABEL_KE_TIPE, RANTAI_TIPE } from './format'
-import { BLUD_IMPOR_MAKS_BARIS } from './schemas'
+import type { TipeBaris } from '@/types'
+import { hitungJumlah, LABEL_KE_TIPE, RANTAI_TIPE } from './format'
+import { BLUD_IMPOR_MAKS_BARIS, keDpaBarisInput } from './import-dpa-shared'
 import { recalcDpaJumlah } from './recalc'
 import {
   barisAnakDariRumus, faktorPerkalian,
@@ -629,24 +629,7 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   }
 }
 
-/** Bentuk siap simpan. `row_id` baru; jangkar dipakai ulang kalau berkasnya membawanya. */
-export function keDpaBarisInput(baris: BarisTerbaca[]): DpaBarisInput[] {
-  const idDariBaris = new Map<number, string>()
-  for (const b of baris) idDariBaris.set(b.barisExcel, genRowId())
-  return baris.map((b, i) => ({
-    kode_rekening: b.kode,
-    uraian: b.uraian,
-    vol: b.vol,
-    satuan: b.satuan,
-    harga: b.harga,
-    jumlah: b.jumlahHitung,
-    penanggung_jawab: b.penanggungJawab,
-    keterangan: b.keterangan,
-    tipe_baris: b.tipe_baris,
-    row_id: idDariBaris.get(b.barisExcel)!,
-    anggaran_key: b.jangkar,
-    parent_id: b.indukBarisExcel != null ? idDariBaris.get(b.indukBarisExcel) ?? null : null,
-    urutan: i,
-    origin: 'MANUAL' as const,
-  }))
-}
+// Pemeta baris tinggal di `import-dpa-shared.ts` supaya modal (klien) bisa
+// memakainya tanpa ikut menyeret parser ini — dan lewat parser ini, `schemas.ts`
+// beserta `ioredis` — ke bundel browser.
+export { keDpaBarisInput, BLUD_IMPOR_MAKS_BARIS } from './import-dpa-shared'
