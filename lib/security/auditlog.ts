@@ -105,6 +105,8 @@ export type AuditEventType =
   | 'BLUD_SAVE_KODE_BESAR'
   | 'BLUD_SAVE_PENANGGUNG_JAWAB'
   | 'BLUD_SAVE_REKAP_PK'
+  | 'BLUD_DPA_IMPORT_PREVIEW'  // POST /api/blud/dpa/import?step=preview (parse berkas, tanpa tulis)
+  | 'BLUD_DPA_IMPORT_COMMIT'   // POST /api/blud/dpa/import?step=commit (tulis satu versi penuh)
   // Audit BLUD v1.2 (B-NEW-2): track view + export untuk modul keuangan sensitif
   | 'BLUD_VIEW_DPA'         // GET /api/blud/dpa (data spesifik versi)
   | 'BLUD_IMPORT_USULAN_VIEW' // GET /api/blud/dpa/import-usulan (modal import)

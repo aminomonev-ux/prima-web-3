@@ -293,9 +293,13 @@ Yang **ditambahkan** ke Sentinel: satu aturan — *baris hasil impor yang jumlah
 | E3 | Sambungkan tombol unduh; empat tampilan lain tetap ke eksporter lama | `blud/cetak/cetak-client.tsx` | ✅ |
 | I1 | Pembaca grid + deteksi bentuk file | `lib/blud/import-dpa-grid.ts` (baru) | ✅ |
 | I2 | Algoritma 5 lapis + pembangun pohon | `lib/blud/import-dpa.ts` (baru) | ✅ |
-| I3 | Route preview/commit + Zod + audit + rate limit | `app/api/blud/dpa/import/route.ts` (baru) | ⬜ |
-| I4 | Modal impor | `components/blud/ImportDpaModal.tsx` (baru) | ⬜ |
-| I5 | Satu aturan Sentinel (jumlah ≠ file asal) | `lib/sentinel/rules/` | ⬜ |
+| I3 | Route preview/commit + Zod + audit + rate limit | `app/api/blud/dpa/import/route.ts` (baru) | ✅ |
+| I4 | Modal impor + tombol di toolbar DPA | `components/blud/ImportDpaModal.tsx` (baru) | ✅ |
+| I5 | Satu aturan Sentinel (jumlah ≠ file asal) | — | ❌ **dibatalkan** |
+
+**Kenapa I5 dibatalkan.** Rencana awal menganggap baris hasil impor mendarat di *form* yang masih diedit, sehingga Sentinel bisa mengawasinya terus. Ternyata tidak: commit menulis langsung ke basis data lalu layar memuat ulang. Untuk mengawasi "jumlah ≠ berkas asal" sesudah itu, angka asal dari berkas harus ikut disimpan — kolom baru di `dpa_blud` semata untuk satu peringatan. Tidak sepadan, dan §5 memutuskan **tidak ada perubahan skema**.
+
+Tempat keputusan itu diambil memang di modal, sebelum commit — di situlah selisihnya ditampilkan per baris. Yang tetap didapat gratis: `validateDupRules()` di [dpa-client.tsx:483](../app/(dashboard)/blud/dpa/dpa-client.tsx) berjalan atas SELURUH baris di layar, jadi baris hasil impor otomatis kena banner "kemungkinan entri ganda" tanpa satu baris kode pun ditambah.
 
 **Tidak ada migrasi database.** Tidak ada kolom atau tabel baru.
 

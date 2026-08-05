@@ -8,8 +8,9 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   ChevronUp, ChevronDown, Save,
-  AlertTriangle, X, FilePlus, Search, ExternalLink,
+  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload,
 } from 'lucide-react'
+import ImportDpaModal from '@/components/blud/ImportDpaModal'
 import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
@@ -836,7 +837,8 @@ function DpaTable({
 
 // ─── DPA PAGE ─────────────────────────────────────────────────────────────────
 
-export default function DpaClient({ bolehUbah }: { bolehUbah: boolean }) {
+export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah: boolean; bolehImpor?: boolean }) {
+  const [importDpaBuka, setImportDpaBuka] = useState(false)
   const [rows,        setRows]        = useState<DpaBarisInput[]>([])
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
   const [versi,       setVersi]       = useState('')
@@ -1133,6 +1135,13 @@ export default function DpaClient({ bolehUbah }: { bolehUbah: boolean }) {
               Form Baru
             </PrimaButton>
 
+            {bolehImpor && (
+              <PrimaButton variant="success" size="sm" iconLeft={<Upload className="w-3.5 h-3.5" />}
+                onClick={() => setImportDpaBuka(true)} data-rima="dpa.impor">
+                Impor
+              </PrimaButton>
+            )}
+
             <PrimaButton variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
               disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
               {saving ? 'Menyimpan...' : 'Simpan'}
@@ -1267,6 +1276,20 @@ export default function DpaClient({ bolehUbah }: { bolehUbah: boolean }) {
         </div>
       ) : (
         <DpaTable rows={rows} onChange={setRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
+      )}
+
+      {importDpaBuka && (
+        <ImportDpaModal
+          tahun={tahun}
+          expectedVersion={version}
+          onTutup={() => setImportDpaBuka(false)}
+          onSelesai={(versiBaru) => {
+            setImportDpaBuka(false)
+            setVersi(versiBaru)
+            void loadHistory()
+            void loadDpa(versiBaru)
+          }}
+        />
       )}
 
       {/* Audit BLUD v1.2 (B-NEW-3): modal konfirmasi safety threshold drop >50% */}

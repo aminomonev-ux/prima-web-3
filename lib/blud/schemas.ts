@@ -50,6 +50,17 @@ export function canHapusVersi(role: string): boolean {
 }
 
 /**
+ * Impor DPA menulis SATU VERSI PENUH sekaligus — sekelas operasi borongan, bukan
+ * sunting baris. Kebetulan daftarnya sama dengan hapus versi, tapi sengaja
+ * dipisah: kalau suatu saat salah satunya dilonggarkan, yang lain tidak ikut.
+ */
+export const BLUD_IMPOR_DPA_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+
+export function canImporDpa(role: string): boolean {
+  return (BLUD_IMPOR_DPA_ROLES as readonly string[]).includes(role);
+}
+
+/**
  * Rate limit helper untuk endpoint BLUD. Pakai key `blud-<action>:<userId>`
  * supaya isolasi per-user (1 user spam tidak block user lain).
  *

@@ -597,3 +597,40 @@ export async function deletePergeseranVersi(tahun: number, versiTanggal: string)
   })
   return { pergeseran_rows: count }
 }
+
+export interface JangkarTerpakai {
+  anggaran_key: string
+  uraian: string
+  jumlah_alokasi: number
+  nilai: number
+}
+
+/**
+ * Jangkar realisasi yang sedang dipakai tahun ini, untuk memperingatkan sebelum
+ * IMPOR mengganti seluruh DPA.
+ *
+ * `periksaJangkar()` di jalur simpan TIDAK menangkap kasus ini — komentarnya
+ * eksplisit bahwa baris serba-baru (yang persis dihasilkan impor) tidak ikut
+ * tertahan. Pagar itu menjaga baris LAMA yang membuang jangkarnya, bukan baris
+ * BARU yang menggantikan. Jadi peringatannya harus dihitung terpisah, di sini.
+ */
+export async function jangkarDipakaiRealisasi(tahun: number): Promise<JangkarTerpakai[]> {
+  const rows = await sql`
+    SELECT a.anggaran_key,
+           ANY_VALUE(d.uraian)      AS uraian,
+           COUNT(*)                 AS jumlah_alokasi,
+           COALESCE(SUM(a.nilai), 0) AS nilai
+    FROM blud_realisasi_alokasi a
+    LEFT JOIN dpa_blud d
+      ON d.anggaran_key = a.anggaran_key AND d.tahun_anggaran = a.tahun_anggaran
+    WHERE a.tahun_anggaran = ${tahun}
+    GROUP BY a.anggaran_key
+    ORDER BY nilai DESC
+  ` as Record<string, unknown>[]
+  return rows.map(r => ({
+    anggaran_key:   String(r.anggaran_key ?? ''),
+    uraian:         String(r.uraian ?? '(baris tidak ditemukan)'),
+    jumlah_alokasi: Number(r.jumlah_alokasi ?? 0),
+    nilai:          Number(r.nilai ?? 0),
+  }))
+}
