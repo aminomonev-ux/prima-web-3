@@ -291,8 +291,8 @@ Yang **ditambahkan** ke Sentinel: satu aturan — *baris hasil impor yang jumlah
 | E1 | Eksporter dokumen DPA (tata letak, rumus, kolom Level + Jangkar, tanda tangan) | `lib/blud/export/dpa-dokumen.ts` (baru) | ✅ |
 | E2 | Eksporter Pergeseran mengikuti pola sama | idem | ✅ |
 | E3 | Sambungkan tombol unduh; empat tampilan lain tetap ke eksporter lama | `blud/cetak/cetak-client.tsx` | ✅ |
-| I1 | Pembaca grid + deteksi bentuk file | `lib/blud/import-dpa-grid.ts` (baru) | ⬜ |
-| I2 | Algoritma 5 lapis + pembangun pohon | `lib/blud/import-dpa.ts` (baru) | ⬜ |
+| I1 | Pembaca grid + deteksi bentuk file | `lib/blud/import-dpa-grid.ts` (baru) | ✅ |
+| I2 | Algoritma 5 lapis + pembangun pohon | `lib/blud/import-dpa.ts` (baru) | ✅ |
 | I3 | Route preview/commit + Zod + audit + rate limit | `app/api/blud/dpa/import/route.ts` (baru) | ⬜ |
 | I4 | Modal impor | `components/blud/ImportDpaModal.tsx` (baru) | ⬜ |
 | I5 | Satu aturan Sentinel (jumlah ≠ file asal) | `lib/sentinel/rules/` | ⬜ |
@@ -303,7 +303,23 @@ Yang **ditambahkan** ke Sentinel: satu aturan — *baris hasil impor yang jumlah
 
 - `scripts/test-dpa-export.mjs` ✅ **40 pemeriksaan lolos** — rumus daun/induk/beranak-tunggal/terpencar, `ROUND` pada vol pecahan, kolom Level+Jangkar tersembunyi tapi terisi, hasil tersimpan di sel, blok tanda tangan (Direktur terisi, Dewas kosong), dan bertahan setelah workbook ditulis-baca ulang. Tanpa DB, tanpa DOM.
   Diuji juga terhadap **12 baris DPA 2026 asli**: 0 selisih antara hasil di sel dan `jumlah` di database. Rantai beranak-tunggal `5.2 → 5.2.2 → daun` yang dulu ambigu kini tertulis tegas `=SUM(F17:F17)` / `=SUM(F18:F18)`.
-- `scripts/test-dpa-import.mjs` — dijalankan atas `DPA BLUD 2026 F.xlsx` **dan** atas file hasil ekspor sendiri (round-trip harus 100% identik: `tipe_baris`, `parent_id`, `anggaran_key`, `jumlah`).
+- `scripts/test-dpa-import.mjs` ✅ **31 pemeriksaan lolos** — menerima folder, menyusuri semua `.xlsx` di dalamnya. Round-trip atas hasil ekspor sendiri identik 100% (`tipe_baris`, induk, `anggaran_key`, nilai). Hasil atas tiga formulir asli:
+
+  | Berkas | Baris | Total berkas | Hitung ulang | Selisih |
+  |---|---|---|---|---|
+  | 2026 | 558 | 68.383.000.000 | 68.383.000.000 | **0** |
+  | 2024 | 453 | 59.000.000.000 | 58.940.000.000 | 60 jt (0,10%) |
+  | 2025 | 466 | 57.000.000.000 | 56.870.750.000 | 129 jt (0,23%) |
+
+  Sisa selisih 2024/2025 **bukan disembunyikan** — tiap barisnya dilaporkan lengkap dengan nomor barisnya, untuk dikonfirmasi di modal. Sebabnya struktur berkas itu sendiri: ada 3 baris judul kembar (`b.434/439/440` di 2024) yang **rumusnya identik persis** `T441+T481+T487+T527`, jadi ketiganya mengklaim anak yang sama. Tidak ada bacaan yang bisa benar untuk ketiganya sekaligus.
+
+- Empat bug ditemukan lewat pengujian ini, semuanya nyata dan sudah ditutup:
+  1. **Judul kolom digabung 2 baris** → header 1 baris ikut menelan baris data (`Level` + `Level 1`), kolom Level tak pernah ketemu.
+  2. **Judul URAIAN tidak bisa dipercaya** — di formulir 2025 sel itu tertimpa jadi `"pemeliharaa"`. Deteksi diganti jadi struktural (kolom antara kode dan vol).
+  3. **Baris diklaim dua induk** → semula pengklaim pertama menang, membuat baris nyata jadi daun kosong. Diganti: **pengklaim terdekat** menang.
+  4. **Baris sisa salin-tempel** (b.108 di 2026: rumus saja, tanpa uraian/kode/hasil) menempel sebagai anak baris di atasnya, mengubah daun jadi agregator sehingga vol × harga miliknya dibuang — Rp 170 juta hilang dan menyeret selisih Rp 351 juta sampai ke akar. Setelah ditutup, total 2026 **cocok sampai rupiah terakhir**.
+
+- Unduhan format **lama** (8 kolom datar, tanpa Level, tanpa rumus) sengaja **DITOLAK** dengan pesan yang menyuruh unduh ulang — bukan ditebak. Menebak di situ menghasilkan pohon yang tampak masuk akal tapi salah tanpa gejala.
 - Uji negatif: file dengan rumus dibuang (*paste as values*) → harus jatuh ke kolom Level dan tetap benar; file tanpa kolom Level **dan** tanpa rumus → harus melapor jujur bahwa hierarki ditebak.
 
 ### Kalibrasi

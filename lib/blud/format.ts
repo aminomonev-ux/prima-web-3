@@ -39,6 +39,23 @@ export const TIPE_LABEL: Record<_TipeBaris, string> = {
   'L8-SUB':             'Level 8.1',
 }
 
+/**
+ * Rantai tipe dari akar ke daun terdalam — kebalikan `DEPTH_ORDER` di recalc.ts.
+ * Dipakai importer untuk memetakan kedalaman berkas ke slot rantai secara
+ * BERPERINGKAT: berkas yang cuma memakai 6 tingkat berhenti di Level 4.1,
+ * tidak dipaksa sampai Level 8.
+ */
+export const RANTAI_TIPE: readonly _TipeBaris[] = [
+  'GRANDMASTER', 'MASTER', 'CHILD', 'LEADER', 'MEMBER',
+  'PLETON-LEADER', 'PLETON-MEMBER', 'KETUA-KELOMPOK-A', 'ANGGOTA-KELOMPOK-A',
+  'KETUA-KELOMPOK-B', 'ANGGOTA-KELOMPOK-B', 'L7-HEAD', 'L7-SUB', 'L8-HEAD', 'L8-SUB',
+]
+
+/** Label 'Level 2.1' → tipe. Kebalikan `TIPE_LABEL`, dipakai membaca kolom Level. */
+export const LABEL_KE_TIPE: Record<string, _TipeBaris> = Object.fromEntries(
+  (Object.entries(TIPE_LABEL) as [_TipeBaris, string][]).map(([tipe, label]) => [label.toLowerCase(), tipe]),
+)
+
 export function genRowId(): string {
   return `row_${safeRandomUUID()}`;
 }
