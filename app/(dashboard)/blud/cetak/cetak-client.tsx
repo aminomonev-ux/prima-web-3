@@ -15,6 +15,8 @@ import { Printer, Calendar, Save, History } from 'lucide-react'
 import { toast } from 'sonner'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DownloadButton from '@/components/ui/DownloadButton'
+import type { DpaBaris, PergeseranBaris } from '@/types'
+import type { PejabatDokumen } from '@/lib/blud/export/dpa-dokumen'
 
 // ── Types lokal (sinkron dengan lib/blud/cetak-data.ts) ──
 type Menu = 'dpa' | 'pergeseran' | 'master-akun'
@@ -53,7 +55,12 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   const [historyList, setHistoryList] = useState<VersiOption[]>([])
   const [loading, setLoading] = useState(false)
   const [renderedHtml, setRenderedHtml] = useState<string>('')  // tabel hasil Cetak
-  const [renderedData, setRenderedData] = useState<unknown>(null) // raw rows untuk export
+  const [renderedData, setRenderedData] = useState<unknown>(null) // baris rata untuk export lama
+  // Baris MENTAH dari API — `renderedData` sudah rata jadi array nilai, sehingga
+  // tipe_baris/parent_id/anggaran_key hilang. Eksporter dokumen butuh ketiganya
+  // untuk membangun rumus SUM (CONCEPT-export-import-dpa §2.3).
+  const [rawRows, setRawRows] = useState<unknown>(null)
+  const [rawVersi, setRawVersi] = useState<string | null>(null)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §7) — scoping cetak per tahun.
   const CURRENT_YEAR = new Date().getFullYear()
   const [tahun, setTahun] = useState<number>(CURRENT_YEAR)
@@ -67,6 +74,8 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     if (firstView) setView(firstView)
     setRenderedHtml('')
     setRenderedData(null)
+    setRawRows(null)
+    setRawVersi(null)
     setHistoryVersi('')
     setTanggal('')
     setHistoryList([])
@@ -111,6 +120,8 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     setLoading(true)
     setRenderedHtml('')
     setRenderedData(null)
+    setRawRows(null)
+    setRawVersi(null)
     try {
       // Pilih endpoint per menu — reuse existing API
       let path = ''
@@ -134,6 +145,8 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       const result = renderCetakHtml({ menu, view, rows: j.data, versi: j.versi_tanggal ?? historyVersi ?? null, tanggal })
       setRenderedHtml(result.html)
       setRenderedData(result.rows)
+      setRawRows(j.data ?? null)
+      setRawVersi(j.versi_tanggal ?? historyVersi ?? tanggal ?? null)
     } catch (e) {
       toast.error('Error: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -166,17 +179,56 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     }
   }, [renderedData, menu, view, tanggal, historyVersi, logExport])
 
+  /**
+   * Direktur ikut tercetak di blok tanda tangan. Diambil best-effort: endpoint
+   * pejabat dijaga izin menu `pengaturan` + kill-switch realisasi, sedangkan
+   * yang mencetak DPA belum tentu memegang keduanya. Kalau gagal, blok Direktur
+   * ikut dicetak kosong seperti blok Dewan Pengawas — bukan alasan membatalkan
+   * unduhan.
+   */
+  const ambilDirektur = useCallback(async (th: number): Promise<PejabatDokumen | null> => {
+    try {
+      const r = await fetch(`/api/blud/pejabat?tahun=${th}`)
+      if (!r.ok) return null
+      const j = await r.json() as {
+        ok?: boolean
+        data?: Array<{ jabatan: string; nama: string; nip: string | null }>
+      }
+      if (!j.ok || !Array.isArray(j.data)) return null
+      const d = j.data.find(p => p.jabatan === 'DIREKTUR')
+      return d?.nama ? { nama: d.nama, nip: d.nip ?? null } : null
+    } catch {
+      return null
+    }
+  }, [])
+
   // ── Action: Excel ──
+  // DPA & Pergeseran turun sebagai DOKUMEN (berumus, ada kolom Level + Jangkar).
+  // Rekap PJ dan Master Akun tetap memakai eksporter rekap lama.
   const onExcel = useCallback(async () => {
     if (!renderedData) { toast.warning('Klik Cetak dulu untuk memuat data.'); return }
+    const dokumenDpa = menu === 'dpa' && view === 'dpa'
+    const dokumenPergeseran = menu === 'pergeseran' && view === 'rekapPergeseran'
     try {
+      if ((dokumenDpa || dokumenPergeseran) && Array.isArray(rawRows) && rawRows.length) {
+        const { exportDpaDokumen, exportPergeseranDokumen } =
+          await import('@/lib/blud/export/dpa-dokumen')
+        const direktur = await ambilDirektur(tahun)
+        if (dokumenDpa) {
+          await exportDpaDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur })
+        } else {
+          await exportPergeseranDokumen({ tahun, versi: rawVersi, rows: rawRows as PergeseranBaris[], direktur })
+        }
+        void logExport('xlsx')
+        return
+      }
       const { exportToExcel } = await import('@/lib/blud/export/excel')
       await exportToExcel({ menu, view, tanggal, versi: historyVersi, rows: renderedData })
       void logExport('xlsx')
     } catch (e) {
       toast.error('Gagal export Excel: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, menu, view, tanggal, historyVersi, logExport])
+  }, [renderedData, rawRows, rawVersi, tahun, menu, view, tanggal, historyVersi, logExport, ambilDirektur])
 
   // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
   const onSimpanRekapPK = useCallback(async () => {
