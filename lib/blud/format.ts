@@ -51,8 +51,15 @@ export const RANTAI_TIPE: readonly _TipeBaris[] = [
   'KETUA-KELOMPOK-B', 'ANGGOTA-KELOMPOK-B', 'L7-HEAD', 'L7-SUB', 'L8-HEAD', 'L8-SUB',
 ]
 
-/** Label 'Level 2.1' → tipe. Kebalikan `TIPE_LABEL`, dipakai membaca kolom Level. */
-export const LABEL_KE_TIPE: Record<string, _TipeBaris> = Object.fromEntries(
+/**
+ * Label 'Level 2.1' → tipe. Kebalikan `TIPE_LABEL`, dipakai membaca kolom Level.
+ *
+ * Sengaja `Map`, bukan objek biasa: kuncinya datang dari isi sel berkas yang
+ * diunggah orang. Pada objek biasa, sel berisi `__proto__` atau `constructor`
+ * akan mengembalikan bawaan Object — nilai TRUTHY yang lolos pemeriksaan
+ * "levelnya terbaca" lalu merambat jadi `tipe_baris` sampah.
+ */
+export const LABEL_KE_TIPE = new Map<string, _TipeBaris>(
   (Object.entries(TIPE_LABEL) as [_TipeBaris, string][]).map(([tipe, label]) => [label.toLowerCase(), tipe]),
 )
 

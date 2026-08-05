@@ -134,17 +134,20 @@ async function ujiBerkas(berkas) {
   return h;
 }
 
+/** Jangkar sah = bentuk buatan newAnggaranKey(): 'AK-' + 32 hex. */
+const jk = (n) => 'AK-' + String(n).repeat(32).slice(0, 32);
+
 /** Round-trip: unduhan sendiri harus terbaca PERSIS seperti aslinya. */
 async function ujiPulangPergi() {
   console.log('\n' + '='.repeat(72) + '\n### ROUND-TRIP unduhan sendiri');
   const asal = [
-    { row_id: 'a', parent_id: null, urutan: 0, tipe_baris: 'GRANDMASTER', kode_rekening: '5.X', uraian: 'Belanja Daerah', vol: null, satuan: null, harga: null, jumlah: 9_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: 'AK-A' },
-    { row_id: 'b', parent_id: 'a', urutan: 1, tipe_baris: 'MASTER', kode_rekening: '5.1', uraian: 'Belanja Operasi', vol: null, satuan: null, harga: null, jumlah: 4_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: 'AK-B' },
-    { row_id: 'c', parent_id: 'b', urutan: 2, tipe_baris: 'MEMBER', kode_rekening: '5.1.01', uraian: 'Gaji', vol: 1, satuan: 'tahun', harga: 1_000_000, jumlah: 1_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: 'AK-C' },
-    { row_id: 'd', parent_id: 'b', urutan: 3, tipe_baris: 'MEMBER', kode_rekening: '5.1.02', uraian: 'Listrik', vol: 2, satuan: 'tahun', harga: 1_500_000, jumlah: 3_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: 'AK-D' },
-    { row_id: 'e', parent_id: 'a', urutan: 4, tipe_baris: 'MASTER', kode_rekening: '5.2', uraian: 'Belanja Modal', vol: null, satuan: null, harga: null, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: 'AK-E' },
-    { row_id: 'f', parent_id: 'e', urutan: 5, tipe_baris: 'CHILD', kode_rekening: '5.2.2', uraian: 'Peralatan', vol: null, satuan: null, harga: null, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: 'AK-F' },
-    { row_id: 'g', parent_id: 'f', urutan: 6, tipe_baris: 'MEMBER', kode_rekening: '5.2.02', uraian: 'Komputer', vol: 1, satuan: 'unit', harga: 5_000_000, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: 'AK-G' },
+    { row_id: 'a', parent_id: null, urutan: 0, tipe_baris: 'GRANDMASTER', kode_rekening: '5.X', uraian: 'Belanja Daerah', vol: null, satuan: null, harga: null, jumlah: 9_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(1) },
+    { row_id: 'b', parent_id: 'a', urutan: 1, tipe_baris: 'MASTER', kode_rekening: '5.1', uraian: 'Belanja Operasi', vol: null, satuan: null, harga: null, jumlah: 4_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(2) },
+    { row_id: 'c', parent_id: 'b', urutan: 2, tipe_baris: 'MEMBER', kode_rekening: '5.1.01', uraian: 'Gaji', vol: 1, satuan: 'tahun', harga: 1_000_000, jumlah: 1_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(3) },
+    { row_id: 'd', parent_id: 'b', urutan: 3, tipe_baris: 'MEMBER', kode_rekening: '5.1.02', uraian: 'Listrik', vol: 2, satuan: 'tahun', harga: 1_500_000, jumlah: 3_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(4) },
+    { row_id: 'e', parent_id: 'a', urutan: 4, tipe_baris: 'MASTER', kode_rekening: '5.2', uraian: 'Belanja Modal', vol: null, satuan: null, harga: null, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(5) },
+    { row_id: 'f', parent_id: 'e', urutan: 5, tipe_baris: 'CHILD', kode_rekening: '5.2.2', uraian: 'Peralatan', vol: null, satuan: null, harga: null, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(6) },
+    { row_id: 'g', parent_id: 'f', urutan: 6, tipe_baris: 'MEMBER', kode_rekening: '5.2.02', uraian: 'Komputer', vol: 1, satuan: 'unit', harga: 5_000_000, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(7) },
   ].map(r => ({ id: 0, versi_tanggal: '2026-01-01', is_latest: 1, origin: 'MANUAL', usulan_item_id: null, usulan_no: null, ...r }));
 
   const wb = await buatWorkbookDpa({ tahun: 2026, versi: '2026-01-01', rows: asal, direktur: null });
@@ -181,6 +184,53 @@ async function ujiPulangPergi() {
   console.log(`terbaca ${h.baris.length} baris · sumber ${h.baris[0]?.sumberHierarki} · total ${rp(h.totalHitung)}`);
 }
 
+/**
+ * Berkas kiriman orang tidak boleh bisa menitipkan rumus atau membajak jangkar.
+ * `anggaran_key` menentukan alokasi realisasi mana yang menempel ke baris, dan
+ * ikut terbit lagi di berkas unduhan berikutnya.
+ */
+async function ujiJangkarJahat() {
+  console.log('\n' + '='.repeat(72) + '\n### JANGKAR JAHAT');
+  const baris = (o) => ({
+    id: 0, versi_tanggal: '2026-01-01', is_latest: 1, origin: 'MANUAL',
+    usulan_item_id: null, usulan_no: null, vol: null, satuan: null, harga: null,
+    penanggung_jawab: null, keterangan: null, ...o,
+  });
+  const asal = [
+    baris({ row_id: 'a', parent_id: null, urutan: 0, tipe_baris: 'GRANDMASTER', kode_rekening: '5.X', uraian: 'Akar', jumlah: 3_000_000, anggaran_key: '=HYPERLINK("http://jahat","klik")' }),
+    baris({ row_id: 'b', parent_id: 'a', urutan: 1, tipe_baris: 'MEMBER', kode_rekening: '5.1', uraian: 'Sah', vol: 1, satuan: 'th', harga: 1_000_000, jumlah: 1_000_000, anggaran_key: jk(9) }),
+    baris({ row_id: 'c', parent_id: 'a', urutan: 2, tipe_baris: 'MEMBER', kode_rekening: '5.2', uraian: 'Kembar', vol: 2, satuan: 'th', harga: 1_000_000, jumlah: 2_000_000, anggaran_key: jk(9) }),
+  ];
+  const wb = await buatWorkbookDpa({ tahun: 2026, versi: '2026-01-01', rows: asal, direktur: null });
+
+  const ws = wb.worksheets[0];
+  const selJangkar = ws.getCell('J7').value;
+  cek('rumus di jangkar dilumpuhkan saat ditulis', typeof selJangkar === 'string' && selJangkar.startsWith("'="),
+    JSON.stringify(selJangkar));
+
+  const buf = await wb.xlsx.writeBuffer();
+  const h = bacaDpaDariGrid(await bacaGridDpa(buf));
+  cek('jangkar berbentuk rumus ditolak saat dibaca', h.baris[0].jangkar === null, String(h.baris[0].jangkar));
+  cek('jangkar sah tetap diterima', h.baris[1].jangkar === jk(9), String(h.baris[1].jangkar));
+  cek('jangkar kembar ditolak', h.baris[2].jangkar === null, String(h.baris[2].jangkar));
+  cek('penolakan jangkar dilaporkan', h.baris[2].catatan.some(c => /kembar/i.test(c)), h.baris[2].catatan.join('|'));
+  console.log(`jangkar: b1=${h.baris[0].jangkar} b2=${h.baris[1].jangkar} b3=${h.baris[2].jangkar}`);
+
+  // Kolom Level dibaca dari isi sel berkas. Pada objek biasa, '__proto__'
+  // mengembalikan bawaan Object — nilai truthy yang lolos "levelnya terbaca"
+  // lalu merambat jadi tipe_baris sampah. Petanya harus Map.
+  const ws2 = (await buatWorkbookDpa({ tahun: 2026, versi: '2026-01-01', rows: asal, direktur: null })).worksheets[0];
+  ws2.getCell('I8').value = '__proto__';
+  ws2.getCell('I9').value = 'constructor';
+  const wb2 = ws2.workbook;
+  const h2 = bacaDpaDariGrid(await bacaGridDpa(await wb2.xlsx.writeBuffer()));
+  const tipeSah = new Set(['GRANDMASTER','MASTER','CHILD','LEADER','MEMBER','PLETON-LEADER','PLETON-MEMBER',
+    'KETUA-KELOMPOK-A','ANGGOTA-KELOMPOK-A','KETUA-KELOMPOK-B','ANGGOTA-KELOMPOK-B','L7-HEAD','L7-SUB','L8-HEAD','L8-SUB']);
+  cek('kolom Level tahan __proto__/constructor', h2.baris.every(b => tipeSah.has(b.tipe_baris)),
+    h2.baris.map(b => String(b.tipe_baris)).join('|'));
+  console.log(`level jahat → tipe: ${h2.baris.map(b => b.tipe_baris).join(', ')}`);
+}
+
 (async () => {
   const berkas = [...telusuri(target)];
   if (!berkas.length) {
@@ -206,6 +256,7 @@ async function ujiPulangPergi() {
     }
   }
   await ujiPulangPergi();
+  await ujiJangkarJahat();
 
   console.log(`\nLolos: ${lolos}  ·  Gagal: ${gagal.length}`);
   if (gagal.length) {

@@ -14,13 +14,19 @@
 // yang berselisih ditandai supaya naik ke modal konfirmasi.
 import type { DpaBarisInput, TipeBaris } from '@/types'
 import { genRowId, hitungJumlah, LABEL_KE_TIPE, RANTAI_TIPE } from './format'
+import { BLUD_IMPOR_MAKS_BARIS } from './schemas'
 import { recalcDpaJumlah } from './recalc'
 import {
   barisAnakDariRumus, faktorPerkalian,
   type GridDpa, type SelGrid,
 } from './import-dpa-grid'
 
-const MAKS_BARIS_IMPOR = 5_000
+/**
+ * Harus sama dengan batas Zod di jalur simpan impor. Kalau parser lebih longgar,
+ * pratinjau menjanjikan "Simpan 3.000 baris" lalu commit-nya ditolak — setelah
+ * orang terlanjur memeriksa seluruh isinya. Ditolak di sini, sebelum diperiksa.
+ */
+const MAKS_BARIS_IMPOR = BLUD_IMPOR_MAKS_BARIS
 
 export interface PetaKolom {
   kode: { awal: number; akhir: number }
@@ -347,7 +353,7 @@ function kumpulkanMentah(grid: GridDpa, kol: PetaKolom, akhir: number): Mentah[]
       volAsli: angka.asli,
       satuan: bacaSatuan(grid, r, kol),
       jumlahFile: selJumlah.angka,
-      level: labelLevel ? LABEL_KE_TIPE[labelLevel] ?? null : null,
+      level: labelLevel ? LABEL_KE_TIPE.get(labelLevel) ?? null : null,
       jangkar: kol.jangkar != null ? (grid.sel(r, kol.jangkar).teks || null) : null,
       pj: kol.penanggungJawab != null ? (grid.sel(r, kol.penanggungJawab).teks || null) : null,
       keterangan: kol.keterangan != null ? (grid.sel(r, kol.keterangan).teks || null) : null,
@@ -512,6 +518,15 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     }
   }
 
+  // Jangkar dari berkas TIDAK dipercaya apa adanya. Ia masuk ke `anggaran_key`,
+  // yang di Zod cuma diperiksa panjangnya — padahal nilai itu (a) terbit lagi ke
+  // berkas unduhan berikutnya, jadi teks `=…` bisa jadi rumus di layar orang
+  // lain, dan (b) menentukan alokasi realisasi mana yang menempel ke baris ini,
+  // sehingga jangkar kembar bisa membelokkan realisasi ke baris yang salah.
+  // Hanya bentuk buatan `newAnggaranKey()` yang diterima, dan hanya sekali.
+  const POLA_JANGKAR = /^AK-[0-9a-f]{32}$/i
+  const jangkarTerpakai = new Set<string>()
+
   const pjSah = new Set((opsi.penanggungJawabSah ?? []).map(s => s.trim().toLowerCase()))
   const ditahan: BarisDitahan[] = []
   const baris: BarisTerbaca[] = mentah.map((m, i) => {
@@ -537,6 +552,17 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
       ditahan.push({ barisExcel: m.barisExcel, uraian: '(kosong)', alasan: 'Uraian kosong.' })
     }
 
+    let jangkar = m.jangkar?.trim() || null
+    if (jangkar && !POLA_JANGKAR.test(jangkar)) {
+      catatan.push('Isi kolom Jangkar bukan kunci anggaran yang sah — diabaikan, baris ini dapat kunci baru.')
+      jangkar = null
+    } else if (jangkar && jangkarTerpakai.has(jangkar.toLowerCase())) {
+      catatan.push('Kunci anggaran kembar di berkas — diabaikan, baris ini dapat kunci baru.')
+      jangkar = null
+    } else if (jangkar) {
+      jangkarTerpakai.add(jangkar.toLowerCase())
+    }
+
     return {
       barisExcel: m.barisExcel,
       kode: m.kode,
@@ -550,7 +576,7 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
       keterangan,
       tipe_baris: tipe,
       indukBarisExcel: induk[i] != null ? mentah[induk[i]!].barisExcel : null,
-      jangkar: m.jangkar,
+      jangkar,
       sumberHierarki: sumber,
       catatan,
     }

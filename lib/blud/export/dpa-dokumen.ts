@@ -249,7 +249,11 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
     baris.getCell(7).value = sanitizeCell(r.penanggung_jawab ?? '')
     baris.getCell(8).value = sanitizeCell(r.keterangan ?? '')
     baris.getCell(9).value = TIPE_LABEL[r.tipe_baris] ?? ''
-    baris.getCell(10).value = r.anggaran_key ?? ''
+    // `anggaran_key` bisa berasal dari berkas yang diimpor orang, jadi ia teks
+    // asing — bukan nilai buatan server semata. Tanpa sanitizeCell, isian
+    // `=…` di kolom Jangkar berkas kiriman bisa tersimpan lalu terbit kembali
+    // sebagai RUMUS di berkas yang dibuka orang keuangan.
+    baris.getCell(10).value = sanitizeCell(r.anggaran_key ?? '')
 
     hiasBarisData(baris, {
       kolomAngka: [3, 5, 6],
@@ -313,7 +317,7 @@ export async function buatWorkbookPergeseran(
     // Selisih = pergeseran − jumlah, sesuai recalcPergeseranJumlah().
     baris.getCell(10).value = { formula: `I${nomor}-F${nomor}`, result: r.bertambah_berkurang }
     baris.getCell(11).value = TIPE_LABEL[r.tipe_baris] ?? ''
-    baris.getCell(12).value = r.anggaran_key ?? ''
+    baris.getCell(12).value = sanitizeCell(r.anggaran_key ?? '')
 
     hiasBarisData(baris, {
       kolomAngka: [3, 5, 6, 7, 8, 9, 10],

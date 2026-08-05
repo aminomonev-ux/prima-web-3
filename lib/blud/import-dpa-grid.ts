@@ -14,6 +14,13 @@ import type ExcelJS from 'exceljs'
 /** L67 — cap jumlah lembar yang diperiksa, tameng zip-bomb. */
 const MAKS_LEMBAR = 20
 const MAKS_BARIS = 20_000
+/**
+ * Lembar Excel boleh sampai 16.384 kolom. Tanpa batas ini, berkas 8MB yang
+ * mengaku 20.000 baris × 16.384 kolom memaksa kita membangun 327 juta objek sel
+ * — server kehabisan memori sebelum satu baris pun dibaca. Formulir DPA terlebar
+ * yang pernah kita temui memakai 29 kolom.
+ */
+const MAKS_KOLOM = 64
 const BARIS_CARI_HEADER = 40
 
 export interface SelGrid {
@@ -98,8 +105,9 @@ function pilihLembar(wb: ExcelJS.Workbook): { ws: ExcelJS.Worksheet; barisHeader
   for (const ws of lembar) {
     if (ws.rowCount === 0 || ws.columnCount === 0) continue
     const batas = Math.min(ws.rowCount, BARIS_CARI_HEADER)
+    const batasKolom = Math.min(ws.columnCount, MAKS_KOLOM)
     for (let r = 1; r <= batas; r++) {
-      for (let c = 1; c <= ws.columnCount; c++) {
+      for (let c = 1; c <= batasKolom; c++) {
         if (POLA_HEADER.test(bacaTeks(ws.getRow(r).getCell(c).value))) {
           return { ws, barisHeader: r }
         }
@@ -119,7 +127,7 @@ export async function bacaGridDpa(data: ArrayBuffer | Buffer): Promise<GridDpa> 
 
   const { ws, barisHeader } = pilihLembar(wb)
   const jumlahBaris = Math.min(ws.rowCount, MAKS_BARIS)
-  const jumlahKolom = ws.columnCount
+  const jumlahKolom = Math.min(ws.columnCount, MAKS_KOLOM)
 
   // Rumus induk per sel, dipakai memperluas shared formula.
   const rumusInduk = new Map<string, string>()

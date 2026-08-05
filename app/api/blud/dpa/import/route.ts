@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { bludRateLimit, canImporDpa, DpaBodySchema, TahunSchema } from '@/lib/blud/schemas'
+import { bludRateLimit, canImporDpa, DpaImportBodySchema, TahunSchema } from '@/lib/blud/schemas'
 import { bolehEditMenu, tolakEdit, unauthorized, bludMati } from '../../_guard'
 import { bacaGridDpa, BerkasDpaTidakDikenalError } from '@/lib/blud/import-dpa-grid'
 import { bacaDpaDariGrid, StrukturDpaTidakTerbacaError } from '@/lib/blud/import-dpa'
@@ -111,7 +111,9 @@ async function tanganiPreview(
       eventType: 'BLUD_DPA_IMPORT_PREVIEW',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Pratinjau impor DPA ${tahun} dari "${file.name}" (lembar "${hasil.namaLembar}"): `
+      // Nama berkas berasal dari klien — dipotong supaya baris audit tidak bisa
+      // dibanjiri teks panjang kiriman orang.
+      detail:    `Pratinjau impor DPA ${tahun} dari "${file.name.slice(0, 120)}" (lembar "${hasil.namaLembar.slice(0, 40)}"): `
         + `${hasil.baris.length} baris, sumber hierarki ${hasil.baris[0]?.sumberHierarki ?? '-'}, `
         + `total ${hasil.totalHitung}, ditahan ${hasil.ditahan.length}, `
         + `realisasi terdampak ${realisasiTerdampak.length}`,
@@ -149,7 +151,7 @@ async function tanganiCommit(
   session: { userId: number; username: string },
 ): Promise<NextResponse> {
   const raw = await req.json().catch(() => null)
-  const parsed = DpaBodySchema.safeParse(raw)
+  const parsed = DpaImportBodySchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(
       { ok: false, error: 'Data tidak valid: ' + parsed.error.issues[0].message },
