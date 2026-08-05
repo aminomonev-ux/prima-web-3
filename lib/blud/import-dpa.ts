@@ -496,20 +496,28 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   })
   const petaTipe = petakanKeRantai(kedalamanPohon)
 
+  // Silang rumus vs posisi kolom. Dijadikan SATU peringatan ringkas, bukan
+  // catatan per baris: di formulir manual keduanya berbeda pendapat di ratusan
+  // baris (144 dari 558 pada berkas 2026) karena kedalaman posisi memang kasar.
+  // Daftar sepanjang itu melatih orang mengabaikan panelnya — padahal rumuslah
+  // yang dipakai, dan rumus itu yang benar.
+  if (!pakaiLevel) {
+    const beda = mentah.filter((_, i) =>
+      indukRumus[i] != null && indukPosisi[i] != null && indukRumus[i] !== indukPosisi[i]).length
+    if (beda) {
+      peringatan.push(
+        `${beda} baris: rumus berkas dan posisi kolom kode berbeda pendapat soal induk. `
+        + 'Yang dipakai rumus berkas — lihat pratinjau pohon untuk memastikan.',
+      )
+    }
+  }
+
   const pjSah = new Set((opsi.penanggungJawabSah ?? []).map(s => s.trim().toLowerCase()))
   const ditahan: BarisDitahan[] = []
   const baris: BarisTerbaca[] = mentah.map((m, i) => {
     const catatan: string[] = []
     const tipe = pakaiLevel ? (m.level as TipeBaris) : petaTipe.get(kedalamanPohon[i])!
 
-    // Silang: rumus dan posisi berselisih soal induk → naikkan ke modal.
-    if (!pakaiLevel && indukRumus[i] != null && indukPosisi[i] != null
-        && indukRumus[i] !== indukPosisi[i]) {
-      catatan.push(
-        `Induk menurut rumus (baris ${mentah[indukRumus[i]!].barisExcel}) berbeda dengan `
-        + `menurut posisi kolom (baris ${mentah[indukPosisi[i]!].barisExcel}).`,
-      )
-    }
     if (m.jumlahFile == null) {
       catatan.push('Berkas tidak menyimpan hasil rumus di baris ini — tidak bisa dibandingkan.')
     }
@@ -554,9 +562,21 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
 
   const akar = baris.filter(b => b.indukBarisExcel == null)
   const totalHitung = akar.reduce((s, b) => s + b.jumlahHitung, 0)
-  const totalFile = akar.every(b => b.jumlahFile != null)
-    ? akar.reduce((s, b) => s + (b.jumlahFile as number), 0)
+  // Akar yang tidak membawa angka biasanya baris judul nyasar tanpa induk —
+  // menolak membandingkan gara-gara satu baris semacam itu justru mematikan
+  // pemeriksaan yang paling menenangkan. Yang berangka dijumlah, yang tidak
+  // disebutkan terus terang di peringatan.
+  const akarBerangka = akar.filter(b => b.jumlahFile != null)
+  const totalFile = akarBerangka.length
+    ? akarBerangka.reduce((s, b) => s + (b.jumlahFile as number), 0)
     : null
+  const akarTanpaAngka = akar.length - akarBerangka.length
+  if (akarTanpaAngka > 0) {
+    peringatan.push(
+      `${akarTanpaAngka} baris tanpa induk tidak membawa angka di berkas dan tidak ikut `
+      + 'dihitung sebagai total berkas.',
+    )
+  }
 
   for (const b of baris) {
     if (b.jumlahFile != null && b.jumlahFile !== b.jumlahHitung) {

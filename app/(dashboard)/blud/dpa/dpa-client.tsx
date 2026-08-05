@@ -1281,7 +1281,6 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
       {importDpaBuka && (
         <ImportDpaModal
           tahun={tahun}
-          expectedVersion={version}
           onTutup={() => setImportDpaBuka(false)}
           onSelesai={(versiBaru) => {
             setImportDpaBuka(false)

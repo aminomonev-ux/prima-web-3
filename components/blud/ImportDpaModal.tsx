@@ -14,6 +14,7 @@ import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
+import { TIPE_LABEL } from '@/lib/blud/format'
 import { keDpaBarisInput, type BarisTerbaca, type PetaKolom } from '@/lib/blud/import-dpa'
 
 interface JangkarTerdampak {
@@ -48,10 +49,9 @@ const LABEL_SUMBER: Record<string, string> = {
 }
 
 export default function ImportDpaModal({
-  tahun, expectedVersion, onTutup, onSelesai,
+  tahun, onTutup, onSelesai,
 }: {
   tahun: number
-  expectedVersion: number
   onTutup: () => void
   onSelesai: (versiTanggal: string) => void
 }) {
@@ -87,6 +87,19 @@ export default function ImportDpaModal({
     if (!hasil) return
     setSibuk(true)
     try {
+      // Kunci optimistik dipegang PER (tahun, versi_tanggal). Angka versi di layar
+      // DPA milik versi yang sedang dibuka, BUKAN milik versi tujuan impor — dan
+      // memakainya membuat commit selalu ditolak 409 "sudah diubah pengguna lain"
+      // padahal tidak ada siapa-siapa. Yang benar: tanyakan angka versi TUJUAN
+      // tepat sebelum menulis, sehingga penulis lain yang menyelinap di sela ini
+      // tetap tertangkap.
+      let versiTujuan = 0
+      try {
+        const cek = await fetch(`/api/blud/dpa?tahun=${tahun}&tanggal=${versiTanggal}`)
+        const jc = await cek.json() as { ok?: boolean; version?: number }
+        if (cek.ok && jc.ok && typeof jc.version === 'number') versiTujuan = jc.version
+      } catch { /* versi belum ada → 0 */ }
+
       const rows = keDpaBarisInput(hasil.baris)
       const res = await fetch('/api/blud/dpa/import?step=commit', {
         method: 'POST',
@@ -96,7 +109,7 @@ export default function ImportDpaModal({
           versi_tanggal: versiTanggal,
           rows,
           force: dipaksa,
-          expected_version: expectedVersion,
+          expected_version: versiTujuan,
         }),
       })
       let json: { ok?: boolean; error?: string; code?: string; message?: string }
@@ -117,7 +130,7 @@ export default function ImportDpaModal({
       setSibuk(false)
       setPaksa(null)
     }
-  }, [hasil, tahun, versiTanggal, expectedVersion, onSelesai])
+  }, [hasil, tahun, versiTanggal, onSelesai])
 
   const bermasalah = hasil?.baris.filter(b => b.catatan.length) ?? []
   const selisih = hasil && hasil.totalFile != null ? hasil.totalFile - hasil.totalHitung : null
@@ -235,7 +248,12 @@ export default function ImportDpaModal({
                 <div style={{ maxHeight: 260, overflowY: 'auto', fontSize: 11 }}>
                   {hasil.baris.slice(0, MAKS_PRATINJAU).map(b => (
                     <div key={b.barisExcel} style={{ display: 'flex', gap: 8, padding: '2px 0' }}>
-                      <span className="blud-imp-lv" style={{ minWidth: 62 }}>{b.tipe_baris}</span>
+                      {/* Nama internal (`KETUA-KELOMPOK-B`) tidak dikenal orang
+                          keuangan — pakai label yang sama dengan tombol filter
+                          level di layar DPA. */}
+                      <span className="blud-imp-lv" style={{ minWidth: 62, whiteSpace: 'nowrap' }}>
+                        {TIPE_LABEL[b.tipe_baris] ?? b.tipe_baris}
+                      </span>
                       <span style={{ flex: 1, paddingLeft: (kedalaman.get(b.barisExcel) ?? 0) * 14 }}>
                         {b.uraian || <em className="blud-imp-muted">(tanpa uraian)</em>}
                       </span>
