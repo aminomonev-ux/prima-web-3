@@ -122,7 +122,10 @@ export default function SaldoAwalReminder({
             </div>
           )}
 
-          <p className="blud-imp-muted">
+          {/* Bukan `blud-imp-muted`: ini kalimat yang menentukan tindakan, bukan
+              keterangan tambahan. Warnanya ikut `blud-imp-text` supaya tetap
+              benar di tema terang maupun gelap. */}
+          <p className="blud-imp-text" style={{ fontWeight: 700 }}>
             Kalau saldo awalnya memang nol, tetapkan sekarang supaya keputusan itu tercatat
             — pengingat ini akan berhenti muncul. Mengisi belakangan juga masih boleh:
             angkanya merambat sendiri ke semua bulan,{' '}
