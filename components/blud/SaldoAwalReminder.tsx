@@ -125,7 +125,10 @@ export default function SaldoAwalReminder({
           <p className="blud-imp-muted">
             Kalau saldo awalnya memang nol, tetapkan sekarang supaya keputusan itu tercatat
             — pengingat ini akan berhenti muncul. Mengisi belakangan juga masih boleh:
-            angkanya merambat sendiri ke semua bulan, <b>selama belum ada bulan yang ditutup</b>.
+            angkanya merambat sendiri ke semua bulan,{' '}
+            {/* Merah: ini syarat yang sekali lewat tidak bisa ditarik balik —
+                sesudah ada bulan ditutup, perbaikannya butuh buka-periode. */}
+            <b style={{ color: '#E24B4A' }}>selama belum ada bulan yang ditutup</b>.
           </p>
         </div>
 
