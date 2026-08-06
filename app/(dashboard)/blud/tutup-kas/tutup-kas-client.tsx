@@ -19,6 +19,7 @@ import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import TautanMenu from '@/components/blud/TautanMenu'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -49,6 +50,7 @@ interface Neraca {
   tgl_surat: string | null
   ditutup_oleh: string | null
   ditutup_at: string | null
+  saldo_awal_ditetapkan: boolean
   penghalang: string[]
   jumlah_baki: number
   saldo_awal_terkunci: boolean
@@ -163,6 +165,26 @@ export default function TutupKasClient(
 
   async function kirim(tutup: boolean) {
     if (!data || tahun == null) return
+
+    // Titik tanpa jalan mundur yang murah: sesudah bulan pertama ditutup, saldo
+    // awal tahun BEKU (`saldo_awal_terkunci`), dan membetulkannya menuntut
+    // prosedur buka-periode berikut alasan tertulis. Karena itu ditahan di sini,
+    // bukan sekadar diingatkan seperti di Buku Kas.
+    if (tutup && !data.saldo_awal_ditetapkan) {
+      const lanjut = await confirmDialog({
+        title: `Saldo awal ${tahun} belum ditetapkan`,
+        message:
+          `Saldo awal kas dan bank tahun ${tahun} masih Rp 0 dan belum pernah ditetapkan siapa pun. `
+          + `Menutup ${NAMA_BULAN[bulan - 1]} akan MEMBEKUKAN angka itu — setelah ini, `
+          + 'membetulkannya harus lewat buka periode dengan alasan tertulis.\n\n'
+          + 'Isiannya ada di layar ini juga, pada bulan Januari. Lanjut menutup?',
+        variant: 'danger',
+        confirmLabel: 'Ya, tutup juga',
+        cancelLabel: 'Batal, isi dulu',
+      })
+      if (!lanjut) return
+    }
+
     setSibuk(true)
     try {
       const res = await fetch('/api/blud/realisasi/periode', {

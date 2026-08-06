@@ -11,7 +11,7 @@
 import { sql, withTransaction } from '@/lib/data/db'
 import type { Penanya, TxSql } from '@/lib/data/db'
 import { acquireBludLock, BLUD_PERIODE_ENTITY, bludPeriodeKey } from './lock'
-import { getSaldoAwal } from './realisasi-data'
+import { getSaldoAwal, saldoAwalSudahDitetapkan } from './realisasi-data'
 import {
   BludPeriodeTertutupError, BludTutupTidakSeimbangError, BludTutupTerhalangError,
   BludBukaTerhalangError, BludSaldoAwalTerkunciError,
@@ -63,6 +63,12 @@ export interface NeracaKas {
    * `kumpulkanPenghalang`: satu daftar aturan, dibaca dua pihak.
    */
   saldo_awal_terkunci: boolean
+  /**
+   * Saldo awal tahun sudah pernah DITETAPKAN orang atau belum — bukan `!= 0`.
+   * Dipakai menahan langkah sebelum bulan pertama ditutup: sesudah itu angkanya
+   * beku (`saldo_awal_terkunci`), dan membetulkannya butuh prosedur buka-periode.
+   */
+  saldo_awal_ditetapkan: boolean
 }
 
 const toIso = (v: unknown): string | null => {
@@ -187,6 +193,7 @@ export async function getNeracaKas(tahun: number, bulan: number): Promise<Neraca
 
   const { pesan, baki } = await kumpulkanPenghalang(tahun, bulan)
   const tertutup = await bulanTertutup(tahun)
+  const ditetapkan = await saldoAwalSudahDitetapkan(tahun)
 
   return {
     tahun_anggaran: tahun,
@@ -213,6 +220,7 @@ export async function getNeracaKas(tahun: number, bulan: number): Promise<Neraca
     penghalang: pesan,
     jumlah_baki: baki,
     saldo_awal_terkunci: tertutup.length > 0,
+    saldo_awal_ditetapkan: ditetapkan,
   }
 }
 
