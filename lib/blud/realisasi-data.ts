@@ -65,6 +65,13 @@ export interface BukuKas {
   status: 'BUKA' | 'TUTUP'
   saldo_awal_kas: number
   saldo_awal_bank: number
+  /**
+   * Saldo awal TAHUN ini sudah pernah ditetapkan orang atau belum. Bukan
+   * `saldo != 0`: kolomnya NOT NULL DEFAULT 0, jadi angka nol tidak memberi tahu
+   * apa pun. Dipakai layar Buku Kas untuk mengingatkan — dan yang saldo awalnya
+   * memang nol tinggal menetapkannya sekali supaya pengingatnya berhenti.
+   */
+  saldo_awal_ditetapkan: boolean
   rows: RealisasiTx[]
 }
 
@@ -119,6 +126,19 @@ export async function getSaldoAwal(
   }
 }
 
+/**
+ * Selalu memeriksa baris bulan 1 — penanda itu milik TAHUN, bukan bulan yang
+ * sedang dibuka. Orang yang mulai memakai sistem di bulan Agustus tetap harus
+ * diingatkan, karena saldo Agustus ikut ditentukan angka Januari.
+ */
+export async function saldoAwalSudahDitetapkan(tahun: number, q: Penanya = sql): Promise<boolean> {
+  const r = await q`
+    SELECT saldo_awal_ditetapkan_at FROM blud_periode
+    WHERE tahun_anggaran = ${tahun} AND bulan = 1
+  ` as Record<string, unknown>[]
+  return r[0]?.saldo_awal_ditetapkan_at != null
+}
+
 // ─── Baca ───────────────────────────────────────────────────────────────────
 
 export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas> {
@@ -145,6 +165,7 @@ export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas>
   ` as Record<string, unknown>[]
   const saldoAwal = await getSaldoAwal(tahun, bulan)
   const status = await getPeriodeStatus(tahun, bulan)
+  const ditetapkan = await saldoAwalSudahDitetapkan(tahun)
   const pagu = await getPaguMap(tahun)
   const potonganByTx = new Map<number, RealisasiPotongan[]>()
   for (const p of potRows) {
@@ -204,6 +225,7 @@ export async function getBukuKas(tahun: number, bulan: number): Promise<BukuKas>
     status,
     saldo_awal_kas: saldoAwal.kas,
     saldo_awal_bank: saldoAwal.bank,
+    saldo_awal_ditetapkan: ditetapkan,
     rows,
   }
 }

@@ -745,6 +745,13 @@ CREATE TABLE IF NOT EXISTS blud_periode (
   -- yang ditutup. Jangan diisi lewat SQL manual: jejaknya hilang.
   saldo_awal_kas  DECIMAL(18,2) NOT NULL DEFAULT 0,
   saldo_awal_bank DECIMAL(18,2) NOT NULL DEFAULT 0,
+  -- Penanda "sudah pernah ditetapkan orang". Wajib ada karena kolom di atas
+  -- NOT NULL DEFAULT 0: tanpa ini, "belum diisi" dan "sengaja 0" tak terbedakan,
+  -- dan pengingatnya akan menyala selamanya di tempat yang saldo awalnya memang
+  -- nol. Baris `blud_periode` sendiri bukan penanda — `kunciPeriode()` membuatnya
+  -- lewat INSERT IGNORE semata untuk penguncian.
+  saldo_awal_ditetapkan_at   DATETIME NULL,
+  saldo_awal_ditetapkan_oleh INT      NULL,
   kas_fisik       DECIMAL(18,2)     NULL COMMENT 'sisi B Tutup Kas: hasil hitung uang tunai',
   bank_koran      DECIMAL(18,2)     NULL COMMENT 'sisi B Tutup Kas: saldo rekening koran',
   no_surat        VARCHAR(64)       NULL,
@@ -752,7 +759,8 @@ CREATE TABLE IF NOT EXISTS blud_periode (
   ditutup_oleh    INT               NULL,
   ditutup_at      DATETIME          NULL,
   PRIMARY KEY (tahun_anggaran, bulan),
-  CONSTRAINT fk_bp_user FOREIGN KEY (ditutup_oleh) REFERENCES users(id) ON DELETE SET NULL
+  CONSTRAINT fk_bp_user FOREIGN KEY (ditutup_oleh) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_bp_saldo_awal_user FOREIGN KEY (saldo_awal_ditetapkan_oleh) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='BLUD - Periode bulanan realisasi (saldo awal + kunci tutup kas)';
 

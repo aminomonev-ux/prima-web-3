@@ -29,6 +29,11 @@ fs.writeFileSync(path.join(outDir, 'stub-ratelimit.js'),
   'exports.checkRateLimit = async () => ({ success: true });\n')
 fs.writeFileSync(path.join(outDir, 'stub-next-server.js'),
   'exports.NextResponse = { json: (b, i) => ({ body: b, init: i }) };\n')
+// Rantai impor sampai ke `format.ts` → `@/lib/shared/uuid` sejak `schemas.ts`
+// meneruskan batas baris impor DPA. Pembuat id bukan yang diuji di sini, jadi
+// distub saja — sama seperti next/server dan ratelimit.
+fs.writeFileSync(path.join(outDir, 'stub-uuid.js'),
+  'exports.safeRandomUUID = () => "00000000-0000-4000-8000-000000000000";\n')
 
 // tsc keluar bukan-nol untuk impor `@/...` yang tak bisa di-resolve, tapi berkas
 // .js-nya tetap ditulis — itu yang dipakai. Karena itu errornya sengaja ditelan.
@@ -44,6 +49,7 @@ const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {
   if (permintaan === 'next/server') return path.join(outDir, 'stub-next-server.js')
   if (permintaan.startsWith('@/lib/security/ratelimit')) return path.join(outDir, 'stub-ratelimit.js')
+  if (permintaan.startsWith('@/lib/shared/uuid')) return path.join(outDir, 'stub-uuid.js')
   return resolveAsli.call(this, permintaan, ...sisa)
 }
 

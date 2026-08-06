@@ -38,8 +38,12 @@ fs.writeFileSync(path.join(outDir, 'stub-ratelimit.js'),
 
 try {
   execSync(
+    // `lib/data/locks.ts` WAJIB disebut: `lib/blud/lock.ts` mengimpornya lewat
+    // alias `@/…` yang tidak ter-resolve tsc telanjang, jadi kalau tidak
+    // disebut, .js-nya tak pernah ditulis dan require-nya gagal ENOENT.
     `npx tsc "${path.join(repo, 'lib/blud/tutup-kas.ts')}" "${path.join(repo, 'lib/blud/schemas.ts')}"`
-    + ` "${path.join(repo, 'lib/data/db.ts')}"`
+    + ` "${path.join(repo, 'lib/data/db.ts')}" "${path.join(repo, 'lib/data/locks.ts')}"`
+    + ` "${path.join(repo, 'lib/shared/uuid.ts')}"`
     + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
     + ' --esModuleInterop --skipLibCheck --moduleResolution node',
     { cwd: repo, stdio: 'pipe' },

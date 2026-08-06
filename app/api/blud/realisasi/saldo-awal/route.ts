@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   try {
     const { lama, neraca } = await setSaldoAwalTahun(p.tahun_anggaran, {
       kas: p.saldo_awal_kas, bank: p.saldo_awal_bank,
-    })
+    }, session.userId)
     await writeAuditLog({
       req,
       eventType: 'BLUD_SALDO_AWAL_SET',

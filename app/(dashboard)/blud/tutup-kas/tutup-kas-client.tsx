@@ -97,7 +97,18 @@ export default function TutupKasClient(
         if (!alive) return
         const list: number[] = json.data ?? []
         setTahunList(list)
-        setTahun(list.includes(CURRENT_YEAR) ? CURRENT_YEAR : (list[0] ?? CURRENT_YEAR))
+        // Pengingat saldo awal di Buku Kas mengantar ke sini lewat
+        // `?tahun=…&bulan=1`. Dibaca dari `location.search` alih-alih
+        // `useSearchParams()` supaya tidak perlu batas Suspense.
+        const q = new URLSearchParams(window.location.search)
+        const thQ = Number(q.get('tahun'))
+        const blQ = Number(q.get('bulan'))
+        if (blQ >= 1 && blQ <= 12) setBulan(blQ)
+        setTahun(
+          list.includes(thQ) ? thQ
+            : list.includes(CURRENT_YEAR) ? CURRENT_YEAR
+              : (list[0] ?? CURRENT_YEAR),
+        )
       } catch {
         if (alive) setTahun(CURRENT_YEAR)
       }

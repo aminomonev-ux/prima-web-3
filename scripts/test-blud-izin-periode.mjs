@@ -39,6 +39,10 @@ try {
   execSync(
     `npx tsc "${path.join(repo, 'lib/blud/schemas.ts')}" "${path.join(repo, 'lib/blud/tutup-kas.ts')}"`
     + ` "${path.join(repo, 'lib/data/db.ts')}" "${path.join(repo, 'lib/data/locks.ts')}"`
+    // Sejak `schemas.ts` meneruskan batas baris impor dari `import-dpa-shared`,
+    // rantainya sampai ke `format.ts` → `@/lib/shared/uuid`. Alias `@/…` tidak
+    // ter-resolve tsc telanjang, jadi berkasnya harus disebut eksplisit.
+    + ` "${path.join(repo, 'lib/shared/uuid.ts')}"`
     + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
     + ' --esModuleInterop --skipLibCheck --moduleResolution node',
     { cwd: repo, stdio: 'pipe' },

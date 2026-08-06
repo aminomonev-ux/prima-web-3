@@ -268,7 +268,7 @@ export interface SaldoAwalTahun { kas: number; bank: number }
  * berapa" tidak pernah bisa dijawab.
  */
 export async function setSaldoAwalTahun(
-  tahun: number, input: SaldoAwalTahun,
+  tahun: number, input: SaldoAwalTahun, userId: number,
 ): Promise<{ lama: SaldoAwalTahun; neraca: NeracaKas }> {
   const lama = await withTransaction(async ({ tx }) => {
     // T2/N1 — dikunci dulu, baru diperiksa. Tanpa itu dua orang bisa sama-sama lolos
@@ -283,11 +283,18 @@ export async function setSaldoAwalTahun(
     const tertutup = await bulanTertutup(tahun, tx)
     if (tertutup.length) throw new BludSaldoAwalTerkunciError(tahun, tertutup)
 
+    // Penanda ditulis di transaksi yang SAMA dengan angkanya — kalau terpisah,
+    // ada sela di mana angkanya sudah berubah tapi jejaknya belum ada.
     await tx`
-      INSERT INTO blud_periode (tahun_anggaran, bulan, status, saldo_awal_kas, saldo_awal_bank)
-      VALUES (${tahun}, 1, 'BUKA', ${input.kas}, ${input.bank})
+      INSERT INTO blud_periode (
+        tahun_anggaran, bulan, status, saldo_awal_kas, saldo_awal_bank,
+        saldo_awal_ditetapkan_at, saldo_awal_ditetapkan_oleh
+      )
+      VALUES (${tahun}, 1, 'BUKA', ${input.kas}, ${input.bank}, NOW(), ${userId})
       ON DUPLICATE KEY UPDATE
-        saldo_awal_kas = VALUES(saldo_awal_kas), saldo_awal_bank = VALUES(saldo_awal_bank)
+        saldo_awal_kas = VALUES(saldo_awal_kas), saldo_awal_bank = VALUES(saldo_awal_bank),
+        saldo_awal_ditetapkan_at = VALUES(saldo_awal_ditetapkan_at),
+        saldo_awal_ditetapkan_oleh = VALUES(saldo_awal_ditetapkan_oleh)
     `
 
     return {

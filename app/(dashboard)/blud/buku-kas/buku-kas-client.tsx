@@ -24,6 +24,7 @@ import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
 import TautanMenu from '@/components/blud/TautanMenu'
 import DetailTransaksiModal from '@/components/blud/DetailTransaksiModal'
 import SpandukLihat from '@/components/blud/SpandukLihat'
+import SaldoAwalReminder, { SaldoAwalSpanduk } from '@/components/blud/SaldoAwalReminder'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -56,11 +57,17 @@ interface BukuKasData {
   status: 'BUKA' | 'TUTUP'
   saldo_awal_kas: number
   saldo_awal_bank: number
+  saldo_awal_ditetapkan: boolean
   rows: TxRow[]
 }
 
-export default function BukuKasClient({ bolehUbah, bolehDpa }: {
-  bolehUbah: boolean; bolehDpa: boolean
+export default function BukuKasClient({
+  bolehUbah, bolehDpa, bolehBukaTutupKas = false, bolehIsiSaldoAwal = false,
+}: {
+  bolehUbah: boolean
+  bolehDpa: boolean
+  bolehBukaTutupKas?: boolean
+  bolehIsiSaldoAwal?: boolean
 }) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
@@ -74,6 +81,11 @@ export default function BukuKasClient({ bolehUbah, bolehDpa }: {
   const [edit, setEdit] = useState<TransaksiAwal | null>(null)
   const [detail, setDetail] = useState<TxRow | null>(null)
   const [bakiOpen, setBakiOpen] = useState(false)
+  const [ingatSaldoAwal, setIngatSaldoAwal] = useState(false)
+  // Tahun yang sudah diingatkan di sesi ini. Tanpa ini, orang yang memilih
+  // "Nanti saja" akan ditegur lagi setiap kali menekan Transaksi Baru — dan
+  // teguran yang berulang tanpa henti berhenti dibaca.
+  const [tahunDiingatkan, setTahunDiingatkan] = useState<number[]>([])
 
   useEffect(() => {
     let alive = true
@@ -124,7 +136,16 @@ export default function BukuKasClient({ bolehUbah, bolehDpa }: {
   const terkunci = data?.status === 'TUTUP'
   const tanpaDpa = sumber?.sumber === 'KOSONG'
 
+  const perluSaldoAwal = data != null && !data.saldo_awal_ditetapkan
+
   function bukaBaru() {
+    // Ditegur SEBELUM mengetik, bukan sesudah — menahan orang di ujung
+    // pekerjaan yang sudah selesai diketik itu menyebalkan dan malah dilewati.
+    if (perluSaldoAwal && tahun != null && !tahunDiingatkan.includes(tahun)) {
+      setTahunDiingatkan(t => [...t, tahun])
+      setIngatSaldoAwal(true)
+      return
+    }
     setEdit(null); setModalOpen(true)
   }
 
@@ -222,6 +243,28 @@ export default function BukuKasClient({ bolehUbah, bolehDpa }: {
             </PrimaButton>
           )}
         </div>
+      )}
+
+      {perluSaldoAwal && tahun != null && (
+        <SaldoAwalSpanduk
+          tahun={tahun} bulan={bulan} bolehBuka={bolehBukaTutupKas}
+          onBuka={() => setIngatSaldoAwal(true)}
+        />
+      )}
+
+      {ingatSaldoAwal && tahun != null && (
+        <SaldoAwalReminder
+          tahun={tahun}
+          bulan={bulan}
+          bolehBuka={bolehBukaTutupKas}
+          bolehIsi={bolehIsiSaldoAwal}
+          onTutup={() => setIngatSaldoAwal(false)}
+          onLanjut={() => { setIngatSaldoAwal(false); setEdit(null); setModalOpen(true) }}
+          onDitetapkan={() => {
+            setIngatSaldoAwal(false)
+            if (tahun != null) void muat(tahun, bulan)
+          }}
+        />
       )}
 
       {data && (

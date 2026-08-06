@@ -37,6 +37,10 @@ fs.writeFileSync(path.join(outDir, 'stub-ratelimit.js'),
   'exports.checkRateLimit = async () => ({ allowed: true });\n')
 
 const sumber = [
+  // `lib/shared/uuid.ts` disebut eksplisit: sejak `schemas.ts` meneruskan batas
+  // baris impor dari `import-dpa-shared`, rantainya sampai ke `format.ts` →
+  // `@/lib/shared/uuid`, dan alias `@/…` tidak ter-resolve tsc telanjang.
+  'lib/shared/uuid.ts',
   'lib/data/db.ts', 'lib/data/locks.ts', 'lib/blud/lock.ts', 'lib/blud/pagu.ts', 'lib/blud/data.ts',
   'lib/blud/anggaran-key.ts', 'lib/blud/schemas.ts', 'lib/blud/alokasi-rule.ts',
   'lib/blud/realisasi-schemas.ts', 'lib/blud/realisasi-data.ts', 'lib/blud/tutup-kas.ts',
