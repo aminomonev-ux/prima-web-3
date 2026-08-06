@@ -11,6 +11,7 @@
 // dibaca, selisih total berkas vs hitung ulang, baris bermasalah, dan alokasi
 // realisasi yang jangkarnya akan hilang.
 import { useCallback, useRef, useState } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
 import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
@@ -43,9 +44,7 @@ interface HasilPreview {
   realisasiTerdampak: JangkarTerdampak[]
 }
 
-const MAKS_PRATINJAU = 300
-
-const rp = (n: number | null | undefined) => (n == null ? '—' : Number(n).toLocaleString('id-ID'))
+const rp =(n: number | null | undefined) => (n == null ? '—' : Number(n).toLocaleString('id-ID'))
 
 const LABEL_SUMBER: Record<string, string> = {
   level:  'kolom Level (unduhan PRIMA — pasti)',
@@ -253,10 +252,18 @@ export default function ImportDpaModal({
                 </Panel>
               )}
 
-              <Panel judul={`Pratinjau pohon${hasil.baris.length > MAKS_PRATINJAU ? ` — ${MAKS_PRATINJAU} baris pertama dari ${hasil.baris.length}` : ''}`}>
-                <div style={{ maxHeight: 260, overflowY: 'auto', fontSize: 11 }}>
-                  {hasil.baris.slice(0, MAKS_PRATINJAU).map(b => (
-                    <div key={b.barisExcel} style={{ display: 'flex', gap: 8, padding: '2px 0' }}>
+              {/* SELURUH baris ditampilkan, bukan sepotong. Versi sebelumnya
+                  memotong di 300 baris — dan pada berkas 2025 itu berarti
+                  seluruh blok "Belanja Modal" (41 baris, mulai urutan ke-348)
+                  tidak pernah terlihat di panel yang justru gunanya memeriksa
+                  pohon. Divirtualisasi supaya ribuan baris tetap ringan. */}
+              <Panel judul={`Pratinjau pohon — ${hasil.baris.length} baris`}>
+                <Virtuoso
+                  style={{ height: 280 }}
+                  data={hasil.baris}
+                  defaultItemHeight={18}
+                  itemContent={(_i, b) => (
+                    <div style={{ display: 'flex', gap: 8, padding: '2px 0', fontSize: 11 }}>
                       {/* Nama internal (`KETUA-KELOMPOK-B`) tidak dikenal orang
                           keuangan — pakai label yang sama dengan tombol filter
                           level di layar DPA. */}
@@ -268,8 +275,8 @@ export default function ImportDpaModal({
                       </span>
                       <span style={{ fontFamily: 'monospace', minWidth: 110, textAlign: 'right' }}>{rp(b.jumlahHitung)}</span>
                     </div>
-                  ))}
-                </div>
+                  )}
+                />
               </Panel>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
