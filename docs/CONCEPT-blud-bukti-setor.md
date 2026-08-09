@@ -146,7 +146,7 @@ Kalimat itulah yang membuat seluruh rancangan ini aman.
 | `Cash` negatif | **Peringatkan**, jangan blokir | Artinya pemakaian melebihi tarikan — sinyal nyata, bukan kesalahan isian |
 | Baris menunjuk transaksi yang sudah terhapus | Tampilkan `(transaksi terhapus)` + hitung sebagai peringatan | Jangan pernah diam |
 | Periode bulan itu `TUTUP` | Slip jadi baca-saja | Konsisten dengan seluruh modul |
-| Akses | `isBludRole` + `canInputRealisasi` — **tanpa** kunci `app_access` baru | Peruntukannya sama dengan Buku Kas |
+| Akses | `bolehLihat`/`bolehInput` pada menu **`bukti-setor`** (`app/api/blud/realisasi/_guard.ts`) — **tanpa** kunci `app_access` baru | Menu sendiri di tabel peran (bawaan EDIT), setara Buku Kas — bukan menumpang padanya |
 | Rate limit & audit | `bludRateLimit` · `BLUD_BUKTI_SETOR_{CREATE,UPDATE,DELETE}` | Pola sama dengan route BLUD lain |
 
 ---

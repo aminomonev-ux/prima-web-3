@@ -29,14 +29,3 @@ export async function petaIzinBlud(userId: number, role: string): Promise<PetaIz
   }
   return peta
 }
-
-/**
- * Izin yang berlaku hari ini menurut kode saja — tanpa menyentuh DB.
- * Dipakai Admin Panel untuk menampilkan "bawaan peran" di layar pengaturan, dan
- * oleh tes 60 sel sebagai pembanding.
- */
-export function petaIzinBawaan(role: string): PetaIzinBlud {
-  const peta = {} as PetaIzinBlud
-  for (const menu of MENU_BLUD) peta[menu] = izinMenu(role, menu)
-  return peta
-}

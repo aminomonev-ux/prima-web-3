@@ -5,7 +5,7 @@
 // L4 (anti-pattern): DELETE + bulkInsert dibungkus withTransaction supaya atomic.
 // PERF-C1: pakai bulkInsert (bukan INSERT loop).
 
-import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
+import { withTransaction, bulkInsert } from '@/lib/data/db'
 import { bumpBludVersion, bludVersiKey } from './lock'
 import { getDpaLatestDate } from './data'
 
@@ -14,13 +14,6 @@ export interface RekapPKItem {
   label:   string
   /** Total nominal per PJ. */
   nominal: number
-}
-
-export interface RekapPKSnapshot {
-  versi_dpa: string
-  rows:      RekapPKItem[]
-  saved_at:  string  // ISO date
-  saved_by:  number | null
 }
 
 /**
@@ -65,26 +58,4 @@ export async function saveRekapPK(
   })
 
   return { versi_dpa: versiDpa, affected }
-}
-
-/**
- * Ambil snapshot terakhir untuk (tahun, versi) tertentu.
- * Returns null kalau belum pernah disimpan.
- */
-export async function getRekapPK(tahun: number, versiDpa: string): Promise<RekapPKSnapshot | null> {
-  const rows = await sql`
-    SELECT label, nominal, saved_at, saved_by
-    FROM rekap_pk
-    WHERE tahun_anggaran = ${tahun} AND versi_dpa = ${versiDpa}
-    ORDER BY id ASC
-  ` as Array<{ label: string; nominal: string | number; saved_at: string | Date; saved_by: number | null }>
-
-  if (rows.length === 0) return null
-
-  return {
-    versi_dpa: versiDpa,
-    rows: rows.map(r => ({ label: r.label, nominal: Number(r.nominal) || 0 })),
-    saved_at: typeof rows[0].saved_at === 'string' ? rows[0].saved_at : rows[0].saved_at.toISOString(),
-    saved_by: rows[0].saved_by,
-  }
 }

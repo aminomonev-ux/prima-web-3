@@ -390,7 +390,7 @@ Uraian & nominal baris ber-penunjuk diambil dari sumbernya **saat dibaca** (§2.
 | Dipakai di **dua slip berbeda** dalam satu bulan | Diperingatkan, tidak diblokir (pembayaran dicicil itu sah) |
 | `Cash` negatif — pemakaian melebihi tarikan | Diperingatkan, tidak diblokir; itu sinyal nyata |
 | Periode bulan itu `TUTUP` | Slip jadi baca-saja (`FOR UPDATE`, sama seperti transaksi) |
-| Akses | `isBludRole` + `canInputRealisasi` — **tanpa** kunci `app_access` baru |
+| Akses | `bolehLihat`/`bolehInput` pada menu **`bukti-setor`** — **tanpa** kunci `app_access` baru |
 
 Regresi: `node scripts/test-blud-bukti-setor.mjs` (11 pemeriksaan).
 

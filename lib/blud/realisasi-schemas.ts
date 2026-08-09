@@ -1,12 +1,10 @@
 // lib/blud/realisasi-schemas.ts — Zod sentral + guard modul Realisasi BLUD.
 // Konsep: docs/CONCEPT-blud-realisasi.md §4, §5, §7
 //
-// Akses: mengikuti BLUD (SUPER_ADMIN + ADMIN + grant app_access 'blud').
-// Pemisahan izin INPUT vs LIHAT sudah dipasang di sini sejak awal walau untuk
-// sekarang keduanya diberikan penuh — saat pembagian role diaktifkan nanti,
-// yang berubah cuma isi dua fungsi ini, bukan route-nya (§7.4).
+// Akses TIDAK diputuskan di berkas ini: sejak pembagian peran, izin lihat/input
+// ditentukan per menu oleh `bolehLihat`/`bolehInput` di
+// `app/api/blud/realisasi/_guard.ts` yang bertumpu pada tabel di `./peran`.
 import { z } from 'zod'
-import { isBludRole } from './schemas'
 import {
   JENIS_TRANSAKSI, JENIS_PEMINDAHAN, JENIS_POTONGAN, POTONGAN_PAJAK, LABEL_POTONGAN,
   nilaiBebanPagu, nilaiArusMasuk, transferNetral,
@@ -25,14 +23,6 @@ export {
 export type { JenisTransaksi, JenisPotongan, SifatAlokasi, ArusKas } from './alokasi-rule'
 
 export const BLUD_REALISASI_APP_FLAG = 'app_status_blud_realisasi'
-
-export function canViewRealisasi(role: string, appAccess: string[] | null | undefined): boolean {
-  return isBludRole(role, appAccess)
-}
-
-export function canInputRealisasi(role: string, appAccess: string[] | null | undefined): boolean {
-  return isBludRole(role, appAccess)
-}
 
 /**
  * Membuka bulan yang sudah ditutup (§4.5). Sengaja lebih ketat dari akses modul:
@@ -342,12 +332,6 @@ export const SimpanGuBodySchema = z.object({
 
 export const JabatanSpjSchema = z.enum(['DIREKTUR', 'BENDAHARA', 'PPK'])
 export type JabatanSpj = z.infer<typeof JabatanSpjSchema>
-
-export const PEJABAT_SPJ_LABEL: Record<JabatanSpj, string> = {
-  DIREKTUR: 'Direktur',
-  BENDAHARA: 'Bendahara Pengeluaran',
-  PPK: 'PPK-BLUD',
-}
 
 /**
  * Nilainya SALINAN, bukan rujukan ke pk_pejabat (keputusan #29). `pk_pejabat_id`
