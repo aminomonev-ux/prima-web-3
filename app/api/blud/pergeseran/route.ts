@@ -8,9 +8,9 @@ import {
   getPergeseranHistory, getPergeseranByDate, getDpaByDate, getDpaLatestDate,
   getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi,
   BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError,
+  BludPaguDibawahRealisasiError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
-import { cekPaguDibawahRealisasi } from '@/lib/blud/pagu'
 import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
@@ -174,24 +174,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // §4.3: pagu tidak boleh turun di bawah realisasi yang SUDAH terjadi, dan
-    // baris yang masih dipakai transaksi tidak boleh hilang. Arah kebalikan §4.1
-    // — belum pernah dijaga di Excel, dan justru yang membuat Realisasi minus.
-    const bentrok = await cekPaguDibawahRealisasi(tahun_anggaran, recalced)
-    if (bentrok.length > 0 && !turunkan_paksa) {
-      const t = bentrok[0]
-      return NextResponse.json(
-        {
-          ok:    false,
-          code:  'PAGU_DIBAWAH_REALISASI',
-          error: `${bentrok.length} baris jadi minus: ${t.kode_rekening} ${t.hilang ? 'dihapus padahal' : 'turun ke Rp ' + t.pagu_baru.toLocaleString('id-ID') + ' padahal'} sudah terserap Rp ${t.terserap.toLocaleString('id-ID')}.`,
-          detail: bentrok,
-        },
-        { status: 409 },
-      )
-    }
-
-    const result = await savePergeseran(tahun_anggaran, versi_tanggal, dpaVersi, recalced, session.userId, expected_version, force)
+    // §4.3: pagu tidak boleh turun di bawah realisasi yang SUDAH terjadi, dan baris
+    // yang masih dipakai transaksi tidak boleh hilang. Arah kebalikan §4.1 — belum
+    // pernah dijaga di Excel, dan justru yang membuat Realisasi minus.
+    //
+    // B3 — pemeriksaannya sekarang DI DALAM transaksi simpan, di bawah kunci pagu
+    // (`pagarSimpanVersi`). Dulu ia berdiri di sini: satu SELECT tanpa kunci, lalu
+    // `savePergeseran` membuka transaksinya sendiri. Di sela keduanya sebuah
+    // transaksi Buku Kas bisa commit dan menaikkan serapan — pergeserannya tetap
+    // masuk dan pagu berakhir di bawah realisasi tanpa sepatah peringatan pun.
+    const result = await savePergeseran(
+      tahun_anggaran, versi_tanggal, dpaVersi, recalced,
+      session.userId, expected_version, force, turunkan_paksa,
+    )
+    const bentrok = result.bentrokPagu
 
     if (bentrok.length > 0) {
       await writeAuditLog({
@@ -282,6 +278,13 @@ export async function POST(req: NextRequest) {
         existing: err.existing,
         incoming: err.incoming,
         dropPct:  err.dropPct,
+      }, { status: 409 })
+    }
+    // Bentuk balasannya sengaja sama persis dengan sebelum B3 (`code` + `detail`)
+    // supaya modal konfirmasi di layar tidak perlu tahu pagarnya sudah pindah.
+    if (err instanceof BludPaguDibawahRealisasiError) {
+      return NextResponse.json({
+        ok: false, code: 'PAGU_DIBAWAH_REALISASI', error: err.message, detail: err.bentrok,
       }, { status: 409 })
     }
     console.error('[API /blud/pergeseran POST]', err)

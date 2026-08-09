@@ -730,7 +730,8 @@ Wajib bertahap. Tiap fase berdiri sendiri dan bisa diverifikasi.
 - [x] Penanda perubahan pagu §4.4 tiga lapis: chip ▲▼/baru per baris + banner ringkas & panel
       diff + toast, disulut sidik jari `getPaguCap` (CRC32 per baris — **bukan** SUM pagu,
       sebab pergeseran wajib berimbang jadi totalnya justru tidak berubah) tiap 30 detik.
-- [x] Guard §4.3 `cekPaguDibawahRealisasi` di route pergeseran + modal "Tetap Lanjut" dengan
+- [x] Guard §4.3 `pagarSimpanVersi` (dulu `cekPaguDibawahRealisasi` di route — dipindah ke
+      dalam transaksi simpan oleh B3, dan ikut dipasang di jalur DPA oleh B2) + modal "Tetap Lanjut" dengan
       alasan wajib → audit `BLUD_PAGU_DIBAWAH_REALISASI`. Baris yatim (rekening dihapus
       padahal masih terpakai) ikut tertangkap.
 - [ ] **DoD — belum bisa diuji**: total layar Realisasi = total Buku Kas bulan itu sampai

@@ -229,6 +229,10 @@ export const DpaBodySchema = z.object({
   versi_tanggal:    TanggalSchema,
   rows:             z.array(DpaBarisInputSchema).min(1, 'Minimal 1 baris').max(700, 'Maksimal 700 baris'),
   force:            z.boolean().optional().default(false),
+  // B2 — §4.3 berlaku juga di jalur DPA: selama tahun itu belum punya Pergeseran,
+  // DPA-lah pagu yang berlaku. Bentuknya sengaja sama dengan PergeseranBodySchema.
+  turunkan_paksa:   z.boolean().optional().default(false),
+  alasan_turun:     z.string().trim().min(10, 'Alasan minimal 10 karakter').max(500).optional(),
   expected_version: z.coerce.number().int().min(0).default(0),
   sentinel_ack:     SentinelAckSchema.optional(),
 });

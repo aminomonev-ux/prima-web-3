@@ -14,6 +14,7 @@ import {
   acquireBludLock, BLUD_PAGU_ENTITY, BLUD_KWT_ENTITY, bludPaguKey, bludKwtKey,
 } from './lock'
 import { getPaguMap } from './pagu'
+import { toDateStr } from './data'
 import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
   BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
@@ -386,6 +387,77 @@ async function kunciBarisPeriode(tx: TxSql, tahun: number, bulan: number): Promi
 }
 
 /**
+ * §4.8 — tahun tanpa DPA belum punya pagu sama sekali, jadi Buku Kas-nya memang
+ * belum boleh dibuka. Layar sudah bersikap begitu (`buku-kas-client.tsx` mematikan
+ * tombolnya ketika sumber pagu KOSONG); ini pagar API-nya.
+ */
+async function pastikanTahunPunyaDpa(tx: TxSql, tahun: number): Promise<void> {
+  const rows = await tx`
+    SELECT EXISTS(SELECT 1 FROM dpa_blud       WHERE tahun_anggaran = ${tahun})
+        OR EXISTS(SELECT 1 FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}) AS ada
+  ` as { ada?: unknown }[]
+  if (!Number(rows[0]?.ada ?? 0)) throw new BludTahunTanpaDpaError(tahun)
+}
+
+/**
+ * Pagu untuk sekumpulan `anggaran_key` — dibaca lewat `tx`, SESUDAH kuncinya
+ * didapat, dan sebagai locking read.
+ *
+ * K2 — dulu tempat ini memanggil `getPaguMap(tahun)` di baris paling atas fungsi
+ * pemanggil: lewat pool (di luar transaksi) DAN sebelum satu kunci pun diambil.
+ * Yang kedua lebih halus dan lebih penting: argumen L55 yang sudah ditulis panjang
+ * untuk `SUM` di bawah berlaku persis sama untuk angka pagu — SELECT biasa membaca
+ * snapshot dari pernyataan pertama transaksi, yaitu keadaan SEBELUM kunci didapat.
+ * Selama §4.3 belum dijaga di jalur simpan, pagu memang "relatif stabil" sehingga
+ * tidak pernah terasa; sesudah B2/B3 pagu bisa berubah di bawah kunci yang sama,
+ * dan alasan itu gugur.
+ *
+ * Sengaja sempit: hanya key yang diminta dan hanya kolom yang dipakai — bukan
+ * seluruh pohon seperti `getPaguEfektif`. Aturan sumbernya tetap `getPaguSumber`:
+ * Pergeseran terbaru menang atas DPA terbaru.
+ */
+async function bacaPaguTerkunci(
+  tx: TxSql, tahun: number, keys: string[],
+): Promise<Map<string, { pagu: number; kode_rekening: string; uraian: string }>> {
+  const pgs = await tx`
+    SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}
+  ` as { v?: unknown }[]
+  const versiPergeseran = pgs[0]?.v ? toDateStr(pgs[0].v) : null
+
+  let versiDpa: string | null = null
+  if (!versiPergeseran) {
+    const dpa = await tx`
+      SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}
+    ` as { v?: unknown }[]
+    versiDpa = dpa[0]?.v ? toDateStr(dpa[0].v) : null
+  }
+
+  const rows = versiPergeseran
+    ? await tx`
+        SELECT anggaran_key, kode_rekening, uraian, pergeseran AS pagu FROM pergeseran_dpa
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiPergeseran}
+          AND anggaran_key IN (${keys})
+        FOR UPDATE
+      `
+    : await tx`
+        SELECT anggaran_key, kode_rekening, uraian, jumlah AS pagu FROM dpa_blud
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiDpa}
+          AND anggaran_key IN (${keys})
+        FOR UPDATE
+      `
+
+  const map = new Map<string, { pagu: number; kode_rekening: string; uraian: string }>()
+  for (const r of rows as Record<string, unknown>[]) {
+    map.set(String(r.anggaran_key), {
+      pagu: Number(r.pagu ?? 0),
+      kode_rekening: String(r.kode_rekening ?? ''),
+      uraian: String(r.uraian ?? ''),
+    })
+  }
+  return map
+}
+
+/**
  * Kunci pagu + verifikasi serapan, ATOMIK di dalam transaksi pemanggil.
  *
  * `abaikanTxId` dipakai saat mengubah transaksi: alokasi lama miliknya sendiri
@@ -397,10 +469,13 @@ async function kunciDanPeriksaPagu(
   alokasi: { anggaran_key: string; nilai: number }[],
   abaikanTxId: number | null,
 ): Promise<void> {
+  // K3 — §4.8 berlaku untuk SEMUA transaksi, bukan hanya yang beralokasi. Dulu
+  // pemeriksaan "tahun ini punya DPA?" menumpang pada `!pagu.size` yang dibaca
+  // SESUDAH `if (!alokasi.length) return`, jadi penerimaan dan setoran pajak —
+  // yang memang tidak beralokasi — lolos lewat pintu samping ke tahun yang belum
+  // punya anggaran sama sekali. Sekarang berdiri sendiri, sebelum cabang itu.
+  await pastikanTahunPunyaDpa(tx, tahun)
   if (!alokasi.length) return
-
-  const pagu = await getPaguMap(tahun)
-  if (!pagu.size) throw new BludTahunTanpaDpaError(tahun)
 
   // §5.3: urutkan MENAIK sebelum mengunci apa pun. Kunci satu per satu — dengan
   // `IN (...)` urutan pengambilan kunci ikut rencana eksekusi MySQL, jaminannya hilang.
@@ -409,6 +484,9 @@ async function kunciDanPeriksaPagu(
   for (const a of urut) {
     await acquireBludLock(tx, BLUD_PAGU_ENTITY, bludPaguKey(tahun, a.anggaran_key))
   }
+
+  // K2 — baru DI SINI pagunya dibaca: sesudah setiap kuncinya dipegang.
+  const pagu = await bacaPaguTerkunci(tx, tahun, urut.map((a) => a.anggaran_key))
 
   for (const a of urut) {
     const baris = pagu.get(a.anggaran_key)

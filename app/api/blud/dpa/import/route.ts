@@ -16,7 +16,7 @@ import { bacaDpaDariGrid, StrukturDpaTidakTerbacaError } from '@/lib/blud/import
 import { getPenanggungJawab } from '@/lib/blud/penanggung-jawab-data'
 import {
   jangkarDipakaiRealisasi, saveDpa,
-  BludReplaceSafetyError, BludJangkarHilangError,
+  BludReplaceSafetyError, BludJangkarHilangError, BludPaguDibawahRealisasiError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
@@ -158,7 +158,14 @@ async function tanganiCommit(
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, rows, force, expected_version } = parsed.data
+  const { tahun_anggaran, versi_tanggal, rows, force, expected_version, turunkan_paksa, alasan_turun } = parsed.data
+
+  if (turunkan_paksa && !alasan_turun) {
+    return NextResponse.json(
+      { ok: false, error: 'Alasan wajib diisi saat menurunkan pagu di bawah realisasi.' },
+      { status: 400 },
+    )
+  }
 
   const salahPohon = validateTreeIntegrity(rows)
   if (salahPohon.length > 0) {
@@ -172,8 +179,19 @@ async function tanganiCommit(
   try {
     const dihitung = recalcDpaJumlah(rows)
     const hasil = await saveDpa(
-      tahun_anggaran, versi_tanggal, dihitung, session.userId, expected_version, force,
+      tahun_anggaran, versi_tanggal, dihitung, session.userId, expected_version, force, turunkan_paksa,
     )
+    if (hasil.bentrokPagu.length > 0) {
+      const b = hasil.bentrokPagu
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_PAGU_DIBAWAH_REALISASI',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `Impor DPA ${tahun_anggaran}/${versi_tanggal} disimpan PAKSA — ${b.length} baris di bawah realisasi `
+          + `(total minus Rp ${b.reduce((s, x) => s + x.minus, 0).toLocaleString('id-ID')}) · Alasan: ${alasan_turun}`,
+      })
+    }
     await writeAuditLog({
       req,
       eventType: 'BLUD_DPA_IMPORT_COMMIT',
@@ -209,6 +227,13 @@ async function tanganiCommit(
       return NextResponse.json({
         ok: false, code: 'SAFETY_THRESHOLD', error: err.message,
         existing: err.existing, incoming: err.incoming, dropPct: err.dropPct,
+      }, { status: 409 })
+    }
+    // Pratinjau impor memang sudah menampilkan `realisasiTerdampak`, tapi itu cuma
+    // pemberitahuan di layar — tidak pernah menahan commit. Ini pagarnya.
+    if (err instanceof BludPaguDibawahRealisasiError) {
+      return NextResponse.json({
+        ok: false, code: 'PAGU_DIBAWAH_REALISASI', error: err.message, detail: err.bentrok,
       }, { status: 409 })
     }
     console.error('[API /blud/dpa/import commit]', err)

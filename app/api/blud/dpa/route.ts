@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError } from '@/lib/blud/data'
+import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError, BludPaguDibawahRealisasiError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
 import { canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
@@ -121,7 +121,19 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack } = parsed.data
+  const {
+    tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack,
+    turunkan_paksa, alasan_turun,
+  } = parsed.data
+
+  // Sejalan dengan jalur Pergeseran: menembus §4.3 harus disengaja DAN beralasan,
+  // karena alasannya yang masuk audit — tanpa itu jejaknya cuma "dipaksa" tanpa sebab.
+  if (turunkan_paksa && !alasan_turun) {
+    return NextResponse.json(
+      { ok: false, error: 'Alasan wajib diisi saat menurunkan pagu di bawah realisasi.' },
+      { status: 400 },
+    )
+  }
 
   // B-1: tolak pohon rusak (parent orphan / row_id duplikat / siklus) sebelum simpan
   const treeErrors = validateTreeIntegrity(rows)
@@ -140,7 +152,24 @@ export async function POST(req: NextRequest) {
     // (transition data, dll). audit-pj.ts catch post-facto di Cetak BLUD untuk review.
     const pjConflicts = validateAllPj(recalced)
 
-    const result = await saveDpa(tahun_anggaran, versi_tanggal, recalced, session.userId, expected_version, force)
+    const result = await saveDpa(
+      tahun_anggaran, versi_tanggal, recalced, session.userId,
+      expected_version, force, turunkan_paksa,
+    )
+
+    if (result.bentrokPagu.length > 0) {
+      const b = result.bentrokPagu
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_PAGU_DIBAWAH_REALISASI',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `DPA ${tahun_anggaran}/${versi_tanggal} disimpan PAKSA — ${b.length} baris di bawah realisasi `
+          + `(total minus Rp ${b.reduce((s, x) => s + x.minus, 0).toLocaleString('id-ID')}): `
+          + `${b.slice(0, 5).map(x => `${x.kode_rekening} pagu ${x.pagu_baru.toLocaleString('id-ID')} < terserap ${x.terserap.toLocaleString('id-ID')}${x.hilang ? ' (baris dihapus)' : ''}`).join('; ')}`
+          + `${b.length > 5 ? '; …' : ''} · Alasan: ${alasan_turun}`,
+      })
+    }
 
     await writeAuditLog({
       req,
@@ -208,6 +237,13 @@ export async function POST(req: NextRequest) {
         existing: err.existing,
         incoming: err.incoming,
         dropPct:  err.dropPct,
+      }, { status: 409 })
+    }
+    // B2 — bentuk balasannya sengaja sama dengan jalur Pergeseran supaya layar
+    // DPA bisa memakai modal konfirmasi yang sudah ada di layar Pergeseran.
+    if (err instanceof BludPaguDibawahRealisasiError) {
+      return NextResponse.json({
+        ok: false, code: 'PAGU_DIBAWAH_REALISASI', error: err.message, detail: err.bentrok,
       }, { status: 409 })
     }
     console.error('[API /blud/dpa POST]', err)

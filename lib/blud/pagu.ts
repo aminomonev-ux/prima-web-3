@@ -279,44 +279,8 @@ export interface BentrokPagu {
   hilang: boolean
 }
 
-/**
- * §4.3 — arah kebalikan §4.1, dan belum pernah dijaga di Excel: pergeseran
- * tidak boleh menurunkan pagu di bawah realisasi yang sudah terjadi, dan tidak
- * boleh menghapus baris yang masih dipakai transaksi.
- */
-export async function cekPaguDibawahRealisasi(
-  tahun: number,
-  rows: { anggaran_key?: string | null; kode_rekening?: string; uraian?: string; pergeseran?: number }[],
-): Promise<BentrokPagu[]> {
-  const terserap = await getTerserap(tahun)
-  if (!terserap.size) return []
-  const lama = await getPaguMap(tahun)
-  const baru = new Map<string, { pagu: number; kode: string; uraian: string }>()
-  for (const r of rows) {
-    const key = String(r.anggaran_key ?? '').trim()
-    if (!key) continue
-    baru.set(key, {
-      pagu:   Number(r.pergeseran ?? 0),
-      kode:   String(r.kode_rekening ?? ''),
-      uraian: String(r.uraian ?? ''),
-    })
-  }
-  const hasil: BentrokPagu[] = []
-  for (const [key, dipakai] of terserap) {
-    if (dipakai <= 0) continue
-    const b = baru.get(key)
-    const paguBaru = b ? b.pagu : 0
-    if (paguBaru >= dipakai) continue
-    const l = lama.get(key)
-    hasil.push({
-      anggaran_key:  key,
-      kode_rekening: b?.kode || l?.kode_rekening || '(tidak diketahui)',
-      uraian:        b?.uraian || l?.uraian || '',
-      pagu_baru:     paguBaru,
-      terserap:      dipakai,
-      minus:         dipakai - paguBaru,
-      hilang:        !b,
-    })
-  }
-  return hasil.sort((a, b) => b.minus - a.minus)
-}
+// §4.3 dijaga oleh `pagarSimpanVersi` di `data.ts` — DI DALAM transaksi simpan dan
+// di bawah kunci pagu. Versi lamanya di sini (`cekPaguDibawahRealisasi`) dibuang
+// bersama B3: ia berjalan di luar transaksi tanpa kunci apa pun, jadi jawabannya
+// bisa sudah basi begitu dipakai. Membiarkannya tetap ada berarti menyediakan
+// pemeriksaan yang tampak benar untuk dipanggil jalur tulis berikutnya.

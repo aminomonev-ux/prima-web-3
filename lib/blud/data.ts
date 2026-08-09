@@ -62,7 +62,7 @@ export class BludJangkarHilangError extends Error {
 
 /**
  * T1 — versi yang dihapus masih menyangga realisasi. Jalur SIMPAN dijaga tiga
- * lapis (`periksaJangkar`, `cekPaguDibawahRealisasi`, ambang penurunan baris);
+ * lapis (`periksaJangkar`, `pagarSimpanVersi`, ambang penurunan baris);
  * jalur HAPUS dulu tidak punya satu pun, padahal akibatnya identik dan justru
  * lebih senyap: `getPaguEfektif` selalu mengambil versi TERBARU, jadi menghapus
  * versi teratas memundurkan pagu SETAHUN penuh sementara alokasinya tetap tinggal.
@@ -79,6 +79,28 @@ export class BludVersiTerpakaiError extends Error {
         : 'Sesudah dihapus, tahun ini tidak punya pagu sama sekali dan seluruh realisasinya jadi yatim.'),
     )
     this.name = 'BludVersiTerpakaiError'
+  }
+}
+
+/**
+ * §4.3 pada jalur SIMPAN — kembaran `BludVersiTerpakaiError` yang menjaga jalur hapus.
+ *
+ * Berbeda dari pagar jangkar, yang ini SENGAJA bisa ditembus `turunkan_paksa`:
+ * menurunkan pagu di bawah serapan kadang memang keputusan sadar (rekening dipindah,
+ * realisasinya menyusul dikoreksi). Yang dibutuhkan konfirmasi + jejak audit, bukan
+ * larangan mutlak.
+ */
+export class BludPaguDibawahRealisasiError extends Error {
+  constructor(public bentrok: BentrokPagu[]) {
+    const t = bentrok[0]
+    const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
+    super(
+      `${bentrok.length} baris anggaran turun di bawah realisasi yang sudah terjadi — `
+      + `${t.kode_rekening} ${t.hilang ? 'hilang dari versi ini' : `jadi ${rp(t.pagu_baru)}`} `
+      + `padahal sudah terserap ${rp(t.terserap)} (kurang ${rp(t.minus)}). `
+      + 'Perbaiki angkanya, atau simpan ulang dengan konfirmasi kalau penurunan ini memang disengaja.',
+    )
+    this.name = 'BludPaguDibawahRealisasiError'
   }
 }
 
@@ -230,6 +252,103 @@ async function pagarHapusVersi(
 }
 
 /**
+ * Apakah versi yang sedang DITULIS akan menentukan pagu efektif tahun itu?
+ * Cerminan `paguPenerus` untuk arah sebaliknya.
+ *
+ * Menyimpan versi DPA lama di tahun yang sudah punya Pergeseran — atau yang sudah
+ * punya DPA bertanggal lebih baru — tidak menggeser pagu satu rupiah pun. Pagar
+ * §4.3 tidak berlaku di situ, dan menyalakannya hanya menghasilkan penolakan yang
+ * tidak bisa dijelaskan ke pengguna.
+ */
+async function versiJadiSumberPagu(
+  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
+): Promise<boolean> {
+  const pgs = await tx`SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
+  const maxPergeseran = pgs[0]?.v ? toDateStr(pgs[0].v) : null
+
+  if (table === 'pergeseran_dpa') return !maxPergeseran || versi >= maxPergeseran
+
+  // B2 — selama tahun itu belum punya Pergeseran, DPA-lah pagu yang berlaku
+  // (`getPaguSumber`). Begitu ada Pergeseran, mengubah DPA tidak menyentuh pagu.
+  if (maxPergeseran) return false
+  const dpa = await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
+  const maxDpa = dpa[0]?.v ? toDateStr(dpa[0].v) : null
+  return !maxDpa || versi >= maxDpa
+}
+
+/**
+ * §4.3 pada jalur SIMPAN — dijalankan DI DALAM transaksi, sebelum DELETE+INSERT.
+ *
+ * B3 — dulu pemeriksaan ini hidup di route (`cekPaguDibawahRealisasi`), di luar
+ * transaksi dan tanpa kunci apa pun: TOCTOU murni. Antara pemeriksaan dan
+ * `savePergeseran` yang membuka transaksinya sendiri, sebuah transaksi Buku Kas
+ * bisa commit dan menaikkan serapan — pergeserannya tetap masuk, dan pagu berakhir
+ * di bawah realisasi tanpa satu pun peringatan.
+ *
+ * B2 — jalur `saveDpa` tidak punya pemeriksaan ini SAMA SEKALI, padahal selama
+ * tahun itu belum punya Pergeseran, DPA-lah pagu yang berlaku.
+ *
+ * Kunci diambil untuk setiap `anggaran_key` yang punya alokasi, urut MENAIK —
+ * entity & urutan yang sama dengan `kunciDanPeriksaPagu` dan `pagarHapusVersi`,
+ * jadi jaminan bebas-deadlock §5.3 tetap utuh.
+ *
+ * Mengembalikan daftar bentrok yang BENAR-BENAR teramati di bawah kunci. Pemanggil
+ * memakainya untuk audit — jangan mencatat hasil pemeriksaan di luar transaksi,
+ * karena itu justru angka yang bisa sudah basi.
+ */
+async function pagarSimpanVersi(
+  tx: TxSql,
+  table: 'dpa_blud' | 'pergeseran_dpa',
+  tahun: number,
+  versi: string,
+  baru: Map<string, BarisPaguVersi>,
+  turunkanPaksa: boolean,
+): Promise<BentrokPagu[]> {
+  if (!(await versiJadiSumberPagu(tx, table, tahun, versi))) return []
+
+  const kunciRows = await tx`
+    SELECT DISTINCT anggaran_key FROM blud_realisasi_alokasi
+    WHERE tahun_anggaran = ${tahun} AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+  ` as { anggaran_key?: unknown }[]
+  const kunci = kunciRows.map(r => String(r.anggaran_key ?? '')).filter(Boolean).sort((a, b) => a.localeCompare(b))
+  if (!kunci.length) return []
+
+  for (const k of kunci) await acquireBludLock(tx, BLUD_PAGU_ENTITY, bludPaguKey(tahun, k))
+
+  const lama = await barisBerjangkar(tx, table, tahun, versi)
+  const bentrok: BentrokPagu[] = []
+  for (const k of kunci) {
+    // FOR UPDATE, bukan SELECT biasa — alasan yang sama dengan `pagarHapusVersi`
+    // dan `kunciDanPeriksaPagu`: snapshot REPEATABLE READ dibaca dari pernyataan
+    // pertama transaksi, yaitu sebelum kuncinya didapat (L55).
+    const rows = await tx`
+      SELECT COALESCE(SUM(nilai), 0) AS n FROM blud_realisasi_alokasi
+      WHERE tahun_anggaran = ${tahun} AND anggaran_key = ${k} FOR UPDATE
+    ` as { n?: unknown }[]
+    const terserap = Number(rows[0]?.n ?? 0)
+    if (terserap <= 0) continue
+
+    const b = baru.get(k)
+    const paguBaru = b?.pagu ?? 0
+    if (paguBaru >= terserap) continue
+    const l = lama.get(k)
+    bentrok.push({
+      anggaran_key:  k,
+      kode_rekening: b?.kode_rekening || l?.kode_rekening || '(tidak diketahui)',
+      uraian:        b?.uraian || l?.uraian || '',
+      pagu_baru:     paguBaru,
+      terserap,
+      minus:         terserap - paguBaru,
+      hilang:        !b,
+    })
+  }
+  if (!bentrok.length) return []
+  bentrok.sort((a, b) => b.minus - a.minus)
+  if (!turunkanPaksa) throw new BludPaguDibawahRealisasiError(bentrok)
+  return bentrok
+}
+
+/**
  * Hasil simpan DPA/Pergeseran. `jangkar` = peta `row_id → anggaran_key` versi
  * yang baru saja ditulis, WAJIB dikembalikan ke klien.
  *
@@ -244,6 +363,13 @@ export interface SimpanHasil {
   replaced: number
   newVersion: number
   jangkar: Record<string, string>
+  /**
+   * §4.3 — bentrok pagu yang BENAR-BENAR teramati di bawah kunci, dan tetap
+   * disimpan karena pemanggil mengirim `turunkanPaksa`. Kosong kalau tidak ada.
+   * Dipakai route untuk menulis audit dengan angka yang sungguh terjadi, bukan
+   * hasil pemeriksaan di luar transaksi yang bisa sudah basi.
+   */
+  bentrokPagu: BentrokPagu[]
 }
 
 /**
@@ -391,6 +517,7 @@ export async function saveDpa(
   userId: number,
   expectedVersion: number,
   force = false,
+  turunkanPaksa = false,
 ): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
@@ -400,20 +527,28 @@ export async function saveDpa(
     const cntRows = await sql`SELECT COUNT(*) AS cnt FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
     const existing = Number(cntRows[0]?.cnt ?? 0)
     if (force && existing > 0) {
+      let bentrokKosong: BentrokPagu[] = []
       await withTransaction(async ({ tx }) => {
         await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
+        // Mengosongkan versi = pagunya jadi nol untuk semua baris. Kalau versi ini
+        // yang sedang menyangga pagu, itu penurunan paling ekstrem yang mungkin.
+        bentrokKosong = await pagarSimpanVersi(tx, 'dpa_blud', tahun, versiTanggal, new Map(), turunkanPaksa)
         await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
       })
-      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {} }
+      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
     }
-    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {} }
+    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [] }
   }
 
   const jangkar: Record<string, string> = {}
+  const baruPagu = new Map<string, BarisPaguVersi>()
   const values = rows.map(r => {
     const key = ensureAnggaranKey(r.anggaran_key)
     jangkar[r.row_id] = key
+    baruPagu.set(key, {
+      kode_rekening: r.kode_rekening, uraian: r.uraian, pagu: Number(r.jumlah ?? 0),
+    })
     return [
       tahun, versiTanggal, r.kode_rekening, r.uraian, r.vol ?? null, r.satuan ?? null,
       r.harga ?? null, r.jumlah, r.penanggung_jawab ?? null, r.keterangan ?? null,
@@ -422,6 +557,7 @@ export async function saveDpa(
     ]
   })
   let existing = 0
+  let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
     await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
     // B-NEW-3 threshold dihitung DI DALAM tx (audit DPA 2026-06-11 B-3) — angka
@@ -434,11 +570,14 @@ export async function saveDpa(
     // Sengaja TIDAK bisa ditembus `force`: kehilangan jangkar tidak pernah
     // disengaja, dan akibatnya (realisasi yatim) tidak terlihat di layar mana pun.
     await periksaJangkar(tx, 'dpa_blud', tahun, rows)
+    // B2 — §4.3 di jalur DPA. Sebelum ini jalur simpan DPA tidak punya pagar pagu
+    // sama sekali; selama tahun itu belum punya Pergeseran, DPA-lah pagu yang berlaku.
+    bentrokPagu = await pagarSimpanVersi(tx, 'dpa_blud', tahun, versiTanggal, baruPagu, turunkanPaksa)
     await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('dpa_blud', DPA_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
   })
-  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar }
+  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
 }
 
 /**
@@ -524,6 +663,7 @@ export async function savePergeseran(
   userId: number,
   expectedVersion: number,
   force = false,
+  turunkanPaksa = false,
 ): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
@@ -532,20 +672,26 @@ export async function savePergeseran(
     const cntRows = await sql`SELECT COUNT(*) AS cnt FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
     const existing = Number(cntRows[0]?.cnt ?? 0)
     if (force && existing > 0) {
+      let bentrokKosong: BentrokPagu[] = []
       await withTransaction(async ({ tx }) => {
         await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
+        bentrokKosong = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, new Map(), turunkanPaksa)
         await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
       })
-      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {} }
+      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
     }
-    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {} }
+    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [] }
   }
 
   const jangkar: Record<string, string> = {}
+  const baruPagu = new Map<string, BarisPaguVersi>()
   const values = rows.map(r => {
     const key = ensureAnggaranKey(r.anggaran_key)
     jangkar[r.row_id] = key
+    baruPagu.set(key, {
+      kode_rekening: r.kode_rekening, uraian: r.uraian, pagu: Number(r.pergeseran ?? 0),
+    })
     return [
       tahun, versiTanggal, dpaVersiTanggal, r.kode_rekening, r.uraian, r.vol ?? null,
       r.satuan ?? null, r.harga ?? null, r.jumlah, r.vol_p ?? null, r.harga_p ?? null,
@@ -555,6 +701,7 @@ export async function savePergeseran(
     ]
   })
   let existing = 0
+  let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
     await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
     // B-NEW-3 threshold di dalam tx (audit DPA 2026-06-11 B-3)
@@ -564,11 +711,14 @@ export async function savePergeseran(
       throw new BludReplaceSafetyError('pergeseran_dpa', existing, incoming, ((existing - incoming) / existing) * 100)
     }
     await periksaJangkar(tx, 'pergeseran_dpa', tahun, rows)
+    // B3 — §4.3 pindah ke DALAM transaksi, di bawah kunci pagu. Di route ia hanya
+    // pemeriksaan tanpa kunci: serapan bisa naik di sela pemeriksaan dan simpan.
+    bentrokPagu = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, baruPagu, turunkanPaksa)
     await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('pergeseran_dpa', PERGESERAN_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
   })
-  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar }
+  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
 }
 
 /**
