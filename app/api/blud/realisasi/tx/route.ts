@@ -18,6 +18,7 @@ import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
   BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
   BludSerapanNegatifError, BludPotonganTidakSahError, BludTanggalDiLuarBulanError,
+  BludPotonganTerpakaiError, BludPotonganAsingError,
 } from '@/lib/blud/realisasi-schemas'
 import { bolehInput, bolehLihatSalahSatu, forbidden, unauthorized, tolakEdit, realisasiMati } from '../_guard'
 
@@ -51,6 +52,17 @@ function petakanError(err: unknown): NextResponse | null {
   }
   if (err instanceof BludTanggalDiLuarBulanError) {
     return NextResponse.json({ ok: false, code: 'TANGGAL_LUAR_BULAN', error: err.message }, { status: 400 })
+  }
+  // B1 — 409, bukan 400: keadaan datanya yang menghalangi, bukan isian yang salah.
+  // Pengguna bisa menindaklanjuti (cabut slipnya dulu), lalu ulangi.
+  if (err instanceof BludPotonganTerpakaiError) {
+    return NextResponse.json({
+      ok: false, code: 'POTONGAN_TERPAKAI', error: err.message,
+      potongan_id: err.potonganId, no_bukti: err.nomorBukti,
+    }, { status: 409 })
+  }
+  if (err instanceof BludPotonganAsingError) {
+    return NextResponse.json({ ok: false, code: 'POTONGAN_ASING', error: err.message }, { status: 409 })
   }
   return null
 }

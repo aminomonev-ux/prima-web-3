@@ -79,6 +79,16 @@ export const AlokasiSchema = z.object({
 export const JenisPotonganSchema = z.enum(JENIS_POTONGAN)
 
 export const PotonganSchema = z.object({
+  /**
+   * B1 — identitas baris potongan. Kosong = baris baru; berisi = baris lama yang
+   * dipertahankan. Bukti Setor yang sudah terbit menunjuk `potongan_id`, jadi
+   * tanpa ini `updateTx` (yang menghapus lalu menulis ulang) mencetak id baru
+   * untuk baris yang isinya tidak berubah, dan slip yang sudah ditandatangani
+   * kehilangan barisnya hanya karena uraian transaksinya dibetulkan.
+   *
+   * Di `createTx` nilainya diabaikan — semua potongan di sana memang baru.
+   */
+  id: z.number().int().positive().nullish(),
   jenis: JenisPotonganSchema,
   keterangan: z.string().trim().max(191).nullish(),
   nilai: z.number().gt(0, 'Nilai potongan harus lebih dari 0').max(1e15),
@@ -414,6 +424,41 @@ export class BludPotonganTidakSahError extends Error {
   constructor(alasan: string) {
     super(alasan)
     this.name = 'BludPotonganTidakSahError'
+  }
+}
+
+/**
+ * B1 — potongan yang sudah masuk Bukti Setor tidak boleh hilang diam-diam.
+ * `ON DELETE SET NULL` pada `blud_bukti_setor_baris.potongan_id` itu jaring
+ * pengaman terakhir, bukan izin merusak dokumen yang sudah terbit: barisnya akan
+ * tetap ada di slip dengan penunjuk kosong, dan tidak ada satu layar pun yang
+ * memberitahu kenapa. Kalau penghapusan memang disengaja, slipnya dicabut dulu.
+ */
+export class BludPotonganTerpakaiError extends Error {
+  constructor(public readonly potonganId: number, public readonly nomorBukti: string[]) {
+    super(
+      `Potongan ini sudah masuk Bukti Setor ${nomorBukti.join(', ')}. `
+      + 'Batalkan atau ubah bukti setornya dulu sebelum menghapus potongan.',
+    )
+    this.name = 'BludPotonganTerpakaiError'
+  }
+}
+
+/**
+ * B1 — `id` potongan yang dikirim klien bukan milik transaksi ini.
+ *
+ * Ditolak terang-terangan, bukan sekadar disaring `AND tx_id = ?` pada UPDATE.
+ * Dengan syarat itu saja barisnya memang tidak tersunting (IDOR tertutup), TAPI
+ * baris itu juga terlewat filter "baris baru" — jadi potongannya lenyap tanpa
+ * satu pun pesan. Diam yang benar tetap lebih buruk daripada penolakan.
+ */
+export class BludPotonganAsingError extends Error {
+  constructor(public readonly txId: number, public readonly asing: number[]) {
+    super(
+      `${asing.length} potongan yang dikirim bukan milik transaksi ini (id ${asing.join(', ')}). `
+      + 'Muat ulang halaman lalu ulangi.',
+    )
+    this.name = 'BludPotonganAsingError'
   }
 }
 

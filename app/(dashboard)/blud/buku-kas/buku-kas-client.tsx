@@ -46,7 +46,7 @@ interface TxRow {
   status: string
   version: number
   alokasi: { anggaran_key: string; nilai: number; kode_rekening: string; uraian: string }[]
-  potongan: { jenis: JenisPotongan; keterangan: string | null; nilai: number }[]
+  potongan: { id: number; jenis: JenisPotongan; keterangan: string | null; nilai: number }[]
   saldo_kas: number
   saldo_bank: number
 }
@@ -156,7 +156,9 @@ export default function BukuKasClient({
       bank_masuk: r.bank_masuk, bank_keluar: r.bank_keluar,
       status: r.status,
       alokasi: r.alokasi.map(a => ({ anggaran_key: a.anggaran_key, nilai: a.nilai })),
-      potongan: (r.potongan ?? []).map(p => ({ jenis: p.jenis, keterangan: p.keterangan, nilai: p.nilai })),
+      // B1 — `id` ikut dibawa: tanpa itu server mengira semua potongan baru dan
+      // Bukti Setor yang menunjuk id lama kehilangan barisnya.
+      potongan: (r.potongan ?? []).map(p => ({ id: p.id, jenis: p.jenis, keterangan: p.keterangan, nilai: p.nilai })),
     })
     setModalOpen(true)
   }

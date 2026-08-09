@@ -19,6 +19,7 @@ import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
   BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
   BludSerapanNegatifError, BludPotonganTidakSahError, BludTanggalDiLuarBulanError,
+  BludPotonganTerpakaiError, BludPotonganAsingError,
   awalanBulan,
   nilaiBebanPagu, sifatAlokasi, nilaiAlokasiSeharusnya, alasanAlokasiDilarang, bolehBerpotongan,
   type TransaksiInput, type JenisTransaksi, type JenisPotongan,
@@ -608,6 +609,96 @@ async function tulisPotongan(
 }
 
 /**
+ * B1 — potongan disunting DI TEMPAT, bukan dihapus lalu ditulis ulang.
+ *
+ * Bukti Setor yang sudah terbit menunjuk `potongan_id`, dan FK-nya
+ * `ON DELETE SET NULL`. Pola lama (`DELETE … ; bulkInsert`) mencetak id
+ * AUTO_INCREMENT baru untuk baris yang isinya tidak berubah sama sekali, jadi
+ * slip yang sudah ditandatangani kehilangan barisnya hanya karena uraian
+ * transaksinya dibetulkan — tanpa galat, tanpa peringatan, tanpa jejak.
+ *
+ * Pencocokan lewat `(jenis, nilai, urutan)` sengaja TIDAK dipakai: dua potongan
+ * PPh 21 dengan nilai sama dalam satu transaksi itu sah (dua orang), dan
+ * pencocokan heuristik akan menyambungkan slip ke baris yang salah — lebih buruk
+ * daripada memutus, karena kelihatan benar.
+ */
+async function tulisUlangPotongan(
+  tx: TxSql,
+  conn: Parameters<typeof bulkInsert>[3],
+  id: number,
+  tahun: number,
+  potongan: TransaksiInput['potongan'],
+): Promise<void> {
+  const diminta = potongan.map((p) => p.id).filter((v): v is number => v != null)
+
+  // Kepemilikan diperiksa DI DEPAN. `AND tx_id = ${id}` pada UPDATE saja memang
+  // menutup IDOR-nya, tapi baris asing itu lalu ikut terlewat filter "baris baru"
+  // (`p.id == null`) — jadi potongannya lenyap tanpa suara.
+  if (diminta.length) {
+    const milik = await tx`
+      SELECT id FROM blud_realisasi_potongan WHERE tx_id = ${id} AND id IN (${diminta})
+    ` as { id?: unknown }[]
+    const sah = new Set(milik.map((r) => Number(r.id)))
+    const asing = diminta.filter((x) => !sah.has(x))
+    if (asing.length) throw new BludPotonganAsingError(id, asing)
+  }
+
+  await tolakHapusPotonganTerpakai(tx, id, diminta)
+
+  if (diminta.length) {
+    await tx`DELETE FROM blud_realisasi_potongan WHERE tx_id = ${id} AND id NOT IN (${diminta})`
+  } else {
+    await tx`DELETE FROM blud_realisasi_potongan WHERE tx_id = ${id}`
+  }
+
+  for (const [i, p] of potongan.entries()) {
+    if (p.id == null) continue
+    await tx`
+      UPDATE blud_realisasi_potongan
+      SET jenis = ${p.jenis}, keterangan = ${p.keterangan ?? null}, nilai = ${p.nilai}, urutan = ${i}
+      WHERE id = ${p.id} AND tx_id = ${id}
+    `
+  }
+
+  const baru = potongan.map((p, i) => ({ p, i })).filter(({ p }) => p.id == null)
+  if (baru.length) {
+    await bulkInsert(
+      'blud_realisasi_potongan',
+      POTONGAN_COLUMNS,
+      baru.map(({ p, i }) => [id, tahun, p.jenis, p.keterangan ?? null, p.nilai, i]),
+      conn,
+    )
+  }
+}
+
+/** Potongan yang akan hilang tapi masih ditunjuk slip Bukti Setor → tolak, jangan SET NULL. */
+async function tolakHapusPotonganTerpakai(
+  tx: TxSql, txId: number, dipertahankan: number[],
+): Promise<void> {
+  const rows = dipertahankan.length
+    ? await tx`
+        SELECT p.id AS pid, s.no_bukti AS no_bukti
+        FROM blud_realisasi_potongan p
+        JOIN blud_bukti_setor_baris b ON b.potongan_id = p.id
+        JOIN blud_bukti_setor s ON s.id = b.bukti_id
+        WHERE p.tx_id = ${txId} AND p.id NOT IN (${dipertahankan})
+      `
+    : await tx`
+        SELECT p.id AS pid, s.no_bukti AS no_bukti
+        FROM blud_realisasi_potongan p
+        JOIN blud_bukti_setor_baris b ON b.potongan_id = p.id
+        JOIN blud_bukti_setor s ON s.id = b.bukti_id
+        WHERE p.tx_id = ${txId}
+      `
+  const dipakai = rows as { pid?: unknown; no_bukti?: unknown }[]
+  if (!dipakai.length) return
+  const pid = Number(dipakai[0].pid)
+  const nomor = [...new Set(dipakai.filter((r) => Number(r.pid) === pid)
+    .map((r) => String(r.no_bukti ?? '(tanpa nomor)')))]
+  throw new BludPotonganTerpakaiError(pid, nomor)
+}
+
+/**
  * Nomor kuitansi berurutan per (tahun, bulan), diberikan SERVER (§5.4).
  * Dikunci lebih dulu daripada kunci pagu supaya urutan penguncian seragam
  * di semua jalur tulis — syarat bebas-deadlock yang sama seperti §5.3.
@@ -724,8 +815,7 @@ export async function updateTx(
         conn,
       )
     }
-    await tx`DELETE FROM blud_realisasi_potongan WHERE tx_id = ${id}`
-    await tulisPotongan(conn, id, tahun, input.potongan)
+    await tulisUlangPotongan(tx, conn, id, tahun, input.potongan)
     return { version: version + 1, no_kwt: noKwt }
   })
 }

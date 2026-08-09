@@ -60,7 +60,7 @@ export interface TransaksiAwal {
   bank_keluar: number
   status: string
   alokasi: { anggaran_key: string; nilai: number }[]
-  potongan: { jenis: JenisPotongan; keterangan: string | null; nilai: number }[]
+  potongan: { id?: number | null; jenis: JenisPotongan; keterangan: string | null; nilai: number }[]
 }
 
 interface Props {
@@ -86,7 +86,10 @@ const POTONGAN_OPSI = JENIS_POTONGAN.map((j) => ({ value: j, label: LABEL_POTONG
 const rp = (n: number) => new Intl.NumberFormat('id-ID').format(Math.round(n))
 const angka = (s: string) => Number(String(s).replace(/[^\d-]/g, '') || 0)
 
-interface PotonganUI { jenis: JenisPotongan; keterangan: string; nilai: number }
+// B1 — `id` dibawa pulang apa adanya. Membuangnya membuat server mengira setiap
+// baris itu baru, lalu mencetak id baru untuk baris yang tidak berubah — dan Bukti
+// Setor yang menunjuk id lama kehilangan barisnya.
+interface PotonganUI { id?: number | null; jenis: JenisPotongan; keterangan: string; nilai: number }
 
 // Dirender hanya saat modal dibuka dan diberi `key` oleh pemanggil, jadi state
 // cukup diambil dari prop saat mount — tanpa effect yang me-reset state
@@ -108,7 +111,7 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
     () => awal?.alokasi.map(a => ({ anggaran_key: a.anggaran_key, nilai: Math.abs(a.nilai) })) ?? [],
   )
   const [potongan, setPotongan] = useState<PotonganUI[]>(
-    () => awal?.potongan.map(p => ({ jenis: p.jenis, keterangan: p.keterangan ?? '', nilai: p.nilai })) ?? [],
+    () => awal?.potongan.map(p => ({ id: p.id ?? null, jenis: p.jenis, keterangan: p.keterangan ?? '', nilai: p.nilai })) ?? [],
   )
   const [parkir, setParkir] = useState(awal?.status === 'BELUM_BERREKENING')
   const [cari, setCari] = useState('')
@@ -236,7 +239,7 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
         : [],
       potongan: bisaPotongan
         ? potongan.filter(p => p.nilai > 0).map(p => ({
-          jenis: p.jenis, keterangan: p.keterangan.trim() || null, nilai: p.nilai,
+          id: p.id ?? null, jenis: p.jenis, keterangan: p.keterangan.trim() || null, nilai: p.nilai,
         }))
         : [],
       belum_berrekening: parkir,
