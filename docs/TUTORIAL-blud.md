@@ -629,6 +629,13 @@ Konsep lengkap: `docs/CONCEPT-blud-peran.md`. Tabelnya hidup di **satu** berkas,
 > apakah angka resminya berubah: `export-log` memakai POST tapi bersifat baca, jadi
 > pemegang LIHAT harus lolos — kalau tidak, unduhan mereka tidak berjejak.
 >
+> ⚠️ **Mematikan sebuah menu menyembunyikan LAYARNYA, bukan DATANYA.** Men-`TIDAK`-kan
+> Buku Kas untuk sebuah peran tidak menutup angkanya: pemegang LIHAT di menu **Cetak**
+> atau **Tutup Kas** tetap bisa mengunduh SPJ bulanan, dan SPJ itu memuat BKU. Itu
+> perilaku yang dirancang, bukan celah — SPJ lahir dari menutup bulan, jadi pagarnya
+> mengikuti alur kerja itu. Kalau yang Anda maksud memang menutup datanya, yang dicabut
+> harus grant `app_access: 'blud'`-nya, bukan satu menu.
+>
 > Dua fungsi izin terakhir sengaja berbentuk **daftar peran**, bukan perbandingan `=== 'SUPER_ADMIN'` yang ditulis di dalam route. Menambah peran = satu nama di daftar, tanpa menyentuh route mana pun. Uji `scripts/test-blud-izin-periode.mjs` + `scripts/test-blud-peran.mjs` mengunci isi daftar itu — jadi melonggarkannya selalu jadi keputusan sadar.
 >
 > Di sisi layar, `app/(dashboard)/blud/_izin.ts` (`izinLayar(menu)`) yang menerjemahkan tabel jadi prop `bolehUbah`. Layar LIHAT **menyembunyikan** tombol dan mengubah isian jadi teks, bukan menonaktifkannya — plus spanduk `SpandukLihat`.
