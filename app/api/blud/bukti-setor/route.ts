@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'bukti-setor'))) return forbidden()
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   if (!(await bolehInput(session.userId, session.role, 'bukti-setor'))) return tolakEdit('bukti-setor')
 
@@ -116,7 +116,7 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   if (!(await bolehInput(session.userId, session.role, 'bukti-setor'))) return tolakEdit('bukti-setor')
 

@@ -51,8 +51,8 @@ export async function izinLayar(menu: MenuBlud): Promise<IzinLayar> {
   // Sengaja TIDAK digabung ke `bolehBuka`: "modul dimatikan" itu keadaan sementara
   // yang hilang sendiri, "Anda tidak berhak" harus ditanyakan ke admin. Menyatukan
   // keduanya membuat pesan yang satu terbaca sebagai yang lain.
-  if (role !== 'SUPER_ADMIN' && MENU_REALISASI.includes(menu)
-      && await modulSedangMati('app_status_blud_realisasi')) {
+  if (MENU_REALISASI.includes(menu)
+      && await modulSedangMati(['app_status_blud_realisasi'], { role })) {
     redirect(`/maintenance?app=${encodeURIComponent(`BLUD - ${LABEL_MENU[menu]}`)}`)
   }
 

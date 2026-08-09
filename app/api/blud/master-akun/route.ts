@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   // Daftar akun mengisi combobox di layar DPA & Pergeseran, bukan cuma layar Master Akun.
   if (!(await bolehLihatSalahSatu(session.userId, session.role, ['master-akun', 'dpa', 'pergeseran']))) return forbidden()
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'master-akun'))) return tolakEdit('master-akun')
 

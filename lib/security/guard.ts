@@ -52,6 +52,25 @@ export async function hasAppAccess(
 }
 
 /**
+ * Peran yang boleh menembus sakelar mati. Orang yang mematikan modul harus tetap
+ * bisa masuk memeriksanya — dan layarnya memang sudah mengecualikannya lebih dulu
+ * (`blud/layout.tsx`, `blud/_izin.ts`). Kalau API tidak ikut mengecualikan, yang
+ * terjadi persis keadaan yang N4 hindari: layarnya terbuka tapi tiap panggilan
+ * dibalas 503 — pengguna melihat layar rusak, bukan halaman pemeliharaan (S1).
+ *
+ * Ditaruh di sini, bukan di tiap pemanggil, supaya kedua lapis membaca daftar yang
+ * sama. Dulu daftarnya ditulis ulang sebagai `role !== 'SUPER_ADMIN'` di dua layar.
+ */
+export const PERAN_TEMBUS_SAKELAR: readonly string[] = ['SUPER_ADMIN'];
+
+export type OpsiSakelar = { role?: string; kecualiRole?: readonly string[] };
+
+function bolehTembusSakelar(opts?: OpsiSakelar): boolean {
+  if (!opts?.role) return false;
+  return (opts.kecualiRole ?? PERAN_TEMBUS_SAKELAR).includes(opts.role);
+}
+
+/**
  * S4 — kill-switch modul. Membaca `app_config` dan menolak kalau flagnya bukan
  * 'online'. Meniru `app/api/rima/query/route.ts` yang sudah bersikap begini.
  *
@@ -66,10 +85,18 @@ export async function hasAppAccess(
  *
  * Mengembalikan `NextResponse | null` supaya jadi early-return satu baris, pola
  * yang sama dengan `bludRateLimit`:
- *   const mati = await modulMati('app_status_blud')
+ *   const mati = await modulMati(['app_status_blud'], { role: session.role })
  *   if (mati) return mati
+ *
+ * `role` WAJIB dioper kalau pengecualian mau berlaku. Tanpa itu tidak ada yang
+ * dikecualikan — pemanggil yang lupa menutup pintu, bukan diam-diam membukanya.
  */
-export async function modulMati(...keys: string[]): Promise<NextResponse | null> {
+export async function modulMati(
+  keys: string[],
+  opts?: OpsiSakelar,
+): Promise<NextResponse | null> {
+  if (bolehTembusSakelar(opts)) return null;
+
   let nyala: Set<string>;
   try {
     const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
@@ -97,7 +124,9 @@ export async function modulMati(...keys: string[]): Promise<NextResponse | null>
  * Versi untuk server component / layout: cukup tahu mati atau tidak, tanpa
  * membentuk respons. Gagal baca = dianggap mati, sejalan dengan `modulMati`.
  */
-export async function modulSedangMati(...keys: string[]): Promise<boolean> {
+export async function modulSedangMati(keys: string[], opts?: OpsiSakelar): Promise<boolean> {
+  if (bolehTembusSakelar(opts)) return false;
+
   try {
     const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
     return (rows as { value: string }[]).some((r) => r.value !== 'online');

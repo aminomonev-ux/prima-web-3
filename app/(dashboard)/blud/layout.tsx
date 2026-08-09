@@ -22,9 +22,10 @@ export default async function BludLayout({ children }: { children: React.ReactNo
   // S4 — kartu BLUD di /menu memang sudah abu saat maintenance, tapi itu cuma
   // menutup SATU pintu. Mengetik /blud/dpa langsung dan FloatingDock antar-modul
   // melewatinya. Diperiksa di sini karena layout ini dilewati semua layar BLUD.
-  // SUPER_ADMIN dikecualikan, sama seperti aturan di /menu — yang mematikan modul
-  // tetap harus bisa masuk memeriksanya.
-  if (role !== 'SUPER_ADMIN' && await modulSedangMati('app_status_blud')) {
+  // Pengecualian perannya (`PERAN_TEMBUS_SAKELAR`) sekarang dipegang guard, bukan
+  // ditulis ulang di sini — dulu layar dan API punya aturan sendiri-sendiri, dan
+  // yang di API tidak ada sama sekali (S1).
+  if (await modulSedangMati(['app_status_blud'], { role })) {
     redirect(`/maintenance?app=${encodeURIComponent('BLUD - Anggaran')}`)
   }
 

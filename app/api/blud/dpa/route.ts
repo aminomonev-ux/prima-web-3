@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
 
   const { searchParams } = new URL(req.url)
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'dpa'))) return tolakEdit('dpa')
 
@@ -221,7 +221,7 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'dpa'))) return forbidden()
   // S5: akses modul ≠ wewenang membuang anggaran setahun. Pagar sungguhannya di

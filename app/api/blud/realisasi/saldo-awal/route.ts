@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   // Ikut menu `tutup-kas`, tanpa daftar peran tersendiri. Wewenang yang benar-benar
   // berbahaya — mengubahnya setelah ada berita acara — sudah terjaga sendirinya:

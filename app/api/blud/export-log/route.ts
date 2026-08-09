@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   // Mengunduh bukan menulis: pemegang LIHAT justru HARUS lolos di sini, kalau tidak
   // unduhan mereka tak berjejak. Izinnya ikut menu Cetak — baca-saja bagi semua peran.

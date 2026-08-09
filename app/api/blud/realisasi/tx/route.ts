@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   // Daftar transaksi sebulan juga dibaca layar Bukti Setor (memilih transaksi yang
   // akan disetor) — cukup salah satu menu terbuka. Tulisnya tetap milik Buku Kas.
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   if (!(await bolehInput(session.userId, session.role, 'buku-kas'))) return tolakEdit('buku-kas')
 
@@ -142,7 +142,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   if (!(await bolehInput(session.userId, session.role, 'buku-kas'))) return tolakEdit('buku-kas')
 
@@ -180,7 +180,7 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   if (!(await bolehInput(session.userId, session.role, 'buku-kas'))) return tolakEdit('buku-kas')
 

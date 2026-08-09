@@ -25,8 +25,7 @@ export const FLAG_BLUD_REALISASI = 'app_status_blud_realisasi'
  * S4 — sakelar mati modul. Dipanggil di TIAP route, sesudah `getSession()` dan
  * sebelum apa pun yang menyentuh data:
  *
- *   const mati = await bludMati()             // route umum BLUD
- *   const mati = await bludMati('realisasi')  // route di bawah realisasi/
+ *   const mati = await bludMati(session.role)  // route umum BLUD
  *   if (mati) return mati
  *
  * Sengaja TIDAK dilebur ke `bolehBukaMenu`. Dua alasannya: hasilnya akan jadi 403
@@ -35,11 +34,16 @@ export const FLAG_BLUD_REALISASI = 'app_status_blud_realisasi'
  * berbeda ke satu jawaban boolean membuat keduanya sulit diperbaiki terpisah.
  *
  * Berjenjang: mematikan BLUD ikut mematikan Realisasi, tidak sebaliknya.
+ *
+ * S1 — `role` dioper supaya `PERAN_TEMBUS_SAKELAR` berlaku sama seperti di layar.
+ * Lupa mengopernya TIDAK menimbulkan error: SUPER_ADMIN cuma kembali ditolak 503
+ * di layar yang membiarkannya masuk. Yang menangkap kelalaian itu pemeriksaan
+ * statis di `scripts/test-blud-killswitch.mjs`, bukan tsc.
  */
-export function bludMati(lingkup?: 'realisasi') {
+export function bludMati(role?: string, lingkup?: 'realisasi') {
   return lingkup === 'realisasi'
-    ? modulMati(FLAG_BLUD, FLAG_BLUD_REALISASI)
-    : modulMati(FLAG_BLUD)
+    ? modulMati([FLAG_BLUD, FLAG_BLUD_REALISASI], { role })
+    : modulMati([FLAG_BLUD], { role })
 }
 
 export function unauthorized() {

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'dpa'))) return tolakEdit('dpa')
   if (!canImporDpa(session.role)) {

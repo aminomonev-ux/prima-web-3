@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   // GET, tapi satu-satunya gunanya menyiapkan tulisan ke DPA — jadi izinnya izin tulis
   // menu DPA, bukan izin baca. Pemegang LIHAT tak punya tombolnya, dan tak perlu daftarnya.

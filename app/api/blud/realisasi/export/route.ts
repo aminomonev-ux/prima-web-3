@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await realisasiMati()
+  const mati = await realisasiMati(session.role)
   if (mati) return mati
   // Tombol "Unduh SPJ Bulanan" duduk di layar Tutup Kas — SPJ itu dokumen yang lahir
   // dari menutup bulan, jadi letaknya mengikuti alur kerja dan pagarnya yang mengikuti.

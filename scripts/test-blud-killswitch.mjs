@@ -83,6 +83,15 @@ async function bacaFlag(key) {
   const r = await sql`SELECT value FROM app_config WHERE \`key\` = ${key}`
   return r[0]?.value ?? null
 }
+function daftarRouteBlud(dir) {
+  const hasil = []
+  for (const entri of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entri.name)
+    if (entri.isDirectory()) hasil.push(...daftarRouteBlud(p))
+    else if (entri.name === 'route.ts') hasil.push(p)
+  }
+  return hasil
+}
 
 const aslinya = { [FLAG]: await bacaFlag(FLAG), [FLAG_R]: await bacaFlag(FLAG_R) }
 
@@ -91,30 +100,61 @@ try {
 
   await setFlag(FLAG, 'online')
   await setFlag(FLAG_R, 'online')
-  periksa('Semua online → tidak menghalangi', (await modulMati(FLAG)) === null)
-  periksa('…termasuk pemeriksaan berjenjang', (await modulMati(FLAG, FLAG_R)) === null)
-  periksa('modulSedangMati false', (await modulSedangMati(FLAG)) === false)
+  periksa('Semua online → tidak menghalangi', (await modulMati([FLAG])) === null)
+  periksa('…termasuk pemeriksaan berjenjang', (await modulMati([FLAG, FLAG_R])) === null)
+  periksa('modulSedangMati false', (await modulSedangMati([FLAG])) === false)
 
   await setFlag(FLAG_R, 'maintenance')
   periksa('Realisasi mati → route realisasi 503',
-    (await modulMati(FLAG, FLAG_R))?.status === 503)
+    (await modulMati([FLAG, FLAG_R]))?.status === 503)
   // Inti "berjenjang": mematikan anak tidak boleh ikut mematikan induk. Kalau
   // baris ini gagal, DPA & master ikut mati padahal tidak diminta.
-  periksa('…tapi route BLUD umum tetap jalan', (await modulMati(FLAG)) === null)
+  periksa('…tapi route BLUD umum tetap jalan', (await modulMati([FLAG])) === null)
 
   await setFlag(FLAG, 'maintenance')
   await setFlag(FLAG_R, 'online')
-  periksa('BLUD mati → route BLUD umum 503', (await modulMati(FLAG))?.status === 503)
-  periksa('…dan Realisasi ikut mati', (await modulMati(FLAG, FLAG_R))?.status === 503)
-  periksa('modulSedangMati true', (await modulSedangMati(FLAG)) === true)
+  periksa('BLUD mati → route BLUD umum 503', (await modulMati([FLAG]))?.status === 503)
+  periksa('…dan Realisasi ikut mati', (await modulMati([FLAG, FLAG_R]))?.status === 503)
+  periksa('modulSedangMati true', (await modulSedangMati([FLAG])) === true)
+
+  // S1 — pengecualian peran. Layar sudah melepas SUPER_ADMIN masuk sejak dulu; kalau
+  // API tidak ikut, yang didapat justru pengalaman terburuk: masuk, lalu semuanya 503.
+  periksa('SUPER_ADMIN menembus sakelar',
+    (await modulMati([FLAG], { role: 'SUPER_ADMIN' })) === null)
+  periksa('…peran lain tetap 503',
+    (await modulMati([FLAG], { role: 'PERBENDAHARAAN' }))?.status === 503)
+  // Fail-closed. Pemanggil yang lupa mengoper role MENUTUP pintu, bukan membukanya —
+  // kelalaian tidak boleh berubah jadi kelonggaran diam-diam.
+  periksa('Tanpa role tetap 503 (fail-closed)',
+    (await modulMati([FLAG], {}))?.status === 503)
+  periksa('…begitu juga tanpa opts sama sekali',
+    (await modulMati([FLAG]))?.status === 503)
+  periksa('Daftar kecuali boleh ditimpa pemanggil',
+    (await modulMati([FLAG], { role: 'ADMIN', kecualiRole: ['ADMIN'] })) === null)
+  periksa('modulSedangMati memakai aturan yang sama',
+    (await modulSedangMati([FLAG], { role: 'SUPER_ADMIN' })) === false)
 
   // Nilai apa pun selain 'online' berarti mati — salah ketik menutup, bukan membuka.
   await setFlag(FLAG, 'ONLINE')
-  periksa('Salah huruf besar dianggap mati, bukan hidup', (await modulMati(FLAG))?.status === 503)
+  periksa('Salah huruf besar dianggap mati, bukan hidup', (await modulMati([FLAG]))?.status === 503)
 
   // Kunci yang barisnya belum ada dianggap hidup, supaya modul baru tidak mati
   // hanya karena seed tertinggal.
-  periksa('Kunci tak dikenal dianggap hidup', (await modulMati('app_status_entah_apa')) === null)
+  periksa('Kunci tak dikenal dianggap hidup', (await modulMati(['app_status_entah_apa'])) === null)
+
+  console.log('\n── S1: tidak ada route yang lupa mengoper role ──')
+  // tsc TIDAK menangkap ini — `role` opsional, jadi `bludMati()` polos tetap sah.
+  // Yang hilang bukan kompilasi, melainkan SUPER_ADMIN yang kembali ditolak 503 di
+  // layar yang justru membiarkannya masuk. Persis pola L69: satu pemanggil terlewat,
+  // tidak ada gejala.
+  const lalai = []
+  for (const berkas of daftarRouteBlud(path.join(repo, 'app', 'api', 'blud'))) {
+    const isi = fs.readFileSync(berkas, 'utf8')
+    for (const m of isi.matchAll(/\b(bludMati|realisasiMati)\(\s*\)/g)) {
+      lalai.push(`${path.relative(repo, berkas).replace(/\\/g, '/')} ${m[1]}()`)
+    }
+  }
+  periksa('Semua pemanggil mengoper session.role', lalai.length === 0, lalai.join(' · '))
 
   console.log('\n── R1: tolak permintaan tidak boleh bilang sukses palsu ──')
   await sql`DELETE FROM blud_permintaan WHERE tahun_anggaran = ${TAHUN}`

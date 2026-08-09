@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
 
   const { searchParams } = new URL(req.url)
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   if (!(await bolehEditMenu(session.userId, session.role, 'pergeseran'))) return tolakEdit('pergeseran')
 
@@ -295,7 +295,7 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
 
-  const mati = await bludMati()
+  const mati = await bludMati(session.role)
   if (mati) return mati
   if (!(await bolehBukaMenu(session.userId, session.role, 'pergeseran'))) return forbidden()
   // S5: sama dengan jalur DPA — akses modul membuka pintu, bukan wewenang hapus.

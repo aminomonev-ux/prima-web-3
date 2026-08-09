@@ -16,8 +16,8 @@ import type { MenuBlud } from '@/lib/blud/peran'
  * perlu mengingat harus menyebut lingkupnya — lupa menyebut = sub-modul ini tidak
  * bisa dimatikan sendiri, dan itu jenis kelalaian yang tidak menimbulkan error.
  */
-export function realisasiMati() {
-  return bludMati('realisasi')
+export function realisasiMati(role?: string) {
+  return bludMati(role, 'realisasi')
 }
 
 export async function bolehLihat(userId: number, role: string, menu: MenuBlud): Promise<boolean> {
