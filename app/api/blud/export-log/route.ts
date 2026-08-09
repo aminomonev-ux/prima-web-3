@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
+import { bludRateLimit } from '@/lib/blud/schemas'
 import { bolehBukaMenu, forbidden, unauthorized, bludMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
@@ -29,6 +30,11 @@ export async function POST(req: NextRequest) {
   // Mengunduh bukan menulis: pemegang LIHAT justru HARUS lolos di sini, kalau tidak
   // unduhan mereka tak berjejak. Izinnya ikut menu Cetak — baca-saja bagi semua peran.
   if (!(await bolehBukaMenu(session.userId, session.role, 'cetak'))) return forbidden()
+
+  // Endpoint ini tidak menulis data bisnis apa pun — hanya audit_log. Tanpa pagar,
+  // satu akun sah bisa mengencerkan jejak audit dengan ribuan entri ekspor palsu.
+  const limited = await bludRateLimit(session.userId, 'blud-export-log', 30)
+  if (limited) return limited
 
   const raw    = await req.json().catch(() => null)
   const parsed = BodySchema.safeParse(raw)

@@ -17,6 +17,10 @@ export async function GET() {
   if (mati) return mati
   // Mengisi kolom Penanggung Jawab di layar DPA juga.
   if (!(await bolehLihatSalahSatu(session.userId, session.role, ['penanggung-jawab', 'dpa']))) return forbidden()
+
+  const limited = await bludRateLimit(session.userId, 'view-penanggung-jawab', 60)
+  if (limited) return limited
+
   try {
     const [data, version] = await Promise.all([getPenanggungJawab(), getPenanggungJawabVersion()])
     return NextResponse.json({ ok: true, data, version })

@@ -24,6 +24,9 @@ export async function GET(req: NextRequest) {
   if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'tutup-kas'))) return forbidden()
 
+  const limited = await bludRateLimit(session.userId, 'view-gu', 60)
+  if (limited) return limited
+
   const { searchParams } = new URL(req.url)
   const tahun = TahunSchema.safeParse(searchParams.get('tahun'))
   const bulan = Number(searchParams.get('bulan'))

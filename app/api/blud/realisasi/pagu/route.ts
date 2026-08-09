@@ -11,7 +11,7 @@ import { getSession } from '@/lib/security/auth'
 import {
   getPaguEfektif, getPaguSumber, getTerserap, getSerapanPeriode, getPaguCap, gulungKeAtas,
 } from '@/lib/blud/pagu'
-import { TahunSchema } from '@/lib/blud/schemas'
+import { bludRateLimit, TahunSchema } from '@/lib/blud/schemas'
 import { bolehLihatSalahSatu, forbidden, unauthorized, realisasiMati } from '../_guard'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +24,11 @@ export async function GET(req: NextRequest) {
   if (mati) return mati
   // Pagu tampil di layar Buku Kas DAN Realisasi — cukup salah satunya terbuka.
   if (!(await bolehLihatSalahSatu(session.userId, session.role, ['buku-kas', 'realisasi']))) return forbidden()
+
+  // Jalur `?mode=cap` memang murah, tapi jalur penuhnya baca terberat di modul —
+  // pagarnya dipasang di pintu, bukan dipilih per-mode.
+  const limited = await bludRateLimit(session.userId, 'view-pagu', 60)
+  if (limited) return limited
 
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))

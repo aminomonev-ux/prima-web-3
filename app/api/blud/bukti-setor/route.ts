@@ -47,6 +47,9 @@ export async function GET(req: NextRequest) {
   if (mati) return mati
   if (!(await bolehLihat(session.userId, session.role, 'bukti-setor'))) return forbidden()
 
+  const limited = await bludRateLimit(session.userId, 'view-bukti-setor', 60)
+  if (limited) return limited
+
   const { searchParams } = new URL(req.url)
   const parsed = ListBuktiSetorQuerySchema.safeParse({
     tahun: searchParams.get('tahun'),

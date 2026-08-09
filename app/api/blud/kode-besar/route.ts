@@ -24,6 +24,9 @@ export async function GET(req: NextRequest) {
   // Template awal "Form Baru" di layar DPA membacanya juga.
   if (!(await bolehLihatSalahSatu(session.userId, session.role, ['kode-besar', 'dpa']))) return forbidden()
 
+  const limited = await bludRateLimit(session.userId, 'view-kode-besar', 60)
+  if (limited) return limited
+
   try {
     const q = new URL(req.url).searchParams.get('q') ?? ''
     const [data, version] = await Promise.all([getKodeBesar(q), getKodeBesarVersion()])

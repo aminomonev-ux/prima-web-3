@@ -23,6 +23,9 @@ export async function GET(req: NextRequest) {
   // Daftar akun mengisi combobox di layar DPA & Pergeseran, bukan cuma layar Master Akun.
   if (!(await bolehLihatSalahSatu(session.userId, session.role, ['master-akun', 'dpa', 'pergeseran']))) return forbidden()
 
+  const limited = await bludRateLimit(session.userId, 'view-master-akun', 60)
+  if (limited) return limited
+
   try {
     const q = new URL(req.url).searchParams.get('q') ?? ''
     const [data, version] = await Promise.all([getMasterAkun(q), getMasterAkunVersion()])
