@@ -19,6 +19,7 @@ import {
 // supaya panel bentrok di layar Pengaturan bisa memakai komponen yang sama.
 import type { BentrokPagu } from './pagu'
 import { ensureAnggaranKey } from './anggaran-key'
+import { JAKARTA_OFFSET_MS } from './tanggal'
 import type {
   DpaBaris, DpaBarisInput,
   PergeseranBaris, PergeseranBarisInput,
@@ -283,8 +284,6 @@ async function periksaJangkar(
 // midnight di +07:00. Di server UTC (Vercel), `Date.toISOString()` shift
 // back ke UTC → bisa kembalikan tanggal sebelumnya. Tambah 7h offset supaya
 // ISO string mewakili midnight UTC dari DATE asli.
-const JAKARTA_OFFSET_MS = 7 * 60 * 60 * 1000
-
 export function toDateStr(v: unknown): string {
   if (!v) return ''
   if (v instanceof Date) {

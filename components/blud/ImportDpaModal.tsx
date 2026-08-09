@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { TIPE_LABEL } from '@/lib/blud/format'
+import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 // Tipe di-impor secara TYPE-ONLY (terhapus saat kompilasi); pemetanya diambil
 // dari modul ringan. Mengambil keduanya dari `import-dpa.ts` akan menyeret
 // parser + `schemas.ts` + `ioredis` ke bundel browser dan build Next gagal
@@ -61,7 +62,7 @@ export default function ImportDpaModal({
 }) {
   const [sibuk, setSibuk] = useState(false)
   const [hasil, setHasil] = useState<HasilPreview | null>(null)
-  const [versiTanggal, setVersiTanggal] = useState(() => new Date().toISOString().slice(0, 10))
+  const [versiTanggal, setVersiTanggal] = useState(() => tanggalHariIniWIB())
   const [paksa, setPaksa] = useState<{ pesan: string } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 

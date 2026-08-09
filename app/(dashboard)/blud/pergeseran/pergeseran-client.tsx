@@ -21,7 +21,7 @@ import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAku
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import SpandukLihat from '@/components/blud/SpandukLihat'
-import { formatTanggalId } from '@/lib/blud/tanggal'
+import { formatTanggalId, tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
 import type { PergeseranBarisInput, PergeseranBaris, DpaBaris, TipeBaris } from '@/types'
@@ -784,8 +784,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         draftRef.current = true
       }
       setSaving(true)
-      const today = new Date().toISOString().split('T')[0]
-      await doSimpanInternal(today, false)
+      await doSimpanInternal(tanggalHariIniWIB(), false)
     } finally { submittingRef.current = false; setSaving(false) }
   }
 

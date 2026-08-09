@@ -20,6 +20,7 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcDpa, recalcDpaJumlah } from '@/lib/blud/recalc'
 import { dpaKeInput } from '@/lib/blud/row-map'
+import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { buildDpaRowsFromKodeBesar } from '@/lib/blud/dpa-skeleton-builder'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import BlockedModal, { type BlockedInfo } from '@/components/blud/BlockedModal'
@@ -986,8 +987,7 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
       if (!gate.ok) return
       sentinelAckRef.current = gate.ack
       setSaving(true)
-      const today = new Date().toISOString().split('T')[0]
-      await doSimpanInternal(today, false)
+      await doSimpanInternal(tanggalHariIniWIB(), false)
     } finally { submittingRef.current = false; setSaving(false) }
   }
 
