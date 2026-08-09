@@ -355,6 +355,37 @@ export async function countBelumBerrekening(tahun: number): Promise<number> {
 // ─── Tulis ──────────────────────────────────────────────────────────────────
 
 /**
+ * Kunci baris periode bulan itu, lalu tolak kalau sudah TUTUP.
+ *
+ * `FOR UPDATE`-nya bukan hiasan: tanpanya Tutup Kas bisa commit di sela antara
+ * pemeriksaan ini dan tulisan di bawahnya, dan transaksi baru menyelinap masuk ke
+ * bulan yang sudah ditutup — neraca yang sudah ditandatangani jadi salah.
+ *
+ * L69-a — `INSERT IGNORE` dulu. Baris `blud_periode` bulan berjalan bisa BELUM ADA
+ * (baru lahir ketika Tutup Kas menyentuhnya), dan `FOR UPDATE` pada baris yang tidak
+ * ada tidak mengunci baris apa pun. Yang menahannya selama ini cuma gap lock InnoDB
+ * di REPEATABLE READ: perlindungan nyata, tapi tidak dijanjikan di mana pun dan
+ * lenyap begitu tingkat isolasi atau bentuk indeksnya berubah.
+ *
+ * SENGAJA TIDAK memakai ulang `kunciPeriode` di `tutup-kas.ts` walau bentuknya mirip.
+ * Fungsi itu juga mengambil `BLUD_PERIODE_ENTITY` yang berlingkup SETAHUN — tepat di
+ * sana (aturan Tutup Kas memang setahun, L69-c), tapi kalau dipasang di sini setiap
+ * pencatatan BKU akan antre satu per satu untuk seluruh tahun anggaran. Yang
+ * dibutuhkan di sini hanya supaya kunci baris per-bulan benar-benar mengunci sesuatu.
+ */
+async function kunciBarisPeriode(tx: TxSql, tahun: number, bulan: number): Promise<void> {
+  await tx`
+    INSERT IGNORE INTO blud_periode (tahun_anggaran, bulan, status)
+    VALUES (${tahun}, ${bulan}, 'BUKA')
+  `
+  const per = await tx`
+    SELECT status FROM blud_periode
+    WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
+  ` as { status?: unknown }[]
+  if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
+}
+
+/**
  * Kunci pagu + verifikasi serapan, ATOMIK di dalam transaksi pemanggil.
  *
  * `abaikanTxId` dipakai saat mengubah transaksi: alokasi lama miliknya sendiri
@@ -523,14 +554,7 @@ export async function createTx(
   periksaPotongan(input)
 
   return withTransaction(async ({ tx, conn }) => {
-    // `FOR UPDATE` bukan hiasan: tanpanya Tutup Kas bisa commit di sela antara
-    // pemeriksaan ini dan INSERT di bawah, dan transaksi baru menyelinap masuk ke
-    // bulan yang sudah ditutup — neraca yang sudah ditandatangani jadi salah.
-    const per = await tx`
-      SELECT status FROM blud_periode
-      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
-    ` as { status?: unknown }[]
-    if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
+    await kunciBarisPeriode(tx, tahun, bulan)
 
     const noKwt = input.jenis === 'BELANJA' ? await nomorKuitansiBerikut(tx, tahun, bulan) : null
     await kunciDanPeriksaPagu(tx, tahun, input.alokasi, null)
@@ -583,11 +607,7 @@ export async function updateTx(
     if (version !== expectedVersion) throw new BludTxConflictError(id, expectedVersion, version)
     periksaTanggalBulan(tahun, bulan, input)
 
-    const per = await tx`
-      SELECT status FROM blud_periode
-      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
-    ` as { status?: unknown }[]
-    if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
+    await kunciBarisPeriode(tx, tahun, bulan)
 
     // N2 — nomor kuitansi ikut pindah waktu `jenis` diubah. Sebelum ini `no_kwt`
     // hanya diberikan `createTx`, jadi mengubah PENERIMAAN → BELANJA meninggalkan
@@ -641,11 +661,7 @@ export async function deleteTx(id: number): Promise<{ deleted: number }> {
 
     const tahun = Number(cur[0].tahun_anggaran)
     const bulan = Number(cur[0].bulan)
-    const per = await tx`
-      SELECT status FROM blud_periode
-      WHERE tahun_anggaran = ${tahun} AND bulan = ${bulan} FOR UPDATE
-    ` as { status?: unknown }[]
-    if (per[0]?.status === 'TUTUP') throw new BludPeriodeTertutupError(tahun, bulan)
+    await kunciBarisPeriode(tx, tahun, bulan)
 
     // Alokasi & potongan ikut terhapus lewat FK ON DELETE CASCADE.
     const res = await tx`DELETE FROM blud_realisasi_tx WHERE id = ${id}` as unknown as Array<{ affectedRows: number }>

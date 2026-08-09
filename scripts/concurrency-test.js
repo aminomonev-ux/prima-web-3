@@ -456,6 +456,82 @@ async function testPeriodeRace(pool, pakaiKunci) {
   return { out, lolos: out.filter(x => x === 'dibuka' || x === 'ditutup').length, bolong, peta };
 }
 
+// ─── K1: bulan yang BELUM punya baris `blud_periode` ────────────────────────
+// Bulan berjalan yang belum pernah disentuh Tutup Kas tidak punya barisnya, dan
+// `SELECT … FOR UPDATE` pada baris yang tidak ada tidak mengunci baris apa pun.
+//
+// Yang diuji di sini BUKAN "apakah hari ini bocor" — gap lock InnoDB pada
+// REPEATABLE READ membuat baseline pun lulus, dan justru itu isi temuan K1:
+// perlindungannya nyata tapi bertumpu pada perilaku yang tidak dijanjikan.
+// Yang memang bisa berubah dan karena itu diuji: apakah `INSERT IGNORE` yang baru
+// menimbulkan deadlock 1213 (konstruksi inilah yang disalahkan locks.ts pada
+// T10a/T10b), dan apakah urutan commit tetap masuk akal — pencatatan tidak boleh
+// commit SESUDAH bulannya ditutup.
+const BULAN_KOSONG = 9;
+
+async function seedPeriodeTanpaBaris(pool) {
+  await pool.query(`DELETE FROM blud_periode WHERE tahun_anggaran = ?`, [R_TAHUN]);
+  await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [PERIODE_ENTITY, String(R_TAHUN)]);
+}
+
+// Mirror `kunciBarisPeriode` di lib/blud/realisasi-data.ts (jalur createTx).
+async function catatBku(pool, bulan, pakaiInsertIgnore) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (pakaiInsertIgnore) {
+      await conn.query(`INSERT IGNORE INTO blud_periode (tahun_anggaran, bulan, status) VALUES (?, ?, 'BUKA')`,
+        [R_TAHUN, bulan]);
+    }
+    const [p] = await conn.query(
+      `SELECT status FROM blud_periode WHERE tahun_anggaran = ? AND bulan = ? FOR UPDATE`,
+      [R_TAHUN, bulan]
+    );
+    if (p[0] && p[0].status === 'TUTUP') { await conn.rollback(); return { hasil: 'ditolak', at: 0 }; }
+    await new Promise(r => setTimeout(r, 20)); // window race
+    await conn.commit();
+    return { hasil: 'tercatat', at: Date.now() };
+  } catch (e) { await conn.rollback(); return { hasil: `err:${e.code || e.message}`, at: 0 }; }
+  finally { conn.release(); }
+}
+
+async function tutupBulanKosong(pool, bulan, pakaiInsertIgnore) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (pakaiInsertIgnore) {
+      await conn.query(`INSERT IGNORE INTO blud_periode (tahun_anggaran, bulan, status) VALUES (?, ?, 'BUKA')`,
+        [R_TAHUN, bulan]);
+    }
+    await conn.query(
+      `SELECT status FROM blud_periode WHERE tahun_anggaran = ? AND bulan = ? FOR UPDATE`,
+      [R_TAHUN, bulan]
+    );
+    await new Promise(r => setTimeout(r, 20)); // window race
+    await conn.query(
+      `INSERT INTO blud_periode (tahun_anggaran, bulan, status) VALUES (?, ?, 'TUTUP')
+       ON DUPLICATE KEY UPDATE status = 'TUTUP'`,
+      [R_TAHUN, bulan]
+    );
+    await conn.commit();
+    return { hasil: 'ditutup', at: Date.now() };
+  } catch (e) { await conn.rollback(); return { hasil: `err:${e.code || e.message}`, at: 0 }; }
+  finally { conn.release(); }
+}
+
+async function testPeriodeKosongRace(pool, pakaiInsertIgnore) {
+  await seedPeriodeTanpaBaris(pool);
+  const [a, b] = await Promise.all([
+    catatBku(pool, BULAN_KOSONG, pakaiInsertIgnore),
+    tutupBulanKosong(pool, BULAN_KOSONG, pakaiInsertIgnore),
+  ]);
+  const deadlock = [a, b].filter(x => String(x.hasil).includes('DEADLOCK')).length;
+  // Selipan = pencatatan commit SESUDAH penutupan. Itulah kerusakan yang dicegah:
+  // transaksi masuk ke bulan yang neracanya sudah ditandatangani.
+  const selipan = a.hasil === 'tercatat' && b.hasil === 'ditutup' && a.at > b.at;
+  return { out: [a.hasil, b.hasil], deadlock, selipan };
+}
+
 // ─── Izin menu (Fase 2 menu-access) ─────────────────────────────────────────
 // Bahaya khas di sini: keadaan awalnya KOSONG. Dua admin membuka layar yang sama,
 // dua-duanya membaca "belum ada pengaturan", lalu dua-duanya menyimpan peta yang
@@ -676,6 +752,24 @@ async function testIzinRace(pool, pakaiKunci) {
       t10b.tersimpan === 1 && t10b.berubah === 1 && t10b.akhir === t10b.hrpA,
       `dua admin menyimpan peta berbeda dari tabel kosong → ${t10b.out.join(', ')}; akhir "${t10b.akhir}". `
       + `Diharapkan 1 tersimpan / 1 berubah & peta pertama utuh → INSERT IGNORE lebih dulu bikin barisnya ADA, jadi FOR UPDATE punya yang dikunci.`
+    );
+
+    // T11a: bulan tanpa baris periode, TANPA INSERT IGNORE (keadaan sebelum K1)
+    const t11a = await testPeriodeKosongRace(pool, false);
+    record(
+      'T11a Bulan tanpa baris periode TANPA INSERT IGNORE (K1 baseline)',
+      t11a.deadlock === 0 && !t11a.selipan,
+      `catat BKU + tutup bulan ${BULAN_KOSONG} barengan, barisnya belum ada → ${t11a.out.join(', ')}. `
+      + `Diharapkan lulus juga — yang menjaganya gap lock InnoDB, bukan kunci baris. Itulah sebabnya K1 soal ketahanan, bukan kebocoran.`
+    );
+
+    // T11b: DENGAN INSERT IGNORE (K1 — barisnya ada dulu, kuncinya mengunci sesuatu)
+    const t11b = await testPeriodeKosongRace(pool, true);
+    record(
+      'T11b Bulan tanpa baris periode DENGAN INSERT IGNORE (K1)',
+      t11b.deadlock === 0 && !t11b.selipan,
+      `sama, tapi barisnya dimaterialisasi dulu → ${t11b.out.join(', ')}. `
+      + `Diharapkan 0 deadlock & 0 selipan → konstruksi barunya mengunci baris sungguhan tanpa menambah lingkaran tunggu.`
     );
 
     console.log('\n=== RINGKASAN ===');
