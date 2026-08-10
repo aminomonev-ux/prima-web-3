@@ -90,7 +90,6 @@ const baris = (bulan, jenis, uraian) => ({
   kas_keluar: jenis === 'PENERIMAAN' ? 0 : 1000,
   bank_masuk: 0, bank_keluar: 0,
   alokasi: [], potongan: [],
-  // Diparkir di baki: alokasi DILARANG, jadi uji ini tidak butuh DPA 2099.
   belum_berrekening: true,
 })
 async function kwtDari(id) {
@@ -99,6 +98,16 @@ async function kwtDari(id) {
 }
 
 try {
+  // Sejak §4.8 dijaga di jalur tulis (`pastikanTahunPunyaDpa`), tahun tanpa DPA
+  // menolak SEMUA transaksi — termasuk yang diparkir tanpa alokasi. Dulu uji ini
+  // sengaja tidak menyeed DPA karena baris parkir dianggap tidak butuh pagu; itu
+  // tidak berlaku lagi. Satu baris DPA sudah cukup: yang dibaca hanya "ada/tidak".
+  await sql`
+    INSERT INTO dpa_blud (tahun_anggaran, versi_tanggal, kode_rekening, uraian, jumlah,
+                          tipe_baris, row_id, anggaran_key, urutan)
+    VALUES (${TAHUN}, '2099-01-01', '5.1.02.01', 'Uji N1-N4', 100000000, 'CHILD', 'r-uji-n1n4', 'AK-uji-n1n4', 1)
+  `
+
   // ── N2: nomor kuitansi ikut pindah saat `jenis` diubah ────────────────────
   console.log('── N2: no_kwt mengikuti jenis ──')
 
@@ -195,11 +204,18 @@ try {
       { ...slipSah, no_bukti: 'UJI-6', baris: [{ asal: 'KETIK', tx_id: null, potongan_id: null, uraian: 'Ketikan lepas', nilai: 500 }] },
       UID))) === null)
 
+} catch (e) {
+  // Lemparan di tengah dulu lolos begitu saja: `finally` mencetak "0/0 lulus" lalu
+  // keluar dengan kode 0 karena `gagal` masih nol — hijau palsu yang menyembunyikan
+  // regresi selama sebulan. Sekarang lemparan apa pun dihitung sebagai kegagalan.
+  gagal++; jalan++
+  console.log(`\n GAGAL uji berhenti di tengah — ${e?.name ?? 'Error'}: ${e?.message ?? e}`)
 } finally {
   console.log('\n── bersih-bersih kotak pasir 2099 ──')
   await sql`DELETE FROM blud_bukti_setor WHERE tahun_anggaran = ${TAHUN}`
   await sql`DELETE FROM blud_realisasi_tx WHERE tahun_anggaran = ${TAHUN}`
   await sql`DELETE FROM blud_periode WHERE tahun_anggaran = ${TAHUN}`
+  await sql`DELETE FROM dpa_blud WHERE tahun_anggaran = ${TAHUN}`
   await sql`DELETE FROM blud_locks WHERE key_id = ${String(TAHUN)} OR key_id LIKE ${`${TAHUN}:%`}`
   const sisa = await sql`
     SELECT (SELECT COUNT(*) FROM blud_realisasi_tx WHERE tahun_anggaran = ${TAHUN}) AS tx,

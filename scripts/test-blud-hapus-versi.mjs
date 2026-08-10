@@ -34,9 +34,20 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
 }
 
 fs.mkdirSync(outDir, { recursive: true })
+
+// Berkas yang hanya terjangkau lewat alias `@/…` WAJIB disebut satu per satu: tsc
+// telanjang tidak membaca `paths` di tsconfig, jadi ia diam-diam tidak menuliskan
+// .js-nya dan pemuatan baru meledak saat runtime (ENOENT). Impor relatif (`./pagu`,
+// `./lock`) ikut sendiri — yang perlu didaftarkan cuma ujung rantai aliasnya.
+const sumber = [
+  'lib/shared/uuid.ts',
+  'lib/data/db.ts', 'lib/data/locks.ts',
+  'lib/blud/lock.ts', 'lib/blud/pagu.ts', 'lib/blud/data.ts',
+  'lib/blud/anggaran-key.ts', 'lib/blud/schemas.ts',
+]
 try {
   execSync(
-    `npx tsc "${path.join(repo, 'lib/blud/data.ts')}" "${path.join(repo, 'lib/data/db.ts')}"`
+    `npx tsc ${sumber.map((f) => `"${path.join(repo, f)}"`).join(' ')}`
     + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
     + ' --esModuleInterop --skipLibCheck --moduleResolution node',
     { cwd: repo, stdio: 'pipe' },
