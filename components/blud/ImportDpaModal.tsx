@@ -31,6 +31,16 @@ interface JangkarTerdampak {
   nilai: number
 }
 
+/** Bentuk `detail` pada 409 PAGU_DIBAWAH_REALISASI — cermin `BentrokPagu` di lib/blud/pagu.ts. */
+interface BentrokBaris {
+  kode_rekening: string
+  uraian: string
+  pagu_baru: number
+  terserap: number
+  minus: number
+  hilang: boolean
+}
+
 interface HasilPreview {
   namaBerkas: string
   namaLembar: string
@@ -64,6 +74,15 @@ export default function ImportDpaModal({
   const [hasil, setHasil] = useState<HasilPreview | null>(null)
   const [versiTanggal, setVersiTanggal] = useState(() => tanggalHariIniWIB())
   const [paksa, setPaksa] = useState<{ pesan: string } | null>(null)
+  // §4.3 — impor menulis lewat `saveDpa` yang sama, jadi ia bisa kena penolakan yang
+  // sama. Tanpa panel ini 409-nya cuma jadi toast merah dan berkasnya buntu.
+  const [bentrokPagu, setBentrokPagu] = useState<BentrokBaris[] | null>(null)
+  const [alasanTurun, setAlasanTurun] = useState('')
+  // Ref, bukan parameter: kalau berkas ini memicu DUA konfirmasi (baris berkurang
+  // drastis + pagu di bawah realisasi), alasan yang dikirim sebagai argumen hilang
+  // begitu pengguna menekan "Ya, tetap simpan" pada konfirmasi yang satunya — dan
+  // keduanya saling memicu tanpa ujung. Ref bertahan lintas percobaan.
+  const alasanRef = useRef<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const unggah = useCallback(async (file: File) => {
@@ -115,25 +134,36 @@ export default function ImportDpaModal({
           rows,
           force: dipaksa,
           expected_version: versiTujuan,
+          turunkan_paksa: !!alasanRef.current,
+          alasan_turun: alasanRef.current ?? undefined,
         }),
       })
-      let json: { ok?: boolean; error?: string; code?: string; message?: string }
+      let json: { ok?: boolean; error?: string; code?: string; message?: string; detail?: BentrokBaris[] }
       try { json = await res.json() } catch { toast.error('Balasan server tidak terbaca.'); return }
       if (!res.ok || !json.ok) {
         if (json.code === 'SAFETY_THRESHOLD') {
           setPaksa({ pesan: json.error ?? 'Baris berkurang drastis.' })
           return
         }
+        if (json.code === 'PAGU_DIBAWAH_REALISASI') {
+          setAlasanTurun('')
+          setBentrokPagu(json.detail ?? [])
+          return
+        }
         toast.error(json.error ?? 'Gagal menyimpan hasil impor.')
         return
       }
       toast.success(json.message ?? 'Impor selesai.')
+      setPaksa(null); setBentrokPagu(null)
       onSelesai(versiTanggal)
     } catch (e) {
       toast.error('Gagal menyimpan: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
+      // `setPaksa(null)` dulu ada di sini — dan itu membatalkan panel yang baru saja
+      // dipasang cabang SAFETY_THRESHOLD beberapa baris di atas, karena React
+      // menggabung keduanya jadi satu render. Akibatnya panel konfirmasinya tidak
+      // pernah muncul. Pembersihan sekarang di jalur sukses & tombol Batal.
       setSibuk(false)
-      setPaksa(null)
     }
   }, [hasil, tahun, versiTanggal, onSelesai])
 
@@ -298,7 +328,8 @@ export default function ImportDpaModal({
             </PrimaButton>
           )}
           {hasil && (
-            <PrimaButton variant="primary" disabled={sibuk || !versiTanggal} onClick={() => void simpan(false)}>
+            <PrimaButton variant="primary" disabled={sibuk || !versiTanggal}
+              onClick={() => { alasanRef.current = null; void simpan(false) }}>
               {sibuk ? 'Menyimpan…' : `Simpan ${hasil.baris.length} baris`}
             </PrimaButton>
           )}
@@ -312,6 +343,65 @@ export default function ImportDpaModal({
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <PrimaButton variant="ghost" onClick={() => setPaksa(null)} disabled={sibuk}>Batal</PrimaButton>
                 <PrimaButton variant="danger" onClick={() => void simpan(true)} disabled={sibuk}>Ya, tetap simpan</PrimaButton>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* §4.3 — sama seperti simpan manual: boleh ditembus, tapi alasannya masuk
+            audit log. Angka ditampilkan supaya orang tahu persis baris mana yang minus. */}
+        {bentrokPagu && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div className="blud-imp-text" style={{ background: 'var(--surface-card, #042C53)', border: '2px solid #E24B4A', borderRadius: 14, padding: 22, maxWidth: 620, width: '100%', maxHeight: '90%', overflowY: 'auto' }}>
+              <div style={{ fontWeight: 800, color: '#E24B4A', marginBottom: 8, fontSize: 14 }}>
+                Pagu turun di bawah realisasi ({bentrokPagu.length} baris)
+              </div>
+              <p style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 12 }}>
+                Uangnya sudah keluar. Menyimpan hasil impor ini membuat baris di bawah jadi minus
+                di layar Realisasi sampai diperbaiki.
+              </p>
+
+              <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 14 }}>
+                <table className="blud-imp-tbl" style={{ width: '100%', fontSize: 11.5 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left' }}>Kode</th>
+                      <th style={{ textAlign: 'left' }}>Uraian</th>
+                      <th style={{ textAlign: 'right' }}>Pagu baru</th>
+                      <th style={{ textAlign: 'right' }}>Terserap</th>
+                      <th style={{ textAlign: 'right' }}>Minus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bentrokPagu.map((d, i) => (
+                      <tr key={i}>
+                        <td style={{ fontFamily: 'var(--font-mono, monospace)' }}>{d.kode_rekening}</td>
+                        <td>{d.uraian}{d.hilang && ' · baris dihapus'}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>{rp(d.pagu_baru)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>{rp(d.terserap)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', color: '#E24B4A' }}>{rp(d.minus)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <label style={{ display: 'block', marginBottom: 14 }}>
+                <span className="blud-imp-muted" style={{ fontSize: 11.5 }}>
+                  Alasan (wajib, minimal 10 karakter — tercatat di audit log)
+                </span>
+                <textarea className="blud-imp-input" rows={3} value={alasanTurun}
+                  onChange={e => setAlasanTurun(e.target.value)}
+                  style={{ width: '100%', marginTop: 6 }}
+                  placeholder="Contoh: pagu dikoreksi mengikuti DPA definitif atas disposisi Direktur tanggal …" />
+              </label>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <PrimaButton variant="ghost" onClick={() => setBentrokPagu(null)} disabled={sibuk}>Batal</PrimaButton>
+                <PrimaButton variant="danger" disabled={sibuk || alasanTurun.trim().length < 10}
+                  onClick={() => { alasanRef.current = alasanTurun.trim(); setBentrokPagu(null); void simpan(false) }}>
+                  Tetap Lanjut
+                </PrimaButton>
               </div>
             </div>
           </div>

@@ -20,7 +20,7 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcDpa, recalcDpaJumlah } from '@/lib/blud/recalc'
 import { dpaKeInput } from '@/lib/blud/row-map'
-import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
+import { tanggalHariIniWIB, formatTanggalId } from '@/lib/blud/tanggal'
 import { buildDpaRowsFromKodeBesar } from '@/lib/blud/dpa-skeleton-builder'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import BlockedModal, { type BlockedInfo } from '@/components/blud/BlockedModal'
@@ -889,6 +889,14 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
   }, [rows, searchQ])
   // Audit BLUD v1.2 (B-NEW-3): modal konfirmasi kalau save drop >50% baris
   const [safetyWarning, setSafetyWarning] = useState<{ versiTanggal: string; existing: number; incoming: number; dropPct: number } | null>(null)
+  // CONCEPT-blud-realisasi §4.3: pagu turun di bawah realisasi yang sudah terjadi.
+  // B2 memasang pagarnya di `saveDpa`; tanpa modal ini 409-nya jatuh ke toast merah
+  // biasa dan bendahara kehilangan satu-satunya jalan sah untuk menembusnya.
+  const [bentrokPagu, setBentrokPagu] = useState<{
+    versiTanggal: string
+    detail: { kode_rekening: string; uraian: string; pagu_baru: number; terserap: number; minus: number; hilang: boolean }[]
+  } | null>(null)
+  const [alasanTurun, setAlasanTurun] = useState('')
 
   // Fetch master akun + penanggung jawab list sekali saat mount
   useEffect(() => {
@@ -926,6 +934,9 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
   useSentinelFeed('blud/dpa', rows, 'dpa-row-')
   const sentinelPreSave = useSentinelPreSave()
   const sentinelAckRef  = useRef<SentinelAckPayload | null>(null)
+  // Alasan penembusan §4.3. Ref, bukan state: dibaca oleh `doSimpanInternal` yang
+  // dipanggil langsung dari tombol modal — setState belum tentu terlihat di sana.
+  const paksaTurunRef   = useRef<string | null>(null)
 
   const loadDpa = useCallback(async (tanggal?: string) => {
     loadCtrlRef.current?.abort()
@@ -981,6 +992,7 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
     if (!rows.length) { showToast('Tidak ada data untuk disimpan', false); return }
     if (submittingRef.current) return
     submittingRef.current = true
+    paksaTurunRef.current = null
     try {
       // RIMA F1 pre-save (CONCEPT §4): critical blokir, warning konfirmasi, ack → audit G8
       const gate = await sentinelPreSave()
@@ -1009,10 +1021,17 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tahun_anggaran: tahun, versi_tanggal: versiTanggal, rows, force, expected_version: version,
+          turunkan_paksa: !!paksaTurunRef.current,
+          alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
         }),
       })
       const json = await res.json()
+      if (res.status === 409 && json.code === 'PAGU_DIBAWAH_REALISASI') {
+        setAlasanTurun('')
+        setBentrokPagu({ versiTanggal, detail: json.detail ?? [] })
+        return
+      }
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
         showToast('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', false)
         await loadDpa(versiTanggal)
@@ -1310,6 +1329,77 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
               <PrimaButton variant="danger" onClick={() => { const v = safetyWarning.versiTanggal; setSafetyWarning(null); setSaving(true); void doSimpanInternal(v, true).finally(() => setSaving(false)) }} disabled={saving}>
                 Ya, Tetap Simpan
               </PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* §4.3: pagu turun di bawah realisasi. Boleh ditembus, tapi harus beralasan
+          dan alasannya masuk audit log — yang menanggung risiko yang memutuskan.
+          Bentuknya sengaja identik dengan layar Pergeseran: keputusannya sama. */}
+      {bentrokPagu && (
+        <div className="blud-modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setBentrokPagu(null) }}>
+          <div className="blud-modal-card rl-reg" role="dialog" aria-modal="true">
+            <div className="blud-modal-header">
+              <div>
+                <div className="blud-modal-title">Pagu turun di bawah realisasi</div>
+                <div className="blud-modal-subtitle">
+                  {bentrokPagu.detail.length} baris · versi {formatTanggalId(bentrokPagu.versiTanggal)}
+                </div>
+              </div>
+              <button className="blud-modal-close" onClick={() => setBentrokPagu(null)} aria-label="Tutup">✕</button>
+            </div>
+
+            <div className="rl-reg-body">
+              <div className="bk-warn">
+                Uangnya sudah keluar. Menyimpan DPA ini membuat baris di bawah jadi minus di layar
+                Realisasi sampai diperbaiki.
+              </div>
+
+              <table className="dpa-table rl-reg-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 170 }}>Kode</th>
+                    <th>Uraian</th>
+                    <th style={{ width: 130 }}>Pagu baru</th>
+                    <th style={{ width: 130 }}>Terserap</th>
+                    <th style={{ width: 130 }}>Minus</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bentrokPagu.detail.map((d, i) => (
+                    <tr key={i}>
+                      <td className="bk-kode">{d.kode_rekening}</td>
+                      <td>{d.uraian}{d.hilang && <span className="bk-tag-parkir">baris dihapus</span>}</td>
+                      <td className="bk-r bk-num-inline">{formatRupiah(d.pagu_baru)}</td>
+                      <td className="bk-r bk-num-inline">{formatRupiah(d.terserap)}</td>
+                      <td className="bk-r bk-num-inline rl-neg">{formatRupiah(d.minus)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <label className="bk-field">
+                <span className="blud-imp-muted">Alasan (wajib, minimal 10 karakter — tercatat di audit log)</span>
+                <textarea className="blud-imp-input" rows={3} value={alasanTurun}
+                  onChange={e => setAlasanTurun(e.target.value)}
+                  placeholder="Contoh: pagu dikoreksi mengikuti DPA definitif atas disposisi Direktur tanggal …" />
+              </label>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <PrimaButton variant="ghost" onClick={() => setBentrokPagu(null)} disabled={saving}>
+                  Batal
+                </PrimaButton>
+                <PrimaButton variant="danger" disabled={saving || alasanTurun.trim().length < 10}
+                  onClick={() => {
+                    const v = bentrokPagu.versiTanggal
+                    paksaTurunRef.current = alasanTurun.trim()
+                    setBentrokPagu(null); setSaving(true)
+                    void doSimpanInternal(v, false).finally(() => setSaving(false))
+                  }}>
+                  Tetap Lanjut
+                </PrimaButton>
+              </div>
             </div>
           </div>
         </div>

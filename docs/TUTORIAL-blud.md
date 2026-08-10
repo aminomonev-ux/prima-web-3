@@ -414,7 +414,9 @@ Peringatan yang bisa muncul:
 
 ### 6.3 Pagar "pagu di bawah realisasi" (§4.3)
 
-Arah kebalikan dari §4.1, dan **belum pernah dijaga di Excel**: Pergeseran tidak boleh menurunkan pagu suatu baris di bawah realisasi yang **sudah terjadi**, dan tidak boleh menghapus baris yang masih dipakai transaksi (barisnya jadi yatim). Kalau tetap dilakukan → alasan wajib + audit `BLUD_PAGU_DIBAWAH_REALISASI`.
+Arah kebalikan dari §4.1, dan **belum pernah dijaga di Excel**: pagu suatu baris tidak boleh turun di bawah realisasi yang **sudah terjadi**, dan baris yang masih dipakai transaksi tidak boleh dihapus (barisnya jadi yatim). Kalau tetap dilakukan → alasan wajib + audit `BLUD_PAGU_DIBAWAH_REALISASI`.
+
+Berlaku di **empat jalur tulis**, bukan hanya Pergeseran: simpan DPA, impor DPA dari berkas, simpan Pergeseran, dan hapus versi. Selama belum ada Pergeseran di tahun itu, DPA-lah yang jadi sumber pagu — jadi menurunkan angka di DPA punya akibat yang sama persis. Keempatnya memakai pagar yang sama (`pagarSimpanVersi`, di dalam transaksi simpan dan di bawah kunci), dan modal "Pagu turun di bawah realisasi" muncul dengan bentuk yang sama di layar DPA maupun Pergeseran.
 
 ---
 
