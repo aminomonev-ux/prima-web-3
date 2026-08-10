@@ -78,11 +78,15 @@ export default function ImportDpaModal({
   // sama. Tanpa panel ini 409-nya cuma jadi toast merah dan berkasnya buntu.
   const [bentrokPagu, setBentrokPagu] = useState<BentrokBaris[] | null>(null)
   const [alasanTurun, setAlasanTurun] = useState('')
-  // Ref, bukan parameter: kalau berkas ini memicu DUA konfirmasi (baris berkurang
-  // drastis + pagu di bawah realisasi), alasan yang dikirim sebagai argumen hilang
-  // begitu pengguna menekan "Ya, tetap simpan" pada konfirmasi yang satunya — dan
-  // keduanya saling memicu tanpa ujung. Ref bertahan lintas percobaan.
+  // Kedua bendera penembus disimpan di ref, BUKAN dioper sebagai argumen. Kalau satu
+  // berkas memicu dua konfirmasi (baris berkurang drastis + pagu di bawah realisasi),
+  // jawaban yang dioper lewat argumen hilang begitu pengguna menjawab konfirmasi yang
+  // satunya — konfirmasi yang sudah dijawab muncul lagi. `alasan` dulu berbentuk
+  // argumen dan kena; `force` menyusul kena karena hanya `alasan` yang dibetulkan.
+  // Sekarang keduanya tidak ada di tanda tangan `simpan()` sama sekali, jadi tidak
+  // ada pemanggil yang bisa lupa membawanya.
   const alasanRef = useRef<string | null>(null)
+  const paksaRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const unggah = useCallback(async (file: File) => {
@@ -107,7 +111,7 @@ export default function ImportDpaModal({
     }
   }, [tahun])
 
-  const simpan = useCallback(async (dipaksa: boolean) => {
+  const simpan = useCallback(async () => {
     if (!hasil) return
     setSibuk(true)
     try {
@@ -132,7 +136,7 @@ export default function ImportDpaModal({
           tahun_anggaran: tahun,
           versi_tanggal: versiTanggal,
           rows,
-          force: dipaksa,
+          force: paksaRef.current,
           expected_version: versiTujuan,
           turunkan_paksa: !!alasanRef.current,
           alasan_turun: alasanRef.current ?? undefined,
@@ -329,7 +333,7 @@ export default function ImportDpaModal({
           )}
           {hasil && (
             <PrimaButton variant="primary" disabled={sibuk || !versiTanggal}
-              onClick={() => { alasanRef.current = null; void simpan(false) }}>
+              onClick={() => { alasanRef.current = null; paksaRef.current = false; void simpan() }}>
               {sibuk ? 'Menyimpan…' : `Simpan ${hasil.baris.length} baris`}
             </PrimaButton>
           )}
@@ -342,7 +346,7 @@ export default function ImportDpaModal({
               <p style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 14 }}>{paksa.pesan}</p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <PrimaButton variant="ghost" onClick={() => setPaksa(null)} disabled={sibuk}>Batal</PrimaButton>
-                <PrimaButton variant="danger" onClick={() => void simpan(true)} disabled={sibuk}>Ya, tetap simpan</PrimaButton>
+                <PrimaButton variant="danger" onClick={() => { paksaRef.current = true; void simpan() }} disabled={sibuk}>Ya, tetap simpan</PrimaButton>
               </div>
             </div>
           </div>
@@ -399,7 +403,7 @@ export default function ImportDpaModal({
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <PrimaButton variant="ghost" onClick={() => setBentrokPagu(null)} disabled={sibuk}>Batal</PrimaButton>
                 <PrimaButton variant="danger" disabled={sibuk || alasanTurun.trim().length < 10}
-                  onClick={() => { alasanRef.current = alasanTurun.trim(); setBentrokPagu(null); void simpan(false) }}>
+                  onClick={() => { alasanRef.current = alasanTurun.trim(); setBentrokPagu(null); void simpan() }}>
                   Tetap Lanjut
                 </PrimaButton>
               </div>

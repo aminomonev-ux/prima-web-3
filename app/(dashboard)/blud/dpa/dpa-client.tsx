@@ -934,9 +934,13 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
   useSentinelFeed('blud/dpa', rows, 'dpa-row-')
   const sentinelPreSave = useSentinelPreSave()
   const sentinelAckRef  = useRef<SentinelAckPayload | null>(null)
-  // Alasan penembusan §4.3. Ref, bukan state: dibaca oleh `doSimpanInternal` yang
-  // dipanggil langsung dari tombol modal — setState belum tentu terlihat di sana.
+  // Dua bendera penembus, keduanya ref dan keduanya SENGAJA tidak ada di tanda tangan
+  // `doSimpanInternal`. Alasannya: satu penyimpanan bisa memicu dua konfirmasi (ambang
+  // drop baris + pagu §4.3), dan jawaban yang dioper lewat argumen hilang begitu
+  // pengguna menjawab konfirmasi yang satunya — konfirmasi yang sudah dijawab muncul
+  // lagi. Dengan ref, tidak ada pemanggil yang bisa lupa membawanya.
   const paksaTurunRef   = useRef<string | null>(null)
+  const paksaDropRef    = useRef(false)
 
   const loadDpa = useCallback(async (tanggal?: string) => {
     loadCtrlRef.current?.abort()
@@ -993,13 +997,14 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
     if (submittingRef.current) return
     submittingRef.current = true
     paksaTurunRef.current = null
+    paksaDropRef.current = false
     try {
       // RIMA F1 pre-save (CONCEPT §4): critical blokir, warning konfirmasi, ack → audit G8
       const gate = await sentinelPreSave()
       if (!gate.ok) return
       sentinelAckRef.current = gate.ack
       setSaving(true)
-      await doSimpanInternal(tanggalHariIniWIB(), false)
+      await doSimpanInternal(tanggalHariIniWIB())
     } finally { submittingRef.current = false; setSaving(false) }
   }
 
@@ -1015,12 +1020,13 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
     setRows(prev => prev.map(r => (r.anggaran_key ? r : { ...r, anggaran_key: peta[r.row_id] ?? null })))
   }
 
-  async function doSimpanInternal(versiTanggal: string, force: boolean) {
+  async function doSimpanInternal(versiTanggal: string) {
     try {
       const res  = await fetch('/api/blud/dpa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tahun_anggaran: tahun, versi_tanggal: versiTanggal, rows, force, expected_version: version,
+          tahun_anggaran: tahun, versi_tanggal: versiTanggal, rows,
+          force: paksaDropRef.current, expected_version: version,
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
@@ -1326,7 +1332,7 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
               <PrimaButton variant="ghost" onClick={() => setSafetyWarning(null)} disabled={saving}>
                 Batal
               </PrimaButton>
-              <PrimaButton variant="danger" onClick={() => { const v = safetyWarning.versiTanggal; setSafetyWarning(null); setSaving(true); void doSimpanInternal(v, true).finally(() => setSaving(false)) }} disabled={saving}>
+              <PrimaButton variant="danger" onClick={() => { const v = safetyWarning.versiTanggal; paksaDropRef.current = true; setSafetyWarning(null); setSaving(true); void doSimpanInternal(v).finally(() => setSaving(false)) }} disabled={saving}>
                 Ya, Tetap Simpan
               </PrimaButton>
             </div>
@@ -1395,7 +1401,7 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
                     const v = bentrokPagu.versiTanggal
                     paksaTurunRef.current = alasanTurun.trim()
                     setBentrokPagu(null); setSaving(true)
-                    void doSimpanInternal(v, false).finally(() => setSaving(false))
+                    void doSimpanInternal(v).finally(() => setSaving(false))
                   }}>
                   Tetap Lanjut
                 </PrimaButton>

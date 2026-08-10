@@ -680,6 +680,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // §4.3: alasan menurunkan pagu di bawah realisasi — ref, sebab satu penyimpanan
   // bisa kena dua penolakan berturut-turut (safety threshold lalu pagu minus).
   const paksaTurunRef   = useRef<string | null>(null)
+  // Penembus ambang drop baris. Dulu dioper sebagai argumen `doSimpanInternal`, dan
+  // justru skenario yang disebut komentar di atas yang mematikannya: percobaan ulang
+  // dari modal pagu melempar `false`, jadi ambang baris diperiksa ulang dari nol dan
+  // konfirmasi yang sudah dijawab muncul lagi. Kedua bendera sekarang sama-sama ref.
+  const paksaDropRef    = useRef(false)
 
   const loadPergeseran = useCallback(async (tanggal?: string) => {
     loadCtrlRef.current?.abort()
@@ -773,6 +778,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       const rootDelta = hitungDeltaPergeseranRoot(rows)
       draftRef.current = false
       paksaTurunRef.current = null
+      paksaDropRef.current = false
       if (rootDelta !== 0) {
         const simpanDraft = await confirmDialog({
           title: 'Pergeseran belum berimbang',
@@ -784,19 +790,21 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         draftRef.current = true
       }
       setSaving(true)
-      await doSimpanInternal(tanggalHariIniWIB(), false)
+      await doSimpanInternal(tanggalHariIniWIB())
     } finally { submittingRef.current = false; setSaving(false) }
   }
 
   // Audit BLUD v1.2 (B-NEW-3): split jadi internal supaya bisa retry dengan force=true
   // L51: kirim expected_version + handle VERSION_CONFLICT
-  async function doSimpanInternal(versiTanggal: string, force: boolean) {
+  // Bendera penembus (`force`, alasan §4.3) SENGAJA tidak ada di tanda tangan — lihat
+  // catatan di deklarasi `paksaTurunRef`/`paksaDropRef`.
+  async function doSimpanInternal(versiTanggal: string) {
     try {
       const res  = await fetch('/api/blud/pergeseran', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tahun_anggaran: tahun, versi_tanggal: versiTanggal, dpa_versi_tanggal: dpaVersi || undefined,
-          rows, force, draft: draftRef.current, expected_version: version,
+          rows, force: paksaDropRef.current, draft: draftRef.current, expected_version: version,
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
@@ -1044,7 +1052,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
               <PrimaButton variant="ghost" onClick={() => setSafetyWarning(null)} disabled={saving}>
                 Batal
               </PrimaButton>
-              <PrimaButton variant="danger" onClick={() => { const v = safetyWarning.versiTanggal; setSafetyWarning(null); setSaving(true); void doSimpanInternal(v, true).finally(() => setSaving(false)) }} disabled={saving}>
+              <PrimaButton variant="danger" onClick={() => { const v = safetyWarning.versiTanggal; paksaDropRef.current = true; setSafetyWarning(null); setSaving(true); void doSimpanInternal(v).finally(() => setSaving(false)) }} disabled={saving}>
                 Ya, Tetap Simpan
               </PrimaButton>
             </div>
@@ -1112,7 +1120,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
                     const v = bentrokPagu.versiTanggal
                     paksaTurunRef.current = alasanTurun.trim()
                     setBentrokPagu(null); setSaving(true)
-                    void doSimpanInternal(v, false).finally(() => setSaving(false))
+                    void doSimpanInternal(v).finally(() => setSaving(false))
                   }}>
                   Tetap Lanjut
                 </PrimaButton>
