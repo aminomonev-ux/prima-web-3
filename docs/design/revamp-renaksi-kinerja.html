@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark" data-concept="a">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PRIMA — Revamp UI: Renaksi &amp; Kinerja (3 Konsep)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRIMA — Mockup revamp UI Renaksi & Kinerja
+   Semua warna diambil dari docs/design/DESIGN-SYSTEM.md. Tidak ada hex baru.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root[data-theme="dark"]{
+  --canvas:#020F1C; --card:#042C53; --elev:#0C447C; --hover:#185FA5;
+  --hair:#0C447C; --hair-active:#185FA5;
+  --text:#E6F1FB; --text2:#B5D4F4; --muted:#85B7EB;
+  --shell:#042C53; --shell-2:#020F1C;
+  --zebra:rgba(12,68,124,.22);
+  --scrim:rgba(2,15,28,.72);
+}
+:root[data-theme="light"]{
+  --canvas:#F5F5F7; --card:#FAFAFA; --elev:#F1EFE8;
+  --hover:color-mix(in srgb, #D3D1C7 45%, #FAFAFA);
+  --hair:#D3D1C7; --hair-active:#378ADD;
+  --text:#042C53; --text2:#185FA5; --muted:#378ADD;
+  --shell:#FAFAFA; --shell-2:#F1EFE8;
+  --zebra:rgba(211,209,199,.24);
+  --scrim:rgba(245,245,247,.72);
+}
+:root{
+  --primary:#EF9F27; --primary-hover:#FAC775; --primary-bg:#633806; --on-primary:#020F1C;
+  --success:#1D9E75; --success-hover:#158A62; --success-bg:#085041;
+  --danger:#E24B4A;  --danger-hover:#C0392B; --danger-bg:#791F1F;
+  --purple:#7C5CFC;  --purple-hover:#6344E0; --purple-bg:#2D1A6E;
+  --warning:#BA7517; --warning-hover:#9A5F10; --warning-bg:#633806;
+  --info:#378ADD;    --info-bg:#0C447C;
+  --on-action:#FFFFFF;
+  --r-sm:6px; --r-md:10px; --r-lg:14px;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono:'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--canvas); color:var(--text); font-family:var(--sans);
+  font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.ico{flex-shrink:0}
+button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
+select,input{font-family:inherit; color:inherit}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--elev); border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:var(--hover)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ───────────────────────── Chrome mockup (bukan bagian desain) ───────────── */
+.mockbar{
+  display:flex; align-items:center; gap:14px; padding:0 16px; height:52px; flex-shrink:0;
+  background:var(--shell-2); border-bottom:1px solid var(--hair); z-index:60;
+}
+.mockbar .brand{display:flex; align-items:center; gap:9px; font-weight:800; font-size:13px; letter-spacing:.2px}
+.mockbar .brand .dot{width:22px;height:22px;border-radius:var(--r-sm);background:var(--primary);color:var(--on-primary);
+  display:grid;place-items:center;font-size:11px;font-weight:800}
+.seg{display:flex; background:var(--card); border:1px solid var(--hair); border-radius:var(--r-sm); padding:2px; gap:2px}
+.seg button{padding:5px 12px; border-radius:4px; font-size:12px; font-weight:600; color:var(--muted); white-space:nowrap}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--primary); color:var(--on-primary)}
+.seg.alt button.on{background:var(--elev); color:var(--text)}
+.mockbar .spacer{flex:1}
+.iconbtn{width:32px;height:32px;border-radius:var(--r-sm);border:1px solid var(--hair);display:grid;place-items:center;color:var(--muted)}
+.iconbtn:hover{color:var(--text); border-color:var(--hair-active)}
+.mocknote{font-size:11px;color:var(--muted);font-weight:500}
+
+/* ───────────────────────── Panel catatan konsep ──────────────────────────── */
+.notes{
+  flex-shrink:0; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--hair);
+  display:flex; gap:14px; align-items:flex-start; font-size:12px;
+}
+.notes .tag{
+  flex-shrink:0; padding:3px 9px; border-radius:99px; font-weight:800; font-size:10.5px;
+  letter-spacing:.5px; background:var(--primary-bg); color:var(--primary); border:1px solid var(--primary);
+}
+.notes b{color:var(--text)}
+.notes span{color:var(--text2); line-height:1.6}
+.notes .close{margin-left:auto; color:var(--muted); flex-shrink:0}
+
+/* ───────────────────────── Stage / app frame ─────────────────────────────── */
+#stage{flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden}
+.app{flex:1; min-height:0; display:flex; overflow:hidden; background:var(--canvas)}
+
+/* sidebar (Konsep A) */
+.sb{width:258px; flex-shrink:0; background:var(--shell); border-right:1px solid var(--hair);
+    display:flex; flex-direction:column; overflow:hidden}
+.sb-head{padding:16px 16px 14px; border-bottom:1px solid var(--hair); display:flex; align-items:center; gap:10px}
+.sb-logo{width:32px;height:32px;border-radius:var(--r-sm);background:var(--primary);color:var(--on-primary);display:grid;place-items:center}
+.sb-title{font-size:12.5px;font-weight:800;letter-spacing:.2px;white-space:nowrap}
+.sb-sub{font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap;margin-top:1px}
+.sb-year{margin:12px 12px 4px}
+.sb-year select,.field select,.field input{
+  width:100%; background:var(--elev); border:1px solid var(--hair); border-radius:var(--r-sm);
+  padding:7px 9px; font-size:12.5px; font-weight:600; outline:none;
+}
+.sb-year select:focus,.field select:focus,.field input:focus{border-color:var(--hair-active)}
+.sb-nav{flex:1; overflow-y:auto; padding:6px 0 16px}
+.sb-lbl{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  padding:14px 18px 5px; opacity:.85}
+.navitem{display:flex; align-items:center; gap:10px; width:calc(100% - 16px); margin:1px 8px;
+  padding:8px 10px; border-radius:var(--r-sm); font-size:13px; font-weight:600; color:var(--text2);
+  text-align:left; border-left:2px solid transparent}
+.navitem:hover{background:var(--zebra); color:var(--text)}
+.navitem.on{background:var(--elev); color:var(--text); font-weight:700; border-left-color:var(--primary)}
+.navitem.on .ico{color:var(--primary)}
+.navitem .ico{color:var(--muted)}
+.navitem .tail{margin-left:auto; font-size:10.5px; color:var(--muted); font-weight:700}
+.navitem .pip{width:6px;height:6px;border-radius:99px;background:currentColor;opacity:.7;flex-shrink:0}
+.navsub{padding-left:16px}
+.navsub .navitem{font-size:12.5px; font-weight:500; padding:6px 10px}
+.navsub .navitem.on{font-weight:700}
+.sb-foot{padding:11px 16px; border-top:1px solid var(--hair); font-size:10.5px; color:var(--muted); font-weight:600}
+
+/* rail + panel konteks (Konsep B) */
+.rail{width:62px; flex-shrink:0; background:var(--shell-2); border-right:1px solid var(--hair);
+      display:flex; flex-direction:column; align-items:center; padding:12px 0; gap:6px}
+.rail .rlogo{width:34px;height:34px;border-radius:var(--r-md);background:var(--primary);color:var(--on-primary);
+  display:grid;place-items:center;margin-bottom:8px}
+.rail button{width:42px;height:42px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--muted);
+  position:relative}
+.rail button:hover{background:var(--zebra); color:var(--text)}
+.rail button.on{background:var(--elev); color:var(--primary)}
+.rail button.on::before{content:'';position:absolute;left:-10px;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--primary)}
+.rail .rsep{width:26px;height:1px;background:var(--hair);margin:6px 0}
+.ctxpanel{width:236px; flex-shrink:0; background:var(--shell); border-right:1px solid var(--hair);
+  display:flex; flex-direction:column; overflow:hidden}
+.ctxpanel .ch{padding:15px 16px 12px; border-bottom:1px solid var(--hair)}
+.ctxpanel .ch h3{font-size:13px; font-weight:800}
+.ctxpanel .ch p{font-size:10.5px; color:var(--muted); font-weight:600; margin-top:2px}
+
+/* topbar horizontal (Konsep C) */
+.topnav{flex-shrink:0; background:var(--shell); border-bottom:1px solid var(--hair)}
+.topnav .row1{display:flex; align-items:center; gap:14px; padding:10px 18px}
+.topnav .row2{display:flex; align-items:stretch; gap:2px; padding:0 12px; overflow-x:auto; border-top:1px solid var(--hair)}
+.topnav .row2 button{padding:9px 13px; font-size:12.5px; font-weight:600; color:var(--text2); white-space:nowrap;
+  border-bottom:2px solid transparent}
+.topnav .row2 button:hover{color:var(--text); background:var(--zebra)}
+.topnav .row2 button.on{color:var(--primary); border-bottom-color:var(--primary); font-weight:700}
+.topnav .modtab{display:flex; gap:4px; background:var(--elev); border-radius:var(--r-sm); padding:3px}
+.topnav .modtab button{padding:6px 14px; border-radius:5px; font-size:12.5px; font-weight:700; color:var(--muted);
+  display:flex; align-items:center; gap:7px}
+.topnav .modtab button.on{background:var(--primary); color:var(--on-primary)}
+
+/* command bar (Konsep B) */
+.cmdbar{display:flex; align-items:center; gap:12px; padding:11px 18px; border-bottom:1px solid var(--hair);
+  background:var(--shell); flex-shrink:0}
+.crumb{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); font-weight:600}
+.crumb b{color:var(--text); font-weight:700}
+.cmdk{display:flex; align-items:center; gap:8px; background:var(--elev); border:1px solid var(--hair);
+  border-radius:var(--r-sm); padding:6px 10px; font-size:12px; color:var(--muted); min-width:230px}
+.cmdk kbd{margin-left:auto; font-family:var(--mono); font-size:10px; background:var(--card);
+  border:1px solid var(--hair); border-radius:4px; padding:1px 5px}
+
+/* ───────────────────────── Content ──────────────────────────────────────── */
+.main{flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden}
+.pagehead{padding:18px 24px 14px; display:flex; align-items:flex-end; gap:16px; flex-shrink:0}
+.pagehead h1{font-size:19px; font-weight:800; letter-spacing:-.2px}
+.pagehead p{font-size:12.5px; color:var(--muted); font-weight:500; margin-top:3px}
+.pagehead .acts{margin-left:auto; display:flex; gap:8px; flex-shrink:0}
+.body{flex:1; overflow:auto; padding:0 24px 26px}
+
+/* button — cermin PrimaButton */
+.btn{display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:var(--r-sm);
+  font-size:12.5px; font-weight:700; border:1px solid transparent; white-space:nowrap; transition:.14s}
+.btn.sm{padding:5px 10px; font-size:11.5px}
+.btn-primary{background:var(--primary); color:var(--on-primary)}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-success{background:var(--success); color:var(--on-action)}
+.btn-success:hover{background:var(--success-hover)}
+.btn-danger{background:var(--danger); color:var(--on-action)}
+.btn-danger:hover{background:var(--danger-hover)}
+.btn-purple{background:var(--purple); color:var(--on-action)}
+.btn-purple:hover{background:var(--purple-hover)}
+.btn-warning{background:var(--warning); color:var(--on-primary)}
+.btn-warning:hover{background:var(--warning-hover)}
+.btn-ghost{background:transparent; color:var(--text2); border-color:var(--hair)}
+.btn-ghost:hover{border-color:var(--hair-active); color:var(--text)}
+
+/* card */
+.card{background:var(--card); border:1px solid var(--hair); border-radius:var(--r-md)}
+.card-h{padding:13px 16px; border-bottom:1px solid var(--hair); display:flex; align-items:center; gap:10px}
+.card-h h3{font-size:13.5px; font-weight:700}
+.card-h .sub{font-size:11px; color:var(--muted); font-weight:600}
+.card-h .acts{margin-left:auto; display:flex; gap:6px}
+.card-b{padding:16px}
+
+/* KPI */
+.kpigrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:12px; margin-bottom:18px}
+.kpi{background:var(--card); border:1px solid var(--hair); border-radius:var(--r-md); padding:14px 15px;
+  position:relative; overflow:hidden}
+.kpi::after{content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent,var(--primary))}
+.kpi .lb{font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+  display:flex; align-items:center; gap:6px}
+.kpi .vl{font-family:var(--mono); font-size:21px; font-weight:700; margin-top:7px; letter-spacing:-.5px}
+.kpi .sb2{font-size:11px; color:var(--text2); font-weight:600; margin-top:3px}
+
+/* KPI ribbon (Konsep C) */
+.ribbon{display:flex; flex-wrap:wrap; gap:0; background:var(--card); border:1px solid var(--hair);
+  border-radius:var(--r-md); margin-bottom:16px; overflow:hidden}
+.ribbon .cell{flex:1; min-width:150px; padding:11px 16px; border-right:1px solid var(--hair)}
+.ribbon .cell:last-child{border-right:none}
+.ribbon .lb{font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+.ribbon .vl{font-family:var(--mono); font-size:16.5px; font-weight:700; margin-top:2px}
+
+/* toolbar */
+.toolbar{display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:11px 14px; background:var(--card);
+  border:1px solid var(--hair); border-bottom:none; border-radius:var(--r-md) var(--r-md) 0 0}
+.toolbar.solo{border-bottom:1px solid var(--hair); border-radius:var(--r-md); margin-bottom:14px}
+.search{display:flex; align-items:center; gap:7px; background:var(--elev); border:1px solid var(--hair);
+  border-radius:var(--r-sm); padding:6px 10px; min-width:210px; color:var(--muted); font-size:12.5px}
+.search input{background:none; border:none; outline:none; width:100%; font-size:12.5px; color:var(--text)}
+.chipset{display:flex; gap:6px; flex-wrap:wrap}
+.chip{padding:5px 11px; border-radius:99px; border:1px solid var(--hair); font-size:11.5px; font-weight:600;
+  color:var(--text2); display:flex; align-items:center; gap:6px}
+.chip:hover{border-color:var(--hair-active); color:var(--text)}
+.chip.on{background:var(--elev); border-color:var(--primary); color:var(--text); font-weight:700}
+.chip .pip{width:7px;height:7px;border-radius:99px;background:var(--info)}
+.pillbar{display:flex; gap:3px; background:var(--elev); border-radius:var(--r-sm); padding:3px; border:1px solid var(--hair)}
+.pillbar button{padding:5px 11px; border-radius:4px; font-size:11.5px; font-weight:600; color:var(--muted)}
+.pillbar button.on{background:var(--card); color:var(--text); font-weight:700; box-shadow:0 1px 0 var(--hair)}
+
+/* table */
+.tablewrap{border:1px solid var(--hair); border-radius:0 0 var(--r-md) var(--r-md); overflow:auto; background:var(--card);
+  max-height:calc(100vh - 350px)}
+.tablewrap.solo{border-radius:var(--r-md)}
+table{width:100%; border-collapse:separate; border-spacing:0; font-size:12.5px}
+thead th{position:sticky; top:0; z-index:3; background:var(--elev); color:var(--muted);
+  font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; text-align:left;
+  padding:9px 12px; border-bottom:1px solid var(--hair); white-space:nowrap}
+thead tr:nth-child(2) th{top:31px}
+thead th.c{text-align:center} thead th.r{text-align:right}
+tbody td{padding:8px 12px; border-bottom:1px solid var(--hair); color:var(--text2); vertical-align:middle}
+tbody tr:hover td{background:var(--zebra)}
+tbody tr:last-child td{border-bottom:none}
+td.c{text-align:center} td.r{text-align:right}
+td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right; color:var(--text)}
+td.strong{color:var(--text); font-weight:600}
+td.trunc{max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+tfoot td{padding:9px 12px; background:var(--elev); font-weight:700; color:var(--text); border-top:1px solid var(--hair)}
+.grp td{background:var(--elev); font-weight:700; color:var(--text); font-size:11.5px;
+  letter-spacing:.03em; text-transform:uppercase}
+
+/* badges */
+.bd{display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:99px;
+  font-size:10.5px; font-weight:700; letter-spacing:.02em; white-space:nowrap}
+.bd-ok{background:var(--success-bg); color:var(--success)}
+.bd-bad{background:var(--danger-bg); color:var(--danger)}
+.bd-warn{background:var(--warning-bg); color:var(--primary)}
+.bd-info{background:var(--info-bg); color:var(--info)}
+.bd-pur{background:var(--purple-bg); color:var(--purple)}
+:root[data-theme="light"] .bd-ok{background:rgba(29,158,117,.12)}
+:root[data-theme="light"] .bd-bad{background:rgba(226,75,74,.12)}
+:root[data-theme="light"] .bd-warn{background:rgba(239,159,39,.16); color:var(--warning)}
+:root[data-theme="light"] .bd-info{background:rgba(55,138,221,.13)}
+:root[data-theme="light"] .bd-pur{background:rgba(124,92,252,.13)}
+
+/* progress */
+.bar{height:5px; border-radius:99px; background:var(--elev); overflow:hidden; min-width:54px}
+.bar i{display:block; height:100%; border-radius:99px; background:var(--primary)}
+.bar.ok i{background:var(--success)} .bar.bad i{background:var(--danger)} .bar.warn i{background:var(--warning)}
+
+/* charts */
+.barchart{display:flex; flex-direction:column; gap:9px}
+.barrow{display:grid; grid-template-columns:112px 1fr 108px; align-items:center; gap:11px; font-size:11.5px}
+.barrow .nm{color:var(--text2); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.barrow .tk{height:8px; background:var(--elev); border-radius:99px; overflow:hidden}
+.barrow .tk i{display:block; height:100%; border-radius:99px}
+.barrow .vl{font-family:var(--mono); text-align:right; color:var(--text); font-weight:600; font-size:11px}
+.legend{display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; padding-top:13px; border-top:1px solid var(--hair)}
+.legend span{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text2); font-weight:600}
+.legend i{width:9px;height:9px;border-radius:3px}
+
+/* month grid (heat) */
+.mgrid{display:grid; grid-template-columns:repeat(12,1fr); gap:4px}
+.mcell{border-radius:var(--r-sm); border:1px solid var(--hair); padding:7px 4px; text-align:center; min-width:0}
+.mcell .m{font-size:9.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em}
+.mcell .v{font-family:var(--mono); font-size:11.5px; font-weight:700; margin-top:3px; color:var(--text)}
+.spark{display:flex; align-items:flex-end; gap:3px; height:52px}
+.spark i{flex:1; background:var(--primary); border-radius:2px 2px 0 0; min-height:2px; opacity:.85}
+.spark i.t{background:var(--elev)}
+
+/* split view (Konsep C) */
+.split{display:flex; gap:14px; align-items:stretch; min-height:0; height:calc(100vh - 268px)}
+.split .lst{width:322px; flex-shrink:0; background:var(--card); border:1px solid var(--hair);
+  border-radius:var(--r-md); display:flex; flex-direction:column; overflow:hidden}
+.split .lst .lh{padding:11px 13px; border-bottom:1px solid var(--hair)}
+.split .lst .ls{flex:1; overflow-y:auto}
+.lrow{padding:10px 13px; border-bottom:1px solid var(--hair); border-left:3px solid transparent; text-align:left; width:100%; display:block}
+.lrow:hover{background:var(--zebra)}
+.lrow.on{background:var(--elev); border-left-color:var(--primary)}
+.lrow .t1{font-size:12.5px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.lrow .t2{font-size:11px; color:var(--muted); margin-top:2px; display:flex; align-items:center; gap:7px}
+.lrow .t2 .num{font-family:var(--mono); color:var(--text2); font-weight:600}
+.split .insp{flex:1; min-width:0; background:var(--card); border:1px solid var(--hair);
+  border-radius:var(--r-md); display:flex; flex-direction:column; overflow:hidden}
+.split .insp .ib{flex:1; overflow-y:auto; padding:16px}
+.kv{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px; margin-bottom:16px}
+.kv .k{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted)}
+.kv .v{font-size:13px; font-weight:600; color:var(--text); margin-top:3px}
+.kv .v.num{font-family:var(--mono)}
+.sect{font-size:11px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+  margin:18px 0 9px; padding-bottom:7px; border-bottom:1px solid var(--hair)}
+.sect:first-child{margin-top:0}
+
+/* hero indikator */
+.hero{display:grid; grid-template-columns:1fr 232px; gap:16px; margin-bottom:16px}
+@media(max-width:1100px){.hero{grid-template-columns:1fr}}
+.hero .big{font-size:17px; font-weight:700; line-height:1.35; color:var(--text)}
+.dial{display:grid; place-items:center; text-align:center}
+.dial .pv{font-family:var(--mono); font-size:30px; font-weight:700; letter-spacing:-1px}
+.dial .pl{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-top:2px}
+.twgrid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px}
+@media(max-width:820px){.twgrid{grid-template-columns:repeat(2,1fr)}}
+.tw{background:var(--card); border:1px solid var(--hair); border-radius:var(--r-md); padding:13px 14px}
+.tw .h{display:flex; align-items:center; justify-content:space-between; margin-bottom:9px}
+.tw .h b{font-size:12px; font-weight:800; letter-spacing:.04em}
+.tw .l{display:flex; justify-content:space-between; font-size:11.5px; color:var(--text2); margin-top:5px}
+.tw .l .num{font-family:var(--mono); color:var(--text); font-weight:600}
+
+/* filter cascade */
+.field{display:flex; flex-direction:column; gap:5px; min-width:0}
+.field label{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted)}
+.cascade{display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:12px}
+
+/* preview cetak */
+/* Pratinjau kertas: mensimulasikan hasil cetak, warna diturunkan dari token light-mode */
+.paper{background:#FFFFFF; color:#020F1C; border-radius:var(--r-sm); padding:26px 30px;
+  box-shadow:0 8px 30px rgba(2,15,28,.28); font-size:10.5px; max-width:1080px; margin:0 auto}
+.paper h4{text-align:center; font-size:13px; font-weight:800; letter-spacing:.3px; text-transform:uppercase}
+.paper .psub{text-align:center; font-size:10px; color:#185FA5; margin:3px 0 16px}
+.paper table{font-size:9.5px; width:100%}
+.paper thead th{position:static; color:#185FA5; padding:5px 6px; font-size:8.5px;
+  background:color-mix(in srgb, #D3D1C7 42%, #FFFFFF); border:1px solid #D3D1C7}
+.paper tbody td{border:1px solid color-mix(in srgb, #D3D1C7 65%, #FFFFFF); color:#020F1C; padding:4px 6px}
+.paper tbody tr:hover td{background:color-mix(in srgb, #D3D1C7 22%, #FFFFFF)}
+.paper .num{font-family:var(--mono); text-align:right}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media(max-width:1080px){.grid2{grid-template-columns:1fr}}
+.grid3{display:grid; grid-template-columns:2fr 1fr; gap:14px}
+@media(max-width:1080px){.grid3{grid-template-columns:1fr}}
+.stack{display:flex; flex-direction:column; gap:14px}
+.muted{color:var(--muted)}
+.hint{font-size:11.5px; color:var(--muted); font-weight:500; line-height:1.6}
+
+/* ── Konsep A: tenang — chrome minimum, kepadatan seragam ── */
+:root[data-concept="a"] .kpi .vl{font-size:23px}
+:root[data-concept="a"] tbody td{padding:9px 12px}
+
+/* ── Konsep B: rel perintah — lebih rapat, aksen di tepi ── */
+:root[data-concept="b"] .pagehead{padding:14px 20px 11px}
+:root[data-concept="b"] .body{padding:0 20px 22px}
+:root[data-concept="b"] tbody td{padding:7px 11px}
+:root[data-concept="b"] .kpi{padding:12px 14px}
+:root[data-concept="b"] .kpi .vl{font-size:19px}
+
+/* ── Konsep C: papan kerja — kartu lebih lapang, tepi lembut ── */
+:root[data-concept="c"] .card{border-radius:var(--r-lg)}
+:root[data-concept="c"] .tablewrap{border-radius:var(--r-lg)}
+:root[data-concept="c"] .kpi{border-radius:var(--r-lg)}
+:root[data-concept="c"] .body{padding:0 22px 24px}
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <div class="brand"><span class="dot">P</span><span>PRIMA · Revamp UI</span></div>
+  <div class="seg" id="conceptSeg">
+    <button data-c="a" class="on">A · Kanvas Tenang</button>
+    <button data-c="b">B · Rel Perintah</button>
+    <button data-c="c">C · Papan Kerja</button>
+  </div>
+  <div class="seg alt" id="moduleSeg">
+    <button data-m="renaksi" class="on">Renaksi</button>
+    <button data-m="kinerja">E-Anggaran / Kinerja</button>
+  </div>
+  <div class="spacer"></div>
+  <span class="mocknote" id="menuCount"></span>
+  <button class="iconbtn" id="themeBtn" title="Ganti tema"></button>
+</div>
+
+<div class="notes" id="notes"></div>
+<main id="stage"></main>
+
+<script>
+/* ═════════════════════════ Ikon ═════════════════════════ */
+const ICONS = {
+  target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>',
+  db:'<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/>',
+  chart:'<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M21 20H3"/>',
+  printer:'<path d="M7 9V3h10v6"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 14h10v7H7z"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2.2v3M12 18.8v3M4.4 4.4l2.1 2.1M17.5 17.5l2.1 2.1M2.2 12h3M18.8 12h3M4.4 19.6l2.1-2.1M17.5 6.5l2.1-2.1"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  wallet:'<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18"/><circle cx="17" cy="14.6" r="1.3" fill="currentColor" stroke="none"/>',
+  coins:'<circle cx="9.5" cy="9.5" r="5.5"/><path d="M15 5.6a5.5 5.5 0 0 1 0 9.8"/><path d="M11 19.6a5.5 5.5 0 0 0 8.4-4.4"/>',
+  percent:'<path d="m19 5-14 14"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3.6 6h.01M3.6 12h.01M3.6 18h.01"/>',
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  download:'<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/>',
+  upload:'<path d="M12 20V8"/><path d="m7 12 5-5 5 5"/><path d="M4 4h16"/>',
+  filter:'<path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z"/>',
+  chevron:'<path d="m6 9 6 6 6-6"/>',
+  check:'<path d="m4 12 5 5L20 6"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  book:'<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5Z"/>',
+  trend:'<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  clip:'<rect x="6" y="4" width="12" height="17" rx="2.5"/><path d="M9.5 4V2.9h5V4"/><path d="M9 11h6M9 15h4"/>',
+  cross:'<path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/>',
+  sun:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2M12 19.6v2M4.3 4.3l1.4 1.4M18.3 18.3l1.4 1.4M2.4 12h2M19.6 12h2M4.3 19.7l1.4-1.4M18.3 5.7l1.4-1.4"/>',
+  moon:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
+  save:'<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/>',
+  lock:'<rect x="4.5" y="10" width="15" height="10.5" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  eye:'<path d="M2.5 12s3.6-6.5 9.5-6.5S21.5 12 21.5 12s-3.6 6.5-9.5 6.5S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/>',
+  pencil:'<path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m14.5 5.5 4 4"/>',
+};
+const ico = (n,s=16) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]||''}</svg>`;
+
+/* ═════════════════════════ Util & data dummy ═════════════════════════ */
+const RP  = n => new Intl.NumberFormat('id-ID').format(Math.round(n));
+const PC  = n => (Math.round(n*100)/100).toFixed(2) + '%';
+let _s = 20260811;
+const rnd = () => (_s = (_s*1103515245 + 12345) % 2147483648) / 2147483648;
+const pick = a => a[Math.floor(rnd()*a.length)];
+const rint = (a,b) => Math.floor(a + rnd()*(b-a+1));
+
+const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const BULAN_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+/* Palet visualisasi — semua diambil dari token DESIGN-SYSTEM.md, tanpa hex baru */
+const VIZ = ['#EF9F27','#378ADD','#1D9E75','#7C5CFC','#BA7517','#E24B4A','#FAC775','#185FA5'];
+
+const LEVELS = [
+  {id:'tujuan',       label:'Tujuan',       icon:'cross',  accent:'#7C5CFC'},
+  {id:'sasaran',      label:'Sasaran',      icon:'clip',   accent:'#378ADD'},
+  {id:'program',      label:'Program',      icon:'chart',  accent:'#1D9E75'},
+  {id:'kegiatan',     label:'Kegiatan',     icon:'grid',   accent:'#BA7517'},
+  {id:'sub-kegiatan', label:'Sub Kegiatan', icon:'layers', accent:'#EF9F27'},
+];
+const SUMBER = ['GAJI','BLUD','HARLEP','PROMKES','SARPRAS','OBAT','PEMELIHARAAN','PEMBANGUNAN'];
+
+const TUJUAN   = ['Meningkatnya derajat kesehatan jiwa masyarakat','Terwujudnya tata kelola rumah sakit yang akuntabel'];
+const SASARAN  = ['Meningkatnya mutu pelayanan kesehatan jiwa','Meningkatnya akuntabilitas kinerja dan keuangan'];
+const PROGRAM  = ['Program Penunjang Urusan Pemerintahan Daerah','Program Pemenuhan Upaya Kesehatan Perorangan dan UKM','Program Peningkatan Kapasitas SDM Kesehatan','Program Sediaan Farmasi, Alkes dan Makanan Minuman'];
+const KEGIATAN = ['Perencanaan, Penganggaran dan Evaluasi Kinerja','Administrasi Keuangan Perangkat Daerah','Penyediaan Layanan Kesehatan untuk UKP Rujukan','Pemeliharaan Barang Milik Daerah'];
+const SUBKEG   = ['Penyusunan Dokumen Perencanaan Perangkat Daerah','Penyediaan Gaji dan Tunjangan ASN','Operasional Pelayanan Rumah Sakit','Pemeliharaan Rutin Alat Kesehatan'];
+const INDIKATOR= ['Indeks Kepuasan Masyarakat','Persentase capaian SPM rumah sakit','Nilai SAKIP perangkat daerah','Persentase sarana prasarana layak fungsi','Cakupan layanan rawat jalan jiwa','Persentase ketersediaan obat esensial','Persentase dokumen perencanaan tepat waktu','Rata-rata waktu tunggu rawat jalan'];
+const SATUAN   = ['%','Nilai','Indeks','Menit','Dokumen','Orang'];
+const JENIS    = ['Akumulatif','Progres Positif','Progres Negatif','Pengulangan'];
+const URAIANSSK= ['Belanja Gaji Pokok ASN','Belanja Obat-obatan','Belanja Bahan Habis Pakai Medis','Belanja Pemeliharaan Gedung dan Bangunan','Belanja Jasa Tenaga Kesehatan','Belanja Modal Alat Kedokteran','Belanja Makanan dan Minuman Pasien','Belanja Alat Tulis Kantor'];
+const REKENING = ['5.1.01.01.01.0001','5.1.02.01.01.0026','5.1.02.02.01.0003','5.2.02.01.01.0012','5.1.02.01.01.0052','5.2.03.02.01.0004','5.1.02.01.01.0024','5.1.02.02.01.0009'];
+
+/* ── generator baris ── */
+function raRows(level, n){
+  const out = [];
+  for(let i=0;i<n;i++){
+    const tgt = rint(60,100);
+    const real = Math.min(120, tgt - rint(-14,26));
+    const bulan = Array.from({length:12}, () => rint(0, Math.round(real/8)));
+    out.push({
+      no:i+1,
+      tujuan: TUJUAN[i%2], sasaran: SASARAN[i%2],
+      program: PROGRAM[i%4], kegiatan: KEGIATAN[i%4], sub: SUBKEG[i%4],
+      indikator: INDIKATOR[i%INDIKATOR.length],
+      satuan: SATUAN[i%SATUAN.length], jenis: JENIS[i%4],
+      rpjmd: tgt+rint(2,10), tahunan: tgt, real,
+      pct: Math.round(real/tgt*10000)/100,
+      anggaran: rint(120,980)*1e6,
+      bulan,
+      tw:[1,2,3,4].map(q => ({t:Math.round(tgt/4), r:Math.round(real/4)+rint(-4,5)})),
+    });
+  }
+  return out;
+}
+function sskRows(sumber, n){
+  const out=[];
+  for(let i=0;i<n;i++){
+    const pagu = rint(80,1400)*1e6;
+    const bulan = Array.from({length:12}, () => 0);
+    let sisa = pagu;
+    for(let m=0;m<12;m++){ const v = m===11 ? sisa : Math.round(rnd()*sisa*0.22); bulan[m]=v; sisa-=v; }
+    const total = bulan.reduce((a,b)=>a+b,0);
+    out.push({
+      no:i+1, program:PROGRAM[i%4], kegiatan:KEGIATAN[i%4], sub:SUBKEG[i%4],
+      uraian:URAIANSSK[i%URAIANSSK.length], rek:REKENING[i%REKENING.length],
+      sumber, pagu, bulan, total, pctTotal: Math.round(total/pagu*10000)/100,
+    });
+  }
+  return out;
+}
+function realRows(sumber, n){
+  const out=[];
+  for(let i=0;i<n;i++){
+    const pagu = rint(80,1400)*1e6;
+    const tf = rint(5,12), rf = tf + rint(-3,3);
+    const rk = Math.round(pagu*(rint(4,11)/100));
+    out.push({
+      no:i+1, ket:SUBKEG[i%4], uraian:URAIANSSK[i%URAIANSSK.length], sumber, pagu,
+      tf, rf, pctF: Math.round(rf/tf*10000)/100,
+      akT: tf*rint(3,7), akR: rf*rint(3,7),
+      rk, pctK: Math.round(rk/pagu*10000)/100,
+      akK: rk*rint(3,7),
+      dev: rf-tf,
+    });
+  }
+  return out;
+}
+
+/* ═════════════════════════ Peta menu ═════════════════════════ */
+const MODULES = {
+  renaksi:{
+    key:'renaksi', name:'Renaksi', full:'PRIMA · Rencana Aksi', icon:'target',
+    sub:'RSJD Dr. Amino Gondohutomo',
+    groups:[
+      {id:'entry', label:'Data Entry', icon:'db',
+       items: LEVELS.map(l => ({id:'entry-'+l.id, label:l.label, kind:'ra-entry', level:l.id,
+                                icon:l.icon, accent:l.accent,
+                                title:'Data Entry — Indikator '+l.label,
+                                desc:'Input target & realisasi indikator tingkat '+l.label.toLowerCase()}))},
+      {id:'kin', label:'Realisasi Kinerja', icon:'chart',
+       items: LEVELS.map(l => ({id:'kin-'+l.id, label:l.label, kind:'ra-dash', level:l.id,
+                                icon:l.icon, accent:l.accent,
+                                title:'Realisasi Kinerja — Indikator '+l.label,
+                                desc:'Pantau capaian per triwulan & bulan pada tingkat '+l.label.toLowerCase()}))},
+      {id:'cetak', label:'Cetak', icon:'printer',
+       items:[{id:'ra-cetak', label:'Renaksi & Kinerja Cetak', kind:'ra-cetak', icon:'printer', accent:'#7C5CFC',
+               title:'Renaksi & Kinerja — Cetak', desc:'Susun matriks lintas level lalu ekspor PDF / Excel'}]},
+    ],
+  },
+  kinerja:{
+    key:'kinerja', name:'E-Anggaran', full:'PRIMA · E-Anggaran', icon:'trend',
+    sub:'RSJD Dr. Amino Gondohutomo',
+    groups:[
+      {id:'ring', label:'Ringkasan', icon:'grid',
+       items:[{id:'k-beranda', label:'Beranda', kind:'k-beranda', icon:'grid', accent:'#EF9F27',
+               title:'Beranda E-Anggaran', desc:'Ringkasan pagu, serapan, dan komposisi 8 sumber anggaran'}]},
+      {id:'lap', label:'Laporan', icon:'chart',
+       items:[{id:'k-laporan', label:'Laporan Konsolidasi', kind:'k-laporan', icon:'chart', accent:'#7C5CFC',
+               title:'Laporan Konsolidasi', desc:'Gabungan RKO & realisasi seluruh sumber anggaran'}]},
+      {id:'rek', label:'Rekening', icon:'db',
+       items:[
+         {id:'k-master',   label:'Master Rekening', kind:'k-master',   icon:'db',   accent:'#378ADD',
+          title:'Master Rekening', desc:'Program, Kegiatan, Sub Kegiatan, Uraian SSK, Sumber Anggaran'},
+         {id:'k-rekening', label:'Rekening',        kind:'k-rekening', icon:'list', accent:'#378ADD',
+          title:'Rekening Belanja', desc:'Pemetaan rekening belanja ke hirarki program'},
+       ]},
+      {id:'rko', label:'RKO', icon:'book',
+       items: SUMBER.map(s => ({id:'rko-'+s, label:'RKO '+s, kind:'k-rko', sumber:s, icon:'book', accent:'#EF9F27',
+                                title:'RKO — '+s, desc:'Rencana Kegiatan Operasional 12 bulan, sumber '+s}))},
+      {id:'real', label:'Realisasi & Cetak', icon:'check',
+       items:[
+         ...SUMBER.map(s => ({id:'real-'+s, label:'Realisasi '+s, kind:'k-real', sumber:s, icon:'check', accent:'#1D9E75',
+                              title:'Realisasi — '+s, desc:'Realisasi fisik & keuangan bulanan, sumber '+s})),
+         {id:'k-cetak', label:'Cetak Realisasi', kind:'k-cetak', icon:'printer', accent:'#378ADD',
+          title:'Cetak Realisasi', desc:'Susun laporan realisasi lalu ekspor PDF / Excel'},
+       ]},
+      {id:'pend', label:'Pendapatan', icon:'coins',
+       items:[{id:'k-crr', label:'Pendapatan & CRR', kind:'k-crr', icon:'coins', accent:'#1D9E75',
+               title:'Pendapatan & CRR', desc:'Target vs realisasi pendapatan dan Cost Recovery Rate'}]},
+      {id:'sys', label:'Sistem', icon:'settings',
+       items:[{id:'k-pengaturan', label:'Pengaturan', kind:'k-set', icon:'settings', accent:'#E24B4A',
+               title:'Pengaturan Modul', desc:'Kill-switch, kunci versi, dan reset tahun anggaran — SUPER_ADMIN'}]},
+    ],
+  },
+};
+const allItems = m => MODULES[m].groups.flatMap(g => g.items);
+const findItem = (m,id) => allItems(m).find(x => x.id === id) || allItems(m)[0];
+
+/* ═════════════════════════ Catatan konsep ═════════════════════════ */
+const NOTES = {
+  a:{name:'Kanvas Tenang', tag:'KONSEP A',
+     text:'<b>Chrome dikecilkan, data dinaikkan.</b> Gradien dibuang dari nav & kartu KPI, ikon nav jadi monokrom — emas <span class="mono">#EF9F27</span> hanya menandai item aktif. Delapan warna acak sumber anggaran diciutkan ke 6 token resmi. Tabel memakai garis rambut horizontal saja (tanpa zebra), header lengket, angka rata kanan pakai mono. Tinggi baris seragam di semua tab.'},
+  b:{name:'Rel Perintah', tag:'KONSEP B',
+     text:'<b>Satu cangkang untuk dua modul.</b> Rel ikon 62px memindah Renaksi ⇄ E-Anggaran tanpa terasa ganti aplikasi, panel konteks 236px memuat menu modul aktif. Baris atas jadi command bar: remah-roti + tahun + pencarian <span class="mono">Ctrl K</span>. Sub-menu naik jadi segmented tab di dalam halaman, dan 12 kolom bulan bisa dilipat jadi 4 triwulan.'},
+  c:{name:'Papan Kerja', tag:'KONSEP C',
+     text:'<b>Hentikan gulir mendatar.</b> Navigasi pindah ke atas (dua baris), isi halaman jadi belah-dua: daftar 322px di kiri, inspektur di kanan. Data 12 bulan disajikan sebagai kisi 12 sel bergradasi emas, bukan 12 kolom tabel. KPI diciutkan jadi pita tipis dan aksi per-baris pindah ke inspektur.'},
+};
+
+/* ═════════════════════════ State ═════════════════════════ */
+const S = { concept:'a', module:'renaksi', item:'entry-tujuan', theme:'dark',
+            openGroup:{renaksi:'entry', kinerja:'ring'}, sel:0, monthMode:'bulan', notesOpen:true };
+
+/* ═════════════════════════ Komponen kecil ═════════════════════════ */
+const btn  = (v,label,icon,size='') => `<button class="btn btn-${v} ${size}">${icon?ico(icon,14):''}${label}</button>`;
+const badge= (v,t) => `<span class="bd bd-${v}">${t}</span>`;
+const pctBadge = p => badge(p>=100?'ok':p>=85?'warn':'bad', PC(p));
+const barOf = (p,cls) => `<div class="bar ${cls||''}"><i style="width:${Math.min(100,p)}%"></i></div>`;
+
+function kpi(label, val, sub, icon, accent){
+  return `<div class="kpi" style="--accent:${accent}">
+    <div class="lb">${ico(icon,13)}${label}</div>
+    <div class="vl">${val}</div><div class="sb2">${sub}</div></div>`;
+}
+function ribbonOf(cells){
+  return `<div class="ribbon">${cells.map(c=>`<div class="cell"><div class="lb">${c[0]}</div><div class="vl">${c[1]}</div></div>`).join('')}</div>`;
+}
+function yearSelect(){
+  return `<select>${[2024,2025,2026,2027].map(y=>`<option ${y===2026?'selected':''}>Tahun ${y}</option>`).join('')}</select>`;
+}
+function searchBox(ph){ return `<div class="search">${ico('search',14)}<input placeholder="${ph}"></div>`; }
+
+function monthGrid(vals, fmt){
+  const mx = Math.max(...vals, 1);
+  return `<div class="mgrid">${vals.map((v,i)=>{
+    const a = v/mx;
+    return `<div class="mcell" style="background:${a>0.02?`color-mix(in srgb, var(--primary) ${Math.round(a*38)}%, transparent)`:'transparent'}">
+      <div class="m">${BULAN[i]}</div><div class="v">${fmt?fmt(v):v}</div></div>`;
+  }).join('')}</div>`;
+}
+function sparkOf(vals){
+  const mx = Math.max(...vals,1);
+  return `<div class="spark">${vals.map(v=>`<i style="height:${Math.max(4,v/mx*100)}%"></i>`).join('')}</div>`;
+}
+function barChart(rows){
+  const mx = Math.max(...rows.map(r=>r[1]),1);
+  return `<div class="barchart">${rows.map((r,i)=>`
+    <div class="barrow"><div class="nm">${r[0]}</div>
+      <div class="tk"><i style="width:${r[1]/mx*100}%;background:${VIZ[i%VIZ.length]}"></i></div>
+      <div class="vl">${r[2]}</div></div>`).join('')}</div>`;
+}
+function donut(rows){
+  const tot = rows.reduce((a,r)=>a+r[1],0) || 1;
+  let acc = 0; const R=54, C=2*Math.PI*R;
+  const segs = rows.map((r,i)=>{
+    const len = r[1]/tot*C, off = -acc; acc += len;
+    return `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${VIZ[i%VIZ.length]}" stroke-width="19"
+      stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${off}" transform="rotate(-90 70 70)"/>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+    <svg width="140" height="140" viewBox="0 0 140 140">${segs}
+      <text x="70" y="66" text-anchor="middle" font-family="var(--mono)" font-size="17" font-weight="700" fill="currentColor">${RP(tot/1e9)}</text>
+      <text x="70" y="82" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--muted)" letter-spacing="1">MILIAR RP</text>
+    </svg>
+    <div style="flex:1;min-width:150px">
+      ${rows.map((r,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:3px 0">
+        <i style="width:9px;height:9px;border-radius:3px;background:${VIZ[i%VIZ.length]};flex-shrink:0"></i>
+        <span style="color:var(--text2);font-weight:600">${r[0]}</span>
+        <span class="mono" style="margin-left:auto;color:var(--text);font-weight:600">${PC(r[1]/tot*100)}</span></div>`).join('')}
+    </div></div>`;
+}
+
+/* tabel generik: cols = [{h, cls, w, sub:[..]}] */
+function tableOf(cols, rows, opts){
+  opts = opts || {};
+  const hasSub = cols.some(c => c.sub);
+  const head = hasSub
+    ? `<tr>${cols.map(c => c.sub
+        ? `<th class="c" colspan="${c.sub.length}" style="border-left:1px solid var(--hair)">${c.h}</th>`
+        : `<th rowspan="2" class="${c.cls||''}" ${c.w?`style="width:${c.w}"`:''}>${c.h}</th>`).join('')}</tr>
+       <tr>${cols.filter(c=>c.sub).flatMap(c => c.sub.map((s,i) =>
+        `<th class="c" ${i===0?'style="border-left:1px solid var(--hair)"':''}>${s}</th>`)).join('')}</tr>`
+    : `<tr>${cols.map(c => `<th class="${c.cls||''}" ${c.w?`style="width:${c.w}"`:''}>${c.h}</th>`).join('')}</tr>`;
+  return `<div class="tablewrap ${opts.solo?'solo':''}"><table>
+    <thead>${head}</thead><tbody>${rows.join('')}</tbody>
+    ${opts.foot?`<tfoot>${opts.foot}</tfoot>`:''}</table></div>`;
+}
+
+/* ═════════════════════════ Layar ═════════════════════════ */
+
+/* ── Renaksi · Data Entry ── */
+function scrRaEntry(it){
+  const rows = raRows(it.level, 9);
+  const lv = it.level;
+  const hier = {
+    'tujuan':[], 'sasaran':['Tujuan'], 'program':['Tujuan','Sasaran'],
+    'kegiatan':['Sasaran','Program'], 'sub-kegiatan':['Program','Kegiatan'],
+  }[lv];
+  const cols = [
+    {h:'No', w:'42px', cls:'c'},
+    ...hier.map(h=>({h})),
+    {h:'Indikator'},
+    {h:'Satuan', cls:'c'}, {h:'Jenis', cls:'c'},
+    {h:'RPJMD', cls:'r'}, {h:'Tahunan', cls:'r'},
+  ];
+  if(lv==='sub-kegiatan') cols.push({h:'Anggaran (Rp)', cls:'r'});
+  if(S.monthMode==='bulan') cols.push({h:'Target Bulanan', sub:BULAN});
+  else cols.push({h:'Target Triwulan', sub:['TW1','TW2','TW3','TW4']});
+  cols.push({h:'Aksi', cls:'c', w:'78px'});
+
+  const body = rows.map(r => {
+    const hcells = hier.map(h => `<td class="trunc">${h==='Tujuan'?r.tujuan:h==='Sasaran'?r.sasaran:h==='Program'?r.program:r.kegiatan}</td>`).join('');
+    const months = S.monthMode==='bulan'
+      ? r.bulan.map((v,i)=>`<td class="num" style="${i===0?'border-left:1px solid var(--hair)':''}">${v||'—'}</td>`).join('')
+      : r.tw.map((q,i)=>`<td class="num" style="${i===0?'border-left:1px solid var(--hair)':''}">${q.t}</td>`).join('');
+    return `<tr><td class="c muted mono">${r.no}</td>${hcells}
+      <td class="strong trunc" style="max-width:270px">${r.indikator}</td>
+      <td class="c">${r.satuan}</td><td class="c">${badge('info',r.jenis)}</td>
+      <td class="num">${r.rpjmd}</td><td class="num">${r.tahunan}</td>
+      ${lv==='sub-kegiatan'?`<td class="num">${RP(r.anggaran)}</td>`:''}
+      ${months}
+      <td class="c"><span style="display:inline-flex;gap:5px;color:var(--muted)">${ico('pencil',15)}${ico('x',15)}</span></td></tr>`;
+  });
+
+  const toolbar = `<div class="toolbar">
+    ${searchBox('Cari indikator…')}
+    <div class="pillbar">
+      <button class="${S.monthMode==='bulan'?'on':''}" onclick="setMonthMode('bulan')">12 Bulan</button>
+      <button class="${S.monthMode==='tw'?'on':''}" onclick="setMonthMode('tw')">4 Triwulan</button>
+    </div>
+    <div class="chipset">${JENIS.map((j,i)=>`<span class="chip ${i===0?'on':''}">${j}</span>`).join('')}</div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      ${btn('ghost','Import File','upload','sm')}
+      ${btn('success','Excel','download','sm')}
+      ${btn('purple','Tambah Indikator','plus','sm')}
+    </div></div>`;
+
+  return {
+    body: toolbar + tableOf(cols, body, {}),
+    rows, cols,
+    listOf: r => ({t1:r.indikator, t2:`${r.satuan} · target ${r.tahunan}`, badge:pctBadge(r.pct)}),
+    inspect: r => raInspect(r, lv),
+  };
+}
+
+function raInspect(r, lv){
+  return `<div class="sect">Identitas Indikator</div>
+    <div class="kv">
+      <div><div class="k">Indikator</div><div class="v">${r.indikator}</div></div>
+      <div><div class="k">Jenis</div><div class="v">${badge('info',r.jenis)}</div></div>
+      <div><div class="k">Satuan</div><div class="v">${r.satuan}</div></div>
+      <div><div class="k">Target RPJMD</div><div class="v num">${r.rpjmd}</div></div>
+      <div><div class="k">Target Tahunan</div><div class="v num">${r.tahunan}</div></div>
+      ${lv==='sub-kegiatan'?`<div><div class="k">Anggaran</div><div class="v num">Rp ${RP(r.anggaran)}</div></div>`:''}
+    </div>
+    <div class="sect">Hirarki</div>
+    <div class="kv">
+      <div><div class="k">Tujuan</div><div class="v" style="font-weight:500;font-size:12px">${r.tujuan}</div></div>
+      <div><div class="k">Sasaran</div><div class="v" style="font-weight:500;font-size:12px">${r.sasaran}</div></div>
+      <div><div class="k">Program</div><div class="v" style="font-weight:500;font-size:12px">${r.program}</div></div>
+      <div><div class="k">Kegiatan</div><div class="v" style="font-weight:500;font-size:12px">${r.kegiatan}</div></div>
+    </div>
+    <div class="sect">Target Bulanan — kisi 12 sel</div>
+    ${monthGrid(r.bulan)}
+    <div class="sect">Capaian per Triwulan</div>
+    <div class="twgrid" style="margin-bottom:0">${r.tw.map((q,i)=>{
+      const p = Math.round(q.r/Math.max(q.t,1)*10000)/100;
+      return `<div class="tw"><div class="h"><b>TW ${i+1}</b>${pctBadge(p)}</div>
+        ${barOf(p, p>=100?'ok':p>=85?'warn':'bad')}
+        <div class="l"><span>Target</span><span class="num">${q.t}</span></div>
+        <div class="l"><span>Realisasi</span><span class="num">${q.r}</span></div></div>`;
+    }).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:18px">${btn('primary','Simpan Perubahan','save')}${btn('ghost','Batal')}</div>`;
+}
+
+/* ── Renaksi · Realisasi Kinerja (dashboard indikator) ── */
+function scrRaDash(it){
+  const rows = raRows(it.level, 8);
+  const r = rows[S.sel % rows.length];
+  const lv = it.level;
+
+  const cascade = `<div class="card" style="margin-bottom:16px"><div class="card-b">
+    <div class="cascade">
+      ${lv!=='tujuan'?`<div class="field"><label>Tujuan</label><select><option>${r.tujuan}</option></select></div>`:''}
+      ${['program','kegiatan','sub-kegiatan'].includes(lv)?`<div class="field"><label>Sasaran</label><select><option>${r.sasaran}</option></select></div>`:''}
+      ${['kegiatan','sub-kegiatan'].includes(lv)?`<div class="field"><label>Program</label><select><option>${r.program}</option></select></div>`:''}
+      ${lv==='sub-kegiatan'?`<div class="field"><label>Kegiatan</label><select><option>${r.kegiatan}</option></select></div>`:''}
+      <div class="field"><label>Indikator</label><select>${rows.map(x=>`<option ${x===r?'selected':''}>${x.indikator}</option>`).join('')}</select></div>
+    </div></div></div>`;
+
+  const hero = `<div class="hero">
+    <div class="card"><div class="card-b">
+      <div style="display:flex;gap:9px;align-items:center;margin-bottom:9px">
+        ${badge('info',r.jenis)}${badge('pur','Satuan: '+r.satuan)}
+        ${lv==='sub-kegiatan'?badge('warn','Pagu Rp '+RP(r.anggaran)):''}
+      </div>
+      <div class="big">${r.indikator}</div>
+      <div style="display:flex;gap:26px;margin-top:16px;flex-wrap:wrap">
+        <div><div class="k muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Target Tahunan</div>
+          <div class="mono" style="font-size:19px;font-weight:700;margin-top:3px">${r.tahunan}</div></div>
+        <div><div class="k muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Realisasi Akhir</div>
+          <div class="mono" style="font-size:19px;font-weight:700;margin-top:3px">${r.real}</div></div>
+        <div><div class="k muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Target RPJMD</div>
+          <div class="mono" style="font-size:19px;font-weight:700;margin-top:3px">${r.rpjmd}</div></div>
+      </div>
+      <div style="margin-top:15px">${barOf(r.pct, r.pct>=100?'ok':r.pct>=85?'warn':'bad')}</div>
+    </div></div>
+    <div class="card"><div class="card-b dial" style="height:100%">
+      <div><div class="pv" style="color:${r.pct>=100?'var(--success)':r.pct>=85?'var(--primary)':'var(--danger)'}">${PC(r.pct)}</div>
+      <div class="pl">Capaian Tahunan</div>
+      <div style="margin-top:12px">${pctBadge(r.pct)}</div></div>
+    </div></div></div>`;
+
+  const tw = `<div class="twgrid">${r.tw.map((q,i)=>{
+    const p = Math.round(q.r/Math.max(q.t,1)*10000)/100;
+    return `<div class="tw"><div class="h"><b>TRIWULAN ${i+1}</b>${pctBadge(p)}</div>
+      ${barOf(p, p>=100?'ok':p>=85?'warn':'bad')}
+      <div class="l"><span>Target</span><span class="num">${q.t}</span></div>
+      <div class="l"><span>Realisasi</span><span class="num">${q.r}</span></div></div>`;
+  }).join('')}</div>`;
+
+  const bulanan = `<div class="grid3">
+    <div class="card"><div class="card-h"><h3>Realisasi Bulanan</h3>
+      <span class="sub">${r.satuan}</span>
+      <div class="acts">${btn('ghost','Matriks Bulanan','grid','sm')}${btn('primary','Simpan','save','sm')}</div></div>
+      <div class="card-b">${monthGrid(r.bulan)}
+        <div style="margin-top:14px">${sparkOf(r.bulan)}</div></div></div>
+    <div class="card"><div class="card-h"><h3>Rekap ${LEVELS.find(l=>l.id===lv).label}</h3></div>
+      <div class="card-b" style="padding:10px 0">
+        ${rows.slice(0,6).map((x,i)=>`<button class="lrow ${x===r?'on':''}" onclick="setSel(${i})">
+          <div class="t1">${x.indikator}</div>
+          <div class="t2"><span class="num">${x.real}</span>/<span class="num">${x.tahunan}</span> ${x.satuan} ${pctBadge(x.pct)}</div>
+        </button>`).join('')}
+      </div></div></div>`;
+
+  const cols = [{h:'No',cls:'c',w:'42px'},{h:'Indikator'},{h:'Satuan',cls:'c'},{h:'Jenis',cls:'c'},
+                {h:'Target',cls:'r'},{h:'Realisasi',cls:'r'},{h:'Capaian',cls:'c',w:'150px'}];
+  const trows = rows.map(x=>`<tr><td class="c muted mono">${x.no}</td>
+    <td class="strong trunc" style="max-width:340px">${x.indikator}</td>
+    <td class="c">${x.satuan}</td><td class="c">${badge('info',x.jenis)}</td>
+    <td class="num">${x.tahunan}</td><td class="num">${x.real}</td>
+    <td class="c"><div style="display:flex;align-items:center;gap:9px">${barOf(x.pct,x.pct>=100?'ok':x.pct>=85?'warn':'bad')}<span class="mono" style="font-size:11px;font-weight:600">${PC(x.pct)}</span></div></td></tr>`);
+
+  return {
+    body: cascade + hero + tw + bulanan + `<div style="margin-top:14px">` +
+          `<div class="toolbar">${searchBox('Cari indikator…')}<div style="margin-left:auto">${btn('success','Excel','download','sm')}</div></div>` +
+          tableOf(cols, trows, {}) + `</div>`,
+    rows, cols,
+    listOf: x => ({t1:x.indikator, t2:`${x.real}/${x.tahunan} ${x.satuan}`, badge:pctBadge(x.pct)}),
+    inspect: x => raInspect(x, lv),
+    ribbon:[['Indikator', rows.length],['Rata Capaian', PC(rows.reduce((a,b)=>a+b.pct,0)/rows.length)],
+            ['Tercapai', rows.filter(x=>x.pct>=100).length+' indikator'],['Tahun', '2026']],
+  };
+}
+
+/* ── Renaksi · Cetak ── */
+function scrRaCetak(){
+  const rows = raRows('sub-kegiatan', 7);
+  const opts = `<div class="card" style="margin-bottom:16px"><div class="card-b">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
+      <div class="field" style="min-width:150px"><label>Mode</label>
+        <div class="pillbar"><button class="on">Hirarki</button><button>Flat</button></div></div>
+      <div class="field" style="min-width:220px"><label>Level ditampilkan</label>
+        <div class="chipset">${LEVELS.map((l,i)=>`<span class="chip ${i>0?'on':''}">${l.label}</span>`).join('')}</div></div>
+      <div class="field" style="min-width:230px"><label>Kolom opsional</label>
+        <div class="chipset"><span class="chip on">${ico('check',12)}Triwulan</span><span class="chip on">${ico('check',12)}Anggaran</span><span class="chip">Outcome</span></div></div>
+      <div class="field" style="min-width:150px"><label>Tahun</label>${yearSelect()}</div>
+      <div style="margin-left:auto;display:flex;gap:8px">${btn('ghost','Excel','download')}${btn('success','Unduh PDF','printer')}</div>
+    </div></div></div>`;
+
+  const paper = `<div class="card"><div class="card-h"><h3>Pratinjau — A4 Lanskap</h3>
+      <span class="sub">7 baris · 1 dari 3 halaman</span>
+      <div class="acts">${btn('ghost','Perbesar','eye','sm')}</div></div>
+    <div class="card-b" style="background:var(--elev)">
+      <div class="paper">
+        <h4>Matriks Rencana Aksi dan Realisasi Kinerja</h4>
+        <div class="psub">RSJD Dr. Amino Gondohutomo Provinsi Jawa Tengah · Tahun Anggaran 2026</div>
+        <table><thead><tr>
+          <th rowspan="2">No</th><th rowspan="2">Program</th><th rowspan="2">Kegiatan</th><th rowspan="2">Sub Kegiatan</th>
+          <th rowspan="2">Indikator</th><th rowspan="2">Satuan</th><th rowspan="2">Target</th>
+          <th colspan="4">Triwulan</th><th rowspan="2">Realisasi</th><th rowspan="2">Capaian</th><th rowspan="2">Anggaran (Rp)</th>
+        </tr><tr>${[1,2,3,4].map(q=>`<th>TW${q}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td style="text-align:center">${r.no}</td><td>${r.program}</td><td>${r.kegiatan}</td><td>${r.sub}</td>
+          <td>${r.indikator}</td><td style="text-align:center">${r.satuan}</td><td class="num">${r.tahunan}</td>
+          ${r.tw.map(q=>`<td class="num">${q.r}</td>`).join('')}
+          <td class="num">${r.real}</td><td class="num">${PC(r.pct)}</td><td class="num">${RP(r.anggaran)}</td></tr>`).join('')}
+        </tbody></table>
+      </div></div></div>`;
+  return {body: opts + paper};
+}
+
+/* ── Kinerja · Beranda ── */
+function scrKBeranda(){
+  const pagu = SUMBER.map(s => [s, rint(2,26)*1e9]);
+  const total = pagu.reduce((a,b)=>a+b[1],0);
+  const real = total*0.6412;
+  const cards = [
+    kpi('Total Pagu','Rp '+RP(total/1e6)+' jt','Anggaran 2026','wallet','#378ADD'),
+    kpi('Realisasi Keuangan','Rp '+RP(real/1e6)+' jt','Total diserap','coins','#1D9E75'),
+    kpi('Serapan Anggaran','64,12%','Keuangan','percent','#EF9F27'),
+    kpi('Item RKO','1.284','Baris SSK','list','#7C5CFC'),
+    kpi('Rekening','312','Terdaftar','db','#BA7517'),
+    kpi('Tahun Aktif','2026','Periode berjalan','calendar','#378ADD'),
+  ].join('');
+  const charts = `<div class="grid2">
+    <div class="card"><div class="card-h"><h3>Pagu per Sumber Anggaran</h3><span class="sub">8 sumber</span></div>
+      <div class="card-b">${barChart(pagu.map(p=>[p[0],p[1],'Rp '+RP(p[1]/1e6)+' jt']))}</div></div>
+    <div class="card"><div class="card-h"><h3>Komposisi Pagu</h3><span class="sub">total Rp ${RP(total/1e9)} M</span></div>
+      <div class="card-b">${donut(pagu)}</div></div></div>`;
+  const trend = `<div class="card" style="margin-top:14px"><div class="card-h"><h3>Serapan Kumulatif 2026</h3>
+    <span class="sub">% terhadap pagu</span></div><div class="card-b">
+    <div class="mgrid">${BULAN.map((b,i)=>{
+      const v = Math.round((i+1)/12*64.12*100)/100;
+      return `<div class="mcell" style="background:color-mix(in srgb, var(--primary) ${Math.round(v/70*38)}%, transparent)">
+        <div class="m">${b}</div><div class="v">${v.toFixed(1)}</div></div>`;
+    }).join('')}</div></div></div>`;
+  return {body:`<div class="kpigrid">${cards}</div>` + charts + trend,
+          ribbon:[['Total Pagu','Rp '+RP(total/1e6)+' jt'],['Realisasi','Rp '+RP(real/1e6)+' jt'],
+                  ['Serapan','64,12%'],['Item RKO','1.284'],['Rekening','312'],['Tahun','2026']]};
+}
+
+/* ── Kinerja · Laporan Konsolidasi ── */
+function scrKLaporan(){
+  const rows = SUMBER.map((s,i)=>{
+    const pagu = rint(2,26)*1e9, rk = Math.round(pagu*(rint(38,92)/100));
+    const fis = rint(40,99);
+    return {no:i+1, sumber:s, pagu, rk, pctK:Math.round(rk/pagu*10000)/100, fis, item:rint(40,260)};
+  });
+  const tot = rows.reduce((a,r)=>({pagu:a.pagu+r.pagu, rk:a.rk+r.rk, item:a.item+r.item}),{pagu:0,rk:0,item:0});
+  const cards = [
+    kpi('Total Pagu','Rp '+RP(tot.pagu/1e6)+' jt','8 sumber','wallet','#378ADD'),
+    kpi('Real. Keuangan','Rp '+RP(tot.rk/1e6)+' jt','Terserap','coins','#1D9E75'),
+    kpi('Serapan Keuangan',PC(tot.rk/tot.pagu*100),'Konsolidasi','percent','#EF9F27'),
+    kpi('Capaian Fisik',PC(rows.reduce((a,r)=>a+r.fis,0)/8),'Rata-rata','trend','#7C5CFC'),
+  ].join('');
+  const cols = [{h:'No',cls:'c',w:'42px'},{h:'Sumber Anggaran'},{h:'Item',cls:'r'},{h:'Pagu (Rp)',cls:'r'},
+                {h:'Real. Keuangan (Rp)',cls:'r'},{h:'% Keuangan',cls:'c',w:'160px'},{h:'% Fisik',cls:'c',w:'160px'}];
+  const trows = rows.map(r=>`<tr><td class="c muted mono">${r.no}</td>
+    <td class="strong">${r.sumber}</td><td class="num">${r.item}</td>
+    <td class="num">${RP(r.pagu)}</td><td class="num">${RP(r.rk)}</td>
+    <td class="c"><div style="display:flex;align-items:center;gap:9px">${barOf(r.pctK,r.pctK>=80?'ok':r.pctK>=50?'warn':'bad')}<span class="mono" style="font-size:11px">${PC(r.pctK)}</span></div></td>
+    <td class="c"><div style="display:flex;align-items:center;gap:9px">${barOf(r.fis,r.fis>=80?'ok':r.fis>=50?'warn':'bad')}<span class="mono" style="font-size:11px">${PC(r.fis)}</span></div></td></tr>`);
+  const foot = `<tr><td colspan="2">TOTAL KONSOLIDASI</td><td class="num">${tot.item}</td>
+    <td class="num">${RP(tot.pagu)}</td><td class="num">${RP(tot.rk)}</td>
+    <td class="c mono">${PC(tot.rk/tot.pagu*100)}</td><td class="c mono">${PC(rows.reduce((a,r)=>a+r.fis,0)/8)}</td></tr>`;
+  return {
+    body:`<div class="kpigrid">${cards}</div>` +
+      `<div class="toolbar">${searchBox('Cari sumber…')}<div style="margin-left:auto;display:flex;gap:8px">${btn('ghost','Excel','download','sm')}${btn('success','Cetak PDF','printer','sm')}</div></div>` +
+      tableOf(cols, trows, {foot}),
+    rows, cols,
+    listOf: r => ({t1:'Sumber '+r.sumber, t2:`Rp ${RP(r.pagu/1e6)} jt · ${r.item} item`, badge:pctBadge(r.pctK)}),
+    inspect: r => `<div class="sect">Ringkasan Sumber ${r.sumber}</div>
+      <div class="kv">
+        <div><div class="k">Pagu</div><div class="v num">Rp ${RP(r.pagu)}</div></div>
+        <div><div class="k">Realisasi Keuangan</div><div class="v num">Rp ${RP(r.rk)}</div></div>
+        <div><div class="k">% Keuangan</div><div class="v num">${PC(r.pctK)}</div></div>
+        <div><div class="k">% Fisik</div><div class="v num">${PC(r.fis)}</div></div>
+        <div><div class="k">Jumlah Item</div><div class="v num">${r.item}</div></div>
+      </div>
+      <div class="sect">Serapan Bulanan</div>
+      ${monthGrid(Array.from({length:12},(_,i)=>Math.round(r.rk/12/1e6*(0.6+rnd()))), v=>v)}
+      <div class="hint" style="margin-top:9px">Nilai dalam juta rupiah.</div>`,
+    ribbon:[['Total Pagu','Rp '+RP(tot.pagu/1e6)+' jt'],['Realisasi','Rp '+RP(tot.rk/1e6)+' jt'],
+            ['Serapan',PC(tot.rk/tot.pagu*100)],['Item',String(tot.item)]],
+  };
+}
+
+/* ── Kinerja · Master Rekening ── */
+function scrKMaster(){
+  const tipe = ['Program','Kegiatan','Sub Kegiatan','Uraian SSK','Sumber Anggaran'];
+  const rows = Array.from({length:10},(_,i)=>({
+    no:i+1, program:PROGRAM[i%4], kegiatan:KEGIATAN[i%4], sub:SUBKEG[i%4],
+    nama:URAIANSSK[i%URAIANSSK.length], sumber:SUMBER[i%8], urut:(i+1)*10,
+  }));
+  const cols=[{h:'No',cls:'c',w:'42px'},{h:'Program'},{h:'Kegiatan'},{h:'Sub Kegiatan'},{h:'Uraian SSK'},{h:'Sumber',cls:'c'},{h:'Urut',cls:'r',w:'62px'},{h:'Aksi',cls:'c',w:'78px'}];
+  const trows = rows.map(r=>`<tr><td class="c muted mono">${r.no}</td>
+    <td class="trunc">${r.program}</td><td class="trunc">${r.kegiatan}</td><td class="trunc">${r.sub}</td>
+    <td class="strong trunc">${r.nama}</td><td class="c">${badge('info',r.sumber)}</td><td class="num">${r.urut}</td>
+    <td class="c"><span style="display:inline-flex;gap:5px;color:var(--muted)">${ico('pencil',15)}${ico('x',15)}</span></td></tr>`);
+  return {
+    body:`<div class="toolbar">
+      <div class="pillbar">${tipe.map((t,i)=>`<button class="${i===3?'on':''}">${t}</button>`).join('')}</div>
+      ${searchBox('Cari master…')}
+      <div style="margin-left:auto;display:flex;gap:8px">${btn('ghost','Import','upload','sm')}${btn('purple','Tambah','plus','sm')}</div></div>` +
+      tableOf(cols, trows, {}),
+    rows, cols,
+    listOf: r => ({t1:r.nama, t2:r.sub, badge:badge('info',r.sumber)}),
+    inspect: r => `<div class="sect">Master — Uraian SSK</div>
+      <div class="kv">
+        <div><div class="k">Nama</div><div class="v">${r.nama}</div></div>
+        <div><div class="k">Sumber</div><div class="v">${badge('info',r.sumber)}</div></div>
+        <div><div class="k">Urutan</div><div class="v num">${r.urut}</div></div>
+      </div>
+      <div class="sect">Referensi Hirarki</div>
+      <div class="kv">
+        <div><div class="k">Program</div><div class="v" style="font-size:12px;font-weight:500">${r.program}</div></div>
+        <div><div class="k">Kegiatan</div><div class="v" style="font-size:12px;font-weight:500">${r.kegiatan}</div></div>
+        <div><div class="k">Sub Kegiatan</div><div class="v" style="font-size:12px;font-weight:500">${r.sub}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:20px">${btn('primary','Simpan','save')}${btn('danger','Hapus','x')}</div>`,
+  };
+}
+
+/* ── Kinerja · Rekening ── */
+function scrKRekening(){
+  const rows = Array.from({length:11},(_,i)=>({
+    no:i+1, rek:REKENING[i%REKENING.length], uraian:URAIANSSK[i%URAIANSSK.length],
+    ssk:URAIANSSK[(i+2)%URAIANSSK.length], sumber:SUMBER[i%8],
+    program:PROGRAM[i%4], kegiatan:KEGIATAN[i%4], sub:SUBKEG[i%4],
+  }));
+  const cols=[{h:'No',cls:'c',w:'42px'},{h:'Kode Rekening'},{h:'Uraian Rekening'},{h:'Uraian SSK'},
+              {h:'Sumber',cls:'c'},{h:'Program'},{h:'Sub Kegiatan'},{h:'Aksi',cls:'c',w:'78px'}];
+  const trows = rows.map(r=>`<tr><td class="c muted mono">${r.no}</td>
+    <td class="num" style="text-align:left;color:var(--primary);font-weight:600">${r.rek}</td>
+    <td class="strong trunc">${r.uraian}</td><td class="trunc">${r.ssk}</td>
+    <td class="c">${badge('info',r.sumber)}</td><td class="trunc">${r.program}</td><td class="trunc">${r.sub}</td>
+    <td class="c"><span style="display:inline-flex;gap:5px;color:var(--muted)">${ico('pencil',15)}${ico('x',15)}</span></td></tr>`);
+  return {
+    body:`<div class="toolbar">${searchBox('Cari kode / uraian rekening…')}
+      <div class="chipset">${SUMBER.slice(0,4).map((s,i)=>`<span class="chip ${i===0?'on':''}"><i class="pip"></i>${s}</span>`).join('')}<span class="chip">+4 lagi</span></div>
+      <div style="margin-left:auto;display:flex;gap:8px">${btn('ghost','Excel','download','sm')}${btn('purple','Tambah Rekening','plus','sm')}</div></div>` +
+      tableOf(cols, trows, {}),
+    rows, cols,
+    listOf: r => ({t1:r.uraian, t2:r.rek, badge:badge('info',r.sumber)}),
+    inspect: r => `<div class="sect">Rekening Belanja</div>
+      <div class="kv">
+        <div><div class="k">Kode Rekening</div><div class="v num" style="color:var(--primary)">${r.rek}</div></div>
+        <div><div class="k">Sumber</div><div class="v">${badge('info',r.sumber)}</div></div>
+        <div><div class="k">Uraian</div><div class="v">${r.uraian}</div></div>
+        <div><div class="k">Uraian SSK</div><div class="v">${r.ssk}</div></div>
+      </div>
+      <div class="sect">Pemetaan Hirarki</div>
+      <div class="kv">
+        <div><div class="k">Program</div><div class="v" style="font-size:12px;font-weight:500">${r.program}</div></div>
+        <div><div class="k">Kegiatan</div><div class="v" style="font-size:12px;font-weight:500">${r.kegiatan}</div></div>
+        <div><div class="k">Sub Kegiatan</div><div class="v" style="font-size:12px;font-weight:500">${r.sub}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:20px">${btn('primary','Simpan','save')}${btn('ghost','Batal')}</div>`,
+  };
+}
+
+/* ── Kinerja · RKO (SSK) ── */
+function scrKRko(it){
+  const rows = sskRows(it.sumber, 9);
+  const totPagu = rows.reduce((a,r)=>a+r.pagu,0);
+  const totAll  = rows.reduce((a,r)=>a+r.total,0);
+  const cols = [
+    {h:'No',cls:'c',w:'42px'},{h:'Program / Kegiatan / Sub'},{h:'Uraian SSK'},{h:'Rekening Belanja'},{h:'Pagu (Rp)',cls:'r'},
+    S.monthMode==='bulan' ? {h:'Rencana Bulanan (Rp juta)', sub:BULAN} : {h:'Rencana Triwulan (Rp juta)', sub:['TW1','TW2','TW3','TW4']},
+    {h:'Total (Rp)',cls:'r'},{h:'Total %',cls:'c'},{h:'Aksi',cls:'c',w:'62px'},
+  ];
+  const trows = rows.map(r=>{
+    const vals = S.monthMode==='bulan' ? r.bulan
+      : [0,1,2,3].map(q => r.bulan.slice(q*3,q*3+3).reduce((a,b)=>a+b,0));
+    return `<tr><td class="c muted mono">${r.no}</td>
+      <td class="trunc" style="max-width:210px"><div class="strong" style="font-size:12px">${r.sub}</div>
+        <div class="muted" style="font-size:10.5px">${r.program}</div></td>
+      <td class="strong trunc">${r.uraian}</td>
+      <td class="num" style="text-align:left;color:var(--primary);font-size:11.5px">${r.rek}</td>
+      <td class="num">${RP(r.pagu)}</td>
+      ${vals.map((v,i)=>`<td class="num" style="${i===0?'border-left:1px solid var(--hair)':''};font-size:11px">${v?RP(v/1e6):'—'}</td>`).join('')}
+      <td class="num">${RP(r.total)}</td>
+      <td class="c">${pctBadge(r.pctTotal)}</td>
+      <td class="c"><span style="color:var(--muted)">${ico('pencil',15)}</span></td></tr>`;
+  });
+  const foot = `<tr><td colspan="4">TOTAL RKO ${it.sumber}</td><td class="num">${RP(totPagu)}</td>
+    <td colspan="${S.monthMode==='bulan'?12:4}"></td><td class="num">${RP(totAll)}</td>
+    <td class="c mono">${PC(totAll/totPagu*100)}</td><td></td></tr>`;
+  return {
+    body:`<div class="toolbar">
+      ${searchBox('Cari uraian / rekening…')}
+      <div class="pillbar">
+        <button class="${S.monthMode==='bulan'?'on':''}" onclick="setMonthMode('bulan')">12 Bulan</button>
+        <button class="${S.monthMode==='tw'?'on':''}" onclick="setMonthMode('tw')">4 Triwulan</button></div>
+      <div class="chipset"><span class="chip on">${ico('check',12)}MURNI</span><span class="chip">PERUBAHAN</span></div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        ${btn('ghost','Import','upload','sm')}${btn('success','Excel','download','sm')}${btn('purple','Tambah Baris','plus','sm')}${btn('primary','Simpan','save','sm')}</div></div>` +
+      tableOf(cols, trows, {foot}),
+    rows, cols,
+    listOf: r => ({t1:r.uraian, t2:`Rp ${RP(r.pagu/1e6)} jt · ${r.rek}`, badge:pctBadge(r.pctTotal)}),
+    inspect: r => `<div class="sect">Baris RKO — ${it.sumber}</div>
+      <div class="kv">
+        <div><div class="k">Uraian SSK</div><div class="v">${r.uraian}</div></div>
+        <div><div class="k">Rekening</div><div class="v num" style="color:var(--primary)">${r.rek}</div></div>
+        <div><div class="k">Pagu</div><div class="v num">Rp ${RP(r.pagu)}</div></div>
+        <div><div class="k">Total Rencana</div><div class="v num">Rp ${RP(r.total)}</div></div>
+        <div><div class="k">Total %</div><div class="v num">${PC(r.pctTotal)}</div></div>
+        <div><div class="k">Versi</div><div class="v">${badge('warn','MURNI')}</div></div>
+      </div>
+      <div class="sect">Rencana Bulanan (Rp juta)</div>
+      ${monthGrid(r.bulan.map(v=>Math.round(v/1e6)), v=>v||'—')}
+      <div class="sect">Hirarki</div>
+      <div class="kv">
+        <div><div class="k">Program</div><div class="v" style="font-size:12px;font-weight:500">${r.program}</div></div>
+        <div><div class="k">Kegiatan</div><div class="v" style="font-size:12px;font-weight:500">${r.kegiatan}</div></div>
+        <div><div class="k">Sub Kegiatan</div><div class="v" style="font-size:12px;font-weight:500">${r.sub}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:20px">${btn('primary','Simpan Baris','save')}${btn('danger','Hapus','x')}</div>`,
+    ribbon:[['Sumber',it.sumber],['Total Pagu','Rp '+RP(totPagu/1e6)+' jt'],
+            ['Total Rencana','Rp '+RP(totAll/1e6)+' jt'],['Baris',String(rows.length)],['Versi','MURNI']],
+  };
+}
+
+/* ── Kinerja · Realisasi ── */
+function scrKReal(it){
+  const rows = realRows(it.sumber, 9);
+  const cols=[{h:'No',cls:'c',w:'42px'},{h:'Keterangan'},{h:'Uraian SSK'},{h:'Pagu Awal (Rp)',cls:'r'},
+    {h:'Fisik', sub:['Target','Real','%','Akum T','Akum R']},
+    {h:'Keuangan', sub:['Real (Rp)','%','Akum (Rp)']},
+    {h:'Deviasi',cls:'c'},{h:'Aksi',cls:'c',w:'62px'}];
+  const trows = rows.map(r=>`<tr><td class="c muted mono">${r.no}</td>
+    <td class="strong trunc" style="max-width:200px">${r.ket}</td>
+    <td class="trunc" style="max-width:190px">${r.uraian}</td>
+    <td class="num">${RP(r.pagu)}</td>
+    <td class="num" style="border-left:1px solid var(--hair)">${r.tf}</td>
+    <td class="num">${r.rf}</td><td class="num">${PC(r.pctF)}</td>
+    <td class="num">${r.akT}</td><td class="num">${r.akR}</td>
+    <td class="num" style="border-left:1px solid var(--hair)">${RP(r.rk)}</td>
+    <td class="num">${PC(r.pctK)}</td><td class="num">${RP(r.akK)}</td>
+    <td class="c">${badge(r.dev>=0?'ok':'bad',(r.dev>=0?'+':'')+r.dev)}</td>
+    <td class="c"><span style="color:var(--muted)">${ico('pencil',15)}</span></td></tr>`);
+  return {
+    body:`<div class="toolbar">
+      <div class="field" style="min-width:150px"><select>${BULAN_FULL.map((b,i)=>`<option ${i===7?'selected':''}>Bulan ${b}</option>`).join('')}</select></div>
+      ${searchBox('Cari keterangan…')}
+      <div class="chipset"><span class="chip on">${ico('check',12)}Sumber ${it.sumber}</span></div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        ${btn('ghost','Import','upload','sm')}${btn('success','Excel','download','sm')}${btn('primary','Simpan','save','sm')}</div></div>` +
+      tableOf(cols, trows, {}),
+    rows, cols,
+    listOf: r => ({t1:r.uraian, t2:`${r.ket} · Rp ${RP(r.pagu/1e6)} jt`, badge:badge(r.dev>=0?'ok':'bad',(r.dev>=0?'+':'')+r.dev)}),
+    inspect: r => `<div class="sect">Realisasi — ${it.sumber}, Agustus 2026</div>
+      <div class="kv">
+        <div><div class="k">Keterangan</div><div class="v">${r.ket}</div></div>
+        <div><div class="k">Uraian SSK</div><div class="v">${r.uraian}</div></div>
+        <div><div class="k">Pagu Awal</div><div class="v num">Rp ${RP(r.pagu)}</div></div>
+      </div>
+      <div class="sect">Fisik</div>
+      <div class="kv">
+        <div><div class="k">Target</div><div class="v num">${r.tf}</div></div>
+        <div><div class="k">Realisasi</div><div class="v num">${r.rf}</div></div>
+        <div><div class="k">Capaian</div><div class="v num">${PC(r.pctF)}</div></div>
+        <div><div class="k">Deviasi</div><div class="v">${badge(r.dev>=0?'ok':'bad',(r.dev>=0?'+':'')+r.dev)}</div></div>
+      </div>
+      <div class="sect">Keuangan</div>
+      <div class="kv">
+        <div><div class="k">Realisasi</div><div class="v num">Rp ${RP(r.rk)}</div></div>
+        <div><div class="k">% Terhadap Pagu</div><div class="v num">${PC(r.pctK)}</div></div>
+        <div><div class="k">Akumulasi</div><div class="v num">Rp ${RP(r.akK)}</div></div>
+      </div>
+      <div class="sect">Realisasi Keuangan Bulanan (Rp juta)</div>
+      ${monthGrid(Array.from({length:12},(_,i)=>i<8?Math.round(r.rk/1e6*(0.5+rnd())):0), v=>v||'—')}
+      <div style="display:flex;gap:8px;margin-top:20px">${btn('primary','Simpan','save')}${btn('ghost','Batal')}</div>`,
+    ribbon:[['Sumber',it.sumber],['Bulan','Agustus 2026'],['Baris',String(rows.length)],
+            ['Rata % Fisik',PC(rows.reduce((a,r)=>a+r.pctF,0)/rows.length)],
+            ['Rata % Keu',PC(rows.reduce((a,r)=>a+r.pctK,0)/rows.length)]],
+  };
+}
+
+/* ── Kinerja · Cetak Realisasi ── */
+function scrKCetak(){
+  const rows = realRows('BLUD', 7);
+  const opts = `<div class="card" style="margin-bottom:16px"><div class="card-b">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end">
+      <div class="field" style="min-width:170px"><label>Versi</label>
+        <div class="pillbar"><button class="on">MURNI</button><button>PERUBAHAN</button></div></div>
+      <div class="field" style="min-width:170px"><label>Mode</label>
+        <div class="pillbar"><button class="on">Detail</button><button>Rekap</button></div></div>
+      <div class="field" style="min-width:180px"><label>Kelompokkan</label>
+        <select><option>Sub Kegiatan</option><option>Kegiatan</option><option>Program</option><option>Uraian SSK</option></select></div>
+      <div class="field" style="min-width:170px"><label>Sumber</label>
+        <select><option>Semua Sumber</option>${SUMBER.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      <div class="field" style="min-width:150px"><label>Sampai Bulan</label>
+        <select>${BULAN_FULL.map((b,i)=>`<option ${i===7?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div style="margin-left:auto;display:flex;gap:8px">${btn('ghost','Excel','download')}${btn('success','Unduh PDF','printer')}</div>
+    </div></div></div>`;
+  const paper = `<div class="card"><div class="card-h"><h3>Pratinjau — A4 Lanskap</h3>
+    <span class="sub">Realisasi s/d Agustus 2026</span></div>
+    <div class="card-b" style="background:var(--elev)"><div class="paper">
+      <h4>Laporan Realisasi Fisik dan Keuangan</h4>
+      <div class="psub">RSJD Dr. Amino Gondohutomo Provinsi Jawa Tengah · s/d Agustus 2026 · Versi MURNI</div>
+      <table><thead><tr>
+        <th rowspan="2">No</th><th rowspan="2">Uraian Kegiatan</th><th rowspan="2">Pagu (Rp)</th>
+        <th colspan="3">Fisik</th><th colspan="3">Keuangan</th><th rowspan="2">Deviasi</th>
+      </tr><tr><th>Target</th><th>Real</th><th>%</th><th>Real (Rp)</th><th>%</th><th>Akum (Rp)</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td style="text-align:center">${r.no}</td><td>${r.uraian}</td>
+        <td class="num">${RP(r.pagu)}</td><td class="num">${r.tf}</td><td class="num">${r.rf}</td><td class="num">${PC(r.pctF)}</td>
+        <td class="num">${RP(r.rk)}</td><td class="num">${PC(r.pctK)}</td><td class="num">${RP(r.akK)}</td>
+        <td class="num">${r.dev>=0?'+':''}${r.dev}</td></tr>`).join('')}</tbody></table>
+    </div></div></div>`;
+  return {body:opts+paper};
+}
+
+/* ── Kinerja · Pendapatan & CRR ── */
+function scrKCrr(){
+  let pd=0, bb=0, bd=0;
+  const pend = BULAN_FULL.map((b,i)=>{
+    const t = rint(1200,2400)*1e6, r = Math.round(t*(rint(70,118)/100));
+    return {no:i+1, bulan:b, target:t, real:r, pct:Math.round(r/t*10000)/100};
+  });
+  const crr = BULAN_FULL.map((b,i)=>{
+    const p = pend[i].real, x = Math.round(p*(rint(58,88)/100)), y = Math.round(p*(rint(12,30)/100));
+    pd+=p; bb+=x; bd+=y;
+    return {no:i+1, bulan:b, pend:p, bblud:x, bdaerah:y, pdSd:pd, bbSd:bb, bdSd:bd,
+      parsial: Math.round(p/Math.max(x,1)*10000)/100, total: Math.round(pd/Math.max(bb+bd,1)*10000)/100};
+  });
+  const totT = pend.reduce((a,r)=>a+r.target,0), totR = pend.reduce((a,r)=>a+r.real,0);
+  const cards = [
+    kpi('Target Pendapatan','Rp '+RP(totT/1e6)+' jt','Tahun 2026','wallet','#378ADD'),
+    kpi('Realisasi','Rp '+RP(totR/1e6)+' jt','Diterima','coins','#1D9E75'),
+    kpi('Capaian',PC(totR/totT*100),'Terhadap target','percent','#EF9F27'),
+    kpi('CRR Total',PC(crr[11].total),'Cost Recovery Rate','trend','#7C5CFC'),
+  ].join('');
+
+  const c1=[{h:'No',cls:'c',w:'42px'},{h:'Bulan'},{h:'Target (Rp)',cls:'r'},{h:'Realisasi (Rp)',cls:'r'},{h:'Capaian %',cls:'c',w:'160px'}];
+  const r1=pend.map(r=>`<tr><td class="c muted mono">${r.no}</td><td class="strong">${r.bulan}</td>
+    <td class="num">${RP(r.target)}</td><td class="num">${RP(r.real)}</td>
+    <td class="c"><div style="display:flex;align-items:center;gap:9px">${barOf(r.pct,r.pct>=100?'ok':r.pct>=85?'warn':'bad')}<span class="mono" style="font-size:11px">${PC(r.pct)}</span></div></td></tr>`);
+  const f1=`<tr><td colspan="2">TOTAL</td><td class="num">${RP(totT)}</td><td class="num">${RP(totR)}</td><td class="c mono">${PC(totR/totT*100)}</td></tr>`;
+
+  const c2=[{h:'No',cls:'c',w:'42px'},{h:'Bulan'},{h:'Pendapatan',cls:'r'},{h:'Belanja BLUD',cls:'r'},{h:'Belanja Daerah',cls:'r'},
+            {h:'Pend. s/d',cls:'r'},{h:'BLUD s/d',cls:'r'},{h:'Daerah s/d',cls:'r'},{h:'CRR Parsial',cls:'c'},{h:'CRR Total',cls:'c'}];
+  const r2=crr.map(r=>`<tr><td class="c muted mono">${r.no}</td><td class="strong">${r.bulan}</td>
+    <td class="num">${RP(r.pend/1e6)}</td><td class="num">${RP(r.bblud/1e6)}</td><td class="num">${RP(r.bdaerah/1e6)}</td>
+    <td class="num">${RP(r.pdSd/1e6)}</td><td class="num">${RP(r.bbSd/1e6)}</td><td class="num">${RP(r.bdSd/1e6)}</td>
+    <td class="c">${pctBadge(r.parsial)}</td><td class="c">${pctBadge(r.total)}</td></tr>`);
+
+  return {
+    body:`<div class="kpigrid">${cards}</div>
+      <div class="toolbar solo">${yearSelect()}
+        <div class="pillbar"><button class="on">Pendapatan</button><button>CRR</button><button>Belanja Otomatis</button></div>
+        <div style="margin-left:auto;display:flex;gap:8px">${btn('ghost','Import','upload','sm')}${btn('success','Excel','download','sm')}${btn('primary','Simpan','save','sm')}</div></div>
+      <div class="card-h" style="border:none;padding:2px 0 10px"><h3>Pendapatan — Target vs Realisasi</h3></div>
+      ${tableOf(c1,r1,{solo:true,foot:f1})}
+      <div class="card-h" style="border:none;padding:18px 0 10px"><h3>Cost Recovery Rate (CRR)</h3><span class="sub">nilai dalam juta rupiah</span></div>
+      ${tableOf(c2,r2,{solo:true})}`,
+    rows: pend, cols:c1,
+    listOf: r => ({t1:r.bulan, t2:`Target Rp ${RP(r.target/1e6)} jt`, badge:pctBadge(r.pct)}),
+    inspect: r => `<div class="sect">Pendapatan — ${r.bulan} 2026</div>
+      <div class="kv">
+        <div><div class="k">Target</div><div class="v num">Rp ${RP(r.target)}</div></div>
+        <div><div class="k">Realisasi</div><div class="v num">Rp ${RP(r.real)}</div></div>
+        <div><div class="k">Capaian</div><div class="v num">${PC(r.pct)}</div></div>
+      </div>
+      <div class="sect">CRR Bulan Ini</div>
+      <div class="kv">
+        <div><div class="k">Belanja BLUD</div><div class="v num">Rp ${RP(crr[r.no-1].bblud)}</div></div>
+        <div><div class="k">Belanja Daerah</div><div class="v num">Rp ${RP(crr[r.no-1].bdaerah)}</div></div>
+        <div><div class="k">CRR Parsial</div><div class="v num">${PC(crr[r.no-1].parsial)}</div></div>
+        <div><div class="k">CRR Total (s/d)</div><div class="v num">${PC(crr[r.no-1].total)}</div></div>
+      </div>
+      <div class="sect">Realisasi Pendapatan 12 Bulan (Rp juta)</div>
+      ${monthGrid(pend.map(x=>Math.round(x.real/1e6)), v=>v)}`,
+    ribbon:[['Target','Rp '+RP(totT/1e6)+' jt'],['Realisasi','Rp '+RP(totR/1e6)+' jt'],
+            ['Capaian',PC(totR/totT*100)],['CRR Total',PC(crr[11].total)]],
+  };
+}
+
+/* ── Kinerja · Pengaturan ── */
+function scrKSet(){
+  const sw = (t,d,on,v)=>`<div class="card"><div class="card-b" style="display:flex;gap:14px;align-items:flex-start">
+    <div style="flex:1"><div style="font-size:13.5px;font-weight:700">${t}</div>
+      <div class="hint" style="margin-top:4px">${d}</div></div>
+    <div style="flex-shrink:0">${on?badge('ok','AKTIF'):badge('bad','NONAKTIF')}</div>
+    <div style="flex-shrink:0">${btn(v,on?'Matikan':'Nyalakan','settings','sm')}</div></div></div>`;
+  return {body:`
+    <div class="card" style="margin-bottom:14px;border-color:var(--danger)">
+      <div class="card-b" style="display:flex;gap:12px;align-items:center">
+        ${ico('lock',18)}<div><b style="font-size:13px">Area SUPER_ADMIN</b>
+        <div class="hint">Perubahan di halaman ini berlaku sistem-wide dan tercatat di audit log.</div></div></div></div>
+    <div class="stack">
+      ${sw('Kill-switch Modul E-Anggaran','Menutup seluruh endpoint <span class="mono">/api/kinerja/*</span> secara fail-closed. Dipakai saat migrasi data atau insiden.',true,'danger')}
+      ${sw('Kunci Versi RKO 2026','Mengunci versi MURNI agar tidak bisa diedit. Perubahan wajib lewat versi PERUBAHAN.',true,'warning')}
+      ${sw('Impor Realisasi dari Excel','Mengizinkan unggah berkas realisasi massal oleh ADMIN.',false,'success')}
+      <div class="card"><div class="card-h"><h3>Reset Tahun Anggaran</h3></div>
+        <div class="card-b">
+          <div class="hint" style="margin-bottom:12px">Menghapus seluruh RKO, realisasi, dan pendapatan pada tahun terpilih. Master rekening tidak ikut terhapus. Tindakan ini tidak dapat dibatalkan.</div>
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+            <div class="field" style="min-width:180px"><label>Tahun anggaran</label>${yearSelect()}</div>
+            <div class="field" style="min-width:220px"><label>Ketik <span class="mono">RESET</span> untuk konfirmasi</label><input placeholder="RESET"></div>
+            ${btn('danger','Reset Tahun Anggaran','x')}
+          </div></div></div>
+    </div>`};
+}
+
+/* ═════════════════════════ Router layar ═════════════════════════ */
+function buildScreen(){
+  const it = findItem(S.module, S.item);
+  _s = 20260811 + it.id.length*77;   // seed stabil per layar
+  let s;
+  switch(it.kind){
+    case 'ra-entry':   s = scrRaEntry(it); break;
+    case 'ra-dash':    s = scrRaDash(it); break;
+    case 'ra-cetak':   s = scrRaCetak(); break;
+    case 'k-beranda':  s = scrKBeranda(); break;
+    case 'k-laporan':  s = scrKLaporan(); break;
+    case 'k-master':   s = scrKMaster(); break;
+    case 'k-rekening': s = scrKRekening(); break;
+    case 'k-rko':      s = scrKRko(it); break;
+    case 'k-real':     s = scrKReal(it); break;
+    case 'k-cetak':    s = scrKCetak(); break;
+    case 'k-crr':      s = scrKCrr(); break;
+    default:           s = scrKSet(); break;
+  }
+  s.item = it;
+  return s;
+}
+
+/* ═════════════════════════ Aksi halaman per layar ═════════════════════════ */
+function pageActions(it){
+  const map = {
+    'ra-entry':  [btn('ghost','Duplikasi Tahun','copy','sm'), btn('warning','Kunci Periode','lock','sm')],
+    'ra-dash':   [btn('ghost','Matriks Bulanan','grid','sm'), btn('success','Excel','download','sm')],
+    'ra-cetak':  [],
+    'k-beranda': [btn('ghost','Muat Ulang','trend','sm')],
+    'k-laporan': [btn('ghost','Excel','download','sm')],
+    'k-master':  [btn('ghost','Sinkron dari Renaksi','copy','sm')],
+    'k-rekening':[btn('ghost','Excel','download','sm')],
+    'k-rko':     [btn('ghost','Riwayat Versi','clip','sm')],
+    'k-real':    [btn('ghost','Nomenklatur','book','sm')],
+    'k-cetak':   [],
+    'k-crr':     [btn('ghost','Belanja Otomatis','coins','sm')],
+    'k-set':     [],
+  };
+  return (map[it.kind]||[]).join('');
+}
+
+/* ═════════════════════════ Shell per konsep ═════════════════════════ */
+
+function navGroupsA(mod){
+  return MODULES[mod].groups.map(g => {
+    const open = S.openGroup[mod] === g.id || g.items.length === 1;
+    const single = g.items.length === 1;
+    if(single){
+      const it = g.items[0];
+      return `<button class="navitem ${S.item===it.id?'on':''}" onclick="go('${it.id}')">${ico(it.icon,16)}<span>${it.label}</span></button>`;
+    }
+    return `<div>
+      <button class="navitem" onclick="toggleGroup('${g.id}')">${ico(g.icon,16)}<span>${g.label}</span>
+        <span class="tail">${g.items.length}</span>
+        <span style="transition:.2s;transform:rotate(${open?0:-90}deg);display:flex;color:var(--muted)">${ico('chevron',14)}</span></button>
+      ${open?`<div class="navsub">${g.items.map(it=>`
+        <button class="navitem ${S.item===it.id?'on':''}" onclick="go('${it.id}')">
+          <span class="pip" style="color:${it.accent}"></span><span>${it.label}</span></button>`).join('')}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function shellA(scr){
+  const M = MODULES[S.module];
+  return `<div class="app">
+    <aside class="sb">
+      <div class="sb-head">
+        <div class="sb-logo">${ico(M.icon,17)}</div>
+        <div style="min-width:0"><div class="sb-title">${M.full}</div><div class="sb-sub">${M.sub}</div></div>
+      </div>
+      <div class="sb-year">${yearSelect()}</div>
+      <div class="sb-nav">
+        <div class="sb-lbl">Menu Utama</div>
+        ${navGroupsA(S.module)}
+      </div>
+      <div class="sb-foot">PRIMA v1.0 · ${M.name}</div>
+    </aside>
+    <div class="main">
+      <div class="pagehead">
+        <div><h1>${scr.item.title}</h1><p>${scr.item.desc}</p></div>
+        <div class="acts">${pageActions(scr.item)}</div>
+      </div>
+      <div class="body">${scr.body}</div>
+    </div></div>`;
+}
+
+function shellB(scr){
+  const M = MODULES[S.module];
+  const grp = MODULES[S.module].groups.find(g => g.items.some(i=>i.id===S.item)) || MODULES[S.module].groups[0];
+  const railBtn = (m) => `<button class="${S.module===m?'on':''}" onclick="setModule('${m}')" title="${MODULES[m].name}">${ico(MODULES[m].icon,19)}</button>`;
+  const ctxItems = grp.items.map(it => `
+    <button class="navitem ${S.item===it.id?'on':''}" onclick="go('${it.id}')">
+      <span class="pip" style="color:${it.accent}"></span><span>${it.label}</span></button>`).join('');
+  const railGroups = MODULES[S.module].groups.map(g =>
+    `<button class="${g.id===grp.id?'on':''}" onclick="go('${g.items[0].id}')" title="${g.label}">${ico(g.icon,17)}</button>`).join('');
+
+  return `<div class="app">
+    <div class="rail">
+      <div class="rlogo">${ico('target',18)}</div>
+      ${railBtn('renaksi')}${railBtn('kinerja')}
+      <div class="rsep"></div>
+      ${railGroups}
+    </div>
+    <div class="ctxpanel">
+      <div class="ch"><h3>${grp.label}</h3><p>${M.full}</p></div>
+      <div class="sb-year">${yearSelect()}</div>
+      <div class="sb-nav">${ctxItems}</div>
+      <div class="sb-foot">${grp.items.length} menu · v1.0</div>
+    </div>
+    <div class="main">
+      <div class="cmdbar">
+        <div class="crumb">${ico(M.icon,14)}<span>${M.name}</span>${ico('chevron',12)}<span>${grp.label}</span>${ico('chevron',12)}<b>${scr.item.label}</b></div>
+        <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+          <div class="cmdk">${ico('search',13)}<span>Cari menu, indikator, rekening…</span><kbd>Ctrl K</kbd></div>
+          ${pageActions(scr.item)}
+        </div>
+      </div>
+      <div class="pagehead" style="padding-bottom:8px">
+        <div><h1>${scr.item.title}</h1><p>${scr.item.desc}</p></div>
+      </div>
+      <div class="body">
+        <div style="display:flex;gap:2px;margin-bottom:14px;overflow-x:auto;border-bottom:1px solid var(--hair)">
+          ${grp.items.map(it=>`<button onclick="go('${it.id}')" style="padding:8px 13px;font-size:12.5px;font-weight:${S.item===it.id?700:600};
+            color:${S.item===it.id?'var(--primary)':'var(--text2)'};border-bottom:2px solid ${S.item===it.id?'var(--primary)':'transparent'};white-space:nowrap">${it.label}</button>`).join('')}
+        </div>
+        ${scr.body}
+      </div>
+    </div></div>`;
+}
+
+function shellC(scr){
+  const M = MODULES[S.module];
+  const grp = MODULES[S.module].groups.find(g => g.items.some(i=>i.id===S.item)) || MODULES[S.module].groups[0];
+  const nav = `<div class="topnav">
+    <div class="row1">
+      <div class="modtab">
+        ${Object.values(MODULES).map(m=>`<button class="${S.module===m.key?'on':''}" onclick="setModule('${m.key}')">${ico(m.icon,15)}${m.name}</button>`).join('')}
+      </div>
+      <div style="width:150px">${yearSelect()}</div>
+      <div class="crumb" style="margin-left:6px">${grp.label}${ico('chevron',12)}<b>${scr.item.label}</b></div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <div class="cmdk" style="min-width:190px">${ico('search',13)}<span>Cari…</span><kbd>Ctrl K</kbd></div>
+        ${pageActions(scr.item)}
+      </div>
+    </div>
+    <div class="row2">
+      ${MODULES[S.module].groups.flatMap(g => g.items).map(it =>
+        `<button class="${S.item===it.id?'on':''}" onclick="go('${it.id}')">${it.label}</button>`).join('')}
+    </div></div>`;
+
+  let content;
+  if(scr.rows && scr.listOf && scr.inspect){
+    const sel = S.sel % scr.rows.length;
+    const r = scr.rows[sel];
+    const info = scr.listOf(r);
+    content = (scr.ribbon?ribbonOf(scr.ribbon):'') + `<div class="split">
+      <div class="lst">
+        <div class="lh">${searchBox('Cari…')}</div>
+        <div class="ls">${scr.rows.map((x,i)=>{const o=scr.listOf(x);
+          return `<button class="lrow ${i===sel?'on':''}" onclick="setSel(${i})">
+            <div class="t1">${o.t1}</div><div class="t2"><span>${o.t2}</span><span style="margin-left:auto">${o.badge||''}</span></div></button>`;}).join('')}</div>
+        <div style="padding:10px 12px;border-top:1px solid var(--hair);display:flex;gap:7px">
+          ${btn('purple','Tambah','plus','sm')}${btn('ghost','Excel','download','sm')}</div>
+      </div>
+      <div class="insp">
+        <div class="card-h"><h3>${info.t1}</h3><span class="sub">${info.t2}</span>
+          <div class="acts">${btn('ghost','Duplikat','copy','sm')}${btn('danger','Hapus','x','sm')}</div></div>
+        <div class="ib">${scr.inspect(r)}</div>
+      </div></div>`;
+  } else {
+    content = scr.body;
+  }
+
+  return `<div style="display:flex;flex-direction:column;flex:1;min-height:0">
+    ${nav}
+    <div class="main">
+      <div class="pagehead" style="padding-bottom:10px"><div><h1>${scr.item.title}</h1><p>${scr.item.desc}</p></div></div>
+      <div class="body">${content}</div>
+    </div></div>`;
+}
+
+/* ═════════════════════════ Render ═════════════════════════ */
+function render(){
+  document.documentElement.dataset.concept = S.concept;
+  document.documentElement.dataset.theme   = S.theme;
+
+  const n = NOTES[S.concept];
+  document.getElementById('notes').innerHTML = S.notesOpen
+    ? `<span class="tag">${n.tag}</span><b style="flex-shrink:0">${n.name}</b><span>${n.text}</span>
+       <button class="close" onclick="S.notesOpen=false;render()">${ico('x',15)}</button>`
+    : `<span class="tag">${n.tag}</span><b>${n.name}</b>
+       <button class="close" onclick="S.notesOpen=true;render()" style="margin-left:auto;font-size:11px;font-weight:700">Tampilkan catatan konsep</button>`;
+
+  const scr = buildScreen();
+  const stage = document.getElementById('stage');
+  stage.innerHTML = S.concept==='a' ? shellA(scr) : S.concept==='b' ? shellB(scr) : shellC(scr);
+
+  document.querySelectorAll('#conceptSeg button').forEach(b => b.classList.toggle('on', b.dataset.c===S.concept));
+  document.querySelectorAll('#moduleSeg button').forEach(b => b.classList.toggle('on', b.dataset.m===S.module));
+  document.getElementById('themeBtn').innerHTML = ico(S.theme==='dark'?'sun':'moon',16);
+  const tot = allItems('renaksi').length + allItems('kinerja').length;
+  document.getElementById('menuCount').textContent =
+    `${allItems(S.module).length} menu di modul ini · ${tot} menu total`;
+}
+
+/* ═════════════════════════ Aksi ═════════════════════════ */
+function go(id){ S.item = id; S.sel = 0;
+  const g = MODULES[S.module].groups.find(x=>x.items.some(i=>i.id===id));
+  if(g) S.openGroup[S.module] = g.id;
+  render(); }
+function toggleGroup(g){ S.openGroup[S.module] = S.openGroup[S.module]===g ? null : g; render(); }
+function setModule(m){ S.module = m; S.item = allItems(m)[0].id; S.sel = 0;
+  S.openGroup[m] = MODULES[m].groups[0].id; render(); }
+function setSel(i){ S.sel = i; render(); }
+function setMonthMode(m){ S.monthMode = m; render(); }
+
+document.getElementById('conceptSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return; S.concept = b.dataset.c; S.sel = 0; render(); });
+document.getElementById('moduleSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return; setModule(b.dataset.m); });
+document.getElementById('themeBtn').addEventListener('click', () => {
+  S.theme = S.theme==='dark' ? 'light' : 'dark'; render(); });
+
+render();
+</script>
+</body>
+</html>

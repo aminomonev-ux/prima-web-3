@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PRIMA — Revamp UI Modul Renaksi &amp; Kinerja (Konsep Gabungan)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRIMA — Konsep Gabungan, modul Renaksi & Kinerja (11 menu)
+     · Sidebar          → Konsep A
+     · Tab strip + cascade dropdown → Konsep B
+     · Inspektur full-width + kisi 12 bulan → Konsep C
+   Semua warna dari docs/design/DESIGN-SYSTEM.md. Tidak ada hex baru.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root[data-theme="dark"]{
+  --canvas:#020F1C; --card:#042C53; --elev:#0C447C; --hover:#185FA5;
+  --hair:#0C447C; --hair-active:#185FA5;
+  --text:#E6F1FB; --text2:#B5D4F4; --muted:#85B7EB;
+  --shell:#042C53; --zebra:rgba(12,68,124,.24);
+}
+:root[data-theme="light"]{
+  --canvas:#F5F5F7; --card:#FAFAFA; --elev:#F1EFE8;
+  --hover:color-mix(in srgb, #D3D1C7 45%, #FAFAFA);
+  --hair:#D3D1C7; --hair-active:#378ADD;
+  --text:#042C53; --text2:#185FA5; --muted:#378ADD;
+  --shell:#FAFAFA; --zebra:rgba(211,209,199,.26);
+}
+:root{
+  --primary:#EF9F27; --primary-hover:#FAC775; --primary-bg:#633806; --on-primary:#020F1C;
+  --success:#1D9E75; --success-hover:#158A62; --success-bg:#085041;
+  --danger:#E24B4A;  --danger-hover:#C0392B; --danger-bg:#791F1F;
+  --purple:#7C5CFC;  --purple-hover:#6344E0; --purple-bg:#2D1A6E;
+  --warning:#BA7517; --warning-hover:#9A5F10; --warning-bg:#633806;
+  --info:#378ADD;    --info-bg:#0C447C; --on-action:#FFFFFF;
+  --r-sm:6px; --r-md:10px; --r-lg:14px;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono:'JetBrains Mono','IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--canvas); color:var(--text); font-family:var(--sans); font-size:14px;
+  line-height:1.45; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; overflow:hidden}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+.ico{flex-shrink:0}
+button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
+select,input{font-family:inherit; color:inherit}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--elev); border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:var(--hover)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ── Bar mockup (bukan bagian desain) ── */
+.mockbar{display:flex; align-items:center; gap:14px; padding:0 16px; height:48px; flex-shrink:0;
+  background:var(--canvas); border-bottom:1px solid var(--hair); z-index:60}
+.mockbar .tag{padding:3px 10px; border-radius:99px; font-size:10.5px; font-weight:800; letter-spacing:.5px;
+  background:var(--primary-bg); color:var(--primary); border:1px solid var(--primary)}
+.mockbar b{font-size:13px; font-weight:800}
+.mockbar .note{font-size:11.5px; color:var(--muted); font-weight:500}
+.mockbar .spacer{flex:1}
+.iconbtn{width:32px;height:32px;border-radius:var(--r-sm);border:1px solid var(--hair);
+  display:grid;place-items:center;color:var(--muted)}
+.iconbtn:hover{color:var(--text); border-color:var(--hair-active)}
+
+.app{flex:1; min-height:0; display:flex; overflow:hidden}
+
+/* ═══ Sidebar — Konsep A ═══ */
+.sb{width:262px; flex-shrink:0; background:var(--shell); border-right:1px solid var(--hair);
+  display:flex; flex-direction:column; overflow:hidden}
+.sb-head{padding:16px; border-bottom:1px solid var(--hair); display:flex; align-items:center; gap:11px}
+.sb-logo{width:36px;height:36px;border-radius:var(--r-md);background:var(--primary);color:var(--on-primary);
+  display:grid;place-items:center;flex-shrink:0}
+.sb-title{font-size:13px;font-weight:800;letter-spacing:.2px;white-space:nowrap}
+.sb-sub{font-size:10px;color:var(--muted);font-weight:600;white-space:nowrap;margin-top:1px}
+.sb-year{padding:12px 12px 4px}
+select.fld,input.fld{width:100%; background:var(--elev); border:1px solid var(--hair); border-radius:var(--r-sm);
+  padding:8px 10px; font-size:13px; font-weight:600; outline:none}
+select.fld:focus,input.fld:focus{border-color:var(--hair-active)}
+.sb-nav{flex:1; overflow-y:auto; padding:8px 0 16px}
+.sb-lbl{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  padding:12px 18px 6px; opacity:.85}
+.navitem{display:flex; align-items:center; gap:11px; width:calc(100% - 16px); margin:1px 8px;
+  padding:9px 11px; border-radius:var(--r-sm); font-size:13.5px; font-weight:600; color:var(--text2);
+  text-align:left; border-left:2px solid transparent}
+.navitem:hover{background:var(--zebra); color:var(--text)}
+.navitem.on{background:var(--elev); color:var(--text); font-weight:700; border-left-color:var(--primary)}
+.navitem.on .ico{color:var(--primary)}
+.navitem .ico{color:var(--muted)}
+.navitem .tail{margin-left:auto; font-size:11px; color:var(--muted); font-weight:700}
+.navitem .chev{display:flex; color:var(--muted); transition:transform .2s}
+.navsub{padding-left:17px}
+.navsub .navitem{font-size:13px; font-weight:500; padding:7px 11px; gap:10px}
+.navsub .navitem.on{font-weight:700}
+.pip{width:7px;height:7px;border-radius:99px;background:currentColor;flex-shrink:0}
+.sb-foot{padding:12px 16px; border-top:1px solid var(--hair); font-size:11px; color:var(--muted); font-weight:600}
+
+/* ═══ Konten ═══ */
+.main{flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden}
+.pagehead{padding:18px 24px 12px; display:flex; align-items:flex-end; gap:16px; flex-shrink:0}
+.pagehead h1{font-size:19px; font-weight:800; letter-spacing:-.2px}
+.pagehead p{font-size:12.5px; color:var(--muted); font-weight:500; margin-top:3px}
+.pagehead .acts{margin-left:auto; display:flex; gap:8px; flex-shrink:0}
+
+/* Tab strip — Konsep B */
+.tabstrip{display:flex; gap:2px; padding:0 24px; border-bottom:1px solid var(--hair);
+  overflow-x:auto; flex-shrink:0}
+.tabstrip button{padding:9px 15px; font-size:13px; font-weight:600; color:var(--text2);
+  white-space:nowrap; border-bottom:2px solid transparent}
+.tabstrip button:hover{color:var(--text); background:var(--zebra)}
+.tabstrip button.on{color:var(--primary); border-bottom-color:var(--primary); font-weight:700}
+
+.body{flex:1; overflow:auto; padding:16px 24px 28px}
+
+/* Tombol — cermin PrimaButton */
+.btn{display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:var(--r-sm);
+  font-size:12.5px; font-weight:700; border:1px solid transparent; white-space:nowrap; transition:.14s}
+.btn.sm{padding:6px 11px; font-size:11.5px}
+.btn-primary{background:var(--primary); color:var(--on-primary)}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-success{background:var(--success); color:var(--on-action)}
+.btn-success:hover{background:var(--success-hover)}
+.btn-danger{background:var(--danger); color:var(--on-action)}
+.btn-danger:hover{background:var(--danger-hover)}
+.btn-purple{background:var(--purple); color:var(--on-action)}
+.btn-purple:hover{background:var(--purple-hover)}
+.btn-warning{background:var(--warning); color:var(--on-primary)}
+.btn-warning:hover{background:var(--warning-hover)}
+.btn-ghost{background:transparent; color:var(--text2); border-color:var(--hair)}
+.btn-ghost:hover{border-color:var(--hair-active); color:var(--text)}
+
+.card{background:var(--card); border:1px solid var(--hair); border-radius:var(--r-md)}
+.card-h{padding:13px 17px; border-bottom:1px solid var(--hair); display:flex; align-items:center; gap:11px}
+.card-h h3{font-size:14px; font-weight:700}
+.card-h .sub{font-size:11.5px; color:var(--muted); font-weight:600}
+.card-h .acts{margin-left:auto; display:flex; gap:7px}
+.card-b{padding:17px}
+
+/* Cascade dropdown — Konsep B */
+.cascade{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:13px}
+.field{display:flex; flex-direction:column; gap:6px; min-width:0}
+.field label{font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:var(--muted)}
+
+/* Inspektur — Konsep C */
+.insp-h{padding:13px 18px; border-bottom:1px solid var(--hair); display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.insp-h h2{font-size:15px; font-weight:700; min-width:0}
+.insp-h .acts{margin-left:auto; display:flex; gap:8px}
+.sect{font-size:11px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
+  margin:22px 0 11px; padding-bottom:8px; border-bottom:1px solid var(--hair);
+  display:flex; align-items:center; gap:11px}
+.sect:first-child{margin-top:0}
+.sect .r{margin-left:auto; display:flex; gap:7px; align-items:center}
+.kv{display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:15px}
+.kv .k{font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--muted)}
+.kv .v{font-size:13.5px; font-weight:600; color:var(--text); margin-top:4px}
+.kv .v.num{font-family:var(--mono)}
+.kv .v.sm{font-size:12.5px; font-weight:500; line-height:1.5}
+
+/* ★ Kisi 12 bulan — elemen utama */
+.mgrid{display:grid; grid-template-columns:repeat(12,1fr); gap:7px}
+@media(max-width:1180px){.mgrid{grid-template-columns:repeat(6,1fr)}}
+@media(max-width:660px){.mgrid{grid-template-columns:repeat(4,1fr)}}
+.mcell{border:1px solid var(--hair); border-radius:var(--r-sm); padding:9px 6px 10px; text-align:center;
+  min-width:0; transition:.14s; position:relative}
+.mcell:hover{border-color:var(--primary)}
+.mcell .m{font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.08em}
+.mcell .v{font-family:var(--mono); font-size:16px; font-weight:700; margin-top:5px; color:var(--text);
+  background:none; border:none; width:100%; text-align:center; outline:none; padding:0}
+.mcell .v:focus{color:var(--primary)}
+.mcell .t{font-size:9.5px; color:var(--muted); font-weight:600; margin-top:3px; font-family:var(--mono)}
+.mcell.locked{opacity:.55}
+.mcell.locked .v{cursor:not-allowed}
+
+/* Kartu triwulan */
+.twgrid{display:grid; grid-template-columns:repeat(4,1fr); gap:13px}
+@media(max-width:900px){.twgrid{grid-template-columns:repeat(2,1fr)}}
+.tw{background:var(--card); border:1px solid var(--hair); border-radius:var(--r-md); padding:14px 15px}
+.tw .h{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px}
+.tw .h b{font-size:12.5px; font-weight:800; letter-spacing:.05em}
+.tw .l{display:flex; justify-content:space-between; font-size:12px; color:var(--text2); margin-top:6px}
+.tw .l .num{font-family:var(--mono); color:var(--text); font-weight:600}
+
+.bar{height:6px; border-radius:99px; background:var(--elev); overflow:hidden; min-width:54px}
+.bar i{display:block; height:100%; border-radius:99px; background:var(--primary)}
+.bar.ok i{background:var(--success)} .bar.bad i{background:var(--danger)} .bar.warn i{background:var(--warning)}
+
+.bd{display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:99px;
+  font-size:10.5px; font-weight:700; white-space:nowrap}
+.bd-ok{background:var(--success-bg); color:var(--success)}
+.bd-bad{background:var(--danger-bg); color:var(--danger)}
+.bd-warn{background:var(--warning-bg); color:var(--primary)}
+.bd-info{background:var(--info-bg); color:var(--info)}
+.bd-pur{background:var(--purple-bg); color:var(--purple)}
+:root[data-theme="light"] .bd-ok{background:rgba(29,158,117,.12)}
+:root[data-theme="light"] .bd-bad{background:rgba(226,75,74,.12)}
+:root[data-theme="light"] .bd-warn{background:rgba(239,159,39,.17); color:var(--warning)}
+:root[data-theme="light"] .bd-info{background:rgba(55,138,221,.13)}
+:root[data-theme="light"] .bd-pur{background:rgba(124,92,252,.13)}
+
+/* Toolbar & tabel */
+.toolbar{display:flex; align-items:center; gap:9px; flex-wrap:wrap; padding:11px 14px; background:var(--card);
+  border:1px solid var(--hair); border-bottom:none; border-radius:var(--r-md) var(--r-md) 0 0}
+.search{display:flex; align-items:center; gap:7px; background:var(--elev); border:1px solid var(--hair);
+  border-radius:var(--r-sm); padding:6px 10px; min-width:220px; color:var(--muted); font-size:12.5px}
+.search input{background:none; border:none; outline:none; width:100%; font-size:12.5px; color:var(--text)}
+.pillbar{display:flex; gap:3px; background:var(--elev); border-radius:var(--r-sm); padding:3px; border:1px solid var(--hair)}
+.pillbar button{padding:5px 12px; border-radius:4px; font-size:11.5px; font-weight:600; color:var(--muted)}
+.pillbar button.on{background:var(--card); color:var(--text); font-weight:700}
+.chipset{display:flex; gap:6px; flex-wrap:wrap}
+.chip{padding:5px 11px; border-radius:99px; border:1px solid var(--hair); font-size:11.5px; font-weight:600; color:var(--text2)}
+.chip:hover{border-color:var(--hair-active); color:var(--text)}
+.chip.on{background:var(--elev); border-color:var(--primary); color:var(--text); font-weight:700}
+
+.tablewrap{border:1px solid var(--hair); border-radius:0 0 var(--r-md) var(--r-md); overflow:auto; background:var(--card)}
+.tablewrap.tall{max-height:calc(100vh - 330px)}
+table{width:100%; border-collapse:separate; border-spacing:0; font-size:12.5px}
+thead th{position:sticky; top:0; z-index:3; background:var(--elev); color:var(--muted);
+  font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; text-align:left;
+  padding:9px 12px; border-bottom:1px solid var(--hair); white-space:nowrap}
+thead tr:nth-child(2) th{top:31px}
+thead th.c{text-align:center} thead th.r{text-align:right}
+tbody td{padding:9px 12px; border-bottom:1px solid var(--hair); color:var(--text2); vertical-align:middle}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--zebra)}
+tbody tr.on td{background:var(--elev); color:var(--text)}
+tbody tr.on td:first-child{box-shadow:inset 3px 0 0 var(--primary)}
+tbody tr:last-child td{border-bottom:none}
+td.c{text-align:center} td.r{text-align:right}
+td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right; color:var(--text)}
+td.strong{color:var(--text); font-weight:600}
+td.trunc{max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+tfoot td{padding:10px 12px; background:var(--elev); font-weight:700; color:var(--text); border-top:1px solid var(--hair)}
+
+/* Cetak */
+.paper{background:#FFFFFF; color:#020F1C; border-radius:var(--r-sm); padding:26px 30px;
+  box-shadow:0 8px 30px rgba(2,15,28,.28); font-size:10.5px; max-width:1080px; margin:0 auto}
+.paper h4{text-align:center; font-size:13px; font-weight:800; letter-spacing:.3px; text-transform:uppercase}
+.paper .psub{text-align:center; font-size:10px; color:#185FA5; margin:3px 0 16px}
+.paper table{font-size:9.5px}
+.paper thead th{position:static; color:#185FA5; padding:5px 6px; font-size:8.5px;
+  background:color-mix(in srgb, #D3D1C7 42%, #FFFFFF); border:1px solid #D3D1C7}
+.paper tbody tr{cursor:default}
+.paper tbody td{border:1px solid color-mix(in srgb, #D3D1C7 65%, #FFFFFF); color:#020F1C; padding:4px 6px}
+.paper tbody tr:hover td{background:color-mix(in srgb, #D3D1C7 22%, #FFFFFF)}
+.paper .num{font-family:var(--mono); text-align:right}
+
+.hint{font-size:11.5px; color:var(--muted); font-weight:500; line-height:1.6}
+.stack{display:flex; flex-direction:column; gap:14px}
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span class="tag">KONSEP GABUNGAN</span>
+  <b>Modul Renaksi &amp; Kinerja</b>
+  <span class="note">Sidebar A · tab &amp; dropdown B · inspektur + kisi 12 bulan C</span>
+  <div class="spacer"></div>
+  <span class="note" id="menuCount"></span>
+  <button class="iconbtn" id="themeBtn" title="Ganti tema"></button>
+</div>
+
+<div class="app" id="app"></div>
+
+<script>
+/* ═══════════════ Ikon ═══════════════ */
+const ICONS = {
+  target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>',
+  db:'<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/>',
+  chart:'<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M21 20H3"/>',
+  printer:'<path d="M7 9V3h10v6"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 14h10v7H7z"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  clip:'<rect x="6" y="4" width="12" height="17" rx="2.5"/><path d="M9.5 4V2.9h5V4"/><path d="M9 11h6M9 15h4"/>',
+  cross:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  chevron:'<path d="m6 9 6 6 6-6"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  check:'<path d="m4 12 5 5L20 6"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  save:'<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/>',
+  copy:'<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  lock:'<rect x="4.5" y="10" width="15" height="10.5" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  upload:'<path d="M12 20V8"/><path d="m7 12 5-5 5 5"/><path d="M4 4h16"/>',
+  download:'<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/>',
+  pencil:'<path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m14.5 5.5 4 4"/>',
+  eye:'<path d="M2.5 12s3.6-6.5 9.5-6.5S21.5 12 21.5 12s-3.6 6.5-9.5 6.5S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/>',
+  sun:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2M12 19.6v2M4.3 4.3l1.4 1.4M18.3 18.3l1.4 1.4M2.4 12h2M19.6 12h2M4.3 19.7l1.4-1.4M18.3 5.7l1.4-1.4"/>',
+  moon:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
+};
+const ico = (n,s=16) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]||''}</svg>`;
+
+/* ═══════════════ Util & data dummy ═══════════════ */
+const RP = n => new Intl.NumberFormat('id-ID').format(Math.round(n));
+const PC = n => (Math.round(n*100)/100).toFixed(2)+'%';
+let _s = 20260811;
+const rnd = () => (_s = (_s*1103515245 + 12345) % 2147483648) / 2147483648;
+const rint = (a,b) => Math.floor(a + rnd()*(b-a+1));
+
+const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const LEVELS = [
+  {id:'tujuan',       label:'Tujuan',       icon:'cross',  accent:'#7C5CFC'},
+  {id:'sasaran',      label:'Sasaran',      icon:'clip',   accent:'#378ADD'},
+  {id:'program',      label:'Program',      icon:'chart',  accent:'#1D9E75'},
+  {id:'kegiatan',     label:'Kegiatan',     icon:'grid',   accent:'#BA7517'},
+  {id:'sub-kegiatan', label:'Sub Kegiatan', icon:'layers', accent:'#EF9F27'},
+];
+const TUJUAN   = ['Meningkatnya derajat kesehatan jiwa masyarakat','Terwujudnya tata kelola rumah sakit yang akuntabel'];
+const SASARAN  = ['Meningkatnya mutu pelayanan kesehatan jiwa','Meningkatnya akuntabilitas kinerja dan keuangan'];
+const PROGRAM  = ['Program Penunjang Urusan Pemerintahan Daerah','Program Pemenuhan Upaya Kesehatan Perorangan dan UKM','Program Peningkatan Kapasitas SDM Kesehatan','Program Sediaan Farmasi, Alkes dan Makanan Minuman'];
+const KEGIATAN = ['Perencanaan, Penganggaran dan Evaluasi Kinerja','Administrasi Keuangan Perangkat Daerah','Penyediaan Layanan Kesehatan untuk UKP Rujukan','Pemeliharaan Barang Milik Daerah'];
+const SUBKEG   = ['Penyusunan Dokumen Perencanaan Perangkat Daerah','Penyediaan Gaji dan Tunjangan ASN','Operasional Pelayanan Rumah Sakit','Pemeliharaan Rutin Alat Kesehatan'];
+const INDIKATOR= ['Indeks Kepuasan Masyarakat','Persentase capaian SPM rumah sakit','Nilai SAKIP perangkat daerah','Persentase sarana prasarana layak fungsi','Cakupan layanan rawat jalan jiwa','Persentase ketersediaan obat esensial','Persentase dokumen perencanaan tepat waktu','Rata-rata waktu tunggu rawat jalan'];
+const SATUAN   = ['%','Nilai','Indeks','Menit','Dokumen','Orang'];
+const JENIS    = ['Akumulatif','Progres Positif','Progres Negatif','Pengulangan'];
+
+const BULAN_TERKUNCI = 8;   // Jan–Agu sudah lewat; Sep–Des belum bisa diisi
+
+function rowsOf(level, n){
+  const out = [];
+  for(let i=0;i<n;i++){
+    const tgt = rint(60,100);
+    const real = Math.min(120, tgt - rint(-14,26));
+    const tBulan = Array.from({length:12}, () => Math.round(tgt/12) + rint(-2,3));
+    const rBulan = tBulan.map((t,m) => m < BULAN_TERKUNCI ? Math.max(0, t + rint(-3,3)) : 0);
+    const tw = [0,1,2,3].map(q => ({
+      t: tBulan.slice(q*3,q*3+3).reduce((a,b)=>a+b,0),
+      r: rBulan.slice(q*3,q*3+3).reduce((a,b)=>a+b,0),
+    }));
+    out.push({
+      no:i+1, tujuan:TUJUAN[i%2], sasaran:SASARAN[i%2],
+      program:PROGRAM[i%4], kegiatan:KEGIATAN[i%4], sub:SUBKEG[i%4],
+      indikator:INDIKATOR[i%INDIKATOR.length], satuan:SATUAN[i%SATUAN.length], jenis:JENIS[i%4],
+      rpjmd:tgt+rint(2,10), tahunan:tgt, real,
+      pct: Math.round(real/tgt*10000)/100,
+      anggaran: rint(120,980)*1e6,
+      tBulan, rBulan, tw,
+    });
+  }
+  return out;
+}
+
+/* ═══════════════ Peta menu — 11 menu Renaksi ═══════════════ */
+const GROUPS = [
+  {id:'entry', label:'Data Entry', icon:'db',
+   items: LEVELS.map(l => ({id:'entry-'+l.id, label:l.label, kind:'entry', level:l.id,
+     accent:l.accent, title:'Data Entry — Indikator '+l.label,
+     desc:'Input target & realisasi indikator tingkat '+l.label.toLowerCase()}))},
+  {id:'kin', label:'Realisasi Kinerja', icon:'chart',
+   items: LEVELS.map(l => ({id:'kin-'+l.id, label:l.label, kind:'kinerja', level:l.id,
+     accent:l.accent, title:'Realisasi Kinerja — Indikator '+l.label,
+     desc:'Pilih indikator, isi realisasi bulanan, pantau capaian per triwulan'}))},
+  {id:'cetak', label:'Cetak', icon:'printer',
+   items:[{id:'cetak', label:'Renaksi & Kinerja Cetak', kind:'cetak', accent:'#7C5CFC',
+     title:'Renaksi & Kinerja — Cetak', desc:'Susun matriks lintas level lalu ekspor PDF / Excel'}]},
+];
+const ALL = GROUPS.flatMap(g => g.items);
+const findItem = id => ALL.find(x => x.id===id) || ALL[0];
+const groupOf  = id => GROUPS.find(g => g.items.some(i => i.id===id)) || GROUPS[0];
+
+/* ═══════════════ State ═══════════════ */
+const S = { item:'kin-program', sel:0, theme:'dark', monthMode:'bulan',
+            gridMode:'realisasi', openGroup:'kin',
+            /* Cetak — sakelar baru; mode 'kertas' = isi lama, tidak diubah */
+            cetakView:'layar', cetakMode:'hirarki',
+            cetakLevels:['tujuan','sasaran','program','kegiatan','sub-kegiatan'],
+            cetakKolom:{tw:true, anggaran:true, outcome:false} };
+
+/* ═══════════════ Komponen ═══════════════ */
+const btn   = (v,l,i,sz='') => `<button class="btn btn-${v} ${sz}">${i?ico(i,14):''}${l}</button>`;
+const badge = (v,t) => `<span class="bd bd-${v}">${t}</span>`;
+const pctBd = p => badge(p>=100?'ok':p>=85?'warn':'bad', PC(p));
+const barOf = (p,c) => `<div class="bar ${c||''}"><i style="width:${Math.min(100,p)}%"></i></div>`;
+const tone  = p => p>=100?'ok':p>=85?'warn':'bad';
+const yearSel = () => `<select class="fld">${[2024,2025,2026,2027].map(y=>`<option ${y===2026?'selected':''}>Tahun ${y}</option>`).join('')}</select>`;
+const searchBox = ph => `<div class="search">${ico('search',14)}<input placeholder="${ph}"></div>`;
+
+/* ★ Kisi 12 bulan — elemen utama Konsep C */
+function monthGrid(row){
+  const isReal = S.gridMode==='realisasi';
+  const vals = isReal ? row.rBulan : row.tBulan;
+  const mx = Math.max(...vals, 1);
+  return `<div class="mgrid">${vals.map((v,i)=>{
+    // Mode Target = baca-saja di layar ini; mengubah target milik Data Entry.
+    const belum  = isReal && i >= BULAN_TERKUNCI;
+    const locked = belum || !isReal;
+    const a = v/mx;
+    return `<div class="mcell ${belum?'locked':''}"
+      style="background:${a>0.02?`color-mix(in srgb, var(--primary) ${Math.round(a*34)}%, transparent)`:'transparent'}">
+      <div class="m">${BULAN[i]}</div>
+      <input class="v mono" value="${belum?'—':v}" ${locked?'disabled':''}>
+      ${isReal?`<div class="t">target ${row.tBulan[i]}</div>`:''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function twCards(row){
+  return `<div class="twgrid">${row.tw.map((q,i)=>{
+    const p = q.t ? Math.round(q.r/q.t*10000)/100 : 0;
+    return `<div class="tw"><div class="h"><b>TRIWULAN ${i+1}</b>${pctBd(p)}</div>
+      ${barOf(p, tone(p))}
+      <div class="l"><span>Target</span><span class="num">${q.t}</span></div>
+      <div class="l"><span>Realisasi</span><span class="num">${q.r}</span></div></div>`;
+  }).join('')}</div>`;
+}
+
+/* ═══════════════ Layar 1 — Realisasi Kinerja (dropdown → inspektur → tabel rekap) ═══════════════ */
+function scrKinerja(it){
+  const rows = rowsOf(it.level, 8);
+  const sel  = S.sel % rows.length;
+  const r    = rows[sel];
+  const lv   = it.level;
+
+  /* ── Konsep B: baris dropdown cascade ── */
+  const cascade = `<div class="card" style="margin-bottom:16px"><div class="card-b"><div class="cascade">
+    ${lv!=='tujuan' ? `<div class="field"><label>Tujuan</label><select class="fld"><option>${r.tujuan}</option></select></div>` : ''}
+    ${['program','kegiatan','sub-kegiatan'].includes(lv) ? `<div class="field"><label>Sasaran</label><select class="fld"><option>${r.sasaran}</option></select></div>` : ''}
+    ${['kegiatan','sub-kegiatan'].includes(lv) ? `<div class="field"><label>Program</label><select class="fld"><option>${r.program}</option></select></div>` : ''}
+    ${lv==='sub-kegiatan' ? `<div class="field"><label>Kegiatan</label><select class="fld"><option>${r.kegiatan}</option></select></div>` : ''}
+    <div class="field"><label>Indikator</label>
+      <select class="fld" onchange="setSel(this.selectedIndex)">
+        ${rows.map((x,i)=>`<option ${i===sel?'selected':''}>${x.indikator}</option>`).join('')}
+      </select></div>
+  </div></div></div>`;
+
+  /* ── Konsep C: inspektur full-width ── */
+  const inspector = `<div class="card" style="margin-bottom:16px">
+    <div class="insp-h">
+      <h2>${r.indikator}</h2>
+      <span class="mono" style="font-size:13px;color:var(--muted);font-weight:600">${r.real}/${r.tahunan} ${r.satuan}</span>
+      ${pctBd(r.pct)}
+      <div class="acts"><span class="hint">${ico('lock',12)} Definisi indikator diubah di Data Entry</span></div>
+    </div>
+    <div class="card-b">
+
+      <div class="sect">Identitas Indikator</div>
+      <div class="kv">
+        <div><div class="k">Indikator</div><div class="v">${r.indikator}</div></div>
+        <div><div class="k">Jenis</div><div class="v">${badge('info',r.jenis)}</div></div>
+        <div><div class="k">Satuan</div><div class="v">${r.satuan}</div></div>
+        <div><div class="k">Target RPJMD</div><div class="v num">${r.rpjmd}</div></div>
+        <div><div class="k">Target Tahunan</div><div class="v num">${r.tahunan}</div></div>
+        ${lv==='sub-kegiatan' ? `<div><div class="k">Anggaran</div><div class="v num">Rp ${RP(r.anggaran)}</div></div>` : ''}
+      </div>
+
+      <div class="sect">Hirarki</div>
+      <div class="kv">
+        <div><div class="k">Tujuan</div><div class="v sm">${r.tujuan}</div></div>
+        <div><div class="k">Sasaran</div><div class="v sm">${r.sasaran}</div></div>
+        <div><div class="k">Program</div><div class="v sm">${r.program}</div></div>
+        <div><div class="k">Kegiatan</div><div class="v sm">${r.kegiatan}</div></div>
+      </div>
+
+      <div class="sect">
+        <span>${S.gridMode==='realisasi'?'Realisasi Bulanan':'Target Bulanan'} — kisi 12 sel</span>
+        <div class="r">
+          <div class="pillbar">
+            <button class="${S.gridMode==='target'?'on':''}" onclick="setGrid('target')">Target</button>
+            <button class="${S.gridMode==='realisasi'?'on':''}" onclick="setGrid('realisasi')">Realisasi</button>
+          </div>
+          ${btn('ghost','Matriks Bulanan','grid','sm')}
+        </div>
+      </div>
+      ${monthGrid(r)}
+      ${S.gridMode==='realisasi'
+        ? `<div class="hint" style="margin-top:10px">${ico('lock',12)} September–Desember belum bisa diisi — periode belum berjalan. Angka kecil di bawah tiap sel adalah target bulan tersebut.</div>`
+        : `<div class="hint" style="margin-top:10px">${ico('lock',12)} Target hanya bisa dilihat di sini. Untuk mengubahnya, buka Data Entry — ${LEVELS.find(l=>l.id===lv).label}.</div>`}
+
+      <div class="sect">Capaian per Triwulan</div>
+      ${twCards(r)}
+
+      <div style="display:flex;gap:9px;margin-top:22px">
+        ${btn('primary','Simpan Perubahan','save')}${btn('ghost','Batal')}
+      </div>
+    </div></div>`;
+
+  /* Tabel rekap DIPINDAH ke menu Cetak → mode Layar (lintas level). */
+  return cascade + inspector;
+}
+
+/* ═══════════════ Layar 2 — Data Entry (tabel lebar, sesuai jawaban Anda) ═══════════════ */
+function scrEntry(it){
+  const rows = rowsOf(it.level, 10);
+  const lv = it.level;
+  const hier = {
+    'tujuan':[], 'sasaran':['Tujuan'], 'program':['Tujuan','Sasaran'],
+    'kegiatan':['Sasaran','Program'], 'sub-kegiatan':['Program','Kegiatan'],
+  }[lv];
+  const bulanCols = S.monthMode==='bulan' ? BULAN : ['TW 1','TW 2','TW 3','TW 4'];
+
+  const head = `<thead>
+    <tr>
+      <th rowspan="2" class="c" style="width:44px">No</th>
+      ${hier.map(h=>`<th rowspan="2">${h}</th>`).join('')}
+      <th rowspan="2">Indikator</th>
+      <th rowspan="2" class="c">Satuan</th>
+      <th rowspan="2" class="c">Jenis</th>
+      <th rowspan="2" class="r">RPJMD</th>
+      <th rowspan="2" class="r">Tahunan</th>
+      ${lv==='sub-kegiatan' ? '<th rowspan="2" class="r">Anggaran (Rp)</th>' : ''}
+      <th class="c" colspan="${bulanCols.length}" style="border-left:1px solid var(--hair)">
+        Target ${S.monthMode==='bulan'?'Bulanan':'Triwulan'}</th>
+      <th rowspan="2" class="c" style="width:80px">Aksi</th>
+    </tr>
+    <tr>${bulanCols.map((b,i)=>`<th class="c" ${i===0?'style="border-left:1px solid var(--hair)"':''}>${b}</th>`).join('')}</tr>
+  </thead>`;
+
+  const body = rows.map(r => {
+    const hc = hier.map(h => `<td class="trunc" style="max-width:180px">${
+      h==='Tujuan'?r.tujuan : h==='Sasaran'?r.sasaran : h==='Program'?r.program : r.kegiatan}</td>`).join('');
+    const vals = S.monthMode==='bulan' ? r.tBulan : r.tw.map(q=>q.t);
+    return `<tr>
+      <td class="c mono" style="color:var(--muted)">${r.no}</td>${hc}
+      <td class="strong trunc" style="max-width:280px">${r.indikator}</td>
+      <td class="c">${r.satuan}</td>
+      <td class="c">${badge('info',r.jenis)}</td>
+      <td class="num">${r.rpjmd}</td>
+      <td class="num">${r.tahunan}</td>
+      ${lv==='sub-kegiatan' ? `<td class="num">${RP(r.anggaran)}</td>` : ''}
+      ${vals.map((v,i)=>`<td class="num" ${i===0?'style="border-left:1px solid var(--hair)"':''}>${v||'—'}</td>`).join('')}
+      <td class="c"><span style="display:inline-flex;gap:7px;color:var(--muted)">${ico('pencil',15)}${ico('x',15)}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="toolbar">
+      ${searchBox('Cari indikator…')}
+      <div class="pillbar">
+        <button class="${S.monthMode==='bulan'?'on':''}" onclick="setMonthMode('bulan')">12 Bulan</button>
+        <button class="${S.monthMode==='tw'?'on':''}" onclick="setMonthMode('tw')">4 Triwulan</button>
+      </div>
+      <div class="chipset">${JENIS.map((j,i)=>`<span class="chip ${i===0?'on':''}">${j}</span>`).join('')}</div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        ${btn('ghost','Import File','upload','sm')}${btn('success','Excel','download','sm')}
+        ${btn('purple','Tambah Indikator','plus','sm')}${btn('primary','Simpan','save','sm')}
+      </div>
+    </div>
+    <div class="tablewrap tall"><table>${head}<tbody>${body}</tbody></table></div>`;
+}
+
+/* ═══════════════ Layar 3 — Cetak ═══════════════
+   Sakelar baru: Layar ⇄ Kertas (A4).
+   Mode 'kertas' = isi Cetak yang sudah ada, TIDAK diubah — itu yang jadi PDF/Excel.
+   Mode 'layar'  = penyajian sama, tapi pakai token tema + bar capaian berwarna. */
+
+/* Pohon lintas level untuk mode Layar */
+function cetakTree(){
+  const out = [];
+  let n = 0;
+  const mk = (level, depth, uraian) => {
+    const tgt = rint(60,100);
+    const real = Math.min(120, tgt - rint(-14,26));
+    const tw = [0,1,2,3].map(() => ({t:Math.round(tgt/4), r:Math.round(real/4)+rint(-3,4)}));
+    return {no:++n, level, depth, uraian,
+      indikator:INDIKATOR[n%INDIKATOR.length], satuan:SATUAN[n%SATUAN.length], jenis:JENIS[n%4],
+      outcome:SASARAN[n%2], tahunan:tgt, real, pct:Math.round(real/tgt*10000)/100,
+      tw, anggaran: level==='sub-kegiatan' ? rint(120,980)*1e6 : null};
+  };
+  TUJUAN.forEach((t,ti) => {
+    out.push(mk('tujuan',0,t));
+    out.push(mk('sasaran',1,SASARAN[ti]));
+    [0,1].forEach(pi => {
+      out.push(mk('program',2,PROGRAM[(ti*2+pi)%4]));
+      out.push(mk('kegiatan',3,KEGIATAN[(ti*2+pi)%4]));
+      [0,1].forEach(si => out.push(mk('sub-kegiatan',4,SUBKEG[(ti*2+pi+si)%4])));
+    });
+  });
+  return out;
+}
+
+/* Tabel mode Layar — token tema + bar capaian berwarna */
+function cetakLayar(){
+  const flat = S.cetakMode === 'flat';
+  const rows = cetakTree().filter(r => S.cetakLevels.includes(r.level));
+  const K = S.cetakKolom;
+
+  const head = `<thead>
+    <tr>
+      <th rowspan="2" class="c" style="width:44px">No</th>
+      <th rowspan="2" class="c" style="width:112px">Level</th>
+      <th rowspan="2">${flat ? 'Uraian' : 'Uraian (berjenjang)'}</th>
+      ${K.outcome ? '<th rowspan="2">Sasaran (Outcome)</th>' : ''}
+      <th rowspan="2">Indikator</th>
+      <th rowspan="2" class="c">Satuan</th>
+      <th rowspan="2" class="c">Jenis</th>
+      <th rowspan="2" class="r">Target</th>
+      ${K.tw ? '<th class="c" colspan="4" style="border-left:1px solid var(--hair)">Triwulan</th>' : ''}
+      <th rowspan="2" class="r" ${K.tw?'style="border-left:1px solid var(--hair)"':''}>Realisasi</th>
+      <th rowspan="2" class="c" style="width:172px">Capaian</th>
+      ${K.anggaran ? '<th rowspan="2" class="r">Anggaran (Rp)</th>' : ''}
+    </tr>
+    ${K.tw ? `<tr>${[1,2,3,4].map((q,i)=>`<th class="c" ${i===0?'style="border-left:1px solid var(--hair)"':''}>TW${q}</th>`).join('')}</tr>` : '<tr></tr>'}
+  </thead>`;
+
+  const body = rows.map(r => {
+    const L = LEVELS.find(l => l.id === r.level);
+    const pad = flat ? 0 : r.depth * 17;
+    return `<tr>
+      <td class="c mono" style="color:var(--muted)">${r.no}</td>
+      <td class="c"><span class="bd" style="background:transparent;border:1px solid ${L.accent};color:${L.accent}">${L.label}</span></td>
+      <td class="strong trunc" style="max-width:280px;padding-left:${12+pad}px">
+        ${flat ? '' : `<span class="pip" style="display:inline-block;color:${L.accent};margin-right:8px;vertical-align:middle"></span>`}${r.uraian}</td>
+      ${K.outcome ? `<td class="trunc" style="max-width:200px">${r.outcome}</td>` : ''}
+      <td class="trunc" style="max-width:230px">${r.indikator}</td>
+      <td class="c">${r.satuan}</td>
+      <td class="c">${badge('info',r.jenis)}</td>
+      <td class="num">${r.tahunan}</td>
+      ${K.tw ? r.tw.map((q,i)=>`<td class="num" ${i===0?'style="border-left:1px solid var(--hair)"':''}>${q.r}</td>`).join('') : ''}
+      <td class="num" ${K.tw?'style="border-left:1px solid var(--hair)"':''}>${r.real}</td>
+      <td class="c"><div style="display:flex;align-items:center;gap:10px">
+        ${barOf(r.pct, tone(r.pct))}
+        <span class="mono" style="font-size:11.5px;font-weight:600;color:var(--text)">${PC(r.pct)}</span></div></td>
+      ${K.anggaran ? `<td class="num">${r.anggaran ? RP(r.anggaran) : '—'}</td>` : ''}
+    </tr>`;
+  }).join('');
+
+  const avg = rows.reduce((a,r)=>a+r.pct,0) / (rows.length||1);
+  return `<div class="card"><div class="card-h">
+      <h3>Tampilan Layar</h3>
+      <span class="sub">${rows.length} baris · lintas level · rata capaian ${PC(avg)}</span>
+      <div class="acts">
+        <span class="bd bd-ok">≥ 100%</span><span class="bd bd-warn">85–99%</span><span class="bd bd-bad">&lt; 85%</span>
+      </div></div>
+    <div class="tablewrap tall" style="border:none;border-top:1px solid var(--hair);border-radius:0 0 var(--r-md) var(--r-md)">
+      <table>${head}<tbody>${body}</tbody></table></div></div>`;
+}
+
+function scrCetak(){
+  const rows = rowsOf('sub-kegiatan', 7);
+  const lvChip = l => `<span class="chip ${S.cetakLevels.includes(l.id)?'on':''}" onclick="toggleCetakLevel('${l.id}')">
+      ${S.cetakLevels.includes(l.id)?ico('check',12):''}${l.label}</span>`;
+  const kolChip = (k,label) => `<span class="chip ${S.cetakKolom[k]?'on':''}" onclick="toggleCetakKolom('${k}')">
+      ${S.cetakKolom[k]?ico('check',12):''}${label}</span>`;
+
+  return `<div class="card" style="margin-bottom:16px"><div class="card-b">
+    <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end">
+      <div class="field" style="min-width:190px"><label>Tampilkan sebagai</label>
+        <div class="pillbar">
+          <button class="${S.cetakView==='layar'?'on':''}" onclick="setCetakView('layar')">Layar</button>
+          <button class="${S.cetakView==='kertas'?'on':''}" onclick="setCetakView('kertas')">Kertas (A4)</button>
+        </div></div>
+      <div class="field" style="min-width:160px"><label>Susunan</label>
+        <div class="pillbar">
+          <button class="${S.cetakMode==='hirarki'?'on':''}" onclick="setCetakMode('hirarki')">Hirarki</button>
+          <button class="${S.cetakMode==='flat'?'on':''}" onclick="setCetakMode('flat')">Flat</button>
+        </div></div>
+      <div class="field" style="min-width:250px"><label>Level ditampilkan</label>
+        <div class="chipset">${LEVELS.map(lvChip).join('')}</div></div>
+      <div class="field" style="min-width:250px"><label>Kolom opsional</label>
+        <div class="chipset">${kolChip('tw','Triwulan')}${kolChip('anggaran','Anggaran')}${kolChip('outcome','Outcome')}</div></div>
+      <div class="field" style="min-width:150px"><label>Tahun</label>${yearSel()}</div>
+      <div style="margin-left:auto;display:flex;gap:8px">${btn('ghost','Excel','download')}${btn('success','Unduh PDF','printer')}</div>
+    </div>
+    <div class="hint" style="margin-top:13px">Kedua sakelar memakai opsi yang sama. Unduhan PDF/Excel selalu mengikuti bentuk Kertas (A4).</div>
+    </div></div>
+
+    ${S.cetakView==='layar' ? cetakLayar() : `
+    <div class="card"><div class="card-h"><h3>Pratinjau — A4 Lanskap</h3>
+      <span class="sub">7 baris · 1 dari 3 halaman</span>
+      <div class="acts">${btn('ghost','Perbesar','eye','sm')}</div></div>
+      <div class="card-b" style="background:var(--elev)"><div class="paper">
+        <h4>Matriks Rencana Aksi dan Realisasi Kinerja</h4>
+        <div class="psub">RSJD Dr. Amino Gondohutomo Provinsi Jawa Tengah · Tahun Anggaran 2026</div>
+        <table><thead><tr>
+          <th rowspan="2">No</th><th rowspan="2">Program</th><th rowspan="2">Kegiatan</th><th rowspan="2">Sub Kegiatan</th>
+          <th rowspan="2">Indikator</th><th rowspan="2">Satuan</th><th rowspan="2">Target</th>
+          <th colspan="4">Triwulan</th><th rowspan="2">Realisasi</th><th rowspan="2">Capaian</th><th rowspan="2">Anggaran (Rp)</th>
+        </tr><tr>${[1,2,3,4].map(q=>`<th>TW${q}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td style="text-align:center">${r.no}</td><td>${r.program}</td><td>${r.kegiatan}</td><td>${r.sub}</td>
+          <td>${r.indikator}</td><td style="text-align:center">${r.satuan}</td><td class="num">${r.tahunan}</td>
+          ${r.tw.map(q=>`<td class="num">${q.r}</td>`).join('')}
+          <td class="num">${r.real}</td><td class="num">${PC(r.pct)}</td><td class="num">${RP(r.anggaran)}</td></tr>`).join('')}
+        </tbody></table>
+      </div></div></div>`}`;
+}
+
+/* ═══════════════ Aksi halaman ═══════════════ */
+function pageActions(it){
+  if(it.kind==='entry')   return btn('ghost','Duplikasi Tahun','copy','sm') + btn('warning','Kunci Periode','lock','sm');
+  if(it.kind==='kinerja') return btn('ghost','Duplikasi Tahun','copy','sm') + btn('success','Excel','download','sm');
+  return '';
+}
+
+/* ═══════════════ Shell ═══════════════ */
+function sidebar(){
+  return `<aside class="sb">
+    <div class="sb-head">
+      <div class="sb-logo">${ico('target',18)}</div>
+      <div style="min-width:0"><div class="sb-title">PRIMA · Rencana Aksi</div>
+        <div class="sb-sub">RSJD Dr. Amino Gondohutomo</div></div>
+    </div>
+    <div class="sb-year">${yearSel()}</div>
+    <div class="sb-nav">
+      <div class="sb-lbl">Menu Utama</div>
+      ${GROUPS.map(g => {
+        if(g.items.length === 1){
+          const it = g.items[0];
+          return `<button class="navitem ${S.item===it.id?'on':''}" onclick="go('${it.id}')">
+            ${ico(g.icon,16)}<span>${it.label}</span></button>`;
+        }
+        const open = S.openGroup === g.id;
+        return `<div>
+          <button class="navitem" onclick="toggleGroup('${g.id}')">
+            ${ico(g.icon,16)}<span>${g.label}</span><span class="tail">${g.items.length}</span>
+            <span class="chev" style="transform:rotate(${open?0:-90}deg)">${ico('chevron',14)}</span></button>
+          ${open ? `<div class="navsub">${g.items.map(it=>`
+            <button class="navitem ${S.item===it.id?'on':''}" onclick="go('${it.id}')">
+              <span class="pip" style="color:${it.accent}"></span><span>${it.label}</span></button>`).join('')}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="sb-foot">PRIMA v1.0 · Renaksi</div>
+  </aside>`;
+}
+
+function render(){
+  document.documentElement.dataset.theme = S.theme;
+  const it  = findItem(S.item);
+  const grp = groupOf(S.item);
+  _s = 20260811 + it.id.length*77;
+
+  const content = it.kind==='kinerja' ? scrKinerja(it)
+                : it.kind==='entry'   ? scrEntry(it)
+                : scrCetak();
+
+  document.getElementById('app').innerHTML = sidebar() + `
+    <div class="main">
+      <div class="pagehead">
+        <div><h1>${it.title}</h1><p>${it.desc}</p></div>
+        <div class="acts">${pageActions(it)}</div>
+      </div>
+      ${grp.items.length > 1 ? `<div class="tabstrip">${grp.items.map(x=>`
+        <button class="${S.item===x.id?'on':''}" onclick="go('${x.id}')">${x.label}</button>`).join('')}</div>` : ''}
+      <div class="body">${content}</div>
+    </div>`;
+
+  document.getElementById('themeBtn').innerHTML = ico(S.theme==='dark'?'sun':'moon',16);
+  document.getElementById('menuCount').textContent = ALL.length + ' menu · modul Renaksi saja';
+}
+
+/* ═══════════════ Aksi ═══════════════ */
+function go(id){ S.item = id; S.sel = 0; S.openGroup = groupOf(id).id; render(); }
+function toggleGroup(g){ S.openGroup = S.openGroup===g ? null : g; render(); }
+function setSel(i){ S.sel = i; render(); }
+function setMonthMode(m){ S.monthMode = m; render(); }
+function setGrid(m){ S.gridMode = m; render(); }
+function setCetakView(v){ S.cetakView = v; render(); }
+function setCetakMode(m){ S.cetakMode = m; render(); }
+function toggleCetakLevel(id){
+  S.cetakLevels = S.cetakLevels.includes(id)
+    ? S.cetakLevels.filter(x => x !== id)
+    : LEVELS.map(l=>l.id).filter(x => S.cetakLevels.includes(x) || x === id);  // jaga urutan level
+  render();
+}
+function toggleCetakKolom(k){ S.cetakKolom[k] = !S.cetakKolom[k]; render(); }
+
+document.getElementById('themeBtn').addEventListener('click', () => {
+  S.theme = S.theme==='dark' ? 'light' : 'dark'; render(); });
+
+render();
+</script>
+</body>
+</html>
