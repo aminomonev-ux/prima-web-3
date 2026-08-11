@@ -1,0 +1,46 @@
+# Akhir baris — repo ini dikerjakan di Windows tapi dideploy ke Linux (PM2 + Nginx).
+# Tanpa berkas ini, salinan Windows membuat SELURUH berkas tampak termodifikasi
+# (CRLF di worktree vs LF di HEAD) sehingga `git diff` tidak bisa dibaca.
+#
+# Cara pakai sekali jalan setelah berkas ini ada:
+#   git add --renormalize .
+#   git commit -m "chore: normalisasi akhir baris ke LF"
+
+* text=auto eol=lf
+
+# ── Biner: JANGAN pernah dinormalisasi ──────────────────────────────────────
+# Template Word PK dipakai docxtemplater (lib/pk/docgen.ts). Kalau git
+# memperlakukannya sebagai teks, isinya rusak dan generator PK mati.
+*.docx  binary
+*.dotx  binary
+*.xlsx  binary
+*.xlsm  binary
+*.xltx  binary
+*.pptx  binary
+*.potx  binary
+*.pdf   binary
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.otf   binary
+
+*.zip   binary
+*.gz    binary
+*.7z    binary
+
+# ── Skrip yang WAJIB LF walau di Windows ────────────────────────────────────
+*.sh        text eol=lf
+.githooks/* text eol=lf
+
+# ── Skrip Windows yang WAJIB CRLF ───────────────────────────────────────────
+*.bat text eol=crlf
+*.cmd text eol=crlf
