@@ -69,6 +69,27 @@ export const LEVEL_LABELS: Record<RaLevel, string> = {
   'sub-kegiatan': 'Indikator Sub Kegiatan',
 };
 
+// Warna identitas level — sumber TUNGGAL untuk Sidebar, CetakPanel, dan layar lain.
+// Semuanya token DESIGN-SYSTEM.md; sebelumnya #10B981/#EC4899/#F59E0B tersebar
+// sebagai literal di beberapa berkas dan gampang menyimpang satu sama lain.
+export const LEVEL_COLORS: Record<RaLevel, string> = {
+  tujuan: '#7C5CFC',          // action-purple
+  sasaran: '#378ADD',         // info
+  program: '#1D9E75',         // action-success
+  kegiatan: '#BA7517',        // action-warning
+  'sub-kegiatan': '#EF9F27',  // primary
+};
+
+// Teks di ATAS warna level. Emas #EF9F27 berpasangan dengan on-primary #020F1C,
+// bukan putih (putih di atas emas hanya ~2:1 — pucat di light mode).
+export const LEVEL_TEXT: Record<RaLevel, string> = {
+  tujuan: '#FFFFFF',
+  sasaran: '#FFFFFF',
+  program: '#FFFFFF',
+  kegiatan: '#FFFFFF',
+  'sub-kegiatan': '#020F1C',
+};
+
 export const YEAR_RANGE: number[] = (() => {
   const out: number[] = [];
   for (let y = 2026; y <= 2045; y++) out.push(y);

@@ -6,7 +6,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import SoftSelect from '@/components/ui/SoftSelect';
 import type { RaRow, RaLevel, HierarchyRow } from '../_lib/types';
-import { LEVEL_LABELS, realisasiAkhirTahun, outcomeOf, anggaranRollup } from '../_lib/types';
+import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, outcomeOf, anggaranRollup, hitungCapaianPct } from '../_lib/types';
 import type { CetakFilter, ColMode } from '../_lib/cetak-filter';
 import { DEFAULT_CETAK_FILTER, ALL_LEVELS, buildCetakRows, cetakRollupBase } from '../_lib/cetak-filter';
 import { apiListAll } from '../_lib/api';
@@ -19,13 +19,13 @@ interface Props {
 
 const moneyFont = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
 
-const LEVEL_COLORS: Record<RaRow['level'], string> = {
-  'tujuan':       '#7C5CFC',
-  'sasaran':      '#10B981',
-  'program':      '#378ADD',
-  'kegiatan':     '#EC4899',
-  'sub-kegiatan': '#F59E0B',
-};
+// Ambang capaian → warna token. Sejalan dengan hitungCapaianPct (arah Progres
+// Negatif sudah dibalik di sana), jadi >=100 selalu berarti "tercapai".
+function warnaCapaian(pct: number): string {
+  if (pct >= 100) return '#1D9E75';
+  if (pct >= 85)  return '#EF9F27';
+  return '#E24B4A';
+}
 
 export default function CetakPanel({ tahun, notify }: Props) {
   const [allRows, setAllRows] = useState<RaRow[]>([]);
@@ -186,16 +186,16 @@ function Seg<T extends string>({ options, value, onChange }: {
   );
 }
 
-function Chip({ active, onClick, color, children }: {
-  active: boolean; onClick: () => void; color?: string; children: React.ReactNode;
+function Chip({ active, onClick, color, fg, children }: {
+  active: boolean; onClick: () => void; color?: string; fg?: string; children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all ${
-        active ? 'text-white border-transparent' : 'text-slate-500 bg-white border-slate-200 hover:border-slate-300'
+        active ? 'border-transparent' : 'text-slate-500 bg-white border-slate-200 hover:border-slate-300'
       }`}
-      style={active ? { background: color ?? '#7C5CFC' } : undefined}
+      style={active ? { background: color ?? '#7C5CFC', color: fg ?? '#FFFFFF' } : undefined}
     >
       {children}
     </button>
@@ -288,7 +288,7 @@ function FilterBar({ allRows, filter, setFilter }: {
       <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100">
         <FieldLabel>Level</FieldLabel>
         {ALL_LEVELS.map(lvl => (
-          <Chip key={lvl} active={filter.levels[lvl]} color={LEVEL_COLORS[lvl]} onClick={() => toggleLevel(lvl)}>
+          <Chip key={lvl} active={filter.levels[lvl]} color={LEVEL_COLORS[lvl]} fg={LEVEL_TEXT[lvl]} onClick={() => toggleLevel(lvl)}>
             {filter.levels[lvl] ? '✓ ' : ''}{LEVEL_LABELS[lvl].replace('Indikator ', '')}
           </Chip>
         ))}
@@ -363,8 +363,9 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
         </h3>
         <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Periode {tahun}</span>
       </div>
+      {/* #B91C1C (merah gelap) tak terbaca di kanvas navy dark — pakai token action-danger. */}
       {orphanCount > 0 && (
-        <div className="border-b border-[#E24B4A]/20 bg-[#E24B4A]/5 px-5 py-2.5 text-[11px] text-[#B91C1C] font-medium">
+        <div className="border-b border-[#E24B4A]/20 bg-[#E24B4A]/5 px-5 py-2.5 text-[11px] text-[#E24B4A] font-medium">
           ⚠️ {orphanCount} baris tidak terhubung ke induknya (ditandai &quot;orphan&quot;) — biasanya karena nama Tujuan/Sasaran/Program/Kegiatan induk diubah tanpa memperbarui baris turunannya. Baris ini tidak ikut rollup hierarki &amp; anggaran; perbaiki lewat menu Data Entry (samakan nama induknya).
         </div>
       )}
@@ -394,6 +395,9 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
               {showReal && (
                 <th rowSpan={2} className="px-3 py-2.5 text-right font-bold uppercase tracking-wider whitespace-nowrap border-l border-slate-200">Real Akhir</th>
               )}
+              {showReal && (
+                <th rowSpan={2} className="px-3 py-2.5 text-right font-bold uppercase tracking-wider whitespace-nowrap">Capaian</th>
+              )}
               {filter.showAnggaran && (
                 <th rowSpan={2} className="px-3 py-2.5 text-right font-bold uppercase tracking-wider whitespace-nowrap">Anggaran (Rp)</th>
               )}
@@ -408,14 +412,17 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
           <tbody className="divide-y divide-slate-100">
             {rows.map(h => {
               const r = h.source;
+              // Sebelumnya lima hex diulang di sini — sumbernya kini satu, LEVEL_COLORS.
               const fillColor =
-                h.tujuan       ? '#7C5CFC' :
-                h.sasaran      ? '#10B981' :
-                h.program      ? '#378ADD' :
-                h.kegiatan     ? '#EC4899' :
-                h.sub_kegiatan ? '#F59E0B' : '#94A3B8';
+                h.tujuan       ? LEVEL_COLORS['tujuan'] :
+                h.sasaran      ? LEVEL_COLORS['sasaran'] :
+                h.program      ? LEVEL_COLORS['program'] :
+                h.kegiatan     ? LEVEL_COLORS['kegiatan'] :
+                h.sub_kegiatan ? LEVEL_COLORS['sub-kegiatan'] : '#85B7EB';
               const outcome = outcomeOf(r);
               const ang = anggaranRollup(r.level, r, rollupRows);
+              const realAkhir = realisasiAkhirTahun(r);
+              const capaian = hitungCapaianPct(r.target_tahunan, realAkhir, r.jenis);
               // Indentasi pohon (mode hirarki saja) → child makin menjorok; flat = rata.
               const depth = { tujuan: 0, sasaran: 1, program: 2, kegiatan: 3, 'sub-kegiatan': 4 }[r.level];
               const indent = filter.mode === 'hirarki' ? { paddingLeft: 12 + depth * 18 } : undefined;
@@ -445,7 +452,25 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
                     showR ? <td key={`r${q}`} className="px-2 py-2 text-center font-semibold text-slate-700" style={moneyFont}>{r[`q${q}_realisasi`]}</td> : null,
                   ])}
                   {showReal && (
-                    <td className="px-3 py-2 text-right font-bold text-[#EF9F27]" style={moneyFont}>{realisasiAkhirTahun(r)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-[#EF9F27]" style={moneyFont}>{realAkhir}</td>
+                  )}
+                  {showReal && (
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${Math.min(100, capaian)}%`, background: warnaCapaian(capaian) }}
+                          />
+                        </div>
+                        <span
+                          className="font-bold whitespace-nowrap"
+                          style={{ ...moneyFont, color: warnaCapaian(capaian), minWidth: 54, textAlign: 'right' }}
+                        >
+                          {capaian.toFixed(2)}%
+                        </span>
+                      </div>
+                    </td>
                   )}
                   {filter.showAnggaran && (
                     <td className="px-3 py-2 text-right font-bold text-[#1D9E75]" style={moneyFont}>{ang != null ? ang.toLocaleString('id-ID') : ''}</td>
@@ -513,7 +538,7 @@ function PdfPreviewModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: '#0C447C', background: 'rgba(12,68,124,.35)' }}>
           <div className="flex items-center gap-2.5 min-w-0">
-            <Eye size={18} color="#A78BFA" />
+            <Eye size={18} color="#7C5CFC" />
             <div className="min-w-0">
               <div className="text-sm font-bold text-white">Preview PDF Gabungan</div>
               <div className="text-[11px] truncate" style={{ color: '#85B7EB', ...moneyFont }}>
@@ -527,7 +552,7 @@ function PdfPreviewModal({
               data-tooltip="Unduh PDF"
               data-tooltip-pos="left"
               className="flex h-8 w-8 items-center justify-center rounded-lg text-white transition-colors hover:opacity-90"
-              style={{ background: '#10B981' }}
+              style={{ background: '#1D9E75' }}
             >
               <Download size={14} />
             </button>
@@ -544,7 +569,7 @@ function PdfPreviewModal({
         </div>
 
         {/* Body */}
-        <div className="relative flex-1 overflow-hidden" style={{ background: '#1a1f2e' }}>
+        <div className="relative flex-1 overflow-hidden" style={{ background: '#020F1C' }}>
           {status === 'loading' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ color: '#85B7EB' }}>
               <Loader2 size={32} className="animate-spin" />

@@ -6,6 +6,7 @@ import {
   ClipboardCheck, X, Database, Menu, Printer, Target, Crosshair,
 } from 'lucide-react';
 import type { RaLevel } from '../_lib/types';
+import { LEVEL_COLORS } from '../_lib/types';
 import Tip from '@/components/ui/Tip';
 
 interface Props {
@@ -20,22 +21,24 @@ interface Props {
   onToggleCollapse: () => void;
 }
 
-type SubMenu = { id: RaLevel; label: string; short: string; icon: typeof ClipboardCheck; color: string };
+// Warna diambil dari LEVEL_COLORS (_lib/types.ts) — sumber tunggal bersama CetakPanel,
+// bukan lagi literal hex per-berkas yang bisa menyimpang.
+type SubMenu = { id: RaLevel; label: string; short: string; icon: typeof ClipboardCheck };
 
 const subMenus: SubMenu[] = [
-  { id: 'tujuan',       label: 'Indikator Tujuan',       short: 'Tujuan',       icon: Crosshair,        color: '#7C5CFC' },
-  { id: 'sasaran',      label: 'Indikator Sasaran',      short: 'Sasaran',      icon: ClipboardCheck,   color: '#10B981' },
-  { id: 'program',      label: 'Indikator Program',      short: 'Program',      icon: BarChart3,        color: '#378ADD' },
-  { id: 'kegiatan',     label: 'Indikator Kegiatan',     short: 'Kegiatan',     icon: LayoutDashboard,  color: '#EC4899' },
-  { id: 'sub-kegiatan', label: 'Indikator Sub Kegiatan', short: 'Sub Kegiatan', icon: Layers,           color: '#F59E0B' },
+  { id: 'tujuan',       label: 'Indikator Tujuan',       short: 'Tujuan',       icon: Crosshair       },
+  { id: 'sasaran',      label: 'Indikator Sasaran',      short: 'Sasaran',      icon: ClipboardCheck  },
+  { id: 'program',      label: 'Indikator Program',      short: 'Program',      icon: BarChart3       },
+  { id: 'kegiatan',     label: 'Indikator Kegiatan',     short: 'Kegiatan',     icon: LayoutDashboard },
+  { id: 'sub-kegiatan', label: 'Indikator Sub Kegiatan', short: 'Sub Kegiatan', icon: Layers          },
 ];
 
 const dataEntrySubMenus: SubMenu[] = [
-  { id: 'tujuan',       label: 'Data Entry Tujuan',       short: 'Tujuan',       icon: Crosshair,        color: '#7C5CFC' },
-  { id: 'sasaran',      label: 'Data Entry Sasaran',      short: 'Sasaran',      icon: ClipboardCheck,   color: '#10B981' },
-  { id: 'program',      label: 'Data Entry Program',      short: 'Program',      icon: BarChart3,        color: '#378ADD' },
-  { id: 'kegiatan',     label: 'Data Entry Kegiatan',     short: 'Kegiatan',     icon: LayoutDashboard,  color: '#EC4899' },
-  { id: 'sub-kegiatan', label: 'Data Entry Sub Kegiatan', short: 'Sub Kegiatan', icon: Layers,           color: '#F59E0B' },
+  { id: 'tujuan',       label: 'Data Entry Tujuan',       short: 'Tujuan',       icon: Crosshair       },
+  { id: 'sasaran',      label: 'Data Entry Sasaran',      short: 'Sasaran',      icon: ClipboardCheck  },
+  { id: 'program',      label: 'Data Entry Program',      short: 'Program',      icon: BarChart3       },
+  { id: 'kegiatan',     label: 'Data Entry Kegiatan',     short: 'Kegiatan',     icon: LayoutDashboard },
+  { id: 'sub-kegiatan', label: 'Data Entry Sub Kegiatan', short: 'Sub Kegiatan', icon: Layers          },
 ];
 
 export default function Sidebar({
@@ -164,13 +167,15 @@ export default function Sidebar({
                   data-tooltip-pos="right"
                           className={`flex w-full items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} rounded-lg py-2 text-left text-[13.2px] font-medium transition-all duration-150 cursor-pointer ${
                             sel
-                              ? 'bg-gradient-to-r from-[#EF9F27]/20 to-[#BA7517]/15 border-l-2 border-[#EF9F27] text-white shadow-sm font-semibold'
+                              ? 'bg-[#0C447C]/45 border-l-2 border-[#EF9F27] text-white font-semibold'
                               : 'text-gray-400 hover:bg-[#0C447C]/25 hover:text-gray-100'
                           }`}
                         >
+                          {/* Ikon selalu memakai warna levelnya; emas dipakai HANYA
+                              sebagai penanda "sedang aktif" di garis kiri. */}
                           <Icon
-                            className={`h-[15.4px] w-[15.4px] shrink-0 ${sel ? 'text-[#EF9F27]' : ''}`}
-                            style={!sel ? { color: sub.color } : undefined}
+                            className="h-[15.4px] w-[15.4px] shrink-0"
+                            style={{ color: LEVEL_COLORS[sub.id] }}
                           />
                           {!collapsed && <span className="truncate">{sub.short}</span>}
                         </button>
@@ -215,13 +220,13 @@ export default function Sidebar({
                   data-tooltip-pos="right"
                           className={`flex w-full items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} rounded-lg py-2 text-left text-[13.2px] font-medium transition-all duration-150 cursor-pointer ${
                             sel
-                              ? 'bg-gradient-to-r from-[#378ADD]/20 to-[#1D9E75]/15 border-l-2 border-[#378ADD] text-white shadow-sm font-semibold'
+                              ? 'bg-[#0C447C]/45 border-l-2 border-[#EF9F27] text-white font-semibold'
                               : 'text-gray-400 hover:bg-[#0C447C]/25 hover:text-gray-200'
                           }`}
                         >
                           <Icon
-                            className={`h-[15.4px] w-[15.4px] shrink-0 ${sel ? 'text-[#378ADD]' : ''}`}
-                            style={!sel ? { color: sub.color } : undefined}
+                            className="h-[15.4px] w-[15.4px] shrink-0"
+                            style={{ color: LEVEL_COLORS[sub.id] }}
                           />
                           {!collapsed && <span className="truncate">{sub.short}</span>}
                         </button>
@@ -239,7 +244,7 @@ export default function Sidebar({
                   data-tooltip-pos="right"
                   className={`group flex w-full items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} rounded-lg py-2.5 text-sm font-semibold transition-all cursor-pointer ${
                     viewMode === 'cetak'
-                      ? 'bg-gradient-to-r from-[#7C5CFC]/20 to-[#EC4899]/15 border-l-2 border-[#7C5CFC] text-white shadow-sm'
+                      ? 'bg-[#0C447C]/45 border-l-2 border-[#EF9F27] text-white'
                       : 'text-gray-200 hover:bg-[#0C447C]/40 hover:text-white'
                   }`}
                 >

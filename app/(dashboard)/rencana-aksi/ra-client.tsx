@@ -332,6 +332,11 @@ export default function RaClient({
         html[data-theme="light"] .ra-scope .ra-sidebar .hover\\:bg-\\[\\#0C447C\\]\\/30:hover { background-color: #F1F5F9 !important; }
         html[data-theme="light"] .ra-scope .ra-sidebar .hover\\:bg-\\[\\#0C447C\\]\\/20:hover { background-color: #F1F5F9 !important; }
         html[data-theme="light"] .ra-scope .ra-sidebar .hover\\:bg-\\[\\#0C447C\\]\\/40:hover { background-color: #F1F5F9 !important; }
+        /* /25 dipakai sub-item nav tapi belum punya padanan light — tanpa ini
+           hover sub-item memunculkan bercak navy di atas sidebar putih. */
+        html[data-theme="light"] .ra-scope .ra-sidebar .hover\\:bg-\\[\\#0C447C\\]\\/25:hover { background-color: #F1F5F9 !important; }
+        /* Latar item aktif (gradien dibuang → warna rata + garis kiri emas). */
+        html[data-theme="light"] .ra-scope .ra-sidebar .bg-\\[\\#0C447C\\]\\/45 { background-color: #EEF2F7 !important; }
         html[data-theme="light"] .ra-scope .ra-sidebar .hover\\:text-white:hover { color: #1E293B !important; }
         html[data-theme="light"] .ra-scope .ra-sidebar .hover\\:text-gray-100:hover { color: #1E293B !important; }
         html[data-theme="light"] .ra-scope .ra-sidebar .hover\\:text-gray-200:hover { color: #334155 !important; }
