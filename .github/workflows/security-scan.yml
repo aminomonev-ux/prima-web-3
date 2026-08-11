@@ -10,7 +10,11 @@
 #   A. semgrep — SAST scan kode (OWASP Top 10, React, TypeScript, security-audit rules)
 #   B. npm-audit — Dependency CVE check (block kalau ada HIGH baru)
 #   C. quality-gate — `npx tsc --noEmit` + `npm run lint` + `npm run rima:check` (NLU gate)
+#                     + Gate E token warna (`npm run check:tokens`)
 #   D. gitleaks — Secret scanning (JWT_SECRET / password DB / API key ter-commit) — config .gitleaks.toml
+#
+# Gate E (token warna) menumpang di job C, bukan job sendiri — pemeriksaannya
+# baca-berkas murni, ~1 detik, tak sepadan dengan ongkos spin-up runner terpisah.
 #
 # Setup tambahan (opsional, tidak wajib untuk MVP):
 #   - SEMGREP_APP_TOKEN di GitHub Secrets → enable Semgrep Cloud dashboard
@@ -185,6 +189,15 @@ jobs:
 
       - name: ESLint
         run: npm run lint
+
+      # ─── GATE E: Token Warna (ratchet) ─────────────────────────────────────
+      # Menahan warna BARU masuk, bukan membersihkan yang lama. Saat dipasang
+      # (2026-08-11) ada 240 hex warisan di luar DESIGN-SYSTEM.md — semuanya
+      # tercatat di docs/design/token-baseline.json dan dibiarkan. Gate hanya
+      # merah kalau muncul hex yang belum pernah ada.
+      # Gate ketat sengaja TIDAK dipakai: yang selalu merah akan dimatikan orang.
+      - name: Gate token warna (DESIGN-SYSTEM.md)
+        run: npm run check:tokens
 
   # ─── JOB D: Gitleaks (secret scanning) ─────────────────────────────────────
   # Scan working tree saat ini untuk rahasia ter-commit (token/password/key).
