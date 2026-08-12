@@ -191,6 +191,9 @@ export default function MainDashboard({
   const colorRpjmd      = getColors(nilaiRpjmd);
 
   const derivedRealisasi = deriveQuartersFromMonthly(bulanRealisasi, data.jenis);
+  // Acuan gradasi kisi 12 sel — relatif terhadap bulan tertinggi, bukan target,
+  // supaya polanya tetap terbaca walau target belum diisi.
+  const maxBulan = Math.max(0, ...bulanRealisasi.map(v => v ?? 0));
   const bulanDirty = (() => {
     const src = activeRow?.bulan_realisasi;
     const base: (number | null)[] = Array.isArray(src) && src.length === 12 ? src : Array(12).fill(null);
@@ -480,25 +483,47 @@ export default function MainDashboard({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            {BULAN_LABELS.map((bln, i) => (
-              <div key={bln} className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{bln}</label>
-                <PrimaNumberField
-                  size="sm"
-                  min={0}
-                  disabled={!activeRow}
-                  value={bulanRealisasi[i] == null ? '' : bulanRealisasi[i]}
-                  placeholder="—"
-                  inputClassName="text-right"
-                  onChange={(e) => {
-                    // R3: kosong = belum diisi (null); "0" = nol nyata. R6: desimal boleh.
-                    const v = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
-                    setBulanRealisasi(prev => prev.map((x, idx) => (idx === i ? v : x)));
-                  }}
-                />
-              </div>
-            ))}
+          {/* Kisi 12 sel: setahun dalam SATU baris supaya polanya terbaca sekali lihat
+              (dulu 2 baris × 6 memotong tahun jadi dua). Latar menguat mengikuti
+              besaran nilai — bulan kosong / menonjol langsung terlihat tanpa dibaca
+              satu per satu. Target bulan ditempel di bawah sel supaya pengisi tidak
+              perlu mengingat atau membuka Matriks Bulanan. */}
+          <div className="grid grid-cols-4 sm:grid-cols-6 xl:grid-cols-12 gap-2">
+            {BULAN_LABELS.map((bln, i) => {
+              const nilai   = bulanRealisasi[i];
+              const targetB = activeRow?.bulan_target?.[i] ?? null;
+              const intensitas = maxBulan > 0 && nilai != null ? Math.min(1, nilai / maxBulan) : 0;
+              return (
+                <div
+                  key={bln}
+                  className="rounded-lg border border-slate-200 px-1.5 pt-1.5 pb-1 transition-colors"
+                  style={intensitas > 0.02
+                    ? { background: `color-mix(in srgb, #EF9F27 ${Math.round(intensitas * 30)}%, transparent)` }
+                    : undefined}
+                >
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-center">{bln}</label>
+                  <PrimaNumberField
+                    size="sm"
+                    min={0}
+                    disabled={!activeRow}
+                    value={nilai == null ? '' : nilai}
+                    placeholder="—"
+                    inputClassName="text-center"
+                    onChange={(e) => {
+                      // R3: kosong = belum diisi (null); "0" = nol nyata. R6: desimal boleh.
+                      const v = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
+                      setBulanRealisasi(prev => prev.map((x, idx) => (idx === i ? v : x)));
+                    }}
+                  />
+                  <div
+                    className="text-[9px] text-slate-400 font-semibold text-center mt-0.5 h-3"
+                    style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}
+                  >
+                    {targetB != null ? `target ${targetB}` : ''}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-4 rounded-xl border border-[#7C5CFC]/20 bg-[#7C5CFC]/5 p-3">
