@@ -78,9 +78,15 @@ for (const dir of SCAN_DIRS) {
 
 // ─── Mode --update: tulis ulang baseline ────────────────────────────────────
 if (UPDATE) {
+  // _dibuat = tanggal gate dipasang, dipertahankan dari berkas lama. Kalau ikut
+  // ditimpa tiap regenerasi, artinya berubah diam-diam jadi "terakhir dirapikan"
+  // dan jejak kapan utang 240 hex itu lahir hilang.
+  const lama = existsSync(BASE_PATH) ? JSON.parse(readFileSync(BASE_PATH, 'utf8')) : {};
+  const hariIni = new Date().toISOString().slice(0, 10);
   const baseline = {
     _catatan: 'Hex di luar DESIGN-SYSTEM.md yang SUDAH ada saat gate dipasang. Daftar ini hanya boleh MENGECIL. Regenerasi: node scripts/check-design-tokens.mjs --update',
-    _dibuat: new Date().toISOString().slice(0, 10),
+    _dibuat: lama._dibuat ?? hariIni,
+    _diperbarui: hariIni,
     _jumlah: found.size,
     hex: [...found.keys()].sort(),
   };

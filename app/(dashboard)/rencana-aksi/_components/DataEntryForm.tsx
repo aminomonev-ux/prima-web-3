@@ -584,6 +584,14 @@ export default function DataEntryForm({ level, rows, selectedYear, role, onReloa
               </div>
             </div>
 
+            {/* Satu-satunya tempat di modul ini yang menyebut rumus capaian. Ikut
+                pindah ke sini saat TargetsModal dibuang — tempatnya memang menempel
+                pada kedua field pembagi di atas, bukan di modal terpisah. */}
+            <p className="text-[10.5px] leading-relaxed text-slate-500">
+              Kedua angka di atas adalah pembagi capaian: capaian akhir tahun = total realisasi
+              triwulan ÷ target tahunan, capaian RPJMD = total realisasi ÷ target RPJMD.
+            </p>
+
             {/* Target adalah PEMBAGI capaian. Menggantinya menulis ulang seluruh
                 persentase yang pernah ada — termasuk laporan yang sudah dicetak,
                 padahal tidak ada realisasi yang berubah. Panel ini muncul hanya

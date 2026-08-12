@@ -9,7 +9,7 @@ import Header from './_components/Header';
 import MainDashboard from './_components/MainDashboard';
 import DataEntryForm from './_components/DataEntryForm';
 import CetakPanel from './_components/CetakPanel';
-import { QuarterModal, TargetsModal, DetailModal, ResetRealisasiModal } from './_components/Modals';
+import { QuarterModal, DetailModal, ResetRealisasiModal } from './_components/Modals';
 import MatrixBulananModal from './_components/MatrixBulananModal';
 import PilihTampilanSub from './_components/PilihTampilanSub';
 import type { RaRow, RaLevel } from './_lib/types';
@@ -68,7 +68,6 @@ export default function RaClient({
   const [selectedIndicator, setSelectedIndicator]   = useState('');
 
   const [activeQuarter, setActiveQuarter] = useState<1 | 2 | 3 | 4 | null>(null);
-  const [isTargetsOpen, setIsTargetsOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen]   = useState(false);
   const [isResetOpen, setIsResetOpen]     = useState(false);
   // Menu Sub Kegiatan punya dua tampilan sederajat. 'pilih' = halaman pemilih,
@@ -285,8 +284,6 @@ export default function RaClient({
         html:not([data-theme="light"]) .ra-scope .text-\\[\\#1F3F73\\] { color: #B5D4F4 !important; }
         /* Rekomendasi Evaluasi (DetailModal): dark-amber #7A4D0A invisible di dark canvas */
         html:not([data-theme="light"]) .ra-scope .text-\\[\\#7A4D0A\\] { color: #F4C77A !important; }
-        /* Informasi Target Acuan (TargetsModal): dark-green #0F5C44 invisible di dark canvas */
-        html:not([data-theme="light"]) .ra-scope .text-\\[\\#0F5C44\\] { color: #6BD9AC !important; }
         html:not([data-theme="light"]) .ra-scope .text-slate-900 { color: #FFFFFF !important; }
         html:not([data-theme="light"]) .ra-scope .text-slate-800 { color: #E6F1FB !important; }
         html:not([data-theme="light"]) .ra-scope .text-slate-700 { color: #C5D7E5 !important; }
@@ -666,14 +663,6 @@ export default function RaClient({
         quarterId={activeQuarter}
         onClose={() => setActiveQuarter(null)}
         onSaved={async () => { setActiveQuarter(null); await reloadRows(tahun, level); }}
-        notify={notify}
-      />
-
-      <TargetsModal
-        row={activeRow}
-        isOpen={isTargetsOpen}
-        onClose={() => setIsTargetsOpen(false)}
-        onSaved={async () => { setIsTargetsOpen(false); await reloadRows(tahun, level); }}
         notify={notify}
       />
 

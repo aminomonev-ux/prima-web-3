@@ -6,7 +6,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import type { RaRow } from '../_lib/types';
 import { quartersOf, realisasiAkhirTahun, LEVEL_LABELS, outcomeOf } from '../_lib/types';
-import { apiUpdateQuarter, apiUpdateTargets, apiResetRealisasi, VersionConflictError } from '../_lib/api';
+import { apiUpdateQuarter, apiResetRealisasi, VersionConflictError } from '../_lib/api';
 
 const moneyFont = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
 
@@ -114,114 +114,6 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
             <PrimaButton type="button" variant="ghost" size="sm" onClick={onClose}>Batal</PrimaButton>
             <PrimaButton type="submit" variant="primary" size="sm" iconLeft={<Save size={14} />} disabled={busy}>
               {busy ? 'Menyimpan…' : 'Simpan Perubahan'}
-            </PrimaButton>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── TargetsModal ──────────────────────────────────────────────────────────
-
-interface TargetsModalProps {
-  row: RaRow | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-  notify: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
-}
-
-export function TargetsModal({ row, isOpen, onClose, onSaved, notify }: TargetsModalProps) {
-  const [rpjmd, setRpjmd] = useState('60');
-  const [tahunan, setTahunan] = useState('12');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [busy, setBusy] = useState(false);
-  const submittingRef = useRef(false);
-
-  useEffect(() => {
-    submittingRef.current = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (isOpen && row) { setRpjmd(String(row.target_rpjmd)); setTahunan(String(row.target_tahunan)); setErrorMsg(''); setBusy(false); }
-  }, [isOpen, row]);
-
-  if (!isOpen || !row) return null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (submittingRef.current) return;
-    const rpjmdNum = parseFloat(rpjmd) || 0;
-    const tahunanNum = parseFloat(tahunan) || 0;
-    if (rpjmdNum <= 0 || tahunanNum <= 0) { setErrorMsg('Target Jangka Panjang dan Tahunan harus lebih dari 0.'); return; }
-    submittingRef.current = true;
-    setBusy(true);
-    try {
-      await apiUpdateTargets(row.id, rpjmdNum, tahunanNum, row.version);
-      notify(`Target tersimpan untuk indikator ${row.indikator}`, 'success');
-      await onSaved();
-    } catch (err) {
-      if (err instanceof VersionConflictError) {
-        notify('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', 'warning');
-        await onSaved();
-      } else {
-        notify((err as Error).message || 'Gagal simpan', 'error');
-      }
-    } finally {
-      submittingRef.current = false;
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0f172a]/70" onClick={onClose} />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
-        <div className="h-1.5 w-full bg-gradient-to-r from-[#1D9E75] to-[#157758]" />
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div>
-            <h3 className="font-bold text-slate-800 text-lg">Konfigurasi Target Strategis</h3>
-            <p className="text-xs text-slate-400">Kelola batas Target Kinerja Tahunan dan RPJMD.</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {errorMsg && (
-            <div className="flex items-start gap-2 rounded-xl bg-[#E24B4A]/5 border border-[#E24B4A]/20 p-3 text-xs text-[#E24B4A] font-medium">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-600 block">Target Kinerja Tahunan</label>
-            <PrimaNumberField
-              min={1} required value={tahunan}
-              onChange={(e) => setTahunan(e.target.value)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-600 block">Target Jangka Panjang RPJMD</label>
-            <PrimaNumberField
-              min={1} required value={rpjmd}
-              onChange={(e) => setRpjmd(e.target.value)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
-
-          <div className="rounded-xl bg-[#1D9E75]/5 border border-[#1D9E75]/20 p-3.5 text-xs text-[#0F5C44] space-y-1">
-            <strong className="block">💡 Informasi Target Acuan:</strong>
-            <p>Nilai capaian akhir tahun = total realisasi triwulan ÷ target tahunan. Nilai RPJMD = total realisasi ÷ target RPJMD.</p>
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <PrimaButton type="button" variant="ghost" size="sm" onClick={onClose}>Batal</PrimaButton>
-            <PrimaButton type="submit" variant="success" size="sm" iconLeft={<Save size={14} />} disabled={busy}>
-              {busy ? 'Menyimpan…' : 'Simpan Target'}
             </PrimaButton>
           </div>
         </form>
