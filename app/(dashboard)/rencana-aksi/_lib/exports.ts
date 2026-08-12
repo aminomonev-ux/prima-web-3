@@ -131,7 +131,11 @@ export async function buildCombinedPdf(allRows: RaRow[], tahun: number, filter: 
   doc.setFontSize(15);
   doc.text(`Renaksi & Kinerja — Tahun ${tahun}`, 14, 14);
   doc.setFontSize(9);
-  doc.text('Tujuan → Sasaran → Program → Kegiatan → Sub Kegiatan', 14, 20);
+  // Pemisah pakai » (WinAnsi 0xBB), BUKAN → (U+2192). Font bawaan jsPDF cuma
+  // paham WinAnsi; begitu ada satu karakter di luar itu, SELURUH baris ditulis
+  // ulang dalam pengkodean dua-byte dan tercetak jadi sampah — bukan cuma
+  // karakternya. Dijaga scripts/check-pdf-glyphs.mjs (Gate F).
+  doc.text('Tujuan » Sasaran » Program » Kegiatan » Sub Kegiatan', 14, 20);
 
   const hier = buildCetakRows(allRows, filter);
   if (!hier.length) {

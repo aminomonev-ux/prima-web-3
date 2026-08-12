@@ -199,6 +199,15 @@ jobs:
       - name: Gate token warna (DESIGN-SYSTEM.md)
         run: npm run check:tokens
 
+      # ─── GATE F: Glyph PDF (WinAnsi) ───────────────────────────────────────
+      # Font bawaan jsPDF cuma paham WinAnsi. Karakter di luar itu tidak bikin
+      # error — jsPDF diam-diam menulis ulang SELURUH baris dalam pengkodean
+      # dua-byte, dan barisnya tercetak jadi sampah. Ketahuannya cuma kalau ada
+      # orang membuka PDF-nya. Gate ini ketat (tanpa baseline) karena saat
+      # dipasang (2026-08-12) pelanggarannya nol.
+      - name: Gate glyph PDF (WinAnsi)
+        run: npm run check:pdf
+
   # ─── JOB D: Gitleaks (secret scanning) ─────────────────────────────────────
   # Scan working tree saat ini untuk rahasia ter-commit (token/password/key).
   # Pakai Docker image resmi (tanpa license/token — gratis untuk repo apa pun).

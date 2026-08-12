@@ -134,7 +134,7 @@ Branch aktif: **mysql** — referensi schema: `docs/schema-mysql.sql` (bukan sch
 - `lib/services/notifications.ts` — `addNotif()`, `sanitizeNotif()`, `buildNotifRecipients()`
 - `lib/constants.ts` — roles, BIDANG_TO_SUBBIDANG, SUBBIDANG_TO_BIDANG
 - `next.config.ts` — HTTP security headers (X-Frame-Options, HSTS, nosniff, dll) — **JANGAN hapus/lemahkan `securityHeaders`**; CSP dikelola di `proxy.ts` (nonce per-request)
-- `.github/workflows/security-scan.yml` — **5 gate CI** (push/PR ke mysql/main): **A** Semgrep SAST · **B** npm-audit (block HIGH) · **C** tsc+ESLint · **D** Gitleaks secret-scan (`.gitleaks.toml`, allowlist `docs/` = contoh/placeholder, kode+`.env` tetap dipindai). CI pakai **Node 20 / npm 10.8.2** → `package-lock.json` WAJIB regen dgn npm versi sama (`npx npm@10.8.2 install`) biar `npm ci` tak EUSAGE (**L57**)
+- `.github/workflows/security-scan.yml` — **6 gate CI** (push/PR ke mysql/main): **A** Semgrep SAST · **B** npm-audit (block HIGH) · **C** tsc+ESLint · **D** Gitleaks secret-scan (`.gitleaks.toml`, allowlist `docs/` = contoh/placeholder, kode+`.env` tetap dipindai) · **E** token warna ratchet (`npm run check:tokens`, baseline `docs/design/token-baseline.json`) · **F** glyph PDF WinAnsi (`npm run check:pdf`, ketat tanpa baseline — **L71**). CI pakai **Node 20 / npm 10.8.2** → `package-lock.json` WAJIB regen dgn npm versi sama (`npx npm@10.8.2 install`) biar `npm ci` tak EUSAGE (**L57**)
 - `package.json` — `overrides` (`postcss`/`uuid`) untuk patch CVE transitif tanpa downgrade `next`/`exceljs`; JANGAN `npm audit fix --force` (**L56**)
 - `app/(dashboard)/usulan-kebutuhan/usulan-client.tsx` — modul usulan (client)
 - `app/api/usulan/` — CRUD, bidang, telaah, putusan, export

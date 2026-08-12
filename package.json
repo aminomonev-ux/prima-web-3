@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:tokens": "node scripts/check-design-tokens.mjs",
+    "check:pdf": "node scripts/check-pdf-glyphs.mjs",
     "rima:train": "node scripts/rima-train.mjs",
     "rima:mine": "node scripts/rima-mine-faillog.mjs",
     "rima:eval": "npx tsx scripts/rima-eval.mts",
