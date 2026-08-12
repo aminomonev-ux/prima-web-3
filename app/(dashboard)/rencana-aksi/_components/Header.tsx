@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, LogOut, ShieldCheck, Home, Copy, Lock, FileUp } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -9,6 +10,13 @@ import { ROLE_LABELS } from '@/lib/constants';
 import { YEAR_RANGE, BULAN_LABELS } from '../_lib/types';
 import { apiDuplikasiTahun, apiGetLock, apiSetLock } from '../_lib/api';
 import ImportRenaksiModal from './ImportRenaksiModal';
+
+// Sasaran portal modal: akar .ra-scope, BUKAN <body>. Modal harus keluar dari
+// <header> (backdrop-blur di sana memenjarakan position:fixed jadi sebesar kotak
+// header), tapi tetap DI DALAM .ra-scope karena seluruh tema gelap Renaksi
+// diturunkan dari kelas itu — kalau dipindah ke <body>, kartunya jadi putih di
+// mode gelap. Akar .ra-scope sengaja tanpa transform/filter, jadi aman.
+const targetPortal = () => document.querySelector('.ra-scope') ?? document.body;
 
 interface Props {
   onToggleSidebar: () => void;
@@ -255,17 +263,23 @@ export default function Header({
         </div>
       </div>
 
-      {importOpen && (
+      {/* Ketiga modal di bawah WAJIB lewat portal ke <body>. <header> memakai
+          backdrop-blur, dan elemen ber-backdrop-filter menjadi containing block
+          untuk anak position:fixed — 'fixed inset-0' berhenti berarti "seluruh
+          layar" dan malah jadi kotak header setinggi 64px, sehingga modalnya
+          tergencet di bilah atas. Jangan kembalikan ke render inline. */}
+      {importOpen && typeof document !== 'undefined' && createPortal(
         <ImportRenaksiModal
           tahun={selectedYear}
           onClose={() => setImportOpen(false)}
           onDone={() => { setImportOpen(false); onDataChanged?.(); }}
           notify={(m, t) => notify?.(m, t)}
-        />
+        />,
+        targetPortal()
       )}
 
       {/* Modal Duplikasi Tahun */}
-      {dupOpen && (
+      {dupOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-[#0f172a]/70" onClick={() => setDupOpen(false)} />
           <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
@@ -305,11 +319,12 @@ export default function Header({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        targetPortal()
       )}
 
       {/* Modal Kunci Periode */}
-      {lockOpen && (
+      {lockOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-[#0f172a]/70" onClick={() => setLockOpen(false)} />
           <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100">
@@ -340,7 +355,8 @@ export default function Header({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        targetPortal()
       )}
 
       <style>{`
