@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle, RotateCcw, X, Sparkles, AlertTriangle } from 'lucide-react';
+import { CheckCircle, RotateCcw, X, Sparkles, AlertTriangle, ChevronLeft } from 'lucide-react';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Sidebar from './_components/Sidebar';
 import Header from './_components/Header';
@@ -11,10 +11,29 @@ import DataEntryForm from './_components/DataEntryForm';
 import CetakPanel from './_components/CetakPanel';
 import { QuarterModal, TargetsModal, DetailModal, ResetRealisasiModal } from './_components/Modals';
 import MatrixBulananModal from './_components/MatrixBulananModal';
-import type { RaRow, RaLevel, RaJenis } from './_lib/types';
+import PilihTampilanSub from './_components/PilihTampilanSub';
+import type { RaRow, RaLevel } from './_lib/types';
 import { LEVEL_LABELS, anggaranRollup } from './_lib/types';
-import { apiList, apiUpdateJenis, apiUpdateBulanRealisasi, VersionConflictError } from './_lib/api';
+import { apiList, apiUpdateBulanRealisasi, VersionConflictError } from './_lib/api';
 import { exportIndikatorPdf, exportIndikatorXlsx } from './_lib/exports';
+
+// Remah jalan untuk dua tampilan Sub Kegiatan — menegaskan bahwa keduanya berada
+// DI DALAM satu menu, bukan tempat terpisah, dan menyediakan jalan pulang yang
+// jelas (menggantikan tombol X modal lama).
+function BarisKembali({ label, onKembali }: { label: string; onKembali: () => void }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5 md:px-8 shrink-0">
+      <button
+        onClick={onKembali}
+        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 cursor-pointer transition-colors"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" /> Pilih tampilan
+      </button>
+      <span className="text-slate-300">/</span>
+      <span className="text-[12px] font-bold text-slate-700">{label}</span>
+    </div>
+  );
+}
 
 interface Props {
   username: string;
@@ -52,7 +71,14 @@ export default function RaClient({
   const [isTargetsOpen, setIsTargetsOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen]   = useState(false);
   const [isResetOpen, setIsResetOpen]     = useState(false);
-  const [isMatrixOpen, setIsMatrixOpen]   = useState(false);
+  // Menu Sub Kegiatan punya dua tampilan sederajat. 'pilih' = halaman pemilih,
+  // dan itu SELALU pintu masuknya. Sengaja tidak diingat: berpindah menu atau
+  // keluar akan mengembalikan ke pemilih, bukan ke tampilan terakhir.
+  const [subView, setSubView] = useState<'pilih' | 'detail' | 'matriks'>('pilih');
+  // Baris yang harus langsung dibuka saat mendarat di Data Entry. Tanpa ini,
+  // pengalihan cuma memindahkan orang ke puncak tabel berisi puluhan baris —
+  // menukar satu modal dengan perburuan.
+  const [fokusEditId, setFokusEditId] = useState<number | null>(null);
 
   const initials = (username || 'U').slice(0, 2).toUpperCase();
 
@@ -140,6 +166,8 @@ export default function RaClient({
     setMode('dashboard');
     setLevel(m);
     setSelectedSasaran(''); setSelectedProgram(''); setSelectedKegiatan(''); setSelectedSubKegiatan(''); setSelectedIndicator('');
+    setSubView('pilih');   // pindah menu = kembali ke pemilih tampilan, bukan ke tampilan terakhir
+    setFokusEditId(null);  // permintaan "buka baris ini" selesai begitu menu ditinggalkan
     setIsSidebarOpen(false);
     await reloadRows(tahun, m);
     notify(`Navigasi beralih ke menu: ${LEVEL_LABELS[m].toUpperCase()}`, 'info');
@@ -149,36 +177,36 @@ export default function RaClient({
     setMode('data-entry');
     setLevel(m);
     setSelectedSasaran(''); setSelectedProgram(''); setSelectedKegiatan(''); setSelectedSubKegiatan(''); setSelectedIndicator('');
+    setSubView('pilih');   // pindah menu = kembali ke pemilih tampilan, bukan ke tampilan terakhir
+    setFokusEditId(null);  // permintaan "buka baris ini" selesai begitu menu ditinggalkan
     setIsSidebarOpen(false);
     await reloadRows(tahun, m);
     notify(`Navigasi beralih ke entri data: DATA ENTRY ${m.toUpperCase()}`, 'info');
   };
 
+  // Jenis & Target milik Data Entry. Dari Realisasi Kinerja kita antar ke sana,
+  // bukan menyediakan pintu kedua di layar ini.
+  const handleUbahDiDataEntry = () => {
+    if (!activeRow) return;
+    setFokusEditId(activeRow.id);
+    setMode('data-entry');
+    setSubView('pilih');
+    notify(`Membuka "${activeRow.indikator}" di Data Entry — target & jenis diubah di sini`, 'info');
+  };
+
   const handleSelectCetak = () => {
     setMode('cetak');
+    setSubView('pilih');
+    setFokusEditId(null);
     setIsSidebarOpen(false);
     notify('Mode Cetak Gabungan aktif', 'info');
   };
 
-  const jenisSubmittingRef = useRef(false);
-  const handleChangeJenis = async (j: RaJenis) => {
-    if (!activeRow || jenisSubmittingRef.current) return;
-    jenisSubmittingRef.current = true;
-    try {
-      await apiUpdateJenis(activeRow.id, j, activeRow.version);
-      notify(`Jenis indikator diubah menjadi ${j}`, 'success');
-      await reloadRows(tahun, level);
-    } catch (err) {
-      if (err instanceof VersionConflictError) {
-        notify('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', 'warning');
-        await reloadRows(tahun, level);
-      } else {
-        notify((err as Error).message || 'Gagal ubah jenis', 'error');
-      }
-    } finally {
-      jenisSubmittingRef.current = false;
-    }
-  };
+  // handleChangeJenis dihapus: Jenis kini hanya diubah dari Data Entry, lewat form
+  // yang sama dengan definisi indikator lainnya — apiUpsert() mengirim jenis dan
+  // target sekaligus. Akibatnya apiUpdateJenis() di _lib/api.ts tidak punya
+  // pemanggil lagi; dibiarkan karena route PATCH action 'jenis' masih ada, BUKAN
+  // karena masih terpakai.
 
   const bulanRealisasiSubmittingRef = useRef(false);
   const handleSaveBulanRealisasi = async (months: (number | null)[]) => {
@@ -568,8 +596,32 @@ export default function RaClient({
             role={role}
             onReload={() => reloadRows(tahun, level)}
             notify={notify}
+            fokusEditId={fokusEditId}
           />
+        ) : level === 'sub-kegiatan' && subView === 'pilih' ? (
+          <PilihTampilanSub
+            tahun={tahun}
+            jumlahIndikator={rows.filter(r => r.level === 'sub-kegiatan').length}
+            onPilih={setSubView}
+          />
+        ) : level === 'sub-kegiatan' && subView === 'matriks' ? (
+          <>
+            <BarisKembali label="Matriks Semua Indikator" onKembali={() => setSubView('pilih')} />
+            <MatrixBulananModal
+              variant="halaman"
+              isOpen
+              tahun={tahun}
+              rows={rows.filter(r => r.level === 'sub-kegiatan')}
+              onClose={() => setSubView('pilih')}
+              onSaved={async () => { await reloadRows(tahun, level); }}
+              notify={notify}
+            />
+          </>
         ) : (
+          <>
+            {level === 'sub-kegiatan' && (
+              <BarisKembali label="Detail Indikator" onKembali={() => setSubView('pilih')} />
+            )}
           <MainDashboard
             level={level}
             rows={rows}
@@ -585,13 +637,14 @@ export default function RaClient({
             setSelectedSubKegiatan={setSelectedSubKegiatan}
             setSelectedIndicator={setSelectedIndicator}
             onOpenQuarterModal={(q) => setActiveQuarter(q.id)}
-            onOpenTargetsModal={() => setIsTargetsOpen(true)}
+            onUbahDiDataEntry={handleUbahDiDataEntry}
             onOpenDetailModal={() => setIsDetailOpen(true)}
-            onChangeJenis={handleChangeJenis}
             onSaveBulanRealisasi={handleSaveBulanRealisasi}
             anggaran={activeAnggaran}
-            onOpenMatrix={level === 'sub-kegiatan' ? () => setIsMatrixOpen(true) : undefined}
+            /* Matriks tidak lagi dibuka dari sini — ia tampilan sederajat di
+               halaman pemilih, bukan jendela yang menumpang layar ini. */
           />
+          </>
         )}
 
         {/* Footer */}
@@ -639,14 +692,8 @@ export default function RaClient({
         notify={notify}
       />
 
-      <MatrixBulananModal
-        isOpen={isMatrixOpen}
-        tahun={tahun}
-        rows={rows.filter(r => r.level === 'sub-kegiatan')}
-        onClose={() => setIsMatrixOpen(false)}
-        onSaved={async () => { await reloadRows(tahun, level); }}
-        notify={notify}
-      />
+      {/* Matriks tidak lagi dipasang sebagai modal di sini — ia dirender sebagai
+          tampilan halaman di percabangan konten (variant="halaman"). */}
     </div>
   );
 }

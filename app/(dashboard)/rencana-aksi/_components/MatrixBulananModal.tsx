@@ -18,6 +18,10 @@ const MONO = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
 
 interface Props {
   isOpen: boolean;
+  /** 'modal' = jendela mengambang (pemakaian lama). 'halaman' = menyatu di alur
+   *  halaman, tanpa selubung gelap dan tanpa tombol X — dipakai saat Matriks jadi
+   *  salah satu dari dua tampilan menu Sub Kegiatan, bukan "tempat kedua". */
+  variant?: 'modal' | 'halaman';
   tahun: number;
   rows: RaRow[];
   onClose: () => void;
@@ -48,7 +52,8 @@ const heatCell = (pct: number | null, filled: boolean): { bg: string; fg: string
   }
 };
 
-export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSaved, notify }: Props) {
+export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSaved, notify, variant = 'modal' }: Props) {
+  const asHalaman = variant === 'halaman';
   const [grid, setGrid] = useState<Map<number, MonthVal[]>>(new Map());
   const [lockBulan, setLockBulan] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -167,9 +172,13 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#0f172a]/75" onClick={onClose} />
-      <div className="relative w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+    <div className={asHalaman
+      ? 'flex-1 overflow-y-auto bg-[#EEF2F6] px-4 py-6 md:px-8'
+      : 'fixed inset-0 z-50 flex items-center justify-center p-4'}>
+      {!asHalaman && <div className="absolute inset-0 bg-[#0f172a]/75" onClick={onClose} />}
+      <div className={asHalaman
+        ? 'relative w-full overflow-hidden rounded-2xl bg-white shadow-xs border border-slate-100 flex flex-col max-h-[calc(100vh-190px)]'
+        : 'relative w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]'}>
         <div className="h-1.5 w-full bg-gradient-to-r from-[#7C5CFC] to-[#378ADD] shrink-0" />
 
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100 shrink-0">
@@ -207,9 +216,13 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
                 if (f) void handleImport(f);
                 e.target.value = '';
               }} />
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
-              <X className="h-5 w-5" />
-            </button>
+            {/* Sebagai halaman tidak ada X — keluarnya lewat "Pilih tampilan" di atas,
+                supaya tidak terasa seperti jendela yang menumpang. */}
+            {!asHalaman && (
+              <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -288,7 +301,9 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
             ) : dirtyRows.length > 0 ? `${dirtyRows.length} baris berubah — belum disimpan` : 'Tidak ada perubahan'}
           </span>
           <div className="flex items-center gap-2.5">
-            <PrimaButton variant="ghost" size="sm" onClick={onClose}>Tutup</PrimaButton>
+            {/* "Tutup" itu bahasa jendela. Sebagai halaman, jalan pulangnya sudah
+                ada di remah jalan atas — tombol ini cuma akan membingungkan. */}
+            {!asHalaman && <PrimaButton variant="ghost" size="sm" onClick={onClose}>Tutup</PrimaButton>}
             <PrimaButton variant="primary" size="sm" iconLeft={<Save size={14} />}
               disabled={busy || dirtyRows.length === 0} onClick={() => { void handleSave(); }}>
               {busy ? 'Menyimpan…' : `Simpan (${dirtyRows.length})`}

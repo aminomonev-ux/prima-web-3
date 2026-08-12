@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Eye, Pencil, Save, Grid3x3 } from 'lucide-react';
+import { Eye, Pencil, Save, ExternalLink } from 'lucide-react';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import SoftSelect from '@/components/ui/SoftSelect';
@@ -25,18 +26,34 @@ interface Props {
   setSelectedSubKegiatan: (v: string) => void;
   setSelectedIndicator: (v: string) => void;
   onOpenQuarterModal: (quarter: { id: 1 | 2 | 3 | 4; target: number; realisasi: number; name: string }) => void;
-  onOpenTargetsModal: () => void;
+  /** Buka baris ini di Data Entry — satu-satunya tempat Jenis & Target diubah. */
+  onUbahDiDataEntry: () => void;
   onOpenDetailModal: () => void;
-  onChangeJenis: (jenis: RaJenis) => void;
   onSaveBulanRealisasi: (months: (number | null)[]) => Promise<void>;
   anggaran: number | null;
-  onOpenMatrix?: () => void;
 }
 
 // Ambang dari AMBANG_CAPAIAN (_lib/types.ts) — sumber tunggal bersama Cetak,
 // Matriks, dan Sparkline. Dulu layar ini tidak punya pita tengah: apa pun di
 // bawah 100 langsung merah, jadi capaian 99% terbaca segawat 5%.
 // Emas memakai teks on-primary #020F1C, bukan putih (DESIGN-SYSTEM.md).
+// Jenis & Target dimiliki Data Entry — layar ini hanya mengisi realisasi.
+// Ikonnya sengaja BUKAN pensil polos: pensil berarti "edit di sini", padahal ini
+// berpindah layar. Panah keluar memberi tahu itu sebelum diklik.
+function TautanDataEntry({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
+  return (
+    <Tip label={label}><button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="inline-flex items-center gap-0.5 text-[#EF9F27] hover:text-[#D17A0A] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+    >
+      <Pencil className="h-3 w-3" />
+      <ExternalLink className="h-2.5 w-2.5" />
+    </button></Tip>
+  );
+}
+
 function getColors(pct: number) {
   if (pct <= 0) return { text: 'text-[#78909C]', badge: 'bg-[#78909C] text-white', progress: 'bg-[#BDC3C7]' };
   switch (nadaCapaian(pct)) {
@@ -50,9 +67,8 @@ export default function MainDashboard({
   level, rows, selectedYear,
   selectedSasaran, selectedProgram, selectedKegiatan, selectedSubKegiatan, selectedIndicator,
   setSelectedSasaran, setSelectedProgram, setSelectedKegiatan, setSelectedSubKegiatan, setSelectedIndicator,
-  onOpenQuarterModal, onOpenTargetsModal, onOpenDetailModal, onChangeJenis, onSaveBulanRealisasi, anggaran, onOpenMatrix,
+  onOpenQuarterModal, onUbahDiDataEntry, onOpenDetailModal, onSaveBulanRealisasi, anggaran,
 }: Props) {
-  const [isEditingJenis, setIsEditingJenis] = useState(false);
 
   const menuName = LEVEL_LABELS[level];
   const levelRows = useMemo(() => rows.filter(r => r.level === level), [rows, level]);
@@ -191,14 +207,25 @@ export default function MainDashboard({
   const colorRpjmd      = getColors(nilaiRpjmd);
 
   const derivedRealisasi = deriveQuartersFromMonthly(bulanRealisasi, data.jenis);
-  // Acuan gradasi kisi 12 sel — relatif terhadap bulan tertinggi, bukan target,
-  // supaya polanya tetap terbaca walau target belum diisi.
-  const maxBulan = Math.max(0, ...bulanRealisasi.map(v => v ?? 0));
   const bulanDirty = (() => {
     const src = activeRow?.bulan_realisasi;
     const base: (number | null)[] = Array.isArray(src) && src.length === 12 ? src : Array(12).fill(null);
     return bulanRealisasi.some((v, i) => (v ?? null) !== (base[i] ?? null));
   })();
+
+  // Jebakan paling gampang terlewat: mengetik realisasi 8 bulan, belum Simpan,
+  // lalu melihat targetnya keliru dan mengklik pensil. Tanpa jaring ini ketikannya
+  // hilang tanpa suara karena berpindah layar.
+  const bukaDataEntry = async () => {
+    if (bulanDirty && !(await confirmDialog({
+      title: 'Realisasi belum disimpan',
+      message: 'Ada isian realisasi bulanan yang belum Anda simpan. Kalau lanjut ke Data Entry sekarang, isian itu hilang.\n\nSimpan dulu, atau lanjut dan tinggalkan?',
+      confirmLabel: 'Lanjut, tinggalkan',
+      cancelLabel: 'Batal',
+      variant: 'warning',
+    }))) return;
+    onUbahDiDataEntry();
+  };
 
   const handleSaveBulan = async () => {
     if (!activeRow || savingBulan) return;
@@ -367,31 +394,9 @@ export default function MainDashboard({
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-slate-400 block font-medium">Jenis</span>
-              <Tip label="Ubah Jenis Indikator"><button
-                onClick={() => setIsEditingJenis(!isEditingJenis)}
-                disabled={!activeRow}
-                className="text-[#EF9F27] hover:text-[#D17A0A] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Pencil className="h-3 w-3" />
-              </button></Tip>
+              <TautanDataEntry label="Ubah Jenis di Data Entry" disabled={!activeRow} onClick={() => { void bukaDataEntry(); }} />
             </div>
-            {isEditingJenis && activeRow ? (
-              <select
-                value={data.jenis}
-                onChange={(e) => { onChangeJenis(e.target.value as RaJenis); setIsEditingJenis(false); }}
-                onBlur={() => setIsEditingJenis(false)}
-                autoFocus
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none focus:border-[#EF9F27]"
-                style={{ colorScheme: 'light' }}
-              >
-                <option value="Akumulatif">Akumulatif</option>
-                <option value="Progres Positif">Progres Positif</option>
-                <option value="Progres Negatif">Progres Negatif</option>
-                <option value="Pengulangan">Pengulangan</option>
-              </select>
-            ) : (
-              <span className="font-semibold text-slate-700 text-sm md:text-base block">{data.jenis}</span>
-            )}
+            <span className="font-semibold text-slate-700 text-sm md:text-base block">{data.jenis}</span>
           </div>
 
           <div className="space-y-1">
@@ -402,13 +407,7 @@ export default function MainDashboard({
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-slate-400 block font-medium">Target Tahunan</span>
-              <Tip label="Ubah Target"><button
-                onClick={onOpenTargetsModal}
-                disabled={!activeRow}
-                className="text-[#EF9F27] hover:text-[#D17A0A] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Pencil className="h-3 w-3" />
-              </button></Tip>
+              <TautanDataEntry label="Ubah Target di Data Entry" disabled={!activeRow} onClick={() => { void bukaDataEntry(); }} />
             </div>
             <span className="font-bold text-[#EF9F27] text-lg md:text-xl block pt-0.5"
                   style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
@@ -464,13 +463,18 @@ export default function MainDashboard({
               <p className="text-[11px] text-slate-400 font-medium">
                 Isi realisasi tiap bulan — Triwulan terhitung otomatis sesuai jenis (<strong>{data.jenis}</strong>).
               </p>
+              {/* Legenda sama persis dengan Matriks Bulanan — sengaja, supaya warna
+                  di kedua layar dibaca dengan aturan yang sama. */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-medium text-slate-400">
+                <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block bg-[#1D9E75]" /> ≥100%</span>
+                <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block bg-[#EF9F27]" /> 80–99%</span>
+                <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm inline-block bg-[#E24B4A]" /> &lt;80%</span>
+                <span>· capaian bulan vs targetnya · tanpa target bulanan = tanpa warna</span>
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              {onOpenMatrix && (
-                <PrimaButton variant="purple" size="sm" iconLeft={<Grid3x3 size={13} />} onClick={onOpenMatrix}>
-                  Matriks Bulanan
-                </PrimaButton>
-              )}
+              {/* Tombol "Matriks Bulanan" dihapus — matriks kini tampilan sederajat
+                  di halaman pemilih menu Sub Kegiatan, bukan jendela dari sini. */}
               <PrimaButton
                 variant="success"
                 size="sm"
@@ -484,22 +488,31 @@ export default function MainDashboard({
           </div>
 
           {/* Kisi 12 sel: setahun dalam SATU baris supaya polanya terbaca sekali lihat
-              (dulu 2 baris × 6 memotong tahun jadi dua). Latar menguat mengikuti
-              besaran nilai — bulan kosong / menonjol langsung terlihat tanpa dibaca
-              satu per satu. Target bulan ditempel di bawah sel supaya pengisi tidak
-              perlu mengingat atau membuka Matriks Bulanan. */}
+              (dulu 2 baris × 6 memotong tahun jadi dua). Target bulan ditempel di
+              bawah sel supaya pengisi tidak perlu mengingat atau membuka Matriks.
+              Warna = capaian bulan vs targetnya, ambang sama dengan Matriks & Cetak
+              (AMBANG_CAPAIAN). Dulu di sini gradasi emas mengikuti BESARAN nilai —
+              bahasa visual yang sama dengan Matriks tapi artinya beda, jadi
+              menyesatkan. Tanpa target bulanan capaian tak bisa dihitung → netral.
+              Yang diwarnai bingkai kartunya, BUKAN kotak input: angka harus tetap
+              tajam saat diketik (Matriks boleh pekat karena inputnya dimatikan). */}
           <div className="grid grid-cols-4 sm:grid-cols-6 xl:grid-cols-12 gap-2">
             {BULAN_LABELS.map((bln, i) => {
               const nilai   = bulanRealisasi[i];
               const targetB = activeRow?.bulan_target?.[i] ?? null;
-              const intensitas = maxBulan > 0 && nilai != null ? Math.min(1, nilai / maxBulan) : 0;
+              const pctBulan = nilai != null && targetB != null && targetB > 0
+                ? hitungCapaianPct(targetB, nilai, data.jenis)
+                : null;
+              const nada = pctBulan == null ? null : nadaCapaian(pctBulan);
+              const warnaNada = nada === 'tercapai' ? '#1D9E75' : nada === 'waspada' ? '#EF9F27' : nada === 'kurang' ? '#E24B4A' : null;
               return (
                 <div
                   key={bln}
-                  className="rounded-lg border border-slate-200 px-1.5 pt-1.5 pb-1 transition-colors"
-                  style={intensitas > 0.02
-                    ? { background: `color-mix(in srgb, #EF9F27 ${Math.round(intensitas * 30)}%, transparent)` }
-                    : undefined}
+                  className="rounded-lg border px-1.5 pt-1.5 pb-1 transition-colors"
+                  style={warnaNada
+                    ? { borderColor: warnaNada, background: `color-mix(in srgb, ${warnaNada} 12%, transparent)` }
+                    : { borderColor: 'var(--ra-border, #E2E8F0)' }}
+                  title={pctBulan != null ? `Capaian ${bln}: ${pctBulan.toFixed(1)}% dari target ${targetB}` : undefined}
                 >
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-center">{bln}</label>
                   <PrimaNumberField

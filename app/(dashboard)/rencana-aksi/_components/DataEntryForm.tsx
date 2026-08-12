@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import {
-  Database, Plus, Edit, Sliders, Tag, AlertCircle, FolderOpen, FileUp,
+  Database, Plus, Edit, Sliders, Tag, AlertCircle, FolderOpen, FileUp, AlertTriangle,
 } from 'lucide-react';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import DeleteIcon from '@/components/ui/DeleteIcon';
@@ -13,7 +14,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Tip from '@/components/ui/Tip';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
-import { outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS } from '../_lib/types';
+import { outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS, hitungCapaianPct, realisasiAkhirTahun } from '../_lib/types';
 import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
 import ImportRenaksiModal from './ImportRenaksiModal';
@@ -25,9 +26,13 @@ interface Props {
   role: string;
   onReload: () => Promise<void>;
   notify: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
+  /** Baris yang harus langsung terbuka dalam mode edit — dikirim saat pengguna
+   *  datang dari Realisasi Kinerja untuk mengubah Target/Jenis. Dibersihkan oleh
+   *  induk saat pengguna berpindah menu, bukan oleh komponen ini. */
+  fokusEditId?: number | null;
 }
 
-export default function DataEntryForm({ level, rows, selectedYear, role, onReload, notify }: Props) {
+export default function DataEntryForm({ level, rows, selectedYear, role, onReload, notify, fokusEditId }: Props) {
   // Import = operasi borongan, sekelas Duplikasi Tahun di Header
   const canImport = role === 'ADMIN' || role === 'SUPER_ADMIN';
   const [importOpen, setImportOpen] = useState(false);
@@ -68,8 +73,12 @@ export default function DataEntryForm({ level, rows, selectedYear, role, onReloa
   const derivedQ = deriveQuartersFromMonthly(bulanTarget, jenis);
 
   useEffect(() => {
+    // Jangan kosongkan form kalau ada permintaan membuka baris tertentu (datang
+    // dari Realisasi Kinerja). Tanpa penjaga ini, di dev StrictMode efek berjalan
+    // dua kali dan lintasan kedua menghapus isian yang baru saja dimuat.
+    if (fokusEditId != null) return;
     resetForm();
-  }, [level]);
+  }, [level, fokusEditId]);
 
   // Fetch parent dropdown options sesuai level
   useEffect(() => {
@@ -140,6 +149,35 @@ export default function DataEntryForm({ level, rows, selectedYear, role, onReloa
       toast.error('Nama sub kegiatan tidak boleh kosong!'); return;
     }
 
+    // Jenis mengubah CARA realisasi dihitung, bukan sekadar angkanya: Akumulatif
+    // menjumlah empat triwulan, Progres Positif/Negatif mengambil nilai terakhir,
+    // dan Progres Negatif membalik arah penilaian. Satu indikator hijau bisa
+    // langsung jadi merah tanpa satu data pun disentuh — jadi tunjukkan angka
+    // sebelum–sesudahnya, bukan kalimat teori tentang rumus.
+    if (barisAsli && jenis !== barisAsli.jenis) {
+      const sebelum = hitungCapaianPct(barisAsli.target_tahunan, realisasiAkhirTahun(barisAsli), barisAsli.jenis);
+      const sesudah = hitungCapaianPct(targetTahunan, realisasiAkhirTahun({ ...barisAsli, jenis }), jenis);
+      // Kalau target ikut diubah, angka "sesudah" memuat KEDUA perubahan. Tanpa
+      // catatan ini orang akan mengira seluruh lonjakannya akibat jenis saja.
+      const catatanTarget = targetBerubah
+        ? `\n\n(Angka "setelah" sudah termasuk target tahunan yang Anda ubah jadi ${targetTahunan}.)`
+        : '';
+      const ok = await confirmDialog({
+        title: 'Ubah jenis indikator?',
+        message:
+          `${barisAsli.jenis} → ${jenis}\n\n` +
+          `Cara realisasi dihitung ikut berubah, padahal datanya tidak Anda sentuh.\n\n` +
+          `Capaian sekarang : ${sebelum.toFixed(2)}%\n` +
+          `Setelah diubah   : ${sesudah.toFixed(2)}%\n\n` +
+          `Angka ini juga yang muncul di Realisasi Kinerja dan di laporan cetak.` +
+          catatanTarget,
+        confirmLabel: 'Ya, ubah jenisnya',
+        cancelLabel: 'Batal',
+        variant: 'warning',
+      });
+      if (!ok) return;
+    }
+
     setBusy(true);
     try {
       await apiUpsert({
@@ -196,6 +234,30 @@ export default function DataEntryForm({ level, rows, selectedYear, role, onReloa
       ? row.bulan_target.slice() : Array(12).fill(null));
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
+
+  // Baris asli yang sedang diedit — pembanding untuk memberi tahu akibat perubahan
+  // Target/Jenis. null saat menambah data baru (tidak ada "sebelum"-nya).
+  const barisAsli = editingId != null ? (rows.find(r => r.id === editingId) ?? null) : null;
+  const targetBerubah = barisAsli != null
+    && (targetTahunan !== barisAsli.target_tahunan || targetRpjmd !== barisAsli.target_rpjmd);
+
+  // Mendarat dari Realisasi Kinerja: buka baris yang dimaksud, jangan tinggalkan
+  // orang di puncak tabel. Ref penanda supaya hanya jalan sekali per kiriman —
+  // kalau tidak, tiap render ulang akan menimpa ketikan yang sedang berjalan.
+  const fokusTerpakaiRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (fokusEditId == null || fokusTerpakaiRef.current === fokusEditId) return;
+    const target = rows.find(r => r.id === fokusEditId);
+    if (!target) return;              // baris belum termuat — coba lagi saat rows datang
+    fokusTerpakaiRef.current = fokusEditId;
+    // Mengisi form dari baris terpilih memang menulis banyak state sekaligus —
+    // itu inti "buka baris ini", bukan efek samping yang tak disengaja.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    handleEdit(target);
+    // fokusEditId TIDAK dibersihkan dari sini — pembersihannya milik induk saat
+    // pengguna berpindah menu. Kalau dibersihkan sekarang, efek reset di atas
+    // langsung berjalan dan mengosongkan form yang baru saja dibuka.
+  }, [fokusEditId, rows]);
 
   const handleDelete = async (row: RaRow) => {
     setBusy(true);
@@ -521,6 +583,31 @@ export default function DataEntryForm({ level, rows, selectedYear, role, onReloa
                 />
               </div>
             </div>
+
+            {/* Target adalah PEMBAGI capaian. Menggantinya menulis ulang seluruh
+                persentase yang pernah ada — termasuk laporan yang sudah dicetak,
+                padahal tidak ada realisasi yang berubah. Panel ini muncul hanya
+                saat angkanya benar-benar berbeda dari yang tersimpan. */}
+            {targetBerubah && barisAsli && (
+              <div className="rounded-xl border border-[#BA7517]/30 bg-[#BA7517]/5 p-3.5">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#BA7517] mt-0.5" />
+                  <div className="space-y-1.5">
+                    <p className="text-[11.5px] font-bold text-[#BA7517]">Target diubah — capaian dihitung ulang</p>
+                    <p className="text-[11px] leading-relaxed text-slate-600">
+                      Tahunan{' '}
+                      <b className="font-mono">{barisAsli.target_tahunan}</b> → <b className="font-mono">{targetTahunan}</b>
+                      {targetRpjmd !== barisAsli.target_rpjmd && (
+                        <> · RPJMD <b className="font-mono">{barisAsli.target_rpjmd}</b> → <b className="font-mono">{targetRpjmd}</b></>
+                      )}
+                      . Realisasinya tidak berubah, tapi persentase capaian di Realisasi Kinerja
+                      dan laporan cetak akan ikut bergeser — termasuk laporan periode sebelumnya
+                      yang sudah terlanjur dicetak.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-3">
               <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-widest block border-b border-slate-100 pb-1">
