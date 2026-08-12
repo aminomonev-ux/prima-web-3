@@ -61,6 +61,40 @@ export function hitungCapaianPct(target: number, realisasi: number, jenis: RaJen
   return (realisasi / target) * 100;
 }
 
+// ─── Ambang capaian — SUMBER TUNGGAL ────────────────────────────────────────
+// Sebelum ini modul punya EMPAT skala berbeda untuk angka yang sama: Cetak
+// memakai 85, MainDashboard tidak punya pita tengah sama sekali (apa pun di
+// bawah 100 langsung merah), Matriks memakai 80, Sparkline hanya hijau/merah.
+// Akibatnya satu indikator 88% bisa tampil emas di satu layar dan merah di
+// layar sebelahnya. Ambang 80 dipilih karena itu yang sudah terdokumentasi di
+// MatrixBulananModal, bukan angka baru.
+//
+// Arah Progres Negatif SUDAH dibalik di hitungCapaianPct, jadi di sini >=100
+// selalu berarti "tercapai" tanpa perlu tahu jenisnya.
+export const AMBANG_CAPAIAN = { tercapai: 100, waspada: 80 } as const;
+
+export type NadaCapaian = 'tercapai' | 'waspada' | 'kurang' | 'kosong';
+
+export function nadaCapaian(pct: number | null | undefined): NadaCapaian {
+  if (pct == null) return 'kosong';
+  if (pct >= AMBANG_CAPAIAN.tercapai) return 'tercapai';
+  if (pct >= AMBANG_CAPAIAN.waspada)  return 'waspada';
+  return 'kurang';
+}
+
+// Warna garis/teks per nada. 'kosong' = belum ada data, bukan nilai buruk —
+// sengaja netral supaya tidak terbaca sebagai gagal.
+export const WARNA_CAPAIAN: Record<NadaCapaian, string> = {
+  tercapai: '#1D9E75',  // action-success
+  waspada:  '#EF9F27',  // primary
+  kurang:   '#E24B4A',  // action-danger
+  kosong:   '#78909C',
+};
+
+export function warnaCapaian(pct: number | null | undefined): string {
+  return WARNA_CAPAIAN[nadaCapaian(pct)];
+}
+
 export const LEVEL_LABELS: Record<RaLevel, string> = {
   tujuan: 'Indikator Tujuan',
   sasaran: 'Indikator Sasaran',

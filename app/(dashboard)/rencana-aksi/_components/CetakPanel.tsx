@@ -6,7 +6,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import SoftSelect from '@/components/ui/SoftSelect';
 import type { RaRow, RaLevel, HierarchyRow } from '../_lib/types';
-import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, outcomeOf, anggaranRollup, hitungCapaianPct } from '../_lib/types';
+import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, outcomeOf, anggaranRollup, hitungCapaianPct, warnaCapaian } from '../_lib/types';
 import type { CetakFilter, ColMode } from '../_lib/cetak-filter';
 import { DEFAULT_CETAK_FILTER, ALL_LEVELS, buildCetakRows, cetakRollupBase } from '../_lib/cetak-filter';
 import { apiListAll } from '../_lib/api';
@@ -18,14 +18,6 @@ interface Props {
 }
 
 const moneyFont = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
-
-// Ambang capaian → warna token. Sejalan dengan hitungCapaianPct (arah Progres
-// Negatif sudah dibalik di sana), jadi >=100 selalu berarti "tercapai".
-function warnaCapaian(pct: number): string {
-  if (pct >= 100) return '#1D9E75';
-  if (pct >= 85)  return '#EF9F27';
-  return '#E24B4A';
-}
 
 export default function CetakPanel({ tahun, notify }: Props) {
   const [allRows, setAllRows] = useState<RaRow[]>([]);

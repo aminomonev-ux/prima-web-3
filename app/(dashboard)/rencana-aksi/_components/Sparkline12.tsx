@@ -6,7 +6,7 @@
 // terbalik, R4). Bulan null (belum diisi) = gap di garis, bukan nol.
 
 import type { RaJenis, MonthVal } from '../_lib/types';
-import { BULAN_LABELS, hitungCapaianPct } from '../_lib/types';
+import { BULAN_LABELS, hitungCapaianPct, warnaCapaian } from '../_lib/types';
 
 interface Props {
   realisasi: MonthVal[];
@@ -45,8 +45,10 @@ export default function Sparkline12({ realisasi, target, jenis }: Props) {
       {realisasi.map((v, i) => {
         if (v == null) return null;
         const t = target?.[i];
-        const ok = t != null && t > 0 ? hitungCapaianPct(t, v, jenis) >= 100 : null;
-        const fill = ok == null ? '#7C5CFC' : ok ? '#1D9E75' : '#E24B4A';
+        // Titik ikut AMBANG_CAPAIAN (3 pita), bukan lagi lulus/gagal biner —
+        // dulu bulan 95% tampil semerah bulan 10%. Tanpa target = ungu netral.
+        const pct = t != null && t > 0 ? hitungCapaianPct(t, v, jenis) : null;
+        const fill = pct == null ? '#7C5CFC' : warnaCapaian(pct);
         return <circle key={i} cx={x(i)} cy={y(v)} r={3.2} fill={fill} stroke="#fff" strokeWidth={1} />;
       })}
       {BULAN_LABELS.map((b, i) => (

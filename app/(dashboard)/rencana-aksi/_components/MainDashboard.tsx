@@ -8,7 +8,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Sparkline12 from './Sparkline12';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
-import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, BULAN_LABELS } from '../_lib/types';
+import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, nadaCapaian, BULAN_LABELS } from '../_lib/types';
 
 interface Props {
   level: RaLevel;
@@ -33,10 +33,17 @@ interface Props {
   onOpenMatrix?: () => void;
 }
 
+// Ambang dari AMBANG_CAPAIAN (_lib/types.ts) — sumber tunggal bersama Cetak,
+// Matriks, dan Sparkline. Dulu layar ini tidak punya pita tengah: apa pun di
+// bawah 100 langsung merah, jadi capaian 99% terbaca segawat 5%.
+// Emas memakai teks on-primary #020F1C, bukan putih (DESIGN-SYSTEM.md).
 function getColors(pct: number) {
-  if (pct >= 100) return { text: 'text-[#1D9E75]', badge: 'bg-[#1D9E75] text-white', progress: 'bg-[#1D9E75]' };
-  if (pct > 0)    return { text: 'text-[#E24B4A]', badge: 'bg-[#E24B4A] text-white', progress: 'bg-[#E24B4A]' };
-  return { text: 'text-[#78909C]', badge: 'bg-[#78909C] text-white', progress: 'bg-[#BDC3C7]' };
+  if (pct <= 0) return { text: 'text-[#78909C]', badge: 'bg-[#78909C] text-white', progress: 'bg-[#BDC3C7]' };
+  switch (nadaCapaian(pct)) {
+    case 'tercapai': return { text: 'text-[#1D9E75]', badge: 'bg-[#1D9E75] text-white',   progress: 'bg-[#1D9E75]' };
+    case 'waspada':  return { text: 'text-[#EF9F27]', badge: 'bg-[#EF9F27] text-[#020F1C]', progress: 'bg-[#EF9F27]' };
+    default:         return { text: 'text-[#E24B4A]', badge: 'bg-[#E24B4A] text-white',   progress: 'bg-[#E24B4A]' };
+  }
 }
 
 export default function MainDashboard({

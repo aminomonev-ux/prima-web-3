@@ -10,7 +10,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Save, Download, Upload, Lock } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import type { RaRow, MonthVal } from '../_lib/types';
-import { BULAN_LABELS, hitungCapaianPct } from '../_lib/types';
+import { BULAN_LABELS, hitungCapaianPct, nadaCapaian } from '../_lib/types';
 import { apiUpdateBulanBulk, VersionConflictError, apiGetLock } from '../_lib/api';
 import { exportMatrixBulananXlsx, parseMatrixBulananXlsx } from '../_lib/exports';
 
@@ -32,15 +32,20 @@ const baseMonths = (r: RaRow): MonthVal[] =>
 const sameMonths = (a: MonthVal[], b: MonthVal[]): boolean =>
   a.every((v, i) => (v ?? null) === (b[i] ?? null));
 
-// Heatmap: warna sel dari capaian bulan vs target bulanan (ambang default
-// ≥100 hijau · 80–99,9 kuning · <80 merah; arah Progres Negatif ikut terbalik
-// via hitungCapaianPct). null = belum diisi (abu), tanpa target = netral.
+// Heatmap: warna sel dari capaian bulan vs target bulanan. Ambangnya dari
+// AMBANG_CAPAIAN (_lib/types.ts) — dulu angka 80 di sini cuma ditulis di
+// komentar dan tidak ada yang mengikat layar lain padanya.
+// Latar tetap rgba + teks gelap khas sel heat (kontras di sel kecil), yang
+// dibagikan adalah AMBANGNYA, bukan cara menggambarnya.
+// null = belum diisi (abu), tanpa target = netral.
 const heatCell = (pct: number | null, filled: boolean): { bg: string; fg: string } => {
   if (!filled) return { bg: '#F1F5F9', fg: '#CBD5E1' };
   if (pct == null) return { bg: '#FFFFFF', fg: '#475569' };
-  if (pct >= 100) return { bg: 'rgba(29,158,117,.20)', fg: '#0F5C44' };
-  if (pct >= 80) return { bg: 'rgba(239,159,39,.22)', fg: '#7A4D0A' };
-  return { bg: 'rgba(226,75,74,.18)', fg: '#B91C1C' };
+  switch (nadaCapaian(pct)) {
+    case 'tercapai': return { bg: 'rgba(29,158,117,.20)', fg: '#0F5C44' };
+    case 'waspada':  return { bg: 'rgba(239,159,39,.22)', fg: '#7A4D0A' };
+    default:         return { bg: 'rgba(226,75,74,.18)', fg: '#B91C1C' };
+  }
 };
 
 export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSaved, notify }: Props) {
