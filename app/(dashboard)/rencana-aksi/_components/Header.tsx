@@ -144,6 +144,7 @@ export default function Header({
                 background: 'transparent',
               }}
               data-tooltip="Isi struktur & target dari file Excel/CSV/PDF"
+              data-tooltip-pos="below"
             >
               <FileUp className="h-3.5 w-3.5" />
               <span>Import File</span>
@@ -157,6 +158,7 @@ export default function Header({
                 background: 'transparent',
               }}
               data-tooltip="Salin struktur + target ke tahun kosong"
+              data-tooltip-pos="below"
             >
               <Copy className="h-3.5 w-3.5" />
               <span>Duplikasi Tahun</span>
@@ -170,6 +172,7 @@ export default function Header({
                 background: 'transparent',
               }}
               data-tooltip="Kunci/buka realisasi periode yang sudah final"
+              data-tooltip-pos="below"
             >
               <Lock className="h-3.5 w-3.5" />
               <span>Kunci Periode</span>
