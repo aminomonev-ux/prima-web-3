@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server';
 import { sql, queryOne } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
+import { modulMati } from '@/lib/security/guard';
 
 export type GuardedSession = { userId: number; username: string; role: string };
 
@@ -41,12 +42,34 @@ function tolak(field: FieldPesan, pesan: string, status: number): NextResponse {
  *   const g = await guard();
  *   if (!g.ok) return g.res;
  */
-export function buatGuardModul(cekPeran: CekPeran, fieldPesan: FieldPesan = 'message') {
+export function buatGuardModul(
+  cekPeran: CekPeran,
+  fieldPesan: FieldPesan = 'message',
+  flagSakelar?: string,
+) {
   return async function guard(): Promise<HasilGuard> {
     const session = await getSession();
     if (!session) {
       return { ok: false, res: tolak(fieldPesan, 'Unauthorized', 401) };
     }
+
+    // T1 — sakelar maintenance modul. Sebelum ini, mematikan modul dari Admin Panel
+    // hanya membuat kartunya abu di /menu; mengetik URL-nya langsung tetap masuk
+    // penuh, baca DAN tulis. Menyembunyikan menu bukan keamanan — pelajaran V3-1
+    // yang sudah dipetik BLUD, tapi tidak pernah menular ke empat modul lain yang
+    // memakai pabrik ini.
+    //
+    // Diperiksa SEBELUM izin: "modul sedang mati" tidak bergantung pada siapa yang
+    // bertanya, dan jawabannya 503 (akan hilang sendiri) — beda arti dari 403
+    // (perlu minta akses). Penerimanya harus bisa membedakan keduanya.
+    //
+    // `role` dioper supaya PERAN_TEMBUS_SAKELAR (SUPER_ADMIN) tetap bisa masuk saat
+    // maintenance, sama seperti di layar.
+    if (flagSakelar) {
+      const mati = await modulMati([flagSakelar], { role: session.role });
+      if (mati) return { ok: false, res: mati };
+    }
+
     const row = await queryOne<{ app_access: string[] | null }>(
       sql`SELECT app_access FROM users WHERE id = ${session.userId} LIMIT 1`,
     );

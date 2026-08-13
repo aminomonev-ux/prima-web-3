@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
+import { modulSedangMati } from '@/lib/security/guard';
 import { listRencanaAksi } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import RaClient from './ra-client';
@@ -26,6 +27,15 @@ export default async function RencanaAksiPage({
   );
   if (!isRencanaAksiRole(role, row?.app_access ?? null)) {
     redirect('/menu');
+  }
+
+  // T1 — kartu Renaksi di /menu memang sudah abu saat maintenance, tapi itu cuma
+  // menutup SATU pintu. Mengetik /rencana-aksi langsung dan FloatingDock
+  // antar-modul melewatinya. Diperiksa di sini, bukan di layout.tsx, karena di
+  // sinilah peran sudah dibaca — pengecualian SUPER_ADMIN butuh `role`.
+  // Pagar APInya terpisah dan tidak menggantung pada layar ini (lihat _guard.ts).
+  if (await modulSedangMati(['app_status_rencana_aksi'], { role })) {
+    redirect(`/maintenance?app=${encodeURIComponent('Renaksi & Kinerja')}`);
   }
 
   const sp = await searchParams;

@@ -208,6 +208,16 @@ jobs:
       - name: Gate glyph PDF (WinAnsi)
         run: npm run check:pdf
 
+      # ─── Gate G: sakelar maintenance benar-benar menutup API ────────────────
+      # T1 (audit 2026-08-13): sakelar Renaksi & E-Anggaran dulu cuma membuat
+      # kartunya abu di /menu — 19 route API-nya tidak pernah menanyakannya, jadi
+      # mengetik URL langsung tetap bisa baca DAN tulis saat modul "dimatikan".
+      # Kelalaian ini tidak bisa ditangkap tsc: route baru lahir dari menyalin
+      # route lama, dan salinan tidak tahu apa yang seharusnya ada. Gate ini yang
+      # menangkapnya. Statis, tanpa DB, ~1 detik.
+      - name: Gate sakelar maintenance (kill-switch modul)
+        run: npm run check:killswitch
+
   # ─── JOB D: Gitleaks (secret scanning) ─────────────────────────────────────
   # Scan working tree saat ini untuk rahasia ter-commit (token/password/key).
   # Pakai Docker image resmi (tanpa license/token — gratis untuk repo apa pun).

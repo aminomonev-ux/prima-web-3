@@ -18,6 +18,7 @@ import { sql, bulkInsert, withTransaction } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, TahunSchema, SumberSchema, VersiTipeSchema, VersiSeqSchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
+import { kinerjaMati } from '../../_guard';
 
 const BodySchema = z.object({
   tahun:           TahunSchema,
@@ -29,6 +30,8 @@ const BodySchema = z.object({
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
   // SDL-M14: versi creation = low cadence, 10/menit.
   const limited = await kinerjaRateLimit(session.userId, 'versi-create', 10); if (limited) return limited;

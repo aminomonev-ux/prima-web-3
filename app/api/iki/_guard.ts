@@ -5,4 +5,5 @@ export type { GuardedSession };
 
 // Akses: SUPER_ADMIN/ADMIN, atau role lain yang punya app_access 'iki'
 // (diatur Admin Panel → User Management).
-export const guard = buatGuardModul(isIkiRole);
+// T1: argumen ketiga = sakelar maintenance (lihat catatan di app-guard.ts).
+export const guard = buatGuardModul(isIkiRole, 'message', 'app_status_iki');

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/security/auth';
 import { sql } from '@/lib/data/db';
 import { isKinerjaRole, KinerjaQuerySchema, kinerjaRateLimit } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
+import { kinerjaMati } from '../../_guard';
 
 /**
  * GET /api/kinerja/pendapatan/belanja-auto?tahun=2025&bulan=1
@@ -13,6 +14,8 @@ import { hasAppAccess } from '@/lib/security/guard';
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   // C-SEC-1 (Tahap 12): read endpoint juga butuh role guard — sama dengan PUT.
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
 

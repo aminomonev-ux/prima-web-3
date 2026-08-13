@@ -13,6 +13,10 @@ const APP_KEYS = [
   'app_status_new_econtrolling',
   'app_status_buku_besar_aset',
   'app_status_iki',
+  // T1b: kartu `lkjip` sudah ada di /menu dan menyusun kuncinya sebagai
+  // `app_status_${card.id}`, tapi kuncinya tidak pernah masuk daftar ini — jadi
+  // sakelar LKJIP tak pernah bisa dinyalakan sama sekali. Bukan bocor, mati total.
+  'app_status_lkjip',
   'app_status_sentinel_bot',   // RIMA F4g — kill switch global (SUPER_ADMIN). 'maintenance' = bot mati (chat+avatar).
   'app_status_rima_query',     // RIMA G30 — kill switch BACA-DATA saja. 'maintenance' = Q&A data mati, chat/tur tetap hidup.
 ];

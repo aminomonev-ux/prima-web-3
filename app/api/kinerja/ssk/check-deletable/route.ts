@@ -12,6 +12,7 @@ import { getSession } from '@/lib/security/auth';
 import { sql } from '@/lib/data/db';
 import { isKinerjaRole, TahunSchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
+import { kinerjaMati } from '../../_guard';
 
 const QuerySchema = z.object({
   tahun:        TahunSchema,
@@ -21,6 +22,8 @@ const QuerySchema = z.object({
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);

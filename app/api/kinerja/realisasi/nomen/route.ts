@@ -4,10 +4,13 @@ import { getNomenRows, saveNomenBatch } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, NomenBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
+import { kinerjaMati } from '../../_guard';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   // C-SEC-1 (Tahap 12): read endpoint juga butuh role guard — sama dengan PUT.
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
 
@@ -28,6 +31,8 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
   const limited = await kinerjaRateLimit(session.userId, 'save-nomen', 30); if (limited) return limited;
 

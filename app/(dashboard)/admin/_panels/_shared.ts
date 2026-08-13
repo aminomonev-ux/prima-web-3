@@ -15,6 +15,7 @@ export const APP_STATUS_LABELS: Record<string, string> = {
   app_status_perjanjian_kinerja: 'Perjanjian Kinerja',
   app_status_rencana_aksi:       'Renaksi & Kinerja',
   app_status_iki:                'IKI',
+  app_status_lkjip:              'LKJIP',
   app_status_new_econtrolling:   'E-Anggaran',
   app_status_buku_besar_aset:    'Buku Besar Aset',
   app_status_sentinel_bot:       'RIMA — Seluruh Bot',
