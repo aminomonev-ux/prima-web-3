@@ -9,6 +9,7 @@ import {
   BbaRealisasiRangeError, BbaStatusMismatchError,
 } from '@/lib/data/buku-besar-aset';
 import { guard } from './_guard';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 export async function GET(req: NextRequest) {
   const g = await guard();
@@ -53,7 +54,7 @@ export async function PATCH(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
   let koreksiMundur = false;
   try {
-    ({ koreksiMundur } = await updateAset(parsed.data, g.session.userId, g.session.role === 'SUPER_ADMIN'));
+    ({ koreksiMundur } = await updateAset(parsed.data, g.session.userId, bolehBatalkanFinal(g.session.role)));
   } catch (err) {
     if (err instanceof BbaVersionConflictError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
     if (err instanceof BbaTransitionError)      return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
@@ -63,7 +64,7 @@ export async function PATCH(req: NextRequest) {
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
     throw err;
   }
-  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${parsed.data.status ? ' status=' + parsed.data.status : ''}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh SUPER_ADMIN)' : ''}` });
+  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${parsed.data.status ? ' status=' + parsed.data.status : ''}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh Admin)' : ''}` });
   return NextResponse.json({ ok: true });
 }
 

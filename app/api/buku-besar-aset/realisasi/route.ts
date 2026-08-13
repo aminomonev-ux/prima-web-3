@@ -3,6 +3,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { BbaRealisasiSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { setRealisasi, BbaVersionConflictError, BbaTransitionError, BbaNotFoundError, BbaUsulanLockedError, BbaRealisasiRangeError, BbaStatusMismatchError } from '@/lib/data/buku-besar-aset';
 import { guard } from '../_guard';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 // PATCH /api/buku-besar-aset/realisasi — set nilai realisasi + status (REALISASI_*).
 export async function PATCH(req: NextRequest) {
@@ -14,7 +15,7 @@ export async function PATCH(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
   let koreksiMundur = false;
   try {
-    ({ koreksiMundur } = await setRealisasi(parsed.data, g.session.userId, g.session.role === 'SUPER_ADMIN'));
+    ({ koreksiMundur } = await setRealisasi(parsed.data, g.session.userId, bolehBatalkanFinal(g.session.role)));
   } catch (err) {
     if (err instanceof BbaVersionConflictError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
     if (err instanceof BbaTransitionError)      return NextResponse.json({ ok: false, message: err.message }, { status: 400 });

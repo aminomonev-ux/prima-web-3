@@ -18,6 +18,7 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
+import { bolehBatalkanFinal } from '@/lib/constants';
 import {
   type IkiDokumen, type IkiRhk, type IkiListRow, type PejabatSuggest,
   type RenaksiImportRow, type AtasanRhkRow,
@@ -353,7 +354,7 @@ export default function EditorClient({ username, role, themePreference, initialD
         {readOnly && (
           <div className="iki-final-banner">
             <Lock size={15} /> Dokumen FINAL — hanya baca.
-            {role === 'SUPER_ADMIN' && (
+            {bolehBatalkanFinal(role) && (
               <PrimaButton variant="warning" size="sm" iconLeft={<Unlock size={14} />} onClick={handleUnfinalize} disabled={busy}>Buka Kembali</PrimaButton>
             )}
           </div>

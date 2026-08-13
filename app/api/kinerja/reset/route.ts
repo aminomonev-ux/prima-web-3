@@ -1,9 +1,9 @@
 // app/api/kinerja/reset/route.ts
-// Reset data SSK dan/atau Realisasi untuk (tahun, sumber). Destructive — SUPER_ADMIN only.
+// Reset data SSK dan/atau Realisasi untuk (tahun, sumber). Destructive — Admin (PERAN_PEMBATAL_FINAL).
 // Body: { tahun, sumber, scope: 'ssk' | 'realisasi' | 'both', confirm: 'RESET' }
 //
 // Pattern:
-//   - getSession + WAJIB session.role === 'SUPER_ADMIN' (lebih ketat dari isKinerjaRole)
+//   - getSession + WAJIB bolehBatalkanFinal(role) (lebih ketat dari isKinerjaRole)
 //   - Confirm phrase WAJIB === 'RESET' (defense double-confirmation)
 //   - withTransaction supaya atomic
 //   - writeAuditLog KINERJA_DATA_RESET dengan detail rows-affected
@@ -14,6 +14,8 @@ import { getSession } from '@/lib/security/auth';
 import { sql, withTransaction } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { kinerjaRateLimit, TahunSchema, SumberSchema, VersiTipeSchema, VersiSeqSchema } from '@/lib/data/kinerja-schemas';
+import { kinerjaMati } from '../_guard';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 const BodySchema = z.object({
   tahun:      TahunSchema,
@@ -28,10 +30,16 @@ const BodySchema = z.object({
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
 
-  // ROLE: SUPER_ADMIN only — destructive bulk delete
-  if (session.role !== 'SUPER_ADMIN') {
-    return NextResponse.json({ ok: false, message: 'Akses ditolak. Hanya SUPER_ADMIN yang boleh reset data.' }, { status: 403 });
+  // ROLE: Admin (SUPER_ADMIN/ADMIN) — destructive bulk delete. ADMIN ikut karena
+  // dialah penanggung jawab teknis modul; lihat PERAN_PEMBATAL_FINAL di constants.
+  // Pagar sebenarnya di sini bukan peran, melainkan tiga lapis lain yang TIDAK
+  // dilonggarkan: frasa konfirmasi 'RESET' milik server, rate limit 5/menit, dan
+  // audit log KINERJA_DATA_RESET yang mencatat berapa baris hilang.
+  if (!bolehBatalkanFinal(session.role)) {
+    return NextResponse.json({ ok: false, message: 'Akses ditolak. Hanya Admin yang boleh reset data.' }, { status: 403 });
   }
   // SDL-M14: low budget untuk destructive op (5/menit).
   const limited = await kinerjaRateLimit(session.userId, 'reset', 5); if (limited) return limited;
@@ -125,7 +133,9 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
-  if (session.role !== 'SUPER_ADMIN') {
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
+  if (!bolehBatalkanFinal(session.role)) {
     return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
   }
 

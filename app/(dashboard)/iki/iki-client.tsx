@@ -14,6 +14,7 @@ import { stripGolongan } from '@/lib/iki/layout';
 import ImportIkiModal from './ImportIkiModal';
 import { pejabatOptionValue, resolvePejabat, nameInitials } from './_lib/types';
 import type { IkiJenisDokumen, IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 interface Props {
   username: string;
@@ -123,11 +124,13 @@ export default function IkiClient({ username, role, themePreference, initialRows
     const ids = [...selected];
     if (ids.length === 0) return;
     const chosen = rows.filter(r => selected.has(r.id));
-    const isSA = role === 'SUPER_ADMIN';
+    // Dulu bernama `isSA` waktu wewenangnya cuma SUPER_ADMIN. Nama peran diganti
+    // nama WEWENANG supaya tidak menyesatkan lagi kalau daftarnya berubah lagi.
+    const bolehHapusFinal = bolehBatalkanFinal(role);
     const finalCount = chosen.filter(r => r.status === 'FINAL').length;
-    const finalNote = finalCount === 0 ? '' : isSA
+    const finalNote = finalCount === 0 ? '' : bolehHapusFinal
       ? ` Termasuk ${finalCount} dokumen FINAL.`
-      : ` ${finalCount} dokumen FINAL akan DILEWATI — hanya SUPER_ADMIN yang bisa menghapus FINAL.`;
+      : ` ${finalCount} dokumen FINAL akan DILEWATI — hanya Admin yang bisa menghapus FINAL.`;
     if (!(await confirmDialog({
       title: `Hapus ${ids.length} dokumen IKI`,
       message: `Menghapus ${ids.length} dokumen terpilih beserta seluruh isinya secara permanen.${finalNote} Lanjutkan?`,
@@ -141,8 +144,8 @@ export default function IkiClient({ username, role, themePreference, initialRows
       });
       const json = await res.json();
       if (!json.ok) { toast.error(json.message ?? 'Gagal menghapus'); return; }
-      // Cocokkan penghapusan lokal dgn logika server: non-SA melewati FINAL.
-      const removed = new Set(chosen.filter(r => isSA || r.status !== 'FINAL').map(r => r.id));
+      // Cocokkan penghapusan lokal dgn logika server: tanpa wewenang, FINAL dilewati.
+      const removed = new Set(chosen.filter(r => bolehHapusFinal || r.status !== 'FINAL').map(r => r.id));
       setRows(prev => prev.filter(r => !removed.has(r.id)));
       toast.success(`${json.deleted} dokumen dihapus${json.skippedFinal ? `, ${json.skippedFinal} FINAL dilewati` : ''}`);
       exitSelect();

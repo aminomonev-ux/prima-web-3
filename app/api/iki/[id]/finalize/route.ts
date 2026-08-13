@@ -8,6 +8,7 @@ import {
   IkiVersionConflictError, IkiNotFoundError,
 } from '@/lib/data/iki';
 import { guard } from '../../_guard';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,8 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const g = await guard();
   if (!g.ok) return g.res;
-  if (g.session.role !== 'SUPER_ADMIN') {
-    return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN yang bisa membuka dokumen FINAL.' }, { status: 403 });
+  if (!bolehBatalkanFinal(g.session.role)) {
+    return NextResponse.json({ ok: false, message: 'Hanya Admin yang bisa membuka dokumen FINAL.' }, { status: 403 });
   }
   const limited = await ikiRateLimit(g.session.userId, 'unfinalize', 10);
   if (limited) return limited;

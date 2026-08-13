@@ -220,3 +220,29 @@ export const SATUAN_OPTIONS: readonly string[] = [
   // Fallback
   'Lainnya',
 ] as const;
+
+// ─── Wewenang membatalkan yang sudah final ──────────────────────────────────
+/**
+ * Peran yang boleh MEMBATALKAN sesuatu yang sudah difinalkan: membuka dokumen
+ * FINAL, menghapusnya, mereset data satu periode, menarik status terminal mundur.
+ *
+ * Kenapa ADMIN ikut, padahal dulu hanya SUPER_ADMIN: SUPER_ADMIN dipegang tim
+ * IT/pengembang, sedangkan ADMIN adalah penanggung jawab teknis modul di unit
+ * kerja. Kalau membuka dokumen yang salah ketik harus lewat IT, yang terjadi
+ * bukan keamanan melainkan antrean — dan pada akhirnya kredensial SUPER_ADMIN
+ * dipinjam-pinjamkan, yang jauh lebih buruk daripada memberi ADMIN wewenangnya
+ * secara terang-terangan.
+ *
+ * SENGAJA TIDAK memakai daftar ini (biar tetap SUPER_ADMIN saja):
+ *  · `PERAN_TEMBUS_SAKELAR` — menembus mode pemeliharaan (lib/security/guard.ts)
+ *  · Admin Panel & alur promosi peran — urusan sistem, bukan urusan modul
+ *  · Modul Usulan — punya tata peran sendiri (Kasubag/Kabag), jangan disamakan
+ *
+ * Ditaruh di constants.ts, BUKAN di security/guard.ts, supaya aman diimpor dari
+ * berkas yang juga terpakai di browser — guard.ts menyeret koneksi database.
+ */
+export const PERAN_PEMBATAL_FINAL = ['SUPER_ADMIN', 'ADMIN'] as const;
+
+export function bolehBatalkanFinal(role: string): boolean {
+  return (PERAN_PEMBATAL_FINAL as readonly string[]).includes(role);
+}

@@ -5,6 +5,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { CreateDokumenSchema, TahunSchema, BulkDeleteSchema, ikiRateLimit } from '@/lib/data/iki-schemas';
 import { listDokumen, createDokumen, deleteDokumen, bulkDeleteDokumen, IkiFinalError, IkiNotFoundError } from '@/lib/data/iki';
 import { guard } from './_guard';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,19 +68,19 @@ export async function DELETE(req: NextRequest) {
 
   const idParam = new URL(req.url).searchParams.get('id');
 
-  // Bulk delete: tanpa ?id= → baca body { ids: [...] }. FINAL hanya boleh dihapus SUPER_ADMIN.
+  // Bulk delete: tanpa ?id= → baca body { ids: [...] }. FINAL hanya boleh dihapus Admin (PERAN_PEMBATAL_FINAL).
   if (!idParam) {
     const raw = await req.json().catch(() => null);
     const parsed = BulkDeleteSchema.safeParse(raw);
     if (!parsed.success) {
       return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
     }
-    const allowFinal = g.session.role === 'SUPER_ADMIN';
+    const allowFinal = bolehBatalkanFinal(g.session.role);
     try {
       const { deleted, skippedFinal } = await bulkDeleteDokumen(parsed.data.ids, allowFinal);
       await writeAuditLog({
         req, eventType: 'IKI_DELETE', userId: g.session.userId, username: g.session.username,
-        detail: `Hapus massal ${deleted} dokumen IKI id=[${parsed.data.ids.join(',')}]${skippedFinal ? ` (${skippedFinal} FINAL dilewati, bukan SUPER_ADMIN)` : ''}`,
+        detail: `Hapus massal ${deleted} dokumen IKI id=[${parsed.data.ids.join(',')}]${skippedFinal ? ` (${skippedFinal} FINAL dilewati, bukan Admin)` : ''}`,
       });
       return NextResponse.json({ ok: true, deleted, skippedFinal });
     } catch (err) {

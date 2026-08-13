@@ -366,7 +366,10 @@ export const SimpanPejabatBodySchema = z.object({
 
 export class BludPeriodeTertutupError extends Error {
   constructor(public tahun: number, public bulan: number) {
-    super(`Periode ${bulan}/${tahun} sudah ditutup. Minta SUPER_ADMIN membuka kembali.`)
+    // Kalimatnya dulu menyebut SUPER_ADMIN, padahal BLUD_BUKA_PERIODE_ROLES sudah
+    // lama memuat ADMIN dan KEUANGAN. Pesan yang salah begini bukan cuma keliru —
+    // ia mengirim orang menelepon IT untuk sesuatu yang atasannya sendiri bisa.
+    super(`Periode ${bulan}/${tahun} sudah ditutup. Mintakan pembukaan kembali ke Kepala Bidang Keuangan atau Admin.`)
     this.name = 'BludPeriodeTertutupError'
   }
 }

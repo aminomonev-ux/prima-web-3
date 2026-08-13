@@ -7,6 +7,7 @@ import type { Role } from '@/types';
 import type { KTab, SumberSSK } from '../_types';
 import { SUMBER_LIST, SSK_THEME, TAHUN_OPTIONS } from '../_utils';
 import Tip from '@/components/ui/Tip';
+import { bolehBatalkanFinal } from '@/lib/constants';
 import {
   LayoutDashboard, Database, ClipboardList, FileText,
   ClipboardCheck, Printer,
@@ -231,7 +232,7 @@ export default function Sidebar({
         <SectionLabel>Pendapatan</SectionLabel>
         <SidebarItem icon={LineChart} label="Pendapatan & CRR" onClick={() => onNav('pend-crr')} active={activeTab==='pend-crr'} color="#ec4899" isLight={isLight} />
 
-        {role === 'SUPER_ADMIN' && (
+        {bolehBatalkanFinal(role) && (
           <>
             <SectionLabel>Sistem</SectionLabel>
             <SidebarItem icon={Settings} label="Pengaturan" onClick={() => onNav('pengaturan')} active={activeTab==='pengaturan'} color="#E24B4A" isLight={isLight} />

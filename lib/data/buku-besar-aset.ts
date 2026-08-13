@@ -209,11 +209,11 @@ function assertUsulanEditable(cur: BbaRow, input: BbaUpdateInput): void {
     throw new BbaUsulanLockedError('Baris usulan DITOLAK: status realisasi terkunci.');
 }
 
-export async function updateAset(input: BbaUpdateInput, userId: number, isSuperAdmin = false): Promise<{ koreksiMundur: boolean }> {
+export async function updateAset(input: BbaUpdateInput, userId: number, bolehKoreksiMundur = false): Promise<{ koreksiMundur: boolean }> {
   const cur = await getAsetById(input.id);
   if (!cur) throw new BbaNotFoundError();
   assertUsulanEditable(cur, input);
-  if (input.status && !isValidStatusTransition(cur.status, input.status, isSuperAdmin)) throw new BbaTransitionError(cur.status, input.status);
+  if (input.status && !isValidStatusTransition(cur.status, input.status, bolehKoreksiMundur)) throw new BbaTransitionError(cur.status, input.status);
   // A2: vol rencana tidak boleh turun di bawah realisasi tersimpan ("5/2 unit")
   const volBaru = input.vol ?? cur.vol;
   if (volBaru < cur.vol_realisasi) throw new BbaRealisasiRangeError(cur.vol_realisasi, volBaru);
@@ -242,14 +242,14 @@ export async function updateAset(input: BbaUpdateInput, userId: number, isSuperA
   return { koreksiMundur: cur.status === 'REALISASI_PENUH' && input.status !== undefined && input.status !== 'REALISASI_PENUH' };
 }
 
-export async function setRealisasi(input: BbaRealisasiInput, userId: number, isSuperAdmin = false): Promise<{ koreksiMundur: boolean }> {
+export async function setRealisasi(input: BbaRealisasiInput, userId: number, bolehKoreksiMundur = false): Promise<{ koreksiMundur: boolean }> {
   const cur = await getAsetById(input.id);
   if (!cur) throw new BbaNotFoundError();
   if (cur.origin === 'USULAN' && cur.usulan_keputusan === 'DITOLAK')
     throw new BbaUsulanLockedError('Baris usulan DITOLAK: realisasi terkunci (catatan sejarah).');
   if (input.vol_realisasi > cur.vol)
     throw new BbaRealisasiRangeError(input.vol_realisasi, cur.vol);
-  if (!isValidStatusTransition(cur.status, input.status, isSuperAdmin)) throw new BbaTransitionError(cur.status, input.status);
+  if (!isValidStatusTransition(cur.status, input.status, bolehKoreksiMundur)) throw new BbaTransitionError(cur.status, input.status);
   // A3: REALISASI_PENUH ⇒ vol_realisasi = vol; TIDAK_TEREALISASI ⇒ realisasi 0
   assertStatusConsistent(input.status, cur.vol, input.vol_realisasi, input.nilai_realisasi);
   const res = await sql`

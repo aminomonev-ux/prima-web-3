@@ -3,7 +3,9 @@
 //
 // GET    ?tahun=&bulan=   neraca dua sisi + daftar penghalang
 // POST                    simpan sisi nyata (tutup=false) / tutup bulan (tutup=true)
-// DELETE ?tahun=&bulan=&alasan=  buka kembali — SUPER_ADMIN saja, wajib beralasan
+// DELETE ?tahun=&bulan=&alasan=  buka kembali — BLUD_BUKA_PERIODE_ROLES, wajib beralasan
+//   (SUPER_ADMIN/ADMIN/KEUANGAN — bukan "SUPER_ADMIN saja" seperti tertulis dulu;
+//    PERBENDAHARAAN sengaja di luar: yang menutup tidak boleh yang membuka)
 //
 // Sisi A tidak pernah diterima dari klien. Keseimbangan dihitung ulang di dalam
 // transaksi DB — kalau tidak, §4.7 cuma hiasan yang bisa dilewati lewat curl.

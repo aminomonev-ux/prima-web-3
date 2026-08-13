@@ -43,10 +43,13 @@ export const BBA_STATUS_TRANSITIONS: Record<BbaStatus, BbaStatus[]> = {
   TIDAK_TEREALISASI:  ['REALISASI_SEBAGIAN', 'REALISASI_PENUH'],
   REALISASI_PENUH:    [],
 };
-export function isValidStatusTransition(from: BbaStatus, to: BbaStatus, superAdminOverride = false): boolean {
+export function isValidStatusTransition(from: BbaStatus, to: BbaStatus, bolehKoreksiMundur = false): boolean {
   if (from === to) return true; // idempotent: edit field lain tanpa ganti status
-  // A4: koreksi mundur dari terminal REALISASI_PENUH — khusus SUPER_ADMIN, dicatat audit log
-  if (superAdminOverride && from === 'REALISASI_PENUH') return true;
+  // A4: koreksi mundur dari terminal REALISASI_PENUH — khusus Admin (SUPER_ADMIN/
+  // ADMIN, lihat PERAN_PEMBATAL_FINAL), dicatat audit log. Nama parameternya dulu
+  // `superAdminOverride`; diganti karena yang menentukan sekarang KEWENANGANNYA,
+  // bukan satu peran tertentu — nama lama akan menyesatkan pembaca berikutnya.
+  if (bolehKoreksiMundur && from === 'REALISASI_PENUH') return true;
   return BBA_STATUS_TRANSITIONS[from]?.includes(to) ?? false;
 }
 

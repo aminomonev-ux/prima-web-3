@@ -25,6 +25,7 @@ import type {
 import { SUMBER_LIST, recalcAllRealisasi } from './_utils';
 import Sidebar from './_components/Sidebar';
 import Topbar from './_components/Topbar';
+import { bolehBatalkanFinal } from '@/lib/constants';
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -705,7 +706,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
             )}
             {activeTab === 'pengaturan' && (
               <Suspense fallback={<div style={{ padding:'40px', textAlign:'center', color:'#85B7EB' }}>Memuat...</div>}>
-                <PengaturanTab tahun={tahun} isLight={isLight} isSuperAdmin={role === 'SUPER_ADMIN'} />
+                <PengaturanTab tahun={tahun} isLight={isLight} isSuperAdmin={bolehBatalkanFinal(role)} />
               </Suspense>
             )}
           </section>
