@@ -13,6 +13,7 @@ import {
 } from '@/lib/data/rencana-aksi-schemas';
 import { parseRenaksiFile, type ColOverrides } from '@/lib/renaksi/import-renaksi';
 import { commitImportRenaksi } from '@/lib/renaksi/import-data';
+import { RaPeriodLockedError } from '@/lib/data/rencana-aksi';
 import { guard } from '../_guard';
 
 export const runtime = 'nodejs';
@@ -124,6 +125,12 @@ async function handleCommit(req: NextRequest, session: { userId: number; usernam
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
+    // T2: mode 'ganti' bisa tertolak Kunci Periode. Pesannya menyebut sampai bulan
+    // ke berapa terkunci — jauh lebih berguna daripada "Gagal menyimpan hasil
+    // import." yang membuat orang mengira filenya yang bermasalah.
+    if (e instanceof RaPeriodLockedError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'PERIOD_LOCKED' }, { status: 400 });
+    }
     console.error('[RA IMPORT COMMIT]', e);
     return NextResponse.json({ ok: false, error: 'Gagal menyimpan hasil import.' }, { status: 500 });
   }

@@ -26,6 +26,7 @@ import {
   RaVersionConflictError,
   RaMonthlyManagedError,
   RaPeriodLockedError,
+  RaPunyaAnakError,
 } from '@/lib/data/rencana-aksi';
 import { guard } from './_guard';
 
@@ -83,6 +84,12 @@ export async function POST(req: NextRequest) {
     if (e instanceof RaVersionConflictError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'VERSION_CONFLICT' }, { status: 409 });
     }
+    // T2: simpan form bisa tertolak kunci periode sekarang — hanya kalau `jenis`
+    // berubah, karena itu yang menghitung ulang realisasi. Tanpa cabang ini
+    // pesannya jatuh jadi "Server error" 500 dan pengguna tak tahu harus apa.
+    if (e instanceof RaPeriodLockedError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'PERIOD_LOCKED' }, { status: 400 });
+    }
     console.error('[RA POST]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });
   }
@@ -104,7 +111,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const row = await getRencanaAksiById(id);
     if (!row) return NextResponse.json({ ok: false, error: 'Tidak ditemukan' }, { status: 404 });
-    await deleteRencanaAksi(id);
+    await deleteRencanaAksi(row);
     await writeAuditLog({
       req,
       eventType: 'RA_DELETE',
@@ -114,6 +121,14 @@ export async function DELETE(req: NextRequest) {
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
+    if (e instanceof RaPeriodLockedError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'PERIOD_LOCKED' }, { status: 400 });
+    }
+    // T7: penolakan karena masih punya anak — pesannya menyebut jumlahnya, jadi
+    // diteruskan apa adanya, bukan diringkas jadi "Server error".
+    if (e instanceof RaPunyaAnakError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'MASIH_PUNYA_ANAK' }, { status: 400 });
+    }
     console.error('[RA DELETE]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });
   }
@@ -142,6 +157,20 @@ export async function PATCH(req: NextRequest) {
   }
 
   const action = parsed.data.action;
+
+  // T3: sekelas Duplikasi Tahun & Kunci Periode — menolkan TW I-IV sekaligus
+  // menghapus 12 nilai bulanan, permanen, tanpa riwayat versi di Renaksi. Dulu
+  // satu-satunya tombol destruktif modul ini yang terbuka untuk semua pemegang
+  // app_access; bukan keputusan, cuma tidak pernah dipagari. Layar ikut
+  // menyembunyikan tombolnya, tapi pagar yang berlaku adalah yang di sini.
+  if (action === 'reset-realisasi'
+      && g.session.role !== 'ADMIN' && g.session.role !== 'SUPER_ADMIN') {
+    return NextResponse.json(
+      { ok: false, error: 'Reset realisasi khusus Admin' },
+      { status: 403 },
+    );
+  }
+
   const limited = await rencanaAksiRateLimit(
     g.session.userId,
     action,

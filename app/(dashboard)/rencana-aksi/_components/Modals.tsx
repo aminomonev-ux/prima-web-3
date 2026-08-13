@@ -284,7 +284,10 @@ export function ResetRealisasiModal({ row, isOpen, onClose, onConfirmed, notify 
     submittingRef.current = true;
     setBusy(true);
     try {
-      await apiResetRealisasi(row.id, input, expectedCode);
+      // Gerbang ketik 4-digit sengaja berhenti di baris `if` di atas: gunanya
+      // menahan salah-klik & refleks, bukan menjaga server. Angkanya tidak ikut
+      // dikirim (T4).
+      await apiResetRealisasi(row.id);
       notify(`Realisasi direset untuk: ${row.indikator}`, 'warning');
       await onConfirmed();
     } catch (err) {

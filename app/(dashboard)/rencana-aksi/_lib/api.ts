@@ -142,13 +142,16 @@ export async function apiSetLock(tahun: number, bulan: number): Promise<void> {
   await jsonOrThrow(r);
 }
 
-export async function apiResetRealisasi(id: number, confirmCode: string, expectedCode: string): Promise<void> {
+// T4: kode 4-digit acaknya diperiksa di browser dan berhenti di sana — dulu ikut
+// dikirim BESERTA kunci jawabannya, jadi server cuma membandingkan dua nilai dari
+// pengirim yang sama. Yang naik ke server sekarang konstanta yang dikenali skema.
+export async function apiResetRealisasi(id: number): Promise<void> {
   const r = await fetch('/api/rencana-aksi', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'reset-realisasi',
-      payload: { id, confirm_code: confirmCode, expected_code: expectedCode },
+      payload: { id, confirm: 'RESET_REALISASI' },
     }),
   });
   await jsonOrThrow(r);

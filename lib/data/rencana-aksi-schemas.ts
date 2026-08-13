@@ -79,6 +79,19 @@ export const UpsertRencanaAksiSchema = z.object({
   // L51: optimistic lock untuk edit by id (form Data Entry). null/absent = create/legacy.
   expected_version: z.coerce.number().int().min(0).nullable().optional(),
 }).superRefine((v, ctx) => {
+  // T5: kunci anti-tabrakan dulu bisa dimatikan pengirimnya sendiri — cukup TIDAK
+  // mengirim `expected_version`, dan `hasCas` di data layer jadi false sehingga
+  // seluruh perlindungan "data sudah diubah orang lain" hilang: tulisan terakhir
+  // menang diam-diam, tanpa 409, tanpa jejak. Pengaman yang bergantung pada
+  // kesopanan pengirim bukan pengaman. Wajib hanya saat MENGEDIT (`id` ada) —
+  // pembuatan baris baru memang belum punya versi untuk dibandingkan.
+  if (v.id && typeof v.expected_version !== 'number') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['expected_version'],
+      message: 'expected_version wajib saat mengubah data (anti-tabrakan edit)',
+    });
+  }
   if (v.level === 'sasaran' && !v.tujuan?.trim()) {
     ctx.addIssue({ code: 'custom', path: ['tujuan'], message: 'Tujuan wajib untuk level sasaran' });
   }
@@ -163,13 +176,18 @@ export const UpdateJenisSchema = z.object({
 
 // ─── Reset realisasi (per indikator yang dipilih) ──────────────────────────
 
+// T4: bentuk lama membandingkan `confirm_code` dengan `expected_code` yang SAMA-SAMA
+// dikirim klien — tautologi, selalu lolos. Kode 4-digit acaknya hidup di browser saja
+// (penahan salah-klik / anti-refleks) dan tidak pernah sampai ke sini.
+// Yang diperiksa server sekarang konstanta MILIKNYA sendiri, meniru
+// `confirm: z.literal('RESET')` di app/api/kinerja/reset.
+//
+// Jujur soal batasnya: literal ini pun bukan kendali keamanan — permintaan buatan bisa
+// mengirimnya semudah angka. Ia menyaring klien salah-pasang & panggilan tak sengaja.
+// Yang menyaring orang berniat adalah pagar ADMIN di route + audit log.
 export const ResetRealisasiSchema = z.object({
   id: z.number().int().positive(),
-  confirm_code: z.string().length(4),
-  expected_code: z.string().length(4),
-}).refine((v) => v.confirm_code === v.expected_code, {
-  message: 'Kode konfirmasi salah',
-  path: ['confirm_code'],
+  confirm: z.literal('RESET_REALISASI'),
 });
 
 // ─── Query schemas ─────────────────────────────────────────────────────────

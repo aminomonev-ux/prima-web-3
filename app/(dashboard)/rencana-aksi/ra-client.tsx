@@ -53,6 +53,11 @@ export default function RaClient({
 }: Props) {
   const router = useRouter();
 
+  // T3: sama persis dengan `isAdminTools` di Header.tsx — Reset Realisasi dulu
+  // satu-satunya tombol destruktif yang tidak ikut dipagari. Ini hanya
+  // menyembunyikan; pagarnya di PATCH /api/rencana-aksi.
+  const isAdminTools = role === 'ADMIN' || role === 'SUPER_ADMIN';
+
   const [tahun, setTahun]   = useState(initialTahun);
   const [level, setLevel]   = useState<RaLevel>(initialLevel);
   const [mode, setMode]     = useState<'dashboard' | 'data-entry' | 'cetak'>(initialMode);
@@ -277,7 +282,6 @@ export default function RaClient({
         html:not([data-theme="light"]) .ra-scope .border-slate-200 { border-color: #0C447C !important; }
         html:not([data-theme="light"]) .ra-scope .border-slate-100 { border-color: #0C447C !important; }
         html:not([data-theme="light"]) .ra-scope .border-slate-50 { border-color: #073064 !important; }
-        html:not([data-theme="light"]) .ra-scope .border-gray-200 { border-color: #0C447C !important; }
 
         /* Text */
         /* Hardcoded hex text fixes (info banner navy text invisible di dark) */
@@ -292,8 +296,6 @@ export default function RaClient({
         html:not([data-theme="light"]) .ra-scope .text-slate-400 { color: #7090A8 !important; }
         html:not([data-theme="light"]) .ra-scope .text-slate-300 { color: #506D85 !important; }
         html:not([data-theme="light"]) .ra-scope .text-gray-800 { color: #E6F1FB !important; }
-        html:not([data-theme="light"]) .ra-scope .text-gray-700 { color: #C5D7E5 !important; }
-        html:not([data-theme="light"]) .ra-scope .text-gray-600 { color: #B0C5D6 !important; }
         html:not([data-theme="light"]) .ra-scope .text-gray-500 { color: #94B0C7 !important; }
         html:not([data-theme="light"]) .ra-scope .text-gray-400 { color: #7090A8 !important; }
         html:not([data-theme="light"]) .ra-scope .text-gray-900 { color: #FFFFFF !important; }
@@ -376,14 +378,6 @@ export default function RaClient({
         html[data-theme="light"] .ra-scope .bg-white { background-color: #FAFAFA !important; }
         html[data-theme="light"] .ra-scope .bg-white\\/95 { background-color: rgba(250,250,250,0.95) !important; }
 
-        /* Brand logo gradient (sidebar) — amber/green → ungu/pink */
-        html[data-theme="light"] .ra-scope .ra-sidebar .bg-gradient-to-tr.from-\\[\\#EF9F27\\].to-\\[\\#1D9E75\\] {
-          background-image: linear-gradient(to top right, #8B5CF6, #EC4899) !important;
-        }
-        html[data-theme="light"] .ra-scope .ra-sidebar .bg-gradient-to-tr.from-\\[\\#EF9F27\\].to-\\[\\#1D9E75\\] > div {
-          background-color: #FFFFFF !important;
-          color: #7C3AED !important;
-        }
 
         /* Sidebar accent "2026" + active dot — amber → ungu */
         html[data-theme="light"] .ra-scope .ra-sidebar .text-\\[\\#EF9F27\\] { color: #7C3AED !important; }
@@ -544,18 +538,22 @@ export default function RaClient({
                   data-tooltip-pos="below"
                 />
 
-                <div className="prima-glowbar-sep" />
+                {isAdminTools && (
+                  <>
+                    <div className="prima-glowbar-sep" />
 
-                <button
-                  onClick={handleResetRealisasi}
-                  disabled={!activeRow}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-[#F5F7FA] hover:text-[#BA7517] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                  data-tooltip="Reset realisasi indikator aktif (TW I-IV → 0)"
-                  data-tooltip-pos="below"
-                >
-                  <RotateCcw className="h-3.5 w-3.5 text-[#EF9F27]" />
-                  <span>Reset Realisasi</span>
-                </button>
+                    <button
+                      onClick={handleResetRealisasi}
+                      disabled={!activeRow}
+                      className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-[#F5F7FA] hover:text-[#BA7517] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      data-tooltip="Reset realisasi indikator aktif (TW I-IV → 0)"
+                      data-tooltip-pos="below"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 text-[#EF9F27]" />
+                      <span>Reset Realisasi</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

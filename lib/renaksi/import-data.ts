@@ -13,6 +13,7 @@
 
 import type { PoolConnection } from 'mysql2/promise';
 import { queryMany, sql, withTransaction } from '@/lib/data/db';
+import { assertPeriodeTerbuka } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 
 export interface CommitRow {
@@ -200,6 +201,13 @@ export async function commitImportRenaksi(
     perLevel[r.level] = (perLevel[r.level] ?? 0) + 1;
     akanTulis.push(r);
   }
+
+  // T2: mode 'ganti' MENGHAPUS baris, dan baris yang terhapus membawa serta
+  // realisasinya. Itu menembus Kunci Periode lebih telak daripada mengubah nilai.
+  // Diperiksa SEBELUM transaksi dibuka — menolak lebih awal lebih murah daripada
+  // membuka transaksi lalu memutarnya kembali. Mode 'tambah'/'upsert' sengaja
+  // tidak diperiksa: keduanya memang tidak menyentuh kolom realisasi.
+  if (mode === 'ganti') await assertPeriodeTerbuka(tahun);
 
   await withTransaction(async ({ tx, conn }) => {
     if (mode === 'ganti') {
