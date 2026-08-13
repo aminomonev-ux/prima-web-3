@@ -10,11 +10,11 @@
 
 ## §0 Satu hal yang harus diluruskan lebih dulu
 
-Di `docs/migrations/` ada **78 berkas**. Anda **tidak perlu menjalankan satu pun**
+Di `docs/migrations/` ada **80 berkas**. Anda **tidak perlu menjalankan satu pun**
 untuk pemasangan baru.
 
 `docs/schema-mysql.sql` adalah skema **lengkap dan terkini** — sudah mencakup
-seluruh isi 78 migration itu, termasuk yang paling baru. Migration hanya dipakai
+seluruh isi 80 migration itu, termasuk yang paling baru. Migration hanya dipakai
 untuk **memutakhirkan database yang sudah berisi data**.
 
 | Keadaan | Yang dijalankan |
@@ -24,8 +24,8 @@ untuk **memutakhirkan database yang sudah berisi data**.
 
 Ini penting karena keliru di sini adalah risiko terbesar pemasangan: menjalankan
 migration satu per satu di database baru akan gagal di tengah dengan cara yang
-membingungkan (kolom sudah ada, tabel belum ada, urutan tidak jelas karena 50 dari
-78 berkas namanya tidak bernomor).
+membingungkan (kolom sudah ada, tabel belum ada, urutan tidak jelas karena lebih
+dari separuh berkasnya tidak bernomor).
 
 **Untuk pemasangan baru: lupakan folder migration.**
 
@@ -395,6 +395,9 @@ Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
 - [ ] Masuk `/blud/dpa` → tabel tampil tanpa error
 - [ ] Admin Panel → matikan satu modul → pastikan kartunya jadi abu **dan**
       mengetik URL modul itu langsung dilempar ke halaman "Sedang Dalam Perbaikan".
+      Coba juga dengan akun **bukan** SUPER_ADMIN — SUPER_ADMIN memang sengaja
+      tetap bisa masuk saat maintenance, jadi menguji pakai akun itu tidak
+      membuktikan apa-apa. Lalu **nyalakan lagi** modulnya.
       Nyalakan lagi.
 - [ ] Unduh satu berkas Excel/Word dari modul mana pun → berhasil
 - [ ] Jalankan ketiga tugas cron dengan tangan (§5) → `cron.log` berisi `OK`

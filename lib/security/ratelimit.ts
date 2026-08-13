@@ -3,10 +3,21 @@ import { Redis as UpstashRedis } from '@upstash/redis';
 import IORedis from 'ioredis';
 
 // Backend dipilih SEKALI saat start dari env (bukan 2 Redis nyala bareng):
-//  · UPSTASH_REDIS_REST_URL terisi → Upstash (cloud, dev/laptop)
-//  · selain itu REDIS_URL terisi   → Redis lokal via ioredis (server kantor, tanpa kuota)
+//  · UPSTASH_REDIS_REST_URL terisi → Upstash (cloud) — TIDAK dipakai di edisi intranet
+//  · selain itu REDIS_URL terisi   → Redis lokal via ioredis — untuk PM2 mode cluster
 //  · dua-duanya kosong             → fallback throttle in-memory per-proses (V5-AUTH-04),
 //                                     BUKAN fail-open — throttle minimal tetap berlaku
+//
+// Yang KETIGA adalah keadaan normal edisi intranet, bukan darurat: PM2 jalan mode
+// fork (1 proses), jadi hitungan in-memory sudah akurat. Redis baru perlu kalau
+// pindah ke cluster — hitungan per-proses tidak lagi mewakili keseluruhan.
+// Keputusan + alasannya: docs/PANDUAN-pemasangan-windows.md §7.
+//
+// Perlu diingat saat membaca warnDegraded() di bawah: dua pengaman terpenting tidak
+// lewat sini sama sekali. Kunci akun 5x salah sandi ada di MySQL (users.locked_until)
+// dan kuota email dihitung dari tabel email_log — keduanya selamat dari restart
+// maupun cluster. Yang hilang saat backend jatuh ke memori cuma rem tambahan
+// per-menit, dan hitungannya kembali nol tiap PM2 restart.
 type Backend = 'upstash' | 'local' | 'none';
 const backend: Backend =
   process.env.UPSTASH_REDIS_REST_URL ? 'upstash'

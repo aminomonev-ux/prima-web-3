@@ -24,6 +24,9 @@ PRIMA punya 102 findings audit dari multiple wave (Audit v1.0, Tahap 11/12/14/15
 | Simpan `*_token` plaintext di DB | `SHA256(rawToken)` at-rest, raw di email URL | **SDL-M18 / SEC-C5 / L45** |
 | Set `x-user-*` di `response.headers` (spoofable) | Strip header klien + set di **request** header proxy | **V3-1 / L54** |
 | Counter baca-lalu-tulis di JS (`x = col+1` → `UPDATE SET col=${x}`) | Atomik `UPDATE SET col = col + 1` (lost-update) | **V3-5 / L55** |
+| Sakelar maintenance cuma bikin kartu /menu abu | Cek flag di **halaman DAN tiap route API** | **T1 / L72** |
+| Kode konfirmasi dikirim klien **beserta** kunci jawabannya | Konstanta milik server (`z.literal`) | **T4 / L73** |
+| `res.affectedRows` langsung pada hasil `sql` (itu **array**) | `execWrite(sql\`…\`)` atau `res[0].affectedRows` | **T15 / L74** |
 
 Anti-pattern terbaru (2026-06-15): **L66** `sqlInt()` utk `LIMIT`/`OFFSET` (mysql2 tolak `LIMIT ?` — lolos tsc, ketahuan saat live), **L67** cap jumlah sheet exceljs anti zip-bomb (di parser bersama), **L68** Zod + cek-eksistensi soft-FK di SEMUA cabang tulis termasuk tabel peta/lookup.
 
@@ -134,7 +137,7 @@ Branch aktif: **mysql** — referensi schema: `docs/schema-mysql.sql` (bukan sch
 - `lib/services/notifications.ts` — `addNotif()`, `sanitizeNotif()`, `buildNotifRecipients()`
 - `lib/constants.ts` — roles, BIDANG_TO_SUBBIDANG, SUBBIDANG_TO_BIDANG
 - `next.config.ts` — HTTP security headers (X-Frame-Options, HSTS, nosniff, dll) — **JANGAN hapus/lemahkan `securityHeaders`**; CSP dikelola di `proxy.ts` (nonce per-request)
-- `.github/workflows/security-scan.yml` — **6 gate CI** (push/PR ke mysql/main): **A** Semgrep SAST · **B** npm-audit (block HIGH) · **C** tsc+ESLint · **D** Gitleaks secret-scan (`.gitleaks.toml`, allowlist `docs/` = contoh/placeholder, kode+`.env` tetap dipindai) · **E** token warna ratchet (`npm run check:tokens`, baseline `docs/design/token-baseline.json`) · **F** glyph PDF WinAnsi (`npm run check:pdf`, ketat tanpa baseline — **L71**). CI pakai **Node 20 / npm 10.8.2** → `package-lock.json` WAJIB regen dgn npm versi sama (`npx npm@10.8.2 install`) biar `npm ci` tak EUSAGE (**L57**)
+- `.github/workflows/security-scan.yml` — **6 gate CI** (push/PR ke mysql/main): **A** Semgrep SAST · **B** npm-audit (block HIGH) · **C** tsc+ESLint · **D** Gitleaks secret-scan (`.gitleaks.toml`, allowlist `docs/` = contoh/placeholder, kode+`.env` tetap dipindai) · **E** token warna ratchet (`npm run check:tokens`, baseline `docs/design/token-baseline.json`) · **F** glyph PDF WinAnsi (`npm run check:pdf`, ketat tanpa baseline — **L71**) · **G** sakelar maintenance menutup API (`npm run check:killswitch`, statis 65 route/6 modul — **L72**). CI pakai **Node 20 / npm 10.8.2** → `package-lock.json` WAJIB regen dgn npm versi sama (`npx npm@10.8.2 install`) biar `npm ci` tak EUSAGE (**L57**)
 - `package.json` — `overrides` (`postcss`/`uuid`) untuk patch CVE transitif tanpa downgrade `next`/`exceljs`; JANGAN `npm audit fix --force` (**L56**)
 - `app/(dashboard)/usulan-kebutuhan/usulan-client.tsx` — modul usulan (client)
 - `app/api/usulan/` — CRUD, bidang, telaah, putusan, export
