@@ -5,6 +5,7 @@ import { isKinerjaRole, kinerjaRateLimit, TahunSchema, SaveMapBodySchema } from 
 import { sql, withTransaction } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { buildRealisasiImport } from '@/lib/data/kinerja-import-match';
+import { kinerjaMati } from '../../_guard';
 
 // IK-4 (Import Realisasi belanja): READ-ONLY match + save-peta. Penulisan
 // real_keuangan tetap lewat PUT /api/kinerja/realisasi (Model A'/G33). Guard sama
@@ -27,6 +28,8 @@ async function sniffMime(buf: Buffer): Promise<string | null> {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole)))
     return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
 
@@ -72,11 +75,16 @@ export async function POST(req: NextRequest) {
   if (file.size > MAX_SIZE) return NextResponse.json({ ok: false, message: 'Ukuran file melebihi 10MB.' }, { status: 400 });
   const tahun = tahunParsed.data;
 
+  // T9/L38/G22: percaya magic-number, TITIK. Dulu ada jalan mundur ke `file.type`
+  // saat sniff gagal — dan `file.type` itu label yang ditulis pengirim di badan
+  // multipart, bisa diisi apa saja. Artinya berkas apa pun bisa mencapai parser
+  // cukup dengan mengaku Excel. Tidak ada kerugian menutupnya: .xlsx (zip) dan
+  // .xls (cfb) dua-duanya punya magic-number, jadi sniff tidak pernah gagal untuk
+  // berkas Excel yang sah. Impor Renaksi sudah bersikap begini sejak awal.
   const buf = Buffer.from(await file.arrayBuffer());
   const sniffed = await sniffMime(buf);
-  const okMime = sniffed
-    ? (ALLOWED_MIME.includes(sniffed) || sniffed === 'application/zip' || sniffed === 'application/x-cfb')
-    : ALLOWED_MIME.includes(file.type);
+  const okMime = !!sniffed
+    && (ALLOWED_MIME.includes(sniffed) || sniffed === 'application/zip' || sniffed === 'application/x-cfb');
   if (!okMime) return NextResponse.json({ ok: false, message: 'File harus Excel (.xlsx/.xls).' }, { status: 400 });
 
   try {

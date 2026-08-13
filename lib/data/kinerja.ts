@@ -93,12 +93,79 @@ export async function createMasterRow(
   return r?.insertId;
 }
 
-export async function updateMasterRow(id: number, nama: string) {
-  await sql`UPDATE kinerja_master SET nama = ${nama} WHERE id = ${id}`;
+// T12: baris master yang tidak ada dulu dijawab "berhasil" — UPDATE 0 baris tidak
+// dianggap apa-apa. Pemanggilnya jadi tak bisa membedakan sukses dari salah id.
+export class KinerjaMasterTidakAdaError extends Error {
+  constructor() {
+    super('Baris master tidak ditemukan.');
+    this.name = 'KinerjaMasterTidakAdaError';
+  }
 }
 
-export async function deleteMasterRow(id: number) {
+// T12: hierarki master disambung lewat TEKS NAMA (program_ref/kegiatan_ref/
+// subkegiatan_ref), bukan foreign key — MySQL tidak punya cara menolak sendiri.
+export class KinerjaMasterPunyaAnakError extends Error {
+  constructor(jumlah: number) {
+    super(`Tidak bisa dihapus — masih ada ${jumlah} baris master di bawahnya. Hapus dari tingkat terbawah lebih dulu.`);
+    this.name = 'KinerjaMasterPunyaAnakError';
+  }
+}
+
+export async function updateMasterRow(id: number, nama: string) {
+  const res = (await sql`UPDATE kinerja_master SET nama = ${nama} WHERE id = ${id}`) as unknown as Array<{ affectedRows: number }>;
+  // L53: hasil non-SELECT datang sebagai Array<{affectedRows}>, bukan object.
+  if (Number(res[0]?.affectedRows ?? 0) === 0) throw new KinerjaMasterTidakAdaError();
+}
+
+type MasterRingkas = { nama: string; tipe: MasterTipe; tahun: string };
+
+/**
+ * T12 — mengembalikan baris yang dihapus supaya route bisa mencatat NAMANYA di
+ * audit log. Dulu jejaknya cuma "Hapus master id=42"; barisnya sudah lenyap, jadi
+ * enam bulan kemudian tidak ada cara tahu 42 itu apa. Jejak audit yang tidak bisa
+ * dibaca ulang sama saja dengan tidak ada.
+ *
+ * Anak yang dihitung HANYA sesama baris `kinerja_master`. Kolom program/kegiatan/
+ * subkegiatan di `kinerja_ssk` SENGAJA tidak ikut dihitung: isinya salinan teks
+ * hasil Inject Rekening, bukan penunjuk hidup — baris SSK tetap utuh dan terbaca
+ * walau masternya dihapus. Yang hilang cuma pilihannya di dropdown.
+ */
+export async function deleteMasterRow(id: number): Promise<MasterRingkas> {
+  const row = (await sql`SELECT nama, tipe, tahun FROM kinerja_master WHERE id = ${id} LIMIT 1`) as unknown as MasterRingkas[];
+  if (!row[0]) throw new KinerjaMasterTidakAdaError();
+  const { nama, tipe, tahun } = row[0];
+
+  // Nama bisa dipikul lebih dari satu baris (tidak ada UNIQUE di kolom nama).
+  // Selama masih ada saudara yang memikul nama sama, anaknya tidak jadi yatim.
+  let hitung: Array<{ sisa: number; anak: number }> | null = null;
+  if (tipe === 'program') {
+    hitung = await sql`
+      SELECT
+        (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='program' AND nama=${nama} AND id<>${id}) AS sisa,
+        (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND program_ref=${nama})                           AS anak
+    ` as unknown as Array<{ sisa: number; anak: number }>;
+  } else if (tipe === 'kegiatan') {
+    hitung = await sql`
+      SELECT
+        (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='kegiatan' AND nama=${nama} AND id<>${id}) AS sisa,
+        (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND kegiatan_ref=${nama})                           AS anak
+    ` as unknown as Array<{ sisa: number; anak: number }>;
+  } else if (tipe === 'subkegiatan') {
+    hitung = await sql`
+      SELECT
+        (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='subkegiatan' AND nama=${nama} AND id<>${id}) AS sisa,
+        (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND subkegiatan_ref=${nama})                           AS anak
+    ` as unknown as Array<{ sisa: number; anak: number }>;
+  }
+
+  if (hitung) {
+    const sisa = Number(hitung[0]?.sisa ?? 0);
+    const anak = Number(hitung[0]?.anak ?? 0);
+    if (sisa === 0 && anak > 0) throw new KinerjaMasterPunyaAnakError(anak);
+  }
+
   await sql`DELETE FROM kinerja_master WHERE id = ${id}`;
+  return { nama, tipe, tahun };
 }
 
 // ─── Init Renaksi → Master ──────────────────────────────────────────────────

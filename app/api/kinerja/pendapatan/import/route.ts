@@ -3,6 +3,7 @@ import { getSession } from '@/lib/security/auth';
 import { hasAppAccess } from '@/lib/security/guard';
 import { isKinerjaRole, kinerjaRateLimit } from '@/lib/data/kinerja-schemas';
 import { parsePendapatanBuffer } from '@/lib/data/kinerja-import';
+import { kinerjaMati } from '../../_guard';
 
 // IK-1 (Import Pendapatan bulanan): POST file Excel → baris realisasi per bulan.
 // READ-ONLY (parse saja, tidak menulis DB) — penulisan tetap lewat PUT
@@ -26,6 +27,8 @@ async function sniffMime(buf: Buffer): Promise<string | null> {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole)))
     return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
   const limited = await kinerjaRateLimit(session.userId, 'import-pendapatan', 20);
@@ -36,11 +39,12 @@ export async function POST(req: NextRequest) {
   if (!file) return NextResponse.json({ ok: false, message: 'Tidak ada file yang dipilih.' }, { status: 400 });
   if (file.size > MAX_SIZE) return NextResponse.json({ ok: false, message: 'Ukuran file melebihi 10MB.' }, { status: 400 });
 
+  // T9/L38/G22: percaya magic-number, TITIK — `file.type` adalah label tulisan
+  // pengirim, bukan bukti isi. Lihat catatan lengkap di realisasi/import/route.ts.
   const buf = Buffer.from(await file.arrayBuffer());
   const sniffed = await sniffMime(buf);
-  const okMime = sniffed
-    ? (ALLOWED_MIME.includes(sniffed) || sniffed === 'application/zip' || sniffed === 'application/x-cfb')
-    : ALLOWED_MIME.includes(file.type);
+  const okMime = !!sniffed
+    && (ALLOWED_MIME.includes(sniffed) || sniffed === 'application/zip' || sniffed === 'application/x-cfb');
   if (!okMime) return NextResponse.json({ ok: false, message: 'File harus Excel (.xlsx/.xls).' }, { status: 400 });
 
   try {

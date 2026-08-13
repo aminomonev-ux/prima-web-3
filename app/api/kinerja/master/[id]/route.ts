@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { safeInt } from '@/lib/data/db';
-import { updateMasterRow, deleteMasterRow } from '@/lib/data/kinerja';
+import {
+  updateMasterRow, deleteMasterRow,
+  KinerjaMasterTidakAdaError, KinerjaMasterPunyaAnakError,
+} from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, MasterUpdateBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
+import { kinerjaMati } from '../../_guard';
 
 const DELETE_ONLY_ROLES = ['SUPER_ADMIN', 'ADMIN']; // hapus master hanya super/admin (lebih ketat dari KINERJA_ALLOWED_ROLES)
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
   const limited = await kinerjaRateLimit(session.userId, 'update-master', 30); if (limited) return limited;
 
@@ -25,7 +31,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
   const { nama } = parsed.data;
 
-  await updateMasterRow(id, nama);
+  try {
+    await updateMasterRow(id, nama);
+  } catch (e) {
+    // T12: id yang tidak ada dulu tetap dijawab ok:true — pemanggil tidak pernah
+    // tahu perubahannya tidak mendarat di baris mana pun.
+    if (e instanceof KinerjaMasterTidakAdaError) {
+      return NextResponse.json({ ok: false, message: e.message }, { status: 404 });
+    }
+    throw e;
+  }
 
   await writeAuditLog({
     req,
@@ -41,6 +56,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
+  const mati = await kinerjaMati(session.role); if (mati) return mati;
   if (!DELETE_ONLY_ROLES.includes(session.role)) {
     return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN/ADMIN yang dapat menghapus master' }, { status: 403 });
   }
@@ -51,14 +68,29 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const id = safeInt(idRaw, 0);
   if (id <= 0) return NextResponse.json({ ok: false, message: 'ID master tidak valid' }, { status: 400 });
 
-  await deleteMasterRow(id);
+  let dihapus;
+  try {
+    dihapus = await deleteMasterRow(id);
+  } catch (e) {
+    if (e instanceof KinerjaMasterTidakAdaError) {
+      return NextResponse.json({ ok: false, message: e.message }, { status: 404 });
+    }
+    // T12: pesannya menyebut berapa baris yang masih menggantung — diteruskan apa
+    // adanya supaya pengguna tahu harus menghapus apa dulu.
+    if (e instanceof KinerjaMasterPunyaAnakError) {
+      return NextResponse.json({ ok: false, message: e.message }, { status: 400 });
+    }
+    throw e;
+  }
 
   await writeAuditLog({
     req,
     eventType: 'KINERJA_DELETE_MASTER',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Hapus master id=${id}`,
+    // T12: nama ikut dicatat. Barisnya sudah lenyap saat log ini dibaca ulang —
+    // "id=42" saja tidak bisa dipulihkan jadi informasi oleh siapa pun.
+    detail:    `Hapus master ${dihapus.tipe} ${dihapus.tahun} id=${id}: "${dihapus.nama}"`,
   });
 
   return NextResponse.json({ ok: true });
