@@ -197,6 +197,8 @@ export default function Header({
             color: 'var(--ra-menu-text, #374151)',
             background: 'transparent',
           }}
+          data-tooltip="Kembali ke menu utama PRIMA"
+          data-tooltip-pos="below"
         >
           <Home className="h-3.5 w-3.5" />
           <span>Menu</span>
