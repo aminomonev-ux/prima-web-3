@@ -2,7 +2,10 @@
 // Import matriks Rencana Aksi dari file (.xlsx/.csv/.pdf digital) — 2 langkah:
 //   step=preview  multipart → parse saja, TIDAK menulis DB
 //   step=commit   JSON      → tulis baris yang sudah dikonfirmasi user di modal
-// Khusus ADMIN/SUPER_ADMIN (sekelas Duplikasi Tahun — operasi borongan).
+// Terbuka untuk semua pemegang akses modul, bukan Admin saja: import adalah cara
+// mengisi Data Entry, dan memaksanya lewat Admin cuma menambah antrean. Mode 'ganti'
+// tidak memberi daya rusak baru — hapus baris satu per satu sudah boleh sejak awal,
+// dan 'ganti' tetap tunduk Kunci Periode (assertPeriodeTerbuka di import-data.ts).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
@@ -20,7 +23,6 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MAX_SIZE = 8 * 1024 * 1024;
-const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
 
 // L38/G22: percaya magic-number, bukan file.type dari klien
 async function sniffMime(buf: Buffer): Promise<string | null> {
@@ -37,9 +39,6 @@ const ALLOWED_MIME: Record<string, string[]> = {
 export async function POST(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
-  if (!ADMIN_ROLES.includes(g.session.role)) {
-    return NextResponse.json({ ok: false, error: 'Import hanya untuk Admin.' }, { status: 403 });
-  }
 
   const step = new URL(req.url).searchParams.get('step') ?? 'preview';
   if (step !== 'preview' && step !== 'commit') {

@@ -42,7 +42,9 @@ export default function Header({
 
   const roleLabel = ROLE_LABELS[role] ?? role;
 
-  // Alat admin: Duplikasi Tahun + Kunci Periode (khusus ADMIN/SUPER_ADMIN)
+  // Alat admin: Duplikasi Tahun + Kunci Periode (khusus ADMIN/SUPER_ADMIN).
+  // Import File SENGAJA di luar pagar ini — mengisi Data Entry adalah pekerjaan
+  // sehari-hari pemegang akses modul, bukan operasi borongan seperti dua tetangganya.
   const isAdminTools = role === 'ADMIN' || role === 'SUPER_ADMIN';
   const [dupOpen, setDupOpen] = useState(false);
   const [dupDari, setDupDari] = useState(selectedYear);
@@ -141,22 +143,22 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-2">
+        <button
+          onClick={() => setImportOpen(true)}
+          className="ra-menu-btn hidden sm:inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
+          style={{
+            border: '1.5px solid var(--ra-menu-border, rgba(0,0,0,0.15))',
+            color: 'var(--ra-menu-text, #374151)',
+            background: 'transparent',
+          }}
+          data-tooltip="Isi struktur & target dari file Excel/CSV/PDF"
+          data-tooltip-pos="below"
+        >
+          <FileUp className="h-3.5 w-3.5" />
+          <span>Import File</span>
+        </button>
         {isAdminTools && (
           <>
-            <button
-              onClick={() => setImportOpen(true)}
-              className="ra-menu-btn hidden sm:inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer"
-              style={{
-                border: '1.5px solid var(--ra-menu-border, rgba(0,0,0,0.15))',
-                color: 'var(--ra-menu-text, #374151)',
-                background: 'transparent',
-              }}
-              data-tooltip="Isi struktur & target dari file Excel/CSV/PDF"
-              data-tooltip-pos="below"
-            >
-              <FileUp className="h-3.5 w-3.5" />
-              <span>Import File</span>
-            </button>
             <button
               onClick={openDup}
               className="ra-menu-btn hidden sm:inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer"

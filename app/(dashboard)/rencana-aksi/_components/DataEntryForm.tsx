@@ -23,7 +23,6 @@ interface Props {
   level: RaLevel;
   rows: RaRow[];
   selectedYear: number;
-  role: string;
   onReload: () => Promise<void>;
   notify: (msg: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
   /** Baris yang harus langsung terbuka dalam mode edit — dikirim saat pengguna
@@ -32,9 +31,7 @@ interface Props {
   fokusEditId?: number | null;
 }
 
-export default function DataEntryForm({ level, rows, selectedYear, role, onReload, notify, fokusEditId }: Props) {
-  // Import = operasi borongan, sekelas Duplikasi Tahun di Header
-  const canImport = role === 'ADMIN' || role === 'SUPER_ADMIN';
+export default function DataEntryForm({ level, rows, selectedYear, onReload, notify, fokusEditId }: Props) {
   const [importOpen, setImportOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -699,18 +696,16 @@ export default function DataEntryForm({ level, rows, selectedYear, role, onReloa
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {canImport && (
-                  <Tip label={`Import file untuk level ${level.replace('-', ' ')}`}>
-                    <button
-                      type="button"
-                      onClick={() => setImportOpen(true)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#7C5CFC]/45 px-2.5 py-1.5 text-[11px] font-bold text-[#6D28D9] transition-colors hover:bg-[#7C5CFC]/8 cursor-pointer"
-                    >
-                      <FileUp className="h-3.5 w-3.5" />
-                      Import
-                    </button>
-                  </Tip>
-                )}
+                <Tip label={`Import file untuk level ${level.replace('-', ' ')}`}>
+                  <button
+                    type="button"
+                    onClick={() => setImportOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#7C5CFC]/45 px-2.5 py-1.5 text-[11px] font-bold text-[#6D28D9] transition-colors hover:bg-[#7C5CFC]/8 cursor-pointer"
+                  >
+                    <FileUp className="h-3.5 w-3.5" />
+                    Import
+                  </button>
+                </Tip>
                 <DownloadButton
                   variant="excel"
                   label="Excel"

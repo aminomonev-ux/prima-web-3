@@ -588,7 +588,6 @@ export default function RaClient({
             level={level}
             rows={rows}
             selectedYear={tahun}
-            role={role}
             onReload={() => reloadRows(tahun, level)}
             notify={notify}
             fokusEditId={fokusEditId}
