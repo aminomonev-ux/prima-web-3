@@ -1,4 +1,5 @@
-// Uji regresi perbaikan audit Renaksi (T2, T5, T6, T7, T8, T10 + keputusan K2).
+// Uji regresi perbaikan audit Renaksi (T2, T5, T6, T7, T8, T10 + keputusan K2)
+// dan kolom `kode` (jangkar identitas lintas ganti nama).
 //   node scripts/test-renaksi-audit.mjs
 //
 // MENYENTUH DB — tapi hanya di TAHUN KOTAK PASIR 2097/2098/2099, dan seluruhnya
@@ -161,7 +162,7 @@ async function main() {
   await RA.setRaLock(TH, 0)
 
   console.log('\n── T10: duplikasi tahun ──')
-  await RA.upsertRencanaAksi({ ...dasar({ indikator: 'IND-dup' }), tahun: TH_SUMBER }, UID)
+  await RA.upsertRencanaAksi({ ...dasar({ indikator: 'IND-dup', kode: '9.99.99.9.99' }), tahun: TH_SUMBER }, UID)
   const d1 = await RA.duplicateYear(TH_SUMBER, TH_TUJUAN, UID)
   periksa('Duplikasi ke tahun kosong berhasil', d1.inserted === 1, `inserted=${d1.inserted}`)
   const e10 = await tangkap(() => RA.duplicateYear(TH_SUMBER, TH_TUJUAN, UID))
@@ -169,6 +170,9 @@ async function main() {
   const salinan = await RA.listRencanaAksi(TH_TUJUAN, 'sub-kegiatan')
   periksa('…hanya 1 salinan (tidak dobel)', salinan.length === 1, `n=${salinan.length}`)
   periksa('…realisasi salinan mulai dari nol', Number(salinan[0].q1_realisasi) === 0 && salinan[0].bulan_realisasi === null)
+  // Dulu `kode` tidak ikut di INSERT..SELECT: tahun baru lahir tanpa jangkar, padahal
+  // pergantian tahun justru saat nomenklatur paling sering berubah.
+  periksa('…kode ikut tersalin ke tahun baru', salinan[0].kode === '9.99.99.9.99', `kode=${salinan[0].kode}`)
 
   // Dua duplikasi BERSAMAAN ke tahun kosong: baris kunci harus membuat yang kedua kalah.
   await sql`DELETE FROM rencana_aksi WHERE tahun = ${TH_TUJUAN}`
@@ -180,6 +184,33 @@ async function main() {
   const akhir = await RA.listRencanaAksi(TH_TUJUAN, 'sub-kegiatan')
   periksa('Dua duplikasi bersamaan -> tepat 1 menang', sukses === 1, `sukses=${sukses}`)
   periksa('…tahun tujuan tidak berisi salinan dobel', akhir.length === 1, `n=${akhir.length}`)
+
+  console.log('\n── Kolom `kode`: jangkar identitas saat nama diganti ──')
+  const idK = await RA.upsertRencanaAksi(dasar({ indikator: 'IND-kode', kode: '1.02.02.2.01' }), UID)
+  let rk = await RA.getRencanaAksiById(idK)
+  periksa('Entri manual menyimpan kode', rk.kode === '1.02.02.2.01', `kode=${rk.kode}`)
+
+  // Rantai baca: SELECT -> RaRow -> state form. Kalau `kode` hilang di sini, form
+  // memuat nilai kosong dan edit berikutnya menghapus kode tanpa ada yang sadar.
+  const dariDaftar = (await RA.listRencanaAksi(TH, 'sub-kegiatan')).find((x) => x.indikator === 'IND-kode')
+  periksa('listRencanaAksi mengembalikan kode', dariDaftar?.kode === '1.02.02.2.01', `kode=${dariDaftar?.kode}`)
+
+  // Form mengirim balik apa yang tadi dimuat — meniru handleEdit di DataEntryForm.
+  await RA.upsertRencanaAksi(dasar({
+    id: idK, indikator: 'IND-kode', kode: dariDaftar?.kode ?? null,
+    sub_kegiatan: 'SUB-UJI NAMA BARU', expected_version: rk.version,
+  }), UID)
+  rk = await RA.getRencanaAksiById(idK)
+  periksa('Ganti nama via form TIDAK menghapus kode', rk.kode === '1.02.02.2.01', `kode=${rk.kode}`)
+
+  // Sisi sebaliknya, dan alasan jalur form TIDAK memakai COALESCE seperti jalur impor:
+  // dengan COALESCE pemeriksaan inilah yang gagal — kode jadi mustahil dihapus.
+  await RA.upsertRencanaAksi(dasar({
+    id: idK, indikator: 'IND-kode', kode: null,
+    sub_kegiatan: 'SUB-UJI NAMA BARU', expected_version: rk.version,
+  }), UID)
+  rk = await RA.getRencanaAksiById(idK)
+  periksa('Kode bisa dikosongkan dengan sengaja', rk.kode === null, `kode=${rk.kode}`)
 }
 
 try {
