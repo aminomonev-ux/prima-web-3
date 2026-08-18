@@ -10,11 +10,11 @@
 
 ## §0 Satu hal yang harus diluruskan lebih dulu
 
-Di `docs/migrations/` ada **80 berkas**. Anda **tidak perlu menjalankan satu pun**
+Di `docs/migrations/` ada **81 berkas**. Anda **tidak perlu menjalankan satu pun**
 untuk pemasangan baru.
 
 `docs/schema-mysql.sql` adalah skema **lengkap dan terkini** — sudah mencakup
-seluruh isi 80 migration itu, termasuk yang paling baru. Migration hanya dipakai
+seluruh isi 81 migration itu, termasuk yang paling baru. Migration hanya dipakai
 untuk **memutakhirkan database yang sudah berisi data**.
 
 | Keadaan | Yang dijalankan |

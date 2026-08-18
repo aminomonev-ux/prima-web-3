@@ -151,6 +151,7 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
     try {
       const rows = terpakai.map(r => ({
         level: levelOf(r),
+        kode: r.kode,
         nama: r.nama,
         induk_tujuan: r.induk_tujuan,
         induk_sasaran: r.induk_sasaran,

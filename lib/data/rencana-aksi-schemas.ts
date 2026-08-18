@@ -216,6 +216,7 @@ export const ImportModeSchema = z.enum(['tambah', 'upsert', 'ganti']);
 
 export const ImportCommitRowSchema = z.object({
   level: LevelSchema,
+  kode: z.string().trim().max(60).nullable().default(null),
   nama: z.string().trim().min(1, 'Nama entitas wajib').max(255),
   induk_tujuan: z.string().trim().max(255).nullable().default(null),
   induk_sasaran: z.string().trim().max(255).nullable().default(null),

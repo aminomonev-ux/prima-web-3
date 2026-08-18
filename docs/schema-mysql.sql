@@ -834,6 +834,7 @@ CREATE TABLE IF NOT EXISTS rencana_aksi (
   id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   tahun           SMALLINT UNSIGNED NOT NULL,
   level           ENUM('tujuan','sasaran','program','kegiatan','sub-kegiatan') NOT NULL,
+  kode            VARCHAR(60) NULL DEFAULT NULL COMMENT 'Kode nomenklatur (1.02.02.2.01) — jangkar identitas lintas ganti nama (migration-renaksi-kode)',
   program         VARCHAR(255) NOT NULL,
   kegiatan        VARCHAR(255) NULL,
   sub_kegiatan    VARCHAR(255) NULL,
@@ -866,6 +867,7 @@ CREATE TABLE IF NOT EXISTS rencana_aksi (
   UNIQUE KEY uk_tahun_level_ind (tahun, level, indikator),
   INDEX idx_tahun_level (tahun, level),
   INDEX idx_tahun_level_prog (tahun, level, program),
+  INDEX idx_tahun_level_kode (tahun, level, kode),
   CONSTRAINT fk_ra_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_ra_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

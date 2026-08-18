@@ -18,6 +18,9 @@ import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 
 export interface CommitRow {
   level: RaLevel;
+  /** Kode nomenklatur dari file. Jangkar identitas yang tidak ikut berubah saat
+   *  nama diperbaiki — hierarki Renaksi disambung teks nama, bukan id. */
+  kode: string | null;
   nama: string;
   induk_tujuan: string | null;
   induk_sasaran: string | null;
@@ -94,7 +97,7 @@ function toDbTuple(row: CommitRow, tahun: number, userId: number): unknown[] {
     : null;
 
   return [
-    tahun, row.level,
+    tahun, row.level, row.kode,
     program, kegiatan, subKegiatan,
     isSasaran ? row.induk_tujuan : null,
     isProgram ? row.induk_sasaran : null,
@@ -111,7 +114,7 @@ function toDbTuple(row: CommitRow, tahun: number, userId: number): unknown[] {
 }
 
 const COLUMNS = [
-  'tahun', 'level', 'program', 'kegiatan', 'sub_kegiatan', 'tujuan', 'sasaran',
+  'tahun', 'level', 'kode', 'program', 'kegiatan', 'sub_kegiatan', 'tujuan', 'sasaran',
   'outcome_program', 'outcome_kegiatan', 'outcome_sub_kegiatan',
   'indikator', 'jenis', 'satuan', 'target_tahunan',
   'q1_target', 'q2_target', 'q3_target', 'q4_target',
@@ -125,7 +128,12 @@ const UPDATE_SET = [
   'jenis', 'satuan', 'target_tahunan',
   'q1_target', 'q2_target', 'q3_target', 'q4_target',
   'anggaran_nominal', 'bulan_target', 'updated_by',
-].map(c => `\`${c}\` = VALUES(\`${c}\`)`).join(', ') + ', `version` = `version` + 1';
+].map(c => `\`${c}\` = VALUES(\`${c}\`)`).join(', ')
+  // `kode` pakai COALESCE, bukan VALUES() polos: file tanpa kolom kode mengirim NULL,
+  // dan itu tidak boleh MENGHAPUS kode yang sudah tersimpan dari impor sebelumnya.
+  // Alasan yang sama dengan kolom realisasi yang sengaja absen dari daftar ini.
+  + ', `kode` = COALESCE(VALUES(`kode`), `kode`)'
+  + ', `version` = `version` + 1';
 
 async function bulkWrite(conn: PoolConnection, rows: unknown[][], upsert: boolean): Promise<void> {
   if (rows.length === 0) return;
