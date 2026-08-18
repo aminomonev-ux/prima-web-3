@@ -54,6 +54,8 @@ export interface RaRow {
   id: number;
   tahun: number;
   level: RaLevel;
+  /** Kode nomenklatur — jangkar identitas yang tidak ikut berubah saat nama diganti. */
+  kode: string | null;
   sasaran: string | null;
   tujuan: string | null;
   outcome_program: string | null;
@@ -132,7 +134,7 @@ export async function listRencanaAksi(tahun: number, level: RaLevel): Promise<Ra
            jenis, satuan, target_rpjmd, target_tahunan,
            q1_target, q1_realisasi, q2_target, q2_realisasi,
            q3_target, q3_realisasi, q4_target, q4_realisasi, anggaran_nominal,
-           bulan_target, bulan_realisasi, version
+           bulan_target, bulan_realisasi, version, kode
     FROM rencana_aksi
     WHERE tahun = ${tahun} AND level = ${level}
     ORDER BY program, kegiatan, sub_kegiatan, indikator
@@ -152,7 +154,7 @@ export async function getRencanaAksiById(id: number): Promise<RaRow | null> {
            jenis, satuan, target_rpjmd, target_tahunan,
            q1_target, q1_realisasi, q2_target, q2_realisasi,
            q3_target, q3_realisasi, q4_target, q4_realisasi, anggaran_nominal,
-           bulan_target, bulan_realisasi, version
+           bulan_target, bulan_realisasi, version, kode
     FROM rencana_aksi WHERE id = ${id}
   `);
   if (row) {
@@ -214,6 +216,7 @@ export async function upsertRencanaAksi(
     // dibaca akan menimpa realisasi yang diubah orang lain di sela baca-dan-tulis.
     const res = await sql`
       UPDATE rencana_aksi SET
+        kode                 = ${data.kode ?? null},
         sasaran              = ${data.sasaran ?? null},
         tujuan               = ${data.tujuan ?? null},
         outcome_program      = ${data.outcome_program ?? null},
@@ -269,13 +272,13 @@ export async function upsertRencanaAksi(
   // ODKU (update, bukan ER_DUP_ENTRY 500). LAST_INSERT_ID(id) → insertId = id existing.
   const res = await sql`
     INSERT INTO rencana_aksi
-      (tahun, level, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
+      (tahun, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
        program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
        target_rpjmd, target_tahunan,
        q1_target, q2_target, q3_target, q4_target, anggaran_nominal, bulan_target,
        created_by, updated_by)
     VALUES (
-      ${data.tahun}, ${data.level}, ${data.sasaran ?? null}, ${data.tujuan ?? null},
+      ${data.tahun}, ${data.level}, ${data.kode ?? null}, ${data.sasaran ?? null}, ${data.tujuan ?? null},
       ${data.outcome_program ?? null}, ${data.outcome_kegiatan ?? null}, ${data.outcome_sub_kegiatan ?? null},
       ${data.program}, ${data.kegiatan ?? null}, ${data.sub_kegiatan ?? null},
       ${data.indikator}, ${data.jenis}, ${data.satuan},
@@ -286,6 +289,7 @@ export async function upsertRencanaAksi(
     ) AS new
     ON DUPLICATE KEY UPDATE
       id                   = LAST_INSERT_ID(rencana_aksi.id),
+      kode                 = new.kode,
       sasaran              = new.sasaran,
       tujuan               = new.tujuan,
       outcome_program      = new.outcome_program,
@@ -588,7 +592,7 @@ export async function updateBulanRealisasiBulk(
            jenis, satuan, target_rpjmd, target_tahunan,
            q1_target, q1_realisasi, q2_target, q2_realisasi,
            q3_target, q3_realisasi, q4_target, q4_realisasi, anggaran_nominal,
-           bulan_target, bulan_realisasi, version
+           bulan_target, bulan_realisasi, version, kode
     FROM rencana_aksi WHERE id IN (${items.map(i => i.id)})
   `);
   const petaBaris = new Map<number, RaRow>();
@@ -664,11 +668,11 @@ export async function duplicateYear(
     // memakai DEFAULT (0/NULL) — hanya struktur + target yang tersalin.
     const res = await tx`
       INSERT INTO rencana_aksi
-        (tahun, level, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
+        (tahun, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
          program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
          target_rpjmd, target_tahunan, q1_target, q2_target, q3_target, q4_target,
          anggaran_nominal, bulan_target, created_by, updated_by)
-      SELECT ${toTahun}, level, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
+      SELECT ${toTahun}, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
          program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
          target_rpjmd, target_tahunan, q1_target, q2_target, q3_target, q4_target,
          anggaran_nominal, bulan_target, ${userId}, ${userId}

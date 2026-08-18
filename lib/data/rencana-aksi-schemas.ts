@@ -53,6 +53,7 @@ export const UpsertRencanaAksiSchema = z.object({
   id: z.number().int().positive().nullable().optional(),
   tahun: TahunSchema,
   level: LevelSchema,
+  kode: z.string().trim().max(60).nullable().optional(),
   sasaran: z.string().trim().max(255).nullable().optional(),
   tujuan: z.string().trim().max(255).nullable().optional(),
   outcome_program:      z.string().trim().max(500).nullable().optional(),

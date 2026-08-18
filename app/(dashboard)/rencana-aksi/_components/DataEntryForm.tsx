@@ -44,6 +44,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const [kegiatan, setKegiatan]     = useState('');
   const [subKegiatan, setSubKeg]    = useState('');
   const [indikator, setIndikator]   = useState('');
+  const [kode, setKode]             = useState('');
   const [satuan, setSatuan]         = useState('Persen');
   const [jenis, setJenis]           = useState<RaJenis>('Akumulatif');
   const [targetRpjmd, setTargetRpjmd]   = useState(100);
@@ -66,6 +67,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
 
   const levelRows = rows.filter(r => r.level === level);
   const isSub = level === 'sub-kegiatan';
+  // Hanya tiga level bawah yang bernomenklatur (3/5/6 segmen kode); tujuan &
+  // sasaran tidak punya kode, jadi isiannya tidak ditampilkan di sana.
+  const punyaKode = level === 'program' || level === 'kegiatan' || isSub;
   // Opsi A: untuk sub-kegiatan, q1-q4 di-derive dari target bulanan (preview live).
   const derivedQ = deriveQuartersFromMonthly(bulanTarget, jenis);
 
@@ -116,6 +120,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   function resetForm() {
     setSasaran(''); setTujuan(''); setProgram(''); setKegiatan(''); setSubKeg(''); setIndikator('');
     setOutcomeProgram(''); setOutcomeKegiatan(''); setOutcomeSubKegiatan('');
+    setKode('');
     setSatuan('Persen'); setJenis('Akumulatif');
     setTargetRpjmd(100); setTargetTahunan(100);
     setQ1(25); setQ2(25); setQ3(25); setQ4(25);
@@ -191,6 +196,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         kegiatan: (level === 'kegiatan' || level === 'sub-kegiatan') ? kegiatan.trim() : null,
         sub_kegiatan: level === 'sub-kegiatan' ? subKegiatan.trim() : null,
         indikator: nm,
+        // Tujuan & sasaran tidak bernomenklatur — kirim null, jangan sisa ketikan
+        // dari level lain yang kebetulan masih ada di state.
+        kode: punyaKode ? (kode.trim() || null) : null,
         jenis, satuan: satuan.trim(),
         target_rpjmd: targetRpjmd, target_tahunan: targetTahunan,
         q1_target: q1, q2_target: q2, q3_target: q3, q4_target: q4,
@@ -222,6 +230,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setKegiatan(row.kegiatan ?? '');
     setSubKeg(row.sub_kegiatan ?? '');
     setIndikator(row.indikator);
+    setKode(row.kode ?? '');
     setSatuan(row.satuan); setJenis(row.jenis);
     setTargetRpjmd(row.target_rpjmd); setTargetTahunan(row.target_tahunan);
     setQ1(row.q1_target); setQ2(row.q2_target);
@@ -511,6 +520,25 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                   className="w-full rounded border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 focus:border-[#EF9F27] focus:outline-none"
                   placeholder="Mis: Terlaksananya pengelolaan ATK..."
                 />
+              </div>
+            )}
+
+            {punyaKode && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Kode Nomenklatur <span className="normal-case tracking-normal text-slate-300">(opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={kode}
+                  onChange={(e) => setKode(e.target.value)}
+                  maxLength={60}
+                  className="w-full rounded border border-slate-200 px-3.5 py-2 font-mono text-xs font-semibold text-slate-700 focus:border-[#EF9F27] focus:outline-none"
+                  placeholder="Contoh: 1.02.02.2.01"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Dipakai sebagai penanda tetap saat nama {level.replace('-', ' ')} diperbaiki.
+                </p>
               </div>
             )}
 

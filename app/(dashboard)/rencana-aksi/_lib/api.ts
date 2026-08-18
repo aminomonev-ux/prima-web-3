@@ -33,6 +33,7 @@ export interface UpsertPayload {
   id?: number | null;
   tahun: number;
   level: RaLevel;
+  kode?: string | null;
   sasaran?: string | null;
   tujuan?: string | null;
   outcome_program?: string | null;
