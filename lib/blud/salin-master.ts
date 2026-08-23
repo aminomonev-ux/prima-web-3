@@ -30,6 +30,8 @@ export interface BarisPindai {
 export interface IndukAda {
   kode: string
   uraian: string
+  /** Hanya diisi untuk `kodeBesar`; menentukan apakah akarnya sudah ada. */
+  level?: string
 }
 
 export interface KandidatSalin {
@@ -48,6 +50,14 @@ export interface KandidatSalin {
   catatan: string[]
   /** Berapa baris DPA memakai kode ini. */
   pakai: number
+  /**
+   * Masih di dalam tiga tingkat teratas, jadi Kode Besar sanggup menampungnya.
+   * Layar WAJIB memakainya untuk menyembunyikan tombol "pindah ke Kode Besar":
+   * langit-langit memutus sebelum penimpaan dibaca, jadi tombol pada baris yang
+   * lebih dalam tidak akan melakukan apa pun — dan tombol mati lebih
+   * membingungkan daripada tombol yang memang tidak ada.
+   */
+  bisaKeKodeBesar: boolean
 }
 
 export interface BarisDitahan {
@@ -107,14 +117,24 @@ const MAKS_PANJANG_KODE = 64
 const MAKS_PANJANG_URAIAN = 255
 
 /**
- * Kode Besar cuma bisa menampung TIGA tingkat (L1 · L2 · L2.1) — itu batas
- * tabelnya, bukan selera. DPA sungguhan jauh lebih dalam: berkas 2026 milik RSJD
- * berantai sampai L7.1, dan tanpa langit-langit ini 131 dari 259 kode terbaca
- * sebagai kerangka lalu diratakan semua ke L2.1. Baris yang lebih dalam dari ini
- * tempatnya di Master Akun — daftar itu memang cuma pasangan kode+uraian untuk
- * combobox, dan baris penghimpun di DPA memakai combobox yang sama.
+ * Kode Besar cuma punya TIGA slot, dan bentuknya kaku — bukan pohon bebas:
+ *
+ *   slot 0 · L1   akar
+ *   slot 1 · L2   menempel ke L1 lewat KECOCOKAN KODE, `parent_kode` diabaikan
+ *   slot 2 · L2.1 menempel ke L2 lewat `parent_kode`
+ *
+ * Yang di baris tengah itu yang gampang salah dikira: `buildDpaRowsFromKodeBesar`
+ * mencari induk sebuah L2 di antara L1 saja. Jadi dua L2 TIDAK PERNAH bisa
+ * bersarang — memberi `5.1.01.99` tingkat L2 dengan `parent_kode: '5.1'` bukan
+ * bikin ia anak `5.1`, melainkan saudaranya. Karena itu pemetaannya lewat nomor
+ * slot, bukan lewat kedalaman pohon apa adanya.
+ *
+ * DPA sungguhan jauh lebih dalam dari tiga: berkas 2026 milik RSJD berantai
+ * sampai L7.1. Yang tidak kebagian slot tempatnya di Master Akun — daftar itu
+ * memang cuma pasangan kode+uraian untuk combobox, dan baris penghimpun di DPA
+ * memakai combobox yang sama.
  */
-const MAKS_TIER_KODE_BESAR = 3
+const SLOT_KODE_BESAR: readonly LevelKodeBesar[] = ['L1', 'L2', 'L2.1']
 
 /**
  * @param penimpaTujuan Tujuan yang dipilih sendiri oleh orangnya, dikunci per kode.
@@ -207,11 +227,33 @@ export function pindaiBarisDpa(
     return hasil
   }
 
-  const putusan = new Map<string, { tujuan: TujuanSalin; yakin: boolean; catatan: string[]; tier: number }>()
+  /**
+   * Akar yang SUDAH ada di tabel — mis. seed `5.X`. Kalau ada yang cocok dengan
+   * cabang ini, slot L1 sudah terpakai dan cabangnya mulai dari L2; tersisa dua
+   * slot, bukan tiga. Kalau tidak ada, berkasnya menyumbang akarnya sendiri.
+   *
+   * Dipakai `kodeIndukCocok` — matcher yang sama dengan yang dipakai pembangun
+   * kerangka saat menyambungkan L2 ke L1. Kalau di sini beda, hasilnya kelihatan
+   * benar di layar lalu tersambung ke tempat lain waktu "Form Baru" ditekan.
+   */
+  const akarTersedia = ada.kodeBesar
+    .filter(k => (k.level ?? '') === 'L1')
+    .map(k => k.kode.trim())
+    .filter(Boolean)
+
+  const putusan = new Map<string, {
+    tujuan: TujuanSalin; yakin: boolean; catatan: string[]; slot: number; akarLuar: string | null
+  }>()
   for (const r of berkode) {
     const catatan: string[] = []
     const panjang = normalKode(r.kode_rekening).length
-    const tier = leluhurBerkode(r).length
+    const leluhur = leluhurBerkode(r)
+    const tier = leluhur.length
+    // Kode cabang ini di tingkat teratas yang berkode — leluhur teratas, atau
+    // dirinya sendiri kalau ia memang yang teratas.
+    const kodeAkarCabang = (tier === 0 ? r : leluhur[tier - 1]).kode_rekening.trim()
+    const akarLuar = akarTersedia.find(a => a !== kodeAkarCabang && kodeIndukCocok(a, kodeAkarCabang)) ?? null
+    const slot = tier + (akarLuar ? 1 : 0)
 
     const suaraTangga: TujuanSalin = TANGGA_KODE_BESAR[r.tipe_baris] ? 'KODE_BESAR' : 'MASTER_AKUN'
     const suaraPohon: TujuanSalin = adaKeturunanBerkode(r) ? 'KODE_BESAR' : 'MASTER_AKUN'
@@ -228,12 +270,12 @@ export function pindaiBarisDpa(
     if (suaraPanjang) suara.push(suaraPanjang)
 
     let tujuan: TujuanSalin
-    if (tier >= MAKS_TIER_KODE_BESAR) {
-      // Langit-langit struktural, bukan pendapat — jadi tidak ada catatan "sinyal
-      // tidak sepakat" di sini. Baris sedalam ini memang tidak punya tujuan lain,
-      // dan menandainya ragu-ragu berarti 128 kotak centang harus dicentang tangan.
+    if (slot >= SLOT_KODE_BESAR.length) {
+      // Slotnya habis — fakta struktural, bukan pendapat. Jadi tidak ada catatan
+      // "sinyal tidak sepakat" di sini: baris sedalam ini memang tidak punya tujuan
+      // lain, dan menandainya ragu berarti ratusan kotak harus dicentang tangan.
       tujuan = 'MASTER_AKUN'
-      putusan.set(r.row_id, { tujuan, yakin: true, catatan, tier })
+      putusan.set(r.row_id, { tujuan, yakin: true, catatan, slot, akarLuar })
       continue
     }
     if (veto) {
@@ -250,7 +292,7 @@ export function pindaiBarisDpa(
     if (pilihanOrang && pilihanOrang !== tujuan) {
       tujuan = pilihanOrang
       catatan.push('tujuan diubah manual')
-      putusan.set(r.row_id, { tujuan, yakin: true, catatan, tier })
+      putusan.set(r.row_id, { tujuan, yakin: true, catatan, slot, akarLuar })
       continue
     }
 
@@ -262,7 +304,7 @@ export function pindaiBarisDpa(
     if (suaraPanjang && suaraPanjang !== tujuan) beda.push(`panjang kode ${panjang} vs garis ${garisRekening}`)
     if (beda.length) catatan.push('sinyal tidak sepakat — ' + beda.join(', '))
 
-    putusan.set(r.row_id, { tujuan, yakin: beda.length === 0, catatan, tier })
+    putusan.set(r.row_id, { tujuan, yakin: beda.length === 0, catatan, slot, akarLuar })
   }
 
   const urutKode: string[] = []
@@ -321,11 +363,26 @@ export function pindaiBarisDpa(
     let level: LevelKodeBesar | null = null
     let parentKode: string | null = null
     if (p.tujuan === 'KODE_BESAR') {
-      // Tingkat diambil dari kedudukan di pohon, bukan dari `tipe_baris` — langit-langit
-      // di atas menjamin tier-nya 0, 1, atau 2, jadi pemetaannya satu-satu.
-      level = p.tier === 0 ? 'L1' : p.tier === 1 ? 'L2' : 'L2.1'
-      parentKode = p.tier === 0 ? null : (leluhurBerkode(utama)[0]?.kode_rekening.trim() || null)
+      level = SLOT_KODE_BESAR[p.slot]
+      // Akar kedua. Kerangka DPA punya satu akar; akar tambahan melahirkan
+      // GRANDMASTER kedua saat "Form Baru" ditekan. Yang memicunya di berkas 2026
+      // adalah satu baris rincian yang kolom kodenya diisi "0" — kode sampah yang
+      // tidak cocok dengan akar mana pun lalu naik sendiri jadi akar.
+      if (p.slot === 0 && akarTersedia.length > 0) {
+        catatan.push('akar baru — kerangka DPA biasanya hanya punya satu akar')
+        yakin = false
+      }
+      // L1 tak berinduk. L2 menempel ke akar — dan kalau akarnya milik tabel
+      // (`akarLuar`), itulah yang disebut, supaya penyaring yatim tahu induknya
+      // memang sudah ada dan tidak ikut membuang barisnya. L2.1 ke leluhur terdekat.
+      parentKode = p.slot === 0
+        ? null
+        : p.slot === 1
+          ? (p.akarLuar ?? leluhurBerkode(utama)[0]?.kode_rekening.trim() ?? null)
+          : (leluhurBerkode(utama)[0]?.kode_rekening.trim() || null)
     }
+
+    const bisaKeKodeBesar = p.slot < SLOT_KODE_BESAR.length
 
     const peta = p.tujuan === 'KODE_BESAR' ? petaKb : petaMa
     const uraianLama = peta.get(kode)
@@ -335,14 +392,14 @@ export function pindaiBarisDpa(
         continue
       }
       kandidat.push({
-        kode, uraian, tujuan: p.tujuan, level, parentKode,
+        kode, uraian, tujuan: p.tujuan, level, parentKode, bisaKeKodeBesar,
         status: 'BEDA_URAIAN', uraianLama, yakin, catatan, pakai: g.baris.length,
       })
       continue
     }
 
     kandidat.push({
-      kode, uraian, tujuan: p.tujuan, level, parentKode,
+      kode, uraian, tujuan: p.tujuan, level, parentKode, bisaKeKodeBesar,
       status: 'BARU', uraianLama: null, yakin, catatan, pakai: g.baris.length,
     })
   }

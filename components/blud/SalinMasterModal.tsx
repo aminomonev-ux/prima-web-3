@@ -25,9 +25,24 @@ import {
 interface MaRow { kode: string; uraian: string }
 interface KbRow { kode: string; uraian: string; level: 'L1' | 'L2' | 'L2.1'; parent_kode: string | null }
 
-/** Batas Zod masing-masing endpoint — diperiksa di klien supaya tidak jadi 400 mentah. */
+/**
+ * Batas Zod masing-masing endpoint, DAN sekaligus batas `LIMIT` pada GET-nya
+ * (`getMasterAkun` 5000 · `getKodeBesar` 1000). Dua peran itu kebetulan seangka,
+ * dan yang kedua jauh lebih berbahaya: kalau daftar yang terbaca mentok di batas,
+ * kita tidak tahu masih ada sisa di belakangnya — sedangkan yang kita kirim balik
+ * adalah SELURUH isi tabel. Sisanya akan terhapus tanpa suara.
+ */
 const BATAS_MA = 5000
 const BATAS_KB = 1000
+
+function pastikanUtuh(jumlah: number, batas: number, label: string) {
+  if (jumlah >= batas) {
+    throw new Error(
+      `${label} sudah berisi ${jumlah} baris — sudah menyentuh batas baca ${batas}, `
+      + 'jadi daftarnya tidak bisa dipastikan utuh. Rapikan dulu lewat menunya sendiri.',
+    )
+  }
+}
 
 interface LaporanTulis { label: string; ok: boolean; pesan: string }
 
@@ -148,6 +163,7 @@ export default function SalinMasterModal({
 
   const tulisKodeBesar = useCallback(async (terpilih: KandidatSalin[]): Promise<string> => {
     const { data, version } = await ambilDaftar<KbRow>('/api/blud/kode-besar')
+    pastikanUtuh(data.length, BATAS_KB, 'Kode Besar')
     // Mode ganti mengosongkan dasarnya, jadi yang tadinya "beda uraian" tidak punya
     // baris untuk ditimpa — tanpa perlakuan ini ia hilang tanpa suara.
     const isi = ganti ? terpilih.map(k => ({ ...k, status: 'BARU' as const })) : terpilih
@@ -158,8 +174,13 @@ export default function SalinMasterModal({
     // ER_DUP_ENTRY, dan itu sampai ke layar sebagai 500 "Server error" yang tidak
     // bisa dibaca siapa pun. Master Akun TIDAK diperlakukan begini: kodenya memang
     // boleh kembar di sana, jadi menyaring akan menghapus baris orang.
-    const unik = new Map<string, KbRow>()
-    for (const r of gabungan) unik.set(r.kode.trim(), r)
+    // Dipetakan eksplisit, bukan dikirim apa adanya: baris hasil GET membawa `id`
+    // dan `urutan` yang bukan bagian dari skema tulis. Zod memang membuangnya, tapi
+    // menyandarkan muatan pada perilaku buang itu bikin rapuh.
+    const unik = new Map<string, { kode: string; uraian: string; level: string; parent_kode: string | null }>()
+    for (const r of gabungan) {
+      unik.set(r.kode.trim(), { kode: r.kode, uraian: r.uraian, level: r.level, parent_kode: r.parent_kode })
+    }
     const kirim = [...unik.values()]
     if (kirim.length > BATAS_KB) {
       throw new Error(`Kode Besar akan jadi ${kirim.length} baris — batasnya ${BATAS_KB}.`)
@@ -171,6 +192,7 @@ export default function SalinMasterModal({
 
   const tulisMasterAkun = useCallback(async (terpilih: KandidatSalin[]): Promise<string> => {
     const { data, version } = await ambilDaftar<MaRow>('/api/blud/master-akun')
+    pastikanUtuh(data.length, BATAS_MA, 'Master Akun')
     const gabungan = gabungInduk<MaRow>(data, terpilih, k => ({ kode: k.kode, uraian: k.uraian }))
     if (gabungan.length > BATAS_MA) {
       throw new Error(`Master Akun akan jadi ${gabungan.length} baris — batasnya ${BATAS_MA}.`)
@@ -203,11 +225,13 @@ export default function SalinMasterModal({
     setLaporan(null)
     const catat: LaporanTulis[] = []
     const berhasil = new Set<string>()
+    let kbBeres = false
 
     if (saring.kirim.length) {
       try {
         catat.push({ label: 'Kode Besar', ok: true, pesan: await tulisKodeBesar(saring.kirim) })
         for (const k of saring.kirim) berhasil.add(k.kode)
+        kbBeres = true
       } catch (e) {
         catat.push({ label: 'Kode Besar', ok: false, pesan: e instanceof Error ? e.message : String(e) })
       }
@@ -226,7 +250,10 @@ export default function SalinMasterModal({
     // tujuan yang sudah berhasil — dan `gabungInduk` menempelnya sebagai baris baru.
     if (berhasil.size) {
       setPilihManual(new Set([...pilih].filter(k => !berhasil.has(k))))
-      setGanti(false)
+      // Hanya dilepas kalau Kode Besar-nya yang beres. Kalau ia gagal sementara
+      // Master Akun berhasil, mengosongkan sakelar ini membuat percobaan ulang
+      // diam-diam berjalan sebagai "tambah" padahal orangnya memilih "ganti".
+      if (kbBeres) setGanti(false)
       await muat()
     }
 
@@ -341,7 +368,7 @@ export default function SalinMasterModal({
                       <BarisKandidat key={k.kode} k={k} dipilih={pilih.has(k.kode)}
                         onToggle={() => toggle(k.kode)}
                         onPindah={t => pindahTujuan(k.kode, t)}
-                        bolehPindah={bolehKodeBesar} lawan="KODE_BESAR" />
+                        bolehPindah={bolehKodeBesar && k.bisaKeKodeBesar} lawan="KODE_BESAR" />
                     ))}
                   </div>
                 </Panel>

@@ -23,7 +23,10 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'menu.daftar-app':   { page: '/menu', label: 'daftar aplikasi/modul' },
 
   // ── /blud/dpa ──────────────────────────────────────────────────────────────
+  'dpa.tahun-dropdown':     { page: '/blud/dpa', label: 'dropdown pilih tahun anggaran' },
   'dpa.versi-dropdown':     { page: '/blud/dpa', label: 'dropdown pilih versi DPA' },
+  'dpa.impor':              { page: '/blud/dpa', label: 'tombol Impor DPA dari berkas', desc: 'Tombol Impor membaca satu berkas .xlsx menjadi satu versi anggaran penuh — hasilnya ditampilkan dulu untuk diperiksa, tidak langsung tersimpan.' },
+  'dpa.salin-induk':        { page: '/blud/dpa', label: 'tombol Salin ke Induk', desc: 'Tombol Salin ke Induk menyalin kode rekening & uraian dari baris DPA di layar ke Master Akun dan Kode Besar — berguna kalau data induknya masih kosong sesudah impor.' },
   'dpa.form-baru':          { page: '/blud/dpa', label: 'tombol Form Baru', desc: 'Tombol Form Baru membangun kerangka DPA otomatis dari daftar Kode Besar — titik awal menyusun DPA baru.' },
   'dpa.overlay-buat-form':  { page: '/blud/dpa', label: 'tombol Buat Form di overlay Kode Besar' },
   'dpa.kolom-uraian':       { page: '/blud/dpa', label: 'kolom Uraian (pencarian Master Akun)', desc: 'Kolom Uraian: ketik kata kunci lalu pilih dari Master Akun — kode rekening ikut terisi otomatis, tak perlu diketik.' },
@@ -84,6 +87,7 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'lkjip.editor-blok':       { page: '/lkjip', label: 'panel isi bab terpilih di editor' },
   'lkjip.editor-addblock':   { page: '/lkjip', label: 'tombol tambah blok (Narasi/Tabel/Gambar/Grafik)', desc: 'Tombol tambah blok menyisipkan isi ke bab terpilih: Narasi (teks kaya), Tabel, Gambar, atau Grafik.' },
 
+  'pergeseran.tahun-dropdown': { page: '/blud/pergeseran', label: 'dropdown pilih tahun anggaran' },
   'pergeseran.buat':           { page: '/blud/pergeseran', label: 'tombol Buat Pergeseran' },
   'pergeseran.sinkron-dpa':    { page: '/blud/pergeseran', label: 'tombol Sinkronkan DPA' },
   'pergeseran.versi-dropdown': { page: '/blud/pergeseran', label: 'dropdown history pergeseran' },

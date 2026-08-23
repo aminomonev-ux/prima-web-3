@@ -158,6 +158,68 @@ periksa('tiga baris di bawahnya semuanya Master Akun',
 periksa('yang kena langit-langit tercentang sendiri, tanpa catatan ragu',
   hDalam.kandidat.filter(k => k.tujuan === 'MASTER_AKUN').every(k => k.yakin && !k.catatan.length))
 
+// Langit-langit memutus SEBELUM penimpaan dibaca, jadi "pindah ke Kode Besar" pada
+// baris sedalam ini tidak akan melakukan apa pun. Layar wajib menyembunyikan
+// tombolnya — tombol mati lebih membingungkan daripada tombol yang tidak ada.
+periksa('baris di bawah langit-langit menandai dirinya tak bisa ke Kode Besar',
+  hDalam.kandidat.filter(k => k.tujuan === 'MASTER_AKUN').every(k => k.bisaKeKodeBesar === false))
+periksa('tiga tingkat teratas tetap boleh dipindah',
+  kbDalam.every(k => k.bisaKeKodeBesar === true))
+periksa('…dan penimpaan pada baris terlalu dalam memang diabaikan',
+  pindaiBarisDpa(rantaiDalam, kosong, { '5.1.01.99.99.999': 'KODE_BESAR' })
+    .kandidat.find(k => k.kode === '5.1.01.99.99.999')?.tujuan === 'MASTER_AKUN')
+
+// Kalau akarnya SUDAH ada di tabel (seed `5.X`), slot L1 terpakai dan cabangnya
+// mulai dari L2 — tersisa dua slot, bukan tiga. Ini bukan hiasan: `buildDpaRows‑
+// FromKodeBesar` menyambungkan L2 ke L1 lewat kecocokan kode dan MENGABAIKAN
+// `parent_kode`, jadi dua L2 tidak pernah bisa bersarang. Memberi tingkat L2 pada
+// baris yang seharusnya cucu membuatnya mendarat sebagai saudara, bukan anak.
+console.log('\n── C3. Akar sudah ada di tabel ──')
+
+const hAkar = pindaiBarisDpa(rantaiDalam, {
+  masterAkun: [],
+  kodeBesar: [{ kode: '5.X', uraian: 'Belanja Daerah', level: 'L1' }],
+})
+const kbAkar = hAkar.kandidat.filter(k => k.tujuan === 'KODE_BESAR')
+
+periksa('slot bergeser: cuma dua baris yang jadi Kode Besar',
+  kbAkar.length === 2, kbAkar.map(k => `${k.kode}=${k.level}`).join(' '))
+periksa('tidak ada L1 baru — akar tabel yang dipakai',
+  kbAkar.every(k => k.level !== 'L1'))
+periksa('L2 menyebut akar tabel sebagai induknya',
+  kbAkar[0]?.level === 'L2' && kbAkar[0]?.parentKode === '5.X')
+periksa('L2.1 menyebut L2 di atasnya',
+  kbAkar[1]?.level === 'L2.1' && kbAkar[1]?.parentKode === '5.1')
+periksa('induk milik tabel tidak bikin barisnya dibuang sebagai yatim',
+  saringIndukKodeBesar(kbAkar, [{ kode: '5.X', uraian: 'Belanja Daerah', level: 'L1' }]).yatim.length === 0)
+periksa('satu baris turun ke Master Akun karena slotnya habis',
+  hAkar.kandidat.filter(k => k.tujuan === 'MASTER_AKUN').length === 4)
+
+// Kode sampah bisa naik jadi akar kedua — di berkas 2026 pemicunya satu baris
+// rincian yang kolom kodenya diisi "0". Akar kedua melahirkan GRANDMASTER kedua
+// saat "Form Baru" ditekan, jadi ia harus ditandai dan tidak boleh tercentang.
+const pohonAkarLiar = [
+  baris('g1', null, '5.1', 'BELANJA OPERASI BLUD', 'MASTER'),
+  baris('g2', 'g1', '5.1.01', 'BELANJA PEGAWAI', 'CHILD'),
+  baris('g3', null, '0', 'Biaya jasafilm badge', 'CHILD'),
+]
+const hLiar = pindaiBarisDpa(pohonAkarLiar, {
+  masterAkun: [],
+  kodeBesar: [{ kode: '5.X', uraian: 'Belanja Daerah', level: 'L1' }],
+})
+periksa('kode yang tak cocok akar mana pun ditandai akar baru',
+  (cari(hLiar, '0')?.catatan ?? []).some(c => c.includes('akar baru')),
+  cari(hLiar, '0')?.level ?? '—')
+periksa('…dan karena itu tidak yakin, jadi tidak tercentang otomatis',
+  cari(hLiar, '0')?.yakin === false)
+periksa('yang cocok akar tabel tidak ikut kena peringatan',
+  (cari(hLiar, '5.1')?.catatan ?? []).every(c => !c.includes('akar baru')))
+// Tanpa akar tersimpan, berkasnya memang WAJIB menyumbang akarnya sendiri —
+// peringatannya justru salah kalau muncul di situ.
+periksa('tanpa akar tersimpan, L1 dari berkas bukan hal aneh',
+  (pindaiBarisDpa(pohonAkarLiar, kosong).kandidat.find(k => k.kode === '5.1')?.catatan ?? [])
+    .every(c => !c.includes('akar baru')))
+
 // ── D. Kode kembar di dalam satu berkas ─────────────────────────────────────
 console.log('\n── D. Kode kembar ──')
 
