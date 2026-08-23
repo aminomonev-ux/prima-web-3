@@ -43,4 +43,7 @@ export const KodeBesarBodySchema = z.object({
   force: z.boolean().optional().default(false),
   // L51 optimistic locking
   expected_version: z.coerce.number().int().min(0).default(0),
+  // Hanya untuk detail audit. Tanpa ini, salinan borongan dari layar DPA terbaca
+  // di riwayat persis seperti sunting biasa di layar Kode Besar.
+  sumber: z.enum(['DPA']).optional(),
 });

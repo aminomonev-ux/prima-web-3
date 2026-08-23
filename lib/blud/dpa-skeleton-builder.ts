@@ -1,7 +1,7 @@
 // lib/blud/dpa-skeleton-builder.ts
 // Convert list kode_besar (L1 + L2 + L2.1) → DpaBarisInput[] dengan hierarki:
 //   L1   → GRANDMASTER, parent_id = null (root)
-//   L2   → MASTER,      parent_id = auto-detect L1 by segmen pertama (split('.')[0])
+//   L2   → MASTER,      parent_id = auto-detect L1 (segmen pertama, atau awalan kode)
 //   L2.1 → CHILD,       parent_id = parent_kode field (manual user di Kode Besar)
 //
 // Extract dari dpa-client.tsx (BLUD-OPT-1 follow-up). Pure function, no React/DOM dep.
@@ -10,6 +10,7 @@
 
 import { genRowId } from '@/lib/blud/format'
 import { recalcDpaJumlah } from '@/lib/blud/recalc'
+import { kodeIndukCocok } from '@/lib/blud/salin-master'
 import type { DpaBarisInput } from '@/types'
 
 export type KbBuildInput = {
@@ -48,8 +49,7 @@ export function buildDpaRowsFromKodeBesar(items: KbBuildInput[]): DpaBarisInput[
       parentRowId = null
     } else if (it.level === 'L2') {
       tipe = 'MASTER'
-      const seg1 = kode.split('.')[0]
-      const parentL1Kode = items.find(x => x.level === 'L1' && x.kode.trim().split('.')[0] === seg1)?.kode.trim()
+      const parentL1Kode = items.find(x => x.level === 'L1' && kodeIndukCocok(x.kode.trim(), kode))?.kode.trim()
       parentRowId = parentL1Kode ? kodeToRowId.get(parentL1Kode) ?? null : null
       if (!parentRowId) continue  // skip L2 tanpa L1 parent
     } else if (it.level === 'L2.1') {

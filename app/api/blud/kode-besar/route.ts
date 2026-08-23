@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { rows, force, expected_version } = parsed.data
+  const { rows, force, expected_version, sumber } = parsed.data
 
   try {
     const result = await saveKodeBesar(rows, session.userId, expected_version, force)
@@ -67,7 +67,8 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_SAVE_KODE_BESAR',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan Kode Besar: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}`,
+      detail:    `Simpan Kode Besar: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}`
+        + (sumber === 'DPA' ? ' · disalin dari baris DPA' : ''),
     })
     return NextResponse.json({
       ok: true,

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { rows, force, expected_version } = parsed.data
+  const { rows, force, expected_version, sumber } = parsed.data
 
   try {
     const result = await saveMasterAkun(rows, session.userId, expected_version, force)
@@ -66,7 +66,8 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_SAVE_MASTER_AKUN',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan Master Akun: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}`,
+      detail:    `Simpan Master Akun: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}`
+        + (sumber === 'DPA' ? ' · disalin dari baris DPA' : ''),
     })
     return NextResponse.json({
       ok: true,

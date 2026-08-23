@@ -8,9 +8,10 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   ChevronUp, ChevronDown, Save,
-  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload,
+  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox,
 } from 'lucide-react'
 import ImportDpaModal from '@/components/blud/ImportDpaModal'
+import SalinMasterModal from '@/components/blud/SalinMasterModal'
 import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
@@ -838,8 +839,17 @@ function DpaTable({
 
 // ─── DPA PAGE ─────────────────────────────────────────────────────────────────
 
-export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah: boolean; bolehImpor?: boolean }) {
+export default function DpaClient({
+  bolehUbah, bolehImpor = false, bolehUbahMasterAkun = false, bolehUbahKodeBesar = false,
+}: {
+  bolehUbah: boolean
+  bolehImpor?: boolean
+  bolehUbahMasterAkun?: boolean
+  bolehUbahKodeBesar?: boolean
+}) {
   const [importDpaBuka, setImportDpaBuka] = useState(false)
+  const [salinBuka,    setSalinBuka]    = useState(false)
+  const bolehSalinInduk = bolehUbahMasterAkun || bolehUbahKodeBesar
   const [rows,        setRows]        = useState<DpaBarisInput[]>([])
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
   const [versi,       setVersi]       = useState('')
@@ -898,19 +908,29 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
   } | null>(null)
   const [alasanTurun, setAlasanTurun] = useState('')
 
+  // Dipisah supaya bisa dipanggil lagi sesudah "Salin ke Data Induk" — kalau tidak,
+  // kode yang baru saja disalin belum muncul di combobox sampai halaman dimuat ulang.
+  const muatAkunOptions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/blud/master-akun', { cache: 'no-store' })
+      const j = await res.json() as { ok?: boolean; data?: AkunOption[] }
+      if (j.ok && j.data) setAkunOptions(j.data)
+    } catch { /* combobox tetap memakai daftar lama */ }
+  }, [])
+
   // Fetch master akun + penanggung jawab list sekali saat mount
   useEffect(() => {
     let alive = true
-    fetch('/api/blud/master-akun')
-      .then(r => r.json())
-      .then(j => { if (alive && j.ok) setAkunOptions(j.data as AkunOption[]) })
-      .catch(() => {})
+    // `muatAkunOptions` menyetel state hanya sesudah `await` — tidak ada render
+    // berantai. Preseden: fetch-on-open di `iki/[id]/editor-client.tsx`.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void muatAkunOptions()
     fetch('/api/blud/penanggung-jawab')
       .then(r => r.json())
       .then(j => { if (alive && j.ok) setPjOptions((j.data as { label: string }[]).map(d => d.label)) })
       .catch(() => {})
     return () => { alive = false }
-  }, [])
+  }, [muatAkunOptions])
 
   // L58: notif standar sonner (richColors dari Toaster global)
   function showToast(msg: string, ok = true) {
@@ -1167,6 +1187,13 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
               </PrimaButton>
             )}
 
+            {bolehSalinInduk && (
+              <PrimaButton variant="ghost" size="sm" iconLeft={<Inbox className="w-3.5 h-3.5" />}
+                disabled={!rows.length} onClick={() => setSalinBuka(true)} data-rima="dpa.salin-induk">
+                Salin ke Induk
+              </PrimaButton>
+            )}
+
             <PrimaButton variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
               disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
               {saving ? 'Menyimpan...' : 'Simpan'}
@@ -1311,8 +1338,23 @@ export default function DpaClient({ bolehUbah, bolehImpor = false }: { bolehUbah
             setImportDpaBuka(false)
             setVersi(versiBaru)
             void loadHistory()
-            void loadDpa(versiBaru)
+            // Tawaran menyalin data induk menunggu barisnya benar-benar ada di
+            // layar — modalnya membaca `rows`, bukan muatan pratinjau impor.
+            void (async () => {
+              await loadDpa(versiBaru)
+              if (bolehSalinInduk) setSalinBuka(true)
+            })()
           }}
+        />
+      )}
+
+      {salinBuka && (
+        <SalinMasterModal
+          rows={rows}
+          bolehMasterAkun={bolehUbahMasterAkun}
+          bolehKodeBesar={bolehUbahKodeBesar}
+          onTutup={() => setSalinBuka(false)}
+          onSelesai={() => { void muatAkunOptions() }}
         />
       )}
 

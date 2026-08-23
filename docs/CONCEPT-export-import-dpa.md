@@ -282,6 +282,40 @@ Yang diwarisi Sentinel tanpa kode baru: setelah baris hasil impor mendarat di fo
 
 Yang **ditambahkan** ke Sentinel: satu aturan — *baris hasil impor yang jumlahnya tidak cocok dengan file asal*. Itu memang perlu diingatkan terus, karena orang bisa mengedit setelah impor.
 
+### 3.9 Salin ke Data Induk (2026-08-23)
+
+**Masalahnya.** Impor menulis `kode_rekening` + `uraian` langsung ke `dpa_blud`, tidak lewat data induk. Sesudah impor pertama tabel DPA penuh, tapi `MasterAkunCombobox` masih kosong: begitu orang menambah satu baris manual, tidak ada pilihan apa pun dan kode yang sudah terpampang di layar sebelah harus diketik ulang.
+
+**Sumber kandidatnya baris DPA yang sedang di layar**, bukan muatan pratinjau impor. Karena itu `ImportDpaModal` tidak berubah sama sekali, jendela ini juga berguna berhari-hari sesudah impor, dan baris hasil "Import dari Usulan" maupun ketikan tangan ikut tertolong. Dua pintu: tombol **Salin ke Induk** di toolbar DPA, dan terbuka sendiri sesudah impor sukses (setelah `loadDpa` selesai — modalnya membaca `rows`).
+
+**Detektornya** (`lib/blud/salin-master.ts`, modul daun tanpa impor) adalah kebalikan `dpa-skeleton-builder.ts`. Tiga sinyal memberi suara per baris berkode, mayoritas menang, imbang jatuh ke Master Akun:
+
+| Sinyal | Isi | Kenapa tidak sendirian |
+|---|---|---|
+| Tangga `tipe_baris` | GRANDMASTER/MASTER/CHILD → Kode Besar (L1/L2/L2.1); LEADER ke bawah → Master Akun | meleset satu tingkat kalau berkas diparse lewat `sumberHierarki: 'posisi'` |
+| Bentuk pohon | masih punya keturunan berkode → penghimpun, bukan rekening | kerangka yang belum dirinci tidak punya anak berkode |
+| Panjang kode | **relatif** terhadap garis rekening berkas itu sendiri | — |
+
+Plus satu veto: baris yang membawa vol/satuan/harga tidak mungkin Kode Besar. Veto memutus tujuan tapi **tidak** ikut membuat yakin — baris rincian yang kebetulan diberi kode juga lolos veto ini.
+
+**Garis rekening dibaca relatif, bukan diambang mati.** Aturan "≤3 ruas" ditolak: ia buta pada kode tanpa titik (`510199` — bentuk yang justru dicontohkan komentar skema `master_akun`) dan salah pada `5.1.02` yang kalau pemisahnya dibuang jadi 4 digit. Yang dipakai: panjang kode yang paling sering muncul di antara baris yang **tidak lagi punya keturunan berkode** — cara yang sama dengan histogram batas kolom di parser PDF Renaksi. Modal menampilkan garis itu sekali di atas beserta contohnya, supaya orang mengoreksi satu batas alih-alih memeriksa 450 baris.
+
+Sinyal yang tidak sepakat → **tidak dicentang otomatis**, catatannya ditulis apa adanya, dan tujuannya bisa dipindah manual. Penimpaan dioper MASUK ke `pindaiBarisDpa`, bukan ditempel belakangan, supaya `level`, `parentKode`, dan penyaringan yatim ikut dihitung ulang.
+
+**Menulisnya lewat endpoint lama** (`POST /api/blud/kode-besar`, lalu `POST /api/blud/master-akun`) — tidak ada route baru. Keduanya sudah membawa lima pagar sekaligus: `bludMati`, `bolehEditMenu`, `bludRateLimit`, Zod, dan kunci optimistik L51. Route baru berarti menyalin kelimanya, dan itu persis bentuk **L69**. Daftar yang di-POST WAJIB dari GET yang baru saja jalan — keduanya replace-all, jadi apa pun yang hilang dari daftar itu ikut terhapus dari tabel.
+
+**Keduanya tidak atomik satu sama lain.** Dua panggilan HTTP, dua kunci singleton. Laporannya per tujuan; yang berhasil dilepas centangnya lalu daftar dimuat ulang, sehingga menekan Salin lagi mengulang **hanya** yang gagal — tanpa itu, tujuan yang sudah berhasil terkirim ulang dan `gabungInduk` menempelnya sebagai baris kembar.
+
+**Tiga perbedaan Kode Besar yang menggigit**: `kode`-nya UNIQUE (Master Akun tidak — jadi menyaring kembar di sana justru menghapus baris orang), batas Zod 1.000 bukan 5.000, dan ia punya `level` + `parent_kode`. Induk yang tidak ikut tersalin — ditahan, atau centangnya dilepas — membuat anaknya jadi baris hantu: tersimpan di tabel tapi dilewati `buildDpaRowsFromKodeBesar`. `saringIndukKodeBesar` membuangnya berulang sampai stabil, karena membuang satu induk membuat cucunya ikut yatim.
+
+**Efek samping yang perlu dilakukan**: `buildDpaRowsFromKodeBesar` mencari L1 milik sebuah L2 lewat `split('.')[0]`. Pada kode tanpa titik itu mengembalikan seluruh kode, jadi `5` tidak pernah cocok dengan `51` dan **setiap L2 diam-diam dilewati**. Aturannya sekarang `kodeIndukCocok` (cocok-segmen **atau** cocok-awalan) — cocok-segmen dipertahankan apa adanya karena itulah yang menyatukan seed `5.X` dengan `5.1`.
+
+**Tabrakan dengan 8 baris seed**: seed memakai `5.X`/`5.1.1`, berkas provinsi memakai `5.1.02`. Bawaan adalah **tambah saja, tidak pernah menghapus**, dengan daftar kode lama yang tidak dipakai berkas ini ditampilkan. Mode "ganti seluruhnya" ada tapi terpisah, di balik `confirmDialog` merah, dan mengirim `force: true` karena orangnya sudah menjawab konfirmasi itu.
+
+**Izin**: tiga menu berbeda (`dpa`, `master-akun`, `kode-besar`). `dpa/page.tsx` membacanya dari `peta` yang sudah ikut terambil `izinLayar`, bukan memanggil `izinLayar` dua kali lagi. Bagian yang tidak boleh diubah tidak ditampilkan; pagarnya tetap di route.
+
+**Audit**: field opsional `sumber: 'DPA'` di kedua body schema — tanpa itu salinan borongan terbaca di riwayat persis seperti sunting biasa. Regresi: `node scripts/test-blud-salin-master.mjs` (60 pemeriksaan; terbukti menggigit lewat uji mutasi — mematikan sinyal pohon menjatuhkan 2, mematikan sinyal panjang menjatuhkan 2 lainnya).
+
 ---
 
 ## 4. Rencana kerja
