@@ -302,11 +302,33 @@ Plus satu veto: baris yang membawa vol/satuan/harga tidak mungkin Kode Besar. Ve
 
 Sinyal yang tidak sepakat → **tidak dicentang otomatis**, catatannya ditulis apa adanya, dan tujuannya bisa dipindah manual. Penimpaan dioper MASUK ke `pindaiBarisDpa`, bukan ditempel belakangan, supaya `level`, `parentKode`, dan penyaringan yatim ikut dihitung ulang.
 
+#### 3.9.1 Slot, bukan kedalaman pohon (revisi 2026-08-23 sesudah uji layar)
+
+Kode Besar bukan pohon bebas. Ia punya **tiga slot dengan aturan sambung yang berbeda-beda**:
+
+| Slot | Tingkat | Menempel ke induknya lewat |
+|---|---|---|
+| 0 | `L1` | — akar |
+| 1 | `L2` | **kecocokan kode dengan L1**; `parent_kode` diabaikan |
+| 2 | `L2.1` | `parent_kode` |
+
+Baris tengah itu yang gampang salah dikira: `buildDpaRowsFromKodeBesar` mencari induk sebuah L2 di antara L1 **saja**. Jadi dua L2 tidak pernah bisa bersarang — memberi `5.1.01.99` tingkat L2 dengan `parent_kode: '5.1'` bukan membuatnya anak `5.1`, melainkan **saudaranya**, dan kerangkanya diam-diam gepeng waktu "Form Baru" ditekan. Rancangan awal memetakan kedalaman pohon apa adanya dan tepat kena jebakan ini.
+
+Karena itu pemetaannya lewat nomor slot, dan slotnya **bergeser** kalau akarnya sudah ada di tabel: seed `5.X` memakai slot L1, jadi cabang dari berkas mulai dari L2 dan cuma kebagian dua slot. Kecocokan akar memakai `kodeIndukCocok` — matcher yang **sama persis** dengan yang dipakai pembangun kerangka. Kalau di sini beda, hasilnya kelihatan benar di layar lalu tersambung ke tempat lain.
+
+Yang tidak kebagian slot turun ke Master Akun, dan itu memang tempatnya: daftar itu cuma pasangan kode+uraian untuk combobox, yang dipakai baris penghimpun juga. Habisnya slot adalah **fakta struktural, bukan keraguan** — jadi barisnya tetap tercentang otomatis dan tanpa catatan; menandainya ragu berarti ratusan kotak harus dicentang tangan. Konsekuensinya kandidat membawa `bisaKeKodeBesar`, dan layar WAJIB memakainya untuk menyembunyikan tombol "pindah ke Kode Besar" — langit-langit memutus sebelum penimpaan dibaca, jadi tombol itu tidak akan melakukan apa pun.
+
+Satu peringatan tersendiri: kandidat yang jatuh di slot 0 **padahal akar sudah ada** ditandai *"akar baru"* dan tidak pernah tercentang otomatis. Akar kedua melahirkan GRANDMASTER kedua. Di berkas 2026 pemicunya satu baris rincian yang kolom kodenya diisi `"0"` — kode sampah yang tidak cocok dengan akar mana pun lalu naik sendiri.
+
+Angka nyatanya pada DPA 2026 RSJD (558 baris, rantai sampai L7.1): tanpa batas apa pun **131 dari 259** kode terbaca sebagai kerangka; dengan langit-langit tiga tingkat **14**; dengan model slot **8**, semuanya bersarang benar di bawah `5.X`.
+
 **Menulisnya lewat endpoint lama** (`POST /api/blud/kode-besar`, lalu `POST /api/blud/master-akun`) — tidak ada route baru. Keduanya sudah membawa lima pagar sekaligus: `bludMati`, `bolehEditMenu`, `bludRateLimit`, Zod, dan kunci optimistik L51. Route baru berarti menyalin kelimanya, dan itu persis bentuk **L69**. Daftar yang di-POST WAJIB dari GET yang baru saja jalan — keduanya replace-all, jadi apa pun yang hilang dari daftar itu ikut terhapus dari tabel.
 
 **Keduanya tidak atomik satu sama lain.** Dua panggilan HTTP, dua kunci singleton. Laporannya per tujuan; yang berhasil dilepas centangnya lalu daftar dimuat ulang, sehingga menekan Salin lagi mengulang **hanya** yang gagal — tanpa itu, tujuan yang sudah berhasil terkirim ulang dan `gabungInduk` menempelnya sebagai baris kembar.
 
 **Tiga perbedaan Kode Besar yang menggigit**: `kode`-nya UNIQUE (Master Akun tidak — jadi menyaring kembar di sana justru menghapus baris orang), batas Zod 1.000 bukan 5.000, dan ia punya `level` + `parent_kode`. Induk yang tidak ikut tersalin — ditahan, atau centangnya dilepas — membuat anaknya jadi baris hantu: tersimpan di tabel tapi dilewati `buildDpaRowsFromKodeBesar`. `saringIndukKodeBesar` membuangnya berulang sampai stabil, karena membuang satu induk membuat cucunya ikut yatim.
+
+**Batas baca ≠ batas tulis, dan itu jebakan senyap.** `getMasterAkun` memakai `LIMIT 5000` dan `getKodeBesar` `LIMIT 1000` — angka yang kebetulan sama dengan batas Zod-nya, sehingga gampang dikira satu hal. Padahal yang dikirim balik adalah SELURUH isi tabel: kalau daftar yang terbaca mentok di batas, sisa di belakangnya ikut terhapus tanpa ada yang memberi tahu. Modal menolak menulis begitu daftarnya menyentuh batas, sebelum satu baris pun dikirim.
 
 **Efek samping yang perlu dilakukan**: `buildDpaRowsFromKodeBesar` mencari L1 milik sebuah L2 lewat `split('.')[0]`. Pada kode tanpa titik itu mengembalikan seluruh kode, jadi `5` tidak pernah cocok dengan `51` dan **setiap L2 diam-diam dilewati**. Aturannya sekarang `kodeIndukCocok` (cocok-segmen **atau** cocok-awalan) — cocok-segmen dipertahankan apa adanya karena itulah yang menyatukan seed `5.X` dengan `5.1`.
 
