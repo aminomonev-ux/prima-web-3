@@ -92,19 +92,42 @@ bab('D. Inject — baris DPA tanpa pasangan tetap bawa PJ-nya')
   cek('PJ kosong di DPA jadi string kosong', rows.find(r => r.kode_rekening === '5.1')!.penanggung_jawab === '')
 }
 
-bab('E. Inject — baris yang lahir di Pergeseran mempertahankan PJ sendiri')
+bab('E. Inject — nasib baris yang lahir di Pergeseran (`pgnew_*`)')
 {
-  const manual: PergeseranBarisInput = {
+  const contoh: PergeseranBarisInput = {
     kode_rekening: '5.1.99', uraian: 'Pos baru hasil geser',
     vol: null, satuan: null, harga: null, jumlah: 0,
     vol_p: 1, harga_p: 50, pergeseran: 50, bertambah_berkurang: 50,
     penanggung_jawab: 'Kasi Penunjang', keterangan: 'lahir di pergeseran',
     tipe_baris: 'CHILD', row_id: 'pgnew_x', parent_id: 'r2', urutan: 4,
   }
-  const { rows } = injectDpaKePergeseran([...dpa().map(dpaKePergeseranInput), manual], dpa())
-  const baru = rows.find(r => r.row_id === 'pgnew_x')
-  cek('Baris pgnew_* tidak hilang saat inject', !!baru)
-  cek('PJ isian sendiri TIDAK ditimpa', baru?.penanggung_jawab === 'Kasi Penunjang', `dapat "${baru?.penanggung_jawab}"`)
+  // Salinan segar tiap pemakaian — inject menyunting barisnya di tempat.
+  function manual(): PergeseranBarisInput { return { ...contoh } }
+
+  // E1 — tiap baris DPA punya pasangan row_id-nya sendiri, jadi pgnew_x tidak
+  // ikut tercocokkan dan lewat cabang "sisa".
+  {
+    const { rows } = injectDpaKePergeseran([...dpa().map(dpaKePergeseranInput), manual()], dpa())
+    const baru = rows.find(r => r.row_id === 'pgnew_x')
+    cek('Tak tercocokkan: barisnya tidak hilang', !!baru)
+    cek('Tak tercocokkan: PJ sendirinya utuh', baru?.penanggung_jawab === 'Kasi Penunjang', `dapat "${baru?.penanggung_jawab}"`)
+  }
+
+  // E2 — DPA punya baris CHILD yang belum ada pasangannya di Pergeseran. Tier
+  // longgar (uraian/tipe/posisi) MEMILIH pgnew_x, dan seluruh identitasnya
+  // diambil alih — bukan cuma PJ. Ini perilaku inject yang sudah ada sejak dulu
+  // untuk uraian/vol/harga; PJ cuma ikut arus yang sama. Diuji supaya tidak ada
+  // yang "memperbaiki" sebelahnya tanpa sadar keduanya satu paket.
+  {
+    const dpaPlus = [...dpa(), {
+      ...dpa()[3], id: 5, kode_rekening: '5.1.77', uraian: 'Pos DPA belum ada di pergeseran',
+      penanggung_jawab: 'PJ DARI DPA', keterangan: 'ket dpa', row_id: 'rBARU', urutan: 4,
+    }]
+    const { rows } = injectDpaKePergeseran([...dpa().map(dpaKePergeseranInput), manual()], dpaPlus)
+    const baru = rows.find(r => r.row_id === 'pgnew_x')
+    cek('Tercocokkan: PJ ikut diambil alih DPA', baru?.penanggung_jawab === 'PJ DARI DPA', `dapat "${baru?.penanggung_jawab}"`)
+    cek('Tercocokkan: uraiannya ikut, bukan PJ sendirian', baru?.uraian === 'Pos DPA belum ada di pergeseran', `dapat "${baru?.uraian}"`)
+  }
 }
 
 bab('F. Cetak — Rekap PJ Pergeseran memakai pagu PASCA-geser')
@@ -144,6 +167,37 @@ bab('F. Cetak — Rekap PJ Pergeseran memakai pagu PASCA-geser')
   cek('Tabel Pergeseran punya 12 kolom', tabel.meta.columns.length === 12, tabel.meta.columns.slice(-2).join(' + '))
   cek('PJ ikut di baris ekspor', tabel.rows[1][10] === 'Kasubbag Umum', String(tabel.rows[1][10]))
   cek('Keterangan ikut di baris ekspor', tabel.rows[1][11] === 'rutin')
+}
+
+bab('F2. Cetak — rekap PJ dari dokumen DRAFT wajib ditandai')
+{
+  // Akar 300, tapi isinya cuma 260 → belum berimbang. Tanpa penanda, rekap PJ
+  // dari draft terlihat sama resminya dengan yang final.
+  const draft: PergeseranBaris[] = [
+    { id: 1, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+      kode_rekening: '5', uraian: 'BELANJA', vol: null, satuan: null, harga: null, jumlah: 300,
+      vol_p: null, harga_p: null, pergeseran: 260, bertambah_berkurang: -40,
+      penanggung_jawab: null, keterangan: null,
+      tipe_baris: 'GRANDMASTER', row_id: 'r1', anggaran_key: null, parent_id: null, urutan: 0 },
+    { id: 2, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+      kode_rekening: '5.1.01', uraian: 'ATK', vol: 1, satuan: null, harga: 300, jumlah: 300,
+      vol_p: 1, harga_p: 260, pergeseran: 260, bertambah_berkurang: -40,
+      penanggung_jawab: 'Kasubbag Umum', keterangan: null,
+      tipe_baris: 'CHILD', row_id: 'r3', anggaran_key: null, parent_id: 'r1', urutan: 1 },
+  ]
+  const pj = renderCetakHtml({ menu: 'pergeseran', view: 'penanggungJawab', rows: draft, versi: '2026-02-01', tanggal: '' })
+  cek('Judul rekap PJ menyandang (DRAFT)', pj.meta.title.includes('(DRAFT)'), pj.meta.title)
+  cek('Spanduk DRAFT terpasang', pj.html.includes('Bukan dokumen final'))
+  cek('Selisihnya disebut angkanya', pj.html.includes('berkurang'))
+
+  // Yang berimbang tidak boleh kena tanda palsu.
+  const imbang = draft.map(r => ({ ...r, pergeseran: r.jumlah, bertambah_berkurang: 0 }))
+  const pjImbang = renderCetakHtml({ menu: 'pergeseran', view: 'penanggungJawab', rows: imbang, versi: '2026-02-01', tanggal: '' })
+  cek('Dokumen berimbang tidak ditandai DRAFT', !pjImbang.meta.title.includes('DRAFT') && !pjImbang.html.includes('Bukan dokumen final'))
+
+  // View DPA tidak punya konsep berimbang — jangan sampai ikut kena spanduk.
+  const dpaPj = renderCetakHtml({ menu: 'dpa', view: 'penanggungJawab', rows: dpa(), versi: '2026-01-01', tanggal: '' })
+  cek('View DPA bebas dari spanduk DRAFT', !dpaPj.html.includes('Bukan dokumen final'))
 }
 
 bab('G. auditRekapPJ menerima baris Pergeseran (tipe struktural)')

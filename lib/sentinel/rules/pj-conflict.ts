@@ -7,7 +7,11 @@ import type { SentinelFinding, SentinelRule } from '../types'
 
 export const pjConflictRule: SentinelRule = {
   id: 'pj-conflict',
-  // Pergeseran tidak punya kolom PJ — scope DPA saja
+  // DPA saja — dan sejak migration-pergeseran-pj alasannya BUKAN lagi "Pergeseran
+  // tidak punya kolomnya". Pergeseran punya, tapi isinya cermin DPA: menegur di
+  // sana berarti menyuruh orang membetulkan barisan yang bukan miliknya, dan
+  // teguran yang sama sudah muncul di layar DPA. Chain-conflict pada angka
+  // pasca-geser tetap dilaporkan panel audit menu Cetak.
   scope: ['blud/dpa'],
   evaluate(rows): SentinelFinding[] {
     return validateAllPj([...rows]).map(p => ({

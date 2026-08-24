@@ -58,6 +58,17 @@ function fmt(n: number | null | undefined): string {
   return n == null ? '' : formatRupiah(n)
 }
 
+/**
+ * B6: pergeseran yang belum berimbang BUKAN dokumen final. Satu sumber untuk
+ * semua view bermenu `pergeseran` — dulu cuma tabel Rekap Pergeseran yang
+ * memasangnya, sehingga rekap PJ bisa terbit dari draft tanpa tanda apa pun.
+ */
+function spandukDraft(deltaRoot: number): string {
+  if (deltaRoot === 0) return ''
+  return `<div style="margin-bottom:10px;padding:8px 12px;border:1.5px solid #F59E0B;background:rgba(245,158,11,.15);border-radius:8px;color:#FCD34D;font-weight:700;font-size:12px;">`
+    + `⚠️ DRAFT — belum berimbang: total anggaran ${deltaRoot > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(deltaRoot))} terhadap DPA. Bukan dokumen final.</div>`
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Main entry point
 // ──────────────────────────────────────────────────────────────────────────
@@ -71,10 +82,14 @@ export function renderCetakHtml(args: RenderArgs): RenderResult {
     return renderPjView(rows as DpaBaris[], versi ?? tanggal, 'dpa')
   }
   if (menu === 'pergeseran' && view === 'penanggungJawab') {
+    const asli = rows as PergeseranBaris[]
+    // Delta WAJIB dihitung sebelum penukaran di bawah: sesudah `jumlah` diisi
+    // `pergeseran`, selisih keduanya selalu 0 dan spanduk DRAFT tak pernah muncul.
+    const deltaRoot = hitungDeltaPergeseranRoot(asli)
     // Pagu PASCA-geser — itu seluruh alasan rekap ini ada. `jumlah` di baris
     // pergeseran masih angka DPA; yang berlaku setelah digeser ada di `pergeseran`.
-    const pascaGeser = (rows as PergeseranBaris[]).map(r => ({ ...r, jumlah: r.pergeseran }))
-    return renderPjView(pascaGeser, versi ?? tanggal, 'pergeseran')
+    const pascaGeser = asli.map(r => ({ ...r, jumlah: r.pergeseran }))
+    return renderPjView(pascaGeser, versi ?? tanggal, 'pergeseran', deltaRoot)
   }
   if (menu === 'pergeseran' && view === 'rekapPergeseran') {
     return renderPergeseranView(rows as PergeseranBaris[], versi ?? tanggal)
@@ -136,11 +151,14 @@ function renderPjView(
   rows: AuditPjRow[],
   versi: string | null,
   sumber: 'dpa' | 'pergeseran',
+  /** Selisih pagu akar terhadap DPA — != 0 berarti dokumennya masih DRAFT. */
+  deltaRoot = 0,
 ): RenderResult {
   const columns = ['Penanggung Jawab', 'Uraian', 'Jumlah']
   const labelSumber = sumber === 'dpa' ? 'DPA' : 'Pergeseran'
   const title = `Rekap Penanggung Jawab${sumber === 'pergeseran' ? ' (Pergeseran)' : ''}`
     + (versi ? ` (${versi})` : ` (${labelSumber} Terbaru)`)
+    + (deltaRoot !== 0 ? ' (DRAFT)' : '')
 
   // Filter rows yang punya PJ (skip '-' dan kosong)
   const pjRows = rows
@@ -183,6 +201,7 @@ function renderPjView(
 
   // Build HTML
   let html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
+  html += spandukDraft(deltaRoot)
   html += `<div style="margin-bottom:8px;font-size:11px;color:#85B7EB;font-weight:600;">`
   html += `Total ${esc(labelSumber)} Belanja Daerah: <strong style="color:#7DD3FC;">${formatRupiah(totalDpa)}</strong> · `
   html += `Total Rekap PJ: <strong style="color:#FAC775;">${formatRupiah(grandTotal)}</strong> · `
@@ -312,10 +331,7 @@ function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): Re
   ])
 
   let html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
-  if (deltaRoot !== 0) {
-    html += `<div style="margin-bottom:10px;padding:8px 12px;border:1.5px solid #F59E0B;background:rgba(245,158,11,.15);border-radius:8px;color:#FCD34D;font-weight:700;font-size:12px;">`
-      + `⚠️ DRAFT — belum berimbang: total anggaran ${deltaRoot > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(deltaRoot))} terhadap DPA. Bukan dokumen final.</div>`
-  }
+  html += spandukDraft(deltaRoot)
   html += `<table><thead><tr>`
   for (const c of columns) html += `<th>${esc(c)}</th>`
   html += `</tr></thead><tbody>`

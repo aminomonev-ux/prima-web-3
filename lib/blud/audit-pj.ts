@@ -91,9 +91,9 @@ export interface AuditResult {
 // ──────────────────────────────────────────────────────────────────────────
 // Public entry: jalankan audit
 // ──────────────────────────────────────────────────────────────────────────
-export function auditRekapPJ(dpaRows: AuditPjRow[]): AuditResult {
+export function auditRekapPJ(barisAudit: AuditPjRow[]): AuditResult {
   // ── 1. Unified validator (Sentinel + Audit pakai sama) ──
-  const findings = validatePjRules(dpaRows)
+  const findings = validatePjRules(barisAudit)
 
   // ── 2. Map chain-conflict → AuditDoubleEntry shape ──
   const doubleEntries: AuditDoubleEntry[] = findings
@@ -133,14 +133,14 @@ export function auditRekapPJ(dpaRows: AuditPjRow[]): AuditResult {
   const conflictedIds = new Set(doubleEntries.map(d => d.rowId))
   let grandTotal = 0
   const uniquePJ = new Set<string>()
-  for (const r of dpaRows) {
+  for (const r of barisAudit) {
     const pj = (r.penanggung_jawab ?? '').trim()
     if (!pj || pj === '-') continue
     uniquePJ.add(pj)
     if (conflictedIds.has(r.row_id)) continue
     grandTotal += Number(r.jumlah) || 0
   }
-  const totalDPA = totalDpaBlud(dpaRows)
+  const totalDPA = totalDpaBlud(barisAudit)
   const selisih  = grandTotal - totalDPA
   const statusSaldo: AuditStatusSaldo =
     Math.abs(selisih) < 1 ? 'ok' : selisih > 0 ? 'lebih' : 'kurang'

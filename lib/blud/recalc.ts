@@ -542,9 +542,13 @@ export function injectDpaKePergeseran(
         harga:         dpa.harga,
         jumlah:        dpa.jumlah,
         // PJ & keterangan ditimpa dari DPA, sederajat dgn uraian/vol/harga: keduanya
-        // milik DPA, Pergeseran cuma memotretnya per versi. Baris yang lahir di layar
-        // Pergeseran (`pgnew_*`) tidak pernah sampai ke sini — tak ada baris DPA yang
-        // cocok, jadi PJ isian sendirinya aman di cabang "sisa" di bawah.
+        // milik DPA, Pergeseran cuma memotretnya per versi.
+        //
+        // Berlaku juga kalau yang tercocokkan ternyata baris `pgnew_*` — tier longgar
+        // di atas (uraian saja / tipe saja / posisi absolut) memang bisa memilihnya.
+        // Itu bukan kekhususan PJ: kalau sampai terjadi, SELURUH identitas barisnya
+        // diambil alih baris DPA itu, uraian dan angkanya sekalian. Baris `pgnew_*`
+        // yang tidak tercocokkan lewat cabang "sisa" di bawah dan tetap utuh.
         penanggung_jawab: dpa.penanggung_jawab ?? '',
         keterangan:       dpa.keterangan ?? '',
         // Jangkar realisasi ikut baris DPA-nya, bukan baris pergeseran lama yang
