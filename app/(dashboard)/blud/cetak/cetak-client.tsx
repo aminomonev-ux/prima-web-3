@@ -5,7 +5,7 @@
 //
 // View per menu:
 //   DPA BLUD     → DPA + Penanggung Jawab (rekap)
-//   Pergeseran   → Pergeseran DPA
+//   Pergeseran   → Pergeseran DPA + Penanggung Jawab pasca-geser
 //   Master Akun  → Master akun (no version)
 //
 // Theme-aware via CSS [data-theme="light"] di blud-shell <style> + token inline.
@@ -21,7 +21,7 @@ import type { PejabatDokumen } from '@/lib/blud/export/dpa-dokumen'
 // ── Types lokal (sinkron dengan lib/blud/cetak-data.ts) ──
 type Menu = 'dpa' | 'pergeseran' | 'master-akun'
 type ViewDpa = 'dpa' | 'penanggungJawab'
-type ViewPergeseran = 'rekapPergeseran'
+type ViewPergeseran = 'rekapPergeseran' | 'penanggungJawab'
 type ViewMasterAkun = 'masterAkun'
 type View = ViewDpa | ViewPergeseran | ViewMasterAkun
 
@@ -40,6 +40,8 @@ const VIEW_OPTIONS: Record<Menu, Array<{ value: View; label: string }>> = {
   ],
   'pergeseran': [
     { value: 'rekapPergeseran',  label: 'Rekap Pergeseran' },
+    // Nominalnya pagu PASCA-geser, bukan angka DPA — lihat renderCetakHtml.
+    { value: 'penanggungJawab',  label: 'PENANGGUNG JAWAB (Pasca-Geser)' },
   ],
   'master-akun': [
     { value: 'masterAkun',       label: 'Master Akun' },

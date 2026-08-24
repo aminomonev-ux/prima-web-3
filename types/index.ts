@@ -275,6 +275,9 @@ export interface PergeseranBaris {
   harga_p: number | null
   pergeseran: number
   bertambah_berkurang: number
+  /** Cermin DPA — ditimpa `injectDpaKePergeseran`, bukan isian mandiri (migration-pergeseran-pj) */
+  penanggung_jawab: string | null
+  keterangan: string | null
   tipe_baris: TipeBaris
   row_id: string
   /** Jangkar realisasi — diwarisi dari baris DPA asalnya (CONCEPT-blud-realisasi §2.3) */
@@ -294,6 +297,8 @@ export interface PergeseranBarisInput {
   harga_p: number | null
   pergeseran: number
   bertambah_berkurang: number
+  penanggung_jawab?: string | null
+  keterangan?: string | null
   tipe_baris: TipeBaris
   row_id: string
   anggaran_key?: string | null

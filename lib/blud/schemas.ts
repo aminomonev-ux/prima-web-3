@@ -204,6 +204,9 @@ export const PergeseranBarisInputSchema = z.object({
   harga_p:              z.number().min(-1e15).max(1e15).nullable(),
   pergeseran:           z.number().min(-1e15).max(1e15),
   bertambah_berkurang:  z.number().min(-1e15).max(1e15),
+  // Batasnya sengaja sama persis dengan DpaBarisInputSchema — kolomnya cermin DPA.
+  penanggung_jawab:     z.string().max(128, 'Penanggung jawab maks 128 karakter').nullable().optional(),
+  keterangan:           z.string().max(2000, 'Keterangan maks 2000 karakter').nullable().optional(),
   tipe_baris:           TipeBarisSchema,
   row_id:               z.string().max(64),
   anggaran_key:         z.string().max(64).nullable().optional(),

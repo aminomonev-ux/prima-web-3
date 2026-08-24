@@ -18,6 +18,7 @@ import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/for
 import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
+import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import SpandukLihat from '@/components/blud/SpandukLihat'
@@ -93,6 +94,7 @@ function PergeseranTable({
   rows,
   onChange,
   akunOptions,
+  pjOptions,
   hiddenLevels,
   highlightId,
   bolehUbah,
@@ -100,6 +102,8 @@ function PergeseranTable({
   rows: PergeseranBarisInput[]
   onChange: (rows: PergeseranBarisInput[]) => void
   akunOptions: AkunOption[]
+  /** Master Penanggung Jawab — hanya dipakai baris `pgnew_*`; sisanya cermin DPA. */
+  pjOptions:   string[]
   hiddenLevels: Set<string>
   highlightId:  string | null
   /** LIHAT: seluruh isian jadi teks, kolom aksi & checkbox tidak dirender. */
@@ -126,8 +130,13 @@ function PergeseranTable({
     onChange(partialRecalcPergeseran(updated, rowId))
   }, [rows, onChange])
 
-  // Edit kode_rekening / uraian (hanya untuk baris baru hasil add manual)
-  const updateText = useCallback((rowId: string, field: 'kode_rekening' | 'uraian', value: string) => {
+  // Edit kolom teks (hanya untuk baris baru hasil add manual). PJ & keterangan ikut
+  // aturan yang sama: pada baris turunan DPA keduanya cermin, diisi lewat menu DPA.
+  const updateText = useCallback((
+    rowId: string,
+    field: 'kode_rekening' | 'uraian' | 'penanggung_jawab' | 'keterangan',
+    value: string,
+  ) => {
     onChange(rows.map(r => r.row_id === rowId ? { ...r, [field]: value } : r))
   }, [rows, onChange])
 
@@ -164,6 +173,7 @@ function PergeseranTable({
       kode_rekening: '', uraian: '',
       vol: null, satuan: null, harga: null, jumlah: 0,
       vol_p: null, harga_p: null, pergeseran: 0, bertambah_berkurang: 0,
+      penanggung_jawab: '', keterangan: '',
       tipe_baris: tipe, row_id: genPgRowId(),
       parent_id: parentRowId, urutan: insertIdx + 1,
     }
@@ -208,6 +218,7 @@ function PergeseranTable({
       kode_rekening: '', uraian: '',
       vol: null, satuan: null, harga: null, jumlah: 0,
       vol_p: null, harga_p: null, pergeseran: 0, bertambah_berkurang: 0,
+      penanggung_jawab: '', keterangan: '',
       tipe_baris: row.tipe_baris, row_id: genPgRowId(),
       parent_id: row.parent_id, urutan: insertIdx + 1,
     }
@@ -305,6 +316,8 @@ function PergeseranTable({
               <th data-rima="pergeseran.kolom-harga-p" style={{ width: 150, textAlign: 'right' }}>Harga P</th>
               <th data-rima="pergeseran.kolom-selisih" style={{ width: 150, textAlign: 'right' }}>Pergeseran</th>
               <th style={{ width: 150, textAlign: 'right' }}>+/−</th>
+              <th data-rima="pergeseran.kolom-pj" style={{ width: 170 }}>Penanggung Jawab</th>
+              <th style={{ width: 160 }}>Keterangan</th>
               {bolehUbah && <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>}
             </tr>
           </thead>
@@ -450,6 +463,41 @@ function PergeseranTable({
                     </strong>
                   </td>
 
+                  {/* Penanggung Jawab — cermin DPA, kecuali baris yang lahir di sini.
+                      Sengaja tanpa penjaga konflik chain seperti DPA: pemiliknya DPA,
+                      dan chain-conflict tetap ketahuan di panel audit menu Cetak. */}
+                  <td>
+                    {isNew && bolehUbah ? (
+                      <PenanggungJawabCombobox
+                        value={row.penanggung_jawab ?? ''}
+                        options={pjOptions}
+                        onChange={v => updateText(row.row_id, 'penanggung_jawab', v ?? '')}
+                        placeholder="— Pilih PJ —"
+                      />
+                    ) : (
+                      <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                        {row.penanggung_jawab || '-'}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Keterangan — sama aturannya dengan PJ */}
+                  <td>
+                    {isNew && bolehUbah ? (
+                      <input
+                        type="text"
+                        value={row.keterangan ?? ''}
+                        onChange={e => updateText(row.row_id, 'keterangan', e.target.value)}
+                        placeholder="Keterangan…"
+                        style={{ width: '100%' }}
+                      />
+                    ) : (
+                      <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                        {row.keterangan || '-'}
+                      </span>
+                    )}
+                  </td>
+
                   {/* Aksi — kebab menu */}
                   {bolehUbah && (
                   <td style={{ textAlign: 'center', padding: '2px 4px' }}>
@@ -572,6 +620,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   const [alasanTurun, setAlasanTurun] = useState('')
   const [confirmInject, setConfirmInject] = useState(false)
   const [akunOptions,   setAkunOptions]   = useState<AkunOption[]>([])
+  const [pjOptions,     setPjOptions]     = useState<string[]>([])
   // Filter level (B) + search jump (C)
   const [hiddenLevels, setHiddenLevels] = useState<Set<string>>(new Set())
   const [searchQ,      setSearchQ]      = useState('')
@@ -628,12 +677,17 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     return () => { clearTimeout(sorot); clearTimeout(padam) }
   }, [fokus, rows])
 
-  // Fetch master akun list utk dropdown Uraian di baris baru
+  // Master akun (dropdown Uraian) + master PJ (dropdown Penanggung Jawab), keduanya
+  // hanya terpakai di baris baru hasil add manual.
   useEffect(() => {
     let alive = true
     fetch('/api/blud/master-akun')
       .then(r => r.json())
       .then(j => { if (alive && j.ok) setAkunOptions(j.data as AkunOption[]) })
+      .catch(() => { /* silent */ })
+    fetch('/api/blud/penanggung-jawab')
+      .then(r => r.json())
+      .then(j => { if (alive && j.ok) setPjOptions((j.data as { label: string }[]).map(d => d.label)) })
       .catch(() => { /* silent */ })
     return () => { alive = false }
   }, [])
@@ -1033,7 +1087,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           <p style={{ fontSize:11, marginTop:4 }}>Klik Generate untuk membuat dari DPA terbaru.</p>
         </div>
       ) : (
-        <PergeseranTable rows={rows} onChange={setRows} akunOptions={akunOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
+        <PergeseranTable rows={rows} onChange={setRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
       )}
 
       {/* Audit BLUD v1.2 (B-NEW-3): modal konfirmasi safety threshold drop >50% */}

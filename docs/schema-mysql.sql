@@ -501,6 +501,8 @@ CREATE TABLE IF NOT EXISTS pergeseran_dpa (
   harga_p             DECIMAL(18,2)     NULL COMMENT 'Harga pergeseran',
   pergeseran          DECIMAL(18,2) NOT NULL DEFAULT 0,
   bertambah_berkurang DECIMAL(18,2) NOT NULL DEFAULT 0,
+  penanggung_jawab    VARCHAR(128)      NULL COMMENT 'Cermin dpa_blud.penanggung_jawab — snapshot per versi pergeseran',
+  keterangan          TEXT              NULL COMMENT 'Cermin dpa_blud.keterangan — snapshot per versi pergeseran',
   tipe_baris          ENUM('GRANDMASTER','MASTER','CHILD','LEADER','MEMBER','PLETON-LEADER','PLETON-MEMBER','KETUA-KELOMPOK-A','ANGGOTA-KELOMPOK-A','KETUA-KELOMPOK-B','ANGGOTA-KELOMPOK-B','L7-HEAD','L7-SUB','L8-HEAD','L8-SUB') NOT NULL DEFAULT 'CHILD',
   row_id              VARCHAR(64)       NULL,
   anggaran_key        VARCHAR(64)       NULL COMMENT 'Identitas stabil baris anggaran lintas-versi (jangkar realisasi)',

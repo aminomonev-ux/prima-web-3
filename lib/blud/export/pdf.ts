@@ -82,16 +82,16 @@ function buildMeta(menu: string, view: string, versi: string | null, tanggal: st
       columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Penanggung Jawab', 'Keterangan'],
     }
   }
-  if (menu === 'dpa' && view === 'penanggungJawab') {
+  if (view === 'penanggungJawab') {
     return {
-      title: `Rekap Penanggung Jawab — ${dateLabel}`,
+      title: `Rekap Penanggung Jawab${menu === 'pergeseran' ? ' (Pergeseran)' : ''} — ${dateLabel}`,
       columns: ['Penanggung Jawab', 'Uraian', 'Jumlah'],
     }
   }
   if (menu === 'pergeseran' && view === 'rekapPergeseran') {
     return {
       title: `Rekap Pergeseran — ${dateLabel}`,
-      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang'],
+      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Penanggung Jawab', 'Keterangan'],
     }
   }
   return { title: 'Rekap Master Akun', columns: ['Kode', 'Uraian'] }

@@ -95,6 +95,7 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'pergeseran.kolom-vol-p':    { page: '/blud/pergeseran', label: 'kolom Vol P (nilai sesudah)' },
   'pergeseran.kolom-harga-p':  { page: '/blud/pergeseran', label: 'kolom Harga P (nilai sesudah)' },
   'pergeseran.kolom-selisih':  { page: '/blud/pergeseran', label: 'kolom selisih pergeseran' },
+  'pergeseran.kolom-pj':       { page: '/blud/pergeseran', label: 'kolom Penanggung Jawab', desc: 'Kolom Penanggung Jawab di Pergeseran mencerminkan isian DPA — hanya baris yang ditambah di layar ini yang bisa diisi sendiri. Gunanya supaya rekap PJ bisa dicetak dengan pagu sesudah digeser.' },
   'pergeseran.simpan':         { page: '/blud/pergeseran', label: 'tombol Simpan pergeseran' },
 }
 

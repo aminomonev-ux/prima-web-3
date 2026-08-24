@@ -13,7 +13,7 @@ import type { MasterAkun } from './master-akun-data'
 import { formatRupiah } from './format'
 import { hitungDeltaPergeseranRoot } from './recalc'
 import { auditRekapPJ } from './audit-pj'
-import type { AuditResult } from './audit-pj'
+import type { AuditResult, AuditPjRow } from './audit-pj'
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types
@@ -68,7 +68,13 @@ export function renderCetakHtml(args: RenderArgs): RenderResult {
     return renderDpaView(rows as DpaBaris[], versi ?? tanggal)
   }
   if (menu === 'dpa' && view === 'penanggungJawab') {
-    return renderPjView(rows as DpaBaris[], versi ?? tanggal)
+    return renderPjView(rows as DpaBaris[], versi ?? tanggal, 'dpa')
+  }
+  if (menu === 'pergeseran' && view === 'penanggungJawab') {
+    // Pagu PASCA-geser — itu seluruh alasan rekap ini ada. `jumlah` di baris
+    // pergeseran masih angka DPA; yang berlaku setelah digeser ada di `pergeseran`.
+    const pascaGeser = (rows as PergeseranBaris[]).map(r => ({ ...r, jumlah: r.pergeseran }))
+    return renderPjView(pascaGeser, versi ?? tanggal, 'pergeseran')
   }
   if (menu === 'pergeseran' && view === 'rekapPergeseran') {
     return renderPergeseranView(rows as PergeseranBaris[], versi ?? tanggal)
@@ -126,9 +132,15 @@ function renderDpaView(rows: DpaBaris[], versi: string | null): RenderResult {
 // View: Rekap Penanggung Jawab — group per PJ, subtotal, grand total
 // Port dari blud.html line 6471-6580 loadAndRender logic.
 // ──────────────────────────────────────────────────────────────────────────
-function renderPjView(rows: DpaBaris[], versi: string | null): RenderResult {
+function renderPjView(
+  rows: AuditPjRow[],
+  versi: string | null,
+  sumber: 'dpa' | 'pergeseran',
+): RenderResult {
   const columns = ['Penanggung Jawab', 'Uraian', 'Jumlah']
-  const title = `Rekap Penanggung Jawab${versi ? ` (${versi})` : ' (DPA Terbaru)'}`
+  const labelSumber = sumber === 'dpa' ? 'DPA' : 'Pergeseran'
+  const title = `Rekap Penanggung Jawab${sumber === 'pergeseran' ? ' (Pergeseran)' : ''}`
+    + (versi ? ` (${versi})` : ` (${labelSumber} Terbaru)`)
 
   // Filter rows yang punya PJ (skip '-' dan kosong)
   const pjRows = rows
@@ -172,7 +184,7 @@ function renderPjView(rows: DpaBaris[], versi: string | null): RenderResult {
   // Build HTML
   let html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
   html += `<div style="margin-bottom:8px;font-size:11px;color:#85B7EB;font-weight:600;">`
-  html += `Total DPA Belanja Daerah: <strong style="color:#7DD3FC;">${formatRupiah(totalDpa)}</strong> · `
+  html += `Total ${esc(labelSumber)} Belanja Daerah: <strong style="color:#7DD3FC;">${formatRupiah(totalDpa)}</strong> · `
   html += `Total Rekap PJ: <strong style="color:#FAC775;">${formatRupiah(grandTotal)}</strong> · `
   const diff = totalDpa - grandTotal
   html += `Selisih: <strong style="color:${diff === 0 ? '#6EE7B7' : '#FCA5A5'};">${formatRupiah(diff)}</strong>`
@@ -198,7 +210,7 @@ function renderPjView(rows: DpaBaris[], versi: string | null): RenderResult {
   html += `</tbody></table>`
 
   // Panel audit hybrid (rule-based, no AI)
-  html += renderAuditPanel(audit)
+  html += renderAuditPanel(audit, labelSumber)
 
   return { html, rows: exportRows, meta: { title, columns } }
 }
@@ -206,7 +218,7 @@ function renderPjView(rows: DpaBaris[], versi: string | null): RenderResult {
 // ──────────────────────────────────────────────────────────────────────────
 // Render audit panel — ringkasan hasil auditRekapPJ
 // ──────────────────────────────────────────────────────────────────────────
-function renderAuditPanel(a: AuditResult): string {
+function renderAuditPanel(a: AuditResult, labelSumber: string): string {
   const statusCfg = {
     ok:     { bg: 'rgba(16,185,129,.15)',  border: '#10B981', ikon: '✅', label: 'SESUAI' },
     lebih:  { bg: 'rgba(239,68,68,.15)',   border: '#EF4444', ikon: '🔴', label: 'SELISIH LEBIH' },
@@ -222,7 +234,7 @@ function renderAuditPanel(a: AuditResult): string {
 
   // Kartu ringkasan. Divider pakai gray-neutral semi-transparent yang adaptif kedua tema.
   h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:rgba(127,127,127,.30);">`
-  h += kartu('Total DPA BLUD', formatRupiah(a.totalDPA), '#7DD3FC')
+  h += kartu(`Total ${labelSumber} BLUD`, formatRupiah(a.totalDPA), '#7DD3FC')
   h += kartu('Total Rekap PJ', formatRupiah(a.grandTotal), '#C4B5FD')
   h += kartu(a.statusSaldo === 'ok' ? 'Selisih' : a.statusSaldo === 'lebih' ? 'Kelebihan' : 'Kekurangan',
              a.statusSaldo === 'ok' ? '0' : formatRupiah(Math.abs(a.selisih)),
@@ -265,7 +277,7 @@ function renderAuditPanel(a: AuditResult): string {
 
   if (a.doubleEntries.length === 0 && a.belumEntry.length === 0 && a.statusSaldo === 'ok') {
     h += `<div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,.06);color:#6EE7B7;font-weight:600;font-size:12.5px;">`
-    h += `✅ Rekap sudah sesuai dengan DPA BLUD. Tidak ada tindakan yang diperlukan.</div>`
+    h += `✅ Rekap sudah sesuai dengan ${esc(labelSumber)} BLUD. Tidak ada tindakan yang diperlukan.</div>`
   }
 
   h += `</div>`
@@ -285,7 +297,7 @@ function kartu(label: string, value: string, color: string): string {
 // View: Rekap Pergeseran — tabel hierarchical, kolom pergeseran-specific
 // ──────────────────────────────────────────────────────────────────────────
 function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): RenderResult {
-  const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang']
+  const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Penanggung Jawab', 'Keterangan']
   // B6: status DRAFT diturunkan dari delta root — tandai dokumen belum berimbang
   const deltaRoot = hitungDeltaPergeseranRoot(rows)
   const title = `Rekap Pergeseran${versi ? `: ${versi}` : ' (Terakhir)'}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
@@ -296,6 +308,7 @@ function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): Re
     r.kode_rekening, r.uraian,
     r.vol ?? '', r.satuan ?? '', r.harga ?? '', r.jumlah,
     r.vol_p ?? '', r.harga_p ?? '', r.pergeseran ?? 0, r.bertambah_berkurang ?? 0,
+    r.penanggung_jawab ?? '', r.keterangan ?? '',
   ])
 
   let html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
@@ -322,6 +335,8 @@ function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): Re
     html += `<td style="text-align:right;font-family:monospace;">${fmt(r.harga_p)}</td>`
     html += `<td style="text-align:right;font-family:monospace;">${fmt(r.pergeseran)}</td>`
     html += `<td style="text-align:right;font-family:monospace;font-weight:600;color:${bbColor};">${bb !== 0 ? formatRupiah(bb) : ''}</td>`
+    html += `<td>${esc(r.penanggung_jawab ?? '')}</td>`
+    html += `<td>${esc(r.keterangan ?? '')}</td>`
     html += `</tr>`
   }
   html += `</tbody></table>`

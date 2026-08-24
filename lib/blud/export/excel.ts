@@ -81,10 +81,11 @@ function buildMeta(menu: string, view: string, versi: string | null, tanggal: st
       numberColIdx: new Set([2, 4, 5]),
     }
   }
-  if (menu === 'dpa' && view === 'penanggungJawab') {
+  if (view === 'penanggungJawab') {
+    const pergeseran = menu === 'pergeseran'
     return {
-      title: `Rekap Penanggung Jawab ${dateLabel}`,
-      sheetName: 'Rekap PJ',
+      title: `Rekap Penanggung Jawab${pergeseran ? ' (Pergeseran)' : ''} ${dateLabel}`,
+      sheetName: pergeseran ? 'Rekap PJ Pergeseran' : 'Rekap PJ',
       columns: ['Penanggung Jawab', 'Uraian', 'Jumlah'],
       numberColIdx: new Set([2]),
     }
@@ -93,7 +94,7 @@ function buildMeta(menu: string, view: string, versi: string | null, tanggal: st
     return {
       title: `Rekap Pergeseran ${dateLabel}`,
       sheetName: 'Pergeseran',
-      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang'],
+      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Penanggung Jawab', 'Keterangan'],
       numberColIdx: new Set([2, 4, 5, 6, 7, 8, 9]),
     }
   }

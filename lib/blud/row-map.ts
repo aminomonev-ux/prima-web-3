@@ -51,6 +51,9 @@ export function pergeseranKeInput(d: PergeseranBaris): PergeseranBarisInput {
     harga_p:             d.harga_p,
     pergeseran:          d.pergeseran,
     bertambah_berkurang: d.bertambah_berkurang,
+    // String kosong, bukan null: keduanya terikat langsung ke <input>.
+    penanggung_jawab:    d.penanggung_jawab ?? '',
+    keterangan:          d.keterangan ?? '',
     tipe_baris:          d.tipe_baris,
     row_id:              d.row_id || `row_${d.id}`,
     anggaran_key:        d.anggaran_key ?? null,
@@ -76,6 +79,8 @@ export function dpaKePergeseranInput(d: DpaBaris, urutan: number): PergeseranBar
     harga_p:             null,
     pergeseran:          0,
     bertambah_berkurang: 0,
+    penanggung_jawab:    d.penanggung_jawab ?? '',
+    keterangan:          d.keterangan ?? '',
     tipe_baris:          d.tipe_baris,
     row_id:              d.row_id || `row_${urutan}`,
     anggaran_key:        d.anggaran_key ?? null,

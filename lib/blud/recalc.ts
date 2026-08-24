@@ -541,6 +541,12 @@ export function injectDpaKePergeseran(
         satuan:        dpa.satuan,
         harga:         dpa.harga,
         jumlah:        dpa.jumlah,
+        // PJ & keterangan ditimpa dari DPA, sederajat dgn uraian/vol/harga: keduanya
+        // milik DPA, Pergeseran cuma memotretnya per versi. Baris yang lahir di layar
+        // Pergeseran (`pgnew_*`) tidak pernah sampai ke sini — tak ada baris DPA yang
+        // cocok, jadi PJ isian sendirinya aman di cabang "sisa" di bawah.
+        penanggung_jawab: dpa.penanggung_jawab ?? '',
+        keterangan:       dpa.keterangan ?? '',
         // Jangkar realisasi ikut baris DPA-nya, bukan baris pergeseran lama yang
         // kebetulan cocok — DPA yang memegang identitas (CONCEPT-blud-realisasi §2.3).
         anggaran_key:  dpa.anggaran_key ?? found.anggaran_key ?? null,
@@ -557,6 +563,8 @@ export function injectDpaKePergeseran(
         harga_p:             null,
         pergeseran:          0,
         bertambah_berkurang: 0,
+        penanggung_jawab:    dpa.penanggung_jawab ?? '',
+        keterangan:          dpa.keterangan ?? '',
         tipe_baris:          dpa.tipe_baris,
         row_id:              dpa.row_id ?? '',
         anggaran_key:        dpa.anggaran_key ?? null,

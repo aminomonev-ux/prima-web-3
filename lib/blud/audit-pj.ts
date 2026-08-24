@@ -13,9 +13,9 @@
 //
 // AI integration: di-defer (roadmap: /api/blud/audit-pj/ai).
 
-import type { DpaBaris } from '@/types'
 import {
   validatePjRules,
+  type PjRowLike,
   type PjChainConflictFinding,
   type PjBelumEntryFinding,
 } from './pj-conflict'
@@ -48,11 +48,22 @@ export interface AuditBelumEntry {
 
 export type AuditStatusSaldo = 'ok' | 'lebih' | 'kurang'
 
+/**
+ * Bentuk minimum yang diaudit. `DpaBaris` memenuhinya apa adanya; baris Pergeseran
+ * memenuhinya setelah `jumlah` ditukar dengan pagu PASCA-geser (`pergeseran`) —
+ * lihat `renderPjView` di cetak-data.ts. Sengaja struktural, bukan `DpaBaris`:
+ * auditnya soal hubungan PJ↔pohon↔nominal, bukan soal tabel asalnya.
+ */
+export type AuditPjRow = PjRowLike & {
+  tipe_baris: string
+  jumlah:     number
+}
+
 // B3: definisi Total DPA seragam dgn dashboard getDpaTotal() — struktural
 // (GRANDMASTER → fallback root parent NULL), lookup uraian 'BELANJA DAERAH'
 // hanya fallback terakhir. Root bernama lain tidak lagi bikin totalDPA = 0.
 export function totalDpaBlud(
-  rows: Array<Pick<DpaBaris, 'tipe_baris' | 'parent_id' | 'uraian' | 'jumlah'>>,
+  rows: Array<{ tipe_baris?: string | null; parent_id: string | null; uraian: string; jumlah: number }>,
 ): number {
   let grand = 0
   let roots = 0
@@ -80,7 +91,7 @@ export interface AuditResult {
 // ──────────────────────────────────────────────────────────────────────────
 // Public entry: jalankan audit
 // ──────────────────────────────────────────────────────────────────────────
-export function auditRekapPJ(dpaRows: DpaBaris[]): AuditResult {
+export function auditRekapPJ(dpaRows: AuditPjRow[]): AuditResult {
   // ── 1. Unified validator (Sentinel + Audit pakai sama) ──
   const findings = validatePjRules(dpaRows)
 

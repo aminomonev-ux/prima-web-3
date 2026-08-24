@@ -15,8 +15,9 @@ export async function GET() {
 
   const mati = await bludMati(session.role)
   if (mati) return mati
-  // Mengisi kolom Penanggung Jawab di layar DPA juga.
-  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['penanggung-jawab', 'dpa']))) return forbidden()
+  // Mengisi kolom Penanggung Jawab di layar DPA & Pergeseran juga — sama pola
+  // master-akun/route.ts: guard menyebut menu yang MENAMPILKAN datanya.
+  if (!(await bolehLihatSalahSatu(session.userId, session.role, ['penanggung-jawab', 'dpa', 'pergeseran']))) return forbidden()
 
   const limited = await bludRateLimit(session.userId, 'view-penanggung-jawab', 60)
   if (limited) return limited
