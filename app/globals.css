@@ -2079,6 +2079,21 @@ input, textarea { caret-color: #FBBF24; }
 .dpa-table.v2 tbody tr.lv-l81 td:first-child { border-left-color: #CBD5E1 !important; }
 .dpa-table.v2 tbody tr.lv-l81 td:first-child::before { background: linear-gradient(90deg, rgba(203,213,225,.20), rgba(203,213,225,0)); }
 
+/* Warna teks baris L1 (GRANDMASTER) di DPA & Pergeseran.
+ *
+ * Ada sebagai variabel karena dulu `#fff` ditulis langsung sebagai gaya sebaris
+ * di 18 tempat pada dpa-client.tsx + pergeseran-client.tsx. Gaya sebaris
+ * mengalahkan stylesheet, jadi override tema terang di bawah (`td { color:
+ * #0F0F12 }`) tidak pernah kesampaian: angka L1 jadi putih di atas #FAFAFA dan
+ * hilang dari layar. Anehnya terbaca lagi saat barisnya disorot — semata karena
+ * aturan :hover kebetulan memakai !important, satu-satunya yang bisa menembus
+ * gaya sebaris. Itu sebabnya bug ini lama tidak ketahuan.
+ *
+ * Jangan kembalikan warnanya ke gaya sebaris. Baris L1 punya latar berbeda di
+ * tiap tema, jadi warna teksnya HARUS ikut tema. */
+:root                  { --blud-l1-text: #FFFFFF; }
+[data-theme="light"]   { --blud-l1-text: #0F0F12; }
+
 /* Sticky L1 row di bawah thead (replace .row-grandmaster sticky lama) */
 .blud-scroll-wrapper.v2 tbody tr.lv-l1 td {
   position: sticky; top: 36px; z-index: 2;

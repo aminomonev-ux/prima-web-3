@@ -358,7 +358,7 @@ function PergeseranTable({
                   </td>
 
                   {/* Kode */}
-                  <td style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                  <td style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                     {isNew ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <input
@@ -388,7 +388,7 @@ function PergeseranTable({
                         placeholder="Cari atau ketik uraian..."
                       />
                     ) : (
-                      <span style={{ fontWeight: isBold ? 700 : 400, fontSize: 13, color: isGM ? '#fff' : undefined, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontWeight: isBold ? 700 : 400, fontSize: 13, color: isGM ? 'var(--blud-l1-text)' : undefined, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         {row.uraian}
                         {/* Warning kalau DPA aggregator (vol=null, jumlah>0) tapi
                             Pergeseran local leaf (tidak punya anak) — struktur beda
@@ -407,21 +407,21 @@ function PergeseranTable({
                   </td>
 
                   {/* Vol DPA (readOnly) */}
-                  <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                  <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                     {row.vol ?? '-'}
                   </td>
 
                   {/* Satuan */}
-                  <td style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>{row.satuan ?? '-'}</td>
+                  <td style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>{row.satuan ?? '-'}</td>
 
                   {/* Harga DPA */}
-                  <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                  <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                     {fmt(row.harga)}
                   </td>
 
                   {/* Jumlah DPA */}
                   <td style={{ textAlign: 'right' }}>
-                    <strong style={{ fontSize: 13, color: isGM ? '#fff' : undefined }}>
+                    <strong style={{ fontSize: 13, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                       {fmt(row.jumlah)}
                     </strong>
                   </td>
@@ -475,7 +475,7 @@ function PergeseranTable({
                         placeholder="— Pilih PJ —"
                       />
                     ) : (
-                      <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                      <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                         {row.penanggung_jawab || '-'}
                       </span>
                     )}
@@ -492,7 +492,7 @@ function PergeseranTable({
                         style={{ width: '100%' }}
                       />
                     ) : (
-                      <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                      <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                         {row.keterangan || '-'}
                       </span>
                     )}

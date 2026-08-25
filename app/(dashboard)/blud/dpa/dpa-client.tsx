@@ -621,7 +621,7 @@ function DpaTable({
                   <td>
                     <input type="text" value={row.kode_rekening ?? ''}
                       readOnly
-                      style={{ color: isGM ? '#fff' : undefined, fontWeight: isGM ? 700 : undefined, cursor: 'default' }} />
+                      style={{ color: isGM ? 'var(--blud-l1-text)' : undefined, fontWeight: isGM ? 700 : undefined, cursor: 'default' }} />
                   </td>
 
                   {/* ─ Uraian ─ */}
@@ -639,11 +639,11 @@ function DpaTable({
                         }}
                         style={{
                           fontWeight: isBold ? 700 : 400,
-                          color: isGM ? '#fff' : undefined,
+                          color: isGM ? 'var(--blud-l1-text)' : undefined,
                         } as React.CSSProperties}
                       />
                     ) : (
-                      <span style={{ fontSize: 12, fontWeight: isBold ? 700 : 400, color: isGM ? '#fff' : undefined }}>
+                      <span style={{ fontSize: 12, fontWeight: isBold ? 700 : 400, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                         {row.uraian ?? ''}
                       </span>
                     )}
@@ -654,7 +654,7 @@ function DpaTable({
                     {editable
                       ? <input type="number" value={row.vol ?? ''} min={0} style={{ textAlign: 'right' }}
                           onChange={e => updateRow(row.row_id, 'vol', e.target.value === '' ? null : Number(e.target.value))} />
-                      : <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined, opacity: isAgg ? .55 : 1 }}>
+                      : <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined, opacity: isAgg ? .55 : 1 }}>
                           {isAgg ? '—' : (row.vol ?? '')}
                         </span>
                     }
@@ -666,10 +666,10 @@ function DpaTable({
                       ? <SatuanCombobox
                           value={row.satuan ?? ''}
                           onChange={v => updateRow(row.row_id, 'satuan', v || null)}
-                          style={{ color: isGM ? '#fff' : undefined }}
+                          style={{ color: isGM ? 'var(--blud-l1-text)' : undefined }}
                           placeholder="—"
                         />
-                      : <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined, opacity: isAgg ? .55 : 1 }}>
+                      : <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined, opacity: isAgg ? .55 : 1 }}>
                           {isAgg ? '—' : (row.satuan ?? '')}
                         </span>
                     }
@@ -680,7 +680,7 @@ function DpaTable({
                     {editable
                       ? <InputNominal value={row.harga ?? 0} style={{ textAlign: 'right' }}
                           onChange={v => updateRow(row.row_id, 'harga', v || null)} />
-                      : <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined, opacity: isAgg ? .55 : 1 }}>
+                      : <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined, opacity: isAgg ? .55 : 1 }}>
                           {isAgg ? '—' : (row.harga ? formatRupiah(row.harga) : '')}
                         </span>
                     }
@@ -688,7 +688,7 @@ function DpaTable({
 
                   {/* ─ Jumlah ─ */}
                   <td style={{ textAlign: 'right' }}>
-                    <strong style={{ fontSize: 13, color: isGM ? '#fff' : undefined }}>
+                    <strong style={{ fontSize: 13, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                       {formatRupiah(row.jumlah)}
                     </strong>
                   </td>
@@ -702,11 +702,11 @@ function DpaTable({
                             value={row.penanggung_jawab ?? ''}
                             options={pjOptions}
                             onChange={v => handlePjChange(row, v ?? '')}
-                            style={{ color: isGM ? '#fff' : undefined }}
+                            style={{ color: isGM ? 'var(--blud-l1-text)' : undefined }}
                             placeholder="— Pilih PJ —"
                           />
                         ) : (
-                          <span style={{ fontSize: 12, color: isGM ? '#fff' : undefined }}>
+                          <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
                             {row.penanggung_jawab ?? ''}
                           </span>
                         )}
