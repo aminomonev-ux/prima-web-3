@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const parsed = InjectBodySchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, error: 'Data tidak valid: ' + parsed.error.issues[0].message },
+      { ok: false, error: 'Ada isian yang belum benar: ' + parsed.error.issues[0].message },
       { status: 400 },
     )
   }
@@ -78,6 +78,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (err) {
     console.error('[API /blud/pergeseran/inject POST]', err)
-    return NextResponse.json({ ok: false, error: 'Gagal melakukan inject' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Kolom DPA gagal disalin ke tabel pergeseran. Coba lagi.' }, { status: 500 })
   }
 }

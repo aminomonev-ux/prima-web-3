@@ -72,12 +72,12 @@ export default function SaldoAwalReminder({
         body: JSON.stringify({ tahun_anggaran: tahun, saldo_awal_kas: 0, saldo_awal_bank: 0 }),
       })
       let json: { ok?: boolean; error?: string }
-      try { json = await res.json() } catch { toast.error('Balasan server tidak terbaca.'); return }
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal menetapkan saldo awal'); return }
+      try { json = await res.json() } catch { toast.error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Saldo awal belum tersimpan. Coba lagi.'); return }
       toast.success(`Saldo awal ${tahun} ditetapkan nol. Pengingat ini tidak muncul lagi.`)
       onDitetapkan()
     } catch (e) {
-      toast.error('Gagal menetapkan: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('Saldo awal belum tersimpan: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSibuk(false)
     }

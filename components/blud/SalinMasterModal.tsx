@@ -49,8 +49,8 @@ interface LaporanTulis { label: string; ok: boolean; pesan: string }
 async function ambilDaftar<T>(url: string): Promise<{ data: T[]; version: number }> {
   const res = await fetch(url, { cache: 'no-store' })
   let json: { ok?: boolean; data?: T[]; version?: number; error?: string }
-  try { json = await res.json() } catch { throw new Error('Balasan server tidak terbaca.') }
-  if (!res.ok || !json.ok || !json.data) throw new Error(json.error ?? 'Gagal memuat data induk.')
+  try { json = await res.json() } catch { throw new Error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.') }
+  if (!res.ok || !json.ok || !json.data) throw new Error(json.error ?? 'Data induk tidak bisa dimuat. Coba lagi sebentar lagi.')
   return { data: json.data, version: json.version ?? 0 }
 }
 
@@ -63,12 +63,12 @@ async function kirimInduk(
     body: JSON.stringify({ rows, expected_version: expectedVersion, force: paksa, sumber: 'DPA' }),
   })
   let json: { ok?: boolean; error?: string; code?: string; message?: string }
-  try { json = await res.json() } catch { throw new Error('Balasan server tidak terbaca.') }
+  try { json = await res.json() } catch { throw new Error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.') }
   if (!res.ok || !json.ok) {
     if (json.code === 'VERSION_CONFLICT') {
-      throw new Error('Data induk baru saja diubah orang lain — daftarnya dimuat ulang, coba lagi.')
+      throw new Error('Orang lain baru saja mengubah data induk. Daftarnya sudah dimuat ulang — periksa dulu, lalu coba lagi.')
     }
-    throw new Error(json.error ?? 'Gagal menyimpan.')
+    throw new Error(json.error ?? 'Belum tersimpan. Coba lagi.')
   }
   return json.message ?? 'Tersimpan.'
 }
@@ -101,7 +101,7 @@ export default function SalinMasterModal({
       setAdaMa(ma.data)
       setAdaKb(kb.data)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal memuat data induk.')
+      toast.error(e instanceof Error ? e.message : 'Data induk tidak bisa dimuat. Coba lagi sebentar lagi.')
     } finally {
       setMemuat(false)
     }
@@ -171,8 +171,8 @@ export default function SalinMasterModal({
       kode: k.kode, uraian: k.uraian, level: k.level ?? 'L2', parent_kode: k.parentKode,
     }))
     // `kode_besar.kode` UNIQUE — satu kembar saja membuat `bulkInsert` melempar
-    // ER_DUP_ENTRY, dan itu sampai ke layar sebagai 500 "Server error" yang tidak
-    // bisa dibaca siapa pun. Master Akun TIDAK diperlakukan begini: kodenya memang
+    // ER_DUP_ENTRY, dan itu sampai ke layar sebagai 500 yang tidak menyebutkan
+    // kode mana yang bentrok. Master Akun TIDAK diperlakukan begini: kodenya memang
     // boleh kembar di sana, jadi menyaring akan menghapus baris orang.
     // Dipetakan eksplisit, bukan dikirim apa adanya: baris hasil GET membawa `id`
     // dan `urutan` yang bukan bagian dari skema tulis. Zod memang membuangnya, tapi
@@ -207,7 +207,7 @@ export default function SalinMasterModal({
     if (ganti && kbTerpilih.length) {
       const setuju = await confirmDialog({
         title: 'Ganti seluruh isi Kode Besar?',
-        message: `${adaKb.length} baris Kode Besar yang sekarang akan DIHAPUS, diganti ${kbTerpilih.length} baris dari DPA. Tidak bisa dibatalkan.`,
+        message: `${adaKb.length} baris Kode Besar yang ada sekarang akan dihapus, diganti ${kbTerpilih.length} baris dari DPA di layar. Sekali disimpan, yang lama tidak bisa dikembalikan.`,
         variant: 'danger',
       })
       if (!setuju) return
@@ -218,7 +218,7 @@ export default function SalinMasterModal({
     // pernah muncul di "Form Baru".
     const saring = saringIndukKodeBesar(kbTerpilih, ganti ? [] : adaKb)
     if (saring.yatim.length) {
-      toast.warning(`${saring.yatim.length} baris Kode Besar dilewati — induknya tidak ikut dipilih.`)
+      toast.warning(`${saring.yatim.length} baris Kode Besar dilewati karena induknya tidak ikut dicentang. Tanpa induk, baris itu tidak akan muncul di Form Baru.`)
     }
 
     setSibuk(true)
@@ -260,7 +260,7 @@ export default function SalinMasterModal({
     setLaporan(catat)
     setSibuk(false)
     if (catat.length && catat.every(l => l.ok)) {
-      toast.success('Data induk diperbarui.')
+      toast.success('Data induk sudah diperbarui.')
       onSelesai?.()
     }
   }, [totalTerpilih, ganti, kbTerpilih, maTerpilih, adaKb, pilih, muat, onSelesai, tulisKodeBesar, tulisMasterAkun])

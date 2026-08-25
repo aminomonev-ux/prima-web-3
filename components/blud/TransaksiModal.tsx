@@ -192,7 +192,7 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
         }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok || !json.ok) { setGalat(json.error ?? 'Gagal mengirim permintaan.'); return }
+      if (!res.ok || !json.ok) { setGalat(json.error ?? 'Permintaan belum terkirim. Coba lagi sebentar lagi.'); return }
       setDiajukan(true)
     } catch {
       setGalat('Tidak bisa menghubungi server. Coba lagi.')
@@ -268,7 +268,7 @@ export default function TransaksiModal({ tahun, bulan, baris, awal, onClose, onS
             `Minta pergeseran lebih dulu, atau parkir transaksi ini kalau rekeningnya memang belum ada.`
           )
         } else {
-          setGalat(json.error ?? `Gagal menyimpan (${res.status}).`)
+          setGalat(json.error ?? 'Belum tersimpan. Coba lagi sebentar lagi.')
         }
         return
       }

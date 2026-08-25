@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (limited) return limited
 
   let body: unknown
-  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Body bukan JSON' }, { status: 400 }) }
+  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Data yang dikirim tidak terbaca. Muat ulang halaman, lalu coba lagi.' }, { status: 400 }) }
 
   const parsed = SaldoAwalBodySchema.safeParse(body)
   if (!parsed.success) {
@@ -57,6 +57,6 @@ export async function POST(req: NextRequest) {
       }, { status: 409 })
     }
     console.error('[API /blud/realisasi/saldo-awal POST]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

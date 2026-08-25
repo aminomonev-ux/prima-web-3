@@ -46,12 +46,21 @@ export function bludMati(role?: string, lingkup?: 'realisasi') {
     : modulMati([FLAG_BLUD], { role })
 }
 
+// Pesan di bawah ini sampai ke layar apa adanya lewat toast merah. Karena itu
+// isinya kalimat untuk orang, bukan istilah HTTP: yang membaca bendahara dan
+// kasubbag, bukan yang menulis kodenya.
 export function unauthorized() {
-  return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+  return NextResponse.json(
+    { ok: false, error: 'Sesi Anda sudah berakhir. Masuk kembali untuk melanjutkan.' },
+    { status: 401 },
+  )
 }
 
 export function forbidden() {
-  return NextResponse.json({ ok: false, error: 'Akses ditolak' }, { status: 403 })
+  return NextResponse.json(
+    { ok: false, error: 'Anda belum berhak membuka bagian ini. Mintakan aksesnya ke admin.' },
+    { status: 403 },
+  )
 }
 
 /**

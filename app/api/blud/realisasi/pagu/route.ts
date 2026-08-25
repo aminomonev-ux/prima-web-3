@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'Parameter `tahun` tidak valid (2000–2100)' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Tahun anggaran tidak dikenali. Pilih tahun antara 2000 dan 2100.' }, { status: 400 })
   }
   const tahun = parsed.data
   const bulanRaw = searchParams.get('bulan') ?? searchParams.get('sampai_bulan')
@@ -84,6 +84,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, data, tahun, bulan, pagu_sumber: sumber })
   } catch (err) {
     console.error('[API /blud/realisasi/pagu GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

@@ -24,7 +24,7 @@ async function resolveTahun(searchParams: URLSearchParams): Promise<{ tahun: num
   const raw = searchParams.get('tahun')
   if (raw != null && raw !== '') {
     const parsed = TahunSchema.safeParse(raw)
-    if (!parsed.success) return { error: 'Parameter `tahun` tidak valid (2000–2100)' }
+    if (!parsed.success) return { error: 'Tahun anggaran tidak dikenali. Pilih tahun antara 2000 dan 2100.' }
     return { tahun: parsed.data }
   }
   const list = await getTahunList()
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, data, versi_tanggal: versi, tahun, version })
   } catch (err) {
     console.error('[API /blud/pergeseran GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
   const parsed = PergeseranBodySchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, error: 'Data tidak valid: ' + parsed.error.issues[0].message },
+      { ok: false, error: 'Ada isian yang belum benar: ' + parsed.error.issues[0].message },
       { status: 400 },
     )
   }
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
   // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
   if (turunkan_paksa && !alasan_turun) {
     return NextResponse.json(
-      { ok: false, error: 'Alasan wajib diisi untuk menurunkan pagu di bawah realisasi' },
+      { ok: false, error: 'Tulis dulu alasannya — pagu ini diturunkan sampai di bawah uang yang sudah terpakai.' },
       { status: 400 },
     )
   }
@@ -288,7 +288,7 @@ export async function POST(req: NextRequest) {
       }, { status: 409 })
     }
     console.error('[API /blud/pergeseran POST]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -305,7 +305,7 @@ export async function DELETE(req: NextRequest) {
   if (!canHapusVersi(session.role)) {
     return NextResponse.json({
       ok: false, code: 'HAPUS_TERBATAS',
-      error: 'Hapus versi anggaran hanya boleh dilakukan Super Admin atau Admin Staff.',
+      error: 'Menghapus versi anggaran hanya bisa dilakukan Super Admin atau Admin Staff.',
     }, { status: 403 })
   }
 
@@ -325,14 +325,14 @@ export async function DELETE(req: NextRequest) {
   const parsed = TanggalSchema.safeParse(versi)
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, error: 'Parameter `versi` wajib format YYYY-MM-DD' },
+      { ok: false, error: 'Tanggal versi tidak terbaca.' },
       { status: 400 },
     )
   }
   const parsedTahun = TahunSchema.safeParse(searchParams.get('tahun'))
   if (!parsedTahun.success) {
     return NextResponse.json(
-      { ok: false, error: 'Parameter `tahun` wajib (2000–2100)' },
+      { ok: false, error: 'Tahun anggaran wajib disebutkan, antara 2000 dan 2100.' },
       { status: 400 },
     )
   }
@@ -372,6 +372,6 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: false, error: msg }, { status: 404 })
     }
     console.error('[API /blud/pergeseran DELETE]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

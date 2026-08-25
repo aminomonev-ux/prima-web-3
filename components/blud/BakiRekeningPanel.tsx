@@ -65,7 +65,7 @@ export default function BakiRekeningPanel({ tahun, onClose, onSambungkan }: Prop
         fetch(`/api/blud/realisasi/permintaan?tahun=${tahun}&status=MENUNGGU`),
       ])
       const [j1, j2] = await Promise.all([rp1.json(), rp2.json()])
-      if (!rp1.ok || !j1.ok) { setGalat(j1.error ?? 'Gagal memuat baki'); return }
+      if (!rp1.ok || !j1.ok) { setGalat(j1.error ?? 'Saldo rekening tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
       setParkir(j1.data ?? [])
       if (rp2.ok && j2.ok) setPermintaan(j2.data ?? [])
     } catch {
@@ -91,7 +91,7 @@ export default function BakiRekeningPanel({ tahun, onClose, onSambungkan }: Prop
         }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok || !json.ok) { setGalat(json.error ?? 'Gagal mengirim permintaan'); return }
+      if (!res.ok || !json.ok) { setGalat(json.error ?? 'Permintaan belum terkirim. Coba lagi sebentar lagi.'); return }
       await muat()
     } catch {
       setGalat('Tidak bisa menghubungi server')

@@ -125,10 +125,10 @@ export default function ImportUsulanModal({ anchor, anchorHasChildren, presentId
         const res = await fetch('/api/blud/dpa/import-usulan')
         const d = await res.json()
         if (aborted) return
-        if (!d.ok) { setLoadError(d.error || 'Gagal memuat'); return }
+        if (!d.ok) { setLoadError(d.error || 'Daftar usulan tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
         setItems(d.data as DpaImportCandidate[])
       } catch {
-        if (!aborted) setLoadError('Gagal memuat data usulan')
+        if (!aborted) setLoadError('Daftar usulan tidak bisa dimuat — periksa sambungan, lalu coba lagi.')
       } finally {
         if (!aborted) setLoading(false)
       }

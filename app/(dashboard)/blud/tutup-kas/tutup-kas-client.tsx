@@ -126,7 +126,7 @@ export default function TutupKasClient(
         fetch(`/api/blud/realisasi/gu?tahun=${th}&bulan=${bl}`),
       ])
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat Tutup Kas'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Data Tutup Kas tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
       const d: Neraca = json.data
       setData(d)
       setKasFisik(d.kas_fisik != null ? rp(d.kas_fisik) : '')
@@ -142,7 +142,7 @@ export default function TutupKasClient(
         })))
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal memuat')
+      toast.error(e instanceof Error ? e.message : 'Data tidak bisa dimuat. Coba lagi sebentar lagi.')
     } finally {
       setLoading(false)
     }
@@ -204,7 +204,7 @@ export default function TutupKasClient(
         } else if (json.code === 'TIDAK_SEIMBANG') {
           toast.error(`Selisih Rp ${rp(Math.abs(json.detail?.selisih ?? 0))} — bulan tidak ditutup.`)
         } else {
-          toast.error(json.error ?? 'Gagal menyimpan')
+          toast.error(json.error ?? 'Belum tersimpan. Coba lagi.')
         }
         await muat(tahun, bulan)
         return
@@ -212,7 +212,7 @@ export default function TutupKasClient(
       setData(json.data)
       toast.success(tutup ? `${NAMA_BULAN[bulan - 1]} ${tahun} ditutup.` : 'Hasil pemeriksaan tersimpan.')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal menyimpan')
+      toast.error(e instanceof Error ? e.message : 'Belum tersimpan — sambungan ke server terputus. Coba lagi sebentar lagi.')
     } finally {
       setSibuk(false)
     }
@@ -241,14 +241,14 @@ export default function TutupKasClient(
       })
       const json = await res.json()
       if (!res.ok || !json.ok) {
-        toast.error(json.error ?? 'Gagal menyimpan saldo awal')
+        toast.error(json.error ?? 'Saldo awal belum tersimpan. Coba lagi.')
         await muat(tahun, bulan)
         return
       }
       setData(json.data)
       toast.success(`Saldo awal ${tahun} tersimpan.`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal menyimpan saldo awal')
+      toast.error(e instanceof Error ? e.message : 'Saldo awal belum tersimpan — sambungan ke server terputus.')
     } finally {
       setSibuk(false)
     }
@@ -272,13 +272,13 @@ export default function TutupKasClient(
         }),
       })
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal menyimpan periode GU'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Periode GU belum tersimpan. Coba lagi.'); return }
       setGu((json.data ?? []).map((g: { tgl_awal: string; tgl_akhir: string; no_surat: string | null }) => ({
         tgl_awal: g.tgl_awal, tgl_akhir: g.tgl_akhir, no_surat: g.no_surat ?? '',
       })))
       toast.success('Periode GU tersimpan.')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal menyimpan periode GU')
+      toast.error(e instanceof Error ? e.message : 'Periode GU belum tersimpan — sambungan ke server terputus.')
     } finally {
       setGuSibuk(false)
     }
@@ -296,7 +296,7 @@ export default function TutupKasClient(
         // modal, bukan toast — pesannya menyebut urutan bulan yang harus dibuka
         // dulu, dan itu perlu dibaca pelan-pelan, bukan lewat dalam 3 detik.
         if (res.status === 409 && json.code === 'BUKA_TERHALANG') { setBukaGagal(json.error); return }
-        toast.error(json.error ?? 'Gagal membuka periode')
+        toast.error(json.error ?? 'Bulan itu belum bisa dibuka kembali. Coba lagi.')
         return
       }
       setData(json.data)
@@ -305,7 +305,7 @@ export default function TutupKasClient(
       setBukaGagal(null)
       toast.success(`${NAMA_BULAN[bulan - 1]} ${tahun} dibuka kembali.`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal membuka periode')
+      toast.error(e instanceof Error ? e.message : 'Bulan itu belum bisa dibuka kembali — sambungan ke server terputus.')
     } finally {
       setSibuk(false)
     }

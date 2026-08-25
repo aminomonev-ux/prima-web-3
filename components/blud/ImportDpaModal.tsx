@@ -98,14 +98,14 @@ export default function ImportDpaModal({
       form.append('tahun', String(tahun))
       const res = await fetch('/api/blud/dpa/import?step=preview', { method: 'POST', body: form })
       let json: { ok?: boolean; data?: HasilPreview; error?: string }
-      try { json = await res.json() } catch { toast.error('Balasan server tidak terbaca.'); return }
+      try { json = await res.json() } catch { toast.error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.'); return }
       if (!res.ok || !json.ok || !json.data) {
         toast.error(json.error ?? 'Berkas gagal dibaca.')
         return
       }
       setHasil(json.data)
     } catch (e) {
-      toast.error('Gagal mengunggah: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('Berkas gagal diunggah: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSibuk(false)
     }
@@ -143,7 +143,7 @@ export default function ImportDpaModal({
         }),
       })
       let json: { ok?: boolean; error?: string; code?: string; message?: string; detail?: BentrokBaris[] }
-      try { json = await res.json() } catch { toast.error('Balasan server tidak terbaca.'); return }
+      try { json = await res.json() } catch { toast.error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.'); return }
       if (!res.ok || !json.ok) {
         if (json.code === 'SAFETY_THRESHOLD') {
           setPaksa({ pesan: json.error ?? 'Baris berkurang drastis.' })
@@ -154,14 +154,14 @@ export default function ImportDpaModal({
           setBentrokPagu(json.detail ?? [])
           return
         }
-        toast.error(json.error ?? 'Gagal menyimpan hasil impor.')
+        toast.error(json.error ?? 'Hasil impor belum tersimpan. Coba lagi.')
         return
       }
       toast.success(json.message ?? 'Impor selesai.')
       setPaksa(null); setBentrokPagu(null)
       onSelesai(versiTanggal)
     } catch (e) {
-      toast.error('Gagal menyimpan: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('Belum tersimpan: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       // `setPaksa(null)` dulu ada di sini — dan itu membatalkan panel yang baru saja
       // dipasang cabang SAFETY_THRESHOLD beberapa baris di atas, karena React

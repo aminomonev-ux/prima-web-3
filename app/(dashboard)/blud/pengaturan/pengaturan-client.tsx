@@ -138,7 +138,7 @@ export default function PengaturanClient(
           setTertahan({ kode: 'VERSI_DIRUJUK', pesan: json.error, perujuk: json.perujuk ?? [] })
           return
         }
-        throw new Error(json.error || 'Gagal hapus')
+        throw new Error(json.error || 'Versi belum terhapus. Coba lagi sebentar lagi.')
       }
       showToast(json.message || 'Versi berhasil dihapus', true)
       closeModal()
@@ -207,7 +207,7 @@ export default function PengaturanClient(
         <div>
           {bolehHapus ? (
             <>
-              <strong style={{ color: '#FFFFFF' }}>Peringatan:</strong> Hapus versi bersifat <strong>permanen</strong> dan tidak bisa di-undo.
+              <strong style={{ color: '#FFFFFF' }}>Perhatian:</strong> versi yang dihapus <strong>tidak bisa dikembalikan</strong>.
               Hapus DPA juga otomatis menghapus Rekap Penanggung Jawab terkait versi tsb.
               Versi yang masih dipakai transaksi akan ditolak sistem.
             </>

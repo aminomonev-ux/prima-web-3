@@ -71,10 +71,10 @@ export default function BuktiSetorClient({ bolehUbah }: { bolehUbah: boolean }) 
     try {
       const res = await fetch(`/api/blud/bukti-setor?tahun=${th}&bulan=${bl}`)
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat bukti setor'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Daftar bukti setor tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
       setRows(json.data ?? [])
     } catch {
-      toast.error('Tidak bisa menghubungi server')
+      toast.error('Server tidak bisa dihubungi. Periksa sambungan, lalu coba lagi.')
     } finally {
       setLoading(false)
     }
@@ -117,11 +117,11 @@ export default function BuktiSetorClient({ bolehUbah }: { bolehUbah: boolean }) 
     try {
       const res = await fetch(`/api/blud/bukti-setor?id=${r.id}`, { method: 'DELETE' })
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal menghapus'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Belum terhapus. Coba lagi sebentar lagi.'); return }
       toast.success('Bukti setor dihapus')
       if (tahun != null) void muat(tahun, bulan)
     } catch {
-      toast.error('Tidak bisa menghubungi server')
+      toast.error('Server tidak bisa dihubungi. Periksa sambungan, lalu coba lagi.')
     }
   }
 

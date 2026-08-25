@@ -46,8 +46,8 @@ const KOSONG: Pratinjau = { versi: null, jumlah: 0, delta: 0 }
 async function ambil<T>(url: string): Promise<{ data: T[]; versi: string | null }> {
   const res = await fetch(url, { cache: 'no-store' })
   let json: { ok?: boolean; data?: T[]; versi_tanggal?: string | null; error?: string }
-  try { json = await res.json() } catch { throw new Error('Balasan server tidak terbaca.') }
-  if (!res.ok || !json.ok) throw new Error(json.error ?? 'Gagal memuat data tahun sumber.')
+  try { json = await res.json() } catch { throw new Error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.') }
+  if (!res.ok || !json.ok) throw new Error(json.error ?? 'Isi tahun sumber tidak bisa dimuat. Coba lagi sebentar lagi.')
   return { data: json.data ?? [], versi: json.versi_tanggal ?? null }
 }
 
@@ -114,7 +114,7 @@ export default function SalinTahunModal({
       }
       await Promise.all(tugas)
     } catch (e) {
-      if (masihBerlaku()) toast.error(e instanceof Error ? e.message : 'Gagal memuat data tahun sumber.')
+      if (masihBerlaku()) toast.error(e instanceof Error ? e.message : 'Isi tahun sumber tidak bisa dimuat. Coba lagi sebentar lagi.')
     } finally {
       if (masihBerlaku()) setMemuat(false)
     }

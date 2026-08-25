@@ -42,11 +42,11 @@ export default function PenanggungJawabClient({ bolehUbah }: { bolehUbah: boolea
         setRows((json.data as Row[]).map(d => ({ label: d.label })))
         setVersion(typeof json.version === 'number' ? json.version : 0)
       } else {
-        showToast(json.error || 'Gagal memuat data', false)
+        showToast(json.error || 'Data tidak bisa dimuat — periksa sambungan, lalu muat ulang halaman.', false)
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      showToast('Gagal memuat data', false)
+      showToast('Data tidak bisa dimuat — periksa sambungan, lalu muat ulang halaman.', false)
     }
     finally   { setLoading(false) }
   }, [])
@@ -57,7 +57,7 @@ export default function PenanggungJawabClient({ bolehUbah }: { bolehUbah: boolea
   function deleteRow(idx: number) {
     const target = rows[idx]
     setRows(p => p.filter((_, i) => i !== idx))
-    toast.success(`Baris "${target?.label || 'tanpa label'}" dihapus. Klik Simpan untuk persist.`)
+    toast.success(`Baris "${target?.label || 'tanpa label'}" dihapus dari daftar — tekan Simpan untuk menetapkannya.`)
   }
   function updateRow(idx: number, label: string) { setRows(p => p.map((r, i) => i === idx ? { label } : r)) }
   function moveRow(idx: number, direction: 'up' | 'down') {
@@ -81,7 +81,7 @@ export default function PenanggungJawabClient({ bolehUbah }: { bolehUbah: boolea
       })
       const json = await res.json()
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
-        showToast('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', false)
+        showToast('Orang lain baru saja mengubah daftar ini. Isian terbarunya sedang dimuat — periksa dulu, lalu simpan ulang.', false)
         await load()
         return
       }
@@ -94,9 +94,9 @@ export default function PenanggungJawabClient({ bolehUbah }: { bolehUbah: boolea
         showToast(json.message)
         if (typeof json.version === 'number') setVersion(json.version)
       } else {
-        showToast(json.error || 'Gagal simpan', false)
+        showToast(json.error || 'Belum tersimpan. Coba lagi.', false)
       }
-    } catch { showToast('Gagal menyimpan', false) }
+    } catch { showToast('Belum tersimpan — sambungan ke server terputus. Coba lagi sebentar lagi.', false) }
     finally  { submittingRef.current = false; setSaving(false) }
   }
 

@@ -93,7 +93,7 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
       if (res.status === 503) { setDimatikan(true); return }
       setDimatikan(false)
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat pejabat'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Daftar pejabat tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
       const next: Record<Jabatan, Isian> = { DIREKTUR: kosong(), BENDAHARA: kosong(), PPK: kosong() }
       for (const p of (json.data ?? [])) {
         next[p.jabatan as Jabatan] = {
@@ -103,7 +103,7 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
       }
       setIsi(next)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal memuat')
+      toast.error(e instanceof Error ? e.message : 'Data tidak bisa dimuat. Coba lagi sebentar lagi.')
     } finally {
       setLoading(false)
     }
@@ -122,10 +122,10 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
     try {
       const res = await fetch(`/api/blud/pejabat?tahun=${tahun}&sumber=pk`)
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat daftar PK'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Daftar Perjanjian Kinerja tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
       setSaran(json.data ?? [])
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal memuat daftar PK')
+      toast.error(e instanceof Error ? e.message : 'Daftar Perjanjian Kinerja tidak bisa dimuat. Coba lagi sebentar lagi.')
     } finally {
       setMemuatSaran(false)
     }
@@ -175,11 +175,11 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
         body: JSON.stringify({ tahun_anggaran: tahun, pejabat: daftar }),
       })
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal menyimpan'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Belum tersimpan. Coba lagi.'); return }
       toast.success(`Pejabat SPJ ${tahun} tersimpan.`)
       await muat(tahun)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal menyimpan')
+      toast.error(e instanceof Error ? e.message : 'Belum tersimpan — sambungan ke server terputus. Coba lagi sebentar lagi.')
     } finally {
       setSibuk(false)
     }

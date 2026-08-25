@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'Parameter `tahun` tidak valid (2000–2100)' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Tahun anggaran tidak dikenali. Pilih tahun antara 2000 dan 2100.' }, { status: 400 })
   }
 
   try {
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, data: await listPejabat(parsed.data) })
   } catch (err) {
     console.error('[API /blud/pejabat GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   if (limited) return limited
 
   let body: unknown
-  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Body bukan JSON' }, { status: 400 }) }
+  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Data yang dikirim tidak terbaca. Muat ulang halaman, lalu coba lagi.' }, { status: 400 }) }
 
   const parsed = SimpanPejabatBodySchema.safeParse(body)
   if (!parsed.success) {
@@ -96,6 +96,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, data })
   } catch (err) {
     console.error('[API /blud/pejabat POST]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

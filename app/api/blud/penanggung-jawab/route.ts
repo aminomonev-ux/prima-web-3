@@ -27,7 +27,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, data, version })
   } catch (err) {
     console.error('[API /blud/penanggung-jawab GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   const raw    = await req.json().catch(() => null)
   const parsed = PenanggungJawabBodySchema.safeParse(raw)
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Ada isian yang belum benar: ' + parsed.error.issues[0].message }, { status: 400 })
   }
   const { rows, force, expected_version } = parsed.data
 
@@ -73,6 +73,6 @@ export async function POST(req: NextRequest) {
       }, { status: 409 })
     }
     console.error('[API /blud/penanggung-jawab POST]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

@@ -61,7 +61,7 @@ export default function RegisterPanel({ tahun, bulan, baris, onClose }: Props) {
         )
         const json = await res.json()
         if (!alive) return
-        if (!res.ok || !json.ok) { setGalat(json.error ?? 'Gagal memuat register'); return }
+        if (!res.ok || !json.ok) { setGalat(json.error ?? 'Daftar transaksi tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
         setData(json.data)
       } catch {
         if (alive) setGalat('Tidak bisa menghubungi server')

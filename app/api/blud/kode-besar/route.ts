@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, data, version })
   } catch (err) {
     console.error('[API /blud/kode-besar GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   const parsed = KodeBesarBodySchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, error: 'Data tidak valid: ' + parsed.error.issues[0].message },
+      { ok: false, error: 'Ada isian yang belum benar: ' + parsed.error.issues[0].message },
       { status: 400 },
     )
   }
@@ -95,6 +95,6 @@ export async function POST(req: NextRequest) {
       }, { status: 409 })
     }
     console.error('[API /blud/kode-besar POST]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

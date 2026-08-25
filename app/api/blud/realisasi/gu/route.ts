@@ -31,14 +31,14 @@ export async function GET(req: NextRequest) {
   const tahun = TahunSchema.safeParse(searchParams.get('tahun'))
   const bulan = Number(searchParams.get('bulan'))
   if (!tahun.success || !Number.isInteger(bulan) || bulan < 1 || bulan > 12) {
-    return NextResponse.json({ ok: false, error: 'Parameter `tahun` / `bulan` tidak valid' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Tahun atau bulan yang diminta tidak dikenali.' }, { status: 400 })
   }
 
   try {
     return NextResponse.json({ ok: true, data: await listGuPeriode(tahun.data, bulan) })
   } catch (err) {
     console.error('[API /blud/realisasi/gu GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (limited) return limited
 
   let body: unknown
-  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Body bukan JSON' }, { status: 400 }) }
+  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Data yang dikirim tidak terbaca. Muat ulang halaman, lalu coba lagi.' }, { status: 400 }) }
 
   const parsed = SimpanGuBodySchema.safeParse(body)
   if (!parsed.success) {
@@ -78,6 +78,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, data })
   } catch (err) {
     console.error('[API /blud/realisasi/gu POST]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

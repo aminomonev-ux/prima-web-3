@@ -38,6 +38,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, data })
   } catch (err) {
     console.error('[API /blud/dpa/import-usulan GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

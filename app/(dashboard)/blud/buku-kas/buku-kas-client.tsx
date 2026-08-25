@@ -108,10 +108,10 @@ export default function BukuKasClient({
     try {
       const res = await fetch(`/api/blud/realisasi/tx?tahun=${th}&bulan=${bl}`)
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat Buku Kas'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Buku Kas tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
       setData(json.data); setSumber(json.pagu_sumber); setDiparkir(json.diparkir ?? 0)
     } catch {
-      toast.error('Tidak bisa menghubungi server')
+      toast.error('Server tidak bisa dihubungi. Periksa sambungan, lalu coba lagi.')
     } finally {
       setLoading(false)
     }
@@ -173,11 +173,11 @@ export default function BukuKasClient({
     try {
       const res = await fetch(`/api/blud/realisasi/tx?id=${r.id}`, { method: 'DELETE' })
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal menghapus'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Belum terhapus. Coba lagi sebentar lagi.'); return }
       toast.success('Transaksi dihapus')
       if (tahun != null) { muat(tahun, bulan); muatPagu(tahun) }
     } catch {
-      toast.error('Tidak bisa menghubungi server')
+      toast.error('Server tidak bisa dihubungi. Periksa sambungan, lalu coba lagi.')
     }
   }
 

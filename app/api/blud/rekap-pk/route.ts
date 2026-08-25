@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   const parsed = RekapPKBodySchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message },
+      { ok: false, message: 'Ada isian yang belum benar: ' + parsed.error.issues[0].message },
       { status: 400 },
     )
   }
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   if (items.length === 0) {
     return NextResponse.json(
-      { ok: false, message: 'Tidak ada row dengan label valid untuk disimpan' },
+      { ok: false, message: 'Tidak ada baris berlabel yang bisa disimpan.' },
       { status: 400 },
     )
   }
@@ -73,6 +73,6 @@ export async function POST(req: NextRequest) {
     if (msg.startsWith('Tidak ada')) {
       return NextResponse.json({ ok: false, message: msg }, { status: 400 })
     }
-    return NextResponse.json({ ok: false, message: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, message: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

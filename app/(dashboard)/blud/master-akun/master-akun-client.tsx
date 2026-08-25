@@ -50,11 +50,11 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
         setRows((json.data as Row[]).map(d => ({ kode: d.kode, uraian: d.uraian })))
         setVersion(typeof json.version === 'number' ? json.version : 0)
       } else {
-        showToast(json.error || 'Gagal memuat data', false)
+        showToast(json.error || 'Data tidak bisa dimuat — periksa sambungan, lalu muat ulang halaman.', false)
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      showToast('Gagal memuat data', false)
+      showToast('Data tidak bisa dimuat — periksa sambungan, lalu muat ulang halaman.', false)
     }
     finally   { setLoading(false) }
   }, [])
@@ -67,7 +67,7 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
   function deleteRow(idx: number) {
     const target = rows[idx]
     setRows(prev => prev.filter((_, i) => i !== idx))
-    toast.success(`Baris "${target?.uraian || target?.kode || 'tanpa uraian'}" dihapus. Klik Simpan untuk persist.`)
+    toast.success(`Baris "${target?.uraian || target?.kode || 'tanpa uraian'}" dihapus dari daftar — tekan Simpan untuk menetapkannya.`)
   }
   function updateRow(idx: number, field: 'kode' | 'uraian', value: string) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r))
@@ -84,7 +84,7 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
       })
       const json = await res.json()
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
-        showToast('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', false)
+        showToast('Orang lain baru saja mengubah daftar ini. Isian terbarunya sedang dimuat — periksa dulu, lalu simpan ulang.', false)
         await load()
         return
       }
@@ -100,9 +100,9 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
         showToast(json.message)
         if (typeof json.version === 'number') setVersion(json.version)
       } else {
-        showToast(json.error || 'Gagal simpan', false)
+        showToast(json.error || 'Belum tersimpan. Coba lagi.', false)
       }
-    } catch { showToast('Gagal menyimpan', false) }
+    } catch { showToast('Belum tersimpan — sambungan ke server terputus. Coba lagi sebentar lagi.', false) }
     finally  { submittingRef.current = false; setSaving(false) }
   }
 
@@ -113,7 +113,7 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
       // SDL-Audit v1.1 Phase 4: migrate xlsx → exceljs (CVE prototype pollution + ReDoS).
       const { readXlsxAsAoa } = await import('@/lib/shared/excel-export')
       const raw = await readXlsxAsAoa(file)
-      if (raw.length === 0) { showToast('Sheet kosong', false); return }
+      if (raw.length === 0) { showToast('Lembar pertama berkas Excel ini kosong.', false); return }
       const parsed: Row[] = []
       for (const r of raw) {
         const kode   = String(r[0] ?? '').trim()
@@ -123,12 +123,12 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
         if (parsed.length === 0 && /^(uraian|nama|akun)/i.test(uraian)) continue
         parsed.push({ kode, uraian })
       }
-      if (!parsed.length) { showToast('Tidak ada baris valid di Excel', false); return }
+      if (!parsed.length) { showToast('Tidak ada baris yang bisa dibaca dari berkas ini. Periksa lagi susunan kolomnya.', false); return }
       setRows(parsed)
-      showToast(`${parsed.length} baris berhasil di-import. Klik Simpan untuk persist.`)
+      showToast(`${parsed.length} baris terbaca dari Excel — belum tersimpan, periksa dulu lalu tekan Simpan.`)
     } catch (err) {
       console.error('[Impor Excel]', err)
-      showToast('Gagal membaca file Excel', false)
+      showToast('Berkas Excel ini tidak terbaca. Pastikan formatnya .xlsx dan tidak rusak.', false)
     } finally {
       setImporting(false)
       if (fileRef.current) fileRef.current.value = ''

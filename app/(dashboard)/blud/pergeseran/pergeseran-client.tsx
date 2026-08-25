@@ -264,8 +264,9 @@ function PergeseranTable({
     const count = selectedRowIds.size
     if (count === 0) return
     const ok = await confirmDialog({
-      title: 'Hapus Baris Terpilih',
-      message: `${count} baris baru terpilih akan dihapus sekaligus. Lanjutkan?`,
+      title: `Hapus ${count} baris?`,
+      message: `${count} baris yang Anda tambahkan sendiri akan dihapus sekaligus. Belum permanen — baru hilang dari database setelah Anda menekan Simpan.`,
+      confirmLabel: `Hapus ${count} baris`,
       variant: 'danger',
     })
     if (!ok) return
@@ -274,7 +275,7 @@ function PergeseranTable({
       .map((r, i) => ({ ...r, urutan: i }))
     onChange(recalcPergeseranJumlah(filtered))
     clearSelection()
-    toast.success(`${count} baris dihapus`)
+    toast.success(`${count} baris dihapus dari tabel — tekan Simpan untuk menetapkannya`)
   }, [rows, selectedRowIds, onChange, clearSelection])
 
   const fmt = (v: number | null | undefined) => (v != null && v !== 0) ? formatRupiah(v) : '-'
@@ -301,7 +302,7 @@ function PergeseranTable({
                     checked={allNewSelected}
                     disabled={newRowIds.length === 0}
                     onChange={() => allNewSelected ? clearSelection() : selectAll(newRowIds)}
-                    data-tooltip={allNewSelected ? 'Uncheck semua' : 'Check semua baris baru (utk multi-hapus)'}
+                    data-tooltip={allNewSelected ? 'Lepas semua centang' : 'Centang semua baris yang Anda tambahkan sendiri'}
                   />
                 )}
               </th>
@@ -345,7 +346,7 @@ function PergeseranTable({
                         className="dpa-row-checkbox"
                         checked={selectedRowIds.has(row.row_id)}
                         onChange={() => toggleCheckbox(row.row_id)}
-                        data-tooltip="Check utk multi-hapus (cascade anak)"
+                        data-tooltip="Centang untuk menghapus beberapa baris sekaligus — baris di bawahnya ikut tercentang"
                       />
                     )}
                   </td>
@@ -634,7 +635,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       r.uraian.toLowerCase().includes(q),
     )
     if (!match) {
-      toast.error(`Tidak ada baris yang match "${searchQ}"`)
+      toast.error(`Tidak ada baris yang mengandung "${searchQ}"`)
       return
     }
     const matchLabel = TIPE_LABEL[match.tipe_baris]
@@ -662,7 +663,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     fokusSudah.current = fokus
     const sorot = setTimeout(() => {
       if (!match) {
-        toast.warning('Baris yang diminta tidak ada di versi ini — mungkin sudah berubah')
+        toast.warning('Baris yang dituju tidak ada di versi ini. Kemungkinan sudah diubah atau dihapus sejak permintaannya dikirim.')
         return
       }
       setHiddenLevels(prev => {
@@ -760,7 +761,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      showToast('Gagal memuat data Pergeseran', false)
+      showToast('Data pergeseran tidak bisa dimuat — periksa sambungan, lalu muat ulang halaman.', false)
     }
     finally  { setLoading(false) }
   }, [tahun])
@@ -773,7 +774,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       const res  = await fetch(`/api/blud/dpa?tahun=${tahun}`)
       const json = await res.json()
       if (!json.ok || !json.data?.length) {
-        showToast(`Belum ada DPA untuk tahun ${tahun} — buat DPA ${tahun} dulu di menu DPA BLUD`, false)
+        showToast(`Tahun ${tahun} belum punya DPA. Susun DPA ${tahun} dulu di menu DPA BLUD, baru pergeserannya bisa dibuat.`, false)
         return
       }
 
@@ -782,14 +783,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       setRows(generated)
       setDpaVersi(json.versi_tanggal || '')
       setVersi('')
-      showToast(`Tabel di-generate dari DPA terbaru tahun ${tahun}`)
-    } catch { showToast('Gagal generate', false) }
+      showToast(`Tabel disalin dari DPA ${tahun} terbaru — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`)
+    } catch { showToast('Tabel gagal dibuat — periksa sambungan, lalu coba lagi.', false) }
     finally  { setLoading(false) }
   }, [tahun])
 
   // Inject: update kolom 0-5 dari DPA terbaru tanpa ubah vol_p/harga_p
   const inject = useCallback(async () => {
-    if (!rows.length) { showToast('Generate tabel dulu', false); return }
+    if (!rows.length) { showToast('Belum ada tabelnya. Tekan "Buat Pergeseran" dulu.', false); return }
     setInjecting(true)
     try {
       const res  = await fetch('/api/blud/pergeseran/inject', {
@@ -800,25 +801,25 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       if (json.ok) {
         setRows(json.data)
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
-        showToast('Inject berhasil — kolom DPA diperbarui')
+        showToast('Kolom DPA sudah disamakan dengan versi terbaru.')
         // B5: match tier heuristik longgar bisa salah tempel vol_p/harga_p — minta user periksa
         const low = (json.low_confidence ?? []) as { kode_rekening: string; uraian: string }[]
         if (low.length > 0) {
           const contoh = low.slice(0, 3).map(l => l.uraian || l.kode_rekening).join(', ')
           toast.warning(
-            `${low.length} baris di-match dengan heuristik longgar — periksa hasilnya: ${contoh}${low.length > 3 ? ', …' : ''}`,
+            `${low.length} baris dipasangkan berdasarkan kemiripan, bukan kecocokan pasti — tolong periksa: ${contoh}${low.length > 3 ? ', dan lainnya' : ''}`,
             { duration: 8000 },
           )
         }
       } else {
-        showToast(json.error || json.message || 'Gagal inject', false)
+        showToast(json.error || json.message || 'Kolom DPA gagal disamakan. Coba lagi.', false)
       }
-    } catch { showToast('Gagal inject', false) }
+    } catch { showToast('Kolom DPA gagal disamakan — periksa sambungan, lalu coba lagi.', false) }
     finally  { setInjecting(false); setConfirmInject(false) }
   }, [rows, tahun])
 
   async function simpan() {
-    if (!rows.length) { showToast('Tidak ada data untuk disimpan', false); return }
+    if (!rows.length) { showToast('Tabel masih kosong — belum ada yang bisa disimpan.', false); return }
     if (submittingRef.current) return
     submittingRef.current = true
     try {
@@ -835,9 +836,9 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       paksaDropRef.current = false
       if (rootDelta !== 0) {
         const simpanDraft = await confirmDialog({
-          title: 'Pergeseran belum berimbang',
-          message: `Total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(rootDelta))} terhadap DPA — pergeseran final wajib berimbang (pagu tetap). Simpan sebagai DRAFT untuk dilanjutkan nanti?`,
-          confirmLabel: 'Simpan sebagai Draft',
+          title: 'Belum berimbang',
+          message: `Dibanding DPA, total anggarannya ${rootDelta > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(rootDelta))}. Menggeser anggaran hanya memindahkan uang antar pos — jumlah totalnya harus tetap sama. Simpan dulu sebagai draf dan lanjutkan nanti?`,
+          confirmLabel: 'Simpan sebagai draf',
           variant: 'warning',
         })
         if (!simpanDraft) return
@@ -871,7 +872,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         return
       }
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
-        showToast('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', false)
+        showToast('Orang lain baru saja mengubah versi ini. Isian terbarunya sedang dimuat — periksa dulu, lalu simpan ulang.', false)
         await loadPergeseran(versiTanggal)
         return
       }
@@ -895,12 +896,12 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           setRows(prev => prev.map(r => (r.anggaran_key ? r : { ...r, anggaran_key: peta[r.row_id] ?? null })))
         }
         if (draftRef.current) {
-          toast.warning('Tersimpan sebagai DRAFT — lanjutkan pengisian sampai berimbang', { duration: 6000 })
+          toast.warning('Tersimpan sebagai draf. Belum bisa dipakai sebagai dokumen resmi sampai selisihnya nol.', { duration: 6000 })
         }
       } else {
-        showToast(json.error || json.message || 'Gagal simpan', false)
+        showToast(json.error || json.message || 'Belum tersimpan. Coba lagi.', false)
       }
-    } catch { showToast('Gagal menyimpan', false) }
+    } catch { showToast('Belum tersimpan — sambungan ke server terputus. Coba lagi sebentar lagi.', false) }
   }
 
   useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
@@ -950,14 +951,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           <>
             <PrimaButton variant="purple" iconLeft={<Sparkles className="w-3.5 h-3.5" />}
               disabled={loading} onClick={generate}
-              data-tooltip="Buat tabel pergeseran dari snapshot DPA terbaru tahun terpilih" data-rima="pergeseran.buat">
+              data-tooltip="Salin isi DPA terbaru tahun ini jadi tabel pergeseran baru" data-rima="pergeseran.buat">
               Buat Pergeseran
             </PrimaButton>
 
             <PrimaButton variant="success" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
               disabled={injecting || !rows.length}
               onClick={() => setConfirmInject(true)}
-              data-tooltip="Sinkronkan kolom kode/uraian/vol/harga dari DPA terbaru" data-rima="pergeseran.sinkron-dpa">
+              data-tooltip="Samakan kode, uraian, volume, dan harga dengan DPA terbaru — kolom pergeseran yang Anda isi tidak tersentuh" data-rima="pergeseran.sinkron-dpa">
               Sinkronkan DPA
             </PrimaButton>
           </>

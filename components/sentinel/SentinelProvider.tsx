@@ -127,16 +127,19 @@ export default function SentinelProvider({ children, role = null, userName = nul
     const criticals = activeNow.filter(x => x.severity === 'critical')
     if (criticals.length > 0) {
       // Mirror validasi server (lapis 3) — pesan ramah, simpan diblokir
-      toast.error(`RIMA: ${criticals.length} entri ganda PASTI terdeteksi — hapus dulu salah satunya, baru simpan.`)
+      toast.error(`RIMA menemukan ${criticals.length} baris kembar. Hapus dulu salah satunya, baru bisa disimpan.`)
       return { ok: false, ack: null }
     }
 
     const warns = activeNow.filter(x => x.severity === 'warning')
     if (warns.length > 0) {
+      // "Sentinel" itu nama internal aturannya; yang dikenal orang di layar cuma
+      // RIMA. Menyebut dua nama untuk satu hal membuat pesannya terbaca seperti
+      // pesan sistem, bukan seperti peringatan yang perlu ditindaklanjuti.
       const lanjut = await confirmDialog({
-        title:        'Peringatan RIMA',
-        message:      `${warns.length} peringatan Sentinel belum dibereskan — tetap simpan?`,
-        confirmLabel: 'Tetap Simpan',
+        title:        `RIMA menemukan ${warns.length} hal yang perlu diperiksa`,
+        message:      `${warns.length} peringatan masih terbuka di layar ini. Anda tetap boleh menyimpan, tapi periksa dulu lewat panel RIMA di pojok kanan bawah.`,
+        confirmLabel: 'Simpan saja',
         variant:      'warning',
       })
       if (!lanjut) return { ok: false, ack: null }

@@ -138,9 +138,9 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       }
 
       const r = await fetch(path)
-      if (!r.ok) { toast.error('Gagal memuat data'); return }
+      if (!r.ok) { toast.error('Data tidak bisa dimuat — periksa sambungan, lalu coba lagi.'); return }
       const j = await r.json() as { ok: boolean; data?: unknown; versi_tanggal?: string | null; error?: string }
-      if (!j.ok) { toast.error(j.error ?? 'Gagal memuat'); return }
+      if (!j.ok) { toast.error(j.error ?? 'Data tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
 
       // Render HTML via cetak-data helper (client-side aggregation)
       const { renderCetakHtml } = await import('@/lib/blud/cetak-data')
@@ -150,7 +150,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       setRawRows(j.data ?? null)
       setRawVersi(j.versi_tanggal ?? historyVersi ?? tanggal ?? null)
     } catch (e) {
-      toast.error('Error: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('Dokumen gagal disusun: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setLoading(false)
     }
@@ -171,13 +171,13 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
 
   // ── Action: PDF ──
   const onPdf = useCallback(async () => {
-    if (!renderedData) { toast.warning('Klik Cetak dulu untuk memuat data.'); return }
+    if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
     try {
       const { exportToPdf } = await import('@/lib/blud/export/pdf')
       await exportToPdf({ menu, view, tanggal, versi: historyVersi, rows: renderedData })
       void logExport('pdf')
     } catch (e) {
-      toast.error('Gagal export PDF: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('Berkas PDF gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
   }, [renderedData, menu, view, tanggal, historyVersi, logExport])
 
@@ -208,7 +208,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   // DPA & Pergeseran turun sebagai DOKUMEN (berumus, ada kolom Level + Jangkar).
   // Rekap PJ dan Master Akun tetap memakai eksporter rekap lama.
   const onExcel = useCallback(async () => {
-    if (!renderedData) { toast.warning('Klik Cetak dulu untuk memuat data.'); return }
+    if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
     const dokumenDpa = menu === 'dpa' && view === 'dpa'
     const dokumenPergeseran = menu === 'pergeseran' && view === 'rekapPergeseran'
     try {
@@ -228,13 +228,13 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       await exportToExcel({ menu, view, tanggal, versi: historyVersi, rows: renderedData })
       void logExport('xlsx')
     } catch (e) {
-      toast.error('Gagal export Excel: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('Berkas Excel gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
   }, [renderedData, rawRows, rawVersi, tahun, menu, view, tanggal, historyVersi, logExport, ambilDirektur])
 
   // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
   const onSimpanRekapPK = useCallback(async () => {
-    if (!renderedData) { toast.warning('Klik Cetak dulu agar data rekap muncul.'); return }
+    if (!renderedData) { toast.warning('Tekan Cetak dulu supaya rekapnya muncul.'); return }
     if (menu !== 'dpa' || view !== 'penanggungJawab') return
     try {
       const r = await fetch('/api/blud/rekap-pk', {
@@ -244,12 +244,12 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       })
       const data = await r.json() as { ok?: boolean; message?: string }
       if (!r.ok || !data.ok) {
-        toast.error(data.message ?? 'Gagal simpan rekap PK')
+        toast.error(data.message ?? 'Rekap penanggung jawab belum tersimpan. Coba lagi.')
         return
       }
-      toast.success(data.message ?? 'Rekap PK tersimpan.')
+      toast.success(data.message ?? 'Rekap penanggung jawab tersimpan.')
     } catch (e) {
-      toast.error('Error: ' + (e instanceof Error ? e.message : String(e)))
+      toast.error('Rekap gagal disimpan: ' + (e instanceof Error ? e.message : String(e)))
     }
   }, [renderedData, menu, view, historyVersi, tahun])
 

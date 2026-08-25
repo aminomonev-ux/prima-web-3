@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, data: await listBuktiSetor(parsed.data.tahun, bulan) })
   } catch (err) {
     console.error('[API /blud/bukti-setor GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
   if (limited) return limited
 
   let body: unknown
-  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Body bukan JSON' }, { status: 400 }) }
+  try { body = await req.json() } catch { return NextResponse.json({ ok: false, error: 'Data yang dikirim tidak terbaca. Muat ulang halaman, lalu coba lagi.' }, { status: 400 }) }
 
   const parsed = SimpanBuktiSetorSchema.safeParse(body)
   if (!parsed.success) {
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     const mapped = petakanError(err)
     if (mapped) return mapped
     console.error('[API /blud/bukti-setor POST]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -125,7 +125,7 @@ export async function DELETE(req: NextRequest) {
 
   const id = Number(new URL(req.url).searchParams.get('id') ?? 0)
   if (!Number.isInteger(id) || id <= 0) {
-    return NextResponse.json({ ok: false, error: 'Parameter `id` tidak valid' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Baris yang dimaksud tidak dikenali. Muat ulang halaman, lalu coba lagi.' }, { status: 400 })
   }
 
   try {
@@ -143,6 +143,6 @@ export async function DELETE(req: NextRequest) {
     const mapped = petakanError(err)
     if (mapped) return mapped
     console.error('[API /blud/bukti-setor DELETE]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

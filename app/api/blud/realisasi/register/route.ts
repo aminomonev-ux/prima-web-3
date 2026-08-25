@@ -27,11 +27,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const parsed = TahunSchema.safeParse(searchParams.get('tahun'))
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'Parameter `tahun` tidak valid (2000–2100)' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Tahun anggaran tidak dikenali. Pilih tahun antara 2000 dan 2100.' }, { status: 400 })
   }
   const anggaranKey = (searchParams.get('anggaran_key') ?? '').trim()
   if (!anggaranKey || anggaranKey.length > 64) {
-    return NextResponse.json({ ok: false, error: 'Parameter `anggaran_key` wajib' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Baris anggaran yang dimaksud tidak disebutkan.' }, { status: 400 })
   }
   const bulanNum = Number(searchParams.get('sampai_bulan'))
   const sampaiBulan = Number.isInteger(bulanNum) && bulanNum >= 1 && bulanNum <= 12 ? bulanNum : undefined
@@ -41,6 +41,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, data })
   } catch (err) {
     console.error('[API /blud/realisasi/register GET]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

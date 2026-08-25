@@ -369,7 +369,7 @@ function DpaTable({
     const next = [...sourceRows]
     next.splice(insertIdx + 1, 0, ...newRows)
     onChange(recalcDpaJumlah(next.map((r, i) => ({ ...r, urutan: i }))))
-    toast.success(`${newRows.length} item usulan diimport di bawah "${anchor.uraian || TIPE_LABEL[anchor.tipe_baris]}"`)
+    toast.success(`${newRows.length} item usulan disisipkan di bawah "${anchor.uraian || TIPE_LABEL[anchor.tipe_baris]}"`)
     setTimeout(() => jumpToRow(newRows[0].row_id), 80)
   }, [onChange, jumpToRow])
 
@@ -407,9 +407,9 @@ function DpaTable({
     const hasContent = !!(anchor.uraian?.trim() || anchor.jumlah)
     if (hasContent) {
       const ok = await confirmDialog({
-        title: 'Timpa Isi Baris',
-        message: `Baris "${anchor.uraian || '(tanpa uraian)'}" sudah berisi — uraian, volume, satuan, dan harga akan ditimpa item usulan "${cand.uraian}". Lanjutkan?`,
-        confirmLabel: 'Timpa',
+        title: 'Ganti isi baris ini?',
+        message: `Baris "${anchor.uraian || '(belum ada uraian)'}" sudah ada isinya. Uraian, volume, satuan, dan harganya akan diganti dengan usulan "${cand.uraian}". Kode rekening dan penanggung jawabnya tetap.`,
+        confirmLabel: 'Ganti isinya',
         variant: 'warning',
       })
       if (!ok) return
@@ -436,8 +436,9 @@ function DpaTable({
     const count = selectedRowIds.size
     if (count === 0) return
     const ok = await confirmDialog({
-      title: 'Hapus Baris Terpilih',
-      message: `${count} baris terpilih akan dihapus sekaligus. Lanjutkan?`,
+      title: `Hapus ${count} baris?`,
+      message: `${count} baris yang dicentang akan dihapus sekaligus, beserta baris di bawahnya. Belum permanen — baru hilang dari database setelah Anda menekan Simpan.`,
+      confirmLabel: `Hapus ${count} baris`,
       variant: 'danger',
     })
     if (!ok) return
@@ -446,7 +447,7 @@ function DpaTable({
       .map((r, i) => ({ ...r, urutan: i }))
     onChange(recalcDpaJumlah(filtered))
     clearSelection()
-    toast.success(`${count} baris dihapus`)
+    toast.success(`${count} baris dihapus dari form — tekan Simpan untuk menetapkannya`)
   }, [rows, selectedRowIds, onChange, clearSelection])
 
   return (
@@ -526,7 +527,7 @@ function DpaTable({
                     checked={allSelected}
                     disabled={selectableIds.length === 0}
                     onChange={() => allSelected ? clearSelection() : selectAll(selectableIds)}
-                    data-tooltip={allSelected ? 'Uncheck semua' : 'Check semua (utk multi-hapus / geser blok)'}
+                    data-tooltip={allSelected ? 'Lepas semua centang' : 'Centang semua — untuk menghapus atau menggeser banyak baris sekaligus'}
                   />
                 )}
               </th>
@@ -581,8 +582,8 @@ function DpaTable({
                               checked={isChecked}
                               onChange={() => toggleCheckbox(row.row_id)}
                               data-tooltip={hasChildren
-                                ? (isChecked ? 'Uncheck (cascade reverse)' : 'Check + cascade anak utk block geser')
-                                : (isChecked ? 'Uncheck' : 'Check (opsional, utk multi-select)')}
+                                ? (isChecked ? 'Lepas centang — baris di bawahnya ikut terlepas' : 'Centang baris ini beserta seluruh baris di bawahnya, supaya bisa digeser sebagai satu blok')
+                                : (isChecked ? 'Lepas centang' : 'Centang untuk memilih beberapa baris sekaligus')}
                             />
                           )}
                           {showArrows && (
@@ -890,7 +891,7 @@ export default function DpaClient({
       r.uraian.toLowerCase().includes(q),
     )
     if (!match) {
-      toast.error(`Tidak ada baris yang match "${searchQ}"`)
+      toast.error(`Tidak ada baris yang mengandung "${searchQ}"`)
       return
     }
     const matchLabel = TIPE_LABEL[match.tipe_baris]
@@ -991,7 +992,7 @@ export default function DpaClient({
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
-      showToast('Gagal memuat data DPA', false)
+      showToast('Data DPA tidak bisa dimuat — periksa sambungan, lalu muat ulang halaman.', false)
     }
     finally   { setLoading(false) }
   }, [tahun])
@@ -1024,7 +1025,7 @@ export default function DpaClient({
   useEffect(() => { void (async () => { await loadDpa(); await loadHistory() })() }, [loadDpa, loadHistory])
 
   async function simpan() {
-    if (!rows.length) { showToast('Tidak ada data untuk disimpan', false); return }
+    if (!rows.length) { showToast('Form masih kosong — belum ada yang bisa disimpan.', false); return }
     if (submittingRef.current) return
     submittingRef.current = true
     paksaTurunRef.current = null
@@ -1071,7 +1072,7 @@ export default function DpaClient({
         return
       }
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
-        showToast('⚠️ Data sudah diubah pengguna lain. Memuat versi terbaru…', false)
+        showToast('Orang lain baru saja mengubah versi ini. Isian terbarunya sedang dimuat — periksa dulu, lalu simpan ulang.', false)
         await loadDpa(versiTanggal)
         return
       }
@@ -1091,9 +1092,9 @@ export default function DpaClient({
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
         asalSalinRef.current = null
       } else {
-        showToast(json.error || json.message || 'Gagal simpan', false)
+        showToast(json.error || json.message || 'Belum tersimpan. Coba lagi.', false)
       }
-    } catch { showToast('Gagal menyimpan', false) }
+    } catch { showToast('Belum tersimpan — sambungan ke server terputus. Coba lagi sebentar lagi.', false) }
   }
 
   // Form Baru flow: fetch kode_besar → conditional modal/overlay
@@ -1102,7 +1103,7 @@ export default function DpaClient({
       const res  = await fetch('/api/blud/kode-besar', { cache: 'no-store' })
       const json = await res.json()
       if (!res.ok || !json.ok) {
-        showToast(json.error || 'Gagal load Kode Besar', false)
+        showToast(json.error || 'Daftar Kode Besar tidak bisa dibuka. Coba lagi sebentar lagi.', false)
         return
       }
       const items = (json.data as KbRow[]) ?? []
@@ -1113,7 +1114,7 @@ export default function DpaClient({
       // Default semua di-include — user bisa hapus per baris di overlay
       setOverlayItems(items)
     } catch {
-      showToast('Gagal memuat Kode Besar', false)
+      showToast('Daftar Kode Besar tidak bisa dibuka — periksa sambungan, lalu coba lagi.', false)
     }
   }
 
@@ -1121,7 +1122,9 @@ export default function DpaClient({
   function executeBuildForm(items: KbRow[]) {
     const built = buildDpaRowsFromKodeBesar(items)
     if (built.length === 0) {
-      showToast('Tidak ada baris valid untuk di-build. Periksa parent_kode L2.1.', false)
+      // `parent_kode` dulu disebut apa adanya di sini — itu nama kolom database,
+      // bukan sesuatu yang bisa dicari orang di layar mana pun.
+      showToast('Kerangka tidak bisa dibuat. Di menu Kode Besar, pastikan tiap baris L2.1 sudah menunjuk induknya.', false)
       return
     }
     setRows(built)
@@ -1129,7 +1132,7 @@ export default function DpaClient({
     asalSalinRef.current = null
     setOverlayItems(null)
     setOverwriteConfirm(null)
-    showToast(`Form DPA dibuat dengan ${built.length} baris dari Kode Besar`)
+    showToast(`Kerangka ${built.length} baris dibuat dari Kode Besar — belum tersimpan, isi dulu lalu tekan Simpan.`)
   }
 
   /**
@@ -1420,19 +1423,21 @@ export default function DpaClient({
         <div onClick={() => setSafetyWarning(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
           <div onClick={e => e.stopPropagation()} style={{ background:'#042C53', border:'2px solid #E24B4A', borderRadius:'14px', padding:'24px', maxWidth:'500px', width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.5)' }}>
             <div style={{ fontSize:'15px', fontWeight:800, color:'#E24B4A', marginBottom:'10px' }}>
-              ⚠️ Peringatan: Drop Banyak Baris
+              Banyak baris akan hilang
             </div>
             <div style={{ fontSize:'12px', color:'#B5D4F4', lineHeight:1.7, marginBottom:'16px' }}>
-              Versi <strong style={{ color:'#FAC775' }}>{safetyWarning.versiTanggal}</strong>: Anda akan menggantikan <strong style={{ color:'#FAC775' }}>{safetyWarning.existing}</strong> baris existing dengan <strong style={{ color:'#FAC775' }}>{safetyWarning.incoming}</strong> baris baru — drop <strong style={{ color:'#E24B4A' }}>{safetyWarning.dropPct.toFixed(1)}%</strong>.
+              Versi <strong style={{ color:'#FAC775' }}>{formatTanggalId(safetyWarning.versiTanggal)}</strong> sekarang berisi <strong style={{ color:'#FAC775' }}>{safetyWarning.existing}</strong> baris.
+              Yang akan Anda simpan cuma <strong style={{ color:'#FAC775' }}>{safetyWarning.incoming}</strong> baris — <strong style={{ color:'#E24B4A' }}>{safetyWarning.dropPct.toFixed(1)}%</strong> isinya lenyap.
               <br /><br />
-              Pastikan ini disengaja (mis. struktur hierarki disederhanakan). <strong style={{ color:'#E24B4A' }}>Tindakan ini PERMANEN.</strong>
+              Kalau memang disengaja, misalnya susunannya baru saja diringkas, lanjutkan saja.
+              Kalau tidak, batalkan dan periksa dulu — <strong style={{ color:'#E24B4A' }}>baris yang hilang tidak bisa dikembalikan.</strong>
             </div>
             <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
               <PrimaButton variant="ghost" onClick={() => setSafetyWarning(null)} disabled={saving}>
-                Batal
+                Periksa dulu
               </PrimaButton>
               <PrimaButton variant="danger" onClick={() => { const v = safetyWarning.versiTanggal; paksaDropRef.current = true; setSafetyWarning(null); setSaving(true); void doSimpanInternal(v).finally(() => setSaving(false)) }} disabled={saving}>
-                Ya, Tetap Simpan
+                Memang disengaja, simpan
               </PrimaButton>
             </div>
           </div>
@@ -1485,7 +1490,7 @@ export default function DpaClient({
               </table>
 
               <label className="bk-field">
-                <span className="blud-imp-muted">Alasan (wajib, minimal 10 karakter — tercatat di audit log)</span>
+                <span className="blud-imp-muted">Alasannya apa? Wajib diisi, minimal 10 huruf. Ini ikut tercatat dan bisa ditanyakan kembali di kemudian hari.</span>
                 <textarea className="blud-imp-input" rows={3} value={alasanTurun}
                   onChange={e => setAlasanTurun(e.target.value)}
                   placeholder="Contoh: pagu dikoreksi mengikuti DPA definitif atas disposisi Direktur tanggal …" />
@@ -1521,8 +1526,8 @@ export default function DpaClient({
               <h2 style={{ fontWeight:800, color:'#E6F1FB', fontSize:15 }}>Belum ada data Kode Besar</h2>
             </div>
             <p style={{ fontSize:12.5, color:'#B5D4F4', lineHeight:1.7, marginBottom:16 }}>
-              Form DPA Baru di-build dari menu <strong style={{ color:'#A78BFA' }}>Kode Besar</strong> (template L1/L2/L2.1).
-              Silakan input data Kode Besar dulu, lalu kembali ke sini untuk buat form.
+              Kerangka form DPA disusun dari daftar di menu <strong style={{ color:'#A78BFA' }}>Kode Besar</strong> — daftar itu yang
+              menentukan baris tingkat 1, 2, dan 2.1 muncul apa saja. Isi dulu daftarnya, lalu kembali ke sini.
             </p>
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
               <PrimaButton variant="ghost" onClick={() => setEmptyKbModal(false)}>
@@ -1543,20 +1548,20 @@ export default function DpaClient({
           <div onClick={e => e.stopPropagation()} style={{ background:'#042C53', border:'1px solid rgba(124,92,252,.45)', borderRadius:12, padding:20, maxWidth:680, width:'100%', maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,.6)' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
               <FilePlus size={18} style={{ color:'#A78BFA' }} />
-              <h2 style={{ fontWeight:800, color:'#E6F1FB', fontSize:15 }}>Buat Form DPA — Pilih Baris</h2>
+              <h2 style={{ fontWeight:800, color:'#E6F1FB', fontSize:15 }}>Pilih baris untuk kerangka DPA</h2>
               <button onClick={() => setOverlayItems(null)} style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#85B7EB', cursor:'pointer', padding:4 }}>
                 <X size={18} />
               </button>
             </div>
             <p style={{ fontSize:11.5, color:'#85B7EB', lineHeight:1.5, marginBottom:12 }}>
-              <strong style={{ color:'#B5D4F4' }}>{overlayItems.length} baris</strong> dari Kode Besar siap di-inject ke form DPA.
-              Klik <span style={{ display:'inline-flex', verticalAlign:'middle' }}><DeleteIcon size={11} /></span> di baris yang tidak diinginkan.
+              <strong style={{ color:'#B5D4F4' }}>{overlayItems.length} baris</strong> dari Kode Besar akan jadi kerangka form.
+              Yang tidak dipakai, buang lewat <span style={{ display:'inline-flex', verticalAlign:'middle' }}><DeleteIcon size={11} /></span>.
             </p>
 
             <div style={{ flex:1, overflowY:'auto', border:'1px solid #0C447C', borderRadius:8 }}>
               {overlayItems.length === 0 ? (
                 <div style={{ padding:32, textAlign:'center', color:'#85B7EB', fontSize:12 }}>
-                  Semua baris sudah dihapus. Tutup overlay untuk membatalkan.
+                  Semua baris sudah dibuang. Tutup jendela ini untuk membatalkan.
                 </div>
               ) : (
                 overlayItems.map((it, idx) => {
@@ -1592,7 +1597,7 @@ export default function DpaClient({
                         style={{ background:'transparent', border:'none', color: idx === overlayItems.length - 1 ? 'rgba(133,183,235,.25)' : '#85B7EB', cursor: idx === overlayItems.length - 1 ? 'not-allowed' : 'pointer', padding:3, borderRadius:4, display:'inline-flex' }}>
                         <ChevronDown size={13} />
                       </button>
-                      <DeleteButton onClick={() => removeFromOverlay(idx)} data-tooltip="Hapus dari list" iconSize={12} />
+                      <DeleteButton onClick={() => removeFromOverlay(idx)} data-tooltip="Buang baris ini dari kerangka" iconSize={12} />
                     </div>
                   )
                 })
@@ -1627,15 +1632,15 @@ export default function DpaClient({
               <strong style={{ color:'#A78BFA' }}> {overwriteConfirm.length} baris</strong> baru dari Kode Besar.
             </p>
             <p style={{ fontSize:11, color:'#85B7EB', lineHeight:1.5, marginBottom:16, fontStyle:'italic' }}>
-              ℹ️ Form lama yang sudah disimpan (versi tanggal) tetap aman di history dropdown — bisa dipilih kembali.
-              Pergantian ini hanya menggantikan baris di editor sekarang, BELUM tersimpan ke DB sampai klik Simpan.
+              Versi yang sudah pernah disimpan tetap aman — pilih tanggalnya lagi dari daftar versi kalau ingin kembali.
+              Yang berganti cuma isi layar ini, dan belum tersimpan sampai Anda menekan Simpan.
             </p>
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
               <PrimaButton variant="ghost" onClick={() => setOverwriteConfirm(null)}>
                 Batal
               </PrimaButton>
               <PrimaButton variant="danger" onClick={() => executeBuildForm(overwriteConfirm)}>
-                Ya, Ganti Form
+                Ganti isi form
               </PrimaButton>
             </div>
           </div>

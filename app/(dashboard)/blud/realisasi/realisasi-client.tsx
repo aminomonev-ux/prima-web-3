@@ -94,7 +94,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
     try {
       const res = await fetch(`/api/blud/realisasi/pagu?tahun=${th}&bulan=${bl}`)
       const json = await res.json()
-      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Gagal memuat Realisasi'); return }
+      if (!res.ok || !json.ok) { toast.error(json.error ?? 'Data realisasi tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
       const data: BarisRealisasi[] = json.data ?? []
       const baruMap = new Map(data.map(b => [b.anggaran_key, { pagu: b.pagu, kode: b.kode_rekening, uraian: b.uraian }]))
 
@@ -123,7 +123,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
       setRows(data)
       setSumber(json.pagu_sumber ?? null)
     } catch {
-      toast.error('Tidak bisa menghubungi server')
+      toast.error('Server tidak bisa dihubungi. Periksa sambungan, lalu coba lagi.')
     } finally {
       setLoading(false)
     }

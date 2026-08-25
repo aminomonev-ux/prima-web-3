@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const raw    = await req.json().catch(() => null)
   const parsed = BodySchema.safeParse(raw)
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, error: 'Data tidak valid' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Ada isian yang belum benar.' }, { status: 400 })
   }
   const { type, menu, view, versi, rows } = parsed.data
 

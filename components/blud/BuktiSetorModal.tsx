@@ -177,7 +177,7 @@ export default function BuktiSetorModal({ tahun, bulan, awal, onClose, onSaved }
       })
       let json: { ok?: boolean; error?: string } = {}
       try { json = await res.json() } catch { /* respons bukan JSON — tangani lewat status */ }
-      if (!res.ok) { setGalat(json.error ?? `Gagal menyimpan (${res.status}).`); return }
+      if (!res.ok) { setGalat(json.error ?? 'Belum tersimpan. Coba lagi sebentar lagi.'); return }
       onSaved(); onClose()
     } catch {
       setGalat('Tidak bisa menghubungi server. Coba lagi.')

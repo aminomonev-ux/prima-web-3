@@ -48,13 +48,13 @@ export async function POST(req: NextRequest) {
   if (!canImporDpa(session.role)) {
     return NextResponse.json({
       ok: false, code: 'IMPOR_TERBATAS',
-      error: 'Impor DPA mengganti satu versi anggaran sekaligus — hanya Super Admin atau Admin Staff.',
+      error: 'Impor mengganti satu versi anggaran sekaligus, jadi hanya Super Admin atau Admin Staff yang boleh melakukannya.',
     }, { status: 403 })
   }
 
   const step = new URL(req.url).searchParams.get('step') ?? 'preview'
   if (step !== 'preview' && step !== 'commit') {
-    return NextResponse.json({ ok: false, error: 'step harus preview atau commit' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Langkah impor tidak dikenali. Muat ulang halaman, lalu ulangi impornya.' }, { status: 400 })
   }
 
   const limited = await bludRateLimit(session.userId, `impor-dpa-${step}`, step === 'commit' ? 6 : 12)
@@ -70,7 +70,7 @@ async function tanganiPreview(
   const form = await req.formData().catch(() => null)
   const file = form?.get('file') as File | null
   if (!file) {
-    return NextResponse.json({ ok: false, error: 'Tidak ada berkas yang dipilih.' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Belum ada berkas yang dipilih.' }, { status: 400 })
   }
   if (file.size > MAKS_UKURAN) {
     return NextResponse.json({ ok: false, error: 'Ukuran berkas melebihi 8MB.' }, { status: 400 })
@@ -82,12 +82,12 @@ async function tanganiPreview(
   const buf = Buffer.from(await file.arrayBuffer())
   const mime = await endusMime(buf)
   if (!mime || !MIME_XLSX.includes(mime)) {
-    return NextResponse.json({ ok: false, error: 'Isi berkas tidak cocok dengan ekstensi .xlsx.' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Isi berkasnya bukan Excel, walau namanya berakhiran .xlsx.' }, { status: 400 })
   }
 
   const tahunParsed = TahunSchema.safeParse(form?.get('tahun'))
   if (!tahunParsed.success) {
-    return NextResponse.json({ ok: false, error: 'Parameter `tahun` tidak valid (2000–2100).' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: 'Tahun anggaran tidak dikenali. Pilih tahun antara 2000 dan 2100.' }, { status: 400 })
   }
   const tahun = tahunParsed.data
 
@@ -142,7 +142,7 @@ async function tanganiPreview(
       }, { status: 400 })
     }
     console.error('[API /blud/dpa/import preview]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
 
@@ -154,7 +154,7 @@ async function tanganiCommit(
   const parsed = DpaImportBodySchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, error: 'Data tidak valid: ' + parsed.error.issues[0].message },
+      { ok: false, error: 'Ada isian yang belum benar: ' + parsed.error.issues[0].message },
       { status: 400 },
     )
   }
@@ -162,7 +162,7 @@ async function tanganiCommit(
 
   if (turunkan_paksa && !alasan_turun) {
     return NextResponse.json(
-      { ok: false, error: 'Alasan wajib diisi saat menurunkan pagu di bawah realisasi.' },
+      { ok: false, error: 'Tulis dulu alasannya — pagu ini diturunkan sampai di bawah uang yang sudah terpakai.' },
       { status: 400 },
     )
   }
@@ -237,6 +237,6 @@ async function tanganiCommit(
       }, { status: 409 })
     }
     console.error('[API /blud/dpa/import commit]', err)
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }
