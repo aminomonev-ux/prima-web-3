@@ -88,3 +88,74 @@ export function dpaKePergeseranInput(d: DpaBaris, urutan: number): PergeseranBar
     urutan,
   }
 }
+
+// ─── SALIN DARI TAHUN LAIN ───────────────────────────────────────────────────
+// Dua mapper di bawah ini kebalikan `dpaKePergeseranInput` di atas dalam satu hal
+// yang menentukan: di sana `anggaran_key` SENGAJA dibawa karena itu baris yang
+// sama; di sini SENGAJA dibuang karena tahunnya beda. Jangkar itu mengikat baris
+// ke realisasi/SPJ tahun sumber — membawanya berarti belanja 2027 dilaporkan ke
+// pos 2026. Jejak `origin`/`usulan_*` juga dilepas: baris tahun baru tidak pernah
+// lewat putusan Usulan tahun lama.
+//
+// `row_id` disalin apa adanya, TANPA nilai cadangan. Mengarang id di sini akan
+// memutus `parent_id` anak-anaknya yang masih menunjuk id lama; kalau sampai ada
+// yang kosong, `validateTreeIntegrity` menolaknya di server — gagal bersuara,
+// bukan gagal diam-diam.
+
+/** Baris DPA tahun sumber → titik awal form DPA tahun berikutnya. */
+export function dpaKeTahunBaruInput(d: DpaBaris, urutan: number): DpaBarisInput {
+  return {
+    kode_rekening:    d.kode_rekening,
+    uraian:           d.uraian,
+    vol:              d.vol,
+    satuan:           d.satuan,
+    harga:            d.harga,
+    jumlah:           d.jumlah,
+    penanggung_jawab: d.penanggung_jawab ?? '',
+    keterangan:       d.keterangan ?? '',
+    tipe_baris:       d.tipe_baris,
+    row_id:           d.row_id,
+    anggaran_key:     null,
+    parent_id:        d.parent_id,
+    urutan,
+    origin:           'MANUAL',
+    usulan_item_id:   null,
+    usulan_no:        null,
+  }
+}
+
+/**
+ * Baris Pergeseran tahun sumber → titik awal form DPA tahun berikutnya, memakai
+ * pagu PASCA-geser.
+ *
+ * Bisa satu lawan satu karena `pergeseran_dpa` menyimpan pasangan vol/harga
+ * sendiri: `pergeseran = vol_p × harga_p` (`recalcPergeseranJumlah`), invarian
+ * yang sama persis dengan `jumlah = vol × harga` di DPA (`recalcDpaJumlah`).
+ * Jadi `jumlah` yang disalin di sini akan dihitung ulang server jadi angka yang
+ * identik. Kalau `pergeseran` dulu angka ketikan bebas, salinan ini akan ditimpa
+ * balik jadi vol × harga lama tanpa pesan apa pun — itu yang tidak terjadi.
+ *
+ * `satuan` diambil apa adanya (Pergeseran tidak punya `satuan_p` — satuannya
+ * memang cermin DPA), dan `bertambah_berkurang` tidak dibawa sama sekali:
+ * selisih terhadap DPA hanya bermakna di dalam tahunnya sendiri.
+ */
+export function pergeseranKeTahunBaruInput(d: PergeseranBaris, urutan: number): DpaBarisInput {
+  return {
+    kode_rekening:    d.kode_rekening,
+    uraian:           d.uraian,
+    vol:              d.vol_p,
+    satuan:           d.satuan,
+    harga:            d.harga_p,
+    jumlah:           d.pergeseran,
+    penanggung_jawab: d.penanggung_jawab ?? '',
+    keterangan:       d.keterangan ?? '',
+    tipe_baris:       d.tipe_baris,
+    row_id:           d.row_id,
+    anggaran_key:     null,
+    parent_id:        d.parent_id,
+    urutan,
+    origin:           'MANUAL',
+    usulan_item_id:   null,
+    usulan_no:        null,
+  }
+}

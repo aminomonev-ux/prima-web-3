@@ -226,6 +226,18 @@ export const SentinelAckSchema = z.object({
   active_warning: z.number().int().min(0).max(999).default(0),
 });
 
+/**
+ * Jejak "baris ini salinan tahun lain" — tujuannya SATU: memperpanjang baris
+ * detail `BLUD_SAVE_DPA`. Tidak disimpan ke kolom mana pun dan tidak mengubah
+ * apa yang ditulis. Tanpa ini tidak ada apa pun di basis data yang menyatakan
+ * DPA 2027 lahir dari 2026 — log-nya cuma berbunyi "0 → 570 baris".
+ */
+export const AsalSalinSchema = z.object({
+  tahun:  TahunSchema,
+  versi:  TanggalSchema,
+  sumber: z.enum(['DPA', 'PERGESERAN']),
+});
+
 /** POST /api/blud/dpa — Audit BLUD v1.2 (B-NEW-3): force + L51 expected_version */
 export const DpaBodySchema = z.object({
   tahun_anggaran:   TahunSchema,
@@ -238,6 +250,7 @@ export const DpaBodySchema = z.object({
   alasan_turun:     z.string().trim().min(10, 'Alasan minimal 10 karakter').max(500).optional(),
   expected_version: z.coerce.number().int().min(0).default(0),
   sentinel_ack:     SentinelAckSchema.optional(),
+  asal_salin:       AsalSalinSchema.optional(),
 });
 
 /** Sama dengan `DpaBodySchema`, hanya batas barisnya mengikuti jalur impor. */

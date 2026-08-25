@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
   }
   const {
     tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack,
-    turunkan_paksa, alasan_turun,
+    turunkan_paksa, alasan_turun, asal_salin,
   } = parsed.data
 
   // Sejalan dengan jalur Pergeseran: menembus §4.3 harus disengaja DAN beralasan,
@@ -176,7 +176,9 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_SAVE_DPA',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan DPA ${tahun_anggaran}/${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`,
+      detail:    `Simpan DPA ${tahun_anggaran}/${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`
+      // Asal-usul salinan hanya hidup di baris ini — tidak ada kolomnya di tabel.
+      + `${asal_salin ? ` · salinan dari ${asal_salin.sumber === 'DPA' ? 'DPA' : 'Pergeseran'} ${asal_salin.tahun}/${asal_salin.versi}` : ''}`,
     })
     if (pjConflicts.length > 0) {
       await writeAuditLog({

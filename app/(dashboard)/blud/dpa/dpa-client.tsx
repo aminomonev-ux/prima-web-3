@@ -8,10 +8,11 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   ChevronUp, ChevronDown, Save,
-  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox,
+  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox, CalendarClock,
 } from 'lucide-react'
 import ImportDpaModal from '@/components/blud/ImportDpaModal'
 import SalinMasterModal from '@/components/blud/SalinMasterModal'
+import SalinTahunModal, { type AsalSalin } from '@/components/blud/SalinTahunModal'
 import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
@@ -841,14 +842,21 @@ function DpaTable({
 
 export default function DpaClient({
   bolehUbah, bolehImpor = false, bolehUbahMasterAkun = false, bolehUbahKodeBesar = false,
+  bolehBacaPergeseran = false,
 }: {
   bolehUbah: boolean
   bolehImpor?: boolean
   bolehUbahMasterAkun?: boolean
   bolehUbahKodeBesar?: boolean
+  /** Menentukan pilihan "Pasca-Pergeseran" di Salin dari Tahun Lain muncul atau tidak. */
+  bolehBacaPergeseran?: boolean
 }) {
   const [importDpaBuka, setImportDpaBuka] = useState(false)
   const [salinBuka,    setSalinBuka]    = useState(false)
+  const [salinTahunBuka, setSalinTahunBuka] = useState(false)
+  // Asal salinan disimpan sampai Simpan ditekan — semata untuk baris detail audit.
+  // Dilepas begitu barisnya diubah lewat jalur lain supaya jejaknya tidak berbohong.
+  const asalSalinRef = useRef<AsalSalin | null>(null)
   const bolehSalinInduk = bolehUbahMasterAkun || bolehUbahKodeBesar
   const [rows,        setRows]        = useState<DpaBarisInput[]>([])
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
@@ -977,6 +985,9 @@ export default function DpaClient({
         setRows((json.data as DpaBaris[]).map(dpaKeInput))
         setVersi(json.versi_tanggal || '')
         setVersion(typeof json.version === 'number' ? json.version : 0)
+        // Barisnya diganti muatan dari server — jejak "ini salinan tahun X" tidak
+        // berlaku lagi. Dibiarkan menempel, ia akan mengotori audit simpan berikutnya.
+        asalSalinRef.current = null
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -1050,6 +1061,7 @@ export default function DpaClient({
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
+          asal_salin: asalSalinRef.current ?? undefined,
         }),
       })
       const json = await res.json()
@@ -1076,6 +1088,8 @@ export default function DpaClient({
         showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList()
         if (typeof json.version === 'number') setVersion(json.version)
         serapJangkar(json.jangkar)
+        // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
+        asalSalinRef.current = null
       } else {
         showToast(json.error || json.message || 'Gagal simpan', false)
       }
@@ -1112,9 +1126,27 @@ export default function DpaClient({
     }
     setRows(built)
     setVersi('')  // unset versi tersimpan (form baru)
+    asalSalinRef.current = null
     setOverlayItems(null)
     setOverwriteConfirm(null)
     showToast(`Form DPA dibuat dengan ${built.length} baris dari Kode Besar`)
+  }
+
+  /**
+   * "Salin dari Tahun Lain" — barisnya sudah dipetakan di dalam modal, di sini
+   * tinggal mendaratkannya. `setVersi('')` sama seperti Form Baru: yang di layar
+   * belum punya padanan tersimpan, jadi Simpan akan menulis versi tanggal HARI INI
+   * di tahun yang sedang dipilih — bukan menimpa versi tahun sumber.
+   */
+  function terapkanSalinTahun(baris: DpaBarisInput[], asal: AsalSalin) {
+    // Recalc supaya total induk di layar langsung sama dengan yang nanti dihitung
+    // server, bukan angka warisan yang kebetulan cocok.
+    setRows(recalcDpaJumlah(baris))
+    setVersi('')
+    asalSalinRef.current = asal
+    setSalinTahunBuka(false)
+    const label = asal.sumber === 'DPA' ? `DPA ${asal.tahun}` : `Pergeseran ${asal.tahun}`
+    showToast(`${baris.length} baris disalin dari ${label} — belum tersimpan, periksa lalu tekan Simpan.`)
   }
 
   // Handler tombol "Buat Form" di overlay — branch: overwrite-confirm atau langsung
@@ -1178,6 +1210,12 @@ export default function DpaClient({
             <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
               onClick={mulaiFormBaru} data-rima="dpa.form-baru">
               Form Baru
+            </PrimaButton>
+
+            <PrimaButton variant="ghost" size="sm" iconLeft={<CalendarClock className="w-3.5 h-3.5" />}
+              disabled={tahunList.filter(t => t !== tahun).length === 0}
+              onClick={() => setSalinTahunBuka(true)} data-rima="dpa.salin-tahun">
+              Salin Tahun Lain
             </PrimaButton>
 
             {bolehImpor && (
@@ -1303,15 +1341,23 @@ export default function DpaClient({
             <p style={{ color:'#E6F1FB', fontWeight:700, fontSize:15, marginBottom:4 }}>Belum ada data DPA</p>
             <p style={{ fontSize:13, color:'#85B7EB', maxWidth:360 }}>
               {bolehUbah
-                ? <>Klik <strong style={{ color:'#B5D4F4' }}>Mulai Form DPA Baru</strong> untuk membuat struktur awal, atau pilih versi dari history di atas.</>
+                ? <>Klik <strong style={{ color:'#B5D4F4' }}>Mulai Form DPA Baru</strong> untuk membuat struktur awal, salin isi tahun lain, atau pilih versi dari history di atas.</>
                 : 'Pilih versi dari history di atas. Penyusunan DPA bukan wewenang peran Anda.'}
             </p>
           </div>
           {bolehUbah && (
-            <PrimaButton variant="primary" iconLeft={<FilePlus className="w-4 h-4" />}
-              onClick={mulaiFormBaru}>
-              Mulai Form DPA Baru
-            </PrimaButton>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'center' }}>
+              <PrimaButton variant="primary" iconLeft={<FilePlus className="w-4 h-4" />}
+                onClick={mulaiFormBaru}>
+                Mulai Form DPA Baru
+              </PrimaButton>
+              {tahunList.filter(t => t !== tahun).length > 0 && (
+                <PrimaButton variant="ghost" iconLeft={<CalendarClock className="w-4 h-4" />}
+                  onClick={() => setSalinTahunBuka(true)}>
+                  Salin dari Tahun Lain
+                </PrimaButton>
+              )}
+            </div>
           )}
 
           {/* Panduan singkat hierarki */}
@@ -1355,6 +1401,17 @@ export default function DpaClient({
           bolehKodeBesar={bolehUbahKodeBesar}
           onTutup={() => setSalinBuka(false)}
           onSelesai={() => { void muatAkunOptions() }}
+        />
+      )}
+
+      {salinTahunBuka && (
+        <SalinTahunModal
+          tahunTujuan={tahun}
+          tahunList={tahunList}
+          bolehBacaPergeseran={bolehBacaPergeseran}
+          adaIsiDiForm={rows.length > 0}
+          onTutup={() => setSalinTahunBuka(false)}
+          onSalin={terapkanSalinTahun}
         />
       )}
 

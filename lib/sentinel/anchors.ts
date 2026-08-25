@@ -28,6 +28,7 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'dpa.impor':              { page: '/blud/dpa', label: 'tombol Impor DPA dari berkas', desc: 'Tombol Impor membaca satu berkas .xlsx menjadi satu versi anggaran penuh — hasilnya ditampilkan dulu untuk diperiksa, tidak langsung tersimpan.' },
   'dpa.salin-induk':        { page: '/blud/dpa', label: 'tombol Salin ke Induk', desc: 'Tombol Salin ke Induk menyalin kode rekening & uraian dari baris DPA di layar ke Master Akun dan Kode Besar — berguna kalau data induknya masih kosong sesudah impor.' },
   'dpa.form-baru':          { page: '/blud/dpa', label: 'tombol Form Baru', desc: 'Tombol Form Baru membangun kerangka DPA otomatis dari daftar Kode Besar — titik awal menyusun DPA baru.' },
+  'dpa.salin-tahun':        { page: '/blud/dpa', label: 'tombol Salin Tahun Lain', desc: 'Tombol Salin Tahun Lain memuat isi DPA tahun sebelumnya ke form yang sedang dibuka — bisa dari DPA murni atau dari pagu pasca-pergeseran. Isinya baru ada di layar; tidak tersimpan sampai Simpan ditekan.' },
   'dpa.overlay-buat-form':  { page: '/blud/dpa', label: 'tombol Buat Form di overlay Kode Besar' },
   'dpa.kolom-uraian':       { page: '/blud/dpa', label: 'kolom Uraian (pencarian Master Akun)', desc: 'Kolom Uraian: ketik kata kunci lalu pilih dari Master Akun — kode rekening ikut terisi otomatis, tak perlu diketik.' },
   'dpa.kolom-vol':          { page: '/blud/dpa', label: 'kolom Vol baris rincian' },
