@@ -489,11 +489,11 @@ function DpaTable({
         return (
           <div className="pj-sentinel-banner" style={{ borderColor: 'rgba(186,117,23,.55)' }}>
             <AlertTriangle style={{ width: 16, height: 16, color: '#BA7517', flexShrink: 0 }} />
-            <strong>{dups.length} kemungkinan entri ganda</strong>
-            <span style={{ opacity: .75 }}>terdeteksi Sentinel Guard. Klik untuk lompat:</span>
+            <strong>{dups.length} baris kemungkinan kembar</strong>
+            <span style={{ opacity: .75 }}>— klik namanya untuk melihat:</span>
             {dups.slice(0, 8).map((d, i) => (
               <span key={`${d.a.row_id}-${d.b.row_id}`} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                <Tip label={`${d.kind === 'hard' ? 'PASTI dobel' : 'Mirip'}: ${d.reason} — "${d.a.uraian}"`}><button
+                <Tip label={`${d.kind === 'hard' ? 'Kembar persis' : 'Mirip'}: ${d.reason} — "${d.a.uraian}"`}><button
                   type="button" className="pj-jump" onClick={() => jumpToRow(d.a.row_id)}
                 >{(d.a.uraian || '?').slice(0, 18)}</button></Tip>
                 <span style={{ opacity: .55 }}>≈</span>

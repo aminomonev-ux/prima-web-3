@@ -487,10 +487,10 @@ export default function KodeBesarClient({ bolehUbah }: { bolehUbah: boolean }) {
               </table>
 
               <ul className="blud-modal-subtitle text-xs" style={{ paddingLeft: 18, lineHeight: 1.7, margin: 0 }}>
-                <li>Kolom <strong>A</strong> = Kode kategori (bebas format, e.g. <code>5.X</code> atau <code>5.1.1</code>)</li>
-                <li>Kolom <strong>B</strong> = Uraian / nama kategori</li>
-                <li>Baris pertama boleh header — otomatis di-skip kalau berisi kata <em>Uraian/Nama/Akun</em></li>
-                <li>Maks 1000 baris per import, format: <code>.xlsx</code> · <code>.xls</code> · <code>.csv</code></li>
+                <li>Kolom <strong>A</strong> = kode kategori. Bentuknya bebas, misal <code>5.X</code> atau <code>5.1.1</code></li>
+                <li>Kolom <strong>B</strong> = uraian atau nama kategori</li>
+                <li>Baris pertama boleh berisi judul kolom — otomatis dilewati kalau memuat kata <em>Uraian</em>, <em>Nama</em>, atau <em>Akun</em></li>
+                <li>Paling banyak 1.000 baris sekali unggah. Berkas: <code>.xlsx</code> · <code>.xls</code> · <code>.csv</code></li>
               </ul>
 
               <div className="flex justify-between items-center" style={{ paddingTop: 4 }}>

@@ -400,7 +400,7 @@ function PergeseranTable({
                             style={{ color: '#F59E0B', flexShrink: 0 }}
                             aria-label="Struktur berbeda dengan DPA"
                           >
-                            <title>DPA punya struktur aggregator (anak), Pergeseran disini leaf. Pertimbangkan tambah anak chain.</title>
+                            <title>Di DPA baris ini punya rincian di bawahnya, di sini belum. Pertimbangkan menambahkan rinciannya.</title>
                           </AlertTriangle>
                         )}
                       </span>
@@ -918,15 +918,15 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       {confirmInject && (
         <div style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,.5)', backdropFilter:'blur(4px)' }}>
           <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,.5)', width:384, padding:24 }}>
-            <h2 style={{ fontWeight:800, color:'#E6F1FB', marginBottom:12 }}>Inject DPA</h2>
+            <h2 style={{ fontWeight:800, color:'#E6F1FB', marginBottom:12 }}>Samakan dengan DPA terbaru?</h2>
             <p style={{ fontSize:13, color:'#85B7EB', marginBottom:20, lineHeight:1.6 }}>
-              Kolom Vol, Harga, Jumlah akan diperbarui dari DPA terbaru.
-              Vol P dan Harga P <strong style={{ color:'#B5D4F4' }}>tidak akan berubah</strong>.
+              Kolom kode rekening, uraian, volume, harga, dan jumlah akan mengikuti DPA terbaru.
+              Angka pergeseran yang sudah Anda isi <strong style={{ color:'#B5D4F4' }}>tidak akan berubah</strong>.
             </p>
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
               <PrimaButton variant="ghost" size="sm" onClick={() => setConfirmInject(false)}>Batal</PrimaButton>
               <PrimaButton variant="primary" size="sm" disabled={injecting} onClick={inject}>
-                {injecting ? 'Injecting...' : 'Ya, Inject'}
+                {injecting ? 'Menyamakan…' : 'Samakan'}
               </PrimaButton>
             </div>
           </div>
@@ -1085,7 +1085,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       ) : rows.length === 0 ? (
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:192, color:'#85B7EB', background:'#042C53', border:'1px solid #0C447C', borderRadius:12 }}>
           <p style={{ fontSize:13 }}>Belum ada data Pergeseran.</p>
-          <p style={{ fontSize:11, marginTop:4 }}>Klik Generate untuk membuat dari DPA terbaru.</p>
+          <p style={{ fontSize:11, marginTop:4 }}>Tekan &quot;Buat Pergeseran&quot; untuk menyalin isi DPA terbaru ke sini.</p>
         </div>
       ) : (
         <PergeseranTable rows={rows} onChange={setRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />

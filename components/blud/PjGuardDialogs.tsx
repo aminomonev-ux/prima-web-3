@@ -41,7 +41,7 @@ export function PjConflictDialog({
         <div className="blud-modal-header flex items-center justify-between px-5 py-4">
           <span className="blud-modal-title font-semibold flex items-center gap-2"
                 style={{ color: '#BA7517' }}>
-            <AlertTriangle className="w-4 h-4" /> Konflik Penanggung Jawab
+            <AlertTriangle className="w-4 h-4" /> Uangnya bisa terhitung dua kali
           </span>
           <button onClick={onCancel} className="blud-modal-close">
             <X className="w-4 h-4" />
@@ -49,11 +49,11 @@ export function PjConflictDialog({
         </div>
         <div className="p-5 space-y-3">
           <p className="blud-modal-subtitle text-sm">
-            Anda akan mengisi PJ <strong>{newPj}</strong> di baris{' '}
-            <strong>{targetUraian || '(tanpa uraian)'}</strong>, namun{' '}
-            <strong>{total}</strong> baris lain dalam rantai vertikalnya sudah memiliki PJ.
-            Jika diteruskan, baris tersebut akan dihitung ganda di Rekap Penanggung Jawab
-            (parent + anak menjumlahkan nominal yang sama).
+            Anda mengisi penanggung jawab <strong>{newPj}</strong> di baris{' '}
+            <strong>{targetUraian || '(tanpa uraian)'}</strong>. Padahal <strong>{total}</strong> baris
+            lain yang segaris dengannya — induk atau turunannya — sudah punya penanggung jawab.
+            Kalau diteruskan, uang yang sama terhitung dua kali di Rekap Penanggung Jawab:
+            sekali di baris induk, sekali lagi di baris ini.
           </p>
 
           <div style={{
@@ -66,7 +66,7 @@ export function PjConflictDialog({
             {ancestors.length > 0 && (
               <div style={{ marginBottom: descendants.length > 0 ? 8 : 0 }}>
                 <div style={{ fontSize: 11, opacity: .7, marginBottom: 4 }}>
-                  ↑ Ancestor (di atas baris ini):
+                  ↑ Baris induk di atasnya:
                 </div>
                 {ancestors.map(a => (
                   <div key={a.row_id} style={{ fontSize: 12, padding: '2px 0' }}>
@@ -82,7 +82,7 @@ export function PjConflictDialog({
             {descendants.length > 0 && (
               <div>
                 <div style={{ fontSize: 11, opacity: .7, marginBottom: 4 }}>
-                  ↓ Descendant (di bawah baris ini):
+                  ↓ Baris turunan di bawahnya:
                 </div>
                 {descendants.map(d => (
                   <div key={d.row_id} style={{ fontSize: 12, padding: '2px 0' }}>
@@ -133,7 +133,7 @@ export function PjMutationDialog({
         <div className="blud-modal-header flex items-center justify-between px-5 py-4">
           <span className="blud-modal-title font-semibold flex items-center gap-2"
                 style={{ color: '#BA7517' }}>
-            <AlertTriangle className="w-4 h-4" /> Penanggung Jawab Aktif di Rantai Atas
+            <AlertTriangle className="w-4 h-4" /> Baris induknya sudah punya penanggung jawab
           </span>
           <button onClick={onCancel} className="blud-modal-close">
             <X className="w-4 h-4" />
@@ -141,9 +141,10 @@ export function PjMutationDialog({
         </div>
         <div className="p-5 space-y-3">
           <p className="blud-modal-subtitle text-sm">
-            Anda akan menambah baris di bawah baris berikut yang sudah memiliki Penanggung Jawab.
-            Pilih bagaimana penanganannya — secara logika 1 PJ boleh menanggung beberapa
-            anak/cabang asalkan baris baru ini (dan turunannya) tidak diisi PJ lagi.
+            Baris baru ini akan berada di bawah baris yang sudah punya penanggung jawab.
+            Satu orang boleh menanggung banyak baris sekaligus — asalkan baris baru ini
+            dan turunannya <strong>tidak</strong> diisi penanggung jawab lagi, supaya uangnya
+            tidak terhitung dua kali di rekap.
           </p>
 
           <div style={{
@@ -165,9 +166,9 @@ export function PjMutationDialog({
           </div>
 
           <div className="flex flex-wrap justify-end gap-2 pt-2">
-            <PrimaButton variant="ghost" size="sm" onClick={onCancel}>Batal Tambah</PrimaButton>
-            <PrimaButton variant="danger" size="sm" onClick={onClear}>Hapus PJ Ancestor</PrimaButton>
-            <PrimaButton variant="success" size="sm" onClick={onKeep}>Tetap (PJ Tetap)</PrimaButton>
+            <PrimaButton variant="ghost" size="sm" onClick={onCancel}>Batal</PrimaButton>
+            <PrimaButton variant="danger" size="sm" onClick={onClear}>Kosongkan PJ induknya</PrimaButton>
+            <PrimaButton variant="success" size="sm" onClick={onKeep}>Biarkan PJ induknya</PrimaButton>
           </div>
         </div>
       </div>

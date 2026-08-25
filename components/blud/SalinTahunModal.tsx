@@ -161,9 +161,9 @@ export default function SalinTahunModal({
 
     if (sumberEfektif === 'PERGESERAN' && pgs.delta !== 0) {
       const setuju = await confirmDialog({
-        title: 'Salin dari pergeseran yang belum berimbang?',
-        message: `Versi ${terpilih.versi} masih draft — selisihnya ${formatRupiah(pgs.delta)} terhadap DPA. `
-          + `Angka yang belum selesai ini akan jadi dasar tahun ${tahunTujuan}.`,
+        title: 'Pergeserannya belum selesai',
+        message: `Pergeseran ${formatTanggalId(terpilih.versi)} totalnya masih berbeda ${formatRupiah(pgs.delta)} dari DPA, `
+          + `jadi angkanya belum final. Angka yang belum selesai ini akan jadi dasar anggaran tahun ${tahunTujuan}. Tetap salin?`,
         // `warning`, bukan `danger`: ini kehati-hatian, bukan tindakan merusak.
         variant: 'warning',
         confirmLabel: 'Tetap salin',
@@ -243,8 +243,8 @@ export default function SalinTahunModal({
                 <div className="blud-imp-badge-warn" style={{ display: 'flex', gap: 8, padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.6 }}>
                   <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
                   <span>
-                    Pergeseran {pgs.versi} belum berimbang — selisih <strong>{formatRupiah(pgs.delta)}</strong> terhadap
-                    DPA. Ini draft, bukan dokumen final.
+                    Pergeseran {pgs.versi ? formatTanggalId(pgs.versi) : ''} belum selesai — totalnya masih
+                    berbeda <strong>{formatRupiah(pgs.delta)}</strong> dari DPA. Angka ini belum final.
                   </span>
                 </div>
               )}
@@ -253,25 +253,28 @@ export default function SalinTahunModal({
                 <div className="blud-imp-badge-warn" style={{ display: 'flex', gap: 8, padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.6 }}>
                   <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
                   <span>
-                    {terpilih.jumlah} baris — melebihi batas simpan {BLUD_SIMPAN_MAKS_BARIS} baris.
-                    Tahun ini kemungkinan diisi lewat Impor, yang batasnya lebih longgar. Menyalinnya
-                    akan menghasilkan form yang tidak bisa disimpan; pakai menu Impor untuk tahun tujuan.
+                    Tahun ini berisi {terpilih.jumlah} baris, lebih banyak dari batas simpan
+                    {' '}{BLUD_SIMPAN_MAKS_BARIS} baris. Isinya kemungkinan dulu dimasukkan lewat menu Impor,
+                    yang batasnya lebih longgar. Kalau disalin, hasilnya tidak akan bisa disimpan —
+                    pakai menu Impor saja untuk tahun tujuan.
                   </span>
                 </div>
               )}
 
               {!memuat && dpa.jumlah > 0 && pgs.jumlah > 0 && dpa.jumlah !== pgs.jumlah && (
                 <p className="blud-imp-muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  Jumlah barisnya memang berbeda: pergeseran bisa mengosongkan pos yang tidak
-                  jadi dipakai. Dua pilihan di atas bukan dua nama untuk isi yang sama.
+                  Jumlah barisnya memang berbeda — saat menggeser anggaran, pos yang tidak jadi
+                  dipakai bisa dikosongkan. Jadi dua pilihan di atas isinya tidak sama persis.
                 </p>
               )}
 
               <div className="blud-imp-muted" style={{ fontSize: 11, lineHeight: 1.7, borderTop: '1px solid rgba(255,255,255,.08)', paddingTop: 12 }}>
-                Yang <strong>tidak</strong> ikut tersalin: jangkar realisasi tiap baris (belanja tahun
-                baru tidak boleh dilaporkan ke pos tahun lama) dan jejak asal-usul dari
-                menu Usulan. Kode rekening, uraian, volume, harga, penanggung jawab, dan
-                keterangan tersalin apa adanya.
+                <div><strong>Yang tersalin:</strong> kode rekening, uraian, volume, satuan, harga, penanggung jawab, dan keterangan.</div>
+                <div style={{ marginTop: 6 }}>
+                  <strong>Yang tidak tersalin:</strong> hubungan tiap baris dengan belanja yang sudah
+                  tercatat di tahun sumber, supaya pengeluaran tahun baru tidak masuk ke pos tahun lama.
+                  Baris hasil salinan juga dianggap isian biasa, bukan lagi kiriman dari menu Usulan.
+                </div>
               </div>
             </>
           )}

@@ -25,16 +25,16 @@ export default function BlockedModal({ info, onClose }: { info: BlockedInfo; onC
       <div className="blud-modal-card rounded-xl w-120 max-w-[95vw]">
         <div className="blud-modal-header flex items-center gap-2 px-5 py-4">
           <AlertTriangle className="w-5 h-5" style={{ color: '#EF9F27' }} />
-          <span className="blud-modal-title font-semibold">Tidak Dapat Digeser</span>
+          <span className="blud-modal-title font-semibold">Baris ini tidak bisa digeser ke sana</span>
           <button onClick={onClose} className="blud-modal-close ml-auto">
             <X className="w-4 h-4" />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <p className="blud-modal-subtitle text-sm">
-            Baris <strong>&quot;{info.target.uraian}&quot;</strong> tidak dapat digeser{' '}
-            <strong>{info.direction === 'up' ? 'ke atas' : 'ke bawah'}</strong> karena
-            akan melewati baris yang berada di grup berbeda.
+            Kalau digeser <strong>{info.direction === 'up' ? 'ke atas' : 'ke bawah'}</strong>,
+            baris <strong>&quot;{info.target.uraian}&quot;</strong> akan melompati baris yang
+            induknya berbeda — susunannya jadi tidak masuk akal.
           </p>
           <div className="blud-modal-info-box space-y-2">
             <p className="blud-modal-info-label text-xs font-medium uppercase tracking-wide">Posisi saat ini</p>
@@ -42,7 +42,7 @@ export default function BlockedModal({ info, onClose }: { info: BlockedInfo; onC
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: '#E24B4A' }} />
               <div>
                 <p className="text-sm font-semibold">{info.neighbor.uraian}</p>
-                <p className="blud-modal-info-label text-xs">{TIPE_LABEL[info.neighbor.tipe_baris]} — grup berbeda</p>
+                <p className="blud-modal-info-label text-xs">{TIPE_LABEL[info.neighbor.tipe_baris]} — induknya beda</p>
               </div>
             </div>
             <div className="blud-modal-row-self flex items-center gap-2 px-3 py-2">
@@ -54,7 +54,7 @@ export default function BlockedModal({ info, onClose }: { info: BlockedInfo; onC
             </div>
           </div>
           <div className="blud-modal-hint px-3 py-2 text-xs">
-            💡 Baris hanya dapat digeser di dalam grup yang sama (sesama baris dengan induk yang sama).
+            Baris hanya bisa digeser di antara saudaranya sendiri — yaitu baris yang induknya sama.
           </div>
           <div className="flex justify-end">
             <PrimaButton variant="primary" size="sm" onClick={onClose}>Mengerti</PrimaButton>
