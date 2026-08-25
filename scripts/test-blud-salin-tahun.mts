@@ -24,6 +24,8 @@
 
 import { dpaKeTahunBaruInput, pergeseranKeTahunBaruInput } from '../lib/blud/row-map'
 import { recalcDpaJumlah, validateTreeIntegrity } from '../lib/blud/recalc'
+import { BLUD_IMPOR_MAKS_BARIS, BLUD_SIMPAN_MAKS_BARIS } from '../lib/blud/import-dpa-shared'
+import { DpaBodySchema } from '../lib/blud/schemas'
 import type { DpaBaris, PergeseranBaris } from '../types'
 
 let lulus = 0
@@ -192,6 +194,29 @@ cek('C8 jalur DPA murni: akar tetap 5.000.000 sesudah recalc',
 bab('D. Urutan')
 cek('D1 urutan hasil salin 0..n-1 walau sumbernya berlubang',
   disalin.every((r, i) => r.urutan === i), `→ ${disalin.map(r => r.urutan).join(',')}`)
+
+// ── E. Batas baris — dua angka yang harus tetap sepakat ──────────────────────
+// Modal Salin menahan tahun sumber yang lebih gemuk dari batas simpan. Angkanya
+// harus angka yang SAMA dengan yang dipakai Zod; kalau `DpaBodySchema` kembali
+// memakai bilangan telanjang, pemeriksaan di modal jadi tebakan yang melenceng
+// dan orang baru tahu setelah menyalin lalu menyunting.
+bab('E. Batas baris')
+cek('E1 batas simpan lebih ketat dari batas impor (asal masalahnya)',
+  BLUD_SIMPAN_MAKS_BARIS < BLUD_IMPOR_MAKS_BARIS,
+  `→ simpan ${BLUD_SIMPAN_MAKS_BARIS} · impor ${BLUD_IMPOR_MAKS_BARIS}`)
+
+const barisPalsu = Array.from({ length: BLUD_SIMPAN_MAKS_BARIS + 1 }, (_, i) =>
+  dpaKeTahunBaruInput({ ...dpaAsli, row_id: `x${i}`, parent_id: null }, i))
+const tolak = DpaBodySchema.safeParse({
+  tahun_anggaran: 2027, versi_tanggal: '2026-08-25', rows: barisPalsu,
+})
+const terima = DpaBodySchema.safeParse({
+  tahun_anggaran: 2027, versi_tanggal: '2026-08-25', rows: barisPalsu.slice(0, BLUD_SIMPAN_MAKS_BARIS),
+})
+cek(`E2 Zod menolak ${BLUD_SIMPAN_MAKS_BARIS + 1} baris`,
+  !tolak.success, `→ ${tolak.success ? 'DITERIMA' : tolak.error.issues[0].message}`)
+cek(`E3 Zod menerima tepat ${BLUD_SIMPAN_MAKS_BARIS} baris`,
+  terima.success, `→ ${terima.success ? 'ok' : terima.error.issues[0].message}`)
 
 console.log(`\n${gagal === 0 ? 'SEMUA LOLOS' : `${gagal} GAGAL`} — ${lulus + gagal} pemeriksaan`)
 process.exit(gagal === 0 ? 0 : 1)

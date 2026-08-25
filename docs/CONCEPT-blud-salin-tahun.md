@@ -115,7 +115,24 @@ mengosongkan pos yang tidak jadi dipakai. Modal menyebutkannya supaya dua piliha
 itu tidak terbaca sebagai dua nama untuk isi yang sama.
 
 **Menimpa form yang sudah berisi.** `confirmDialog()` varian `danger`, bukan
-`window.confirm`.
+`window.confirm`. Kedua konfirmasi WAJIB mengisi `confirmLabel` — bawaannya
+berbunyi "Hapus", menyesatkan di sini karena tidak ada yang dihapus dan tidak
+ada apa pun yang menyentuh basis data.
+
+**Tahun sumber yang terlalu gemuk.** Jalur impor menampung
+`BLUD_IMPOR_MAKS_BARIS` = 2.000 baris, jalur simpan biasa cuma
+`BLUD_SIMPAN_MAKS_BARIS` = 700. Tahun yang diisi lewat Impor karena itu bisa
+lebih besar daripada yang bisa disimpan balik — dan sebelum fitur ini, form
+berisi >700 baris tidak pernah bisa lahir tanpa menyentuh jalur impor. Modal
+menahannya di muka (tombol Salin mati + penjelasan), bukan membiarkannya jatuh
+jadi 400 dari Zod sesudah orangnya menyalin lalu menyunting satu jam. Kedua
+angka tinggal di `import-dpa-shared.ts` supaya Zod dan modal memakai angka yang
+sama; uji E menjaga keduanya tetap sepakat.
+
+**Balapan permintaan.** Mengganti tahun sumber dua kali beruntun bisa membuat
+balasan yang lebih lama datang belakangan — layar menampilkan isi 2026 sementara
+dropdown menunjuk 2025, lalu `asal_salin` mencatat tahun yang salah ke audit.
+Dijaga nomor urut permintaan (`generasiRef`); balasan basi dibuang.
 
 ## 6. Jejak audit
 
@@ -161,13 +178,24 @@ palsu.
 npx tsx scripts/test-blud-salin-tahun.mts
 ```
 
-30 pemeriksaan. Terbukti menggigit lewat uji mutasi:
+33 pemeriksaan. Terbukti menggigit lewat uji mutasi:
 
 | Kode dirusak jadi | Pemeriksaan gagal |
 |---|---|
 | `anggaran_key: d.anggaran_key ?? null` + `origin: d.origin ?? 'MANUAL'` | 3 (A1, A2, A3) |
 | varian pasca-geser ambil `vol`/`harga`/`jumlah` | 6 (B1–B3, C1, C3, C4) |
 | `row_id: \`row_${urutan}\`` | 1 (A8) |
+
+Diverifikasi di data asli (25 Agu 2026), bukan cuma di memori:
+
+| Yang diperiksa | Hasil |
+|---|---|
+| Total DPA 2026 vs form 2027 pasca-geser | 68.383.000.000 → 67.883.000.000, selisih persis −500.000.000 = delta pergeseran |
+| Jangkar 2027 vs 2026 | 558 jangkar baru, **irisan nol** dengan DPA maupun Pergeseran 2026 |
+| `origin` / `usulan_item_id` / `usulan_no` | 0 baris membawa jejak Usulan |
+| Pohon | 0 baris yatim, 0 `row_id` kembar |
+| Baris audit | `Simpan DPA 2027/2026-08-25: 0 → 558 baris (v0→1) · salinan dari Pergeseran 2026/2026-08-25` |
+| Sentinel | 385 peringatan warisan 2026 muncul **sebelum** Simpan, bukan tersalin diam-diam |
 
 ## 10. Berkas
 

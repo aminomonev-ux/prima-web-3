@@ -24,6 +24,17 @@ import { genRowId } from './format'
  */
 export const BLUD_IMPOR_MAKS_BARIS = 2000
 
+/**
+ * Batas baris jalur SIMPAN biasa (`DpaBodySchema`). Dulu angka telanjang di Zod;
+ * diangkat ke sini sejak "Salin dari Tahun Lain" — fitur itu bisa memuat isi
+ * tahun yang DIISI LEWAT IMPOR, jadi sebuah form berisi >700 baris kini bisa
+ * lahir tanpa menyentuh jalur impor sama sekali, dan Simpan-nya akan ditolak
+ * sesudah orangnya terlanjur menyalin. Modal salinnya memeriksa angka ini di
+ * muka; kalau angkanya cuma hidup di dalam Zod, pemeriksaan itu jadi tebakan
+ * yang diam-diam melenceng begitu batasnya diubah.
+ */
+export const BLUD_SIMPAN_MAKS_BARIS = 700
+
 /** Bentuk minimum yang dibutuhkan pemeta — dipenuhi `BarisTerbaca`. */
 export interface BarisSiapPeta {
   barisExcel: number

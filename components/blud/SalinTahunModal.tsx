@@ -16,13 +16,16 @@
 // Pilihan kedua disembunyikan untuk orang yang tidak berhak membuka menu
 // Pergeseran — GET-nya dijaga `bolehBukaMenu('pergeseran')`, jadi menampilkannya
 // hanya akan berujung 403 (L69: pagar API tanpa pasangannya di layar).
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { X, CalendarClock, AlertTriangle } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import SoftSelect from '@/components/ui/SoftSelect'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { dpaKeTahunBaruInput, pergeseranKeTahunBaruInput } from '@/lib/blud/row-map'
+// Dari `import-dpa-shared`, bukan `schemas`: berkas itu sengaja bebas dependensi
+// server. Lewat `schemas` bundel browser ikut menyeret ratelimit → ioredis → dns.
+import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import { hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { formatRupiah } from '@/lib/blud/format'
 import { formatTanggalId } from '@/lib/blud/tanggal'
@@ -81,12 +84,21 @@ export default function SalinTahunModal({
   const [barisDpa, setBarisDpa] = useState<DpaBaris[]>([])
   const [barisPgs, setBarisPgs] = useState<PergeseranBaris[]>([])
 
+  // Nomor urut permintaan. Mengganti tahun sumber dua kali beruntun bisa membuat
+  // balasan yang LEBIH LAMA datang belakangan: layar menampilkan isi 2026 sementara
+  // dropdown menunjuk 2025, lalu `asal_salin` mencatat tahun yang salah ke audit —
+  // justru jejak yang fitur ini ada untuk menjaganya. Balasan basi dibuang.
+  const generasiRef = useRef(0)
+
   const muat = useCallback(async (tahun: number) => {
+    const generasi = ++generasiRef.current
+    const masihBerlaku = () => generasiRef.current === generasi
     setMemuat(true)
     setDpa(KOSONG); setPgs(KOSONG); setBarisDpa([]); setBarisPgs([])
     try {
       const tugas: Promise<void>[] = [
         ambil<DpaBaris>(`/api/blud/dpa?tahun=${tahun}`).then(r => {
+          if (!masihBerlaku()) return
           setBarisDpa(r.data)
           setDpa({ versi: r.versi, jumlah: r.data.length, delta: 0 })
         }),
@@ -94,6 +106,7 @@ export default function SalinTahunModal({
       if (bolehBacaPergeseran) {
         tugas.push(
           ambil<PergeseranBaris>(`/api/blud/pergeseran?tahun=${tahun}`).then(r => {
+            if (!masihBerlaku()) return
             setBarisPgs(r.data)
             setPgs({ versi: r.versi, jumlah: r.data.length, delta: hitungDeltaPergeseranRoot(r.data) })
           }),
@@ -101,9 +114,9 @@ export default function SalinTahunModal({
       }
       await Promise.all(tugas)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Gagal memuat data tahun sumber.')
+      if (masihBerlaku()) toast.error(e instanceof Error ? e.message : 'Gagal memuat data tahun sumber.')
     } finally {
-      setMemuat(false)
+      if (masihBerlaku()) setMemuat(false)
     }
   }, [bolehBacaPergeseran])
 
@@ -121,7 +134,13 @@ export default function SalinTahunModal({
   // di sela itu tombol Salin sempat menunjuk isi yang tidak ada.
   const sumberEfektif: SumberSalin = sumber === 'PERGESERAN' && pgs.jumlah === 0 ? 'DPA' : sumber
   const terpilih = sumberEfektif === 'DPA' ? dpa : pgs
-  const siap = !memuat && !sibuk && tahunSumber != null && terpilih.jumlah > 0
+
+  // Jalur impor menampung 2.000 baris, jalur simpan biasa cuma 700. Tahun yang
+  // diisi lewat Impor karena itu bisa lebih gemuk daripada yang bisa disimpan
+  // balik. Ditahan DI SINI, bukan dibiarkan jatuh jadi 400 dari Zod sesudah
+  // orangnya menyalin lalu menyunting satu jam.
+  const kegemukan = terpilih.jumlah > BLUD_SIMPAN_MAKS_BARIS
+  const siap = !memuat && !sibuk && tahunSumber != null && terpilih.jumlah > 0 && !kegemukan
 
   const jalankan = useCallback(async () => {
     if (tahunSumber == null || !terpilih.versi) return
@@ -226,6 +245,17 @@ export default function SalinTahunModal({
                   <span>
                     Pergeseran {pgs.versi} belum berimbang — selisih <strong>{formatRupiah(pgs.delta)}</strong> terhadap
                     DPA. Ini draft, bukan dokumen final.
+                  </span>
+                </div>
+              )}
+
+              {!memuat && kegemukan && (
+                <div className="blud-imp-badge-warn" style={{ display: 'flex', gap: 8, padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.6 }}>
+                  <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <span>
+                    {terpilih.jumlah} baris — melebihi batas simpan {BLUD_SIMPAN_MAKS_BARIS} baris.
+                    Tahun ini kemungkinan diisi lewat Impor, yang batasnya lebih longgar. Menyalinnya
+                    akan menghasilkan form yang tidak bisa disimpan; pakai menu Impor untuk tahun tujuan.
                   </span>
                 </div>
               )}

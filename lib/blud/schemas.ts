@@ -62,8 +62,11 @@ export function canImporDpa(role: string): boolean {
 
 // Batas baris impor tinggal di `import-dpa-shared.ts` — satu angka dipakai
 // parser DAN Zod, dan berkas itu sengaja bebas dependensi server.
-export { BLUD_IMPOR_MAKS_BARIS } from './import-dpa-shared';
-import { BLUD_IMPOR_MAKS_BARIS as MAKS_BARIS_IMPOR } from './import-dpa-shared';
+export { BLUD_IMPOR_MAKS_BARIS, BLUD_SIMPAN_MAKS_BARIS } from './import-dpa-shared';
+import {
+  BLUD_IMPOR_MAKS_BARIS as MAKS_BARIS_IMPOR,
+  BLUD_SIMPAN_MAKS_BARIS as MAKS_BARIS_SIMPAN,
+} from './import-dpa-shared';
 
 /**
  * Rate limit helper untuk endpoint BLUD. Pakai key `blud-<action>:<userId>`
@@ -242,7 +245,7 @@ export const AsalSalinSchema = z.object({
 export const DpaBodySchema = z.object({
   tahun_anggaran:   TahunSchema,
   versi_tanggal:    TanggalSchema,
-  rows:             z.array(DpaBarisInputSchema).min(1, 'Minimal 1 baris').max(700, 'Maksimal 700 baris'),
+  rows:             z.array(DpaBarisInputSchema).min(1, 'Minimal 1 baris').max(MAKS_BARIS_SIMPAN, `Maksimal ${MAKS_BARIS_SIMPAN} baris`),
   force:            z.boolean().optional().default(false),
   // B2 — §4.3 berlaku juga di jalur DPA: selama tahun itu belum punya Pergeseran,
   // DPA-lah pagu yang berlaku. Bentuknya sengaja sama dengan PergeseranBodySchema.
