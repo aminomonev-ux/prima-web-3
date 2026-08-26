@@ -58,6 +58,9 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   const [loading, setLoading] = useState(false)
   const [renderedHtml, setRenderedHtml] = useState<string>('')  // tabel hasil Cetak
   const [renderedData, setRenderedData] = useState<unknown>(null) // baris rata untuk export lama
+  // Cetak hanya pos yang benar-benar bergeser. Default MATI — cetak penuh tetap
+  // perilaku bawaan; dokumen sebagian harus dipilih dengan sadar.
+  const [hanyaBergeser, setHanyaBergeser] = useState(false)
   // Baris MENTAH dari API — `renderedData` sudah rata jadi array nilai, sehingga
   // tipe_baris/parent_id/anggaran_key hilang. Eksporter dokumen butuh ketiganya
   // untuk membangun rumus SUM (CONCEPT-export-import-dpa §2.3).
@@ -117,6 +120,12 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     return () => ctrl.abort()
   }, [menu, tahun])
 
+  // Saringan "yang bergeser" hanya masuk akal di Rekap Pergeseran. Rekap PJ
+  // sengaja TIDAK ikut: panel auditnya mencocokkan total rekap terhadap pagu DPA
+  // penuh, dan pencocokan itu mustahil pada daftar yang sebagian — panelnya akan
+  // melaporkan "SELISIH KURANG" sebesar pos yang tidak dicetak, setiap kali.
+  const bisaSaringBergeser = menu === 'pergeseran' && view === 'rekapPergeseran'
+
   // ── Action: Cetak (fetch raw data + render tabel client-side) ──
   const onCetak = useCallback(async () => {
     setLoading(true)
@@ -144,7 +153,11 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
 
       // Render HTML via cetak-data helper (client-side aggregation)
       const { renderCetakHtml } = await import('@/lib/blud/cetak-data')
-      const result = renderCetakHtml({ menu, view, rows: j.data, versi: j.versi_tanggal ?? historyVersi ?? null, tanggal })
+      const result = renderCetakHtml({
+        menu, view, rows: j.data,
+        versi: j.versi_tanggal ?? historyVersi ?? null, tanggal,
+        hanyaBergeser: bisaSaringBergeser && hanyaBergeser,
+      })
       setRenderedHtml(result.html)
       setRenderedData(result.rows)
       setRawRows(j.data ?? null)
@@ -154,7 +167,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     } finally {
       setLoading(false)
     }
-  }, [menu, view, tanggal, historyVersi, tahun])
+  }, [menu, view, tanggal, historyVersi, tahun, bisaSaringBergeser, hanyaBergeser])
 
   // Audit BLUD v1.2 (B-NEW-2): log export event ke audit trail (fire-and-forget).
   const logExport = useCallback(async (type: 'pdf' | 'xlsx') => {
@@ -210,7 +223,12 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   const onExcel = useCallback(async () => {
     if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
     const dokumenDpa = menu === 'dpa' && view === 'dpa'
-    const dokumenPergeseran = menu === 'pergeseran' && view === 'rekapPergeseran'
+    // Saringan aktif → JANGAN lewat eksporter dokumen. Berkas itu membangun
+    // rumus `SUM(anak)` dari posisi baris; begitu sebagian anak tidak ikut,
+    // Excel menjumlah yang tersisa saja dan baris induk memuat angka BERBEDA
+    // dari yang tercetak di layar — diam-diam, dan justru di berkas yang
+    // beredar ke orang lain. Yang tersaring turun sebagai rekap nilai statis.
+    const dokumenPergeseran = menu === 'pergeseran' && view === 'rekapPergeseran' && !hanyaBergeser
     try {
       if ((dokumenDpa || dokumenPergeseran) && Array.isArray(rawRows) && rawRows.length) {
         const { exportDpaDokumen, exportPergeseranDokumen } =
@@ -230,7 +248,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     } catch (e) {
       toast.error('Berkas Excel gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, rawRows, rawVersi, tahun, menu, view, tanggal, historyVersi, logExport, ambilDirektur])
+  }, [renderedData, rawRows, rawVersi, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, logExport, ambilDirektur])
 
   // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
   const onSimpanRekapPK = useCallback(async () => {
@@ -359,6 +377,19 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
                   <option key={v.versi} value={v.versi}>{v.versi} ({v.jumlah_baris} baris)</option>
                 ))}
               </select>
+            </div>
+          )}
+          {bisaSaringBergeser && (
+            <div>
+              <div className="cetak-field-label">Cakupan</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: '6px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={hanyaBergeser}
+                  onChange={e => setHanyaBergeser(e.target.checked)}
+                />
+                Hanya yang bergeser
+              </label>
             </div>
           )}
           {menu !== 'master-akun' && (

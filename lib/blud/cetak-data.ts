@@ -28,6 +28,11 @@ export interface RenderArgs {
   rows:    unknown      // raw data dari API (DpaBaris[] | PergeseranBaris[] | MasterAkun[])
   versi:   string | null
   tanggal: string       // user-input date filter (kosong = pakai versi)
+  /**
+   * Cetak hanya pos yang benar-benar bergeser (+ leluhurnya). Hanya berlaku di
+   * `menu: 'pergeseran'` / `view: 'rekapPergeseran'`; view lain mengabaikannya.
+   */
+  hanyaBergeser?: boolean
 }
 
 // Output shape — `rows` di sini sudah-aggregated (PJ grouping, etc.) untuk export
@@ -69,11 +74,79 @@ function spandukDraft(deltaRoot: number): string {
     + `⚠️ DRAFT — belum berimbang: total anggaran ${deltaRoot > 0 ? 'bertambah' : 'berkurang'} ${formatRupiah(Math.abs(deltaRoot))} terhadap DPA. Bukan dokumen final.</div>`
 }
 
+/** Jumlah baris yang dicetak vs jumlah baris versi itu — dipakai spanduk "sebagian". */
+export interface CakupanCetak { ditampilkan: number; total: number }
+
+/**
+ * Rekap anggaran yang diam-diam membuang baris adalah dokumen yang menyesatkan,
+ * bukan dokumen yang ringkas. Spanduk ini yang membuat penyaringan jujur —
+ * terutama kalimat kedua, sebab angka pada baris induk memang tetap pagu penuh.
+ */
+function spandukSebagian(c: CakupanCetak): string {
+  return `<div style="margin-bottom:10px;padding:8px 12px;border:1.5px solid #38BDF8;background:rgba(56,189,248,.12);border-radius:8px;color:#7DD3FC;font-weight:600;font-size:12px;">`
+    + `ℹ️ <strong>Hanya baris yang bergeser</strong> — ${c.ditampilkan} dari ${c.total} baris. `
+    + `Angka pada baris induk tetap pagu penuh, termasuk pos yang tidak ditampilkan.</div>`
+}
+
+/**
+ * Saring baris Pergeseran ke "hanya yang bergeser": daun ber-selisih, PLUS
+ * seluruh leluhurnya.
+ *
+ * Leluhur dibawa TANPA memandang selisihnya sendiri, dan itu bukan kelonggaran
+ * melainkan syarat. Geser Rp 1 juta dari ATK ke Listrik di bawah induk yang
+ * sama: kedua daun ber-selisih, induknya +1jt −1jt = 0. Saringan naif
+ * `bb !== 0` membuang induknya dan menyisakan dua daun yatim — padahal
+ * pergeseran berimbang di bawah satu induk justru bentuk yang paling sering
+ * terjadi, dan tanpa baris induk dokumennya tidak terbaca sebagai anggaran.
+ *
+ * Angka pada baris leluhur SENGAJA tidak dihitung ulang dari anak yang lolos
+ * saring: itu pagu penuh yang menyambung ke DPA. Karena itu pemanggil wajib
+ * memasang `spandukSebagian`.
+ *
+ * Penyaringan ini baru punya dasar sejak kolom P jadi salinan penuh kolom DPA.
+ * Sebelumnya baris yang tidak digeser ber-`bertambah_berkurang` = −jumlah, jadi
+ * di mata mesin SEMUA baris bergeser dan saringan ini tidak menyaring apa pun.
+ */
+export function saringYangBergeser<T extends {
+  row_id: string; parent_id: string | null; bertambah_berkurang?: number | null
+}>(rows: T[]): T[] {
+  const punyaAnak = new Set<string>()
+  for (const r of rows) if (r.parent_id) punyaAnak.add(r.parent_id)
+
+  // Hanya daun yang dinilai dari selisihnya sendiri; induk masuk lewat jalur
+  // leluhur di bawah. Pada data konsisten hasilnya sama saja — selisih induk
+  // adalah jumlah selisih anaknya, jadi induk ber-selisih pasti punya daun
+  // ber-selisih. Yang dijaga penjaga ini data TIDAK konsisten: baris agregat
+  // yang selisih tersimpannya basi tidak boleh menyeret dirinya sendiri masuk
+  // tanpa satu pun anak yang menemani — kepala tabel tanpa rincian.
+  const simpan = new Set<string>()
+  for (const r of rows) {
+    if (punyaAnak.has(r.row_id)) continue
+    if ((r.bertambah_berkurang ?? 0) !== 0) simpan.add(r.row_id)
+  }
+
+  const byId = new Map(rows.map(r => [r.row_id, r]))
+  for (const id of [...simpan]) {
+    let kini = byId.get(id)
+    // Pagar kedalaman: rantai induk melingkar ditolak saat SIMPAN
+    // (`validateTreeIntegrity`), tapi ini jalan di jalur BACA — data lama yang
+    // terlanjur melingkar tidak boleh menggantung layar Cetak.
+    for (let pagar = 0; kini?.parent_id && pagar < 64; pagar++) {
+      const induk = byId.get(kini.parent_id)
+      if (!induk) break
+      simpan.add(induk.row_id)
+      kini = induk
+    }
+  }
+
+  return rows.filter(r => simpan.has(r.row_id))
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Main entry point
 // ──────────────────────────────────────────────────────────────────────────
 export function renderCetakHtml(args: RenderArgs): RenderResult {
-  const { menu, view, rows, versi, tanggal } = args
+  const { menu, view, rows, versi, tanggal, hanyaBergeser } = args
 
   if (menu === 'dpa' && view === 'dpa') {
     return renderDpaView(rows as DpaBaris[], versi ?? tanggal)
@@ -92,7 +165,19 @@ export function renderCetakHtml(args: RenderArgs): RenderResult {
     return renderPjView(pascaGeser, versi ?? tanggal, 'pergeseran', deltaRoot)
   }
   if (menu === 'pergeseran' && view === 'rekapPergeseran') {
-    return renderPergeseranView(rows as PergeseranBaris[], versi ?? tanggal)
+    const asli = rows as PergeseranBaris[]
+    // Delta dari daftar PENUH, supaya penilaian DRAFT tidak bergantung pada cara
+    // saringan bekerja. Pada data yang konsisten kedua cara memang sama —
+    // akar ber-selisih berarti ada daun ber-selisih, daun itu selalu lolos saring,
+    // dan leluhurnya ikut terbawa sampai akar. Tapi kesamaan itu kebetulan yang
+    // bergantung pada aturan saringan hari ini; tanda DRAFT terlalu penting untuk
+    // digantungkan padanya.
+    const deltaRoot = hitungDeltaPergeseranRoot(asli)
+    const tampil = hanyaBergeser ? saringYangBergeser(asli) : asli
+    return renderPergeseranView(
+      tampil, versi ?? tanggal, deltaRoot,
+      hanyaBergeser ? { ditampilkan: tampil.length, total: asli.length } : null,
+    )
   }
   if (menu === 'master-akun' && view === 'masterAkun') {
     return renderMasterAkunView(rows as MasterAkun[])
@@ -315,11 +400,25 @@ function kartu(label: string, value: string, color: string): string {
 // ──────────────────────────────────────────────────────────────────────────
 // View: Rekap Pergeseran — tabel hierarchical, kolom pergeseran-specific
 // ──────────────────────────────────────────────────────────────────────────
-function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): RenderResult {
+function renderPergeseranView(
+  rows: PergeseranBaris[],
+  versi: string | null,
+  /** B6: status DRAFT diturunkan dari delta akar — dihitung pemanggil dari daftar PENUH. */
+  deltaRoot: number,
+  /** Non-null = daftar sudah disaring "hanya yang bergeser". */
+  sebagian: CakupanCetak | null,
+): RenderResult {
   const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Penanggung Jawab', 'Keterangan']
-  // B6: status DRAFT diturunkan dari delta root — tandai dokumen belum berimbang
-  const deltaRoot = hitungDeltaPergeseranRoot(rows)
-  const title = `Rekap Pergeseran${versi ? `: ${versi}` : ' (Terakhir)'}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
+  const title = `Rekap Pergeseran${sebagian ? ' — Yang Bergeser' : ''}${versi ? `: ${versi}` : ' (Terakhir)'}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
+
+  if (sebagian && rows.length === 0) {
+    // Tabel kosong tanpa keterangan terbaca seperti kegagalan memuat data.
+    const html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
+      + spandukDraft(deltaRoot)
+      + `<div style="padding:20px;color:#85B7EB;font-style:italic;">`
+      + `Belum ada baris yang bergeser pada versi ini — seluruh ${sebagian.total} barisnya masih sama dengan DPA.</div>`
+    return { html, rows: [], meta: { title, columns } }
+  }
 
   const sorted = [...rows].sort((a, b) => a.urutan - b.urutan)
 
@@ -332,6 +431,7 @@ function renderPergeseranView(rows: PergeseranBaris[], versi: string | null): Re
 
   let html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
   html += spandukDraft(deltaRoot)
+  if (sebagian) html += spandukSebagian(sebagian)
   html += `<table><thead><tr>`
   for (const c of columns) html += `<th>${esc(c)}</th>`
   html += `</tr></thead><tbody>`
