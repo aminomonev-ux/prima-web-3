@@ -314,12 +314,18 @@ function PergeseranTable({
               <th style={{ width: 120 }}>Satuan</th>
               <th style={{ width: 140, textAlign: 'right' }}>Harga</th>
               <th style={{ width: 150, textAlign: 'right' }}>Jumlah</th>
+              {/* Harga P pakai minWidth, bukan width: `.dpa-table` memakai
+                  table-layout bawaan (auto), jadi `width` cuma USULAN — kolom
+                  berisi teks panjang (Uraian, PJ) menarik jatah kolom angka
+                  sampai nominal miliar terpotong jadi "3.774.2". `minWidth`
+                  yang tidak bisa diperas, plus PJ & Keterangan dipersempit
+                  untuk mengembalikan ruangnya. */}
               <th data-rima="pergeseran.kolom-vol-p" style={{ width: 80, textAlign: 'right' }}>Vol P</th>
-              <th data-rima="pergeseran.kolom-harga-p" style={{ width: 150, textAlign: 'right' }}>Harga P</th>
-              <th data-rima="pergeseran.kolom-selisih" style={{ width: 150, textAlign: 'right' }}>Pergeseran</th>
-              <th style={{ width: 150, textAlign: 'right' }}>+/−</th>
-              <th data-rima="pergeseran.kolom-pj" style={{ width: 170 }}>Penanggung Jawab</th>
-              <th style={{ width: 160 }}>Keterangan</th>
+              <th data-rima="pergeseran.kolom-harga-p" style={{ minWidth: 180, textAlign: 'right' }}>Harga P</th>
+              <th data-rima="pergeseran.kolom-selisih" style={{ minWidth: 160, textAlign: 'right' }}>Pergeseran</th>
+              <th style={{ minWidth: 160, textAlign: 'right' }}>+/−</th>
+              <th data-rima="pergeseran.kolom-pj" style={{ width: 120 }}>Penanggung Jawab</th>
+              <th style={{ width: 110 }}>Keterangan</th>
               {bolehUbah && <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>}
             </tr>
           </thead>
