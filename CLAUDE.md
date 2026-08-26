@@ -28,6 +28,7 @@ PRIMA punya 102 findings audit dari multiple wave (Audit v1.0, Tahap 11/12/14/15
 | Kode konfirmasi dikirim klien **beserta** kunci jawabannya | Konstanta milik server (`z.literal`) | **T4 / L73** |
 | `res.affectedRows` langsung pada hasil `sql` (itu **array**) | `execWrite(sql\`…\`)` atau `res[0].affectedRows` | **T15 / L74** |
 | `expected_version` diambil dari versi yang **dibuka**, padahal yang ditulis versi **lain** | Angka kunci harus milik kunci TUJUAN (`expectedVersionUntuk`) | **L75** |
+| Layar hapus menebalkan **stempel waktu**, identitas datanya jadi subtitle; gesekan konfirmasi berupa **kode acak** | Identitas jadi kepala grup; yang diketik = **sasarannya** (tahun anggaran) | **L76** |
 
 Anti-pattern terbaru (2026-06-15): **L66** `sqlInt()` utk `LIMIT`/`OFFSET` (mysql2 tolak `LIMIT ?` — lolos tsc, ketahuan saat live), **L67** cap jumlah sheet exceljs anti zip-bomb (di parser bersama), **L68** Zod + cek-eksistensi soft-FK di SEMUA cabang tulis termasuk tabel peta/lookup.
 

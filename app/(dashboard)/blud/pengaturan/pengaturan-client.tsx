@@ -1,10 +1,15 @@
 'use client'
 // app/(dashboard)/blud/pengaturan/pengaturan-client.tsx
 // Pengaturan BLUD: hapus versi DPA & Pergeseran dari history.
-// - 2 section: DPA BLUD + Pergeseran DPA
-// - Per row: tanggal versi · jumlah baris · tombol Hapus
-// - Modal confirm dengan KODE RANDOM 4-digit (cegah mis-click)
-// - Tombol hapus DISABLED kalau hanya 1 versi tersisa (jaga app tidak empty state)
+// - 2 section: DPA BLUD + Pergeseran DPA, dikelompokkan per TAHUN ANGGARAN
+// - Tahun jadi kepala grup, bukan subtitle. Layar ini memuat dua angka tahun yang
+//   artinya jauh berbeda — tanggal SIMPAN ("26 Agu 2026") dan tahun ANGGARAN
+//   ("2027") — dan yang ditebalkan dulu justru tanggal simpannya, sementara
+//   semua tahun dituang ke satu daftar tanpa pemisah. Akibatnya nyata: versi
+//   2027 terhapus karena dikira 2026.
+// - Konfirmasi = ketik TAHUN ANGGARAN-nya, bukan kode acak. Kode acak menjaga
+//   dari salah PENCET; mengetik tahunnya menjaga dari salah SASARAN, dan itu
+//   kesalahan yang benar-benar terjadi.
 // - Audit log via API DELETE handler
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
@@ -14,6 +19,7 @@ import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import PejabatSpjPanel from '@/components/blud/PejabatSpjPanel'
 import SpandukLihat from '@/components/blud/SpandukLihat'
+import { kelompokkanPerTahun, type GrupTahun } from '@/lib/blud/pengaturan-grup'
 
 interface DpaVersi {
   tahun_anggaran: number
@@ -45,17 +51,13 @@ type Tertahan =
   | { kode: 'VERSI_TERPAKAI'; pesan: string; detail: BentrokPagu[]; penerus: string | null }
   | { kode: 'VERSI_DIRUJUK';  pesan: string; perujuk: string[] }
 
-// Generate kode konfirmasi 4-digit random (1000-9999)
-function generateConfirmCode(): string {
-  return String(Math.floor(1000 + Math.random() * 9000))
-}
-
 const ID_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 function formatTanggal(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
   if (!m) return iso
   return `${m[3]} ${ID_MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`
 }
+
 
 export default function PengaturanClient(
   { bolehHapus, bolehUbah }: { bolehHapus: boolean; bolehUbah: boolean },
@@ -66,14 +68,28 @@ export default function PengaturanClient(
   const [err,       setErr]       = useState<string | null>(null)
 
   // Modal state
-  const [target,     setTarget]     = useState<DeleteTarget | null>(null)
-  const [expectCode, setExpectCode] = useState('')           // kode random yang harus diketik user
-  const [typedCode,  setTypedCode]  = useState('')           // input user
-  const [deleting,   setDeleting]   = useState(false)
-  const [tertahan,   setTertahan]   = useState<Tertahan | null>(null)
-  const [alasan,     setAlasan]     = useState('')
-  const codeMatches = useMemo(() => typedCode === expectCode && expectCode !== '', [typedCode, expectCode])
+  const [target,       setTarget]       = useState<DeleteTarget | null>(null)
+  const [tahunDiketik, setTahunDiketik] = useState('')
+  const [deleting,     setDeleting]     = useState(false)
+  const [tertahan,     setTertahan]     = useState<Tertahan | null>(null)
+  const [alasan,       setAlasan]       = useState('')
+  // Tidak ada state "kode harusnya" — jawabannya sudah ada di target. Satu state
+  // yang tidak perlu disinkronkan adalah satu state yang tidak bisa basi.
+  const tahunCocok  = useMemo(
+    () => target !== null && tahunDiketik === String(target.tahun),
+    [tahunDiketik, target],
+  )
   const alasanCukup = alasan.trim().length >= 10
+
+  const dpaGrup  = useMemo(
+    () => kelompokkanPerTahun(dpaList, v => `${v.jumlah_baris} baris`),
+    [dpaList],
+  )
+  const pergGrup = useMemo(
+    () => kelompokkanPerTahun(pergList,
+      v => `${v.jumlah_baris} baris · mengacu DPA yang disimpan ${formatTanggal(v.dpa_versi_tanggal)}`),
+    [pergList],
+  )
 
   // ─── Data fetch ────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -116,7 +132,7 @@ export default function PengaturanClient(
 
   // ─── Delete action ─────────────────────────────────────────────────────────
   async function executeDelete() {
-    if (!target || !codeMatches || !alasanCukup) return
+    if (!target || !tahunCocok || !alasanCukup) return
     setDeleting(true)
     setTertahan(null)
     try {
@@ -152,22 +168,19 @@ export default function PengaturanClient(
 
   function closeModal() {
     setTarget(null)
-    setExpectCode('')
-    setTypedCode('')
+    setTahunDiketik('')
     setTertahan(null)
     setAlasan('')
   }
   function openDeleteDpa(v: DpaVersi) {
     setTarget({ kind: 'dpa', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris })
-    setExpectCode(generateConfirmCode())
-    setTypedCode('')
+    setTahunDiketik('')
     setTertahan(null)
     setAlasan('')
   }
   function openDeletePerg(v: PergeseranVersi) {
     setTarget({ kind: 'pergeseran', tahun: v.tahun_anggaran, versi: v.versi_tanggal, baris: v.jumlah_baris, dpaVersi: v.dpa_versi_tanggal })
-    setExpectCode(generateConfirmCode())
-    setTypedCode('')
+    setTahunDiketik('')
     setTertahan(null)
     setAlasan('')
   }
@@ -233,11 +246,11 @@ export default function PengaturanClient(
         icon={<FileText size={16} />}
         color="#8B5CF6"
         loading={loading}
-        rows={dpaList.map(v => ({
-          versi: v.versi_tanggal,
-          meta:  `Tahun ${v.tahun_anggaran} · ${v.jumlah_baris} baris`,
-        }))}
-        onDelete={(idx) => openDeleteDpa(dpaList[idx])}
+        grup={dpaGrup}
+        onDelete={(tahun, versi) => {
+          const v = dpaList.find(x => x.tahun_anggaran === tahun && x.versi_tanggal === versi)
+          if (v) openDeleteDpa(v)
+        }}
         bolehHapus={bolehHapus}
       />
 
@@ -247,13 +260,12 @@ export default function PengaturanClient(
         icon={<Shuffle size={16} />}
         color="#EC4899"
         loading={loading}
-        rows={pergList.map(v => ({
-          versi: v.versi_tanggal,
-          meta:  `Tahun ${v.tahun_anggaran} · ${v.jumlah_baris} baris · acuan DPA ${formatTanggal(v.dpa_versi_tanggal)}`,
-        }))}
-        onDelete={(idx) => openDeletePerg(pergList[idx])}
+        grup={pergGrup}
+        onDelete={(tahun, versi) => {
+          const v = pergList.find(x => x.tahun_anggaran === tahun && x.versi_tanggal === versi)
+          if (v) openDeletePerg(v)
+        }}
         bolehHapus={bolehHapus}
-        deleteDisabled={pergList.length === 0}  // pergeseran boleh kosong total (DPA tetap ada)
       />
 
       {/* Confirm modal — ketik kode random untuk konfirmasi */}
@@ -280,7 +292,11 @@ export default function PengaturanClient(
               }}>
                 <AlertTriangle size={18} />
               </div>
-              <h2 style={{ fontWeight: 800, color: '#E6F1FB', fontSize: 15 }}>Hapus versi permanen?</h2>
+              {/* Judul menyebut sasarannya. Ini satu-satunya baris yang pasti
+                  dibaca semua orang, jadi di situlah tahun anggaran harus ada. */}
+              <h2 style={{ fontWeight: 800, color: '#E6F1FB', fontSize: 15 }}>
+                Hapus {target.kind === 'dpa' ? 'DPA BLUD' : 'Pergeseran DPA'} Tahun Anggaran {target.tahun}?
+              </h2>
               <button
                 onClick={() => !deleting && closeModal()}
                 disabled={deleting}
@@ -299,10 +315,18 @@ export default function PengaturanClient(
               <div><strong style={{ color: '#E6F1FB' }}>
                 {target.kind === 'dpa' ? 'DPA BLUD' : 'Pergeseran DPA'}
               </strong></div>
-              <div>Versi: <strong style={{ color: '#FBBF24' }}>{formatTanggal(target.versi)}</strong></div>
+              {/* Tahun anggaran dibuat paling besar, tanggal simpan sengaja
+                  dikecilkan — kebalikan dari daftar lama yang menebalkan tanggal. */}
+              <div style={{ marginTop: 4 }}>Tahun Anggaran:{' '}
+                <strong style={{
+                  color: '#FBBF24', fontSize: 20, fontWeight: 800,
+                  fontFamily: 'var(--font-jetbrains-mono, ui-monospace, monospace)',
+                }}>{target.tahun}</strong>
+              </div>
+              <div>Disimpan: <strong>{formatTanggal(target.versi)}</strong></div>
               <div>Jumlah baris: <strong>{target.baris}</strong></div>
               {target.kind === 'pergeseran' && (
-                <div>Acuan DPA: <strong>{formatTanggal(target.dpaVersi)}</strong></div>
+                <div>Mengacu DPA yang disimpan: <strong>{formatTanggal(target.dpaVersi)}</strong></div>
               )}
               {target.kind === 'dpa' && (
                 <div style={{ marginTop: 6, color: '#FCA5A5', fontSize: 11.5 }}>
@@ -315,9 +339,13 @@ export default function PengaturanClient(
               <TertahanPanel data={tertahan} />
             ) : (
             <>
-            {/* Konfirmasi via kode random — anti mis-click */}
+            {/* Yang diketik adalah TAHUN ANGGARAN, bukan angka acak. Angka acak
+                membuktikan "saya tidak salah pencet" — dan itu bukan kesalahan yang
+                terjadi. Yang terjadi: tindakan benar, sasaran salah. Satu-satunya
+                gesekan yang menolong di situ adalah gesekan yang memaksa
+                menyebutkan sasarannya. */}
             <div style={{ marginBottom: 4, fontSize: 12, color: '#B5D4F4', fontWeight: 600 }}>
-              Untuk konfirmasi, ketik kode berikut:
+              Untuk konfirmasi, ketik tahun anggaran yang akan dihapus:
             </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 12,
@@ -331,32 +359,33 @@ export default function PengaturanClient(
                 color: '#FCA5A5', userSelect: 'none',
                 background: 'rgba(0,0,0,.30)', padding: '4px 12px', borderRadius: 6,
                 flexShrink: 0,
-              }}>{expectCode}</code>
+              }}>{target.tahun}</code>
               <input
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={4}
-                value={typedCode}
-                onChange={(e) => setTypedCode(e.target.value.replace(/\D/g, ''))}
+                value={tahunDiketik}
+                onChange={(e) => setTahunDiketik(e.target.value.replace(/\D/g, ''))}
                 disabled={deleting}
                 autoFocus
-                placeholder="ketik 4 digit"
+                placeholder="ketik tahunnya"
                 style={{
                   flex: 1, fontFamily: 'var(--font-jetbrains-mono, ui-monospace, monospace)',
                   fontSize: 18, fontWeight: 700, letterSpacing: '4px',
                   textAlign: 'center',
                   padding: '8px 10px', borderRadius: 8,
                   background: '#020F1C',
-                  border: `1.5px solid ${codeMatches ? '#10B981' : '#185FA5'}`,
-                  color: codeMatches ? '#6EE7B7' : '#E6F1FB',
+                  border: `1.5px solid ${tahunCocok ? '#10B981' : '#185FA5'}`,
+                  color: tahunCocok ? '#6EE7B7' : '#E6F1FB',
                   outline: 'none', transition: 'border-color .15s, color .15s',
                 }}
               />
             </div>
-            {typedCode.length === 4 && !codeMatches && (
+            {tahunDiketik.length === 4 && !tahunCocok && (
               <div style={{ fontSize: 11.5, color: '#FCA5A5', marginBottom: 8 }}>
-                Kode tidak cocok. Periksa lagi 4 digit di kotak merah.
+                Bukan tahun ini. Yang akan dihapus tahun anggaran <strong>{target.tahun}</strong> —
+                periksa lagi, jangan tertukar dengan tanggal simpannya.
               </div>
             )}
 
@@ -395,7 +424,7 @@ export default function PengaturanClient(
               </PrimaButton>
               {!tertahan && (
                 <PrimaButton variant="danger" iconLeft={<DeleteIcon size={13} />}
-                  onClick={executeDelete} disabled={!codeMatches || !alasanCukup || deleting}>
+                  onClick={executeDelete} disabled={!tahunCocok || !alasanCukup || deleting}>
                   {deleting ? 'Menghapus...' : 'Hapus Permanen'}
                 </PrimaButton>
               )}
@@ -455,19 +484,17 @@ function TertahanPanel({ data }: { data: Tertahan }) {
 }
 
 // ─── Sub: VersiSection ────────────────────────────────────────────────────────
-interface SectionRow { versi: string; meta: string }
-function VersiSection({ title, icon, color, loading, rows, onDelete, bolehHapus, deleteDisabled, disabledReason }: {
+function VersiSection({ title, icon, color, loading, grup, onDelete, bolehHapus }: {
   title:   string
   icon:    React.ReactNode
   color:   string
   loading: boolean
-  rows:    SectionRow[]
-  onDelete: (idx: number) => void
+  grup:    GrupTahun[]
+  onDelete: (tahun: number, versi: string) => void
   /** S5 — tombolnya tidak dirender sama sekali, bukan sekadar dinonaktifkan. */
   bolehHapus: boolean
-  deleteDisabled?: boolean
-  disabledReason?: string
 }) {
+  const totalVersi = grup.reduce((n, g) => n + g.rows.length, 0)
   return (
     <div style={{ background: '#042C53', border: '1px solid #0C447C', borderRadius: 10, overflow: 'hidden' }}>
       <div style={{
@@ -477,8 +504,10 @@ function VersiSection({ title, icon, color, loading, rows, onDelete, bolehHapus,
       }}>
         <span style={{ color, display: 'inline-flex' }}>{icon}</span>
         <h2 style={{ fontWeight: 700, fontSize: 13, color: '#E6F1FB' }}>{title}</h2>
+        {/* Jumlah tahun ikut disebut: "3 versi" saja pernah berarti 2 tahun
+            berbeda, dan tidak ada apa pun di layar yang membocorkannya. */}
         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#85B7EB', fontWeight: 500 }}>
-          {loading ? '—' : `${rows.length} versi`}
+          {loading ? '—' : `${totalVersi} versi · ${grup.length} tahun`}
           {!bolehHapus && ' · hanya bisa dilihat'}
         </span>
       </div>
@@ -490,68 +519,89 @@ function VersiSection({ title, icon, color, loading, rows, onDelete, bolehHapus,
             margin: '0 auto',
           }} />
         </div>
-      ) : rows.length === 0 ? (
+      ) : totalVersi === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: '#85B7EB', fontSize: 12 }}>
           Belum ada versi tersimpan
         </div>
       ) : (
-        <div>
-          {rows.map((r, i) => (
-            <div key={r.versi} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 16px',
-              borderBottom: i < rows.length - 1 ? '1px solid rgba(12,68,124,.4)' : 'none',
-              transition: 'background .12s',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(12,68,124,.25)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#E6F1FB' }}>
-                  {formatTanggal(r.versi)}
-                  {i === 0 && (
-                    <span style={{
-                      marginLeft: 8, fontSize: 9, fontWeight: 800, letterSpacing: '.4px',
-                      padding: '2px 6px', borderRadius: 999,
-                      background: '#10B981', color: '#FFFFFF',
-                    }}>LATEST</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 11, color: '#85B7EB', marginTop: 2 }}>{r.meta}</div>
-              </div>
-              {bolehHapus && (
-              <button
-                onClick={() => !deleteDisabled && onDelete(i)}
-                disabled={deleteDisabled}
-                data-tooltip={deleteDisabled ? (disabledReason ?? 'Tidak bisa hapus') : 'Hapus versi ini'}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 600,
-                  background: 'transparent',
-                  border: `1px solid ${deleteDisabled ? 'rgba(133,183,235,.20)' : 'rgba(226,75,74,.4)'}`,
-                  color: deleteDisabled ? '#85B7EB' : '#FCA5A5',
-                  cursor: deleteDisabled ? 'not-allowed' : 'pointer',
-                  opacity: deleteDisabled ? .45 : 1,
-                  fontFamily: 'inherit',
-                  transition: 'all .15s',
-                }}
-                onMouseEnter={(e) => {
-                  if (deleteDisabled) return
-                  e.currentTarget.style.background = '#E24B4A'
-                  e.currentTarget.style.color = '#FFFFFF'
-                  e.currentTarget.style.borderColor = '#E24B4A'
-                }}
-                onMouseLeave={(e) => {
-                  if (deleteDisabled) return
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = '#FCA5A5'
-                  e.currentTarget.style.borderColor = 'rgba(226,75,74,.4)'
-                }}>
-                <DeleteIcon size={12} /> Hapus
-              </button>
-              )}
+        grup.map(g => (
+          <div key={g.tahun}>
+            {/* Kepala grup: tahun anggaran, sekali dan lantang. Di dalamnya
+                tanggal tidak pernah lagi berdiri tanpa tahunnya. */}
+            <div style={{
+              display: 'flex', alignItems: 'baseline', gap: 8,
+              padding: '7px 16px',
+              background: 'rgba(12,68,124,.45)',
+              borderTop: '1px solid #0C447C', borderBottom: '1px solid #0C447C',
+            }}>
+              <span style={{
+                fontSize: 9.5, fontWeight: 800, letterSpacing: '.8px', color: '#85B7EB',
+              }}>TAHUN ANGGARAN</span>
+              <span style={{
+                fontSize: 16, fontWeight: 800, color: '#E6F1FB',
+                fontFamily: 'var(--font-jetbrains-mono, ui-monospace, monospace)',
+              }}>{g.tahun}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#85B7EB' }}>
+                {g.rows.length} versi
+              </span>
             </div>
-          ))}
-        </div>
+
+            {g.rows.map((r, i) => (
+              <div key={r.key} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 16px',
+                borderBottom: i < g.rows.length - 1 ? '1px solid rgba(12,68,124,.4)' : 'none',
+                transition: 'background .12s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(12,68,124,.25)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#E6F1FB' }}>
+                    {/* Kata "Disimpan" yang menghentikan mata membaca tahun di
+                        tanggal ini sebagai tahun anggaran. */}
+                    <span style={{ fontWeight: 500, color: '#85B7EB' }}>Disimpan </span>
+                    {formatTanggal(r.versi)}
+                    {r.berlaku && (
+                      <span style={{
+                        marginLeft: 8, fontSize: 9, fontWeight: 800, letterSpacing: '.4px',
+                        padding: '2px 6px', borderRadius: 999,
+                        background: '#10B981', color: '#FFFFFF',
+                      }}>BERLAKU</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#85B7EB', marginTop: 2 }}>{r.meta}</div>
+                </div>
+                {bolehHapus && (
+                <button
+                  onClick={() => onDelete(g.tahun, r.versi)}
+                  data-tooltip={`Hapus versi ${formatTanggal(r.versi)} — tahun anggaran ${g.tahun}`}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 600,
+                    background: 'transparent',
+                    border: '1px solid rgba(226,75,74,.4)',
+                    color: '#FCA5A5',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    transition: 'all .15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#E24B4A'
+                    e.currentTarget.style.color = '#FFFFFF'
+                    e.currentTarget.style.borderColor = '#E24B4A'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.color = '#FCA5A5'
+                    e.currentTarget.style.borderColor = 'rgba(226,75,74,.4)'
+                  }}>
+                  <DeleteIcon size={12} /> Hapus
+                </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ))
       )}
     </div>
   )
