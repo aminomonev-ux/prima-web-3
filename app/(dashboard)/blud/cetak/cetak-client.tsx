@@ -303,6 +303,15 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         [data-theme="light"] .cetak-select { background: #FFFFFF; border-color: rgba(139,92,246,.25); color: #0F0F12; }
         [data-theme="light"] .cetak-select:focus { border-color: #8B5CF6; box-shadow: 0 0 0 3px rgba(139,92,246,.15); }
         .cetak-select:disabled { opacity: .55; cursor: not-allowed; }
+        /* Sakelar "Hanya yang bergeser". Warnanya WAJIB dinyatakan per tema:
+           tanpa itu teksnya mewarisi warna redup dan lenyap di kanvas gelap. */
+        .cetak-check {
+          display: flex; align-items: center; gap: 7px; cursor: pointer;
+          font-size: 12.5px; font-weight: 600; color: #E6F1FB; padding: 8px 0;
+        }
+        .cetak-check input { accent-color: #EF9F27; width: 15px; height: 15px; cursor: pointer; }
+        [data-theme="light"] .cetak-check { color: #0F0F12; }
+        [data-theme="light"] .cetak-check input { accent-color: #8B5CF6; }
         /* input date tidak kena baseline select global — calendar icon ikut tema */
         input.cetak-select[type="date"] { color-scheme: dark; }
         [data-theme="light"] input.cetak-select[type="date"] { color-scheme: light; }
@@ -382,7 +391,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
           {bisaSaringBergeser && (
             <div>
               <div className="cetak-field-label">Cakupan</div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: '6px 0' }}>
+              <label className="cetak-check">
                 <input
                   type="checkbox"
                   checked={hanyaBergeser}
