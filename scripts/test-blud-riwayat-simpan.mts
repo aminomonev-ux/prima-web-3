@@ -36,6 +36,18 @@ function bab(judul: string) { console.log(`\n── ${judul} ──`) }
 
 const baca = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8')
 
+/**
+ * Buang komentar sebelum memeriksa "pola ini sudah TIDAK ada".
+ *
+ * Berkas ini menjelaskan bentuk lamanya di komentar — `<span role="button"
+ * tabIndex={-1}>` dan sejenisnya. Pemeriksaan negatif yang membaca berkas
+ * mentah akan menemukan kutipan itu dan menyatakan bentuk lamanya masih ada,
+ * padahal yang tersisa cuma ceritanya. Sekelas dengan B10: pemeriksaan yang
+ * cocok pada tempat yang salah.
+ */
+const tanpaKomentar = (s: string) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
 // ── A. Stempel waktu WIB ─────────────────────────────────────────────────────
 bab('A. waktuSekarangWIB')
 
@@ -143,6 +155,15 @@ for (const [nama, berkas, ep] of [
   cek(`${nama}4 angka kunci diambil SEGAR dari server`,
     new RegExp(`/api/blud/${ep}\\?tahun=\\$\\{tahun\\}&tanggal=`).test(K))
 
+  // Tanpa ini, endpoint yang menolak (mis. kena bludRateLimit 60/menit)
+  // memulangkan badan tanpa `version`, angka kunci diam-diam jadi 0, dan Simpan
+  // berikutnya ditolak 409 "diubah orang lain" — konflik yang tak pernah ada.
+  cek(`${nama}4b pemulihan DIBATALKAN kalau angka kunci gagal diambil`,
+    /if \(!vRes\.ok \|\| typeof vJson\.version !== 'number'\) \{[\s\S]{0,200}?throw new Error/.test(K))
+
+  cek(`${nama}4c angka kunci dipasang apa adanya, tanpa jatuh ke 0`,
+    /setVersion\(vJson\.version\)/.test(K) && !/setVersion\(typeof vJson\.version/.test(K))
+
   cek(`${nama}5 TIDAK memakai versi_ke snapshot sebagai expected_version`,
     !/setVersion\(\s*s\.versi_ke/.test(K) && !/expected_version:\s*s\.versi_ke/.test(K),
     'INI L75 lewat pintu lain')
@@ -165,6 +186,41 @@ cek('C-PRG10 acuan DPA ikut dipulihkan dari snapshot',
   /if \(json\.data\.dpa_versi_tanggal\) setDpaVersi\(json\.data\.dpa_versi_tanggal\)/.test(PRG),
   'kalau tidak, acuannya jadi yang kebetulan terpilih di layar')
 
+// Kolom turunan di snapshot adalah angka kiriman klien saat itu; server SELALU
+// menghitung ulang sebelum menilai, dan lencana DRAFT di layar juga. Memuat apa
+// adanya membuat tabel memperlihatkan angka yang tidak dipakai keputusan mana pun.
+cek('C-PRG11 snapshot di-recalc saat dimuat, sama seperti jalur DPA',
+  /setRows\(recalcPergeseranJumlah\(json\.data\.isi as PergeseranBarisInput\[\]\)\)/.test(PRG))
+
+const DPAK = baca('../app/(dashboard)/blud/dpa/dpa-client.tsx')
+cek('C-DPA11 snapshot di-recalc saat dimuat',
+  /setRows\(recalcDpaJumlah\(json\.data\.isi as DpaBarisInput\[\]\)\)/.test(DPAK))
+
+// ── F. Versi terhapus & aksesibilitas dropdown ───────────────────────────────
+bab('F. VersiDropdown')
+
+const VD = baca('../components/blud/VersiDropdown.tsx')
+
+// `deleteDpaVersi` sengaja tidak mengikutkan tabel riwayat supaya angkanya bisa
+// dipulihkan. Tanpa daftar ini janji itu tidak punya jalan: tanggalnya lenyap
+// dari `items`, dan riwayat yang bersarang di bawahnya ikut lenyap.
+cek('F1 tanggal yang riwayatnya ada tapi versinya sudah dihapus tetap tampil',
+  /const yatim = useMemo\(/.test(VD) && /versi-yatim-grup/.test(VD))
+cek('F2 tanggal versi terhapus TIDAK bisa dipilih sebagai versi',
+  /versi-item versi-item--yatim/.test(VD) && !/onClick=\{\(\) => \{ onChange\(tgl\)/.test(VD))
+cek('F3 semua simpanan versi terhapus bisa dipulihkan (tak ada "tampil sekarang")',
+  /kini=\{false\}/.test(VD), 'versinya sudah tidak ada, jadi tak ada yang sedang tampil')
+
+// Bersarang di dalam `<button>` ia tidak akan pernah bisa difokus, dan pengguna
+// papan ketik tidak punya cara apa pun membuka riwayat — Pulihkan tak tercapai.
+const VDK = tanpaKomentar(VD)   // komentarnya mengutip bentuk lama — lihat `tanpaKomentar`
+cek('F4 panah riwayat adalah <button> sendiri, bukan span bersarang',
+  /<button[\s\S]{0,400}?className=\{`versi-riwayat-toggle/.test(VDK)
+  && !/tabIndex=\{-1\}/.test(VDK))
+cek('F5 panah mengumumkan status buka/tutup', /aria-expanded=\{mekar\}/.test(VDK))
+cek('F6 panah tidak lagi butuh stopPropagation — ia bukan anak tombol versi',
+  !/e\.stopPropagation\(\)/.test(VDK))
+
 // ── D. Endpoint & retensi ────────────────────────────────────────────────────
 bab('D. Endpoint, pagar, retensi')
 
@@ -186,6 +242,13 @@ cek('D7 pemangkasan lewat derived table (MySQL tolak subquery ke tabel yg di-DEL
   /SELECT id FROM \(\s*\n\s*SELECT id FROM blud_riwayat_simpan/.test(LIB))
 cek('D8 LIMIT pakai sqlInt — mysql2 menolak `LIMIT ?` (L66)',
   /LIMIT \$\{sqlInt\(RIWAYAT_RETENSI\)\}/.test(LIB))
+
+// Kalau kuncinya cuma (jenis, tahun), 50 simpanan pada versi yang sedang aktif
+// menyapu habis riwayat versi lain di tahun yang sama — dan versi lama yang
+// tak lagi disentuh justru yang paling mungkin dicari orang.
+cek('D11 pemangkasan dikunci per VERSI, bukan per tahun',
+  (LIB.match(/versi_tanggal = \$\{a\.versiTanggal\}/g) ?? []).length === 2,
+  'wajib di KEDUA sisi: DELETE dan daftar yang disisakan')
 cek('D9 daftar tidak membawa kolom isi', !/SELECT[^;]*r\.isi[^;]*ORDER BY/.test(LIB))
 cek('D10 tidak mengimpor data.ts — arah impornya searah, tanpa lingkaran',
   !/from '\.\/data'/.test(LIB))
@@ -207,6 +270,31 @@ cek('E5 dpa_blud.versi_tanggal masih DATE (tidak ikut diubah)',
   /versi_tanggal\s+DATE\s+NOT NULL COMMENT 'Tanggal versi\/history DPA'/.test(SCH))
 cek('E6 pergeseran_dpa.dpa_versi_tanggal masih DATE',
   /dpa_versi_tanggal\s+DATE\s+NOT NULL COMMENT 'Versi DPA yang menjadi acuan'/.test(SCH))
+
+// ── G. Cakupan cetak ikut ke berkas unduhan ──────────────────────────────────
+bab('G. Penanda "sebagian" di PDF & Excel')
+
+const CETAK = baca('../app/(dashboard)/blud/cetak/cetak-client.tsx')
+const PDF   = baca('../lib/blud/export/pdf.ts')
+const XLSX  = baca('../lib/blud/export/excel.ts')
+
+// Pratinjau layar memuat spanduk + judul "Yang Bergeser", tapi `result.meta`
+// dibuang di onCetak dan eksporter menyusun judulnya sendiri. Tanpa penanda,
+// yang beredar adalah dokumen yang tampak lengkap padahal barisnya sebagian —
+// sementara baris induknya tetap pagu penuh.
+cek('G1 catatan cakupan dikirim ke PDF', /exportToPdf\(\{[^}]*catatan: catatanCakupan/.test(CETAK))
+cek('G2 catatan cakupan dikirim ke Excel', /exportToExcel\(\{[^}]*catatan: catatanCakupan/.test(CETAK))
+cek('G3 PDF mencetak catatannya', /if \(catatan\) \{[\s\S]{0,300}?doc\.text\(catatan/.test(PDF))
+cek('G4 Excel menulis catatannya DI ATAS kepala tabel',
+  /if \(catatan\) \{[\s\S]{0,120}?ws\.addRow\(\[catatan\]\)/.test(XLSX)
+  && /const barisHeader = catatan \? 2 : 1/.test(XLSX))
+// Sakelarnya bisa diubah SESUDAH tabel tercetak tanpa menekan Cetak lagi;
+// membacanya saat unduh memberi keterangan yang tidak cocok dengan isi berkas.
+cek('G5 catatan dipotret saat Cetak, bukan dibaca saat unduh',
+  /setCatatanCakupan\(saring/.test(CETAK) && !/catatan: hanyaBergeser/.test(CETAK))
+cek('G6 spanduk Pengaturan menyebut bagian "Versi terhapus" + batas retensi',
+  /Versi terhapus/.test(baca('../app/(dashboard)/blud/pengaturan/pengaturan-client.tsx'))
+  && /\{RIWAYAT_RETENSI\}/.test(baca('../app/(dashboard)/blud/pengaturan/pengaturan-client.tsx')))
 
 // ── Hasil ────────────────────────────────────────────────────────────────────
 console.log(`\n${gagal === 0 ? 'SEMUA LOLOS' : 'ADA YANG GAGAL'} — ${lulus} lolos, ${gagal} gagal\n`)

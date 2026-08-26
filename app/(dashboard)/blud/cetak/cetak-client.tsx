@@ -61,6 +61,13 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   // Cetak hanya pos yang benar-benar bergeser. Default MATI — cetak penuh tetap
   // perilaku bawaan; dokumen sebagian harus dipilih dengan sadar.
   const [hanyaBergeser, setHanyaBergeser] = useState(false)
+  /**
+   * Keterangan cakupan untuk berkas unduhan, dipotret SAAT Cetak — bukan dibaca
+   * dari sakelar saat mengunduh. Sakelarnya bisa diubah sesudah tabel tercetak
+   * tanpa menekan Cetak lagi; membacanya saat unduh akan memberi keterangan
+   * yang tidak cocok dengan isi berkas.
+   */
+  const [catatanCakupan, setCatatanCakupan] = useState('')
   // Baris MENTAH dari API — `renderedData` sudah rata jadi array nilai, sehingga
   // tipe_baris/parent_id/anggaran_key hilang. Eksporter dokumen butuh ketiganya
   // untuk membangun rumus SUM (CONCEPT-export-import-dpa §2.3).
@@ -153,13 +160,19 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
 
       // Render HTML via cetak-data helper (client-side aggregation)
       const { renderCetakHtml } = await import('@/lib/blud/cetak-data')
+      const saring = bisaSaringBergeser && hanyaBergeser
       const result = renderCetakHtml({
         menu, view, rows: j.data,
         versi: j.versi_tanggal ?? historyVersi ?? null, tanggal,
-        hanyaBergeser: bisaSaringBergeser && hanyaBergeser,
+        hanyaBergeser: saring,
       })
       setRenderedHtml(result.html)
       setRenderedData(result.rows)
+      const totalBaris = Array.isArray(j.data) ? j.data.length : result.rows.length
+      setCatatanCakupan(saring
+        ? `Hanya baris yang bergeser — ${result.rows.length} dari ${totalBaris} baris. `
+          + `Angka pada baris induk tetap pagu penuh, termasuk pos yang tidak ditampilkan.`
+        : '')
       setRawRows(j.data ?? null)
       setRawVersi(j.versi_tanggal ?? historyVersi ?? tanggal ?? null)
     } catch (e) {
@@ -187,12 +200,12 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
     try {
       const { exportToPdf } = await import('@/lib/blud/export/pdf')
-      await exportToPdf({ menu, view, tanggal, versi: historyVersi, rows: renderedData })
+      await exportToPdf({ menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan })
       void logExport('pdf')
     } catch (e) {
       toast.error('Berkas PDF gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, menu, view, tanggal, historyVersi, logExport])
+  }, [renderedData, menu, view, tanggal, historyVersi, catatanCakupan, logExport])
 
   /**
    * Direktur ikut tercetak di blok tanda tangan. Diambil best-effort: endpoint
@@ -243,12 +256,12 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         return
       }
       const { exportToExcel } = await import('@/lib/blud/export/excel')
-      await exportToExcel({ menu, view, tanggal, versi: historyVersi, rows: renderedData })
+      await exportToExcel({ menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan })
       void logExport('xlsx')
     } catch (e) {
       toast.error('Berkas Excel gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, rawRows, rawVersi, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, logExport, ambilDirektur])
+  }, [renderedData, rawRows, rawVersi, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
 
   // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
   const onSimpanRekapPK = useCallback(async () => {

@@ -17,7 +17,13 @@ import { waktuSekarangWIB, toDateStr } from './tanggal'
 export type JenisRiwayat = 'DPA' | 'PERGESERAN'
 
 /**
- * Berapa snapshot yang disimpan per (jenis, tahun).
+ * Berapa snapshot yang disimpan per (jenis, tahun, versi_tanggal).
+ *
+ * Per VERSI, bukan per tahun. Kalau kuncinya cuma (jenis, tahun), 50 simpanan
+ * pada versi 26 Agu akan menyapu habis riwayat versi 05 Agu yang tidak pernah
+ * disentuh — dan itu justru versi yang paling mungkin dicari orang, karena
+ * versi lama yang sudah tidak dipakai persis yang tidak lagi diperhatikan.
+ * Pemangkasan harus mengenai riwayat versi yang sedang ditulis saja.
  *
  * LKJIP/IKI pakai 20, tapi DPA disimpan jauh lebih sering — 20 bisa habis dalam
  * satu sore sibuk dan menelan riwayat sebulan. Angka ini knob, bukan prinsip.
@@ -75,15 +81,22 @@ export async function catatRiwayatSimpan(tx: TxSql, a: CatatArgs): Promise<void>
        ${a.baris.length}, ${a.totalNilai}, ${a.dpaVersiTanggal ?? null},
        ${JSON.stringify(a.baris)}, ${a.userId})
   `
+  // Dipangkas per VERSI, bukan per tahun: `versi_tanggal` ikut di KEDUA sisi.
+  // Tanpa itu, simpanan pada versi yang sedang aktif menghapus riwayat versi
+  // lain di tahun yang sama — versi lama yang tidak lagi disentuh justru yang
+  // paling mungkin dicari orang.
+  //
   // MySQL menolak subquery ke tabel yang sedang di-DELETE — derived table `t`
   // memaksanya membuat hasil antara lebih dulu, dan itu justru yang dibutuhkan.
   await tx`
     DELETE FROM blud_riwayat_simpan
      WHERE jenis = ${a.jenis} AND tahun_anggaran = ${a.tahun}
+       AND versi_tanggal = ${a.versiTanggal}
        AND id NOT IN (
          SELECT id FROM (
            SELECT id FROM blud_riwayat_simpan
             WHERE jenis = ${a.jenis} AND tahun_anggaran = ${a.tahun}
+              AND versi_tanggal = ${a.versiTanggal}
             ORDER BY id DESC LIMIT ${sqlInt(RIWAYAT_RETENSI)}
          ) t
        )

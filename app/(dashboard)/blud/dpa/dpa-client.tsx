@@ -1048,12 +1048,20 @@ export default function DpaClient({
       // "diubah orang lain" — L75 lahir kembali lewat pintu lain.
       const vRes  = await fetch(`/api/blud/dpa?tahun=${tahun}&tanggal=${encodeURIComponent(s.versi_tanggal)}`)
       const vJson = await vRes.json()
+      // Dibatalkan, bukan dilanjutkan dengan angka 0. Endpoint ini dijaga
+      // `bludRateLimit('view-dpa', 60)`; kalau ia menolak, `vJson.version`
+      // kosong dan angka 0 akan membuat Simpan berikutnya ditolak 409 sebagai
+      // "diubah orang lain" — konflik yang tidak pernah terjadi. Lebih baik
+      // gagal di sini dengan sebab yang benar daripada di sana dengan sebab palsu.
+      if (!vRes.ok || typeof vJson.version !== 'number') {
+        throw new Error('Angka kunci versi tidak bisa diambil, jadi pemulihan dibatalkan. Coba lagi sebentar lagi.')
+      }
       // Tanpa `dpaKeInput`: `isi` memang disimpan dalam bentuk payload POST, jadi
       // ia sudah `DpaBarisInput`. Recalc tetap dijalankan supaya total induk di
       // layar sama dengan yang nanti dihitung server, bukan angka warisan.
       setRows(recalcDpaJumlah(json.data.isi as DpaBarisInput[]))
       setVersi(s.versi_tanggal)
-      setVersion(typeof vJson.version === 'number' ? vJson.version : 0)
+      setVersion(vJson.version)
       asalSalinRef.current  = null
       asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
       showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)

@@ -665,13 +665,34 @@ input, textarea { caret-color: #FBBF24; }
 .versi-item-check { color: #FBBF24; margin-left: auto; flex-shrink: 0; }
 /* Riwayat simpan per jam — anak baris di bawah tanggalnya. Panah punya area
    klik sendiri supaya membuka riwayat tidak sekalian mengganti versi. */
+/* Panah + tombol versi berdampingan. Panah tombol sendiri supaya bisa difokus
+   papan ketik — bersarang di dalam `<button>` ia tidak akan pernah bisa. */
+.versi-baris { display: flex; align-items: stretch; gap: 4px; }
+.versi-baris > .versi-item { flex: 1; min-width: 0; }
 .versi-riwayat-toggle {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; flex-shrink: 0; border-radius: 4px;
+  width: 20px; flex-shrink: 0; border-radius: 4px; align-self: center;
+  background: transparent; border: none; padding: 0;
   color: #85B7EB; cursor: pointer; transition: transform .12s, background .12s;
 }
 .versi-riwayat-toggle:hover { background: rgba(133,183,235,.20); }
+.versi-riwayat-toggle:focus-visible { outline: 2px solid #EF9F27; outline-offset: 1px; }
 .versi-riwayat-toggle.open { transform: rotate(90deg); }
+/* Penjaga lebar supaya versi tanpa riwayat tetap segaris dengan yang punya. */
+.versi-riwayat-kosong { width: 20px; flex-shrink: 0; }
+/* Versi yang barisnya sudah dihapus — riwayatnya masih bisa dipulihkan.
+   Judulnya diberi latar sendiri: menu brutalist transparan, jadi teks tanpa
+   latar akan menempel di kanvas halaman dan ditembus isi di belakangnya. */
+.versi-yatim-grup { margin-top: 8px; }
+.versi-yatim-judul {
+  font-size: 9.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+  color: #85B7EB; padding: 5px 9px; margin-bottom: 5px;
+  background: #042C53; border: 1px dashed rgba(133,183,235,.35); border-radius: 4px;
+}
+/* Tanggalnya tidak bisa dipilih: versinya memang sudah tidak ada. Ditandai
+   garis putus-putus, BUKAN `opacity` — opacity membuat latar kartunya ikut
+   tembus, dan isi halaman di belakang menembusnya. */
+.versi-item--yatim { cursor: default; border-style: dashed; }
 /* Latar sendiri itu WAJIB, bukan hiasan: di varian brutalist `.versi-menu`
    transparan dan tiap item kartu mengambang sendiri. Tanpa latar, baris riwayat
    menempel di kanvas halaman dan menindih isi di belakangnya. Indentasi + tepi
@@ -806,10 +827,15 @@ input, textarea { caret-color: #FBBF24; }
 .versi-dropdown--brutalist .versi-item:hover .versi-item-meta,
 .versi-dropdown--brutalist .versi-item:hover .versi-item-date,
 .versi-dropdown--brutalist .versi-item:hover .versi-item-icon,
-.versi-dropdown--brutalist .versi-item:hover .versi-item-check,
-.versi-dropdown--brutalist .versi-item:hover .versi-riwayat-toggle { color: #FFFFFF; }
-.versi-dropdown--brutalist .versi-item:hover .versi-riwayat-toggle:hover {
-  background: rgba(255,255,255,.22);
+.versi-dropdown--brutalist .versi-item:hover .versi-item-check { color: #FFFFFF; }
+/* Baris versi terhapus bukan tombol — hover ungunya menjanjikan klik yang
+   tidak ada. Tanggalnya memang tidak bisa dipilih; yang bisa cuma Pulihkan. */
+.versi-dropdown--brutalist .versi-item--yatim:hover {
+  background: #042C53; border-color: rgba(124,92,252,.55); color: #E6F1FB;
+  transform: none; box-shadow: 2px 2px 0 rgba(124,92,252,.35);
+}
+[data-theme="light"] .versi-dropdown--brutalist .versi-item--yatim:hover {
+  background: #FAFAFA; color: #1F2937; box-shadow: 3px 3px 0 rgba(124,92,252,.25);
 }
 .versi-dropdown--brutalist .versi-item-meta {
   color: #B8A7FE; font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -1136,6 +1162,9 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .versi-item-check { color: #5B21B6; }
 [data-theme="light"] .versi-riwayat-toggle { color: #8B5CF6; }
 [data-theme="light"] .versi-riwayat-toggle:hover { background: rgba(139,92,246,.14); }
+[data-theme="light"] .versi-yatim-judul {
+  color: #6B7280; background: #FAFAFA; border-color: rgba(139,92,246,.35);
+}
 [data-theme="light"] .versi-simpanan {
   background: #FAFAFA; color: #4B5563;
   border-color: rgba(124,92,252,.30);

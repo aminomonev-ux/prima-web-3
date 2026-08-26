@@ -813,9 +813,19 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       // L75 lahir kembali: snapshot lama membawa angka lama, kuncinya sudah maju.
       const vRes  = await fetch(`/api/blud/pergeseran?tahun=${tahun}&tanggal=${encodeURIComponent(s.versi_tanggal)}`)
       const vJson = await vRes.json()
-      setRows(json.data.isi as PergeseranBarisInput[])
+      // Dibatalkan, bukan dilanjutkan dengan angka 0 — sebabnya sama dengan
+      // jalur DPA: angka 0 menghasilkan 409 "diubah orang lain" yang palsu.
+      if (!vRes.ok || typeof vJson.version !== 'number') {
+        throw new Error('Angka kunci versi tidak bisa diambil, jadi pemulihan dibatalkan. Coba lagi sebentar lagi.')
+      }
+      // Di-recalc, sama seperti jalur DPA. Kolom turunan (`pergeseran`, `+/−`)
+      // di dalam snapshot adalah angka yang dikirim klien saat itu; server
+      // SELALU menghitung ulang sebelum menilai, dan lencana DRAFT di layar ini
+      // juga. Memuat apa adanya membuat tabel memperlihatkan angka yang tidak
+      // dipakai satu pun keputusan.
+      setRows(recalcPergeseranJumlah(json.data.isi as PergeseranBarisInput[]))
       setVersi(s.versi_tanggal)
-      setVersion(typeof vJson.version === 'number' ? vJson.version : 0)
+      setVersion(vJson.version)
       // Acuan DPA ikut dipulihkan dari snapshot — kalau tidak, Simpan berikutnya
       // memakai acuan yang kebetulan sedang terpilih di layar, bukan acuan aslinya.
       if (json.data.dpa_versi_tanggal) setDpaVersi(json.data.dpa_versi_tanggal)

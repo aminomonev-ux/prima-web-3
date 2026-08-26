@@ -14,10 +14,17 @@ export interface ExportPdfArgs {
   tanggal: string
   versi:   string | null
   rows:    unknown            // ExportRow[] (cast di internal)
+  /**
+   * Keterangan cakupan, dicetak tepat di bawah judul. WAJIB diisi kalau `rows`
+   * sudah disaring: dokumen anggaran yang membuang baris tanpa mengatakannya
+   * bukan dokumen ringkas, ia dokumen menyesatkan — angka pada baris induk
+   * tetap pagu penuh, jadi penerima menjumlah anak-anaknya dan tidak cocok.
+   */
+  catatan?: string
 }
 
 export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
-  const { menu, view, versi, tanggal, rows } = args
+  const { menu, view, versi, tanggal, rows, catatan } = args
   const exportRows = (rows as ExportRow[]) ?? []
   if (!Array.isArray(exportRows) || exportRows.length === 0) {
     throw new Error('Data kosong — tidak ada yang bisa di-export')
@@ -42,11 +49,19 @@ export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
   doc.setFont('helvetica', 'normal')
   doc.text('RSJD Dr. Amino Gondohutomo · PRIMA BLUD', doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' })
 
+  // Catatan cakupan — hanya muncul kalau daftarnya memang disaring.
+  if (catatan) {
+    doc.setFontSize(8.5)
+    doc.setTextColor(180, 83, 9)
+    doc.text(catatan, doc.internal.pageSize.getWidth() / 2, 25, { align: 'center' })
+    doc.setTextColor(0)
+  }
+
   // Tabel
   autoTable(doc, {
     head: [columns],
     body: exportRows.map(r => r.map(c => formatCell(c))),
-    startY: 26,
+    startY: catatan ? 30 : 26,
     styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
     headStyles: { fillColor: [24, 85, 187], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [248, 250, 252] },

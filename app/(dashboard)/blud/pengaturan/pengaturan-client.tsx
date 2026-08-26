@@ -20,6 +20,7 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import PejabatSpjPanel from '@/components/blud/PejabatSpjPanel'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { kelompokkanPerTahun, type GrupTahun } from '@/lib/blud/pengaturan-grup'
+import { RIWAYAT_RETENSI } from '@/lib/blud/riwayat-simpan'
 
 interface DpaVersi {
   tahun_anggaran: number
@@ -225,8 +226,10 @@ export default function PengaturanClient(
               <strong style={{ color: '#FFFFFF' }}>Perhatian:</strong> baris versi yang dihapus <strong>hilang dari tabel</strong>.
               Hapus DPA juga otomatis menghapus Rekap Penanggung Jawab terkait versi tsb.
               Versi yang masih dipakai transaksi akan ditolak sistem.
-              {' '}Riwayat simpannya <strong>tidak ikut terhapus</strong> — angkanya masih bisa dimuat
-              ulang dari dropdown versi di layar DPA/Pergeseran, lalu disimpan sebagai versi baru.
+              {' '}Riwayat simpannya <strong>tidak ikut terhapus</strong> — di dropdown versi layar
+              DPA/Pergeseran, tanggalnya pindah ke bagian <strong>&ldquo;Versi terhapus&rdquo;</strong> dan
+              angkanya masih bisa dipulihkan jadi versi baru. Riwayat itu sendiri dibatasi
+              {' '}{RIWAYAT_RETENSI} simpanan terakhir per versi.
             </>
           ) : (
             <>

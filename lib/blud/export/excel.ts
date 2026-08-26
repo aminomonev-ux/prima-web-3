@@ -13,10 +13,17 @@ export interface ExportExcelArgs {
   tanggal: string
   versi:   string | null
   rows:    unknown
+  /**
+   * Keterangan cakupan, ditulis sebagai baris pertama di atas kepala tabel.
+   * WAJIB diisi kalau `rows` sudah disaring — angka pada baris induk tetap pagu
+   * penuh, jadi berkas yang membuang baris tanpa mengatakannya akan dijumlah
+   * ulang oleh penerimanya dan tidak akan cocok.
+   */
+  catatan?: string
 }
 
 export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
-  const { menu, view, versi, tanggal, rows } = args
+  const { menu, view, versi, tanggal, rows, catatan } = args
   const exportRows = (rows as ExportRow[]) ?? []
   if (!Array.isArray(exportRows) || exportRows.length === 0) {
     throw new Error('Data kosong — tidak ada yang bisa di-export')
@@ -28,10 +35,22 @@ export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
   const wb = new ExcelJSLib.Workbook()
   const ws = wb.addWorksheet(sheetName)
 
-  // Header row (row 1)
+  // Catatan cakupan mendorong kepala tabel turun satu baris — ditulis di ATAS,
+  // bukan di bawah, karena yang dibaca orang pertama kali baris paling atas.
+  if (catatan) {
+    ws.addRow([catatan])
+    ws.mergeCells(1, 1, 1, columns.length)
+    const c1 = ws.getRow(1).getCell(1)
+    c1.font = { bold: true, size: 10, color: { argb: 'FFB45309' } }
+    c1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }
+    c1.alignment = { horizontal: 'left', vertical: 'middle' }
+  }
+
+  // Header row
+  const barisHeader = catatan ? 2 : 1
   ws.addRow(columns)
   for (let c = 0; c < columns.length; c++) {
-    const cell = ws.getRow(1).getCell(c + 1)
+    const cell = ws.getRow(barisHeader).getCell(c + 1)
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
     cell.alignment = { horizontal: 'center', vertical: 'middle' }
