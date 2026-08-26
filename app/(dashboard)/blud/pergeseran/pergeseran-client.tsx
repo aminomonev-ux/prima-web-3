@@ -17,6 +17,7 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
+import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
@@ -775,6 +776,16 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       const json = await res.json()
       if (!json.ok || !json.data?.length) {
         showToast(`Tahun ${tahun} belum punya DPA. Susun DPA ${tahun} dulu di menu DPA BLUD, baru pergeserannya bisa dibuat.`, false)
+        return
+      }
+      // Ditolak DI MUKA, bukan saat Simpan — sepadan penjaga `kegemukan` di
+      // SalinTahunModal. Tanpa ini tabelnya tetap tampil, orang mengisi seluruh
+      // geserannya, lalu Zod menolak di ujung dan Sinkronkan DPA ikut buntu.
+      if (json.data.length > BLUD_SIMPAN_MAKS_BARIS) {
+        showToast(
+          `DPA ${tahun} berisi ${json.data.length} baris, di atas batas ${BLUD_SIMPAN_MAKS_BARIS} baris per simpan. Rampingkan dulu di menu DPA BLUD — kalau diteruskan, geserannya tidak akan bisa disimpan.`,
+          false,
+        )
         return
       }
 

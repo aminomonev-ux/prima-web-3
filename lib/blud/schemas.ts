@@ -268,7 +268,10 @@ export const PergeseranBodySchema = z.object({
   tahun_anggaran:    TahunSchema,
   versi_tanggal:     TanggalSchema,
   dpa_versi_tanggal: TanggalSchema.optional(),
-  rows:              z.array(PergeseranBarisInputSchema).min(1, 'Minimal 1 baris').max(700, 'Maksimal 700 baris'),
+  // Batasnya WAJIB ikut plafon DPA: tabel Pergeseran salinan 1:1 DPA, jadi
+  // plafon yang lebih rendah membuat DPA gemuk tidak bisa dibuatkan pergeseran
+  // sama sekali — dan baru ketahuan setelah seluruh geserannya diisi.
+  rows:              z.array(PergeseranBarisInputSchema).min(1, 'Minimal 1 baris').max(MAKS_BARIS_SIMPAN, `Maksimal ${MAKS_BARIS_SIMPAN} baris`),
   force:             z.boolean().optional().default(false),
   // B6 draft: simpan progres belum berimbang — pengakuan eksplisit user,
   // tanpa flag ini delta root != 0 ditolak PERGESERAN_TIDAK_BERIMBANG
@@ -284,7 +287,7 @@ export const PergeseranBodySchema = z.object({
 /** POST /api/blud/pergeseran/inject */
 export const InjectBodySchema = z.object({
   tahun_anggaran:  TahunSchema,
-  pergeseran_rows: z.array(PergeseranBarisInputSchema).min(1, 'Data pergeseran kosong').max(700, 'Maksimal 700 baris'),
+  pergeseran_rows: z.array(PergeseranBarisInputSchema).min(1, 'Data pergeseran kosong').max(MAKS_BARIS_SIMPAN, `Maksimal ${MAKS_BARIS_SIMPAN} baris`),
 });
 
 /** POST /api/blud/rekap-pk — snapshot rekap Penanggung Jawab dari menu Cetak */

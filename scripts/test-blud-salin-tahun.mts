@@ -199,8 +199,13 @@ cek('D1 urutan hasil salin 0..n-1 walau sumbernya berlubang',
 // memakai bilangan telanjang, pemeriksaan di modal jadi tebakan yang melenceng
 // dan orang baru tahu setelah menyalin lalu menyunting.
 bab('E. Batas baris')
-cek('E1 batas simpan lebih ketat dari batas impor (asal masalahnya)',
-  BLUD_SIMPAN_MAKS_BARIS < BLUD_IMPOR_MAKS_BARIS,
+// Dibalik: dulu memaku asimetri "simpan lebih ketat dari impor" sebagai fakta.
+// Asimetri itulah asal masalahnya — impor 2.000 vs simpan 700 berarti DPA 1.500
+// baris bisa MASUK lalu tidak bisa disimpan lagi dari layar DPA sendiri: ubah
+// satu sel, Simpan ditolak, tanpa jalan keluar. Yang dijaga sekarang aturannya:
+// data yang bisa masuk wajib bisa keluar.
+cek('E1 plafon impor tidak melampaui plafon simpan',
+  BLUD_IMPOR_MAKS_BARIS <= BLUD_SIMPAN_MAKS_BARIS,
   `→ simpan ${BLUD_SIMPAN_MAKS_BARIS} · impor ${BLUD_IMPOR_MAKS_BARIS}`)
 
 const barisPalsu = Array.from({ length: BLUD_SIMPAN_MAKS_BARIS + 1 }, (_, i) =>

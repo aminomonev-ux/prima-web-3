@@ -11,29 +11,38 @@ import type { DpaBarisInput, TipeBaris } from '@/types'
 import { genRowId } from './format'
 
 /**
- * Batas baris jalur IMPOR — lebih longgar dari batas 700 pada simpan manual,
- * karena satu berkas DPA provinsi wajar berisi ratusan sampai ribuan baris
- * (yang asli: 453, 466, 558).
+ * Batas baris jalur SIMPAN — berlaku untuk `DpaBodySchema`, `PergeseranBodySchema`,
+ * dan `InjectBodySchema`. Satu angka untuk semua jalur tulis BLUD.
  *
- * Angka ini dipakai parser DAN Zod. Kalau keduanya berbeda, pratinjau bisa
- * menjanjikan "Simpan 1.200 baris" lalu simpannya ditolak — setelah orang
- * terlanjur memeriksa seluruh isinya.
+ * Dulu angka telanjang di Zod; diangkat ke sini sejak "Salin dari Tahun Lain" —
+ * fitur itu bisa memuat isi tahun yang DIISI LEWAT IMPOR, jadi sebuah form
+ * berisi ribuan baris bisa lahir tanpa menyentuh jalur impor sama sekali, dan
+ * Simpan-nya ditolak sesudah orangnya terlanjur menyalin. Modal salinnya
+ * memeriksa angka ini di muka; kalau angkanya cuma hidup di dalam Zod,
+ * pemeriksaan itu jadi tebakan yang melenceng begitu batasnya diubah.
  *
- * 2.000 dipilih karena `bulkInsert` menulis satu INSERT tunggal tanpa memecah
- * bongkahan; 2.000 × 18 kolom masih jauh di bawah `max_allowed_packet`.
+ * 3.000 dipilih dari DPA BLUD tergemuk yang nyata (~2.500) plus ruang tumbuh.
+ * Batas atasnya `bulkInsert`, yang menulis satu INSERT tunggal tanpa memecah
+ * bongkahan — 3.000 × 20 kolom masih jauh di bawah `max_allowed_packet` 64 MB.
+ * Yang justru lebih dulu mentok: `client_max_body_size` Nginx (bawaan 1 MB;
+ * setel `10m` saat pemasangan) dan tabel DPA/Pergeseran yang belum
+ * di-virtualisasi — di atas ~1.500 baris ketikan mulai terasa tersendat.
  */
-export const BLUD_IMPOR_MAKS_BARIS = 2000
+export const BLUD_SIMPAN_MAKS_BARIS = 3000
 
 /**
- * Batas baris jalur SIMPAN biasa (`DpaBodySchema`). Dulu angka telanjang di Zod;
- * diangkat ke sini sejak "Salin dari Tahun Lain" — fitur itu bisa memuat isi
- * tahun yang DIISI LEWAT IMPOR, jadi sebuah form berisi >700 baris kini bisa
- * lahir tanpa menyentuh jalur impor sama sekali, dan Simpan-nya akan ditolak
- * sesudah orangnya terlanjur menyalin. Modal salinnya memeriksa angka ini di
- * muka; kalau angkanya cuma hidup di dalam Zod, pemeriksaan itu jadi tebakan
- * yang diam-diam melenceng begitu batasnya diubah.
+ * Batas baris jalur IMPOR. Dipakai parser DAN Zod — kalau keduanya berbeda,
+ * pratinjau bisa menjanjikan "Simpan 1.200 baris" lalu simpannya ditolak,
+ * setelah orang terlanjur memeriksa seluruh isinya.
+ *
+ * SENGAJA diturunkan dari batas simpan, bukan angka sendiri. Dulu impor 2.000
+ * sementara simpan 700: DPA 1.500 baris bisa MASUK lewat impor lalu tidak bisa
+ * disimpan lagi dari layar DPA sendiri — ubah satu sel, Simpan ditolak, tanpa
+ * jalan keluar. Data yang bisa masuk wajib bisa keluar, jadi plafon impor tidak
+ * boleh melampaui plafon simpan. Turunan, bukan salinan, supaya tidak bisa
+ * melenceng lagi diam-diam.
  */
-export const BLUD_SIMPAN_MAKS_BARIS = 700
+export const BLUD_IMPOR_MAKS_BARIS = BLUD_SIMPAN_MAKS_BARIS
 
 /** Bentuk minimum yang dibutuhkan pemeta — dipenuhi `BarisTerbaca`. */
 export interface BarisSiapPeta {
