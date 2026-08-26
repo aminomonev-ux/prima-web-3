@@ -3,7 +3,7 @@
 // app/(dashboard)/blud/pergeseran/pergeseran-client.tsx
 // Port dari blud-app: PergeseranTable + pergeseran-dpa/page — shadcn/ui + Tailwind
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -830,7 +830,12 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       // B6: pergeseran WAJIB berimbang (pagu tetap). Belum berimbang → tawarkan
       // simpan DRAFT (pengakuan eksplisit, flag ke server); status draft
       // diturunkan dari delta, tidak disimpan di DB
-      const rootDelta = hitungDeltaPergeseranRoot(rows)
+      // Hitung dari pohon, JANGAN percaya kolom `bertambah_berkurang` yang
+      // menempel di baris: server selalu `recalcPergeseranJumlah` dulu sebelum
+      // menilai (route.ts), jadi klien yang membaca angka tersimpan bisa yakin
+      // "sudah berimbang", melewatkan tawaran draf, lalu ditolak 400 tanpa
+      // jalan keluar. Dua cara hitung untuk satu keputusan = dua jawaban.
+      const rootDelta = hitungDeltaPergeseranRoot(recalcPergeseranJumlah(rows))
       draftRef.current = false
       paksaTurunRef.current = null
       paksaDropRef.current = false
@@ -925,9 +930,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // loadPergeseran/loadHistory ber-dep [tahun] → efek refire saat tahun berganti.
   useEffect(() => { void (async () => { await loadPergeseran(); await loadHistory() })() }, [loadPergeseran, loadHistory])
 
-  // B6: status DRAFT diturunkan dari delta root (tidak disimpan) — badge live,
-  // hilang sendiri begitu angka berimbang
-  const deltaBerimbang = rows.length > 0 ? hitungDeltaPergeseranRoot(rows) : 0
+  // B6: status DRAFT diturunkan dari delta akar (tidak disimpan) — badge live,
+  // hilang sendiri begitu angka berimbang. Sumber hitungannya sama persis
+  // dengan `simpan()` dan server: pohon yang di-recalc, bukan kolom tersimpan.
+  // `useMemo` supaya recalc tidak jalan di tiap render, hanya saat baris berubah.
+  const deltaBerimbang = useMemo(
+    () => (rows.length > 0 ? hitungDeltaPergeseranRoot(recalcPergeseranJumlah(rows)) : 0),
+    [rows],
+  )
 
   return (
     <div className="space-y-4">

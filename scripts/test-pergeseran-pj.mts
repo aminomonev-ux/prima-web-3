@@ -51,7 +51,12 @@ bab('A. Generate — DPA → Pergeseran membawa PJ')
   cek('PJ daun ikut tersalin', hasil[2].penanggung_jawab === 'Kasubbag Umum', hasil[2].penanggung_jawab ?? '(kosong)')
   cek('Keterangan ikut tersalin', hasil[2].keterangan === 'rutin')
   cek('NULL jadi string kosong (terikat <input>)', hasil[0].penanggung_jawab === '' && hasil[0].keterangan === '')
-  cek('Kolom P tetap kosong', hasil[2].vol_p === null && hasil[2].pergeseran === 0)
+  // Sengaja dibalik dari versi sebelumnya: kolom P kini salinan PENUH kolom DPA,
+  // bukan kolom kosong. `vol_p = null` dulu berarti "pagunya dinolkan", bukan
+  // "belum digeser" — salinan segar melaporkan seluruh DPA lenyap dan Simpan
+  // ditolak sebelum satu angka pun bergeser. Rinciannya di test-pergeseran-berimbang.
+  cek('Kolom P salinan penuh kolom DPA',
+    hasil[2].vol_p === 10 && hasil[2].harga_p === 10 && hasil[2].pergeseran === 100)
 }
 
 bab('B. Baca ulang — server → klien (pergeseranKeInput)')

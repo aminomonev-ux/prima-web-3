@@ -63,9 +63,21 @@ export function pergeseranKeInput(d: PergeseranBaris): PergeseranBarisInput {
 }
 
 /**
- * "Generate" di layar Pergeseran: salinan DPA sebagai titik awal. Kolom P
- * sengaja kosong — yang menggeser manusia. Jangkarnya ikut terbawa, sebab ini
- * baris yang sama, bukan baris yang baru lahir.
+ * "Generate" di layar Pergeseran: salinan DPA sebagai titik awal. Jangkarnya
+ * ikut terbawa, sebab ini baris yang sama, bukan baris yang baru lahir.
+ *
+ * Kolom P adalah salinan PENUH kolom DPA, bukan kolom kosong. Dulu keduanya
+ * `null`, dan itu bukan "belum digeser" melainkan "pagunya dinolkan":
+ * `recalcPergeseranJumlah` menghitung `pergeseran = vol_p × harga_p`, jadi
+ * tabel yang baru disalin melaporkan seluruh DPA-nya lenyap dan Simpan ditolak
+ * PERGESERAN_TIDAK_BERIMBANG sebelum satu angka pun digeser. Lebih jauh lagi:
+ * begitu satu versi Pergeseran tersimpan, `getPaguEfektif` membaca pagu tahun
+ * itu dari kolom `pergeseran` — nol di situ berarti Realisasi & Buku Kas
+ * menolak belanja di hampir semua rekening.
+ *
+ * Konsekuensinya "belum digeser" kini dikenali dari `vol_p`/`harga_p` yang
+ * masih sama persis dengan `vol`/`harga` — dipakai `injectDpaKePergeseran`
+ * untuk memutuskan baris mana yang boleh ikut DPA baru.
  */
 export function dpaKePergeseranInput(d: DpaBaris, urutan: number): PergeseranBarisInput {
   return {
@@ -75,9 +87,9 @@ export function dpaKePergeseranInput(d: DpaBaris, urutan: number): PergeseranBar
     satuan:              d.satuan,
     harga:               d.harga,
     jumlah:              d.jumlah,
-    vol_p:               null,
-    harga_p:             null,
-    pergeseran:          0,
+    vol_p:               d.vol,
+    harga_p:             d.harga,
+    pergeseran:          d.jumlah,
     bertambah_berkurang: 0,
     penanggung_jawab:    d.penanggung_jawab ?? '',
     keterangan:          d.keterangan ?? '',

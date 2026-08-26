@@ -368,15 +368,29 @@ export function geserBlock<T extends {
 
 /**
  * B6: pergeseran WAJIB berimbang — geser antar rekening, pagu total tetap.
- * Return delta root (GRANDMASTER, fallback baris tanpa parent); ≠ 0 = tidak
- * berimbang → save ditolak (client + server POST /api/blud/pergeseran).
+ * Return delta akar; ≠ 0 = tidak berimbang → save ditolak (client + server
+ * POST /api/blud/pergeseran).
+ *
+ * Akar ditentukan STRUKTURAL — baris tanpa induk, atau yang induknya tidak ada
+ * di daftar — bukan dari `tipe_baris`. Definisi yang sama dipakai `sortTreeDFS`
+ * dan `validateTreeIntegrity`; satu berkas dengan tiga pendapat soal "akar"
+ * adalah cara paling rapi untuk menyembunyikan bug.
+ *
+ * Dulu: "ambil semua GRANDMASTER, kalau ada satu pun pakai itu SAJA". Baris
+ * lain yang menggantung tanpa induk — bentuk yang bisa lahir dari impor DPA
+ * berkas ber-tingkat-tertinggi Level 2 — uangnya nyata (tampil, tersimpan,
+ * terbaca `getPaguEfektif`) tapi luput dari satu-satunya angka yang memisahkan
+ * draf dari dokumen resmi. Tanpa pesan, tanpa gejala. `validateTreeIntegrity`
+ * pun tidak menangkapnya: yang ditolak hanya `parent_id` menunjuk baris tak
+ * ada, sedangkan `parent_id` null lolos mulus.
  */
 export function hitungDeltaPergeseranRoot(
-  rows: Array<Pick<PergeseranBarisInput, 'tipe_baris' | 'parent_id' | 'bertambah_berkurang'>>,
+  rows: Array<Pick<PergeseranBarisInput, 'row_id' | 'parent_id' | 'bertambah_berkurang'>>,
 ): number {
-  const gm = rows.filter(r => r.tipe_baris === 'GRANDMASTER')
-  const roots = gm.length > 0 ? gm : rows.filter(r => !r.parent_id)
-  return roots.reduce((s, r) => s + (r.bertambah_berkurang ?? 0), 0)
+  const ids = new Set(rows.map(r => r.row_id))
+  return rows
+    .filter(r => !r.parent_id || !ids.has(r.parent_id))
+    .reduce((s, r) => s + (r.bertambah_berkurang ?? 0), 0)
 }
 
 // ─── INJECT — 16 LEVEL MATCHING ──────────────────────────────────────────────
@@ -533,6 +547,21 @@ export function injectDpaKePergeseran(
     if (found) {
       matched.add(found)
       if (lowTier) lowConfidence.push({ kode_rekening: dpa.kode_rekening, uraian: dpa.uraian, tier: lowTier })
+      // Kolom P = salinan penuh kolom DPA (lihat `dpaKePergeseranInput`), jadi
+      // "baris ini belum digeser" terbaca dari kolom P yang masih sama persis
+      // dengan kolom DPA-nya. `found.vol`/`found.harga` di sini masih nilai LAMA
+      // — belum ditimpa `dpa.*` di bawah — itulah yang membuat perbandingan ini
+      // mungkin sama sekali.
+      //
+      // Baris yang belum digeser WAJIB ikut DPA baru. Kalau tidak, revisi DPA
+      // menaikkan `jumlah` sementara kolom P tertinggal di angka lama, dan
+      // Sinkronkan DPA memunculkan selisih di baris yang tak pernah disentuh
+      // siapa pun — tabel jadi tidak berimbang sendiri, tepat pada tombol yang
+      // menjanjikan "angka pergeseran Anda tidak akan berubah".
+      //
+      // Menggeser ke angka yang sama persis dengan DPA memang ikut terbaca
+      // "belum digeser". Itu disengaja: geser ke nilai asal = tidak menggeser.
+      const belumDigeser = found.vol_p === found.vol && found.harga_p === found.harga
       finalOrder.push({
         ...found,
         kode_rekening: dpa.kode_rekening,
@@ -541,6 +570,8 @@ export function injectDpaKePergeseran(
         satuan:        dpa.satuan,
         harga:         dpa.harga,
         jumlah:        dpa.jumlah,
+        vol_p:         belumDigeser ? dpa.vol   : found.vol_p,
+        harga_p:       belumDigeser ? dpa.harga : found.harga_p,
         // PJ & keterangan ditimpa dari DPA, sederajat dgn uraian/vol/harga: keduanya
         // milik DPA, Pergeseran cuma memotretnya per versi.
         //
@@ -556,6 +587,10 @@ export function injectDpaKePergeseran(
         anggaran_key:  dpa.anggaran_key ?? found.anggaran_key ?? null,
       })
     } else {
+      // Baris DPA yang belum punya pasangan di Pergeseran — lahir sebagai
+      // salinan penuh, sama seperti `dpaKePergeseranInput`. Kalau kolom P-nya
+      // dibiarkan kosong, setiap baris baru di DPA otomatis membuat Pergeseran
+      // tidak berimbang sebesar pagunya sendiri.
       finalOrder.push({
         kode_rekening:       dpa.kode_rekening,
         uraian:              dpa.uraian,
@@ -563,9 +598,9 @@ export function injectDpaKePergeseran(
         satuan:              dpa.satuan,
         harga:               dpa.harga,
         jumlah:              dpa.jumlah,
-        vol_p:               null,
-        harga_p:             null,
-        pergeseran:          0,
+        vol_p:               dpa.vol,
+        harga_p:             dpa.harga,
+        pergeseran:          dpa.jumlah,
         bertambah_berkurang: 0,
         penanggung_jawab:    dpa.penanggung_jawab ?? '',
         keterangan:          dpa.keterangan ?? '',
