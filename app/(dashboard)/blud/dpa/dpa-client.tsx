@@ -22,7 +22,7 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcDpa, recalcDpaJumlah } from '@/lib/blud/recalc'
 import { dpaKeInput } from '@/lib/blud/row-map'
-import { tanggalHariIniWIB, formatTanggalId } from '@/lib/blud/tanggal'
+import { tanggalHariIniWIB, formatTanggalId, expectedVersionUntuk } from '@/lib/blud/tanggal'
 import { buildDpaRowsFromKodeBesar } from '@/lib/blud/dpa-skeleton-builder'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import BlockedModal, { type BlockedInfo } from '@/components/blud/BlockedModal'
@@ -1058,7 +1058,8 @@ export default function DpaClient({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tahun_anggaran: tahun, versi_tanggal: versiTanggal, rows,
-          force: paksaDropRef.current, expected_version: version,
+          force: paksaDropRef.current,
+          expected_version: expectedVersionUntuk(versiTanggal, versi, version),
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
@@ -1072,8 +1073,27 @@ export default function DpaClient({
         return
       }
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
-        showToast('Orang lain baru saja mengubah versi ini. Isian terbarunya sedang dimuat — periksa dulu, lalu simpan ulang.', false)
-        await loadDpa(versiTanggal)
+        // Dulu muatan server langsung menimpa isian di layar. Akibatnya pekerjaan
+        // yang belum tersimpan hilang tanpa bisa dibatalkan — padahal pesannya
+        // justru menyuruh "periksa dulu, lalu simpan ulang", yang mustahil kalau
+        // isiannya sudah lenyap. Sekarang orangnya yang memutuskan, dan pilihan
+        // yang TIDAK menghancurkan apa pun jadi jawaban bawaan (Esc / klik luar).
+        const ambilMilikMereka = await confirmDialog({
+          title:   'Versi ini baru saja diisi orang lain',
+          message: `Sementara layar ini terbuka, ada yang menyimpan versi ${formatTanggalId(versiTanggal)}. `
+            + `Isian di layar Anda (${rows.length} baris) belum tersimpan di mana pun.\n\n`
+            + `Muat punya mereka — isian Anda hilang.\n`
+            + `Tetap pakai isian Anda — punya mereka yang tertimpa, begitu Anda tekan Simpan sekali lagi.`,
+          confirmLabel: 'Muat punya mereka',
+          cancelLabel:  'Tetap pakai isian saya',
+          variant:      'warning',
+        })
+        if (ambilMilikMereka) { await loadDpa(versiTanggal); return }
+        // Menyejajarkan angka kunci ke keadaan server. Tanpa ini Simpan berikutnya
+        // ditolak lagi memakai angka yang sudah basi, dan "tetap pakai isian saya"
+        // berubah jadi jalan buntu.
+        if (typeof json.actual === 'number') { setVersi(versiTanggal); setVersion(json.actual) }
+        showToast('Isian Anda dipertahankan. Tekan Simpan sekali lagi kalau memang mau menimpa punya mereka.', false)
         return
       }
       if (res.status === 409 && json.code === 'SAFETY_THRESHOLD') {

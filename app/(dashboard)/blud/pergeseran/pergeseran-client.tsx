@@ -22,7 +22,7 @@ import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import SpandukLihat from '@/components/blud/SpandukLihat'
-import { formatTanggalId, tanggalHariIniWIB } from '@/lib/blud/tanggal'
+import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk } from '@/lib/blud/tanggal'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
 import type { PergeseranBarisInput, PergeseranBaris, DpaBaris, TipeBaris } from '@/types'
@@ -859,7 +859,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tahun_anggaran: tahun, versi_tanggal: versiTanggal, dpa_versi_tanggal: dpaVersi || undefined,
-          rows, force: paksaDropRef.current, draft: draftRef.current, expected_version: version,
+          rows, force: paksaDropRef.current, draft: draftRef.current,
+          expected_version: expectedVersionUntuk(versiTanggal, versi, version),
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
@@ -872,8 +873,24 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         return
       }
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
-        showToast('Orang lain baru saja mengubah versi ini. Isian terbarunya sedang dimuat — periksa dulu, lalu simpan ulang.', false)
-        await loadPergeseran(versiTanggal)
+        // Sama dengan jalur DPA: yang belum tersimpan tidak boleh hilang tanpa
+        // ditanya. Di sini malah lebih buruk sebelumnya — `loadPergeseran` hanya
+        // menyetel state kalau server mengirim baris, jadi memuat versi yang belum
+        // ada tidak mengubah apa pun dan Simpan berikutnya ditolak lagi, terus
+        // berputar tanpa jalan keluar.
+        const ambilMilikMereka = await confirmDialog({
+          title:   'Versi ini baru saja diisi orang lain',
+          message: `Sementara layar ini terbuka, ada yang menyimpan versi ${formatTanggalId(versiTanggal)}. `
+            + `Isian di layar Anda (${rows.length} baris) belum tersimpan di mana pun.\n\n`
+            + `Muat punya mereka — isian Anda hilang.\n`
+            + `Tetap pakai isian Anda — punya mereka yang tertimpa, begitu Anda tekan Simpan sekali lagi.`,
+          confirmLabel: 'Muat punya mereka',
+          cancelLabel:  'Tetap pakai isian saya',
+          variant:      'warning',
+        })
+        if (ambilMilikMereka) { await loadPergeseran(versiTanggal); return }
+        if (typeof json.actual === 'number') { setVersi(versiTanggal); setVersion(json.actual) }
+        showToast('Isian Anda dipertahankan. Tekan Simpan sekali lagi kalau memang mau menimpa punya mereka.', false)
         return
       }
       if (res.status === 409 && json.code === 'SAFETY_THRESHOLD') {
