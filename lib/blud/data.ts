@@ -19,7 +19,8 @@ import {
 // supaya panel bentrok di layar Pengaturan bisa memakai komponen yang sama.
 import type { BentrokPagu } from './pagu'
 import { ensureAnggaranKey } from './anggaran-key'
-import { JAKARTA_OFFSET_MS } from './tanggal'
+import { toDateStr } from './tanggal'
+import { catatRiwayatSimpan } from './riwayat-simpan'
 import type {
   DpaBaris, DpaBarisInput,
   PergeseranBaris, PergeseranBarisInput,
@@ -406,17 +407,10 @@ async function periksaJangkar(
   if (yatim > 0) throw new BludJangkarHilangError(table, yatim, berjangkar.size)
 }
 
-// Pool config `timezone: '+07:00'` → mysql2 interpret DATE column sebagai
-// midnight di +07:00. Di server UTC (Vercel), `Date.toISOString()` shift
-// back ke UTC → bisa kembalikan tanggal sebelumnya. Tambah 7h offset supaya
-// ISO string mewakili midnight UTC dari DATE asli.
-export function toDateStr(v: unknown): string {
-  if (!v) return ''
-  if (v instanceof Date) {
-    return new Date(v.getTime() + JAKARTA_OFFSET_MS).toISOString().slice(0, 10)
-  }
-  return String(v).slice(0, 10)
-}
+// Pindah ke `tanggal.ts` supaya `riwayat-simpan.ts` bisa memakainya tanpa
+// lingkaran modul (berkas ini memanggil pencatat riwayat). Di-re-export di sini
+// agar seluruh pemanggil lama `from './data'` tidak perlu disentuh.
+export { toDateStr }
 
 function normDpa(r: Record<string, unknown>): DpaBaris {
   return {
@@ -537,6 +531,13 @@ export async function saveDpa(
         bentrokKosong = await pagarSimpanVersi(tx, 'dpa_blud', tahun, versiTanggal, new Map(), turunkanPaksa)
         await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
+        // L69: jalur ini paling mudah terlewat, dan justru riwayat paling berharga
+        // — "jam sekian versinya dikosongkan". Tanpa ini, satu-satunya pengosongan
+        // isi di luar layar Pengaturan tidak berjejak.
+        await catatRiwayatSimpan(tx, {
+          jenis: 'DPA', tahun, versiTanggal, versiKe: expectedVersion + 1,
+          baris: [], totalNilai: 0, userId,
+        })
       })
       return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
     }
@@ -578,6 +579,13 @@ export async function saveDpa(
     await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('dpa_blud', DPA_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
+    // Di DALAM transaksi, sesudah bump: simpanan yang ditolak (409, pagar pagu,
+    // ambang drop) ikut rollback, jadi tidak ada snapshot untuk simpanan yang
+    // tidak pernah terjadi. `versiKe` = angka kunci SESUDAH bump.
+    await catatRiwayatSimpan(tx, {
+      jenis: 'DPA', tahun, versiTanggal, versiKe: expectedVersion + 1,
+      baris: rows, totalNilai: rows.reduce((s, r) => s + Number(r.jumlah ?? 0), 0), userId,
+    })
   })
   return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
 }
@@ -681,6 +689,13 @@ export async function savePergeseran(
         bentrokKosong = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, new Map(), turunkanPaksa)
         await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
+        // L69 — cermin jalur kosong+force di saveDpa. Ini jalur tulis KEEMPAT,
+        // dan yang paling gampang dikira tidak ada karena savePergeseran terlihat
+        // seperti satu fungsi dengan satu jalan keluar.
+        await catatRiwayatSimpan(tx, {
+          jenis: 'PERGESERAN', tahun, versiTanggal, versiKe: expectedVersion + 1,
+          baris: [], totalNilai: 0, dpaVersiTanggal, userId,
+        })
       })
       return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
     }
@@ -724,6 +739,13 @@ export async function savePergeseran(
     await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('pergeseran_dpa', PERGESERAN_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
+    // `pergeseran` (pagu pasca-geser), bukan `jumlah` — itu angka yang berlaku
+    // untuk baris pergeseran, sama seperti yang dipakai `baruPagu` di atas.
+    await catatRiwayatSimpan(tx, {
+      jenis: 'PERGESERAN', tahun, versiTanggal, versiKe: expectedVersion + 1,
+      baris: rows, totalNilai: rows.reduce((s, r) => s + Number(r.pergeseran ?? 0), 0),
+      dpaVersiTanggal, userId,
+    })
   })
   return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
 }

@@ -21,6 +21,7 @@ import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
+import type { SimpananItem } from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk } from '@/lib/blud/tanggal'
@@ -609,8 +610,12 @@ function AddPergeseranBarisModal({
 export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [rows,      setRows]      = useState<PergeseranBarisInput[]>([])
   const [history,   setHistory]   = useState<{ versi_tanggal: string }[]>([])
+  const [riwayat,   setRiwayat]   = useState<SimpananItem[]>([])
   const [versi,     setVersi]     = useState('')
   const [dpaVersi,  setDpaVersi]  = useState('')
+  // Jejak "baris ini dipulihkan dari simpanan jam sekian" — semata memperpanjang
+  // baris detail audit, sepadan `asalSalinRef` di layar DPA.
+  const asalPulihkanRef = useRef<{ id: number; versi_ke: number; disimpan_pada: string } | null>(null)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §2.1) — pilih tahun dulu, sama pola DPA.
   const CURRENT_YEAR = new Date().getFullYear()
   const [tahun,     setTahun]     = useState<number>(CURRENT_YEAR)
@@ -714,6 +719,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     } catch { /* skip */ }
   }, [tahun])
 
+  const loadRiwayat = useCallback(async () => {
+    try {
+      const res  = await fetch(`/api/blud/riwayat-simpan?jenis=PERGESERAN&tahun=${tahun}`)
+      const json = await res.json()
+      if (json.ok) setRiwayat(json.data)
+    } catch { /* riwayat itu pelengkap — kegagalannya tidak boleh menahan layar */ }
+  }, [tahun])
+
   const loadTahunList = useCallback(async () => {
     try {
       const res  = await fetch('/api/blud/pergeseran?mode=tahun-list')
@@ -765,6 +778,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         setVersion(typeof json.version === 'number' ? json.version : 0)
         const firstRow = json.data[0] as PergeseranBaris
         if (firstRow?.dpa_versi_tanggal) setDpaVersi(firstRow.dpa_versi_tanggal)
+        // Barisnya diganti muatan server — jejak "ini pulihan" tidak berlaku lagi.
+        asalPulihkanRef.current = null
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -772,6 +787,44 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     }
     finally  { setLoading(false) }
   }, [tahun])
+
+  /**
+   * Muat satu simpanan lama ke FORM — cermin `pulihkanSimpanan` di layar DPA.
+   * Tidak ada yang ditulis di sini; Simpan biasa yang menuliskannya.
+   */
+  const pulihkanSimpanan = useCallback(async (s: SimpananItem) => {
+    // L75b: yang tidak merusak jadi bawaan — confirmDialog memulangkan false utk Esc.
+    const lanjut = await confirmDialog({
+      title:   'Muat simpanan lama ke layar?',
+      message: `Simpan ke-${s.versi_ke} pada ${formatTanggalId(s.versi_tanggal)} pukul ${s.disimpan_pada.slice(11, 16)} `
+        + `(${s.jumlah_baris} baris) akan menggantikan ${rows.length} baris yang sekarang di layar.\n\n`
+        + `Belum ada yang tersimpan sampai Anda menekan Simpan.`,
+      confirmLabel: 'Muat ke layar',
+      cancelLabel:  'Batal',
+      variant:      'warning',
+    })
+    if (!lanjut) return
+    setLoading(true)
+    try {
+      const res  = await fetch(`/api/blud/riwayat-simpan?id=${s.id}`)
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Riwayat simpan tidak bisa diambil.')
+      // Angka kunci SEGAR dari server, bukan `versi_ke` snapshot — kalau tidak,
+      // L75 lahir kembali: snapshot lama membawa angka lama, kuncinya sudah maju.
+      const vRes  = await fetch(`/api/blud/pergeseran?tahun=${tahun}&tanggal=${encodeURIComponent(s.versi_tanggal)}`)
+      const vJson = await vRes.json()
+      setRows(json.data.isi as PergeseranBarisInput[])
+      setVersi(s.versi_tanggal)
+      setVersion(typeof vJson.version === 'number' ? vJson.version : 0)
+      // Acuan DPA ikut dipulihkan dari snapshot — kalau tidak, Simpan berikutnya
+      // memakai acuan yang kebetulan sedang terpilih di layar, bukan acuan aslinya.
+      if (json.data.dpa_versi_tanggal) setDpaVersi(json.data.dpa_versi_tanggal)
+      asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
+      showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), false)
+    } finally { setLoading(false) }
+  }, [tahun, rows.length])
 
   // Generate: ambil DPA terbaru DALAM TAHUN TERPILIH, jadikan tabel pergeseran baru.
   // Empty-state (§2.1): kalau tahun itu belum punya DPA → guard arahkan buat DPA dulu.
@@ -886,6 +939,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
+          asal_pulihkan: asalPulihkanRef.current ?? undefined,
         }),
       })
       const json = await res.json()
@@ -925,7 +979,9 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         return
       }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList()
+        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList(); loadRiwayat()
+        // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pemulihan.
+        asalPulihkanRef.current = null
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
         if (typeof json.version === 'number') setVersion(json.version)
         // Jangkar baris baru dicetak server saat simpan — tanpa diserap ke state,
@@ -945,7 +1001,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
 
   useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
   // loadPergeseran/loadHistory ber-dep [tahun] → efek refire saat tahun berganti.
-  useEffect(() => { void (async () => { await loadPergeseran(); await loadHistory() })() }, [loadPergeseran, loadHistory])
+  useEffect(() => { void (async () => { await loadPergeseran(); await loadHistory(); await loadRiwayat() })() }, [loadPergeseran, loadHistory, loadRiwayat])
 
   // B6: status DRAFT diturunkan dari delta akar (tidak disimpan) — badge live,
   // hilang sendiri begitu angka berimbang. Sumber hitungannya sama persis
@@ -1015,6 +1071,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             items={history}
             onChange={v => { setVersi(v); if (v) loadPergeseran(v) }}
             placeholder="— Pilih History —"
+            riwayat={riwayat}
+            onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
           />
         </div>
 

@@ -38,6 +38,45 @@ export function tanggalHariIniWIB(sekarang: number = Date.now()): string {
 }
 
 /**
+ * Kolom DATE dari MySQL → 'YYYY-MM-DD'.
+ *
+ * Pool memakai `timezone: '+07:00'`, jadi mysql2 menafsirkan kolom DATE sebagai
+ * tengah malam di +07:00. Di server UTC, `toISOString()` menggesernya balik dan
+ * bisa memulangkan tanggal SEBELUMNYA — 2026-07-01 tampil 30 Jun. Offset yang
+ * sama ditambahkan supaya string ISO-nya mewakili tengah malam DATE aslinya.
+ *
+ * Tinggal di sini, bukan di `data.ts`, supaya `riwayat-simpan.ts` bisa
+ * memakainya tanpa membentuk lingkaran modul — `data.ts` memanggil pencatat
+ * riwayat, jadi arah impornya tidak boleh berbalik. `data.ts` me-re-export ini
+ * agar 38 pemanggil lama tidak perlu disentuh.
+ */
+export function toDateStr(v: unknown): string {
+  if (!v) return ''
+  if (v instanceof Date) {
+    return new Date(v.getTime() + JAKARTA_OFFSET_MS).toISOString().slice(0, 10)
+  }
+  return String(v).slice(0, 10)
+}
+
+/**
+ * Saat ini menurut WIB dalam bentuk `YYYY-MM-DD HH:MM:SS` — siap masuk kolom
+ * DATETIME MySQL. Dipakai `disimpan_pada` di `blud_riwayat_simpan`.
+ *
+ * SENGAJA bukan `NOW()` MySQL: `versi_tanggal` ditetapkan klien lewat
+ * `tanggalHariIniWIB` di atas, sedangkan `NOW()` mengikuti zona server. Kalau
+ * servernya UTC, tanggal keduanya bisa berbeda pada dini hari WIB dan snapshot
+ * terlihat nyasar dari versinya. Satu tetapan (`JAKARTA_OFFSET_MS`) untuk dua
+ * angka yang harus sepakat.
+ *
+ * Juga bukan `.toISOString()` apa adanya: MySQL menolak sisipan 'T' dan 'Z'.
+ *
+ * @param sekarang epoch ms — parameter hanya untuk pengujian.
+ */
+export function waktuSekarangWIB(sekarang: number = Date.now()): string {
+  return new Date(sekarang + JAKARTA_OFFSET_MS).toISOString().slice(0, 19).replace('T', ' ')
+}
+
+/**
  * Angka kunci (`expected_version`) yang benar untuk versi yang AKAN ditulis.
  *
  * Kunci optimistik itu milik pasangan (tahun, versi_tanggal) — lihat `bludVersiKey`

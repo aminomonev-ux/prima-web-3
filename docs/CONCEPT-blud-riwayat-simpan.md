@@ -1,6 +1,7 @@
 # CONCEPT — Riwayat Simpan per Jam (BLUD: DPA & Pergeseran)
 
-> Status: **usulan** (2026-08-26). Belum dikerjakan.
+> Status: **terpasang** (2026-08-26). Regresi:
+> `npx tsx scripts/test-blud-riwayat-simpan.mts` (55), 10 uji mutasi tertangkap.
 > Lahir dari kejadian nyata: versi DPA 2026 & 2027 terhapus karena layar Pengaturan
 > menampilkan tanggal simpan sebagai identitas utama. Revamp layar itu dibahas
 > terpisah; dokumen ini soal yang kedua — riwayat simpan yang lebih rinci.
@@ -126,18 +127,26 @@ meninggalkan snapshot — otomatis, karena ikut rollback.
 
 ### L69 — SEMUA jalur tulis, bukan yang utama saja
 
-`saveDpa` punya **dua** jalur yang menulis, dan yang kedua mudah terlewat:
+Jalur tulisnya **EMPAT**, bukan tiga. Draf pertama dokumen ini menulis "tiga
+titik: `saveDpa` normal, `saveDpa` kosong+force, `savePergeseran`" — dan itu
+salah hitung, karena `savePergeseran` juga punya cabang kosong+force. Kesalahan
+itu dibiarkan tercatat di sini: ia contoh L69 yang terjadi **saat menulis
+konsepnya sendiri**, bukan saat mengetik kodenya.
 
-| Jalur | Baris | Snapshot? |
+| Fungsi | Jalur | Snapshot |
 |---|---|---|
-| Simpan biasa (DELETE + `bulkInsert`) | [data.ts:563–581](../lib/blud/data.ts:563) | Ya |
-| Kirim kosong + `force` → versi dikosongkan | [data.ts:533–540](../lib/blud/data.ts:533) | **Ya**, dengan `isi = []` |
+| `saveDpa` | Simpan biasa (DELETE + `bulkInsert`) | Ya |
+| `saveDpa` | Kirim kosong + `force` → versi dikosongkan | **Ya**, `isi = []` |
+| `savePergeseran` | Simpan biasa | Ya, + `dpa_versi_tanggal` |
+| `savePergeseran` | Kirim kosong + `force` | **Ya**, `isi = []` + acuan |
 
-Yang kedua justru riwayat paling berharga: "jam 16:40 versinya dikosongkan". Kalau
-terlewat, satu-satunya penghapusan isi yang bisa dilakukan tanpa lewat layar
-Pengaturan jadi tak berjejak.
+Dua cabang kosong+force itu justru riwayat paling berharga: "jam 16:40 versinya
+dikosongkan". Kalau terlewat, satu-satunya pengosongan isi yang bisa dilakukan
+tanpa lewat layar Pengaturan jadi tak berjejak.
 
-`savePergeseran` diperlakukan sama, plus mengisi `dpa_versi_tanggal`.
+Penjaganya: `B1` di `test-blud-riwayat-simpan.mts` menghitung pemanggilan harus
+tepat **4**, dan uji mutasi membuktikan menghapus cabang keempat menjatuhkan
+5 pemeriksaan.
 
 ### Retensi
 
@@ -268,6 +277,27 @@ jauh di bawah `max_allowed_packet` per baris maupun kewajaran ukuran basis data.
 
 ## 13. Urutan
 
-Revamp layar Pengaturan **dulu** (sudah disetujui, dan itu yang menutup lubang
-kemarin), riwayat simpan menyusul. Dua konsep terpisah supaya kalau ada yang
-meleset, ketahuan mana penyebabnya.
+Revamp layar Pengaturan **dulu** (commit `474b928`, menutup lubang L76), riwayat
+simpan menyusul. Dua commit terpisah supaya kalau ada yang meleset, ketahuan mana
+penyebabnya.
+
+## 14. Hasil verifikasi (2026-08-26)
+
+Diuji terhadap basis data sungguhan lewat `saveDpa`/`savePergeseran` asli — bukan
+tiruan:
+
+| Yang dibuktikan | Hasil |
+|---|---|
+| Dua simpanan tanggal sama, jam beda | `17:31:41` **dan** `17:31:42` — dua baris, tidak saling menimpa |
+| `versi_ke` mengikuti angka kunci | ke-5 lalu ke-6, sejalan `v4→5→6` |
+| Isi utuh & bisa diambil kembali | 558 baris, `anggaran_key` (jangkar realisasi) ikut |
+| Bentuk `isi` = payload POST | tanpa `id`/`versi_tanggal` hasil SELECT — siap dikirim balik |
+| Jalur Pergeseran | snapshot tercatat + `dpa_versi_tanggal` terisi |
+| Total pakai kolom yang benar | DPA Rp 632,97 M (`jumlah`) vs Pergeseran Rp 637,27 M (`pergeseran`) |
+| Data lama tidak terganggu | DPA 2026 tetap 558 baris, pergeseran tidak berkurang |
+
+Kasus nyata yang memicunya terlihat di audit log hari itu: Pergeseran 2026 versi
+`2026-08-26` disimpan **tiga kali** — 13:34 (v0→1), 13:55 (v1→2), 13:59 (v2→3).
+Ketiganya saling menimpa dan hanya yang terakhir tersisa. Itu persis keadaan yang
+fitur ini akhiri; ketiga simpanan itu sendiri sudah tidak bisa dikembalikan karena
+terjadi sebelum tabelnya ada.

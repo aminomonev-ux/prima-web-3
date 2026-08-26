@@ -663,6 +663,34 @@ input, textarea { caret-color: #FBBF24; }
 .versi-item-meta { color: #85B7EB; font-size: 11.5px; white-space: nowrap; }
 .versi-item.active .versi-item-meta { color: rgba(251,191,36,.85); }
 .versi-item-check { color: #FBBF24; margin-left: auto; flex-shrink: 0; }
+/* Riwayat simpan per jam — anak baris di bawah tanggalnya. Panah punya area
+   klik sendiri supaya membuka riwayat tidak sekalian mengganti versi. */
+.versi-riwayat-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; flex-shrink: 0; border-radius: 4px;
+  color: #85B7EB; cursor: pointer; transition: transform .12s, background .12s;
+}
+.versi-riwayat-toggle:hover { background: rgba(133,183,235,.20); }
+.versi-riwayat-toggle.open { transform: rotate(90deg); }
+.versi-simpanan {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 10px 5px 30px; font-size: 11.5px; color: #B5D4F4;
+  border-left: 1px solid rgba(133,183,235,.25); margin-left: 16px;
+}
+.versi-simpanan-jam {
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-weight: 700; color: #FBBF24; flex-shrink: 0;
+}
+.versi-simpanan-teks { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.versi-simpanan-kini { margin-left: auto; font-size: 10.5px; color: #85B7EB; flex-shrink: 0; }
+.versi-simpanan-pulih {
+  margin-left: auto; flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 600;
+  background: transparent; border: 1px solid rgba(124,92,252,.45); color: #C4B5FD;
+  cursor: pointer; font-family: inherit; transition: all .12s;
+}
+.versi-simpanan-pulih:hover { background: #7C5CFC; border-color: #7C5CFC; color: #FFFFFF; }
 /* TahunDropdown — input inline "Tahun Baru" */
 .versi-add-input {
   flex: 1; min-width: 0; width: 100%;
@@ -1085,6 +1113,15 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .versi-item-meta { color: #6B7280; }
 [data-theme="light"] .versi-item.active .versi-item-meta { color: rgba(91,33,182,.75); }
 [data-theme="light"] .versi-item-check { color: #5B21B6; }
+[data-theme="light"] .versi-riwayat-toggle { color: #8B5CF6; }
+[data-theme="light"] .versi-riwayat-toggle:hover { background: rgba(139,92,246,.14); }
+[data-theme="light"] .versi-simpanan {
+  color: #4B5563; border-left-color: rgba(139,92,246,.25);
+}
+[data-theme="light"] .versi-simpanan-jam { color: #B45309; }
+[data-theme="light"] .versi-simpanan-kini { color: #6B7280; }
+[data-theme="light"] .versi-simpanan-pulih { border-color: rgba(124,92,252,.45); color: #5B21B6; }
+[data-theme="light"] .versi-simpanan-pulih:hover { background: #7C5CFC; color: #FFFFFF; }
 
 /* ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ Level badge L1/L2/... di kolom aksi kiri ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ */
 .blud-level-badge {

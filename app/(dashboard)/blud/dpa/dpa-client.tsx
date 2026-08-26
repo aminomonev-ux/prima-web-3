@@ -35,6 +35,7 @@ import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAku
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import SatuanCombobox from '@/components/shared/SatuanCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
+import type { SimpananItem } from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { PjConflictDialog, PjMutationDialog } from '@/components/blud/PjGuardDialogs'
@@ -858,9 +859,13 @@ export default function DpaClient({
   // Asal salinan disimpan sampai Simpan ditekan — semata untuk baris detail audit.
   // Dilepas begitu barisnya diubah lewat jalur lain supaya jejaknya tidak berbohong.
   const asalSalinRef = useRef<AsalSalin | null>(null)
+  // Sepadan `asalSalinRef` tapi untuk pemulihan snapshot — tanpa ini tidak ada
+  // apa pun di basis data yang bilang versi hari ini lahir dari simpanan jam 09:15.
+  const asalPulihkanRef = useRef<{ id: number; versi_ke: number; disimpan_pada: string } | null>(null)
   const bolehSalinInduk = bolehUbahMasterAkun || bolehUbahKodeBesar
   const [rows,        setRows]        = useState<DpaBarisInput[]>([])
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
+  const [riwayat,     setRiwayat]     = useState<SimpananItem[]>([])
   const [versi,       setVersi]       = useState('')
   const [loading,     setLoading]     = useState(false)
   const [saving,      setSaving]      = useState(false)
@@ -988,7 +993,8 @@ export default function DpaClient({
         setVersion(typeof json.version === 'number' ? json.version : 0)
         // Barisnya diganti muatan dari server — jejak "ini salinan tahun X" tidak
         // berlaku lagi. Dibiarkan menempel, ia akan mengotori audit simpan berikutnya.
-        asalSalinRef.current = null
+        asalSalinRef.current    = null
+        asalPulihkanRef.current = null
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -1004,6 +1010,57 @@ export default function DpaClient({
       if (json.ok) setHistory(json.data)
     } catch { /* skip */ }
   }, [tahun])
+
+  const loadRiwayat = useCallback(async () => {
+    try {
+      const res  = await fetch(`/api/blud/riwayat-simpan?jenis=DPA&tahun=${tahun}`)
+      const json = await res.json()
+      if (json.ok) setRiwayat(json.data)
+    } catch { /* riwayat itu pelengkap — kegagalannya tidak boleh menahan layar */ }
+  }, [tahun])
+
+  /**
+   * Muat satu simpanan lama ke FORM. Tidak ada yang ditulis di sini — yang
+   * menyimpannya tetap tombol Simpan biasa, jadi seluruh pagar (gembok
+   * optimistik, pagar pagu, periksaJangkar, Sentinel) berlaku tanpa ditulis ulang.
+   */
+  const pulihkanSimpanan = useCallback(async (s: SimpananItem) => {
+    // L75b: memuat membuang isian yang sedang di layar, jadi pilihan yang TIDAK
+    // merusak harus jadi bawaan — confirmDialog memulangkan false untuk Esc.
+    const lanjut = await confirmDialog({
+      title:   'Muat simpanan lama ke layar?',
+      message: `Simpan ke-${s.versi_ke} pada ${formatTanggalId(s.versi_tanggal)} pukul ${s.disimpan_pada.slice(11, 16)} `
+        + `(${s.jumlah_baris} baris) akan menggantikan ${rows.length} baris yang sekarang di layar.\n\n`
+        + `Belum ada yang tersimpan sampai Anda menekan Simpan.`,
+      confirmLabel: 'Muat ke layar',
+      cancelLabel:  'Batal',
+      variant:      'warning',
+    })
+    if (!lanjut) return
+    setLoading(true)
+    try {
+      const res  = await fetch(`/api/blud/riwayat-simpan?id=${s.id}`)
+      const json = await res.json()
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Riwayat simpan tidak bisa diambil.')
+      // Angka kunci diambil SEGAR dari server, BUKAN dari `versi_ke` snapshot.
+      // Snapshot jam 09:15 membawa angka 1; kalau angka itu yang dikirim saat
+      // Simpan sementara kunci tanggal itu sudah di angka 3, Simpan ditolak
+      // "diubah orang lain" — L75 lahir kembali lewat pintu lain.
+      const vRes  = await fetch(`/api/blud/dpa?tahun=${tahun}&tanggal=${encodeURIComponent(s.versi_tanggal)}`)
+      const vJson = await vRes.json()
+      // Tanpa `dpaKeInput`: `isi` memang disimpan dalam bentuk payload POST, jadi
+      // ia sudah `DpaBarisInput`. Recalc tetap dijalankan supaya total induk di
+      // layar sama dengan yang nanti dihitung server, bukan angka warisan.
+      setRows(recalcDpaJumlah(json.data.isi as DpaBarisInput[]))
+      setVersi(s.versi_tanggal)
+      setVersion(typeof vJson.version === 'number' ? vJson.version : 0)
+      asalSalinRef.current  = null
+      asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
+      showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), false)
+    } finally { setLoading(false) }
+  }, [tahun, rows.length])
 
   const loadTahunList = useCallback(async () => {
     try {
@@ -1022,7 +1079,7 @@ export default function DpaClient({
 
   useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
   // loadDpa/loadHistory ber-dep [tahun] → efek ini refire saat tahun berganti.
-  useEffect(() => { void (async () => { await loadDpa(); await loadHistory() })() }, [loadDpa, loadHistory])
+  useEffect(() => { void (async () => { await loadDpa(); await loadHistory(); await loadRiwayat() })() }, [loadDpa, loadHistory, loadRiwayat])
 
   async function simpan() {
     if (!rows.length) { showToast('Form masih kosong — belum ada yang bisa disimpan.', false); return }
@@ -1064,6 +1121,7 @@ export default function DpaClient({
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
           asal_salin: asalSalinRef.current ?? undefined,
+          asal_pulihkan: asalPulihkanRef.current ?? undefined,
         }),
       })
       const json = await res.json()
@@ -1106,11 +1164,12 @@ export default function DpaClient({
         return
       }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList()
+        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList(); loadRiwayat()
         if (typeof json.version === 'number') setVersion(json.version)
         serapJangkar(json.jangkar)
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
-        asalSalinRef.current = null
+        asalSalinRef.current    = null
+        asalPulihkanRef.current = null
       } else {
         showToast(json.error || json.message || 'Belum tersimpan. Coba lagi.', false)
       }
@@ -1149,7 +1208,8 @@ export default function DpaClient({
     }
     setRows(built)
     setVersi('')  // unset versi tersimpan (form baru)
-    asalSalinRef.current = null
+    asalSalinRef.current    = null
+    asalPulihkanRef.current = null
     setOverlayItems(null)
     setOverwriteConfirm(null)
     showToast(`Kerangka ${built.length} baris dibuat dari Kode Besar — belum tersimpan, isi dulu lalu tekan Simpan.`)
@@ -1166,7 +1226,8 @@ export default function DpaClient({
     // server, bukan angka warisan yang kebetulan cocok.
     setRows(recalcDpaJumlah(baris))
     setVersi('')
-    asalSalinRef.current = asal
+    asalSalinRef.current    = asal
+    asalPulihkanRef.current = null
     setSalinTahunBuka(false)
     const label = asal.sumber === 'DPA' ? `DPA ${asal.tahun}` : `Pergeseran ${asal.tahun}`
     showToast(`${baris.length} baris disalin dari ${label} — belum tersimpan, periksa lalu tekan Simpan.`)
@@ -1225,6 +1286,8 @@ export default function DpaClient({
             items={history}
             onChange={v => { setVersi(v); if (v) loadDpa(v) }}
             placeholder="— Pilih Versi —"
+            riwayat={riwayat}
+            onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
           />
         </div>
 

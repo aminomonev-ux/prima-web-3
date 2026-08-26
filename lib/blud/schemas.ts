@@ -241,6 +241,17 @@ export const AsalSalinSchema = z.object({
   sumber: z.enum(['DPA', 'PERGESERAN']),
 });
 
+/**
+ * Sepadan `AsalSalinSchema`, untuk baris yang dimuat dari riwayat simpan.
+ * Tujuannya juga satu: memperpanjang baris detail audit. Tanpa ini tidak ada
+ * apa pun yang menyatakan versi hari ini lahir dari simpanan pukul 09:15.
+ */
+export const AsalPulihkanSchema = z.object({
+  id:            z.coerce.number().int().positive(),
+  versi_ke:      z.coerce.number().int().min(0),
+  disimpan_pada: z.string().trim().max(32),
+});
+
 /** POST /api/blud/dpa — Audit BLUD v1.2 (B-NEW-3): force + L51 expected_version */
 export const DpaBodySchema = z.object({
   tahun_anggaran:   TahunSchema,
@@ -254,6 +265,7 @@ export const DpaBodySchema = z.object({
   expected_version: z.coerce.number().int().min(0).default(0),
   sentinel_ack:     SentinelAckSchema.optional(),
   asal_salin:       AsalSalinSchema.optional(),
+  asal_pulihkan:    AsalPulihkanSchema.optional(),
 });
 
 /** Sama dengan `DpaBodySchema`, hanya batas barisnya mengikuti jalur impor. */
@@ -282,6 +294,7 @@ export const PergeseranBodySchema = z.object({
   alasan_turun:      z.string().trim().min(10, 'Alasan minimal 10 karakter').max(500).optional(),
   expected_version:  z.coerce.number().int().min(0).default(0),
   sentinel_ack:      SentinelAckSchema.optional(),
+  asal_pulihkan:     AsalPulihkanSchema.optional(),
 });
 
 /** POST /api/blud/pergeseran/inject */

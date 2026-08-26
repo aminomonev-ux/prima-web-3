@@ -220,9 +220,13 @@ export default function PengaturanClient(
         <div>
           {bolehHapus ? (
             <>
-              <strong style={{ color: '#FFFFFF' }}>Perhatian:</strong> versi yang dihapus <strong>tidak bisa dikembalikan</strong>.
+              {/* Sejak riwayat simpan ada, "tidak bisa dikembalikan" berhenti benar:
+                  snapshot TIDAK ikut terhapus. Yang hilang barisnya, bukan angkanya. */}
+              <strong style={{ color: '#FFFFFF' }}>Perhatian:</strong> baris versi yang dihapus <strong>hilang dari tabel</strong>.
               Hapus DPA juga otomatis menghapus Rekap Penanggung Jawab terkait versi tsb.
               Versi yang masih dipakai transaksi akan ditolak sistem.
+              {' '}Riwayat simpannya <strong>tidak ikut terhapus</strong> — angkanya masih bisa dimuat
+              ulang dari dropdown versi di layar DPA/Pergeseran, lalu disimpan sebagai versi baru.
             </>
           ) : (
             <>

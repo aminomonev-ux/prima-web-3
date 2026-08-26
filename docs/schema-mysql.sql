@@ -525,6 +525,33 @@ CREATE OR REPLACE VIEW v_pergeseran_history AS
   FROM pergeseran_dpa GROUP BY tahun_anggaran, versi_tanggal, dpa_versi_tanggal
   ORDER BY tahun_anggaran DESC, versi_tanggal DESC;
 
+-- ─── BLUD — RIWAYAT SIMPAN (per jam) ─────────────────────────────────────────
+-- Simpan itu hapus-lalu-tulis-ulang untuk (tahun_anggaran, versi_tanggal) yang
+-- sama, jadi simpanan jam 16:40 menghapus hasil jam 09:15 tanpa sisa. Tabel ini
+-- menyimpan snapshot tiap klik Simpan supaya keduanya tetap ada dan bisa
+-- dipulihkan. `versi_tanggal` SENGAJA tetap DATE — jam hidup di sini saja, dan
+-- baris di tabel ini TIDAK dirujuk siapa pun. Alasan lengkap:
+-- docs/CONCEPT-blud-riwayat-simpan.md §2. Migration: migration-blud-riwayat-simpan.sql
+
+CREATE TABLE IF NOT EXISTS blud_riwayat_simpan (
+  id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  jenis             ENUM('DPA','PERGESERAN') NOT NULL,
+  tahun_anggaran    SMALLINT UNSIGNED NOT NULL,
+  versi_tanggal     DATE          NOT NULL COMMENT 'Versi yang ditulis simpanan ini',
+  disimpan_pada     DATETIME      NOT NULL COMMENT 'Jam-menit WIB, distempel server',
+  versi_ke          INT UNSIGNED  NOT NULL COMMENT 'Angka kunci sesudah simpan = simpan ke-n untuk versi itu',
+  jumlah_baris      INT UNSIGNED  NOT NULL DEFAULT 0,
+  total_nilai       DECIMAL(18,2) NOT NULL DEFAULT 0,
+  dpa_versi_tanggal DATE              NULL COMMENT 'Acuan DPA — hanya untuk jenis PERGESERAN',
+  isi               JSON          NOT NULL COMMENT 'Array baris, bentuknya sama dgn payload POST',
+  disimpan_oleh     INT               NULL,
+  created_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_brs_versi   (jenis, tahun_anggaran, versi_tanggal, disimpan_pada),
+  INDEX idx_brs_retensi (jenis, tahun_anggaran, id),
+  CONSTRAINT fk_brs_user FOREIGN KEY (disimpan_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Riwayat tiap klik Simpan DPA/Pergeseran — snapshot, tidak dirujuk siapa pun';
+
 -- ─── BLUD — MASTER AKUN ──────────────────────────────────────────────────────
 -- Tabel master daftar kode rekening + uraian. Dipakai sebagai source-of-truth
 -- dropdown rekening di DPA & Pergeseran. Migration 018.

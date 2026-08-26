@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_pulihkan } = parsed.data
 
   // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
   if (turunkan_paksa && !alasan_turun) {
@@ -204,7 +204,9 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_SAVE_PERGESERAN',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan Pergeseran ${tahun_anggaran}/${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`,
+      detail:    `Simpan Pergeseran ${tahun_anggaran}/${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`
+        // Asal-usul pemulihan hanya hidup di baris ini — tidak ada kolomnya.
+        + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`,
     })
     // §4.1/§4.2: permintaan bendahara yang sudah terpenuhi ditutup sendiri +
     // notifikasi balik. Sengaja SETELAH commit dan dibungkus try sendiri —

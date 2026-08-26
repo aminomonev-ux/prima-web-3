@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
   }
   const {
     tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack,
-    turunkan_paksa, alasan_turun, asal_salin,
+    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan,
   } = parsed.data
 
   // Sejalan dengan jalur Pergeseran: menembus §4.3 harus disengaja DAN beralasan,
@@ -178,7 +178,9 @@ export async function POST(req: NextRequest) {
       username:  session.username,
       detail:    `Simpan DPA ${tahun_anggaran}/${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`
       // Asal-usul salinan hanya hidup di baris ini — tidak ada kolomnya di tabel.
-      + `${asal_salin ? ` · salinan dari ${asal_salin.sumber === 'DPA' ? 'DPA' : 'Pergeseran'} ${asal_salin.tahun}/${asal_salin.versi}` : ''}`,
+      + `${asal_salin ? ` · salinan dari ${asal_salin.sumber === 'DPA' ? 'DPA' : 'Pergeseran'} ${asal_salin.tahun}/${asal_salin.versi}` : ''}`
+      // Sama seperti asal_salin: hanya hidup di baris ini, tidak ada kolomnya.
+      + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`,
     })
     if (pjConflicts.length > 0) {
       await writeAuditLog({

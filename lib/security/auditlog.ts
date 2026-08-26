@@ -116,6 +116,9 @@ export type AuditEventType =
   // Pengaturan BLUD (2026-05-21): hapus versi DPA / Pergeseran via menu Pengaturan
   | 'BLUD_DELETE_DPA_VERSI'         // DELETE /api/blud/dpa?versi=YYYY-MM-DD
   | 'BLUD_DELETE_PERGESERAN_VERSI'  // DELETE /api/blud/pergeseran?versi=YYYY-MM-DD
+  // Riwayat simpan per jam (2026-08-26): isi snapshot diambil untuk dipulihkan.
+  // Simpan sesudahnya tetap tercatat sendiri lewat BLUD_SAVE_*.
+  | 'BLUD_RIWAYAT_PULIHKAN'         // GET /api/blud/riwayat-simpan?id=
   // Sentinel PJ (2026-05-22): konflik PJ ancestor↔descendant terdeteksi saat save DPA
   | 'BLUD_PJ_CHAIN_CONFLICT'        // POST /api/blud/dpa, log only (tidak block)
   // RIMA F1 (G8): user simpan dgn temuan Sentinel diabaikan/aktif — jejak "sudah diperingatkan"
