@@ -296,6 +296,29 @@ tiruan:
 | Total pakai kolom yang benar | DPA Rp 632,97 M (`jumlah`) vs Pergeseran Rp 637,27 M (`pergeseran`) |
 | Data lama tidak terganggu | DPA 2026 tetap 558 baris, pergeseran tidak berkurang |
 
+Lalu diverifikasi lagi **di layar**, masuk lewat aplikasi:
+
+```
+26 Agu 2026 · 558 baris · 2× simpan  [BERLAKU]
+   17:31  Simpan ke-6 · 558 baris · Super Administrator   tampil sekarang
+   17:31  Simpan ke-5 · 558 baris · Super Administrator   [Pulihkan]
+25 Agu 2026 · 558 baris                    ← tanpa panah: belum punya riwayat
+```
+
+- Panah "Lihat riwayat simpan" hanya muncul pada versi yang punya >1 simpanan.
+- Simpanan terbaru berlabel "tampil sekarang", tanpa tombol Pulihkan — ia isi
+  yang sedang di layar, jadi tombolnya tidak akan melakukan apa pun.
+- Menekan Pulihkan memunculkan konfirmasi lebih dulu ("…akan menggantikan 558
+  baris yang sekarang di layar. Belum ada yang tersimpan sampai Anda menekan
+  Simpan."), lalu memuat 558 baris ke form.
+- **Bukti L77 bekerja**: pemuatan menembak DUA permintaan —
+  `GET /api/blud/riwayat-simpan?id=1` (isi) lalu
+  `GET /api/blud/dpa?tahun=2027&tanggal=2026-08-26` (angka kunci **segar**).
+  Angka kunci tidak diambil dari `versi_ke` snapshot.
+- Audit tercatat: `BLUD_RIWAYAT_PULIHKAN — Ambil riwayat DPA 2027/2026-08-26
+  simpan ke-5 (2026-08-26 17:31:41, 558 baris)`.
+- Tidak ada yang ditulis: pemulihan berhenti di form, persis §3.
+
 Kasus nyata yang memicunya terlihat di audit log hari itu: Pergeseran 2026 versi
 `2026-08-26` disimpan **tiga kali** — 13:34 (v0→1), 13:55 (v1→2), 13:59 (v2→3).
 Ketiganya saling menimpa dan hanya yang terakhir tersisa. Itu persis keadaan yang
