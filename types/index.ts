@@ -221,7 +221,6 @@ export type TipeBaris =
 export interface DpaBaris {
   id: number
   versi_tanggal: string
-  is_latest: number
   kode_rekening: string
   uraian: string
   vol: number | null
@@ -264,7 +263,6 @@ export interface PergeseranBaris {
   id: number
   versi_tanggal: string
   dpa_versi_tanggal: string
-  is_latest: number
   kode_rekening: string
   uraian: string
   vol: number | null

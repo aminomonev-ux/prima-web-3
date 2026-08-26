@@ -26,7 +26,7 @@ function bab(judul: string) { console.log(`\n── ${judul} ──`) }
 // ── Contoh: 1 akar + 2 daun, PJ terisi di daun ────────────────────────────────
 function dpa(): DpaBaris[] {
   const dasar = {
-    id: 0, versi_tanggal: '2026-01-01', is_latest: 1, satuan: null,
+    id: 0, versi_tanggal: '2026-01-01', satuan: null,
     anggaran_key: null, origin: 'MANUAL' as const, usulan_item_id: null, usulan_no: null,
   }
   return [
@@ -57,7 +57,7 @@ bab('A. Generate — DPA → Pergeseran membawa PJ')
 bab('B. Baca ulang — server → klien (pergeseranKeInput)')
 {
   const dariDb = {
-    id: 9, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+    id: 9, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
     kode_rekening: '5.1.01', uraian: 'ATK', vol: 10, satuan: null, harga: 10, jumlah: 100,
     vol_p: 12, harga_p: 10, pergeseran: 120, bertambah_berkurang: 20,
     penanggung_jawab: 'Kasubbag Umum', keterangan: 'rutin',
@@ -134,17 +134,17 @@ bab('F. Cetak — Rekap PJ Pergeseran memakai pagu PASCA-geser')
 {
   // ATK digeser 100 → 120, Listrik 200 → 180. Total tetap 300 (berimbang).
   const rows: PergeseranBaris[] = [
-    { id: 1, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+    { id: 1, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5', uraian: 'BELANJA', vol: null, satuan: null, harga: null, jumlah: 300,
       vol_p: null, harga_p: null, pergeseran: 300, bertambah_berkurang: 0,
       penanggung_jawab: null, keterangan: null,
       tipe_baris: 'GRANDMASTER', row_id: 'r1', anggaran_key: null, parent_id: null, urutan: 0 },
-    { id: 2, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+    { id: 2, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5.1.01', uraian: 'ATK', vol: 10, satuan: null, harga: 10, jumlah: 100,
       vol_p: 12, harga_p: 10, pergeseran: 120, bertambah_berkurang: 20,
       penanggung_jawab: 'Kasubbag Umum', keterangan: 'rutin',
       tipe_baris: 'CHILD', row_id: 'r3', anggaran_key: null, parent_id: 'r1', urutan: 1 },
-    { id: 3, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+    { id: 3, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5.1.02', uraian: 'Listrik', vol: 20, satuan: null, harga: 10, jumlah: 200,
       vol_p: 18, harga_p: 10, pergeseran: 180, bertambah_berkurang: -20,
       penanggung_jawab: 'Kasubbag Keuangan', keterangan: null,
@@ -174,12 +174,12 @@ bab('F2. Cetak — rekap PJ dari dokumen DRAFT wajib ditandai')
   // Akar 300, tapi isinya cuma 260 → belum berimbang. Tanpa penanda, rekap PJ
   // dari draft terlihat sama resminya dengan yang final.
   const draft: PergeseranBaris[] = [
-    { id: 1, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+    { id: 1, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5', uraian: 'BELANJA', vol: null, satuan: null, harga: null, jumlah: 300,
       vol_p: null, harga_p: null, pergeseran: 260, bertambah_berkurang: -40,
       penanggung_jawab: null, keterangan: null,
       tipe_baris: 'GRANDMASTER', row_id: 'r1', anggaran_key: null, parent_id: null, urutan: 0 },
-    { id: 2, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01', is_latest: 1,
+    { id: 2, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5.1.01', uraian: 'ATK', vol: 1, satuan: null, harga: 300, jumlah: 300,
       vol_p: 1, harga_p: 260, pergeseran: 260, bertambah_berkurang: -40,
       penanggung_jawab: 'Kasubbag Umum', keterangan: null,

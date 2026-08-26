@@ -40,7 +40,6 @@ function bab(judul: string) { console.log(`\n── ${judul} ──`) }
 const dpaAsli: DpaBaris = {
   id: 91,
   versi_tanggal: '2026-08-24',
-  is_latest: 1,
   kode_rekening: '5.1.02.01.0026',
   uraian: 'Belanja Alat Tulis Kantor',
   vol: 12,
@@ -95,7 +94,6 @@ const pgsAsli: PergeseranBaris = {
   id: 55,
   versi_tanggal: '2026-08-25',
   dpa_versi_tanggal: '2026-08-24',
-  is_latest: 1,
   kode_rekening: '5.1.02.01.0026',
   uraian: 'Belanja Alat Tulis Kantor',
   vol: 12,             // angka DPA (sebelum geser)

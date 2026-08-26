@@ -421,7 +421,7 @@ export function toDateStr(v: unknown): string {
 function normDpa(r: Record<string, unknown>): DpaBaris {
   return {
     id: Number(r.id), versi_tanggal: toDateStr(r.versi_tanggal),
-    is_latest: Number(r.is_latest), kode_rekening: String(r.kode_rekening ?? ''),
+    kode_rekening: String(r.kode_rekening ?? ''),
     uraian: String(r.uraian ?? ''), vol: r.vol != null ? Number(r.vol) : null,
     satuan: r.satuan != null ? String(r.satuan) : null,
     harga: r.harga != null ? Number(r.harga) : null,
@@ -442,7 +442,7 @@ function normDpa(r: Record<string, unknown>): DpaBaris {
 function normPergeseran(r: Record<string, unknown>): PergeseranBaris {
   return {
     id: Number(r.id), versi_tanggal: toDateStr(r.versi_tanggal),
-    dpa_versi_tanggal: toDateStr(r.dpa_versi_tanggal), is_latest: Number(r.is_latest),
+    dpa_versi_tanggal: toDateStr(r.dpa_versi_tanggal),
     kode_rekening: String(r.kode_rekening ?? ''), uraian: String(r.uraian ?? ''),
     vol: r.vol != null ? Number(r.vol) : null, satuan: r.satuan != null ? String(r.satuan) : null,
     harga: r.harga != null ? Number(r.harga) : null, jumlah: Number(r.jumlah ?? 0),

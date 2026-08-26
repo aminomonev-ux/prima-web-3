@@ -148,7 +148,7 @@ async function ujiPulangPergi() {
     { row_id: 'e', parent_id: 'a', urutan: 4, tipe_baris: 'MASTER', kode_rekening: '5.2', uraian: 'Belanja Modal', vol: null, satuan: null, harga: null, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(5) },
     { row_id: 'f', parent_id: 'e', urutan: 5, tipe_baris: 'CHILD', kode_rekening: '5.2.2', uraian: 'Peralatan', vol: null, satuan: null, harga: null, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(6) },
     { row_id: 'g', parent_id: 'f', urutan: 6, tipe_baris: 'MEMBER', kode_rekening: '5.2.02', uraian: 'Komputer', vol: 1, satuan: 'unit', harga: 5_000_000, jumlah: 5_000_000, penanggung_jawab: null, keterangan: null, anggaran_key: jk(7) },
-  ].map(r => ({ id: 0, versi_tanggal: '2026-01-01', is_latest: 1, origin: 'MANUAL', usulan_item_id: null, usulan_no: null, ...r }));
+  ].map(r => ({ id: 0, versi_tanggal: '2026-01-01', origin: 'MANUAL', usulan_item_id: null, usulan_no: null, ...r }));
 
   const wb = await buatWorkbookDpa({ tahun: 2026, versi: '2026-01-01', rows: asal, direktur: null });
   const buf = await wb.xlsx.writeBuffer();
@@ -192,7 +192,7 @@ async function ujiPulangPergi() {
 async function ujiJangkarJahat() {
   console.log('\n' + '='.repeat(72) + '\n### JANGKAR JAHAT');
   const baris = (o) => ({
-    id: 0, versi_tanggal: '2026-01-01', is_latest: 1, origin: 'MANUAL',
+    id: 0, versi_tanggal: '2026-01-01', origin: 'MANUAL',
     usulan_item_id: null, usulan_no: null, vol: null, satuan: null, harga: null,
     penanggung_jawab: null, keterangan: null, ...o,
   });

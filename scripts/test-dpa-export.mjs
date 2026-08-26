@@ -55,7 +55,7 @@ const cek = (nama, syarat, detail = '') => {
 };
 
 const baris = (o) => ({
-  id: 0, versi_tanggal: '2026-01-01', is_latest: 1,
+  id: 0, versi_tanggal: '2026-01-01',
   vol: null, satuan: null, harga: null, penanggung_jawab: null, keterangan: null,
   anggaran_key: null, origin: 'MANUAL', usulan_item_id: null, usulan_no: null,
   ...o,
