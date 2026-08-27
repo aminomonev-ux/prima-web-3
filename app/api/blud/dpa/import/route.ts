@@ -1,25 +1,28 @@
 // app/api/blud/dpa/import/route.ts
-// Impor DPA dari berkas Excel — 2 langkah:
-//   step=preview  multipart → parse saja, TIDAK menulis DB
-//   step=commit   JSON      → tulis baris yang sudah dikonfirmasi user di modal
+// Impor DPA dari berkas Excel — PEMBACA BERKAS, bukan penulis.
+//   step=preview  multipart → parse saja, TIDAK PERNAH menulis DB
 // Konsep: docs/CONCEPT-export-import-dpa.md §3.1 & §3.6.
 //
-// Khusus ADMIN/SUPER_ADMIN: satu impor mengganti SATU VERSI PENUH, sekelas
-// operasi borongan, bukan sunting baris.
+// `step=commit` DIBUANG (2026-08-27). Dulu tombol di modal impor menulis DB
+// sendiri, memakai tanggal miliknya sendiri yang bawaannya "hari ini" — jadi
+// memilih "Periode Juli" di halaman lalu mengimpor menghasilkan versi AGUSTUS,
+// dan bisa menimpa versi bulan berjalan yang sudah ada. Dua tombol simpan
+// dengan dua tanggal berbeda tidak bisa dibereskan dengan menyamakan tanggal
+// bawaannya; yang dibuang jalur tulisnya. Sekarang hasil impor mendarat di
+// FORM, dan satu-satunya yang menulis adalah tombol Simpan di halaman DPA —
+// lewat POST /api/blud/dpa, dengan seluruh pagar yang sama.
+//
+// Khusus ADMIN/SUPER_ADMIN: satu impor menyiapkan SATU VERSI PENUH untuk
+// menggantikan isi form, sekelas operasi borongan, bukan sunting baris.
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { bludRateLimit, canImporDpa, DpaImportBodySchema, TahunSchema } from '@/lib/blud/schemas'
+import { bludRateLimit, canImporDpa, TahunSchema } from '@/lib/blud/schemas'
 import { bolehEditMenu, tolakEdit, unauthorized, bludMati } from '../../_guard'
 import { bacaGridDpa, BerkasDpaTidakDikenalError } from '@/lib/blud/import-dpa-grid'
 import { bacaDpaDariGrid, StrukturDpaTidakTerbacaError } from '@/lib/blud/import-dpa'
 import { getPenanggungJawab } from '@/lib/blud/penanggung-jawab-data'
-import {
-  jangkarDipakaiRealisasi, saveDpa,
-  BludReplaceSafetyError, BludJangkarHilangError, BludPaguDibawahRealisasiError,
-} from '@/lib/blud/data'
-import { BludVersionConflictError } from '@/lib/blud/lock'
-import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
+import { jangkarDipakaiRealisasi } from '@/lib/blud/data'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -53,14 +56,23 @@ export async function POST(req: NextRequest) {
   }
 
   const step = new URL(req.url).searchParams.get('step') ?? 'preview'
-  if (step !== 'preview' && step !== 'commit') {
+  if (step === 'commit') {
+    // Tab lama yang masih memegang modal versi sebelumnya. Ditolak dengan sebab,
+    // bukan diam-diam diperlakukan sebagai pratinjau — kalau tidak, orangnya
+    // mengira berkasnya sudah tersimpan padahal tidak.
+    return NextResponse.json({
+      ok: false, code: 'IMPOR_TIDAK_MENULIS',
+      error: 'Impor tidak lagi menyimpan sendiri — hasilnya masuk ke form, lalu Anda tekan Simpan. Muat ulang halaman ini dulu.',
+    }, { status: 410 })
+  }
+  if (step !== 'preview') {
     return NextResponse.json({ ok: false, error: 'Langkah impor tidak dikenali. Muat ulang halaman, lalu ulangi impornya.' }, { status: 400 })
   }
 
-  const limited = await bludRateLimit(session.userId, `impor-dpa-${step}`, step === 'commit' ? 6 : 12)
+  const limited = await bludRateLimit(session.userId, 'impor-dpa-preview', 12)
   if (limited) return limited
 
-  return step === 'commit' ? tanganiCommit(req, session) : tanganiPreview(req, session)
+  return tanganiPreview(req, session)
 }
 
 async function tanganiPreview(
@@ -142,101 +154,6 @@ async function tanganiPreview(
       }, { status: 400 })
     }
     console.error('[API /blud/dpa/import preview]', err)
-    return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
-  }
-}
-
-async function tanganiCommit(
-  req: NextRequest,
-  session: { userId: number; username: string },
-): Promise<NextResponse> {
-  const raw = await req.json().catch(() => null)
-  const parsed = DpaImportBodySchema.safeParse(raw)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { ok: false, error: 'Ada isian yang belum benar: ' + parsed.error.issues[0].message },
-      { status: 400 },
-    )
-  }
-  const { tahun_anggaran, versi_tanggal, rows, force, expected_version, turunkan_paksa, alasan_turun } = parsed.data
-
-  if (turunkan_paksa && !alasan_turun) {
-    return NextResponse.json(
-      { ok: false, error: 'Tulis dulu alasannya — pagu ini diturunkan sampai di bawah uang yang sudah terpakai.' },
-      { status: 400 },
-    )
-  }
-
-  const salahPohon = validateTreeIntegrity(rows)
-  if (salahPohon.length > 0) {
-    return NextResponse.json({
-      ok: false,
-      error: `Struktur baris tidak valid: ${salahPohon[0]}`
-        + (salahPohon.length > 1 ? ` (+${salahPohon.length - 1} lainnya)` : ''),
-    }, { status: 400 })
-  }
-
-  try {
-    const dihitung = recalcDpaJumlah(rows)
-    const hasil = await saveDpa(
-      tahun_anggaran, versi_tanggal, dihitung, session.userId, expected_version, force, turunkan_paksa,
-    )
-    if (hasil.bentrokPagu.length > 0) {
-      const b = hasil.bentrokPagu
-      await writeAuditLog({
-        req,
-        eventType: 'BLUD_PAGU_DIBAWAH_REALISASI',
-        userId:    session.userId,
-        username:  session.username,
-        detail:    `Impor DPA ${tahun_anggaran}/${versi_tanggal} disimpan PAKSA — ${b.length} baris di bawah realisasi `
-          + `(total minus Rp ${b.reduce((s, x) => s + x.minus, 0).toLocaleString('id-ID')}) · Alasan: ${alasan_turun}`,
-      })
-    }
-    await writeAuditLog({
-      req,
-      eventType: 'BLUD_DPA_IMPORT_COMMIT',
-      userId:    session.userId,
-      username:  session.username,
-      detail:    `Impor DPA ${tahun_anggaran}/${versi_tanggal}: ${hasil.existing} → ${hasil.replaced} baris `
-        + `(v${expected_version}→${hasil.newVersion})${force ? ' (dipaksa)' : ''}`,
-    })
-    return NextResponse.json({
-      ok: true,
-      message: `Impor selesai — ${hasil.replaced} baris tersimpan di versi ${versi_tanggal}.`,
-      tahun: tahun_anggaran,
-      versi: versi_tanggal,
-      existing: hasil.existing,
-      replaced: hasil.replaced,
-      version: hasil.newVersion,
-      jangkar: hasil.jangkar,
-    })
-  } catch (err) {
-    if (err instanceof BludVersionConflictError) {
-      return NextResponse.json({
-        ok: false, code: 'VERSION_CONFLICT', error: err.message,
-        expected: err.expected, actual: err.actual,
-      }, { status: 409 })
-    }
-    if (err instanceof BludJangkarHilangError) {
-      return NextResponse.json({
-        ok: false, code: 'JANGKAR_HILANG', error: err.message,
-        yatim: err.yatim, berjangkar: err.berjangkar,
-      }, { status: 409 })
-    }
-    if (err instanceof BludReplaceSafetyError) {
-      return NextResponse.json({
-        ok: false, code: 'SAFETY_THRESHOLD', error: err.message,
-        existing: err.existing, incoming: err.incoming, dropPct: err.dropPct,
-      }, { status: 409 })
-    }
-    // Pratinjau impor memang sudah menampilkan `realisasiTerdampak`, tapi itu cuma
-    // pemberitahuan di layar — tidak pernah menahan commit. Ini pagarnya.
-    if (err instanceof BludPaguDibawahRealisasiError) {
-      return NextResponse.json({
-        ok: false, code: 'PAGU_DIBAWAH_REALISASI', error: err.message, detail: err.bentrok,
-      }, { status: 409 })
-    }
-    console.error('[API /blud/dpa/import commit]', err)
     return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
   }
 }

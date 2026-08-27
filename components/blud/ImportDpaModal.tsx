@@ -7,16 +7,24 @@
 // parser server, bukan di sini — modal ini hanya MENAMPILKAN hasil deteksi dan
 // meminta persetujuan.
 //
-// Yang wajib terlihat sebelum orang menekan Simpan: dari mana hierarkinya
-// dibaca, selisih total berkas vs hitung ulang, baris bermasalah, dan alokasi
-// realisasi yang jangkarnya akan hilang.
+// Modal ini TIDAK MENULIS APA PUN (2026-08-27). Dulu ia punya tanggal versinya
+// sendiri — bawaannya "hari ini" — dan tombolnya memanggil `step=commit` yang
+// langsung menulis DB. Akibatnya memilih "Periode Juli" di halaman lalu
+// mengimpor menghasilkan versi Agustus, dan bisa menimpa versi bulan berjalan
+// yang sudah berisi. Sekarang hasil impor dioper ke form lewat `onTerapkan`,
+// dan yang menulis hanya tombol Simpan di halaman DPA — satu tombol, satu
+// tanggal, satu set pagar.
+//
+// Yang wajib terlihat sebelum orang memasukkannya ke form: dari mana
+// hierarkinya dibaca, selisih total berkas vs hitung ulang, baris bermasalah,
+// dan alokasi realisasi yang jangkarnya akan hilang.
 import { useCallback, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
 import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { TIPE_LABEL } from '@/lib/blud/format'
-import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
+import type { DpaBarisInput } from '@/types'
 // Tipe di-impor secara TYPE-ONLY (terhapus saat kompilasi); pemetanya diambil
 // dari modul ringan. Mengambil keduanya dari `import-dpa.ts` akan menyeret
 // parser + `schemas.ts` + `ioredis` ke bundel browser dan build Next gagal
@@ -31,15 +39,12 @@ interface JangkarTerdampak {
   nilai: number
 }
 
-/** Bentuk `detail` pada 409 PAGU_DIBAWAH_REALISASI — cermin `BentrokPagu` di lib/blud/pagu.ts. */
-interface BentrokBaris {
-  kode_rekening: string
-  uraian: string
-  pagu_baru: number
-  terserap: number
-  minus: number
-  hilang: boolean
-}
+/**
+ * Jejak asal-usul yang ikut ke body Simpan — cermin `AsalImporSchema` di
+ * `lib/blud/schemas.ts`. Gunanya satu: memperpanjang baris audit `BLUD_SAVE_DPA`,
+ * pengganti `BLUD_DPA_IMPORT_COMMIT` yang ikut hilang bersama jalur tulisnya.
+ */
+export type AsalImpor = { berkas: string; lembar: string; baris: number }
 
 interface HasilPreview {
   namaBerkas: string
@@ -64,29 +69,17 @@ const LABEL_SUMBER: Record<string, string> = {
 }
 
 export default function ImportDpaModal({
-  tahun, onTutup, onSelesai,
+  tahun, periodeLabel, onTutup, onTerapkan,
 }: {
   tahun: number
+  /** Nama periode yang akan jadi tujuan Simpan — ditampilkan apa adanya supaya
+   *  tujuannya terbaca SEBELUM berkas masuk form, bukan lewat toast sesudahnya. */
+  periodeLabel: string
   onTutup: () => void
-  onSelesai: (versiTanggal: string) => void
+  onTerapkan: (rows: DpaBarisInput[], asal: AsalImpor) => void
 }) {
   const [sibuk, setSibuk] = useState(false)
   const [hasil, setHasil] = useState<HasilPreview | null>(null)
-  const [versiTanggal, setVersiTanggal] = useState(() => tanggalHariIniWIB())
-  const [paksa, setPaksa] = useState<{ pesan: string } | null>(null)
-  // §4.3 — impor menulis lewat `saveDpa` yang sama, jadi ia bisa kena penolakan yang
-  // sama. Tanpa panel ini 409-nya cuma jadi toast merah dan berkasnya buntu.
-  const [bentrokPagu, setBentrokPagu] = useState<BentrokBaris[] | null>(null)
-  const [alasanTurun, setAlasanTurun] = useState('')
-  // Kedua bendera penembus disimpan di ref, BUKAN dioper sebagai argumen. Kalau satu
-  // berkas memicu dua konfirmasi (baris berkurang drastis + pagu di bawah realisasi),
-  // jawaban yang dioper lewat argumen hilang begitu pengguna menjawab konfirmasi yang
-  // satunya — konfirmasi yang sudah dijawab muncul lagi. `alasan` dulu berbentuk
-  // argumen dan kena; `force` menyusul kena karena hanya `alasan` yang dibetulkan.
-  // Sekarang keduanya tidak ada di tanda tangan `simpan()` sama sekali, jadi tidak
-  // ada pemanggil yang bisa lupa membawanya.
-  const alasanRef = useRef<string | null>(null)
-  const paksaRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const unggah = useCallback(async (file: File) => {
@@ -111,65 +104,21 @@ export default function ImportDpaModal({
     }
   }, [tahun])
 
-  const simpan = useCallback(async () => {
+  /**
+   * Tidak ada permintaan jaringan di sini — hasil pratinjau langsung dioper ke
+   * form. Seluruh pemeriksaan berat (pohon, jangkar, ambang penurunan baris,
+   * pagu di bawah realisasi, kunci optimistik) tetap berjalan, tapi di tombol
+   * Simpan halaman DPA. Menaruhnya di dua tempat pernah membuat satu pagar
+   * (`entri_historis`) terpasang di satu jalur saja.
+   */
+  const terapkan = useCallback(() => {
     if (!hasil) return
-    setSibuk(true)
-    try {
-      // Kunci optimistik dipegang PER (tahun, versi_tanggal). Angka versi di layar
-      // DPA milik versi yang sedang dibuka, BUKAN milik versi tujuan impor — dan
-      // memakainya membuat commit selalu ditolak 409 "sudah diubah pengguna lain"
-      // padahal tidak ada siapa-siapa. Yang benar: tanyakan angka versi TUJUAN
-      // tepat sebelum menulis, sehingga penulis lain yang menyelinap di sela ini
-      // tetap tertangkap.
-      let versiTujuan = 0
-      try {
-        const cek = await fetch(`/api/blud/dpa?tahun=${tahun}&tanggal=${versiTanggal}`)
-        const jc = await cek.json() as { ok?: boolean; version?: number }
-        if (cek.ok && jc.ok && typeof jc.version === 'number') versiTujuan = jc.version
-      } catch { /* versi belum ada → 0 */ }
-
-      const rows = keDpaBarisInput(hasil.baris)
-      const res = await fetch('/api/blud/dpa/import?step=commit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tahun_anggaran: tahun,
-          versi_tanggal: versiTanggal,
-          rows,
-          force: paksaRef.current,
-          expected_version: versiTujuan,
-          turunkan_paksa: !!alasanRef.current,
-          alasan_turun: alasanRef.current ?? undefined,
-        }),
-      })
-      let json: { ok?: boolean; error?: string; code?: string; message?: string; detail?: BentrokBaris[] }
-      try { json = await res.json() } catch { toast.error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.'); return }
-      if (!res.ok || !json.ok) {
-        if (json.code === 'SAFETY_THRESHOLD') {
-          setPaksa({ pesan: json.error ?? 'Baris berkurang drastis.' })
-          return
-        }
-        if (json.code === 'PAGU_DIBAWAH_REALISASI') {
-          setAlasanTurun('')
-          setBentrokPagu(json.detail ?? [])
-          return
-        }
-        toast.error(json.error ?? 'Hasil impor belum tersimpan. Coba lagi.')
-        return
-      }
-      toast.success(json.message ?? 'Impor selesai.')
-      setPaksa(null); setBentrokPagu(null)
-      onSelesai(versiTanggal)
-    } catch (e) {
-      toast.error('Belum tersimpan: ' + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      // `setPaksa(null)` dulu ada di sini — dan itu membatalkan panel yang baru saja
-      // dipasang cabang SAFETY_THRESHOLD beberapa baris di atas, karena React
-      // menggabung keduanya jadi satu render. Akibatnya panel konfirmasinya tidak
-      // pernah muncul. Pembersihan sekarang di jalur sukses & tombol Batal.
-      setSibuk(false)
-    }
-  }, [hasil, tahun, versiTanggal, onSelesai])
+    onTerapkan(keDpaBarisInput(hasil.baris), {
+      berkas: hasil.namaBerkas.slice(0, 120),
+      lembar: hasil.namaLembar.slice(0, 60),
+      baris:  hasil.baris.length,
+    })
+  }, [hasil, onTerapkan])
 
   const bermasalah = hasil?.baris.filter(b => b.catatan.length) ?? []
   const selisih = hasil && hasil.totalFile != null ? hasil.totalFile - hasil.totalHitung : null
@@ -315,10 +264,13 @@ export default function ImportDpaModal({
                 />
               </Panel>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <label style={{ fontSize: 11.5 }} className="blud-imp-muted">Simpan sebagai versi tanggal</label>
-                <input type="date" className="blud-imp-input" value={versiTanggal}
-                  onChange={e => setVersiTanggal(e.target.value)} style={{ padding: '5px 8px', fontSize: 12 }} />
+              {/* Kolom tanggal sendiri dulu ada di sini, dan justru itu bugnya:
+                  ia tidak tahu-menahu periode yang dipilih di halaman. Yang
+                  tersisa pernyataan tujuan — dibaca, bukan diisi. */}
+              <div className="blud-imp-badge-warn" style={{ padding: '10px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.7 }}>
+                Hasil impor ini <strong>masuk ke form dulu</strong>, belum tersimpan. Tujuan penyimpanannya
+                mengikuti periode di halaman DPA: <strong>{periodeLabel}</strong>. Periksa dulu isinya,
+                lalu tekan Simpan di halaman.
               </div>
             </>
           )}
@@ -333,84 +285,11 @@ export default function ImportDpaModal({
             </PrimaButton>
           )}
           {hasil && (
-            <PrimaButton variant="primary" disabled={sibuk || !versiTanggal}
-              onClick={() => { alasanRef.current = null; paksaRef.current = false; void simpan() }}>
-              {sibuk ? 'Menyimpan…' : `Simpan ${hasil.baris.length} baris`}
+            <PrimaButton variant="primary" disabled={sibuk} onClick={terapkan}>
+              Masukkan {hasil.baris.length} baris ke Form
             </PrimaButton>
           )}
         </div>
-
-        {paksa && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="blud-imp-text" style={{ background: 'var(--surface-card, #042C53)', border: '2px solid #E24B4A', borderRadius: 14, padding: 22, maxWidth: 460 }}>
-              <div style={{ fontWeight: 800, color: '#E24B4A', marginBottom: 8, fontSize: 14 }}>Baris berkurang drastis</div>
-              <p style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 14 }}>{paksa.pesan}</p>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <PrimaButton variant="ghost" onClick={() => setPaksa(null)} disabled={sibuk}>Batal</PrimaButton>
-                <PrimaButton variant="danger" onClick={() => { paksaRef.current = true; void simpan() }} disabled={sibuk}>Ya, tetap simpan</PrimaButton>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* §4.3 — sama seperti simpan manual: boleh ditembus, tapi alasannya masuk
-            audit log. Angka ditampilkan supaya orang tahu persis baris mana yang minus. */}
-        {bentrokPagu && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div className="blud-imp-text" style={{ background: 'var(--surface-card, #042C53)', border: '2px solid #E24B4A', borderRadius: 14, padding: 22, maxWidth: 620, width: '100%', maxHeight: '90%', overflowY: 'auto' }}>
-              <div style={{ fontWeight: 800, color: '#E24B4A', marginBottom: 8, fontSize: 14 }}>
-                Pagu turun di bawah realisasi ({bentrokPagu.length} baris)
-              </div>
-              <p style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 12 }}>
-                Uangnya sudah keluar. Menyimpan hasil impor ini membuat baris di bawah jadi minus
-                di layar Realisasi sampai diperbaiki.
-              </p>
-
-              <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 14 }}>
-                <table className="blud-imp-tbl" style={{ width: '100%', fontSize: 11.5 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left' }}>Kode</th>
-                      <th style={{ textAlign: 'left' }}>Uraian</th>
-                      <th style={{ textAlign: 'right' }}>Pagu baru</th>
-                      <th style={{ textAlign: 'right' }}>Terserap</th>
-                      <th style={{ textAlign: 'right' }}>Minus</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bentrokPagu.map((d, i) => (
-                      <tr key={i}>
-                        <td style={{ fontFamily: 'var(--font-mono, monospace)' }}>{d.kode_rekening}</td>
-                        <td>{d.uraian}{d.hilang && ' · baris dihapus'}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>{rp(d.pagu_baru)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>{rp(d.terserap)}</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', color: '#E24B4A' }}>{rp(d.minus)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <label style={{ display: 'block', marginBottom: 14 }}>
-                <span className="blud-imp-muted" style={{ fontSize: 11.5 }}>
-                  Alasan (wajib, minimal 10 karakter — tercatat di audit log)
-                </span>
-                <textarea className="blud-imp-input" rows={3} value={alasanTurun}
-                  onChange={e => setAlasanTurun(e.target.value)}
-                  style={{ width: '100%', marginTop: 6 }}
-                  placeholder="Contoh: pagu dikoreksi mengikuti DPA definitif atas disposisi Direktur tanggal …" />
-              </label>
-
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <PrimaButton variant="ghost" onClick={() => setBentrokPagu(null)} disabled={sibuk}>Batal</PrimaButton>
-                <PrimaButton variant="danger" disabled={sibuk || alasanTurun.trim().length < 10}
-                  onClick={() => { alasanRef.current = alasanTurun.trim(); setBentrokPagu(null); void simpan() }}>
-                  Tetap Lanjut
-                </PrimaButton>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

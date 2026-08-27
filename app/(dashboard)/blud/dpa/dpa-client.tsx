@@ -10,7 +10,7 @@ import {
   ChevronUp, ChevronDown, Save,
   AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox, CalendarClock,
 } from 'lucide-react'
-import ImportDpaModal from '@/components/blud/ImportDpaModal'
+import ImportDpaModal, { type AsalImpor } from '@/components/blud/ImportDpaModal'
 import SalinMasterModal from '@/components/blud/SalinMasterModal'
 import SalinTahunModal, { type AsalSalin } from '@/components/blud/SalinTahunModal'
 import DeleteButton from '@/components/ui/DeleteButton'
@@ -863,6 +863,10 @@ export default function DpaClient({
   // Sepadan `asalSalinRef` tapi untuk pemulihan snapshot — tanpa ini tidak ada
   // apa pun di basis data yang bilang versi hari ini lahir dari simpanan jam 09:15.
   const asalPulihkanRef = useRef<{ id: number; versi_ke: number; disimpan_pada: string } | null>(null)
+  // Sepadan dua ref di atas, untuk baris yang datang dari berkas Excel. Sejak
+  // modal impor berhenti menulis sendiri, `BLUD_DPA_IMPORT_COMMIT` tidak ada lagi
+  // — ini satu-satunya yang menyatakan versi itu lahir dari sebuah berkas.
+  const asalImporRef = useRef<AsalImpor | null>(null)
   const bolehSalinInduk = bolehUbahMasterAkun || bolehUbahKodeBesar
   const [rows,        setRows]        = useState<DpaBarisInput[]>([])
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
@@ -999,6 +1003,7 @@ export default function DpaClient({
         // berlaku lagi. Dibiarkan menempel, ia akan mengotori audit simpan berikutnya.
         asalSalinRef.current    = null
         asalPulihkanRef.current = null
+        asalImporRef.current    = null
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -1067,6 +1072,7 @@ export default function DpaClient({
       setVersi(s.versi_tanggal)
       setVersion(vJson.version)
       asalSalinRef.current  = null
+      asalImporRef.current  = null
       asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
       showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
     } catch (e) {
@@ -1139,6 +1145,7 @@ export default function DpaClient({
           sentinel_ack: sentinelAckRef.current ?? undefined,
           asal_salin: asalSalinRef.current ?? undefined,
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
+          asal_impor: asalImporRef.current ?? undefined,
         }),
       })
       const json = await res.json()
@@ -1191,6 +1198,7 @@ export default function DpaClient({
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
         asalSalinRef.current    = null
         asalPulihkanRef.current = null
+        asalImporRef.current    = null
       } else {
         showToast(json.error || json.message || 'Belum tersimpan. Coba lagi.', false)
       }
@@ -1231,6 +1239,7 @@ export default function DpaClient({
     setVersi('')  // unset versi tersimpan (form baru)
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
+    asalImporRef.current    = null
     setOverlayItems(null)
     setOverwriteConfirm(null)
     showToast(`Kerangka ${built.length} baris dibuat dari Kode Besar — belum tersimpan, isi dulu lalu tekan Simpan.`)
@@ -1242,6 +1251,69 @@ export default function DpaClient({
    * belum punya padanan tersimpan, jadi Simpan akan menulis versi tanggal HARI INI
    * di tahun yang sedang dipilih — bukan menimpa versi tahun sumber.
    */
+  /**
+   * Hasil impor Excel mendarat di form — sepadan `terapkanSalinTahun` di bawah,
+   * dan itu memang inti perbaikannya. Modal impor dulu menulis DB sendiri
+   * memakai tanggalnya sendiri, jadi memilih "Periode Juli" lalu mengimpor
+   * menghasilkan versi Agustus. Sekarang ia cuma mengisi layar; yang menulis
+   * tetap satu tombol Simpan, dengan target `periodeTulis` yang sama.
+   */
+  function terapkanImpor(baris: DpaBarisInput[], asal: AsalImpor) {
+    setRows(recalcDpaJumlah(baris))
+    setVersi('')
+    asalImporRef.current    = asal
+    asalSalinRef.current    = null
+    asalPulihkanRef.current = null
+    setImportDpaBuka(false)
+    showToast(`${baris.length} baris dibaca dari "${asal.berkas}" — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
+    // Tawaran menyalin data induk menunggu barisnya benar-benar ada di layar —
+    // modalnya membaca `rows`, bukan muatan pratinjau impor.
+    if (bolehSalinInduk) setSalinBuka(true)
+  }
+
+  /**
+   * Ganti periode = ganti konteks seluruh layar, bukan cuma target Simpan.
+   *
+   * Dulu ini `setPeriodeTulis` polos, dan itu separuh dari bug yang dilaporkan:
+   * memilih Juli meninggalkan 558 baris Agustus di layar, lalu Simpan menulis
+   * baris Agustus itu ke dalam versi Juli. Layar Pergeseran sudah mengosongkan
+   * sejak awal; DPA tertinggal.
+   *
+   * Periode historis hanya ditawarkan untuk bulan yang BELUM punya versi
+   * (`periodeHistorisTersedia`), jadi jawaban yang benar selalu "kosong" — tidak
+   * ada yang bisa dimuat. Kembali ke bulan berjalan memuat ulang versi terbaru,
+   * bukan meninggalkan layar kosong.
+   */
+  async function gantiPeriode(tanggal: string) {
+    if (tanggal === periodeTulis) return
+    // `versi` kosong + ada baris = isian yang belum punya padanan tersimpan di
+    // mana pun (Form Baru, hasil impor, salinan tahun lain). Menghapusnya tanpa
+    // bertanya sama saja membuang pekerjaan orang. Jawaban bawaan (Esc/klik luar)
+    // sengaja yang TIDAK menghancurkan apa pun.
+    if (rows.length > 0 && !versi) {
+      const buang = await confirmDialog({
+        title:   'Ganti periode?',
+        message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
+          + `Berpindah periode mengosongkan form ini.`,
+        confirmLabel: 'Ganti, buang isian',
+        cancelLabel:  'Tetap di sini',
+        variant:      'danger',
+      })
+      if (!buang) return
+    }
+    setPeriodeTulis(tanggal)
+    asalSalinRef.current    = null
+    asalPulihkanRef.current = null
+    asalImporRef.current    = null
+    if (tanggal) {
+      setRows([])
+      setVersi('')
+      setVersion(0)
+    } else {
+      await loadDpa()
+    }
+  }
+
   function terapkanSalinTahun(baris: DpaBarisInput[], asal: AsalSalin) {
     // Recalc supaya total induk di layar langsung sama dengan yang nanti dihitung
     // server, bukan angka warisan yang kebetulan cocok.
@@ -1249,6 +1321,7 @@ export default function DpaClient({
     setVersi('')
     asalSalinRef.current    = asal
     asalPulihkanRef.current = null
+    asalImporRef.current    = null
     setSalinTahunBuka(false)
     const label = asal.sumber === 'DPA' ? `DPA ${asal.tahun}` : `Pergeseran ${asal.tahun}`
     showToast(`${baris.length} baris disalin dari ${label} — belum tersimpan, periksa lalu tekan Simpan.`)
@@ -1304,7 +1377,7 @@ export default function DpaClient({
             tahun={tahun}
             versiTerpakai={history.map(h => h.versi_tanggal)}
             value={periodeTulis}
-            onChange={setPeriodeTulis}
+            onChange={t => { void gantiPeriode(t) }}
           />
         )}
 
@@ -1495,18 +1568,9 @@ export default function DpaClient({
       {importDpaBuka && (
         <ImportDpaModal
           tahun={tahun}
+          periodeLabel={periodeTulis ? formatTanggalId(periodeTulis) : 'bulan berjalan (hari ini)'}
           onTutup={() => setImportDpaBuka(false)}
-          onSelesai={(versiBaru) => {
-            setImportDpaBuka(false)
-            setVersi(versiBaru)
-            void loadHistory()
-            // Tawaran menyalin data induk menunggu barisnya benar-benar ada di
-            // layar — modalnya membaca `rows`, bukan muatan pratinjau impor.
-            void (async () => {
-              await loadDpa(versiBaru)
-              if (bolehSalinInduk) setSalinBuka(true)
-            })()
-          }}
+          onTerapkan={terapkanImpor}
         />
       )}
 

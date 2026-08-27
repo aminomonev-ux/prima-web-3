@@ -906,6 +906,35 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     finally  { setLoading(false) }
   }, [tahun, periodeTulis])
 
+  /**
+   * Cermin `gantiPeriode` di layar DPA. Pengosongannya sudah benar sejak awal di
+   * sini; yang ditambahkan cuma pertanyaannya — "Buat Pergeseran" bisa
+   * menghasilkan ratusan baris yang belum tersimpan di mana pun, dan berpindah
+   * periode membuangnya tanpa sepatah kata pun.
+   */
+  async function gantiPeriode(tanggal: string) {
+    if (tanggal === periodeTulis) return
+    if (rows.length > 0 && !versi) {
+      const buang = await confirmDialog({
+        title:   'Ganti periode?',
+        message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
+          + `Berpindah periode mengosongkan tabel ini.`,
+        confirmLabel: 'Ganti, buang isian',
+        cancelLabel:  'Tetap di sini',
+        variant:      'danger',
+      })
+      if (!buang) return
+    }
+    setPeriodeTulis(tanggal)
+    if (tanggal) {
+      setRows([])
+      setVersi('')
+      setVersion(0)
+    } else {
+      await loadPergeseran()
+    }
+  }
+
   // Inject: update kolom 0-5 dari DPA terbaru tanpa ubah vol_p/harga_p
   const inject = useCallback(async () => {
     if (!rows.length) { showToast('Belum ada tabelnya. Tekan "Buat Pergeseran" dulu.', false); return }
@@ -1108,7 +1137,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             tahun={tahun}
             versiTerpakai={history.map(h => h.versi_tanggal)}
             value={periodeTulis}
-            onChange={v => { setPeriodeTulis(v); setRows([]); setVersi('') }}
+            onChange={v => { void gantiPeriode(v) }}
           />
         )}
 

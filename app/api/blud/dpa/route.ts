@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
   }
   const {
     tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack,
-    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan, entri_historis,
+    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan, asal_impor, entri_historis,
   } = parsed.data
 
   // Sejalan dengan jalur Pergeseran: menembus §4.3 harus disengaja DAN beralasan,
@@ -185,7 +185,10 @@ export async function POST(req: NextRequest) {
       // Asal-usul salinan hanya hidup di baris ini — tidak ada kolomnya di tabel.
       + `${asal_salin ? ` · salinan dari ${asal_salin.sumber === 'DPA' ? 'DPA' : 'Pergeseran'} ${asal_salin.tahun}/${asal_salin.versi}` : ''}`
       // Sama seperti asal_salin: hanya hidup di baris ini, tidak ada kolomnya.
-      + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`,
+      + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`
+      // Pengganti `BLUD_DPA_IMPORT_COMMIT` yang dibuang bersama jalur tulis di
+      // modal impor. Tanpa baris ini, versi hasil impor tak terbedakan dari ketikan.
+      + `${asal_impor ? ` · diimpor dari "${asal_impor.berkas}" (lembar "${asal_impor.lembar}", ${asal_impor.baris} baris terbaca)` : ''}`,
     })
     if (pjConflicts.length > 0) {
       await writeAuditLog({

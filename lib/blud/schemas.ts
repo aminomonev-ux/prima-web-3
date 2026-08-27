@@ -65,7 +65,6 @@ export function canImporDpa(role: string): boolean {
 // parser DAN Zod, dan berkas itu sengaja bebas dependensi server.
 export { BLUD_IMPOR_MAKS_BARIS, BLUD_SIMPAN_MAKS_BARIS } from './import-dpa-shared';
 import {
-  BLUD_IMPOR_MAKS_BARIS as MAKS_BARIS_IMPOR,
   BLUD_SIMPAN_MAKS_BARIS as MAKS_BARIS_SIMPAN,
 } from './import-dpa-shared';
 
@@ -285,9 +284,25 @@ export const AsalPulihkanSchema = z.object({
 });
 
 /**
- * Bentuk objeknya dipisah dari versi ber-refinement karena `DpaImportBodySchema`
- * memakai `.extend()` — dan `.extend()` tidak ada pada hasil `.superRefine()`.
- * Keduanya memakai pagar yang sama di bawah, jadi tidak bisa melenceng.
+ * Sepadan `AsalSalinSchema`, untuk baris yang datang dari berkas Excel.
+ *
+ * Sejak impor berhenti di form, `BLUD_DPA_IMPORT_COMMIT` tidak ada lagi — tidak
+ * ada yang di-commit di sana. Baris inilah satu-satunya yang tersisa untuk
+ * menyatakan "versi ini lahir dari sebuah berkas", lengkap dengan nama berkas
+ * dan lembarnya. Tanpa itu impor tidak bisa dibedakan dari ketikan tangan.
+ *
+ * Nama berkas berasal dari klien: dibatasi panjangnya supaya baris audit tidak
+ * bisa dibanjiri teks kiriman orang (pagar yang sama dengan jalur pratinjau).
+ */
+export const AsalImporSchema = z.object({
+  berkas: z.string().trim().max(120),
+  lembar: z.string().trim().max(60),
+  baris:  z.coerce.number().int().min(0),
+});
+
+/**
+ * Bentuk objeknya dipisah dari versi ber-refinement supaya bisa di-`.extend()`
+ * — `.extend()` tidak ada pada hasil `.superRefine()`.
  */
 const DpaBodyObject = z.object({
   tahun_anggaran:   TahunSchema,
@@ -302,21 +317,24 @@ const DpaBodyObject = z.object({
   sentinel_ack:     SentinelAckSchema.optional(),
   asal_salin:       AsalSalinSchema.optional(),
   asal_pulihkan:    AsalPulihkanSchema.optional(),
+  asal_impor:       AsalImporSchema.optional(),
   // Versi bulan yang sudah lewat, diisi belakangan (aplikasi mulai dipakai di
   // tengah tahun). Bukan sekadar penanda audit: jalur simpan memakainya untuk
   // menolak entri historis yang justru akan menjadi acuan pagu.
   entri_historis:   z.boolean().optional().default(false),
 });
 
-/** POST /api/blud/dpa — Audit BLUD v1.2 (B-NEW-3): force + L51 expected_version */
+/**
+ * POST /api/blud/dpa — Audit BLUD v1.2 (B-NEW-3): force + L51 expected_version.
+ *
+ * SATU-SATUNYA skema tulis DPA. Dulu ada `DpaImportBodySchema` kembarannya
+ * dengan batas baris sendiri; ia dibuang bersama jalur commit impor. Dua skema
+ * tulis berarti dua tempat pagar bisa lupa dipasang — dan memang terjadi:
+ * `entri_historis` ada di kedua skema, tapi hanya jalur normal yang
+ * meneruskannya ke `saveDpa`, sehingga dokumen historis yang ditolak lewat
+ * Simpan justru diterima lewat Impor.
+ */
 export const DpaBodySchema = DpaBodyObject.superRefine(pagarVersiTanggal);
-
-/** Sama dengan `DpaBodySchema`, hanya batas barisnya mengikuti jalur impor. */
-export const DpaImportBodySchema = DpaBodyObject.extend({
-  rows: z.array(DpaBarisInputSchema)
-    .min(1, 'Minimal 1 baris')
-    .max(MAKS_BARIS_IMPOR, `Maksimal ${MAKS_BARIS_IMPOR} baris per impor`),
-}).superRefine(pagarVersiTanggal);
 
 /** POST /api/blud/pergeseran */
 export const PergeseranBodySchema = z.object({
