@@ -26,6 +26,7 @@ import { dpaKeTahunBaruInput, pergeseranKeTahunBaruInput } from '../lib/blud/row
 import { recalcDpaJumlah, validateTreeIntegrity } from '../lib/blud/recalc'
 import { BLUD_IMPOR_MAKS_BARIS, BLUD_SIMPAN_MAKS_BARIS } from '../lib/blud/import-dpa-shared'
 import { DpaBodySchema } from '../lib/blud/schemas'
+import { warisiJangkar } from '../lib/blud/data'
 import type { DpaBaris, PergeseranBaris } from '../types'
 
 let lulus = 0
@@ -220,6 +221,42 @@ cek(`E2 Zod menolak ${BLUD_SIMPAN_MAKS_BARIS + 1} baris`,
   !tolak.success, `→ ${tolak.success ? 'DITERIMA' : tolak.error.issues[0].message}`)
 cek(`E3 Zod menerima tepat ${BLUD_SIMPAN_MAKS_BARIS} baris`,
   terima.success, `→ ${terima.success ? 'ok' : terima.error.issues[0].message}`)
+
+// ── F. Jangkar tahun tujuan diwarisi ────────────────────────────────────────
+// Salin Tahun sengaja MEMBUANG `anggaran_key` (jangkar tahun sumber tidak boleh
+// ikut) tapi sengaja pula MEMPERTAHANKAN `row_id` (mengarang id memutus
+// `parent_id` anak). Dua keputusan yang benar, dan bertabrakan tepat saat
+// menyalin ke tahun yang SUDAH punya versi tersimpan: semua barisnya cocok
+// row_id, semuanya tanpa jangkar, dan `periksaJangkar` menolak seluruhnya
+// ("558 dari 558 baris berjangkar dikirim tanpa anggaran_key").
+bab('F. Jangkar tahun tujuan diwarisi')
+{
+  const salinan = [
+    { row_id: 'r1', anggaran_key: null },
+    { row_id: 'r2', anggaran_key: null },
+    { row_id: 'r3', anggaran_key: null },   // baris baru, belum dikenal tahun tujuan
+  ]
+  const warisan = new Map([['r1', 'AK-a'], ['r2', 'AK-b']])
+  const hasil = warisiJangkar(salinan, warisan)
+
+  cek('F1 baris yang dikenal mewarisi jangkar tahun tujuan',
+    hasil[0].anggaran_key === 'AK-a' && hasil[1].anggaran_key === 'AK-b',
+    `→ ${hasil[0].anggaran_key}, ${hasil[1].anggaran_key}`)
+  cek('F2 baris betul-betul baru tetap tanpa jangkar (dicetak saat simpan)',
+    hasil[2].anggaran_key === null)
+
+  // Jangkar yang SUDAH dibawa klien tidak boleh ditimpa — itu jangkar yang
+  // sedang dipakai realisasi, dan menukarnya memutus tautan yang justru dijaga.
+  const bawaJangkar = warisiJangkar(
+    [{ row_id: 'r1', anggaran_key: 'AK-milik-klien' }], warisan)
+  cek('F3 jangkar bawaan klien tidak ditimpa',
+    bawaJangkar[0].anggaran_key === 'AK-milik-klien', `→ ${bawaJangkar[0].anggaran_key}`)
+
+  cek('F4 tahun tujuan masih kosong → tidak ada yang berubah',
+    warisiJangkar(salinan, new Map())[0].anggaran_key === null)
+  cek('F5 string kosong dihitung "belum berjangkar", bukan jangkar sah',
+    warisiJangkar([{ row_id: 'r1', anggaran_key: '  ' }], warisan)[0].anggaran_key === 'AK-a')
+}
 
 console.log(`\n${gagal === 0 ? 'SEMUA LOLOS' : `${gagal} GAGAL`} — ${lulus + gagal} pemeriksaan`)
 process.exit(gagal === 0 ? 0 : 1)

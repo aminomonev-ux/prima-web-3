@@ -20,7 +20,11 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import PejabatSpjPanel from '@/components/blud/PejabatSpjPanel'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { kelompokkanPerTahun, type GrupTahun } from '@/lib/blud/pengaturan-grup'
-import { RIWAYAT_RETENSI } from '@/lib/blud/riwayat-simpan'
+// Dari `riwayat-konstanta`, BUKAN `riwayat-simpan`: berkas kedua mengimpor
+// mysql2, dan satu angka yang ditarik dari sana menyeret seluruh driver MySQL ke
+// bundel peramban ("Can't resolve 'net'"). Karena layout dashboard ada di jejak
+// impornya, yang mati seluruh rute dashboard — bukan cuma halaman ini.
+import { RIWAYAT_RETENSI } from '@/lib/blud/riwayat-konstanta'
 
 interface DpaVersi {
   tahun_anggaran: number

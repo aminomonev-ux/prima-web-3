@@ -418,9 +418,66 @@ export interface SimpanHasil {
 }
 
 /**
+ * Jangkar milik versi TERBARU tahun itu, dipetakan dari `row_id`.
+ *
+ * Dipakai mewarisi jangkar untuk baris yang datang tanpa `anggaran_key` padahal
+ * `row_id`-nya sudah dikenal di tahun itu. Kasus nyatanya "Salin dari Tahun
+ * Lain": `dpaKeTahunBaruInput`/`pergeseranKeTahunBaruInput` sengaja MEMBUANG
+ * `anggaran_key` (jangkar tahun sumber tidak boleh ikut) tapi sengaja pula
+ * MEMPERTAHANKAN `row_id` (mengarang id memutus `parent_id` anak). Dua keputusan
+ * yang masing-masing benar, dan bertabrakan tepat saat menyalin ke tahun yang
+ * SUDAH punya versi tersimpan: seluruh barisnya cocok row_id, semuanya tanpa
+ * jangkar, dan `periksaJangkar` menolak 558 dari 558 baris.
+ *
+ * Mewarisi jangkar TAHUN TUJUAN — bukan menghidupkan kembali jangkar tahun
+ * sumber — menyelesaikannya tanpa melanggar keputusan mana pun: baris 2027 tetap
+ * memakai jangkar 2027 miliknya sendiri, dan realisasi 2027 yang menempel di
+ * situ tidak jadi yatim.
+ */
+async function jangkarVersiTerbaru(
+  tx: TxSql,
+  table: 'dpa_blud' | 'pergeseran_dpa',
+  tahun: number,
+): Promise<Map<string, string>> {
+  const rows = table === 'dpa_blud'
+    ? await tx`
+        SELECT row_id, anggaran_key FROM dpa_blud
+        WHERE tahun_anggaran = ${tahun} AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+          AND versi_tanggal = (SELECT MAX(versi_tanggal) FROM dpa_blud WHERE tahun_anggaran = ${tahun})
+      `
+    : await tx`
+        SELECT row_id, anggaran_key FROM pergeseran_dpa
+        WHERE tahun_anggaran = ${tahun} AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+          AND versi_tanggal = (SELECT MAX(versi_tanggal) FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun})
+      `
+  const peta = new Map<string, string>()
+  for (const r of rows as { row_id?: unknown; anggaran_key?: unknown }[]) {
+    const id = String(r.row_id ?? '')
+    const key = String(r.anggaran_key ?? '')
+    if (id && key) peta.set(id, key)
+  }
+  return peta
+}
+
+/** Baris yang belum berjangkar mengambil jangkar tahun tujuan berdasarkan `row_id`. */
+export function warisiJangkar<T extends { row_id: string; anggaran_key?: string | null }>(
+  rows: T[], warisan: Map<string, string>,
+): T[] {
+  if (warisan.size === 0) return rows
+  return rows.map(r => (
+    String(r.anggaran_key ?? '').trim() ? r : { ...r, anggaran_key: warisan.get(r.row_id) ?? null }
+  ))
+}
+
+/**
  * Dijalankan DI DALAM transaksi simpan, sebelum DELETE. Pembandingnya versi
  * TERBARU tahun itu — bukan versi yang sedang ditimpa — supaya versi baru yang
  * lahir tanpa jangkar pun ketahuan.
+ *
+ * Sesudah `warisiJangkar` dipasang, ini jadi JARING PENGAMAN, bukan penjaga
+ * garis depan: baris yang row_id-nya dikenal sudah dapat jangkarnya sendiri.
+ * Tetap dipertahankan supaya jalur yang kelak melewatkan pewarisan itu tetap
+ * berhenti dengan pesan, bukan menulis diam-diam.
  */
 async function periksaJangkar(
   tx: TxSql,
@@ -593,19 +650,6 @@ export async function saveDpa(
 
   const jangkar: Record<string, string> = {}
   const baruPagu = new Map<string, BarisPaguVersi>()
-  const values = rows.map(r => {
-    const key = ensureAnggaranKey(r.anggaran_key)
-    jangkar[r.row_id] = key
-    baruPagu.set(key, {
-      kode_rekening: r.kode_rekening, uraian: r.uraian, pagu: Number(r.jumlah ?? 0),
-    })
-    return [
-      tahun, versiTanggal, r.kode_rekening, r.uraian, r.vol ?? null, r.satuan ?? null,
-      r.harga ?? null, r.jumlah, r.penanggung_jawab ?? null, r.keterangan ?? null,
-      r.tipe_baris, r.row_id, key, r.parent_id ?? null, r.urutan,
-      r.origin ?? 'MANUAL', r.usulan_item_id ?? null, r.usulan_no ?? null,
-    ]
-  })
   let existing = 0
   let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
@@ -618,9 +662,26 @@ export async function saveDpa(
     if (!force && existing > 0 && incoming < existing * SAFE_DROP_THRESHOLD) {
       throw new BludReplaceSafetyError('dpa_blud', existing, incoming, ((existing - incoming) / existing) * 100)
     }
+    // Baris tanpa jangkar mengambil jangkar tahun INI berdasarkan row_id. Dibaca
+    // di dalam transaksi, di bawah kunci versi — bukan di luar, supaya jangkar
+    // yang diwarisi bukan snapshot yang sudah basi.
+    const berjangkar = warisiJangkar(rows, await jangkarVersiTerbaru(tx, 'dpa_blud', tahun))
     // Sengaja TIDAK bisa ditembus `force`: kehilangan jangkar tidak pernah
     // disengaja, dan akibatnya (realisasi yatim) tidak terlihat di layar mana pun.
-    await periksaJangkar(tx, 'dpa_blud', tahun, rows)
+    await periksaJangkar(tx, 'dpa_blud', tahun, berjangkar)
+    const values = berjangkar.map(r => {
+      const key = ensureAnggaranKey(r.anggaran_key)
+      jangkar[r.row_id] = key
+      baruPagu.set(key, {
+        kode_rekening: r.kode_rekening, uraian: r.uraian, pagu: Number(r.jumlah ?? 0),
+      })
+      return [
+        tahun, versiTanggal, r.kode_rekening, r.uraian, r.vol ?? null, r.satuan ?? null,
+        r.harga ?? null, r.jumlah, r.penanggung_jawab ?? null, r.keterangan ?? null,
+        r.tipe_baris, r.row_id, key, r.parent_id ?? null, r.urutan,
+        r.origin ?? 'MANUAL', r.usulan_item_id ?? null, r.usulan_no ?? null,
+      ]
+    })
     // B2 — §4.3 di jalur DPA. Sebelum ini jalur simpan DPA tidak punya pagar pagu
     // sama sekali; selama tahun itu belum punya Pergeseran, DPA-lah pagu yang berlaku.
     bentrokPagu = await pagarSimpanVersi(tx, 'dpa_blud', tahun, versiTanggal, baruPagu, turunkanPaksa)
@@ -755,24 +816,6 @@ export async function savePergeseran(
 
   const jangkar: Record<string, string> = {}
   const baruPagu = new Map<string, BarisPaguVersi>()
-  const values = rows.map(r => {
-    const key = ensureAnggaranKey(r.anggaran_key)
-    jangkar[r.row_id] = key
-    baruPagu.set(key, {
-      kode_rekening: r.kode_rekening, uraian: r.uraian, pagu: Number(r.pergeseran ?? 0),
-    })
-    return [
-      tahun, versiTanggal, dpaVersiTanggal, r.kode_rekening, r.uraian, r.vol ?? null,
-      r.satuan ?? null, r.harga ?? null, r.jumlah, r.vol_p ?? null, r.harga_p ?? null,
-      r.pergeseran, r.bertambah_berkurang,
-      // `?? null` (bukan `|| null`) mengikuti saveDpa persis: kolom ini cermin DPA,
-      // '' vs NULL harus sama di kedua tabel supaya hasil inject tidak beda diam-diam.
-      r.penanggung_jawab ?? null, r.keterangan ?? null,
-      r.tipe_baris, r.row_id,
-      key, r.parent_id ?? null,
-      r.urutan,
-    ]
-  })
   let existing = 0
   let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
@@ -784,7 +827,28 @@ export async function savePergeseran(
     if (!force && existing > 0 && incoming < existing * SAFE_DROP_THRESHOLD) {
       throw new BludReplaceSafetyError('pergeseran_dpa', existing, incoming, ((existing - incoming) / existing) * 100)
     }
-    await periksaJangkar(tx, 'pergeseran_dpa', tahun, rows)
+    // Cermin `saveDpa` — L69: pewarisan jangkar tidak boleh hanya dipasang di satu
+    // tabel. Salin Tahun bisa menyasar Pergeseran persis seperti DPA.
+    const berjangkar = warisiJangkar(rows, await jangkarVersiTerbaru(tx, 'pergeseran_dpa', tahun))
+    await periksaJangkar(tx, 'pergeseran_dpa', tahun, berjangkar)
+    const values = berjangkar.map(r => {
+      const key = ensureAnggaranKey(r.anggaran_key)
+      jangkar[r.row_id] = key
+      baruPagu.set(key, {
+        kode_rekening: r.kode_rekening, uraian: r.uraian, pagu: Number(r.pergeseran ?? 0),
+      })
+      return [
+        tahun, versiTanggal, dpaVersiTanggal, r.kode_rekening, r.uraian, r.vol ?? null,
+        r.satuan ?? null, r.harga ?? null, r.jumlah, r.vol_p ?? null, r.harga_p ?? null,
+        r.pergeseran, r.bertambah_berkurang,
+        // `?? null` (bukan `|| null`) mengikuti saveDpa persis: kolom ini cermin DPA,
+        // '' vs NULL harus sama di kedua tabel supaya hasil inject tidak beda diam-diam.
+        r.penanggung_jawab ?? null, r.keterangan ?? null,
+        r.tipe_baris, r.row_id,
+        key, r.parent_id ?? null,
+        r.urutan,
+      ]
+    })
     // B3 — §4.3 pindah ke DALAM transaksi, di bawah kunci pagu. Di route ia hanya
     // pemeriksaan tanpa kunci: serapan bisa naik di sela pemeriksaan dan simpan.
     bentrokPagu = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, baruPagu, turunkanPaksa)

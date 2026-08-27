@@ -13,6 +13,9 @@
 import { sql, sqlInt } from '@/lib/data/db'
 import type { TxSql } from '@/lib/data/db'
 import { waktuSekarangWIB, toDateStr } from './tanggal'
+// Diimpor DAN di-re-export di bawah: `export … from` tidak membuat binding lokal,
+// padahal pemangkasan retensi di berkas ini memakainya sendiri.
+import { RIWAYAT_RETENSI } from './riwayat-konstanta'
 
 export type JenisRiwayat = 'DPA' | 'PERGESERAN'
 
@@ -27,8 +30,13 @@ export type JenisRiwayat = 'DPA' | 'PERGESERAN'
  *
  * LKJIP/IKI pakai 20, tapi DPA disimpan jauh lebih sering — 20 bisa habis dalam
  * satu sore sibuk dan menelan riwayat sebulan. Angka ini knob, bukan prinsip.
+ *
+ * Nilainya tinggal di `riwayat-konstanta.ts` — berkas tanpa impor DB — dan
+ * di-re-export di sini supaya pemanggil lama tidak perlu disentuh. Sebabnya
+ * bukan kerapian: berkas ini mengimpor mysql2, jadi komponen `'use client'`
+ * yang menariknya langsung dari sini merobohkan seluruh rute dashboard.
  */
-export const RIWAYAT_RETENSI = 50
+export { RIWAYAT_RETENSI }
 
 /** Baris daftar — TANPA `isi`, supaya membuka dropdown tidak menyeret puluhan MB. */
 export interface RiwayatSimpanItem {
