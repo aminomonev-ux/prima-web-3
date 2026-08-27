@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
+import { tanggalHariIniWIB } from './tanggal';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -134,6 +135,37 @@ export const TanggalSchema = z
   .refine((v) => !Number.isNaN(new Date(v).getTime()), 'Tanggal tidak valid');
 
 /**
+ * Pagar `versi_tanggal` — dipakai `DpaBodySchema` & `PergeseranBodySchema`.
+ *
+ * Sampai sekarang `versi_tanggal` bebas sepenuhnya: format benar = diterima.
+ * Padahal `getPaguEfektif` selalu mengambil MAX(versi_tanggal), jadi permintaan
+ * berisi `{ tahun_anggaran: 2026, versi_tanggal: '2099-12-31' }` akan diterima
+ * dan tanggal itu menjadi pagu efektif tahun 2026 SELAMANYA — tidak bisa
+ * dikalahkan versi mana pun sampai tahun 2100.
+ *
+ * SENGAJA TIDAK memeriksa apakah tahun `versi_tanggal` sama dengan
+ * `tahun_anggaran`. Keduanya memang dimensi terpisah: `versi_tanggal` adalah
+ * KAPAN versi itu ditulis, `tahun_anggaran` adalah tahun yang dianggarkan.
+ * Menyusun DPA 2027 pada Agustus 2026 — persis guna "Salin dari Tahun Lain" —
+ * menghasilkan `{ tahun_anggaran: 2027, versi_tanggal: '2026-08-26' }`, dan
+ * memaksakan keduanya sama akan menolak alur yang sah itu.
+ */
+export function pagarVersiTanggal(
+  data: { tahun_anggaran: number; versi_tanggal: string },
+  ctx: z.RefinementCtx,
+  /** Param hanya untuk pengujian; produksi selalu memakai hari ini WIB. */
+  hariIni: string = tanggalHariIniWIB(),
+): void {
+  if (data.versi_tanggal > hariIni) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['versi_tanggal'],
+      message: `Versi tidak boleh bertanggal setelah hari ini (${hariIni}).`,
+    });
+  }
+}
+
+/**
  * Tahun anggaran — dimensi di atas versi_tanggal (CONCEPT-blud-tahun-anggaran).
  * `z.coerce` supaya query string `?tahun=2027` diterima sebagai number.
  */
@@ -252,8 +284,12 @@ export const AsalPulihkanSchema = z.object({
   disimpan_pada: z.string().trim().max(32),
 });
 
-/** POST /api/blud/dpa — Audit BLUD v1.2 (B-NEW-3): force + L51 expected_version */
-export const DpaBodySchema = z.object({
+/**
+ * Bentuk objeknya dipisah dari versi ber-refinement karena `DpaImportBodySchema`
+ * memakai `.extend()` — dan `.extend()` tidak ada pada hasil `.superRefine()`.
+ * Keduanya memakai pagar yang sama di bawah, jadi tidak bisa melenceng.
+ */
+const DpaBodyObject = z.object({
   tahun_anggaran:   TahunSchema,
   versi_tanggal:    TanggalSchema,
   rows:             z.array(DpaBarisInputSchema).min(1, 'Minimal 1 baris').max(MAKS_BARIS_SIMPAN, `Maksimal ${MAKS_BARIS_SIMPAN} baris`),
@@ -266,14 +302,21 @@ export const DpaBodySchema = z.object({
   sentinel_ack:     SentinelAckSchema.optional(),
   asal_salin:       AsalSalinSchema.optional(),
   asal_pulihkan:    AsalPulihkanSchema.optional(),
+  // Versi bulan yang sudah lewat, diisi belakangan (aplikasi mulai dipakai di
+  // tengah tahun). Bukan sekadar penanda audit: jalur simpan memakainya untuk
+  // menolak entri historis yang justru akan menjadi acuan pagu.
+  entri_historis:   z.boolean().optional().default(false),
 });
 
+/** POST /api/blud/dpa — Audit BLUD v1.2 (B-NEW-3): force + L51 expected_version */
+export const DpaBodySchema = DpaBodyObject.superRefine(pagarVersiTanggal);
+
 /** Sama dengan `DpaBodySchema`, hanya batas barisnya mengikuti jalur impor. */
-export const DpaImportBodySchema = DpaBodySchema.extend({
+export const DpaImportBodySchema = DpaBodyObject.extend({
   rows: z.array(DpaBarisInputSchema)
     .min(1, 'Minimal 1 baris')
     .max(MAKS_BARIS_IMPOR, `Maksimal ${MAKS_BARIS_IMPOR} baris per impor`),
-});
+}).superRefine(pagarVersiTanggal);
 
 /** POST /api/blud/pergeseran */
 export const PergeseranBodySchema = z.object({
@@ -295,6 +338,21 @@ export const PergeseranBodySchema = z.object({
   expected_version:  z.coerce.number().int().min(0).default(0),
   sentinel_ack:      SentinelAckSchema.optional(),
   asal_pulihkan:     AsalPulihkanSchema.optional(),
+  entri_historis:    z.boolean().optional().default(false),
+}).superRefine((d, ctx) => {
+  pagarVersiTanggal(d, ctx);
+  // Pergeseran memotret DPA pada satu titik waktu. DPA yang lahir SESUDAH
+  // pergeserannya menghasilkan dokumen yang berbunyi "pada Januari kami
+  // menggeser anggaran yang baru ada di Agustus". Sebelum ada pemilih periode,
+  // ini mustahil terjadi — server selalu mengambil DPA terbaru dan versinya
+  // selalu hari ini; begitu keduanya bisa dipilih, keduanya bisa tidak sepadan.
+  if (d.dpa_versi_tanggal && d.dpa_versi_tanggal > d.versi_tanggal) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['dpa_versi_tanggal'],
+      message: `DPA acuan (${d.dpa_versi_tanggal}) lebih baru dari versi pergeserannya (${d.versi_tanggal}). Pilih DPA periode yang sama atau sebelumnya.`,
+    });
+  }
 });
 
 /** POST /api/blud/pergeseran/inject */

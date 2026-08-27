@@ -62,6 +62,32 @@ export class BludJangkarHilangError extends Error {
 }
 
 /**
+ * Entri historis (versi bulan yang sudah lewat) yang justru akan MENENTUKAN pagu
+ * tahun itu — ditolak.
+ *
+ * Kasus paling berbahaya: tahun yang belum punya Pergeseran sama sekali. Begitu
+ * satu baris pergeseran masuk, `getPaguSumber` berhenti membaca DPA dan beralih
+ * ke `pergeseran_dpa` — jadi mengarsipkan Pergeseran Januari akan memindahkan
+ * pagu SELURUH tahun ke angka Januari, sekalipun DPA Agustus jauh lebih baru.
+ *
+ * Aturannya sengaja diambil dari `versiJadiSumberPagu`, fungsi yang sudah ada dan
+ * sudah menjawab pertanyaan yang tepat ("apakah tulisan ini menentukan pagu?").
+ * Menulis ulang aturannya di sini berarti dua pendapat yang cepat atau lambat
+ * berbeda.
+ */
+export class BludHistorisJadiPaguError extends Error {
+  constructor(public table: 'dpa_blud' | 'pergeseran_dpa', public versi: string) {
+    super(
+      `Versi historis ${versi} justru akan menjadi acuan pagu tahun ini, bukan sekadar arsip. `
+      + (table === 'pergeseran_dpa'
+        ? 'Tahun ini belum punya Pergeseran yang lebih baru — simpan Pergeseran bulan berjalan lebih dulu, baru isi bulan-bulan sebelumnya.'
+        : 'Belum ada versi lain yang lebih baru — simpan versi bulan berjalan lebih dulu, baru isi bulan-bulan sebelumnya.'),
+    )
+    this.name = 'BludHistorisJadiPaguError'
+  }
+}
+
+/**
  * T1 — versi yang dihapus masih menyangga realisasi. Jalur SIMPAN dijaga tiga
  * lapis (`periksaJangkar`, `pagarSimpanVersi`, ambang penurunan baris);
  * jalur HAPUS dulu tidak punya satu pun, padahal akibatnya identik dan justru
@@ -275,6 +301,24 @@ async function versiJadiSumberPagu(
   const dpa = await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
   const maxDpa = dpa[0]?.v ? toDateStr(dpa[0].v) : null
   return !maxDpa || versi >= maxDpa
+}
+
+/**
+ * Pagar entri historis — WAJIB dipanggil di keempat cabang tulis (saveDpa ×2,
+ * savePergeseran ×2), bukan hanya cabang "ada isi". L69: cabang kosong+force
+ * juga menulis, dan versi yang dikosongkan sama saja menentukan pagu — nol.
+ */
+async function tolakHistorisJadiPagu(
+  tx: TxSql,
+  table: 'dpa_blud' | 'pergeseran_dpa',
+  tahun: number,
+  versi: string,
+  entriHistoris: boolean,
+): Promise<void> {
+  if (!entriHistoris) return
+  if (await versiJadiSumberPagu(tx, table, tahun, versi)) {
+    throw new BludHistorisJadiPaguError(table, versi)
+  }
 }
 
 /**
@@ -514,6 +558,8 @@ export async function saveDpa(
   expectedVersion: number,
   force = false,
   turunkanPaksa = false,
+  /** Versi bulan lampau — ditolak kalau justru akan jadi acuan pagu tahun itu. */
+  entriHistoris = false,
 ): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
@@ -526,6 +572,7 @@ export async function saveDpa(
       let bentrokKosong: BentrokPagu[] = []
       await withTransaction(async ({ tx }) => {
         await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
+        await tolakHistorisJadiPagu(tx, 'dpa_blud', tahun, versiTanggal, entriHistoris)
         // Mengosongkan versi = pagunya jadi nol untuk semua baris. Kalau versi ini
         // yang sedang menyangga pagu, itu penurunan paling ekstrem yang mungkin.
         bentrokKosong = await pagarSimpanVersi(tx, 'dpa_blud', tahun, versiTanggal, new Map(), turunkanPaksa)
@@ -563,6 +610,7 @@ export async function saveDpa(
   let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
     await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
+    await tolakHistorisJadiPagu(tx, 'dpa_blud', tahun, versiTanggal, entriHistoris)
     // B-NEW-3 threshold dihitung DI DALAM tx (audit DPA 2026-06-11 B-3) — angka
     // segar setelah row lock, throw → rollback otomatis
     const cntRows = await tx`SELECT COUNT(*) AS cnt FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
@@ -675,6 +723,8 @@ export async function savePergeseran(
   expectedVersion: number,
   force = false,
   turunkanPaksa = false,
+  /** Versi bulan lampau — ditolak kalau justru akan jadi acuan pagu tahun itu. */
+  entriHistoris = false,
 ): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
@@ -686,6 +736,7 @@ export async function savePergeseran(
       let bentrokKosong: BentrokPagu[] = []
       await withTransaction(async ({ tx }) => {
         await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
+        await tolakHistorisJadiPagu(tx, 'pergeseran_dpa', tahun, versiTanggal, entriHistoris)
         bentrokKosong = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, new Map(), turunkanPaksa)
         await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
@@ -726,6 +777,7 @@ export async function savePergeseran(
   let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
     await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
+    await tolakHistorisJadiPagu(tx, 'pergeseran_dpa', tahun, versiTanggal, entriHistoris)
     // B-NEW-3 threshold di dalam tx (audit DPA 2026-06-11 B-3)
     const cntRows = await tx`SELECT COUNT(*) AS cnt FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
     existing = Number(cntRows[0]?.cnt ?? 0)

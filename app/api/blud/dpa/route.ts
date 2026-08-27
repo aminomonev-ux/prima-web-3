@@ -4,8 +4,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError, BludPaguDibawahRealisasiError } from '@/lib/blud/data'
+import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError, BludPaguDibawahRealisasiError, BludHistorisJadiPaguError } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
+import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
 import { canHapusVersi, DpaBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
 import { bolehBukaMenu, bolehEditMenu, bolehLihatSalahSatu, bolehModulBlud, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
   }
   const {
     tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack,
-    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan,
+    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan, entri_historis,
   } = parsed.data
 
   // Sejalan dengan jalur Pergeseran: menembus §4.3 harus disengaja DAN beralasan,
@@ -154,7 +155,7 @@ export async function POST(req: NextRequest) {
 
     const result = await saveDpa(
       tahun_anggaran, versi_tanggal, recalced, session.userId,
-      expected_version, force, turunkan_paksa,
+      expected_version, force, turunkan_paksa, entri_historis,
     )
 
     if (result.bentrokPagu.length > 0) {
@@ -176,7 +177,11 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_SAVE_DPA',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan DPA ${tahun_anggaran}/${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`
+      // Jejak "entri historis" WAJIB di sini: tanpa itu, setahun lagi tidak ada
+      // yang bisa membedakan DPA Januari yang memang disusun Januari dari yang
+      // diketik Agustus. `blud_riwayat_simpan.disimpan_pada` sudah merekam waktu
+      // tulis sebenarnya — baris ini yang membuatnya terbaca di panel audit.
+      detail:    `Simpan DPA ${tahun_anggaran}/${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${entri_historis ? ` [ENTRI HISTORIS — ditulis ${tanggalHariIniWIB()}]` : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`
       // Asal-usul salinan hanya hidup di baris ini — tidak ada kolomnya di tabel.
       + `${asal_salin ? ` · salinan dari ${asal_salin.sumber === 'DPA' ? 'DPA' : 'Pergeseran'} ${asal_salin.tahun}/${asal_salin.versi}` : ''}`
       // Sama seperti asal_salin: hanya hidup di baris ini, tidak ada kolomnya.
@@ -223,6 +228,12 @@ export async function POST(req: NextRequest) {
         expected: err.expected,
         actual:   err.actual,
       }, { status: 409 })
+    }
+    if (err instanceof BludHistorisJadiPaguError) {
+      return NextResponse.json(
+        { ok: false, code: 'HISTORIS_JADI_PAGU', error: err.message },
+        { status: 409 },
+      )
     }
     if (err instanceof BludJangkarHilangError) {
       return NextResponse.json({

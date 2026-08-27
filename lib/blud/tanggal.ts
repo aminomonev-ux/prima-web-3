@@ -76,6 +76,67 @@ export function waktuSekarangWIB(sekarang: number = Date.now()): string {
   return new Date(sekarang + JAKARTA_OFFSET_MS).toISOString().slice(0, 19).replace('T', ' ')
 }
 
+// ─── PERIODE VERSI HISTORIS ──────────────────────────────────────────────────
+// Aplikasi bisa mulai dipakai di tengah tahun; bulan-bulan sebelumnya perlu punya
+// versi DPA/Pergeseran sendiri supaya bisa dicetak sebagai dokumen bulanan.
+
+/** Hari terakhir bulan itu, 'YYYY-MM-DD'. Februari kabisat ikut benar (hari 0 bulan berikutnya). */
+export function akhirBulan(tahun: number, bulan: number): string {
+  const hari = new Date(Date.UTC(tahun, bulan, 0)).getUTCDate()
+  return `${tahun}-${String(bulan).padStart(2, '0')}-${String(hari).padStart(2, '0')}`
+}
+
+export interface PeriodeVersi {
+  bulan:   number
+  label:   string
+  tanggal: string
+}
+
+const BULAN_PANJANG = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+]
+
+/**
+ * Bulan mana saja yang boleh dipilih sebagai versi historis.
+ *
+ * Dua syarat, dan keduanya punya alasan berbeda:
+ *
+ * 1. **Sudah lewat.** Bulan berjalan sengaja TIDAK ditawarkan. Tanggal kanoniknya
+ *    hari terakhir bulan, jadi "Agustus" akan jadi 31 Agustus — lebih baru dari
+ *    hari ini (26 Agustus) dan merebut `MAX(versi_tanggal)` dari versi hari ini.
+ *    Pagu tahun berjalan akan pindah ke dokumen yang belum tentu final.
+ *
+ * 2. **Belum punya versi.** Bukan "hanya boleh sekali di awal": aturan begitu jadi
+ *    jebakan bagi orang yang mengisi Januari lalu sadar butuh Februari. Daftarnya
+ *    menyusut sendiri sampai habis, jadi tidak perlu penanda "sudah pernah".
+ *
+ * Tahun selain tahun berjalan: seluruh 12 bulannya sudah lewat.
+ *
+ * @param versiTerpakai daftar `versi_tanggal` yang sudah ada di tahun itu
+ */
+export function periodeHistorisTersedia(
+  tahun: number,
+  versiTerpakai: readonly string[],
+  sekarang: number = Date.now(),
+): PeriodeVersi[] {
+  const hariIni = tanggalHariIniWIB(sekarang)
+  const tahunIni = Number(hariIni.slice(0, 4))
+  const bulanIni = Number(hariIni.slice(5, 7))
+  if (tahun > tahunIni) return []
+
+  const terpakai = new Set(versiTerpakai.map(v => String(v).slice(0, 7)))
+  const batas = tahun < tahunIni ? 12 : bulanIni - 1
+
+  const hasil: PeriodeVersi[] = []
+  for (let b = 1; b <= batas; b++) {
+    const tanggal = akhirBulan(tahun, b)
+    if (terpakai.has(tanggal.slice(0, 7))) continue
+    hasil.push({ bulan: b, label: `${BULAN_PANJANG[b - 1]} ${tahun}`, tanggal })
+  }
+  return hasil
+}
+
 /**
  * Angka kunci (`expected_version`) yang benar untuk versi yang AKAN ditulis.
  *

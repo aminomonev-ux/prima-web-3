@@ -37,6 +37,7 @@ import SatuanCombobox from '@/components/shared/SatuanCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import type { SimpananItem } from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import PeriodeVersiSelect from '@/components/blud/PeriodeVersiSelect'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { PjConflictDialog, PjMutationDialog } from '@/components/blud/PjGuardDialogs'
 import { findAncestorPjOnAdd } from '@/lib/blud/pj-conflict'
@@ -867,6 +868,9 @@ export default function DpaClient({
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
   const [riwayat,     setRiwayat]     = useState<SimpananItem[]>([])
   const [versi,       setVersi]       = useState('')
+  // Periode yang akan DITULIS saat Simpan. '' = bulan berjalan (perilaku bawaan).
+  // Beda peran dengan `versi` di atas: itu versi yang sedang DIBUKA/dibaca.
+  const [periodeTulis, setPeriodeTulis] = useState('')
   const [loading,     setLoading]     = useState(false)
   const [saving,      setSaving]      = useState(false)
   const [akunOptions, setAkunOptions] = useState<AkunOption[]>([])
@@ -1101,7 +1105,7 @@ export default function DpaClient({
       if (!gate.ok) return
       sentinelAckRef.current = gate.ack
       setSaving(true)
-      await doSimpanInternal(tanggalHariIniWIB())
+      await doSimpanInternal(periodeTulis || tanggalHariIniWIB())
     } finally { submittingRef.current = false; setSaving(false) }
   }
 
@@ -1124,6 +1128,11 @@ export default function DpaClient({
         body: JSON.stringify({
           tahun_anggaran: tahun, versi_tanggal: versiTanggal, rows,
           force: paksaDropRef.current,
+          // Diturunkan dari tanggalnya sendiri, BUKAN dari state `periodeTulis`:
+          // fungsi ini juga dipanggil ulang dari jalur retry (ambang turun /
+          // pagu di bawah realisasi) dengan tanggal yang sudah ditangkap lebih
+          // dulu. Membaca state di situ bisa memberi jawaban yang sudah bergeser.
+          entri_historis: versiTanggal !== tanggalHariIniWIB(),
           expected_version: expectedVersionUntuk(versiTanggal, versi, version),
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
@@ -1171,8 +1180,12 @@ export default function DpaClient({
         })
         return
       }
+      if (res.status === 409 && json.code === 'HISTORIS_JADI_PAGU') {
+        showToast(json.error, false)
+        return
+      }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList(); loadRiwayat()
+        showToast(json.message); setVersi(versiTanggal); setPeriodeTulis(''); loadHistory(); loadTahunList(); loadRiwayat()
         if (typeof json.version === 'number') setVersion(json.version)
         serapJangkar(json.jangkar)
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
@@ -1282,9 +1295,18 @@ export default function DpaClient({
             value={tahun}
             items={tahunList}
             current={CURRENT_YEAR}
-            onChange={t => { setTahun(t); setVersi('') }}
+            onChange={t => { setTahun(t); setVersi(''); setPeriodeTulis('') }}
           />
         </div>
+
+        {bolehUbah && (
+          <PeriodeVersiSelect
+            tahun={tahun}
+            versiTerpakai={history.map(h => h.versi_tanggal)}
+            value={periodeTulis}
+            onChange={setPeriodeTulis}
+          />
+        )}
 
         {/* History selector — custom pill dropdown */}
         {/* data-rima: anchor tur RIMA F3 — wrapper inline-flex (display:contents rect-nya kosong) */}
@@ -1328,7 +1350,7 @@ export default function DpaClient({
 
             <PrimaButton variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
               disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
-              {saving ? 'Menyimpan...' : 'Simpan'}
+              {saving ? 'Menyimpan...' : periodeTulis ? 'Simpan Periode' : 'Simpan'}
             </PrimaButton>
           </div>
         )}

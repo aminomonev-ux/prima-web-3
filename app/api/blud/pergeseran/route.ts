@@ -7,10 +7,11 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import {
   getPergeseranHistory, getPergeseranByDate, getDpaByDate, getDpaLatestDate,
   getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi,
-  BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError,
+  BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludHistorisJadiPaguError,
   BludPaguDibawahRealisasiError,
 } from '@/lib/blud/data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
+import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_pulihkan } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_pulihkan, entri_historis } = parsed.data
 
   // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
   if (turunkan_paksa && !alasan_turun) {
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
     // masuk dan pagu berakhir di bawah realisasi tanpa sepatah peringatan pun.
     const result = await savePergeseran(
       tahun_anggaran, versi_tanggal, dpaVersi, recalced,
-      session.userId, expected_version, force, turunkan_paksa,
+      session.userId, expected_version, force, turunkan_paksa, entri_historis,
     )
     const bentrok = result.bentrokPagu
 
@@ -204,14 +205,20 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_SAVE_PERGESERAN',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan Pergeseran ${tahun_anggaran}/${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`
+      detail:    `Simpan Pergeseran ${tahun_anggaran}/${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${entri_historis ? ` [ENTRI HISTORIS — ditulis ${tanggalHariIniWIB()}]` : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`
         // Asal-usul pemulihan hanya hidup di baris ini — tidak ada kolomnya.
         + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`,
     })
     // §4.1/§4.2: permintaan bendahara yang sudah terpenuhi ditutup sendiri +
     // notifikasi balik. Sengaja SETELAH commit dan dibungkus try sendiri —
     // gagal menutup permintaan tidak boleh membatalkan pergeseran yang benar.
-    try {
+    //
+    // DILEWATI untuk entri historis. Sapuan ini membaca `getPaguMap` — yaitu pagu
+    // versi TERBARU, yang tidak berubah sedikit pun oleh arsip bulan lampau. Jadi
+    // mengarsipkan Januari akan menutup permintaan bendahara dan mengirim
+    // notifikasi "permintaan Anda sudah dipenuhi lewat Pergeseran 2026-01-31",
+    // padahal tidak ada satu rupiah pun yang bergeser karenanya.
+    if (!entri_historis) try {
       const selesai = await selesaikanPermintaanTerpenuhi(tahun_anggaran)
       for (const p of selesai) {
         if (!p.diminta_username) continue
@@ -265,6 +272,12 @@ export async function POST(req: NextRequest) {
         ok: false, code: 'VERSION_CONFLICT', error: err.message,
         expected: err.expected, actual: err.actual,
       }, { status: 409 })
+    }
+    if (err instanceof BludHistorisJadiPaguError) {
+      return NextResponse.json(
+        { ok: false, code: 'HISTORIS_JADI_PAGU', error: err.message },
+        { status: 409 },
+      )
     }
     if (err instanceof BludJangkarHilangError) {
       return NextResponse.json({

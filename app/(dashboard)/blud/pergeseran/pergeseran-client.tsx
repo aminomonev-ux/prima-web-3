@@ -23,6 +23,7 @@ import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import type { SimpananItem } from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import PeriodeVersiSelect from '@/components/blud/PeriodeVersiSelect'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk } from '@/lib/blud/tanggal'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
@@ -613,6 +614,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   const [riwayat,   setRiwayat]   = useState<SimpananItem[]>([])
   const [versi,     setVersi]     = useState('')
   const [dpaVersi,  setDpaVersi]  = useState('')
+  // Periode yang akan DITULIS saat Simpan. '' = bulan berjalan (perilaku bawaan).
+  // Ia juga menentukan DPA mana yang ditarik "Buat Pergeseran": Pergeseran Januari
+  // harus lahir dari DPA Januari, bukan DPA terbaru.
+  const [periodeTulis, setPeriodeTulis] = useState('')
   // Jejak "baris ini dipulihkan dari simpanan jam sekian" — semata memperpanjang
   // baris detail audit, sepadan `asalSalinRef` di layar DPA.
   const asalPulihkanRef = useRef<{ id: number; versi_ke: number; disimpan_pada: string } | null>(null)
@@ -841,10 +846,41 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   const generate = useCallback(async () => {
     setLoading(true)
     try {
-      const res  = await fetch(`/api/blud/dpa?tahun=${tahun}`)
+      // Periode historis WAJIB menarik DPA periode yang sama. Tanpa `?tanggal=`,
+      // server memulangkan DPA TERBARU — dan Pergeseran Januari akan lahir dari
+      // angka Agustus. Servernya juga menolaknya (`dpa_versi_tanggal` tidak boleh
+      // lebih baru dari versinya), tapi penolakan itu baru datang saat Simpan,
+      // sesudah seluruh geserannya diisi.
+      //
+      // Yang dicari BUKAN DPA bertanggal persis akhir bulan, melainkan DPA yang
+      // BERLAKU pada akhir bulan itu — versi terakhir yang tanggalnya ≤ periode.
+      // Versi DPA lahir pada hari orang menyimpannya (mis. 2026-07-26), jadi
+      // pencarian tanggal persis ke 2026-07-31 tidak akan menemukan apa pun
+      // padahal DPA Julinya jelas ada.
+      const qs = new URLSearchParams({ tahun: String(tahun) })
+      if (periodeTulis) {
+        const rh = await fetch(`/api/blud/dpa?mode=history&tahun=${tahun}`)
+        const jh = await rh.json()
+        const berlaku = ((jh.data ?? []) as { versi_tanggal: string }[])
+          .map(d => d.versi_tanggal)
+          .filter(v => v <= periodeTulis)
+          .sort()
+          .pop()
+        if (!berlaku) {
+          showToast(`Belum ada DPA yang berlaku sampai ${formatTanggalId(periodeTulis)}. Susun DPA periode itu dulu di menu DPA BLUD.`, false)
+          return
+        }
+        qs.set('tanggal', berlaku)
+      }
+      const res  = await fetch(`/api/blud/dpa?${qs.toString()}`)
       const json = await res.json()
       if (!json.ok || !json.data?.length) {
-        showToast(`Tahun ${tahun} belum punya DPA. Susun DPA ${tahun} dulu di menu DPA BLUD, baru pergeserannya bisa dibuat.`, false)
+        showToast(
+          periodeTulis
+            ? `Belum ada DPA untuk periode ${formatTanggalId(periodeTulis)}. Susun DPA periode itu dulu di menu DPA BLUD.`
+            : `Tahun ${tahun} belum punya DPA. Susun DPA ${tahun} dulu di menu DPA BLUD, baru pergeserannya bisa dibuat.`,
+          false,
+        )
         return
       }
       // Ditolak DI MUKA, bukan saat Simpan — sepadan penjaga `kegemukan` di
@@ -863,10 +899,12 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       setRows(generated)
       setDpaVersi(json.versi_tanggal || '')
       setVersi('')
-      showToast(`Tabel disalin dari DPA ${tahun} terbaru — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`)
+      showToast(periodeTulis
+        ? `Tabel disalin dari DPA ${formatTanggalId(json.versi_tanggal || periodeTulis)} — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`
+        : `Tabel disalin dari DPA ${tahun} terbaru — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`)
     } catch { showToast('Tabel gagal dibuat — periksa sambungan, lalu coba lagi.', false) }
     finally  { setLoading(false) }
-  }, [tahun])
+  }, [tahun, periodeTulis])
 
   // Inject: update kolom 0-5 dari DPA terbaru tanpa ubah vol_p/harga_p
   const inject = useCallback(async () => {
@@ -930,7 +968,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         draftRef.current = true
       }
       setSaving(true)
-      await doSimpanInternal(tanggalHariIniWIB())
+      await doSimpanInternal(periodeTulis || tanggalHariIniWIB())
     } finally { submittingRef.current = false; setSaving(false) }
   }
 
@@ -945,6 +983,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         body: JSON.stringify({
           tahun_anggaran: tahun, versi_tanggal: versiTanggal, dpa_versi_tanggal: dpaVersi || undefined,
           rows, force: paksaDropRef.current, draft: draftRef.current,
+          // Diturunkan dari tanggalnya sendiri, BUKAN dari state `periodeTulis`:
+          // fungsi ini dipanggil ulang dari jalur retry dengan tanggal yang sudah
+          // ditangkap lebih dulu (lihat catatan yang sama di dpa-client).
+          entri_historis: versiTanggal !== tanggalHariIniWIB(),
           expected_version: expectedVersionUntuk(versiTanggal, versi, version),
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
@@ -988,8 +1030,12 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         })
         return
       }
+      if (res.status === 409 && json.code === 'HISTORIS_JADI_PAGU') {
+        showToast(json.error, false)
+        return
+      }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); loadHistory(); loadTahunList(); loadRiwayat()
+        showToast(json.message); setVersi(versiTanggal); setPeriodeTulis(''); loadHistory(); loadTahunList(); loadRiwayat()
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pemulihan.
         asalPulihkanRef.current = null
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
@@ -1053,9 +1099,18 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             value={tahun}
             items={tahunList}
             current={CURRENT_YEAR}
-            onChange={t => { setTahun(t); setVersi(''); setRows([]) }}
+            onChange={t => { setTahun(t); setVersi(''); setRows([]); setPeriodeTulis('') }}
           />
         </div>
+
+        {bolehUbah && (
+          <PeriodeVersiSelect
+            tahun={tahun}
+            versiTerpakai={history.map(h => h.versi_tanggal)}
+            value={periodeTulis}
+            onChange={v => { setPeriodeTulis(v); setRows([]); setVersi('') }}
+          />
+        )}
 
         {bolehUbah && (
           <>
@@ -1065,10 +1120,18 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
               Buat Pergeseran
             </PrimaButton>
 
+            {/* Pagar 5: dimatikan pada periode historis. `inject` selalu menarik
+                DPA TERBARU (`getDpaLatestDate`, tanpa parameter tanggal), jadi
+                menekannya di Pergeseran Januari akan menimpa seluruh kolom DPA
+                dengan angka Agustus — diam-diam, dan justru di bawah tombol yang
+                menjanjikan "angka pergeseran Anda tidak akan berubah". */}
             <PrimaButton variant="success" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
-              disabled={injecting || !rows.length}
+              disabled={injecting || !rows.length || !!periodeTulis}
               onClick={() => setConfirmInject(true)}
-              data-tooltip="Samakan kode, uraian, volume, dan harga dengan DPA terbaru — kolom pergeseran yang Anda isi tidak tersentuh" data-rima="pergeseran.sinkron-dpa">
+              data-tooltip={periodeTulis
+                ? 'Tidak tersedia untuk periode historis — tombol ini selalu mengambil DPA terbaru, bukan DPA periode ini'
+                : 'Samakan kode, uraian, volume, dan harga dengan DPA terbaru — kolom pergeseran yang Anda isi tidak tersentuh'}
+              data-rima="pergeseran.sinkron-dpa">
               Sinkronkan DPA
             </PrimaButton>
           </>
