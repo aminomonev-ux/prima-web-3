@@ -32,6 +32,7 @@ import {
   periodeUntukVersi, tanggalPeriodeHistoris, labelPeriodeVersi,
   periodeHistorisTersedia, expectedVersionUntuk,
 } from '../lib/blud/tanggal'
+import { BludHistorisJadiPaguError } from '../lib/blud/data'
 
 const AKAR = join(import.meta.dirname, '..')
 const baca = (p: string) => readFileSync(join(AKAR, p), 'utf8')
@@ -113,25 +114,36 @@ bab('A. periodeUntukVersi — satu aturan, diuji sungguhan')
 
 bab('A2. Kalimat penolakan arsip yang akan jadi pagu')
 {
-  // Struktural, bukan dijalankan: `lib/blud/data.ts` membuat pool MySQL saat
-  // diimpor, dan tidak satu pun suite BLUD menyeretnya ke dalam proses tes.
-  const src = baca('lib/blud/data.ts')
-  const blok = src.slice(src.indexOf('class BludHistorisJadiPaguError'))
-    .slice(0, 900)
+  // Kalimatnya DIBANGUN sungguhan, bukan dicocokkan ke berkas sumbernya: yang
+  // dinilai di sini bunyi yang dibaca orang, dan potongan template di sumber
+  // tidak memperlihatkannya. Mengimpor `data.ts` aman — `createPool` mysql2
+  // tidak menyambung apa pun sampai kueri pertama, dan seluruh env-nya punya
+  // nilai cadangan.
+  const dpa = new BludHistorisJadiPaguError('dpa_blud', '2026-07-31').message
+  const pgs = new BludHistorisJadiPaguError('pergeseran_dpa', '2026-07-31').message
 
-  cek('Membuka dengan apa yang KURANG, bukan istilah dalam',
-    blok.includes('Belum ada ${modul} bulan berjalan'))
-  cek('Modulnya diturunkan dari tabel, tidak ditulis dua kali',
-    /const modul = table === 'pergeseran_dpa' \? 'Pergeseran' : 'DPA'/.test(blok))
+  // Dibuka dengan TOMBOL yang harus ditekan, dan kata-katanya sama dengan yang
+  // tertulis di layar masing-masing modul — DPA punya Impor & Form Baru,
+  // Pergeseran cuma punya "Buat Pergeseran". Menyebut "Impor" di layar
+  // Pergeseran menyuruh orang mencari tombol yang tidak ada di sana.
+  cek('DPA membuka dengan Impor/buat, sesuai tombol di layarnya',
+    dpa.startsWith('Impor atau buat DPA bulan berjalan dulu, lalu simpan.'))
+  cek('Pergeseran membuka dengan Buat Pergeseran, tanpa Impor',
+    pgs.startsWith('Buat Pergeseran bulan berjalan dulu, lalu simpan.')
+    && !pgs.includes('Impor'))
   cek('Tanggalnya terbaca manusia, bukan ISO',
-    blok.includes('formatTanggalId(versi)'))
-  cek('Menutup dengan langkah yang bisa dikerjakan',
-    blok.includes('Simpan ${modul} bulan ini dulu.'))
+    dpa.includes('arsip 31 Jul 2026') && !dpa.includes('2026-07-31'))
   // Pendek itu tujuannya, tapi sebabnya tidak boleh ikut hilang — tanpa itu
-  // penolakannya terdengar sewenang-wenang.
-  cek('Sebabnya tetap disebut sekali', blok.includes('acuan pagu setahun'))
-  cek('Kalimat lama yang bertele-tele sudah tidak ada',
-    !kode(src).includes('justru akan menjadi acuan pagu tahun ini'))
+  // penolakannya terdengar sewenang-wenang. Yang diganti cara mengatakannya:
+  // "ia akan jadi acuan pagu setahun" dilaporkan tidak terbaca.
+  cek('Sebabnya pakai kata sehari-hari, bukan "acuan"',
+    dpa.endsWith('kalau tidak, angka Juli 2026 yang dipakai jadi pagu tahun ini.')
+    && !dpa.includes('acuan'))
+  cek('Bulannya disebut namanya, bukan "ia"', dpa.includes('angka Juli 2026'))
+  cek('Tidak ada istilah dalam yang tersisa',
+    !/versi historis|entri historis|sumber pagu/i.test(dpa + pgs))
+  cek('Cukup pendek untuk satu toast',
+    dpa.length < 180 && pgs.length < 180, `${dpa.length} & ${pgs.length} huruf (dulu 246)`)
 }
 
 bab('B. Keempat pintu memakai aturan yang sama')

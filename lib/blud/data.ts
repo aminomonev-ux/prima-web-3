@@ -19,7 +19,7 @@ import {
 // supaya panel bentrok di layar Pengaturan bisa memakai komponen yang sama.
 import type { BentrokPagu } from './pagu'
 import { ensureAnggaranKey } from './anggaran-key'
-import { toDateStr, formatTanggalId } from './tanggal'
+import { toDateStr, formatTanggalId, labelPeriodeVersi } from './tanggal'
 import { catatRiwayatSimpan } from './riwayat-simpan'
 import type {
   DpaBaris, DpaBarisInput,
@@ -77,14 +77,18 @@ export class BludJangkarHilangError extends Error {
  */
 export class BludHistorisJadiPaguError extends Error {
   constructor(public table: 'dpa_blud' | 'pergeseran_dpa', public versi: string) {
-    // Kalimatnya dipendekkan (2026-08-28): yang lama membuka dengan istilah
-    // dalam ("versi historis", "acuan pagu") sebelum sampai ke hal yang bisa
-    // dikerjakan orangnya. Sekarang urutannya dibalik — apa yang kurang dulu,
-    // apa yang harus dilakukan berikutnya, sebabnya belakangan dan sekali saja.
-    const modul = table === 'pergeseran_dpa' ? 'Pergeseran' : 'DPA'
+    // Kalimatnya ditulis ulang dua kali (2026-08-28). Yang pertama membuka
+    // dengan istilah dalam ("versi historis", "acuan pagu"). Yang kedua masih
+    // menyisakan "ia akan jadi acuan pagu setahun" — dilaporkan pengguna tidak
+    // terbaca. Sekarang: dibuka dengan TOMBOL yang harus ditekan (kata-katanya
+    // sama dengan yang tertulis di layar masing-masing modul), sebabnya
+    // belakangan dan memakai kata sehari-hari.
+    const aksi = table === 'pergeseran_dpa'
+      ? 'Buat Pergeseran bulan berjalan dulu, lalu simpan.'
+      : 'Impor atau buat DPA bulan berjalan dulu, lalu simpan.'
     super(
-      `Belum ada ${modul} bulan berjalan, jadi arsip ${formatTanggalId(versi)} belum bisa disimpan `
-      + `— ia akan jadi acuan pagu setahun. Simpan ${modul} bulan ini dulu.`,
+      `${aksi} Setelah itu arsip ${formatTanggalId(versi)} baru bisa disimpan `
+      + `— kalau tidak, angka ${labelPeriodeVersi(versi)} yang dipakai jadi pagu tahun ini.`,
     )
     this.name = 'BludHistorisJadiPaguError'
   }
