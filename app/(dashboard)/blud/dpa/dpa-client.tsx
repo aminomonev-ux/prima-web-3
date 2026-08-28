@@ -1367,6 +1367,13 @@ export default function DpaClient({
 
   async function gantiPeriode(tanggal: string) {
     if (tanggal === periodeTulis) return
+    // Periode yang SUDAH punya arsip: memilihnya berarti MEMBUKA arsip itu,
+    // bukan menyiapkan yang baru. Mengosongkan layar di sini jadi jebakan —
+    // layar kosong dengan sasaran Simpan yang justru sudah berisi.
+    if (tanggal && history.some(h => h.versi_tanggal === tanggal)) {
+      await bukaVersi(tanggal)
+      return
+    }
     // Membuang pekerjaan orang tanpa bertanya tidak boleh. Patokannya
     // `belumTersimpan`, BUKAN `versi` kosong: sesudah Pulihkan atau sesudah satu
     // sel disunting, `versi` terisi padahal yang di layar belum ada di mana pun.

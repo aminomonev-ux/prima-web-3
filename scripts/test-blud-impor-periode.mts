@@ -110,7 +110,10 @@ bab('B. Ganti periode menggerakkan layar')
   cek('setPeriodeTulis polos tidak lagi jadi onChange',
     !/onChange=\{setPeriodeTulis\}/.test(dpa))
 
-  const badanDpa = dpa.slice(dpa.indexOf('async function gantiPeriode'))
+  // Komentar dibuang dulu supaya jendelanya mengukur KODE, bukan prosa. Tanpa
+  // itu, menambahkan satu paragraf penjelasan menggeser baris yang diperiksa ke
+  // luar jendela dan tesnya menyalak pada penjelasannya sendiri.
+  const badanDpa = kode(dpa).slice(kode(dpa).indexOf('async function gantiPeriode'))
     .slice(0, 1400)
   cek('gantiPeriode mengosongkan baris', badanDpa.includes('setRows([])'))
   cek('gantiPeriode melepas versi', badanDpa.includes("setVersi('')"))
@@ -128,7 +131,7 @@ bab('B. Ganti periode menggerakkan layar')
   cek('Pergeseran memakai gantiPeriode juga', pgs.includes('async function gantiPeriode'))
   cek('Pemilih periode Pergeseran memakai gantiPeriode',
     /value=\{periodeTulis\}[\s\S]{0,120}gantiPeriode/.test(pgs))
-  const badanPgs = pgs.slice(pgs.indexOf('async function gantiPeriode')).slice(0, 1200)
+  const badanPgs = kode(pgs).slice(kode(pgs).indexOf('async function gantiPeriode')).slice(0, 1200)
   cek('Pergeseran juga bertanya sebelum membuang',
     badanPgs.includes('confirmDialog') && badanPgs.includes('rows.length > 0 && belumTersimpan'))
 }

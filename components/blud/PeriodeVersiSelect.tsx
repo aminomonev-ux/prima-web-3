@@ -9,7 +9,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, ChevronDown, Check } from 'lucide-react'
-import { periodeHistorisTersedia, labelPeriodeVersi, type PeriodeVersi } from '@/lib/blud/tanggal'
+import {
+  periodeHistorisTersedia, labelPeriodeVersi, tanggalPeriodeHistoris, type PeriodeVersi,
+} from '@/lib/blud/tanggal'
 
 interface Props {
   tahun:    number
@@ -24,29 +26,32 @@ export default function PeriodeVersiSelect({ tahun, versiTerpakai, value, onChan
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  // Periode yang BARU SAJA disimpan lenyap dari daftar — bulannya kini punya
-  // versi, dan `periodeHistorisTersedia` memang hanya menawarkan bulan kosong.
-  // Padahal justru periode itulah yang sedang dipakai layar: tanpa dikembalikan,
-  // pemicunya jatuh ke "bulan berjalan" sementara Simpan tetap menulis ke Juli.
-  // Label dan sasaran berbeda pendapat, persis bug yang dilaporkan.
-  const pilihan = useMemo(() => {
-    const tersedia = periodeHistorisTersedia(tahun, versiTerpakai)
-    if (!value || tersedia.some(p => p.tanggal === value)) return tersedia
-    const terpakai: PeriodeVersi = {
-      bulan:   Number(value.slice(5, 7)),
-      label:   labelPeriodeVersi(value),
-      tanggal: value,
+  // Daftarnya memuat DUA hal yang tampak sama tapi berbeda akibatnya:
+  //   • bulan kosong  → memilihnya MENYIAPKAN arsip baru (layar dikosongkan)
+  //   • bulan berarsip → memilihnya MEMBUKA arsipnya    (layar dimuat)
+  //
+  // Kelompok kedua dulu tidak ada sama sekali: `periodeHistorisTersedia` memang
+  // hanya menawarkan bulan yang masih kosong, jadi begitu Juli tersimpan ia
+  // lenyap dari sini dan satu-satunya jalan kembali ke Juli lewat daftar VERSI.
+  // Dua tempat untuk satu maksud, dan orang harus tahu keduanya lebih dulu.
+  const { pilihan, berarsip } = useMemo(() => {
+    const kosong = periodeHistorisTersedia(tahun, versiTerpakai)
+    // Hanya tanggal akhir-bulan yang dihitung arsip periode. Versi bertanggal 26
+    // Juli itu revisi harian yang kebetulan lahir di Juli — tempatnya di daftar
+    // versi, bukan di sini, karena menyimpannya tidak mendarat di 31 Juli.
+    const arsip = versiTerpakai
+      .map(v => String(v))
+      .filter(v => tanggalPeriodeHistoris(v))
+    const dariArsip: PeriodeVersi[] = arsip.map(v => ({
+      bulan:   Number(v.slice(5, 7)),
+      label:   labelPeriodeVersi(v),
+      tanggal: v,
+    }))
+    return {
+      pilihan:  [...kosong, ...dariArsip].sort((a, b) => a.tanggal.localeCompare(b.tanggal)),
+      berarsip: new Set(arsip),
     }
-    return [...tersedia, terpakai].sort((a, b) => a.tanggal.localeCompare(b.tanggal))
-  }, [tahun, versiTerpakai, value])
-
-  // Bulan yang sudah punya versi tetap ditawarkan kalau ia yang sedang dipilih,
-  // jadi bedanya harus terbaca — kalau tidak, "simpan lagi ke Juli" dan "buat
-  // versi Juli baru" terlihat sama.
-  const sudahAdaVersi = useMemo(
-    () => new Set(versiTerpakai.map(v => String(v).slice(0, 7))),
-    [versiTerpakai],
-  )
+  }, [tahun, versiTerpakai])
 
   useEffect(() => {
     if (!open) return
@@ -110,8 +115,8 @@ export default function PeriodeVersiSelect({ tahun, versiTerpakai, value, onChan
               >
                 <CalendarClock className="w-3 h-3 versi-item-icon" />
                 <span className="versi-item-date">{p.label}</span>
-                {sudahAdaVersi.has(p.tanggal.slice(0, 7)) &&
-                  <span className="versi-item-meta">· sudah ada versinya</span>}
+                {berarsip.has(p.tanggal) &&
+                  <span className="versi-item-meta">· sudah ada arsipnya</span>}
                 {active && <Check className="w-3.5 h-3.5 versi-item-check" />}
               </button>
             )

@@ -936,6 +936,12 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
    */
   async function gantiPeriode(tanggal: string) {
     if (tanggal === periodeTulis) return
+    // Periode yang SUDAH punya arsip: memilihnya berarti MEMBUKA arsip itu,
+    // bukan menyiapkan yang baru — cermin layar DPA.
+    if (tanggal && history.some(h => h.versi_tanggal === tanggal)) {
+      await bukaVersi(tanggal)
+      return
+    }
     // Patokannya `belumTersimpan`, BUKAN `versi` kosong — sesudah Pulihkan atau
     // sesudah satu sel disunting, `versi` terisi padahal isinya belum tersimpan.
     if (rows.length > 0 && belumTersimpan) {

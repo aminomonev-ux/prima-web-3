@@ -103,12 +103,35 @@ bab('A. periodeUntukVersi — satu aturan, diuji sungguhan')
   cek('Simpan ke tanggal lain tetap mulai dari 0',
     expectedVersionUntuk('2026-07-31', '2026-08-27', 3) === 0)
 
-  // Bulan yang sudah punya versi tetap tidak DITAWARKAN — yang dikembalikan
-  // hanya yang sedang dipilih, dan itu tugas komponennya (bab B).
+  // Helpernya tetap menjawab "bulan mana yang bisa menampung arsip BARU" —
+  // tidak diubah. Menggabungkannya dengan yang sudah berarsip tugas komponen.
   const sisa = periodeHistorisTersedia(2026, ['2026-07-31'], KINI)
-  cek('Bulan terpakai tidak ditawarkan lagi',
+  cek('Bulan terpakai bukan calon arsip baru',
     !sisa.some(p => p.tanggal === '2026-07-31') && sisa.length === 6,
     `${sisa.length} bulan tersisa`)
+}
+
+bab('A2. Kalimat penolakan arsip yang akan jadi pagu')
+{
+  // Struktural, bukan dijalankan: `lib/blud/data.ts` membuat pool MySQL saat
+  // diimpor, dan tidak satu pun suite BLUD menyeretnya ke dalam proses tes.
+  const src = baca('lib/blud/data.ts')
+  const blok = src.slice(src.indexOf('class BludHistorisJadiPaguError'))
+    .slice(0, 900)
+
+  cek('Membuka dengan apa yang KURANG, bukan istilah dalam',
+    blok.includes('Belum ada ${modul} bulan berjalan'))
+  cek('Modulnya diturunkan dari tabel, tidak ditulis dua kali',
+    /const modul = table === 'pergeseran_dpa' \? 'Pergeseran' : 'DPA'/.test(blok))
+  cek('Tanggalnya terbaca manusia, bukan ISO',
+    blok.includes('formatTanggalId(versi)'))
+  cek('Menutup dengan langkah yang bisa dikerjakan',
+    blok.includes('Simpan ${modul} bulan ini dulu.'))
+  // Pendek itu tujuannya, tapi sebabnya tidak boleh ikut hilang — tanpa itu
+  // penolakannya terdengar sewenang-wenang.
+  cek('Sebabnya tetap disebut sekali', blok.includes('acuan pagu setahun'))
+  cek('Kalimat lama yang bertele-tele sudah tidak ada',
+    !kode(src).includes('justru akan menjadi acuan pagu tahun ini'))
 }
 
 bab('B. Keempat pintu memakai aturan yang sama')
@@ -132,15 +155,27 @@ bab('B. Keempat pintu memakai aturan yang sama')
       !/onChange=\{v => \{ setVersi\(v\)/.test(isi))
   }
 
-  // Periode yang bulannya sudah punya versi lenyap dari daftar pilihan. Kalau
-  // tidak dikembalikan, pemicunya jatuh ke "bulan berjalan" sementara Simpan
-  // tetap menulis ke Juli — label dan sasaran berbeda pendapat.
+  // Bulan yang sudah punya arsip lenyap dari daftar pilihan — `periodeHistoris
+  // Tersedia` memang cuma menawarkan bulan kosong. Benar untuk MEMILIH, salah
+  // untuk KEMBALI: sesudah Juli tersimpan, satu-satunya jalan pulang ke Juli
+  // lewat daftar versi. Dua tempat untuk satu maksud.
   const pemilih = kode(baca(PEMILIH))
-  cek('Pemilih periode mengembalikan periode yang sedang dipilih',
-    pemilih.includes('tersedia.some(p => p.tanggal === value)')
-    && pemilih.includes('labelPeriodeVersi(value)'))
-  cek('Periode yang sudah punya versi diberi tanda',
-    pemilih.includes('sudahAdaVersi'))
+  cek('Pemilih periode ikut menampilkan bulan yang sudah berarsip',
+    pemilih.includes('tanggalPeriodeHistoris(v)')
+    && /pilihan:\s*\[\.\.\.kosong, \.\.\.dariArsip\]/.test(pemilih))
+  cek('Revisi harian tidak ikut masuk daftar periode',
+    pemilih.includes('.filter(v => tanggalPeriodeHistoris(v))'),
+    'versi 26 Jul itu revisi harian, bukan arsip Juli')
+  cek('Bulan berarsip diberi tanda',
+    pemilih.includes('berarsip.has(p.tanggal)'))
+
+  // Memilih periode berarsip = MEMBUKA arsipnya. Mengosongkan layar di situ
+  // meninggalkan form kosong dengan sasaran Simpan yang justru sudah berisi.
+  for (const [nama, berkas] of [['DPA', KLIEN_DPA], ['Pergeseran', KLIEN_PGS]] as const) {
+    cek(`${nama}: Memilih periode berarsip membuka arsipnya`,
+      /if \(tanggal && history\.some\(h => h\.versi_tanggal === tanggal\)\) \{\s*\n\s*await bukaVersi\(tanggal\)/
+        .test(kode(baca(berkas))))
+  }
 }
 
 bab('C. belumTersimpan — bendera "layar ≠ yang tersimpan"')
