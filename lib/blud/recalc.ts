@@ -143,65 +143,89 @@ export function recalcPergeseranJumlah(rows: PergeseranBarisInput[]): Pergeseran
 // Hanya recalc baris yang berubah + semua ancestor-nya. O(level) bukan O(n×level).
 
 export function partialRecalcDpa(rows: DpaBarisInput[], changedRowId: string): DpaBarisInput[] {
-  const data     = rows.map(r => ({ ...r }))
   const byId     = new Map<string, DpaBarisInput>()
-  data.forEach(r => byId.set(r.row_id, r))
-  const childMap = buildChildMap(data)
+  rows.forEach(r => byId.set(r.row_id, r))
+  const childMap = buildChildMap(rows)
 
   const changed = byId.get(changedRowId)
-  if (!changed) return data
+  if (!changed) return rows
 
-  // Recalc the changed row first (leaf or aggregator)
+  // Angka baru ditampung di sini dulu, TIDAK ditulis ke barisnya. Dulu fungsi ini
+  // membuka dengan `rows.map(r => ({ ...r }))` — 558 baris dapat identitas baru
+  // tiap ketikan, jadi React menganggap SEMUANYA berubah dan me-render ulang
+  // seluruh tabel. Yang benar-benar berubah cuma baris yang diketik dan rantai
+  // induknya: pada pohon DPA itu 5–6 baris, bukan 558. (Tahap 4)
+  const jumlahBaru = new Map<string, number>()
+  const jumlahDari = (r: DpaBarisInput) => jumlahBaru.get(r.row_id) ?? (r.jumlah ?? 0)
+
   const changedKids = childMap.get(changed.row_id) ?? []
   if (changedKids.length === 0 && EDITABLE.has(changed.tipe_baris)) {
-    changed.jumlah = hitungJumlah(changed.vol, changed.harga)
+    jumlahBaru.set(changed.row_id, hitungJumlah(changed.vol, changed.harga))
   } else if (changedKids.length > 0) {
-    changed.jumlah = changedKids.reduce((s, c) => s + (c.jumlah ?? 0), 0)
+    jumlahBaru.set(changed.row_id, changedKids.reduce((s, c) => s + jumlahDari(c), 0))
   }
 
-  // Walk up ancestor chain — each parent re-sums all its direct children
+  // Naik rantai induk — tiap induk menjumlah ulang seluruh anak langsungnya.
   let current: DpaBarisInput | undefined = changed
   while (current?.parent_id) {
     const parent: DpaBarisInput | undefined = byId.get(current.parent_id)
     if (!parent) break
     const kids = childMap.get(parent.row_id) ?? []
-    parent.jumlah = kids.reduce((s, c) => s + (c.jumlah ?? 0), 0)
+    jumlahBaru.set(parent.row_id, kids.reduce((s, c) => s + jumlahDari(c), 0))
     current = parent
   }
 
-  return data
+  // Larik baru (Simpan & React butuh identitas larik berubah), tapi baris yang
+  // angkanya tidak bergeser dibiarkan memakai objek yang sama.
+  return rows.map((r) => {
+    const baru = jumlahBaru.get(r.row_id)
+    return baru === undefined || baru === r.jumlah ? r : { ...r, jumlah: baru }
+  })
 }
 
 // ─── PERGESERAN PARTIAL RECALC ────────────────────────────────────────────────
 
 export function partialRecalcPergeseran(rows: PergeseranBarisInput[], changedRowId: string): PergeseranBarisInput[] {
-  const data     = rows.map(r => ({ ...r }))
   const byId     = new Map<string, PergeseranBarisInput>()
-  data.forEach(r => byId.set(r.row_id, r))
-  const childMap = buildChildMap(data)
+  rows.forEach(r => byId.set(r.row_id, r))
+  const childMap = buildChildMap(rows)
 
   const changed = byId.get(changedRowId)
-  if (!changed) return data
+  if (!changed) return rows
+
+  // Sama seperti `partialRecalcDpa`: yang berubah cuma baris yang diketik dan
+  // rantai induknya, jadi hanya baris itu yang boleh dapat identitas baru.
+  const pgsBaru = new Map<string, number>()
+  const pgsDari = (r: PergeseranBarisInput) => pgsBaru.get(r.row_id) ?? (r.pergeseran ?? 0)
 
   const changedKids = childMap.get(changed.row_id) ?? []
   if (changedKids.length === 0 && EDITABLE.has(changed.tipe_baris)) {
-    changed.pergeseran = hitungJumlah(changed.vol_p, changed.harga_p)
+    pgsBaru.set(changed.row_id, hitungJumlah(changed.vol_p, changed.harga_p))
   } else if (changedKids.length > 0) {
-    changed.pergeseran = changedKids.reduce((s, c) => s + (c.pergeseran ?? 0), 0)
+    pgsBaru.set(changed.row_id, changedKids.reduce((s, c) => s + pgsDari(c), 0))
+  } else {
+    // Baris tak-editable tanpa anak: angkanya memang tidak berubah, tapi
+    // `bertambah_berkurang` tetap harus disegarkan terhadap `jumlah`.
+    pgsBaru.set(changed.row_id, changed.pergeseran ?? 0)
   }
-  changed.bertambah_berkurang = changed.pergeseran - (changed.jumlah ?? 0)
 
   let current: PergeseranBarisInput | undefined = changed
   while (current?.parent_id) {
     const parent: PergeseranBarisInput | undefined = byId.get(current.parent_id)
     if (!parent) break
     const kids = childMap.get(parent.row_id) ?? []
-    parent.pergeseran          = kids.reduce((s, c) => s + (c.pergeseran ?? 0), 0)
-    parent.bertambah_berkurang = parent.pergeseran - (parent.jumlah ?? 0)
+    pgsBaru.set(parent.row_id, kids.reduce((s, c) => s + pgsDari(c), 0))
     current = parent
   }
 
-  return data
+  return rows.map((r) => {
+    const baru = pgsBaru.get(r.row_id)
+    if (baru === undefined) return r
+    const selisih = baru - (r.jumlah ?? 0)
+    return baru === r.pergeseran && selisih === r.bertambah_berkurang
+      ? r
+      : { ...r, pergeseran: baru, bertambah_berkurang: selisih }
+  })
 }
 
 // ─── GESER BARIS ─────────────────────────────────────────────────────────────

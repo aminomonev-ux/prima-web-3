@@ -3,7 +3,7 @@
 // app/(dashboard)/blud/pergeseran/pergeseran-client.tsx
 // Port dari blud-app: PergeseranTable + pergeseran-dpa/page — shadcn/ui + Tailwind
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -98,6 +98,231 @@ function genPgRowId(): string { return 'pgnew_' + genRowId() }
 
 // ─── PERGESERAN TABLE ─────────────────────────────────────────────────────────
 
+/** Konstanta modul: `setBlocked` yang stabil. Pergeseran tidak memakai geser blok. */
+const abaikanBlocked = () => {}
+
+/** Berkas aksi satu baris Pergeseran — cermin `AksiBaris` di layar DPA. */
+interface AksiBarisPg {
+  updateVolHarga: (rowId: string, field: 'vol_p' | 'harga_p', value: number | null) => void
+  updateText:     (rowId: string, field: 'kode_rekening' | 'uraian' | 'penanggung_jawab' | 'keterangan', value: string) => void
+  pickAkun:       (rowId: string, akun: AkunOption) => void
+  toggleCheckbox: (rowId: string) => void
+  addSibling:     (row: PergeseranBarisInput) => void
+  deleteBaris:    (rowId: string) => void
+  bukaTambahAnak: (row: PergeseranBarisInput) => void
+}
+
+const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatRupiah(v) : '-'
+
+/**
+ * Satu baris tabel Pergeseran — Tahap 4, cermin `DpaRow`.
+ *
+ * Tabel ini 13 kolom (DPA 10) dan lahir dari salinan DPA, jadi jumlah barisnya
+ * sama besar. Alasan dan syaratnya identik: `memo` hanya menggigit kalau tiap
+ * prop stabil, jadi yang dioper `terpilih`/`disorot`/`isAgg` sebagai boolean —
+ * bukan Set, bukan Map — dan seluruh penangan lewat satu objek `aksi`.
+ */
+const PergeseranRow = memo(function PergeseranRow({
+  row, terpilih, disorot, isAgg, bolehUbah, akunOptions, pjOptions, aksi,
+}: {
+  row:         PergeseranBarisInput
+  terpilih:    boolean
+  disorot:     boolean
+  isAgg:       boolean
+  bolehUbah:   boolean
+  akunOptions: AkunOption[]
+  pjOptions:   string[]
+  aksi:        AksiBarisPg
+}) {
+  const editable = bolehUbah && EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
+  const isBold   = ['GRANDMASTER','MASTER','LEADER','PLETON-LEADER','KETUA-KELOMPOK-A','KETUA-KELOMPOK-B','L7-HEAD','L8-HEAD'].includes(row.tipe_baris)
+  const isGM     = row.tipe_baris === 'GRANDMASTER'
+  const bb       = row.bertambah_berkurang ?? 0
+  const isNew    = isNewRow(row)
+  const canAdd   = !!TIPE_CHILD_OPTIONS_PG[row.tipe_baris]
+
+  return (
+    <tr id={`perg-row-${row.row_id}`}
+        className={`${TIPE_ROW_CLASS[row.tipe_baris]}${disorot ? ' row-highlight' : ''}`}>
+      {/* Checkbox multi-hapus — hanya baris baru */}
+      <td style={{ padding: '2px 4px', textAlign: 'center' }}>
+        {bolehUbah && isNew && (
+          <input
+            type="checkbox"
+            className="dpa-row-checkbox"
+            checked={terpilih}
+            onChange={() => aksi.toggleCheckbox(row.row_id)}
+            data-tooltip="Centang untuk menghapus beberapa baris sekaligus — baris di bawahnya ikut tercentang"
+          />
+        )}
+      </td>
+
+      {/* Level badge L1/L2/.. — sama seperti DPA */}
+      <td style={{ padding: '2px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+        <span data-tooltip={TIPE_LABEL[row.tipe_baris]} className="blud-level-badge">
+          {TIPE_LABEL[row.tipe_baris].replace('Level ', 'L')}
+        </span>
+      </td>
+
+      {/* Kode */}
+      <td style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
+        {isNew ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input
+              type="text"
+              value={row.kode_rekening}
+              readOnly
+              placeholder="auto-fill dari pilihan uraian"
+              style={{ flex: 1, minWidth: 60, cursor: 'default' }}
+            />
+            <span style={{
+              fontSize: 9, fontWeight: 800, letterSpacing: '.5px',
+              padding: '2px 5px', borderRadius: 3,
+              background: '#10B981', color: '#FFFFFF', flexShrink: 0,
+            }}>BARU</span>
+          </div>
+        ) : row.kode_rekening}
+      </td>
+
+      {/* Uraian — combobox kalau baris baru, span kalau dari DPA */}
+      <td>
+        {isNew && bolehUbah ? (
+          <MasterAkunCombobox
+            value={row.uraian}
+            options={akunOptions}
+            onChange={v => aksi.updateText(row.row_id, 'uraian', v)}
+            onSelect={akun => aksi.pickAkun(row.row_id, akun)}
+            placeholder="Cari atau ketik uraian..."
+          />
+        ) : (
+          <span style={{ fontWeight: isBold ? 700 : 400, fontSize: 13, color: isGM ? 'var(--blud-l1-text)' : undefined, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {row.uraian}
+            {/* Warning kalau DPA aggregator (vol=null, jumlah>0) tapi
+                Pergeseran local leaf (tidak punya anak) — struktur beda
+                antara DPA & Pergeseran setelah inject */}
+            {!isAgg && row.vol == null && row.harga == null && (row.jumlah ?? 0) > 0 && (
+              <AlertTriangle
+                className="w-3 h-3"
+                style={{ color: '#F59E0B', flexShrink: 0 }}
+                aria-label="Struktur berbeda dengan DPA"
+              >
+                <title>Di DPA baris ini punya rincian di bawahnya, di sini belum. Pertimbangkan menambahkan rinciannya.</title>
+              </AlertTriangle>
+            )}
+          </span>
+        )}
+      </td>
+
+      {/* Vol DPA (readOnly) */}
+      <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
+        {row.vol ?? '-'}
+      </td>
+
+      {/* Satuan */}
+      <td style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>{row.satuan ?? '-'}</td>
+
+      {/* Harga DPA */}
+      <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
+        {fmtRp(row.harga)}
+      </td>
+
+      {/* Jumlah DPA */}
+      <td style={{ textAlign: 'right' }}>
+        <strong style={{ fontSize: 13, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
+          {fmtRp(row.jumlah)}
+        </strong>
+      </td>
+
+      {/* Vol P (editable saat LEAF) */}
+      <td style={{ textAlign: 'right' }}>
+        {editable
+          ? <input type="number" value={row.vol_p ?? ''} min={0} style={{ textAlign: 'right' }}
+              onChange={e => aksi.updateVolHarga(row.row_id, 'vol_p', e.target.value === '' ? null : Number(e.target.value))} />
+          : <span style={{ fontSize: 12, opacity: isAgg ? .55 : 1 }}>
+              {isAgg ? '—' : (row.vol_p ?? '-')}
+            </span>
+        }
+      </td>
+
+      {/* Harga P (editable saat LEAF) */}
+      <td style={{ textAlign: 'right' }}>
+        {editable
+          ? <InputNominal value={row.harga_p ?? 0} style={{ textAlign: 'right' }}
+              onChange={v => aksi.updateVolHarga(row.row_id, 'harga_p', v || null)} />
+          : <span style={{ fontSize: 12, opacity: isAgg ? .55 : 1 }}>
+              {isAgg ? '—' : fmtRp(row.harga_p)}
+            </span>
+        }
+      </td>
+
+      {/* Pergeseran */}
+      <td style={{ textAlign: 'right' }}>
+        <strong style={{ fontSize: 13, color: '#7DD3FC' }}>{fmtRp(row.pergeseran)}</strong>
+      </td>
+
+      {/* +/− */}
+      <td style={{ textAlign: 'right' }}>
+        <strong style={{
+          fontSize: 13,
+          color: bb > 0 ? '#6EE7B7' : bb < 0 ? '#FCA5A5' : '#85B7EB',
+        }}>
+          {bb > 0 ? '+' : ''}{bb !== 0 ? formatRupiah(bb) : '-'}
+        </strong>
+      </td>
+
+      {/* Penanggung Jawab — cermin DPA, kecuali baris yang lahir di sini.
+          Sengaja tanpa penjaga konflik chain seperti DPA: pemiliknya DPA,
+          dan chain-conflict tetap ketahuan di panel audit menu Cetak. */}
+      <td>
+        {isNew && bolehUbah ? (
+          <PenanggungJawabCombobox
+            value={row.penanggung_jawab ?? ''}
+            options={pjOptions}
+            onChange={v => aksi.updateText(row.row_id, 'penanggung_jawab', v ?? '')}
+            placeholder="— Pilih PJ —"
+          />
+        ) : (
+          <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
+            {row.penanggung_jawab || '-'}
+          </span>
+        )}
+      </td>
+
+      {/* Keterangan — sama aturannya dengan PJ */}
+      <td>
+        {isNew && bolehUbah ? (
+          <input
+            type="text"
+            value={row.keterangan ?? ''}
+            onChange={e => aksi.updateText(row.row_id, 'keterangan', e.target.value)}
+            placeholder="Keterangan…"
+            style={{ width: '100%' }}
+          />
+        ) : (
+          <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
+            {row.keterangan || '-'}
+          </span>
+        )}
+      </td>
+
+      {/* Aksi — kebab menu */}
+      {bolehUbah && (
+      <td style={{ textAlign: 'center', padding: '2px 4px' }}>
+        <RowActionsMenu
+          canAdd={canAdd}
+          canSibling={!!row.parent_id}
+          locked={!isNew && !canAdd}  // tampilkan kebab hanya kalau ada aksi tersedia
+          onAddChild={canAdd ? () => aksi.bukaTambahAnak(row) : undefined}
+          onAddSibling={row.parent_id ? () => aksi.addSibling(row) : undefined}
+          onDelete={isNew ? () => aksi.deleteBaris(row.row_id) : undefined}
+          title={isAgg ? 'Aggregator: hapus anak dulu' : 'Hapus baris (hanya untuk baris baru)'}
+        />
+      </td>
+      )}
+    </tr>
+  )
+})
+
 function PergeseranTable({
   rows,
   onChange,
@@ -120,15 +345,24 @@ function PergeseranTable({
   const [addParent, setAddParent] = useState<PergeseranBarisInput | null>(null)
   const [delGuard,  setDelGuard]  = useState<{ uraian: string; childCount: number } | null>(null)
 
+  // Tahap 4 — cermin `DpaTable`: baris terbaru yang sudah commit, dibaca lewat ref
+  // supaya penangan per-baris punya identitas tetap dan `memo` pada barisnya
+  // benar-benar menggigit. Diisi di efek (sesudah commit), bukan saat render.
+  const rowsRef = useRef(rows)
+  useEffect(() => { rowsRef.current = rows })
+
   // Build child-count map untuk dynamic leaf/aggregator
-  const childCount = new Map<string, number>()
-  for (const r of rows) {
-    if (r.parent_id) childCount.set(r.parent_id, (childCount.get(r.parent_id) ?? 0) + 1)
-  }
+  const childCount = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const r of rows) {
+      if (r.parent_id) m.set(r.parent_id, (m.get(r.parent_id) ?? 0) + 1)
+    }
+    return m
+  }, [rows])
 
   // Edit vol_p / harga_p (baris editable) — auto recalc parent chain
   const updateVolHarga = useCallback((rowId: string, field: 'vol_p' | 'harga_p', value: number | null) => {
-    const updated = rows.map(r => {
+    const updated = rowsRef.current.map(r => {
       if (r.row_id !== rowId) return r
       const next = { ...r, [field]: value }
       next.pergeseran          = hitungJumlah(next.vol_p, next.harga_p)
@@ -136,7 +370,7 @@ function PergeseranTable({
       return next
     })
     onChange(partialRecalcPergeseran(updated, rowId))
-  }, [rows, onChange])
+  }, [onChange])
 
   // Edit kolom teks (hanya untuk baris baru hasil add manual). PJ & keterangan ikut
   // aturan yang sama: pada baris turunan DPA keduanya cermin, diisi lewat menu DPA.
@@ -145,17 +379,18 @@ function PergeseranTable({
     field: 'kode_rekening' | 'uraian' | 'penanggung_jawab' | 'keterangan',
     value: string,
   ) => {
-    onChange(rows.map(r => r.row_id === rowId ? { ...r, [field]: value } : r))
-  }, [rows, onChange])
+    onChange(rowsRef.current.map(r => r.row_id === rowId ? { ...r, [field]: value } : r))
+  }, [onChange])
 
   // Pick dari Master Akun → fill kode + uraian sekaligus
   const pickAkun = useCallback((rowId: string, akun: AkunOption) => {
-    onChange(rows.map(r => r.row_id === rowId ? { ...r, kode_rekening: akun.kode, uraian: akun.uraian } : r))
-  }, [rows, onChange])
+    onChange(rowsRef.current.map(r => r.row_id === rowId ? { ...r, kode_rekening: akun.kode, uraian: akun.uraian } : r))
+  }, [onChange])
 
   // Add baris baru sebagai child dari parent — CHAIN: leaf parent switch ke
   // aggregator (clear vol_p/harga_p) saat anak pertama ditambahkan.
   const addChild = useCallback((tipe: TipeBaris, parentRowId: string) => {
+    const rows = rowsRef.current
     const parentIdx = rows.findIndex(r => r.row_id === parentRowId)
     if (parentIdx === -1) return
     const parent = rows[parentIdx]
@@ -201,10 +436,11 @@ function PergeseranTable({
       el.classList.add('pj-sentinel-row-flash')
       window.setTimeout(() => el.classList.remove('pj-sentinel-row-flash'), 1700)
     }, 80)
-  }, [rows, onChange])
+  }, [onChange])
 
   // Tambah baris level sama (sibling) — tipe & parent sama, sisip setelah subtree baris ini
   const addSibling = useCallback((row: PergeseranBarisInput) => {
+    const rows = rowsRef.current
     const idx = rows.findIndex(r => r.row_id === row.row_id)
     if (idx === -1 || !row.parent_id) return
 
@@ -240,19 +476,24 @@ function PergeseranTable({
       el.classList.add('pj-sentinel-row-flash')
       window.setTimeout(() => el.classList.remove('pj-sentinel-row-flash'), 1700)
     }, 80)
-  }, [rows, onChange])
+  }, [onChange])
 
   // Multi-hapus — reuse seleksi cascade Sentinel Swap (geser tidak dipakai di Pergeseran).
   // Hanya baris baru (pgnew_*) yang dapat checkbox; descendant baris baru selalu baru juga.
+  // `setBlocked` HARUS stabil — arrow baru tiap render membuat `geser`/`toggleCheckbox`
+  // ikut berganti identitas dan `memo` di `PergeseranRow` tidak pernah menggigit.
   const { selectedRowIds, toggleCheckbox, selectAll, clearSelection } = useSentinelSwap({
-    rows, onChange, setBlocked: () => {},
+    rows, onChange, setBlocked: abaikanBlocked,
   })
-  const newRowIds = rows.filter(isNewRow).map(r => r.row_id)
-  const allNewSelected = newRowIds.length > 0 && newRowIds.every(id => selectedRowIds.has(id))
+  const { newRowIds, allNewSelected } = useMemo(() => {
+    const ids = rows.filter(isNewRow).map(r => r.row_id)
+    return { newRowIds: ids, allNewSelected: ids.length > 0 && ids.every(id => selectedRowIds.has(id)) }
+  }, [rows, selectedRowIds])
 
   // Delete baris. Aggregator (punya anak) blocked — modal peringatan.
   // Hanya baris baru (pgnew_*) atau leaf yang bisa dihapus langsung.
   const deleteBaris = useCallback((rowId: string) => {
+    const rows = rowsRef.current
     const target = rows.find(r => r.row_id === rowId)
     if (!target) return
     const directChildren = rows.filter(r => r.parent_id === rowId)
@@ -265,7 +506,7 @@ function PergeseranTable({
       .map((r, i) => ({ ...r, urutan: i }))
     onChange(recalcPergeseranJumlah(filtered))
     toast.success(`Baris "${target.uraian || target.kode_rekening || 'tanpa uraian'}" dihapus`)
-  }, [rows, onChange])
+  }, [onChange])
 
   // Multi-hapus: seleksi cascade = subtree utuh, aman filter sekali jalan
   const deleteSelected = useCallback(async () => {
@@ -286,7 +527,11 @@ function PergeseranTable({
     toast.success(`${count} baris dihapus dari tabel — tekan Simpan untuk menetapkannya`)
   }, [rows, selectedRowIds, onChange, clearSelection])
 
-  const fmt = (v: number | null | undefined) => (v != null && v !== 0) ? formatRupiah(v) : '-'
+  // Satu berkas aksi, satu identitas — cermin `aksi` di `DpaTable`.
+  const aksi = useMemo(() => ({
+    updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
+    bukaTambahAnak: setAddParent,
+  }), [updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris])
 
   return (
     <>
@@ -339,195 +584,18 @@ function PergeseranTable({
           <tbody>
             {rows.map(row => {
               if (hiddenLevels.has(TIPE_LABEL[row.tipe_baris])) return null
-              const _isHighlighted = row.row_id === highlightId
-              const isAgg    = (childCount.get(row.row_id) ?? 0) > 0
-              const editable = bolehUbah && EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
-              const isBold   = ['GRANDMASTER','MASTER','LEADER','PLETON-LEADER','KETUA-KELOMPOK-A','KETUA-KELOMPOK-B','L7-HEAD','L8-HEAD'].includes(row.tipe_baris)
-              const isGM     = row.tipe_baris === 'GRANDMASTER'
-              const bb       = row.bertambah_berkurang ?? 0
-              const isNew    = isNewRow(row)
-              const canAdd   = !!TIPE_CHILD_OPTIONS_PG[row.tipe_baris]
-
               return (
-                <tr key={row.row_id}
-                    id={`perg-row-${row.row_id}`}
-                    className={`${TIPE_ROW_CLASS[row.tipe_baris]}${_isHighlighted ? ' row-highlight' : ''}`}>
-                  {/* Checkbox multi-hapus — hanya baris baru */}
-                  <td style={{ padding: '2px 4px', textAlign: 'center' }}>
-                    {bolehUbah && isNew && (
-                      <input
-                        type="checkbox"
-                        className="dpa-row-checkbox"
-                        checked={selectedRowIds.has(row.row_id)}
-                        onChange={() => toggleCheckbox(row.row_id)}
-                        data-tooltip="Centang untuk menghapus beberapa baris sekaligus — baris di bawahnya ikut tercentang"
-                      />
-                    )}
-                  </td>
-
-                  {/* Level badge L1/L2/.. — sama seperti DPA */}
-                  <td style={{ padding: '2px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    <span data-tooltip={TIPE_LABEL[row.tipe_baris]} className="blud-level-badge">
-                      {TIPE_LABEL[row.tipe_baris].replace('Level ', 'L')}
-                    </span>
-                  </td>
-
-                  {/* Kode */}
-                  <td style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
-                    {isNew ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input
-                          type="text"
-                          value={row.kode_rekening}
-                          readOnly
-                          placeholder="auto-fill dari pilihan uraian"
-                          style={{ flex: 1, minWidth: 60, cursor: 'default' }}
-                        />
-                        <span style={{
-                          fontSize: 9, fontWeight: 800, letterSpacing: '.5px',
-                          padding: '2px 5px', borderRadius: 3,
-                          background: '#10B981', color: '#FFFFFF', flexShrink: 0,
-                        }}>BARU</span>
-                      </div>
-                    ) : row.kode_rekening}
-                  </td>
-
-                  {/* Uraian — combobox kalau baris baru, span kalau dari DPA */}
-                  <td>
-                    {isNew && bolehUbah ? (
-                      <MasterAkunCombobox
-                        value={row.uraian}
-                        options={akunOptions}
-                        onChange={v => updateText(row.row_id, 'uraian', v)}
-                        onSelect={akun => pickAkun(row.row_id, akun)}
-                        placeholder="Cari atau ketik uraian..."
-                      />
-                    ) : (
-                      <span style={{ fontWeight: isBold ? 700 : 400, fontSize: 13, color: isGM ? 'var(--blud-l1-text)' : undefined, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {row.uraian}
-                        {/* Warning kalau DPA aggregator (vol=null, jumlah>0) tapi
-                            Pergeseran local leaf (tidak punya anak) — struktur beda
-                            antara DPA & Pergeseran setelah inject */}
-                        {!isAgg && row.vol == null && row.harga == null && (row.jumlah ?? 0) > 0 && (
-                          <AlertTriangle
-                            className="w-3 h-3"
-                            style={{ color: '#F59E0B', flexShrink: 0 }}
-                            aria-label="Struktur berbeda dengan DPA"
-                          >
-                            <title>Di DPA baris ini punya rincian di bawahnya, di sini belum. Pertimbangkan menambahkan rinciannya.</title>
-                          </AlertTriangle>
-                        )}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Vol DPA (readOnly) */}
-                  <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
-                    {row.vol ?? '-'}
-                  </td>
-
-                  {/* Satuan */}
-                  <td style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>{row.satuan ?? '-'}</td>
-
-                  {/* Harga DPA */}
-                  <td style={{ textAlign: 'right', fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
-                    {fmt(row.harga)}
-                  </td>
-
-                  {/* Jumlah DPA */}
-                  <td style={{ textAlign: 'right' }}>
-                    <strong style={{ fontSize: 13, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
-                      {fmt(row.jumlah)}
-                    </strong>
-                  </td>
-
-                  {/* Vol P (editable saat LEAF) */}
-                  <td style={{ textAlign: 'right' }}>
-                    {editable
-                      ? <input type="number" value={row.vol_p ?? ''} min={0} style={{ textAlign: 'right' }}
-                          onChange={e => updateVolHarga(row.row_id, 'vol_p', e.target.value === '' ? null : Number(e.target.value))} />
-                      : <span style={{ fontSize: 12, opacity: isAgg ? .55 : 1 }}>
-                          {isAgg ? '—' : (row.vol_p ?? '-')}
-                        </span>
-                    }
-                  </td>
-
-                  {/* Harga P (editable saat LEAF) */}
-                  <td style={{ textAlign: 'right' }}>
-                    {editable
-                      ? <InputNominal value={row.harga_p ?? 0} style={{ textAlign: 'right' }}
-                          onChange={v => updateVolHarga(row.row_id, 'harga_p', v || null)} />
-                      : <span style={{ fontSize: 12, opacity: isAgg ? .55 : 1 }}>
-                          {isAgg ? '—' : fmt(row.harga_p)}
-                        </span>
-                    }
-                  </td>
-
-                  {/* Pergeseran */}
-                  <td style={{ textAlign: 'right' }}>
-                    <strong style={{ fontSize: 13, color: '#7DD3FC' }}>{fmt(row.pergeseran)}</strong>
-                  </td>
-
-                  {/* +/− */}
-                  <td style={{ textAlign: 'right' }}>
-                    <strong style={{
-                      fontSize: 13,
-                      color: bb > 0 ? '#6EE7B7' : bb < 0 ? '#FCA5A5' : '#85B7EB',
-                    }}>
-                      {bb > 0 ? '+' : ''}{bb !== 0 ? formatRupiah(bb) : '-'}
-                    </strong>
-                  </td>
-
-                  {/* Penanggung Jawab — cermin DPA, kecuali baris yang lahir di sini.
-                      Sengaja tanpa penjaga konflik chain seperti DPA: pemiliknya DPA,
-                      dan chain-conflict tetap ketahuan di panel audit menu Cetak. */}
-                  <td>
-                    {isNew && bolehUbah ? (
-                      <PenanggungJawabCombobox
-                        value={row.penanggung_jawab ?? ''}
-                        options={pjOptions}
-                        onChange={v => updateText(row.row_id, 'penanggung_jawab', v ?? '')}
-                        placeholder="— Pilih PJ —"
-                      />
-                    ) : (
-                      <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
-                        {row.penanggung_jawab || '-'}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Keterangan — sama aturannya dengan PJ */}
-                  <td>
-                    {isNew && bolehUbah ? (
-                      <input
-                        type="text"
-                        value={row.keterangan ?? ''}
-                        onChange={e => updateText(row.row_id, 'keterangan', e.target.value)}
-                        placeholder="Keterangan…"
-                        style={{ width: '100%' }}
-                      />
-                    ) : (
-                      <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
-                        {row.keterangan || '-'}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Aksi — kebab menu */}
-                  {bolehUbah && (
-                  <td style={{ textAlign: 'center', padding: '2px 4px' }}>
-                    <RowActionsMenu
-                      canAdd={canAdd}
-                      canSibling={!!row.parent_id}
-                      locked={!isNew && !canAdd}  // tampilkan kebab hanya kalau ada aksi tersedia
-                      onAddChild={canAdd ? () => setAddParent(row) : undefined}
-                      onAddSibling={row.parent_id ? () => addSibling(row) : undefined}
-                      onDelete={isNew ? () => deleteBaris(row.row_id) : undefined}
-                      title={isAgg ? 'Aggregator: hapus anak dulu' : 'Hapus baris (hanya untuk baris baru)'}
-                    />
-                  </td>
-                  )}
-                </tr>
+                <PergeseranRow
+                  key={row.row_id}
+                  row={row}
+                  terpilih={selectedRowIds.has(row.row_id)}
+                  disorot={row.row_id === highlightId}
+                  isAgg={(childCount.get(row.row_id) ?? 0) > 0}
+                  bolehUbah={bolehUbah}
+                  akunOptions={akunOptions}
+                  pjOptions={pjOptions}
+                  aksi={aksi}
+                />
               )
             })}
           </tbody>

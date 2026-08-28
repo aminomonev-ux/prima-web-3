@@ -16,7 +16,7 @@
 
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { geserBaris, geserBlock } from '@/lib/blud/recalc'
 import { buildChildMap, getDescendants } from '@/lib/blud/pj-conflict'
 import type { DpaBarisInput, PergeseranBarisInput, TipeBaris } from '@/types'
@@ -55,6 +55,20 @@ export function useSentinelSwap<T extends SentinelSwapRow>({
 }: UseSentinelSwapParams<T>): UseSentinelSwapReturn {
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
 
+  // Tahap 4 — `rows` dan `selectedRowIds` dibaca lewat ref supaya `toggleCheckbox`
+  // dan `geser` punya identitas TETAP. Keduanya dioper ke tiap baris tabel; kalau
+  // identitasnya berganti tiap kali ada satu sel disunting, `React.memo` pada
+  // barisnya tidak pernah menggigit dan 558 baris ikut di-render ulang.
+  //
+  // Diisi di dalam efek, BUKAN saat render: efek jalan sesudah commit, jadi ref
+  // selalu memegang nilai yang sudah terpasang di layar — persis semantik closure
+  // yang digantikannya. Mengisinya saat render bisa menyimpan hasil render yang
+  // ternyata dibatalkan.
+  const rowsRef = useRef(rows)
+  const pilihRef = useRef(selectedRowIds)
+  useEffect(() => { rowsRef.current = rows })
+  useEffect(() => { pilihRef.current = selectedRowIds })
+
   // Audit DPA 2026-06-11 B-2: buang id basi saat rows berganti (ganti versi /
   // generate ulang) — tanpa ini bar "Hapus Terpilih (n)" tampil dgn seleksi
   // milik dataset lama dan aksi hapus jadi no-op menyesatkan.
@@ -76,6 +90,7 @@ export function useSentinelSwap<T extends SentinelSwapRow>({
   // Per session notes: no indeterminate state.
   const toggleCheckbox = useCallback((rowId: string) => {
     setSelectedRowIds(prev => {
+      const rows = rowsRef.current
       const next = new Set(prev)
       const row = rows.find(r => r.row_id === rowId)
       if (!row) return prev
@@ -120,15 +135,17 @@ export function useSentinelSwap<T extends SentinelSwapRow>({
       }
       return next
     })
-  }, [rows])
+  }, [])
 
   // Geser hybrid mode:
   //   - selectedRowIds empty / clicked row not in set → single-row geser (leaf existing)
   //   - selectedRowIds non-empty + clicked row ter-check → block geser
   const geser = useCallback((rowId: string, direction: 'up' | 'down') => {
-    const inBlock = selectedRowIds.size > 0 && selectedRowIds.has(rowId)
+    const rows = rowsRef.current
+    const dipilih = pilihRef.current
+    const inBlock = dipilih.size > 0 && dipilih.has(rowId)
     const result = inBlock
-      ? geserBlock(rows, selectedRowIds, direction)
+      ? geserBlock(rows, dipilih, direction)
       : geserBaris(rows, rowId, direction)
     if (result.ok) {
       onChange(result.rows)
@@ -136,7 +153,7 @@ export function useSentinelSwap<T extends SentinelSwapRow>({
     } else if (result.blocked) {
       setBlocked({ ...result.blocked, direction })
     }
-  }, [rows, onChange, selectedRowIds, setBlocked])
+  }, [onChange, setBlocked])
 
   const isChecked = useCallback((rowId: string) => selectedRowIds.has(rowId), [selectedRowIds])
 

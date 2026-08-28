@@ -20,7 +20,7 @@
 
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   detectPjConflict, validateAllPj,
   type PjConflictRow, type PjGlobalConflict,
@@ -69,23 +69,38 @@ export function useSentinelPjGuard({
   const [pjConflict, setPjConflict] = useState<PjConflictState | null>(null)
   const [pjMutation, setPjMutation] = useState<PjMutationState | null>(null)
 
-  // Sentinel PJ — scan konflik chain vertikal tiap render.
+  // Tahap 4 — `handlePjChange` dioper ke tiap baris, jadi identitasnya harus
+  // tetap. Ia butuh MEMBACA `rows` untuk memutuskan apakah dialog konflik perlu
+  // muncul, dan keputusan itu efek samping yang tidak boleh hidup di dalam
+  // updater setState. Diisi di efek supaya ref memegang nilai yang sudah commit.
+  const rowsRef = useRef(rows)
+  useEffect(() => { rowsRef.current = rows })
+
+  // Sentinel PJ — scan konflik chain vertikal.
   // pjConflictPairs:    untuk banner overview (list pasangan + tombol Lompat)
   // pjConflictPartners: rowId → list partner konflik (untuk icon ⚠ click & tooltip)
-  const pjConflictPairs = validateAllPj(rows)
-  const pjConflictPartners = new Map<string, PjConflictPartner[]>()
-  for (const pair of pjConflictPairs) {
-    if (!pjConflictPartners.has(pair.row.row_id)) pjConflictPartners.set(pair.row.row_id, [])
-    pjConflictPartners.get(pair.row.row_id)!.push({
-      row_id: pair.conflict.row_id, kode: pair.conflict.kode_rekening,
-      uraian: pair.conflict.uraian,  pj:   pair.conflict.pj,
-    })
-    if (!pjConflictPartners.has(pair.conflict.row_id)) pjConflictPartners.set(pair.conflict.row_id, [])
-    pjConflictPartners.get(pair.conflict.row_id)!.push({
-      row_id: pair.row.row_id, kode: pair.row.kode_rekening,
-      uraian: pair.row.uraian,  pj:   pair.row.pj,
-    })
-  }
+  //
+  // Tahap 4 — `useMemo`, bukan dihitung ulang tiap render. Bukan karena scan-nya
+  // mahal (pada 558 baris ia tidak masuk hitungan long-task), tapi karena Map dan
+  // larik di dalamnya dioper ke tiap baris tabel: identitas baru tiap render
+  // membuat `React.memo` pada baris tidak pernah menggigit.
+  const { pjConflictPairs, pjConflictPartners } = useMemo(() => {
+    const pairs = validateAllPj(rows)
+    const partners = new Map<string, PjConflictPartner[]>()
+    for (const pair of pairs) {
+      if (!partners.has(pair.row.row_id)) partners.set(pair.row.row_id, [])
+      partners.get(pair.row.row_id)!.push({
+        row_id: pair.conflict.row_id, kode: pair.conflict.kode_rekening,
+        uraian: pair.conflict.uraian,  pj:   pair.conflict.pj,
+      })
+      if (!partners.has(pair.conflict.row_id)) partners.set(pair.conflict.row_id, [])
+      partners.get(pair.conflict.row_id)!.push({
+        row_id: pair.row.row_id, kode: pair.row.kode_rekening,
+        uraian: pair.row.uraian,  pj:   pair.row.pj,
+      })
+    }
+    return { pjConflictPairs: pairs, pjConflictPartners: partners }
+  }, [rows])
 
   // Jump-to-row + flash animation untuk tombol Lompat di banner Sentinel PJ.
   const jumpToRow = useCallback((rowId: string) => {
@@ -113,7 +128,7 @@ export function useSentinelPjGuard({
       updateRow(row.row_id, 'penanggung_jawab', isClear ? null : newPj)
       return
     }
-    const result = detectPjConflict(rows, row.row_id)
+    const result = detectPjConflict(rowsRef.current, row.row_id)
     if (!result.hasConflict) {
       updateRow(row.row_id, 'penanggung_jawab', newPj)
       return
@@ -125,7 +140,7 @@ export function useSentinelPjGuard({
       ancestors:    result.ancestors,
       descendants:  result.descendants,
     })
-  }, [rows, updateRow])
+  }, [updateRow])
 
   return {
     pjConflict, setPjConflict,
