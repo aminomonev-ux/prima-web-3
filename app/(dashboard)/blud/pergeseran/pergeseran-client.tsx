@@ -25,8 +25,9 @@ import type { SimpananItem } from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import PeriodeVersiSelect from '@/components/blud/PeriodeVersiSelect'
 import SpandukLihat from '@/components/blud/SpandukLihat'
-import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk } from '@/lib/blud/tanggal'
+import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk, periodeUntukVersi } from '@/lib/blud/tanggal'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
+import { useIngatkanBelumTersimpan } from '@/lib/shared/belum-tersimpan'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
 import type { PergeseranBarisInput, PergeseranBaris, DpaBaris, TipeBaris } from '@/types'
 
@@ -618,6 +619,9 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // Ia juga menentukan DPA mana yang ditarik "Buat Pergeseran": Pergeseran Januari
   // harus lahir dari DPA Januari, bukan DPA terbaru.
   const [periodeTulis, setPeriodeTulis] = useState('')
+  // Cermin layar DPA: `versi` menjawab "slot mana yang dibuka", ini menjawab
+  // "apakah yang di layar sudah sama dengan yang tersimpan di slot itu".
+  const [belumTersimpan, setBelumTersimpan] = useState(false)
   // Jejak "baris ini dipulihkan dari simpanan jam sekian" — semata memperpanjang
   // baris detail audit, sepadan `asalSalinRef` di layar DPA.
   const asalPulihkanRef = useRef<{ id: number; versi_ke: number; disimpan_pada: string } | null>(null)
@@ -716,6 +720,17 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     else toast.error(msg)
   }
 
+  /**
+   * SATU-SATUNYA jalan bagi tabel untuk mengubah baris — dipasang sebagai
+   * `onChange` PergeseranTable, jadi tiap sunting sel ikut menandai layar belum
+   * tersimpan. `setRows` langsung tetap dipakai untuk yang BUKAN suntingan
+   * orang: muatan server dan penyerapan jangkar sesudah Simpan berhasil.
+   */
+  const ubahRows = useCallback((next: PergeseranBarisInput[]) => {
+    setBelumTersimpan(true)
+    setRows(next)
+  }, [])
+
   const loadHistory = useCallback(async () => {
     try {
       const res  = await fetch(`/api/blud/pergeseran?mode=history&tahun=${tahun}`)
@@ -781,6 +796,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         setRows((json.data as PergeseranBaris[]).map(pergeseranKeInput))
         setVersi(json.versi_tanggal || '')
         setVersion(typeof json.version === 'number' ? json.version : 0)
+        setBelumTersimpan(false)
         const firstRow = json.data[0] as PergeseranBaris
         if (firstRow?.dpa_versi_tanggal) setDpaVersi(firstRow.dpa_versi_tanggal)
         // Barisnya diganti muatan server — jejak "ini pulihan" tidak berlaku lagi.
@@ -831,6 +847,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       setRows(recalcPergeseranJumlah(json.data.isi as PergeseranBarisInput[]))
       setVersi(s.versi_tanggal)
       setVersion(vJson.version)
+      // Periode ikut pindah ke tanggal snapshot — cermin layar DPA. Tanpa ini
+      // layar memperlihatkan simpanan 31 Juli sementara Simpan menulis ke bulan
+      // berjalan.
+      setPeriodeTulis(periodeUntukVersi(s.versi_tanggal))
+      setBelumTersimpan(true)
       // Acuan DPA ikut dipulihkan dari snapshot — kalau tidak, Simpan berikutnya
       // memakai acuan yang kebetulan sedang terpilih di layar, bukan acuan aslinya.
       if (json.data.dpa_versi_tanggal) setDpaVersi(json.data.dpa_versi_tanggal)
@@ -899,6 +920,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       setRows(generated)
       setDpaVersi(json.versi_tanggal || '')
       setVersi('')
+      setBelumTersimpan(true)
       showToast(periodeTulis
         ? `Tabel disalin dari DPA ${formatTanggalId(json.versi_tanggal || periodeTulis)} — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`
         : `Tabel disalin dari DPA ${tahun} terbaru — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`)
@@ -914,7 +936,9 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
    */
   async function gantiPeriode(tanggal: string) {
     if (tanggal === periodeTulis) return
-    if (rows.length > 0 && !versi) {
+    // Patokannya `belumTersimpan`, BUKAN `versi` kosong — sesudah Pulihkan atau
+    // sesudah satu sel disunting, `versi` terisi padahal isinya belum tersimpan.
+    if (rows.length > 0 && belumTersimpan) {
       const buang = await confirmDialog({
         title:   'Ganti periode?',
         message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
@@ -930,9 +954,54 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       setRows([])
       setVersi('')
       setVersion(0)
+      setBelumTersimpan(false)
     } else {
       await loadPergeseran()
     }
+  }
+
+  /** Ganti tahun anggaran — sepadan `gantiPeriode`, dan sama-sama mengganti layar. */
+  async function gantiTahun(t: number) {
+    if (t === tahun) return
+    if (rows.length > 0 && belumTersimpan) {
+      const buang = await confirmDialog({
+        title:   'Ganti tahun anggaran?',
+        message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
+          + `Berpindah ke tahun ${t} membuangnya.`,
+        confirmLabel: 'Ganti, buang isian',
+        cancelLabel:  'Tetap di sini',
+        variant:      'danger',
+      })
+      if (!buang) return
+    }
+    setTahun(t)
+    setVersi('')
+    setRows([])
+    setPeriodeTulis('')
+    setBelumTersimpan(false)
+  }
+
+  /**
+   * Membuka satu versi tersimpan dari daftar — cermin `bukaVersi` di layar DPA.
+   * Periode IKUT ke versi yang dibuka, jadi Simpan selalu menulis ke tempat
+   * yang sedang dibaca layar.
+   */
+  async function bukaVersi(v: string) {
+    if (!v || v === versi) return
+    if (rows.length > 0 && belumTersimpan) {
+      const buang = await confirmDialog({
+        title:   'Buka versi lain?',
+        message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
+          + `Membuka versi ${formatTanggalId(v)} menggantikannya.`,
+        confirmLabel: 'Buka, buang isian',
+        cancelLabel:  'Tetap di sini',
+        variant:      'danger',
+      })
+      if (!buang) return
+    }
+    setVersi(v)
+    setPeriodeTulis(periodeUntukVersi(v))
+    await loadPergeseran(v)
   }
 
   // Inject: update kolom 0-5 dari DPA terbaru tanpa ubah vol_p/harga_p
@@ -947,6 +1016,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       const json = await res.json()
       if (json.ok) {
         setRows(json.data)
+        setBelumTersimpan(true)
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
         showToast('Kolom DPA sudah disamakan dengan versi terbaru.')
         // B5: match tier heuristik longgar bisa salah tempel vol_p/harga_p — minta user periksa
@@ -1035,19 +1105,29 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         // menyetel state kalau server mengirim baris, jadi memuat versi yang belum
         // ada tidak mengubah apa pun dan Simpan berikutnya ditolak lagi, terus
         // berputar tanpa jalan keluar.
-        const ambilMilikMereka = await confirmDialog({
-          title:   'Versi ini baru saja diisi orang lain',
-          message: `Sementara layar ini terbuka, ada yang menyimpan versi ${formatTanggalId(versiTanggal)}. `
-            + `Isian di layar Anda (${rows.length} baris) belum tersimpan di mana pun.\n\n`
-            + `Muat punya mereka — isian Anda hilang.\n`
-            + `Tetap pakai isian Anda — punya mereka yang tertimpa, begitu Anda tekan Simpan sekali lagi.`,
-          confirmLabel: 'Muat punya mereka',
+        //
+        // Cermin layar DPA: `expected = 0` berarti layar menyusun versi BARU dan
+        // tanggalnya ternyata sudah terisi — paling sering simpanan sendiri yang
+        // lebih awal, bukan rekan kerja. Menuduh "orang lain" di situ membuat
+        // orang mencari tersangka yang tidak ada.
+        const versiBaruTernyataAda = json.expected === 0
+        const ambilYangTersimpan = await confirmDialog({
+          title: versiBaruTernyataAda
+            ? `Versi ${formatTanggalId(versiTanggal)} sudah ada isinya`
+            : 'Versi ini berubah sejak layar dibuka',
+          message: (versiBaruTernyataAda
+            ? `Layar ini menyusun versi baru, tapi versi ${formatTanggalId(versiTanggal)} ternyata sudah tersimpan — bisa simpanan Anda sendiri yang lebih awal, bisa rekan kerja. `
+            : `Sementara layar ini terbuka, versi ${formatTanggalId(versiTanggal)} disimpan ulang — bisa dari tab Anda yang lain, bisa rekan kerja. `)
+            + `Isian di layar (${rows.length} baris) belum tersimpan di mana pun.\n\n`
+            + `Muat yang tersimpan — isian di layar hilang.\n`
+            + `Tetap pakai isian layar — yang tersimpan tertimpa, begitu Anda tekan Simpan sekali lagi.`,
+          confirmLabel: 'Muat yang tersimpan',
           cancelLabel:  'Tetap pakai isian saya',
           variant:      'warning',
         })
-        if (ambilMilikMereka) { await loadPergeseran(versiTanggal); return }
+        if (ambilYangTersimpan) { await loadPergeseran(versiTanggal); return }
         if (typeof json.actual === 'number') { setVersi(versiTanggal); setVersion(json.actual) }
-        showToast('Isian Anda dipertahankan. Tekan Simpan sekali lagi kalau memang mau menimpa punya mereka.', false)
+        showToast('Isian Anda dipertahankan. Tekan Simpan sekali lagi kalau memang mau menimpa yang tersimpan.', false)
         return
       }
       if (res.status === 409 && json.code === 'SAFETY_THRESHOLD') {
@@ -1064,7 +1144,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         return
       }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); setPeriodeTulis(''); loadHistory(); loadTahunList(); loadRiwayat()
+        showToast(json.message)
+        setVersi(versiTanggal)
+        // Periode TETAP di versi yang barusan ditulis — cermin layar DPA.
+        // `setPeriodeTulis('')` di sini dulu membuat koreksi kedua mendarat di
+        // bulan berjalan, bukan di bulan yang barusan disimpan.
+        setPeriodeTulis(periodeUntukVersi(versiTanggal))
+        setBelumTersimpan(false)
+        loadHistory(); loadTahunList(); loadRiwayat()
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pemulihan.
         asalPulihkanRef.current = null
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
@@ -1097,6 +1184,23 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     [rows],
   )
 
+  // L78 — "Buat Pergeseran" bisa menghasilkan ratusan baris yang belum tersimpan
+  // di mana pun; satu klik menu atau satu Ctrl+R dulu membuangnya diam-diam.
+  useIngatkanBelumTersimpan(
+    belumTersimpan && rows.length > 0
+      ? `Ada ${rows.length} baris Pergeseran ${tahun} di layar yang belum tersimpan. Meninggalkan halaman ini membuangnya.`
+      : null,
+  )
+
+  // Cermin layar DPA: tombol yang mengganti SELURUH tabel dikunci selama versi
+  // tersimpan sedang terbuka. Di sini cuma satu — "Buat Pergeseran". "Sinkronkan
+  // DPA" SENGAJA tidak ikut: ia memperbarui kolom sisi DPA di tempat, menjaga
+  // `row_id` dan vol_p/harga_p, jadi jangkarnya utuh dan itu pekerjaan normal
+  // pada versi yang sudah tersimpan.
+  const alasanKunciBorongan = versi
+    ? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
+    : ''
+
   return (
     <div className="space-y-4">
       {/* Confirm Inject Dialog */}
@@ -1128,7 +1232,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             value={tahun}
             items={tahunList}
             current={CURRENT_YEAR}
-            onChange={t => { setTahun(t); setVersi(''); setRows([]); setPeriodeTulis('') }}
+            onChange={t => { void gantiTahun(t) }}
           />
         </div>
 
@@ -1144,8 +1248,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         {bolehUbah && (
           <>
             <PrimaButton variant="purple" iconLeft={<Sparkles className="w-3.5 h-3.5" />}
-              disabled={loading} onClick={generate}
-              data-tooltip="Salin isi DPA terbaru tahun ini jadi tabel pergeseran baru" data-rima="pergeseran.buat">
+              disabled={loading || !!alasanKunciBorongan} onClick={generate}
+              data-tooltip={alasanKunciBorongan
+                || 'Salin isi DPA terbaru tahun ini jadi tabel pergeseran baru'}
+              data-rima="pergeseran.buat">
               Buat Pergeseran
             </PrimaButton>
 
@@ -1171,7 +1277,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           <VersiDropdown
             value={versi}
             items={history}
-            onChange={v => { setVersi(v); if (v) loadPergeseran(v) }}
+            onChange={v => { void bukaVersi(v) }}
             placeholder="— Pilih History —"
             riwayat={riwayat}
             onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
@@ -1292,7 +1398,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           <p style={{ fontSize:11, marginTop:4 }}>Tekan &quot;Buat Pergeseran&quot; untuk menyalin isi DPA terbaru ke sini.</p>
         </div>
       ) : (
-        <PergeseranTable rows={rows} onChange={setRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
+        <PergeseranTable rows={rows} onChange={ubahRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
       )}
 
       {/* Audit BLUD v1.2 (B-NEW-3): modal konfirmasi safety threshold drop >50% */}

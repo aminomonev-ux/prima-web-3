@@ -118,8 +118,11 @@ bab('B. Ganti periode menggerakkan layar')
   // Kembali ke bulan berjalan HARUS memuat ulang, bukan meninggalkan layar kosong
   // — kalau kosong, Simpan berikutnya menulis form kosong ke versi hari ini.
   cek('Kembali ke bulan berjalan memuat ulang', badanDpa.includes('await loadDpa()'))
+  // Patokannya naik dari `!versi` ke `belumTersimpan` (2026-08-28): `versi`
+  // kosong melewatkan dua kasus nyata — sesudah Pulihkan dan sesudah satu sel
+  // disunting, `versi` terisi padahal isinya belum tersimpan di mana pun.
   cek('Isian belum tersimpan dikonfirmasi dulu',
-    badanDpa.includes('confirmDialog') && badanDpa.includes('rows.length > 0 && !versi'))
+    badanDpa.includes('confirmDialog') && badanDpa.includes('rows.length > 0 && belumTersimpan'))
   cek('gantiPeriode melepas jejak asal', badanDpa.includes('asalImporRef.current    = null'))
 
   cek('Pergeseran memakai gantiPeriode juga', pgs.includes('async function gantiPeriode'))
@@ -127,7 +130,7 @@ bab('B. Ganti periode menggerakkan layar')
     /value=\{periodeTulis\}[\s\S]{0,120}gantiPeriode/.test(pgs))
   const badanPgs = pgs.slice(pgs.indexOf('async function gantiPeriode')).slice(0, 1200)
   cek('Pergeseran juga bertanya sebelum membuang',
-    badanPgs.includes('confirmDialog') && badanPgs.includes('rows.length > 0 && !versi'))
+    badanPgs.includes('confirmDialog') && badanPgs.includes('rows.length > 0 && belumTersimpan'))
 }
 
 bab('C. Rantai asal_impor — modal → klien → Zod → audit')

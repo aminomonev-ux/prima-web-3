@@ -104,10 +104,13 @@ for (const [nama, path] of layar) {
     !/expected_version:\s*version\b/.test(isi),
     'pola lama yang menyebabkan bug')
 
-  // Tanggal tujuan tetap dicetak dari WIB, bukan dari `versi` yang sedang dibuka —
-  // kalau ini berubah, arti argumen pertama helper ikut berubah.
-  cek(`B4 ${nama} menyimpan ke tanggalHariIniWIB()`,
-    /doSimpanInternal\(tanggalHariIniWIB\(\)\)/.test(isi))
+  // Tanggal tujuan tetap dicetak dari WIB atau dari periode yang DIPILIH, bukan
+  // dari `versi` yang sedang dibuka — kalau ini berubah, arti argumen pertama
+  // helper ikut berubah. `periodeTulis ||` masuk di L78 (arsip bulan lampau);
+  // yang dijaga tetap sama: tanggal tujuan tidak boleh diambil dari `versi`.
+  cek(`B4 ${nama} menyimpan ke periode terpilih atau tanggalHariIniWIB()`,
+    /doSimpanInternal\((periodeTulis \|\| )?tanggalHariIniWIB\(\)\)/.test(isi)
+    && !/doSimpanInternal\(versi\b/.test(isi))
 }
 
 // ── C. Konflik sungguhan tidak boleh membuang pekerjaan diam-diam ────────────
@@ -134,8 +137,10 @@ for (const [nama, path] of layar) {
     /cancelLabel:\s*'Tetap pakai isian saya'/.test(blok),
     'Esc / klik luar = false → yang tidak merusak jadi bawaan')
 
+  // Nama penampung jawabannya bebas — yang dijaga bentuknya: memuat ulang
+  // BERSYARAT, bukan `await load…()` telanjang di awal blok.
   cek(`C4 ${nama} memuat ulang HANYA kalau diminta`,
-    /if\s*\(\s*ambilMilikMereka\s*\)\s*\{\s*await load/.test(blok),
+    /if\s*\(\s*\w+\s*\)\s*\{\s*await load/.test(blok),
     'bukan `await load…()` tanpa syarat')
 
   // Tanpa ini "tetap pakai isian saya" jadi jalan buntu: Simpan berikutnya

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import ThemeToggle from '@/components/ui/ThemeToggle'
+import { bolehTinggalkanHalaman } from '@/lib/shared/belum-tersimpan'
 import { bolehBuka, type Izin, type MenuBlud } from '@/lib/blud/peran'
 import type { Role } from '@/types'
 
@@ -131,6 +132,10 @@ export default function BludShell({ username, role, izin, themePreference, child
   }, [overflowOpen, posisikanOverflow])
 
   async function handleLogout() {
+    // Ditanya SEBELUM sesinya dimatikan. Terbalik, menjawab "tetap di sini"
+    // meninggalkan orang di halaman bersesi mati — Simpan berikutnya kena 401
+    // dan isiannya tetap hilang, justru sesudah dijanjikan tidak.
+    if (!(await bolehTinggalkanHalaman())) return
     setLoggingOut(true)
     await fetch('/api/auth/logout', { method: 'POST' })
     window.location.href = '/login'
@@ -247,7 +252,7 @@ export default function BludShell({ username, role, izin, themePreference, child
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Tombol Menu — seragam dengan kinerja-menu-btn (Home icon + label "Menu") */}
           <button
-            onClick={() => router.push('/menu')}
+            onClick={() => { void (async () => { if (await bolehTinggalkanHalaman()) router.push('/menu') })() }}
             className="blud-back-btn"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -299,7 +304,7 @@ export default function BludShell({ username, role, izin, themePreference, child
                   <div style={{ fontSize: 10.5, color: isLight ? '#6B7280' : '#85B7EB', marginTop: 1, fontWeight: 500 }}>{roleLabel}</div>
                 </div>
                 <button
-                  onClick={() => { setDropOpen(false); router.push('/profil') }}
+                  onClick={() => { void (async () => { setDropOpen(false); if (await bolehTinggalkanHalaman()) router.push('/profil') })() }}
                   className="blud-dd-item"
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px',

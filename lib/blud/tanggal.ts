@@ -98,6 +98,20 @@ const BULAN_PANJANG = [
 ]
 
 /**
+ * '2026-07-31' → 'Juli 2026'. Nilai yang tidak dikenali dikembalikan apa adanya.
+ *
+ * Dipakai dua tempat yang harus berbunyi sama: daftar pilihan di bawah, dan
+ * `PeriodeVersiSelect` saat harus menampilkan periode yang bulannya SUDAH punya
+ * versi — periode itu tidak ada di daftar, jadi labelnya tidak bisa diambil
+ * dari sana.
+ */
+export function labelPeriodeVersi(tanggal: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(String(tanggal))
+  if (!m) return String(tanggal)
+  return `${BULAN_PANJANG[Number(m[2]) - 1] ?? m[2]} ${m[1]}`
+}
+
+/**
  * Bulan mana saja yang boleh dipilih sebagai versi historis.
  *
  * Dua syarat, dan keduanya punya alasan berbeda:
@@ -132,9 +146,50 @@ export function periodeHistorisTersedia(
   for (let b = 1; b <= batas; b++) {
     const tanggal = akhirBulan(tahun, b)
     if (terpakai.has(tanggal.slice(0, 7))) continue
-    hasil.push({ bulan: b, label: `${BULAN_PANJANG[b - 1]} ${tahun}`, tanggal })
+    hasil.push({ bulan: b, label: labelPeriodeVersi(tanggal), tanggal })
   }
   return hasil
+}
+
+/**
+ * Apakah `tanggal` itu tanggal kanonik sebuah PERIODE historis — hari terakhir
+ * bulan yang sudah lewat?
+ *
+ * Bedanya penting, dan bukan soal rapi-rapian. Ada dua jenis versi di tabel
+ * yang sama:
+ *
+ *   • 2026-08-27 — revisi harian biasa, lahir pada hari orang menyimpannya.
+ *   • 2026-07-31 — arsip periode, lahir karena seseorang SENGAJA memilih
+ *     "Periode Juli" di pemilih periode. Tanggalnya tidak pernah kebetulan.
+ *
+ * Yang membedakan hanya bentuk tanggalnya, jadi di sinilah pembedanya tinggal.
+ */
+export function tanggalPeriodeHistoris(tanggal: string, sekarang: number = Date.now()): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(tanggal))
+  if (!m) return false
+  if (tanggal !== akhirBulan(Number(m[1]), Number(m[2]))) return false
+  // Akhir bulan BERJALAN masih di depan, jadi ia bukan periode historis —
+  // `periodeHistorisTersedia` juga tidak pernah menawarkannya.
+  return tanggal < `${tanggalHariIniWIB(sekarang).slice(0, 8)}01`
+}
+
+/**
+ * Nilai pemilih periode yang MEWAKILI sebuah `versi_tanggal` di layar.
+ *
+ * Pemilih periode dan versi yang dibuka harus menunjuk hal yang sama — kalau
+ * tidak, Simpan menulis ke tempat yang berbeda dari yang dibaca layar. Itu bug
+ * yang dilaporkan (L78b), dan ia punya empat pintu: memilih periode, membuka
+ * versi dari daftar, memulihkan snapshot, dan selesai menyimpan. Keempatnya
+ * lewat sini supaya jawabannya satu.
+ *
+ * Revisi harian memulangkan '' — SENGAJA. Membuka revisi 27 Agustus lalu
+ * menekan Simpan harus melahirkan revisi HARI INI, seperti sedia kala; kalau
+ * pemilih periode ikut mengunci ke 27 Agustus, tiap penyuntingan menimpa revisi
+ * kemarin dan riwayat harian berhenti tumbuh. Yang dikunci hanya arsip periode,
+ * karena di situlah "simpan lagi" memang harus mendarat di bulan yang sama.
+ */
+export function periodeUntukVersi(versiTanggal: string, sekarang: number = Date.now()): string {
+  return tanggalPeriodeHistoris(versiTanggal, sekarang) ? versiTanggal : ''
 }
 
 /**

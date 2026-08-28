@@ -22,7 +22,7 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcDpa, recalcDpaJumlah } from '@/lib/blud/recalc'
 import { dpaKeInput } from '@/lib/blud/row-map'
-import { tanggalHariIniWIB, formatTanggalId, expectedVersionUntuk } from '@/lib/blud/tanggal'
+import { tanggalHariIniWIB, formatTanggalId, expectedVersionUntuk, periodeUntukVersi } from '@/lib/blud/tanggal'
 import { buildDpaRowsFromKodeBesar } from '@/lib/blud/dpa-skeleton-builder'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import BlockedModal, { type BlockedInfo } from '@/components/blud/BlockedModal'
@@ -43,6 +43,7 @@ import { PjConflictDialog, PjMutationDialog } from '@/components/blud/PjGuardDia
 import { findAncestorPjOnAdd } from '@/lib/blud/pj-conflict'
 import { useSentinelPjGuard } from '@/lib/blud/use-sentinel-pj-guard'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
+import { useIngatkanBelumTersimpan } from '@/lib/shared/belum-tersimpan'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
 import type { DpaBarisInput, DpaBaris, TipeBaris } from '@/types'
 
@@ -875,6 +876,12 @@ export default function DpaClient({
   // Periode yang akan DITULIS saat Simpan. '' = bulan berjalan (perilaku bawaan).
   // Beda peran dengan `versi` di atas: itu versi yang sedang DIBUKA/dibaca.
   const [periodeTulis, setPeriodeTulis] = useState('')
+  // `versi` menjawab "slot mana yang sedang dibuka". Ini menjawab pertanyaan
+  // yang LAIN: "apakah yang di layar sudah sama dengan yang tersimpan di slot
+  // itu". Dulu keduanya diwakili `versi` saja, dan itu salah di dua arah —
+  // sesudah Pulihkan `versi` terisi padahal isinya justru belum tersimpan, dan
+  // menyunting satu sel pada versi yang dimuat tidak terdeteksi sama sekali.
+  const [belumTersimpan, setBelumTersimpan] = useState(false)
   const [loading,     setLoading]     = useState(false)
   const [saving,      setSaving]      = useState(false)
   const [akunOptions, setAkunOptions] = useState<AkunOption[]>([])
@@ -960,6 +967,19 @@ export default function DpaClient({
     else toast.error(msg)
   }
 
+  /**
+   * SATU-SATUNYA jalan bagi tabel untuk mengubah baris. Dipasang sebagai
+   * `onChange` DpaTable, jadi setiap sunting sel — juga tambah/hapus baris dan
+   * geser Sentinel — lewat sini dan menandai layar belum tersimpan.
+   *
+   * Jalur `setRows` langsung sengaja dibiarkan untuk yang BUKAN suntingan orang:
+   * muatan dari server, dan penyerapan jangkar sesudah Simpan berhasil.
+   */
+  const ubahRows = useCallback((next: DpaBarisInput[]) => {
+    setBelumTersimpan(true)
+    setRows(next)
+  }, [])
+
   // L51: optimistic locking version state (R1 prevent lost update)
   const [version, setVersion] = useState<number>(0)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §7) — dimensi di atas versi.
@@ -999,6 +1019,7 @@ export default function DpaClient({
         setRows((json.data as DpaBaris[]).map(dpaKeInput))
         setVersi(json.versi_tanggal || '')
         setVersion(typeof json.version === 'number' ? json.version : 0)
+        setBelumTersimpan(false)
         // Barisnya diganti muatan dari server — jejak "ini salinan tahun X" tidak
         // berlaku lagi. Dibiarkan menempel, ia akan mengotori audit simpan berikutnya.
         asalSalinRef.current    = null
@@ -1071,6 +1092,11 @@ export default function DpaClient({
       setRows(recalcDpaJumlah(json.data.isi as DpaBarisInput[]))
       setVersi(s.versi_tanggal)
       setVersion(vJson.version)
+      // Periode ikut pindah ke tanggal snapshot-nya. Tanpa ini layar
+      // memperlihatkan simpanan 31 Juli sementara Simpan tetap menulis ke bulan
+      // berjalan — pintu ketiga dari bug yang sama, lewat tombol Pulihkan.
+      setPeriodeTulis(periodeUntukVersi(s.versi_tanggal))
+      setBelumTersimpan(true)
       asalSalinRef.current  = null
       asalImporRef.current  = null
       asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
@@ -1098,6 +1124,15 @@ export default function DpaClient({
   useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
   // loadDpa/loadHistory ber-dep [tahun] → efek ini refire saat tahun berganti.
   useEffect(() => { void (async () => { await loadDpa(); await loadHistory(); await loadRiwayat() })() }, [loadDpa, loadHistory, loadRiwayat])
+
+  // L78 — hasil impor/Form Baru/Salin Tahun/Pulihkan hidup di FORM sampai Simpan
+  // ditekan. Sebelum ini satu klik menu, satu Ctrl+R, atau satu klik Keluar bisa
+  // membuang ratusan baris tanpa sepatah kata pun.
+  useIngatkanBelumTersimpan(
+    belumTersimpan && rows.length > 0
+      ? `Ada ${rows.length} baris DPA ${tahun} di layar yang belum tersimpan. Meninggalkan halaman ini membuangnya.`
+      : null,
+  )
 
   async function simpan() {
     if (!rows.length) { showToast('Form masih kosong — belum ada yang bisa disimpan.', false); return }
@@ -1160,22 +1195,35 @@ export default function DpaClient({
         // justru menyuruh "periksa dulu, lalu simpan ulang", yang mustahil kalau
         // isiannya sudah lenyap. Sekarang orangnya yang memutuskan, dan pilihan
         // yang TIDAK menghancurkan apa pun jadi jawaban bawaan (Esc / klik luar).
-        const ambilMilikMereka = await confirmDialog({
-          title:   'Versi ini baru saja diisi orang lain',
-          message: `Sementara layar ini terbuka, ada yang menyimpan versi ${formatTanggalId(versiTanggal)}. `
-            + `Isian di layar Anda (${rows.length} baris) belum tersimpan di mana pun.\n\n`
-            + `Muat punya mereka — isian Anda hilang.\n`
-            + `Tetap pakai isian Anda — punya mereka yang tertimpa, begitu Anda tekan Simpan sekali lagi.`,
-          confirmLabel: 'Muat punya mereka',
+        //
+        // Dua keadaan yang berbeda, dan dulu keduanya dituduh "orang lain":
+        //   expected > 0 → versi yang SEDANG dibuka bergerak sejak layar dibuka.
+        //   expected = 0 → layar menyusun versi BARU, tapi tanggalnya ternyata
+        //                  sudah terisi. Paling sering itu simpanan SENDIRI yang
+        //                  lebih awal — mis. menyimpan ke periode Juli dari layar
+        //                  yang belum memuat versi Julinya. Menyebut "orang lain"
+        //                  di situ membuat orang mencari rekan kerja yang tidak ada.
+        const versiBaruTernyataAda = json.expected === 0
+        const ambilYangTersimpan = await confirmDialog({
+          title: versiBaruTernyataAda
+            ? `Versi ${formatTanggalId(versiTanggal)} sudah ada isinya`
+            : 'Versi ini berubah sejak layar dibuka',
+          message: (versiBaruTernyataAda
+            ? `Layar ini menyusun versi baru, tapi versi ${formatTanggalId(versiTanggal)} ternyata sudah tersimpan — bisa simpanan Anda sendiri yang lebih awal, bisa rekan kerja. `
+            : `Sementara layar ini terbuka, versi ${formatTanggalId(versiTanggal)} disimpan ulang — bisa dari tab Anda yang lain, bisa rekan kerja. `)
+            + `Isian di layar (${rows.length} baris) belum tersimpan di mana pun.\n\n`
+            + `Muat yang tersimpan — isian di layar hilang.\n`
+            + `Tetap pakai isian layar — yang tersimpan tertimpa, begitu Anda tekan Simpan sekali lagi.`,
+          confirmLabel: 'Muat yang tersimpan',
           cancelLabel:  'Tetap pakai isian saya',
           variant:      'warning',
         })
-        if (ambilMilikMereka) { await loadDpa(versiTanggal); return }
+        if (ambilYangTersimpan) { await loadDpa(versiTanggal); return }
         // Menyejajarkan angka kunci ke keadaan server. Tanpa ini Simpan berikutnya
         // ditolak lagi memakai angka yang sudah basi, dan "tetap pakai isian saya"
         // berubah jadi jalan buntu.
         if (typeof json.actual === 'number') { setVersi(versiTanggal); setVersion(json.actual) }
-        showToast('Isian Anda dipertahankan. Tekan Simpan sekali lagi kalau memang mau menimpa punya mereka.', false)
+        showToast('Isian Anda dipertahankan. Tekan Simpan sekali lagi kalau memang mau menimpa yang tersimpan.', false)
         return
       }
       if (res.status === 409 && json.code === 'SAFETY_THRESHOLD') {
@@ -1192,7 +1240,18 @@ export default function DpaClient({
         return
       }
       if (json.ok) {
-        showToast(json.message); setVersi(versiTanggal); setPeriodeTulis(''); loadHistory(); loadTahunList(); loadRiwayat()
+        showToast(json.message)
+        setVersi(versiTanggal)
+        // Periode TETAP di versi yang barusan ditulis, tidak dipulangkan ke bulan
+        // berjalan. Dulu `setPeriodeTulis('')` di sini, dan itu yang membuat
+        // "simpan Juli" terasa seperti menimpa Agustus: labelnya melompat ke
+        // "PERIODE BULAN BERJALAN" tepat sesudah berhasil, lalu koreksi kedua
+        // benar-benar mendarat di Agustus. Satu-satunya cara membetulkan hasil
+        // impor adalah menyunting lalu Simpan lagi — dan itu harus jatuh di
+        // bulan yang sama.
+        setPeriodeTulis(periodeUntukVersi(versiTanggal))
+        setBelumTersimpan(false)
+        loadHistory(); loadTahunList(); loadRiwayat()
         if (typeof json.version === 'number') setVersion(json.version)
         serapJangkar(json.jangkar)
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
@@ -1237,6 +1296,7 @@ export default function DpaClient({
     }
     setRows(built)
     setVersi('')  // unset versi tersimpan (form baru)
+    setBelumTersimpan(true)
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
     asalImporRef.current    = null
@@ -1261,6 +1321,7 @@ export default function DpaClient({
   function terapkanImpor(baris: DpaBarisInput[], asal: AsalImpor) {
     setRows(recalcDpaJumlah(baris))
     setVersi('')
+    setBelumTersimpan(true)
     asalImporRef.current    = asal
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
@@ -1284,13 +1345,33 @@ export default function DpaClient({
    * ada yang bisa dimuat. Kembali ke bulan berjalan memuat ulang versi terbaru,
    * bukan meninggalkan layar kosong.
    */
+  /** Ganti tahun anggaran — sepadan `gantiPeriode`, dan sama-sama mengganti layar. */
+  async function gantiTahun(t: number) {
+    if (t === tahun) return
+    if (rows.length > 0 && belumTersimpan) {
+      const buang = await confirmDialog({
+        title:   'Ganti tahun anggaran?',
+        message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
+          + `Berpindah ke tahun ${t} membuangnya.`,
+        confirmLabel: 'Ganti, buang isian',
+        cancelLabel:  'Tetap di sini',
+        variant:      'danger',
+      })
+      if (!buang) return
+    }
+    setTahun(t)
+    setVersi('')
+    setPeriodeTulis('')
+    setBelumTersimpan(false)
+  }
+
   async function gantiPeriode(tanggal: string) {
     if (tanggal === periodeTulis) return
-    // `versi` kosong + ada baris = isian yang belum punya padanan tersimpan di
-    // mana pun (Form Baru, hasil impor, salinan tahun lain). Menghapusnya tanpa
-    // bertanya sama saja membuang pekerjaan orang. Jawaban bawaan (Esc/klik luar)
-    // sengaja yang TIDAK menghancurkan apa pun.
-    if (rows.length > 0 && !versi) {
+    // Membuang pekerjaan orang tanpa bertanya tidak boleh. Patokannya
+    // `belumTersimpan`, BUKAN `versi` kosong: sesudah Pulihkan atau sesudah satu
+    // sel disunting, `versi` terisi padahal yang di layar belum ada di mana pun.
+    // Jawaban bawaan (Esc/klik luar) sengaja yang TIDAK menghancurkan apa pun.
+    if (rows.length > 0 && belumTersimpan) {
       const buang = await confirmDialog({
         title:   'Ganti periode?',
         message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
@@ -1309,9 +1390,37 @@ export default function DpaClient({
       setRows([])
       setVersi('')
       setVersion(0)
+      setBelumTersimpan(false)
     } else {
       await loadDpa()
     }
+  }
+
+  /**
+   * Membuka satu versi tersimpan dari daftar riwayat — pintu KEDUA dari L78b.
+   *
+   * Dulu isinya `setVersi(v); loadDpa(v)` saja. Dua akibat, dua-duanya senyap:
+   * isian yang belum tersimpan lenyap tanpa ditanya, dan pemilih periode tetap
+   * menunjuk tempat lain — layar memperlihatkan Agustus sementara Simpan
+   * menulis ke Juli. Periode sekarang IKUT ke versi yang dibuka, jadi tombol
+   * Simpan selalu menulis ke tempat yang sedang dibaca layar.
+   */
+  async function bukaVersi(v: string) {
+    if (!v || v === versi) return
+    if (rows.length > 0 && belumTersimpan) {
+      const buang = await confirmDialog({
+        title:   'Buka versi lain?',
+        message: `Ada ${rows.length} baris di layar yang belum tersimpan di mana pun. `
+          + `Membuka versi ${formatTanggalId(v)} menggantikannya.`,
+        confirmLabel: 'Buka, buang isian',
+        cancelLabel:  'Tetap di sini',
+        variant:      'danger',
+      })
+      if (!buang) return
+    }
+    setVersi(v)
+    setPeriodeTulis(periodeUntukVersi(v))
+    await loadDpa(v)
   }
 
   function terapkanSalinTahun(baris: DpaBarisInput[], asal: AsalSalin) {
@@ -1319,6 +1428,7 @@ export default function DpaClient({
     // server, bukan angka warisan yang kebetulan cocok.
     setRows(recalcDpaJumlah(baris))
     setVersi('')
+    setBelumTersimpan(true)
     asalSalinRef.current    = asal
     asalPulihkanRef.current = null
     asalImporRef.current    = null
@@ -1356,6 +1466,23 @@ export default function DpaClient({
     })
   }
 
+  // ── Kunci tombol yang mengganti SELURUH tabel sekaligus ────────────────────
+  // Bukan karena tombolnya berbahaya, tapi karena satu klik di layar yang sedang
+  // memegang versi tersimpan menghapus ratusan baris dan menggantinya — lalu
+  // Simpan berikutnya menuliskannya ke slot yang sama. Pintunya dibuka lagi
+  // dengan memilih periode yang masih kosong, atau menghapus versinya.
+  const alasanKunciBorongan = versi
+    ? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
+    : ''
+  // Salin Tahun patokannya SENGAJA berbeda: sasarannya tahun yang sedang dibuka,
+  // bukan slot versi. Menyalin ke tahun yang sudah berisi tidak pernah benar,
+  // sekalipun layarnya kebetulan kosong karena sedang memilih periode historis.
+  const alasanKunciSalinTahun = tahunList.filter(t => t !== tahun).length === 0
+    ? 'Belum ada tahun lain yang punya DPA untuk disalin.'
+    : history.length > 0
+      ? `DPA ${tahun} sudah punya ${history.length} versi. Salin dari tahun lain hanya untuk tahun yang masih kosong.`
+      : ''
+
   return (
     <div className="space-y-4">
       {/* Header / Toolbar */}
@@ -1368,7 +1495,7 @@ export default function DpaClient({
             value={tahun}
             items={tahunList}
             current={CURRENT_YEAR}
-            onChange={t => { setTahun(t); setVersi(''); setPeriodeTulis('') }}
+            onChange={t => { void gantiTahun(t) }}
           />
         </div>
 
@@ -1387,7 +1514,7 @@ export default function DpaClient({
           <VersiDropdown
             value={versi}
             items={history}
-            onChange={v => { setVersi(v); if (v) loadDpa(v) }}
+            onChange={v => { void bukaVersi(v) }}
             placeholder="— Pilih Versi —"
             riwayat={riwayat}
             onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
@@ -1397,18 +1524,20 @@ export default function DpaClient({
         {bolehUbah && (
           <div style={{ display:'flex', gap:8, marginLeft:'auto' }}>
             <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
+              disabled={!!alasanKunciBorongan} data-tooltip={alasanKunciBorongan}
               onClick={mulaiFormBaru} data-rima="dpa.form-baru">
               Form Baru
             </PrimaButton>
 
             <PrimaButton variant="ghost" size="sm" iconLeft={<CalendarClock className="w-3.5 h-3.5" />}
-              disabled={tahunList.filter(t => t !== tahun).length === 0}
+              disabled={!!alasanKunciSalinTahun} data-tooltip={alasanKunciSalinTahun}
               onClick={() => setSalinTahunBuka(true)} data-rima="dpa.salin-tahun">
               Salin Tahun Lain
             </PrimaButton>
 
             {bolehImpor && (
               <PrimaButton variant="success" size="sm" iconLeft={<Upload className="w-3.5 h-3.5" />}
+                disabled={!!alasanKunciBorongan} data-tooltip={alasanKunciBorongan}
                 onClick={() => setImportDpaBuka(true)} data-rima="dpa.impor">
                 Impor
               </PrimaButton>
@@ -1562,7 +1691,7 @@ export default function DpaClient({
           </div>
         </div>
       ) : (
-        <DpaTable rows={rows} onChange={setRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
+        <DpaTable rows={rows} onChange={ubahRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
       )}
 
       {importDpaBuka && (

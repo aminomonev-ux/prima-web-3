@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, ChevronDown, Check } from 'lucide-react'
-import { periodeHistorisTersedia } from '@/lib/blud/tanggal'
+import { periodeHistorisTersedia, labelPeriodeVersi, type PeriodeVersi } from '@/lib/blud/tanggal'
 
 interface Props {
   tahun:    number
@@ -24,9 +24,28 @@ export default function PeriodeVersiSelect({ tahun, versiTerpakai, value, onChan
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  const pilihan = useMemo(
-    () => periodeHistorisTersedia(tahun, versiTerpakai),
-    [tahun, versiTerpakai],
+  // Periode yang BARU SAJA disimpan lenyap dari daftar — bulannya kini punya
+  // versi, dan `periodeHistorisTersedia` memang hanya menawarkan bulan kosong.
+  // Padahal justru periode itulah yang sedang dipakai layar: tanpa dikembalikan,
+  // pemicunya jatuh ke "bulan berjalan" sementara Simpan tetap menulis ke Juli.
+  // Label dan sasaran berbeda pendapat, persis bug yang dilaporkan.
+  const pilihan = useMemo(() => {
+    const tersedia = periodeHistorisTersedia(tahun, versiTerpakai)
+    if (!value || tersedia.some(p => p.tanggal === value)) return tersedia
+    const terpakai: PeriodeVersi = {
+      bulan:   Number(value.slice(5, 7)),
+      label:   labelPeriodeVersi(value),
+      tanggal: value,
+    }
+    return [...tersedia, terpakai].sort((a, b) => a.tanggal.localeCompare(b.tanggal))
+  }, [tahun, versiTerpakai, value])
+
+  // Bulan yang sudah punya versi tetap ditawarkan kalau ia yang sedang dipilih,
+  // jadi bedanya harus terbaca — kalau tidak, "simpan lagi ke Juli" dan "buat
+  // versi Juli baru" terlihat sama.
+  const sudahAdaVersi = useMemo(
+    () => new Set(versiTerpakai.map(v => String(v).slice(0, 7))),
+    [versiTerpakai],
   )
 
   useEffect(() => {
@@ -91,6 +110,8 @@ export default function PeriodeVersiSelect({ tahun, versiTerpakai, value, onChan
               >
                 <CalendarClock className="w-3 h-3 versi-item-icon" />
                 <span className="versi-item-date">{p.label}</span>
+                {sudahAdaVersi.has(p.tanggal.slice(0, 7)) &&
+                  <span className="versi-item-meta">· sudah ada versinya</span>}
                 {active && <Check className="w-3.5 h-3.5 versi-item-check" />}
               </button>
             )

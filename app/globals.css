@@ -634,9 +634,16 @@ input, textarea { caret-color: #FBBF24; }
 .versi-chevron { color: #85B7EB; transition: transform .18s; flex-shrink: 0; }
 .versi-chevron.open { transform: rotate(180deg); }
 
+/* `overflow-x: hidden` itu WAJIB, bukan kerapian: menurut spesifikasi, nilai
+   `visible` pada satu sumbu otomatis jadi `auto` kalau sumbu lain `auto`. Isi
+   yang meleset beberapa piksel ke kanan (bayangan + geseran 1px saat hover di
+   varian brutalist) memunculkan bilah gulir MENDATAR, tingginya makan ~15px,
+   isi jadi lebih tinggi dari 320px, bilah gulir TEGAK ikut muncul, lebarnya
+   menyempitkan isi, bilah mendatarnya hilang lagi — berkedip tanpa henti dan
+   tidak bisa digulir dengan trackpad. */
 .versi-menu {
   position: absolute; top: calc(100% + 6px); left: 0;
-  min-width: 280px; max-height: 320px; overflow-y: auto;
+  min-width: 280px; max-height: 320px; overflow-y: auto; overflow-x: hidden;
   background: #042C53;
   border: 1px solid rgba(133,183,235,.30);
   border-radius: 10px;
@@ -788,7 +795,10 @@ input, textarea { caret-color: #FBBF24; }
   background: transparent;
   border: none;
   box-shadow: none;
-  padding: 5px 0 0 0;
+  /* Lapang 4px di kiri-kanan supaya bayangan 2px + geseran 1px saat hover muat
+     di dalam kotak. Tanpa itu `overflow-x: hidden` di atas memang menghentikan
+     kedipnya, tapi dengan memotong bayangan brutalis di tepi kanan. */
+  padding: 5px 4px 0 4px;
   min-width: 240px;
 }
 .versi-dropdown--brutalist .versi-item {
