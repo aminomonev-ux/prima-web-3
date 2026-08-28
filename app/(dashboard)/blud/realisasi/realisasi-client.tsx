@@ -11,13 +11,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ChevronRight, ChevronDown, Search, TriangleAlert, ArrowUp, ArrowDown, Plus, CalendarDays } from 'lucide-react'
+import { ChevronRight, ChevronDown, Search, TriangleAlert, ArrowUp, ArrowDown, Plus, CalendarDays, Calculator } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import { formatTanggalId } from '@/lib/blud/tanggal'
 import RegisterPanel from '@/components/blud/RegisterPanel'
 import TautanMenu from '@/components/blud/TautanMenu'
+import PratinjauSerapanModal from '@/components/blud/PratinjauSerapanModal'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -68,6 +69,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
   const [fokus, setFokus] = useState<BarisRealisasi | null>(null)
   const [perubahan, setPerubahan] = useState<Perubahan | null>(null)
   const [lihatPerubahan, setLihatPerubahan] = useState(false)
+  const [pratinjauBuka, setPratinjauBuka] = useState(false)
 
   // Foto pagu terakhir yang dilihat pengguna — pembanding untuk chip ▲▼ (§4.4 lapis 1).
   const paguLama = useRef<Map<string, { pagu: number; kode: string; uraian: string }> | null>(null)
@@ -281,6 +283,14 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          {/* Tahap 2 — murni pembacaan, barisnya dipinjam dari state ini. Tanpa
+              pagu tidak ada yang bisa dibandingkan, jadi tombolnya ikut mati. */}
+          <PrimaButton variant="ghost" size="sm" iconLeft={<Calculator className="w-3.5 h-3.5" />}
+            disabled={tanpaDpa || rows.length === 0}
+            data-tooltip="Coba angka belanja yang belum dimasukkan — lihat rekening mana yang plafonnya kurang"
+            onClick={() => setPratinjauBuka(true)}>
+            Pratinjau Serapan
+          </PrimaButton>
           <PrimaButton variant="ghost" size="sm" onClick={() => setTutup(new Set())}>Buka semua</PrimaButton>
           <PrimaButton variant="ghost" size="sm"
             onClick={() => setTutup(new Set(rows.filter(r => punyaAnak.has(r.anggaran_key)).map(r => r.anggaran_key)))}>
@@ -462,6 +472,15 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
           bulan={bulan}
           baris={fokus}
           onClose={() => setFokus(null)}
+        />
+      )}
+
+      {tahun != null && pratinjauBuka && (
+        <PratinjauSerapanModal
+          tahun={tahun}
+          rows={rows}
+          sumberVersi={sumber?.versi ?? null}
+          onTutup={() => setPratinjauBuka(false)}
         />
       )}
     </div>
