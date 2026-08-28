@@ -20,6 +20,10 @@ import {
   barisAnakDariRumus, faktorPerkalian,
   type GridDpa, type SelGrid,
 } from './import-dpa-grid'
+import {
+  rapikanHierarki, normalkanDaunTanpaPerkalian, sumberSelisih,
+  type SimpulImpor, type PerbaikanImpor, type SumberSelisih,
+} from './import-rapikan'
 
 /**
  * Harus sama dengan batas Zod di jalur simpan impor. Kalau parser lebih longgar,
@@ -79,6 +83,10 @@ export interface HasilBacaDpa {
   totalFile: number | null
   totalHitung: number
   peringatan: string[]
+  /** Yang dirapikan sendiri oleh sistem — ditampilkan, bukan disembunyikan. */
+  perbaikan: PerbaikanImpor[]
+  /** Baris yang MELAHIRKAN sisa selisih; yang cuma mewarisi tidak ikut. */
+  sumberSelisih: SumberSelisih[]
 }
 
 export class StrukturDpaTidakTerbacaError extends Error {
@@ -492,6 +500,28 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     )
   }
 
+  // ── Rapikan hierarki sebelum apa pun dihitung ──────────────────────────────
+  // Baris yang rumusnya perkalian tidak boleh punya anak: begitu ia dianggap
+  // induk, vol × harga miliknya DIBUANG dan angkanya lenyap dari total. Tiap
+  // pemindahan harus membuktikan dirinya lebih dulu — lihat `import-rapikan.ts`.
+  const simpulRapi: SimpulImpor[] = mentah.map(m => ({
+    barisExcel:     m.barisExcel,
+    jumlahFile:     m.jumlahFile,
+    vol:            m.vol,
+    harga:          m.harga,
+    rumusPerkalian: (faktorPerkalian(grid.sel(m.barisExcel, kolom.jumlah).rumus)?.length ?? 0) >= 2,
+  }))
+  const rapi = rapikanHierarki(simpulRapi, induk)
+  induk = rapi.induk
+
+  // Baru sesudah pohonnya benar: baris terbawah yang berangka tapi tanpa
+  // vol/harga diberi 1 × angkanya, supaya nilainya tidak dihitung nol.
+  const normal = normalkanDaunTanpaPerkalian(simpulRapi, induk)
+  normal.vol.forEach((v, i) => { mentah[i].vol = v })
+  normal.harga.forEach((v, i) => { mentah[i].harga = v })
+  simpulRapi.forEach((s, i) => { s.vol = normal.vol[i]; s.harga = normal.harga[i] })
+  const perbaikan = [...rapi.perbaikan, ...normal.perbaikan]
+
   // Kedalaman final dari pohon, lalu dipetakan berperingkat ke rantai.
   const kedalamanPohon = mentah.map((_, i) => {
     let d = 0
@@ -604,13 +634,31 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     )
   }
 
-  for (const b of baris) {
-    if (b.jumlahFile != null && b.jumlahFile !== b.jumlahHitung) {
-      b.catatan.push(
-        `Jumlah di berkas ${b.jumlahFile.toLocaleString('id-ID')} ≠ hitung ulang `
-        + `${b.jumlahHitung.toLocaleString('id-ID')}.`,
-      )
-    }
+  // Catatan hanya untuk baris yang MELAHIRKAN selisih. Dulu setiap baris yang
+  // angkanya tidak cocok ikut ditandai — 54 baris di formulir Juli, dan hampir
+  // semuanya cuma mewarisi selisih dari bawah. Daftar sepanjang itu melatih
+  // orang mengabaikan panelnya.
+  const sumberSisa = sumberSelisih(simpulRapi, induk)
+  const petaIndeks = new Map(mentah.map((m, i) => [m.barisExcel, i]))
+  for (const s of sumberSisa) {
+    const b = baris[petaIndeks.get(s.barisExcel)!]
+    b.catatan.push(
+      s.jenis === 'INDUK'
+        ? `Angka di berkas ${(b.jumlahFile ?? 0).toLocaleString('id-ID')} tidak sama dengan `
+          + `jumlah ${s.jumlahAnak} baris di bawahnya — selisih `
+          + `${s.residu.toLocaleString('id-ID')}. Rumus penjumlahannya kemungkinan belum diperbarui.`
+        : `Angka di berkas ${(b.jumlahFile ?? 0).toLocaleString('id-ID')} tidak sama dengan `
+          + `volume × harga di baris ini — selisih ${s.residu.toLocaleString('id-ID')}.`,
+    )
+  }
+  // Selisih di akar nol TIDAK berarti berkasnya benar: kesalahan bisa saling
+  // menghapus. Pada `DPA BLUD 2026 F.xlsx` akarnya cocok persis sementara di
+  // dalamnya ada ±80 juta yang menutupi satu sama lain.
+  if (totalFile != null && totalFile === totalHitung && sumberSisa.length > 0) {
+    peringatan.push(
+      `Totalnya cocok, tapi ${sumberSisa.length} tempat di dalamnya saling menutupi. `
+      + 'Nilainya benar, susunannya belum tentu — dan susunan menentukan rekap per Penanggung Jawab.',
+    )
   }
   if (akar.length > 1) {
     peringatan.push(`Berkas punya ${akar.length} baris tanpa induk — DPA seharusnya satu akar.`)
@@ -626,6 +674,8 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     totalFile,
     totalHitung,
     peringatan,
+    perbaikan,
+    sumberSelisih: sumberSisa,
   }
 }
 

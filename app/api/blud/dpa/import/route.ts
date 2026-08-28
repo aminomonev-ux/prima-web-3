@@ -144,6 +144,10 @@ async function tanganiPreview(
         totalFile: hasil.totalFile,
         totalHitung: hasil.totalHitung,
         peringatan: hasil.peringatan,
+        // Apa yang dirapikan sistem, dan apa yang tersisa — ditampilkan, bukan
+        // disembunyikan. Perbaikan diam-diam adalah kerusakan diam-diam.
+        perbaikan: hasil.perbaikan,
+        sumberSelisih: hasil.sumberSelisih,
         realisasiTerdampak,
       },
     })

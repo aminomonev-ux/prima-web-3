@@ -30,6 +30,7 @@ import type { DpaBarisInput } from '@/types'
 // parser + `schemas.ts` + `ioredis` ke bundel browser dan build Next gagal
 // dengan "Module not found: Can't resolve 'dns'".
 import type { BarisTerbaca, PetaKolom } from '@/lib/blud/import-dpa'
+import type { PerbaikanImpor, SumberSelisih } from '@/lib/blud/import-rapikan'
 import { keDpaBarisInput } from '@/lib/blud/import-dpa-shared'
 
 interface JangkarTerdampak {
@@ -57,6 +58,8 @@ interface HasilPreview {
   totalFile: number | null
   totalHitung: number
   peringatan: string[]
+  perbaikan: PerbaikanImpor[]
+  sumberSelisih: SumberSelisih[]
   realisasiTerdampak: JangkarTerdampak[]
 }
 
@@ -193,7 +196,15 @@ export default function ImportDpaModal({
                 <Baris label="Total hitung ulang">{rp(hasil.totalHitung)}</Baris>
                 <Baris label="Selisih">
                   <strong style={{ color: selisih ? '#E24B4A' : '#1D9E75' }}>
-                    {selisih == null ? 'tidak bisa dibandingkan' : selisih === 0 ? 'nihil — cocok persis' : rp(selisih)}
+                    {selisih == null
+                      ? 'tidak bisa dibandingkan'
+                      : selisih === 0
+                        ? (hasil.sumberSelisih.length
+                            // Nol di akar TIDAK berarti benar: kesalahan bisa saling
+                            // menghapus. Menulis "cocok persis" di situ menyesatkan.
+                            ? 'nihil di total — tapi lihat catatan di bawah'
+                            : 'nihil — cocok persis')
+                        : rp(selisih)}
                   </strong>
                 </Baris>
               </Panel>
@@ -217,6 +228,24 @@ export default function ImportDpaModal({
                         <span style={{ flex: 1 }}>{t.uraian}</span>
                         <span className="blud-imp-muted">{t.jumlah_alokasi} alokasi</span>
                         <span style={{ fontFamily: 'monospace' }}>{rp(t.nilai)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              )}
+
+              {hasil.perbaikan.length > 0 && (
+                <Panel judul={`Dirapikan otomatis — ${hasil.perbaikan.length} baris`}>
+                  <p style={{ fontSize: 11.5, lineHeight: 1.6, marginBottom: 8 }}>
+                    Susunan baris diperbaiki memakai rumus yang ada di berkas. Tidak ada nominal yang
+                    ditambahkan — angkanya tetap dari volume × harga. Tiap perbaikan hanya dipakai
+                    kalau sesudahnya angka di berkas jadi cocok.
+                  </p>
+                  <div style={{ maxHeight: 150, overflowY: 'auto', fontSize: 11, lineHeight: 1.6 }}>
+                    {hasil.perbaikan.slice(0, 40).map(p => (
+                      <div key={`${p.barisExcel}-${p.jenis}`} style={{ padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,.05)' }}>
+                        <span className="blud-imp-muted">b.{p.barisExcel}</span>{' '}
+                        <span style={{ color: '#1D9E75' }}>{p.keterangan}</span>
                       </div>
                     ))}
                   </div>
