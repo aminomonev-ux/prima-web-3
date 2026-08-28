@@ -193,8 +193,12 @@ bab('D. Pagar lama tidak ikut terbawa')
 
   // Tahap 1 memasang ini; merapikan impor tidak boleh menghapusnya.
   cek('entri_historis masih dikirim klien', dpa.includes('entri_historis: versiTanggal !=='))
+  // Rumusnya pindah ke `sasaranSimpan(periodeTulis)` di Tahap 3 — isinya persis
+  // sama (`periodeTulis || tanggalHariIniWIB()`), tapi kini SATU tempat, supaya
+  // modal Salin Versi bisa MENAMPILKAN sasaran yang benar-benar akan ditulis.
+  // Yang dijaga di sini tetap yang sama: sasaran datang dari periode terpilih.
   cek('Target Simpan masih dari periodeTulis',
-    dpa.includes('doSimpanInternal(periodeTulis || tanggalHariIniWIB())'))
+    dpa.includes('doSimpanInternal(sasaranSimpan(periodeTulis))'))
   // Impor tetap operasi borongan — pratinjaunya pun hanya untuk SA/Admin.
   cek('Pratinjau impor tetap dijaga peran', rute.includes('canImporDpa'))
   cek('Pratinjau tetap dicatat audit', rute.includes('BLUD_DPA_IMPORT_PREVIEW'))

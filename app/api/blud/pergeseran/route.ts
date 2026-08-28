@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_pulihkan, entri_historis } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_salin, asal_pulihkan, entri_historis } = parsed.data
 
   // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
   if (turunkan_paksa && !alasan_turun) {
@@ -206,7 +206,11 @@ export async function POST(req: NextRequest) {
       userId:    session.userId,
       username:  session.username,
       detail:    `Simpan Pergeseran ${tahun_anggaran}/${versi_tanggal} (acuan DPA ${dpaVersi}): ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${entri_historis ? ` [ENTRI HISTORIS — ditulis ${tanggalHariIniWIB()}]` : ''}${rootDelta !== 0 ? ` [DRAFT — belum berimbang, delta Rp ${rootDelta.toLocaleString('id-ID')}]` : ''}`
-        // Asal-usul pemulihan hanya hidup di baris ini — tidak ada kolomnya.
+        // Asal-usul salinan/pemulihan hanya hidup di baris ini — tidak ada kolomnya.
+        // Di layar Pergeseran salinan selalu antar versi dalam tahun yang sama,
+        // jadi jangkar realisasinya utuh; `lingkup` tetap disebut supaya baris
+        // ini terbaca sama dengan pasangannya di BLUD_SAVE_DPA.
+        + `${asal_salin ? ` · salinan dari Pergeseran ${asal_salin.tahun}/${asal_salin.versi} (versi lain, tahun sama — jangkar realisasi ikut terbawa)` : ''}`
         + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`,
     })
     // §4.1/§4.2: permintaan bendahara yang sudah terpenuhi ditutup sendiri +

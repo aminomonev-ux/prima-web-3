@@ -183,7 +183,11 @@ export async function POST(req: NextRequest) {
       // tulis sebenarnya — baris ini yang membuatnya terbaca di panel audit.
       detail:    `Simpan DPA ${tahun_anggaran}/${versi_tanggal}: ${result.existing} → ${result.replaced} baris (v${expected_version}→${result.newVersion})${force ? ' (forced)' : ''}${entri_historis ? ` [ENTRI HISTORIS — ditulis ${tanggalHariIniWIB()}]` : ''}${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`
       // Asal-usul salinan hanya hidup di baris ini — tidak ada kolomnya di tabel.
-      + `${asal_salin ? ` · salinan dari ${asal_salin.sumber === 'DPA' ? 'DPA' : 'Pergeseran'} ${asal_salin.tahun}/${asal_salin.versi}` : ''}`
+      // `lingkup` disebut terus terang: itu satu-satunya yang membedakan salinan
+      // lintas tahun (jangkar dilepas) dari salinan antar versi dalam tahun yang
+      // sama (jangkar utuh) — dan jangkar itu yang menyambungkan baris ke belanja.
+      + `${asal_salin ? ` · salinan dari ${asal_salin.sumber === 'DPA' ? 'DPA' : 'Pergeseran'} ${asal_salin.tahun}/${asal_salin.versi}`
+        + `${asal_salin.lingkup === 'VERSI' ? ' (versi lain, tahun sama — jangkar realisasi ikut terbawa)' : ' (jangkar realisasi dilepas)'}` : ''}`
       // Sama seperti asal_salin: hanya hidup di baris ini, tidak ada kolomnya.
       + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`
       // Pengganti `BLUD_DPA_IMPORT_COMMIT` yang dibuang bersama jalur tulis di

@@ -8,11 +8,12 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   ChevronUp, ChevronDown, Save,
-  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox, CalendarClock,
+  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox, CalendarClock, Copy,
 } from 'lucide-react'
 import ImportDpaModal, { type AsalImpor } from '@/components/blud/ImportDpaModal'
 import SalinMasterModal from '@/components/blud/SalinMasterModal'
-import SalinTahunModal, { type AsalSalin } from '@/components/blud/SalinTahunModal'
+import SalinTahunModal from '@/components/blud/SalinTahunModal'
+import SalinVersiModal from '@/components/blud/SalinVersiModal'
 import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
@@ -22,7 +23,10 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcDpa, recalcDpaJumlah } from '@/lib/blud/recalc'
 import { dpaKeInput } from '@/lib/blud/row-map'
-import { tanggalHariIniWIB, formatTanggalId, expectedVersionUntuk, periodeUntukVersi } from '@/lib/blud/tanggal'
+import { tanggalHariIniWIB, formatTanggalId, expectedVersionUntuk, periodeUntukVersi, sasaranSimpan } from '@/lib/blud/tanggal'
+import {
+  alasanKunciSalinVersi, petakanDpaRows, totalAkarDpa, type AsalSalin,
+} from '@/lib/blud/salin-versi'
 import { buildDpaRowsFromKodeBesar } from '@/lib/blud/dpa-skeleton-builder'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import BlockedModal, { type BlockedInfo } from '@/components/blud/BlockedModal'
@@ -858,6 +862,7 @@ export default function DpaClient({
   const [importDpaBuka, setImportDpaBuka] = useState(false)
   const [salinBuka,    setSalinBuka]    = useState(false)
   const [salinTahunBuka, setSalinTahunBuka] = useState(false)
+  const [salinVersiBuka, setSalinVersiBuka] = useState(false)
   // Asal salinan disimpan sampai Simpan ditekan — semata untuk baris detail audit.
   // Dilepas begitu barisnya diubah lewat jalur lain supaya jejaknya tidak berbohong.
   const asalSalinRef = useRef<AsalSalin | null>(null)
@@ -1146,7 +1151,7 @@ export default function DpaClient({
       if (!gate.ok) return
       sentinelAckRef.current = gate.ack
       setSaving(true)
-      await doSimpanInternal(periodeTulis || tanggalHariIniWIB())
+      await doSimpanInternal(sasaranSimpan(periodeTulis))
     } finally { submittingRef.current = false; setSaving(false) }
   }
 
@@ -1444,6 +1449,30 @@ export default function DpaClient({
     showToast(`${baris.length} baris disalin dari ${label} — belum tersimpan, periksa lalu tekan Simpan.`)
   }
 
+  /**
+   * "Salin dari Versi Lain" — Tahap 3, pengganti alur yang dibuang di L79d.
+   *
+   * Perhatikan apa yang TIDAK ada di sini: `setVersi`, `setPeriodeTulis`, dan
+   * `setVersion`. Itu bukan kelalaian, itu seluruh rancangannya. Menyalin
+   * mengganti ISI layar; sasaran Simpan tetap milik pemilih periode. Kalau
+   * salinan ikut memindahkan sasaran, kita menghidupkan lagi bentuk L78 — modal
+   * yang menulis ke tempat lain daripada yang ditunjuk toolbar.
+   *
+   * `versi` yang tetap terisi juga yang membuat `expectedVersionUntuk`
+   * memulangkan angka kunci yang BENAR: menimpa versi yang sedang terbuka
+   * memang harus membawa angka kuncinya, bukan 0.
+   */
+  function terapkanSalinVersi(baris: DpaBarisInput[], asal: AsalSalin) {
+    setRows(recalcDpaJumlah(baris))
+    setBelumTersimpan(true)
+    asalSalinRef.current    = asal
+    asalPulihkanRef.current = null
+    asalImporRef.current    = null
+    setSalinVersiBuka(false)
+    showToast(`${baris.length} baris disalin dari versi ${formatTanggalId(asal.versi)} — belum tersimpan, `
+      + `periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
+  }
+
   // Handler tombol "Buat Form" di overlay — branch: overwrite-confirm atau langsung
   function confirmBuildForm() {
     if (!overlayItems) return
@@ -1489,6 +1518,17 @@ export default function DpaClient({
     : history.length > 0
       ? `DPA ${tahun} sudah punya ${history.length} versi. Salin dari tahun lain hanya untuk tahun yang masih kosong.`
       : ''
+  // Sasaran Simpan, sekali dihitung: dipakai untuk menyaring daftar sumber DAN
+  // untuk ditampilkan di modal. Rumusnya milik `sasaranSimpan`, yang juga dipakai
+  // tombol Simpan — kalau ada dua rumus, modalnya menjanjikan tempat yang salah.
+  const sasaran = sasaranSimpan(periodeTulis)
+  // Salin Versi SENGAJA tidak ikut `alasanKunciBorongan`. Tombol-tombol itu
+  // dikunci karena mengganti tabel dengan baris dari LUAR tahun ini (atau dari
+  // nol): `anggaran_key`-nya kosong, jadi menuliskannya di atas versi tersimpan
+  // memutus tautan ke belanja yang sudah tercatat. Salin Versi mengambil baris
+  // dari tahun yang SAMA dengan jangkar utuh — dan sasaran yang sudah berisi
+  // justru pemakaian utamanya: "mulai versi hari ini dari angka Juli".
+  const alasanKunciVersi = alasanKunciSalinVersi(tahun, history, [versi, sasaran])
 
   return (
     <div className="space-y-4">
@@ -1540,6 +1580,14 @@ export default function DpaClient({
               disabled={!!alasanKunciSalinTahun} data-tooltip={alasanKunciSalinTahun}
               onClick={() => setSalinTahunBuka(true)} data-rima="dpa.salin-tahun">
               Salin Tahun Lain
+            </PrimaButton>
+
+            <PrimaButton variant="ghost" size="sm" iconLeft={<Copy className="w-3.5 h-3.5" />}
+              disabled={!!alasanKunciVersi}
+              data-tooltip={alasanKunciVersi
+                || `Ambil isi versi lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
+              onClick={() => setSalinVersiBuka(true)} data-rima="dpa.salin-versi">
+              Salin Versi Lain
             </PrimaButton>
 
             {bolehImpor && (
@@ -1728,6 +1776,21 @@ export default function DpaClient({
           adaIsiDiForm={rows.length > 0}
           onTutup={() => setSalinTahunBuka(false)}
           onSalin={terapkanSalinTahun}
+        />
+      )}
+
+      {salinVersiBuka && (
+        <SalinVersiModal<DpaBaris, DpaBarisInput>
+          tahun={tahun}
+          jenis="DPA"
+          history={history}
+          versiTerbuka={versi}
+          sasaran={sasaran}
+          jumlahDiLayar={rows.length}
+          petakan={petakanDpaRows}
+          hitungTotal={totalAkarDpa}
+          onTutup={() => setSalinVersiBuka(false)}
+          onSalin={terapkanSalinVersi}
         />
       )}
 

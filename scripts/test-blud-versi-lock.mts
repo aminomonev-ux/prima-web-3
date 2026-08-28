@@ -108,8 +108,8 @@ for (const [nama, path] of layar) {
   // dari `versi` yang sedang dibuka — kalau ini berubah, arti argumen pertama
   // helper ikut berubah. `periodeTulis ||` masuk di L78 (arsip bulan lampau);
   // yang dijaga tetap sama: tanggal tujuan tidak boleh diambil dari `versi`.
-  cek(`B4 ${nama} menyimpan ke periode terpilih atau tanggalHariIniWIB()`,
-    /doSimpanInternal\((periodeTulis \|\| )?tanggalHariIniWIB\(\)\)/.test(isi)
+  cek(`B4 ${nama} menyimpan ke sasaran dari periode, bukan ke versi yang dibuka`,
+    /doSimpanInternal\(sasaranSimpan\(periodeTulis\)\)/.test(isi)
     && !/doSimpanInternal\(versi\b/.test(isi))
 }
 

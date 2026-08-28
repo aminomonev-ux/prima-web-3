@@ -270,6 +270,11 @@ export const AsalSalinSchema = z.object({
   tahun:  TahunSchema,
   versi:  TanggalSchema,
   sumber: z.enum(['DPA', 'PERGESERAN']),
+  // Menjawab yang tidak bisa dijawab angka baris: jangkar realisasi ikut terbawa
+  // atau tidak. 'TAHUN' = dilepas (tahun beda), 'VERSI' = utuh (tahun sama).
+  // `.default` supaya tab lama yang belum mengirimnya tetap tercatat benar —
+  // sebelum ada Salin Versi, satu-satunya salinan memang lintas tahun.
+  lingkup: z.enum(['TAHUN', 'VERSI']).default('TAHUN'),
 });
 
 /**
@@ -355,6 +360,9 @@ export const PergeseranBodySchema = z.object({
   alasan_turun:      z.string().trim().min(10, 'Alasan minimal 10 karakter').max(500).optional(),
   expected_version:  z.coerce.number().int().min(0).default(0),
   sentinel_ack:      SentinelAckSchema.optional(),
+  // Hanya 'VERSI' yang bisa sampai ke sini: Pergeseran tidak punya "Salin dari
+  // Tahun Lain" (salinan lintas tahun mendarat di form DPA, bukan di sini).
+  asal_salin:        AsalSalinSchema.optional(),
   asal_pulihkan:     AsalPulihkanSchema.optional(),
   entri_historis:    z.boolean().optional().default(false),
 }).superRefine((d, ctx) => {

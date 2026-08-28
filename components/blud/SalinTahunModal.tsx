@@ -29,10 +29,12 @@ import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import { hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { formatRupiah } from '@/lib/blud/format'
 import { formatTanggalId } from '@/lib/blud/tanggal'
+import type { AsalSalin, SumberSalin } from '@/lib/blud/salin-versi'
 import type { DpaBaris, DpaBarisInput, PergeseranBaris } from '@/types'
 
-export type SumberSalin = 'DPA' | 'PERGESERAN'
-export type AsalSalin = { tahun: number; versi: string; sumber: SumberSalin }
+// Tipe `SumberSalin`/`AsalSalin` pindah ke `lib/blud/salin-versi.ts` — dipakai
+// bersama "Salin dari Versi Lain", dan `lingkup` di dalamnya justru ada untuk
+// membedakan kedua modal ini di baris audit.
 
 type Pratinjau = {
   versi: string | null
@@ -175,7 +177,10 @@ export default function SalinTahunModal({
     const rows = sumberEfektif === 'DPA'
       ? barisDpa.map((d, i) => dpaKeTahunBaruInput(d, i))
       : barisPgs.map((d, i) => pergeseranKeTahunBaruInput(d, i))
-    onSalin(rows, { tahun: tahunSumber, versi: terpilih.versi, sumber: sumberEfektif })
+    // `lingkup: 'TAHUN'` = jangkar realisasi DILEPAS (dua mapper di `row-map.ts`
+    // sengaja membuang `anggaran_key`). Baris audit memakainya untuk membedakan
+    // salinan ini dari "Salin dari Versi Lain", yang justru mempertahankannya.
+    onSalin(rows, { tahun: tahunSumber, versi: terpilih.versi, sumber: sumberEfektif, lingkup: 'TAHUN' })
     setSibuk(false)
   }, [tahunSumber, terpilih, adaIsiDiForm, sumberEfektif, pgs.delta, barisDpa, barisPgs, tahunTujuan, onSalin])
 

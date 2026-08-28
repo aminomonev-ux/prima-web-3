@@ -193,6 +193,19 @@ export function periodeUntukVersi(versiTanggal: string, sekarang: number = Date.
 }
 
 /**
+ * Tanggal yang AKAN ditulis tombol Simpan — satu-satunya rumusnya.
+ *
+ * Sebelumnya ekspresi ini hidup langsung di dalam `simpan()` di dua layar, dan
+ * itu cukup selama tidak ada yang perlu MENAMPILKANNYA. "Salin dari Versi Lain"
+ * perlu: modalnya menjanjikan "sasaran Simpan tidak berubah", dan janji itu
+ * hanya benar kalau yang ditampilkan dan yang ditulis lahir dari rumus yang
+ * sama. Dua salinan rumus yang sama adalah persis cara L78 lahir.
+ */
+export function sasaranSimpan(periodeTulis: string, sekarang: number = Date.now()): string {
+  return periodeTulis || tanggalHariIniWIB(sekarang)
+}
+
+/**
  * Angka kunci (`expected_version`) yang benar untuk versi yang AKAN ditulis.
  *
  * Kunci optimistik itu milik pasangan (tahun, versi_tanggal) — lihat `bludVersiKey`
