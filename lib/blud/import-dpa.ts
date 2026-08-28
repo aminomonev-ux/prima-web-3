@@ -563,9 +563,10 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     const catatan: string[] = []
     const tipe = pakaiLevel ? (m.level as TipeBaris) : petaTipe.get(kedalamanPohon[i])!
 
-    if (m.jumlahFile == null) {
-      catatan.push('Berkas tidak menyimpan hasil rumus di baris ini — tidak bisa dibandingkan.')
-    }
+    // "Tidak bisa dibandingkan" TIDAK jadi catatan per baris: di formulir Juli
+    // ia berlaku untuk 43 baris dan mengubur satu temuan sungguhan di antara
+    // 44 entri yang berbunyi sama. Dijadikan satu peringatan ringkas di bawah —
+    // penyakit yang sama dengan daftar 54 baris yang baru saja dibereskan.
 
     let pj = m.pj
     let keterangan = m.keterangan
@@ -638,6 +639,16 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   // angkanya tidak cocok ikut ditandai — 54 baris di formulir Juli, dan hampir
   // semuanya cuma mewarisi selisih dari bawah. Daftar sepanjang itu melatih
   // orang mengabaikan panelnya.
+  const takTerbandingkan = baris.filter(b => b.jumlahFile == null)
+  if (takTerbandingkan.length) {
+    peringatan.push(
+      `${takTerbandingkan.length} baris tidak menyimpan hasil rumusnya di berkas `
+      + `(b.${takTerbandingkan.slice(0, 5).map(b => b.barisExcel).join(', b.')}`
+      + `${takTerbandingkan.length > 5 ? ', …' : ''}) — angkanya tetap dihitung dari `
+      + 'volume × harga, tapi tidak bisa diadu dengan angka di berkas.',
+    )
+  }
+
   const sumberSisa = sumberSelisih(simpulRapi, induk)
   const petaIndeks = new Map(mentah.map((m, i) => [m.barisExcel, i]))
   for (const s of sumberSisa) {
