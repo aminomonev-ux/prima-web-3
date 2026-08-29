@@ -316,5 +316,63 @@ bab('G. Rantai kode')
     (kPgs.match(/asalTutupRef\.current\s*=\s*\{/g) ?? []).length === 1)
 }
 
+bab('H. Jalur HAPUS ikut membuang catatan penutupan')
+{
+  const kDat = kode(baca(DATA))
+  const kTdt = kode(baca(TDATA))
+  const kLib = kode(baca(LIB))
+  const kPgs = kode(baca(PGS))
+  const kRt  = kode(baca(RUTE))
+
+  // Kejadian nyata 2026-08-29: versi basis 28 Feb dihapus & 31 Jan dibangun
+  // ulang, catatannya tertinggal → daftar versi mengumumkan basis yang sudah
+  // tidak ada, dan tombol Tutup abu-abu tanpa jalan keluar.
+  const fn = /export async function hapusTutupTerkaitVersi[\s\S]*?\n}/.exec(kTdt)?.[0] ?? ''
+  cek('Ada pembuang catatan penutupan', fn !== '')
+  cek('KEDUA sisi dibuang',
+    /versi_ditutup = \$\{versiTanggal\} OR versi_basis = \$\{versiTanggal\}/.test(fn),
+    'basis dihapus = penutupan tak berbekas · yang ditutup dihapus = tanggal itu jadi dokumen baru')
+  cek('Memulangkan jumlah lewat res[0], bukan res.affectedRows',
+    /res\[0\]\?\.affectedRows/.test(fn), 'hasil `tx` itu array (L53/T15)')
+
+  // Jendelanya berhenti di `export` berikutnya, BUKAN di `\n}` pertama: tipe
+  // kembaliannya `Promise<{ … }>` menaruh sebuah `}` di kolom 0, jadi pola itu
+  // memotong tepat sesudah tanda tangan dan memeriksa fungsi yang kosong —
+  // pemeriksaan yang selalu "gagal" tanpa ada yang salah pada kodenya.
+  const del = /export async function deletePergeseranVersi[\s\S]*?\nexport /.exec(kDat)?.[0] ?? ''
+  cek('deletePergeseranVersi memanggilnya', /hapusTutupTerkaitVersi\(tx, tahun, versiTanggal\)/.test(del))
+  cek('…DI DALAM transaksi yang sama',
+    /withTransaction\([\s\S]*hapusTutupTerkaitVersi[\s\S]*\}\)/.test(del),
+    'kalau di luar, barisnya hilang walau penghapusannya dibatalkan')
+  cek('Jumlahnya dipulangkan ke pemanggil', /tutup_dibuang/.test(del) && /tutup_dibuang/.test(kRt))
+
+  // L69 — jalur KOSONG+FORCE mengosongkan versi, dan versi tanpa baris lenyap
+  // dari `getPergeseranHistory`. Akibatnya sama dengan menghapus.
+  // Dipotong dari `savePergeseran` DULU: `saveDpa` punya cabang `if (!incoming)`
+  // yang bentuknya kembar dan letaknya lebih awal di berkas, jadi pola tanpa
+  // jangkar ini memeriksa fungsi yang salah — dan `saveDpa` memang tidak boleh
+  // memanggilnya (penutupan cuma ada di Pergeseran).
+  const sp = kDat.slice(kDat.indexOf('export async function savePergeseran'))
+  const kosong = /if \(!incoming\) \{[\s\S]*?const jangkar: Record/.exec(sp)?.[0] ?? ''
+  cek('Jalur kosong+force ikut membuangnya',
+    /hapusTutupTerkaitVersi\(tx, tahun, versiTanggal\)/.test(kosong),
+    'pagar yang cuma di jalur utama persis kegagalan L69')
+  cek('Dua tempat memanggilnya di data.ts',
+    (kDat.match(/hapusTutupTerkaitVersi\(tx,/g) ?? []).length === 2)
+
+  cek('Penolakan sasaran-dihuni tidak menyuruh "pilih periode lain"',
+    !/pilih periode lain/i.test(kLib),
+    'sasaran penutupan diturunkan, bukan dipilih — menawarkan tombol yang tidak ada')
+  cek('…dan menyebut tindakan yang memang bisa dilakukan',
+    /hapus dulu versi/i.test(kLib))
+
+  cek('Baris baru dari DPA ikut disebut di pesan sinkron',
+    /beda\.barisBaru > 0[\s\S]{0,160}rekening baru ditambahkan/.test(kPgs),
+    '"tidak ada angka yang berubah" sambil menyisipkan rekening itu tidak benar')
+  cek('Peringatan kecocokan longgar tidak hilang di jalur Terapkan',
+    /pratinjauSinkron\.dpaVersi, pratinjauSinkron\.low\)/.test(kPgs),
+    'sempat dioper larik kosong — justru jalur ini yang mengubah angka')
+}
+
 console.log(`\n${lulus} pemeriksaan LULUS · ${gagal} GAGAL`)
 process.exit(gagal > 0 ? 1 : 0)

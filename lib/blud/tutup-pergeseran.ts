@@ -125,9 +125,13 @@ export function alasanTolakTutup(
   }
 
   if (versiTerpakai.includes(sasaran)) {
-    return `${formatTanggalId(sasaran)} sudah punya versi pergeseran. `
-      + `Menyimpan basis ke situ akan menimpanya — buka versi itu kalau memang mau dilanjutkan, `
-      + `atau pilih periode lain.`
+    // JANGAN menyuruh "pilih periode lain": sasaran penutupan tidak dipilih
+    // orang, ia diturunkan dari versi yang ditutup (`periodeSetelahTutup`).
+    // Kalimat yang menawarkan tindakan yang tidak bisa dilakukan lebih buruk
+    // daripada penolakan polos — orangnya mencari tombol yang tidak ada.
+    return `${formatTanggalId(sasaran)} sudah punya versi pergeseran, dan basis penutupan `
+      + `akan menimpanya. Biasanya ini berarti hasil putaran ini memang sudah dibawa ke sana. `
+      + `Kalau memang perlu diulang, hapus dulu versi ${formatTanggalId(sasaran)} di menu Pengaturan.`
   }
 
   return ''

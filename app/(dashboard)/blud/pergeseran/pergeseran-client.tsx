@@ -720,8 +720,12 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   } | null>(null)
   // Hasil sinkron yang MENUNGGU persetujuan — hanya diisi kalau ada angka yang
   // berubah. Tidak ada perubahan = langsung diterapkan, tanpa satu pun dialog.
+  // `low` ikut disimpan, bukan dibuang: peringatan "dipasangkan berdasarkan
+  // kemiripan" justru paling penting di jalur ini — yang ini jalur yang MENGUBAH
+  // angka. Sempat hilang karena tombol Terapkan mengoper larik kosong.
   const [pratinjauSinkron, setPratinjauSinkron] = useState<{
     rows: PergeseranBarisInput[]; beda: BedaSinkron; dpaVersi: string
+    low: { kode_rekening: string; uraian: string }[]
   } | null>(null)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §2.1) — pilih tahun dulu, sama pola DPA.
   const CURRENT_YEAR = new Date().getFullYear()
@@ -1197,10 +1201,17 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       const low   = (json.low_confidence ?? []) as { kode_rekening: string; uraian: string }[]
       if (!sinkronMengubahAngka(beda)) {
         pasangHasilSinkron(hasil, json.dpa_versi, low)
-        showToast(`Sudah sama dengan DPA ${formatTanggalId(json.dpa_versi)} — tidak ada angka yang berubah.`)
+        // Baris baru dari DPA sengaja TIDAK menahan penerapan — menambah rekening
+        // memang tujuan tombol ini dan tidak membatalkan apa pun. Tapi jumlahnya
+        // tetap disebut: "tidak ada angka yang berubah" sambil diam-diam menyisipkan
+        // 5 rekening baru itu kalimat yang tidak benar.
+        showToast(beda.barisBaru > 0
+          ? `Disamakan dengan DPA ${formatTanggalId(json.dpa_versi)} — ${beda.barisBaru} rekening baru ditambahkan, `
+            + `angka yang sudah ada tidak berubah.`
+          : `Sudah sama dengan DPA ${formatTanggalId(json.dpa_versi)} — tidak ada angka yang berubah.`)
         return
       }
-      setPratinjauSinkron({ rows: hasil, beda, dpaVersi: json.dpa_versi })
+      setPratinjauSinkron({ rows: hasil, beda, dpaVersi: json.dpa_versi, low })
     } catch { showToast('Kolom DPA gagal disamakan — periksa sambungan, lalu coba lagi.', false) }
     finally  { setInjecting(false) }
   }, [rows, tahun, periodeTulis, pasangHasilSinkron])
@@ -1537,7 +1548,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
               <PrimaButton variant="ghost" size="sm" onClick={() => setPratinjauSinkron(null)}>Batal</PrimaButton>
               <PrimaButton variant="warning" size="sm" onClick={() => {
-                pasangHasilSinkron(pratinjauSinkron.rows, pratinjauSinkron.dpaVersi, [])
+                pasangHasilSinkron(pratinjauSinkron.rows, pratinjauSinkron.dpaVersi, pratinjauSinkron.low)
                 setPratinjauSinkron(null)
                 showToast('Kolom DPA disamakan — belum tersimpan, periksa lalu tekan Simpan.')
               }}>

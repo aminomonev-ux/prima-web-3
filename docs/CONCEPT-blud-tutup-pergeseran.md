@@ -1,7 +1,8 @@
 # CONCEPT — Tutup Pergeseran (BLUD)
 
 > Status: **terpasang** (2026-08-29). Regresi:
-> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (59), 6 uji mutasi tertangkap.
+> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (71), 11 uji mutasi tertangkap.
+> Lihat §16 — cacat jalur HAPUS yang ditemukan pemakai pada hari yang sama.
 > Lahir dari permintaan langsung: pada bulan Februari, yang jadi pembanding
 > seharusnya **hasil pergeseran Januari**, bukan DPA murni.
 
@@ -288,3 +289,73 @@ peringatan memakai warna sebaris, dan tema terang **tidak menimpanya** — teks
 merah muda di atas latar merah muda, praktis tidak terbaca. Dijadikan kelas
 `.tp-galat`/`.tp-ingat` dengan pasangan `[data-theme="light"]`, mengikuti pola
 `.rl-minus-banner`. Diperiksa ulang di kedua tema.
+
+## 16. Cacat jalur HAPUS (ditemukan pemakai, 2026-08-29 sore)
+
+Pemakai menghapus versi pergeseran lalu membangunnya ulang, dan melapor: *"klik
+Simpan otomatis jadi tutup ya? padahal saya belum klik Tutup."*
+
+Simpan **tidak** menutup apa pun — audit membuktikannya, hanya satu baris yang
+membawa keterangan `BASIS dari penutupan`. Yang terjadi: catatan penutupan di
+`blud_pergeseran_tutup` **tidak ikut terhapus** bersama versinya.
+
+| Akibatnya | |
+|---|---|
+| Lencana | Daftar versi mengumumkan "ditutup 28 Feb 2026" untuk basis yang sudah tidak ada |
+| Tombol Tutup | **Mati permanen** — `alasanKunciTutup` membaca catatan yang tertinggal |
+| Kalau ditembus | `PRIMARY KEY (tahun_anggaran, versi_ditutup)` menolak penutupan yang sah |
+
+Jalan buntu, dan sampainya lewat pemakaian biasa: Pengaturan → Hapus Versi.
+
+Ini kegagalan **L69** lagi, dan pada fitur yang seluruh dokumennya membahas L69:
+pagarnya dipasang di jalur SIMPAN, jalur HAPUS tidak pernah ditengok.
+
+### Perbaikannya
+
+`hapusTutupTerkaitVersi(tx, tahun, versi)` membuang **kedua sisi**:
+
+- **basis dihapus** → penutupan itu tidak meninggalkan apa pun.
+- **versi yang ditutup dihapus** → `versi_tanggal` cuma tanggal, jadi apa pun yang
+  nanti disimpan lagi di tanggal itu adalah dokumen **baru**. Catatan yang
+  bertahan membuatnya lahir dalam keadaan "sudah ditutup".
+
+Dipanggil di **dua** tempat, di dalam transaksi masing-masing:
+`deletePergeseranVersi`, dan cabang **kosong+force** `savePergeseran` —
+mengosongkan versi membuatnya lenyap dari `getPergeseranHistory`, jadi akibatnya
+sama dengan menghapus. Cabang itu tidak bisa dicapai lewat HTTP (`rows` minimal 1
+di Zod), tapi pagar yang cuma di jalur utama persis kegagalan yang sedang diobati.
+
+Riwayatnya tidak hilang: `audit_log` menyimpan `BASIS dari penutupan Pergeseran …`,
+dan itu memang arsipnya. `blud_pergeseran_tutup` keadaan yang berjalan (lencana +
+pagar "sudah ditutup"), bukan arsip. Jumlah yang dibuang ikut disebut di baris
+audit penghapusan.
+
+### Dua temuan lain dari tinjauan kode di putaran yang sama
+
+**Kalimat penolakan menawarkan tindakan yang tidak ada.** Saat bulan tujuan sudah
+berisi, pesannya berbunyi "atau pilih periode lain" — padahal sasaran penutupan
+**diturunkan** dari versi yang ditutup, tidak bisa dipilih orang. Diganti: sebutkan
+bahwa hasilnya kemungkinan memang sudah dibawa ke sana, dan kalau perlu diulang,
+hapus dulu versi tujuannya.
+
+**Peringatan kecocokan longgar hilang di jalur yang paling membutuhkannya.**
+Tombol "Terapkan perubahan ini" mengoper larik kosong sebagai `low_confidence`,
+jadi peringatan "dipasangkan berdasarkan kemiripan" hanya muncul di jalur yang
+TIDAK mengubah angka. Sekarang ikut disimpan di state pratinjau.
+
+Ditambah satu koreksi kecil: pesan "tidak ada angka yang berubah" sekarang
+menyebut jumlah rekening baru kalau sinkron menambah baris — menyisipkan rekening
+sambil bilang tidak ada yang berubah itu tidak benar, walau memang tidak merusak.
+
+### Verifikasi
+
+Dijalankan sungguhan lewat aplikasi: tutup Januari → basis `2026-02-28` lahir →
+hapus versi itu lewat Pengaturan → catatan penutupan **ikut hilang** (0 baris
+tersisa), audit berbunyi `… · 1 catatan penutupan ikut dibuang · Alasan: …`, dan
+tombol Tutup di Januari **hidup kembali** dengan tooltip normal.
+
+Regresi bagian H (12 pemeriksaan), 5 uji mutasi tertangkap. Dua di antaranya
+sempat "gagal" karena jendela regex-nya salah, bukan kodenya: `Promise<{ … }>`
+menaruh `}` di kolom 0 sehingga potongan fungsi berhenti di tanda tangan, dan
+`saveDpa` punya cabang `if (!incoming)` kembar yang letaknya lebih awal. Keduanya
+sekarang berjangkar eksplisit.

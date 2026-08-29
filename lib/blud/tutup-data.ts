@@ -63,6 +63,40 @@ export async function catatTutupPergeseran(
 }
 
 /**
+ * Buang catatan penutupan yang menyangkut sebuah versi — dipanggil dari DALAM
+ * transaksi hapus versi.
+ *
+ * **Kedua sisi** dibuang, dan itu keputusan yang perlu ditulis alasannya:
+ *
+ *   • basis dihapus  → penutupan itu tidak menghasilkan apa pun yang tersisa.
+ *   • versi yang ditutup dihapus → yang ditutup sudah tidak ada. Dan
+ *     `versi_tanggal` cuma tanggal: apa pun yang nanti disimpan lagi di tanggal
+ *     itu adalah dokumen BARU, bukan yang dulu ditutup. Membiarkan catatannya
+ *     membuat dokumen baru itu lahir dalam keadaan "sudah ditutup" — tombol
+ *     Tutup mati selamanya dan PRIMARY KEY menolak penutupan yang sah.
+ *
+ * Itu bukan hipotesis: persis yang terjadi 2026-08-29 sore. Versi basis
+ * 28 Feb dihapus, versi 31 Jan dihapus lalu dibangun ulang, dan barisnya
+ * tertinggal — daftar versi mengumumkan "ditutup 28 Feb 2026" untuk basis yang
+ * sudah tidak ada, sementara tombol Tutup abu-abu tanpa jalan keluar.
+ *
+ * Riwayat penutupannya tidak ikut hilang: `audit_log` menyimpan
+ * "BASIS dari penutupan Pergeseran …" dan itu memang arsipnya. Tabel ini
+ * keadaan yang berjalan (lencana + pagar "sudah ditutup"), bukan arsip.
+ */
+export async function hapusTutupTerkaitVersi(
+  tx: TxSql, tahun: number, versiTanggal: string,
+): Promise<number> {
+  const res = await tx`
+    DELETE FROM blud_pergeseran_tutup
+    WHERE tahun_anggaran = ${tahun}
+      AND (versi_ditutup = ${versiTanggal} OR versi_basis = ${versiTanggal})
+  ` as unknown as Array<{ affectedRows: number }>
+  // L53/T15: hasil `tx` itu ARRAY — `res.affectedRows` di sini selalu undefined.
+  return Number(res[0]?.affectedRows ?? 0)
+}
+
+/**
  * Daftar penutupan setahun, urut tanggal. Nomor putaran TIDAK ikut dipulangkan —
  * ia dihitung dari urutan ini oleh `nomorPutaran`. Menyimpannya berarti
  * baca-lalu-tulis pada sebuah penghitung, anti-pattern L55.

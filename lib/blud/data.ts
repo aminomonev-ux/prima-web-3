@@ -21,7 +21,7 @@ import type { BentrokPagu } from './pagu'
 import { ensureAnggaranKey } from './anggaran-key'
 import { toDateStr, formatTanggalId, labelPeriodeVersi } from './tanggal'
 import { catatRiwayatSimpan } from './riwayat-simpan'
-import { catatTutupPergeseran } from './tutup-data'
+import { catatTutupPergeseran, hapusTutupTerkaitVersi } from './tutup-data'
 import type {
   DpaBaris, DpaBarisInput,
   PergeseranBaris, PergeseranBarisInput,
@@ -877,6 +877,13 @@ export async function savePergeseran(
           jenis: 'PERGESERAN', tahun, versiTanggal, versiKe: expectedVersion + 1,
           baris: [], totalNilai: 0, dpaVersiTanggal, userId,
         })
+        // Mengosongkan versi = versi itu lenyap dari daftar (`getPergeseranHistory`
+        // menghitung dari barisnya). Akibatnya sama dengan menghapus, jadi catatan
+        // penutupannya juga harus ikut — kalau tidak, tanggal itu lahir kembali
+        // dalam keadaan "sudah ditutup". Jalur ini TIDAK bisa dicapai lewat HTTP
+        // (`rows` di Zod minimal 1), tapi `savePergeseran` fungsi terekspor dan
+        // pagar yang cuma dipasang di jalur utama persis kegagalan L69.
+        await hapusTutupTerkaitVersi(tx, tahun, versiTanggal)
       })
       return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
     }
@@ -956,6 +963,7 @@ export async function savePergeseran(
  */
 export async function deletePergeseranVersi(tahun: number, versiTanggal: string): Promise<{
   pergeseran_rows: number;
+  tutup_dibuang: number;
 }> {
   const cntRows = await sql`SELECT COUNT(*) AS cnt FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
   const existing = Number(cntRows[0]?.cnt ?? 0)
@@ -964,6 +972,7 @@ export async function deletePergeseranVersi(tahun: number, versiTanggal: string)
   }
   const lockKey = bludVersiKey(tahun, versiTanggal)
   let count = 0
+  let tutupDibuang = 0
   await withTransaction(async ({ tx }) => {
     // T1: menghapus Pergeseran TERBARU memundurkan pagu setahun penuh ke versi
     // sebelumnya (atau jatuh ke DPA) sementara alokasinya tetap tinggal.
@@ -971,9 +980,15 @@ export async function deletePergeseranVersi(tahun: number, versiTanggal: string)
     // L53: tx wrapper return Array<{affectedRows}>, akses lewat [0].
     const res = await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as unknown as Array<{ affectedRows: number }>
     count = Number(res[0]?.affectedRows ?? 0)
+    // Catatan penutupan ikut dibuang — DI TRANSAKSI YANG SAMA, kalau tidak
+    // barisnya bisa tertinggal saat penghapusannya sendiri dibatalkan.
+    // Alasan "kedua sisi" ada di `hapusTutupTerkaitVersi`; ringkasnya: catatan
+    // yang tertinggal membuat tanggal itu lahir kembali dalam keadaan "sudah
+    // ditutup", dan tombol Tutup mati tanpa jalan keluar.
+    tutupDibuang = await hapusTutupTerkaitVersi(tx, tahun, versiTanggal)
     await dropBludVersion(tx, 'pergeseran_dpa', lockKey)
   })
-  return { pergeseran_rows: count }
+  return { pergeseran_rows: count, tutup_dibuang: tutupDibuang }
 }
 
 export interface JangkarTerpakai {

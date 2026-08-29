@@ -388,7 +388,9 @@ export async function DELETE(req: NextRequest) {
       eventType: 'BLUD_DELETE_PERGESERAN_VERSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${result.pergeseran_rows} baris · Alasan: ${parsedAlasan.data}`,
+      detail:    `Hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${result.pergeseran_rows} baris`
+        + `${result.tutup_dibuang > 0 ? ` · ${result.tutup_dibuang} catatan penutupan ikut dibuang` : ''}`
+        + ` · Alasan: ${parsedAlasan.data}`,
     })
     return NextResponse.json({
       ok: true,
