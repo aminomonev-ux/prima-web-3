@@ -116,10 +116,25 @@ export function alasanTolakTutup(
   if (!versiDitutup) return 'Tidak ada versi pergeseran yang sedang dibuka untuk ditutup.'
 
   if (sasaran <= versiDitutup) {
+    // `sasaran === versiDitutup` cuma bisa terjadi satu cara: versi yang ditutup
+    // BERTANGGAL HARI INI (`periodeSetelahTutup` memulangkan '' → sasaran = hari
+    // ini). Jadi kalimatnya boleh menyebutnya langsung.
+    //
+    // JANGAN menyuruh "pilih periode setelah tanggal ini": pemilih periode hanya
+    // menawarkan bulan yang SUDAH lewat (`periodeHistorisTersedia`, batas =
+    // bulan ini − 1), jadi tanggal sesudah hari ini tidak pernah ada di sana —
+    // sama cacatnya dengan penolakan sasaran-dihuni yang sudah diperbaiki.
+    //
+    // Dan JANGAN pula diam-diam membidik besok. `periodeUntukVersi` memulangkan
+    // '' untuk tanggal yang bukan akhir bulan lampau, jadi sesudah Simpan ke
+    // besok pemilih periode pulang ke "bulan berjalan" dan koreksi BERIKUTNYA
+    // mendarat di hari ini — menimpa versi yang barusan ditutup. Itu L79 lahir
+    // kembali, dengan akibat yang lebih parah.
     return sasaran === versiDitutup
-      ? `Basis akan disimpan ke ${formatTanggalId(sasaran)} — versi yang sedang ditutup. `
-        + `Dokumen pergeserannya akan tertimpa dan selisihnya hilang. `
-        + `Pilih periode setelah ${formatTanggalId(versiDitutup)} dulu.`
+      ? `Versi ${formatTanggalId(versiDitutup)} bertanggal hari ini, dan hasil penutupannya butuh `
+        + `tanggal sendiri — ditulis ke tanggal yang sama, dokumen pergeseran ini tertimpa dan `
+        + `selisihnya hilang. Tutup versi ini besok atau sesudahnya; hasilnya akan mendarat di `
+        + `tanggal hari itu.`
       : `Basis akan disimpan ke ${formatTanggalId(sasaran)}, lebih dulu dari versi yang ditutup `
         + `(${formatTanggalId(versiDitutup)}). Hasil penutupan harus mendarat sesudahnya.`
   }

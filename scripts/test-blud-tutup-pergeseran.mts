@@ -153,8 +153,16 @@ bab('C. Dua pagar sasaran')
 
   cek('Menimpa versi yang ditutup → ditolak',
     alasanTolakTutup('2026-01-31', '2026-01-31', dipakai) !== '')
-  cek('Alasannya menyebut jalan keluarnya',
-    /Pilih periode setelah/.test(alasanTolakTutup('2026-01-31', '2026-01-31', dipakai)))
+  {
+    // Cabang ini HANYA tercapai kalau versi yg ditutup bertanggal hari ini.
+    const pesan = alasanTolakTutup('2026-01-31', '2026-01-31', dipakai)
+    cek('Alasannya menyebut jalan keluar yang MEMANG bisa dilakukan',
+      /besok atau sesudahnya/.test(pesan),
+      'menunggu sehari itu bisa; memilih periode sesudah hari ini tidak')
+    cek('…dan berhenti menyuruh memilih periode yang tak pernah ditawarkan',
+      !/[Pp]ilih periode/.test(pesan),
+      'periodeHistorisTersedia batasnya bulan ini - 1')
+  }
   cek('Mundur ke sebelum versi yang ditutup → ditolak',
     alasanTolakTutup('2026-01-15', '2026-01-31', dipakai) !== '')
   cek('Menimpa versi lain yang sudah ada → ditolak',

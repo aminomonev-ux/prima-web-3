@@ -1,7 +1,7 @@
 # CONCEPT — Tutup Pergeseran (BLUD)
 
 > Status: **terpasang** (2026-08-29). Regresi:
-> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (81), 19 uji mutasi tertangkap.
+> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (82), 21 uji mutasi tertangkap.
 > Dua laporan pemakai pada hari yang sama: §16 cacat jalur HAPUS (data), §17 pil
 > versi berbohong sesudah Tutup (tampilan — datanya ternyata sudah benar).
 > Lahir dari permintaan langsung: pada bulan Februari, yang jadi pembanding
@@ -435,3 +435,45 @@ Yang **tidak** dilakukan, dan alasannya:
 Regresi: bagian I di `scripts/test-blud-tutup-pergeseran.mts` (81 pemeriksaan
 total), 8 uji mutasi tertangkap — termasuk mencabut prop hanya di satu layar dan
 mengembalikan `title=` native.
+
+---
+
+## 18. Versi bertanggal HARI INI tidak bisa ditutup hari itu juga
+
+Dilaporkan pemakai: versi 29 Agu 2026 (versi berlaku, disimpan hari itu) mau
+ditutup, tombolnya mati dan kotaknya berbunyi *"Pilih periode setelah 29 Agu 2026
+dulu"*.
+
+Pagarnya benar; **kalimatnya** yang cacat — ia menyuruh sesuatu yang tidak bisa
+dilakukan, sama persis dengan penolakan sasaran-dihuni yang sudah diperbaiki di
+§16. Pemilih periode hanya menawarkan bulan yang **sudah lewat**
+(`periodeHistorisTersedia`, batas = bulan ini − 1), jadi tanggal sesudah hari ini
+tidak pernah ada di sana.
+
+Kenapa terhalang: `periodeSetelahTutup('2026-08-29')` memulangkan `''` (29 Agu
+bukan akhir bulan lampau), jadi sasaran = `sasaranSimpan('')` = hari ini = 29 Agu
+— tanggal yang sama dengan versi yang ditutup. Simpan itu hapus-lalu-tulis-ulang
+per `(tahun, versi_tanggal)`, jadi basisnya akan **menimpa dokumen yang sedang
+ditutup** dan selisih putaran itu hilang. Cabang `sasaran === versiDitutup` cuma
+bisa tercapai lewat satu jalan itu, jadi kalimatnya boleh menyebutnya langsung.
+
+### Kenapa TIDAK diam-diam dibidikkan ke besok
+
+Terlihat sepele — sasaran tinggal digeser +1 hari. Tapi `periodeUntukVersi`
+memulangkan `''` untuk tanggal yang bukan akhir bulan lampau, jadi sesudah Simpan
+ke 30 Agu pemilih periode pulang ke "bulan berjalan", dan koreksi **berikutnya**
+mendarat di 29 Agu — menimpa versi yang barusan ditutup. Itu L79 lahir kembali,
+dengan akibat yang lebih parah daripada aslinya.
+
+Membidik akhir bulan berjalan (31 Agu) punya penyakit yang sama, ditambah versi
+bertanggal masa depan yang jadi sumber pagu sejak hari ini.
+
+### Yang berlaku sekarang
+
+Versi bertanggal hari ini ditutup **besok atau sesudahnya** — saat itu sasaran =
+hari itu, sudah berbeda dari versi yang ditutup, dan pagar lolos tanpa perubahan
+apa pun. Ini cocok dengan pemakaian nyata: satu putaran ditutup **sesudah**
+putarannya selesai, bukan pada menit yang sama ia disimpan.
+
+Kalimatnya sekarang menyebutkan sebabnya sekali dan menutup dengan tindakan yang
+memang bisa dikerjakan.
