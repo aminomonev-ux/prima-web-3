@@ -552,6 +552,29 @@ CREATE TABLE IF NOT EXISTS blud_riwayat_simpan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Riwayat tiap klik Simpan DPA/Pergeseran — snapshot, tidak dirujuk siapa pun';
 
+-- ─── BLUD — TUTUP PERGESERAN ─────────────────────────────────────────────────
+-- Menutup satu PUTARAN pergeseran: kolom P disalin ke kolom kiri, sehingga
+-- geseran berikutnya dihitung terhadap hasil putaran ini, bukan terhadap DPA
+-- murni. Barisnya ditulis lewat jalur Simpan yang sudah ada; tabel ini hanya
+-- mencatat PERISTIWA penutupannya. PRIMARY KEY-nya yang menjaga "satu versi
+-- hanya bisa ditutup sekali" (L69-a). Nomor putaran tidak disimpan — dihitung
+-- dari urutan `versi_ditutup` (L55). Konsep: docs/CONCEPT-blud-tutup-pergeseran.md
+-- Migration: migration-blud-pergeseran-tutup.sql
+
+CREATE TABLE IF NOT EXISTS blud_pergeseran_tutup (
+  tahun_anggaran SMALLINT UNSIGNED NOT NULL,
+  versi_ditutup  DATE     NOT NULL COMMENT 'Versi pergeseran yang dikunci',
+  versi_basis    DATE     NOT NULL COMMENT 'Versi yang lahir dari penutupan',
+  ditutup_pada   DATETIME NOT NULL COMMENT 'Jam-menit WIB, distempel server',
+  ditutup_oleh   INT          NULL,
+  catatan        TEXT         NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (tahun_anggaran, versi_ditutup),
+  INDEX idx_bpt_basis (tahun_anggaran, versi_basis),
+  CONSTRAINT fk_bpt_user FOREIGN KEY (ditutup_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='BLUD - Penutupan putaran pergeseran (hasil putaran jadi patokan berikutnya)';
+
 -- ─── BLUD — MASTER AKUN ──────────────────────────────────────────────────────
 -- Tabel master daftar kode rekening + uraian. Dipakai sebagai source-of-truth
 -- dropdown rekening di DPA & Pergeseran. Migration 018.

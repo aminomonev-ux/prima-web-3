@@ -306,6 +306,20 @@ export const AsalImporSchema = z.object({
 });
 
 /**
+ * Sepadan `AsalSalinSchema`, untuk baris hasil "Tutup Pergeseran".
+ *
+ * Bedanya dengan tiga saudaranya: yang ini tidak berhenti di baris audit. Ia
+ * juga yang menerbitkan baris `blud_pergeseran_tutup` — satu-satunya tempat yang
+ * menyatakan versi mana yang dikunci dan basis mana yang lahir darinya. Tanpa
+ * itu, versi hasil penutupan tidak bisa dibedakan dari versi biasa yang kebetulan
+ * selisihnya nol, dan "Sinkronkan DPA" kehilangan satu-satunya tanda bahwa kolom
+ * kirinya bukan lagi angka DPA murni.
+ */
+export const AsalTutupSchema = z.object({
+  versi_ditutup: TanggalSchema,
+});
+
+/**
  * Bentuk objeknya dipisah dari versi ber-refinement supaya bisa di-`.extend()`
  * — `.extend()` tidak ada pada hasil `.superRefine()`.
  */
@@ -364,9 +378,26 @@ export const PergeseranBodySchema = z.object({
   // Tahun Lain" (salinan lintas tahun mendarat di form DPA, bukan di sini).
   asal_salin:        AsalSalinSchema.optional(),
   asal_pulihkan:     AsalPulihkanSchema.optional(),
+  asal_tutup:        AsalTutupSchema.optional(),
   entri_historis:    z.boolean().optional().default(false),
 }).superRefine((d, ctx) => {
   pagarVersiTanggal(d, ctx);
+  // Pagar tutup #1 — sasaran harus mendarat SESUDAH versi yang ditutup. Simpan
+  // itu hapus-lalu-tulis-ulang per (tahun, versi_tanggal), jadi menyimpan basis
+  // ke tanggal versi yang sedang ditutup akan menghapus dokumen pergeserannya:
+  // selisih −20/+20 miliknya lenyap dan tinggal versi berselisih nol.
+  //
+  // Pagar #2 ("sasaran tidak boleh menimpa versi lain yang sudah ada") tidak bisa
+  // hidup di sini — ia perlu membaca daftar versi. Tempatnya di route, di bawah
+  // kunci, bersama pagar-pagar lain yang butuh database.
+  if (d.asal_tutup && d.asal_tutup.versi_ditutup >= d.versi_tanggal) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['versi_tanggal'],
+      message: `Hasil penutupan versi ${d.asal_tutup.versi_ditutup} tidak boleh disimpan ke ${d.versi_tanggal} — `
+        + `dokumen pergeseran yang ditutup akan tertimpa. Pilih periode sesudahnya.`,
+    });
+  }
   // Pergeseran memotret DPA pada satu titik waktu. DPA yang lahir SESUDAH
   // pergeserannya menghasilkan dokumen yang berbunyi "pada Januari kami
   // menggeser anggaran yang baru ada di Agustus". Sebelum ada pemilih periode,
@@ -381,9 +412,22 @@ export const PergeseranBodySchema = z.object({
   }
 });
 
-/** POST /api/blud/pergeseran/inject */
+/**
+ * POST /api/blud/pergeseran/inject
+ *
+ * `versi_tanggal` WAJIB, dan itu perbaikan bug yang sudah ada: route ini dulu
+ * selalu mengambil DPA TERBARU. Menekan Sinkronkan DPA di versi Januari menarik
+ * DPA Agustus — Simpan memang menolaknya lewat pagar `dpa_versi_tanggal >
+ * versi_tanggal`, tapi tabelnya sudah terlanjur tertimpa dan penolakannya baru
+ * datang setelah seluruh geseran diisi ulang.
+ *
+ * Sengaja bukan `.optional()` dengan cadangan "DPA terbaru": cadangan itu adalah
+ * perilaku lamanya, dan pemanggil yang lupa mengirimnya akan diam-diam kembali ke
+ * sana. Wajib berarti kompilernya yang mengingatkan.
+ */
 export const InjectBodySchema = z.object({
   tahun_anggaran:  TahunSchema,
+  versi_tanggal:   TanggalSchema,
   pergeseran_rows: z.array(PergeseranBarisInputSchema).min(1, 'Data pergeseran kosong').max(MAKS_BARIS_SIMPAN, `Maksimal ${MAKS_BARIS_SIMPAN} baris`),
 });
 

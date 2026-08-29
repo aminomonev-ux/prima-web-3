@@ -1,0 +1,169 @@
+// lib/blud/tutup-pergeseran.ts — aturan "Tutup Pergeseran".
+// Konsep lengkap: docs/CONCEPT-blud-tutup-pergeseran.md
+//
+// Menutup satu PUTARAN pergeseran: kolom P disalin ke kolom kiri, sehingga
+// geseran berikutnya dihitung terhadap hasil putaran ini — bukan terhadap DPA
+// murni. Tanpa ini, dokumen Februari berbunyi "menggeser 20 juta ke B" padahal
+// itu kerjaan Januari; angka pagunya benar, dokumennya yang bohong — dan
+// dokumen itulah bahan Rekap Penanggung Jawab.
+//
+// Dua keputusan yang membentuk seluruh berkas ini:
+//
+// 1. **Berhenti di FORM.** Tidak ada satu pun fungsi di sini yang menulis ke
+//    database. Yang menulis tetap tombol Simpan halaman, dengan rumus tanggal
+//    yang sudah ada (`sasaranSimpan`). Modal yang memegang tanggal versi DAN
+//    jalur tulisnya sendiri adalah persis bentuk L78, dan itu sudah pernah
+//    menimpa 558 baris bulan berjalan.
+//
+// 2. **Ini "tutup putaran", bukan "tutup bulan".** Batasnya kebijakan kantor —
+//    tanggal terakhir unit lain boleh mengajukan pergeseran — jadi bisa jatuh di
+//    tengah bulan dan bisa lebih dari sekali sebulan. Karena itu tidak ada
+//    aturan "bulannya harus sudah lewat", dan penomorannya "Pergeseran ke-n".
+
+import { recalcPergeseranJumlah } from './recalc'
+import { akhirBulan, formatTanggalId, labelPeriodeVersi, tanggalPeriodeHistoris } from './tanggal'
+import type { PergeseranBarisInput } from '@/types'
+
+/** Satu peristiwa penutupan — cermin baris `blud_pergeseran_tutup`. */
+export interface TutupPergeseran {
+  versi_ditutup: string
+  versi_basis:   string
+  ditutup_pada:  string
+  ditutup_oleh:  string | null
+}
+
+/**
+ * Jejak audit — ikut body Simpan, pola persis `asal_salin`/`asal_pulihkan`.
+ * Tidak ada kolom di `pergeseran_dpa` yang menyatakan "versi ini lahir dari
+ * penutupan"; baris `blud_pergeseran_tutup` yang ditulis dari sinilah jawabannya.
+ */
+export interface AsalTutup {
+  versi_ditutup: string
+}
+
+/**
+ * Kolom P → kolom kiri. Angka pergeserannya sendiri TIDAK disentuh, dan itu
+ * seluruh alasan penutupan ini tidak bisa mengganggu realisasi: pagu dibaca dari
+ * kolom `pergeseran` versi terbaru, sedangkan `recalcPergeseranJumlah` menghitung
+ * kolom itu dari `vol_p × harga_p` yang tetap sama persis.
+ *
+ * Urutannya penting dan bukan kerapian: recalc DULU, baru disalin. Kalau
+ * dibalik, baris induk yang angkanya sempat tidak sinkron dengan anak-anaknya
+ * akan mendapat `jumlah` dari nilai lama lalu `pergeseran`-nya dihitung ulang ke
+ * nilai baru — hasilnya `bertambah_berkurang` bukan nol, dan Simpan langsung
+ * ditolak PERGESERAN_TIDAK_BERIMBANG oleh angka yang tidak pernah digeser siapa
+ * pun. Dengan urutan ini `jumlah` selalu diambil dari `pergeseran` yang SUDAH
+ * final, jadi selisihnya nol secara konstruksi.
+ *
+ * `vol`/`harga` induk ikut `vol_p`/`harga_p` (biasanya null) — sederajat dengan
+ * bentuk baris induk di DPA, yang angkanya juga datang dari anak-anaknya.
+ */
+export function tutupPergeseranRows(rows: PergeseranBarisInput[]): PergeseranBarisInput[] {
+  return recalcPergeseranJumlah(rows).map(r => ({
+    ...r,
+    vol:                 r.vol_p,
+    harga:               r.harga_p,
+    jumlah:              r.pergeseran,
+    bertambah_berkurang: 0,
+  }))
+}
+
+/**
+ * Nilai pemilih periode yang harus disetel sesudah penutupan. `''` berarti
+ * "bulan berjalan" — yaitu hari ini, lewat `sasaranSimpan`.
+ *
+ * Ini SATU-SATUNYA tempat di aplikasi yang memindahkan sasaran Simpan dari
+ * sebuah aksi, dan pengecualiannya disengaja. L80 melarangnya untuk "Salin dari
+ * Versi Lain" karena di sana memindahkan sasaran adalah efek samping yang tidak
+ * diminta siapa pun; di sini periode berikutnya ADALAH pekerjaannya. Syaratnya
+ * tetap: perpindahannya terlihat (chip periode berganti) dan disebutkan lebih
+ * dulu di konfirmasi.
+ *
+ * Yang ditutup arsip periode (mis. 31 Jan) → basisnya milik bulan berikutnya.
+ * Kalau bulan itu sendiri sudah lewat, ia punya tanggal kanoniknya; kalau belum,
+ * jatuh ke bulan berjalan. Yang ditutup revisi harian → basisnya hari ini.
+ */
+export function periodeSetelahTutup(versiDitutup: string, sekarang: number = Date.now()): string {
+  if (!tanggalPeriodeHistoris(versiDitutup, sekarang)) return ''
+
+  const tahun = Number(versiDitutup.slice(0, 4))
+  const bulan = Number(versiDitutup.slice(5, 7))
+  // Desember tidak punya bulan berikutnya DI TAHUN ITU. Basisnya jatuh ke bulan
+  // berjalan, dan `alasanTolakTutup` yang memutuskan apakah itu masuk akal —
+  // menebak tahun berikutnya di sini akan melahirkan versi bertahun-anggaran
+  // sama tapi bertanggal tahun lain, tepat kebingungan yang §2 hindari.
+  if (bulan >= 12) return ''
+
+  const berikut = akhirBulan(tahun, bulan + 1)
+  return tanggalPeriodeHistoris(berikut, sekarang) ? berikut : ''
+}
+
+/**
+ * Dua pagar sasaran. Kosong = boleh disimpan.
+ *
+ * Keduanya diperiksa pada AKIBATNYA, bukan pada tebakan soal niat, dan itu yang
+ * membuatnya cukup dua. Simpan itu hapus-lalu-tulis-ulang per
+ * `(tahun, versi_tanggal)`, jadi setiap sasaran yang sudah dihuni berarti
+ * dokumen orang lain hilang tanpa sisa — termasuk dokumen yang sedang ditutup.
+ *
+ * @param versiTerpakai daftar `versi_tanggal` yang sudah ada di tahun itu
+ */
+export function alasanTolakTutup(
+  sasaran: string,
+  versiDitutup: string,
+  versiTerpakai: readonly string[],
+): string {
+  if (!versiDitutup) return 'Tidak ada versi pergeseran yang sedang dibuka untuk ditutup.'
+
+  if (sasaran <= versiDitutup) {
+    return sasaran === versiDitutup
+      ? `Basis akan disimpan ke ${formatTanggalId(sasaran)} — versi yang sedang ditutup. `
+        + `Dokumen pergeserannya akan tertimpa dan selisihnya hilang. `
+        + `Pilih periode setelah ${formatTanggalId(versiDitutup)} dulu.`
+      : `Basis akan disimpan ke ${formatTanggalId(sasaran)}, lebih dulu dari versi yang ditutup `
+        + `(${formatTanggalId(versiDitutup)}). Hasil penutupan harus mendarat sesudahnya.`
+  }
+
+  if (versiTerpakai.includes(sasaran)) {
+    return `${formatTanggalId(sasaran)} sudah punya versi pergeseran. `
+      + `Menyimpan basis ke situ akan menimpanya — buka versi itu kalau memang mau dilanjutkan, `
+      + `atau pilih periode lain.`
+  }
+
+  return ''
+}
+
+/**
+ * Nomor putaran sebuah versi — DIHITUNG dari urutan, tidak pernah disimpan.
+ * Menyimpannya berarti baca-lalu-tulis pada sebuah penghitung, anti-pattern L55.
+ * Memulangkan 0 kalau versi itu belum pernah ditutup.
+ */
+export function nomorPutaran(daftar: readonly TutupPergeseran[], versiDitutup: string): number {
+  const urut = [...daftar].sort((a, b) => a.versi_ditutup.localeCompare(b.versi_ditutup))
+  return urut.findIndex(t => t.versi_ditutup === versiDitutup) + 1
+}
+
+/** Label daftar versi: "Pergeseran ke-2 · ditutup 21 Jan 2027". */
+export function labelTutup(daftar: readonly TutupPergeseran[], versiDitutup: string): string {
+  const n = nomorPutaran(daftar, versiDitutup)
+  if (!n) return ''
+  const t = daftar.find(x => x.versi_ditutup === versiDitutup)
+  return `Pergeseran ke-${n}${t ? ` · ditutup ${formatTanggalId(t.versi_basis)}` : ''}`
+}
+
+/** Ringkasan sasaran untuk lembar konfirmasi — "Periode Februari 2026" / "hari ini". */
+export function labelSasaranTutup(sasaran: string, periode: string): string {
+  return periode ? labelPeriodeVersi(periode) : `${formatTanggalId(sasaran)} (bulan berjalan)`
+}
+
+/**
+ * Total pagu tahun itu menurut kolom `pergeseran` baris AKAR. Ditampilkan
+ * sebelum dan sesudah penutupan di lembar konfirmasi.
+ *
+ * Bukan hiasan: kedua angka WAJIB sama. Penutupan tidak menyentuh `vol_p`/
+ * `harga_p`, jadi kalau totalnya sampai bergeser, ada yang salah — dan orangnya
+ * melihatnya sebelum menekan Simpan, bukan sesudah.
+ */
+export function totalPaguAkar(rows: readonly PergeseranBarisInput[]): number {
+  return rows.reduce((s, r) => (r.parent_id ? s : s + (r.pergeseran ?? 0)), 0)
+}

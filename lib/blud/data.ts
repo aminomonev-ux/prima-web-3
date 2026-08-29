@@ -21,6 +21,7 @@ import type { BentrokPagu } from './pagu'
 import { ensureAnggaranKey } from './anggaran-key'
 import { toDateStr, formatTanggalId, labelPeriodeVersi } from './tanggal'
 import { catatRiwayatSimpan } from './riwayat-simpan'
+import { catatTutupPergeseran } from './tutup-data'
 import type {
   DpaBaris, DpaBarisInput,
   PergeseranBaris, PergeseranBarisInput,
@@ -91,6 +92,33 @@ export class BludHistorisJadiPaguError extends Error {
       + `— kalau tidak, angka ${labelPeriodeVersi(versi)} yang dipakai jadi pagu tahun ini.`,
     )
     this.name = 'BludHistorisJadiPaguError'
+  }
+}
+
+/**
+ * Pagar tutup #2 — hasil penutupan mendarat di tanggal yang SUDAH punya versi.
+ *
+ * Pagar #1 (sasaran harus sesudah versi yang ditutup) hidup di Zod: ia cuma
+ * membandingkan dua tanggal. Yang ini perlu membaca tabel, jadi tempatnya di
+ * dalam transaksi — dan sengaja memakai `existing` yang sudah dihitung di bawah
+ * kunci, bukan hitungan baru: dua pembacaan berarti dua kesempatan angkanya basi.
+ *
+ * Kenapa penting: Simpan itu hapus-lalu-tulis-ulang per (tahun, versi_tanggal).
+ * Menutup Januari sementara pemilih periode tertinggal di bulan berjalan akan
+ * menyimpan basisnya ke tanggal hari ini — dan kalau hari ini sudah punya versi
+ * (mis. versi Agustus yang sedang jadi acuan realisasi), versi itu lenyap
+ * digantikan angka Januari. Jumlah barisnya sama persis, jadi ambang penurunan
+ * baris tidak menyalak; selisihnya nol, jadi pemeriksaan berimbang lolos juga.
+ * Tidak ada pagar lama yang menangkapnya.
+ */
+export class BludSasaranTutupTerpakaiError extends Error {
+  constructor(public versiDitutup: string, public sasaran: string, public existing: number) {
+    super(
+      `${formatTanggalId(sasaran)} sudah punya versi pergeseran (${existing} baris). `
+      + `Menyimpan hasil penutupan ${formatTanggalId(versiDitutup)} ke situ akan menimpanya. `
+      + `Pilih periode lain yang masih kosong.`,
+    )
+    this.name = 'BludSasaranTutupTerpakaiError'
   }
 }
 
@@ -598,6 +626,30 @@ export async function getDpaLatestDate(tahun: number): Promise<string | null> {
   return v ? toDateStr(v) : null
 }
 
+/**
+ * Versi DPA yang BERLAKU pada sebuah tanggal — versi terakhir yang tanggalnya
+ * ≤ tanggal itu.
+ *
+ * Bukan "DPA bertanggal persis tanggal itu": versi DPA lahir pada hari orang
+ * menyimpannya (mis. 2026-07-26), jadi pencarian persis ke 2026-07-31 tidak akan
+ * menemukan apa pun padahal DPA Julinya jelas ada.
+ *
+ * Untuk sasaran bertanggal hari ini, hasilnya SAMA PERSIS dengan
+ * `getDpaLatestDate` — `pagarVersiTanggal` menolak versi bertanggal setelah hari
+ * ini, jadi "terakhir ≤ hari ini" memang "terbaru". Itu sebabnya memakai fungsi
+ * ini di jalur yang dulu memanggil `getDpaLatestDate` tidak mengubah perilaku
+ * bulan berjalan sedikit pun; yang berubah hanya jalur periode historis, yang
+ * memang selama ini salah.
+ */
+export async function getDpaVersiBerlaku(tahun: number, tanggal: string): Promise<string | null> {
+  const rows = await sql`
+    SELECT MAX(versi_tanggal) AS v FROM dpa_blud
+    WHERE tahun_anggaran = ${tahun} AND versi_tanggal <= ${tanggal}
+  `
+  const v = (rows as Record<string, unknown>[])[0]?.v
+  return v ? toDateStr(v) : null
+}
+
 export async function getDpaByDate(tahun: number, versiTanggal: string): Promise<DpaBaris[]> {
   const rows = await sql`SELECT * FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal} ORDER BY urutan ASC`
   return (rows as Record<string,unknown>[]).map(normDpa)
@@ -793,6 +845,16 @@ export async function savePergeseran(
   turunkanPaksa = false,
   /** Versi bulan lampau — ditolak kalau justru akan jadi acuan pagu tahun itu. */
   entriHistoris = false,
+  /**
+   * Versi yang sedang ditutup — hanya diisi jalur "Tutup Pergeseran".
+   *
+   * SENGAJA tidak diteruskan ke cabang `!incoming` di bawah: penutupan selalu
+   * membawa seluruh barisnya (kolom P disalin ke kiri, jumlah barisnya tidak
+   * berubah sama sekali), jadi cabang kosong+force tidak akan pernah dilewatinya.
+   * Ditulis eksplisit supaya pembaca berikutnya tidak mengira ini jalur yang
+   * terlupa — L69 lahir justru dari perbaikan yang cuma kena sebagian jalur.
+   */
+  asalTutup: { versi_ditutup: string } | null = null,
 ): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
@@ -834,6 +896,12 @@ export async function savePergeseran(
     if (!force && existing > 0 && incoming < existing * SAFE_DROP_THRESHOLD) {
       throw new BludReplaceSafetyError('pergeseran_dpa', existing, incoming, ((existing - incoming) / existing) * 100)
     }
+    // Pagar tutup #2. TIDAK bisa ditembus `force`: `force` menyatakan "saya tahu
+    // barisnya menyusut drastis", bukan "saya tahu dokumen lain akan hilang".
+    // Basis penutupan selalu punya tempat kosong yang benar untuk didarati.
+    if (asalTutup && existing > 0) {
+      throw new BludSasaranTutupTerpakaiError(asalTutup.versi_ditutup, versiTanggal, existing)
+    }
     // Cermin `saveDpa` — L69: pewarisan jangkar tidak boleh hanya dipasang di satu
     // tabel. Salin Tahun bisa menyasar Pergeseran persis seperti DPA.
     const berjangkar = warisiJangkar(rows, await jangkarVersiTerbaru(tx, 'pergeseran_dpa', tahun))
@@ -869,6 +937,15 @@ export async function savePergeseran(
       baris: rows, totalNilai: rows.reduce((s, r) => s + Number(r.pergeseran ?? 0), 0),
       dpaVersiTanggal, userId,
     })
+    // Di dalam transaksi yang sama dengan barisnya: kalau penutupannya tercatat
+    // tapi barisnya gagal ditulis (atau sebaliknya), daftar putaran berbohong
+    // tentang dokumen yang ada. PRIMARY KEY tabelnya yang menolak penutupan
+    // ganda — lihat `catatTutupPergeseran`.
+    if (asalTutup) {
+      await catatTutupPergeseran(tx, {
+        tahun, versiDitutup: asalTutup.versi_ditutup, versiBasis: versiTanggal, userId,
+      })
+    }
   })
   return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
 }

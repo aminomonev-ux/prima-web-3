@@ -232,8 +232,12 @@ bab('C. belumTersimpan — bendera "layar ≠ yang tersimpan"')
   const pgs = kode(baca(KLIEN_PGS))
   cek('Pergeseran: Buat Pergeseran menandai belum tersimpan',
     /setRows\(generated\)[\s\S]{0,120}setBelumTersimpan\(true\)/.test(pgs))
+  // Pemasangan baris hasil sinkron pindah ke `pasangHasilSinkron` (2026-08-29):
+  // hasilnya kini dibandingkan dulu, dan dua jalur — "tidak ada yang berubah"
+  // dan tombol Terapkan — memanggil pemasang yang sama. Yang dijaga tetap sama:
+  // barisnya berganti, jadi layar WAJIB menandai belum tersimpan.
   cek('Pergeseran: Sinkronkan DPA menandai belum tersimpan',
-    /setRows\(json\.data\)\s*\n\s*setBelumTersimpan\(true\)/.test(pgs))
+    /pasangHasilSinkron = useCallback\([\s\S]{0,200}setRows\(baris\)\s*\n\s*setBelumTersimpan\(true\)/.test(pgs))
 }
 
 bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')
@@ -263,8 +267,16 @@ bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')
     /disabled=\{loading \|\| !!alasanKunciBorongan\}/.test(pgs))
   // Sinkronkan DPA memperbarui kolom di TEMPAT — row_id & vol_p/harga_p utuh,
   // jadi ia pekerjaan normal pada versi yang sudah tersimpan.
+  //
+  // Syarat `!!periodeTulis` dicabut 2026-08-29: dulu tombol ini dimatikan pada
+  // periode historis karena servernya selalu mengambil DPA TERBARU. Sekarang ia
+  // mengambil DPA yang BERLAKU pada sasaran Simpan, jadi sebabnya hilang.
   cek('Pergeseran: Sinkronkan DPA sengaja tidak ikut terkunci',
-    /disabled=\{injecting \|\| !rows\.length \|\| !!periodeTulis\}/.test(pgs))
+    /disabled=\{injecting \|\| !rows\.length\}/.test(pgs)
+    && !/disabled=\{injecting[^}]*alasanKunciBorongan/.test(pgs))
+  cek('Pergeseran: Sinkronkan DPA tidak lagi dimatikan periode historis',
+    !/disabled=\{injecting \|\| !rows\.length \|\| !!periodeTulis\}/.test(pgs),
+    'servernya sudah sadar periode — lihat scripts/test-blud-tutup-pergeseran.mts')
 }
 
 bab('E. 409 berhenti menuduh "orang lain"')

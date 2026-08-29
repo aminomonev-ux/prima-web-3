@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { getDpaByDate, getDpaLatestDate, getDpaVersion } from '@/lib/blud/data'
+import { getDpaByDate, getDpaVersiBerlaku, getDpaVersion } from '@/lib/blud/data'
 import { injectDpaKePergeseran } from '@/lib/blud/recalc'
 import { InjectBodySchema, bludRateLimit } from '@/lib/blud/schemas'
 import { bolehEditMenu, tolakEdit, unauthorized, bludMati } from '../../_guard'
@@ -37,13 +37,26 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, pergeseran_rows } = parsed.data
+  const { tahun_anggaran, versi_tanggal, pergeseran_rows } = parsed.data
 
   try {
-    // Coupling ketat (§2.1): inject selalu ambil DPA terbaru DALAM TAHUN SAMA.
-    const dpaTanggal = await getDpaLatestDate(tahun_anggaran)
+    // Coupling ketat (§2.1): DPA selalu dari TAHUN YANG SAMA. Yang berubah cuma
+    // "versi mana" — dulu selalu yang TERBARU, sekarang yang BERLAKU pada versi
+    // pergeseran yang sedang ditulis.
+    //
+    // Perbedaannya baru terasa di periode historis, dan di situ yang lama salah:
+    // menekan Sinkronkan DPA pada versi Januari menarik DPA Agustus, menimpa
+    // seluruh kolom kirinya, lalu Simpan menolak lewat pagar `dpa_versi_tanggal >
+    // versi_tanggal` — penolakan yang datang setelah tabelnya rusak. Untuk versi
+    // bertanggal hari ini hasilnya identik dengan sebelumnya, sebab versi DPA
+    // tidak mungkin bertanggal setelah hari ini.
+    const dpaTanggal = await getDpaVersiBerlaku(tahun_anggaran, versi_tanggal)
     if (!dpaTanggal) {
-      return NextResponse.json({ ok: false, error: `Tidak ada data DPA untuk tahun ${tahun_anggaran}` }, { status: 404 })
+      return NextResponse.json({
+        ok: false,
+        error: `Belum ada DPA ${tahun_anggaran} yang berlaku sampai ${versi_tanggal}. `
+          + `Susun DPA periode itu dulu di menu DPA BLUD.`,
+      }, { status: 404 })
     }
 
     // L51 transparency (B1): baca DPA + version paralel — kalau user lain edit
@@ -66,7 +79,7 @@ export async function POST(req: NextRequest) {
       eventType: 'BLUD_INJECT_DPA',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Inject DPA ${tahun_anggaran}/${dpaTanggal} (v${dpaVersion}) ke Pergeseran (${pergeseran_rows.length} baris client → ${injected.length} hasil, ${lowConfidence.length} match heuristik longgar)`,
+      detail:    `Inject DPA ${tahun_anggaran}/${dpaTanggal} (v${dpaVersion}) ke Pergeseran versi ${versi_tanggal} (${pergeseran_rows.length} baris client → ${injected.length} hasil, ${lowConfidence.length} match heuristik longgar)`,
     })
 
     return NextResponse.json({

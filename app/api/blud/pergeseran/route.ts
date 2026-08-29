@@ -8,8 +8,9 @@ import {
   getPergeseranHistory, getPergeseranByDate, getDpaByDate, getDpaLatestDate,
   getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi,
   BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludHistorisJadiPaguError,
-  BludPaguDibawahRealisasiError,
+  BludPaguDibawahRealisasiError, BludSasaranTutupTerpakaiError,
 } from '@/lib/blud/data'
+import { BludSudahDitutupError, getTutupPergeseran } from '@/lib/blud/tutup-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
@@ -72,8 +73,12 @@ export async function GET(req: NextRequest) {
     const { tahun } = resolved
 
     if (mode === 'history') {
-      const data = await getPergeseranHistory(tahun)
-      return NextResponse.json({ ok: true, data, tahun })
+      // Daftar penutupan menumpang di sini, bukan di endpoint sendiri: ia
+      // metadata TENTANG versi, jadi pagar aksesnya memang pagar yang sama, dan
+      // layar yang butuh keduanya cuma menembak server sekali. Endpoint baru
+      // berarti permukaan sakelar maintenance baru yang harus ikut dijaga (L72).
+      const [data, tutup] = await Promise.all([getPergeseranHistory(tahun), getTutupPergeseran(tahun)])
+      return NextResponse.json({ ok: true, data, tutup, tahun })
     }
 
     const versi = tanggal ?? await getPergeseranLatestDate(tahun)
@@ -119,7 +124,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_salin, asal_pulihkan, entri_historis } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_salin, asal_pulihkan, asal_tutup, entri_historis } = parsed.data
 
   // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
   if (turunkan_paksa && !alasan_turun) {
@@ -187,6 +192,7 @@ export async function POST(req: NextRequest) {
     const result = await savePergeseran(
       tahun_anggaran, versi_tanggal, dpaVersi, recalced,
       session.userId, expected_version, force, turunkan_paksa, entri_historis,
+      asal_tutup ?? null,
     )
     const bentrok = result.bentrokPagu
 
@@ -211,7 +217,11 @@ export async function POST(req: NextRequest) {
         // jadi jangkar realisasinya utuh; `lingkup` tetap disebut supaya baris
         // ini terbaca sama dengan pasangannya di BLUD_SAVE_DPA.
         + `${asal_salin ? ` · salinan dari Pergeseran ${asal_salin.tahun}/${asal_salin.versi} (versi lain, tahun sama — jangkar realisasi ikut terbawa)` : ''}`
-        + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`,
+        + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`
+        // Penutupan punya kolomnya sendiri di `blud_pergeseran_tutup`, tapi baris
+        // ini tetap menyebutnya: audit dibaca berurutan sebagai satu cerita, dan
+        // "kenapa versi ini selisihnya nol" harus terjawab tanpa membuka tabel lain.
+        + `${asal_tutup ? ` · BASIS dari penutupan Pergeseran ${asal_tutup.versi_ditutup} (kolom pergeseran disalin ke kolom kiri, pagu tidak berubah)` : ''}`,
     })
     // §4.1/§4.2: permintaan bendahara yang sudah terpenuhi ditutup sendiri +
     // notifikasi balik. Sengaja SETELAH commit dan dibungkus try sendiri —
@@ -304,6 +314,21 @@ export async function POST(req: NextRequest) {
     if (err instanceof BludPaguDibawahRealisasiError) {
       return NextResponse.json({
         ok: false, code: 'PAGU_DIBAWAH_REALISASI', error: err.message, detail: err.bentrok,
+      }, { status: 409 })
+    }
+    // Dua pagar penutupan. Keduanya 409, bukan 400: barisnya sah, keadaan di
+    // server yang membuatnya belum boleh mendarat — dan keduanya hilang sendiri
+    // begitu periodenya diganti.
+    if (err instanceof BludSasaranTutupTerpakaiError) {
+      return NextResponse.json({
+        ok: false, code: 'SASARAN_TUTUP_TERPAKAI', error: err.message,
+        versi_ditutup: err.versiDitutup, sasaran: err.sasaran,
+      }, { status: 409 })
+    }
+    if (err instanceof BludSudahDitutupError) {
+      return NextResponse.json({
+        ok: false, code: 'SUDAH_DITUTUP', error: err.message,
+        versi_ditutup: err.versiDitutup, versi_basis: err.versiBasis,
       }, { status: 409 })
     }
     console.error('[API /blud/pergeseran POST]', err)

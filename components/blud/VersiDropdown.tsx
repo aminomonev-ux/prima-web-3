@@ -15,6 +15,12 @@ import { formatTanggalId } from '@/lib/blud/tanggal'
 export interface VersiItem {
   versi_tanggal: string         // YYYY-MM-DD
   jumlah_baris?: number         // opsional (DPA pakai, Pergeseran tidak)
+  /**
+   * Keterangan pendek di samping tanggal. Sengaja teks bebas, bukan enum:
+   * satu-satunya pemakainya sejauh ini layar Pergeseran ("Pergeseran ke-2 ·
+   * ditutup 21 Jan 2027"), dan komponen ini tidak perlu tahu apa itu penutupan.
+   */
+  catatan?: string
 }
 
 /** Satu klik Simpan. Bentuknya sengaja sama dengan `RiwayatSimpanItem` di server. */
@@ -157,6 +163,7 @@ export default function VersiDropdown({
                       {simpanan.length > 1 && (
                         <span className="versi-item-meta">· {simpanan.length}× simpan</span>
                       )}
+                      {item.catatan && <span className="versi-item-meta">· {item.catatan}</span>}
                       {isBerlaku && <span className="versi-badge-latest">BERLAKU</span>}
                       {active && <Check className="w-3.5 h-3.5 versi-item-check" />}
                     </button>

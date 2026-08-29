@@ -3151,6 +3151,25 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .rl-toggle:hover { color: #10243B; }
 [data-theme="light"] .rl-banner { background: rgba(124,92,252,.09); color: #534AB7; }
 [data-theme="light"] .rl-minus-banner { background: rgba(226,75,74,.08); color: #A32E2D; }
+
+/* Tutup Pergeseran — dua kotak peringatan di lembar konfirmasi & pratinjau
+   sinkron. Kelas, bukan gaya sebaris: warna sebaris tidak ikut ditimpa tema
+   terang, dan teks merah muda di atas latar merah muda memang sempat tidak
+   terbaca sama sekali di layar. Bentuknya menyalin `.rl-minus-banner`. */
+.tp-galat {
+  padding: 10px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.6;
+  background: rgba(226,75,74,.12); border: 1px solid #E24B4A; color: #F0B3B2;
+}
+/* `strong` sengaja tanpa warna sendiri — tebalnya sudah cukup menonjol, dan
+   warna keempat di kotak sekecil ini hanya menambah token baru tanpa menambah
+   arti. */
+[data-theme="light"] .tp-galat { background: rgba(226,75,74,.08); color: #A32E2D; }
+
+.tp-ingat {
+  padding: 10px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.6;
+  background: rgba(245,158,11,.12); border: 1px solid #F59E0B; color: #FCD34D;
+}
+[data-theme="light"] .tp-ingat { background: rgba(245,158,11,.10); color: #92400E; }
 [data-theme="light"] .rl-diff { background: #fff; border: 1px solid #E1E7EE; }
 [data-theme="light"] .rl-diff-judul { color: #5B7392; }
 [data-theme="light"] .rl-reg-ringkas { color: #5B7392; }

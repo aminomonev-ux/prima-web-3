@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Save, Sparkles, RefreshCw, Calendar, X, AlertTriangle, Search, Copy } from 'lucide-react'
+import { Save, Sparkles, RefreshCw, Calendar, X, AlertTriangle, Search, Copy, Lock } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
@@ -29,6 +29,11 @@ import { formatTanggalId, tanggalHariIniWIB, expectedVersionUntuk, periodeUntukV
 import {
   alasanKunciSalinVersi, petakanPergeseranRows, totalAkarPergeseran, type AsalSalin,
 } from '@/lib/blud/salin-versi'
+import {
+  tutupPergeseranRows, periodeSetelahTutup, alasanTolakTutup, labelSasaranTutup,
+  labelTutup, totalPaguAkar, type TutupPergeseran, type AsalTutup,
+} from '@/lib/blud/tutup-pergeseran'
+import { bedaSinkron, sinkronMengubahAngka, type BedaSinkron } from '@/lib/blud/sinkron-dpa'
 import SalinVersiModal from '@/components/blud/SalinVersiModal'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import { useIngatkanBelumTersimpan } from '@/lib/shared/belum-tersimpan'
@@ -700,6 +705,24 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // Sepadan, untuk baris yang datang dari versi lain tahun yang sama.
   const asalSalinRef = useRef<AsalSalin | null>(null)
   const [salinVersiBuka, setSalinVersiBuka] = useState(false)
+  // ── Tutup Pergeseran ───────────────────────────────────────────────────────
+  // Daftar penutupan setahun. Dipakai tiga tempat: lencana di daftar versi,
+  // penolakan "sudah ditutup", dan peringatan Sinkron DPA pada versi basis.
+  const [tutupList, setTutupList] = useState<TutupPergeseran[]>([])
+  // Berbeda dari `asalSalinRef`/`asalPulihkanRef` yang berhenti di baris audit:
+  // yang ini juga menerbitkan baris `blud_pergeseran_tutup`. Ref, bukan state —
+  // ia dibaca di dalam `doSimpanInternal` yang bisa dipanggil ulang dari jalur
+  // retry, dan nilainya tidak boleh ikut basi bersama closure render lama.
+  const asalTutupRef = useRef<AsalTutup | null>(null)
+  const [konfirmTutup, setKonfirmTutup] = useState<{
+    versiDitutup: string; sasaran: string; periode: string
+    paguSebelum: number; paguSesudah: number; jumlahBaris: number; halangan: string
+  } | null>(null)
+  // Hasil sinkron yang MENUNGGU persetujuan — hanya diisi kalau ada angka yang
+  // berubah. Tidak ada perubahan = langsung diterapkan, tanpa satu pun dialog.
+  const [pratinjauSinkron, setPratinjauSinkron] = useState<{
+    rows: PergeseranBarisInput[]; beda: BedaSinkron; dpaVersi: string
+  } | null>(null)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §2.1) — pilih tahun dulu, sama pola DPA.
   const CURRENT_YEAR = new Date().getFullYear()
   const [tahun,     setTahun]     = useState<number>(CURRENT_YEAR)
@@ -715,7 +738,6 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     detail: { kode_rekening: string; uraian: string; pagu_baru: number; terserap: number; minus: number; hilang: boolean }[]
   } | null>(null)
   const [alasanTurun, setAlasanTurun] = useState('')
-  const [confirmInject, setConfirmInject] = useState(false)
   const [akunOptions,   setAkunOptions]   = useState<AkunOption[]>([])
   const [pjOptions,     setPjOptions]     = useState<string[]>([])
   // Filter level (B) + search jump (C)
@@ -810,7 +832,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     try {
       const res  = await fetch(`/api/blud/pergeseran?mode=history&tahun=${tahun}`)
       const json = await res.json()
-      if (json.ok) setHistory(json.data)
+      // Daftar penutupan ikut di balasan yang sama — satu tembakan, satu pagar
+      // akses. Keduanya metadata tentang versi, jadi memisahkannya cuma menambah
+      // permukaan tanpa menambah jawaban.
+      if (json.ok) { setHistory(json.data); setTutupList(json.tutup ?? []) }
     } catch { /* skip */ }
   }, [tahun])
 
@@ -877,6 +902,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         // Barisnya diganti muatan server — jejak "ini pulihan/salinan" tidak berlaku lagi.
         asalPulihkanRef.current = null
         asalSalinRef.current    = null
+        asalTutupRef.current    = null
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -933,6 +959,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       if (json.data.dpa_versi_tanggal) setDpaVersi(json.data.dpa_versi_tanggal)
       asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
       asalSalinRef.current    = null
+      asalTutupRef.current    = null
       showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), false)
@@ -998,10 +1025,13 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       setDpaVersi(json.versi_tanggal || '')
       setVersi('')
       setBelumTersimpan(true)
-      // Barisnya lahir dari DPA, bukan dari pulihan/salinan. Ref yang dibiarkan
-      // menempel akan membuat baris audit simpan berikutnya berbohong.
+      // Barisnya lahir dari DPA, bukan dari pulihan/salinan/penutupan. Ref yang
+      // dibiarkan menempel akan membuat baris audit simpan berikutnya berbohong —
+      // dan untuk `asalTutupRef` lebih dari berbohong: ia akan mencoba menutup
+      // versi yang barisnya sudah tidak ada lagi di layar.
       asalPulihkanRef.current = null
       asalSalinRef.current    = null
+      asalTutupRef.current    = null
       showToast(periodeTulis
         ? `Tabel disalin dari DPA ${formatTanggalId(json.versi_tanggal || periodeTulis)} — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`
         : `Tabel disalin dari DPA ${tahun} terbaru — belum tersimpan, isi kolom pergeserannya lalu tekan Simpan.`)
@@ -1037,6 +1067,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       if (!buang) return
     }
     setPeriodeTulis(tanggal)
+    // Mengganti periode LEWAT PEMILIH berarti tabelnya dibuang atau dimuat ulang,
+    // jadi jejak penutupan tidak lagi menggambarkan apa yang ada di layar.
+    // Perpindahan periode yang dilakukan `terapkanTutup` sengaja TIDAK lewat sini
+    // — di sana pindahnya justru bagian dari pekerjaannya.
+    asalTutupRef.current = null
     if (tanggal) {
       setRows([])
       setVersi('')
@@ -1109,41 +1144,120 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     setBelumTersimpan(true)
     asalSalinRef.current    = asal
     asalPulihkanRef.current = null
+    asalTutupRef.current    = null
     setSalinVersiBuka(false)
     showToast(`${baris.length} baris disalin dari versi ${formatTanggalId(asal.versi)} — belum tersimpan, `
       + `periksa lalu tekan Simpan.`)
   }
 
-  // Inject: update kolom 0-5 dari DPA terbaru tanpa ubah vol_p/harga_p
+  /** Baris hasil sinkron dipasang ke layar — dipakai jalur "tidak ada yang berubah" DAN tombol Terapkan. */
+  const pasangHasilSinkron = useCallback((
+    baris: PergeseranBarisInput[], versiDpa: string,
+    low: { kode_rekening: string; uraian: string }[],
+  ) => {
+    setRows(baris)
+    setBelumTersimpan(true)
+    if (versiDpa) setDpaVersi(versiDpa)
+    // B5: match tier heuristik longgar bisa salah tempel vol_p/harga_p — minta user periksa
+    if (low.length > 0) {
+      const contoh = low.slice(0, 3).map(l => l.uraian || l.kode_rekening).join(', ')
+      toast.warning(
+        `${low.length} baris dipasangkan berdasarkan kemiripan, bukan kecocokan pasti — tolong periksa: ${contoh}${low.length > 3 ? ', dan lainnya' : ''}`,
+        { duration: 8000 },
+      )
+    }
+  }, [])
+
+  // Sinkronkan DPA: segarkan kolom sisi DPA dari versi DPA yang BERLAKU pada
+  // sasaran Simpan — bukan yang terbaru (lihat catatan di InjectBodySchema).
+  //
+  // Bandingkan dulu, baru bertanya (CONCEPT §9.2). Dialog "yakin?" yang dulu
+  // berdiri di depan sudah dibuang: ia menanyakan sesuatu yang sekarang bisa
+  // DIJAWAB. Nol perubahan angka → langsung diterapkan tanpa mengganggu siapa
+  // pun; ada perubahan → barisnya dan nominalnya ditampilkan lebih dulu.
   const inject = useCallback(async () => {
     if (!rows.length) { showToast('Belum ada tabelnya. Tekan "Buat Pergeseran" dulu.', false); return }
     setInjecting(true)
     try {
       const res  = await fetch('/api/blud/pergeseran/inject', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tahun_anggaran: tahun, pergeseran_rows: rows }),
+        body: JSON.stringify({
+          tahun_anggaran: tahun,
+          versi_tanggal:  sasaranSimpan(periodeTulis),
+          pergeseran_rows: rows,
+        }),
       })
       const json = await res.json()
-      if (json.ok) {
-        setRows(json.data)
-        setBelumTersimpan(true)
-        if (json.dpa_versi) setDpaVersi(json.dpa_versi)
-        showToast('Kolom DPA sudah disamakan dengan versi terbaru.')
-        // B5: match tier heuristik longgar bisa salah tempel vol_p/harga_p — minta user periksa
-        const low = (json.low_confidence ?? []) as { kode_rekening: string; uraian: string }[]
-        if (low.length > 0) {
-          const contoh = low.slice(0, 3).map(l => l.uraian || l.kode_rekening).join(', ')
-          toast.warning(
-            `${low.length} baris dipasangkan berdasarkan kemiripan, bukan kecocokan pasti — tolong periksa: ${contoh}${low.length > 3 ? ', dan lainnya' : ''}`,
-            { duration: 8000 },
-          )
-        }
-      } else {
+      if (!json.ok) {
         showToast(json.error || json.message || 'Kolom DPA gagal disamakan. Coba lagi.', false)
+        return
       }
+      const hasil = json.data as PergeseranBarisInput[]
+      const beda  = bedaSinkron(rows, hasil)
+      const low   = (json.low_confidence ?? []) as { kode_rekening: string; uraian: string }[]
+      if (!sinkronMengubahAngka(beda)) {
+        pasangHasilSinkron(hasil, json.dpa_versi, low)
+        showToast(`Sudah sama dengan DPA ${formatTanggalId(json.dpa_versi)} — tidak ada angka yang berubah.`)
+        return
+      }
+      setPratinjauSinkron({ rows: hasil, beda, dpaVersi: json.dpa_versi })
     } catch { showToast('Kolom DPA gagal disamakan — periksa sambungan, lalu coba lagi.', false) }
-    finally  { setInjecting(false); setConfirmInject(false) }
-  }, [rows, tahun])
+    finally  { setInjecting(false) }
+  }, [rows, tahun, periodeTulis, pasangHasilSinkron])
+
+  // ── Tutup Pergeseran ───────────────────────────────────────────────────────
+  // Menyusun lembar konfirmasi. Tidak mengubah apa pun — yang mengubah layar
+  // `terapkanTutup`, dan yang menulis tetap tombol Simpan (CONCEPT §3).
+  function mulaiTutup() {
+    const periodeBaru = periodeSetelahTutup(versi)
+    const sasaranTgl  = sasaranSimpan(periodeBaru)
+    const sudah       = tutupList.find(t => t.versi_ditutup === versi)
+    const sesudah     = tutupPergeseranRows(rows)
+    setKonfirmTutup({
+      versiDitutup: versi,
+      sasaran:      sasaranTgl,
+      periode:      periodeBaru,
+      // Dihitung dari pohon yang di-recalc, bukan dari kolom tersimpan — sumber
+      // yang sama dengan `tutupPergeseranRows`, supaya dua angka di lembar ini
+      // tidak pernah lahir dari dua cara hitung.
+      paguSebelum:  totalPaguAkar(recalcPergeseranJumlah(rows)),
+      paguSesudah:  totalPaguAkar(sesudah),
+      jumlahBaris:  rows.length,
+      halangan: sudah
+        ? `Versi ${formatTanggalId(versi)} sudah ditutup — basisnya ${formatTanggalId(sudah.versi_basis)}. `
+          + `Satu putaran hanya bisa ditutup sekali.`
+        : alasanTolakTutup(sasaranTgl, versi, history.map(h => h.versi_tanggal)),
+    })
+  }
+
+  function terapkanTutup() {
+    if (!konfirmTutup || konfirmTutup.halangan) return
+    setRows(tutupPergeseranRows(rows))
+    // SATU-SATUNYA aksi di layar ini yang memindahkan sasaran Simpan, dan
+    // pengecualiannya disengaja (CONCEPT §5): L80 melarangnya untuk Salin Versi
+    // karena di sana perpindahan sasaran adalah efek samping; di sini periode
+    // berikutnya ADALAH pekerjaannya. Syaratnya dipenuhi — chip periode berganti
+    // di depan mata, dan lembar konfirmasi sudah menyebut tujuannya lebih dulu.
+    setPeriodeTulis(konfirmTutup.periode)
+    setBelumTersimpan(true)
+    asalTutupRef.current    = { versi_ditutup: konfirmTutup.versiDitutup }
+    asalSalinRef.current    = null
+    asalPulihkanRef.current = null
+    setKonfirmTutup(null)
+    showToast(`Kolom pergeseran disalin ke kolom kiri. Basis akan disimpan sebagai `
+      + `${labelSasaranTutup(konfirmTutup.sasaran, konfirmTutup.periode)} — belum tersimpan, tekan Simpan.`)
+  }
+
+  /** Alasan tombol Tutup mati — kosong berarti hidup. Sekaligus jadi tooltipnya (L79c). */
+  const alasanKunciTutup = !rows.length
+    ? 'Belum ada tabelnya.'
+    : !versi
+      ? 'Simpan dulu versi pergeserannya. Yang ditutup harus versi yang sudah tercatat, bukan isian di layar.'
+      : belumTersimpan
+        ? 'Ada perubahan yang belum tersimpan. Tekan Simpan dulu, baru versinya bisa ditutup.'
+        : tutupList.some(t => t.versi_ditutup === versi)
+          ? `Versi ${formatTanggalId(versi)} sudah ditutup.`
+          : ''
 
   async function simpan() {
     if (!rows.length) { showToast('Tabel masih kosong — belum ada yang bisa disimpan.', false); return }
@@ -1202,6 +1316,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           sentinel_ack: sentinelAckRef.current ?? undefined,
           asal_salin: asalSalinRef.current ?? undefined,
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
+          asal_tutup: asalTutupRef.current ?? undefined,
         }),
       })
       const json = await res.json()
@@ -1254,6 +1369,13 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         showToast(json.error, false)
         return
       }
+      // Dua pagar penutupan. Barisnya TIDAK dibuang dan `asalTutupRef` TIDAK
+      // dikosongkan: keduanya hilang begitu periodenya diganti, jadi menekan
+      // Simpan lagi sesudah itu harus tetap tercatat sebagai penutupan.
+      if (res.status === 409 && (json.code === 'SASARAN_TUTUP_TERPAKAI' || json.code === 'SUDAH_DITUTUP')) {
+        toast.error(json.error, { duration: 9000 })
+        return
+      }
       if (json.ok) {
         showToast(json.message)
         setVersi(versiTanggal)
@@ -1266,6 +1388,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pemulihan/salinan.
         asalPulihkanRef.current = null
         asalSalinRef.current    = null
+        // Wajib dikosongkan, dan lebih keras dari dua di atas: kalau tertinggal,
+        // koreksi berikutnya akan mencoba menutup versi yang SAMA sekali lagi dan
+        // ditolak PRIMARY KEY — orangnya cuma melihat "sudah ditutup" pada simpan
+        // biasa yang tidak ada hubungannya dengan penutupan.
+        asalTutupRef.current    = null
         if (json.dpa_versi) setDpaVersi(json.dpa_versi)
         if (typeof json.version === 'number') setVersion(json.version)
         // Jangkar baris baru dicetak server saat simpan — tanpa diserap ke state,
@@ -1320,21 +1447,155 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // dan sasaran yang sudah berisi justru pemakaian utamanya.
   const alasanKunciVersi = alasanKunciSalinVersi(tahun, history, [versi, sasaran])
 
+  // Lencana penutupan di daftar versi. Dua peran berbeda dan keduanya perlu
+  // terbaca: versi yang DITUTUP (dokumen putaran itu) dan versi BASIS yang lahir
+  // darinya. Tanpa keduanya, daftar versi cuma menampilkan deretan tanggal dan
+  // "kenapa versi ini selisihnya nol" tidak terjawab di mana pun.
+  const historyBerlencana = useMemo(() => history.map(h => {
+    const basisDari = tutupList.find(t => t.versi_basis === h.versi_tanggal)
+    return {
+      ...h,
+      catatan: tutupList.some(t => t.versi_ditutup === h.versi_tanggal)
+        ? labelTutup(tutupList, h.versi_tanggal)
+        : basisDari
+          ? `basis dari ${formatTanggalId(basisDari.versi_ditutup)}`
+          : undefined,
+    }
+  }), [history, tutupList])
+
   return (
     <div className="space-y-4">
-      {/* Confirm Inject Dialog */}
-      {confirmInject && (
-        <div style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,.5)', backdropFilter:'blur(4px)' }}>
-          <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,.5)', width:384, padding:24 }}>
-            <h2 style={{ fontWeight:800, color:'#E6F1FB', marginBottom:12 }}>Samakan dengan DPA terbaru?</h2>
-            <p style={{ fontSize:13, color:'#85B7EB', marginBottom:20, lineHeight:1.6 }}>
-              Kolom kode rekening, uraian, volume, harga, dan jumlah akan mengikuti DPA terbaru.
-              Angka pergeseran yang sudah Anda isi <strong style={{ color:'#B5D4F4' }}>tidak akan berubah</strong>.
+      {/* Sinkronkan DPA — pratinjau perubahan. Dialog "yakin?" yang dulu berdiri
+          di DEPAN sudah dibuang: pertanyaannya sekarang bisa dijawab, dan panel
+          ini yang menjawabnya. Muncul HANYA kalau ada angka yang berubah. */}
+      {pratinjauSinkron && (
+        <div style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,.5)', backdropFilter:'blur(4px)', padding:16 }}>
+          <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,.5)', width:'min(720px,100%)', maxHeight:'86vh', display:'flex', flexDirection:'column', padding:24 }}>
+            <h2 style={{ fontWeight:800, color:'#E6F1FB', marginBottom:6 }}>
+              Menyamakan dengan DPA {formatTanggalId(pratinjauSinkron.dpaVersi)} akan mengubah angka
+            </h2>
+            <p style={{ fontSize:13, color:'#85B7EB', marginBottom:14, lineHeight:1.6 }}>
+              {pratinjauSinkron.beda.baris.length} baris berubah nominalnya
+              {pratinjauSinkron.beda.barisBaru > 0 && ` · ${pratinjauSinkron.beda.barisBaru} baris baru dari DPA`}
+              {pratinjauSinkron.beda.barisHilang > 0 && ` · ${pratinjauSinkron.beda.barisHilang} baris hilang`}
+              {Math.abs(pratinjauSinkron.beda.deltaPagu) >= 0.005 && (
+                <> · total pagu <strong style={{ color:'#FCD34D' }}>
+                  {pratinjauSinkron.beda.deltaPagu > 0 ? '+' : '−'}{formatRupiah(Math.abs(pratinjauSinkron.beda.deltaPagu))}
+                </strong></>
+              )}
             </p>
+
+            {/* Versi hasil penutupan: kolom kirinya BUKAN angka DPA lagi, jadi
+                seluruh barisnya terbaca "belum digeser" oleh pencocok inject dan
+                bisa ditarik balik ke DPA murni sekaligus. Ini satu-satunya tempat
+                orang bisa tahu sebelum menekan. */}
+            {tutupList.some(t => t.versi_basis === versi) && (
+              <div className="tp-galat" style={{ marginBottom:14 }}>
+                <strong>Versi ini basis hasil penutupan.</strong>{' '}
+                Kolom kirinya berisi hasil pergeseran putaran sebelumnya, bukan angka DPA murni.
+                Menerapkan sinkron akan mengembalikannya ke angka DPA — hasil penutupan itu batal,
+                dan pagu realisasi ikut mundur.
+              </div>
+            )}
+
+            <div style={{ flex:1, overflowY:'auto', border:'1px solid #0C447C', borderRadius:8 }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                <thead style={{ position:'sticky', top:0, background:'#042C53' }}>
+                  <tr style={{ color:'#85B7EB', textAlign:'left' }}>
+                    <th style={{ padding:'7px 10px' }}>Rekening</th>
+                    <th style={{ padding:'7px 10px', textAlign:'right' }}>Pagu sekarang</th>
+                    <th style={{ padding:'7px 10px', textAlign:'right' }}>Jadi</th>
+                    <th style={{ padding:'7px 10px', textAlign:'right' }}>Selisih</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pratinjauSinkron.beda.baris.slice(0, 60).map(b => {
+                    const d = b.pergeseranBaru - b.pergeseranLama
+                    return (
+                      <tr key={b.row_id} style={{ borderTop:'1px solid #0C447C', color:'#B5D4F4' }}>
+                        <td style={{ padding:'6px 10px' }}>
+                          <span style={{ fontFamily:'var(--font-mono,monospace)', color:'#85B7EB' }}>{b.kode_rekening}</span>{' '}
+                          {b.uraian}
+                        </td>
+                        <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--font-mono,monospace)' }}>{formatRupiah(b.pergeseranLama)}</td>
+                        <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--font-mono,monospace)' }}>{formatRupiah(b.pergeseranBaru)}</td>
+                        <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--font-mono,monospace)', color: d === 0 ? '#85B7EB' : d > 0 ? '#1D9E75' : '#E24B4A' }}>
+                          {d === 0 ? '—' : `${d > 0 ? '+' : '−'}${formatRupiah(Math.abs(d))}`}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {pratinjauSinkron.beda.baris.length > 60 && (
+                <div style={{ padding:'8px 10px', fontSize:11.5, color:'#85B7EB', borderTop:'1px solid #0C447C' }}>
+                  …dan {pratinjauSinkron.beda.baris.length - 60} baris lain.
+                </div>
+              )}
+            </div>
+
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
+              <PrimaButton variant="ghost" size="sm" onClick={() => setPratinjauSinkron(null)}>Batal</PrimaButton>
+              <PrimaButton variant="warning" size="sm" onClick={() => {
+                pasangHasilSinkron(pratinjauSinkron.rows, pratinjauSinkron.dpaVersi, [])
+                setPratinjauSinkron(null)
+                showToast('Kolom DPA disamakan — belum tersimpan, periksa lalu tekan Simpan.')
+              }}>
+                Terapkan perubahan ini
+              </PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tutup Pergeseran — lembar yang MENAMPILKAN, bukan modal yang menyuruh
+          memilih. Yang ditutup selalu versi yang sedang dilihat (CONCEPT §11). */}
+      {konfirmTutup && (
+        <div style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,.5)', backdropFilter:'blur(4px)', padding:16 }}>
+          <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,.5)', width:'min(560px,100%)', padding:24 }}>
+            <h2 style={{ fontWeight:800, color:'#E6F1FB', marginBottom:14 }}>Tutup pergeseran ini?</h2>
+
+            <dl style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:'8px 14px', fontSize:13, marginBottom:16 }}>
+              <dt style={{ color:'#85B7EB' }}>Yang ditutup</dt>
+              <dd style={{ color:'#E6F1FB', fontWeight:700 }}>
+                {formatTanggalId(konfirmTutup.versiDitutup)} · {konfirmTutup.jumlahBaris} baris
+              </dd>
+              <dt style={{ color:'#85B7EB' }}>Disimpan sebagai</dt>
+              <dd style={{ color:'#E6F1FB', fontWeight:700 }}>
+                {labelSasaranTutup(konfirmTutup.sasaran, konfirmTutup.periode)}
+              </dd>
+              <dt style={{ color:'#85B7EB' }}>Total pagu</dt>
+              {/* Kedua angka WAJIB sama — penutupan tidak menyentuh vol_p/harga_p.
+                  Kalau sampai berbeda, ada yang salah, dan itu terlihat SEBELUM
+                  disimpan, bukan sesudah. */}
+              <dd style={{ fontFamily:'var(--font-mono,monospace)', color: Math.abs(konfirmTutup.paguSesudah - konfirmTutup.paguSebelum) < 0.005 ? '#1D9E75' : '#E24B4A' }}>
+                {formatRupiah(konfirmTutup.paguSebelum)} → {formatRupiah(konfirmTutup.paguSesudah)}
+                {Math.abs(konfirmTutup.paguSesudah - konfirmTutup.paguSebelum) < 0.005
+                  ? ' · tidak berubah'
+                  : ' · BERUBAH — jangan diteruskan, laporkan ini'}
+              </dd>
+              <dt style={{ color:'#85B7EB' }}>Yang berubah</dt>
+              <dd style={{ color:'#B5D4F4', lineHeight:1.6 }}>
+                Kolom volume, harga, dan jumlah diisi angka pergeseran. Selisihnya jadi nol,
+                dan geseran berikutnya dihitung terhadap hasil putaran ini.
+              </dd>
+            </dl>
+
+            {konfirmTutup.halangan
+              ? (
+                <div className="tp-galat" style={{ marginBottom:16 }}>{konfirmTutup.halangan}</div>
+              )
+              : (
+                <div className="tp-ingat" style={{ marginBottom:16 }}>
+                  Belum tersimpan sampai Anda menekan <strong>Simpan</strong>. Sampai saat itu, tidak ada
+                  satu pun yang berubah di server.
+                </div>
+              )}
+
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-              <PrimaButton variant="ghost" size="sm" onClick={() => setConfirmInject(false)}>Batal</PrimaButton>
-              <PrimaButton variant="primary" size="sm" disabled={injecting} onClick={inject}>
-                {injecting ? 'Menyamakan…' : 'Samakan'}
+              <PrimaButton variant="ghost" size="sm" onClick={() => setKonfirmTutup(null)}>Batal</PrimaButton>
+              <PrimaButton variant="success" size="sm" disabled={!!konfirmTutup.halangan} onClick={terapkanTutup}>
+                Tutup pergeseran
               </PrimaButton>
             </div>
           </div>
@@ -1374,19 +1635,26 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
               Buat Pergeseran
             </PrimaButton>
 
-            {/* Pagar 5: dimatikan pada periode historis. `inject` selalu menarik
-                DPA TERBARU (`getDpaLatestDate`, tanpa parameter tanggal), jadi
-                menekannya di Pergeseran Januari akan menimpa seluruh kolom DPA
-                dengan angka Agustus — diam-diam, dan justru di bawah tombol yang
-                menjanjikan "angka pergeseran Anda tidak akan berubah". */}
+            {/* Pagar 5 dulu MEMATIKAN tombol ini pada periode historis, karena
+                `inject` selalu menarik DPA TERBARU: menekannya di Pergeseran
+                Januari akan menimpa kolom DPA dengan angka Agustus. Sekarang
+                servernya mengambil DPA yang BERLAKU pada sasaran Simpan, jadi
+                sebabnya hilang dan tombolnya hidup lagi di periode historis —
+                menutup Januari lalu menyamakan dengan DPA Januari kini bisa. */}
             <PrimaButton variant="success" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
-              disabled={injecting || !rows.length || !!periodeTulis}
-              onClick={() => setConfirmInject(true)}
-              data-tooltip={periodeTulis
-                ? 'Tidak tersedia untuk periode historis — tombol ini selalu mengambil DPA terbaru, bukan DPA periode ini'
-                : 'Samakan kode, uraian, volume, dan harga dengan DPA terbaru — kolom pergeseran yang Anda isi tidak tersentuh'}
+              disabled={injecting || !rows.length}
+              onClick={() => { void inject() }}
+              data-tooltip={`Samakan kode, uraian, volume, dan harga dengan DPA yang berlaku pada ${formatTanggalId(sasaran)} — perubahannya ditampilkan dulu sebelum diterapkan`}
               data-rima="pergeseran.sinkron-dpa">
-              Sinkronkan DPA
+              {injecting ? 'Membandingkan…' : 'Sinkronkan DPA'}
+            </PrimaButton>
+
+            <PrimaButton variant="warning" iconLeft={<Lock className="w-3.5 h-3.5" />}
+              disabled={loading || !!alasanKunciTutup} onClick={mulaiTutup}
+              data-tooltip={alasanKunciTutup
+                || `Kunci hasil pergeseran ${formatTanggalId(versi)} dan jadikan patokan putaran berikutnya`}
+              data-rima="pergeseran.tutup">
+              Tutup Pergeseran
             </PrimaButton>
 
             <PrimaButton variant="ghost" iconLeft={<Copy className="w-3.5 h-3.5" />}
@@ -1403,7 +1671,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         <div data-rima="pergeseran.versi-dropdown" style={{ display:'inline-flex' }}>
           <VersiDropdown
             value={versi}
-            items={history}
+            items={historyBerlencana}
             onChange={v => { void bukaVersi(v) }}
             placeholder="— Pilih History —"
             riwayat={riwayat}
