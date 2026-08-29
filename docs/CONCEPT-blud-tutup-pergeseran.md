@@ -1,7 +1,7 @@
 # CONCEPT — Tutup Pergeseran (BLUD)
 
 > Status: **terpasang** (2026-08-29). Regresi:
-> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (83), 21 uji mutasi tertangkap.
+> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (85), 21 uji mutasi tertangkap.
 > Dua laporan pemakai pada hari yang sama: §16 cacat jalur HAPUS (data), §17 pil
 > versi berbohong sesudah Tutup (tampilan — datanya ternyata sudah benar).
 > Lahir dari permintaan langsung: pada bulan Februari, yang jadi pembanding
@@ -489,3 +489,23 @@ Versi sebelumnya ditolak pemilik aplikasi karena bahasanya kaku — kata seperti
 orang kantor. `.tp-galat` diberi `white-space: pre-line` supaya ketiga bagiannya
 benar-benar terpisah; tanpa itu mereka menyatu jadi satu blok dan baris pertama
 tenggelam.
+
+---
+
+## 19. Pil versi memakai keterangan penutupan, bukan jumlah baris
+
+Diminta pemilik aplikasi: status penutupan harus terbaca **tanpa** membuka daftar
+versi. Jumlah barisnya justru dibuang dari pil.
+
+Alasannya kuat: `558 baris` sama untuk hampir semua versi tahun itu, jadi ia
+memakan lebar tanpa membedakan apa pun — sementara "Pergeseran ke-1 · ditutup 28
+Feb 2026" adalah satu-satunya hal di daftar yang perlu diketahui **sebelum**
+memilih. Jumlah barisnya tetap ada di dalam daftar, satu ketukan jauhnya.
+
+Diukur sesudahnya: pil jadi 380px di desktop (muat, `Simpan` turun ke baris
+berikutnya pada lebar sempit — bilah ini memang membungkus). Di 375px keterangan
+itu dilepas oleh `@media (max-width: 520px)` yang sudah ada, jadi tanggal +
+lencana BELUM TERSIMPAN/BERLAKU tetap muat: 220px, tepi kanan 257px.
+
+Layar DPA memakai komponen yang sama tapi tidak mengirim `catatan`, jadi pilnya
+menampilkan tanggal saja.

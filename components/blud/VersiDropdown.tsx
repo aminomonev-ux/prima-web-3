@@ -114,8 +114,12 @@ export default function VersiDropdown({
           {selected
             ? <>
                 {formatTanggal(selected.versi_tanggal)}
-                {typeof selected.jumlah_baris === 'number' &&
-                  <span className="versi-meta"> · {selected.jumlah_baris} baris</span>}
+                {/* Jumlah baris SENGAJA tidak ikut di pil: ia sama untuk hampir
+                    semua versi (558 di mana-mana), jadi memakan lebar tanpa
+                    membedakan apa pun. Yang menggantikannya keterangan penutupan —
+                    satu-satunya hal di daftar yang harus diketahui SEBELUM
+                    membuka dropdown. Jumlah barisnya tetap ada di dalam daftar. */}
+                {selected.catatan && <span className="versi-meta"> · {selected.catatan}</span>}
               </>
             : <span className="versi-placeholder">{placeholder}</span>}
         </span>

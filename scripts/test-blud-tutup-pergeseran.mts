@@ -427,9 +427,16 @@ bab('I. Pil versi berhenti mengaku mewakili versi tersimpan')
   cek('Penanda punya pasangan tema terang',
     /\[data-theme="light"\] \.versi-draft/.test(css),
     'kotak berwarna sebaris tidak ikut ditimpa tema terang — pola .tp-galat')
-  cek('Jumlah baris dilepas di lebar ponsel',
-    /@media \(max-width: 520px\) \{[\s\S]{0,160}\.versi-trigger \.versi-meta/.test(css),
-    'diukur: lencana menambah 96px, tepi pil mendarat di 399px pada viewport 375px')
+  cek('Pil menampilkan keterangan penutupan, bukan jumlah baris',
+    /\{selected\.catatan && <span className="versi-meta">/.test(kDrp)
+      && !/selected\.jumlah_baris/.test(kDrp),
+    'status penutupan harus terbaca TANPA membuka daftar versi')
+  cek('Jumlah baris tetap ada di dalam daftar',
+    /item\.jumlah_baris/.test(kDrp),
+    'dibuang dari pil, bukan dari aplikasi')
+  cek('Keterangan itu dilepas di lebar ponsel',
+    /@media \(max-width: 520px\) \{[\s\S]{0,200}\.versi-trigger \.versi-meta/.test(css),
+    'diukur: pil 380px di desktop; di 375px tanggal + lencana saja yang muat')
 }
 
 console.log(`\n${lulus} pemeriksaan LULUS · ${gagal} GAGAL`)
