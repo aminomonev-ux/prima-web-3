@@ -231,7 +231,9 @@ dan itu terlihat **sebelum** disimpan.
 - **Menyentuh `dpa_blud`** — nol perubahan.
 - **Endpoint tulis baru** — nol.
 - **Mengubah `versi_tanggal` jadi DATETIME** — lihat CONCEPT-blud-riwayat-simpan §2.
-- **Membuat versi yang ditutup jadi baca-saja.** Belum diputuskan; membukanya lalu
+- **Membuat versi yang ditutup jadi baca-saja.** **Ditunda — keputusan pemilik
+  aplikasi, 2026-08-29.** Jangan diangkat lagi tanpa ada kejadian nyata yang
+  membutuhkannya. Alasannya: membukanya lalu
   Simpan mendarat di hari ini, bukan menimpa versi itu (`periodeUntukVersi`
   memulangkan `''` untuk revisi harian), jadi bahayanya kecil. Ditinjau ulang
   sesudah dipakai.
