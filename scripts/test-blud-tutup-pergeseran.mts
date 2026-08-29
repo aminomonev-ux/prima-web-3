@@ -156,9 +156,12 @@ bab('C. Dua pagar sasaran')
   {
     // Cabang ini HANYA tercapai kalau versi yg ditutup bertanggal hari ini.
     const pesan = alasanTolakTutup('2026-01-31', '2026-01-31', dipakai)
-    cek('Alasannya menyebut jalan keluar yang MEMANG bisa dilakukan',
-      /besok atau sesudahnya/.test(pesan),
+    cek('Alasannya menutup dengan jalan keluar yang MEMANG bisa dilakukan',
+      /Coba lagi besok\./.test(pesan),
       'menunggu sehari itu bisa; memilih periode sesudah hari ini tidak')
+    cek('…disusun tiga bagian: masalah, sebab, jalan keluar',
+      pesan.split(String.fromCharCode(10)).length === 3,
+      '.tp-galat ber-white-space:pre-line — baris pertama tidak boleh tenggelam')
     cek('…dan berhenti menyuruh memilih periode yang tak pernah ditawarkan',
       !/[Pp]ilih periode/.test(pesan),
       'periodeHistorisTersedia batasnya bulan ini - 1')

@@ -131,10 +131,11 @@ export function alasanTolakTutup(
     // mendarat di hari ini — menimpa versi yang barusan ditutup. Itu L79 lahir
     // kembali, dengan akibat yang lebih parah.
     return sasaran === versiDitutup
-      ? `Versi ${formatTanggalId(versiDitutup)} bertanggal hari ini, dan hasil penutupannya butuh `
-        + `tanggal sendiri — ditulis ke tanggal yang sama, dokumen pergeseran ini tertimpa dan `
-        + `selisihnya hilang. Tutup versi ini besok atau sesudahnya; hasilnya akan mendarat di `
-        + `tanggal hari itu.`
+      ? `Versi ini disimpan hari ini juga, jadi belum bisa ditutup sekarang.\n`
+        + `Hasil penutupan selalu jadi versi baru, sedangkan satu tanggal cuma bisa berisi satu `
+        + `versi. Kalau diteruskan, yang tertimpa malah versi ${formatTanggalId(versiDitutup)} ini, `
+        + `dan catatan geserannya ikut hilang.\n`
+        + `Coba lagi besok. Hasilnya nanti tersimpan sebagai versi besok.`
       : `Basis akan disimpan ke ${formatTanggalId(sasaran)}, lebih dulu dari versi yang ditutup `
         + `(${formatTanggalId(versiDitutup)}). Hasil penutupan harus mendarat sesudahnya.`
   }

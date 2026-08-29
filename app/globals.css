@@ -3178,6 +3178,10 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 .tp-galat {
   padding: 10px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.6;
   background: rgba(226,75,74,.12); border: 1px solid #E24B4A; color: #F0B3B2;
+  /* Penolakan yang panjang disusun tiga bagian — masalahnya, sebabnya, jalan
+     keluarnya. Tanpa ini ketiganya menyatu jadi satu blok dan baris pertama
+     (yang paling perlu terbaca) tenggelam. */
+  white-space: pre-line;
 }
 /* `strong` sengaja tanpa warna sendiri — tebalnya sudah cukup menonjol, dan
    warna keempat di kotak sekecil ini hanya menambah token baru tanpa menambah

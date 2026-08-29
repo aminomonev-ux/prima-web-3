@@ -1,7 +1,7 @@
 # CONCEPT — Tutup Pergeseran (BLUD)
 
 > Status: **terpasang** (2026-08-29). Regresi:
-> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (82), 21 uji mutasi tertangkap.
+> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (83), 21 uji mutasi tertangkap.
 > Dua laporan pemakai pada hari yang sama: §16 cacat jalur HAPUS (data), §17 pil
 > versi berbohong sesudah Tutup (tampilan — datanya ternyata sudah benar).
 > Lahir dari permintaan langsung: pada bulan Februari, yang jadi pembanding
@@ -475,5 +475,17 @@ hari itu, sudah berbeda dari versi yang ditutup, dan pagar lolos tanpa perubahan
 apa pun. Ini cocok dengan pemakaian nyata: satu putaran ditutup **sesudah**
 putarannya selesai, bukan pada menit yang sama ia disimpan.
 
-Kalimatnya sekarang menyebutkan sebabnya sekali dan menutup dengan tindakan yang
-memang bisa dikerjakan.
+Kalimat finalnya disusun **tiga bagian** — masalah, sebab, jalan keluar — supaya
+orang yang cuma membaca baris pertama sudah tahu harus apa:
+
+> Versi ini disimpan hari ini juga, jadi belum bisa ditutup sekarang.
+> Hasil penutupan selalu jadi versi baru, sedangkan satu tanggal cuma bisa berisi
+> satu versi. Kalau diteruskan, yang tertimpa malah versi 29 Agu 2026 ini, dan
+> catatan geserannya ikut hilang.
+> Coba lagi besok. Hasilnya nanti tersimpan sebagai versi besok.
+
+Versi sebelumnya ditolak pemilik aplikasi karena bahasanya kaku — kata seperti
+"bertanggal", "butuh tanggal sendiri", "mendarat", dan "selisihnya" tidak dipakai
+orang kantor. `.tp-galat` diberi `white-space: pre-line` supaya ketiga bagiannya
+benar-benar terpisah; tanpa itu mereka menyatu jadi satu blok dan baris pertama
+tenggelam.
