@@ -45,6 +45,8 @@ const TDATA = 'lib/blud/tutup-data.ts'
 const SKEMA = 'lib/blud/schemas.ts'
 const RUTE  = 'app/api/blud/pergeseran/route.ts'
 const INJ   = 'app/api/blud/pergeseran/inject/route.ts'
+const DPA   = 'app/(dashboard)/blud/dpa/dpa-client.tsx'
+const DROP  = 'components/blud/VersiDropdown.tsx'
 
 let lulus = 0
 let gagal = 0
@@ -372,6 +374,43 @@ bab('H. Jalur HAPUS ikut membuang catatan penutupan')
   cek('Peringatan kecocokan longgar tidak hilang di jalur Terapkan',
     /pratinjauSinkron\.dpaVersi, pratinjauSinkron\.low\)/.test(kPgs),
     'sempat dioper larik kosong — justru jalur ini yang mengubah angka')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+bab('I. Pil versi berhenti mengaku mewakili versi tersimpan')
+// Dilaporkan pemakai: sesudah menutup 31 Jan, tabel di layar berubah (kolom P
+// disalin ke kiri) sementara pil versi tetap berbunyi "31 JAN 2026 · 558 baris".
+// Kesimpulannya wajar — arsip Januari ikut tertimpa — padahal DB utuh. Yang
+// berbohong tampilannya, bukan datanya, jadi yang diperbaiki juga tampilannya.
+{
+  const kPgs = kode(baca(PGS))
+  const kDpa = kode(baca(DPA))
+  const kDrp = kode(baca(DROP))
+
+  cek('Penutupan menandai layar belum tersimpan',
+    /setRows\(tutupPergeseranRows\(rows\)\)[\s\S]{0,600}setBelumTersimpan\(true\)/.test(kPgs),
+    'penanda pil menumpang bendera ini — tanpa itu tidak ada yang menyalakannya')
+
+  cek('Pil punya penanda belum-tersimpan', /versi-draft/.test(kDrp))
+  cek('…yang dikunci ke prop `belumTersimpan`',
+    /\{selected && belumTersimpan && \(/.test(kDrp),
+    'harus ikut `selected` juga: placeholder tidak mengaku apa-apa')
+  cek('…dan bukan turunan dari `value` kosong',
+    !/!value[\s\S]{0,40}versi-draft/.test(kDrp),
+    'sesudah Pulihkan `versi` terisi padahal isinya belum tersimpan (L79b)')
+
+  cek('BERLAKU tetap berdampingan, tidak disembunyikan',
+    /versi-draft[\s\S]{0,600}versi-badge-latest--trigger/.test(kDrp),
+    'fakta tentang versi tersimpan; menghapusnya menyesatkan ke arah lain')
+
+  cek('Layar Pergeseran mengoper benderanya', /belumTersimpan=\{belumTersimpan\}/.test(kPgs))
+  cek('Layar DPA ikut mengoper',
+    /belumTersimpan=\{belumTersimpan\}/.test(kDpa),
+    'kebohongan yang sama hidup di dua layar — L69')
+
+  cek('Penanda punya pasangan tema terang',
+    /\[data-theme="light"\] \.versi-draft/.test(baca('app/globals.css')),
+    'kotak berwarna sebaris tidak ikut ditimpa tema terang — pola .tp-galat')
 }
 
 console.log(`\n${lulus} pemeriksaan LULUS · ${gagal} GAGAL`)

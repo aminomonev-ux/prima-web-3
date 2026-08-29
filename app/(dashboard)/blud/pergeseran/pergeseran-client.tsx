@@ -1687,6 +1687,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             placeholder="— Pilih History —"
             riwayat={riwayat}
             onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
+            belumTersimpan={belumTersimpan}
           />
         </div>
 

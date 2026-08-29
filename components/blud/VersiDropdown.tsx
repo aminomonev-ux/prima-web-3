@@ -42,6 +42,16 @@ interface Props {
   riwayat?: SimpananItem[]
   /** Dipanggil saat satu simpanan lama dipilih untuk dimuat ke form. */
   onPulihkan?: (s: SimpananItem) => void
+  /**
+   * Isi layar sudah tidak sama dengan versi yang namanya tertulis di pil ini.
+   * Dilaporkan pemakai sesudah "Tutup Pergeseran": tabel 31 Jan berubah di depan
+   * mata (kolom P disalin ke kiri) sementara pil ini tetap berbunyi "31 JAN 2026
+   * · 558 baris" — persis kalimat "versi 31 Jan berisi ini", jadi kesimpulannya
+   * wajar: arsip Januari ikut tertimpa. Padahal belum ada apa pun yang ditulis.
+   * Berlaku untuk SEMUA sebab layar jadi belum tersimpan (sunting satu sel,
+   * Pulihkan, Salin Versi, Tutup) — satu kebohongan, satu tempat memperbaikinya.
+   */
+  belumTersimpan?: boolean
 }
 
 const formatTanggal = formatTanggalId
@@ -53,7 +63,7 @@ function jamMenit(waktu: string): string {
 }
 
 export default function VersiDropdown({
-  value, items, onChange, placeholder = '— Pilih Versi —', riwayat, onPulihkan,
+  value, items, onChange, placeholder = '— Pilih Versi —', riwayat, onPulihkan, belumTersimpan,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [terbuka, setTerbuka] = useState<string | null>(null)
@@ -109,6 +119,14 @@ export default function VersiDropdown({
               </>
             : <span className="versi-placeholder">{placeholder}</span>}
         </span>
+        {selected && belumTersimpan && (
+          <span className="versi-draft" title="Isi layar sudah berbeda dari versi ini — belum ada yang ditulis ke server.">
+            BELUM TERSIMPAN
+          </span>
+        )}
+        {/* BERLAKU tetap tampil berdampingan: ia fakta tentang versi TERSIMPAN
+            ("yang jadi acuan realisasi"), dan itu tidak berubah cuma karena ada
+            suntingan di layar. Menyembunyikannya justru menyesatkan ke arah lain. */}
         {selected && selected.versi_tanggal === berlakuTanggal && (
           <span className="versi-badge-latest versi-badge-latest--trigger">BERLAKU</span>
         )}

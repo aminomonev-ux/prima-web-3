@@ -758,6 +758,16 @@ input, textarea { caret-color: #FBBF24; }
   font-size: 8.5px;
 }
 
+/* Penanda "isi layar ≠ versi tersimpan". Sengaja tanpa latar penuh supaya tidak
+   tertukar dengan lencana BERLAKU yang bisa berdiri di sebelahnya. */
+.versi-draft {
+  margin-left: 4px; flex-shrink: 0;
+  font-size: 8.5px; font-weight: 800; letter-spacing: .4px;
+  padding: 1px 5px; border-radius: 999px;
+  color: #FCD34D; border: 1px solid #F59E0B; background: rgba(245,158,11,.15);
+}
+[data-theme="light"] .versi-draft { color: #92400E; background: rgba(245,158,11,.18); }
+
 /* ─── Neo-Brutalist variant (E-Anggaran VersiPickerKinerja only) ─────────────
    Outline-only, floating-card style. Activated via .versi-dropdown--brutalist
    wrapper class. Tidak mempengaruhi BLUD VersiDropdown.
@@ -890,6 +900,9 @@ input, textarea { caret-color: #FBBF24; }
 }
 .versi-dropdown--brutalist .versi-badge-latest--trigger {
   padding: 1px 4px; font-size: 7.5px;
+}
+.versi-dropdown--brutalist .versi-draft {
+  border-radius: 2px; padding: 1px 4px; font-size: 7.5px; font-weight: 900;
 }
 
 /* ─── Soft Brutalist Select (Cetak helper dropdowns) ──────────────────────

@@ -1659,6 +1659,7 @@ export default function DpaClient({
             placeholder="— Pilih Versi —"
             riwayat={riwayat}
             onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
+            belumTersimpan={belumTersimpan}
           />
         </div>
 

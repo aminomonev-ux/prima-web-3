@@ -1,8 +1,9 @@
 # CONCEPT — Tutup Pergeseran (BLUD)
 
 > Status: **terpasang** (2026-08-29). Regresi:
-> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (71), 11 uji mutasi tertangkap.
-> Lihat §16 — cacat jalur HAPUS yang ditemukan pemakai pada hari yang sama.
+> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (79), 17 uji mutasi tertangkap.
+> Dua laporan pemakai pada hari yang sama: §16 cacat jalur HAPUS (data), §17 pil
+> versi berbohong sesudah Tutup (tampilan — datanya ternyata sudah benar).
 > Lahir dari permintaan langsung: pada bulan Februari, yang jadi pembanding
 > seharusnya **hasil pergeseran Januari**, bukan DPA murni.
 
@@ -361,3 +362,63 @@ sempat "gagal" karena jendela regex-nya salah, bukan kodenya: `Promise<{ … }>`
 menaruh `}` di kolom 0 sehingga potongan fungsi berhenti di tanda tangan, dan
 `saveDpa` punya cabang `if (!incoming)` kembar yang letaknya lebih awal. Keduanya
 sekarang berjangkar eksplisit.
+
+---
+
+## 17. Pil versi berbohong sesudah Tutup (dilaporkan pemakai, 2026-08-29 malam)
+
+Laporannya: *"kalau Januari ditutup lalu disimpan, seharusnya Januari masih
+mempertahankan nominal asli pergeserannya — yang pindah ke kolom kiri itu yang
+disimpan di Februari, supaya secara historis tahu kemarin saya pindah apa saja.
+Bukan Januari ikut keganti juga seperti Februari."*
+
+**Datanya ternyata sudah persis seperti itu.** Diperiksa langsung di DB dan di
+layar, dengan data 2026 asli:
+
+| Versi | Jumlah (kiri) | Pergeseran (kanan) | +/− |
+|---|---|---|---|
+| 31 Jan 2026 — Belanja Pembulatan gaji PPPK | 100.000 | 5.100.000 | **+5.000.000** |
+| 31 Jan 2026 — Belanja iuran Jaminan kesehatan PPPK | 175.000.000 | 170.000.000 | **−5.000.000** |
+| 28 Feb 2026 — baris yang sama | 5.100.000 | 5.100.000 | 0 |
+
+Januari menyimpan 4 baris berselisih (2 daun + 2 induk), Februari nol. Snapshot
+`blud_riwayat_simpan` mengonfirmasi urutannya: #38 (Januari, 16:47:07) berselisih,
+#39 (Februari, 16:47:27) rata. Arsip Januari tidak pernah tersentuh — dan memang
+tidak bisa: pagar #1 (Zod) menolak sasaran ≤ versi yang ditutup, pagar #2 menolak
+sasaran yang sudah dihuni.
+
+### Yang berbohong: tampilannya
+
+Direproduksi di aplikasi pada versi 28 Feb (yang belum ditutup). Sesudah menekan
+**Tutup pergeseran**:
+
+| Yang berpindah | Yang tidak |
+|---|---|
+| Chip periode → **PERIODE MARET 2026** | Pil versi tetap **"28 FEB 2026 · 558 baris"** |
+| Tabel → seluruh kolom P disalin ke kiri, selisih jadi nol | |
+
+Pil versi adalah kalimat *"versi ini isinya begini"* — lengkap dengan jumlah
+barisnya, fakta tentang data **tersimpan**. Ia tidak ikut berubah saat isinya
+berubah, jadi kesimpulan pemakai wajar sekali: arsipnya ikut ditimpa. Toast
+"belum tersimpan" memang muncul, tapi toast hilang; pil tidak.
+
+### Perbaikannya — satu penanda, bukan satu pengecualian
+
+`VersiDropdown` menerima `belumTersimpan` dan menempelkan lencana **BELUM
+TERSIMPAN** di pil. Sengaja **bukan** khusus penutupan: bendera yang sama sudah
+menyala untuk sunting satu sel, Pulihkan, dan Salin Versi — yang semuanya
+berbohong dengan cara persis sama, cuma lebih kecil. Satu kebohongan, satu tempat
+memperbaikinya, dan dua layar (DPA + Pergeseran) sama-sama mengopernya (L69).
+
+Yang **tidak** dilakukan, dan alasannya:
+
+- **Mengosongkan `versi`.** Pil jadi jujur tapi kehilangan asal-usulnya, dan dua
+  pagar ikut lepas: `alasanKunciBorongan` membuka kunci "Buat Pergeseran" tepat
+  di atas tabel hasil penutupan, dan `alasanKunciSalinVersi` berhenti mengecualikan
+  versi yang barusan ditutup.
+- **Menyembunyikan lencana BERLAKU.** Itu fakta tentang versi **tersimpan** —
+  "yang jadi acuan realisasi" — dan tidak berubah cuma karena ada suntingan di
+  layar. Menghapusnya menyesatkan ke arah lain.
+
+Regresi: bagian I di `scripts/test-blud-tutup-pergeseran.mts` (79 pemeriksaan
+total), 6 uji mutasi tertangkap — termasuk mencabut prop hanya di satu layar.
