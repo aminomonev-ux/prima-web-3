@@ -171,6 +171,26 @@ export function labelTutup(daftar: readonly TutupPergeseran[], versiDitutup: str
   return `Pergeseran ke-${n}${t ? ` · ditutup ${formatTanggalId(t.versi_basis)}` : ''}`
 }
 
+/**
+ * Keterangan satu versi di daftar/pil: apa perannya dalam penutupan.
+ * `undefined` = versi biasa.
+ *
+ * Dua peran berbeda dan keduanya perlu terbaca: versi yang DITUTUP (dokumen
+ * putaran itu) dan versi BASIS yang lahir darinya. Tanpa keduanya, daftar versi
+ * cuma deretan tanggal dan "kenapa versi ini selisihnya nol" tidak terjawab di
+ * mana pun.
+ *
+ * Tinggal di lib, bukan di berkas layar: dipakai layar Pergeseran DAN layar
+ * Cetak. Dua salinan aturan yang sama adalah cara L78 lahir.
+ */
+export function catatanVersi(
+  daftar: readonly TutupPergeseran[], versiTanggal: string,
+): string | undefined {
+  if (daftar.some(t => t.versi_ditutup === versiTanggal)) return labelTutup(daftar, versiTanggal)
+  const basisDari = daftar.find(t => t.versi_basis === versiTanggal)
+  return basisDari ? `basis dari ${formatTanggalId(basisDari.versi_ditutup)}` : undefined
+}
+
 /** Ringkasan sasaran untuk lembar konfirmasi — "Periode Februari 2026" / "hari ini". */
 export function labelSasaranTutup(sasaran: string, periode: string): string {
   return periode ? labelPeriodeVersi(periode) : `${formatTanggalId(sasaran)} (bulan berjalan)`

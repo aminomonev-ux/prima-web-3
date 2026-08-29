@@ -17,6 +17,7 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import DownloadButton from '@/components/ui/DownloadButton'
 import type { DpaBaris, PergeseranBaris } from '@/types'
 import type { PejabatDokumen } from '@/lib/blud/export/dpa-dokumen'
+import { catatanVersi, type TutupPergeseran } from '@/lib/blud/tutup-pergeseran'
 
 // ── Types lokal (sinkron dengan lib/blud/cetak-data.ts) ──
 type Menu = 'dpa' | 'pergeseran' | 'master-akun'
@@ -25,7 +26,7 @@ type ViewPergeseran = 'rekapPergeseran' | 'penanggungJawab'
 type ViewMasterAkun = 'masterAkun'
 type View = ViewDpa | ViewPergeseran | ViewMasterAkun
 
-interface VersiOption { versi: string; jumlah_baris: number }
+interface VersiOption { versi: string; jumlah_baris: number; catatan?: string }
 
 const MENU_LABELS: Record<Menu, string> = {
   'dpa':         'DPA BLUD',
@@ -119,9 +120,19 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         const base = menu === 'dpa' ? '/api/blud/dpa' : '/api/blud/pergeseran'
         const r = await fetch(`${base}?mode=history&tahun=${tahun}`, { signal: ctrl.signal })
         if (!r.ok) return
-        const j = await r.json() as { ok: boolean; data?: Array<{ versi_tanggal: string; jumlah_baris: number }> }
+        const j = await r.json() as {
+          ok: boolean
+          data?: Array<{ versi_tanggal: string; jumlah_baris: number }>
+          // Cuma dikirim endpoint Pergeseran — DPA tidak punya penutupan.
+          tutup?: TutupPergeseran[]
+        }
         if (!j.ok || !j.data) return
-        setHistoryList(j.data.map(d => ({ versi: d.versi_tanggal, jumlah_baris: d.jumlah_baris })))
+        const tutup = j.tutup ?? []
+        setHistoryList(j.data.map(d => ({
+          versi: d.versi_tanggal,
+          jumlah_baris: d.jumlah_baris,
+          catatan: catatanVersi(tutup, d.versi_tanggal),
+        })))
       } catch { /* abort */ }
     })()
     return () => ctrl.abort()
@@ -396,7 +407,9 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
               <select className="cetak-select" value={historyVersi} onChange={e => setHistoryVersi(e.target.value)}>
                 <option value="">— Terbaru —</option>
                 {historyList.map(v => (
-                  <option key={v.versi} value={v.versi}>{v.versi} ({v.jumlah_baris} baris)</option>
+                  <option key={v.versi} value={v.versi}>
+                    {v.versi} ({v.jumlah_baris} baris){v.catatan ? ` · ${v.catatan}` : ''}
+                  </option>
                 ))}
               </select>
             </div>

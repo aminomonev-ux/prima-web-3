@@ -31,7 +31,7 @@ import {
 } from '@/lib/blud/salin-versi'
 import {
   tutupPergeseranRows, periodeSetelahTutup, alasanTolakTutup, labelSasaranTutup,
-  labelTutup, totalPaguAkar, type TutupPergeseran, type AsalTutup,
+  catatanVersi, totalPaguAkar, type TutupPergeseran, type AsalTutup,
 } from '@/lib/blud/tutup-pergeseran'
 import { bedaSinkron, sinkronMengubahAngka, type BedaSinkron } from '@/lib/blud/sinkron-dpa'
 import SalinVersiModal from '@/components/blud/SalinVersiModal'
@@ -1462,17 +1462,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // terbaca: versi yang DITUTUP (dokumen putaran itu) dan versi BASIS yang lahir
   // darinya. Tanpa keduanya, daftar versi cuma menampilkan deretan tanggal dan
   // "kenapa versi ini selisihnya nol" tidak terjawab di mana pun.
-  const historyBerlencana = useMemo(() => history.map(h => {
-    const basisDari = tutupList.find(t => t.versi_basis === h.versi_tanggal)
-    return {
-      ...h,
-      catatan: tutupList.some(t => t.versi_ditutup === h.versi_tanggal)
-        ? labelTutup(tutupList, h.versi_tanggal)
-        : basisDari
-          ? `basis dari ${formatTanggalId(basisDari.versi_ditutup)}`
-          : undefined,
-    }
-  }), [history, tutupList])
+  const historyBerlencana = useMemo(
+    () => history.map(h => ({ ...h, catatan: catatanVersi(tutupList, h.versi_tanggal) })),
+    [history, tutupList],
+  )
 
   return (
     <div className="space-y-4">

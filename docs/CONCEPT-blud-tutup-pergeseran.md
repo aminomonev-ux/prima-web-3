@@ -1,7 +1,7 @@
 # CONCEPT — Tutup Pergeseran (BLUD)
 
 > Status: **terpasang** (2026-08-29). Regresi:
-> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (85), 21 uji mutasi tertangkap.
+> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (92), 26 uji mutasi tertangkap.
 > Dua laporan pemakai pada hari yang sama: §16 cacat jalur HAPUS (data), §17 pil
 > versi berbohong sesudah Tutup (tampilan — datanya ternyata sudah benar).
 > Lahir dari permintaan langsung: pada bulan Februari, yang jadi pembanding
@@ -509,3 +509,30 @@ lencana BELUM TERSIMPAN/BERLAKU tetap muat: 220px, tepi kanan 257px.
 
 Layar DPA memakai komponen yang sama tapi tidak mengirim `catatan`, jadi pilnya
 menampilkan tanggal saja.
+
+---
+
+## 20. Keterangan penutupan ikut ke layar Cetak
+
+Dilaporkan pemilik aplikasi: dropdown "History Pergeseran" di layar Cetak masih
+polos — `2026-01-31 (558 baris)` — jadi orang yang mau mencetak Rekap PJ tidak
+tahu versi mana yang sudah ditutup.
+
+Aturannya sudah ada, tapi tinggal di dalam `pergeseran-client.tsx` sebagai
+`useMemo`. Menyalinnya ke `cetak-client.tsx` berarti dua tempat memutuskan hal
+yang sama — persis cara L78 lahir. Jadi dipindah dulu ke lib sebagai
+`catatanVersi(daftar, versiTanggal)`, lalu dipakai kedua layar.
+
+```
+2026-08-29 (558 baris)
+2026-02-28 (558 baris) · basis dari 31 Jan 2026
+2026-01-31 (558 baris) · Pergeseran ke-1 · ditutup 28 Feb 2026
+```
+
+Nol endpoint baru: `mode=history` sudah memulangkan `tutup` sejak fiturnya lahir,
+dan layar Cetak sudah memanggil endpoint itu. Menu DPA memakai dropdown yang sama
+tapi endpoint-nya tidak mengirim `tutup`, jadi `j.tutup ?? []` dan keterangannya
+tidak pernah muncul di sana — memang tidak ada penutupan DPA.
+
+`catatanVersi` memulangkan `undefined`, bukan string kosong: pil versi merangkai
+`· {catatan}`, jadi string kosong akan menampilkan pemisah menggantung.

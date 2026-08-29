@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   tutupPergeseranRows, periodeSetelahTutup, alasanTolakTutup,
-  nomorPutaran, labelTutup, totalPaguAkar, type TutupPergeseran,
+  nomorPutaran, labelTutup, catatanVersi, totalPaguAkar, type TutupPergeseran,
 } from '../lib/blud/tutup-pergeseran'
 import { bedaSinkron, sinkronMengubahAngka } from '../lib/blud/sinkron-dpa'
 import { recalcPergeseranJumlah } from '../lib/blud/recalc'
@@ -45,6 +45,7 @@ const TDATA = 'lib/blud/tutup-data.ts'
 const SKEMA = 'lib/blud/schemas.ts'
 const RUTE  = 'app/api/blud/pergeseran/route.ts'
 const INJ   = 'app/api/blud/pergeseran/inject/route.ts'
+const CETAK = 'app/(dashboard)/blud/cetak/cetak-client.tsx'
 const DPA   = 'app/(dashboard)/blud/dpa/dpa-client.tsx'
 const DROP  = 'components/blud/VersiDropdown.tsx'
 
@@ -437,6 +438,34 @@ bab('I. Pil versi berhenti mengaku mewakili versi tersimpan')
   cek('Keterangan itu dilepas di lebar ponsel',
     /@media \(max-width: 520px\) \{[\s\S]{0,200}\.versi-trigger \.versi-meta/.test(css),
     'diukur: pil 380px di desktop; di 375px tanggal + lencana saja yang muat')
+}
+
+
+// -----------------------------------------------------------------------------
+bab('J. Keterangan penutupan di daftar versi - satu aturan, dua layar')
+{
+  const kPgs = kode(baca(PGS))
+  const kCtk = kode(baca(CETAK))
+  const daftar: TutupPergeseran[] = [
+    { versi_ditutup: '2026-01-31', versi_basis: '2026-02-28', ditutup_pada: '2026-08-29 09:47:27', ditutup_oleh: 'superadmin' },
+  ]
+
+  cek('Versi yang ditutup dapat nomor putarannya',
+    catatanVersi(daftar, '2026-01-31') === labelTutup(daftar, '2026-01-31'))
+  cek('Versi basis menyebut asalnya',
+    catatanVersi(daftar, '2026-02-28') === 'basis dari 31 Jan 2026')
+  cek('Versi biasa tidak berketerangan',
+    catatanVersi(daftar, '2026-08-29') === undefined,
+    'string kosong akan membuat pil menampilkan separator menggantung')
+
+  cek('Layar Pergeseran memakai penolong itu', /catatanVersi\(tutupList, h\.versi_tanggal\)/.test(kPgs))
+  cek('Layar Cetak memakai penolong yang SAMA', /catatanVersi\(tutup, d\.versi_tanggal\)/.test(kCtk),
+    'dua salinan aturan yang sama adalah cara L78 lahir')
+  cek('Tidak ada lagi yang merakit "basis dari" sendiri di berkas layar',
+    !/basis dari \$\{/.test(kPgs) && !/basis dari \$\{/.test(kCtk))
+  cek('Cetak membaca daftar penutupan dari server, tahan undefined',
+    /tutup\?: TutupPergeseran\[\]/.test(kCtk) && /j\.tutup \?\? \[\]/.test(kCtk),
+    'endpoint DPA tidak mengirimnya')
 }
 
 console.log(`\n${lulus} pemeriksaan LULUS · ${gagal} GAGAL`)
