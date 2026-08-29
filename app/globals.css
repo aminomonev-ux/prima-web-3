@@ -767,6 +767,12 @@ input, textarea { caret-color: #FBBF24; }
   color: #FCD34D; border: 1px solid #F59E0B; background: rgba(245,158,11,.15);
 }
 [data-theme="light"] .versi-draft { color: #92400E; background: rgba(245,158,11,.18); }
+/* Di lebar ponsel lencana ini menambah 96px dan mendorong pil keluar layar
+   (diukur: tepi kanan 399px di viewport 375px). Yang dilepas jumlah barisnya —
+   bagian pil yang paling tidak menentukan; tanggal + status tetap utuh. */
+@media (max-width: 520px) {
+  .versi-dropdown .versi-trigger .versi-meta { display: none; }
+}
 
 /* ─── Neo-Brutalist variant (E-Anggaran VersiPickerKinerja only) ─────────────
    Outline-only, floating-card style. Activated via .versi-dropdown--brutalist

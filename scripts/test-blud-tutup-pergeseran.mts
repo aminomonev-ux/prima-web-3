@@ -408,9 +408,17 @@ bab('I. Pil versi berhenti mengaku mewakili versi tersimpan')
     /belumTersimpan=\{belumTersimpan\}/.test(kDpa),
     'kebohongan yang sama hidup di dua layar — L69')
 
+  cek('Tooltipnya pakai standar `data-tooltip`, bukan native `title`',
+    /className="versi-draft" data-tooltip=/.test(kDrp) && !/ title="/.test(kDrp),
+    'native title = kotak putih browser; DESIGN-SYSTEM cuma mengizinkan satu standar')
+
+  const css = baca('app/globals.css')
   cek('Penanda punya pasangan tema terang',
-    /\[data-theme="light"\] \.versi-draft/.test(baca('app/globals.css')),
+    /\[data-theme="light"\] \.versi-draft/.test(css),
     'kotak berwarna sebaris tidak ikut ditimpa tema terang — pola .tp-galat')
+  cek('Jumlah baris dilepas di lebar ponsel',
+    /@media \(max-width: 520px\) \{[\s\S]{0,160}\.versi-trigger \.versi-meta/.test(css),
+    'diukur: lencana menambah 96px, tepi pil mendarat di 399px pada viewport 375px')
 }
 
 console.log(`\n${lulus} pemeriksaan LULUS · ${gagal} GAGAL`)

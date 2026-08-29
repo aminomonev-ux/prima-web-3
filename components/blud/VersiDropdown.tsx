@@ -120,7 +120,7 @@ export default function VersiDropdown({
             : <span className="versi-placeholder">{placeholder}</span>}
         </span>
         {selected && belumTersimpan && (
-          <span className="versi-draft" title="Isi layar sudah berbeda dari versi ini — belum ada yang ditulis ke server.">
+          <span className="versi-draft" data-tooltip="Isi layar sudah berbeda dari versi ini — belum ada yang ditulis ke server.">
             BELUM TERSIMPAN
           </span>
         )}

@@ -1,7 +1,7 @@
 # CONCEPT — Tutup Pergeseran (BLUD)
 
 > Status: **terpasang** (2026-08-29). Regresi:
-> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (79), 17 uji mutasi tertangkap.
+> `npx tsx scripts/test-blud-tutup-pergeseran.mts` (81), 19 uji mutasi tertangkap.
 > Dua laporan pemakai pada hari yang sama: §16 cacat jalur HAPUS (data), §17 pil
 > versi berbohong sesudah Tutup (tampilan — datanya ternyata sudah benar).
 > Lahir dari permintaan langsung: pada bulan Februari, yang jadi pembanding
@@ -420,5 +420,18 @@ Yang **tidak** dilakukan, dan alasannya:
   "yang jadi acuan realisasi" — dan tidak berubah cuma karena ada suntingan di
   layar. Menghapusnya menyesatkan ke arah lain.
 
-Regresi: bagian I di `scripts/test-blud-tutup-pergeseran.mts` (79 pemeriksaan
-total), 6 uji mutasi tertangkap — termasuk mencabut prop hanya di satu layar.
+### Dua temuan dari code review perbaikan ini
+
+1. **Tooltipnya pakai `title=` native** — satu-satunya di seluruh `components/`,
+   dan DESIGN-SYSTEM melarangnya (kotak putih browser, di luar standar tunggal).
+   Diganti `data-tooltip`; aturan CSS-nya generik (`[data-tooltip]:not(select)…`)
+   jadi cukup ganti nama atribut, dan tidak ada leluhur yang mengklipnya.
+2. **Pil keluar layar di lebar ponsel** — diukur, bukan ditaksir: lencana
+   menambah 96px, pil 266,6 → 362,3px, tepi kanan mendarat di 399px pada viewport
+   375px. Yang dilepas di `@media (max-width: 520px)` adalah **jumlah barisnya**
+   (`· 558 baris`) — bagian pil yang paling tidak menentukan; tanggal dan status
+   tetap utuh. Sesudahnya 286,4px, tepi kanan 323px.
+
+Regresi: bagian I di `scripts/test-blud-tutup-pergeseran.mts` (81 pemeriksaan
+total), 8 uji mutasi tertangkap — termasuk mencabut prop hanya di satu layar dan
+mengembalikan `title=` native.
