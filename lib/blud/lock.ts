@@ -59,6 +59,32 @@ export const BLUD_KWT_ENTITY = 'realisasi_kwt'
  */
 export const BLUD_PERIODE_ENTITY = 'realisasi_periode'
 
+/**
+ * Entity lock penulisan & penghapusan VERSI anggaran — satu baris per TAHUN.
+ *
+ * "Versi mana yang jadi sumber pagu" itu pertanyaan berlingkup SETAHUN
+ * (`MAX(versi_tanggal)`), sederajat dengan aturan Tutup Kas. Kunci per-versi
+ * (`bludVersiKey`) tidak menjaganya: A menghapus versi TERBARU dan B menghapus
+ * versi tengah memegang kunci berbeda, keduanya menjawab "bukan saya sumber
+ * pagunya", dan sesudah dua-duanya commit pagu mendarat di versi lama tanpa satu
+ * pemeriksaan pun pernah berjalan — di bawah realisasi yang sudah tercatat.
+ *
+ * WAJIB diambil sebagai pernyataan PERTAMA transaksi. Bukan kerapian: pada
+ * REPEATABLE READ snapshot baca-konsisten lahir di SELECT BIASA yang pertama,
+ * jadi mengambilnya belakangan berarti `MAX(versi_tanggal)` sudah terlanjur
+ * dibaca dari foto lama dan kuncinya cuma menjaga jawaban yang basi (L55).
+ * `assertBludVersion` boleh mendahului — itu locking read, tidak melahirkan
+ * snapshot.
+ *
+ * Selalu TERLUAR, dan itu yang membuatnya bebas-buntu: tidak ada jalur yang
+ * memegang kunci pagu atau baris periode lebih dulu lalu meminta yang ini. Kalau
+ * dipakaikan `BLUD_PERIODE_ENTITY` justru terbentuk siklus — hapus-versi
+ * (periode-tahun → pagu) × Tutup Kas (periode-tahun → baris bulan) × catat BKU
+ * (baris bulan → pagu).
+ */
+export const BLUD_VERSI_ENTITY = 'blud_versi_tahun'
+
 export const bludPaguKey = (tahun: number, anggaranKey: string) => `${tahun}:${anggaranKey}`
 export const bludKwtKey = (tahun: number, bulan: number) => `${tahun}:${bulan}`
 export const bludPeriodeKey = (tahun: number) => String(tahun)
+export const bludTahunKey = (tahun: number) => String(tahun)

@@ -474,6 +474,48 @@ dikerjakan **sebelum** transaksi dibuka; (b) coba ulang sekali bila tetap kena `
 bukan galat data); (c) skenario baru di `scripts/concurrency-test.js` yang sudah ada: dua sesi membagi
 transaksi ke dua rekening sama dengan urutan ketik terbalik → benar bila keduanya selesai tanpa `1213`.
 
+#### 5.3.1 Kunci setahun jalur versi (ditambahkan 2026-08-29)
+
+Urutan di atas menjaga transaksi realisasi satu sama lain. Yang TIDAK dijaganya:
+dua **penghapusan versi** di tahun yang sama.
+
+`pagarHapusVersi` membuka dengan satu pertanyaan — *"versi ini `MAX(versi_tanggal)`
+atau bukan?"* Kalau bukan, penghapusan dibiarkan lewat, dan itu benar: pagu tidak
+bergeser. Cacatnya bukan di jawabannya, tapi di **kapan** ia dibaca — sebelum kunci
+apa pun dipegang, jadi jawabannya datang dari snapshot baca-konsisten yang bisa
+sudah usang begitu transaksi lain commit.
+
+```
+T1 hapus Des (terbaru)  → penerus Jun, pagu 5jt ≥ terserap 3jt   → lolos
+T2 hapus Jun (tengah)   → MAX masih Des (T1 belum commit)        → lolos, tanpa periksa
+keduanya commit         → yang tersisa Jan, pagu 1jt < 3jt       ← pagu di bawah realisasi
+```
+
+Diperbaiki dengan `BLUD_VERSI_ENTITY` — satu baris kunci **per tahun**, diambil
+sebagai perintah PERTAMA di **keenam** transaksi versi (`saveDpa` ×2,
+`savePergeseran` ×2, `deleteDpaVersi`, `deletePergeseranVersi`). Dua hal yang
+membuat penempatannya tidak bisa ditawar:
+
+- **Pertama, bukan di tengah.** Snapshot baca-konsisten lahir di `SELECT` biasa
+  yang pertama; mengambil kuncinya belakangan hanya menjaga jawaban yang sudah
+  terlanjur salah (L55). `assertBludVersion` boleh mendahului — itu *locking read*,
+  tidak melahirkan snapshot.
+- **Entity sendiri, bukan `BLUD_PERIODE_ENTITY`.** Menumpang entity Tutup Kas
+  membentuk siklus: hapus-versi (periode-tahun → pagu) × Tutup Kas (periode-tahun →
+  baris bulan) × catat BKU (baris bulan → pagu). Dengan entity terpisah kunci ini
+  selalu terluar — tidak ada jalur yang memegang kunci pagu atau baris periode
+  lebih dulu lalu memintanya.
+
+Juga dipasang di jalur SIMPAN, bukan hanya HAPUS (L69): menyimpan versi lama yang
+`versiJadiSumberPagu` jawab "bukan sumber pagu", lalu menghapus versi terbaru,
+menghasilkan keadaan yang sama persis.
+
+Diuji sungguhan & deterministik: `node scripts/test-blud-race-hapus-versi.mjs`
+memutar balapannya dua kali — tanpa kunci (pagu mendarat Rp 1.000.000 di bawah
+serapan Rp 3.000.000) dan dengan kunci (yang kedua menunggu, lalu ditolak).
+Pasangan statisnya `npx tsx scripts/test-blud-kunci-versi.mts` (10) menjaga keenam
+titiknya tidak lepas — 5 uji mutasi tertangkap.
+
 ### 5.4 Nomor kuitansi
 
 Diberikan **server** secara berurutan (pola `canonical_id` atomik BBA/IKI), dengan

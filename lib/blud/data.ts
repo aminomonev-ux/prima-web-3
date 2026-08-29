@@ -12,7 +12,7 @@ import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
 import type { TxSql } from '@/lib/data/db'
 import {
   assertBludVersion, bumpBludVersion, dropBludVersion, getBludVersion, bludVersiKey,
-  acquireBludLock, BLUD_PAGU_ENTITY, bludPaguKey,
+  acquireBludLock, BLUD_PAGU_ENTITY, bludPaguKey, BLUD_VERSI_ENTITY, bludTahunKey,
 } from './lock'
 // Tipe saja — `pagu.ts` mengimpor `toDateStr` dari berkas ini, jadi impor nilai
 // akan membuat lingkaran modul. Bentuk hasilnya sengaja sama dengan pagar §4.3
@@ -212,6 +212,26 @@ async function versiSebelum(
     : await tx`SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal < ${versi}`
   const v = (rows as { v?: unknown }[])[0]?.v
   return v ? toDateStr(v) : null
+}
+
+/**
+ * Kunci setahun untuk SEMUA jalur yang menulis atau menghapus versi anggaran.
+ * Alasan lengkapnya di `BLUD_VERSI_ENTITY`; ringkasnya "versi mana yang jadi
+ * sumber pagu" itu pertanyaan setahun, dan jawabannya dibaca dari snapshot.
+ *
+ * Dipanggil sebagai pernyataan PERTAMA di keenam transaksi — empat jalur simpan
+ * (saveDpa ×2, savePergeseran ×2) dan dua jalur hapus. Memasangnya hanya di jalur
+ * hapus menutup separuh lubangnya: menyimpan versi lama yang tidak diperiksa
+ * (`versiJadiSumberPagu` menjawab "bukan sumber pagu") lalu menghapus versi
+ * terbaru menghasilkan keadaan yang sama persis — pagu mendarat di angka yang
+ * belum pernah diadu dengan realisasi. L69.
+ *
+ * Mendahului `assertBludVersion` supaya urutannya seragam di seluruh berkas ini:
+ * dua-duanya kunci baris `blud_locks`, jadi urutan yang berbeda antar-jalur
+ * cukup untuk membuat buntu.
+ */
+async function kunciVersiTahun(tx: TxSql, tahun: number): Promise<void> {
+  await acquireBludLock(tx, BLUD_VERSI_ENTITY, bludTahunKey(tahun))
 }
 
 /**
@@ -687,6 +707,7 @@ export async function saveDpa(
     if (force && existing > 0) {
       let bentrokKosong: BentrokPagu[] = []
       await withTransaction(async ({ tx }) => {
+        await kunciVersiTahun(tx, tahun)
         await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
         await tolakHistorisJadiPagu(tx, 'dpa_blud', tahun, versiTanggal, entriHistoris)
         // Mengosongkan versi = pagunya jadi nol untuk semua baris. Kalau versi ini
@@ -712,6 +733,7 @@ export async function saveDpa(
   let existing = 0
   let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
+    await kunciVersiTahun(tx, tahun)
     await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
     await tolakHistorisJadiPagu(tx, 'dpa_blud', tahun, versiTanggal, entriHistoris)
     // B-NEW-3 threshold dihitung DI DALAM tx (audit DPA 2026-06-11 B-3) — angka
@@ -777,6 +799,7 @@ export async function deleteDpaVersi(tahun: number, versiTanggal: string): Promi
   let dpaCount = 0
   let rekapCount = 0
   await withTransaction(async ({ tx }) => {
+    await kunciVersiTahun(tx, tahun)
     // T1: dua pagar sebelum apa pun terhapus — realisasi yang menggantung, dan
     // soft-FK `pergeseran_dpa.dpa_versi_tanggal` yang akan menunjuk ke ruang kosong.
     const perujuk = await tx`
@@ -865,6 +888,7 @@ export async function savePergeseran(
     if (force && existing > 0) {
       let bentrokKosong: BentrokPagu[] = []
       await withTransaction(async ({ tx }) => {
+        await kunciVersiTahun(tx, tahun)
         await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
         await tolakHistorisJadiPagu(tx, 'pergeseran_dpa', tahun, versiTanggal, entriHistoris)
         bentrokKosong = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, new Map(), turunkanPaksa)
@@ -895,6 +919,7 @@ export async function savePergeseran(
   let existing = 0
   let bentrokPagu: BentrokPagu[] = []
   await withTransaction(async ({ tx, conn }) => {
+    await kunciVersiTahun(tx, tahun)
     await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
     await tolakHistorisJadiPagu(tx, 'pergeseran_dpa', tahun, versiTanggal, entriHistoris)
     // B-NEW-3 threshold di dalam tx (audit DPA 2026-06-11 B-3)
@@ -974,6 +999,7 @@ export async function deletePergeseranVersi(tahun: number, versiTanggal: string)
   let count = 0
   let tutupDibuang = 0
   await withTransaction(async ({ tx }) => {
+    await kunciVersiTahun(tx, tahun)
     // T1: menghapus Pergeseran TERBARU memundurkan pagu setahun penuh ke versi
     // sebelumnya (atau jatuh ke DPA) sementara alokasinya tetap tinggal.
     await pagarHapusVersi(tx, 'pergeseran_dpa', tahun, versiTanggal)
