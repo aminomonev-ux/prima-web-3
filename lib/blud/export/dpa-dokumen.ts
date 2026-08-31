@@ -111,6 +111,8 @@ function selNilai<T extends BarisPohon>(
   pohon: Pohon<T>,
   kol: { vol: string; harga: string; nilai: string },
   nilai: number,
+  /** Nilai vol & harga baris ini — nama kolomnya beda antara sisi DPA dan sisi P. */
+  isian: { vol: number | null; harga: number | null },
 ): ExcelJS.CellValue {
   const anak = pohon.anak.get(r.row_id) ?? []
   if (anak.length) {
@@ -124,6 +126,16 @@ function selNilai<T extends BarisPohon>(
   if (!isLeafMode(r, pohon.anak)) return 0
   const baris = pohon.barisExcel.get(r.row_id)
   if (baris == null) return nilai
+  // Vol/harga kosong → ANGKA, bukan rumus. Sel kosongnya ditulis sebagai teks
+  // kosong, dan `ROUND(""*"",0)` di Excel berbunyi #VALUE! — rumus yang ada tapi
+  // galat. Muncul pada DPA hasil IMPOR, yang lumrah membawa baris berjumlah tanpa
+  // rincian vol × harga (berkas sumbernya cuma memuat totalnya); Pergeseran
+  // mewarisinya karena barisnya disalin dari DPA.
+  //
+  // Menulis 0 pada sel vol/harga agar rumusnya "jalan" DITOLAK: hasilnya 0 pada
+  // baris yang nilainya bukan nol — angka salah yang terlihat benar, jauh lebih
+  // berbahaya daripada galat yang kelihatan.
+  if (isian.vol == null || isian.harga == null) return nilai
   return { formula: rumusDaun(kol.vol, kol.harga, baris), result: nilai }
 }
 
@@ -245,7 +257,7 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
     baris.getCell(3).value = r.vol ?? ''
     baris.getCell(4).value = sanitizeCell(r.satuan ?? '')
     baris.getCell(5).value = r.harga ?? ''
-    baris.getCell(6).value = selNilai(r, pohon, { vol: 'C', harga: 'E', nilai: 'F' }, r.jumlah)
+    baris.getCell(6).value = selNilai(r, pohon, { vol: 'C', harga: 'E', nilai: 'F' }, r.jumlah, { vol: r.vol, harga: r.harga })
     baris.getCell(7).value = sanitizeCell(r.penanggung_jawab ?? '')
     baris.getCell(8).value = sanitizeCell(r.keterangan ?? '')
     baris.getCell(9).value = TIPE_LABEL[r.tipe_baris] ?? ''
@@ -310,10 +322,10 @@ export async function buatWorkbookPergeseran(
     baris.getCell(3).value = r.vol ?? ''
     baris.getCell(4).value = sanitizeCell(r.satuan ?? '')
     baris.getCell(5).value = r.harga ?? ''
-    baris.getCell(6).value = selNilai(r, pohon, { vol: 'C', harga: 'E', nilai: 'F' }, r.jumlah)
+    baris.getCell(6).value = selNilai(r, pohon, { vol: 'C', harga: 'E', nilai: 'F' }, r.jumlah, { vol: r.vol, harga: r.harga })
     baris.getCell(7).value = r.vol_p ?? ''
     baris.getCell(8).value = r.harga_p ?? ''
-    baris.getCell(9).value = selNilai(r, pohon, { vol: 'G', harga: 'H', nilai: 'I' }, r.pergeseran)
+    baris.getCell(9).value = selNilai(r, pohon, { vol: 'G', harga: 'H', nilai: 'I' }, r.pergeseran, { vol: r.vol_p, harga: r.harga_p })
     // Selisih = pergeseran − jumlah, sesuai recalcPergeseranJumlah().
     baris.getCell(10).value = { formula: `I${nomor}-F${nomor}`, result: r.bertambah_berkurang }
     baris.getCell(11).value = TIPE_LABEL[r.tipe_baris] ?? ''
