@@ -119,6 +119,7 @@ export type AuditEventType =
   // Riwayat simpan per jam (2026-08-26): isi snapshot diambil untuk dipulihkan.
   // Simpan sesudahnya tetap tercatat sendiri lewat BLUD_SAVE_*.
   | 'BLUD_RIWAYAT_PULIHKAN'         // GET /api/blud/riwayat-simpan?id=
+  | 'BLUD_CADANGAN_JSON'            // cadangan foto per-simpan -> Google Drive
   // Sentinel PJ (2026-05-22): konflik PJ ancestor↔descendant terdeteksi saat save DPA
   | 'BLUD_PJ_CHAIN_CONFLICT'        // POST /api/blud/dpa, log only (tidak block)
   // RIMA F1 (G8): user simpan dgn temuan Sentinel diabaikan/aktif — jejak "sudah diperingatkan"

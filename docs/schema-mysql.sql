@@ -545,6 +545,7 @@ CREATE TABLE IF NOT EXISTS blud_riwayat_simpan (
   dpa_versi_tanggal DATE              NULL COMMENT 'Acuan DPA — hanya untuk jenis PERGESERAN',
   isi               JSON          NOT NULL COMMENT 'Array baris, bentuknya sama dgn payload POST',
   disimpan_oleh     INT               NULL,
+  drive_file_id     VARCHAR(64)       NULL COMMENT 'Id berkas Google Drive hasil pencadangan JSON. NULL = belum diunggah.',
   created_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_brs_versi   (jenis, tahun_anggaran, versi_tanggal, disimpan_pada),
   INDEX idx_brs_retensi (jenis, tahun_anggaran, id),

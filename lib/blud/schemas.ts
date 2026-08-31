@@ -61,6 +61,18 @@ export function canImporDpa(role: string): boolean {
   return (BLUD_IMPOR_DPA_ROLES as readonly string[]).includes(role);
 }
 
+/**
+ * Menjalankan pencadangan JSON — mengirim angka anggaran KELUAR dari gedung, ke
+ * penyimpanan pihak ketiga. Daftarnya kebetulan sama dengan dua di atas, dan
+ * sengaja tetap terpisah dengan alasan yang sama: melonggarkan salah satunya
+ * kelak tidak boleh ikut melonggarkan yang lain.
+ */
+export const BLUD_CADANGAN_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+
+export function canCadangkanJson(role: string): boolean {
+  return (BLUD_CADANGAN_ROLES as readonly string[]).includes(role);
+}
+
 // Batas baris impor tinggal di `import-dpa-shared.ts` — satu angka dipakai
 // parser DAN Zod, dan berkas itu sengaja bebas dependensi server.
 export { BLUD_IMPOR_MAKS_BARIS, BLUD_SIMPAN_MAKS_BARIS } from './import-dpa-shared';

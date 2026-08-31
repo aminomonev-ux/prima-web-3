@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, FileText, Shuffle, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, FileText, Shuffle, RefreshCw, X, UploadCloud } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import PejabatSpjPanel from '@/components/blud/PejabatSpjPanel'
@@ -25,6 +25,10 @@ import { kelompokkanPerTahun, type GrupTahun } from '@/lib/blud/pengaturan-grup'
 // bundel peramban ("Can't resolve 'net'"). Karena layout dashboard ada di jejak
 // impornya, yang mati seluruh rute dashboard — bukan cuma halaman ini.
 import { RIWAYAT_RETENSI } from '@/lib/blud/riwayat-konstanta'
+// Tipe saja — `cadangan-json.ts` menyentuh mysql2 & googleapis, jadi nilai
+// apa pun dari sana akan menyeretnya ke bundel peramban (alasan yang sama
+// dengan `RIWAYAT_RETENSI` di atas).
+import type { StatusCadangan } from '@/lib/blud/cadangan-json'
 
 interface DpaVersi {
   tahun_anggaran: number
@@ -65,7 +69,8 @@ function formatTanggal(iso: string): string {
 
 
 export default function PengaturanClient(
-  { bolehHapus, bolehUbah }: { bolehHapus: boolean; bolehUbah: boolean },
+  { bolehHapus, bolehUbah, bolehCadang }:
+  { bolehHapus: boolean; bolehUbah: boolean; bolehCadang: boolean },
 ) {
   const [dpaList,   setDpaList]   = useState<DpaVersi[]>([])
   const [pergList,  setPergList]  = useState<PergeseranVersi[]>([])
@@ -214,6 +219,8 @@ export default function PengaturanClient(
       {!bolehUbah && <SpandukLihat menu="pengaturan" />}
 
       <PejabatSpjPanel bolehUbah={bolehUbah} />
+
+      <CadanganPanel bolehCadang={bolehCadang} />
 
       {/* Warning banner — solid red full (request user: merah full, text putih) */}
       <div style={{
@@ -630,6 +637,93 @@ function Settings_Icon() {
         <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
         <circle cx="12" cy="12" r="3"/>
       </svg>
+    </div>
+  )
+}
+
+/**
+ * Cadangan JSON ke Google Drive — foto per-simpan DPA/Pergeseran.
+ * Konsep: docs/CONCEPT-blud-cadangan-json.md §4 Tahap 2
+ *
+ * Bagian terpentingnya BUKAN tombolnya, melainkan baris "Terakhir berhasil".
+ * Cadangan basis data di server ini berhenti dua bulan tanpa ada yang sadar,
+ * karena satu-satunya tanda hidupnya ada di berkas log yang tidak pernah dibuka.
+ * Angkanya dibaca dari kolom penanda tiap foto, bukan dari catatan terpisah yang
+ * bisa berbeda pendapat dengan kenyataan.
+ */
+function CadanganPanel({ bolehCadang }: { bolehCadang: boolean }) {
+  const [status, setStatus] = useState<StatusCadangan | null>(null)
+  const [jalan, setJalan]   = useState(false)
+
+  // IIFE async di dalam efek, bukan `useCallback` yang dipanggil dari efek:
+  // `setStatus` di sini terjadi SESUDAH await, jadi bukan set-state sinkron yang
+  // memicu render beruntun. Pola yang sama dipakai layar Cetak.
+  useEffect(() => {
+    let hidup = true
+    ;(async () => {
+      try {
+        const res  = await fetch('/api/blud/cadangan-json')
+        const json = await res.json()
+        if (hidup && json.ok) setStatus(json.data as StatusCadangan)
+      } catch { /* diam — panel ini pelengkap, bukan penghalang layar */ }
+    })()
+    return () => { hidup = false }
+  }, [])
+
+  async function cadangkan() {
+    if (jalan) return
+    setJalan(true)
+    try {
+      const res  = await fetch('/api/blud/cadangan-json', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok || !json.ok) { toast.error(json.error || 'Pencadangan gagal dijalankan.'); return }
+      const h = json.data as StatusCadangan & { diunggah: number; gagal: number; pesan: string | null }
+      setStatus(h)
+      if (h.gagal > 0) {
+        toast.warning(`${h.diunggah} berkas naik, ${h.gagal} gagal — ${h.pesan ?? 'sebabnya tidak diketahui'}.`, { duration: 9000 })
+      } else if (h.diunggah === 0) {
+        toast.success(h.belum === 0 ? 'Semua sudah tercadang — tidak ada yang perlu diunggah.' : (h.pesan ?? 'Tidak ada yang diunggah.'))
+      } else {
+        // Sisa disebut supaya orangnya tahu harus menekan lagi, bukan mengira beres.
+        toast.success(`${h.diunggah} berkas naik ke Drive.${h.belum > 0 ? ` Masih ada ${h.belum} tertunggak — tekan lagi.` : ''}`)
+      }
+    } catch {
+      toast.error('Pencadangan gagal — periksa sambungan, lalu coba lagi.')
+    } finally { setJalan(false) }
+  }
+
+  const belumSiap = status && !status.aktif
+
+  return (
+    <div style={{
+      background: '#042C53', border: '1px solid #0C447C', borderRadius: 10,
+      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+    }}>
+      <UploadCloud size={16} color="#85B7EB" style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div style={{ fontWeight: 800, fontSize: 13, color: '#E6F1FB', marginBottom: 2 }}>
+          Cadangan ke Google Drive
+        </div>
+        <div style={{ fontSize: 11.5, color: '#85B7EB' }}>
+          {belumSiap
+            ? 'Folder Drive-nya belum dikonfigurasi di server.'
+            : status
+              ? <>
+                  Terakhir berhasil: <strong style={{ color: '#E6F1FB' }}>
+                    {status.terakhir ? formatTanggal(status.terakhir.slice(0, 10)) + ' ' + status.terakhir.slice(11, 16) : 'belum pernah'}
+                  </strong>
+                  {' · '}{status.sudah} tercadang{status.belum > 0 && <> · <strong style={{ color: '#FCD34D' }}>{status.belum} tertunggak</strong></>}
+                </>
+              : 'Memuat…'}
+        </div>
+      </div>
+      {bolehCadang && (
+        <PrimaButton variant="success" iconLeft={<UploadCloud size={13} />}
+          onClick={cadangkan} disabled={jalan || !!belumSiap}
+          data-tooltip={belumSiap ? 'GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON belum diisi di .env' : 'Unggah foto simpan yang belum tercadang'}>
+          {jalan ? 'Mengunggah…' : 'Cadangkan sekarang'}
+        </PrimaButton>
+      )}
     </div>
   )
 }
