@@ -682,10 +682,10 @@ function CadanganPanel({ bolehCadang }: { bolehCadang: boolean }) {
       if (h.gagal > 0) {
         toast.warning(`${h.diunggah} berkas naik, ${h.gagal} gagal — ${h.pesan ?? 'sebabnya tidak diketahui'}.`, { duration: 9000 })
       } else if (h.diunggah === 0) {
-        toast.success(h.belum === 0 ? 'Semua sudah tercadang — tidak ada yang perlu diunggah.' : (h.pesan ?? 'Tidak ada yang diunggah.'))
+        toast.success(h.belum === 0 ? 'Semua sudah ada di Drive — tidak ada yang perlu diunggah.' : (h.pesan ?? 'Tidak ada yang diunggah.'))
       } else {
         // Sisa disebut supaya orangnya tahu harus menekan lagi, bukan mengira beres.
-        toast.success(`${h.diunggah} berkas naik ke Drive.${h.belum > 0 ? ` Masih ada ${h.belum} tertunggak — tekan lagi.` : ''}`)
+        toast.success(`${h.diunggah} berkas naik ke Drive.${h.belum > 0 ? ` Masih ada ${h.belum} yang belum naik — tekan lagi.` : ''}`)
       }
     } catch {
       toast.error('Pencadangan gagal — periksa sambungan, lalu coba lagi.')
@@ -709,10 +709,16 @@ function CadanganPanel({ bolehCadang }: { bolehCadang: boolean }) {
             ? 'Folder Drive-nya belum dikonfigurasi di server.'
             : status
               ? <>
-                  Terakhir berhasil: <strong style={{ color: '#E6F1FB' }}>
-                    {status.terakhir ? formatTanggal(status.terakhir.slice(0, 10)) + ' ' + status.terakhir.slice(11, 16) : 'belum pernah'}
+                  {/* "Aman sampai", bukan "terakhir berhasil": angkanya waktu SIMPAN foto
+                      terbaru yang sudah naik, bukan waktu unggahnya. Karena unggahan
+                      dikerjakan dari yang paling tua, kalimat itu benar apa adanya —
+                      dan ia menjawab pertanyaan yang sebenarnya, "sejauh mana saya
+                      terlindungi", bukan "jam berapa mesinnya jalan". */}
+                  Aman sampai: <strong style={{ color: '#E6F1FB' }}>
+                    {status.terakhir ? formatTanggal(status.terakhir.slice(0, 10)) + ' ' + status.terakhir.slice(11, 16) : 'belum ada yang naik'}
                   </strong>
-                  {' · '}{status.sudah} tercadang{status.belum > 0 && <> · <strong style={{ color: '#FCD34D' }}>{status.belum} tertunggak</strong></>}
+                  {' · '}{status.sudah} sudah di Drive
+                  {status.belum > 0 && <> · <strong style={{ color: '#FCD34D' }}>{status.belum} belum naik</strong></>}
                 </>
               : 'Memuat…'}
         </div>
@@ -720,7 +726,7 @@ function CadanganPanel({ bolehCadang }: { bolehCadang: boolean }) {
       {bolehCadang && (
         <PrimaButton variant="success" iconLeft={<UploadCloud size={13} />}
           onClick={cadangkan} disabled={jalan || !!belumSiap}
-          data-tooltip={belumSiap ? 'GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON belum diisi di .env' : 'Unggah foto simpan yang belum tercadang'}>
+          data-tooltip={belumSiap ? 'GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON belum diisi di .env' : 'Unggah simpanan yang belum naik ke Drive'}>
           {jalan ? 'Mengunggah…' : 'Cadangkan sekarang'}
         </PrimaButton>
       )}
