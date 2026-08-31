@@ -35,6 +35,8 @@ import {
 } from '@/lib/blud/tutup-pergeseran'
 import { bedaSinkron, sinkronMengubahAngka, type BedaSinkron } from '@/lib/blud/sinkron-dpa'
 import SalinVersiModal from '@/components/blud/SalinVersiModal'
+import MuatBerkasButton from '@/components/blud/MuatBerkasButton'
+import type { BerkasCadangan } from '@/lib/blud/cadangan-berkas'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import { useIngatkanBelumTersimpan } from '@/lib/shared/belum-tersimpan'
 import type { SentinelAckPayload } from '@/lib/sentinel/types'
@@ -708,6 +710,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // Jejak "baris ini dipulihkan dari simpanan jam sekian" — semata memperpanjang
   // baris detail audit, sepadan `asalSalinRef` di layar DPA.
   const asalPulihkanRef = useRef<{ id: number; versi_ke: number; disimpan_pada: string } | null>(null)
+  /**
+   * Baris yang dimuat dari BERKAS cadangan. Dipisah dari `asalPulihkanRef`
+   * dengan sengaja: pemulihan dari riwayat mengambil dari tabel di server,
+   * yang ini datang dari luar — audit tidak boleh menyamakan keduanya.
+   */
+  const asalBerkasRef = useRef<
+    { nama: string; versi_tanggal: string; versi_ke: number; disimpan_pada: string } | null
+  >(null)
   // Sepadan, untuk baris yang datang dari versi lain tahun yang sama.
   const asalSalinRef = useRef<AsalSalin | null>(null)
   const [salinVersiBuka, setSalinVersiBuka] = useState(false)
@@ -911,6 +921,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         if (firstRow?.dpa_versi_tanggal) setDpaVersi(firstRow.dpa_versi_tanggal)
         // Barisnya diganti muatan server — jejak "ini pulihan/salinan" tidak berlaku lagi.
         asalPulihkanRef.current = null
+        asalBerkasRef.current   = null
         asalSalinRef.current    = null
         asalTutupRef.current    = null
       }
@@ -969,12 +980,50 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       if (json.data.dpa_versi_tanggal) setDpaVersi(json.data.dpa_versi_tanggal)
       asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
       asalSalinRef.current    = null
+      asalBerkasRef.current   = null
       asalTutupRef.current    = null
       showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), false)
     } finally { setLoading(false) }
   }, [tahun, rows.length])
+
+  /**
+   * Muat baris dari berkas cadangan JSON — pintu masuk kedua ke jalur Pulihkan.
+   *
+   * Mengganti ISI, TIDAK PERNAH sasaran (L80): periode & versi dibiarkan apa
+   * adanya, jadi Simpan tetap mendarat di tempat yang sudah terlihat di layar.
+   * Yang dari berkas cuma barisnya.
+   */
+  async function muatDariBerkas(data: BerkasCadangan, nama: string) {
+    const lanjut = await confirmDialog({
+      title:   'Muat cadangan ke layar?',
+      message: `Berkas "${nama}" berisi ${data.rows.length} baris — versi `
+        + `${formatTanggalId(data.versi_tanggal)}, simpan ke-${data.versi_ke} `
+        + `(${data.disimpan_pada}). Isinya akan menggantikan ${rows.length} baris yang sekarang di layar.
+
+`
+        + `Belum ada yang tersimpan sampai Anda menekan Simpan, dan sasarannya tetap `
+        + `${formatTanggalId(sasaranSimpan(periodeTulis))}.`,
+      confirmLabel: 'Muat ke layar',
+      cancelLabel:  'Batal',
+      variant:      'warning',
+    })
+    if (!lanjut) return
+    // Di-recalc seperti jalur Pulihkan: kolom turunan di dalam berkas adalah
+    // angka yang dikirim klien saat itu, sedangkan server SELALU menghitung ulang
+    // sebelum menilai. Memuat apa adanya membuat tabel memperlihatkan angka yang
+    // tidak dipakai satu pun keputusan.
+    setRows(recalcPergeseranJumlah(data.rows as unknown as PergeseranBarisInput[]))
+    setBelumTersimpan(true)
+    asalBerkasRef.current   = {
+      nama, versi_tanggal: data.versi_tanggal, versi_ke: data.versi_ke, disimpan_pada: data.disimpan_pada,
+    }
+    asalSalinRef.current    = null
+    asalPulihkanRef.current = null
+    asalTutupRef.current    = null
+    showToast(`${data.rows.length} baris dari berkas cadangan dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
+  }
 
   // Generate: ambil DPA terbaru DALAM TAHUN TERPILIH, jadikan tabel pergeseran baru.
   // Empty-state (§2.1): kalau tahun itu belum punya DPA → guard arahkan buat DPA dulu.
@@ -1040,6 +1089,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       // dan untuk `asalTutupRef` lebih dari berbohong: ia akan mencoba menutup
       // versi yang barisnya sudah tidak ada lagi di layar.
       asalPulihkanRef.current = null
+      asalBerkasRef.current   = null
       asalSalinRef.current    = null
       asalTutupRef.current    = null
       showToast(periodeTulis
@@ -1154,6 +1204,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     setBelumTersimpan(true)
     asalSalinRef.current    = asal
     asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
     asalTutupRef.current    = null
     setSalinVersiBuka(false)
     showToast(`${baris.length} baris disalin dari versi ${formatTanggalId(asal.versi)} — belum tersimpan, `
@@ -1260,6 +1311,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     asalTutupRef.current    = { versi_ditutup: konfirmTutup.versiDitutup }
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
     setKonfirmTutup(null)
     showToast(`Kolom pergeseran disalin ke kolom kiri. Basis akan disimpan sebagai `
       + `${labelSasaranTutup(konfirmTutup.sasaran, konfirmTutup.periode)} — belum tersimpan, tekan Simpan.`)
@@ -1333,6 +1385,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           sentinel_ack: sentinelAckRef.current ?? undefined,
           asal_salin: asalSalinRef.current ?? undefined,
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
+          asal_berkas: asalBerkasRef.current ?? undefined,
           asal_tutup: asalTutupRef.current ?? undefined,
         }),
       })
@@ -1404,6 +1457,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         loadHistory(); loadTahunList(); loadRiwayat()
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pemulihan/salinan.
         asalPulihkanRef.current = null
+        asalBerkasRef.current   = null
         asalSalinRef.current    = null
         // Wajib dikosongkan, dan lebih keras dari dua di atas: kalau tertinggal,
         // koreksi berikutnya akan mencoba menutup versi yang SAMA sekali lagi dan
@@ -1674,6 +1728,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
               onClick={() => setSalinVersiBuka(true)} data-rima="pergeseran.salin-versi">
               Salin Versi Lain
             </PrimaButton>
+
+            {/* Sasarannya sengaja TIDAK ikut berpindah — lihat `muatDariBerkas`.
+                Ikut `alasanKunciBorongan` karena ia mengganti SELURUH tabel. */}
+            <MuatBerkasButton
+              jenis="PERGESERAN" tahun={tahun}
+              alasanKunci={alasanKunciBorongan}
+              onMuat={(d, n) => { void muatDariBerkas(d, n) }}
+            />
           </>
         )}
 

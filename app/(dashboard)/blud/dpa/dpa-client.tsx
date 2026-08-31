@@ -14,6 +14,8 @@ import ImportDpaModal, { type AsalImpor } from '@/components/blud/ImportDpaModal
 import SalinMasterModal from '@/components/blud/SalinMasterModal'
 import SalinTahunModal from '@/components/blud/SalinTahunModal'
 import SalinVersiModal from '@/components/blud/SalinVersiModal'
+import MuatBerkasButton from '@/components/blud/MuatBerkasButton'
+import type { BerkasCadangan } from '@/lib/blud/cadangan-berkas'
 import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
@@ -963,6 +965,14 @@ export default function DpaClient({
   // Sepadan `asalSalinRef` tapi untuk pemulihan snapshot — tanpa ini tidak ada
   // apa pun di basis data yang bilang versi hari ini lahir dari simpanan jam 09:15.
   const asalPulihkanRef = useRef<{ id: number; versi_ke: number; disimpan_pada: string } | null>(null)
+  /**
+   * Baris yang dimuat dari BERKAS cadangan. Dipisah dari `asalPulihkanRef`
+   * dengan sengaja: pemulihan dari riwayat mengambil dari tabel di server,
+   * yang ini datang dari luar — audit tidak boleh menyamakan keduanya.
+   */
+  const asalBerkasRef = useRef<
+    { nama: string; versi_tanggal: string; versi_ke: number; disimpan_pada: string } | null
+  >(null)
   // Sepadan dua ref di atas, untuk baris yang datang dari berkas Excel. Sejak
   // modal impor berhenti menulis sendiri, `BLUD_DPA_IMPORT_COMMIT` tidak ada lagi
   // — ini satu-satunya yang menyatakan versi itu lahir dari sebuah berkas.
@@ -1123,6 +1133,7 @@ export default function DpaClient({
         // berlaku lagi. Dibiarkan menempel, ia akan mengotori audit simpan berikutnya.
         asalSalinRef.current    = null
         asalPulihkanRef.current = null
+        asalBerkasRef.current   = null
         asalImporRef.current    = null
       }
     } catch (err) {
@@ -1197,6 +1208,7 @@ export default function DpaClient({
       setPeriodeTulis(periodeUntukVersi(s.versi_tanggal))
       setBelumTersimpan(true)
       asalSalinRef.current  = null
+      asalBerkasRef.current = null
       asalImporRef.current  = null
       asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
       showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
@@ -1279,6 +1291,7 @@ export default function DpaClient({
           sentinel_ack: sentinelAckRef.current ?? undefined,
           asal_salin: asalSalinRef.current ?? undefined,
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
+          asal_berkas: asalBerkasRef.current ?? undefined,
           asal_impor: asalImporRef.current ?? undefined,
         }),
       })
@@ -1356,6 +1369,7 @@ export default function DpaClient({
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
         asalSalinRef.current    = null
         asalPulihkanRef.current = null
+        asalBerkasRef.current   = null
         asalImporRef.current    = null
       } else {
         showToast(json.error || json.message || 'Belum tersimpan. Coba lagi.', false)
@@ -1398,6 +1412,7 @@ export default function DpaClient({
     setBelumTersimpan(true)
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
     asalImporRef.current    = null
     setOverlayItems(null)
     setOverwriteConfirm(null)
@@ -1410,6 +1425,41 @@ export default function DpaClient({
    * belum punya padanan tersimpan, jadi Simpan akan menulis versi tanggal HARI INI
    * di tahun yang sedang dipilih — bukan menimpa versi tahun sumber.
    */
+  /**
+   * Muat baris dari berkas cadangan JSON — pintu masuk kedua ke jalur Pulihkan.
+   *
+   * Mengganti ISI, TIDAK PERNAH sasaran (L80): periode & versi dibiarkan apa
+   * adanya, jadi Simpan tetap mendarat di tempat yang sudah terlihat di layar.
+   */
+  async function muatDariBerkas(data: BerkasCadangan, nama: string) {
+    const lanjut = await confirmDialog({
+      title:   'Muat cadangan ke layar?',
+      message: `Berkas "${nama}" berisi ${data.rows.length} baris — versi `
+        + `${formatTanggalId(data.versi_tanggal)}, simpan ke-${data.versi_ke} `
+        + `(${data.disimpan_pada}). Isinya akan menggantikan ${rows.length} baris yang sekarang di layar.
+
+`
+        + `Belum ada yang tersimpan sampai Anda menekan Simpan, dan sasarannya tetap `
+        + `${formatTanggalId(sasaranSimpan(periodeTulis))}.`,
+      confirmLabel: 'Muat ke layar',
+      cancelLabel:  'Batal',
+      variant:      'warning',
+    })
+    if (!lanjut) return
+    // Di-recalc seperti jalur Pulihkan — server selalu menghitung ulang sebelum
+    // menilai, jadi memuat kolom turunan apa adanya memperlihatkan angka yang
+    // tidak dipakai satu pun keputusan.
+    setRows(recalcDpaJumlah(data.rows as unknown as DpaBarisInput[]))
+    setBelumTersimpan(true)
+    asalBerkasRef.current   = {
+      nama, versi_tanggal: data.versi_tanggal, versi_ke: data.versi_ke, disimpan_pada: data.disimpan_pada,
+    }
+    asalSalinRef.current    = null
+    asalPulihkanRef.current = null
+    asalImporRef.current    = null
+    showToast(`${data.rows.length} baris dari berkas cadangan dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
+  }
+
   /**
    * Hasil impor Excel mendarat di form — sepadan `terapkanSalinTahun` di bawah,
    * dan itu memang inti perbaikannya. Modal impor dulu menulis DB sendiri
@@ -1424,6 +1474,7 @@ export default function DpaClient({
     asalImporRef.current    = asal
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
     setImportDpaBuka(false)
     showToast(`${baris.length} baris dibaca dari "${asal.berkas}" — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
     // Tawaran menyalin data induk menunggu barisnya benar-benar ada di layar —
@@ -1491,6 +1542,7 @@ export default function DpaClient({
     setPeriodeTulis(tanggal)
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
     asalImporRef.current    = null
     if (tanggal) {
       setRows([])
@@ -1537,6 +1589,7 @@ export default function DpaClient({
     setBelumTersimpan(true)
     asalSalinRef.current    = asal
     asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
     asalImporRef.current    = null
     setSalinTahunBuka(false)
     const label = asal.sumber === 'DPA' ? `DPA ${asal.tahun}` : `Pergeseran ${asal.tahun}`
@@ -1561,6 +1614,7 @@ export default function DpaClient({
     setBelumTersimpan(true)
     asalSalinRef.current    = asal
     asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
     asalImporRef.current    = null
     setSalinVersiBuka(false)
     showToast(`${baris.length} baris disalin dari versi ${formatTanggalId(asal.versi)} — belum tersimpan, `
@@ -1684,6 +1738,14 @@ export default function DpaClient({
               onClick={() => setSalinVersiBuka(true)} data-rima="dpa.salin-versi">
               Salin Versi Lain
             </PrimaButton>
+
+            {/* Sasarannya sengaja TIDAK ikut berpindah — lihat `muatDariBerkas`.
+                Ikut `alasanKunciBorongan` karena ia mengganti SELURUH tabel. */}
+            <MuatBerkasButton
+              jenis="DPA" tahun={tahun}
+              alasanKunci={alasanKunciBorongan}
+              onMuat={(d, n) => { void muatDariBerkas(d, n) }}
+            />
 
             {bolehImpor && (
               <PrimaButton variant="success" size="sm" iconLeft={<Upload className="w-3.5 h-3.5" />}

@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
   }
   const {
     tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack,
-    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan, asal_impor, entri_historis,
+    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan, asal_berkas, asal_impor, entri_historis,
   } = parsed.data
 
   // Sejalan dengan jalur Pergeseran: menembus §4.3 harus disengaja DAN beralasan,
@@ -190,6 +190,9 @@ export async function POST(req: NextRequest) {
         + `${asal_salin.lingkup === 'VERSI' ? ' (versi lain, tahun sama — jangkar realisasi ikut terbawa)' : ' (jangkar realisasi dilepas)'}` : ''}`
       // Sama seperti asal_salin: hanya hidup di baris ini, tidak ada kolomnya.
       + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`
+      // Dibedakan dari `asal_pulihkan`: yang itu diambil dari tabel di server,
+      // yang ini datang dari berkas di luar — asal-usul angkanya jauh berbeda.
+      + `${asal_berkas ? ` · dimuat dari berkas "${asal_berkas.nama}" (versi ${asal_berkas.versi_tanggal}, simpan ke-${asal_berkas.versi_ke}, ${asal_berkas.disimpan_pada})` : ''}`
       // Pengganti `BLUD_DPA_IMPORT_COMMIT` yang dibuang bersama jalur tulis di
       // modal impor. Tanpa baris ini, versi hasil impor tak terbedakan dari ketikan.
       + `${asal_impor ? ` · diimpor dari "${asal_impor.berkas}" (lembar "${asal_impor.lembar}", ${asal_impor.baris} baris terbaca)` : ''}`,

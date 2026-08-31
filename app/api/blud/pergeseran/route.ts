@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_salin, asal_pulihkan, asal_tutup, entri_historis } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_salin, asal_pulihkan, asal_berkas, asal_tutup, entri_historis } = parsed.data
 
   // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
   if (turunkan_paksa && !alasan_turun) {
@@ -218,6 +218,9 @@ export async function POST(req: NextRequest) {
         // ini terbaca sama dengan pasangannya di BLUD_SAVE_DPA.
         + `${asal_salin ? ` · salinan dari Pergeseran ${asal_salin.tahun}/${asal_salin.versi} (versi lain, tahun sama — jangkar realisasi ikut terbawa)` : ''}`
         + `${asal_pulihkan ? ` · dipulihkan dari riwayat #${asal_pulihkan.id} (simpan ke-${asal_pulihkan.versi_ke}, ${asal_pulihkan.disimpan_pada})` : ''}`
+        // Dibedakan dari `asal_pulihkan`: yang itu diambil dari tabel di server,
+        // yang ini datang dari berkas di luar — asal-usul angkanya jauh berbeda.
+        + `${asal_berkas ? ` · dimuat dari berkas "${asal_berkas.nama}" (versi ${asal_berkas.versi_tanggal}, simpan ke-${asal_berkas.versi_ke}, ${asal_berkas.disimpan_pada})` : ''}`
         // Penutupan punya kolomnya sendiri di `blud_pergeseran_tutup`, tapi baris
         // ini tetap menyebutnya: audit dibaca berurutan sebagai satu cerita, dan
         // "kenapa versi ini selisihnya nol" harus terjawab tanpa membuka tabel lain.

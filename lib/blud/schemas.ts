@@ -301,6 +301,21 @@ export const AsalPulihkanSchema = z.object({
 });
 
 /**
+ * Sepadan `AsalSalinSchema`, untuk baris yang dimuat dari BERKAS cadangan JSON.
+ *
+ * Bedanya dengan `asal_pulihkan` bukan sepele: pemulihan dari riwayat mengambil
+ * dari tabel yang masih ada di server, sedangkan ini datang dari berkas di luar —
+ * bisa dari cadangan Drive bulan lalu, bisa dari komputer siapa saja. Tanpa baris
+ * audit sendiri, keduanya terlihat sama padahal asal-usul angkanya jauh berbeda.
+ */
+export const AsalBerkasSchema = z.object({
+  nama:          z.string().trim().min(1).max(191),
+  versi_tanggal: TanggalSchema,
+  versi_ke:      z.coerce.number().int().min(0),
+  disimpan_pada: z.string().trim().max(32),
+});
+
+/**
  * Sepadan `AsalSalinSchema`, untuk baris yang datang dari berkas Excel.
  *
  * Sejak impor berhenti di form, `BLUD_DPA_IMPORT_COMMIT` tidak ada lagi — tidak
@@ -348,6 +363,7 @@ const DpaBodyObject = z.object({
   sentinel_ack:     SentinelAckSchema.optional(),
   asal_salin:       AsalSalinSchema.optional(),
   asal_pulihkan:    AsalPulihkanSchema.optional(),
+  asal_berkas:      AsalBerkasSchema.optional(),
   asal_impor:       AsalImporSchema.optional(),
   // Versi bulan yang sudah lewat, diisi belakangan (aplikasi mulai dipakai di
   // tengah tahun). Bukan sekadar penanda audit: jalur simpan memakainya untuk
@@ -390,6 +406,7 @@ export const PergeseranBodySchema = z.object({
   // Tahun Lain" (salinan lintas tahun mendarat di form DPA, bukan di sini).
   asal_salin:        AsalSalinSchema.optional(),
   asal_pulihkan:     AsalPulihkanSchema.optional(),
+  asal_berkas:       AsalBerkasSchema.optional(),
   asal_tutup:        AsalTutupSchema.optional(),
   entri_historis:    z.boolean().optional().default(false),
 }).superRefine((d, ctx) => {

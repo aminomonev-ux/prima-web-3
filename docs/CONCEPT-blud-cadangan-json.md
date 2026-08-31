@@ -1,6 +1,10 @@
 # CONCEPT — Cadangan JSON BLUD ke Google Drive
 
-> Status: **rencana** (2026-08-31). Belum ada satu baris kode pun.
+> Status: Tahap 1–3 **terpasang** (2026-08-31); Tahap 0 (jadwal) milik server.
+> Regresi: `npx tsx scripts/test-blud-cadangan-json.mts` (43), 10 uji mutasi
+> tertangkap — salah satunya menemukan cacat nyata: jejak `asal_berkas` tidak
+> dilepas di jalur yang MENYETEL jejak lain (Pulihkan), sehingga audit simpanan
+> berikutnya akan mengaku "dimuat dari berkas" padahal bukan.
 > Lahir dari pertanyaan pemilik aplikasi: *"di sistem BLUD saya sudah ada
 > pencadangan? misal tiap save bisa export lalu upload ke Google Drive?"*
 
@@ -171,3 +175,32 @@ Jadi sasaran simpannya tetap dipilih lewat pemilih periode seperti biasa.
 
 Regresi: satu berkas uji baru (`scripts/test-blud-cadangan-json.mts`) untuk Tahap
 1–3, dengan uji mutasi seperti suite BLUD yang lain.
+
+---
+
+## 7. Catatan pelaksanaan (2026-08-31)
+
+**Enkripsi: POLOS.** Diputuskan sesuai usul §4 Tahap 1 — folder Drive-nya privat,
+dan berkas yang bisa dibuka langsung itu setengah dari gunanya. Kalau kelak
+diubah, Tahap 3 ikut harus bisa mendekripsi.
+
+**Yang berubah dari rencana:** satu berkas jadi dua. `cadangan-berkas.ts` (bentuk
+berkas + pembacanya) BEBAS dependensi server karena dipakai komponen
+`'use client'` di Tahap 3; `cadangan-json.ts` (DB + Drive) mengimpornya. Menaruh
+keduanya di satu berkas akan menyeret mysql2 ke bundel peramban dan merobohkan
+seluruh rute dashboard — pelajaran yang sama dengan `riwayat-konstanta.ts`.
+
+**Jejak audit `asal_berkas`** tidak ada di rencana awal, tapi wajib: tanpa itu
+baris yang dimuat dari berkas luar terlihat sama persis dengan pemulihan dari
+riwayat server, padahal asal-usul angkanya jauh berbeda. Ia mengikuti pola
+`asal_salin`/`asal_pulihkan`/`asal_tutup` — hidup hanya di detail audit, tanpa
+kolom DB — dan WAJIB diputuskan (disetel atau dikosongkan) di **setiap** jalur
+yang mengganti baris. Suite membandingkannya dengan `asalSalinRef`, bukan
+menghitung sendiri: menghitung sendiri tidak bisa membedakan "lengkap" dari
+"kebetulan sama".
+
+**Diverifikasi sungguhan** ke folder Drive milik pemilik aplikasi: 22 berkas naik
+(2 lewat skrip, 20 lewat tombol), nama benar, ±243 KB per berkas. Tombol "Muat
+dari Berkas" diuji dengan berkas sah (558 baris masuk ke layar, pil berlencana
+BELUM TERSIMPAN, sasaran TIDAK berpindah) dan tiga berkas cacat (tahun beda,
+jenis beda, bukan JSON) — ketiganya ditolak dengan kalimat yang menyebut sebabnya.
