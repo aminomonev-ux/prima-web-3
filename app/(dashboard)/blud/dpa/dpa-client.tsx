@@ -1440,7 +1440,11 @@ export default function DpaClient({
 
 `
         + `Belum ada yang tersimpan sampai Anda menekan Simpan, dan sasarannya tetap `
-        + `${formatTanggalId(sasaranSimpan(periodeTulis))}.`,
+        + `${formatTanggalId(sasaranSimpan(periodeTulis))}.
+
+`
+        + `Ini mengembalikan salinan cadangan. Untuk menyusun DPA baru, pakai `
+        + `"Form Baru" atau "Salin Tahun Lain".`,
       confirmLabel: 'Muat ke layar',
       cancelLabel:  'Batal',
       variant:      'warning',
@@ -1717,6 +1721,16 @@ export default function DpaClient({
           />
         </div>
 
+        {/* Berdampingan dengan dropdown versi, BUKAN di sebelah Impor: Impor
+            MENYUSUN dari Excel, ini MENGEMBALIKAN foto simpanan. Duduk bersebelahan
+            membuat keduanya terbaca sekeluarga padahal berlawanan. */}
+        {bolehUbah && (
+          <MuatBerkasButton
+            jenis="DPA" tahun={tahun}
+            onMuat={(d, n) => { void muatDariBerkas(d, n) }}
+          />
+        )}
+
         {bolehUbah && (
           <div style={{ display:'flex', gap:8, marginLeft:'auto' }}>
             <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
@@ -1738,14 +1752,6 @@ export default function DpaClient({
               onClick={() => setSalinVersiBuka(true)} data-rima="dpa.salin-versi">
               Salin Versi Lain
             </PrimaButton>
-
-            {/* Sasarannya sengaja TIDAK ikut berpindah — lihat `muatDariBerkas`.
-                Ikut `alasanKunciBorongan` karena ia mengganti SELURUH tabel. */}
-            <MuatBerkasButton
-              jenis="DPA" tahun={tahun}
-              alasanKunci={alasanKunciBorongan}
-              onMuat={(d, n) => { void muatDariBerkas(d, n) }}
-            />
 
             {bolehImpor && (
               <PrimaButton variant="success" size="sm" iconLeft={<Upload className="w-3.5 h-3.5" />}

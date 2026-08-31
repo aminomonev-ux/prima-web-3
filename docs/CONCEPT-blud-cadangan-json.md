@@ -1,7 +1,7 @@
 # CONCEPT — Cadangan JSON BLUD ke Google Drive
 
 > Status: Tahap 1–3 **terpasang** (2026-08-31); Tahap 0 (jadwal) milik server.
-> Regresi: `npx tsx scripts/test-blud-cadangan-json.mts` (43), 10 uji mutasi
+> Regresi: `npx tsx scripts/test-blud-cadangan-json.mts` (48), 14 uji mutasi
 > tertangkap — salah satunya menemukan cacat nyata: jejak `asal_berkas` tidak
 > dilepas di jalur yang MENYETEL jejak lain (Pulihkan), sehingga audit simpanan
 > berikutnya akan mengaku "dimuat dari berkas" padahal bukan.
@@ -204,3 +204,66 @@ menghitung sendiri: menghitung sendiri tidak bisa membedakan "lengkap" dari
 dari Berkas" diuji dengan berkas sah (558 baris masuk ke layar, pil berlencana
 BELUM TERSIMPAN, sasaran TIDAK berpindah) dan tiga berkas cacat (tahun beda,
 jenis beda, bukan JSON) — ketiganya ditolak dengan kalimat yang menyebut sebabnya.
+
+---
+
+## 8. Tombolnya bernama salah, dan dikunci salah (2026-08-31, susulan)
+
+Dilaporkan pemilik aplikasi sambil menunjukkan layar DPA 2027 yang kosong:
+tombolnya "selalu terkunci", lalu begitu terbuka di tahun kosong justru dikira
+cara **membuat** DPA baru.
+
+Dua keluhan, dua akar berbeda, dan dua-duanya kesalahan saya.
+
+### Kuncinya salah pasang
+
+`alasanKunciBorongan` untuk tombol yang membawa baris **dari LUAR dengan jangkar
+kosong** — Form Baru dari Kode Besar, Impor dari Excel, Buat Pergeseran dari DPA.
+Menyimpannya di atas versi berisi memutus jangkar realisasi.
+
+Berkas cadangan bukan itu: diperiksa di data sungguhan, **558 dari 558 baris
+membawa `anggaran_key`**. Sifatnya sama persis dengan "Salin Versi Lain", yang
+justru sengaja diletakkan di LUAR kunci itu (L80). Saya tidak konsisten — dua
+tombol bersifat sama, satu dikunci satu tidak.
+
+Lebih buruk lagi: keadaan yang paling membutuhkannya (database hilang, tahun
+kosong) adalah satu-satunya keadaan di mana ia kebetulan terbuka. Di pemakaian
+sehari-hari — memulihkan cadangan lama sementara sebuah versi terbuka — ia mati.
+Kuncinya dilepas seluruhnya.
+
+### Guard hitungan: DITOLAK
+
+Sempat diusulkan tombolnya selalu terbuka tapi dijaga soal hitungan (dengan
+tombol ganti soal). Ditolak, dan alasannya sudah dua kali dipakai di modul ini:
+
+- Layar Hapus Versi meninggalkan **kode acak** demi mengetik **tahun
+  anggarannya** — kode menjaga dari salah *pencet*, bukan salah *sasaran*, dan
+  yang terjadi di lapangan salah sasaran (L76).
+- Tutup Pergeseran menolaknya lagi: kode membuktikan jari sudah sengaja, bukan
+  bahwa orangnya tahu apa yang hilang.
+
+Soal hitungan satu tingkat lebih lemah — ia membuktikan orangnya bisa menjumlah.
+Dan yang menentukan: **tombol ini tidak menulis apa pun.** Gesekan berat di
+tindakan yang tidak merusak melatih orang menembusnya tanpa membaca, lalu di
+tempat yang benar-benar berbahaya (Simpan) kebiasaan itu terbawa. Gesekan
+sungguhannya sudah ada di Simpan: ambang penurunan baris, `periksaJangkar`,
+pagar pagu di bawah realisasi, gembok versi.
+
+### Yang diperbaiki: namanya, bukan pagarnya
+
+Pagar tahun sudah bekerja — tangkapan layar pemakai justru memperlihatkan berkas
+2026 ditolak di layar 2027. Yang gagal cuma **label**.
+
+| | sebelum | sesudah |
+|---|---|---|
+| Nama | "Muat dari Berkas" | **"Pulihkan Cadangan"** |
+| Letak | di sebelah **Impor** | di sebelah **dropdown versi** |
+| Dialog | tidak menyebut batasnya | + "Ini mengembalikan salinan cadangan. Untuk menyusun DPA baru, pakai ..." |
+
+"Pulihkan" sudah punya arti mapan di aplikasi ini — nama tombol di dalam dropdown
+versi yang mengerjakan hal yang sama, cuma sumbernya database. Dan letak barunya
+mengelompokkannya dengan keluarga pemulihan, bukan dengan penyusun.
+
+Kalimat dialognya menyebut tombol yang **memang ada di layar itu** — DPA "Form
+Baru atau Salin Tahun Lain", Pergeseran "Buat Pergeseran". Menyebut tombol yang
+tidak ada di layarnya adalah cacat yang sudah pernah terjadi (L79d).

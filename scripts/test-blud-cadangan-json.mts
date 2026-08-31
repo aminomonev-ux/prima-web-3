@@ -156,14 +156,26 @@ bab('E. Muat dari berkas — berhenti di form, dua layar')
   cek('Tombolnya tidak pernah memanggil endpoint tulis',
     !/fetch\(/.test(kTbl),
     'ia memulangkan isi berkas lewat onMuat; yang menulis tetap tombol Simpan (L78/L80)')
+  cek('Namanya menyebut dirinya sendiri', /Pulihkan Cadangan/.test(kTbl),
+    '"Muat dari Berkas" generik, dan di sebelah Impor ia terbaca sebagai penyusun')
   cek('Nilai input dikosongkan sebelum diproses',
     /e\.target\.value = ''[\s\S]{0,80}if \(!berkas\) return/.test(kTbl),
     'tanpa ini memilih berkas yang sama dua kali tidak memicu change')
 
   for (const [nama, k, jenis] of [['Pergeseran', kPgs, 'PERGESERAN'], ['DPA', kDpa, 'DPA']] as const) {
     cek(`Layar ${nama} memasang tombolnya`, new RegExp(`jenis="${jenis}" tahun=\\{tahun\\}`).test(k))
-    cek(`…dikunci alasanKunciBorongan`, /alasanKunci=\{alasanKunciBorongan\}/.test(k),
-      'ia mengganti SELURUH tabel, sederajat Form Baru')
+    // Kebalikan dari dugaan pertama, dan itu intinya: kunci borongan untuk tombol
+    // yang membawa baris dari LUAR dengan jangkar kosong. Berkas cadangan membawa
+    // `anggaran_key` lengkap, jadi sifatnya sama dengan Salin Versi yang memang
+    // sengaja di luar kunci itu (L80).
+    cek(`…TIDAK dikunci alasanKunciBorongan`,
+      !/<MuatBerkasButton[\s\S]{0,200}alasanKunci/.test(k),
+      'jangkarnya utuh — mengunci di sini membuat jalan pulang mati saat paling dibutuhkan')
+    cek(`…dan duduk di sebelah dropdown versi, bukan di sebelah Impor`,
+      /versi-dropdown[\s\S]{0,600}<MuatBerkasButton/.test(k),
+      'Impor MENYUSUN, ini MENGEMBALIKAN — bersebelahan membuat keduanya terbaca sekeluarga')
+    cek(`…dialognya menyebut ini BUKAN cara membuat tabel baru`,
+      /Ini mengembalikan salinan cadangan\. Untuk (menyusun|membuat)/.test(k))
     cek(`…menandai layar belum tersimpan`,
       /setRows\(recalc\w+\(data\.rows[\s\S]{0,120}setBelumTersimpan\(true\)/.test(k))
     cek(`…dan TIDAK memindahkan sasaran`,

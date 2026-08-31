@@ -1004,7 +1004,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
 
 `
         + `Belum ada yang tersimpan sampai Anda menekan Simpan, dan sasarannya tetap `
-        + `${formatTanggalId(sasaranSimpan(periodeTulis))}.`,
+        + `${formatTanggalId(sasaranSimpan(periodeTulis))}.
+
+`
+        + `Ini mengembalikan salinan cadangan. Untuk menyusun tabel pergeseran baru, `
+        + `pakai "Buat Pergeseran".`,
       confirmLabel: 'Muat ke layar',
       cancelLabel:  'Batal',
       variant:      'warning',
@@ -1728,14 +1732,6 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
               onClick={() => setSalinVersiBuka(true)} data-rima="pergeseran.salin-versi">
               Salin Versi Lain
             </PrimaButton>
-
-            {/* Sasarannya sengaja TIDAK ikut berpindah — lihat `muatDariBerkas`.
-                Ikut `alasanKunciBorongan` karena ia mengganti SELURUH tabel. */}
-            <MuatBerkasButton
-              jenis="PERGESERAN" tahun={tahun}
-              alasanKunci={alasanKunciBorongan}
-              onMuat={(d, n) => { void muatDariBerkas(d, n) }}
-            />
           </>
         )}
 
@@ -1751,6 +1747,16 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             belumTersimpan={belumTersimpan}
           />
         </div>
+
+        {/* Berdampingan dengan dropdown versi, BUKAN di deretan tombol penyusun:
+            keduanya keluarga pemulihan. Waktu ia duduk di sebelah Impor, orang
+            wajar mengira ia cara membuat tabel baru. */}
+        {bolehUbah && (
+          <MuatBerkasButton
+            jenis="PERGESERAN" tahun={tahun}
+            onMuat={(d, n) => { void muatDariBerkas(d, n) }}
+          />
+        )}
 
         {bolehUbah && (
           <div style={{ marginLeft: 'auto' }}>
