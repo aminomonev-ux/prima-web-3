@@ -3,7 +3,7 @@
 // Pattern sama dengan sasaran-client: replace-all per tahun via POST.
 
 import { useState, useCallback } from 'react'
-import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, X, FileUp } from 'lucide-react'
+import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, X, FileUp, Download } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import ImportPejabatModal, { type ImportedPejabatRow } from '@/components/pk/ImportPejabatModal'
 import { fetchJson } from '@/lib/shared/api'
@@ -34,6 +34,9 @@ export default function PejabatClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [confirmDel, setConfirmDel] = useState<{ mode: 'single'; idx: number; preview: string } | { mode: 'bulk'; count: number } | { mode: 'wipe'; count: number } | null>(null)
   const [showImport, setShowImport] = useState(false)
+  const [showUnduh, setShowUnduh] = useState(false)
+  const [unduhFormat, setUnduhFormat] = useState<'xlsx' | 'docx'>('xlsx')
+  const [unduhBusy, setUnduhBusy] = useState(false)
 
   function showToast(kind: 'ok' | 'err', msg: string) {
     setToast({ kind, msg })
@@ -134,6 +137,38 @@ export default function PejabatClient({ bolehUbah }: { bolehUbah: boolean }) {
       : `Import digabung: ${updated} di-update, ${added} baru — review lalu klik Simpan.`)
   }, [])
 
+  // Unduh berkas Master Pejabat dari data TERSIMPAN. Route-nya membalas biner saat
+  // berhasil dan JSON saat ditolak (403/404), jadi yang dibaca tipe balasannya —
+  // bukan status saja: JSON yang lolos jadi blob akan turun sebagai berkas rusak.
+  const unduhBerkas = useCallback(async () => {
+    setUnduhBusy(true)
+    try {
+      const res = await fetch(`/api/perjanjian-kinerja/pejabat/export?tahun=${tahun}&format=${unduhFormat}`)
+      if (!res.ok || (res.headers.get('content-type') ?? '').includes('application/json')) {
+        let pesan = 'Gagal mengunduh berkas.'
+        try {
+          const j = await res.json() as { message?: string }
+          if (j?.message) pesan = j.message
+        } catch { /* balasannya memang bukan JSON */ }
+        showToast('err', pesan)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Master-Pejabat-${tahun}.${unduhFormat}`
+      a.click()
+      URL.revokeObjectURL(url)
+      setShowUnduh(false)
+      showToast('ok', `Master Pejabat ${tahun} diunduh sebagai ${unduhFormat === 'xlsx' ? 'Excel' : 'Word'}.`)
+    } catch {
+      showToast('err', 'Gagal terhubung ke server.')
+    } finally {
+      setUnduhBusy(false)
+    }
+  }, [tahun, unduhFormat])
+
   const dirtyCount    = rows.filter(r => r._dirty).length
   const selectedCount = rows.filter(r => r._selected).length
   const allSelected   = rows.length > 0 && rows.every(r => r._selected)
@@ -220,6 +255,11 @@ export default function PejabatClient({ bolehUbah }: { bolehUbah: boolean }) {
           <PrimaButton variant="ghost" iconLeft={<RefreshCw size={14} />}
             onClick={() => setReloadKey(k => k + 1)} disabled={loading || saving}>
             Muat Ulang
+          </PrimaButton>
+          {/* Di luar `bolehUbah`: unduh bukan aksi tulis, dan pagarnya pun `bolehBukaMenu`. */}
+          <PrimaButton variant="ghost" iconLeft={<Download size={14} />}
+            onClick={() => setShowUnduh(true)} disabled={loading || saving || rows.length === 0}>
+            Unduh
           </PrimaButton>
           {bolehUbah && (
             <>
@@ -365,6 +405,52 @@ export default function PejabatClient({ bolehUbah }: { bolehUbah: boolean }) {
         />
       )}
 
+      {showUnduh && (
+        <div onClick={() => !unduhBusy && setShowUnduh(false)} style={modalBackdrop}>
+          <div onClick={e => e.stopPropagation()} style={modalCard}>
+            <div style={modalHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Download size={18} color="#1D9E75" />
+                <strong style={{ fontSize: 14, color: '#E6F1FB' }}>Unduh Master Pejabat {tahun}</strong>
+              </div>
+              <button onClick={() => setShowUnduh(false)} style={modalCloseBtn} data-tooltip="Tutup" disabled={unduhBusy}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button type="button" onClick={() => setUnduhFormat('xlsx')} disabled={unduhBusy}
+                  style={optFormat(unduhFormat === 'xlsx')}>
+                  <b style={{ fontSize: 13 }}>Excel</b>
+                  <span style={{ fontSize: 11, opacity: .8 }}>.xlsx — mudah disunting massal</span>
+                </button>
+                <button type="button" onClick={() => setUnduhFormat('docx')} disabled={unduhBusy}
+                  style={optFormat(unduhFormat === 'docx')}>
+                  <b style={{ fontSize: 13 }}>Word</b>
+                  <span style={{ fontSize: 11, opacity: .8 }}>.docx — tabel polos</span>
+                </button>
+              </div>
+              <p style={{ fontSize: 12, lineHeight: 1.6, color: '#B5D4F4', margin: 0 }}>
+                Isinya <strong>data tersimpan di server</strong> untuk tahun {tahun} ({rows.length} baris).
+                Berkasnya bisa langsung dibaca kembali lewat <strong>Import File</strong> — kolom terpetakan otomatis.
+              </p>
+              {dirtyCount > 0 && (
+                <p style={{ fontSize: 12, lineHeight: 1.6, color: '#FAC775', margin: 0 }}>
+                  <AlertCircle size={12} style={{ verticalAlign: -2, marginRight: 4 }} />
+                  {dirtyCount} baris di layar belum disimpan — perubahan itu <strong>tidak ikut</strong> ke dalam berkas.
+                </p>
+              )}
+            </div>
+            <div style={{ padding: '10px 18px 14px', borderTop: '1px solid rgba(127,127,127,.18)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <PrimaButton variant="ghost" onClick={() => setShowUnduh(false)} disabled={unduhBusy}>Batal</PrimaButton>
+              <PrimaButton variant="success" iconLeft={<Download size={14} />} onClick={unduhBerkas} disabled={unduhBusy}>
+                {unduhBusy ? 'Menyiapkan…' : 'Unduh'}
+              </PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmDel && (
         <div onClick={() => setConfirmDel(null)} style={modalBackdrop}>
           <div onClick={e => e.stopPropagation()} style={modalCard}>
@@ -430,6 +516,16 @@ const modalCard: React.CSSProperties = {
 const modalHeader: React.CSSProperties = {
   padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,.08)',
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+}
+function optFormat(active: boolean): React.CSSProperties {
+  return {
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+    padding: '10px 12px', borderRadius: 10, textAlign: 'left',
+    background: active ? 'rgba(29,158,117,.16)' : 'rgba(255,255,255,.03)',
+    border: `1px solid ${active ? '#1D9E75' : 'rgba(181,212,244,.2)'}`,
+    color: active ? '#E6F1FB' : '#B5D4F4',
+    cursor: 'pointer', transition: 'all .15s',
+  }
 }
 const modalCloseBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

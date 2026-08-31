@@ -163,6 +163,7 @@ export type AuditEventType =
   | 'PK_DOKUMEN_DOWNLOAD'     // GET /api/perjanjian-kinerja/dokumen/[id]/download
   | 'PK_VIEW_LIST'            // GET /api/perjanjian-kinerja/dokumen (bulk PII — UU PDP Pasal 39)
   | 'PK_IMPORT_PEJABAT'       // POST /api/perjanjian-kinerja/pejabat/import (preview parse file — bulk PII)
+  | 'PK_EXPORT_PEJABAT'       // GET  /api/perjanjian-kinerja/pejabat/export (berkas xlsx/docx — bulk PII keluar aplikasi)
   // ─── Rencana Aksi (modul baru) ────────────────────────────────────────────
   | 'RA_UPSERT'               // POST /api/rencana-aksi
   | 'RA_DELETE'               // DELETE /api/rencana-aksi
