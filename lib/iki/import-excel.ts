@@ -264,7 +264,18 @@ function resolveColumns(
   const indikatorCol = indSpan.filter(c => c !== aspekCol).sort((a, b) => score(b, /\S/) - score(a, /\S/))[0] ?? indSpan[0];
   const rhkCol = rhkCols.filter(c => c !== aspekCol)[0] ?? rhkCols[0];
   const romawiCol = twSpan.sort((a, b) => score(b, /^(I|II|III|IV)$/) - score(a, /^(I|II|III|IV)$/))[0];
-  const caraCol = twSpan.filter(c => c !== romawiCol).sort((a, b) => score(b, RE_ASPEK_B) - score(a, RE_ASPEK_B))[0];
+  // Kolom "cara menghitung" HANYA ada di varian STANDAR: di sana Target Triwulan
+  // membentang 3 kolom (romawi · cara · target). Varian DIREKTUR membentang 2
+  // saja (romawi · target) — lihat `head` di layout.ts.
+  //
+  // Tanpa penjagaan panjang span ini, `caraCol` melahap satu-satunya kolom target
+  // yang tersisa, `targetTwCol` jadi undefined, dan berkas Direktur ditolak
+  // "Kolom wajib target_tw tidak terdeteksi" — padahal berkasnya hasil ekspor
+  // aplikasi ini sendiri. Panjang span dipakai sebagai penanda, bukan `varian`:
+  // parser membaca lembar Excel dan memang tidak tahu varian dokumennya.
+  const caraCol = twSpan.length >= 3
+    ? twSpan.filter(c => c !== romawiCol).sort((a, b) => score(b, RE_ASPEK_B) - score(a, RE_ASPEK_B))[0]
+    : undefined;
   const targetTwCol = twSpan.filter(c => c !== romawiCol && c !== caraCol).sort((a, b) => score(b, /\S/) - score(a, /\S/))[0];
   const uraian = uraianCol ?? aksiSpan[0];
   const targetAksiCol = aksiSpan.find(c => c !== uraian && /target/i.test(heads.get(c) ?? ''))

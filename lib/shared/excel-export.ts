@@ -7,7 +7,16 @@ import type ExcelJS from 'exceljs';
 // Dynamic import — exceljs ~600KB, hanya load saat user klik tombol export.
 let _exceljsPromise: Promise<typeof import('exceljs')> | null = null;
 export function loadExcelJs() {
-  if (!_exceljsPromise) _exceljsPromise = import('exceljs');
+  // Interop CJS: bundler menyuguhkan `Workbook` di permukaan modul, sedangkan
+  // Node ESM menaruhnya di `.default`. Dipilih yang benar-benar punya `Workbook`
+  // supaya berkas ini hidup di dua-duanya — tombol unduh jalan di peramban,
+  // sementara uji round-trip ekspor↔impor IKI menjalankannya di Node.
+  if (!_exceljsPromise) {
+    _exceljsPromise = import('exceljs').then((m) => {
+      const kandidat = m as unknown as { Workbook?: unknown; default?: typeof m };
+      return kandidat.Workbook ? m : (kandidat.default ?? m);
+    });
+  }
   return _exceljsPromise;
 }
 
