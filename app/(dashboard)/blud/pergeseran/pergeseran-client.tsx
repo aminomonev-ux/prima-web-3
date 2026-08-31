@@ -275,15 +275,21 @@ const PergeseranRow = memo(function PergeseranRow({
         </strong>
       </td>
 
-      {/* Penanggung Jawab — cermin DPA, kecuali baris yang lahir di sini.
+      {/* Penanggung Jawab — bisa diubah di SEMUA baris (cermin aturan DPA).
+          Nilainya lahir sebagai salinan DPA, tapi pemilik pos bisa berpindah
+          justru KARENA pergeseran, jadi mengunci baris turunan memaksa orang
+          memutar lewat menu DPA untuk sesuatu yang cuma berlaku di dokumen ini.
+          Catatan: "Sinkronkan DPA" tetap menimpanya dari DPA — itu memang
+          tugasnya, dan `bedaSinkron` sengaja hanya melaporkan selisih UANG.
           Sengaja tanpa penjaga konflik chain seperti DPA: pemiliknya DPA,
           dan chain-conflict tetap ketahuan di panel audit menu Cetak. */}
       <td>
-        {isNew && bolehUbah ? (
+        {bolehUbah ? (
           <PenanggungJawabCombobox
             value={row.penanggung_jawab ?? ''}
             options={pjOptions}
             onChange={v => aksi.updateText(row.row_id, 'penanggung_jawab', v ?? '')}
+            style={{ color: isGM ? 'var(--blud-l1-text)' : undefined }}
             placeholder="— Pilih PJ —"
           />
         ) : (
@@ -340,7 +346,7 @@ function PergeseranTable({
   rows: PergeseranBarisInput[]
   onChange: (rows: PergeseranBarisInput[]) => void
   akunOptions: AkunOption[]
-  /** Master Penanggung Jawab — hanya dipakai baris `pgnew_*`; sisanya cermin DPA. */
+  /** Master Penanggung Jawab — dipakai SEMUA baris; nilainya lahir dari DPA. */
   pjOptions:   string[]
   hiddenLevels: Set<string>
   highlightId:  string | null
@@ -377,8 +383,8 @@ function PergeseranTable({
     onChange(partialRecalcPergeseran(updated, rowId))
   }, [onChange])
 
-  // Edit kolom teks (hanya untuk baris baru hasil add manual). PJ & keterangan ikut
-  // aturan yang sama: pada baris turunan DPA keduanya cermin, diisi lewat menu DPA.
+  // Edit kolom teks. kode_rekening/uraian/keterangan hanya untuk baris baru hasil
+  // add manual; `penanggung_jawab` terbuka di semua baris (lihat catatan di selnya).
   const updateText = useCallback((
     rowId: string,
     field: 'kode_rekening' | 'uraian' | 'penanggung_jawab' | 'keterangan',
