@@ -103,6 +103,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
 
   const [showZip, setShowZip] = useState(false);
   const [zipTahun, setZipTahun] = useState('');
+  const [zipFormat, setZipFormat] = useState<'pdf' | 'xlsx'>('pdf');
   const [zipOnlyFinal, setZipOnlyFinal] = useState(true);
   const [zipBusy, setZipBusy] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
@@ -224,10 +225,16 @@ export default function IkiClient({ username, role, themePreference, initialRows
     if (list.length === 0) { toast.error(`Tidak ada dokumen${zipOnlyFinal ? ' FINAL' : ''} di tahun ${tahun}`); return; }
     setZipBusy(true);
     try {
-      const [{ default: PizZip }, { buildIkiPdfBytes }, { ikiFilename }] = await Promise.all([
+      // Hanya pustaka format terpilih yang di-import — exceljs ~600KB, jspdf sekelas;
+      // memuat keduanya membuat unduhan PDF ikut menunggu paket yang tak dipakai.
+      const [{ default: PizZip }, { ikiFilename }, gen] = await Promise.all([
         import('pizzip'),
-        import('@/lib/iki/export-pdf'),
         import('@/lib/iki/layout'),
+        zipFormat === 'xlsx'
+          ? import('@/lib/iki/export-excel').then(m => ({
+              bytes: (doc: Parameters<typeof m.buildIkiExcelBytes>[0]) => m.buildIkiExcelBytes(doc, tahun),
+            }))
+          : import('@/lib/iki/export-pdf').then(m => ({ bytes: m.buildIkiPdfBytes })),
       ]);
       const zip = new PizZip();
       let done = 0, skipped = 0;
@@ -237,8 +244,8 @@ export default function IkiClient({ username, role, themePreference, initialRows
           const res = await fetch(`/api/iki/${r.id}`);
           const json = await res.json();
           if (!json.ok || !json.data?.rhk?.length) { skipped++; continue; }
-          const bytes = await buildIkiPdfBytes(json.data);
-          zip.file(`${r.status === 'DRAFT' ? 'DRAFT_' : ''}${ikiFilename(json.data, r.tahun, 'pdf')}`, bytes);
+          const bytes = await gen.bytes(json.data);
+          zip.file(`${r.status === 'DRAFT' ? 'DRAFT_' : ''}${ikiFilename(json.data, r.tahun, zipFormat)}`, bytes);
           done++;
         } catch { skipped++; }
       }
@@ -246,13 +253,16 @@ export default function IkiClient({ username, role, themePreference, initialRows
       const blob = zip.generate({ type: 'blob', compression: 'DEFLATE' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `IKI_${folder ? `${folder}_` : ''}${tahun}.zip`; a.click();
+      const labelFormat = zipFormat === 'xlsx' ? 'EXCEL' : 'PDF';
+      // Format masuk nama berkas: tanpa itu mengunduh kedua format di tahun yang
+      // sama menghasilkan dua zip bernama sama, tinggal " (1)" dari browser.
+      a.href = url; a.download = `IKI_${folder ? `${folder}_` : ''}${tahun}_${labelFormat}.zip`; a.click();
       URL.revokeObjectURL(url);
       fetch('/api/iki/export-log', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format: 'pdf', mode: 'massal', tahun, jumlah: done }),
+        body: JSON.stringify({ format: zipFormat, mode: 'massal', tahun, jumlah: done }),
       }).catch(() => {});
-      toast.success(`${done} PDF di-zip${skipped ? `, ${skipped} dilewati (RHK kosong/gagal)` : ''}`);
+      toast.success(`${done} ${labelFormat} di-zip${skipped ? `, ${skipped} dilewati (RHK kosong/gagal)` : ''}`);
       setShowZip(false);
     } catch { toast.error('Gagal membuat zip'); }
     finally { setZipBusy(false); setZipProgress(''); }
@@ -562,12 +572,23 @@ export default function IkiClient({ username, role, themePreference, initialRows
       {showZip && (
         <div className="iki-modal-bg" onClick={() => !zipBusy && setShowZip(false)}>
           <div className="iki-modal" onClick={e => e.stopPropagation()}>
-            <h3>Unduh Semua PDF (Zip)</h3>
+            <h3>Unduh Semua Dokumen (Zip)</h3>
             <label className="iki-field">
               <span>Tahun</span>
               <select className="iki-filter" value={zipTahun} onChange={e => setZipTahun(e.target.value)} disabled={zipBusy}>
                 {tahunList.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
+            </label>
+            <label className="iki-field">
+              <span>Format berkas</span>
+              <div className="iki-tpl">
+                <button type="button" className={`iki-tpl-opt${zipFormat === 'pdf' ? ' on' : ''}`} onClick={() => setZipFormat('pdf')} disabled={zipBusy}>
+                  <b>PDF</b><span>siap cetak, tata letak terkunci</span>
+                </button>
+                <button type="button" className={`iki-tpl-opt${zipFormat === 'xlsx' ? ' on' : ''}`} onClick={() => setZipFormat('xlsx')} disabled={zipBusy}>
+                  <b>Excel</b><span>masih bisa disunting di Excel</span>
+                </button>
+              </div>
             </label>
             <label className="iki-field">
               <span>Dokumen yang diikutkan</span>

@@ -14,6 +14,25 @@ const THIN: Partial<ExcelJS.Borders> = {
 const GREY_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
 
 export async function exportIkiExcel(doc: IkiGridDokumen, tahun: string): Promise<void> {
+  const wb = await buildIkiWorkbook(doc, tahun);
+  await downloadWorkbook(wb, ikiFilename(doc, tahun, 'xlsx'));
+}
+
+/**
+ * Bytes XLSX untuk export massal zip — tanpa auto-save. Cermin `buildIkiPdfBytes`.
+ * `writeBuffer()` memulangkan Buffer di Node dan Uint8Array (polyfill) di browser,
+ * BUKAN ArrayBuffer — `downloadWorkbook` lolos karena Blob menerima keduanya.
+ * Di sini disalin jadi ArrayBuffer betulan supaya tipenya tidak berbohong.
+ */
+export async function buildIkiExcelBytes(doc: IkiGridDokumen, tahun: string): Promise<ArrayBuffer> {
+  const wb = await buildIkiWorkbook(doc, tahun);
+  const buf = await wb.xlsx.writeBuffer() as ArrayBuffer | Uint8Array;
+  return buf instanceof Uint8Array
+    ? buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
+    : buf;
+}
+
+async function buildIkiWorkbook(doc: IkiGridDokumen, tahun: string) {
   if (doc.rhk.length === 0) throw new Error('Belum ada baris RHK — tidak ada yang bisa di-export');
 
   const ExcelJSLib = await loadExcelJs();
@@ -182,5 +201,5 @@ export async function exportIkiExcel(doc: IkiGridDokumen, tahun: string): Promis
     writeTtd(kanan, mid + 1, grid.colCount);
   }
 
-  await downloadWorkbook(wb, ikiFilename(doc, tahun, 'xlsx'));
+  return wb;
 }
