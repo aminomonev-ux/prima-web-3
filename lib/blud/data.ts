@@ -599,6 +599,10 @@ function normPergeseran(r: Record<string, unknown>): PergeseranBaris {
     vol_p: r.vol_p != null ? Number(r.vol_p) : null,
     harga_p: r.harga_p != null ? Number(r.harga_p) : null,
     pergeseran: Number(r.pergeseran ?? 0), bertambah_berkurang: Number(r.bertambah_berkurang ?? 0),
+    // `null` DIPERTAHANKAN, jangan `Number(x ?? 0)` — nol dan "belum diuraikan"
+    // dua hal berbeda, dan yang membedakannya cuma null ini.
+    bertambah: r.bertambah != null ? Number(r.bertambah) : null,
+    berkurang: r.berkurang != null ? Number(r.berkurang) : null,
     penanggung_jawab: r.penanggung_jawab != null ? String(r.penanggung_jawab) : null,
     keterangan: r.keterangan != null ? String(r.keterangan) : null,
     tipe_baris: String(r.tipe_baris) as PergeseranBaris['tipe_baris'],
@@ -853,6 +857,7 @@ export async function getPergeseranVersion(tahun: number, versiTanggal: string):
 const PERGESERAN_COLUMNS = [
   'tahun_anggaran', 'versi_tanggal', 'dpa_versi_tanggal', 'kode_rekening', 'uraian', 'vol', 'satuan',
   'harga', 'jumlah', 'vol_p', 'harga_p', 'pergeseran', 'bertambah_berkurang',
+  'bertambah', 'berkurang',
   'penanggung_jawab', 'keterangan',
   'tipe_baris', 'row_id', 'anggaran_key', 'parent_id', 'urutan',
 ]
@@ -948,6 +953,7 @@ export async function savePergeseran(
         tahun, versiTanggal, dpaVersiTanggal, r.kode_rekening, r.uraian, r.vol ?? null,
         r.satuan ?? null, r.harga ?? null, r.jumlah, r.vol_p ?? null, r.harga_p ?? null,
         r.pergeseran, r.bertambah_berkurang,
+        r.bertambah ?? null, r.berkurang ?? null,
         // `?? null` (bukan `|| null`) mengikuti saveDpa persis: kolom ini cermin DPA,
         // '' vs NULL harus sama di kedua tabel supaya hasil inject tidak beda diam-diam.
         r.penanggung_jawab ?? null, r.keterangan ?? null,

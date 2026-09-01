@@ -65,6 +65,12 @@ export function tutupPergeseranRows(rows: PergeseranBarisInput[]): PergeseranBar
     harga:               r.harga_p,
     jumlah:              r.pergeseran,
     bertambah_berkurang: 0,
+    // Uraian tangan ikut dilepas, dan ini bukan kerapian. Sesudah penutupan
+    // selisih tiap baris nol secara konstruksi; uraian "45jt masuk, 12jt keluar"
+    // yang tertinggal akan berdiri di atas selisih nol — dokumen yang berbohong,
+    // dan `periksaUraian` menolaknya saat Simpan.
+    bertambah:           null,
+    berkurang:           null,
   }))
 }
 

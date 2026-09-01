@@ -250,6 +250,20 @@ export const PergeseranBarisInputSchema = z.object({
   harga_p:              z.number().min(-1e15).max(1e15).nullable(),
   pergeseran:           z.number().min(-1e15).max(1e15),
   bertambah_berkurang:  z.number().min(-1e15).max(1e15),
+  // Uraian tangan bertambah/berkurang. NULLABLE + OPTIONAL, dan dua-duanya wajib:
+  //
+  //   nullable — `null` adalah keadaan NORMAL, bukan data hilang. Ia yang
+  //     membedakan "isi sendiri dari selisih" dari "sudah diuraikan tangan,
+  //     jangan ditimpa recalc".
+  //   optional — 50 snapshot `blud_riwayat_simpan` + berkas cadangan Drive dibuat
+  //     SEBELUM kolom ini ada. Kalau diwajibkan, memulihkan salah satunya lalu
+  //     Simpan ditolak 400 dan seluruh riwayat jadi tak terpakai.
+  //
+  // `min(0)`: "bertambah −5jt" tidak punya arti, dan membiarkannya membuat
+  // invarian `bertambah − berkurang = selisih` bisa dipenuhi dengan angka
+  // omong kosong.
+  bertambah:            z.number().min(0).max(1e15).nullable().optional(),
+  berkurang:            z.number().min(0).max(1e15).nullable().optional(),
   // Batasnya sengaja sama persis dengan DpaBarisInputSchema — kolomnya cermin DPA.
   penanggung_jawab:     z.string().max(128, 'Penanggung jawab maks 128 karakter').nullable().optional(),
   keterangan:           z.string().max(2000, 'Keterangan maks 2000 karakter').nullable().optional(),

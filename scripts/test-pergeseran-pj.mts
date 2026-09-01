@@ -65,6 +65,7 @@ bab('B. Baca ulang — server → klien (pergeseranKeInput)')
     id: 9, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
     kode_rekening: '5.1.01', uraian: 'ATK', vol: 10, satuan: null, harga: 10, jumlah: 100,
     vol_p: 12, harga_p: 10, pergeseran: 120, bertambah_berkurang: 20,
+    bertambah: null, berkurang: null,
     penanggung_jawab: 'Kasubbag Umum', keterangan: 'rutin',
     tipe_baris: 'CHILD', row_id: 'r3', anggaran_key: 'ak3', parent_id: 'r2', urutan: 2,
   } satisfies PergeseranBaris
@@ -103,6 +104,7 @@ bab('E. Inject — nasib baris yang lahir di Pergeseran (`pgnew_*`)')
     kode_rekening: '5.1.99', uraian: 'Pos baru hasil geser',
     vol: null, satuan: null, harga: null, jumlah: 0,
     vol_p: 1, harga_p: 50, pergeseran: 50, bertambah_berkurang: 50,
+    bertambah: null, berkurang: null,
     penanggung_jawab: 'Kasi Penunjang', keterangan: 'lahir di pergeseran',
     tipe_baris: 'CHILD', row_id: 'pgnew_x', parent_id: 'r2', urutan: 4,
   }
@@ -142,16 +144,19 @@ bab('F. Cetak — Rekap PJ Pergeseran memakai pagu PASCA-geser')
     { id: 1, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5', uraian: 'BELANJA', vol: null, satuan: null, harga: null, jumlah: 300,
       vol_p: null, harga_p: null, pergeseran: 300, bertambah_berkurang: 0,
+      bertambah: null, berkurang: null,
       penanggung_jawab: null, keterangan: null,
       tipe_baris: 'GRANDMASTER', row_id: 'r1', anggaran_key: null, parent_id: null, urutan: 0 },
     { id: 2, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5.1.01', uraian: 'ATK', vol: 10, satuan: null, harga: 10, jumlah: 100,
       vol_p: 12, harga_p: 10, pergeseran: 120, bertambah_berkurang: 20,
+      bertambah: null, berkurang: null,
       penanggung_jawab: 'Kasubbag Umum', keterangan: 'rutin',
       tipe_baris: 'CHILD', row_id: 'r3', anggaran_key: null, parent_id: 'r1', urutan: 1 },
     { id: 3, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5.1.02', uraian: 'Listrik', vol: 20, satuan: null, harga: 10, jumlah: 200,
       vol_p: 18, harga_p: 10, pergeseran: 180, bertambah_berkurang: -20,
+      bertambah: null, berkurang: null,
       penanggung_jawab: 'Kasubbag Keuangan', keterangan: null,
       tipe_baris: 'CHILD', row_id: 'r4', anggaran_key: null, parent_id: 'r1', urutan: 2 },
   ]
@@ -169,9 +174,16 @@ bab('F. Cetak — Rekap PJ Pergeseran memakai pagu PASCA-geser')
   cek('View DPA tidak ikut berubah', nilaiDpa.every(v => v === 100), `dapat ${nilaiDpa.join('/')}`)
 
   const tabel = renderCetakHtml({ menu: 'pergeseran', view: 'rekapPergeseran', rows, versi: '2026-02-01', tanggal: '' })
-  cek('Tabel Pergeseran punya 12 kolom', tabel.meta.columns.length === 12, tabel.meta.columns.slice(-2).join(' + '))
-  cek('PJ ikut di baris ekspor', tabel.rows[1][10] === 'Kasubbag Umum', String(tabel.rows[1][10]))
-  cek('Keterangan ikut di baris ekspor', tabel.rows[1][11] === 'rutin')
+  // 14 sejak uraian Bertambah/Berkurang dipisah (CONCEPT-blud-uraian-geser):
+  // satu kolom `Bertambah/Berkurang` jadi tiga — Bertambah · Berkurang · Selisih.
+  // Yang dijaga pemeriksaan ini tetap sama: PJ & Keterangan ikut terbawa ke
+  // baris ekspor. Indeksnya dicari dari nama kolomnya, bukan ditulis mati —
+  // menambah kolom lagi tidak boleh membuat tes ini salah menuduh.
+  cek('Tabel Pergeseran punya 14 kolom', tabel.meta.columns.length === 14, tabel.meta.columns.slice(-2).join(' + '))
+  const iPj  = tabel.meta.columns.indexOf('Penanggung Jawab')
+  const iKet = tabel.meta.columns.indexOf('Keterangan')
+  cek('PJ ikut di baris ekspor', tabel.rows[1][iPj] === 'Kasubbag Umum', String(tabel.rows[1][iPj]))
+  cek('Keterangan ikut di baris ekspor', tabel.rows[1][iKet] === 'rutin')
 }
 
 bab('F2. Cetak — rekap PJ dari dokumen DRAFT wajib ditandai')
@@ -182,11 +194,13 @@ bab('F2. Cetak — rekap PJ dari dokumen DRAFT wajib ditandai')
     { id: 1, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5', uraian: 'BELANJA', vol: null, satuan: null, harga: null, jumlah: 300,
       vol_p: null, harga_p: null, pergeseran: 260, bertambah_berkurang: -40,
+      bertambah: null, berkurang: null,
       penanggung_jawab: null, keterangan: null,
       tipe_baris: 'GRANDMASTER', row_id: 'r1', anggaran_key: null, parent_id: null, urutan: 0 },
     { id: 2, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
       kode_rekening: '5.1.01', uraian: 'ATK', vol: 1, satuan: null, harga: 300, jumlah: 300,
       vol_p: 1, harga_p: 260, pergeseran: 260, bertambah_berkurang: -40,
+      bertambah: null, berkurang: null,
       penanggung_jawab: 'Kasubbag Umum', keterangan: null,
       tipe_baris: 'CHILD', row_id: 'r3', anggaran_key: null, parent_id: 'r1', urutan: 1 },
   ]

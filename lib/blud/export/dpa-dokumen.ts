@@ -19,6 +19,7 @@ import type ExcelJS from 'exceljs'
 import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-export'
 import { TIPE_LABEL } from '@/lib/blud/format'
 import { isLeafMode } from '@/lib/blud/recalc'
+import { uraiGeser, URAIAN_NOL } from '@/lib/blud/urai-geser'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
 const INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO'
@@ -289,11 +290,16 @@ export async function exportDpaDokumen(args: UnduhDokumenArgs<DpaBaris>): Promis
 
 // ─── Pergeseran ──────────────────────────────────────────────────────────────
 
+// Kolom `Selisih` (12) TETAP rumus `I−F`, jangan diganti nilai mati: itu yang
+// membuat berkasnya bisa diperiksa sendiri — ubah satu angka Pergeseran, selisih
+// ikut. Dua kolom sebelumnya berisi NILAI, sebab uraian tangan memang bukan
+// hasil rumus. `F` (Jumlah) dan `I` (Pergeseran) tidak bergeser, jadi rumusnya
+// tetap sah walau selnya pindah dari J ke L.
 const KOLOM_PERGESERAN = [
   'Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah',
-  'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Level', 'Jangkar',
+  'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih', 'Level', 'Jangkar',
 ]
-const LEBAR_PERGESERAN = [26, 46, 8, 10, 16, 18, 8, 16, 18, 20, 10, 26]
+const LEBAR_PERGESERAN = [26, 46, 8, 10, 16, 18, 8, 16, 18, 16, 16, 18, 10, 26]
 
 export async function buatWorkbookPergeseran(
   args: UnduhDokumenArgs<PergeseranBaris>,
@@ -307,7 +313,8 @@ export async function buatWorkbookPergeseran(
   const wb = new ExcelJSLib.Workbook()
   const ws = wb.addWorksheet(`Pergeseran ${tahun}`)
   const pohon = siapkanPohon(rows)
-  const kolTampak = 10
+  const urai = uraiGeser(rows)
+  const kolTampak = 12
 
   tulisJudul(ws, kolTampak, 'PERGESERAN RINCIAN BELANJA ANGGARAN', tahun)
   tulisHeader(ws, KOLOM_PERGESERAN)
@@ -326,13 +333,20 @@ export async function buatWorkbookPergeseran(
     baris.getCell(7).value = r.vol_p ?? ''
     baris.getCell(8).value = r.harga_p ?? ''
     baris.getCell(9).value = selNilai(r, pohon, { vol: 'G', harga: 'H', nilai: 'I' }, r.pergeseran, { vol: r.vol_p, harga: r.harga_p })
+    // Uraian bertambah/berkurang — nilai efektif, sudah termasuk rollup induk
+    // (`uraiGeser`). Baris yang tidak diuraikan tangan tetap terisi di sini:
+    // turunannya memang angka yang benar, dan dokumen yang mengosongkannya akan
+    // membuat baris totalnya tidak berjumlah.
+    const u = urai.get(r.row_id) ?? URAIAN_NOL
+    baris.getCell(10).value = u.bertambah || ''
+    baris.getCell(11).value = u.berkurang || ''
     // Selisih = pergeseran − jumlah, sesuai recalcPergeseranJumlah().
-    baris.getCell(10).value = { formula: `I${nomor}-F${nomor}`, result: r.bertambah_berkurang }
-    baris.getCell(11).value = TIPE_LABEL[r.tipe_baris] ?? ''
-    baris.getCell(12).value = sanitizeCell(r.anggaran_key ?? '')
+    baris.getCell(12).value = { formula: `I${nomor}-F${nomor}`, result: r.bertambah_berkurang }
+    baris.getCell(13).value = TIPE_LABEL[r.tipe_baris] ?? ''
+    baris.getCell(14).value = sanitizeCell(r.anggaran_key ?? '')
 
     hiasBarisData(baris, {
-      kolomAngka: [3, 5, 6, 7, 8, 9, 10],
+      kolomAngka: [3, 5, 6, 7, 8, 9, 10, 11, 12],
       kolomVolume: [3, 7],
       kolTerakhir: KOLOM_PERGESERAN.length,
       indent: pohon.kedalaman.get(r.row_id) ?? 0,

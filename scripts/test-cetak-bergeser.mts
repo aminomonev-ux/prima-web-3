@@ -31,6 +31,7 @@ function bab(judul: string) { console.log(`\n── ${judul} ──`) }
 const dasar = {
   id: 0, versi_tanggal: '2026-02-01', dpa_versi_tanggal: '2026-01-01',
   satuan: 'Paket' as string | null, penanggung_jawab: null, keterangan: null, anggaran_key: null,
+  bertambah: null as number | null, berkurang: null as number | null,
 }
 
 /**

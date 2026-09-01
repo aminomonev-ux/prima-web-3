@@ -12,6 +12,7 @@ import type { DpaBaris, PergeseranBaris } from '@/types'
 import type { MasterAkun } from './master-akun-data'
 import { formatRupiah } from './format'
 import { hitungDeltaPergeseranRoot } from './recalc'
+import { uraiGeser, URAIAN_NOL } from './urai-geser'
 import { auditRekapPJ } from './audit-pj'
 import type { AuditResult, AuditPjRow } from './audit-pj'
 
@@ -408,7 +409,7 @@ function renderPergeseranView(
   /** Non-null = daftar sudah disaring "hanya yang bergeser". */
   sebagian: CakupanCetak | null,
 ): RenderResult {
-  const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Penanggung Jawab', 'Keterangan']
+  const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih', 'Penanggung Jawab', 'Keterangan']
   const title = `Rekap Pergeseran${sebagian ? ' — Yang Bergeser' : ''}${versi ? `: ${versi}` : ' (Terakhir)'}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
 
   if (sebagian && rows.length === 0) {
@@ -422,10 +423,17 @@ function renderPergeseranView(
 
   const sorted = [...rows].sort((a, b) => a.urutan - b.urutan)
 
+  // Uraian efektif dihitung dari baris yang SUDAH disaring (`sorted`), bukan dari
+  // seluruh dokumen: pada cetak "yang bergeser saja" induknya ikut dibawa tanpa
+  // anak yang tidak bergeser, dan rollup harus mengikuti apa yang tercetak.
+  const urai = uraiGeser(sorted)
+  const u = (rowId: string) => urai.get(rowId) ?? URAIAN_NOL
+
   const exportRows: ExportRow[] = sorted.map(r => [
     r.kode_rekening, r.uraian,
     r.vol ?? '', r.satuan ?? '', r.harga ?? '', r.jumlah,
-    r.vol_p ?? '', r.harga_p ?? '', r.pergeseran ?? 0, r.bertambah_berkurang ?? 0,
+    r.vol_p ?? '', r.harga_p ?? '', r.pergeseran ?? 0,
+    u(r.row_id).bertambah, u(r.row_id).berkurang, r.bertambah_berkurang ?? 0,
     r.penanggung_jawab ?? '', r.keterangan ?? '',
   ])
 
@@ -450,6 +458,9 @@ function renderPergeseranView(
     html += `<td style="text-align:right;font-family:monospace;">${r.vol_p ?? ''}</td>`
     html += `<td style="text-align:right;font-family:monospace;">${fmt(r.harga_p)}</td>`
     html += `<td style="text-align:right;font-family:monospace;">${fmt(r.pergeseran)}</td>`
+    const ur = u(r.row_id)
+    html += `<td style="text-align:right;font-family:monospace;color:#6EE7B7;">${ur.bertambah ? formatRupiah(ur.bertambah) : ''}</td>`
+    html += `<td style="text-align:right;font-family:monospace;color:#FCA5A5;">${ur.berkurang ? formatRupiah(ur.berkurang) : ''}</td>`
     html += `<td style="text-align:right;font-family:monospace;font-weight:600;color:${bbColor};">${bb !== 0 ? formatRupiah(bb) : ''}</td>`
     html += `<td>${esc(r.penanggung_jawab ?? '')}</td>`
     html += `<td>${esc(r.keterangan ?? '')}</td>`

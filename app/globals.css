@@ -3389,3 +3389,55 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .pj-peran-petunjuk, [data-theme="light"] .pj-kosong,
 [data-theme="light"] .pj-item-meta, [data-theme="light"] .pj-item-nip { color: #5B7392; }
 [data-theme="light"] .pj-item { color: #0F0F12; }
+
+/* ── Pergeseran — uraian Bertambah/Berkurang ────────────────────────────────
+   Kelas, bukan gaya sebaris: aturan borongan `[data-theme="light"] table tbody
+   td { color: … !important }` di blud-shell menelan warna sel di tema terang,
+   dan itu yang dulu membuat angka merah baris melebihi pagu tampil abu-abu. */
+.pg-urai-galat {
+  display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px;
+  padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.6;
+  background: rgba(226,75,74,.14); color: #F0B3B2;
+}
+[data-theme="light"] .pg-urai-galat { background: rgba(226,75,74,.08); color: #A32E2D; }
+
+/* Kekhususan sengaja setinggi ini + `!important`: baris tabel memasang
+   `.row-child td input { color: #FFFFFF !important }` dkk, jadi warna SEBARIS
+   pada input di sini tidak pernah menang. Persis pelajaran L82 — kotak
+   berwarna sebaris ditimpa aturan borongan, dan cacatnya baru kelihatan saat
+   dijalankan. */
+input.pg-urai { width: 100%; }
+
+/* Pemenangnya ditentukan KEKHUSUSAN, bukan urutan — dua-duanya `!important`.
+   Lawannya aturan borongan di <style> sebaris:
+     [data-theme="light"] input:not([type=checkbox]):not([type=radio]):not([type=file])
+   = (0,4,1). Selektor di bawah (0,4,4): empat kelas/atribut yang sama
+   banyaknya, lalu menang di hitungan elemen. Tanpa `[type=...]` dan `:not(…)`
+   itu ia (0,2,4) dan KALAH — kotak merahnya tidak pernah muncul, padahal
+   spanduknya menjanjikan "kotaknya bergaris merah". Ketahuan saat dijalankan,
+   bukan dari kode. */
+table tbody td input.pg-urai.salah[type="number"]:not([readonly]) {
+  border-color: #E24B4A !important; background: rgba(226,75,74,.10) !important;
+}
+table tbody td input.pg-urai.diurai-plus[type="number"]:not([readonly])  { color: #6EE7B7 !important; }
+table tbody td input.pg-urai.diurai-minus[type="number"]:not([readonly]) { color: #FCA5A5 !important; }
+/* Tema terang: hijau/merah muda itu tak terbaca di atas putih. */
+[data-theme="light"] table tbody td input.pg-urai.diurai-plus[type="number"]  { color: #0F5C44 !important; }
+[data-theme="light"] table tbody td input.pg-urai.diurai-minus[type="number"] { color: #A32E2D !important; }
+/* Angka turunan tampil sebagai placeholder — sengaja lebih redup daripada angka
+   yang diketik, supaya "dihitung sendiri" dan "saya isi" bisa dibedakan sekilas. */
+input.pg-urai::placeholder { color: #85B7EB; opacity: .7; }
+[data-theme="light"] input.pg-urai::placeholder { color: #9AA0A6; opacity: 1; }
+
+/* Baris baca-saja (induk & non-editable). Aturan borongan tema terang
+   `table tbody td { color: #374151 !important }` menelan warna sebaris — itu
+   yang dulu membuat angka merah "melebihi pagu" tampil abu-abu. */
+.pg-urai-teks { font-size: 13px; color: #85B7EB; }
+table tbody td .pg-urai-teks.plus  { color: #6EE7B7 !important; }
+table tbody td .pg-urai-teks.minus { color: #FCA5A5 !important; }
+[data-theme="light"] table tbody td .pg-urai-teks.plus  { color: #0F5C44 !important; }
+[data-theme="light"] table tbody td .pg-urai-teks.minus { color: #A32E2D !important; }
+
+tr.pg-total > td { border-top: 2px solid #0C447C; padding-top: 7px; padding-bottom: 7px; }
+[data-theme="light"] tr.pg-total > td { border-top-color: rgba(0,0,0,.18); }
+[data-theme="light"] tr.pg-total > td:nth-child(1) { color: #0F0F12 !important; }

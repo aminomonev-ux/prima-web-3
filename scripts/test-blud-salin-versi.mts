@@ -83,6 +83,7 @@ const pgsBaris = (o: Partial<PergeseranBaris> & { row_id: string }): PergeseranB
   kode_rekening: '5.1.01', uraian: 'Beras',
   vol: 2, satuan: 'kg', harga: 5000, jumlah: 10_000,
   vol_p: 3, harga_p: 5000, pergeseran: 15_000, bertambah_berkurang: 5_000,
+  bertambah: null, berkurang: null,
   penanggung_jawab: null, keterangan: null, tipe_baris: 'CHILD',
   anggaran_key: 'AK-1', parent_id: null, urutan: 0,
   ...o,

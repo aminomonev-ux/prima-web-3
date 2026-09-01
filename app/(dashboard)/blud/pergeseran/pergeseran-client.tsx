@@ -17,6 +17,7 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
+import { uraiGeser, periksaUraian, totalUraian } from '@/lib/blud/urai-geser'
 import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
@@ -117,6 +118,7 @@ interface AksiBarisPg {
   addSibling:     (row: PergeseranBarisInput) => void
   deleteBaris:    (rowId: string) => void
   bukaTambahAnak: (row: PergeseranBarisInput) => void
+  setUraian:      (rowId: string, field: 'bertambah' | 'berkurang', value: number | null) => void
 }
 
 const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatRupiah(v) : '-'
@@ -131,6 +133,7 @@ const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatR
  */
 const PergeseranRow = memo(function PergeseranRow({
   row, terpilih, disorot, isAgg, bolehUbah, akunOptions, pjOptions, aksi,
+  uBertambah, uBerkurang, diurai, salahUrai,
 }: {
   row:         PergeseranBarisInput
   terpilih:    boolean
@@ -140,6 +143,14 @@ const PergeseranRow = memo(function PergeseranRow({
   akunOptions: AkunOption[]
   pjOptions:   string[]
   aksi:        AksiBarisPg
+  /** Uraian EFEKTIF — sudah termasuk rollup induk. Dioper sebagai dua angka,
+   *  bukan satu objek: objek lahir baru tiap render dan `memo` berhenti
+   *  menggigit (L81b). */
+  uBertambah:  number
+  uBerkurang:  number
+  /** Diuraikan tangan? Membedakan angka yang diketik dari yang diturunkan. */
+  diurai:      boolean
+  salahUrai:   boolean
 }) {
   const editable = bolehUbah && EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
   const isBold   = ['GRANDMASTER','MASTER','LEADER','PLETON-LEADER','KETUA-KELOMPOK-A','KETUA-KELOMPOK-B','L7-HEAD','L8-HEAD'].includes(row.tipe_baris)
@@ -267,6 +278,41 @@ const PergeseranRow = memo(function PergeseranRow({
         <strong style={{ fontSize: 13, color: '#7DD3FC' }}>{fmtRp(row.pergeseran)}</strong>
       </td>
 
+      {/* Bertambah / Berkurang — uraian dua arah.
+          Hanya baris DAUN yang boleh diisi: induk angkanya dijumlah dari anak
+          (`uraiGeser`), persis seperti kolom Pergeseran di sebelahnya.
+          Kosong = "hitung dari selisih"; terisi = "jangan diutak-atik". */}
+      <td style={{ textAlign: 'right' }}>
+        {editable ? (
+          <input
+            type="number" min={0}
+            className={`pg-urai${diurai ? ' diurai-plus' : ''}${salahUrai ? ' salah' : ''}`}
+            style={{ textAlign: 'right' }}
+            value={row.bertambah ?? ''}
+            placeholder={uBertambah ? formatRupiah(uBertambah) : '-'}
+            onChange={e => aksi.setUraian(row.row_id, 'bertambah', e.target.value === '' ? null : Number(e.target.value))}
+            data-tooltip="Bagian yang MASUK ke rekening ini. Kosongkan kalau rekening ini cuma bergerak satu arah — angkanya dihitung sendiri."
+          />
+        ) : (
+          <span className={`pg-urai-teks${uBertambah ? ' plus' : ''}`}>{fmtRp(uBertambah)}</span>
+        )}
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        {editable ? (
+          <input
+            type="number" min={0}
+            className={`pg-urai${diurai ? ' diurai-minus' : ''}${salahUrai ? ' salah' : ''}`}
+            style={{ textAlign: 'right' }}
+            value={row.berkurang ?? ''}
+            placeholder={uBerkurang ? formatRupiah(uBerkurang) : '-'}
+            onChange={e => aksi.setUraian(row.row_id, 'berkurang', e.target.value === '' ? null : Number(e.target.value))}
+            data-tooltip="Bagian yang KELUAR dari rekening ini. Isi kedua kolom hanya kalau rekening ini ditambah DAN dikurangi di dokumen yang sama."
+          />
+        ) : (
+          <span className={`pg-urai-teks${uBerkurang ? ' minus' : ''}`}>{fmtRp(uBerkurang)}</span>
+        )}
+      </td>
+
       {/* +/− */}
       <td style={{ textAlign: 'right' }}>
         <strong style={{
@@ -385,6 +431,18 @@ function PergeseranTable({
     onChange(partialRecalcPergeseran(updated, rowId))
   }, [onChange])
 
+  // Uraian bertambah/berkurang — TIDAK lewat recalc.
+  //
+  // Sengaja tidak memanggil `partialRecalcPergeseran`: kolom ini tidak
+  // menggerakkan angka apa pun. `pergeseran` tetap `vol_p × harga_p`, dan itu
+  // yang membuat pagu — beserta seluruh sisi Realisasi — tidak bisa bergeser
+  // gara-gara uraian. Yang berubah cuma penjelasannya.
+  const setUraian = useCallback((
+    rowId: string, field: 'bertambah' | 'berkurang', value: number | null,
+  ) => {
+    onChange(rowsRef.current.map(r => r.row_id === rowId ? { ...r, [field]: value } : r))
+  }, [onChange])
+
   // Edit kolom teks. kode_rekening/uraian/keterangan hanya untuk baris baru hasil
   // add manual; `penanggung_jawab` terbuka di semua baris (lihat catatan di selnya).
   const updateText = useCallback((
@@ -429,6 +487,7 @@ function PergeseranTable({
       kode_rekening: '', uraian: '',
       vol: null, satuan: null, harga: null, jumlah: 0,
       vol_p: null, harga_p: null, pergeseran: 0, bertambah_berkurang: 0,
+      bertambah: null, berkurang: null,
       penanggung_jawab: '', keterangan: '',
       tipe_baris: tipe, row_id: genPgRowId(),
       parent_id: parentRowId, urutan: insertIdx + 1,
@@ -436,7 +495,8 @@ function PergeseranTable({
     let next = [...rows]
     if (willSwitchToAggregator) {
       next = next.map(r => r.row_id === parentRowId
-        ? { ...r, vol_p: null, harga_p: null, pergeseran: 0, bertambah_berkurang: 0 - (r.jumlah ?? 0) }
+        ? { ...r, vol_p: null, harga_p: null, pergeseran: 0, bertambah_berkurang: 0 - (r.jumlah ?? 0),
+            bertambah: null, berkurang: null }
         : r)
     }
     next.splice(insertIdx + 1, 0, newRow)
@@ -475,6 +535,7 @@ function PergeseranTable({
       kode_rekening: '', uraian: '',
       vol: null, satuan: null, harga: null, jumlah: 0,
       vol_p: null, harga_p: null, pergeseran: 0, bertambah_berkurang: 0,
+      bertambah: null, berkurang: null,
       penanggung_jawab: '', keterangan: '',
       tipe_baris: row.tipe_baris, row_id: genPgRowId(),
       parent_id: row.parent_id, urutan: insertIdx + 1,
@@ -543,11 +604,27 @@ function PergeseranTable({
   // Satu berkas aksi, satu identitas — cermin `aksi` di `DpaTable`.
   const aksi = useMemo(() => ({
     updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
-    bukaTambahAnak: setAddParent,
-  }), [updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris])
+    bukaTambahAnak: setAddParent, setUraian,
+  }), [updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris, setUraian])
+
+  // Uraian efektif seluruh pohon — dihitung SEKALI, bukan per baris: memanggil
+  // `uraiGeser` di dalam map membuat rollup-nya O(n²) pada 558 baris.
+  const petaUrai  = useMemo(() => uraiGeser(rows), [rows])
+  const salahUrai = useMemo(() => new Set(periksaUraian(rows).map(u => u.row_id)), [rows])
+  const totalUrai = useMemo(() => totalUraian(rows), [rows])
 
   return (
     <>
+      {salahUrai.size > 0 && (
+        <div className="pg-urai-galat">
+          <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+          <span>
+            <b>{salahUrai.size} baris</b> uraiannya tidak cocok — Bertambah dikurangi
+            Berkurang harus sama dengan Pergeseran dikurangi Jumlah. Kotaknya bergaris merah.
+          </span>
+        </div>
+      )}
+
       {selectedRowIds.size > 0 && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <span style={{ fontSize: 12, opacity: .75 }}>{selectedRowIds.size} baris terpilih</span>
@@ -588,6 +665,8 @@ function PergeseranTable({
               <th data-rima="pergeseran.kolom-vol-p" style={{ width: 80, textAlign: 'right' }}>Vol P</th>
               <th data-rima="pergeseran.kolom-harga-p" style={{ minWidth: 180, textAlign: 'right' }}>Harga P</th>
               <th data-rima="pergeseran.kolom-selisih" style={{ minWidth: 160, textAlign: 'right' }}>Pergeseran</th>
+              <th data-rima="pergeseran.kolom-bertambah" style={{ width: 120, textAlign: 'right' }}>Bertambah</th>
+              <th data-rima="pergeseran.kolom-berkurang" style={{ width: 120, textAlign: 'right' }}>Berkurang</th>
               <th style={{ minWidth: 160, textAlign: 'right' }}>+/−</th>
               <th data-rima="pergeseran.kolom-pj" style={{ width: 120 }}>Penanggung Jawab</th>
               <th style={{ width: 110 }}>Keterangan</th>
@@ -608,10 +687,35 @@ function PergeseranTable({
                   akunOptions={akunOptions}
                   pjOptions={pjOptions}
                   aksi={aksi}
+                  uBertambah={petaUrai.get(row.row_id)?.bertambah ?? 0}
+                  uBerkurang={petaUrai.get(row.row_id)?.berkurang ?? 0}
+                  diurai={row.bertambah != null || row.berkurang != null}
+                  salahUrai={salahUrai.has(row.row_id)}
                 />
               )
             })}
           </tbody>
+
+          {/* Total dokumen — baris AKAR saja (`totalUraian`), sepadan
+              `hitungDeltaPergeseranRoot`. Total Bertambah HARUS sama dengan
+              total Berkurang; itu bukti geserannya berpasangan, dan pemeriksaan
+              yang lebih kuat dari "selisihnya nol". */}
+          {rows.length > 0 && (
+            <tfoot>
+              <tr className="pg-total">
+                <td colSpan={11} style={{ textAlign: 'right', fontWeight: 800, fontSize: 12 }}>
+                  Total pergeseran
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#6EE7B7' }}>
+                  {fmtRp(totalUrai.bertambah)}
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#FCA5A5' }}>
+                  {fmtRp(totalUrai.berkurang)}
+                </td>
+                <td colSpan={bolehUbah ? 4 : 3} />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

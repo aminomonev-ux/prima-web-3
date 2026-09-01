@@ -105,6 +105,8 @@ const pgsAsli: PergeseranBaris = {
   harga_p: 260000,     // angka pasca-geser
   pergeseran: 3900000, // 15 × 260.000
   bertambah_berkurang: 900000,
+  bertambah: null,
+  berkurang: null,
   penanggung_jawab: 'Kasubbag Umum',
   keterangan: 'ditambah 3 paket',
   tipe_baris: 'CHILD',

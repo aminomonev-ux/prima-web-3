@@ -16,6 +16,7 @@ import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
+import { periksaUraian, pesanUraianTidakCocok } from '@/lib/blud/urai-geser'
 import { canHapusVersi, PergeseranBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
 import { bolehBukaMenu, bolehEditMenu, bolehLihatSalahSatu, bolehModulBlud, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 
@@ -175,6 +176,28 @@ export async function POST(req: NextRequest) {
           code:  'PERGESERAN_TIDAK_BERIMBANG',
           error: `Pergeseran tidak berimbang: total anggaran ${rootDelta > 0 ? 'bertambah' : 'berkurang'} Rp ${Math.abs(rootDelta).toLocaleString('id-ID')} terhadap DPA. Sesuaikan dulu — pergeseran wajib berimbang (pagu tetap).`,
           delta: rootDelta,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Uraian bertambah/berkurang wajib cocok dengan selisih barisnya sendiri.
+    // Diperiksa SESUDAH recalc, karena `pergeseran` baris agregat baru final di
+    // situ — dan sesudah pagar berimbang, supaya pesan yang muncul lebih dulu
+    // adalah yang paling menentukan.
+    //
+    // Hanya baris DAUN yang diuraikan tangan yang diperiksa; induk angkanya
+    // dijumlah dari anak (`uraiGeser`), jadi tidak pernah punya uraian sendiri.
+    // Sifat "total Bertambah = total Berkurang" tidak diperiksa terpisah — ia
+    // mengikuti dari invarian per-baris ini + pagar berimbang di atas.
+    const uraianSalah = periksaUraian(recalced)
+    if (uraianSalah.length > 0) {
+      return NextResponse.json(
+        {
+          ok:    false,
+          code:  'URAIAN_GESER_TIDAK_COCOK',
+          error: pesanUraianTidakCocok(uraianSalah),
+          baris: uraianSalah.map(u => u.row_id),
         },
         { status: 400 },
       )

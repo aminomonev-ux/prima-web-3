@@ -273,6 +273,10 @@ export interface PergeseranBaris {
   harga_p: number | null
   pergeseran: number
   bertambah_berkurang: number
+  /** Uraian tangan bagian MASUK. `null` = belum diuraikan → turunkan dari selisih (uraiGeser) */
+  bertambah: number | null
+  /** Uraian tangan bagian KELUAR. `null` = belum diuraikan */
+  berkurang: number | null
   /** Cermin DPA — ditimpa `injectDpaKePergeseran`, bukan isian mandiri (migration-pergeseran-pj) */
   penanggung_jawab: string | null
   keterangan: string | null
@@ -295,6 +299,8 @@ export interface PergeseranBarisInput {
   harga_p: number | null
   pergeseran: number
   bertambah_berkurang: number
+  bertambah?: number | null
+  berkurang?: number | null
   penanggung_jawab?: string | null
   keterangan?: string | null
   tipe_baris: TipeBaris

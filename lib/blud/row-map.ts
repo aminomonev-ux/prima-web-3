@@ -51,6 +51,11 @@ export function pergeseranKeInput(d: PergeseranBaris): PergeseranBarisInput {
     harga_p:             d.harga_p,
     pergeseran:          d.pergeseran,
     bertambah_berkurang: d.bertambah_berkurang,
+    // `null` apa adanya — ini SATU-SATUNYA tempat baris Pergeseran server→klien
+    // dipetakan, dan kolom yang lupa didaftar di sini terbuang senyap lalu
+    // terkirim balik sebagai "tidak ada" (CLAUDE.md).
+    bertambah:           d.bertambah,
+    berkurang:           d.berkurang,
     // String kosong, bukan null: keduanya terikat langsung ke <input>.
     penanggung_jawab:    d.penanggung_jawab ?? '',
     keterangan:          d.keterangan ?? '',
@@ -91,6 +96,9 @@ export function dpaKePergeseranInput(d: DpaBaris, urutan: number): PergeseranBar
     harga_p:             d.harga,
     pergeseran:          d.jumlah,
     bertambah_berkurang: 0,
+    // Salinan DPA — belum digeser sama sekali, jadi belum ada yang diuraikan.
+    bertambah:           null,
+    berkurang:           null,
     penanggung_jawab:    d.penanggung_jawab ?? '',
     keterangan:          d.keterangan ?? '',
     tipe_baris:          d.tipe_baris,
@@ -149,7 +157,10 @@ export function dpaKeTahunBaruInput(d: DpaBaris, urutan: number): DpaBarisInput 
  *
  * `satuan` diambil apa adanya (Pergeseran tidak punya `satuan_p` — satuannya
  * memang cermin DPA), dan `bertambah_berkurang` tidak dibawa sama sekali:
- * selisih terhadap DPA hanya bermakna di dalam tahunnya sendiri.
+ * selisih terhadap DPA hanya bermakna di dalam tahunnya sendiri. Alasan yang
+ * sama membuang `bertambah`/`berkurang` — uraian geseran tahun lalu tidak
+ * menjelaskan apa pun tentang pagu awal tahun baru. Tipe tujuannya
+ * `DpaBarisInput` yang memang tidak punya kolom itu, jadi ini terjaga sendiri.
  */
 export function pergeseranKeTahunBaruInput(d: PergeseranBaris, urutan: number): DpaBarisInput {
   return {

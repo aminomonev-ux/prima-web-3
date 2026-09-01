@@ -115,6 +115,21 @@ export function recalcDpaJumlah(rows: DpaBarisInput[]): DpaBarisInput[] {
 
 // ─── PERGESERAN FULL RECALC ───────────────────────────────────────────────────
 
+/**
+ * JANGAN tambahkan pengisian `bertambah`/`berkurang` di sini.
+ *
+ * Fungsi ini jalan tiap kali tabel dihitung ulang — dan versi parsialnya jalan
+ * TIAP KETIKAN. Kolom `bertambah_berkurang` memang hasil hitungan, jadi wajar
+ * ditimpa terus. Kolom `bertambah`/`berkurang` TIDAK: itu uraian yang diketik
+ * manusia. Mengisinya di sini berarti angka 45/12 yang baru diketik di satu
+ * baris tertimpa jadi 33/0 begitu pemakai menyentuh sel lain, tanpa pesan apa
+ * pun (CONCEPT-blud-uraian-geser §2.1).
+ *
+ * Keduanya lolos lewat sebaran `{ ...r }` dan memang harus begitu. Nilai
+ * tampilannya dihitung `uraiGeser()` saat dipakai, tidak pernah disimpan —
+ * preseden `is_latest`: dua sumber kebenaran soal angka uang cepat atau lambat
+ * berbeda pendapat.
+ */
 export function recalcPergeseranJumlah(rows: PergeseranBarisInput[]): PergeseranBarisInput[] {
   const data     = rows.map(r => ({ ...r }))
   const childMap = buildChildMap(data)
@@ -626,6 +641,8 @@ export function injectDpaKePergeseran(
         harga_p:             dpa.harga,
         pergeseran:          dpa.jumlah,
         bertambah_berkurang: 0,
+        bertambah:           null,
+        berkurang:           null,
         penanggung_jawab:    dpa.penanggung_jawab ?? '',
         keterangan:          dpa.keterangan ?? '',
         tipe_baris:          dpa.tipe_baris,
