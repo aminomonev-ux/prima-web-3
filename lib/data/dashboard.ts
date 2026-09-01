@@ -7,7 +7,8 @@ import { sql } from '@/lib/data/db';
 import { getKinerjaKpi, SUMBER_LIST } from './kinerja';
 import { listRencanaAksi } from './rencana-aksi';
 import type { RaLevel } from './rencana-aksi-schemas';
-import { getDpaLatest, getDpaByDate } from '@/lib/blud/data';
+import { getDpaLatest, getDpaLatestDate, getDpaByDate } from '@/lib/blud/data';
+import { ringkasSerapan } from '@/lib/blud/serapan-ringkas';
 
 export interface UsulanSummary {
   total: number;
@@ -34,6 +35,21 @@ export interface BludSummary {
   total_pagu: number;
   total_baris: number;
   leaf_baris: number;
+  /**
+   * Sisi realisasi. `null` = orang ini tidak berhak membuka menu Realisasi, atau
+   * sakelar `app_status_blud_realisasi` sedang mati — bukan "kebetulan nol".
+   * Konsep: docs/CONCEPT-blud-beranda-serapan.md §10
+   */
+  serapan: {
+    /** Versi pagu ACUAN realisasi — bisa berbeda dari `versi_tanggal` (itu DPA). */
+    pagu_versi: string | null;
+    pagu_sumber: 'PERGESERAN' | 'DPA' | 'KOSONG';
+    pagu: number;
+    terserap: number;
+    pct_serapan: number;
+    menembus: number;
+    mepet: number;
+  } | null;
 }
 
 export interface RenaksiLevelStat { level: RaLevel; count: number; target_terisi: number }
@@ -111,15 +127,46 @@ async function getEanggaranSummary(tahun: string): Promise<EanggaranSummary> {
   };
 }
 
-async function getBludSummary(): Promise<BludSummary> {
-  const latest = await getDpaLatest();
-  if (!latest) return { versi_tanggal: null, total_pagu: 0, total_baris: 0, leaf_baris: 0 };
-  const versi_tanggal = latest.versi;
-  const rows = await getDpaByDate(latest.tahun, latest.versi);
+/**
+ * Ringkasan BLUD untuk `/dashboard`.
+ *
+ * `tahun` WAJIB. Sebelumnya fungsi ini satu-satunya ringkasan modul yang tidak
+ * menerimanya — ia memakai `getDpaLatest()`, yaitu DPA dengan tanggal terbaru
+ * TAHUN APA PUN, sehingga pemilih tahun di layar sama sekali tidak berpengaruh
+ * pada widget BLUD. Serapan selalu milik satu tahun tertentu, jadi tahunnya harus
+ * diputuskan, bukan disimpulkan dari versi DPA yang kebetulan paling baru.
+ *
+ * `total_pagu` di sini tetap pagu DPA (baris 'BELANJA DAERAH') — kartu itu memang
+ * bicara soal dokumen DPA. Pagu ACUAN realisasi ikut di `serapan.pagu`, lengkap
+ * dengan versinya, karena keduanya menjawab pertanyaan yang berbeda dan
+ * mencampurnya persis cara dua kartu bersebelahan saling membantah (§2).
+ */
+async function getBludSummary(tahun: number, bolehSerapan: boolean): Promise<BludSummary> {
+  const versi_tanggal = await getDpaLatestDate(tahun);
+  const serapan = bolehSerapan ? await ringkasSerapan(tahun) : null;
+  const sisiSerapan: BludSummary['serapan'] = serapan && {
+    pagu_versi:  serapan.versi,
+    pagu_sumber: serapan.sumber,
+    pagu:        serapan.pagu,
+    terserap:    serapan.terserap,
+    pct_serapan: serapan.pct,
+    menembus:    serapan.menembus,
+    mepet:       serapan.mepet,
+  };
+  if (!versi_tanggal) {
+    return { versi_tanggal: null, total_pagu: 0, total_baris: 0, leaf_baris: 0, serapan: sisiSerapan };
+  }
+  const rows = await getDpaByDate(tahun, versi_tanggal);
   // Total pagu = baris induk 'BELANJA DAERAH' (konvensi cetak-data.ts).
   const total_pagu = rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0;
   const leaf_baris = rows.filter(r => (r.vol ?? 0) > 0 || (r.harga ?? 0) > 0).length;
-  return { versi_tanggal, total_pagu: Number(total_pagu) || 0, total_baris: rows.length, leaf_baris };
+  return {
+    versi_tanggal,
+    total_pagu: Number(total_pagu) || 0,
+    total_baris: rows.length,
+    leaf_baris,
+    serapan: sisiSerapan,
+  };
 }
 
 function sumQuarters(r: { q1_target: number; q2_target: number; q3_target: number; q4_target: number; q1_realisasi: number; q2_realisasi: number; q3_realisasi: number; q4_realisasi: number }) {
@@ -172,11 +219,14 @@ async function getRenaksiAndRealisasi(tahun: number): Promise<{ renaksi: Renaksi
   };
 }
 
-export async function getDashboardSummary(tahun: string): Promise<DashboardSummary> {
+export async function getDashboardSummary(
+  tahun: string,
+  opsi?: { bolehSerapanBlud?: boolean },
+): Promise<DashboardSummary> {
   const [usulan, eanggaran, blud, ra] = await Promise.all([
     getUsulanSummary(),
     getEanggaranSummary(tahun),
-    getBludSummary(),
+    getBludSummary(Number(tahun), opsi?.bolehSerapanBlud === true),
     getRenaksiAndRealisasi(Number(tahun)),
   ]);
   return { usulan, eanggaran, blud, renaksi: ra.renaksi, realisasiKinerja: ra.realisasiKinerja };

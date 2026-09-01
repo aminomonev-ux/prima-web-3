@@ -292,10 +292,36 @@ export default function DashboardClient({ username, role, themePreference, initi
                 <div className="kpi"><div className="kpi-val">{fmtNum(bl.leaf_baris)}</div><div className="kpi-lbl">Rincian</div></div>
                 <div className="kpi"><div className="kpi-val">{fmtNum(bl.total_baris)}</div><div className="kpi-lbl">Total Baris</div></div>
               </div>
-              <div className="serap-wrap">
-                <div className="serap-track"><div className="serap-fill" style={{ width: `${bl.total_baris > 0 ? Math.round((bl.leaf_baris / bl.total_baris) * 100) : 0}%`, background: 'linear-gradient(90deg,#1D9E75,#2BD46A)' }} /></div>
-                <div className="serap-meta"><span>Rincian belanja</span><span>{bl.total_baris > 0 ? Math.round((bl.leaf_baris / bl.total_baris) * 100) : 0}% dari struktur</span></div>
-              </div>
+              {/* Bilah ini dulu memajang leaf/total baris — "% dari struktur",
+                  angka yang berpakaian seperti serapan padahal bukan. Sekarang
+                  serapan sungguhan, dan pagu acuannya DISEBUT: ia dari Pergeseran
+                  versi terbaru, bukan dari "Total Pagu" DPA di atasnya. */}
+              {bl.serapan ? (
+                <div className="serap-wrap">
+                  <div className="serap-track"><div className="serap-fill" style={{ width: `${Math.max(0, Math.min(100, bl.serapan.pct_serapan))}%`, background: 'linear-gradient(90deg,#1D9E75,#2BD46A)' }} /></div>
+                  <div className="serap-meta">
+                    <span>Terserap {fmtRpCompact(bl.serapan.terserap)}</span>
+                    <span>
+                      {bl.serapan.pagu > 0 ? `${bl.serapan.pct_serapan.toFixed(1)}%` : '—'} dari pagu{' '}
+                      {bl.serapan.pagu_sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {bl.serapan.pagu_versi ?? '—'}
+                    </span>
+                  </div>
+                  {(bl.serapan.menembus > 0 || bl.serapan.mepet > 0) && (
+                    <div className="serap-meta" style={{ color: bl.serapan.menembus > 0 ? '#E24B4A' : '#BA7517' }}>
+                      <span>
+                        {bl.serapan.menembus > 0 && `${bl.serapan.menembus} menembus pagu`}
+                        {bl.serapan.menembus > 0 && bl.serapan.mepet > 0 && ' · '}
+                        {bl.serapan.mepet > 0 && `${bl.serapan.mepet} mepet`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="serap-wrap">
+                  <div className="serap-track"><div className="serap-fill" style={{ width: `${bl.total_baris > 0 ? Math.round((bl.leaf_baris / bl.total_baris) * 100) : 0}%`, background: 'linear-gradient(90deg,#1D9E75,#2BD46A)' }} /></div>
+                  <div className="serap-meta"><span>Rincian belanja</span><span>{bl.total_baris > 0 ? Math.round((bl.leaf_baris / bl.total_baris) * 100) : 0}% dari struktur</span></div>
+                </div>
+              )}
               <div className="widget-foot" style={{ marginTop: 'auto' }}>
                 <PrimaButton variant="success" size="sm" iconRight={<ArrowRight size={14} />} onClick={() => open('/dashboard/blud')}>Lihat Detail</PrimaButton>
               </div>

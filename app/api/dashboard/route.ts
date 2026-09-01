@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAccess } from '@/lib/security/guard';
+import { requireAccess, modulSedangMati } from '@/lib/security/guard';
 import { isDashboardRole, dashboardRateLimit, DashboardQuerySchema } from '@/lib/data/dashboard-schemas';
 import { getDashboardSummary } from '@/lib/data/dashboard';
+import { petaIzinBlud } from '@/lib/blud/izin-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,17 @@ export async function GET(req: NextRequest) {
   const tahun = parsed.data.tahun ?? String(new Date().getFullYear());
 
   try {
-    const data = await getDashboardSummary(tahun);
+    // Angka serapan BLUD tunduk pada pagar BLUD, bukan pada `isDashboardRole`.
+    // Tanpa ini, orang dengan akses `dashboard` tapi menu Realisasi tertutup akan
+    // membacanya di sini — pagar Beranda BLUD bocor lewat pintu sebelah, satu
+    // modul berikutnya (L69). Sakelar realisasi ikut diperiksa (L72).
+    const [peta, realisasiMati] = await Promise.all([
+      petaIzinBlud(g.session.userId, g.session.role),
+      modulSedangMati(['app_status_blud_realisasi'], { role: g.session.role }),
+    ]);
+    const bolehSerapanBlud = peta['realisasi'] !== 'TIDAK' && !realisasiMati;
+
+    const data = await getDashboardSummary(tahun, { bolehSerapanBlud });
     return NextResponse.json({ ok: true, tahun, data });
   } catch (err) {
     console.error('[Dashboard GET Error]', err);

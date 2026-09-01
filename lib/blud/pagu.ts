@@ -240,6 +240,19 @@ export interface PaguCap {
   versi: string | null
   baris: number
   sidik: number
+  /**
+   * Total alokasi setahun — penanda "ada yang mencatat transaksi baru", supaya
+   * layar Realisasi ikut segar saat rekan mengetik di Buku Kas. Sebelumnya
+   * pemeriksaan 30 detik hanya melihat pagu, jadi serapan diam sampai halaman
+   * dimuat ulang.
+   *
+   * `SUM` mentah, sengaja: angka ini TIDAK PERNAH ditampilkan — ia cuma
+   * dibandingkan dengan angka sebelumnya. Aturan "jumlahkan baris akar"
+   * (docs/CONCEPT-blud-beranda-serapan.md §9.1) berlaku untuk angka yang dibaca
+   * orang; di sini ikut menghitung alokasi yatim justru bagus, sebab perubahan
+   * padanya juga perlu memicu muat ulang.
+   */
+  terserap: number
 }
 
 /**
@@ -250,7 +263,11 @@ export interface PaguCap {
  */
 export async function getPaguCap(tahun: number): Promise<PaguCap> {
   const { sumber, versi } = await getPaguSumber(tahun)
-  if (sumber === 'KOSONG') return { sumber, versi: null, baris: 0, sidik: 0 }
+  const serap = await sql`
+    SELECT COALESCE(SUM(nilai), 0) AS n FROM blud_realisasi_alokasi WHERE tahun_anggaran = ${tahun}
+  ` as Record<string, unknown>[]
+  const terserap = Number(serap[0]?.n ?? 0)
+  if (sumber === 'KOSONG') return { sumber, versi: null, baris: 0, sidik: 0, terserap }
   const rows = sumber === 'PERGESERAN'
     ? await sql`
         SELECT COUNT(*) AS n,
@@ -265,7 +282,7 @@ export async function getPaguCap(tahun: number): Promise<PaguCap> {
         WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
       `
   const r = (rows as Record<string, unknown>[])[0]
-  return { sumber, versi, baris: Number(r?.n ?? 0), sidik: Number(r?.s ?? 0) }
+  return { sumber, versi, baris: Number(r?.n ?? 0), sidik: Number(r?.s ?? 0), terserap }
 }
 
 export interface BentrokPagu {

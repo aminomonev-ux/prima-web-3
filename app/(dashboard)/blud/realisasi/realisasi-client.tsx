@@ -19,6 +19,7 @@ import { formatTanggalId } from '@/lib/blud/tanggal'
 import RegisterPanel from '@/components/blud/RegisterPanel'
 import TautanMenu from '@/components/blud/TautanMenu'
 import PratinjauSerapanModal from '@/components/blud/PratinjauSerapanModal'
+import { EPS_PRATINJAU, AMBANG_MEPET, mepetSetahun } from '@/lib/blud/pratinjau-serapan'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -42,7 +43,25 @@ export interface BarisRealisasi {
   persen: number
 }
 
-interface Cap { sumber: string; versi: string | null; baris: number; sidik: number }
+interface Cap { sumber: string; versi: string | null; baris: number; sidik: number; terserap: number }
+
+/** Saringan tabel — kosakatanya sama dengan modal Pratinjau supaya tidak ada dua istilah. */
+type SaringBaris = 'semua' | 'menembus' | 'mepet'
+
+// Lebih pagu dinilai dari serapan SETAHUN: baris yang jebol di Agustus tetap
+// harus terlihat merah saat pengguna menengok laporan Juni.
+const lebihPagu = (r: BarisRealisasi) => r.pagu - r.terserap < -EPS_PRATINJAU
+
+/**
+ * "Mepet" memakai sisa SETAHUN (`pagu − terserap`), BUKAN kolom `sisa` di tabel
+ * yang mengikuti bulan terpilih — kalau tidak, membuka bulan Juni membuat
+ * rekening yang jebol di Agustus tampil tanpa warna, sementara modal Pratinjau
+ * di layar yang sama menyebutnya "akan menembus".
+ *
+ * Daun saja: pagar pagu server bekerja di baris terbawah, dan kalau induk ikut
+ * diwarnai satu baris mepet akan mewarnai enam tingkat di atasnya.
+ */
+const barisMepet = (r: BarisRealisasi) => r.is_leaf && mepetSetahun(r.pagu, r.pagu - r.terserap)
 
 interface Perubahan {
   naik: { kode: string; uraian: string; lama: number; baru: number }[]
@@ -52,15 +71,21 @@ interface Perubahan {
   versi: string | null
 }
 
+// `terserap` ikut dibandingkan supaya transaksi yang dicatat rekan di Buku Kas
+// juga memicu muat ulang — sebelumnya hanya perubahan PAGU yang terdeteksi, jadi
+// angka serapan diam sampai halaman dimuat ulang.
 const capSama = (a: Cap | null, b: Cap | null) =>
   !!a && !!b && a.versi === b.versi && a.baris === b.baris && a.sidik === b.sidik
+  && a.terserap === b.terserap
 
-export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
+export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, saringAwal }: {
   bolehDpa: boolean; bolehPergeseran: boolean
+  tahunAwal: number | null; saringAwal: 'menembus' | 'mepet' | null
 }) {
   const [tahun, setTahun] = useState<number | null>(null)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
+  const [saring, setSaring] = useState<SaringBaris>(saringAwal ?? 'semua')
   const [rows, setRows] = useState<BarisRealisasi[]>([])
   const [sumber, setSumber] = useState<{ sumber: string; versi: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -84,15 +109,30 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
         if (!alive) return
         const list: number[] = json.data ?? []
         setTahunList(list)
-        setTahun(list.includes(CURRENT_YEAR) ? CURRENT_YEAR : (list[0] ?? CURRENT_YEAR))
+        // Tahun dari URL menang — kalau tidak, mengklik kartu Beranda tahun 2025
+        // mendarat di tabel tahun berjalan dan hitungannya tidak cocok dengan
+        // kartu yang barusan diklik.
+        setTahun(tahunAwal && list.includes(tahunAwal)
+          ? tahunAwal
+          : (list.includes(CURRENT_YEAR) ? CURRENT_YEAR : (list[0] ?? CURRENT_YEAR)))
       } catch {
         if (alive) setTahun(CURRENT_YEAR)
       }
     })()
     return () => { alive = false }
-  }, [])
+  }, [tahunAwal])
 
-  const muat = useCallback(async (th: number, bl: number, bandingkan: boolean) => {
+  /**
+   * `mode` — tiga watak, dan yang ketiga wajib ada:
+   *
+   *   awal    muat pertama / ganti periode: pembanding pagu disetel ulang.
+   *   banding versi pagu berubah: cari selisihnya, munculkan spanduk + chip ▲▼.
+   *   angka   hanya serapannya yang bergeser (rekan mencatat transaksi). Pagunya
+   *           tidak berubah, jadi `banding` sia-sia — tapi `awal` MENGHAPUS
+   *           spanduk "Pagu diperbarui" yang mungkin belum sempat dibaca orang.
+   *           Jadi angkanya disegarkan tanpa menyentuh pembanding sama sekali.
+   */
+  const muat = useCallback(async (th: number, bl: number, mode: 'awal' | 'banding' | 'angka') => {
     try {
       const res = await fetch(`/api/blud/realisasi/pagu?tahun=${th}&bulan=${bl}`)
       const json = await res.json()
@@ -100,7 +140,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
       const data: BarisRealisasi[] = json.data ?? []
       const baruMap = new Map(data.map(b => [b.anggaran_key, { pagu: b.pagu, kode: b.kode_rekening, uraian: b.uraian }]))
 
-      if (bandingkan && paguLama.current) {
+      if (mode === 'banding' && paguLama.current) {
         const lama = paguLama.current
         const d: Perubahan = { naik: [], turun: [], baru: [], hilang: [], versi: json.pagu_sumber?.versi ?? null }
         for (const [k, v] of baruMap) {
@@ -117,7 +157,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
           setPerubahan(d)
           toast.info(`Pagu diperbarui — ${jml} baris berubah`)
         }
-      } else {
+      } else if (mode !== 'angka') {
         paguLama.current = baruMap
         setPerubahan(null)
       }
@@ -137,7 +177,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
       setLoading(true)
       paguLama.current = null
       cap.current = null
-      await muat(tahun, bulan, false)
+      await muat(tahun, bulan, 'awal')
       try {
         const res = await fetch(`/api/blud/realisasi/pagu?tahun=${tahun}&mode=cap`)
         const json = await res.json()
@@ -157,8 +197,15 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
           const json = await res.json()
           if (!res.ok || !json.ok) return
           if (cap.current && !capSama(cap.current, json.cap)) {
+            // Pagunya yang bergeser, atau cuma serapannya? Dua kabar berbeda:
+            // yang pertama layak diberi spanduk + chip ▲▼, yang kedua tidak —
+            // dan kalau diperlakukan sama, muat ulang karena satu transaksi baru
+            // akan menghapus spanduk pagu yang belum sempat dibaca.
+            const paguBergeser = cap.current.versi !== json.cap.versi
+              || cap.current.baris !== json.cap.baris
+              || cap.current.sidik !== json.cap.sidik
             cap.current = json.cap
-            await muat(tahun, bulan, true)
+            await muat(tahun, bulan, paguBergeser ? 'banding' : 'angka')
           } else if (!cap.current) {
             cap.current = json.cap
           }
@@ -192,11 +239,15 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
 
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase()
-    if (q) {
+    if (q || saring !== 'semua') {
+      // Leluhurnya ikut dibawa, sama seperti pencarian: baris tanpa induknya
+      // kehilangan konteks program/kegiatan, dan indentasinya jadi menggantung.
       const induk = new Map(rows.map(r => [r.anggaran_key, r.parent_key]))
       const perlu = new Set<string>()
       for (const r of rows) {
-        if (!`${r.kode_rekening} ${r.uraian}`.toLowerCase().includes(q)) continue
+        if (q && !`${r.kode_rekening} ${r.uraian}`.toLowerCase().includes(q)) continue
+        if (saring === 'menembus' && !(r.is_leaf && lebihPagu(r))) continue
+        if (saring === 'mepet' && !barisMepet(r)) continue
         perlu.add(r.anggaran_key)
         let p = induk.get(r.anggaran_key) ?? null
         while (p && !perlu.has(p)) { perlu.add(p); p = induk.get(p) ?? null }
@@ -213,7 +264,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
       }
       return true
     })
-  }, [rows, cari, tutup])
+  }, [rows, cari, tutup, saring])
 
   const akar = useMemo(() => rows.filter(r => !r.parent_key), [rows])
   const total = useMemo(() => ({
@@ -226,10 +277,11 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
 
   const setelahBulanIni = total.terserap - total.sd
   const tanpaDpa = sumber?.sumber === 'KOSONG'
-  // Lebih pagu dinilai dari serapan SETAHUN: baris yang jebol di Agustus tetap
-  // harus terlihat merah saat pengguna menengok laporan Juni.
-  const lebihPagu = (r: BarisRealisasi) => r.pagu - r.terserap < -0.005
-  const minus = rows.filter(lebihPagu)
+  // Dihitung dari baris DAUN saja — induk yang ikut merah cuma akibat anaknya,
+  // dan menghitungnya membuat angka di spanduk ini berbeda dari kartu "Perlu
+  // Perhatian" di Beranda yang bicara soal hal yang sama persis.
+  const menembus = rows.filter(r => r.is_leaf && lebihPagu(r))
+  const mepet = rows.filter(barisMepet)
 
   function toggle(key: string) {
     setTutup(prev => {
@@ -365,14 +417,41 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
         </div>
       )}
 
-      {minus.length > 0 && (
+      {menembus.length > 0 && (
         <div className="rl-minus-banner">
           <TriangleAlert className="w-4 h-4 shrink-0" />
           <span>
-            <b>{minus.length} baris terserap melebihi pagunya</b> — pagu diturunkan setelah uangnya
+            <b>{menembus.length} rekening terserap melebihi pagunya</b> — pagu diturunkan setelah uangnya
             terlanjur keluar (§4.3). Perbaiki lewat menu <TautanMenu href="/blud/pergeseran" boleh={bolehPergeseran}>Pergeseran</TautanMenu>,
             atau koreksi transaksinya di Buku Kas.
           </span>
+        </div>
+      )}
+
+      {/* Dengan 391 baris, mencari warna sambil menggulir tetap pekerjaan manual —
+          yang menghapusnya penyaring, bukan warnanya. */}
+      {(menembus.length > 0 || mepet.length > 0 || saring !== 'semua') && (
+        <div className="rl-saring">
+          <span className="rl-saring-teks">
+            {menembus.length > 0 && <><b>{menembus.length}</b> menembus pagu</>}
+            {menembus.length > 0 && mepet.length > 0 && ' · '}
+            {mepet.length > 0 && <><b>{mepet.length}</b> sisa di bawah {Math.round(AMBANG_MEPET * 100)}%</>}
+            {menembus.length === 0 && mepet.length === 0 && 'Tidak ada rekening yang mepet'}
+          </span>
+          <div className="rl-saring-tombol">
+            {([
+              ['semua', 'Semua', rows.length],
+              ['menembus', 'Menembus', menembus.length],
+              ['mepet', 'Mepet', mepet.length],
+            ] as const).map(([nilai, label, jml]) => (
+              <button key={nilai}
+                className={`rl-saring-chip ${saring === nilai ? 'aktif' : ''}`}
+                disabled={nilai !== 'semua' && jml === 0}
+                onClick={() => setSaring(nilai)}>
+                {label}{nilai !== 'semua' && ` (${jml})`}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -403,7 +482,9 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
             {loading && <tr><td colSpan={8} className="bk-kosong">Memuat…</td></tr>}
             {!loading && !tampil.length && (
               <tr><td colSpan={8} className="bk-kosong">
-                {cari ? `Tidak ada baris yang cocok dengan "${cari}".` : `Belum ada baris anggaran untuk ${tahun}.`}
+                {cari ? `Tidak ada baris yang cocok dengan "${cari}".`
+                  : saring !== 'semua' ? 'Tidak ada rekening pada saringan ini.'
+                  : `Belum ada baris anggaran untuk ${tahun}.`}
               </td></tr>
             )}
             {!loading && tampil.map((r) => {
@@ -412,7 +493,9 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran }: {
               const c = chip(r.kode_rekening)
               return (
                 <tr key={r.anggaran_key}
-                  className={`${induk ? 'rl-induk' : ''} ${r.sisa < -0.005 || lebihPagu(r) ? 'rl-row-minus' : ''}`}>
+                  className={`${induk ? 'rl-induk' : ''} ${
+                    r.sisa < -EPS_PRATINJAU || lebihPagu(r) ? 'rl-row-minus'
+                    : barisMepet(r) ? 'rl-row-mepet' : ''}`}>
                   <td className="bk-kode" style={{ paddingLeft: 8 + d * 14 }}>
                     {induk && (
                       <button className="rl-toggle" onClick={() => toggle(r.anggaran_key)}

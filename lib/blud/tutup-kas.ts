@@ -152,6 +152,36 @@ async function bulanTertutup(tahun: number, q: Penanya = sql): Promise<number[]>
   return rows.map((r) => Number(r.bulan))
 }
 
+export interface RingkasTutupKas {
+  /** 12 nilai, indeks 0 = Januari. */
+  status: ('BUKA' | 'TUTUP')[]
+  kas: number
+  bank: number
+}
+
+/**
+ * Strip 12 bulan + saldo hari ini, untuk panel Beranda BLUD.
+ * Konsep: docs/CONCEPT-blud-beranda-serapan.md §4, §9.3
+ *
+ * Berangkat dari 12 bulan BUKA lalu ditimpa yang TUTUP — bukan dari daftar baris
+ * `blud_periode` yang ada. Baris itu dibuat `kunciPeriode()` lewat INSERT IGNORE
+ * semata untuk penguncian, jadi ada tidaknya baris bukan penanda apa pun.
+ *
+ * Saldonya `getSaldoAwal(tahun, 13)` — saldo awal tahun plus seluruh arus tahun
+ * itu. Kolom `saldo_awal_*` hanya berarti di baris `bulan = 1`; saldo bulan lain
+ * memang tidak pernah disimpan. Menulis rumus saldo kedua di Beranda adalah cara
+ * tercepat membuatnya berbeda pendapat dengan layar Tutup Kas.
+ */
+export async function ringkasTutupKas(tahun: number): Promise<RingkasTutupKas> {
+  const [tertutup, saldo] = await Promise.all([
+    bulanTertutup(tahun),
+    getSaldoAwal(tahun, 13),
+  ])
+  const status = Array.from({ length: 12 }, () => 'BUKA' as 'BUKA' | 'TUTUP')
+  for (const b of tertutup) if (b >= 1 && b <= 12) status[b - 1] = 'TUTUP'
+  return { status, kas: saldo.kas, bank: saldo.bank }
+}
+
 export async function getNeracaKas(tahun: number, bulan: number): Promise<NeracaKas> {
   const awal = await getSaldoAwal(tahun, bulan)
 

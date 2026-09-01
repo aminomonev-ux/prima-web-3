@@ -19,7 +19,7 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import { InputNominal } from '@/components/ui/input-nominal'
 import { formatTanggalId } from '@/lib/blud/tanggal'
 import {
-  hitungPratinjau, bandingMepet, akanMenembus, daftarPerluGeser,
+  hitungPratinjau, bandingMepet, akanMenembus, mepetSetahun, daftarPerluGeser, AMBANG_MEPET,
   type BarisPratinjau,
 } from '@/lib/blud/pratinjau-serapan'
 
@@ -43,7 +43,7 @@ type Saring = 'semua' | 'jebol' | 'mepet' | 'terisi'
 const SARING_LABEL: Record<Saring, string> = {
   semua:  'Semua rekening',
   jebol:  'Akan menembus',
-  mepet:  'Sisa di bawah 10%',
+  mepet:  `Sisa di bawah ${Math.round(AMBANG_MEPET * 100)}%`,
   terisi: 'Yang saya isi',
 }
 
@@ -74,7 +74,7 @@ export default function PratinjauSerapanModal({ tahun, rows, sumberVersi, onTutu
     let hasil = dihitung.filter((r) => {
       if (q && !r.kode_rekening.toLowerCase().includes(q) && !r.uraian.toLowerCase().includes(q)) return false
       if (saring === 'jebol')  return akanMenembus(r)
-      if (saring === 'mepet')  return !akanMenembus(r) && r.pagu > 0 && r.sisaSetelah / r.pagu < 0.1
+      if (saring === 'mepet')  return mepetSetahun(r.pagu, r.sisaSetelah)
       if (saring === 'terisi') return r.tambah > 0
       return true
     })

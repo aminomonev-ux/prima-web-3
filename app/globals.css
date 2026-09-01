@@ -3122,6 +3122,37 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 .rl-row-minus .rl-sisa { color: #E24B4A; font-weight: 700; }
 .rl-neg { color: #E24B4A; }
 
+/* Sisa tinggal di bawah 10% — strip tepi, BUKAN latar penuh seperti yang merah.
+   "Hampir habis" itu kabar, bukan kesalahan; memberinya latar sekuat merah
+   membuat dua keadaan yang beda tingkat kegawatannya terlihat sederajat.
+   Yang aman sengaja tidak diberi warna sama sekali: dari 391 rekening, kalau
+   yang aman ikut berwarna maka yang genting tenggelam. */
+.rl-row-mepet td:first-child { box-shadow: inset 3px 0 0 #BA7517; }
+/* Stripnya token `action-warning` apa adanya — sebagai elemen grafis 3px ia
+   cukup terbaca. TEKSNYA tidak: #BA7517 di atas kanvas gelap jatuh di bawah
+   ambang keterbacaan, jadi dipakai amber terang yang SUDAH ada di modul ini
+   untuk teks peringatan (`.bk-warn`), bukan hex karangan baru. */
+.rl-row-mepet .rl-sisa { color: #FAC775; font-weight: 700; }
+.rl-row-mepet td:last-child { color: #FAC775; font-weight: 700; }
+
+.rl-saring {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 9px 14px; border-radius: 10px; font-size: 12.5px;
+  background: rgba(186,117,23,.10); border: 1px solid rgba(186,117,23,.30); color: #FAC775;
+}
+.rl-saring-teks b { font-family: 'JetBrains Mono', monospace; }
+.rl-saring-tombol { display: flex; gap: 6px; margin-left: auto; }
+.rl-saring-chip {
+  padding: 4px 11px; border-radius: 6px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  background: transparent; border: 1px solid rgba(255,255,255,.16); color: inherit;
+}
+/* `:not(.aktif)` wajib: aturan hover lebih spesifik daripada `.aktif`, jadi tanpa
+   ini chip yang BARU SAJA diklik berubah jadi teks putih di atas latar nyaris
+   transparan — tak terbaca justru saat kursornya masih di sana. */
+.rl-saring-chip:hover:not(:disabled):not(.aktif) { background: rgba(255,255,255,.07); }
+.rl-saring-chip.aktif { background: #BA7517; border-color: #BA7517; color: #FFFFFF; }
+.rl-saring-chip:disabled { opacity: .38; cursor: not-allowed; }
+
 .rl-toggle {
   display: inline-flex; align-items: center; justify-content: center;
   width: 16px; height: 16px; margin-right: 4px; vertical-align: -3px;
@@ -3168,6 +3199,21 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .rl-cari { color: #5B7392; }
 [data-theme="light"] .rl-induk td { background: #EEF3F9; }
 [data-theme="light"] .rl-row-minus td { background: rgba(226,75,74,.10); }
+
+/* `!important` di sini bukan kemalasan: `blud-shell.tsx` memasang aturan borongan
+   `[data-theme="light"] table tbody td { color: #374151 !important }` untuk SELURUH
+   modul BLUD, dan tanpa tandingannya tiap warna per-sel di tema terang tertelan.
+   Ketahuan saat memasang baris mepet — dan yang MERAH ternyata sudah lama kena:
+   di tema terang, angka sisa pada baris melebihi pagu tampil abu-abu seperti
+   angka biasa, jadi satu-satunya tanda tinggal latar merah mudanya. Mengubah
+   aturan borongannya jangkauannya seluruh modul; yang dilawan cukup selnya. */
+[data-theme="light"] .rl-row-minus .rl-sisa { color: #A32E2D !important; }
+[data-theme="light"] .rl-row-mepet .rl-sisa,
+[data-theme="light"] .rl-row-mepet td:last-child { color: #854F0B !important; }
+[data-theme="light"] .rl-saring { background: rgba(186,117,23,.09); color: #854F0B; }
+[data-theme="light"] .rl-saring-chip { border-color: rgba(0,0,0,.14); }
+[data-theme="light"] .rl-saring-chip:hover:not(:disabled):not(.aktif) { background: rgba(0,0,0,.05); }
+[data-theme="light"] .rl-saring-chip.aktif { background: #BA7517; border-color: #BA7517; color: #FFFFFF; }
 [data-theme="light"] .rl-toggle:hover { color: #10243B; }
 [data-theme="light"] .rl-banner { background: rgba(124,92,252,.09); color: #534AB7; }
 [data-theme="light"] .rl-minus-banner { background: rgba(226,75,74,.08); color: #A32E2D; }

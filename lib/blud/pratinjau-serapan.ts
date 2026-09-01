@@ -14,6 +14,28 @@ import { formatTanggalId } from './tanggal'
 /** Ambang yang sama dengan `lebihPagu` di layar Realisasi — pecahan rupiah pada DECIMAL. */
 export const EPS_PRATINJAU = 0.005
 
+/**
+ * "Mepet" = sisa tinggal di bawah 10% pagunya. Dipakai TIGA layar: penyaring
+ * modal ini, warna baris tabel Realisasi, dan kartu Perlu Perhatian di Beranda.
+ * Kalau angkanya disalin, cepat atau lambat satu layar memakai 20% dan ketiganya
+ * berbantah tentang rekening yang sama.
+ */
+export const AMBANG_MEPET = 0.1
+
+/**
+ * Sisa yang dipakai SELALU setahun (`pagu − terserap`), BUKAN kolom `sisa` di
+ * layar Realisasi yang mengikuti bulan terpilih. Pagar pagu server menjumlah
+ * setahun tanpa saringan bulan, jadi angka per-bulan melaporkan sisa yang lebih
+ * longgar dari kenyataan — rekening yang jebol di Agustus akan tampil aman saat
+ * orang membuka laporan Juni.
+ *
+ * `pagu > 0` wajib: tanpa itu rekening berpagu nol menghitung 0/0 dan seluruhnya
+ * mengaku mepet.
+ */
+export function mepetSetahun(pagu: number, sisa: number): boolean {
+  return sisa >= -EPS_PRATINJAU && pagu > 0 && sisa / pagu < AMBANG_MEPET
+}
+
 export interface BarisPratinjau {
   anggaran_key:  string
   kode_rekening: string

@@ -1,6 +1,11 @@
 // app/(dashboard)/blud/page.tsx — landing dashboard BLUD (KPI + history)
 import { sql, queryOne, queryMany } from '@/lib/data/db'
 import { toDateStr } from '@/lib/blud/data'
+import { muatDataPagu, ringkasSerapan } from '@/lib/blud/serapan-ringkas'
+import { riwayatPergeseran, realisasiTerbaru } from '@/lib/blud/beranda-panel'
+import { ringkasTutupKas } from '@/lib/blud/tutup-kas'
+import { waktuSekarangWIB } from '@/lib/blud/tanggal'
+import { modulSedangMati } from '@/lib/security/guard'
 import DashboardClient from './dashboard-client'
 import { izinLayar } from './_izin'
 
@@ -53,7 +58,7 @@ const toIsoDate = toDateStr
 export default async function BludLandingPage({ searchParams }: { searchParams: Promise<{ tahun?: string }> }) {
   // Beranda tidak pernah bisa ditutup (MENU_SELALU_TERBUKA), jadi ini tidak akan
   // melempar siapa pun — yang dibutuhkan cuma petanya, untuk kartu KPI di bawah.
-  const { peta } = await izinLayar('beranda')
+  const { peta, role } = await izinLayar('beranda')
 
   // Daftar tahun (union) + resolve tahun terpilih (§9 #1: berjalan → LATEST data)
   const tahunRows = await queryMany<{ tahun_anggaran: string | number }>(
@@ -97,36 +102,39 @@ export default async function BludLandingPage({ searchParams }: { searchParams: 
   const dpaLatestTotal = await getDpaTotal(tahun, dpaLatestVersi)
   const pgLatestDelta  = await getPergeseranDelta(tahun, pgLatestVersi)
 
-  // History — 5 versi terbaru tiap modul DALAM TAHUN. 2-step (versi list → totals).
-  const dpaVersis = await queryMany<{ versi_tanggal: unknown; jumlah_baris: string | number }>(
-    sql`SELECT versi_tanggal, COUNT(*) AS jumlah_baris
-        FROM dpa_blud
-        WHERE tahun_anggaran = ${tahun}
-        GROUP BY versi_tanggal
-        ORDER BY versi_tanggal DESC
-        LIMIT 5`
-  )
-  const dpaHistory: Array<{ versi_tanggal: string; jumlah_baris: number; total_jumlah: number }> = []
-  for (const v of dpaVersis) {
-    const versi = toIsoDate(v.versi_tanggal)
-    const total = await getDpaTotal(tahun, versi)
-    dpaHistory.push({ versi_tanggal: versi, jumlah_baris: Number(v.jumlah_baris ?? 0), total_jumlah: total })
-  }
+  // Panel kiri dulu "5 versi DPA + total pagunya", panel kanan "5 versi
+  // Pergeseran + Δ Net". Keduanya diganti isinya: yang satu jadi rekening yang
+  // baru dicatat realisasinya, yang satu jadi rekening yang benar-benar digeser.
+  // Dua perulangan yang masing-masing memanggil database 5 kali ikut hilang.
+  const pgHistory = await riwayatPergeseran(tahun)
 
-  const pgVersis = await queryMany<{ versi_tanggal: unknown; jumlah_baris: string | number }>(
-    sql`SELECT versi_tanggal, COUNT(*) AS jumlah_baris
-        FROM pergeseran_dpa
-        WHERE tahun_anggaran = ${tahun}
-        GROUP BY versi_tanggal
-        ORDER BY versi_tanggal DESC
-        LIMIT 5`
-  )
-  const pgHistory: Array<{ versi_tanggal: string; jumlah_baris: number; total_jumlah: number }> = []
-  for (const v of pgVersis) {
-    const versi = toIsoDate(v.versi_tanggal)
-    const delta = await getPergeseranDelta(tahun, versi)
-    pgHistory.push({ versi_tanggal: versi, jumlah_baris: Number(v.jumlah_baris ?? 0), total_jumlah: delta })
-  }
+  // Sisi realisasi dijaga DUA pagar yang berbeda, dan dua-duanya wajib:
+  //
+  //   izin  — orang yang tidak boleh membuka Realisasi juga tidak boleh membaca
+  //           angkanya di sini. Pagar di API tidak menolong: Beranda memang
+  //           berhak memanggil (L69).
+  //   sakelar — `beranda` sengaja TIDAK ada di MENU_REALISASI (Beranda tak pernah
+  //           bisa ditutup), jadi mematikan sub-modul Realisasi tidak menyentuh
+  //           halaman ini dengan sendirinya. Tanpa pemeriksaan di sini, sakelarnya
+  //           menutup empat layar tapi angkanya tetap terpampang di Beranda — L72:
+  //           sakelar yang cuma mengabukan kartu bukan sakelar.
+  //
+  // Gate CI `check:killswitch` hanya memindai `app/api/*`; halaman ini bertanya ke
+  // database langsung tanpa route file, jadi penjagaannya ada di uji regresi.
+  const realisasiMati = await modulSedangMati(['app_status_blud_realisasi'], { role })
+  const bolehRealisasi = peta['realisasi'] !== 'TIDAK' && !realisasiMati
+  const bolehTutupKas  = peta['tutup-kas'] !== 'TIDAK' && !realisasiMati
+
+  // Kartu serapan dan panel "Realisasi Terbaru" berdiri di atas bahan yang sama
+  // persis (pagu per rekening + SUM alokasi). Dimuat SEKALI: memanggilnya
+  // sendiri-sendiri berarti tiga kueri berat diulang, dan dua jawaban yang bisa
+  // berasal dari keadaan berbeda kalau ada yang menyimpan di sela keduanya.
+  const dataPagu = bolehRealisasi ? await muatDataPagu(tahun) : null
+  const [serapan, panelRealisasi, tutupKas] = await Promise.all([
+    dataPagu ? ringkasSerapan(tahun, dataPagu) : Promise.resolve(null),
+    dataPagu ? realisasiTerbaru(tahun, dataPagu) : Promise.resolve(null),
+    bolehTutupKas ? ringkasTutupKas(tahun) : Promise.resolve(null),
+  ])
 
   return (
     <DashboardClient
@@ -139,10 +147,14 @@ export default async function BludLandingPage({ searchParams }: { searchParams: 
       pgLatestVersi={pgLatestVersi}
       pgLatestRows={pgLatestRows}
       pgLatestDelta={pgLatestDelta}
-      dpaHistory={dpaHistory}
       pgHistory={pgHistory}
+      panelRealisasi={panelRealisasi}
+      dimuatPada={waktuSekarangWIB()}
       bolehDpa={peta.dpa !== 'TIDAK'}
       bolehPergeseran={peta.pergeseran !== 'TIDAK'}
+      serapan={serapan}
+      tutupKas={tutupKas}
+      realisasiMati={realisasiMati}
     />
   )
 }
