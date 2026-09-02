@@ -22,6 +22,7 @@ import { ensureAnggaranKey } from './anggaran-key'
 import { toDateStr, formatTanggalId, labelPeriodeVersi } from './tanggal'
 import { catatRiwayatSimpan } from './riwayat-simpan'
 import { catatTutupPergeseran, hapusTutupTerkaitVersi } from './tutup-data'
+import type { MutasiInput } from './mutasi'
 import type {
   DpaBaris, DpaBarisInput,
   PergeseranBaris, PergeseranBarisInput,
@@ -883,6 +884,12 @@ export async function savePergeseran(
    * terlupa — L69 lahir justru dari perbaikan yang cuma kena sebagian jalur.
    */
   asalTutup: { versi_ditutup: string } | null = null,
+  /**
+   * Catatan perpindahan versi ini — hapus-lalu-tulis-ulang, pola yang sama
+   * dengan barisnya dan di transaksi yang sama. `undefined` berarti pemanggil
+   * tidak mengurusnya (jalur lama), `[]` berarti sengaja dikosongkan.
+   */
+  mutasi: MutasiInput[] | undefined = undefined,
 ): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
@@ -913,6 +920,10 @@ export async function savePergeseran(
         // (`rows` di Zod minimal 1), tapi `savePergeseran` fungsi terekspor dan
         // pagar yang cuma dipasang di jalur utama persis kegagalan L69.
         await hapusTutupTerkaitVersi(tx, tahun, versiTanggal)
+        // Barisnya habis, jadi catatan perpindahannya menunjuk `row_id` yang
+        // tidak ada lagi. Dikosongkan TANPA melihat argumen `mutasi`: apa pun
+        // yang dikirim pemanggil, tidak ada baris untuk ditunjuknya.
+        await tulisMutasi(tx, undefined, tahun, versiTanggal, [])
       })
       return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
     }
@@ -984,8 +995,53 @@ export async function savePergeseran(
         tahun, versiDitutup: asalTutup.versi_ditutup, versiBasis: versiTanggal, userId,
       })
     }
+    await tulisMutasi(tx, conn, tahun, versiTanggal, mutasi)
   })
   return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
+}
+
+// ─── CATATAN PERPINDAHAN ─────────────────────────────────────────────────────
+// Konsep: docs/CONCEPT-blud-catatan-perpindahan.md
+
+const MUTASI_COLUMNS = ['tahun_anggaran', 'versi_tanggal', 'dari_row', 'ke_row', 'nilai', 'keterangan', 'urutan']
+
+/**
+ * Hapus-lalu-tulis-ulang untuk `(tahun, versi_tanggal)` — pola yang sama persis
+ * dengan barisnya, dan WAJIB di transaksi yang sama: baris dan catatannya harus
+ * jatuh bersama atau tidak sama sekali, kalau tidak catatan bisa menunjuk
+ * `row_id` yang tidak pernah tersimpan.
+ *
+ * `undefined` = pemanggil tidak mengurusnya, catatan lama dibiarkan. Itu bukan
+ * kelalaian melainkan jalur peralihan: `savePergeseran` dipanggil beberapa
+ * tempat yang tidak tahu-menahu soal catatan perpindahan, dan menghapus
+ * catatan orang gara-gara pemanggil lama tidak mengirim apa-apa jauh lebih
+ * buruk daripada membiarkannya.
+ */
+async function tulisMutasi(
+  tx: TxSql, conn: Parameters<typeof bulkInsert>[3], tahun: number, versiTanggal: string,
+  mutasi: MutasiInput[] | undefined,
+): Promise<void> {
+  if (mutasi === undefined) return
+  await tx`DELETE FROM pergeseran_mutasi WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
+  if (!mutasi.length) return
+  await bulkInsert('pergeseran_mutasi', MUTASI_COLUMNS, mutasi.map((m, i) => [
+    tahun, versiTanggal, m.dari_row, m.ke_row, m.nilai, m.keterangan?.trim() || null, i,
+  ]), conn)
+}
+
+/** Catatan perpindahan satu versi, urut seperti disimpan. */
+export async function getPergeseranMutasi(tahun: number, versiTanggal: string): Promise<MutasiInput[]> {
+  const rows = await sql`
+    SELECT dari_row, ke_row, nilai, keterangan FROM pergeseran_mutasi
+    WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}
+    ORDER BY urutan ASC, id ASC
+  ` as Record<string, unknown>[]
+  return rows.map(r => ({
+    dari_row: String(r.dari_row),
+    ke_row: String(r.ke_row),
+    nilai: Number(r.nilai ?? 0),
+    keterangan: r.keterangan != null ? String(r.keterangan) : null,
+  }))
 }
 
 /**
@@ -1018,6 +1074,10 @@ export async function deletePergeseranVersi(tahun: number, versiTanggal: string)
     // yang tertinggal membuat tanggal itu lahir kembali dalam keadaan "sudah
     // ditutup", dan tombol Tutup mati tanpa jalan keluar.
     tutupDibuang = await hapusTutupTerkaitVersi(tx, tahun, versiTanggal)
+    // Alasan yang sama: catatan perpindahan menunjuk `row_id` versi ini, jadi
+    // tanpa ini ia menggantung selamanya dan akan menempel pada versi baru yang
+    // kebetulan bertanggal sama.
+    await tulisMutasi(tx, undefined, tahun, versiTanggal, [])
     await dropBludVersion(tx, 'pergeseran_dpa', lockKey)
   })
   return { pergeseran_rows: count, tutup_dibuang: tutupDibuang }

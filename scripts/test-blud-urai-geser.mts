@@ -246,9 +246,10 @@ cek('Dibaca balik dengan null dipertahankan',
 
 const routeSrc = kode(baca('app/api/blud/pergeseran/route.ts'))
 cek('Route menolak uraian yang tidak cocok',
-  /periksaUraian\(recalced\)/.test(routeSrc) && /URAIAN_GESER_TIDAK_COCOK/.test(routeSrc))
+  /periksaUraian\(recalced, mutasi\)/.test(routeSrc) && /URAIAN_GESER_TIDAK_COCOK/.test(routeSrc),
+  'argumen kedua: baris yang dijelaskan catatan perpindahan diperiksa periksaMutasi')
 cek('…diperiksa SESUDAH recalc',
-  routeSrc.indexOf('const recalced') < routeSrc.indexOf('periksaUraian(recalced)'),
+  routeSrc.indexOf('const recalced') < routeSrc.indexOf('periksaUraian(recalced'),
   '`pergeseran` baris agregat baru final sesudah recalc')
 
 const salinSrc = kode(baca('lib/blud/row-map.ts'))
@@ -318,7 +319,7 @@ cek('Cetak memakai uraiGeser atas baris TERSARING',
 
 const clientSrc = kode(baca('app/(dashboard)/blud/pergeseran/pergeseran-client.tsx'))
 cek('Uraian dihitung sekali untuk seluruh pohon',
-  /useMemo\(\(\) => uraiGeser\(rows\), \[rows\]\)/.test(clientSrc),
+  /useMemo\(\(\) => uraiGeser\(rows, mutasi\), \[rows, mutasi\]\)/.test(clientSrc),
   'memanggilnya di dalam map membuat rollup O(n²) pada 558 baris')
 // L81b — prop objek lahir baru tiap render dan `memo` berhenti menggigit.
 cek('Prop baris berupa ANGKA, bukan objek uraian',

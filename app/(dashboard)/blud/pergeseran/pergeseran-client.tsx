@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { Save, Sparkles, RefreshCw, Calendar, X, AlertTriangle, Search, Copy, Lock } from 'lucide-react'
+import { Save, Sparkles, RefreshCw, Calendar, X, AlertTriangle, Search, Copy, Lock, Shuffle } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
@@ -18,6 +18,10 @@ import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/for
 import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
 import { uraiGeser, periksaUraian, totalUraian, tawaranTerapkan } from '@/lib/blud/urai-geser'
+import {
+  ringkasMutasi, barisPerluCatatan, tebakPasangan, buangMutasiYatim, type MutasiInput,
+} from '@/lib/blud/mutasi'
+import CatatanPerpindahanModal from '@/components/blud/CatatanPerpindahanModal'
 import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
@@ -121,6 +125,8 @@ interface AksiBarisPg {
   setUraian:      (rowId: string, field: 'bertambah' | 'berkurang', value: number | null) => void
   terapkanUraian: (rowId: string) => void
   tutupTawaran:   (rowId: string) => void
+  bukaCatatan:    (rowId: string) => void
+  abaikanCatatan: (rowId: string) => void
 }
 
 const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatRupiah(v) : '-'
@@ -136,6 +142,7 @@ const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatR
 const PergeseranRow = memo(function PergeseranRow({
   row, terpilih, disorot, isAgg, bolehUbah, akunOptions, pjOptions, aksi,
   uBertambah, uBerkurang, diurai, salahUrai, tawarHarga, tawarMeleset,
+  perluCatatan, dariCatatan,
 }: {
   row:         PergeseranBarisInput
   terpilih:    boolean
@@ -159,6 +166,11 @@ const PergeseranRow = memo(function PergeseranRow({
    *  berhenti menggigit (L81b). */
   tawarHarga:   number | null
   tawarMeleset: number
+  /** Barisnya bergeser tapi belum dijelaskan catatan perpindahan mana pun. */
+  perluCatatan: boolean
+  /** Angka Bertambah/Berkurang baris ini datang dari catatan perpindahan —
+   *  jadi hanya-baca, dan mengkliknya membuka catatannya. */
+  dariCatatan:  boolean
 }) {
   const editable = bolehUbah && EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
   const isBold   = ['GRANDMASTER','MASTER','LEADER','PLETON-LEADER','KETUA-KELOMPOK-A','KETUA-KELOMPOK-B','L7-HEAD','L8-HEAD'].includes(row.tipe_baris)
@@ -296,7 +308,12 @@ const PergeseranRow = memo(function PergeseranRow({
           tergantikan tidak pernah merender `::after`, jadi di sana ia diam saja. */}
       <td style={{ textAlign: 'right' }}
           data-tooltip={editable ? 'Bagian yang MASUK ke rekening ini. Kosongkan kalau rekening ini cuma bergerak satu arah — angkanya dihitung sendiri.' : undefined}>
-        {editable ? (
+        {editable && dariCatatan ? (
+          <button type="button" className={`pg-dari-catatan${uBertambah ? ' plus' : ''}`}
+                  onClick={() => aksi.bukaCatatan(row.row_id)}>
+            {fmtRp(uBertambah)}
+          </button>
+        ) : editable ? (
           <InputNominal
             nullable
             value={row.bertambah ?? null}
@@ -311,7 +328,12 @@ const PergeseranRow = memo(function PergeseranRow({
       </td>
       <td style={{ textAlign: 'right' }}
           data-tooltip={editable ? 'Bagian yang KELUAR dari rekening ini. Isi kedua kolom hanya kalau rekening ini ditambah DAN dikurangi di dokumen yang sama.' : undefined}>
-        {editable ? (
+        {editable && dariCatatan ? (
+          <button type="button" className={`pg-dari-catatan${uBerkurang ? ' minus' : ''}`}
+                  onClick={() => aksi.bukaCatatan(row.row_id)}>
+            {fmtRp(uBerkurang)}
+          </button>
+        ) : editable ? (
           <InputNominal
             nullable
             value={row.berkurang ?? null}
@@ -421,6 +443,34 @@ const PergeseranRow = memo(function PergeseranRow({
         </td>
       </tr>
     )}
+
+    {/* Pintu 2 — CONCEPT-blud-catatan-perpindahan §4.1. Muncul sejak geseran
+        PERTAMA di baris ini, jadi tidak perlu menggulung balik ke bilah alat.
+        Mengalah pada tawaran Terapkan di atas: dua spanduk bertumpuk di bawah
+        satu baris membuat keduanya berhenti terbaca, dan uraian yang tidak
+        cocok lebih mendesak daripada asal yang belum dicatat. */}
+    {tawarHarga == null && perluCatatan && (
+      <tr className="pg-catat-row">
+        <td colSpan={bolehUbah ? 17 : 16}>
+          <div className="pg-catat">
+            <div>
+              <div className="pg-catat-teks">
+                Pergeseran Rp {formatRupiah(Math.abs((row.pergeseran ?? 0) - (row.jumlah ?? 0)))} di baris ini belum tercatat asalnya.
+              </div>
+              <div className="pg-catat-sub">Boleh dilewati — catatan perpindahan tidak wajib.</div>
+            </div>
+            <div className="pg-catat-aksi">
+              <PrimaButton variant="purple" size="sm" onClick={() => aksi.bukaCatatan(row.row_id)}>
+                Catat perpindahan
+              </PrimaButton>
+              <PrimaButton variant="ghost" size="sm" onClick={() => aksi.abaikanCatatan(row.row_id)}>
+                Nanti saja
+              </PrimaButton>
+            </div>
+          </div>
+        </td>
+      </tr>
+    )}
     </>
   )
 })
@@ -433,6 +483,10 @@ function PergeseranTable({
   hiddenLevels,
   highlightId,
   bolehUbah,
+  mutasi,
+  lewatiCatatan,
+  onBukaCatatan,
+  onLewatiCatatan,
 }: {
   rows: PergeseranBarisInput[]
   onChange: (rows: PergeseranBarisInput[]) => void
@@ -443,9 +497,21 @@ function PergeseranTable({
   highlightId:  string | null
   /** LIHAT: seluruh isian jadi teks, kolom aksi & checkbox tidak dirender. */
   bolehUbah:    boolean
+  /** Catatan perpindahan versi ini — sumber angka Bertambah/Berkurang kalau ada. */
+  mutasi:        MutasiInput[]
+  lewatiCatatan: boolean
+  /** `null` = dibuka dari bilah alat (pintu 1) atau spanduk atas (pintu 0). */
+  onBukaCatatan:   (rowId: string | null) => void
+  onLewatiCatatan: () => void
 }) {
   const [addParent, setAddParent] = useState<PergeseranBarisInput | null>(null)
   const [delGuard,  setDelGuard]  = useState<{ uraian: string; childCount: number } | null>(null)
+  /** Baris yang digeser SEJAK HALAMAN DIMUAT. Patokan spanduk pintu 2 — bukan
+   *  "dokumen sudah punya catatan", yang membuat spanduknya tidak pernah muncul
+   *  di dokumen baru (konsep §4.1b). */
+  const [digeserSesiIni, setDigeserSesiIni] = useState<Set<string>>(new Set())
+  /** "Nanti saja" per baris. */
+  const [abaikanCatat, setAbaikanCatat] = useState<Set<string>>(new Set())
   /** Baris yang tawaran Terapkan-nya ditutup pemakai. Set, bukan satu id: dua
    *  baris bisa sama-sama belum cocok, dan menutup yang satu tidak boleh
    *  memunculkan ulang yang lain. */
@@ -468,6 +534,10 @@ function PergeseranTable({
 
   // Edit vol_p / harga_p (baris editable) — auto recalc parent chain
   const updateVolHarga = useCallback((rowId: string, field: 'vol_p' | 'harga_p', value: number | null) => {
+    // Menandai baris ini "digeser di sesi ini" — itu yang menyalakan spanduk
+    // pintu 2. `prev.has` dulu supaya ketikan kedua pada sel yang sama tidak
+    // melahirkan Set baru dan me-render ulang seluruh tabel (L81).
+    setDigeserSesiIni(prev => (prev.has(rowId) ? prev : new Set(prev).add(rowId)))
     const updated = rowsRef.current.map(r => {
       if (r.row_id !== rowId) return r
       const next = { ...r, [field]: value }
@@ -524,6 +594,10 @@ function PergeseranTable({
 
   const tutupTawaran = useCallback((rowId: string) => {
     setTawarTutup(prev => new Set(prev).add(rowId))
+  }, [])
+
+  const abaikanCatatan = useCallback((rowId: string) => {
+    setAbaikanCatat(prev => new Set(prev).add(rowId))
   }, [])
 
   // Edit kolom teks. kode_rekening/uraian/keterangan hanya untuk baris baru hasil
@@ -688,18 +762,69 @@ function PergeseranTable({
   const aksi = useMemo(() => ({
     updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
     bukaTambahAnak: setAddParent, setUraian, terapkanUraian, tutupTawaran,
+    bukaCatatan: onBukaCatatan, abaikanCatatan,
   }), [updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
-       setUraian, terapkanUraian, tutupTawaran])
+       setUraian, terapkanUraian, tutupTawaran, onBukaCatatan, abaikanCatatan])
 
   // Uraian efektif seluruh pohon — dihitung SEKALI, bukan per baris: memanggil
   // `uraiGeser` di dalam map membuat rollup-nya O(n²) pada 558 baris.
-  const petaUrai  = useMemo(() => uraiGeser(rows), [rows])
-  const salahUrai = useMemo(() => new Set(periksaUraian(rows).map(u => u.row_id)), [rows])
-  const totalUrai = useMemo(() => totalUraian(rows), [rows])
+  const petaUrai  = useMemo(() => uraiGeser(rows, mutasi), [rows, mutasi])
+  const salahUrai = useMemo(() => new Set(periksaUraian(rows, mutasi).map(u => u.row_id)), [rows, mutasi])
+  const totalUrai = useMemo(() => totalUraian(rows, mutasi), [rows, mutasi])
   const tawaran   = useMemo(() => tawaranTerapkan(rows), [rows])
+
+  /** Baris yang angkanya datang dari catatan — kolomnya jadi hanya-baca. */
+  const dariCatatan = useMemo(() => new Set(ringkasMutasi(mutasi).keys()), [mutasi])
+  const perluCatatan = useMemo(
+    () => barisPerluCatatan(rows, mutasi, digeserSesiIni),
+    [rows, mutasi, digeserSesiIni],
+  )
+  /** Pintu 0 — satu spanduk untuk seluruh dokumen, bukan satu per baris.
+   *  Tebakan pasangannya dihitung saat modal dibuka, bukan di sini: ia cuma
+   *  dipakai sekali dan menghitungnya tiap render membuang kerja di 558 baris. */
+  const tampilkanSpandukAtas = !lewatiCatatan && mutasi.length === 0 && perluCatatan.size > 0
+  const totalBelumTercatat = useMemo(() => {
+    // Sisi yang lebih besar, BUKAN jumlah kedua sisi dibagi dua. Tiap perpindahan
+    // menyentuh dua baris, jadi menjumlah semuanya menghitung uang yang sama dua
+    // kali — tapi membaginya dua salah begitu dokumennya belum berimbang:
+    // sesudah geseran PERTAMA (satu baris turun 5 juta, belum ada pasangannya)
+    // ia berbunyi "Rp 2.500.000". Ketahuan saat dijalankan.
+    let masuk = 0
+    let keluar = 0
+    for (const r of rows) {
+      if (!perluCatatan.has(r.row_id)) continue
+      const d = (r.pergeseran ?? 0) - (r.jumlah ?? 0)
+      if (d > 0) masuk += d
+      else keluar += -d
+    }
+    return Math.max(masuk, keluar)
+  }, [rows, perluCatatan])
 
   return (
     <>
+      {/* Pintu 0 — supaya fiturnya ditemukan. Tanpa ini pemakai harus sudah tahu
+          tombolnya ada sebelum bisa memakainya (konsep §4.1). */}
+      {bolehUbah && tampilkanSpandukAtas && (
+        <div className="pg-catat-atas">
+          <div>
+            <div style={{ fontWeight: 700 }}>
+              {perluCatatan.size} rekening bergeser Rp {formatRupiah(totalBelumTercatat)}, belum ada catatan perpindahannya.
+            </div>
+            <div style={{ fontSize: 11.5, opacity: .85 }}>
+              Catatan perpindahan tidak wajib — boleh dilewati.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <PrimaButton variant="purple" size="sm" onClick={() => onBukaCatatan(null)}>
+              Catat sekarang
+            </PrimaButton>
+            <PrimaButton variant="ghost" size="sm" onClick={onLewatiCatatan}>
+              Lewati dokumen ini
+            </PrimaButton>
+          </div>
+        </div>
+      )}
+
       {salahUrai.size > 0 && (
         <div className="pg-urai-galat">
           <AlertTriangle size={14} style={{ flexShrink: 0 }} />
@@ -778,6 +903,8 @@ function PergeseranTable({
                   salahUrai={salahUrai.has(row.row_id)}
                   tawarHarga={tawarTutup.has(row.row_id) ? null : (tawaran.get(row.row_id)?.hargaBaru ?? null)}
                   tawarMeleset={tawaran.get(row.row_id)?.meleset ?? 0}
+                  perluCatatan={!lewatiCatatan && !abaikanCatat.has(row.row_id) && perluCatatan.has(row.row_id)}
+                  dariCatatan={dariCatatan.has(row.row_id)}
                 />
               )
             })}
@@ -912,6 +1039,23 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // Sepadan, untuk baris yang datang dari versi lain tahun yang sama.
   const asalSalinRef = useRef<AsalSalin | null>(null)
   const [salinVersiBuka, setSalinVersiBuka] = useState(false)
+  // ── Catatan Perpindahan ────────────────────────────────────────────────────
+  // Konsep: docs/CONCEPT-blud-catatan-perpindahan.md. State layar, bukan ref:
+  // angkanya ikut menentukan kolom Bertambah/Berkurang, jadi tabelnya harus
+  // dirender ulang saat berubah.
+  const [mutasi, setMutasi] = useState<MutasiInput[]>([])
+  const [lewatiCatatan, setLewatiCatatan] = useState(false)
+  const [catatanBuka, setCatatanBuka] = useState<{ fokus: string | null } | null>(null)
+
+  /** Tiga pintu, satu ruang — kalau dibuat dua tempat, keduanya akan berbeda
+   *  pendapat cepat atau lambat (L78). */
+  const bukaCatatan = useCallback((rowId: string | null) => setCatatanBuka({ fokus: rowId }), [])
+  const lewatiSekarang = useCallback(() => setLewatiCatatan(true), [])
+  const terapkanCatatan = useCallback((baru: MutasiInput[]) => {
+    setMutasi(baru)
+    setCatatanBuka(null)
+    setBelumTersimpan(true)
+  }, [])
   // ── Tutup Pergeseran ───────────────────────────────────────────────────────
   // Daftar penutupan setahun. Dipakai tiga tempat: lencana di daftar versi,
   // penolakan "sudah ditutup", dan peringatan Sinkron DPA pada versi basis.
@@ -1037,6 +1181,19 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   const ubahRows = useCallback((next: PergeseranBarisInput[]) => {
     setBelumTersimpan(true)
     setRows(next)
+    // Baris yang dihapus menyeret catatan yang menunjuknya. Satu tempat untuk
+    // seluruh jalur hapus (satu baris, hapus terpilih, hapus beranak) karena
+    // semuanya lewat sini. Tanpa ini, Simpan ditolak MUTASI_SASARAN_SALAH untuk
+    // baris yang sudah tidak ada di layar mana pun.
+    //
+    // `prev` dipulangkan apa adanya kalau tidak ada yang terbuang — larik baru
+    // tiap ketikan membuat `mutasi` berganti identitas dan seluruh memo tabel
+    // dihitung ulang (L81).
+    setMutasi(prev => {
+      if (!prev.length) return prev
+      const sisa = buangMutasiYatim(next, prev)
+      return sisa.length === prev.length ? prev : sisa
+    })
   }, [])
 
   const loadHistory = useCallback(async () => {
@@ -1115,6 +1272,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         asalBerkasRef.current   = null
         asalSalinRef.current    = null
         asalTutupRef.current    = null
+        // Catatan perpindahan MILIK versi yang dimuat — bukan dikosongkan, tapi
+        // diganti punya versi itu. Mengosongkannya di sini akan menghapus catatan
+        // orang begitu halaman dimuat ulang.
+        setMutasi(Array.isArray(json.mutasi) ? (json.mutasi as MutasiInput[]) : [])
+        setLewatiCatatan(false)
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -1159,6 +1321,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       // juga. Memuat apa adanya membuat tabel memperlihatkan angka yang tidak
       // dipakai satu pun keputusan.
       setRows(recalcPergeseranJumlah(json.data.isi as PergeseranBarisInput[]))
+      // Snapshot riwayat dibuat sebelum catatan perpindahan ada, dan isinya
+      // memang cuma barisnya — dikosongkan, bukan dipertahankan dari versi yang
+      // kebetulan sedang terbuka.
+      setMutasi([])
+      setLewatiCatatan(false)
       setVersi(s.versi_tanggal)
       setVersion(vJson.version)
       // Periode ikut pindah ke tanggal snapshot — cermin layar DPA. Tanpa ini
@@ -1210,6 +1377,9 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     // sebelum menilai. Memuat apa adanya membuat tabel memperlihatkan angka yang
     // tidak dipakai satu pun keputusan.
     setRows(recalcPergeseranJumlah(data.rows as unknown as PergeseranBarisInput[]))
+    // Berkas cadangan hanya memuat barisnya — alasan yang sama dengan Pulihkan.
+    setMutasi([])
+    setLewatiCatatan(false)
     setBelumTersimpan(true)
     asalBerkasRef.current   = {
       nama, versi_tanggal: data.versi_tanggal, versi_ke: data.versi_ke, disimpan_pada: data.disimpan_pada,
@@ -1276,6 +1446,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       const generated: PergeseranBarisInput[] = (json.data as DpaBaris[]).map(dpaKePergeseranInput)
 
       setRows(generated)
+      setMutasi([])
+      setLewatiCatatan(false)
       setDpaVersi(json.versi_tanggal || '')
       setVersi('')
       setBelumTersimpan(true)
@@ -1329,6 +1501,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     asalTutupRef.current = null
     if (tanggal) {
       setRows([])
+      setMutasi([])
+      setLewatiCatatan(false)
       setVersi('')
       setVersion(0)
       setBelumTersimpan(false)
@@ -1354,6 +1528,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     setTahun(t)
     setVersi('')
     setRows([])
+    setMutasi([])
+    setLewatiCatatan(false)
     setPeriodeTulis('')
     setBelumTersimpan(false)
   }
@@ -1395,6 +1571,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     baris: PergeseranBarisInput[], asal: AsalSalin, dpaVersiSumber: string | null,
   ) {
     setRows(recalcPergeseranJumlah(baris))
+    // Catatan perpindahan versi sumber TIDAK ikut. Barisnya memang membawa
+    // `row_id` yang sama, jadi secara teknis catatannya masih menunjuk baris
+    // yang benar — tapi `SalinVersiModal` dipakai bersama layar DPA yang tidak
+    // punya catatan sama sekali, dan menambahkan jalur khusus di sana berarti
+    // satu modal dengan dua perilaku. Akibatnya cuma satu langkah tambahan:
+    // spanduk pintu 0 langsung menawarkan mencatatnya.
+    setMutasi([])
+    setLewatiCatatan(false)
     if (dpaVersiSumber) setDpaVersi(dpaVersiSumber)
     setBelumTersimpan(true)
     asalSalinRef.current    = asal
@@ -1412,6 +1596,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     low: { kode_rekening: string; uraian: string }[],
   ) => {
     setRows(baris)
+    // Sinkron menimpa vol/harga dari DPA, jadi selisih tiap baris berubah dan
+    // catatan lama berdiri di atas angka yang sudah bukan miliknya.
+    setMutasi([])
+    setLewatiCatatan(false)
     setBelumTersimpan(true)
     if (versiDpa) setDpaVersi(versiDpa)
     // B5: match tier heuristik longgar bisa salah tempel vol_p/harga_p — minta user periksa
@@ -1496,6 +1684,11 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   function terapkanTutup() {
     if (!konfirmTutup || konfirmTutup.halangan) return
     setRows(tutupPergeseranRows(rows))
+    // Sesudah tutup, selisih seluruh baris nol — catatan yang tertinggal akan
+    // berdiri di atas nol dan langsung ditolak `periksaMutasi`. Putaran
+    // berikutnya memang mulai dari catatan kosong.
+    setMutasi([])
+    setLewatiCatatan(false)
     // SATU-SATUNYA aksi di layar ini yang memindahkan sasaran Simpan, dan
     // pengecualiannya disengaja (CONCEPT §5): L80 melarangnya untuk Salin Versi
     // karena di sana perpindahan sasaran adalah efek samping; di sini periode
@@ -1578,6 +1771,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           turunkan_paksa: !!paksaTurunRef.current,
           alasan_turun: paksaTurunRef.current ?? undefined,
           sentinel_ack: sentinelAckRef.current ?? undefined,
+          // Selalu dikirim, termasuk saat kosong: `undefined` berarti "jangan
+          // sentuh catatannya", dan itu membuat penghapusan catatan terakhir
+          // tidak pernah sampai ke server.
+          mutasi,
           asal_salin: asalSalinRef.current ?? undefined,
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
           asal_berkas: asalBerkasRef.current ?? undefined,
@@ -1923,6 +2120,16 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
               onClick={() => setSalinVersiBuka(true)} data-rima="pergeseran.salin-versi">
               Salin Versi Lain
             </PrimaButton>
+
+            {/* Pintu 1 — jalan masuknya. SENGAJA di luar `alasanKunciBorongan`:
+                tombol-tombol itu dikunci karena membawa baris dari LUAR; yang ini
+                tidak menyentuh satu baris pun, cuma menjelaskan yang sudah ada. */}
+            <PrimaButton variant="ghost" iconLeft={<Shuffle className="w-3.5 h-3.5" />}
+              disabled={loading || rows.length === 0}
+              data-tooltip="Catat uang berpindah dari rekening mana ke rekening mana — kolom Bertambah/Berkurang dihitung dari sini"
+              onClick={() => bukaCatatan(null)} data-rima="pergeseran.catatan-perpindahan">
+              Catatan Perpindahan{mutasi.length > 0 ? ` · ${mutasi.length}` : ''}
+            </PrimaButton>
           </>
         )}
 
@@ -2063,7 +2270,21 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           <p style={{ fontSize:11, marginTop:4 }}>Tekan &quot;Buat Pergeseran&quot; untuk menyalin isi DPA terbaru ke sini.</p>
         </div>
       ) : (
-        <PergeseranTable rows={rows} onChange={ubahRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
+        <PergeseranTable rows={rows} onChange={ubahRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah}
+          mutasi={mutasi} lewatiCatatan={lewatiCatatan}
+          onBukaCatatan={bukaCatatan} onLewatiCatatan={lewatiSekarang} />
+      )}
+
+      {catatanBuka && (
+        <CatatanPerpindahanModal
+          versi={sasaranSimpan(periodeTulis)}
+          rows={rows}
+          awal={mutasi}
+          fokusRow={catatanBuka.fokus}
+          tebakan={mutasi.length === 0 ? tebakPasangan(rows) : null}
+          onTutup={() => setCatatanBuka(null)}
+          onTerapkan={terapkanCatatan}
+        />
       )}
 
       {salinVersiBuka && (

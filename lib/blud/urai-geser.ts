@@ -13,6 +13,7 @@
 // SATU tempat, dipakai layar, Excel, Cetak, dan panel Beranda. Empat salinan
 // rumus yang sama adalah cara L78 lahir.
 import { hitungJumlah } from '@/lib/blud/format'
+import { adaMutasi, ringkasMutasi, type MutasiInput } from './mutasi'
 import type { PergeseranBarisInput } from '@/types'
 
 /** Toleransi banding DECIMAL(18,2) — sepadan EPS_PRATINJAU di pratinjau-serapan. */
@@ -66,7 +67,18 @@ export function uraianTurunan(selisih: number): UraianGeser {
  * Dihitung sekali untuk seluruh pohon, bukan per baris: memanggilnya per baris
  * membuat rollup-nya O(n²) pada 558 baris.
  */
-export function uraiGeser(rows: readonly BarisUrai[]): Map<string, UraianGeser> {
+export function uraiGeser(
+  rows: readonly BarisUrai[],
+  /**
+   * Catatan perpindahan versi ini, kalau ada. Baris DAUN yang disebut di dalamnya
+   * mengambil angkanya dari situ — bukan dari kolom yang diketik tangan, dan bukan
+   * dari selisihnya. Urutan kuasanya: catatan perpindahan > uraian tangan >
+   * turunan selisih. Baris yang belum disebut tetap memakai dua yang belakangan,
+   * supaya dokumen yang baru sebagian dicatat tetap memulangkan angka yang benar.
+   */
+  mutasi?: readonly MutasiInput[] | null,
+): Map<string, UraianGeser> {
+  const dariMutasi = adaMutasi(mutasi) ? ringkasMutasi(mutasi!) : null
   const anak = new Map<string, BarisUrai[]>()
   for (const r of rows) {
     if (!r.parent_id) continue
@@ -95,6 +107,8 @@ export function uraiGeser(rows: readonly BarisUrai[]): Map<string, UraianGeser> 
         berkurang += uk.berkurang
       }
       u = { bertambah, berkurang }
+    } else if (dariMutasi?.has(r.row_id)) {
+      u = dariMutasi.get(r.row_id)!
     } else if (sudahDiurai(r)) {
       u = { bertambah: n(r.bertambah), berkurang: n(r.berkurang) }
     } else {
@@ -110,8 +124,11 @@ export function uraiGeser(rows: readonly BarisUrai[]): Map<string, UraianGeser> 
 }
 
 /** Total dokumen — baris AKAR saja, sepadan `hitungDeltaPergeseranRoot`. */
-export function totalUraian(rows: readonly BarisUrai[]): UraianGeser {
-  const peta = uraiGeser(rows)
+export function totalUraian(
+  rows: readonly BarisUrai[],
+  mutasi?: readonly MutasiInput[] | null,
+): UraianGeser {
+  const peta = uraiGeser(rows, mutasi)
   const ids = new Set(rows.map(r => r.row_id))
   let bertambah = 0
   let berkurang = 0
@@ -145,13 +162,19 @@ export interface UraianTidakCocok {
  */
 export function periksaUraian(
   rows: readonly (BarisUrai & { kode_rekening?: string; uraian?: string })[],
+  /** Baris yang sudah dijelaskan catatan perpindahan diperiksa `periksaMutasi`,
+   *  bukan di sini — kolom tangannya sudah tidak bisa disunting, jadi nilai lama
+   *  yang tertinggal di situ tidak boleh menahan Simpan. */
+  mutasi?: readonly MutasiInput[] | null,
 ): UraianTidakCocok[] {
   const punyaAnak = new Set<string>()
   for (const r of rows) if (r.parent_id) punyaAnak.add(r.parent_id)
+  const dariMutasi = adaMutasi(mutasi) ? ringkasMutasi(mutasi!) : null
 
   const salah: UraianTidakCocok[] = []
   for (const r of rows) {
     if (punyaAnak.has(r.row_id) || !sudahDiurai(r)) continue
+    if (dariMutasi?.has(r.row_id)) continue
     const bertambah = n(r.bertambah)
     const berkurang = n(r.berkurang)
     const selisih = n(r.pergeseran) - n(r.jumlah)

@@ -1,6 +1,20 @@
 # CONCEPT — Catatan Perpindahan pada Pergeseran BLUD
 
-> Status: **konsep** (2026-09-02), belum dikerjakan.
+> Status: **selesai** (2026-09-02). Regresi `npx tsx scripts/test-blud-catatan-perpindahan.mts`.
+>
+> **Dua hal berubah saat dikerjakan, keduanya karena membaca kodenya:**
+>
+> 1. Kuncinya `row_id`, **bukan `anggaran_key`** seperti tertulis di §5.
+>    `ensureAnggaranKey` mencetak jangkar di SERVER saat Simpan, jadi baris yang
+>    baru ditambahkan di layar belum punya jangkar untuk ditunjuk — catatannya
+>    tidak akan bisa dibuat sampai dokumennya disimpan lebih dulu. `row_id`
+>    adalah identitas baris di dalam versi, sama dengan yang sudah dipakai
+>    `parent_id`, dan catatan ini memang foto per-versi.
+> 2. **Salin dari Versi Lain melepas catatannya**, bukan membawanya (§6).
+>    `SalinVersiModal` dipakai bersama layar DPA yang tidak punya catatan sama
+>    sekali; menambahkan jalur khusus di sana berarti satu modal dengan dua
+>    perilaku. Akibatnya cuma satu langkah tambahan — spanduk pintu 0 langsung
+>    menawarkan mencatatnya.
 > Lanjutan dari [CONCEPT-blud-uraian-geser.md](CONCEPT-blud-uraian-geser.md) dan
 > [CONCEPT-blud-terapkan-uraian.md](CONCEPT-blud-terapkan-uraian.md).
 > Mockup: artifact "Catatan Perpindahan" (tautannya di catatan sesi).

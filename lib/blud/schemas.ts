@@ -397,6 +397,27 @@ const DpaBodyObject = z.object({
  */
 export const DpaBodySchema = DpaBodyObject.superRefine(pagarVersiTanggal);
 
+/**
+ * Satu perpindahan: dari baris mana ke baris mana, berapa.
+ *
+ * `row_id`, bukan `anggaran_key` — catatan ini foto per-versi persis seperti
+ * barisnya, dan jangkar baru dicetak server saat Simpan (`ensureAnggaranKey`),
+ * jadi baris yang baru ditambahkan di layar belum punya jangkar untuk ditunjuk.
+ *
+ * Bentuknya saja yang dijaga di sini. Bahwa barisnya ADA, bukan induk, dan
+ * angkanya cocok dengan pagunya diperiksa di route (`periksaSasaranMutasi` lalu
+ * `periksaMutasi`) — Zod tidak melihat daftar barisnya.
+ */
+export const MutasiSchema = z.object({
+  dari_row:   z.string().trim().min(1).max(64),
+  ke_row:     z.string().trim().min(1).max(64),
+  nilai:      z.number().positive('Nilai perpindahan harus lebih dari nol').max(1e15),
+  keterangan: z.string().trim().max(255).nullable().optional(),
+});
+
+/** Selaras `MAKS_BARIS_SIMPAN`: dokumen 558 baris tidak mungkin butuh lebih. */
+export const MAKS_MUTASI = 2000;
+
 /** POST /api/blud/pergeseran */
 export const PergeseranBodySchema = z.object({
   tahun_anggaran:    TahunSchema,
@@ -422,6 +443,10 @@ export const PergeseranBodySchema = z.object({
   asal_pulihkan:     AsalPulihkanSchema.optional(),
   asal_berkas:       AsalBerkasSchema.optional(),
   asal_tutup:        AsalTutupSchema.optional(),
+  // Catatan perpindahan versi ini. Optional + default: seluruh riwayat simpan
+  // dan cadangan Drive dibuat sebelum tabel ini ada, dan mewajibkannya membuat
+  // Pulihkan → Simpan ditolak 400 (pelajaran yang sama dengan §2.2 uraian).
+  mutasi:            z.array(MutasiSchema).max(MAKS_MUTASI, `Maksimal ${MAKS_MUTASI} perpindahan`).optional(),
   entri_historis:    z.boolean().optional().default(false),
 }).superRefine((d, ctx) => {
   pagarVersiTanggal(d, ctx);

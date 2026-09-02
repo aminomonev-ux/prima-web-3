@@ -7,6 +7,7 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import {
   getPergeseranHistory, getPergeseranByDate, getDpaByDate, getDpaLatestDate,
   getPergeseranLatestDate, getPergeseranVersion, getTahunList, savePergeseran, deletePergeseranVersi,
+  getPergeseranMutasi,
   BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludHistorisJadiPaguError,
   BludPaguDibawahRealisasiError, BludSasaranTutupTerpakaiError,
 } from '@/lib/blud/data'
@@ -17,6 +18,7 @@ import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { periksaUraian, pesanUraianTidakCocok } from '@/lib/blud/urai-geser'
+import { periksaMutasi, periksaSasaranMutasi, pesanMutasiTidakCocok } from '@/lib/blud/mutasi'
 import { canHapusVersi, PergeseranBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
 import { bolehBukaMenu, bolehEditMenu, bolehLihatSalahSatu, bolehModulBlud, forbidden, tolakEdit, unauthorized, bludMati } from '../_guard'
 
@@ -85,7 +87,11 @@ export async function GET(req: NextRequest) {
     const versi = tanggal ?? await getPergeseranLatestDate(tahun)
     if (!versi) return NextResponse.json({ ok: true, data: [], versi_tanggal: null, tahun })
 
-    const [data, version] = await Promise.all([getPergeseranByDate(tahun, versi), getPergeseranVersion(tahun, versi)])
+    const [data, version, mutasi] = await Promise.all([
+      getPergeseranByDate(tahun, versi),
+      getPergeseranVersion(tahun, versi),
+      getPergeseranMutasi(tahun, versi),
+    ])
     // R4 — sekali per menit per user per versi (lihat `bolehCatatView`).
     if (await bolehCatatView(session.userId, `pergeseran:${tahun}:${versi}`)) {
       await writeAuditLog({
@@ -96,7 +102,7 @@ export async function GET(req: NextRequest) {
         detail:    `View Pergeseran ${tahun}/${versi}: ${data.length} baris`,
       })
     }
-    return NextResponse.json({ ok: true, data, versi_tanggal: versi, tahun, version })
+    return NextResponse.json({ ok: true, data, versi_tanggal: versi, tahun, version, mutasi })
   } catch (err) {
     console.error('[API /blud/pergeseran GET]', err)
     return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
@@ -125,7 +131,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_salin, asal_pulihkan, asal_berkas, asal_tutup, entri_historis } = parsed.data
+  const { tahun_anggaran, versi_tanggal, dpa_versi_tanggal, rows, force, draft, turunkan_paksa, alasan_turun, expected_version, sentinel_ack, asal_salin, asal_pulihkan, asal_berkas, asal_tutup, mutasi, entri_historis } = parsed.data
 
   // §4.3 pagar 2: menembus penolakan tanpa alasan = jejak audit kosong.
   if (turunkan_paksa && !alasan_turun) {
@@ -190,7 +196,7 @@ export async function POST(req: NextRequest) {
     // dijumlah dari anak (`uraiGeser`), jadi tidak pernah punya uraian sendiri.
     // Sifat "total Bertambah = total Berkurang" tidak diperiksa terpisah — ia
     // mengikuti dari invarian per-baris ini + pagar berimbang di atas.
-    const uraianSalah = periksaUraian(recalced)
+    const uraianSalah = periksaUraian(recalced, mutasi)
     if (uraianSalah.length > 0) {
       return NextResponse.json(
         {
@@ -201,6 +207,31 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 },
       )
+    }
+
+    // Catatan perpindahan. Dua pemeriksaan, dan URUTANNYA menentukan: mencocokkan
+    // angka pada baris yang tidak ada di dokumen tidak berarti apa-apa, jadi
+    // bentuknya dijaga dulu (`periksaSasaranMutasi`) baru angkanya.
+    if (mutasi?.length) {
+      const sasaranSalah = periksaSasaranMutasi(recalced, mutasi)
+      if (sasaranSalah.length > 0) {
+        return NextResponse.json(
+          { ok: false, code: 'MUTASI_SASARAN_SALAH', error: sasaranSalah[0].pesan },
+          { status: 400 },
+        )
+      }
+      const mutasiSalah = periksaMutasi(recalced, mutasi)
+      if (mutasiSalah.length > 0) {
+        return NextResponse.json(
+          {
+            ok:    false,
+            code:  'MUTASI_TIDAK_COCOK',
+            error: pesanMutasiTidakCocok(mutasiSalah),
+            baris: mutasiSalah.map(m => m.row_id),
+          },
+          { status: 400 },
+        )
+      }
     }
 
     // §4.3: pagu tidak boleh turun di bawah realisasi yang SUDAH terjadi, dan baris
@@ -215,7 +246,7 @@ export async function POST(req: NextRequest) {
     const result = await savePergeseran(
       tahun_anggaran, versi_tanggal, dpaVersi, recalced,
       session.userId, expected_version, force, turunkan_paksa, entri_historis,
-      asal_tutup ?? null,
+      asal_tutup ?? null, mutasi,
     )
     const bentrok = result.bentrokPagu
 

@@ -230,14 +230,18 @@ bab('C. belumTersimpan — bendera "layar ≠ yang tersimpan"')
     /function terapkanSalinTahun[\s\S]{0,200}setBelumTersimpan\(true\)/.test(dpa))
 
   const pgs = kode(baca(KLIEN_PGS))
+  // Jendelanya dilebarkan 2026-09-02: jalur ini sekarang juga melepas catatan
+  // perpindahan dan menyetel ulang dpaVersi/versi di antaranya. Yang dijaga
+  // tidak berubah — barisnya berganti, jadi layar WAJIB menandai belum
+  // tersimpan (L82c: jendela sempit menyalak pada kode yang benar).
   cek('Pergeseran: Buat Pergeseran menandai belum tersimpan',
-    /setRows\(generated\)[\s\S]{0,120}setBelumTersimpan\(true\)/.test(pgs))
+    /setRows\(generated\)[\s\S]{0,240}setBelumTersimpan\(true\)/.test(pgs))
   // Pemasangan baris hasil sinkron pindah ke `pasangHasilSinkron` (2026-08-29):
   // hasilnya kini dibandingkan dulu, dan dua jalur — "tidak ada yang berubah"
   // dan tombol Terapkan — memanggil pemasang yang sama. Yang dijaga tetap sama:
   // barisnya berganti, jadi layar WAJIB menandai belum tersimpan.
   cek('Pergeseran: Sinkronkan DPA menandai belum tersimpan',
-    /pasangHasilSinkron = useCallback\([\s\S]{0,200}setRows\(baris\)\s*\n\s*setBelumTersimpan\(true\)/.test(pgs))
+    /pasangHasilSinkron = useCallback\([\s\S]{0,200}setRows\(baris\)[\s\S]{0,120}setBelumTersimpan\(true\)/.test(pgs))
 }
 
 bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')

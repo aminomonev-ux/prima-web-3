@@ -3477,6 +3477,75 @@ table tbody td .pg-tawar-sub  { font-size: 11.5px; line-height: 1.5; color: #85B
 [data-theme="light"] table tbody td .pg-tawar-teks { color: #A32E2D !important; }
 [data-theme="light"] table tbody td .pg-tawar-sub  { color: #6B7280 !important; }
 
+/* ── Catatan Perpindahan (modal + spanduk) ──────────────────────────────────
+   Warna dipakai ulang dari yang sudah ada; nol token baru. */
+.cp-strip {
+  padding: 10px 13px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 600; line-height: 1.5;
+}
+.cp-strip.ok  { background: rgba(29,158,117,.14);  color: #6EE7B7; }
+.cp-strip.bad { background: rgba(226,75,74,.14);   color: #F0B3B2; }
+[data-theme="light"] .cp-strip.ok  { background: rgba(29,158,117,.10); color: #0F5C44; }
+[data-theme="light"] .cp-strip.bad { background: rgba(226,75,74,.08);  color: #A32E2D; }
+
+.cp-tabel { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 640px; }
+.cp-tabel th {
+  text-align: left; padding: 0 6px 7px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .7px; text-transform: uppercase; opacity: .7;
+}
+.cp-tabel td { padding: 4px 6px; vertical-align: middle; }
+.cp-tabel select, .cp-tabel input { width: 100%; }
+
+.cp-recon {
+  border: 1px solid #E24B4A; border-radius: 9px;
+  background: rgba(226,75,74,.10); color: #F0B3B2;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+[data-theme="light"] .cp-recon { background: rgba(226,75,74,.07); color: #A32E2D; }
+
+/* Spanduk "belum tercatat asalnya" — bentuknya sama dengan tawaran Terapkan,
+   termasuk sticky-nya. Warnanya amber, bukan merah: barisnya tidak salah, cuma
+   belum dijelaskan. */
+tr.pg-catat-row > td { padding: 0 2px 4px !important; border-top: none !important; }
+.dpa-table.v2 tbody tr.pg-catat-row > td > .pg-catat { position: sticky; left: 2px; z-index: 2; }
+.pg-catat {
+  width: min(760px, calc(100vw - 48px));
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 8px;
+  border-left: 3px solid #EF9F27;
+  background: rgba(239,159,39,.12);
+}
+.pg-catat-aksi { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+table tbody td .pg-catat-teks { font-size: 12.5px; line-height: 1.5; color: #FAC775 !important; font-weight: 600; }
+table tbody td .pg-catat-sub  { font-size: 11.5px; line-height: 1.45; color: #85B7EB !important; }
+[data-theme="light"] .pg-catat { background: rgba(239,159,39,.10); }
+[data-theme="light"] table tbody td .pg-catat-teks { color: #854F0B !important; }
+[data-theme="light"] table tbody td .pg-catat-sub  { color: #6B7280 !important; }
+
+/* Spanduk pintu 0 — satu untuk seluruh dokumen, di atas tabel. */
+.pg-catat-atas {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 8px;
+  padding: 10px 14px; border-radius: 10px;
+  border-left: 3px solid #EF9F27;
+  background: rgba(239,159,39,.12); color: #FAC775;
+  font-size: 12.5px; line-height: 1.6;
+}
+[data-theme="light"] .pg-catat-atas { background: rgba(239,159,39,.10); color: #854F0B; }
+
+/* Sel Bertambah/Berkurang yang angkanya datang dari catatan perpindahan:
+   hanya-baca, tapi bisa diklik untuk menengok asalnya. */
+table tbody td .pg-dari-catatan {
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  border-bottom: 1px dotted currentColor; background: none; border-top: none;
+  border-left: none; border-right: none; padding: 0; font-family: inherit;
+}
+table tbody td .pg-dari-catatan.plus  { color: #6EE7B7 !important; }
+table tbody td .pg-dari-catatan.minus { color: #FCA5A5 !important; }
+[data-theme="light"] table tbody td .pg-dari-catatan.plus  { color: #0F5C44 !important; }
+[data-theme="light"] table tbody td .pg-dari-catatan.minus { color: #A32E2D !important; }
+
 tr.pg-total > td { border-top: 2px solid #0C447C; padding-top: 7px; padding-bottom: 7px; }
 [data-theme="light"] tr.pg-total > td { border-top-color: rgba(0,0,0,.18); }
 [data-theme="light"] tr.pg-total > td:nth-child(1) { color: #0F0F12 !important; }

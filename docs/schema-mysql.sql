@@ -1442,3 +1442,21 @@ CREATE TABLE IF NOT EXISTS iki_versi (
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Selesai. MySQL 8.0.13+ required (functional index pada users).
 -- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── Catatan Perpindahan Pergeseran (migration-pergeseran-mutasi.sql) ────────
+-- Satu baris = satu perpindahan uang antar rekening DI DALAM satu versi
+-- pergeseran. Kolom Bertambah/Berkurang dihitung dari sini.
+-- `dari_row`/`ke_row` menunjuk pergeseran_dpa.row_id (soft-FK, per-versi) —
+-- BUKAN anggaran_key, yang baru dicetak server saat Simpan.
+CREATE TABLE IF NOT EXISTS pergeseran_mutasi (
+  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tahun_anggaran  SMALLINT UNSIGNED NOT NULL,
+  versi_tanggal   DATE NOT NULL,
+  dari_row        VARCHAR(64) NOT NULL,
+  ke_row          VARCHAR(64) NOT NULL,
+  nilai           DECIMAL(18,2) NOT NULL,
+  keterangan      VARCHAR(255) NULL DEFAULT NULL,
+  urutan          INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  KEY idx_mutasi_versi (tahun_anggaran, versi_tanggal, urutan)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
