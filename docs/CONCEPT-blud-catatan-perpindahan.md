@@ -98,6 +98,23 @@ sama adalah cara L78 lahir.
 Angka di belakangnya = jumlah perpindahan tercatat. Ini **jalan masuknya** —
 dipakai saat orang memang duduk untuk menyusun pergeseran bulan itu.
 
+**Pintu 0 — spanduk di atas tabel.** Muncul **sekali** ketika dokumen sudah
+berimbang tapi belum punya catatan sama sekali. Ini yang membuat fiturnya
+ditemukan orang; tanpa ini pemakai harus sudah tahu tombolnya ada.
+
+```
+2 rekening bergeser Rp 5.000.000, belum ada catatan perpindahannya.
+                                  [Catat sekarang]  (Lewati dokumen ini)
+```
+
+"Catat sekarang" membuka modal yang **sudah berisi tebakan pasangannya** kalau
+memang cuma ada satu yang turun dan satu yang naik. Menebak boleh **hanya**
+kalau hasilnya tunggal DAN manusianya tetap menekan tombol; yang ditolak sejak
+awal adalah menebak lalu menyimpannya diam-diam (§7).
+
+"Lewati dokumen ini" mematikan pintu 0 **dan** pintu 2 untuk dokumen itu — satu
+sakelar, dua tingkat. Catatan perpindahan tetap tidak wajib.
+
 **Pintu 2 — spanduk di bawah barisnya.** Yang paling sering dipakai. Muncul di
 baris yang pagunya sudah bergeser tapi belum ada catatan yang menjelaskannya:
 
@@ -120,10 +137,36 @@ jadi hanya-baca; mengkliknya membuka modal yang sama, tersaring ke rekening itu.
 beberapa kali; modal yang terbuka tiap ketikan tidak bisa dipakai. Spanduk pintu
 2 hanya mengikuti keadaan barisnya — sama seperti kotak merah uraian hari ini.
 
-**Spanduk pintu 2 hanya hidup pada versi yang sudah punya minimal satu catatan
-perpindahan.** Tanpa syarat itu, membuka dokumen tahun-tahun sebelumnya
-memunculkan puluhan spanduk sekaligus untuk sesuatu yang memang belum pernah
-ada. Jalan masuk untuk dokumen yang masih kosong tetap pintu 1.
+### 4.1b Kapan spanduk baris muncul — patokannya BARIS, bukan dokumen
+
+Rancangan pertama memakai syarat "versi ini sudah punya minimal satu catatan".
+**Salah patokan**, dan pemakai pertama langsung menemukannya: pada dokumen baru
+spanduk barisnya tidak pernah muncul, jadi orang harus menggulung balik ke bilah
+alat untuk sesuatu yang sedang ia kerjakan tepat di depan matanya.
+
+Yang menentukan bukan keadaan dokumen, melainkan **apakah baris itu baru saja
+digeser**. Spanduk baris muncul kalau **keduanya** benar —
+
+1. barisnya bergeser (`pergeseran ≠ jumlah`), **dan**
+2. tidak ada catatan perpindahan yang menyentuh jangkarnya
+
+— **dan** salah satu dari:
+
+- barisnya digeser **di sesi ini** (`updateVolHarga` menyentuhnya), **atau**
+- dokumen ini sudah punya minimal satu catatan
+
+Cabang pertama itu yang membuat spanduknya muncul sejak geseran **pertama**,
+tepat di bawah baris yang sedang dikerjakan. Cabang kedua membuatnya tetap
+berguna saat dokumen dibuka kembali besok: yang belum dijelaskan tetap menyalak,
+seperti daftar pekerjaan yang habis sendiri begitu catatannya dibuat.
+
+Arsip lama yang cuma **dibuka untuk dilihat** tidak menyentuh cabang mana pun —
+tidak ada baris yang digeser di sesi itu, dan catatannya memang tidak ada. Diam,
+seperti seharusnya.
+
+**Mengubah Harga P / Vol P tetap tidak membuka modal apa pun** — yang muncul
+cuma spanduk, dan spanduk tidak menyela. Bedanya dengan rancangan pertama hanya
+kapan ia berhak tampil.
 
 ### 4.2 Modalnya BERHENTI DI FORM
 
