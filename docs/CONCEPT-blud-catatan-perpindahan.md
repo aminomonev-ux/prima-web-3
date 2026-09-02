@@ -82,16 +82,48 @@ membetulkan **baris perpindahannya**, bukan menebak sisi mana yang salah.
 
 ## 4. Di mana fiturnya, dan bagaimana bentuknya
 
-### 4.1 Tombol di bilah alat Pergeseran
+### 4.1 Tiga pintu, satu ruang
 
-Sebaris dengan "Tutup Pergeseran" dan "Salin Versi Lain":
+Ketiganya membuka **modal yang sama**. Dua tempat berbeda yang mengurus hal yang
+sama adalah cara L78 lahir.
+
+**Pintu 1 — tombol di bilah alat.** Sebaris dengan "Tutup Pergeseran" dan
+"Salin Versi Lain":
 
 ```
 [ Buat Pergeseran ] [ Sinkronkan DPA ] [ Tutup Pergeseran ] [ Salin Versi Lain ]
 [ Catatan Perpindahan · 2 ]
 ```
 
-Angka di belakangnya = jumlah perpindahan tercatat. Nol = belum ada.
+Angka di belakangnya = jumlah perpindahan tercatat. Ini **jalan masuknya** —
+dipakai saat orang memang duduk untuk menyusun pergeseran bulan itu.
+
+**Pintu 2 — spanduk di bawah barisnya.** Yang paling sering dipakai. Muncul di
+baris yang pagunya sudah bergeser tapi belum ada catatan yang menjelaskannya:
+
+```
+Pergeseran Rp 30.000.000 di baris ini belum tercatat asalnya.  [Catat perpindahan]
+Boleh dilewati — catatan perpindahan tidak wajib.               (Nanti saja)
+```
+
+Bentuknya sama persis dengan tawaran Terapkan yang sudah berjalan
+(`tawaranTerapkan`), termasuk `sticky` + lebar terbatas supaya kalimat dan
+tombolnya terlihat bersamaan. Menekannya membuka modal dengan rekening itu
+**sudah terisi di sisi yang benar**.
+
+**Pintu 3 — klik sel Bertambah/Berkurang.** Sesudah catatannya ada, kedua kolom
+jadi hanya-baca; mengkliknya membuka modal yang sama, tersaring ke rekening itu.
+
+### 4.1a Yang SENGAJA bukan pemicu
+
+**Mengubah Harga P / Vol P tidak membuka apa pun.** Satu sel lazim diutak-atik
+beberapa kali; modal yang terbuka tiap ketikan tidak bisa dipakai. Spanduk pintu
+2 hanya mengikuti keadaan barisnya — sama seperti kotak merah uraian hari ini.
+
+**Spanduk pintu 2 hanya hidup pada versi yang sudah punya minimal satu catatan
+perpindahan.** Tanpa syarat itu, membuka dokumen tahun-tahun sebelumnya
+memunculkan puluhan spanduk sekaligus untuk sesuatu yang memang belum pernah
+ada. Jalan masuk untuk dokumen yang masih kosong tetap pintu 1.
 
 ### 4.2 Modalnya BERHENTI DI FORM
 
