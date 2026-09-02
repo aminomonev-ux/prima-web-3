@@ -3438,6 +3438,39 @@ table tbody td .pg-urai-teks.minus { color: #FCA5A5 !important; }
 [data-theme="light"] table tbody td .pg-urai-teks.plus  { color: #0F5C44 !important; }
 [data-theme="light"] table tbody td .pg-urai-teks.minus { color: #A32E2D !important; }
 
+/* Tawaran "Terapkan" — satu baris tepat di bawah baris yang uraiannya belum
+   cocok (CONCEPT-blud-terapkan-uraian §2). Kelas, bukan gaya sebaris: aturan
+   borongan `[data-theme=light] table tbody td { color:#374151 !important }` di
+   blud-shell menelan warna sebaris, dan `[style*="85B7EB"]` memetakan ulang
+   warna yang ditulis di atribut style (L82). */
+tr.pg-tawar-row > td { padding: 0 2px 4px !important; border-top: none !important; }
+/* `sticky` + lebar terbatas, bukan selebar sel. Tabelnya ~1.900px sedangkan
+   layar 1.680px: tanpa ini kalimatnya duduk di ujung kiri dan tombolnya di ujung
+   kanan, jadi keduanya TIDAK PERNAH terlihat bersamaan — orang membaca "belum
+   masuk ke pagu" tanpa pernah melihat ada tombolnya. Ketahuan saat dijalankan. */
+.pg-tawar {
+  width: min(860px, calc(100vw - 48px));
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 8px;
+  border-left: 3px solid #E24B4A;
+  background: rgba(226,75,74,.10);
+}
+/* `sticky` DIPISAH dan sengaja sepanjang ini: lawannya
+   `.dpa-table.v2 tbody td:first-child > *` = (0,3,3) yang memasang
+   `position: relative` untuk kolom checkbox. Sel tawaran ini kebetulan
+   `td:first-child` juga (satu sel ber-colSpan), jadi ia kena. `.pg-tawar`
+   sendirian cuma (0,1,0) dan KALAH — tanpa selektor panjang ini tombolnya
+   hanyut ke ujung kanan tabel dan tidak pernah terlihat bersama kalimatnya.
+   Yang di bawah (0,4,2): empat kelas lawan tiga, menang di ruas pertama. */
+.dpa-table.v2 tbody tr.pg-tawar-row > td > .pg-tawar { position: sticky; left: 2px; z-index: 2; }
+.pg-tawar-aksi { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+table tbody td .pg-tawar-teks { font-size: 12.5px; line-height: 1.55; color: #F0B3B2 !important; }
+table tbody td .pg-tawar-sub  { font-size: 11.5px; line-height: 1.5; color: #85B7EB !important; }
+[data-theme="light"] .pg-tawar { background: rgba(226,75,74,.07); }
+[data-theme="light"] table tbody td .pg-tawar-teks { color: #A32E2D !important; }
+[data-theme="light"] table tbody td .pg-tawar-sub  { color: #6B7280 !important; }
+
 tr.pg-total > td { border-top: 2px solid #0C447C; padding-top: 7px; padding-bottom: 7px; }
 [data-theme="light"] tr.pg-total > td { border-top-color: rgba(0,0,0,.18); }
 [data-theme="light"] tr.pg-total > td:nth-child(1) { color: #0F0F12 !important; }

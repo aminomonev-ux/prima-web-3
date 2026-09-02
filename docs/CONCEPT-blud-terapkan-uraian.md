@@ -1,6 +1,6 @@
 # CONCEPT — Tombol Terapkan pada uraian pergeseran
 
-> Status: **konsep** (2026-09-01), belum dikerjakan.
+> Status: **selesai** (2026-09-02). Regresi `npx tsx scripts/test-blud-terapkan-uraian.mts`.
 > Lanjutan dari [CONCEPT-blud-uraian-geser.md](CONCEPT-blud-uraian-geser.md).
 > Nol kolom, nol migrasi, nol endpoint.
 
@@ -107,3 +107,32 @@ itu sendiri yang membuat barisnya ditolak.
       (b) selisih pembulatan tidak disebutkan, (c) angka uraian tidak
       disesuaikan sehingga barisnya ditolak saat menyimpan, (d) muncul di baris
       induk, (e) pembagian nol tidak dijaga
+
+## 7. Yang ketahuan saat dijalankan
+
+**Kalimat dan tombolnya tidak pernah terlihat bersamaan.** Selnya ber-`colSpan`
+17, jadi lebarnya mengikuti tabel — sekitar 1.900px, sementara layar 1.680px.
+Kalimatnya duduk di ujung kiri dan tombolnya di ujung kanan: orang membaca
+"belum masuk ke pagu" tanpa pernah tahu ada tombolnya. Diperbaiki dengan
+membatasi lebarnya (`min(860px, 100vw − 48px)`) dan membuatnya `sticky` di tepi
+kiri, jadi ia ikut ke mana pun tabel digulir mendatar.
+
+`position: sticky` sempat tidak berlaku sama sekali. Lawannya
+`.dpa-table.v2 tbody td:first-child > *` = (0,3,3) yang memasang
+`position: relative` untuk kolom checkbox — dan sel tawaran ini **kebetulan**
+`td:first-child` juga, karena ia satu-satunya sel di barisnya. `.pg-tawar`
+sendirian cuma (0,1,0). Selektornya dipanjangkan jadi (0,4,2). Ini pintu keempat
+pelajaran L82: aturan borongan yang tidak ditujukan ke elemen ini tetap
+mengenainya.
+
+**Sisi mana yang menanggung pembulatan** tidak disebut di konsep dan harus
+diputuskan saat menulis kodenya: yang angkanya **lebih besar**. Satu rupiah pada
+Rp 45 juta lebih tidak terasa daripada pada Rp 12 juta. Kalau sisi itu jadi
+negatif ia pindah ke sisi satunya — Zod menolak `min(0)`, dan "bertambah −44"
+bukan kalimat yang berarti apa pun. Keduanya tidak mungkin negatif sekaligus,
+sebab pembulatannya cuma condong satu arah.
+
+Dua pagar tambahan yang juga tidak ada di konsep: **Vol P kosong atau nol** tidak
+ditawari (`target / 0` memulangkan `Infinity` yang lolos sampai ke `harga_p`
+tanpa satu galat pun), dan **uraian yang menuntut harga negatif** tidak ditawari
+— yang salah uraiannya, bukan pagunya.

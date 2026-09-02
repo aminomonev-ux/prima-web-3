@@ -17,7 +17,7 @@ import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, hitungJumlah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
 import { partialRecalcPergeseran, recalcPergeseranJumlah, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
 import { pergeseranKeInput, dpaKePergeseranInput } from '@/lib/blud/row-map'
-import { uraiGeser, periksaUraian, totalUraian } from '@/lib/blud/urai-geser'
+import { uraiGeser, periksaUraian, totalUraian, tawaranTerapkan } from '@/lib/blud/urai-geser'
 import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
@@ -119,6 +119,8 @@ interface AksiBarisPg {
   deleteBaris:    (rowId: string) => void
   bukaTambahAnak: (row: PergeseranBarisInput) => void
   setUraian:      (rowId: string, field: 'bertambah' | 'berkurang', value: number | null) => void
+  terapkanUraian: (rowId: string) => void
+  tutupTawaran:   (rowId: string) => void
 }
 
 const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatRupiah(v) : '-'
@@ -133,7 +135,7 @@ const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatR
  */
 const PergeseranRow = memo(function PergeseranRow({
   row, terpilih, disorot, isAgg, bolehUbah, akunOptions, pjOptions, aksi,
-  uBertambah, uBerkurang, diurai, salahUrai,
+  uBertambah, uBerkurang, diurai, salahUrai, tawarHarga, tawarMeleset,
 }: {
   row:         PergeseranBarisInput
   terpilih:    boolean
@@ -151,6 +153,12 @@ const PergeseranRow = memo(function PergeseranRow({
   /** Diuraikan tangan? Membedakan angka yang diketik dari yang diturunkan. */
   diurai:      boolean
   salahUrai:   boolean
+  /** Harga P usulan, atau `null` kalau tidak ada tawaran (uraiannya sudah cocok,
+   *  Vol P kosong, atau pemakai menekan Batal). Dioper sebagai angka telanjang,
+   *  bukan objek `TawaranTerapkan` — objek lahir baru tiap render dan `memo`
+   *  berhenti menggigit (L81b). */
+  tawarHarga:   number | null
+  tawarMeleset: number
 }) {
   const editable = bolehUbah && EDITABLE_TYPES.has(row.tipe_baris) && !isAgg
   const isBold   = ['GRANDMASTER','MASTER','LEADER','PLETON-LEADER','KETUA-KELOMPOK-A','KETUA-KELOMPOK-B','L7-HEAD','L8-HEAD'].includes(row.tipe_baris)
@@ -160,6 +168,7 @@ const PergeseranRow = memo(function PergeseranRow({
   const canAdd   = !!TIPE_CHILD_OPTIONS_PG[row.tipe_baris]
 
   return (
+    <>
     <tr id={`perg-row-${row.row_id}`}
         className={`${TIPE_ROW_CLASS[row.tipe_baris]}${disorot ? ' row-highlight' : ''}`}>
       {/* Checkbox multi-hapus — hanya baris baru */}
@@ -379,6 +388,37 @@ const PergeseranRow = memo(function PergeseranRow({
       </td>
       )}
     </tr>
+
+    {/* Tawaran Terapkan — CONCEPT-blud-terapkan-uraian §2.
+        Kalimat kedua wajib menyertainya: tombol ini cuma menawarkan SATU jalan
+        (lewat Harga P), padahal sering jalan keluarnya justru memangkas volume.
+        Batal menutup tawarannya saja — angka yang diketik dan kotak merahnya
+        tetap, karena memang belum beres. */}
+    {tawarHarga != null && (
+      <tr className="pg-tawar-row">
+        <td colSpan={bolehUbah ? 17 : 16}>
+          <div className="pg-tawar">
+            <div>
+              <div className="pg-tawar-teks">
+                Belum masuk ke pagu. Harga P jadi <b>Rp {formatRupiah(tawarHarga)}</b>
+                {' — '}
+                {tawarMeleset === 0 ? 'pas' : `meleset Rp ${formatRupiah(Math.abs(tawarMeleset))}`}.
+              </div>
+              <div className="pg-tawar-sub">Atau ubah sendiri Vol P / Harga P agar pas.</div>
+            </div>
+            <div className="pg-tawar-aksi">
+              <PrimaButton variant="primary" size="sm" onClick={() => aksi.terapkanUraian(row.row_id)}>
+                Terapkan
+              </PrimaButton>
+              <PrimaButton variant="ghost" size="sm" onClick={() => aksi.tutupTawaran(row.row_id)}>
+                Batal
+              </PrimaButton>
+            </div>
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   )
 })
 
@@ -403,6 +443,10 @@ function PergeseranTable({
 }) {
   const [addParent, setAddParent] = useState<PergeseranBarisInput | null>(null)
   const [delGuard,  setDelGuard]  = useState<{ uraian: string; childCount: number } | null>(null)
+  /** Baris yang tawaran Terapkan-nya ditutup pemakai. Set, bukan satu id: dua
+   *  baris bisa sama-sama belum cocok, dan menutup yang satu tidak boleh
+   *  memunculkan ulang yang lain. */
+  const [tawarTutup, setTawarTutup] = useState<Set<string>>(new Set())
 
   // Tahap 4 — cermin `DpaTable`: baris terbaru yang sudah commit, dibaca lewat ref
   // supaya penangan per-baris punya identitas tetap dan `memo` pada barisnya
@@ -440,8 +484,44 @@ function PergeseranTable({
   const setUraian = useCallback((
     rowId: string, field: 'bertambah' | 'berkurang', value: number | null,
   ) => {
+    // Mengetik ulang uraiannya berarti sasarannya berganti, jadi tawaran yang
+    // sempat ditutup boleh muncul lagi. Sengaja TIDAK berlaku untuk Vol P /
+    // Harga P: menyunting keduanya justru jalan keluar yang ditawarkan kalimat
+    // di bawah tombol — memunculkan tawarannya lagi di situ malah menghalangi.
+    setTawarTutup(prev => {
+      if (!prev.has(rowId)) return prev
+      const next = new Set(prev)
+      next.delete(rowId)
+      return next
+    })
     onChange(rowsRef.current.map(r => r.row_id === rowId ? { ...r, [field]: value } : r))
   }, [onChange])
+
+  /**
+   * Harga P disetel supaya pagunya cocok dengan uraian yang sudah diketik.
+   *
+   * Uraiannya IKUT disesuaikan ke angka yang benar-benar terjadi: pembulatan
+   * harga membuat selisihnya meleset beberapa rupiah, dan `periksaUraian` di
+   * route akan menolak barisnya saat menyimpan — tombol ini sendiri yang bikin
+   * gagal kalau uraiannya dibiarkan.
+   *
+   * Tawarannya dihitung ulang dari `rowsRef`, bukan diterima dari barisnya:
+   * yang dirender bisa satu render lebih tua daripada yang sudah commit.
+   */
+  const terapkanUraian = useCallback((rowId: string) => {
+    const kini = rowsRef.current
+    const tawar = tawaranTerapkan(kini).get(rowId)
+    if (!tawar) return
+    const updated = kini.map(r => r.row_id === rowId
+      ? { ...r, harga_p: tawar.hargaBaru, bertambah: tawar.bertambah, berkurang: tawar.berkurang }
+      : r)
+    onChange(partialRecalcPergeseran(updated, rowId))
+    toast.success(`Harga P jadi Rp ${formatRupiah(tawar.hargaBaru)} — uraiannya sekarang cocok`)
+  }, [onChange])
+
+  const tutupTawaran = useCallback((rowId: string) => {
+    setTawarTutup(prev => new Set(prev).add(rowId))
+  }, [])
 
   // Edit kolom teks. kode_rekening/uraian/keterangan hanya untuk baris baru hasil
   // add manual; `penanggung_jawab` terbuka di semua baris (lihat catatan di selnya).
@@ -604,14 +684,16 @@ function PergeseranTable({
   // Satu berkas aksi, satu identitas — cermin `aksi` di `DpaTable`.
   const aksi = useMemo(() => ({
     updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
-    bukaTambahAnak: setAddParent, setUraian,
-  }), [updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris, setUraian])
+    bukaTambahAnak: setAddParent, setUraian, terapkanUraian, tutupTawaran,
+  }), [updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
+       setUraian, terapkanUraian, tutupTawaran])
 
   // Uraian efektif seluruh pohon — dihitung SEKALI, bukan per baris: memanggil
   // `uraiGeser` di dalam map membuat rollup-nya O(n²) pada 558 baris.
   const petaUrai  = useMemo(() => uraiGeser(rows), [rows])
   const salahUrai = useMemo(() => new Set(periksaUraian(rows).map(u => u.row_id)), [rows])
   const totalUrai = useMemo(() => totalUraian(rows), [rows])
+  const tawaran   = useMemo(() => tawaranTerapkan(rows), [rows])
 
   return (
     <>
@@ -691,6 +773,8 @@ function PergeseranTable({
                   uBerkurang={petaUrai.get(row.row_id)?.berkurang ?? 0}
                   diurai={row.bertambah != null || row.berkurang != null}
                   salahUrai={salahUrai.has(row.row_id)}
+                  tawarHarga={tawarTutup.has(row.row_id) ? null : (tawaran.get(row.row_id)?.hargaBaru ?? null)}
+                  tawarMeleset={tawaran.get(row.row_id)?.meleset ?? 0}
                 />
               )
             })}

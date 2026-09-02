@@ -12,6 +12,7 @@
 //
 // SATU tempat, dipakai layar, Excel, Cetak, dan panel Beranda. Empat salinan
 // rumus yang sama adalah cara L78 lahir.
+import { hitungJumlah } from '@/lib/blud/format'
 import type { PergeseranBarisInput } from '@/types'
 
 /** Toleransi banding DECIMAL(18,2) — sepadan EPS_PRATINJAU di pratinjau-serapan. */
@@ -189,6 +190,86 @@ export function petaDaun(rows: readonly Pick<BarisUrai, 'row_id' | 'parent_id'>[
   const daun = new Set<string>()
   for (const r of rows) if (!punyaAnak.has(r.row_id)) daun.add(r.row_id)
   return daun
+}
+
+// ─── TAWARAN "TERAPKAN" ──────────────────────────────────────────────────────
+// Konsep: docs/CONCEPT-blud-terapkan-uraian.md
+
+/** Baris yang cukup untuk ditawari Terapkan — `vol_p` yang dipakai membagi. */
+export type BarisTawar = BarisUrai & { vol_p?: number | null }
+
+export interface TawaranTerapkan {
+  row_id: string
+  /** Harga P usulan — rupiah utuh. */
+  hargaBaru: number
+  /** Pagu yang BENAR-BENAR terjadi sesudah pembulatan, bukan yang dimaksud. */
+  pergeseranBaru: number
+  /** Selisih pembulatan, bertanda. 0 = pas. */
+  meleset: number
+  /** Uraian yang ikut disesuaikan ke pagu baru. Sisi yang tidak menanggung
+   *  pembulatan dikembalikan apa adanya — termasuk `null`. */
+  bertambah: number | null
+  berkurang: number | null
+}
+
+/**
+ * Harga P yang membuat pagu baris ini cocok dengan uraian yang sudah diketik.
+ *
+ * Dibangun DI ATAS `periksaUraian`, bukan di sampingnya. Dengan begitu tawaran
+ * ini mustahil muncul di baris yang uraiannya sudah cocok, dan mustahil muncul
+ * di baris INDUK — induk angkanya dijumlah dari anak, jadi tidak pernah punya
+ * uraian sendiri untuk dicocokkan. Menyalin syaratnya ke sini akan melahirkan
+ * dua daftar yang bisa berbeda pendapat (L78).
+ *
+ * Yang diubah HARGA, bukan VOLUME. Volume itu jumlah barang atau orang yang
+ * nyata: menurunkan pagu Dokter Umum Rp 10 juta lewat volume berarti memangkas
+ * 2 dokter, dan nominal geserannya ikut berubah jadi Rp 9 juta — keputusan yang
+ * tidak boleh diambil sebuah tombol.
+ */
+export function tawaranTerapkan(rows: readonly BarisTawar[]): Map<string, TawaranTerapkan> {
+  const byId = new Map(rows.map(r => [r.row_id, r] as const))
+  const hasil = new Map<string, TawaranTerapkan>()
+
+  for (const { row_id } of periksaUraian(rows)) {
+    const r = byId.get(row_id)
+    if (!r) continue
+
+    // Tidak ada yang bisa dibagi: baris yang volumenya belum diisi tidak punya
+    // jalan keluar lewat harga, dan `target / 0` memulangkan Infinity yang lolos
+    // sampai ke `harga_p`.
+    const volP = n(r.vol_p)
+    if (volP <= 0) continue
+
+    const jumlah = n(r.jumlah)
+    const bertambah = n(r.bertambah)
+    const berkurang = n(r.berkurang)
+
+    // Pagu yang DIMAKSUD pemakai lewat angka yang diketiknya.
+    const target = jumlah + bertambah - berkurang
+    // Harga negatif bukan jalan keluar; yang salah uraiannya, bukan pagunya.
+    if (target < 0) continue
+
+    const hargaBaru      = Math.round(target / volP)
+    const pergeseranBaru = hitungJumlah(volP, hargaBaru)
+    const meleset        = pergeseranBaru - target
+
+    // Selisih pembulatan ditanggung sisi yang angkanya lebih besar — beberapa
+    // rupiah pada Rp 45 juta lebih tidak terasa daripada pada Rp 12 juta. Kalau
+    // sisi itu jadi negatif, pindah ke sisi satunya: Zod menolak `min(0)`, dan
+    // "bertambah −44" bukan kalimat yang berarti apa pun. Keduanya tidak mungkin
+    // negatif sekaligus, sebab `meleset` cuma condong satu arah.
+    const bisaPlus  = bertambah + meleset >= 0
+    const bisaMinus = berkurang - meleset >= 0
+    const kePlus    = bertambah >= berkurang ? bisaPlus : !bisaMinus
+
+    hasil.set(row_id, {
+      row_id, hargaBaru, pergeseranBaru, meleset,
+      bertambah: kePlus ? bertambah + meleset : (r.bertambah ?? null),
+      berkurang: kePlus ? (r.berkurang ?? null) : berkurang - meleset,
+    })
+  }
+
+  return hasil
 }
 
 export type { PergeseranBarisInput }
