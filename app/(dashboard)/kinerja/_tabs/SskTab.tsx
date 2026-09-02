@@ -8,16 +8,18 @@ import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import { InputNominal } from '@/components/ui/input-nominal';
-import type { SumberSSK, SskRow, RekeningRow, MonthKey, SskMonths } from '../_types';
-import { SUMBER_LIST, SSK_THEME, MONTHS_KEYS, MONTH_SHORT, emptyMonths, calcTotal, calcTotalPct } from '../_utils';
+import type { SumberSSK, SskRow, RekeningRow, MonthKey } from '../_types';
+import { SUMBER_LIST, SSK_THEME, MONTHS_KEYS, MONTH_SHORT, emptyMonths } from '../_utils';
 import { exportSskExcel, exportSskPdf } from '../_exports';
+import ImportRkoModal from '@/components/kinerja/ImportRkoModal';
+import { hitungTurunanRko } from '@/lib/kinerja/gabung-rko';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import Tip from '@/components/ui/Tip';
-import { Download, Save, Check } from 'lucide-react';
+import { Download, Save, Check, Upload } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -45,6 +47,7 @@ export default function SskTab({
   isLight = false, sskVersi, setSskVersi, sskVersion, refetchSsk,
 }: Props) {
   // ─── Versi list + locked detect ─────────────────────────────────────────
+  const [showImport,    setShowImport]    = useState(false);
   const [versiItems,    setVersiItems]    = useState<VersiKinerja[]>([]);
   const [versiLoading,  setVersiLoading]  = useState(false);
   const [confirmCreate, setConfirmCreate] = useState(false);
@@ -108,26 +111,18 @@ export default function SskTab({
     setSskRows(p => p.filter((_,i) => i !== idx));
   }
 
+  // Rumus turunan dipusatkan di `hitungTurunanRko` — sebelumnya ditulis dua kali
+  // di berkas ini, dan impor RKO akan jadi salinan ketiga.
   function updateSskPagu(idx: number, val: number) {
-    setSskRows(p => p.map((r,i) => {
-      if (i !== idx) return r;
-      const total = calcTotal(r.months);
-      const months_pct = MONTHS_KEYS.reduce((acc, mk) => {
-        acc[mk] = val > 0 ? Math.round(((r.months[mk] || 0) / val) * 10000) / 100 : 0;
-        return acc;
-      }, {} as SskMonths);
-      return { ...r, pagu: val, months_pct, total, total_pct: calcTotalPct(total, val) };
-    }));
+    setSskRows(p => p.map((r,i) =>
+      i === idx ? { ...r, pagu: val, ...hitungTurunanRko(val, r.months) } : r));
   }
 
   function updateSskMonth(idx: number, m: MonthKey, val: number) {
     setSskRows(p => p.map((r,i) => {
       if (i !== idx) return r;
-      const months     = { ...r.months, [m]: val };
-      const total      = calcTotal(months);
-      const pct_m      = r.pagu > 0 ? Math.round((val / r.pagu) * 10000) / 100 : 0;
-      const months_pct = { ...r.months_pct, [m]: pct_m };
-      return { ...r, months, months_pct, total, total_pct: calcTotalPct(total, r.pagu) };
+      const months = { ...r.months, [m]: val };
+      return { ...r, months, ...hitungTurunanRko(r.pagu, months) };
     }));
   }
 
@@ -229,6 +224,10 @@ export default function SskTab({
               onClick={injectRekening} disabled={versiLocked}>
               Inject Rekening
             </PrimaButton></Tip>
+            <Tip label={versiLocked ? 'Versi terkunci' : 'Isi dari berkas Excel RKO'}><PrimaButton variant="purple" iconLeft={<Upload size={14} />}
+              onClick={() => setShowImport(true)} disabled={versiLocked}>
+              Import
+            </PrimaButton></Tip>
             <Tip label={versiLocked ? 'Versi terkunci, tidak bisa disimpan' : ''}><PrimaButton variant="success" iconLeft={<Save size={14} />}
               onClick={saveSsk} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
@@ -238,6 +237,22 @@ export default function SskTab({
           </div>
         </div>
       )}
+      {showImport && (
+        <ImportRkoModal
+          tahun={tahun}
+          sumber={activeSumber}
+          versiLabel={versiLabel}
+          rowsSekarang={sskRows}
+          rekeningRows={rekeningRows}
+          isLight={isLight}
+          onApply={(rows) => {
+            setSskRows(rows);
+            toast.success(`${rows.length} baris masuk ke tabel — periksa lalu klik Simpan Semua`);
+          }}
+          onClose={() => setShowImport(false)}
+        />
+      )}
+
 
       {/* Tabel SSK — wide, horizontal scroll */}
       {loadingData ? (
