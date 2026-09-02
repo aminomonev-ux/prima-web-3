@@ -13,9 +13,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { useAbortableEffect } from '@/lib/shared/hooks';
-import { Pencil, Plus, Save, Download, AlertTriangle, X } from 'lucide-react';
+import { Pencil, Plus, Save, Download, AlertTriangle, X, Upload } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
+import DownloadButton from '@/components/ui/DownloadButton';
+import ImportMasterModal from '@/components/kinerja/ImportMasterModal';
+import { exportMasterExcel } from '../_exports';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import type { MasterTipe, MasterRow, MasterOpts } from '../_types';
 import { MASTER_TIPE_LIST } from '../_utils';
@@ -71,6 +74,7 @@ export default function MasterTab({
   // ─── State lokal panel ───────────────────────────────────────────────────
   const [masterTipe,           setMasterTipe]           = useState<MasterTipe>('program');
   const [masterRows,           setMasterRows]           = useState<MasterRow[]>([]);
+  const [showImportMaster, setShowImportMaster] = useState(false);
   const [masterInput,          setMasterInput]          = useState('');
   const [masterEditId,         setMasterEditId]         = useState<number|null>(null);
   const [masterProgramRef,     setMasterProgramRef]     = useState('');
@@ -284,14 +288,42 @@ export default function MasterTab({
             </button>
           );
         })}
-        {canEdit && (
-          <div style={{ marginLeft:'auto' }}>
-            <PrimaButton variant="purple" iconLeft={<Download size={14} />} onClick={openInitRenaksi} disabled={initLoading}>
-              Init Renaksi
-            </PrimaButton>
-          </div>
-        )}
+        <div style={{ marginLeft:'auto', display:'flex', gap:'8px', alignItems:'center' }}>
+          {canEdit && (
+            <>
+              <PrimaButton variant="purple" iconLeft={<Download size={14} />} onClick={openInitRenaksi} disabled={initLoading}>
+                Init Renaksi
+              </PrimaButton>
+              <PrimaButton variant="ghost" iconLeft={<Upload size={14} />} onClick={() => setShowImportMaster(true)} disabled={saving}>
+                Import
+              </PrimaButton>
+            </>
+          )}
+          {/* Unduh di luar `canEdit`: mengunduh tidak mengubah apa pun. */}
+          <DownloadButton variant="excel" label="Excel"
+            onClick={() => exportMasterExcel({ opts: masterOpts, tahun })} />
+        </div>
       </div>
+
+      {showImportMaster && (
+        <ImportMasterModal
+          tahun={tahun}
+          tersedia={{
+            program:         masterOpts.program,
+            kegiatan:        masterOpts.kegiatan,
+            subkegiatan:     masterOpts.subkegiatan,
+            uraian_ssk:      masterOpts.uraian_ssk,
+            sumber_anggaran: masterOpts.sumber_anggaran,
+          }}
+          isLight={isLight}
+          onSelesai={(dibuat) => {
+            toast.success(`${dibuat} entri Master dibuat`);
+            fetchMaster(masterTipe);
+            onMasterOptsRefresh();
+          }}
+          onClose={() => setShowImportMaster(false)}
+        />
+      )}
 
       {/* Form tambah/edit */}
       {canEdit && (

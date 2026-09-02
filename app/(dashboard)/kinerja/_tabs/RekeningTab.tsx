@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
-import { Pencil, Plus, Save } from 'lucide-react';
+import { Pencil, Plus, Save, Upload } from 'lucide-react';
 import DeleteButton from '@/components/ui/DeleteButton';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -18,6 +18,8 @@ import DownloadButton from '@/components/ui/DownloadButton';
 import type { SumberSSK, RekeningRow, RekForm, MasterOpts } from '../_types';
 import { SUMBER_LIST, emptyRekForm } from '../_utils';
 import { exportRekeningExcel } from '../_exports';
+import ImportRekeningModal from '@/components/kinerja/ImportRekeningModal';
+import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -31,13 +33,15 @@ interface Props {
   loadingData: boolean;
   saving: boolean;
   setSaving: React.Dispatch<React.SetStateAction<boolean>>;
+  /** Dipanggil setelah impor membuat entri Master — dropdown tab lain ikut disegarkan. */
+  onMasterOptsRefresh: () => void;
   isLight?: boolean;
 }
 
 export default function RekeningTab({
   rekeningRows, setRekeningRows, activeSumber, setActiveSumber,
   masterOpts, tahun, canEdit, loadingData, saving, setSaving,
-  isLight = false,
+  onMasterOptsRefresh, isLight = false,
 }: Props) {
   // Surface/teks dari lib/theme; aksen ungu/pink Kinerja tetap lokal.
   const t = uiTheme(isLight);
@@ -61,6 +65,7 @@ export default function RekeningTab({
 
   const [rekForm,    setRekForm]    = useState<RekForm>(emptyRekForm());
   const [rekEditIdx, setRekEditIdx] = useState<number | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const selStyle: React.CSSProperties = {
     width:'100%', border:`1.5px solid ${cInputBorder}`, borderRadius:'9px',
@@ -107,6 +112,20 @@ export default function RekeningTab({
   }
 
   const doExportRekeningExcel = () => exportRekeningExcel({ rows: rekeningRows, sumber: activeSumber, tahun });
+
+  // Impor berhenti di FORM: tabel terisi, penulisan tetap lewat tombol Simpan.
+  // Entri Master yang menyertainya sudah ditulis di dalam modal (tab Master layar
+  // lain, tak bisa dititipkan ke Simpan tab ini) — dropdown perlu disegarkan.
+  function terapkanImport(rows: BarisRekening[], masterDibuat: number) {
+    setRekeningRows(rows.map(r => ({ id: 0, ...r })));
+    setRekForm(emptyRekForm());
+    setRekEditIdx(null);
+    if (masterDibuat > 0) onMasterOptsRefresh();
+    toast.success(
+      `${rows.length} baris masuk ke tabel${masterDibuat > 0 ? `, ${masterDibuat} entri Master dibuat` : ''}`
+      + ' — periksa lalu klik Simpan',
+    );
+  }
 
   return (
     <div style={{ padding:'20px' }}>
@@ -228,9 +247,31 @@ export default function RekeningTab({
               onClick={saveRekening} disabled={saving || rekeningRows.length === 0}>
               {saving ? 'Menyimpan...' : 'Simpan'}
             </PrimaButton>
+            <PrimaButton variant="ghost" iconLeft={<Upload size={14} />}
+              onClick={() => setShowImport(true)} disabled={saving}>
+              Import
+            </PrimaButton>
             <DownloadButton variant="excel" label="Excel" onClick={doExportRekeningExcel} />
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <ImportRekeningModal
+          tahun={tahun}
+          sumber={activeSumber}
+          rowsSekarang={rekeningRows}
+          tersedia={{
+            program:         masterOpts.program,
+            kegiatan:        masterOpts.kegiatan,
+            subkegiatan:     masterOpts.subkegiatan,
+            uraian_ssk:      masterOpts.uraian_ssk,
+            sumber_anggaran: masterOpts.sumber_anggaran,
+          }}
+          isLight={isLight}
+          onApply={terapkanImport}
+          onClose={() => setShowImport(false)}
+        />
       )}
 
       {/* Tabel */}

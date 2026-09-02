@@ -8,6 +8,7 @@ import { fmtRp, fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import { loadExcelJs, addSheetFromAoa, downloadWorkbook } from '@/lib/shared/excel-export';
 import type {
   SumberSSK, SskRow, RekeningRow, RealRow, CrrRow, PendRow, LaporanSumber,
+  MasterOpts, MasterRow, MasterTipe,
 } from './_types';
 import { MONTHS_KEYS, MONTH_SHORT, CRR_BULAN_LABELS } from './_utils';
 
@@ -200,4 +201,55 @@ export async function exportLaporanPdf(params: { data: LaporanSumber; tahun: str
   ]);
   autoTable(doc, { head, body, startY:32, styles:{ fontSize:8, cellPadding:2 }, headStyles:{ fillColor:[51,65,85] } });
   doc.save(`Laporan-${data.sumber}-${tahun}.pdf`);
+}
+
+// ─── Master ───────────────────────────────────────────────────────────────────
+
+/**
+ * Judul sheet = TIPE master. Bukan hiasan: itu satu-satunya penanda yang dipakai
+ * pembaca berkasnya (lib/data/kinerja-import-master.ts) untuk tahu sebuah nama
+ * itu Program atau Kegiatan — isinya sendiri tidak membedakan.
+ */
+export const MASTER_SHEET: { tipe: MasterTipe; sheet: string }[] = [
+  { tipe: 'program',         sheet: 'Program' },
+  { tipe: 'kegiatan',        sheet: 'Kegiatan' },
+  { tipe: 'subkegiatan',     sheet: 'Sub Kegiatan' },
+  { tipe: 'uraian_ssk',      sheet: 'Uraian SSK' },
+  { tipe: 'sumber_anggaran', sheet: 'Sumber Anggaran' },
+];
+
+export const MASTER_HEADER = ['No', 'Nama', 'Program', 'Kegiatan', 'Sub Kegiatan'];
+
+/** Baris tiap sheet Master, dari MasterOpts yang sudah dipegang layar. */
+export function masterAoa(opts: MasterOpts, tipe: MasterTipe): (string | number)[][] {
+  const dariRows = (rows: MasterRow[], nama: string[]) =>
+    nama.map(n => rows.find(r => r.nama === n) ?? null);
+
+  const baris = (nama: string[], rows: (MasterRow | null)[]) =>
+    nama.map((n, i) => [
+      i + 1, n,
+      rows[i]?.program_ref ?? '', rows[i]?.kegiatan_ref ?? '', rows[i]?.subkegiatan_ref ?? '',
+    ]);
+
+  switch (tipe) {
+    case 'program':         return baris(opts.program, opts.program.map(() => null));
+    case 'kegiatan':        return baris(opts.kegiatan, dariRows(opts.kegiatanRows, opts.kegiatan));
+    case 'subkegiatan':     return baris(opts.subkegiatan, dariRows(opts.subkegiatanRows, opts.subkegiatan));
+    case 'uraian_ssk':      return baris(opts.uraian_ssk, dariRows(opts.sskRows, opts.uraian_ssk));
+    case 'sumber_anggaran': return baris(opts.sumber_anggaran, opts.sumber_anggaran.map(() => null));
+  }
+}
+
+/** Satu workbook berisi KELIMA tipe — supaya sekali unduh bisa diimpor balik utuh. */
+export async function exportMasterExcel(params: { opts: MasterOpts; tahun: string }) {
+  const { opts, tahun } = params;
+  const ExcelJSLib = await loadExcelJs();
+  const wb = new ExcelJSLib.Workbook();
+  for (const { tipe, sheet } of MASTER_SHEET) {
+    const ws = wb.addWorksheet(sheet);
+    addSheetFromAoa(ws, [MASTER_HEADER, ...masterAoa(opts, tipe)], {
+      colWidths: [{ wch: 5 }, { wch: 55 }, { wch: 40 }, { wch: 35 }, { wch: 35 }],
+    });
+  }
+  await downloadWorkbook(wb, `Master-E-Anggaran-${tahun}.xlsx`);
 }

@@ -54,6 +54,8 @@ export type AuditEventType =
   | 'KINERJA_DELETE_MASTER'
   | 'KINERJA_MASTER_INIT_RENAKSI'
   | 'KINERJA_SAVE_REKENING'
+  | 'KINERJA_IMPORT_REKENING'    // POST /api/kinerja/rekening/import (baca berkas, tidak menulis)
+  | 'KINERJA_IMPORT_MASTER'      // POST /api/kinerja/master/import (baca berkas, tidak menulis)
   | 'KINERJA_SAVE_SSK'
   | 'KINERJA_SAVE_REALISASI'
   | 'KINERJA_SAVE_NOMEN'

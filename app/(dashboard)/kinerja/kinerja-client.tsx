@@ -629,6 +629,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
                   loadingData={loadingData}
                   saving={saving}
                   setSaving={setSaving}
+                  onMasterOptsRefresh={fetchMasterOpts}
                   isLight={isLight}
                 />
               </Suspense>
