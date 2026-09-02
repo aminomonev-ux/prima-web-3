@@ -34,11 +34,18 @@ export interface SerapanRingkas {
   tren: number[]
   /** Tanggal transaksi terakhir tahun itu, untuk keterangan kartu Terserap. */
   tx_terakhir: string | null
+  /**
+   * Belanja yang jangkarnya TIDAK ada di versi pagu berlaku, jadi tidak ikut
+   * `terserap`. Bukan untuk dijumlahkan ke dalamnya — untuk DISEBUTKAN.
+   */
+  yatim: number
+  yatim_rekening: number
 }
 
 export const RINGKAS_KOSONG: SerapanRingkas = {
   sumber: 'KOSONG', versi: null, pagu: 0, terserap: 0, sisa: 0, pct: 0,
   menembus: 0, mepet: 0, tren: Array(12).fill(0), tx_terakhir: null,
+  yatim: 0, yatim_rekening: 0,
 }
 
 /**
@@ -107,11 +114,18 @@ async function getTren(
  *
  *   hitungan menembus & mepet → baris DAUN. Pagar pagu server bekerja di baris
  *     terbawah, dan itu pula yang disaring `hitungPratinjau`.
+ *
+ *   yatim → alokasi yang jangkarnya TIDAK ada di pohon sama sekali. `gulungKeAtas`
+ *     berjalan atas `baris`, jadi kunci yang tidak ada di situ tidak punya induk
+ *     untuk dinaiki dan hilang tanpa jejak dari `terserap` — padahal uangnya
+ *     sudah keluar dan tetap terbaca di kartu Kas. Dihitung supaya bisa
+ *     DISEBUTKAN, bukan supaya dijumlahkan ke `terserap`: menambahkannya
+ *     membuat % serapan berdiri di atas penyebut yang tidak memuatnya.
  */
 export function hitungRingkas(
   baris: readonly BarisPagu[],
   terserapMap: ReadonlyMap<string, number>,
-): { pagu: number; terserap: number; menembus: number; mepet: number } {
+): { pagu: number; terserap: number; menembus: number; mepet: number; yatim: number; yatimRekening: number } {
   const gulung = gulungKeAtas(baris as BarisPagu[], new Map(terserapMap))
 
   let pagu = 0
@@ -120,6 +134,17 @@ export function hitungRingkas(
     if (b.parent_key) continue
     pagu += b.pagu
     terserap += gulung.get(b.anggaran_key) ?? 0
+  }
+
+  const adaDiPohon = new Set(baris.map(b => b.anggaran_key))
+  let yatim = 0
+  let yatimRekening = 0
+  for (const [key, nilai] of terserapMap) {
+    // Nol dilewati: rekening yang pengembaliannya menutup belanjanya bukan uang
+    // yang hilang dari hitungan, dan menyebutnya cuma menambah kebisingan.
+    if (adaDiPohon.has(key) || Math.abs(nilai) <= EPS_PRATINJAU) continue
+    yatim += nilai
+    yatimRekening++
   }
 
   let menembus = 0
@@ -131,7 +156,7 @@ export function hitungRingkas(
     else if (mepetSetahun(b.pagu, sisa)) mepet++
   }
 
-  return { pagu, terserap, menembus, mepet }
+  return { pagu, terserap, menembus, mepet, yatim, yatimRekening }
 }
 
 /**
@@ -167,7 +192,7 @@ export async function ringkasSerapan(tahun: number, pra?: DataPagu): Promise<Ser
   const { baris, sumber, terserapMap } = pra ?? await muatDataPagu(tahun)
   if (!baris.length) return { ...RINGKAS_KOSONG, tren: Array(12).fill(0) }
 
-  const { pagu, terserap, menembus, mepet } = hitungRingkas(baris, terserapMap)
+  const { pagu, terserap, menembus, mepet, yatim, yatimRekening } = hitungRingkas(baris, terserapMap)
   const { tren, tx_terakhir } = await getTren(tahun, sumber.sumber, sumber.versi)
 
   return {
@@ -181,5 +206,7 @@ export async function ringkasSerapan(tahun: number, pra?: DataPagu): Promise<Ser
     mepet,
     tren,
     tx_terakhir,
+    yatim,
+    yatim_rekening: yatimRekening,
   }
 }

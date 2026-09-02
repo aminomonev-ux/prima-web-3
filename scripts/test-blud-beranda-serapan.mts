@@ -90,6 +90,23 @@ cek('…alokasi di baris bekas-daun TIDAK hilang', h.terserap >= 3_000_000,
   'menjumlah baris daun saja melewatkan Rp 3 juta yang menempel di induk')
 cek('Total pagu = jumlah baris akar', h.pagu === 100_000_000)
 
+// §9.1 lanjutan — yatim memang tidak ikut `terserap`, tapi uangnya sudah keluar
+// dan tetap terbaca di kartu Kas. Kalau tidak dihitung terpisah, selisih kedua
+// kartu itu tidak terjelaskan di mana pun, dan panel "Realisasi Terbaru" cuma
+// memuat 5 rekening terakhir — yang lama jatuh dari daftar lalu lenyap.
+cek('Belanja yatim dihitung TERPISAH', h.yatim === 7_777_777, `Rp ${h.yatim.toLocaleString('id-ID')}`)
+cek('…berikut jumlah rekeningnya', h.yatimRekening === 1, String(h.yatimRekening))
+cek('…dan TIDAK ikut masuk terserap', h.terserap === 49_000_000,
+  'menjumlahkannya membuat % serapan berdiri di atas penyebut yang tidak memuatnya')
+
+const hNol = hitungRingkas(pohon, new Map([...alokasi, ['yatim-nol', 0]]))
+cek('Yatim yang nilainya nol tidak ikut disebut',
+  hNol.yatimRekening === 1 && hNol.yatim === 7_777_777,
+  'rekening yang pengembaliannya menutup belanjanya bukan uang yang hilang')
+
+const hBersih = hitungRingkas(pohon, new Map([['aman', 20_000_000]]))
+cek('Tanpa yatim, angkanya nol — bukan NaN', hBersih.yatim === 0 && hBersih.yatimRekening === 0)
+
 cek('Hitungan menembus = 1 (daun saja)', h.menembus === 1, String(h.menembus))
 cek('Hitungan mepet = 1', h.mepet === 1, String(h.mepet))
 cek('Rekening berpagu NOL tidak mengaku mepet', h.mepet === 1,
@@ -193,7 +210,20 @@ cek('Sakelar mati diberi keterangan, bukan ruang kosong',
 cek('Kelas baru berpasangan tema terang (L82)',
   /\[data-theme="light"\] \.blud-mati/.test(dc)
   && /\[data-theme="light"\] \.blud-strip-bulan/.test(dc)
-  && /\[data-theme="light"\] \.blud-tren-label/.test(dc))
+  && /\[data-theme="light"\] \.blud-tren-label/.test(dc)
+  && /\[data-theme="light"\] \.blud-kpi-nota/.test(dc))
+
+// Selisih kartu Terserap × kartu Kas wajib punya penjelasan di layar.
+cek('Kartu Terserap menyebut belanja yatim', /nota:\s*s\.yatim !== 0/.test(dc))
+cek('…hanya kalau memang ada', /\{c\.nota && <div className="blud-kpi-nota"/.test(dc),
+  '"Rp 0 di luar versi pagu" cuma kebisingan')
+cek('…tanpa mengubah angka Terserap-nya', /value: fmtRp\(s\.terserap\)/.test(dc),
+  'ia menjelaskan angka itu, bukan membetulkannya')
+cek('…dengan warnanya sendiri, bukan hijau kartunya',
+  /\.blud-kpi-nota\s*\{[\s\S]{0,160}color: #FAC775/.test(dc),
+  'hijau "aman" justru menyembunyikan keterangan yang mengurangi keyakinan')
+cek('…dan sebabnya terbaca tanpa harus menebak', /notaTip:/.test(dc)
+  && /data-tooltip=\{c\.notaTip\}/.test(dc))
 
 const css = kode(baca('app/globals.css'))
 cek('Baris mepet punya pasangan tema terang',

@@ -158,11 +158,26 @@ export default function DashboardClient(p: Props) {
   // Pagunya BUKAN `p.dpaLatestTotal`. Realisasi diukur terhadap kolom `pergeseran`
   // versi terbaru, dan memakai total DPA di sini membuat Beranda melaporkan %
   // serapan yang berbeda dari layar Realisasi untuk hal yang sama persis.
-  const kartuSerapan = !s ? [] : [
+  const kartuSerapan: {
+    label: string; value: string; sub: string; href: string; color: string
+    Icon: React.ComponentType<{ size?: number; strokeWidth?: number }>
+    /** Keterangan tambahan di bawah `sub` — hanya kartu Terserap yang memakainya. */
+    nota?: string | null
+    notaTip?: string
+  }[] = !s ? [] : [
     {
       label: 'Terserap',
       value: fmtRp(s.terserap),
       sub:   s.tx_terakhir ? `Transaksi terakhir ${fmtTgl(s.tx_terakhir)}` : 'Belum ada transaksi',
+      // Angka ini SENGAJA tidak memuat belanja yang jangkarnya sudah tidak ada di
+      // versi pagu (§9.1), sementara kartu Kas di bawah tetap menghitungnya —
+      // uangnya memang sudah keluar. Tanpa baris ini selisih keduanya tidak
+      // terjelaskan di mana pun, dan panel "Realisasi Terbaru" hanya memuat 5
+      // rekening terakhir, jadi yang lama jatuh dari daftar dan lenyap.
+      nota:  s.yatim !== 0
+        ? `${fmtRp(s.yatim)} di luar versi pagu${s.yatim_rekening > 1 ? ` · ${s.yatim_rekening} rekening` : ''}`
+        : null,
+      notaTip: 'Belanja yang kode rekeningnya sudah tidak ada di versi pagu yang berlaku, jadi tidak ikut dijumlahkan ke Terserap. Uangnya tetap terbaca di kartu Kas. Klik untuk membukanya di layar Realisasi.',
       Icon:  Wallet,
       color: '#1D9E75',
       href:  `/blud/realisasi?tahun=${p.tahun}`,
@@ -223,6 +238,13 @@ export default function DashboardClient(p: Props) {
         .blud-kpi-label { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; opacity: .9; }
         .blud-kpi-value { font-size: 20px; font-weight: 800; margin: 6px 0 3px; line-height: 1.15; letter-spacing: -.3px; }
         .blud-kpi-sub   { font-size: 11px; opacity: .75; font-weight: 500; }
+        /* Warna sendiri, BUKAN mewarisi warna kartunya: ini keterangan yang
+           mengurangi keyakinan pada angka di atasnya, dan hijau "aman" justru
+           menyembunyikannya. Amber-nya sama dengan spanduk modul dimatikan. */
+        .blud-kpi-nota  {
+          font-size: 10.5px; font-weight: 600; margin-top: 5px; line-height: 1.35;
+          color: #FAC775; cursor: help;
+        }
         .blud-kpi-icon-box {
           width: 40px; height: 40px; border-radius: 10px;
           display: flex; align-items: center; justify-content: center;
@@ -321,6 +343,7 @@ export default function DashboardClient(p: Props) {
         [data-theme="light"] .blud-history-val{ color: #374151; }
         [data-theme="light"] .blud-empty      { color: #6B7280; }
         [data-theme="light"] .blud-mati       { background: rgba(239,159,39,.10); color: #854F0B; }
+        [data-theme="light"] .blud-kpi-nota   { color: #854F0B; }
         [data-theme="light"] .blud-strip-bulan{ background: #F3F4F6; border-color: rgba(0,0,0,.07); color: #6B7280; }
         [data-theme="light"] .blud-strip-bulan.tutup { background: rgba(29,158,117,.14); border-color: rgba(29,158,117,.40); color: #0F5C44; }
         [data-theme="light"] .blud-saldo      { border-color: rgba(0,0,0,.07); }
@@ -401,6 +424,7 @@ export default function DashboardClient(p: Props) {
                     <div className="blud-kpi-label" style={{ color: c.color }}>{c.label}</div>
                     <div className="blud-kpi-value" style={{ color: c.color, fontFamily: c.label === 'Perlu Perhatian' ? undefined : "'JetBrains Mono', monospace" }}>{c.value}</div>
                     <div className="blud-kpi-sub" style={{ color: c.color }}>{c.sub}</div>
+                    {c.nota && <div className="blud-kpi-nota" data-tooltip={c.notaTip}>{c.nota}</div>}
                   </div>
                   <div className="blud-kpi-icon-box" style={{ background: c.color, color: '#FFFFFF' }}>
                     <Icon size={20} strokeWidth={2.2} />

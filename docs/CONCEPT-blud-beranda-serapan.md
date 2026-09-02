@@ -325,6 +325,38 @@ Yang cocok cuma satu: **jumlah baris akar**, persis `akar.reduce`
 ([realisasi-client.tsx:218](../app/(dashboard)/blud/realisasi/realisasi-client.tsx:218)).
 Itu juga definisi yang membuat total layar Realisasi cocok dengan Buku Kas.
 
+### 9.1a — Susulan (2026-09-02): yatim tidak ikut dihitung, tapi wajib disebut
+
+Aturan di atas benar dan tidak berubah. Yang kurang cuma satu: **tidak ada apa pun
+di layar yang mengaku bahwa uang itu ada.**
+
+Kartu **Terserap** menjumlah baris akar, jadi belanja yatim luput. Kartu **Kas
+Tunai** menjumlah kolom uang di `blud_realisasi_tx` — tidak kenal `anggaran_key`
+sama sekali — jadi belanja itu tetap terhitung. Selisih kedua kartu itu tidak
+terjelaskan di mana pun. Panel "Realisasi Terbaru" memang menyebutkan tiap
+rekening yatim satu per satu, tapi isinya cuma **5 rekening yang paling baru
+disentuh** (`BATAS_REALISASI`); rekening yatim yang terakhir dipakai tiga bulan
+lalu jatuh dari daftar, dan sesudah itu Beranda diam sepenuhnya.
+
+`hitungRingkas` kini ikut memulangkan `yatim` (total) dan `yatimRekening`
+(cacah), ditampilkan sebagai satu baris amber di bawah kartu Terserap —
+*"Rp 2.000.000 di luar versi pagu · 2 rekening"*. Nol kueri baru: `terserapMap`
+dan `baris` sudah dipegang fungsi itu, jadi yatim = kunci di peta yang tidak ada
+di pohon.
+
+**Sengaja TIDAK dijumlahkan ke `terserap`.** Menambahkannya membuat % serapan
+berdiri di atas penyebut yang tidak memuatnya, dan merusak janji §9.1 bahwa angka
+Beranda sama dengan total layar Realisasi. Yang ditambah keterangannya, bukan
+angkanya.
+
+**Menyamakan Terserap dengan Kas juga bukan tujuannya.** Keduanya memang berbeda
+karena hal lain: `AMBIL_BANK`/`SETOR_BANK` memindahkan uang tanpa memakai
+anggaran, dan `PENERIMAAN` menambah kas. Kalau dipaksa sama, Terserap berhenti
+berarti "anggaran terpakai".
+
+Nilai nol dilewati (`EPS_PRATINJAU`): rekening yang pengembaliannya menutup
+belanjanya bukan uang yang hilang dari hitungan.
+
 **Hitungan menembus/mepet tetap dari baris DAUN** (§5.1c) — pertanyaannya berbeda,
 dan `hitungPratinjau` sudah menyaringnya begitu. Satu kueri boleh memulangkan
 dua-duanya, asal keduanya tidak tertukar.
@@ -427,6 +459,9 @@ lebih dulu.
       benar-benar menggeser, bukan Δ = 0
 - [x] Ada rekening yang alokasinya yatim (key-nya tidak ada di versi pagu) →
       Beranda dan layar Realisasi **tetap** melaporkan angka yang sama
+- [x] …dan totalnya **disebut** di bawah kartu Terserap, tanpa ikut menggeser
+      angkanya (§9.1a) — diuji dengan 2 rekening yatim: Terserap Rp 80.000 +
+      yatim Rp 2.000.000 = Kas Tunai Rp 2.080.000
 - [x] Warna mepet dihitung dari sisa **setahun**, bukan kolom `sisa` — dibuktikan
       dengan membuka bulan sebelum transaksi yang menjebolkan
 - [x] Baris mepet berwarna amber di tabel Realisasi, **daun saja**, `pagu > 0`
