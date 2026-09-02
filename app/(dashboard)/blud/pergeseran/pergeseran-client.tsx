@@ -291,31 +291,34 @@ const PergeseranRow = memo(function PergeseranRow({
           Hanya baris DAUN yang boleh diisi: induk angkanya dijumlah dari anak
           (`uraiGeser`), persis seperti kolom Pergeseran di sebelahnya.
           Kosong = "hitung dari selisih"; terisi = "jangan diutak-atik". */}
-      <td style={{ textAlign: 'right' }}>
+      {/* Tooltip menempel di `td`, BUKAN di kotak isiannya: aturan
+          `[data-tooltip]` di globals.css mengecualikan `input` — elemen
+          tergantikan tidak pernah merender `::after`, jadi di sana ia diam saja. */}
+      <td style={{ textAlign: 'right' }}
+          data-tooltip={editable ? 'Bagian yang MASUK ke rekening ini. Kosongkan kalau rekening ini cuma bergerak satu arah — angkanya dihitung sendiri.' : undefined}>
         {editable ? (
-          <input
-            type="number" min={0}
+          <InputNominal
+            nullable
+            value={row.bertambah ?? null}
+            onChange={v => aksi.setUraian(row.row_id, 'bertambah', v)}
             className={`pg-urai${diurai ? ' diurai-plus' : ''}${salahUrai ? ' salah' : ''}`}
             style={{ textAlign: 'right' }}
-            value={row.bertambah ?? ''}
             placeholder={uBertambah ? formatRupiah(uBertambah) : '-'}
-            onChange={e => aksi.setUraian(row.row_id, 'bertambah', e.target.value === '' ? null : Number(e.target.value))}
-            data-tooltip="Bagian yang MASUK ke rekening ini. Kosongkan kalau rekening ini cuma bergerak satu arah — angkanya dihitung sendiri."
           />
         ) : (
           <span className={`pg-urai-teks${uBertambah ? ' plus' : ''}`}>{fmtRp(uBertambah)}</span>
         )}
       </td>
-      <td style={{ textAlign: 'right' }}>
+      <td style={{ textAlign: 'right' }}
+          data-tooltip={editable ? 'Bagian yang KELUAR dari rekening ini. Isi kedua kolom hanya kalau rekening ini ditambah DAN dikurangi di dokumen yang sama.' : undefined}>
         {editable ? (
-          <input
-            type="number" min={0}
+          <InputNominal
+            nullable
+            value={row.berkurang ?? null}
+            onChange={v => aksi.setUraian(row.row_id, 'berkurang', v)}
             className={`pg-urai${diurai ? ' diurai-minus' : ''}${salahUrai ? ' salah' : ''}`}
             style={{ textAlign: 'right' }}
-            value={row.berkurang ?? ''}
             placeholder={uBerkurang ? formatRupiah(uBerkurang) : '-'}
-            onChange={e => aksi.setUraian(row.row_id, 'berkurang', e.target.value === '' ? null : Number(e.target.value))}
-            data-tooltip="Bagian yang KELUAR dari rekening ini. Isi kedua kolom hanya kalau rekening ini ditambah DAN dikurangi di dokumen yang sama."
           />
         ) : (
           <span className={`pg-urai-teks${uBerkurang ? ' minus' : ''}`}>{fmtRp(uBerkurang)}</span>

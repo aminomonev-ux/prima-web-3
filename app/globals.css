@@ -3415,15 +3415,21 @@ input.pg-urai { width: 100%; }
    banyaknya, lalu menang di hitungan elemen. Tanpa `[type=...]` dan `:not(…)`
    itu ia (0,2,4) dan KALAH — kotak merahnya tidak pernah muncul, padahal
    spanduknya menjanjikan "kotaknya bergaris merah". Ketahuan saat dijalankan,
-   bukan dari kode. */
-table tbody td input.pg-urai.salah[type="number"]:not([readonly]) {
+   bukan dari kode.
+
+   `[type="text"]`, bukan `number`: kolomnya pindah ke `InputNominal` supaya
+   ribuannya bertitik seperti kolom uang lain, dan komponen itu merender
+   `type="text"` + `inputMode="numeric"`. Bobotnya sama persis (satu atribut),
+   jadi hitungan (0,4,4) di atas tidak berubah — tapi LUPA menggantinya membuat
+   seluruh aturan ini berhenti cocok tanpa satu galat pun. */
+table tbody td input.pg-urai.salah[type="text"]:not([readonly]) {
   border-color: #E24B4A !important; background: rgba(226,75,74,.10) !important;
 }
-table tbody td input.pg-urai.diurai-plus[type="number"]:not([readonly])  { color: #6EE7B7 !important; }
-table tbody td input.pg-urai.diurai-minus[type="number"]:not([readonly]) { color: #FCA5A5 !important; }
+table tbody td input.pg-urai.diurai-plus[type="text"]:not([readonly])  { color: #6EE7B7 !important; }
+table tbody td input.pg-urai.diurai-minus[type="text"]:not([readonly]) { color: #FCA5A5 !important; }
 /* Tema terang: hijau/merah muda itu tak terbaca di atas putih. */
-[data-theme="light"] table tbody td input.pg-urai.diurai-plus[type="number"]  { color: #0F5C44 !important; }
-[data-theme="light"] table tbody td input.pg-urai.diurai-minus[type="number"] { color: #A32E2D !important; }
+[data-theme="light"] table tbody td input.pg-urai.diurai-plus[type="text"]  { color: #0F5C44 !important; }
+[data-theme="light"] table tbody td input.pg-urai.diurai-minus[type="text"] { color: #A32E2D !important; }
 /* Angka turunan tampil sebagai placeholder — sengaja lebih redup daripada angka
    yang diketik, supaya "dihitung sendiri" dan "saya isi" bisa dibedakan sekilas. */
 input.pg-urai::placeholder { color: #85B7EB; opacity: .7; }

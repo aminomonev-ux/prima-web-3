@@ -328,8 +328,41 @@ cek('setUraian tidak lewat recalc',
   && !/setUraian[\s\S]{0,400}partialRecalcPergeseran/.test(clientSrc),
   'kolom ini tidak menggerakkan angka apa pun')
 cek('Hanya baris daun yang bisa diisi',
-  /editable \? \(\s*<input[\s\S]{0,400}row\.bertambah/.test(clientSrc),
+  /editable \? \(\s*<InputNominal[\s\S]{0,400}row\.bertambah/.test(clientSrc),
   '`editable` sudah memuat `!isAgg`')
+// Ribuannya bertitik seperti kolom uang lain — tapi `nullable` WAJIB ikut:
+// tanpa itu mengosongkan sel terkirim sebagai 0, barisnya mengaku sudah
+// diuraikan, lalu ditolak `periksaUraian` saat menyimpan.
+cek('Kedua kolom memakai InputNominal ragam nullable',
+  (clientSrc.match(/<InputNominal\s+nullable/g) ?? []).length === 2,
+  `${(clientSrc.match(/<InputNominal\s+nullable/g) ?? []).length} dari 2`)
+cek('…dan null diteruskan apa adanya, bukan dijadikan 0',
+  /onChange=\{v => aksi\.setUraian\(row\.row_id, 'bertambah', v\)\}/.test(clientSrc)
+  && /onChange=\{v => aksi\.setUraian\(row\.row_id, 'berkurang', v\)\}/.test(clientSrc))
+
+// `[data-tooltip]` di globals.css mengecualikan `input` — elemen tergantikan
+// tidak merender `::after`. Keterangannya harus menempel di `td`.
+cek('Keterangan kolom dipasang di td, bukan di kotak isiannya',
+  (clientSrc.match(/data-tooltip=\{editable \?/g) ?? []).length === 2
+  && !/<InputNominal[\s\S]{0,300}data-tooltip/.test(clientSrc),
+  `${(clientSrc.match(/data-tooltip=\{editable \?/g) ?? []).length} dari 2`)
+
+const nominalSrc = kode(baca('components/ui/input-nominal.tsx'))
+cek('Ragam nullable mengirim null saat dikosongkan',
+  /if \(raw === ''\) \{ setDisplay\(''\); kirim\(null\); return; \}/.test(nominalSrc)
+  && /if \(props\.nullable\) props\.onChange\(v\);\s*else props\.onChange\(v \?\? 0\)/.test(nominalSrc),
+  'ragam biasa TETAP mengirim 0 — 14 pemakai lain bergantung padanya')
+cek('…dan nol tetap tampil "0", bukan kosong',
+  /nullable \? \(v == null \? '' : v\.toLocaleString\('id-ID'\)\) : formatNominal\(v\)/.test(nominalSrc),
+  'formatNominal memulangkan string kosong untuk 0 — itu menghapus beda "nol" dan "belum diisi"')
+
+// `InputNominal` merender type="text"; aturan warna & kotak merah dikunci ke
+// atribut itu. Lupa menggantinya = seluruh aturan berhenti cocok tanpa galat.
+const cssSrc = baca('app/globals.css')
+cek('Aturan .pg-urai mengikuti type="text"',
+  (cssSrc.match(/input\.pg-urai\.[a-z-]+\[type="text"\]/g) ?? []).length === 5
+  && !/input\.pg-urai\.[a-z-]+\[type="number"\]/.test(cssSrc),
+  `${(cssSrc.match(/input\.pg-urai\.[a-z-]+\[type="text"\]/g) ?? []).length} dari 5 aturan`)
 cek('Baris yang baru dapat anak melepas uraiannya',
   /willSwitchToAggregator[\s\S]{0,400}bertambah: null, berkurang: null/.test(clientSrc),
   'induk tidak punya tempat untuk uraian tangan')
