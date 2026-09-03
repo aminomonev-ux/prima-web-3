@@ -17,10 +17,14 @@ interface MatchRow {
   keterangan: string; realisasi: number; bulan_ke: number; source: string;
   ssk_canonical_id: string | null; ssk_keterangan: string | null; sumber: string | null;
   score: number; status: 'match' | 'mirip' | 'none';
+  /** Hanya terisi pada bentuk 'laporan' — berkas belanja tidak memuat kolom fisik. */
+  real_fisik?: number;
 }
 interface ImportData {
   tahun: string; months: number[]; total: number; targetCount: number;
   bySumber: Record<string, MatchRow[]>; warnings: string[];
+  /** Bentuk berkas yang dikenali server. Lama (tanpa field ini) = 'belanja'. */
+  bentuk?: 'laporan' | 'belanja';
 }
 interface Props {
   tahun: string;
@@ -29,7 +33,7 @@ interface Props {
   /** §23 Lampirkan: hasil parse dari chat Rima — modal langsung tampil tanpa unggah ulang. */
   preload?: ImportData;
   preloadName?: string;
-  onApply: (items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number }[]) => void;
+  onApply: (items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) => void;
   onClose: () => void;
 }
 
@@ -65,6 +69,7 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
     finally { setBusy(false); }
   }
 
+  const laporan = data?.bentuk === 'laporan';
   const tabs = data ? Object.keys(data.bySumber) : [];
   const rows = data ? (data.bySumber[activeTab] ?? []) : [];
   const isIncluded = (r: MatchRow) => !!r.ssk_canonical_id && !excluded.has(r.source);
@@ -84,7 +89,12 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
   }
 
   function terapkan() {
-    const items = includedOf(currentSumber).map(r => ({ ssk_canonical_id: r.ssk_canonical_id!, bulan_ke: r.bulan_ke, realisasi: r.realisasi }));
+    const items = includedOf(currentSumber).map(r => ({
+      ssk_canonical_id: r.ssk_canonical_id!, bulan_ke: r.bulan_ke, realisasi: r.realisasi,
+      // Hanya dikirim pada bentuk 'laporan'; untuk berkas belanja tetap undefined
+      // supaya sel Real Fisik yang sudah diisi tangan tidak ikut dinolkan.
+      ...(laporan ? { real_fisik: r.real_fisik ?? 0 } : {}),
+    }));
     if (items.length === 0) { toast.error(`Tidak ada baris cocok untuk ${currentSumber}`); return; }
     onApply(items);
     toast.success(`${items.length} baris diisi ke Realisasi ${currentSumber} — periksa lalu klik Simpan`);
@@ -95,14 +105,14 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
   const td: React.CSSProperties = { padding: '6px 9px', fontSize: '11px', color: t.text, borderBottom: `1px solid ${isLight ? 'rgba(139,92,246,.08)' : 'rgba(51,65,85,.4)'}`, verticalAlign: 'top' };
 
   return createPortal(
-    <div role="dialog" aria-label="Import Realisasi Belanja dari Excel"
+    <div role="dialog" aria-label="Import Realisasi dari Excel"
       style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(2,15,28,.6)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ width: 'min(820px,96vw)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: t.card, border: `1px solid ${cBorder}`, borderRadius: '14px', boxShadow: '0 24px 60px rgba(0,0,0,.45)' }}>
         {/* Head */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${cBorder}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: t.text, fontSize: '14px' }}>
-            <FileSpreadsheet size={18} color={isLight ? '#7C3AED' : '#C4B5FD'} /> Import Realisasi Belanja dari Excel
+            <FileSpreadsheet size={18} color={isLight ? '#7C3AED' : '#C4B5FD'} /> Import Realisasi dari Excel
           </div>
           <button type="button" onClick={onClose} aria-label="Tutup" style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textSub, padding: 4 }}><X size={18} /></button>
         </div>
@@ -110,9 +120,16 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
         {/* Body */}
         <div style={{ padding: '16px 18px', overflowY: 'auto' }}>
           <p style={{ fontSize: '12px', color: t.textSub, margin: '0 0 12px' }}>
-            Unggah laporan belanja (.xlsx). Rima cocokkan tiap baris ke <strong>keterangan</strong> SSK
-            (fuzzy) lalu kelompokkan per sumber. Periksa per tab; <strong>Terapkan</strong> mengisi draft
-            Realisasi <strong>{currentSumber}</strong> (kamu yang Simpan). <strong>Simpan peta</strong> = ajari bot untuk bulan depan.
+            {laporan ? (
+              <>Berkas dikenali sebagai <strong>laporan realisasi bulanan</strong>. Yang dibaca hanya
+              Bulan, Keterangan, Realisasi Fisik, dan Realisasi Keuangan — pagu, target, akumulasi,
+              persentase, dan deviasi dihitung ulang server. <strong>Terapkan</strong> mengisi draft
+              Realisasi <strong>{currentSumber}</strong> (kamu yang Simpan).</>
+            ) : (
+              <>Unggah laporan belanja (.xlsx). Rima cocokkan tiap baris ke <strong>keterangan</strong> SSK
+              (fuzzy) lalu kelompokkan per sumber. Periksa per tab; <strong>Terapkan</strong> mengisi draft
+              Realisasi <strong>{currentSumber}</strong> (kamu yang Simpan). <strong>Simpan peta</strong> = ajari bot untuk bulan depan.</>
+            )}
           </p>
 
           <input ref={fileRef} type="file" accept=".xlsx,.xls" hidden
@@ -161,7 +178,8 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
                     <th style={th}>Keterangan Excel</th>
                     <th style={th}>→ SSK app</th>
                     <th style={{ ...th, width: '74px', textAlign: 'center' }}>Status</th>
-                    <th style={{ ...th, width: '120px', textAlign: 'right' }}>Realisasi</th>
+                    {laporan && <th style={{ ...th, width: '120px', textAlign: 'right' }}>Real Fisik</th>}
+                    <th style={{ ...th, width: '120px', textAlign: 'right' }}>{laporan ? 'Real Keuangan' : 'Realisasi'}</th>
                     <th style={{ ...th, width: '44px', textAlign: 'center' }}>Bln</th>
                   </tr></thead>
                   <tbody>
@@ -176,11 +194,12 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
                           <span style={{ color: STATUS_C[r.status], fontWeight: 700, fontSize: '10px' }}>{STATUS_L[r.status]}</span>
                           {r.status !== 'none' && <span style={{ display: 'block', fontSize: '8px', color: t.textSub }}>{r.score.toFixed(2)}</span>}
                         </td>
+                        {laporan && <td style={{ ...td, textAlign: 'right' }}>{fmtRp(r.real_fisik ?? 0)}</td>}
                         <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{fmtRp(r.realisasi)}</td>
                         <td style={{ ...td, textAlign: 'center', color: t.textSub }}>{MONTHS[r.bulan_ke]}</td>
                       </tr>
                     ))}
-                    {rows.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: t.textSub }}>Tidak ada baris di tab ini.</td></tr>}
+                    {rows.length === 0 && <tr><td colSpan={laporan ? 7 : 6} style={{ ...td, textAlign: 'center', color: t.textSub }}>Tidak ada baris di tab ini.</td></tr>}
                   </tbody>
                 </table>
               </div>

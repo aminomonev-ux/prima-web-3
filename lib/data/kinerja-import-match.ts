@@ -7,10 +7,15 @@
 // atas konfirmasi user (Model A′).
 import { sql } from '@/lib/data/db';
 import { parseBelanjaBuffer } from './kinerja-import';
-import { matchBelanja, type SskTarget, type MatchRow } from './kinerja-match';
+import { parseLaporanRealisasiBuffer } from './kinerja-import-laporan';
+import { matchBelanja, type SskTarget, type MatchRow, type BelanjaInput } from './kinerja-match';
+
+/** Bentuk berkas yang dikenali — menentukan tampilan pratinjau di modal. */
+export type BentukImporRealisasi = 'laporan' | 'belanja';
 
 export interface RealisasiImportData {
   tahun: string;
+  bentuk: BentukImporRealisasi;
   months: number[];
   total: number;
   targetCount: number;
@@ -21,12 +26,25 @@ export interface RealisasiImportData {
 const norm = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** Parse + match buffer belanja untuk satu tahun. leafCount=0 → bukan file belanja. */
+/**
+ * Parse + match buffer untuk satu tahun. leafCount=0 → bukan berkas yang dikenali.
+ *
+ * DUA bentuk berkas, SATU mesin pencocokan. Bentuk "laporan realisasi" (sudah rapi
+ * per baris SSK, punya kolom Bulan) dicoba lebih dulu; kalau tidak dikenali,
+ * jatuh ke pembaca laporan belanja lama — jalur itu tetap jadi jaring pengaman,
+ * bukan sesuatu yang bisa direbut. Sesudah titik ini keduanya melewati langkah
+ * yang persis sama: peta tersimpan dulu, baru tebakan mirip. Karena itu tombol
+ * "Simpan peta" ikut berlaku untuk bentuk baru tanpa satu baris tambahan.
+ */
 export async function buildRealisasiImport(
   buf: Buffer,
   tahun: string,
 ): Promise<{ leafCount: number; data: RealisasiImportData }> {
-  const { rows: leaves, warnings } = await parseBelanjaBuffer(buf);
+  const laporan = await parseLaporanRealisasiBuffer(buf);
+  const bentuk: BentukImporRealisasi = laporan.rows.length > 0 ? 'laporan' : 'belanja';
+  const belanja = bentuk === 'belanja' ? await parseBelanjaBuffer(buf) : null;
+  const leaves: BelanjaInput[] = belanja ? belanja.rows : laporan.rows;
+  const warnings = belanja ? belanja.warnings : laporan.warnings;
 
   // Target = baris Realisasi app (distinct per SSK+sumber) untuk tahun ini.
   const targetRows = (await sql`
@@ -44,7 +62,7 @@ export async function buildRealisasiImport(
   const mapByKet = new Map(mapRows.map(m => [norm(m.keterangan_excel), m]));
 
   const matched: MatchRow[] = [];
-  const toFuzzy: typeof leaves = [];
+  const toFuzzy: BelanjaInput[] = [];
   for (const lf of leaves) {
     const mp = mapByKet.get(norm(lf.keterangan));
     if (mp) matched.push({ ...lf, ssk_canonical_id: mp.ssk_canonical_id, ssk_keterangan: ketById.get(mp.ssk_canonical_id) ?? null, sumber: mp.sumber, score: 1, status: 'match' });
@@ -58,6 +76,6 @@ export async function buildRealisasiImport(
 
   return {
     leafCount: leaves.length,
-    data: { tahun, months, total: matched.length, targetCount: targets.length, bySumber, warnings },
+    data: { tahun, bentuk, months, total: matched.length, targetCount: targets.length, bySumber, warnings },
   };
 }

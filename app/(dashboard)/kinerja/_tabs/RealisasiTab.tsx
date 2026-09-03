@@ -63,10 +63,15 @@ export default function RealisasiTab({
   // IK-4: terapkan hasil Import (sumber yang sedang dibuka) ke DRAFT realisasi —
   // isi real_keuangan baris SSK pada bulan yang sesuai, lalu recalc turunan.
   // TIDAK menyimpan: user klik "Simpan Semua" (Model A′).
-  function applyImport(items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number }[]) {
+  function applyImport(items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) {
     setRealisasiRows(p => recalcAllRealisasi(p.map(r => {
       const hit = items.find(it => it.ssk_canonical_id === r.ssk_canonical_id && it.bulan_ke === r.bulan);
-      return hit ? { ...r, real_keuangan: hit.realisasi } : r;
+      if (!hit) return r;
+      // `real_fisik` hanya ikut pada berkas bentuk 'laporan'. Untuk laporan belanja
+      // ia undefined, dan sel yang sudah diisi tangan sengaja tidak disentuh.
+      return hit.real_fisik === undefined
+        ? { ...r, real_keuangan: hit.realisasi }
+        : { ...r, real_keuangan: hit.realisasi, real_fisik: hit.real_fisik };
     })));
   }
 

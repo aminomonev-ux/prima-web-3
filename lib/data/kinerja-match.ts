@@ -13,6 +13,8 @@ export interface BelanjaInput {
   realisasi: number;
   bulan_ke: number;
   source?: string;
+  /** Hanya terisi pada bentuk "laporan realisasi" — berkas belanja tidak memuatnya. */
+  real_fisik?: number;
 }
 export type MatchStatus = 'match' | 'mirip' | 'none';
 export interface MatchRow extends BelanjaInput {
