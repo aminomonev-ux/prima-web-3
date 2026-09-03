@@ -175,6 +175,9 @@ export const SskBodySchema = z.object({
   versi_tipe: VersiTipeSchema.optional(),
   versi_seq:  VersiSeqSchema.optional(),
   expected_version: z.number().int().optional(), // V3-6 optimistic lock
+  // Pagar simpan: menyatakan "saya memang mau mengosongkan / memangkas drastis".
+  // Tanpa ini larik kosong dulu tetap menghapus seluruh (tahun, sumber).
+  force:      z.boolean().optional(),
   rows:       z.array(SskRowSchema).max(5000, 'Maks 5000 baris per batch'),
 });
 
@@ -193,6 +196,7 @@ const RekeningRowSchema = z.object({
 export const RekeningBodySchema = z.object({
   tahun:  TahunSchema,
   sumber: SumberSchema,
+  force:  z.boolean().optional(),
   rows:   z.array(RekeningRowSchema).max(5000, 'Maks 5000 baris per batch'),
 });
 
@@ -213,6 +217,7 @@ export const RealisasiBodySchema = z.object({
   tahun:  TahunSchema,
   sumber: SumberSchema,
   expected_version: z.number().int().optional(), // V3-6 optimistic lock
+  force:  z.boolean().optional(),
   rows:   z.array(RealRowSchema).max(10000, 'Maks 10000 baris per batch'),
 });
 

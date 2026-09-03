@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getRealisasiRows, getRealisasiHydrated, saveRealisasiBatch, getKinerjaVersion, KinerjaVersionConflictError } from '@/lib/data/kinerja';
+import { getRealisasiRows, getRealisasiHydrated, saveRealisasiBatch, getKinerjaVersion, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import type { RealRow } from '@/lib/data/kinerja';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RealisasiBodySchema } from '@/lib/data/kinerja-schemas';
@@ -38,9 +38,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, rows, versi: { tipe: versiTipe, seq: versiSeq }, version });
   }
 
-  // Path lama (belum versi-aware) — tetap fungsional sampai UI migrasi.
-  const rows = await getRealisasiRows(tahun, sumber);
-  return NextResponse.json({ ok: true, rows });
+  // Tanpa parameter versi → versi AKTIF (bukan lagi MURNI-0 paksa). Versinya ikut
+  // dipulangkan supaya layar bisa menuliskan angka ini mengacu ke mana.
+  const { rows, versi } = await getRealisasiRows(tahun, sumber);
+  return NextResponse.json({ ok: true, rows, versi });
 }
 
 export async function PUT(req: NextRequest) {
@@ -55,15 +56,22 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = RealisasiBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, expected_version } = parsed.data;
+  const { tahun, sumber, rows, expected_version, force } = parsed.data;
 
   // Cast ke type yang ditunggu saveRealisasiBatch — Zod schema passthrough sudah handle extra fields
   try {
-    await saveRealisasiBatch(tahun, sumber, rows as Omit<RealRow, 'id' | 'tahun' | 'sumber'>[], session.userId, expected_version);
+    await saveRealisasiBatch(tahun, sumber, rows as Omit<RealRow, 'id' | 'tahun' | 'sumber'>[], session.userId, expected_version, force ?? false);
   } catch (err) {
     // V3-6: optimistic-lock conflict → 409 dengan code agar client bisa auto-reload.
     if (err instanceof KinerjaVersionConflictError) {
       return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message, actual: err.actual }, { status: 409 });
+    }
+    // Pagar simpan: klien menerjemahkannya jadi konfirmasi lalu mengulang dengan force.
+    if (err instanceof KinerjaReplaceSafetyError) {
+      return NextResponse.json(
+        { ok: false, code: 'PENURUNAN_DRASTIS', message: err.message, existing: err.existing, incoming: err.incoming },
+        { status: 409 },
+      );
     }
     const msg = err instanceof Error ? err.message : 'Gagal menyimpan';
     return NextResponse.json({ ok: false, message: msg }, { status: 409 });

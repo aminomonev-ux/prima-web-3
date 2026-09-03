@@ -86,8 +86,9 @@ export function calcTotalPct(total: number, pagu: number): number {
 // tidak tabrakan. Untuk setiap group, sort by bulan ASC lalu hitung running
 // total akumulasi (target_fisik, real_fisik, real_keuangan, deviasi, dst).
 //
-// `akum_target_fisik` disimpan sebagai % (bukan Rp) — dijumlah tanpa round dulu
-// supaya tidak drift, baru dibulatkan 2 desimal di akhir.
+// Target diakumulasi dalam RUPIAH (`target_rp`), persennya diturunkan di akhir —
+// menjumlah persen yang sudah dibulatkan membuat akumulasi meleset sampai
+// 0,005% × pagu tiap bulan tiap item. Sinkron kinerja-calc.ts.
 export function recalcAllRealisasi(rows: RealRow[]): RealRow[] {
   const groups = new Map<string, { row: RealRow; origIdx: number }[]>();
   rows.forEach((r, i) => {
@@ -104,14 +105,15 @@ export function recalcAllRealisasi(rows: RealRow[]): RealRow[] {
   const resultMap = new Map<number, RealRow>();
   for (const entries of groups.values()) {
     entries.sort((a, b) => a.row.bulan - b.row.bulan);
-    let akumTargetPct = 0;
+    let akumTargetRp  = 0;
     let akumRealFisik = 0;
     let akumKeuangan  = 0;
     for (const { row, origIdx } of entries) {
       const pagu = row.pagu_awal || 0;
-      akumTargetPct += row.target_fisik  || 0;
+      akumTargetRp  += row.target_rp     || 0;
       akumRealFisik += row.real_fisik    || 0;
       akumKeuangan  += row.real_keuangan || 0;
+      const akumTargetPct = pagu > 0 ? (akumTargetRp / pagu) * 100 : 0;
       const pct_fisik         = pagu > 0 ? Math.round((row.real_fisik    / pagu) * 10000) / 100 : 0;
       const akum_pct_fisik    = pagu > 0 ? Math.round((akumRealFisik     / pagu) * 10000) / 100 : 0;
       const pct_keuangan      = pagu > 0 ? Math.round((row.real_keuangan / pagu) * 10000) / 100 : 0;
@@ -128,6 +130,7 @@ export function recalcAllRealisasi(rows: RealRow[]): RealRow[] {
         ...row,
         pct_fisik,
         akum_target_fisik: Math.round(akumTargetPct * 100) / 100,
+        akum_target_rp:    akumTargetRp,
         akum_real_fisik:   akumRealFisik,
         akum_pct_fisik,
         pct_keuangan,

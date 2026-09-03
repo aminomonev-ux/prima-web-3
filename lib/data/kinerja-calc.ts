@@ -35,18 +35,23 @@ export interface RealRowRaw {
 
 /** Snapshot SSK per canonical_id (versi yang user pilih). */
 export interface SskHydrationCtx {
-  /** Map canonical_id → { pagu, months_pct } untuk versi aktif. */
-  sskByCanonical: Map<string, { pagu: number; months_pct: SskMonths | null }>;
+  /** Map canonical_id → { pagu, months } untuk versi aktif. */
+  sskByCanonical: Map<string, { pagu: number; months: SskMonths | null }>;
 }
 
 /** Row hasil hydrate — siap dikirim ke client. */
 export interface RealRowHydrated extends RealRowRaw {
   // Diturunkan dari SSK versi aktif:
   pagu_awal:         number;
+  /** Target bulan ini dalam RUPIAH — sumber tunggal; `target_fisik` turunannya. */
+  target_rp:         number;
   target_fisik:      number;
+  /** canonical_id tidak ketemu di SSK versi acuan — pagu & target 0, dilaporkan. */
+  yatim:             boolean;
   // Diturunkan dari running calc:
   pct_fisik:         number;
   akum_target_fisik: number;
+  akum_target_rp:    number;
   akum_real_fisik:   number;
   akum_pct_fisik:    number;
   pct_keuangan:      number;
@@ -59,8 +64,8 @@ export interface RealRowHydrated extends RealRowRaw {
 /**
  * Hydrate + recalc semua row realisasi.
  *
- * Step 1: Ambil pagu + target_fisik per bulan dari SSK by canonical_id.
- *   target_fisik bulan b = months_pct[b] (sudah dalam %).
+ * Step 1: Ambil pagu + target_rp per bulan dari SSK by canonical_id.
+ *   target_rp bulan b = months[b] (RUPIAH); target_fisik (%) turunannya.
  * Step 2: Group by (keterangan + uraian_ssk), sort by bulan, hitung akumulasi.
  * Step 3: Return rows dengan kolom turunan terisi.
  *
@@ -79,14 +84,20 @@ export function recalcAllRealisasiServer(
     const ssk = ctx.sskByCanonical.get(r.ssk_canonical_id);
     const pagu = ssk?.pagu ?? 0;
     const monthKey = MONTH_BY_INDEX[r.bulan - 1];
-    const target_fisik = ssk?.months_pct?.[monthKey] ?? 0;
+    // Target diambil dalam RUPIAH; persennya diturunkan. Kebalikan dari sebelumnya
+    // (`months_pct` langsung), yang menjumlah persen sudah-dibulatkan sehingga
+    // akumulasi meleset sampai 0,005% × pagu tiap bulan tiap item.
+    const target_rp = ssk?.months?.[monthKey] ?? 0;
     return {
       ...r,
       pagu_awal: pagu,
-      target_fisik,
+      target_rp,
+      target_fisik: pagu > 0 ? Math.round((target_rp / pagu) * 10000) / 100 : 0,
+      yatim: !ssk,
       // placeholder — di-overwrite di step 2
       pct_fisik: 0,
       akum_target_fisik: 0,
+      akum_target_rp:    0,
       akum_real_fisik:   0,
       akum_pct_fisik:    0,
       pct_keuangan:      0,
@@ -114,14 +125,15 @@ export function recalcAllRealisasiServer(
   const resultMap = new Map<number, RealRowHydrated>();
   for (const entries of groups.values()) {
     entries.sort((a, b) => a.row.bulan - b.row.bulan);
-    let akumTargetPct = 0;
+    let akumTargetRp  = 0;
     let akumRealFisik = 0;
     let akumKeuangan  = 0;
     for (const { row, origIdx } of entries) {
       const pagu = row.pagu_awal || 0;
-      akumTargetPct += row.target_fisik  || 0;
+      akumTargetRp  += row.target_rp     || 0;
       akumRealFisik += row.real_fisik    || 0;
       akumKeuangan  += row.real_keuangan || 0;
+      const akumTargetPct = pagu > 0 ? (akumTargetRp / pagu) * 100 : 0;
       const pct_fisik         = pagu > 0 ? Math.round((row.real_fisik    / pagu) * 10000) / 100 : 0;
       const akum_pct_fisik    = pagu > 0 ? Math.round((akumRealFisik     / pagu) * 10000) / 100 : 0;
       const pct_keuangan      = pagu > 0 ? Math.round((row.real_keuangan / pagu) * 10000) / 100 : 0;
@@ -137,6 +149,7 @@ export function recalcAllRealisasiServer(
         ...row,
         pct_fisik,
         akum_target_fisik: Math.round(akumTargetPct * 100) / 100,
+        akum_target_rp:    akumTargetRp,
         akum_real_fisik:   akumRealFisik,
         akum_pct_fisik,
         pct_keuangan,

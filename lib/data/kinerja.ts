@@ -284,10 +284,16 @@ export async function saveRekeningBatch(
   tahun: string,
   sumber: SumberSSK,
   rows: Pick<RekeningRow, 'uraian' | 'uraian_ssk' | 'sumber_anggaran' | 'program' | 'kegiatan' | 'subkegiatan'>[],
-  userId: number
+  userId: number,
+  force = false,
 ) {
   // PERF-C1: DELETE + bulk INSERT dalam transaction (atomicity + 1 round-trip)
   await withTransaction(async ({ tx, conn }) => {
+    const [ada] = await tx`
+      SELECT COUNT(*) AS n FROM kinerja_rekening WHERE tahun = ${tahun} AND sumber = ${sumber}
+    ` as { n: unknown }[];
+    pagarReplace(`Rekening ${sumber} ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+
     await tx`DELETE FROM kinerja_rekening WHERE tahun = ${tahun} AND sumber = ${sumber}`;
     if (rows.length === 0) return;
     const values = rows.map((r, i) => [
@@ -356,6 +362,84 @@ export async function getKinerjaVersion(entity: string, keyId: string): Promise<
   return Number(rows[0]?.version ?? 0);
 }
 
+// ─── Pagar simpan: replace-all tidak boleh menghapus tanpa ada yang menyatakan ──
+//
+// Ketiga jalur simpan modul ini (SSK, Realisasi, Rekening) berpola DELETE-lalu-
+// tulis-ulang. Sebelumnya penjagaan baris kosong berdiri SESUDAH DELETE, jadi
+// payload kosong tetap menghapus seluruh (tahun, sumber) lalu commit — dan
+// `kinerja_realisasi` tidak punya riwayat apa pun untuk memulihkannya.
+//
+// Ambang & bentuk pesan menyalin lib/blud/data.ts (SAFE_DROP_THRESHOLD): bukan
+// mekanisme baru, cuma dipakai di modul yang belum kebagian.
+const SAFE_DROP_THRESHOLD = 0.5;
+
+export class KinerjaReplaceSafetyError extends Error {
+  constructor(public table: string, public existing: number, public incoming: number) {
+    super(
+      incoming === 0
+        ? `Permintaan simpan tidak berisi satu baris pun, sementara ${existing} baris sudah tersimpan di ${table}. ` +
+          `Kalau memang mau dikosongkan, ulangi dengan force=true.`
+        : `Hanya ${incoming} baris baru vs ${existing} yang sudah tersimpan di ${table} ` +
+          `(turun ${(100 - (incoming / existing) * 100).toFixed(1)}%). Pakai force=true kalau memang sengaja.`,
+    );
+    this.name = 'KinerjaReplaceSafetyError';
+  }
+}
+
+/**
+ * Dipanggil SEBELUM DELETE, di dalam transaksi yang sama supaya `existing` dibaca
+ * di bawah kunci yang sama dengan tulisannya. Menaruhnya sesudah DELETE membuat
+ * pemeriksaan ini tidak berarti apa-apa — barisnya sudah hilang.
+ */
+function pagarReplace(table: string, existing: number, incoming: number, force: boolean) {
+  if (force || existing === 0) return;
+  if (incoming === 0 || incoming < existing * SAFE_DROP_THRESHOLD) {
+    throw new KinerjaReplaceSafetyError(table, existing, incoming);
+  }
+}
+
+/**
+ * Versi SSK yang berlaku per sumber untuk satu tahun.
+ *
+ * Satu-satunya tempat aturan "versi mana yang dipakai" hidup. Sebelumnya ada
+ * TIGA jawaban di modul yang sama: tab Realisasi memakai pilihan pengguna,
+ * Cetak→Rekap dipaksa MURNI-0, sementara Laporan & KPI memakai `pickVersiAktif`.
+ * Karena baris realisasi TIDAK berversi (satu set per tahun+sumber), ketiganya
+ * mengukur realisasi yang sama persis terhadap pagu yang berbeda.
+ */
+export async function versiAktifKinerja(
+  tahun: string,
+  sumber?: SumberSSK,
+): Promise<Map<string, { tipe: 'MURNI' | 'PERUBAHAN'; seq: number }>> {
+  const rows = sumber
+    ? await sql`
+        SELECT sumber, versi_tipe, versi_seq FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND sumber = ${sumber} AND is_nullified = FALSE
+        GROUP BY sumber, versi_tipe, versi_seq
+      ` as Record<string, unknown>[]
+    : await sql`
+        SELECT sumber, versi_tipe, versi_seq FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND is_nullified = FALSE
+        GROUP BY sumber, versi_tipe, versi_seq
+      ` as Record<string, unknown>[];
+
+  const perSumber = new Map<string, Record<string, unknown>[]>();
+  for (const r of rows) {
+    const key = String(r.sumber);
+    if (!perSumber.has(key)) perSumber.set(key, []);
+    perSumber.get(key)!.push(r);
+  }
+  const out = new Map<string, { tipe: 'MURNI' | 'PERUBAHAN'; seq: number }>();
+  for (const [key, list] of perSumber) {
+    const aktif = pickVersiAktif(list);
+    out.set(key, {
+      tipe: aktif?.versi_tipe === 'PERUBAHAN' ? 'PERUBAHAN' : 'MURNI',
+      seq:  Number(aktif?.versi_seq ?? 0),
+    });
+  }
+  return out;
+}
+
 export async function saveSskBatch(
   tahun: string,
   sumber: SumberSSK,
@@ -364,6 +448,7 @@ export async function saveSskBatch(
   versiTipe: 'MURNI' | 'PERUBAHAN' = 'MURNI',
   versiSeq: number = 0,
   expectedVersion?: number,
+  force = false,
 ) {
   // PERF-C1: DELETE + bulk INSERT atomic (1 round-trip).
   // Refactor Versi (Checkpoint C): scope DELETE & INSERT per (versi_tipe, versi_seq) — versi
@@ -391,6 +476,13 @@ export async function saveSskBatch(
       const current = Number(vrows[0]?.version ?? 0);
       if (current !== expectedVersion) throw new KinerjaVersionConflictError(expectedVersion, current);
     }
+
+    const [ada] = await tx`
+      SELECT COUNT(*) AS n FROM kinerja_ssk
+      WHERE tahun = ${tahun} AND sumber = ${sumber}
+        AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
+    ` as { n: unknown }[];
+    pagarReplace(`SSK ${sumber} ${versiTipe}-${versiSeq}`, Number(ada?.n ?? 0), rows.length, force);
 
     await tx`
       DELETE FROM kinerja_ssk
@@ -486,9 +578,14 @@ export interface RealRow {
   uraian_ssk: string;
   pagu_awal: number;
   target_fisik: number;
+  /** Target bulan ini dalam RUPIAH (dari `kinerja_ssk.months`) — sumber persennya. */
+  target_rp: number;
+  /** canonical_id tidak ada di SSK versi acuan. */
+  yatim: boolean;
   real_fisik: number;
   pct_fisik: number;
   akum_target_fisik: number;
+  akum_target_rp: number;
   akum_real_fisik: number;
   akum_pct_fisik: number;
   real_keuangan: number;
@@ -504,9 +601,20 @@ export interface RealRow {
  * pct_*, akum_*, deviasi_*) dihitung dari real_fisik + real_keuangan + SSK lookup
  * via recalcAllRealisasiServer. Default versi MURNI seq=0 untuk backwards-compat.
  */
-export async function getRealisasiRows(tahun: string, sumber: SumberSSK): Promise<RealRow[]> {
-  const hydrated = await getRealisasiHydrated(tahun, sumber, 'MURNI', 0);
-  return hydrated.map((r, i) => ({
+/**
+ * Jalur tanpa parameter versi. Dulu memaksa `'MURNI', 0` — itu yang membuat
+ * Cetak→Rekap mengukur realisasi terhadap pagu MURNI sementara Laporan & KPI
+ * memakai versi aktif. Kini keduanya bertanya ke `versiAktifKinerja`, jadi tidak
+ * ada lagi pemanggil yang diam-diam mendapat versi berbeda.
+ */
+export async function getRealisasiRows(
+  tahun: string,
+  sumber: SumberSSK,
+): Promise<{ rows: RealRow[]; versi: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } }> {
+  const peta = await versiAktifKinerja(tahun, sumber);
+  const versi = peta.get(sumber) ?? { tipe: 'MURNI' as const, seq: 0 };
+  const hydrated = await getRealisasiHydrated(tahun, sumber, versi.tipe, versi.seq);
+  const rows = hydrated.map((r, i) => ({
     id:                i + 1, // identitas runtime — DB id tidak di-expose ke client lewat path lama
     tahun,
     sumber,
@@ -521,9 +629,12 @@ export async function getRealisasiRows(tahun: string, sumber: SumberSSK): Promis
     uraian_ssk:        r.uraian_ssk ?? '',
     pagu_awal:         r.pagu_awal,
     target_fisik:      r.target_fisik,
+    target_rp:         r.target_rp,
+    yatim:             r.yatim,
     real_fisik:        r.real_fisik,
     pct_fisik:         r.pct_fisik,
     akum_target_fisik: r.akum_target_fisik,
+    akum_target_rp:    r.akum_target_rp,
     akum_real_fisik:   r.akum_real_fisik,
     akum_pct_fisik:    r.akum_pct_fisik,
     real_keuangan:     r.real_keuangan,
@@ -533,6 +644,7 @@ export async function getRealisasiRows(tahun: string, sumber: SumberSSK): Promis
     deviasi_fisik:     r.deviasi_fisik,
     deviasi_keuangan:  r.deviasi_keuangan,
   }));
+  return { rows, versi };
 }
 
 /**
@@ -569,7 +681,7 @@ export async function getRealisasiHydrated(
       ORDER BY bulan, id
     ` as unknown as Promise<Record<string, unknown>[]>,
     sql`
-      SELECT canonical_id, pagu, months_pct
+      SELECT canonical_id, pagu, months
       FROM kinerja_ssk
       WHERE tahun = ${tahun} AND sumber = ${sumber}
         AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
@@ -578,13 +690,13 @@ export async function getRealisasiHydrated(
   ]);
 
   // Build SSK lookup map by canonical_id
-  const sskByCanonical = new Map<string, { pagu: number; months_pct: SskMonths | null }>();
+  const sskByCanonical = new Map<string, { pagu: number; months: SskMonths | null }>();
   for (const s of sskRaw) {
     const cid = String(s.canonical_id ?? '');
     if (!cid) continue;
     sskByCanonical.set(cid, {
       pagu: Number(s.pagu ?? 0),
-      months_pct: parseJson<SskMonths>(s.months_pct, emptyMonths()),
+      months: parseJson<SskMonths>(s.months, emptyMonths()),
     });
   }
 
@@ -616,6 +728,7 @@ export async function saveRealisasiBatch(
   })[],
   userId: number,
   expectedVersion?: number,
+  force = false,
 ) {
   // PERF-C1: DELETE + bulk INSERT atomic.
   // Refactor Versi (Checkpoint C fix): WAJIB include ssk_canonical_id, ssk_versi_tipe, ssk_versi_seq
@@ -631,6 +744,11 @@ export async function saveRealisasiBatch(
       const current = Number(vrows[0]?.version ?? 0);
       if (current !== expectedVersion) throw new KinerjaVersionConflictError(expectedVersion, current);
     }
+    const [ada] = await tx`
+      SELECT COUNT(*) AS n FROM kinerja_realisasi WHERE tahun = ${tahun} AND sumber = ${sumber}
+    ` as { n: unknown }[];
+    pagarReplace(`Realisasi ${sumber} ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+
     await tx`DELETE FROM kinerja_realisasi WHERE tahun = ${tahun} AND sumber = ${sumber}`;
     if (expectedVersion !== undefined) {
       await tx`
@@ -843,7 +961,10 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
     SELECT
       COALESCE(SUM(real_keuangan), 0) AS total_real_keuangan,
       COALESCE(SUM(real_fisik), 0)    AS total_real_fisik,
-      COALESCE(MAX(bulan), 0)         AS bulan_terakhir
+      -- Bulan terakhir yang ADA ISINYA. MAX(bulan) polos selalu 12, karena
+      -- "Init dari SSK" membuat baris Jan-Des lengkap berisi nol sejak awal
+      -- tahun — labelnya lalu berbunyi "Desember" di bulan Juli.
+      COALESCE(MAX(CASE WHEN real_fisik <> 0 OR real_keuangan <> 0 THEN bulan END), 0) AS bulan_terakhir
     FROM kinerja_realisasi
     WHERE tahun = ${tahun} AND sumber = ${sumber}
   ` as Record<string, unknown>[];
@@ -927,7 +1048,10 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
       sumber,
       COALESCE(SUM(real_keuangan), 0) AS total_real_keuangan,
       COALESCE(SUM(real_fisik), 0)    AS total_real_fisik,
-      COALESCE(MAX(bulan), 0)         AS bulan_terakhir
+      -- Bulan terakhir yang ADA ISINYA. MAX(bulan) polos selalu 12, karena
+      -- "Init dari SSK" membuat baris Jan-Des lengkap berisi nol sejak awal
+      -- tahun — labelnya lalu berbunyi "Desember" di bulan Juli.
+      COALESCE(MAX(CASE WHEN real_fisik <> 0 OR real_keuangan <> 0 THEN bulan END), 0) AS bulan_terakhir
     FROM kinerja_realisasi
     WHERE tahun = ${tahun}
     GROUP BY sumber

@@ -16,7 +16,11 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
-import { Wand2, Save, Upload } from 'lucide-react';
+import { Wand2, Save, Upload, Equal } from 'lucide-react';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { kumpulkanItem } from '@/lib/kinerja/rekap';
+import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '@/lib/kinerja/samakan-target';
+import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import ImportRealisasiModal from '@/components/kinerja/ImportRealisasiModal';
 import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
 import { useLampir, type LampirRealisasiData } from '@/lib/sentinel/lampir-store';
@@ -126,6 +130,37 @@ export default function RealisasiTab({
     setRealisasiRows(p => recalcAllRealisasi(p.map((r,i) => i === idx ? { ...r, [field]: val } : r)));
   }
 
+  // ─── Samakan realisasi fisik dengan target bulan ini ──────────────────────
+  // Aturannya di lib/kinerja/samakan-target.ts (PURE, diuji perilakunya).
+  // Di sini tinggal dialog + toast; bulan yang sedang dibuka saja, bukan
+  // akumulasi — kolom akumulasi menyesuaikan sendiri lewat recalcAllRealisasi.
+
+  function samakanBaris(idx: number) {
+    setRealisasiRows(p => recalcAllRealisasi(samakanSatu(p, idx)));
+  }
+
+  async function samakanBulanIni() {
+    const { kosong, berisi } = ringkasSamakan(realisasiRows, realisasiBulan);
+    const namaBulan = MONTH_LABELS[realisasiBulan-1];
+    if (kosong === 0) {
+      toast.info(berisi > 0
+        ? `Semua ${berisi} baris ${namaBulan} yang punya target sudah ada isinya.`
+        : `Tidak ada baris ${namaBulan} yang punya target untuk disalin.`);
+      return;
+    }
+    const ok = await confirmDialog({
+      title: `Samakan dengan target ${namaBulan}`,
+      message: `${kosong} baris akan diisi realisasi fisiknya sama dengan target bulan ini.`
+        + (berisi > 0 ? ` ${berisi} baris sudah ada isinya dan tidak akan disentuh.` : '')
+        + ' Belum tersimpan sampai Anda menekan Simpan Semua.',
+      variant: 'primary',
+      confirmLabel: 'Isi sekarang',
+    });
+    if (!ok) return;
+    setRealisasiRows(p => recalcAllRealisasi(samakanSebulan(p, realisasiBulan)));
+    toast.success(`${kosong} baris diisi dari target ${namaBulan}.`);
+  }
+
   /** Init 12 bulan dari SSK — bulan Des dibulatkan supaya total 100% tepat. */
   function initRealisasiFromSSK() {
     if (!sskRows.length) { toast.error('Data SSK kosong. Isi SSK terlebih dahulu.'); return; }
@@ -133,11 +168,24 @@ export default function RealisasiTab({
     const toAdd: RealRow[] = [];
     // Hitung berapa SSK row yang di-skip karena uraian kosong → kasih warning informatif
     const skippedNoUraian = sskRows.filter(s => !s.uraian.trim()).length;
+    // Duplikat diperiksa lewat canonical_id — identitas yang SAMA dengan yang
+    // dipakai recalcAllRealisasi untuk mengelompokkan. Dulu diperiksa lewat nama,
+    // jadi memperbaiki uraian di SSK lalu Init ulang menambahkan 12 baris baru di
+    // samping 12 baris lama yang canonical_id-nya sama → akumulasinya dobel tanpa
+    // satu pun peringatan. Nama tinggal cadangan untuk baris lama tanpa canonical.
+    const namaBerubah: string[] = [];
     for (let b = 1; b <= 12; b++) {
       const mk = MONTH_IDX[b - 1];
       for (const s of sskRows) {
         if (!s.uraian.trim()) continue;
-        const exists = realisasiRows.some(r => r.bulan === b && r.keterangan === s.uraian && r.uraian_ssk === s.uraian_ssk);
+        const cid = s.canonical_id || '';
+        const exists = cid
+          ? realisasiRows.some(r => r.bulan === b && r.ssk_canonical_id === cid)
+          : realisasiRows.some(r => r.bulan === b && r.keterangan === s.uraian && r.uraian_ssk === s.uraian_ssk);
+        if (exists && cid && b === 1) {
+          const lama = realisasiRows.find(r => r.bulan === b && r.ssk_canonical_id === cid);
+          if (lama && lama.keterangan !== s.uraian) namaBerubah.push(s.uraian);
+        }
         if (!exists) {
           toAdd.push({
             bulan: b,
@@ -151,12 +199,13 @@ export default function RealisasiTab({
             subkegiatan:  s.subkegiatan  || '',
             uraian_ssk:   s.uraian_ssk   || '',
             pagu_awal:    s.pagu         || 0,
-            // #10: pakai months_pct langsung — sumber yang SAMA dgn server saat
-            // hydrate reload (kinerja-calc.ts). Rumus lama memaksa Des = 100 − Σ11
-            // bulan → nilai beda sebelum vs sesudah simpan (bahkan bisa negatif).
-            target_fisik: s.months_pct?.[mk] ?? 0,
+            // Target diambil dalam RUPIAH; persennya diturunkan — sumber yang SAMA
+            // dengan server saat hydrate reload (kinerja-calc.ts), jadi nilainya
+            // tidak berubah sebelum vs sesudah simpan.
+            target_rp:    s.months?.[mk] ?? 0,
+            target_fisik: (s.pagu || 0) > 0 ? Math.round(((s.months?.[mk] ?? 0) / s.pagu) * 10000) / 100 : 0,
             real_fisik: 0, pct_fisik: 0,
-            akum_target_fisik: 0, akum_real_fisik: 0, akum_pct_fisik: 0,
+            akum_target_fisik: 0, akum_target_rp: 0, akum_real_fisik: 0, akum_pct_fisik: 0,
             real_keuangan: 0, pct_keuangan: 0, akum_keuangan: 0, akum_pct_keuangan: 0,
             deviasi_fisik: 0, deviasi_keuangan: 0,
           });
@@ -175,21 +224,35 @@ export default function RealisasiTab({
     const itemCount = sskRows.length - skippedNoUraian;
     const msg = `${toAdd.length} baris ditambahkan dari SSK (12 bulan × ${itemCount} item)`;
     toast.success(skippedNoUraian > 0 ? `${msg}. ${skippedNoUraian} item di-skip (uraian kosong).` : msg);
+    if (namaBerubah.length > 0) {
+      toast.info(
+        `${namaBerubah.length} rekening namanya berbeda dengan yang tersimpan di realisasi — barisnya TIDAK digandakan, ` +
+        `tapi nama lama masih terpakai: ${namaBerubah.slice(0, 3).join(' · ')}`,
+        { duration: 8000 },
+      );
+    }
   }
 
-  async function saveRealisasi() {
+  async function saveRealisasi(force = false) {
     setSaving(true);
     try {
       const rows = recalcAllRealisasi(realisasiRows);
       const d = await fetchJson<unknown>('/api/kinerja/realisasi', {
         method: 'PUT',
-        body: JSON.stringify({ tahun, sumber: realisasiSumber, rows, expected_version: realVersion }),
+        body: JSON.stringify({ tahun, sumber: realisasiSumber, rows, expected_version: realVersion, force }),
       });
       if (d.ok) { toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} baris realisasi`); setRealisasiRows(rows); refetchReal(); }
       else if ((d as unknown as { code?: string }).code === 'VERSION_CONFLICT') {
         toast.error('Data realisasi sudah diubah pengguna lain — memuat versi terbaru.');
         refetchReal();
-      } else toast.error(d.message || 'Gagal menyimpan');
+      }
+      // Pagar simpan: barisnya turun drastis / kosong. Ditanyakan, bukan ditolak
+      // buntu — mengosongkan satu sumber dengan sengaja itu pekerjaan yang sah.
+      else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
+        const ok = await konfirmasiPenurunan(`realisasi ${realisasiSumber}`, d as unknown as JawabanPagar);
+        if (ok) { setSaving(false); await saveRealisasi(true); return; }
+      }
+      else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
 
@@ -200,6 +263,10 @@ export default function RealisasiTab({
   const bulanRowsWithIdx = realisasiRows
     .map((r, i) => ({ row: r, idx: i }))
     .filter(({ row }) => row.bulan === realisasiBulan);
+
+  // Rekening yatim dilaporkan, bukan didiamkan: uangnya nyata tapi tidak punya
+  // pagu sebagai pembagi, jadi rekap Cetak mengeluarkannya dari hitungan.
+  const yatim = kumpulkanItem(realisasiRows, 12).yatim;
 
   const inpBase: React.CSSProperties = {
     border:`1px solid ${cInputBorder}`, borderRadius:'5px', padding:'3px 6px',
@@ -262,8 +329,16 @@ export default function RealisasiTab({
               onClick={() => setShowImport(true)} disabled={versiLocked}>
               Import Excel
             </PrimaButton></Tip>
+            <Tip label={versiLocked
+              ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa input baru.`
+              : `Isi Real Fisik ${MONTH_LABELS[realisasiBulan-1]} sama dengan targetnya, hanya baris yang masih kosong`}>
+              <PrimaButton variant="warning" iconLeft={<Equal size={14} />}
+                onClick={samakanBulanIni} disabled={versiLocked}>
+                Samakan Target
+              </PrimaButton>
+            </Tip>
             <Tip label={versiLocked ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa simpan input baru.` : ''}><PrimaButton variant="success" iconLeft={<Save size={14} />}
-              onClick={saveRealisasi} disabled={saving || versiLocked}>
+              onClick={() => saveRealisasi()} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
             </PrimaButton></Tip>
             <DownloadButton variant="excel" label="Excel" onClick={doExportRealisasiExcel} />
@@ -271,6 +346,15 @@ export default function RealisasiTab({
           </div>
         )}
       </div>
+
+      {yatim.jumlahBaris > 0 && (
+        <div style={{ marginBottom:'14px', padding:'10px 14px', borderRadius:'10px', fontSize:'11px', lineHeight:1.6,
+          background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775', color: isLight?'#854F0B':'#FAC775' }}>
+          <strong>{yatim.jumlahItem} rekening tidak ada di SSK {versiLabel}</strong> ({yatim.jumlahBaris} baris,
+          realisasi keuangan {fmtNum(yatim.nominal)}). Pagu &amp; targetnya 0 sehingga persennya tidak bisa dihitung, dan
+          baris ini <strong>tidak ikut</strong> dijumlah di rekap Cetak. {yatim.contoh.join(' · ')}
+        </div>
+      )}
 
       {showImport && (
         <ImportRealisasiModal tahun={tahun} currentSumber={realisasiSumber} isLight={isLight}
@@ -363,8 +447,28 @@ export default function RealisasiTab({
                   </td>
                   <td style={{ padding:'3px 6px', borderBottom:cBorderHair }}>
                     {canEdit
-                      ? <InputNominal value={row.real_fisik||0} onChange={v => updateRealInput(idx,'real_fisik',v)}
-                          style={{ ...inpBase, width:'110px', textAlign:'right', borderColor: isLight?'#10b981':'#86efac' }} />
+                      ? (
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
+                          <InputNominal value={row.real_fisik||0} onChange={v => updateRealInput(idx,'real_fisik',v)}
+                            style={{ ...inpBase, width:'110px', textAlign:'right', borderColor: isLight?'#10b981':'#86efac' }} />
+                          {bisaSamakan(row) && (
+                            <button
+                              type="button"
+                              onClick={() => samakanBaris(idx)}
+                              data-tooltip={`Isi dengan target ${MONTH_LABELS[realisasiBulan-1]}: Rp ${fmtNum(row.target_rp)}`}
+                              className="rl-samakan"
+                              aria-label={`Samakan realisasi fisik dengan target ${MONTH_LABELS[realisasiBulan-1]}`}
+                              style={{
+                                display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                width:'24px', height:'24px', flex:'0 0 auto', cursor:'pointer',
+                                borderRadius:'6px', border:`1px solid ${isLight?'rgba(139,92,246,.35)':'#0C447C'}`,
+                                background: isLight?'#FFFFFF':'rgba(4,44,83,.6)', color: isLight?'#6D28D9':'#85B7EB',
+                              }}>
+                              <Equal size={12} />
+                            </button>
+                          )}
+                        </span>
+                      )
                       : <span style={{ color: isLight?'#15803D':'#16a34a', fontWeight:700 }}>{fmtNum(row.real_fisik)}</span>}
                   </td>
                   <td style={{ padding:'3px 6px', borderBottom:cBorderHair }}>

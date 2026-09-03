@@ -43,6 +43,9 @@ export const DEFAULT_HEADER_STYLE: Partial<ExcelJS.Style> = {
 /**
  * Tambah AOA (Array of Arrays) ke worksheet, style header row, set column widths.
  * AOA[0] = header row, AOA[1..] = data rows.
+ *
+ * `headerRowIndex` (0-based, default 0) untuk berkas yang punya baris kop di
+ * atas headernya — tanpa itu baris kop yang ter-style dan header aslinya polos.
  */
 export function addSheetFromAoa(
   ws: ExcelJS.Worksheet,
@@ -50,6 +53,7 @@ export function addSheetFromAoa(
   options?: {
     colWidths?: ColWidth[];
     headerStyle?: Partial<ExcelJS.Style>;
+    headerRowIndex?: number;
   },
 ) {
   if (aoa.length === 0) return;
@@ -57,9 +61,9 @@ export function addSheetFromAoa(
   for (const row of aoa) {
     ws.addRow(row.map(sanitizeCell));
   }
-  // Style header (row 1)
+  // Style header row
   const headerStyle = options?.headerStyle ?? DEFAULT_HEADER_STYLE;
-  const headerRow = ws.getRow(1);
+  const headerRow = ws.getRow((options?.headerRowIndex ?? 0) + 1);
   headerRow.eachCell((cell) => {
     Object.assign(cell, headerStyle);
   });

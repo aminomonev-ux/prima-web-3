@@ -11,6 +11,7 @@ import type {
   MasterOpts, MasterRow, MasterTipe,
 } from './_types';
 import { MONTHS_KEYS, MONTH_SHORT, CRR_BULAN_LABELS } from './_utils';
+import type { BarisRekap, LaporanYatim } from '@/lib/kinerja/rekap';
 
 let _pdfPromise:  Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
 
@@ -61,6 +62,106 @@ export async function exportSskPdf(params: { rows: SskRow[]; sumber: SumberSSK; 
   doc.save(`SSK-${sumber}-${tahun}.pdf`);
 }
 
+// ─── Rekap (Cetak → Rekap) ────────────────────────────────────────────────────
+//
+// Menerima baris yang SUDAH dihitung `hitungRekap`, bukan menghitung ulang —
+// dokumen yang diunduh wajib memuat angka yang persis sama dengan yang dilihat
+// orang di layar. Menghitung ulang di sini berarti dua sumber kebenaran untuk
+// satu tabel, dan cepat atau lambat keduanya berbeda pendapat.
+
+const REKAP_HEADER = [
+  'No', 'Uraian', 'Anggaran (Rp)', 'Target s/d Bln Ini (%)',
+  'Realisasi Fisik s/d Bln Ini (Rp)', 'Realisasi Fisik s/d Bln Ini (%)', 'Deviasi Fisik (%)',
+  'Target Keu s/d Bln Ini (Rp)', 'Realisasi Keu s/d Bln Ini (Rp)', 'Realisasi Keu s/d Bln Ini (%)',
+  'Deviasi Keu (%)',
+];
+
+/** Hierarki dipertahankan lewat spasi di depan label — Excel & PDF tidak punya indent baris. */
+const labelIndent = (b: BarisRekap) => `${'    '.repeat(b.indent)}${b.label}`;
+
+export interface RekapExportParams {
+  baris:    BarisRekap[];
+  yatim:    LaporanYatim;
+  tahun:    string;
+  namaBulan: string;
+}
+
+/** Catatan yatim ikut dibawa: tanpa ini, dokumen yang dibaca di luar aplikasi
+ *  tidak bisa dijelaskan kenapa totalnya lebih kecil dari kas yang keluar. */
+function catatanYatim(yatim: LaporanYatim): string | null {
+  if (yatim.jumlahBaris === 0) return null;
+  return `Catatan: ${yatim.jumlahItem} rekening (${yatim.jumlahBaris} baris, realisasi keuangan `
+    + `${fmtNum(yatim.nominal)}) TIDAK ikut dihitung — rekeningnya sudah tidak ada di SSK acuan `
+    + `sehingga tidak punya pagu sebagai pembagi.`;
+}
+
+/** Baris kop di atas header — indeksnya juga yang dipakai `headerRowIndex`. */
+export const REKAP_JUDUL_BARIS = 6;
+
+/** Dipisah dari pengunduhannya supaya bisa diuji tanpa DOM. */
+export function rekapAoa({ baris, yatim, tahun, namaBulan }: RekapExportParams): (string | number | null)[][] {
+  const judul: (string | number | null)[][] = [
+    ['RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO'],
+    ['PROVINSI JAWA TENGAH'],
+    ['LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP'],
+    [`S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`],
+    ['Pagu & target mengacu SSK versi aktif tiap sumber'],
+    [],
+  ];
+  const data = baris.map(b => [
+    b.no, labelIndent(b), b.pagu, b.targetPct,
+    b.realFisik, b.pctFisik, b.devFisik,
+    b.targetRp, b.realKeu, b.pctKeu, b.devKeu,
+  ]);
+  const catatan = catatanYatim(yatim);
+  return [...judul, REKAP_HEADER, ...data, ...(catatan ? [[], [catatan]] : [])];
+}
+
+export async function exportRekapExcel(params: RekapExportParams) {
+  const ExcelJSLib = await loadExcelJs();
+  const wb = new ExcelJSLib.Workbook();
+  const ws = wb.addWorksheet('Rekap');
+  addSheetFromAoa(ws, rekapAoa(params), {
+    headerRowIndex: REKAP_JUDUL_BARIS,
+    colWidths: [{ wch:5 },{ wch:48 },{ wch:18 },{ wch:12 },{ wch:20 },{ wch:12 },{ wch:12 },{ wch:20 },{ wch:20 },{ wch:12 },{ wch:12 }],
+  });
+  await downloadWorkbook(wb, `Rekap-SemuaSumber-sd-${params.namaBulan}-${params.tahun}.xlsx`);
+}
+
+export async function exportRekapPdf({ baris, yatim, tahun, namaBulan }: RekapExportParams) {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+  doc.setFontSize(12);
+  doc.text('RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO', 14, 13);
+  doc.setFontSize(9);
+  doc.text('PROVINSI JAWA TENGAH', 14, 18);
+  doc.setFontSize(11);
+  doc.text('LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP', 14, 25);
+  doc.setFontSize(9);
+  doc.text(`S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`, 14, 30);
+  doc.text('Pagu & target mengacu SSK versi aktif tiap sumber', 14, 35);
+
+  const body = baris.map(b => [
+    String(b.no), labelIndent(b), fmtNum(b.pagu), b.targetPct.toFixed(2) + '%',
+    fmtNum(b.realFisik), b.pctFisik.toFixed(2) + '%', b.devFisik.toFixed(2) + '%',
+    fmtNum(b.targetRp), fmtNum(b.realKeu), b.pctKeu.toFixed(2) + '%', b.devKeu.toFixed(2) + '%',
+  ]);
+  autoTable(doc, {
+    head: [REKAP_HEADER], body, startY: 40,
+    styles: { fontSize: 7, cellPadding: 1 },
+    headStyles: { fillColor: [51,65,85] },
+    // Baris grand total & program ditebalkan supaya pohonnya tetap terbaca di kertas.
+    didParseCell: (d) => { if (d.section === 'body' && baris[d.row.index]?.tebal) d.cell.styles.fontStyle = 'bold'; },
+  });
+  const catatan = catatanYatim(yatim);
+  if (catatan) {
+    const y = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 40;
+    doc.setFontSize(8);
+    doc.text(doc.splitTextToSize(catatan, 380), 14, y + 8);
+  }
+  doc.save(`Rekap-SemuaSumber-sd-${namaBulan}-${tahun}.pdf`);
+}
+
 // ─── Rekening ─────────────────────────────────────────────────────────────────
 
 export async function exportRekeningExcel(params: { rows: RekeningRow[]; sumber: SumberSSK; tahun: string }) {
@@ -108,7 +209,9 @@ export async function exportRealisasiPdf(params: { rows: RealRow[]; sumber: Sumb
   const head = [['No','Bulan','Keterangan','Pagu','Tgt Fisik','Real Fisik','% Fisik','Akum Tgt','Akum Real','Akum %','Real Keu','% Real Keu','Akum Keu','Akum % Keu','Dev Fisik %','Dev Keu %']];
   const body = rows.map((r,i) => [
     String(i+1), CRR_BULAN_LABELS[r.bulan-1] ?? String(r.bulan), r.keterangan,
-    fmtNum(r.pagu_awal), fmtNum(r.target_fisik), fmtNum(r.real_fisik), r.pct_fisik+'%',
+    // target_fisik satuannya PERSEN — `fmtNum` membuatnya berdiri tanpa tanda %
+    // tepat di sebelah kolom akumulasi yang bertanda, dua satuan bersebelahan.
+    fmtNum(r.pagu_awal), r.target_fisik.toFixed(2)+'%', fmtNum(r.real_fisik), r.pct_fisik+'%',
     String(r.akum_target_fisik.toFixed(2))+'%', fmtNum(r.akum_real_fisik), r.akum_pct_fisik+'%',
     fmtNum(r.real_keuangan), r.pct_keuangan+'%', fmtNum(r.akum_keuangan), r.akum_pct_keuangan+'%',
     r.deviasi_fisik+'%', r.deviasi_keuangan+'%',

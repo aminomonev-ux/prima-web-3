@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import { fetchJson } from '@/lib/shared/api';
 import { Pencil, Plus, Save, Upload } from 'lucide-react';
 import DeleteButton from '@/components/ui/DeleteButton';
@@ -99,14 +100,18 @@ export default function RekeningTab({
     setRekeningRows(p => p.filter((_,i) => i !== idx));
   }
 
-  async function saveRekening() {
+  async function saveRekening(force = false) {
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/kinerja/rekening', {
         method: 'PUT',
-        body: JSON.stringify({ tahun, sumber: activeSumber, rows: rekeningRows }),
+        body: JSON.stringify({ tahun, sumber: activeSumber, rows: rekeningRows, force }),
       });
       if (d.ok) toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} rekening`);
+      else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
+        const ok = await konfirmasiPenurunan(`rekening ${activeSumber}`, d as unknown as JawabanPagar);
+        if (ok) { setSaving(false); await saveRekening(true); return; }
+      }
       else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
@@ -244,7 +249,7 @@ export default function RekeningTab({
               {rekEditIdx !== null ? 'Update' : 'Tambah'}
             </PrimaButton>
             <PrimaButton variant="success" iconLeft={<Save size={14} />}
-              onClick={saveRekening} disabled={saving || rekeningRows.length === 0}>
+              onClick={() => saveRekening()} disabled={saving || rekeningRows.length === 0}>
               {saving ? 'Menyimpan...' : 'Simpan'}
             </PrimaButton>
             <PrimaButton variant="ghost" iconLeft={<Upload size={14} />}

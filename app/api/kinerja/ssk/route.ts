@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getSskRows, saveSskBatch, getKinerjaVersion, KinerjaVersionConflictError } from '@/lib/data/kinerja';
+import { getSskRows, saveSskBatch, getKinerjaVersion, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, SskBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
@@ -45,16 +45,22 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = SskBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version } = parsed.data;
+  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version, force } = parsed.data;
   const versiTipe = versi_tipe ?? 'MURNI';
   const versiSeq  = versi_seq  ?? 0;
 
   try {
-    await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version);
+    await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version, force ?? false);
   } catch (err) {
     // V3-6: optimistic-lock conflict → 409 dengan code agar client bisa auto-reload.
     if (err instanceof KinerjaVersionConflictError) {
       return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message, actual: err.actual }, { status: 409 });
+    }
+    if (err instanceof KinerjaReplaceSafetyError) {
+      return NextResponse.json(
+        { ok: false, code: 'PENURUNAN_DRASTIS', message: err.message, existing: err.existing, incoming: err.incoming },
+        { status: 409 },
+      );
     }
     const msg = err instanceof Error ? err.message : 'Gagal menyimpan';
     return NextResponse.json({ ok: false, message: msg }, { status: 409 });

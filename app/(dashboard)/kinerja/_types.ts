@@ -69,9 +69,19 @@ export interface RealRow {
   ssk_versi_seq?: number;
   pagu_awal: number;
   target_fisik: number;
+  /**
+   * Target bulan ini dalam RUPIAH — diambil dari `kinerja_ssk.months`, bukan
+   * diturunkan dari `target_fisik` (%). `target_fisik` justru turunan dari sini.
+   * Menjumlah persen yang sudah dibulatkan 2 desimal membuat akumulasi meleset
+   * sampai 0,005% × pagu per bulan per item.
+   */
+  target_rp: number;
+  /** Baris yang `ssk_canonical_id`-nya tidak ada di SSK versi acuan. */
+  yatim?: boolean;
   real_fisik: number;
   pct_fisik: number;
   akum_target_fisik: number;
+  akum_target_rp: number;
   akum_real_fisik: number;
   akum_pct_fisik: number;
   real_keuangan: number;

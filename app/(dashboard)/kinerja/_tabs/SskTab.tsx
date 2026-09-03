@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
+import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import { fetchJson } from '@/lib/shared/api';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import { InputNominal } from '@/components/ui/input-nominal';
@@ -126,7 +127,7 @@ export default function SskTab({
     }));
   }
 
-  async function saveSsk() {
+  async function saveSsk(force = false) {
     if (versiLocked) { toast.error(`Versi ${versiLabel} sudah dikunci, tidak bisa diubah.`); return; }
     setSaving(true);
     try {
@@ -136,6 +137,7 @@ export default function SskTab({
           tahun, sumber: activeSumber, rows: sskRows,
           versi_tipe: sskVersi.tipe, versi_seq: sskVersi.seq,
           expected_version: sskVersion, // V3-6 optimistic lock
+          force,
         }),
       });
       if (d.ok) {
@@ -147,6 +149,9 @@ export default function SskTab({
         // V3-6: edit barengan → muat ulang versi terbaru (mirror RA L49).
         toast.error('Data SSK sudah diubah pengguna lain — memuat versi terbaru.');
         refetchSsk();
+      } else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
+        const ok = await konfirmasiPenurunan(`SSK ${activeSumber} ${versiLabel}`, d as unknown as JawabanPagar);
+        if (ok) { setSaving(false); await saveSsk(true); return; }
       } else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
@@ -229,7 +234,7 @@ export default function SskTab({
               Import
             </PrimaButton></Tip>
             <Tip label={versiLocked ? 'Versi terkunci, tidak bisa disimpan' : ''}><PrimaButton variant="success" iconLeft={<Save size={14} />}
-              onClick={saveSsk} disabled={saving || versiLocked}>
+              onClick={() => saveSsk()} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
             </PrimaButton></Tip>
             <DownloadButton variant="excel" label="Excel" onClick={doExportSskExcel} />

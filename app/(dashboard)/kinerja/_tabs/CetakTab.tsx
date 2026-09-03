@@ -4,7 +4,7 @@
 // View-only tab: read realisasiRows + realisasiAllRows dari shell via props.
 // State lokal: cetakView, cetakBulan, rekapBulan, rekapDepth (filter UI).
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import SoftSelect from '@/components/ui/SoftSelect';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -12,7 +12,8 @@ import DownloadButton from '@/components/ui/DownloadButton';
 import { Printer } from 'lucide-react';
 import type { SumberSSK, RealRow } from '../_types';
 import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS } from '../_utils';
-import { exportRealisasiExcel, exportRealisasiPdf } from '../_exports';
+import { hitungRekap, bulanTersedia } from '@/lib/kinerja/rekap';
+import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf } from '../_exports';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -52,6 +53,27 @@ export default function CetakTab({
   const [cetakBulan, setCetakBulan] = useState<number | 'semua'>('semua');
   const [rekapBulan, setRekapBulan] = useState<number>(0);
   const [rekapDepth, setRekapDepth] = useState<'program'|'kegiatan'|'subkegiatan'|'ssk'|'full'>('ssk');
+
+  // Rekap dihitung SEKALI di sini, dipakai bilah alat (unduh) DAN tabel. Dua
+  // pemanggilan = dua jawaban kalau salah satunya kelewat disesuaikan, dan yang
+  // diunduh wajib memuat angka yang persis sama dengan yang dilihat di layar.
+  const bulanRekapAda   = bulanTersedia(realisasiAllRows);
+  const bulanRekapPilih = rekapBulan === 0
+    ? (bulanRekapAda.length > 0 ? Math.max(...bulanRekapAda) : 0)
+    : rekapBulan;
+  const rekap = useMemo(
+    () => bulanRekapPilih === 0
+      ? null
+      : hitungRekap(realisasiAllRows, bulanRekapPilih, rekapDepth, 'RSJD Dr. Amino Gondohutomo'),
+    [realisasiAllRows, bulanRekapPilih, rekapDepth],
+  );
+
+  const doExportRekapExcel = () => rekap && exportRekapExcel({
+    baris: rekap.baris, yatim: rekap.yatim, tahun, namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
+  });
+  const doExportRekapPdf = () => rekap && exportRekapPdf({
+    baris: rekap.baris, yatim: rekap.yatim, tahun, namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
+  });
 
   // Group rows by bulan
   const grouped: Record<number, RealRow[]> = {};
@@ -108,9 +130,8 @@ export default function CetakTab({
 
       {/* Toolbar */}
       {cetakView === 'rekap' ? (() => {
-        const allBulanRekap = [...new Set(realisasiAllRows.map(r => r.bulan))].sort((a,b) => a-b);
-        const bulanMaxRekap = allBulanRekap.length > 0 ? Math.max(...allBulanRekap) : 0;
-        const selectedBulan = rekapBulan === 0 ? bulanMaxRekap : rekapBulan;
+        const allBulanRekap = bulanRekapAda;
+        const selectedBulan = bulanRekapPilih;
         return (
           <div className="no-print" style={{ background:cSurfaceForm, border:'1px solid #0891b2', borderRadius:'12px', padding:'12px 16px', marginBottom:'14px', display:'flex', flexDirection:'column', gap:'8px' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px' }}>
@@ -148,6 +169,8 @@ export default function CetakTab({
                 <PrimaButton variant="purple" iconLeft={<Printer size={14} />} onClick={() => window.print()}>
                   Print
                 </PrimaButton>
+                <DownloadButton variant="excel" label="Excel" onClick={doExportRekapExcel} disabled={!rekap} />
+                <DownloadButton variant="pdf"   label="PDF"   onClick={doExportRekapPdf}   disabled={!rekap} />
               </div>
             </div>
           </div>
@@ -189,143 +212,31 @@ export default function CetakTab({
 
       {cetakView === 'rekap' ? (() => {
         // ── REKAP: semua sumber, S/D bulan yang dipilih ──
-        const allBulan = [...new Set(realisasiAllRows.map(r => r.bulan))].sort((a,b) => a-b);
-        const bulanMax = allBulan.length > 0 ? Math.max(...allBulan) : 0;
-        const bulanTerpilih = rekapBulan === 0 ? bulanMax : rekapBulan;
-        if (bulanTerpilih === 0) return (
+        // Seluruh rumusnya pindah ke lib/kinerja/rekap.ts supaya bisa diuji;
+        // di sini tinggal menggambar.
+        const bulanTerpilih = bulanRekapPilih;
+        if (bulanTerpilih === 0 || !rekap) return (
           <div style={{ padding:'40px', textAlign:'center', color:cTextSub, background:cSurface, borderRadius:'12px', border:`1px solid ${cBorder}` }}>
             {loadingData ? 'Memuat data rekap...' : 'Belum ada data realisasi untuk tahun ' + tahun + '.'}
           </div>
         );
 
-        const rowsBulanMax = realisasiAllRows.filter(r => r.bulan === bulanTerpilih);
-
-        // Build hierarki: program → kegiatan → subkegiatan → uraian_ssk → rekening
-        type RekapItem = { keterangan: string; pagu: number; akumTgtPct: number; akumRealFisik: number; akumPctFisik: number; akumKeu: number; akumPctKeu: number; devFisik: number; devKeu: number; };
-
-        // Aggregate by hierarki
-        const progMap = new Map<string, Map<string, Map<string, Map<string, RekapItem[]>>>>();
-        for (const r of rowsBulanMax) {
-          const prog = r.program || '-';
-          const keg  = r.kegiatan || '-';
-          const sub  = r.subkegiatan || '-';
-          const ssk  = r.uraian_ssk || '-';
-          if (!progMap.has(prog)) progMap.set(prog, new Map());
-          const kegMap = progMap.get(prog)!;
-          if (!kegMap.has(keg)) kegMap.set(keg, new Map());
-          const subMap = kegMap.get(keg)!;
-          if (!subMap.has(sub)) subMap.set(sub, new Map());
-          const sskMap = subMap.get(sub)!;
-          if (!sskMap.has(ssk)) sskMap.set(ssk, []);
-          sskMap.get(ssk)!.push({
-            keterangan: r.keterangan,
-            pagu: r.pagu_awal,
-            akumTgtPct: r.akum_target_fisik,
-            akumRealFisik: r.akum_real_fisik,
-            akumPctFisik: r.akum_pct_fisik,
-            akumKeu: r.akum_keuangan,
-            akumPctKeu: r.akum_pct_keuangan,
-            devFisik: r.deviasi_fisik,
-            devKeu: r.deviasi_keuangan,
-          });
-        }
-
-        const agg = (items: RekapItem[]) => {
-          const pagu          = items.reduce((s,r) => s + r.pagu, 0);
-          const akumTgtRp     = items.reduce((s,r) => s + Math.round(r.akumTgtPct / 100 * r.pagu), 0);
-          const akumTgtPct    = pagu > 0 ? Math.round(akumTgtRp / pagu * 10000) / 100 : 0;
-          const akumRealFisik = items.reduce((s,r) => s + r.akumRealFisik, 0);
-          const akumKeu       = items.reduce((s,r) => s + r.akumKeu, 0);
-          return { pagu, akumTgtPct, akumTgtRp, akumRealFisik, akumKeu };
-        };
-        const pct = (val: number, pagu: number) => pagu > 0 ? Math.round(val/pagu*10000)/100 : 0;
-        const color = (v: number) => v >= 100 ? '#16a34a' : v >= 50 ? '#f59e0b' : '#dc2626';
-
-        const thR: React.CSSProperties = { padding:'6px 8px', border:`1px solid ${cBorder}`, fontWeight:700, fontSize:'10px', color: isLight?'#5B21B6':'#E6F1FB', background:cTableHeadBg, whiteSpace:'nowrap', textAlign:'center' };
-        const tdR = (align: 'left'|'right'|'center' = 'right', extra?: React.CSSProperties): React.CSSProperties => ({ padding:'5px 8px', border:`1px solid ${cBorder}`, fontSize:'11px', color:cTextPrimary, textAlign: align, ...extra });
-
-        let rowNo = 0;
-        const rows: React.ReactNode[] = [];
-
-        // Grand total
-        const allItems = rowsBulanMax;
-        if (allItems.length === 0) return (
+        const hasil = rekap;
+        if (hasil.baris.length === 0) return (
           <div style={{ padding:'40px', textAlign:'center', color:cTextSub, background:cSurface, borderRadius:'12px', border:`1px solid ${cBorder}` }}>
-            Belum ada data realisasi untuk {realisasiSumber} tahun {tahun}.
+            Belum ada data realisasi untuk tahun {tahun}.
           </div>
         );
-        const gtPagu    = allItems.reduce((s,r) => s + r.pagu_awal, 0);
-        const gtAkumR   = allItems.reduce((s,r) => s + r.akum_real_fisik, 0);
-        const gtAkumK   = allItems.reduce((s,r) => s + r.akum_keuangan, 0);
-        const gtTgtRp   = allItems.reduce((s,r) => s + Math.round(r.akum_target_fisik / 100 * r.pagu_awal), 0);
-        const gtAkumTgt = gtPagu > 0 ? Math.round(gtTgtRp / gtPagu * 10000) / 100 : 0;
 
-        // Row render helper
-        const pushRow = (no: number|null, label: string, pagu: number, akumTgt: number, akumR: number, akumK: number, bg: string, indent: number, bold: boolean) => {
-          const apf  = pct(akumR, pagu);                              // Real Fisik %
-          const apk  = pct(akumK, pagu);                              // Real Keu %
-          const tgtKeuRp = pagu > 0 ? Math.round(akumTgt/100*pagu) : 0; // Target Keu (Rp)
-          // #5: konvensi deviasi seragam dgn server: realisasi − target
-          // (positif = melampaui target) — rumus deviasi umum.
-          const devF = Math.round((apf - akumTgt)*100)/100;
-          const devK = Math.round((apk - akumTgt)*100)/100;
-          rows.push(
-            <tr key={`${label}-${no}`} style={{ background: bg }}>
-              <td style={{ ...tdR('center'), fontWeight: bold?800:400 }}>{no ?? ''}</td>
-              <td style={{ ...tdR('left'), paddingLeft: `${8 + indent*16}px`, fontWeight: bold?700:400 }}>{label}</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400 }}>{fmtNum(pagu)}</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400 }}>{akumTgt.toFixed(2)}%</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400 }}>{fmtNum(akumR)}</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400, color: color(apf) }}>{apf.toFixed(2)}%</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400, color: devF>=0?'#16a34a':'#dc2626' }}>{devF.toFixed(2)}%</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400, color: '#b45309' }}>{fmtNum(tgtKeuRp)}</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400 }}>{fmtNum(akumK)}</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400, color: color(apk) }}>{apk.toFixed(2)}%</td>
-              <td style={{ ...tdR(), fontWeight: bold?700:400, color: devK>=0?'#16a34a':'#dc2626' }}>{devK.toFixed(2)}%</td>
-            </tr>
-          );
-        };
-
-        // Grand total row (no 1)
-        rowNo++;
-        pushRow(rowNo, `RSJD Dr. Amino Gondohutomo`, gtPagu, gtAkumTgt, gtAkumR, gtAkumK, 'rgba(12,68,124,.5)', 0, true);
-
-        for (const [prog, kegMap] of progMap) {
-          const progItems = Array.from(kegMap.values()).flatMap(sm => Array.from(sm.values()).flatMap(sk => Array.from(sk.values()).flat()));
-          const pa = agg(progItems);
-          rowNo++;
-          pushRow(rowNo, prog, pa.pagu, pa.akumTgtPct, pa.akumRealFisik, pa.akumKeu, isLight?'rgba(139,92,246,.18)':'rgba(24,95,165,.25)', 1, true);
-          if (rekapDepth === 'program') continue;
-
-          for (const [keg, subMap] of kegMap) {
-            const kItems = Array.from(subMap.values()).flatMap(sk => Array.from(sk.values()).flat());
-            const ka = agg(kItems);
-            rowNo++;
-            pushRow(rowNo, keg, ka.pagu, ka.akumTgtPct, ka.akumRealFisik, ka.akumKeu, isLight?'rgba(139,92,246,.10)':'rgba(4,44,83,.7)', 2, false);
-            if (rekapDepth === 'kegiatan') continue;
-
-            for (const [sub, sskMap] of subMap) {
-              const sItems = Array.from(sskMap.values()).flat();
-              const sa = agg(sItems);
-              rowNo++;
-              pushRow(rowNo, `** ${sub}`, sa.pagu, sa.akumTgtPct, sa.akumRealFisik, sa.akumKeu, isLight?'rgba(139,92,246,.06)':'rgba(4,44,83,.4)', 3, false);
-              if (rekapDepth === 'subkegiatan') continue;
-
-              for (const [ssk, rItems] of sskMap) {
-                const ra = agg(rItems);
-                rowNo++;
-                pushRow(rowNo, ssk, ra.pagu, ra.akumTgtPct, ra.akumRealFisik, ra.akumKeu, isLight?'rgba(139,92,246,.03)':'rgba(4,44,83,.2)', 4, false);
-
-                if (rekapDepth === 'full') {
-                  for (const item of rItems) {
-                    rowNo++;
-                    pushRow(rowNo, item.keterangan, item.pagu, item.akumTgtPct, item.akumRealFisik, item.akumKeu, cSurface, 5, false);
-                  }
-                }
-              }
-            }
-          }
-        }
+        const warna = (v: number) => v >= 100 ? '#16a34a' : v >= 50 ? '#f59e0b' : '#dc2626';
+        const thR: React.CSSProperties = { padding:'6px 8px', border:`1px solid ${cBorder}`, fontWeight:700, fontSize:'10px', color: isLight?'#5B21B6':'#E6F1FB', background:cTableHeadBg, whiteSpace:'nowrap', textAlign:'center' };
+        const tdR = (align: 'left'|'right'|'center' = 'right', extra?: React.CSSProperties): React.CSSProperties => ({ padding:'5px 8px', border:`1px solid ${cBorder}`, fontSize:'11px', color:cTextPrimary, textAlign: align, ...extra });
+        const latar = (indent: number) => indent === 0 ? 'rgba(12,68,124,.5)'
+          : indent === 1 ? (isLight?'rgba(139,92,246,.18)':'rgba(24,95,165,.25)')
+          : indent === 2 ? (isLight?'rgba(139,92,246,.10)':'rgba(4,44,83,.7)')
+          : indent === 3 ? (isLight?'rgba(139,92,246,.06)':'rgba(4,44,83,.4)')
+          : indent === 4 ? (isLight?'rgba(139,92,246,.03)':'rgba(4,44,83,.2)')
+          : cSurface;
 
         return (
           <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'20px' }}>
@@ -339,7 +250,29 @@ export default function CetakTab({
               <div style={{ fontSize:'12px', fontWeight:600, color:cTextSubAlt, marginTop:'2px' }}>
                 S/D BULAN {CRR_BULAN_LABELS[bulanTerpilih-1].toUpperCase()} TAHUN {tahun} — SEMUA SUMBER
               </div>
+              {/* Angka pagu tanpa keterangan versi adalah angka yang tidak bisa diperiksa. */}
+              <div style={{ fontSize:'10px', color:cTextSub, marginTop:'4px' }}>
+                Pagu &amp; target mengacu SSK versi aktif tiap sumber
+              </div>
             </div>
+
+            {(hasil.yatim.jumlahBaris > 0 || hasil.dobel.jumlahItem > 0) && (
+              <div className="no-print" style={{ marginBottom:'12px', display:'flex', flexDirection:'column', gap:'6px' }}>
+                {hasil.yatim.jumlahBaris > 0 && (
+                  <div style={{ padding:'8px 12px', borderRadius:'8px', fontSize:'11px', lineHeight:1.5,
+                    background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775', color: isLight?'#854F0B':'#FAC775' }}>
+                    <strong>{hasil.yatim.jumlahItem} rekening yatim</strong> ({hasil.yatim.jumlahBaris} baris, realisasi keuangan {fmtNum(hasil.yatim.nominal)}) tidak ikut dihitung — rekeningnya sudah tidak ada di SSK acuan, jadi tidak punya pagu sebagai pembagi. {hasil.yatim.contoh.join(' · ')}
+                  </div>
+                )}
+                {hasil.dobel.jumlahItem > 0 && (
+                  <div style={{ padding:'8px 12px', borderRadius:'8px', fontSize:'11px', lineHeight:1.5,
+                    background: isLight?'#FEE2E2':'rgba(226,75,74,.14)', border:'1px solid #E24B4A', color: isLight?'#991B1B':'#FCA5A5' }}>
+                    <strong>{hasil.dobel.jumlahItem} rekening punya baris kembar</strong> di bulan yang sama — realisasinya terhitung dobel. Buka tab Realisasi dan hapus salah satunya. {hasil.dobel.contoh.join(' · ')}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
                 <thead>
@@ -349,7 +282,23 @@ export default function CetakTab({
                     ))}
                   </tr>
                 </thead>
-                <tbody>{rows}</tbody>
+                <tbody>
+                  {hasil.baris.map(b => (
+                    <tr key={`${b.no}-${b.label}`} style={{ background: latar(b.indent) }}>
+                      <td style={{ ...tdR('center'), fontWeight: b.tebal?800:400 }}>{b.no}</td>
+                      <td style={{ ...tdR('left'), paddingLeft: `${8 + b.indent*16}px`, fontWeight: b.tebal?700:400 }}>{b.label}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.pagu)}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{b.targetPct.toFixed(2)}%</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realFisik)}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctFisik) }}>{b.pctFisik.toFixed(2)}%</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devFisik>=0?'#16a34a':'#dc2626' }}>{b.devFisik.toFixed(2)}%</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: '#b45309' }}>{fmtNum(b.targetRp)}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realKeu)}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctKeu) }}>{b.pctKeu.toFixed(2)}%</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devKeu>=0?'#16a34a':'#dc2626' }}>{b.devKeu.toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
             </div>
           </div>
