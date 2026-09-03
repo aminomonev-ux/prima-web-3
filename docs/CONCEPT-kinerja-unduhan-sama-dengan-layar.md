@@ -7,10 +7,20 @@
 > pemeriksaan, 59 uji mutasi**; 12 mutasi bagian Q semuanya tertangkap di
 > percobaan pertama.
 >
-> **BELUM diperiksa di layar.** Sesi login kedaluwarsa (timeout 60 menit) sebelum
-> sempat mengunduh berkasnya dari aplikasi berjalan. Yang terbukti: tsc & ESLint
-> bersih, dan uji regresi menjaga bentuknya. Yang BELUM dilihat mata: rupa berkas
-> Excel per bulan dan kop PDF rekap yang sudah rata tengah.
+> **Diverifikasi dari berkas yang benar-benar diunduh** (ZIP dibongkar langsung di
+> peramban lewat `DecompressionStream`, jadi berkasnya tidak perlu keluar):
+>
+> | Yang diperiksa | Hasil |
+> |---|---|
+> | Nama sheet | `Rekap` · `GAJI` · `Data GAJI` |
+> | Sheet GAJI | 12 kop · 12 judul bulan (JANUARI…) · 12 baris JUMLAH · 12 blok tanda tangan |
+> | Merge sheet GAJI | 48 = 12 bulan × 4 baris kop |
+> | Pemisah halaman | **11** = 12 bulan − 1 (tidak dipasang di bulan pertama) |
+> | Merge sheet Rekap | `A1:M1` … `A5:M5` — selebar 13 kolom |
+> | Sheet Data | 0 merge, tanpa kop/JUMLAH/tanda tangan, langsung header 16 kolom |
+> | PDF bundel | 13 halaman; kop halaman 1 (rekap) kini **rata tengah** seperti halaman detail |
+>
+> Data uji dibersihkan sesudahnya.
 > Nol tabel, nol kolom, **nol migrasi**, nol endpoint. Hanya penyusunan berkas.
 >
 > Diminta: *"download excel dan pdf itu sama persis dengan tampilan preview"* —
