@@ -313,8 +313,11 @@ cek('Level & Jangkar bergeser ke kolom 13-14',
   `${judulKolom[12]} · ${judulKolom[13]}`)
 
 const cetakSrc = kode(baca('lib/blud/cetak-data.ts'))
+// Yang dijaga argumen PERTAMA-nya: `sorted`, bukan daftar penuh. Argumen kedua
+// (catatan perpindahan) menyusul kemudian, jadi pengikatnya `[,)]` — mengunci
+// `uraiGeser(sorted)` persis akan menyalak pada kode yang benar.
 cek('Cetak memakai uraiGeser atas baris TERSARING',
-  /uraiGeser\(sorted\)/.test(cetakSrc),
+  /uraiGeser\(sorted[,)]/.test(cetakSrc),
   'cetak "yang bergeser saja" membawa induk tanpa anak yang diam')
 
 const clientSrc = kode(baca('app/(dashboard)/blud/pergeseran/pergeseran-client.tsx'))

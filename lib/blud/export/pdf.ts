@@ -21,6 +21,15 @@ export interface ExportPdfArgs {
    * tetap pagu penuh, jadi penerima menjumlah anak-anaknya dan tidak cocok.
    */
   catatan?: string
+  /**
+   * Kepala tabel & judul dari `renderCetakHtml().meta` — view yang sama yang
+   * menyusun barisnya. Dikirim pemanggil supaya daftar kolom punya SATU sumber:
+   * `buildMeta` di bawah pernah ketinggalan dua kolom waktu Bertambah/Berkurang
+   * ditambahkan (L86), dan nama kolom berhenti menerangkan angka di bawahnya
+   * tanpa satu galat pun. `buildMeta` tinggal cadangan.
+   */
+  columns?: readonly string[]
+  title?:   string
 }
 
 export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
@@ -37,7 +46,9 @@ export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
   ])
 
   // Tentukan title + columns per view
-  const { title, columns } = buildMeta(menu, view, versi, tanggal)
+  const cadangan = buildMeta(menu, view, versi, tanggal)
+  const columns  = args.columns ? [...args.columns] : cadangan.columns
+  const title    = args.title ?? cadangan.title
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
@@ -106,7 +117,13 @@ function buildMeta(menu: string, view: string, versi: string | null, tanggal: st
   if (menu === 'pergeseran' && view === 'rekapPergeseran') {
     return {
       title: `Rekap Pergeseran — ${dateLabel}`,
-      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Penanggung Jawab', 'Keterangan'],
+      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih', 'Penanggung Jawab', 'Keterangan'],
+    }
+  }
+  if (menu === 'pergeseran' && view === 'daftarPerpindahan') {
+    return {
+      title: `Daftar Perpindahan — ${dateLabel}`,
+      columns: ['Dari', 'Ke', 'Nilai', 'Keterangan'],
     }
   }
   return { title: 'Rekap Master Akun', columns: ['Kode', 'Uraian'] }

@@ -20,6 +20,7 @@ import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-
 import { TIPE_LABEL } from '@/lib/blud/format'
 import { isLeafMode } from '@/lib/blud/recalc'
 import { uraiGeser, URAIAN_NOL } from '@/lib/blud/urai-geser'
+import { totalMutasi, type MutasiInput } from '@/lib/blud/mutasi'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
 const INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO'
@@ -230,6 +231,13 @@ export interface UnduhDokumenArgs<T> {
   versi: string | null
   rows: T[]
   direktur?: PejabatDokumen | null
+  /**
+   * Catatan perpindahan (Pergeseran saja). Dua gunanya: kolom Bertambah/Berkurang
+   * memakai angka catatan alih-alih turunan selisih, dan lembar "Perpindahan"
+   * yang menjawab "45 juta itu dari mana" — pertanyaan yang tidak bisa dijawab
+   * dokumen yang cuma memuat hasilnya.
+   */
+  mutasi?: readonly MutasiInput[] | null
 }
 
 /** Dipisah dari unduhan supaya bisa diuji di Node tanpa DOM (`test-dpa-export.mjs`). */
@@ -304,7 +312,7 @@ const LEBAR_PERGESERAN = [26, 46, 8, 10, 16, 18, 8, 16, 18, 16, 16, 18, 10, 26]
 export async function buatWorkbookPergeseran(
   args: UnduhDokumenArgs<PergeseranBaris>,
 ): Promise<ExcelJS.Workbook> {
-  const { tahun, rows, direktur = null } = args
+  const { tahun, rows, direktur = null, mutasi = null } = args
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('Data kosong — tidak ada yang bisa diunduh')
   }
@@ -313,7 +321,7 @@ export async function buatWorkbookPergeseran(
   const wb = new ExcelJSLib.Workbook()
   const ws = wb.addWorksheet(`Pergeseran ${tahun}`)
   const pohon = siapkanPohon(rows)
-  const urai = uraiGeser(rows)
+  const urai = uraiGeser(rows, mutasi)
   const kolTampak = 12
 
   tulisJudul(ws, kolTampak, 'PERGESERAN RINCIAN BELANJA ANGGARAN', tahun)
@@ -357,7 +365,64 @@ export async function buatWorkbookPergeseran(
   const akhirData = BARIS_DATA_1 + pohon.urut.length - 1
   tulisTandaTangan(ws, akhirData + 3, 6, kolTampak, direktur)
   selesaikanLembar(ws, LEBAR_PERGESERAN, [11, 12])
+  if (mutasi?.length) tulisLembarPerpindahan(wb, rows, mutasi)
   return wb
+}
+
+/**
+ * Lembar kedua: uang berpindah dari rekening mana ke mana.
+ *
+ * Dibuat HANYA kalau ada catatannya — lembar kosong di dokumen yang beredar ke
+ * luar terbaca seperti ada yang gagal, bukan seperti "memang tidak ada".
+ */
+function tulisLembarPerpindahan(
+  wb: ExcelJS.Workbook,
+  rows: PergeseranBaris[],
+  mutasi: readonly MutasiInput[],
+): void {
+  const ws = wb.addWorksheet('Perpindahan')
+  const nama = new Map<string, string>()
+  for (const r of rows) {
+    nama.set(r.row_id, `${r.kode_rekening ? r.kode_rekening + ' — ' : ''}${r.uraian || '(tanpa uraian)'}`)
+  }
+  // Baris yang sudah tidak ada tetap tercetak dengan id mentahnya: uangnya nyata,
+  // dan baris yang hilang justru yang perlu ketahuan.
+  const label = (rowId: string) => nama.get(rowId) ?? `(baris tidak ditemukan: ${rowId})`
+
+  ws.addRow(['DAFTAR PERPINDAHAN ANGGARAN'])
+  ws.getRow(1).getCell(1).font = { bold: true, size: 12 }
+  ws.mergeCells(1, 1, 1, 4)
+  ws.addRow([])
+
+  const kolom = ['Dari', 'Ke', 'Nilai', 'Keterangan']
+  ws.addRow(kolom)
+  const barisHeader = 3
+  for (let c = 1; c <= kolom.length; c++) {
+    const cell = ws.getRow(barisHeader).getCell(c)
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
+    cell.alignment = { horizontal: 'center', vertical: 'middle' }
+  }
+
+  for (const m of mutasi) {
+    const baris = ws.addRow([
+      sanitizeCell(label(m.dari_row)),
+      sanitizeCell(label(m.ke_row)),
+      Number(m.nilai) || 0,
+      sanitizeCell(m.keterangan ?? ''),
+    ])
+    baris.getCell(3).numFmt = RUPIAH
+    baris.getCell(3).alignment = { horizontal: 'right' }
+  }
+
+  const total = ws.addRow(['TOTAL PERPINDAHAN', '', totalMutasi(mutasi), ''])
+  total.font = { bold: true }
+  total.getCell(3).numFmt = RUPIAH
+  total.getCell(3).alignment = { horizontal: 'right' }
+
+  // Lebar lewat `getColumn`, bukan `ws.columns = […]` — pola `selesaikanLembar`;
+  // menugaskan `columns` sesudah baris ditulis mendefinisikan ulang kuncinya.
+  ;[46, 46, 18, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w })
 }
 
 export async function exportPergeseranDokumen(

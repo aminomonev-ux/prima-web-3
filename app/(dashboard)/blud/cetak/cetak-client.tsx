@@ -5,7 +5,7 @@
 //
 // View per menu:
 //   DPA BLUD     → DPA + Penanggung Jawab (rekap)
-//   Pergeseran   → Pergeseran DPA + Penanggung Jawab pasca-geser
+//   Pergeseran   → Pergeseran DPA + Penanggung Jawab pasca-geser + Daftar Perpindahan
 //   Master Akun  → Master akun (no version)
 //
 // Theme-aware via CSS [data-theme="light"] di blud-shell <style> + token inline.
@@ -18,11 +18,12 @@ import DownloadButton from '@/components/ui/DownloadButton'
 import type { DpaBaris, PergeseranBaris } from '@/types'
 import type { PejabatDokumen } from '@/lib/blud/export/dpa-dokumen'
 import { catatanVersi, type TutupPergeseran } from '@/lib/blud/tutup-pergeseran'
+import type { MutasiInput } from '@/lib/blud/mutasi'
 
 // ── Types lokal (sinkron dengan lib/blud/cetak-data.ts) ──
 type Menu = 'dpa' | 'pergeseran' | 'master-akun'
 type ViewDpa = 'dpa' | 'penanggungJawab'
-type ViewPergeseran = 'rekapPergeseran' | 'penanggungJawab'
+type ViewPergeseran = 'rekapPergeseran' | 'penanggungJawab' | 'daftarPerpindahan'
 type ViewMasterAkun = 'masterAkun'
 type View = ViewDpa | ViewPergeseran | ViewMasterAkun
 
@@ -43,6 +44,8 @@ const VIEW_OPTIONS: Record<Menu, Array<{ value: View; label: string }>> = {
     { value: 'rekapPergeseran',  label: 'Rekap Pergeseran' },
     // Nominalnya pagu PASCA-geser, bukan angka DPA — lihat renderCetakHtml.
     { value: 'penanggungJawab',  label: 'PENANGGUNG JAWAB (Pasca-Geser)' },
+    // Kolom Bertambah/Berkurang memuat hasilnya; view ini memuat ceritanya.
+    { value: 'daftarPerpindahan', label: 'Daftar Perpindahan' },
   ],
   'master-akun': [
     { value: 'masterAkun',       label: 'Master Akun' },
@@ -74,6 +77,13 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   // untuk membangun rumus SUM (CONCEPT-export-import-dpa §2.3).
   const [rawRows, setRawRows] = useState<unknown>(null)
   const [rawVersi, setRawVersi] = useState<string | null>(null)
+  // Catatan perpindahan — field SEJAJAR `data` di respons GET, bukan bagian dari
+  // barisnya. Tanpa disimpan di sini, kolom Bertambah/Berkurang di berkas jatuh
+  // ke turunan selisih dan berbeda dari yang tampil di layar Pergeseran.
+  const [rawMutasi, setRawMutasi] = useState<MutasiInput[] | null>(null)
+  // Judul + kepala tabel milik view yang menyusun barisnya — dioper ke eksporter
+  // supaya daftar kolom punya satu sumber (lihat ExportPdfArgs.columns).
+  const [renderedMeta, setRenderedMeta] = useState<{ title: string; columns: string[] } | null>(null)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §7) — scoping cetak per tahun.
   const CURRENT_YEAR = new Date().getFullYear()
   const [tahun, setTahun] = useState<number>(CURRENT_YEAR)
@@ -149,8 +159,10 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     setLoading(true)
     setRenderedHtml('')
     setRenderedData(null)
+    setRenderedMeta(null)
     setRawRows(null)
     setRawVersi(null)
+    setRawMutasi(null)
     try {
       // Pilih endpoint per menu — reuse existing API
       let path = ''
@@ -166,26 +178,31 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
 
       const r = await fetch(path)
       if (!r.ok) { toast.error('Data tidak bisa dimuat — periksa sambungan, lalu coba lagi.'); return }
-      const j = await r.json() as { ok: boolean; data?: unknown; versi_tanggal?: string | null; error?: string }
+      const j = await r.json() as {
+        ok: boolean; data?: unknown; versi_tanggal?: string | null; error?: string
+        mutasi?: MutasiInput[]
+      }
       if (!j.ok) { toast.error(j.error ?? 'Data tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
 
       // Render HTML via cetak-data helper (client-side aggregation)
-      const { renderCetakHtml } = await import('@/lib/blud/cetak-data')
+      const { renderCetakHtml, kalimatCakupan } = await import('@/lib/blud/cetak-data')
       const saring = bisaSaringBergeser && hanyaBergeser
+      const mutasi = menu === 'pergeseran' ? j.mutasi ?? null : null
       const result = renderCetakHtml({
         menu, view, rows: j.data,
         versi: j.versi_tanggal ?? historyVersi ?? null, tanggal,
         hanyaBergeser: saring,
+        mutasi,
       })
       setRenderedHtml(result.html)
       setRenderedData(result.rows)
-      const totalBaris = Array.isArray(j.data) ? j.data.length : result.rows.length
-      setCatatanCakupan(saring
-        ? `Hanya baris yang bergeser — ${result.rows.length} dari ${totalBaris} baris. `
-          + `Angka pada baris induk tetap pagu penuh, termasuk pos yang tidak ditampilkan.`
-        : '')
+      setRenderedMeta({ title: result.meta.title, columns: result.meta.columns })
+      // Kalimatnya milik `cetak-data` — di sanalah cakupannya dihitung, termasuk
+      // berapa catatan perpindahan yang barisnya tidak ikut tercetak.
+      setCatatanCakupan(result.meta.cakupan ? kalimatCakupan(result.meta.cakupan) : '')
       setRawRows(j.data ?? null)
       setRawVersi(j.versi_tanggal ?? historyVersi ?? tanggal ?? null)
+      setRawMutasi(mutasi)
     } catch (e) {
       toast.error('Dokumen gagal disusun: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -211,12 +228,15 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
     try {
       const { exportToPdf } = await import('@/lib/blud/export/pdf')
-      await exportToPdf({ menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan })
+      await exportToPdf({
+        menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan,
+        columns: renderedMeta?.columns, title: renderedMeta?.title,
+      })
       void logExport('pdf')
     } catch (e) {
       toast.error('Berkas PDF gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, menu, view, tanggal, historyVersi, catatanCakupan, logExport])
+  }, [renderedData, renderedMeta, menu, view, tanggal, historyVersi, catatanCakupan, logExport])
 
   /**
    * Direktur ikut tercetak di blok tanda tangan. Diambil best-effort: endpoint
@@ -261,18 +281,24 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         if (dokumenDpa) {
           await exportDpaDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur })
         } else {
-          await exportPergeseranDokumen({ tahun, versi: rawVersi, rows: rawRows as PergeseranBaris[], direktur })
+          await exportPergeseranDokumen({
+            tahun, versi: rawVersi, rows: rawRows as PergeseranBaris[], direktur,
+            mutasi: rawMutasi,
+          })
         }
         void logExport('xlsx')
         return
       }
       const { exportToExcel } = await import('@/lib/blud/export/excel')
-      await exportToExcel({ menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan })
+      await exportToExcel({
+        menu, view, tanggal, versi: historyVersi, rows: renderedData, catatan: catatanCakupan,
+        columns: renderedMeta?.columns, title: renderedMeta?.title,
+      })
       void logExport('xlsx')
     } catch (e) {
       toast.error('Berkas Excel gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, rawRows, rawVersi, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
+  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
 
   // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
   const onSimpanRekapPK = useCallback(async () => {

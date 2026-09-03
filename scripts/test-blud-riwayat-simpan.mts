@@ -290,8 +290,11 @@ cek('G4 Excel menulis catatannya DI ATAS kepala tabel',
   && /const barisHeader = catatan \? 2 : 1/.test(XLSX))
 // Sakelarnya bisa diubah SESUDAH tabel tercetak tanpa menekan Cetak lagi;
 // membacanya saat unduh memberi keterangan yang tidak cocok dengan isi berkas.
+// Sumber kalimatnya kini `result.meta.cakupan` milik `renderCetakHtml` (satu
+// kalimat, dipakai spanduk + PDF + Excel), bukan lagi dirakit di klien dari
+// `saring` — yang dijaga TETAP sama: distempel di dalam onCetak.
 cek('G5 catatan dipotret saat Cetak, bukan dibaca saat unduh',
-  /setCatatanCakupan\(saring/.test(CETAK) && !/catatan: hanyaBergeser/.test(CETAK))
+  /setCatatanCakupan\(result\.meta\.cakupan/.test(CETAK) && !/catatan: hanyaBergeser/.test(CETAK))
 cek('G6 spanduk Pengaturan menyebut bagian "Versi terhapus" + batas retensi',
   /Versi terhapus/.test(baca('../app/(dashboard)/blud/pengaturan/pengaturan-client.tsx'))
   && /\{RIWAYAT_RETENSI\}/.test(baca('../app/(dashboard)/blud/pengaturan/pengaturan-client.tsx')))

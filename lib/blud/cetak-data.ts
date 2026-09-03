@@ -13,6 +13,7 @@ import type { MasterAkun } from './master-akun-data'
 import { formatRupiah } from './format'
 import { hitungDeltaPergeseranRoot } from './recalc'
 import { uraiGeser, URAIAN_NOL } from './urai-geser'
+import { buangMutasiYatim, totalMutasi, type MutasiInput } from './mutasi'
 import { auditRekapPJ } from './audit-pj'
 import type { AuditResult, AuditPjRow } from './audit-pj'
 
@@ -21,7 +22,7 @@ import type { AuditResult, AuditPjRow } from './audit-pj'
 // ──────────────────────────────────────────────────────────────────────────
 
 export type Menu = 'dpa' | 'pergeseran' | 'master-akun'
-export type View = 'dpa' | 'penanggungJawab' | 'rekapPergeseran' | 'masterAkun'
+export type View = 'dpa' | 'penanggungJawab' | 'rekapPergeseran' | 'masterAkun' | 'daftarPerpindahan'
 
 export interface RenderArgs {
   menu:    Menu
@@ -34,13 +35,19 @@ export interface RenderArgs {
    * `menu: 'pergeseran'` / `view: 'rekapPergeseran'`; view lain mengabaikannya.
    */
   hanyaBergeser?: boolean
+  /**
+   * Catatan perpindahan versi ini. Tanpa ini kolom Bertambah/Berkurang di
+   * dokumen jatuh ke turunan selisih: rekening yang menerima 45jt lalu melepas
+   * 12jt tercetak "33 / —" padahal layar menunjukkan "45 / 12".
+   */
+  mutasi?: readonly MutasiInput[] | null
 }
 
 // Output shape — `rows` di sini sudah-aggregated (PJ grouping, etc.) untuk export
 export interface RenderResult {
   html: string
   rows: ExportRow[]
-  meta: { title: string; columns: string[] }
+  meta: { title: string; columns: string[]; cakupan?: CakupanCetak }
 }
 
 // Tabel row terstruktur untuk export — string-only supaya XLSX & PDF konsisten
@@ -76,7 +83,38 @@ function spandukDraft(deltaRoot: number): string {
 }
 
 /** Jumlah baris yang dicetak vs jumlah baris versi itu — dipakai spanduk "sebagian". */
-export interface CakupanCetak { ditampilkan: number; total: number }
+export interface CakupanCetak {
+  ditampilkan: number
+  total: number
+  /**
+   * Berapa catatan perpindahan yang menyebut baris yang TIDAK ikut tercetak.
+   * Bisa terjadi walau saringannya benar: rekening yang menerima 45jt lalu
+   * melepas 45jt berselisih nol, dan `saringYangBergeser` menilai dari selisih.
+   * Angkanya tidak boleh didiamkan — berkasnya memuat daftar perpindahan yang
+   * menyebut rekening yang tidak ada di tabelnya.
+   */
+  catatanTakTampil?: number
+}
+
+const CAKUPAN_JUDUL = 'Hanya baris yang bergeser'
+
+function rincianCakupan(c: CakupanCetak): string {
+  let s = `${c.ditampilkan} dari ${c.total} baris. `
+    + `Angka pada baris induk tetap pagu penuh, termasuk pos yang tidak ditampilkan.`
+  if (c.catatanTakTampil) {
+    s += ` ${c.catatanTakTampil} catatan perpindahan menyebut rekening yang tidak ditampilkan.`
+  }
+  return s
+}
+
+/**
+ * Kalimat cakupan — SATU sumber untuk spanduk HTML, catatan PDF, dan baris
+ * pertama Excel. Tiga salinan kalimat yang sama pasti berbeda bunyi begitu satu
+ * disunting (L78).
+ */
+export function kalimatCakupan(c: CakupanCetak): string {
+  return `${CAKUPAN_JUDUL} — ${rincianCakupan(c)}`
+}
 
 /**
  * Rekap anggaran yang diam-diam membuang baris adalah dokumen yang menyesatkan,
@@ -85,8 +123,7 @@ export interface CakupanCetak { ditampilkan: number; total: number }
  */
 function spandukSebagian(c: CakupanCetak): string {
   return `<div style="margin-bottom:10px;padding:8px 12px;border:1.5px solid #38BDF8;background:rgba(56,189,248,.12);border-radius:8px;color:#7DD3FC;font-weight:600;font-size:12px;">`
-    + `ℹ️ <strong>Hanya baris yang bergeser</strong> — ${c.ditampilkan} dari ${c.total} baris. `
-    + `Angka pada baris induk tetap pagu penuh, termasuk pos yang tidak ditampilkan.</div>`
+    + `ℹ️ <strong>${CAKUPAN_JUDUL}</strong> — ${esc(rincianCakupan(c))}</div>`
 }
 
 /**
@@ -147,7 +184,7 @@ export function saringYangBergeser<T extends {
 // Main entry point
 // ──────────────────────────────────────────────────────────────────────────
 export function renderCetakHtml(args: RenderArgs): RenderResult {
-  const { menu, view, rows, versi, tanggal, hanyaBergeser } = args
+  const { menu, view, rows, versi, tanggal, hanyaBergeser, mutasi } = args
 
   if (menu === 'dpa' && view === 'dpa') {
     return renderDpaView(rows as DpaBaris[], versi ?? tanggal)
@@ -175,10 +212,23 @@ export function renderCetakHtml(args: RenderArgs): RenderResult {
     // digantungkan padanya.
     const deltaRoot = hitungDeltaPergeseranRoot(asli)
     const tampil = hanyaBergeser ? saringYangBergeser(asli) : asli
+    // `mutasi` dioper APA ADANYA, tidak disaring: `uraiGeser` membacanya lewat
+    // `get(row_id)` per baris, bukan menjumlah seluruh daftar, jadi catatan yang
+    // barisnya tidak ikut tercetak tidak pernah terbaca dan tidak bisa
+    // menggelembungkan rollup induk. `buangMutasiYatim` di sini cuma MENGHITUNG.
+    const takTampil = hanyaBergeser && mutasi?.length
+      ? mutasi.length - buangMutasiYatim(tampil, mutasi).length
+      : 0
     return renderPergeseranView(
       tampil, versi ?? tanggal, deltaRoot,
-      hanyaBergeser ? { ditampilkan: tampil.length, total: asli.length } : null,
+      hanyaBergeser
+        ? { ditampilkan: tampil.length, total: asli.length, catatanTakTampil: takTampil }
+        : null,
+      mutasi,
     )
+  }
+  if (menu === 'pergeseran' && view === 'daftarPerpindahan') {
+    return renderPerpindahanView(rows as PergeseranBaris[], versi ?? tanggal, mutasi)
   }
   if (menu === 'master-akun' && view === 'masterAkun') {
     return renderMasterAkunView(rows as MasterAkun[])
@@ -408,6 +458,7 @@ function renderPergeseranView(
   deltaRoot: number,
   /** Non-null = daftar sudah disaring "hanya yang bergeser". */
   sebagian: CakupanCetak | null,
+  mutasi?: readonly MutasiInput[] | null,
 ): RenderResult {
   const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih', 'Penanggung Jawab', 'Keterangan']
   const title = `Rekap Pergeseran${sebagian ? ' — Yang Bergeser' : ''}${versi ? `: ${versi}` : ' (Terakhir)'}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
@@ -418,7 +469,7 @@ function renderPergeseranView(
       + spandukDraft(deltaRoot)
       + `<div style="padding:20px;color:#85B7EB;font-style:italic;">`
       + `Belum ada baris yang bergeser pada versi ini — seluruh ${sebagian.total} barisnya masih sama dengan DPA.</div>`
-    return { html, rows: [], meta: { title, columns } }
+    return { html, rows: [], meta: { title, columns, cakupan: sebagian ?? undefined } }
   }
 
   const sorted = [...rows].sort((a, b) => a.urutan - b.urutan)
@@ -426,7 +477,7 @@ function renderPergeseranView(
   // Uraian efektif dihitung dari baris yang SUDAH disaring (`sorted`), bukan dari
   // seluruh dokumen: pada cetak "yang bergeser saja" induknya ikut dibawa tanpa
   // anak yang tidak bergeser, dan rollup harus mengikuti apa yang tercetak.
-  const urai = uraiGeser(sorted)
+  const urai = uraiGeser(sorted, mutasi)
   const u = (rowId: string) => urai.get(rowId) ?? URAIAN_NOL
 
   const exportRows: ExportRow[] = sorted.map(r => [
@@ -466,6 +517,71 @@ function renderPergeseranView(
     html += `<td>${esc(r.keterangan ?? '')}</td>`
     html += `</tr>`
   }
+  html += `</tbody></table>`
+
+  return { html, rows: exportRows, meta: { title, columns, cakupan: sebagian ?? undefined } }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// View: Daftar Perpindahan — uang berpindah dari rekening mana ke mana
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Kolom Bertambah/Berkurang cuma memuat hasilnya; ini yang memuat ceritanya.
+ *
+ * SENGAJA tidak tunduk saringan "hanya yang bergeser": saringan itu sifat view
+ * Rekap, bukan sifat dokumennya, dan justru daftar inilah yang menjelaskan ke
+ * mana perginya baris yang hilang dari Rekap — termasuk rekening bersih-nol yang
+ * memang tidak bisa lolos saringan berbasis selisih.
+ */
+function renderPerpindahanView(
+  rows: PergeseranBaris[],
+  versi: string | null,
+  mutasi?: readonly MutasiInput[] | null,
+): RenderResult {
+  const columns = ['Dari', 'Ke', 'Nilai', 'Keterangan']
+  const title = `Daftar Perpindahan${versi ? `: ${versi}` : ' (Terakhir)'}`
+  const daftar = mutasi ?? []
+
+  let html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
+
+  if (daftar.length === 0) {
+    html += `<div style="padding:20px;color:#85B7EB;font-style:italic;">`
+      + `Belum ada catatan perpindahan pada versi ini. Catatan dibuat di layar Pergeseran — `
+      + `tombol "Catatan Perpindahan" atau spanduk di bawah baris yang baru digeser.</div>`
+    return { html, rows: [], meta: { title, columns } }
+  }
+
+  // Nama rekening dicari dari baris dokumen. Baris yang catatannya menunjuk row_id
+  // yang sudah tidak ada tetap DITAMPILKAN dengan id mentahnya, bukan disembunyikan:
+  // uangnya nyata, dan baris yang hilang justru yang perlu ketahuan.
+  const nama = new Map<string, string>()
+  for (const r of rows) {
+    nama.set(r.row_id, `${r.kode_rekening ? r.kode_rekening + ' — ' : ''}${r.uraian || '(tanpa uraian)'}`)
+  }
+  const label = (rowId: string) => nama.get(rowId) ?? `(baris tidak ditemukan: ${rowId})`
+
+  const exportRows: ExportRow[] = daftar.map(m => [
+    label(m.dari_row), label(m.ke_row), Number(m.nilai) || 0, m.keterangan ?? '',
+  ])
+  // Baris total ikut ke PDF/Excel — pola `renderPjView`. Berkas yang isinya
+  // berbeda dari pratinjaunya adalah berkas yang tidak bisa dipercaya.
+  exportRows.push(['TOTAL PERPINDAHAN', '', totalMutasi(daftar), ''])
+
+  html += `<table><thead><tr>`
+  for (const c of columns) html += `<th>${esc(c)}</th>`
+  html += `</tr></thead><tbody>`
+  for (const m of daftar) {
+    html += `<tr>`
+    html += `<td style="color:#FCA5A5;">${esc(label(m.dari_row))}</td>`
+    html += `<td style="color:#6EE7B7;">${esc(label(m.ke_row))}</td>`
+    html += `<td style="text-align:right;font-family:monospace;font-weight:600;">${fmt(Number(m.nilai) || 0)}</td>`
+    html += `<td>${esc(m.keterangan ?? '')}</td>`
+    html += `</tr>`
+  }
+  html += `<tr style="background:rgba(239,159,39,.22);font-weight:800;color:#FFE6BF;">`
+  html += `<td colspan="2" style="text-align:right;">TOTAL PERPINDAHAN</td>`
+  html += `<td style="text-align:right;font-family:monospace;">${fmt(totalMutasi(daftar))}</td><td></td></tr>`
   html += `</tbody></table>`
 
   return { html, rows: exportRows, meta: { title, columns } }

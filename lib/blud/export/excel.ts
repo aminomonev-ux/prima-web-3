@@ -20,6 +20,18 @@ export interface ExportExcelArgs {
    * ulang oleh penerimanya dan tidak akan cocok.
    */
   catatan?: string
+  /**
+   * Kepala tabel & judul dari `renderCetakHtml().meta` — view yang sama yang
+   * menyusun barisnya. Dikirim pemanggil supaya daftar kolom punya SATU sumber:
+   * `buildMeta` di bawah pernah ketinggalan dua kolom waktu Bertambah/Berkurang
+   * ditambahkan (L86), dan nama kolom berhenti menerangkan angka di bawahnya
+   * tanpa satu galat pun. `buildMeta` tinggal cadangan.
+   *
+   * `numberColIdx` SENGAJA tidak ikut dioper: itu urusan gaya berkas, bukan
+   * identitas kolom, dan layar tidak pernah memakainya.
+   */
+  columns?: readonly string[]
+  title?:   string
 }
 
 export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
@@ -30,7 +42,10 @@ export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
   }
 
   const ExcelJSLib = await loadExcelJs()
-  const { title, columns, sheetName, numberColIdx } = buildMeta(menu, view, versi, tanggal)
+  const cadangan = buildMeta(menu, view, versi, tanggal)
+  const { sheetName, numberColIdx } = cadangan
+  const columns = args.columns ? [...args.columns] : cadangan.columns
+  const title   = args.title ?? cadangan.title
 
   const wb = new ExcelJSLib.Workbook()
   const ws = wb.addWorksheet(sheetName)
@@ -113,8 +128,16 @@ function buildMeta(menu: string, view: string, versi: string | null, tanggal: st
     return {
       title: `Rekap Pergeseran ${dateLabel}`,
       sheetName: 'Pergeseran',
-      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah/Berkurang', 'Penanggung Jawab', 'Keterangan'],
-      numberColIdx: new Set([2, 4, 5, 6, 7, 8, 9]),
+      columns: ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih', 'Penanggung Jawab', 'Keterangan'],
+      numberColIdx: new Set([2, 4, 5, 6, 7, 8, 9, 10, 11]),
+    }
+  }
+  if (menu === 'pergeseran' && view === 'daftarPerpindahan') {
+    return {
+      title: `Daftar Perpindahan ${dateLabel}`,
+      sheetName: 'Perpindahan',
+      columns: ['Dari', 'Ke', 'Nilai', 'Keterangan'],
+      numberColIdx: new Set([2]),
     }
   }
   return {
