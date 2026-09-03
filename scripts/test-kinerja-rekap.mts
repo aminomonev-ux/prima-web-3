@@ -12,7 +12,8 @@ import { recalcAllRealisasiServer, type RealRowRaw } from '../lib/data/kinerja-c
 import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan } from '../lib/kinerja/rekap';
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '../lib/kinerja/samakan-target';
-import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER } from '../app/(dashboard)/kinerja/_exports';
+import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
+  DETAIL_BULAN_HEADER, barisBulanDetail } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import type { RealRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
@@ -244,27 +245,33 @@ const ctP = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
 const exP = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
 ok('P10 layar Detail memakai lib, tidak menjumlah sendiri lagi',
    /hitungJumlahBulan\(rows\)/.test(ctP) && !/const totAkumTgtRp/.test(ctP));
-ok('P11 PDF detail memakai baris JUMLAH dari lib yang sama',
-   /hitungJumlahBulan\(barisBulan\)/.test(exP));
+// PDF & Excel sama-sama lewat `barisBulanDetail`, dan di situlah JUMLAH-nya
+// diambil dari lib — satu tempat untuk dua berkas.
+ok('P11 baris JUMLAH berkas dari lib yang sama dengan layar',
+   /const j = hitungJumlahBulan\(rows\);/.test(exP) &&
+   (exP.match(/barisBulanDetail\(/g) || []).length === 3);
 // Diperiksa pada PEMANGGILANNYA, bukan keberadaan teksnya: melepas panggilan
 // `tandaTangan(...)` tetap meninggalkan fungsinya lengkap dengan kata-katanya,
 // dan nama rumah sakit juga muncul di kop REKAP — dua-duanya lulus tanpa menguji
 // apa pun (L82c).
-ok('P12 tiap halaman detail memanggil kop DAN tanda tangan',
-   /kopHalaman\(doc, sumber, b, tahun\)/.test(exP) && /tandaTangan\(doc, akhir \+ \d+, b, tahun\)/.test(exP));
-// Dipotong ke badan `kopHalaman` dulu — nama rumah sakit juga muncul di kop
-// rekap (PDF dan Excel), jadi mencarinya di seluruh berkas selalu ketemu.
-const badanKop = exP.slice(exP.indexOf('function kopHalaman'), exP.indexOf('function tandaTangan'));
-ok('P12b kop halaman detail memuat identitas lengkap',
+ok('P12 halaman detail PDF memanggil kop DAN tanda tangan',
+   /tulisKopPdf\(doc, kopDetail\(sumber, b, tahun\)\)/.test(exP) &&
+   /tandaTangan\(doc, akhir \+ \d+, b, tahun\)/.test(exP));
+// Teks kopnya hidup di SATU tempat (`kopDetail`) dan dipakai dua penulis —
+// PDF dan Excel. Dulu kop rekap & kop detail dua salinan yang beda perlakuan.
+eq('P12b kopDetail dipakai PDF dan Excel', (exP.match(/kopDetail\(/g) || []).length, 3);
+const badanKop = exP.slice(exP.indexOf('export function kopDetail'), exP.indexOf('const PENANDA_TANGAN'));
+ok('P12c kop detail memuat identitas lengkap',
    /RUMAH SAKIT JIWA DAERAH DR\. AMINO GONDOHUTOMO/.test(badanKop) &&
-   /LAPORAN REALISASI KINERJA \$\{sumber\}/.test(badanKop) &&
-   /BULAN \$\{/.test(badanKop));
-ok('P12c blok tanda tangan menyebut kedua pejabat',
-   /Kabag Program & Anggaran/.test(exP) && /Kasubag Program/.test(exP));
+   /LAPORAN REALISASI KINERJA \$\{sumber\}/.test(badanKop) && /BULAN \$\{/.test(badanKop));
+ok('P12d nama pejabat cuma didefinisikan sekali',
+   (exP.match(/Kasubag Program/g) || []).length === 1 && /PENANDA_TANGAN/.test(exP));
+
 ok('P13 bundel Excel satu sheet per sumber, bukan ditumpuk',
    /addWorksheet\('Rekap'\)/.test(exP) && /addWorksheet\(bagian\.sumber\)/.test(exP));
 ok('P14 bundel memakai penyusun yang sama dengan unduhan satuan',
-   /DETAIL_HEADER, \.\.\.realisasiAoa\(baris\)/.test(exP));
+   /tulisSheetDetailPerBulan\(wb\.addWorksheet\(bagian\.sumber\)/.test(exP) &&
+   /tulisSheetData\(wb, baris, bagian\.sumber\)/.test(exP));
 ok('P15 sumber tanpa baris tidak melahirkan sheet kosong',
    (exP.match(/if \(baris\.length === 0\) continue;/g) || []).length === 2);
 ok('P16 baris ditandai sumbernya di fetchRealisasiAll',
@@ -272,6 +279,68 @@ ok('P16 baris ditandai sumbernya di fetchRealisasiAll',
      readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8')));
 ok('P17 tanpa sumber dicentang, hasilnya rekap saja seperti sebelumnya',
    /exportBundelExcel\(\{ \.\.\.paramRekap\(\), detail: d \}\) : exportRekapExcel\(paramRekap\(\)\)/.test(ctP));
+
+console.log('\n── Q. Berkas unduhan sebentuk dengan layar ─────────────────────');
+
+const exQ = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
+
+// Q1: satu penulis kop untuk PDF, satu untuk Excel — bukan kop yang ditulis
+// ulang di tiap tempat. Rekap & detail sama-sama memasoknya lewat KopBaris[].
+ok('Q1 kop PDF ditulis satu fungsi untuk rekap DAN detail',
+   (exQ.match(/tulisKopPdf\(doc, kop(Rekap|Detail)\(/g) || []).length === 2);
+ok('Q2 kop PDF rekap rata tengah, bukan lagi di pojok kiri',
+   /doc\.text\(k\.teks, tengah, y, \{ align: 'center' \}\)/.test(exQ) &&
+   !/doc\.text\('RUMAH SAKIT JIWA DAERAH DR\. AMINO GONDOHUTOMO', 14,/.test(exQ));
+
+// Q3: lebar merge diambil dari jumlah kolom, bukan angka mati yang basi begitu
+// kolom bertambah (dan kolom memang baru bertambah dua di Tahap 7).
+ok('Q3 kop Excel di-merge selebar jumlah kolom',
+   /ws\.mergeCells\(r\.number, 1, r\.number, kolom\)/.test(exQ) &&
+   /const kolom = REKAP_HEADER\.length;/.test(exQ));
+ok('Q3b kop Excel detail juga memakai jumlah kolom, bukan angka mati',
+   /tulisKopExcel\(ws, kopDetail\(sumber, b, tahun\), DETAIL_BULAN_HEADER\.length\)/.test(exQ));
+
+ok('Q4 baris tebal di rekap ikut ditebalkan di Excel',
+   /if \(!b\.tebal\) return;/.test(exQ) && /c\.font = \{ bold: true \}/.test(exQ));
+
+// Q5-Q7: struktur per bulan.
+ok('Q5 sheet detail Excel satu blok per bulan',
+   /export function tulisSheetDetailPerBulan/.test(exQ) &&
+   /for \(const b of bulanDipakai\)/.test(exQ));
+ok('Q6 tiap blok punya kop, header, JUMLAH, dan tanda tangan',
+   /tulisKopExcel\(ws, kopDetail/.test(exQ) &&
+   /ws\.addRow\(DETAIL_BULAN_HEADER\)/.test(exQ) &&
+   /tulisTandaTanganExcel\(ws, b, tahun/.test(exQ));
+ok('Q7 ada pemisah halaman antar bulan, bukan di bulan pertama',
+   /if \(!pertama\) ws\.getRow\(ws\.rowCount\)\.addPageBreak\(\);/.test(exQ));
+
+// Q8: sheet Data tetap tabel rata — yang menyelamatkan sort/filter.
+ok('Q8 sheet Data tetap tabel rata tanpa kop/JUMLAH',
+   /export function tulisSheetData/.test(exQ) &&
+   /addSheetFromAoa\(ws, \[DETAIL_HEADER, \.\.\.realisasiAoa\(rows\)\]/.test(exQ));
+ok('Q8b sheet Data ikut di unduhan satuan DAN bundel',
+   (exQ.match(/tulisSheetData\(/g) || []).length === 3);
+// Nama sheet Excel dibatasi 31 karakter — "Data PEMELIHARAAN" masih muat, tapi
+// pemotongnya dipasang supaya sumber baru yang namanya panjang tidak melempar.
+ok('Q9 nama sheet Data dipotong ke batas Excel', /\.slice\(0, 31\)/.test(exQ));
+
+// Kolom blok per bulan meniru layar: TANPA kolom Bulan (bulannya sudah di kop),
+// beda dengan sheet Data yang rata dan perlu pembeda bulan.
+eq('Q10 blok per bulan 15 kolom seperti layar', DETAIL_BULAN_HEADER.length, 15);
+eq('Q11 sheet Data 16 kolom (ada kolom Bulan)', DETAIL_HEADER.length, 16);
+ok('Q12 hanya sheet Data yang punya kolom Bulan',
+   DETAIL_HEADER.includes('Bulan') && !DETAIL_BULAN_HEADER.includes('Bulan'));
+
+// Angka di Excel tetap ANGKA supaya bisa dijumlah; di PDF baru jadi teks.
+ok('Q13 Excel menyimpan rupiah sebagai angka, bukan teks',
+   typeof barisBulanDetail(barisJan, true)[0][2] === 'number');
+ok('Q14 PDF menyimpan rupiah sebagai teks berformat',
+   typeof barisBulanDetail(barisJan, false)[0][2] === 'string');
+// Baris terakhir SELALU JUMLAH — itu yang ditebalkan pemanggilnya.
+const isiQ = barisBulanDetail(barisJan, true);
+eq('Q15 baris terakhir adalah JUMLAH', isiQ[isiQ.length - 1][1], 'JUMLAH');
+eq('Q16 jumlah baris = data + 1 baris JUMLAH', isiQ.length, barisJan.length + 1);
+eq('Q17 kolom per baris sama dengan headernya', isiQ[0].length, DETAIL_BULAN_HEADER.length);
 
 console.log('\n── O. Tingkat Capaian Fisik & Bulan Ini ────────────────────────');
 
@@ -378,8 +447,11 @@ ok('M7 Samakan tidak dipasang di Init maupun Import',
      rt.slice(rt.indexOf('function initRealisasiFromSSK'), rt.indexOf('async function saveRealisasi'))));
 
 const ex = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
-ok('M8 PDF mencetak target fisik dengan tanda %',
-   /r\.target_fisik\.toFixed\(2\)\s*\+\s*'%'/.test(ex) && !/fmtNum\(r\.target_fisik\)/.test(ex));
+// Kolom persen lewat penolong `p()`; yang dijaga: `p` memang menambahkan '%'
+// dan target_fisik memakainya, bukan `n()` yang untuk rupiah.
+ok('M8 target fisik diformat sebagai persen, bukan rupiah',
+   /const p = \(v: number\) => angka \? v : v\.toFixed\(2\) \+ '%';/.test(ex) &&
+   /p\(r\.target_fisik\)/.test(ex) && !/n\(r\.target_fisik\)/.test(ex));
 
 console.log('\n── N. Unduh rekap: angkanya sama dengan yang di layar ───────────');
 
