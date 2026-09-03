@@ -32,6 +32,8 @@ export interface ItemRekap {
   targetRp:    number;
   realFisik:   number;
   realKeu:     number;
+  /** Realisasi keuangan bulan terpilih SAJA — bukan akumulasi. */
+  realKeuBulanIni: number;
 }
 
 export interface AngkaRekap {
@@ -41,6 +43,17 @@ export interface AngkaRekap {
   realFisik:  number;
   pctFisik:   number;
   devFisik:   number;
+  /**
+   * Realisasi fisik ÷ TARGET × 100 — berapa persen dari rencana yang tercapai.
+   * Beda dengan `devFisik` yang merupakan selisih poin persen terhadap pagu.
+   *
+   * `null` kalau targetnya nol: "0% dari rencana nol" tidak berarti apa-apa, dan
+   * pembagian dengan nol menghasilkan Infinity yang merusak seluruh baris. Di
+   * layar & dokumen ditulis "—", BUKAN 0%.
+   */
+  capaianFisik: number | null;
+  /** Bulan terpilih saja, untuk menjawab "bulan ini habis berapa" tanpa mengurangkan dua bulan. */
+  realKeuBulanIni: number;
   realKeu:    number;
   pctKeu:     number;
   devKeu:     number;
@@ -85,7 +98,9 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  * `52,664 − 55,065` dan `52,66 − 55,07` bisa berbeda 0,01, dan bedanya muncul
  * tepat di angka yang dipakai orang untuk menilai capaian.
  */
-export function hitungAngka(pagu: number, targetRp: number, realFisik: number, realKeu: number): AngkaRekap {
+export function hitungAngka(
+  pagu: number, targetRp: number, realFisik: number, realKeu: number, realKeuBulanIni = 0,
+): AngkaRekap {
   const targetPctRaw = pagu > 0 ? (targetRp  / pagu) * 100 : 0;
   const fisikPctRaw  = pagu > 0 ? (realFisik / pagu) * 100 : 0;
   const keuPctRaw    = pagu > 0 ? (realKeu   / pagu) * 100 : 0;
@@ -96,6 +111,9 @@ export function hitungAngka(pagu: number, targetRp: number, realFisik: number, r
     realFisik,
     pctFisik:  r2(fisikPctRaw),
     devFisik:  r2(fisikPctRaw - targetPctRaw),
+    // Pembaginya TARGET, bukan pagu — itu seluruh bedanya dengan pctFisik.
+    capaianFisik: targetRp > 0 ? r2((realFisik / targetRp) * 100) : null,
+    realKeuBulanIni,
     realKeu,
     pctKeu:    r2(keuPctRaw),
     devKeu:    r2(keuPctRaw - targetPctRaw),
@@ -103,14 +121,15 @@ export function hitungAngka(pagu: number, targetRp: number, realFisik: number, r
 }
 
 export function jumlahkan(items: ItemRekap[]): AngkaRekap {
-  let pagu = 0, targetRp = 0, realFisik = 0, realKeu = 0;
+  let pagu = 0, targetRp = 0, realFisik = 0, realKeu = 0, bulanIni = 0;
   for (const it of items) {
     pagu      += it.pagu;
     targetRp  += it.targetRp;
     realFisik += it.realFisik;
     realKeu   += it.realKeu;
+    bulanIni  += it.realKeuBulanIni;
   }
-  return hitungAngka(pagu, targetRp, realFisik, realKeu);
+  return hitungAngka(pagu, targetRp, realFisik, realKeu, bulanIni);
 }
 
 function identitas(r: RealRow): string {
@@ -162,11 +181,14 @@ export function kumpulkanItem(rows: RealRow[], sdBulan: number): {
     bulanSet.add(r.bulan);
     bulanTerlihat.set(key, bulanSet);
 
+    const bulanIni = r.bulan === sdBulan ? (r.real_keuangan || 0) : 0;
+
     const ada = items.get(key);
     if (ada) {
-      ada.targetRp  += r.target_rp     || 0;
-      ada.realFisik += r.real_fisik    || 0;
-      ada.realKeu   += r.real_keuangan || 0;
+      ada.targetRp        += r.target_rp     || 0;
+      ada.realFisik       += r.real_fisik    || 0;
+      ada.realKeu         += r.real_keuangan || 0;
+      ada.realKeuBulanIni += bulanIni;
     } else {
       items.set(key, {
         cid:         r.ssk_canonical_id || '',
@@ -179,6 +201,7 @@ export function kumpulkanItem(rows: RealRow[], sdBulan: number): {
         targetRp:    r.target_rp     || 0,
         realFisik:   r.real_fisik    || 0,
         realKeu:     r.real_keuangan || 0,
+        realKeuBulanIni: bulanIni,
       });
     }
   }
@@ -258,7 +281,7 @@ export function hitungRekap(
           dorong(uraianSsk, jumlahkan(daftar), 4, false);
           if (kedalaman !== 'full') continue;
           for (const it of daftar) {
-            dorong(it.keterangan, hitungAngka(it.pagu, it.targetRp, it.realFisik, it.realKeu), 5, false);
+            dorong(it.keterangan, hitungAngka(it.pagu, it.targetRp, it.realFisik, it.realKeu, it.realKeuBulanIni), 5, false);
           }
         }
       }

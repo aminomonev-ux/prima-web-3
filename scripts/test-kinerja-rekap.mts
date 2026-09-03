@@ -203,6 +203,37 @@ eq('I9 per baris menimpa isi yang ada dengan target rupiah',
 eq('I10 ringkasan menghitung baris kosong berpagu', ringkasSamakan(rows, 8).kosong, 2);
 eq('I11 bulan yang sudah terisi dilaporkan sebagai berisi', ringkasSamakan(rows, 7).berisi, 2);
 
+console.log('\n── O. Tingkat Capaian Fisik & Bulan Ini ────────────────────────');
+
+// Capaian = realisasi / TARGET (bukan / pagu). Item A s/d bulan 7:
+// realFisik 400jt x 7 = 2,8 M; target 583.333.333 x 7 = 4.083.333.331.
+const oA = hitungRekap(rows.filter(r => r.ssk_canonical_id === 'A'), 7, 'ssk', 'A').baris[0];
+eq('O1 capaian = realisasi / target', oA.capaianFisik,
+   Math.round((400_000_000 * 7) / (BULAN_A * 7) * 10000) / 100);
+ok('O2 capaian BEDA dengan pctFisik (pembaginya beda)', oA.capaianFisik !== oA.pctFisik);
+
+// Target nol -> null, BUKAN 0 dan bukan Infinity.
+eq('O3 target nol -> capaian null', hitungAngka(0, 0, 0, 0, 0).capaianFisik, null);
+eq('O4 pagu ada tapi target nol -> tetap null', hitungAngka(1000, 0, 500, 0).capaianFisik, null);
+eq('O5 target ada tapi realisasi nol -> 0%, bukan null', hitungAngka(1000, 500, 0, 0).capaianFisik, 0);
+
+// Bulan Ini = bulan terpilih SAJA. Item A bulan 7 keuangannya 500jt.
+eq('O6 bulan ini hanya bulan terpilih', oA.realKeuBulanIni, 500_000_000);
+ok('O7 bulan ini lebih kecil dari akumulasinya', oA.realKeuBulanIni < oA.realKeu);
+// Bulan 9 tidak ada realisasi -> nol, sementara akumulasinya tetap.
+const oA9 = hitungRekap(rows.filter(r => r.ssk_canonical_id === 'A'), 9, 'ssk', 'A').baris[0];
+eq('O8 bulan tanpa realisasi -> bulan ini nol', oA9.realKeuBulanIni, 0);
+ok('O9 tapi akumulasinya tidak ikut nol', oA9.realKeu > 0);
+
+// Penanganan `null` di sisi tampilan tidak bisa dijalankan dari Node, jadi
+// diperiksa di sumbernya — dan di KEDUA tempat, layar dan PDF.
+const ctO = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
+const exO = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
+ok('O10 layar menulis "—" untuk capaian null, bukan 0%',
+   /b\.capaianFisik === null \? '—'/.test(ctO));
+ok('O11 PDF juga menulis "—", tidak memaksa 0 lewat \\?\\?',
+   /b\.capaianFisik === null \? '—'/.test(exO) && !/capaianFisik \?\? 0/.test(exO));
+
 console.log('\n── J. Pagar simpan: penjagaan berdiri SEBELUM DELETE ────────────');
 
 const src = readFileSync('lib/data/kinerja.ts', 'utf8');
@@ -284,15 +315,17 @@ console.log('\n── N. Unduh rekap: angkanya sama dengan yang di layar ──�
 
 const aoa = rekapAoa({ baris: hasil.baris, yatim: hasil.yatim, tahun: '2026', namaBulan: 'Juli' });
 eq('N1 header berdiri tepat di bawah kop', aoa[REKAP_JUDUL_BARIS][0], 'No');
-eq('N2 jumlah kolom header sama dengan tabel layar', aoa[REKAP_JUDUL_BARIS].length, 11);
+eq('N2 jumlah kolom header sama dengan tabel layar', aoa[REKAP_JUDUL_BARIS].length, 13);
 ok('N3 kop menyebut bulan & tahun', String(aoa[3][0]).includes('JULI') && String(aoa[3][0]).includes('2026'));
 ok('N4 kop menyebut versi acuan', String(aoa[4][0]).includes('versi aktif'));
 
 // Angka WAJIB diambil dari baris yang sudah dihitung, bukan dihitung ulang.
 const gt = aoa[REKAP_JUDUL_BARIS + 1];
 eq('N5 pagu grand total sama dengan layar', gt[2], hasil.baris[0].pagu);
-eq('N6 target Rp sama dengan layar', gt[7], hasil.baris[0].targetRp);
-eq('N7 deviasi keuangan sama dengan layar', gt[10], hasil.baris[0].devKeu);
+eq('N6 target Rp sama dengan layar', gt[8], hasil.baris[0].targetRp);
+eq('N7 deviasi keuangan sama dengan layar', gt[12], hasil.baris[0].devKeu);
+eq('N7b capaian fisik ikut ke berkas', gt[7], hasil.baris[0].capaianFisik);
+eq('N7c bulan ini ikut ke berkas', gt[9], hasil.baris[0].realKeuBulanIni);
 
 // Hierarki dibawa lewat spasi di depan label — Excel tak punya indent baris.
 const barisProgram = hasil.baris.findIndex(b => b.indent === 1);

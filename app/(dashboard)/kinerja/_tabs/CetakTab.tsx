@@ -277,7 +277,7 @@ export default function CetakTab({
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
                 <thead>
                   <tr>
-                    {['No','Uraian','Anggaran (Rp)','Target s/d Bln Ini (%)','Realisasi Fisik s/d Bln Ini (Rp)','Realisasi Fisik s/d Bln Ini (%)','Deviasi Fisik (%)','Target Keu s/d Bln Ini (Rp)','Realisasi Keu s/d Bln Ini (Rp)','Realisasi Keu s/d Bln Ini (%)','Deviasi Keu (%)'].map((h,i) => (
+                    {['No','Uraian','Anggaran (Rp)','Target s/d Bln Ini (%)','Realisasi Fisik s/d Bln Ini (Rp)','Realisasi Fisik s/d Bln Ini (%)','Deviasi Fisik (%)','Tingkat Capaian Fisik (%)','Target Keu s/d Bln Ini (Rp)','Bulan Ini (Rp)','Realisasi Keu s/d Bln Ini (Rp)','Realisasi Keu s/d Bln Ini (%)','Deviasi Keu (%)'].map((h,i) => (
                       <th key={i} style={{ ...thR, textAlign: i===1?'left':'center' }}>{h}</th>
                     ))}
                   </tr>
@@ -292,7 +292,12 @@ export default function CetakTab({
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realFisik)}</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctFisik) }}>{b.pctFisik.toFixed(2)}%</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devFisik>=0?'#16a34a':'#dc2626' }}>{b.devFisik.toFixed(2)}%</td>
+                      {/* Target 0 -> "—", bukan 0%: "0% dari rencana nol" tidak berarti apa-apa. */}
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.capaianFisik === null ? cTextSub : warna(b.capaianFisik) }}>
+                        {b.capaianFisik === null ? '—' : b.capaianFisik.toFixed(2) + '%'}
+                      </td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: '#b45309' }}>{fmtNum(b.targetRp)}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realKeuBulanIni)}</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realKeu)}</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctKeu) }}>{b.pctKeu.toFixed(2)}%</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devKeu>=0?'#16a34a':'#dc2626' }}>{b.devKeu.toFixed(2)}%</td>

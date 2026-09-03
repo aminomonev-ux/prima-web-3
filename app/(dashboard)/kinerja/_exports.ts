@@ -72,8 +72,9 @@ export async function exportSskPdf(params: { rows: SskRow[]; sumber: SumberSSK; 
 const REKAP_HEADER = [
   'No', 'Uraian', 'Anggaran (Rp)', 'Target s/d Bln Ini (%)',
   'Realisasi Fisik s/d Bln Ini (Rp)', 'Realisasi Fisik s/d Bln Ini (%)', 'Deviasi Fisik (%)',
-  'Target Keu s/d Bln Ini (Rp)', 'Realisasi Keu s/d Bln Ini (Rp)', 'Realisasi Keu s/d Bln Ini (%)',
-  'Deviasi Keu (%)',
+  'Tingkat Capaian Fisik (%)',
+  'Target Keu s/d Bln Ini (Rp)', 'Bulan Ini (Rp)', 'Realisasi Keu s/d Bln Ini (Rp)',
+  'Realisasi Keu s/d Bln Ini (%)', 'Deviasi Keu (%)',
 ];
 
 /** Hierarki dipertahankan lewat spasi di depan label — Excel & PDF tidak punya indent baris. */
@@ -110,8 +111,8 @@ export function rekapAoa({ baris, yatim, tahun, namaBulan }: RekapExportParams):
   ];
   const data = baris.map(b => [
     b.no, labelIndent(b), b.pagu, b.targetPct,
-    b.realFisik, b.pctFisik, b.devFisik,
-    b.targetRp, b.realKeu, b.pctKeu, b.devKeu,
+    b.realFisik, b.pctFisik, b.devFisik, b.capaianFisik,
+    b.targetRp, b.realKeuBulanIni, b.realKeu, b.pctKeu, b.devKeu,
   ]);
   const catatan = catatanYatim(yatim);
   return [...judul, REKAP_HEADER, ...data, ...(catatan ? [[], [catatan]] : [])];
@@ -123,7 +124,7 @@ export async function exportRekapExcel(params: RekapExportParams) {
   const ws = wb.addWorksheet('Rekap');
   addSheetFromAoa(ws, rekapAoa(params), {
     headerRowIndex: REKAP_JUDUL_BARIS,
-    colWidths: [{ wch:5 },{ wch:48 },{ wch:18 },{ wch:12 },{ wch:20 },{ wch:12 },{ wch:12 },{ wch:20 },{ wch:20 },{ wch:12 },{ wch:12 }],
+    colWidths: [{ wch:5 },{ wch:48 },{ wch:18 },{ wch:12 },{ wch:20 },{ wch:12 },{ wch:12 },{ wch:14 },{ wch:20 },{ wch:18 },{ wch:20 },{ wch:12 },{ wch:12 }],
   });
   await downloadWorkbook(wb, `Rekap-SemuaSumber-sd-${params.namaBulan}-${params.tahun}.xlsx`);
 }
@@ -144,7 +145,9 @@ export async function exportRekapPdf({ baris, yatim, tahun, namaBulan }: RekapEx
   const body = baris.map(b => [
     String(b.no), labelIndent(b), fmtNum(b.pagu), b.targetPct.toFixed(2) + '%',
     fmtNum(b.realFisik), b.pctFisik.toFixed(2) + '%', b.devFisik.toFixed(2) + '%',
-    fmtNum(b.targetRp), fmtNum(b.realKeu), b.pctKeu.toFixed(2) + '%', b.devKeu.toFixed(2) + '%',
+    b.capaianFisik === null ? '—' : b.capaianFisik.toFixed(2) + '%',
+    fmtNum(b.targetRp), fmtNum(b.realKeuBulanIni), fmtNum(b.realKeu),
+    b.pctKeu.toFixed(2) + '%', b.devKeu.toFixed(2) + '%',
   ]);
   autoTable(doc, {
     head: [REKAP_HEADER], body, startY: 40,

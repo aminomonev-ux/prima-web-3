@@ -1,7 +1,7 @@
 # CONCEPT — Pembenahan perhitungan E-Anggaran (Kinerja)
 
-> Status: **Tahap 0–6, 6b, dan 8 SELESAI** (2026-09-03). Tahap 7 & 9 sengaja belum —
-> keduanya opsional, dan Tahap 9 satu-satunya yang butuh migrasi.
+> Status: **Tahap 0–8 SELESAI** (2026-09-03). Tinggal Tahap 9 (riwayat simpan) —
+> opsional, dan satu-satunya yang butuh migrasi.
 > Yang dikerjakan: nol tabel baru, nol kolom baru, **nol migrasi**, nol endpoint
 > baru. Semua yang dibutuhkan sudah ada di DB — yang salah cuma jalur bacanya.
 >
@@ -259,7 +259,7 @@ Kolom "Angka bergeser?" itu yang paling penting — pemakai harus diberitahu
 | 4 | Kebersihan data: dobel & yatim (T4, T6) | sedang | ya, kalau ada dobel/yatim |
 | 5 | Target hidup sebagai rupiah (T5) | **tinggi** | **ya, semua kolom target** |
 | 6 | Label & satuan (T8, T9) | rendah | tidak |
-| 7 | *Opsional* — kolom tambahan di rekap | rendah | tidak |
+| **7** | **Dua kolom tambahan di rekap (Capaian Fisik + Bulan Ini)** | rendah | tidak |
 | **6b** | **Unduh Excel & PDF di view Rekap** | rendah | tidak |
 | **8** | **Fitur "Samakan dengan Target" (§6)** | rendah | tidak, sampai diklik |
 | 9 | *Opsional* — riwayat simpan (**butuh migrasi**) | sedang | tidak |
@@ -429,12 +429,29 @@ tidak punya indent baris.
 jadi 8 pemakai lama tak tersentuh) — tanpa itu baris kop yang ter-style dan header
 aslinya polos.
 
-### Tahap 7 — opsional: dua kolom tambahan di rekap
+### Tahap 7 — dua kolom tambahan di rekap (SELESAI)
 
-**"Bulan Ini (Rp)"** dan **"Tingkat Capaian Fisik (%)"** (= realisasi ÷ target ×
-100). Keduanya murni turunan dari angka yang sudah dihitung — tidak menambah kueri.
-Dipisah karena ini **penambahan**, bukan perbaikan, dan tidak boleh menumpang commit
-pembenahan.
+Rekap 11 kolom → **13**, menyamai format pusat pada dua kolom yang selama ini tidak
+ada:
+
+- **"Tingkat Capaian Fisik (%)"** = realisasi fisik ÷ **TARGET** × 100. Pembaginya
+  target, BUKAN pagu — itu seluruh bedanya dengan kolom `% Fisik` di sebelahnya.
+  Terlihat pada data uji: `% Fisik` 7,34% (÷ pagu) vs Capaian 9,42% (÷ target).
+  Deviasi menjawab "meleset berapa poin", capaian menjawab "berapa persen rencana
+  yang tercapai" — dua pertanyaan berbeda dari angka yang sama.
+- **"Bulan Ini (Rp)"** = realisasi keuangan bulan terpilih **saja**. Tanpa ini
+  orang harus mengurangkan dua bulan pakai kalkulator untuk tahu "bulan ini habis
+  berapa".
+
+**Target nol → `null`, ditulis "—", BUKAN 0%.** "0% dari rencana nol" tidak berarti
+apa-apa, dan pembagian dengan nol menghasilkan `Infinity` yang merusak seluruh
+baris. Kasusnya nyata: di layar produksi September, 9 dari 14 baris (rekening PPPK)
+bertarget nol. Aturannya dipegang di **tiga** tempat — lib, layar, dan PDF — dan uji
+mutasi memaksa ketiganya diperiksa (O-M8 sempat lolos karena tampilan tidak bisa
+dijalankan dari Node; ditambah asersi sumber O10/O11).
+
+Nol kueri baru, nol kolom DB, nol migrasi — keduanya turunan dari angka yang sudah
+dihitung `kumpulkanItem`.
 
 ### Tahap 9 — opsional: riwayat simpan
 
@@ -576,8 +593,9 @@ dikerjakan kapan saja.
 | L | `bulan_terakhir` = bulan yang ada isinya | 6 |
 | M | ketiga layar menerjemahkan pagar; Init pakai canonical_id; PDF bertanda % | 0b·4·6 |
 | N | unduhan rekap memuat angka yang sama dengan layar, kop + catatan yatim ikut | 6b |
+| O | Capaian Fisik dibagi TARGET, target nol → "—"; Bulan Ini hanya bulan terpilih | 7 |
 
-**Hasil: `npx tsx scripts/test-kinerja-rekap.mts` — 80 pemeriksaan, 25 uji mutasi
+**Hasil: `npx tsx scripts/test-kinerja-rekap.mts` — 93 pemeriksaan, 33 uji mutasi
 tertangkap.** Lima mutasi awalnya **LOLOS**, dan kelimanya menunjukkan hal yang
 sama: pemeriksaan yang lulus bukan karena kodenya benar.
 
