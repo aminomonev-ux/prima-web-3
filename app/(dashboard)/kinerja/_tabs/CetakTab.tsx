@@ -13,7 +13,9 @@ import { Printer } from 'lucide-react';
 import type { SumberSSK, RealRow } from '../_types';
 import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS } from '../_utils';
 import { hitungRekap, bulanTersedia } from '@/lib/kinerja/rekap';
-import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf } from '../_exports';
+import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
+import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf,
+  exportBundelExcel, exportBundelPdf, type BagianDetail } from '../_exports';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -53,6 +55,10 @@ export default function CetakTab({
   const [cetakBulan, setCetakBulan] = useState<number | 'semua'>('semua');
   const [rekapBulan, setRekapBulan] = useState<number>(0);
   const [rekapDepth, setRekapDepth] = useState<'program'|'kegiatan'|'subkegiatan'|'ssk'|'full'>('ssk');
+  // Bundel: sumber yang ikut diunduh + cakupan bulan bagian detailnya.
+  const [bundelSumber, setBundelSumber] = useState<SumberSSK[]>([]);
+  const [bundelBulan,  setBundelBulan]  = useState<'ikut'|'semua'|number>('ikut');
+  const [bukaPilihan,  setBukaPilihan]  = useState(false);
 
   // Rekap dihitung SEKALI di sini, dipakai bilah alat (unduh) DAN tabel. Dua
   // pemanggilan = dua jawaban kalau salah satunya kelewat disesuaikan, dan yang
@@ -68,12 +74,32 @@ export default function CetakTab({
     [realisasiAllRows, bulanRekapPilih, rekapDepth],
   );
 
-  const doExportRekapExcel = () => rekap && exportRekapExcel({
-    baris: rekap.baris, yatim: rekap.yatim, tahun, namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
+  // Sumber yang benar-benar ada datanya — bawaan pilihan, supaya bundel tidak
+  // berisi sheet kosong yang membuat berkasnya lebih sulit dibaca, bukan lebih
+  // lengkap. "Semua sumber" tetap tersedia.
+  const sumberBerdata = SUMBER_LIST.filter(sm => realisasiAllRows.some(r => r.sumber === sm));
+
+  const bagianDetail = (): BagianDetail[] => bundelSumber.map(sm => {
+    const rows = realisasiAllRows.filter(r => r.sumber === sm);
+    const ada  = bulanBerdata(rows);
+    const bulan = bundelBulan === 'semua' ? ada
+      : bundelBulan === 'ikut' ? ada.filter(x => x <= bulanRekapPilih)
+      : ada.filter(x => x === bundelBulan);
+    return { sumber: sm, rows, bulan };
   });
-  const doExportRekapPdf = () => rekap && exportRekapPdf({
-    baris: rekap.baris, yatim: rekap.yatim, tahun, namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
+
+  const paramRekap = () => ({
+    baris: rekap!.baris, yatim: rekap!.yatim, tahun,
+    namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
   });
+  // Dropdown MENGUBAH hasil dua tombol yang sudah ada — tidak menambah tombol.
+  // Tanpa sumber dicentang, hasilnya persis seperti sebelumnya: rekap saja.
+  const doExportRekapExcel = () => { if (!rekap) return;
+    const d = bagianDetail();
+    return d.length ? exportBundelExcel({ ...paramRekap(), detail: d }) : exportRekapExcel(paramRekap()); };
+  const doExportRekapPdf = () => { if (!rekap) return;
+    const d = bagianDetail();
+    return d.length ? exportBundelPdf({ ...paramRekap(), detail: d }) : exportRekapPdf(paramRekap()); };
 
   // Group rows by bulan
   const grouped: Record<number, RealRow[]> = {};
@@ -166,6 +192,55 @@ export default function CetakTab({
                     { value: 'full',        label: 'Termasuk Rekening Belanja' },
                   ]}
                 />
+                <div style={{ position:'relative' }}>
+                  <button type="button" onClick={() => setBukaPilihan(v => !v)}
+                    style={{ padding:'7px 14px', borderRadius:'8px', fontSize:'11px', fontWeight:700, cursor:'pointer',
+                      border:`1.5px solid ${bundelSumber.length ? '#0891b2' : cBorder}`, color: bundelSumber.length ? '#0891b2' : cTextSub,
+                      background: isLight?'#FFFFFF':'rgba(4,44,83,.6)' }}>
+                    {bundelSumber.length === 0 ? 'Sertakan detail…' : `Detail: ${bundelSumber.length} sumber`} ▾
+                  </button>
+                  {bukaPilihan && (
+                    <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, zIndex:30, minWidth:'250px',
+                      background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'10px', padding:'10px 12px',
+                      boxShadow:'0 8px 24px rgba(0,0,0,.18)' }}>
+                      <div style={{ fontSize:'10px', fontWeight:700, color:cTextSubAlt, textTransform:'uppercase', marginBottom:'6px' }}>
+                        Sumber yang ikut diunduh
+                      </div>
+                      {SUMBER_LIST.map(sm => {
+                        const kosong = !sumberBerdata.includes(sm);
+                        return (
+                          <label key={sm} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'3px 0',
+                            fontSize:'11px', color: kosong ? cTextSub : cTextPrimary, cursor:'pointer' }}>
+                            <input type="checkbox" checked={bundelSumber.includes(sm)}
+                              onChange={e => setBundelSumber(p => e.target.checked ? [...p, sm] : p.filter(x => x !== sm))} />
+                            {sm}{kosong && <span style={{ fontSize:'10px' }}>(belum ada data)</span>}
+                          </label>
+                        );
+                      })}
+                      <div style={{ display:'flex', gap:'6px', margin:'8px 0' }}>
+                        <button type="button" onClick={() => setBundelSumber(sumberBerdata)}
+                          style={{ fontSize:'10px', padding:'4px 8px', borderRadius:'6px', cursor:'pointer',
+                            border:`1px solid ${cBorder}`, background:'transparent', color:cTextSub }}>Yang ada datanya</button>
+                        <button type="button" onClick={() => setBundelSumber([])}
+                          style={{ fontSize:'10px', padding:'4px 8px', borderRadius:'6px', cursor:'pointer',
+                            border:`1px solid ${cBorder}`, background:'transparent', color:cTextSub }}>Kosongkan</button>
+                      </div>
+                      <div style={{ fontSize:'10px', fontWeight:700, color:cTextSubAlt, textTransform:'uppercase', margin:'8px 0 4px' }}>
+                        Bulan bagian detail
+                      </div>
+                      <SoftSelect
+                        value={bundelBulan as string | number}
+                        onChange={(v) => setBundelBulan(v === 'ikut' || v === 'semua' ? v : Number(v))}
+                        minWidth={220}
+                        options={[
+                          { value: 'ikut'  as string|number, label: `Ikut rekap (s/d ${CRR_BULAN_LABELS[bulanRekapPilih-1] ?? '—'})` },
+                          { value: 'semua' as string|number, label: 'Semua bulan berdata' },
+                          ...bulanRekapAda.map(bl => ({ value: bl as string|number, label: `Hanya ${CRR_BULAN_LABELS[bl-1]}` })),
+                        ]}
+                      />
+                    </div>
+                  )}
+                </div>
                 <PrimaButton variant="purple" iconLeft={<Printer size={14} />} onClick={() => window.print()}>
                   Print
                 </PrimaButton>
@@ -317,27 +392,11 @@ export default function CetakTab({
           {bulanTampil.map(b => {
             const rows = grouped[b];
             if (!rows || rows.length === 0) return null;
-            // Totals
-            const totPagu    = rows.reduce((s,r) => s + r.pagu_awal, 0);
-            // #3: total target % WAJIB weighted by pagu (Σ % antar-item beda pagu
-            // tidak valid) — pola sama dgn agg() di view Rekap.
-            const totTgtRp   = rows.reduce((s,r) => s + Math.round((r.target_fisik / 100) * r.pagu_awal), 0);
-            const totTgt     = totPagu > 0 ? Math.round((totTgtRp / totPagu) * 10000) / 100 : 0;
-            const totReal    = rows.reduce((s,r) => s + r.real_fisik, 0);
-            const totPctF    = totPagu > 0 ? Math.round((totReal / totPagu) * 10000) / 100 : 0;
-            // #4: akum target total = weighted agregat, bukan nilai baris terakhir.
-            const totAkumTgtRp = rows.reduce((s,r) => s + Math.round((r.akum_target_fisik / 100) * r.pagu_awal), 0);
-            const totAkumTgt   = totPagu > 0 ? Math.round((totAkumTgtRp / totPagu) * 10000) / 100 : 0;
-            const totAkumR   = rows.reduce((s,r) => s + r.akum_real_fisik, 0);
-            const totAkumPF  = totPagu > 0 ? Math.round((totAkumR / totPagu) * 10000) / 100 : 0;
-            const totRealKeu = rows.reduce((s,r) => s + r.real_keuangan, 0);
-            const totPctKeu  = totPagu > 0 ? Math.round((totRealKeu / totPagu) * 10000) / 100 : 0;
-            const totAkumKeu = rows.reduce((s,r) => s + r.akum_keuangan, 0);
-            const totAkumPK  = totPagu > 0 ? Math.round((totAkumKeu / totPagu) * 10000) / 100 : 0;
-            // #2/#7: deviasi total satu satuan (%) & satu konvensi (realisasi −
-            // target, positif = melampaui) — sebelumnya campur % dgn Rp.
-            const totDevF    = Math.round((totAkumPF - totAkumTgt) * 100) / 100;
-            const totDevKeu  = Math.round((totAkumPK - totAkumTgt) * 100) / 100;
+            // Baris JUMLAH: rumusnya di lib/kinerja/cetak-detail.ts supaya layar,
+            // Excel, dan PDF memakai satu definisi. Di situ pula dua cacat yang
+            // luput dari audit dibereskan — target dari RUPIAH (bukan persen
+            // bulat) dan deviasi dari rasio mentah.
+            const jml = hitungJumlahBulan(rows);
 
             return (
               <div key={b} className="print-page" style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'20px', marginBottom:'20px', boxShadow: isLight?'0 4px 16px rgba(0,0,0,.06)':'0 4px 16px rgba(0,0,0,.3)' }}>
@@ -398,19 +457,19 @@ export default function CetakTab({
                       {/* Total row */}
                       <tr style={{ background:'rgba(12,68,124,.4)', fontWeight:800 }}>
                         <td colSpan={2} style={{ ...tdP('center'), fontWeight:800, color:cTextPrimary }}>JUMLAH</td>
-                        <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(totPagu)}</td>
-                        <td style={{ ...tdP(), fontWeight:800 }}>{totTgt.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color:'#16a34a' }}>{fmtNum(totReal)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: totPctF>=100?'#16a34a':totPctF>=50?'#f59e0b':'#dc2626' }}>{totPctF.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800 }}>{totAkumTgt.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(totAkumR)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: totAkumPF>=100?'#16a34a':totAkumPF>=50?'#f59e0b':'#dc2626' }}>{totAkumPF.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color:'#16a34a' }}>{fmtNum(totRealKeu)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: totPctKeu>=100?'#16a34a':totPctKeu>=50?'#f59e0b':'#dc2626' }}>{totPctKeu.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(totAkumKeu)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: totAkumPK>=100?'#16a34a':totAkumPK>=50?'#f59e0b':'#dc2626' }}>{totAkumPK.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: totDevF>=0?'#16a34a':'#dc2626' }}>{totDevF.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: totDevKeu>=0?'#16a34a':'#dc2626' }}>{totDevKeu.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(jml.pagu)}</td>
+                        <td style={{ ...tdP(), fontWeight:800 }}>{jml.targetPct.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color:'#16a34a' }}>{fmtNum(jml.realFisik)}</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.pctFisik>=100?'#16a34a':jml.pctFisik>=50?'#f59e0b':'#dc2626' }}>{jml.pctFisik.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800 }}>{jml.akumTgtPct.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(jml.akumFisik)}</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.akumPctF>=100?'#16a34a':jml.akumPctF>=50?'#f59e0b':'#dc2626' }}>{jml.akumPctF.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color:'#16a34a' }}>{fmtNum(jml.realKeu)}</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.pctKeu>=100?'#16a34a':jml.pctKeu>=50?'#f59e0b':'#dc2626' }}>{jml.pctKeu.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(jml.akumKeu)}</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.akumPctKeu>=100?'#16a34a':jml.akumPctKeu>=50?'#f59e0b':'#dc2626' }}>{jml.akumPctKeu.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.devFisik>=0?'#16a34a':'#dc2626' }}>{jml.devFisik.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.devKeu>=0?'#16a34a':'#dc2626' }}>{jml.devKeu.toFixed(2)}%</td>
                       </tr>
                     </tbody>
                   </table>

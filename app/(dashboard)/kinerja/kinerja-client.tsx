@@ -297,7 +297,9 @@ export default function KinerjaClient({ userId, role, username, themePreference 
       const results = await Promise.all(
         SUMBER_LIST.map(async s => {
           const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${s}`);
-          return d.ok ? (d as { rows?: RealRow[] }).rows ?? [] : [];
+          // Ditandai di sini: larik hasilnya datar, dan unduhan gabungan perlu
+          // memisahkannya kembali per sumber.
+          return d.ok ? ((d as { rows?: RealRow[] }).rows ?? []).map(r => ({ ...r, sumber: s })) : [];
         })
       );
       // BUG-FIX: recalc setelah fetch supaya deviasi_keuangan pakai rumus baru

@@ -12,7 +12,8 @@ import { recalcAllRealisasiServer, type RealRowRaw } from '../lib/data/kinerja-c
 import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan } from '../lib/kinerja/rekap';
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '../lib/kinerja/samakan-target';
-import { rekapAoa, REKAP_JUDUL_BARIS } from '../app/(dashboard)/kinerja/_exports';
+import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER } from '../app/(dashboard)/kinerja/_exports';
+import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import type { RealRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
 let lulus = 0;
@@ -203,6 +204,75 @@ eq('I9 per baris menimpa isi yang ada dengan target rupiah',
 eq('I10 ringkasan menghitung baris kosong berpagu', ringkasSamakan(rows, 8).kosong, 2);
 eq('I11 bulan yang sudah terisi dilaporkan sebagai berisi', ringkasSamakan(rows, 7).berisi, 2);
 
+console.log('\n── P. Baris JUMLAH view Detail & bundel unduhan ────────────────');
+
+// Baris JUMLAH LUPUT dari audit: dulu targetnya diturunkan dari persen bulat dan
+// deviasinya dari dua angka bulat — dua cacat yang sama dengan T5 & T3.
+const barisJan = rows.filter(r => r.bulan === 1 && !r.yatim);
+const jml = hitungJumlahBulan(barisJan);
+// Diperiksa pada RUPIAHNYA, bukan persennya: pada satu bulan kedua cara
+// kebetulan membulat ke persen yang sama (8,94%), jadi asersi persen lulus tanpa
+// menguji apa pun. Rupiahnya beda 233.333 dan itu yang menopang segalanya.
+eq('P1 target JUMLAH = jumlah target_rp', jml.targetRp, BULAN_A + BULAN_B);
+const caraLamaJml = barisJan.reduce((a, r) => a + Math.round((r.target_fisik / 100) * r.pagu_awal), 0);
+ok('P2 cara lama memang memberi rupiah lain', caraLamaJml !== jml.targetRp,
+   `keduanya ${jml.targetRp}`);
+eq('P2b akum target JUMLAH juga dari rupiah',
+   jml.akumTgtRp, barisJan.reduce((a, r) => a + r.akum_target_rp, 0));
+eq('P3 pagu JUMLAH = jumlah pagu barisnya',
+   jml.pagu, barisJan.reduce((a, r) => a + r.pagu_awal, 0));
+eq('P4 deviasi JUMLAH dari rasio mentah',
+   jml.devFisik,
+   Math.round((jml.akumFisik / jml.pagu * 100 - barisJan.reduce((a,r)=>a+r.akum_target_rp,0) / jml.pagu * 100) * 100) / 100);
+
+eq('P5 bulanBerdata memulangkan bulan yang ada barisnya', bulanBerdata(rows).length, 12);
+// Masukannya sengaja DIACAK — kalau memakai `rows` apa adanya, urutannya sudah
+// benar sejak awal dan pengurutnya bisa dilepas tanpa satu tes pun gagal.
+const acak = [...rows].sort(() => Math.random() - 0.5);
+eq('P6 bulanBerdata mengurutkan masukan yang acak',
+   bulanBerdata(acak).join(','), '1,2,3,4,5,6,7,8,9,10,11,12');
+// Bulan di luar 1-12 (data rusak) tidak boleh ikut jadi halaman.
+const rusak = [...rows, { ...rows[0], bulan: 0 }, { ...rows[0], bulan: 13 }];
+eq('P6b bulan di luar 1-12 dibuang', bulanBerdata(rusak).join(','), '1,2,3,4,5,6,7,8,9,10,11,12');
+
+const aoaDetail = realisasiAoa(barisJan);
+eq('P7 kolom detail sama dengan headernya', aoaDetail[0].length, DETAIL_HEADER.length);
+eq('P8 baris detail = jumlah baris yang dikirim', aoaDetail.length, barisJan.length);
+eq('P9 kolom Pagu detail sama dengan barisnya', aoaDetail[0][3], barisJan[0].pagu_awal);
+
+const ctP = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
+const exP = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
+ok('P10 layar Detail memakai lib, tidak menjumlah sendiri lagi',
+   /hitungJumlahBulan\(rows\)/.test(ctP) && !/const totAkumTgtRp/.test(ctP));
+ok('P11 PDF detail memakai baris JUMLAH dari lib yang sama',
+   /hitungJumlahBulan\(barisBulan\)/.test(exP));
+// Diperiksa pada PEMANGGILANNYA, bukan keberadaan teksnya: melepas panggilan
+// `tandaTangan(...)` tetap meninggalkan fungsinya lengkap dengan kata-katanya,
+// dan nama rumah sakit juga muncul di kop REKAP — dua-duanya lulus tanpa menguji
+// apa pun (L82c).
+ok('P12 tiap halaman detail memanggil kop DAN tanda tangan',
+   /kopHalaman\(doc, sumber, b, tahun\)/.test(exP) && /tandaTangan\(doc, akhir \+ \d+, b, tahun\)/.test(exP));
+// Dipotong ke badan `kopHalaman` dulu — nama rumah sakit juga muncul di kop
+// rekap (PDF dan Excel), jadi mencarinya di seluruh berkas selalu ketemu.
+const badanKop = exP.slice(exP.indexOf('function kopHalaman'), exP.indexOf('function tandaTangan'));
+ok('P12b kop halaman detail memuat identitas lengkap',
+   /RUMAH SAKIT JIWA DAERAH DR\. AMINO GONDOHUTOMO/.test(badanKop) &&
+   /LAPORAN REALISASI KINERJA \$\{sumber\}/.test(badanKop) &&
+   /BULAN \$\{/.test(badanKop));
+ok('P12c blok tanda tangan menyebut kedua pejabat',
+   /Kabag Program & Anggaran/.test(exP) && /Kasubag Program/.test(exP));
+ok('P13 bundel Excel satu sheet per sumber, bukan ditumpuk',
+   /addWorksheet\('Rekap'\)/.test(exP) && /addWorksheet\(bagian\.sumber\)/.test(exP));
+ok('P14 bundel memakai penyusun yang sama dengan unduhan satuan',
+   /DETAIL_HEADER, \.\.\.realisasiAoa\(baris\)/.test(exP));
+ok('P15 sumber tanpa baris tidak melahirkan sheet kosong',
+   (exP.match(/if \(baris\.length === 0\) continue;/g) || []).length === 2);
+ok('P16 baris ditandai sumbernya di fetchRealisasiAll',
+   /\.map\(r => \(\{ \.\.\.r, sumber: s \}\)\)/.test(
+     readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8')));
+ok('P17 tanpa sumber dicentang, hasilnya rekap saja seperti sebelumnya',
+   /exportBundelExcel\(\{ \.\.\.paramRekap\(\), detail: d \}\) : exportRekapExcel\(paramRekap\(\)\)/.test(ctP));
+
 console.log('\n── O. Tingkat Capaian Fisik & Bulan Ini ────────────────────────');
 
 // Capaian = realisasi / TARGET (bukan / pagu). Item A s/d bulan 7:
@@ -309,7 +379,7 @@ ok('M7 Samakan tidak dipasang di Init maupun Import',
 
 const ex = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
 ok('M8 PDF mencetak target fisik dengan tanda %',
-   /r\.target_fisik\.toFixed\(2\)\+'%'/.test(ex));
+   /r\.target_fisik\.toFixed\(2\)\s*\+\s*'%'/.test(ex) && !/fmtNum\(r\.target_fisik\)/.test(ex));
 
 console.log('\n── N. Unduh rekap: angkanya sama dengan yang di layar ───────────');
 
@@ -347,8 +417,15 @@ ok('N11 tanpa yatim tidak ada catatan menggantung',
 const ct = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
 // Dihitung KEMUNCULANNYA, bukan "ada?": Excel & PDF dua panggilan terpisah, jadi
 // merusak salah satunya tetap menyisakan yang lain untuk dicocokkan.
-eq('N12 KEDUA tombol unduh memakai baris hasil hitungan layar',
-   (ct.match(/baris: rekap\.baris, yatim: rekap\.yatim/g) || []).length, 2);
+// Invariannya: cuma SATU tempat yang menyusun parameter unduhan, dan kedua
+// tombol memanggilnya. Menghitung kemunculan `rekap!.baris` lebih kuat daripada
+// mencocokkan satu panggilan — kalau salah satu tombol menyusun sendiri, angkanya
+// naik dan tes ini gagal.
+eq('N12 hanya SATU tempat menyusun parameter unduhan',
+   (ct.match(/rekap!\.baris/g) || []).length, 1);
+// 4 = dua tombol x dua cabang (bundel / rekap saja).
+eq('N12b kedua tombol memakai penyusun itu',
+   (ct.match(/paramRekap\(\)/g) || []).length, 4);
 // hitungRekap hanya boleh dipanggil SEKALI — di useMemo. Panggilan kedua di mana
 // pun berarti dokumen yang diunduh berdiri di atas hitungan sendiri.
 eq('N13 hitungRekap dipanggil tepat sekali di seluruh berkas',

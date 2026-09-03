@@ -12,6 +12,7 @@ import type {
 } from './_types';
 import { MONTHS_KEYS, MONTH_SHORT, CRR_BULAN_LABELS } from './_utils';
 import type { BarisRekap, LaporanYatim } from '@/lib/kinerja/rekap';
+import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
 
 let _pdfPromise:  Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
 
@@ -129,9 +130,12 @@ export async function exportRekapExcel(params: RekapExportParams) {
   await downloadWorkbook(wb, `Rekap-SemuaSumber-sd-${params.namaBulan}-${params.tahun}.xlsx`);
 }
 
-export async function exportRekapPdf({ baris, yatim, tahun, namaBulan }: RekapExportParams) {
-  const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+/** Halaman rekap di PDF — dipakai unduhan satuan DAN bundel. */
+export function gambarRekapPdf(
+  doc: import('jspdf').jsPDF,
+  autoTable: typeof import('jspdf-autotable').default,
+  { baris, yatim, tahun, namaBulan }: RekapExportParams,
+) {
   doc.setFontSize(12);
   doc.text('RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO', 14, 13);
   doc.setFontSize(9);
@@ -162,7 +166,13 @@ export async function exportRekapPdf({ baris, yatim, tahun, namaBulan }: RekapEx
     doc.setFontSize(8);
     doc.text(doc.splitTextToSize(catatan, 380), 14, y + 8);
   }
-  doc.save(`Rekap-SemuaSumber-sd-${namaBulan}-${tahun}.pdf`);
+}
+
+export async function exportRekapPdf(params: RekapExportParams) {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+  gambarRekapPdf(doc, autoTable, params);
+  doc.save(`Rekap-SemuaSumber-sd-${params.namaBulan}-${params.tahun}.pdf`);
 }
 
 // ─── Rekening ─────────────────────────────────────────────────────────────────
@@ -182,44 +192,131 @@ export async function exportRekeningExcel(params: { rows: RekeningRow[]; sumber:
 
 // ─── Realisasi ────────────────────────────────────────────────────────────────
 
-export async function exportRealisasiExcel(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string }) {
-  const { rows, sumber, tahun } = params;
-  const ExcelJSLib = await loadExcelJs();
-  const wb = new ExcelJSLib.Workbook();
-  const ws = wb.addWorksheet(`Realisasi ${sumber}`);
-  const header = ['No','Bulan','Keterangan','Pagu','Target Fisik','Real Fisik','% Fisik',
-    'Akum Target Fisik','Akum Real Fisik','Akum % Fisik',
-    'Real Keuangan','% Real Keu','Akum Keuangan','Akum % Keuangan','Deviasi Fisik %','Deviasi Keuangan %'];
-  const data = rows.map((r,i) => [
-    i+1, CRR_BULAN_LABELS[r.bulan-1] ?? r.bulan, r.keterangan,
+// ─── Detail per sumber: susunan bersama layar / Excel / PDF ───────────────────
+//
+// Dipisah dari pengunduhnya (pola `rekapAoa`) supaya unduhan per-sumber DAN
+// bundel gabungan memakai satu definisi. Dua definisi tabel detail cepat atau
+// lambat berbeda pendapat.
+
+export const DETAIL_HEADER = [
+  'No', 'Bulan', 'Keterangan', 'Pagu', 'Target Fisik', 'Real Fisik', '% Fisik',
+  'Akum Target Fisik', 'Akum Real Fisik', 'Akum % Fisik',
+  'Real Keuangan', '% Real Keu', 'Akum Keuangan', 'Akum % Keuangan',
+  'Deviasi Fisik %', 'Deviasi Keuangan %',
+];
+
+export function realisasiAoa(rows: RealRow[]): (string | number | null)[][] {
+  return rows.map((r, i) => [
+    i + 1, CRR_BULAN_LABELS[r.bulan - 1] ?? r.bulan, r.keterangan,
     r.pagu_awal, r.target_fisik, r.real_fisik, r.pct_fisik,
     r.akum_target_fisik, r.akum_real_fisik, r.akum_pct_fisik,
     r.real_keuangan, r.pct_keuangan, r.akum_keuangan, r.akum_pct_keuangan,
     r.deviasi_fisik, r.deviasi_keuangan,
   ]);
-  addSheetFromAoa(ws, [header, ...data], {
-    colWidths: [{ wch:4 },{ wch:14 },{ wch:30 },...Array(13).fill({ wch:14 })],
-  });
+}
+
+const DETAIL_LEBAR = [{ wch: 4 }, { wch: 14 }, { wch: 30 }, ...Array(13).fill({ wch: 14 })];
+
+export async function exportRealisasiExcel(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string }) {
+  const { rows, sumber, tahun } = params;
+  const ExcelJSLib = await loadExcelJs();
+  const wb = new ExcelJSLib.Workbook();
+  const ws = wb.addWorksheet(`Realisasi ${sumber}`);
+  addSheetFromAoa(ws, [DETAIL_HEADER, ...realisasiAoa(rows)], { colWidths: DETAIL_LEBAR });
   await downloadWorkbook(wb, `Realisasi-${sumber}-${tahun}.xlsx`);
+}
+
+// ─── Halaman detail di PDF: kop + tabel + JUMLAH + tanda tangan ───────────────
+//
+// Bentuknya meniru LAYAR, bukan tabel rata seperti versi lama — supaya berkasnya
+// benar-benar bisa ditandatangani dan dikirim, bukan cuma tumpukan angka.
+// Dipakai bersama oleh unduhan per-sumber dan bundel gabungan.
+
+type Dok = import('jspdf').jsPDF;
+type AutoTable = typeof import('jspdf-autotable').default;
+
+const LEBAR_A3 = 420;
+
+function kopHalaman(doc: Dok, sumber: SumberSSK, bulan: number, tahun: string) {
+  const tengah = LEBAR_A3 / 2;
+  doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+  doc.text('RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO', tengah, 14, { align: 'center' });
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text('PROVINSI JAWA TENGAH', tengah, 19, { align: 'center' });
+  doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+  doc.text(`LAPORAN REALISASI KINERJA ${sumber}`, tengah, 27, { align: 'center' });
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text(`BULAN ${(CRR_BULAN_LABELS[bulan - 1] ?? '').toUpperCase()} TAHUN ${tahun}`, tengah, 32, { align: 'center' });
+}
+
+function tandaTangan(doc: Dok, y: number, bulan: number, tahun: string) {
+  const kolom = [
+    { x: LEBAR_A3 - 190, jabatan: 'Kabag Program & Anggaran', peran: 'Mengetahui,' },
+    { x: LEBAR_A3 - 90,  jabatan: 'Kasubag Program',          peran: 'Yang membuat,' },
+  ];
+  doc.setFontSize(8);
+  for (const k of kolom) {
+    doc.text(`Semarang, ${CRR_BULAN_LABELS[bulan - 1] ?? ''} ${tahun}`, k.x, y, { align: 'center' });
+    doc.text(k.peran, k.x, y + 4, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.text(k.jabatan, k.x, y + 22, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.line(k.x - 32, y + 18, k.x + 32, y + 18);
+  }
+}
+
+/** Satu halaman per bulan. `halamanBaru` false untuk halaman pertama dokumen. */
+export function gambarDetailPdf(
+  doc: Dok, autoTable: AutoTable,
+  rows: RealRow[], sumber: SumberSSK, tahun: string, bulanDipakai: number[],
+  halamanBaru: boolean,
+) {
+  let perluHalaman = halamanBaru;
+  for (const b of bulanDipakai) {
+    const barisBulan = rows.filter(r => r.bulan === b);
+    if (barisBulan.length === 0) continue;
+    if (perluHalaman) doc.addPage();
+    perluHalaman = true;
+
+    kopHalaman(doc, sumber, b, tahun);
+    const jml = hitungJumlahBulan(barisBulan);
+    const body = barisBulan.map((r, i) => [
+      String(i + 1), r.keterangan || '-', fmtNum(r.pagu_awal),
+      r.target_fisik.toFixed(2) + '%', fmtNum(r.real_fisik), r.pct_fisik.toFixed(2) + '%',
+      r.akum_target_fisik.toFixed(2) + '%', fmtNum(r.akum_real_fisik), r.akum_pct_fisik.toFixed(2) + '%',
+      fmtNum(r.real_keuangan), r.pct_keuangan.toFixed(2) + '%',
+      fmtNum(r.akum_keuangan), r.akum_pct_keuangan.toFixed(2) + '%',
+      r.deviasi_fisik.toFixed(2) + '%', r.deviasi_keuangan.toFixed(2) + '%',
+    ]);
+    // Baris JUMLAH dari lib yang sama dengan layar — bukan dijumlah ulang di sini.
+    body.push([
+      '', 'JUMLAH', fmtNum(jml.pagu), jml.targetPct.toFixed(2) + '%',
+      fmtNum(jml.realFisik), jml.pctFisik.toFixed(2) + '%',
+      jml.akumTgtPct.toFixed(2) + '%', fmtNum(jml.akumFisik), jml.akumPctF.toFixed(2) + '%',
+      fmtNum(jml.realKeu), jml.pctKeu.toFixed(2) + '%',
+      fmtNum(jml.akumKeu), jml.akumPctKeu.toFixed(2) + '%',
+      jml.devFisik.toFixed(2) + '%', jml.devKeu.toFixed(2) + '%',
+    ]);
+    autoTable(doc, {
+      head: [['No','Uraian Kegiatan','Pagu (Rp)','Target Fisik','Real Fisik','% Fisik',
+        'Akum. Target','Akum. Real Fisik','Akum. % Fisik',
+        'Real Keuangan (Rp)','% Real Keu','Akum. Keuangan (Rp)','Akum. % Keuangan',
+        'Deviasi Fisik %','Deviasi Keuangan %']],
+      body, startY: 37,
+      styles: { fontSize: 7, cellPadding: 1 },
+      headStyles: { fillColor: [51, 65, 85] },
+      didParseCell: (d) => { if (d.section === 'body' && d.row.index === body.length - 1) d.cell.styles.fontStyle = 'bold'; },
+    });
+    const akhir = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 37;
+    tandaTangan(doc, akhir + 14, b, tahun);
+  }
 }
 
 export async function exportRealisasiPdf(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string }) {
   const { rows, sumber, tahun } = params;
   const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a3' });
-  doc.setFontSize(13); doc.text(`Realisasi ${sumber} — Tahun ${tahun}`, 14, 14);
-  doc.setFontSize(9);  doc.text('RSJD dr. Amino Gondohutomo', 14, 20);
-  const head = [['No','Bulan','Keterangan','Pagu','Tgt Fisik','Real Fisik','% Fisik','Akum Tgt','Akum Real','Akum %','Real Keu','% Real Keu','Akum Keu','Akum % Keu','Dev Fisik %','Dev Keu %']];
-  const body = rows.map((r,i) => [
-    String(i+1), CRR_BULAN_LABELS[r.bulan-1] ?? String(r.bulan), r.keterangan,
-    // target_fisik satuannya PERSEN — `fmtNum` membuatnya berdiri tanpa tanda %
-    // tepat di sebelah kolom akumulasi yang bertanda, dua satuan bersebelahan.
-    fmtNum(r.pagu_awal), r.target_fisik.toFixed(2)+'%', fmtNum(r.real_fisik), r.pct_fisik+'%',
-    String(r.akum_target_fisik.toFixed(2))+'%', fmtNum(r.akum_real_fisik), r.akum_pct_fisik+'%',
-    fmtNum(r.real_keuangan), r.pct_keuangan+'%', fmtNum(r.akum_keuangan), r.akum_pct_keuangan+'%',
-    r.deviasi_fisik+'%', r.deviasi_keuangan+'%',
-  ]);
-  autoTable(doc, { head, body, startY:24, styles:{ fontSize:7, cellPadding:1 }, headStyles:{ fillColor:[51,65,85] } });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+  gambarDetailPdf(doc, autoTable, rows, sumber, tahun, bulanBerdata(rows), false);
   doc.save(`Realisasi-${sumber}-${tahun}.pdf`);
 }
 
@@ -358,4 +455,67 @@ export async function exportMasterExcel(params: { opts: MasterOpts; tahun: strin
     });
   }
   await downloadWorkbook(wb, `Master-E-Anggaran-${tahun}.xlsx`);
+}
+
+// ─── Bundel: Rekap + Detail per sumber dalam SATU berkas ──────────────────────
+//
+// Excel = satu SHEET per bagian, bukan ditumpuk. Rekap 13 kolom, Detail 16 —
+// menumpuknya di satu lembar membuat kolom tidak segaris, dan berkasnya jadi
+// tidak bisa disortir/disaring/dirumuskan. Sheet memang untuk itu.
+// PDF = bertumpuk, karena kertas memang bertumpuk: halaman rekap, lalu halaman
+// tiap sumber lengkap dengan kop & tanda tangan.
+//
+// Keduanya memakai penyusun yang SAMA dengan unduhan satuan (`rekapAoa`,
+// `realisasiAoa`, `gambarDetailPdf`) — yang diunduh wajib memuat angka yang
+// persis sama dengan yang dilihat di layar.
+
+export interface BagianDetail {
+  sumber: SumberSSK;
+  rows:   RealRow[];
+  /** Bulan yang dicetak untuk sumber ini — sudah disaring pemanggil. */
+  bulan:  number[];
+}
+
+export interface BundelParams extends RekapExportParams {
+  detail: BagianDetail[];
+}
+
+function namaBundel(namaBulan: string, tahun: string, ext: string) {
+  return `Laporan-Realisasi-${tahun}-sd-${namaBulan}.${ext}`;
+}
+
+export async function exportBundelExcel(params: BundelParams) {
+  const ExcelJSLib = await loadExcelJs();
+  const wb = new ExcelJSLib.Workbook();
+
+  const wsRekap = wb.addWorksheet('Rekap');
+  addSheetFromAoa(wsRekap, rekapAoa(params), {
+    headerRowIndex: REKAP_JUDUL_BARIS,
+    colWidths: [{ wch:5 },{ wch:48 },{ wch:18 },{ wch:12 },{ wch:20 },{ wch:12 },{ wch:12 },{ wch:14 },{ wch:20 },{ wch:18 },{ wch:20 },{ wch:12 },{ wch:12 }],
+  });
+
+  for (const bagian of params.detail) {
+    const baris = bagian.rows.filter(r => bagian.bulan.includes(r.bulan));
+    if (baris.length === 0) continue;
+    const ws = wb.addWorksheet(bagian.sumber);
+    addSheetFromAoa(ws, [DETAIL_HEADER, ...realisasiAoa(baris)], { colWidths: DETAIL_LEBAR });
+  }
+
+  await downloadWorkbook(wb, namaBundel(params.namaBulan, params.tahun, 'xlsx'));
+}
+
+export async function exportBundelPdf(params: BundelParams) {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+
+  gambarRekapPdf(doc, autoTable, params);
+
+  for (const bagian of params.detail) {
+    const baris = bagian.rows.filter(r => bagian.bulan.includes(r.bulan));
+    if (baris.length === 0) continue;
+    // halamanBaru = true: tiap sumber selalu mulai di halaman sendiri.
+    gambarDetailPdf(doc, autoTable, baris, bagian.sumber, params.tahun, bagian.bulan, true);
+  }
+
+  doc.save(namaBundel(params.namaBulan, params.tahun, 'pdf'));
 }

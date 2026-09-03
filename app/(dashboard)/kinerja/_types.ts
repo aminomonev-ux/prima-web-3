@@ -58,6 +58,13 @@ export interface SskRow {
 export interface RealRow {
   id?: number;
   bulan: number;
+  /**
+   * Diisi `fetchRealisasiAll` saat menarik SEMUA sumber. Server memang
+   * menyertakannya di jalur tanpa parameter versi, tapi jalur versi-aware TIDAK —
+   * mengandalkan muatan berarti berdiri di atas perbedaan dua jalur yang tidak
+   * disengaja (bentuk T1). Ditandai di pemanggilnya.
+   */
+  sumber?: SumberSSK;
   keterangan: string;
   program: string;
   kegiatan: string;
