@@ -13,7 +13,7 @@ import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan } from '../lib/kiner
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '../lib/kinerja/samakan-target';
 import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
-  DETAIL_BULAN_HEADER, barisBulanDetail } from '../app/(dashboard)/kinerja/_exports';
+  DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import type { RealRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
@@ -264,8 +264,17 @@ const badanKop = exP.slice(exP.indexOf('export function kopDetail'), exP.indexOf
 ok('P12c kop detail memuat identitas lengkap',
    /RUMAH SAKIT JIWA DAERAH DR\. AMINO GONDOHUTOMO/.test(badanKop) &&
    /LAPORAN REALISASI KINERJA \$\{sumber\}/.test(badanKop) && /BULAN \$\{/.test(badanKop));
-ok('P12d nama pejabat cuma didefinisikan sekali',
-   (exP.match(/Kasubag Program/g) || []).length === 1 && /PENANDA_TANGAN/.test(exP));
+// Nama jabatan cuma boleh hidup di SATU daftar. Dulu ditulis ulang di JSX
+// CetakTab, jadi mengganti "Kabag Program & Anggaran" jadi "Kabag Renbang" harus
+// menyentuh dua tempat — dan lupa satu berarti cetakan berbeda dengan layarnya.
+eq('P12d nama jabatan cuma didefinisikan sekali di seluruh modul',
+   PENANDA_TANGAN.length +
+   (readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8')
+     .match(new RegExp(PENANDA_TANGAN.map(p => p.jabatan).join('|'), 'g')) || []).length, 2);
+ok('P12e layar memakai daftar yang sama dengan berkas',
+   /PENANDA_TANGAN\.map\(pj =>/.test(readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8')));
+ok('P12f jabatan & peran keduanya terpakai di berkas',
+   /p\.jabatan/.test(exP) && /p\.peran/.test(exP));
 
 ok('P13 bundel Excel satu sheet per sumber, bukan ditumpuk',
    /addWorksheet\('Rekap'\)/.test(exP) && /addWorksheet\(bagian\.sumber\)/.test(exP));

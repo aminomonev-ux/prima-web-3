@@ -15,7 +15,7 @@ import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS } from '../_utils';
 import { hitungRekap, bulanTersedia } from '@/lib/kinerja/rekap';
 import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
 import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf,
-  exportBundelExcel, exportBundelPdf, type BagianDetail } from '../_exports';
+  exportBundelExcel, exportBundelPdf, PENANDA_TANGAN, type BagianDetail } from '../_exports';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -475,30 +475,22 @@ export default function CetakTab({
                   </table>
                 </div>
 
-                {/* ── Blok tanda tangan ── */}
+                {/* ── Blok tanda tangan ── nama jabatan dari PENANDA_TANGAN,
+                     satu daftar yang sama dengan berkas PDF & Excel. */}
                 <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'28px', gap:'60px', paddingRight:'20px' }}>
-                  <div style={{ textAlign:'center', minWidth:'160px' }}>
+                  {PENANDA_TANGAN.map(pj => (
+                  <div key={pj.jabatan} style={{ textAlign:'center', minWidth:'160px' }}>
                     <div style={{ fontSize:'11px', color:cTextSubAlt }}>
                       Semarang, {CRR_BULAN_LABELS[b-1]} {tahun}
                     </div>
                     <div style={{ fontSize:'11px', fontWeight:600, color:cTextSubAlt, marginTop:'2px' }}>
-                      Mengetahui,
+                      {pj.peran}
                     </div>
                     <div style={{ marginTop:'48px', borderTop:`1px solid ${cBorder}`, paddingTop:'4px', fontSize:'11px', fontWeight:700, color:cTextPrimary }}>
-                      Kabag Program &amp; Anggaran
+                      {pj.jabatan}
                     </div>
                   </div>
-                  <div style={{ textAlign:'center', minWidth:'160px' }}>
-                    <div style={{ fontSize:'11px', color:cTextSubAlt }}>
-                      Semarang, {CRR_BULAN_LABELS[b-1]} {tahun}
-                    </div>
-                    <div style={{ fontSize:'11px', fontWeight:600, color:cTextSubAlt, marginTop:'2px' }}>
-                      Yang membuat,
-                    </div>
-                    <div style={{ marginTop:'48px', borderTop:`1px solid ${cBorder}`, paddingTop:'4px', fontSize:'11px', fontWeight:700, color:cTextPrimary }}>
-                      Kasubag Program
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
               </div>

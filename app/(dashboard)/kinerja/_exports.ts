@@ -92,9 +92,15 @@ export function kopDetail(sumber: SumberSSK, bulan: number, tahun: string): KopB
   ];
 }
 
-/** Dua pejabat penanda tangan — dipakai PDF & Excel. */
-const PENANDA_TANGAN = [
-  { peran: 'Mengetahui,',   jabatan: 'Kabag Program & Anggaran' },
+/**
+ * Dua pejabat penanda tangan — dipakai LAYAR, PDF, dan Excel.
+ *
+ * Dulu nama jabatannya ditulis ulang di JSX CetakTab, jadi mengganti
+ * "Kabag Program & Anggaran" jadi "Kabag Renbang" harus disentuh di dua tempat
+ * dan cukup lupa satu untuk membuat cetakan berbeda dengan layarnya.
+ */
+export const PENANDA_TANGAN = [
+  { peran: 'Mengetahui,',   jabatan: 'Kabag Renbang' },
   { peran: 'Yang membuat,', jabatan: 'Kasubag Program' },
 ];
 
