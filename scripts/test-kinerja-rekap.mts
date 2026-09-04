@@ -15,6 +15,7 @@ import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '../lib
 import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
+import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
 import type { RealRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
 let lulus = 0;
@@ -430,9 +431,26 @@ ok('K4 versiAktifKinerja mengecualikan is_nullified',
 
 console.log('\n── L. bulan_terakhir = bulan yang ada isinya ────────────────────');
 
-eq('L1 dua kueri agregat ikut diperbaiki',
-   (kode.match(/MAX\(CASE WHEN real_fisik <> 0 OR real_keuangan <> 0 THEN bulan END\)/g) || []).length, 2);
+// A2 memindahkan hitungannya dari SQL ke JS: kuerinya sekarang dikelompokkan
+// sampai `ssk_canonical_id` supaya yatim bisa disaring, jadi `MAX(CASE WHEN …)`
+// tidak lagi bisa dipakai. Yang dijaga tetap PERILAKUNYA — "bulan terakhir yang
+// ada isinya", bukan MAX(bulan) polos yang selalu 12 karena Init membuat Jan–Des
+// berisi nol sejak awal tahun.
+eq('L1 dua jalur menghitungnya dari baris yang berisi',
+   (kode.match(/if \(\(keu !== 0 \|\| fis !== 0\) && bulan > bulanTerakhir\)/g) || []).length, 2);
 ok('L2 MAX(bulan) polos sudah tidak dipakai', !/COALESCE\(MAX\(bulan\), 0\)/.test(kode));
+ok('L3 bentuk SQL lamanya sudah tidak ada',
+   !/MAX\(CASE WHEN real_fisik <> 0 OR real_keuangan <> 0 THEN bulan END\)/.test(kode));
+// Baris yatim tidak boleh menentukan bulan terakhir: `continue` HARUS mendahului
+// pemutakhirannya, di badan fungsi yang sama.
+for (const fn of ['getLaporanData', 'getLaporanSemua'] as const) {
+  const i = kode.indexOf(`export async function ${fn}(`);
+  const badan = kode.slice(i, kode.indexOf('\n}\n', i));
+  const iSkip = badan.indexOf(')) continue;');
+  const iBln  = badan.indexOf('bulan > bulanTerakhir');
+  ok(`L4 ${fn}: yatim dilewati SEBELUM bulan_terakhir disetel`,
+     iSkip > 0 && iBln > 0 && iSkip < iBln, `continue@${iSkip} bulan@${iBln}`);
+}
 
 console.log('\n── M. Ketiga layar simpan menerjemahkan pagar itu ───────────────');
 
@@ -559,6 +577,159 @@ console.log('\n── R. Format angka Excel: notasi ilmiah tidak boleh muncul �
 
   // Setiap unduhan yang memuat uang harus kebagian.
   eq('R11 delapan pemanggil memakai numFmts', (ex.match(/numFmts:/g) || []).length, 8);
+}
+
+console.log('\n── S. A2: realisasi yatim keluar dari Laporan & KPI juga ───────');
+
+// Sampai T7, hanya `hitungRekap` yang mengeluarkan yatim. getLaporanData,
+// getLaporanSemua, dan getKinerjaKpi menjumlahkan `SUM(real_keuangan)` tanpa
+// saringan apa pun — pembilangnya memuat uang yang penyebutnya tidak memuat
+// pagunya. Bab ini menjaga ketiganya sepakat dengan Rekap.
+{
+  const aktif = new Map<string, Set<string>>([['GAJI', new Set(['A', 'B', 'C'])]]);
+
+  // ── Perilaku penyaring ────────────────────────────────────────────────────
+  {
+    const p1 = buatPenyaringYatim(aktif);
+    ok('S1 canonical yang ada di versi aktif dipakai',  p1.pakai('GAJI', 'A', 500, 1, 'Item A'));
+    ok('S2 canonical yang lenyap TIDAK dipakai',       !p1.pakai('GAJI', 'HILANG', 90_000_000, 1, 'Item Yatim'));
+    const h1 = p1.hasil();
+    eq('S3 nominal yatim ditally',      h1.nominal, 90_000_000);
+    eq('S4 jumlah baris yatim ditally', h1.jumlahBaris, 1);
+    eq('S5 item yatim dihitung sekali', h1.jumlahItem, 1);
+    ok('S6 contoh menyebut namanya', h1.contoh[0] === 'Item Yatim');
+  }
+  {
+    // Sumber yang tidak punya baris SSK sama sekali: SEMUA realisasinya yatim.
+    // `?? new Set()`, bukan "semuanya lolos" — sumber tanpa pagu tidak boleh
+    // menyumbang pembilang.
+    const p2 = buatPenyaringYatim(aktif);
+    ok('S7 sumber tanpa SSK: semuanya yatim', !p2.pakai('BLUD', 'A', 777, 1, 'Item A'));
+    eq('S8 nominalnya ikut ditally', p2.hasil().nominal, 777);
+  }
+  {
+    // Satu item yatim di 12 bulan = 1 item, 12 baris. Kalau `jumlahItem` ikut
+    // naik per baris, spanduknya berbunyi "12 rekening" untuk satu rekening.
+    const p3 = buatPenyaringYatim(aktif);
+    for (let b = 1; b <= 12; b++) p3.pakai('GAJI', 'HILANG', 1_000_000, 1, 'Item Yatim');
+    const h3 = p3.hasil();
+    eq('S9 satu item di 12 bulan = 1 item',    h3.jumlahItem, 1);
+    eq('S10 tapi 12 baris',                     h3.jumlahBaris, 12);
+    eq('S11 nominalnya dijumlah',               h3.nominal, 12_000_000);
+  }
+  {
+    const kosong = buatPenyaringYatim(aktif).hasil();
+    eq('S12 tanpa yatim, nominalnya nol', kosong.nominal, 0);
+    eq('S13 tanpa yatim, contohnya kosong', kosong.contoh.length, 0);
+  }
+
+  // ── Angkanya HARUS cocok dengan Rekap ─────────────────────────────────────
+  //
+  // Asersi terpenting di bab ini: ia yang membuktikan dua layar berhenti
+  // berbantah, dan ia gagal kalau salah satu sisi diperbaiki tanpa yang lain.
+  // Pohon uji `rows` memuat satu baris yatim ('HILANG', Rp 90.000.000).
+  {
+    const pRekap = buatPenyaringYatim(aktif);
+    let totalLaporan = 0;
+    for (const r of rows) {
+      const keu = r.real_keuangan || 0;
+      if (!pRekap.pakai('GAJI', r.ssk_canonical_id || '', keu, 1, r.keterangan)) continue;
+      totalLaporan += keu;
+    }
+    const rekapSemua = hitungRekap(rows, 12, 'ssk', 'TOTAL');
+    eq('S14 total Laporan == total Rekap', totalLaporan, rekapSemua.baris[0].realKeu);
+    eq('S15 nominal yatim sama dengan yang dilaporkan Rekap',
+       pRekap.hasil().nominal, rekapSemua.yatim.nominal);
+    // Kalau saringannya dilepas, totalnya lebih besar — buktinya ada bedanya.
+    const tanpaSaring = rows.reduce((t, r) => t + (r.real_keuangan || 0), 0);
+    ok('S16 tanpa saringan totalnya memang lebih besar',
+       tanpaSaring === totalLaporan + 90_000_000, `${tanpaSaring} vs ${totalLaporan}`);
+  }
+
+  // ── himpunanCanonical: hanya versi AKTIF, bukan semua versi ──────────────
+  //
+  // Diuji perilakunya, bukan teksnya: uji mutasi membuktikan asersi teks tidak
+  // menggigit di sini — melepas perbandingan versinya lolos tanpa satu tes gagal.
+  {
+    const petaVersi = new Map<string, { tipe: 'MURNI' | 'PERUBAHAN'; seq: number }>([
+      ['GAJI', { tipe: 'PERUBAHAN', seq: 2 }],
+      ['BLUD', { tipe: 'MURNI',     seq: 0 }],
+    ]);
+    const barisSsk = [
+      // GAJI aktif di PERUBAHAN-2. Item X hidup di MURNI-0 tapi SUDAH DIBUANG
+      // dari versi aktif; item W hidup di PERUBAHAN-1 dan juga sudah dibuang.
+      //
+      // W itu yang penting: tipenya SAMA dengan versi aktif, hanya `seq`-nya
+      // beda. Tanpa baris seperti ini, melepas perbandingan `versi_seq` lolos
+      // tanpa satu tes gagal — pohon ujinya kebetulan setuju (uji mutasi S-M7b).
+      { sumber: 'GAJI', canonical_id: 'X', versi_tipe: 'MURNI',     versi_seq: 0 },
+      { sumber: 'GAJI', canonical_id: 'W', versi_tipe: 'PERUBAHAN', versi_seq: 1 },
+      { sumber: 'GAJI', canonical_id: 'Y', versi_tipe: 'MURNI',     versi_seq: 0 },
+      { sumber: 'GAJI', canonical_id: 'Y', versi_tipe: 'PERUBAHAN', versi_seq: 1 },
+      { sumber: 'GAJI', canonical_id: 'Y', versi_tipe: 'PERUBAHAN', versi_seq: 2 },
+      // Bentuk yang SEHARUSNYA tidak ada: MURNI ber-seq bukan 0 (skema menyebut
+      // `0=MURNI, 1+=Perubahan ke-n`). Ada di sini justru supaya perbandingan
+      // `versi_tipe` tidak bersandar diam-diam pada kebiasaan itu — kalau ia
+      // dilepas, baris ini akan lolos dan tesnya menyalak (uji mutasi S-M7d).
+      { sumber: 'GAJI', canonical_id: 'V', versi_tipe: 'MURNI',     versi_seq: 2 },
+      { sumber: 'BLUD', canonical_id: 'Z', versi_tipe: 'MURNI',     versi_seq: 0 },
+      // Sumber yang tidak punya versi aktif sama sekali.
+      { sumber: 'OBAT', canonical_id: 'Q', versi_tipe: 'MURNI',     versi_seq: 0 },
+      // canonical_id kosong tidak boleh jadi anggota himpunan.
+      { sumber: 'BLUD', canonical_id: '',  versi_tipe: 'MURNI',     versi_seq: 0 },
+    ];
+    const him = himpunanCanonical(barisSsk, petaVersi);
+    ok('S17a item yang masih ada di versi aktif masuk',   him.get('GAJI')?.has('Y') === true);
+    ok('S17b item yang dibuang di versi aktif TIDAK masuk', him.get('GAJI')?.has('X') !== true);
+    ok('S17b2 versi ber-TIPE sama tapi seq lebih tua juga TIDAK masuk',
+       him.get('GAJI')?.has('W') !== true);
+    ok('S17b3 tipe dibandingkan juga, bukan cuma seq',
+       him.get('GAJI')?.has('V') !== true);
+    eq('S17c GAJI cuma punya satu canonical aktif',       him.get('GAJI')?.size, 1);
+    ok('S17d sumber lain ikut terbaca',                   him.get('BLUD')?.has('Z') === true);
+    eq('S17e canonical_id kosong dilewati',               him.get('BLUD')?.size, 1);
+    ok('S17f sumber tanpa versi aktif tidak punya himpunan', !him.has('OBAT'));
+  }
+
+  // ── Statis: ketiga jalur agregat memakai aturan yang SAMA ────────────────
+  const kj = readFileSync('lib/data/kinerja.ts', 'utf8');
+  const tanpaKomentar = kj.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+  ok('S17 canonicalAktifKinerja ada dan bertanya ke versiAktifKinerja',
+     /export async function canonicalAktifKinerja[\s\S]{0,400}await versiAktifKinerja\(/.test(kj));
+
+  // Dicacah, bukan ditanya "ada?": memperbaiki satu jalur saja sudah cukup
+  // membuat asersi "ada" lulus, dan yang terlewat selalu yang tidak dilihat (L69).
+  eq('S18 KETIGA jalur agregat memanggil canonicalAktifKinerja',
+     (tanpaKomentar.match(/canonicalAktifKinerja\(/g) || []).length, 4); // 1 definisi + 3 pemanggil
+  eq('S19 KETIGA jalur memakai buatPenyaringYatim',
+     (tanpaKomentar.match(/buatPenyaringYatim\(/g) || []).length, 3);
+
+  // Tidak boleh ada lagi SUM datar tanpa pengelompokan canonical di ketiganya.
+  ok('S20 tidak ada lagi SUM(real_keuangan) tanpa GROUP BY canonical',
+     !/SUM\(real_keuangan\), 0\) AS total_real_keuangan/.test(tanpaKomentar));
+
+  // Yatim dipulangkan, bukan cuma dibuang.
+  eq('S21 ketiga jalur memulangkan hasil penyaringnya',
+     (tanpaKomentar.match(/penyaring\.hasil\(\)/g) || []).length, 3);
+  ok('S21b getLaporanSemua memecahnya per sumber',
+     tanpaKomentar.includes('yatimBySumber.get(sumber)'));
+
+  // Dan TIDAK dijumlahkan ke totalnya — kalau `continue`-nya dilepas, yatim
+  // ikut masuk pembilang dan seluruh perbaikan ini batal.
+  eq('S22 tiga tempat melewati baris yatim dengan continue',
+     (tanpaKomentar.match(/\)\) continue;/g) || []).length, 3);
+
+  // ── Statis: spanduknya ada di kedua layar ────────────────────────────────
+  for (const [nama, berkas] of [
+    ['Laporan',   'app/(dashboard)/kinerja/_tabs/LaporanTab.tsx'],
+    ['Dashboard', 'app/(dashboard)/kinerja/_tabs/DashboardTab.tsx'],
+  ] as const) {
+    const t = readFileSync(berkas, 'utf8');
+    ok(`S23 ${nama} menampilkan spanduk yatim`, /yatim\??\.jumlahBaris \?\? 0\) > 0|yatim\.jumlahBaris > 0/.test(t));
+    ok(`S24 ${nama} menyebut nominalnya`, /yatim\.nominal/.test(t));
+    ok(`S25 ${nama} menyebut contoh rekeningnya`, /yatim\.contoh\.join/.test(t));
+  }
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

@@ -1,5 +1,7 @@
 import { sql, bulkInsert, withTransaction } from './db';
 import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simpan';
+import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
+import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
 export type SumberSSK = 'GAJI' | 'BLUD' | 'HARLEP' | 'PROMKES' | 'SARPRAS' | 'OBAT' | 'PEMELIHARAAN' | 'PEMBANGUNAN';
 export type MasterTipe = 'program' | 'kegiatan' | 'subkegiatan' | 'uraian_ssk' | 'sumber_anggaran';
@@ -451,6 +453,46 @@ export async function versiAktifKinerja(
     });
   }
   return out;
+}
+
+/**
+ * Himpunan `canonical_id` yang BERLAKU per sumber — versi aktif, bukan yang
+ * dinol-kan.
+ *
+ * Turunan `versiAktifKinerja`, dan itu yang penting: aturan "versi mana yang
+ * berlaku" tetap satu jawaban (L88). Dipakai KETIGA jalur agregat (getLaporanData,
+ * getLaporanSemua, getKinerjaKpi) untuk mengeluarkan realisasi yatim dari
+ * pembilang — lihat lib/kinerja/yatim.ts untuk sebabnya.
+ *
+ * Sengaja memulangkan himpunan, bukan potongan SQL. Aturan versinya hidup di JS;
+ * menuliskannya ulang sebagai subkueri berarti jawaban kelima soal versi, dan
+ * itu persis bagaimana L88 lahir.
+ */
+export async function canonicalAktifKinerja(
+  tahun: string,
+  sumber?: SumberSSK,
+): Promise<Map<string, Set<string>>> {
+  const peta = await versiAktifKinerja(tahun, sumber);
+  if (peta.size === 0) return new Map<string, Set<string>>();
+
+  const rows = sumber
+    ? await sql`
+        SELECT sumber, canonical_id, versi_tipe, versi_seq FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND sumber = ${sumber} AND is_nullified = FALSE
+      ` as Record<string, unknown>[]
+    : await sql`
+        SELECT sumber, canonical_id, versi_tipe, versi_seq FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND is_nullified = FALSE
+      ` as Record<string, unknown>[];
+
+  // Pelipatannya di `himpunanCanonical` — PURE, jadi aturannya bisa diuji
+  // perilakunya. Selama ia di sini, tes cuma bisa mencocokkan teks sumbernya.
+  return himpunanCanonical(rows.map(r => ({
+    sumber:       String(r.sumber),
+    canonical_id: String(r.canonical_id ?? ''),
+    versi_tipe:   String(r.versi_tipe ?? ''),
+    versi_seq:    Number(r.versi_seq ?? 0),
+  })), peta);
 }
 
 export async function saveSskBatch(
@@ -973,6 +1015,12 @@ export interface LaporanSumber {
   pct_fisik: number;
   bulan_terakhir: number;
   trend: LaporanTrend[];
+  /**
+   * Realisasi yang jangkarnya sudah lenyap dari versi SSK acuan. TIDAK ikut
+   * dijumlah ke `total_real_*` — lihat lib/kinerja/yatim.ts. Dilaporkan supaya
+   * total yang lebih kecil dari kas yang keluar bisa dijelaskan.
+   */
+  yatim: LaporanYatim;
 }
 
 // #1: agregat pagu/target WAJIB discope ke SATU versi aktif per sumber —
@@ -1004,43 +1052,57 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
   ` as Record<string, unknown>[];
   const sskAgg = pickVersiAktif(sskVersiAgg);
 
-  // Realisasi keuangan & fisik total semua bulan
-  const [realAgg] = await sql`
-    SELECT
-      COALESCE(SUM(real_keuangan), 0) AS total_real_keuangan,
-      COALESCE(SUM(real_fisik), 0)    AS total_real_fisik,
-      -- Bulan terakhir yang ADA ISINYA. MAX(bulan) polos selalu 12, karena
-      -- "Init dari SSK" membuat baris Jan-Des lengkap berisi nol sejak awal
-      -- tahun — labelnya lalu berbunyi "Desember" di bulan Juli.
-      COALESCE(MAX(CASE WHEN real_fisik <> 0 OR real_keuangan <> 0 THEN bulan END), 0) AS bulan_terakhir
+  // A2: SATU kueri sampai tingkat `ssk_canonical_id`, supaya realisasi yatim
+  // bisa dikeluarkan dari pembilang sebelum apa pun dijumlah. Dulu dua kueri
+  // ber-SUM datar (total + tren) yang tidak punya cara mengenali yatim.
+  //
+  // Skalanya: 12 bulan x jumlah item. Pada data 2026 itu 180 baris; kalau item
+  // SSK per sumber nanti tumbuh ke ratusan, saringannya perlu pindah ke SQL.
+  const detail = await sql`
+    SELECT bulan, ssk_canonical_id,
+           ANY_VALUE(keterangan)           AS keterangan,
+           COALESCE(SUM(real_keuangan), 0) AS keu,
+           COALESCE(SUM(real_fisik), 0)    AS fis,
+           COUNT(*)                        AS baris
     FROM kinerja_realisasi
     WHERE tahun = ${tahun} AND sumber = ${sumber}
-  ` as Record<string, unknown>[];
-
-  // Checkpoint D: kolom akum_* di-DROP. Akumulasi dihitung di JS dari SUM real_* per bulan.
-  const bulanTerakhir = Number(realAgg?.bulan_terakhir ?? 0);
-
-  // Trend bulanan (1–12) — query cuma SUM real_*, akumulasi di JS
-  const trendRaw = await sql`
-    SELECT
-      bulan,
-      COALESCE(SUM(real_keuangan), 0) AS real_keuangan,
-      COALESCE(SUM(real_fisik), 0)    AS real_fisik
-    FROM kinerja_realisasi
-    WHERE tahun = ${tahun} AND sumber = ${sumber}
-    GROUP BY bulan
+    GROUP BY bulan, ssk_canonical_id
     ORDER BY bulan
   ` as Record<string, unknown>[];
 
-  const total_pagu          = Number(sskAgg?.total_pagu ?? 0);
+  const aktif    = await canonicalAktifKinerja(tahun, sumber);
+  const penyaring = buatPenyaringYatim(aktif);
+
+  const total_pagu = Number(sskAgg?.total_pagu ?? 0);
+  const perBulan = new Map<number, { keu: number; fis: number }>();
+  let total_real_keuangan = 0, total_real_fisik = 0, bulanTerakhir = 0;
+
+  for (const r of detail) {
+    const bulan = Number(r.bulan ?? 0);
+    const keu   = Number(r.keu ?? 0);
+    const fis   = Number(r.fis ?? 0);
+    if (!penyaring.pakai(sumber, String(r.ssk_canonical_id ?? ''), keu,
+                         Number(r.baris ?? 0), String(r.keterangan ?? ''))) continue;
+    total_real_keuangan += keu;
+    total_real_fisik    += fis;
+    const b = perBulan.get(bulan) ?? { keu: 0, fis: 0 };
+    b.keu += keu; b.fis += fis;
+    perBulan.set(bulan, b);
+    // Bulan terakhir yang ADA ISINYA — bukan MAX(bulan) polos, sebab "Init dari
+    // SSK" membuat baris Jan-Des lengkap berisi nol sejak awal tahun sehingga
+    // labelnya berbunyi "Desember" di bulan Juli. Baris yatim tidak boleh
+    // menentukannya: ia menerangkan data yang sedang diukur.
+    if ((keu !== 0 || fis !== 0) && bulan > bulanTerakhir) bulanTerakhir = bulan;
+  }
+
+  // Checkpoint D: kolom akum_* di-DROP. Akumulasi dihitung di JS.
   let akumKeu = 0, akumFis = 0;
-  const trend: LaporanTrend[] = trendRaw.map(r => {
-    const real_keuangan = Number(r.real_keuangan ?? 0);
-    const real_fisik    = Number(r.real_fisik ?? 0);
+  const trend: LaporanTrend[] = [...perBulan.keys()].sort((a, b) => a - b).map(bulan => {
+    const { keu: real_keuangan, fis: real_fisik } = perBulan.get(bulan)!;
     akumKeu += real_keuangan;
     akumFis += real_fisik;
     return {
-      bulan:             Number(r.bulan ?? 0),
+      bulan,
       real_keuangan,
       pct_keuangan:      total_pagu > 0 ? Math.round((real_keuangan / total_pagu) * 10000) / 100 : 0,
       akum_keuangan:     akumKeu,
@@ -1053,19 +1115,19 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
   // pct_fisik = akum_pct_fisik di bulan terakhir (dari trend, sudah dihitung)
   const pct_fisik = trend.length > 0 ? trend[trend.length - 1].akum_pct_fisik : 0;
 
-  const total_real_keuangan = Number(realAgg?.total_real_keuangan ?? 0);
-  const pct_serapan         = total_pagu > 0 ? Math.round((total_real_keuangan / total_pagu) * 10000) / 100 : 0;
+  const pct_serapan = total_pagu > 0 ? Math.round((total_real_keuangan / total_pagu) * 10000) / 100 : 0;
 
   return {
     sumber,
     total_pagu,
     total_target_fisik: Number(sskAgg?.total_target_fisik ?? 0),
     total_real_keuangan,
-    total_real_fisik:   Number(realAgg?.total_real_fisik ?? 0),
+    total_real_fisik,
     pct_serapan,
     pct_fisik,
     bulan_terakhir:     bulanTerakhir,
     trend,
+    yatim: penyaring.hasil(),
   };
 }
 
@@ -1090,36 +1152,26 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
     GROUP BY sumber, versi_tipe, versi_seq
   ` as Record<string, unknown>[];
 
-  // Query 2: agregat realisasi per sumber (SUM + bulan_terakhir)
-  const realRows = await sql`
-    SELECT
-      sumber,
-      COALESCE(SUM(real_keuangan), 0) AS total_real_keuangan,
-      COALESCE(SUM(real_fisik), 0)    AS total_real_fisik,
-      -- Bulan terakhir yang ADA ISINYA. MAX(bulan) polos selalu 12, karena
-      -- "Init dari SSK" membuat baris Jan-Des lengkap berisi nol sejak awal
-      -- tahun — labelnya lalu berbunyi "Desember" di bulan Juli.
-      COALESCE(MAX(CASE WHEN real_fisik <> 0 OR real_keuangan <> 0 THEN bulan END), 0) AS bulan_terakhir
+  // A2 + Checkpoint D: SATU kueri sampai tingkat `ssk_canonical_id` menggantikan
+  // dua kueri ber-SUM datar (total per sumber + tren per bulan). Bukan
+  // penghematan — SUM datar tidak punya cara mengenali realisasi yatim, jadi
+  // pembilangnya memuat uang yang penyebutnya tidak memuat pagunya.
+  //
+  // Skalanya: 8 sumber x 12 bulan x jumlah item. Pada data 2026 itu 348 baris;
+  // kalau item SSK tumbuh ke ratusan per sumber, saringannya perlu pindah ke SQL.
+  const detailRows = await sql`
+    SELECT sumber, bulan, ssk_canonical_id,
+           ANY_VALUE(keterangan)           AS keterangan,
+           COALESCE(SUM(real_keuangan), 0) AS keu,
+           COALESCE(SUM(real_fisik), 0)    AS fis,
+           COUNT(*)                        AS baris
     FROM kinerja_realisasi
     WHERE tahun = ${tahun}
-    GROUP BY sumber
-  ` as Record<string, unknown>[];
-
-  // Checkpoint D: Query 3 (pctRows) tidak dibutuhkan lagi — pct_fisik / pct_keuangan
-  // diturunkan dari trend di JS (akumulasi running total). Hemat 1 round-trip.
-
-  // Query 4 (lama 3): trend bulanan per sumber — cuma SUM real_*, akumulasi di JS
-  const trendRows = await sql`
-    SELECT
-      sumber,
-      bulan,
-      COALESCE(SUM(real_keuangan), 0) AS real_keuangan,
-      COALESCE(SUM(real_fisik), 0)    AS real_fisik
-    FROM kinerja_realisasi
-    WHERE tahun = ${tahun}
-    GROUP BY sumber, bulan
+    GROUP BY sumber, bulan, ssk_canonical_id
     ORDER BY sumber, bulan
   ` as Record<string, unknown>[];
+
+  const aktifSemua = await canonicalAktifKinerja(tahun);
 
   // Index hasil per sumber untuk lookup O(1) — pilih versi aktif per sumber (#1)
   const sskVersiBySumber = new Map<string, Record<string, unknown>[]>();
@@ -1136,38 +1188,58 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
       total_target_fisik: Number(aktif?.total_target_fisik ?? 0),
     });
   }
-  const realBySumber = new Map<string, { total_real_keuangan: number; total_real_fisik: number; bulan_terakhir: number }>();
-  for (const r of realRows) {
-    realBySumber.set(String(r.sumber), {
-      total_real_keuangan: Number(r.total_real_keuangan ?? 0),
-      total_real_fisik:    Number(r.total_real_fisik ?? 0),
-      bulan_terakhir:      Number(r.bulan_terakhir ?? 0),
-    });
+  // Yatim dipisah SEBELUM apa pun dijumlah. SATU penyaring untuk semua sumber:
+  // spanduknya per sumber, jadi hasilnya dipecah lagi lewat `yatimBySumber`.
+  const realBySumber  = new Map<string, { total_real_keuangan: number; total_real_fisik: number; bulan_terakhir: number }>();
+  const bulanBySumber = new Map<string, Map<number, { keu: number; fis: number }>>();
+  const yatimBySumber = new Map<string, LaporanYatim>();
+
+  for (const sumber of SUMBER_LIST) {
+    const penyaring = buatPenyaringYatim(aktifSemua);
+    const perBulan  = new Map<number, { keu: number; fis: number }>();
+    let keuTotal = 0, fisTotal = 0, bulanTerakhir = 0;
+
+    for (const r of detailRows) {
+      if (String(r.sumber) !== sumber) continue;
+      const bulan = Number(r.bulan ?? 0);
+      const keu   = Number(r.keu ?? 0);
+      const fis   = Number(r.fis ?? 0);
+      if (!penyaring.pakai(sumber, String(r.ssk_canonical_id ?? ''), keu,
+                           Number(r.baris ?? 0), String(r.keterangan ?? ''))) continue;
+      keuTotal += keu;
+      fisTotal += fis;
+      const b = perBulan.get(bulan) ?? { keu: 0, fis: 0 };
+      b.keu += keu; b.fis += fis;
+      perBulan.set(bulan, b);
+      // Baris yatim tidak boleh menentukan "bulan terakhir berisi": ia
+      // menerangkan data yang sedang diukur.
+      if ((keu !== 0 || fis !== 0) && bulan > bulanTerakhir) bulanTerakhir = bulan;
+    }
+
+    realBySumber.set(sumber, { total_real_keuangan: keuTotal, total_real_fisik: fisTotal, bulan_terakhir: bulanTerakhir });
+    bulanBySumber.set(sumber, perBulan);
+    yatimBySumber.set(sumber, penyaring.hasil());
   }
-  // Checkpoint D: trendBySumber populate dengan akumulasi running-total di JS.
-  // Rows sudah ORDER BY sumber, bulan — reset akumulator setiap ganti sumber.
+
+  // Checkpoint D: akumulasi running-total di JS, per sumber.
   const trendBySumber = new Map<string, LaporanTrend[]>();
-  let curSumber = '';
-  let akumKeu = 0, akumFis = 0;
-  for (const r of trendRows) {
-    const key = String(r.sumber);
-    if (key !== curSumber) { curSumber = key; akumKeu = 0; akumFis = 0; }
-    const list = trendBySumber.get(key) ?? [];
-    const total_pagu_sumber = sskBySumber.get(key)?.total_pagu ?? 0;
-    const real_keuangan = Number(r.real_keuangan ?? 0);
-    const real_fisik    = Number(r.real_fisik ?? 0);
-    akumKeu += real_keuangan;
-    akumFis += real_fisik;
-    list.push({
-      bulan:             Number(r.bulan ?? 0),
-      real_keuangan,
-      pct_keuangan:      total_pagu_sumber > 0 ? Math.round((real_keuangan / total_pagu_sumber) * 10000) / 100 : 0,
-      akum_keuangan:     akumKeu,
-      akum_pct_keuangan: total_pagu_sumber > 0 ? Math.round((akumKeu / total_pagu_sumber) * 10000) / 100 : 0,
-      real_fisik,
-      akum_pct_fisik:    total_pagu_sumber > 0 ? Math.round((akumFis / total_pagu_sumber) * 10000) / 100 : 0,
-    });
-    trendBySumber.set(key, list);
+  for (const [sumber, perBulan] of bulanBySumber) {
+    const total_pagu_sumber = sskBySumber.get(sumber)?.total_pagu ?? 0;
+    let akumKeu = 0, akumFis = 0;
+    trendBySumber.set(sumber, [...perBulan.keys()].sort((a, b) => a - b).map(bulan => {
+      const { keu: real_keuangan, fis: real_fisik } = perBulan.get(bulan)!;
+      akumKeu += real_keuangan;
+      akumFis += real_fisik;
+      return {
+        bulan,
+        real_keuangan,
+        pct_keuangan:      total_pagu_sumber > 0 ? Math.round((real_keuangan / total_pagu_sumber) * 10000) / 100 : 0,
+        akum_keuangan:     akumKeu,
+        akum_pct_keuangan: total_pagu_sumber > 0 ? Math.round((akumKeu / total_pagu_sumber) * 10000) / 100 : 0,
+        real_fisik,
+        akum_pct_fisik:    total_pagu_sumber > 0 ? Math.round((akumFis / total_pagu_sumber) * 10000) / 100 : 0,
+      };
+    }));
   }
 
   // Assemble per sumber — pastikan urutan sama dengan SUMBER_LIST (deterministic)
@@ -1190,6 +1262,7 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
       pct_fisik,
       bulan_terakhir:      real.bulan_terakhir,
       trend,
+      yatim:               yatimBySumber.get(sumber) ?? yatimKosong(),
     };
   });
 }
@@ -1230,14 +1303,29 @@ export async function getKinerjaKpi(tahun: string) {
     SELECT COUNT(*) AS total_rekening FROM kinerja_rekening WHERE tahun = ${tahun}
   ` as { total_rekening: unknown }[];
 
-  // Realisasi agregat untuk dashboard
-  const [real] = await sql`
-    SELECT COALESCE(SUM(real_keuangan), 0) AS total_real_keuangan
+  // A2: dikelompokkan sampai `ssk_canonical_id` supaya realisasi yatim bisa
+  // dikeluarkan dari pembilang. SUM datar memasukkan uang yang penyebutnya
+  // (pagu) tidak memuatnya, sehingga kartu SERAPAN ANGGARAN naik palsu dan
+  // berbeda dari Cetak→Rekap untuk tahun yang sama.
+  const realDetail = await sql`
+    SELECT sumber, ssk_canonical_id,
+           ANY_VALUE(keterangan)           AS keterangan,
+           COALESCE(SUM(real_keuangan), 0) AS keu,
+           COUNT(*)                        AS baris
     FROM kinerja_realisasi WHERE tahun = ${tahun}
-  ` as { total_real_keuangan: unknown }[];
+    GROUP BY sumber, ssk_canonical_id
+  ` as Record<string, unknown>[];
 
-  const total_pagu          = Number(ssk?.total_pagu ?? 0);
-  const total_real_keuangan = Number(real?.total_real_keuangan ?? 0);
+  const penyaring = buatPenyaringYatim(await canonicalAktifKinerja(tahun));
+  let total_real_keuangan = 0;
+  for (const r of realDetail) {
+    const keu = Number(r.keu ?? 0);
+    if (!penyaring.pakai(String(r.sumber), String(r.ssk_canonical_id ?? ''), keu,
+                         Number(r.baris ?? 0), String(r.keterangan ?? ''))) continue;
+    total_real_keuangan += keu;
+  }
+
+  const total_pagu = Number(ssk?.total_pagu ?? 0);
 
   return {
     total_pagu,
@@ -1248,5 +1336,8 @@ export async function getKinerjaKpi(tahun: string) {
     pagu_per_sumber: Object.fromEntries(
       perSumber.map(r => [r.sumber, Number(r.pagu)])
     ) as Partial<Record<SumberSSK, number>>,
+    // TIDAK ikut `total_real_keuangan` — menambahkannya membuat persen berdiri
+    // di atas penyebut yang tidak memuatnya. Dilaporkan, bukan dijumlahkan.
+    yatim: penyaring.hasil(),
   };
 }

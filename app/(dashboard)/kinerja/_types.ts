@@ -145,6 +145,14 @@ export interface RekForm {
   subkegiatan: string;
 }
 
+/** Cermin `LaporanYatim` di lib/kinerja/rekap.ts — realisasi tanpa jangkar SSK. */
+export interface YatimRingkas {
+  jumlahBaris: number;
+  jumlahItem:  number;
+  nominal:     number;
+  contoh:      string[];
+}
+
 export interface KpiData {
   total_pagu: number;
   total_ssk_rows: number;
@@ -152,6 +160,8 @@ export interface KpiData {
   total_real_keuangan: number;
   pct_serapan: number;
   pagu_per_sumber: Partial<Record<SumberSSK, number>>;
+  /** TIDAK ikut `total_real_keuangan`; dilaporkan terpisah. */
+  yatim: YatimRingkas;
 }
 
 // ─── Laporan shapes (chart trend per sumber) ────────────────────────────────
@@ -176,6 +186,8 @@ export interface LaporanSumber {
   pct_fisik: number;
   bulan_terakhir: number;
   trend: LaporanTrend[];
+  /** TIDAK ikut `total_real_*`; dilaporkan terpisah. */
+  yatim: YatimRingkas;
 }
 
 // ─── Form input field name types (untuk updateXxxInput handler) ─────────────

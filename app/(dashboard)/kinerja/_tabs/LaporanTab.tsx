@@ -123,6 +123,19 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
         </div>
       ) : (
         <>
+          {/* A2: yatim dilaporkan, bukan didiamkan. Nominalnya TIDAK ikut kartu
+              Real Keuangan — kalau ikut, persennya berdiri di atas penyebut yang
+              tidak memuat pagunya. Warna & kalimatnya menyalin spanduk yang sudah
+              ada di tab Realisasi supaya orang mengenalinya sebagai hal yang sama. */}
+          {d.yatim.jumlahBaris > 0 && (
+            <div style={{ marginBottom:'14px', padding:'10px 14px', borderRadius:'10px', fontSize:'11px', lineHeight:1.6,
+              background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775', color: isLight?'#854F0B':'#FAC775' }}>
+              <strong>{d.yatim.jumlahItem} rekening tidak ada di SSK acuan</strong> ({d.yatim.jumlahBaris} baris,
+              realisasi keuangan {fmtRp(d.yatim.nominal)}). Rekeningnya sudah tidak punya pagu sebagai pembagi, jadi
+              angka di halaman ini <strong>tidak memuatnya</strong>. {d.yatim.contoh.join(' · ')}
+            </div>
+          )}
+
           {/* KPI Summary Cards */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'20px' }}>
             {[

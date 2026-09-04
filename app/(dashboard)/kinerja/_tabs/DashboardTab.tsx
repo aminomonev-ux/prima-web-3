@@ -161,6 +161,22 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
       </div>
       )}
 
+      {/* A2: realisasi tanpa jangkar SSK. Nominalnya TIDAK ikut kartu Realisasi
+          Keuangan maupun Serapan Anggaran — kalau ikut, persennya berdiri di atas
+          penyebut yang tidak memuat pagunya. Warnanya token peringatan, BUKAN
+          mewarisi hijau kartunya: keterangan yang mengurangi keyakinan tidak
+          boleh berwarna "aman" (§9.1a Beranda BLUD). */}
+      {(kpi?.yatim?.jumlahBaris ?? 0) > 0 && (
+        <div style={{ marginTop:'-8px', marginBottom:'20px', padding:'10px 14px', borderRadius:'10px',
+          fontSize:'11px', lineHeight:1.6,
+          background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775',
+          color: isLight?'#854F0B':'#FAC775' }}>
+          <strong>{kpi!.yatim.jumlahItem} rekening tidak ada di SSK acuan</strong> ({kpi!.yatim.jumlahBaris} baris,
+          realisasi keuangan {fmtRp(kpi!.yatim.nominal)}). Rekeningnya sudah tidak punya pagu sebagai pembagi,
+          jadi kartu di atas <strong>tidak memuatnya</strong>. {kpi!.yatim.contoh.join(' · ')}
+        </div>
+      )}
+
       {/* Donut + Gauge side-by-side */}
       <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'14px', marginBottom:'14px' }}>
       {/* Donut Chart — Distribusi Pagu per Sumber Anggaran */}
