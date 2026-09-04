@@ -16,7 +16,8 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
-import type { RealRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
+import { nolkanBaris, aktifkanBaris, sudahDinolkan } from '../lib/kinerja/nol-kan';
+import type { RealRow, SskRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
 let lulus = 0;
 const gagal: string[] = [];
@@ -752,6 +753,80 @@ console.log('\n── T. check-deletable ikut memulangkan nominalnya ───�
   // Nol rupiah tidak perlu disebut - "12 baris (realisasi keuangan Rp 0)"
   // membuat kalimatnya terbaca seperti galat.
   ok('T6 nominal nol tidak ikut disebut di kalimat', /nominal > 0 \?/.test(cd));
+}
+
+console.log('\n-- U. Nol-kan berhenti di FORM ---------------------------------');
+
+// A1 tahap 3. Nol-kan lewat route yang menulis langsung ke DB tidak bisa hidup
+// di layar isi-form-lalu-Simpan: barisnya jadi nol di DB, layar masih memegang
+// angka lamanya, dan Simpan sesudahnya MENIMPA BALIK hasilnya tanpa satu pesan.
+{
+  const bulan12 = (v: number): SskMonths =>
+    MK.reduce((a, m) => { a[m] = v; return a; }, {} as SskMonths);
+  const barisSsk = (): SskRow[] => ([
+    { uraian_ssk: 'SSK A', uraian: 'Item A', program: 'P', kegiatan: 'K', subkegiatan: 'S',
+      pagu: 1_200_000_000, months: bulan12(100_000_000), months_pct: bulan12(8.33),
+      total: 1_200_000_000, total_pct: 100, canonical_id: 'A' },
+    { uraian_ssk: 'SSK B', uraian: 'Item B', program: 'P', kegiatan: 'K', subkegiatan: 'S',
+      pagu: 500_000_000, months: bulan12(0), months_pct: bulan12(0),
+      total: 0, total_pct: 0, canonical_id: 'B' },
+  ]);
+
+  const setelah = nolkanBaris(barisSsk(), 0);
+  const a = setelah[0], b = setelah[1];
+
+  ok('U1 benderanya dinaikkan', a.is_nullified === true);
+  eq('U2 pagunya nol', a.pagu, 0);
+  eq('U3 seluruh 12 bulan nol', MK.filter(m => (a.months[m] || 0) !== 0).length, 0);
+  eq('U4 total ikut nol', a.total, 0);
+  eq('U5 total_pct ikut nol', a.total_pct, 0);
+  eq('U6 months_pct ikut nol', MK.filter(m => (a.months_pct[m] || 0) !== 0).length, 0);
+  // Rekening TETAP ADA — itu seluruh bedanya dengan menghapus. Kalau uraian atau
+  // canonical_id ikut dibuang, baris realisasinya jadi yatim juga.
+  eq('U7 uraiannya TETAP', a.uraian, 'Item A');
+  eq('U8 canonical_id TETAP', a.canonical_id, 'A');
+  // Baris lain tidak boleh tersentuh, dan identitasnya tidak boleh berganti
+  // (larik baru, objek lama) supaya React tidak me-render ulang seisi tabel.
+  eq('U9 baris lain pagunya utuh', b.pagu, 500_000_000);
+  ok('U10 baris lain objeknya SAMA (tidak dikloning)', b === barisSsk()[1] ? false : true);
+
+  const aktif = aktifkanBaris(setelah, 0);
+  ok('U11 Aktifkan menurunkan benderanya', aktif[0].is_nullified === false);
+  // Angkanya SENGAJA tidak kembali — menebak angka lama bukan tugas sebuah tombol.
+  eq('U12 Aktifkan TIDAK mengembalikan pagunya', aktif[0].pagu, 0);
+  eq('U13 Aktifkan TIDAK mengembalikan bulanannya',
+     MK.filter(m => (aktif[0].months[m] || 0) !== 0).length, 0);
+
+  ok('U14 sudahDinolkan benar untuk yang dinol-kan', sudahDinolkan(setelah[0]));
+  ok('U15 sudahDinolkan salah untuk yang belum', !sudahDinolkan(setelah[1]));
+  // Baris yang belum tersimpan belum punya bendera sama sekali.
+  ok('U16 bendera undefined dianggap belum dinol-kan',
+     !sudahDinolkan({ ...barisSsk()[0], is_nullified: undefined }));
+
+  // ── Statis: berhenti di FORM, bukan menulis ─────────────────────────────
+  const st = readFileSync('app/(dashboard)/kinerja/_tabs/SskTab.tsx', 'utf8');
+  ok('U17 layar memakai nolkanBaris & aktifkanBaris',
+     st.includes('nolkanBaris(p, idx)') && st.includes('aktifkanBaris(p, idx)'));
+  // Yang membuktikan ia berhenti di form: penanganya tidak menembak endpoint.
+  const iFn = st.indexOf('async function toggleNolkan(');
+  const badan = st.slice(iFn, st.indexOf('\n  function deleteSskRow', iFn));
+  ok('U18 toggleNolkan tidak memanggil fetch/fetchJson', !/fetch(Json)?\(/.test(badan));
+  ok('U19 toggleNolkan tidak menyebut endpoint nullify', !badan.includes('nullify'));
+  // Dijangkarkan ke AWAL BARIS dan menyertakan pengikatannya: kutipan
+  // `await confirmDialog(` telanjang tetap cocok kalau seseorang menaruh
+  // `if (false)` di depannya, dan asersinya lulus untuk alasan yang salah (L82c).
+  eq('U20 keduanya lewat confirmDialog dan HASILNYA dipakai',
+     (badan.match(/^\s*const lanjut = await confirmDialog\(\{$/gm) || []).length, 2);
+  eq('U20b keduanya berhenti kalau dibatalkan',
+     (badan.match(/^\s*if \(!lanjut\) return;$/gm) || []).length, 2);
+  // Dialog Aktifkan WAJIB menyatakan angkanya tidak kembali.
+  ok('U21 dialog Aktifkan menyatakan angkanya tetap nol', badan.includes('TETAP NOL'));
+  ok('U22 dialog Nol-kan menyatakan rekeningnya tetap ada', badan.includes('TETAP ADA'));
+  ok('U23 keduanya menegaskan belum tersimpan', (badan.match(/Simpan Semua/g) || []).length >= 2);
+  // Versi terkunci: dijaga di penanganya, bukan cuma tombolnya dimatikan (L82).
+  ok('U24 versi terkunci ditolak di dalam penanganya', /if \(versiLocked\) return;/.test(badan));
+  ok('U25 lencana DINOL-KAN ada di layar', st.includes('DINOL-KAN'));
+  ok('U26 baris dinol-kan tampil pudar', /opacity: dinolkan \? \.55 : 1/.test(st));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

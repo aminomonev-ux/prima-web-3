@@ -15,13 +15,15 @@ import { exportSskExcel, exportSskPdf } from '../_exports';
 import ImportRkoModal from '@/components/kinerja/ImportRkoModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import { hitungTurunanRko } from '@/lib/kinerja/gabung-rko';
+import { nolkanBaris, aktifkanBaris, sudahDinolkan } from '@/lib/kinerja/nol-kan';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import Tip from '@/components/ui/Tip';
-import { Download, Save, Check, Upload, History } from 'lucide-react';
+import { Download, Save, Check, Upload, History, Ban, Undo2 } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -118,6 +120,48 @@ export default function SskTab({
     }
     setSskRows(p => [...p, ...toInject]);
     toast.success(`${toInject.length} rekening berhasil diinjeksi`);
+  }
+
+  /**
+   * Nol-kan / Aktifkan — mengubah ISI LAYAR saja. Yang menulis tetap tombol
+   * Simpan, jadi pagar `locked_at` dan gembok optimistik berlaku otomatis dan
+   * tidak ada jalur tulis kedua yang bisa ditimpa balik oleh Simpan sesudahnya.
+   */
+  async function toggleNolkan(idx: number) {
+    if (versiLocked) return;
+    const row = sskRows[idx];
+    const nama = (row.uraian || row.uraian_ssk || 'baris ini').slice(0, 60);
+
+    if (sudahDinolkan(row)) {
+      const lanjut = await confirmDialog({
+        title:   'Aktifkan kembali item ini?',
+        message: `"${nama}" akan aktif lagi.\n\n`
+          + 'Pagu dan target bulanannya TETAP NOL — angka lamanya tidak dikembalikan. '
+          + 'Isi ulang lalu tekan Simpan Semua.',
+        confirmLabel: 'Aktifkan',
+        cancelLabel:  'Batal',
+        variant:      'warning',
+      });
+      if (!lanjut) return;
+      setSskRows(p => aktifkanBaris(p, idx));
+      toast.success('Item diaktifkan — pagu & target masih nol, isi lalu Simpan.');
+      return;
+    }
+
+    const lanjut = await confirmDialog({
+      title:   'Nol-kan item ini?',
+      message: `Pagu dan seluruh target bulanan "${nama}" akan jadi nol, `
+        + 'tapi rekeningnya TETAP ADA di versi ini.\n\n'
+        + 'Bedanya dengan menghapus: baris realisasi yang menunjuk item ini tidak kehilangan '
+        + 'pagu sebagai pembagi, jadi angkanya tetap ikut dihitung.\n\n'
+        + 'Belum tersimpan sampai Anda menekan Simpan Semua.',
+      confirmLabel: 'Nol-kan',
+      cancelLabel:  'Batal',
+      variant:      'warning',
+    });
+    if (!lanjut) return;
+    setSskRows(p => nolkanBaris(p, idx));
+    toast.success('Target dinol-kan — belum tersimpan, tekan Simpan Semua.');
   }
 
   function deleteSskRow(idx: number) {
@@ -322,7 +366,7 @@ export default function SskTab({
                 ))}
                 <th rowSpan={2} style={{ ...thStyle, minWidth:'150px', textAlign:'right' }}>Total (Rp)</th>
                 <th rowSpan={2} style={{ ...thStyle, minWidth:'70px' }}>Total %</th>
-                {canEdit && <th rowSpan={2} style={{ ...thStyle, minWidth:'60px', position:'sticky', right:0, background: isLight?'rgba(255,255,255,.95)':'rgba(4,44,83,.95)', zIndex:2 }}>Aksi</th>}
+                {canEdit && <th rowSpan={2} style={{ ...thStyle, minWidth:'92px', position:'sticky', right:0, background: isLight?'rgba(255,255,255,.95)':'rgba(4,44,83,.95)', zIndex:2 }}>Aksi</th>}
               </tr>
               <tr style={{ background:cTableSubBg }}>
                 {MONTH_SHORT.map(m => [
@@ -337,8 +381,13 @@ export default function SskTab({
                   Belum ada data SSK. {canEdit && 'Klik "Inject Rekening" untuk tarik item dari Master Rekening.'}
                 </td></tr>
               )}
-              {sskRows.map((row, idx) => (
-                <tr key={idx} style={{ background: idx%2===0 ? cRowEven : cRowOdd }}>
+              {sskRows.map((row, idx) => {
+                const dinolkan = sudahDinolkan(row);
+                return (
+                <tr key={idx} style={{ background: idx%2===0 ? cRowEven : cRowOdd,
+                  // Pudar supaya barisnya terbaca "sengaja dimatikan", bukan
+                  // "belum diisi" — dua keadaan yang sama-sama berpagu nol.
+                  opacity: dinolkan ? .55 : 1 }}>
                   <td style={tdCenter}>{idx+1}</td>
                   <td style={{ ...tdBase, minWidth:'220px' }}>
                     <div style={{ fontSize:'10px', color: isLight?'#B45309':'#FAC775', fontWeight:600, lineHeight:'1.5' }}>{row.program||'-'}</div>
@@ -346,7 +395,17 @@ export default function SskTab({
                     <div style={{ fontSize:'10px', color: isLight?'#047857':'#86EFAC', lineHeight:'1.5' }}>{row.subkegiatan||'-'}</div>
                   </td>
                   <td style={{ ...tdBase, minWidth:'150px', fontSize:'11px', color:cTextSubAlt }}>{row.uraian_ssk||'-'}</td>
-                  <td style={{ ...tdBase, minWidth:'200px', fontSize:'11px', color:cTextPrimary, fontWeight:500 }}>{row.uraian||'-'}</td>
+                  <td style={{ ...tdBase, minWidth:'200px', fontSize:'11px', color:cTextPrimary, fontWeight:500 }}>
+                    {row.uraian||'-'}
+                    {/* Tanpa lencana, baris berpagu nol tidak bisa dibedakan dari
+                        baris yang belum diisi — dan orang akan mengisinya lagi. */}
+                    {dinolkan && (
+                      <span style={{ marginLeft:'6px', fontSize:'9px', fontWeight:800, letterSpacing:'.04em',
+                        padding:'1px 6px', borderRadius:'999px', whiteSpace:'nowrap',
+                        background: isLight?'#FEF3C7':'rgba(245,158,11,.18)',
+                        color: isLight?'#854F0B':'#FAC775' }}>DINOL-KAN</span>
+                    )}
+                  </td>
                   <td style={tdRight}>
                     {canEdit
                       ? <InputNominal value={row.pagu} onChange={v => updateSskPagu(idx, v)} style={inputNum} className="text-right" />
@@ -367,15 +426,33 @@ export default function SskTab({
                     {row.total_pct.toFixed(2)}%
                   </td>
                   {canEdit && (
-                    <td style={{ ...tdCenter, position:'sticky', right:0, zIndex:1, background: idx%2===0 ? cRowEven : cRowOdd }}>
-                      <Tip label={versiLocked ? 'Versi terkunci, gunakan Nol-kan di Perubahan' : 'Hapus baris'}><button onClick={() => !versiLocked && deleteSskRow(idx)} disabled={versiLocked}
-                        style={{ padding:'3px 10px', borderRadius:'6px', border:'1.5px solid rgba(226,75,74,.5)', background:'rgba(226,75,74,.1)', cursor: versiLocked?'not-allowed':'pointer', fontSize:'12px', fontWeight:700, color: isLight?'#B91C1C':'#FCA5A5', opacity: versiLocked?.35:1 }}>
+                    <td style={{ ...tdCenter, position:'sticky', right:0, zIndex:1, display:'flex', gap:'4px', justifyContent:'center',
+                      background: idx%2===0 ? cRowEven : cRowOdd }}>
+                      {/* Nol-kan/Aktifkan lebih dulu: ia jalan keluar yang tidak
+                          merusak, dan tombol yang merusak tidak pantas jadi yang
+                          paling dekat jempol. */}
+                      <Tip label={versiLocked
+                        ? 'Versi terkunci, tidak bisa diubah'
+                        : dinolkan
+                          ? 'Aktifkan kembali — pagu & target tetap nol'
+                          : 'Nol-kan target, rekeningnya tetap ada'}>
+                        <button onClick={() => toggleNolkan(idx)} disabled={versiLocked}
+                          style={{ padding:'3px 8px', borderRadius:'6px', border:'1.5px solid rgba(186,117,23,.5)',
+                            background:'rgba(186,117,23,.12)', cursor: versiLocked?'not-allowed':'pointer',
+                            fontSize:'12px', fontWeight:700, color: isLight?'#B45309':'#FAC775',
+                            opacity: versiLocked?.35:1 }}>
+                          {dinolkan ? <Undo2 size={13} /> : <Ban size={13} />}
+                        </button>
+                      </Tip>
+                      <Tip label={versiLocked ? 'Versi terkunci, tidak bisa diubah' : 'Hapus baris'}><button onClick={() => !versiLocked && deleteSskRow(idx)} disabled={versiLocked}
+                        style={{ padding:'3px 8px', borderRadius:'6px', border:'1.5px solid rgba(226,75,74,.5)', background:'rgba(226,75,74,.1)', cursor: versiLocked?'not-allowed':'pointer', fontSize:'12px', fontWeight:700, color: isLight?'#B91C1C':'#FCA5A5', opacity: versiLocked?.35:1 }}>
                         <DeleteIcon size={13} />
                       </button></Tip>
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
             {sskRows.length > 0 && (() => {
               const totalPagu = sskRows.reduce((s, r) => s + (r.pagu || 0), 0);
