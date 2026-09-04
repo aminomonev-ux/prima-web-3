@@ -16,7 +16,8 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
-import { nolkanBaris, aktifkanBaris, sudahDinolkan } from '../lib/kinerja/nol-kan';
+import { nolkanBaris, aktifkanBaris, sudahDinolkan,
+  perluPeriksaHapus, pesanHapusSsk } from '../lib/kinerja/nol-kan';
 import type { RealRow, SskRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
 let lulus = 0;
@@ -808,8 +809,12 @@ console.log('\n-- U. Nol-kan berhenti di FORM ---------------------------------'
   ok('U17 layar memakai nolkanBaris & aktifkanBaris',
      st.includes('nolkanBaris(p, idx)') && st.includes('aktifkanBaris(p, idx)'));
   // Yang membuktikan ia berhenti di form: penanganya tidak menembak endpoint.
+  // Jendelanya berhenti di penutup fungsi (`\n  }` di kolom 3), BUKAN di tanda
+  // tangan fungsi tetangga: patokan begitu pecah begitu tetangganya berubah
+  // jadi `async` — dan pecahnya diam-diam MELEBARKAN jendela, sehingga asersi
+  // "tidak memanggil fetch" tiba-tiba membaca isi fungsi lain.
   const iFn = st.indexOf('async function toggleNolkan(');
-  const badan = st.slice(iFn, st.indexOf('\n  function deleteSskRow', iFn));
+  const badan = st.slice(iFn, st.indexOf('\n  }\n', iFn) + 4);
   ok('U18 toggleNolkan tidak memanggil fetch/fetchJson', !/fetch(Json)?\(/.test(badan));
   ok('U19 toggleNolkan tidak menyebut endpoint nullify', !badan.includes('nullify'));
   // Dijangkarkan ke AWAL BARIS dan menyertakan pengikatannya: kutipan
@@ -827,6 +832,77 @@ console.log('\n-- U. Nol-kan berhenti di FORM ---------------------------------'
   ok('U24 versi terkunci ditolak di dalam penanganya', /if \(versiLocked\) return;/.test(badan));
   ok('U25 lencana DINOL-KAN ada di layar', st.includes('DINOL-KAN'));
   ok('U26 baris dinol-kan tampil pudar', /opacity: dinolkan \? \.55 : 1/.test(st));
+}
+
+console.log('\n-- V. Hapus baris SSK berpagar ---------------------------------');
+
+// A1 tahap 4. Menghapus baris SSK membuat canonical_id-nya lenyap dari versi
+// ini, dan setiap baris realisasi yang menunjuknya jadi YATIM - pagu 0,
+// target 0, dan pagarReplace tidak menyalak karena jumlah barisnya cuma turun
+// satu (15 -> 14 = 6,7%, jauh di bawah ambang 50%).
+{
+  const dasar = {
+    uraian_ssk: 'SSK A', uraian: 'Belanja Gaji Pokok PNS',
+    program: 'P', kegiatan: 'K', subkegiatan: 'S',
+    pagu: 0, months: {} as SskMonths, months_pct: {} as SskMonths, total: 0, total_pct: 0,
+  } as unknown as SskRow;
+
+  // Baris yang belum tersimpan tidak bisa dirujuk siapa pun - bertanya cuma
+  // menambah satu perjalanan dan satu jeda untuk jawaban yang sudah pasti.
+  ok('V1 baris tanpa canonical_id tidak perlu diperiksa',
+     !perluPeriksaHapus({ ...dasar, canonical_id: undefined }));
+  ok('V2 canonical_id string kosong juga tidak perlu',
+     !perluPeriksaHapus({ ...dasar, canonical_id: '' }));
+  ok('V3 baris tersimpan WAJIB diperiksa',
+     perluPeriksaHapus({ ...dasar, canonical_id: 'K-abc-123' }));
+
+  const pesan = pesanHapusSsk('Belanja Gaji Pokok PNS', { count: 12, nominal: 5_443_354_000 });
+  ok('V4 menyebut nama itemnya', pesan.includes('"Belanja Gaji Pokok PNS"'));
+  ok('V5 menyebut jumlah barisnya', pesan.includes('12 baris realisasi'));
+  // Orang bisa menaksir "12 baris" itu sepele; tidak bisa menaksir rupiahnya sepele.
+  ok('V6 menyebut NOMINALNYA', pesan.includes('Rp 5.443.354.000'));
+  ok('V7 menjelaskan realisasinya tidak ikut terhapus', pesan.includes('TIDAK ikut terhapus'));
+  ok('V8 menjelaskan akibatnya di Laporan & Cetak',
+     pesan.includes('Laporan') && pesan.includes('Cetak'));
+  // Dialog yang cuma menakut-nakuti tanpa menawarkan jalan keluar melatih orang
+  // menembusnya. Nol-kan sekarang benar-benar ADA (tahap 3).
+  ok('V9 menawarkan Nol-kan sebagai jalan keluar', pesan.includes('Nol-kan'));
+
+  const nol = pesanHapusSsk('Item B', { count: 4, nominal: 0 });
+  ok('V10 tetap menyebut jumlah barisnya', nol.includes('4 baris realisasi'));
+  // "(realisasi keuangan Rp 0)" terbaca seperti galat, padahal artinya barisnya
+  // ada tapi belum diisi uangnya.
+  ok('V11 nominal nol TIDAK disebut', !nol.includes('Rp 0'));
+
+  // -- Statis: penanganya benar-benar bertanya, dan membatalkan kalau gagal --
+  const st = readFileSync('app/(dashboard)/kinerja/_tabs/SskTab.tsx', 'utf8');
+  const iFn = st.indexOf('async function deleteSskRow(');
+  ok('V12 deleteSskRow jadi async', iFn > 0);
+  const badan = st.slice(iFn, st.indexOf('\n  // Rumus turunan dipusatkan', iFn));
+
+  ok('V13 memanggil check-deletable', badan.includes('/api/kinerja/ssk/check-deletable?'));
+  ok('V14 melewati baris yang belum tersimpan',
+     /if \(!perluPeriksaHapus\(row\)\) \{ buang\(\); return; \}/.test(badan));
+  ok('V15 boleh-hapus lewat tanpa bertanya', /if \(d\.deletable\) \{ buang\(\); return; \}/.test(badan));
+  ok('V16 memakai pesanHapusSsk', badan.includes('pesanHapusSsk(nama,'));
+  // Dijangkarkan ke awal baris + menyertakan pengikatannya (L82c).
+  eq('V17 hasil dialognya dipakai',
+     (badan.match(/^\s*const lanjut = await confirmDialog\(\{$/gm) || []).length, 1);
+  eq('V18 dibatalkan kalau ditolak', (badan.match(/^\s*if \(!lanjut\) return;$/gm) || []).length, 1);
+  // Yang PALING penting: permintaan gagal HARUS membatalkan, bukan meneruskan.
+  // Meneruskan dengan asumsi "mungkin aman" adalah cara pagar ini kehilangan
+  // gunanya justru di hari tersibuk.
+  const iCatch = badan.indexOf('} catch {');
+  const blokCatch = badan.slice(iCatch, badan.indexOf('}', badan.indexOf('return;', iCatch)));
+  ok('V19 blok catch ada', iCatch > 0);
+  ok('V20 catch memulangkan tanpa membuang barisnya',
+     blokCatch.includes('return;') && !blokCatch.includes('buang()'));
+  ok('V21 catch memberi tahu sebabnya', /toast\.error\(/.test(blokCatch));
+  // Versi terkunci dijaga di penanganya, bukan cuma tombolnya dimatikan (L82).
+  ok('V22 versi terkunci ditolak di dalam penanganya', /^\s*if \(versiLocked\) return;$/m.test(badan));
+  // Jalur buang cuma SATU: kalau ada dua `filter`, salah satunya bisa lolos pagar.
+  eq('V23 hanya SATU jalur membuang barisnya',
+     (badan.match(/p\.filter\(\(_, i\) => i !== idx\)/g) || []).length, 1);
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

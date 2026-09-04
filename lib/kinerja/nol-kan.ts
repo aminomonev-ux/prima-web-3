@@ -60,3 +60,46 @@ export function aktifkanBaris(rows: SskRow[], idx: number): SskRow[] {
 export function sudahDinolkan(r: SskRow): boolean {
   return r.is_nullified === true;
 }
+
+// ─── Sisi HAPUS ──────────────────────────────────────────────────────────────
+// Nol-kan dan Hapus adalah dua jawaban untuk pertanyaan yang sama ("baris ini
+// tidak dipakai lagi"), jadi keduanya tinggal serumah: dialog hapus WAJIB
+// menawarkan Nol-kan, dan kalimat itu cuma benar selama keduanya masih sejalan.
+
+export interface JawabanHapus {
+  count:   number;
+  nominal: number;
+}
+
+/**
+ * Perlu bertanya ke `check-deletable` dulu?
+ *
+ * Baris tanpa `canonical_id` belum pernah tersimpan (baru dari Inject Rekening
+ * atau Import RKO), jadi tidak ada baris realisasi yang bisa merujuknya —
+ * bertanya cuma menambah satu perjalanan dan satu jeda untuk jawaban yang sudah
+ * pasti.
+ */
+export function perluPeriksaHapus(r: SskRow): boolean {
+  return typeof r.canonical_id === 'string' && r.canonical_id.length > 0;
+}
+
+/**
+ * Kalimat dialognya. Dipisah ke sini supaya bisa diuji perilakunya — selama ia
+ * di dalam komponen, tes cuma bisa mencocokkan potongan teksnya.
+ *
+ * Menyebut NOMINAL, bukan cuma jumlah baris: orang bisa menaksir "12 baris" itu
+ * sepele, tidak bisa menaksir angka rupiahnya sepele. Nominal nol tidak ikut
+ * disebut — "(realisasi keuangan Rp 0)" terbaca seperti galat, padahal artinya
+ * barisnya ada tapi belum diisi uangnya.
+ */
+export function pesanHapusSsk(nama: string, d: JawabanHapus): string {
+  const uang = d.nominal > 0
+    ? ` (realisasi keuangan Rp ${d.nominal.toLocaleString('id-ID')})`
+    : '';
+  return `"${nama}" dirujuk ${d.count} baris realisasi${uang}.\n\n`
+    + 'Kalau dihapus, baris realisasi itu TIDAK ikut terhapus — tapi kehilangan pagu dan '
+    + 'targetnya, sehingga persennya tidak bisa dihitung lagi dan nominalnya tidak ikut '
+    + 'dijumlah di Laporan maupun Cetak.\n\n'
+    + 'Kalau maksud Anda menonaktifkan item ini, pakai Nol-kan — targetnya jadi nol tapi '
+    + 'realisasinya tetap punya rekening.';
+}

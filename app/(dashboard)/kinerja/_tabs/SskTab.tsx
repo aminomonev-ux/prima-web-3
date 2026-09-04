@@ -15,7 +15,7 @@ import { exportSskExcel, exportSskPdf } from '../_exports';
 import ImportRkoModal from '@/components/kinerja/ImportRkoModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import { hitungTurunanRko } from '@/lib/kinerja/gabung-rko';
-import { nolkanBaris, aktifkanBaris, sudahDinolkan } from '@/lib/kinerja/nol-kan';
+import { nolkanBaris, aktifkanBaris, sudahDinolkan, perluPeriksaHapus, pesanHapusSsk } from '@/lib/kinerja/nol-kan';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
@@ -164,8 +164,49 @@ export default function SskTab({
     toast.success('Target dinol-kan — belum tersimpan, tekan Simpan Semua.');
   }
 
-  function deleteSskRow(idx: number) {
-    setSskRows(p => p.filter((_,i) => i !== idx));
+  /**
+   * A1: baris SSK yang sudah dirujuk realisasi tidak boleh lenyap tanpa ada yang
+   * tahu apa yang ikut lepas. Menghapusnya membuat `canonical_id`-nya hilang dari
+   * versi ini, dan setiap baris realisasi yang menunjuknya jadi YATIM — pagu 0,
+   * target 0, dan `pagarReplace` tidak menyalak karena jumlah barisnya cuma turun
+   * satu.
+   *
+   * Bukan diblokir buntu: menghapus item salah ketik yang belum dipakai itu
+   * pekerjaan sah. Yang salah "hapus tanpa ada yang tahu", bukan "boleh hapus".
+   */
+  async function deleteSskRow(idx: number) {
+    if (versiLocked) return;
+    const row = sskRows[idx];
+    const buang = () => setSskRows(p => p.filter((_, i) => i !== idx));
+
+    // Belum tersimpan → tidak ada yang bisa merujuknya. Langsung buang.
+    if (!perluPeriksaHapus(row)) { buang(); return; }
+
+    let d: { ok?: boolean; deletable?: boolean; count?: number; nominal?: number; message?: string };
+    try {
+      const res = await fetch(
+        `/api/kinerja/ssk/check-deletable?tahun=${tahun}&canonical_id=${encodeURIComponent(row.canonical_id!)}`);
+      d = await res.json();
+      if (!res.ok || !d?.ok) throw new Error(d?.message || 'gagal');
+    } catch {
+      // DIBATALKAN, bukan diteruskan. Meneruskan dengan asumsi "mungkin aman"
+      // adalah cara pagar ini kehilangan gunanya justru di hari tersibuk.
+      toast.error('Belum bisa memastikan item ini dipakai realisasi atau tidak — penghapusan dibatalkan. Coba lagi sebentar lagi.');
+      return;
+    }
+
+    if (d.deletable) { buang(); return; }
+
+    const nama = (row.uraian || row.uraian_ssk || 'baris ini').slice(0, 60);
+    const lanjut = await confirmDialog({
+      title:   'Hapus item yang sudah punya realisasi?',
+      message: pesanHapusSsk(nama, { count: d.count ?? 0, nominal: d.nominal ?? 0 }),
+      confirmLabel: 'Hapus saja',
+      cancelLabel:  'Batal',
+      variant:      'danger',
+    });
+    if (!lanjut) return;
+    buang();
   }
 
   // Rumus turunan dipusatkan di `hitungTurunanRko` — sebelumnya ditulis dua kali
@@ -444,7 +485,7 @@ export default function SskTab({
                           {dinolkan ? <Undo2 size={13} /> : <Ban size={13} />}
                         </button>
                       </Tip>
-                      <Tip label={versiLocked ? 'Versi terkunci, tidak bisa diubah' : 'Hapus baris'}><button onClick={() => !versiLocked && deleteSskRow(idx)} disabled={versiLocked}
+                      <Tip label={versiLocked ? 'Versi terkunci, tidak bisa diubah' : 'Hapus baris'}><button onClick={() => deleteSskRow(idx)} disabled={versiLocked}
                         style={{ padding:'3px 8px', borderRadius:'6px', border:'1.5px solid rgba(226,75,74,.5)', background:'rgba(226,75,74,.1)', cursor: versiLocked?'not-allowed':'pointer', fontSize:'12px', fontWeight:700, color: isLight?'#B91C1C':'#FCA5A5', opacity: versiLocked?.35:1 }}>
                         <DeleteIcon size={13} />
                       </button></Tip>
