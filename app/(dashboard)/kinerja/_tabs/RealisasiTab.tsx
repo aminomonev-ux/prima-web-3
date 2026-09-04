@@ -19,6 +19,7 @@ import Tip from '@/components/ui/Tip';
 import { Wand2, Save, Upload, Equal, History } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { kumpulkanItem } from '@/lib/kinerja/rekap';
+import { hidrasiDariSsk, hidrasiUlang, petaHidrasi } from '@/lib/kinerja/hidrasi-ssk';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '@/lib/kinerja/samakan-target';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import ImportRealisasiModal from '@/components/kinerja/ImportRealisasiModal';
@@ -177,7 +178,10 @@ export default function RealisasiTab({
   function initRealisasiFromSSK() {
     asalPulihkanRef.current = null;
     if (!sskRows.length) { toast.error('Data SSK kosong. Isi SSK terlebih dahulu.'); return; }
-    const MONTH_IDX = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'] as const;
+    // Saringan baris acuan (nol-kan, canonical kosong) hidup di petaHidrasi —
+    // sama dengan yang dipakai server, jadi bendera `yatim` tidak berbeda
+    // pendapat antara layar dan hasil muat ulang.
+    const petaSsk = petaHidrasi(sskRows);
     const toAdd: RealRow[] = [];
     // Hitung berapa SSK row yang di-skip karena uraian kosong → kasih warning informatif
     const skippedNoUraian = sskRows.filter(s => !s.uraian.trim()).length;
@@ -188,7 +192,6 @@ export default function RealisasiTab({
     // satu pun peringatan. Nama tinggal cadangan untuk baris lama tanpa canonical.
     const namaBerubah: string[] = [];
     for (let b = 1; b <= 12; b++) {
-      const mk = MONTH_IDX[b - 1];
       for (const s of sskRows) {
         if (!s.uraian.trim()) continue;
         const cid = s.canonical_id || '';
@@ -211,12 +214,10 @@ export default function RealisasiTab({
             kegiatan:     s.kegiatan     || '',
             subkegiatan:  s.subkegiatan  || '',
             uraian_ssk:   s.uraian_ssk   || '',
-            pagu_awal:    s.pagu         || 0,
-            // Target diambil dalam RUPIAH; persennya diturunkan — sumber yang SAMA
-            // dengan server saat hydrate reload (kinerja-calc.ts), jadi nilainya
-            // tidak berubah sebelum vs sesudah simpan.
-            target_rp:    s.months?.[mk] ?? 0,
-            target_fisik: (s.pagu || 0) > 0 ? Math.round(((s.months?.[mk] ?? 0) / s.pagu) * 10000) / 100 : 0,
+            // pagu_awal / target_rp / target_fisik / yatim — rumus yang SAMA dengan
+            // server saat hydrate reload (lib/kinerja/hidrasi-ssk.ts), jadi
+            // angkanya tidak bergeser sebelum vs sesudah simpan.
+            ...hidrasiDariSsk(petaSsk.get(cid), b),
             real_fisik: 0, pct_fisik: 0,
             akum_target_fisik: 0, akum_target_rp: 0, akum_real_fisik: 0, akum_pct_fisik: 0,
             real_keuangan: 0, pct_keuangan: 0, akum_keuangan: 0, akum_pct_keuangan: 0,
@@ -249,11 +250,14 @@ export default function RealisasiTab({
   /**
    * Muat snapshot ke layar. TIDAK menulis apa pun — Simpan tetap tombol biasa.
    *
-   * Kolom turunan di snapshot (`pagu_awal`, `target_rp`, `akum_*`) dihitung
-   * terhadap SSK versi SAAT ITU. Kalau sejak itu ada Perubahan, angkanya sudah
-   * tidak berlaku — jadi `recalcAllRealisasi` melahirkannya ulang dari SSK versi
-   * yang sedang dibuka. Yang benar-benar dipertahankan cuma yang diketik manusia:
-   * `real_fisik`, `real_keuangan`, dan jangkarnya `ssk_canonical_id` (L88).
+   * Kolom turunan di snapshot (`pagu_awal`, `target_rp`, `yatim`, `akum_*`)
+   * dihitung terhadap SSK versi SAAT ITU; kalau sejak itu ada Perubahan, angkanya
+   * sudah tidak berlaku. `recalcAllRealisasi` TIDAK menutup itu — ia MEMBACA
+   * `pagu_awal` & `target_rp` lalu menghitung persen dan akumulasi dari situ,
+   * jadi hidrasi harus jalan lebih dulu (A4).
+   *
+   * Yang dipertahankan dari foto cuma yang diketik manusia: `real_fisik`,
+   * `real_keuangan`, dan jangkarnya `ssk_canonical_id` (L88).
    */
   function pulihkanRealisasi(isi: unknown[], version: number | null, item: { id: number; disimpan_pada: string }) {
     // Dibatalkan, bukan diteruskan dengan 0: angka gembok yang salah membuat
@@ -263,7 +267,7 @@ export default function RealisasiTab({
       toast.error('Angka kunci versi tidak terbaca, jadi pemulihan dibatalkan. Coba lagi sebentar lagi.');
       return;
     }
-    setRealisasiRows(recalcAllRealisasi(isi as RealRow[]));
+    setRealisasiRows(recalcAllRealisasi(hidrasiUlang(isi as RealRow[], sskRows, sskVersi)));
     setRealVersion(version);
     asalPulihkanRef.current = { id: item.id, disimpan_pada: item.disimpan_pada };
     toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);

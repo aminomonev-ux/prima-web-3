@@ -16,6 +16,8 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
+import { hidrasiDariSsk, hidrasiUlang, petaHidrasi,
+  type BarisSskAcuan } from '../lib/kinerja/hidrasi-ssk';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '../lib/kinerja/master-nama';
 import { nolkanBaris, aktifkanBaris, sudahDinolkan,
   perluPeriksaHapus, pesanHapusSsk, hitungDinolkan } from '../lib/kinerja/nol-kan';
@@ -695,6 +697,17 @@ console.log('\n── S. A2: realisasi yatim keluar dari Laporan & KPI juga ─�
   }
 
   // ── Statis: ketiga jalur agregat memakai aturan yang SAMA ────────────────
+  // Seluruh perbaikan ini berdiri di atas satu anggapan: `sskRows` yang diterima
+  // tab Realisasi memang milik SUMBER dan VERSI yang sedang dibuka di tab itu -
+  // bukan milik tab SSK, yang punya pemilih sumber sendiri (`activeSumber`).
+  // Kalau efek ini hilang, hidrasinya memakai SSK sumber lain tanpa satu galat.
+  const kc2 = readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('Y37 tab Realisasi memuat SSK sumbernya sendiri',
+     /activeTab === 'realisasi'\) fetchSsk\(realisasiSumber\)/.test(kc2));
+  ok('Y38 dan fetchSsk memakai versi yang sedang dibuka',
+     /const vt = versiTipe \?\? sskVersi\.tipe/.test(kc2));
+
   const kj = readFileSync('lib/data/kinerja.ts', 'utf8');
   const tanpaKomentar = kj.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
@@ -1042,6 +1055,138 @@ console.log('\n-- X. A3: ganti nama master memindahkan anaknya -----------------
      /\$\{ikut\} baris di bawahnya ikut dipindah/.test(mt));
   ok('X28b angkanya dibaca dari balasan server', mt.includes('anak_dipindah'));
   ok('X29 layar menangani NAMA_KEMBAR', mt.includes("=== 'NAMA_KEMBAR'"));
+}
+
+console.log('\n-- Y. A4: Pulihkan menghidrasi ulang dari SSK versi terbuka ----');
+
+// `real_fisik` & `real_keuangan` satu-satunya yang diketik manusia; pagu, target,
+// dan bendera yatim SELALU turunan SSK versi yang sedang dibuka. Pulihkan dulu
+// memakai angka milik FOTO, dan `recalcAllRealisasi` tidak menutup itu - ia
+// MEMBACA pagu_awal/target_rp lalu menghitung persen & akumulasi dari situ.
+{
+  // Foto diambil saat MURNI. Sejak itu PERUBAHAN-1 menaikkan pagu A, item B
+  // LENYAP dari versi itu (uangnya sudah keluar), dan item D di-NOL-KAN.
+  const PAGU_A2  = 9_000_000_000;
+  const BULAN_A2 =   812_345_678;
+  const PAGU_D   = 5_000_000_000;
+
+  const sskFoto = new Map(ssk);
+  sskFoto.set('D', { pagu: PAGU_D, months: bulanan(400_000_000) });
+
+  const fotoMentah: RealRowRaw[] = [];
+  for (let b = 1; b <= 12; b++) fotoMentah.push(baris('A', b, b <= 7 ? 400_000_000 : 0, b <= 7 ? 500_000_000 : 0));
+  fotoMentah.push(baris('D', 3, 0, 12_000_000, 'Dinolkan'));
+  fotoMentah.push(baris('B', 5, 0, 30_000_000, 'Lenyap'));
+
+  // Foto = payload PUT apa adanya (kinerja_riwayat_simpan menyimpan itu, bukan
+  // hasil SELECT), jadi kolom turunannya IKUT dan nilainya milik MURNI.
+  const foto = recalcAllRealisasiServer(fotoMentah, { sskByCanonical: sskFoto }) as unknown as RealRow[];
+
+  const sskBaru: BarisSskAcuan[] = [
+    { canonical_id: 'A', pagu: PAGU_A2, months: bulanan(BULAN_A2) },
+    { canonical_id: 'C', pagu: 0,       months: bulanan(0) },
+    // Di-nol-kan: server mengecualikannya lewat `is_nullified = FALSE`, jadi peta
+    // di layar HARUS mengecualikannya juga.
+    { canonical_id: 'D', pagu: PAGU_D,  months: bulanan(400_000_000), is_nullified: true },
+    // Baris lama tanpa canonical_id - tidak boleh jadi kunci peta.
+    { canonical_id: '',  pagu: 1_000,   months: bulanan(1) },
+  ];
+  const versiBaru = { tipe: 'PERUBAHAN' as const, seq: 1 };
+
+  // Prasyarat: fotonya memang basi. Tanpa ini seluruh bagian ini lulus tanpa
+  // menguji apa pun, karena angka lama dan baru kebetulan sama.
+  const fotoA1 = foto.find(r => r.ssk_canonical_id === 'A' && r.bulan === 1)!;
+  eq('Y1 foto membawa pagu LAMA', fotoA1.pagu_awal, PAGU_A);
+  eq('Y2 foto membawa target LAMA', fotoA1.target_rp, BULAN_A);
+
+  const pulih = recalcAllRealisasi(hidrasiUlang(foto, sskBaru, versiBaru));
+  const pA1 = pulih.find(r => r.ssk_canonical_id === 'A' && r.bulan === 1)!;
+  const pA7 = pulih.find(r => r.ssk_canonical_id === 'A' && r.bulan === 7)!;
+
+  eq('Y3 pagu diambil dari versi yang dibuka', pA1.pagu_awal, PAGU_A2);
+  eq('Y4 target diambil dari versi yang dibuka', pA1.target_rp, BULAN_A2);
+  eq('Y5 target_fisik diturunkan dari pagu baru', pA1.target_fisik, 9.03);
+  // Yang diketik manusia TIDAK disentuh - itu seluruh isi foto yang berharga.
+  eq('Y6 real_fisik dipertahankan', pA1.real_fisik, 400_000_000);
+  eq('Y7 real_keuangan dipertahankan', pA1.real_keuangan, 500_000_000);
+  // 3,5 M / 9 M = 38,89%. Terhadap pagu foto (7 M) angkanya 50,00 - kalau
+  // hidrasinya dilepas, inilah yang tampil.
+  eq('Y8 akumulasi dihitung terhadap pagu BARU', pA7.akum_pct_keuangan, 38.89);
+  ok('Y9 dan bukan terhadap pagu foto', pA7.akum_pct_keuangan !== 50);
+
+  const pB = pulih.find(r => r.ssk_canonical_id === 'B')!;
+  ok('Y10 item yang lenyap dari versi jadi yatim', pB.yatim === true);
+  eq('Y11 yatim pagunya 0', pB.pagu_awal, 0);
+  // Fotonya menyatakan sebaliknya - dan spanduk yatim berdiri di atas bendera ini.
+  ok('Y12 foto menyatakan sebaliknya', foto.find(r => r.ssk_canonical_id === 'B')!.yatim === false);
+
+  const pD = pulih.find(r => r.ssk_canonical_id === 'D')!;
+  ok('Y13 item yang di-nol-kan juga yatim', pD.yatim === true);
+  eq('Y14 dan pagunya 0, bukan pagu sebelum dinolkan', pD.pagu_awal, 0);
+
+  // Angkanya kini milik versi yang dibuka, jadi penunjuk versinya ikut - dan
+  // app/api/kinerja/reset menyaring baris realisasi LEWAT kolom itu.
+  eq('Y15 penunjuk versi ikut disetel (tipe)', pA1.ssk_versi_tipe, 'PERUBAHAN');
+  eq('Y16 penunjuk versi ikut disetel (seq)', pA1.ssk_versi_seq, 1);
+  eq('Y17 foto tadinya menunjuk versi lain', foto[0].ssk_versi_tipe, 'MURNI');
+
+  const peta = petaHidrasi(sskBaru);
+  ok('Y18 baris nol-kan tidak masuk peta', !peta.has('D'));
+  ok('Y19 canonical kosong tidak jadi kunci', !peta.has(''));
+  ok('Y20 baris sah masuk peta', peta.has('A'));
+
+  // INTI temuan A4: layar sesudah Pulihkan harus sama dengan layar sesudah muat
+  // ulang. Pembandingnya jalur server yang sesungguhnya, bukan rumus yang
+  // disalin ke tes.
+  const server = recalcAllRealisasiServer(fotoMentah, { sskByCanonical: peta }) as unknown as RealRow[];
+  const kolom: (keyof RealRow)[] = ['pagu_awal','target_rp','target_fisik','yatim',
+    'pct_fisik','akum_target_fisik','akum_target_rp','akum_real_fisik','akum_pct_fisik',
+    'pct_keuangan','akum_keuangan','akum_pct_keuangan','deviasi_fisik','deviasi_keuangan'];
+  let bedaY = 0;
+  for (let i = 0; i < server.length; i++)
+    for (const k of kolom) if (server[i][k] !== pulih[i][k]) bedaY++;
+  eq('Y21 hasil Pulihkan == hasil muat ulang dari server', bedaY, 0);
+
+  // -- Rumus tunggal: nol pagu, bulan di luar jangkauan, acuan tidak ada -----
+  const kosong = hidrasiDariSsk(undefined, 1);
+  ok('Y22 acuan tidak ada -> yatim', kosong.yatim === true);
+  eq('Y23 acuan tidak ada -> pagu 0', kosong.pagu_awal, 0);
+  eq('Y24 acuan tidak ada -> target 0', kosong.target_rp, 0);
+  // Pagu 0 itu item sah yang tidak beranggaran, bukan yatim - dan pembagiannya
+  // tidak boleh melahirkan Infinity/NaN yang lolos sampai ke kolom persen.
+  const nol = hidrasiDariSsk({ pagu: 0, months: bulanan(1_000) }, 1);
+  eq('Y25 pagu 0 -> target_fisik 0, bukan Infinity', nol.target_fisik, 0);
+  ok('Y26 pagu 0 bukan yatim', nol.yatim === false);
+  eq('Y27 bulan 12 mengambil kunci des', hidrasiDariSsk({ pagu: 100, months: { ...bulanan(0), des: 40 } }, 12).target_rp, 40);
+  eq('Y28 bulan di luar jangkauan -> target 0', hidrasiDariSsk({ pagu: 100, months: bulanan(7) }, 13).target_rp, 0);
+  eq('Y29 months null -> target 0', hidrasiDariSsk({ pagu: 100, months: null }, 1).target_rp, 0);
+
+  // -- Statis: ketiga jalur memakai rumus yang sama, dan urutannya benar -----
+  // Komentar dibuang dulu: paragraf di atas barisnya menyebut nama fungsi yang
+  // sama, jadi kutipan telanjang tetap cocok walau kodenya dikembalikan (L82c).
+  const rt = readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  // Hidrasi WAJIB mendahului recalc - kebalikannya melahirkan persen dari pagu foto.
+  ok('Y30 Pulihkan menghidrasi ulang sebelum recalc',
+     /recalcAllRealisasi\(hidrasiUlang\(isi as RealRow\[\], sskRows, sskVersi\)\)/.test(rt));
+  ok('Y31 Init memakai peta yang sama', /const petaSsk = petaHidrasi\(sskRows\)/.test(rt));
+  ok('Y32 Init memakai rumus yang sama', /\.\.\.hidrasiDariSsk\(petaSsk\.get\(cid\), b\)/.test(rt));
+  // Salinan rumus di layar sudah tidak ada - kalau kembali, dua tempat bisa
+  // berbeda pendapat tanpa satu tes pun berubah.
+  ok('Y33 layar tidak lagi menyalin rumus target_fisik', !/target_fisik:\s*\(s\.pagu/.test(rt));
+
+  // Saringan peta di layar cuma benar selama kueri SSK server juga menyaringnya.
+  // Kalau SQL-nya berubah, dua sisi berhenti sepakat baris mana yang yatim -
+  // dan Y21 tidak akan menangkapnya, sebab kedua sisi memakai peta yang sama.
+  const kj = readFileSync('lib/data/kinerja.ts', 'utf8');
+  const iHid = kj.indexOf('export async function getRealisasiHydrated(');
+  const badanHid = kj.slice(iHid, kj.indexOf('\n}\n', iHid));
+  ok('Y36 kueri SSK server juga mengecualikan baris nol-kan',
+     /FROM kinerja_ssk[\s\S]*?AND is_nullified = FALSE/.test(badanHid));
+
+  const kc = readFileSync('lib/data/kinerja-calc.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('Y34 server memakai lib yang sama', /\.\.\.hidrasiDariSsk\(ssk, r\.bulan\)/.test(kc));
+  ok('Y35 server tidak lagi menyalin rumus', !/Math\.round\(\(target_rp \/ pagu\)/.test(kc));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

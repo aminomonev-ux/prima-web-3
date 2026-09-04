@@ -14,9 +14,8 @@
 //     deviasi dihitung dari akumulasi mentah (belum dibulatkan) supaya tidak
 //     drift ±0,01; group key pakai ssk_canonical_id (fallback legacy).
 
-import type { MonthKey, SskMonths } from '@/app/(dashboard)/kinerja/_types';
-
-const MONTH_BY_INDEX: MonthKey[] = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'];
+import type { SskMonths } from '@/app/(dashboard)/kinerja/_types';
+import { hidrasiDariSsk } from '@/lib/kinerja/hidrasi-ssk';
 
 /** Input row realisasi mentah dari DB — field persisten + identitas + fallback snapshot. */
 export interface RealRowRaw {
@@ -82,18 +81,12 @@ export function recalcAllRealisasiServer(
     // Kalau canonical_id tidak match (orphan), pagu/target = 0 → semua kolom % juga 0.
     // Prasyarat sebelum migration 031: 0 orphan rows (sudah diverifikasi).
     const ssk = ctx.sskByCanonical.get(r.ssk_canonical_id);
-    const pagu = ssk?.pagu ?? 0;
-    const monthKey = MONTH_BY_INDEX[r.bulan - 1];
-    // Target diambil dalam RUPIAH; persennya diturunkan. Kebalikan dari sebelumnya
-    // (`months_pct` langsung), yang menjumlah persen sudah-dibulatkan sehingga
-    // akumulasi meleset sampai 0,005% × pagu tiap bulan tiap item.
-    const target_rp = ssk?.months?.[monthKey] ?? 0;
     return {
       ...r,
-      pagu_awal: pagu,
-      target_rp,
-      target_fisik: pagu > 0 ? Math.round((target_rp / pagu) * 10000) / 100 : 0,
-      yatim: !ssk,
+      // Rumus pagu/target/yatim di lib/kinerja/hidrasi-ssk.ts, dipakai bersama
+      // layar (Init & Pulihkan). Tiga salinan rumus yang sama pasti berbeda
+      // pendapat begitu satu di antaranya disunting.
+      ...hidrasiDariSsk(ssk, r.bulan),
       // placeholder — di-overwrite di step 2
       pct_fisik: 0,
       akum_target_fisik: 0,
