@@ -33,6 +33,27 @@ export function sanitizeCell<T>(val: T): T | string {
 
 export type ColWidth = { wch: number };
 
+/**
+ * Format angka Rupiah — ribuan bertitik, tanpa desimal.
+ *
+ * WAJIB dipasang di kolom uang, dan sebabnya bukan kerapian: format bawaan Excel
+ * ("General") berpindah sendiri ke notasi ilmiah begitu bilangan bulatnya lebih
+ * dari 11 angka. Pagu Rp 142.593.279.000 (12 angka) tampil `1,42593E+11`
+ * sementara Rp 74.154.779.000 (11 angka) tampil utuh — jadi cacatnya muncul
+ * hanya pada baris total dan justru tidak terlihat saat diuji dengan data kecil.
+ * Melebarkan kolom TIDAK menolong; yang menentukan jumlah angkanya.
+ */
+export const FMT_RUPIAH = '#,##0';
+
+/**
+ * Persen yang nilainya SUDAH dalam satuan persen (62.01 berarti 62,01%).
+ *
+ * Sengaja `0.00`, BUKAN `0.00%`: tanda persen di dalam kode format membuat Excel
+ * mengalikan nilainya dengan 100, jadi 62,01 akan terbaca 6201%. Satuannya sudah
+ * disebut di judul kolom.
+ */
+export const FMT_PERSEN = '0.00';
+
 /** Header style default: bold + fill abu-abu (E2E8F0) + center align + wrap text. */
 export const DEFAULT_HEADER_STYLE: Partial<ExcelJS.Style> = {
   font: { bold: true },
@@ -46,6 +67,8 @@ export const DEFAULT_HEADER_STYLE: Partial<ExcelJS.Style> = {
  *
  * `headerRowIndex` (0-based, default 0) untuk berkas yang punya baris kop di
  * atas headernya — tanpa itu baris kop yang ter-style dan header aslinya polos.
+ *
+ * `numFmts` (0-based per kolom) memasang format angka pada baris DATA saja.
  */
 export function addSheetFromAoa(
   ws: ExcelJS.Worksheet,
@@ -54,6 +77,8 @@ export function addSheetFromAoa(
     colWidths?: ColWidth[];
     headerStyle?: Partial<ExcelJS.Style>;
     headerRowIndex?: number;
+    /** Format angka per kolom (0-based). `null`/kosong = biarkan apa adanya. */
+    numFmts?: (string | null | undefined)[];
   },
 ) {
   if (aoa.length === 0) return;
@@ -72,6 +97,20 @@ export function addSheetFromAoa(
     options.colWidths.forEach((w, i) => {
       ws.getColumn(i + 1).width = w.wch;
     });
+  }
+  // Format angka — baris DATA saja (sesudah header), dan hanya sel yang isinya
+  // memang angka. Sel teks dilewati supaya format tidak menempel di label atau
+  // di baris catatan yang kebetulan jatuh di kolom uang.
+  if (options?.numFmts) {
+    const mulai = (options.headerRowIndex ?? 0) + 2;
+    for (let r = mulai; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      options.numFmts.forEach((f, i) => {
+        if (!f) return;
+        const cell = row.getCell(i + 1);
+        if (typeof cell.value === 'number') cell.numFmt = f;
+      });
+    }
   }
 }
 

@@ -5,7 +5,7 @@
 // Bundle initial /kinerja TIDAK termasuk library ini.
 
 import { fmtRp, fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
-import { loadExcelJs, addSheetFromAoa, downloadWorkbook } from '@/lib/shared/excel-export';
+import { loadExcelJs, addSheetFromAoa, downloadWorkbook, FMT_RUPIAH, FMT_PERSEN } from '@/lib/shared/excel-export';
 import type {
   SumberSSK, SskRow, RekeningRow, RealRow, CrrRow, PendRow, LaporanSumber,
   MasterOpts, MasterRow, MasterTipe,
@@ -41,6 +41,7 @@ export async function exportSskExcel(params: { rows: SskRow[]; sumber: SumberSSK
   ]);
   addSheetFromAoa(ws, [header, ...data], {
     colWidths: [{ wch: 5 }, { wch: 20 }, { wch: 30 }, { wch: 16 }, ...MONTHS_KEYS.flatMap(() => [{ wch: 14 }, { wch: 8 }]), { wch: 16 }, { wch: 10 }],
+    numFmts:   [null, null, null, FMT_RUPIAH, ...MONTHS_KEYS.flatMap(() => [FMT_RUPIAH, FMT_PERSEN]), FMT_RUPIAH, FMT_PERSEN],
   });
   await downloadWorkbook(wb, `SSK-${sumber}-${tahun}.xlsx`);
 }
@@ -162,6 +163,15 @@ export function rekapAoa({ baris, yatim, tahun, namaBulan }: RekapExportParams):
 
 const REKAP_LEBAR = [{ wch:5 },{ wch:48 },{ wch:18 },{ wch:12 },{ wch:20 },{ wch:12 },{ wch:12 },{ wch:14 },{ wch:20 },{ wch:18 },{ wch:20 },{ wch:12 },{ wch:12 }];
 
+/** Urutannya WAJIB sejajar `REKAP_HEADER` — kolom uang vs kolom persen. */
+const REKAP_FMT = [
+  null, null, FMT_RUPIAH, FMT_PERSEN,
+  FMT_RUPIAH, FMT_PERSEN, FMT_PERSEN,
+  FMT_PERSEN,
+  FMT_RUPIAH, FMT_RUPIAH, FMT_RUPIAH,
+  FMT_PERSEN, FMT_PERSEN,
+];
+
 /**
  * Rapikan sheet Rekap supaya sebentuk dengan layar: kop di-merge selebar tabel
  * dan dirata-tengah (dulu menggantung di kolom A dan meluber ke kanan), lalu
@@ -186,7 +196,7 @@ export async function exportRekapExcel(params: RekapExportParams) {
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
   const ws = wb.addWorksheet('Rekap');
-  addSheetFromAoa(ws, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR });
+  addSheetFromAoa(ws, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR, numFmts: REKAP_FMT });
   rapikanSheetRekap(ws, params.baris);
   await downloadWorkbook(wb, `Rekap-SemuaSumber-sd-${params.namaBulan}-${params.tahun}.xlsx`);
 }
@@ -272,6 +282,24 @@ export function realisasiAoa(rows: RealRow[]): (string | number | null)[][] {
 }
 
 const DETAIL_LEBAR = [{ wch: 4 }, { wch: 14 }, { wch: 30 }, ...Array(13).fill({ wch: 14 })];
+
+/** Sejajar `DETAIL_HEADER` (16 kolom). */
+const DETAIL_FMT = [
+  null, null, null,
+  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
+  FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
+  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
+  FMT_PERSEN, FMT_PERSEN,
+];
+
+/** Sejajar `DETAIL_BULAN_HEADER` (15 kolom — tanpa Bulan, bulannya di kop). */
+export const DETAIL_BULAN_FMT = [
+  null, null,
+  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
+  FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
+  FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN,
+  FMT_PERSEN, FMT_PERSEN,
+];
 
 
 // ─── Halaman detail di PDF: kop + tabel + JUMLAH + tanda tangan ───────────────
@@ -435,6 +463,14 @@ export function tulisSheetDetailPerBulan(
     const isi = barisBulanDetail(barisBulan, true);
     isi.forEach((baris, i) => {
       const r = ws.addRow(baris);
+      // Blok ini menambah baris sendiri, tidak lewat addSheetFromAoa, jadi
+      // formatnya harus dipasang di sini juga — kalau tidak, kolom uang di sheet
+      // per-bulan kembali jadi notasi ilmiah begitu angkanya 12 digit.
+      DETAIL_BULAN_FMT.forEach((f, k) => {
+        if (!f) return;
+        const c = r.getCell(k + 1);
+        if (typeof c.value === 'number') c.numFmt = f;
+      });
       // Baris terakhir = JUMLAH.
       if (i === isi.length - 1) r.eachCell(c => { c.font = { bold: true }; });
     });
@@ -464,7 +500,7 @@ export async function exportRealisasiExcel(params: { rows: RealRow[]; sumber: Su
  */
 export function tulisSheetData(wb: import('exceljs').Workbook, rows: RealRow[], sumber: SumberSSK) {
   const ws = wb.addWorksheet(`Data ${sumber}`.slice(0, 31));
-  addSheetFromAoa(ws, [DETAIL_HEADER, ...realisasiAoa(rows)], { colWidths: DETAIL_LEBAR });
+  addSheetFromAoa(ws, [DETAIL_HEADER, ...realisasiAoa(rows)], { colWidths: DETAIL_LEBAR, numFmts: DETAIL_FMT });
 }
 
 export async function exportRealisasiPdf(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string }) {
@@ -486,6 +522,7 @@ export async function exportCrrExcel(params: { rows: CrrRow[]; tahun: string }) 
   const data = rows.map((r,i) => [i+1, r.bulan, r.pendapatan, r.belanja_blud, r.belanja_daerah, r.pendapatan_sd, r.belanja_blud_sd, r.belanja_daerah_sd, r.crr_parsial_pct, r.crr_total_pct]);
   addSheetFromAoa(ws, [header, ...data], {
     colWidths: [{ wch:4 },{ wch:14 },...Array(8).fill({ wch:16 })],
+    numFmts:   [null, null, ...Array(6).fill(FMT_RUPIAH), FMT_PERSEN, FMT_PERSEN],
   });
   await downloadWorkbook(wb, `CRR-${tahun}.xlsx`);
 }
@@ -501,6 +538,7 @@ export async function exportPendapatanExcel(params: { rows: PendRow[]; tahun: st
   const data = rows.map((r,i) => [i+1, r.keterangan, r.target, r.realisasi, r.capaian_pct]);
   addSheetFromAoa(ws, [header, ...data], {
     colWidths: [{ wch:4 },{ wch:40 },{ wch:16 },{ wch:16 },{ wch:12 }],
+    numFmts:   [null, null, FMT_RUPIAH, FMT_RUPIAH, FMT_PERSEN],
   });
   await downloadWorkbook(wb, `Pendapatan-${tahun}.xlsx`);
 }
@@ -527,6 +565,9 @@ export async function exportLaporanExcel(params: { data: LaporanSumber; tahun: s
   ];
   addSheetFromAoa(wsSum, [sumHeader, ...sumData], {
     colWidths: [{ wch: 24 }, { wch: 30 }],
+    // Kolom Nilai campur angka & teks ('62.01%', nama bulan). Pelewat sel
+    // non-angka di addSheetFromAoa yang membuat ini aman.
+    numFmts:   [null, FMT_RUPIAH],
   });
 
   // Sheet 2: Trend Bulanan
@@ -538,6 +579,8 @@ export async function exportLaporanExcel(params: { data: LaporanSumber; tahun: s
   ]);
   addSheetFromAoa(wsTrend, [trendHeader, ...trendData], {
     colWidths: [{ wch:14 },{ wch:16 },{ wch:14 },{ wch:16 },{ wch:16 },{ wch:16 },{ wch:14 }],
+    // Kolom persen di sheet ini dikirim sebagai teks ('62.01%'), jadi tidak diberi format.
+    numFmts:   [null, FMT_RUPIAH, null, FMT_RUPIAH, null, FMT_RUPIAH, null],
   });
 
   await downloadWorkbook(wb, `Laporan-${data.sumber}-${tahun}.xlsx`);
@@ -644,7 +687,7 @@ export async function exportBundelExcel(params: BundelParams) {
   const wb = new ExcelJSLib.Workbook();
 
   const wsRekap = wb.addWorksheet('Rekap');
-  addSheetFromAoa(wsRekap, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR });
+  addSheetFromAoa(wsRekap, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR, numFmts: REKAP_FMT });
   rapikanSheetRekap(wsRekap, params.baris);
 
   for (const bagian of params.detail) {

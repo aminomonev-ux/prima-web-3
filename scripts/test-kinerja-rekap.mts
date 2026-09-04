@@ -518,5 +518,48 @@ eq('N13 hitungRekap dipanggil tepat sekali di seluruh berkas',
 ok('N14 panggilan tunggal itu memang di useMemo',
    /const rekap = useMemo\(\s*\(\) =>[\s\S]{0,200}hitungRekap\(/.test(ct));
 
+console.log('\n── R. Format angka Excel: notasi ilmiah tidak boleh muncul ──────');
+
+// Format bawaan Excel ("General") pindah ke notasi ilmiah begitu bilangan
+// bulatnya >11 angka: pagu Rp 142.593.279.000 tampil "1,42593E+11" sementara
+// Rp 74.154.779.000 tampil utuh. Jadi cacatnya HANYA muncul di baris total dan
+// tidak terlihat saat diuji dengan data kecil — karena itu dijaga di sini.
+{
+  const ex     = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
+  const helper = readFileSync('lib/shared/excel-export.ts', 'utf8');
+
+  ok('R1 FMT_RUPIAH pakai pemisah ribuan', helper.includes("export const FMT_RUPIAH = '#,##0'"));
+  // `0.00%` membuat Excel mengalikan 100 → 62,01 terbaca 6201%.
+  ok('R2 FMT_PERSEN TANPA tanda % di kode format', helper.includes("export const FMT_PERSEN = '0.00'"));
+  ok('R3 helper hanya memformat sel yang isinya angka',
+     helper.includes("if (typeof cell.value === 'number') cell.numFmt = f;"));
+  ok('R4 format dipasang mulai SESUDAH baris header',
+     helper.includes('const mulai = (options.headerRowIndex ?? 0) + 2;'));
+
+  // Panjang larik format WAJIB sama dengan jumlah kolomnya. Kalau bergeser satu,
+  // kolom uang dapat format persen dan sebaliknya — tanpa satu galat pun.
+  const panjangFmt = (nama: string): number => {
+    const i = ex.indexOf('const ' + nama + ' = [');
+    if (i < 0) return -1;
+    const blok = ex.slice(i, ex.indexOf('];', i));
+    return (blok.match(/FMT_RUPIAH|FMT_PERSEN|null/g) || []).length;
+  };
+  eq('R5 REKAP_FMT sejajar 13 kolom REKAP_HEADER',            panjangFmt('REKAP_FMT'), 13);
+  eq('R6 DETAIL_FMT sejajar 16 kolom DETAIL_HEADER',           panjangFmt('DETAIL_FMT'), 16);
+  eq('R7 DETAIL_BULAN_FMT sejajar 15 kolom DETAIL_BULAN_HEADER', panjangFmt('DETAIL_BULAN_FMT'), 15);
+
+  // Rekap dipakai DUA kali (satuan + bundel) — dicacah, bukan ditanya "ada?".
+  eq('R8 kedua sheet Rekap memakai REKAP_FMT', (ex.match(/numFmts: REKAP_FMT/g) || []).length, 2);
+  ok('R9 sheet Data memakai DETAIL_FMT', ex.includes('numFmts: DETAIL_FMT'));
+  // Blok per-bulan menambah baris sendiri, di luar addSheetFromAoa.
+  // Dijangkarkan ke AWAL BARIS: kutipan telanjang tetap cocok kalau seseorang
+  // menaruh `if (false)` di depannya, dan asersinya lulus untuk alasan yang salah.
+  ok('R10 blok per-bulan memformat barisnya sendiri',
+     /^\s*DETAIL_BULAN_FMT\.forEach\(\(f, k\) => \{$/m.test(ex));
+
+  // Setiap unduhan yang memuat uang harus kebagian.
+  eq('R11 delapan pemanggil memakai numFmts', (ex.match(/numFmts:/g) || []).length, 8);
+}
+
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);
 if (gagal.length) { gagal.forEach(g => console.log('  - ' + g)); process.exit(1); }
