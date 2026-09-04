@@ -1189,5 +1189,89 @@ console.log('\n-- Y. A4: Pulihkan menghidrasi ulang dari SSK versi terbuka ----'
   ok('Y35 server tidak lagi menyalin rumus', !/Math\.round\(\(target_rp \/ pagu\)/.test(kc));
 }
 
+console.log('\n-- Z. A6: Buat Perubahan atomik, dan bentroknya dijawab 409 -----');
+
+// Perilakunya dibuktikan lawan MySQL sungguhan di
+// `node scripts/test-kinerja-race-versi.mjs` (3 balapan, sebelum vs sesudah).
+// Yang dijaga DI SINI bentuk kodenya: urutan pengambilan kunci dan letak
+// pembacaan tidak bisa dilihat dari hasil satu permintaan tunggal, jadi kalau
+// tidak dipatok di sini ia bisa bergeser balik tanpa satu tes pun berubah.
+{
+  const rt = readFileSync('app/api/kinerja/ssk/perubahan/route.ts', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+
+  // Tidak boleh ada `sql` biasa di route ini: satu saja yang tertinggal di luar
+  // transaksi mengembalikan seluruh temuannya.
+  ok('Z1 tidak ada lagi kueri di luar transaksi', !/\bawait sql`/.test(rt));
+  ok('Z2 route tidak lagi mengimpor sql', !/import \{[^}]*\bsql\b[^}]*\} from '@\/lib\/data\/db'/.test(rt));
+
+  // L84: kuncinya perintah PERTAMA. Kalau `MAX(versi_seq)` dibaca lebih dulu,
+  // snapshot baca-konsisten sudah lahir dan kuncinya cuma menjaga angka basi.
+  const iTx = rt.indexOf('withTransaction(async ({ tx, conn })');
+  const iKunci = rt.indexOf('kunciVersiSsk(tx', iTx);
+  const iMax = rt.indexOf('MAX(versi_seq)', iTx);
+  const iSumber = rt.indexOf('FROM kinerja_ssk', iMax);
+  ok('Z3 kunci diambil di dalam transaksi', iKunci > iTx);
+  ok('Z4 kunci mendahului MAX(versi_seq)', iKunci < iMax, `kunci ${iKunci}, max ${iMax}`);
+  ok('Z5 baris sumber dibaca sesudah kunci juga', iKunci < iSumber);
+
+  // FOR UPDATE pada baris SUMBERNYA: yang mengubah isinya adalah DELETE milik
+  // saveSskBatch, dan DELETE itu yang harus menunggu.
+  ok('Z6 baris sumber dibaca FOR UPDATE', /versi_seq = \$\{from_versi_seq\}\s*\n\s*FOR UPDATE/.test(rt));
+
+  // Sumber kosong tetap 404 — sekarang lewat error yang dilempar dari dalam
+  // transaksi, jadi tidak ada lagi jalan keluar dini sebelum kunci diambil.
+  ok('Z7 sumber kosong tetap 404', /KinerjaVersiSumberKosongError/.test(rt) && /status: 404/.test(rt));
+  // ER_DUP_ENTRY = dua permintaan berbarengan, punya penjelasan sendiri.
+  ok('Z8 ER_DUP_ENTRY diterjemahkan 409', /ER_DUP_ENTRY/.test(rt) && /status: 409/.test(rt));
+  ok('Z9 bentroknya berkode supaya layar bisa menanganinya', rt.includes("code: 'VERSI_BENTROK'"));
+  // Yang bukan dua-duanya WAJIB naik apa adanya — menelan galat tak dikenal
+  // membuat kegagalan tulis terbaca seperti sukses.
+  ok('Z10 galat lain dilempar ulang', /\n\s*throw e;\n/.test(rt));
+
+  const kj = readFileSync('lib/data/kinerja.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('Z11 entity kunci punya nama sendiri', kj.includes("KINERJA_VERSI_ENTITY = 'kinerja_versi_ssk'"));
+  // L69-a: FOR UPDATE pada baris lock yang belum ada tidak mengunci apa pun.
+  ok('Z12 kunci lewat acquireBludLock (INSERT IGNORE dulu)',
+     /kunciVersiSsk[\s\S]{0,200}?acquireBludLock\(tx, KINERJA_VERSI_ENTITY/.test(kj));
+  // Kuncinya per (tahun, sumber) — bukan per versi, karena MAX(versi_seq)
+  // pertanyaannya berlingkup seluruh versi sumber itu.
+  ok('Z13 kuncinya per (tahun, sumber)',
+     /kinerjaVersiKey = \(tahun: string, sumber: SumberSSK\) => `\$\{tahun\}:\$\{sumber\}`/.test(kj));
+
+  // saveSskBatch: pagar locked_at ikut masuk transaksi (A6 lewat pintu kedua).
+  const iSave = kj.indexOf('export async function saveSskBatch(');
+  const badanSave = kj.slice(iSave, kj.indexOf('\n}\n', iSave));
+  const iTxSave = badanSave.indexOf('withTransaction(async ({ tx, conn })');
+  const iPagar = badanSave.indexOf('MAX(locked_at)');
+  ok('Z14 pagar locked_at dibaca di dalam transaksi', iPagar > iTxSave && iTxSave >= 0,
+     `tx ${iTxSave}, pagar ${iPagar}`);
+  ok('Z15 dan mengunci barisnya', /MAX\(locked_at\)[\s\S]{0,220}?FOR UPDATE/.test(badanSave));
+  ok('Z16 penolakannya tetap menyebut versinya',
+     /Versi \$\{versiTipe\}-\$\{versiSeq\} sudah dikunci/.test(badanSave));
+  // Kalau ada yang mengembalikannya ke luar transaksi, `sql` biasa akan muncul
+  // lagi di badan fungsi ini.
+  ok('Z17 tidak ada lagi kueri lepas di saveSskBatch', !/\bawait sql`/.test(badanSave));
+
+  const st = readFileSync('app/(dashboard)/kinerja/_tabs/SskTab.tsx', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('Z18 layar menangani VERSI_BENTROK', st.includes("=== 'VERSI_BENTROK'"));
+  // Daftar versi di layar SUDAH basi begitu bentrok terjadi — menyuruh orang
+  // memuat ulang untuk sesuatu yang bisa kita kerjakan sendiri itu melempar
+  // pekerjaan.
+  const iBentrok = st.indexOf("=== 'VERSI_BENTROK'");
+  const potong = st.slice(iBentrok, iBentrok + 700);
+  ok('Z19 dan menyegarkan daftar versinya sendiri',
+     potong.includes('fetchVersiList()') && potong.includes('refetchSsk()'));
+
+  const sk = readFileSync('docs/schema-mysql.sql', 'utf8');
+  // Penjaga terakhirnya ADA di migration-022 tapi tidak pernah tertulis di skema
+  // acuan, jadi basis data yang lahir dari berkas ini berdiri tanpanya.
+  ok('Z20 skema acuan mendeklarasikan uq_ks_canonical_versi',
+     /UNIQUE KEY uq_ks_canonical_versi \(tahun, sumber, canonical_id, versi_tipe, versi_seq\)/.test(sk));
+  ok('Z21 ada migrasi untuk basis data yang sudah terlanjur',
+     existsSync('docs/migrations/migration-kinerja-uq-versi.sql'));
+}
+
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);
 if (gagal.length) { gagal.forEach(g => console.log('  - ' + g)); process.exit(1); }

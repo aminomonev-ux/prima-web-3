@@ -1,0 +1,40 @@
+-- migration-kinerja-uq-versi.sql
+-- Temuan A6 (susulan): UNIQUE KEY penjaga "satu canonical_id sekali per versi"
+-- ternyata TIDAK ADA di basis data, dan tidak pernah tertulis di skema acuan.
+--
+-- Ia diperkenalkan migration-022 langkah 3, tapi migration itu juga membawa dua
+-- UPDATE backfill di depannya — jadi ia berjalan sekali di satu lingkungan lalu
+-- tidak pernah dijalankan lagi di lingkungan lain, dan `docs/schema-mysql.sql`
+-- (acuan yang WAJIB dibaca sebelum menyebut kolom/tabel) tidak pernah ikut
+-- diperbarui. Akibatnya basis data yang lahir dari skema itu berdiri TANPA
+-- penjaganya, tanpa satu gejala pun.
+--
+-- Yang dijaganya bukan kerapian: tanpa indeks ini dua permintaan "Buat
+-- Perubahan" yang berbarengan sama-sama menjawab "berikutnya PERUBAHAN-1" dan
+-- KEDUANYA lahir. Dibuktikan di MySQL nyata lewat
+-- `node scripts/test-kinerja-race-versi.mjs` sebelum indeks ini dipasang:
+-- dua baris PERUBAHAN-1 untuk canonical_id yang sama, nol galat.
+--
+-- Kunci (tahun, sumber) di `buatVersiPerubahan` sudah membuat itu nyaris
+-- mustahil, tapi indeks ini jaminan TERAKHIRNYA — pagar aplikasi hanya berlaku
+-- bagi yang lewat aplikasi.
+--
+-- PERIKSA DULU sebelum menjalankan (harus memulangkan 0 baris):
+--
+--   SELECT tahun, sumber, canonical_id, versi_tipe, versi_seq, COUNT(*) AS n
+--   FROM kinerja_ssk
+--   GROUP BY tahun, sumber, canonical_id, versi_tipe, versi_seq
+--   HAVING n > 1;
+--
+-- Kalau ada isinya, itu duplikat yang sudah terlanjur lahir — putuskan dulu
+-- baris mana yang benar, jangan biarkan ALTER ini yang memilihkan.
+--
+-- Aman dijalankan pada basis data yang sudah punya indeksnya? TIDAK — MySQL
+-- menjawab ER_DUP_KEYNAME (1061). Periksa dulu:
+--
+--   SHOW INDEX FROM kinerja_ssk WHERE Key_name = 'uq_ks_canonical_versi';
+--
+-- Referensi: docs/AUDIT-kinerja-2026-09-04.md §A6, migration-022 langkah 3.
+
+ALTER TABLE kinerja_ssk
+  ADD UNIQUE KEY uq_ks_canonical_versi (tahun, sumber, canonical_id, versi_tipe, versi_seq);

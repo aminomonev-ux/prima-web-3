@@ -290,6 +290,17 @@ export default function SskTab({
         setSskVersi({ tipe: 'PERUBAHAN', seq: newSeq });
         await fetchVersiList();
         refetchSsk();
+      } else if ((d as unknown as { code?: string }).code === 'VERSI_BENTROK') {
+        // A6: dua "Buat Perubahan" berbarengan, yang kalah ditolak `uq_ks_canonical_versi`.
+        // Daftar versi di layar SUDAH basi begitu itu terjadi, jadi disegarkan di
+        // sini — menyuruh orang "muat ulang halaman" untuk sesuatu yang bisa kita
+        // kerjakan sendiri itu melempar pekerjaan.
+        toast.error(
+          `${d.message} Daftar versinya disegarkan — periksa dulu, baru buat lagi kalau memang perlu.`,
+          { duration: 9000 },
+        );
+        await fetchVersiList();
+        refetchSsk();
       } else toast.error(d.message || 'Gagal membuat versi baru');
     } catch { toast.error('Gagal membuat versi baru'); }
   }

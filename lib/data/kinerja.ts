@@ -1,4 +1,5 @@
-import { sql, bulkInsert, withTransaction } from './db';
+import { sql, bulkInsert, withTransaction, type TxSql } from './db';
+import { acquireBludLock } from './locks';
 import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simpan';
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '@/lib/kinerja/master-nama';
@@ -459,6 +460,45 @@ export async function getKinerjaVersion(entity: string, keyId: string): Promise<
   return Number(rows[0]?.version ?? 0);
 }
 
+// ─── Kunci penerbitan VERSI SSK — satu baris per (tahun, sumber) ──────────────
+//
+// "PERUBAHAN ke berapa berikutnya" (`MAX(versi_seq)`) itu pertanyaan berlingkup
+// SELURUH versi satu sumber di satu tahun, bukan satu versi. Kunci per-versi yang
+// dipakai `saveSskBatch` (`kinerja_ssk:{tahun}:{sumber}:{tipe}:{seq}`) tidak
+// menjaganya — dua permintaan "Buat Perubahan" memegang kunci yang berbeda, atau
+// tidak memegang apa pun, sebab versi yang akan dibuat memang belum ada (L84).
+//
+// WAJIB diambil sebagai pernyataan PERTAMA transaksi: pada REPEATABLE READ
+// snapshot baca-konsisten lahir di SELECT BIASA yang pertama, jadi mengambilnya
+// belakangan cuma menjaga jawaban yang sudah terlanjur dibaca dari foto lama (L55).
+//
+// INSERT IGNORE dulu (`acquireBludLock`): `SELECT … FOR UPDATE` pada baris lock
+// yang BELUM ADA tidak mengunci apa pun (L69-a), dan untuk (tahun, sumber) yang
+// belum pernah menerbitkan versi barisnya memang belum ada.
+export const KINERJA_VERSI_ENTITY = 'kinerja_versi_ssk';
+
+export const kinerjaVersiKey = (tahun: string, sumber: SumberSSK) => `${tahun}:${sumber}`;
+
+export async function kunciVersiSsk(tx: TxSql, tahun: string, sumber: SumberSSK): Promise<void> {
+  await acquireBludLock(tx, KINERJA_VERSI_ENTITY, kinerjaVersiKey(tahun, sumber));
+}
+
+/** Versi sumber yang diminta tidak ada / kosong — diterjemahkan jadi 404 di route. */
+export class KinerjaVersiSumberKosongError extends Error {
+  constructor(public tipe: string, public seq: number) {
+    super(`Versi source (${tipe} seq=${seq}) tidak ditemukan / kosong.`);
+    this.name = 'KinerjaVersiSumberKosongError';
+  }
+}
+
+/** Dua "Buat Perubahan" bertabrakan di `uq_ks_canonical_versi` — 409, bukan 500. */
+export class KinerjaVersiBentrokError extends Error {
+  constructor(public seq: number) {
+    super(`PERUBAHAN-${seq} baru saja dibuat pengguna lain untuk sumber ini.`);
+    this.name = 'KinerjaVersiBentrokError';
+  }
+}
+
 // ─── Pagar simpan: replace-all tidak boleh menghapus tanpa ada yang menyatakan ──
 //
 // KEENAM jalur simpan modul ini (SSK, Realisasi, Rekening, Nomenklatur, CRR,
@@ -597,15 +637,6 @@ export async function saveSskBatch(
   // lain TIDAK ke-touch. Generate canonical_id baru kalau row tidak punya.
 
   // Cek versi locked dulu (defense)
-  const lockRows = await sql`
-    SELECT MAX(locked_at) AS locked_at FROM kinerja_ssk
-    WHERE tahun = ${tahun} AND sumber = ${sumber}
-      AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
-  ` as { locked_at: unknown }[];
-  if (lockRows[0]?.locked_at) {
-    throw new Error(`Versi ${versiTipe}-${versiSeq} sudah dikunci, tidak bisa diubah.`);
-  }
-
   const lockEntity = 'kinerja_ssk';
   const lockKey = `${tahun}:${sumber}:${versiTipe}:${versiSeq}`;
 
@@ -619,11 +650,25 @@ export async function saveSskBatch(
       if (current !== expectedVersion) throw new KinerjaVersionConflictError(expectedVersion, current);
     }
 
+    // A6: pagar "versi sudah dikunci" dibaca DI DALAM transaksi, di bawah kunci
+    // baris yang akan dihapus. Dulu `sql` biasa sebelum transaksi dibuka, jadi
+    // "Buat Perubahan" yang mengunci versi ini di sela itu terlewat — dan karena
+    // Simpan itu DELETE-lalu-tulis-ulang, barisnya lahir kembali TANPA locked_at:
+    // versi yang sudah punya turunan diam-diam terbuka lagi untuk disunting.
+    //
+    // FOR UPDATE-nya bukan hiasan: ia yang membuat "Buat Perubahan" (yang juga
+    // mengunci baris-baris ini) dan Simpan tidak bisa berjalan bersamaan.
+    // Urutannya seragam — blud_locks dulu, baris kinerja_ssk sesudahnya — jadi
+    // tidak ada lingkaran tunggu.
     const [ada] = await tx`
-      SELECT COUNT(*) AS n FROM kinerja_ssk
+      SELECT COUNT(*) AS n, MAX(locked_at) AS locked_at FROM kinerja_ssk
       WHERE tahun = ${tahun} AND sumber = ${sumber}
         AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
-    ` as { n: unknown }[];
+      FOR UPDATE
+    ` as { n: unknown; locked_at: unknown }[];
+    if (ada?.locked_at) {
+      throw new Error(`Versi ${versiTipe}-${versiSeq} sudah dikunci, tidak bisa diubah.`);
+    }
     pagarReplace(`SSK ${sumber} ${versiTipe}-${versiSeq}`, Number(ada?.n ?? 0), rows.length, force);
 
     await tx`

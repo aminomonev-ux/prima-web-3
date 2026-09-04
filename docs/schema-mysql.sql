@@ -343,6 +343,13 @@ CREATE TABLE IF NOT EXISTS kinerja_ssk (
   urut        INT           NOT NULL DEFAULT 0,
   updated_by  INT           DEFAULT NULL,
   updated_at  DATETIME      NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+  -- Satu canonical_id hanya boleh muncul SEKALI per versi. Jaminan terakhir
+  -- kalau dua "Buat Perubahan" berbarengan sama-sama menjawab "berikutnya
+  -- PERUBAHAN-1" — pagar aplikasi hanya berlaku bagi yang lewat aplikasi.
+  -- Diperkenalkan migration-022 langkah 3 tapi tidak pernah tertulis di sini,
+  -- jadi basis data yang lahir dari berkas ini berdiri tanpa penjaganya
+  -- (migration-kinerja-uq-versi.sql memasangnya di yang sudah terlanjur).
+  UNIQUE KEY uq_ks_canonical_versi (tahun, sumber, canonical_id, versi_tipe, versi_seq),
   FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
   FOREIGN KEY (parent_versi_id) REFERENCES kinerja_ssk(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
