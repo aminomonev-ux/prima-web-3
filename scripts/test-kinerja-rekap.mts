@@ -16,6 +16,7 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
+import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '../lib/kinerja/master-nama';
 import { nolkanBaris, aktifkanBaris, sudahDinolkan,
   perluPeriksaHapus, pesanHapusSsk, hitungDinolkan } from '../lib/kinerja/nol-kan';
 import type { RealRow, SskRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
@@ -957,6 +958,90 @@ console.log('\n-- W. Route nullify dibuang, jejaknya pindah -------------------'
     ok(`W12 ${berkas.split('/').pop()} tidak menyebut endpoint nullify`,
        !t.includes('ssk/nullify'));
   }
+}
+
+console.log('\n-- X. A3: ganti nama master memindahkan anaknya -----------------');
+
+// Hierarki master disambung TEKS NAMA (program_ref/kegiatan_ref/subkegiatan_ref
+// berisi NAMA induknya), bukan foreign key. `UPDATE ... SET nama = ?` sendirian
+// membuat setiap anak menunjuk nama yang sudah tidak ada, dan akibatnya SENYAP:
+// cabangnya lenyap dari dropdown berantai tanpa satu galat pun.
+{
+  // Tipe yang namanya dipikul anak.
+  ok('X1 program punya anak',      punyaAnak('program'));
+  ok('X2 kegiatan punya anak',     punyaAnak('kegiatan'));
+  ok('X3 subkegiatan punya anak',  punyaAnak('subkegiatan'));
+  // Daun - tidak ada yang menunjuk namanya di kinerja_master. Kolom teks di
+  // kinerja_ssk/kinerja_rekening memang memuatnya, tapi itu SALINAN hasil
+  // Inject Rekening, bukan penunjuk hidup (keputusan yang sama di deleteMasterRow).
+  ok('X4 uraian_ssk daun',         !punyaAnak('uraian_ssk'));
+  ok('X5 sumber_anggaran daun',    !punyaAnak('sumber_anggaran'));
+
+  // Tanpa anak tidak ada yang dipindahkan, jadi tidak ada yang bisa nyasar -
+  // menolaknya cuma menghalangi pembetulan salah ketik yang tidak merusak.
+  eq('X6 tanpa anak: selalu boleh',              alasanTolakGantiNama(0, 3, 2), null);
+  eq('X7 punya anak, nama unik: boleh',          alasanTolakGantiNama(5, 0, 0), null);
+  // Saudara masih memikul nama LAMA -> kaskade ikut memindahkan anak MILIK DIA.
+  eq('X8 nama lama kembar: DITOLAK',             alasanTolakGantiNama(5, 1, 0), 'lama-kembar');
+  // Sesudah ganti nama, anak baris ini dan anak saudara bernama-baru itu
+  // menunjuk teks yang sama dan tidak bisa dibedakan lagi.
+  eq('X9 nama baru sudah dipakai: DITOLAK',      alasanTolakGantiNama(5, 0, 1), 'baru-kembar');
+  // Kalau dua-duanya kembar, yang lama diperiksa lebih dulu: ia yang membuat
+  // kaskadenya merusak SEKARANG, bukan nanti.
+  eq('X10 dua-duanya kembar: nama lama didahulukan', alasanTolakGantiNama(5, 1, 1), 'lama-kembar');
+
+  const pLama = pesanTolakGantiNama('lama-kembar', 'PROGRAM A', 'PROGRAM B', 7);
+  ok('X11 pesan lama-kembar menyebut nama lamanya', pLama.includes('"PROGRAM A"'));
+  ok('X12 pesan lama-kembar menyebut jumlah anaknya', pLama.includes('7 baris'));
+  ok('X13 pesan lama-kembar menawarkan jalan keluar', pLama.includes('Samakan dulu'));
+
+  const pBaru = pesanTolakGantiNama('baru-kembar', 'PROGRAM A', 'PROGRAM B', 7);
+  ok('X14 pesan baru-kembar menyebut nama barunya', pBaru.includes('"PROGRAM B"'));
+  ok('X15 pesan baru-kembar menyebut jumlah anaknya', pBaru.includes('7 baris'));
+  ok('X16 pesan baru-kembar menyuruh pakai nama lain', pBaru.includes('Pakai nama lain'));
+
+  // -- Statis: kaskadenya benar-benar ada, atomik, dan tidak melebar ---------
+  const kj = readFileSync('lib/data/kinerja.ts', 'utf8');
+  const iFn = kj.indexOf('export async function updateMasterRow(');
+  const badan = kj.slice(iFn, kj.indexOf('\n}\n', iFn));
+
+  ok('X17 dibungkus withTransaction', /await withTransaction\(async \(\{ tx \}\)/.test(badan));
+  // Nama lama dibaca di bawah kunci yang sama dengan tulisannya - tanpa itu dua
+  // penggantian beruntun saling melewatkan dan kaskade kedua mencari nama yang
+  // sudah tidak ada (L55).
+  ok('X18 nama lama dibaca FOR UPDATE', /FROM kinerja_master WHERE id = \$\{id\} FOR UPDATE/.test(badan));
+  ok('X19 memakai aturan dari lib, bukan disalin',
+     badan.includes('alasanTolakGantiNama(') && badan.includes('punyaAnak(tipe)'));
+  // TIGA kolom ref, tiga cabang UPDATE. Kalau salah satu terlewat, satu tingkat
+  // hierarki tetap putus - dan yang terlewat selalu yang tidak sedang dilihat (L69).
+  eq('X20 ketiga kolom ref ikut dikaskade',
+     (badan.match(/SET (program_ref|kegiatan_ref|subkegiatan_ref) = \$\{nama\}/g) || []).length, 3);
+  // Kaskadenya HANYA di kinerja_master. Kolom teks di kinerja_ssk &
+  // kinerja_rekening sengaja tidak disentuh - itu salinan, bukan penunjuk.
+  ok('X21 kinerja_ssk TIDAK ikut dikaskade', !badan.includes('UPDATE kinerja_ssk'));
+  ok('X22 kinerja_rekening TIDAK ikut dikaskade', !badan.includes('UPDATE kinerja_rekening'));
+  // Nama kolom TIDAK dirangkai ke dalam SQL - tiga cabang eksplisit.
+  ok('X23 tidak ada nama kolom yang dirangkai ke SQL', !/SET \$\{/.test(badan));
+  // Ganti nama ke nama yang sama = tidak melakukan apa pun, bukan kaskade sia-sia.
+  ok('X24 nama tidak berubah -> berhenti awal', /if \(namaLama === nama\) return/.test(badan));
+
+  // -- Statis: route & layar ------------------------------------------------
+  const rt = readFileSync('app/api/kinerja/master/[id]/route.ts', 'utf8');
+  ok('X25 route menerjemahkan NAMA_KEMBAR jadi 400', rt.includes("code: 'NAMA_KEMBAR'"));
+  // Nama LAMA ikut dicatat: "id=42 jadi X" tidak memberi tahu X itu tadinya apa,
+  // dan justru itu yang dicari saat ada yang mengeluh cabangnya hilang.
+  ok('X26 audit mencatat nama lamanya', rt.includes('hasil.nama_lama'));
+  ok('X27 audit mencatat jumlah anak yang dipindah', rt.includes('hasil.anak_dipindah'));
+
+  // Komentar dibuang dulu, dan yang dicocokkan INTERPOLASINYA: komentar di atas
+  // baris itu memuat frasa "ikut dipindah" juga, jadi kutipan telanjang tetap
+  // cocok walau kalimatnya sudah berhenti menyebut angkanya (L82c).
+  const mt = readFileSync('app/(dashboard)/kinerja/_tabs/MasterTab.tsx', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('X28 layar menyebut BERAPA anak yang ikut dipindah',
+     /\$\{ikut\} baris di bawahnya ikut dipindah/.test(mt));
+  ok('X28b angkanya dibaca dari balasan server', mt.includes('anak_dipindah'));
+  ok('X29 layar menangani NAMA_KEMBAR', mt.includes("=== 'NAMA_KEMBAR'"));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

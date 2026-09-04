@@ -1,6 +1,7 @@
 import { sql, bulkInsert, withTransaction } from './db';
 import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simpan';
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
+import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '@/lib/kinerja/master-nama';
 import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
 export type SumberSSK = 'GAJI' | 'BLUD' | 'HARLEP' | 'PROMKES' | 'SARPRAS' | 'OBAT' | 'PEMELIHARAAN' | 'PEMBANGUNAN';
@@ -114,10 +115,96 @@ export class KinerjaMasterPunyaAnakError extends Error {
   }
 }
 
-export async function updateMasterRow(id: number, nama: string) {
-  const res = (await sql`UPDATE kinerja_master SET nama = ${nama} WHERE id = ${id}`) as unknown as Array<{ affectedRows: number }>;
-  // L53: hasil non-SELECT datang sebagai Array<{affectedRows}>, bukan object.
-  if (Number(res[0]?.affectedRows ?? 0) === 0) throw new KinerjaMasterTidakAdaError();
+// A3: kaskade ganti nama ditolak karena namanya dipikul lebih dari satu baris.
+export class KinerjaMasterNamaKembarError extends Error {
+  constructor(pesan: string) {
+    super(pesan);
+    this.name = 'KinerjaMasterNamaKembarError';
+  }
+}
+
+export interface HasilUbahMaster {
+  nama_lama:     string;
+  tipe:          MasterTipe;
+  anak_dipindah: number;
+}
+
+/**
+ * Ganti nama baris master, DAN pindahkan anaknya (A3).
+ *
+ * Hierarki master disambung TEKS NAMA, bukan foreign key, jadi `UPDATE … SET
+ * nama = ?` sendirian membuat setiap anak menunjuk nama yang sudah tidak ada.
+ * Akibatnya senyap: cabangnya lenyap dari dropdown berantai di tab Rekening
+ * tanpa satu galat pun.
+ *
+ * Yang dikaskade HANYA penunjuk hidup di `kinerja_master`. Kolom
+ * program/kegiatan/subkegiatan di `kinerja_ssk` dan `kinerja_rekening` SENGAJA
+ * tidak disentuh — isinya salinan teks hasil Inject Rekening, dan baris di sana
+ * tetap utuh serta terbaca walau masternya berganti nama. Keputusan yang sama
+ * sudah ditulis di komentar `deleteMasterRow`.
+ *
+ * Satu transaksi: kalau namanya berganti tapi kaskadenya gagal, anaknya
+ * menggantung — persis keadaan yang sedang diperbaiki.
+ */
+export async function updateMasterRow(id: number, nama: string): Promise<HasilUbahMaster> {
+  return await withTransaction(async ({ tx }) => {
+    // FOR UPDATE: nama lama dibaca di bawah kunci yang sama dengan tulisannya.
+    // Tanpa itu dua penggantian nama beruntun bisa saling melewatkan, dan
+    // kaskade yang kedua mencari nama yang sudah tidak ada (L55).
+    const [row] = await tx`
+      SELECT nama, tipe, tahun FROM kinerja_master WHERE id = ${id} FOR UPDATE
+    ` as { nama: string; tipe: MasterTipe; tahun: string }[];
+    if (!row) throw new KinerjaMasterTidakAdaError();
+
+    const { nama: namaLama, tipe, tahun } = row;
+    if (namaLama === nama) return { nama_lama: namaLama, tipe, anak_dipindah: 0 };
+
+    if (!punyaAnak(tipe)) {
+      await tx`UPDATE kinerja_master SET nama = ${nama} WHERE id = ${id}`;
+      return { nama_lama: namaLama, tipe, anak_dipindah: 0 };
+    }
+
+    // Tiga cabang eksplisit, BUKAN nama kolom yang dirangkai ke dalam SQL:
+    // kolomnya memang berasal dari enum yang sudah divalidasi, tapi merangkai
+    // nama kolom adalah bentuk yang harus dibaca dua kali tiap kali disunting.
+    // `deleteMasterRow` tepat di atas sudah bercabang begini.
+    const [h] = tipe === 'program'
+      ? await tx`
+          SELECT
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND program_ref=${namaLama}) AS anak,
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='program' AND nama=${namaLama} AND id<>${id}) AS sisa_lama,
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='program' AND nama=${nama}     AND id<>${id}) AS sisa_baru
+        ` as { anak: number; sisa_lama: number; sisa_baru: number }[]
+      : tipe === 'kegiatan'
+      ? await tx`
+          SELECT
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND kegiatan_ref=${namaLama}) AS anak,
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='kegiatan' AND nama=${namaLama} AND id<>${id}) AS sisa_lama,
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='kegiatan' AND nama=${nama}     AND id<>${id}) AS sisa_baru
+        ` as { anak: number; sisa_lama: number; sisa_baru: number }[]
+      : await tx`
+          SELECT
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND subkegiatan_ref=${namaLama}) AS anak,
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='subkegiatan' AND nama=${namaLama} AND id<>${id}) AS sisa_lama,
+            (SELECT COUNT(*) FROM kinerja_master WHERE tahun=${tahun} AND tipe='subkegiatan' AND nama=${nama}     AND id<>${id}) AS sisa_baru
+        ` as { anak: number; sisa_lama: number; sisa_baru: number }[];
+
+    const anak = Number(h?.anak ?? 0);
+    const alasan = alasanTolakGantiNama(anak, Number(h?.sisa_lama ?? 0), Number(h?.sisa_baru ?? 0));
+    if (alasan) throw new KinerjaMasterNamaKembarError(pesanTolakGantiNama(alasan, namaLama, nama, anak));
+
+    await tx`UPDATE kinerja_master SET nama = ${nama} WHERE id = ${id}`;
+    if (anak > 0) {
+      if (tipe === 'program') {
+        await tx`UPDATE kinerja_master SET program_ref = ${nama} WHERE tahun=${tahun} AND program_ref=${namaLama}`;
+      } else if (tipe === 'kegiatan') {
+        await tx`UPDATE kinerja_master SET kegiatan_ref = ${nama} WHERE tahun=${tahun} AND kegiatan_ref=${namaLama}`;
+      } else {
+        await tx`UPDATE kinerja_master SET subkegiatan_ref = ${nama} WHERE tahun=${tahun} AND subkegiatan_ref=${namaLama}`;
+      }
+    }
+    return { nama_lama: namaLama, tipe, anak_dipindah: anak };
+  });
 }
 
 type MasterRingkas = { nama: string; tipe: MasterTipe; tahun: string };

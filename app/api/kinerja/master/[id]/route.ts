@@ -3,7 +3,7 @@ import { getSession } from '@/lib/security/auth';
 import { safeInt } from '@/lib/data/db';
 import {
   updateMasterRow, deleteMasterRow,
-  KinerjaMasterTidakAdaError, KinerjaMasterPunyaAnakError,
+  KinerjaMasterTidakAdaError, KinerjaMasterPunyaAnakError, KinerjaMasterNamaKembarError,
 } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, MasterUpdateBodySchema } from '@/lib/data/kinerja-schemas';
@@ -31,13 +31,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
   const { nama } = parsed.data;
 
+  let hasil;
   try {
-    await updateMasterRow(id, nama);
+    hasil = await updateMasterRow(id, nama);
   } catch (e) {
     // T12: id yang tidak ada dulu tetap dijawab ok:true — pemanggil tidak pernah
     // tahu perubahannya tidak mendarat di baris mana pun.
     if (e instanceof KinerjaMasterTidakAdaError) {
       return NextResponse.json({ ok: false, message: e.message }, { status: 404 });
+    }
+    // A3: kaskadenya akan nyasar ke anak baris lain. Pesannya diteruskan apa
+    // adanya — ia yang menjelaskan apa yang harus dibereskan dulu, bentuk yang
+    // sama dengan KinerjaMasterPunyaAnakError di DELETE.
+    if (e instanceof KinerjaMasterNamaKembarError) {
+      return NextResponse.json({ ok: false, code: 'NAMA_KEMBAR', message: e.message }, { status: 400 });
     }
     throw e;
   }
@@ -47,10 +54,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     eventType: 'KINERJA_SAVE_MASTER',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Update master id=${id}: "${nama}"`,
+    // A3: nama LAMA ikut dicatat, dan berapa anak yang ikut dipindah. Tanpa nama
+    // lamanya, jejaknya tidak bisa dibaca ulang — "id=42 jadi X" tidak memberi
+    // tahu X itu tadinya apa, dan justru itu yang dicari saat ada yang mengeluh
+    // cabangnya hilang.
+    detail:    `Update master ${hasil.tipe} id=${id}: "${hasil.nama_lama}" -> "${nama}"`
+      + (hasil.anak_dipindah > 0 ? ` (${hasil.anak_dipindah} baris di bawahnya ikut dipindah)` : ''),
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, anak_dipindah: hasil.anak_dipindah });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

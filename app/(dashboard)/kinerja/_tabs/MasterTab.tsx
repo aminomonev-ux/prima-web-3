@@ -134,10 +134,20 @@ export default function MasterTab({
         body: JSON.stringify({ nama: masterInput.trim() }),
       });
       if (d.ok) {
-        toast.success('Berhasil diperbarui');
+        // A3: berapa anak yang ikut dipindah DISEBUTKAN. Ganti nama induk
+        // memindahkan cabang di bawahnya, dan perubahan sebesar itu tidak
+        // pantas lewat dengan pesan "Berhasil diperbarui" saja.
+        const ikut = (d as unknown as { anak_dipindah?: number }).anak_dipindah ?? 0;
+        toast.success(ikut > 0
+          ? `Nama diperbarui — ${ikut} baris di bawahnya ikut dipindah`
+          : 'Berhasil diperbarui');
         setMasterInput(''); setMasterEditId(null);
         fetchMaster(masterTipe);
         onMasterOptsRefresh();
+      } else if ((d as unknown as { code?: string }).code === 'NAMA_KEMBAR') {
+        // Pesannya menjelaskan apa yang harus dibereskan dulu, jadi ia butuh
+        // waktu baca lebih lama dari toast biasa.
+        toast.error(d.message || 'Nama itu tidak bisa dipakai', { duration: 9000 });
       } else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
