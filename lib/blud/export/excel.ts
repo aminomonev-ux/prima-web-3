@@ -6,6 +6,13 @@
 import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-export'
 import type ExcelJS from 'exceljs'
 import type { ExportRow } from '@/lib/blud/cetak-data'
+import { arahDelta, HEX_NAIK, HEX_TURUN } from '@/lib/blud/export/warna-delta'
+
+/** Warna teks sel delta dalam bentuk ARGB exceljs, atau `null` kalau tak berwarna. */
+function warnaDelta(namaKolom: string | undefined, nilai: unknown): string | null {
+  const arah = namaKolom ? arahDelta(namaKolom, nilai) : null
+  return arah === 'naik' ? `FF${HEX_NAIK}` : arah === 'turun' ? `FF${HEX_TURUN}` : null
+}
 
 export interface ExportExcelArgs {
   menu:    string
@@ -78,7 +85,8 @@ export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
     for (let c = 0; c < columns.length; c++) {
       const cell = r.getCell(c + 1)
       const isNumCol = numberColIdx.has(c)
-      cell.font = { size: 10 }
+      const argb = warnaDelta(columns[c], rowData[c])
+      cell.font = { size: 10, ...(argb ? { color: { argb } } : {}) }
       cell.alignment = isNumCol
         ? { horizontal: 'right' }
         : { horizontal: 'left', vertical: 'top', wrapText: true }

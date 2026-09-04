@@ -7,6 +7,7 @@
 // Format: A4 landscape, header judul, tabel autoTable, footer page number.
 
 import type { ExportRow } from '@/lib/blud/cetak-data'
+import { arahDelta, RGB_NAIK, RGB_TURUN } from '@/lib/blud/export/warna-delta'
 
 export interface ExportPdfArgs {
   menu:    string
@@ -77,6 +78,15 @@ export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
     headStyles: { fillColor: [24, 85, 187], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     margin: { left: 10, right: 10 },
+    // Hijau/merah kolom delta, sepadan pratinjau di layar. Nilainya dibaca dari
+    // `exportRows` (angka aslinya), bukan dari sel yang sudah jadi teks berformat.
+    didParseCell: (data) => {
+      if (data.section !== 'body') return
+      const arah = arahDelta(columns[data.column.index] ?? '', exportRows[data.row.index]?.[data.column.index])
+      if (!arah) return
+      data.cell.styles.textColor = arah === 'naik' ? RGB_NAIK : RGB_TURUN
+      data.cell.styles.fontStyle = 'bold'
+    },
     didDrawPage: (data) => {
       // Footer: page number
       const pageCount = doc.getNumberOfPages()

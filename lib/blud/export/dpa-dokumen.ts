@@ -21,6 +21,7 @@ import { TIPE_LABEL } from '@/lib/blud/format'
 import { isLeafMode } from '@/lib/blud/recalc'
 import { uraiGeser, URAIAN_NOL } from '@/lib/blud/urai-geser'
 import { totalMutasi, type MutasiInput } from '@/lib/blud/mutasi'
+import { HEX_NAIK, HEX_TURUN } from '@/lib/blud/export/warna-delta'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
 const INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO'
@@ -30,6 +31,9 @@ const GARIS_ISI = '..............................'
 
 const BARIS_HEADER = 6
 const BARIS_DATA_1 = 7
+
+const WARNA_NAIK = `FF${HEX_NAIK}`
+const WARNA_TURUN = `FF${HEX_TURUN}`
 
 export interface PejabatDokumen {
   nama: string
@@ -334,6 +338,12 @@ const KOLOM_PERGESERAN = [
 ]
 const LEBAR_PERGESERAN = [26, 46, 8, 10, 16, 18, 8, 16, 18, 16, 16, 18, 22, 24, 10, 26]
 
+/** Letak tiga kolom delta, dicari dari namanya — bukan angka yang diam waktu
+ *  kolom lain disisipkan di depannya. */
+const KOL_BERTAMBAH = KOLOM_PERGESERAN.indexOf('Bertambah') + 1
+const KOL_BERKURANG = KOLOM_PERGESERAN.indexOf('Berkurang') + 1
+const KOL_SELISIH = KOLOM_PERGESERAN.indexOf('Selisih') + 1
+
 export async function buatWorkbookPergeseran(
   args: UnduhDokumenArgs<PergeseranBaris>,
 ): Promise<ExcelJS.Workbook> {
@@ -371,21 +381,31 @@ export async function buatWorkbookPergeseran(
     // turunannya memang angka yang benar, dan dokumen yang mengosongkannya akan
     // membuat baris totalnya tidak berjumlah.
     const u = urai.get(r.row_id) ?? URAIAN_NOL
-    baris.getCell(10).value = u.bertambah || ''
-    baris.getCell(11).value = u.berkurang || ''
+    baris.getCell(KOL_BERTAMBAH).value = u.bertambah || ''
+    baris.getCell(KOL_BERKURANG).value = u.berkurang || ''
     // Selisih = pergeseran − jumlah, sesuai recalcPergeseranJumlah().
-    baris.getCell(12).value = { formula: `I${nomor}-F${nomor}`, result: r.bertambah_berkurang }
+    baris.getCell(KOL_SELISIH).value = { formula: `I${nomor}-F${nomor}`, result: r.bertambah_berkurang }
+
+    // Hijau/merah seperti di layar Cetak. Nol dibiarkan hitam — mewarnai baris
+    // yang tidak bergeser membuat yang bergeser tenggelam di antaranya.
+    const bb = Number(r.bertambah_berkurang ?? 0)
+    const warna = new Map<number, string>()
+    if (u.bertambah) warna.set(KOL_BERTAMBAH, WARNA_NAIK)
+    if (u.berkurang) warna.set(KOL_BERKURANG, WARNA_TURUN)
+    if (bb > 0) warna.set(KOL_SELISIH, WARNA_NAIK)
+    else if (bb < 0) warna.set(KOL_SELISIH, WARNA_TURUN)
     baris.getCell(13).value = sanitizeCell(r.penanggung_jawab ?? '')
     baris.getCell(14).value = sanitizeCell(r.keterangan ?? '')
     baris.getCell(15).value = TIPE_LABEL[r.tipe_baris] ?? ''
     baris.getCell(16).value = sanitizeCell(r.anggaran_key ?? '')
 
     hiasBarisData(baris, {
-      kolomAngka: [3, 5, 6, 7, 8, 9, 10, 11, 12],
+      kolomAngka: [3, 5, 6, 7, 8, 9, KOL_BERTAMBAH, KOL_BERKURANG, KOL_SELISIH],
       kolomVolume: [3, 7],
       kolTerakhir: KOLOM_PERGESERAN.length,
       indent: pohon.kedalaman.get(r.row_id) ?? 0,
       tebal: punyaAnak,
+      warna,
     })
   }
 
@@ -469,14 +489,21 @@ function hiasBarisData(
     kolTerakhir: number
     indent: number
     tebal: boolean
+    /** Kolom → warna teks. Diterapkan DI SINI karena fungsi ini menulis ulang
+     *  `font` tiap sel; mewarnai sebelum memanggilnya akan tertimpa diam-diam. */
+    warna?: Map<number, string>
   },
 ): void {
   const angka = new Set(opsi.kolomAngka)
   const volume = new Set(opsi.kolomVolume)
   for (let c = 1; c <= opsi.kolTerakhir; c++) {
     const sel = baris.getCell(c)
+    const argb = opsi.warna?.get(c)
     // Monospace untuk angka keuangan — aturan design system.
-    sel.font = { size: 10, bold: opsi.tebal, name: angka.has(c) ? 'Consolas' : 'Calibri' }
+    sel.font = {
+      size: 10, bold: opsi.tebal, name: angka.has(c) ? 'Consolas' : 'Calibri',
+      ...(argb ? { color: { argb } } : {}),
+    }
     sel.border = garisSemua()
     if (angka.has(c)) {
       sel.alignment = { horizontal: 'right', vertical: 'top' }

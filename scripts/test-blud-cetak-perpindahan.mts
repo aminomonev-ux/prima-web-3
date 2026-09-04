@@ -26,6 +26,7 @@ import type ExcelJS from 'exceljs'
 import { renderCetakHtml, kalimatCakupan, saringYangBergeser } from '../lib/blud/cetak-data'
 import { buatWorkbookDpa, buatWorkbookPergeseran } from '../lib/blud/export/dpa-dokumen'
 import { periksaMutasi, type MutasiInput } from '../lib/blud/mutasi'
+import { arahDelta } from '../lib/blud/export/warna-delta'
 import type { DpaBaris, PergeseranBaris } from '../types'
 
 let lulus = 0
@@ -385,6 +386,62 @@ console.log('\n── G. Dokumen resmi sejajar dengan tabel di menu Cetak ──
     kd.filter(x => !x.tersembunyi).map(x => x.nama).join('|') === layarDpa.join('|'))
   cek('dokumen DPA menyembunyikan Level & Jangkar',
     kd.filter(x => x.tersembunyi).map(x => x.nama).join('|') === 'Level|Jangkar')
+}
+
+// ── H. Warna kolom delta ikut ke berkas ──────────────────────────────────────
+console.log('\n── H. Hijau/merah kolom Bertambah, Berkurang, Selisih ──')
+{
+  cek('Bertambah selalu hijau', arahDelta('Bertambah', 45) === 'naik')
+  cek('Berkurang merah walau angkanya positif', arahDelta('Berkurang', 45) === 'turun',
+    'kolomnya yang menentukan, bukan tandanya')
+  cek('Selisih ikut tandanya',
+    arahDelta('Selisih', 33) === 'naik' && arahDelta('Selisih', -33) === 'turun')
+  cek('nol tidak diwarnai', arahDelta('Selisih', 0) === null && arahDelta('Bertambah', 0) === null,
+    'mewarnai 558 baris membuat yang bergeser tenggelam')
+  cek('kolom lain tidak tersentuh',
+    arahDelta('Pergeseran', 45) === null && arahDelta('Jumlah', -45) === null)
+
+  const wb = await buatWorkbookPergeseran({ rows: pohon(), tahun: 2026, versi: '2026-01-31' })
+  const ws = wb.worksheets[0]
+  let kepala = 0
+  ws.eachRow((r, n) => { if (!kepala && String(r.getCell(1).value ?? '') === 'Kode Rekening') kepala = n })
+  const kolomKe = (nama: string) => {
+    for (let c = 1; c <= 20; c++) if (String(ws.getRow(kepala).getCell(c).value ?? '') === nama) return c
+    return 0
+  }
+  const cariBaris = (kode: string) => {
+    let n = 0
+    ws.eachRow((r, i) => { if (String(r.getCell(1).value ?? '') === kode) n = i })
+    return n
+  }
+  const argb = (baris: number, nama: string) =>
+    (ws.getRow(baris).getCell(kolomKe(nama)).font as { color?: { argb?: string } } | undefined)?.color?.argb ?? null
+
+  // Baris induk sekaligus menguji ketiga aturan: rollup 45 masuk & 45 keluar,
+  // sementara selisihnya sendiri NOL.
+  const induk = cariBaris('5.1')
+  cek('Bertambah induk hijau', argb(induk, 'Bertambah') === 'FF1D9E75', String(argb(induk, 'Bertambah')))
+  cek('Berkurang induk merah', argb(induk, 'Berkurang') === 'FFE24B4A', String(argb(induk, 'Berkurang')))
+  cek('Selisih induk TIDAK diwarnai', argb(induk, 'Selisih') === null, String(argb(induk, 'Selisih')))
+
+  const a = cariBaris('5.1.01')
+  cek('Selisih baris turun berwarna merah', argb(a, 'Selisih') === 'FFE24B4A', String(argb(a, 'Selisih')))
+  cek('Bertambah baris turun tidak diwarnai', argb(a, 'Bertambah') === null)
+  cek('kolom bukan-delta tetap hitam', argb(a, 'Pergeseran') === null)
+
+  // Dikutip UTUH dari pengambilan arah sampai pewarnaannya: mengutip barisnya
+  // saja membuat `if (!arah || true) return` di antaranya tetap cocok (L82c).
+  const pdfSrc = kode('lib/blud/export/pdf.ts')
+  cek('PDF mewarnai lewat didParseCell dari nilai ASLI, bukan teks berformat',
+    /const arah = arahDelta\(columns\[data\.column\.index\] \?\? '', exportRows\[data\.row\.index\]\?\.\[data\.column\.index\]\)\s*\r?\n\s*if \(!arah\) return\s*\r?\n\s*data\.cell\.styles\.textColor = arah === 'naik' \? RGB_NAIK : RGB_TURUN/
+      .test(pdfSrc))
+  const xlsSrc = kode('lib/blud/export/excel.ts')
+  cek('Excel rekap ikut mewarnai',
+    xlsSrc.includes('const argb = warnaDelta(columns[c], rowData[c])')
+    && xlsSrc.includes('cell.font = { size: 10, ...(argb ? { color: { argb } } : {}) }'))
+  cek('warna hidup di SATU berkas, dipakai tiga jalur',
+    ['lib/blud/export/pdf.ts', 'lib/blud/export/excel.ts', 'lib/blud/export/dpa-dokumen.ts']
+      .every(p => /from '@\/lib\/blud\/export\/warna-delta'/.test(kode(p))))
 }
 
 console.log(`\n${gagal === 0 ? 'SEMUA LULUS' : 'ADA YANG GAGAL'} — ${lulus} lulus, ${gagal} gagal`)
