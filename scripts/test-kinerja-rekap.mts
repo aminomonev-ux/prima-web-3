@@ -732,5 +732,27 @@ console.log('\n── S. A2: realisasi yatim keluar dari Laporan & KPI juga ─�
   }
 }
 
+console.log('\n── T. check-deletable ikut memulangkan nominalnya ──────────────');
+
+// A1 tahap 2. Dialog "hapus item yang sudah punya realisasi" perlu menyebut
+// UANGNYA, bukan cuma jumlah barisnya - "12 baris" tidak seberat
+// "Rp 5.443.354.000". Route-nya dulu cuma memulangkan `count`.
+{
+  const cd = readFileSync('app/api/kinerja/ssk/check-deletable/route.ts', 'utf8');
+
+  ok('T1 kueri menjumlah real_keuangan',
+     cd.includes('COALESCE(SUM(real_keuangan), 0) AS nominal'));
+  eq('T2 satu kueri, bukan dua perjalanan', (cd.match(/await sql`/g) || []).length, 1);
+  // KEDUA cabang balasan, bukan salah satunya: klien membaca medan yang sama
+  // tanpa peduli hasilnya boleh-hapus atau tidak.
+  eq('T3 nominal ada di kedua cabang balasan', (cd.match(/^\s*nominal[,:]/gm) || []).length, 2);
+  ok('T4 cabang boleh-hapus memulangkan nominal 0', /nominal: 0,/.test(cd));
+  ok('T5 kalimat alasannya menyebut rupiahnya',
+     cd.includes("realisasi keuangan Rp ${nominal.toLocaleString('id-ID')}"));
+  // Nol rupiah tidak perlu disebut - "12 baris (realisasi keuangan Rp 0)"
+  // membuat kalimatnya terbaca seperti galat.
+  ok('T6 nominal nol tidak ikut disebut di kalimat', /nominal > 0 \?/.test(cd));
+}
+
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);
 if (gagal.length) { gagal.forEach(g => console.log('  - ' + g)); process.exit(1); }

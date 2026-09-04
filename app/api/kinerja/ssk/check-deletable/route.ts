@@ -39,18 +39,25 @@ export async function GET(req: NextRequest) {
   }
   const { tahun, canonical_id } = parsed.data;
 
+  // `nominal` ikut dipulangkan supaya dialog konfirmasi bisa menyebut UANGNYA,
+  // bukan cuma jumlah barisnya: "12 baris" tidak seberat "Rp 5.443.354.000",
+  // dan yang membedakan dialog berguna dari gesekan kosong adalah ia menyebut
+  // apa yang hilang. Satu SUM di kueri yang sudah ada, nol perjalanan tambahan.
   const rows = await sql`
-    SELECT COUNT(*) AS cnt
+    SELECT COUNT(*) AS cnt,
+           COALESCE(SUM(real_keuangan), 0) AS nominal
     FROM kinerja_realisasi
     WHERE tahun = ${tahun} AND ssk_canonical_id = ${canonical_id}
-  ` as { cnt: unknown }[];
-  const count = Number(rows[0]?.cnt ?? 0);
+  ` as { cnt: unknown; nominal: unknown }[];
+  const count   = Number(rows[0]?.cnt ?? 0);
+  const nominal = Number(rows[0]?.nominal ?? 0);
 
   if (count === 0) {
     return NextResponse.json({
       ok: true,
       deletable: true,
       count: 0,
+      nominal: 0,
       reason: 'Belum ada referensi di Realisasi. Boleh hapus permanen.',
     });
   }
@@ -59,6 +66,9 @@ export async function GET(req: NextRequest) {
     ok: true,
     deletable: false,
     count,
-    reason: `Sudah ada ${count} baris realisasi yang merujuk ke item ini. Gunakan opsi Nol-kan.`,
+    nominal,
+    reason: `Sudah ada ${count} baris realisasi yang merujuk ke item ini`
+      + `${nominal > 0 ? ` (realisasi keuangan Rp ${nominal.toLocaleString('id-ID')})` : ''}`
+      + `. Gunakan opsi Nol-kan.`,
   });
 }
