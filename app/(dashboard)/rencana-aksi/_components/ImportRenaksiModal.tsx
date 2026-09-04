@@ -8,6 +8,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileUp, Upload, X } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
+import { tulisDesimal } from '@/lib/shared/desimal';
 import { LEVEL_LABELS, type RaLevel } from '../_lib/types';
 
 type ColSource = 'header' | 'isi' | 'manual' | 'tidak-ada';
@@ -330,7 +331,7 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
                           <div className="text-slate-500">{r.indikator}</div>
                           {r.catatan.map((c, i) => <div key={i} className="text-[9.5px] text-[#92610E]">· {c}</div>)}
                         </td>
-                        <td className="px-2 py-1.5 text-right font-mono text-slate-600">{r.target_tahunan} {r.satuan}</td>
+                        <td className="px-2 py-1.5 text-right font-mono text-slate-600">{tulisDesimal(r.target_tahunan)} {r.satuan}</td>
                         <td className="px-2 py-1.5 text-right font-mono text-slate-600">{r.q.join(' · ')}</td>
                       </tr>
                     ))}

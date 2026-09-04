@@ -5,6 +5,7 @@ import { realisasiAkhirTahun, quartersOf, LEVEL_LABELS, outcomeOf, hitungCapaian
 import type { CetakFilter } from './cetak-filter';
 import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader } from './cetak-filter';
 import { sanitizeCell } from '@/lib/shared/excel-export';
+import { tulisDesimal } from '@/lib/shared/desimal';
 
 let _pdf: Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
 function loadPdf() {
@@ -48,12 +49,12 @@ export async function exportListPdf(rows: RaRow[], tahun: number, level: RaRow['
       r.indikator,
       r.jenis,
       r.satuan,
-      r.target_rpjmd,
-      r.target_tahunan,
-      `${r.q1_realisasi}/${r.q1_target}`,
-      `${r.q2_realisasi}/${r.q2_target}`,
-      `${r.q3_realisasi}/${r.q3_target}`,
-      `${r.q4_realisasi}/${r.q4_target}`,
+      tulisDesimal(r.target_rpjmd),
+      tulisDesimal(r.target_tahunan),
+      `${tulisDesimal(r.q1_realisasi)}/${tulisDesimal(r.q1_target)}`,
+      `${tulisDesimal(r.q2_realisasi)}/${tulisDesimal(r.q2_target)}`,
+      `${tulisDesimal(r.q3_realisasi)}/${tulisDesimal(r.q3_target)}`,
+      `${tulisDesimal(r.q4_realisasi)}/${tulisDesimal(r.q4_target)}`,
     ]),
     styles: { fontSize: 7, cellPadding: 1.5 },
     headStyles: { fillColor: [239, 159, 39], textColor: 255, fontSize: 7 },
@@ -164,7 +165,7 @@ export async function buildCombinedPdf(allRows: RaRow[], tahun: number, filter: 
     body: hier.map(h => hdr.flat.map(c => {
       const v = c.value(h, rollup);
       if (v == null) return '';
-      if (c.money && typeof v === 'number') return v.toLocaleString('id-ID');
+      if (typeof v === 'number') return c.money ? v.toLocaleString('id-ID') : tulisDesimal(v);
       return v;
     })),
     styles: { fontSize: 7, cellPadding: 1.5 },
@@ -258,9 +259,9 @@ export async function exportIndikatorPdf(row: RaRow) {
       ['Sasaran (Outcome)', outcomeOf(row) || '-'],
       ['Jenis', row.jenis],
       ['Satuan', row.satuan],
-      ['Target RPJMD', String(row.target_rpjmd)],
-      ['Target Tahunan', String(row.target_tahunan)],
-      ['Realisasi Akhir Tahun', String(realAkhir)],
+      ['Target RPJMD', tulisDesimal(row.target_rpjmd)],
+      ['Target Tahunan', tulisDesimal(row.target_tahunan)],
+      ['Realisasi Akhir Tahun', tulisDesimal(realAkhir)],
       ['Capaian Tahunan (%)', pctTh.toFixed(2) + '%'],
       ['Capaian RPJMD (%)', pctRp.toFixed(2) + '%'],
     ],
@@ -274,7 +275,7 @@ export async function exportIndikatorPdf(row: RaRow) {
     head: [['Triwulan', 'Target', 'Realisasi', 'Capaian (%)']],
     body: quartersOf(row).map(q => {
       const pct = q.target > 0 ? hitungCapaianPct(q.target, q.realisasi, row.jenis) : null;
-      return [`TW ${q.id}`, q.target, q.realisasi, pct === null ? '-' : pct.toFixed(2) + '%'];
+      return [`TW ${q.id}`, tulisDesimal(q.target), tulisDesimal(q.realisasi), pct === null ? '-' : pct.toFixed(2) + '%'];
     }),
     styles: { fontSize: 9 },
     headStyles: { fillColor: [239, 159, 39] },

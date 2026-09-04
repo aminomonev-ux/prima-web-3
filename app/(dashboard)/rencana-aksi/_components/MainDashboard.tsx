@@ -10,6 +10,7 @@ import Sparkline12 from './Sparkline12';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, nadaCapaian, BULAN_LABELS } from '../_lib/types';
+import { tulisDesimal } from '@/lib/shared/desimal';
 
 interface Props {
   level: RaLevel;
@@ -254,7 +255,7 @@ export default function MainDashboard({
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Realisasi</div>
             <div className="text-sm font-bold text-slate-800" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-              {realAkhir} <span className="text-[11px] font-normal text-slate-500">{data.satuan}</span>
+              {tulisDesimal(realAkhir)} <span className="text-[11px] font-normal text-slate-500">{data.satuan}</span>
             </div>
           </div>
         </div>
@@ -411,7 +412,7 @@ export default function MainDashboard({
             </div>
             <span className="font-bold text-[#EF9F27] text-lg md:text-xl block pt-0.5"
                   style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-              {data.target_tahunan}
+              {tulisDesimal(data.target_tahunan)}
             </span>
           </div>
 
@@ -419,7 +420,7 @@ export default function MainDashboard({
             <span className="text-xs text-slate-400 block font-medium">Target RPJMD</span>
             <span className="font-bold text-[#378ADD] text-lg md:text-xl block pt-0.5"
                   style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-              {data.target_rpjmd}
+              {tulisDesimal(data.target_rpjmd)}
             </span>
           </div>
         </div>
@@ -512,12 +513,13 @@ export default function MainDashboard({
                   style={warnaNada
                     ? { borderColor: warnaNada, background: `color-mix(in srgb, ${warnaNada} 12%, transparent)` }
                     : { borderColor: 'var(--ra-border, #E2E8F0)' }}
-                  title={pctBulan != null ? `Capaian ${bln}: ${pctBulan.toFixed(1)}% dari target ${targetB}` : undefined}
+                  title={pctBulan != null ? `Capaian ${bln}: ${pctBulan.toFixed(1)}% dari target ${tulisDesimal(targetB)}` : undefined}
                 >
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-center">{bln}</label>
                   <PrimaNumberField
                     size="sm"
                     min={0}
+                    desimal={2}
                     disabled={!activeRow}
                     value={nilai == null ? '' : nilai}
                     placeholder="—"
@@ -532,7 +534,7 @@ export default function MainDashboard({
                     className="text-[9px] text-slate-400 font-semibold text-center mt-0.5 h-3"
                     style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}
                   >
-                    {targetB != null ? `target ${targetB}` : ''}
+                    {targetB != null ? `target ${tulisDesimal(targetB)}` : ''}
                   </div>
                 </div>
               );
@@ -548,7 +550,7 @@ export default function MainDashboard({
                 <div key={lbl}>
                   <span className="text-[9px] font-semibold text-slate-400 block">{lbl}</span>
                   <span className="text-sm font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                    {derivedRealisasi[i]}
+                    {tulisDesimal(derivedRealisasi[i])}
                   </span>
                 </div>
               ))}
@@ -612,11 +614,11 @@ export default function MainDashboard({
               <div className="space-y-2.5 mb-4 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Target</span>
-                  <span className="font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{q.target}</span>
+                  <span className="font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.target)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Realisasi</span>
-                  <span className="font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{q.realisasi}</span>
+                  <span className="font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.realisasi)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Nilai</span>
@@ -692,8 +694,8 @@ function EvalCard({ title, badge, badgeClass, target, realisasi, nilai, progress
         </div>
 
         <div className="grid grid-cols-3 gap-2 border-b border-slate-50 pb-4 mb-4">
-          <Stat label="Target" value={target} />
-          <Stat label="Realisasi" value={realisasi} />
+          <Stat label="Target" value={tulisDesimal(target)} />
+          <Stat label="Realisasi" value={tulisDesimal(realisasi)} />
           <Stat label="Nilai" value={`${nilai.toFixed(2)}%`} colorClass={colorText} align="right" />
         </div>
       </div>

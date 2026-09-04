@@ -1,3 +1,5 @@
+import { bulatkanDesimal } from '@/lib/shared/desimal';
+
 export type RaLevel = 'tujuan' | 'sasaran' | 'program' | 'kegiatan' | 'sub-kegiatan';
 export type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
 
@@ -43,7 +45,10 @@ export const BULAN_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'A
 export function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [number, number, number, number] {
   const seg = (start: number): number => {
     const part = months.slice(start, start + 3);
-    if (jenis === 'Akumulatif') return part.reduce((a: number, b) => a + (b ?? 0), 0);
+    // Menjumlah pecahan biner: 7,5 + 2,68 + 3,25 memulangkan 13,430000000000001.
+    // Dibulatkan di sini, di tempat penjumlahannya, supaya angka itu tidak pernah
+    // lahir — bukan disembunyikan belakangan oleh pemformat di layar.
+    if (jenis === 'Akumulatif') return bulatkanDesimal(part.reduce((a: number, b) => a + (b ?? 0), 0));
     // R3: "terisi" = non-null — 0 nyata ikut terekam
     for (let i = part.length - 1; i >= 0; i--) { const v = part[i]; if (v != null) return v; }
     return 0;
@@ -265,7 +270,7 @@ export function quartersOf(row: RaRow): { id: 1 | 2 | 3 | 4; name: string; targe
 
 export function realisasiAkhirTahun(row: RaRow): number {
   const qs = [row.q1_realisasi, row.q2_realisasi, row.q3_realisasi, row.q4_realisasi];
-  if (row.jenis === 'Akumulatif') return qs.reduce((a, b) => a + b, 0);
+  if (row.jenis === 'Akumulatif') return bulatkanDesimal(qs.reduce((a, b) => a + b, 0));
   // Progres Positif/Negatif/Pengulangan: snapshot terbaru.
   // R3: kalau ada data bulanan, pakai bulan TERAKHIR non-null (0 nyata terekam).
   if (Array.isArray(row.bulan_realisasi)) {

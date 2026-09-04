@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import PrimaButton from '@/components/ui/PrimaButton';
+import { tulisDesimal } from '@/lib/shared/desimal';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import DownloadButton from '@/components/ui/DownloadButton';
@@ -162,7 +163,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
       // Kalau target ikut diubah, angka "sesudah" memuat KEDUA perubahan. Tanpa
       // catatan ini orang akan mengira seluruh lonjakannya akibat jenis saja.
       const catatanTarget = targetBerubah
-        ? `\n\n(Angka "setelah" sudah termasuk target tahunan yang Anda ubah jadi ${targetTahunan}.)`
+        ? `\n\n(Angka "setelah" sudah termasuk target tahunan yang Anda ubah jadi ${tulisDesimal(targetTahunan)}.)`
         : '';
       const ok = await confirmDialog({
         title: 'Ubah jenis indikator?',
@@ -590,6 +591,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 <PrimaNumberField
                   size="sm"
                   min={0}
+                  desimal={2}
                   required
                   value={targetRpjmd === 0 ? '' : targetRpjmd}
                   placeholder="0"
@@ -601,6 +603,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 <PrimaNumberField
                   size="sm"
                   min={0}
+                  desimal={2}
                   required
                   value={targetTahunan === 0 ? '' : targetTahunan}
                   placeholder="0"
@@ -629,9 +632,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                     <p className="text-[11.5px] font-bold text-[#BA7517]">Target diubah — capaian dihitung ulang</p>
                     <p className="text-[11px] leading-relaxed text-slate-600">
                       Tahunan{' '}
-                      <b className="font-mono">{barisAsli.target_tahunan}</b> → <b className="font-mono">{targetTahunan}</b>
+                      <b className="font-mono">{tulisDesimal(barisAsli.target_tahunan)}</b> → <b className="font-mono">{tulisDesimal(targetTahunan)}</b>
                       {targetRpjmd !== barisAsli.target_rpjmd && (
-                        <> · RPJMD <b className="font-mono">{barisAsli.target_rpjmd}</b> → <b className="font-mono">{targetRpjmd}</b></>
+                        <> · RPJMD <b className="font-mono">{tulisDesimal(barisAsli.target_rpjmd)}</b> → <b className="font-mono">{tulisDesimal(targetRpjmd)}</b></>
                       )}
                       . Realisasinya tidak berubah, tapi persentase capaian di Realisasi Kinerja
                       dan laporan cetak akan ikut bergeser — termasuk laporan periode sebelumnya
@@ -655,7 +658,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           className="w-full rounded border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 text-center"
                           style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}
                         >
-                          {derivedQ[i]}
+                          {tulisDesimal(derivedQ[i])}
                         </div>
                       </div>
                     ))
@@ -670,6 +673,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         <PrimaNumberField
                           size="sm"
                           min={0}
+                          desimal={2}
                           value={val === 0 ? '' : val}
                           placeholder="0"
                           onChange={(e) => set(e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))}
@@ -915,11 +919,11 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         )}
                         <td className="px-5 py-4 text-center font-bold text-slate-700 whitespace-nowrap"
                             style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                          {row.target_rpjmd}
+                          {tulisDesimal(row.target_rpjmd)}
                         </td>
                         <td className="px-5 py-4 text-center font-bold text-[#1D9E75] whitespace-nowrap"
                             style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                          {row.target_tahunan}
+                          {tulisDesimal(row.target_tahunan)}
                         </td>
                         <td className="px-5 py-4 text-center">
                           <span className="bg-[#378ADD]/10 text-[#378ADD] px-2 py-0.5 rounded-sm text-[9.5px] font-bold inline-block">
@@ -936,7 +940,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         ).map((v: number, i: number) => (
                           <td key={`bln${i}`} className={`px-1.5 py-4 text-center text-slate-500 ${i === 0 ? 'border-l border-slate-100' : ''}`}
                               style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                            {v > 0 ? v : <span className="text-slate-300">—</span>}
+                            {v > 0 ? tulisDesimal(v) : <span className="text-slate-300">—</span>}
                           </td>
                         ))}
                         {[
@@ -946,9 +950,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           { t: row.q4_target, r: row.q4_realisasi },
                         ].map((q, i) => [
                           <td key={`t${i}`} className="px-2 py-4 text-center text-slate-500 border-l border-slate-100"
-                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{q.t}</td>,
+                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.t)}</td>,
                           <td key={`r${i}`} className={`px-2 py-4 text-center font-bold ${q.r > 0 ? 'text-[#1D9E75]' : 'text-slate-500'}`}
-                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{q.r}</td>,
+                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.r)}</td>,
                         ])}
                         <td className="px-5 py-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
@@ -1005,6 +1009,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                       <PrimaNumberField
                         size="sm"
                         min={0}
+                        desimal={2}
                         value={bulanTarget[i] == null ? '' : bulanTarget[i]}
                         placeholder="—"
                         inputClassName="text-right"
@@ -1027,7 +1032,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                       <div key={lbl}>
                         <span className="text-[9px] font-semibold text-slate-400 block">{lbl}</span>
                         <span className="text-sm font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                          {derivedQ[i]}
+                          {tulisDesimal(derivedQ[i])}
                         </span>
                       </div>
                     ))}
@@ -1037,8 +1042,8 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                       </span>
                       <span className="text-sm font-bold text-[#7C5CFC]" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
                         {jenis === 'Akumulatif'
-                          ? derivedQ.reduce((a, b) => a + b, 0)
-                          : (() => { for (let i = 11; i >= 0; i--) { const v = bulanTarget[i]; if (v != null) return v; } return 0; })()}
+                          ? tulisDesimal(derivedQ.reduce((a, b) => a + b, 0))
+                          : tulisDesimal((() => { for (let i = 11; i >= 0; i--) { const v = bulanTarget[i]; if (v != null) return v; } return 0; })())}
                       </span>
                     </div>
                   </div>

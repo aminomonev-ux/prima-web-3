@@ -13,6 +13,7 @@ import type { RaRow, MonthVal } from '../_lib/types';
 import { BULAN_LABELS, hitungCapaianPct, nadaCapaian } from '../_lib/types';
 import { apiUpdateBulanBulk, VersionConflictError, apiGetLock } from '../_lib/api';
 import { exportMatrixBulananXlsx, parseMatrixBulananXlsx } from '../_lib/exports';
+import { bacaDesimal, bersihkanKetikan, bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 
 const MONO = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
 
@@ -58,6 +59,11 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
   const [lockBulan, setLockBulan] = useState(0);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<'angka' | 'warna'>('angka');
+  /* Teks sel yang sedang diketik. Tanpa ini "7," langsung dibaca jadi 7 lalu
+     digambar ulang tanpa koma — desimal mustahil diketik huruf demi huruf,
+     hanya bisa ditempel utuh. Satu sel saja yang disimpan: yang lain tetap
+     digambar dari angkanya. */
+  const [selDiketik, setSelDiketik] = useState<{ kunci: string; teks: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const submittingRef = useRef(false);
 
@@ -88,9 +94,8 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
   });
 
   const parseVal = (s: string): MonthVal => {
-    if (s.trim() === '') return null;
-    const n = parseFloat(s.replace(',', '.'));
-    return Number.isFinite(n) && n >= 0 ? n : null;
+    const n = bacaDesimal(s);
+    return n != null && n >= 0 ? n : null;
   };
 
   // Paste blok Excel: TSV multi-sel diisi mulai dari sel yang di-paste;
@@ -257,20 +262,36 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
                           <td key={m} className="px-0.5 py-1">
                             <div className="rounded px-1 py-1 text-right text-[11px] font-bold"
                               style={{ ...MONO, background: c.bg, color: c.fg }}>
-                              {v == null ? '—' : v}
+                              {v == null ? '—' : tulisDesimal(v)}
                             </div>
                           </td>
                         );
                       }
+                      const kunciSel = `${r.id}:${m}`;
                       return (
                         <td key={m} className="px-0.5 py-1">
                           <input
                             type="text"
                             inputMode="decimal"
                             disabled={m < lockBulan}
-                            value={v == null ? '' : String(v)}
+                            value={selDiketik?.kunci === kunciSel ? selDiketik.teks : tulisDesimal(v)}
                             placeholder="—"
-                            onChange={(e) => setCell(r.id, m, parseVal(e.target.value))}
+                            onFocus={() => setSelDiketik({ kunci: kunciSel, teks: tulisDesimal(v) })}
+                            onChange={(e) => {
+                              const diketik = bersihkanKetikan(e.target.value);
+                              setSelDiketik({ kunci: kunciSel, teks: diketik });
+                              setCell(r.id, m, parseVal(diketik));
+                            }}
+                            onBlur={() => {
+                              setSelDiketik(null);
+                              // Hanya sel yang MEMANG sedang diketik yang ditulis ulang. Tanpa
+                              // syarat ini, blur tanpa teks tersimpan menulis null — sel terisi
+                              // ikut terhapus.
+                              if (selDiketik?.kunci !== kunciSel) return;
+                              const n = parseVal(selDiketik.teks);
+                              // Dibulatkan di depan mata, bukan diam-diam oleh DECIMAL(14,2) di server.
+                              setCell(r.id, m, n == null ? null : bulatkanDesimal(n));
+                            }}
                             onPaste={(e) => handlePaste(e, rowIdx, m)}
                             className={`w-full rounded border px-1 py-1 text-right focus:outline-none focus:border-[#7C5CFC] ${m < lockBulan ? 'bg-slate-100 border-slate-100 text-slate-400 cursor-not-allowed' : 'border-slate-200 text-slate-800'}`}
                             style={MONO}

@@ -6,6 +6,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import type { RaRow } from '../_lib/types';
 import { quartersOf, realisasiAkhirTahun, LEVEL_LABELS, outcomeOf } from '../_lib/types';
+import { tulisDesimal } from '@/lib/shared/desimal';
 import { apiUpdateQuarter, apiResetRealisasi, VersionConflictError } from '../_lib/api';
 
 const moneyFont = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
@@ -89,7 +90,7 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-600 block">Target ({qName})</label>
             <PrimaNumberField
-              min={0} required value={target}
+              min={0} desimal={2} required value={target}
               onChange={(e) => setTarget(e.target.value)}
               onFocus={(e) => e.target.select()}
               placeholder="Contoh: 12"
@@ -99,7 +100,7 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-600 block">Realisasi ({qName})</label>
             <PrimaNumberField
-              min={0} required value={realisasi}
+              min={0} desimal={2} required value={realisasi}
               onChange={(e) => setRealisasi(e.target.value)}
               onFocus={(e) => e.target.select()}
               placeholder="Contoh: 7"
@@ -224,13 +225,13 @@ export function DetailModal({ row, isOpen, onClose, anggaran }: DetailModalProps
               <div className="rounded-xl border border-slate-100 p-3 bg-white">
                 <span className="text-slate-400 block font-medium">Tahunan ({row.tahun})</span>
                 <span className="text-lg font-bold text-slate-800" style={moneyFont}>
-                  {realAkhir} dari {row.target_tahunan} {row.satuan}
+                  {tulisDesimal(realAkhir)} dari {tulisDesimal(row.target_tahunan)} {row.satuan}
                 </span>
               </div>
               <div className="rounded-xl border border-slate-100 p-3 bg-white">
                 <span className="text-slate-400 block font-medium">RPJMD</span>
                 <span className="text-lg font-bold text-slate-800" style={moneyFont}>
-                  {realAkhir} dari {row.target_rpjmd} {row.satuan}
+                  {tulisDesimal(realAkhir)} dari {tulisDesimal(row.target_rpjmd)} {row.satuan}
                 </span>
               </div>
             </div>
@@ -239,7 +240,7 @@ export function DetailModal({ row, isOpen, onClose, anggaran }: DetailModalProps
           <div className="flex gap-2 rounded-xl bg-[#EF9F27]/5 border border-[#EF9F27]/20 p-3.5 text-xs text-[#7A4D0A]">
             <Sparkles className="h-4 w-4 shrink-0 text-[#EF9F27] mt-0.5" />
             <p className="leading-relaxed">
-              <strong>Rekomendasi Evaluasi:</strong> Diperlukan koordinasi intensif pada triwulan berjalan agar realisasi akhir tahun untuk {menuName} dapat memenuhi target {row.target_tahunan} {row.satuan} secara maksimal.
+              <strong>Rekomendasi Evaluasi:</strong> Diperlukan koordinasi intensif pada triwulan berjalan agar realisasi akhir tahun untuk {menuName} dapat memenuhi target {tulisDesimal(row.target_tahunan)} {row.satuan} secara maksimal.
             </p>
           </div>
         </div>

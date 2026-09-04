@@ -3,6 +3,7 @@
 // Optimistic locking via kolom `version` (migration 034): cegah lost-update concurrent edit.
 
 import { sql, queryMany, queryOne, withTransaction } from '@/lib/data/db';
+import { bulatkanDesimal } from '@/lib/shared/desimal';
 import { acquireBludLock } from '@/lib/data/locks';
 import type { RaLevel, UpsertRencanaAksiInput } from './rencana-aksi-schemas';
 
@@ -90,7 +91,11 @@ type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulang
 function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [number, number, number, number] {
   const seg = (start: number): number => {
     const part = months.slice(start, start + 3);
-    if (jenis === 'Akumulatif') return part.reduce((a: number, b) => a + (b ?? 0), 0);
+    // Sama dengan helper klien: pecahan biner (7,5 + 2,68 + 3,25 = 13,430000000000001)
+    // dibulatkan di tempat penjumlahannya. Kolom q*_target DECIMAL(14,2) memang
+    // akan membulatkannya juga, tapi diam-diam — dan angka itu keburu dipakai
+    // pembanding sebelum sampai ke MySQL.
+    if (jenis === 'Akumulatif') return bulatkanDesimal(part.reduce((a: number, b) => a + (b ?? 0), 0));
     // R3: "terisi" = non-null — 0 nyata ikut terekam (capaian terbaik Progres Negatif)
     for (let i = part.length - 1; i >= 0; i--) { const v = part[i]; if (v != null) return v; }
     return 0;
