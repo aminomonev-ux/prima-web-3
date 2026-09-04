@@ -16,6 +16,7 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
+import { pickVersiAktif } from '../lib/kinerja/versi';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi,
   type BarisSskAcuan } from '../lib/kinerja/hidrasi-ssk';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '../lib/kinerja/master-nama';
@@ -1271,6 +1272,68 @@ console.log('\n-- Z. A6: Buat Perubahan atomik, dan bentroknya dijawab 409 -----
      /UNIQUE KEY uq_ks_canonical_versi \(tahun, sumber, canonical_id, versi_tipe, versi_seq\)/.test(sk));
   ok('Z21 ada migrasi untuk basis data yang sudah terlanjur',
      existsSync('docs/migrations/migration-kinerja-uq-versi.sql'));
+}
+
+console.log('\n-- AA. A5 & A7: satu pernyataan, dan satu aturan versi ---------');
+
+// A7 — aturan "versi mana yang paling belakang" cuma boleh ada SATU (L88).
+{
+  const M0 = { versi_tipe: 'MURNI', versi_seq: 0 };
+  const P1 = { versi_tipe: 'PERUBAHAN', versi_seq: 1 };
+  const P2 = { versi_tipe: 'PERUBAHAN', versi_seq: 2 };
+
+  eq('AA1 daftar kosong -> null', pickVersiAktif([]), null);
+  eq('AA2 satu-satunya dipilih', pickVersiAktif([M0]), M0);
+  // PERUBAHAN mengalahkan MURNI apa pun urutannya di daftar - `ORDER BY` di SQL
+  // hanya kebetulan setuju selama MURNI ber-seq 0.
+  eq('AA3 PERUBAHAN mengalahkan MURNI', pickVersiAktif([M0, P1]), P1);
+  eq('AA4 urutan daftar tidak berpengaruh', pickVersiAktif([P1, M0]), P1);
+  eq('AA5 seq tertinggi menang', pickVersiAktif([P1, P2, M0]), P2);
+  eq('AA6 dan tetap menang walau di depan', pickVersiAktif([P2, P1]), P2);
+  // Kasus yang membedakannya dari `ORDER BY versi_seq DESC`: MURNI ber-seq lebih
+  // tinggi tidak boleh mengalahkan PERUBAHAN.
+  eq('AA7 MURNI ber-seq tinggi tetap kalah',
+     pickVersiAktif([{ versi_tipe: 'MURNI', versi_seq: 9 }, P1]), P1);
+
+  const kj = readFileSync('lib/data/kinerja.ts', 'utf8');
+  ok('AA8 kinerja.ts memakai aturan dari lib', kj.includes("from '@/lib/kinerja/versi'"));
+  ok('AA9 dan tidak menyimpan salinannya sendiri', !/function pickVersiAktif</.test(kj));
+
+  const rs = readFileSync('app/api/kinerja/reset/route.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('AA10 reset memakai aturan yang sama', rs.includes('pickVersiAktif(slotRows)'));
+  // Rumus keempat dibuang. Kalau kembali, dua tempat bisa berbeda pendapat soal
+  // slot mana yang dibuka kuncinya, tanpa satu tes pun berubah.
+  ok('AA11 rumus ORDER BY-nya sendiri sudah tidak ada', !/ORDER BY versi_seq DESC/.test(rs));
+  // L69-b: DELETE di atasnya belum commit, jadi pembacaan lewat koneksi lain
+  // masih melihat versi yang barusan dihapus.
+  ok('AA12 slotnya dibaca lewat tx, bukan sql', /const slotRows = await tx`/.test(rs));
+  // SENGAJA tanpa saringan is_nullified - bedanya dengan versiAktifKinerja itu
+  // keputusan, dan alasannya ditulis di komentar (yang dibuang sebelum dicocokkan).
+  const iSlot = rs.indexOf('const slotRows');
+  ok('AA13 slotnya TIDAK menyaring is_nullified',
+     !rs.slice(iSlot, iSlot + 320).includes('is_nullified'));
+  const rsKomentar = readFileSync('app/api/kinerja/reset/route.ts', 'utf8');
+  ok('AA14 dan alasannya ditulis, bukan disembunyikan',
+     rsKomentar.includes('SENGAJA TIDAK disaring'));
+
+  // A5 — satu pernyataan, bukan 2.000 perjalanan berurutan (PERF-C1).
+  const im = readFileSync('app/api/kinerja/realisasi/import/route.ts', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('AA15 tidak ada lagi perulangan await INSERT', !/for \(const p of valid\)/.test(im));
+  ok('AA16 satu pernyataan ber-VALUES ?', /VALUES \?/.test(im));
+  // `conn.query`, bukan `tx`/`execute`: ekspansi `VALUES ?` butuh non-prepared.
+  ok('AA17 lewat conn.query, bukan jalur prepared', /await conn\.query\(/.test(im));
+  ok('AA18 masih di dalam transaksi', /withTransaction\(async \(\{ conn \}\)/.test(im));
+  // Upsert-nya WAJIB tetap ada: uq_krm_tahun_ket membuat pemetaan ulang
+  // keterangan yang sama jadi INSERT yang gagal, bukan pembaruan.
+  ok('AA19 ON DUPLICATE KEY UPDATE dipertahankan', /ON DUPLICATE KEY UPDATE/.test(im));
+  eq('AA20 ketiga kolomnya ikut diperbarui',
+     (im.match(/= VALUES\((sumber|ssk_canonical_id|updated_by)\)/g) || []).length, 3);
+  ok('AA21 keterangan tetap dipotong 500 karakter', im.includes('slice(0, 500)'));
+
+  const sk = readFileSync('docs/schema-mysql.sql', 'utf8');
+  ok('AA22 upsert-nya berdiri di atas kunci unik yang memang ada',
+     /UNIQUE KEY uq_krm_tahun_ket \(tahun, keterangan_excel\)/.test(sk));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

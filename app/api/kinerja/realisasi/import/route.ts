@@ -52,13 +52,29 @@ export async function POST(req: NextRequest) {
     const validIds = new Set(existRows.map(r => r.ssk_canonical_id));
     const valid = pairs.filter(p => validIds.has(p.ssk_canonical_id));
     if (valid.length === 0) return NextResponse.json({ ok: false, message: 'Target SSK pada peta tidak ditemukan di tahun ini.' }, { status: 400 });
-    await withTransaction(async ({ tx }) => {
-      for (const p of valid) {
-        await tx`
-          INSERT INTO kinerja_realisasi_map (tahun, sumber, keterangan_excel, ssk_canonical_id, updated_by)
-          VALUES (${tahun}, ${p.sumber}, ${p.keterangan_excel.slice(0, 500)}, ${p.ssk_canonical_id}, ${session.userId})
-          ON DUPLICATE KEY UPDATE sumber = VALUES(sumber), ssk_canonical_id = VALUES(ssk_canonical_id), updated_by = VALUES(updated_by)`;
-      }
+    // A5: SATU pernyataan, bukan satu per pasangan. Batas Zod-nya 2.000, jadi
+    // bentuk lamanya berarti sampai 2.000 perjalanan berurutan di dalam satu
+    // transaksi yang terbuka selama itu — dan selama itu ia menahan kunci baris
+    // `kinerja_realisasi_map`, jadi admin kedua yang menyimpan peta tahun yang
+    // sama ikut menunggu (PERF-C1).
+    //
+    // `conn.query`, BUKAN `tx`/`execute`: ekspansi `VALUES ?` butuh jalur
+    // non-prepared — catatan yang sama sudah ada di `bulkInsert`. `bulkInsert`
+    // sendiri belum dipakai karena ia tidak punya `ON DUPLICATE KEY UPDATE`;
+    // menambah cabang ke fungsi yang dipakai lusinan pemanggil demi SATU
+    // kebutuhan bukan penghematan. Kalau nanti ada pemakai ketiga, barulah.
+    await withTransaction(async ({ conn }) => {
+      await conn.query(
+        `INSERT INTO kinerja_realisasi_map
+           (tahun, sumber, keterangan_excel, ssk_canonical_id, updated_by)
+         VALUES ?
+         ON DUPLICATE KEY UPDATE
+           sumber = VALUES(sumber),
+           ssk_canonical_id = VALUES(ssk_canonical_id),
+           updated_by = VALUES(updated_by)`,
+        [valid.map(p => [tahun, p.sumber, p.keterangan_excel.slice(0, 500),
+                         p.ssk_canonical_id, session.userId])],
+      );
     });
     // L-2: jejak audit permukaan tulis peta (sebelumnya tanpa writeAuditLog)
     await writeAuditLog({ req, eventType: 'KINERJA_SAVE_REALISASI_MAP', userId: session.userId, username: session.username, detail: `tahun=${tahun} pairs=${valid.length}` });

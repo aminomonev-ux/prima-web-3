@@ -3,6 +3,7 @@ import { acquireBludLock } from './locks';
 import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simpan';
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '@/lib/kinerja/master-nama';
+import { pickVersiAktif } from '@/lib/kinerja/versi';
 import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
 export type SumberSSK = 'GAJI' | 'BLUD' | 'HARLEP' | 'PROMKES' | 'SARPRAS' | 'OBAT' | 'PEMELIHARAAN' | 'PEMBANGUNAN';
@@ -1160,16 +1161,6 @@ export interface LaporanSumber {
 // sama; tanpa filter, SUM(pagu) terhitung ganda tiap versi PERUBAHAN dibuat.
 // Versi aktif = PERUBAHAN seq tertinggi bila ada, selain itu MURNI seq
 // tertinggi. Baris is_nullified dikecualikan (konsisten getRealisasiHydrated).
-function pickVersiAktif<T extends { versi_tipe?: unknown; versi_seq?: unknown }>(rows: T[]): T | null {
-  let best: T | null = null;
-  for (const r of rows) {
-    if (!best) { best = r; continue; }
-    const rp = r.versi_tipe === 'PERUBAHAN' ? 1 : 0;
-    const bp = best.versi_tipe === 'PERUBAHAN' ? 1 : 0;
-    if (rp > bp || (rp === bp && Number(r.versi_seq ?? 0) > Number(best.versi_seq ?? 0))) best = r;
-  }
-  return best;
-}
 
 export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<LaporanSumber> {
   // Pagu & target dari SSK — agregat per versi, lalu pilih versi aktif (#1)

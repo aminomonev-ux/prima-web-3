@@ -14,6 +14,7 @@ import { getSession } from '@/lib/security/auth';
 import { sql, withTransaction } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { kinerjaRateLimit, TahunSchema, SumberSchema, VersiTipeSchema, VersiSeqSchema } from '@/lib/data/kinerja-schemas';
+import { pickVersiAktif } from '@/lib/kinerja/versi';
 import { kinerjaMati } from '../_guard';
 import { bolehBatalkanFinal } from '@/lib/constants';
 
@@ -88,20 +89,39 @@ export async function POST(req: NextRequest) {
           ` as unknown as Array<{ affectedRows: number }>;
       deletedSsk = Number(sRes[0]?.affectedRows ?? 0);
 
-      // BUGFIX: setelah hapus versi PERUBAHAN, latest yang tersisa harus di-unlock
-      // supaya bisa di-edit lagi. Cari (versi_tipe, versi_seq) tertinggi yang tersisa
-      // lalu SET locked_at = NULL. Aman dijalankan unconditional — kalau tabel kosong,
-      // UPDATE no-op (0 affected rows).
-      const latestRows = await tx`
+      // Sesudah versi PERUBAHAN dihapus, slot terakhir yang tersisa harus dibuka
+      // kuncinya supaya bisa disunting lagi. Aman dijalankan tanpa syarat — kalau
+      // tabelnya kosong, UPDATE-nya no-op.
+      //
+      // A7: aturannya `pickVersiAktif` (lib/kinerja/versi.ts), sama dengan yang
+      // dipakai `versiAktifKinerja` — dulu di sini ada `ORDER BY versi_seq DESC,
+      // versi_tipe DESC LIMIT 1`, jawaban KEEMPAT untuk pertanyaan yang sudah
+      // punya jawaban (L88). Ia kebetulan memberi hasil yang sama, tapi cuma
+      // selama MURNI selalu ber-seq 0 dan selama urutan deklarasi ENUM-nya tidak
+      // berubah — dua hal yang tidak tertulis di mana pun.
+      //
+      // Baris `is_nullified` SENGAJA TIDAK disaring, dan bedanya dengan
+      // `versiAktifKinerja` itu disengaja: yang ditanyakan di sini "slot mana
+      // yang tidak punya penerus", bukan "versi mana yang jadi pengukur". Versi
+      // yang seluruh barisnya dinol-kan tetap slot yang ada di pemilih versi dan
+      // tetap boleh disunting; menyaringnya justru membuka kunci versi yang
+      // MASIH punya turunan — persis keadaan yang balapan 1B di
+      // scripts/test-kinerja-race-versi.mjs buktikan merusak.
+      //
+      // Dibaca lewat `tx`, bukan `sql`: DELETE di atas belum commit, jadi
+      // pembacaan lewat koneksi lain masih melihat versi yang barusan dihapus
+      // (L69-b). Itu juga sebabnya `versiAktifKinerja` tidak dipanggil di sini —
+      // ia bertanya lewat pool.
+      const slotRows = await tx`
         SELECT versi_tipe, versi_seq
         FROM kinerja_ssk
         WHERE tahun = ${tahun} AND sumber = ${sumber}
-        ORDER BY versi_seq DESC, versi_tipe DESC
-        LIMIT 1
+        GROUP BY versi_tipe, versi_seq
       ` as { versi_tipe?: unknown; versi_seq?: unknown }[];
-      if (latestRows.length > 0) {
-        const latestTipe = String(latestRows[0].versi_tipe ?? 'MURNI');
-        const latestSeq  = Number(latestRows[0].versi_seq ?? 0);
+      const terakhir = pickVersiAktif(slotRows);
+      if (terakhir) {
+        const latestTipe = String(terakhir.versi_tipe ?? 'MURNI');
+        const latestSeq  = Number(terakhir.versi_seq ?? 0);
         await tx`
           UPDATE kinerja_ssk
           SET locked_at = NULL
