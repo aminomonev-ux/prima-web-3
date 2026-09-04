@@ -97,6 +97,7 @@ export const SumberSchema: z.ZodType<SumberSSK> = z.enum([
  * — akan trigger ReferenceError "Cannot access before initialization".
  */
 export const VersiTipeSchema = z.enum(['MURNI', 'PERUBAHAN']);
+
 export const VersiSeqSchema  = z
   .union([z.string(), z.number()])
   .transform((v) => Number(v))
@@ -109,6 +110,22 @@ export const MasterTipeSchema: z.ZodType<MasterTipe> = z.enum([
   'program', 'kegiatan', 'subkegiatan', 'uraian_ssk', 'sumber_anggaran',
 ]);
 
+/** Jenis snapshot di `kinerja_riwayat_simpan` — cermin ENUM kolomnya. */
+export const JenisRiwayatSchema = z.enum(['SSK', 'REALISASI', 'REKENING']);
+
+/**
+ * Jejak "isi layar ini datang dari snapshot mana" — ikut body PUT, berhenti di
+ * detail audit KINERJA_SAVE_*. Tidak ada kolom DB-nya; pola `asal_pulihkan` BLUD.
+ *
+ * Tanpa ini, memulihkan lalu menyimpan terlihat persis seperti orang mengetik
+ * ulang 180 baris dengan tangan. WAJIB dikosongkan di setiap jalur lain yang
+ * mengganti isi tabel (Init, Import, Inject) — kalau tertinggal, auditnya bohong.
+ */
+export const AsalPulihkanSchema = z.object({
+  id:            z.number().int().positive(),
+  disimpan_pada: z.string().max(32),
+});
+
 // ─── Months Object ──────────────────────────────────────────────────────────
 
 const MonthsSchema = z.object({
@@ -117,6 +134,14 @@ const MonthsSchema = z.object({
   jul: z.number(), agu: z.number(), sep: z.number(),
   okt: z.number(), nov: z.number(), des: z.number(),
 });
+
+/**
+ * Potongan detail audit "isi ini datang dari snapshot". Satu fungsi untuk tiga
+ * route: tiga salinan kalimat pasti berbeda begitu salah satunya disunting.
+ */
+export function jejakPulihkan(a?: { id: number; disimpan_pada: string }): string {
+  return a ? ` — dipulihkan dari riwayat #${a.id} (${a.disimpan_pada})` : '';
+}
 
 // ─── Body Schemas per Endpoint ──────────────────────────────────────────────
 
@@ -170,6 +195,7 @@ const SskRowSchema = z.object({
 });
 
 export const SskBodySchema = z.object({
+  asal_pulihkan: AsalPulihkanSchema.optional(),
   tahun:      TahunSchema,
   sumber:     SumberSchema,
   versi_tipe: VersiTipeSchema.optional(),
@@ -194,6 +220,7 @@ const RekeningRowSchema = z.object({
 });
 
 export const RekeningBodySchema = z.object({
+  asal_pulihkan: AsalPulihkanSchema.optional(),
   tahun:  TahunSchema,
   sumber: SumberSchema,
   force:  z.boolean().optional(),
@@ -214,6 +241,7 @@ const RealRowSchema = z.object({
 }).passthrough(); // tolerate extra fields seperti uraian_ssk untuk display
 
 export const RealisasiBodySchema = z.object({
+  asal_pulihkan: AsalPulihkanSchema.optional(),
   tahun:  TahunSchema,
   sumber: SumberSchema,
   expected_version: z.number().int().optional(), // V3-6 optimistic lock
@@ -227,6 +255,7 @@ export const RealisasiBodySchema = z.object({
 export const NomenBodySchema = z.object({
   tahun:  TahunSchema,
   sumber: SumberSchema,
+  force:  z.boolean().optional(),
   rows:   z.array(z.object({ keterangan: z.string() })).max(1000),
 });
 
@@ -254,9 +283,11 @@ const PendRowSchema = z.object({
   capaian_pct:  z.number(),
 });
 
+// `force` WAJIB ada di KEDUA cabang: keduanya replace-all per tahun, dan cabang
+// yang lupa mendapatkannya tidak punya jalan keluar dari 409 `PENURUNAN_DRASTIS`.
 export const PendapatanBodySchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('crr'),        tahun: TahunSchema, rows: z.array(CrrRowSchema).max(12) }),
-  z.object({ type: z.literal('pendapatan'), tahun: TahunSchema, rows: z.array(PendRowSchema).max(1000) }),
+  z.object({ type: z.literal('crr'),        tahun: TahunSchema, force: z.boolean().optional(), rows: z.array(CrrRowSchema).max(12) }),
+  z.object({ type: z.literal('pendapatan'), tahun: TahunSchema, force: z.boolean().optional(), rows: z.array(PendRowSchema).max(1000) }),
 ]);
 
 /**

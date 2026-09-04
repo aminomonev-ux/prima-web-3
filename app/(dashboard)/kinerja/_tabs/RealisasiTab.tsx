@@ -4,7 +4,7 @@
 // State realisasi (sumber, bulan, rows) TIDAK lokal — di-share dengan CetakTab
 // (rekap mode konsumsi realisasiAllRows). Tetap di shell, di-pass via props.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
@@ -16,12 +16,13 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
-import { Wand2, Save, Upload, Equal } from 'lucide-react';
+import { Wand2, Save, Upload, Equal, History } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { kumpulkanItem } from '@/lib/kinerja/rekap';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '@/lib/kinerja/samakan-target';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import ImportRealisasiModal from '@/components/kinerja/ImportRealisasiModal';
+import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
 import { useLampir, type LampirRealisasiData } from '@/lib/sentinel/lampir-store';
 import { uiTheme } from '@/lib/theme';
@@ -44,6 +45,7 @@ interface Props {
   sskVersi: VersiValue;
   setSskVersi: React.Dispatch<React.SetStateAction<VersiValue>>;
   realVersion: number;       // V3-6 optimistic lock baseline
+  setRealVersion: React.Dispatch<React.SetStateAction<number>>;
   refetchReal: () => void;
   // IK-4 #5: dipicu Rima lewat /kinerja?import=realisasi → buka modal Import sekali.
   autoOpenImport?: boolean;
@@ -53,21 +55,31 @@ interface Props {
 export default function RealisasiTab({
   realisasiSumber, setRealisasiSumber, realisasiBulan, setRealisasiBulan,
   realisasiRows, setRealisasiRows, sskRows, tahun, canEdit, loadingData, saving, setSaving,
-  isLight = false, sskVersi, setSskVersi, realVersion, refetchReal,
+  isLight = false, sskVersi, setSskVersi, realVersion, setRealVersion, refetchReal,
   autoOpenImport = false, onImportConsumed,
 }: Props) {
   // Refactor Versi: list versi yang ada (untuk pill chip)
   const [versiItems,   setVersiItems]   = useState<VersiKinerja[]>([]);
   const [versiLoading, setVersiLoading] = useState(false);
   const [showImport,   setShowImport]   = useState(false);
+  const [showRiwayat,  setShowRiwayat]  = useState(false);
   // §23 Lampirkan: hasil parse dari chat Rima (RAM store) → preload modal tanpa unggah ulang.
   const lampir = useLampir();
   const [preload, setPreload] = useState<{ data: LampirRealisasiData; name: string } | null>(null);
+
+  /**
+   * Snapshot yang jadi asal isi layar — ikut body Simpan, berhenti di detail
+   * audit. WAJIB dilepas di SETIAP jalur lain yang mengganti isi tabel, dan
+   * sesudah Simpan berhasil: kalau tertinggal, simpan berikutnya mengaku
+   * pulihan padahal bukan.
+   */
+  const asalPulihkanRef = useRef<{ id: number; disimpan_pada: string } | null>(null);
 
   // IK-4: terapkan hasil Import (sumber yang sedang dibuka) ke DRAFT realisasi —
   // isi real_keuangan baris SSK pada bulan yang sesuai, lalu recalc turunan.
   // TIDAK menyimpan: user klik "Simpan Semua" (Model A′).
   function applyImport(items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) {
+    asalPulihkanRef.current = null;
     setRealisasiRows(p => recalcAllRealisasi(p.map(r => {
       const hit = items.find(it => it.ssk_canonical_id === r.ssk_canonical_id && it.bulan_ke === r.bulan);
       if (!hit) return r;
@@ -163,6 +175,7 @@ export default function RealisasiTab({
 
   /** Init 12 bulan dari SSK — bulan Des dibulatkan supaya total 100% tepat. */
   function initRealisasiFromSSK() {
+    asalPulihkanRef.current = null;
     if (!sskRows.length) { toast.error('Data SSK kosong. Isi SSK terlebih dahulu.'); return; }
     const MONTH_IDX = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'] as const;
     const toAdd: RealRow[] = [];
@@ -233,15 +246,44 @@ export default function RealisasiTab({
     }
   }
 
+  /**
+   * Muat snapshot ke layar. TIDAK menulis apa pun — Simpan tetap tombol biasa.
+   *
+   * Kolom turunan di snapshot (`pagu_awal`, `target_rp`, `akum_*`) dihitung
+   * terhadap SSK versi SAAT ITU. Kalau sejak itu ada Perubahan, angkanya sudah
+   * tidak berlaku — jadi `recalcAllRealisasi` melahirkannya ulang dari SSK versi
+   * yang sedang dibuka. Yang benar-benar dipertahankan cuma yang diketik manusia:
+   * `real_fisik`, `real_keuangan`, dan jangkarnya `ssk_canonical_id` (L88).
+   */
+  function pulihkanRealisasi(isi: unknown[], version: number | null, item: { id: number; disimpan_pada: string }) {
+    // Dibatalkan, bukan diteruskan dengan 0: angka gembok yang salah membuat
+    // Simpan berikutnya ditolak "diubah orang lain" — konflik yang tidak pernah
+    // terjadi, dengan sebab yang menyesatkan.
+    if (typeof version !== 'number') {
+      toast.error('Angka kunci versi tidak terbaca, jadi pemulihan dibatalkan. Coba lagi sebentar lagi.');
+      return;
+    }
+    setRealisasiRows(recalcAllRealisasi(isi as RealRow[]));
+    setRealVersion(version);
+    asalPulihkanRef.current = { id: item.id, disimpan_pada: item.disimpan_pada };
+    toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
+  }
+
   async function saveRealisasi(force = false) {
     setSaving(true);
     try {
       const rows = recalcAllRealisasi(realisasiRows);
       const d = await fetchJson<unknown>('/api/kinerja/realisasi', {
         method: 'PUT',
-        body: JSON.stringify({ tahun, sumber: realisasiSumber, rows, expected_version: realVersion, force }),
+        body: JSON.stringify({ tahun, sumber: realisasiSumber, rows, expected_version: realVersion, force,
+          asal_pulihkan: asalPulihkanRef.current ?? undefined }),
       });
-      if (d.ok) { toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} baris realisasi`); setRealisasiRows(rows); refetchReal(); }
+      if (d.ok) {
+        toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} baris realisasi`);
+        setRealisasiRows(rows); refetchReal();
+        // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pulihan.
+        asalPulihkanRef.current = null;
+      }
       else if ((d as unknown as { code?: string }).code === 'VERSION_CONFLICT') {
         toast.error('Data realisasi sudah diubah pengguna lain — memuat versi terbaru.');
         refetchReal();
@@ -337,6 +379,10 @@ export default function RealisasiTab({
                 Samakan Target
               </PrimaButton>
             </Tip>
+            <Tip label="Foto tiap klik Simpan — muat salah satunya kembali ke layar"><PrimaButton variant="ghost" iconLeft={<History size={14} />}
+              onClick={() => setShowRiwayat(true)}>
+              Riwayat Simpan
+            </PrimaButton></Tip>
             <Tip label={versiLocked ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa simpan input baru.` : ''}><PrimaButton variant="success" iconLeft={<Save size={14} />}
               onClick={() => saveRealisasi()} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
@@ -360,6 +406,12 @@ export default function RealisasiTab({
         <ImportRealisasiModal tahun={tahun} currentSumber={realisasiSumber} isLight={isLight}
           preload={preload?.data} preloadName={preload?.name}
           onApply={applyImport} onClose={() => { setShowImport(false); setPreload(null); }} />
+      )}
+
+      {showRiwayat && (
+        <RiwayatSimpanModal jenis="REALISASI" tahun={tahun} sumber={realisasiSumber}
+          barisSekarang={realisasiRows.length} isLight={isLight}
+          onPulihkan={pulihkanRealisasi} onClose={() => setShowRiwayat(false)} />
       )}
 
       {/* Month tabs */}

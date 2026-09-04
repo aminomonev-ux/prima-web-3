@@ -3,7 +3,7 @@ import { getSession } from '@/lib/security/auth';
 import { getRealisasiRows, getRealisasiHydrated, saveRealisasiBatch, getKinerjaVersion, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import type { RealRow } from '@/lib/data/kinerja';
-import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RealisasiBodySchema } from '@/lib/data/kinerja-schemas';
+import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RealisasiBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
 
@@ -56,7 +56,7 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = RealisasiBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, expected_version, force } = parsed.data;
+  const { tahun, sumber, rows, expected_version, force, asal_pulihkan } = parsed.data;
 
   // Cast ke type yang ditunggu saveRealisasiBatch — Zod schema passthrough sudah handle extra fields
   try {
@@ -83,7 +83,7 @@ export async function PUT(req: NextRequest) {
     eventType: 'KINERJA_SAVE_REALISASI',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Simpan realisasi ${sumber} tahun ${tahun}: ${rows.length} baris`,
+    detail:    `Simpan realisasi ${sumber} tahun ${tahun}: ${rows.length} baris` + jejakPulihkan(asal_pulihkan),
   });
 
   return NextResponse.json({ ok: true, saved: rows.length, version });

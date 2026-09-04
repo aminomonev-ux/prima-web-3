@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getCrrRows, saveCrrBatch, getPendapatanRows, savePendapatanBatch } from '@/lib/data/kinerja';
+import { getCrrRows, saveCrrBatch, getPendapatanRows, savePendapatanBatch, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, PendapatanBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
+
+/** Satu penerjemah untuk DUA cabang — dua salinan `if instanceof` pasti berbeda begitu satu disunting. */
+function terjemahPagar(err: unknown): NextResponse | null {
+  if (!(err instanceof KinerjaReplaceSafetyError)) return null;
+  return NextResponse.json(
+    { ok: false, code: 'PENURUNAN_DRASTIS', message: err.message, existing: err.existing, incoming: err.incoming },
+    { status: 409 },
+  );
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -47,8 +56,10 @@ export async function PUT(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
 
   if (parsed.data.type === 'pendapatan') {
-    const { tahun, rows } = parsed.data;
-    await savePendapatanBatch(tahun, rows, session.userId);
+    const { tahun, rows, force } = parsed.data;
+    try {
+      await savePendapatanBatch(tahun, rows, session.userId, force ?? false);
+    } catch (err) { const t = terjemahPagar(err); if (t) return t; throw err; }
     await writeAuditLog({
       req,
       eventType: 'KINERJA_SAVE_PENDAPATAN',
@@ -60,8 +71,10 @@ export async function PUT(req: NextRequest) {
   }
 
   // crr branch
-  const { tahun, rows } = parsed.data;
-  await saveCrrBatch(tahun, rows, session.userId);
+  const { tahun, rows, force } = parsed.data;
+  try {
+    await saveCrrBatch(tahun, rows, session.userId, force ?? false);
+  } catch (err) { const t = terjemahPagar(err); if (t) return t; throw err; }
   await writeAuditLog({
     req,
     eventType: 'KINERJA_SAVE_CRR',

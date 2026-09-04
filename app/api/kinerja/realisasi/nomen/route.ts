@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getNomenRows, saveNomenBatch } from '@/lib/data/kinerja';
+import { getNomenRows, saveNomenBatch, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, NomenBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
@@ -40,9 +40,19 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = NomenBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows } = parsed.data;
+  const { tahun, sumber, rows, force } = parsed.data;
 
-  await saveNomenBatch(tahun, sumber, rows, session.userId);
+  try {
+    await saveNomenBatch(tahun, sumber, rows, session.userId, force ?? false);
+  } catch (err) {
+    if (err instanceof KinerjaReplaceSafetyError) {
+      return NextResponse.json(
+        { ok: false, code: 'PENURUNAN_DRASTIS', message: err.message, existing: err.existing, incoming: err.incoming },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
 
   await writeAuditLog({
     req,

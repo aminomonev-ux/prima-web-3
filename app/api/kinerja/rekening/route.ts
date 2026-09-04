@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { getRekeningRows, saveRekeningBatch, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RekeningBodySchema } from '@/lib/data/kinerja-schemas';
+import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RekeningBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
 
@@ -40,7 +40,7 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = RekeningBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, force } = parsed.data;
+  const { tahun, sumber, rows, force, asal_pulihkan } = parsed.data;
 
   try {
     await saveRekeningBatch(tahun, sumber, rows, session.userId, force ?? false);
@@ -59,7 +59,7 @@ export async function PUT(req: NextRequest) {
     eventType: 'KINERJA_SAVE_REKENING',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Simpan rekening ${sumber} tahun ${tahun}: ${rows.length} baris`,
+    detail:    `Simpan rekening ${sumber} tahun ${tahun}: ${rows.length} baris` + jejakPulihkan(asal_pulihkan),
   });
 
   return NextResponse.json({ ok: true, saved: rows.length });

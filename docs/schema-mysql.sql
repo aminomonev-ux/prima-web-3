@@ -451,6 +451,34 @@ CREATE TABLE IF NOT EXISTS kinerja_realisasi_map (
 
 CREATE INDEX idx_krm_tahun ON kinerja_realisasi_map (tahun);
 
+-- ─── KINERJA — RIWAYAT SIMPAN ────────────────────────────────────────────────
+-- Snapshot tiap klik Simpan SSK/Realisasi/Rekening. Ketiganya hapus-lalu-tulis-
+-- ulang, jadi simpanan sore menghapus hasil pagi tanpa sisa. `versi_tipe`/
+-- `versi_seq` NULL = jenis itu memang tidak berversi (Realisasi & Rekening) —
+-- pemangkasan retensi karena itu WAJIB memakai `<=>`, bukan `=`.
+-- Rinciannya di docs/CONCEPT-kinerja-riwayat-simpan.md
+CREATE TABLE IF NOT EXISTS kinerja_riwayat_simpan (
+  id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  jenis          ENUM('SSK','REALISASI','REKENING') NOT NULL,
+  tahun          VARCHAR(10)   NOT NULL COMMENT 'Ikut kinerja_* — VARCHAR, bukan SMALLINT',
+  sumber         ENUM('GAJI','BLUD','HARLEP','PROMKES','SARPRAS',
+                      'OBAT','PEMELIHARAAN','PEMBANGUNAN') NOT NULL,
+  versi_tipe     ENUM('MURNI','PERUBAHAN') NULL
+                 COMMENT 'NULL = jenis ini tidak berversi (REALISASI, REKENING)',
+  versi_seq      TINYINT       NULL,
+  disimpan_pada  DATETIME      NOT NULL COMMENT 'Jam-menit WIB, distempel server',
+  versi_ke       INT UNSIGNED  NULL COMMENT 'Angka gembok sesudah bump. NULL = jenis tanpa gembok',
+  jumlah_baris   INT UNSIGNED  NOT NULL DEFAULT 0,
+  total_nilai    DECIMAL(18,2) NOT NULL DEFAULT 0,
+  isi            JSON          NOT NULL COMMENT 'Baris apa adanya, bentuk sama dgn payload PUT',
+  disimpan_oleh  INT               NULL,
+  created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_krs_lingkup (jenis, tahun, sumber, versi_tipe, versi_seq, disimpan_pada),
+  INDEX idx_krs_retensi (jenis, tahun, sumber, id),
+  CONSTRAINT fk_krs_user FOREIGN KEY (disimpan_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Riwayat tiap klik Simpan SSK/Realisasi/Rekening — snapshot, tidak dirujuk siapa pun';
+
 -- ─── BLUD — DPA & PERGESERAN ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS dpa_blud (

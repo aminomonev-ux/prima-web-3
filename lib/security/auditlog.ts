@@ -60,6 +60,7 @@ export type AuditEventType =
   | 'KINERJA_SAVE_SSK'
   | 'KINERJA_SAVE_REALISASI'
   | 'KINERJA_SAVE_NOMEN'
+  | 'KINERJA_RIWAYAT_PULIHKAN'     // GET /api/kinerja/riwayat-simpan?id=
   | 'KINERJA_SAVE_REALISASI_MAP'  // POST /api/kinerja/realisasi/import (save-map) — peta keterangan Excel→SSK
   | 'KINERJA_SAVE_PENDAPATAN'
   | 'KINERJA_SAVE_CRR'

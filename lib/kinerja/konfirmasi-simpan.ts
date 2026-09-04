@@ -25,8 +25,9 @@ export function konfirmasiPenurunan(apa: string, d: JawabanPagar): Promise<boole
     title: `Baris ${apa} akan berkurang banyak`,
     message:
       `Tersimpan sekarang ${ada} baris, yang akan ditulis ${baru} baris. ` +
-      'Simpan itu menghapus lalu menulis ulang seluruh isinya, dan tidak ada riwayat untuk memulihkannya. ' +
-      'Kalau tabelnya tadi belum selesai termuat, batalkan lalu muat ulang halaman.',
+      'Simpan itu menghapus lalu menulis ulang seluruh isinya. ' +
+      'Isi yang sekarang masih bisa diambil lagi lewat tombol Riwayat Simpan, tapi jangan diandalkan — ' +
+      'kalau tabelnya tadi belum selesai termuat, batalkan lalu muat ulang halaman.',
     variant: 'danger',
     confirmLabel: 'Ya, simpan apa adanya',
   });

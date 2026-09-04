@@ -411,7 +411,11 @@ ok('J3 pagar lolos saat force', /if \(force \|\| existing === 0\) return;/.test(
 ok('J4 kosong ditolak walau bukan penurunan relatif', /incoming === 0 \|\| incoming < existing \* SAFE_DROP_THRESHOLD/.test(kode));
 
 const zod = readFileSync('lib/data/kinerja-schemas.ts', 'utf8');
-eq('J5 ketiga skema menerima force', (zod.match(/^\s*force:\s*z\.boolean\(\)\.optional\(\),/gm) || []).length, 3);
+// Tahap 9a memperluas pagar dari 3 jalur ke 6 (Nomen, CRR, Pendapatan menyusul).
+// Dua di antaranya inline di dalam discriminatedUnion, jadi jangkar awal-baris
+// tidak lagi cukup — dihitung apa adanya. Rinciannya per-skema di
+// scripts/test-kinerja-riwayat-simpan.mts bagian D.
+eq('J5 keenam skema replace-all menerima force', (zod.match(/force:\s*z\.boolean\(\)\.optional\(\)/g) || []).length, 6);
 
 console.log('\n── K. Versi: jalur tanpa parameter memakai versi AKTIF ──────────');
 

@@ -653,6 +653,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
                   sskVersi={sskVersi}
                   setSskVersi={setSskVersi}
                   sskVersion={sskVersion}
+                  setSskVersion={setSskVersion}
                   refetchSsk={() => fetchSsk(activeSumber)}
                 />
               </Suspense>
@@ -676,6 +677,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
                   sskVersi={sskVersi}
                   setSskVersi={setSskVersi}
                   realVersion={realVersion}
+                  setRealVersion={setRealVersion}
                   refetchReal={() => fetchRealisasi(realisasiSumber)}
                   autoOpenImport={autoImportReal}
                   onImportConsumed={consumeImportReal}

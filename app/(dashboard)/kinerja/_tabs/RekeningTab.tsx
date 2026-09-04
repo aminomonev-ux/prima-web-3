@@ -7,11 +7,11 @@
 // rekeningRows TIDAK di-lokalisasi karena di-share dengan SSK tab (Inject
 // dari Rekening) — tetap di shell, di-pass via props.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import { fetchJson } from '@/lib/shared/api';
-import { Pencil, Plus, Save, Upload } from 'lucide-react';
+import { Pencil, Plus, Save, Upload, History } from 'lucide-react';
 import DeleteButton from '@/components/ui/DeleteButton';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -20,6 +20,7 @@ import type { SumberSSK, RekeningRow, RekForm, MasterOpts } from '../_types';
 import { SUMBER_LIST, emptyRekForm } from '../_utils';
 import { exportRekeningExcel } from '../_exports';
 import ImportRekeningModal from '@/components/kinerja/ImportRekeningModal';
+import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
 import { uiTheme } from '@/lib/theme';
 
@@ -67,6 +68,7 @@ export default function RekeningTab({
   const [rekForm,    setRekForm]    = useState<RekForm>(emptyRekForm());
   const [rekEditIdx, setRekEditIdx] = useState<number | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [showRiwayat, setShowRiwayat] = useState(false);
 
   const selStyle: React.CSSProperties = {
     width:'100%', border:`1.5px solid ${cInputBorder}`, borderRadius:'9px',
@@ -100,14 +102,30 @@ export default function RekeningTab({
     setRekeningRows(p => p.filter((_,i) => i !== idx));
   }
 
+  /**
+   * Muat snapshot ke layar. Beda dari SSK & Realisasi: tabel ini memang TIDAK
+   * punya gembok optimistik, jadi `version` null di sini normal dan diabaikan —
+   * bukan kelalaian yang perlu dibatalkan.
+   */
+  function pulihkanRekening(isi: unknown[], _version: number | null, item: { id: number; disimpan_pada: string }) {
+    setRekeningRows((isi as RekeningRow[]).map(r => ({ ...r, id: 0 })));
+    asalPulihkanRef.current = { id: item.id, disimpan_pada: item.disimpan_pada };
+    toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
+  }
+
   async function saveRekening(force = false) {
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/kinerja/rekening', {
         method: 'PUT',
-        body: JSON.stringify({ tahun, sumber: activeSumber, rows: rekeningRows, force }),
+        body: JSON.stringify({ tahun, sumber: activeSumber, rows: rekeningRows, force,
+          asal_pulihkan: asalPulihkanRef.current ?? undefined }),
       });
-      if (d.ok) toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} rekening`);
+      if (d.ok) {
+        toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} rekening`);
+        // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pulihan.
+        asalPulihkanRef.current = null;
+      }
       else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
         const ok = await konfirmasiPenurunan(`rekening ${activeSumber}`, d as unknown as JawabanPagar);
         if (ok) { setSaving(false); await saveRekening(true); return; }
@@ -121,7 +139,16 @@ export default function RekeningTab({
   // Impor berhenti di FORM: tabel terisi, penulisan tetap lewat tombol Simpan.
   // Entri Master yang menyertainya sudah ditulis di dalam modal (tab Master layar
   // lain, tak bisa dititipkan ke Simpan tab ini) — dropdown perlu disegarkan.
+  /**
+   * Snapshot yang jadi asal isi layar — ikut body Simpan, berhenti di detail
+   * audit. WAJIB dilepas di SETIAP jalur lain yang mengganti isi tabel, dan
+   * sesudah Simpan berhasil: kalau tertinggal, simpan berikutnya mengaku
+   * pulihan padahal bukan.
+   */
+  const asalPulihkanRef = useRef<{ id: number; disimpan_pada: string } | null>(null);
+
   function terapkanImport(rows: BarisRekening[], masterDibuat: number) {
+    asalPulihkanRef.current = null;
     setRekeningRows(rows.map(r => ({ id: 0, ...r })));
     setRekForm(emptyRekForm());
     setRekEditIdx(null);
@@ -256,6 +283,10 @@ export default function RekeningTab({
               onClick={() => setShowImport(true)} disabled={saving}>
               Import
             </PrimaButton>
+            <PrimaButton variant="ghost" iconLeft={<History size={14} />}
+              onClick={() => setShowRiwayat(true)} disabled={saving}>
+              Riwayat Simpan
+            </PrimaButton>
             <DownloadButton variant="excel" label="Excel" onClick={doExportRekeningExcel} />
           </div>
         </div>
@@ -277,6 +308,12 @@ export default function RekeningTab({
           onApply={terapkanImport}
           onClose={() => setShowImport(false)}
         />
+      )}
+
+      {showRiwayat && (
+        <RiwayatSimpanModal jenis="REKENING" tahun={tahun} sumber={activeSumber}
+          barisSekarang={rekeningRows.length} isLight={isLight}
+          onPulihkan={pulihkanRekening} onClose={() => setShowRiwayat(false)} />
       )}
 
       {/* Tabel */}

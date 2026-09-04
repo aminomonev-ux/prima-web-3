@@ -1,4 +1,5 @@
 import { sql, bulkInsert, withTransaction } from './db';
+import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simpan';
 
 export type SumberSSK = 'GAJI' | 'BLUD' | 'HARLEP' | 'PROMKES' | 'SARPRAS' | 'OBAT' | 'PEMELIHARAAN' | 'PEMBANGUNAN';
 export type MasterTipe = 'program' | 'kegiatan' | 'subkegiatan' | 'uraian_ssk' | 'sumber_anggaran';
@@ -295,6 +296,13 @@ export async function saveRekeningBatch(
     pagarReplace(`Rekening ${sumber} ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
 
     await tx`DELETE FROM kinerja_rekening WHERE tahun = ${tahun} AND sumber = ${sumber}`;
+    // SEBELUM `return` di bawah (L69). `versiKe` null: fungsi ini memang tidak
+    // punya gembok optimistik sama sekali — mengarang angkanya berbohong.
+    await catatRiwayatSimpan(tx, {
+      jenis: 'REKENING', tahun, sumber, versiTipe: null, versiSeq: null,
+      baris: rows, totalNilai: hitungTotalNilai('REKENING', rows),
+      versiKe: null, userId,
+    });
     if (rows.length === 0) return;
     const values = rows.map((r, i) => [
       tahun, sumber, r.uraian, r.uraian_ssk ?? null, r.sumber_anggaran ?? null,
@@ -364,10 +372,15 @@ export async function getKinerjaVersion(entity: string, keyId: string): Promise<
 
 // ─── Pagar simpan: replace-all tidak boleh menghapus tanpa ada yang menyatakan ──
 //
-// Ketiga jalur simpan modul ini (SSK, Realisasi, Rekening) berpola DELETE-lalu-
-// tulis-ulang. Sebelumnya penjagaan baris kosong berdiri SESUDAH DELETE, jadi
-// payload kosong tetap menghapus seluruh (tahun, sumber) lalu commit — dan
-// `kinerja_realisasi` tidak punya riwayat apa pun untuk memulihkannya.
+// KEENAM jalur simpan modul ini (SSK, Realisasi, Rekening, Nomenklatur, CRR,
+// Pendapatan) berpola DELETE-lalu-tulis-ulang. Sebelumnya penjagaan baris kosong
+// berdiri SESUDAH DELETE, jadi payload kosong tetap menghapus seluruh tahun lalu
+// commit.
+//
+// Tahap 0b cuma memasangnya di tiga yang pertama; tiga sisanya menyusul di Tahap
+// 9a — dan dua di antaranya berisi uang (CRR = pendapatan & belanja 12 bulan,
+// Pendapatan = target & realisasi). L69: yang terlewat selalu yang tidak sedang
+// dilihat, jadi pemanggilnya dihitung di scripts/test-kinerja-riwayat-simpan.mts.
 //
 // Ambang & bentuk pesan menyalin lib/blud/data.ts (SAFE_DROP_THRESHOLD): bukan
 // mekanisme baru, cuma dipakai di modul yang belum kebagian.
@@ -523,6 +536,14 @@ export async function saveSskBatch(
         ON DUPLICATE KEY UPDATE version = version + 1, updated_by = ${userId}
       `;
     }
+    // Tidak ada jalan keluar dini di fungsi ini (`if (rows.length > 0)` membungkus
+    // insert, bukan me-return), jadi titik ini memang akhir transaksinya.
+    await catatRiwayatSimpan(tx, {
+      jenis: 'SSK', tahun, sumber, versiTipe, versiSeq,
+      baris: rows, totalNilai: hitungTotalNilai('SSK', rows),
+      versiKe: expectedVersion === undefined ? null : expectedVersion + 1,
+      userId,
+    });
   });
 }
 
@@ -549,9 +570,15 @@ export async function saveNomenBatch(
   tahun: string,
   sumber: SumberSSK,
   rows: Pick<NomenRow, 'keterangan'>[],
-  userId: number
+  userId: number,
+  force = false,
 ) {
   await withTransaction(async ({ tx, conn }) => {
+    const [ada] = await tx`
+      SELECT COUNT(*) AS n FROM kinerja_realisasi_nomen WHERE tahun = ${tahun} AND sumber = ${sumber}
+    ` as { n: unknown }[];
+    pagarReplace(`Nomenklatur ${sumber} ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+
     await tx`DELETE FROM kinerja_realisasi_nomen WHERE tahun = ${tahun} AND sumber = ${sumber}`;
     if (rows.length === 0) return;
     const values = rows.map((r, i) => [tahun, sumber, i + 1, r.keterangan, userId]);
@@ -757,6 +784,15 @@ export async function saveRealisasiBatch(
         ON DUPLICATE KEY UPDATE version = version + 1, updated_by = ${userId}
       `;
     }
+    // SEBELUM `return` di bawah, bukan di akhir fungsi. Simpanan kosong yang
+    // dipaksa `force` justru yang paling perlu bisa ditarik balik — menaruhnya
+    // sesudah `return` melewatkan tepat kasus itu (L69).
+    await catatRiwayatSimpan(tx, {
+      jenis: 'REALISASI', tahun, sumber, versiTipe: null, versiSeq: null,
+      baris: rows, totalNilai: hitungTotalNilai('REALISASI', rows),
+      versiKe: expectedVersion === undefined ? null : expectedVersion + 1,
+      userId,
+    });
     if (rows.length === 0) return;
     // Checkpoint D: kolom turunan sudah di-DROP. INSERT cuma input persisten + identitas.
     const values = rows.map(r => [
@@ -828,7 +864,8 @@ export async function getCrrRows(tahun: string): Promise<CrrRow[]> {
 export async function saveCrrBatch(
   tahun: string,
   rows: Omit<CrrRow, 'id' | 'tahun'>[],
-  userId: number
+  userId: number,
+  force = false,
 ) {
   // C-BUG-1 (audit Tahap 12): refactor dari loop INSERT non-atomic ke
   // withTransaction + DELETE + bulkInsert (konsisten dengan saveSskBatch,
@@ -836,6 +873,11 @@ export async function saveCrrBatch(
   // Jika crash di tengah loop sebelumnya, sebagian bulan ter-update, sebagian
   // pakai data lama → inkonsisten total YTD. Sekarang all-or-nothing.
   await withTransaction(async ({ tx, conn }) => {
+    const [ada] = await tx`
+      SELECT COUNT(*) AS n FROM kinerja_pendapatan_crr WHERE tahun = ${tahun}
+    ` as { n: unknown }[];
+    pagarReplace(`CRR ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+
     await tx`DELETE FROM kinerja_pendapatan_crr WHERE tahun = ${tahun}`;
     if (rows.length === 0) return;
     const values = rows.map(r => [
@@ -888,9 +930,15 @@ export async function getPendapatanRows(tahun: string): Promise<PendRow[]> {
 export async function savePendapatanBatch(
   tahun: string,
   rows: Omit<PendRow, 'id' | 'tahun'>[],
-  userId: number
+  userId: number,
+  force = false,
 ) {
   await withTransaction(async ({ tx, conn }) => {
+    const [ada] = await tx`
+      SELECT COUNT(*) AS n FROM kinerja_pendapatan_real WHERE tahun = ${tahun}
+    ` as { n: unknown }[];
+    pagarReplace(`Pendapatan ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+
     await tx`DELETE FROM kinerja_pendapatan_real WHERE tahun = ${tahun}`;
     if (rows.length === 0) return;
     const values = rows.map((r, i) => [tahun, i + 1, r.keterangan, r.target, r.realisasi, r.capaian_pct, userId]);

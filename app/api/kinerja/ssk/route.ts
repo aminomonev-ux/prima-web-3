@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { getSskRows, saveSskBatch, getKinerjaVersion, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, SskBodySchema } from '@/lib/data/kinerja-schemas';
+import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, SskBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
 
@@ -45,7 +45,7 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = SskBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version, force } = parsed.data;
+  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version, force, asal_pulihkan } = parsed.data;
   const versiTipe = versi_tipe ?? 'MURNI';
   const versiSeq  = versi_seq  ?? 0;
 
@@ -72,7 +72,7 @@ export async function PUT(req: NextRequest) {
     eventType: 'KINERJA_SAVE_SSK',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Simpan SSK ${sumber} ${tahun} ${versiTipe}-${versiSeq}: ${rows.length} baris`,
+    detail:    `Simpan SSK ${sumber} ${tahun} ${versiTipe}-${versiSeq}: ${rows.length} baris` + jejakPulihkan(asal_pulihkan),
   });
 
   return NextResponse.json({ ok: true, saved: rows.length, versi: { tipe: versiTipe, seq: versiSeq }, version });

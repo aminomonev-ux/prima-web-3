@@ -3,7 +3,7 @@
 // O2: extract dari kinerja-client.tsx renderSskPanel + 5 handler.
 // Refactor Versi (Checkpoint C Task #19): integrate VersiPicker + handle save versi-aware.
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import { fetchJson } from '@/lib/shared/api';
@@ -13,6 +13,7 @@ import type { SumberSSK, SskRow, RekeningRow, MonthKey } from '../_types';
 import { SUMBER_LIST, SSK_THEME, MONTHS_KEYS, MONTH_SHORT, emptyMonths } from '../_utils';
 import { exportSskExcel, exportSskPdf } from '../_exports';
 import ImportRkoModal from '@/components/kinerja/ImportRkoModal';
+import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import { hitungTurunanRko } from '@/lib/kinerja/gabung-rko';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
@@ -20,7 +21,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import Tip from '@/components/ui/Tip';
-import { Download, Save, Check, Upload } from 'lucide-react';
+import { Download, Save, Check, Upload, History } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -39,16 +40,18 @@ interface Props {
   sskVersi: VersiValue;
   setSskVersi: React.Dispatch<React.SetStateAction<VersiValue>>;
   sskVersion: number; // V3-6 optimistic lock baseline
+  setSskVersion: React.Dispatch<React.SetStateAction<number>>;
   refetchSsk: () => void;
 }
 
 export default function SskTab({
   sskRows, setSskRows, activeSumber, setActiveSumber,
   rekeningRows, tahun, canEdit, loadingData, saving, setSaving,
-  isLight = false, sskVersi, setSskVersi, sskVersion, refetchSsk,
+  isLight = false, sskVersi, setSskVersi, sskVersion, setSskVersion, refetchSsk,
 }: Props) {
   // ─── Versi list + locked detect ─────────────────────────────────────────
   const [showImport,    setShowImport]    = useState(false);
+  const [showRiwayat,   setShowRiwayat]   = useState(false);
   const [versiItems,    setVersiItems]    = useState<VersiKinerja[]>([]);
   const [versiLoading,  setVersiLoading]  = useState(false);
   const [confirmCreate, setConfirmCreate] = useState(false);
@@ -86,7 +89,16 @@ export default function SskTab({
 
   // ─── Handlers ────────────────────────────────────────────────────────────
 
+  /**
+   * Snapshot yang jadi asal isi layar — ikut body Simpan, berhenti di detail
+   * audit. WAJIB dilepas di SETIAP jalur lain yang mengganti isi tabel, dan
+   * sesudah Simpan berhasil: kalau tertinggal, simpan berikutnya mengaku
+   * pulihan padahal bukan.
+   */
+  const asalPulihkanRef = useRef<{ id: number; disimpan_pada: string } | null>(null);
+
   function injectRekening() {
+    asalPulihkanRef.current = null;
     const existingKeys = new Set(sskRows.map(r => `${r.uraian_ssk}||${r.uraian}`));
     const toInject = rekeningRows
       .filter(r => r.uraian.trim())
@@ -127,6 +139,24 @@ export default function SskTab({
     }));
   }
 
+  /**
+   * Muat snapshot ke layar. TIDAK menulis apa pun — Simpan tetap tombol biasa.
+   * Riwayatnya per (tahun, sumber, versi), jadi yang dimuat pasti milik versi
+   * yang sedang dibuka; tidak ada snapshot versi lain yang bisa nyasar ke sini.
+   */
+  function pulihkanSsk(isi: unknown[], version: number | null, item: { id: number; disimpan_pada: string }) {
+    // Dibatalkan, bukan diteruskan dengan 0 — angka gembok yang salah membuat
+    // Simpan berikutnya ditolak "diubah orang lain", konflik yang tidak terjadi.
+    if (typeof version !== 'number') {
+      toast.error('Angka kunci versi tidak terbaca, jadi pemulihan dibatalkan. Coba lagi sebentar lagi.');
+      return;
+    }
+    setSskRows(isi as SskRow[]);
+    setSskVersion(version);
+    asalPulihkanRef.current = { id: item.id, disimpan_pada: item.disimpan_pada };
+    toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
+  }
+
   async function saveSsk(force = false) {
     if (versiLocked) { toast.error(`Versi ${versiLabel} sudah dikunci, tidak bisa diubah.`); return; }
     setSaving(true);
@@ -138,6 +168,7 @@ export default function SskTab({
           versi_tipe: sskVersi.tipe, versi_seq: sskVersi.seq,
           expected_version: sskVersion, // V3-6 optimistic lock
           force,
+          asal_pulihkan: asalPulihkanRef.current ?? undefined,
         }),
       });
       if (d.ok) {
@@ -145,6 +176,8 @@ export default function SskTab({
         // Refetch versi-list + rows (sinkron baseline version terbaru)
         fetchVersiList();
         refetchSsk();
+        // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pulihan.
+        asalPulihkanRef.current = null;
       } else if ((d as unknown as { code?: string }).code === 'VERSION_CONFLICT') {
         // V3-6: edit barengan → muat ulang versi terbaru (mirror RA L49).
         toast.error('Data SSK sudah diubah pengguna lain — memuat versi terbaru.');
@@ -233,6 +266,10 @@ export default function SskTab({
               onClick={() => setShowImport(true)} disabled={versiLocked}>
               Import
             </PrimaButton></Tip>
+            <Tip label="Foto tiap klik Simpan — muat salah satunya kembali ke layar"><PrimaButton variant="ghost" iconLeft={<History size={14} />}
+              onClick={() => setShowRiwayat(true)}>
+              Riwayat Simpan
+            </PrimaButton></Tip>
             <Tip label={versiLocked ? 'Versi terkunci, tidak bisa disimpan' : ''}><PrimaButton variant="success" iconLeft={<Save size={14} />}
               onClick={() => saveSsk()} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
@@ -251,11 +288,19 @@ export default function SskTab({
           rekeningRows={rekeningRows}
           isLight={isLight}
           onApply={(rows) => {
+            asalPulihkanRef.current = null;
             setSskRows(rows);
             toast.success(`${rows.length} baris masuk ke tabel — periksa lalu klik Simpan Semua`);
           }}
           onClose={() => setShowImport(false)}
         />
+      )}
+
+      {showRiwayat && (
+        <RiwayatSimpanModal jenis="SSK" tahun={tahun} sumber={activeSumber}
+          versiTipe={sskVersi.tipe} versiSeq={sskVersi.seq}
+          barisSekarang={sskRows.length} isLight={isLight}
+          onPulihkan={pulihkanSsk} onClose={() => setShowRiwayat(false)} />
       )}
 
 

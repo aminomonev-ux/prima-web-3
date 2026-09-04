@@ -23,6 +23,7 @@ import { InputNominal } from '@/components/ui/input-nominal';
 import type { CrrRow, PendRow, CrrInputField } from '../_types';
 import { CRR_BULAN_LABELS, initCrrRows, initPendapatanRows, recalcCrr } from '../_utils';
 import { exportCrrExcel, exportPendapatanExcel } from '../_exports';
+import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import { uiTheme } from '@/lib/theme';
 import ImportPendapatanModal from '@/components/kinerja/ImportPendapatanModal';
 import { useLampir, type LampirPendapatanData } from '@/lib/sentinel/lampir-store';
@@ -133,15 +134,19 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
     });
   }
 
-  async function saveCrr() {
+  async function saveCrr(force = false) {
     const rows = getDisplayCrrRows();
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/kinerja/pendapatan', {
         method: 'PUT',
-        body: JSON.stringify({ tahun, type: 'crr', rows }),
+        body: JSON.stringify({ tahun, type: 'crr', rows, force }),
       });
       if (d.ok) toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} baris CRR`);
+      else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
+        const ok = await konfirmasiPenurunan(`CRR ${tahun}`, d as unknown as JawabanPagar);
+        if (ok) { setSaving(false); await saveCrr(true); return; }
+      }
       else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
@@ -182,14 +187,18 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
     });
   }
 
-  async function savePendapatan() {
+  async function savePendapatan(force = false) {
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/kinerja/pendapatan', {
         method: 'PUT',
-        body: JSON.stringify({ tahun, type: 'pendapatan', rows: pendapatanRows.length === 12 ? pendapatanRows : initPendapatanRows() }),
+        body: JSON.stringify({ tahun, type: 'pendapatan', force, rows: pendapatanRows.length === 12 ? pendapatanRows : initPendapatanRows() }),
       });
       if (d.ok) toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} item pendapatan`);
+      else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
+        const ok = await konfirmasiPenurunan(`pendapatan ${tahun}`, d as unknown as JawabanPagar);
+        if (ok) { setSaving(false); await savePendapatan(true); return; }
+      }
       else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
@@ -259,7 +268,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
             )}
             {canEdit && (
               <PrimaButton variant="success" iconLeft={<Save size={14} />}
-                onClick={savePendapatan} disabled={saving}>
+                onClick={() => savePendapatan()} disabled={saving}>
                 {saving ? 'Menyimpan...' : 'Simpan Pendapatan'}
               </PrimaButton>
             )}
@@ -325,7 +334,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             {canEdit && (
               <PrimaButton variant="success" iconLeft={<Save size={14} />}
-                onClick={saveCrr} disabled={saving}>
+                onClick={() => saveCrr()} disabled={saving}>
                 {saving ? 'Menyimpan...' : 'Simpan CRR'}
               </PrimaButton>
             )}

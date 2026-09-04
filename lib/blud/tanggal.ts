@@ -5,6 +5,8 @@
 // `new Date(iso)`: konstruktor Date menafsirkan tanggal polos sebagai UTC lalu
 // menggesernya ke zona lokal, jadi 2026-07-01 bisa tampil 30 Jun.
 
+import { JAKARTA_OFFSET_MS, waktuSekarangWIB } from '@/lib/shared/waktu-wib'
+
 const BULAN_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
 /** "2026-07-26" → "26 Jul 2026". Nilai yang tidak dikenali dikembalikan apa adanya. */
@@ -16,11 +18,13 @@ export function formatTanggalId(iso: string | null | undefined): string {
 }
 
 /**
- * Selisih WIB terhadap UTC. Satu tetapan untuk dua sisi: `toDateStr` di
- * `data.ts` (server, membaca kolom DATE) dan `tanggalHariIniWIB` di bawah
- * (klien, menetapkan versi baru).
+ * Selisih WIB terhadap UTC + stempel DATETIME-nya. Keduanya PINDAH ke
+ * `lib/shared/waktu-wib.ts` saat E-Anggaran memerlukan jam yang sama untuk
+ * `kinerja_riwayat_simpan`; di-re-export di sini supaya pemanggil lama tidak
+ * disentuh. Diimpor DAN di-re-export: `export … from` tidak membuat binding
+ * lokal, padahal `tanggalHariIniWIB` di bawah memakai offsetnya sendiri.
  */
-export const JAKARTA_OFFSET_MS = 7 * 60 * 60 * 1000
+export { JAKARTA_OFFSET_MS, waktuSekarangWIB }
 
 /**
  * Tanggal hari ini menurut WIB, bukan UTC.
@@ -56,24 +60,6 @@ export function toDateStr(v: unknown): string {
     return new Date(v.getTime() + JAKARTA_OFFSET_MS).toISOString().slice(0, 10)
   }
   return String(v).slice(0, 10)
-}
-
-/**
- * Saat ini menurut WIB dalam bentuk `YYYY-MM-DD HH:MM:SS` — siap masuk kolom
- * DATETIME MySQL. Dipakai `disimpan_pada` di `blud_riwayat_simpan`.
- *
- * SENGAJA bukan `NOW()` MySQL: `versi_tanggal` ditetapkan klien lewat
- * `tanggalHariIniWIB` di atas, sedangkan `NOW()` mengikuti zona server. Kalau
- * servernya UTC, tanggal keduanya bisa berbeda pada dini hari WIB dan snapshot
- * terlihat nyasar dari versinya. Satu tetapan (`JAKARTA_OFFSET_MS`) untuk dua
- * angka yang harus sepakat.
- *
- * Juga bukan `.toISOString()` apa adanya: MySQL menolak sisipan 'T' dan 'Z'.
- *
- * @param sekarang epoch ms — parameter hanya untuk pengujian.
- */
-export function waktuSekarangWIB(sekarang: number = Date.now()): string {
-  return new Date(sekarang + JAKARTA_OFFSET_MS).toISOString().slice(0, 19).replace('T', ' ')
 }
 
 // ─── PERIODE VERSI HISTORIS ──────────────────────────────────────────────────
