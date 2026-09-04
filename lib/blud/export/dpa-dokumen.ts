@@ -203,13 +203,33 @@ function tulisTandaTangan(
   tulis(mulai + 8, direktur?.nip?.trim() ? `NIP. ${direktur.nip.trim()}` : `NIP. ${GARIS_ISI}`)
 }
 
+/**
+ * Dua kolom cadangan di belakang yang disembunyikan dari mata pembaca dokumen,
+ * tapi tetap terbawa supaya berkasnya bisa diimpor balik.
+ *
+ * Letaknya DIHITUNG dari nama kolomnya, tidak ditulis sebagai angka. Waktu L86
+ * menyisipkan Bertambah/Berkurang/Selisih, keduanya bergeser dari kolom 11-12 ke
+ * 13-14 sementara angkanya tidak ikut digeser — jadi dokumen Pergeseran
+ * menyembunyikan Berkurang & Selisih dan memamerkan Level & Jangkar, tanpa satu
+ * galat pun. Indeks kolom yang ditulis tangan akan mengulang itu pada
+ * penyisipan berikutnya.
+ */
+const KOLOM_CADANGAN = ['Level', 'Jangkar']
+
+const kolomCadangan = (kolom: readonly string[]): number[] =>
+  kolom.flatMap((nama, i) => (KOLOM_CADANGAN.includes(nama) ? [i + 1] : []))
+
+/** Kolom yang benar-benar terlihat — dipakai merge judul & blok tanda tangan. */
+const kolomTampak = (kolom: readonly string[]): number =>
+  kolom.length - kolomCadangan(kolom).length
+
 function selesaikanLembar(
   ws: ExcelJS.Worksheet,
   lebar: number[],
-  kolSembunyi: number[],
+  kolom: readonly string[],
 ): void {
   lebar.forEach((w, i) => { ws.getColumn(i + 1).width = w })
-  kolSembunyi.forEach(c => { ws.getColumn(c).hidden = true })
+  kolomCadangan(kolom).forEach(c => { ws.getColumn(c).hidden = true })
   ws.views = [{ state: 'frozen', ySplit: BARIS_HEADER }]
 }
 
@@ -251,7 +271,7 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
   const wb = new ExcelJSLib.Workbook()
   const ws = wb.addWorksheet(`DPA ${tahun}`)
   const pohon = siapkanPohon(rows)
-  const kolTampak = 8
+  const kolTampak = kolomTampak(KOLOM_DPA)
 
   tulisJudul(ws, kolTampak, 'RINCIAN BELANJA ANGGARAN', tahun)
   tulisHeader(ws, KOLOM_DPA)
@@ -287,7 +307,7 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
 
   const akhirData = BARIS_DATA_1 + pohon.urut.length - 1
   tulisTandaTangan(ws, akhirData + 3, 5, kolTampak, direktur)
-  selesaikanLembar(ws, LEBAR_DPA, [9, 10])
+  selesaikanLembar(ws, LEBAR_DPA, KOLOM_DPA)
   return wb
 }
 
@@ -303,11 +323,16 @@ export async function exportDpaDokumen(args: UnduhDokumenArgs<DpaBaris>): Promis
 // ikut. Dua kolom sebelumnya berisi NILAI, sebab uraian tangan memang bukan
 // hasil rumus. `F` (Jumlah) dan `I` (Pergeseran) tidak bergeser, jadi rumusnya
 // tetap sah walau selnya pindah dari J ke L.
+// Penanggung Jawab & Keterangan ikut, sama dengan dokumen DPA dan sama dengan
+// tabel di menu Cetak: keduanya sudah jadi kolom `pergeseran_dpa` sejak 2026-08-24
+// (cermin DPA), dan dokumen yang menghilangkannya membuat orang yang cuma
+// memegang berkasnya tidak tahu pos itu tanggung jawab siapa.
 const KOLOM_PERGESERAN = [
   'Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah',
-  'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih', 'Level', 'Jangkar',
+  'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih',
+  'Penanggung Jawab', 'Keterangan', 'Level', 'Jangkar',
 ]
-const LEBAR_PERGESERAN = [26, 46, 8, 10, 16, 18, 8, 16, 18, 16, 16, 18, 10, 26]
+const LEBAR_PERGESERAN = [26, 46, 8, 10, 16, 18, 8, 16, 18, 16, 16, 18, 22, 24, 10, 26]
 
 export async function buatWorkbookPergeseran(
   args: UnduhDokumenArgs<PergeseranBaris>,
@@ -322,7 +347,7 @@ export async function buatWorkbookPergeseran(
   const ws = wb.addWorksheet(`Pergeseran ${tahun}`)
   const pohon = siapkanPohon(rows)
   const urai = uraiGeser(rows, mutasi)
-  const kolTampak = 12
+  const kolTampak = kolomTampak(KOLOM_PERGESERAN)
 
   tulisJudul(ws, kolTampak, 'PERGESERAN RINCIAN BELANJA ANGGARAN', tahun)
   tulisHeader(ws, KOLOM_PERGESERAN)
@@ -350,8 +375,10 @@ export async function buatWorkbookPergeseran(
     baris.getCell(11).value = u.berkurang || ''
     // Selisih = pergeseran − jumlah, sesuai recalcPergeseranJumlah().
     baris.getCell(12).value = { formula: `I${nomor}-F${nomor}`, result: r.bertambah_berkurang }
-    baris.getCell(13).value = TIPE_LABEL[r.tipe_baris] ?? ''
-    baris.getCell(14).value = sanitizeCell(r.anggaran_key ?? '')
+    baris.getCell(13).value = sanitizeCell(r.penanggung_jawab ?? '')
+    baris.getCell(14).value = sanitizeCell(r.keterangan ?? '')
+    baris.getCell(15).value = TIPE_LABEL[r.tipe_baris] ?? ''
+    baris.getCell(16).value = sanitizeCell(r.anggaran_key ?? '')
 
     hiasBarisData(baris, {
       kolomAngka: [3, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -364,7 +391,7 @@ export async function buatWorkbookPergeseran(
 
   const akhirData = BARIS_DATA_1 + pohon.urut.length - 1
   tulisTandaTangan(ws, akhirData + 3, 6, kolTampak, direktur)
-  selesaikanLembar(ws, LEBAR_PERGESERAN, [11, 12])
+  selesaikanLembar(ws, LEBAR_PERGESERAN, KOLOM_PERGESERAN)
   if (mutasi?.length) tulisLembarPerpindahan(wb, rows, mutasi)
   return wb
 }

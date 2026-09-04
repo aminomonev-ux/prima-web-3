@@ -24,9 +24,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type ExcelJS from 'exceljs'
 import { renderCetakHtml, kalimatCakupan, saringYangBergeser } from '../lib/blud/cetak-data'
-import { buatWorkbookPergeseran } from '../lib/blud/export/dpa-dokumen'
+import { buatWorkbookDpa, buatWorkbookPergeseran } from '../lib/blud/export/dpa-dokumen'
 import { periksaMutasi, type MutasiInput } from '../lib/blud/mutasi'
-import type { PergeseranBaris } from '../types'
+import type { DpaBaris, PergeseranBaris } from '../types'
 
 let lulus = 0
 let gagal = 0
@@ -74,7 +74,8 @@ function pohon(): PergeseranBaris[] {
       jumlah: 100_000_000, pergeseran: 55_000_000 }),
     baris({ row_id: 'B', parent_id: 'induk', tipe_baris: 'CHILD', urutan: 3, kode_rekening: '5.1.02',
       uraian: 'Belanja listrik', vol: 1, harga: 50_000_000, vol_p: 1, harga_p: 83_000_000,
-      jumlah: 50_000_000, pergeseran: 83_000_000 }),
+      jumlah: 50_000_000, pergeseran: 83_000_000,
+      penanggung_jawab: 'Kasubbag Umum', keterangan: 'tambah daya' }),
     baris({ row_id: 'C', parent_id: 'induk', tipe_baris: 'CHILD', urutan: 4, kode_rekening: '5.1.03',
       uraian: 'Belanja air', vol: 1, harga: 30_000_000, vol_p: 1, harga_p: 42_000_000,
       jumlah: 30_000_000, pergeseran: 42_000_000 }),
@@ -315,6 +316,75 @@ console.log('\n── F. Pagar: yang sengaja tidak tersentuh ──')
   cek('kalimat cakupan satu sumber',
     (cd.match(/rincianCakupan\(/g) ?? []).length === 3,
     'definisi + spanduk + kalimatCakupan')
+}
+
+// ── G. Berkas unduhan memuat kolom yang sama dengan layar ────────────────────
+console.log('\n── G. Dokumen resmi sejajar dengan tabel di menu Cetak ──')
+{
+  const kepala = (ws: ExcelJS.Worksheet) => {
+    const b = ws.getRow(6)
+    const semua: { nama: string; tersembunyi: boolean }[] = []
+    for (let c = 1; c <= 20; c++) {
+      const nama = String(b.getCell(c).value ?? '')
+      if (!nama) continue
+      semua.push({ nama, tersembunyi: ws.getColumn(c).hidden === true })
+    }
+    return semua
+  }
+
+  const wb = await buatWorkbookPergeseran({ rows: pohon(), tahun: 2026, versi: '2026-01-31' })
+  const k = kepala(wb.worksheets[0])
+  const tampak = k.filter(x => !x.tersembunyi).map(x => x.nama)
+  const sembunyi = k.filter(x => x.tersembunyi).map(x => x.nama)
+
+  const layar = rekap(pohon()).meta.columns
+  cek('kolom TAMPAK dokumen persis sama dengan tabel di layar',
+    tampak.join('|') === layar.join('|'),
+    tampak.length === layar.length ? '' : `${tampak.length} vs ${layar.length}`)
+  cek('yang disembunyikan HANYA Level & Jangkar',
+    sembunyi.join('|') === 'Level|Jangkar', sembunyi.join('|') || '(tidak ada)')
+  cek('Penanggung Jawab & Keterangan ikut tercetak',
+    tampak.includes('Penanggung Jawab') && tampak.includes('Keterangan'))
+
+  // Kepala tabel yang ada tapi selnya kosong itu kolom yang tidak berguna —
+  // diperiksa terpisah dari nama kolomnya.
+  const iPj = tampak.indexOf('Penanggung Jawab') + 1
+  const iKet = tampak.indexOf('Keterangan') + 1
+  let barisB = 0
+  wb.worksheets[0].eachRow((row, n) => { if (String(row.getCell(1).value ?? '') === '5.1.02') barisB = n })
+  const sel = (k: number) => (k > 0 ? wb.worksheets[0].getRow(barisB).getCell(k).value : null)
+  cek('selnya benar-benar terisi dari barisnya',
+    sel(iPj) === 'Kasubbag Umum' && sel(iKet) === 'tambah daya',
+    `${sel(iPj)} · ${sel(iKet)}`)
+
+  // Kop & blok tanda tangan dimerge selebar kolom yang TAMPAK. Angka mati di
+  // sini membuat judulnya berhenti di tengah tabel begitu ada kolom baru.
+  const merges: string[] = (wb.worksheets[0].model as { merges?: string[] }).merges ?? []
+  const kolomAkhir = (r: string) => r.split(':')[1]?.replace(/\d+/g, '') ?? ''
+  const hurufKe = (n: number) => String.fromCharCode(64 + n)
+  cek('kop dimerge selebar kolom yang tampak',
+    merges.some(r => r.startsWith('A1:') && kolomAkhir(r) === hurufKe(tampak.length)),
+    `cari A1:${hurufKe(tampak.length)}1 — ada ${merges.filter(r => r.startsWith('A1')).join(', ') || '(tidak ada)'}`)
+
+  // Kolom cadangan dicari dari NAMANYA, bukan ditulis sebagai angka: waktu L86
+  // menyisipkan tiga kolom, indeks tangan [11, 12] tetap diam dan dokumen
+  // menyembunyikan Berkurang & Selisih sambil memamerkan Level & Jangkar.
+  const dk = kode('lib/blud/export/dpa-dokumen.ts')
+  cek('letak kolom cadangan dihitung, bukan ditulis tangan',
+    dk.includes('const kolomCadangan = (kolom: readonly string[]): number[] =>')
+    && !/selesaikanLembar\(ws, LEBAR_\w+, \[/.test(dk))
+  cek('lebar kolom sepanjang daftar kolomnya',
+    (dk.match(/const LEBAR_PERGESERAN = \[[^\]]*\]/)?.[0].split(',').length ?? 0) === 16)
+
+  const wbDpa = await buatWorkbookDpa({ rows: pohon() as unknown as DpaBaris[], tahun: 2026, versi: '2026-01-31' })
+  const kd = kepala(wbDpa.worksheets[0])
+  const layarDpa = renderCetakHtml({
+    menu: 'dpa', view: 'dpa', rows: pohon(), versi: '2026-01-31', tanggal: '',
+  }).meta.columns
+  cek('dokumen DPA juga sejajar dengan layarnya',
+    kd.filter(x => !x.tersembunyi).map(x => x.nama).join('|') === layarDpa.join('|'))
+  cek('dokumen DPA menyembunyikan Level & Jangkar',
+    kd.filter(x => x.tersembunyi).map(x => x.nama).join('|') === 'Level|Jangkar')
 }
 
 console.log(`\n${gagal === 0 ? 'SEMUA LULUS' : 'ADA YANG GAGAL'} — ${lulus} lulus, ${gagal} gagal`)

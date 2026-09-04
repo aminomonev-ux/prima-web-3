@@ -308,9 +308,12 @@ cek('Induk memuat rollup, bukan turunan selisihnya sendiri',
   && ws.getRow(barisInduk).getCell(11).value === 87,
   `${ws.getRow(barisInduk).getCell(10).value} / ${ws.getRow(barisInduk).getCell(11).value} — selisih induk −42 akan memberi ''/42`)
 
-cek('Level & Jangkar bergeser ke kolom 13-14',
-  judulKolom[12] === 'Level' && judulKolom[13] === 'Jangkar',
-  `${judulKolom[12]} · ${judulKolom[13]}`)
+// Yang dijaga: keduanya tetap DUA TERAKHIR, berapa pun kolom yang disisipkan di
+// depannya — bukan nomor kolomnya. Mengunci "13-14" membuat tes ini gagal tiap
+// kali ada kolom baru, padahal yang penting posisinya relatif.
+cek('Level & Jangkar tetap dua kolom terakhir',
+  judulKolom.slice(-2).join('|') === 'Level|Jangkar',
+  judulKolom.slice(-2).join(' · '))
 
 const cetakSrc = kode(baca('lib/blud/cetak-data.ts'))
 // Yang dijaga argumen PERTAMA-nya: `sorted`, bukan daftar penuh. Argumen kedua
