@@ -128,6 +128,8 @@ export interface RekapExportParams {
   yatim:    LaporanYatim;
   tahun:    string;
   namaBulan: string;
+  /** Lihat `HasilRekap.tanpaRealisasi` — catatannya WAJIB ikut ke berkas. */
+  tanpaRealisasi: boolean;
 }
 
 /** Catatan yatim ikut dibawa: tanpa ini, dokumen yang dibaca di luar aplikasi
@@ -139,11 +141,26 @@ function catatanYatim(yatim: LaporanYatim): string | null {
     + `sehingga tidak punya pagu sebagai pembagi.`;
 }
 
+/**
+ * Catatan "belum ada realisasi yang diisi".
+ *
+ * Ia ada di berkas, bukan cuma di layar, dan itu seluruh alasannya: yang
+ * ditandatangani dan diedarkan adalah berkasnya. "Realisasi Rp 0" tanpa
+ * keterangan akan dibaca sebagai "anggarannya belum dipakai", padahal dokumen
+ * ini tidak punya cara membedakannya dari "datanya belum dimasukkan".
+ */
+function catatanTanpaRealisasi(tanpaRealisasi: boolean, namaBulan: string, tahun: string): string | null {
+  if (!tanpaRealisasi) return null;
+  return `Catatan: belum ada data realisasi yang diisi s/d ${namaBulan} ${tahun}. `
+    + 'Angka Realisasi Rp 0 di atas berarti datanya belum dimasukkan ke sistem — '
+    + 'bukan berarti anggarannya belum dipakai.';
+}
+
 /** Baris kop di atas header — indeksnya juga yang dipakai `headerRowIndex`. */
 export const REKAP_JUDUL_BARIS = 6;
 
 /** Dipisah dari pengunduhannya supaya bisa diuji tanpa DOM. */
-export function rekapAoa({ baris, yatim, tahun, namaBulan }: RekapExportParams): (string | number | null)[][] {
+export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi }: RekapExportParams): (string | number | null)[][] {
   const judul: (string | number | null)[][] = [
     ['RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO'],
     ['PROVINSI JAWA TENGAH'],
@@ -157,8 +174,11 @@ export function rekapAoa({ baris, yatim, tahun, namaBulan }: RekapExportParams):
     b.realFisik, b.pctFisik, b.devFisik, b.capaianFisik,
     b.targetRp, b.realKeuBulanIni, b.realKeu, b.pctKeu, b.devKeu,
   ]);
-  const catatan = catatanYatim(yatim);
-  return [...judul, REKAP_HEADER, ...data, ...(catatan ? [[], [catatan]] : [])];
+  const catatan = [
+    catatanTanpaRealisasi(tanpaRealisasi, namaBulan, tahun),
+    catatanYatim(yatim),
+  ].filter((c): c is string => c !== null);
+  return [...judul, REKAP_HEADER, ...data, ...(catatan.length ? [[], ...catatan.map(c => [c])] : [])];
 }
 
 const REKAP_LEBAR = [{ wch:5 },{ wch:48 },{ wch:18 },{ wch:12 },{ wch:20 },{ wch:12 },{ wch:12 },{ wch:14 },{ wch:20 },{ wch:18 },{ wch:20 },{ wch:12 },{ wch:12 }];
@@ -205,7 +225,7 @@ export async function exportRekapExcel(params: RekapExportParams) {
 export function gambarRekapPdf(
   doc: import('jspdf').jsPDF,
   autoTable: typeof import('jspdf-autotable').default,
-  { baris, yatim, tahun, namaBulan }: RekapExportParams,
+  { baris, yatim, tahun, namaBulan, tanpaRealisasi }: RekapExportParams,
 ) {
   // Rata tengah lewat penulis yang SAMA dengan halaman detail. Dulu kop rekap
   // ditulis di x=14 (pojok kiri) sementara kop detail rata tengah, jadi dalam
@@ -226,11 +246,14 @@ export function gambarRekapPdf(
     // Baris grand total & program ditebalkan supaya pohonnya tetap terbaca di kertas.
     didParseCell: (d) => { if (d.section === 'body' && baris[d.row.index]?.tebal) d.cell.styles.fontStyle = 'bold'; },
   });
-  const catatan = catatanYatim(yatim);
-  if (catatan) {
+  const catatan = [
+    catatanTanpaRealisasi(tanpaRealisasi, namaBulan, tahun),
+    catatanYatim(yatim),
+  ].filter((c): c is string => c !== null);
+  if (catatan.length) {
     const y = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? yTabel;
     doc.setFontSize(8);
-    doc.text(doc.splitTextToSize(catatan, 380), 14, y + 8);
+    doc.text(doc.splitTextToSize(catatan.join('\n'), 380), 14, y + 8);
   }
 }
 

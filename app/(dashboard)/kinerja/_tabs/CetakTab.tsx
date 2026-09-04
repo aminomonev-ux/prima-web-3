@@ -71,9 +71,24 @@ export default function CetakTab({
   // pemanggilan = dua jawaban kalau salah satunya kelewat disesuaikan, dan yang
   // diunduh wajib memuat angka yang persis sama dengan yang dilihat di layar.
   const bulanRekapAda   = bulanTersedia(realisasiAllRows);
-  const bulanRekapPilih = rekapBulan === 0
-    ? (bulanRekapAda.length > 0 ? Math.max(...bulanRekapAda) : 0)
-    : rekapBulan;
+  // Pemilih bulan menawarkan Jan–Des TANPA SYARAT. Dulu ia cuma menawarkan bulan
+  // yang punya baris realisasi, jadi tahun yang SSK-nya sudah terisi tapi
+  // realisasinya belum di-Init sama sekali tidak bisa direkap — padahal pagu &
+  // targetnya sudah ada, dan "berapa yang seharusnya sudah terserap" itu
+  // pertanyaan yang sah sebelum realisasi pertama masuk.
+  //
+  // Harganya satu: "Realisasi Rp 0" jadi mungkin muncul di dokumen. Karena itu
+  // ia TIDAK dibiarkan berdiri sendiri — `hasil.tanpaRealisasi` memasang catatan
+  // di bawah tabel, di layar DAN di berkasnya.
+  const bulanBawaan = () => {
+    if (bulanRekapAda.length > 0) return Math.max(...bulanRekapAda);
+    // Belum ada realisasi sama sekali. Tahun berjalan → bulan ini; tahun lain →
+    // Desember, sebab tahun yang sudah lewat (atau belum mulai) tidak punya
+    // "bulan ini" yang berarti apa pun.
+    const kini = new Date();
+    return tahun === String(kini.getFullYear()) ? kini.getMonth() + 1 : 12;
+  };
+  const bulanRekapPilih = rekapBulan === 0 ? bulanBawaan() : rekapBulan;
   const rekap = useMemo(
     () => bulanRekapPilih === 0
       ? null
@@ -96,7 +111,7 @@ export default function CetakTab({
   });
 
   const paramRekap = () => ({
-    baris: rekap!.baris, yatim: rekap!.yatim, tahun,
+    baris: rekap!.baris, yatim: rekap!.yatim, tanpaRealisasi: rekap!.tanpaRealisasi, tahun,
     namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
   });
   // Dropdown MENGUBAH hasil dua tombol yang sudah ada — tidak menambah tombol.
@@ -163,7 +178,7 @@ export default function CetakTab({
 
       {/* Toolbar */}
       {cetakView === 'rekap' ? (() => {
-        const allBulanRekap = bulanRekapAda;
+        const allBulanRekap = Array.from({ length: 12 }, (_, i) => i + 1);
         const selectedBulan = bulanRekapPilih;
         return (
           <div className="no-print" style={{ background:cSurfaceForm, border:'1px solid #0891b2', borderRadius:'12px', padding:'12px 16px', marginBottom:'14px', display:'flex', flexDirection:'column', gap:'8px' }}>
@@ -184,7 +199,13 @@ export default function CetakTab({
                   minWidth={190}
                   options={[
                     { value: 0, label: 'S/D Bulan Terakhir' },
-                    ...allBulanRekap.map(b => ({ value: b, label: `S/D ${CRR_BULAN_LABELS[b-1]}` })),
+                    ...allBulanRekap.map(b => ({
+                      value: b,
+                      // Bulan yang belum punya baris realisasi tetap ditawarkan,
+                      // tapi ditandai — supaya orang tidak menyangka angkanya
+                      // hilang, dan tahu apa yang akan ia dapat sebelum memilih.
+                      label: `S/D ${CRR_BULAN_LABELS[b-1]}${bulanRekapAda.includes(b) ? '' : ' (belum ada realisasi)'}`,
+                    })),
                   ]}
                 />
                 <SoftSelect
@@ -304,9 +325,12 @@ export default function CetakTab({
         );
 
         const hasil = rekap;
+        // Sesudah A8 penyebutnya datang dari SSK, jadi tabel kosong berarti
+        // SSK-nya yang kosong — bukan realisasinya. Kalimat lamanya menyuruh
+        // orang mencari masalah di tempat yang salah.
         if (hasil.baris.length === 0) return (
           <div style={{ padding:'40px', textAlign:'center', color:cTextSub, background:cSurface, borderRadius:'12px', border:`1px solid ${cBorder}` }}>
-            Belum ada data realisasi untuk tahun {tahun}.
+            Belum ada item SSK untuk tahun {tahun} — isi RKO/SSK dulu, rekap mengambil pagu &amp; targetnya dari sana.
           </div>
         );
 
@@ -337,6 +361,20 @@ export default function CetakTab({
                 Pagu &amp; target mengacu SSK versi aktif tiap sumber
               </div>
             </div>
+
+            {/* IKUT TERCETAK (tanpa `no-print`), berbeda dari spanduk yatim/kembar di
+                bawah: yang dua itu instruksi kerja untuk operatornya, yang ini
+                keterangan tentang isi dokumennya sendiri. Angka "Rp 0" yang
+                beredar tanpa keterangan ini akan dibaca sebagai "anggarannya
+                belum dipakai" — padahal dokumen ini tidak punya cara
+                membedakannya dari "datanya belum dimasukkan". */}
+            {hasil.tanpaRealisasi && (
+              <div style={{ marginBottom:'12px', padding:'8px 12px', borderRadius:'8px', fontSize:'11px', lineHeight:1.5,
+                background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775', color: isLight?'#854F0B':'#FAC775' }}>
+                <strong>Belum ada data realisasi yang diisi s/d {CRR_BULAN_LABELS[bulanTerpilih-1]} {tahun}.</strong>{' '}
+                Angka Realisasi Rp 0 di atas berarti datanya belum dimasukkan ke sistem — bukan berarti anggarannya belum dipakai.
+              </div>
+            )}
 
             {(hasil.yatim.jumlahBaris > 0 || hasil.dobel.jumlahItem > 0) && (
               <div className="no-print" style={{ marginBottom:'12px', display:'flex', flexDirection:'column', gap:'6px' }}>

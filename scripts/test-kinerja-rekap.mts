@@ -506,7 +506,8 @@ ok('M8 target fisik diformat sebagai persen, bukan rupiah',
 
 console.log('\n── N. Unduh rekap: angkanya sama dengan yang di layar ───────────');
 
-const aoa = rekapAoa({ baris: hasil.baris, yatim: hasil.yatim, tahun: '2026', namaBulan: 'Juli' });
+const aoa = rekapAoa({ baris: hasil.baris, yatim: hasil.yatim,
+  tanpaRealisasi: hasil.tanpaRealisasi, tahun: '2026', namaBulan: 'Juli' });
 eq('N1 header berdiri tepat di bawah kop', aoa[REKAP_JUDUL_BARIS][0], 'No');
 eq('N2 jumlah kolom header sama dengan tabel layar', aoa[REKAP_JUDUL_BARIS].length, 13);
 ok('N3 kop menyebut bulan & tahun', String(aoa[3][0]).includes('JULI') && String(aoa[3][0]).includes('2026'));
@@ -532,7 +533,7 @@ ok('N10 catatan yatim ikut terbawa', !!catatan && catatan.includes('90.000.000')
 const tanpaYatimAoa = rekapAoa({
   baris: hasil.baris,
   yatim: { jumlahBaris: 0, jumlahItem: 0, nominal: 0, contoh: [] },
-  tahun: '2026', namaBulan: 'Juli',
+  tanpaRealisasi: false, tahun: '2026', namaBulan: 'Juli',
 });
 ok('N11 tanpa yatim tidak ada catatan menggantung',
    !tanpaYatimAoa.some(r => String(r[0] ?? '').startsWith('Catatan:')));
@@ -1491,6 +1492,92 @@ console.log('\n-- AB. A8: penyebut Rekap disemai dari SSK, bukan dari realisasi 
   ok('AB39 daftar canonical-nya dari petaHidrasi',
      /const cidAktif = new Set\(petaHidrasi\(sskRows\)\.keys\(\)\)/.test(rlA8));
   ok('AB40 tab Realisasi tidak lagi memanggil kumpulkanItem', !/kumpulkanItem\(/.test(rlA8));
+}
+
+console.log('\n-- AC. Rekap boleh dicetak sebelum ada realisasi, dengan syarat --');
+
+// Pemilih bulan sekarang menawarkan Jan-Des tanpa syarat, jadi tahun yang SSK-nya
+// sudah terisi tapi realisasinya belum di-Init pun bisa direkap. Harganya:
+// "Realisasi Rp 0" bisa muncul di dokumen yang ditandatangani — dan dokumen itu
+// TIDAK BISA membedakan "uangnya belum dipakai" dari "datanya belum diisi".
+// Bendera `tanpaRealisasi` yang membuatnya mengatakan bahwa ia tidak tahu.
+{
+  const itemSaja: ItemSskAktif[] = [{
+    canonical_id: 'Z', program: 'Program Z', kegiatan: 'Kegiatan Z', subkegiatan: 'Sub Z',
+    uraian_ssk: 'SSK Z', uraian: 'Item Z', pagu: 5_000_000_000, months: bulanan(400_000_000),
+  }];
+
+  // Nol baris realisasi, tapi SSK-nya berisi.
+  const hKosong = hitungRekap([], itemSaja, 8, 'ssk', 'TOTAL');
+  ok('AC1 tabelnya tetap terbentuk walau realisasinya nol', hKosong.baris.length > 0);
+  eq('AC2 pagunya tampil apa adanya', hKosong.baris[0].pagu, 5_000_000_000);
+  eq('AC3 targetnya tampil s/d bulan terpilih', hKosong.baris[0].targetRp, 400_000_000 * 8);
+  eq('AC4 realisasinya nol', hKosong.baris[0].realKeu, 0);
+  ok('AC5 dan itu ditandai', hKosong.tanpaRealisasi === true);
+
+  // Baris ADA tapi seluruhnya nol — hasil "Init dari SSK" yang belum diisi.
+  // Ini justru kasus yang paling gampang salah dibaca, jadi ikut ditandai.
+  const nolSemua = rows.map(r => ({ ...r, real_fisik: 0, real_keuangan: 0 }));
+  ok('AC6 baris nol semua juga ditandai',
+     hitungRekap(nolSemua, ITEM_SSK, 7, 'ssk', 'TOTAL').tanpaRealisasi === true);
+  // Ada isinya -> TIDAK ditandai, kalau tidak catatannya jadi hiasan permanen.
+  ok('AC7 begitu ada isinya, tandanya lepas',
+     hitungRekap(rows, ITEM_SSK, 7, 'ssk', 'TOTAL').tanpaRealisasi === false);
+  // Realisasi FISIK saja (keuangan belum) tetap terhitung "ada isinya".
+  const fisikSaja = rows.map(r => ({ ...r, real_keuangan: 0 }));
+  ok('AC8 fisik saja sudah cukup untuk melepas tandanya',
+     hitungRekap(fisikSaja, ITEM_SSK, 7, 'ssk', 'TOTAL').tanpaRealisasi === false);
+
+  // -- Catatannya WAJIB ada di BERKAS, bukan cuma di layar ------------------
+  const aoaKosong = rekapAoa({
+    baris: hKosong.baris, yatim: hKosong.yatim, tanpaRealisasi: true,
+    tahun: '2040', namaBulan: 'Agustus',
+  });
+  const catatanKosong = aoaKosong.map(r => String(r[0] ?? '')).filter(x => x.startsWith('Catatan:'));
+  eq('AC9 satu catatan masuk ke berkas', catatanKosong.length, 1);
+  ok('AC10 catatannya menyebut periodenya',
+     catatanKosong[0].includes('Agustus') && catatanKosong[0].includes('2040'));
+  // Kalimat inti: yang membedakan "belum dipakai" dari "belum diisi".
+  ok('AC11 dan menjelaskan bedanya, bukan cuma bilang nol',
+     catatanKosong[0].includes('belum dimasukkan') && catatanKosong[0].includes('belum dipakai'));
+
+  // Dua catatan bisa berdampingan (belum diisi + ada yatim) — keduanya harus ikut.
+  const duaCatatan = rekapAoa({
+    baris: hKosong.baris,
+    yatim: { jumlahBaris: 2, jumlahItem: 1, nominal: 7_000_000, contoh: ['Item Yatim'] },
+    tanpaRealisasi: true, tahun: '2040', namaBulan: 'Agustus',
+  }).map(r => String(r[0] ?? '')).filter(x => x.startsWith('Catatan:'));
+  eq('AC12 dua catatan tidak saling menutupi', duaCatatan.length, 2);
+
+  // Tidak ditandai -> tidak ada catatan menggantung.
+  const aoaAda = rekapAoa({
+    baris: hKosong.baris, yatim: hKosong.yatim, tanpaRealisasi: false,
+    tahun: '2040', namaBulan: 'Agustus',
+  });
+  ok('AC13 tanpa tanda, tidak ada catatan',
+     !aoaAda.some(r => String(r[0] ?? '').includes('belum dimasukkan')));
+
+  // -- Statis: layar & PDF ikut, dan catatannya TIDAK dikecualikan dari cetak
+  const exAC = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  eq('AC14 catatannya dipakai Excel DAN PDF',
+     (exAC.match(/catatanTanpaRealisasi\(/g) || []).length, 3);   // 1 definisi + 2 pemakai
+
+  const ctAC = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
+  ok('AC15 pemilih bulan menawarkan Jan-Des tanpa syarat',
+     /Array\.from\(\{ length: 12 \}, \(_, i\) => i \+ 1\)/.test(ctAC));
+  ok('AC16 bulan tanpa realisasi tetap ditawarkan, tapi ditandai',
+     ctAC.includes('(belum ada realisasi)'));
+  ok('AC17 layar menampilkan catatannya', /hasil\.tanpaRealisasi &&/.test(ctAC));
+  ok('AC18 dan benderanya diteruskan ke pengekspor',
+     /tanpaRealisasi: rekap!\.tanpaRealisasi/.test(ctAC));
+  // Spanduk yatim/kembar sengaja `no-print` (instruksi kerja untuk operator);
+  // catatan INI tentang isi dokumennya sendiri, jadi ia HARUS ikut tercetak.
+  const iCat = ctAC.indexOf('hasil.tanpaRealisasi &&');
+  ok('AC19 catatannya tidak dikecualikan dari cetak',
+     !ctAC.slice(iCat, iCat + 420).includes('no-print'));
+  // Bulan bawaan saat belum ada realisasi: tahun berjalan -> bulan ini.
+  ok('AC20 ada bulan bawaan untuk tahun tanpa realisasi',
+     /kini\.getMonth\(\) \+ 1 : 12/.test(ctAC));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

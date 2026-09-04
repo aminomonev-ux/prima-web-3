@@ -124,6 +124,15 @@ export interface HasilRekap {
   yatim:         LaporanYatim;
   dobel:         LaporanDobel;
   bulanTersedia: number[];
+  /**
+   * Tidak ada SATU RUPIAH pun realisasi yang tercatat s/d bulan ini.
+   *
+   * Dokumen cetak TIDAK BISA membedakan dua hal yang sangat berbeda:
+   * uangnya memang belum dipakai, atau uangnya sudah dipakai tapi datanya belum
+   * dimasukkan ke sistem. Bendera ini yang membuat dokumennya mengatakan bahwa
+   * ia tidak tahu, alih-alih membiarkan "0,00%" dibaca sebagai yang pertama.
+   */
+  tanpaRealisasi: boolean;
 }
 
 const MAX_CONTOH = 5;
@@ -324,11 +333,14 @@ export function hitungRekap(
     baris.push({ no, label, indent, tebal, ...angka });
   };
 
+  const total = jumlahkan(items);
+  const tanpaRealisasi = total.realKeu === 0 && total.realFisik === 0;
+
   if (items.length === 0) {
-    return { baris, yatim, dobel, bulanTersedia: tersedia };
+    return { baris, yatim, dobel, bulanTersedia: tersedia, tanpaRealisasi };
   }
 
-  dorong(labelGrandTotal, jumlahkan(items), 0, true);
+  dorong(labelGrandTotal, total, 0, true);
 
   const pohon = new Map<string, Map<string, Map<string, Map<string, ItemRekap[]>>>>();
   for (const it of items) {
@@ -369,5 +381,5 @@ export function hitungRekap(
     }
   }
 
-  return { baris, yatim, dobel, bulanTersedia: tersedia };
+  return { baris, yatim, dobel, bulanTersedia: tersedia, tanpaRealisasi };
 }
