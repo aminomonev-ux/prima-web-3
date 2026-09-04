@@ -12,7 +12,7 @@ import DownloadButton from '@/components/ui/DownloadButton';
 import { Printer } from 'lucide-react';
 import type { SumberSSK, RealRow } from '../_types';
 import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS } from '../_utils';
-import { hitungRekap, bulanTersedia } from '@/lib/kinerja/rekap';
+import { hitungRekap, bulanTersedia, type ItemSskAktif } from '@/lib/kinerja/rekap';
 import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
 import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf,
   exportBundelExcel, exportBundelPdf, PENANDA_TANGAN, type BagianDetail } from '../_exports';
@@ -21,6 +21,13 @@ import { uiTheme } from '@/lib/theme';
 interface Props {
   realisasiRows: RealRow[];
   realisasiAllRows: RealRow[];
+  /**
+   * A8: item SSK versi aktif seluruh sumber — PENYEBUT rekap. Wajib, bukan
+   * opsional bernilai bawaan `[]`: bawaan diam-diam mengembalikan cacatnya
+   * (penyebut diambil dari baris realisasi) di pemanggil yang lupa disesuaikan,
+   * dan cacat itu justru tidak menyalakan apa pun di layar.
+   */
+  realisasiAllItems: ItemSskAktif[];
   realisasiSumber: SumberSSK;
   setRealisasiSumber: (s: SumberSSK) => void;
   tahun: string;
@@ -32,7 +39,7 @@ interface Props {
 }
 
 export default function CetakTab({
-  realisasiRows, realisasiAllRows, realisasiSumber, setRealisasiSumber,
+  realisasiRows, realisasiAllRows, realisasiAllItems, realisasiSumber, setRealisasiSumber,
   tahun, loadingData, onFetchAll,
   isLight = false, sskVersi,
 }: Props) {
@@ -70,8 +77,8 @@ export default function CetakTab({
   const rekap = useMemo(
     () => bulanRekapPilih === 0
       ? null
-      : hitungRekap(realisasiAllRows, bulanRekapPilih, rekapDepth, 'RSJD Dr. Amino Gondohutomo'),
-    [realisasiAllRows, bulanRekapPilih, rekapDepth],
+      : hitungRekap(realisasiAllRows, realisasiAllItems, bulanRekapPilih, rekapDepth, 'RSJD Dr. Amino Gondohutomo'),
+    [realisasiAllRows, realisasiAllItems, bulanRekapPilih, rekapDepth],
   );
 
   // Sumber yang benar-benar ada datanya — bawaan pilihan, supaya bundel tidak

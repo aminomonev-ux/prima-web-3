@@ -18,7 +18,7 @@ import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
 import { Wand2, Save, Upload, Equal, History } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
-import { kumpulkanItem } from '@/lib/kinerja/rekap';
+import { laporanYatim } from '@/lib/kinerja/rekap';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi } from '@/lib/kinerja/hidrasi-ssk';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '@/lib/kinerja/samakan-target';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
@@ -312,7 +312,15 @@ export default function RealisasiTab({
 
   // Rekening yatim dilaporkan, bukan didiamkan: uangnya nyata tapi tidak punya
   // pagu sebagai pembagi, jadi rekap Cetak mengeluarkannya dari hitungan.
-  const yatim = kumpulkanItem(realisasiRows, 12).yatim;
+  //
+  // A8: `laporanYatim`, bukan `kumpulkanItem(...).yatim` — spanduk ini cuma
+  // butuh bagian yatimnya, dan `kumpulkanItem` sekarang menuntut daftar item SSK
+  // yang tidak dipakainya sama sekali. Daftar canonical-nya dari `sskRows`
+  // dengan saringan yang SAMA (`petaHidrasi`: nol-kan & canonical kosong
+  // dikecualikan), jadi baris yang baru saja dinol-kan di layar sudah terhitung
+  // yatim sebelum Simpan — itu memang kabar yang berguna, bukan kejutan.
+  const cidAktif = new Set(petaHidrasi(sskRows).keys());
+  const yatim = laporanYatim(realisasiRows, cidAktif, 12);
 
   const inpBase: React.CSSProperties = {
     border:`1px solid ${cInputBorder}`, borderRadius:'5px', padding:'3px 6px',

@@ -4,6 +4,7 @@ import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simp
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '@/lib/kinerja/master-nama';
 import { pickVersiAktif } from '@/lib/kinerja/versi';
+import type { ItemSskAktif } from '@/lib/kinerja/rekap';
 import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
 export type SumberSSK = 'GAJI' | 'BLUD' | 'HARLEP' | 'PROMKES' | 'SARPRAS' | 'OBAT' | 'PEMELIHARAAN' | 'PEMBANGUNAN';
@@ -812,10 +813,14 @@ export interface RealRow {
 export async function getRealisasiRows(
   tahun: string,
   sumber: SumberSSK,
-): Promise<{ rows: RealRow[]; versi: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } }> {
+): Promise<{
+  rows: RealRow[];
+  versi: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number };
+  itemSsk: ItemSskAktif[];
+}> {
   const peta = await versiAktifKinerja(tahun, sumber);
   const versi = peta.get(sumber) ?? { tipe: 'MURNI' as const, seq: 0 };
-  const hydrated = await getRealisasiHydrated(tahun, sumber, versi.tipe, versi.seq);
+  const { rows: hydrated, itemSsk } = await getRealisasiHydrated(tahun, sumber, versi.tipe, versi.seq);
   const rows = hydrated.map((r, i) => ({
     id:                i + 1, // identitas runtime — DB id tidak di-expose ke client lewat path lama
     tahun,
@@ -846,7 +851,10 @@ export async function getRealisasiRows(
     deviasi_fisik:     r.deviasi_fisik,
     deviasi_keuangan:  r.deviasi_keuangan,
   }));
-  return { rows, versi };
+  // A8: `itemSsk` ikut supaya Rekap punya penyebut yang tidak bergantung pada
+  // ada-tidaknya baris realisasi. Dipulangkan di jawaban yang SAMA dengan
+  // `versi` — jadi "versi mana" dan "isinya apa" mustahil berselisih (L88).
+  return { rows, versi, itemSsk };
 }
 
 /**
@@ -859,14 +867,45 @@ export async function getRealisasiRows(
  *
  * Default versi: MURNI seq=0 (kompatibel dgn data pre-refactor).
  */
+export async function itemSskVersi(
+  tahun: string,
+  sumber: SumberSSK,
+  versiTipe: 'MURNI' | 'PERUBAHAN',
+  versiSeq: number,
+): Promise<ItemSskAktif[]> {
+  const rows = await sql`
+    SELECT canonical_id, pagu, months,
+           COALESCE(program,'') AS program,
+           COALESCE(kegiatan,'') AS kegiatan,
+           COALESCE(subkegiatan,'') AS subkegiatan,
+           COALESCE(uraian_ssk,'') AS uraian_ssk,
+           COALESCE(uraian,'') AS uraian
+    FROM kinerja_ssk
+    WHERE tahun = ${tahun} AND sumber = ${sumber}
+      AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
+      AND is_nullified = FALSE
+    ORDER BY urut, id
+  ` as Record<string, unknown>[];
+  return rows.map(r => ({
+    canonical_id: String(r.canonical_id ?? ''),
+    program:      String(r.program ?? ''),
+    kegiatan:     String(r.kegiatan ?? ''),
+    subkegiatan:  String(r.subkegiatan ?? ''),
+    uraian_ssk:   String(r.uraian_ssk ?? ''),
+    uraian:       String(r.uraian ?? ''),
+    pagu:         Number(r.pagu ?? 0),
+    months:       parseJson<SskMonths>(r.months, emptyMonths()),
+  }));
+}
+
 export async function getRealisasiHydrated(
   tahun: string,
   sumber: SumberSSK,
   versiTipe: 'MURNI' | 'PERUBAHAN' = 'MURNI',
   versiSeq: number = 0,
-): Promise<import('./kinerja-calc').RealRowHydrated[]> {
+): Promise<{ rows: import('./kinerja-calc').RealRowHydrated[]; itemSsk: ItemSskAktif[] }> {
   const { recalcAllRealisasiServer } = await import('./kinerja-calc');
-  const [realRaw, sskRaw] = await Promise.all([
+  const [realRaw, itemSsk] = await Promise.all([
     sql`
       SELECT bulan,
              COALESCE(keterangan,'') AS keterangan,
@@ -882,24 +921,16 @@ export async function getRealisasiHydrated(
       WHERE tahun = ${tahun} AND sumber = ${sumber}
       ORDER BY bulan, id
     ` as unknown as Promise<Record<string, unknown>[]>,
-    sql`
-      SELECT canonical_id, pagu, months
-      FROM kinerja_ssk
-      WHERE tahun = ${tahun} AND sumber = ${sumber}
-        AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
-        AND is_nullified = FALSE
-    ` as unknown as Promise<Record<string, unknown>[]>,
+    // A8: SATU kueri SSK untuk dua kebutuhan — peta hidrasi baris realisasi DAN
+    // penyebut Rekap. Dua SELECT pada tabel yang sama cepat atau lambat berbeda
+    // saringan, dan yang berbeda di antara keduanya pasti `is_nullified`.
+    itemSskVersi(tahun, sumber, versiTipe, versiSeq),
   ]);
 
-  // Build SSK lookup map by canonical_id
   const sskByCanonical = new Map<string, { pagu: number; months: SskMonths | null }>();
-  for (const s of sskRaw) {
-    const cid = String(s.canonical_id ?? '');
-    if (!cid) continue;
-    sskByCanonical.set(cid, {
-      pagu: Number(s.pagu ?? 0),
-      months: parseJson<SskMonths>(s.months, emptyMonths()),
-    });
+  for (const it of itemSsk) {
+    if (!it.canonical_id) continue;
+    sskByCanonical.set(it.canonical_id, { pagu: it.pagu, months: it.months });
   }
 
   // Map raw → RealRowRaw shape expected by recalc
@@ -917,7 +948,7 @@ export async function getRealisasiHydrated(
     real_keuangan:         Number(r.real_keuangan ?? 0),
   }));
 
-  return recalcAllRealisasiServer(realRows, { sskByCanonical });
+  return { rows: recalcAllRealisasiServer(realRows, { sskByCanonical }), itemSsk };
 }
 
 export async function saveRealisasiBatch(

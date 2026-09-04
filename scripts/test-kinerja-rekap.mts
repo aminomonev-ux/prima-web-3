@@ -9,7 +9,8 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { recalcAllRealisasiServer, type RealRowRaw } from '../lib/data/kinerja-calc';
-import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan } from '../lib/kinerja/rekap';
+import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan, laporanYatim,
+  targetSampai, type ItemSskAktif } from '../lib/kinerja/rekap';
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '../lib/kinerja/samakan-target';
 import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
@@ -64,6 +65,19 @@ function baris(cid: string, bulan: number, fisik: number, keu: number, nama = ci
     real_fisik: fisik, real_keuangan: keu,
   };
 }
+
+// A8: Rekap menyemai itemnya dari SSK, jadi pohon uji butuh sisi SSK-nya juga.
+// Hierarkinya SENGAJA sama dengan yang ditulis `baris()` ke baris realisasi —
+// kalau berbeda, bagian H (kedalaman pohon) akan gagal karena alasan yang salah.
+const ITEM_SSK: ItemSskAktif[] = [
+  { canonical_id: 'A', program: 'Program 1', kegiatan: 'Kegiatan 1', subkegiatan: 'Sub 1',
+    uraian_ssk: 'SSK A', uraian: 'Item A', pagu: PAGU_A, months: bulanan(BULAN_A) },
+  { canonical_id: 'B', program: 'Program 1', kegiatan: 'Kegiatan 1', subkegiatan: 'Sub 1',
+    uraian_ssk: 'SSK B', uraian: 'Item B', pagu: PAGU_B, months: bulanan(BULAN_B) },
+  { canonical_id: 'C', program: 'Program 1', kegiatan: 'Kegiatan 1', subkegiatan: 'Sub 1',
+    uraian_ssk: 'SSK C', uraian: 'Item C', pagu: 0, months: bulanan(0) },
+];
+const itemA = ITEM_SSK.filter(i => i.canonical_id === 'A');
 
 const mentah: RealRowRaw[] = [];
 for (let b = 1; b <= 12; b++) {
@@ -122,7 +136,7 @@ ok('C4 cara lama memang berbeda', Math.round((angka.pctKeu - angka.targetPct) * 
 
 console.log('\n── D. Rekap: target Rp dijumlah, tidak dikarang dari persen ─────');
 
-const hasil = hitungRekap(rows, 7, 'ssk', 'TOTAL');
+const hasil = hitungRekap(rows, ITEM_SSK, 7, 'ssk', 'TOTAL');
 const total = hasil.baris[0];
 eq('D1 pagu total = A + B (C berpagu 0)', total.pagu, PAGU_A + PAGU_B);
 eq('D2 target Rp = jumlah rupiah 7 bulan', total.targetRp, (BULAN_A + BULAN_B) * 7);
@@ -136,7 +150,7 @@ console.log('\n── E. Rekap: item bolong satu bulan tidak hilang ────
 // Buang seluruh baris bulan 7 milik B — dulu rekap menyaring `bulan === 7`,
 // jadi pagu B ikut lenyap dari penyebut.
 const bolong = rows.filter(r => !(r.ssk_canonical_id === 'B' && r.bulan === 7));
-const hBolong = hitungRekap(bolong, 7, 'ssk', 'TOTAL');
+const hBolong = hitungRekap(bolong, ITEM_SSK, 7, 'ssk', 'TOTAL');
 eq('E1 pagu tetap utuh walau bulan 7 bolong', hBolong.baris[0].pagu, PAGU_A + PAGU_B);
 eq('E2 realisasi B 6 bulan ikut terhitung',
    hBolong.baris[0].realKeu, 500_000_000 * 7 + 2_500_000_000 * 6);
@@ -144,7 +158,7 @@ eq('E2 realisasi B 6 bulan ikut terhitung',
 console.log('\n── F. Rekap: baris kembar dilaporkan, pagu tidak dobel ──────────');
 
 const kembar = [...rows, ...rows.filter(r => r.ssk_canonical_id === 'B' && r.bulan === 3)];
-const hKembar = hitungRekap(kembar, 7, 'ssk', 'TOTAL');
+const hKembar = hitungRekap(kembar, ITEM_SSK, 7, 'ssk', 'TOTAL');
 eq('F1 pagu tidak ikut berlipat', hKembar.baris[0].pagu, PAGU_A + PAGU_B);
 eq('F2 kekembaran dilaporkan', hKembar.dobel.jumlahItem, 1);
 ok('F3 contoh menyebut rekeningnya', hKembar.dobel.contoh[0] === 'Item B');
@@ -156,14 +170,14 @@ eq('G1 yatim terhitung', hasil.yatim.jumlahBaris, 1);
 eq('G2 nominal yatim disebut', hasil.yatim.nominal, 90_000_000);
 const tanpaYatim = rows.filter(r => !r.yatim);
 eq('G3 total keuangan tidak memuat yatim',
-   total.realKeu, jumlahkan(kumpulkanItem(tanpaYatim, 7).items).realKeu);
+   total.realKeu, jumlahkan(kumpulkanItem(tanpaYatim, ITEM_SSK, 7).items).realKeu);
 ok('G4 yatim memang punya uang', hasil.yatim.nominal > 0);
 
 console.log('\n── H. Rekap: kedalaman & bentuk baris ───────────────────────────');
 
-const hProgram = hitungRekap(rows, 7, 'program', 'TOTAL');
+const hProgram = hitungRekap(rows, ITEM_SSK, 7, 'program', 'TOTAL');
 eq('H1 kedalaman program = grand total + 1 program', hProgram.baris.length, 2);
-const hFull = hitungRekap(rows, 7, 'full', 'TOTAL');
+const hFull = hitungRekap(rows, ITEM_SSK, 7, 'full', 'TOTAL');
 ok('H2 kedalaman full memuat baris rekening', hFull.baris.length > hasil.baris.length);
 eq('H3 nomor baris berurutan', hFull.baris.map(b => b.no).join(','),
    hFull.baris.map((_, i) => i + 1).join(','));
@@ -362,7 +376,7 @@ console.log('\n── O. Tingkat Capaian Fisik & Bulan Ini ───────
 
 // Capaian = realisasi / TARGET (bukan / pagu). Item A s/d bulan 7:
 // realFisik 400jt x 7 = 2,8 M; target 583.333.333 x 7 = 4.083.333.331.
-const oA = hitungRekap(rows.filter(r => r.ssk_canonical_id === 'A'), 7, 'ssk', 'A').baris[0];
+const oA = hitungRekap(rows.filter(r => r.ssk_canonical_id === 'A'), itemA, 7, 'ssk', 'A').baris[0];
 eq('O1 capaian = realisasi / target', oA.capaianFisik,
    Math.round((400_000_000 * 7) / (BULAN_A * 7) * 10000) / 100);
 ok('O2 capaian BEDA dengan pctFisik (pembaginya beda)', oA.capaianFisik !== oA.pctFisik);
@@ -376,7 +390,7 @@ eq('O5 target ada tapi realisasi nol -> 0%, bukan null', hitungAngka(1000, 500, 
 eq('O6 bulan ini hanya bulan terpilih', oA.realKeuBulanIni, 500_000_000);
 ok('O7 bulan ini lebih kecil dari akumulasinya', oA.realKeuBulanIni < oA.realKeu);
 // Bulan 9 tidak ada realisasi -> nol, sementara akumulasinya tetap.
-const oA9 = hitungRekap(rows.filter(r => r.ssk_canonical_id === 'A'), 9, 'ssk', 'A').baris[0];
+const oA9 = hitungRekap(rows.filter(r => r.ssk_canonical_id === 'A'), itemA, 9, 'ssk', 'A').baris[0];
 eq('O8 bulan tanpa realisasi -> bulan ini nol', oA9.realKeuBulanIni, 0);
 ok('O9 tapi akumulasinya tidak ikut nol', oA9.realKeu > 0);
 
@@ -642,7 +656,7 @@ console.log('\n── S. A2: realisasi yatim keluar dari Laporan & KPI juga ─�
       if (!pRekap.pakai('GAJI', r.ssk_canonical_id || '', keu, 1, r.keterangan)) continue;
       totalLaporan += keu;
     }
-    const rekapSemua = hitungRekap(rows, 12, 'ssk', 'TOTAL');
+    const rekapSemua = hitungRekap(rows, ITEM_SSK, 12, 'ssk', 'TOTAL');
     eq('S14 total Laporan == total Rekap', totalLaporan, rekapSemua.baris[0].realKeu);
     eq('S15 nominal yatim sama dengan yang dilaporkan Rekap',
        pRekap.hasil().nominal, rekapSemua.yatim.nominal);
@@ -1180,10 +1194,14 @@ console.log('\n-- Y. A4: Pulihkan menghidrasi ulang dari SSK versi terbuka ----'
   // Kalau SQL-nya berubah, dua sisi berhenti sepakat baris mana yang yatim -
   // dan Y21 tidak akan menangkapnya, sebab kedua sisi memakai peta yang sama.
   const kj = readFileSync('lib/data/kinerja.ts', 'utf8');
-  const iHid = kj.indexOf('export async function getRealisasiHydrated(');
+  // A8: kueri itu pindah ke `itemSskVersi`, yang sekarang melayani DUA kebutuhan
+  // — peta hidrasi baris realisasi DAN penyebut Rekap. Satu tempat, satu saringan.
+  const iHid = kj.indexOf('export async function itemSskVersi(');
   const badanHid = kj.slice(iHid, kj.indexOf('\n}\n', iHid));
   ok('Y36 kueri SSK server juga mengecualikan baris nol-kan',
      /FROM kinerja_ssk[\s\S]*?AND is_nullified = FALSE/.test(badanHid));
+  ok('Y36b dan hidrasi memakai kueri yang sama, bukan salinannya',
+     /itemSskVersi\(tahun, sumber, versiTipe, versiSeq\)/.test(kj));
 
   const kc = readFileSync('lib/data/kinerja-calc.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
   ok('Y34 server memakai lib yang sama', /\.\.\.hidrasiDariSsk\(ssk, r\.bulan\)/.test(kc));
@@ -1334,6 +1352,145 @@ console.log('\n-- AA. A5 & A7: satu pernyataan, dan satu aturan versi ---------'
   const sk = readFileSync('docs/schema-mysql.sql', 'utf8');
   ok('AA22 upsert-nya berdiri di atas kunci unik yang memang ada',
      /UNIQUE KEY uq_krm_tahun_ket \(tahun, keterangan_excel\)/.test(sk));
+}
+
+console.log('\n-- AB. A8: penyebut Rekap disemai dari SSK, bukan dari realisasi --');
+
+// Item SSK yang belum punya satu pun baris realisasi dulu tidak terlihat Rekap,
+// padahal Laporan menjumlah pagunya. Karena yang hilang cuma dari PENYEBUT,
+// Rekap melaporkan serapan yang LEBIH TINGGI dari kenyataan.
+{
+  const PAGU_D = 23_683_980_000;   // sepupu angka nyata yang melahirkan temuannya
+  const BULAN_D =   1_000_000_000;
+  const itemD: ItemSskAktif = {
+    canonical_id: 'D', program: 'Program 1', kegiatan: 'Kegiatan 1', subkegiatan: 'Sub 1',
+    uraian_ssk: 'SSK D', uraian: 'Item D belum di-Init', pagu: PAGU_D, months: bulanan(BULAN_D),
+  };
+  const denganD = [...ITEM_SSK, itemD];
+
+  // `rows` TIDAK punya satu pun baris untuk D — itu seluruh kasusnya.
+  const hD = hitungRekap(rows, denganD, 7, 'ssk', 'TOTAL');
+  const totalD = hD.baris[0];
+
+  eq('AB1 pagu item tanpa realisasi ikut penyebut', totalD.pagu, PAGU_A + PAGU_B + PAGU_D);
+  // Sebelum perbaikan penyebutnya berhenti di A + B. Bedanya PERSIS pagu D.
+  const tanpaD = hitungRekap(rows, ITEM_SSK, 7, 'ssk', 'TOTAL').baris[0];
+  eq('AB2 bedanya persis sebesar pagu item itu', totalD.pagu - tanpaD.pagu, PAGU_D);
+  // Dan arahnya: serapan yang dilaporkan jadi LEBIH KECIL, bukan lebih besar.
+  ok('AB3 serapan yang dilaporkan turun, bukan naik', totalD.pctKeu < tanpaD.pctKeu,
+     `${totalD.pctKeu} vs ${tanpaD.pctKeu}`);
+  eq('AB4 pembilangnya tidak ikut berubah', totalD.realKeu, tanpaD.realKeu);
+
+  // Itemnya muncul di tabel dengan realisasi nol — bukan disembunyikan.
+  const barisD = hitungRekap(rows, denganD, 7, 'full', 'TOTAL').baris
+    .find(b => b.label === 'Item D belum di-Init');
+  ok('AB5 itemnya tampil di tabel', !!barisD);
+  eq('AB6 dengan realisasi nol', barisD?.realKeu, 0);
+  eq('AB7 tapi targetnya ada', barisD?.targetRp, BULAN_D * 7);
+
+  // Pagu itu TAHUNAN — ia tidak boleh bergerak mengikuti bulan yang dipilih.
+  const b1  = hitungRekap(rows, denganD, 1,  'ssk', 'TOTAL').baris[0];
+  const b12 = hitungRekap(rows, denganD, 12, 'ssk', 'TOTAL').baris[0];
+  eq('AB8 pagu tidak bergerak saat bulan diganti', b1.pagu, b12.pagu);
+  ok('AB9 sementara targetnya memang bergerak', b1.targetRp < b12.targetRp);
+
+  // -- targetSampai: rencana, bukan turunan baris yang kebetulan ada ---------
+  eq('AB10 target s/d 1 = bulan Januari', targetSampai(bulanan(100), 1), 100);
+  eq('AB11 target s/d 12 = setahun', targetSampai(bulanan(100), 12), 1200);
+  eq('AB12 bulan 0 -> nol', targetSampai(bulanan(100), 0), 0);
+  eq('AB13 di atas 12 tidak melewati Desember', targetSampai(bulanan(100), 99), 1200);
+  eq('AB14 months null -> nol', targetSampai(null, 7), 0);
+  // Bukti bahwa ia menjumlah bulan yang BENAR, bukan mengalikan rata-rata.
+  eq('AB15 tiap bulan dijumlah apa adanya',
+     targetSampai({ ...bulanan(0), jan: 5, feb: 7, mar: 11 }, 2), 12);
+
+  // -- Target item berbaris-bolong tidak ikut menyusut ----------------------
+  // Buang seluruh baris bulan 7 milik B. Dulu targetnya ikut hilang karena
+  // diakumulasi dari `target_rp` baris yang ada; sekarang dari `months` SSK.
+  const bolongB = rows.filter(r => !(r.ssk_canonical_id === 'B' && r.bulan === 7));
+  const hBolongB = hitungRekap(bolongB, ITEM_SSK, 7, 'ssk', 'TOTAL').baris[0];
+  eq('AB16 target tetap utuh walau barisnya bolong', hBolongB.targetRp, (BULAN_A + BULAN_B) * 7);
+  ok('AB17 tapi realisasinya memang berkurang', hBolongB.realKeu < tanpaD.realKeu);
+
+  // -- Label ikut SSK, bukan salinan di baris realisasi ---------------------
+  const diubah = ITEM_SSK.map(i => i.canonical_id === 'A'
+    ? { ...i, uraian: 'Item A NAMA BARU', uraian_ssk: 'SSK A BARU' } : i);
+  const hNama = hitungRekap(rows, diubah, 7, 'full', 'TOTAL');
+  ok('AB18 nama item ikut SSK versi aktif',
+     hNama.baris.some(b => b.label === 'Item A NAMA BARU'));
+  ok('AB19 nama lama di baris realisasi tidak dipakai lagi',
+     !hNama.baris.some(b => b.label === 'Item A'));
+
+  // -- Yatim: tetap dikeluarkan, tidak menyelinap jadi item -----------------
+  eq('AB20 yatim tetap dilaporkan', hD.yatim.jumlahBaris, 1);
+  ok('AB21 dan tidak jadi item di tabel', !hD.baris.some(b => b.label.includes('Yatim')));
+  // Baris yang canonical-nya tidak ada di semaian TIDAK boleh melahirkan item —
+  // kalau ia melahirkan, pagunya datang dari baris realisasi lagi (cacat A8).
+  const hTanpaB = hitungRekap(rows, ITEM_SSK.filter(i => i.canonical_id !== 'B'), 7, 'ssk', 'TOTAL');
+  eq('AB22 baris tanpa pasangan SSK tidak menambah penyebut', hTanpaB.baris[0].pagu, PAGU_A);
+  ok('AB23 dan realisasinya tidak masuk pembilang',
+     hTanpaB.baris[0].realKeu < tanpaD.realKeu);
+
+  // -- laporanYatim berdiri sendiri -----------------------------------------
+  const cidSemua = new Set(['A', 'B', 'C']);
+  eq('AB24 yatim dari benderanya', laporanYatim(rows, cidSemua, 7).jumlahBaris, 1);
+  // Daftar KOSONG = "belum dimuat", bukan "tidak ada satu pun item". Tanpa
+  // penjagaan ini, sekejap sebelum SSK selesai dimuat SELURUH baris dilaporkan
+  // yatim sekaligus.
+  eq('AB25 daftar kosong tidak melaporkan semuanya yatim',
+     laporanYatim(rows, new Set<string>(), 7).jumlahBaris, 1);
+  // Baris yang benderanya belum menyusul tetap tertangkap lewat daftar.
+  eq('AB26 canonical di luar daftar ikut terhitung yatim',
+     laporanYatim(rows, new Set(['A']), 7).jumlahBaris > 1, true);
+  eq('AB27 bulan di atas sdBulan tidak ikut', laporanYatim(rows, cidSemua, 2).jumlahBaris, 0);
+
+  // -- Statis: penyebutnya mustahil datang dari baris realisasi lagi --------
+  //
+  // Cabang "tidak ketemu di semaian" di `kumpulkanItem` TIDAK BISA dijangkau uji
+  // perilaku: baris ber-canonical yang ada di semaian selalu ketemu, dan yang
+  // tidak ada sudah disaring `yatimkah` lebih dulu. Jadi yang dipatok di sini
+  // BENTUKNYA — dan itu ketahuan dari uji mutasi, bukan dari membaca: menaruh
+  // "kalau tidak ketemu, lahirkan item dari barisnya" di situ mengembalikan
+  // seluruh cacat A8 dan lolos 408 pemeriksaan tanpa satu pun berubah.
+  const rkA8 = readFileSync('lib/kinerja/rekap.ts', 'utf8').replace(/^[ 	]*\/\/.*$/gm, '');
+  ok('AB28 rekap tidak lagi menyentuh pagu_awal sama sekali', !/pagu_awal/.test(rkA8));
+  eq('AB29 item hanya dilahirkan di satu tempat: penyemaian',
+     (rkA8.match(/items\.set\(/g) || []).length, 1);
+
+  // -- Statis: rantainya utuh dari server sampai layar ----------------------
+  const kjA8 = readFileSync('lib/data/kinerja.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('AB30 itemSsk ikut dipulangkan getRealisasiRows', /return \{ rows, versi, itemSsk \}/.test(kjA8));
+  // Kolom hierarkinya WAJIB ikut — tanpa itu pohon rekap kehilangan induknya.
+  eq('AB31 kueri item membawa kolom hierarkinya',
+     (kjA8.match(/COALESCE\((program|kegiatan|subkegiatan|uraian_ssk|uraian),''\)/g) || []).length >= 5, true);
+
+  const rtA8 = readFileSync('app/api/kinerja/realisasi/route.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  // DUA cabang GET, dua-duanya. Bentuk balasan yang berbeda tergantung ada
+  // tidaknya parameter versi itu jebakan yang sudah pernah menggigit (bentuk T1).
+  eq('AB32 kedua cabang GET memulangkan itemSsk',
+     (rtA8.match(/ok: true, rows, itemSsk/g) || []).length, 2);
+
+  const shA8 = readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('AB33 layar mengumpulkan itemSsk semua sumber',
+     /setRealisasiAllItems\(results\.flatMap\(x => x\.itemSsk\)\)/.test(shA8));
+  ok('AB34 dan mengopernya ke tab Cetak', /realisasiAllItems=\{realisasiAllItems\}/.test(shA8));
+
+  const ctA8 = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('AB35 rekap dihitung dengan item SSK-nya',
+     /hitungRekap\(realisasiAllRows, realisasiAllItems, bulanRekapPilih/.test(ctA8));
+  ok('AB36 propnya wajib, bukan opsional', /realisasiAllItems: ItemSskAktif\[\];/.test(ctA8));
+  // Tetap SEKALI dihitung — yang diunduh wajib memuat angka yang sama dengan layar.
+  eq('AB37 hitungRekap tetap dipanggil sekali', (ctA8.match(/hitungRekap\(/g) || []).length, 1);
+
+  const rlA8 = readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('AB38 spanduk yatim lewat laporanYatim', /laporanYatim\(realisasiRows, cidAktif, 12\)/.test(rlA8));
+  // Saringan daftar canonical-nya SAMA dengan yang dipakai hidrasi & server.
+  ok('AB39 daftar canonical-nya dari petaHidrasi',
+     /const cidAktif = new Set\(petaHidrasi\(sskRows\)\.keys\(\)\)/.test(rlA8));
+  ok('AB40 tab Realisasi tidak lagi memanggil kumpulkanItem', !/kumpulkanItem\(/.test(rlA8));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

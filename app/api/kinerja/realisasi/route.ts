@@ -33,15 +33,18 @@ export async function GET(req: NextRequest) {
   if (q.data.versi_tipe !== undefined || q.data.versi_seq !== undefined) {
     const versiTipe = q.data.versi_tipe ?? 'MURNI';
     const versiSeq  = q.data.versi_seq  ?? 0;
-    const rows = await getRealisasiHydrated(tahun, sumber, versiTipe, versiSeq);
+    const { rows, itemSsk } = await getRealisasiHydrated(tahun, sumber, versiTipe, versiSeq);
     const version = await getKinerjaVersion('kinerja_realisasi', `${tahun}:${sumber}`);
-    return NextResponse.json({ ok: true, rows, versi: { tipe: versiTipe, seq: versiSeq }, version });
+    // A8: `itemSsk` ikut di KEDUA cabang. Satu bentuk balasan, bukan dua yang
+    // berbeda tergantung ada-tidaknya parameter versi — beda bentuk yang tidak
+    // disengaja itu yang membuat `sumber` di RealRow jadi jebakan (bentuk T1).
+    return NextResponse.json({ ok: true, rows, itemSsk, versi: { tipe: versiTipe, seq: versiSeq }, version });
   }
 
   // Tanpa parameter versi → versi AKTIF (bukan lagi MURNI-0 paksa). Versinya ikut
   // dipulangkan supaya layar bisa menuliskan angka ini mengacu ke mana.
-  const { rows, versi } = await getRealisasiRows(tahun, sumber);
-  return NextResponse.json({ ok: true, rows, versi });
+  const { rows, versi, itemSsk } = await getRealisasiRows(tahun, sumber);
+  return NextResponse.json({ ok: true, rows, itemSsk, versi });
 }
 
 export async function PUT(req: NextRequest) {

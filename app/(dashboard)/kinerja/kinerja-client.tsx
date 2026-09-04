@@ -23,6 +23,7 @@ import type {
   SumberSSK, KTab, MasterRow, RekeningRow, SskRow, RealRow,
 } from './_types';
 import { SUMBER_LIST, recalcAllRealisasi } from './_utils';
+import type { ItemSskAktif } from '@/lib/kinerja/rekap';
 import Sidebar from './_components/Sidebar';
 import Topbar from './_components/Topbar';
 import { bolehBatalkanFinal } from '@/lib/constants';
@@ -113,6 +114,9 @@ export default function KinerjaClient({ userId, role, username, themePreference 
   const [realisasiBulan,  setRealisasiBulan]  = useState<number>(new Date().getMonth() + 1);
   const [realisasiRows,   setRealisasiRows]   = useState<RealRow[]>([]);
   const [realisasiAllRows, setRealisasiAllRows] = useState<RealRow[]>([]);
+  // A8: item SSK versi aktif SEMUA sumber — penyebut Rekap. Datang dari balasan
+  // yang sama dengan barisnya, jadi "versi mana" cuma punya satu jawaban (L88).
+  const [realisasiAllItems, setRealisasiAllItems] = useState<ItemSskAktif[]>([]);
   // O2: cetakView state dipindah ke _tabs/CetakTab.
   // O2: crrRows + pendapatanRows state dipindah ke _tabs/PendapatanCrrTab.
 
@@ -297,14 +301,20 @@ export default function KinerjaClient({ userId, role, username, themePreference 
       const results = await Promise.all(
         SUMBER_LIST.map(async s => {
           const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${s}`);
+          if (!d.ok) return { rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[] };
+          const j = d as { rows?: RealRow[]; itemSsk?: ItemSskAktif[] };
           // Ditandai di sini: larik hasilnya datar, dan unduhan gabungan perlu
           // memisahkannya kembali per sumber.
-          return d.ok ? ((d as { rows?: RealRow[] }).rows ?? []).map(r => ({ ...r, sumber: s })) : [];
+          return {
+            rows: (j.rows ?? []).map(r => ({ ...r, sumber: s })),
+            itemSsk: j.itemSsk ?? [],
+          };
         })
       );
       // BUG-FIX: recalc setelah fetch supaya deviasi_keuangan pakai rumus baru
       // (akum % keu - akum tgt fisik). DB row masih simpan nilai lama.
-      setRealisasiAllRows(recalcAllRealisasi(results.flat()));
+      setRealisasiAllRows(recalcAllRealisasi(results.flatMap(x => x.rows)));
+      setRealisasiAllItems(results.flatMap(x => x.itemSsk));
     } finally { setLoadingData(false); }
   }, [tahun]);
 
@@ -689,6 +699,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
                 <CetakTab
                   realisasiRows={realisasiRows}
                   realisasiAllRows={realisasiAllRows}
+                  realisasiAllItems={realisasiAllItems}
                   realisasiSumber={realisasiSumber}
                   setRealisasiSumber={setRealisasiSumber}
                   tahun={tahun}

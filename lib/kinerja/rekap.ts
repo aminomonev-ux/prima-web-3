@@ -15,10 +15,49 @@
 //     per `ssk_canonical_id`, bukan disaring `bulan === terpilih`. Versi lama
 //     membuat item yang kebetulan tidak punya baris di bulan itu lenyap total —
 //     pagunya keluar dari penyebut, realisasinya keluar dari pembilang.
+//  4. (A8) Item DISEMAI dari SSK versi aktif, bukan dilahirkan dari baris
+//     realisasi. Versi lama mengambil pagu dari `pagu_awal` baris realisasi,
+//     jadi item SSK yang belum punya satu pun baris realisasi tidak terlihat —
+//     sementara Laporan & Dashboard menjumlah `pagu` dari `kinerja_ssk` dan
+//     melihatnya. Karena yang hilang cuma dari PENYEBUT, Rekap melaporkan
+//     serapan yang LEBIH TINGGI dari kenyataan.
+//     Konsep: docs/CONCEPT-kinerja-penyebut-rekap.md
 
-import type { RealRow } from '@/app/(dashboard)/kinerja/_types';
+import type { RealRow, SskMonths } from '@/app/(dashboard)/kinerja/_types';
 
 export type KedalamanRekap = 'program' | 'kegiatan' | 'subkegiatan' | 'ssk' | 'full';
+
+/**
+ * Satu item SSK versi aktif — bahan penyebut Rekap.
+ *
+ * Datang dari `GET /api/kinerja/realisasi` bersama barisnya, jadi versi dan
+ * isinya lahir dari SATU jawaban dan mustahil berselisih (L88).
+ */
+export interface ItemSskAktif {
+  canonical_id: string;
+  program:      string;
+  kegiatan:     string;
+  subkegiatan:  string;
+  uraian_ssk:   string;
+  uraian:       string;
+  pagu:         number;
+  months:       SskMonths | null;
+}
+
+const BULAN_KUNCI: (keyof SskMonths)[] =
+  ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'];
+
+/**
+ * Target RUPIAH s/d bulan ke-N. Dijumlah dari `months`, bukan dari `target_rp`
+ * baris realisasi yang kebetulan ada: target itu RENCANA, dan rencana tidak
+ * hilang karena tidak ada yang membuat barisnya.
+ */
+export function targetSampai(months: SskMonths | null, sdBulan: number): number {
+  if (!months) return 0;
+  let total = 0;
+  for (let b = 1; b <= Math.min(sdBulan, 12); b++) total += months[BULAN_KUNCI[b - 1]] || 0;
+  return total;
+}
 
 /** Satu item SSK, sudah diakumulasi s/d bulan terpilih. */
 export interface ItemRekap {
@@ -141,69 +180,115 @@ function identitas(r: RealRow): string {
 }
 
 /**
- * Kumpulkan baris realisasi jadi item SSK, terakumulasi s/d `sdBulan`.
+ * Baris realisasi yang tidak punya pagu yang menaunginya.
  *
- * Pagu diambil SEKALI per item (bukan dijumlah per baris) — itu yang membuat
- * baris kembar tidak menggandakan penyebut. Realisasinya tetap dijumlah apa
- * adanya, dan kekembarannya dilaporkan lewat `dobel`: yang mana dari dua baris
- * itu yang benar bukan sesuatu yang bisa ditebak program.
+ * Dipisah dari `kumpulkanItem` karena spanduk di tab Realisasi cuma butuh ini —
+ * memaksanya menyodorkan daftar item SSK yang tidak ia pakai sama sekali cuma
+ * memindahkan kerumitan ke pemanggil.
  *
- * Baris yatim (`yatim === true`) dikeluarkan dari hitungan dan dilaporkan
- * terpisah. Memasukkannya menaikkan pembilang tanpa menaikkan penyebut —
- * persen serapan jadi berdiri di atas pagu yang tidak memuatnya.
+ * DUA sumber jawabannya, dan keduanya perlu:
+ *
+ *   `r.yatim`  — sudah dihitung saat hidrasi (server maupun layar), terhadap
+ *                SSK versi acuan.
+ *   `cidAktif` — daftar canonical yang benar-benar ada di versi yang SEDANG
+ *                dibuka. Ia menangkap baris yang bendera hidrasinya belum
+ *                sempat menyusul, mis. sesudah baris SSK-nya dinol-kan di layar
+ *                tapi belum disimpan.
+ *
+ * `cidAktif` KOSONG diperlakukan sebagai "belum dimuat", BUKAN sebagai
+ * pernyataan bahwa tidak ada satu pun item: tanpa itu, sekejap sebelum SSK
+ * selesai dimuat seluruh baris akan dilaporkan yatim sekaligus.
  */
-export function kumpulkanItem(rows: RealRow[], sdBulan: number): {
+export function laporanYatim(rows: RealRow[], cidAktif: Set<string>, sdBulan: number): LaporanYatim {
+  let jumlahBaris = 0, nominal = 0;
+  const item = new Set<string>();
+  for (const r of rows) {
+    if (r.bulan > sdBulan) continue;
+    if (!yatimkah(r, cidAktif)) continue;
+    jumlahBaris += 1;
+    nominal     += (r.real_keuangan || 0);
+    if (r.keterangan) item.add(r.keterangan);
+  }
+  return {
+    jumlahBaris,
+    jumlahItem: item.size,
+    nominal,
+    contoh: Array.from(item).slice(0, MAX_CONTOH),
+  };
+}
+
+function yatimkah(r: RealRow, cidAktif: Set<string>): boolean {
+  if (r.yatim) return true;
+  if (cidAktif.size === 0) return false;
+  return !cidAktif.has(r.ssk_canonical_id || '');
+}
+
+/**
+ * Kumpulkan item SSK versi aktif, lalu lipat realisasinya ke dalam — s/d `sdBulan`.
+ *
+ * A8: urutannya SEMAI DULU, baru dilipat. Kebalikannya (melahirkan item dari
+ * baris realisasi) membuat item yang belum punya baris lenyap dari penyebut,
+ * dan Rekap melaporkan serapan yang lebih tinggi dari kenyataan.
+ *
+ * Pagu diambil dari SSK, sekali per item — jadi baris kembar tidak lagi bisa
+ * menggandakan penyebut sama sekali, bukan cuma "diambil sekali". Realisasinya
+ * tetap dijumlah apa adanya, dan kekembarannya dilaporkan lewat `dobel`: yang
+ * mana dari dua baris itu yang benar bukan sesuatu yang bisa ditebak program.
+ *
+ * Baris yatim dikeluarkan dan dilaporkan terpisah. Memasukkannya menaikkan
+ * pembilang tanpa menaikkan penyebut — persen serapan jadi berdiri di atas pagu
+ * yang tidak memuatnya (§9.1a BLUD).
+ */
+export function kumpulkanItem(rows: RealRow[], itemSsk: ItemSskAktif[], sdBulan: number): {
   items: ItemRekap[];
   yatim: LaporanYatim;
   dobel: LaporanDobel;
 } {
   const items = new Map<string, ItemRekap>();
+  const cidAktif = new Set<string>();
+
+  for (const s of itemSsk) {
+    const cid = s.canonical_id;
+    if (!cid) continue;
+    cidAktif.add(cid);
+    items.set(`cid:${cid}`, {
+      cid,
+      keterangan:  s.uraian      || '-',
+      program:     s.program     || '-',
+      kegiatan:    s.kegiatan    || '-',
+      subkegiatan: s.subkegiatan || '-',
+      uraianSsk:   s.uraian_ssk  || '-',
+      pagu:        s.pagu || 0,
+      targetRp:    targetSampai(s.months, sdBulan),
+      realFisik:   0,
+      realKeu:     0,
+      realKeuBulanIni: 0,
+    });
+  }
+
   const bulanTerlihat = new Map<string, Set<number>>();
   const cidDobel = new Set<string>();
 
-  let yatimBaris = 0, yatimNominal = 0;
-  const yatimItem = new Set<string>();
-
   for (const r of rows) {
     if (r.bulan > sdBulan) continue;
-
-    if (r.yatim) {
-      yatimBaris   += 1;
-      yatimNominal += (r.real_keuangan || 0);
-      if (r.keterangan) yatimItem.add(r.keterangan);
-      continue;
-    }
+    if (yatimkah(r, cidAktif)) continue;
 
     const key = identitas(r);
+    const ada = items.get(key);
+    // Tidak ketemu di semaian padahal tidak yatim: hanya mungkin untuk baris
+    // lama tanpa canonical_id, yang `identitas()`-nya memang bukan `cid:`.
+    // Melahirkan item baru di sini akan mengembalikan cacat A8 lewat pintu
+    // belakang — pagunya akan datang dari baris realisasi lagi.
+    if (!ada) continue;
 
     const bulanSet = bulanTerlihat.get(key) ?? new Set<number>();
     if (bulanSet.has(r.bulan)) cidDobel.add(key);
     bulanSet.add(r.bulan);
     bulanTerlihat.set(key, bulanSet);
 
-    const bulanIni = r.bulan === sdBulan ? (r.real_keuangan || 0) : 0;
-
-    const ada = items.get(key);
-    if (ada) {
-      ada.targetRp        += r.target_rp     || 0;
-      ada.realFisik       += r.real_fisik    || 0;
-      ada.realKeu         += r.real_keuangan || 0;
-      ada.realKeuBulanIni += bulanIni;
-    } else {
-      items.set(key, {
-        cid:         r.ssk_canonical_id || '',
-        keterangan:  r.keterangan  || '-',
-        program:     r.program     || '-',
-        kegiatan:    r.kegiatan    || '-',
-        subkegiatan: r.subkegiatan || '-',
-        uraianSsk:   r.uraian_ssk  || '-',
-        pagu:        r.pagu_awal   || 0,
-        targetRp:    r.target_rp     || 0,
-        realFisik:   r.real_fisik    || 0,
-        realKeu:     r.real_keuangan || 0,
-        realKeuBulanIni: bulanIni,
-      });
-    }
+    ada.realFisik       += r.real_fisik    || 0;
+    ada.realKeu         += r.real_keuangan || 0;
+    ada.realKeuBulanIni += r.bulan === sdBulan ? (r.real_keuangan || 0) : 0;
   }
 
   const contohDobel = Array.from(cidDobel)
@@ -212,12 +297,7 @@ export function kumpulkanItem(rows: RealRow[], sdBulan: number): {
 
   return {
     items: Array.from(items.values()),
-    yatim: {
-      jumlahBaris: yatimBaris,
-      jumlahItem:  yatimItem.size,
-      nominal:     yatimNominal,
-      contoh:      Array.from(yatimItem).slice(0, MAX_CONTOH),
-    },
+    yatim: laporanYatim(rows, cidAktif, sdBulan),
     dobel: { jumlahItem: cidDobel.size, contoh: contohDobel },
   };
 }
@@ -229,12 +309,13 @@ export function bulanTersedia(rows: RealRow[]): number[] {
 
 export function hitungRekap(
   rows: RealRow[],
+  itemSsk: ItemSskAktif[],
   sdBulan: number,
   kedalaman: KedalamanRekap,
   labelGrandTotal: string,
 ): HasilRekap {
   const tersedia = bulanTersedia(rows);
-  const { items, yatim, dobel } = kumpulkanItem(rows, sdBulan);
+  const { items, yatim, dobel } = kumpulkanItem(rows, itemSsk, sdBulan);
 
   const baris: BarisRekap[] = [];
   let no = 0;
