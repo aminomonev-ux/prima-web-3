@@ -218,7 +218,7 @@ menghapus. Perbedaan itu tidak muncul di matriks, dan §9 menjelaskan kenapa dib
 | `ssk` | PUT | `bolehEditMenu('ssk')` |
 | `ssk/versi-list` | GET | `bolehLihatSalahSatu(['ssk','realisasi'])` |
 | `ssk/check-deletable` | GET | `bolehLihatSalahSatu(['ssk'])` |
-| `ssk/nullify` | PATCH | `bolehEditMenu('ssk')` |
+| ~~`ssk/nullify`~~ | — | **Route ini DIHAPUS 2026-09-05** — Nol-kan berhenti di form, lihat `docs/CONCEPT-kinerja-yatim-dan-hapus-ssk.md` §2 |
 | `ssk/perubahan` | POST | `bolehEditMenu('ssk')` |
 | `realisasi` | GET | `bolehLihatSalahSatu(['realisasi','cetak'])` |
 | `realisasi` | PUT | `bolehEditMenu('realisasi')` |

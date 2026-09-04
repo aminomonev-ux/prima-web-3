@@ -68,7 +68,6 @@ export type AuditEventType =
   | 'KINERJA_VERSI_CREATED'    // POST /api/kinerja/ssk/perubahan — buat PERUBAHAN-n + lock previous
   | 'KINERJA_VERSI_LOCKED'     // (reserved) manual lock versi
   | 'KINERJA_VERSI_SWITCH'     // (reserved) UI switch versi aktif — telemetry-grade
-  | 'KINERJA_SSK_NULLIFIED'    // PATCH /api/kinerja/ssk/nullify — nol-kan/un-nol-kan baris
   | 'KINERJA_DATA_RESET'       // POST /api/kinerja/reset — destructive bulk delete (SUPER_ADMIN only)
   // ─── Usulan ───────────────────────────────────────────────────────────────
   | 'TELAAH_USULAN'

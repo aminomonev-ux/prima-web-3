@@ -61,6 +61,18 @@ export function sudahDinolkan(r: SskRow): boolean {
   return r.is_nullified === true;
 }
 
+/**
+ * Berapa baris yang dinol-kan pada payload ini — untuk detail audit
+ * `KINERJA_SAVE_SSK`.
+ *
+ * Bertipe struktural, bukan `SskRow[]`: pemanggilnya route, yang memegang baris
+ * hasil Zod, bukan tipe layar. Mengecornya jadi `SskRow` di sana cuma
+ * menyembunyikan bahwa yang dibutuhkan sebenarnya satu medan saja.
+ */
+export function hitungDinolkan(rows: { is_nullified?: boolean }[]): number {
+  return rows.reduce((n, r) => n + (r.is_nullified === true ? 1 : 0), 0);
+}
+
 // ─── Sisi HAPUS ──────────────────────────────────────────────────────────────
 // Nol-kan dan Hapus adalah dua jawaban untuk pertanyaan yang sama ("baris ini
 // tidak dipakai lagi"), jadi keduanya tinggal serumah: dialog hapus WAJIB

@@ -7,7 +7,7 @@
 // yang persennya jatuh di batas pembulatan. Tanpa itu, bagian C/F/G/K/L semuanya
 // lulus tanpa menguji apa pun — selisih 0,01 tidak akan pernah muncul.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { recalcAllRealisasiServer, type RealRowRaw } from '../lib/data/kinerja-calc';
 import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan } from '../lib/kinerja/rekap';
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
@@ -17,7 +17,7 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
 import { nolkanBaris, aktifkanBaris, sudahDinolkan,
-  perluPeriksaHapus, pesanHapusSsk } from '../lib/kinerja/nol-kan';
+  perluPeriksaHapus, pesanHapusSsk, hitungDinolkan } from '../lib/kinerja/nol-kan';
 import type { RealRow, SskRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
 let lulus = 0;
@@ -903,6 +903,60 @@ console.log('\n-- V. Hapus baris SSK berpagar ---------------------------------'
   // Jalur buang cuma SATU: kalau ada dua `filter`, salah satunya bisa lolos pagar.
   eq('V23 hanya SATU jalur membuang barisnya',
      (badan.match(/p\.filter\(\(_, i\) => i !== idx\)/g) || []).length, 1);
+}
+
+console.log('\n-- W. Route nullify dibuang, jejaknya pindah -------------------');
+
+// A1 tahap 5. Nol-kan berhenti di FORM sejak tahap 3, jadi route yang menulis
+// langsung ke DB jadi jalur tulis KEDUA untuk hal yang sama - bentuk yang di
+// BLUD sudah melahirkan lubang nyata (L78). Dan route yang ada tapi tidak
+// tersambung ADALAH temuan A1; membiarkannya berarti menyisakan jebakan yang
+// baru saja dilaporkan.
+{
+  ok('W1 route ssk/nullify sudah tidak ada',
+     !existsSync('app/api/kinerja/ssk/nullify/route.ts'));
+  ok('W2 foldernya ikut bersih', !existsSync('app/api/kinerja/ssk/nullify'));
+
+  // Event auditnya ikut dilepas - event yang tidak pernah bisa terbit lagi cuma
+  // membuat daftar AuditEventType berbohong tentang apa yang bisa terjadi.
+  const al = readFileSync('lib/security/auditlog.ts', 'utf8');
+  ok('W3 KINERJA_SSK_NULLIFIED dilepas dari AuditEventType',
+     !al.includes('KINERJA_SSK_NULLIFIED'));
+
+  // Tapi PERISTIWANYA tidak boleh ikut hilang: "berapa baris dimatikan" adalah
+  // satu-satunya cara menjawab kenapa pagu setahun tiba-tiba mengecil.
+  const rt = readFileSync('app/api/kinerja/ssk/route.ts', 'utf8');
+  ok('W4 detail Simpan menyebut jumlah yang dinol-kan', rt.includes('dinol-kan)'));
+  ok('W5 dihitung dari payloadnya, bukan dikarang', rt.includes('hitungDinolkan(rows)'));
+  // Nol tidak disebut - "(0 dinol-kan)" di tiap simpanan biasa cuma bising.
+  ok('W6 nol tidak ikut disebut', /hitungDinolkan\(rows\) > 0 \?/.test(rt));
+  // Jejak pulihan TIDAK boleh ikut terbuang saat kalimatnya disunting.
+  ok('W7 jejak pulihan tetap ada', rt.includes('jejakPulihkan(asal_pulihkan)'));
+
+  const nk = readFileSync('lib/kinerja/nol-kan.ts', 'utf8');
+  // Bertipe struktural: pemanggilnya route yang memegang baris hasil Zod, bukan
+  // tipe layar. Mengecornya jadi SskRow cuma menyembunyikan bahwa yang
+  // dibutuhkan satu medan saja.
+  ok('W8 hitungDinolkan bertipe struktural, bukan SskRow[]',
+     /hitungDinolkan\(rows: \{ is_nullified\?: boolean \}\[\]\)/.test(nk));
+
+  // Perilakunya.
+  eq('W9 menghitung yang benar',
+     hitungDinolkan([{ is_nullified: true }, {}, { is_nullified: false }, { is_nullified: true }]), 2);
+  eq('W10 larik kosong nol', hitungDinolkan([]), 0);
+  // `undefined` bukan `true` - baris yang belum tersimpan belum punya benderanya.
+  eq('W11 bendera undefined tidak dihitung', hitungDinolkan([{}, {}]), 0);
+
+  // Tidak boleh ada rujukan yang tertinggal di kode sumber.
+  for (const berkas of [
+    'app/(dashboard)/kinerja/_tabs/SskTab.tsx',
+    'app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx',
+    'lib/kinerja/nol-kan.ts',
+  ]) {
+    const t = readFileSync(berkas, 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+    ok(`W12 ${berkas.split('/').pop()} tidak menyebut endpoint nullify`,
+       !t.includes('ssk/nullify'));
+  }
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

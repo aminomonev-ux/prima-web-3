@@ -5,6 +5,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, SskBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
+import { hitungDinolkan } from '@/lib/kinerja/nol-kan';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -72,7 +73,14 @@ export async function PUT(req: NextRequest) {
     eventType: 'KINERJA_SAVE_SSK',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Simpan SSK ${sumber} ${tahun} ${versiTipe}-${versiSeq}: ${rows.length} baris` + jejakPulihkan(asal_pulihkan),
+    // Nol-kan sekarang berhenti di FORM, jadi peristiwanya tidak lagi punya
+    // event audit sendiri (`KINERJA_SSK_NULLIFIED` dibuang bersama routenya).
+    // Jejaknya pindah ke sini — kalau tidak, "berapa baris dimatikan" lenyap
+    // dari catatan, dan yang hilang bukan cuma kerapian: itu satu-satunya cara
+    // menjawab kenapa pagu setahun tiba-tiba mengecil.
+    detail:    `Simpan SSK ${sumber} ${tahun} ${versiTipe}-${versiSeq}: ${rows.length} baris`
+      + (hitungDinolkan(rows) > 0 ? ` (${hitungDinolkan(rows)} dinol-kan)` : '')
+      + jejakPulihkan(asal_pulihkan),
   });
 
   return NextResponse.json({ ok: true, saved: rows.length, versi: { tipe: versiTipe, seq: versiSeq }, version });
