@@ -8,6 +8,20 @@
 // lulus tanpa menguji apa pun — selisih 0,01 tidak akan pernah muncul.
 
 import { readFileSync, existsSync } from 'node:fs';
+import { letakTip } from '../lib/shared/tip-posisi';
+
+/**
+ * Buang komentar BARIS dan BLOK sebelum pemeriksaan "tidak boleh ada lagi".
+ *
+ * Tanpa yang blok, prosa JSDoc yang MENJELASKAN cacat lama ikut terbaca sebagai
+ * cacat itu sendiri, dan tesnya gagal karena kalimat yang menerangkannya —
+ * bukan karena kodenya. Terjadi pada tiga pemeriksaan bab AF sekaligus (L82c
+ * lewat pintu lain). Bagian Y sudah memakai bentuk yang sama secara lokal;
+ * di sini ia jadi fungsi supaya tidak disalin lagi.
+ */
+function bersihkanKomentar(teks: string): string {
+  return teks.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+}
 import { recalcAllRealisasiServer, type RealRowRaw } from '../lib/data/kinerja-calc';
 import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan, laporanYatim,
   targetSampai, type ItemSskAktif } from '../lib/kinerja/rekap';
@@ -18,7 +32,8 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
 import { pickVersiAktif, pilihVersiAgregat, versiUntukPilihan, labelVersi,
-  ringkasVersiRekap, imbuhanBerkasVersi, namaBerkasRekap } from '../lib/kinerja/versi';
+  ringkasVersiRekap, imbuhanBerkasVersi, namaBerkasRekap,
+  sumberTanpaVersi } from '../lib/kinerja/versi';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi,
   type BarisSskAcuan } from '../lib/kinerja/hidrasi-ssk';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '../lib/kinerja/master-nama';
@@ -1233,8 +1248,15 @@ console.log('\n-- Y. A4: Pulihkan menghidrasi ulang dari SSK versi terbuka ----'
   // — peta hidrasi baris realisasi DAN penyebut Rekap. Satu tempat, satu saringan.
   const iHid = kj.indexOf('export async function itemSskVersi(');
   const badanHid = kj.slice(iHid, kj.indexOf('\n}\n', iHid));
-  ok('Y36 kueri SSK server juga mengecualikan baris nol-kan',
-     /FROM kinerja_ssk[\s\S]*?AND is_nullified = FALSE/.test(badanHid));
+  // Saringannya pindah dari WHERE ke JS supaya satu kueri menjawab dua hal,
+  // jadi yang diperiksa juga pindah — INVARIANNYA sama: baris nol-kan tidak
+  // boleh sampai ke item maupun ke peta hidrasi.
+  ok('Y36 baris nol-kan tetap dikecualikan dari item & peta hidrasi',
+     /rows\.filter\(r => Number\(r\.is_nullified \?\? 0\) === 0\)/.test(badanHid)
+     && /const items = aktif\.map\(/.test(badanHid));
+  ok('Y36c dan kueri itu sekaligus menjawab "habis dinol-kan?" tanpa kueri kedua',
+     /baris: rows\.length, baris_aktif: aktif\.length/.test(badanHid)
+     && !/versiDinolkanSsk/.test(kj));
   ok('Y36b dan hidrasi memakai kueri yang sama, bukan salinannya',
      /itemSskVersi\(tahun, sumber, versiTipe, versiSeq\)/.test(kj));
 
@@ -1692,8 +1714,11 @@ console.log('\n-- AD. A9: daftar calon versi lengkap, angkanya yang disaring --'
   // + getKinerjaKpi 2. Penjumlahan bersyarat ini TIDAK bergantung pada baris
   // dinol-kan yang pagunya sudah 0: baris lama (dari route `nullify` yang dulu)
   // bisa berbendera nol tapi masih berangka.
+  // 10 = versiAktifKinerja 2 (dua cabang) + getLaporanData 3 + getLaporanSemua 3
+  // + getKinerjaKpi 2. `itemSskVersi` menyaring di JS, bukan di SQL, supaya satu
+  // kueri menjawab dua hal — jadi ia sengaja tidak ikut hitungan ini.
   eq('AD18 penjumlahannya bersyarat, bukan disaring di WHERE',
-     (dk.match(/SUM\(CASE WHEN is_nullified = FALSE/g) || []).length, 11);
+     (dk.match(/SUM\(CASE WHEN is_nullified = FALSE/g) || []).length, 10);
   // canonicalAktifKinerja SENGAJA tetap menyaring barisnya: realisasi yang
   // menunjuk item dinol-kan HARUS jadi yatim, bukan diam-diam berpagu.
   ok('AD19 kueri baris canonical tetap menyaring is_nullified',
@@ -1940,8 +1965,9 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   const rtAE = readFileSync('app/api/kinerja/realisasi/route.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
   ok('AE40 cabang versi-eksplisit ikut membawa bendera dinolkan',
      /versi: \{ tipe: versiTipe, seq: versiSeq, dinolkan \}/.test(rtAE));
-  ok('AE41 dan benderanya dihitung untuk versi yang DIMINTA',
-     /versiDinolkanSsk\(tahun, sumber, versiTipe, versiSeq\)/.test(rtAE));
+  ok('AE41 benderanya datang dari kueri yang sama dengan itemnya, bukan kueri kedua',
+     /const \{ rows, itemSsk, dinolkan \} = await getRealisasiHydrated\(tahun, sumber, versiTipe, versiSeq\)/.test(rtAE)
+     && !/versiDinolkanSsk/.test(rtAE));
 
   // Laporan/KPI/Beranda SENGAJA tanpa pemilih: pertanyaannya "sekarang
   // bagaimana", dan itu satu jawaban (L88 tetap utuh).
@@ -1949,6 +1975,102 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   const dtAE = readFileSync('app/(dashboard)/kinerja/_tabs/DashboardTab.tsx', 'utf8');
   ok('AE42 Laporan & Beranda tidak dapat pemilih versi',
      !/pilihanVersi/.test(ltAE) && !/pilihanVersi/.test(dtAE));
+}
+
+console.log('\n-- AF. Perbaikan hasil audit: label tidak boleh berbohong --');
+
+{
+  const kcAF = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
+
+  // Dua pemuatan yang saling menyalip bisa selesai tidak berurutan, dan yang
+  // selesai terakhir belum tentu yang terakhir diminta -- angka pilihan lama di
+  // bawah label pilihan baru.
+  ok('AF1 pemuatan Rekap bernomor giliran', /const giliran = \+\+giliranMuatRef\.current;/.test(kcAF));
+  ok('AF2 hasil giliran basi DIBUANG sebelum state disentuh',
+     /if \(giliran !== giliranMuatRef\.current\) return;/.test(kcAF));
+  const iSet = kcAF.indexOf('setRealisasiAllRows(recalcAllRealisasi');
+  const iBuang = kcAF.indexOf('if (giliran !== giliranMuatRef.current) return;');
+  ok('AF3 pagar itu berdiri SEBELUM setter pertama', iBuang > 0 && iBuang < iSet);
+  ok('AF4 hanya giliran terakhir yang mematikan penanda memuat',
+     /if \(giliran === giliranMuatRef\.current\) setLoadingData\(false\);/.test(kcAF));
+
+  // `fetchRealisasiAll` menerima `pilihan` sebagai argumen pertama, jadi ia
+  // TIDAK boleh dioper langsung sebagai penangan: event klik akan mendarat di
+  // situ (bentuk cacat `onClick={savePendapatan}` di catatan Tahap 9a).
+  ok('AF5 layar Cetak menerima pembungkus tanpa argumen',
+     /onFetchAll=\{muatRekap\}/.test(kcAF)
+     && /const muatRekap = useCallback\(\(\) => \{ void fetchRealisasiAll\(\); \}/.test(kcAF));
+  ok('AF6 dan bukan fungsi ber-argumen itu sendiri', !/onFetchAll=\{fetchRealisasiAll\}/.test(kcAF));
+
+  // Ganti tahun sementara Rekap terbuka: kop & judul sudah mengumumkan tahun
+  // baru, angkanya masih tahun lama.
+  ok('AF7 ganti tahun memuat ulang Rekap yang sudah dimuat',
+     /useEffect\(\(\) => \{ if \(rekapPernahDimuatRef\.current\) muatRekapRef\.current\(\); \}, \[tahun\]\);/.test(kcAF));
+  ok('AF8 lewat ref, supaya ganti pilihan versi tidak memuat dua kali',
+     /muatRekapRef\.current = muatRekap/.test(kcAF));
+
+  // Syaratnya diuji positif: pilihan ketiga tidak boleh diam-diam masuk ke
+  // cabang "murni" lalu memuat versi berlaku.
+  ok('AF9 cabang versi diuji positif', /if \(pilihan === 'murni'\) \{/.test(kcAF));
+  ok('AF10 bukan negasi', !/if \(pilihan !== 'berlaku'\) \{/.test(kcAF));
+
+  // Sumber yang habis dinol-kan tidak punya item dan bisa belum punya
+  // realisasi -- tanpa `dinolkan` di syaratnya ia hilang dari daftar versi kop
+  // padahal catatan di bawah tabel sedang membicarakannya.
+  ok('AF11 sumber dinol-kan tetap masuk daftar versi kop',
+     /x\.versi\.tipe === null \|\| x\.dinolkan \|\| x\.itemSsk\.length > 0/.test(kcAF));
+
+  // Kop rekap: satu sumber untuk teks, gaya, dan jumlah baris.
+  const exAF = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8'));
+  ok('AF12 ringkasan versi WAJIB dioper ke kopRekap, tanpa nilai bawaan',
+     /export function kopRekap\(namaBulan: string, tahun: string, ringkasVersi: string\)/.test(exAF));
+  ok('AF13 kalimat kop lama tidak bisa kembali sebagai bawaan',
+     !/'Pagu & target mengacu SSK versi aktif/.test(exAF));
+  ok('AF14 kop Excel diambil dari kopRekap, tidak ditulis ulang',
+     /\.\.\.kopRekap\(namaBulan, tahun, ringkasVersiRekap\(versiRekap, pilihanVersi\)\)\.map/.test(exAF));
+  ok('AF15 gaya sheet tidak lagi memanggil pembuat teks dgn argumen palsu',
+     /GAYA_KOP_REKAP\.forEach/.test(exAF) && !/kopRekap\('', ''\)/.test(exAF));
+  ok('AF16 jumlah baris kop diturunkan, bukan angka tetap',
+     /REKAP_JUDUL_BARIS = GAYA_KOP_REKAP\.length \+ 1/.test(exAF));
+  eq('AF16b dan nilainya tetap 6', REKAP_JUDUL_BARIS, 6);
+
+  // Keadaan kosong: SSK-nya ada, versinya yang tidak.
+  eq('AF17 sumber tanpa versi bisa dikenali',
+     JSON.stringify(sumberTanpaVersi([
+       { sumber: 'GAJI', tipe: 'MURNI', seq: 0 },
+       { sumber: 'HARLEP', tipe: null, seq: 0 },
+     ])), JSON.stringify(['HARLEP']));
+  eq('AF17b dan daftar tanpa yang kosong memulangkan larik kosong',
+     sumberTanpaVersi([{ sumber: 'GAJI', tipe: 'MURNI', seq: 0 }]).length, 0);
+  const ctAF = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
+  ok('AF18 keadaan kosong menyebut "tidak punya versi murni", bukan "isi RKO/SSK dulu"',
+     /tanpaVersi\.length > 0/.test(ctAF) && ctAF.includes('tidak punya versi murni'));
+  ok('AF19 dan menunjukkan jalan keluarnya', ctAF.includes('Pilih <strong>Versi Berlaku</strong>'));
+
+  // Tooltip: kedua sumbu, dan lebar tanpa bilah gulir.
+  ok('AF20 letak tooltip membalik ke bawah kalau ruang di atas tidak cukup',
+     letakTip({ left: 300, right: 330, width: 30, top: 10, bottom: 36 }, 1400).ty === '0%');
+  eq('AF21 dan titik jangkarnya pindah ke bawah pemiliknya',
+     letakTip({ left: 300, right: 330, width: 30, top: 10, bottom: 36 }, 1400).top, 42);
+  ok('AF22 ruang cukup -> tetap di atas',
+     letakTip({ left: 300, right: 330, width: 30, top: 400, bottom: 426 }, 1400).ty === '-100%');
+  eq('AF23 dan jangkarnya di atas pemiliknya',
+     letakTip({ left: 300, right: 330, width: 30, top: 400, bottom: 426 }, 1400).top, 394);
+  ok('AF24 nilai tegaknya bersatuan — calc() batal kalau 0 telanjang',
+     ['0%', '-100%'].includes(letakTip({ left: 300, right: 330, width: 30, top: 10, bottom: 36 }, 1400).ty));
+  const tipAF = bersihkanKomentar(readFileSync('components/ui/Tip.tsx', 'utf8'));
+  ok('AF25 lebar diukur tanpa bilah gulir', /document\.documentElement\.clientWidth/.test(tipAF)
+     && !/window\.innerWidth/.test(tipAF));
+  ok('AF26 dan --tip-ty ikut dikirim ke CSS', /'--tip-ty': pos\.ty/.test(tipAF));
+  const cssAF = readFileSync('app/globals.css', 'utf8');
+  ok('AF27 keyframes memakai variabel tegaknya juga',
+     /transform: translate\(var\(--tip-tx\), calc\(var\(--tip-ty\) \+ 4px\)\)/.test(cssAF));
+
+  // Cermin klien berhenti mengecilkan kontrak servernya.
+  const tyAF = readFileSync('app/(dashboard)/kinerja/_types.ts', 'utf8');
+  ok('AF28 bendera A9 di cermin klien wajib, bukan opsional',
+     /versi_dinolkan: boolean;/.test(tyAF) && !/versi_dinolkan\?: /.test(tyAF)
+     && /sumber_dinolkan: SumberSSK\[\];/.test(tyAF));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

@@ -17,7 +17,8 @@ import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
 import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf,
   exportBundelExcel, exportBundelPdf, PENANDA_TANGAN, type BagianDetail } from '../_exports';
 import { uiTheme } from '@/lib/theme';
-import { ringkasVersiRekap, type PilihanVersiRekap, type VersiSumberRekap } from '@/lib/kinerja/versi';
+import { ringkasVersiRekap, sumberTanpaVersi,
+  type PilihanVersiRekap, type VersiSumberRekap } from '@/lib/kinerja/versi';
 
 interface Props {
   realisasiRows: RealRow[];
@@ -63,6 +64,7 @@ export default function CetakTab({
   pilihanVersi, onGantiPilihanVersi, versiRekap,
 }: Props) {
   const ringkasVersi = ringkasVersiRekap(versiRekap, pilihanVersi);
+  const tanpaVersi   = sumberTanpaVersi(versiRekap);
   const versiLabel = sskVersi
     ? (sskVersi.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${sskVersi.seq}`)
     : 'MURNI';
@@ -374,7 +376,13 @@ export default function CetakTab({
             {sumberDinolkan.length > 0
               ? <>Seluruh baris SSK {sumberDinolkan.join(', ')} sudah dinol-kan, jadi tidak ada pagu &amp; target untuk direkap.
                   Kalau maksudnya membatalkan Perubahannya, hapus versinya di <strong>Pengaturan → Reset</strong>.</>
-              : <>Belum ada item SSK untuk tahun {tahun} — isi RKO/SSK dulu, rekap mengambil pagu &amp; targetnya dari sana.</>}
+              : tanpaVersi.length > 0
+                /* SSK-nya ADA, cuma versi yang diminta tidak. Kalimat "isi
+                   RKO/SSK dulu" di sini menyuruh orang membereskan data yang
+                   sudah benar. */
+                ? <>{tanpaVersi.join(', ')} tidak punya versi murni — MURNI-nya sudah dihapus di Pengaturan → Reset,
+                    yang tersisa versi Perubahan. Pilih <strong>Versi Berlaku</strong> di atas untuk memakainya.</>
+                : <>Belum ada item SSK untuk tahun {tahun} — isi RKO/SSK dulu, rekap mengambil pagu &amp; targetnya dari sana.</>}
           </div>
         );
 

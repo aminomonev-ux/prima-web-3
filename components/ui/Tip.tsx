@@ -31,7 +31,10 @@ export default function Tip({ label, children }: { label: string; children: Reac
   const childProps = children.props
 
   function enter(e: MouseEvent<HTMLElement>) {
-    setPos(letakTip(e.currentTarget.getBoundingClientRect(), window.innerWidth))
+    // `clientWidth`, BUKAN `window.innerWidth`: yang kedua ikut menghitung
+    // lebar bilah gulir, jadi jangkarnya boleh mendarat di bawah bilah itu dan
+    // huruf terakhirnya tertutup.
+    setPos(letakTip(e.currentTarget.getBoundingClientRect(), document.documentElement.clientWidth))
     childProps.onMouseEnter?.(e)
   }
   function leave(e: MouseEvent<HTMLElement>) {
@@ -47,7 +50,7 @@ export default function Tip({ label, children }: { label: string; children: Reac
       {label && pos && typeof window !== 'undefined' && createPortal(
         <div className="blud-tip-portal" style={{
           position: 'fixed', top: pos.top, left: pos.left,
-          '--tip-tx': pos.tx, '--tip-maks': `${pos.lebar}px`,
+          '--tip-tx': pos.tx, '--tip-ty': pos.ty, '--tip-maks': `${pos.lebar}px`,
         } as CSSProperties}>
           {label}
         </div>,

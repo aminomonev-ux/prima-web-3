@@ -11,11 +11,26 @@ export const JARAK_TEPI = 8;
 /** Batas lebar tooltip di layar lapang. */
 export const LEBAR_MAKS = 280;
 
+/**
+ * Perkiraan tinggi tooltip SATU baris (padding + baris teks) plus jaraknya ke
+ * pemilik. Dipakai untuk memutuskan apakah masih ada ruang di ATAS pemiliknya.
+ * Sengaja perkiraan satu baris, bukan dua: dengan angka dua baris, tombol yang
+ * masih punya ruang cukup akan ikut dibalik ke bawah tanpa perlu.
+ */
+export const TINGGI_KIRA = 34;
+
 export interface LetakTip {
   top: number;
   left: number;
   /** Nilai `--tip-tx`: pergeseran mendatar terhadap `left`. */
-  tx: '-50%' | '-100%' | '0';
+  tx: '-50%' | '-100%' | '0%';
+  /**
+   * Nilai `--tip-ty`: `-100%` = tooltip di ATAS pemiliknya (lumrah), `0%` = di
+   * BAWAH, dipakai kalau ruang di atas tidak cukup. Ber-satuan persen, bukan
+   * `0` telanjang: keyframe-nya memakai `calc(var(--tip-ty) + 4px)`, dan
+   * menambah angka tanpa satuan ke panjang membuat seluruh `calc` batal.
+   */
+  ty: '-100%' | '0%';
   /**
    * Nilai `--tip-maks` (max-width di CSS). Dipulangkan, BUKAN ditulis ulang di
    * CSS: perhitungan di bawah memakai angka ini sebagai batas atas lebar
@@ -25,7 +40,7 @@ export interface LetakTip {
   lebar: number;
 }
 
-export interface KotakPemilik { left: number; right: number; width: number; top: number }
+export interface KotakPemilik { left: number; right: number; width: number; top: number; bottom: number }
 
 /**
  * Tooltip belum bisa DIUKUR saat letaknya dihitung — ia baru ada sesudah
@@ -44,15 +59,21 @@ export interface KotakPemilik { left: number; right: number; width: number; top:
 export function letakTip(r: KotakPemilik, lebarLayar: number): LetakTip {
   const tengah = r.left + r.width / 2;
   const lebar  = Math.min(LEBAR_MAKS, Math.max(0, lebarLayar - 2 * JARAK_TEPI));
-  const top    = r.top - 6;
+  // Sumbu tegak dijaga dengan aturan yang sama: kalau ruang di atas pemiliknya
+  // tidak cukup, tooltipnya dibalik ke BAWAH. Tanpa ini perbaikan tepi cuma
+  // separuh — tombol di dekat tepi atas layar tetap terpotong, cacat yang sama
+  // persis dengan yang di tepi kanan.
+  const keBawah = r.top - TINGGI_KIRA < JARAK_TEPI;
+  const top = keBawah ? r.bottom + 6 : r.top - 6;
+  const ty: LetakTip['ty'] = keBawah ? '0%' : '-100%';
 
   if (tengah + lebar / 2 > lebarLayar - JARAK_TEPI) {
     const kanan = Math.max(r.right, JARAK_TEPI + lebar);
-    return { top, lebar, left: Math.min(lebarLayar - JARAK_TEPI, kanan), tx: '-100%' };
+    return { top, ty, lebar, left: Math.min(lebarLayar - JARAK_TEPI, kanan), tx: '-100%' };
   }
   if (tengah - lebar / 2 < JARAK_TEPI) {
     const kiri = Math.min(r.left, lebarLayar - JARAK_TEPI - lebar);
-    return { top, lebar, left: Math.max(JARAK_TEPI, kiri), tx: '0' };
+    return { top, ty, lebar, left: Math.max(JARAK_TEPI, kiri), tx: '0%' };
   }
-  return { top, lebar, left: tengah, tx: '-50%' };
+  return { top, ty, lebar, left: tengah, tx: '-50%' };
 }

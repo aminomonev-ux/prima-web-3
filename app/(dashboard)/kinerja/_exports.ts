@@ -76,17 +76,38 @@ export async function exportSskPdf(params: { rows: SskRow[]; sumber: SumberSSK; 
 
 export interface KopBaris { teks: string; ukuran: number; tebal: boolean }
 
-export function kopRekap(namaBulan: string, tahun: string, ringkasVersi = ''): KopBaris[] {
-  return [
-    { teks: 'RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO', ukuran: 12, tebal: true },
-    { teks: 'PROVINSI JAWA TENGAH', ukuran: 9, tebal: false },
-    { teks: 'LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP', ukuran: 11, tebal: true },
-    { teks: `S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`, ukuran: 9, tebal: false },
-    // Jumlah barisnya HARUS tetap 5 — `REKAP_JUDUL_BARIS` dan `rapikanSheetRekap`
-    // berdiri di atasnya. Jadi versinya menggantikan teks baris ini, bukan
-    // menambah baris baru.
-    { teks: ringkasVersi || 'Pagu & target mengacu SSK versi aktif tiap sumber', ukuran: 8, tebal: false },
+/**
+ * Ukuran & ketebalan tiap baris kop rekap — SATU sumber untuk tiga hal yang
+ * dulu memeliharanya masing-masing: teksnya (`kopRekap`), gaya sel Excel
+ * (`rapikanSheetRekap`, yang dulu memanggil `kopRekap('', '')` cuma untuk
+ * menghitung baris), dan jumlah barisnya (`REKAP_JUDUL_BARIS`, dulu angka 6
+ * yang ditulis tangan).
+ */
+const GAYA_KOP_REKAP = [
+  { ukuran: 12, tebal: true  },
+  { ukuran: 9,  tebal: false },
+  { ukuran: 11, tebal: true  },
+  { ukuran: 9,  tebal: false },
+  { ukuran: 8,  tebal: false },
+] as const;
+
+/**
+ * `ringkasVersi` WAJIB, tanpa nilai bawaan: bawaan `''` dulu memulangkan
+ * kalimat "mengacu SSK versi aktif tiap sumber" — kalimat yang menyebut
+ * ATURANNYA dan bukan versinya, jadi dua rekap yang diukur ke versi berbeda
+ * terbaca identik. Begitu versinya bisa dipilih, kalimat itu bukan cuma kurang
+ * informatif, ia menyesatkan — dan nilai bawaan membuatnya bisa kembali diam-
+ * diam lewat pemanggil yang lupa.
+ */
+export function kopRekap(namaBulan: string, tahun: string, ringkasVersi: string): KopBaris[] {
+  const teks = [
+    'RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO',
+    'PROVINSI JAWA TENGAH',
+    'LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP',
+    `S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`,
+    ringkasVersi,
   ];
+  return GAYA_KOP_REKAP.map((g, i) => ({ teks: teks[i], ukuran: g.ukuran, tebal: g.tebal }));
 }
 
 export function kopDetail(sumber: SumberSSK, bulan: number, tahun: string): KopBaris[] {
@@ -189,18 +210,22 @@ function catatanDinolkan(sumberDinolkan: string[]): string | null {
     + 'Rp 0 dan TIDAK ikut menyumbang ke total di atas. Itu disengaja, bukan data yang belum diisi.';
 }
 
-/** Baris kop di atas header — indeksnya juga yang dipakai `headerRowIndex`. */
-export const REKAP_JUDUL_BARIS = 6;
+/**
+ * Baris kop di atas header — indeksnya juga yang dipakai `headerRowIndex`.
+ * DITURUNKAN dari kopnya (+1 untuk baris kosong pemisah), bukan angka tetap:
+ * menambah baris kop tanpa menggeser angka ini membuat header tabel ter-style
+ * sebagai kop dan sebaliknya.
+ */
+export const REKAP_JUDUL_BARIS = GAYA_KOP_REKAP.length + 1;
 
 /** Dipisah dari pengunduhannya supaya bisa diuji tanpa DOM. */
 export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan,
   versiRekap, pilihanVersi }: RekapExportParams): (string | number | null)[][] {
+  // Kopnya DIAMBIL dari `kopRekap`, tidak ditulis ulang di sini: dua salinan
+  // kalimat yang sama pasti berbeda bunyi begitu satu disunting — dan keduanya
+  // memang sudah mulai berbeda soal kasus kosongnya.
   const judul: (string | number | null)[][] = [
-    ['RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO'],
-    ['PROVINSI JAWA TENGAH'],
-    ['LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP'],
-    [`S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`],
-    [ringkasVersiRekap(versiRekap, pilihanVersi)],
+    ...kopRekap(namaBulan, tahun, ringkasVersiRekap(versiRekap, pilihanVersi)).map(k => [k.teks]),
     [],
   ];
   const data = baris.map(b => [
@@ -235,11 +260,14 @@ const REKAP_FMT = [
  */
 export function rapikanSheetRekap(ws: import('exceljs').Worksheet, baris: BarisRekap[]) {
   const kolom = REKAP_HEADER.length;
-  kopRekap('', '').forEach((k, i) => {
+  // Gayanya dari `GAYA_KOP_REKAP`, bukan dari `kopRekap('', '')`: memanggil
+  // pembuat teks dengan argumen palsu cuma untuk menghitung baris adalah cara
+  // kalimat kop yang salah bisa lolos ke berkas.
+  GAYA_KOP_REKAP.forEach((g, i) => {
     const r = ws.getRow(i + 1);
     ws.mergeCells(r.number, 1, r.number, kolom);
     r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-    r.getCell(1).font = { bold: k.tebal, size: k.ukuran };
+    r.getCell(1).font = { bold: g.tebal, size: g.ukuran };
   });
   baris.forEach((b, i) => {
     if (!b.tebal) return;

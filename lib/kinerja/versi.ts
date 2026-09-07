@@ -184,6 +184,18 @@ export function ringkasVersiRekap(daftar: VersiSumberRekap[], pilihan: PilihanVe
 }
 
 /**
+ * Sumber yang punya SSK tapi tidak punya versi untuk pilihan yang sedang aktif.
+ *
+ * Dipisah supaya keadaan-kosong di layar bisa MENYEBUT sebabnya. Tanpa ini
+ * layar berbunyi "Belum ada item SSK — isi RKO/SSK dulu" padahal SSK-nya ada,
+ * cuma versi yang diminta tidak: menyuruh orang membereskan data yang sudah
+ * benar, persis kesalahan alamat yang kalimat itu ditulis untuk menghindari.
+ */
+export function sumberTanpaVersi(daftar: VersiSumberRekap[]): string[] {
+  return daftar.filter(v => v.tipe === null).map(v => v.sumber);
+}
+
+/**
  * Sisipan nama berkas. Hanya pilihan NON-BAWAAN yang ditandai, supaya nama
  * berkas yang sudah beredar tidak berubah — dan nama tanpa sisipan selalu
  * berarti "versi berlaku", jadi tetap tak bermakna ganda. Gunanya nyata:

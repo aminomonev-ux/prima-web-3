@@ -542,36 +542,6 @@ function pagarReplace(table: string, existing: number, incoming: number, force: 
   }
 }
 
-/**
- * Apakah SATU versi tertentu punya baris tapi semuanya dinol-kan?
- *
- * Dibutuhkan jalur "versi diminta eksplisit" di GET realisasi: `versiAktifKinerja`
- * menjawab untuk versi BERLAKU, dan sesudah versi bisa dipilih di layar Cetak,
- * jawaban itu bukan lagi jawaban untuk versi yang sedang ditampilkan. Tanpa ini
- * spanduk A9 diam persis saat orang memilih versi yang habis dinol-kan.
- *
- * Aturannya tetap `pilihVersiAgregat`, bukan perbandingan baru di sini — satu
- * daftar berisi satu baris, supaya "dinol-kan" tidak punya dua definisi (L88).
- */
-export async function versiDinolkanSsk(
-  tahun: string,
-  sumber: SumberSSK,
-  versiTipe: 'MURNI' | 'PERUBAHAN',
-  versiSeq: number,
-): Promise<boolean> {
-  const rows = await sql`
-    SELECT COUNT(*) AS baris,
-           SUM(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END) AS baris_aktif
-    FROM kinerja_ssk
-    WHERE tahun = ${tahun} AND sumber = ${sumber}
-      AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
-  ` as Record<string, unknown>[];
-  return pilihVersiAgregat([{
-    versi_tipe: versiTipe, versi_seq: versiSeq,
-    baris: rows[0]?.baris, baris_aktif: rows[0]?.baris_aktif,
-  }]).dinolkan;
-}
-
 export interface VersiAktifKinerja {
   tipe: 'MURNI' | 'PERUBAHAN';
   seq: number;
@@ -917,9 +887,13 @@ export async function itemSskVersi(
   sumber: SumberSSK,
   versiTipe: 'MURNI' | 'PERUBAHAN',
   versiSeq: number,
-): Promise<ItemSskAktif[]> {
+): Promise<{ items: ItemSskAktif[]; dinolkan: boolean }> {
+  // Saringan `is_nullified` di JS, bukan di WHERE — dan itu bukan selera:
+  // dengan begitu SATU kueri menjawab dua pertanyaan sekaligus ("item apa saja"
+  // dan "apakah versi ini habis dinol-kan"). Sebelumnya jawaban kedua butuh
+  // kueri COUNT sendiri di route, yang dibayar SETIAP muat tab Realisasi.
   const rows = await sql`
-    SELECT canonical_id, pagu, months,
+    SELECT canonical_id, pagu, months, is_nullified,
            COALESCE(program,'') AS program,
            COALESCE(kegiatan,'') AS kegiatan,
            COALESCE(subkegiatan,'') AS subkegiatan,
@@ -928,10 +902,10 @@ export async function itemSskVersi(
     FROM kinerja_ssk
     WHERE tahun = ${tahun} AND sumber = ${sumber}
       AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
-      AND is_nullified = FALSE
     ORDER BY urut, id
   ` as Record<string, unknown>[];
-  return rows.map(r => ({
+  const aktif = rows.filter(r => Number(r.is_nullified ?? 0) === 0);
+  const items = aktif.map(r => ({
     canonical_id: String(r.canonical_id ?? ''),
     program:      String(r.program ?? ''),
     kegiatan:     String(r.kegiatan ?? ''),
@@ -941,6 +915,13 @@ export async function itemSskVersi(
     pagu:         Number(r.pagu ?? 0),
     months:       parseJson<SskMonths>(r.months, emptyMonths()),
   }));
+  // Aturannya tetap `pilihVersiAgregat` — satu daftar berisi satu baris —
+  // supaya "dinol-kan" tidak punya dua definisi (L88).
+  const { dinolkan } = pilihVersiAgregat([{
+    versi_tipe: versiTipe, versi_seq: versiSeq,
+    baris: rows.length, baris_aktif: aktif.length,
+  }]);
+  return { items, dinolkan };
 }
 
 export async function getRealisasiHydrated(
@@ -948,9 +929,11 @@ export async function getRealisasiHydrated(
   sumber: SumberSSK,
   versiTipe: 'MURNI' | 'PERUBAHAN' = 'MURNI',
   versiSeq: number = 0,
-): Promise<{ rows: import('./kinerja-calc').RealRowHydrated[]; itemSsk: ItemSskAktif[] }> {
+): Promise<{ rows: import('./kinerja-calc').RealRowHydrated[]; itemSsk: ItemSskAktif[];
+  /** Versi yang DIMINTA punya baris tapi semuanya dinol-kan (A9). */
+  dinolkan: boolean }> {
   const { recalcAllRealisasiServer } = await import('./kinerja-calc');
-  const [realRaw, itemSsk] = await Promise.all([
+  const [realRaw, ssk] = await Promise.all([
     sql`
       SELECT bulan,
              COALESCE(keterangan,'') AS keterangan,
@@ -971,6 +954,7 @@ export async function getRealisasiHydrated(
     // saringan, dan yang berbeda di antara keduanya pasti `is_nullified`.
     itemSskVersi(tahun, sumber, versiTipe, versiSeq),
   ]);
+  const { items: itemSsk, dinolkan } = ssk;
 
   const sskByCanonical = new Map<string, { pagu: number; months: SskMonths | null }>();
   for (const it of itemSsk) {
@@ -993,7 +977,7 @@ export async function getRealisasiHydrated(
     real_keuangan:         Number(r.real_keuangan ?? 0),
   }));
 
-  return { rows: recalcAllRealisasiServer(realRows, { sskByCanonical }), itemSsk };
+  return { rows: recalcAllRealisasiServer(realRows, { sskByCanonical }), itemSsk, dinolkan };
 }
 
 export async function saveRealisasiBatch(

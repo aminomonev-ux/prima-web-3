@@ -1350,6 +1350,7 @@ input, textarea { caret-color: #FBBF24; }
      sebaris, jadi keyframe ber-(-50%) mati akan menarik tooltip balik ke tengah
      selama 180ms lalu melompat. */
   --tip-tx: -50%;
+  --tip-ty: -100%;
   background: linear-gradient(135deg, #EF9F27, #FAC775);
   color: #020F1C;
   font-size: 11px; font-weight: 700; letter-spacing: .2px;
@@ -1367,14 +1368,14 @@ input, textarea { caret-color: #FBBF24; }
   width: max-content;
   max-width: var(--tip-maks, 280px);
   box-shadow: 0 6px 20px rgba(239,159,39,.35), 0 2px 6px rgba(0,0,0,.4);
-  transform: translate(var(--tip-tx), -100%);
+  transform: translate(var(--tip-tx), var(--tip-ty));
   pointer-events: none;
   z-index: 1100;
   animation: blud-tip-fade .18s ease-out;
 }
 @keyframes blud-tip-fade {
-  from { opacity: 0; transform: translate(var(--tip-tx), calc(-100% + 4px)); }
-  to   { opacity: 1; transform: translate(var(--tip-tx), -100%); }
+  from { opacity: 0; transform: translate(var(--tip-tx), calc(var(--tip-ty) + 4px)); }
+  to   { opacity: 1; transform: translate(var(--tip-tx), var(--tip-ty)); }
 }
 [data-theme="light"] .blud-tip-portal {
   background: linear-gradient(135deg, #8B5CF6, #EC4899);

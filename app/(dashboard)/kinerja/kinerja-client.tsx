@@ -129,6 +129,18 @@ export default function KinerjaClient({ userId, role, username, themePreference 
   const [pilihanVersi, setPilihanVersi] = useState<PilihanVersiRekap>('berlaku');
   /** Versi yang BENAR-BENAR dipakai tiap sumber — untuk kop dokumen & label layar. */
   const [versiRekap, setVersiRekap] = useState<VersiSumberRekap[]>([]);
+  /**
+   * Nomor giliran pemuatan Rekap. Pemuatannya 8 permintaan (16 kalau versi
+   * murni, karena daftar versinya dibaca dulu), jadi dua pemuatan yang saling
+   * menyalip BISA selesai tidak berurutan — dan yang selesai terakhir belum
+   * tentu yang terakhir diminta. Tanpa pagar ini, mengklik "Versi Murni" lalu
+   * cepat kembali ke "Versi Berlaku" meninggalkan angka murni di layar dengan
+   * label DAN nama berkas "berlaku": dokumen yang salah menyebut versinya,
+   * tepat yang seluruh fitur ini ada untuk mencegah.
+   */
+  const giliranMuatRef = useRef(0);
+  /** Rekap sudah pernah dimuat? Penentu apakah ganti tahun perlu memuat ulang. */
+  const rekapPernahDimuatRef = useRef(false);
   // O2: cetakView state dipindah ke _tabs/CetakTab.
   // O2: crrRows + pendapatanRows state dipindah ke _tabs/PendapatanCrrTab.
 
@@ -312,6 +324,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
    * layarnya tetap berisi angka yang masuk akal.
    */
   const fetchRealisasiAll = useCallback(async (pilihan: PilihanVersiRekap = pilihanVersi) => {
+    const giliran = ++giliranMuatRef.current;
     setLoadingData(true);
     try {
       // Partial fail OK: per-sumber gagal → return [] untuk yang itu saja,
@@ -322,7 +335,11 @@ export default function KinerjaClient({ userId, role, username, themePreference 
           const kosong = { sumber: s, rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[],
                            dinolkan: false, versi: null as VersiSumberRekap | null };
           let param = '';
-          if (pilihan !== 'berlaku') {
+          // Diuji POSITIF (`=== 'murni'`), bukan `!== 'berlaku'`: dengan
+          // negasi, pilihan ketiga yang ditambahkan nanti akan diam-diam masuk
+          // ke cabang ini dan memuat versi BERLAKU sementara label & nama
+          // berkasnya mengumumkan pilihan baru itu.
+          if (pilihan === 'murni') {
             // Versinya DIRESOLUSI dari daftar versi sumber itu, bukan ditulis
             // `MURNI-0` mati — nomor urut MURNI tidak dijamin 0 di mana pun.
             const dv = await fetchJson<unknown>(`/api/kinerja/ssk/versi-list?tahun=${tahun}&sumber=${s}`);
@@ -359,6 +376,10 @@ export default function KinerjaClient({ userId, role, username, themePreference 
           };
         })
       );
+      // Hasil dari giliran yang sudah ditinggalkan DIBUANG, tidak dipasang:
+      // memasangnya berarti angka dari pilihan lama duduk di bawah label
+      // pilihan baru.
+      if (giliran !== giliranMuatRef.current) return;
       // BUG-FIX: recalc setelah fetch supaya deviasi_keuangan pakai rumus baru
       // (akum % keu - akum tgt fisik). DB row masih simpan nilai lama.
       setRealisasiAllRows(recalcAllRealisasi(results.flatMap(x => x.rows)));
@@ -368,10 +389,22 @@ export default function KinerjaClient({ userId, role, username, themePreference 
       // sumber padahal satu yang berdata cuma bising. Sumber ber-`tipe: null`
       // TETAP masuk — ia punya SSK, cuma tidak punya versi untuk pilihan ini,
       // dan menghilangkannya dari daftar adalah bentuk cacat yang sama dgn A9.
+      // `x.dinolkan` WAJIB ikut jadi alasan masuk: versi yang habis dinol-kan
+      // TIDAK punya item dan bisa belum punya realisasi, jadi tanpa syarat ini
+      // ia hilang dari daftar versi di kop — padahal catatan di bawah tabel
+      // justru sedang membicarakannya. Sumber lenyap tanpa keterangan itu
+      // bentuk cacat yang sama dengan A9.
       setVersiRekap(results
-        .filter(x => x.versi !== null && (x.versi.tipe === null || x.itemSsk.length > 0 || x.rows.length > 0))
+        .filter(x => x.versi !== null
+          && (x.versi.tipe === null || x.dinolkan || x.itemSsk.length > 0 || x.rows.length > 0))
         .map(x => x.versi as VersiSumberRekap));
-    } finally { setLoadingData(false); }
+      rekapPernahDimuatRef.current = true;
+    } finally {
+      // Hanya giliran terakhir yang boleh mematikan penanda memuat; kalau tidak,
+      // pemuatan yang selesai lebih dulu membuat layar tampak siap sementara
+      // yang lain masih berjalan.
+      if (giliran === giliranMuatRef.current) setLoadingData(false);
+    }
   }, [tahun, pilihanVersi]);
 
   /**
@@ -383,6 +416,29 @@ export default function KinerjaClient({ userId, role, username, themePreference 
     setPilihanVersi(v);
     void fetchRealisasiAll(v);
   }, [fetchRealisasiAll]);
+
+  /**
+   * Pembungkus TANPA argumen untuk layar Cetak.
+   *
+   * `fetchRealisasiAll` menerima `pilihan` sebagai argumen pertama, jadi
+   * mengopernya langsung sebagai penangan (`onClick={onFetchAll}`) akan
+   * mengirim event klik ke situ — objek yang bukan 'berlaku', sehingga seluruh
+   * sumber dimuat dari versi murni sementara pemilihnya masih berbunyi "Versi
+   * Berlaku". Bentuk cacat itu sudah pernah terjadi di repo ini
+   * (`onClick={savePendapatan}` membuat `force` truthy, catatan Tahap 9a).
+   */
+  const muatRekap = useCallback(() => { void fetchRealisasiAll(); }, [fetchRealisasiAll]);
+
+  /**
+   * Ganti tahun sementara Rekap sudah dimuat = angka di layar jadi milik tahun
+   * lain, sedangkan kop & judulnya sudah mengumumkan tahun yang baru. Dimuat
+   * lewat ref supaya efek ini TIDAK ikut berjalan saat `pilihanVersi` berganti
+   * (`gantiPilihanVersi` sudah memuatnya) — dua pemuatan untuk satu tindakan
+   * adalah cara balapan di atas lahir.
+   */
+  const muatRekapRef = useRef(muatRekap);
+  useEffect(() => { muatRekapRef.current = muatRekap; }, [muatRekap]);
+  useEffect(() => { if (rekapPernahDimuatRef.current) muatRekapRef.current(); }, [tahun]);
 
 
   // O2: fetchCrr + fetchPendapatan dipindah ke _tabs/PendapatanCrrTab.
@@ -770,7 +826,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
                   setRealisasiSumber={setRealisasiSumber}
                   tahun={tahun}
                   loadingData={loadingData}
-                  onFetchAll={fetchRealisasiAll}
+                  onFetchAll={muatRekap}
                   isLight={isLight}
                   sskVersi={sskVersi}
                   sumberDinolkan={sumberDinolkan}
