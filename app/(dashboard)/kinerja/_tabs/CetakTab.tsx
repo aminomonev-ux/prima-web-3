@@ -36,12 +36,19 @@ interface Props {
   isLight?: boolean;
   // Refactor Versi (Checkpoint C):
   sskVersi?: { tipe: 'MURNI'|'PERUBAHAN'; seq: number };
+  /**
+   * A9: sumber yang versi SSK acuannya habis dinol-kan. Wajib, bukan opsional
+   * bernilai `[]` — bawaan diam-diam menyembunyikan keterangannya di pemanggil
+   * yang lupa disesuaikan, dan yang hilang justru satu-satunya penjelasan
+   * kenapa sebuah sumber seolah tidak ada di rekap.
+   */
+  sumberDinolkan: SumberSSK[];
 }
 
 export default function CetakTab({
   realisasiRows, realisasiAllRows, realisasiAllItems, realisasiSumber, setRealisasiSumber,
   tahun, loadingData, onFetchAll,
-  isLight = false, sskVersi,
+  isLight = false, sskVersi, sumberDinolkan,
 }: Props) {
   const versiLabel = sskVersi
     ? (sskVersi.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${sskVersi.seq}`)
@@ -111,7 +118,8 @@ export default function CetakTab({
   });
 
   const paramRekap = () => ({
-    baris: rekap!.baris, yatim: rekap!.yatim, tanpaRealisasi: rekap!.tanpaRealisasi, tahun,
+    baris: rekap!.baris, yatim: rekap!.yatim, tanpaRealisasi: rekap!.tanpaRealisasi,
+    sumberDinolkan, tahun,
     namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
   });
   // Dropdown MENGUBAH hasil dua tombol yang sudah ada — tidak menambah tombol.
@@ -330,7 +338,10 @@ export default function CetakTab({
         // orang mencari masalah di tempat yang salah.
         if (hasil.baris.length === 0) return (
           <div style={{ padding:'40px', textAlign:'center', color:cTextSub, background:cSurface, borderRadius:'12px', border:`1px solid ${cBorder}` }}>
-            Belum ada item SSK untuk tahun {tahun} — isi RKO/SSK dulu, rekap mengambil pagu &amp; targetnya dari sana.
+            {sumberDinolkan.length > 0
+              ? <>Seluruh baris SSK {sumberDinolkan.join(', ')} sudah dinol-kan, jadi tidak ada pagu &amp; target untuk direkap.
+                  Kalau maksudnya membatalkan Perubahannya, hapus versinya di <strong>Pengaturan → Reset</strong>.</>
+              : <>Belum ada item SSK untuk tahun {tahun} — isi RKO/SSK dulu, rekap mengambil pagu &amp; targetnya dari sana.</>}
           </div>
         );
 
@@ -361,6 +372,18 @@ export default function CetakTab({
                 Pagu &amp; target mengacu SSK versi aktif tiap sumber
               </div>
             </div>
+
+            {/* A9 — IKUT TERCETAK. Sumber yang habis dinol-kan menyumbang Rp 0 ke
+                total, dan pembaca yang cuma memegang berkasnya tidak punya cara
+                menebak kenapa sumber itu seolah tidak ada. Di ATAS catatan
+                "belum ada realisasi": ini sebab, itu akibat. */}
+            {sumberDinolkan.length > 0 && (
+              <div style={{ marginBottom:'12px', padding:'8px 12px', borderRadius:'8px', fontSize:'11px', lineHeight:1.5,
+                background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775', color: isLight?'#854F0B':'#FAC775' }}>
+                <strong>Seluruh baris SSK {sumberDinolkan.join(', ')} dinol-kan.</strong>{' '}
+                Pagu &amp; targetnya Rp 0, jadi sumber itu tidak menyumbang apa pun ke total di atas — disengaja, bukan data yang belum diisi.
+              </div>
+            )}
 
             {/* IKUT TERCETAK (tanpa `no-print`), berbeda dari spanduk yatim/kembar di
                 bawah: yang dua itu instruksi kerja untuk operatornya, yang ini

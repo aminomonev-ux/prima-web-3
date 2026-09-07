@@ -3,7 +3,7 @@ import { acquireBludLock } from './locks';
 import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simpan';
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '@/lib/kinerja/master-nama';
-import { pickVersiAktif } from '@/lib/kinerja/versi';
+import { pilihVersiAgregat } from '@/lib/kinerja/versi';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
 import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
@@ -542,6 +542,13 @@ function pagarReplace(table: string, existing: number, incoming: number, force: 
   }
 }
 
+export interface VersiAktifKinerja {
+  tipe: 'MURNI' | 'PERUBAHAN';
+  seq: number;
+  /** Versi ini punya baris, tapi SEMUANYA dinol-kan — jadi pagunya 0 dengan sengaja. */
+  dinolkan: boolean;
+}
+
 /**
  * Versi SSK yang berlaku per sumber untuk satu tahun.
  *
@@ -554,16 +561,27 @@ function pagarReplace(table: string, existing: number, incoming: number, force: 
 export async function versiAktifKinerja(
   tahun: string,
   sumber?: SumberSSK,
-): Promise<Map<string, { tipe: 'MURNI' | 'PERUBAHAN'; seq: number }>> {
+): Promise<Map<string, VersiAktifKinerja>> {
+  // A9: saringan `is_nullified` SENGAJA TIDAK ADA di WHERE. Ia dulu ada, dan
+  // karena kueri ini yang menentukan daftar CALON, versi yang seluruh barisnya
+  // dinol-kan lenyap dari `GROUP BY` sehingga versi sebelumnya terpilih —
+  // menol-kan seisi Perubahan jadi tidak berpengaruh apa pun. Penjelasan penuh
+  // di `pilihVersiAgregat`.
   const rows = sumber
     ? await sql`
-        SELECT sumber, versi_tipe, versi_seq FROM kinerja_ssk
-        WHERE tahun = ${tahun} AND sumber = ${sumber} AND is_nullified = FALSE
+        SELECT sumber, versi_tipe, versi_seq,
+               COUNT(*) AS baris,
+               SUM(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END) AS baris_aktif
+        FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND sumber = ${sumber}
         GROUP BY sumber, versi_tipe, versi_seq
       ` as Record<string, unknown>[]
     : await sql`
-        SELECT sumber, versi_tipe, versi_seq FROM kinerja_ssk
-        WHERE tahun = ${tahun} AND is_nullified = FALSE
+        SELECT sumber, versi_tipe, versi_seq,
+               COUNT(*) AS baris,
+               SUM(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END) AS baris_aktif
+        FROM kinerja_ssk
+        WHERE tahun = ${tahun}
         GROUP BY sumber, versi_tipe, versi_seq
       ` as Record<string, unknown>[];
 
@@ -573,13 +591,10 @@ export async function versiAktifKinerja(
     if (!perSumber.has(key)) perSumber.set(key, []);
     perSumber.get(key)!.push(r);
   }
-  const out = new Map<string, { tipe: 'MURNI' | 'PERUBAHAN'; seq: number }>();
+  const out = new Map<string, VersiAktifKinerja>();
   for (const [key, list] of perSumber) {
-    const aktif = pickVersiAktif(list);
-    out.set(key, {
-      tipe: aktif?.versi_tipe === 'PERUBAHAN' ? 'PERUBAHAN' : 'MURNI',
-      seq:  Number(aktif?.versi_seq ?? 0),
-    });
+    const { versi, dinolkan } = pilihVersiAgregat(list);
+    out.set(key, { tipe: versi?.tipe ?? 'MURNI', seq: versi?.seq ?? 0, dinolkan });
   }
   return out;
 }
@@ -815,11 +830,11 @@ export async function getRealisasiRows(
   sumber: SumberSSK,
 ): Promise<{
   rows: RealRow[];
-  versi: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number };
+  versi: VersiAktifKinerja;
   itemSsk: ItemSskAktif[];
 }> {
   const peta = await versiAktifKinerja(tahun, sumber);
-  const versi = peta.get(sumber) ?? { tipe: 'MURNI' as const, seq: 0 };
+  const versi = peta.get(sumber) ?? { tipe: 'MURNI' as const, seq: 0, dinolkan: false };
   const { rows: hydrated, itemSsk } = await getRealisasiHydrated(tahun, sumber, versi.tipe, versi.seq);
   const rows = hydrated.map((r, i) => ({
     id:                i + 1, // identitas runtime — DB id tidak di-expose ke client lewat path lama
@@ -1185,6 +1200,15 @@ export interface LaporanSumber {
    * total yang lebih kecil dari kas yang keluar bisa dijelaskan.
    */
   yatim: LaporanYatim;
+  /** Versi SSK yang jadi acuan angka di baris ini. Null = sumber ini tanpa SSK. */
+  versi_aktif: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } | null;
+  /**
+   * A9: versi acuannya punya baris tapi SEMUANYA dinol-kan, jadi pagu 0 itu
+   * disengaja. Wajib dibedakan dari "belum diisi" di layar — angka nol yang
+   * tidak lumrah dan tidak menjelaskan diri akan dilaporkan sebagai bug, lalu
+   * orang belajar bahwa angka di layar tidak bisa dipercaya.
+   */
+  versi_dinolkan: boolean;
 }
 
 // #1: agregat pagu/target WAJIB discope ke SATU versi aktif per sumber —
@@ -1195,16 +1219,19 @@ export interface LaporanSumber {
 
 export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<LaporanSumber> {
   // Pagu & target dari SSK — agregat per versi, lalu pilih versi aktif (#1)
+  // A9: calonnya TANPA saringan, angkanya yang disaring — lihat `pilihVersiAgregat`.
   const sskVersiAgg = await sql`
     SELECT
       versi_tipe, versi_seq,
-      COALESCE(SUM(pagu), 0)  AS total_pagu,
-      COALESCE(SUM(total), 0) AS total_target_fisik
+      COUNT(*) AS baris,
+      SUM(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END) AS baris_aktif,
+      COALESCE(SUM(CASE WHEN is_nullified = FALSE THEN pagu  ELSE 0 END), 0) AS total_pagu,
+      COALESCE(SUM(CASE WHEN is_nullified = FALSE THEN total ELSE 0 END), 0) AS total_target_fisik
     FROM kinerja_ssk
-    WHERE tahun = ${tahun} AND sumber = ${sumber} AND is_nullified = FALSE
+    WHERE tahun = ${tahun} AND sumber = ${sumber}
     GROUP BY versi_tipe, versi_seq
   ` as Record<string, unknown>[];
-  const sskAgg = pickVersiAktif(sskVersiAgg);
+  const { agregat: sskAgg, versi: versiAcuan, dinolkan: versiDinolkan } = pilihVersiAgregat(sskVersiAgg);
 
   // A2: SATU kueri sampai tingkat `ssk_canonical_id`, supaya realisasi yatim
   // bisa dikeluarkan dari pembilang sebelum apa pun dijumlah. Dulu dua kueri
@@ -1282,6 +1309,8 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
     bulan_terakhir:     bulanTerakhir,
     trend,
     yatim: penyaring.hasil(),
+    versi_aktif:    versiAcuan,
+    versi_dinolkan: versiDinolkan,
   };
 }
 
@@ -1294,15 +1323,25 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
  *   independen jumlah sumber. ~5× lebih cepat untuk endpoint /api/kinerja/laporan
  *   tanpa filter sumber.
  */
+interface AgregatSskSumber {
+  total_pagu: number;
+  total_target_fisik: number;
+  versi_aktif: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } | null;
+  versi_dinolkan: boolean;
+}
+
 export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
   // Query 1: agregat SSK per sumber+versi → pilih versi aktif per sumber (#1)
+  // A9: calonnya TANPA saringan, angkanya yang disaring — lihat `pilihVersiAgregat`.
   const sskRows = await sql`
     SELECT
       sumber, versi_tipe, versi_seq,
-      COALESCE(SUM(pagu), 0)  AS total_pagu,
-      COALESCE(SUM(total), 0) AS total_target_fisik
+      COUNT(*) AS baris,
+      SUM(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END) AS baris_aktif,
+      COALESCE(SUM(CASE WHEN is_nullified = FALSE THEN pagu  ELSE 0 END), 0) AS total_pagu,
+      COALESCE(SUM(CASE WHEN is_nullified = FALSE THEN total ELSE 0 END), 0) AS total_target_fisik
     FROM kinerja_ssk
-    WHERE tahun = ${tahun} AND is_nullified = FALSE
+    WHERE tahun = ${tahun}
     GROUP BY sumber, versi_tipe, versi_seq
   ` as Record<string, unknown>[];
 
@@ -1334,12 +1373,14 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
     if (!sskVersiBySumber.has(key)) sskVersiBySumber.set(key, []);
     sskVersiBySumber.get(key)!.push(r);
   }
-  const sskBySumber = new Map<string, { total_pagu: number; total_target_fisik: number }>();
+  const sskBySumber = new Map<string, AgregatSskSumber>();
   for (const [key, list] of sskVersiBySumber) {
-    const aktif = pickVersiAktif(list);
+    const { agregat, versi, dinolkan } = pilihVersiAgregat(list);
     sskBySumber.set(key, {
-      total_pagu:         Number(aktif?.total_pagu ?? 0),
-      total_target_fisik: Number(aktif?.total_target_fisik ?? 0),
+      total_pagu:         Number(agregat?.total_pagu ?? 0),
+      total_target_fisik: Number(agregat?.total_target_fisik ?? 0),
+      versi_aktif:        versi,
+      versi_dinolkan:     dinolkan,
     });
   }
   // Yatim dipisah SEBELUM apa pun dijumlah. SATU penyaring untuk semua sumber:
@@ -1398,7 +1439,8 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
 
   // Assemble per sumber — pastikan urutan sama dengan SUMBER_LIST (deterministic)
   return SUMBER_LIST.map(sumber => {
-    const ssk = sskBySumber.get(sumber) ?? { total_pagu: 0, total_target_fisik: 0 };
+    const ssk: AgregatSskSumber = sskBySumber.get(sumber)
+      ?? { total_pagu: 0, total_target_fisik: 0, versi_aktif: null, versi_dinolkan: false };
     const real = realBySumber.get(sumber) ?? { total_real_keuangan: 0, total_real_fisik: 0, bulan_terakhir: 0 };
     const trend = trendBySumber.get(sumber) ?? [];
     const pct_serapan = ssk.total_pagu > 0
@@ -1417,6 +1459,8 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
       bulan_terakhir:      real.bulan_terakhir,
       trend,
       yatim:               yatimBySumber.get(sumber) ?? yatimKosong(),
+      versi_aktif:         ssk.versi_aktif,
+      versi_dinolkan:      ssk.versi_dinolkan,
     };
   });
 }
@@ -1426,11 +1470,16 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
 export async function getKinerjaKpi(tahun: string) {
   // #1: agregat per sumber+versi → pilih versi aktif per sumber, baru dijumlah.
   // Tanpa ini pagu & jumlah baris terhitung ganda begitu ada versi PERUBAHAN.
+  // A9: calonnya TANPA saringan, angkanya yang disaring — lihat `pilihVersiAgregat`.
+  // `total_ssk_rows` ikut hanya menghitung baris tak-nol, supaya kartu "ITEM SSK"
+  // dan kartu "TOTAL PAGU" menerangkan HIMPUNAN YANG SAMA. Perilakunya identik
+  // dengan sebelumnya untuk versi yang tidak dinol-kan.
   const sskVersiRows = await sql`
     SELECT sumber, versi_tipe, versi_seq,
-      COUNT(*) AS total_ssk_rows,
-      COALESCE(SUM(pagu), 0) AS pagu
-    FROM kinerja_ssk WHERE tahun = ${tahun} AND is_nullified = FALSE
+      COUNT(*) AS baris,
+      SUM(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END) AS baris_aktif,
+      COALESCE(SUM(CASE WHEN is_nullified = FALSE THEN pagu ELSE 0 END), 0) AS pagu
+    FROM kinerja_ssk WHERE tahun = ${tahun}
     GROUP BY sumber, versi_tipe, versi_seq
   ` as Record<string, unknown>[];
   const kpiVersiBySumber = new Map<string, Record<string, unknown>[]>();
@@ -1439,13 +1488,14 @@ export async function getKinerjaKpi(tahun: string) {
     if (!kpiVersiBySumber.has(key)) kpiVersiBySumber.set(key, []);
     kpiVersiBySumber.get(key)!.push(r);
   }
-  const perSumber: { sumber: SumberSSK; pagu: number; rows: number }[] = [];
+  const perSumber: { sumber: SumberSSK; pagu: number; rows: number; dinolkan: boolean }[] = [];
   for (const [key, list] of kpiVersiBySumber) {
-    const aktif = pickVersiAktif(list);
+    const { agregat, dinolkan } = pilihVersiAgregat(list);
     perSumber.push({
-      sumber: key as SumberSSK,
-      pagu:   Number(aktif?.pagu ?? 0),
-      rows:   Number(aktif?.total_ssk_rows ?? 0),
+      sumber:   key as SumberSSK,
+      pagu:     Number(agregat?.pagu ?? 0),
+      rows:     Number(agregat?.baris_aktif ?? 0),
+      dinolkan,
     });
   }
   const ssk = {
@@ -1486,6 +1536,12 @@ export async function getKinerjaKpi(tahun: string) {
     total_ssk_rows:      Number(ssk?.total_ssk_rows ?? 0),
     total_rekening:      Number(rek?.total_rekening ?? 0),
     total_real_keuangan,
+    /**
+     * A9: sumber yang versi acuannya habis dinol-kan. Pagunya 0 DENGAN SENGAJA,
+     * dan kartu di Beranda wajib mengatakannya — kalau tidak, orang pertama yang
+     * melihat "Rp 0" akan melaporkannya sebagai kerusakan.
+     */
+    sumber_dinolkan: perSumber.filter(r => r.dinolkan).map(r => r.sumber),
     pct_serapan: total_pagu > 0 ? Math.round((total_real_keuangan / total_pagu) * 10000) / 100 : 0,
     pagu_per_sumber: Object.fromEntries(
       perSumber.map(r => [r.sumber, Number(r.pagu)])

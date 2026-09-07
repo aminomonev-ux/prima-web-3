@@ -162,6 +162,8 @@ export interface KpiData {
   pagu_per_sumber: Partial<Record<SumberSSK, number>>;
   /** TIDAK ikut `total_real_keuangan`; dilaporkan terpisah. */
   yatim: YatimRingkas;
+  /** A9: sumber yang versi acuannya habis dinol-kan — pagu 0 dengan sengaja. */
+  sumber_dinolkan?: SumberSSK[];
 }
 
 // ─── Laporan shapes (chart trend per sumber) ────────────────────────────────
@@ -188,6 +190,10 @@ export interface LaporanSumber {
   trend: LaporanTrend[];
   /** TIDAK ikut `total_real_*`; dilaporkan terpisah. */
   yatim: YatimRingkas;
+  /** Versi SSK yang jadi acuan angka baris ini. Null = sumber ini tanpa SSK. */
+  versi_aktif?: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } | null;
+  /** A9: versi acuannya punya baris tapi semuanya dinol-kan — pagu 0 disengaja. */
+  versi_dinolkan?: boolean;
 }
 
 // ─── Form input field name types (untuk updateXxxInput handler) ─────────────

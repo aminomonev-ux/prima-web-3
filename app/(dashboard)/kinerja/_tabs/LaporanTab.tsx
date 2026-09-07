@@ -123,6 +123,23 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
         </div>
       ) : (
         <>
+          {/* A9: pagu Rp 0 yang tidak menjelaskan diri akan dilaporkan sebagai
+              kerusakan, lalu orang belajar bahwa angka di layar tidak bisa
+              dipercaya. Kalimatnya menyebut JALAN KELUARNYA (hapus versinya di
+              Reset), sebab itu memang yang seharusnya dilakukan orang yang
+              maksudnya membatalkan Perubahan — dan itu lebih berguna daripada
+              memberi tahu bahwa angkanya nol. Ia berdiri di ATAS spanduk yatim:
+              yatim adalah AKIBAT dari keadaan ini, jadi sebabnya dibaca dulu. */}
+          {d.versi_dinolkan && (
+            <div style={{ marginBottom:'14px', padding:'10px 14px', borderRadius:'10px', fontSize:'11px', lineHeight:1.6,
+              background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775', color: isLight?'#854F0B':'#FAC775' }}>
+              <strong>Seluruh baris SSK {d.versi_aktif ? (d.versi_aktif.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${d.versi_aktif.seq}`) : ''} dinol-kan</strong>,
+              jadi pagu {d.sumber} tahun {tahun} memang Rp 0 — bukan karena datanya belum diisi.
+              Kalau maksudnya membatalkan Perubahan itu, hapus versinya di <strong>Pengaturan → Reset</strong>,
+              bukan menol-kan barisnya.
+            </div>
+          )}
+
           {/* A2: yatim dilaporkan, bukan didiamkan. Nominalnya TIDAK ikut kartu
               Real Keuangan — kalau ikut, persennya berdiri di atas penyebut yang
               tidak memuat pagunya. Warna & kalimatnya menyalin spanduk yang sudah

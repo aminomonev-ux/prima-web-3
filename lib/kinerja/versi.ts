@@ -45,3 +45,56 @@ export function pickVersiAktif<T extends { versi_tipe?: unknown; versi_seq?: unk
   }
   return best;
 }
+
+/**
+ * A9 — DAFTAR CALON LENGKAP, ANGKANYA DISARING.
+ *
+ * Satu saringan pernah mengerjakan dua pekerjaan: `WHERE is_nullified = FALSE`
+ * benar untuk MENGHITUNG pagu, tapi ia juga menentukan versi mana yang masuk
+ * daftar calon — jadi versi yang SELURUH barisnya dinol-kan tidak menghasilkan
+ * satu baris pun, hilang dari `GROUP BY`, dan versi SEBELUMNYA diambil sebagai
+ * "berlaku". Akibatnya menol-kan seluruh isi sebuah Perubahan tidak berpengaruh
+ * apa pun: angkanya MUNDUR ke versi yang sudah digantikan, bukan turun ke nol,
+ * dan ia melaporkan pagu LEBIH BESAR dari kenyataan tanpa satu spanduk pun.
+ *
+ * Karena itu pemanggilnya membaca calonnya TANPA saringan dan menjumlah dengan
+ * `SUM(CASE WHEN is_nullified = FALSE …)`. Fungsi ini yang menyatukan keduanya,
+ * dan itu sebabnya ia ada: bentuk yang sama diulang di EMPAT tempat
+ * (`versiAktifKinerja`, `getLaporanData`, `getLaporanSemua`, `getKinerjaKpi`),
+ * dan empat salinan aturan cepat atau lambat berbeda pendapat (L88).
+ *
+ * `dinolkan` dipulangkan, bukan disimpulkan pemanggilnya dari "pagu === 0":
+ * pagu nol punya DUA sebab yang sangat berbeda — belum diisi, dan sengaja
+ * dinol-kan — dan layar wajib bisa membedakannya.
+ */
+export interface BarisVersiAgregat {
+  versi_tipe?: unknown;
+  versi_seq?: unknown;
+  /** COUNT(*) seluruh baris versi ini, termasuk yang dinol-kan. */
+  baris?: unknown;
+  /** Baris yang `is_nullified = FALSE` — yang angkanya ikut dihitung. */
+  baris_aktif?: unknown;
+}
+
+export function pilihVersiAgregat<T extends BarisVersiAgregat>(rows: T[]): {
+  versi: { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } | null;
+  agregat: T | null;
+  dinolkan: boolean;
+} {
+  const aktif = pickVersiAktif(rows);
+  if (!aktif) return { versi: null, agregat: null, dinolkan: false };
+  return {
+    versi: {
+      tipe: aktif.versi_tipe === 'PERUBAHAN' ? 'PERUBAHAN' : 'MURNI',
+      seq:  Number(aktif.versi_seq ?? 0),
+    },
+    agregat: aktif,
+    // `baris > 0` BUKAN jaga kosong: pemanggil yang lupa memilih kedua kolom
+    // hitungan membuat keduanya terbaca 0, dan tanpa pagar ini SETIAP versi
+    // akan mengaku habis dinol-kan — layar penuh spanduk untuk keadaan yang
+    // tidak terjadi. Kolom yang lupa didaftar itu cacat yang sudah berulang di
+    // repo ini (row-map DPA), jadi pagarnya berdiri di sisi yang aman: tanpa
+    // bukti, jawabannya "tidak dinol-kan".
+    dinolkan: Number(aktif.baris ?? 0) > 0 && Number(aktif.baris_aktif ?? 0) === 0,
+  };
+}

@@ -161,6 +161,19 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
       </div>
       )}
 
+      {/* A9: kartu TOTAL PAGU yang turun karena penol-kan wajib menyebut
+          sebabnya. Di atas spanduk yatim karena ia SEBAB, yatimnya akibat. */}
+      {(kpi?.sumber_dinolkan?.length ?? 0) > 0 && (
+        <div style={{ marginTop:'-8px', marginBottom:'20px', padding:'10px 14px', borderRadius:'10px',
+          fontSize:'11px', lineHeight:1.6,
+          background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775',
+          color: isLight?'#854F0B':'#FAC775' }}>
+          <strong>Pagu {kpi!.sumber_dinolkan!.join(', ')} Rp 0 karena seluruh baris SSK versi acuannya dinol-kan</strong>
+          {' '}— disengaja, bukan data yang belum diisi. Kalau maksudnya membatalkan Perubahannya,
+          hapus versinya di <strong>Pengaturan → Reset</strong>.
+        </div>
+      )}
+
       {/* A2: realisasi tanpa jangkar SSK. Nominalnya TIDAK ikut kartu Realisasi
           Keuangan maupun Serapan Anggaran — kalau ikut, persennya berdiri di atas
           penyebut yang tidak memuat pagunya. Warnanya token peringatan, BUKAN

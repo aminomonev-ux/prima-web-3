@@ -130,6 +130,12 @@ export interface RekapExportParams {
   namaBulan: string;
   /** Lihat `HasilRekap.tanpaRealisasi` — catatannya WAJIB ikut ke berkas. */
   tanpaRealisasi: boolean;
+  /**
+   * A9: sumber yang versi SSK acuannya habis dinol-kan. Pagunya 0, jadi ia
+   * TIDAK menyumbang apa pun ke total rekap — dan pembaca yang cuma memegang
+   * berkasnya tidak punya cara menebak kenapa sumber itu seolah tidak ada.
+   */
+  sumberDinolkan: string[];
 }
 
 /** Catatan yatim ikut dibawa: tanpa ini, dokumen yang dibaca di luar aplikasi
@@ -156,11 +162,24 @@ function catatanTanpaRealisasi(tanpaRealisasi: boolean, namaBulan: string, tahun
     + 'bukan berarti anggarannya belum dipakai.';
 }
 
+/**
+ * Catatan "sumber ini dinol-kan".
+ *
+ * Sebab, bukan akibat — karena itu ia catatan PERTAMA: yatim yang menyusul di
+ * bawahnya adalah akibat langsung dari keadaan ini, dan membacanya lebih dulu
+ * membuat orang mengira ada dua masalah berbeda.
+ */
+function catatanDinolkan(sumberDinolkan: string[]): string | null {
+  if (sumberDinolkan.length === 0) return null;
+  return `Catatan: seluruh baris SSK ${sumberDinolkan.join(', ')} dinol-kan, jadi pagu & targetnya `
+    + 'Rp 0 dan TIDAK ikut menyumbang ke total di atas. Itu disengaja, bukan data yang belum diisi.';
+}
+
 /** Baris kop di atas header — indeksnya juga yang dipakai `headerRowIndex`. */
 export const REKAP_JUDUL_BARIS = 6;
 
 /** Dipisah dari pengunduhannya supaya bisa diuji tanpa DOM. */
-export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi }: RekapExportParams): (string | number | null)[][] {
+export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan }: RekapExportParams): (string | number | null)[][] {
   const judul: (string | number | null)[][] = [
     ['RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO'],
     ['PROVINSI JAWA TENGAH'],
@@ -175,6 +194,7 @@ export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi }: Rek
     b.targetRp, b.realKeuBulanIni, b.realKeu, b.pctKeu, b.devKeu,
   ]);
   const catatan = [
+    catatanDinolkan(sumberDinolkan),
     catatanTanpaRealisasi(tanpaRealisasi, namaBulan, tahun),
     catatanYatim(yatim),
   ].filter((c): c is string => c !== null);
@@ -225,7 +245,7 @@ export async function exportRekapExcel(params: RekapExportParams) {
 export function gambarRekapPdf(
   doc: import('jspdf').jsPDF,
   autoTable: typeof import('jspdf-autotable').default,
-  { baris, yatim, tahun, namaBulan, tanpaRealisasi }: RekapExportParams,
+  { baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan }: RekapExportParams,
 ) {
   // Rata tengah lewat penulis yang SAMA dengan halaman detail. Dulu kop rekap
   // ditulis di x=14 (pojok kiri) sementara kop detail rata tengah, jadi dalam
@@ -247,6 +267,7 @@ export function gambarRekapPdf(
     didParseCell: (d) => { if (d.section === 'body' && baris[d.row.index]?.tebal) d.cell.styles.fontStyle = 'bold'; },
   });
   const catatan = [
+    catatanDinolkan(sumberDinolkan),
     catatanTanpaRealisasi(tanpaRealisasi, namaBulan, tahun),
     catatanYatim(yatim),
   ].filter((c): c is string => c !== null);

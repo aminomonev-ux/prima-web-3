@@ -17,7 +17,7 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
   DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
-import { pickVersiAktif } from '../lib/kinerja/versi';
+import { pickVersiAktif, pilihVersiAgregat } from '../lib/kinerja/versi';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi,
   type BarisSskAcuan } from '../lib/kinerja/hidrasi-ssk';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '../lib/kinerja/master-nama';
@@ -444,10 +444,36 @@ ok('K1 getRealisasiRows tidak lagi memaksa MURNI-0',
    !/getRealisasiHydrated\(tahun, sumber, 'MURNI', 0\)/.test(kode));
 ok('K2 getRealisasiRows bertanya ke versiAktifKinerja',
    /versiAktifKinerja\(tahun, sumber\)/.test(kode));
-ok('K3 versiAktifKinerja memakai pickVersiAktif yang sudah ada',
-   /export async function versiAktifKinerja[\s\S]{0,1200}pickVersiAktif\(list\)/.test(kode));
-ok('K4 versiAktifKinerja mengecualikan is_nullified',
-   /export async function versiAktifKinerja[\s\S]{0,600}is_nullified = FALSE/.test(kode));
+// Badan fungsinya dipotong dulu, bukan dicocokkan lintas-berkas: pemeriksaan
+// yang menjangkau ke luar akan menemukan pagar milik fungsi LAIN lalu lulus
+// untuk alasan yang salah.
+const blokVersiAktif = (() => {
+  const i = kode.indexOf('export async function versiAktifKinerja');
+  if (i < 0) return '';
+  // Batasnya deklarasi berikutnya, BUKAN jumlah karakter tetap: dengan 1800
+  // karakter jendelanya menjulur ke `canonicalAktifKinerja` yang saringannya
+  // memang masih ada — dan pemeriksaannya jadi gagal menuduh fungsi yang benar.
+  const j = kode.indexOf('export async function canonicalAktifKinerja', i + 10);
+  // Kalau penanda batasnya hilang (fungsinya diganti nama), jendelanya
+  // dikosongkan supaya pemeriksaannya GAGAL BERSUARA — jendela yang menjulur
+  // diam-diam ke fungsi tetangga itu yang membuat pemeriksaan ini keliru
+  // menuduh fungsi yang sudah benar.
+  return j < 0 ? '' : kode.slice(i, j);
+})();
+ok('K3 versiAktifKinerja memakai satu aturan versi yang sudah ada',
+   /pilihVersiAgregat\(list\)/.test(blokVersiAktif));
+ok('K3b dan aturannya tidak ditulis ulang di lib/data',
+   !/=== 'PERUBAHAN' \? 1 : 0/.test(kode));
+// A9 MEMBALIK pemeriksaan lama di sini, dan itu disengaja. Dulu: "wajib
+// menyaring is_nullified". Sekarang: saringan itu justru yang membuat versi
+// habis-dinol-kan lenyap dari daftar calon sehingga versi SEBELUMNYA terpilih.
+// Pemeriksaan lamanya kalau dibiarkan akan LULUS lewat `SUM(CASE WHEN …)` —
+// menegaskan perilaku yang sudah salah, tanpa satu pun tanda (L82c).
+ok('K4 versiAktifKinerja TIDAK lagi menyaring is_nullified di WHERE-nya',
+   blokVersiAktif.length > 0
+   && !/WHERE tahun = \$\{tahun\}(?: AND sumber = \$\{sumber\})? AND is_nullified = FALSE/.test(blokVersiAktif));
+ok('K4b tapi hitungan barisnya tetap menyaring — angka disaring, calon tidak',
+   /SUM\(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END\) AS baris_aktif/.test(blokVersiAktif));
 
 console.log('\n── L. bulan_terakhir = bulan yang ada isinya ────────────────────');
 
@@ -507,7 +533,7 @@ ok('M8 target fisik diformat sebagai persen, bukan rupiah',
 console.log('\n── N. Unduh rekap: angkanya sama dengan yang di layar ───────────');
 
 const aoa = rekapAoa({ baris: hasil.baris, yatim: hasil.yatim,
-  tanpaRealisasi: hasil.tanpaRealisasi, tahun: '2026', namaBulan: 'Juli' });
+  tanpaRealisasi: hasil.tanpaRealisasi, sumberDinolkan: [], tahun: '2026', namaBulan: 'Juli' });
 eq('N1 header berdiri tepat di bawah kop', aoa[REKAP_JUDUL_BARIS][0], 'No');
 eq('N2 jumlah kolom header sama dengan tabel layar', aoa[REKAP_JUDUL_BARIS].length, 13);
 ok('N3 kop menyebut bulan & tahun', String(aoa[3][0]).includes('JULI') && String(aoa[3][0]).includes('2026'));
@@ -533,7 +559,7 @@ ok('N10 catatan yatim ikut terbawa', !!catatan && catatan.includes('90.000.000')
 const tanpaYatimAoa = rekapAoa({
   baris: hasil.baris,
   yatim: { jumlahBaris: 0, jumlahItem: 0, nominal: 0, contoh: [] },
-  tanpaRealisasi: false, tahun: '2026', namaBulan: 'Juli',
+  tanpaRealisasi: false, sumberDinolkan: [], tahun: '2026', namaBulan: 'Juli',
 });
 ok('N11 tanpa yatim tidak ada catatan menggantung',
    !tanpaYatimAoa.some(r => String(r[0] ?? '').startsWith('Catatan:')));
@@ -1531,7 +1557,7 @@ console.log('\n-- AC. Rekap boleh dicetak sebelum ada realisasi, dengan syarat -
   // -- Catatannya WAJIB ada di BERKAS, bukan cuma di layar ------------------
   const aoaKosong = rekapAoa({
     baris: hKosong.baris, yatim: hKosong.yatim, tanpaRealisasi: true,
-    tahun: '2040', namaBulan: 'Agustus',
+    sumberDinolkan: [], tahun: '2040', namaBulan: 'Agustus',
   });
   const catatanKosong = aoaKosong.map(r => String(r[0] ?? '')).filter(x => x.startsWith('Catatan:'));
   eq('AC9 satu catatan masuk ke berkas', catatanKosong.length, 1);
@@ -1545,14 +1571,14 @@ console.log('\n-- AC. Rekap boleh dicetak sebelum ada realisasi, dengan syarat -
   const duaCatatan = rekapAoa({
     baris: hKosong.baris,
     yatim: { jumlahBaris: 2, jumlahItem: 1, nominal: 7_000_000, contoh: ['Item Yatim'] },
-    tanpaRealisasi: true, tahun: '2040', namaBulan: 'Agustus',
+    tanpaRealisasi: true, sumberDinolkan: [], tahun: '2040', namaBulan: 'Agustus',
   }).map(r => String(r[0] ?? '')).filter(x => x.startsWith('Catatan:'));
   eq('AC12 dua catatan tidak saling menutupi', duaCatatan.length, 2);
 
   // Tidak ditandai -> tidak ada catatan menggantung.
   const aoaAda = rekapAoa({
     baris: hKosong.baris, yatim: hKosong.yatim, tanpaRealisasi: false,
-    tahun: '2040', namaBulan: 'Agustus',
+    sumberDinolkan: [], tahun: '2040', namaBulan: 'Agustus',
   });
   ok('AC13 tanpa tanda, tidak ada catatan',
      !aoaAda.some(r => String(r[0] ?? '').includes('belum dimasukkan')));
@@ -1578,6 +1604,153 @@ console.log('\n-- AC. Rekap boleh dicetak sebelum ada realisasi, dengan syarat -
   // Bulan bawaan saat belum ada realisasi: tahun berjalan -> bulan ini.
   ok('AC20 ada bulan bawaan untuk tahun tanpa realisasi',
      /kini\.getMonth\(\) \+ 1 : 12/.test(ctAC));
+}
+
+console.log('\n-- AD. A9: daftar calon versi lengkap, angkanya yang disaring --');
+
+// Satu saringan pernah mengerjakan dua pekerjaan. `is_nullified = FALSE` benar
+// untuk MENGHITUNG pagu, tapi ia juga menentukan versi mana yang masuk daftar
+// calon -- jadi versi yang SELURUH barisnya dinol-kan lenyap dari GROUP BY dan
+// versi SEBELUMNYA terpilih. Menol-kan seisi Perubahan jadi tidak berpengaruh
+// apa pun, dan angkanya MUNDUR ke versi yang sudah digantikan.
+{
+  const v = (tipe: string, seq: number, baris: number, aktif: number, pagu: number) =>
+    ({ versi_tipe: tipe, versi_seq: seq, baris, baris_aktif: aktif, total_pagu: pagu });
+
+  // Inti A9: PERUBAHAN-1 habis dinol-kan, MURNI-0 berisi 7 M.
+  const habis = pilihVersiAgregat([v('MURNI', 0, 3, 3, 7_000_000_000), v('PERUBAHAN', 1, 3, 0, 0)]);
+  eq('AD1 versi yang habis dinol-kan TETAP terpilih sebagai acuan', habis.versi?.tipe, 'PERUBAHAN');
+  eq('AD2 dan seq-nya ikut benar', habis.versi?.seq, 1);
+  eq('AD3 pagunya 0, BUKAN mundur ke pagu MURNI', Number(habis.agregat?.total_pagu ?? -1), 0);
+  ok('AD4 keadaannya ditandai, bukan dibiarkan jadi nol tanpa sebab', habis.dinolkan === true);
+
+  // Dinol-kan SEBAGIAN tidak pernah kena cacatnya -- versinya masih punya baris
+  // tak-nol sehingga tetap muncul. Diuji supaya perbaikannya tidak "menyembuhkan"
+  // yang tidak sakit lalu menandai keadaan sehat sebagai bermasalah.
+  const sebagian = pilihVersiAgregat([v('MURNI', 0, 3, 3, 7_000_000_000), v('PERUBAHAN', 1, 3, 2, 4_000_000_000)]);
+  eq('AD5 dinol-kan sebagian tetap memilih versi terbaru', sebagian.versi?.tipe, 'PERUBAHAN');
+  eq('AD6 angkanya hanya dari baris tak-nol', Number(sebagian.agregat?.total_pagu ?? 0), 4_000_000_000);
+  ok('AD7 dan TIDAK ditandai dinol-kan', sebagian.dinolkan === false);
+
+  // Versi biasa: tidak boleh ada yang berubah.
+  const biasa = pilihVersiAgregat([v('MURNI', 0, 15, 15, 74_154_779_000)]);
+  eq('AD8 versi tunggal tanpa nol-kan tetap terpilih', biasa.versi?.tipe, 'MURNI');
+  ok('AD9 dan tidak ditandai', biasa.dinolkan === false);
+  eq('AD10 pagunya utuh', Number(biasa.agregat?.total_pagu ?? 0), 74_154_779_000);
+
+  // Sumber tanpa SSK sama sekali -> tidak ada versi, dan BUKAN "dinol-kan".
+  const kosong = pilihVersiAgregat([]);
+  eq('AD11 tanpa baris sama sekali tidak ada versi terpilih', kosong.versi, null);
+  ok('AD12 dan itu bukan "dinol-kan" -- dua sebab berbeda', kosong.dinolkan === false);
+  // Pemanggil yang lupa memilih kolom hitungannya: keduanya terbaca 0, dan
+  // tanpa pagar `baris > 0` SETIAP versi akan mengaku habis dinol-kan.
+  const tanpaKolom = pilihVersiAgregat([{ versi_tipe: 'MURNI', versi_seq: 0, total_pagu: 7_000_000_000 }]);
+  eq('AD12b versi tetap terpilih walau kolom hitungannya tidak diminta', tanpaKolom.versi?.tipe, 'MURNI');
+  ok('AD12c dan TIDAK dituduh dinol-kan tanpa bukti', tanpaKolom.dinolkan === false);
+
+  // PERUBAHAN-2 habis dinol-kan, PERUBAHAN-1 masih berisi: yang menang tetap
+  // yang terbaru. Kalau tidak, angkanya mundur satu langkah -- cacat yang sama
+  // persis, cuma antar-Perubahan.
+  const dua = pilihVersiAgregat([
+    v('MURNI', 0, 3, 3, 7_000_000_000),
+    v('PERUBAHAN', 1, 3, 3, 9_000_000_000),
+    v('PERUBAHAN', 2, 3, 0, 0),
+  ]);
+  eq('AD13 PERUBAHAN-2 yang habis dinol-kan tetap mengalahkan PERUBAHAN-1', dua.versi?.seq, 2);
+  eq('AD14 pagunya 0, bukan 9 M milik PERUBAHAN-1', Number(dua.agregat?.total_pagu ?? -1), 0);
+
+  // Aturannya WAJIB sepakat dengan pickVersiAktif -- keduanya menjawab "versi
+  // mana", dan dua jawaban yang berbeda adalah L88 lahir kembali.
+  const daftar = [v('MURNI', 0, 3, 3, 7_000_000_000), v('PERUBAHAN', 1, 3, 0, 0)];
+  eq('AD15 satu aturan: pilihVersiAgregat sepakat dengan pickVersiAktif',
+     pilihVersiAgregat(daftar).versi?.seq, Number(pickVersiAktif(daftar)?.versi_seq));
+
+  // -- Keempat kueri: calon TANPA saringan, angka DENGAN saringan ------------
+  const dk = readFileSync('lib/data/kinerja.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  // Blok kueri yang mengelompokkan per versi tidak boleh lagi menyaring di WHERE.
+  const grup = dk.split('GROUP BY').length - 1;
+  ok('AD16 tidak ada lagi WHERE ber-is_nullified di kueri pemilih versi',
+     !/WHERE[^`]*is_nullified = FALSE[^`]*GROUP BY[^`]*versi_seq/.test(dk), `blok GROUP BY: ${grup}`);
+  // Empat tempat, dan dihitung KEMUNCULANNYA: memperbaiki satu lalu mengutip
+  // sepotong akan lulus untuk alasan yang salah (L82c).
+  eq('AD17 keempat tempat memakai penolong yang sama',
+     (dk.match(/pilihVersiAgregat\(/g) || []).length, 4);
+  // Dihitung PERSIS: ">= 6" akan lulus walau satu penjumlahan dikembalikan jadi
+  // SUM biasa. 10 = versiAktifKinerja 2 + getLaporanData 3 + getLaporanSemua 3
+  // + getKinerjaKpi 2. Penjumlahan bersyarat ini TIDAK bergantung pada baris
+  // dinol-kan yang pagunya sudah 0: baris lama (dari route `nullify` yang dulu)
+  // bisa berbendera nol tapi masih berangka.
+  eq('AD18 penjumlahannya bersyarat, bukan disaring di WHERE',
+     (dk.match(/SUM\(CASE WHEN is_nullified = FALSE/g) || []).length, 10);
+  // canonicalAktifKinerja SENGAJA tetap menyaring barisnya: realisasi yang
+  // menunjuk item dinol-kan HARUS jadi yatim, bukan diam-diam berpagu.
+  ok('AD19 kueri baris canonical tetap menyaring is_nullified',
+     /SELECT sumber, canonical_id, versi_tipe, versi_seq FROM kinerja_ssk\s*\n\s*WHERE tahun = \$\{tahun\} AND sumber = \$\{sumber\} AND is_nullified = FALSE/.test(dk));
+  // Bendera dibawa keluar, bukan disimpulkan pemanggil dari "pagu === 0".
+  ok('AD20 LaporanSumber membawa versi acuan + benderanya',
+     /versi_aktif: \{ tipe: 'MURNI' \| 'PERUBAHAN'; seq: number \} \| null;/.test(dk)
+     && /versi_dinolkan: boolean;/.test(dk));
+  ok('AD21 KPI memulangkan daftar sumber yang dinol-kan',
+     /sumber_dinolkan: perSumber\.filter\(r => r\.dinolkan\)/.test(dk));
+  ok('AD22 getRealisasiRows meneruskan benderanya ke layar',
+     /versi: VersiAktifKinerja;/.test(dk));
+
+  // -- Nol yang tidak dijelaskan adalah jebakan berikutnya ------------------
+  const exAD = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  eq('AD23 catatannya dipakai Excel DAN PDF',
+     (exAD.match(/catatanDinolkan\(/g) || []).length, 3);   // 1 definisi + 2 pemakai
+  const aoaNol = rekapAoa({
+    baris: hasil.baris, yatim: { jumlahBaris: 0, jumlahItem: 0, nominal: 0, contoh: [] },
+    tanpaRealisasi: false, sumberDinolkan: ['GAJI', 'BLUD'], tahun: '2040', namaBulan: 'Oktober',
+  });
+  const catNol = aoaNol.map(r => String(r[0] ?? '')).filter(x => x.startsWith('Catatan:'));
+  eq('AD24 catatannya masuk ke berkas', catNol.length, 1);
+  ok('AD25 dan menyebut sumbernya', catNol[0].includes('GAJI') && catNol[0].includes('BLUD'));
+  ok('AD26 serta menyatakan itu disengaja, bukan data yang belum diisi',
+     catNol[0].includes('disengaja'));
+  // Tanpa sumber dinol-kan -> tidak ada catatan menggantung.
+  ok('AD27 tanpa sumber dinol-kan, tidak ada catatannya', !rekapAoa({
+    baris: hasil.baris, yatim: { jumlahBaris: 0, jumlahItem: 0, nominal: 0, contoh: [] },
+    tanpaRealisasi: false, sumberDinolkan: [], tahun: '2040', namaBulan: 'Oktober',
+  }).some(r => String(r[0] ?? '').includes('dinol-kan')));
+  // Tiga catatan bisa berdampingan, dan yang SEBAB harus dibaca lebih dulu.
+  const tiga = rekapAoa({
+    baris: hasil.baris,
+    yatim: { jumlahBaris: 2, jumlahItem: 1, nominal: 7_000_000, contoh: ['Item Yatim'] },
+    tanpaRealisasi: true, sumberDinolkan: ['GAJI'], tahun: '2040', namaBulan: 'Oktober',
+  }).map(r => String(r[0] ?? '')).filter(x => x.startsWith('Catatan:'));
+  eq('AD28 tiga catatan tidak saling menutupi', tiga.length, 3);
+  ok('AD29 sebab dibaca sebelum akibat: dinol-kan mendahului yatim',
+     tiga[0].includes('dinol-kan'));
+
+  // -- Layar: ketiga tempat wajib mengatakannya (L69) -----------------------
+  const ctAD = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
+  ok('AD30 Rekap menampilkan keterangannya', /sumberDinolkan\.length > 0 &&/.test(ctAD));
+  const iAD = ctAD.indexOf('sumberDinolkan.length > 0 &&');
+  ok('AD31 dan keterangan itu IKUT tercetak', !ctAD.slice(iAD, iAD + 420).includes('no-print'));
+  ok('AD32 benderanya diteruskan ke pengekspor', /sumberDinolkan, tahun,/.test(ctAD));
+  // Dijangkarkan ke SYARATNYA, bukan cuma ke kedua kalimatnya: mengganti
+  // syaratnya jadi `false` menyisakan kedua kalimat tetap ada di sumber, jadi
+  // pemeriksaan yang cuma mengutipnya lulus untuk alasan yang salah (L82c).
+  ok('AD33 keadaan-kosong membedakan "dinol-kan" dari "belum diisi"',
+     /\{sumberDinolkan\.length > 0\s*\n\s*\? <>Seluruh baris SSK/.test(ctAD)
+     && ctAD.includes('sudah dinol-kan, jadi tidak ada pagu')
+     && ctAD.includes('Belum ada item SSK untuk tahun'));
+  ok('AD34 propnya wajib, bukan opsional bernilai bawaan',
+     /sumberDinolkan: SumberSSK\[\];/.test(ctAD) && !/sumberDinolkan\?: /.test(ctAD));
+
+  const ltAD = readFileSync('app/(dashboard)/kinerja/_tabs/LaporanTab.tsx', 'utf8');
+  ok('AD35 Laporan menyebut sebabnya', /d\.versi_dinolkan &&/.test(ltAD));
+  ok('AD36 dan menunjukkan jalan keluarnya, bukan cuma bilang nol',
+     ltAD.includes('Pengaturan → Reset'));
+  const dtAD = readFileSync('app/(dashboard)/kinerja/_tabs/DashboardTab.tsx', 'utf8');
+  ok('AD37 Beranda menyebutnya juga', /kpi\?\.sumber_dinolkan\?\.length/.test(dtAD));
+  ok('AD38 dan menunjukkan jalan keluarnya', dtAD.includes('Pengaturan → Reset'));
+
+  const kcAD = readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok('AD39 benderanya dibaca dari balasan server, bukan ditebak dari itemSsk kosong',
+     /dinolkan: j\.versi\?\.dinolkan === true/.test(kcAD) && !/itemSsk\.length === 0/.test(kcAD));
+  ok('AD40 dan dioper ke layar Cetak', /sumberDinolkan=\{sumberDinolkan\}/.test(kcAD));
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

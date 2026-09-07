@@ -117,6 +117,8 @@ export default function KinerjaClient({ userId, role, username, themePreference 
   // A8: item SSK versi aktif SEMUA sumber — penyebut Rekap. Datang dari balasan
   // yang sama dengan barisnya, jadi "versi mana" cuma punya satu jawaban (L88).
   const [realisasiAllItems, setRealisasiAllItems] = useState<ItemSskAktif[]>([]);
+  /** A9: sumber yang versi SSK acuannya habis dinol-kan — pagunya 0 disengaja. */
+  const [sumberDinolkan, setSumberDinolkan] = useState<SumberSSK[]>([]);
   // O2: cetakView state dipindah ke _tabs/CetakTab.
   // O2: crrRows + pendapatanRows state dipindah ke _tabs/PendapatanCrrTab.
 
@@ -301,13 +303,19 @@ export default function KinerjaClient({ userId, role, username, themePreference 
       const results = await Promise.all(
         SUMBER_LIST.map(async s => {
           const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${s}`);
-          if (!d.ok) return { rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[] };
-          const j = d as { rows?: RealRow[]; itemSsk?: ItemSskAktif[] };
+          if (!d.ok) return { sumber: s, rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[], dinolkan: false };
+          const j = d as { rows?: RealRow[]; itemSsk?: ItemSskAktif[]; versi?: { dinolkan?: boolean } };
           // Ditandai di sini: larik hasilnya datar, dan unduhan gabungan perlu
           // memisahkannya kembali per sumber.
           return {
+            sumber: s,
             rows: (j.rows ?? []).map(r => ({ ...r, sumber: s })),
             itemSsk: j.itemSsk ?? [],
+            // A9: dibaca dari balasan server, BUKAN disimpulkan dari
+            // `itemSsk.length === 0` — daftar kosong punya dua sebab yang
+            // berbeda (belum diisi vs sengaja dinol-kan) dan menebaknya justru
+            // menghapus perbedaan yang seluruh perbaikan ini menjaganya.
+            dinolkan: j.versi?.dinolkan === true,
           };
         })
       );
@@ -315,6 +323,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
       // (akum % keu - akum tgt fisik). DB row masih simpan nilai lama.
       setRealisasiAllRows(recalcAllRealisasi(results.flatMap(x => x.rows)));
       setRealisasiAllItems(results.flatMap(x => x.itemSsk));
+      setSumberDinolkan(results.filter(x => x.dinolkan).map(x => x.sumber));
     } finally { setLoadingData(false); }
   }, [tahun]);
 
@@ -707,6 +716,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
                   onFetchAll={fetchRealisasiAll}
                   isLight={isLight}
                   sskVersi={sskVersi}
+                  sumberDinolkan={sumberDinolkan}
                 />
               </Suspense>
             )}
