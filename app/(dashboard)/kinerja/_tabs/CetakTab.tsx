@@ -17,6 +17,7 @@ import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
 import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf,
   exportBundelExcel, exportBundelPdf, PENANDA_TANGAN, type BagianDetail } from '../_exports';
 import { uiTheme } from '@/lib/theme';
+import { ringkasVersiRekap, type PilihanVersiRekap, type VersiSumberRekap } from '@/lib/kinerja/versi';
 
 interface Props {
   realisasiRows: RealRow[];
@@ -43,13 +44,25 @@ interface Props {
    * kenapa sebuah sumber seolah tidak ada di rekap.
    */
   sumberDinolkan: SumberSSK[];
+  /**
+   * Pilihan versi SSK untuk Rekap + versi yang benar-benar dipakai tiap sumber.
+   * Pemilihnya TIDAK memegang state sendiri: yang memuat datanya ada di
+   * pemanggil, dan pemilih yang menyetel pilihannya sendiri lalu menunggu
+   * pemanggil menyusul akan menampilkan label versi baru di atas angka versi
+   * lama (L78b/L83).
+   */
+  pilihanVersi: PilihanVersiRekap;
+  onGantiPilihanVersi: (v: PilihanVersiRekap) => void;
+  versiRekap: VersiSumberRekap[];
 }
 
 export default function CetakTab({
   realisasiRows, realisasiAllRows, realisasiAllItems, realisasiSumber, setRealisasiSumber,
   tahun, loadingData, onFetchAll,
   isLight = false, sskVersi, sumberDinolkan,
+  pilihanVersi, onGantiPilihanVersi, versiRekap,
 }: Props) {
+  const ringkasVersi = ringkasVersiRekap(versiRekap, pilihanVersi);
   const versiLabel = sskVersi
     ? (sskVersi.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${sskVersi.seq}`)
     : 'MURNI';
@@ -119,7 +132,7 @@ export default function CetakTab({
 
   const paramRekap = () => ({
     baris: rekap!.baris, yatim: rekap!.yatim, tanpaRealisasi: rekap!.tanpaRealisasi,
-    sumberDinolkan, tahun,
+    sumberDinolkan, versiRekap, pilihanVersi, tahun,
     namaBulan: CRR_BULAN_LABELS[bulanRekapPilih-1],
   });
   // Dropdown MENGUBAH hasil dua tombol yang sudah ada — tidak menambah tombol.
@@ -199,8 +212,28 @@ export default function CetakTab({
                 <div style={{ fontSize:'11px', color:cTextSub, marginTop:'2px' }}>
                   S/D Bulan {selectedBulan > 0 ? CRR_BULAN_LABELS[selectedBulan-1] : '—'}
                 </div>
+                {/* Versinya disebut di bilah alat JUGA, bukan cuma di kop yang
+                    tercetak: yang memilih perlu melihat akibat pilihannya
+                    sebelum menekan unduh. */}
+                <div style={{ fontSize:'10px', color:cTextSub, marginTop:'2px' }}>
+                  <i className="fas fa-code-branch" style={{ marginRight:'4px' }} />{ringkasVersi}
+                </div>
               </div>
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center' }}>
+                {/* Dua keadaan, bukan pemilih per sumber: Rekap menjumlah SEMUA
+                    sumber dan tiap sumber punya riwayat versinya sendiri.
+                    Sumber yang belum berperubahan memberi angka yang sama di
+                    kedua pilihan, jadi pilihan ini tidak pernah menyesatkan
+                    untuk sumber itu. */}
+                <SoftSelect<PilihanVersiRekap>
+                  value={pilihanVersi}
+                  onChange={(v) => onGantiPilihanVersi(v)}
+                  minWidth={210}
+                  options={[
+                    { value: 'berlaku', label: 'Versi Berlaku' },
+                    { value: 'murni',   label: 'Versi Murni (sebelum perubahan)' },
+                  ]}
+                />
                 <SoftSelect
                   value={rekapBulan}
                   onChange={(v) => setRekapBulan(v)}
@@ -369,7 +402,7 @@ export default function CetakTab({
               </div>
               {/* Angka pagu tanpa keterangan versi adalah angka yang tidak bisa diperiksa. */}
               <div style={{ fontSize:'10px', color:cTextSub, marginTop:'4px' }}>
-                Pagu &amp; target mengacu SSK versi aktif tiap sumber
+                {ringkasVersi}
               </div>
             </div>
 

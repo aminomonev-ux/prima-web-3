@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getRealisasiRows, getRealisasiHydrated, saveRealisasiBatch, getKinerjaVersion, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
+import { getRealisasiRows, getRealisasiHydrated, saveRealisasiBatch, getKinerjaVersion, versiDinolkanSsk, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import type { RealRow } from '@/lib/data/kinerja';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RealisasiBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
@@ -35,10 +35,14 @@ export async function GET(req: NextRequest) {
     const versiSeq  = q.data.versi_seq  ?? 0;
     const { rows, itemSsk } = await getRealisasiHydrated(tahun, sumber, versiTipe, versiSeq);
     const version = await getKinerjaVersion('kinerja_realisasi', `${tahun}:${sumber}`);
+    // A9 + pemilih versi: benderanya WAJIB ikut di cabang ini juga. Kalau tidak,
+    // memilih versi yang habis dinol-kan di layar Cetak membuat spanduknya diam
+    // — dan pagu Rp 0 tanpa keterangan itu yang A9 ada untuk mencegahnya.
+    const dinolkan = await versiDinolkanSsk(tahun, sumber, versiTipe, versiSeq);
     // A8: `itemSsk` ikut di KEDUA cabang. Satu bentuk balasan, bukan dua yang
     // berbeda tergantung ada-tidaknya parameter versi — beda bentuk yang tidak
     // disengaja itu yang membuat `sumber` di RealRow jadi jebakan (bentuk T1).
-    return NextResponse.json({ ok: true, rows, itemSsk, versi: { tipe: versiTipe, seq: versiSeq }, version });
+    return NextResponse.json({ ok: true, rows, itemSsk, versi: { tipe: versiTipe, seq: versiSeq, dinolkan }, version });
   }
 
   // Tanpa parameter versi → versi AKTIF (bukan lagi MURNI-0 paksa). Versinya ikut

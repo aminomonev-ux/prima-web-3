@@ -24,6 +24,8 @@ import type {
 } from './_types';
 import { SUMBER_LIST, recalcAllRealisasi } from './_utils';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
+import { versiUntukPilihan, type PilihanVersiRekap, type SlotVersiSsk,
+  type VersiSumberRekap } from '@/lib/kinerja/versi';
 import Sidebar from './_components/Sidebar';
 import Topbar from './_components/Topbar';
 import { bolehBatalkanFinal } from '@/lib/constants';
@@ -119,6 +121,14 @@ export default function KinerjaClient({ userId, role, username, themePreference 
   const [realisasiAllItems, setRealisasiAllItems] = useState<ItemSskAktif[]>([]);
   /** A9: sumber yang versi SSK acuannya habis dinol-kan — pagunya 0 disengaja. */
   const [sumberDinolkan, setSumberDinolkan] = useState<SumberSSK[]>([]);
+  /**
+   * Pilihan versi untuk Cetak -> Rekap. Bawaannya "berlaku" = perilaku seluruh
+   * layar lain, jadi jawaban yang benar didapat tanpa memilih apa pun dan
+   * pilihan yang lain butuh tindakan sengaja.
+   */
+  const [pilihanVersi, setPilihanVersi] = useState<PilihanVersiRekap>('berlaku');
+  /** Versi yang BENAR-BENAR dipakai tiap sumber — untuk kop dokumen & label layar. */
+  const [versiRekap, setVersiRekap] = useState<VersiSumberRekap[]>([]);
   // O2: cetakView state dipindah ke _tabs/CetakTab.
   // O2: crrRows + pendapatanRows state dipindah ke _tabs/PendapatanCrrTab.
 
@@ -294,7 +304,14 @@ export default function KinerjaClient({ userId, role, username, themePreference 
     } finally { setLoadingData(false); }
   }, [tahun, sskVersi.tipe, sskVersi.seq]);
 
-  const fetchRealisasiAll = useCallback(async () => {
+  /**
+   * `pilihan` dioper eksplisit, bukan dibaca dari state: pemilihnya memanggil
+   * fungsi ini pada klik yang sama dengan `setPilihanVersi`, dan state React
+   * belum berganti di saat itu — membacanya dari state akan memuat versi yang
+   * BARUSAN ditinggalkan, tepat kesalahan yang paling sulit dikenali karena
+   * layarnya tetap berisi angka yang masuk akal.
+   */
+  const fetchRealisasiAll = useCallback(async (pilihan: PilihanVersiRekap = pilihanVersi) => {
     setLoadingData(true);
     try {
       // Partial fail OK: per-sumber gagal → return [] untuk yang itu saja,
@@ -302,9 +319,31 @@ export default function KinerjaClient({ userId, role, username, themePreference 
       // (5 toast kalau semua endpoint down) — silent per-row mirror original.
       const results = await Promise.all(
         SUMBER_LIST.map(async s => {
-          const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${s}`);
-          if (!d.ok) return { sumber: s, rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[], dinolkan: false };
-          const j = d as { rows?: RealRow[]; itemSsk?: ItemSskAktif[]; versi?: { dinolkan?: boolean } };
+          const kosong = { sumber: s, rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[],
+                           dinolkan: false, versi: null as VersiSumberRekap | null };
+          let param = '';
+          if (pilihan !== 'berlaku') {
+            // Versinya DIRESOLUSI dari daftar versi sumber itu, bukan ditulis
+            // `MURNI-0` mati — nomor urut MURNI tidak dijamin 0 di mana pun.
+            const dv = await fetchJson<unknown>(`/api/kinerja/ssk/versi-list?tahun=${tahun}&sumber=${s}`);
+            const slot = dv.ok ? ((dv as { items?: SlotVersiSsk[] }).items ?? []) : [];
+            const diminta = versiUntukPilihan(slot, pilihan);
+            // Sumber punya SSK tapi tidak punya versi murni (MURNI-nya dihapus
+            // lewat Reset; `parent_versi_id` ber-ON DELETE SET NULL sehingga
+            // PERUBAHAN-nya tetap hidup). TIDAK dimuat — jatuh ke versi berlaku
+            // akan membuat layar berbunyi "murni" sambil menampilkan angka
+            // perubahan. Disebut apa adanya di label & kop lewat `tipe: null`.
+            if (!diminta) {
+              return slot.length > 0
+                ? { ...kosong, versi: { sumber: s, tipe: null, seq: 0 } }
+                : kosong;
+            }
+            param = `&versi_tipe=${diminta.tipe}&versi_seq=${diminta.seq}`;
+          }
+          const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${s}${param}`);
+          if (!d.ok) return kosong;
+          const j = d as { rows?: RealRow[]; itemSsk?: ItemSskAktif[];
+                           versi?: { tipe?: 'MURNI'|'PERUBAHAN'; seq?: number; dinolkan?: boolean } };
           // Ditandai di sini: larik hasilnya datar, dan unduhan gabungan perlu
           // memisahkannya kembali per sumber.
           return {
@@ -316,6 +355,7 @@ export default function KinerjaClient({ userId, role, username, themePreference 
             // berbeda (belum diisi vs sengaja dinol-kan) dan menebaknya justru
             // menghapus perbedaan yang seluruh perbaikan ini menjaganya.
             dinolkan: j.versi?.dinolkan === true,
+            versi: { sumber: s, tipe: j.versi?.tipe ?? 'MURNI', seq: Number(j.versi?.seq ?? 0) },
           };
         })
       );
@@ -324,8 +364,25 @@ export default function KinerjaClient({ userId, role, username, themePreference 
       setRealisasiAllRows(recalcAllRealisasi(results.flatMap(x => x.rows)));
       setRealisasiAllItems(results.flatMap(x => x.itemSsk));
       setSumberDinolkan(results.filter(x => x.dinolkan).map(x => x.sumber));
+      // Hanya sumber yang punya isi yang dicatat versinya: kop yang menyebut 8
+      // sumber padahal satu yang berdata cuma bising. Sumber ber-`tipe: null`
+      // TETAP masuk — ia punya SSK, cuma tidak punya versi untuk pilihan ini,
+      // dan menghilangkannya dari daftar adalah bentuk cacat yang sama dgn A9.
+      setVersiRekap(results
+        .filter(x => x.versi !== null && (x.versi.tipe === null || x.itemSsk.length > 0 || x.rows.length > 0))
+        .map(x => x.versi as VersiSumberRekap));
     } finally { setLoadingData(false); }
-  }, [tahun]);
+  }, [tahun, pilihanVersi]);
+
+  /**
+   * Ganti pilihan versi = ganti konteks: pilihannya disetel DAN datanya dimuat
+   * ulang dalam satu tindakan. Menyetel pilihannya saja meninggalkan layar
+   * berisi angka versi lama di bawah label versi baru (L78b/L83).
+   */
+  const gantiPilihanVersi = useCallback((v: PilihanVersiRekap) => {
+    setPilihanVersi(v);
+    void fetchRealisasiAll(v);
+  }, [fetchRealisasiAll]);
 
 
   // O2: fetchCrr + fetchPendapatan dipindah ke _tabs/PendapatanCrrTab.
@@ -717,6 +774,9 @@ export default function KinerjaClient({ userId, role, username, themePreference 
                   isLight={isLight}
                   sskVersi={sskVersi}
                   sumberDinolkan={sumberDinolkan}
+                  pilihanVersi={pilihanVersi}
+                  onGantiPilihanVersi={gantiPilihanVersi}
+                  versiRekap={versiRekap}
                 />
               </Suspense>
             )}

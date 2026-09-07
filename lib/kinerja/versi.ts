@@ -98,3 +98,97 @@ export function pilihVersiAgregat<T extends BarisVersiAgregat>(rows: T[]): {
     dinolkan: Number(aktif.baris ?? 0) > 0 && Number(aktif.baris_aktif ?? 0) === 0,
   };
 }
+
+// ─── Memilih versi saat mencetak Rekap ───────────────────────────────────────
+//
+// Perubahan anggaran terjadi di tengah tahun — tidak selalu Agustus, sering
+// Oktober — dan sesudahnya ada DUA dokumen yang dua-duanya sah. Datanya sudah
+// utuh di basis data (tiap versi disalin lengkap oleh `ssk/perubahan`), yang
+// belum ada cuma cara memintanya.
+//
+// SENGAJA dua keadaan, bukan pemilih per sumber: Rekap menjumlah SEMUA sumber
+// sekaligus dan tiap sumber punya riwayat versinya sendiri (GAJI bisa sudah
+// PERUBAHAN-1 sementara BLUD masih MURNI). Sumber yang belum berperubahan
+// memberi angka yang SAMA di kedua pilihan, jadi pilihannya tidak pernah
+// menyesatkan untuk sumber itu.
+//
+// Konsep: docs/CONCEPT-kinerja-pilih-versi-rekap.md
+
+export type PilihanVersiRekap = 'berlaku' | 'murni';
+
+/** Satu slot versi dari `GET /api/kinerja/ssk/versi-list`. */
+export interface SlotVersiSsk { versi_tipe?: unknown; versi_seq?: unknown }
+
+/** Versi yang dipakai satu sumber. `tipe: null` = tidak ada versi untuk pilihan ini. */
+export interface VersiSumberRekap {
+  sumber: string;
+  tipe: 'MURNI' | 'PERUBAHAN' | null;
+  seq: number;
+}
+
+/**
+ * "berlaku" = versi paling belakang, persis yang dipakai seluruh layar lain.
+ * "murni"   = versi MURNI paling belakang, yaitu dokumen sebelum Perubahan.
+ *
+ * BUKAN `{ tipe: 'MURNI', seq: 0 }` mati: nomor urut MURNI tidak dijamin 0 di
+ * mana pun (lihat alasan `pickVersiAktif` menolak ORDER BY), jadi menuliskannya
+ * berarti memasang kembali andaian yang sudah pernah ditolak di berkas ini.
+ *
+ * Null kalau sumbernya tidak punya slot yang cocok — dan itu keadaan yang NYATA,
+ * bukan jaga-jaga: `parent_versi_id` ber-ON DELETE SET NULL, jadi MURNI bisa
+ * dihapus lewat Reset sementara PERUBAHAN-nya tetap hidup. Pemanggil WAJIB
+ * memperlakukannya sebagai "tidak ada", bukan diam-diam jatuh ke versi berlaku:
+ * layar yang berbunyi "murni" sambil menampilkan angka perubahan itu cacat yang
+ * lebih buruk daripada tidak punya fiturnya.
+ */
+export function versiUntukPilihan<T extends SlotVersiSsk>(
+  slot: T[],
+  pilihan: PilihanVersiRekap,
+): { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } | null {
+  const kandidat = pilihan === 'murni'
+    ? slot.filter(r => r.versi_tipe !== 'PERUBAHAN')
+    : slot;
+  const pilih = pickVersiAktif(kandidat);
+  if (!pilih) return null;
+  return {
+    tipe: pilih.versi_tipe === 'PERUBAHAN' ? 'PERUBAHAN' : 'MURNI',
+    seq:  Number(pilih.versi_seq ?? 0),
+  };
+}
+
+/** 'MURNI' · 'MURNI-1' · 'PERUBAHAN-1'. Seq 0 tidak ditulis: itu bunyi di layar RKO. */
+export function labelVersi(tipe: 'MURNI' | 'PERUBAHAN', seq: number): string {
+  return seq === 0 ? tipe : `${tipe}-${seq}`;
+}
+
+/**
+ * Satu kalimat untuk kop dokumen DAN label layar.
+ *
+ * Kalimat lamanya "mengacu SSK versi aktif tiap sumber" menyebut ATURANNYA,
+ * bukan versinya — jadi dua rekap yang diukur ke versi berbeda terbaca
+ * identik, di layar maupun di berkasnya. Begitu versinya bisa dipilih, itu
+ * berubah dari kurang informatif menjadi menyesatkan.
+ *
+ * Sumber yang tidak punya versi untuk pilihan ini disebut apa adanya, bukan
+ * dihilangkan dari daftar: sumber yang lenyap tanpa keterangan adalah bentuk
+ * cacat yang sama dengan A9.
+ */
+export function ringkasVersiRekap(daftar: VersiSumberRekap[], pilihan: PilihanVersiRekap): string {
+  if (daftar.length === 0) return 'Belum ada versi SSK yang bisa diacu';
+  const isi = daftar
+    .map(v => v.tipe === null
+      ? `${v.sumber} tidak punya versi ${pilihan === 'murni' ? 'murni' : 'aktif'}`
+      : `${v.sumber} ${labelVersi(v.tipe, v.seq)}`)
+    .join(' · ');
+  return `Pagu & target mengacu SSK: ${isi}`;
+}
+
+/**
+ * Sisipan nama berkas. Hanya pilihan NON-BAWAAN yang ditandai, supaya nama
+ * berkas yang sudah beredar tidak berubah — dan nama tanpa sisipan selalu
+ * berarti "versi berlaku", jadi tetap tak bermakna ganda. Gunanya nyata:
+ * mengunduh kedua pilihan tidak saling menimpa di folder unduhan.
+ */
+export function imbuhanBerkasVersi(pilihan: PilihanVersiRekap): string {
+  return pilihan === 'murni' ? 'Murni-' : '';
+}

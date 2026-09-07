@@ -12,6 +12,8 @@ import type {
 } from './_types';
 import { MONTHS_KEYS, MONTH_SHORT, CRR_BULAN_LABELS } from './_utils';
 import type { BarisRekap, LaporanYatim } from '@/lib/kinerja/rekap';
+import { ringkasVersiRekap, imbuhanBerkasVersi,
+  type VersiSumberRekap, type PilihanVersiRekap } from '@/lib/kinerja/versi';
 import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
 
 let _pdfPromise:  Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
@@ -74,13 +76,16 @@ export async function exportSskPdf(params: { rows: SskRow[]; sumber: SumberSSK; 
 
 export interface KopBaris { teks: string; ukuran: number; tebal: boolean }
 
-export function kopRekap(namaBulan: string, tahun: string): KopBaris[] {
+export function kopRekap(namaBulan: string, tahun: string, ringkasVersi = ''): KopBaris[] {
   return [
     { teks: 'RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO', ukuran: 12, tebal: true },
     { teks: 'PROVINSI JAWA TENGAH', ukuran: 9, tebal: false },
     { teks: 'LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP', ukuran: 11, tebal: true },
     { teks: `S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`, ukuran: 9, tebal: false },
-    { teks: 'Pagu & target mengacu SSK versi aktif tiap sumber', ukuran: 8, tebal: false },
+    // Jumlah barisnya HARUS tetap 5 — `REKAP_JUDUL_BARIS` dan `rapikanSheetRekap`
+    // berdiri di atasnya. Jadi versinya menggantikan teks baris ini, bukan
+    // menambah baris baru.
+    { teks: ringkasVersi || 'Pagu & target mengacu SSK versi aktif tiap sumber', ukuran: 8, tebal: false },
   ];
 }
 
@@ -131,6 +136,15 @@ export interface RekapExportParams {
   /** Lihat `HasilRekap.tanpaRealisasi` — catatannya WAJIB ikut ke berkas. */
   tanpaRealisasi: boolean;
   /**
+   * Versi SSK yang jadi acuan tiap sumber + pilihan yang menghasilkannya.
+   * WAJIB, dan itu seluruh alasan pemilih versi boleh ada: begitu versinya bisa
+   * dipilih, dokumen yang tidak menyebut versinya berubah dari kurang
+   * informatif menjadi menyesatkan — dua rekap dengan angka berbeda terbaca
+   * identik oleh orang yang cuma memegang berkasnya.
+   */
+  versiRekap: VersiSumberRekap[];
+  pilihanVersi: PilihanVersiRekap;
+  /**
    * A9: sumber yang versi SSK acuannya habis dinol-kan. Pagunya 0, jadi ia
    * TIDAK menyumbang apa pun ke total rekap — dan pembaca yang cuma memegang
    * berkasnya tidak punya cara menebak kenapa sumber itu seolah tidak ada.
@@ -179,13 +193,14 @@ function catatanDinolkan(sumberDinolkan: string[]): string | null {
 export const REKAP_JUDUL_BARIS = 6;
 
 /** Dipisah dari pengunduhannya supaya bisa diuji tanpa DOM. */
-export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan }: RekapExportParams): (string | number | null)[][] {
+export function rekapAoa({ baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan,
+  versiRekap, pilihanVersi }: RekapExportParams): (string | number | null)[][] {
   const judul: (string | number | null)[][] = [
     ['RUMAH SAKIT JIWA DAERAH DR. AMINO GONDOHUTOMO'],
     ['PROVINSI JAWA TENGAH'],
     ['LAPORAN PERKEMBANGAN PELAKSANAAN BELANJA — REKAP'],
     [`S/D BULAN ${namaBulan.toUpperCase()} TAHUN ${tahun} — SEMUA SUMBER`],
-    ['Pagu & target mengacu SSK versi aktif tiap sumber'],
+    [ringkasVersiRekap(versiRekap, pilihanVersi)],
     [],
   ];
   const data = baris.map(b => [
@@ -238,19 +253,20 @@ export async function exportRekapExcel(params: RekapExportParams) {
   const ws = wb.addWorksheet('Rekap');
   addSheetFromAoa(ws, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR, numFmts: REKAP_FMT });
   rapikanSheetRekap(ws, params.baris);
-  await downloadWorkbook(wb, `Rekap-SemuaSumber-sd-${params.namaBulan}-${params.tahun}.xlsx`);
+  await downloadWorkbook(wb, `Rekap-SemuaSumber-${imbuhanBerkasVersi(params.pilihanVersi)}sd-${params.namaBulan}-${params.tahun}.xlsx`);
 }
 
 /** Halaman rekap di PDF — dipakai unduhan satuan DAN bundel. */
 export function gambarRekapPdf(
   doc: import('jspdf').jsPDF,
   autoTable: typeof import('jspdf-autotable').default,
-  { baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan }: RekapExportParams,
+  { baris, yatim, tahun, namaBulan, tanpaRealisasi, sumberDinolkan,
+    versiRekap, pilihanVersi }: RekapExportParams,
 ) {
   // Rata tengah lewat penulis yang SAMA dengan halaman detail. Dulu kop rekap
   // ditulis di x=14 (pojok kiri) sementara kop detail rata tengah, jadi dalam
   // satu berkas bundel halaman 1 tidak sebentuk dengan halaman 2.
-  const yTabel = tulisKopPdf(doc, kopRekap(namaBulan, tahun), 13);
+  const yTabel = tulisKopPdf(doc, kopRekap(namaBulan, tahun, ringkasVersiRekap(versiRekap, pilihanVersi)), 13);
 
   const body = baris.map(b => [
     String(b.no), labelIndent(b), fmtNum(b.pagu), b.targetPct.toFixed(2) + '%',
@@ -282,7 +298,7 @@ export async function exportRekapPdf(params: RekapExportParams) {
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
   gambarRekapPdf(doc, autoTable, params);
-  doc.save(`Rekap-SemuaSumber-sd-${params.namaBulan}-${params.tahun}.pdf`);
+  doc.save(`Rekap-SemuaSumber-${imbuhanBerkasVersi(params.pilihanVersi)}sd-${params.namaBulan}-${params.tahun}.pdf`);
 }
 
 // ─── Rekening ─────────────────────────────────────────────────────────────────

@@ -542,6 +542,36 @@ function pagarReplace(table: string, existing: number, incoming: number, force: 
   }
 }
 
+/**
+ * Apakah SATU versi tertentu punya baris tapi semuanya dinol-kan?
+ *
+ * Dibutuhkan jalur "versi diminta eksplisit" di GET realisasi: `versiAktifKinerja`
+ * menjawab untuk versi BERLAKU, dan sesudah versi bisa dipilih di layar Cetak,
+ * jawaban itu bukan lagi jawaban untuk versi yang sedang ditampilkan. Tanpa ini
+ * spanduk A9 diam persis saat orang memilih versi yang habis dinol-kan.
+ *
+ * Aturannya tetap `pilihVersiAgregat`, bukan perbandingan baru di sini — satu
+ * daftar berisi satu baris, supaya "dinol-kan" tidak punya dua definisi (L88).
+ */
+export async function versiDinolkanSsk(
+  tahun: string,
+  sumber: SumberSSK,
+  versiTipe: 'MURNI' | 'PERUBAHAN',
+  versiSeq: number,
+): Promise<boolean> {
+  const rows = await sql`
+    SELECT COUNT(*) AS baris,
+           SUM(CASE WHEN is_nullified = FALSE THEN 1 ELSE 0 END) AS baris_aktif
+    FROM kinerja_ssk
+    WHERE tahun = ${tahun} AND sumber = ${sumber}
+      AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
+  ` as Record<string, unknown>[];
+  return pilihVersiAgregat([{
+    versi_tipe: versiTipe, versi_seq: versiSeq,
+    baris: rows[0]?.baris, baris_aktif: rows[0]?.baris_aktif,
+  }]).dinolkan;
+}
+
 export interface VersiAktifKinerja {
   tipe: 'MURNI' | 'PERUBAHAN';
   seq: number;
