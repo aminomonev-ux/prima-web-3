@@ -7,11 +7,17 @@
 // Pakai untuk tombol di dalam scroll-wrapper. Untuk tombol di area non-scroll
 // (toolbar/topbar/sidebar non-overflow) boleh pakai `data-tooltip` pseudo.
 //
+// Lolos dari clip ancestor TIDAK berarti lolos dari tepi LAYAR: tombol aksi
+// tabel hidup di kolom `position: sticky; right: 0`, jadi tooltip yang selalu
+// dipusatkan di atasnya separuhnya jatuh di luar jendela. Geometrinya di
+// `lib/shared/tip-posisi.ts` (PURE, bisa diuji perilakunya).
+//
 // <Tip label="Edit"><button onClick={..}>✏️</button></Tip>
 
 import { useState, cloneElement, isValidElement } from 'react'
-import type { ReactElement, MouseEvent } from 'react'
+import type { CSSProperties, ReactElement, MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { letakTip, type LetakTip } from '@/lib/shared/tip-posisi'
 
 type ChildProps = {
   onMouseEnter?: (e: MouseEvent<HTMLElement>) => void
@@ -19,14 +25,13 @@ type ChildProps = {
 }
 
 export default function Tip({ label, children }: { label: string; children: ReactElement }) {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const [pos, setPos] = useState<LetakTip | null>(null)
 
   if (!isValidElement<ChildProps>(children)) return <>{children}</>
   const childProps = children.props
 
   function enter(e: MouseEvent<HTMLElement>) {
-    const r = e.currentTarget.getBoundingClientRect()
-    setPos({ top: r.top - 6, left: r.left + r.width / 2 })
+    setPos(letakTip(e.currentTarget.getBoundingClientRect(), window.innerWidth))
     childProps.onMouseEnter?.(e)
   }
   function leave(e: MouseEvent<HTMLElement>) {
@@ -40,7 +45,10 @@ export default function Tip({ label, children }: { label: string; children: Reac
     <>
       {child}
       {label && pos && typeof window !== 'undefined' && createPortal(
-        <div className="blud-tip-portal" style={{ position: 'fixed', top: pos.top, left: pos.left }}>
+        <div className="blud-tip-portal" style={{
+          position: 'fixed', top: pos.top, left: pos.left,
+          '--tip-tx': pos.tx, '--tip-maks': `${pos.lebar}px`,
+        } as CSSProperties}>
           {label}
         </div>,
         document.body,
