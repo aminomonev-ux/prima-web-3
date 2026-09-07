@@ -12,7 +12,7 @@ import type {
 } from './_types';
 import { MONTHS_KEYS, MONTH_SHORT, CRR_BULAN_LABELS } from './_utils';
 import type { BarisRekap, LaporanYatim } from '@/lib/kinerja/rekap';
-import { ringkasVersiRekap, imbuhanBerkasVersi,
+import { ringkasVersiRekap, namaBerkasRekap,
   type VersiSumberRekap, type PilihanVersiRekap } from '@/lib/kinerja/versi';
 import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
 
@@ -253,7 +253,7 @@ export async function exportRekapExcel(params: RekapExportParams) {
   const ws = wb.addWorksheet('Rekap');
   addSheetFromAoa(ws, rekapAoa(params), { headerRowIndex: REKAP_JUDUL_BARIS, colWidths: REKAP_LEBAR, numFmts: REKAP_FMT });
   rapikanSheetRekap(ws, params.baris);
-  await downloadWorkbook(wb, `Rekap-SemuaSumber-${imbuhanBerkasVersi(params.pilihanVersi)}sd-${params.namaBulan}-${params.tahun}.xlsx`);
+  await downloadWorkbook(wb, namaBerkasRekap(params.pilihanVersi, params.namaBulan, params.tahun, 'xlsx'));
 }
 
 /** Halaman rekap di PDF — dipakai unduhan satuan DAN bundel. */
@@ -298,7 +298,7 @@ export async function exportRekapPdf(params: RekapExportParams) {
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
   gambarRekapPdf(doc, autoTable, params);
-  doc.save(`Rekap-SemuaSumber-${imbuhanBerkasVersi(params.pilihanVersi)}sd-${params.namaBulan}-${params.tahun}.pdf`);
+  doc.save(namaBerkasRekap(params.pilihanVersi, params.namaBulan, params.tahun, 'pdf'));
 }
 
 // ─── Rekening ─────────────────────────────────────────────────────────────────

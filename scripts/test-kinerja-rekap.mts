@@ -18,7 +18,7 @@ import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
 import { pickVersiAktif, pilihVersiAgregat, versiUntukPilihan, labelVersi,
-  ringkasVersiRekap, imbuhanBerkasVersi } from '../lib/kinerja/versi';
+  ringkasVersiRekap, imbuhanBerkasVersi, namaBerkasRekap } from '../lib/kinerja/versi';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi,
   type BarisSskAcuan } from '../lib/kinerja/hidrasi-ssk';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '../lib/kinerja/master-nama';
@@ -1870,6 +1870,25 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
 
   eq('AE24 nama berkas bawaan tidak berubah', imbuhanBerkasVersi('berlaku'), '');
   eq('AE25 pilihan non-bawaan menandai nama berkasnya', imbuhanBerkasVersi('murni'), 'Murni-');
+  // Nama berkas diuji UTUH, bukan cuma imbuhannya: imbuhan yang benar tapi
+  // dipasang di tempat yang salah menghasilkan nama yang salah, dan itu baru
+  // terlihat sesudah orang mengunduhnya. Angka-angka ini disalin dari unduhan
+  // sungguhan di aplikasi (Rekap GAJI 2026, s/d September).
+  eq('AE24b nama berkas Excel bawaan',
+     namaBerkasRekap('berlaku', 'September', '2026', 'xlsx'),
+     'Rekap-SemuaSumber-sd-September-2026.xlsx');
+  eq('AE24c nama berkas PDF bawaan',
+     namaBerkasRekap('berlaku', 'September', '2026', 'pdf'),
+     'Rekap-SemuaSumber-sd-September-2026.pdf');
+  eq('AE25b nama berkas Excel versi murni',
+     namaBerkasRekap('murni', 'September', '2026', 'xlsx'),
+     'Rekap-SemuaSumber-Murni-sd-September-2026.xlsx');
+  eq('AE25c nama berkas PDF versi murni',
+     namaBerkasRekap('murni', 'September', '2026', 'pdf'),
+     'Rekap-SemuaSumber-Murni-sd-September-2026.pdf');
+  ok('AE25d kedua pilihan tidak saling menimpa di folder unduhan',
+     namaBerkasRekap('berlaku', 'September', '2026', 'xlsx')
+     !== namaBerkasRekap('murni', 'September', '2026', 'xlsx'));
 
   // -- Versinya sampai ke BERKAS, bukan cuma ke layar ----------------------
   const aoaMurni = rekapAoa({
@@ -1884,8 +1903,12 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   const exAE = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
   // Excel DAN PDF: dua nama berkas, dua kop -- dihitung kemunculannya supaya
   // memperbaiki satu saja tidak lolos (L82c).
-  eq('AE29 imbuhan versi masuk ke nama berkas Excel DAN PDF',
-     (exAE.match(/imbuhanBerkasVersi\(params\.pilihanVersi\)/g) || []).length, 2);
+  // Kedua pengekspor memakai penamaan yang SAMA — dua templat nama berkas yang
+  // ditulis terpisah pasti berbeda bunyi begitu satu disunting.
+  eq('AE29 Excel DAN PDF memakai satu fungsi penamaan',
+     (exAE.match(/namaBerkasRekap\(params\.pilihanVersi/g) || []).length, 2);
+  ok('AE29b tidak ada lagi templat nama berkas rekap yang ditulis tangan',
+     !/`Rekap-SemuaSumber-/.test(exAE));
   eq('AE30 ringkasan versi masuk ke kop Excel DAN PDF',
      (exAE.match(/ringkasVersiRekap\(versiRekap, pilihanVersi\)/g) || []).length, 2);
   ok('AE31 params versinya WAJIB, bukan opsional bernilai bawaan',

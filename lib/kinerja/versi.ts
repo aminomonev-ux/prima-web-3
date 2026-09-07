@@ -192,3 +192,21 @@ export function ringkasVersiRekap(daftar: VersiSumberRekap[], pilihan: PilihanVe
 export function imbuhanBerkasVersi(pilihan: PilihanVersiRekap): string {
   return pilihan === 'murni' ? 'Murni-' : '';
 }
+
+/**
+ * Nama berkas unduhan Rekap — SATU fungsi untuk Excel dan PDF.
+ *
+ * Dipisah dari pemanggilnya supaya penjaganya bisa menguji PERILAKU, bukan
+ * mencocokkan teks templatnya: pemeriksaan yang cuma menghitung kemunculan
+ * `imbuhanBerkasVersi` tetap lulus walau imbuhannya dipasang di tempat yang
+ * salah, dan nama berkas yang salah tempat baru terlihat sesudah orang
+ * mengunduhnya.
+ */
+export function namaBerkasRekap(
+  pilihan: PilihanVersiRekap,
+  namaBulan: string,
+  tahun: string,
+  ekstensi: 'xlsx' | 'pdf',
+): string {
+  return `Rekap-SemuaSumber-${imbuhanBerkasVersi(pilihan)}sd-${namaBulan}-${tahun}.${ekstensi}`;
+}
