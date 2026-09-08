@@ -8,21 +8,7 @@
 // lulus tanpa menguji apa pun — selisih 0,01 tidak akan pernah muncul.
 
 import { readFileSync, existsSync } from 'node:fs';
-import { letakTip } from '../lib/shared/tip-posisi';
-
-/**
- * Buang komentar BARIS dan BLOK sebelum pemeriksaan "tidak boleh ada lagi".
- *
- * Tanpa yang blok, prosa JSDoc yang MENJELASKAN cacat lama ikut terbaca sebagai
- * cacat itu sendiri, dan tesnya gagal karena kalimat yang menerangkannya —
- * bukan karena kodenya. Terjadi pada tiga pemeriksaan bab AF sekaligus (L82c
- * lewat pintu lain). Bagian Y sudah memakai bentuk yang sama secara lokal;
- * di sini ia jadi fungsi supaya tidak disalin lagi.
- */
-function bersihkanKomentar(teks: string): string {
-  return teks.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
-}
-import { recalcAllRealisasiServer, type RealRowRaw } from '../lib/data/kinerja-calc';
+import { letakTip } from '../lib/shared/tip-posisi';import { recalcAllRealisasiServer, type RealRowRaw } from '../lib/data/kinerja-calc';
 import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan, laporanYatim,
   targetSampai, type ItemSskAktif } from '../lib/kinerja/rekap';
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
@@ -40,6 +26,19 @@ import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '../lib/kin
 import { nolkanBaris, aktifkanBaris, sudahDinolkan,
   perluPeriksaHapus, pesanHapusSsk, hitungDinolkan } from '../lib/kinerja/nol-kan';
 import type { RealRow, SskRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
+
+/**
+ * Buang komentar BARIS dan BLOK sebelum pemeriksaan "tidak boleh ada lagi".
+ *
+ * Tanpa yang blok, prosa JSDoc yang MENJELASKAN cacat lama ikut terbaca sebagai
+ * cacat itu sendiri, dan tesnya gagal karena kalimat yang menerangkannya —
+ * bukan karena kodenya. Terjadi pada tiga pemeriksaan bab AF sekaligus (L82c
+ * lewat pintu lain). Bagian Y sudah memakai bentuk yang sama secara lokal;
+ * di sini ia jadi fungsi supaya tidak disalin lagi.
+ */
+function bersihkanKomentar(teks: string): string {
+  return teks.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+}
 
 let lulus = 0;
 const gagal: string[] = [];
@@ -766,15 +765,14 @@ console.log('\n── S. A2: realisasi yatim keluar dari Laporan & KPI juga ─�
   // tab Realisasi memang milik SUMBER dan VERSI yang sedang dibuka di tab itu -
   // bukan milik tab SSK, yang punya pemilih sumber sendiri (`activeSumber`).
   // Kalau efek ini hilang, hidrasinya memakai SSK sumber lain tanpa satu galat.
-  const kc2 = readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const kc2 = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
   ok('Y37 tab Realisasi memuat SSK sumbernya sendiri',
      /activeTab === 'realisasi'\) fetchSsk\(realisasiSumber\)/.test(kc2));
   ok('Y38 dan fetchSsk memakai versi yang sedang dibuka',
      /const vt = versiTipe \?\? sskVersi\.tipe/.test(kc2));
 
   const kj = readFileSync('lib/data/kinerja.ts', 'utf8');
-  const tanpaKomentar = kj.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  const tanpaKomentar = bersihkanKomentar(kj);
 
   ok('S17 canonicalAktifKinerja ada dan bertanya ke versiAktifKinerja',
      /export async function canonicalAktifKinerja[\s\S]{0,400}await versiAktifKinerja\(/.test(kj));
@@ -1032,7 +1030,7 @@ console.log('\n-- W. Route nullify dibuang, jejaknya pindah -------------------'
     'app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx',
     'lib/kinerja/nol-kan.ts',
   ]) {
-    const t = readFileSync(berkas, 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+    const t = bersihkanKomentar(readFileSync(berkas, 'utf8'));
     ok(`W12 ${berkas.split('/').pop()} tidak menyebut endpoint nullify`,
        !t.includes('ssk/nullify'));
   }
@@ -1114,8 +1112,7 @@ console.log('\n-- X. A3: ganti nama master memindahkan anaknya -----------------
   // Komentar dibuang dulu, dan yang dicocokkan INTERPOLASINYA: komentar di atas
   // baris itu memuat frasa "ikut dipindah" juga, jadi kutipan telanjang tetap
   // cocok walau kalimatnya sudah berhenti menyebut angkanya (L82c).
-  const mt = readFileSync('app/(dashboard)/kinerja/_tabs/MasterTab.tsx', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const mt = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/MasterTab.tsx', 'utf8'));
   ok('X28 layar menyebut BERAPA anak yang ikut dipindah',
      /\$\{ikut\} baris di bawahnya ikut dipindah/.test(mt));
   ok('X28b angkanya dibaca dari balasan server', mt.includes('anak_dipindah'));
@@ -1229,8 +1226,7 @@ console.log('\n-- Y. A4: Pulihkan menghidrasi ulang dari SSK versi terbuka ----'
   // -- Statis: ketiga jalur memakai rumus yang sama, dan urutannya benar -----
   // Komentar dibuang dulu: paragraf di atas barisnya menyebut nama fungsi yang
   // sama, jadi kutipan telanjang tetap cocok walau kodenya dikembalikan (L82c).
-  const rt = readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const rt = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8'));
   // Hidrasi WAJIB mendahului recalc - kebalikannya melahirkan persen dari pagu foto.
   ok('Y30 Pulihkan menghidrasi ulang sebelum recalc',
      /recalcAllRealisasi\(hidrasiUlang\(isi as RealRow\[\], sskRows, sskVersi\)\)/.test(rt));
@@ -1260,7 +1256,7 @@ console.log('\n-- Y. A4: Pulihkan menghidrasi ulang dari SSK versi terbuka ----'
   ok('Y36b dan hidrasi memakai kueri yang sama, bukan salinannya',
      /itemSskVersi\(tahun, sumber, versiTipe, versiSeq\)/.test(kj));
 
-  const kc = readFileSync('lib/data/kinerja-calc.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const kc = bersihkanKomentar(readFileSync('lib/data/kinerja-calc.ts', 'utf8'));
   ok('Y34 server memakai lib yang sama', /\.\.\.hidrasiDariSsk\(ssk, r\.bulan\)/.test(kc));
   ok('Y35 server tidak lagi menyalin rumus', !/Math\.round\(\(target_rp \/ pagu\)/.test(kc));
 }
@@ -1273,8 +1269,7 @@ console.log('\n-- Z. A6: Buat Perubahan atomik, dan bentroknya dijawab 409 -----
 // pembacaan tidak bisa dilihat dari hasil satu permintaan tunggal, jadi kalau
 // tidak dipatok di sini ia bisa bergeser balik tanpa satu tes pun berubah.
 {
-  const rt = readFileSync('app/api/kinerja/ssk/perubahan/route.ts', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const rt = bersihkanKomentar(readFileSync('app/api/kinerja/ssk/perubahan/route.ts', 'utf8'));
 
   // Tidak boleh ada `sql` biasa di route ini: satu saja yang tertinggal di luar
   // transaksi mengembalikan seluruh temuannya.
@@ -1305,7 +1300,7 @@ console.log('\n-- Z. A6: Buat Perubahan atomik, dan bentroknya dijawab 409 -----
   // membuat kegagalan tulis terbaca seperti sukses.
   ok('Z10 galat lain dilempar ulang', /\n\s*throw e;\n/.test(rt));
 
-  const kj = readFileSync('lib/data/kinerja.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const kj = bersihkanKomentar(readFileSync('lib/data/kinerja.ts', 'utf8'));
   ok('Z11 entity kunci punya nama sendiri', kj.includes("KINERJA_VERSI_ENTITY = 'kinerja_versi_ssk'"));
   // L69-a: FOR UPDATE pada baris lock yang belum ada tidak mengunci apa pun.
   ok('Z12 kunci lewat acquireBludLock (INSERT IGNORE dulu)',
@@ -1329,8 +1324,7 @@ console.log('\n-- Z. A6: Buat Perubahan atomik, dan bentroknya dijawab 409 -----
   // lagi di badan fungsi ini.
   ok('Z17 tidak ada lagi kueri lepas di saveSskBatch', !/\bawait sql`/.test(badanSave));
 
-  const st = readFileSync('app/(dashboard)/kinerja/_tabs/SskTab.tsx', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const st = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/SskTab.tsx', 'utf8'));
   ok('Z18 layar menangani VERSI_BENTROK', st.includes("=== 'VERSI_BENTROK'"));
   // Daftar versi di layar SUDAH basi begitu bentrok terjadi — menyuruh orang
   // memuat ulang untuk sesuatu yang bisa kita kerjakan sendiri itu melempar
@@ -1374,7 +1368,7 @@ console.log('\n-- AA. A5 & A7: satu pernyataan, dan satu aturan versi ---------'
   ok('AA8 kinerja.ts memakai aturan dari lib', kj.includes("from '@/lib/kinerja/versi'"));
   ok('AA9 dan tidak menyimpan salinannya sendiri', !/function pickVersiAktif</.test(kj));
 
-  const rs = readFileSync('app/api/kinerja/reset/route.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const rs = bersihkanKomentar(readFileSync('app/api/kinerja/reset/route.ts', 'utf8'));
   ok('AA10 reset memakai aturan yang sama', rs.includes('pickVersiAktif(slotRows)'));
   // Rumus keempat dibuang. Kalau kembali, dua tempat bisa berbeda pendapat soal
   // slot mana yang dibuka kuncinya, tanpa satu tes pun berubah.
@@ -1392,8 +1386,7 @@ console.log('\n-- AA. A5 & A7: satu pernyataan, dan satu aturan versi ---------'
      rsKomentar.includes('SENGAJA TIDAK disaring'));
 
   // A5 — satu pernyataan, bukan 2.000 perjalanan berurutan (PERF-C1).
-  const im = readFileSync('app/api/kinerja/realisasi/import/route.ts', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const im = bersihkanKomentar(readFileSync('app/api/kinerja/realisasi/import/route.ts', 'utf8'));
   ok('AA15 tidak ada lagi perulangan await INSERT', !/for \(const p of valid\)/.test(im));
   ok('AA16 satu pernyataan ber-VALUES ?', /VALUES \?/.test(im));
   // `conn.query`, bukan `tx`/`execute`: ekspansi `VALUES ?` butuh non-prepared.
@@ -1509,40 +1502,37 @@ console.log('\n-- AB. A8: penyebut Rekap disemai dari SSK, bukan dari realisasi 
   // BENTUKNYA — dan itu ketahuan dari uji mutasi, bukan dari membaca: menaruh
   // "kalau tidak ketemu, lahirkan item dari barisnya" di situ mengembalikan
   // seluruh cacat A8 dan lolos 408 pemeriksaan tanpa satu pun berubah.
-  const rkA8 = readFileSync('lib/kinerja/rekap.ts', 'utf8').replace(/^[ 	]*\/\/.*$/gm, '');
+  const rkA8 = bersihkanKomentar(readFileSync('lib/kinerja/rekap.ts', 'utf8'));
   ok('AB28 rekap tidak lagi menyentuh pagu_awal sama sekali', !/pagu_awal/.test(rkA8));
   eq('AB29 item hanya dilahirkan di satu tempat: penyemaian',
      (rkA8.match(/items\.set\(/g) || []).length, 1);
 
   // -- Statis: rantainya utuh dari server sampai layar ----------------------
-  const kjA8 = readFileSync('lib/data/kinerja.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const kjA8 = bersihkanKomentar(readFileSync('lib/data/kinerja.ts', 'utf8'));
   ok('AB30 itemSsk ikut dipulangkan getRealisasiRows', /return \{ rows, versi, itemSsk \}/.test(kjA8));
   // Kolom hierarkinya WAJIB ikut — tanpa itu pohon rekap kehilangan induknya.
   eq('AB31 kueri item membawa kolom hierarkinya',
      (kjA8.match(/COALESCE\((program|kegiatan|subkegiatan|uraian_ssk|uraian),''\)/g) || []).length >= 5, true);
 
-  const rtA8 = readFileSync('app/api/kinerja/realisasi/route.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const rtA8 = bersihkanKomentar(readFileSync('app/api/kinerja/realisasi/route.ts', 'utf8'));
   // DUA cabang GET, dua-duanya. Bentuk balasan yang berbeda tergantung ada
   // tidaknya parameter versi itu jebakan yang sudah pernah menggigit (bentuk T1).
   eq('AB32 kedua cabang GET memulangkan itemSsk',
      (rtA8.match(/ok: true, rows, itemSsk/g) || []).length, 2);
 
-  const shA8 = readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const shA8 = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
   ok('AB33 layar mengumpulkan itemSsk semua sumber',
      /setRealisasiAllItems\(results\.flatMap\(x => x\.itemSsk\)\)/.test(shA8));
   ok('AB34 dan mengopernya ke tab Cetak', /realisasiAllItems=\{realisasiAllItems\}/.test(shA8));
 
-  const ctA8 = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const ctA8 = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8'));
   ok('AB35 rekap dihitung dengan item SSK-nya',
      /hitungRekap\(realisasiAllRows, realisasiAllItems, bulanRekapPilih/.test(ctA8));
   ok('AB36 propnya wajib, bukan opsional', /realisasiAllItems: ItemSskAktif\[\];/.test(ctA8));
   // Tetap SEKALI dihitung — yang diunduh wajib memuat angka yang sama dengan layar.
   eq('AB37 hitungRekap tetap dipanggil sekali', (ctA8.match(/hitungRekap\(/g) || []).length, 1);
 
-  const rlA8 = readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
+  const rlA8 = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8'));
   ok('AB38 spanduk yatim lewat laporanYatim', /laporanYatim\(realisasiRows, cidAktif, 12\)/.test(rlA8));
   // Saringan daftar canonical-nya SAMA dengan yang dipakai hidrasi & server.
   ok('AB39 daftar canonical-nya dari petaHidrasi',
@@ -1614,7 +1604,7 @@ console.log('\n-- AC. Rekap boleh dicetak sebelum ada realisasi, dengan syarat -
      !aoaAda.some(r => String(r[0] ?? '').includes('belum dimasukkan')));
 
   // -- Statis: layar & PDF ikut, dan catatannya TIDAK dikecualikan dari cetak
-  const exAC = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const exAC = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8'));
   eq('AC14 catatannya dipakai Excel DAN PDF',
      (exAC.match(/catatanTanpaRealisasi\(/g) || []).length, 3);   // 1 definisi + 2 pemakai
 
@@ -1696,7 +1686,7 @@ console.log('\n-- AD. A9: daftar calon versi lengkap, angkanya yang disaring --'
      pilihVersiAgregat(daftar).versi?.seq, Number(pickVersiAktif(daftar)?.versi_seq));
 
   // -- Keempat kueri: calon TANPA saringan, angka DENGAN saringan ------------
-  const dk = readFileSync('lib/data/kinerja.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const dk = bersihkanKomentar(readFileSync('lib/data/kinerja.ts', 'utf8'));
   // Blok kueri yang mengelompokkan per versi tidak boleh lagi menyaring di WHERE.
   const grup = dk.split('GROUP BY').length - 1;
   ok('AD16 tidak ada lagi WHERE ber-is_nullified di kueri pemilih versi',
@@ -1733,7 +1723,7 @@ console.log('\n-- AD. A9: daftar calon versi lengkap, angkanya yang disaring --'
      /versi: VersiAktifKinerja;/.test(dk));
 
   // -- Nol yang tidak dijelaskan adalah jebakan berikutnya ------------------
-  const exAD = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const exAD = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8'));
   eq('AD23 catatannya dipakai Excel DAN PDF',
      (exAD.match(/catatanDinolkan\(/g) || []).length, 3);   // 1 definisi + 2 pemakai
   const aoaNol = rekapAoa({
@@ -1785,7 +1775,7 @@ console.log('\n-- AD. A9: daftar calon versi lengkap, angkanya yang disaring --'
   ok('AD37 Beranda menyebutnya juga', /kpi\?\.sumber_dinolkan\?\.length/.test(dtAD));
   ok('AD38 dan menunjukkan jalan keluarnya', dtAD.includes('Pengaturan → Reset'));
 
-  const kcAD = readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const kcAD = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
   ok('AD39 benderanya dibaca dari balasan server, bukan ditebak dari itemSsk kosong',
      /dinolkan: j\.versi\?\.dinolkan === true/.test(kcAD) && !/itemSsk\.length === 0/.test(kcAD));
   ok('AD40 dan dioper ke layar Cetak', /sumberDinolkan=\{sumberDinolkan\}/.test(kcAD));
@@ -1925,7 +1915,7 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   eq('AE27 jumlah baris kop tidak bergeser', REKAP_JUDUL_BARIS, 6);
   eq('AE28 header tetap tepat di bawah kop', aoaMurni[REKAP_JUDUL_BARIS][0], 'No');
 
-  const exAE = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const exAE = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8'));
   // Excel DAN PDF: dua nama berkas, dua kop -- dihitung kemunculannya supaya
   // memperbaiki satu saja tidak lolos (L82c).
   // Kedua pengekspor memakai penamaan yang SAMA — dua templat nama berkas yang
@@ -1947,7 +1937,7 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   ok('AE34 versinya tampil di bilah alat DAN di kop yang tercetak',
      (ctAE.match(/\{ringkasVersi\}/g) || []).length === 2);
 
-  const kcAE = readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const kcAE = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
   ok('AE35 bawaannya "berlaku" — jawaban benar tanpa memilih apa pun',
      /useState<PilihanVersiRekap>\('berlaku'\)/.test(kcAE));
   ok('AE36 versi murni DIRESOLUSI dari daftar versi, bukan MURNI-0 mati',
@@ -1962,7 +1952,7 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
 
   // Cabang "versi diminta eksplisit" WAJIB ikut melaporkan `dinolkan`, kalau
   // tidak spanduk A9 diam persis saat versi yang habis dinol-kan dipilih.
-  const rtAE = readFileSync('app/api/kinerja/realisasi/route.ts', 'utf8').replace(/^[ \t]*\/\/.*$/gm, '');
+  const rtAE = bersihkanKomentar(readFileSync('app/api/kinerja/realisasi/route.ts', 'utf8'));
   ok('AE40 cabang versi-eksplisit ikut membawa bendera dinolkan',
      /versi: \{ tipe: versiTipe, seq: versiSeq, dinolkan \}/.test(rtAE));
   ok('AE41 benderanya datang dari kueri yang sama dengan itemnya, bukan kueri kedua',
@@ -2071,6 +2061,37 @@ console.log('\n-- AF. Perbaikan hasil audit: label tidak boleh berbohong --');
   ok('AF28 bendera A9 di cermin klien wajib, bukan opsional',
      /versi_dinolkan: boolean;/.test(tyAF) && !/versi_dinolkan\?: /.test(tyAF)
      && /sumber_dinolkan: SumberSSK\[\];/.test(tyAF));
+}
+
+console.log('\n-- AG. Penyaring komentar: satu bentuk untuk seluruh suite --');
+
+{
+  // Pemeriksaan "tidak boleh ada lagi" membaca berkas sebagai TEKS, jadi ia tak
+  // bisa membedakan kode dari komentar. Selama penyaringnya cuma membuang
+  // komentar BARIS, satu JSDoc yang MENYEBUT bentuk terlarang melahirkan dua
+  // akibat: tes gagal padahal kodenya benar, atau — lebih buruk — pemeriksaan
+  // "harus ADA" lulus karena menemukannya di dalam prosa.
+  const contoh = [
+    '/** Dulu memakai terlarang(); jangan lagi. */',
+    '  // terlarang() sudah dibuang',
+    'const b = terlarang();',
+    "const url = 'https://a.b'; // ekor",
+  ].join('\n');
+  const bersih = bersihkanKomentar(contoh);
+  eq('AG1 komentar blok dan komentar baris dibuang',
+     (bersih.match(/terlarang\(\)/g) || []).length, 1);
+  ok('AG2 dan yang tersisa memang kodenya', /const b = terlarang\(\);/.test(bersih));
+
+  // Komentar EKOR sengaja DIBIARKAN: `//` juga hidup di dalam string (URL) dan
+  // regex, jadi membuangnya merusak kode yang sah. Batasnya dituliskan di sini
+  // supaya yang berikutnya tahu itu pilihan, bukan kelalaian.
+  ok('AG3 komentar ekor dibiarkan, dan URL di depannya utuh',
+     bersih.includes("'https://a.b'; // ekor"));
+
+  // Anti-kambuh: seluruh suite lewat satu pintu.
+  eq('AG4 hanya penolong ini yang menyaring komentar di suite ini',
+     (readFileSync('scripts/test-kinerja-rekap.mts', 'utf8')
+       .match(/\.replace\(\/\^\[ /g) || []).length, 1);
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);
