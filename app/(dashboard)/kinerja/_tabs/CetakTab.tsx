@@ -9,7 +9,7 @@ import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import SoftSelect from '@/components/ui/SoftSelect';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
-import { Printer } from 'lucide-react';
+import { ChevronDown, Printer } from 'lucide-react';
 import type { SumberSSK, RealRow } from '../_types';
 import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS } from '../_utils';
 import { hitungRekap, bulanTersedia, type ItemSskAktif } from '@/lib/kinerja/rekap';
@@ -265,10 +265,13 @@ export default function CetakTab({
                 />
                 <div style={{ position:'relative' }}>
                   <button type="button" onClick={() => setBukaPilihan(v => !v)}
-                    style={{ padding:'7px 14px', borderRadius:'8px', fontSize:'11px', fontWeight:700, cursor:'pointer',
+                    aria-haspopup="true" aria-expanded={bukaPilihan}
+                    style={{ display:'inline-flex', alignItems:'center', gap:'6px',
+                      padding:'7px 14px', borderRadius:'8px', fontSize:'11px', fontWeight:700, cursor:'pointer',
                       border:`1.5px solid ${bundelSumber.length ? '#0891b2' : cBorder}`, color: bundelSumber.length ? '#0891b2' : cTextSub,
                       background: isLight?'#FFFFFF':'rgba(4,44,83,.6)' }}>
-                    {bundelSumber.length === 0 ? 'Sertakan detail…' : `Detail: ${bundelSumber.length} sumber`} ▾
+                    {bundelSumber.length === 0 ? 'Sertakan detail…' : `Detail: ${bundelSumber.length} sumber`}
+                    <ChevronDown size={12} style={{ transition:'transform .2s', transform: bukaPilihan ? 'rotate(180deg)' : 'none', flexShrink:0 }} />
                   </button>
                   {bukaPilihan && (
                     <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, zIndex:30, minWidth:'250px',
