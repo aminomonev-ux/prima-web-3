@@ -4,7 +4,7 @@
 // View-only tab: read realisasiRows + realisasiAllRows dari shell via props.
 // State lokal: cetakView, cetakBulan, rekapBulan, rekapDepth (filter UI).
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import SoftSelect from '@/components/ui/SoftSelect';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -88,6 +88,24 @@ export default function CetakTab({
   const [bundelSumber, setBundelSumber] = useState<SumberSSK[]>([]);
   const [bundelBulan,  setBundelBulan]  = useState<'ikut'|'semua'|number>('ikut');
   const [bukaPilihan,  setBukaPilihan]  = useState(false);
+  const pilihanRef = useRef<HTMLDivElement>(null);
+
+  // Pola penutupan dropdown se-repo (OpsiDropdown, SoftSelect): klik di luar +
+  // Escape. Panelnya bersarang di wrapper yang sama dengan tombolnya, jadi satu
+  // ref cukup — tidak ada portal yang harus diperiksa terpisah.
+  useEffect(() => {
+    if (!bukaPilihan) return;
+    const klikLuar = (e: MouseEvent) => {
+      if (!pilihanRef.current?.contains(e.target as Node)) setBukaPilihan(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setBukaPilihan(false); };
+    document.addEventListener('mousedown', klikLuar);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', klikLuar);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [bukaPilihan]);
 
   // Rekap dihitung SEKALI di sini, dipakai bilah alat (unduh) DAN tabel. Dua
   // pemanggilan = dua jawaban kalau salah satunya kelewat disesuaikan, dan yang
@@ -263,7 +281,7 @@ export default function CetakTab({
                     { value: 'full',        label: 'Termasuk Rekening Belanja' },
                   ]}
                 />
-                <div style={{ position:'relative' }}>
+                <div ref={pilihanRef} style={{ position:'relative' }}>
                   <button type="button" onClick={() => setBukaPilihan(v => !v)}
                     aria-haspopup="true" aria-expanded={bukaPilihan}
                     style={{ display:'inline-flex', alignItems:'center', gap:'6px',
