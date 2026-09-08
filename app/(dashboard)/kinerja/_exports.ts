@@ -569,13 +569,32 @@ export function tulisSheetDetailPerBulan(
   }
 }
 
-export async function exportRealisasiExcel(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string }) {
+/**
+ * Bulan yang ikut ke berkas. `bulan` dikirim pemanggil supaya berkasnya memuat
+ * bulan yang SAMA dengan yang dilihat di layar — dulu daftarnya dihitung sendiri
+ * di sini (`bulanBerdata(rows)`), jadi memilih Januari di layar Cetak tetap
+ * mengunduh dua belas bulan tanpa satu tanda pun. Tanpa argumen = seluruh bulan
+ * berdata, perilaku lama untuk tab Realisasi yang memang mengekspor setahun.
+ */
+function lingkupBulan(rows: RealRow[], bulan?: number[]) {
+  const dipakai = bulan ?? bulanBerdata(rows);
+  return { dipakai, baris: rows.filter(r => dipakai.includes(r.bulan)) };
+}
+
+/** Bulan disebut di nama berkas hanya kalau dipilih satu — dua unduhan bulan berbeda tidak boleh bernama sama. */
+function namaBerkasRealisasi(sumber: SumberSSK, tahun: string, bulan: number[], ekstensi: 'xlsx' | 'pdf') {
+  const imbuhan = bulan.length === 1 ? `${CRR_BULAN_LABELS[bulan[0] - 1]}-` : '';
+  return `Realisasi-${sumber}-${imbuhan}${tahun}.${ekstensi}`;
+}
+
+export async function exportRealisasiExcel(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string; bulan?: number[] }) {
   const { rows, sumber, tahun } = params;
+  const { dipakai, baris } = lingkupBulan(rows, params.bulan);
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
-  tulisSheetDetailPerBulan(wb.addWorksheet(sumber), rows, sumber, tahun, bulanBerdata(rows));
-  tulisSheetData(wb, rows, sumber);
-  await downloadWorkbook(wb, `Realisasi-${sumber}-${tahun}.xlsx`);
+  tulisSheetDetailPerBulan(wb.addWorksheet(sumber), baris, sumber, tahun, dipakai);
+  tulisSheetData(wb, baris, sumber);
+  await downloadWorkbook(wb, namaBerkasRealisasi(sumber, tahun, dipakai, 'xlsx'));
 }
 
 /**
@@ -591,12 +610,13 @@ export function tulisSheetData(wb: import('exceljs').Workbook, rows: RealRow[], 
   addSheetFromAoa(ws, [DETAIL_HEADER, ...realisasiAoa(rows)], { colWidths: DETAIL_LEBAR, numFmts: DETAIL_FMT });
 }
 
-export async function exportRealisasiPdf(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string }) {
+export async function exportRealisasiPdf(params: { rows: RealRow[]; sumber: SumberSSK; tahun: string; bulan?: number[] }) {
   const { rows, sumber, tahun } = params;
+  const { dipakai, baris } = lingkupBulan(rows, params.bulan);
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
-  gambarDetailPdf(doc, autoTable, rows, sumber, tahun, bulanBerdata(rows), false);
-  doc.save(`Realisasi-${sumber}-${tahun}.pdf`);
+  gambarDetailPdf(doc, autoTable, baris, sumber, tahun, dipakai, false);
+  doc.save(namaBerkasRealisasi(sumber, tahun, dipakai, 'pdf'));
 }
 
 // ─── CRR ──────────────────────────────────────────────────────────────────────

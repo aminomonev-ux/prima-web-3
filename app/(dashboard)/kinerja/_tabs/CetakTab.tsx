@@ -191,9 +191,12 @@ export default function CetakTab({
     color:cTextPrimary, textAlign: align, verticalAlign:'middle',
   });
 
-  // Export wrappers (pure call to _exports.ts)
-  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun });
-  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun });
+  // Export wrappers (pure call to _exports.ts). `bulanTampil` dioper supaya
+  // berkasnya memuat bulan yang SAMA dengan tabel di layar — Print sudah begitu
+  // sejak awal (ia mencetak DOM), jadi tanpa ini tiga tombol di satu bilah
+  // berbeda pendapat soal bulan mana yang dimaksud.
+  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: bulanTampil });
+  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: bulanTampil });
 
   return (
     <div id="cetak-area" style={{ padding:'20px' }}>
