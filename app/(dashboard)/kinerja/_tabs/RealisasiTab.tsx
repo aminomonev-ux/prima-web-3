@@ -302,8 +302,11 @@ export default function RealisasiTab({
     } finally { setSaving(false); }
   }
 
-  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun });
-  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun });
+  // Layar ini menyunting SATU bulan, jadi unduhannya bulan itu juga — dulu ia
+  // mengekspor setahun sementara tabel di bawahnya cuma memperlihatkan sebulan,
+  // dan tidak ada apa pun di berkasnya yang menyebutkan bedanya.
+  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: [realisasiBulan] });
+  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: [realisasiBulan] });
 
   // ─── Render ──────────────────────────────────────────────────────────────
   const bulanRowsWithIdx = realisasiRows
@@ -399,8 +402,8 @@ export default function RealisasiTab({
               onClick={() => saveRealisasi()} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
             </PrimaButton></Tip>
-            <DownloadButton variant="excel" label="Excel" onClick={doExportRealisasiExcel} />
-            <DownloadButton variant="pdf" label="PDF" onClick={doExportRealisasiPdf} />
+            <DownloadButton variant="excel" label="Excel" onClick={doExportRealisasiExcel} disabled={bulanRowsWithIdx.length === 0} />
+            <DownloadButton variant="pdf" label="PDF" onClick={doExportRealisasiPdf} disabled={bulanRowsWithIdx.length === 0} />
           </div>
         )}
       </div>

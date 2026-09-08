@@ -172,9 +172,18 @@ export default function CetakTab({
   }
   const bulanAda = Object.keys(grouped).map(Number).sort((a,b) => a-b);
 
-  const bulanTampil = cetakBulan === 'semua'
+  // Pilihan bulan itu milik SUMBER yang sedang dibuka — memilih Februari di GAJI
+  // lalu pindah ke BLUD (yang cuma punya Januari) meninggalkan angka 2 yang tidak
+  // ada di daftar bulan mana pun: pemilihnya jatuh ke placeholder "—" dan tabelnya
+  // kosong, padahal sumbernya berdata. Diturunkan, BUKAN disetel ulang lewat efek —
+  // efek baru berjalan setelah satu render memakai nilai basi, dan gampang
+  // berkelahi dengan pilihan yang baru saja ditekan orangnya.
+  const bulanEfektif = typeof cetakBulan === 'number' && bulanAda.includes(cetakBulan)
+    ? cetakBulan
+    : 'semua';
+  const bulanTampil = bulanEfektif === 'semua'
     ? bulanAda
-    : bulanAda.filter(b => b === cetakBulan);
+    : bulanAda.filter(b => b === bulanEfektif);
 
   // Table columns definition
   const tHead = ['No','Uraian Kegiatan','Pagu (Rp)','Target Fisik','Real Fisik','% Fisik',
@@ -362,7 +371,7 @@ export default function CetakTab({
           </div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center' }}>
             <SoftSelect
-              value={typeof cetakBulan === 'number' ? cetakBulan : 'semua'}
+              value={bulanEfektif}
               onChange={(v) => setCetakBulan(v === 'semua' ? 'semua' : Number(v))}
               minWidth={150}
               options={[
@@ -373,8 +382,8 @@ export default function CetakTab({
             <PrimaButton variant="primary" iconLeft={<Printer size={14} />} onClick={() => window.print()}>
               Print
             </PrimaButton>
-            <DownloadButton variant="excel" label="Excel" onClick={doExportRealisasiExcel} />
-            <DownloadButton variant="pdf" label="PDF" onClick={doExportRealisasiPdf} />
+            <DownloadButton variant="excel" label="Excel" onClick={doExportRealisasiExcel} disabled={bulanTampil.length === 0} />
+            <DownloadButton variant="pdf" label="PDF" onClick={doExportRealisasiPdf} disabled={bulanTampil.length === 0} />
           </div>
         </div>
       </div>
