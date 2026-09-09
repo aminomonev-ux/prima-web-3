@@ -1,6 +1,6 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1 & 2 DIKERJAKAN 2026-09-09 — menunggu verifikasi peramban.** Ditulis &
+> Status: **Tahap 1 & 2 SELESAI & TERVERIFIKASI 2026-09-09.** Berikutnya Tahap 3. Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -1707,12 +1707,52 @@ nol migrasi, nol tabel, nol endpoint baru.
 
 **Yang BELUM diverifikasi, dan sengaja tidak saya paksakan**: langkah "di peramban"
 dengan akun sungguhan. Itu butuh memasukkan kata sandi ke form login, dan saya tidak
-melakukannya. Daftar periksanya diserahkan ke pemilik aplikasi — empat hal: mengetik URL
-modul yang dimatikan harus mendarat di `/maintenance`; menurunkan peran akun uji yang
-sedang login harus membuatnya **tetap masuk** dengan peran baru berlaku setelah keepalive
-(bukan terlempar ke `/login`); menonaktifkan akun yang sedang login harus
-menghentikannya saat itu juga; mengaktifkan akun ke peran berkuota penuh harus dijawab
-409.
+melakukannya.
+
+**VERIFIKASI PERAMBAN — dilakukan 2026-09-09**, pemilik aplikasi yang login (akun
+`uji.program`, peran PROGRAM, di panel peramban), saya yang menjalankan langkahnya.
+Tiga dari empat pemeriksaan LULUS; yang keempat dilewati karena penyiapannya tidak
+sepadan.
+
+**1. Sakelar menutup (A1) — LULUS.** Mengetik `/usulan-kebutuhan` langsung mendarat di
+`/maintenance?app=Usulan%20Kebutuhan`. Lapis API-nya diuji dari dalam sesi yang sama —
+`/api/usulan` dan `/api/usulan/kpi` dua-duanya **503** dengan kalimat "Modul ini sedang
+dimatikan admin untuk pemeliharaan", sementara `/api/perjanjian-kinerja/units` tetap
+**200** pada sesi yang persis sama. Itu membuktikan pagarnya per-modul, bukan
+selimut — dan bahwa dua handler berbeda di satu modul sama-sama tertutup, bukan cuma
+yang pertama.
+
+Ikut terbukti tanpa direncanakan: sebelum akun uji login, sesi **SUPER_ADMIN** membuka
+halaman Usulan itu dengan normal walau sakelarnya sudah mati. `PERAN_TEMBUS_SAKELAR`
+bekerja — orang yang mematikan modul tidak mengunci dirinya sendiri di luar (S1).
+
+Dan satu bukti tak terduga untuk Fase B: `/api/blud/dpa` menjawab **200** untuk peran
+PROGRAM, yang **tidak** ada di `peranBawaan` BLUD — akun itu memang punya
+`app_access: ['blud']`. Jadi jalur grant masih membuka pintu sesudah kedelapan
+`is*Role` diganti `bolehMasukModul`. Tabel kebenaran sudah mengatakannya; sekarang
+aplikasi yang sedang berjalan mengatakan hal yang sama.
+
+**2. Ubah peran tidak mengusir (A2) — LULUS**, dan diuji bolak-balik. Peran
+`uji.program` diubah PROGRAM → KEUANGAN **langsung di DB** (bukan lewat API, supaya
+yang teruji betul-betul penyegaran perannya). Satu `POST /api/auth/keepalive` dijawab
+**200** — sesinya hidup, tidak ada yang dilempar ke `/login`. Sesudah itu
+`/api/perjanjian-kinerja/units` berubah dari **200 → 403**: KEUANGAN memang tidak ada
+di `peranBawaan` PK. Peran dikembalikan, keepalive sekali lagi, dan jawabannya kembali
+**200** — jadi ini penyegaran dua arah, bukan kunci satu arah.
+
+**3. Nonaktif memutus seketika (A3) — LULUS**, dan ini yang paling sulit dibuktikan
+tanpa sesi sungguhan. Status diubah jadi `NONAKTIF` **langsung di DB**, tanpa satu pun
+sesi dicabut — persis kasus L69 yang jaring kedua di `getSession` dipasang untuknya.
+Permintaan berikutnya: API modul **401**, keepalive **401**, halaman `/menu`
+dialihkan. Tidak ada jeda.
+
+**4. Kuota saat mengaktifkan (A4) — DILEWATI.** Perlu menyiapkan satu peran sampai
+kuotanya penuh; dari keempatnya ini yang paling kecil akibatnya kalau salah (satu akun
+kelebihan, bukan pintu terbuka) dan sudah dijaga uji mutasi. Data uji dikembalikan
+seluruhnya: `uji.program` kembali PROGRAM/AKTIF, `app_status_usulan_aset` kembali
+`online`.
+
+---
 
 **Catatan untuk yang menguji di komputer dev**: `app_status_dashboard` di basis data itu
 bernilai `maintenance` sejak 2026-08-03. Sebelum Tahap 1 nilai itu tidak berefek; mulai
