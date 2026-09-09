@@ -41,6 +41,8 @@ import { AntrianPanel } from './_panels/AntrianPanel';
 import { DataUsulanPanel } from './_panels/DataUsulanPanel';
 // KelolaUserPanel: usePaginatedList + tabel besar — diakses ADMIN only.
 const KelolaUserPanel = dynamic(() => import('./_panels/KelolaUserPanel').then(m => ({ default: m.KelolaUserPanel })), { ssr: false });
+// Berkas daun (nol impor server), jadi aman diimpor langsung walau panelnya dinamis.
+import { segarkanStatKuota } from '@/components/admin/PilihPeran';
 import { SemuaPanel } from './_panels/SemuaPanel';
 import { MilikPanel } from './_panels/MilikPanel';
 // HapusUsulanPanel: SUPER_ADMIN only — sangat jarang.
@@ -907,6 +909,10 @@ export default function UsulanClient({ userId, role, username, themePreference }
       method: 'PATCH',
       body: JSON.stringify({ id: uid, action: 'ubah-role', role }),
     });
+    // Konfirmasinya sudah ditanyakan `KelolaUserPanel` lewat komponen bersama (D1/T-8);
+    // di sini tinggal menulis. Angka kuota di dropdown dibuang cache-nya supaya penanda
+    // `(n/max)` ikut bergeser tanpa perlu memuat ulang halaman.
+    segarkanStatKuota();
     if (d.ok) { showToast(d.message || 'Role diubah.', false); fetchUsers(userPage); }
     else { showToast(d.message || 'Gagal ubah role.'); fetchUsers(userPage); }
   }
@@ -1952,6 +1958,7 @@ export default function UsulanClient({ userId, role, username, themePreference }
                 page={userPage} totalPages={userPages} total={userTotal}
                 setPage={fetchUsers}
                 doChangeRole={doChangeRole}
+                isSA={role === 'SUPER_ADMIN'}
                 isLight={isLight}
               />
             )}

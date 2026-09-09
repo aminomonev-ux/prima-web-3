@@ -22,6 +22,8 @@
 //      kartu `/menu` — dan hanya selama sakelarnya memang mati.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { MessageSquare, ShieldCheck, ShieldAlert, Save, X } from 'lucide-react';
+import { toast } from 'sonner';
+import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { SAKELAR_INFO, formatSampai } from '@/lib/registry/apps';
 import { type AppStatus } from './_shared';
@@ -36,8 +38,6 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
   const [pesan,  setPesan]  = useState<Teks>({});
   const [sampai, setSampai] = useState<Teks>({});
   const [loading, setLoad]  = useState(false);
-  const [ok, setOk]         = useState('');
-  const [err, setErr]       = useState('');
   // Kunci sakelar yang panel pesannya sedang dibuka, beserta isian yang belum disimpan.
   const [draf, setDraf]     = useState<Record<string, Draf>>({});
 
@@ -58,13 +58,16 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
   );
 
   async function kirim(kunci: string, body: Record<string, string>, kabar: string) {
-    setLoad(true); setErr('');
+    setLoad(true);
     const r = await fetchJson('/api/admin/app-status', {
       method: 'POST', body: JSON.stringify({ key: kunci, ...body }),
     });
     setLoad(false);
-    if (r.ok) { setOk(kabar); await load(); }
-    else { setErr((r as { message?: string }).message ?? 'Gagal menyimpan.'); await load(); }
+    // Hasil aksi lewat toast; yang BERTAHAN (lantai peran) tetap spanduk sebaris.
+    // Pesan yang menghilang sendiri tidak boleh dipakai menjelaskan kenapa sebuah
+    // tombol mati — orangnya akan menatap tombol mati tanpa keterangan.
+    if (r.ok) { toast.success(kabar); await load(); }
+    else { toast.error((r as { message?: string }).message ?? 'Gagal menyimpan.'); await load(); }
   }
 
   async function toggle(kunci: string, label: string) {
@@ -89,10 +92,8 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
 
   return (
     <div>
-      {ok  && <div className="msg-ok"  style={{marginBottom:12}}>{ok}</div>}
-      {err && <div className="msg-err" style={{marginBottom:12}}>{err}</div>}
       <div className="ap-section-title">SAKELAR APLIKASI</div>
-      {!isSA && <div className="msg-err" style={{marginBottom:12}}>Hanya SUPER_ADMIN yang dapat mengubah status aplikasi.</div>}
+      {!isSA && <div className="ap-sk-ingat">Hanya SUPER_ADMIN yang dapat mengubah status aplikasi.</div>}
 
       {tanpaPesan.length > 0 && (
         <div className="ap-sk-ingat">
@@ -156,9 +157,10 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                     <div className="ap-sk-sampai">Diperkirakan selesai {formatSampai(sampai[s.kunci] ?? '')}</div>
                   )}
                   {bolehIsi && (
-                    <button className="ap-btn ap-btn-cyan" style={{marginTop:8}} type="button" onClick={()=>bukaDraf(s.kunci)}>
-                      <MessageSquare size={12}/> {pesan[s.kunci] ? 'UBAH KETERANGAN' : 'TULIS KETERANGAN'}
-                    </button>
+                    <PrimaButton variant="ghost" size="sm" style={{marginTop:8}}
+                      iconLeft={<MessageSquare size={12}/>} onClick={()=>bukaDraf(s.kunci)}>
+                      {pesan[s.kunci] ? 'UBAH KETERANGAN' : 'TULIS KETERANGAN'}
+                    </PrimaButton>
                   )}
                 </div>
               )}
@@ -183,12 +185,10 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                     />
                   </div>
                   <div className="ap-row" style={{marginTop:10}}>
-                    <button className="ap-btn ap-btn-green" type="button" disabled={loading} onClick={()=>simpanDraf(s.kunci, s.label)}>
-                      <Save size={12}/> SIMPAN
-                    </button>
-                    <button className="ap-btn ap-btn-cyan" type="button" onClick={()=>tutupDraf(s.kunci)}>
-                      <X size={12}/> BATAL
-                    </button>
+                    <PrimaButton variant="primary" size="sm" iconLeft={<Save size={12}/>}
+                      disabled={loading} onClick={()=>simpanDraf(s.kunci, s.label)}>SIMPAN</PrimaButton>
+                    <PrimaButton variant="ghost" size="sm" iconLeft={<X size={12}/>}
+                      onClick={()=>tutupDraf(s.kunci)}>BATAL</PrimaButton>
                     <span className="ap-sk-hitung">{d.pesan.length}/{PESAN_MAKS}</span>
                   </div>
                 </div>

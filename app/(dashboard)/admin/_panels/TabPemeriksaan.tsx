@@ -9,6 +9,7 @@
 // tahu kenapa. Yang aman diperbaiki mesin (grant mubazir) pun tetap diserahkan ke
 // manusia — kalau tidak, layar ini berhenti bisa dipercaya sebagai laporan.
 import { RefreshCw, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
+import PrimaButton from '@/components/ui/PrimaButton';
 import type { Temuan } from '@/lib/admin/pemeriksaan';
 
 const IKON = {
@@ -36,13 +37,16 @@ export function TabPemeriksaan(
         <div className="ap-section-title" style={{margin:0,border:'none',padding:0}}>PEMERIKSAAN MANDIRI</div>
         <div className="ap-row" style={{gap:10}}>
           {jam && <span className="ap-pm-jam">data per {jam}</span>}
-          <button className="ap-btn ap-btn-cyan" type="button" onClick={onMuat} disabled={loading}>
-            <RefreshCw size={12}/> {loading?'MEMERIKSA…':'PERIKSA ULANG'}
-          </button>
+          <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={onMuat} disabled={loading}>
+            {loading ? 'MEMERIKSA…' : 'PERIKSA ULANG'}
+          </PrimaButton>
         </div>
       </div>
 
-      {err && <div className="msg-err" style={{marginBottom:12}}>{err}</div>}
+      {/* Tetap sebaris, BUKAN toast: kalau pemuatannya gagal, layarnya kosong — dan
+          pesan yang menghilang sendiri membuat orang menatap halaman kosong tanpa tahu
+          kenapa. Toast untuk yang lewat, spanduk untuk yang bertahan. */}
+      {err && <div className="ap-sk-ingat" style={{marginBottom:12}}>{err}</div>}
 
       {!err && temuan.length > 0 && (
         <div className={perluDilihat ? 'ap-sk-ingat' : 'ap-pm-bersih'}>

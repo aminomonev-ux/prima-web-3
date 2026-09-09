@@ -38,12 +38,12 @@ interface PromotionRow {
 }
 
 const STATUS_COLORS: Record<Status, { color: string; bg: string; label: string }> = {
-  PENDING:   { color: '#BA7517', bg: 'rgba(186,117,23,0.15)', label: 'Pending' },
-  COOLDOWN:  { color: '#7C5CFC', bg: 'rgba(124,92,252,0.15)', label: 'Cooldown' },
-  COMPLETED: { color: '#1D9E75', bg: 'rgba(29,158,117,0.15)', label: 'Completed' },
-  REJECTED:  { color: '#E24B4A', bg: 'rgba(226,75,74,0.15)',  label: 'Rejected' },
-  EXPIRED:   { color: '#8A8A95', bg: 'rgba(138,138,149,0.15)', label: 'Expired' },
-  CANCELLED: { color: '#8A8A95', bg: 'rgba(138,138,149,0.15)', label: 'Cancelled' },
+  PENDING:   { color: 'var(--ap-warn)', bg: 'rgba(186,117,23,0.15)', label: 'Pending' },
+  COOLDOWN:  { color: 'var(--ap-aksen)', bg: 'var(--ap-aksen-bg2)', label: 'Cooldown' },
+  COMPLETED: { color: 'var(--ap-ok)', bg: 'rgba(29,158,117,0.15)', label: 'Completed' },
+  REJECTED:  { color: 'var(--ap-bad-fg)', bg: 'rgba(226,75,74,0.15)',  label: 'Rejected' },
+  EXPIRED:   { color: 'var(--ap-dim)', bg: 'var(--ap-line-tipis)', label: 'Expired' },
+  CANCELLED: { color: 'var(--ap-dim)', bg: 'var(--ap-line-tipis)', label: 'Cancelled' },
 };
 
 function StatusBadge({ s }: { s: Status }) {
@@ -155,8 +155,8 @@ export function PromotionRequestsPanel() {
             onClick={() => setTab(t)}
             style={{
               padding: '6px 14px', borderRadius: 999, border: 0, cursor: 'pointer',
-              background: tab === t ? '#7C5CFC' : 'rgba(124,92,252,0.15)',
-              color: tab === t ? '#fff' : '#7C5CFC',
+              background: tab === t ? 'var(--ap-aksen)' : 'var(--ap-aksen-bg2)',
+              color: tab === t ? 'var(--ap-on-aksen)' : 'var(--ap-aksen)',
               fontSize: 12, fontWeight: 600, fontFamily: 'Inter, sans-serif',
             }}
           >
@@ -172,7 +172,7 @@ export function PromotionRequestsPanel() {
 
       {error && (
         <div style={{
-          background: 'rgba(226,75,74,0.15)', color: '#E24B4A',
+          background: 'rgba(226,75,74,0.15)', color: 'var(--ap-bad-fg)',
           padding: '10px 12px', borderRadius: 6, fontSize: 13, marginBottom: 12,
           border: '1px solid rgba(226,75,74,0.3)',
         }}>
@@ -185,29 +185,29 @@ export function PromotionRequestsPanel() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'rgba(124,92,252,0.08)' }}>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#85B7EB', fontWeight: 600 }}>Pemohon</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#85B7EB', fontWeight: 600 }}>From → To</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#85B7EB', fontWeight: 600 }}>Status</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: '#85B7EB', fontWeight: 600 }}>Submitted</th>
-              <th style={{ padding: '10px 12px', textAlign: 'right', color: '#85B7EB', fontWeight: 600 }}>Aksi</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Pemohon</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>From → To</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Status</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Submitted</th>
+              <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--ap-dim)', fontWeight: 600 }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && !loading && (
-              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#85B7EB' }}>Tidak ada permohonan.</td></tr>
+              <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--ap-dim)' }}>Tidak ada permohonan.</td></tr>
             )}
             {rows.map((r) => (
               <tr key={r.id} style={{ borderTop: '1px solid rgba(133,183,235,0.1)' }}>
                 <td style={{ padding: '10px 12px' }}>
                   <div style={{ fontWeight: 600 }}>{r.nama_lengkap ?? r.username}</div>
-                  <div style={{ fontSize: 11, color: '#85B7EB' }}>{r.username}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ap-dim)' }}>{r.username}</div>
                 </td>
                 <td style={{ padding: '10px 12px' }}>
                   {ROLE_LABELS[r.from_role] ?? r.from_role} → <b>{ROLE_LABELS[r.to_role] ?? r.to_role}</b>
-                  {r.is_bootstrap ? <span style={{ marginLeft: 6, fontSize: 10, color: '#BA7517' }}>(BOOTSTRAP)</span> : null}
+                  {r.is_bootstrap ? <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--ap-warn)' }}>(BOOTSTRAP)</span> : null}
                 </td>
                 <td style={{ padding: '10px 12px' }}><StatusBadge s={r.status} /></td>
-                <td style={{ padding: '10px 12px', fontSize: 12, color: '#85B7EB', whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--ap-dim)', whiteSpace: 'nowrap' }}>
                   {new Date(r.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 </td>
                 <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -235,41 +235,41 @@ export function PromotionRequestsPanel() {
           }}
         >
           <div style={{
-            background: '#042C53', borderRadius: 14, padding: 24,
-            width: '100%', maxWidth: 560, color: '#E6F1FB',
+            background: 'var(--ap-elev)', borderRadius: 14, padding: 24,
+            width: '100%', maxWidth: 560, color: 'var(--ap-fg)',
             border: '1px solid rgba(124,92,252,0.3)',
             maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
           }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 18 }}>Detail Permohonan #{selected.id}</h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 12px', fontSize: 13, marginBottom: 16 }}>
-              <span style={{ color: '#85B7EB' }}>Pemohon</span>
+              <span style={{ color: 'var(--ap-dim)' }}>Pemohon</span>
               <span><b>{selected.nama_lengkap ?? selected.username}</b> ({selected.username}){selected.email ? ` · ${selected.email}` : ''}</span>
 
-              <span style={{ color: '#85B7EB' }}>Upgrade</span>
+              <span style={{ color: 'var(--ap-dim)' }}>Upgrade</span>
               <span>{ROLE_LABELS[selected.from_role] ?? selected.from_role} → <b>{ROLE_LABELS[selected.to_role] ?? selected.to_role}</b></span>
 
-              <span style={{ color: '#85B7EB' }}>Status</span>
+              <span style={{ color: 'var(--ap-dim)' }}>Status</span>
               <span><StatusBadge s={selected.status} /></span>
 
-              <span style={{ color: '#85B7EB' }}>Submitted</span>
+              <span style={{ color: 'var(--ap-dim)' }}>Submitted</span>
               <span>{new Date(selected.created_at).toLocaleString('id-ID')}</span>
 
-              <span style={{ color: '#85B7EB' }}>IP</span>
+              <span style={{ color: 'var(--ap-dim)' }}>IP</span>
               <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{selected.ip_address ?? '-'}</span>
 
-              <span style={{ color: '#85B7EB', alignSelf: 'flex-start' }}>Alasan</span>
+              <span style={{ color: 'var(--ap-dim)', alignSelf: 'flex-start' }}>Alasan</span>
               <span style={{ whiteSpace: 'pre-wrap' }}>{selected.reason}</span>
 
               {selected.rejected_reason && (
                 <>
-                  <span style={{ color: '#85B7EB', alignSelf: 'flex-start' }}>Alasan tolak</span>
-                  <span style={{ color: '#E24B4A', whiteSpace: 'pre-wrap' }}>{selected.rejected_reason}</span>
+                  <span style={{ color: 'var(--ap-dim)', alignSelf: 'flex-start' }}>Alasan tolak</span>
+                  <span style={{ color: 'var(--ap-bad-fg)', whiteSpace: 'pre-wrap' }}>{selected.rejected_reason}</span>
                 </>
               )}
               {selected.approver_username && (
                 <>
-                  <span style={{ color: '#85B7EB' }}>Approver</span>
+                  <span style={{ color: 'var(--ap-dim)' }}>Approver</span>
                   <span>{selected.approver_username}</span>
                 </>
               )}
@@ -309,8 +309,8 @@ export function PromotionRequestsPanel() {
           }}
         >
           <div style={{
-            background: '#042C53', borderRadius: 14, padding: 24,
-            width: '100%', maxWidth: 440, color: '#E6F1FB',
+            background: 'var(--ap-elev)', borderRadius: 14, padding: 24,
+            width: '100%', maxWidth: 440, color: 'var(--ap-fg)',
             border: '1px solid rgba(226,75,74,0.3)',
             maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
           }}>
@@ -323,7 +323,7 @@ export function PromotionRequestsPanel() {
               placeholder="Alasan reject (min 10 karakter)…"
               style={{
                 width: '100%', padding: 10, borderRadius: 6,
-                background: '#020F1C', color: '#E6F1FB',
+                background: 'var(--ap-canvas)', color: 'var(--ap-fg)',
                 border: '1px solid rgba(133,183,235,0.2)', resize: 'vertical',
                 fontFamily: 'Inter, sans-serif', fontSize: 14, marginBottom: 12,
               }}

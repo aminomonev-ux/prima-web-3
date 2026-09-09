@@ -4,6 +4,7 @@
 // Dipecah dari admin-client.tsx — isinya tidak diubah, cuma dipindah.
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { fmtTs, type AuditRow } from './_shared';
 
@@ -50,7 +51,7 @@ export function TabAuditTrail() {
             {['LOGIN_SUCCESS','LOGIN_FAILED','LOGIN_BLOCKED','ACCOUNT_LOCKED','LOGOUT','SIGNUP','PASSWORD_RESET','SESSION_EXPIRED','BROADCAST','BRUTE_FORCE'].map(e=><option key={e} value={e}>{e}</option>)}
           </select>
           <input className="ap-input" style={{width:160}} placeholder="Filter username..." value={user} onChange={e=>setUser(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')load(1);}}/>
-          <button className="ap-btn ap-btn-cyan" onClick={()=>load(1)} disabled={loading}><RefreshCw size={12}/></button>
+          <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={()=>load(1)} disabled={loading} aria-label="Muat ulang jejak audit"/>
         </div>
       </div>
       <div className="ap-table-wrap">
@@ -58,16 +59,16 @@ export function TabAuditTrail() {
           <thead><tr><th>WAKTU</th><th>EVENT</th><th>USERNAME</th><th>IP</th><th>DETAIL</th></tr></thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'#5a8ea8'}}>LOADING...</td></tr>
+              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>LOADING...</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'#5a8ea8'}}>Tidak ada data</td></tr>
+              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>Tidak ada data</td></tr>
             ) : rows.map(r=>(
               <tr key={r.id}>
-                <td style={{fontSize:11,color:'#5a8ea8',whiteSpace:'nowrap'}}>{fmtTs(r.created_at)}</td>
+                <td style={{fontSize:11,color:'var(--ap-dim)',whiteSpace:'nowrap'}}>{fmtTs(r.created_at)}</td>
                 <td>{eventBadge(r.event_type)}</td>
-                <td style={{fontWeight:700,color:'#e0f7ff'}}>{r.username??'-'}</td>
-                <td style={{fontSize:11,fontFamily:"'JetBrains Mono',monospace",color:'#5a8ea8'}}>{r.ip_address??'-'}</td>
-                <td style={{fontSize:11,color:'#a0cfe0'}}>{r.detail??'-'}</td>
+                <td style={{fontWeight:700,color:'var(--ap-fg)'}}>{r.username??'-'}</td>
+                <td style={{fontSize:11,fontFamily:"'JetBrains Mono',monospace",color:'var(--ap-dim)'}}>{r.ip_address??'-'}</td>
+                <td style={{fontSize:11,color:'var(--ap-fg2)'}}>{r.detail??'-'}</td>
               </tr>
             ))}
           </tbody>
@@ -76,7 +77,7 @@ export function TabAuditTrail() {
       {pages > 1 && (
         <div style={{display:'flex',justifyContent:'center',gap:8,marginTop:12}}>
           <button className="ap-btn ap-btn-cyan" disabled={page<=1} onClick={()=>load(page-1)}><ChevronLeft size={12}/></button>
-          <span style={{fontSize:11,color:'#5a8ea8',alignSelf:'center'}}>Hal {page}/{pages}</span>
+          <span style={{fontSize:11,color:'var(--ap-dim)',alignSelf:'center'}}>Hal {page}/{pages}</span>
           <button className="ap-btn ap-btn-cyan" disabled={page>=pages} onClick={()=>load(page+1)}><ChevronRight size={12}/></button>
         </div>
       )}

@@ -181,7 +181,7 @@ export function RimaFeedbackPanel() {
         {intents.map(i => <option key={i} value={i} />)}
       </datalist>
 
-      {error && <div style={{ padding: 14, borderRadius: 8, background: 'rgba(226,75,74,0.12)', color: '#E24B4A', fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ padding: 14, borderRadius: 8, background: 'rgba(226,75,74,0.12)', color: 'var(--ap-bad-fg)', fontSize: 13 }}>{error}</div>}
       {!error && loading && <div style={{ padding: 24, color: 'var(--ma-dim)', fontSize: 13 }}>Memuat…</div>}
       {!error && !loading && rows.length === 0 && (
         <div style={{ padding: 24, color: 'var(--ma-dim)', fontSize: 13 }}>Tidak ada antrian label — semua feedback sudah diproses 🎉</div>
@@ -238,7 +238,7 @@ export function RimaFeedbackPanel() {
                         data-tooltip="Simpan label → dataset training"
                         style={{
                           padding: '5px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-                          background: '#1D9E75', color: '#fff', border: 'none',
+                          background: 'var(--ap-ok)', color: 'var(--ap-on-aksen)', border: 'none',
                         }}
                       >✓ Label</button>
                       <button

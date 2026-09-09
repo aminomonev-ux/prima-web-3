@@ -16,6 +16,10 @@ import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { ROLE_LABELS } from '@/lib/constants';
 import { MENU_APPS } from '@/lib/registry/menu-apps';
+// C4 — dari berkas DAUN. Aturan pintunya sama persis dengan yang dipakai Pusat Akses
+// dan pagar sungguhannya; yang ditampilkan di sini cuma pembacaannya untuk satu peran.
+import { barisPintu } from '@/lib/admin/pintu-akses';
+import { useStatKuota } from '@/components/admin/PilihPeran';
 
 type Izin = 'EDIT' | 'LIHAT' | 'TIDAK';
 type MenuInfo = {
@@ -289,6 +293,70 @@ function selisih(nilai: Record<string, Izin>, bawaan: Record<string, Izin>) {
 // dipakai tab Peran. Yang berbahaya adalah pintu TANPA sidik jari — itu tab Pengguna,
 // dan itu yang dimatikan.
 
+
+/**
+ * C4 — pintu modul milik sebuah PERAN, plus jumlah pemegang & kuotanya (§4.6).
+ *
+ * Menjawab pertanyaan yang selama ini cuma bisa dijawab dengan membaca delapan berkas:
+ * "peran KEUANGAN sebenarnya bisa masuk ke mana saja". Dihitung dari `barisPintu` yang
+ * SAMA dengan pagar sungguhannya, dengan `appAccess` KOSONG — jadi yang tampil memang
+ * "yang didapat peran ini tanpa satu pun pemberian akses".
+ *
+ * BACA-SAJA, dan itu bukan kekurangan melainkan seluruh maksudnya: baris peran TIDAK
+ * memberi akses. Pintu modul tetap `app_access` per orang. Perbedaan itu sudah ditulis
+ * di berkas ini sejak awal dan harus tetap terbaca — layar yang menawarkan saklar di
+ * sini akan membuat orang mengira sudah membuka pintu untuk satu peran penuh.
+ */
+function PintuPeran({ role, jumlahUser }: { role: string; jumlahUser: number | null }) {
+  const stat = useStatKuota().find(s => s.role === role);
+  const pintu = barisPintu(role, null);
+  const otomatis = pintu.filter(p => p.terbuka);
+  const perluGrant = pintu.filter(p => !p.terbuka && p.bisaDicentang);
+
+  const chip = (warna: 'ok' | 'diam') => ({
+    display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10.5, fontWeight: 700,
+    color: warna === 'ok' ? 'var(--ap-ok-fg)' : 'var(--ap-dim)',
+    background: warna === 'ok' ? 'var(--ap-ok-bg)' : 'var(--ap-line-tipis)',
+    border: `1px solid ${warna === 'ok' ? 'var(--ap-ok-line)' : 'var(--ap-line)'}`,
+  });
+
+  return (
+    <div style={{ padding: '12px 14px', marginBottom: 14, borderRadius: 8,
+      background: 'var(--ma-bg)', border: '1px solid var(--ma-line)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 9 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ma-dim)' }}>
+          Pintu modul peran {ROLE_LABELS[role] ?? role}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--ma-dim)', fontFamily: "'JetBrains Mono', monospace" }}>
+          {jumlahUser === null ? '—' : `${jumlahUser} pemegang aktif`}
+          {stat && stat.quota > 0 && ` · kuota ${stat.count}/${stat.quota}${stat.full ? ' (penuh)' : ''}`}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 7 }}>
+        {otomatis.length === 0
+          ? <span style={{ fontSize: 11, color: 'var(--ma-dim)', fontStyle: 'italic' }}>Tidak satu pun modul terbuka dengan sendirinya.</span>
+          : otomatis.map(p => <span key={p.kunci} style={chip('ok')}>{p.label}</span>)}
+      </div>
+      <div style={{ fontSize: 10.5, color: 'var(--ma-dim)', lineHeight: 1.6, marginBottom: perluGrant.length ? 9 : 0 }}>
+        Terbuka dengan sendirinya untuk peran ini.
+      </div>
+
+      {perluGrant.length > 0 && (
+        <>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 7 }}>
+            {perluGrant.map(p => <span key={p.kunci} style={chip('diam')}>{p.label}</span>)}
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--ma-dim)', lineHeight: 1.6 }}>
+            Tertutup — harus diberikan <b>per orang</b> di Pusat Akses. Baris peran di bawah
+            mengatur izin <b>di dalam</b> modul, bukan pintunya.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * Tab matriks per peran. SUPER_ADMIN tidak muncul di pilihan — barisnya dikunci supaya
  * tidak ada yang bisa mencabut akses dirinya sendiri lalu terkurung di luar.
@@ -330,10 +398,16 @@ export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
 
   return (
     <div style={{ maxWidth: 620 }}>
+      <PintuPeran role={roleAktif} jumlahUser={data?.scope === 'role' ? data.jumlahUser : null} />
+
+      {/* Kalimat ini sempat menunjuk "tombol MENU di tab User Management" — tab yang
+          dimatikan Tahap 5. Menyebut tombol yang tidak ada lagi menyuruh orang mencari
+          sesuatu yang tidak akan ditemukannya (L79d); pengganti yang benar bukan
+          menghapus kalimatnya, melainkan menyebut tempatnya yang sekarang. */}
       <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginBottom: 12, lineHeight: 1.7 }}>
         Aturan yang berlaku untuk semua orang dengan peran ini di modul {aplikasi.label}. Kalau
-        cuma satu orang yang perlu beda, atur lewat tombol <b style={{ color: 'var(--ma-aksen)' }}>MENU</b> di
-        tab User Management.
+        cuma satu orang yang perlu beda, atur di tab <b style={{ color: 'var(--ma-aksen)' }}>Pusat
+        Akses</b> — pilih orangnya, lalu buka daftar menu di bawah modulnya.
       </div>
 
       <PilihModul nilai={appKey} ubah={setAppKey} />

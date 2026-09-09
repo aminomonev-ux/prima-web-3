@@ -4,6 +4,7 @@
 // Dipecah dari admin-client.tsx — isinya tidak diubah, cuma dipindah.
 import { useState, useEffect, useCallback } from 'react';
 import { Shield, RefreshCw } from 'lucide-react';
+import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { APP_STATUS_LABELS, type AppStatus } from './_shared';
 
@@ -49,17 +50,17 @@ export function TabSecurityStatus() {
   const totalApps    = Object.keys(APP_STATUS_LABELS).length;
   const passedChecks = SEC_CHECKS.filter(c=>c.ok).length;
   const secLevel     = passedChecks === SEC_CHECKS.length ? 'AMAN' : passedChecks >= SEC_CHECKS.length*0.8 ? 'WASPADA' : 'BAHAYA';
-  const secColor     = secLevel==='AMAN' ? '#00ffc8' : secLevel==='WASPADA' ? '#ffcc00' : '#ff4466';
+  const secColor     = secLevel==='AMAN' ? 'var(--ap-ok-fg)' : secLevel==='WASPADA' ? 'var(--ap-warn-fg)' : 'var(--ap-bad-fg)';
 
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <div className="ap-section-title" style={{margin:0}}>SECURITY STATUS OVERVIEW</div>
-        <button className="ap-btn ap-btn-cyan" onClick={load} disabled={loading}><RefreshCw size={12}/> REFRESH</button>
+        <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>REFRESH</PrimaButton>
       </div>
 
       {/* Security Level Banner */}
-      <div style={{background:`rgba(${secColor==='#00ffc8'?'0,255,200':secColor==='#ffcc00'?'255,204,0':'255,68,102'},.06)`,
+      <div style={{background:`rgba(${secColor==='var(--ap-ok-fg)'?'0,255,200':secColor==='var(--ap-warn-fg)'?'255,204,0':'255,68,102'},.06)`,
         border:`1px solid ${secColor}40`,borderRadius:10,padding:'16px 24px',marginBottom:16,
         display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
         <div style={{display:'flex',alignItems:'center',gap:16}}>
@@ -69,18 +70,18 @@ export function TabSecurityStatus() {
             <Shield size={22} color={secColor}/>
           </div>
           <div>
-            <div style={{fontSize:11,color:'#5a8ea8',letterSpacing:2,marginBottom:2}}>SECURITY LEVEL</div>
+            <div style={{fontSize:11,color:'var(--ap-dim)',letterSpacing:2,marginBottom:2}}>SECURITY LEVEL</div>
             <div style={{fontSize:22,fontWeight:800,color:secColor,letterSpacing:3,fontFamily:"var(--font-jakarta),sans-serif"}}>{secLevel}</div>
           </div>
         </div>
         <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
-          {[['CHECKS PASSED',`${passedChecks}/${SEC_CHECKS.length}`,'#00ffc8'],
-            ['USER AKTIF',stats?.users?.aktif??'-','#00d4ff'],
-            ['SESI AKTIF',stats?.sessions?.aktif??'-','#00d4ff'],
-            ['APP ONLINE',`${onlineCount}/${totalApps}`,'#00ffc8'],
+          {[['CHECKS PASSED',`${passedChecks}/${SEC_CHECKS.length}`,'var(--ap-ok-fg)'],
+            ['USER AKTIF',stats?.users?.aktif??'-','var(--ap-aksen)'],
+            ['SESI AKTIF',stats?.sessions?.aktif??'-','var(--ap-aksen)'],
+            ['APP ONLINE',`${onlineCount}/${totalApps}`,'var(--ap-ok-fg)'],
           ].map(([l,v,c])=>(
             <div key={l as string} style={{textAlign:'center'}}>
-              <div style={{fontSize:9,color:'#5a8ea8',letterSpacing:1.5,marginBottom:3}}>{l as string}</div>
+              <div style={{fontSize:9,color:'var(--ap-dim)',letterSpacing:1.5,marginBottom:3}}>{l as string}</div>
               <div style={{fontSize:20,fontWeight:400,color:c as string,fontFamily:"'JetBrains Mono',monospace"}}>{v as string}</div>
             </div>
           ))}
@@ -94,17 +95,17 @@ export function TabSecurityStatus() {
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'2px 16px'}}>
             {SEC_CHECKS.map(({label,ok,val})=>(
               <div key={label} style={{display:'flex',alignItems:'center',justifyContent:'space-between',
-                padding:'7px 0',borderBottom:'1px solid rgba(0,212,255,.05)'}}>
+                padding:'7px 0',borderBottom:'1px solid var(--ap-line-tipis)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{width:16,height:16,borderRadius:4,background:ok?'rgba(0,255,200,.15)':'rgba(255,68,102,.15)',
-                    border:`1px solid ${ok?'rgba(0,255,200,.4)':'rgba(255,68,102,.4)'}`,
+                  <span style={{width:16,height:16,borderRadius:4,background:ok?'var(--ap-ok-bg)':'var(--ap-bad-bg)',
+                    border:`1px solid ${ok?'var(--ap-ok-line)':'var(--ap-bad-line)'}`,
                     display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,
-                    color:ok?'#00ffc8':'#ff4466',flexShrink:0,fontWeight:700}}>
+                    color:ok?'var(--ap-ok-fg)':'var(--ap-bad-fg)',flexShrink:0,fontWeight:700}}>
                     {ok?'✓':'✗'}
                   </span>
-                  <span style={{fontSize:11,color:'#a0cfe0'}}>{label}</span>
+                  <span style={{fontSize:11,color:'var(--ap-fg2)'}}>{label}</span>
                 </div>
-                <span style={{fontSize:10,color:'#5a8ea8',fontFamily:"'JetBrains Mono',monospace"}}>{val}</span>
+                <span style={{fontSize:10,color:'var(--ap-dim)',fontFamily:"'JetBrains Mono',monospace"}}>{val}</span>
               </div>
             ))}
           </div>
@@ -115,8 +116,8 @@ export function TabSecurityStatus() {
           <div className="ap-card">
             <div className="ap-card-title">STATUS APLIKASI</div>
             {Object.entries(APP_STATUS_LABELS).map(([key,label])=>(
-              <div key={key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid rgba(0,212,255,.05)'}}>
-                <span style={{fontSize:11,color:'#a0cfe0'}}>{label}</span>
+              <div key={key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid var(--ap-line-tipis)'}}>
+                <span style={{fontSize:11,color:'var(--ap-fg2)'}}>{label}</span>
                 <span className={`ap-badge ${appSt[key]==='online'||!appSt[key]?'badge-green':'badge-yellow'}`} style={{fontSize:9}}>
                   {(appSt[key]??'ONLINE').toUpperCase()}
                 </span>
@@ -129,8 +130,8 @@ export function TabSecurityStatus() {
               ['Idle >30m',stats?.sessions?.idle??'-','yellow'],['Terkunci',stats?.users?.locked??'-','red'],
               ['Menunggu',stats?.users?.menunggu??'-','yellow'],
             ].map(([k,v,c])=>(
-              <div key={k as string} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid rgba(0,212,255,.05)',fontSize:11}}>
-                <span style={{color:'#5a8ea8'}}>{k as string}</span>
+              <div key={k as string} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid var(--ap-line-tipis)',fontSize:11}}>
+                <span style={{color:'var(--ap-dim)'}}>{k as string}</span>
                 <span className={c as string} style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>{v as string}</span>
               </div>
             ))}

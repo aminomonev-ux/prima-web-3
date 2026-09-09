@@ -52,6 +52,12 @@ export interface ItemForm {
 export interface UserRow {
   id: number; username: string; nama_lengkap: string; email: string;
   role: string; status: string; email_verified: boolean; created_at: string;
+  // D1 (T-8): dua fakta yang `GET /api/admin/users` SUDAH kirim sejak lama, tapi tidak
+  // pernah disebut tipenya — jadi tidak pernah dipakai. Keduanya yang membuat kalimat
+  // konfirmasi ubah-peran menyebut apa yang benar-benar terjadi pada orang INI, bukan
+  // peringatan umum yang muncul untuk semua orang.
+  menu_exceptions?: number;
+  probationary_until?: string | null;
 }
 
 export interface TelaahDecision {

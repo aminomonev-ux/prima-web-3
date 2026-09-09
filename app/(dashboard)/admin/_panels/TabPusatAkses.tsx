@@ -34,6 +34,9 @@ import { ROLE_LABELS } from '@/lib/constants';
 // Dari berkas DAUN, bukan dari `pusat-akses.ts` yang membaca DB — lihat kepala
 // `pintu-akses.ts` untuk sebabnya (halaman /admin sempat balas 500 karenanya).
 import { barisPintu, type BerkasOrang } from '@/lib/admin/pintu-akses';
+// D1 (T-8) — dropdown peran yang SAMA dengan yang dipakai panel Kelola User di Usulan.
+// Penanda kuota, opsi penuh dimatikan, dan kalimat konfirmasinya lahir dari satu tempat.
+import PilihPeran, { konfirmasiUbahPeran, segarkanStatKuota, useStatKuota } from '@/components/admin/PilihPeran';
 import { ALL_ROLES } from './_shared';
 
 type Izin = 'EDIT' | 'LIHAT' | 'TIDAK';
@@ -75,6 +78,7 @@ export function TabPusatAkses() {
   const [asalPaket, setAsalPaket] = useState<string | null>(null);
   const [buatBuka, setBuatBuka]   = useState(false);
   const [paketBuka, setPaketBuka] = useState(false);
+  const statKuota = useStatKuota();
 
   const muatDaftar = useCallback(async () => {
     const p = new URLSearchParams();
@@ -158,6 +162,19 @@ export function TabPusatAkses() {
 
   async function simpan() {
     if (!berkas) return;
+    // Ditanyakan di sini, bukan saat dropdown-nya digeser: selama belum Simpan,
+    // pilihannya masih bisa dibatalkan. Inilah titik yang tidak bisa ditarik balik.
+    if (peranBerubah) {
+      const jumlahPerkecualian = berkas.menu.reduce((a, m) => a + Object.keys(m.orang).length, 0);
+      const ya = await konfirmasiUbahPeran({
+        username: berkas.user.username,
+        dari: berkas.user.role, ke: draRole,
+        jumlahPerkecualian,
+        probationAktif: berkas.masaPercobaan,
+        stat: statKuota.find(s => s.role === draRole),
+      });
+      if (!ya) return;
+    }
     setSibuk(true);
     const j = await fetchJson('/api/admin/pusat-akses', {
       method: 'PUT',
@@ -178,6 +195,8 @@ export function TabPusatAkses() {
       return;
     }
     toast.success('Tersimpan.' + (j.data?.izinDihapus ? ` ${j.data.izinDihapus} perkecualian menu ikut dibuang.` : ''));
+    // Angka kuota di dropdown ikut bergeser begitu perannya benar-benar berubah.
+    if (peranBerubah) segarkanStatKuota();
     await muatBerkas(berkas.user.id);
     await muatDaftar();
   }
@@ -306,11 +325,10 @@ export function TabPusatAkses() {
             <div className="ap-pa-kartu">
               <div className="ap-card ap-pa-k">
                 <div className="ap-pa-k-lbl">Peran</div>
-                <select className="ap-select" value={draRole} onChange={e => setDraRole(e.target.value)}>
-                  {ALL_ROLES.filter(r => r !== 'SUPER_ADMIN').map(r => (
-                    <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>
-                  ))}
-                </select>
+                <PilihPeran
+                  className="ap-select" nilai={draRole} onGanti={setDraRole}
+                  stat={statKuota} peranSekarang={u.role} disabled={sibuk}
+                />
                 <div className="ap-pa-k-sub">
                   {berkas.kuota.kuota === null
                     ? 'Peran ini tanpa kuota'
