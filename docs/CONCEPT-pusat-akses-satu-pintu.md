@@ -1,6 +1,7 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–5 SELESAI 2026-09-09** (C3 sengaja dipotong, lihat §17.2). Berikutnya Tahap 6. Ditulis &
+> Status: **Tahap 1–5 SELESAI 2026-09-09.** C3 & C4 dipotong dari Tahap 5 dan
+> **dijadwalkan ulang**: C4 → Tahap 6, C3 → Tahap 14 (§17.1). Berikutnya Tahap 6. Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -676,14 +677,19 @@ Dikerjakan lebih dulu karena tidak bergantung registry dan akibatnya paling lang
   **identik** dengan `is*Role` lama (§7); grant/revoke & sakelar berperilaku sama.
 
 ### Fase C — layar Pusat Akses
-- [ ] **C1** — tab baru + daftar orang + panel identitas (§4.5 a–d).
-- [ ] **C2** — baris pintu modul yang menyebut sebab; menu ber-indent (menutup T-4).
-- [ ] **C3** — "Lihat sebagai orang ini" (baca-saja, dihitung server).
-- [ ] **C4** — Tab Peran diperluas kolom pintu + jumlah pemegang & kuota (§4.6).
-- [ ] **C5** (T-12) — Arsipkan vs Hapus permanen (§5.5).
-- [ ] **C6** — jenis peristiwa audit sendiri: `ACCESS_GRANT` / `ACCESS_REVOKE` /
+- [x] **C1** — tab baru + daftar orang + panel identitas (§4.5 a–d). *(Tahap 5)*
+- [x] **C2** — baris pintu modul yang menyebut sebab; menu ber-indent (menutup T-4). *(Tahap 5)*
+- [ ] **C3** — "Lihat sebagai orang ini" (baca-saja, dihitung server). → **Tahap 14**
+- [ ] **C4** — Tab Peran diperluas kolom pintu + jumlah pemegang & kuota (§4.6). → **Tahap 6**
+- [x] **C5** (T-12) — Arsipkan vs Hapus permanen (§5.5). *(Tahap 5)*
+- [x] **C6** — jenis peristiwa audit sendiri: `ACCESS_GRANT` / `ACCESS_REVOKE` /
       `ROLE_CHANGE`, menggantikan `USER_UPDATE` yang hari ini menampung semuanya
-      sehingga "siapa memberi akses apa bulan lalu" tidak bisa disaring.
+      sehingga "siapa memberi akses apa bulan lalu" tidak bisa disaring. *(Tahap 5)*
+
+> **C3 & C4 dijadwalkan 2026-09-09.** Keduanya sempat selesai-sebagian: dipotong dari
+> Tahap 5 tapi tidak masuk tahap mana pun di §17.1 — jadi "ditunda" tanpa ada yang bisa
+> menunjukkan ke mana. Daftar tahap yang tidak memuat pekerjaan yang belum selesai
+> persis bentuk masalah yang seluruh dokumen ini ada untuk membuangnya.
 - **DoD**: tab lama tetap berfungsi selama transisi; tiap aksi menulis audit dengan
   bentuk sebelum→sesudah; diverifikasi di peramban dengan minimal 3 akun uji berbeda
   peran.
@@ -1587,7 +1593,7 @@ menimpa).
 | **3** | Fondasi tampilan | R1 + R2 | 0 | Admin Panel memakai warna sistem; rel kiri berkelompok | Ya (menunda revamp) |
 | **4** | Sakelar & Pemeriksaan | T-5 · P6 · P10 | 0 | Sub-sakelar Realisasi punya tombol; pesan pemeliharaan; layar temuan | Ya |
 | **5** | Pusat Akses | Fase C + R4 + P1 | 0 | **Satu pintu berdiri** | Ya, tapi ini intinya |
-| **6** | Usulan & penutup revamp | Fase D + R3 sisa + R5 | 0 | Ubah peran di Usulan sepagar Admin Panel; baseline gate E turun | Ya |
+| **6** | Usulan & penutup revamp | Fase D + **C4** + R3 sisa + R5 | 0 | Ubah peran di Usulan sepagar Admin Panel; tab Peran menyebut pintu & kuota; baseline gate E turun | Ya |
 | **7** | Jejak & alasan | P8 lapis 1 + P9 | 1 | Garis waktu per orang; tiap perubahan wewenang punya alasan | Ya |
 | **8** | Tinjauan berkala | P3 + P11 | 1 | Kewajiban AUTHZ-02 punya alat & bukti | Ya |
 | **9** | Mode baca-saja | P5 | 0 | Modul bisa dibekukan saat tutup buku | Ya |
@@ -1595,6 +1601,7 @@ menimpa).
 | **11** | Permintaan mandiri | P4 | 1 | Antrean WhatsApp pindah ke aplikasi | Ya |
 | **12** | Sakelar global | P12 | 0 | Satu tombol untuk pemeliharaan menyeluruh | Ya |
 | **13** | Wajib ganti kata sandi | P7 | 1 | Kata sandi berhenti diketahui dua orang | Ya |
+| **14** | Lihat sebagai orang ini | C3 | 0 | Hasil pengaturan bisa diperiksa tanpa meminjam akun orang lain | Ya |
 
 **Tahap 0–2 wajib**, dan itu satu-satunya bagian yang saya sebut wajib. Sisanya boleh
 berhenti di mana saja — tiap tahap meninggalkan aplikasi dalam keadaan utuh, bukan
@@ -2147,39 +2154,106 @@ tertangkap** — termasuk "berkas daun menyeret lapisan server", yang tertangkap
 cara paling jujur: suite-nya **tidak bisa dimuat sama sekali**, persis yang terjadi pada
 bundel peramban.
 
-**YANG DIPOTONG, sengaja — C3 "Lihat sebagai orang ini".** §17.4 menomorinya paling
-akhir dan menyebutnya yang pertama dipotong, dan alasan itu masih berlaku: ia satu-satunya
-langkah yang **tidak menutup temuan mana pun**. Nilainya nyata (admin bisa memeriksa
-hasil pengaturannya tanpa meminjam akun orang lain), tapi kolom sebab sudah menjawab
-sebagian besar pertanyaan yang sama — dan sekarang menjawabnya di tempat orang mengatur,
-bukan di layar terpisah. Kalau dikerjakan nanti, syaratnya tidak berubah: baca-saja,
-dihitung server dari fungsi yang SAMA dengan pagarnya, nol penggantian sesi.
+**YANG DIPOTONG, sengaja — C3 "Lihat sebagai orang ini" → Tahap 14.** §17.4
+menomorinya paling akhir dan menyebutnya yang pertama dipotong, dan alasan itu masih
+berlaku: ia satu-satunya langkah yang **tidak menutup temuan mana pun**. Nilainya nyata
+(admin bisa memeriksa hasil pengaturannya tanpa meminjam akun orang lain), tapi kolom
+sebab sudah menjawab sebagian besar pertanyaan yang sama — dan sekarang menjawabnya di
+tempat orang mengatur, bukan di layar terpisah.
 
-**Juga tidak dikerjakan:** C4 (kolom pintu + kuota di tab Peran) — tidak ada di daftar
+**Juga tidak dikerjakan: C4** (kolom pintu + kuota di tab Peran) — tidak ada di daftar
 §17.4 Tahap 5. Akibat sampingnya: tabel kuota seluruh peran yang dulu ada di tab
-Pengguna ikut hilang, dan endpoint `/api/admin/role-quota-stats` jadi tidak terpakai.
+Pengguna ikut hilang, dan `/api/admin/role-quota-stats` jadi tidak terpakai.
 Pertanyaannya tetap terjawab di dua tempat — kuota peran orang yang sedang dibuka ada di
-kartunya, dan peran yang ≥80% penuh dilaporkan Pemeriksaan Mandiri. Endpointnya
-sengaja tidak dibuang: C4 akan memakainya.
+kartunya, dan peran yang ≥80% penuh dilaporkan Pemeriksaan Mandiri. **→ Tahap 6.**
+
+**Keduanya sempat tidak punya tahap sama sekali**, dan itu cacat tersendiri: dipotong
+dari Tahap 5 tapi tidak masuk peta §17.1, jadi "ditunda" tanpa ada yang bisa menunjukkan
+ke mana. Dijadwalkan hari yang sama (2026-09-09) atas persetujuan pemilik aplikasi —
+C4 dibonceng Tahap 6 karena tempatnya sudah ada, C3 jadi Tahap 14 karena ia berdiri
+sendiri dan memang boleh tidak pernah dikerjakan.
+
+**SUSULAN HARI YANG SAMA — sticky yang tidak pernah menempel.** Dilaporkan pemilik
+aplikasi sambil menunjukkan layarnya: digulir ke bawah, rel kiri DAN daftar orang ikut
+naik dan hilang. Keduanya ditulis `position: sticky` justru supaya tidak begitu.
+
+Sebabnya satu kata di berkas yang sama sejak Tahap 3: `.ap-body{overflow-x:hidden}`.
+Begitu satu sumbu bukan `visible`, sumbu satunya **otomatis** jadi `auto` — jadi
+`.ap-body` berubah menjadi "scrollport" terdekat bagi tiap `sticky` di dalamnya, padahal
+ia sendiri tumbuh mengikuti isinya dan **tidak pernah menggulung** (terukur:
+`scrollHeight` 1459 === `clientHeight` 1459; yang menggulung dokumennya). Sticky jadi
+punya jangkauan NOL dan tidak pernah menempel.
+
+Diganti `overflow-x: clip` — memotong tanpa membuat kotak gulir, jadi `overflow-y` tetap
+`visible`. Diukur sesudahnya pada 1440×900: digulir 626px penuh, rel tetap di 56px dan
+daftar orang tetap di 80px; pada 375px `scrollWidth === clientWidth === 375` dan **nol**
+elemen menembus tepi kanan, jadi jaminan Tahap 3 tidak ikut lepas. Tanpa cadangan
+`hidden`: berkas ini sudah memakai `:has()`, yang dukungannya lebih baru daripada
+`overflow: clip`.
+
+**Ini cacat Tahap 3, bukan Tahap 5** — rel sudah begitu sejak R2. Yang membuatnya baru
+kelihatan: Pusat Akses layar admin pertama yang cukup panjang untuk digulir DAN punya
+kolom kiri yang memang harus tetap terlihat. Sepupu jebakan `.versi-menu` di BLUD (di
+sana `overflow-x: visible` yang diam-diam jadi `auto`), arah kebalikan — dan bukti bahwa
+mencatat pelajaran di CLAUDE.md tidak dengan sendirinya mencegahnya terulang di berkas
+lain. Karena itu ia sekarang punya penjaga: bagian H di `test-tahap-5.mts`, 7
+pemeriksaan, 3 uji mutasi. Tidak ada alat lain yang bisa melihatnya — CSS-nya sah,
+tsc/ESLint/gate E semuanya lulus.
 
 ---
 
-#### Tahap 6 · Usulan & penutup revamp — *Fase D + R3 sisa + R5*
+#### Tahap 6 · Usulan & penutup revamp — *Fase D + C4 + R3 sisa + R5*
 
 **Prasyarat.** Tahap 5 (komponen dropdown peran bersama lahir di sana).
 
 **Isi.** D1 dropdown peran Usulan memakai komponen yang sama (kuota, konfirmasi,
 peringatan perkecualian menu + probation — T-8) · D2 spanduk penjelas dengan tautan ke
-Pusat Akses, kalimatnya menyebut tombol yang **memang ada** di layar tujuan · R3 tab
-sisanya (mulai dari yang paling jarang dipakai: RIMA Feedback, Broadcast) · R5
+Pusat Akses, kalimatnya menyebut tombol yang **memang ada** di layar tujuan · **C4** tab
+Peran diperluas kolom pintu modul + jumlah pemegang & kuota (§4.6) · R3 tab sisanya
+(mulai dari yang paling jarang dipakai: RIMA Feedback, Broadcast) · R5
 `node scripts/check-design-tokens.mjs --update`.
+
+**Kenapa C4 di sini.** Ia kecil, dan tempatnya sudah ada — tab Peran baru berganti nama
+di Tahap 5, jadi menyentuhnya lagi sekarang tidak membuka apa pun yang belum terbuka. Ia
+juga yang **mengembalikan tabel kuota seluruh peran** yang ikut hilang bersama tab
+Pengguna, dan yang memakai kembali `/api/admin/role-quota-stats` yang sejak Tahap 5
+menganggur. Menunda C4 berarti membiarkan satu endpoint hidup tanpa pembaca — bentuk
+yang sama dengan T-9.
 
 **Selesai kalau.** `_jumlah` baseline gate E **≤ 225** (turun dari 238), dibuktikan lewat
 diff berkas baseline. Nol hex langsung di `_panels/*.tsx`. Semua CTA utama `PrimaButton`,
 semua hapus `DeleteButton`/`DeleteIcon`, semua konfirmasi destruktif `confirmDialog()`.
+Tab Peran menjawab "peran KEUANGAN sebenarnya bisa masuk ke mana saja" tanpa membuka
+kode, dan menyebut berapa pemegangnya dari kuotanya.
 
 **Sesudah tahap ini, "satu pintu" berdiri penuh.** Tahap 7 ke atas adalah penambahan,
 bukan penyelesaian.
+
+---
+
+#### Tahap 14 · Lihat sebagai orang ini — *C3*
+
+**Prasyarat.** Tahap 5.
+
+**Isi.** Halaman **baca-saja** yang menampilkan: kartu apa yang akan dilihat orang itu di
+`/menu`, menu apa yang terbuka di tiap modul, dan mana yang abu karena pemeliharaan.
+Dihitung server dari fungsi yang **SAMA** dengan pagar sungguhannya (`bolehMasukModul` +
+`izinMenuRegistry`), bukan dari salinan — layar yang menghitung aksesnya sendiri akan
+berbeda pendapat dengan pagarnya cepat atau lambat, dan di layar inilah selisih itu
+paling menyesatkan.
+
+**Bukan impersonasi**: nol penggantian sesi, nol token, nol jalur tulis.
+
+**Kenapa paling belakang.** Ia satu-satunya butir Fase C yang **tidak menutup temuan mana
+pun**. Nilainya nyata — admin bisa memeriksa hasil pengaturannya tanpa meminjam akun
+orang lain, dan meminjam akun adalah kebiasaan yang paling merusak jejak audit — tapi
+kolom sebab di Pusat Akses sudah menjawab sebagian besar pertanyaan yang sama, dan
+menjawabnya **di tempat orang mengatur**, bukan di layar terpisah. Itu yang membuatnya
+boleh menunggu, dan boleh tidak pernah dikerjakan.
+
+**Selesai kalau.** Untuk tiga akun uji berbeda peran, isi halaman ini cocok persis dengan
+apa yang benar-benar mereka lihat saat login — dibuktikan berdampingan, bukan
+diperkirakan.
 
 ---
 
