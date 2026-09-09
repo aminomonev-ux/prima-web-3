@@ -1,6 +1,6 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–4 SELESAI 2026-09-09.** Berikutnya Tahap 5. Ditulis &
+> Status: **Tahap 1–5 SELESAI 2026-09-09** (C3 sengaja dipotong, lihat §17.2). Berikutnya Tahap 6. Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -2030,6 +2030,137 @@ Diverifikasi dengan **tiga akun uji berbeda peran**.
 
 **Risiko.** Dua pintu ke pengaturan yang sama = dua orang saling menimpa. Karena itu
 langkah 7 bukan pilihan dan bukan pekerjaan susulan (§17.4).
+
+**HASIL — dikerjakan & diverifikasi 2026-09-09.** C1, C2, C6, C5, P1 dan langkah 7
+selesai. **C3 DIPOTONG** — konsep ini sendiri menyebutnya "paling akhir, dan yang
+pertama dipotong"; keterangannya di bawah.
+
+**C1 + C2 — kolom sebab itu seluruh gunanya layar ini.** Tiap baris modul menyebut
+KENAPA pintunya terbuka, bukan cuma bahwa ia terbuka, dan kotak yang tidak berarti
+DIMATIKAN dengan kalimatnya sendiri. Untuk seorang PROGRAM layarnya berbunyi: BLUD
+*"terbuka karena diberi akses — mencabut centang akan menutupnya"* (kotak hidup),
+Perjanjian Kinerja *"terbuka karena peran Program — mencabut centang tidak
+menutupnya"* (kotak mati), Usulan *"terbuka untuk semua peran — memberi akses di sini
+tidak menambah apa pun"*, Admin Panel *"hanya untuk Super Admin — tidak bisa diberikan
+satu per satu"*. Itu T-6 yang dijawab di layar, bukan di komentar kode.
+
+Menu bersarang di bawah modulnya, dan **hanya untuk modul yang pintunya terbuka** —
+menu yang diatur untuk orang yang pintunya tertutup tidak berarti apa-apa. T-4 tertutup
+sebagai akibat: syarat `punyaBlud()` tidak pernah ditulis ulang, tombol menunya muncul
+untuk setiap modul ber-menu karena daftarnya diturunkan dari registry.
+
+**Satu Simpan, satu transaksi.** Peran + pintu modul + perkecualian menu ditulis
+bersama atau tidak sama sekali. Kunci diambil menurut nama key MENAIK — aturan yang
+sudah tertulis di `lib/data/menu-access.ts` sejak 2026-08 "saat alasannya masih segar",
+untuk hari yang belum ada. Ini hari itu.
+
+**Dua pemeriksaan bentrok, bukan satu.** `sidikJariIzin` menjawab "apakah izin menunya
+berubah". Ia **tidak** menjawab "apakah orangnya masih berperan sama" — dan layar yang
+dimuat saat seseorang masih PROGRAM lalu disimpan setelah orang lain memindahkannya ke
+KEUANGAN akan menulis izin milik jabatan yang sudah ditinggalkan, tanpa satu pun
+pemeriksaan yang ada hari ini menyalak. Karena itu `role_awal` ikut dikirim dan
+dibandingkan di bawah `FOR UPDATE` → 409 `PERAN_BERUBAH`, di samping 409 `BERUBAH`
+yang sudah ada.
+
+**C6.** `ACCESS_GRANT` / `ACCESS_REVOKE` / `ROLE_CHANGE` / `USER_ARCHIVE` jadi jenis
+peristiwa sendiri. `USER_UPDATE` TIDAK dibuang: mengganti nama jenis yang sudah
+tertulis di ribuan baris audit akan membuat riwayatnya berlubang.
+
+**C5 (T-12) — angkanya DIHITUNG, dan daftarnya dibaca dari `information_schema`.**
+Ada tiga puluhan kolom yang menunjuk `users(id)`; daftar tangan akan memberi angka yang
+terlihat pasti tapi terlalu kecil — kesalahan yang paling sulit ketahuan, karena
+angkanya tetap masuk akal. `ON DELETE SET NULL` dan `CASCADE` dipisah: yang pertama
+menyisakan datanya tanpa penulis, yang kedua membuangnya. Diukur pada data sungguhan:
+`uji.program` → **0** baris kehilangan pemilik (itu jawaban yang paling sering, dan
+justru itu yang membuat angkanya berguna); `superadmin` → **247** baris di 14 kolom /
+9 tabel.
+
+**P1 — dan satu keputusan yang tidak ada di rencana.** Konsep menyebut paket disimpan
+sebagai satu baris `app_config` ber-Zod, tapi tidak menyebut siapa yang menyusunnya.
+Fitur yang satu-satunya jalur penyusunannya adalah menyunting MySQL langsung persis
+bentuk T-5 ("penjaganya ada tapi tombolnya tidak"). Jadi penyusunnya ikut lahir, dan
+gesturnya **"jadikan paket dari orang yang sudah benar"**, bukan formulir kosong: yang
+tahu isi paket "Bendahara Pengeluaran" adalah orang yang baru saja menyiapkan bendahara
+pengeluaran, dan ia sedang melihat jawabannya di layar. Paket **tidak memuat peran**
+(dijaga uji mutasi), divalidasi Zod saat baca DAN tulis, dan baris yang rusak jatuh jadi
+"tidak ada paket" alih-alih merobohkan layarnya.
+
+**Langkah 7 — dan bacaan yang perlu ditegaskan.** Tab **USER MANAGEMENT dimatikan**
+(berkasnya dibuang, bukan cuma disembunyikan) beserta `MenuAccessModal`, di commit yang
+sama. Tab **AKSES MENU TETAP ADA, berganti nama jadi "Peran"** — ia bukan pintu kedua ke
+pengaturan yang sama: yang diatur di sana aturan sebuah PERAN, mengenai semua
+pemegangnya sekaligus. Yang berbahaya pintu TANPA sidik jari, dan itu tab Pengguna
+(tiga endpoint terpisah, nol pemeriksaan bentrok). Cabang `scope: 'user'` di
+`api/admin/menu-access` sengaja dibiarkan hidup: ia dijaga sidik jari yang sama.
+
+Enam aksi ikut pindah supaya mematikan tab lama tidak memutus satu-satunya pintunya:
+buat akun, reset kata sandi, nonaktif/aktifkan, **putus sesi** (aksi baru — sebelumnya
+memutus sesi tanpa menonaktifkan akun mustahil), buka kunci promosi, cabut masa
+percobaan. Kata sandi sementara **dibuatkan** `crypto.getRandomValues`, tidak diketik
+admin: kata sandi yang diketik orang lain untuk seseorang hampir selalu jadi kata sandi
+yang dipakai terus.
+
+**CACAT YANG DITEMUKAN SAAT DIJALANKAN, bukan dari membaca kode.** Versi pertama
+menaruh `barisPintu` di `pusat-akses.ts` bersama pembacaan DB. Satu impor `getRoleQuota`
+dari `lib/security/promotion.ts` menyeret `verifyPassword` → `auth.ts` → `next/headers`
+ke bundel peramban, dan **seluruh rute `/admin` balas 500** dengan pesan yang menunjuk
+`auth.ts` — bukan barisnya. `tsc` lulus, ESLint lulus. Preseden yang sama sudah tercatat
+di kepala `lib/registry/apps.ts` dan tetap terulang. Aturannya sekarang tinggal di
+`lib/admin/pintu-akses.ts`, berkas DAUN, dan uji regresi memeriksa daftar impor
+terlarangnya.
+
+`getRoleQuota` juga pindah ke `lib/constants.ts` (di-re-export dari `promotion.ts`)
+karena sebab yang sama, satu lapis lebih awal — sudah dicatat di Tahap 4.
+
+**Diverifikasi di aplikasi**, sesi SUPER_ADMIN sungguhan, **tiga akun uji berbeda
+peran**:
+
+- **uji.program** (PROGRAM): 4 pintu terbuka — BLUD lewat grant, PK & E-Anggaran lewat
+  peran, Usulan untuk semua; dua blok menu (BLUD 12, PK 7).
+- **uji.keuangan** (KEUANGAN, kuota 1/3): 3 pintu; satu blok menu. Kartu kuotanya
+  berbunyi "1/3 terpakai" sementara dua yang lain "peran ini tanpa kuota".
+- **uji.perbendaharaan** (PERBENDAHARAAN): 2 pintu.
+
+Yang dijalankan sungguhan lewat layar & API:
+- Mengubah izin menu DPA BLUD jadi "Hanya lihat" → Simpan → tersimpan, sidik jarinya
+  ikut berganti, nilai efektifnya LIHAT.
+- Mencabut centang BLUD → **"Tersimpan. 1 perkecualian menu ikut dibuang."** Grant
+  dicabut dan perkecualian menunya hilang di transaksi yang sama (L69).
+- Audit: `ACCESS_REVOKE :: user id=41: -blud`, lalu `ACCESS_GRANT :: +blud` saat
+  dikembalikan, dan `ROLE_CHANGE :: PERBENDAHARAAN → AKUNTANSI [1 perkecualian menu
+  dihapus]` — ganti peran membuang perkecualiannya, terbukti dari data.
+- Tiga penolakan: sidik jari menu basi → 409 `BERUBAH`; `role_awal` basi → 409
+  `PERAN_BERUBAH`; menyentuh SUPER_ADMIN → 403.
+- P1: paket disimpan lewat API yang sama dengan tombolnya, dibaca balik utuh, lalu
+  dihapus.
+- Data uji dikembalikan seluruhnya: `uji.program` PROGRAM + grant `blud` + nol
+  perkecualian, `uji.perbendaharaan` PERBENDAHARAAN, nol paket tersisa.
+
+**Satu cacat kecil ikut diperbaiki di tengah jalan**: satu Simpan mengirim SELURUH modul
+yang terbuka, jadi jejak audit sempat berbunyi "izin menu diperbarui: perjanjian_kinerja"
+untuk modul yang tidak disentuh siapa pun. Jejak yang menyebut perubahan yang tidak
+terjadi lebih buruk daripada tidak mencatat, karena ia dipercaya. Modul yang sidik
+jarinya sama sekarang dilewati sepenuhnya.
+
+**Regresi:** `npx tsx scripts/test-tahap-5.mts` (81 pemeriksaan), **16 uji mutasi
+tertangkap** — termasuk "berkas daun menyeret lapisan server", yang tertangkap dengan
+cara paling jujur: suite-nya **tidak bisa dimuat sama sekali**, persis yang terjadi pada
+bundel peramban.
+
+**YANG DIPOTONG, sengaja — C3 "Lihat sebagai orang ini".** §17.4 menomorinya paling
+akhir dan menyebutnya yang pertama dipotong, dan alasan itu masih berlaku: ia satu-satunya
+langkah yang **tidak menutup temuan mana pun**. Nilainya nyata (admin bisa memeriksa
+hasil pengaturannya tanpa meminjam akun orang lain), tapi kolom sebab sudah menjawab
+sebagian besar pertanyaan yang sama — dan sekarang menjawabnya di tempat orang mengatur,
+bukan di layar terpisah. Kalau dikerjakan nanti, syaratnya tidak berubah: baca-saja,
+dihitung server dari fungsi yang SAMA dengan pagarnya, nol penggantian sesi.
+
+**Juga tidak dikerjakan:** C4 (kolom pintu + kuota di tab Peran) — tidak ada di daftar
+§17.4 Tahap 5. Akibat sampingnya: tabel kuota seluruh peran yang dulu ada di tab
+Pengguna ikut hilang, dan endpoint `/api/admin/role-quota-stats` jadi tidak terpakai.
+Pertanyaannya tetap terjawab di dua tempat — kuota peran orang yang sedang dibuka ada di
+kartunya, dan peran yang ≥80% penuh dilaporkan Pemeriksaan Mandiri. Endpointnya
+sengaja tidak dibuang: C4 akan memakainya.
 
 ---
 
