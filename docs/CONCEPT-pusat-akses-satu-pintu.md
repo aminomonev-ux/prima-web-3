@@ -1,7 +1,7 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–5 SELESAI 2026-09-09.** C3 & C4 dipotong dari Tahap 5 dan
-> **dijadwalkan ulang**: C4 → Tahap 6, C3 → Tahap 14 (§17.1). Berikutnya Tahap 6. Ditulis &
+> Status: **Tahap 1–6 SELESAI 2026-09-09 — "satu pintu" berdiri penuh.** C3 tersisa,
+> dijadwalkan sebagai Tahap 14 (§17.1); Tahap 7 ke atas penambahan, bukan penyelesaian. Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -680,7 +680,7 @@ Dikerjakan lebih dulu karena tidak bergantung registry dan akibatnya paling lang
 - [x] **C1** — tab baru + daftar orang + panel identitas (§4.5 a–d). *(Tahap 5)*
 - [x] **C2** — baris pintu modul yang menyebut sebab; menu ber-indent (menutup T-4). *(Tahap 5)*
 - [ ] **C3** — "Lihat sebagai orang ini" (baca-saja, dihitung server). → **Tahap 14**
-- [ ] **C4** — Tab Peran diperluas kolom pintu + jumlah pemegang & kuota (§4.6). → **Tahap 6**
+- [x] **C4** — Tab Peran diperluas kolom pintu + jumlah pemegang & kuota (§4.6). *(Tahap 6)*
 - [x] **C5** (T-12) — Arsipkan vs Hapus permanen (§5.5). *(Tahap 5)*
 - [x] **C6** — jenis peristiwa audit sendiri: `ACCESS_GRANT` / `ACCESS_REVOKE` /
       `ROLE_CHANGE`, menggantikan `USER_UPDATE` yang hari ini menampung semuanya
@@ -695,7 +695,7 @@ Dikerjakan lebih dulu karena tidak bergantung registry dan akibatnya paling lang
   peran.
 
 ### Fase D — Usulan Kebutuhan
-- [ ] **D1** (T-8) — dropdown peran memakai komponen bersama (§5.4).
+- [x] **D1** (T-8) — dropdown peran memakai komponen bersama (§5.4). *(Tahap 6)*
 - [ ] **D2** — spanduk penjelas di panel: apa yang bisa & tidak bisa dilakukan di sini,
       dengan tautan ke Pusat Akses. Kalimatnya menyebut **tombol yang memang ada di layar
       tujuan** (L79d).
@@ -2228,6 +2228,107 @@ kode, dan menyebut berapa pemegangnya dari kuotanya.
 
 **Sesudah tahap ini, "satu pintu" berdiri penuh.** Tahap 7 ke atas adalah penambahan,
 bukan penyelesaian.
+
+**HASIL — dikerjakan & diverifikasi 2026-09-09.**
+
+**D1 (T-8) — yang menutupnya bukan menyalin kalimatnya.** `doChangeRole` di Usulan
+memanggil endpoint yang **sama persis** dengan Admin Panel, langsung dari `onChange`
+dropdown: tanpa konfirmasi, tanpa penanda kuota, tanpa peringatan bahwa perkecualian
+menu orang itu ikut terhapus. Satu aksi berdampak sama, dua tingkat kehati-hatian — dan
+yang lebih longgar justru yang lebih sering dipakai sehari-hari.
+
+Sekarang satu komponen dipakai dua layar: `components/admin/PilihPeran.tsx`. Dua salinan
+kalimat pasti berbeda bunyi begitu salah satu disunting (L78, sudah tiga kali terjadi di
+BLUD). Isinya penanda kuota `(n/max)` per opsi, opsi penuh dimatikan, dan satu
+`confirmDialog`.
+
+Tiga keputusan kecil yang menentukan apakah dialognya dibaca atau dilewati:
+
+- **Yang disebut cuma yang benar-benar terjadi pada orang ini.** Perkecualian menu
+  disebut hanya kalau ada, probation hanya kalau berjalan. Peringatan yang selalu muncul
+  melatih orang menekan "Ya" tanpa membaca, dan itu yang membuat dialog berikutnya —
+  yang memang penting — ikut tidak terbaca.
+- **Opsi penuh dimatikan KECUALI peran yang sedang dipegang.** Kuota dihitung
+  `COUNT(*) … status='AKTIF'`, jadi angkanya SUDAH memuat orang itu; mematikan opsinya
+  sendiri membuat dropdown tidak bisa menampilkan keadaan sekarang. Bentuk yang sama
+  dengan T-7.
+- **`masihProbation` tinggal di komponennya**, bukan di layar pemanggil — dua layar yang
+  menghitungnya sendiri akan berbeda pendapat pada hari salah satunya lupa membandingkan
+  dengan jam sekarang. Pusat Akses tidak memakainya sama sekali: di sana jawabannya
+  datang dari SQL, yang tidak bergantung pada jam peramban.
+
+**D2 — spanduk yang menyebut tombol yang MEMANG ADA.** Kalimat lamanya menyebut "nonaktif,
+reset password, hapus, atur akses aplikasi"; tombolnya di Pusat Akses berbunyi
+**Nonaktifkan · Reset sandi · Putuskan · Arsipkan**. Uji regresinya yang menangkap
+selisih itu — versi pertama saya menulis "reset kata sandi", cukup untuk membuat orang
+mencari sesuatu yang tidak persis ada di sana (L79d).
+
+Dan satu cabang yang tidak ada di rencana: panel ini terbuka untuk **ADMIN**, sementara
+`/admin` sesudah T-16 hanya SUPER_ADMIN. Menyuruh ADMIN "buka Admin Panel" mengarahkan
+orang ke pintu yang akan melemparnya balik — persis bentuk yang D2 ada untuk
+mencegahnya. Jadi kalimatnya berbeda per peran, dan tautannya hanya muncul bagi yang
+memang bisa membukanya.
+
+**C4 — tab Peran menjawab pertanyaannya sendiri.** "Peran KEUANGAN sebenarnya bisa masuk
+ke mana saja" sekarang punya jawaban di layar: E-Anggaran & Usulan otomatis, tujuh modul
+lain tertutup dan harus diberikan per orang. Dihitung `barisPintu(role, null)` — aturan
+yang SAMA dengan pagar sungguhannya, dengan `appAccess` KOSONG, jadi yang tampil memang
+"yang didapat peran ini tanpa satu pun pemberian akses". **Baca-saja**, dan itu bukan
+kekurangan melainkan seluruh maksudnya: baris peran tidak memberi akses, dan saklar di
+sini akan membuat orang mengira sudah membuka pintu untuk satu peran penuh (§4.6).
+Jumlah pemegang aktif & kuotanya ikut, jadi tabel kuota yang hilang bersama tab Pengguna
+punya rumah lagi — dan `/api/admin/role-quota-stats` berhenti menganggur.
+
+Kalimat pembuka tab itu ternyata masih menunjuk **"tombol MENU di tab User Management"**
+— tab yang dimatikan Tahap 5. Sisa yang terlewat, dan bentuknya persis yang D2 perbaiki
+di layar sebelah.
+
+**R3 — 159 hex jadi NOL, dan itu bukan kerapian.** Style sebaris di `_panels/*.tsx` masih
+memakai palet cyberpunk lama (sian + mint) yang sudah diganti Tahap 3 di CSS-nya. Jadi
+selama ini panelnya merender warna yang **berbeda dari kerangkanya sendiri** — bukan
+"belum bertoken", tapi benar-benar tidak cocok. Dipetakan menurut ARTI warnanya (redup /
+utama / berhasil / gagal / peringatan / aksen), bukan nilai yang mirip.
+
+Satu jebakan ikut ketahuan di jalan: chip penyaring Attack Monitor menghitung latarnya
+lewat **tabel pencarian hex → rgba**. Tabel itu bekerja dengan MEMBANDINGKAN nilai
+warnanya, jadi ia diam-diam meleset begitu warnanya jadi token — semua chip jatuh ke
+cabang terakhir tanpa satu galat pun. Diganti `color-mix`, yang mengikuti tokennya apa
+pun nilainya.
+
+CTA utama jadi `PrimaButton`, tombol putus-sesi jadi `DeleteButton`, dan pesan hasil aksi
+pindah ke `toast`. Yang **tidak** ikut pindah, sengaja: pernyataan yang BERTAHAN — "Hanya
+SUPER_ADMIN yang dapat…", galat pemuatan, galat di dalam modal. Pesan yang menghilang
+sendiri tidak boleh dipakai menjelaskan kenapa sebuah tombol mati; orangnya akan menatap
+tombol mati tanpa keterangan. Toast untuk yang lewat, spanduk untuk yang bertahan.
+
+Ikut ditutup di jalan: **memutus sesi orang lain sebelumnya terjadi pada SATU klik**,
+tanpa ditanya apa pun, pada baris yang berdempetan di tabel yang bisa digulir cepat.
+Sekarang ditanya, dan yang ditanyakan menyebut NAMA orangnya — salah baris ketahuan
+sebelum terjadi, bukan sesudah.
+
+**R5 — baseline gate E 238 → 225**, tepat di angka yang §17.2 sebut sebagai DoD.
+
+**Diverifikasi di aplikasi**, sesi SUPER_ADMIN, dua tema:
+
+- Pusat Akses & Kelola User dua-duanya menampilkan `Admin Staff (1/6)`, `Keuangan (1/3)`,
+  dst. dari satu sumber.
+- Mengganti peran `uji.perbendaharaan` di Usulan memunculkan dialog — dan **membatalkannya
+  tidak mengubah apa pun**. Dulu perubahan itu sudah terkirim sebelum sempat ditanya.
+- Diberi satu perkecualian menu, dialog yang sama berbunyi *"1 pengaturan menu khusus
+  miliknya ikut dibuang"*; tanpa perkecualian, kalimat itu tidak muncul sama sekali.
+- Tab Peran: ADMIN STAFF → 9 modul otomatis, kuota 1/6; KEUANGAN → 2 otomatis, 7 tertutup.
+- Lima panel yang disunting dibuka satu per satu: nol `.ap-btn` tersisa di luar
+  pengecualian, semuanya merender.
+- Data uji dikembalikan seluruhnya.
+
+**Regresi:** `npx tsx scripts/test-tahap-6.mts` (76 pemeriksaan), **15 uji mutasi
+tertangkap** — termasuk "berkas daun menyeret lapisan server", yang lagi-lagi tertangkap
+dengan cara paling jujur: suite-nya tidak bisa dimuat sama sekali.
+
+**Yang TIDAK dikerjakan:** `.ap-btn` sengaja tersisa di dua tempat yang memang
+dikecualikan DESIGN-SYSTEM — chevron pagination Jejak Audit dan tombol buka-tutup daftar
+menu di Pusat Akses (keduanya *disclosure*, bukan CTA). Uji regresinya mengunci daftar
+pengecualian itu, jadi tempat ketiga tidak bisa muncul diam-diam.
 
 ---
 
