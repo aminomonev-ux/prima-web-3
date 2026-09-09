@@ -1,6 +1,6 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1 & 2 SELESAI & TERVERIFIKASI 2026-09-09.** Berikutnya Tahap 3. Ditulis &
+> Status: **Tahap 1, 2 & 3 SELESAI 2026-09-09.** Berikutnya Tahap 4. Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -1845,6 +1845,61 @@ diperiksa di peramban. Lebar 375px tidak ada yang keluar layar.
 **Risiko.** R1 **tidak boleh berhenti di tengah** (§17.4). Dan R2 memindahkan wadah 11
 tab sekaligus — kalau ada yang rusak, penyebabnya tetap satu hal, itu sebabnya isi tab
 tidak boleh ikut disentuh di commit yang sama.
+
+**HASIL — dikerjakan 2026-09-09** (commit `9c2967b`). R1 dan R2 jadi **satu commit**,
+sengaja: §17.4 menyebut R1 titik yang tidak boleh berhenti di tengah, dan memecahnya
+jadi dua commit berarti menerbitkan keadaan setengah itu.
+
+**R1.** `admin.css` berbasis token: satu blok mendefinisikan, satu blok menimpa untuk
+mode terang, sisanya hanya membaca `var(--ap-*)`. **Nol `!important` di kode** (enam
+yang tersisa ada di komentar yang menjelaskan kenapa mereka dibuang — pemeriksaannya
+membuang komentar dulu, kalau tidak prosa itu menyalakan tesnya sendiri) dan **nol hex
+di luar kedua blok token**. Palet mengikuti maket: emas `#EF9F27` di gelap, ungu-merah
+muda `#8B5CF6` di terang; `#7C3AED` dibetulkan; sian `#00D4FF` lepas. Lima hex warisan
+hilang dari kode. Animasi abadi (garis pindai, denyut, kedip) dibuang;
+`prefers-reduced-motion` dihormati.
+
+**R2.** Bilah 11 tab mendatar → rel kiri berkelompok empat, topbar 76px → 56px, jam
+turun dari 22px sian jadi 12,5px mono redup. Rel jadi ikon di bawah 1100px dan laci
+bertirai di bawah 720px. Isi tab tidak disentuh sama sekali.
+
+**Empat cacat ditemukan lewat PENGUKURAN di peramban, bukan dari membaca kode** — dan
+keempatnya tidak akan muncul sebagai galat apa pun:
+
+1. **Bilah atas menembus 105px ke luar layar di 375px.** Lencana pengguna terpotong,
+   dan tidak terlihat sebagai gejala karena `.ap-body` menyembunyikan gulir mendatar —
+   halamannya tampak normal, tombolnya saja yang hilang. Pola yang sama dengan pil
+   versi BLUD. Jam, nama, dan peran dilepas di layar sempit.
+2. **`.ap-content` 828px di dalam jalur grid 375px.** DUA sebab sekaligus, dan
+   memperbaiki satu saja tidak cukup: item grid membawa `min-width:auto` bawaan, DAN
+   `margin:0 auto` mematikan perataan `stretch` sehingga ukurannya diambil dari isinya
+   sendiri. `minmax(0,1fr)` cuma mengatur jalurnya.
+3. **`.ap-table-wrap` ber-`overflow:hidden` memotong kolom terakhir tabel** di layar
+   sempit — termasuk kolom aksi — tanpa menyisakan cara melihatnya. Ini cacat lama yang
+   baru terukur sekarang, bukan bawaan R2.
+4. **Blok `@media(max-width:440px)` sempat disisipkan di TENGAH blok 720px**, sehingga
+   seluruh aturan laci ikut terdorong ke dalamnya: di antara 440px dan 720px gridnya
+   sudah satu kolom sementara relnya masih di aliran, jadi rel menumpuk **di atas** isi
+   sebagai balok selebar layar. Cacat ini lahir dari editan terakhir di tahap ini
+   sendiri, sesudah semuanya dinyatakan selesai — dan **tidak satu pun alat menyalak**:
+   CSS-nya sah, kurung kurawalnya seimbang, `tsc`/ESLint/gate E bersih. Yang
+   menangkapnya cuma satu tangkapan layar penutup yang nyaris tidak diambil.
+
+   Riwayatnya ikut dirapikan setelah itu: perbaikannya dilipat ke commit Tahap 3 lewat
+   `reset --soft` (belum ada yang di-push, dan kesepuluh commit di atas `origin/main`
+   semuanya milik sesi ini), supaya tiap commit di `main` benar-benar jalan. Yang
+   dihapus keadaan rusaknya, bukan catatannya — pelajarannya ada di pesan commit dan
+   di paragraf ini.
+
+**Diverifikasi di peramban** pada sesi SUPER_ADMIN sungguhan: kedua tema di lebar penuh,
+laci di 652px, dan 375px dengan `scrollWidth = clientWidth = 375` serta tabel yang
+menggulir di dalam kotaknya sendiri. Kesebelas tujuan diklik satu per satu — semuanya
+merender isinya, tidak ada yang kosong.
+
+**Yang BELUM: baseline gate E belum diturunkan** — itu R5 (Tahap 6), dan sengaja
+dikerjakan setelah komponen per tab selesai supaya ratchet-nya turun sekali saja.
+Gate E hari ini lolos apa adanya (nol warna baru), dan skripnya sudah menyebut lima hex
+warisan yang siap dibuang.
 
 ---
 
