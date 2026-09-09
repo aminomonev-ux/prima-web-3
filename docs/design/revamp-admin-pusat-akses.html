@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PRIMA — Maket Revamp Admin Panel (Pusat Akses)</title>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   PRIMA — Maket revamp Admin Panel (Pusat Akses · Sakelar · Pemeriksaan)
+   Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §16
+
+   SELURUH warna diambil dari docs/design/DESIGN-SYSTEM.md — NOL hex baru.
+   Mode gelap: emas #EF9F27 di atas #020F1C.
+   Mode terang: gradien ungu-merah muda #8B5CF6 → #EC4899 (aturan sistem,
+   §Theme Toggle Behavior) — bukan palet khusus Admin Panel.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Dark-first: :root telanjang = gelap (tampilan utama ruang kendali).
+   Terang berlaku saat OS terang & belum ada pilihan, atau saat dipilih. */
+:root{
+  --canvas:#020F1C; --card:#042C53; --elev:#0C447C;
+  --line:#0C447C; --line2:#185FA5;
+  --fg:#E6F1FB; --fg2:#B5D4F4; --dim:#85B7EB;
+  --acc:#EF9F27; --acc2:#FAC775;
+  --acc-grad:linear-gradient(135deg,#EF9F27,#FAC775);
+  --on-acc:#020F1C;
+  --ok:#1D9E75;  --ok-bg:#085041;
+  --bad:#E24B4A; --bad-bg:#791F1F;
+  --warn:#BA7517;--warn-bg:#633806;
+  --info:#378ADD;--info-bg:#0C447C;
+  --pur:#7C5CFC; --pur-bg:#2D1A6E;
+  --r-sm:6px; --r-md:10px; --r-lg:14px;
+  --rail:212px;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --canvas:#FAFAFB; --card:#FFFFFF; --elev:#F4F4F7;
+    --line:#E5E5EA; --line2:#CBD5E1;
+    --fg:#0F0F12; --fg2:#3A3A42; --dim:#8A8A95;
+    --acc:#8B5CF6; --acc2:#EC4899;
+    --acc-grad:linear-gradient(135deg,#8B5CF6,#EC4899);
+    --on-acc:#FFFFFF;
+    --ok:#0B8A63;  --ok-bg:#F0FDF8;
+    --bad:#E53E3E; --bad-bg:#FFF5F5;
+    --warn:#B45309;--warn-bg:#FFFBEB;
+    --info:#378ADD;--info-bg:#EFF6FF;
+    --pur:#7C5CFC; --pur-bg:#F5F0FF;
+  }
+}
+:root[data-theme="light"]{
+  --canvas:#FAFAFB; --card:#FFFFFF; --elev:#F4F4F7;
+  --line:#E5E5EA; --line2:#CBD5E1;
+  --fg:#0F0F12; --fg2:#3A3A42; --dim:#8A8A95;
+  --acc:#8B5CF6; --acc2:#EC4899;
+  --acc-grad:linear-gradient(135deg,#8B5CF6,#EC4899);
+  --on-acc:#FFFFFF;
+  --ok:#0B8A63;  --ok-bg:#F0FDF8;
+  --bad:#E53E3E; --bad-bg:#FFF5F5;
+  --warn:#B45309;--warn-bg:#FFFBEB;
+  --info:#378ADD;--info-bg:#EFF6FF;
+  --pur:#7C5CFC; --pur-bg:#F5F0FF;
+}
+
+*,*::before,*::after{box-sizing:border-box;}
+body{
+  margin:0; background:var(--canvas); color:var(--fg);
+  font:400 13px/1.6 Inter,'Plus Jakarta Sans',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'JetBrains Mono','Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;}
+:focus-visible{outline:2px solid var(--info);outline-offset:2px;border-radius:4px;}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;}}
+
+/* ── pita maket ─────────────────────────────────────────────────────────── */
+.mk{
+  display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;
+  padding:9px 20px;background:var(--warn-bg);
+  border-bottom:1px solid var(--warn);
+  font-size:11px;color:var(--fg);
+}
+.mk b{color:var(--warn);letter-spacing:.06em;text-transform:uppercase;font-size:10px;font-weight:700;}
+.mk span{color:var(--fg2);}
+
+/* ── kerangka ───────────────────────────────────────────────────────────── */
+.shell{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);min-height:100vh;}
+.top{
+  grid-column:1/-1;height:56px;display:flex;align-items:center;gap:16px;
+  padding:0 18px;background:var(--card);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20;
+}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;}
+.brand-ic{
+  width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+  background:var(--acc-grad);color:var(--on-acc);flex:0 0 auto;
+}
+.brand-ic svg{width:15px;height:15px;}
+.brand-tx{font-size:15px;font-weight:600;letter-spacing:.2px;white-space:nowrap;}
+.brand-tx i{font-style:normal;color:var(--dim);font-weight:400;}
+.top .clock{margin-left:auto;font-size:13px;color:var(--dim);letter-spacing:.12em;}
+.top-act{display:flex;align-items:center;gap:8px;}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;
+  border:1px solid var(--line);border-radius:var(--r-sm);
+  font-size:12px;font-weight:500;color:var(--fg2);background:var(--canvas);
+  transition:border-color .15s,color .15s;
+}
+.chip:hover{border-color:var(--line2);color:var(--fg);}
+.chip svg{width:14px;height:14px;}
+.who{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px 0 4px;border:1px solid var(--line);border-radius:var(--r-sm);}
+.ava{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;background:var(--acc-grad);color:var(--on-acc);font-size:10px;font-weight:700;}
+.who-n{font-size:12px;font-weight:500;}
+.who-r{font-size:10px;color:var(--dim);letter-spacing:.06em;}
+
+/* ── rel kiri ───────────────────────────────────────────────────────────── */
+.rail{
+  background:var(--card);border-right:1px solid var(--line);
+  padding:14px 10px 24px;display:flex;flex-direction:column;gap:16px;
+  position:sticky;top:56px;align-self:start;
+  max-height:calc(100vh - 56px);overflow-y:auto;
+}
+.rg-t{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding:0 8px 6px;}
+.rg{display:flex;flex-direction:column;gap:1px;}
+.ri{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  padding:7px 9px;border-radius:var(--r-sm);font-size:12.5px;color:var(--fg2);
+  transition:background .12s,color .12s;
+}
+.ri svg{width:15px;height:15px;flex:0 0 auto;color:var(--dim);}
+.ri:hover{background:var(--elev);color:var(--fg);}
+.ri[aria-current="page"]{background:var(--elev);color:var(--fg);font-weight:600;box-shadow:inset 2px 0 0 var(--acc);}
+.ri[aria-current="page"] svg{color:var(--acc);}
+.ri.soon{opacity:.55;}
+.ri .bdg{
+  margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;
+  display:grid;place-items:center;font-size:10px;font-weight:700;
+  background:var(--acc);color:var(--on-acc);
+}
+.ri .bdg.w{background:var(--warn);color:#FFFFFF;}
+
+/* ── isi ────────────────────────────────────────────────────────────────── */
+.main{padding:20px 22px 40px;min-width:0;}
+.ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px;}
+.ph h1{margin:0;font-size:22px;font-weight:500;letter-spacing:-.2px;text-wrap:balance;}
+.ph p{margin:4px 0 0;font-size:12px;color:var(--dim);max-width:62ch;}
+.acts{display:flex;gap:8px;}
+.btn{
+  height:34px;padding:0 14px;border-radius:var(--r-sm);font-size:12px;font-weight:500;
+  display:inline-flex;align-items:center;gap:7px;border:1px solid transparent;
+  transition:filter .15s,border-color .15s;
+}
+.btn svg{width:14px;height:14px;}
+.btn-p{background:var(--acc-grad);color:var(--on-acc);font-weight:600;}
+.btn-p:hover{filter:brightness(1.08);}
+.btn-g{border-color:var(--line);color:var(--fg2);}
+.btn-g:hover{border-color:var(--line2);color:var(--fg);}
+
+.two{display:grid;grid-template-columns:264px minmax(0,1fr);gap:16px;align-items:start;}
+
+/* daftar orang */
+.pane{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);}
+.pane-h{padding:12px 13px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:9px;}
+.srch{
+  width:100%;height:32px;padding:0 10px;border-radius:var(--r-sm);
+  border:1px solid var(--line);background:var(--canvas);color:var(--fg);font:inherit;font-size:12px;
+}
+.srch::placeholder{color:var(--dim);}
+.srch:focus{border-color:var(--acc);outline:none;}
+.fchips{display:flex;gap:5px;}
+.fc{padding:3px 9px;border:1px solid var(--line);border-radius:99px;font-size:10.5px;color:var(--dim);}
+.fc[aria-pressed="true"]{border-color:var(--acc);color:var(--acc);}
+.plist{max-height:min(60vh,520px);overflow-y:auto;}
+.pi{display:flex;align-items:center;gap:9px;width:100%;padding:8px 13px;text-align:left;border-bottom:1px solid var(--line);}
+.pi:last-child{border-bottom:none;}
+.pi:hover{background:var(--elev);}
+.pi[aria-selected="true"]{background:var(--elev);box-shadow:inset 2px 0 0 var(--acc);}
+.pi-av{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;background:var(--elev);border:1px solid var(--line2);font-size:10px;font-weight:700;color:var(--fg2);flex:0 0 auto;}
+.pi[aria-selected="true"] .pi-av{background:var(--card);}
+.pi-b{min-width:0;flex:1;}
+.pi-n{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pi-r{font-size:10px;color:var(--dim);letter-spacing:.04em;}
+.dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
+.dot.on{background:var(--ok);} .dot.off{background:var(--dim);} .dot.wait{background:var(--warn);}
+.pane-f{padding:9px 13px;border-top:1px solid var(--line);font-size:11px;color:var(--dim);}
+
+/* berkas orang */
+.dos{display:flex;flex-direction:column;gap:14px;}
+.dh{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:15px 16px;}
+.dh-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.dh-av{width:40px;height:40px;border-radius:var(--r-md);display:grid;place-items:center;background:var(--acc-grad);color:var(--on-acc);font-size:15px;font-weight:700;}
+.dh-n{font-size:18px;font-weight:500;line-height:1.25;}
+.dh-m{font-size:11.5px;color:var(--dim);}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin-top:14px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;}
+.tile{background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:5px;}
+.tile-l{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600;}
+.tile-v{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;}
+.tile-a{font-size:11px;color:var(--info);align-self:flex-start;text-decoration:underline;text-underline-offset:2px;}
+.tile-a:hover{filter:brightness(1.15);}
+
+/* seksi */
+.sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;}
+.sec-h{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+.sec-t{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);}
+.sec-h .btn{margin-left:auto;height:28px;padding:0 10px;font-size:11.5px;}
+
+/* baris modul */
+.mrow{display:grid;grid-template-columns:22px minmax(120px,1.1fr) minmax(140px,1.2fr) 92px 34px;
+      gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);font-size:12.5px;}
+.mrow:last-child{border-bottom:none;}
+.mrow.sub{padding-left:46px;grid-template-columns:minmax(120px,1fr);font-size:11.5px;color:var(--dim);background:var(--canvas);}
+.mst{display:grid;place-items:center;}
+.mst svg{width:15px;height:15px;}
+.mst.y{color:var(--ok);} .mst.n{color:var(--dim);} .mst.t{color:var(--warn);}
+.mn{font-weight:500;}
+.mc{font-size:11.5px;color:var(--dim);}
+.mc b{font-weight:500;color:var(--fg2);}
+.mc.hold{color:var(--warn);}
+.mtog{display:flex;justify-content:flex-end;}
+.sw{position:relative;width:38px;height:21px;border-radius:11px;background:var(--elev);border:1px solid var(--line2);transition:background .15s;}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--dim);transition:transform .15s,background .15s;}
+.sw[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);}
+.sw[aria-pressed="true"]::after{transform:translateX(17px);background:var(--on-acc);}
+.sw[disabled]{opacity:.45;cursor:not-allowed;}
+.mgo{display:grid;place-items:center;color:var(--dim);}
+.mgo svg{width:15px;height:15px;}
+.mgo:hover{color:var(--fg);}
+
+/* garis waktu */
+.tl{padding:6px 14px 12px;}
+.tli{display:grid;grid-template-columns:78px 1fr;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;}
+.tli:last-child{border-bottom:none;}
+.tld{color:var(--dim);font-size:11px;}
+.tlb b{font-weight:500;}
+.tlb i{font-style:normal;color:var(--dim);}
+
+/* bilah belum tersimpan */
+.dirty{
+  position:sticky;bottom:0;display:none;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:11px 14px;border:1px solid var(--warn);border-radius:var(--r-md);
+  background:var(--warn-bg);font-size:12px;
+}
+.dirty.on{display:flex;}
+.dirty .btn{margin-left:auto;}
+.dirty svg{width:15px;height:15px;color:var(--warn);flex:0 0 auto;}
+
+/* ── sakelar ────────────────────────────────────────────────────────────── */
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
+.scard{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:13px 14px;display:flex;flex-direction:column;gap:10px;}
+.scard.risk{border-color:var(--warn);}
+.sc-h{display:flex;align-items:flex-start;gap:8px;}
+.sc-n{font-size:13.5px;font-weight:500;flex:1;}
+.seg{display:flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;}
+.seg button{flex:1;padding:6px 0;font-size:10.5px;font-weight:600;letter-spacing:.05em;color:var(--dim);border-right:1px solid var(--line);}
+.seg button:last-child{border-right:none;}
+.seg button[aria-pressed="true"]{color:var(--on-acc);}
+.seg button.v-on[aria-pressed="true"]{background:var(--ok);color:#FFFFFF;}
+.seg button.v-ro[aria-pressed="true"]{background:var(--info);color:#FFFFFF;}
+.seg button.v-off[aria-pressed="true"]{background:var(--bad);color:#FFFFFF;}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;letter-spacing:.04em;}
+.tag svg{width:11px;height:11px;}
+.tag.ok{background:var(--ok-bg);color:var(--ok);}
+.tag.no{background:var(--warn-bg);color:var(--warn);}
+.sc-note{font-size:11px;color:var(--dim);}
+.sc-msg{display:flex;flex-direction:column;gap:6px;}
+.sc-msg input{height:30px;padding:0 9px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--canvas);color:var(--fg);font:inherit;font-size:11.5px;}
+.sc-msg input:focus{border-color:var(--acc);outline:none;}
+.sub-sw{display:flex;align-items:center;gap:8px;padding-top:9px;border-top:1px solid var(--line);font-size:11.5px;color:var(--fg2);}
+.sub-sw .sw{margin-left:auto;}
+
+/* ── pemeriksaan ────────────────────────────────────────────────────────── */
+.finds{display:flex;flex-direction:column;gap:9px;}
+.find{
+  display:grid;grid-template-columns:4px 1fr auto;gap:0 14px;align-items:center;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);
+  overflow:hidden;
+}
+.find>.stripe{align-self:stretch;}
+.find.s3 .stripe{background:var(--bad);}
+.find.s2 .stripe{background:var(--warn);}
+.find.s1 .stripe{background:var(--info);}
+.find-b{padding:12px 0;min-width:0;}
+.find-t{font-size:13px;font-weight:500;}
+.find-d{font-size:11.5px;color:var(--dim);margin-top:2px;}
+.find-a{padding-right:14px;display:flex;align-items:center;gap:10px;}
+.find-c{font-size:17px;font-weight:600;}
+.find.s3 .find-c{color:var(--bad);} .find.s2 .find-c{color:var(--warn);} .find.s1 .find-c{color:var(--info);}
+
+.soonbox{background:var(--card);border:1px dashed var(--line2);border-radius:var(--r-md);padding:28px 20px;text-align:center;color:var(--dim);font-size:12.5px;}
+.soonbox b{display:block;color:var(--fg2);font-size:14px;font-weight:500;margin-bottom:5px;}
+
+.view{display:none;} .view.on{display:block;}
+.wrap{overflow-x:auto;}
+
+@media (max-width:1080px){
+  .shell{grid-template-columns:60px minmax(0,1fr);}
+  .rail{padding:14px 6px;}
+  .ri span.lbl,.rg-t{display:none;}
+  .ri{justify-content:center;padding:9px 0;}
+  .ri .bdg{position:absolute;margin:0;transform:translate(14px,-11px);}
+  .ri{position:relative;}
+}
+@media (max-width:900px){
+  .two{grid-template-columns:minmax(0,1fr);}
+  .plist{max-height:220px;}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media (max-width:560px){
+  .main{padding:16px 13px 32px;}
+  .top .clock{display:none;}
+  .who-n,.who-r{display:none;}
+  /* Kolom SEBAB tidak boleh hilang di layar sempit — ia yang membuat kotak
+     centangnya jujur. Yang turun ke baris kedua, bukan yang dibuang. */
+  .mrow{grid-template-columns:20px minmax(0,1fr) 40px;row-gap:2px;}
+  .mrow .mst{grid-column:1;grid-row:1/3;}
+  .mrow .mn{grid-column:2;grid-row:1;}
+  .mrow .mc{grid-column:2;grid-row:2;}
+  .mrow .mtog{grid-column:3;grid-row:1/3;align-self:center;}
+  .mrow .mgo,.mrow>span:empty{display:none;}
+  .mrow.sub{padding-left:34px;}
+}
+</style>
+
+<div class="mk">
+  <b>Maket</b>
+  <span>Rancangan tampilan — data di layar ini contoh, bukan data pegawai sungguhan.
+  Konsep: <span class="mono">docs/CONCEPT-pusat-akses-satu-pintu.md §16</span></span>
+</div>
+
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="brand-tx">PRIMA <i>·</i> Pusat Kendali</div>
+    </div>
+    <div class="clock mono" id="jam">08:41:07</div>
+    <div class="top-act">
+      <button class="chip" id="tema" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span id="tema-tx">Terang</span>
+      </button>
+      <div class="who">
+        <div class="ava">BS</div>
+        <div>
+          <div class="who-n">budi.setiawan</div>
+          <div class="who-r mono">SUPER_ADMIN</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="rail" aria-label="Bagian Pusat Kendali">
+    <div>
+      <div class="rg-t">Akun &amp; Akses</div>
+      <div class="rg">
+        <button class="ri" data-view="akses" aria-current="page" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/></svg>
+          <span class="lbl">Pusat Akses</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          <span class="lbl">Peran</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H5.2L4 18z"/></svg>
+          <span class="lbl">Permintaan</span><span class="bdg">3</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>
+          <span class="lbl">Tinjauan</span>
+        </button>
+      </div>
+    </div>
+    <div>
+      <div class="rg-t">Aplikasi</div>
+      <div class="rg">
+        <button class="ri" data-view="sakelar" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.4 5.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></svg>
+          <span class="lbl">Sakelar</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          <span class="lbl">Konfigurasi</span>
+        </button>
+      </div>
+    </div>
+    <div>
+      <div class="rg-t">Keamanan</div>
+      <div class="rg">
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8"/></svg>
+          <span class="lbl">Sesi Aktif</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+          <span class="lbl">Monitor</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="lbl">Status</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <span class="lbl">Jejak Audit</span>
+        </button>
+      </div>
+    </div>
+    <div>
+      <div class="rg-t">Sistem</div>
+      <div class="rg">
+        <button class="ri" data-view="periksa" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          <span class="lbl">Pemeriksaan</span><span class="bdg w">6</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-8-8 18-2-8z"/></svg>
+          <span class="lbl">Broadcast</span>
+        </button>
+        <button class="ri soon" data-view="soon" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6L22 7"/></svg>
+          <span class="lbl">Email</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- ══ PUSAT AKSES ══ -->
+    <section class="view on" id="v-akses">
+      <div class="ph">
+        <div>
+          <h1>Pusat Akses</h1>
+          <p>Satu orang, satu halaman: peran, status, pintu tiap modul, dan riwayat perubahannya.
+             Tiap baris menyebut <em>kenapa</em> pintunya terbuka — bukan cuma terbuka atau tidak.</p>
+        </div>
+        <div class="acts">
+          <button class="btn btn-g" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            Lihat sebagai orang ini
+          </button>
+          <button class="btn btn-p" type="button" id="simpan">Simpan</button>
+        </div>
+      </div>
+
+      <div class="two">
+        <!-- daftar orang -->
+        <div class="pane">
+          <div class="pane-h">
+            <input class="srch" type="search" placeholder="Cari nama atau username…" aria-label="Cari orang">
+            <div class="fchips">
+              <button class="fc" type="button" aria-pressed="true">Semua</button>
+              <button class="fc" type="button" aria-pressed="false">Aktif</button>
+              <button class="fc" type="button" aria-pressed="false">Nonaktif</button>
+            </div>
+          </div>
+          <div class="plist" id="plist" role="listbox" aria-label="Daftar akun"></div>
+          <div class="pane-f"><span class="mono">27</span> akun · <span class="mono">24</span> aktif</div>
+        </div>
+
+        <!-- berkas orang -->
+        <div class="dos">
+          <div class="dh">
+            <div class="dh-top">
+              <div class="dh-av" id="d-ini">SW</div>
+              <div style="flex:1;min-width:0">
+                <div class="dh-n" id="d-nama">Sari Wulandari</div>
+                <div class="dh-m mono" id="d-meta">sari.w · sari.w@rsjd.jatengprov.go.id</div>
+              </div>
+            </div>
+            <div class="tiles">
+              <div class="tile">
+                <div class="tile-l">Peran</div>
+                <div class="tile-v"><span id="d-peran">PERBENDAHARAAN</span></div>
+                <button class="tile-a" type="button">Ubah peran</button>
+              </div>
+              <div class="tile">
+                <div class="tile-l">Status</div>
+                <div class="tile-v"><span class="dot on" id="d-dot"></span><span id="d-status">Aktif</span></div>
+                <button class="tile-a" type="button">Nonaktifkan</button>
+              </div>
+              <div class="tile">
+                <div class="tile-l">Sesi</div>
+                <div class="tile-v"><span class="mono" id="d-sesi">2</span> perangkat</div>
+                <button class="tile-a" type="button">Putuskan semua</button>
+              </div>
+              <div class="tile">
+                <div class="tile-l">Tinjauan</div>
+                <div class="tile-v mono" id="d-tinjau">6 bln lalu</div>
+                <button class="tile-a" type="button">Tandai ditinjau</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="sec">
+            <div class="sec-h">
+              <div class="sec-t">Pintu Modul</div>
+              <button class="btn btn-g" type="button">Terapkan paket…</button>
+            </div>
+            <div class="wrap" id="modlist"></div>
+          </div>
+
+          <div class="sec">
+            <div class="sec-h"><div class="sec-t">Garis Waktu</div></div>
+            <div class="tl" id="tl"></div>
+          </div>
+
+          <div class="dirty" id="dirty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+            <span><b>Belum tersimpan.</b> <span id="dirty-tx">1 perubahan</span> — akan ditulis sebagai satu penyimpanan.</span>
+            <button class="btn btn-p" type="button" id="simpan2">Simpan</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SAKELAR ══ -->
+    <section class="view" id="v-sakelar">
+      <div class="ph">
+        <div>
+          <h1>Sakelar &amp; Pemeliharaan</h1>
+          <p>Daftarnya dari registry modul, jadi modul baru muncul sendiri di sini.
+             Lencana <b>Terjaga</b> menyatakan sakelarnya benar-benar menutup API-nya —
+             bukan cuma mengabukan kartunya di halaman menu.</p>
+        </div>
+      </div>
+      <div class="sgrid" id="sgrid"></div>
+    </section>
+
+    <!-- ══ PEMERIKSAAN ══ -->
+    <section class="view" id="v-periksa">
+      <div class="ph">
+        <div>
+          <h1>Pemeriksaan Mandiri</h1>
+          <p>Melaporkan, tidak membereskan. Perbaikan wewenang yang berjalan otomatis
+             adalah cara tercepat membuat orang kehilangan akses tanpa ada yang tahu kenapa.</p>
+        </div>
+        <div class="acts"><button class="btn btn-g" type="button">Unduh Excel</button></div>
+      </div>
+      <div class="finds" id="finds"></div>
+    </section>
+
+    <section class="view" id="v-soon">
+      <div class="ph"><div><h1>Belum digambar di maket</h1></div></div>
+      <div class="soonbox">
+        <b>Layar ini sudah ada di aplikasi atau dirancang di dokumen konsep</b>
+        Maket ini membatasi diri pada tiga layar yang bentuknya benar-benar baru:
+        Pusat Akses, Sakelar &amp; Pemeliharaan, dan Pemeriksaan Mandiri.
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const ic = {
+    ya:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    no:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    jam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    go:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
+    gembok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+    awas:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>',
+  };
+
+  /* ── data contoh ──────────────────────────────────────────────────────── */
+  const MODUL = [
+    { k:'dashboard',          n:'Dashboard' },
+    { k:'usulan_aset',        n:'Usulan Kebutuhan' },
+    { k:'blud',               n:'BLUD',               menu:12 },
+    { k:'perjanjian_kinerja', n:'Perjanjian Kinerja', menu:7 },
+    { k:'rencana_aksi',       n:'Renaksi & Kinerja' },
+    { k:'new_econtrolling',   n:'E-Anggaran' },
+    { k:'buku_besar_aset',    n:'Buku Besar Aset' },
+    { k:'lkjip',              n:'LKJIP' },
+    { k:'iki',                n:'IKI' },
+  ];
+
+  const ORANG = [
+    {
+      u:'sari.w', nama:'Sari Wulandari', peran:'PERBENDAHARAAN', status:'Aktif', dot:'on',
+      email:'sari.w@rsjd.jatengprov.go.id', sesi:2, tinjau:'6 bln lalu',
+      akses:{
+        blud:{ s:'grant', ket:'diberi akses', sub:'12 menu · 2 perkecualian' },
+        usulan_aset:{ s:'semua', ket:'terbuka untuk semua yang login' },
+        dashboard:{ s:'jangka', ket:'sampai 30 Sep', sisa:'12 hari lagi' },
+      },
+      tl:[
+        ['03 Sep','Peran diubah <b>UMUM → PERBENDAHARAAN</b> <i>· budi.setiawan</i>'],
+        ['22 Ags','Diberi akses <b>BLUD</b> <i>· budi.setiawan — "pengganti bendahara selama cuti"</i>'],
+        ['22 Ags','Akses <b>Dashboard</b> berjangka s/d 30 Sep <i>· budi.setiawan</i>'],
+      ],
+    },
+    {
+      u:'agus.p', nama:'Agus Prasetyo', peran:'ADMIN', status:'Aktif', dot:'on',
+      email:'agus.p@rsjd.jatengprov.go.id', sesi:1, tinjau:'2 bln lalu',
+      akses:{
+        blud:{ s:'peran', ket:'karena peran ADMIN', sub:'12 menu · ikut bawaan peran' },
+        perjanjian_kinerja:{ s:'peran', ket:'karena peran ADMIN', sub:'7 menu · ikut bawaan peran' },
+        dashboard:{ s:'peran', ket:'karena peran ADMIN' },
+        usulan_aset:{ s:'semua', ket:'terbuka untuk semua yang login' },
+        rencana_aksi:{ s:'peran', ket:'karena peran ADMIN' },
+        new_econtrolling:{ s:'peran', ket:'karena peran ADMIN' },
+        buku_besar_aset:{ s:'peran', ket:'karena peran ADMIN' },
+        lkjip:{ s:'peran', ket:'karena peran ADMIN' },
+        iki:{ s:'peran', ket:'karena peran ADMIN' },
+      },
+      tl:[
+        ['14 Jul','Peran diubah <b>PROGRAM → ADMIN</b> <i>· lewat alur promosi, disetujui budi.setiawan</i>'],
+        ['14 Jul','Masa percobaan 7 hari dimulai <i>· otomatis</i>'],
+      ],
+    },
+    {
+      u:'joko.p', nama:'Joko Purnomo', peran:'RUMAH TANGGA', status:'Nonaktif', dot:'off',
+      email:'joko.p@rsjd.jatengprov.go.id', sesi:0, tinjau:'belum pernah',
+      akses:{
+        usulan_aset:{ s:'semua', ket:'terbuka untuk semua yang login' },
+      },
+      tl:[
+        ['28 Ags','Dinonaktifkan <i>· budi.setiawan — "pindah unit kerja"</i>'],
+        ['28 Ags','2 sesi aktif diputuskan <i>· otomatis</i>'],
+      ],
+    },
+  ];
+
+  const RINGKAS = [
+    { u:'agus.p',  n:'Agus Prasetyo',   r:'ADMIN',          d:'on'   },
+    { u:'sari.w',  n:'Sari Wulandari',  r:'PERBENDAHARAAN', d:'on'   },
+    { u:'dewi.k',  n:'Dewi Kartika',    r:'PROGRAM',        d:'on'   },
+    { u:'rahmat.h',n:'Rahmat Hidayat',  r:'AKUNTANSI',      d:'on'   },
+    { u:'nur.a',   n:'Nur Aini',        r:'KEPEGAWAIAN',    d:'wait' },
+    { u:'joko.p',  n:'Joko Purnomo',    r:'RUMAH TANGGA',   d:'off'  },
+  ];
+
+  const SAKELAR = [
+    { n:'Dashboard',           v:'on',  jaga:false },
+    { n:'Usulan Kebutuhan',    v:'on',  jaga:false },
+    { n:'BLUD',                v:'on',  jaga:true, sub:'Sub-modul Realisasi (Buku Kas, Bukti Setor, Tutup Kas)' },
+    { n:'Perjanjian Kinerja',  v:'on',  jaga:false },
+    { n:'Renaksi & Kinerja',   v:'on',  jaga:true },
+    { n:'E-Anggaran',          v:'ro',  jaga:true, pesan:'Dibekukan sampai rekonsiliasi triwulan III selesai — membaca & mencetak tetap bisa.' },
+    { n:'Buku Besar Aset',     v:'on',  jaga:true },
+    { n:'LKJIP',               v:'off', jaga:true, pesan:'Pemeliharaan sampai 9 Sep 08.00 — hubungi Sub Bagian Program.' },
+    { n:'IKI',                 v:'on',  jaga:true },
+  ];
+
+  const TEMUAN = [
+    { s:3, c:3, t:'Sakelar yang tidak menutup apa pun',
+      d:'Dashboard, Usulan Kebutuhan, Perjanjian Kinerja — mematikannya hanya mengabukan kartu di halaman menu; URL-nya tetap bisa diketik.' },
+    { s:3, c:1, t:'Akun aktif yang belum pernah masuk',
+      d:'nur.a — dibuat 12 Ags, belum pernah login. Akun hidup tanpa pemakai.' },
+    { s:2, c:5, t:'Kuota peran hampir penuh',
+      d:'ADMIN 5/6 · SUPER_ADMIN 3/4. Sisa slot sebaiknya diketahui sebelum ada permintaan mendadak.' },
+    { s:2, c:2, t:'Sakelar menyala "pemeliharaan" lebih dari 7 hari',
+      d:'LKJIP sejak 29 Ags. Kemungkinan lupa dinyalakan kembali.' },
+    { s:1, c:4, t:'Pemberian akses yang mubazir',
+      d:'Empat orang diberi grant untuk modul yang perannya sudah membukanya. Mencabutnya tidak mengubah apa pun.' },
+    { s:1, c:2, t:'Perkecualian menu yatim',
+      d:'Dua baris menunjuk menu yang sudah berganti nama. Tidak berbahaya, tapi menumpuk tanpa ada yang tahu.' },
+  ];
+
+  /* ── render ───────────────────────────────────────────────────────────── */
+  const $ = (s) => document.querySelector(s);
+  let dipilih = 'sari.w';
+  let ubahan = 0;
+
+  function daftarOrang() {
+    $('#plist').innerHTML = RINGKAS.map((p) => `
+      <button class="pi" role="option" type="button" data-u="${p.u}" aria-selected="${p.u === dipilih}">
+        <span class="pi-av">${p.n.split(' ').map(w => w[0]).join('').slice(0,2)}</span>
+        <span class="pi-b">
+          <span class="pi-n">${p.n}</span>
+          <span class="pi-r mono">${p.r}</span>
+        </span>
+        <span class="dot ${p.d}" aria-hidden="true"></span>
+      </button>`).join('');
+  }
+
+  function barisModul(m, a) {
+    if (!a) {
+      return `<div class="mrow">
+        <span class="mst n" aria-hidden="true">${ic.no}</span>
+        <span class="mn">${m.n}</span>
+        <span class="mc">tertutup</span>
+        <span class="mtog"><button class="sw" type="button" aria-pressed="false" aria-label="Beri akses ${m.n}"></button></span>
+        <span></span>
+      </div>`;
+    }
+    const kunci = a.s === 'peran' || a.s === 'semua';
+    const ikon = a.s === 'jangka' ? `<span class="mst t" aria-hidden="true">${ic.jam}</span>`
+                                  : `<span class="mst y" aria-hidden="true">${ic.ya}</span>`;
+    const ket = a.s === 'jangka'
+      ? `<span class="mc hold">${a.ket} <b>(${a.sisa})</b></span>`
+      : `<span class="mc">${a.ket}</span>`;
+    const tog = kunci
+      ? `<span class="mtog"><button class="sw" type="button" aria-pressed="true" disabled
+           aria-label="Terkunci — ${a.ket}, mencabut centang tidak menutupnya"></button></span>`
+      : `<span class="mtog"><button class="sw" type="button" aria-pressed="true" aria-label="Cabut akses ${m.n}"></button></span>`;
+    const go = m.menu ? `<button class="mgo" type="button" aria-label="Atur menu ${m.n}">${ic.go}</button>` : '<span></span>';
+    const sub = a.sub ? `<div class="mrow sub">${a.sub}</div>` : '';
+    return `<div class="mrow">${ikon}<span class="mn">${m.n}</span>${ket}${tog}${go}</div>${sub}`;
+  }
+
+  function berkas() {
+    const o = ORANG.find((x) => x.u === dipilih) ?? ORANG[0];
+    $('#d-ini').textContent = o.nama.split(' ').map(w => w[0]).join('').slice(0,2);
+    $('#d-nama').textContent = o.nama;
+    $('#d-meta').textContent = `${o.u} · ${o.email}`;
+    $('#d-peran').textContent = o.peran;
+    $('#d-status').textContent = o.status;
+    $('#d-dot').className = 'dot ' + o.dot;
+    $('#d-sesi').textContent = o.sesi;
+    $('#d-tinjau').textContent = o.tinjau;
+    $('#modlist').innerHTML = MODUL.map((m) => barisModul(m, o.akses[m.k])).join('');
+    $('#tl').innerHTML = o.tl.map(([d, b]) =>
+      `<div class="tli"><span class="tld mono">${d}</span><span class="tlb">${b}</span></div>`).join('');
+    ubahan = 0; $('#dirty').classList.remove('on');
+  }
+
+  function sakelar() {
+    $('#sgrid').innerHTML = SAKELAR.map((s, i) => {
+      const tag = s.jaga
+        ? `<span class="tag ok">${ic.gembok} Terjaga</span>`
+        : `<span class="tag no">${ic.awas} Belum terjaga</span>`;
+      const note = s.jaga
+        ? '<div class="sc-note">Sakelar ini menutup halaman dan seluruh route API-nya.</div>'
+        : '<div class="sc-note">Baru mengabukan kartu di halaman menu — URL-nya masih bisa diketik. Perlu pagar di API.</div>';
+      const msg = s.v === 'on' ? '' : `
+        <div class="sc-msg">
+          <label class="tile-l" for="ps${i}">Pesan yang dilihat pemakai</label>
+          <input id="ps${i}" value="${s.pesan ?? ''}">
+        </div>`;
+      const sub = s.sub ? `
+        <div class="sub-sw"><span>${s.sub}</span>
+          <button class="sw" type="button" aria-pressed="true" aria-label="Sub-modul Realisasi"></button>
+        </div>` : '';
+      return `<div class="scard ${s.jaga ? '' : 'risk'}">
+        <div class="sc-h"><span class="sc-n">${s.n}</span>${tag}</div>
+        <div class="seg" role="group" aria-label="Keadaan ${s.n}">
+          <button class="v-on"  type="button" aria-pressed="${s.v === 'on'}">ONLINE</button>
+          <button class="v-ro"  type="button" aria-pressed="${s.v === 'ro'}">BACA-SAJA</button>
+          <button class="v-off" type="button" aria-pressed="${s.v === 'off'}">MATI</button>
+        </div>
+        ${note}${msg}${sub}
+      </div>`;
+    }).join('');
+  }
+
+  function temuan() {
+    $('#finds').innerHTML = TEMUAN.map((f) => `
+      <div class="find s${f.s}">
+        <span class="stripe" aria-hidden="true"></span>
+        <div class="find-b">
+          <div class="find-t">${f.t}</div>
+          <div class="find-d">${f.d}</div>
+        </div>
+        <div class="find-a">
+          <span class="find-c mono">${f.c}</span>
+          <button class="btn btn-g" type="button">Buka</button>
+        </div>
+      </div>`).join('');
+  }
+
+  /* ── kelakuan ─────────────────────────────────────────────────────────── */
+  document.addEventListener('click', (e) => {
+    const ri = e.target.closest('.ri');
+    if (ri) {
+      document.querySelectorAll('.ri').forEach((b) => b.removeAttribute('aria-current'));
+      ri.setAttribute('aria-current', 'page');
+      const v = ri.dataset.view;
+      document.querySelectorAll('.view').forEach((s) => s.classList.remove('on'));
+      $('#v-' + v).classList.add('on');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
+    const pi = e.target.closest('.pi');
+    if (pi) { dipilih = pi.dataset.u; daftarOrang(); berkas(); return; }
+
+    const fc = e.target.closest('.fc');
+    if (fc) {
+      fc.parentElement.querySelectorAll('.fc').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      fc.setAttribute('aria-pressed', 'true');
+      return;
+    }
+    const seg = e.target.closest('.seg button');
+    if (seg) {
+      seg.parentElement.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      seg.setAttribute('aria-pressed', 'true');
+      return;
+    }
+    const sw = e.target.closest('.sw');
+    if (sw && !sw.disabled) {
+      const on = sw.getAttribute('aria-pressed') === 'true';
+      sw.setAttribute('aria-pressed', String(!on));
+      if (sw.closest('#modlist')) {
+        ubahan += 1;
+        $('#dirty-tx').textContent = ubahan + ' perubahan';
+        $('#dirty').classList.add('on');
+      }
+      return;
+    }
+    if (e.target.closest('#simpan, #simpan2')) {
+      ubahan = 0; $('#dirty').classList.remove('on');
+    }
+  });
+
+  $('#tema').addEventListener('click', () => {
+    const kini = document.documentElement.dataset.theme
+      || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    const baru = kini === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = baru;
+    $('#tema-tx').textContent = baru === 'dark' ? 'Terang' : 'Gelap';
+  });
+
+  const jam = $('#jam');
+  const tik = () => { jam.textContent = new Date().toLocaleTimeString('id-ID', { hour12:false }); };
+  tik(); setInterval(tik, 1000);
+
+  daftarOrang(); berkas(); sakelar(); temuan();
+})();
+</script>
+</body>
+</html>
