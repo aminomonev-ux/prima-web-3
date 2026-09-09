@@ -1,6 +1,6 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1 DIKERJAKAN 2026-09-09 — menunggu verifikasi peramban.** Ditulis &
+> Status: **Tahap 1 & 2 DIKERJAKAN 2026-09-09 — menunggu verifikasi peramban.** Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -1752,6 +1752,42 @@ gejala. Itu sebabnya snapshot dibekukan sebelum kode lama dihapus — bukan sesu
 **Kenapa wajib.** B5 adalah keping yang membuat seluruh dokumen ini bukan sekadar
 tambalan. Tanpa B5, Tahap 1 cuma menutup tiga lubang yang kebetulan ketahuan
 2026-09-08.
+
+**HASIL — dikerjakan 2026-09-09** (commit `361dbcb` bekuan, `720c158` refactor).
+
+Urutannya ditaati: tabel kebenaran dibekukan **lebih dulu, di commit terpisah**,
+selagi kedelapan `is*Role` masih asli. Sesudah refactor, **1.080 sel identik** —
+8 modul × 27 peran × 5 keadaan `app_access` (null · kosong · grant sendiri · grant
+modul lain · grant semua).
+
+Yang berubah bentuknya: `lib/registry/apps.ts` + `apps-data.mjs` (10 modul), delapan
+`is*Role` jadi pembungkus tipis `bolehMasukModul()`, dan **enam** daftar tangan
+diturunkan — `APP_CHECKS` (hilang sama sekali), `APP_KEYS`, `APP_STATUS_LABELS`,
+`APP_ACCESS_LIST`, `NAV_MODULES`, dan daftar modul gate G. `admin` keluar dari
+`AppAccessKeyEnum` (B4). Gate G tetap **95 route/9 modul** — sama seperti sesudah
+Tahap 1, sekarang daftarnya bukan lagi ketikan tangan.
+
+**Datanya JavaScript polos (`apps-data.mjs`), bukan TypeScript** — keputusan yang
+lahir saat mengerjakan. Gate G jalan di CI dengan `node` biasa dan `tsx` **bukan**
+devDependency di repo ini; menambahkannya berarti meregenerasi `package-lock.json`
+(L57) di berkas yang paling rawan bentrok dengan agen lain. Pilihan lainnya —
+membiarkan gate G mengetik ulang daftar modulnya — justru mengembalikan cacat yang
+seluruh registry ini ada untuk membuangnya. Jadi yang dikorbankan bentuk berkasnya,
+bukan ketunggalan datanya; tipenya tetap ditegakkan `readonly Modul[]` di `apps.ts`.
+
+**Dua lubang di pekerjaan ini sendiri ditemukan uji mutasi**, keduanya sudah ditutup
+dan keduanya tidak akan terlihat dari membaca ulang kodenya:
+
+1. **Kunci modul tak dikenal tidak teruji.** Tabel kebenaran hanya menanyakan modul
+   yang memang ada, jadi membalik `if (!m) return false` menjadi `return true` lolos
+   tanpa satu sel pun bergeser — padahal akibatnya satu salah ketik kunci membuka
+   **semua** pintu untuk **semua** peran. Sekarang deny-by-default diuji terpisah.
+2. **Gate G bisa dimatikan per modul dengan menghapus satu baris.** Penyaringnya
+   melewati modul yang `penjagaApi`-nya kosong, jadi menghapus baris itu membuat
+   modulnya lenyap dari pemeriksaan tanpa satu pesan pun — **T-1 lahir kembali, lewat
+   pintu yang saya sendiri baru pasang.** Sekarang keadaan itu MENGGAGALKAN gate.
+
+Total 22 uji mutasi (13 Tahap 1 + 9 Tahap 2), 22 tertangkap.
 
 ---
 
