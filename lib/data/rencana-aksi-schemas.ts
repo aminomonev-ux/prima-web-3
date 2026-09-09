@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { bulatkanDesimal } from '@/lib/shared/desimal';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -13,14 +14,14 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
  * Role allow-list default. User lain di-toggle via admin panel
  * (`users.app_access` JSON include 'rencana_aksi').
  */
-export const RENCANA_AKSI_ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+export const RENCANA_AKSI_ALLOWED_ROLES = peranBawaanModul('rencana_aksi');
 
-export function isRencanaAksiRole(
-  role: string,
-  appAccess: string[] | null,
-): boolean {
-  if ((RENCANA_AKSI_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes('rencana_aksi');
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 1 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
+export function isRencanaAksiRole(role: string,
+  appAccess: string[] | null): boolean {
+  return bolehMasukModul('rencana_aksi', role, appAccess);
 }
 
 export async function rencanaAksiRateLimit(

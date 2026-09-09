@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 // ─── Rate Limit ─────────────────────────────────────────────────────────────
 
@@ -41,10 +42,7 @@ export async function pkRateLimit(
  * RENBANG (BIDANG_ROLES) + PROGRAM (SUBBIDANG_ROLES) eksis di lib/constants.ts.
  * Verified Sprint 0 — RENBANG/PROGRAM = fungsional owner modul Perjanjian Kinerja.
  */
-export const PK_ALLOWED_ROLES = [
-  'SUPER_ADMIN', 'ADMIN', 'ADMIN_KASUBAG', 'ADMIN_KABAG',
-  'RENBANG', 'PROGRAM',
-] as const;
+export const PK_ALLOWED_ROLES = peranBawaanModul('perjanjian_kinerja');
 
 /**
  * Role yang boleh mutating (create/update/delete dokumen PK).
@@ -61,9 +59,11 @@ export const PK_APP_KEY = 'perjanjian_kinerja';
  * Cek role + app_access (pola isAsetRole/isLkjipRole). Role di luar allow-list
  * bisa di-grant via users.app_access include 'perjanjian_kinerja' (Admin Panel).
  */
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 1 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
 export function isPkRole(role: string, appAccess: string[] | null | undefined): boolean {
-  if ((PK_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes(PK_APP_KEY);
+  return bolehMasukModul('perjanjian_kinerja', role, appAccess);
 }
 export function isPkEditRole(role: string, appAccess: string[] | null | undefined): boolean {
   if ((PK_EDIT_ROLES as readonly string[]).includes(role)) return true;

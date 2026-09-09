@@ -2,31 +2,16 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { sql, queryOne } from '@/lib/data/db';
-import { isBludRole } from '@/lib/blud/schemas';
-import { isKinerjaRole } from '@/lib/data/kinerja-schemas';
-import { isPkRole } from '@/lib/data/pk-schemas';
-import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
-import { isLkjipRole } from '@/lib/lkjip/schemas';
-import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
-import { isIkiRole } from '@/lib/data/iki-schemas';
-import { isDashboardRole } from '@/lib/data/dashboard-schemas';
+import { MODUL_APPS, bolehMasukModul } from '@/lib/registry/apps';
 
-// AC-1: per app card id → checker yang SAMA dengan guard halaman/API-nya,
+// AC-1: kunci kartu /menu dijawab oleh aturan yang SAMA dengan guard halaman/API-nya,
 // supaya kunci di menu tidak pernah beda arti dengan satpam di belakang.
-const APP_CHECKS: Array<[string, (role: string, appAccess: string[] | null) => boolean]> = [
-  ['blud',               isBludRole],
-  ['new_econtrolling',   isKinerjaRole],
-  ['perjanjian_kinerja', isPkRole],
-  ['buku_besar_aset',    isAsetRole],
-  ['lkjip',              isLkjipRole],
-  ['rencana_aksi',       isRencanaAksiRole],
-  ['iki',                isIkiRole],
-  // T-6 (Tahap 1/A6): Dashboard tidak pernah masuk daftar ini, jadi kartunya terkunci
-  // di /menu untuk ADMIN_KASUBAG & ADMIN_KABAG — padahal `isDashboardRole` memberi
-  // mereka akses dan halaman + API-nya menerima mereka. Kuncinya kebalikan T-1:
-  // di sana pintu terbuka tanpa penjaga, di sini penjaga menahan orang yang berhak.
-  ['dashboard',          isDashboardRole],
-];
+//
+// Fase B (Tahap 2): daftarnya hilang, diganti perulangan atas registry. Bentuk lama —
+// tujuh pasangan `['blud', isBludRole]` yang harus diingat orang — persis yang membuat
+// T-6 lahir: Dashboard punya `isDashboardRole`, punya halaman, punya API, tapi tidak
+// pernah didaftarkan di sini, jadi kartunya terkunci untuk Kasubag & Kabag yang justru
+// berhak. Penjaga yang daftarnya diketik terpisah hanya menjaga yang sudah diingat.
 
 export async function GET() {
   const session = await getSession();
@@ -42,11 +27,13 @@ export async function GET() {
   );
   const granted = Array.isArray(row?.app_access) ? row.app_access : [];
 
-  // Akses efektif = grant manual ∪ default role. Usulan Kebutuhan terbuka untuk
-  // semua role (akses internal dibatasi getPanels per role di modulnya sendiri).
-  const effective = new Set<string>(['usulan_aset', ...granted]);
-  for (const [appId, check] of APP_CHECKS) {
-    if (check(session.role, granted)) effective.add(appId);
+  // Akses efektif = grant manual ∪ peran bawaan. Modul ber-`peranBawaan: 'SEMUA'`
+  // (hari ini Usulan Kebutuhan) ikut lewat `bolehMasukModul`, tidak lagi disebut
+  // namanya di sini — dulu ia satu-satunya kunci yang ditulis literal, dan kunci
+  // literal adalah bentuk awal dari daftar tangan berikutnya.
+  const effective = new Set<string>(granted);
+  for (const m of MODUL_APPS) {
+    if (bolehMasukModul(m.kunci, session.role, granted)) effective.add(m.kunci);
   }
 
   return NextResponse.json({ ok: true, app_access: [...effective] });

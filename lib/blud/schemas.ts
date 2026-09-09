@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { tanggalHariIniWIB } from './tanggal';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -19,17 +20,19 @@ import { tanggalHariIniWIB } from './tanggal';
  * Tahap 12): kalau tidak punya akses app BLUD, tidak boleh lihat data
  * DPA mentah (sensitif: kode rekening + nominal anggaran).
  */
-export const BLUD_ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
 export const BLUD_APP_KEY = 'blud';
+export const BLUD_ALLOWED_ROLES = peranBawaanModul(BLUD_APP_KEY);
 
 /**
  * Cek role + app_access (pola isAsetRole/isLkjipRole). Role di luar allow-list
  * bisa di-grant via users.app_access include 'blud' (Admin Panel → User Management).
  * Pakai via `hasAppAccess(userId, role, isBludRole)` atau `requireAccess(isBludRole)`.
  */
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 3 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
 export function isBludRole(role: string, appAccess: string[] | null | undefined): boolean {
-  if ((BLUD_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes(BLUD_APP_KEY);
+  return bolehMasukModul('blud', role, appAccess);
 }
 
 /**

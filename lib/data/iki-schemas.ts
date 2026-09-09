@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 // ─── Role allow-list ─────────────────────────────────────────────────────────
 
@@ -12,11 +13,13 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
  * Default: Admin Staff + Super Admin (keputusan user 2026-07-14).
  * Role lain di-toggle via Admin Panel (`users.app_access` include 'iki').
  */
-export const IKI_ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+export const IKI_ALLOWED_ROLES = peranBawaanModul('iki');
 
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 1 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
 export function isIkiRole(role: string, appAccess: string[] | null): boolean {
-  if ((IKI_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes('iki');
+  return bolehMasukModul('iki', role, appAccess);
 }
 
 export async function ikiRateLimit(

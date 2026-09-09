@@ -6,15 +6,14 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 /**
  * Audiens default Dashboard = role verif/admin yang memang melihat data lintas
  * modul secara penuh. Role lain (mis. bidang) bisa di-grant manual via Admin
  * Panel → User Management (users.app_access include 'dashboard').
  */
-export const DASHBOARD_ALLOWED_ROLES = [
-  'SUPER_ADMIN', 'ADMIN', 'ADMIN_KASUBAG', 'ADMIN_KABAG',
-] as const;
+export const DASHBOARD_ALLOWED_ROLES = peranBawaanModul('dashboard');
 
 export const DASHBOARD_APP_KEY = 'dashboard'; // = APP_CARDS.id kartu Dashboard
 
@@ -22,9 +21,11 @@ export const DASHBOARD_APP_KEY = 'dashboard'; // = APP_CARDS.id kartu Dashboard
  * Cek role + app_access (pola isAsetRole/isKinerjaRole). Pakai via
  * `requireAccess(isDashboardRole)` atau `hasAppAccess(userId, role, isDashboardRole)`.
  */
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 3 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
 export function isDashboardRole(role: string, appAccess: string[] | null | undefined): boolean {
-  if ((DASHBOARD_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes(DASHBOARD_APP_KEY);
+  return bolehMasukModul('dashboard', role, appAccess);
 }
 
 export async function dashboardRateLimit(

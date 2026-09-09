@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { StrongPasswordSchema } from './auth-schemas';
 import { BIDANG_ROLES, SUBBIDANG_ROLES } from '@/lib/constants';
+import { KUNCI_GRANT } from '@/lib/registry/apps';
 
 // ─── Role enum ──────────────────────────────────────────────────────────────
 
@@ -28,14 +29,16 @@ const ASSIGNABLE_ROLES: [string, ...string[]] = [
 export const AssignableRoleEnum = z.enum(ASSIGNABLE_ROLES);
 
 /**
- * SDL-L4: whitelist app_access key. Match `APP_CARDS.id` di menu-client.tsx.
- * Sebelumnya `apps: string[]` di-`JSON.stringify` tanpa cek isi → DB pollution.
+ * SDL-L4: whitelist app_access key. Sebelumnya `apps: string[]` di-`JSON.stringify`
+ * tanpa cek isi → DB pollution.
+ *
+ * Fase B (Tahap 2): DITURUNKAN dari `lib/registry/apps.ts`, tidak lagi diketik.
+ * B4 sekaligus ikut: `admin` KELUAR. Ia sempat jadi nilai yang sah di sini padahal
+ * tidak ada satu pun kode yang membacanya sebagai grant — mencentangnya untuk seseorang
+ * tidak pernah membuka Admin Panel, cuma menuliskan janji kosong ke `users.app_access`
+ * yang kemudian terbaca seperti wewenang sungguhan waktu ada yang memeriksa (T-9).
  */
-export const AppAccessKeyEnum = z.enum([
-  'dashboard', 'blud', 'rencana_aksi', 'perjanjian_kinerja',
-  'usulan_aset', 'new_econtrolling', 'admin',
-  'buku_besar_aset', 'lkjip', 'iki',
-]);
+export const AppAccessKeyEnum = z.enum(KUNCI_GRANT as [string, ...string[]]);
 
 // ─── User ID ────────────────────────────────────────────────────────────────
 

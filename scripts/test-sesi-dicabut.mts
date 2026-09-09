@@ -18,6 +18,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { MODUL_APPS, LABEL_SAKELAR } from '../lib/registry/apps'
 
 let lulus = 0
 let gagal = 0
@@ -103,10 +104,18 @@ for (const [p, kunci, label] of [
 
 // Layar drill-down Dashboard punya pagarnya SENDIRI, bukan menumpang halaman induk —
 // URL-nya bisa diketik langsung, dan pagar yang cuma di satu layar bukan pagar (L69).
-cek('gate G memindai ketiga modul baru', (() => {
-  const t = baca('scripts/test-killswitch-modul.mjs')
-  return ['app/api/usulan', 'app/api/perjanjian-kinerja', 'app/api/dashboard'].every((d) => t.includes(`dir: '${d}'`))
+// Sesudah Fase B daftar modulnya tidak lagi ditulis di skrip gate G, jadi yang
+// diperiksa bukan teks di sana melainkan NILAI di registry — sekaligus bahwa skripnya
+// memang membacanya dari situ, bukan mengetik ulang daftarnya sendiri.
+cek('gate G menurunkan daftarnya dari registry, tidak mengetik ulang', (() => {
+  const t = buangKomentar(baca('scripts/test-killswitch-modul.mjs'))
+  return t.includes("from '../lib/registry/apps-data.mjs'") && !/dir: '/.test(t)
 })())
+for (const d of ['app/api/usulan', 'app/api/perjanjian-kinerja', 'app/api/dashboard']) {
+  const m = MODUL_APPS.find((x) => x.dirApi === d)
+  cek(`registry: ${d.replace('app/api/', '')} bersakelar & berpenjaga`,
+    !!m && m.sakelar !== null && m.penjagaApi !== undefined, m?.penjagaApi?.penanda.join('/') ?? '—')
+}
 
 // ── A2 · keepalive membaca peran dari DB ─────────────────────────────────────
 console.log('\nA2 · ubah peran berlaku tanpa mengusir siapa pun (T-2)')
@@ -176,12 +185,21 @@ console.log('\nA4 · mengaktifkan kembali memeriksa kuota (T-7)')
 
 // ── A5 · A6 · dua tambalan satu baris ────────────────────────────────────────
 console.log('\nA5/A6 · sakelar tanpa tombol, dan kartu terkunci untuk yang berhak')
-cek('app_status_blud_realisasi punya label (T-5)',
-  buangKomentar(baca('app/(dashboard)/admin/_panels/_shared.ts')).includes('app_status_blud_realisasi:'))
+// Keduanya kini fakta di registry, bukan baris di berkas layar/route. Diperiksa lewat
+// nilai yang benar-benar dihasilkan — asersi yang mencocokkan teks akan lulus atau
+// gagal karena alasan yang salah begitu tempatnya berpindah lagi.
+cek('sakelar sub-modul Realisasi BLUD punya label (T-5)',
+  LABEL_SAKELAR['app_status_blud_realisasi'] !== undefined,
+  LABEL_SAKELAR['app_status_blud_realisasi'] ?? '(tidak ada)')
 {
+  const dash = MODUL_APPS.find((m) => m.kunci === 'dashboard')
+  const peran = dash?.peranBawaan
+  cek('Dashboard terbuka untuk Kasubag & Kabag (T-6)',
+    peran !== undefined && peran !== 'SEMUA'
+      && peran.includes('ADMIN_KASUBAG') && peran.includes('ADMIN_KABAG'))
   const t = buangKomentar(baca('app/api/user/access/route.ts'))
-  cek('dashboard masuk APP_CHECKS (T-6)',
-    /\['dashboard',\s+isDashboardRole\]/.test(t) && t.includes("from '@/lib/data/dashboard-schemas'"))
+  cek('kartu /menu menjawab dari registry, bukan daftar pasangan',
+    t.includes('for (const m of MODUL_APPS)') && !t.includes('APP_CHECKS'))
 }
 
 // ── A7 · lantai API menyusul lantai layar ────────────────────────────────────

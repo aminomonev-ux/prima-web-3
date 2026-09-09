@@ -2,24 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
+import { KUNCI_SAKELAR } from '@/lib/registry/apps';
 
-const APP_KEYS = [
-  'app_status_dashboard',
-  'app_status_usulan_aset',
-  'app_status_blud',
-  'app_status_blud_realisasi', // S4 — sub-modul Realisasi saja; mematikan BLUD ikut mematikannya.
-  'app_status_perjanjian_kinerja',
-  'app_status_rencana_aksi',
-  'app_status_new_econtrolling',
-  'app_status_buku_besar_aset',
-  'app_status_iki',
-  // T1b: kartu `lkjip` sudah ada di /menu dan menyusun kuncinya sebagai
-  // `app_status_${card.id}`, tapi kuncinya tidak pernah masuk daftar ini — jadi
-  // sakelar LKJIP tak pernah bisa dinyalakan sama sekali. Bukan bocor, mati total.
-  'app_status_lkjip',
-  'app_status_sentinel_bot',   // RIMA F4g — kill switch global (SUPER_ADMIN). 'maintenance' = bot mati (chat+avatar).
-  'app_status_rima_query',     // RIMA G30 — kill switch BACA-DATA saja. 'maintenance' = Q&A data mati, chat/tur tetap hidup.
-];
+// Fase B (Tahap 2): DITURUNKAN dari `lib/registry/apps.ts`, tidak lagi diketik.
+//
+// Daftar tangan di sini pernah melahirkan kegagalan senyap dua arah. T1b: kunci
+// `app_status_lkjip` tidak pernah ditambahkan padahal kartunya menyusun nama kunci
+// dari id-nya sendiri, jadi sakelar LKJIP tak pernah bisa dinyalakan — bukan bocor,
+// mati total. T-5: sebaliknya, `app_status_blud_realisasi` ADA di sini tapi tidak di
+// daftar label, jadi ia berlaku penuh tanpa punya tombol. Dua daftar yang menjawab
+// pertanyaan yang sama tidak pernah bertahan sama.
+const APP_KEYS = [...KUNCI_SAKELAR];
 
 export async function GET() {
   // R1/L61: GET sengaja boleh dibaca SEMUA user terautentikasi — payload hanya

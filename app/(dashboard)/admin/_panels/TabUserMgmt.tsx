@@ -10,20 +10,17 @@ import { fetchJson } from '@/lib/shared/api';
 import Tip from '@/components/ui/Tip';
 import { MenuAccessModal } from './MenuAccessPanel';
 import { ALL_ROLES, type UserRow } from './_shared';
+import { MODUL_APPS } from '@/lib/registry/apps';
 
 // Hanya panel ini yang memakainya — SDL-L4: whitelist app_access key, cocok dengan
 // `APP_CARDS.id` di menu-client.tsx.
-const APP_ACCESS_LIST = [
-  { id:'dashboard',          name:'Dashboard' },
-  { id:'usulan_aset',        name:'Usulan Kebutuhan' },
-  { id:'blud',               name:'BLUD' },
-  { id:'perjanjian_kinerja', name:'Perjanjian Kinerja' },
-  { id:'rencana_aksi',       name:'Renaksi & Kinerja' },
-  { id:'new_econtrolling',   name:'E-Anggaran' },
-  { id:'buku_besar_aset',    name:'Buku Besar Aset' },
-  { id:'lkjip',              name:'LKJIP' },
-  { id:'iki',                name:'IKI (Indikator Kinerja Individu)' },
-];
+// Fase B (Tahap 2): DITURUNKAN dari `lib/registry/apps.ts`. Daftar ini dulu punya 9
+// entri sementara whitelist Zod-nya punya 10 — dan yang ke-10 (`admin`) tidak pernah
+// membuka apa pun (T-9). Urutan & label ikut registry supaya centang di sini, nilai
+// yang diterima server, dan kartu di /menu menyebut modul yang sama.
+const APP_ACCESS_LIST = MODUL_APPS
+  .filter((m) => m.bolehDigrant)
+  .map((m) => ({ id: m.kunci, name: m.label }));
 
 export function TabUserMgmt({ isSA }: { isSA:boolean }) {
   const [users,        setUsers]   = useState<UserRow[]>([]);

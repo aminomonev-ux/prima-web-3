@@ -28,6 +28,7 @@ import { isLkjipRole } from '../lib/lkjip/schemas'
 import { isRencanaAksiRole } from '../lib/data/rencana-aksi-schemas'
 import { isIkiRole } from '../lib/data/iki-schemas'
 import { isDashboardRole } from '../lib/data/dashboard-schemas'
+import { bolehMasukModul } from '../lib/registry/apps'
 
 const BASELINE = 'docs/registry-akses-baseline.json'
 
@@ -83,6 +84,25 @@ function bangunTabel(): Tabel {
 
 const sekarang = bangunTabel()
 const sel = MODUL.length * PERAN.length * 5
+
+/**
+ * Deny-by-default untuk kunci yang tidak dikenal. Tidak bisa dijaga tabel di atas —
+ * ia hanya menanyakan modul yang MEMANG ada, jadi `if (!m) return true` lolos di sana
+ * tanpa satu sel pun bergeser. Akibatnya kalau terbalik: satu salah ketik kunci
+ * membuka SEMUA pintu untuk SEMUA peran. Ketahuan lewat uji mutasi.
+ */
+{
+  const salah = [
+    bolehMasukModul('tidak-ada', 'SUPER_ADMIN', ['tidak-ada']),
+    bolehMasukModul('', 'ADMIN', null),
+    bolehMasukModul('BLUD', 'SUPER_ADMIN', null), // kunci peka huruf besar-kecil
+  ]
+  if (salah.some(Boolean)) {
+    console.log('\n  GAGAL kunci modul tak dikenal TIDAK ditolak — deny-by-default bocor.')
+    process.exit(1)
+  }
+  console.log('  ok    kunci modul tak dikenal ditolak (deny-by-default)')
+}
 
 if (process.argv.includes('--bekukan')) {
   if (fs.existsSync(BASELINE)) {

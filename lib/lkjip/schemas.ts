@@ -5,15 +5,18 @@ import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { MAX_DEPTH } from './numbering';
 import { FONT_CHOICES } from './style-constants';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
 // users.app_access include 'lkjip' (diatur Admin Panel → User Management). Pola BBA/Rencana Aksi.
-export const LKJIP_ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
 export const LKJIP_APP_KEY = 'lkjip';
+export const LKJIP_ALLOWED_ROLES = peranBawaanModul(LKJIP_APP_KEY);
 
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 1 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
 export function isLkjipRole(role: string, appAccess: string[] | null | undefined): boolean {
-  if ((LKJIP_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes(LKJIP_APP_KEY);
+  return bolehMasukModul('lkjip', role, appAccess);
 }
 
 /** Rate-limit per user+action (pola bbaRateLimit). Return 429 NextResponse atau null. */

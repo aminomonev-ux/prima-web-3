@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import type { SumberSSK, MasterTipe } from './kinerja';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 // ─── Rate Limit ─────────────────────────────────────────────────────────────
 
@@ -46,20 +47,19 @@ export async function kinerjaRateLimit(
  * NOTE: `master/[id]` DELETE pakai `DELETE_ONLY_ROLES` (SUPER_ADMIN+ADMIN)
  * — guard ekstra di endpoint tersebut, BUKAN gantikan ini.
  */
-export const KINERJA_ALLOWED_ROLES = [
-  'SUPER_ADMIN', 'ADMIN', 'ADMIN_KASUBAG', 'ADMIN_KABAG',
-  'RENBANG', 'PROGRAM', 'KEUANGAN',
-] as const;
 export const KINERJA_APP_KEY = 'new_econtrolling'; // = APP_CARDS.id kartu E-Anggaran/Kinerja
+export const KINERJA_ALLOWED_ROLES = peranBawaanModul(KINERJA_APP_KEY);
 
 /**
  * Cek role + app_access (pola isAsetRole/isLkjipRole). Role di luar allow-list
  * bisa di-grant via users.app_access include 'new_econtrolling' (Admin Panel).
  * Pakai via `hasAppAccess(userId, role, isKinerjaRole)` atau `requireAccess(isKinerjaRole)`.
  */
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 3 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
 export function isKinerjaRole(role: string, appAccess: string[] | null | undefined): boolean {
-  if ((KINERJA_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes(KINERJA_APP_KEY);
+  return bolehMasukModul('new_econtrolling', role, appAccess);
 }
 
 // ─── Primitive Schemas ──────────────────────────────────────────────────────

@@ -6,26 +6,17 @@
 // dipakai satu panel ikut pindah ke panel itu, bukan menumpuk di sini.
 
 import { ROLE_LABELS } from '@/lib/constants';
+import { LABEL_SAKELAR } from '@/lib/registry/apps';
 
 /** Dipakai APP CONTROL (saklar) & SECURITY STATUS (daftar modul aktif). */
-export const APP_STATUS_LABELS: Record<string, string> = {
-  app_status_dashboard:          'Dashboard',
-  app_status_usulan_aset:        'Usulan Kebutuhan',
-  app_status_blud:               'BLUD',
-  // T-5 (Tahap 1/A5): sub-modul Realisasi BLUD sudah ditegakkan `app/api/blud/_guard.ts`
-  // dan sudah ada di `APP_KEYS` route app-status, tapi tidak pernah masuk daftar label —
-  // jadi sakelarnya berlaku penuh tanpa punya satu pun tombol untuk menyalakannya
-  // kembali. Kebalikan T-1, dan lebih sunyi: yang ini menutup, bukan membuka.
-  app_status_blud_realisasi:     'BLUD — Realisasi (sub-modul)',
-  app_status_perjanjian_kinerja: 'Perjanjian Kinerja',
-  app_status_rencana_aksi:       'Renaksi & Kinerja',
-  app_status_iki:                'IKI',
-  app_status_lkjip:              'LKJIP',
-  app_status_new_econtrolling:   'E-Anggaran',
-  app_status_buku_besar_aset:    'Buku Besar Aset',
-  app_status_sentinel_bot:       'RIMA — Seluruh Bot',
-  app_status_rima_query:         'RIMA — Tanya Data (Q&A)',
-};
+/**
+ * Fase B (Tahap 2): DITURUNKAN dari `lib/registry/apps.ts`. Sebelumnya daftar tangan
+ * berisi 11 entri, sementara route `app-status` punya daftarnya sendiri berisi 12 —
+ * dan yang ke-12 (`app_status_blud_realisasi`) sudah ditegakkan guard BLUD tapi tak
+ * punya satu pun tombol untuk menyalakannya kembali (T-5). Selisih seperti itu tidak
+ * bisa lahir lagi begitu keduanya membaca daftar yang sama.
+ */
+export const APP_STATUS_LABELS: Record<string, string> = { ...LABEL_SAKELAR };
 
 /** Dipakai USER MANAGEMENT (ubah peran) & BROADCAST (pilih penerima). */
 export const ALL_ROLES = Object.keys(ROLE_LABELS);

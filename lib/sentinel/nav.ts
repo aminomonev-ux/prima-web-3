@@ -4,6 +4,7 @@
 // aturan dicerminkan dari menu-client (role filter + userAccess lock + maintenance,
 // SUPER_ADMIN bypass). id & href WAJIB sinkron dengan APP_CARDS di menu-client.tsx.
 import type { Role } from '@/types'
+import { MODUL_APPS } from '@/lib/registry/apps'
 
 export interface NavModule {
   id: string
@@ -13,17 +14,27 @@ export interface NavModule {
   adminOnly?: boolean
 }
 
-export const NAV_MODULES: NavModule[] = [
-  { id: 'blud',               label: 'BLUD',               href: '/blud',              aliases: ['blud', 'dpa', 'pergeseran', 'anggaran blud'] },
-  { id: 'new_econtrolling',   label: 'E-Anggaran (Kinerja)', href: '/kinerja',         aliases: ['kinerja', 'e-anggaran', 'e anggaran', 'e-controlling', 'econtrolling', 'eanggaran'] },
-  { id: 'usulan_aset',        label: 'Usulan Kebutuhan',   href: '/usulan-kebutuhan',  aliases: ['usulan kebutuhan', 'usulan', 'pengajuan'] },
-  { id: 'perjanjian_kinerja', label: 'Perjanjian Kinerja', href: '/perjanjian-kinerja', aliases: ['perjanjian kinerja', 'pk'] },
-  { id: 'rencana_aksi',       label: 'Renaksi & Kinerja',  href: '/rencana-aksi',      aliases: ['rencana aksi', 'renaksi', 'renaksi & kinerja'] },
-  { id: 'buku_besar_aset',    label: 'Buku Besar Aset',    href: '/buku-besar-aset',   aliases: ['buku besar aset', 'bba', 'belanja modal'] },
-  { id: 'lkjip',              label: 'E-LKJIP',            href: '/lkjip',             aliases: ['lkjip', 'e-lkjip', 'laporan kinerja'] },
-  { id: 'iki',                label: 'IKI',                href: '/iki',               aliases: ['iki', 'indikator kinerja individu', 'kinerja individu'] },
-  { id: 'admin',              label: 'Admin Panel',        href: '/admin',             aliases: ['admin panel', 'admin'], adminOnly: true },
-]
+/**
+ * Fase B (Tahap 2): DITURUNKAN dari `lib/registry/apps.ts`.
+ *
+ * Daftar tangan di sini punya 9 entri dan **Dashboard tidak pernah ada di dalamnya**
+ * (T-11) — jadi menyuruh RIMA "buka dashboard" tidak pernah bisa dijawab, sementara
+ * kartunya berdiri normal di /menu. Tidak ada yang salah dengan kodenya; yang salah
+ * cuma satu daftar yang lupa ditambah. Sekarang modul baru masuk ke sini dengan
+ * sendirinya.
+ *
+ * `adminOnly` diturunkan dari peran bawaan yang isinya persis SUPER_ADMIN saja —
+ * bukan bendera terpisah yang bisa berbeda pendapat dengan `proxy.ts`.
+ */
+export const NAV_MODULES: NavModule[] = MODUL_APPS.map((m) => ({
+  id: m.kunci,
+  label: m.label,
+  href: m.href,
+  aliases: [...(m.alias ?? [])],
+  ...(m.peranBawaan !== 'SEMUA' && m.peranBawaan.length === 1 && m.peranBawaan[0] === 'SUPER_ADMIN'
+    ? { adminOnly: true }
+    : {}),
+}))
 
 export interface NavSnapshot {
   role:   Role | null

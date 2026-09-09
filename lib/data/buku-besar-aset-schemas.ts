@@ -3,15 +3,18 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
+import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 
 // K5: akses dasar SUPER_ADMIN + ADMIN (staf). Role lain via users.app_access
 // include 'buku_besar_aset' (diatur Admin Panel → User Management). Pola Rencana Aksi.
-export const ASET_ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
 export const ASET_APP_KEY = 'buku_besar_aset';
+export const ASET_ALLOWED_ROLES = peranBawaanModul(ASET_APP_KEY);
 
+// Fase B (Tahap 2): daftar peran + aturan pintunya PINDAH ke `lib/registry/apps.ts`.
+// Fungsi ini dipertahankan sebagai pembungkus tipis supaya 1 pemanggilnya tidak
+// perlu disentuh — yang hilang cuma salinan aturannya, bukan bentuk pemanggilannya.
 export function isAsetRole(role: string, appAccess: string[] | null | undefined): boolean {
-  if ((ASET_ALLOWED_ROLES as readonly string[]).includes(role)) return true;
-  return Array.isArray(appAccess) && appAccess.includes(ASET_APP_KEY);
+  return bolehMasukModul('buku_besar_aset', role, appAccess);
 }
 
 /** Rate-limit per user+action (pola kinerjaRateLimit). Return 429 NextResponse atau null. */

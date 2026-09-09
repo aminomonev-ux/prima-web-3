@@ -9,35 +9,39 @@
 // dipasang di kartu menu, lalu 19 route tumbuh tanpa pernah menanyakannya.
 // tsc tidak bisa menangkap kelalaian ini; hanya pemeriksaan seperti inilah yang bisa.
 //
-// Dua bentuk yang diterima, keduanya sah:
-//   1. pabrik  — `buatGuardModul(cek, field, 'app_status_x')` di `_guard.ts`,
-//                route cukup memanggil `guard()`
-//   2. per-route — route memanggil helper mati-modul sendiri (mis. `kinerjaMati`)
+// B5 (Tahap 2) — DAFTAR MODULNYA TIDAK LAGI DITULIS DI SINI.
 //
-// Jalankan: node scripts/test-killswitch-modul.mjs
+// Sampai 2026-09-09 berkas ini memegang `MODUL`-nya sendiri berisi enam direktori yang
+// diketik tangan. Itu cacat yang paling menentukan di seluruh dokumen konsep: penjaga
+// yang daftarnya terpisah dari daftar yang dijaga **hanya menjaga modul yang sudah
+// diingat orang**. Usulan, PK, dan Dashboard punya sakelar bertahun-tahun tanpa satu
+// pun route memeriksanya, dan gate ini lulus terus — bukan karena pemeriksaannya
+// lemah, tapi karena ketiganya tidak pernah masuk daftar.
+//
+// Sekarang daftarnya `MODUL_BERSAKELAR` dari `lib/registry/apps.ts`. Modul baru yang
+// punya sakelar tapi route-nya tidak menjaganya akan MENGGAGALKAN CI sejak hari
+// pertama, tanpa ada yang perlu ingat menambahkannya ke sini.
+//
+// Datanya dibaca dari `apps-data.mjs` — JavaScript polos, supaya gate ini tetap jalan
+// dengan `node` biasa di CI tanpa menambah dependensi. Jalankan: npm run check:killswitch
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { MODUL_APPS_DATA } from '../lib/registry/apps-data.mjs';
 
-// `penanda` = daftar nama yang salah satunya WAJIB muncul di berkas route.
-// BLUD punya dua: `realisasiMati` adalah turunan bersyarat `bludMati(role,
-// 'realisasi')` untuk sub-modul Buku Kas — dua-duanya sah, jadi dua-duanya diterima.
-const MODUL = [
-  { nama: 'Rencana Aksi',    dir: 'app/api/rencana-aksi',    lewat: 'pabrik',    penanda: ['guard'] },
-  { nama: 'Buku Besar Aset', dir: 'app/api/buku-besar-aset', lewat: 'pabrik',    penanda: ['guard'] },
-  { nama: 'IKI',             dir: 'app/api/iki',             lewat: 'pabrik',    penanda: ['guard'] },
-  { nama: 'LKJIP',           dir: 'app/api/lkjip',           lewat: 'pabrik',    penanda: ['guard'] },
-  { nama: 'E-Anggaran',      dir: 'app/api/kinerja',         lewat: 'per-route', penanda: ['kinerjaMati'] },
-  { nama: 'BLUD',            dir: 'app/api/blud',            lewat: 'per-route', penanda: ['bludMati', 'realisasiMati'] },
-  // Tahap 1/A1 (2026-09-09) — tiga modul yang sakelarnya sudah punya tombol tapi tidak
-  // menutup apa pun (T-1). Ketiadaan mereka di daftar ini persis kenapa T-1 bisa hidup
-  // diam-diam: gate G memeriksa 6 direktori yang ditulis tangan, jadi modul yang tidak
-  // pernah didaftarkan tidak pernah gagal. Daftar tangan ini dibuang di Tahap 2, diganti
-  // pemindaian `dirApi` dari registry — sampai saat itu, tambah modul = tambah baris.
-  { nama: 'Usulan Kebutuhan', dir: 'app/api/usulan',              lewat: 'per-route', penanda: ['usulanMati'] },
-  { nama: 'Perjanjian Kinerja', dir: 'app/api/perjanjian-kinerja', lewat: 'per-route', penanda: ['pkMati'] },
-  { nama: 'Dashboard',        dir: 'app/api/dashboard',           lewat: 'per-route', penanda: ['dashboardMati'] },
-];
+// Modul yang punya sakelar DAN punya route: itulah yang wajib menjaganya. Modul tanpa
+// sakelar (Admin Panel) sengaja tidak diperiksa — mengunci pintu dari dalam.
+//
+// `penjagaApi` yang belum diisi TIDAK membuat modulnya dilewati — itu justru
+// digagalkan. Menyaringnya keluar akan membuat gate ini bisa dimatikan per modul
+// dengan menghapus satu baris di registry, tanpa satu pesan pun: persis bentuk T-1
+// yang seluruh berkas ini ada untuk mencegahnya. Ketahuan lewat uji mutasi, bukan
+// lewat membaca ulang kodenya.
+const KANDIDAT = MODUL_APPS_DATA.filter((m) => m.sakelar && m.dirApi);
+const TANPA_PENJAGA = KANDIDAT.filter((m) => !m.penjagaApi);
+const MODUL = KANDIDAT
+  .filter((m) => m.penjagaApi)
+  .map((m) => ({ nama: m.label, dir: m.dirApi, lewat: m.penjagaApi.lewat, penanda: m.penjagaApi.penanda }));
 
 // Modul berpabrik: flag WAJIB dioper sebagai argumen ketiga buatGuardModul.
 const FLAG_PABRIK = /buatGuardModul\([^)]*['"]app_status_[a-z_]+['"]\s*\)/s;
@@ -57,6 +61,13 @@ function cariRoute(dir) {
 
 let gagal = 0;
 let diperiksa = 0;
+
+for (const m of TANPA_PENJAGA) {
+  console.log(`X  ${m.label}: punya sakelar '${m.sakelar}' dan route di ${m.dirApi}, tapi`);
+  console.log('     `penjagaApi` belum diisi di lib/registry/apps-data.mjs — jadi tidak ada');
+  console.log('     yang bisa diperiksa. Sakelar tanpa penjaga sama saja dengan tanpa sakelar.');
+  gagal++;
+}
 
 for (const m of MODUL) {
   const routes = cariRoute(m.dir);
