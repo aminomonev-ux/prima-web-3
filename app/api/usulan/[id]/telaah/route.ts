@@ -7,6 +7,7 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import { updateHeaderStats } from '@/lib/data/usulan';
 import { addNotif } from '@/lib/services/notifications';
 import { writeAuditLog } from '@/lib/security/auditlog';
+import { usulanMati } from '../../_guard';
 
 const decisionSchema = z.object({
   item_id:       z.number(),
@@ -24,6 +25,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const canTelaah = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN';
     if (!canTelaah) return NextResponse.json({ ok: false, message: 'Hanya Admin yang dapat menelaah usulan.' }, { status: 403 });

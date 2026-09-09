@@ -12,7 +12,7 @@ import {
   PejabatBodySchema,
 } from '@/lib/data/pk-schemas';
 import { lantaiEditMenghalangi } from '@/lib/pk/peran';
-import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit, tolakLantai } from '../_guard';
+import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit, tolakLantai, pkMati } from '../_guard';
 import { getPejabatByUnit } from '@/lib/data/pk';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +31,8 @@ type PejabatRow = {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Nama & jabatan pejabat ikut mengisi Form PK (pihak pertama/kedua), bukan cuma layar
   // Master Pejabat. Mengikat baca ini ke menu `pejabat` saja akan merusak Form PK untuk
   // penyusun — yang justru pekerjaan utamanya.
@@ -75,6 +77,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Pejabat = sensitif (PII). Lantai perannya DAN, bukan pengganti izin menu: matriks
   // Admin Panel tidak bisa membukanya untuk peran lain, dan izin EDIT dari matriks
   // tetap wajib untuk yang perannya lolos. Dua pesan berbeda karena jalan keluarnya

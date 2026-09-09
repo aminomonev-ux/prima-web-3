@@ -3,11 +3,14 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { ADMIN_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
+import { usulanMati } from '../_guard';
 
 export async function GET() {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const isAdmin   = (ADMIN_ROLES as readonly string[]).includes(session.role);
     const isKasubag = session.role === 'ADMIN_KASUBAG';

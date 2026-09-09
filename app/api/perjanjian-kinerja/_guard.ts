@@ -14,7 +14,7 @@
 // Klien PK membaca `message` di semua layarnya; menyeragamkan nama kolom dengan
 // BLUD akan membuat pesan galat berubah jadi "undefined" di tujuh layar.
 import { NextResponse } from 'next/server'
-import { hasAppAccess } from '@/lib/security/guard'
+import { hasAppAccess, modulMati } from '@/lib/security/guard'
 import { isPkRole } from '@/lib/data/pk-schemas'
 import { LABEL_MENU_PK, LANTAI_EDIT, lantaiEditMenghalangi, type MenuPk } from '@/lib/pk/peran'
 import { izinPk, petaIzinPk } from '@/lib/pk/izin-server'
@@ -25,6 +25,31 @@ export function unauthorized() {
 
 export function forbidden() {
   return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 })
+}
+
+export const FLAG_PK = 'app_status_perjanjian_kinerja'
+
+/**
+ * T-1 — sakelar pemeliharaan modul. Dipanggil di TIAP handler, sesudah `getSession()`
+ * dan sebelum apa pun yang menyentuh data:
+ *
+ *   const mati = await pkMati(session.role)
+ *   if (mati) return mati
+ *
+ * Sebelum ini `app_status_perjanjian_kinerja` punya baris di `app_config` dan tombol
+ * di Admin Panel, tapi tidak dibaca satu pun halaman/route — mematikan PK cuma
+ * membuat kartunya abu di /menu, sementara URL-nya tetap terbuka penuh (L72).
+ *
+ * Sengaja TIDAK dilebur ke `bolehBukaMenu` walau letaknya bersebelahan. Alasannya
+ * sama dengan di BLUD: jawabannya 503 (akan hilang sendiri), bukan 403 (perlu minta
+ * akses) — dan lebih halus, `bolehBukaMenu` menjawab "siapa Anda", ini menjawab
+ * "apakah modulnya sedang hidup". Satu boolean untuk dua pertanyaan berbeda membuat
+ * keduanya sulit diperbaiki terpisah.
+ *
+ * `role` WAJIB dioper supaya `PERAN_TEMBUS_SAKELAR` berlaku sama seperti di layar.
+ */
+export function pkMati(role?: string) {
+  return modulMati([FLAG_PK], { role })
 }
 
 /**

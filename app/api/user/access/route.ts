@@ -9,6 +9,7 @@ import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { isLkjipRole } from '@/lib/lkjip/schemas';
 import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
 import { isIkiRole } from '@/lib/data/iki-schemas';
+import { isDashboardRole } from '@/lib/data/dashboard-schemas';
 
 // AC-1: per app card id → checker yang SAMA dengan guard halaman/API-nya,
 // supaya kunci di menu tidak pernah beda arti dengan satpam di belakang.
@@ -20,6 +21,11 @@ const APP_CHECKS: Array<[string, (role: string, appAccess: string[] | null) => b
   ['lkjip',              isLkjipRole],
   ['rencana_aksi',       isRencanaAksiRole],
   ['iki',                isIkiRole],
+  // T-6 (Tahap 1/A6): Dashboard tidak pernah masuk daftar ini, jadi kartunya terkunci
+  // di /menu untuk ADMIN_KASUBAG & ADMIN_KABAG — padahal `isDashboardRole` memberi
+  // mereka akses dan halaman + API-nya menerima mereka. Kuncinya kebalikan T-1:
+  // di sana pintu terbuka tanpa penjaga, di sini penjaga menahan orang yang berhak.
+  ['dashboard',          isDashboardRole],
 ];
 
 export async function GET() {

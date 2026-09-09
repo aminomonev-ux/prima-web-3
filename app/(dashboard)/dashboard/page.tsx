@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isDashboardRole } from '@/lib/data/dashboard-schemas';
+import { modulSedangMati } from '@/lib/security/guard';
 import { getDashboardSummary } from '@/lib/data/dashboard';
 import DashboardClient from './dashboard-client';
 
@@ -19,6 +20,13 @@ export default async function DashboardPage() {
     sql`SELECT app_access, theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`,
   );
   if (!isDashboardRole(role, row?.app_access ?? null)) redirect('/menu');
+
+  // T-1: `app_status_dashboard` masuk whitelist APP_KEYS dan punya tombolnya, tapi tak
+  // pernah dibaca. Diperiksa SEBELUM getDashboardSummary — modul yang sedang dimatikan
+  // tidak boleh tetap menjalankan agregasi lintas-modulnya.
+  if (await modulSedangMati(['app_status_dashboard'], { role })) {
+    redirect(`/maintenance?app=${encodeURIComponent('Dashboard')}`);
+  }
 
   const tahun = String(new Date().getFullYear());
   const initialData = await getDashboardSummary(tahun);

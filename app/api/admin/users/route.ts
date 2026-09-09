@@ -136,23 +136,80 @@ export async function PATCH(req: NextRequest) {
     const data = parsed.data;
     const { id } = data;
 
-    const target = await sql`SELECT role, probationary_until FROM users WHERE id = ${id} LIMIT 1`;
+    // T-16 (Tahap 1/A7, keputusan §9-1) — lantai per-aksi.
+    //
+    // Admin Panel adalah layar SUPER_ADMIN (`proxy.ts:82` + `admin/page.tsx`), tapi
+    // PATCH ini terbuka untuk ADMIN sejak awal. Akibatnya ADMIN memegang tiga wewenang
+    // yang tidak punya satu pun layar untuknya: menonaktifkan/mengaktifkan akun dan
+    // mengatur `app_access` orang lain — termasuk menonaktifkan akun ADMIN_KABAG, yang
+    // lewat `ubah-role` justru ditolak `ADMIN_TIER_ROLES` di bawah. Tombol yang tidak
+    // ada di layar bukan berarti jalurnya tertutup (L82).
+    //
+    // `ubah-role` SENGAJA tetap terbuka: panel Kelola User di /usulan-kebutuhan berdiri
+    // di atasnya (`usulan-client.tsx` → `doChangeRole`), dan panel itu memang
+    // diperlukan. Batasan tier di dalam cabangnya yang menjaga ADMIN tidak naik pangkat
+    // sendiri. GET juga tetap terbuka — panel yang sama memakainya untuk daftar user.
+    const AKSI_TERBUKA_UNTUK_ADMIN: readonly string[] = ['ubah-role'];
+    if (session.role !== 'SUPER_ADMIN' && !AKSI_TERBUKA_UNTUK_ADMIN.includes(data.action)) {
+      return NextResponse.json(
+        { ok: false, message: 'Hanya SUPER_ADMIN yang boleh melakukan aksi ini.' },
+        { status: 403 },
+      );
+    }
+
+    const target = await sql`SELECT role, status, probationary_until FROM users WHERE id = ${id} LIMIT 1`;
     if (!target.length) return NextResponse.json({ ok: false, message: 'User tidak ditemukan.' }, { status: 404 });
     const targetCurrentRole = (target[0] as Record<string,unknown>).role as string;
+    const targetCurrentStatus = (target[0] as Record<string,unknown>).status as string;
     const targetProbationUntil = (target[0] as Record<string,unknown>).probationary_until as Date | null;
     if (targetCurrentRole === 'SUPER_ADMIN' && session.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ ok: false, message: 'Tidak dapat mengubah Super Admin.' }, { status: 403 });
     }
 
     if (data.action === 'nonaktif') {
-      await sql`UPDATE users SET status = 'NONAKTIF', updated_at = NOW() WHERE id = ${id}`;
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Nonaktifkan user id=${id}` });
-      return NextResponse.json({ ok: true, message: 'User dinonaktifkan.' });
+      // T-3 (A3): status DAN sesi dalam SATU transaksi. Mengubah statusnya saja tidak
+      // menghentikan orang yang sedang login — sesi hidup dari JWT, dan sampai A3
+      // `getSession()` tidak pernah menanyakan status. Tombol ini dipakai persis pada
+      // hari seseorang berhenti; kalau sesinya dibiarkan, ia bekerja sampai sore.
+      //
+      // Satu transaksi, bukan dua perintah berurutan: "status sudah NONAKTIF tapi
+      // sesinya masih hidup" adalah keadaan setengah jalan yang justru mau dihindari.
+      // Polanya sudah ada di `revokeProbation` (lib/data/promotion.ts) — di sini ia
+      // menular ke jalur tulis kedua yang selama ini terlewat (L69).
+      await withTransaction(async ({ tx }) => {
+        await tx`UPDATE users SET status = 'NONAKTIF', updated_at = NOW() WHERE id = ${id}`;
+        await tx`UPDATE user_sessions SET invalidated_at = NOW() WHERE user_id = ${id} AND invalidated_at IS NULL`;
+      });
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Nonaktifkan user id=${id} [sesi aktif dicabut]` });
+      return NextResponse.json({ ok: true, message: 'User dinonaktifkan. Sesi yang sedang berjalan ikut dihentikan.' });
     }
 
     if (data.action === 'aktifkan') {
-      await sql`UPDATE users SET status = 'AKTIF', updated_at = NOW() WHERE id = ${id}`;
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Aktifkan user id=${id}` });
+      // T-7 (A4): kuota diperiksa di sini juga. Kuota dihitung real-time dari
+      // `COUNT(*) WHERE role = ? AND status = 'AKTIF'` (CLAUDE.md §Role Quota), jadi
+      // mengaktifkan kembali akun MENAMBAH satu — sama persis dampaknya dengan
+      // register / ubah-role / verify-email yang ketiganya sudah memeriksa. Jalur ini
+      // pintu keempat, dan satu-satunya yang tidak pernah didaftarkan (L69).
+      //
+      // Perannya `targetCurrentRole`, bukan peran baru: aksi ini tidak mengubah peran.
+      //
+      // Dilewati kalau akunnya MEMANG SUDAH aktif — `assertQuotaAvailableTx` menghitung
+      // `COUNT(*) … status='AKTIF'` yang SUDAH memuat akun ini, jadi memeriksanya pada
+      // peran yang kuotanya pas-pasan akan menolak aksi yang tidak mengubah apa pun,
+      // lalu menyuruh admin menonaktifkan akun lain untuk masalah yang tidak ada.
+      // Bentuknya sama dengan `if (role !== targetCurrentRole)` di cabang ubah-role.
+      try {
+        await withTransaction(async ({ tx }) => {
+          if (targetCurrentStatus !== 'AKTIF') await assertQuotaAvailableTx(targetCurrentRole, tx);
+          await tx`UPDATE users SET status = 'AKTIF', updated_at = NOW() WHERE id = ${id}`;
+        });
+      } catch (e) {
+        if (e instanceof QuotaFullError) {
+          return NextResponse.json({ ok: false, message: `Kuota role ${targetCurrentRole} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
+        }
+        throw e;
+      }
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Aktifkan user id=${id} (role ${targetCurrentRole})` });
       return NextResponse.json({ ok: true, message: 'User diaktifkan.' });
     }
 

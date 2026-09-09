@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import UsulanClient from './usulan-client';
 import { sql, queryOne } from '@/lib/data/db';
+import { modulSedangMati } from '@/lib/security/guard';
 import type { Role } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,14 @@ export default async function UsulanKebutuhanPage() {
   const role     = h.get('x-user-role') as Role | null;
   const username = h.get('x-username');
   if (!userId || !role || !username) redirect('/login');
+
+  // T-1: `app_status_usulan_aset` punya tombol di Admin Panel sejak lama, tapi sampai
+  // sekarang tidak dibaca siapa pun — mematikan modul Usulan cuma membuat kartunya abu
+  // di /menu, sementara mengetik URL ini tetap masuk penuh. Pengecualian perannya
+  // dipegang guard (`PERAN_TEMBUS_SAKELAR`), tidak ditulis ulang di sini.
+  if (await modulSedangMati(['app_status_usulan_aset'], { role })) {
+    redirect(`/maintenance?app=${encodeURIComponent('Usulan Kebutuhan')}`);
+  }
 
   const row = await queryOne<{ theme_preference: string }>(
     sql`SELECT theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`

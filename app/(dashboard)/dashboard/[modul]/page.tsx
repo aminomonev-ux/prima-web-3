@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isDashboardRole } from '@/lib/data/dashboard-schemas';
+import { modulSedangMati } from '@/lib/security/guard';
 import { getModuleDetail, isDashModule } from '@/lib/data/dashboard';
 import DashboardDetailClient from './detail-client';
 
@@ -22,6 +23,13 @@ export default async function DashboardDetailPage({ params }: { params: Promise<
     sql`SELECT app_access, theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`,
   );
   if (!isDashboardRole(role, row?.app_access ?? null)) redirect('/menu');
+
+  // T-1 — sama dengan halaman ringkasannya. Layar drill-down ini dicapai lewat tautan
+  // dari sana, tapi URL-nya bisa diketik langsung; pagar yang cuma di satu layar
+  // bukan pagar (L69).
+  if (await modulSedangMati(['app_status_dashboard'], { role })) {
+    redirect(`/maintenance?app=${encodeURIComponent('Dashboard')}`);
+  }
 
   const tahun = String(new Date().getFullYear());
   const payload = await getModuleDetail(modul, tahun);

@@ -14,7 +14,7 @@ import {
 } from '@/lib/data/pk-schemas';
 import { lantaiEditMenghalangi } from '@/lib/pk/peran';
 import {
-  bolehBukaMenu, bolehEditMenu, bolehModulPk, forbidden, tolakEdit, tolakLantai,
+  bolehBukaMenu, bolehEditMenu, bolehModulPk, forbidden, tolakEdit, tolakLantai, pkMati,
 } from '../_guard';
 import { getPkUnitKerjaList, getAllPkUnitKerjaWithMapping } from '@/lib/data/pk';
 
@@ -23,6 +23,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Daftar unit kerja adalah isi dropdown di Form PK, Master Pejabat, dan Riwayat —
   // bukan cuma di layar Master Unit. Sengaja TIDAK diikat ke menu `unit-kerja`:
   // menempelkannya ke sana akan merusak tiga layar lain begitu menu itu disembunyikan.
@@ -68,6 +70,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Lantai peran, bukan sekadar izin menu: mengganti nama unit meng-cascade ke
   // `pk_pejabat` dan pemetaan BLUD di bawah — satu salah ketik menulis ulang rujukan
   // di banyak tempat sekaligus. Matriks Admin Panel tidak bisa membukanya.

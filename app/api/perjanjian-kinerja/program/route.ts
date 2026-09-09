@@ -11,7 +11,7 @@ import {
   PkQuerySchema,
   ProgramBodySchema,
 } from '@/lib/data/pk-schemas';
-import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit } from '../_guard';
+import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, pkMati } from '../_guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +27,8 @@ type ProgramRow = {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   if (!(await bolehBukaMenu(session.userId, session.role, 'program'))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'program-list', 60);
@@ -84,6 +86,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   if (!(await bolehEditMenu(session.userId, session.role, 'program'))) return tolakEdit('program');
 
   const limited = await pkRateLimit(session.userId, 'save-program', 30);

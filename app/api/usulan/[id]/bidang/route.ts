@@ -8,6 +8,7 @@ import { updateHeaderStats } from '@/lib/data/usulan';
 import { BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
 import { addNotif } from '@/lib/services/notifications';
 import { writeAuditLog } from '@/lib/security/auditlog';
+import { usulanMati } from '../../_guard';
 
 const decisionSchema = z.object({
   item_id:         z.number(),
@@ -31,6 +32,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const isBidang     = (BIDANG_ROLES as readonly string[]).includes(session.role);
     const isSuperAdmin = session.role === 'SUPER_ADMIN';

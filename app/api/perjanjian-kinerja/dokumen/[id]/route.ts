@@ -7,7 +7,7 @@ import { sql, withTransaction, bulkInsert, safeInt } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit, DokumenUpdateBodySchema } from '@/lib/data/pk-schemas';
-import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit } from '../../_guard';
+import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit, pkMati } from '../../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,8 @@ async function getOwnership(dokumenId: number): Promise<{ created_by: number | n
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   if (!(await bolehLihatSalahSatu(session.userId, session.role, ['beranda', 'form', 'riwayat']))) return forbidden();
 
   const limited = await pkRateLimit(session.userId, 'dokumen-detail', 60);
@@ -84,6 +86,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   if (!(await bolehEditMenu(session.userId, session.role, 'form'))) return tolakEdit('form');
 
   const limited = await pkRateLimit(session.userId, 'update-dokumen', 20);
@@ -173,6 +177,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Menghapus dokumen dilakukan dari layar Riwayat, bukan Form — pemegang Form saja
   // tidak berwenang membuang arsip yang sudah jadi.
   if (!(await bolehEditMenu(session.userId, session.role, 'riwayat'))) return tolakEdit('riwayat');

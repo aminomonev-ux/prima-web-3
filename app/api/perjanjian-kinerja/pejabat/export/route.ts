@@ -13,7 +13,7 @@ import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit, PkQuerySchema } from '@/lib/data/pk-schemas';
-import { bolehBukaMenu, forbidden } from '../../_guard';
+import { bolehBukaMenu, forbidden, pkMati } from '../../_guard';
 import {
   buatBerkasPejabat, namaBerkasPejabat, MIME_EXPORT,
   type ExportFormat, type ExportPejabatRow,
@@ -27,6 +27,8 @@ const FormatSchema = z.enum(['xlsx', 'docx']);
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // LIHAT, bukan EDIT — mengunduh tidak mengubah angka resmi mana pun. Tapi diikat ke
   // menu `pejabat` saja, BUKAN `bolehLihatSalahSatu(['form','pejabat'])` seperti GET
   // list: kelonggaran di sana ada demi auto-fill satu unit di Form PK, sedangkan

@@ -4,11 +4,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { generateNoUsulan } from '@/lib/data/usulan';
+import { usulanMati } from '../_guard';
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const subBidang = req.nextUrl.searchParams.get('sub_bidang') ?? '';
     const tahunStr  = req.nextUrl.searchParams.get('tahun') ?? '';

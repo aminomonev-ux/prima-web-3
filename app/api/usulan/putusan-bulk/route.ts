@@ -5,11 +5,14 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { updateHeaderStats } from '@/lib/data/usulan';
 import { addNotif } from '@/lib/services/notifications';
+import { usulanMati } from '../_guard';
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const isKasubag    = session.role === 'ADMIN_KASUBAG';
     const isKabag      = session.role === 'ADMIN_KABAG';
@@ -45,6 +48,8 @@ export async function PUT(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const isKasubag    = session.role === 'ADMIN_KASUBAG';
     const isKabag      = session.role === 'ADMIN_KABAG';

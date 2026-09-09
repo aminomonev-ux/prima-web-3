@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAccess } from '@/lib/security/guard';
 import { isDashboardRole, dashboardRateLimit, DashboardQuerySchema } from '@/lib/data/dashboard-schemas';
 import { getModuleDetail, isDashModule } from '@/lib/data/dashboard';
+import { dashboardMati } from '../_guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest, ctx: { params: Promise<{ modul: string }> }) {
   const g = await requireAccess(isDashboardRole);
   if (!g.ok) return g.res;
+
+  const mati = await dashboardMati(g.session.role);
+  if (mati) return mati;
 
   const limited = await dashboardRateLimit(g.session.userId, 'detail', 60);
   if (limited) return limited;

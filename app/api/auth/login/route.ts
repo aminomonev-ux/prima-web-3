@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sql, sqlInt, toMysqlDatetime, execWrite } from '@/lib/data/db';
-import { verifyPassword, createToken, setSessionCookie } from '@/lib/security/auth';
+import { verifyPassword, createToken, setSessionCookie, statusMenutupSesi } from '@/lib/security/auth';
 import { MAX_LOGIN_ATTEMPTS, LOCK_DURATION_MINUTES, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, LOGIN_IP_BURST } from '@/lib/constants';
 import { verifyTurnstile } from '@/lib/security/recaptcha';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
@@ -106,7 +106,11 @@ export async function POST(req: NextRequest) {
     // (audit log) agar Admin tetap bisa debug user complaint.
     // Status user valid: AKTIF (lolos), MENUNGGU (belum verif email),
     // NONAKTIF (admin nonaktifkan). DITOLAK & PENDING sudah dihapus.
-    if (user.status === 'NONAKTIF' || user.status === 'MENUNGGU') {
+    //
+    // A3: daftarnya PINDAH ke `statusMenutupSesi` di lib/security/auth.ts, karena
+    // `getSession()` sekarang menanyakan hal yang sama pada tiap request. Dua salinan
+    // aturan "akun ini boleh masuk?" akan berbeda pendapat begitu satu disunting (L88).
+    if (statusMenutupSesi(user.status)) {
       await verifyPassword(password, DUMMY_HASH); // timing parity dengan happy path
       await writeAuditLog({
         req, eventType: 'LOGIN_BLOCKED', userId: user.id, username: user.username,

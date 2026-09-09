@@ -47,6 +47,22 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
   }
 }
 
+/**
+ * T-3 (Tahap 1/A3) — status akun yang TIDAK boleh memegang sesi.
+ *
+ * Daftar hitam, bukan `!== 'AKTIF'`, dan itu disengaja: `users.status` bertipe
+ * VARCHAR(20) bebas, jadi mensyaratkan satu nilai persis akan menendang keluar
+ * status apa pun yang lahir belakangan. Yang lebih penting, kalimat ini harus SAMA
+ * dengan yang dipakai `app/api/auth/login/route.ts` — dua jawaban berbeda untuk
+ * "akun ini boleh masuk?" persis bentuk L88, dan yang satu akan diperbaiki tanpa
+ * yang lain ikut.
+ */
+export const STATUS_TIDAK_BOLEH_MASUK: readonly string[] = ['NONAKTIF', 'MENUNGGU'];
+
+export function statusMenutupSesi(status: string | null | undefined): boolean {
+  return status != null && STATUS_TIDAK_BOLEH_MASUK.includes(status);
+}
+
 // ─── Get session dari cookie ──────────────────────────────────────────────────
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
@@ -56,14 +72,29 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!payload) return null;
 
   // SEC-C3: enforce session revocation — invalidated session cannot resume
+  //
+  // T-3 (A3): status akun ikut diperiksa di sini, MENUMPANG kueri yang sudah ada lewat
+  // JOIN — nol kueri tambahan pada God Node yang dipanggil setiap route. Tanpa ini,
+  // menonaktifkan akun tidak menghentikan orang yang sedang login: `users.status` hanya
+  // dibaca saat login, dan sesi yang terlanjur hidup tidak pernah menanyakannya lagi.
+  //
+  // Pencabutan sesi saat nonaktif (di `api/admin/users`) sudah menutup jalur normalnya;
+  // pemeriksaan ini jaring keduanya — untuk status yang berubah lewat jalur lain
+  // (SQL manual, impor, perbaikan data) yang tidak ikut mencabut sesi (L69).
   if (payload.sessionId) {
     try {
       const rows = await sql`
-        SELECT 1 FROM user_sessions
-        WHERE session_id = ${payload.sessionId} AND invalidated_at IS NULL
+        SELECT u.status
+        FROM user_sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.session_id = ${payload.sessionId} AND s.invalidated_at IS NULL
         LIMIT 1
-      ` as unknown[];
+      ` as { status: string }[];
       if (!Array.isArray(rows) || rows.length === 0) {
+        cookieStore.delete(COOKIE_NAME);
+        return null;
+      }
+      if (statusMenutupSesi(rows[0]?.status)) {
         cookieStore.delete(COOKIE_NAME);
         return null;
       }

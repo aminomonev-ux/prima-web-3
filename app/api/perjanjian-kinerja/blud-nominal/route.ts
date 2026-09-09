@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { pkRateLimit, BludNominalQuerySchema } from '@/lib/data/pk-schemas';
-import { bolehLihatSalahSatu, forbidden } from '../_guard';
+import { bolehLihatSalahSatu, forbidden, pkMati } from '../_guard';
 import { getBludNominalByUnit } from '@/lib/data/pk';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Angka BLUD untuk lampiran anggaran Form PK. Sengaja TIDAK ikut memeriksa izin menu
   // BLUD: menambah syarat itu terdengar lebih ketat, tapi ia mengubah SIAPA yang bisa
   // menyusun PK — keputusan proses kerja, bukan keputusan teknis. Dicatat di

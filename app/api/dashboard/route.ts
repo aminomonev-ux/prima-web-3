@@ -3,6 +3,7 @@ import { requireAccess, modulSedangMati } from '@/lib/security/guard';
 import { isDashboardRole, dashboardRateLimit, DashboardQuerySchema } from '@/lib/data/dashboard-schemas';
 import { getDashboardSummary } from '@/lib/data/dashboard';
 import { petaIzinBlud } from '@/lib/blud/izin-server';
+import { dashboardMati } from './_guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const g = await requireAccess(isDashboardRole);
   if (!g.ok) return g.res;
+
+  const mati = await dashboardMati(g.session.role);
+  if (mati) return mati;
 
   // SDL-M14: dashboard di-poll dari client → budget 60/menit.
   const limited = await dashboardRateLimit(g.session.userId, 'summary', 60);

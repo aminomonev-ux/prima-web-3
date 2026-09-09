@@ -6,9 +6,16 @@
 // POST { scope:'user'|'role', ... , izin:{menu_key: IZIN} } — ganti-semua; peta kosong =
 //      kembalikan ke bawaan.
 //
-// Dua tingkat kewenangan, dan pembedaannya disengaja: mengubah perkecualian SATU orang
-// boleh ADMIN, mengubah aturan sebuah PERAN hanya SUPER_ADMIN — yang kedua mengenai semua
-// orang berperan itu sekaligus, termasuk yang tidak sedang dibicarakan.
+// Seluruh route ini SUPER_ADMIN saja (T-16, Tahap 1/A7, keputusan §9-1). Sebelumnya
+// perkecualian SATU orang boleh diubah ADMIN sementara aturan PERAN hanya SUPER_ADMIN —
+// pembedaan yang masuk akal di atas kertas, tapi layarnya (`MenuAccessPanel`) hidup di
+// dalam Admin Panel yang tertutup untuk ADMIN. Jadi lantai yang lebih longgar itu tidak
+// pernah punya pintu; satu-satunya cara memakainya adalah menyusun permintaan sendiri.
+//
+// Pembedaan role-vs-user TETAP ADA di bawah (baris ~218) dan tidak dibuang: kalau suatu
+// saat Pusat Akses dibuka untuk peran lain, alasan aslinya masih berlaku — mengubah
+// aturan sebuah PERAN mengenai semua orang berperan itu sekaligus, termasuk yang tidak
+// sedang dibicarakan.
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
@@ -68,7 +75,7 @@ function keluarkan(peta: Map<string, Izin>) {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') return forbidden()
+  if (session.role !== 'SUPER_ADMIN') return forbidden()
 
   const p = req.nextUrl.searchParams
   // Bawaannya BLUD demi klien lama yang memanggil tanpa `appKey`. Yang sah = apa pun
@@ -154,7 +161,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return unauthorized()
-  if (session.role !== 'ADMIN' && session.role !== 'SUPER_ADMIN') return forbidden()
+  if (session.role !== 'SUPER_ADMIN') return forbidden()
 
   // Sepasang dengan rem di route admin lain (`users/route.ts`): pertahanan berlapis
   // kalau sesi admin disalahgunakan. Tiap penyimpanan itu DELETE + INSERT dalam

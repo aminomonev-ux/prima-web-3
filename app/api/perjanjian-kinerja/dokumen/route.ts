@@ -11,7 +11,7 @@ import {
   PkQuerySchema,
   DokumenCreateBodySchema,
 } from '@/lib/data/pk-schemas';
-import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit } from '../_guard';
+import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit, pkMati } from '../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +35,8 @@ type DokumenListRow = {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Daftar dokumen tampil di tiga layar sekaligus — Beranda (ringkasan), Form (dokumen
   // yang sedang disusun), dan Riwayat. Mengikatnya ke satu menu akan mematikan dua
   // layar lain begitu menu itu disembunyikan.
@@ -105,6 +107,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   if (!(await bolehEditMenu(session.userId, session.role, 'form'))) return tolakEdit('form');
 
   const limited = await pkRateLimit(session.userId, 'create-dokumen', 20);

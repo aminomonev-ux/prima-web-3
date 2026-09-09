@@ -29,6 +29,14 @@ const MODUL = [
   { nama: 'LKJIP',           dir: 'app/api/lkjip',           lewat: 'pabrik',    penanda: ['guard'] },
   { nama: 'E-Anggaran',      dir: 'app/api/kinerja',         lewat: 'per-route', penanda: ['kinerjaMati'] },
   { nama: 'BLUD',            dir: 'app/api/blud',            lewat: 'per-route', penanda: ['bludMati', 'realisasiMati'] },
+  // Tahap 1/A1 (2026-09-09) — tiga modul yang sakelarnya sudah punya tombol tapi tidak
+  // menutup apa pun (T-1). Ketiadaan mereka di daftar ini persis kenapa T-1 bisa hidup
+  // diam-diam: gate G memeriksa 6 direktori yang ditulis tangan, jadi modul yang tidak
+  // pernah didaftarkan tidak pernah gagal. Daftar tangan ini dibuang di Tahap 2, diganti
+  // pemindaian `dirApi` dari registry — sampai saat itu, tambah modul = tambah baris.
+  { nama: 'Usulan Kebutuhan', dir: 'app/api/usulan',              lewat: 'per-route', penanda: ['usulanMati'] },
+  { nama: 'Perjanjian Kinerja', dir: 'app/api/perjanjian-kinerja', lewat: 'per-route', penanda: ['pkMati'] },
+  { nama: 'Dashboard',        dir: 'app/api/dashboard',           lewat: 'per-route', penanda: ['dashboardMati'] },
 ];
 
 // Modul berpabrik: flag WAJIB dioper sebagai argumen ketiga buatGuardModul.

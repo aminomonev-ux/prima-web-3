@@ -9,12 +9,15 @@ import { generateNoUsulan, updateHeaderStats } from '@/lib/data/usulan';
 import { SUBBIDANG_ROLES, ADMIN_ROLES, SUBBIDANG_TO_BIDANG, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
 import { addNotif, bidangRoleOf } from '@/lib/services/notifications';
 import { isSafeHttpUrl, isSafeFileUrl } from '@/lib/shared/url';
+import { usulanMati } from './_guard';
 
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const { searchParams: p } = req.nextUrl;
     const scope    = p.get('scope')    ?? 'milik';
@@ -239,6 +242,8 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const rl = await checkRateLimit(`usulan_post:${session.userId}`, 20, 60);
     if (!rl.allowed) return NextResponse.json({ ok: false, message: 'Terlalu banyak permintaan. Coba lagi dalam 1 menit.' }, { status: 429 });
@@ -341,6 +346,8 @@ export async function PUT(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const rl = await checkRateLimit(`usulan_put:${session.userId}`, 10, 60);
     if (!rl.allowed) return NextResponse.json({ ok: false, message: 'Terlalu banyak permintaan. Coba lagi dalam 1 menit.' }, { status: 429 });

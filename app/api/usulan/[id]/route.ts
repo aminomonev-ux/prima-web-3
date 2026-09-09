@@ -8,12 +8,15 @@ import { ADMIN_ROLES, BIDANG_ROLES, SUBBIDANG_ROLES, BIDANG_TO_SUBBIDANG, SUBBID
 import { generateNoUsulan, updateHeaderStats } from '@/lib/data/usulan';
 import { addNotif, bidangRoleOf } from '@/lib/services/notifications';
 import { isSafeFileUrl } from '@/lib/shared/url';
+import { usulanMati } from '../_guard';
 
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     const { id } = await params;
     // BUG-W2: NaN guard — `/api/usulan/abc` → parseInt=NaN → WHERE id=NULL → silent 404
@@ -72,6 +75,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
     // SDL-M16: workflow mutation PATCH (ajukan/cancel/update_draft) = 20/menit per user.
     const rl = await checkRateLimit(`usulan_patch:${session.userId}`, 20, 60);
     if (!rl.allowed) {
@@ -322,6 +327,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
     // SDL-M16: hard-delete = 10/menit per user.
     const rl = await checkRateLimit(`usulan_delete:${session.userId}`, 10, 60);
     if (!rl.allowed) {

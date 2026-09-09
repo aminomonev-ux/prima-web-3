@@ -10,7 +10,7 @@ import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit } from '@/lib/data/pk-schemas';
 import { lantaiEditMenghalangi } from '@/lib/pk/peran';
-import { bolehEditMenu, tolakEdit, tolakLantai } from '../../_guard';
+import { bolehEditMenu, tolakEdit, tolakLantai, pkMati } from '../../_guard';
 import { parsePejabatImport, type ImportFormat } from '@/lib/pk/import-pejabat';
 
 export const runtime = 'nodejs';
@@ -34,6 +34,8 @@ async function sniffMime(buf: Buffer): Promise<string | null> {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   // Pratinjau saja, tapi pagarnya tetap sama ketat dengan POST pejabat: yang diparsir
   // berkas berisi nama & NIP orang, dan hasilnya langsung terbaca di layar.
   if (lantaiEditMenghalangi(session.role, 'pejabat')) return tolakLantai('pejabat');

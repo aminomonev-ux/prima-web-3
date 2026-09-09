@@ -12,6 +12,11 @@ export const APP_STATUS_LABELS: Record<string, string> = {
   app_status_dashboard:          'Dashboard',
   app_status_usulan_aset:        'Usulan Kebutuhan',
   app_status_blud:               'BLUD',
+  // T-5 (Tahap 1/A5): sub-modul Realisasi BLUD sudah ditegakkan `app/api/blud/_guard.ts`
+  // dan sudah ada di `APP_KEYS` route app-status, tapi tidak pernah masuk daftar label —
+  // jadi sakelarnya berlaku penuh tanpa punya satu pun tombol untuk menyalakannya
+  // kembali. Kebalikan T-1, dan lebih sunyi: yang ini menutup, bukan membuka.
+  app_status_blud_realisasi:     'BLUD — Realisasi (sub-modul)',
   app_status_perjanjian_kinerja: 'Perjanjian Kinerja',
   app_status_rencana_aksi:       'Renaksi & Kinerja',
   app_status_iki:                'IKI',

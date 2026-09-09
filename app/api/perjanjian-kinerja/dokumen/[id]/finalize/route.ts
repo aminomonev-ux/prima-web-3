@@ -7,7 +7,7 @@ import { sql, safeInt, withTransaction } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit } from '@/lib/data/pk-schemas';
-import { bolehEditMenu, tolakEdit } from '../../../_guard';
+import { bolehEditMenu, tolakEdit, pkMati } from '../../../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 import { generatePkDocument } from '@/lib/pk/docgen';
 
@@ -17,6 +17,8 @@ export const runtime = 'nodejs'; // perlu fs untuk template file
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await pkMati(session.role);
+  if (mati) return mati;
   if (!(await bolehEditMenu(session.userId, session.role, 'form'))) return tolakEdit('form');
 
   const limited = await pkRateLimit(session.userId, 'finalize-dokumen', 10);

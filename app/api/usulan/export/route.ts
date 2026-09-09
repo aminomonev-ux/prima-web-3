@@ -6,6 +6,7 @@ import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ADMIN_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
+import { usulanMati } from '../_guard';
 
 // SDL-H5: cap array size + integer guard untuk hindari bulk DoS / NaN injection.
 const ExportBodySchema = z.object({
@@ -16,6 +17,8 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+    const mati = await usulanMati(session.role);
+    if (mati) return mati;
 
     // SDL-H5 (RL): bulk read = expensive, throttle 10/menit per user.
     const rl = await checkRateLimit(`usulan_export:${session.userId}`, 10, 60);

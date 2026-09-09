@@ -9,7 +9,7 @@ import PkShell from './pk-shell'
 import { PkYearProvider } from './_context/PkYearContext'
 import { sql, queryOne } from '@/lib/data/db'
 import { isPkRole } from '@/lib/data/pk-schemas'
-import { hasAppAccess } from '@/lib/security/guard'
+import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
 import { petaIzinPk } from '@/lib/pk/izin-server'
 import type { Role } from '@/types'
 
@@ -23,6 +23,14 @@ export default async function PerjanjianKinerjaLayout({ children }: { children: 
 
   if (!userId || !username || !role) redirect('/login')
   if (!(await hasAppAccess(Number(userId), role, isPkRole))) redirect('/menu')
+
+  // T-1: sakelar `app_status_perjanjian_kinerja` sudah lama ada tombolnya, tapi tidak
+  // dibaca satu pun layar — mematikan PK cuma membuat kartunya abu di /menu. Diperiksa
+  // di layout karena semua layar PK melewatinya; pengecualian perannya dipegang guard
+  // (`PERAN_TEMBUS_SAKELAR`), tidak ditulis ulang di sini. Cermin blud/layout.tsx.
+  if (await modulSedangMati(['app_status_perjanjian_kinerja'], { role })) {
+    redirect(`/maintenance?app=${encodeURIComponent('Perjanjian Kinerja')}`)
+  }
 
   const row = await queryOne<{ theme_preference: string }>(
     sql`SELECT theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`,
