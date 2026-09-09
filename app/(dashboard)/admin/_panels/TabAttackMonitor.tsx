@@ -74,7 +74,10 @@ export function TabAttackMonitor() {
         <button className="ap-btn ap-btn-cyan" onClick={load} disabled={loading}><RefreshCw size={12}/> REFRESH</button>
       </div>
 
-      <div className="ap-grid5" style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,marginBottom:20}}>
+      {/* Lebar kolom pindah ke `.ap-grid5` di admin.css — style sebaris hanya kalah oleh
+          `!important`, jadi selama ia di sini setiap aturan layar sempit terpaksa
+          memakainya (R1: nol `!important`). */}
+      <div className="ap-grid5">
         {STATS.map(({label,val,color,sub})=>(
           <div key={label} className="ap-kpi">
             <div className="ap-kpi-label">{label}</div>

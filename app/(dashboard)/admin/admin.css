@@ -16,6 +16,34 @@
  *
  * N-1: @import Google Fonts dibuang — diblok CSP (style-src/font-src tanpa
  * fonts.googleapis/gstatic) & langgar DESIGN-SYSTEM. Pakai font app yg sudah 'self'.
+ *
+ * ─── R1 (Tahap 3, 2026-09-09) — SATU PALET, NOL `!important` ──────────────────
+ *
+ * Bentuk lama: satu palet ditulis untuk mode gelap dengan hex langsung, lalu 56 baris
+ * menimpanya untuk mode terang, tiap baris memakai `!important`. Dua akibatnya nyata,
+ * bukan teoretis. Pertama, siapa pun yang menambah aturan baru harus ingat menulis
+ * pasangannya di blok bawah — dan yang lupa baru ketahuan saat aplikasinya dijalankan
+ * di tema yang lain (preseden: `blud-shell.tsx:628` menelan warna sel, `.pg-urai`
+ * kalah kekhususan). Kedua, `!important` di sini membuat komponen bersama yang punya
+ * warnanya sendiri tidak bisa lagi mengaturnya di dalam Admin Panel.
+ *
+ * Bentuk baru: SATU tempat mendefinisikan token, SATU tempat menimpanya, dan aturan
+ * di bawahnya cuma membaca `var(--ap-*)`. Palet & namanya mengikuti maket yang
+ * disetujui (`docs/design/revamp-admin-pusat-akses.html`, keputusan §9-5) — emas
+ * di gelap, ungu-merah muda di terang, keduanya sudah ada di DESIGN-SYSTEM.md.
+ *
+ * ATURAN LANJUTAN: di dalam berkas ini TIDAK BOLEH ada hex langsung di bawah blok
+ * token, dan tidak boleh ada `!important`. Keduanya bisa diuji, dan uji itu yang
+ * membuat aturannya bertahan lebih lama dari ingatan orang.
+ *
+ * Aksen sian `#00D4FF` dilepas di sini. Ia tidak pernah ada di DESIGN-SYSTEM.md;
+ * mempertahankannya berarti mendaftarkannya sebagai token resmi, dan itu menaikkan
+ * baseline gate E alih-alih menurunkannya. Admin Panel tetap terasa berbeda dari modul
+ * lain — lewat kepadatan, angka monospace, dan kisi — bukan lewat warna dari luar sistem.
+ *
+ * Animasi abadi (garis pindai `scan`, denyut `pls`, kedip `blink`) dibuang. Ketiganya
+ * berjalan selamanya tanpa menyampaikan apa pun: satu-satunya kabar yang dibawa titik
+ * berkedip adalah "masih hidup", dan itu sudah dikatakan angkanya sendiri.
  */
 
 /* Reset SENGAJA dipagari ke subpohon Admin Panel. Waktu masih inline, aturannya ikut
@@ -27,178 +55,306 @@
 .ap-body *,
 .ap-body *::before,
 .ap-body *::after{box-sizing:border-box;margin:0;padding:0;}
-@keyframes scan{0%{transform:translateY(0)}100%{transform:translateY(100vh)}}
-@keyframes pls{0%,100%{box-shadow:0 0 10px rgba(0,212,255,.5),0 0 3px rgba(0,212,255,.3)}50%{box-shadow:0 0 22px rgba(0,212,255,.9),0 0 8px rgba(0,212,255,.6)}}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-/* Warna panel Akses Menu lewat variabel, bukan hex langsung. Panel itu digambar
-   dengan style inline, dan style inline hanya kalah oleh !important — sementara
-   aturan light theme di bawah menyasar kelas, bukan elemennya. Variabel memutus
-   simpul itu: satu nilai dibaca style inline, satu lagi ditimpa per tema.
-   .ap-modal-bg ikut disebut supaya modal tetap dapat nilainya walau suatu saat
-   dipindah ke portal di luar .ap-body. */
-.ap-body,.ap-modal-bg{--ma-fg:#e0f7ff;--ma-dim:#5a8ea8;--ma-aksen:#00d4ff;--ma-ok:#00ffc8;--ma-warn:#ff9944;--ma-beda:#ffcc00;--ma-line:rgba(0,212,255,.12);--ma-line-on:rgba(0,212,255,.3);--ma-bg:rgba(0,212,255,.03);--ma-bg-on:rgba(0,212,255,.08);--ma-warn-bg:rgba(255,153,68,.05);--ma-warn-line:rgba(255,153,68,.2);}
-.ap-body{min-height:100vh;background:#020b14;background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);background-size:40px 40px;color:#e0f7ff;font-family:var(--font-jakarta),sans-serif;position:relative;overflow-x:hidden;}
-.ap-body::before{content:'';position:fixed;top:-100vh;left:0;right:0;height:200vh;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none;z-index:0;animation:scan 12s linear infinite;}
-.ap-header{position:sticky;top:0;z-index:100;background:linear-gradient(135deg,rgba(0,212,255,.07),rgba(0,255,200,.04)),rgba(2,11,20,0.96);backdrop-filter:blur(14px);border-bottom:1px solid rgba(0,212,255,0.2);padding:0 24px;height:76px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 0 40px rgba(0,212,255,.08);}
-.ap-brand{display:flex;align-items:center;gap:14px;border:1px solid rgba(0,212,255,.55);border-radius:12px;padding:12px 20px 12px 12px;background:rgba(0,212,255,.06);box-shadow:0 0 20px rgba(0,212,255,.12),inset 0 0 20px rgba(0,212,255,.03);}
-.ap-brand-icon{width:42px;height:42px;border-radius:10px;border:1px solid rgba(0,212,255,.6);display:flex;align-items:center;justify-content:center;color:#00d4ff;background:rgba(0,212,255,.08);animation:pls 2.5s ease-in-out infinite;flex-shrink:0;}
-.ap-brand-title{font-size:17px;font-weight:800;color:#e0f7ff;letter-spacing:2.5px;font-family:var(--font-jakarta),sans-serif;text-shadow:0 0 20px rgba(0,212,255,.5);}
-.ap-brand-sub{font-size:9px;color:#5a8ea8;letter-spacing:1px;margin-top:4px;font-family:'JetBrains Mono',monospace;}
-.ap-clock{font-size:22px;font-weight:400;color:#00d4ff;letter-spacing:3px;font-family:'JetBrains Mono',monospace;text-shadow:0 0 12px rgba(0,212,255,.4);}
-.ap-user{display:flex;align-items:center;gap:10px;cursor:pointer;padding:5px 14px 5px 5px;border-radius:10px;border:1px solid rgba(0,212,255,.3);background:rgba(0,212,255,.05);transition:all .2s;user-select:none;}
-.ap-user:hover{border-color:rgba(0,212,255,.65);background:rgba(0,212,255,.1);box-shadow:0 0 14px rgba(0,212,255,.15);}
-.ap-avatar{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#00d4ff,#00ffc8);color:#020b14;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(0,212,255,.4);font-family:var(--font-jakarta),sans-serif;}
-.ap-uname{font-size:12px;font-weight:700;color:#e0f7ff;letter-spacing:.8px;}
-.ap-urole{font-size:9px;font-weight:700;background:linear-gradient(90deg,#00d4ff,#00ffc8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.8px;}
-.ap-chevron{transition:transform .2s;color:#00d4ff;flex-shrink:0;}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOKEN — mode gelap (bawaan)
+
+   `.ap-modal-bg` ikut disebut supaya modal tetap dapat nilainya kalau suatu saat
+   dipindah ke portal di luar `.ap-body`.
+
+   Varian transparan ditulis sebagai token tersendiri (`*-bg`, `*-line`), bukan
+   dihitung dari token warnanya. Alasannya bukan gaya: `rgba(var(--x), .1)` tidak sah
+   di CSS, dan `color-mix()` menaruh seluruh tampilan panel ini di atas dukungan
+   peramban yang tidak bisa kita pastikan di komputer kantor. Token eksplisit selalu
+   jalan, dan nilainya bisa dibaca orang.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ap-body,.ap-modal-bg{
+  --ap-canvas:#020F1C;
+  --ap-card:#042C53;
+  --ap-elev:#0C447C;
+  --ap-line:rgba(12,68,124,.85);
+  --ap-line-tipis:rgba(12,68,124,.45);
+  --ap-fg:#E6F1FB;
+  --ap-fg2:#B5D4F4;
+  --ap-dim:#85B7EB;
+
+  --ap-aksen:#EF9F27;
+  --ap-aksen2:#FAC775;
+  --ap-aksen-grad:linear-gradient(135deg,#EF9F27,#FAC775);
+  --ap-on-aksen:#020F1C;
+  --ap-aksen-bg:rgba(239,159,39,.08);
+  --ap-aksen-bg2:rgba(239,159,39,.16);
+  --ap-aksen-line:rgba(239,159,39,.35);
+  --ap-aksen-line2:rgba(239,159,39,.6);
+
+  --ap-ok:#1D9E75;      --ap-ok-fg:#34D399;
+  --ap-ok-bg:rgba(29,158,117,.12);   --ap-ok-line:rgba(29,158,117,.35);
+  --ap-bad:#E24B4A;     --ap-bad-fg:#E24B4A;
+  --ap-bad-bg:rgba(226,75,74,.12);   --ap-bad-line:rgba(226,75,74,.35);
+  /* Peringatan punya dua nilai: yang untuk TEKS dan yang untuk grafis. `#BA7517`
+     cukup terbaca sebagai strip atau bingkai, tapi tidak sebagai huruf di atas
+     kanvas gelap — pelajaran yang sama sudah dipetik di layar Realisasi BLUD. */
+  --ap-warn:#BA7517;    --ap-warn-fg:#FAC775;
+  --ap-warn-bg:rgba(186,117,23,.14); --ap-warn-line:rgba(186,117,23,.4);
+  --ap-info:#378ADD;
+  --ap-info-bg:rgba(55,138,221,.12); --ap-info-line:rgba(55,138,221,.35);
+
+  --ap-tirai:rgba(0,0,0,.75);
+  --ap-bayang:0 16px 40px rgba(0,0,0,.6);
+  --ap-bayang-modal:0 28px 60px rgba(0,0,0,.7);
+  --ap-kisi:rgba(133,183,235,.05);
+
+  /* Panel Akses Menu digambar dengan style sebaris (nilainya dihitung per baris),
+     jadi ia hanya bisa membaca variabel — bukan kelas. Diturunkan dari token di atas
+     supaya tidak jadi palet kedua yang harus diingat terpisah. */
+  --ma-fg:var(--ap-fg); --ma-dim:var(--ap-dim); --ma-aksen:var(--ap-aksen);
+  --ma-ok:var(--ap-ok-fg); --ma-warn:var(--ap-warn-fg); --ma-beda:var(--ap-aksen2);
+  --ma-line:var(--ap-line-tipis); --ma-line-on:var(--ap-aksen-line);
+  --ma-bg:var(--ap-aksen-bg); --ma-bg-on:var(--ap-aksen-bg2);
+  --ma-warn-bg:var(--ap-warn-bg); --ma-warn-line:var(--ap-warn-line);
+}
+
+/* ═══ TOKEN — mode terang ═══════════════════════════════════════════════════
+   Merek berganti emas → ungu-merah muda, dan itu memang aturan sistemnya
+   (DESIGN-SYSTEM.md §Theme Toggle Behavior), bukan kekhasan Admin Panel. Yang
+   diperbaiki cuma nilainya: `#7C3AED` (meleset satu langkah) → `#8B5CF6`.
+
+   HANYA token yang ditimpa. Tidak ada satu pun aturan tampilan di blok ini — kalau
+   suatu saat ada, itu tanda ada warna yang belum jadi token. */
+[data-theme="light"] .ap-body,[data-theme="light"] .ap-modal-bg{
+  --ap-canvas:#FAFAFB;
+  --ap-card:#FFFFFF;
+  --ap-elev:#F4F4F7;
+  --ap-line:#E5E5EA;
+  --ap-line-tipis:rgba(0,0,0,.08);
+  --ap-fg:#0F0F12;
+  --ap-fg2:#3A3A42;
+  --ap-dim:#8A8A95;
+
+  --ap-aksen:#8B5CF6;
+  --ap-aksen2:#EC4899;
+  --ap-aksen-grad:linear-gradient(135deg,#8B5CF6,#EC4899);
+  --ap-on-aksen:#FFFFFF;
+  --ap-aksen-bg:rgba(139,92,246,.06);
+  --ap-aksen-bg2:rgba(139,92,246,.12);
+  --ap-aksen-line:rgba(139,92,246,.3);
+  --ap-aksen-line2:rgba(139,92,246,.55);
+
+  --ap-ok:#0B8A63;      --ap-ok-fg:#0B8A63;
+  --ap-ok-bg:rgba(11,138,99,.09);    --ap-ok-line:rgba(11,138,99,.28);
+  --ap-bad:#DC2626;     --ap-bad-fg:#DC2626;
+  --ap-bad-bg:rgba(226,75,74,.08);   --ap-bad-line:rgba(226,75,74,.28);
+  --ap-warn:#B45309;    --ap-warn-fg:#B45309;
+  --ap-warn-bg:rgba(180,83,9,.09);   --ap-warn-line:rgba(180,83,9,.28);
+  --ap-info:#378ADD;
+  --ap-info-bg:rgba(55,138,221,.08); --ap-info-line:rgba(55,138,221,.28);
+
+  --ap-tirai:rgba(15,15,18,.45);
+  --ap-bayang:0 16px 40px rgba(0,0,0,.15);
+  --ap-bayang-modal:0 28px 60px rgba(0,0,0,.18);
+  --ap-kisi:rgba(0,0,0,.03);
+}
+
+/* ═══ Kerangka — R2: topbar 56px + rel kiri berkelompok ═══════════════════
+   Bilah tab datar berisi 11 tujuan yang digulir mendatar diganti rel kiri
+   berkelompok empat. Sebabnya bukan selera: tujuan yang harus digulir untuk
+   ditemukan sama saja dengan tidak ada, dan §13 masih menambah empat layar lagi.
+   Rel juga memberi tempat untuk lencana angka ("3 permintaan menunggu") yang di
+   bilah mendatar tidak punya tempat sama sekali.
+
+   Topbar turun 76px → 56px. Yang dilepas: bingkai merek + subjudul 9px berisi nama
+   panjang instansi — kalimat yang dibaca sekali seumur hidup tapi menempati ruang
+   permanen di layar yang isinya tabel. */
+.ap-body{min-height:100vh;background:var(--ap-canvas);background-image:linear-gradient(var(--ap-kisi) 1px,transparent 1px),linear-gradient(90deg,var(--ap-kisi) 1px,transparent 1px);background-size:40px 40px;color:var(--ap-fg);font-family:var(--font-jakarta),sans-serif;position:relative;overflow-x:hidden;}
+.ap-top{position:sticky;top:0;z-index:100;height:56px;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--ap-card);border-bottom:1px solid var(--ap-line);}
+.ap-brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1;}
+.ap-brand-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--ap-aksen-grad);color:var(--ap-on-aksen);flex-shrink:0;}
+.ap-brand-title{font-size:13px;font-weight:700;color:var(--ap-fg);letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Jam tetap ada dan tetap monospace: ia dipakai untuk membaca "idle 12m" di tabel
+   sesi, jadi ia keterangan — bukan judul. Karena itu ukurannya turun 22px → 12.5px
+   dan warnanya jadi teks redup, bukan warna merek. */
+.ap-clock{font-size:12.5px;font-weight:400;color:var(--ap-dim);letter-spacing:.08em;font-family:'JetBrains Mono',monospace;flex-shrink:0;}
+.ap-top-kanan{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:1;}
+.ap-menu-btn{display:none;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--ap-line);background:none;color:var(--ap-fg2);cursor:pointer;flex-shrink:0;}
+.ap-shell{display:grid;grid-template-columns:208px minmax(0,1fr);align-items:start;}
+.ap-rail{background:var(--ap-card);border-right:1px solid var(--ap-line);padding:14px 10px 24px;display:flex;flex-direction:column;gap:16px;position:sticky;top:56px;align-self:start;max-height:calc(100vh - 56px);overflow-y:auto;z-index:50;}
+.ap-rg-t{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ap-dim);padding:0 8px 6px;}
+.ap-rg{display:flex;flex-direction:column;gap:1px;}
+.ap-ri{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:7px 9px;border-radius:6px;font-size:12.5px;color:var(--ap-fg2);border:none;background:none;cursor:pointer;font-family:var(--font-jakarta),sans-serif;transition:background .12s,color .12s;}
+.ap-ri svg{width:15px;height:15px;flex:0 0 auto;color:var(--ap-dim);}
+.ap-ri:hover{background:var(--ap-aksen-bg);color:var(--ap-fg);}
+.ap-ri.active{background:var(--ap-aksen-bg2);color:var(--ap-fg);font-weight:600;}
+.ap-ri.active svg{color:var(--ap-aksen);}
+.ap-tirai-rail{position:fixed;inset:0;background:var(--ap-tirai);z-index:390;border:none;}
+.ap-user{display:flex;align-items:center;gap:10px;cursor:pointer;padding:5px 14px 5px 5px;border-radius:10px;border:1px solid var(--ap-aksen-line);background:var(--ap-aksen-bg);transition:border-color .2s,background .2s;user-select:none;}
+.ap-user:hover{border-color:var(--ap-aksen-line2);background:var(--ap-aksen-bg2);}
+.ap-avatar{width:34px;height:34px;border-radius:8px;background:var(--ap-aksen-grad);color:var(--ap-on-aksen);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:var(--font-jakarta),sans-serif;}
+.ap-uname{font-size:12px;font-weight:700;color:var(--ap-fg);letter-spacing:.8px;}
+.ap-urole{font-size:9px;font-weight:700;background:var(--ap-aksen-grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.8px;}
+.ap-chevron{transition:transform .2s;color:var(--ap-aksen);flex-shrink:0;}
 .ap-chevron.open{transform:rotate(180deg);}
-.ap-dropdown{position:absolute;top:calc(100%+10px);right:0;width:210px;background:#0a0e14;border:1px solid rgba(0,212,255,.2);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.6);overflow:hidden;z-index:300;}
-.ap-ddi{display:flex;align-items:center;gap:9px;padding:11px 16px;font-size:12px;color:#a0cfe0;cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:var(--font-jakarta),sans-serif;transition:background .15s;letter-spacing:.3px;}
-.ap-ddi:hover{background:rgba(0,212,255,.08);color:#00d4ff;}
-.ap-ddi.danger{color:#ff4466;}
-.ap-ddi.danger:hover{background:rgba(255,68,102,.08);}
-.ap-tabs{display:flex;align-items:center;gap:0;padding:0 20px;background:rgba(2,11,20,.92);border-bottom:1px solid rgba(0,212,255,.1);overflow-x:auto;position:relative;z-index:10;}
-.ap-tab{display:flex;align-items:center;gap:6px;padding:13px 15px;font-size:10.5px;font-weight:700;letter-spacing:1.2px;color:#5a8ea8;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;font-family:var(--font-jakarta),sans-serif;}
-.ap-tab:hover{color:#a0cfe0;}
-.ap-tab.active{color:#00d4ff;border-bottom-color:#00d4ff;text-shadow:0 0 8px rgba(0,212,255,.4);}
+.ap-dropdown{position:absolute;top:calc(100%+10px);right:0;width:210px;background:var(--ap-elev);border:1px solid var(--ap-line);border-radius:10px;box-shadow:var(--ap-bayang);overflow:hidden;z-index:300;}
+.ap-ddi{display:flex;align-items:center;gap:9px;padding:11px 16px;font-size:12px;color:var(--ap-fg2);cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:var(--font-jakarta),sans-serif;transition:background .15s;letter-spacing:.3px;}
+.ap-ddi:hover{background:var(--ap-aksen-bg);color:var(--ap-aksen);}
+.ap-ddi.danger{color:var(--ap-bad-fg);}
+.ap-ddi.danger:hover{background:var(--ap-bad-bg);}
 /* TANPA z-index — sengaja. Nilai apa pun di sini membentuk stacking context,
    dan modal hidup DI DALAM elemen ini: z-index 500 pada .ap-modal-bg lalu hanya
    berlaku di antara sesama isi .ap-content, sehingga seluruh modal terkubur di
    bawah .ap-header (100) dan .ap-tabs (10) — bagian atas modal tertutup bilah
-   nav. position:relative tetap dipertahankan (dipakai anak yang absolute) dan
-   urutan gambar terhadap .ap-body::before tidak berubah: keduanya di level yang
-   sama, dan yang belakangan di pohon menang. */
-.ap-content{padding:24px;max-width:1400px;margin:0 auto;position:relative;}
-.ap-card{background:rgba(7,21,37,.92);border:1px solid rgba(0,212,255,.14);border-radius:10px;padding:20px;position:relative;overflow:hidden;}
-.ap-card::after{content:'';position:absolute;bottom:0;right:0;width:80px;height:80px;background:radial-gradient(circle at bottom right,rgba(0,212,255,.07),transparent 70%);pointer-events:none;}
-.ap-card-title{font-size:10px;font-weight:700;letter-spacing:2px;color:#5a8ea8;margin-bottom:14px;display:flex;align-items:center;gap:8px;text-transform:uppercase;}
-.ap-card-title::before{content:'';display:inline-block;width:3px;height:13px;background:linear-gradient(180deg,#00d4ff,#00ffc8);border-radius:2px;}
+   nav. position:relative tetap dipertahankan (dipakai anak yang absolute). */
+/* `width:100%` + `min-width:0` — dua-duanya WAJIB, dan sebabnya tidak kelihatan dari
+   membaca aturannya. Terukur di 375px: jalur gridnya benar 375px, tapi isinya 828px.
+   Dua hal berbeda menyebabkannya, dan memperbaiki salah satu saja tidak cukup:
+     1. Item grid membawa `min-width:auto` bawaan, jadi ia menolak menyempit di bawah
+        lebar min-content isinya. `minmax(0,1fr)` di `.ap-shell` cuma mengatur JALUR.
+     2. `margin:0 auto` mematikan perataan `stretch` bawaan item grid — sesudah itu
+        ukurannya diambil dari isinya sendiri (max-content), bukan dari jalurnya.
+        Ini yang menahan perbaikan pertama: `min-width:0` MENGIZINKAN menyempit, tapi
+        tidak menyuruhnya.
+   Kelebihannya tak terlihat sebagai gejala karena `.ap-body` menyembunyikan gulir
+   mendatar — halamannya tampak normal, tabelnya saja yang terpotong. */
+.ap-content{padding:24px;width:100%;max-width:1400px;margin:0 auto;position:relative;min-width:0;}
+
+/* ═══ Kartu, KPI, tabel ════════════════════════════════════════════════════ */
+.ap-card{background:var(--ap-card);border:1px solid var(--ap-line);border-radius:10px;padding:20px;position:relative;overflow:hidden;}
+.ap-card-title{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--ap-dim);margin-bottom:14px;display:flex;align-items:center;gap:8px;text-transform:uppercase;}
+.ap-card-title::before{content:'';display:inline-block;width:3px;height:13px;background:var(--ap-aksen-grad);border-radius:2px;}
+.ap-grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
 .ap-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
 .ap-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
-.ap-kpi{background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.1);border-radius:8px;padding:16px 18px;position:relative;overflow:hidden;}
-.ap-kpi::after{content:'';position:absolute;top:-20px;right:-20px;width:70px;height:70px;background:radial-gradient(circle,rgba(0,212,255,.08),transparent 70%);pointer-events:none;}
-.ap-kpi-label{font-size:9px;letter-spacing:1.8px;color:#5a8ea8;margin-bottom:8px;text-transform:uppercase;font-family:var(--font-jakarta),sans-serif;}
+.ap-kpi{background:var(--ap-aksen-bg);border:1px solid var(--ap-line-tipis);border-radius:8px;padding:16px 18px;position:relative;overflow:hidden;}
+.ap-kpi-label{font-size:9px;letter-spacing:1.8px;color:var(--ap-dim);margin-bottom:8px;text-transform:uppercase;font-family:var(--font-jakarta),sans-serif;}
 .ap-kpi-value{font-size:30px;font-weight:400;font-family:'JetBrains Mono',monospace;}
-.ap-kpi-sub{font-size:10px;color:#5a8ea8;margin-top:4px;}
-.ap-body .cyan{color:#00d4ff;}
-.ap-body .green{color:#00ffc8;}
-.ap-body .yellow{color:#ffcc00;}
-.ap-body .red{color:#ff4466;}
-.ap-table-wrap{background:rgba(7,21,37,.92);border:1px solid rgba(0,212,255,.12);border-radius:10px;overflow:hidden;}
+.ap-kpi-sub{font-size:10px;color:var(--ap-dim);margin-top:4px;}
+
+/* Kelas warna lama. Namanya menyebut warna ("cyan", "green") sementara nilainya kini
+   token — nama yang menyesatkan, tapi menggantinya berarti menyentuh isi tab, dan R1
+   sengaja tidak melakukannya (§16.8). Diganti nama di R3, per tab. */
+.ap-body .cyan{color:var(--ap-aksen);}
+.ap-body .green{color:var(--ap-ok-fg);}
+.ap-body .yellow{color:var(--ap-warn-fg);}
+.ap-body .red{color:var(--ap-bad-fg);}
+
+/* `overflow-x:auto`, bukan `hidden`. Tabel di sini punya 8–9 kolom dan tidak muat di
+   layar sempit; `hidden` MEMOTONG kolom terakhir tanpa menyisakan cara melihatnya —
+   termasuk kolom aksi. Digulung di dalam kotaknya sendiri, halaman tetap tidak
+   menggulir mendatar. */
+.ap-table-wrap{background:var(--ap-card);border:1px solid var(--ap-line);border-radius:10px;overflow-x:auto;overflow-y:hidden;}
 .ap-table{width:100%;border-collapse:collapse;font-size:12px;}
-.ap-table thead tr{background:linear-gradient(90deg,rgba(0,212,255,.08),rgba(0,255,200,.04));}
-.ap-table th{padding:11px 14px;text-align:left;font-size:9.5px;font-weight:700;letter-spacing:1.5px;color:#5a8ea8;border-bottom:1px solid rgba(0,212,255,.12);font-family:var(--font-jakarta),sans-serif;}
-.ap-table td{padding:9px 14px;border-bottom:1px solid rgba(0,212,255,.05);color:#a0cfe0;vertical-align:middle;font-family:var(--font-jakarta),sans-serif;}
+.ap-table thead tr{background:var(--ap-aksen-bg);}
+.ap-table th{padding:11px 14px;text-align:left;font-size:9.5px;font-weight:700;letter-spacing:1.5px;color:var(--ap-dim);border-bottom:1px solid var(--ap-line);font-family:var(--font-jakarta),sans-serif;}
+.ap-table td{padding:9px 14px;border-bottom:1px solid var(--ap-line-tipis);color:var(--ap-fg2);vertical-align:middle;font-family:var(--font-jakarta),sans-serif;}
 .ap-table td.mono{font-family:'JetBrains Mono',monospace;}
-.ap-table tr:hover td{background:rgba(0,212,255,.04);}
-.ap-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;border:1px solid;transition:all .2s;font-family:var(--font-jakarta),sans-serif;}
-.ap-btn-cyan{border-color:rgba(0,212,255,.4);color:#00d4ff;background:rgba(0,212,255,.08);}
-.ap-btn-cyan:hover{background:rgba(0,212,255,.15);border-color:#00d4ff;box-shadow:0 0 10px rgba(0,212,255,.2);}
-.ap-btn-red{border-color:rgba(255,68,102,.4);color:#ff4466;background:rgba(255,68,102,.08);}
-.ap-btn-red:hover{background:rgba(255,68,102,.15);border-color:#ff4466;box-shadow:0 0 10px rgba(255,68,102,.2);}
-.ap-btn-green{border-color:rgba(0,255,200,.4);color:#00ffc8;background:rgba(0,255,200,.08);}
-.ap-btn-green:hover{background:rgba(0,255,200,.15);border-color:#00ffc8;box-shadow:0 0 10px rgba(0,255,200,.2);}
-.ap-btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;}
+.ap-table tr:hover td{background:var(--ap-aksen-bg);}
+
+/* ═══ Tombol, lencana, isian ═══════════════════════════════════════════════ */
+.ap-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;border:1px solid;transition:background .2s,border-color .2s;font-family:var(--font-jakarta),sans-serif;}
+.ap-btn-cyan{border-color:var(--ap-aksen-line);color:var(--ap-aksen);background:var(--ap-aksen-bg);}
+.ap-btn-cyan:hover{background:var(--ap-aksen-bg2);border-color:var(--ap-aksen);}
+.ap-btn-red{border-color:var(--ap-bad-line);color:var(--ap-bad-fg);background:var(--ap-bad-bg);}
+.ap-btn-red:hover{background:var(--ap-bad-bg);border-color:var(--ap-bad);}
+.ap-btn-green{border-color:var(--ap-ok-line);color:var(--ap-ok-fg);background:var(--ap-ok-bg);}
+.ap-btn-green:hover{background:var(--ap-ok-bg);border-color:var(--ap-ok);}
+.ap-btn:disabled{opacity:.35;cursor:not-allowed;}
 .ap-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;font-family:var(--font-jakarta),sans-serif;}
-.ap-body .badge-green{background:rgba(0,255,200,.1);color:#00ffc8;border:1px solid rgba(0,255,200,.28);}
-.ap-body .badge-yellow{background:rgba(255,204,0,.1);color:#ffcc00;border:1px solid rgba(255,204,0,.28);}
-.ap-body .badge-red{background:rgba(255,68,102,.1);color:#ff4466;border:1px solid rgba(255,68,102,.28);}
-.ap-body .badge-cyan{background:rgba(0,212,255,.1);color:#00d4ff;border:1px solid rgba(0,212,255,.28);}
-.ap-body .badge-gray{background:rgba(90,142,168,.1);color:#5a8ea8;border:1px solid rgba(90,142,168,.28);}
-.ap-body .dot-active{display:inline-block;width:6px;height:6px;border-radius:50%;background:#00ffc8;animation:blink 1.8s ease-in-out infinite;}
-.ap-body .dot-idle{display:inline-block;width:6px;height:6px;border-radius:50%;background:#ffcc00;}
-.ap-input{background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:6px;padding:8px 12px;color:#e0f7ff;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;width:100%;}
-.ap-input:focus{border-color:rgba(0,212,255,.55);background:rgba(0,212,255,.08);}
-.ap-select{background:#071525;border:1px solid rgba(0,212,255,.2);border-radius:6px;padding:8px 12px;color:#a0cfe0;font-size:12px;font-family:var(--font-jakarta),sans-serif;outline:none;}
-.ap-select:focus{border-color:rgba(0,212,255,.55);}
-.ap-select option{background:#071525;color:#e0f7ff;}
-.ap-select optgroup{background:#071525;color:#5a8ea8;font-style:normal;font-weight:700;}
+.ap-body .badge-green{background:var(--ap-ok-bg);color:var(--ap-ok-fg);border:1px solid var(--ap-ok-line);}
+.ap-body .badge-yellow{background:var(--ap-warn-bg);color:var(--ap-warn-fg);border:1px solid var(--ap-warn-line);}
+.ap-body .badge-red{background:var(--ap-bad-bg);color:var(--ap-bad-fg);border:1px solid var(--ap-bad-line);}
+.ap-body .badge-cyan{background:var(--ap-aksen-bg);color:var(--ap-aksen);border:1px solid var(--ap-aksen-line);}
+.ap-body .badge-gray{background:var(--ap-line-tipis);color:var(--ap-dim);border:1px solid var(--ap-line);}
+.ap-body .dot-active{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ap-ok-fg);}
+.ap-body .dot-idle{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ap-warn-fg);}
+.ap-input{background:var(--ap-aksen-bg);border:1px solid var(--ap-line);border-radius:6px;padding:8px 12px;color:var(--ap-fg);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;width:100%;}
+.ap-input:focus{border-color:var(--ap-aksen-line2);background:var(--ap-aksen-bg2);}
+.ap-select{background:var(--ap-elev);border:1px solid var(--ap-line);border-radius:6px;padding:8px 12px;color:var(--ap-fg2);font-size:12px;font-family:var(--font-jakarta),sans-serif;outline:none;}
+.ap-select:focus{border-color:var(--ap-aksen-line2);}
+.ap-select option{background:var(--ap-elev);color:var(--ap-fg);}
+.ap-select optgroup{background:var(--ap-elev);color:var(--ap-dim);font-style:normal;font-weight:700;}
 .ap-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-.ap-section-title{font-size:12px;font-weight:800;letter-spacing:1.5px;color:#00d4ff;margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid rgba(0,212,255,.12);text-transform:uppercase;font-family:var(--font-jakarta),sans-serif;}
+.ap-section-title{font-size:12px;font-weight:800;letter-spacing:1.5px;color:var(--ap-aksen);margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid var(--ap-line);text-transform:uppercase;font-family:var(--font-jakarta),sans-serif;}
 .ap-toggle{position:relative;width:44px;height:22px;cursor:pointer;}
 .ap-toggle input{opacity:0;width:0;height:0;position:absolute;}
-.ap-toggle-track{position:absolute;inset:0;border-radius:11px;background:rgba(255,68,102,.25);border:1px solid rgba(255,68,102,.4);transition:all .3s;}
-.ap-toggle input:checked + .ap-toggle-track{background:rgba(0,255,200,.18);border-color:rgba(0,255,200,.5);}
-.ap-toggle-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#ff4466;transition:all .3s;}
-.ap-toggle input:checked ~ .ap-toggle-thumb{left:25px;background:#00ffc8;}
+.ap-toggle-track{position:absolute;inset:0;border-radius:11px;background:var(--ap-bad-bg);border:1px solid var(--ap-bad-line);transition:background .3s,border-color .3s;}
+.ap-toggle input:checked + .ap-toggle-track{background:var(--ap-ok-bg);border-color:var(--ap-ok-line);}
+.ap-toggle-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--ap-bad-fg);transition:left .3s,background .3s;}
+.ap-toggle input:checked ~ .ap-toggle-thumb{left:25px;background:var(--ap-ok-fg);}
 .ap-toggle:has(input:disabled){cursor:not-allowed;opacity:.35;}
 .ap-toggle-row-disabled{opacity:.4;pointer-events:none;}
+
 /* Isi modal yang lebih tinggi dari layar digulung DI DALAM kotaknya. Tanpa
    max-height, kotak tumbuh melewati batas viewport dan bagian bawahnya —
    termasuk tombol Simpan — tidak bisa dicapai: penggulung halaman di belakang
    tidak menggulung isi modal. Kena ke semua modal Admin Panel, bukan cuma
    Akses Menu. */
-.ap-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px);}
-.ap-modal-box{background:#0a1220;border:1px solid rgba(0,212,255,.3);border-radius:12px;padding:28px;width:100%;max-width:420px;max-height:calc(100vh - 48px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 28px 60px rgba(0,0,0,.7);}
-.ap-modal-box.danger{border-color:rgba(255,68,102,.4);box-shadow:0 28px 60px rgba(0,0,0,.7),0 0 30px rgba(255,68,102,.08);}
-.ap-modal-title{font-size:13px;font-weight:800;color:#00d4ff;letter-spacing:1.5px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-family:var(--font-jakarta),sans-serif;}
-.ap-body .msg-ok{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(0,255,200,.07);border:1px solid rgba(0,255,200,.2);border-radius:6px;font-size:12px;color:#00ffc8;margin-bottom:12px;}
-.ap-body .msg-err{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,68,102,.07);border:1px solid rgba(255,68,102,.2);border-radius:6px;font-size:12px;color:#ff4466;margin-bottom:12px;}
-@media(max-width:1100px){.ap-grid5{grid-template-columns:repeat(3,1fr)!important;}.sec-grid{grid-template-columns:1fr!important;}.sec-span2{grid-column:span 1!important;}.email-grid{grid-template-columns:1fr!important;}}
-@media(max-width:900px){.ap-grid4{grid-template-columns:repeat(2,1fr);}.ap-grid3{grid-template-columns:1fr 1fr;}.ap-grid5{grid-template-columns:repeat(2,1fr)!important;}}
-@media(max-width:600px){.ap-grid4,.ap-grid3{grid-template-columns:1fr;}.ap-grid5{grid-template-columns:1fr!important;}}
+.ap-modal-bg{position:fixed;inset:0;background:var(--ap-tirai);z-index:500;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(5px);}
+.ap-modal-box{background:var(--ap-elev);border:1px solid var(--ap-line);border-radius:12px;padding:28px;width:100%;max-width:420px;max-height:calc(100vh - 48px);overflow-y:auto;overscroll-behavior:contain;box-shadow:var(--ap-bayang-modal);}
+.ap-modal-box.danger{border-color:var(--ap-bad-line);}
+.ap-modal-title{font-size:13px;font-weight:800;color:var(--ap-aksen);letter-spacing:1.5px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-family:var(--font-jakarta),sans-serif;}
+.ap-body .msg-ok{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--ap-ok-bg);border:1px solid var(--ap-ok-line);border-radius:6px;font-size:12px;color:var(--ap-ok-fg);margin-bottom:12px;}
+.ap-body .msg-err{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--ap-bad-bg);border:1px solid var(--ap-bad-line);border-radius:6px;font-size:12px;color:var(--ap-bad-fg);margin-bottom:12px;}
 
-/* ═══════════════════════════════════════
-   LIGHT THEME OVERRIDES — Admin Panel
-═══════════════════════════════════════ */
-[data-theme="light"] .ap-body{background:#F0F4F8!important;background-image:linear-gradient(rgba(0,0,0,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,0.03) 1px,transparent 1px)!important;color:#0F172A!important;}
-[data-theme="light"] .ap-body::before{display:none;}
-[data-theme="light"] .ap-header{background:rgba(250,250,250,0.97)!important;border-bottom:1px solid rgba(0,0,0,0.1)!important;box-shadow:0 2px 12px rgba(0,0,0,0.06)!important;}
-[data-theme="light"] .ap-brand{border:1px solid rgba(139,92,246,0.3)!important;background:rgba(139,92,246,0.05)!important;box-shadow:none!important;}
-[data-theme="light"] .ap-brand-icon{border-color:rgba(139,92,246,0.4)!important;color:#7C3AED!important;background:rgba(139,92,246,0.08)!important;animation:none!important;}
-[data-theme="light"] .ap-brand-title{color:#0F172A!important;text-shadow:none!important;}
-[data-theme="light"] .ap-brand-sub{color:#6B7280!important;}
-[data-theme="light"] .ap-clock{color:#7C3AED!important;text-shadow:none!important;}
-[data-theme="light"] .ap-user{border-color:rgba(139,92,246,0.25)!important;background:rgba(139,92,246,0.05)!important;}
-[data-theme="light"] .ap-user:hover{border-color:rgba(139,92,246,0.5)!important;background:rgba(139,92,246,0.1)!important;box-shadow:none!important;}
-[data-theme="light"] .ap-avatar{background:linear-gradient(135deg,#7C3AED,#EC4899)!important;color:#fff!important;box-shadow:none!important;}
-[data-theme="light"] .ap-uname{color:#0F172A!important;}
-[data-theme="light"] .ap-urole{background:linear-gradient(90deg,#7C3AED,#EC4899)!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent!important;}
-[data-theme="light"] .ap-dropdown{background:#FAFAFA!important;border:1px solid rgba(0,0,0,0.1)!important;box-shadow:0 16px 40px rgba(0,0,0,0.15)!important;}
-[data-theme="light"] .ap-ddi{color:#374151!important;}
-[data-theme="light"] .ap-ddi:hover{background:rgba(0,0,0,0.04)!important;color:#0F172A!important;}
-[data-theme="light"] .ap-ddi.danger{color:#DC2626!important;}
-[data-theme="light"] .ap-ddi.danger:hover{background:rgba(226,75,74,0.08)!important;}
-[data-theme="light"] .ap-tabs{background:rgba(250,250,250,0.95)!important;border-bottom:1px solid rgba(0,0,0,0.08)!important;}
-[data-theme="light"] .ap-tab{color:#6B7280!important;}
-[data-theme="light"] .ap-tab:hover{color:#374151!important;}
-[data-theme="light"] .ap-tab.active{color:#7C3AED!important;border-bottom-color:#7C3AED!important;text-shadow:none!important;}
-[data-theme="light"] .ap-card{background:#FAFAFA!important;border:1px solid rgba(0,0,0,0.08)!important;}
-[data-theme="light"] .ap-card::after{display:none;}
-[data-theme="light"] .ap-card-title{color:#6B7280!important;}
-[data-theme="light"] .ap-card-title::before{background:linear-gradient(180deg,#7C3AED,#EC4899)!important;}
-[data-theme="light"] .ap-kpi{background:#F5F7FA!important;border:1px solid rgba(0,0,0,0.08)!important;}
-[data-theme="light"] .ap-kpi::after{display:none;}
-[data-theme="light"] .ap-kpi-label{color:#6B7280!important;}
-[data-theme="light"] .ap-kpi-value{color:#0F172A!important;}
-[data-theme="light"] .ap-kpi-sub{color:#6B7280!important;}
-[data-theme="light"] .ap-body .cyan{color:#7C3AED!important;}
-[data-theme="light"] .ap-body .green{color:#059669!important;}
-[data-theme="light"] .ap-body .yellow{color:#D97706!important;}
-[data-theme="light"] .ap-body .red{color:#DC2626!important;}
-[data-theme="light"] .ap-table-wrap{background:#FAFAFA!important;border:1px solid rgba(0,0,0,0.08)!important;}
-[data-theme="light"] .ap-table thead tr{background:#F3F4F6!important;}
-[data-theme="light"] .ap-table th{color:#6B7280!important;border-bottom:1px solid rgba(0,0,0,0.1)!important;}
-[data-theme="light"] .ap-table td{color:#374151!important;border-bottom:1px solid rgba(0,0,0,0.06)!important;}
-[data-theme="light"] .ap-table tr:hover td{background:rgba(0,0,0,0.02)!important;}
-[data-theme="light"] .ap-btn-cyan{border-color:rgba(124,92,246,0.35)!important;color:#7C3AED!important;background:rgba(124,92,246,0.08)!important;}
-[data-theme="light"] .ap-btn-cyan:hover{background:rgba(124,92,246,0.15)!important;border-color:#7C3AED!important;box-shadow:none!important;}
-[data-theme="light"] .ap-btn-green{border-color:rgba(5,150,105,0.3)!important;color:#059669!important;background:rgba(5,150,105,0.08)!important;}
-[data-theme="light"] .ap-btn-red{border-color:rgba(220,38,38,0.3)!important;color:#DC2626!important;background:rgba(220,38,38,0.08)!important;}
-[data-theme="light"] .ap-body .badge-green{background:rgba(5,150,105,0.1)!important;color:#059669!important;border-color:rgba(5,150,105,0.25)!important;}
-[data-theme="light"] .ap-body .badge-cyan{background:rgba(124,92,246,0.1)!important;color:#7C3AED!important;border-color:rgba(124,92,246,0.25)!important;}
-[data-theme="light"] .ap-body .badge-yellow{background:rgba(217,119,6,0.1)!important;color:#D97706!important;border-color:rgba(217,119,6,0.25)!important;}
-[data-theme="light"] .ap-body .badge-red{background:rgba(220,38,38,0.1)!important;color:#DC2626!important;border-color:rgba(220,38,38,0.25)!important;}
-[data-theme="light"] .ap-body .badge-gray{background:rgba(107,114,128,0.1)!important;color:#6B7280!important;border-color:rgba(107,114,128,0.25)!important;}
-[data-theme="light"] .ap-input{background:#FFFFFF!important;border-color:rgba(0,0,0,0.15)!important;color:#0F172A!important;}
-[data-theme="light"] .ap-input:focus{border-color:rgba(124,92,246,0.5)!important;background:#FFFFFF!important;}
-[data-theme="light"] .ap-select{background:#FFFFFF!important;border-color:rgba(0,0,0,0.15)!important;color:#374151!important;}
-[data-theme="light"] .ap-select option{background:#FFFFFF;color:#374151;}
-[data-theme="light"] .ap-select optgroup{background:#FFFFFF;color:#6B7280;}
-[data-theme="light"] .ap-section-title{color:#7C3AED!important;border-bottom:1px solid rgba(124,92,246,0.15)!important;}
-[data-theme="light"] .ap-modal-bg{background:rgba(0,0,0,0.5)!important;}
-[data-theme="light"] .ap-modal-box{background:#FAFAFA!important;border-color:rgba(0,0,0,0.12)!important;box-shadow:0 28px 60px rgba(0,0,0,0.2)!important;}
-[data-theme="light"] .ap-modal-box.danger{border-color:rgba(220,38,38,0.3)!important;}
-[data-theme="light"] .ap-modal-title{color:#7C3AED!important;}
-[data-theme="light"] .ap-chevron{color:#6B7280!important;}
-[data-theme="light"] .ap-body,[data-theme="light"] .ap-modal-bg{--ma-fg:#0F172A;--ma-dim:#6B7280;--ma-aksen:#7C3AED;--ma-ok:#059669;--ma-warn:#D97706;--ma-beda:#B45309;--ma-line:rgba(0,0,0,.1);--ma-line-on:rgba(124,92,246,.35);--ma-bg:#F5F7FA;--ma-bg-on:rgba(124,92,246,.08);--ma-warn-bg:rgba(217,119,6,.07);--ma-warn-line:rgba(217,119,6,.25);}
+/* Kelas kisi memiliki lebar kolomnya sendiri di sini, bukan di style sebaris —
+   itu yang membuat aturan responsif di bawah tidak lagi butuh `!important`. Style
+   sebaris hanya kalah oleh `!important`, jadi selama lebar kolom ditulis di TSX,
+   setiap penyesuaian layar sempit terpaksa memakainya. */
+@media(max-width:1100px){.ap-grid5{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:900px){.ap-grid5{grid-template-columns:repeat(2,1fr);}.ap-grid4{grid-template-columns:repeat(2,1fr);}.ap-grid3{grid-template-columns:1fr 1fr;}}
+@media(max-width:600px){.ap-grid5,.ap-grid4,.ap-grid3{grid-template-columns:1fr;}}
+
+/* Rel menyusut jadi ikon di bawah 1100px, dan jadi laci di bawah 720px. Judul
+   kelompok ikut hilang di ragam ikon — label yang tidak punya tempat lebih buruk
+   daripada tidak ada, karena ia memotong nama tujuan di tengah. Di ragam laci
+   judulnya kembali, sebab lacinya memang selebar rel penuh. */
+@media(max-width:1100px){
+  .ap-shell{grid-template-columns:56px minmax(0,1fr);}
+  .ap-rail{padding:14px 6px 24px;}
+  .ap-rg-t{display:none;}
+  .ap-ri{justify-content:center;padding:9px;}
+  .ap-lbl{display:none;}
+  .ap-content{padding:20px 16px;}
+}
+/* Bilah atas di layar sempit. Diukur, bukan diperkirakan: pada 375px isi kanan
+   (`.ap-top-kanan`) menembus 105px ke luar layar dan lencana pengguna terpotong —
+   `.ap-body` ber-`overflow-x:hidden` jadi halamannya TIDAK menggulir mendatar, yang
+   membuat kelebihannya tidak terlihat sebagai gejala, cuma sebagai tombol yang hilang.
+   Pelajaran yang sama sudah dipetik pil versi BLUD.
+
+   Yang dilepas dipilih dari yang paling tidak menentukan: jam (ia keterangan untuk
+   membaca "idle 12m" di tabel, bukan bagian dari identitas layar), lalu nama & peran
+   di lencana — avatar sudah cukup menandai siapa yang login, dan namanya toh muncul
+   di dalam menunya. `flex:1` pada sisi kanan ikut dilepas: selama ia menuntut jatah
+   sama besar dengan merek, yang mengalah selalu merek. */
+@media(max-width:720px){
+  .ap-shell{grid-template-columns:minmax(0,1fr);}
+  .ap-menu-btn{display:inline-flex;}
+  .ap-top{gap:10px;padding:0 12px;}
+  .ap-clock{display:none;}
+  .ap-top-kanan{flex:0 0 auto;}
+  .ap-uname,.ap-urole{display:none;}
+  .ap-user{padding:5px 8px 5px 5px;}
+  .ap-brand-title{font-size:12px;}
+  /* Rel keluar dari aliran dan jadi laci. WAJIB satu blok dengan
+     `grid-template-columns:minmax(0,1fr)` di atas — begitu gridnya jadi satu kolom
+     sementara relnya masih di aliran, rel menumpuk DI ATAS isi sebagai balok selebar
+     layar. Persis itu yang terjadi waktu aturan-aturan ini pernah tergeser ke blok
+     media di bawahnya, dan tidak satu pun alat menyalak: CSS-nya sah, cuma salah
+     lebar layar. */
+  .ap-rail{position:fixed;top:0;left:0;bottom:0;width:232px;max-height:none;transform:translateX(-100%);transition:transform .2s;z-index:400;padding:14px 10px 24px;}
+  .ap-rail.buka{transform:none;}
+  .ap-rg-t{display:block;}
+  .ap-ri{justify-content:flex-start;padding:9px;}
+  .ap-lbl{display:inline;}
+}
+/* Di bawah ~440px judul mereknya tinggal muat satu huruf ("P…"). Judul yang terpotong
+   sampai tak terbaca lebih buruk daripada tidak ada — ikonnya sudah menandai layar ini,
+   dan namanya toh tertulis di judul tab peramban. */
+@media(max-width:440px){
+  .ap-brand-title{display:none;}
+}
+
+/* Gerak hanya dipakai untuk peralihan yang menjawab tindakan orang, dan itu pun
+   dihormati kalau sistemnya minta diam (§16.7). */
+@media (prefers-reduced-motion: reduce){
+  .ap-body *,.ap-modal-bg *{transition-duration:.01ms;animation-duration:.01ms;animation-iteration-count:1;}
+}

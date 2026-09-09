@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Monitor, Shield, Activity, Users, Server,
   Radio, Search, Mail, LogOut,
-  Power, ChevronDown, ShieldCheck, MessageSquareWarning, ListChecks,
+  Power, ChevronDown, ShieldCheck, MessageSquareWarning, ListChecks, Menu,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -36,6 +36,9 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   const [tab, setTab]           = useState<Tab>('sessions');
   const [loggingOut, setOut]    = useState(false);
   const [dropOpen, setDrop]     = useState(false);
+  // Hanya berarti di bawah 720px, tempat rel berubah jadi laci. Di lebar lain kelasnya
+  // tidak dipakai CSS mana pun, jadi tidak perlu dijaga per ukuran layar.
+  const [railOpen, setRail]     = useState(false);
   const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>(themePreference);
   void currentTheme; // theme dipakai ThemeToggle setter saja, tidak untuk render.
   const dropRef = useRef<HTMLDivElement>(null);
@@ -58,6 +61,16 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
     return () => document.removeEventListener('mousedown', h);
   }, [dropOpen]);
 
+  // Escape menutup laci. Ia menutupi seluruh layar di lebar ponsel, jadi tanpa ini
+  // satu-satunya jalan keluar adalah menemukan tirainya — preseden yang sama dengan
+  // modal Riwayat Simpan BLUD, yang juga baru ketahuan waktu dicoba, bukan dibaca.
+  useEffect(() => {
+    if (!railOpen) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setRail(false); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [railOpen]);
+
   async function handleLogout() {
     setOut(true);
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
@@ -67,65 +80,109 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   const initial   = username.charAt(0).toUpperCase();
   const roleLabel = ROLE_LABELS[role] ?? role;
 
-  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id:'sessions',       label:'ACTIVE SESSIONS',  icon:<Monitor size={13}/> },
-    { id:'app-control',    label:'APP CONTROL',       icon:<Power size={13}/> },
-    { id:'attack-monitor', label:'ATTACK MONITOR',    icon:<Activity size={13}/> },
-    { id:'user-mgmt',      label:'USER MANAGEMENT',   icon:<Users size={13}/> },
-    { id:'menu-access',    label:'AKSES MENU',        icon:<ListChecks size={13}/> },
-    { id:'security-status',label:'SECURITY STATUS',   icon:<Shield size={13}/> },
-    { id:'broadcast',      label:'BROADCAST',         icon:<Radio size={13}/> },
-    { id:'audit-trail',    label:'AUDIT TRAIL',        icon:<Search size={13}/> },
-    { id:'email-notif',    label:'EMAIL NOTIF',        icon:<Mail size={13}/> },
-    { id:'promotion',      label:'PROMOTION REQ',     icon:<ShieldCheck size={13}/> },
-    { id:'rima-feedback',  label:'RIMA FEEDBACK',     icon:<MessageSquareWarning size={13}/> },
+  /**
+   * R2 — sebelas tujuan yang sama, dikelompokkan empat. Yang berubah cuma WADAH-nya:
+   * `id` tiap tujuan tidak disentuh, dan isi tabnya tidak dibuka sama sekali. Kalau
+   * ada yang rusak sesudah commit ini, penyebabnya hanya bisa satu hal.
+   *
+   * Kelompoknya mengikuti maket (§16.3). Tiga tujuan yang di maket bernama Pusat
+   * Akses / Tinjauan / Pemeriksaan belum ada di sini — layarnya memang belum lahir
+   * (Tahap 4 & 5), dan menaruh nama untuk layar yang belum ada cuma menjanjikan
+   * sesuatu yang tidak bisa dibuka.
+   */
+  const GRUP: { judul: string; items: { id: Tab; label: string; icon: React.ReactNode }[] }[] = [
+    { judul: 'Akun & Akses', items: [
+      { id:'user-mgmt',      label:'Pengguna',    icon:<Users size={15}/> },
+      { id:'menu-access',    label:'Akses Menu',  icon:<ListChecks size={15}/> },
+      { id:'promotion',      label:'Permintaan',  icon:<ShieldCheck size={15}/> },
+    ]},
+    { judul: 'Aplikasi', items: [
+      { id:'app-control',    label:'Sakelar',     icon:<Power size={15}/> },
+    ]},
+    { judul: 'Keamanan', items: [
+      { id:'sessions',       label:'Sesi Aktif',  icon:<Monitor size={15}/> },
+      { id:'attack-monitor', label:'Monitor',     icon:<Activity size={15}/> },
+      { id:'security-status',label:'Status',      icon:<Shield size={15}/> },
+      { id:'audit-trail',    label:'Jejak Audit', icon:<Search size={15}/> },
+    ]},
+    { judul: 'Sistem', items: [
+      { id:'broadcast',      label:'Broadcast',   icon:<Radio size={15}/> },
+      { id:'email-notif',    label:'Email',       icon:<Mail size={15}/> },
+      { id:'rima-feedback',  label:'RIMA',        icon:<MessageSquareWarning size={15}/> },
+    ]},
   ];
 
   return (
     <div className="ap-body">
-      <header className="ap-header">
+      <header className="ap-top">
+        <button
+          className="ap-menu-btn"
+          type="button"
+          aria-label={railOpen ? 'Tutup daftar bagian' : 'Buka daftar bagian'}
+          aria-expanded={railOpen}
+          onClick={()=>setRail(!railOpen)}
+        >
+          <Menu size={16}/>
+        </button>
         <div className="ap-brand">
-          <div className="ap-brand-icon"><Shield size={19}/></div>
-          <div>
-            <div className="ap-brand-title">PRIMA CONTROL CENTER</div>
-            <div className="ap-brand-sub">Program Realisasi Informasi Monitoring Anggaran &nbsp;|&nbsp; RSJD DR. AMINO GONDOHUTOMO — ADMIN PANEL v2.0</div>
-          </div>
+          <div className="ap-brand-icon"><Shield size={16}/></div>
+          <div className="ap-brand-title">PRIMA · Pusat Kendali</div>
         </div>
         <AdminClock/>
-        {/* Theme toggle */}
-        <ThemeToggle initialTheme={themePreference} onThemeChange={setCurrentTheme} />
-        <div style={{position:'relative'}} ref={dropRef}>
-          <div className="ap-user" onClick={()=>setDrop(!dropOpen)}>
-            <div className="ap-avatar">{initial}</div>
-            <div style={{minWidth:0}}>
-              <div className="ap-uname">{username}</div>
-              <div className="ap-urole">{roleLabel.toUpperCase()}</div>
+        <div className="ap-top-kanan">
+          <ThemeToggle initialTheme={themePreference} onThemeChange={setCurrentTheme} />
+          <div style={{position:'relative'}} ref={dropRef}>
+            <div className="ap-user" onClick={()=>setDrop(!dropOpen)}>
+              <div className="ap-avatar">{initial}</div>
+              <div style={{minWidth:0}}>
+                <div className="ap-uname">{username}</div>
+                <div className="ap-urole">{roleLabel.toUpperCase()}</div>
+              </div>
+              <ChevronDown size={13} className={`ap-chevron${dropOpen?' open':''}`}/>
             </div>
-            <ChevronDown size={13} className={`ap-chevron${dropOpen?' open':''}`}/>
+            {dropOpen && (
+              <div className="ap-dropdown">
+                <button className="ap-ddi" onClick={()=>{setDrop(false);router.push('/menu');}}>
+                  <Server size={13}/> Menu Utama
+                </button>
+                <div style={{height:1,background:'var(--ap-line)',margin:'4px 0'}}/>
+                <button className="ap-ddi danger" onClick={handleLogout} disabled={loggingOut}>
+                  <LogOut size={13}/> {loggingOut?'Keluar...':'Keluar'}
+                </button>
+              </div>
+            )}
           </div>
-          {dropOpen && (
-            <div className="ap-dropdown">
-              <button className="ap-ddi" onClick={()=>{setDrop(false);router.push('/menu');}}>
-                <Server size={13}/> Menu Utama
-              </button>
-              <div style={{height:1,background:'rgba(0,212,255,.1)',margin:'4px 0'}}/>
-              <button className="ap-ddi danger" onClick={handleLogout} disabled={loggingOut}>
-                <LogOut size={13}/> {loggingOut?'Keluar...':'Keluar'}
-              </button>
-            </div>
-          )}
         </div>
       </header>
 
-      <nav className="ap-tabs">
-        {TABS.map(t => (
-          <button key={t.id} className={`ap-tab ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </nav>
+      <div className="ap-shell">
+        {/* Tirai hanya lahir saat laci terbuka — di lebar layar lain `.ap-menu-btn`
+            tersembunyi, jadi `railOpen` tidak pernah menyala. */}
+        {railOpen && (
+          <button className="ap-tirai-rail" type="button" aria-label="Tutup daftar bagian" onClick={()=>setRail(false)}/>
+        )}
+        <nav className={`ap-rail${railOpen?' buka':''}`} aria-label="Bagian Pusat Kendali">
+          {GRUP.map(g => (
+            <div key={g.judul}>
+              <div className="ap-rg-t">{g.judul}</div>
+              <div className="ap-rg">
+                {g.items.map(t => (
+                  <button
+                    key={t.id}
+                    className={`ap-ri${tab===t.id?' active':''}`}
+                    type="button"
+                    aria-current={tab===t.id ? 'page' : undefined}
+                    onClick={()=>{setTab(t.id);setRail(false);}}
+                  >
+                    {t.icon}<span className="ap-lbl">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
 
-      <main className="ap-content">
+        <main className="ap-content">
         {tab === 'sessions'        && <TabSessions     selfSessionId={sessionId} isSA={isSA}/>}
         {tab === 'app-control'     && <TabAppControl   isSA={isSA}/>}
         {tab === 'attack-monitor'  && <TabAttackMonitor/>}
@@ -136,9 +193,10 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'audit-trail'     && <TabAuditTrail/>}
         {tab === 'email-notif'     && <TabEmailNotif   isSA={isSA}/>}
         {tab === 'promotion'       && isSA && <PromotionRequestsPanel/>}
-        {tab === 'promotion'       && !isSA && <div style={{padding:24,color:'#85B7EB'}}>Hanya SUPER_ADMIN.</div>}
+        {tab === 'promotion'       && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
         {tab === 'rima-feedback'   && <RimaFeedbackPanel/>}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
