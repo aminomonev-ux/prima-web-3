@@ -185,6 +185,9 @@
 .ap-ri:hover{background:var(--ap-aksen-bg);color:var(--ap-fg);}
 .ap-ri.active{background:var(--ap-aksen-bg2);color:var(--ap-fg);font-weight:600;}
 .ap-ri.active svg{color:var(--ap-aksen);}
+/* Lencana angka di rel (§16.3). Ia satu-satunya cara sesuatu yang menunggu bisa
+   diketahui tanpa tabnya dibuka — sebelumnya tidak punya tempat sama sekali. */
+.ap-ri-lencana{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace;background:var(--ap-warn-bg);color:var(--ap-warn-fg);border:1px solid var(--ap-warn-line);}
 .ap-tirai-rail{position:fixed;inset:0;background:var(--ap-tirai);z-index:390;border:none;}
 .ap-user{display:flex;align-items:center;gap:10px;cursor:pointer;padding:5px 14px 5px 5px;border-radius:10px;border:1px solid var(--ap-aksen-line);background:var(--ap-aksen-bg);transition:border-color .2s,background .2s;user-select:none;}
 .ap-user:hover{border-color:var(--ap-aksen-line2);background:var(--ap-aksen-bg2);}
@@ -281,6 +284,49 @@
 .ap-toggle input:checked ~ .ap-toggle-thumb{left:25px;background:var(--ap-ok-fg);}
 .ap-toggle:has(input:disabled){cursor:not-allowed;opacity:.35;}
 .ap-toggle-row-disabled{opacity:.4;pointer-events:none;}
+
+/* ─── Layar Sakelar (Tahap 4) ────────────────────────────────────────────────
+   Sub-sakelar menjorok dan diberi garis kiri: susunannya yang menyatakan
+   "mematikan induknya ikut mematikan yang ini", bukan tulisan "(sub-modul)" di
+   belakang namanya — label itu ikut tampil di `/maintenance`, tempat jargon admin
+   tidak punya urusan. */
+.ap-sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;}
+.ap-sk{padding:16px 18px;display:flex;flex-direction:column;gap:10px;}
+.ap-sk.anak{border-left:3px solid var(--ap-aksen-line2);margin-left:18px;}
+.ap-sk-atas{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.ap-sk-kiri{display:flex;flex-direction:column;gap:7px;min-width:0;}
+.ap-sk-label{font-size:13px;font-weight:700;color:var(--ap-fg);}
+.ap-sk-sebab{font-size:10.5px;line-height:1.55;color:var(--ap-dim);}
+.ap-sk-teks{border-top:1px solid var(--ap-line-tipis);padding-top:10px;display:flex;flex-direction:column;gap:6px;}
+.ap-sk-pesan{font-size:11.5px;line-height:1.6;color:var(--ap-fg2);white-space:pre-line;}
+.ap-sk-kosong{font-size:11.5px;color:var(--ap-dim);font-style:italic;}
+.ap-sk-sampai{font-size:11px;font-weight:700;color:var(--ap-warn-fg);font-family:'JetBrains Mono',monospace;}
+.ap-sk-area{font-family:var(--font-jakarta),sans-serif;resize:vertical;line-height:1.6;}
+.ap-sk-baris{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.ap-sk-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ap-dim);flex-shrink:0;}
+.ap-sk-baris .ap-input{width:auto;flex:1;min-width:180px;}
+.ap-sk-hitung{font-size:10.5px;color:var(--ap-dim);font-family:'JetBrains Mono',monospace;margin-left:auto;}
+.ap-sk-ingat{display:flex;align-items:flex-start;gap:9px;padding:11px 14px;margin-bottom:14px;border-radius:8px;font-size:11.5px;line-height:1.6;background:var(--ap-warn-bg);border:1px solid var(--ap-warn-line);color:var(--ap-warn-fg);}
+.ap-sk-ingat svg{flex:0 0 auto;margin-top:2px;}
+
+/* ─── Pemeriksaan Mandiri (Tahap 4) ──────────────────────────────────────────
+   Kartu temuan, bukan tabel: yang perlu dibaca di sini kalimatnya, bukan kolomnya.
+   Strip warna di tepi kiri, bukan latar penuh — "perlu dilihat" itu kabar, bukan
+   kesalahan; yang bersih sengaja tanpa strip supaya yang genting tidak tenggelam
+   (pola `.rl-minus-banner` di layar Realisasi BLUD). */
+.ap-pm-kepala{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid var(--ap-line);}
+.ap-pm-jam{font-size:10.5px;color:var(--ap-dim);font-family:'JetBrains Mono',monospace;}
+.ap-pm-bersih{display:flex;align-items:center;gap:9px;padding:11px 14px;margin-bottom:14px;border-radius:8px;font-size:11.5px;background:var(--ap-ok-bg);border:1px solid var(--ap-ok-line);color:var(--ap-ok-fg);}
+.ap-pm-daftar{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;align-items:start;}
+.ap-pm{padding:16px 18px;display:flex;flex-direction:column;gap:9px;border-left:3px solid var(--ap-line);}
+.ap-pm.merah{border-left-color:var(--ap-bad);}
+.ap-pm.kuning{border-left-color:var(--ap-warn);}
+.ap-pm-atas{display:flex;align-items:center;gap:9px;}
+.ap-pm-ikon{display:flex;align-items:center;}
+.ap-pm-judul{font-size:12.5px;font-weight:700;color:var(--ap-fg);flex:1;min-width:0;}
+.ap-pm-ringkas{font-size:11.5px;line-height:1.65;color:var(--ap-fg2);}
+.ap-pm-contoh{list-style:none;display:flex;flex-direction:column;gap:3px;padding:9px 11px;border-radius:6px;background:var(--ap-aksen-bg);font-size:11px;line-height:1.55;color:var(--ap-fg2);font-family:'JetBrains Mono',monospace;}
+.ap-pm-tindakan{font-size:11px;line-height:1.6;color:var(--ap-dim);border-top:1px solid var(--ap-line-tipis);padding-top:8px;}
 
 /* Isi modal yang lebih tinggi dari layar digulung DI DALAM kotaknya. Tanpa
    max-height, kotak tumbuh melewati batas viewport dan bagian bawahnya —

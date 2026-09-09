@@ -8,9 +8,10 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { MENU_REALISASI, LABEL_MENU, type Izin, type MenuBlud } from '@/lib/blud/peran'
+import { MENU_REALISASI, type Izin, type MenuBlud } from '@/lib/blud/peran'
 import { petaIzinBlud, type PetaIzinBlud } from '@/lib/blud/izin-server'
 import { modulSedangMati } from '@/lib/security/guard'
+import { urlPemeliharaan } from '@/lib/registry/apps'
 import type { Role } from '@/types'
 
 export type IzinLayar = {
@@ -53,7 +54,7 @@ export async function izinLayar(menu: MenuBlud): Promise<IzinLayar> {
   // keduanya membuat pesan yang satu terbaca sebagai yang lain.
   if (MENU_REALISASI.includes(menu)
       && await modulSedangMati(['app_status_blud_realisasi'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent(`BLUD - ${LABEL_MENU[menu]}`)}`)
+    redirect(urlPemeliharaan('app_status_blud_realisasi'))
   }
 
   return { role, bolehUbah: izin === 'EDIT', izin, peta }

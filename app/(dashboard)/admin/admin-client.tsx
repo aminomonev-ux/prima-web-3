@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Monitor, Shield, Activity, Users, Server,
   Radio, Search, Mail, LogOut,
-  Power, ChevronDown, ShieldCheck, MessageSquareWarning, ListChecks, Menu,
+  Power, ChevronDown, ShieldCheck, MessageSquareWarning, ListChecks, Menu, Stethoscope,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -21,11 +21,14 @@ import { TabSecurityStatus } from './_panels/TabSecurityStatus';
 import { TabBroadcast } from './_panels/TabBroadcast';
 import { TabAuditTrail } from './_panels/TabAuditTrail';
 import { TabEmailNotif } from './_panels/TabEmailNotif';
+import { TabPemeriksaan } from './_panels/TabPemeriksaan';
+import { fetchJson } from '@/lib/shared/api';
+import type { Temuan } from '@/lib/admin/pemeriksaan';
 import './admin.css';
 
 interface Props { userId: number; username: string; role: Role; sessionId: string; themePreference: 'dark' | 'light'; }
 
-type Tab = 'sessions'|'app-control'|'attack-monitor'|'user-mgmt'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback';
+type Tab = 'sessions'|'app-control'|'attack-monitor'|'user-mgmt'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback'|'pemeriksaan';
 
 
 
@@ -42,6 +45,37 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>(themePreference);
   void currentTheme; // theme dipakai ThemeToggle setter saja, tidak untuk render.
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // P10 — datanya dipegang di sini, bukan di dalam tabnya, karena lencana angka di rel
+  // harus menyala tanpa tabnya pernah dibuka. Itu seluruh alasan §16.3 memindahkan
+  // tab mendatar jadi rel: sesuatu yang menunggu tidak boleh cuma diketahui oleh yang
+  // kebetulan mengklik.
+  const [temuan, setTemuan]     = useState<Temuan[]>([]);
+  const [pmLoad, setPmLoad]     = useState(false);
+  const [pmJam, setPmJam]       = useState('');
+  const [pmErr, setPmErr]       = useState('');
+
+  const muatPemeriksaan = useCallback(async () => {
+    setPmLoad(true); setPmErr('');
+    const j = await fetchJson('/api/admin/pemeriksaan') as { ok: boolean; data?: Temuan[]; message?: string };
+    setPmLoad(false);
+    if (j.ok && j.data) {
+      setTemuan(j.data);
+      // Jam distempel saat balasan tiba, bukan saat tombol ditekan — ia menyatakan
+      // "angka ini dari jam berapa", bukan "saya menekan jam berapa".
+      setPmJam(new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}));
+    } else {
+      setPmErr(j.message ?? 'Gagal memuat pemeriksaan.');
+    }
+  }, []);
+
+  // Pemuatan awal. `muatPemeriksaan` menyalakan penanda sibuk sebelum `await` — dan itu
+  // memang yang dibutuhkan tombol Periksa Ulang yang memanggil fungsi yang sama. Pola
+  // muat-awal yang sama dipakai seluruh panel di folder ini.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (isSA) void muatPemeriksaan(); }, [isSA, muatPemeriksaan]);
+
+  const perluDilihat = temuan.filter(t => t.keparahan !== 'aman').length;
 
   // Apply theme dari DB ke <html> + sync cookie. Selaras menu-client.tsx —
   // cegah Admin Panel pakai cookie stale (mis. light) saat DB preference dark.
@@ -90,7 +124,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
    * (Tahap 4 & 5), dan menaruh nama untuk layar yang belum ada cuma menjanjikan
    * sesuatu yang tidak bisa dibuka.
    */
-  const GRUP: { judul: string; items: { id: Tab; label: string; icon: React.ReactNode }[] }[] = [
+  const GRUP: { judul: string; items: { id: Tab; label: string; icon: React.ReactNode; lencana?: number }[] }[] = [
     { judul: 'Akun & Akses', items: [
       { id:'user-mgmt',      label:'Pengguna',    icon:<Users size={15}/> },
       { id:'menu-access',    label:'Akses Menu',  icon:<ListChecks size={15}/> },
@@ -106,6 +140,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
       { id:'audit-trail',    label:'Jejak Audit', icon:<Search size={15}/> },
     ]},
     { judul: 'Sistem', items: [
+      ...(isSA ? [{ id:'pemeriksaan' as Tab, label:'Pemeriksaan', icon:<Stethoscope size={15}/>, lencana: perluDilihat }] : []),
       { id:'broadcast',      label:'Broadcast',   icon:<Radio size={15}/> },
       { id:'email-notif',    label:'Email',       icon:<Mail size={15}/> },
       { id:'rima-feedback',  label:'RIMA',        icon:<MessageSquareWarning size={15}/> },
@@ -175,6 +210,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
                     onClick={()=>{setTab(t.id);setRail(false);}}
                   >
                     {t.icon}<span className="ap-lbl">{t.label}</span>
+                    {t.lencana ? <span className="ap-ri-lencana">{t.lencana}</span> : null}
                   </button>
                 ))}
               </div>
@@ -195,6 +231,9 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'promotion'       && isSA && <PromotionRequestsPanel/>}
         {tab === 'promotion'       && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
         {tab === 'rima-feedback'   && <RimaFeedbackPanel/>}
+        {tab === 'pemeriksaan'     && isSA && (
+          <TabPemeriksaan temuan={temuan} loading={pmLoad} jam={pmJam} err={pmErr} onMuat={()=>void muatPemeriksaan()}/>
+        )}
         </main>
       </div>
     </div>

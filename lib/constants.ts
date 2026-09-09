@@ -176,6 +176,22 @@ export const ROLE_QUOTA                   = 3;   // max akun per role (berlaku u
 export const ADMIN_QUOTA                  = 6;   // max ADMIN tier (Admin Staff) — migration 037
 export const SUPER_ADMIN_QUOTA            = 4;   // max SUPER_ADMIN — migration 037
 
+/**
+ * Kuota maksimum akun AKTIF untuk sebuah peran; `null` = peran ini memang tanpa batas.
+ *
+ * Tinggal di sini, bukan di `lib/security/promotion.ts` tempat ia lahir, karena berkas
+ * itu mengimpor `verifyPassword` — jadi siapa pun yang cuma ingin tahu angka kuota ikut
+ * menyeret JWT_SECRET dan seluruh lapisan auth. Preseden yang sama dengan `toDateStr`
+ * dan `waktuSekarangWIB`: aturan murni pindah ke berkas daun, tempat asalnya
+ * me-re-export supaya pemanggil lama tidak disentuh.
+ */
+export function getRoleQuota(role: string): number | null {
+  if (role === 'SUPER_ADMIN') return SUPER_ADMIN_QUOTA;
+  if (role === 'ADMIN')       return ADMIN_QUOTA;
+  if ((BIDANG_ROLES as readonly string[]).includes(role)) return ROLE_QUOTA;
+  return null;
+}
+
 // ─── Role Promotion Ladder (migration 037) ───────────────────────────────────
 // Konsep: docs/session/ROLE_PROMOTION_CONCEPT.md
 // Chain upgrade role yang diizinkan. Source = key, target = array role tujuan.

@@ -98,8 +98,13 @@ for (const [p, kunci, label] of [
   ['app/(dashboard)/dashboard/[modul]/page.tsx', 'app_status_dashboard', 'Dashboard drill-down'],
 ] as const) {
   const t = buangKomentar(baca(p))
-  cek(`${label} memeriksa sakelar + redirect /maintenance`,
-    t.includes(`await modulSedangMati(['${kunci}'], { role })`) && t.includes("redirect(`/maintenance"))
+  // Tahap 4 mengganti `/maintenance?app=<nama karangan>` dengan `urlPemeliharaan(<kunci>)`.
+  // Yang diperiksa jadi LEBIH ketat, bukan sekadar disesuaikan: kunci yang ditanyakan ke
+  // sakelar dan kunci yang dikirim ke halaman pemeliharaan harus SAMA. Dulu keduanya bisa
+  // berbeda tanpa satu pun galat — halaman itu percaya apa pun yang tertulis di URL.
+  cek(`${label} memeriksa sakelar + halaman pemeliharaan menyebut kunci yang sama`,
+    t.includes(`await modulSedangMati(['${kunci}'], { role })`)
+    && t.includes(`redirect(urlPemeliharaan('${kunci}'))`))
 }
 
 // Layar drill-down Dashboard punya pagarnya SENDIRI, bukan menumpang halaman induk —

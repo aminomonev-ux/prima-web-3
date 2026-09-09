@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isDashboardRole } from '@/lib/data/dashboard-schemas';
 import { modulSedangMati } from '@/lib/security/guard';
+import { urlPemeliharaan } from '@/lib/registry/apps';
 import { getModuleDetail, isDashModule } from '@/lib/data/dashboard';
 import DashboardDetailClient from './detail-client';
 
@@ -28,7 +29,7 @@ export default async function DashboardDetailPage({ params }: { params: Promise<
   // dari sana, tapi URL-nya bisa diketik langsung; pagar yang cuma di satu layar
   // bukan pagar (L69).
   if (await modulSedangMati(['app_status_dashboard'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent('Dashboard')}`);
+    redirect(urlPemeliharaan('app_status_dashboard'));
   }
 
   const tahun = String(new Date().getFullYear());

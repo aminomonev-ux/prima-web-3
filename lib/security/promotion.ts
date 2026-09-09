@@ -7,9 +7,7 @@ import { timingSafeEqual } from 'crypto';
 import { sql, sqlInt, toMysqlDatetime, type TxSql } from '@/lib/data/db';
 import { verifyPassword } from '@/lib/security/auth';
 import {
-  ADMIN_QUOTA,
-  ROLE_QUOTA,
-  SUPER_ADMIN_QUOTA,
+  getRoleQuota,
   PROMOTION_LOCK_HOURS,
   PROMOTION_MAX_ATTEMPTS,
   BIDANG_ROLES,
@@ -160,13 +158,10 @@ export async function clearPromotionLock(userId: number): Promise<void> {
 
 // ─── Quota enforcement ──────────────────────────────────────────────────────
 
-/** Quota max akun per role (lihat lib/constants.ts). */
-export function getRoleQuota(role: string): number | null {
-  if (role === 'SUPER_ADMIN') return SUPER_ADMIN_QUOTA;
-  if (role === 'ADMIN')       return ADMIN_QUOTA;
-  if ((BIDANG_ROLES as readonly string[]).includes(role)) return ROLE_QUOTA;
-  return null;
-}
+// Isinya PINDAH ke `lib/constants.ts` (berkas daun) supaya pembaca yang cuma butuh
+// angka kuota tidak ikut menyeret `verifyPassword` → JWT_SECRET. Di-re-export dari
+// sini supaya 4 pemanggil lama tidak perlu disentuh.
+export { getRoleQuota };
 
 /** Count user aktif di role (real-time, bukan counter terpisah). */
 export async function getActiveRoleCount(role: string): Promise<number> {

@@ -1,11 +1,64 @@
-'use client';
+// app/maintenance/page.tsx — halaman pemeliharaan.
+// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md P6 (Tahap 4).
+//
+// Dulu halaman ini komponen klien yang menampilkan `?app=` MENTAH. Artinya siapa pun
+// sekantor bisa membuka `/maintenance?app=Sistem%20Kepegawaian` dan memperlihatkan
+// halaman resmi yang menyebut modul apa pun — termasuk yang sedang berjalan normal,
+// termasuk yang tidak ada.
+//
+// Sekarang server yang menjawab, dan ia menjawab dua pertanyaan berurutan:
+//   1. Apakah `?m=` sebuah kunci sakelar yang DIKENAL registry? Kalau tidak, namanya
+//      tidak ditampilkan sama sekali.
+//   2. Apakah sakelar itu (atau induknya) memang sedang mati DI DATABASE? Kalau tidak,
+//      namanya juga tidak ditampilkan.
+//
+// Pemeriksaan kedua yang menutup lubangnya. Memvalidasi ke registry saja masih
+// mengizinkan `?m=app_status_blud` dipakai untuk mengarang kabar bahwa BLUD mati
+// padahal ia hidup — nama yang sah dipakai untuk pernyataan yang tidak benar.
+//
+// Gagal membaca DB = anggap tidak terbukti, tampilkan halaman umum. Sakelar yang
+// hanya jujur saat semuanya lancar bukan sakelar (pola `modulMati`).
+import { sql } from '@/lib/data/db';
+import { formatSampai, infoSakelar, kunciPesan, kunciSampai } from '@/lib/registry/apps';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+export const dynamic = 'force-dynamic';
 
-function MaintenanceContent() {
-  const params  = useSearchParams();
-  const appName = params.get('app') ?? 'Aplikasi';
+type Terbukti = { label: string; pesan: string; sampai: string } | null;
+
+async function buktikan(kunci: string | undefined): Promise<Terbukti> {
+  if (!kunci) return null;
+  const info = infoSakelar(kunci);
+  if (!info) return null;
+
+  // Induk ikut ditanyakan: mematikan BLUD ikut mematikan Realisasi, jadi tautan yang
+  // menunjuk sub-sakelar tetap sah walau baris sub-nya sendiri masih 'online'.
+  const kunciCek = [kunci, ...(info.induk ? [info.induk] : [])];
+  try {
+    const rows = await sql`
+      SELECT \`key\`, value FROM app_config
+      WHERE \`key\` IN (${[...kunciCek, kunciPesan(kunci), kunciSampai(kunci)]})
+    ` as { key: string; value: string }[];
+    const peta = new Map(rows.map((r) => [r.key, r.value]));
+    const mati = kunciCek.some((k) => (peta.get(k) ?? 'online') !== 'online');
+    if (!mati) return null;
+    return {
+      label: info.label,
+      pesan: (peta.get(kunciPesan(kunci)) ?? '').trim(),
+      sampai: formatSampai((peta.get(kunciSampai(kunci)) ?? '').trim()),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export default async function MaintenancePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const m = Array.isArray(sp.m) ? sp.m[0] : sp.m;
+  const terbukti = await buktikan(m);
 
   return (
     <>
@@ -76,6 +129,24 @@ function MaintenanceContent() {
           font-size: 13px; color: #5a8ea8;
           line-height: 1.7; margin-bottom: 32px;
         }
+        .mn-pesan {
+          font-size: 13.5px; color: #e0f7ff;
+          line-height: 1.7; margin-bottom: 22px;
+          padding: 14px 18px; text-align: left;
+          background: rgba(255,204,0,.06);
+          border: 1px solid rgba(255,204,0,.22);
+          border-left: 3px solid #ffcc00;
+          border-radius: 8px;
+          white-space: pre-line;
+        }
+        .mn-sampai {
+          display: inline-flex; align-items: center; gap: 8px;
+          font-family: 'Share Tech Mono', monospace;
+          font-size: 11.5px; color: #ffcc00;
+          padding: 6px 14px; margin-bottom: 24px;
+          border: 1px solid rgba(255,204,0,.3);
+          border-radius: 6px; background: rgba(255,204,0,.05);
+        }
         .mn-divider {
           height: 1px;
           background: linear-gradient(90deg, transparent, rgba(0,212,255,.2), transparent);
@@ -113,6 +184,9 @@ function MaintenanceContent() {
           font-family: 'Share Tech Mono', monospace;
           font-size: 10px; color: #2a4a5a; letter-spacing: 1px;
         }
+        @media (prefers-reduced-motion: reduce) {
+          .mn-body::before, .mn-icon-wrap, .mn-status-dot { animation: none; }
+        }
       `}</style>
 
       <div className="mn-body">
@@ -122,32 +196,29 @@ function MaintenanceContent() {
           </div>
           <div className="mn-tag">SISTEM MAINTENANCE</div>
           <div className="mn-title">Sedang Dalam Perbaikan</div>
-          <div className="mn-app">{appName}</div>
-          <p className="mn-desc">
-            Modul ini sedang dalam pemeliharaan sistem oleh tim administrator.
-            Kami sedang bekerja untuk meningkatkan layanan dan akan segera kembali online.
-          </p>
+          <div className="mn-app">{terbukti?.label ?? 'Modul PRIMA'}</div>
+          {terbukti?.pesan
+            ? <p className="mn-pesan">{terbukti.pesan}</p>
+            : (
+              <p className="mn-desc">
+                Modul ini sedang dalam pemeliharaan sistem oleh tim administrator.
+                Kami sedang bekerja untuk meningkatkan layanan dan akan segera kembali online.
+              </p>
+            )}
+          {terbukti?.sampai && (
+            <div className="mn-sampai">DIPERKIRAKAN SELESAI — {terbukti.sampai}</div>
+          )}
           <div className="mn-divider" />
           <div className="mn-status">
             <div className="mn-status-dot" />
             MAINTENANCE IN PROGRESS — HARAP TUNGGU
           </div>
-          <button className="mn-btn" onClick={() => { window.location.href = '/menu'; }}>
-            ← Kembali ke Menu
-          </button>
+          <a className="mn-btn" href="/menu">← Kembali ke Menu</a>
         </div>
         <div className="mn-footer">
           PRIMA v2.0 · RSJD DR. AMINO GONDOHUTOMO
         </div>
       </div>
     </>
-  );
-}
-
-export default function MaintenancePage() {
-  return (
-    <Suspense>
-      <MaintenanceContent />
-    </Suspense>
   );
 }

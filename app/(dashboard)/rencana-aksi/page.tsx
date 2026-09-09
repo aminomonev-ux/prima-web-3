@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
 import { modulSedangMati } from '@/lib/security/guard';
+import { urlPemeliharaan } from '@/lib/registry/apps';
 import { listRencanaAksi } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import RaClient from './ra-client';
@@ -35,7 +36,7 @@ export default async function RencanaAksiPage({
   // sinilah peran sudah dibaca — pengecualian SUPER_ADMIN butuh `role`.
   // Pagar APInya terpisah dan tidak menggantung pada layar ini (lihat _guard.ts).
   if (await modulSedangMati(['app_status_rencana_aksi'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent('Renaksi & Kinerja')}`);
+    redirect(urlPemeliharaan('app_status_rencana_aksi'));
   }
 
   const sp = await searchParams;

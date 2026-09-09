@@ -4,6 +4,7 @@ import KinerjaClient from './kinerja-client';
 import { sql, queryOne } from '@/lib/data/db';
 import { isKinerjaRole } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard';
+import { urlPemeliharaan } from '@/lib/registry/apps';
 import type { Role } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function KinerjaPage() {
   // Mengetik /kinerja langsung tetap tembus sebelum ini. Pagar 18 route API-nya
   // terpisah di app/api/kinerja/_guard.ts — layar dan API tidak saling menumpang.
   if (await modulSedangMati(['app_status_new_econtrolling'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent('E-Anggaran')}`);
+    redirect(urlPemeliharaan('app_status_new_econtrolling'));
   }
 
   const row = await queryOne<{ theme_preference: string }>(

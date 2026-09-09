@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isDashboardRole } from '@/lib/data/dashboard-schemas';
 import { modulSedangMati } from '@/lib/security/guard';
+import { urlPemeliharaan } from '@/lib/registry/apps';
 import { getDashboardSummary } from '@/lib/data/dashboard';
 import DashboardClient from './dashboard-client';
 
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
   // pernah dibaca. Diperiksa SEBELUM getDashboardSummary — modul yang sedang dimatikan
   // tidak boleh tetap menjalankan agregasi lintas-modulnya.
   if (await modulSedangMati(['app_status_dashboard'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent('Dashboard')}`);
+    redirect(urlPemeliharaan('app_status_dashboard'));
   }
 
   const tahun = String(new Date().getFullYear());

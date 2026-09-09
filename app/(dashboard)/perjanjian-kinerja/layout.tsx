@@ -10,6 +10,7 @@ import { PkYearProvider } from './_context/PkYearContext'
 import { sql, queryOne } from '@/lib/data/db'
 import { isPkRole } from '@/lib/data/pk-schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { urlPemeliharaan } from '@/lib/registry/apps'
 import { petaIzinPk } from '@/lib/pk/izin-server'
 import type { Role } from '@/types'
 
@@ -29,7 +30,7 @@ export default async function PerjanjianKinerjaLayout({ children }: { children: 
   // di layout karena semua layar PK melewatinya; pengecualian perannya dipegang guard
   // (`PERAN_TEMBUS_SAKELAR`), tidak ditulis ulang di sini. Cermin blud/layout.tsx.
   if (await modulSedangMati(['app_status_perjanjian_kinerja'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent('Perjanjian Kinerja')}`)
+    redirect(urlPemeliharaan('app_status_perjanjian_kinerja'))
   }
 
   const row = await queryOne<{ theme_preference: string }>(

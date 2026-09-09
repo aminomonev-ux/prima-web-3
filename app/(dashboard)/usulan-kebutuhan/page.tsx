@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import UsulanClient from './usulan-client';
 import { sql, queryOne } from '@/lib/data/db';
 import { modulSedangMati } from '@/lib/security/guard';
+import { urlPemeliharaan } from '@/lib/registry/apps';
 import type { Role } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ export default async function UsulanKebutuhanPage() {
   // di /menu, sementara mengetik URL ini tetap masuk penuh. Pengecualian perannya
   // dipegang guard (`PERAN_TEMBUS_SAKELAR`), tidak ditulis ulang di sini.
   if (await modulSedangMati(['app_status_usulan_aset'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent('Usulan Kebutuhan')}`);
+    redirect(urlPemeliharaan('app_status_usulan_aset'));
   }
 
   const row = await queryOne<{ theme_preference: string }>(

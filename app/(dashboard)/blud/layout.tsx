@@ -5,6 +5,7 @@ import BludShell from './blud-shell'
 import { sql, queryOne } from '@/lib/data/db'
 import { isBludRole } from '@/lib/blud/schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { urlPemeliharaan } from '@/lib/registry/apps'
 import { petaIzinBlud } from '@/lib/blud/izin-server'
 import type { Role } from '@/types'
 
@@ -26,7 +27,7 @@ export default async function BludLayout({ children }: { children: React.ReactNo
   // ditulis ulang di sini — dulu layar dan API punya aturan sendiri-sendiri, dan
   // yang di API tidak ada sama sekali (S1).
   if (await modulSedangMati(['app_status_blud'], { role })) {
-    redirect(`/maintenance?app=${encodeURIComponent('BLUD - Anggaran')}`)
+    redirect(urlPemeliharaan('app_status_blud'))
   }
 
   const row = await queryOne<{ theme_preference: string }>(

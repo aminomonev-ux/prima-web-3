@@ -10,6 +10,7 @@ import {
   ArrowUpCircle, Clock, LayoutDashboard,
 } from 'lucide-react';
 import { APP_NAME, APP_INSTANSI, ROLE_LABELS, ADMIN_ROLES } from '@/lib/constants';
+import { formatSampai, urlPemeliharaan } from '@/lib/registry/apps';
 import type { Role } from '@/types';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { PromotionRequestModal } from '@/components/promotion/PromotionRequestModal';
@@ -138,6 +139,10 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
   const [dropOpen,    setDropOpen]    = useState(false);
   const [loggingOut,  setLoggingOut]  = useState(false);
   const [appStatus,   setAppStatus]   = useState<Record<string, string>>({});
+  // P6 — pesan & tenggat pemeliharaan, dari GET yang sama dengan statusnya. Kalau
+  // dijemput terpisah, kartu bisa sempat berbunyi "MAINTENANCE" tanpa alasannya.
+  const [appPesan,    setAppPesan]    = useState<Record<string, string>>({});
+  const [appSampai,   setAppSampai]   = useState<Record<string, string>>({});
   const [userAccess,  setUserAccess]  = useState<string[] | null>(null);
   // Promotion ladder state
   const [eligibleTargets, setEligibleTargets] = useState<readonly string[]>([]);
@@ -166,7 +171,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
       fetch('/api/admin/app-status').then(r => r.json()),
       fetch('/api/user/access').then(r => r.json()),
     ]).then(([st, ac]) => {
-      if (st.ok) setAppStatus(st.data);
+      if (st.ok) { setAppStatus(st.data); setAppPesan(st.pesan ?? {}); setAppSampai(st.sampai ?? {}); }
       if (ac.ok) setUserAccess(ac.app_access);
     }).catch(() => {});
   }, []);
@@ -216,7 +221,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
     if (isLocked(card)) return;
     const statusKey = `app_status_${card.id}`;
     if (appStatus[statusKey] === 'maintenance' && role !== 'SUPER_ADMIN') {
-      router.push(`/maintenance?app=${encodeURIComponent(card.name)}`);
+      router.push(urlPemeliharaan(statusKey));
     } else {
       router.push(card.href);
     }
@@ -409,6 +414,19 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
         .app-card:active { transform: translate(0,0);       box-shadow: 3px 3px 0 rgba(0,0,0,.45); }
         .app-card.locked { opacity: .45; filter: grayscale(.7); cursor: not-allowed; }
         .app-card.maintenance { opacity: .72; filter: grayscale(.25); }
+        /* P6 — alasan & tenggat pemeliharaan di kartunya sendiri. Sengaja di kartu,
+           bukan cuma di /maintenance: kebanyakan orang berhenti di sini dan tidak
+           pernah menekan kartu yang sudah abu. */
+        .card-maint-note {
+          margin-top: 10px; padding: 8px 10px;
+          font-size: 11px; line-height: 1.55;
+          color: #B5D4F4;
+          background: rgba(239,159,39,.10);
+          border-left: 2px solid #EF9F27;
+          border-radius: 0 6px 6px 0;
+          white-space: pre-line;
+        }
+        .card-maint-sampai { margin-top: 4px; font-weight: 700; color: #EF9F27; }
 
         /* header band */
         .card-band {
@@ -568,6 +586,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
         [data-theme="light"] .card-name   { color: #0F0F12; }
         [data-theme="light"] .card-handle { color: #6B7280; }
         [data-theme="light"] .card-desc   { color: #4B5563; }
+        [data-theme="light"] .card-maint-note { color: #4B5563; }
         /* Light: band lebih lembut (tint accent), border + CTA tetap solid accent */
         [data-theme="light"] .card-band { background: color-mix(in srgb, var(--cardc) 16%, #fff); }
         [data-theme="light"] .card-band::before { background: repeating-linear-gradient(45deg, transparent 0 8px, rgba(0,0,0,.05) 8px 10px); }
@@ -746,6 +765,16 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                     <div className="card-handle">@{card.id}</div>
                     <div className="card-name">{card.name}</div>
                     <div className="card-desc">{card.desc}</div>
+                    {(isMaint || isMaintSA) && (appPesan[statusKey] || appSampai[statusKey]) && (
+                      <div className="card-maint-note">
+                        {appPesan[statusKey] && <div>{appPesan[statusKey]}</div>}
+                        {formatSampai(appSampai[statusKey] ?? '') && (
+                          <div className="card-maint-sampai">
+                            Diperkirakan selesai {formatSampai(appSampai[statusKey] ?? '')}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {isMaintSA && (
                       <div style={{ fontSize: 10, color: '#EF9F27', fontWeight: 700, marginTop: 10 }}>
                         👑 Bypass aktif · hanya terlihat oleh Anda

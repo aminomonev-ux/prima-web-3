@@ -128,9 +128,33 @@ export function cekModul(kunci: string) {
  * sendiri di App Control. Ditaruh di sini, bukan dibiarkan di berkas route, supaya
  * "daftar seluruh sakelar" tetap satu — itu seluruh gunanya berkas ini.
  */
-export const SAKELAR_LAIN: readonly SubSakelar[] = [
-  { kunci: 'app_status_sentinel_bot', label: 'RIMA — Seluruh Bot' },
-  { kunci: 'app_status_rima_query', label: 'RIMA — Tanya Data (Q&A)' },
+export type SakelarLain = {
+  kunci: string
+  label: string
+  /**
+   * Berkas server yang benar-benar MEMBACA sakelar ini. `null` = tidak ada satu pun —
+   * dan itu bukan kelalaian pengisian, itu fakta yang wajib kelihatan (lihat lencana
+   * `terjaga` di bawah).
+   */
+  dijagaDi: readonly string[] | null
+  catatan?: string
+}
+
+export const SAKELAR_LAIN: readonly SakelarLain[] = [
+  {
+    kunci: 'app_status_sentinel_bot',
+    label: 'RIMA — Seluruh Bot',
+    // Satu-satunya yang membacanya `components/sentinel/SentinelProvider.tsx`, dan itu
+    // berjalan DI PERAMBAN. Mematikannya menyembunyikan tombol RIMA, tidak menutup
+    // apa pun di server — bentuk T-1 yang sama, di modul yang berbeda.
+    dijagaDi: null,
+    catatan: 'Hanya menyembunyikan tombol di peramban; route RIMA tidak membacanya.',
+  },
+  {
+    kunci: 'app_status_rima_query',
+    label: 'RIMA — Tanya Data (Q&A)',
+    dijagaDi: ['app/api/rima/query/route.ts', 'app/api/rima/summary/route.ts'],
+  },
 ]
 
 /** Kunci `app_access` yang sah — whitelist Zod. `admin` & `usulan_aset` tidak termasuk. */
@@ -158,3 +182,131 @@ export const LABEL_SAKELAR: Readonly<Record<string, string>> = Object.fromEntrie
 export const MODUL_BERSAKELAR: readonly Modul[] = MODUL_APPS.filter(
   (m) => m.sakelar !== null && m.dirApi !== null && m.penjagaApi !== undefined,
 )
+
+// ─── P6 · Pesan & jadwal pemeliharaan ────────────────────────────────────────
+// Nol migrasi: `app_config.value` sudah TEXT, jadi dua kunci turunan per sakelar
+// cukup. Diturunkan, bukan diketik — kunci ketiga yang salah eja tidak akan
+// menghasilkan galat apa pun, cuma pesan yang tidak pernah muncul.
+
+/** `app_status_blud` → `app_status_blud_pesan`. */
+export function kunciPesan(sakelar: string): string {
+  return `${sakelar}_pesan`
+}
+
+/** `app_status_blud` → `app_status_blud_sampai`. */
+export function kunciSampai(sakelar: string): string {
+  return `${sakelar}_sampai`
+}
+
+export const KUNCI_PESAN: readonly string[] = KUNCI_SAKELAR.map(kunciPesan)
+export const KUNCI_SAMPAI: readonly string[] = KUNCI_SAKELAR.map(kunciSampai)
+
+/**
+ * Satu baris untuk tiap sakelar yang ada di aplikasi — bahan layar Sakelar, halaman
+ * `/maintenance`, dan pemeriksaan P10 nomor 6.
+ *
+ * `terjaga` menjawab satu pertanyaan yang selama ini tidak pernah bisa ditanyakan dari
+ * layar: **apakah mematikan sakelar ini benar-benar menutup sesuatu di server?** T-1
+ * dan T-5 dua-duanya lahir dari pertanyaan itu tidak punya jawaban yang terlihat —
+ * di T-1 tombolnya ada tapi tidak menjaga, di T-5 penjaganya ada tapi tombolnya tidak.
+ * Gate G sudah menjawabnya di CI; ini membawanya ke layar, supaya yang lolos CI
+ * (mis. sakelar yang penjaganya hidup di peramban) tetap kelihatan orang.
+ */
+export type InfoSakelar = {
+  kunci: string
+  label: string
+  /** Modul pemilik. `null` = sakelar lintas-modul (`SAKELAR_LAIN`). */
+  modulKunci: string | null
+  /** Sakelar induk untuk sub-sakelar — mematikan induk ikut mematikan yang ini. */
+  induk: string | null
+  terjaga: boolean
+  /** Satu kalimat yang menjelaskan lencananya. Selalu terisi, termasuk saat terjaga. */
+  sebab: string
+}
+
+function infoModul(m: Modul): InfoSakelar[] {
+  if (!m.sakelar) return []
+  const penanda = m.penjagaApi?.penanda.map((p) => `\`${p}\``).join(' / ') ?? ''
+  const utama: InfoSakelar = m.dirApi === null
+    ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true,
+        sebab: 'Tidak punya route API sendiri — tidak ada yang perlu dijaga.' }
+    : m.penjagaApi
+      ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true,
+          sebab: `Tiap route di ${m.dirApi} wajib menyebut ${penanda} — diperiksa gate G tiap kali CI jalan.` }
+      : { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: false,
+          sebab: `Punya route di ${m.dirApi} tapi belum punya penjaga. Mematikannya hanya menutup layarnya; API-nya tetap terbuka.` }
+  return [
+    utama,
+    ...(m.subSakelar ?? []).map((s) => ({
+      kunci: s.kunci,
+      label: s.label,
+      modulKunci: m.kunci,
+      induk: m.sakelar as string,
+      terjaga: utama.terjaga,
+      sebab: utama.terjaga
+        ? `Ikut penjaga ${m.label} (${penanda}).`
+        : utama.sebab,
+    })),
+  ]
+}
+
+export const SAKELAR_INFO: readonly InfoSakelar[] = [
+  ...MODUL_APPS.flatMap(infoModul),
+  ...SAKELAR_LAIN.map((s) => ({
+    kunci: s.kunci,
+    label: s.label,
+    modulKunci: null,
+    induk: null,
+    terjaga: s.dijagaDi !== null,
+    sebab: s.dijagaDi
+      ? `Dibaca ${s.dijagaDi.join(' dan ')}.`
+      : (s.catatan ?? 'Tidak ada berkas server yang membacanya.'),
+  })),
+]
+
+const PETA_SAKELAR = new Map(SAKELAR_INFO.map((s) => [s.kunci, s]))
+
+/** `null` = bukan kunci sakelar yang dikenal. Dipakai `/maintenance` untuk menolak `?m=` karangan. */
+export function infoSakelar(kunci: string): InfoSakelar | null {
+  return PETA_SAKELAR.get(kunci) ?? null
+}
+
+/** Sakelar yang tombolnya ada tapi tidak menutup apa pun di server — P10 nomor 6. */
+export const SAKELAR_TANPA_PENJAGA: readonly InfoSakelar[] = SAKELAR_INFO.filter((s) => !s.terjaga)
+
+/**
+ * Alamat halaman pemeliharaan untuk sebuah sakelar. Satu tempat yang merangkai `?m=`,
+ * supaya penggantian nama parameternya tidak perlu dicari di sembilan berkas — dan
+ * supaya tidak ada lagi yang mengirim nama modul karangan ke sana.
+ */
+export function urlPemeliharaan(kunciSakelar: string): string {
+  return `/maintenance?m=${encodeURIComponent(kunciSakelar)}`
+}
+
+/** Bentuk `app_status_*_sampai` yang diterima: tanggal, boleh berjam. */
+export const RE_SAMPAI = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/
+
+const BULAN_ID = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+]
+
+/**
+ * `2026-09-20T14:30` → `20 September 2026, 14.30 WIB`. Teks yang tidak berbentuk
+ * tanggal memulangkan string KOSONG, bukan teks aslinya — nilai `app_config` ditulis
+ * manusia, dan halaman ini dibaca orang yang tidak bisa membedakan tenggat sungguhan
+ * dari isi kolom yang kebetulan tersimpan.
+ *
+ * Tinggal di sini bersama `kunciSampai` supaya cara MENULIS dan cara MEMBACA nilainya
+ * tidak pernah jadi dua aturan di dua berkas (L78): layar Sakelar, `/maintenance`, dan
+ * kartu `/menu` memanggil fungsi yang sama.
+ */
+export function formatSampai(raw: string): string {
+  if (!RE_SAMPAI.test(raw)) return ''
+  const [tgl, jam] = raw.split('T')
+  const [y, m, d] = tgl.split('-').map(Number)
+  const nama = BULAN_ID[m - 1]
+  if (!nama) return ''
+  const tanggal = `${d} ${nama} ${y}`
+  return jam ? `${tanggal}, ${jam.replace(':', '.')} WIB` : tanggal
+}
