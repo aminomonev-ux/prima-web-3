@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, sqlInt, safeInt, escapeLike, withTransaction } from '@/lib/data/db';
+import { sql, sqlInt, safeInt, escapeLike, withTransaction, execWrite, queryOne } from '@/lib/data/db';
 import { getSession, hashPassword } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { AdminUsersPatchBodySchema, AdminUserCreateBodySchema } from '@/lib/data/admin-schemas';
@@ -111,7 +111,14 @@ export async function POST(req: NextRequest) {
     }
     await writeAuditLog({ req, eventType: 'USER_CREATE', userId: session.userId, username: session.username, detail: `Buat akun ${username} role=${role}` });
 
-    return NextResponse.json({ ok: true, message: `Akun ${username} dibuat & langsung aktif.` });
+    // Id-nya dipulangkan supaya Pusat Akses bisa langsung membuka berkas orang yang
+    // baru dibuat — memberi akses adalah langkah berikutnya yang hampir selalu
+    // dikerjakan, dan menyuruh orang mencarinya lagi di daftar adalah pintu kedua yang
+    // tidak perlu. Dibaca ulang, bukan dari `insertId`: baris INSERT-nya dibungkus
+    // `withTransaction` yang memulangkan larik, bukan header hasil.
+    const baru = await queryOne<{ id: number }>(sql`SELECT id FROM users WHERE username = ${username} LIMIT 1`);
+
+    return NextResponse.json({ ok: true, message: `Akun ${username} dibuat & langsung aktif.`, data: { id: baru?.id ?? 0 } });
 
   } catch (error) {
     console.error('[Admin Users POST Error]', error);
@@ -284,6 +291,19 @@ export async function PATCH(req: NextRequest) {
       });
       await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Set app_access user id=${id}: ${JSON.stringify(apps)}${izinDihapus ? ` [${izinDihapus} perkecualian akses menu dihapus]` : ''}` });
       return NextResponse.json({ ok: true, message: 'Akses aplikasi berhasil diperbarui.' });
+    }
+
+    if (data.action === 'putus-sesi') {
+      // Statusnya TIDAK disentuh: memutus sesi dan menonaktifkan akun dua maksud yang
+      // berbeda, dan menggabungkannya membuat "lupa logout di komputer bersama" harus
+      // dibayar dengan slot kuota (akun nonaktif tidak bisa selalu diaktifkan kembali
+      // kalau perannya sudah penuh — T-7).
+      const res = await execWrite(sql`
+        UPDATE user_sessions SET invalidated_at = NOW()
+        WHERE user_id = ${id} AND invalidated_at IS NULL
+      `);
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Putus ${res.affectedRows} sesi aktif user id=${id}` });
+      return NextResponse.json({ ok: true, message: res.affectedRows ? `${res.affectedRows} sesi dihentikan.` : 'Tidak ada sesi aktif.' });
     }
 
     if (data.action === 'reset-password') {

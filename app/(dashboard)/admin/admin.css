@@ -328,6 +328,80 @@
 .ap-pm-contoh{list-style:none;display:flex;flex-direction:column;gap:3px;padding:9px 11px;border-radius:6px;background:var(--ap-aksen-bg);font-size:11px;line-height:1.55;color:var(--ap-fg2);font-family:'JetBrains Mono',monospace;}
 .ap-pm-tindakan{font-size:11px;line-height:1.6;color:var(--ap-dim);border-top:1px solid var(--ap-line-tipis);padding-top:8px;}
 
+/* ─── Pusat Akses (Tahap 5) ──────────────────────────────────────────────────
+   Dua kolom: daftar orang TETAP TERLIHAT di kiri, berkas orang terpilih di kanan.
+   Daftar yang hilang begitu seseorang dipilih memaksa orang bolak-balik hanya untuk
+   membandingkan dua akun — pekerjaan yang paling sering dilakukan di layar ini. */
+.ap-pa{display:grid;grid-template-columns:262px minmax(0,1fr);gap:16px;align-items:start;}
+.ap-pa-kiri{display:flex;flex-direction:column;gap:8px;position:sticky;top:80px;max-height:calc(100vh - 104px);}
+.ap-pa-cari{display:flex;align-items:center;gap:7px;padding:0 2px;color:var(--ap-dim);}
+.ap-pa-cari .ap-input{font-family:var(--font-jakarta),sans-serif;padding:7px 10px;}
+.ap-pa-tambah{display:flex;align-items:center;justify-content:center;width:30px;height:30px;flex-shrink:0;border-radius:6px;border:1px solid var(--ap-aksen-line);background:var(--ap-aksen-bg);color:var(--ap-aksen);cursor:pointer;}
+.ap-pa-tambah:hover{background:var(--ap-aksen-bg2);border-color:var(--ap-aksen);}
+.ap-pa-arsip{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--ap-dim);cursor:pointer;padding:0 2px;}
+.ap-pa-daftar{display:flex;flex-direction:column;gap:2px;overflow-y:auto;padding-right:2px;}
+.ap-pa-orang{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;padding:8px 10px;border-radius:7px;border:1px solid transparent;background:none;cursor:pointer;font-family:var(--font-jakarta),sans-serif;}
+.ap-pa-orang:hover{background:var(--ap-aksen-bg);}
+.ap-pa-orang.aktif{background:var(--ap-aksen-bg2);border-color:var(--ap-aksen-line);}
+.ap-pa-orang.arsip{opacity:.55;}
+.ap-pa-nama{font-size:12.5px;font-weight:700;color:var(--ap-fg);}
+.ap-pa-meta{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--ap-dim);}
+.ap-pa-titik{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.ap-pa-titik.ok{background:var(--ap-ok-fg);}
+.ap-pa-titik.diam{background:var(--ap-dim);}
+.ap-pa-kosong{font-size:11.5px;color:var(--ap-dim);padding:14px 10px;}
+.ap-pa-jumlah{font-size:10px;color:var(--ap-dim);padding:0 2px;font-family:'JetBrains Mono',monospace;}
+
+.ap-pa-kanan{display:flex;flex-direction:column;gap:14px;min-width:0;}
+.ap-pa-kosong-besar{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:64px 24px;text-align:center;font-size:12.5px;line-height:1.7;color:var(--ap-dim);border:1px dashed var(--ap-line);border-radius:10px;}
+.ap-pa-kepala{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.ap-pa-judul{font-size:17px;font-weight:800;color:var(--ap-fg);letter-spacing:.01em;}
+.ap-pa-sub{font-size:11.5px;color:var(--ap-dim);font-family:'JetBrains Mono',monospace;margin-top:3px;}
+
+/* Empat kartu ringkas menggantikan enam tombol yang berdesakan di satu sel tabel
+   selebar ±180px. Tiap kartu = satu pertanyaan + satu aksi (§16.4). */
+.ap-pa-kartu{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;}
+.ap-pa-k{padding:13px 15px;display:flex;flex-direction:column;gap:7px;align-items:flex-start;}
+.ap-pa-k-lbl{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ap-dim);}
+.ap-pa-k-nilai{font-size:14px;font-weight:700;color:var(--ap-fg);}
+.ap-pa-k-sub{font-size:10px;color:var(--ap-dim);line-height:1.5;}
+.ap-pa-k .ap-select{width:100%;}
+
+.ap-pa-baris-judul{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--ap-line);padding-bottom:9px;}
+.ap-pa-catatan{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ap-dim);padding:7px 10px;border-radius:6px;background:var(--ap-aksen-bg);}
+
+/* Baris modul: kotak centang, nama, dan KOLOM SEBAB. Sebabnya bukan hiasan — ia yang
+   membuat kotak centang jujur, dan tanpanya layar ini mengulangi T-6 dalam bentuk
+   yang lebih rapi. */
+.ap-pa-pintu{display:flex;flex-direction:column;gap:6px;}
+.ap-pa-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 13px;border:1px solid var(--ap-line);border-left:3px solid var(--ap-line);border-radius:8px;background:var(--ap-card);}
+.ap-pa-row.buka{border-left-color:var(--ap-ok);}
+.ap-pa-cek{display:flex;align-items:center;}
+.ap-pa-cek input:disabled{cursor:not-allowed;opacity:.45;}
+.ap-pa-row-isi{min-width:0;}
+.ap-pa-row-nama{font-size:12.5px;font-weight:700;color:var(--ap-fg);}
+.ap-pa-row-sebab{font-size:10.5px;line-height:1.55;color:var(--ap-dim);margin-top:2px;}
+.ap-pa-menu{grid-column:1 / -1;display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-top:9px;border-top:1px solid var(--ap-line-tipis);}
+.ap-pa-menu-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0 4px 22px;}
+.ap-pa-menu-nama{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ap-fg2);min-width:0;}
+.ap-pa-menu-row .ap-select{flex-shrink:0;font-size:11px;padding:5px 9px;}
+
+.ap-pa-kaki{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--ap-line);padding-top:13px;}
+.ap-pa-belum{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--ap-warn-fg);}
+.ap-pa-form{display:flex;flex-direction:column;gap:5px;}
+.ap-pa-form .ap-sk-lbl{margin-top:7px;}
+.ap-pa-tutup{margin-left:auto;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;border:none;background:none;color:var(--ap-dim);cursor:pointer;}
+.ap-pa-tutup:hover{background:var(--ap-aksen-bg);color:var(--ap-fg);}
+
+/* Di bawah 900px daftar orang berhenti jadi kolom dan naik ke atas: dua kolom di
+   lebar itu menyisakan ±300px untuk berkasnya, dan kolom sebab jadi tidak terbaca —
+   padahal kolom sebab itulah alasan layar ini ada. */
+@media(max-width:900px){
+  .ap-pa{grid-template-columns:minmax(0,1fr);}
+  .ap-pa-kiri{position:static;max-height:none;}
+  .ap-pa-daftar{max-height:210px;}
+}
+
 /* Isi modal yang lebih tinggi dari layar digulung DI DALAM kotaknya. Tanpa
    max-height, kotak tumbuh melewati batas viewport dan bagian bawahnya —
    termasuk tombol Simpan — tidak bisa dicapai: penggulung halaman di belakang

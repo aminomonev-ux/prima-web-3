@@ -88,6 +88,18 @@ export type AuditEventType =
   | 'USER_CREATE'
   | 'USER_UPDATE'
   | 'USER_DELETE'
+  // ─── C6 (Tahap 5): wewenang punya jenisnya sendiri ────────────────────────
+  // `USER_UPDATE` menampung SEMUANYA — ganti peran, beri akses, cabut akses, reset
+  // kata sandi, nonaktifkan. Akibatnya pertanyaan "siapa memberi akses BLUD ke siapa
+  // bulan lalu" hanya bisa dijawab dengan membaca kolom `detail` satu per satu, dan
+  // penyaring jenis di Jejak Audit tidak menolong sama sekali. Tiga jenis di bawah
+  // memisahkan yang paling sering ditanyakan auditor. `USER_UPDATE` TETAP ADA dan
+  // tetap dipakai jalur lama — mengganti nama jenis peristiwa yang sudah tertulis di
+  // ribuan baris audit akan membuat riwayatnya berlubang.
+  | 'ACCESS_GRANT'          // pintu modul dibuka untuk seseorang
+  | 'ACCESS_REVOKE'         // pintu modul ditutup untuk seseorang
+  | 'ROLE_CHANGE'           // peran diganti (kuota, probation, perkecualian menu ikut)
+  | 'USER_ARCHIVE'          // T-12: nonaktif permanen + deleted_at, PII menunggu retensi
   | 'PASSWORD_CHANGE'
   | 'EMAIL_VERIFIED'
   | 'CONFIG_UPDATE'

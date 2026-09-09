@@ -11,7 +11,7 @@
 // Yang disimpan hanya SELISIH terhadap bawaan. Sama dengan bawaan = tidak ada baris =
 // ikut mengikuti kalau bawaannya suatu saat berubah.
 import { useCallback, useEffect, useState } from 'react';
-import { X, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react';
+import { ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { ROLE_LABELS } from '@/lib/constants';
@@ -278,76 +278,16 @@ function selisih(nilai: Record<string, Izin>, bawaan: Record<string, Izin>) {
   return keluar;
 }
 
-export function MenuAccessModal({ userId, username, onClose }: {
-  userId: number; username: string; onClose: () => void;
-}) {
-  const [appKey, setAppKey] = useState(MENU_APPS[0].key);
-  const { data, nilai, setNilai, muat, reload } = useMenuAccess(appKey, `userId=${userId}`);
-  const [simpan, setSimpan] = useState(false);
-
-  async function kirim(kosongkan = false) {
-    if (!data) return;
-    setSimpan(true);
-    try {
-      const izin = kosongkan ? {} : selisih(nilai, bawaanDari(data));
-      const res = await fetch('/api/admin/menu-access', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: 'user', appKey, userId, izin, versi: data.versi }),
-      });
-      const j = await res.json() as { ok: boolean; message?: string; code?: string };
-      if (!j.ok) {
-        // 409: orang lain menyimpan lebih dulu. Layar dimuat ulang supaya admin
-        // melihat keadaan terbaru — perubahan orang pertama tidak ditimpa diam-diam.
-        if (j.code === 'BERUBAH') { toast.error(`${j.message} Ini yang terbaru — cek dulu sebelum menyimpan lagi.`); await reload(); return; }
-        toast.error(j.message ?? 'Gagal menyimpan'); return;
-      }
-      toast.success(kosongkan ? 'Sekarang ikut aturan perannya lagi' : 'Akses menu tersimpan');
-      onClose();
-    } catch {
-      toast.error('Gagal menyimpan');
-    } finally {
-      setSimpan(false);
-    }
-  }
-
-  return (
-    <div className="ap-modal-bg" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="ap-modal-box" style={{ maxWidth: 560 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <div className="ap-modal-title">AKSES MENU</div>
-          <button style={{ background: 'none', border: 'none', color: 'var(--ma-dim)', cursor: 'pointer' }} onClick={onClose}>
-            <X size={18} />
-          </button>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginBottom: 14 }}>
-          {username}
-          {data?.scope === 'user' && <> · <span style={{ color: 'var(--ma-aksen)' }}>{ROLE_LABELS[data.user.role] ?? data.user.role}</span></>}
-        </div>
-
-        {/* Pengaturan disimpan per modul: pindah tab lalu Simpan hanya menyentuh modul
-            yang sedang dibuka, tidak menghapus setelan modul lain. */}
-        <PilihModul nilai={appKey} ubah={setAppKey} />
-
-        {muat || !data ? (
-          <div style={{ fontSize: 12, color: 'var(--ma-dim)', padding: '20px 0' }}>Memuat…</div>
-        ) : (
-          <>
-            <DaftarMenu data={data} nilai={nilai} setNilai={setNilai} />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <PrimaButton variant="ghost" size="sm" onClick={() => { void kirim(true); }} disabled={simpan}>
-                Samakan dengan perannya
-              </PrimaButton>
-              <PrimaButton variant="ghost" size="sm" onClick={onClose} disabled={simpan}>Batal</PrimaButton>
-              <PrimaButton variant="primary" size="sm" onClick={() => { void kirim(); }} disabled={simpan}>
-                Simpan
-              </PrimaButton>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
+// `MenuAccessModal` DIBUANG di Tahap 5. Ia pintu kedua ke pengaturan yang sama dengan
+// bagian menu di Pusat Akses — dan pintu kedua ke satu pengaturan berarti dua admin bisa
+// saling menimpa (§17.4). Perkecualian per-ORANG sekarang hidup di dalam Pusat Akses,
+// bersarang di bawah modulnya, dan ikut satu Simpan bersama peran & pintu modulnya.
+//
+// Cabang `scope: 'user'` di `app/api/admin/menu-access` SENGAJA dibiarkan hidup: ia
+// dijaga sidik jari yang sama (409 BERUBAH), jadi ia tidak bisa menimpa diam-diam, dan
+// membuang cabangnya berarti menyunting route yang jalur `scope: 'role'`-nya masih
+// dipakai tab Peran. Yang berbahaya adalah pintu TANPA sidik jari — itu tab Pengguna,
+// dan itu yang dimatikan.
 
 /**
  * Tab matriks per peran. SUPER_ADMIN tidak muncul di pilihan — barisnya dikunci supaya

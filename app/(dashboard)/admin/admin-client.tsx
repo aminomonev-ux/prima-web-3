@@ -16,7 +16,7 @@ import { MenuAccessRoleTab } from './_panels/MenuAccessPanel';
 import { TabSessions } from './_panels/TabSessions';
 import { TabAppControl } from './_panels/TabAppControl';
 import { TabAttackMonitor } from './_panels/TabAttackMonitor';
-import { TabUserMgmt } from './_panels/TabUserMgmt';
+import { TabPusatAkses } from './_panels/TabPusatAkses';
 import { TabSecurityStatus } from './_panels/TabSecurityStatus';
 import { TabBroadcast } from './_panels/TabBroadcast';
 import { TabAuditTrail } from './_panels/TabAuditTrail';
@@ -28,7 +28,7 @@ import './admin.css';
 
 interface Props { userId: number; username: string; role: Role; sessionId: string; themePreference: 'dark' | 'light'; }
 
-type Tab = 'sessions'|'app-control'|'attack-monitor'|'user-mgmt'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback'|'pemeriksaan';
+type Tab = 'sessions'|'app-control'|'attack-monitor'|'pusat-akses'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback'|'pemeriksaan';
 
 
 
@@ -36,7 +36,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   void userId;
   const router    = useRouter();
   const isSA      = role === 'SUPER_ADMIN';
-  const [tab, setTab]           = useState<Tab>('sessions');
+  const [tab, setTab]           = useState<Tab>('pusat-akses');
   const [loggingOut, setOut]    = useState(false);
   const [dropOpen, setDrop]     = useState(false);
   // Hanya berarti di bawah 720px, tempat rel berubah jadi laci. Di lebar lain kelasnya
@@ -115,6 +115,18 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   const roleLabel = ROLE_LABELS[role] ?? role;
 
   /**
+   * Tahap 5 langkah 7 (§17.4) — tab USER MANAGEMENT DIMATIKAN di commit yang sama
+   * dengan lahirnya Pusat Akses, bukan sebagai pekerjaan susulan. Dua pintu ke
+   * pengaturan yang sama berarti dua admin bisa saling menimpa tanpa satu pun 409
+   * berbunyi: layar lama menyimpan lewat tiga endpoint terpisah tanpa sidik jari,
+   * jadi ia akan menghapus pekerjaan Pusat Akses tanpa suara.
+   *
+   * Tab AKSES MENU TETAP ADA, berganti nama jadi **Peran**. Ia bukan pintu kedua ke
+   * pengaturan yang sama: yang diatur di sana aturan sebuah PERAN (mengenai semua
+   * pemegangnya sekaligus), bukan wewenang satu orang. Perkecualian per-ORANG yang
+   * dulu dibuka dari tab Pengguna sekarang hidup di dalam Pusat Akses, bersarang di
+   * bawah modulnya.
+   *
    * R2 — sebelas tujuan yang sama, dikelompokkan empat. Yang berubah cuma WADAH-nya:
    * `id` tiap tujuan tidak disentuh, dan isi tabnya tidak dibuka sama sekali. Kalau
    * ada yang rusak sesudah commit ini, penyebabnya hanya bisa satu hal.
@@ -126,8 +138,8 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
    */
   const GRUP: { judul: string; items: { id: Tab; label: string; icon: React.ReactNode; lencana?: number }[] }[] = [
     { judul: 'Akun & Akses', items: [
-      { id:'user-mgmt',      label:'Pengguna',    icon:<Users size={15}/> },
-      { id:'menu-access',    label:'Akses Menu',  icon:<ListChecks size={15}/> },
+      { id:'pusat-akses',    label:'Pusat Akses', icon:<Users size={15}/> },
+      { id:'menu-access',    label:'Peran',       icon:<ListChecks size={15}/> },
       { id:'promotion',      label:'Permintaan',  icon:<ShieldCheck size={15}/> },
     ]},
     { judul: 'Aplikasi', items: [
@@ -222,7 +234,8 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'sessions'        && <TabSessions     selfSessionId={sessionId} isSA={isSA}/>}
         {tab === 'app-control'     && <TabAppControl   isSA={isSA}/>}
         {tab === 'attack-monitor'  && <TabAttackMonitor/>}
-        {tab === 'user-mgmt'       && <TabUserMgmt     isSA={isSA}/>}
+        {tab === 'pusat-akses'     && isSA && <TabPusatAkses/>}
+        {tab === 'pusat-akses'     && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
         {tab === 'menu-access'     && <MenuAccessRoleTab isSA={isSA}/>}
         {tab === 'security-status' && <TabSecurityStatus/>}
         {tab === 'broadcast'       && <TabBroadcast/>}

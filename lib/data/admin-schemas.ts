@@ -75,6 +75,14 @@ export const AdminUsersPatchBodySchema = z.discriminatedUnion('action', [
     id:       UserIdSchema,
     password: StrongPasswordSchema,
   }),
+  // Tahap 5: kartu SESI di Pusat Akses. Memutus sesi TANPA menonaktifkan akun —
+  // dipakai saat seseorang lupa logout di komputer bersama. Sebelumnya satu-satunya
+  // cara adalah menonaktifkan lalu mengaktifkan lagi, yang menabrak kuota di peran
+  // yang sedang penuh, atau reset kata sandi, yang mengubah hal lain.
+  z.object({
+    action: z.literal('putus-sesi'),
+    id:     UserIdSchema,
+  }),
 ]);
 
 export type AdminUsersPatchBody = z.infer<typeof AdminUsersPatchBodySchema>;
@@ -112,3 +120,53 @@ export const ConfigKeyEnum = z.enum([
 export const PUBLIC_CONFIG_KEYS: ReadonlySet<string> = new Set([
   'batas_mulai', 'batas_selesai', 'batas_pesan', 'batas_aktif',
 ]);
+
+// ─── Pusat Akses (Tahap 5 · Fase C) ─────────────────────────────────────────
+
+/**
+ * Satu Simpan untuk seluruh halaman: peran + pintu modul + perkecualian menu.
+ *
+ * `role_awal` bukan basa-basi. Sidik jari menu menjawab "apakah izin menunya berubah";
+ * ia tidak menjawab "apakah orangnya masih berperan sama". Layar yang dimuat saat
+ * seseorang masih PROGRAM lalu disimpan setelah orang lain memindahkannya ke KEUANGAN
+ * akan menulis izin milik jabatan yang sudah ditinggalkan — tanpa satu pun pemeriksaan
+ * yang ada hari ini menyalak.
+ */
+export const IzinMenuEnum = z.enum(['EDIT', 'LIHAT', 'TIDAK']);
+
+export const PusatAksesSimpanSchema = z.object({
+  user_id:    UserIdSchema,
+  role:       AssignableRoleEnum,
+  role_awal:  z.string().min(1),
+  app_access: z.array(AppAccessKeyEnum).max(20),
+  menu:       z.record(z.string(), z.record(z.string(), IzinMenuEnum)).default({}),
+  versi:      z.record(z.string(), z.string()).default({}),
+  /** Jejak P1: paket mana yang dipakai sebagai titik awal, dan berapa yang disunting. */
+  asal_paket: z.object({
+    nama:   z.string().min(1).max(60),
+    diubah: z.number().int().min(0).max(999),
+  }).nullable().optional(),
+});
+
+export type PusatAksesSimpanBody = z.infer<typeof PusatAksesSimpanSchema>;
+
+/**
+ * P1 — Paket Akses. Disimpan sebagai SATU baris `app_config` (`akses_paket`), bukan
+ * tabel: `value` bertipe TEXT tanpa bentuk, jadi yang menjaganya cuma skema ini —
+ * divalidasi saat BACA dan saat TULIS. Baris yang rusak (disunting tangan di MySQL)
+ * harus jatuh jadi "tidak ada paket", bukan merobohkan layarnya.
+ */
+export const PaketAksesSchema = z.object({
+  nama:       z.string().min(1).max(60),
+  keterangan: z.string().max(200).default(''),
+  app_access: z.array(AppAccessKeyEnum).max(20),
+  menu:       z.record(z.string(), z.record(z.string(), IzinMenuEnum)).default({}),
+});
+
+/**
+ * Paket TIDAK boleh memuat peran. Memberi peran punya kuota, mencabut sesi, dan
+ * membatalkan probation — itu aksi tersendiri, bukan isi paket (§12 P1).
+ */
+export const DaftarPaketSchema = z.array(PaketAksesSchema).max(20);
+
+export type PaketAkses = z.infer<typeof PaketAksesSchema>;
