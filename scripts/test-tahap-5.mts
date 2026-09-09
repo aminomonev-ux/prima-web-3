@@ -254,6 +254,33 @@ cek('asal paket ikut tercatat di audit', rute.includes('b.asal_paket ? ` [paket 
 cek('paket bisa disusun dari layar, bukan cuma lewat MySQL',
   panel.includes("aksi: 'simpan-paket'") && panel.includes("aksi: 'hapus-paket'"))
 
+// -- H . Sticky yang benar-benar menempel ------------------------------------
+console.log('\nH · rel & daftar orang tetap di tempat')
+
+// Dua kolom yang HARUS tetap terlihat saat halaman digulir: rel kiri (sejak Tahap 3)
+// dan daftar orang (Tahap 5). Keduanya `position: sticky`, dan keduanya sempat MATI
+// tanpa satu galat pun.
+//
+// Sebabnya satu kata di berkas lain: `.ap-body{overflow-x:hidden}`. Begitu satu sumbu
+// bukan `visible`, sumbu satunya otomatis jadi `auto` — jadi `.ap-body` berubah jadi
+// scrollport terdekat bagi tiap sticky di dalamnya, padahal ia sendiri tumbuh mengikuti
+// isinya dan tidak pernah menggulung. Sticky jadi punya jangkauan NOL.
+//
+// Tidak ada alat yang bisa melihat ini: CSS-nya sah, tsc lulus, ESLint lulus, gate E
+// lulus. Ketahuan waktu halamannya digulir. Karena itu ia dijaga di sini.
+const css = baca('app/(dashboard)/admin/admin.css')
+const aturanBody = css.slice(css.indexOf('.ap-body{min-height:100vh'), css.indexOf('.ap-top{'))
+cek('.ap-body memotong TANPA membuat kotak gulir', aturanBody.includes('overflow-x:clip'))
+cek('...dan tidak kembali ke overflow-x:hidden', !aturanBody.includes('overflow-x:hidden'))
+cek('rel kiri sticky', /\.ap-rail\{[^}]*position:sticky/.test(css))
+cek('daftar orang sticky', /\.ap-pa-kiri\{[^}]*position:sticky/.test(css))
+// Offsetnya harus sama dengan tinggi topbar (56px), plus padding isi (24px) untuk
+// kolom kiri. Angka yang meleset membuat sticky menempel di tempat yang salah — dan
+// itu terbaca seperti "kadang menempel, kadang tidak".
+cek('rel menempel tepat di bawah topbar 56px', /\.ap-rail\{[^}]*top:56px/.test(css))
+cek('daftar orang menempel di 56px + padding 24px', /\.ap-pa-kiri\{[^}]*top:80px/.test(css))
+cek('topbar sendiri sticky di 0', /\.ap-top\{[^}]*position:sticky;top:0/.test(css))
+
 console.log(`\n${lulus + gagal} pemeriksaan · ${lulus} lulus · ${gagal} gagal`)
 if (gagal > 0) {
   console.log('GAGAL — Tahap 5 tidak lagi utuh.')

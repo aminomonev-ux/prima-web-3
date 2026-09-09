@@ -165,7 +165,27 @@
    Topbar turun 76px → 56px. Yang dilepas: bingkai merek + subjudul 9px berisi nama
    panjang instansi — kalimat yang dibaca sekali seumur hidup tapi menempati ruang
    permanen di layar yang isinya tabel. */
-.ap-body{min-height:100vh;background:var(--ap-canvas);background-image:linear-gradient(var(--ap-kisi) 1px,transparent 1px),linear-gradient(90deg,var(--ap-kisi) 1px,transparent 1px);background-size:40px 40px;color:var(--ap-fg);font-family:var(--font-jakarta),sans-serif;position:relative;overflow-x:hidden;}
+/* `overflow-x: CLIP`, bukan `hidden`. Bedanya satu kata dan akibatnya besar:
+   `hidden` MEMBUAT KOTAK GULIR. Begitu satu sumbu bukan `visible`, sumbu satunya
+   otomatis jadi `auto` (aturan CSS), jadi `.ap-body` berubah jadi "scrollport"
+   terdekat bagi tiap `position: sticky` di dalamnya — padahal ia sendiri tumbuh
+   mengikuti isinya dan TIDAK PERNAH menggulung (terukur: scrollHeight 1459 ===
+   clientHeight 1459; yang menggulung dokumennya). Sticky jadi punya jangkauan NOL
+   dan tidak pernah menempel.
+
+   Akibatnya rel kiri (`.ap-rail`, sticky sejak Tahap 3/R2) dan daftar orang di Pusat
+   Akses (`.ap-pa-kiri`) ikut tergulir naik dan hilang dari layar — persis yang
+   keduanya ditulis untuk dihindari. CSS-nya sah, tidak ada galat, dan `tsc`/ESLint/
+   gate mana pun tidak punya cara melihatnya; ketahuan waktu halamannya digulir.
+
+   `clip` memotong tanpa membuat kotak gulir, jadi `overflow-y` tetap `visible` dan
+   sticky kembali mengacu ke dokumen. Sepupu jebakan `.versi-menu` di BLUD (di sana
+   `overflow-x: visible` yang diam-diam jadi `auto`), arah kebalikan.
+
+   Tanpa cadangan `hidden` dengan sengaja: berkas ini sudah memakai `:has()`
+   (`.ap-toggle:has(input:disabled)`), yang dukungannya LEBIH BARU daripada
+   `overflow: clip` — peramban yang bisa membuka Admin Panel pasti mengerti keduanya. */
+.ap-body{min-height:100vh;background:var(--ap-canvas);background-image:linear-gradient(var(--ap-kisi) 1px,transparent 1px),linear-gradient(90deg,var(--ap-kisi) 1px,transparent 1px);background-size:40px 40px;color:var(--ap-fg);font-family:var(--font-jakarta),sans-serif;position:relative;overflow-x:clip;}
 .ap-top{position:sticky;top:0;z-index:100;height:56px;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--ap-card);border-bottom:1px solid var(--ap-line);}
 .ap-brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1;}
 .ap-brand-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--ap-aksen-grad);color:var(--ap-on-aksen);flex-shrink:0;}
