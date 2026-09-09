@@ -1,0 +1,1530 @@
+{
+  "blud": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  },
+  "new_econtrolling": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  },
+  "perjanjian_kinerja": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  },
+  "buku_besar_aset": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  },
+  "lkjip": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  },
+  "rencana_aksi": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  },
+  "iki": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  },
+  "dashboard": {
+    "SUPER_ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KASUBAG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "ADMIN_KABAG": {
+      "null": true,
+      "kosong": true,
+      "grant-sendiri": true,
+      "grant-lain": true,
+      "grant-semua": true
+    },
+    "BIDANG_UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "BIDANG_PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RENBANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "UMUM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEUANGAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PROGRAM": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "MDSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "DIKLAT": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "RUMAH TANGGA": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "TUKMAS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPEGAWAIAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PERBENDAHARAAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "AKUNTANSI": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENGEMBANGAN PENDAPATAN": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PELAYANAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "KEPERAWATAN MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    },
+    "PENUNJANG NON MEDIS": {
+      "null": false,
+      "kosong": false,
+      "grant-sendiri": true,
+      "grant-lain": false,
+      "grant-semua": true
+    }
+  }
+}
