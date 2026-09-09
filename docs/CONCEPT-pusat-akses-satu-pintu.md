@@ -1,6 +1,6 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1, 2 & 3 SELESAI 2026-09-09.** Berikutnya Tahap 4. Ditulis &
+> Status: **Tahap 1–4 SELESAI 2026-09-09.** Berikutnya Tahap 5. Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -1920,6 +1920,89 @@ mematikan satu modul menampilkan pesannya di `/maintenance` dan di kartu `/menu`
 **Kenapa di sini, bukan sesudah Pusat Akses.** P10 memberi tahu **apa lagi yang salah**
 sebelum layar besarnya dirancang — jadi Tahap 5 dirancang untuk masalah yang nyata, bukan
 yang dibayangkan. Menukar urutan keduanya membuang keuntungan itu.
+
+**HASIL — dikerjakan & diverifikasi 2026-09-09.**
+
+**T-5 sudah tertutup sebelum tahap ini dimulai**, dan itu justru buktinya registry
+bekerja: `APP_STATUS_LABELS` menjadi `LABEL_SAKELAR` di Tahap 2, jadi
+`app_status_blud_realisasi` mendapat tombolnya sendiri tanpa ada yang menambahkannya.
+Yang dikerjakan di sini tinggal membuat susunannya jujur — kartunya menjorok di bawah
+BLUD, dan labelnya kehilangan embel "(sub-modul)" karena label yang sama ikut tampil di
+`/maintenance`, tempat jargon admin tidak punya urusan.
+
+**Lencana Terjaga / Belum terjaga** menjawab pertanyaan yang selama ini hanya bisa
+dijawab dengan membaca kode: *mematikan sakelar ini menutup sesuatu di server, atau cuma
+menyembunyikan tombol?* Itu pertanyaan yang sama yang melahirkan T-1 dan T-5 dari dua
+arah berlawanan. Jawabannya diturunkan dari registry — bahan yang sama dengan gate G.
+
+Dan ia **langsung menemukan satu temuan baru pada hari pertama**:
+`app_status_sentinel_bot` satu-satunya pembacanya `components/sentinel/SentinelProvider.tsx`,
+yang berjalan **di peramban**. Mematikan "RIMA — Seluruh Bot" menyembunyikan tombolnya dan
+tidak menutup apa pun di server. Gate G tidak akan pernah melihatnya karena ia memindai
+`app/api/*`; inilah keadaan yang lencana ini ada untuk memperlihatkannya. Ia dicatat apa
+adanya, **tidak ditambal di tahap ini** — memasang penjaga di route RIMA mengubah
+perilaku modul lain, dan itu pekerjaan tersendiri.
+
+**P6 — dan lubangnya bukan yang disangka.** Rencana awal berbunyi "validasi nama modul
+terhadap registry". Itu ternyata **tidak cukup**: `?m=app_status_blud` adalah nama yang
+sah, dan memakainya saat BLUD berjalan normal tetap menghasilkan halaman resmi yang
+mengabarkan BLUD mati. Yang menutupnya pemeriksaan KEDUA — halaman itu kini membaca
+`app_config` dan **hanya menyebut nama modul kalau sakelarnya memang mati**. Halamannya
+karena itu berubah dari komponen klien jadi server component. Induk ikut ditanyakan,
+supaya tautan ke sub-sakelar tetap sah saat yang dimatikan modul induknya. Gagal membaca
+DB = dianggap tidak terbukti (pola `modulMati`).
+
+Kesembilan pengalih berhenti merangkai URL-nya sendiri dan lewat `urlPemeliharaan(kunci)`
+— satu tempat, dan kunci yang ditanyakan ke sakelar kini kunci yang sama dengan yang
+dikirim ke halamannya. Dulu keduanya bisa berbeda tanpa satu galat pun.
+
+**P10 — tujuh pemeriksaan, nol tabel, nol migrasi**, dan **tidak ada satu pun tombol
+perbaiki**. Route-nya GET saja: perbaikan otomatis atas wewenang adalah cara tercepat
+membuat orang kehilangan akses tanpa ada yang tahu kenapa. Datanya dipegang
+`admin-client.tsx`, bukan tabnya, karena lencana angka di rel harus menyala tanpa tabnya
+pernah dibuka — dua pemuat untuk satu fakta berarti lencana dan isi layar bisa menyebut
+angka berbeda (L88).
+
+`getRoleQuota` **pindah** ke `lib/constants.ts` dan di-re-export dari
+`lib/security/promotion.ts`. Bukan kerapian: berkas itu mengimpor `verifyPassword`, jadi
+siapa pun yang cuma ingin tahu angka kuota ikut menyeret JWT_SECRET — uji regresinya mati
+sebelum satu asersi pun jalan. Preseden yang sama dengan `toDateStr` dan `waktuSekarangWIB`.
+
+**Diverifikasi di aplikasi**, sesi SUPER_ADMIN sungguhan, dua tema:
+
+- `/maintenance?app=Sistem%20Kepegawaian%20RSJD` → **"Modul PRIMA"**. Nama karangan tidak
+  lagi bisa dipajang di halaman resmi.
+- `?m=app_status_blud` saat BLUD **online** → juga "Modul PRIMA". Ini pemeriksaan yang
+  membedakan perbaikan ini dari yang direncanakan.
+- `?m=app_status_dashboard` (mati sejak 3 Agu) → **"Dashboard"** + kalimatnya +
+  "Diperkirakan selesai 14 September 2026, 08.00 WIB".
+- Sub-sakelar dibuktikan dua arah: mematikan `app_status_blud_realisasi` sendiri → halaman
+  menyebut "BLUD — Realisasi"; menyalakannya kembali lalu mematikan **induknya** →
+  halaman itu **tetap** sah.
+- Menulis pesan lewat layar Sakelar tersimpan dan langsung tampil di `/maintenance` **dan**
+  di kartu `/menu`.
+- Ketujuh pemeriksaan memulangkan angka pada data sungguhan: **3 grant mubazir**
+  (`tesujiakun` memegang dashboard/blud/rencana_aksi yang ADMIN sudah punya dari
+  perannya), **1 sakelar mati > 7 hari** (Dashboard, sejak 3 Agu — persis jebakan yang
+  ditemukan Tahap 0), **1 sakelar tanpa penjaga** (RIMA Bot), sisanya nol.
+- Data uji dikembalikan seluruhnya: `app_status_blud` & `app_status_blud_realisasi`
+  kembali `online`, kedua baris pesan Dashboard dihapus.
+
+**Regresi:** `npx tsx scripts/test-tahap-4.mts` (97 pemeriksaan), **10 uji mutasi
+tertangkap**. Satu awalnya **LOLOS**, dan itu asersi saya sendiri: pemeriksaan lencana
+menghitung "seharusnya" dengan rumus yang persis sama dengan yang diperiksa
+(`m.penjagaApi !== undefined`), jadi menghapus `penjagaApi` menggeser kedua sisinya
+bersamaan. Diganti dengan keadaan yang diharapkan, bukan cara menghitungnya — L82c dalam
+bentuk baru: bukan kutipan sepotong, tapi asersi yang mengulang implementasinya.
+
+Empat asersi `test-sesi-dicabut.mts` ikut ditulis ulang di commit yang sama: ia mencari
+rangkaian URL `/maintenance` yang sudah tidak dirangkai siapa pun lagi. Penggantinya
+**lebih ketat** — ia menuntut kunci sakelar yang ditanyakan sama dengan kunci yang
+dikirim ke halaman pemeliharaan.
+
+**Yang TIDAK dikerjakan, sengaja:** penjaga server untuk `app_status_sentinel_bot`
+(temuan baru di atas — mengubah perilaku RIMA, pekerjaan tersendiri) dan P12 sakelar
+seluruh aplikasi (tidak ada di lingkup Tahap 4).
 
 ---
 
