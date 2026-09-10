@@ -904,10 +904,12 @@ export default function UsulanClient({ userId, role, username, themePreference }
   // O3: doUserAction dihapus — aksi nonaktif/aktifkan/reset-pw/delete/access
   // adalah domain admin-client (/admin). Panel kelola-user usulan = ubah role saja.
 
-  async function doChangeRole(uid: number, role: string) {
+  async function doChangeRole(uid: number, role: string, alasan: string) {
     const d = await fetchJson('/api/admin/users', {
       method: 'PATCH',
-      body: JSON.stringify({ id: uid, action: 'ubah-role', role }),
+      // `alasan` WAJIB di sisi server (P9); dikirim dari dialog yang sama dengan yang
+      // dipakai Pusat Akses, jadi kalimat yang tercatat berbentuk sama di dua layar.
+      body: JSON.stringify({ id: uid, action: 'ubah-role', role, alasan }),
     });
     // Konfirmasinya sudah ditanyakan `KelolaUserPanel` lewat komponen bersama (D1/T-8);
     // di sini tinggal menulis. Angka kuota di dropdown dibuang cache-nya supaya penanda

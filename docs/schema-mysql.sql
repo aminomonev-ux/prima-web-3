@@ -211,12 +211,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   ip_address  VARCHAR(50)     DEFAULT NULL,
   user_agent  VARCHAR(250)    DEFAULT NULL,
   detail      TEXT            DEFAULT NULL,
+  -- T-15 (migration-audit-target-user.sql): `username`/`user_id` = PELAKU; kolom ini
+  -- SASARAN. Tanpa ia, "akses Sari pernah diubah siapa" cuma bisa dicari lewat
+  -- `detail LIKE '%id=12%'` — yang ikut cocok dengan id=120, id=123, id=127.
+  -- NULL = peristiwa ini memang tidak mengenai orang tertentu. Sengaja TANPA FK:
+  -- jejak audit harus bertahan melewati orang yang dijejaknya.
+  target_user_id INT          DEFAULT NULL,
   created_at  DATETIME        NOT NULL DEFAULT NOW()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_audit_log_created ON audit_log (created_at DESC);
 CREATE INDEX idx_audit_log_event   ON audit_log (event_type);
 CREATE INDEX idx_audit_log_user    ON audit_log (user_id);
+-- Dua kolom, bukan satu: garis waktu satu orang selalu dibaca terurut waktu terbaru.
+CREATE INDEX idx_audit_log_target  ON audit_log (target_user_id, created_at DESC);
 
 -- ─── RIMA UNANSWERED (#2 fail-log mining + RAL-2/3 active learning) ──────────
 -- Pertanyaan Rima yang gagal dijawab classifier + telemetri belajar (klik

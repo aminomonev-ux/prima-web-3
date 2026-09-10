@@ -44,6 +44,23 @@ export const AppAccessKeyEnum = z.enum(KUNCI_GRANT as [string, ...string[]]);
 
 const UserIdSchema = z.number().int().positive();
 
+/**
+ * P9 (Tahap 7) — alasan singkat pada perubahan wewenang.
+ *
+ * Audit hari ini menjawab *apa* dan *siapa*, tidak pernah *kenapa*. Enam bulan kemudian
+ * tidak ada yang ingat kenapa seorang staf gudang punya akses BLUD.
+ *
+ * `min(4)` bukan angka hiasan: alasan yang boleh kosong adalah alasan yang tidak pernah
+ * diisi, dan kolom yang selalu berisi "-" lebih buruk daripada kolom yang tidak ada —
+ * ia terbaca seperti sudah dijawab. Kalau memang boleh kosong, jangan ditanyakan.
+ *
+ * Dipakai HANYA pada: beri/cabut akses, ubah peran, hapus permanen. TIDAK pada
+ * aktifkan/nonaktifkan rutin — di sana pertanyaannya sudah dijawab oleh keadaan
+ * (orangnya berhenti / masuk lagi), dan meminta alasan pada aksi harian melatih orang
+ * mengetik "-" lalu terbawa ke aksi yang benar-benar butuh dijelaskan.
+ */
+export const AlasanWewenangSchema = z.string().trim().min(4, 'Sebutkan alasannya (min. 4 huruf).').max(140);
+
 // ─── Discriminated union per action ─────────────────────────────────────────
 
 /**
@@ -64,12 +81,13 @@ export const AdminUsersPatchBodySchema = z.discriminatedUnion('action', [
     action: z.literal('ubah-role'),
     id:     UserIdSchema,
     role:   AssignableRoleEnum,
+    alasan: AlasanWewenangSchema,
   }),
-  z.object({
-    action:     z.literal('set-app-access'),
-    id:         UserIdSchema,
-    app_access: z.array(AppAccessKeyEnum).max(10).nullable(),
-  }),
+  // `set-app-access` DIBUANG di Tahap 7. Layar yang memakainya (tab User Management)
+  // sudah dimatikan Tahap 5, jadi sejak itu ia jalur tulis tanpa satu pun pintu — dan
+  // yang lebih menentukan: ia memberi & mencabut akses TANPA melewati kewajiban alasan
+  // yang baru dipasang P9. Pintu kedua yang melewati aturan barunya membuat aturan itu
+  // jadi hiasan. Pemberian akses sekarang satu jalur: `PUT /api/admin/pusat-akses`.
   z.object({
     action:   z.literal('reset-password'),
     id:       UserIdSchema,
@@ -139,6 +157,13 @@ export const PusatAksesSimpanSchema = z.object({
   role:       AssignableRoleEnum,
   role_awal:  z.string().min(1),
   app_access: z.array(AppAccessKeyEnum).max(20),
+  /**
+   * P9. Dibiarkan OPSIONAL di sini dan diwajibkan di dalam transaksi — server yang
+   * memutuskan "ada yang berubah atau tidak" dari baris yang sudah dikunci `FOR UPDATE`,
+   * bukan dari tebakan klien. Menyimpan tanpa mengubah wewenang apa pun (mis. cuma
+   * menggeser satu izin menu) tidak perlu ditanya alasannya.
+   */
+  alasan:     AlasanWewenangSchema.optional(),
   menu:       z.record(z.string(), z.record(z.string(), IzinMenuEnum)).default({}),
   versi:      z.record(z.string(), z.string()).default({}),
   /** Jejak P1: paket mana yang dipakai sebagai titik awal, dan berapa yang disunting. */
@@ -149,6 +174,15 @@ export const PusatAksesSimpanSchema = z.object({
 });
 
 export type PusatAksesSimpanBody = z.infer<typeof PusatAksesSimpanSchema>;
+
+/**
+ * Badan DELETE. `id` & `mode` tetap di query string, alasannya TIDAK: teks bebas di URL
+ * berakhir di log akses Nginx dan riwayat peramban, dan yang ditulis di sini kadang
+ * menyebut nama orang atau sebab pemberhentiannya.
+ */
+export const PusatAksesHapusSchema = z.object({
+  alasan: AlasanWewenangSchema,
+});
 
 /**
  * P1 — Paket Akses. Disimpan sebagai SATU baris `app_config` (`akses_paket`), bukan

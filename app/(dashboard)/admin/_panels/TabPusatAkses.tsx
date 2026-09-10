@@ -25,9 +25,10 @@ import { toast } from 'sonner';
 import {
   Search, Save, RotateCcw, ChevronDown, ChevronRight, KeyRound, Power, LogOut,
   Archive, Trash2, UserPlus, PackageOpen, PackagePlus, ShieldAlert, Info, Unlock, X,
+  History,
 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
-import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { confirmDialog, promptDialog } from '@/components/ui/ConfirmDialog';
 import { useIngatkanBelumTersimpan } from '@/lib/shared/belum-tersimpan';
 import { fetchJson } from '@/lib/shared/api';
 import { ROLE_LABELS } from '@/lib/constants';
@@ -46,6 +47,7 @@ type Orang = {
   deleted_at: string | null; sesi_aktif: number;
 };
 type Paket = { nama: string; keterangan: string; app_access: string[]; menu: Record<string, Record<string, Izin>> };
+type Peristiwa = { id: number; jenis: string; detail: string | null; pelaku: string | null; waktu: string };
 type Jejak = {
   kehilanganPemilik: { tabel: string; kolom: string; jumlah: number }[];
   ikutTerhapus: { tabel: string; kolom: string; jumlah: number }[];
@@ -60,6 +62,23 @@ const PILIHAN_IZIN: { nilai: '' | Izin; label: string }[] = [
 ];
 
 const tgl = (v: string | null) => v ? new Date(v).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const waktuLengkap = (v: string) => new Date(v).toLocaleString('id-ID', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+
+/**
+ * Warna per jenis peristiwa. Dipisah menurut ARAHNYA, bukan menurut seberapa serius:
+ * memberi akses hijau, mencabut & menghapus merah, ganti peran kuning. Yang dicari orang
+ * di garis waktu hampir selalu "kapan sesuatu DIAMBIL", dan itu harus terbaca sekilas.
+ */
+const JENIS_BADGE: Record<string, string> = {
+  ACCESS_GRANT:  'badge-green',
+  ACCESS_REVOKE: 'badge-red',
+  ROLE_CHANGE:   'badge-yellow',
+  USER_ARCHIVE:  'badge-yellow',
+  USER_DELETE:   'badge-red',
+  USER_CREATE:   'badge-cyan',
+};
 
 export function TabPusatAkses() {
   const [daftar, setDaftar]   = useState<Orang[]>([]);
@@ -78,6 +97,8 @@ export function TabPusatAkses() {
   const [asalPaket, setAsalPaket] = useState<string | null>(null);
   const [buatBuka, setBuatBuka]   = useState(false);
   const [paketBuka, setPaketBuka] = useState(false);
+  const [garis, setGaris]         = useState<Peristiwa[] | null>(null);
+  const [garisBulan, setGarisBulan] = useState(12);
   const statKuota = useStatKuota();
 
   const muatDaftar = useCallback(async () => {
@@ -98,6 +119,20 @@ export function TabPusatAkses() {
     setDraGrant([...j.data.appAccess]);
     setDraMenu(Object.fromEntries(j.data.menu.map(m => [m.appKey, { ...m.orang }])));
     setAsalPaket(null);
+    setGaris(null);
+  }, []);
+
+  // P8 — garis waktu dimuat SAAT DIMINTA, bukan bersama berkasnya. Ia menyapu tabel
+  // audit yang paling besar di basis data ini, dan pertanyaan "apa yang pernah terjadi
+  // pada orang ini" tidak ditanyakan tiap kali sebuah nama diklik.
+  const muatGaris = useCallback(async (id: number) => {
+    setSibuk(true);
+    const j = await fetchJson(`/api/admin/pusat-akses?userId=${id}&garisWaktu=1`) as
+      { ok: boolean; data?: Peristiwa[]; bulan?: number; message?: string };
+    setSibuk(false);
+    if (!j.ok || !j.data) { toast.error(j.message ?? 'Gagal memuat garis waktu.'); return; }
+    setGaris(j.data);
+    if (j.bulan) setGarisBulan(j.bulan);
   }, []);
 
   /* eslint-disable-next-line react-hooks/set-state-in-effect -- pemuatan awal & saat penyaring berubah; pola muat-awal yang dipakai seluruh panel di folder ini. */
@@ -162,19 +197,49 @@ export function TabPusatAkses() {
 
   async function simpan() {
     if (!berkas) return;
-    // Ditanyakan di sini, bukan saat dropdown-nya digeser: selama belum Simpan,
-    // pilihannya masih bisa dibatalkan. Inilah titik yang tidak bisa ditarik balik.
+    const grantKirim = pintuDraf.filter(b => b.bisaDicentang && draGrant.includes(b.kunci)).map(b => b.kunci);
+
+    // P9 — alasan diminta HANYA kalau wewenangnya benar-benar bergeser. Menyimpan
+    // sesudah menggeser satu izin menu saja tidak ditanya: pertanyaan yang muncul pada
+    // aksi harian melatih orang mengetik "-" lalu terbawa ke aksi yang penting.
+    //
+    // Server memeriksanya lagi di dalam transaksi, dari baris yang sudah dikunci —
+    // pemeriksaan di sini untuk MEMINTA, bukan untuk menjamin.
+    const grantLama = [...berkas.appAccess].sort().join(',');
+    const grantBaru = [...grantKirim].sort().join(',');
+    const grantBergeser = grantLama !== grantBaru;
+
+    let alasan: string | null = null;
     if (peranBerubah) {
+      // Ditanyakan di sini, bukan saat dropdown-nya digeser: selama belum Simpan,
+      // pilihannya masih bisa dibatalkan. Inilah titik yang tidak bisa ditarik balik.
       const jumlahPerkecualian = berkas.menu.reduce((a, m) => a + Object.keys(m.orang).length, 0);
-      const ya = await konfirmasiUbahPeran({
+      alasan = await konfirmasiUbahPeran({
         username: berkas.user.username,
         dari: berkas.user.role, ke: draRole,
         jumlahPerkecualian,
         probationAktif: berkas.masaPercobaan,
         stat: statKuota.find(s => s.role === draRole),
       });
-      if (!ya) return;
+      if (alasan === null) return;
+    } else if (grantBergeser) {
+      const dibuka = grantKirim.filter(k => !berkas.appAccess.includes(k));
+      const ditutup = berkas.appAccess.filter(k => !grantKirim.includes(k));
+      const nama = (k: string) => pintuDraf.find(b => b.kunci === k)?.label ?? k;
+      alasan = await promptDialog({
+        title: 'Simpan perubahan akses?',
+        message: [
+          dibuka.length ? `Dibuka: ${dibuka.map(nama).join(', ')}.` : '',
+          ditutup.length ? `Ditutup: ${ditutup.map(nama).join(', ')} — perkecualian menunya ikut dibuang.` : '',
+        ].filter(Boolean).join('\n\n'),
+        label: 'Alasan',
+        placeholder: 'Mis. ditugaskan membantu Bendahara sampai akhir tahun',
+        confirmLabel: 'Simpan',
+        variant: 'primary',
+      });
+      if (alasan === null) return;
     }
+
     setSibuk(true);
     const j = await fetchJson('/api/admin/pusat-akses', {
       method: 'PUT',
@@ -182,10 +247,11 @@ export function TabPusatAkses() {
         user_id: berkas.user.id,
         role: draRole,
         role_awal: berkas.user.role,
-        app_access: pintuDraf.filter(b => b.bisaDicentang && draGrant.includes(b.kunci)).map(b => b.kunci),
+        app_access: grantKirim,
         menu: peranBerubah ? {} : draMenu,
         versi: Object.fromEntries(berkas.menu.map(m => [m.appKey, m.versi])),
         asal_paket: asalPaket ? { nama: asalPaket, diubah: 1 } : null,
+        ...(alasan ? { alasan } : {}),
       }),
     }) as { ok: boolean; message?: string; code?: string; data?: { izinDihapus: number } };
     setSibuk(false);
@@ -197,7 +263,11 @@ export function TabPusatAkses() {
     toast.success('Tersimpan.' + (j.data?.izinDihapus ? ` ${j.data.izinDihapus} perkecualian menu ikut dibuang.` : ''));
     // Angka kuota di dropdown ikut bergeser begitu perannya benar-benar berubah.
     if (peranBerubah) segarkanStatKuota();
+    const garisTerbuka = garis !== null;
     await muatBerkas(berkas.user.id);
+    // Garis waktu yang sedang terbuka ikut disegarkan — kalau tidak, ia menampilkan
+    // keadaan sebelum perubahan yang barusan disimpan, tepat di sebelah hasilnya.
+    if (garisTerbuka) await muatGaris(berkas.user.id);
     await muatDaftar();
   }
 
@@ -217,6 +287,7 @@ export function TabPusatAkses() {
   async function hapus(mode: 'arsip' | 'permanen') {
     if (!berkas) return;
     const u = berkas.user;
+    let alasanHapus = '';
     if (mode === 'permanen') {
       // Angkanya DIHITUNG, bukan diperingatkan secara umum (§5.5). Nol adalah jawaban
       // yang paling sering, dan justru itu yang membuatnya berguna: ketika ia bukan
@@ -241,6 +312,19 @@ export function TabPusatAkses() {
         variant: 'danger',
       });
       if (!ya) return;
+      // P9 — hapus permanen satu-satunya aksi di layar ini yang tidak bisa ditarik
+      // balik. Ditanyakan SESUDAH angka jejaknya terlihat, bukan sebelum: alasan yang
+      // diketik tanpa tahu 247 baris akan kehilangan pemiliknya bukan alasan.
+      const sebab = await promptDialog({
+        title: `Alasan menghapus ${u.username}`,
+        message: 'Tercatat di jejak audit, dan itu satu-satunya yang tersisa sesudah akunnya hilang.',
+        label: 'Alasan',
+        placeholder: 'Mis. akun uji yang dibuat 2 Sep, belum pernah dipakai',
+        confirmLabel: 'Hapus permanen',
+        variant: 'danger',
+      });
+      if (sebab === null) return;
+      alasanHapus = sebab;
     } else {
       const ya = await confirmDialog({
         title: `Arsipkan ${u.username}?`,
@@ -252,7 +336,12 @@ export function TabPusatAkses() {
       if (!ya) return;
     }
     setSibuk(true);
-    const j = await fetchJson(`/api/admin/pusat-akses?id=${u.id}&mode=${mode}`, { method: 'DELETE' }) as { ok: boolean; message?: string };
+    // Alasannya lewat BADAN, bukan query string: teks bebas di URL berakhir di log
+    // akses Nginx dan riwayat peramban, dan yang ditulis di sini kadang menyebut nama
+    // orang atau sebab pemberhentiannya.
+    const j = await fetchJson(`/api/admin/pusat-akses?id=${u.id}&mode=${mode}`, {
+      method: 'DELETE', body: JSON.stringify({ alasan: alasanHapus || 'diarsipkan dari Pusat Akses' }),
+    }) as { ok: boolean; message?: string };
     setSibuk(false);
     if (!j.ok) { toast.error(j.message ?? 'Gagal.'); return; }
     toast.success(j.message ?? 'Berhasil.');
@@ -472,6 +561,51 @@ export function TabPusatAkses() {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="ap-pa-garis">
+              <div className="ap-pa-baris-judul">
+                <div className="ap-section-title" style={{ margin: 0, border: 'none', padding: 0 }}>GARIS WAKTU</div>
+                <PrimaButton size="sm" variant="ghost" disabled={sibuk}
+                  iconLeft={<History size={13}/>} onClick={() => void muatGaris(u.id)}>
+                  {garis === null ? 'Tampilkan' : 'Muat ulang'}
+                </PrimaButton>
+              </div>
+
+              {garis !== null && (
+                <>
+                  {/* WAJIB tertulis, bukan disimpulkan sendiri: `audit_log` dipangkas
+                      cron retensi, jadi garis waktunya PUNYA UJUNG. Layar yang diam
+                      soal itu membiarkan orang membaca "tidak ada catatan" dari
+                      "catatannya sudah dibuang" — dan itu kesimpulan yang salah tepat
+                      pada pertanyaan yang paling penting. */}
+                  <div className="ap-pa-catatan">
+                    <Info size={13}/>
+                    Jejak audit dipangkas otomatis setiap {garisBulan} bulan. Yang lebih
+                    lama dari itu memang sudah tidak ada — bukan berarti tidak pernah terjadi.
+                  </div>
+
+                  {garis.length === 0 ? (
+                    <div className="ap-sk-kosong" style={{ padding: '10px 2px' }}>
+                      Belum ada perubahan wewenang yang tercatat untuk orang ini.
+                    </div>
+                  ) : (
+                    <ol className="ap-pa-peristiwa">
+                      {garis.map(g2 => (
+                        <li key={g2.id}>
+                          <span className={`ap-badge ${JENIS_BADGE[g2.jenis] ?? 'badge-gray'}`}>{g2.jenis}</span>
+                          <div className="ap-pa-peristiwa-isi">
+                            <div className="ap-pa-peristiwa-teks">{g2.detail ?? '—'}</div>
+                            <div className="ap-pa-peristiwa-kaki">
+                              {waktuLengkap(g2.waktu)} · oleh {g2.pelaku ?? 'sistem'}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="ap-pa-kaki">

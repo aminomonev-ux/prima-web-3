@@ -18,7 +18,7 @@
 // lihat kepala `lib/admin/pintu-akses.ts`).
 
 import { useEffect, useState } from 'react'
-import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { promptDialog } from '@/components/ui/ConfirmDialog'
 import { ROLE_LABELS, ROLE_GROUPS_OPTIONS } from '@/lib/constants'
 
 export type StatKuota = { role: string; count: number; quota: number; full: boolean }
@@ -98,8 +98,15 @@ export type FaktaUbahPeran = {
  * ini — peringatan yang selalu muncul, termasuk saat tidak ada perkecualian dan tidak
  * ada probation, melatih orang menekan "Ya" tanpa membaca. Itu yang membuat dialog
  * berikutnya, yang memang penting, ikut tidak terbaca.
+ *
+ * Sejak Tahap 7 ia juga MEMINTA ALASAN (P9), dan memulangkannya alih-alih `boolean`.
+ * Digabung ke dialog yang sudah ada, bukan ditambah sebagai langkah kedua: dua kotak
+ * berurutan untuk satu tindakan membuat yang kedua terbaca sebagai gangguan lalu diisi
+ * seadanya — persis yang membuat kolom alasan berakhir berisi "-".
+ *
+ * `null` = dibatalkan.
  */
-export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<boolean> {
+export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<string | null> {
   const baris: string[] = [
     `${f.username}: ${ROLE_LABELS[f.dari] ?? f.dari} → ${ROLE_LABELS[f.ke] ?? f.ke}.`,
   ]
@@ -117,9 +124,11 @@ export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<boolean> {
   }
   baris.push('Sesi orang ini TIDAK diputus — peran barunya berlaku dalam satu menit tanpa ia perlu keluar.')
 
-  return confirmDialog({
+  return promptDialog({
     title: 'Ubah peran?',
     message: baris.join('\n\n'),
+    label: 'Alasan',
+    placeholder: 'Mis. mutasi ke Bagian Keuangan per 1 Okt',
     confirmLabel: 'Ubah peran',
     cancelLabel: 'Batal',
     variant: 'warning',

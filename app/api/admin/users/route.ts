@@ -7,7 +7,6 @@ import { AdminUsersPatchBodySchema, AdminUserCreateBodySchema } from '@/lib/data
 import { assertQuotaAvailableTx, QuotaFullError } from '@/lib/security/promotion';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { hapusIzinOrang } from '@/lib/data/menu-access';
-import { MENU_APP_KEYS } from '@/lib/registry/menu-apps';
 import { RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants';
 
 // Marker untuk membedakan konflik dup (409) dari error lain di dalam transaksi create-user.
@@ -109,16 +108,15 @@ export async function POST(req: NextRequest) {
       }
       throw e;
     }
-    await writeAuditLog({ req, eventType: 'USER_CREATE', userId: session.userId, username: session.username, detail: `Buat akun ${username} role=${role}` });
+    const baruUntukJejak = await queryOne<{ id: number }>(sql`SELECT id FROM users WHERE username = ${username} LIMIT 1`);
+    await writeAuditLog({ req, eventType: 'USER_CREATE', userId: session.userId, username: session.username, targetUserId: baruUntukJejak?.id, detail: `Buat akun ${username} role=${role}` });
 
     // Id-nya dipulangkan supaya Pusat Akses bisa langsung membuka berkas orang yang
     // baru dibuat — memberi akses adalah langkah berikutnya yang hampir selalu
     // dikerjakan, dan menyuruh orang mencarinya lagi di daftar adalah pintu kedua yang
     // tidak perlu. Dibaca ulang, bukan dari `insertId`: baris INSERT-nya dibungkus
     // `withTransaction` yang memulangkan larik, bukan header hasil.
-    const baru = await queryOne<{ id: number }>(sql`SELECT id FROM users WHERE username = ${username} LIMIT 1`);
-
-    return NextResponse.json({ ok: true, message: `Akun ${username} dibuat & langsung aktif.`, data: { id: baru?.id ?? 0 } });
+    return NextResponse.json({ ok: true, message: `Akun ${username} dibuat & langsung aktif.`, data: { id: baruUntukJejak?.id ?? 0 } });
 
   } catch (error) {
     console.error('[Admin Users POST Error]', error);
@@ -187,7 +185,10 @@ export async function PATCH(req: NextRequest) {
         await tx`UPDATE users SET status = 'NONAKTIF', updated_at = NOW() WHERE id = ${id}`;
         await tx`UPDATE user_sessions SET invalidated_at = NOW() WHERE user_id = ${id} AND invalidated_at IS NULL`;
       });
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Nonaktifkan user id=${id} [sesi aktif dicabut]` });
+      // P8: `userId` PELAKU, `targetUserId` SASARAN. Tanpa yang kedua, "akses Sari
+      // pernah diubah siapa" cuma bisa dicari lewat `detail LIKE '%id=12%'` — yang ikut
+      // cocok dengan id=120, id=123, id=127 (T-15).
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, targetUserId: id, detail: `Nonaktifkan user id=${id} [sesi aktif dicabut]` });
       return NextResponse.json({ ok: true, message: 'User dinonaktifkan. Sesi yang sedang berjalan ikut dihentikan.' });
     }
 
@@ -216,7 +217,7 @@ export async function PATCH(req: NextRequest) {
         }
         throw e;
       }
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Aktifkan user id=${id} (role ${targetCurrentRole})` });
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, targetUserId: id, detail: `Aktifkan user id=${id} (role ${targetCurrentRole})` });
       return NextResponse.json({ ok: true, message: 'User diaktifkan.' });
     }
 
@@ -260,7 +261,9 @@ export async function PATCH(req: NextRequest) {
         }
         throw e;
       }
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Ubah role user id=${id} (${targetCurrentRole} → ${role})${probationWasActive ? ' [probation dibatalkan]' : ''}${izinDihapus ? ` [${izinDihapus} perkecualian akses menu dihapus]` : ''}` });
+      // Jenisnya ROLE_CHANGE, bukan USER_UPDATE (C6): "siapa mengubah peran siapa bulan
+      // lalu" harus bisa disaring, bukan dibaca satu per satu dari kolom `detail`.
+      await writeAuditLog({ req, eventType: 'ROLE_CHANGE', userId: session.userId, username: session.username, targetUserId: id, detail: `user id=${id}: ${targetCurrentRole} → ${role}${probationWasActive ? ' [probation dibatalkan]' : ''}${izinDihapus ? ` [${izinDihapus} perkecualian menu dihapus]` : ''} · alasan: ${data.alasan}` });
       return NextResponse.json({
         ok: true,
         message: `Role diubah ke ${role}.`
@@ -269,29 +272,11 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    if (data.action === 'set-app-access') {
-      const { app_access: apps } = data;
-      if (targetCurrentRole === 'SUPER_ADMIN') {
-        return NextResponse.json({ ok: false, message: 'Akses SUPER_ADMIN tidak dapat dibatasi.' }, { status: 403 });
-      }
-      // Modul yang grant-nya dicabut ikut membawa perkecualian menunya. Kalau
-      // ditinggal, barisnya jadi yatim — tidak berbahaya (pintu modulnya menutup),
-      // tapi hidup kembali tanpa ada yang ingat kalau grant-nya diberikan lagi nanti.
-      let izinDihapus = 0;
-      await withTransaction(async ({ tx }) => {
-        if (apps === null || apps.length === 0) {
-          await tx`UPDATE users SET app_access = NULL, updated_at = NOW() WHERE id = ${id}`;
-        } else {
-          await tx`UPDATE users SET app_access = ${JSON.stringify(apps)}, updated_at = NOW() WHERE id = ${id}`;
-          const punya = new Set<string>(apps);
-          for (const app of MENU_APP_KEYS) {
-            if (!punya.has(app)) izinDihapus += await hapusIzinOrang(tx, id, app);
-          }
-        }
-      });
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Set app_access user id=${id}: ${JSON.stringify(apps)}${izinDihapus ? ` [${izinDihapus} perkecualian akses menu dihapus]` : ''}` });
-      return NextResponse.json({ ok: true, message: 'Akses aplikasi berhasil diperbarui.' });
-    }
+    // Cabang `set-app-access` DIBUANG di Tahap 7. Layarnya (tab User Management) sudah
+    // dimatikan Tahap 5, jadi sejak itu ia jalur tulis tanpa satu pun pintu — dan yang
+    // lebih menentukan: ia memberi & mencabut akses TANPA melewati kewajiban alasan
+    // yang dipasang P9. Pintu kedua yang melewati aturan barunya membuat aturan itu
+    // jadi hiasan. Sekarang satu jalur: `PUT /api/admin/pusat-akses`.
 
     if (data.action === 'putus-sesi') {
       // Statusnya TIDAK disentuh: memutus sesi dan menonaktifkan akun dua maksud yang
@@ -302,7 +287,7 @@ export async function PATCH(req: NextRequest) {
         UPDATE user_sessions SET invalidated_at = NOW()
         WHERE user_id = ${id} AND invalidated_at IS NULL
       `);
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Putus ${res.affectedRows} sesi aktif user id=${id}` });
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, targetUserId: id, detail: `Putus ${res.affectedRows} sesi aktif user id=${id}` });
       return NextResponse.json({ ok: true, message: res.affectedRows ? `${res.affectedRows} sesi dihentikan.` : 'Tidak ada sesi aktif.' });
     }
 
@@ -311,7 +296,7 @@ export async function PATCH(req: NextRequest) {
       const hash = await hashPassword(data.password);
       await sql`UPDATE users SET password_hash = ${hash}, updated_at = NOW() WHERE id = ${id}`;
       await sql`UPDATE user_sessions SET invalidated_at = NOW() WHERE user_id = ${id} AND invalidated_at IS NULL`;
-      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, detail: `Reset password user id=${id}` });
+      await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, targetUserId: id, detail: `Reset password user id=${id}` });
       return NextResponse.json({ ok: true, message: 'Password berhasil direset. Semua sesi user dihapus.' });
     }
 
@@ -350,7 +335,7 @@ export async function DELETE(req: NextRequest) {
     // Invalidate semua sesi aktif user terlebih dahulu
     await sql`UPDATE user_sessions SET invalidated_at = NOW() WHERE user_id = ${id} AND invalidated_at IS NULL`;
     await sql`DELETE FROM users WHERE id = ${id}`;
-    await writeAuditLog({ req, eventType: 'USER_DELETE', userId: session.userId, username: session.username, detail: `Hapus user ${t.username as string} (id=${id})` });
+    await writeAuditLog({ req, eventType: 'USER_DELETE', userId: session.userId, username: session.username, targetUserId: id, detail: `Hapus user ${t.username as string} (id=${id})` });
 
     return NextResponse.json({ ok: true, message: `Akun ${t.username as string} berhasil dihapus. Slot kuota role dibebaskan.` });
 

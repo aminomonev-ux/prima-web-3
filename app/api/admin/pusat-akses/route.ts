@@ -16,10 +16,13 @@ import { writeAuditLog } from '@/lib/security/auditlog'
 import { ROLE_LABELS } from '@/lib/constants'
 import { QuotaFullError } from '@/lib/security/promotion'
 import { IzinBerubahError } from '@/lib/data/menu-access'
-import { DaftarPaketSchema, PaketAksesSchema, PusatAksesSimpanSchema } from '@/lib/data/admin-schemas'
+import {
+  DaftarPaketSchema, PaketAksesSchema, PusatAksesSimpanSchema, PusatAksesHapusSchema,
+} from '@/lib/data/admin-schemas'
 import { z } from 'zod'
 import {
-  berkasOrang, hitungJejakOrang, simpanBerkasOrang, PeranBerubahError,
+  berkasOrang, hitungJejakOrang, simpanBerkasOrang, garisWaktuOrang,
+  AlasanWajibError, PeranBerubahError, BULAN_GARIS_WAKTU,
 } from '@/lib/admin/pusat-akses'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +72,17 @@ export async function GET(req: NextRequest) {
       if (!userId) return tolak('userId tidak valid', 400)
       if (p.get('jejak')) {
         return NextResponse.json({ ok: true, data: await hitungJejakOrang(userId) })
+      }
+      if (p.get('garisWaktu')) {
+        // `bulan` ikut dipulangkan, bukan cuma barisnya: `audit_log` dipangkas cron
+        // retensi 12 bulan, jadi garis waktunya PUNYA UJUNG — dan layar yang tidak
+        // mengatakannya membiarkan orang menyimpulkan "tidak ada catatan" dari
+        // "catatannya sudah dibuang" (§12 P8).
+        return NextResponse.json({
+          ok: true,
+          data: await garisWaktuOrang(userId),
+          bulan: BULAN_GARIS_WAKTU,
+        })
       }
       const berkas = await berkasOrang(userId)
       if (!berkas) return tolak('User tidak ditemukan.', 404)
@@ -180,6 +194,7 @@ export async function PUT(req: NextRequest) {
       appAccess: b.app_access,
       menu: b.menu,
       versi: b.versi,
+      alasan: b.alasan,
       olehUserId: session.userId,
     })
 
@@ -187,24 +202,30 @@ export async function PUT(req: NextRequest) {
     // terpisah supaya penyaring jenis di Jejak Audit benar-benar menyaring; satu baris
     // gabungan akan memaksa auditor kembali membaca kolom `detail`.
     const asal = b.asal_paket ? ` [paket ${b.asal_paket.nama}, ${b.asal_paket.diubah} hal diubah]` : ''
-    const jejak = { req, userId: session.userId, username: session.username } as const
+    // P9 — alasannya ikut ke tiap baris yang mencatat perubahan wewenang, bukan cuma ke
+    // satu baris ringkasan: yang membaca jejak audit menyaring per jenis peristiwa, dan
+    // alasan yang cuma menempel di satu jenis hilang begitu penyaringnya digeser.
+    const sebab = b.alasan ? ` · alasan: ${b.alasan}` : ''
+    // P8 — `targetUserId` menjawab "kepada siapa". Tanpa ia, satu-satunya cara mencari
+    // riwayat seseorang adalah `detail LIKE '%id=12%'`, yang ikut cocok dengan id=120.
+    const jejak = { req, userId: session.userId, username: session.username, targetUserId: b.user_id } as const
     if (hasil.peranBerubah) {
       await writeAuditLog({
         ...jejak, eventType: 'ROLE_CHANGE',
         detail: `user id=${b.user_id}: ${hasil.peranBerubah.dari} → ${hasil.peranBerubah.ke}`
-          + (hasil.izinDihapus ? ` [${hasil.izinDihapus} perkecualian menu dihapus]` : ''),
+          + (hasil.izinDihapus ? ` [${hasil.izinDihapus} perkecualian menu dihapus]` : '') + sebab,
       })
     }
     if (hasil.grantDitambah.length) {
       await writeAuditLog({
         ...jejak, eventType: 'ACCESS_GRANT',
-        detail: `user id=${b.user_id}: +${hasil.grantDitambah.join(', ')}${asal}`,
+        detail: `user id=${b.user_id}: +${hasil.grantDitambah.join(', ')}${asal}${sebab}`,
       })
     }
     if (hasil.grantDicabut.length) {
       await writeAuditLog({
         ...jejak, eventType: 'ACCESS_REVOKE',
-        detail: `user id=${b.user_id}: -${hasil.grantDicabut.join(', ')}`,
+        detail: `user id=${b.user_id}: -${hasil.grantDicabut.join(', ')}${sebab}`,
       })
     }
     if (hasil.modulMenuDitulis.length) {
@@ -216,6 +237,7 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ ok: true, data: hasil })
   } catch (e) {
+    if (e instanceof AlasanWajibError) return tolak(e.message, 400, { code: 'ALASAN_WAJIB' })
     if (e instanceof PeranBerubahError) return tolak(e.message, 409, { code: 'PERAN_BERUBAH' })
     if (e instanceof IzinBerubahError) {
       return tolak('Pengaturan menu orang ini baru saja diubah orang lain. Muat ulang dulu.', 409, { code: 'BERUBAH' })
@@ -259,6 +281,10 @@ export async function DELETE(req: NextRequest) {
     if (id === session.userId) return tolak('Tidak dapat menghapus akun sendiri.', 403)
 
     if (mode === 'arsip') {
+      // Mengarsipkan TIDAK ditanya alasannya (§12 P9): ia aksi rutin hari seseorang
+      // berhenti atau pindah, dan pertanyaan yang muncul pada aksi harian melatih orang
+      // mengetik "-" — lalu kebiasaan itu terbawa ke Hapus permanen, satu-satunya yang
+      // benar-benar tidak bisa ditarik balik.
       if (t.deleted_at) return tolak('Akun ini sudah diarsipkan.', 409)
       // Satu transaksi: "sudah diarsipkan tapi sesinya masih hidup" adalah keadaan
       // setengah jalan yang justru mau dihindari (pola A3).
@@ -268,9 +294,18 @@ export async function DELETE(req: NextRequest) {
       })
       await writeAuditLog({
         req, eventType: 'USER_ARCHIVE', userId: session.userId, username: session.username,
+        targetUserId: id,
         detail: `Arsipkan ${t.username} (id=${id}) — sesi dicabut, jejak dipertahankan`,
       })
       return NextResponse.json({ ok: true, message: `Akun ${t.username} diarsipkan. Jejaknya tetap utuh; sesinya dihentikan.` })
+    }
+
+    // Hapus permanen WAJIB menyebut alasannya. Ini satu-satunya aksi di layar ini yang
+    // tidak bisa ditarik balik, dan enam bulan kemudian "kenapa akun itu dibuang" cuma
+    // bisa dijawab kalau jawabannya ditulis sekarang.
+    const badan = PusatAksesHapusSchema.safeParse(await req.json().catch(() => null))
+    if (!badan.success) {
+      return tolak(badan.error.issues[0]?.message ?? 'Sebutkan alasannya.', 400, { code: 'ALASAN_WAJIB' })
     }
 
     // Angkanya dihitung SEBELUM menghapus dan ikut ke jejak audit: sesudah barisnya
@@ -282,7 +317,11 @@ export async function DELETE(req: NextRequest) {
     })
     await writeAuditLog({
       req, eventType: 'USER_DELETE', userId: session.userId, username: session.username,
-      detail: `Hapus permanen ${t.username} (id=${id}) — ${jejak.totalKehilangan} baris kehilangan pemilik, ${jejak.totalTerhapus} baris ikut terhapus`,
+      // `targetUserId` sengaja TETAP diisi walau barisnya baru saja dihapus: id yatim di
+      // sini lebih berguna daripada NULL yang rapi — ia yang menyambungkan baris ini
+      // dengan seluruh riwayat orang itu saat ada yang menelusurinya belakangan.
+      targetUserId: id,
+      detail: `Hapus permanen ${t.username} (id=${id}) — ${jejak.totalKehilangan} baris kehilangan pemilik, ${jejak.totalTerhapus} baris ikut terhapus · alasan: ${badan.data.alasan}`,
     })
     return NextResponse.json({
       ok: true,

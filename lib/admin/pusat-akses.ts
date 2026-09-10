@@ -22,7 +22,7 @@
 // sama dengan pagar sungguhannya. Yang ditambahkan cuma kalimat sebabnya. Layar yang
 // menghitung aksesnya sendiri akan berbeda pendapat dengan pagarnya cepat atau lambat.
 
-import { sql, queryOne, withTransaction, bulkInsert, type Penanya } from '@/lib/data/db'
+import { sql, sqlInt, queryOne, withTransaction, bulkInsert, type Penanya } from '@/lib/data/db'
 import { getRoleQuota } from '@/lib/constants'
 import { MENU_APP_KEYS, aplikasiMenu, izinMenuRegistry, type Izin } from '@/lib/registry/menu-apps'
 import {
@@ -193,6 +193,24 @@ export async function hitungJejakOrang(userId: number): Promise<Jejak> {
 
 // ─── Simpan (satu transaksi) ─────────────────────────────────────────────────
 
+/**
+ * P9 — perubahan wewenang tanpa alasan ditolak, dan yang memutuskan "berubah atau tidak"
+ * SERVER, dari baris yang sudah dikunci `FOR UPDATE`.
+ *
+ * Bukan klien: klien tidak tahu keadaan tersimpan yang sebenarnya (grant lama tidak
+ * pernah dikirim balik), jadi "apakah ini perubahan" yang dihitung di sana adalah tebakan
+ * yang bisa meleset tepat pada kasus yang paling perlu dicatat — dua admin menyunting
+ * orang yang sama.
+ *
+ * Dilempar DI DALAM transaksi, jadi apa pun yang sudah ditulis ikut dibatalkan.
+ */
+export class AlasanWajibError extends Error {
+  constructor(public readonly yangBerubah: string) {
+    super(`Sebutkan alasannya — ${yangBerubah} akan berubah.`)
+    this.name = 'AlasanWajibError'
+  }
+}
+
 export class PeranBerubahError extends Error {
   constructor() {
     super('Peran orang ini sudah diubah dari layar lain. Muat ulang dulu.')
@@ -209,6 +227,8 @@ export type PermintaanSimpan = {
   menu: Record<string, Record<string, Izin>>
   /** Sidik jari per modul dari GET — pemeriksaan bentrok dua admin. */
   versi: Record<string, string>
+  /** P9 — wajib kalau peran atau pintu modulnya bergeser; diperiksa di dalam transaksi. */
+  alasan?: string
   /** Peran yang dilihat layar saat dimuat. Beda = layar sudah basi. */
   roleAwal: string
   olehUserId: number
@@ -252,6 +272,17 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
     const peranBaru = p.role
     const gantiPeran = peranBaru !== target.role
 
+    // P9 — diperiksa SEBELUM satu baris pun ditulis. Menyimpan tanpa menggeser wewenang
+    // (mis. cuma satu izin menu) tidak ditanya alasannya: pertanyaan yang muncul pada
+    // aksi harian melatih orang mengetik "-" lalu terbawa ke aksi yang benar-benar
+    // butuh dijelaskan.
+    const grantCalon = grantYangBerarti(peranBaru, p.appAccess)
+    const grantBergeser = [...grantCalon].sort().join(',') !== [...appAccessLama].sort().join(',')
+    if ((gantiPeran || grantBergeser) && !p.alasan) {
+      throw new AlasanWajibError(gantiPeran && grantBergeser ? 'peran dan pintu modul'
+        : gantiPeran ? 'peran' : 'pintu modul')
+    }
+
     // Kunci diambil lebih dulu, semuanya, menurut urutan key menaik.
     for (const appKey of [...MENU_APP_KEYS].sort()) {
       await acquireBludLock(tx, 'menu_access', `${appKey}:user:${p.userId}`)
@@ -272,7 +303,7 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
       hasil.peranBerubah = { dari: target.role, ke: peranBaru }
     }
 
-    const grantBaru = grantYangBerarti(peranBaru, p.appAccess)
+    const grantBaru = grantCalon
     hasil.grantDitambah = grantBaru.filter((k) => !appAccessLama.includes(k))
     hasil.grantDicabut = appAccessLama.filter((k) => !grantBaru.includes(k))
     await tx`
@@ -345,4 +376,46 @@ async function tulisIzinOrangTx(
     )
   }
   return true
+}
+
+// ─── Garis waktu satu orang (P8 lapis 1) ─────────────────────────────────────
+
+/**
+ * Umur garis waktunya, dalam bulan. **Bukan pilihan tampilan** — ini kenyataan:
+ * `app/api/cron/purge-retention` membuang `audit_log` yang lebih tua dari 12 bulan.
+ *
+ * Angkanya tinggal di sini supaya layar bisa MENGATAKANNYA. Garis waktu yang berhenti
+ * tanpa keterangan membuat orang menyimpulkan "tidak ada catatan" dari "catatannya sudah
+ * dibuang" — dan itu kesimpulan yang salah pada pertanyaan yang paling penting.
+ */
+export const BULAN_GARIS_WAKTU = 12
+
+export type PeristiwaOrang = {
+  id: number
+  jenis: string
+  detail: string | null
+  pelaku: string | null
+  waktu: string
+}
+
+/**
+ * Riwayat wewenang SATU orang, terbaru dulu.
+ *
+ * Disaring `target_user_id`, bukan `detail LIKE '%id=12%'` — pencarian teks itu ikut
+ * cocok dengan id=120, id=123, id=127 (T-15), dan ia kelihatan berhasil sambil
+ * diam-diam salah.
+ *
+ * `id` di-`CAST … AS UNSIGNED` karena `audit_log.id` BIGINT: mysql2 memulangkannya
+ * sebagai BigInt, yang tidak bisa di-JSON-kan dan merobohkan seluruh balasan.
+ */
+export async function garisWaktuOrang(userId: number, batas = 60): Promise<PeristiwaOrang[]> {
+  const rows = await sql`
+    SELECT CAST(a.id AS UNSIGNED) AS id, a.event_type AS jenis, a.detail,
+           a.username AS pelaku, a.created_at AS waktu
+    FROM audit_log a
+    WHERE a.target_user_id = ${userId}
+    ORDER BY a.created_at DESC, a.id DESC
+    LIMIT ${sqlInt(batas)}
+  ` as PeristiwaOrang[]
+  return rows
 }

@@ -211,16 +211,83 @@ export type AuditEventType =
   | 'PROMOTION_RECOVERY_USED'         // CLI scripts/promotion-recovery.js success (single-use break-glass)
   | 'PROMOTION_RECOVERY_DENIED';      // CLI recovery dengan secret salah / used / target invalid
 
+/**
+ * Sudah ketahuan bahwa basis data ini belum menjalankan
+ * `migration-audit-target-user.sql`? Ditandai SEKALI, lalu jalur cadangan dipakai
+ * langsung — kalau tidak, tiap penulisan audit membayar satu percobaan gagal.
+ *
+ * Kenapa ada jalur cadangan sama sekali. `writeAuditLog` sengaja **gagal diam-diam**
+ * (try/catch, dan itu memang aturannya — audit tidak boleh menjatuhkan aksi yang
+ * dijejaknya). Konsekuensinya: pada basis data yang kodenya sudah di-deploy tapi
+ * migrasinya belum dijalankan, SELURUH jejak audit berhenti tertulis tanpa satu gejala
+ * pun. Bukan satu kolom yang hilang — semuanya.
+ *
+ * Jadi urutannya dibalik: kolom baru yang dikorbankan, bukan seluruh barisnya. Garis
+ * waktu per orang kosong untuk periode itu, dan konsolnya menyebut nama berkas migrasi
+ * yang harus dijalankan. Begitu migrasinya jalan, jalur ini tidak pernah dipakai lagi.
+ *
+ * Ini BUKAN izin untuk melewatkan migrasinya — §17.3 aturan 4 tetap berlaku: migrasi
+ * dijalankan sebagai langkah tersendiri sebelum kodenya di-deploy.
+ */
+let kolomTargetHilang = false;
+
+/** ER_BAD_FIELD_ERROR (1054) — satu-satunya galat yang boleh memicu jalur cadangan. */
+function kolomBelumAda(e: unknown): boolean {
+  return typeof e === 'object' && e !== null
+    && (e as { code?: string; errno?: number }).code === 'ER_BAD_FIELD_ERROR'
+    && String((e as { message?: string }).message ?? '').includes('target_user_id');
+}
+
 export async function writeAuditLog(params: {
   req:        NextRequest;
   eventType:  AuditEventType;
+  /** PELAKU. */
   userId?:    number;
   username?:  string;
+  /**
+   * SASARAN — siapa yang dikenai (T-15, Tahap 7 / P8 lapis 1).
+   *
+   * `userId` menjawab "siapa yang melakukan"; kolom ini menjawab "kepada siapa". Tanpa
+   * ia, pertanyaan yang paling sering ditanyakan saat ada masalah — "akses Sari pernah
+   * diubah siapa dan kapan?" — cuma bisa dicari lewat `detail LIKE '%id=12%'`, yang
+   * ikut cocok dengan id=120, id=123, id=127.
+   *
+   * Dibiarkan kosong untuk peristiwa yang memang tidak mengenai orang tertentu; itu
+   * jawaban yang benar, bukan data yang hilang.
+   */
+  targetUserId?: number;
   detail?:    string;
 }): Promise<void> {
   try {
     const ip         = getClientIp(params.req);
     const userAgent  = (params.req.headers.get('user-agent') ?? '').slice(0, 250);
+    if (!kolomTargetHilang) {
+      try {
+        await sql`
+          INSERT INTO audit_log (user_id, username, event_type, ip_address, user_agent, detail, target_user_id)
+          VALUES (
+            ${params.userId  ?? null},
+            ${params.username ?? null},
+            ${params.eventType},
+            ${ip},
+            ${userAgent},
+            ${params.detail ?? null},
+            ${params.targetUserId ?? null}
+          )
+        `;
+        return;
+      } catch (e) {
+        if (!kolomBelumAda(e)) throw e;
+        kolomTargetHilang = true;
+        console.error(
+          '[writeAuditLog] Kolom `audit_log.target_user_id` belum ada. '
+          + 'Jalankan docs/migrations/migration-audit-target-user.sql di basis data ini. '
+          + 'Sementara itu jejak audit tetap ditulis TANPA kolom sasaran — '
+          + 'garis waktu per orang akan kosong untuk periode ini.',
+        );
+      }
+    }
+    // Jalur cadangan: bentuk INSERT sebelum Tahap 7.
     await sql`
       INSERT INTO audit_log (user_id, username, event_type, ip_address, user_agent, detail)
       VALUES (
