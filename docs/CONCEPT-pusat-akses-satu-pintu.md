@@ -2691,7 +2691,7 @@ karena itu tetap tampil untuk SUPER_ADMIN, hanya kalimatnya yang berbeda.
 tanpa dilemahkan: yang dijaga tetap "keadaannya dibaca dari DB, dan hanya yang
 benar-benar mati yang boleh menampilkan halaman itu".
 
-**Regresi:** `npx tsx scripts/test-tahap-9.mts` (80 pemeriksaan), **24 uji mutasi
+**Regresi:** `npx tsx scripts/test-tahap-9.mts` (81 pemeriksaan), **24 uji mutasi
 tertangkap** — 24/24 pada percobaan pertama, tanpa satu asersi pun perlu diperbaiki;
 pertama kali dalam rangkaian tahap ini.
 
@@ -2701,12 +2701,33 @@ menyebut BLUD (jatuh ke halaman umum "Modul PRIMA"); dengan nilai yang sama diub
 `maintenance`, halaman yang sama menyebut **BLUD**. Dua arah, jadi lulusnya bukan karena
 halaman itu selalu jatuh ke teks umum. Sakelar dikembalikan ke `online`.
 
-**⚠ BELUM diverifikasi di peramban** (sesi login kedaluwarsa di tengah pengerjaan, dan
-saya tidak mengetik kata sandi ke formulir): layar Sakelar tiga keadaan di kedua tema &
-375px · lencana BEKU di kartu `/menu` · spanduk di dalam BLUD/PK · penolakan
-`MODUL_BACA_SAJA` yang dilihat **akun non-SUPER_ADMIN** (SUPER_ADMIN menembus, jadi
-pembuktiannya memang menuntut akun lain). Semuanya berdiri di atas suite + uji mutasi,
-dan itu bukan pengganti melihatnya.
+**Verifikasi peramban (susulan, sesi login pemilik aplikasi).** Membekukan BLUD lewat
+tombol BEKU di layar Sakelar menulis tepat satu baris audit — `BLUD: app_status_blud =
+readonly` — lalu: kartu `/menu` berlencana **BEKU** biru, **tidak** diabukan, tombol BUKA
+tetap hidup; `/blud` terbuka penuh dengan spanduk beku di atasnya, kalimat versi
+SUPER_ADMIN ("kecuali untuk Anda"); `/perjanjian-kinerja` sama; kedua tema terbaca; di
+375px spanduknya membungkus rapi.
+
+**CACAT YANG DITEMUKAN SAAT DIJALANKAN, bukan dari kode.** Spanduk peringatan di layar
+Sakelar berbunyi *"2 sakelar **mati** tanpa keterangan: Dashboard, BLUD — orang yang
+menabraknya cuma melihat 'sedang dipelihara'"*. Menghitung modul beku di situ **benar**
+(modul beku tanpa kalimat justru lebih membingungkan: layarnya terbuka dan tampak
+normal), yang salah **kalimatnya** — ia menjanjikan halaman pemeliharaan yang justru
+sengaja tidak akan muncul. Diperbaiki jadi "mati atau beku", dan janji "sedang
+dipelihara" diganti dengan apa yang benar-benar ditemui: pintu tertutup **atau** tombol
+simpan yang mati. Ini tempat KELIMA yang menyamakan beku dengan mati; empat yang lain
+ketahuan dari kode, yang satu ini tidak.
+
+**Bonus temuan, di luar lingkup tahap ini dan sengaja TIDAK diperbaiki:** halaman
+`/blud` meluber menyamping di 375px (`scrollWidth` 623 vs 375). Diukur dua kali —
+**dengan dan tanpa** spanduk beku — dan angkanya sama, jadi penyebabnya bilah kepala
+shell BLUD, bukan Tahap 9. Elemen yang menonjol: `theme-toggle-pill` dan tombol di
+sebelahnya.
+
+**⚠ SATU hal tetap belum diverifikasi:** penolakan `MODUL_BACA_SAJA` sebagaimana dilihat
+**akun non-SUPER_ADMIN**. SUPER_ADMIN menembus sakelar — sengaja, dan ditulis di layar —
+jadi pembuktiannya memang menuntut sesi akun lain. Yang menopangnya sekarang suite + 24
+uji mutasi, dan itu bukan pengganti melihatnya.
 
 ---
 
