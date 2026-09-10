@@ -1,7 +1,7 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–7 SELESAI** (1–6 pada 2026-09-09; Tahap 7 dengan migrasi & verifikasi
-> peramban pada 2026-09-10). C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
+> Status: **Tahap 1–8 SELESAI** (1–6 pada 2026-09-09; Tahap 7 & 8 dengan migrasi &
+> verifikasi peramban pada 2026-09-10). C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -696,9 +696,10 @@ Dikerjakan lebih dulu karena tidak bergantung registry dan akibatnya paling lang
 
 ### Fase D — Usulan Kebutuhan
 - [x] **D1** (T-8) — dropdown peran memakai komponen bersama (§5.4). *(Tahap 6)*
-- [ ] **D2** — spanduk penjelas di panel: apa yang bisa & tidak bisa dilakukan di sini,
+- [x] **D2** — spanduk penjelas di panel: apa yang bisa & tidak bisa dilakukan di sini,
       dengan tautan ke Pusat Akses. Kalimatnya menyebut **tombol yang memang ada di layar
-      tujuan** (L79d).
+      tujuan** (L79d). *(Tahap 6 — kotaknya baru dicentang 2026-09-10; spanduknya sudah
+      terpasang sejak tahap itu, lihat `KelolaUserPanel.tsx`)*
 - **Yang TIDAK dikerjakan**: izin per-panel. Alasan pembatalan 2026-08-04 masih berlaku.
 
 ### Fase E — modul lain, kalau memang dibutuhkan
@@ -940,6 +941,8 @@ tahan terlewat — cron memeriksa **"yang sudah lewat"**, bukan "yang jatuh temp
 
 ### P3 · Tinjauan Akses Berkala — memenuhi aturan yang sudah ditulis sendiri
 
+> ✅ **SELESAI 2026-09-10 (Tahap 8).** Hasil & keputusan yang bergeser: §17.2 Tahap 8.
+
 **Masalah.** CLAUDE.md (AUTHZ-02/V5) menyatakan akses harus **direview berkala**. Tidak
 ada alatnya, tidak ada catatannya, dan karena itu tidak pernah terjadi. Kalau SPI atau
 auditor bertanya "kapan terakhir ditinjau", tidak ada jawaban.
@@ -1110,6 +1113,8 @@ kenapa.
 Ini kemampuan dengan rasio manfaat-per-risiko tertinggi di seluruh dokumen.
 
 ### P11 · Ekspor akses untuk lampiran audit
+
+> ✅ **SELESAI 2026-09-10 (Tahap 8).** Hasil: §17.2 Tahap 8.
 
 Satu berkas Excel: akun · peran · status · akses efektif per modul · sumbernya (peran /
 grant / berjangka) · tanggal tinjauan terakhir. Reuse pembangkit yang sudah ada, menerima
@@ -1595,7 +1600,7 @@ menimpa).
 | **5** | Pusat Akses | Fase C + R4 + P1 | 0 | **Satu pintu berdiri** | Ya, tapi ini intinya |
 | **6** | Usulan & penutup revamp | Fase D + **C4** + R3 sisa + R5 | 0 | Ubah peran di Usulan sepagar Admin Panel; tab Peran menyebut pintu & kuota; baseline gate E turun | Ya |
 | **7** | Jejak & alasan | P8 lapis 1 + P9 | 1 | Garis waktu per orang; tiap perubahan wewenang punya alasan | Ya |
-| **8** | Tinjauan berkala | P3 + P11 | 1 | Kewajiban AUTHZ-02 punya alat & bukti | Ya |
+| **8** ✅ | Tinjauan berkala | P3 + P11 | 1 | Kewajiban AUTHZ-02 punya alat & bukti | Ya |
 | **9** | Mode baca-saja | P5 | 0 | Modul bisa dibekukan saat tutup buku | Ya |
 | **10** | Akses berjangka | P2 | 1 | Akses pinjaman kembali sendiri | Ya |
 | **11** | Permintaan mandiri | P4 | 1 | Antrean WhatsApp pindah ke aplikasi | Ya |
@@ -2366,7 +2371,7 @@ tidak pernah dikerjakan.
 | Tahap | Isi | Migrasi | Catatan yang menentukan |
 |---|---|---|---|
 | **7** ✅ | P8 lapis 1 (`audit_log.target_user_id` + indeks) + P9 (alasan wajib) | 1 kolom | Garis waktu berumur **12 bulan** (cron retensi) — dan itu wajib ditulis di layar, bukan dibiarkan orang mengira riwayatnya lengkap. **Selesai & terverifikasi 2026-09-10** |
-| **8** | P3 Tinjauan (2 kolom `users`) + P11 Ekspor | 2 kolom | Pengekspor **menerima baris yang sudah dihitung layar**, tidak menghitung ulang |
+| **8** ✅ | P3 Tinjauan (2 kolom `users`) + P11 Ekspor | 2 kolom | Pengekspor **menerima baris yang sudah dihitung layar**, tidak menghitung ulang. **Selesai & terverifikasi 2026-09-10** |
 | **9** | P5 Mode baca-saja | 0 | Kerjakan **BLUD + PK** (menjepit `izinMenuRegistry` ke `LIHAT` — hampir gratis) **dan** empat modul pabrik `buatGuardModul`. Usulan/E-Anggaran/Dashboard **disebut terus terang belum dapat** |
 | **10** | P2 Akses berjangka + cron | 1 tabel | Pencabutan otomatis **wajib memanggil fungsi pencabutan yang sama** dengan manual (L69). Cron memeriksa "yang sudah lewat", bukan "yang jatuh tempo hari ini" — server kantor dimatikan tiap malam |
 | **11** | P4 Permintaan mandiri | 1 tabel | Tabel sendiri, **bukan** menumpang tabel promosi. Tanpa cooldown/probation/kata sandi ulang (aturan 11.4) |
@@ -2508,6 +2513,104 @@ tertangkap**. Tiga awalnya **LOLOS**, dan ketiganya asersi saya sendiri:
 
 Data uji dikembalikan: `uji.perbendaharaan` kembali PERBENDAHARAAN dengan grant `blud`
 saja, `uji.hapus` memang tidak tersisa (itu yang diuji).
+
+---
+
+#### Tahap 8 — HASIL (selesai & terverifikasi 2026-09-10)
+
+**P3 Tinjauan Akses Berkala + P11 Ekspor.** CLAUDE.md (AUTHZ-02/V5) sudah menyatakan
+akses harus direview berkala sejak audit V5. Tidak ada alatnya, tidak ada catatannya, dan
+karena itu tidak pernah terjadi — dan jawaban atas "kapan terakhir ditinjau" bukan jawaban
+yang buruk, melainkan tidak ada sama sekali. Tahap ini yang mengubahnya jadi ada.
+
+**Migrasi:** `docs/migrations/migration-tinjauan-akses.sql` — dua kolom di `users`
+(`access_reviewed_at`, `access_reviewed_by`) + indeks `idx_users_reviewed`. Dijalankan di
+basis data pengembangan hari ini.
+
+Tiga keputusan yang menentukan bentuknya, dan ketiganya bisa salah dengan cara yang tidak
+kelihatan:
+
+1. **Dua kolom, BUKAN tabel riwayat tinjauan.** Yang dibutuhkan "kapan terakhir", dan
+   sejarahnya toh sudah masuk `audit_log` sejak Tahap 7 lengkap dengan `target_user_id`.
+   Tabel kedua berarti dua sumber kebenaran untuk satu tanggal, dan yang satu pasti mulai
+   berbeda dari yang lain.
+2. **`access_reviewed_by` ber-FK `ON DELETE SET NULL` — kebalikan dari
+   `audit_log.target_user_id` yang sengaja tanpa FK.** Dua-duanya benar karena yang
+   dijaga berlawanan arah: audit menjaga **riwayat** (harus bertahan melewati orang yang
+   dijejaknya), kolom ini menjaga **keadaan sekarang** ("siapa peninjau terakhir") — dan
+   peninjau yang akunnya sudah dihapus lebih jujur ditulis NULL daripada id yang tidak
+   menunjuk siapa-siapa.
+3. **Tanpa nilai awal.** Mengisi kolomnya dengan tanggal migrasi membuat seluruh akun
+   tampak baru ditinjau hari ini — bukti palsu, justru pada kolom yang seluruh gunanya
+   adalah jadi bukti. Setiap akun mulai dari "belum pernah ditinjau", dan itu memang
+   keadaan yang sebenarnya.
+
+**Layar Tinjauan** (`app/(dashboard)/admin/_panels/TabTinjauan.tsx`, SUPER_ADMIN saja):
+matriks **orang × modul**, `✓` = akses yang **diberikan** (yang perlu diputuskan), `·` =
+datang dari peran (berubah sendiri kalau perannya berubah). Penyaring "belum ditinjau {n}
+bulan terakhir" memakai bendera `kedaluwarsa` **dari SQL**, bukan membandingkan tanggal
+dengan jam peramban: penyaring yang meleset satu hari membuat baris yang harus ditinjau
+menghilang tanpa gejala apa pun. Ambang bulannya (`BULAN_TINJAUAN = 6`) ikut dipulangkan
+route dan dipakai layar untuk menjelaskan penyaringnya — dua angka di dua tempat akan
+berbeda pada hari salah satunya disunting; ke SQL ia lewat `sqlInt` (L66, mysql2 menolak
+parameter terikat di dalam `INTERVAL`).
+
+**TIDAK ada jalur pencabutan akses di route ini, dan itu keputusan.** Mencabut akses
+adalah perubahan wewenang: ia butuh alasan (P9), transaksi yang sama dengan pembersihan
+perkecualian menunya (L69), dan pemeriksaan bentrok dua admin — semuanya sudah berdiri di
+`PUT /api/admin/pusat-akses`. Tombol **ATUR** melompat ke sana membawa orangnya. Itu satu
+klik lebih jauh, ditukar dengan aturan yang tidak punya dua salinan (L78/L88).
+
+Menandai "sudah ditinjau" **tidak** diminta alasannya: ia bukan perubahan wewenang, dan
+meminta alasan pada aksi yang diulang 40 kali dalam satu duduk adalah cara tercepat
+membuat kolom alasan berisi "-". Stempelnya `NOW()` MySQL, bukan kiriman klien — tanggal
+tinjauan itu bukti, dan bukti yang tanggalnya ditentukan pihak yang ditinjau bukan bukti.
+Auditnya `USER_UPDATE` + `targetUserId` (bukan jenis baru: yang dicari orang di jejak
+audit adalah PERUBAHAN wewenang).
+
+**P11** menumpang berkas daun yang sama: `tinjauanKeAoa` menerima **baris yang sudah
+dihitung layar** (`tampil`, bukan pembacaan ulang), aturan yang sudah mahal dipelajari di
+rekap E-Anggaran — dan di sini taruhannya lebih besar lagi, berkasnya dilampirkan ke
+auditor.
+
+**Berkas daun, lagi.** `lib/admin/tinjauan-baris.ts` dibaca komponen `'use client'` (Excel
+disusun di peramban) DAN oleh `tinjauan.ts` di sisi server, jadi ia tidak boleh mengimpor
+apa pun yang menyeret `next/headers`/mysql2/`NextResponse` — persis lubang yang
+merobohkan seluruh rute `/admin` di Tahap 5 dengan `tsc` dan ESLint sama-sama lulus.
+Suite-nya menegaskan daftar impor terlarang itu. Aturan aksesnya sendiri **dipinjam** dari
+`barisPintu` (`lib/admin/pintu-akses.ts`), tidak ditulis ulang: layar tinjauan yang
+menghitung aksesnya sendiri akan meninjau sesuatu yang bukan keadaan yang berlaku.
+
+**Dua cacat ditemukan saat dijalankan, bukan dari kode:**
+- Spanduk penjelas di atas tabel berantakan — `.ap-pa-catatan` itu **flex row** (dibuat
+  untuk ikon + satu baris), jadi prosa ber-`<b>` di dalamnya dipecah jadi kolom-kolom
+  terpisah. Ketahuan dari tangkapan layar. Dibungkus satu `<span>`.
+- Menyalin prop `pilih` ke state lewat `useEffect` ditolak
+  `react-hooks/set-state-in-effect` — dan penolakan itu menunjuk jalan yang lebih baik:
+  "siapa yang sedang dibuka" **diangkat ke `admin-client.tsx`** sebagai state terkendali,
+  jadi efeknya hilang berikut salinan faktanya. Tombol ATUR mengisi state yang sama yang
+  dibaca Pusat Akses.
+
+**Regresi:** `npx tsx scripts/test-tahap-8.mts` (45 pemeriksaan), **18 uji mutasi
+tertangkap**. Dua awalnya **LOLOS**, dan dua-duanya asersi saya sendiri — pola yang kini
+sudah menggigit di Tahap 4, 5, 7, dan 8:
+- data ujinya memberi hasil yang **kebetulan sama**: `app_access: 'blud'` melewati
+  penjaga `Array.isArray` tanpa gejala, sebab `new Set('blud')` menghasilkan huruf-huruf
+  yang toh tidak cocok dengan kunci modul mana pun. Diganti **objek** — yang benar-benar
+  tidak iterable, jadi bedanya terlihat.
+- jendela pemeriksaannya dipotong pakai indeks dari teks **mentah** lalu diterapkan pada
+  teks yang sudah dibuang komentarnya (bergeser sejauh panjang komentarnya), **dan** yang
+  dicari `susunBaris(` berkurung sementara menyebut namanya saja sudah cukup untuk
+  memanggilnya. Sekarang: potong dari teks yang sama, dan **nol kemunculan**, bukan nol
+  panggilan.
+
+**Diverifikasi di peramban** (login `superadmin`, kedua tema, 375px): matriks terbaca dan
+kolomnya sejajar dengan lambangnya; menandai satu akun memindahkan penghitung penyaring
+**6 → 5** dan barisnya berganti dari lencana BELUM PERNAH jadi tanggal + nama peninjau;
+ATUR mendarat di Pusat Akses dengan orang yang benar terbuka; Excel turun sebagai
+`Tinjauan-Akses-2026-09-10.xlsx` berisi baris yang sama dengan yang tampil. Di 375px
+halaman **tidak** bergulir menyamping — tabelnya yang bergulir di dalam
+`.ap-table-wrap`.
 
 ---
 
