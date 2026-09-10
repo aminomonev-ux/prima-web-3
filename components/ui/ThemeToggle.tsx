@@ -106,7 +106,9 @@ export default function ThemeToggle({ initialTheme, onThemeChange }: ThemeToggle
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
-        Dark
+        {/* Dibungkus supaya bisa dilepas di layar sempit (globals.css). Yang hilang
+            cuma kata — ikonnya jelas dan `data-tooltip` di atas tetap menyebutkannya. */}
+        <span className="tt-label">Dark</span>
       </button>
 
       {/* Light segment */}
@@ -154,7 +156,7 @@ export default function ThemeToggle({ initialTheme, onThemeChange }: ThemeToggle
           <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
           <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
         </svg>
-        Light
+        <span className="tt-label">Light</span>
       </button>
     </div>
   );

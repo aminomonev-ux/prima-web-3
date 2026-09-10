@@ -3567,3 +3567,58 @@ table tbody td .pg-dari-catatan.minus { color: #FCA5A5 !important; }
 tr.pg-total > td { border-top: 2px solid #0C447C; padding-top: 7px; padding-bottom: 7px; }
 [data-theme="light"] tr.pg-total > td { border-top-color: rgba(0,0,0,.18); }
 [data-theme="light"] tr.pg-total > td:nth-child(1) { color: #0F0F12 !important; }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Bilah kepala modul di layar sempit — BLUD & PK (2026-09-10)
+
+   Diukur pada viewport 375px: /blud butuh 622px, /perjanjian-kinerja 733px, jadi
+   halaman itu sendiri bergulir menyamping — bukan tabelnya, melainkan seluruh
+   halamannya, dan kepala yang `position: sticky` ikut tergeser meninggalkan
+   ruang kosong. `/menu` tidak kena; yang kena dua shell modul yang bilah
+   kepalanya kembar (kelasnya pun kembar: `blud-*` / `pk-*`).
+
+   Aturannya di sini, BUKAN di dua blok <style> masing-masing shell: dua salinan
+   ambang & daftar yang sama pasti mulai berbeda begitu salah satunya disunting
+   (L78). Penandanya sengaja bernama `prima-hdr-*` supaya shell berikutnya cukup
+   memakai nama yang sama tanpa menyalin satu baris CSS pun.
+
+   Yang dilepas selalu bagian yang paling tidak menentukan, dan tak satu pun
+   menghilangkan kemampuan (pola L82d):
+     · kata pada pil tema      → ikon matahari/bulan + `data-tooltip` menahannya
+     · anak judul rumah sakit  → terulang di tiap halaman, tidak menerangkan apa pun
+     · kata "Menu" & "TAHUN"   → ikon dan angkanya yang menentukan
+     · nama & peran di lencana → tetap tertulis DI DALAM dropdown-nya, satu ketukan
+   ───────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .theme-toggle-pill .tt-label { display: none !important; }
+  .theme-toggle-pill button { padding: 5px 8px !important; gap: 0 !important; }
+  .prima-hdr-label { display: none !important; }
+  .prima-hdr-sub { display: none !important; }
+}
+
+/* Judul modul boleh menyusut & terpotong daripada mendorong sisanya keluar layar.
+   `min-width: 0` wajib: bawaan flex-item `auto` membuatnya menolak menyusut di
+   bawah lebar teksnya, dan itu sebab paling sering sebuah bilah kepala meluber. */
+.prima-hdr-brand { min-width: 0; }
+.prima-hdr-brand > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Tombol kecilkan-ribbon: di bawah 768px ribbon-nya SENDIRI sudah disembunyikan
+   (lihat blok mobile di kedua shell), jadi tombol ini di sana tidak mengecilkan
+   apa pun — tombol mati tanpa akibat, dan memakan lebar yang justru kurang. */
+@media (max-width: 768px) {
+  .blud-toggle-ribbon, .pk-toggle-ribbon { display: none !important; }
+}
+
+/* Kedua sisi bilah kepala harus BOLEH menyusut. Sarang flex punya jebakan yang
+   sama dua tingkat: `min-width` bawaan sebuah flex-item adalah `auto`, jadi
+   wadah kiri menolak turun di bawah lebar isinya walau anaknya sudah dipasangi
+   ellipsis — teks di dalamnya tidak pernah dapat giliran memotong diri. */
+.prima-hdr > div { min-width: 0; }
+
+@media (max-width: 480px) {
+  /* Di bawah ini judulnya memang tidak muat, dan memaksanya muat berarti
+     memerasnya jadi dua-tiga huruf ber-elipsis — lebih buruk daripada tidak ada.
+     Lambangnya tetap, dan tiap halaman sudah menuliskan namanya sendiri. */
+  .prima-hdr-brand { display: none !important; }
+  .prima-hdr { padding-left: 12px !important; padding-right: 12px !important; }
+}

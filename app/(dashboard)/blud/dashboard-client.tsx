@@ -308,7 +308,15 @@ export default function DashboardClient(p: Props) {
           background: rgba(239,159,39,.12); border: 1px solid #EF9F27; color: #FAC775;
         }
 
-        .blud-strip { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
+        /* minmax(0, 1fr), bukan 1fr: lantai bawaan sebuah track grid adalah
+           min-content, jadi dua belas nama bulan menolak menyusut dan mendorong
+           SELURUH HALAMAN meluber menyamping — bukan stripnya saja. Di bawah 520px
+           dipecah jadi dua baris enam supaya semua bulan tetap terbaca; menggulung
+           strip status menyamping berarti separuh tahunnya harus dicari dulu. */
+        .blud-strip { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+        @media (max-width: 520px) {
+          .blud-strip { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+        }
         .blud-strip-bulan {
           text-align: center; padding: 7px 0; border-radius: 6px; font-size: 10.5px; font-weight: 700;
           background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #85B7EB;

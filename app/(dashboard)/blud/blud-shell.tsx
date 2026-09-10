@@ -196,7 +196,7 @@ export default function BludShell({ username, role, izin, themePreference, beku,
       display: 'flex', flexDirection: 'column',
     }}>
       {/* ── TOP BRAND STRIP ── */}
-      <div style={{
+      <div className="prima-hdr" style={{
         position: 'sticky', top: 0, zIndex: 110,
         background: isLight ? 'rgba(250,250,250,0.96)' : 'rgba(4,44,83,.94)',
         backdropFilter: 'blur(16px)',
@@ -223,7 +223,7 @@ export default function BludShell({ username, role, izin, themePreference, beku,
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
             boxShadow: isLight ? '0 4px 12px rgba(139,92,246,.25)' : '0 4px 12px rgba(239,159,39,.2)',
           }}><Landmark size={18} color={isLight ? '#FFFFFF' : '#020F1C'} strokeWidth={2.2} /></div>
-          <div key={isLight ? 'brand-light' : 'brand-dark'}>
+          <div key={isLight ? 'brand-light' : 'brand-dark'} className="prima-hdr-brand">
             <div style={{
               fontSize: 16, fontWeight: 800,
               background: isLight ? 'linear-gradient(135deg,#8B5CF6,#EC4899)' : 'linear-gradient(135deg,#EF9F27,#FAC775)',
@@ -231,7 +231,7 @@ export default function BludShell({ username, role, izin, themePreference, beku,
               WebkitTextFillColor: 'transparent', color: 'transparent',
               letterSpacing: '.3px', lineHeight: 1.1,
             }}>PRIMA · BLUD</div>
-            <div style={{ fontSize: 10.5, color: isLight ? '#6B7280' : '#85B7EB', fontWeight: 600, marginTop: 1 }}>
+            <div className="prima-hdr-sub" style={{ fontSize: 10.5, color: isLight ? '#6B7280' : '#85B7EB', fontWeight: 600, marginTop: 1 }}>
               RSJD Dr. Amino Gondohutomo
             </div>
           </div>
@@ -259,6 +259,8 @@ export default function BludShell({ username, role, izin, themePreference, beku,
           <button
             onClick={() => { void (async () => { if (await bolehTinggalkanHalaman()) router.push('/menu') })() }}
             className="blud-back-btn"
+            data-tooltip="Kembali ke menu utama"
+            data-tooltip-pos="below"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '5px 10px', borderRadius: 8,
@@ -267,7 +269,7 @@ export default function BludShell({ username, role, izin, themePreference, beku,
               cursor: 'pointer', transition: 'all .15s', fontFamily: 'inherit',
             }}>
             <Home size={13} />
-            Menu
+            <span className="prima-hdr-label">Menu</span>
           </button>
 
           <ThemeToggle initialTheme={themePreference} onThemeChange={setCurrentTheme} />
@@ -288,7 +290,7 @@ export default function BludShell({ username, role, izin, themePreference, beku,
                 color: isLight ? '#FFFFFF' : '#020F1C', fontWeight: 800, fontSize: 11,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>{initials}</div>
-              <div style={{ textAlign: 'left' }}>
+              <div className="prima-hdr-label" style={{ textAlign: 'left' }}>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: isLight ? '#0F0F12' : '#E6F1FB', lineHeight: 1.2 }}>{username}</div>
                 <div style={{ fontSize: 10, color: isLight ? '#6B7280' : '#85B7EB', fontWeight: 500 }}>{roleLabel}</div>
               </div>
