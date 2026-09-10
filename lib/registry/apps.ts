@@ -169,6 +169,51 @@ export const KUNCI_SAKELAR: readonly string[] = [
   ...SAKELAR_LAIN.map((s) => s.kunci),
 ]
 
+/**
+ * Tiga keadaan sakelar, dan yang tengah itu seluruh isi P5.
+ *
+ * Saat tutup buku / penyusunan LKJIP / rekonsiliasi, yang dibutuhkan BUKAN mematikan
+ * modul — orang masih harus membuka dan mencetak. Yang dibutuhkan membekukan TULISAN.
+ * Karena pilihannya cuma dua, yang terjadi selama ini: dibiarkan `online`, lalu
+ * diumumkan di grup WhatsApp "jangan diubah dulu ya". Itu bukan kontrol, itu harapan.
+ *
+ * Nol migrasi — `app_config.value` sudah TEXT. Yang berubah cuma yang membacanya.
+ */
+export const KEADAAN_SAKELAR = ['online', 'readonly', 'maintenance'] as const
+export type KeadaanSakelar = (typeof KEADAAN_SAKELAR)[number]
+
+/**
+ * Baris `app_config` yang belum ada dianggap `online` — modul baru tidak boleh mati
+ * hanya karena seed tertinggal. Nilai yang tidak dikenal dianggap `maintenance`:
+ * satu-satunya arah aman untuk nilai yang tidak bisa dijelaskan.
+ */
+export function bacaKeadaan(nilai: string | null | undefined): KeadaanSakelar {
+  if (!nilai) return 'online'
+  return (KEADAAN_SAKELAR as readonly string[]).includes(nilai)
+    ? (nilai as KeadaanSakelar)
+    : 'maintenance'
+}
+
+/**
+ * Keadaan paling membatasi dari beberapa sakelar — dipakai sakelar berjenjang
+ * (BLUD mati ikut mematikan Realisasi; BLUD beku ikut membekukannya).
+ */
+export function keadaanTerburuk(nilai: readonly (string | null | undefined)[]): KeadaanSakelar {
+  let hasil: KeadaanSakelar = 'online'
+  for (const n of nilai) {
+    const k = bacaKeadaan(n)
+    if (k === 'maintenance') return 'maintenance'
+    if (k === 'readonly') hasil = 'readonly'
+  }
+  return hasil
+}
+
+export const LABEL_KEADAAN: Readonly<Record<KeadaanSakelar, string>> = {
+  online: 'ONLINE',
+  readonly: 'BEKU',
+  maintenance: 'MAINTENANCE',
+}
+
 /** Kunci sakelar → label yang tampil di App Control. */
 export const LABEL_SAKELAR: Readonly<Record<string, string>> = Object.fromEntries([
   ...MODUL_APPS.flatMap((m) => [
@@ -220,6 +265,18 @@ export type InfoSakelar = {
   /** Sakelar induk untuk sub-sakelar — mematikan induk ikut mematikan yang ini. */
   induk: string | null
   terjaga: boolean
+  /**
+   * P5 — sakelar ini punya arti kalau dibekukan?
+   *
+   * BEKU menutup METODE TULIS. Sakelar yang tidak menjaga route tulis apa pun tidak
+   * punya apa-apa untuk dibekukan: `app_status_sentinel_bot` cuma dibaca peramban,
+   * dan RIMA Tanya-Data hanya punya endpoint baca. Menawarkan BEKU di situ berarti
+   * memasang tombol yang tidak melakukan apa pun — dan tombol mati tanpa sebab, atau
+   * lebih buruk, tombol hidup tanpa akibat, adalah cacat tersendiri (L79c).
+   *
+   * Ditolak juga di API, bukan cuma disembunyikan di layar (L82).
+   */
+  bisaBeku: boolean
   /** Satu kalimat yang menjelaskan lencananya. Selalu terisi, termasuk saat terjaga. */
   sebab: string
 }
@@ -227,13 +284,17 @@ export type InfoSakelar = {
 function infoModul(m: Modul): InfoSakelar[] {
   if (!m.sakelar) return []
   const penanda = m.penjagaApi?.penanda.map((p) => `\`${p}\``).join(' / ') ?? ''
+  // Bisa dibekukan = punya route API DAN penjaganya berdiri. Syaratnya sama persis
+  // dengan `MODUL_BERSAKELAR` (bahan gate G) — sengaja, karena pertanyaannya memang
+  // sama: apakah ada penjaga di jalur tulisnya.
+  const bisaBeku = m.dirApi !== null && m.penjagaApi !== undefined
   const utama: InfoSakelar = m.dirApi === null
-    ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true,
+    ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true, bisaBeku,
         sebab: 'Tidak punya route API sendiri — tidak ada yang perlu dijaga.' }
     : m.penjagaApi
-      ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true,
+      ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true, bisaBeku,
           sebab: `Tiap route di ${m.dirApi} wajib menyebut ${penanda} — diperiksa gate G tiap kali CI jalan.` }
-      : { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: false,
+      : { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: false, bisaBeku,
           sebab: `Punya route di ${m.dirApi} tapi belum punya penjaga. Mematikannya hanya menutup layarnya; API-nya tetap terbuka.` }
   return [
     utama,
@@ -243,6 +304,7 @@ function infoModul(m: Modul): InfoSakelar[] {
       modulKunci: m.kunci,
       induk: m.sakelar as string,
       terjaga: utama.terjaga,
+      bisaBeku,
       sebab: utama.terjaga
         ? `Ikut penjaga ${m.label} (${penanda}).`
         : utama.sebab,
@@ -258,6 +320,9 @@ export const SAKELAR_INFO: readonly InfoSakelar[] = [
     modulKunci: null,
     induk: null,
     terjaga: s.dijagaDi !== null,
+    // Keduanya sakelar BACA: satu cuma dibaca peramban, satu lagi menjaga dua
+    // endpoint yang dua-duanya GET. Tidak ada tulisan untuk dibekukan.
+    bisaBeku: false,
     sebab: s.dijagaDi
       ? `Dibaca ${s.dijagaDi.join(' dan ')}.`
       : (s.catatan ?? 'Tidak ada berkas server yang membacanya.'),
@@ -270,6 +335,11 @@ const PETA_SAKELAR = new Map(SAKELAR_INFO.map((s) => [s.kunci, s]))
 export function infoSakelar(kunci: string): InfoSakelar | null {
   return PETA_SAKELAR.get(kunci) ?? null
 }
+
+/** Alasan sebuah sakelar tidak menawarkan BEKU — dipakai layar & API supaya keduanya
+ *  menolak dengan kalimat yang sama. */
+export const SEBAB_TAK_BISA_BEKU =
+  'Sakelar ini tidak menjaga satu pun jalur tulis, jadi membekukannya tidak menutup apa pun.'
 
 /** Sakelar yang tombolnya ada tapi tidak menutup apa pun di server — P10 nomor 6. */
 export const SAKELAR_TANPA_PENJAGA: readonly InfoSakelar[] = SAKELAR_INFO.filter((s) => !s.terjaga)

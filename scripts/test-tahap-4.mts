@@ -212,10 +212,15 @@ cek('nama modul diambil dari registry, bukan dari URL',
 // Ini pemeriksaan yang menutup lubangnya. Memvalidasi ke registry saja masih
 // mengizinkan `?m=app_status_blud` dipakai mengarang kabar bahwa BLUD mati padahal
 // hidup. Kutipannya UTUH sampai kurung buka (L82c).
+//
+// Bentuk kalimatnya berubah di Tahap 9 (P5): sakelarnya kini TIGA keadaan, jadi
+// `!== 'online'` bukan lagi pertanyaan yang benar — ia ikut menelan modul yang cuma
+// dibekukan. Yang dijaga pemeriksaan ini TIDAK berubah: keadaannya dibaca dari DB, dan
+// hanya yang benar-benar mati yang boleh menampilkan halaman ini.
 cek('status sakelar dibaca dari DB sebelum namanya ditampilkan',
-  mtBersih.includes("const mati = kunciCek.some((k) => (peta.get(k) ?? 'online') !== 'online')"))
-cek('sakelar yang menyala = nama tidak ditampilkan',
-  mtBersih.includes('if (!mati) return null'))
+  mtBersih.includes('keadaanTerburuk(kunciCek.map((k) => peta.get(k)))'))
+cek('sakelar yang TIDAK mati = nama tidak ditampilkan',
+  mtBersih.includes("!== 'maintenance') return null"))
 cek('induk ikut ditanyakan (mematikan BLUD ikut menutup Realisasi)',
   mtBersih.includes('...(info.induk ? [info.induk] : [])'))
 cek('gagal baca DB = tidak terbukti, bukan diteruskan',

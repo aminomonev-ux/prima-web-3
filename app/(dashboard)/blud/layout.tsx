@@ -5,6 +5,7 @@ import BludShell from './blud-shell'
 import { sql, queryOne } from '@/lib/data/db'
 import { isBludRole } from '@/lib/blud/schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { infoBeku } from '@/lib/security/beku'
 import { urlPemeliharaan } from '@/lib/registry/apps'
 import { petaIzinBlud } from '@/lib/blud/izin-server'
 import type { Role } from '@/types'
@@ -38,9 +39,12 @@ export default async function BludLayout({ children }: { children: React.ReactNo
   // Dua belas menu diselesaikan sekali di sini, bukan per tile — layout ini dilewati
   // semua layar BLUD, jadi ribbon tidak pernah memicu 12 pemeriksaan terpisah.
   const izin = await petaIzinBlud(Number(userId), role)
+  // P5 — dibaca di sini, bukan di tiap layar: layout ini dilewati semua layar BLUD,
+  // sama alasannya dengan kenapa peta izin diselesaikan di sini.
+  const beku = await infoBeku(['app_status_blud'], role)
 
   return (
-    <BludShell username={username} role={role} izin={izin} themePreference={themePreference}>
+    <BludShell username={username} role={role} izin={izin} themePreference={themePreference} beku={beku}>
       {children}
     </BludShell>
   )

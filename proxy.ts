@@ -93,6 +93,19 @@ export async function proxy(req: NextRequest) {
   const reqHeaders = new Headers(req.headers);
   reqHeaders.set('x-nonce', nonce);
 
+  // P5 — metode permintaan dipasang di REQUEST header supaya `modulMati` bisa
+  // membedakan membaca dari menulis saat modul dibekukan (mode baca-saja).
+  //
+  // Di sini, bukan dioper tiap route: satu route yang lupa mengoper `req.method`
+  // berarti tulisan lolos saat modulnya beku — cacat senyap yang bentuknya persis
+  // T-1/L69. Dipasang sebelum cabang mana pun supaya route publik & yang tanpa sesi
+  // ikut membawanya.
+  //
+  // Di-strip dulu (V3-1/L54): tanpa itu klien bisa mengirim `x-prima-metode: GET`
+  // pada sebuah POST dan menembus pembekuan.
+  reqHeaders.delete('x-prima-metode');
+  reqHeaders.set('x-prima-metode', req.method);
+
   function nextWithNonce(): NextResponse {
     return NextResponse.next({ request: { headers: reqHeaders } });
   }

@@ -19,7 +19,7 @@
 // Gagal membaca DB = anggap tidak terbukti, tampilkan halaman umum. Sakelar yang
 // hanya jujur saat semuanya lancar bukan sakelar (pola `modulMati`).
 import { sql } from '@/lib/data/db';
-import { formatSampai, infoSakelar, kunciPesan, kunciSampai } from '@/lib/registry/apps';
+import { formatSampai, infoSakelar, keadaanTerburuk, kunciPesan, kunciSampai } from '@/lib/registry/apps';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,8 +39,11 @@ async function buktikan(kunci: string | undefined): Promise<Terbukti> {
       WHERE \`key\` IN (${[...kunciCek, kunciPesan(kunci), kunciSampai(kunci)]})
     ` as { key: string; value: string }[];
     const peta = new Map(rows.map((r) => [r.key, r.value]));
-    const mati = kunciCek.some((k) => (peta.get(k) ?? 'online') !== 'online');
-    if (!mati) return null;
+    // P5: `readonly` BUKAN alasan menampilkan halaman ini. Modul beku tetap harus
+    // bisa dibuka & dicetak — halaman pemeliharaan yang tampil untuknya justru
+    // mengubah pembekuan jadi pemadaman. Karena itu `keadaanTerburuk`, bukan
+    // pemeriksaan lama `!== 'online'` yang menganggap keduanya sama.
+    if (keadaanTerburuk(kunciCek.map((k) => peta.get(k))) !== 'maintenance') return null;
     return {
       label: info.label,
       pesan: (peta.get(kunciPesan(kunci)) ?? '').trim(),

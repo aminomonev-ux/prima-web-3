@@ -29,15 +29,20 @@ const SEMUA_TILE: Tile[] = [
   { href: '/perjanjian-kinerja/unit-kerja', label: 'Master Unit',    icon: Building2,       color: '#64748B', group: 'SISTEM',            menu: 'unit-kerja' },
 ]
 
+import SpandukBeku from '@/components/ui/SpandukBeku'
+import type { InfoBeku } from '@/lib/security/beku'
+
 interface Props {
   username: string
   role:     Role
   izin:     Partial<Record<MenuPk, Izin>>
   themePreference: 'dark' | 'light'
+  /** P5 — keterangan pembekuan, diselesaikan di layout. */
+  beku: InfoBeku
   children: React.ReactNode
 }
 
-export default function PkShell({ username, role, izin, themePreference, children }: Props) {
+export default function PkShell({ username, role, izin, themePreference, beku, children }: Props) {
   // Menu yang tertutup bagi orang ini tidak dipasang sama sekali — bukan disabled.
   // Tile mati hanya memancing klik lalu memantul; pagar sebenarnya tetap di route.
   // Sebelum ini Master Pejabat & Master Unit tetap tampil untuk semua peran padahal
@@ -405,6 +410,7 @@ export default function PkShell({ username, role, izin, themePreference, childre
         backgroundSize: '48px 48px',
         padding: 20,
       } as React.CSSProperties}>
+        <SpandukBeku {...beku}/>
         {children}
       </main>
 

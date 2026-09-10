@@ -41,6 +41,9 @@ const SEMUA_TILE: Tile[] = [
 // baru supaya satu grup tidak terbelah — separuh di ribbon, separuh di "Lainnya".
 const MAX_INLINE_TILES = 11
 
+import SpandukBeku from '@/components/ui/SpandukBeku'
+import type { InfoBeku } from '@/lib/security/beku'
+
 interface Props {
   username: string
   role:     Role
@@ -49,10 +52,12 @@ interface Props {
    *  ribbon tidak punya kesempatan berbeda pendapat dengan route. */
   izin:     Partial<Record<MenuBlud, Izin>>
   themePreference: 'dark' | 'light'
+  /** P5 — keterangan pembekuan, diselesaikan di layout. */
+  beku: InfoBeku
   children: React.ReactNode
 }
 
-export default function BludShell({ username, role, izin, themePreference, children }: Props) {
+export default function BludShell({ username, role, izin, themePreference, beku, children }: Props) {
   const pathname  = usePathname()
   const router    = useRouter()
   const [dropOpen, setDropOpen] = useState(false)
@@ -541,6 +546,7 @@ export default function BludShell({ username, role, izin, themePreference, child
         backgroundSize: '48px 48px',
         padding: 20,
       } as React.CSSProperties}>
+        <SpandukBeku {...beku}/>
         {children}
       </main>
 

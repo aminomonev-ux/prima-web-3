@@ -5,6 +5,7 @@ import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import {
   KUNCI_SAKELAR, KUNCI_PESAN, KUNCI_SAMPAI, kunciPesan, kunciSampai, LABEL_SAKELAR, RE_SAMPAI,
+  KEADAAN_SAKELAR, infoSakelar, SEBAB_TAK_BISA_BEKU,
 } from '@/lib/registry/apps';
 
 // Fase B (Tahap 2): DITURUNKAN dari `lib/registry/apps.ts`, tidak lagi diketik.
@@ -34,7 +35,11 @@ export const PESAN_MAKS = 300;
 
 const BodySchema = z.object({
   key: z.string().refine((k) => APP_KEYS.includes(k), 'Key tidak valid.'),
-  value: z.enum(['online', 'maintenance']).optional(),
+  // P5 — keadaan ketiga `readonly`. Daftarnya DIAMBIL dari registry, tidak diketik
+  // ulang: dua daftar yang menjawab pertanyaan yang sama tidak pernah bertahan sama
+  // (pelajaran yang sudah dua kali dibayar di berkas ini sendiri, lihat catatan
+  // APP_KEYS di atas).
+  value: z.enum(KEADAAN_SAKELAR).optional(),
   pesan: z.string().max(PESAN_MAKS).optional(),
   sampai: z.string().refine((s) => s === '' || RE_SAMPAI.test(s), 'Format tanggal tidak dikenal.').optional(),
 }).refine(
@@ -92,6 +97,14 @@ export async function POST(req: NextRequest) {
       );
     }
     const { key, value, pesan, sampai } = parsed.data;
+
+    // P5 — pagar di API, bukan cuma tombol yang disembunyikan di layar (L82). Layar
+    // Sakelar memang tidak menawarkan BEKU untuk sakelar baca, tapi endpoint ini bisa
+    // dipanggil langsung — dan sakelar yang tersimpan `readonly` padahal tidak menjaga
+    // jalur tulis apa pun menghasilkan lencana BEKU yang berbohong.
+    if (value === 'readonly' && !infoSakelar(key)?.bisaBeku) {
+      return NextResponse.json({ ok: false, message: SEBAB_TAK_BISA_BEKU }, { status: 400 });
+    }
 
     // Tiga baris `app_config` untuk satu perubahan yang dimaksudkan sebagai satu hal:
     // menyalakan sakelar sambil membiarkan pesan lama tertinggal akan membuat kartu

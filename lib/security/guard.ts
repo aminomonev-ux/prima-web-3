@@ -11,8 +11,10 @@
 // Semua mengembalikan discriminated union — pakai: `const g = await requireRole(...);
 // if (!g.ok) return g.res; const { session } = g;`
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { sql, queryOne } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
+import { keadaanTerburuk, type KeadaanSakelar } from '@/lib/registry/apps';
 import type { SessionPayload } from '@/types';
 
 export type GuardOk   = { ok: true; session: SessionPayload };
@@ -91,33 +93,99 @@ function bolehTembusSakelar(opts?: OpsiSakelar): boolean {
  * `role` WAJIB dioper kalau pengecualian mau berlaku. Tanpa itu tidak ada yang
  * dikecualikan — pemanggil yang lupa menutup pintu, bukan diam-diam membukanya.
  */
+/**
+ * P5 — mode BACA-SAJA. Sakelar tidak lagi dua keadaan, tapi tiga; yang tengah
+ * (`readonly`) membiarkan modul dibuka & dicetak tapi menutup semua penulisan.
+ *
+ * `'gagal'` bukan keadaan sakelar melainkan keadaan PEMBACAAN sakelar — dipisah
+ * supaya pemanggil yang cuma bertanya "beku?" tidak salah menjawab "ya" saat MySQL
+ * yang bermasalah.
+ */
+export type KeadaanModul = KeadaanSakelar | 'gagal';
+
+/**
+ * METODE datang dari proxy, BUKAN dioper tiap route — dan itu keputusan pokok P5.
+ *
+ * Kalau tiap pemanggil harus menyertakan `req.method`, satu route yang lupa berarti
+ * tulisan lolos saat modulnya dibekukan: cacat senyap yang bentuknya persis T-1 dan
+ * L69 (perbaikan yang tidak kena semua jalur tulis). Dengan header, kesembilan modul
+ * yang dijaga gate G ikut mendapat baca-saja tanpa satu route pun disentuh, dan route
+ * yang lahir besok ikut sejak hari pertama.
+ *
+ * Headernya di-strip lalu dipasang ulang proxy dari `req.method` — pola V3-1/L54 yang
+ * sudah dipakai `x-user-*`, jadi ia tidak bisa dipalsukan klien.
+ */
+const METODE_BACA = new Set(['GET', 'HEAD', 'OPTIONS']);
+export const HEADER_METODE = 'x-prima-metode';
+
+/**
+ * Tidak tahu metodenya = anggap MENULIS. Arah gagalnya sengaja begitu: modul beku
+ * yang menolak satu pembacaan itu merepotkan, modul beku yang meloloskan tulisan itu
+ * tidak membekukan apa pun.
+ */
+async function sedangMenulis(): Promise<boolean> {
+  try {
+    const m = (await headers()).get(HEADER_METODE);
+    if (!m) return true;
+    return !METODE_BACA.has(m.toUpperCase());
+  } catch {
+    return true;
+  }
+}
+
+async function bacaKeadaan(keys: string[]): Promise<KeadaanModul> {
+  try {
+    const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
+    // Kunci yang belum ada barisnya dianggap 'online' — sama seperti GET app-status
+    // yang mengisi default. Modul baru tidak boleh mati hanya karena seed tertinggal.
+    return keadaanTerburuk((rows as { value: string }[]).map((r) => r.value));
+  } catch {
+    return 'gagal';
+  }
+}
+
+/**
+ * Keadaan modul apa adanya, untuk yang perlu MENAMPILKANNYA (lencana BEKU di layar,
+ * spanduk, kartu /menu) alih-alih menolak permintaan.
+ */
+export async function keadaanModul(keys: string[], opts?: OpsiSakelar): Promise<KeadaanModul> {
+  if (bolehTembusSakelar(opts)) return 'online';
+  return bacaKeadaan(keys);
+}
+
+const tolakMati = (pesan: string) =>
+  NextResponse.json({ ok: false, code: 'MODUL_MATI', error: pesan }, { status: 503 });
+
+/**
+ * 503 dan kode SENDIRI (`MODUL_BACA_SAJA`), terpisah dari `MODUL_MATI`. Penerimanya
+ * harus bisa membedakan "sedang dibekukan, membaca tetap boleh" dari "modul mati" —
+ * alasan yang sama persis dengan kenapa `modulMati` memulangkan 503 dan bukan 403.
+ */
+const tolakBeku = () =>
+  NextResponse.json(
+    {
+      ok: false,
+      code: 'MODUL_BACA_SAJA',
+      error: 'Modul ini sedang dibekukan admin. Membuka dan mencetak tetap bisa, menyimpan ditutup sementara.',
+    },
+    { status: 503 },
+  );
+
 export async function modulMati(
   keys: string[],
   opts?: OpsiSakelar,
 ): Promise<NextResponse | null> {
   if (bolehTembusSakelar(opts)) return null;
 
-  let nyala: Set<string>;
-  try {
-    const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
-    nyala = new Set(
-      (rows as { key: string; value: string }[])
-        .filter((r) => r.value !== 'online')
-        .map((r) => r.key),
-    );
-  } catch {
-    return NextResponse.json(
-      { ok: false, code: 'MODUL_MATI', error: 'Modul sedang tidak tersedia. Coba lagi beberapa saat lagi.' },
-      { status: 503 },
-    );
+  const keadaan = await bacaKeadaan(keys);
+  if (keadaan === 'gagal') {
+    return tolakMati('Modul sedang tidak tersedia. Coba lagi beberapa saat lagi.');
   }
-  // Kunci yang belum ada barisnya dianggap 'online' — sama seperti GET app-status
-  // yang mengisi default. Modul baru tidak boleh mati hanya karena seed tertinggal.
-  if (nyala.size === 0) return null;
-  return NextResponse.json(
-    { ok: false, code: 'MODUL_MATI', error: 'Modul ini sedang dimatikan admin untuk pemeliharaan.' },
-    { status: 503 },
-  );
+  if (keadaan === 'maintenance') {
+    return tolakMati('Modul ini sedang dimatikan admin untuk pemeliharaan.');
+  }
+  if (keadaan === 'readonly' && (await sedangMenulis())) return tolakBeku();
+  return null;
 }
 
 /**
@@ -125,14 +193,17 @@ export async function modulMati(
  * membentuk respons. Gagal baca = dianggap mati, sejalan dengan `modulMati`.
  */
 export async function modulSedangMati(keys: string[], opts?: OpsiSakelar): Promise<boolean> {
-  if (bolehTembusSakelar(opts)) return false;
+  const k = await keadaanModul(keys, opts);
+  // `readonly` SENGAJA tidak ikut. Fungsi ini menjawab "haruskah halaman pemeliharaan
+  // yang tampil", dan modul beku justru harus tetap bisa dibuka & dicetak — itu
+  // seluruh gunanya. Menyamakan keduanya (`!== 'online'`, bentuk lamanya) mengubah
+  // pembekuan jadi pemadaman tanpa satu pesan pun.
+  return k === 'maintenance' || k === 'gagal';
+}
 
-  try {
-    const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
-    return (rows as { value: string }[]).some((r) => r.value !== 'online');
-  } catch {
-    return true;
-  }
+/** Untuk layar: apakah tulisannya sedang dibekukan (lencana BEKU + tombol simpan mati). */
+export async function modulDibekukan(keys: string[], opts?: OpsiSakelar): Promise<boolean> {
+  return (await keadaanModul(keys, opts)) === 'readonly';
 }
 
 // Untuk modul "milik bersama" yang aksesnya bisa diberikan manual lewat users.app_access.

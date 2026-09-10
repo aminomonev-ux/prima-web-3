@@ -733,13 +733,17 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
               const statusKey = `app_status_${card.id}`;
               const isMaint   = !locked && card.id !== 'admin' && appStatus[statusKey] === 'maintenance' && role !== 'SUPER_ADMIN';
               const isMaintSA = !locked && card.id !== 'admin' && appStatus[statusKey] === 'maintenance' && role === 'SUPER_ADMIN';
+              // P5 — modul BEKU tetap bisa dibuka: kartunya TIDAK diabukan dan tetap
+              // bisa diklik. Yang berubah cuma lencananya, dan itu memang seluruh
+              // maksudnya: orang tahu sebelum masuk bahwa hari ini cuma bisa membaca.
+              const isBeku    = !locked && card.id !== 'admin' && appStatus[statusKey] === 'readonly';
 
-              const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : card.badge;
+              const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : isBeku ? 'BEKU' : card.badge;
               // Warna badge status (brutalist: teks gelap + border hitam): hijau=LIVE, merah=admin, amber=maint, abu=locked
               // `#9CA3AF` di sini LATAR badge, bukan warna teks — sengaja tidak ikut
               // dinaikkan ke #6B7280 seperti teks bantu lainnya. Teksnya gelap di atasnya,
               // jadi menggelapkan latarnya justru menurunkan kontras.
-              const stColor = locked ? '#9CA3AF' : (isMaint || isMaintSA) ? '#EF9F27' : card.id === 'admin' ? '#E24B4A' : '#2BD46A';
+              const stColor = locked ? '#9CA3AF' : (isMaint || isMaintSA) ? '#EF9F27' : isBeku ? '#378ADD' : card.id === 'admin' ? '#E24B4A' : '#2BD46A';
               const initials = card.name.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase();
 
               return (
@@ -750,7 +754,11 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                   onClick={() => handleCardClick(card)}
                   role="button"
                   tabIndex={locked ? -1 : 0}
-                  data-tooltip={isMaintSA ? 'Modul sedang maintenance. Anda bisa akses sebagai SUPER_ADMIN.' : ''}
+                  data-tooltip={
+                    isMaintSA ? 'Modul sedang maintenance. Anda bisa akses sebagai SUPER_ADMIN.'
+                    : isBeku ? 'Modul sedang dibekukan: membuka, membaca, dan mencetak tetap bisa; menyimpan ditutup sementara.'
+                    : ''
+                  }
                   onKeyDown={e => e.key === 'Enter' && handleCardClick(card)}
                 >
                   <div className="card-band">
@@ -765,7 +773,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                     <div className="card-handle">@{card.id}</div>
                     <div className="card-name">{card.name}</div>
                     <div className="card-desc">{card.desc}</div>
-                    {(isMaint || isMaintSA) && (appPesan[statusKey] || appSampai[statusKey]) && (
+                    {(isMaint || isMaintSA || isBeku) && (appPesan[statusKey] || appSampai[statusKey]) && (
                       <div className="card-maint-note">
                         {appPesan[statusKey] && <div>{appPesan[statusKey]}</div>}
                         {formatSampai(appSampai[statusKey] ?? '') && (

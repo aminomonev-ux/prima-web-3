@@ -326,6 +326,20 @@
 .ap-sk-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ap-dim);flex-shrink:0;}
 .ap-sk-baris .ap-input{width:auto;flex:1;min-width:180px;}
 .ap-sk-hitung{font-size:10.5px;color:var(--ap-dim);font-family:'JetBrains Mono',monospace;margin-left:auto;}
+/* P5 — sakelar tiga keadaan. Warnanya semua token yang sudah ada (gate E): hijau
+   ONLINE, biru-info BEKU, amber MAINTENANCE. BEKU sengaja BUKAN amber: "sedang
+   dibekukan" itu kabar, bukan kesalahan, dan mewarnainya sama dengan modul mati
+   membuat dua keadaan yang sangat berbeda terbaca sama dari kejauhan. */
+.ap-sk-seg{display:flex;flex:0 0 auto;border:1px solid var(--ap-line);border-radius:8px;overflow:hidden;}
+.ap-sk-seg-btn{appearance:none;border:0;background:transparent;cursor:pointer;
+  padding:6px 10px;font-size:9.5px;font-weight:800;letter-spacing:.08em;
+  font-family:inherit;color:var(--ap-dim);transition:background .15s,color .15s;}
+.ap-sk-seg-btn+.ap-sk-seg-btn{border-left:1px solid var(--ap-line);}
+.ap-sk-seg-btn:hover:not(:disabled):not(.aktif){background:var(--ap-line-tipis);color:var(--ap-fg);}
+.ap-sk-seg-btn:disabled{cursor:wait;opacity:.6;}
+.ap-sk-seg-btn.aktif.k-online{background:var(--ap-ok-bg);color:var(--ap-ok-fg);}
+.ap-sk-seg-btn.aktif.k-readonly{background:var(--ap-info-bg);color:var(--ap-info);}
+.ap-sk-seg-btn.aktif.k-maintenance{background:var(--ap-warn-bg);color:var(--ap-warn-fg);}
 .ap-sk-ingat{display:flex;align-items:flex-start;gap:9px;padding:11px 14px;margin-bottom:14px;border-radius:8px;font-size:11.5px;line-height:1.6;background:var(--ap-warn-bg);border:1px solid var(--ap-warn-line);color:var(--ap-warn-fg);}
 .ap-sk-ingat svg{flex:0 0 auto;margin-top:2px;}
 

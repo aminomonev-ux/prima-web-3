@@ -21,11 +21,14 @@
 //      tanpa menempel kertas. Yang ditulis di sini muncul di `/maintenance` dan di
 //      kartu `/menu` — dan hanya selama sakelarnya memang mati.
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { MessageSquare, ShieldCheck, ShieldAlert, Save, X } from 'lucide-react';
+import { MessageSquare, ShieldCheck, ShieldAlert, Save, X, Snowflake } from 'lucide-react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
-import { SAKELAR_INFO, formatSampai } from '@/lib/registry/apps';
+import {
+  SAKELAR_INFO, formatSampai, bacaKeadaan, KEADAAN_SAKELAR, LABEL_KEADAAN,
+  SEBAB_TAK_BISA_BEKU, type KeadaanSakelar,
+} from '@/lib/registry/apps';
 import { type AppStatus } from './_shared';
 
 const PESAN_MAKS = 300;
@@ -70,11 +73,11 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
     else { toast.error((r as { message?: string }).message ?? 'Gagal menyimpan.'); await load(); }
   }
 
-  async function toggle(kunci: string, label: string) {
+  async function pilihKeadaan(kunci: string, label: string, baru: KeadaanSakelar) {
     if (!isSA) return;
-    const baru = (status[kunci] ?? 'online') === 'online' ? 'maintenance' : 'online';
+    if (bacaKeadaan(status[kunci]) === baru) return;
     setStatus(p=>({...p,[kunci]:baru}));
-    await kirim(kunci, { value: baru }, `${label} → ${baru.toUpperCase()}`);
+    await kirim(kunci, { value: baru }, `${label} → ${LABEL_KEADAAN[baru]}`);
   }
 
   function bukaDraf(kunci: string) {
@@ -95,6 +98,19 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
       <div className="ap-section-title">SAKELAR APLIKASI</div>
       {!isSA && <div className="ap-sk-ingat">Hanya SUPER_ADMIN yang dapat mengubah status aplikasi.</div>}
 
+      {/* Ditulis di layar, bukan cuma di konsep. SUPER_ADMIN menembus ketiga keadaan —
+          kalau tidak disebut, orang yang baru saja membekukan modul lalu masih bisa
+          menyimpan akan menyimpulkan pembekuannya tidak bekerja. */}
+      <div className="ap-sk-ingat">
+        <Snowflake size={14}/>
+        <span>
+          <b>BEKU</b> menutup penyimpanan tapi membiarkan modul dibuka, dibaca, dan dicetak —
+          untuk tutup buku &amp; rekonsiliasi, saat &ldquo;jangan diubah dulu ya&rdquo; di grup
+          WhatsApp bukan kontrol. <b>MAINTENANCE</b> menutup modulnya sama sekali.
+          SUPER_ADMIN tetap bisa menembus keduanya, jadi ujilah dengan akun lain.
+        </span>
+      </div>
+
       {tanpaPesan.length > 0 && (
         <div className="ap-sk-ingat">
           <MessageSquare size={14}/>
@@ -107,9 +123,9 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
 
       <div className="ap-sk-grid">
         {SAKELAR_INFO.map(s => {
-          const val      = status[s.kunci] ?? 'online';
+          const val      = bacaKeadaan(status[s.kunci]);
           const isOnline = val === 'online';
-          const indukMati = s.induk ? (status[s.induk] ?? 'online') !== 'online' : false;
+          const indukVal = s.induk ? bacaKeadaan(status[s.induk]) : 'online';
           const d        = draf[s.kunci];
           const adaTeks  = Boolean(pesan[s.kunci] || sampai[s.kunci]);
           const bolehIsi = isSA && (!isOnline || adaTeks);
@@ -120,8 +136,8 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                 <div className="ap-sk-kiri">
                   <div className="ap-sk-label">{s.label}</div>
                   <div className="ap-row" style={{gap:6}}>
-                    <span className={`ap-badge ${isOnline?'badge-green':'badge-yellow'}`}>
-                      {isOnline?'ONLINE':'MAINTENANCE'}
+                    <span className={`ap-badge ${val === 'online' ? 'badge-green' : val === 'readonly' ? 'badge-cyan' : 'badge-yellow'}`}>
+                      {LABEL_KEADAAN[val]}
                     </span>
                     {/* `data-tooltip`, bukan `title=` — kotak putih bawaan peramban
                         dilarang DESIGN-SYSTEM, dan aturan `[data-tooltip]` di
@@ -135,16 +151,38 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                     </span>
                   </div>
                   {!s.terjaga && <div className="ap-sk-sebab">{s.sebab}</div>}
-                  {indukMati && isOnline && (
-                    <div className="ap-sk-sebab">Sudah ikut mati karena induknya dimatikan.</div>
+                  {/* Sakelar berjenjang: induk mati ikut mematikan, induk beku ikut
+                      membekukan — dan kalimatnya harus menyebut yang MANA, kalau tidak
+                      orang mengira turunannya masih bisa ditulis. */}
+                  {indukVal !== 'online' && val === 'online' && (
+                    <div className="ap-sk-sebab">
+                      {indukVal === 'readonly'
+                        ? 'Sudah ikut beku karena induknya dibekukan.'
+                        : 'Sudah ikut mati karena induknya dimatikan.'}
+                    </div>
                   )}
                 </div>
+                {/* Sakelar tiga keadaan, jadi bukan lagi tuas dua posisi. Tuas yang
+                    dipaksa menampung tiga keadaan selalu menyembunyikan yang ketiga di
+                    balik klik kedua — dan yang tersembunyi itu justru yang paling sering
+                    dibutuhkan. */}
                 {isSA && (
-                  <label className="ap-toggle" style={{cursor:loading?'wait':'pointer'}}>
-                    <input type="checkbox" checked={isOnline} disabled={loading} onChange={()=>toggle(s.kunci, s.label)}/>
-                    <div className="ap-toggle-track"/>
-                    <div className="ap-toggle-thumb"/>
-                  </label>
+                  <div className="ap-sk-seg" role="group" aria-label={`Keadaan ${s.label}`}>
+                    {KEADAAN_SAKELAR.map(k => {
+                      // Tombol mati WAJIB menyebut sebabnya (L79c). Yang dilarang cuma
+                      // BEKU pada sakelar baca — dan kalimatnya sama persis dengan yang
+                      // dipulangkan API, supaya keduanya tidak pernah berbeda bunyi.
+                      const dilarang = k === 'readonly' && !s.bisaBeku;
+                      return (
+                        <button key={k} type="button" disabled={loading || dilarang}
+                          className={`ap-sk-seg-btn${val === k ? ' aktif' : ''} k-${k}`}
+                          data-tooltip={dilarang ? SEBAB_TAK_BISA_BEKU : ''}
+                          onClick={()=>pilihKeadaan(s.kunci, s.label, k)}>
+                          {LABEL_KEADAAN[k]}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
