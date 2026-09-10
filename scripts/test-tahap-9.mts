@@ -183,6 +183,14 @@ cek('BEKU dimatikan untuk sakelar tanpa jalur tulis',
 cek('…dengan sebab yang tertulis', panel.includes('data-tooltip={dilarang ? SEBAB_TAK_BISA_BEKU'))
 cek('SUPER_ADMIN yang menembus disebut di layar', panel.includes('SUPER_ADMIN tetap bisa menembus'))
 cek('induk beku diberi kalimat sendiri', panel.includes('Sudah ikut beku karena induknya dibekukan.'))
+// Ketahuan saat dijalankan, bukan dari kode: spanduk peringatan menghitung sakelar
+// yang TIDAK online — jadi modul beku ikut masuk, dan itu benar (modul beku tanpa
+// kalimat justru lebih membingungkan: layarnya terbuka dan tampak normal). Yang salah
+// KALIMATNYA — ia menjanjikan orang melihat "sedang dipelihara", padahal yang mereka
+// temui tombol simpan yang mati di layar yang jalan.
+cek('spanduk peringatan tidak menyebut modul beku sebagai mati',
+  panel.includes('sakelar mati atau beku tanpa keterangan')
+  && !panel.includes('sedang dipelihara'))
 
 const menu = buangKomentar(baca('app/(dashboard)/menu/menu-client.tsx'))
 cek('kartu /menu punya keadaan BEKU', menu.includes("appStatus[statusKey] === 'readonly'"))

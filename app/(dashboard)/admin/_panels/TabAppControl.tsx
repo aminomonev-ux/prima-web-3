@@ -52,9 +52,12 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
 
   useEffect(()=>{ load(); },[load]);
 
-  // Sakelar yang mati DAN belum punya kalimat. Diangkat ke atas karena inilah keadaan
-  // yang paling merugikan: orang menemukan pintu tertutup tanpa keterangan apa pun,
-  // lalu menelepon — yang persis dihindari P6.
+  // Sakelar yang TIDAK online DAN belum punya kalimat. Diangkat ke atas karena inilah
+  // keadaan yang paling merugikan: orang menemukan pintu tertutup — atau, sejak P5,
+  // tombol simpan yang mati — tanpa keterangan apa pun, lalu menelepon.
+  //
+  // Beku ikut dihitung, dan itu memang benar: modul beku tanpa kalimat justru lebih
+  // membingungkan daripada modul mati, sebab layarnya terbuka dan tampak normal.
   const tanpaPesan = useMemo(
     () => SAKELAR_INFO.filter((s) => (status[s.kunci] ?? 'online') !== 'online' && !pesan[s.kunci]),
     [status, pesan],
@@ -115,8 +118,9 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
         <div className="ap-sk-ingat">
           <MessageSquare size={14}/>
           <span>
-            {tanpaPesan.length} sakelar mati tanpa keterangan: {tanpaPesan.map(s=>s.label).join(', ')}.
-            Orang yang menabraknya cuma melihat &ldquo;sedang dipelihara&rdquo; tanpa tahu sampai kapan.
+            {tanpaPesan.length} sakelar mati atau beku tanpa keterangan: {tanpaPesan.map(s=>s.label).join(', ')}.
+            Orang yang menabraknya cuma menemukan pintu tertutup atau tombol simpan yang mati,
+            tanpa tahu kenapa maupun sampai kapan.
           </span>
         </div>
       )}
