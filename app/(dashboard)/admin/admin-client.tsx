@@ -6,6 +6,7 @@ import {
   Monitor, Shield, Activity, Users, Server,
   Radio, Search, Mail, LogOut,
   Power, ChevronDown, ShieldCheck, MessageSquareWarning, ListChecks, Menu, Stethoscope,
+  ClipboardCheck,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -17,6 +18,7 @@ import { TabSessions } from './_panels/TabSessions';
 import { TabAppControl } from './_panels/TabAppControl';
 import { TabAttackMonitor } from './_panels/TabAttackMonitor';
 import { TabPusatAkses } from './_panels/TabPusatAkses';
+import { TabTinjauan } from './_panels/TabTinjauan';
 import { TabSecurityStatus } from './_panels/TabSecurityStatus';
 import { TabBroadcast } from './_panels/TabBroadcast';
 import { TabAuditTrail } from './_panels/TabAuditTrail';
@@ -28,7 +30,7 @@ import './admin.css';
 
 interface Props { userId: number; username: string; role: Role; sessionId: string; themePreference: 'dark' | 'light'; }
 
-type Tab = 'sessions'|'app-control'|'attack-monitor'|'pusat-akses'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback'|'pemeriksaan';
+type Tab = 'sessions'|'app-control'|'attack-monitor'|'pusat-akses'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback'|'pemeriksaan'|'tinjauan';
 
 
 
@@ -37,6 +39,11 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   const router    = useRouter();
   const isSA      = role === 'SUPER_ADMIN';
   const [tab, setTab]           = useState<Tab>('pusat-akses');
+  // Siapa yang sedang dibuka di Pusat Akses. Dipegang di SINI, bukan di dalam tabnya,
+  // karena tombol ATUR di layar Tinjauan memindahkan orangnya ke sana — dan prop yang
+  // disalin ke state lokal lewat efek berarti dua salinan satu fakta plus satu efek
+  // yang harus menjaganya tetap sama.
+  const [pilihOrang, setPilihOrang] = useState<number | null>(null);
   const [loggingOut, setOut]    = useState(false);
   const [dropOpen, setDrop]     = useState(false);
   // Hanya berarti di bawah 720px, tempat rel berubah jadi laci. Di lebar lain kelasnya
@@ -131,16 +138,18 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
    * `id` tiap tujuan tidak disentuh, dan isi tabnya tidak dibuka sama sekali. Kalau
    * ada yang rusak sesudah commit ini, penyebabnya hanya bisa satu hal.
    *
-   * Kelompoknya mengikuti maket (§16.3). Tiga tujuan yang di maket bernama Pusat
-   * Akses / Tinjauan / Pemeriksaan belum ada di sini — layarnya memang belum lahir
-   * (Tahap 4 & 5), dan menaruh nama untuk layar yang belum ada cuma menjanjikan
-   * sesuatu yang tidak bisa dibuka.
+   * Kelompoknya mengikuti maket (§16.3). Ketiga tujuan yang di maket bernama Pusat
+   * Akses / Pemeriksaan / Tinjauan sekarang SUDAH ada — lahir berturut-turut di Tahap
+   * 5, 4, dan 8. Sampai layarnya benar-benar bisa dibuka, namanya sengaja tidak
+   * dipasang di rel: nama untuk layar yang belum ada cuma menjanjikan sesuatu yang
+   * tidak bisa ditekan.
    */
   const GRUP: { judul: string; items: { id: Tab; label: string; icon: React.ReactNode; lencana?: number }[] }[] = [
     { judul: 'Akun & Akses', items: [
       { id:'pusat-akses',    label:'Pusat Akses', icon:<Users size={15}/> },
       { id:'menu-access',    label:'Peran',       icon:<ListChecks size={15}/> },
       { id:'promotion',      label:'Permintaan',  icon:<ShieldCheck size={15}/> },
+      ...(isSA ? [{ id:'tinjauan' as Tab, label:'Tinjauan', icon:<ClipboardCheck size={15}/> }] : []),
     ]},
     { judul: 'Aplikasi', items: [
       { id:'app-control',    label:'Sakelar',     icon:<Power size={15}/> },
@@ -234,7 +243,9 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'sessions'        && <TabSessions     selfSessionId={sessionId} isSA={isSA}/>}
         {tab === 'app-control'     && <TabAppControl   isSA={isSA}/>}
         {tab === 'attack-monitor'  && <TabAttackMonitor/>}
-        {tab === 'pusat-akses'     && isSA && <TabPusatAkses/>}
+        {tab === 'pusat-akses'     && isSA && (
+          <TabPusatAkses pilih={pilihOrang} setPilih={setPilihOrang}/>
+        )}
         {tab === 'pusat-akses'     && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
         {tab === 'menu-access'     && <MenuAccessRoleTab isSA={isSA}/>}
         {tab === 'security-status' && <TabSecurityStatus/>}
@@ -244,6 +255,12 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'promotion'       && isSA && <PromotionRequestsPanel/>}
         {tab === 'promotion'       && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
         {tab === 'rima-feedback'   && <RimaFeedbackPanel/>}
+        {tab === 'tinjauan'        && isSA && (
+          // Tautan ATUR memindahkan orangnya ke Pusat Akses, bukan membuka layar
+          // pengaturan kedua di sini: mencabut akses butuh alasan (P9) dan pembersihan
+          // izin menu (L69), dan dua salinan aturan itu pasti mulai berbeda.
+          <TabTinjauan onKeAkses={(id) => { setPilihOrang(id); setTab('pusat-akses'); }}/>
+        )}
         {tab === 'pemeriksaan'     && isSA && (
           <TabPemeriksaan temuan={temuan} loading={pmLoad} jam={pmJam} err={pmErr} onMuat={()=>void muatPemeriksaan()}/>
         )}

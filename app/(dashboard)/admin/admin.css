@@ -348,6 +348,20 @@
 .ap-pm-contoh{list-style:none;display:flex;flex-direction:column;gap:3px;padding:9px 11px;border-radius:6px;background:var(--ap-aksen-bg);font-size:11px;line-height:1.55;color:var(--ap-fg2);font-family:'JetBrains Mono',monospace;}
 .ap-pm-tindakan{font-size:11px;line-height:1.6;color:var(--ap-dim);border-top:1px solid var(--ap-line-tipis);padding-top:8px;}
 
+/* ─── Tinjauan Akses (Tahap 8 · P3) ──────────────────────────────────────────
+   Matriks orang x modul. Kolom modulnya sempit dan judulnya ditulis tegak? TIDAK —
+   judul tegak memang hemat lebar, tapi ia menukar satu masalah dengan masalah yang
+   lebih buruk: tabel yang tidak bisa dibaca sekilas, padahal "dibaca dari atas ke
+   bawah" itu seluruh alasan layar ini ada. Lebarnya dibiarkan, dan tabelnya
+   menggulir di dalam kotaknya sendiri (`.ap-table-wrap`). */
+.ap-tj th.ap-tj-modul{font-size:9px;letter-spacing:.06em;min-width:74px;text-align:center;}
+.ap-tj-nama{font-size:12px;font-weight:700;color:var(--ap-fg);}
+.ap-tj-sub{font-size:10px;color:var(--ap-dim);margin-top:2px;}
+.ap-tj-sel{text-align:center;color:var(--ap-dim);font-size:13px;}
+/* Yang DIBERIKAN menonjol; yang datang dari peran sengaja redup — kalau keduanya
+   sama tebal, mata tidak punya cara membedakan mana yang perlu diputuskan. */
+.ap-tj-sel.beri{color:var(--ap-ok-fg);font-weight:700;font-size:14px;}
+
 /* ─── Pusat Akses (Tahap 5) ──────────────────────────────────────────────────
    Dua kolom: daftar orang TETAP TERLIHAT di kiri, berkas orang terpilih di kanan.
    Daftar yang hilang begitu seseorang dipilih memaksa orang bolak-balik hanya untuk

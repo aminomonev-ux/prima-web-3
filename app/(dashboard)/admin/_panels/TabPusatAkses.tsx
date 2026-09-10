@@ -80,11 +80,18 @@ const JENIS_BADGE: Record<string, string> = {
   USER_CREATE:   'badge-cyan',
 };
 
-export function TabPusatAkses() {
+/**
+ * `pilih` dipegang INDUKNYA, bukan komponen ini. Sebabnya tombol ATUR di layar Tinjauan:
+ * ia memindahkan orangnya ke sini, dan satu-satunya cara lain adalah menyalin prop itu
+ * ke state lokal lewat efek — yang berarti dua salinan "siapa yang sedang dibuka" dan
+ * satu efek yang harus menjaganya tetap sama. State terkendali membuang keduanya.
+ */
+export function TabPusatAkses(
+  { pilih, setPilih }: { pilih: number | null; setPilih: (id: number | null) => void },
+) {
   const [daftar, setDaftar]   = useState<Orang[]>([]);
   const [cari, setCari]       = useState('');
   const [arsip, setArsip]     = useState(false);
-  const [pilih, setPilih]     = useState<number | null>(null);
   const [berkas, setBerkas]   = useState<BerkasOrang | null>(null);
   const [sibuk, setSibuk]     = useState(false);
   const [paket, setPaket]     = useState<Paket[]>([]);

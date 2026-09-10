@@ -36,15 +36,25 @@ CREATE TABLE IF NOT EXISTS users (
   promotion_failed_at     DATETIME    DEFAULT NULL,         -- last failed attempt
   probationary_until      DATETIME    DEFAULT NULL,         -- 7 hari sejak role aktif
   probationary_from_role  VARCHAR(50) DEFAULT NULL,         -- role sebelum promotion (utk revoke rollback)
+  -- ─── Tinjauan Akses Berkala (P3, migration-tinjauan-akses.sql) ─────────────
+  -- AUTHZ-02/V5 menuntut akses direview berkala. Dua kolom, BUKAN tabel riwayat:
+  -- yang dibutuhkan "kapan terakhir", dan sejarahnya sudah ada di `audit_log`.
+  -- FK-nya SET NULL — di sini yang dijaga keadaan sekarang, bukan riwayat.
+  access_reviewed_at  DATETIME        DEFAULT NULL,
+  access_reviewed_by  INT             DEFAULT NULL,
   created_at          DATETIME        NOT NULL DEFAULT NOW(),
   updated_at          DATETIME        NOT NULL DEFAULT NOW() ON UPDATE NOW(),
   deleted_at          DATETIME        DEFAULT NULL,  -- SDL-L5 migration 028: soft-delete untuk retention/anonimisasi UU PDP Pasal 16
-  CONSTRAINT chk_users_status CHECK (status IN ('AKTIF','NONAKTIF','MENUNGGU','DITOLAK','PENDING'))
+  CONSTRAINT chk_users_status CHECK (status IN ('AKTIF','NONAKTIF','MENUNGGU','DITOLAK','PENDING')),
+  CONSTRAINT fk_users_reviewed_by FOREIGN KEY (access_reviewed_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_users_username       ON users (username);
 CREATE INDEX idx_users_email          ON users (email);
 CREATE INDEX idx_users_role           ON users (role);
+-- Penyaring utama layar Tinjauan "belum ditinjau / lewat 6 bulan" — yang dibaca justru
+-- baris ber-NULL dan yang paling tua. Menaik: NULL lebih dulu di MySQL.
+CREATE INDEX idx_users_reviewed       ON users (access_reviewed_at);
 CREATE INDEX idx_users_status         ON users (status);
 CREATE INDEX idx_users_username_lower ON users ((LOWER(username)));
 CREATE INDEX idx_users_email_lower    ON users ((LOWER(email)));
