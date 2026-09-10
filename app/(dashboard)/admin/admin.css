@@ -537,3 +537,18 @@
 @media (prefers-reduced-motion: reduce){
   .ap-body *,.ap-modal-bg *{transition-duration:.01ms;animation-duration:.01ms;animation-iteration-count:1;}
 }
+
+/* ── P2 · Akses berjangka (Tahap 10) ───────────────────────────────────────
+   Tenggat hidup DI DALAM baris modulnya, bukan di panel terpisah. "Sampai kapan"
+   itu sifat dari sebuah pemberian akses, dan memisahkannya berarti dua tempat
+   yang harus dibaca bersamaan untuk menjawab satu pertanyaan. */
+.ap-pa-jangka{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:7px;}
+.ap-pa-jangka-teks{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  color:var(--ap-info);background:var(--ap-info-bg);border:1px solid var(--ap-info-line);
+  padding:3px 9px;border-radius:999px;}
+/* Yang tinggal ≤3 hari berpindah ke warna peringatan. Bukan merah: tenggat yang
+   mendekat itu kabar yang perlu diputuskan, bukan kesalahan yang sudah terjadi. */
+.ap-pa-jangka-teks.mepet{color:var(--ap-warn-fg);background:var(--ap-warn-bg);border-color:var(--ap-warn-line);}
+.ap-pa-jangka-form{display:flex;flex-direction:column;gap:5px;width:100%;max-width:420px;
+  padding:10px 12px;border:1px solid var(--ap-line);border-radius:8px;background:var(--ap-line-tipis);}
+.ap-pa-jangka-nota{font-size:10.5px;line-height:1.55;color:var(--ap-dim);}

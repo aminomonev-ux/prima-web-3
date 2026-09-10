@@ -31,6 +31,8 @@ import {
 } from '@/lib/data/menu-access'
 import { acquireBludLock } from '@/lib/data/locks'
 import { barisPintu, grantYangBerarti, type BerkasOrang, type BlokMenu } from '@/lib/admin/pintu-akses'
+import { jangkaYangBerarti } from '@/lib/admin/berjangka-baris'
+import { bacaJangka, tulisJangkaTx } from '@/lib/admin/akses-berjangka'
 import { assertQuotaAvailableTx } from '@/lib/security/promotion'
 
 // Aturan pintunya + bentuk berkasnya tinggal di `pintu-akses.ts` — berkas DAUN tanpa
@@ -60,7 +62,8 @@ export async function berkasOrang(userId: number): Promise<BerkasOrang | null> {
   const pintu = barisPintu(u.role, appAccess)
   const terbuka = new Set(pintu.filter((p) => p.terbuka).map((p) => p.kunci))
 
-  const [sesi, hitungPeran, waktu, ...blokMentah] = await Promise.all([
+  const [jangka, sesi, hitungPeran, waktu, ...blokMentah] = await Promise.all([
+    bacaJangka(userId),
     queryOne<{ n: number }>(sql`
       SELECT COUNT(*) AS n FROM user_sessions
       WHERE user_id = ${userId} AND invalidated_at IS NULL
@@ -92,6 +95,7 @@ export async function berkasOrang(userId: number): Promise<BerkasOrang | null> {
     pintu,
     menu: blokMentah as BlokMenu[],
     appAccess,
+    jangka,
   }
 }
 
@@ -229,9 +233,19 @@ export type PermintaanSimpan = {
   versi: Record<string, string>
   /** P9 — wajib kalau peran atau pintu modulnya bergeser; diperiksa di dalam transaksi. */
   alasan?: string
+  /**
+   * P2 — tenggat per modul. Modul yang tidak disebut berarti tanpa batas waktu, jadi
+   * menghilangkan sebuah kunci dari sini MENCABUT tenggatnya (bukan membiarkannya).
+   */
+  berjangka?: Record<string, { berakhir: string; alasan: string }>
   /** Peran yang dilihat layar saat dimuat. Beda = layar sudah basi. */
   roleAwal: string
-  olehUserId: number
+  /**
+   * `null` = tidak ada manusia di baliknya — cron pencabutan kedaluwarsa. Sengaja
+   * dibedakan dari sebuah id: menuliskan id seseorang pada baris yang ditulis mesin
+   * membuat jejaknya menuduh orang yang tidak melakukan apa-apa.
+   */
+  olehUserId: number | null
 }
 
 export type HasilSimpan = {
@@ -240,6 +254,8 @@ export type HasilSimpan = {
   grantDicabut: string[]
   izinDihapus: number
   modulMenuDitulis: string[]
+  jangkaDitulis: number
+  jangkaDihapus: number
 }
 
 /**
@@ -253,6 +269,7 @@ export type HasilSimpan = {
 export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpan> {
   const hasil: HasilSimpan = {
     peranBerubah: null, grantDitambah: [], grantDicabut: [], izinDihapus: 0, modulMenuDitulis: [],
+    jangkaDitulis: 0, jangkaDihapus: 0,
   }
 
   await withTransaction(async ({ tx, conn }) => {
@@ -311,6 +328,17 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
         updated_at = NOW()
       WHERE id = ${p.userId}
     `
+    // P2 — tenggat ditulis di TRANSAKSI YANG SAMA dengan grant-nya, dan disaring
+    // `jangkaYangBerarti` terhadap grant yang BARU. Dua akibatnya, dua-duanya perlu:
+    // modul yang grant-nya baru saja dicabut kehilangan tenggatnya (tenggat yatim akan
+    // mencabut akses yang mungkin sudah diberikan ulang belakangan — tanpa ada yang
+    // memintanya), dan tenggat pada modul yang terbuka karena PERAN tidak pernah
+    // tersimpan, sebab tanggal di situ tidak akan menutup apa pun saat lewat.
+    const jangkaBaru = jangkaYangBerarti(grantBaru, p.berjangka ?? {})
+    const j = await tulisJangkaTx(tx, p.userId, jangkaBaru, p.olehUserId)
+    hasil.jangkaDitulis = j.ditulis
+    hasil.jangkaDihapus = j.dihapus
+
     // Modul yang grant-nya dicabut ikut membawa perkecualian menunya. Kalau ditinggal,
     // barisnya jadi yatim — tidak berbahaya hari ini (pintu modulnya menutup), tapi
     // hidup kembali tanpa ada yang ingat kalau grant-nya diberikan lagi nanti.
@@ -344,7 +372,7 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
 async function tulisIzinOrangTx(
   tx: Penanya, conn: Parameters<typeof bulkInsert>[3],
   userId: number, appKey: string,
-  peta: Record<string, Izin>, sidikJariHarap: string | undefined, olehUserId: number,
+  peta: Record<string, Izin>, sidikJariHarap: string | undefined, olehUserId: number | null,
 ): Promise<boolean> {
   const kini = new Map<string, Izin>()
   const rows = await tx`

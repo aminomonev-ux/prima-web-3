@@ -1513,3 +1513,20 @@ CREATE TABLE IF NOT EXISTS pergeseran_mutasi (
   PRIMARY KEY (id),
   KEY idx_mutasi_versi (tahun_anggaran, versi_tanggal, urutan)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Akses berjangka (P2, Tahap 10) — tenggat sebuah grant `app_access`.
+-- Migrasi: docs/migrations/migration-akses-berjangka.sql
+CREATE TABLE akses_kedaluwarsa (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  user_id         INT          NOT NULL,
+  app_key         VARCHAR(64)  NOT NULL,
+  berakhir_pada   DATE         NOT NULL,
+  alasan          VARCHAR(255) NOT NULL,
+  dibuat_oleh     INT          DEFAULT NULL,
+  dibuat_pada     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  diingatkan_pada DATE         DEFAULT NULL,
+  UNIQUE KEY uq_akses_kedaluwarsa (user_id, app_key),
+  KEY idx_ak_berakhir (berakhir_pada),
+  CONSTRAINT fk_ak_user FOREIGN KEY (user_id)     REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ak_oleh FOREIGN KEY (dibuat_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

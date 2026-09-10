@@ -134,4 +134,13 @@ export type BerkasOrang = {
   pintu: BarisPintu[]
   menu: BlokMenu[]
   appAccess: string[]
+  /**
+   * P2 — tenggat per modul yang DIBERIKAN. Kuncinya sama dengan `appAccess`; modul yang
+   * tidak disebut berarti tanpa batas waktu.
+   *
+   * Ikut di berkas ini, bukan diambil layar lewat panggilan kedua: dua pemuatan berarti
+   * dua keadaan yang bisa berbeda kalau ada yang menyimpan di selanya, dan yang kedua
+   * inilah yang menentukan kalimat "12 hari lagi" di layar.
+   */
+  jangka: Record<string, { berakhir: string; alasan: string }>
 }

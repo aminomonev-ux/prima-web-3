@@ -195,6 +195,7 @@ export async function PUT(req: NextRequest) {
       menu: b.menu,
       versi: b.versi,
       alasan: b.alasan,
+      berjangka: b.berjangka,
       olehUserId: session.userId,
     })
 
@@ -226,6 +227,16 @@ export async function PUT(req: NextRequest) {
       await writeAuditLog({
         ...jejak, eventType: 'ACCESS_REVOKE',
         detail: `user id=${b.user_id}: -${hasil.grantDicabut.join(', ')}${sebab}`,
+      })
+    }
+    // P2 — tenggat itu BATAS wewenang, jadi menggesernya ikut dicatat. Baris sendiri,
+    // bukan disisipkan ke ACCESS_GRANT: memberi akses tanpa batas waktu dan memberi
+    // akses sampai 30 September adalah dua keputusan berbeda, dan yang membacanya
+    // belakangan perlu bisa membedakannya tanpa menebak dari kolom detail.
+    if (hasil.jangkaDitulis || hasil.jangkaDihapus) {
+      await writeAuditLog({
+        ...jejak, eventType: 'USER_UPDATE',
+        detail: `Akses berjangka user id=${b.user_id}: ${hasil.jangkaDitulis} disetel, ${hasil.jangkaDihapus} dilepas${sebab}`,
       })
     }
     if (hasil.modulMenuDitulis.length) {

@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 import {
   Search, Save, RotateCcw, ChevronDown, ChevronRight, KeyRound, Power, LogOut,
   Archive, Trash2, UserPlus, PackageOpen, PackagePlus, ShieldAlert, Info, Unlock, X,
-  History,
+  History, CalendarClock,
 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog, promptDialog } from '@/components/ui/ConfirmDialog';
@@ -35,6 +35,9 @@ import { ROLE_LABELS } from '@/lib/constants';
 // Dari berkas DAUN, bukan dari `pusat-akses.ts` yang membaca DB — lihat kepala
 // `pintu-akses.ts` untuk sebabnya (halaman /admin sempat balas 500 karenanya).
 import { barisPintu, type BerkasOrang } from '@/lib/admin/pintu-akses';
+// Berkas DAUN juga — aturan tenggatnya murni, dan panel ini yang memakainya untuk
+// menyusun kalimat "12 hari lagi" tanpa menghitungnya sendiri.
+import { labelJangka, perluPerhatian, jangkaYangBerarti, HARI_PERINGATAN } from '@/lib/admin/berjangka-baris';
 // D1 (T-8) — dropdown peran yang SAMA dengan yang dipakai panel Kelola User di Usulan.
 // Penanda kuota, opsi penuh dimatikan, dan kalimat konfirmasinya lahir dari satu tempat.
 import PilihPeran, { konfirmasiUbahPeran, segarkanStatKuota, useStatKuota } from '@/components/admin/PilihPeran';
@@ -101,6 +104,8 @@ export function TabPusatAkses(
   const [draRole, setDraRole]   = useState('');
   const [draGrant, setDraGrant] = useState<string[]>([]);
   const [draMenu, setDraMenu]   = useState<Record<string, Record<string, Izin>>>({});
+  const [draJangka, setDraJangka] = useState<Record<string, { berakhir: string; alasan: string }>>({});
+  const [jangkaBuka, setJangkaBuka] = useState<Record<string, boolean>>({});
   const [asalPaket, setAsalPaket] = useState<string | null>(null);
   const [buatBuka, setBuatBuka]   = useState(false);
   const [paketBuka, setPaketBuka] = useState(false);
@@ -125,6 +130,8 @@ export function TabPusatAkses(
     setDraRole(j.data.user.role);
     setDraGrant([...j.data.appAccess]);
     setDraMenu(Object.fromEntries(j.data.menu.map(m => [m.appKey, { ...m.orang }])));
+    setDraJangka({ ...j.data.jangka });
+    setJangkaBuka({});
     setAsalPaket(null);
     setGaris(null);
   }, []);
@@ -164,13 +171,27 @@ export function TabPusatAkses(
     [berkas, draRole, draGrant],
   );
 
+  // Tanggal hari ini menurut peramban — dipakai HANYA untuk menyusun kalimat "n hari
+  // lagi" di layar. Yang benar-benar memutuskan kapan akses dicabut adalah `CURDATE()`
+  // di server, dan itu memang harus begitu: tenggat yang bergantung pada jam mesin
+  // pembacanya akan berbeda-beda per orang yang membuka halaman yang sama.
+  const hariIni = useMemo(() => {
+    const d = new Date();
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+  }, []);
+
   const berubah = useMemo(() => {
     if (!berkas) return false;
     if (draRole !== berkas.user.role) return true;
     const a = [...draGrant].sort().join(','), b = [...berkas.appAccess].sort().join(',');
     if (a !== b) return true;
+    // Tenggat ikut dihitung "berubah" — kalau tidak, menyetel tanggal lalu meninggalkan
+    // halaman tidak akan memicu peringatan belum-tersimpan, dan tombol Simpan tetap
+    // mati sehingga tanggalnya tidak pernah bisa ditulis sama sekali.
+    if (JSON.stringify(jangkaYangBerarti(draGrant, draJangka)) !== JSON.stringify(jangkaYangBerarti(berkas.appAccess, berkas.jangka))) return true;
     return berkas.menu.some(m => JSON.stringify(m.orang) !== JSON.stringify(draMenu[m.appKey] ?? {}));
-  }, [berkas, draRole, draGrant, draMenu]);
+  }, [berkas, draRole, draGrant, draMenu, draJangka]);
 
   useIngatkanBelumTersimpan(
     berubah ? 'Pengaturan akses orang ini belum disimpan. Kalau Anda pergi sekarang, perubahannya hilang.' : null,
@@ -178,6 +199,25 @@ export function TabPusatAkses(
 
   function geserGrant(kunci: string, nyala: boolean) {
     setDraGrant(prev => nyala ? [...new Set([...prev, kunci])] : prev.filter(k => k !== kunci));
+    // Mencabut centang ikut membuang tenggatnya. Kalau ditinggal, ia tersimpan sebagai
+    // tenggat yatim yang akan mencabut akses ini LAGI kalau nanti diberikan ulang —
+    // pencabutan yang tidak pernah diminta siapa pun.
+    if (!nyala) {
+      setDraJangka(prev => { const n = { ...prev }; delete n[kunci]; return n; });
+      setJangkaBuka(prev => { const n = { ...prev }; delete n[kunci]; return n; });
+    }
+  }
+
+  function geserJangka(kunci: string, isi: Partial<{ berakhir: string; alasan: string }>) {
+    setDraJangka(prev => ({
+      ...prev,
+      [kunci]: { berakhir: prev[kunci]?.berakhir ?? '', alasan: prev[kunci]?.alasan ?? '', ...isi },
+    }));
+  }
+
+  function lepasJangka(kunci: string) {
+    setDraJangka(prev => { const n = { ...prev }; delete n[kunci]; return n; });
+    setJangkaBuka(prev => ({ ...prev, [kunci]: false }));
   }
 
   function geserMenu(appKey: string, menuKey: string, nilai: '' | Izin) {
@@ -255,6 +295,12 @@ export function TabPusatAkses(
         role: draRole,
         role_awal: berkas.user.role,
         app_access: grantKirim,
+        // Disaring dengan fungsi yang SAMA dengan yang dipakai server sesudah
+        // menyimpan grant-nya. Layar yang menyaring dengan aturannya sendiri cepat
+        // atau lambat mengirim tenggat untuk modul yang tidak jadi diberikan.
+        berjangka: Object.fromEntries(
+          jangkaYangBerarti(grantKirim, draJangka).map(b => [b.appKey, { berakhir: b.berakhir, alasan: b.alasan }]),
+        ),
         menu: peranBerubah ? {} : draMenu,
         versi: Object.fromEntries(berkas.menu.map(m => [m.appKey, m.versi])),
         asal_paket: asalPaket ? { nama: asalPaket, diubah: 1 } : null,
@@ -524,6 +570,61 @@ export function TabPusatAkses(
                     <div className="ap-pa-row-isi">
                       <div className="ap-pa-row-nama">{b.label}</div>
                       <div className="ap-pa-row-sebab">{b.sebab}</div>
+                      {/* P2 — tenggat HANYA untuk modul yang benar-benar diberikan per
+                          orang. Menawarkannya pada baris yang terbuka karena PERAN akan
+                          memasang tanggal yang tidak menutup apa pun saat lewat: pintu
+                          itu tidak digerakkan `app_access`. Janji yang tidak ditepati
+                          sistem lebih buruk daripada tidak ditawarkan. */}
+                      {b.bisaDicentang && draGrant.includes(b.kunci) && (() => {
+                        const j = draJangka[b.kunci];
+                        const adaTgl = Boolean(j?.berakhir);
+                        const bukaForm = jangkaBuka[b.kunci];
+                        return (
+                          <div className="ap-pa-jangka">
+                            {adaTgl && !bukaForm && (
+                              <span className={`ap-pa-jangka-teks${perluPerhatian(j.berakhir, hariIni) ? ' mepet' : ''}`}>
+                                <CalendarClock size={12}/> {labelJangka(j.berakhir, hariIni)}
+                              </span>
+                            )}
+                            {!bukaForm && (
+                              <PrimaButton size="sm" variant="ghost" disabled={sibuk}
+                                iconLeft={<CalendarClock size={12}/>}
+                                onClick={() => setJangkaBuka(p => ({ ...p, [b.kunci]: true }))}>
+                                {adaTgl ? 'UBAH BATAS' : 'BERI BATAS WAKTU'}
+                              </PrimaButton>
+                            )}
+                            {adaTgl && !bukaForm && (
+                              <PrimaButton size="sm" variant="ghost" disabled={sibuk}
+                                onClick={() => lepasJangka(b.kunci)}>JADIKAN TETAP</PrimaButton>
+                            )}
+                            {bukaForm && (
+                              <div className="ap-pa-jangka-form">
+                                <label className="ap-sk-lbl">Berlaku sampai</label>
+                                <input className="ap-input" type="date" value={j?.berakhir ?? ''}
+                                  onChange={e => geserJangka(b.kunci, { berakhir: e.target.value })}/>
+                                <label className="ap-sk-lbl">Alasan peminjaman</label>
+                                <input className="ap-input" type="text" maxLength={255}
+                                  placeholder="Mis. pengganti Bu Sari selama cuti melahirkan"
+                                  value={j?.alasan ?? ''}
+                                  onChange={e => geserJangka(b.kunci, { alasan: e.target.value })}/>
+                                {/* Disebut di layar, bukan cuma di kode: orang yang tahu
+                                    pengingatnya berbunyi H-3 tidak perlu meminta jangka
+                                    yang kepanjangan-panjangan "supaya aman". */}
+                                <div className="ap-pa-jangka-nota">
+                                  Dicabut otomatis pada hari setelah tanggal itu. Anda &amp; pemegangnya
+                                  diingatkan {HARI_PERINGATAN} hari sebelumnya.
+                                </div>
+                                <div className="ap-row" style={{ gap: 6 }}>
+                                  <PrimaButton size="sm" variant="primary"
+                                    onClick={() => setJangkaBuka(p => ({ ...p, [b.kunci]: false }))}>SELESAI</PrimaButton>
+                                  <PrimaButton size="sm" variant="ghost"
+                                    onClick={() => lepasJangka(b.kunci)}>LEPAS BATAS</PrimaButton>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     {b.punyaMenu && b.terbuka && blok && (
                       <button className="ap-btn ap-btn-cyan" type="button" onClick={() => setBuka(p => ({ ...p, [b.kunci]: !p[b.kunci] }))}>

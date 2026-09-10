@@ -166,6 +166,18 @@ export const PusatAksesSimpanSchema = z.object({
   alasan:     AlasanWewenangSchema.optional(),
   menu:       z.record(z.string(), z.record(z.string(), IzinMenuEnum)).default({}),
   versi:      z.record(z.string(), z.string()).default({}),
+  /**
+   * P2 — tenggat per modul. Kunci yang TIDAK disebut berarti tanpa batas waktu, jadi
+   * menghilangkannya dari kiriman mencabut tenggatnya. Server menyaringnya lagi
+   * terhadap grant yang benar-benar tersimpan (`jangkaYangBerarti`), jadi tanggal pada
+   * modul yang tidak diberikan per orang tidak akan pernah mendarat di tabel.
+   *
+   * `max(20)` sama dengan `app_access` — tenggat tidak bisa lebih banyak dari pintunya.
+   */
+  berjangka: z.record(z.string(), z.object({
+    berakhir: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal berakhir tidak berbentuk YYYY-MM-DD.'),
+    alasan:   z.string().trim().min(4, 'Tulis dulu alasan peminjamannya.').max(255),
+  })).default({}),
   /** Jejak P1: paket mana yang dipakai sebagai titik awal, dan berapa yang disunting. */
   asal_paket: z.object({
     nama:   z.string().min(1).max(60),
