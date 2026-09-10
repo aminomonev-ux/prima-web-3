@@ -1,7 +1,8 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–6 SELESAI 2026-09-09 — "satu pintu" berdiri penuh.** C3 tersisa,
-> dijadwalkan sebagai Tahap 14 (§17.1); Tahap 7 ke atas penambahan, bukan penyelesaian. Ditulis &
+> Status: **Tahap 1–6 SELESAI 2026-09-09.** **Tahap 7 kodenya selesai 2026-09-10 —
+> MENUNGGU MIGRASI & VERIFIKASI PERAMBAN** (MySQL & dev server mati saat dikerjakan;
+> daftar periksanya di §17.2 Tahap 7). C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -2365,7 +2366,7 @@ tidak pernah dikerjakan.
 
 | Tahap | Isi | Migrasi | Catatan yang menentukan |
 |---|---|---|---|
-| **7** | P8 lapis 1 (`audit_log.target_user_id` + indeks) + P9 (alasan wajib) | 1 kolom | Garis waktu berumur **12 bulan** (cron retensi) — dan itu wajib ditulis di layar, bukan dibiarkan orang mengira riwayatnya lengkap |
+| **7** ✅ | P8 lapis 1 (`audit_log.target_user_id` + indeks) + P9 (alasan wajib) | 1 kolom | Garis waktu berumur **12 bulan** (cron retensi) — dan itu wajib ditulis di layar, bukan dibiarkan orang mengira riwayatnya lengkap. **Kode selesai 2026-09-10; migrasi & verifikasi peramban BELUM** |
 | **8** | P3 Tinjauan (2 kolom `users`) + P11 Ekspor | 2 kolom | Pengekspor **menerima baris yang sudah dihitung layar**, tidak menghitung ulang |
 | **9** | P5 Mode baca-saja | 0 | Kerjakan **BLUD + PK** (menjepit `izinMenuRegistry` ke `LIHAT` — hampir gratis) **dan** empat modul pabrik `buatGuardModul`. Usulan/E-Anggaran/Dashboard **disebut terus terang belum dapat** |
 | **10** | P2 Akses berjangka + cron | 1 tabel | Pencabutan otomatis **wajib memanggil fungsi pencabutan yang sama** dengan manual (L69). Cron memeriksa "yang sudah lewat", bukan "yang jatuh tempo hari ini" — server kantor dimatikan tiap malam |
@@ -2376,6 +2377,108 @@ tidak pernah dikerjakan.
 **Fase E** (izin per-menu untuk modul lain) **tidak dijadwalkan.** Ia dipicu permintaan
 nyata, dan syaratnya tetap: kalau tabel perannya keluar datar, modul itu tidak
 membutuhkannya (pelajaran Kinerja).
+
+#### Tahap 7 — HASIL (kode selesai 2026-09-10)
+
+> ⚠ **BELUM SELESAI SEPENUHNYA.** MySQL dan dev server mati saat tahap ini dikerjakan,
+> jadi **migrasinya belum dijalankan** dan **belum satu layar pun diperiksa di peramban**.
+> Daftar periksanya di bawah. Kodenya lengkap dan lolos seluruh gate statis.
+
+**P8 lapis 1 — satu kolom, dan yang ditutupnya bukan kerapian.** `audit_log.username`
+menyimpan PELAKU; sasarannya tenggelam di `detail` sebagai teks bebas. Akibatnya
+pertanyaan yang paling sering ditanyakan saat ada masalah — *"akses Sari pernah diubah
+siapa dan kapan?"* — tidak bisa dijawab dari layar mana pun.
+
+Dan mencarinya manual pun jebakan: `detail LIKE '%id=12%'` ikut cocok dengan `id=120`,
+`id=123`, `id=127`. Pencarian yang kelihatan berhasil dan diam-diam salah — jenis
+kesalahan yang paling sulit ketahuan, karena hasilnya tetap masuk akal.
+
+Tiga keputusan di migrasinya, masing-masing dengan sebabnya:
+
+- **Tanpa FOREIGN KEY.** `ON DELETE SET NULL` akan MENGHAPUS jawabannya persis pada
+  kasus yang paling perlu dijawab ("akun itu dihapus, siapa yang menghapusnya dan
+  kenapa?"); `CASCADE` malah membuang baris auditnya. Jejak audit harus bertahan
+  melewati orang yang dijejaknya — id yatim di sini lebih berguna daripada NULL rapi.
+- **Indeksnya dua kolom** `(target_user_id, created_at DESC)`. Garis waktu satu orang
+  SELALU dibaca terurut waktu terbaru; indeks satu kolom menyisakan filesort.
+- **Tanpa backfill.** Menerka sasaran dari `detail LIKE '%id=N%'` adalah persis
+  pencarian salah yang migrasi ini ada untuk membuangnya. Garis waktunya berumur maju
+  dari hari migrasinya dijalankan.
+
+**BAHAYA YANG DITEMUKAN SAAT MENULISNYA, bukan dari rencana.** `writeAuditLog` sengaja
+gagal **diam-diam** (try/catch — audit tidak boleh menjatuhkan aksi yang dijejaknya).
+Konsekuensinya: pada basis data yang kodenya sudah di-deploy tapi migrasinya belum
+dijalankan, `INSERT` yang menyebut kolom baru gagal — dan **SELURUH jejak audit berhenti
+tertulis tanpa satu gejala pun**. Bukan satu kolom yang hilang; semuanya.
+
+Jadi urutan korbannya dibalik: `ER_BAD_FIELD_ERROR` khusus kolom itu memicu jalur
+cadangan yang menulis baris tanpa kolom sasaran, ditandai sekali (tidak mencoba tiap
+penulisan), dan konsolnya menyebut nama berkas migrasinya. Ini **bukan izin melewatkan
+migrasinya** — §17.3 aturan 4 tetap berlaku; ini yang membuat melewatkannya bisa
+ketahuan alih-alih senyap.
+
+**P9 — dan yang menentukan bukan kotak teksnya, melainkan KAPAN ia muncul.** Alasan
+diminta pada: ubah peran, buka/tutup pintu modul, hapus permanen. **Tidak** pada
+aktifkan/nonaktifkan/putus sesi/reset kata sandi — pertanyaan yang muncul pada aksi
+harian melatih orang mengetik "-", lalu kebiasaan itu terbawa ke aksi yang benar-benar
+tidak bisa ditarik balik. Alasan yang boleh kosong adalah alasan yang tidak pernah
+diisi, dan kolom yang selalu berisi "-" lebih buruk daripada kolom yang tidak ada: ia
+terbaca seperti sudah dijawab.
+
+**Yang memutuskan "ada yang berubah" SERVER**, di dalam transaksi, dari baris yang sudah
+dikunci `FOR UPDATE`. Bukan klien: klien tidak pernah menerima grant lama, jadi
+perhitungannya di sana tebakan yang bisa meleset tepat pada kasus yang paling perlu
+dicatat — dua admin menyunting orang yang sama. Layar tetap menghitungnya juga, tapi
+untuk **meminta**, bukan untuk menjamin.
+
+**Satu pintu ikut ditutup**: cabang `set-app-access` di `/api/admin/users` dibuang. Layar
+yang memakainya mati sejak Tahap 5, jadi ia jalur tulis tanpa pintu — dan yang lebih
+menentukan, ia memberi & mencabut akses **tanpa melewati kewajiban alasan yang baru
+dipasang**. Pintu kedua yang melewati aturan barunya membuat aturan itu jadi hiasan.
+
+**Alasannya diminta di dialog yang SUDAH ADA**, bukan sebagai langkah kedua: dua kotak
+berurutan untuk satu tindakan membuat yang kedua terbaca sebagai gangguan lalu diisi
+seadanya. `promptDialog` lahir di berkas yang sama dengan `confirmDialog` — komponen
+dialog kedua akan berbeda bunyi begitu salah satunya disunting, dan yang paling gampang
+berbeda justru bagian yang paling perlu terbaca sama: tombol mana yang membatalkan.
+`confirmDialog` **tidak** diubah bentuk balasannya (30-an pemakai).
+
+Alasan hapus permanen lewat **badan**, bukan query string: teks bebas di URL berakhir di
+log akses Nginx dan riwayat peramban, dan yang ditulis di sini kadang menyebut nama orang
+atau sebab pemberhentiannya. Ia juga diminta **sesudah** angka jejaknya terlihat —
+alasan yang diketik tanpa tahu 247 baris akan kehilangan pemiliknya bukan alasan.
+
+**Garis waktu** dimuat saat diminta, bukan bersama berkasnya (ia menyapu tabel terbesar
+di basis data ini). Dan layarnya **mengatakan garis waktunya punya ujung**: angkanya
+datang dari server, dari konstanta yang sama dengan yang benar-benar dipangkas
+`purge-retention`. Layar yang diam soal itu membiarkan orang membaca *"tidak ada
+catatan"* dari *"catatannya sudah dibuang"* — kesimpulan yang salah tepat pada
+pertanyaan yang paling penting.
+
+**Regresi:** `npx tsx scripts/test-tahap-7.mts` (61 pemeriksaan), **19 uji mutasi
+tertangkap**. Tiga awalnya **LOLOS**, dan ketiganya asersi saya sendiri:
+- mencabut penjaga jalur cadangan (`throw e` polos) meninggalkan seluruh perancahnya di
+  tempat — kutipannya kurang utuh (L82c);
+- dua asersi atas berkas `.sql` memindai **prosa komentarnya**: kalimat yang menyebut
+  bentuk indeks untuk menjelaskannya, dan kolom yang DIKOMENTARI di skema acuan yang
+  tetap terbaca seperti masih ada. Jebakan yang sudah tiga kali memakan korban di suite
+  BLUD, kali ini di berkas SQL — penyaring komentarnya sekarang ada.
+
+**DAFTAR PERIKSA YANG BELUM DIKERJAKAN** (MySQL & dev server mati saat itu):
+
+1. Jalankan `docs/migrations/migration-audit-target-user.sql` — kueri pemeriksaannya ada
+   di kepala berkas.
+2. Ubah peran satu akun uji: dialognya wajib meminta alasan, membatalkannya tidak
+   mengubah apa pun, dan alasannya muncul di `detail` baris `ROLE_CHANGE`.
+3. Buka & tutup satu pintu modul: dialog menyebut modul mana yang dibuka/ditutup.
+4. Simpan yang HANYA menggeser satu izin menu: **tidak** diminta alasan.
+5. Garis waktu satu orang menampilkan peristiwanya, terbaru dulu, dengan kalimat
+   "dipangkas otomatis setiap 12 bulan".
+6. Kirim `PUT` tanpa `alasan` saat peran berubah → **400 `ALASAN_WAJIB`**, dan tidak ada
+   satu baris pun yang berubah di DB.
+7. Kedua tema + lebar 375px (§17.3 aturan 5).
+
+---
 
 ### 17.3 Aturan kerja yang berlaku di semua tahap
 
