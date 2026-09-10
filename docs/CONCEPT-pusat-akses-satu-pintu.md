@@ -1,7 +1,7 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–8 SELESAI** (1–6 pada 2026-09-09; Tahap 7 & 8 dengan migrasi &
-> verifikasi peramban pada 2026-09-10). C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
+> Status: **Tahap 1–9 SELESAI** (1–6 pada 2026-09-09; Tahap 7–9 pada 2026-09-10 — Tahap 9
+> nol migrasi, dan sebagian verifikasi perambannya tertunda, lihat §17.2 Tahap 9). C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -993,6 +993,11 @@ status — bentuk yang sudah dijelaskan di L88 sebagai sumber kebingungan.
 
 ### P5 · Mode BACA-SAJA — keadaan sakelar ketiga yang paling sering dibutuhkan
 
+> ✅ **SELESAI 2026-09-10 (Tahap 9).** Satu rekomendasi di bagian ini **tidak lagi
+> berlaku**: "kerjakan enam modul, sebut terus terang tiga sisanya belum dapat". Yang
+> membedakan membaca dari menulis ternyata metode HTTP, bukan lapisan izin — jadi
+> kesembilan modul dapat sekaligus. Hasil & alasannya: §17.2 Tahap 9.
+
 **Masalah, dan ini musiman tapi pasti.** Saat tutup buku, penyusunan LKJIP, atau
 rekonsiliasi, yang dibutuhkan **bukan** mematikan modul — orang masih harus membuka dan
 mencetak. Yang dibutuhkan adalah **membekukan tulisan**. Karena pilihannya cuma
@@ -1601,7 +1606,7 @@ menimpa).
 | **6** | Usulan & penutup revamp | Fase D + **C4** + R3 sisa + R5 | 0 | Ubah peran di Usulan sepagar Admin Panel; tab Peran menyebut pintu & kuota; baseline gate E turun | Ya |
 | **7** | Jejak & alasan | P8 lapis 1 + P9 | 1 | Garis waktu per orang; tiap perubahan wewenang punya alasan | Ya |
 | **8** ✅ | Tinjauan berkala | P3 + P11 | 1 | Kewajiban AUTHZ-02 punya alat & bukti | Ya |
-| **9** | Mode baca-saja | P5 | 0 | Modul bisa dibekukan saat tutup buku | Ya |
+| **9** ✅ | Mode baca-saja | P5 | 0 | Modul bisa dibekukan saat tutup buku — **kesembilan modul**, bukan enam | Ya |
 | **10** | Akses berjangka | P2 | 1 | Akses pinjaman kembali sendiri | Ya |
 | **11** | Permintaan mandiri | P4 | 1 | Antrean WhatsApp pindah ke aplikasi | Ya |
 | **12** | Sakelar global | P12 | 0 | Satu tombol untuk pemeliharaan menyeluruh | Ya |
@@ -2372,7 +2377,7 @@ tidak pernah dikerjakan.
 |---|---|---|---|
 | **7** ✅ | P8 lapis 1 (`audit_log.target_user_id` + indeks) + P9 (alasan wajib) | 1 kolom | Garis waktu berumur **12 bulan** (cron retensi) — dan itu wajib ditulis di layar, bukan dibiarkan orang mengira riwayatnya lengkap. **Selesai & terverifikasi 2026-09-10** |
 | **8** ✅ | P3 Tinjauan (2 kolom `users`) + P11 Ekspor | 2 kolom | Pengekspor **menerima baris yang sudah dihitung layar**, tidak menghitung ulang. **Selesai & terverifikasi 2026-09-10** |
-| **9** | P5 Mode baca-saja | 0 | Kerjakan **BLUD + PK** (menjepit `izinMenuRegistry` ke `LIHAT` — hampir gratis) **dan** empat modul pabrik `buatGuardModul`. Usulan/E-Anggaran/Dashboard **disebut terus terang belum dapat** |
+| **9** ✅ | P5 Mode baca-saja | 0 | Rencananya enam modul; **jadinya sembilan** — `modulMati` yang sadar metode HTTP membuat tiap route yang sudah dijaga gate G ikut dapat, tanpa satu route pun disentuh. **Selesai 2026-09-10** |
 | **10** | P2 Akses berjangka + cron | 1 tabel | Pencabutan otomatis **wajib memanggil fungsi pencabutan yang sama** dengan manual (L69). Cron memeriksa "yang sudah lewat", bukan "yang jatuh tempo hari ini" — server kantor dimatikan tiap malam |
 | **11** | P4 Permintaan mandiri | 1 tabel | Tabel sendiri, **bukan** menumpang tabel promosi. Tanpa cooldown/probation/kata sandi ulang (aturan 11.4) |
 | **12** | P12 Sakelar global | 0 | Admin Panel **tidak boleh** ikut mati — pengecualian kartu `admin` wajib berlaku juga di sisi guard |
@@ -2611,6 +2616,97 @@ ATUR mendarat di Pusat Akses dengan orang yang benar terbuka; Excel turun sebaga
 `Tinjauan-Akses-2026-09-10.xlsx` berisi baris yang sama dengan yang tampil. Di 375px
 halaman **tidak** bergulir menyamping — tabelnya yang bergulir di dalam
 `.ap-table-wrap`.
+
+---
+
+#### Tahap 9 — HASIL (selesai 2026-09-10; satu bagian verifikasi peramban tertunda)
+
+**P5 Mode BACA-SAJA.** Nol migrasi — `app_config.value` sudah TEXT, yang berubah hanya
+yang membacanya: `KEADAAN_SAKELAR = ['online','readonly','maintenance']` di registry,
+dengan `bacaKeadaan` (nilai kosong → `online`, nilai asing → `maintenance`) dan
+`keadaanTerburuk` untuk sakelar berjenjang.
+
+**Rekomendasi §12 P5 terbukti tidak lagi berlaku, dan itu temuan tahap ini.** Konsep
+menganjurkan mengerjakan enam modul — BLUD + PK lewat penjepitan `izinMenuRegistry`,
+empat modul lewat pabrik `buatGuardModul` — lalu **menyebut terus terang** Usulan,
+E-Anggaran, dan Dashboard belum dapat, karena guard ketiganya per-route. Anjuran itu
+berdiri di atas asumsi bahwa baca-saja harus ditegakkan di lapisan izin.
+
+Ternyata tidak. Yang membedakan membaca dari menulis adalah **metode HTTP**, dan setiap
+route dari kesembilan modul sudah memanggil `modulMati` — gate G membuktikannya tiap kali
+CI jalan (95 route, 9 modul). Begitu `modulMati` sadar metode, kesembilannya dapat
+baca-saja **tanpa satu route pun disentuh**, dan route yang lahir besok ikut sejak hari
+pertama karena gate G mewajibkannya memanggil penjaga yang sama.
+
+**Metodenya datang dari proxy, bukan dioper tiap route.** Ini keputusan pokoknya. Kalau
+tiap pemanggil harus menyertakan `req.method`, satu route yang lupa berarti tulisan lolos
+saat modulnya beku — cacat senyap yang bentuknya persis T-1 dan L69. Proxy men-*strip*
+lalu memasang `x-prima-metode` dari `req.method` di REQUEST header, pola V3-1/L54 yang
+sudah dipakai `x-user-*`; tanpa strip, klien bisa mengirim `x-prima-metode: GET` pada
+sebuah POST dan menembus pembekuan. Dipasang sebelum cabang mana pun, supaya route publik
+ikut membawanya.
+
+**Arah gagalnya sengaja tidak seragam**, dan tiap arah punya alasannya sendiri:
+- Header tidak ada / gagal dibaca → dianggap **MENULIS**, jadi ditolak. Modul beku yang
+  menolak satu pembacaan itu merepotkan; modul beku yang meloloskan tulisan tidak
+  membekukan apa pun.
+- `app_config` gagal dibaca → tetap **menutup**, sama seperti sebelumnya.
+- `infoBeku` (keterangan layar) gagal → dianggap **tidak beku**. Ia cuma kalimat di
+  layar; pagarnya sudah berdiri di `modulMati`, jadi spanduk yang hilang tidak membuka
+  satu pintu pun.
+
+**`readonly` BUKAN `maintenance`, dan itu titik paling gampang salah.** Bentuk lama
+`!== 'online'` hidup di empat tempat, dan semuanya akan mengubah pembekuan jadi pemadaman
+tanpa satu pesan pun: `modulSedangMati` (yang memutuskan halaman pemeliharaan tampil),
+`/maintenance`, kartu `/menu`, dan kalimat "ikut mati karena induknya" di layar Sakelar.
+Keempatnya diperiksa ulang satu per satu. `modulSedangMati` kini hanya benar untuk
+`maintenance` dan `gagal`; kartu `/menu` beku **tidak** diabukan dan tetap bisa diklik —
+itu seluruh gunanya.
+
+**Kode balasan sendiri:** `MODUL_BACA_SAJA`, tetap 503, terpisah dari `MODUL_MATI`.
+Penerimanya harus bisa membedakan "sedang dibekukan, membaca boleh" dari "modul mati" —
+alasan yang sama persis dengan kenapa `modulMati` memulangkan 503 dan bukan 403.
+
+**Bagian layar** (yang membedakan "tombolnya mati dengan alasan" dari "tombolnya hidup
+lalu gagal"): `izinBlud`/`petaIzinBlud`/`izinPk`/`petaIzinPk` menjepit `EDIT` → `LIHAT`
+saat modulnya beku. Dipasang di satu-satunya tempat yang menyelesaikan izin menu, karena
+dari sinilah dua hal berangkat sekaligus — ribbon di layar DAN `bolehEditMenu` di
+`_guard.ts`. Keempat fungsi ikut dijepit, bukan dua (L69). Ditambah `SpandukBeku`, satu
+komponen daun dipakai dua shell.
+
+**Tidak semua sakelar boleh dibekukan, dan itu ditolak di API bukan disembunyikan di
+layar** (L82). `app_status_sentinel_bot` hanya dibaca peramban; `app_status_rima_query`
+menjaga dua endpoint yang dua-duanya GET. Tidak ada tulisan untuk dibekukan di keduanya,
+jadi `bisaBeku: false` — tombolnya mati **dengan sebab yang tertulis** (L79c), dan
+`POST /api/admin/app-status` menolak `readonly` untuk sakelar itu dengan kalimat yang
+sama persis, dirujuk dari satu konstanta.
+
+**SUPER_ADMIN tetap menembus** ketiga keadaan, sama seperti sebelumnya — dan itu **ditulis
+di layar**, dua kali. Tanpa itu yang terjadi: orang membekukan modul, mencoba sendiri,
+masih bisa menyimpan, lalu menyimpulkan sakelarnya tidak bekerja. Spanduk di dalam modul
+karena itu tetap tampil untuk SUPER_ADMIN, hanya kalimatnya yang berbeda.
+
+**Uji regresi lama ikut jujur.** Dua asersi Tahap 4 gugur — keduanya mengutip baris
+`/maintenance` yang P5 tulis ulang. Itu kegagalan yang BENAR, dan asersinya disesuaikan
+tanpa dilemahkan: yang dijaga tetap "keadaannya dibaca dari DB, dan hanya yang
+benar-benar mati yang boleh menampilkan halaman itu".
+
+**Regresi:** `npx tsx scripts/test-tahap-9.mts` (80 pemeriksaan), **24 uji mutasi
+tertangkap** — 24/24 pada percobaan pertama, tanpa satu asersi pun perlu diperbaiki;
+pertama kali dalam rangkaian tahap ini.
+
+**Diverifikasi sungguhan, dan bagian yang paling berbahaya yang dibuktikan:** dengan
+`app_status_blud = 'readonly'` di basis data, `/maintenance?m=app_status_blud` **tidak**
+menyebut BLUD (jatuh ke halaman umum "Modul PRIMA"); dengan nilai yang sama diubah jadi
+`maintenance`, halaman yang sama menyebut **BLUD**. Dua arah, jadi lulusnya bukan karena
+halaman itu selalu jatuh ke teks umum. Sakelar dikembalikan ke `online`.
+
+**⚠ BELUM diverifikasi di peramban** (sesi login kedaluwarsa di tengah pengerjaan, dan
+saya tidak mengetik kata sandi ke formulir): layar Sakelar tiga keadaan di kedua tema &
+375px · lencana BEKU di kartu `/menu` · spanduk di dalam BLUD/PK · penolakan
+`MODUL_BACA_SAJA` yang dilihat **akun non-SUPER_ADMIN** (SUPER_ADMIN menembus, jadi
+pembuktiannya memang menuntut akun lain). Semuanya berdiri di atas suite + uji mutasi,
+dan itu bukan pengganti melihatnya.
 
 ---
 
