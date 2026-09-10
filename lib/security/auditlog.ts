@@ -229,7 +229,24 @@ export type AuditEventType =
  * Ini BUKAN izin untuk melewatkan migrasinya — §17.3 aturan 4 tetap berlaku: migrasi
  * dijalankan sebagai langkah tersendiri sebelum kodenya di-deploy.
  */
-let kolomTargetHilang = false;
+let kolomTargetHilangSampai = 0;
+
+/**
+ * Penandanya KEDALUWARSA, bukan menyala selamanya — dan itu ketahuan saat diuji, bukan
+ * saat dirancang.
+ *
+ * Versi pertamanya `boolean` sekali-nyala. Akibatnya: proses yang sempat menulis audit
+ * SEBELUM migrasinya dijalankan akan memakai jalur cadangan **sampai ia di-restart**,
+ * jadi kolom sasarannya tetap kosong walau migrasinya sudah jalan sejam yang lalu.
+ * Terbukti langsung — migrasi dijalankan, peran diubah lewat layar, dan barisnya tetap
+ * `target_user_id = NULL` karena dua LOGIN_SUCCESS sebelum migrasi sudah menyalakan
+ * penandanya.
+ *
+ * "Restart dulu" bisa saja ditulis di catatan rilis, tapi catatan rilis tidak menjaga
+ * apa pun. Lima menit adalah biaya terburuknya: satu INSERT gagal tiap lima menit
+ * selama migrasinya memang belum jalan — dan nol sesudah ia jalan.
+ */
+const JEDA_COBA_LAGI_MS = 5 * 60_000;
 
 /** ER_BAD_FIELD_ERROR (1054) — satu-satunya galat yang boleh memicu jalur cadangan. */
 function kolomBelumAda(e: unknown): boolean {
@@ -261,7 +278,7 @@ export async function writeAuditLog(params: {
   try {
     const ip         = getClientIp(params.req);
     const userAgent  = (params.req.headers.get('user-agent') ?? '').slice(0, 250);
-    if (!kolomTargetHilang) {
+    if (Date.now() >= kolomTargetHilangSampai) {
       try {
         await sql`
           INSERT INTO audit_log (user_id, username, event_type, ip_address, user_agent, detail, target_user_id)
@@ -278,7 +295,7 @@ export async function writeAuditLog(params: {
         return;
       } catch (e) {
         if (!kolomBelumAda(e)) throw e;
-        kolomTargetHilang = true;
+        kolomTargetHilangSampai = Date.now() + JEDA_COBA_LAGI_MS;
         console.error(
           '[writeAuditLog] Kolom `audit_log.target_user_id` belum ada. '
           + 'Jalankan docs/migrations/migration-audit-target-user.sql di basis data ini. '

@@ -111,7 +111,13 @@ cek('kolomnya ada di INSERT', audit.includes('user_agent, detail, target_user_id
 // sudah di-deploy tapi migrasinya belum jalan, SELURUH jejak audit berhenti tertulis
 // tanpa satu gejala pun — bukan satu kolom, semuanya. Jalur cadangan membalik urutan
 // korbannya: kolom baru yang hilang, bukan barisnya.
-cek('ada jalur cadangan kalau migrasinya belum jalan', audit.includes('let kolomTargetHilang = false;'))
+cek('ada jalur cadangan kalau migrasinya belum jalan', audit.includes('let kolomTargetHilangSampai = 0;'))
+// Penandanya KEDALUWARSA. Versi `boolean` sekali-nyala membuat proses yang sempat
+// menulis audit SEBELUM migrasinya jalan memakai jalur cadangan sampai di-restart —
+// terbukti langsung saat diuji: migrasi jalan, peran diubah, barisnya tetap NULL.
+cek('…dan penandanya kedaluwarsa, tidak menyala selamanya',
+  audit.includes('const JEDA_COBA_LAGI_MS = 5 * 60_000;')
+  && audit.includes('if (Date.now() >= kolomTargetHilangSampai) {'))
 // Kutipan UTUH sampai kurung buka (L82c): tanpa baris ini, mencabut penjaganya
 // (`throw e` polos) meninggalkan seluruh perancah cadangan di tempatnya dan lolos.
 cek('…dan galat lain tetap dilempar, tidak ikut dianggap kolom hilang',
@@ -121,7 +127,8 @@ cek('…jalur cadangan menulis TANPA kolom sasaran, bukan menyerah',
 cek('…dipicu HANYA oleh kolom yang belum ada', audit.includes("=== 'ER_BAD_FIELD_ERROR'"))
 cek('…dan hanya untuk kolom itu, bukan salah ketik kolom lain',
   audit.includes("includes('target_user_id')"))
-cek('…ditandai sekali, tidak mencoba tiap penulisan', audit.includes('kolomTargetHilang = true;'))
+cek('…ditandai, tidak mencoba tiap penulisan',
+  audit.includes('kolomTargetHilangSampai = Date.now() + JEDA_COBA_LAGI_MS;'))
 cek('…dan konsolnya menyebut nama berkas migrasinya',
   audit.includes('migration-audit-target-user.sql'))
 
