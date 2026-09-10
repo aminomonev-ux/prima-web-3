@@ -2724,10 +2724,35 @@ ketahuan dari kode, yang satu ini tidak.
 shell BLUD, bukan Tahap 9. Elemen yang menonjol: `theme-toggle-pill` dan tombol di
 sebelahnya.
 
-**⚠ SATU hal tetap belum diverifikasi:** penolakan `MODUL_BACA_SAJA` sebagaimana dilihat
-**akun non-SUPER_ADMIN**. SUPER_ADMIN menembus sakelar — sengaja, dan ditulis di layar —
-jadi pembuktiannya memang menuntut sesi akun lain. Yang menopangnya sekarang suite + 24
-uji mutasi, dan itu bukan pengganti melihatnya.
+**Verifikasi akun non-SUPER_ADMIN (`uji.program`, peran PROGRAM, grant `blud`).** Inilah
+pembuktian yang tidak bisa dilakukan SUPER_ADMIN, sebab ia menembus sakelar. Dijalankan
+sebagai **pasangan beku ↔ online** pada layar yang sama, supaya hasilnya tidak bisa
+dijelaskan oleh peran orangnya:
+
+| | BLUD beku | BLUD online |
+|---|---|---|
+| spanduk beku di atas layar | ada | tidak ada |
+| spanduk modul "DPA BLUD — mode lihat" | ada | tidak ada |
+| tombol **Simpan** | **tidak ada** | ada |
+
+Kolom kanan yang membuat kolom kiri berarti: peran PROGRAM memang **boleh menyunting**
+DPA, dan yang mencabutnya adalah pembekuan — bukan tabel perannya. Dan spanduk "mode
+lihat" itu **milik BLUD sejak dulu**: ia menyala sendiri begitu izinnya jatuh ke `LIHAT`,
+tanpa satu baris kode baru. Itu persis "hampir gratis" yang §12 P5 janjikan, terlihat di
+layar.
+
+Jalur API-nya diuji langsung dari halaman itu, dengan badan permintaan sengaja tidak sah
+supaya tidak mungkin menulis apa pun walau pagarnya jebol:
+- `POST /api/blud/dpa` → **503**, `code: MODUL_BACA_SAJA`
+- `GET /api/blud/dpa?tahun=2026` → **200**, datanya utuh
+
+Membaca lewat, menulis ditolak, pada modul dan sesi yang sama — itu seluruh isi P5, dan
+sekaligus bukti bahwa metode HTTP dari header proxy sampai ke `modulMati` dengan benar.
+
+Kartu `/menu` untuk akun ini juga benar: **BEKU**, tidak terkunci, tooltipnya menjelaskan.
+Sekalian terjawab satu pertanyaan yang sempat mencurigakan: kartu Dashboard tampil
+**TERKUNCI**, bukan MAINTENANCE, padahal sakelarnya mati — itu benar, sebab tidak punya
+akses sama sekali adalah fakta yang lebih kuat daripada modulnya sedang mati.
 
 ---
 
