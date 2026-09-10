@@ -1,7 +1,8 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–9 SELESAI** (1–6 pada 2026-09-09; Tahap 7–9 pada 2026-09-10 — Tahap 9
-> nol migrasi, dan sebagian verifikasi perambannya tertunda, lihat §17.2 Tahap 9). C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
+> Status: **Tahap 1–10 SELESAI** (1–6 pada 2026-09-09; Tahap 7–10 pada 2026-09-10).
+> Tahap 13 (P7) **dilewati atas permintaan pemilik aplikasi**; ia tetap berdiri di §12
+> dan bisa diambil kapan saja. C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
 > dijalankan hari yang sama dan putusannya **aman** (hasilnya di §17.2 Tahap 0). Yang sudah dikerjakan baru **R0 (maket)** —
 > `docs/design/revamp-admin-pusat-akses.html`, yang sejak 2026-09-09 berstatus **acuan
@@ -915,6 +916,9 @@ mencabut sesi, dan membatalkan probation. Itu aksi tersendiri, bukan isi paket.
 
 ### P2 · Akses berjangka — yang dipinjam, kembali sendiri
 
+> ✅ **SELESAI 2026-09-10 (Tahap 10).** Hasil, keputusan, dan satu cacat yang ditemukan
+> sebelum sempat jadi cacat: §17.2 Tahap 10.
+
 **Masalah.** Akses sementara (pegawai magang, pengganti selama cuti, tim SPI saat
 pemeriksaan) diberikan dengan niat "nanti dicabut", dan tidak pernah dicabut. Inilah yang
 membuat perintah di CLAUDE.md — *"pemberian `app_access` harus konservatif & direview
@@ -1045,6 +1049,11 @@ ditampilkan mentah dari URL.
 masuk — dan perbaikan `?app=` menutup satu jalan gampang untuk menipu orang sekantor.
 
 ### P7 · Wajib ganti kata sandi pada login pertama
+
+> ⏭ **DILEWATI atas permintaan pemilik aplikasi (2026-09-10).** Bukan dibatalkan: seluruh
+> alasan di bawah masih berlaku, termasuk yang paling menentukan — selama sandi diketahui
+> dua orang, jejak audit yang dibangun Tahap 7 bisa dibantah pelakunya. Bisa diambil kapan
+> saja; biayanya tetap dua kolom.
 
 **Masalah, dan ini yang paling tidak nyaman untuk disebut.** SUPER_ADMIN membuat akun
 **beserta kata sandinya**, lalu memberitahukannya. "Reset password" juga begitu. Tidak ada
@@ -1607,10 +1616,10 @@ menimpa).
 | **7** | Jejak & alasan | P8 lapis 1 + P9 | 1 | Garis waktu per orang; tiap perubahan wewenang punya alasan | Ya |
 | **8** ✅ | Tinjauan berkala | P3 + P11 | 1 | Kewajiban AUTHZ-02 punya alat & bukti | Ya |
 | **9** ✅ | Mode baca-saja | P5 | 0 | Modul bisa dibekukan saat tutup buku — **kesembilan modul**, bukan enam | Ya |
-| **10** | Akses berjangka | P2 | 1 | Akses pinjaman kembali sendiri | Ya |
+| **10** ✅ | Akses berjangka | P2 | 1 | Akses pinjaman kembali sendiri | Ya |
 | **11** | Permintaan mandiri | P4 | 1 | Antrean WhatsApp pindah ke aplikasi | Ya |
 | **12** | Sakelar global | P12 | 0 | Satu tombol untuk pemeliharaan menyeluruh | Ya |
-| **13** | Wajib ganti kata sandi | P7 | 1 | Kata sandi berhenti diketahui dua orang | Ya |
+| **13** ⏭ | Wajib ganti kata sandi | P7 | 1 | Kata sandi berhenti diketahui dua orang | **Dilewati** atas permintaan pemilik aplikasi (2026-09-10) |
 | **14** | Lihat sebagai orang ini | C3 | 0 | Hasil pengaturan bisa diperiksa tanpa meminjam akun orang lain | Ya |
 
 **Tahap 0–2 wajib**, dan itu satu-satunya bagian yang saya sebut wajib. Sisanya boleh
@@ -2378,7 +2387,7 @@ tidak pernah dikerjakan.
 | **7** ✅ | P8 lapis 1 (`audit_log.target_user_id` + indeks) + P9 (alasan wajib) | 1 kolom | Garis waktu berumur **12 bulan** (cron retensi) — dan itu wajib ditulis di layar, bukan dibiarkan orang mengira riwayatnya lengkap. **Selesai & terverifikasi 2026-09-10** |
 | **8** ✅ | P3 Tinjauan (2 kolom `users`) + P11 Ekspor | 2 kolom | Pengekspor **menerima baris yang sudah dihitung layar**, tidak menghitung ulang. **Selesai & terverifikasi 2026-09-10** |
 | **9** ✅ | P5 Mode baca-saja | 0 | Rencananya enam modul; **jadinya sembilan** — `modulMati` yang sadar metode HTTP membuat tiap route yang sudah dijaga gate G ikut dapat, tanpa satu route pun disentuh. **Selesai 2026-09-10** |
-| **10** | P2 Akses berjangka + cron | 1 tabel | Pencabutan otomatis **wajib memanggil fungsi pencabutan yang sama** dengan manual (L69). Cron memeriksa "yang sudah lewat", bukan "yang jatuh tempo hari ini" — server kantor dimatikan tiap malam |
+| **10** ✅ | P2 Akses berjangka + cron | 1 tabel | Pencabutan otomatis **memanggil fungsi pencabutan yang sama** dengan manual (L69) — dibuktikan lewat perkecualian menu yang ikut terhapus. **Selesai & terverifikasi 2026-09-10** |
 | **11** | P4 Permintaan mandiri | 1 tabel | Tabel sendiri, **bukan** menumpang tabel promosi. Tanpa cooldown/probation/kata sandi ulang (aturan 11.4) |
 | **12** | P12 Sakelar global | 0 | Admin Panel **tidak boleh** ikut mati — pengecualian kartu `admin` wajib berlaku juga di sisi guard |
 | **13** | P7 Wajib ganti kata sandi | 2 kolom | **Dikerjakan sendirian.** Bawaan kolom 0; hanya jalur create/reset yang menyalakannya |
@@ -2753,6 +2762,103 @@ Kartu `/menu` untuk akun ini juga benar: **BEKU**, tidak terkunci, tooltipnya me
 Sekalian terjawab satu pertanyaan yang sempat mencurigakan: kartu Dashboard tampil
 **TERKUNCI**, bukan MAINTENANCE, padahal sakelarnya mati — itu benar, sebab tidak punya
 akses sama sekali adalah fakta yang lebih kuat daripada modulnya sedang mati.
+
+---
+
+#### Tahap 10 — HASIL (selesai & terverifikasi 2026-09-10)
+
+**P2 Akses Berjangka.** Akses sementara — pegawai magang, pengganti selama cuti, tim SPI
+saat pemeriksaan — diberikan dengan niat "nanti dicabut", dan tidak pernah dicabut. Yang
+menumpuk bukan pemberian yang salah, melainkan pemberian yang BENAR yang kelewat umurnya.
+
+**Migrasi:** `docs/migrations/migration-akses-berjangka.sql` — satu tabel
+`akses_kedaluwarsa`. Dijalankan di basis data pengembangan hari ini.
+
+**Jadwal yang perlu dipasang di server kantor:**
+`POST /api/cron/akses-kedaluwarsa` dengan header `Authorization: Bearer ${CRON_SECRET}`,
+harian, lewat MySQL EVENT atau crontab — **bukan** `vercel.json`.
+
+**Aturan pokoknya satu, dan seluruh bentuk berkas `cabut-kedaluwarsa.ts` berdiri di
+atasnya: pencabutan otomatis memanggil fungsi pencabutan yang SAMA dengan manual**
+(`simpanBerkasOrang`), bukan `UPDATE users SET app_access` sendiri di dalam cron.
+Sebabnya bukan kerapian — pencabutan yang benar juga membuang perkecualian menu modul
+itu, mengambil kunci per-modul menurut urutan menaik supaya tidak berebut dengan admin
+yang sedang menyimpan halaman orang yang sama, dan membuang tenggat yang ikut jadi yatim.
+Jalur kedua PASTI melewatkan salah satunya (L69), dan pembersihan perkecualian menu sudah
+pernah jadi korbannya. **Ini dibuktikan, bukan diyakini** — lihat verifikasi di bawah.
+
+**Tenggat hanya untuk modul yang benar-benar DIBERIKAN per orang.** Memasang tanggal pada
+modul yang terbuka karena PERAN tidak akan menutup apa pun saat lewat — pintunya tidak
+digerakkan `app_access` — jadi yang tersisa cuma janji yang tidak ditepati sistem, dan itu
+lebih buruk daripada tidak menawarkannya. `jangkaYangBerarti` menegakkannya di berkas
+daun, dipakai layar DAN server; layar bahkan tidak menampilkan tombolnya di baris yang
+bukan grant.
+
+**Tahan terlewat, dan itu syarat.** Server PRIMA adalah laptop kantor yang dimatikan tiap
+malam, jadi cron harian BISA tidak jalan sepenuhnya:
+- yang dicabut adalah yang **sudah lewat** (`< CURDATE()`), bukan "yang jatuh tempo hari
+  ini" — kueri kedua akan melewatkan seluruh baris hari itu dan tidak pernah menengoknya
+  lagi, jadi aksesnya hidup selamanya tanpa satu gejala pun;
+- pengingat berpatokan pada "sisa ≤3 hari **dan belum pernah dikirim**", bukan "tepat
+  H-3" — hari itu mungkin memang tidak pernah terjadi. Kolom `diingatkan_pada` yang
+  membuat pertanyaan kedua bisa dijawab tanpa mengirim dua kali.
+
+**Cacat yang ditemukan sebelum sempat jadi cacat, saat memikirkan akibatnya.** Rancangan
+pertama `tulisJangkaTx` menghapus lalu menulis ulang SELURUH tenggat orang itu. Dua
+kolomnya akan berbohong: `dibuat_oleh` berganti jadi siapa pun yang kebetulan menekan
+Simpan terakhir (padahal yang ditanyakan orang adalah siapa yang MEMINJAMKAN), dan
+`diingatkan_pada` kembali NULL sehingga pengingat H-3 berbunyi lagi tiap kali ada yang
+menyimpan halaman orang itu untuk urusan lain — cara tercepat melatih orang mengabaikan
+pengingatnya. Sekarang baris yang isinya tidak bergeser tidak disentuh sama sekali; yang
+bergeser memang menyetel ulang pengingatnya, sebab tenggat baru = pengingat baru.
+
+**Keputusan kecil yang bukan selera:**
+- Tabel sendiri, bukan kolom di `users.app_access` — bentuk larik datar itu dibaca God
+  Node `hasAppAccess()`, dan menyelipkan tanggal ke dalamnya berarti menyentuh fungsi
+  yang dipakai hampir setiap route demi segelintir baris.
+- `berakhir_pada` **DATE**, bukan DATETIME: tenggatnya sebuah HARI, dan satu-satunya
+  pembandingnya `CURDATE()`.
+- `ON DELETE CASCADE` pada `user_id` — kebalikan `audit_log.target_user_id` yang sengaja
+  tanpa FK, dan sekali lagi karena yang dijaga berbeda: baris ini menerangkan KEADAAN
+  SEKARANG sebuah grant, riwayatnya hidup di `audit_log`.
+- Pengingat ke antrean `__SUPER_ADMIN__` saja, bukan `buildNotifRecipients` — helper itu
+  ikut menyiarkan ke antrean ADMIN/KASUBAG/KABAG, padahal yang bisa memperpanjang hanya
+  SUPER_ADMIN sejak T-16. Pengingat yang sampai ke orang yang tidak bisa
+  menindaklanjutinya cuma menambah bunyi.
+- `olehUserId: null` untuk cron: menuliskan id seseorang pada baris yang ditulis mesin
+  membuat jejaknya menuduh orang yang tidak melakukan apa-apa.
+
+**Gate Tahap 6 menangkap drift saya sendiri.** Empat tombol baru sempat ditulis sebagai
+`.ap-btn` mentah, dan pemeriksaan "CTA utama pakai PrimaButton" langsung gugur. Diperbaiki
+ke `PrimaButton`, bukan dengan menaikkan ambangnya — gerbang yang dilonggarkan tiap kali
+ia berbunyi berhenti menjaga apa pun.
+
+**Regresi:** `npx tsx scripts/test-tahap-10.mts` (68 pemeriksaan), **33 uji mutasi
+tertangkap**. Dua awalnya LOLOS, dua-duanya asersi saya sendiri dan dua-duanya bentuk yang
+sama — kutipan yang terlalu longgar: satu mencari `z.string().trim().min(4,` yang muncul
+juga di skema alasan lain di berkas itu, satu lagi mencari `CREATE TABLE
+akses_kedaluwarsa` tanpa kurung buka sehingga nama tabel yang diganti jadi
+`akses_kedaluwarsa_lama` tetap cocok sebagai AWALAN.
+
+**Diverifikasi ujung-ke-ujung terhadap DB & cron sungguhan** (akun uji `uji.program`,
+peran PROGRAM, grant `blud`):
+
+| yang diuji | hasil |
+|---|---|
+| menyetel tenggat lewat layar | baris tersimpan, audit `USER_UPDATE target=41 · "1 disetel, 0 dilepas"` |
+| kalimat di layar | "terbuka sampai 20 Sep 2026 (10 hari lagi)" — benar terhadap 10 Sep |
+| pengingat (tenggat H-2) | `diingatkan: 1`; notifikasi ke `uji.program` DAN `__SUPER_ADMIN__`; akses **tidak** dicabut |
+| cron dijalankan lagi | `diingatkan: 0` — tidak berbunyi dua kali |
+| tenggat didorong ke kemarin | `dicabut: 1`; `app_access` → NULL; baris tenggat lenyap; audit `ACCESS_REVOKE target=41` |
+| **perkecualian menu `blud/dpa`** | **ikut terhapus (1 baris → 0)** |
+
+Baris terakhir itu pembuktian aturan pokoknya: perkecualian menu itu persis yang akan
+tertinggal kalau cron menulis `app_access` sendiri.
+
+Di layar, tombol **BERI BATAS WAKTU** hanya muncul di baris **BLUD** (diberi akses);
+**Perjanjian Kinerja** dan **E-Anggaran** — yang terbuka karena peran — tidak
+menawarkannya. Data uji dikembalikan: `uji.program` kembali ber-grant `blud` tanpa
+tenggat, perkecualian menu & notifikasi uji dibersihkan.
 
 ---
 
