@@ -1,6 +1,7 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–10 SELESAI** (1–6 pada 2026-09-09; Tahap 7–10 pada 2026-09-10).
+> Status: **Tahap 1–11 SELESAI** (1–6 pada 2026-09-09; Tahap 7–10 pada 2026-09-10;
+> Tahap 11 pada 2026-09-11, verifikasi peramban masih menunggu).
 > Tahap 13 (P7) **dilewati atas permintaan pemilik aplikasi**; ia tetap berdiri di §12
 > dan bisa diambil kapan saja. C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
@@ -970,6 +971,10 @@ yang sudah dihitung, bukan menghitung ulang di pengekspor.
 
 ### P4 · Permintaan akses mandiri — memindahkan antrean WhatsApp ke dalam aplikasi
 
+> ✅ **SELESAI 2026-09-11 (Tahap 11).** Keputusan pokoknya — SETUJUI **mengisi form**,
+> bukan menulis — beserta hasil, tiga temuan saat dikerjakan, dan yang belum
+> diverifikasi: §17.2 Tahap 11.
+
 **Masalah.** Orang yang butuh akses modul mengirim WhatsApp ke admin. Tidak ada
 antreannya, tidak ada alasannya yang tercatat, tidak ada jejak siapa menyetujui — dan
 kalau adminnya cuti, tidak ada yang tahu ada yang menunggu.
@@ -1617,7 +1622,7 @@ menimpa).
 | **8** ✅ | Tinjauan berkala | P3 + P11 | 1 | Kewajiban AUTHZ-02 punya alat & bukti | Ya |
 | **9** ✅ | Mode baca-saja | P5 | 0 | Modul bisa dibekukan saat tutup buku — **kesembilan modul**, bukan enam | Ya |
 | **10** ✅ | Akses berjangka | P2 | 1 | Akses pinjaman kembali sendiri | Ya |
-| **11** | Permintaan mandiri | P4 | 1 | Antrean WhatsApp pindah ke aplikasi | Ya |
+| **11** ✅ | Permintaan mandiri | P4 | 1 | Antrean WhatsApp pindah ke aplikasi | Ya |
 | **12** | Sakelar global | P12 | 0 | Satu tombol untuk pemeliharaan menyeluruh | Ya |
 | **13** ⏭ | Wajib ganti kata sandi | P7 | 1 | Kata sandi berhenti diketahui dua orang | **Dilewati** atas permintaan pemilik aplikasi (2026-09-10) |
 | **14** | Lihat sebagai orang ini | C3 | 0 | Hasil pengaturan bisa diperiksa tanpa meminjam akun orang lain | Ya |
@@ -2388,7 +2393,7 @@ tidak pernah dikerjakan.
 | **8** ✅ | P3 Tinjauan (2 kolom `users`) + P11 Ekspor | 2 kolom | Pengekspor **menerima baris yang sudah dihitung layar**, tidak menghitung ulang. **Selesai & terverifikasi 2026-09-10** |
 | **9** ✅ | P5 Mode baca-saja | 0 | Rencananya enam modul; **jadinya sembilan** — `modulMati` yang sadar metode HTTP membuat tiap route yang sudah dijaga gate G ikut dapat, tanpa satu route pun disentuh. **Selesai 2026-09-10** |
 | **10** ✅ | P2 Akses berjangka + cron | 1 tabel | Pencabutan otomatis **memanggil fungsi pencabutan yang sama** dengan manual (L69) — dibuktikan lewat perkecualian menu yang ikut terhapus. **Selesai & terverifikasi 2026-09-10** |
-| **11** | P4 Permintaan mandiri | 1 tabel | Tabel sendiri, **bukan** menumpang tabel promosi. Tanpa cooldown/probation/kata sandi ulang (aturan 11.4) |
+| **11** ✅ | P4 Permintaan mandiri | 1 tabel | Tabel sendiri, **bukan** menumpang tabel promosi. Tanpa cooldown/probation/kata sandi ulang (aturan 11.4). SETUJUI **mengisi form**, yang menulis tetap Simpan Pusat Akses (aturan 11.1). **Selesai 2026-09-11; verifikasi peramban belum** |
 | **12** | P12 Sakelar global | 0 | Admin Panel **tidak boleh** ikut mati — pengecualian kartu `admin` wajib berlaku juga di sisi guard |
 | **13** | P7 Wajib ganti kata sandi | 2 kolom | **Dikerjakan sendirian.** Bawaan kolom 0; hanya jalur create/reset yang menyalakannya |
 
@@ -2859,6 +2864,122 @@ Di layar, tombol **BERI BATAS WAKTU** hanya muncul di baris **BLUD** (diberi aks
 **Perjanjian Kinerja** dan **E-Anggaran** — yang terbuka karena peran — tidak
 menawarkannya. Data uji dikembalikan: `uji.program` kembali ber-grant `blud` tanpa
 tenggat, perkecualian menu & notifikasi uji dibersihkan.
+
+---
+
+#### Tahap 11 — HASIL (selesai 2026-09-11; verifikasi peramban belum)
+
+**P4 Permintaan akses mandiri.** Orang yang butuh satu modul mengirim WhatsApp ke admin.
+Tidak ada antreannya, alasannya tidak tercatat, tidak ada jejak siapa menyetujui — dan
+kalau adminnya cuti, tidak ada yang tahu ada yang menunggu. Yang dipindahkan ke dalam
+aplikasi **bukan pemberian aksesnya, melainkan pertanyaannya**.
+
+**Keputusan yang menentukan seluruh bentuknya: SETUJUI tidak menulis apa pun.** §12 P4
+menjanjikan "admin menyetujui dengan satu klik", sementara aturan 11.1 melarang jalur
+tulis kedua. Keduanya dipenuhi dengan menggeser arti kliknya: tombol SETUJUI **mengisi
+form** orang itu — mencentang modulnya di Pusat Akses dan menyalin alasan pemohon ke
+kotak alasan P9 — lalu berhenti. Yang menulis tetap `PUT /api/admin/pusat-akses` yang
+sudah ada, jadi pemberian ini otomatis tunduk pada seluruh pagar yang sudah berdiri di
+sana: kunci per-modul, kuota peran, sidik jari menu, alasan wajib P9, tenggat P2. Nol
+endpoint tulis baru, nol guard baru — hak menyetujui = hak menyimpan Pusat Akses.
+
+Karena itu route admin hanya punya `PATCH` untuk **MENOLAK**; tidak ada "setujui" di
+sana. Menyetujui berarti memberi akses, dan memberi akses cuma punya satu jalur.
+
+**Permintaannya ditutup di dalam transaksi Simpan yang sama.** `tutupYangSudahTerbukaTx`
+dipanggil dari dalam `withTransaction` milik `simpanBerkasOrang`, jadi dua keadaan yang
+paling merepotkan jadi mustahil: "aksesnya sudah diberi tapi antreannya masih bilang
+menunggu", dan "antreannya bersih tapi pemberiannya gagal". Pemberitahuannya dikirim
+**sesudah** commit — `HasilSimpan` memulangkan daftarnya, bukan mengirimkannya dari dalam
+transaksi yang masih bisa dibatalkan.
+
+**Patokan menutupnya "pintunya terbuka SEKARANG", bukan "modulnya barusan dicentang".**
+Tiga jalan berbeda menjawab pertanyaan pemohon dengan sama sahnya: modulnya baru
+diberikan, ternyata sudah diberikan sebelumnya, atau peran barunya yang membukanya. Kalau
+patokannya "barusan dicentang", dua jalan terakhir meninggalkan permintaannya menggantung
+selamanya — tanpa cara bagi pembaca besok untuk tahu jawabannya sebetulnya sudah "ya".
+
+**Duplikat dijawab kunci unik DB, bukan SELECT-dulu** (L69-a — memeriksa baris yang belum
+ada tidak mengunci apa pun, jadi dua klik beruntun melahirkan dua baris menunggu). Kolom
+`menunggu` GENERATED (`IF(status = 'MENUNGGU', 1, NULL)`) + `UNIQUE (user_id, app_key,
+menunggu)`: NULL dianggap berbeda satu sama lain oleh indeks unik MySQL, jadi "satu
+permintaan menunggu per orang per modul" berlaku tanpa ikut melarang riwayat. Dibuktikan
+di MySQL sungguhan sebelum kodenya ditulis — tiga baris yang sudah diputus berdampingan,
+`MENUNGGU` kedua ditolak `ER_DUP_ENTRY`, dan memutus yang lama membebaskan slotnya lagi.
+GENERATED dan bukan kolom yang diisi kode, sebab kolom bayangan yang diisi tangan cepat
+atau lambat tidak sinkron dengan `status` — dan begitu ia tidak sinkron, kunci uniknya
+berhenti menjaga apa pun tanpa satu gejala.
+
+**`alasan` VARCHAR(140), bukan 255.** Alasan pemohon dipakai ulang sebagai alasan P9 saat
+disetujui, dan `AlasanWewenangSchema` membatasi 140. Kolom yang lebih panjang menaruh
+kalimat **terpotong** di jejak audit — lebih buruk daripada alasan yang pendek sejak awal.
+
+**Yang sengaja TIDAK ada** (aturan 11.4): cooldown, masa percobaan, dan kata sandi ulang.
+Ketiganya ikut dari alur promosi peran, dan di sini tidak ada wewenang yang diberikan —
+yang ditulis sebuah pertanyaan. Yang tetap ada cuma pembatas laju (5 per 5 menit), dan ia
+menjaga **antreannya**, bukan wewenangnya: seratus permintaan dalam semenit membuat layar
+Pusat Akses tidak terbaca, dan itu sama saja dengan mematikannya.
+
+Route pemohon juga **sengaja tanpa sakelar pemeliharaan**: modul yang sedang dimatikan
+justru saat paling wajar untuk ditanyakan aksesnya, dan menutup pintu bertanya cuma
+memindahkan pertanyaannya balik ke WhatsApp. Ia hidup di luar `app/api/<modul>` jadi gate
+G memang tidak memindainya.
+
+**Tiga jenis kejadian audit baru**, bukan menumpang `ACCESS_GRANT`: permintaan yang
+**ditolak** tidak menghasilkan baris pemberian apa pun, jadi tanpa jenisnya sendiri ia
+lenyap dari jejak justru pada kasus yang paling perlu bisa ditelusuri.
+
+**Cron kedaluwarsa ikut menutup permintaan** (L69). Jalurnya nyaris mustahil — perlu
+seseorang meminta modul yang justru sedang dicabut otomatis pada hari yang sama — tapi
+"perbaikan belum selesai sampai semua jalur tulis kena" tidak mengenal kata nyaris.
+
+**Ditemukan saat dikerjakan, tiga hal:**
+
+1. **ESLint `react-hooks/purity` menolak `Date.now()` saat render.** Umur permintaan
+   ("3 hari lalu") semula dihitung di layar. Diperbaiki di akarnya, bukan disiasati:
+   umurnya kini dihitung MySQL (`DATEDIFF(CURDATE(), DATE(dibuat_pada))`) dan
+   `umurPermintaan(hari)` jadi fungsi murni — satu pertanyaan, satu jam, pelajaran yang
+   sama dengan `tanggalServer()` di P2.
+2. **Kartu terkunci tidak boleh diredupkan seluruhnya.** `opacity`/`filter` pada induk
+   tidak bisa dibatalkan anaknya, jadi meredupkan kartunya akan membuat **sebab
+   penolakan** jadi teks paling sulit dibaca di halaman itu. Yang diredupkan
+   bagian-bagiannya, dan aturan hover wajib ber-`:not(.locked)` — tanpa itu kekhususannya
+   seri dan yang ditulis belakangan menang, jadi kartu terkunci berkedip terang saat
+   disentuh tetikus.
+3. **Backtick di dalam komentar CSS pada blok gaya sebaris** memutus template literal-nya
+   dan menghasilkan galat TS yang menunjuk ke tempat lain. Ini **kali kedua** jebakan yang
+   sama; suite sekarang memeriksa blok gaya itu tidak memuat satu backtick pun.
+
+**Permintaan yang dibawa ke form dipegang `ref`, bukan state.** Sebagai state ia masuk
+daftar kebergantungan pemuat berkas, dan pemuatan ulang itu persis yang menghapus centang
+yang baru saja dipasang.
+
+**Uji.** `npx tsx scripts/test-tahap-11.mts` — **98 pemeriksaan, 70 uji mutasi, semuanya
+tertangkap.** Empat sempat LOLOS dan keempatnya bentuk yang sama: kutipan sepotong (L82c,
+kali keenam di proyek ini) — `.min(MIN_ALASAN,` yang muncul di **dua** skema,
+`session.role !== 'SUPER_ADMIN'` yang tetap cocok sesudah dilonggarkan jadi
+`&& !== 'ADMIN'`, dan dua potongan JSX kembar. Semuanya diperbaiki jadi **menghitung
+kemunculan**, bukan bertanya "ada?".
+
+Dua suite tahap lama ikut jatuh, dan dua-duanya **asersinya yang usang, bukan kodenya**:
+Tahap 5 mengutip `SELECT role, app_access …` yang kini membawa `username`, dan Tahap 8
+mengutip elemen `<TabPusatAkses …/>` sampai penutupnya sehingga tiap tahap yang menambah
+prop menjatuhkannya sambil menuduh kode yang benar. Yang pertama sekalian diperkuat — ia
+tidak pernah benar-benar membuktikan bagian "lewat `tx`" yang jadi namanya (L69-b); yang
+kedua dipersempit ke hal yang memang dijaganya. Tiga mutasi atas keduanya tertangkap.
+
+**Gate:** `tsc` bersih · ESLint bersih pada 15 berkas yang disentuh · gate E lolos (token
+resmi 107 · warisan 225) · gate F lolos · gate G 95 route lolos · `npm run build`
+"Compiled successfully" dengan `/api/akses/permintaan` dan `/api/admin/permintaan-akses`
+terdaftar · suite Tahap 4–11 dan `test-kepala-sempit` semuanya lulus.
+
+**Yang BELUM diverifikasi, terus terang.** Alurnya belum dicoba lewat peramban dengan
+sesi sungguhan: meminta akses dari kartu terkunci, melihatnya muncul di antrean Pusat
+Akses beserta lencana relnya, menekan SETUJUI lalu Simpan, dan menolak dengan sebab yang
+sampai ke pemohon. Itu menunggu pemilik aplikasi. Dan
+`docs/migrations/migration-akses-permintaan.sql` baru dijalankan di basis data
+pengembangan — **server kantor belum**, berbarengan dengan `migration-akses-berjangka.sql`
+dan jadwal harian `POST /api/cron/akses-kedaluwarsa` yang juga masih menunggu.
 
 ---
 
