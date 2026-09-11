@@ -202,18 +202,24 @@ pm2 restart prima
 
 ## §5 Tugas terjadwal — bagian yang paling sering terlupa
 
-Ada **tiga** tugas yang harus dijalankan berkala. Kalau tidak dipasang, aplikasi
+Ada **lima** tugas yang harus dijalankan berkala. Kalau tidak dipasang, aplikasi
 tetap menyala dan tampak normal — yang terjadi: permintaan promosi peran
-menggantung selamanya, dan data kedaluwarsa tidak pernah dibersihkan. **Tidak ada
-pesan error apa pun.**
+menggantung selamanya, data kedaluwarsa tidak pernah dibersihkan, akses berjangka
+tidak pernah dicabut, dan cadangan ke Drive berhenti diam-diam. **Tidak ada pesan
+error apa pun.**
 
 | Endpoint | Guna | Saran jadwal |
 |---|---|---|
 | `/api/cron/promotion-complete` | Menuntaskan promosi peran yang sudah waktunya | tiap 15 menit |
 | `/api/cron/promotion-expire` | Membatalkan permintaan promosi yang kedaluwarsa | tiap jam |
-| `/api/cron/purge-retention` | Menghapus data lewat masa simpan (UU PDP) | harian, dini hari |
+| `/api/cron/purge-retention` | Menghapus data lewat masa simpan (UU PDP) | harian |
+| `/api/cron/akses-kedaluwarsa` | Mencabut akses berjangka yang habis + mengingatkan yang tinggal ≤3 hari | harian |
+| `/api/cron/blud-cadangan-json` | Mencadangkan foto simpanan BLUD ke Google Drive | harian |
 
-Ketiganya dijaga `CRON_SECRET` lewat header `Authorization: Bearer <CRON_SECRET>`.
+Kelimanya dijaga `CRON_SECRET` lewat header `Authorization: Bearer <CRON_SECRET>`
+— **satu mekanisme untuk semuanya**, jadi menambah tugas baru tidak pernah berarti
+menambah cara baru; `cron.ps1` di bawah memanggil kelimanya apa adanya, yang beda
+cuma nilai `-Endpoint`.
 
 Di Windows Server, pakai **Task Scheduler**. Buat satu berkas
 `C:\apps\prima\cron.ps1`:
@@ -242,21 +248,90 @@ try {
 
 Buat foldernya dulu: `mkdir C:\apps\prima\logs`
 
-Lalu tiga tugas di Task Scheduler (jalankan sebagai akun layanan, centang **Run
-whether user is logged on or not**):
+### ⚠️ Server ini laptop yang dimatikan tiap malam — jangan jadwalkan dini hari
 
+Ini bukan catatan kecil, ini yang menentukan tiga tugas harian di atas jalan atau
+tidak. Task Scheduler **melewatkan** jadwal yang jatuh saat mesinnya mati, dan
+secara bawaan tidak menyusulnya — jadi "harian, jam 2 dini hari" pada server ini
+artinya **tidak pernah jalan sama sekali**, tanpa satu pesan pun.
+
+Dua hal yang menutupnya, dan keduanya wajib:
+
+1. **`-StartWhenAvailable`** — tugas yang terlewat dijalankan menyusul begitu
+   laptopnya hidup, bukan dibuang.
+2. **Jamnya di jam kerja** (mis. 08:30), bukan dini hari.
+
+Ketiga tugas harian itu memang dirancang tahan terlewat — `akses-kedaluwarsa`
+misalnya bertanya "mana yang tenggatnya sudah lewat", bukan "mana yang jatuh tempo
+hari ini", jadi telat tiga hari cuma berarti pencabutannya telat tiga hari, bukan
+hilang. Menjalankannya dua kali sehari juga tidak berakibat apa-apa. Tapi "tahan
+terlewat" bukan izin untuk tidak pernah jalan.
+
+### Mendaftarkan tugasnya
+
+Jalankan PowerShell **sebagai Administrator**. Berjalan sebagai `SYSTEM`, jadi
+tidak ada sandi yang perlu disimpan dan tidak ikut mati saat orangnya logout:
+
+```powershell
+function Pasang-CronPrima {
+  param([string]$Nama, [string]$Endpoint, $Pemicu)
+  $act = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument "-ExecutionPolicy Bypass -File C:\apps\prima\cron.ps1 -Endpoint $Endpoint"
+  $set = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+  Register-ScheduledTask -TaskName $Nama -Action $act -Trigger $Pemicu `
+    -Settings $set -User 'SYSTEM' -RunLevel Highest -Force
+}
+
+# Harian — jam kerja, supaya laptopnya hidup
+Pasang-CronPrima 'PRIMA - akses kedaluwarsa' 'akses-kedaluwarsa' (New-ScheduledTaskTrigger -Daily -At 08:30)
+Pasang-CronPrima 'PRIMA - purge retention'   'purge-retention'   (New-ScheduledTaskTrigger -Daily -At 08:40)
+Pasang-CronPrima 'PRIMA - cadangan BLUD'     'blud-cadangan-json' (New-ScheduledTaskTrigger -Daily -At 17:00)
+
+# Berulang sepanjang hari
+Pasang-CronPrima 'PRIMA - promotion complete' 'promotion-complete' `
+  (New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
+     -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650))
+Pasang-CronPrima 'PRIMA - promotion expire' 'promotion-expire' `
+  (New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
+     -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650))
 ```
-powershell.exe -ExecutionPolicy Bypass -File C:\apps\prima\cron.ps1 -Endpoint promotion-complete
-powershell.exe -ExecutionPolicy Bypass -File C:\apps\prima\cron.ps1 -Endpoint promotion-expire
-powershell.exe -ExecutionPolicy Bypass -File C:\apps\prima\cron.ps1 -Endpoint purge-retention
+
+Jamnya sengaja diselang (08:30 / 08:40) supaya keduanya tidak menghantam aplikasi
+bersamaan saat laptop baru menyala dan PM2 masih memuat. Cadangan BLUD ditaruh sore
+karena ia mencadangkan pekerjaan hari itu.
+
+⚠️ **Kalau tugasnya sudah pernah dipasang dengan nama lain**, jangan jalankan blok
+di atas bulat-bulat — `-Force` hanya menimpa tugas yang **namanya sama**, jadi nama
+lain akan menghasilkan tugas KEMBAR yang dua-duanya jalan. Periksa dulu:
+
+```powershell
+Get-ScheduledTask | Where-Object { $_.Actions.Arguments -match 'cron\.ps1' } |
+  Select-Object TaskName, @{n='Endpoint';e={($_.Actions.Arguments -split '-Endpoint ')[-1]}}
 ```
+
+Yang sudah ada, lewati barisnya; yang belum, jalankan barisnya saja. (Menjalankan
+cron ini dua kali tidak merusak apa pun — semuanya bertanya "mana yang sudah lewat",
+bukan "mana yang jatuh tempo hari ini" — tapi tugas kembar membuat `cron.log` sulit
+dibaca dan menyembunyikan tugas yang sebenarnya mati.)
 
 **Uji sekali dengan tangan sebelum percaya:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\apps\prima\cron.ps1 -Endpoint promotion-expire
+powershell -ExecutionPolicy Bypass -File C:\apps\prima\cron.ps1 -Endpoint akses-kedaluwarsa
 Get-Content C:\apps\prima\logs\cron.log -Tail 5
 ```
+
+Lalu pastikan penjadwalnya sendiri benar-benar terdaftar dan pernah jalan — skrip
+yang jalan dengan tangan tidak membuktikan tugasnya terpasang:
+
+```powershell
+Get-ScheduledTask -TaskName 'PRIMA*' |
+  Get-ScheduledTaskInfo |
+  Select-Object TaskName, LastRunTime, LastTaskResult, NextRunTime
+```
+
+`LastTaskResult` **0** berarti berhasil. `267011` berarti belum pernah jalan.
 
 Kalau tertulis `GAGAL ... 401`, berarti `CRON_SECRET` yang terbaca skrip tidak sama
 dengan yang dipakai aplikasi — biasanya karena ada spasi atau tanda kutip di
@@ -400,7 +475,9 @@ Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
       membuktikan apa-apa. Lalu **nyalakan lagi** modulnya.
       Nyalakan lagi.
 - [ ] Unduh satu berkas Excel/Word dari modul mana pun → berhasil
-- [ ] Jalankan ketiga tugas cron dengan tangan (§5) → `cron.log` berisi `OK`
+- [ ] Jalankan **kelima** tugas cron dengan tangan (§5) → `cron.log` berisi `OK`
+- [ ] `Get-ScheduledTask -TaskName 'PRIMA*'` → kelimanya terdaftar, dan
+      `-StartWhenAvailable` menyala (server ini dimatikan tiap malam)
 - [ ] Restart server Windows → PM2 hidup sendiri, aplikasi jalan lagi
 - [ ] `pm2 logs prima --lines 200` → tidak ada error berulang
 
