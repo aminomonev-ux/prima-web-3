@@ -1,7 +1,8 @@
 # CONCEPT — Pusat Akses: pengaturan akun & hak akses dari satu pintu
 
-> Status: **Tahap 1–11 SELESAI** (1–6 pada 2026-09-09; Tahap 7–10 pada 2026-09-10;
-> Tahap 11 pada 2026-09-11, verifikasi peramban masih menunggu).
+> Status: **Tahap 1–12 SELESAI** (1–6 pada 2026-09-09; Tahap 7–10 pada 2026-09-10;
+> Tahap 11 & 12 pada 2026-09-11, keduanya sudah diverifikasi lewat layar dengan sesi
+> sungguhan — Tahap 12 juga lewat akun non-SUPER_ADMIN).
 > Tahap 13 (P7) **dilewati atas permintaan pemilik aplikasi**; ia tetap berdiri di §12
 > dan bisa diambil kapan saja. C3 tersisa, dijadwalkan sebagai Tahap 14 (§17.1). Ditulis &
 > difinalkan 2026-09-08; enam keputusan §9 diambil 2026-09-09; pemeriksaan server kantor
@@ -1142,6 +1143,10 @@ jadi bukti.
 
 ### P12 · Sakelar seluruh aplikasi
 
+> ✅ **SELESAI 2026-09-11 (Tahap 12).** Pengecualian Admin Panel ternyata sudah
+> **struktural** (`admin` tak bersakelar), jadi yang dikerjakan menagihnya ke uji
+> alih-alih menulis daftar perkecualian. Hasil & dua kebocoran uji: §17.2 Tahap 12.
+
 **Masalah.** Mematikan semuanya untuk pemeliharaan = 11 klik, dan menyalakannya kembali =
 11 klik lagi dengan risiko satu terlewat (T-5 & P10 baris 5 menunjukkan itu bukan
 kekhawatiran teoretis).
@@ -1623,7 +1628,7 @@ menimpa).
 | **9** ✅ | Mode baca-saja | P5 | 0 | Modul bisa dibekukan saat tutup buku — **kesembilan modul**, bukan enam | Ya |
 | **10** ✅ | Akses berjangka | P2 | 1 | Akses pinjaman kembali sendiri | Ya |
 | **11** ✅ | Permintaan mandiri | P4 | 1 | Antrean WhatsApp pindah ke aplikasi | Ya |
-| **12** | Sakelar global | P12 | 0 | Satu tombol untuk pemeliharaan menyeluruh | Ya |
+| **12** ✅ | Sakelar global | P12 | 0 | Satu tombol untuk pemeliharaan menyeluruh | Ya |
 | **13** ⏭ | Wajib ganti kata sandi | P7 | 1 | Kata sandi berhenti diketahui dua orang | **Dilewati** atas permintaan pemilik aplikasi (2026-09-10) |
 | **14** | Lihat sebagai orang ini | C3 | 0 | Hasil pengaturan bisa diperiksa tanpa meminjam akun orang lain | Ya |
 
@@ -2394,7 +2399,7 @@ tidak pernah dikerjakan.
 | **9** ✅ | P5 Mode baca-saja | 0 | Rencananya enam modul; **jadinya sembilan** — `modulMati` yang sadar metode HTTP membuat tiap route yang sudah dijaga gate G ikut dapat, tanpa satu route pun disentuh. **Selesai 2026-09-10** |
 | **10** ✅ | P2 Akses berjangka + cron | 1 tabel | Pencabutan otomatis **memanggil fungsi pencabutan yang sama** dengan manual (L69) — dibuktikan lewat perkecualian menu yang ikut terhapus. **Selesai & terverifikasi 2026-09-10** |
 | **11** ✅ | P4 Permintaan mandiri | 1 tabel | Tabel sendiri, **bukan** menumpang tabel promosi. Tanpa cooldown/probation/kata sandi ulang (aturan 11.4). SETUJUI **mengisi form**, yang menulis tetap Simpan Pusat Akses (aturan 11.1). **Selesai 2026-09-11; verifikasi peramban belum** |
-| **12** | P12 Sakelar global | 0 | Admin Panel **tidak boleh** ikut mati — pengecualian kartu `admin` wajib berlaku juga di sisi guard |
+| **12** ✅ | P12 Sakelar global | 0 | Admin Panel tidak bisa ikut mati **secara struktural**: `admin` tidak punya `sakelar` di registry, jadi tak satu pun route-nya memanggil penjaga sakelar. Disisipkan di satu tempat (`bacaKeadaan`), dan sebab pembekuan ikut sampai ke layar. **Selesai & diverifikasi lewat layar 2026-09-11** |
 | **13** | P7 Wajib ganti kata sandi | 2 kolom | **Dikerjakan sendirian.** Bawaan kolom 0; hanya jalur create/reset yang menyalakannya |
 
 **Fase E** (izin per-menu untuk modul lain) **tidak dijadwalkan.** Ia dipicu permintaan
@@ -2973,13 +2978,223 @@ resmi 107 · warisan 225) · gate F lolos · gate G 95 route lolos · `npm run b
 "Compiled successfully" dengan `/api/akses/permintaan` dan `/api/admin/permintaan-akses`
 terdaftar · suite Tahap 4–11 dan `test-kepala-sempit` semuanya lulus.
 
-**Yang BELUM diverifikasi, terus terang.** Alurnya belum dicoba lewat peramban dengan
-sesi sungguhan: meminta akses dari kartu terkunci, melihatnya muncul di antrean Pusat
-Akses beserta lencana relnya, menekan SETUJUI lalu Simpan, dan menolak dengan sebab yang
-sampai ke pemohon. Itu menunggu pemilik aplikasi. Dan
+**Diverifikasi lewat layar 2026-09-11.** Tombol **MINTA AKSES** memang muncul di kartu
+terkunci milik `uji.program` di `/menu`. Sisi adminnya diuji dengan permintaan yang
+dititipkan langsung ke tabelnya, lalu dijalankan lewat layar sungguhnya:
+
+- Antrean muncul di atas berkas orang, lencana "1" menyala di rel Pusat Akses, barisnya
+  berbunyi "uji.program · Program · minta Buku Besar Aset" beserta alasan pemohon dan
+  umurnya ("hari ini" — `umurPermintaan` yang disuapi `DATEDIFF` MySQL).
+- **SETUJUI hanya mengisi form, dan itu dibuktikan bukan disimpulkan**: sesudah ditekan,
+  Buku Besar Aset tercentang dengan penanda "Belum tersimpan", sementara di basis data
+  permintaannya **masih MENUNGGU** dan `app_access` **masih `["blud"]`**. Nol tulisan.
+- Dialog Simpan terbuka dengan kotak alasan **sudah terisi kalimat pemohon** — pembacaan
+  P9 "diisikan, bukan dilewati".
+- Sesudah Simpan: `app_access` jadi `["blud","buku_besar_aset"]`, permintaan **DISETUJUI**,
+  audit menulis `ACCESS_REQUEST_APPROVED` **dan** `ACCESS_GRANT` yang alasannya persis
+  kalimat pemohon, dan notifikasi `AKSES_DISETUJUI` sampai ke `uji.program`.
+- Jalur **TOLAK**: dialognya menolak lanjut sebelum sebabnya diisi (min. 10 huruf), lalu
+  permintaan jadi **DITOLAK** dengan sebabnya tersimpan, `app_access` **tidak bergerak**,
+  audit `ACCESS_REQUEST_REJECTED` memuat permintaan DAN sebab penolakannya, dan notifikasi
+  `AKSES_DITOLAK` membawa sebab itu apa adanya ke pemohon.
+
+Data uji dikembalikan lewat layar yang sama (centang dilepas + Simpan): `app_access`
+kembali `["blud"]`, nol sisa di `menu_user_access`, dan kedua baris permintaan dihapus.
+
+**Sisi pemohon ikut diverifikasi** (2026-09-11, sesudahnya): `uji.program` menekan MINTA
+AKSES sendiri dari kartu terkunci Dashboard. Ketiga akibatnya mendarat seperti dirancang —
+baris `akses_permintaan` dengan kolom bayangan `menunggu = 1`; audit `ACCESS_REQUEST` yang
+pelaku **dan** sasarannya sama-sama id 41, jadi ia muncul di garis waktu orang itu sendiri;
+dan notifikasi `AKSES_DIMINTA` yang hanya ke antrean `__SUPER_ADMIN__`, bukan disiarkan ke
+ADMIN/KASUBAG/KABAG.
+
+Kunci uniknya diuji pada baris hidup itu, bukan pada data karangan: INSERT kedua untuk
+pasangan yang sama ditolak MySQL — `ER_DUP_ENTRY (1062)`, kunci `41-dashboard-1` pada
+`uq_akses_permintaan_menunggu` — dan jumlah baris MENUNGGU tetap 1. Itu L69-a yang
+dibuktikan, bukan diasumsikan.
+
+**Pembatas lajunya ikut diuji hidup.** Ia berdiri di DEPAN Zod, jadi enam POST beruntun
+dengan badan sengaja tidak sah sudah cukup membuktikannya tanpa menulis satu baris pun:
+lima percobaan pertama lolos pembatas lalu jatuh di validasi (400), yang **keenam dijegal
+429 `TERLALU_SERING` — "Coba lagi dalam 300 detik"**. Yang dijaga memang antreannya, bukan
+wewenangnya (aturan 11.4): seratus permintaan dalam semenit membuat layar Pusat Akses tidak
+terbaca, dan itu sama saja dengan mematikannya.
+
+Dengan begitu seluruh P4 sudah dibuktikan lewat jalur sungguhan — sisi pemohon, sisi admin,
+kedua putusan, pagar duplikat di DB, dan pembatas lajunya. Dan
 `docs/migrations/migration-akses-permintaan.sql` baru dijalankan di basis data
 pengembangan — **server kantor belum**, berbarengan dengan `migration-akses-berjangka.sql`
 dan jadwal harian `POST /api/cron/akses-kedaluwarsa` yang juga masih menunggu.
+
+---
+
+#### Tahap 12 — HASIL (selesai 2026-09-11)
+
+**P12 Sakelar seluruh aplikasi.** Mematikan semuanya untuk pemeliharaan dulu berarti 11
+klik, dan menyalakannya kembali 11 klik lagi dengan satu yang terlewat — dan itu bukan
+kekhawatiran teoretis: T-5 dan P10 baris 5 dua-duanya lahir dari sakelar yang tertinggal.
+Nol migrasi, nol tabel, nol kolom, nol endpoint baru — `app_config` sudah berupa
+kunci/nilai, jadi yang bertambah satu barisnya saja.
+
+**Ia disisipkan di SATU tempat: `bacaKeadaan` di `lib/security/guard.ts`.** Keempat pintu
+(`modulMati`, `keadaanModul`, `modulSedangMati`, `modulDibekukan`) lewat fungsi itu, jadi
+menambahkannya sekali membuat kesembilan modul ikut — termasuk modul yang lahir besok.
+Menyuruh tiap penjaga modul mengingat kunci globalnya sendiri adalah bentuk T-1/L69 yang
+persis: ia akan berlaku di modul yang kebetulan diingat, dan diam di modul berikutnya.
+Uji regresi menegaskan `guard.ts` cuma punya SATU kueri `app_config`, dan menegaskan
+delapan berkas penjaga modul tidak menyebut kunci globalnya sama sekali.
+
+**Pintu untuk menyalakannya kembali dijaga DUA lapis, dan yang pertama struktural.**
+Konsep menyebut "Admin Panel tidak boleh ikut mati — pengecualian yang sama wajib berlaku
+di sisi guard". Yang berlaku ternyata lebih kuat daripada sebuah pengecualian: modul
+`admin` memang tidak punya `sakelar` di registry dan tidak punya `penjagaApi`, jadi tak
+satu pun route `app/api/admin/*` memanggil penjaga sakelar — tidak ada yang bisa dikunci.
+Perkecualian yang harus dipelihara bisa lupa dihapus atau lupa ditambah; fakta struktural
+tidak bisa. Yang dikerjakan bukan menuliskan perkecualiannya, melainkan **menagih fakta
+itu ke uji**: `modul('admin').sakelar === null`, `penjagaApi === undefined`, dan nol berkas
+di `app/api/admin` yang menyebut `modulMati`/`buatGuardModul`. Lapis keduanya
+`PERAN_TEMBUS_SAKELAR` yang sudah ada — dan urutannya ikut dijaga uji: peran yang menembus
+diperiksa SEBELUM DB dibaca, di `modulMati` maupun `keadaanModul`.
+
+**Perkecualian `admin` di kartu /menu berhenti tersebar.** Aturan "Admin Panel tidak pernah
+ikut mati" ditulis `card.id !== 'admin'` di EMPAT tempat di `menu-client.tsx`. Menambahkan
+sakelar global ke masing-masing berarti empat kesempatan untuk melewatkan satu — dan yang
+terlewat itu persis pintu untuk menyalakannya kembali. Semuanya dilipat jadi satu penolong
+`sakelarKartu(id)`; uji menghitung `card.id !== 'admin'` harus **nol** kemunculan.
+
+**`sebabTerburuk` — keadaan terburuk BESERTA kunci penyebabnya.** Tanpa ini, modul yang
+beku gara-gara sakelar global akan mengambil kalimatnya dari `app_status_<modul>_pesan`
+yang KOSONG: pagarnya berdiri, keterangannya hilang, tepat pada pembekuan yang paling luas
+akibatnya — keadaan yang P6 dibuat untuk menghapus (aturan 11.3, layar menyebut sebabnya).
+Kuncinya dipakai di tiga tempat: spanduk beku (`infoBeku`), kartu `/menu`, dan halaman
+`/maintenance`. `keadaanTerburuk` lama **diturunkan** dari fungsi baru itu, bukan berdiri
+di sampingnya — dua penelusuran yang menjawab "keadaan mana yang menang" cepat atau lambat
+berbeda pendapat, dan bedanya cuma muncul pada kombinasi yang jarang (L88). Kesetaraannya
+dibuktikan: 216 kombinasi tiga nilai dicocokkan dengan acuan yang ditulis ulang dari nol,
+bukan dipanggilkan ke fungsi yang sedang diuji.
+
+**Gesekan cuma di arah yang merusak** (aturan 11.4). Mematikan atau membekukan seluruh
+aplikasi wajib lewat `confirmDialog`; **menyalakannya kembali tidak ditanya apa-apa** —
+memulihkan layanan tidak boleh dihalangi dialog, dan gesekan di arah yang tidak merusak
+cuma melatih orang menembusnya. Kalimat dialognya menyebut jalan pulangnya ("Admin Panel
+tidak ikut tertutup"), sebab dialog yang hanya bertanya "yakin?" tidak memberi tahu apa pun.
+
+**Kartu modul berhenti menuduh induk yang masih hidup.** Sebelumnya keterangan turunan
+berbunyi "Sudah ikut mati karena induknya dimatikan". Kalau yang menahan sakelar global,
+kalimat itu mengirim orang memeriksa sakelar yang sebetulnya masih ONLINE — jadi sakelar
+global diperiksa LEBIH DULU daripada induk, dan namanya ikut disebut. Plus spanduk di ATAS
+layar saat global tidak online: keadaan paling mahal untuk tidak disadari adalah seisi
+kantor terkunci sementara tiap kartu modul di bawahnya masih menulis ONLINE.
+
+**BEKU tetap bukan MATI, termasuk secara global.** `modulSedangMati` sengaja tidak
+menghitung `readonly`, dan `/maintenance` tetap menolak menampilkan diri untuk keadaan beku
+— dibuktikan lewat peramban, bukan dari kode: dengan `app_status_global = readonly`,
+`/maintenance?m=app_status_blud` memulangkan halaman umum tanpa nama modul.
+
+**Diverifikasi pada MySQL sungguhan** (9 pemeriksaan, jalur `bacaKeadaan` ditiru persis):
+tanpa baris global → `online`; global `maintenance` → modul yang sakelarnya sendiri
+`online` ikut **maintenance** dengan sebab `app_status_global`; global `readonly` → modul
+ikut **readonly**; modul mati sendiri saat global beku → **maintenance** dengan sebab
+`app_status_blud` (yang lebih membatasi menang, dan sebab yang disebut yang benar); global
+dinyalakan → `online` tanpa sebab tertinggal. **Dan lewat peramban**: `/maintenance` yang
+diminta dengan kunci **modul** benar menampilkan "SELURUH APLIKASI" beserta pesan dan
+tenggat globalnya. Data uji dikembalikan — ketiga baris `app_status_global*` dihapus,
+`app_status_blud` kembali `online`.
+
+**Uji.** `npx tsx scripts/test-tahap-12.mts` — **68 pemeriksaan, 26 uji mutasi, semuanya
+tertangkap.** Dua sempat LOLOS:
+
+1. **`indexOf` yang tidak ketemu memulangkan -1, dan -1 lebih kecil dari indeks mana pun.**
+   Asersi "peran yang menembus diperiksa sebelum keadaan dibaca" membandingkan dua
+   `indexOf` mentah, jadi MENGHAPUS baris yang diperiksa justru MELULUSKANNYA. Diganti
+   penolong `sebelum()` yang menuntut keduanya ada. Sepupu L82c, lewat pintu lain: bukan
+   kutipan yang terlalu pendek, tapi pembanding yang punya jawaban untuk "tidak ada".
+2. **Satu-satunya pembeda ada di kombinasi yang tidak diuji.** Mengubah `return` seketika
+   pada `maintenance` jadi "timpa terus" memberi jawaban yang SAMA untuk setiap kasus uji
+   yang ada — bedanya baru muncul kalau DUA kunci sama-sama `maintenance`, dan di situ
+   yang benar menyebut yang PERTAMA (global), bukan yang terakhir.
+
+**Tiga suite tahap lama ikut jatuh, semuanya asersi usang atas kode yang P12 ubah dengan
+sah** — dan satu di antaranya pertanyaan yang sungguhan: Tahap 9 menegaskan "sakelar
+lintas-modul tak satu pun bisa dibekukan" dengan patokan `modulKunci === null`. Patokan itu
+akurat sampai P12 menambahkan sakelar tak-bermodul yang justru menjaga SETIAP jalur tulis
+sekaligus. Yang dijaga pemeriksaan itu sebenarnya "sakelar BACA tidak menawarkan BEKU",
+jadi patokannya dipersempit ke `SAKELAR_LAIN` — dua sakelar yang memang hanya dibaca.
+Empat sisanya kutipan kode yang bergeser (`keadaanTerburuk` → `sebabTerburuk`, `indukVal`
+→ `dariAtas`, `appStatus[statusKey]` → `st.keadaan`). Kelimanya ikut diuji mutasi: **5
+mutasi, 5 tertangkap.**
+
+**Gate:** `tsc` bersih · ESLint bersih pada 9 berkas yang disentuh · gate E lolos (token
+resmi 107 · warisan 225 — nol warna karangan, seluruh blok CSS P12 memakai token yang sudah
+ada, dan uji menegaskan blok itu tidak memuat satu hex pun) · gate F lolos · gate G 95 route
+lolos · `npm run build` "Compiled successfully" · suite Tahap 4–12, `test-kepala-sempit`,
+dan `test-sesi-dicabut` semuanya lulus.
+
+**Diverifikasi lewat layar, sesi SUPER_ADMIN sungguhan (2026-09-11).** Kartu SELURUH
+APLIKASI berdiri paling depan dengan lencana ONLINE + TERJAGA. Menekan MAINTENANCE
+memunculkan dialognya; **Batal benar-benar membatalkan** (sakelarnya tetap ONLINE).
+Sesudah dikonfirmasi: toast "SELURUH APLIKASI → MAINTENANCE", spanduk merah di atas layar,
+dan **kesembilan kartu modul yang sakelarnya sendiri masih ONLINE** menulis "Sudah ikut
+mati karena sakelar SELURUH APLIKASI dimatikan". Di `/menu`: sembilan kartu modul berkelas
+`maintenance-sa` berlencana MAINTENANCE, sementara **kartu `@admin` tetap kartu biasa
+berlencana ADMIN** — pintu untuk menyalakannya kembali terbukti tidak ikut terkunci.
+Mengembalikan ke ONLINE **satu klik tanpa dialog**, spanduknya hilang, dan jejak auditnya
+mencatat dua barisnya dengan label yang benar ("SELURUH APLIKASI: app_status_global =
+maintenance" lalu "= online"). Sakelarnya ditinggalkan `online`.
+
+**Diverifikasi juga lewat akun BUKAN SUPER_ADMIN** (`uji.program`, peran Program, punya
+grant BLUD + Perjanjian Kinerja + E-Anggaran + Usulan). Ini yang menutup satu-satunya
+lubang berarti di atas: semua yang terlihat lewat sesi SUPER_ADMIN adalah jalur bypass.
+
+Dengan `app_status_global = maintenance` dan **sakelar tiap modulnya sendiri tetap
+`online`**:
+
+- `/menu` — keempat kartu yang memang dia punya jadi MAINTENANCE **beserta kalimat
+  globalnya tercetak di kartu**; sisanya tetap TERKUNCI (bukan haknya), dan kartu Admin
+  Panel memang tidak ada untuk peran ini.
+- API — **keempat bentuk penjaga sekaligus** menjawab **503 `MODUL_MATI`**: per-route
+  (`bludMati`, `pkMati`, `kinerjaMati`, `usulanMati`) dan pabrik (`buatGuardModul` di
+  Rencana Aksi). Satu baris `app_config`, lima route, nol sakelar modul yang disentuh.
+- `/api/admin/app-status` dan `/api/user/access` tetap **200** — pintu pulangnya utuh.
+- Mengetik `/blud` langsung → dialihkan ke `/maintenance` yang menyebut **SELURUH
+  APLIKASI** beserta pesan & tenggat globalnya.
+
+Dengan `app_status_global = readonly`:
+
+- Modulnya **terbuka** (BEKU bukan MATI, P5 utuh), dan spanduk bekunya membawa **pesan
+  global** — bukan pesan BLUD yang kosong. Itu justru bagian yang P12 tambahkan.
+- GET **200**, POST/PUT **503 `MODUL_BACA_SAJA`** di BLUD, E-Anggaran, Rencana Aksi, dan
+  Usulan. Sesudah sakelarnya dikembalikan `online`, POST yang sama sampai ke Zod (400) —
+  jadi 503 tadi memang datang dari sakelar ini, bukan dari sesuatu yang lain.
+
+**Kartu global yang melebar sepenuh grid: aturannya diukur, panel hidupnya belum.** Pane
+pengujian selebar 672px membuat grid-nya satu kolom, jadi di sana kartu global dan kartu
+modul memang sama lebar — bukan cacat, cuma tidak ada bedanya untuk dilihat. Aturannya
+sendiri diuji terpisah dengan angka yang disalin apa adanya dari `admin.css`
+(`repeat(auto-fill, minmax(320px, 1fr))` + `grid-column: 1/-1`) pada tiga lebar:
+
+| Lebar isi | Kolom | Kartu global | Kartu modul |
+|---|---|---|---|
+| 630px | 1 | 630px | 630px — memang kembar |
+| 900px | 2 | 900px | 444px |
+| 1340px | 4 | 1340px | 326px |
+
+Di ketiganya kartu global berdiri di barisnya sendiri. **Dan panel hidupnya ikut diukur**
+pada viewport 1400px: grid-nya 3 kolom selebar 1134px, kartu SELURUH APLIKASI **1134px**
+membentang penuh di barisnya sendiri, sementara Dashboard / Renaksi & Kinerja / Buku Besar
+Aset masing-masing **370px** berjajar di baris berikutnya. Tidak ada lagi yang tersisa dari
+daftar ini.
+
+**Temuan di luar lingkup P12, dari pengujian ini.** Spanduk BEKU hanya dipasang di **BLUD
+dan Perjanjian Kinerja** (`bekuBlud` / `bekuPk`). E-Anggaran, Rencana Aksi, IKI, LKJIP,
+BBA, dan Usulan **API-nya dijaga** — 503 di atas membuktikannya — tapi layarnya tidak punya
+spanduk itu, jadi orang di sana baru tahu saat menekan Simpan lalu menerima pesan galat.
+Sisa Tahap 9, bukan sesuatu yang P12 ubah; memperbaikinya pekerjaan tersendiri.
+
+**Catatan di luar lingkup:** `app_status_dashboard` tercatat `maintenance` sejak **3
+Agustus 2026** — sebulan lebih, dan bukan bekas pengujian ini. Itu persis yang dimaksud
+pemeriksaan "sakelar lama" di P10; dibiarkan apa adanya karena mengubah sakelar produksi
+bukan keputusan yang boleh diambil sebagai efek samping sebuah tahap.
 
 ---
 
