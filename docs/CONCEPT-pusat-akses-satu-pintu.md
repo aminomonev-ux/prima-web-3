@@ -706,12 +706,55 @@ Dikerjakan lebih dulu karena tidak bergantung registry dan akibatnya paling lang
 - **Yang TIDAK dikerjakan**: izin per-panel. Alasan pembatalan 2026-08-04 masih berlaku.
 
 ### Fase E — modul lain, kalau memang dibutuhkan
-- [ ] **E1** — inventaris menu Renaksi / LKJIP / BBA / IKI dalam bentuk `peran.ts` daun,
+
+> ⏭ **DITUTUP 2026-09-11 — dijawab "tidak perlu" oleh pemilik aplikasi.** Bukan
+> dilewati karena kehabisan waktu: pagar yang dipasang E1 sendiri (*"hanya untuk modul
+> yang perannya benar-benar berbeda"*) memang dirancang untuk bisa menjawab TIDAK, dan
+> hari ini ia menjawab TIDAK. Inventarisnya tetap ditulis di bawah, karena yang mahal
+> dari pekerjaan ini bukan kodenya melainkan pertanyaannya — dan pertanyaan yang sudah
+> dijawab tidak perlu ditanyakan dua kali.
+
+- [x] **E1** — inventaris menu Renaksi / LKJIP / BBA / IKI dalam bentuk `peran.ts` daun,
       **hanya untuk modul yang perannya benar-benar berbeda**. Tabel peran yang keluar
       datar = modul itu tidak membutuhkannya (pelajaran Kinerja), dan menuliskannya tetap
-      berarti melahirkan matriks hiasan.
-- [ ] **E2** — Kinerja **tetap ditolak** untuk izin per-menu. Yang ia dapat dari konsep
-      ini cuma pintu & sakelar yang benar — dan itu memang yang kurang.
+      berarti melahirkan matriks hiasan. → **inventaris dibuat, hasilnya: tidak ada yang
+      memenuhi syaratnya.**
+- [x] **E2** — Kinerja **tetap ditolak** untuk izin per-menu. Yang ia dapat dari konsep
+      ini cuma pintu & sakelar yang benar — dan itu memang yang kurang. → tetap berlaku,
+      dan sekarang berlaku untuk **keempat modul lain juga**.
+
+**Inventaris E1 (2026-09-11).** Keadaan keempat modul hari ini: satu pagar datar di API
+(`buatGuardModul(isXRole, …)`), jadi memegang akses modul berarti memegang seluruh isinya
+kecuali segelintir tombol yang sudah dibatasi sendiri-sendiri.
+
+| Modul | Layar & aksi yang bisa dipisah | Pembeda peran yang sudah ada |
+|---|---|---|
+| Renaksi | Dashboard · Data Entry · Cetak · Impor · Alat Admin | `ADMIN/SUPER_ADMIN`: Duplikasi Tahun, Kunci Periode, Reset Realisasi |
+| Buku Besar Aset | Register · Master Kategori · Realisasi · Tarik dari Usulan | `ADMIN/SUPER_ADMIN`: Tarik dari Usulan |
+| IKI | Daftar · Editor · Impor (3 sumber) · Finalisasi · Riwayat | `SUPER_ADMIN`: membuka dokumen FINAL |
+| E-LKJIP | Daftar · Editor · Finalisasi · Unduh Word · Riwayat | nyaris tidak ada |
+
+**Pertanyaan penentunya bukan soal kode**, dan itu sebabnya ia harus ditanyakan ke pemilik
+aplikasi: apakah di kantor memang ada orang berbeda yang mengerjakan bagian berbeda?
+Jawabannya **tidak** — di keempat modul, semua pemegang akses memang mengerjakan semuanya.
+Membangun matriksnya tetap akan menghasilkan tabel yang seluruh barisnya sama, plus satu
+layar pengaturan baru yang harus dipelihara selamanya untuk membedakan hal yang tidak
+dibedakan siapa pun.
+
+Dua catatan yang ikut lahir dari inventaris ini dan tetap berlaku walau E1 ditutup:
+
+- **IKI salah sasaran sejak awal.** Tiap orang punya dokumennya sendiri, jadi kebutuhan
+  yang sesungguhnya — kalau suatu saat muncul — adalah **kepemilikan per-dokumen**, bukan
+  izin per-menu. Matriks per-menu tidak menjawab itu; ia hanya terlihat menjawab. Ini
+  konsekuensi sadar dari AUTHZ-02/V5 (modul kolaboratif tanpa ownership per-record),
+  bukan temuan baru.
+- **Master Kategori BBA** bentuknya paling mirip Master Pejabat PK yang memang dibatasi
+  (`LANTAI_EDIT`). Kalau suatu hari ada yang mengubah kategori sembarangan dan itu
+  merepotkan, di situlah pintu ini dibuka lebih dulu — bukan seluruh matriks.
+
+**Yang akan membalik keputusan ini:** bertambahnya orang dengan tugas yang benar-benar
+terpisah di salah satu modul. Selama pemakainya masih satu tim yang mengerjakan semuanya,
+jawabannya tetap tidak.
 
 ---
 
