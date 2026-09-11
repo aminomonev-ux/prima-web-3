@@ -21,12 +21,13 @@
 //      tanpa menempel kertas. Yang ditulis di sini muncul di `/maintenance` dan di
 //      kartu `/menu` — dan hanya selama sakelarnya memang mati.
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { MessageSquare, ShieldCheck, ShieldAlert, Save, X, Snowflake } from 'lucide-react';
+import { MessageSquare, ShieldCheck, ShieldAlert, Save, X, Snowflake, Power } from 'lucide-react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import {
-  SAKELAR_INFO, formatSampai, bacaKeadaan, KEADAAN_SAKELAR, LABEL_KEADAAN,
+  SAKELAR_INFO, formatSampai, bacaKeadaan, KEADAAN_SAKELAR, KUNCI_GLOBAL, LABEL_KEADAAN,
   SEBAB_TAK_BISA_BEKU, type KeadaanSakelar,
 } from '@/lib/registry/apps';
 import { type AppStatus } from './_shared';
@@ -63,6 +64,9 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
     [status, pesan],
   );
 
+  // P12 — dibaca sekali, dipakai spanduk di atas DAN keterangan di tiap kartu.
+  const globalVal = bacaKeadaan(status[KUNCI_GLOBAL]);
+
   async function kirim(kunci: string, body: Record<string, string>, kabar: string) {
     setLoad(true);
     const r = await fetchJson('/api/admin/app-status', {
@@ -79,6 +83,22 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
   async function pilihKeadaan(kunci: string, label: string, baru: KeadaanSakelar) {
     if (!isSA) return;
     if (bacaKeadaan(status[kunci]) === baru) return;
+    // P12 — gesekan ditaruh di tempat yang memang merusak, dan hanya di situ (aturan
+    // 11.4). Satu klik di sini menutup sembilan modul untuk seluruh kantor sekaligus;
+    // menyalakannya kembali tidak ditanya apa-apa, karena memulihkan layanan tidak boleh
+    // dihalangi dialog.
+    if (kunci === KUNCI_GLOBAL && baru !== 'online') {
+      const jadi = baru === 'maintenance'
+        ? 'Semua modul akan tertutup dan orang yang membukanya mendarat di halaman pemeliharaan.'
+        : 'Semua modul masih bisa dibuka dan dicetak, tapi tidak ada yang bisa menyimpan apa pun.';
+      const lanjut = await confirmDialog({
+        title: `${LABEL_KEADAAN[baru]} untuk seluruh aplikasi`,
+        message: `${jadi}\n\nAnda sendiri tetap bisa masuk sebagai SUPER_ADMIN, dan Admin Panel tidak ikut tertutup — jadi sakelar ini selalu bisa dikembalikan dari layar ini.\n\nTulis keterangannya sesudah ini supaya orang tahu sebabnya dan sampai kapan.`,
+        confirmLabel: LABEL_KEADAAN[baru],
+        variant: baru === 'maintenance' ? 'danger' : 'warning',
+      });
+      if (!lanjut) return;
+    }
     setStatus(p=>({...p,[kunci]:baru}));
     await kirim(kunci, { value: baru }, `${label} → ${LABEL_KEADAAN[baru]}`);
   }
@@ -114,6 +134,21 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
         </span>
       </div>
 
+      {/* Keadaan paling mahal untuk tidak disadari: seisi kantor terkunci sementara
+          tiap kartu modul di bawah masih menulis ONLINE. Spanduknya di ATAS, bukan
+          mengandalkan orang menggulir sampai menemukan kartunya. */}
+      {globalVal !== 'online' && (
+        <div className={`ap-sk-global-ingat ${globalVal === 'maintenance' ? 'mati' : 'beku'}`}>
+          <Power size={14}/>
+          <span>
+            {globalVal === 'maintenance'
+              ? <><b>Seluruh aplikasi sedang DIMATIKAN.</b> Semua modul tertutup untuk semua orang selain SUPER_ADMIN.</>
+              : <><b>Seluruh aplikasi sedang DIBEKUKAN.</b> Semua modul masih bisa dibuka dan dicetak, tapi tidak ada yang bisa menyimpan.</>}
+            {' '}Admin Panel tidak ikut — kembalikan ke ONLINE lewat kartu paling atas kalau sudah selesai.
+          </span>
+        </div>
+      )}
+
       {tanpaPesan.length > 0 && (
         <div className="ap-sk-ingat">
           <MessageSquare size={14}/>
@@ -130,12 +165,18 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
           const val      = bacaKeadaan(status[s.kunci]);
           const isOnline = val === 'online';
           const indukVal = s.induk ? bacaKeadaan(status[s.induk]) : 'online';
+          const isGlobal = s.kunci === KUNCI_GLOBAL;
+          // Sakelar global berlaku SEBELUM induk: kalau seluruh aplikasi dimatikan,
+          // menyebut "induknya" akan mengirim orang memeriksa sakelar yang sebetulnya
+          // masih hidup. Yang ditulis harus sakelar yang benar-benar menahannya.
+          const dariAtas = isGlobal ? 'online' : globalVal !== 'online' ? globalVal : indukVal;
+          const namaAtas = !isGlobal && globalVal !== 'online' ? 'sakelar SELURUH APLIKASI' : 'induknya';
           const d        = draf[s.kunci];
           const adaTeks  = Boolean(pesan[s.kunci] || sampai[s.kunci]);
           const bolehIsi = isSA && (!isOnline || adaTeks);
 
           return (
-            <div key={s.kunci} className={`ap-card ap-sk${s.induk ? ' anak' : ''}`}>
+            <div key={s.kunci} className={`ap-card ap-sk${s.induk ? ' anak' : ''}${isGlobal ? ' global' : ''}`}>
               <div className="ap-sk-atas">
                 <div className="ap-sk-kiri">
                   <div className="ap-sk-label">{s.label}</div>
@@ -158,11 +199,11 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                   {/* Sakelar berjenjang: induk mati ikut mematikan, induk beku ikut
                       membekukan — dan kalimatnya harus menyebut yang MANA, kalau tidak
                       orang mengira turunannya masih bisa ditulis. */}
-                  {indukVal !== 'online' && val === 'online' && (
+                  {dariAtas !== 'online' && val === 'online' && (
                     <div className="ap-sk-sebab">
-                      {indukVal === 'readonly'
-                        ? 'Sudah ikut beku karena induknya dibekukan.'
-                        : 'Sudah ikut mati karena induknya dimatikan.'}
+                      {dariAtas === 'readonly'
+                        ? `Sudah ikut beku karena ${namaAtas} dibekukan.`
+                        : `Sudah ikut mati karena ${namaAtas} dimatikan.`}
                     </div>
                   )}
                 </div>

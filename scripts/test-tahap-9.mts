@@ -15,7 +15,7 @@
 
 import fs from 'node:fs'
 import {
-  KEADAAN_SAKELAR, LABEL_KEADAAN, SAKELAR_INFO, SEBAB_TAK_BISA_BEKU,
+  KEADAAN_SAKELAR, LABEL_KEADAAN, SAKELAR_INFO, SAKELAR_LAIN, SEBAB_TAK_BISA_BEKU,
   bacaKeadaan, infoSakelar, keadaanTerburuk, modul,
 } from '../lib/registry/apps'
 
@@ -77,8 +77,14 @@ cek('sakelar yang hanya dibaca peramban TIDAK bisa dibekukan',
   infoSakelar('app_status_sentinel_bot')?.bisaBeku === false)
 cek('sakelar yang endpointnya GET saja TIDAK bisa dibekukan',
   infoSakelar('app_status_rima_query')?.bisaBeku === false)
-cek('sakelar lintas-modul tak satu pun bisa dibekukan',
-  SAKELAR_INFO.filter((s) => s.modulKunci === null).every((s) => !s.bisaBeku))
+// Patokannya SAKELAR_LAIN, bukan `modulKunci === null`. Keduanya sama sampai P12
+// menambahkan sakelar SELURUH APLIKASI — yang juga tak bermodul, tapi justru menjaga
+// SETIAP jalur tulis sekaligus. Yang dijaga pemeriksaan ini "sakelar baca tidak
+// menawarkan BEKU", dan dua sakelar itulah yang dimaksud.
+const kunciLain = new Set(SAKELAR_LAIN.map((s) => s.kunci))
+cek('sakelar baca lintas-modul tak satu pun bisa dibekukan',
+  kunciLain.size === 2
+  && SAKELAR_INFO.filter((s) => kunciLain.has(s.kunci)).every((s) => !s.bisaBeku))
 // Kalau kuncinya tidak ketemu, `modul('blud')?.sakelar ?? ''` memulangkan string kosong
 // dan pembekuan BLUD berhenti bekerja TANPA satu galat pun — kegagalan paling senyap
 // di seluruh tahap ini.
@@ -182,7 +188,7 @@ cek('BEKU dimatikan untuk sakelar tanpa jalur tulis',
   panel.includes("k === 'readonly' && !s.bisaBeku"))
 cek('…dengan sebab yang tertulis', panel.includes('data-tooltip={dilarang ? SEBAB_TAK_BISA_BEKU'))
 cek('SUPER_ADMIN yang menembus disebut di layar', panel.includes('SUPER_ADMIN tetap bisa menembus'))
-cek('induk beku diberi kalimat sendiri', panel.includes('Sudah ikut beku karena induknya dibekukan.'))
+cek('induk beku diberi kalimat sendiri', panel.includes('Sudah ikut beku karena ${namaAtas} dibekukan.'))
 // Ketahuan saat dijalankan, bukan dari kode: spanduk peringatan menghitung sakelar
 // yang TIDAK online — jadi modul beku ikut masuk, dan itu benar (modul beku tanpa
 // kalimat justru lebih membingungkan: layarnya terbuka dan tampak normal). Yang salah
@@ -193,7 +199,7 @@ cek('spanduk peringatan tidak menyebut modul beku sebagai mati',
   && !panel.includes('sedang dipelihara'))
 
 const menu = buangKomentar(baca('app/(dashboard)/menu/menu-client.tsx'))
-cek('kartu /menu punya keadaan BEKU', menu.includes("appStatus[statusKey] === 'readonly'"))
+cek('kartu /menu punya keadaan BEKU', menu.includes("const isBeku    = !locked && st.keadaan === 'readonly'"))
 cek('…berlencana BEKU', menu.includes("isBeku ? 'BEKU'"))
 // Modul beku HARUS tetap bisa dibuka — itu seluruh gunanya. Kartu yang diabukan &
 // tidak bisa diklik akan mengubah pembekuan jadi pemadaman di mata pemakainya.
@@ -204,7 +210,7 @@ cek('kartunya tetap membawa keterangan & tenggat',
 
 const halaman = buangKomentar(baca('app/maintenance/page.tsx'))
 cek('/maintenance hanya untuk modul yang benar-benar MATI',
-  halaman.includes("keadaanTerburuk(kunciCek.map((k) => peta.get(k))) !== 'maintenance'")
+  halaman.includes("if (sebab.keadaan !== 'maintenance') return null")
   && !halaman.includes("!== 'online'"))
 
 const spanduk = buangKomentar(baca('components/ui/SpandukBeku.tsx'))

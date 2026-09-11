@@ -157,11 +157,24 @@ export const SAKELAR_LAIN: readonly SakelarLain[] = [
   },
 ]
 
+/**
+ * P12 — sakelar seluruh aplikasi.
+ *
+ * BUKAN sebuah modul, jadi ia sengaja TIDAK ditaruh di `apps-data.mjs`: entri di sana
+ * ikut jadi kartu /menu, ikut jadi centang "Atur Akses Aplikasi", dan ikut dipindai
+ * gate G sebagai direktori route. Yang ini cuma sebuah baris `app_config`.
+ */
+export const KUNCI_GLOBAL = 'app_status_global'
+
+/** Namanya di layar Sakelar, di jejak audit, dan di halaman `/maintenance` — satu kata. */
+export const LABEL_GLOBAL = 'SELURUH APLIKASI'
+
 /** Kunci `app_access` yang sah — whitelist Zod. `admin` & `usulan_aset` tidak termasuk. */
 export const KUNCI_GRANT: readonly string[] = MODUL_APPS.filter((m) => m.bolehDigrant).map((m) => m.kunci)
 
-/** Semua kunci sakelar `app_config` — modul, sub-modul, dan fitur lintas-modul. */
+/** Semua kunci sakelar `app_config` — global, modul, sub-modul, dan fitur lintas-modul. */
 export const KUNCI_SAKELAR: readonly string[] = [
+  KUNCI_GLOBAL,
   ...MODUL_APPS.flatMap((m) => [
     ...(m.sakelar ? [m.sakelar] : []),
     ...(m.subSakelar ?? []).map((s) => s.kunci),
@@ -195,17 +208,46 @@ export function bacaKeadaan(nilai: string | null | undefined): KeadaanSakelar {
 }
 
 /**
- * Keadaan paling membatasi dari beberapa sakelar — dipakai sakelar berjenjang
- * (BLUD mati ikut mematikan Realisasi; BLUD beku ikut membekukannya).
+ * Sakelar yang ikut diperhitungkan pada SETIAP pertanyaan "modul ini sedang apa".
+ *
+ * Satu tempat, bukan ditambahkan di tiap pemanggil: sakelar global yang harus diingat
+ * satu per satu adalah bentuk T-1/L69 yang persis — ia akan berlaku di modul yang
+ * kebetulan diingat, dan diam di modul berikutnya.
  */
-export function keadaanTerburuk(nilai: readonly (string | null | undefined)[]): KeadaanSakelar {
-  let hasil: KeadaanSakelar = 'online'
-  for (const n of nilai) {
-    const k = bacaKeadaan(n)
-    if (k === 'maintenance') return 'maintenance'
-    if (k === 'readonly') hasil = 'readonly'
+export function kunciDenganGlobal(keys: readonly string[]): string[] {
+  return [KUNCI_GLOBAL, ...keys]
+}
+
+/**
+ * Keadaan paling membatasi dari beberapa sakelar, BESERTA kunci yang menyebabkannya.
+ *
+ * Kuncinya ikut karena layar wajib menyebut SEBAB-nya (aturan 11.3): modul yang beku
+ * gara-gara sakelar global punya `app_status_<modul>_pesan` yang KOSONG, jadi tanpa
+ * ini yang tampil spanduk pembekuan tanpa satu kalimat pun — persis keadaan yang P6
+ * dibuat untuk menghapus.
+ */
+export function sebabTerburuk(
+  pasangan: readonly (readonly [string, string | null | undefined])[],
+): { keadaan: KeadaanSakelar; kunci: string | null } {
+  let hasil: { keadaan: KeadaanSakelar; kunci: string | null } = { keadaan: 'online', kunci: null }
+  for (const [kunci, nilai] of pasangan) {
+    const k = bacaKeadaan(nilai)
+    if (k === 'maintenance') return { keadaan: 'maintenance', kunci }
+    if (k === 'readonly' && hasil.keadaan === 'online') hasil = { keadaan: 'readonly', kunci }
   }
   return hasil
+}
+
+/**
+ * Keadaan paling membatasi dari beberapa sakelar — dipakai sakelar berjenjang
+ * (BLUD mati ikut mematikan Realisasi; BLUD beku ikut membekukannya).
+ *
+ * Diturunkan dari `sebabTerburuk` supaya aturannya hidup di SATU perulangan. Dua
+ * penelusuran yang menjawab "keadaan mana yang menang" cepat atau lambat berbeda
+ * pendapat, dan bedanya cuma kelihatan pada kombinasi yang jarang (L88).
+ */
+export function keadaanTerburuk(nilai: readonly (string | null | undefined)[]): KeadaanSakelar {
+  return sebabTerburuk(nilai.map((n, i) => [String(i), n] as const)).keadaan
 }
 
 export const LABEL_KEADAAN: Readonly<Record<KeadaanSakelar, string>> = {
@@ -216,6 +258,7 @@ export const LABEL_KEADAAN: Readonly<Record<KeadaanSakelar, string>> = {
 
 /** Kunci sakelar → label yang tampil di App Control. */
 export const LABEL_SAKELAR: Readonly<Record<string, string>> = Object.fromEntries([
+  [KUNCI_GLOBAL, LABEL_GLOBAL] as const,
   ...MODUL_APPS.flatMap((m) => [
     ...(m.sakelar ? [[m.sakelar, m.label] as const] : []),
     ...(m.subSakelar ?? []).map((s) => [s.kunci, s.label] as const),
@@ -312,7 +355,29 @@ function infoModul(m: Modul): InfoSakelar[] {
   ]
 }
 
+/**
+ * P12 — berdiri PALING DEPAN di `SAKELAR_INFO`, dan itu bukan soal tata letak: layar
+ * Sakelar merender daftar ini apa adanya, jadi sakelar yang mematikan semuanya harus
+ * jadi hal pertama yang dibaca orang di halaman itu.
+ *
+ * `terjaga: true` bukan pernyataan optimis — ia ditegakkan uji regresi Tahap 12, yang
+ * memeriksa `bacaKeadaan` di `guard.ts` memang menyisipkannya lewat `kunciDenganGlobal`.
+ * Lencana TERJAGA yang tidak bisa dibuktikan justru kebalikan dari gunanya (T-1).
+ */
+const SAKELAR_GLOBAL: InfoSakelar = {
+  kunci: KUNCI_GLOBAL,
+  label: LABEL_GLOBAL,
+  modulKunci: null,
+  induk: null,
+  terjaga: true,
+  bisaBeku: true,
+  sebab:
+    'Ikut dibaca setiap penjaga modul lewat `kunciDenganGlobal` di lib/security/guard.ts.'
+    + ' Admin Panel sengaja di luar jangkauannya — route-nya memang tidak punya sakelar.',
+}
+
 export const SAKELAR_INFO: readonly InfoSakelar[] = [
+  SAKELAR_GLOBAL,
   ...MODUL_APPS.flatMap(infoModul),
   ...SAKELAR_LAIN.map((s) => ({
     kunci: s.kunci,

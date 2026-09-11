@@ -218,7 +218,7 @@ cek('nama modul diambil dari registry, bukan dari URL',
 // dibekukan. Yang dijaga pemeriksaan ini TIDAK berubah: keadaannya dibaca dari DB, dan
 // hanya yang benar-benar mati yang boleh menampilkan halaman ini.
 cek('status sakelar dibaca dari DB sebelum namanya ditampilkan',
-  mtBersih.includes('keadaanTerburuk(kunciCek.map((k) => peta.get(k)))'))
+  mtBersih.includes('sebabTerburuk(kunciCek.map((k) => [k, peta.get(k)] as const))'))
 cek('sakelar yang TIDAK mati = nama tidak ditampilkan',
   mtBersih.includes("!== 'maintenance') return null"))
 cek('induk ikut ditanyakan (mematikan BLUD ikut menutup Realisasi)',

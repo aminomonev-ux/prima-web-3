@@ -343,6 +343,20 @@
 .ap-sk-ingat{display:flex;align-items:flex-start;gap:9px;padding:11px 14px;margin-bottom:14px;border-radius:8px;font-size:11.5px;line-height:1.6;background:var(--ap-warn-bg);border:1px solid var(--ap-warn-line);color:var(--ap-warn-fg);}
 .ap-sk-ingat svg{flex:0 0 auto;margin-top:2px;}
 
+/* P12 — sakelar SELURUH APLIKASI. Ia melebar sepenuh grid dan memakai warna bahaya,
+   sengaja tidak terlihat seperti kartu modul: disamakan bentuknya, satu-satunya
+   sakelar yang mengunci semua orang akan tenggelam di antara belasan sakelar yang
+   tidak. Semua nilainya token yang sudah ada — gate E tetap hijau. */
+.ap-sk.global{grid-column:1/-1;border-color:var(--ap-bad-line);background:var(--ap-bad-bg);}
+.ap-sk.global .ap-sk-label{letter-spacing:.08em;}
+.ap-sk-global-ingat{display:flex;align-items:flex-start;gap:9px;padding:12px 15px;margin-bottom:14px;border-radius:8px;font-size:12px;line-height:1.6;}
+.ap-sk-global-ingat svg{flex:0 0 auto;margin-top:2px;}
+/* Dimatikan = merah; dibekukan = biru keterangan. Memakai merah untuk dua-duanya
+   membuat pembekuan — yang membiarkan orang tetap bekerja membaca — terbaca sama
+   gawatnya dengan pemadaman total. */
+.ap-sk-global-ingat.mati{background:var(--ap-bad-bg);border:1px solid var(--ap-bad-line);color:var(--ap-bad-fg);}
+.ap-sk-global-ingat.beku{background:var(--ap-info-bg);border:1px solid var(--ap-info-line);color:var(--ap-info);}
+
 /* ─── Pemeriksaan Mandiri (Tahap 4) ──────────────────────────────────────────
    Kartu temuan, bukan tabel: yang perlu dibaca di sini kalimatnya, bukan kolomnya.
    Strip warna di tepi kiri, bukan latar penuh — "perlu dilihat" itu kabar, bukan

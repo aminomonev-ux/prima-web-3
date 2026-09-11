@@ -10,7 +10,9 @@ import {
   ArrowUpCircle, Clock, LayoutDashboard, KeyRound, Hourglass, CircleSlash,
 } from 'lucide-react';
 import { APP_NAME, APP_INSTANSI, ROLE_LABELS, ADMIN_ROLES } from '@/lib/constants';
-import { formatSampai, urlPemeliharaan } from '@/lib/registry/apps';
+import {
+  formatSampai, KUNCI_GLOBAL, sebabTerburuk, urlPemeliharaan, type KeadaanSakelar,
+} from '@/lib/registry/apps';
 import type { Role } from '@/types';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { MintaAksesModal } from '@/components/akses/MintaAksesModal';
@@ -244,11 +246,31 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
     return userAccess !== null && !userAccess.includes(card.id);
   }
 
+  /**
+   * P12 — keadaan sebuah kartu, sakelar global sudah ikut diperhitungkan, beserta kunci
+   * sakelar yang MENYEBABKANNYA (dipakai untuk tautan `/maintenance` dan untuk mengambil
+   * pesan yang benar).
+   *
+   * Ditulis SEKALI. Aturan "Admin Panel tidak pernah ikut mati" sebelumnya tersebar di
+   * empat tempat di berkas ini; menambahkan sakelar global ke masing-masing berarti
+   * empat kesempatan untuk lupa satu — dan yang terlupa itu persis pintu untuk
+   * menyalakannya kembali.
+   */
+  function sakelarKartu(id: string): { keadaan: KeadaanSakelar; kunci: string } {
+    const kunciModul = `app_status_${id}`;
+    if (id === 'admin') return { keadaan: 'online', kunci: kunciModul };
+    const s = sebabTerburuk([
+      [KUNCI_GLOBAL, appStatus[KUNCI_GLOBAL]],
+      [kunciModul, appStatus[kunciModul]],
+    ]);
+    return { keadaan: s.keadaan, kunci: s.kunci ?? kunciModul };
+  }
+
   function handleCardClick(card: typeof APP_CARDS[0]) {
     if (isLocked(card)) return;
-    const statusKey = `app_status_${card.id}`;
-    if (appStatus[statusKey] === 'maintenance' && role !== 'SUPER_ADMIN') {
-      router.push(urlPemeliharaan(statusKey));
+    const st = sakelarKartu(card.id);
+    if (st.keadaan === 'maintenance' && role !== 'SUPER_ADMIN') {
+      router.push(urlPemeliharaan(st.kunci));
     } else {
       router.push(card.href);
     }
@@ -792,13 +814,19 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
             {visibleCards.map(card => {
               const Icon      = card.icon;
               const locked    = isLocked(card);
-              const statusKey = `app_status_${card.id}`;
-              const isMaint   = !locked && card.id !== 'admin' && appStatus[statusKey] === 'maintenance' && role !== 'SUPER_ADMIN';
-              const isMaintSA = !locked && card.id !== 'admin' && appStatus[statusKey] === 'maintenance' && role === 'SUPER_ADMIN';
+              // P12 — `statusKey` bukan lagi kunci modulnya, melainkan kunci sakelar
+              // yang menyebabkan keadaan ini. Kalau yang mematikan sakelar global,
+              // pesan yang ditempel di kartu harus pesan global: kartu MAINTENANCE
+              // dengan keterangan kosong mengirim orang menelepon, dan itu persis yang
+              // P6 hapus.
+              const st        = sakelarKartu(card.id);
+              const statusKey = st.kunci;
+              const isMaint   = !locked && st.keadaan === 'maintenance' && role !== 'SUPER_ADMIN';
+              const isMaintSA = !locked && st.keadaan === 'maintenance' && role === 'SUPER_ADMIN';
               // P5 — modul BEKU tetap bisa dibuka: kartunya TIDAK diabukan dan tetap
               // bisa diklik. Yang berubah cuma lencananya, dan itu memang seluruh
               // maksudnya: orang tahu sebelum masuk bahwa hari ini cuma bisa membaca.
-              const isBeku    = !locked && card.id !== 'admin' && appStatus[statusKey] === 'readonly';
+              const isBeku    = !locked && st.keadaan === 'readonly';
 
               const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : isBeku ? 'BEKU' : card.badge;
               // Warna badge status (brutalist: teks gelap + border hitam): hijau=LIVE, merah=admin, amber=maint, abu=locked

@@ -14,7 +14,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { sql, queryOne } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
-import { keadaanTerburuk, type KeadaanSakelar } from '@/lib/registry/apps';
+import { keadaanTerburuk, kunciDenganGlobal, type KeadaanSakelar } from '@/lib/registry/apps';
 import type { SessionPayload } from '@/types';
 
 export type GuardOk   = { ok: true; session: SessionPayload };
@@ -133,9 +133,23 @@ async function sedangMenulis(): Promise<boolean> {
   }
 }
 
+/**
+ * P12 — sakelar global disisipkan DI SINI, satu tempat, bukan di tiap pemanggil.
+ *
+ * Keempat pintu (`modulMati`, `keadaanModul`, `modulSedangMati`, `modulDibekukan`)
+ * lewat fungsi ini, jadi menambahkannya sekali membuat kesembilan modul ikut — termasuk
+ * modul yang lahir besok. Menyuruh tiap pemanggil mengingat kunci global adalah bentuk
+ * T-1/L69 yang persis: ia akan berlaku di modul yang kebetulan diingat.
+ *
+ * Admin Panel tidak ikut mati, dan bukan karena dikecualikan di sini — `admin` memang
+ * tidak punya `sakelar` di registry, jadi tak satu pun route `app/api/admin/*` memanggil
+ * fungsi ini. Pengecualian struktural lebih kuat daripada daftar perkecualian yang harus
+ * dipelihara; uji Tahap 12 menjaganya tetap begitu.
+ */
 async function bacaKeadaan(keys: string[]): Promise<KeadaanModul> {
   try {
-    const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${keys})`;
+    const semua = kunciDenganGlobal(keys);
+    const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN (${semua})`;
     // Kunci yang belum ada barisnya dianggap 'online' — sama seperti GET app-status
     // yang mengisi default. Modul baru tidak boleh mati hanya karena seed tertinggal.
     return keadaanTerburuk((rows as { value: string }[]).map((r) => r.value));

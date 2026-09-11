@@ -19,7 +19,10 @@
 // Gagal membaca DB = anggap tidak terbukti, tampilkan halaman umum. Sakelar yang
 // hanya jujur saat semuanya lancar bukan sakelar (pola `modulMati`).
 import { sql } from '@/lib/data/db';
-import { formatSampai, infoSakelar, keadaanTerburuk, kunciPesan, kunciSampai } from '@/lib/registry/apps';
+import {
+  formatSampai, infoSakelar, KUNCI_GLOBAL, kunciDenganGlobal, kunciPesan, kunciSampai,
+  LABEL_GLOBAL, sebabTerburuk,
+} from '@/lib/registry/apps';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,22 +35,34 @@ async function buktikan(kunci: string | undefined): Promise<Terbukti> {
 
   // Induk ikut ditanyakan: mematikan BLUD ikut mematikan Realisasi, jadi tautan yang
   // menunjuk sub-sakelar tetap sah walau baris sub-nya sendiri masih 'online'.
-  const kunciCek = [kunci, ...(info.induk ? [info.induk] : [])];
+  //
+  // P12: sakelar global ikut, lewat penolong yang sama dengan `guard.ts`. Tanpa itu,
+  // mematikan seluruh aplikasi membuat halaman ini menjawab "tidak terbukti" untuk tiap
+  // modul — orangnya ditolak 503 lalu mendarat di halaman umum tanpa nama dan tanpa
+  // kalimat, tepat pada pemadaman yang paling perlu dijelaskan.
+  const kunciCek = kunciDenganGlobal([kunci, ...(info.induk ? [info.induk] : [])]);
+  const berteks = [KUNCI_GLOBAL, kunci];
   try {
     const rows = await sql`
       SELECT \`key\`, value FROM app_config
-      WHERE \`key\` IN (${[...kunciCek, kunciPesan(kunci), kunciSampai(kunci)]})
+      WHERE \`key\` IN (${[...kunciCek, ...berteks.map(kunciPesan), ...berteks.map(kunciSampai)]})
     ` as { key: string; value: string }[];
     const peta = new Map(rows.map((r) => [r.key, r.value]));
     // P5: `readonly` BUKAN alasan menampilkan halaman ini. Modul beku tetap harus
     // bisa dibuka & dicetak — halaman pemeliharaan yang tampil untuknya justru
-    // mengubah pembekuan jadi pemadaman. Karena itu `keadaanTerburuk`, bukan
+    // mengubah pembekuan jadi pemadaman. Karena itu `sebabTerburuk`, bukan
     // pemeriksaan lama `!== 'online'` yang menganggap keduanya sama.
-    if (keadaanTerburuk(kunciCek.map((k) => peta.get(k))) !== 'maintenance') return null;
+    const sebab = sebabTerburuk(kunciCek.map((k) => [k, peta.get(k)] as const));
+    if (sebab.keadaan !== 'maintenance') return null;
+    // Yang ditulis di halaman ini nama sakelar yang MENYEBABKANNYA. Menyebut nama modul
+    // saat yang mati seluruh aplikasi membuat orang mencoba modul sebelah, lalu kembali
+    // dengan pertanyaan yang sama.
+    const global = sebab.kunci === KUNCI_GLOBAL;
+    const sumber = global ? KUNCI_GLOBAL : kunci;
     return {
-      label: info.label,
-      pesan: (peta.get(kunciPesan(kunci)) ?? '').trim(),
-      sampai: formatSampai((peta.get(kunciSampai(kunci)) ?? '').trim()),
+      label: global ? LABEL_GLOBAL : info.label,
+      pesan: (peta.get(kunciPesan(sumber)) ?? '').trim(),
+      sampai: formatSampai((peta.get(kunciSampai(sumber)) ?? '').trim()),
     };
   } catch {
     return null;
