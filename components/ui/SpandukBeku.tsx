@@ -44,8 +44,16 @@ export default function SpandukBeku({ beku, tembus, pesan, sampai, global }: Pro
           // menyimpan, berhasil, lalu menyimpulkan pembekuannya tidak bekerja.
           ? <>Membuka, membaca, dan mencetak tetap bisa untuk semua orang; menyimpan ditutup —
               <b> kecuali untuk Anda</b>, karena SUPER_ADMIN menembus sakelar. Ujilah dengan akun lain.</>
-          : <>Membuka, membaca, dan mencetak tetap bisa. Menyimpan ditutup sementara, jadi
-              tombol simpan &amp; hapus dimatikan.</>}
+          // Dulu berbunyi "tombol simpan & hapus dimatikan". Tidak pernah benar: `beku`
+          // di BLUD & PK dipakai HANYA untuk merender spanduk ini, dan di enam modul
+          // berikutnya juga. Akibatnya orang membaca "tombolnya mati", menekan tombol
+          // yang jelas-jelas hidup, lalu menerima galat umum ("Gagal membuat dokumen")
+          // yang tidak menyebut pembekuan sama sekali — persis kebingungan yang spanduk
+          // ini dibuat untuk mencegah, dan spanduknya sendiri yang mengantar ke sana.
+          // Yang benar: pagarnya di API (503), bukan di tombol (L82).
+          : <>Membuka, membaca, dan mencetak tetap bisa. Menyimpan ditolak sampai
+              pembekuan selesai — tombolnya masih bisa ditekan, tapi simpanannya akan
+              gagal.</>}
         {pesan && <div style={{ marginTop: 6, whiteSpace: 'pre-line' }}>{pesan}</div>}
         {sampai && (
           <div style={{ marginTop: 4, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>

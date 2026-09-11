@@ -2814,12 +2814,20 @@ begitu dua `layout.tsx` baru lahir — L91 lewat pintu berlawanan (di sana route
 di sini layout DITAMBAH). Yang gagal berkas bangkitan, bukan kodenya; `prebuild` yang
 membuang dua direktori tipe itu menyelesaikannya.
 
-**Yang BELUM diverifikasi, terus terang:** redirect ketiga modul ini belum dilihat
-lewat peramban. Ia butuh akun **bukan** SUPER_ADMIN yang punya akses IKI/E-LKJIP/BBA —
-SUPER_ADMIN menembus sakelar, jadi dari sesinya layar tetap terbuka (memang begitu
-seharusnya). Yang sudah dibuktikan: keempat rute tetap terbuka normal sesudah perubahan
-(nol regresi), dan `modulSedangMati` + `urlPemeliharaan` sendiri sudah terbukti hidup
-pada `/blud` di Tahap 12.
+**DIVERIFIKASI 2026-09-11 lewat akun `uji.program`** (peran PROGRAM, bukan SUPER_ADMIN,
+ber-`app_access` iki + lkjip + buku_besar_aset — persis akun yang dibutuhkan). Urutannya
+dijaga: keempat rute dibuka lebih dulu dalam keadaan `online` untuk membuktikan aksesnya
+memang ada, supaya redirect sesudahnya tidak bisa dikelirukan dengan penolakan akses.
+Ketiga modul lalu disetel `maintenance`, dan **kelima rute dipulangkan ke `/maintenance`**
+dengan nama modul + pesan + tenggatnya: `/iki`, **`/iki/2`**, `/lkjip`,
+`/buku-besar-aset`, dan **`/buku-besar-aset/master`**.
+
+Dua yang ditebalkan itu seluruh alasan penjaganya ditaruh di **layout**: keduanya halaman
+penuh tersendiri, dan penjaga di `page.tsx` daftar tidak akan menyentuh satu pun dari
+keduanya. `/iki/2` itu tautan langsung ke editor — bentuk yang paling sering dipakai
+orang, dan sebelum perubahan ini ia membuka editor penuh lalu membalas 503 di tiap
+panggilan. E-LKJIP sengaja dibekukan **tanpa pesan** untuk melihat bentuk cadangannya;
+halaman pemeliharaan memakai kalimat bawaannya, tidak kosong.
 
 **SUSULAN 2026-09-11 (b) — spanduk BEKU dipasang di enam modul sisanya.**
 
@@ -2888,11 +2896,37 @@ yang memang sudah ada sejak 2026-08-03 tidak disentuh), dan dokumen E-LKJIP yang
 untuk melihat editornya dihapus lewat tombolnya sendiri — ketiga tabel `lkjip_*` kembali
 0 baris.
 
-**Yang TIDAK dikerjakan, sengaja:** spanduk ini **memberi tahu**, ia tidak mematikan
-tombol. Tombol Simpan di enam modul itu masih hidup dan akan ditolak API dengan 503 saat
-ditekan. Mematikannya satu per satu pekerjaan tersendiri dan bukan pengganti pagar —
-"tombol mati cuma menyembunyikan, tidak memperbaiki" (**L82**); pagarnya sudah berdiri di
-API sejak Tahap 4. Yang dikerjakan hari ini bagian yang hilang: **sebabnya**.
+**SUSULAN (c) — spanduknya sendiri berbohong, dan sudah sejak Tahap 9.**
+
+Ketahuan saat menguji dari sesi `uji.program`, bukan dari membaca kode. Kalimat
+non-SUPER_ADMIN berbunyi "Menyimpan ditutup sementara, jadi **tombol simpan & hapus
+dimatikan**" — dan tombolnya tidak pernah dimatikan. Bukan cuma di enam modul yang baru
+dipasang: di **BLUD dan Perjanjian Kinerja juga**, yang sudah memakai spanduk ini sejak
+Tahap 9. Dibuktikan dari kodenya — `beku` di kedua shell itu dipakai untuk SATU hal,
+merender spanduknya; ia tidak pernah dioper ke anak mana pun. (`bekuIsian` di layar Tutup
+Kas kebetulan bernama mirip tapi isinya `terkunci || !bolehUbah`, soal buku kas yang
+ditutup, bukan sakelar pemeliharaan.)
+
+Akibatnya diperagakan utuh: spanduk berbunyi "tombolnya dimatikan", tombol **Buat
+E-LKJIP** di sebelahnya jelas hidup, ditekan, modalnya terbuka, "Buat" ditekan — dan yang
+muncul toast **"Gagal membuat dokumen"**. Pagarnya bekerja (POST `/api/lkjip` → **503**,
+nol dokumen lahir), tapi galatnya tidak menyebut pembekuan sama sekali. Jadi orang membaca
+kalimat yang salah, menekan tombol yang dikatakan mati, lalu menerima galat yang terbaca
+seperti kerusakan — **persis kebingungan yang spanduk ini dibuat untuk mencegah, dan
+spanduknya sendiri yang mengantar ke sana.**
+
+Yang diperbaiki KALIMATNYA, bukan tombolnya: "Menyimpan ditolak sampai pembekuan selesai
+— tombolnya masih bisa ditekan, tapi simpanannya akan gagal." Mematikan tombol di delapan
+modul adalah pekerjaan tersendiri **dan bukan pengganti pagar** — "tombol mati cuma
+menyembunyikan, tidak memperbaiki" (**L82**); pagarnya sudah berdiri di API sejak Tahap 4.
+Yang dituntut kejujuran spanduk, dan kalimat jujur jauh lebih murah daripada delapan modul
+tombol mati. Nilai tambahannya: galat umum "Gagal membuat dokumen" jadi bisa ditafsirkan —
+spanduk di atasnya sudah memperingatkan bahwa itu yang akan terjadi.
+
+Pagar regresinya sengaja dipasang **terbalik**: suite menuntut spanduk TIDAK memuat kata
+"dimatikan". Kalau suatu hari tombolnya benar-benar dimatikan, pemeriksaan itu yang harus
+dicabut lebih dulu — jadi kalimatnya tidak bisa berubah diam-diam ke janji yang tidak
+ditepati. `test-tahap-9.mts` jadi **143 pemeriksaan**.
 
 ---
 

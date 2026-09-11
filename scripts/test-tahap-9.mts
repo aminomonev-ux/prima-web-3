@@ -221,6 +221,13 @@ for (const terlarang of ['lib/data/db', 'lib/security/guard', 'next/server', 'ne
 cek('tipe InfoBeku diimpor sebagai tipe saja',
   !spanduk.includes("from '@/lib/security/beku'"))
 cek('spanduk membedakan yang menembus', spanduk.includes('kecuali untuk Anda'))
+// Spanduk ini TIDAK mematikan tombol apa pun — `beku` cuma dioper ke komponennya, di
+// BLUD/PK maupun di enam modul berikutnya. Selama itu berlaku, menjanjikan "tombol
+// dimatikan" mengantar orang menekan tombol hidup lalu menerima galat umum yang tidak
+// menyebut pembekuan. Kalau suatu hari tombolnya BENAR-BENAR dimatikan, pemeriksaan ini
+// yang harus dicabut lebih dulu — sengaja, supaya kalimatnya tidak berubah diam-diam.
+cek('spanduk tidak menjanjikan tombol yang mati',
+  !spanduk.includes('dimatikan') && spanduk.includes('Menyimpan ditolak'))
 
 for (const p of ['app/(dashboard)/blud/blud-shell.tsx', 'app/(dashboard)/perjanjian-kinerja/pk-shell.tsx']) {
   const t = buangKomentar(baca(p))
