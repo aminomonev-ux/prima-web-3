@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { StrongPasswordSchema } from './auth-schemas';
 import { BIDANG_ROLES, SUBBIDANG_ROLES } from '@/lib/constants';
 import { KUNCI_GRANT } from '@/lib/registry/apps';
+import { MAKS_ALASAN, MIN_ALASAN } from '@/lib/admin/permintaan-baris';
 
 // ─── Role enum ──────────────────────────────────────────────────────────────
 
@@ -216,3 +217,37 @@ export const PaketAksesSchema = z.object({
 export const DaftarPaketSchema = z.array(PaketAksesSchema).max(20);
 
 export type PaketAkses = z.infer<typeof PaketAksesSchema>;
+
+// ─── Permintaan akses mandiri (Tahap 11 · P4) ───────────────────────────────
+
+/**
+ * Badan POST `/api/akses/permintaan` — dikirim pemakai biasa dari kartu /menu.
+ *
+ * `app_key` DITERIMA sebagai kunci grant apa pun yang dikenal registry, dan yang
+ * memutuskan boleh-tidaknya bukan skema ini melainkan `bolehDimintaOleh` di route:
+ * jawabannya bergantung pada peran & grant orang yang bertanya, sesuatu yang tidak
+ * diketahui sebuah skema. Yang dijaga di sini bentuknya saja.
+ *
+ * Panjang alasan mengikuti konstanta di berkas daun, bukan angka yang diketik ulang —
+ * batas yang hidup di dua tempat cepat atau lambat berbeda, dan yang pertama pecah
+ * adalah kolom DB-nya (aturan 11.5).
+ */
+export const PermintaanAksesSchema = z.object({
+  app_key: AppAccessKeyEnum,
+  alasan:  z.string().trim()
+    .min(MIN_ALASAN, `Ceritakan sedikit keperluannya (min. ${MIN_ALASAN} huruf).`)
+    .max(MAKS_ALASAN),
+});
+
+/**
+ * Badan PATCH `/api/admin/permintaan-akses` — penolakan.
+ *
+ * Catatannya WAJIB, dan ini justru gesekan yang aturan 11.4 minta dipasang: penolakan
+ * tanpa sebab mengirim orangnya kembali bertanya lewat WhatsApp — antrean yang persis
+ * sedang dipindahkan ke dalam aplikasi. Menyetujui, sebaliknya, tidak ditanya apa pun:
+ * alasannya sudah ditulis pemohon (§12 P9).
+ */
+export const TolakPermintaanSchema = z.object({
+  id:      UserIdSchema,
+  catatan: z.string().trim().min(MIN_ALASAN, `Sebutkan sebab penolakannya (min. ${MIN_ALASAN} huruf).`).max(255),
+});

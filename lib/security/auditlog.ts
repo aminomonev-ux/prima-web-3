@@ -99,6 +99,14 @@ export type AuditEventType =
   | 'ACCESS_GRANT'          // pintu modul dibuka untuk seseorang
   | 'ACCESS_REVOKE'         // pintu modul ditutup untuk seseorang
   | 'ROLE_CHANGE'           // peran diganti (kuota, probation, perkecualian menu ikut)
+  // ─── P4 (Tahap 11): permintaan akses mandiri ──────────────────────────────
+  // Jenisnya sendiri, bukan ditumpangkan ke ACCESS_GRANT. Pertanyaan "siapa yang
+  // pernah MEMINTA apa" berbeda dari "siapa yang DIBERI apa", dan yang kedua tidak
+  // pernah bisa menjawab yang pertama — permintaan yang ditolak tidak melahirkan satu
+  // pun baris ACCESS_GRANT, jadi ia lenyap tanpa jejak kalau tidak punya jenis sendiri.
+  | 'ACCESS_REQUEST'          // pemohon menekan "Minta akses" di /menu
+  | 'ACCESS_REQUEST_APPROVED' // permintaan terjawab: pintunya terbuka lewat Simpan Pusat Akses
+  | 'ACCESS_REQUEST_REJECTED' // SUPER_ADMIN menolak, beserta sebabnya
   | 'USER_ARCHIVE'          // T-12: nonaktif permanen + deleted_at, PII menunggu retensi
   | 'PASSWORD_CHANGE'
   | 'EMAIL_VERIFIED'

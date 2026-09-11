@@ -30,6 +30,17 @@ const label = (appKey: string) => modul(appKey)?.label ?? appKey
 export type HasilCabut = {
   dicabut: { userId: number; username: string; appKey: string; berakhir: string }[]
   diingatkan: number
+  /**
+   * P4 — permintaan yang ikut terjawab oleh simpanan pencabutan ini.
+   *
+   * Nyaris mustahil dan tetap ditangani (L69). Tautan "Minta akses" hanya muncul pada
+   * kartu yang TERKUNCI, jadi permintaan untuk modul yang sudah terbuka baru bisa lahir
+   * kalau pintunya terbuka SESUDAH orang itu bertanya — dan `simpanBerkasOrang`
+   * menutupnya di transaksi yang sama, di jalur mana pun ia dipanggil. Yang tidak boleh
+   * terjadi adalah pemohonnya tidak pernah dikabari karena kebetulan yang memanggil
+   * fungsi simpan itu sebuah cron.
+   */
+  permintaanTerjawab: number
   galat: string[]
 }
 
@@ -42,7 +53,7 @@ export type HasilCabut = {
  * mengembalikan kunci yang barusan dicabut. Digabung dulu, sekali simpan.
  */
 export async function cabutYangLewat(): Promise<HasilCabut> {
-  const hasil: HasilCabut = { dicabut: [], diingatkan: 0, galat: [] }
+  const hasil: HasilCabut = { dicabut: [], diingatkan: 0, permintaanTerjawab: 0, galat: [] }
 
   const lewat = await yangSudahLewat()
   const perOrang = new Map<number, BarisJatuhTempo[]>()
@@ -58,7 +69,7 @@ export async function cabutYangLewat(): Promise<HasilCabut> {
       const dibuang = new Set(baris.map((b) => b.appKey))
       const sisa = punya.filter((k) => !dibuang.has(k))
 
-      await simpanBerkasOrang({
+      const simpanan = await simpanBerkasOrang({
         userId,
         role: u.role,
         roleAwal: u.role,
@@ -78,6 +89,14 @@ export async function cabutYangLewat(): Promise<HasilCabut> {
         ),
         olehUserId: null,
       })
+
+      for (const q of simpanan.permintaanDisetujui) {
+        hasil.permintaanTerjawab++
+        await addNotif(
+          q.username, q.role, 'AKSES_DISETUJUI',
+          `Akses ${label(q.appKey)} sudah terbuka untuk Anda.`,
+        )
+      }
 
       for (const b of baris) {
         hasil.dicabut.push({ userId, username: b.username, appKey: b.appKey, berakhir: b.berakhir })

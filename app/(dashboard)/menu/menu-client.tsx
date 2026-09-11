@@ -7,12 +7,17 @@ import {
   ChevronDown, LogOut, Settings, User,
   BarChart3, ClipboardList, ClipboardCheck, FileText, BookText,
   Handshake, Building2, ShieldCheck, ArrowRight, Lock,
-  ArrowUpCircle, Clock, LayoutDashboard,
+  ArrowUpCircle, Clock, LayoutDashboard, KeyRound, Hourglass, CircleSlash,
 } from 'lucide-react';
 import { APP_NAME, APP_INSTANSI, ROLE_LABELS, ADMIN_ROLES } from '@/lib/constants';
 import { formatSampai, urlPemeliharaan } from '@/lib/registry/apps';
 import type { Role } from '@/types';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import { MintaAksesModal } from '@/components/akses/MintaAksesModal';
+// Berkas DAUN — aturan "boleh diminta atau tidak" hidup satu tempat dengan yang dipakai
+// server menolak. Layar yang menghitungnya sendiri akan berbeda pendapat dengan
+// satpamnya cepat atau lambat.
+import { keadaanKartu, type PermintaanSaya } from '@/lib/admin/permintaan-baris';
 import { PromotionRequestModal } from '@/components/promotion/PromotionRequestModal';
 import { PromotionStatusModal } from '@/components/promotion/PromotionStatusModal';
 import { ProbationBanner } from '@/components/promotion/ProbationBanner';
@@ -150,6 +155,13 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
     id: number; toRole: string; status: 'PENDING' | 'COOLDOWN';
     createdAt: string; cooldownUntil: string | null;
   } | null>(null);
+  // P4 — permintaan akses mandiri. `bisaDiminta` datang dari SERVER, bukan disimpulkan
+  // dari kartu yang kebetulan terkunci: daftar kartu di berkas ini punya isinya sendiri
+  // yang bisa berbeda dari registry, dan modul ber-`bolehDigrant: false` tidak pernah
+  // boleh ditawarkan (mencentangnya di app_access tidak membuka apa pun — T-9).
+  const [permintaan, setPermintaan] = useState<PermintaanSaya[]>([]);
+  const [bisaDiminta, setBisaDiminta] = useState<string[]>([]);
+  const [mintaKartu, setMintaKartu] = useState<{ id: string; name: string } | null>(null);
   const [showPromoModal,  setShowPromoModal]  = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   // Track current theme untuk inline style computation
@@ -175,6 +187,21 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
       if (ac.ok) setUserAccess(ac.app_access);
     }).catch(() => {});
   }, []);
+
+  const loadPermintaan = useCallback(async () => {
+    try {
+      const res = await fetch('/api/akses/permintaan');
+      const json = await res.json() as {
+        ok: boolean; data?: PermintaanSaya[]; bisaDiminta?: { kunci: string; label: string }[];
+      };
+      if (json.ok) {
+        setPermintaan(json.data ?? []);
+        setBisaDiminta((json.bisaDiminta ?? []).map(m => m.kunci));
+      }
+    } catch { /* diam — kartu tetap tampil, cuma tanpa tautannya */ }
+  }, []);
+
+  useEffect(() => { void loadPermintaan(); }, [loadPermintaan]);
 
   const loadPromotion = useCallback(async () => {
     try {
@@ -412,7 +439,39 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
         }
         .app-card:hover  { transform: translate(-2px,-2px); box-shadow: 8px 8px 0 rgba(0,0,0,.5); }
         .app-card:active { transform: translate(0,0);       box-shadow: 3px 3px 0 rgba(0,0,0,.45); }
-        .app-card.locked { opacity: .45; filter: grayscale(.7); cursor: not-allowed; }
+        /* Yang diredupkan BAGIAN-BAGIANNYA, bukan seluruh kartunya. Sebabnya baris
+           "Minta akses" (P4) hidup di dalam kartu terkunci, dan opacity/filter milik
+           induk tidak bisa dibatalkan anaknya — kalau kartunya yang diredupkan,
+           satu-satunya jalan keluar dari kunci itu justru jadi yang paling sulit
+           dibaca, termasuk kalimat sebab penolakannya. */
+        .app-card.locked { cursor: not-allowed; }
+        .app-card.locked > .card-band,
+        .app-card.locked > .card-body,
+        .app-card.locked > .card-cta { opacity: .45; filter: grayscale(.7); }
+
+        /* ── Baris permintaan akses (P4) ── */
+        .card-minta {
+          display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+          padding: 12px; border-top: 2px dashed rgba(133,183,235,.35);
+          cursor: default;
+        }
+        .card-minta-teks {
+          display: flex; gap: 6px; align-items: flex-start;
+          font-size: 11.5px; line-height: 1.45; color: #85B7EB;
+        }
+        .card-minta-teks svg { flex-shrink: 0; margin-top: 1px; }
+        .card-minta-teks.tolak { color: #E24B4A; font-weight: 600; }
+        .card-minta-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: transparent; border: 2px solid #EF9F27; color: #EF9F27;
+          padding: 6px 10px; cursor: pointer;
+          font: inherit; font-size: 11px; font-weight: 800;
+          letter-spacing: .1em; text-transform: uppercase;
+          transition: background .15s, color .15s;
+        }
+        .card-minta-btn:hover { background: #EF9F27; color: #020F1C; }
+        [data-theme="light"] .card-minta { border-top-color: rgba(15,15,18,.15); }
+        [data-theme="light"] .card-minta-teks { color: #6B7280; }
         .app-card.maintenance { opacity: .72; filter: grayscale(.25); }
         /* P6 — alasan & tenggat pemeliharaan di kartunya sendiri. Sengaja di kartu,
            bukan cuma di /maintenance: kebanyakan orang berhenti di sini dan tidak
@@ -472,7 +531,10 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
           font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
           transition: filter .15s;
         }
-        .app-card:hover .card-cta { filter: brightness(1.14); }
+        /* :not(.locked) bukan hiasan: tanpa itu kekhususannya persis sama dengan
+           aturan peredup di atas, dan karena ia ditulis belakangan ia MENANG —
+           kartu terkunci berkedip terang tiap kali disentuh tetikus. */
+        .app-card:not(.locked):hover .card-cta { filter: brightness(1.14); }
 
         /* ── Brand card (brutalist twitter-style, theme-aware) ── */
         .m-stats { margin-bottom: 24px; }
@@ -790,6 +852,44 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                     )}
                   </div>
 
+                  {/* P4 — satu-satunya jalan keluar dari kartu terkunci, dan ia
+                      SENGAJA di luar `.card-body` supaya tidak ikut diredupkan.
+                      `stopPropagation` wajib: kartunya sendiri punya onClick yang
+                      diam-diam menelan klik pada kartu terkunci. */}
+                  {locked && (() => {
+                    const k = keadaanKartu(card.id, permintaan);
+                    if (k.status === 'menunggu') {
+                      return (
+                        <div className="card-minta" onClick={e => e.stopPropagation()}>
+                          <span className="card-minta-teks">
+                            <Hourglass size={13} /> Permintaan Anda sudah masuk antrean Super Admin.
+                          </span>
+                        </div>
+                      );
+                    }
+                    if (!bisaDiminta.includes(card.id)) return null;
+                    return (
+                      <div className="card-minta" onClick={e => e.stopPropagation()}>
+                        {/* Sebab penolakan ditulis di kartunya, bukan cuma dikirim
+                            sekali lewat notifikasi yang bisa terlewat: orang yang tidak
+                            tahu kenapa ditolak akan meminta lagi dengan alasan yang
+                            sama, dan itu mengembalikan percakapan ke WhatsApp. */}
+                        {k.status === 'ditolak' && k.catatan && (
+                          <span className="card-minta-teks tolak">
+                            <CircleSlash size={13} /> Belum bisa dipenuhi: {k.catatan}
+                          </span>
+                        )}
+                        <button
+                          type="button" className="card-minta-btn"
+                          onClick={() => setMintaKartu({ id: card.id, name: card.name })}
+                        >
+                          <KeyRound size={12} />
+                          {k.status === 'ditolak' ? 'Minta lagi' : 'Minta akses'}
+                        </button>
+                      </div>
+                    );
+                  })()}
+
                   <div className="card-cta">
                     {locked ? <Lock size={15} /> : <ArrowRight size={16} />}
                     {locked ? 'Terkunci' : 'Buka'}
@@ -804,6 +904,16 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
           </div>
         </main>
       </div>
+
+      {/* P4 — kotak minta akses */}
+      {mintaKartu && (
+        <MintaAksesModal
+          appKey={mintaKartu.id}
+          label={mintaKartu.name}
+          onClose={() => setMintaKartu(null)}
+          onSuccess={() => { setMintaKartu(null); void loadPermintaan(); }}
+        />
+      )}
 
       {/* Promotion modals */}
       {showPromoModal && (

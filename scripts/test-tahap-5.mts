@@ -154,7 +154,8 @@ cek('seluruh penyimpanan dibungkus satu transaksi',
 cek('kunci diambil menurut urutan key menaik',
   lib.includes('for (const appKey of [...MENU_APP_KEYS].sort()) {\n      await acquireBludLock('))
 cek('baris user dikunci FOR UPDATE lewat tx, bukan koneksi lain',
-  lib.includes('SELECT role, app_access FROM users WHERE id = ${p.userId} FOR UPDATE'))
+  hitung(lib, 'const baris = await tx`') === 1
+  && lib.includes('SELECT role, username, app_access FROM users WHERE id = ${p.userId} FOR UPDATE'))
 // Sidik jari menu menjawab "apakah izinnya berubah"; ia TIDAK menjawab "apakah
 // orangnya masih berperan sama". Layar yang dimuat saat seseorang masih PROGRAM lalu
 // disimpan setelah ia dipindah ke KEUANGAN akan menulis izin milik jabatan yang sudah

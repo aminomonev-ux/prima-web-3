@@ -92,13 +92,23 @@ export interface PromptOpts extends ConfirmOpts {
    * kalau memang boleh kosong, jangan tanyakan sama sekali.
    */
   minLength?: number;
+  /**
+   * Isian awal — dipakai saat alasannya SUDAH ADA dan tinggal disetujui: persetujuan
+   * permintaan akses membawa kalimat yang ditulis pemohon (P4/§12 P9, "di sana
+   * alasannya sudah ditulis pemohon").
+   *
+   * Sengaja mengisi, bukan melewati dialognya: yang dilepas adalah keharusan MENGARANG
+   * kalimat (aturan 11.4), bukan kesempatan melihat pintu mana yang akan dibuka dan
+   * ditutup — dan satu simpanan bisa membawa perubahan lain yang tidak diminta pemohon.
+   */
+  nilaiAwal?: string;
 }
 
 /** `null` = dibatalkan. String = alasan yang diketik (sudah di-trim). */
 export type HasilPrompt = string | null;
 
 function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt) => void }) {
-  const [teks, setTeks] = useState('');
+  const [teks, setTeks] = useState(opts.nilaiAwal ?? '');
   const maks = opts.maxLength ?? 140;
   const min = opts.minLength ?? 4;
   const cukup = teks.trim().length >= min;

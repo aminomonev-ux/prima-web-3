@@ -24,6 +24,8 @@ import {
   berkasOrang, hitungJejakOrang, simpanBerkasOrang, garisWaktuOrang,
   AlasanWajibError, PeranBerubahError, BULAN_GARIS_WAKTU,
 } from '@/lib/admin/pusat-akses'
+import { addNotif } from '@/lib/services/notifications'
+import { labelModul } from '@/lib/admin/permintaan-baris'
 
 export const dynamic = 'force-dynamic'
 
@@ -244,6 +246,20 @@ export async function PUT(req: NextRequest) {
         ...jejak, eventType: 'USER_UPDATE',
         detail: `Izin menu user id=${b.user_id} diperbarui: ${hasil.modulMenuDitulis.join(', ')}${asal}`,
       })
+    }
+    // P4 — permintaan yang ikut terjawab. Diberitahukan DI SINI, di luar transaksi:
+    // kabar yang terlanjur terkirim tidak bisa ditarik balik kalau simpanannya gagal
+    // di detik terakhir, dan `addNotif` memang sengaja diam saat galat.
+    for (const q of hasil.permintaanDisetujui) {
+      await writeAuditLog({
+        ...jejak, eventType: 'ACCESS_REQUEST_APPROVED',
+        detail: `Permintaan #${q.id} ${labelModul(q.appKey)} dari user id=${q.userId} terpenuhi · minta: ${q.alasan}`,
+      })
+      // Yang meminta harus tahu sendiri, bukan menunggu kartunya kebetulan dicoba lagi.
+      await addNotif(
+        q.username, q.role, 'AKSES_DISETUJUI',
+        `Akses ${labelModul(q.appKey)} sudah dibuka untuk Anda.`,
+      )
     }
 
     return NextResponse.json({ ok: true, data: hasil })

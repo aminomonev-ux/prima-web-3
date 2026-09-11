@@ -155,7 +155,7 @@ cek('tombol ATUR memindahkan ke Pusat Akses', panel.includes('onKeAkses(b.id)'))
 // sedang dibuka" dan satu efek yang harus menjaganya tetap sama.
 const klien = buangKomentar(baca('app/(dashboard)/admin/admin-client.tsx'))
 cek('pilihan orang dipegang induk, dioper terkendali',
-  klien.includes('<TabPusatAkses pilih={pilihOrang} setPilih={setPilihOrang}/>'))
+  klien.includes('<TabPusatAkses pilih={pilihOrang} setPilih={setPilihOrang}'))
 cek('tab Tinjauan SUPER_ADMIN saja', klien.includes("...(isSA ? [{ id:'tinjauan' as Tab"))
 
 // ── E · Migrasi ──────────────────────────────────────────────────────────────

@@ -20,12 +20,12 @@
 //      membuat urutan itu terlihat.
 //   3. **Satu Simpan untuk seluruh halaman**, satu transaksi. Pengingat belum-tersimpan
 //      memakai `lib/shared/belum-tersimpan.ts` yang sudah ada.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Search, Save, RotateCcw, ChevronDown, ChevronRight, KeyRound, Power, LogOut,
   Archive, Trash2, UserPlus, PackageOpen, PackagePlus, ShieldAlert, Info, Unlock, X,
-  History, CalendarClock,
+  History, CalendarClock, Inbox, Check, Hourglass,
 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog, promptDialog } from '@/components/ui/ConfirmDialog';
@@ -38,6 +38,10 @@ import { barisPintu, type BerkasOrang } from '@/lib/admin/pintu-akses';
 // Berkas DAUN juga — aturan tenggatnya murni, dan panel ini yang memakainya untuk
 // menyusun kalimat "12 hari lagi" tanpa menghitungnya sendiri.
 import { labelJangka, perluPerhatian, jangkaYangBerarti, HARI_PERINGATAN } from '@/lib/admin/berjangka-baris';
+// Berkas DAUN juga — kalimat umur antrean & nama modul, tanpa berkas ini menghitungnya
+// sendiri. Tipe `BarisAntrean` ikut dari sana, bukan dari lapisan server (yang menyeret
+// mysql2 ke bundel peramban lewat satu impor NILAI — preseden Tahap 5).
+import { labelModul, umurPermintaan, type BarisAntrean } from '@/lib/admin/permintaan-baris';
 // D1 (T-8) — dropdown peran yang SAMA dengan yang dipakai panel Kelola User di Usulan.
 // Penanda kuota, opsi penuh dimatikan, dan kalimat konfirmasinya lahir dari satu tempat.
 import PilihPeran, { konfirmasiUbahPeran, segarkanStatKuota, useStatKuota } from '@/components/admin/PilihPeran';
@@ -90,7 +94,16 @@ const JENIS_BADGE: Record<string, string> = {
  * satu efek yang harus menjaganya tetap sama. State terkendali membuang keduanya.
  */
 export function TabPusatAkses(
-  { pilih, setPilih }: { pilih: number | null; setPilih: (id: number | null) => void },
+  { pilih, setPilih, antrean, muatAntrean }: {
+    pilih: number | null; setPilih: (id: number | null) => void;
+    /**
+     * P4 — antrean permintaan akses. Dipegang INDUKNYA karena lencana angka di rel
+     * harus menyala tanpa tab ini pernah dibuka; alasan yang sama dengan `temuan` P10.
+     * Sesuatu yang menunggu tidak boleh cuma diketahui oleh yang kebetulan mengklik.
+     */
+    antrean: BarisAntrean[];
+    muatAntrean: () => Promise<void>;
+  },
 ) {
   const [daftar, setDaftar]   = useState<Orang[]>([]);
   const [cari, setCari]       = useState('');
@@ -111,6 +124,22 @@ export function TabPusatAkses(
   const [paketBuka, setPaketBuka] = useState(false);
   const [garis, setGaris]         = useState<Peristiwa[] | null>(null);
   const [garisBulan, setGarisBulan] = useState(12);
+  const [antreanBuka, setAntreanBuka] = useState(true);
+  // Alasan yang DITULIS PEMOHON, disimpan sampai tombol Simpan ditekan. §12 P9
+  // menyebut terus terang bahwa persetujuan tidak ditanya alasannya lagi — jadi
+  // kotaknya sudah terisi, bukan kosong menunggu admin mengarang kalimat kedua untuk
+  // keputusan yang alasannya sudah ada di depan matanya.
+  const [alasanSiap, setAlasanSiap] = useState<string | null>(null);
+  /**
+   * Permintaan yang sedang "dibawa" ke form seseorang.
+   *
+   * REF, bukan state, dan itu yang membuat urutannya bisa dipercaya: memilih orang lain
+   * menyalakan efek pemuat berkas, sementara mencentang modulnya baru boleh terjadi
+   * SESUDAH berkas itu mendarat (pemuatnya menyetel ulang seluruh draf). State akan
+   * masuk daftar dependensi pemuatnya lalu memuat ulang tiap kali ia berubah — dan
+   * pemuatan ulang itu persis yang menghapus centang yang baru saja dipasang.
+   */
+  const permintaanRef = useRef<BarisAntrean | null>(null);
   const statKuota = useStatKuota();
 
   const muatDaftar = useCallback(async () => {
@@ -128,13 +157,72 @@ export function TabPusatAkses(
     if (!j.ok || !j.data) { toast.error(j.message ?? 'Gagal memuat berkas orang ini.'); return; }
     setBerkas(j.data);
     setDraRole(j.data.user.role);
-    setDraGrant([...j.data.appAccess]);
     setDraMenu(Object.fromEntries(j.data.menu.map(m => [m.appKey, { ...m.orang }])));
     setDraJangka({ ...j.data.jangka });
     setJangkaBuka({});
     setAsalPaket(null);
     setGaris(null);
+
+    // P4 — permintaan yang dibawa ke sini dicentangkan SESUDAH berkasnya mendarat,
+    // bukan sebelumnya: pemuat ini menyetel ulang seluruh draf, jadi centang yang
+    // dipasang lebih dulu akan terhapus tanpa satu pun gejala.
+    //
+    // Yang terjadi cuma MENGISI FORM (aturan 11.1). Tidak ada satu baris pun yang
+    // ditulis sampai admin membaca layarnya dan menekan Simpan — dan Simpan itu jalur
+    // yang sudah membawa kunci per-modul, kuota peran, sidik jari menu, dan alasan P9.
+    const q = permintaanRef.current;
+    if (q && q.userId === id) {
+      permintaanRef.current = null;
+      setDraGrant([...new Set([...j.data.appAccess, q.appKey])]);
+      setAlasanSiap(q.alasan);
+      toast.success(`Permintaan ${labelModul(q.appKey)} dimasukkan ke form. Periksa dulu, baru Simpan.`);
+    } else {
+      setDraGrant([...j.data.appAccess]);
+      setAlasanSiap(null);
+    }
   }, []);
+
+  /**
+   * SETUJUI = mengisi form orang itu, lalu berhenti. Sengaja BUKAN satu klik yang
+   * langsung menulis: endpoint tulis kedua berarti set aturan kedua, dan itu sudah
+   * tiga kali melahirkan lubang nyata di modul BLUD (L78/L80/L82).
+   */
+  const bawaKeForm = useCallback(async (q: BarisAntrean) => {
+    permintaanRef.current = q;
+    // Kalau orangnya sudah terbuka, efek pemuat TIDAK akan jalan lagi (`pilih` tidak
+    // berubah) — jadi pemuatnya dipanggil sendiri. Kalau berganti orang, biarkan efek
+    // yang memanggil: dua pemuatan berbarengan untuk satu orang bisa mendarat terbalik.
+    if (pilih === q.userId) await muatBerkas(q.userId);
+    else setPilih(q.userId);
+  }, [pilih, muatBerkas, setPilih]);
+
+  const tolakPermintaan = useCallback(async (q: BarisAntrean) => {
+    // Sebabnya WAJIB, dan justru di sinilah gesekan itu memang tempatnya (aturan 11.4):
+    // penolakan tanpa sebab mengirim orangnya kembali bertanya lewat WhatsApp — antrean
+    // yang persis sedang dipindahkan ke dalam aplikasi.
+    const catatan = await promptDialog({
+      title: `Tolak permintaan ${q.username}?`,
+      message: `Ia meminta ${labelModul(q.appKey)} dengan alasan: "${q.alasan}".
+
+`
+        + 'Sebab penolakan di bawah akan dikirim apa adanya ke yang bersangkutan.',
+      label: 'Sebab penolakan',
+      placeholder: 'Mis. datanya cukup diminta ke Bagian Keuangan, tidak perlu akses modulnya',
+      confirmLabel: 'Tolak & kirim sebabnya',
+      variant: 'danger',
+      minLength: 10,
+      maxLength: 255,
+    });
+    if (catatan === null) return;
+    setSibuk(true);
+    const j = await fetchJson('/api/admin/permintaan-akses', {
+      method: 'PATCH', body: JSON.stringify({ id: q.id, catatan }),
+    }) as { ok: boolean; message?: string };
+    setSibuk(false);
+    if (!j.ok) { toast.error(j.message ?? 'Gagal menolak.'); return; }
+    toast.success(j.message ?? 'Permintaan ditolak.');
+    await muatAntrean();
+  }, [muatAntrean]);
 
   // P8 — garis waktu dimuat SAAT DIMINTA, bukan bersama berkasnya. Ia menyapu tabel
   // audit yang paling besar di basis data ini, dan pertanyaan "apa yang pernah terjadi
@@ -278,11 +366,17 @@ export function TabPusatAkses(
         message: [
           dibuka.length ? `Dibuka: ${dibuka.map(nama).join(', ')}.` : '',
           ditutup.length ? `Ditutup: ${ditutup.map(nama).join(', ')} — perkecualian menunya ikut dibuang.` : '',
+          alasanSiap ? 'Alasannya sudah diisi dari permintaan yang bersangkutan.' : '',
         ].filter(Boolean).join('\n\n'),
         label: 'Alasan',
         placeholder: 'Mis. ditugaskan membantu Bendahara sampai akhir tahun',
         confirmLabel: 'Simpan',
         variant: 'primary',
+        // P4/§12 P9 — persetujuan permintaan TIDAK ditanya alasannya lagi: kalimatnya
+        // sudah ditulis pemohon. Yang dilepas keharusan MENGARANG, bukan kesempatan
+        // melihat pintu mana yang akan dibuka & ditutup — satu simpanan bisa membawa
+        // perubahan lain yang tidak diminta pemohon, dan itu harus tetap terbaca.
+        nilaiAwal: alasanSiap ?? undefined,
       });
       if (alasan === null) return;
     }
@@ -306,14 +400,23 @@ export function TabPusatAkses(
         asal_paket: asalPaket ? { nama: asalPaket, diubah: 1 } : null,
         ...(alasan ? { alasan } : {}),
       }),
-    }) as { ok: boolean; message?: string; code?: string; data?: { izinDihapus: number } };
+    }) as {
+      ok: boolean; message?: string; code?: string;
+      data?: { izinDihapus: number; permintaanDisetujui: { appKey: string }[] };
+    };
     setSibuk(false);
     if (!j.ok) {
       toast.error(j.message ?? 'Gagal menyimpan.');
       if (j.code === 'BERUBAH' || j.code === 'PERAN_BERUBAH') void muatBerkas(berkas.user.id);
       return;
     }
-    toast.success('Tersimpan.' + (j.data?.izinDihapus ? ` ${j.data.izinDihapus} perkecualian menu ikut dibuang.` : ''));
+    const terjawab = j.data?.permintaanDisetujui ?? [];
+    toast.success('Tersimpan.'
+      + (j.data?.izinDihapus ? ` ${j.data.izinDihapus} perkecualian menu ikut dibuang.` : '')
+      // Disebutkan, bukan didiamkan: permintaan yang ikut tertutup mengirim notifikasi
+      // ke orangnya, dan admin harus tahu apa yang barusan ia kabarkan atas namanya.
+      + (terjawab.length ? ` ${terjawab.length} permintaan terjawab (${terjawab.map(q => labelModul(q.appKey)).join(', ')}).` : ''));
+    setAlasanSiap(null);
     // Angka kuota di dropdown ikut bergeser begitu perannya benar-benar berubah.
     if (peranBerubah) segarkanStatKuota();
     const garisTerbuka = garis !== null;
@@ -322,6 +425,9 @@ export function TabPusatAkses(
     // keadaan sebelum perubahan yang barusan disimpan, tepat di sebelah hasilnya.
     if (garisTerbuka) await muatGaris(berkas.user.id);
     await muatDaftar();
+    // Antreannya ikut disegarkan — kalau tidak, baris yang barusan terjawab masih
+    // berbunyi "menunggu" tepat di sebelah hasil yang menjawabnya.
+    await muatAntrean();
   }
 
   async function aksiAkun(action: string, extra: Record<string, unknown> = {}) {
@@ -447,6 +553,58 @@ export function TabPusatAkses(
       </aside>
 
       <section className="ap-pa-kanan">
+        {/* P4 — antrean permintaan. Ia berdiri di ATAS berkas orang, bukan di tab
+            sendiri, karena keduanya satu pekerjaan: menyetujui berarti membuka berkas
+            orang itu lalu menekan Simpan. Tab terpisah akan memaksa orang berpindah
+            bolak-balik untuk satu keputusan. */}
+        {antrean.length > 0 && (
+          <div className="ap-pa-antrean">
+            <button type="button" className="ap-pa-antrean-kepala"
+              onClick={() => setAntreanBuka(v => !v)}>
+              <Inbox size={14}/>
+              <span>{antrean.length} permintaan akses menunggu</span>
+              {antreanBuka ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+            </button>
+            {antreanBuka && antrean.map(q => (
+              <div key={q.id} className="ap-pa-antrean-baris">
+                <div className="ap-pa-antrean-isi">
+                  <div className="ap-pa-antrean-judul">
+                    <b>{q.username}</b>
+                    <span className="ap-pa-antrean-peran">{ROLE_LABELS[q.role] ?? q.role}</span>
+                    minta <b>{labelModul(q.appKey)}</b>
+                  </div>
+                  {/* Alasannya ditampilkan UTUH di baris antrean, bukan disembunyikan
+                      di balik tombol "lihat detail": ia satu-satunya bahan keputusan
+                      yang ada di layar ini, dan keputusan yang bahannya harus diklik
+                      dulu akan diambil tanpa membacanya. */}
+                  <div className="ap-pa-antrean-alasan">&ldquo;{q.alasan}&rdquo;</div>
+                  <div className="ap-pa-antrean-umur">
+                    <Hourglass size={11}/> {umurPermintaan(q.umurHari)}
+                  </div>
+                </div>
+                <div className="ap-row" style={{ gap: 6, flexShrink: 0 }}>
+                  <PrimaButton size="sm" variant="success" disabled={sibuk}
+                    iconLeft={<Check size={13}/>} onClick={() => void bawaKeForm(q)}>
+                    SETUJUI
+                  </PrimaButton>
+                  <PrimaButton size="sm" variant="danger" disabled={sibuk}
+                    iconLeft={<X size={13}/>} onClick={() => void tolakPermintaan(q)}>
+                    TOLAK
+                  </PrimaButton>
+                </div>
+              </div>
+            ))}
+            {antreanBuka && (
+              // Ditulis di layar, bukan cuma berlaku di kode: admin yang mengira
+              // SETUJUI langsung memberi akses akan menutup tabnya lalu heran kenapa
+              // orangnya tetap terkunci.
+              <div className="ap-pa-antrean-nota">
+                SETUJUI mengisi form orang itu — aksesnya baru diberikan saat Anda menekan Simpan.
+              </div>
+            )}
+          </div>
+        )}
+
         {!u && (
           <div className="ap-pa-kosong-besar">
             <UserPlus size={22}/>

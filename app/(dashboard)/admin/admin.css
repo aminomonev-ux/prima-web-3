@@ -552,3 +552,29 @@
 .ap-pa-jangka-form{display:flex;flex-direction:column;gap:5px;width:100%;max-width:420px;
   padding:10px 12px;border:1px solid var(--ap-line);border-radius:8px;background:var(--ap-line-tipis);}
 .ap-pa-jangka-nota{font-size:10.5px;line-height:1.55;color:var(--ap-dim);}
+
+/* ── P4 · Antrean permintaan akses (Tahap 11) ──────────────────────────────
+   Berdiri di ATAS berkas orang, bukan di tab sendiri: menyetujui berarti membuka
+   berkas orang itu lalu menekan Simpan, jadi keduanya satu pekerjaan. Tab
+   terpisah memaksa orang berpindah bolak-balik untuk satu keputusan.
+
+   Warnanya --ap-warn, bukan --ap-bahaya: sesuatu yang MENUNGGU diputuskan bukan
+   sesuatu yang salah. Merah di layar yang dibuka tiap hari berhenti dibaca. */
+.ap-pa-antrean{border:1px solid var(--ap-warn-line);background:var(--ap-warn-bg);
+  border-radius:10px;margin-bottom:14px;overflow:hidden;}
+.ap-pa-antrean-kepala{display:flex;align-items:center;gap:8px;width:100%;
+  padding:10px 12px;background:transparent;border:0;cursor:pointer;
+  font:inherit;font-size:12px;font-weight:700;letter-spacing:.04em;
+  color:var(--ap-warn-fg);text-align:left;}
+.ap-pa-antrean-kepala span{flex:1;}
+.ap-pa-antrean-baris{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;
+  padding:10px 12px;border-top:1px solid var(--ap-warn-line);}
+.ap-pa-antrean-isi{flex:1;min-width:220px;display:flex;flex-direction:column;gap:3px;}
+.ap-pa-antrean-judul{font-size:12.5px;color:var(--ap-fg);line-height:1.5;}
+.ap-pa-antrean-peran{font-size:10px;font-weight:700;letter-spacing:.06em;
+  color:var(--ap-dim);margin:0 6px;}
+.ap-pa-antrean-alasan{font-size:11.5px;line-height:1.5;color:var(--ap-dim);font-style:italic;}
+.ap-pa-antrean-umur{display:inline-flex;align-items:center;gap:4px;
+  font-size:10.5px;color:var(--ap-dim);}
+.ap-pa-antrean-nota{padding:8px 12px;border-top:1px solid var(--ap-warn-line);
+  font-size:10.5px;line-height:1.55;color:var(--ap-dim);}

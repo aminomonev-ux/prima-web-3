@@ -26,6 +26,9 @@ import { TabEmailNotif } from './_panels/TabEmailNotif';
 import { TabPemeriksaan } from './_panels/TabPemeriksaan';
 import { fetchJson } from '@/lib/shared/api';
 import type { Temuan } from '@/lib/admin/pemeriksaan';
+// Berkas DAUN — tipe saja, tapi jalurnya tetap penting: lapisan servernya menyeret
+// mysql2 ke bundel peramban lewat satu impor NILAI (preseden Tahap 5).
+import type { BarisAntrean } from '@/lib/admin/permintaan-baris';
 import './admin.css';
 
 interface Props { userId: number; username: string; role: Role; sessionId: string; themePreference: 'dark' | 'light'; }
@@ -83,6 +86,18 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   useEffect(() => { if (isSA) void muatPemeriksaan(); }, [isSA, muatPemeriksaan]);
 
   const perluDilihat = temuan.filter(t => t.keparahan !== 'aman').length;
+
+  // P4 — antrean permintaan akses. Dipegang di sini karena alasan yang persis sama
+  // dengan `temuan`: lencana angkanya harus menyala tanpa tab Pusat Akses pernah
+  // dibuka. Permintaan yang cuma terlihat oleh yang kebetulan mengklik adalah
+  // permintaan yang tetap dikejar lewat WhatsApp.
+  const [antrean, setAntrean] = useState<BarisAntrean[]>([]);
+  const muatAntrean = useCallback(async () => {
+    const j = await fetchJson('/api/admin/permintaan-akses') as { ok: boolean; data?: BarisAntrean[] };
+    if (j.ok && j.data) setAntrean(j.data);
+  }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (isSA) void muatAntrean(); }, [isSA, muatAntrean]);
 
   // Apply theme dari DB ke <html> + sync cookie. Selaras menu-client.tsx —
   // cegah Admin Panel pakai cookie stale (mis. light) saat DB preference dark.
@@ -146,7 +161,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
    */
   const GRUP: { judul: string; items: { id: Tab; label: string; icon: React.ReactNode; lencana?: number }[] }[] = [
     { judul: 'Akun & Akses', items: [
-      { id:'pusat-akses',    label:'Pusat Akses', icon:<Users size={15}/> },
+      { id:'pusat-akses',    label:'Pusat Akses', icon:<Users size={15}/>, lencana: antrean.length },
       { id:'menu-access',    label:'Peran',       icon:<ListChecks size={15}/> },
       { id:'promotion',      label:'Permintaan',  icon:<ShieldCheck size={15}/> },
       ...(isSA ? [{ id:'tinjauan' as Tab, label:'Tinjauan', icon:<ClipboardCheck size={15}/> }] : []),
@@ -244,7 +259,8 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'app-control'     && <TabAppControl   isSA={isSA}/>}
         {tab === 'attack-monitor'  && <TabAttackMonitor/>}
         {tab === 'pusat-akses'     && isSA && (
-          <TabPusatAkses pilih={pilihOrang} setPilih={setPilihOrang}/>
+          <TabPusatAkses pilih={pilihOrang} setPilih={setPilihOrang}
+            antrean={antrean} muatAntrean={muatAntrean}/>
         )}
         {tab === 'pusat-akses'     && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
         {tab === 'menu-access'     && <MenuAccessRoleTab isSA={isSA}/>}

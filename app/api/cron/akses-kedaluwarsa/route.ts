@@ -55,13 +55,15 @@ export async function POST(req: NextRequest) {
       detail: JSON.stringify({
         cron: 'akses-kedaluwarsa', hari_ini: hariIni,
         dicabut: hasil.dicabut.length, diingatkan: hasil.diingatkan,
+        permintaan_terjawab: hasil.permintaanTerjawab,
         galat: hasil.galat, durasi_ms: Date.now() - mulai,
       }),
     })
 
     return NextResponse.json({
       ok: true, hari_ini: hariIni,
-      dicabut: hasil.dicabut.length, diingatkan: hasil.diingatkan, galat: hasil.galat,
+      dicabut: hasil.dicabut.length, diingatkan: hasil.diingatkan,
+      permintaan_terjawab: hasil.permintaanTerjawab, galat: hasil.galat,
     })
   } catch (error) {
     console.error('[Cron akses-kedaluwarsa]', error)

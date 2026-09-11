@@ -1530,3 +1530,26 @@ CREATE TABLE akses_kedaluwarsa (
   CONSTRAINT fk_ak_user FOREIGN KEY (user_id)     REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_ak_oleh FOREIGN KEY (dibuat_oleh) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Permintaan akses mandiri (P4, Tahap 11) — antrean "minta akses satu modul".
+-- Migrasi: docs/migrations/migration-akses-permintaan.sql
+-- `menunggu` GENERATED: NULL dianggap berbeda satu sama lain oleh indeks unik MySQL,
+-- jadi kuncinya berbunyi "satu permintaan MENUNGGU per orang per modul" tanpa ikut
+-- melarang riwayat putusan menumpuk. Dibuat GENERATED supaya mustahil berbeda pendapat
+-- dengan kolom `status`.
+CREATE TABLE akses_permintaan (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  user_id         INT          NOT NULL,
+  app_key         VARCHAR(64)  NOT NULL,
+  alasan          VARCHAR(140) NOT NULL,
+  status          ENUM('MENUNGGU','DISETUJUI','DITOLAK') NOT NULL DEFAULT 'MENUNGGU',
+  dibuat_pada     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  diputus_pada    DATETIME     DEFAULT NULL,
+  diputus_oleh    INT          DEFAULT NULL,
+  catatan_putusan VARCHAR(255) DEFAULT NULL,
+  menunggu        TINYINT GENERATED ALWAYS AS (IF(status = 'MENUNGGU', 1, NULL)) STORED,
+  UNIQUE KEY uq_akses_permintaan_menunggu (user_id, app_key, menunggu),
+  KEY idx_ap_antrean (status, dibuat_pada),
+  CONSTRAINT fk_ap_user  FOREIGN KEY (user_id)      REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ap_oleh  FOREIGN KEY (diputus_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

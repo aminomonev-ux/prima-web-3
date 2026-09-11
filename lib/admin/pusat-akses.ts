@@ -33,6 +33,7 @@ import { acquireBludLock } from '@/lib/data/locks'
 import { barisPintu, grantYangBerarti, type BerkasOrang, type BlokMenu } from '@/lib/admin/pintu-akses'
 import { jangkaYangBerarti } from '@/lib/admin/berjangka-baris'
 import { bacaJangka, tulisJangkaTx } from '@/lib/admin/akses-berjangka'
+import { tutupYangSudahTerbukaTx, type PermintaanDitutup } from '@/lib/admin/permintaan-akses'
 import { assertQuotaAvailableTx } from '@/lib/security/promotion'
 
 // Aturan pintunya + bentuk berkasnya tinggal di `pintu-akses.ts` — berkas DAUN tanpa
@@ -256,6 +257,12 @@ export type HasilSimpan = {
   modulMenuDitulis: string[]
   jangkaDitulis: number
   jangkaDihapus: number
+  /**
+   * P4 — permintaan yang ikut terjawab oleh simpanan ini. Dipulangkan, BUKAN
+   * diberitahukan dari dalam: pemohon harus dikabari dan jejaknya harus ditulis, dan
+   * dua-duanya tidak boleh jalan di dalam transaksi yang masih bisa dibatalkan.
+   */
+  permintaanDisetujui: PermintaanDitutup[]
 }
 
 /**
@@ -269,15 +276,15 @@ export type HasilSimpan = {
 export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpan> {
   const hasil: HasilSimpan = {
     peranBerubah: null, grantDitambah: [], grantDicabut: [], izinDihapus: 0, modulMenuDitulis: [],
-    jangkaDitulis: 0, jangkaDihapus: 0,
+    jangkaDitulis: 0, jangkaDihapus: 0, permintaanDisetujui: [],
   }
 
   await withTransaction(async ({ tx, conn }) => {
     // Dibaca lewat `tx`, bukan `queryOne` — `queryOne` memakai koneksi pool sendiri, dan
     // barisnya jadi tidak terkunci oleh transaksi ini (L69-b).
     const baris = await tx`
-      SELECT role, app_access FROM users WHERE id = ${p.userId} FOR UPDATE
-    ` as { role: string; app_access: unknown }[]
+      SELECT role, username, app_access FROM users WHERE id = ${p.userId} FOR UPDATE
+    ` as { role: string; username: string; app_access: unknown }[]
     const target = baris[0]
     if (!target) throw new Error('User tidak ditemukan.')
     // Layar yang dimuat saat orangnya masih PROGRAM lalu disimpan setelah orang lain
@@ -346,6 +353,15 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
     for (const appKey of MENU_APP_KEYS) {
       if (!terbukaBaru.has(appKey)) hasil.izinDihapus += await hapusIzinOrang(tx, p.userId, appKey)
     }
+
+    // P4 — permintaan yang pintunya kini terbuka ditutup DI SINI, di transaksi yang
+    // sama dengan grant-nya. Patokannya keadaan akhir, bukan "baru saja dicentang":
+    // permintaan untuk akses yang ternyata sudah dipunyai, atau yang jadi terbuka
+    // karena perannya diganti, sama-sama sudah terjawab "ya" — dan kalau tidak ikut
+    // ditutup, ia menggantung di antrean tanpa ada yang tahu jawabannya sudah ada.
+    hasil.permintaanDisetujui = await tutupYangSudahTerbukaTx(
+      tx, { userId: p.userId, username: target.username, role: peranBaru }, terbukaBaru, p.olehUserId,
+    )
 
     // Sesudah ganti peran, perkecualian yang dikirim layar milik jabatan LAMA — layar
     // sudah diminta mengosongkannya, dan di sini ia diabaikan kalau tetap dikirim.
