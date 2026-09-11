@@ -4,6 +4,7 @@ import { sql, queryOne } from '@/lib/data/db';
 import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
 import { modulSedangMati } from '@/lib/security/guard';
 import { urlPemeliharaan } from '@/lib/registry/apps';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { listRencanaAksi } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import RaClient from './ra-client';
@@ -52,6 +53,7 @@ export default async function RencanaAksiPage({
     sp.mode === 'data-entry' ? 'data-entry' :
     sp.mode === 'cetak' ? 'cetak' : 'dashboard';
 
+  const beku = await bekuLayarModul('rencana_aksi');
   const initialRows = await listRencanaAksi(tahun, level);
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
@@ -64,6 +66,7 @@ export default async function RencanaAksiPage({
       initialLevel={level}
       initialMode={mode}
       initialRows={initialRows}
+      beku={beku}
     />
   );
 }

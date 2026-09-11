@@ -11,10 +11,14 @@ import FloatingDock from '@/components/ui/FloatingDock';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import type { KategoriAset } from '@/lib/data/buku-besar-aset';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 
-type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialKategori: KategoriAset[] };
+type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialKategori: KategoriAset[];
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku };
 
-export default function MasterClient({ username, role, themePreference, initialKategori }: Props) {
+export default function MasterClient({ username, role, themePreference, initialKategori, beku }: Props) {
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
   const c = {
@@ -68,6 +72,7 @@ export default function MasterClient({ username, role, themePreference, initialK
       </header>
 
       <div style={{ padding: '24px 28px 100px', maxWidth: 720, margin: '0 auto' }}>
+        <SpandukBeku {...beku}/>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>🗂️ Master Kategori Aset</h1>
         <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 18 }}>Daftar kategori untuk dropdown di form item · {rows.length} kategori</div>
 

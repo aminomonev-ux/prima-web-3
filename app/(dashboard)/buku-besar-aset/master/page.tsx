@@ -4,6 +4,7 @@ import { sql, queryOne } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { listKategori } from '@/lib/data/buku-besar-aset';
 import MasterClient from './master-client';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -20,6 +21,7 @@ export default async function BukuBesarAsetMasterPage() {
   );
   if (!isAsetRole(role, row?.app_access ?? null)) redirect('/menu');
 
+  const beku = await bekuLayarModul('buku_besar_aset');
   const initialKategori = await listKategori();
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
@@ -29,6 +31,7 @@ export default async function BukuBesarAsetMasterPage() {
       role={role}
       themePreference={themePreference}
       initialKategori={initialKategori}
+      beku={beku}
     />
   );
 }

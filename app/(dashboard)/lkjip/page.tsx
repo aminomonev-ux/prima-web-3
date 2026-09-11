@@ -4,6 +4,7 @@ import { sql, queryOne } from '@/lib/data/db';
 import { isLkjipRole } from '@/lib/lkjip/schemas';
 import { listDokumen } from '@/lib/lkjip/data';
 import LkjipClient from './lkjip-client';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -20,6 +21,7 @@ export default async function LkjipPage() {
   );
   if (!isLkjipRole(role, row?.app_access ?? null)) redirect('/menu');
 
+  const beku = await bekuLayarModul('lkjip');
   const initial = await listDokumen({ page: 1, limit: 50 });
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
@@ -29,6 +31,7 @@ export default async function LkjipPage() {
       role={role}
       themePreference={themePreference}
       initialRows={initial.rows}
+      beku={beku}
     />
   );
 }

@@ -16,6 +16,8 @@ import type { RaRow, RaLevel } from './_lib/types';
 import { LEVEL_LABELS, anggaranRollup } from './_lib/types';
 import { apiList, apiUpdateBulanRealisasi, VersionConflictError } from './_lib/api';
 import { exportIndikatorPdf, exportIndikatorXlsx } from './_lib/exports';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 
 // Remah jalan untuk dua tampilan Sub Kegiatan — menegaskan bahwa keduanya berada
 // DI DALAM satu menu, bukan tempat terpisah, dan menyediakan jalan pulang yang
@@ -43,13 +45,15 @@ interface Props {
   initialLevel: RaLevel;
   initialMode: 'dashboard' | 'data-entry' | 'cetak';
   initialRows: RaRow[];
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku;
 }
 
 type Notif = { type: 'success' | 'info' | 'warning' | 'error'; message: string };
 
 export default function RaClient({
   username, role, themePreference,
-  initialTahun, initialLevel, initialMode, initialRows,
+  initialTahun, initialLevel, initialMode, initialRows, beku,
 }: Props) {
   const router = useRouter();
 
@@ -579,6 +583,10 @@ export default function RaClient({
             </div>
           </div>
         )}
+
+        {/* P5 — `shrink-0` WAJIB: kolom ini `flex flex-col overflow-hidden`, jadi tanpa
+            itu spanduk ikut diperas sampai kalimatnya terpotong saat tabel panjang. */}
+        {beku.beku && <div className="shrink-0 px-4 pt-2"><SpandukBeku {...beku}/></div>}
 
         {/* Content */}
         {mode === 'cetak' ? (

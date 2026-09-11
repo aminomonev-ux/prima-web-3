@@ -4,6 +4,7 @@ import UsulanClient from './usulan-client';
 import { sql, queryOne } from '@/lib/data/db';
 import { modulSedangMati } from '@/lib/security/guard';
 import { urlPemeliharaan } from '@/lib/registry/apps';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import type { Role } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -24,10 +25,12 @@ export default async function UsulanKebutuhanPage() {
     redirect(urlPemeliharaan('app_status_usulan_aset'));
   }
 
+  const beku = await bekuLayarModul('usulan_aset');
+
   const row = await queryOne<{ theme_preference: string }>(
     sql`SELECT theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`
   );
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
-  return <UsulanClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} />;
+  return <UsulanClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} beku={beku} />;
 }

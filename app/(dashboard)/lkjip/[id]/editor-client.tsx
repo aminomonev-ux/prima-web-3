@@ -25,6 +25,8 @@ import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDetail } from '@/lib/lkjip/data';
 import type { SectionNode, BlockNode } from '@/lib/lkjip/numbering';
 import type { VersiMeta } from '@/lib/lkjip/versi';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 import { FONT_CHOICES } from '@/lib/lkjip/style-constants';
 import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel, type TabelCell, type TabelAlign, type TabelNumFmt } from '@/lib/lkjip/tabel';
@@ -39,6 +41,8 @@ interface Props {
   role: string;
   themePreference: 'dark' | 'light';
   initialDetail: LkjipDetail;
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku;
 }
 
 type FlatNode = { node: SectionNode; parentId: number | null; index: number; siblings: SectionNode[] };
@@ -63,7 +67,7 @@ function fmtDate(s: string): string {
   return `${d.getDate()} ${bln[d.getMonth()]} ${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export default function EditorClient({ initialDetail, username, role, themePreference }: Props) {
+export default function EditorClient({ initialDetail, username, role, themePreference, beku }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -250,6 +254,13 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
           <UserBadge username={username} role={role} isLight={isLight} />
         </div>
       </header>
+
+      {/* P5 — di atas kisi 3 panel, bukan di dalam panel tengah: panel itu KOSONG
+          sampai sebuah bab dipilih, jadi spanduk di sana tidak terlihat saat editor
+          baru dibuka. `flexShrink` 0 supaya tidak diperas oleh kisi yang `flex:1`. */}
+      {beku.beku && (
+        <div style={{ flexShrink: 0, padding: '12px 18px 0' }}><SpandukBeku {...beku}/></div>
+      )}
 
       <div className="lk-ed-grid">
         {/* Outline tree */}

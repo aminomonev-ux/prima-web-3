@@ -5,6 +5,7 @@ import { sql, queryOne } from '@/lib/data/db';
 import { isKinerjaRole } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard';
 import { urlPemeliharaan } from '@/lib/registry/apps';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import type { Role } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -25,10 +26,14 @@ export default async function KinerjaPage() {
     redirect(urlPemeliharaan('app_status_new_econtrolling'));
   }
 
+  // P5 — spanduk BEKU. Dibaca SESUDAH `modulSedangMati` di atas: kalau modulnya mati
+  // halaman ini tidak pernah dirender, jadi membacanya lebih dulu cuma kueri terbuang.
+  const beku = await bekuLayarModul('new_econtrolling');
+
   const row = await queryOne<{ theme_preference: string }>(
     sql`SELECT theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`
   );
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
-  return <KinerjaClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} />;
+  return <KinerjaClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} beku={beku} />;
 }

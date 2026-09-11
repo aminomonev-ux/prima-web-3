@@ -17,6 +17,8 @@ import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
 import { fetchJson } from '@/lib/shared/api';
 import type { Role } from '@/types';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 // ─── Types & Helpers — semua dipindah ke ./_types.ts + ./_utils.ts ──────────
 // Shell hanya import yang masih dipakai untuk fetcher + state container.
 import type {
@@ -32,9 +34,11 @@ import { bolehBatalkanFinal } from '@/lib/constants';
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-interface Props { userId: number; role: Role; username: string; themePreference: 'dark' | 'light'; }
+interface Props { userId: number; role: Role; username: string; themePreference: 'dark' | 'light';
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku; }
 
-export default function KinerjaClient({ userId, role, username, themePreference }: Props) {
+export default function KinerjaClient({ userId, role, username, themePreference, beku }: Props) {
   void userId;
 
   const tahunDefault = new Date().getFullYear().toString();
@@ -732,6 +736,10 @@ export default function KinerjaClient({ userId, role, username, themePreference 
             onLogout={handleLogout}
           />
           <section style={{ flex:1, overflowY:'auto' }}>
+            {/* P5 — di DALAM area isi yang menggulung, bukan di atas shell: bilah tab di
+                atasnya `position: sticky`, dan spanduk di luar section akan menggeser
+                seluruh kolom tanpa ikut tergulung. */}
+            {beku.beku && <div style={{ padding: '16px 20px 0' }}><SpandukBeku {...beku}/></div>}
             {activeTab === 'dashboard'  && (
             <Suspense fallback={<div style={{ padding:'40px', textAlign:'center', color:'#85B7EB' }}>Memuat...</div>}>
               <DashboardTab tahun={tahun} isLight={isLight} />

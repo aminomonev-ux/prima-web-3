@@ -5,6 +5,7 @@ import { isIkiRole } from '@/lib/data/iki-schemas';
 import { listDokumen } from '@/lib/data/iki';
 import IkiClient from './iki-client';
 import type { IkiListRow } from './_lib/types';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -21,6 +22,7 @@ export default async function IkiPage() {
   );
   if (!isIkiRole(role, row?.app_access ?? null)) redirect('/menu');
 
+  const beku = await bekuLayarModul('iki');
   const initial = await listDokumen();
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
@@ -30,6 +32,7 @@ export default async function IkiPage() {
       role={role}
       themePreference={themePreference}
       initialRows={initial as IkiListRow[]}
+      beku={beku}
     />
   );
 }

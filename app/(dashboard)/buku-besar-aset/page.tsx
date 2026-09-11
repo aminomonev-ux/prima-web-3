@@ -4,6 +4,7 @@ import { sql, queryOne } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { listAset, getAsetKpi, listKategori } from '@/lib/data/buku-besar-aset';
 import BukuBesarAsetClient from './buku-besar-aset-client';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -20,6 +21,7 @@ export default async function BukuBesarAsetPage() {
   );
   if (!isAsetRole(role, row?.app_access ?? null)) redirect('/menu');
 
+  const beku = await bekuLayarModul('buku_besar_aset');
   const tahun = new Date().getFullYear();
   const [initial, kategori, initialKpi] = await Promise.all([
     listAset({ tahun, page: 1, limit: 50 }),
@@ -37,6 +39,7 @@ export default async function BukuBesarAsetPage() {
       initialResult={initial}
       initialKpi={initialKpi}
       kategori={kategori.map(k => k.nama)}
+      beku={beku}
     />
   );
 }

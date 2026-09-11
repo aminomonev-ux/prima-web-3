@@ -15,15 +15,19 @@ import ImportIkiModal from './ImportIkiModal';
 import { pejabatOptionValue, resolvePejabat, nameInitials } from './_lib/types';
 import type { IkiJenisDokumen, IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
 import { bolehBatalkanFinal } from '@/lib/constants';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 
 interface Props {
   username: string;
   role: string;
   themePreference: 'dark' | 'light';
   initialRows: IkiListRow[];
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku;
 }
 
-export default function IkiClient({ username, role, themePreference, initialRows }: Props) {
+export default function IkiClient({ username, role, themePreference, initialRows, beku }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -281,6 +285,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
       </header>
 
       <main className="iki-main">
+        <SpandukBeku {...beku}/>
         <div className="iki-main-head">
           <div>
             {folder === null ? (

@@ -4,6 +4,7 @@ import { sql, queryOne, safeInt } from '@/lib/data/db';
 import { isLkjipRole } from '@/lib/lkjip/schemas';
 import { getDokumenDetail } from '@/lib/lkjip/data';
 import EditorClient from './editor-client';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -25,6 +26,7 @@ export default async function LkjipEditorPage({ params }: { params: Promise<{ id
   const detail = await getDokumenDetail(id);
   if (!detail) notFound();
 
+  const beku = await bekuLayarModul('lkjip');
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
@@ -33,6 +35,7 @@ export default async function LkjipEditorPage({ params }: { params: Promise<{ id
       role={role}
       themePreference={themePreference}
       initialDetail={detail}
+      beku={beku}
     />
   );
 }

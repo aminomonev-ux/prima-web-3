@@ -5,6 +5,7 @@ import { isIkiRole } from '@/lib/data/iki-schemas';
 import { getDokumen } from '@/lib/data/iki';
 import EditorClient from './editor-client';
 import type { IkiDokumen } from '../_lib/types';
+import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -26,6 +27,9 @@ export default async function IkiEditorPage({ params }: { params: Promise<{ id: 
   const doc = await getDokumen(id);
   if (!doc) notFound();
 
+  // Editor ikut dapat spanduknya: DI SINILAH orang menyimpan. Layar daftar saja
+  // berarti yang paling butuh tahu justru yang tidak diberi tahu (L69).
+  const beku = await bekuLayarModul('iki');
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
@@ -34,6 +38,7 @@ export default async function IkiEditorPage({ params }: { params: Promise<{ id: 
       role={role}
       themePreference={themePreference}
       initialDoc={doc as unknown as IkiDokumen}
+      beku={beku}
     />
   );
 }

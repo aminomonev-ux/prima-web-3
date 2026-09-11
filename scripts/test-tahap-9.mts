@@ -327,6 +327,131 @@ cek('aturan aksesnya dipinjam registry, bukan is<Modul>Role',
 cek('peran dioper supaya yang mematikan tetap bisa masuk',
   penjaga.includes('modulSedangMati([sakelar], { role })'))
 
+// ── H · Spanduk BEKU di tiap modul yang bisa dibekukan ───────────────────────
+// Sampai 2026-09-11 spanduk ini cuma terpasang di BLUD & Perjanjian Kinerja. Enam modul
+// lain API-nya menolak dengan benar (503 `MODUL_BACA_SAJA`) tapi LAYARNYA diam — orang
+// di sana baru tahu modulnya dibekukan sesudah menekan Simpan dan menerima pesan galat.
+// Itu bentuk L79c yang paling mahal: tombol mati tanpa sebab, dikali satu modul penuh.
+//
+// Cakupannya DITURUNKAN dari registry, bukan diketik: tiap modul bersakelar diperiksa,
+// tiap `page.tsx` di dalamnya diperiksa. Modul kesepuluh yang lupa memasangnya akan
+// menjatuhkan suite ini.
+console.log('\nH · spanduk BEKU di layar tiap modul')
+
+function semuaHalaman(dir: string, acc: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return acc
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const jalur = `${dir}/${e.name}`
+    if (e.isDirectory()) semuaHalaman(jalur, acc)
+    else if (e.name === 'page.tsx') acc.push(jalur)
+  }
+  return acc
+}
+
+function semuaBerkas(dir: string, acc: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return acc
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const jalur = `${dir}/${e.name}`
+    if (e.isDirectory()) semuaBerkas(jalur, acc)
+    else if (e.name.endsWith('.tsx')) acc.push(jalur)
+  }
+  return acc
+}
+
+/** Halaman ini menyelesaikan `beku` sendiri, atau sebuah layout di atasnya melakukannya. */
+function bekuTerselesaikan(halaman: string, akar: string): 'sendiri' | 'layout' | null {
+  if (buangKomentar(baca(halaman)).includes('bekuLayarModul(')) return 'sendiri'
+  let dir = halaman.slice(0, halaman.lastIndexOf('/'))
+  while (dir.length >= akar.length) {
+    const l = `${dir}/layout.tsx`
+    if (fs.existsSync(l)) {
+      const t = buangKomentar(baca(l))
+      if (t.includes('infoBeku(') || t.includes('bekuLayarModul(')) return 'layout'
+    }
+    dir = dir.slice(0, dir.lastIndexOf('/'))
+  }
+  return null
+}
+
+/** Modul tanpa satu pun handler selain GET tidak punya apa pun untuk dibekukan. */
+function punyaJalurTulis(dirApi: string | null): boolean {
+  if (!dirApi || !fs.existsSync(dirApi)) return false
+  const rute: string[] = []
+  const jelajah = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const jalur = `${d}/${e.name}`
+      if (e.isDirectory()) jelajah(jalur)
+      else if (e.name === 'route.ts') rute.push(jalur)
+    }
+  }
+  jelajah(dirApi)
+  return rute.some((r) => /export async function (POST|PUT|PATCH|DELETE)/.test(baca(r)))
+}
+
+for (const m of MODUL_BERSAKELAR) {
+  const akar = `app/(dashboard)${m.href}`
+  const halaman = semuaHalaman(akar)
+  const menulis = punyaJalurTulis(m.dirApi)
+
+  if (!menulis) {
+    // Dashboard. Pengecualiannya BUKAN daftar yang diketik — ia DIBUKTIKAN dari rute API
+    // modulnya sendiri, jadi begitu modul ini dapat tombol Simpan pertamanya, cabang di
+    // bawah yang berlaku dan spanduknya jadi wajib. Memasangnya sekarang justru cacat:
+    // "menyimpan ditutup" pada layar yang memang tidak punya tombol simpan.
+    cek(`${m.kunci} tidak punya jalur tulis, jadi memang tanpa spanduk`,
+      semuaBerkas(akar).every((f) => !baca(f).includes('SpandukBeku')), 'hanya GET')
+    continue
+  }
+
+  const hasil = halaman.map((f) => [f, bekuTerselesaikan(f, akar)] as const)
+  const bolong = hasil.filter(([, v]) => v === null)
+  cek(`${m.kunci} — ${halaman.length} halaman menyelesaikan keterangan beku`,
+    bolong.length === 0,
+    bolong.length ? bolong.map(([f]) => f.split('/').pop()).join(', ') : `${halaman.length}/${halaman.length}`)
+
+  // Halaman yang membacanya sendiri WAJIB mengopernya — `bekuLayarModul` yang dipanggil
+  // lalu hasilnya dibuang adalah kueri yang jalan tanpa satu akibat pun.
+  for (const [f, cara] of hasil) {
+    if (cara !== 'sendiri') continue
+    cek(`  ${f.replace(akar + '/', '')} mengoper beku ke kliennya`,
+      buangKomentar(baca(f)).includes('beku={beku}'))
+  }
+
+  const perender = semuaBerkas(akar).filter((f) => buangKomentar(baca(f)).includes('<SpandukBeku'))
+  const wajib = Math.max(1, hasil.filter(([, v]) => v === 'sendiri').length)
+  cek(`${m.kunci} benar-benar merender spanduknya`, perender.length >= wajib,
+    `${perender.length} berkas (min ${wajib})`)
+  // Spread, bukan prop satu per satu: `global` ditambahkan P12 dan hanya ikut lewat
+  // spread. Mengetik `pesan={…} sampai={…}` melewatkannya tanpa satu galat tipe pun.
+  for (const f of perender) {
+    cek(`  ${f.split('/').pop()} mengoper spanduk utuh`,
+      buangKomentar(baca(f)).includes('<SpandukBeku {...beku}/>'))
+  }
+}
+
+// Penolongnya sendiri. Kunci sakelar spanduk WAJIB kunci yang sama dengan penjaganya —
+// kalau tiap layar mengetiknya sendiri, satu salah ketik menghasilkan layar yang dijaga
+// sakelar A tapi menjelaskan sakelar B; dan karena keduanya nyaris selalu `online`,
+// selisih itu tidak bergejala sampai hari modulnya benar-benar dibekukan.
+cek('bekuLayarModul mengambil sakelarnya dari registry',
+  penjaga.includes('bekuLayarModul') && penjaga.includes('modul(kunci)?.sakelar'))
+// Tanpa `role`, SUPER_ADMIN dapat kalimat "menyimpan ditutup" lalu berhasil menyimpan —
+// persis kesimpulan "sakelarnya tidak bekerja" yang spanduk ini dibuat untuk mencegah.
+cek('bekuLayarModul mengoper peran supaya yang menembus dapat kalimatnya sendiri',
+  penjaga.includes("infoBeku([sakelar], h.get('x-user-role')"))
+// Modul tanpa sakelar tidak boleh melempar: `modul()` memulangkan null untuk kunci yang
+// tidak dikenal, dan spanduk yang hilang tidak membuka satu pintu pun.
+cek('modul tanpa sakelar dijawab TIDAK_BEKU, bukan dilempar',
+  penjaga.includes('if (!sakelar) return TIDAK_BEKU'))
+
+// P12 — `InfoBeku.global` sudah ada sejak Tahap 12 tapi spanduknya tidak pernah
+// memakainya: pembekuan seluruh aplikasi berbunyi "Modul sedang dibekukan", lalu orang
+// bertanya ke penanggung jawab modulnya soal sesuatu yang berlaku di mana-mana (11.3).
+cek('spanduk menyebut pembekuan global sebagai global',
+  spanduk.includes('Seluruh aplikasi sedang dibekukan'))
+cek('…dan tetap menyebut modul kalau memang cuma modulnya',
+  spanduk.includes('Modul sedang dibekukan'))
+
 console.log(`\n${lulus + gagal} pemeriksaan · ${lulus} lulus · ${gagal} gagal`)
 if (gagal > 0) {
   console.log('GAGAL — Tahap 9 tidak lagi utuh.')

@@ -18,6 +18,8 @@ import SatuanCombobox from '@/components/shared/SatuanCombobox';
 import { fetchJson } from '@/lib/shared/api';
 import type { BbaRow, BbaListResult, BbaKpi, BbaImportCandidate } from '@/lib/data/buku-besar-aset';
 import type { BbaStatus } from '@/lib/data/buku-besar-aset-schemas';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 
 const STATUSES: BbaStatus[] = ['DIRENCANAKAN', 'REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'];
 const SUMBER = ['BLUD', 'APBD', 'DAK', 'LAINNYA'] as const;
@@ -28,7 +30,9 @@ const STATUS_COLOR: Record<BbaStatus, string> = {
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 
-type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialTahun: number; initialResult: BbaListResult; initialKpi: BbaKpi; kategori: string[] };
+type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialTahun: number; initialResult: BbaListResult; initialKpi: BbaKpi; kategori: string[];
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku };
 
 type FormState = {
   id?: number; expected_version?: number;
@@ -48,7 +52,7 @@ const emptyForm = (tahun: number): FormState => ({
   vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '',
 });
 
-export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, initialKpi, kategori }: Props) {
+export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, initialKpi, kategori, beku }: Props) {
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
   const searchRef = useRef<HTMLInputElement>(null);
@@ -197,6 +201,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       </header>
 
       <div style={{ padding: '24px 28px 100px' }}>
+      <SpandukBeku {...beku}/>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📦 Buku Besar Aset</h1>

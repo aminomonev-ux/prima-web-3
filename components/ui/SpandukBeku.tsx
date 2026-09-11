@@ -16,9 +16,18 @@ type Props = {
   tembus: boolean;
   pesan: string;
   sampai: string;
+  /**
+   * P12 — yang membekukan sakelar SELURUH APLIKASI, bukan sakelar modul ini.
+   *
+   * `infoBeku` sudah memulangkan bedanya sejak Tahap 12, tapi spanduk ini tidak pernah
+   * memakainya: pembekuan global berbunyi "Modul sedang dibekukan", lalu orang bertanya
+   * ke penanggung jawab modulnya tentang sesuatu yang hari itu berlaku di mana-mana.
+   * Aturan 11.3 — layar menyebut SEBABNYA, bukan cuma akibatnya.
+   */
+  global?: boolean;
 };
 
-export default function SpandukBeku({ beku, tembus, pesan, sampai }: Props) {
+export default function SpandukBeku({ beku, tembus, pesan, sampai, global }: Props) {
   if (!beku) return null;
   return (
     <div style={{
@@ -29,7 +38,7 @@ export default function SpandukBeku({ beku, tembus, pesan, sampai }: Props) {
     }}>
       <Snowflake size={15} style={{ flex: '0 0 auto', marginTop: 2 }}/>
       <div>
-        <b>Modul sedang dibekukan.</b>{' '}
+        <b>{global ? 'Seluruh aplikasi sedang dibekukan.' : 'Modul sedang dibekukan.'}</b>{' '}
         {tembus
           // Ditulis apa adanya. SUPER_ADMIN yang tidak diberi tahu akan mencoba
           // menyimpan, berhasil, lalu menyimpulkan pembekuannya tidak bekerja.

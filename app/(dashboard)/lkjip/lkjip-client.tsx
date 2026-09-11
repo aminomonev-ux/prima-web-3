@@ -13,15 +13,19 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDokumen } from '@/lib/lkjip/data';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 
 interface Props {
   username: string;
   role: string;
   themePreference: 'dark' | 'light';
   initialRows: LkjipDokumen[];
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku;
 }
 
-export default function LkjipClient({ username, role, themePreference, initialRows }: Props) {
+export default function LkjipClient({ username, role, themePreference, initialRows, beku }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -78,6 +82,7 @@ export default function LkjipClient({ username, role, themePreference, initialRo
       </header>
 
       <main className="lk-main">
+        <SpandukBeku {...beku}/>
         <div className="lk-main-head">
           <div>
             <h1 className="lk-h1"><BookText size={22} /> Dokumen E-LKJIP</h1>

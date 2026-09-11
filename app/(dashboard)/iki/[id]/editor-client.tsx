@@ -18,6 +18,8 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 import { bolehBatalkanFinal } from '@/lib/constants';
 import {
   type IkiDokumen, type IkiRhk, type IkiListRow, type PejabatSuggest,
@@ -31,6 +33,8 @@ interface Props {
   role: string;
   themePreference: 'dark' | 'light';
   initialDoc: IkiDokumen;
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku;
 }
 
 type VersiRow = {
@@ -41,7 +45,7 @@ type VersiRow = {
   created_at: string;
 };
 
-export default function EditorClient({ username, role, themePreference, initialDoc }: Props) {
+export default function EditorClient({ username, role, themePreference, initialDoc, beku }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -351,6 +355,7 @@ export default function EditorClient({ username, role, themePreference, initialD
       </header>
 
       <main className="iki-ed-main">
+        <SpandukBeku {...beku}/>
         {readOnly && (
           <div className="iki-final-banner">
             <Lock size={15} /> Dokumen FINAL — hanya baca.

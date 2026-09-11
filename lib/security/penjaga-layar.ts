@@ -15,6 +15,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cekModul, modul, urlPemeliharaan } from '@/lib/registry/apps'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { infoBeku, TIDAK_BEKU, type InfoBeku } from '@/lib/security/beku'
 
 /**
  * Sesi → AKSES → sakelar, dalam urutan itu. Urutannya menentukan, bukan selera:
@@ -50,4 +51,25 @@ export async function jagaLayarModul(kunci: string): Promise<void> {
   // adalah daftar kesekian yang bisa ketinggalan.
   const sakelar = modul(kunci)?.sakelar
   if (sakelar && (await modulSedangMati([sakelar], { role }))) redirect(urlPemeliharaan(sakelar))
+}
+
+/**
+ * Keterangan pembekuan untuk layar sebuah modul — pendamping `jagaLayarModul`.
+ *
+ * Ada di berkas yang sama dan bukan dipanggil langsung dari tiap layar karena yang
+ * dijaga di sini sebuah PASANGAN: kunci sakelar yang dipakai spanduk WAJIB kunci yang
+ * sama dengan yang dipakai penjaganya. Kalau tiap layar mengetiknya sendiri, satu salah
+ * ketik menghasilkan layar yang dijaga sakelar A tapi menjelaskan sakelar B — dan
+ * karena keduanya nyaris selalu `online`, selisih itu tidak menimbulkan gejala apa pun
+ * sampai hari modulnya benar-benar dibekukan.
+ *
+ * Modul tanpa sakelar dijawab TIDAK_BEKU, bukan dilempar: `modul()` memulangkan `null`
+ * untuk kunci yang tidak dikenal, dan spanduk yang hilang tidak membuka satu pintu pun
+ * (pagarnya berdiri di `modulMati`, yang tetap menolak).
+ */
+export async function bekuLayarModul(kunci: string): Promise<InfoBeku> {
+  const sakelar = modul(kunci)?.sakelar
+  if (!sakelar) return TIDAK_BEKU
+  const h = await headers()
+  return infoBeku([sakelar], h.get('x-user-role') ?? undefined)
 }

@@ -2821,14 +2821,78 @@ seharusnya). Yang sudah dibuktikan: keempat rute tetap terbuka normal sesudah pe
 (nol regresi), dan `modulSedangMati` + `urlPemeliharaan` sendiri sudah terbukti hidup
 pada `/blud` di Tahap 12.
 
-**Yang masih tersisa dari P5:** spanduk BEKU hanya terpasang di **BLUD dan Perjanjian
-Kinerja**. Enam modul lain API-nya dijaga (503 `MODUL_BACA_SAJA` sudah dibuktikan) tapi
-layarnya diam — orang di sana baru tahu saat menekan Simpan lalu menerima pesan galat.
-Memasangnya bukan pekerjaan sepele: keenamnya shell layar-penuh dengan tata letak
-berbeda-beda (`h-screen` + flex + overflow), jadi tiap spanduk harus ditempatkan di
-dalam area isinya masing-masing, bukan disisipkan di atas layarnya. Tidak ada komponen
-bersama yang bisa dipakai sebagai satu titik pasang — `FloatingDock`/`UserBadge` cuma
-dipakai tiga dari enam.
+**SUSULAN 2026-09-11 (b) — spanduk BEKU dipasang di enam modul sisanya.**
+
+Sampai hari ini spanduk pembekuan cuma ada di **BLUD dan Perjanjian Kinerja**. Enam modul
+lain API-nya menolak dengan benar (503 `MODUL_BACA_SAJA` sudah dibuktikan) tapi **layarnya
+diam** — orang di sana baru tahu modulnya dibekukan sesudah menekan Simpan dan menerima
+pesan galat. Itu L79c dalam ukuran satu modul penuh: tombol mati tanpa sebab. Dan sebabnya
+justru yang paling perlu sampai, karena pembekuan itu sementara dan punya tenggat — dua
+hal yang tidak bisa disimpulkan dari pesan galat mana pun.
+
+**Sembilan layar, bukan enam.** Modul dihitung enam, tapi tiga di antaranya punya halaman
+penuh KEDUA (`/iki/[id]`, `/lkjip/[id]`, `/buku-besar-aset/master`) — dan justru di
+situlah orang menyimpan. Memasang spanduk cuma di layar daftar berarti yang paling butuh
+tahu adalah yang tidak diberi tahu (L69 lewat pintu yang sama dengan susulan (a) pagi ini).
+
+**Satu penolong, bukan sembilan bacaan lepas:** `bekuLayarModul(kunci)` di
+`lib/security/penjaga-layar.ts`, berdampingan dengan `jagaLayarModul`. Keduanya sengaja
+satu berkas, karena yang dijaga sebuah **pasangan**: kunci sakelar yang dipakai spanduk
+wajib kunci yang sama dengan yang dipakai penjaganya. Kalau tiap layar mengetiknya
+sendiri, satu salah ketik menghasilkan layar yang **dijaga sakelar A tapi menjelaskan
+sakelar B** — dan karena keduanya nyaris selalu `online`, selisih itu tidak bergejala
+sampai hari modulnya benar-benar dibekukan. Kuncinya diambil `modul(kunci)?.sakelar`,
+tidak diketik.
+
+**Penempatannya per-layar, dan itu memang tidak bisa diseragamkan.** Keenam modul shell
+layar-penuh dengan tata letak berbeda (`h-screen` + flex + overflow), jadi tiap spanduk
+masuk ke **dalam area isinya masing-masing**, bukan disisipkan di atas layarnya. Dua yang
+menuntut perhatian khusus: Rencana Aksi kolomnya `flex flex-col overflow-hidden` sehingga
+spanduknya wajib `shrink-0` (tanpa itu ia diperas sampai kalimatnya terpotong saat tabel
+panjang); dan editor E-LKJIP spanduknya di **atas kisi 3 panel**, bukan di dalam panel
+tengah — panel itu kosong sampai sebuah bab dipilih, jadi spanduk di sana tidak akan
+terlihat justru saat editor baru dibuka.
+
+**Cacat P12 yang ikut ketahuan:** `InfoBeku.global` sudah dipulangkan sejak Tahap 12, tapi
+`SpandukBeku` tidak pernah memakainya — pembekuan SELURUH APLIKASI berbunyi "Modul sedang
+dibekukan", lalu orang bertanya ke penanggung jawab modulnya soal sesuatu yang hari itu
+berlaku di mana-mana (aturan 11.3). Kini ia berbunyi "Seluruh aplikasi sedang dibekukan".
+BLUD & PK ikut benar tanpa disentuh, karena keduanya sudah mengoper `{...beku}` — dan
+itu sebabnya suite mewajibkan **spread**, bukan prop satu per satu: `global` hanya ikut
+lewat spread, dan mengetik `pesan={…} sampai={…}` melewatkannya tanpa satu galat tipe pun.
+
+**Dashboard sengaja TIDAK dapat spanduk, dan pengecualiannya dibuktikan bukan diketik:**
+suite memindai rute API modulnya dan hanya melewatkannya kalau benar-benar tidak ada
+handler selain GET. Dashboard memang begitu — membekukannya tidak menutup apa pun, dan
+"menyimpan ditutup" di layar yang tidak punya tombol simpan adalah kalimat yang salah.
+Begitu modul itu dapat tombol Simpan pertamanya, cabang sebaliknya yang berlaku dan
+spanduknya jadi wajib.
+
+Cakupannya **diturunkan dari registry**: tiap modul bersakelar, tiap `page.tsx` di
+dalamnya. `test-tahap-9.mts` jadi **142 pemeriksaan**; bagian barunya diuji mutasi —
+**10 mutasi, 10 tertangkap**. Satu sempat LOLOS dan itu asersi saya sendiri: "mengoper
+peran" dikutip SEPOTONG jadi dua bagian, dan potongan keduanya (`h.get('x-user-role')`)
+juga hidup di `jagaLayarModul` — membuang argumennya tetap menyisakannya untuk dicocokkan
+(**L82c**, kali keenam). Dikutip utuh sampai argumennya, mutasinya tertangkap.
+
+**Diverifikasi di peramban** — dan kali ini bisa dari sesi SUPER_ADMIN, justru karena
+spanduk ini memang dirancang tetap tampil untuknya dengan kalimat berbeda ("kecuali untuk
+Anda"). Kesembilan layar dilihat satu per satu: keenam layar utama, editor IKI, Master
+Kategori BBA, dan editor E-LKJIP. Pembekuan **global** diuji terpisah dengan menyalakan
+`app_status_global` sementara `app_status_lkjip` justru `online`: layarnya berbunyi
+"Seluruh aplikasi sedang dibekukan" dengan pesan GLOBAL — bukan pesan lkjip yang basi —
+dan BLUD ikut menampilkannya tanpa satu baris pun disentuh. IKI sengaja dibekukan **tanpa
+pesan & tanpa tenggat** untuk melihat bentuk minimumnya; tetap terbaca. Seluruh sakelar
+dikembalikan ke keadaan semula (17 baris, identik; `app_status_dashboard = maintenance`
+yang memang sudah ada sejak 2026-08-03 tidak disentuh), dan dokumen E-LKJIP yang dibuat
+untuk melihat editornya dihapus lewat tombolnya sendiri — ketiga tabel `lkjip_*` kembali
+0 baris.
+
+**Yang TIDAK dikerjakan, sengaja:** spanduk ini **memberi tahu**, ia tidak mematikan
+tombol. Tombol Simpan di enam modul itu masih hidup dan akan ditolak API dengan 503 saat
+ditekan. Mematikannya satu per satu pekerjaan tersendiri dan bukan pengganti pagar —
+"tombol mati cuma menyembunyikan, tidak memperbaiki" (**L82**); pagarnya sudah berdiri di
+API sejak Tahap 4. Yang dikerjakan hari ini bagian yang hilang: **sebabnya**.
 
 ---
 

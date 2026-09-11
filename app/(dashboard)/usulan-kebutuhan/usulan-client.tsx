@@ -54,6 +54,8 @@ import {
   ADMIN_ANTRIAN_STATUSES, HIDE_DATA_ADMIN_STATUSES,
 } from './_types';
 import type { Panel } from './_types';
+import SpandukBeku from '@/components/ui/SpandukBeku';
+import type { InfoBeku } from '@/lib/security/beku';
 import { getPanels } from './_utils';
 import { exportExcel, exportPrint } from './_exports';
 import { fetchJson } from '@/lib/shared/api';
@@ -74,7 +76,9 @@ async function swrFetcher<T>(url: string): Promise<T> {
 }
 
 
-interface Props { userId: number; role: Role; username: string; themePreference: 'dark' | 'light'; }
+interface Props { userId: number; role: Role; username: string; themePreference: 'dark' | 'light';
+  /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
+  beku: InfoBeku; }
 
 // PERF-C2 (Tahap 1 foundation): Panel type + KPIData, UsulanHeader, UsulanItem,
 // ItemForm, UserRow, TelaahDecision, PutusanDecision, NotifRow,
@@ -82,7 +86,7 @@ interface Props { userId: number; role: Role; username: string; themePreference:
 // (fmtRp/fmtTgl/fmtNum/parseNum) sekarang di-import dari ./_types
 // (sumber di sibling _types.ts level dengan _modals/ & future _panels/).
 
-export default function UsulanClient({ userId, role, username, themePreference }: Props) {
+export default function UsulanClient({ userId, role, username, themePreference, beku }: Props) {
   const router = useRouter();
   const [panel, setPanel]         = useState<Panel>('dashboard');
   const [sidebarOpen, setSidebar] = useState(false);
@@ -1706,6 +1710,7 @@ export default function UsulanClient({ userId, role, username, themePreference }
           </header>
 
           <div className="ua-content">
+            <SpandukBeku {...beku}/>
 
             {/* ════ DASHBOARD ════ */}
             {panel==='dashboard' && (
