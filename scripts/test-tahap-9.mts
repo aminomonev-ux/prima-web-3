@@ -15,8 +15,8 @@
 
 import fs from 'node:fs'
 import {
-  KEADAAN_SAKELAR, LABEL_KEADAAN, SAKELAR_INFO, SAKELAR_LAIN, SEBAB_TAK_BISA_BEKU,
-  bacaKeadaan, infoSakelar, keadaanTerburuk, modul,
+  KEADAAN_SAKELAR, LABEL_KEADAAN, MODUL_BERSAKELAR, SAKELAR_INFO, SAKELAR_LAIN,
+  SEBAB_TAK_BISA_BEKU, bacaKeadaan, infoSakelar, keadaanTerburuk, modul,
 } from '../lib/registry/apps'
 
 let lulus = 0
@@ -262,6 +262,70 @@ const beku = buangKomentar(baca('lib/security/beku.ts'))
 cek('keterangan layar gagal-terbuka, bukan gagal-tertutup',
   badan(beku, 'export async function infoBeku(').includes('catch {\n    return TIDAK_BEKU'))
 cek('yang menembus tetap diberi tahu modulnya beku', beku.includes('beku: true'))
+
+// ── G · Pagar di LAYAR, untuk setiap modul bersakelar ────────────────────────
+console.log('\nG · tiap modul bersakelar menjaga layarnya')
+
+// Ditemukan saat menutup sisa Tahap 9 (2026-09-11): IKI, E-LKJIP, dan Buku Besar Aset
+// tidak memeriksa sakelarnya di layar SAMA SEKALI. Route API-nya menolak lewat
+// `buatGuardModul`, jadi mengetik alamatnya saat modulnya dimatikan membuka layarnya
+// penuh lalu membalas 503 pada tiap panggilan — layar rusak, bukan halaman pemeliharaan.
+// Bentuk T-1/L72 yang persis, dan gate G tidak bisa menangkapnya: ia memindai route API.
+//
+// Daftarnya DITURUNKAN dari registry, bukan diketik: modul kesepuluh yang lupa
+// memasangnya harus menjatuhkan suite ini, bukan menunggu ada yang melaporkannya.
+for (const m of MODUL_BERSAKELAR) {
+  const dir = `app/(dashboard)${m.href}`
+  const berkas = ['layout.tsx', 'page.tsx']
+    .map((n) => `${dir}/${n}`)
+    .filter((p) => fs.existsSync(p))
+  const menjaga = berkas.filter((p) => {
+    const t = buangKomentar(baca(p))
+    return t.includes('modulSedangMati(') || t.includes('jagaLayarModul(')
+  })
+  cek(`${m.kunci} menjaga layarnya`, menjaga.length > 0, menjaga.map((p) => p.split('/').pop()).join(' + '))
+}
+
+// Modul yang punya halaman penuh KEDUA wajib menjaganya di layout: penjaga di halaman
+// daftar tidak menutup pintu editor, dan tautan langsung ke editor justru yang paling
+// sering dipakai.
+for (const [kunci, dir] of [
+  ['iki', 'app/(dashboard)/iki'],
+  ['lkjip', 'app/(dashboard)/lkjip'],
+  ['buku_besar_aset', 'app/(dashboard)/buku-besar-aset'],
+] as const) {
+  cek(`${kunci} menjaganya di LAYOUT, bukan cuma di halaman daftar`,
+    buangKomentar(baca(`${dir}/layout.tsx`)).includes(`jagaLayarModul('${kunci}')`))
+}
+
+const penjaga = buangKomentar(baca('lib/security/penjaga-layar.ts'))
+// Urutannya yang dijaga, bukan sekadar kehadiran keduanya. Sakelar lebih dulu berarti
+// orang yang TIDAK BERHAK diberi halaman pemeliharaan — ia lalu menunggu modul yang
+// tidak akan pernah terbuka untuknya.
+cek('akses diperiksa SEBELUM sakelar',
+  penjaga.indexOf("redirect('/menu')") >= 0
+  && penjaga.indexOf("redirect('/menu')") < penjaga.indexOf('modulSedangMati('))
+cek('sesi diperiksa paling dulu',
+  penjaga.indexOf("redirect('/login')") >= 0
+  && penjaga.indexOf("redirect('/login')") < penjaga.indexOf("redirect('/menu')"))
+// Urutan yang sama sudah berlaku di dua layout lama; kalau salah satunya berubah,
+// dua modul akan menjawab pertanyaan yang sama dengan cara berbeda (L88).
+for (const p of ['app/(dashboard)/blud/layout.tsx', 'app/(dashboard)/perjanjian-kinerja/layout.tsx']) {
+  const t = buangKomentar(baca(p))
+  cek(`${p.split('/')[2]} juga memeriksa akses sebelum sakelar`,
+    t.indexOf("redirect('/menu')") >= 0
+    && t.indexOf("redirect('/menu')") < t.indexOf('modulSedangMati('))
+}
+// Kunci sakelar & aturan aksesnya diambil dari registry — daftar kesekian yang mengetik
+// `app_status_iki` adalah daftar kesekian yang bisa ketinggalan.
+cek('penolong tidak mengetik satu pun kunci sakelar',
+  !penjaga.includes('app_status_') && penjaga.includes("modul(kunci)?.sakelar"))
+cek('aturan aksesnya dipinjam registry, bukan is<Modul>Role',
+  penjaga.includes('cekModul(kunci)') && !penjaga.includes('isIkiRole'))
+// `role` yang tidak dioper membuat SUPER_ADMIN ikut terkunci di luar modul yang baru
+// saja ia matikan — satu-satunya orang yang harus bisa masuk memeriksanya.
+cek('peran dioper supaya yang mematikan tetap bisa masuk',
+  penjaga.includes('modulSedangMati([sakelar], { role })'))
 
 console.log(`\n${lulus + gagal} pemeriksaan · ${lulus} lulus · ${gagal} gagal`)
 if (gagal > 0) {

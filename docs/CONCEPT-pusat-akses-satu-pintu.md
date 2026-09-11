@@ -2638,7 +2638,7 @@ halaman **tidak** bergulir menyamping — tabelnya yang bergulir di dalam
 
 ---
 
-#### Tahap 9 — HASIL (selesai 2026-09-10; satu bagian verifikasi peramban tertunda)
+#### Tahap 9 — HASIL (selesai 2026-09-10; susulan penjaga layar 2026-09-11)
 
 **P5 Mode BACA-SAJA.** Nol migrasi — `app_config.value` sudah TEXT, yang berubah hanya
 yang membacanya: `KEADAAN_SAKELAR = ['online','readonly','maintenance']` di registry,
@@ -2772,6 +2772,63 @@ Kartu `/menu` untuk akun ini juga benar: **BEKU**, tidak terkunci, tooltipnya me
 Sekalian terjawab satu pertanyaan yang sempat mencurigakan: kartu Dashboard tampil
 **TERKUNCI**, bukan MAINTENANCE, padahal sakelarnya mati — itu benar, sebab tidak punya
 akses sama sekali adalah fakta yang lebih kuat daripada modulnya sedang mati.
+
+**SUSULAN 2026-09-11 — tiga modul tidak menjaga layarnya sama sekali.**
+
+Ketahuan saat menguji sakelar global (Tahap 12), bukan dari membaca kode: **IKI,
+E-LKJIP, dan Buku Besar Aset** tidak memeriksa sakelar maintenance di layar sama sekali.
+Route API ketiganya sudah menolak lewat `buatGuardModul`, jadi pagarnya berdiri — tapi
+mengetik `/iki`, `/lkjip`, atau `/buku-besar-aset` saat modulnya dimatikan **tetap
+membuka layarnya penuh**, lalu setiap panggilan dibalas 503. Yang dilihat orang bukan
+halaman pemeliharaan melainkan **layar rusak** — dan itu keadaan yang paling sulit
+dilaporkan dengan benar ("IKI-nya error", padahal sedang sengaja dimatikan).
+
+Bentuk T-1/L72 yang persis, dan **gate G tidak bisa menangkapnya**: ia memindai route
+API, sementara yang bolong justru layarnya. Tiga modul lain (E-Anggaran, Rencana Aksi,
+Usulan) sudah punya penjaganya di `page.tsx` sejak Tahap 4; ketiga ini terlewat.
+
+Diperbaiki di **LAYOUT**, bukan `page.tsx`, dan itu bagian yang menentukan: ketiganya
+punya halaman penuh KEDUA — `/iki/[id]`, `/lkjip/[id]`, `/buku-besar-aset/master` —
+dan penjaga di halaman daftar tidak menutup pintu editor. Tautan langsung ke editor
+justru yang paling sering dipakai orang. (Aksesnya sendiri tidak bocor: ketiga sub-rute
+itu sudah memeriksa `is<Modul>Role` sendiri-sendiri.)
+
+Urutannya ditulis sekali di `lib/security/penjaga-layar.ts` — **sesi → AKSES → sakelar**
+— karena urutan yang disalin tiga kali cepat atau lambat terbalik di salah satunya.
+Dan urutan itu bukan selera: kalau sakelar diperiksa lebih dulu, orang yang memang
+TIDAK BERHAK akan diberi halaman pemeliharaan, lalu menunggu modul yang tidak akan
+pernah terbuka untuknya. Urutan yang sama sudah berlaku di layout BLUD & PK sejak
+Tahap 9; penolong ini membawanya ke tiga modul yang belum punya. Kunci sakelar dan
+aturan aksesnya diambil dari registry (`modul(kunci)?.sakelar`, `cekModul(kunci)`),
+bukan diketik — ketiga `is<Modul>Role` memang sudah pembungkus tipis `bolehMasukModul`.
+
+Penjaganya di suite **diturunkan dari registry**: tiap `MODUL_BERSAKELAR` wajib
+menyebut `modulSedangMati(` atau `jagaLayarModul(` di `layout.tsx` atau `page.tsx`-nya.
+Modul kesepuluh yang lupa memasangnya akan menjatuhkan suite, bukan menunggu ada yang
+melaporkannya. `test-tahap-9.mts` jadi **100 pemeriksaan**; bagian barunya diuji mutasi
+— **9 mutasi, 9 tertangkap**, termasuk membuang pemeriksaan akses, membalik urutannya,
+dan melepas `role` sehingga yang mematikan modul ikut terkunci di luar.
+
+**Ditemukan saat mengerjakannya:** `tsc` gugur menyebut `.next/dev/types/validator.ts`
+begitu dua `layout.tsx` baru lahir — L91 lewat pintu berlawanan (di sana route DIHAPUS,
+di sini layout DITAMBAH). Yang gagal berkas bangkitan, bukan kodenya; `prebuild` yang
+membuang dua direktori tipe itu menyelesaikannya.
+
+**Yang BELUM diverifikasi, terus terang:** redirect ketiga modul ini belum dilihat
+lewat peramban. Ia butuh akun **bukan** SUPER_ADMIN yang punya akses IKI/E-LKJIP/BBA —
+SUPER_ADMIN menembus sakelar, jadi dari sesinya layar tetap terbuka (memang begitu
+seharusnya). Yang sudah dibuktikan: keempat rute tetap terbuka normal sesudah perubahan
+(nol regresi), dan `modulSedangMati` + `urlPemeliharaan` sendiri sudah terbukti hidup
+pada `/blud` di Tahap 12.
+
+**Yang masih tersisa dari P5:** spanduk BEKU hanya terpasang di **BLUD dan Perjanjian
+Kinerja**. Enam modul lain API-nya dijaga (503 `MODUL_BACA_SAJA` sudah dibuktikan) tapi
+layarnya diam — orang di sana baru tahu saat menekan Simpan lalu menerima pesan galat.
+Memasangnya bukan pekerjaan sepele: keenamnya shell layar-penuh dengan tata letak
+berbeda-beda (`h-screen` + flex + overflow), jadi tiap spanduk harus ditempatkan di
+dalam area isinya masing-masing, bukan disisipkan di atas layarnya. Tidak ada komponen
+bersama yang bisa dipakai sebagai satu titik pasang — `FloatingDock`/`UserBadge` cuma
+dipakai tiga dari enam.
 
 ---
 
