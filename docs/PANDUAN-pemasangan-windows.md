@@ -37,7 +37,7 @@ dari separuh berkasnya tidak bernomor).
 |---|---|---|
 | **Node.js** | **20.x LTS** | Jangan 22/24. CI proyek ini memakai Node 20 + npm 10.8.2; versi lain bisa menghasilkan `package-lock.json` yang tidak cocok (pelajaran L57). |
 | **MySQL** | **8.0.13+** (ideal 8.4) | Skema memakai `DEFAULT (expr)` yang baru ada sejak 8.0.13. |
-| **PM2** | terbaru | `npm install -g pm2 pm2-windows-startup` |
+| **PM2** | terbaru | `npm install -g pm2` — **tanpa** `pm2-windows-startup`, lihat §4 |
 | **Nginx for Windows** | terbaru stabil | Sebagai reverse proxy + HTTPS. |
 | Redis | — | **Lewati.** Lihat §7. |
 
@@ -176,15 +176,67 @@ disengaja begitu supaya aplikasi tidak pernah jalan dengan kunci kosong.
 
 ## §4 PM2
 
-```bash
-pm2 start npm --name prima -- start
-pm2 save
-pm2-startup install
+> **Ditulis ulang 2026-09-11 sesudah dipasang sungguhan di laptop server.** Resep lama
+> (`pm2 start npm --name prima -- start` + `pm2-startup install`) **tidak jalan apa
+> adanya di Windows**; tiga hal di bawah ini yang membuatnya bekerja.
+
+**Jangan lewat `npm`.** Di Windows `npm` itu berkas `.cmd` — sebuah pembungkus. PM2
+yang menjalankan pembungkus sering kehilangan jejak proses anaknya: `pm2 stop` menutup
+pembungkusnya sementara server Next-nya tetap hidup memegang port 3000, lalu
+`pm2 start` berikutnya gagal karena portnya masih dipakai. Tunjuk berkas Next
+**langsung**.
+
+**`-H 0.0.0.0` wajib ikut**, kalau tidak aplikasinya hanya bisa dibuka dari server itu
+sendiri — dan itu baru ketahuan saat orang lain mencoba membukanya.
+
+Buat `D:\APLIKASI\prima.config.js` — **di luar folder repo**, supaya ia tidak jadi
+berkas tak terlacak git yang membuat `git pull` berikutnya menolak jalan:
+
+```js
+module.exports = {
+  apps: [{
+    name: 'prima',
+    script: 'node_modules/next/dist/bin/next',
+    args: 'start -H 0.0.0.0 -p 3000',
+    cwd: 'D:\\APLIKASI\\prima-web-3',
+    exec_mode: 'fork',
+    instances: 1,
+    autorestart: true,
+    exp_backoff_restart_delay: 2000,
+    max_memory_restart: '1G',
+    env: { NODE_ENV: 'production' },
+    out_file: 'D:\\APLIKASI\\logs\\prima-out.log',
+    error_file: 'D:\\APLIKASI\\logs\\prima-err.log',
+    merge_logs: true,
+    time: true,
+  }],
+};
 ```
 
-`pm2-startup install` yang membuat PM2 hidup lagi otomatis setelah server
-di-restart. Tanpa ini, aplikasi mati diam-diam setiap kali Windows Update
-me-reboot server — dan tidak ada yang memberi tahu.
+```powershell
+pm2 start D:\APLIKASI\prima.config.js
+pm2 save
+```
+
+**`pm2 save` bukan pelengkap — tanpanya langkah berikutnya tidak punya apa pun untuk
+dihidupkan.** Ia menulis daftar proses ke `C:\Users\<nama>\.pm2\dump.pm2`.
+
+**Auto-start: `pm2-startup install` TIDAK dipakai.** Paket `pm2-windows-startup` sudah
+lama tidak dipelihara, dan kemampuan `pm2 startup` bawaan memang hanya ada di Linux.
+Penggantinya satu tugas Task Scheduler bertrigger **saat login** yang menjalankan
+`pm2 resurrect`.
+
+Dua syarat yang menentukan tugas itu berhasil atau tidak:
+
+- **Berjalan sebagai PENGGUNA, bukan `SYSTEM`.** Data PM2 hidup di
+  `C:\Users\<nama>\.pm2`; `SYSTEM` punya rumahnya sendiri dan akan bangun dengan
+  daftar KOSONG — tugasnya sukses, aplikasinya tetap mati.
+- **Beri jeda ~60 detik sebelum `pm2 resurrect`.** Saat laptop baru menyala, MySQL
+  masih bangun. Bukan kehati-hatian kosong: cadangan DB 2026-09-10 gagal persis karena
+  menembak terlalu cepat (`Can't connect to MySQL server ... (10061)`).
+
+Pemicunya **"saat login"**, bukan "saat komputer menyala" — konsekuensi langsung dari
+syarat pertama: PM2 milik seorang pengguna, jadi harus ada yang login dulu.
 
 **Tetap di mode `fork` (satu proses).** Jangan pakai `-i max` / cluster. Alasannya
 di §7; ringkasnya: beberapa pembatas laju menghitung per-proses, jadi cluster
@@ -255,11 +307,47 @@ tidak. Task Scheduler **melewatkan** jadwal yang jatuh saat mesinnya mati, dan
 secara bawaan tidak menyusulnya — jadi "harian, jam 2 dini hari" pada server ini
 artinya **tidak pernah jalan sama sekali**, tanpa satu pesan pun.
 
-Dua hal yang menutupnya, dan keduanya wajib:
+**Tiga** hal yang menutupnya, dan ketiganya wajib:
 
 1. **`-StartWhenAvailable`** — tugas yang terlewat dijalankan menyusul begitu
    laptopnya hidup, bukan dibuang.
 2. **Jamnya di jam kerja** (mis. 08:30), bukan dini hari.
+3. **`-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries`** — lihat di bawah.
+   Ini yang paling mudah terlewat dan paling senyap akibatnya.
+
+#### ⚠️ Task Scheduler MENOLAK jalan saat komputer pakai baterai
+
+Ini bawaan Windows, bukan salah setelan: `New-ScheduledTaskSettingsSet` menyalakan
+**`DisallowStartIfOnBatteries`** dan **`StopIfGoingOnBatteries`** kecuali Anda minta
+sebaliknya. Di server sungguhan (yang selalu tercolok) aturan itu tak pernah terasa.
+Di **laptop** ia mematikan seluruh penjadwalan begitu kabelnya dicabut — **tanpa satu
+pesan, tanpa satu baris log, tanpa tanda apa pun.** Tugasnya tidak gagal; ia hanya
+tidak pernah dimulai.
+
+Terukur saat pemasangan 2026-09-11: `promotion-complete` berjadwal tiap 15 menit
+tercatat jalan **sekali** pukul 11:30, lalu tidak sama sekali sampai pukul 13:00 —
+sementara `Get-ScheduledTaskInfo` tetap melaporkan `NextRunTime` yang wajar dan
+pengulangannya benar (`Interval PT15M`, `Duration P3650D`). Yang membongkarnya
+`cron.log`, bukan Task Scheduler: log mencatat tiap panggilan, jadi barisnya yang
+hilang menjadi bukti. Pelajarannya melampaui baterai — **jangan percaya
+`LastRunTime` sendirian; sediakan log yang ditulis tugasnya sendiri.**
+
+Memperbaiki ketujuh tugas sekaligus, tanpa menimpa setelan lain:
+
+```powershell
+Get-ScheduledTask -TaskName 'PRIMA*' | ForEach-Object { $s = $_.Settings; $s.DisallowStartIfOnBatteries = $false; $s.StopIfGoingOnBatteries = $false; Set-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath -Settings $s | Out-Null; "diperbaiki: $($_.TaskName)" }
+```
+
+Sengaja **mengubah dua properti pada setelan yang sudah ada**, bukan memasang setelan
+baru lewat `Set-ScheduledTask -Settings (New-ScheduledTaskSettingsSet ...)` — cara
+kedua MENGGANTI seluruh setelan, jadi `-StartWhenAvailable` yang dipasang sebelumnya
+ikut terhapus diam-diam, dan Anda menukar satu masalah senyap dengan yang lain.
+
+Memeriksanya:
+
+```powershell
+Get-ScheduledTask -TaskName 'PRIMA*' | ForEach-Object { "$($_.TaskName.PadRight(28)) boleh-baterai=$(-not $_.Settings.DisallowStartIfOnBatteries)" }
+```
 
 Ketiga tugas harian itu memang dirancang tahan terlewat — `akses-kedaluwarsa`
 misalnya bertanya "mana yang tenggatnya sudah lewat", bukan "mana yang jatuh tempo
@@ -476,8 +564,13 @@ Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
       Nyalakan lagi.
 - [ ] Unduh satu berkas Excel/Word dari modul mana pun → berhasil
 - [ ] Jalankan **kelima** tugas cron dengan tangan (§5) → `cron.log` berisi `OK`
-- [ ] `Get-ScheduledTask -TaskName 'PRIMA*'` → kelimanya terdaftar, dan
+- [ ] `Get-ScheduledTask -TaskName 'PRIMA*'` → semuanya terdaftar, dan
       `-StartWhenAvailable` menyala (server ini dimatikan tiap malam)
+- [ ] **Cabut kabel listriknya**, tunggu satu putaran jadwal, lalu periksa `cron.log`
+      → tugasnya TETAP jalan. Kalau berhenti, setelan baterai di §5 terlewat — dan
+      ini tidak akan pernah menimbulkan gejala yang kelihatan
+- [ ] Restart Windows → login → tunggu ~2 menit → `pm2 list` berstatus **online**
+      tanpa ada yang mengetik apa pun
 - [ ] Restart server Windows → PM2 hidup sendiri, aplikasi jalan lagi
 - [ ] `pm2 logs prima --lines 200` → tidak ada error berulang
 
