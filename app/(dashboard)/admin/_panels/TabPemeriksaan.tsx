@@ -55,7 +55,7 @@ export function TabPemeriksaan(
       {!err && temuan.length > 0 && (
         <div className={perluDilihat ? 'ap-sk-ingat' : 'ap-pm-bersih'}>
           {perluDilihat
-            ? <>{IKON.kuning}<span>{perluDilihat} dari {temuan.length} pemeriksaan menemukan sesuatu. Tidak ada yang diperbaiki otomatis — semuanya keputusan Anda.</span></>
+            ? <>{IKON.kuning}<span>{perluDilihat} dari {temuan.length} pemeriksaan menemukan sesuatu. Tidak ada yang diperbaiki otomatis; semua keputusan ada di tangan Anda.</span></>
             : <>{IKON.aman}<span>Ketujuh pemeriksaan bersih.</span></>}
         </div>
       )}

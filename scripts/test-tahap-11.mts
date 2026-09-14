@@ -344,7 +344,7 @@ const badanBawa = iBawa >= 0 && jBawa > iBawa ? tabBersih.slice(iBawa, jBawa) : 
 cek('SETUJUI tidak menulis apa pun sendiri',
   badanBawa.length > 0 && !badanBawa.includes('fetchJson') && !badanBawa.includes('method:'))
 cek('…dan itu ditulis di layar, bukan cuma di kode',
-  tab.includes('SETUJUI mengisi form orang itu — aksesnya baru diberikan saat Anda menekan Simpan.'))
+  tab.includes('SETUJUI hanya mengisi form orang itu. Aksesnya baru diberikan setelah Anda menekan Simpan.'))
 // REF, bukan state: state akan masuk daftar dependensi pemuat berkas lalu memuat ulang
 // tiap kali ia berubah — dan pemuatan ulang itu yang menghapus centang yang baru dipasang.
 cek('permintaan yang dibawa disimpan di ref', tab.includes('const permintaanRef = useRef<BarisAntrean | null>(null);'))

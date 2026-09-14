@@ -211,7 +211,7 @@ export async function hitungJejakOrang(userId: number): Promise<Jejak> {
  */
 export class AlasanWajibError extends Error {
   constructor(public readonly yangBerubah: string) {
-    super(`Sebutkan alasannya — ${yangBerubah} akan berubah.`)
+    super(`Tulis alasannya, karena ${yangBerubah} akan berubah.`)
     this.name = 'AlasanWajibError'
   }
 }
@@ -227,7 +227,7 @@ export class AlasanWajibError extends Error {
  */
 export class LantaiSuperAdminError extends Error {
   constructor() {
-    super('Akses SUPER_ADMIN tidak dapat dibatasi.')
+    super('Akses Super Admin tidak bisa dibatasi.')
     this.name = 'LantaiSuperAdminError'
   }
 }
@@ -329,8 +329,8 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
     const grantLamaBerarti = grantYangBerarti(target.role, appAccessLama)
     const grantBergeser = [...grantCalon].sort().join(',') !== [...grantLamaBerarti].sort().join(',')
     if ((gantiPeran || grantBergeser) && !p.alasan) {
-      throw new AlasanWajibError(gantiPeran && grantBergeser ? 'peran dan pintu modul'
-        : gantiPeran ? 'peran' : 'pintu modul')
+      throw new AlasanWajibError(gantiPeran && grantBergeser ? 'peran dan akses modul'
+        : gantiPeran ? 'peran' : 'akses modul')
     }
 
     // Kunci diambil lebih dulu, semuanya, menurut urutan key menaik.

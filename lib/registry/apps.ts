@@ -155,16 +155,16 @@ export type SakelarLain = {
 export const SAKELAR_LAIN: readonly SakelarLain[] = [
   {
     kunci: 'app_status_sentinel_bot',
-    label: 'RIMA — Seluruh Bot',
+    label: 'RIMA (seluruh bot)',
     // Satu-satunya yang membacanya `components/sentinel/SentinelProvider.tsx`, dan itu
     // berjalan DI PERAMBAN. Mematikannya menyembunyikan tombol RIMA, tidak menutup
     // apa pun di server — bentuk T-1 yang sama, di modul yang berbeda.
     dijagaDi: null,
-    catatan: 'Hanya menyembunyikan tombol di peramban; route RIMA tidak membacanya.',
+    catatan: 'Belum terjaga. Hanya menyembunyikan tombol RIMA di layar; jalur datanya tidak ikut tertutup.',
   },
   {
     kunci: 'app_status_rima_query',
-    label: 'RIMA — Tanya Data (Q&A)',
+    label: 'RIMA Tanya Data',
     dijagaDi: ['app/api/rima/query/route.ts', 'app/api/rima/summary/route.ts'],
   },
 ]
@@ -295,10 +295,15 @@ export function keadaanTerburuk(nilai: readonly (string | null | undefined)[]): 
   return sebabTerburuk(nilai.map((n, i) => [String(i), n] as const)).keadaan
 }
 
+/**
+ * Fase F Tahap 18 — istilah yang dibaca orang, dalam bahasa Indonesia. Nama di KODE
+ * (`readonly`, `beku`, `MODUL_BACA_SAJA`) sengaja tidak diubah. Satu sumber: lencana
+ * /menu, tombol Sakelar, dan kalimat spanduk membaca dari sini.
+ */
 export const LABEL_KEADAAN: Readonly<Record<KeadaanSakelar, string>> = {
-  online: 'ONLINE',
-  readonly: 'BEKU',
-  maintenance: 'MAINTENANCE',
+  online: 'AKTIF',
+  readonly: 'HANYA BACA',
+  maintenance: 'PEMELIHARAAN',
 }
 
 /** Kunci sakelar → label yang tampil di App Control. */
@@ -371,19 +376,20 @@ export type InfoSakelar = {
 
 function infoModul(m: Modul): InfoSakelar[] {
   if (!m.sakelar) return []
-  const penanda = m.penjagaApi?.penanda.map((p) => `\`${p}\``).join(' / ') ?? ''
   // Bisa dibekukan = punya route API, penjaganya berdiri, DAN route itu memang menulis.
   // Syarat ketiga baru di Tahap 14c: tanpa itu Dashboard (dua route GET) menawarkan BEKU
   // yang tidak menutup apa pun (T13). `hanyaBaca` dicocokkan gate G ke handler sungguhan.
   const bisaBeku = m.dirApi !== null && m.penjagaApi !== undefined && m.hanyaBaca !== true
+  // Tahap 18 — kalimat untuk orang. Nama route & penanda gate G sengaja tidak ditulis:
+  // yang membaca tooltip ini ingin tahu apakah sakelarnya bekerja, bukan cara memeriksanya.
   const utama: InfoSakelar = m.dirApi === null
     ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true, bisaBeku,
-        sebab: 'Tidak punya route API sendiri — tidak ada yang perlu dijaga.' }
+        sebab: 'Modul ini tidak punya jalur data sendiri, jadi tidak ada yang perlu dijaga.' }
     : m.penjagaApi
       ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true, bisaBeku,
-          sebab: `Tiap route di ${m.dirApi} wajib menyebut ${penanda} — diperiksa gate G tiap kali CI jalan.` }
+          sebab: 'Layar dan jalur datanya ikut tertutup saat sakelar ini diubah. Diperiksa otomatis setiap ada perubahan kode.' }
       : { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: false, bisaBeku,
-          sebab: `Punya route di ${m.dirApi} tapi belum punya penjaga. Mematikannya hanya menutup layarnya; API-nya tetap terbuka.` }
+          sebab: 'Belum terjaga. Mengubah sakelar ini hanya menutup layarnya; jalur datanya tetap terbuka.' }
   return [
     utama,
     ...(m.subSakelar ?? []).map((s) => ({
@@ -394,7 +400,7 @@ function infoModul(m: Modul): InfoSakelar[] {
       terjaga: utama.terjaga,
       bisaBeku,
       sebab: utama.terjaga
-        ? `Ikut penjaga ${m.label} (${penanda}).`
+        ? `Ikut terjaga bersama ${m.label}.`
         : utama.sebab,
     })),
   ]
@@ -416,9 +422,9 @@ const SAKELAR_GLOBAL: InfoSakelar = {
   induk: null,
   terjaga: true,
   bisaBeku: true,
+  // Tahap 18. Klaim "terjaga" tetap ditagih uji Tahap 12 ke `kunciDenganGlobal` di guard.ts.
   sebab:
-    'Ikut dibaca setiap penjaga modul lewat `kunciDenganGlobal` di lib/security/guard.ts.'
-    + ' Admin Panel sengaja di luar jangkauannya — route-nya memang tidak punya sakelar.',
+    'Berlaku untuk semua modul sekaligus. Admin Panel tidak ikut tertutup, jadi sakelar ini selalu bisa dikembalikan dari sini.',
 }
 
 export const SAKELAR_INFO: readonly InfoSakelar[] = [
@@ -434,8 +440,8 @@ export const SAKELAR_INFO: readonly InfoSakelar[] = [
     // endpoint yang dua-duanya GET. Tidak ada tulisan untuk dibekukan.
     bisaBeku: false,
     sebab: s.dijagaDi
-      ? `Dibaca ${s.dijagaDi.join(' dan ')}.`
-      : (s.catatan ?? 'Tidak ada berkas server yang membacanya.'),
+      ? 'Jalur datanya ikut tertutup saat sakelar ini diubah.'
+      : (s.catatan ?? 'Belum terjaga. Tidak ada jalur data yang ikut tertutup.'),
   })),
 ]
 
@@ -449,7 +455,7 @@ export function infoSakelar(kunci: string): InfoSakelar | null {
 /** Alasan sebuah sakelar tidak menawarkan BEKU — dipakai layar & API supaya keduanya
  *  menolak dengan kalimat yang sama. */
 export const SEBAB_TAK_BISA_BEKU =
-  'Sakelar ini tidak menjaga satu pun jalur tulis, jadi membekukannya tidak menutup apa pun.'
+  'Bagian ini tidak punya data yang bisa diubah, jadi mode hanya baca tidak berpengaruh apa pun.'
 
 /** Sakelar yang tombolnya ada tapi tidak menutup apa pun di server — P10 nomor 6. */
 export const SAKELAR_TANPA_PENJAGA: readonly InfoSakelar[] = SAKELAR_INFO.filter((s) => !s.terjaga)

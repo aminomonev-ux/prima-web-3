@@ -34,7 +34,7 @@ export function MintaAksesModal({ appKey, label, onClose, onSuccess }: Props) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setGalat('');
-    if (kurang > 0) { setGalat(`Ceritakan sedikit keperluannya — kurang ${kurang} huruf.`); return; }
+    if (kurang > 0) { setGalat(`Ceritakan sedikit keperluannya (kurang ${kurang} huruf lagi).`); return; }
     setKirim(true);
     try {
       // `fetch` dan `.json()` dipisah, keduanya di dalam try — balasan proxy yang bukan

@@ -278,7 +278,7 @@ cek('confirmDialog, bukan window.confirm',
 // Dialog yang cuma bertanya "yakin?" tidak memberi tahu apa pun. Yang menentukan:
 // orangnya tahu ia masih punya jalan pulang.
 cek('dialognya menyebut jalan pulangnya',
-  badanPilih.includes('Admin Panel tidak ikut tertutup'))
+  badanPilih.includes('Admin Panel tidak ikut ditutup. Sakelar ini selalu bisa dikembalikan dari layar ini.'))
 
 // ── G · Layar sakelar ────────────────────────────────────────────────────────
 console.log('\nG · layar sakelar')
@@ -290,7 +290,7 @@ cek('keadaan global dibaca sekali, dipakai bersama',
 // Kalau kartu modul tetap menulis "induknya" saat yang menahan sakelar global,
 // orangnya akan memeriksa sakelar yang sebetulnya masih hidup.
 cek('kartu modul menyebut sakelar yang BENAR-BENAR menahannya',
-  panel.includes("const namaAtas = !isGlobal && globalVal !== 'online' ? 'sakelar SELURUH APLIKASI' : 'induknya'"))
+  panel.includes("const namaAtas = !isGlobal && globalVal !== 'online' ? 'sakelar seluruh aplikasi' : 'modul induknya'"))
 cek('global berlaku sebelum induk',
   panel.includes("const dariAtas = isGlobal ? 'online' : globalVal !== 'online' ? globalVal : indukVal"))
 cek('keterangan turunan memakai dariAtas, bukan indukVal lagi',

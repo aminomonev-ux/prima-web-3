@@ -29,14 +29,14 @@ export async function POST(req: NextRequest) {
   }
   const rl = await checkRateLimit(`broadcast:${session.userId}`, 5, 600);
   if (!rl.allowed) {
-    return NextResponse.json({ ok: false, message: `Rate limit. Coba lagi dalam ${rl.resetIn} detik.` }, { status: 429 });
+    return NextResponse.json({ ok: false, message: `Terlalu sering mengirim. Coba lagi dalam ${rl.resetIn} detik.` }, { status: 429 });
   }
   const { pesan, targetRole } = await req.json() as { pesan: string; targetRole?: string };
   if (!pesan?.trim()) return NextResponse.json({ ok: false, message: 'Pesan tidak boleh kosong.' }, { status: 400 });
   if (pesan.length > 500) return NextResponse.json({ ok: false, message: 'Pesan maksimal 500 karakter.' }, { status: 400 });
   // V5-ADMIN (L-1): targetRole wajib role kanonik — cegah query senyap 0-row dari role tak dikenal.
   if (targetRole && !Object.prototype.hasOwnProperty.call(ROLE_LABELS, targetRole)) {
-    return NextResponse.json({ ok: false, message: 'Target role tidak valid.' }, { status: 400 });
+    return NextResponse.json({ ok: false, message: 'Peran tujuan tidak valid.' }, { status: 400 });
   }
 
   const users = targetRole

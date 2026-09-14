@@ -23,7 +23,7 @@ export async function POST(
       return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     }
     if (session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN.' }, { status: 403 });
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin.' }, { status: 403 });
     }
     const limited = await promotionRateLimit(session.userId, 'cancel-cooldown', 10);
     if (limited) return limited;
@@ -36,7 +36,7 @@ export async function POST(
     const parsed = PromotionCancelCooldownBodySchema.safeParse(raw);
     if (!parsed.success) {
       return NextResponse.json(
-        { ok: false, message: parsed.error.issues[0]?.message ?? 'Body tidak valid.' },
+        { ok: false, message: parsed.error.issues[0]?.message ?? 'Data tidak valid.' },
         { status: 400 },
       );
     }
@@ -48,14 +48,14 @@ export async function POST(
     }
     if (reqRow.status !== 'COOLDOWN') {
       return NextResponse.json(
-        { ok: false, message: `Permohonan tidak dalam cooldown (status=${reqRow.status}).` },
+        { ok: false, message: `Permohonan ini tidak sedang dalam masa tunggu (status ${reqRow.status}).` },
         { status: 409 },
       );
     }
     const ok = await cancelCooldownBySa(id, session.userId, reason);
     if (!ok) {
       return NextResponse.json(
-        { ok: false, message: 'Race condition — status berubah.' },
+        { ok: false, message: 'Statusnya baru saja berubah. Muat ulang halaman.' },
         { status: 409 },
       );
     }
@@ -72,10 +72,10 @@ export async function POST(
       void addPromotionNotif(
         userRows[0].username,
         'PROMOTION_CANCELLED',
-        `Permohonan upgrade dibatalkan SA saat cooldown.${reason ? ` Alasan: ${reason}` : ''}`,
+        `Permohonan naik peran Anda dibatalkan Super Admin selama masa tunggu.${reason ? ` Alasan: ${reason}` : ''}`,
       );
     }
-    return NextResponse.json({ ok: true, message: 'Cooldown dibatalkan.' });
+    return NextResponse.json({ ok: true, message: 'Masa tunggu dibatalkan.' });
   } catch (err) {
     console.error('[Promotion CancelCooldown Error]', err);
     return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 });

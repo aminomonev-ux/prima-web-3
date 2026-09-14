@@ -128,9 +128,9 @@ export function TabTinjauan({ onKeAkses }: { onKeAkses: (userId: number) => void
       <div className="ap-pa-catatan" style={{ marginBottom: 12 }}>
         <span>
           Baris ini menjawab satu pertanyaan auditor: <b>kapan wewenang orang ini terakhir
-          diperiksa, dan oleh siapa</b>. Tanda <b>✓</b> = akses yang <b>diberikan</b> — itu
-          yang perlu diputuskan tiap tinjauan; <b>·</b> = datang dari perannya, dan berubah
-          sendiri kalau perannya berubah.
+          diperiksa, dan oleh siapa</b>. Tanda <b>✓</b> berarti akses yang <b>diberikan</b> per
+          orang; itulah yang perlu diputuskan setiap tinjauan. Tanda <b>·</b> berarti akses dari
+          perannya, yang ikut berubah sendiri kalau perannya berubah.
         </span>
       </div>
 

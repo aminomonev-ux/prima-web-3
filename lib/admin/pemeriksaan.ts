@@ -170,54 +170,55 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
     ...izinOrang.map((r) => ({ appKey: r.app_key, menuKey: r.menu_key, pemilik: r.username ?? 'akun terhapus' })),
   ]);
 
+  // Tahap 18 — kalimat untuk orang: pendek, tanpa kiasan, tanpa nama berkas kode.
   return [
     {
       id: 'kuota',
       judul: 'Kuota peran hampir penuh',
       jumlah: kuota.length,
       keparahan: kuota.some((k) => k.jumlah >= k.kuota) ? 'merah' : kuota.length ? 'kuning' : 'aman',
-      ringkas: `Peran yang sudah memakai ${Math.round(AMBANG_KUOTA * 100)}% kuotanya atau lebih. Kuota penuh sebaiknya diketahui sebelum ada yang perlu membuat akun, bukan saat sedang buru-buru.`,
-      tindakan: 'Nonaktifkan akun yang sudah tidak dipakai di tab Pusat Akses, atau naikkan kuotanya di lib/constants.ts.',
-      contoh: contohkan(kuota.map((k) => `${ROLE_LABELS[k.role] ?? k.role} — ${k.jumlah}/${k.kuota}`)),
+      ringkas: `Peran yang kuotanya sudah terpakai ${Math.round(AMBANG_KUOTA * 100)}% atau lebih. Sebaiknya diketahui sebelum ada yang perlu membuat akun baru.`,
+      tindakan: 'Nonaktifkan akun yang sudah tidak dipakai di tab Pusat Akses, atau minta tim IT menaikkan kuotanya.',
+      contoh: contohkan(kuota.map((k) => `${ROLE_LABELS[k.role] ?? k.role}: ${k.jumlah} dari ${k.kuota}`)),
     },
     {
       id: 'nganggur',
-      judul: 'Akun aktif yang menganggur',
+      judul: 'Akun aktif yang tidak dipakai',
       jumlah: nganggur.length,
       keparahan: nganggur.length ? 'kuning' : 'aman',
-      ringkas: `Akun berstatus AKTIF yang belum pernah login, atau tidak login lebih dari ${HARI_MENGANGGUR} hari. Akun hidup tanpa pemakai adalah pintu yang tidak dijaga siapa pun.`,
-      tindakan: 'Tanyakan pemiliknya; kalau memang sudah tidak dipakai, nonaktifkan di tab Pusat Akses.',
-      contoh: contohkan(nganggur.map((u) => `${u.username} — ${u.last_login ? `terakhir ${new Date(u.last_login).toLocaleDateString('id-ID')}` : 'belum pernah login'}`)),
+      ringkas: `Akun aktif yang belum pernah login, atau tidak login lebih dari ${HARI_MENGANGGUR} hari. Akun yang tidak dipakai tetap bisa disalahgunakan.`,
+      tindakan: 'Tanyakan ke pemiliknya. Kalau memang sudah tidak dipakai, nonaktifkan di tab Pusat Akses.',
+      contoh: contohkan(nganggur.map((u) => `${u.username}, ${u.last_login ? `terakhir login ${new Date(u.last_login).toLocaleDateString('id-ID')}` : 'belum pernah login'}`)),
     },
     {
       id: 'mubazir',
       judul: 'Pemberian akses yang tidak menambah apa-apa',
       jumlah: mubazir.length,
       keparahan: mubazir.length ? 'kuning' : 'aman',
-      ringkas: 'Modul yang sudah terbuka oleh perannya, tapi tetap diberikan lagi per orang. Mencabutnya nol risiko — dan membiarkannya membuat satu pintu punya dua penjelasan.',
+      ringkas: 'Modul yang sudah terbuka karena perannya, tapi masih diberikan lagi per orang. Aman dilepas, dan kalau dibiarkan asal aksesnya jadi membingungkan.',
       // T17 — dulu menunjuk tab yang tidak ada, dan di layar penggantinya kotak centang
       // itu MATI. Kini ada jalannya: buka orangnya, tekan "Lepas centangnya", Simpan.
-      tindakan: 'Buka orangnya lewat tombol di bawah, tekan "Lepas centangnya" di tab Pusat Akses, lalu Simpan. Tidak ada pintu yang tertutup, jadi tidak ditanya alasan.',
+      tindakan: 'Buka orangnya lewat tombol di bawah, tekan "Lepas centangnya" di tab Pusat Akses, lalu Simpan. Tidak ada akses yang tertutup, jadi tidak perlu menulis alasan.',
       contoh: contohkan(mubazir.map((m) => `${m.username} · ${m.kunci} (${m.sebab})`)),
       orang: orangMubazir,
     },
     {
       id: 'yatim',
-      judul: 'Baris izin menu yatim',
+      judul: 'Pengaturan izin untuk menu yang sudah tidak ada',
       jumlah: yatim.length,
       keparahan: yatim.length ? 'kuning' : 'aman',
-      ringkas: 'Baris izin yang menunjuk menu yang sudah tidak ada — menu berganti nama atau dihapus, barisnya tertinggal. Matriksnya jadi bercerita tentang layar yang tak bisa dibuka siapa pun.',
-      tindakan: 'Buka tab Peran dan simpan ulang modul yang bersangkutan; penyimpanan menulis ulang seluruh barisnya.',
+      ringkas: 'Pengaturan izin yang masih menunjuk menu yang sudah berganti nama atau dihapus. Tidak berbahaya, tapi membuat daftar izinnya tidak rapi.',
+      tindakan: 'Buka tab Peran lalu simpan ulang modul yang bersangkutan. Penyimpanan akan merapikan pengaturannya.',
       contoh: contohkan(yatim.map((y) => `${y.appKey} · ${y.menuKey} (${y.pemilik})`)),
     },
     {
       id: 'sakelar-lama',
-      judul: 'Sakelar mati lebih dari seminggu',
+      judul: 'Sakelar tidak aktif lebih dari seminggu',
       jumlah: sakelarLama.length,
       keparahan: sakelarLama.length ? 'kuning' : 'aman',
-      ringkas: `Modul yang sudah dimatikan lebih dari ${HARI_SAKELAR_LAMA} hari. Kemungkinan besar lupa dinyalakan kembali — dan yang memakainya sudah berhenti bertanya.`,
-      tindakan: 'Periksa di tab Sakelar. Kalau memang masih dipelihara, isi keterangannya supaya orang berhenti menebak.',
-      contoh: contohkan(sakelarLama.map((s) => `${LABEL_SAKELAR[s.key] ?? s.key} — sejak ${s.updated_at ? new Date(s.updated_at).toLocaleDateString('id-ID') : 'entah kapan'}`)),
+      ringkas: `Modul yang sudah tidak aktif lebih dari ${HARI_SAKELAR_LAMA} hari. Mungkin lupa diaktifkan kembali.`,
+      tindakan: 'Periksa di tab Sakelar. Kalau memang masih dalam pemeliharaan, isi keterangannya supaya orang tahu.',
+      contoh: contohkan(sakelarLama.map((s) => `${LABEL_SAKELAR[s.key] ?? s.key}, sejak ${s.updated_at ? new Date(s.updated_at).toLocaleDateString('id-ID') : 'tanggal tidak diketahui'}`)),
     },
     {
       id: 'tanpa-penjaga',
@@ -227,16 +228,16 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
       // Gate G dibawa ke layar. Kalau ada yang lolos CI — mis. sakelar yang penjaganya
       // hidup di peramban, yang memang tidak bisa dilihat pemindai route — ia tetap
       // kelihatan orang. Ini persis bentuk T-1.
-      ringkas: 'Sakelar yang tombolnya ada tapi tidak ada berkas server yang membacanya. Mematikannya hanya menyembunyikan layar; jalur datanya tetap terbuka.',
-      tindakan: 'Pasang penjaganya di route modul yang bersangkutan, lalu daftarkan di lib/registry/apps.ts.',
-      contoh: SAKELAR_TANPA_PENJAGA.map((s) => `${s.label} — ${s.sebab}`),
+      ringkas: 'Sakelar yang tombolnya ada, tapi jalur datanya tidak ikut tertutup. Mengubahnya hanya menyembunyikan layar.',
+      tindakan: 'Minta tim IT memasang penjaga pada jalur data bagian ini.',
+      contoh: SAKELAR_TANPA_PENJAGA.map((s) => `${s.label}: ${s.sebab}`),
     },
     {
       id: 'super-admin',
-      judul: 'Jumlah SUPER_ADMIN aktif',
+      judul: 'Jumlah Super Admin aktif',
       jumlah: sa.length,
       keparahan: sa.length > BATAS_SUPER_ADMIN ? 'kuning' : 'aman',
-      ringkas: `Kunci induk sebaiknya sedikit. Lebih dari ${BATAS_SUPER_ADMIN} bukan pelanggaran, tapi angkanya harus terlihat, bukan ditemukan saat menelusuri jejak audit.`,
+      ringkas: `Akun Super Admin sebaiknya sedikit. Lebih dari ${BATAS_SUPER_ADMIN} tidak dilarang, tapi jumlahnya perlu diketahui.`,
       tindakan: 'Kalau ada yang sebenarnya cukup jadi Admin Staff, turunkan perannya di tab Pusat Akses.',
       contoh: contohkan(sa.map((u) => u.username)),
     },

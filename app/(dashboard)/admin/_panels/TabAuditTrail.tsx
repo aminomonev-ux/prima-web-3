@@ -44,13 +44,13 @@ export function TabAuditTrail() {
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap',gap:8}}>
-        <div className="ap-section-title" style={{margin:0}}>AUDIT TRAIL — {total} ENTRI</div>
+        <div className="ap-section-title" style={{margin:0}}>JEJAK AUDIT: {total} ENTRI</div>
         <div className="ap-row">
           <select className="ap-select" value={event} onChange={e=>{setEvent(e.target.value);load(1);}}>
             <option value="">Semua Event</option>
             {['LOGIN_SUCCESS','LOGIN_FAILED','LOGIN_BLOCKED','ACCOUNT_LOCKED','LOGOUT','SIGNUP','PASSWORD_RESET','SESSION_EXPIRED','BROADCAST','BRUTE_FORCE'].map(e=><option key={e} value={e}>{e}</option>)}
           </select>
-          <input className="ap-input" style={{width:160}} placeholder="Filter username..." value={user} onChange={e=>setUser(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')load(1);}}/>
+          <input className="ap-input" style={{width:160}} placeholder="Saring username…" value={user} onChange={e=>setUser(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')load(1);}}/>
           <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={()=>load(1)} disabled={loading} aria-label="Muat ulang jejak audit"/>
         </div>
       </div>
@@ -59,7 +59,7 @@ export function TabAuditTrail() {
           <thead><tr><th>WAKTU</th><th>EVENT</th><th>USERNAME</th><th>IP</th><th>DETAIL</th></tr></thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>LOADING...</td></tr>
+              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>MEMUAT…</td></tr>
             ) : rows.length === 0 ? (
               <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>Tidak ada data</td></tr>
             ) : rows.map(r=>(

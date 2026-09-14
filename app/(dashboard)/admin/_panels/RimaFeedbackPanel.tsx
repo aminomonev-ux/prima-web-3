@@ -113,7 +113,7 @@ export function RimaFeedbackPanel() {
 
   const onLabel = useCallback((r: LabelRow) => {
     const intent = (draft[r.question] ?? r.usul_intent ?? suggest[r.question] ?? '').trim();
-    if (!intent) { toast.error('Isi intent tujuan dulu ya.'); return; }
+    if (!intent) { toast.error('Isi intent tujuannya dulu.'); return; }
     void patchLabel(r.question, 'LABEL', intent);
   }, [draft, patchLabel, suggest]);
 
@@ -141,7 +141,7 @@ export function RimaFeedbackPanel() {
       toast.error('Jawaban server tidak terbaca.'); return;
     }
     const data = json?.ok && Array.isArray(json.data) ? json.data : [];
-    if (!data.length) { toast.info('Belum ada data berlabel untuk diexport.'); return; }
+    if (!data.length) { toast.info('Belum ada data berlabel untuk diekspor.'); return; }
     const jsonl = data.map(d => JSON.stringify(d)).join('\n');
     const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
     const url = URL.createObjectURL(blob);
@@ -149,7 +149,7 @@ export function RimaFeedbackPanel() {
     a.href = url; a.download = `rima-labeled-${new Date().toISOString().slice(0, 10)}.jsonl`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(`Export ${data.length} baris dataset.`);
+    toast.success(`${data.length} baris dataset diekspor.`);
   }, []);
 
   const th = { padding: '10px 14px', color: 'var(--ma-dim)', fontWeight: 600, letterSpacing: 0.5 } as const;
@@ -161,7 +161,7 @@ export function RimaFeedbackPanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <MessageSquareWarning size={18} style={{ color: 'var(--ma-aksen)' }} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ma-fg)', letterSpacing: 0.5 }}>Rima Feedback — Labeling Workbench</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ma-fg)', letterSpacing: 0.5 }}>Masukan RIMA: Pelabelan</div>
             <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginTop: 2 }}>
               Label pertanyaan gagal → dataset training (jalankan <code>npm run rima:train</code>). Sudah diredaksi privasi.
             </div>
@@ -169,7 +169,7 @@ export function RimaFeedbackPanel() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <PrimaButton variant="success" onClick={() => { void onExport(); }}>
-            <Download size={14} style={{ marginRight: 6 }} /> Export Dataset
+            <Download size={14} style={{ marginRight: 6 }} /> Ekspor Dataset
           </PrimaButton>
           <PrimaButton variant="ghost" onClick={load} disabled={loading}>
             <RefreshCw size={14} style={{ marginRight: 6 }} /> Muat Ulang
@@ -184,7 +184,7 @@ export function RimaFeedbackPanel() {
       {error && <div style={{ padding: 14, borderRadius: 8, background: 'rgba(226,75,74,0.12)', color: 'var(--ap-bad-fg)', fontSize: 13 }}>{error}</div>}
       {!error && loading && <div style={{ padding: 24, color: 'var(--ma-dim)', fontSize: 13 }}>Memuat…</div>}
       {!error && !loading && rows.length === 0 && (
-        <div style={{ padding: 24, color: 'var(--ma-dim)', fontSize: 13 }}>Tidak ada antrian label — semua feedback sudah diproses 🎉</div>
+        <div style={{ padding: 24, color: 'var(--ma-dim)', fontSize: 13 }}>Tidak ada antrean label. Semua masukan sudah diproses.</div>
       )}
 
       {!error && !loading && rows.length > 0 && (
@@ -223,10 +223,10 @@ export function RimaFeedbackPanel() {
                       }}
                     />
                     {draft[r.question] === undefined && !r.usul_intent && suggest[r.question] && (
-                      <div style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 3 }}>✨ saran otomatis Rima — koreksi bila keliru</div>
+                      <div style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 3 }}>Saran otomatis RIMA. Koreksi kalau keliru.</div>
                     )}
                     {draft[r.question] === undefined && r.usul_intent && (
-                      <div style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 3 }}>👆 dari pilihan user (klik kandidat)</div>
+                      <div style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 3 }}>👆 dari kandidat yang dipilih pemakai</div>
                     )}
                   </td>
                   <td style={td}>
@@ -245,7 +245,7 @@ export function RimaFeedbackPanel() {
                         type="button"
                         disabled={saving === r.question}
                         onClick={() => { void onAbaikan(r); }}
-                        data-tooltip="Buang dari antrian (bukan bahan training)"
+                        data-tooltip="Buang dari antrean (bukan bahan training)"
                         style={{
                           padding: '5px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
                           background: 'transparent', color: 'var(--ma-dim)', border: '1px solid var(--ma-line-on)',

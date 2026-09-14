@@ -262,14 +262,14 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
           <TabPusatAkses pilih={pilihOrang} setPilih={setPilihOrang}
             antrean={antrean} muatAntrean={muatAntrean}/>
         )}
-        {tab === 'pusat-akses'     && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
+        {tab === 'pusat-akses'     && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya Super Admin.</div>}
         {tab === 'menu-access'     && <MenuAccessRoleTab isSA={isSA}/>}
         {tab === 'security-status' && <TabSecurityStatus/>}
         {tab === 'broadcast'       && <TabBroadcast/>}
         {tab === 'audit-trail'     && <TabAuditTrail/>}
         {tab === 'email-notif'     && <TabEmailNotif   isSA={isSA}/>}
         {tab === 'promotion'       && isSA && <PromotionRequestsPanel/>}
-        {tab === 'promotion'       && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya SUPER_ADMIN.</div>}
+        {tab === 'promotion'       && !isSA && <div style={{padding:24,color:'var(--ap-dim)'}}>Hanya Super Admin.</div>}
         {tab === 'rima-feedback'   && <RimaFeedbackPanel/>}
         {tab === 'tinjauan'        && isSA && (
           // Tautan ATUR memindahkan orangnya ke Pusat Akses, bukan membuka layar

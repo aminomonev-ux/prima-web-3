@@ -62,7 +62,7 @@ export function useStatKuota(): StatKuota[] {
 export function labelPeran(role: string, stat?: StatKuota): string {
   const nama = ROLE_LABELS[role] ?? role
   if (!stat || stat.quota <= 0) return nama
-  return `${nama} (${stat.count}/${stat.quota}${stat.full ? ' — penuh' : ''})`
+  return `${nama} (${stat.count}/${stat.quota}${stat.full ? ', penuh' : ''})`
 }
 
 // ─── Konfirmasi ──────────────────────────────────────────────────────────────
@@ -112,8 +112,8 @@ export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<string | n
   ]
   if (f.jumlahPerkecualian) {
     baris.push(
-      `${f.jumlahPerkecualian} pengaturan menu khusus miliknya ikut dibuang — `
-      + 'perkecualian diberikan untuk jabatan tertentu, bukan untuk orangnya.',
+      `${f.jumlahPerkecualian} pengaturan menu khusus miliknya ikut dihapus, `
+      + 'karena pengaturan itu diberikan untuk jabatan tertentu, bukan untuk orangnya.',
     )
   }
   if (f.probationAktif) {
@@ -122,7 +122,7 @@ export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<string | n
   if (f.stat && f.stat.quota > 0) {
     baris.push(`Kuota ${ROLE_LABELS[f.ke] ?? f.ke} sesudahnya: ${f.stat.count + 1}/${f.stat.quota}.`)
   }
-  baris.push('Sesi orang ini TIDAK diputus — peran barunya berlaku dalam satu menit tanpa ia perlu keluar.')
+  baris.push('Orang ini tidak perlu keluar dari aplikasi. Peran barunya berlaku dalam satu menit.')
 
   return promptDialog({
     title: 'Ubah peran?',

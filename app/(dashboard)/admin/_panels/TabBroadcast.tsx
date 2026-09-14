@@ -43,7 +43,7 @@ export function TabBroadcast() {
           <textarea className="ap-input" rows={3} placeholder="Tulis pesan broadcast..." value={pesan} onChange={e=>setPesan(e.target.value)} style={{resize:'vertical'}}/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             <select className="ap-select" style={{width:'100%'}} value={target} onChange={e=>setTarget(e.target.value)}>
-              <option value="">Semua Role</option>
+              <option value="">Semua Peran</option>
               {ALL_ROLES.map(r=><option key={r} value={r}>{r}</option>)}
             </select>
             <PrimaButton variant="success" size="sm" iconLeft={<Send size={12}/>}

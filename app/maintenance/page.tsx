@@ -202,24 +202,24 @@ export default async function MaintenancePage({
           <div className="mn-icon-wrap">
             <span className="mn-icon">🔧</span>
           </div>
-          <div className="mn-tag">SISTEM MAINTENANCE</div>
+          <div className="mn-tag">PEMELIHARAAN SISTEM</div>
           <div className="mn-title">Sedang Dalam Perbaikan</div>
           <div className="mn-app">{terbukti?.label ?? 'Modul PRIMA'}</div>
           {terbukti?.pesan
             ? <p className="mn-pesan">{terbukti.pesan}</p>
             : (
               <p className="mn-desc">
-                Modul ini sedang dalam pemeliharaan sistem oleh tim administrator.
-                Kami sedang bekerja untuk meningkatkan layanan dan akan segera kembali online.
+                Modul ini sedang dalam pemeliharaan oleh tim admin.
+                Silakan coba lagi nanti.
               </p>
             )}
           {terbukti?.sampai && (
-            <div className="mn-sampai">DIPERKIRAKAN SELESAI — {terbukti.sampai}</div>
+            <div className="mn-sampai">DIPERKIRAKAN SELESAI: {terbukti.sampai}</div>
           )}
           <div className="mn-divider" />
           <div className="mn-status">
             <div className="mn-status-dot" />
-            MAINTENANCE IN PROGRESS — HARAP TUNGGU
+            PEMELIHARAAN SEDANG BERJALAN, HARAP TUNGGU
           </div>
           <a className="mn-btn" href="/menu">← Kembali ke Menu</a>
         </div>

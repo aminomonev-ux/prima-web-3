@@ -54,14 +54,14 @@ export async function DELETE(req: NextRequest) {
   }
   const { password } = await req.json() as { password?: string };
   if (!password) {
-    return NextResponse.json({ ok: false, message: 'Password wajib diisi.' }, { status: 400 });
+    return NextResponse.json({ ok: false, message: 'Kata sandi wajib diisi.' }, { status: 400 });
   }
   const users = await sql`SELECT password_hash FROM users WHERE id = ${session.userId} LIMIT 1`;
   if (!users.length) return NextResponse.json({ ok: false, message: 'User tidak ditemukan.' }, { status: 404 });
   const valid = await verifyPassword(password, (users[0] as Record<string,string>).password_hash);
   if (!valid) {
     await writeAuditLog({ req, eventType: 'LOGIN_FAILED', userId: session.userId, username: session.username, detail: 'Emergency logout password salah' });
-    return NextResponse.json({ ok: false, message: 'Password salah.' }, { status: 403 });
+    return NextResponse.json({ ok: false, message: 'Kata sandi salah.' }, { status: 403 });
   }
   const result = await sql`
     UPDATE user_sessions SET invalidated_at = NOW()

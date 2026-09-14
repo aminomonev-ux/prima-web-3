@@ -60,19 +60,19 @@ export function barisPintu(role: string, appAccess: readonly string[] | null): B
     }
     if (m.peranBawaan === 'SEMUA') {
       return { ...dasar, keadaan: 'semua', bisaDicentang: false, dicentang: punya.has(m.kunci),
-        sebab: 'Terbuka untuk semua peran — memberi akses di sini tidak menambah apa pun.' }
+        sebab: 'Terbuka untuk semua peran. Memberi akses di sini tidak menambah apa pun.' }
     }
     if (m.peranBawaan.includes(role)) {
       return { ...dasar, keadaan: 'peran', bisaDicentang: false, dicentang: punya.has(m.kunci),
-        sebab: `Terbuka karena peran ${namaPeran} — mencabut centang tidak menutupnya.` }
+        sebab: `Terbuka karena peran ${namaPeran}. Melepas centang tidak menutupnya.` }
     }
     if (!m.bolehDigrant) {
       return { ...dasar, keadaan: 'tak-digrant', bisaDicentang: false, dicentang: false,
-        sebab: `Hanya untuk ${m.peranBawaan.map((r) => ROLE_LABELS[r] ?? r).join(', ')} — tidak bisa diberikan satu per satu.` }
+        sebab: `Hanya untuk ${m.peranBawaan.map((r) => ROLE_LABELS[r] ?? r).join(', ')}. Tidak bisa diberikan per orang.` }
     }
     return punya.has(m.kunci)
       ? { ...dasar, keadaan: 'grant', bisaDicentang: true, dicentang: true,
-          sebab: 'Terbuka karena diberi akses — mencabut centang akan menutupnya.' }
+          sebab: 'Terbuka karena diberi akses. Melepas centang akan menutupnya.' }
       : { ...dasar, keadaan: 'tertutup', bisaDicentang: true, dicentang: false,
           sebab: 'Tertutup. Peran ini tidak mendapatkannya dengan sendirinya.' }
   })

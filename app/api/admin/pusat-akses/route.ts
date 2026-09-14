@@ -313,7 +313,7 @@ export async function DELETE(req: NextRequest) {
       { role: string; username: string; deleted_at: Date | null }[]
     const t = rows[0]
     if (!t) return tolak('User tidak ditemukan.', 404)
-    if (t.role === 'SUPER_ADMIN') return tolak('Akun SUPER_ADMIN tidak dapat dihapus dari sini.', 403)
+    if (t.role === 'SUPER_ADMIN') return tolak('Akun Super Admin tidak bisa dihapus dari sini.', 403)
     if (id === session.userId) return tolak('Tidak dapat menghapus akun sendiri.', 403)
 
     if (mode === 'arsip') {

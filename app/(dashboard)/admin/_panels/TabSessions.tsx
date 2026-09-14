@@ -47,7 +47,7 @@ export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isS
   async function forceLogout(sid: string, username: string) {
     const ya = await confirmDialog({
       title: `Putuskan sesi ${username}?`,
-      message: 'Ia akan diminta masuk lagi pada permintaan berikutnya. Akun & perannya tidak berubah.',
+      message: 'Ia akan diminta masuk lagi saat membuka halaman berikutnya. Akun dan perannya tidak berubah.',
       confirmLabel: 'Putuskan sesi',
     });
     if (!ya) return;
@@ -61,7 +61,7 @@ export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isS
       const j = await fetchJson('/api/admin/sessions', { method:'DELETE', body:JSON.stringify({password:emPw}) });
       if (j.ok) {
         const deleted = (j as { deleted?: number }).deleted ?? 0;
-        toast.success(`Emergency logout: ${deleted} sesi dihapus.`); setEmModal(false); setEmPw(''); load();
+        toast.success(`${deleted} sesi dihentikan.`); setEmModal(false); setEmPw(''); load();
       }
       else setEmErr(j.message);
     } finally { setEmLoad(false); }
@@ -111,16 +111,16 @@ export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isS
         <div className="ap-section-title" style={{margin:0}}>DAFTAR SESI AKTIF</div>
         <div className="ap-row">
           <input className="ap-input" style={{width:220}} placeholder="Cari username atau IP..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>REFRESH</PrimaButton>
+          <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>MUAT ULANG</PrimaButton>
           {isSA && (
             <PrimaButton variant="danger" size="sm" iconLeft={<AlertTriangle size={12}/>}
-              onClick={()=>{setEmModal(true);setEmErr('');}}>EMERGENCY LOGOUT</PrimaButton>
+              onClick={()=>{setEmModal(true);setEmErr('');}}>PUTUSKAN SEMUA SESI</PrimaButton>
           )}
         </div>
       </div>
 
       {loading ? (
-        <div style={{textAlign:'center',padding:40,color:'var(--ap-dim)',letterSpacing:2}}>LOADING...</div>
+        <div style={{textAlign:'center',padding:40,color:'var(--ap-dim)',letterSpacing:2}}>MEMUAT…</div>
       ) : (
         <div className="ap-table-wrap">
           <table className="ap-table">
@@ -168,21 +168,21 @@ export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isS
         <div className="ap-modal-bg" onClick={e=>{if(e.target===e.currentTarget){setEmModal(false);setEmPw('');}}}>
           <div className="ap-modal-box danger">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div className="ap-modal-title" style={{color:'var(--ap-bad-fg)'}}><AlertTriangle size={16}/> EMERGENCY LOGOUT</div>
+              <div className="ap-modal-title" style={{color:'var(--ap-bad-fg)'}}><AlertTriangle size={16}/> PUTUSKAN SEMUA SESI</div>
               <button style={{background:'none',border:'none',color:'var(--ap-dim)',cursor:'pointer'}} onClick={()=>{setEmModal(false);setEmPw('');}}><X size={18}/></button>
             </div>
             <p style={{fontSize:12,color:'var(--ap-fg2)',marginBottom:16,lineHeight:1.6}}>
-              Aksi ini akan <span style={{color:'var(--ap-bad-fg)',fontWeight:700}}>menghapus semua sesi aktif</span> kecuali sesi Anda. Konfirmasi dengan password Anda.
+              Semua orang <span style={{color:'var(--ap-bad-fg)',fontWeight:700}}>harus masuk ulang</span>, kecuali Anda. Ketik kata sandi Anda untuk melanjutkan.
             </p>
             {/* Tetap sebaris, bukan toast: modalnya tidak tertutup saat gagal, dan
                 alasannya harus terbaca tepat di atas kotak kata sandi yang salah. */}
             {emErr && <div className="ap-sk-ingat">{emErr}</div>}
-            <input className="ap-input" type="password" placeholder="Password Anda..." value={emPw} onChange={e=>setEmPw(e.target.value)} style={{marginBottom:14}}/>
+            <input className="ap-input" type="password" placeholder="Kata sandi Anda" value={emPw} onChange={e=>setEmPw(e.target.value)} style={{marginBottom:14}}/>
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <PrimaButton variant="ghost" size="sm" onClick={()=>{setEmModal(false);setEmPw('');}}>Batal</PrimaButton>
               <PrimaButton variant="danger" size="sm" iconLeft={<AlertTriangle size={11}/>}
                 onClick={doEmergency} disabled={emLoading||!emPw}>
-                {emLoading ? 'Proses...' : 'KONFIRMASI'}
+                {emLoading ? 'Memproses…' : 'PUTUSKAN'}
               </PrimaButton>
             </div>
           </div>

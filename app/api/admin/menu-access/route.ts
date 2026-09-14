@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
           && !info.editHanyaPeran.includes(peranSasaran)) {
         return NextResponse.json({
           ok: false,
-          message: `Menu ${info.label} memuat data pribadi — yang boleh mengubahnya hanya `
+          message: `Menu ${info.label} memuat data pribadi. Yang boleh mengubahnya hanya `
             + `${info.editHanyaPeran.join(' & ')}. Izin ubah di sini tidak akan berlaku.`,
         }, { status: 400 })
       }
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
     if (b.scope === 'role') {
       // Aturan peran mengenai semua orang berperan itu sekaligus — sengaja lebih sempit.
       if (session.role !== 'SUPER_ADMIN') {
-        return forbidden('Yang boleh mengubah aturan peran hanya SUPER_ADMIN, karena perubahannya kena ke semua orang dengan peran ini.')
+        return forbidden('Hanya Super Admin yang boleh mengubah aturan peran, karena perubahannya berlaku untuk semua orang dengan peran ini.')
       }
       const sebelum = await getIzinPeran(b.appKey, b.role)
       await simpanIzinPeran(b.appKey, b.role, peta, session.userId, b.versi)
@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
     // Alasan yang sama dengan baris SUPER_ADMIN di matriks peran: kalau akunnya bisa
     // dibatasi, cepat atau lambat ada yang mengunci dirinya sendiri di luar.
     if (u.role === 'SUPER_ADMIN') {
-      return forbidden('Akses menu SUPER_ADMIN tidak bisa dibatasi. Kalau akun ini ikut dibatasi, tidak ada lagi yang bisa membetulkan pengaturan yang telanjur salah.')
+      return forbidden('Akses menu Super Admin tidak bisa dibatasi. Kalau dibatasi, tidak ada lagi yang bisa memperbaiki pengaturan yang terlanjur salah.')
     }
 
     const sebelum = await getIzinOrang(b.userId, b.appKey)

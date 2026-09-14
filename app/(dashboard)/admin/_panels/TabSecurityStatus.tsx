@@ -7,6 +7,7 @@ import { Shield, RefreshCw } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { APP_STATUS_LABELS, type AppStatus } from './_shared';
+import { bacaKeadaan, LABEL_KEADAAN } from '@/lib/registry/apps';
 
 export const SEC_CHECKS = [
   { label:'Cloudflare Turnstile', ok:true,  val:'Widget (CF)' },
@@ -56,7 +57,7 @@ export function TabSecurityStatus() {
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <div className="ap-section-title" style={{margin:0}}>SECURITY STATUS OVERVIEW</div>
-        <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>REFRESH</PrimaButton>
+        <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>MUAT ULANG</PrimaButton>
       </div>
 
       {/* Security Level Banner */}
@@ -78,7 +79,7 @@ export function TabSecurityStatus() {
           {[['CHECKS PASSED',`${passedChecks}/${SEC_CHECKS.length}`,'var(--ap-ok-fg)'],
             ['USER AKTIF',stats?.users?.aktif??'-','var(--ap-aksen)'],
             ['SESI AKTIF',stats?.sessions?.aktif??'-','var(--ap-aksen)'],
-            ['APP ONLINE',`${onlineCount}/${totalApps}`,'var(--ap-ok-fg)'],
+            ['MODUL AKTIF',`${onlineCount}/${totalApps}`,'var(--ap-ok-fg)'],
           ].map(([l,v,c])=>(
             <div key={l as string} style={{textAlign:'center'}}>
               <div style={{fontSize:9,color:'var(--ap-dim)',letterSpacing:1.5,marginBottom:3}}>{l as string}</div>
@@ -119,7 +120,7 @@ export function TabSecurityStatus() {
               <div key={key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid var(--ap-line-tipis)'}}>
                 <span style={{fontSize:11,color:'var(--ap-fg2)'}}>{label}</span>
                 <span className={`ap-badge ${appSt[key]==='online'||!appSt[key]?'badge-green':'badge-yellow'}`} style={{fontSize:9}}>
-                  {(appSt[key]??'ONLINE').toUpperCase()}
+                  {LABEL_KEADAAN[bacaKeadaan(appSt[key])]}
                 </span>
               </div>
             ))}

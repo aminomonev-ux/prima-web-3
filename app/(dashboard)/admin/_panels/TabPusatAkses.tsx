@@ -387,7 +387,7 @@ export function TabPusatAkses(
         title: 'Simpan perubahan akses?',
         message: [
           dibuka.length ? `Dibuka: ${dibuka.map(nama).join(', ')}.` : '',
-          ditutup.length ? `Ditutup: ${ditutup.map(nama).join(', ')} — perkecualian menunya ikut dibuang.` : '',
+          ditutup.length ? `Ditutup: ${ditutup.map(nama).join(', ')}. Pengaturan menu khusus di modul itu ikut dihapus.` : '',
           alasanSiap ? 'Alasannya sudah diisi dari permintaan yang bersangkutan.' : '',
         ].filter(Boolean).join('\n\n'),
         label: 'Alasan',
@@ -438,7 +438,7 @@ export function TabPusatAkses(
     }
     const terjawab = j.data?.permintaanDisetujui ?? [];
     toast.success('Tersimpan.'
-      + (j.data?.izinDihapus ? ` ${j.data.izinDihapus} perkecualian menu ikut dibuang.` : '')
+      + (j.data?.izinDihapus ? ` ${j.data.izinDihapus} pengaturan menu khusus ikut dihapus.` : '')
       // Disebutkan, bukan didiamkan: permintaan yang ikut tertutup mengirim notifikasi
       // ke orangnya, dan admin harus tahu apa yang barusan ia kabarkan atas namanya.
       + (terjawab.length ? ` ${terjawab.length} permintaan terjawab (${terjawab.map(q => labelModul(q.appKey)).join(', ')}).` : ''));
@@ -483,16 +483,16 @@ export function TabPusatAkses(
       const jj = j.data;
       const rincian = jj && jj.totalKehilangan > 0
         ? `\n\n${jj.totalKehilangan} baris akan kehilangan pemiliknya:\n`
-          + jj.kehilanganPemilik.map(r => `  · ${r.tabel}.${r.kolom} — ${r.jumlah}`).join('\n')
+          + jj.kehilanganPemilik.map(r => `  · ${r.tabel}.${r.kolom}: ${r.jumlah}`).join('\n')
         : '\n\nTidak ada satu pun baris yang kehilangan pemiliknya.';
       const ikut = jj && jj.totalTerhapus > 0
         ? `\n\n${jj.totalTerhapus} baris IKUT TERHAPUS bersama akunnya:\n`
-          + jj.ikutTerhapus.map(r => `  · ${r.tabel}.${r.kolom} — ${r.jumlah}`).join('\n')
+          + jj.ikutTerhapus.map(r => `  · ${r.tabel}.${r.kolom}: ${r.jumlah}`).join('\n')
         : '';
       const ya = await confirmDialog({
         title: `Hapus permanen ${u.username}?`,
-        message: `Barisnya dibuang dari tabel users dan tidak bisa dikembalikan.${rincian}${ikut}`
-          + '\n\nKalau orangnya cuma pindah atau berhenti, pilih Arsipkan — jejaknya tetap utuh.',
+        message: `Akunnya dihapus dari basis data dan tidak bisa dikembalikan.${rincian}${ikut}`
+          + '\n\nKalau orangnya hanya pindah atau berhenti, pilih Arsipkan. Riwayatnya tetap tersimpan.',
         confirmLabel: 'Hapus permanen',
         variant: 'danger',
       });
@@ -514,7 +514,7 @@ export function TabPusatAkses(
       const ya = await confirmDialog({
         title: `Arsipkan ${u.username}?`,
         message: 'Akunnya dinonaktifkan permanen dan sesinya dihentikan sekarang juga. '
-          + 'Jejak "siapa menyimpan apa" tetap utuh; data pribadinya dianonimisasi cron retensi setelah 5 tahun.',
+          + 'Catatan siapa menyimpan apa tetap utuh. Data pribadinya disamarkan otomatis setelah 5 tahun.',
         confirmLabel: 'Arsipkan',
         variant: 'warning',
       });
@@ -632,7 +632,7 @@ export function TabPusatAkses(
               // SETUJUI langsung memberi akses akan menutup tabnya lalu heran kenapa
               // orangnya tetap terkunci.
               <div className="ap-pa-antrean-nota">
-                SETUJUI mengisi form orang itu — aksesnya baru diberikan saat Anda menekan Simpan.
+                SETUJUI hanya mengisi form orang itu. Aksesnya baru diberikan setelah Anda menekan Simpan.
               </div>
             )}
           </div>
@@ -712,14 +712,14 @@ export function TabPusatAkses(
                 <ShieldAlert size={14}/>
                 <span>
                   Peran akan diubah {ROLE_LABELS[u.role] ?? u.role} → {ROLE_LABELS[draRole] ?? draRole}.
-                  Seluruh perkecualian menu miliknya ikut dibuang — perkecualian diberikan
+                  Semua pengaturan menu khususnya ikut dihapus, karena pengaturan itu diberikan
                   untuk jabatan tertentu, bukan untuk orangnya. Atur ulang setelah tersimpan.
                 </span>
               </div>
             )}
 
             <div className="ap-pa-baris-judul">
-              <div className="ap-section-title" style={{ margin: 0, border: 'none', padding: 0 }}>PINTU MODUL</div>
+              <div className="ap-section-title" style={{ margin: 0, border: 'none', padding: 0 }}>AKSES MODUL</div>
               <div className="ap-row" style={{ gap: 8 }}>
                 {paket.length > 0 && (
                   <select
@@ -747,7 +747,7 @@ export function TabPusatAkses(
                 <span style={{ flex: 1 }}>
                   {mubazirDraf.length} pemberian akses tidak menambah apa-apa:{' '}
                   <b>{mubazirDraf.map(k => pintuDraf.find(b => b.kunci === k)?.label ?? k).join(', ')}</b>.
-                  {' '}Pintunya sudah terbuka lewat peran, jadi melepasnya tidak menutup apa pun.
+                  {' '}Akses itu sudah didapat dari perannya, jadi melepas centangnya tidak menutup apa pun.
                 </span>
                 <PrimaButton variant="ghost" size="sm" disabled={sibuk}
                   onClick={() => setDraGrant(g => g.filter(k => !mubazirDraf.includes(k)))}>
@@ -896,7 +896,7 @@ export function TabPusatAkses(
                   <div className="ap-pa-catatan">
                     <Info size={13}/>
                     Jejak audit dipangkas otomatis setiap {garisBulan} bulan. Yang lebih
-                    lama dari itu memang sudah tidak ada — bukan berarti tidak pernah terjadi.
+                    lama dari itu memang sudah tidak ada, bukan berarti tidak pernah terjadi.
                   </div>
 
                   {garis.length === 0 ? (
@@ -1073,8 +1073,8 @@ function KelolaPaket(
           <input className="ap-input" value={ket} onChange={e => setKet(e.target.value)}
             placeholder="Keterangan singkat (opsional)"/>
           <div className="ap-pa-k-sub">
-            Akan menyimpan {calon.app_access.length} pintu modul dan {jumlahMenu} pengaturan menu.
-            Peran TIDAK ikut — memberinya punya kuota dan mencabut sesi, jadi ia aksi tersendiri.
+            Akan menyimpan {calon.app_access.length} akses modul dan {jumlahMenu} pengaturan menu.
+            Peran tidak ikut disimpan dalam paket, karena perubahan peran terikat kuota dan diatur terpisah.
           </div>
           <PrimaButton size="sm" variant="primary" disabled={kerja || !nama.trim()}
             onClick={() => void kirim(
@@ -1101,7 +1101,7 @@ function KelolaPaket(
                     onClick={async () => {
                       if (!(await confirmDialog({
                         title: `Hapus paket "${p.nama}"?`,
-                        message: 'Wewenang orang yang sudah memakainya TIDAK berubah — paket cuma titik awal.',
+                        message: 'Akses orang yang sudah memakai paket ini tidak ikut berubah. Paket hanya titik awal pengisian.',
                         confirmLabel: 'Hapus paket',
                       }))) return;
                       await kirim({ aksi: 'hapus-paket', nama: p.nama }, `Paket "${p.nama}" dihapus.`);
@@ -1136,7 +1136,7 @@ function BuatAkun({ onTutup, onJadi }: { onTutup: () => void; onJadi: (id: numbe
     if (!j.ok) { toast.error(j.message ?? 'Gagal membuat akun.'); return; }
     await confirmDialog({
       title: `Akun ${username} dibuat`,
-      message: `Kata sandi sementara:\n\n${sandi}\n\nSalin sekarang — kalimat ini tidak bisa ditampilkan lagi.`,
+      message: `Kata sandi sementara:\n\n${sandi}\n\nSalin sekarang. Kata sandi ini tidak bisa ditampilkan lagi.`,
       confirmLabel: 'Sudah saya salin', cancelLabel: 'Tutup', variant: 'primary',
     });
     await onJadi(j.data?.id ?? 0);
@@ -1206,7 +1206,7 @@ async function resetSandi(id: number, username: string, setSibuk: (v: boolean) =
   if (!j.ok) { toast.error(j.message ?? 'Gagal reset kata sandi.'); return; }
   await confirmDialog({
     title: 'Kata sandi sementara',
-    message: `${sandi}\n\nSalin sekarang — kalimat ini tidak bisa ditampilkan lagi. `
+    message: `${sandi}\n\nSalin sekarang. Kata sandi ini tidak bisa ditampilkan lagi. `
       + 'Semua sesi lama sudah dihentikan.',
     confirmLabel: 'Sudah saya salin',
     cancelLabel: 'Tutup',

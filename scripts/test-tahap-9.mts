@@ -50,8 +50,8 @@ function badan(teks: string, tanda: string): string {
 console.log('\nA · tiga keadaan sakelar')
 
 cek('keadaannya tepat tiga', KEADAAN_SAKELAR.length === 3 && KEADAAN_SAKELAR.includes('readonly'))
-cek('BEKU punya label sendiri, bukan menumpang MAINTENANCE',
-  LABEL_KEADAAN.readonly === 'BEKU' && LABEL_KEADAAN.readonly !== LABEL_KEADAAN.maintenance)
+cek('hanya baca punya label sendiri, bukan menumpang pemeliharaan',
+  LABEL_KEADAAN.readonly === 'HANYA BACA' && LABEL_KEADAAN.readonly !== LABEL_KEADAAN.maintenance)
 
 // Baris `app_config` yang belum ada = modul baru, bukan modul mati.
 cek('nilai kosong dibaca online', bacaKeadaan(undefined) === 'online' && bacaKeadaan(null) === 'online')
@@ -193,20 +193,23 @@ cek('sakelar digambar dari daftar keadaan, bukan tuas dua posisi',
 cek('BEKU dimatikan untuk sakelar tanpa jalur tulis',
   panel.includes("k === 'readonly' && !s.bisaBeku"))
 cek('…dengan sebab yang tertulis', panel.includes('data-tooltip={dilarang ? SEBAB_TAK_BISA_BEKU'))
-cek('SUPER_ADMIN yang menembus disebut di layar', panel.includes('SUPER_ADMIN tetap bisa menembus'))
-cek('induk beku diberi kalimat sendiri', panel.includes('Sudah ikut beku karena ${namaAtas} dibekukan.'))
+cek('Super Admin yang menembus disebut di layar',
+  panel.includes('Super Admin tetap bisa masuk dan menyimpan dalam kedua keadaan'))
+cek('induk beku diberi kalimat sendiri',
+  panel.includes('Ikut dalam mode hanya baca karena ${namaAtas} sedang hanya baca.'))
 // Ketahuan saat dijalankan, bukan dari kode: spanduk peringatan menghitung sakelar
 // yang TIDAK online — jadi modul beku ikut masuk, dan itu benar (modul beku tanpa
 // kalimat justru lebih membingungkan: layarnya terbuka dan tampak normal). Yang salah
 // KALIMATNYA — ia menjanjikan orang melihat "sedang dipelihara", padahal yang mereka
 // temui tombol simpan yang mati di layar yang jalan.
 cek('spanduk peringatan tidak menyebut modul beku sebagai mati',
-  panel.includes('sakelar mati atau beku tanpa keterangan')
+  panel.includes('sakelar tidak aktif dan belum punya keterangan')
+  && panel.includes('tombol simpan yang mati')
   && !panel.includes('sedang dipelihara'))
 
 const menu = buangKomentar(baca('app/(dashboard)/menu/menu-client.tsx'))
 cek('kartu /menu punya keadaan BEKU', menu.includes("const isBeku    = !locked && st.keadaan === 'readonly'"))
-cek('…berlencana BEKU', menu.includes("isBeku ? 'BEKU'"))
+cek('…berlencana HANYA BACA dari LABEL_KEADAAN', menu.includes('isBeku ? LABEL_KEADAAN.readonly'))
 // Modul beku HARUS tetap bisa dibuka — itu seluruh gunanya. Kartu yang diabukan &
 // tidak bisa diklik akan mengubah pembekuan jadi pemadaman di mata pemakainya.
 cek('kartu beku tidak ikut diabukan seperti maintenance',
@@ -226,7 +229,7 @@ for (const terlarang of ['lib/data/db', 'lib/security/guard', 'next/server', 'ne
 // Tipe boleh — ia dihapus saat kompilasi. Nilai TIDAK, dan bedanya satu kata.
 cek('tipe InfoBeku diimpor sebagai tipe saja',
   !spanduk.includes("from '@/lib/security/beku'"))
-cek('spanduk membedakan yang menembus', spanduk.includes('kecuali untuk Anda'))
+cek('spanduk membedakan yang menembus', spanduk.includes('karena Anda Super Admin'))
 // Dulu pemeriksaan ini menegaskan spanduk TIDAK menjanjikan tombol mati, dengan catatan:
 // "kalau suatu hari tombolnya BENAR-BENAR dimatikan, pemeriksaan ini yang dicabut lebih
 // dulu". Hari itu Tahap 14b (K1=C). Janjinya kini hanya boleh ada BERSAMA mekanismenya.
@@ -264,7 +267,7 @@ cek('…dengan kalimat yang sama dengan layar', rute.includes('SEBAB_TAK_BISA_BE
 cek('kalimat itu tinggal di SATU tempat',
   hitung(buangKomentar(baca('lib/registry/apps.ts')), 'export const SEBAB_TAK_BISA_BEKU') === 1)
 cek('…dan memang menjelaskan sebabnya, bukan sekadar melarang',
-  SEBAB_TAK_BISA_BEKU.length > 30 && SEBAB_TAK_BISA_BEKU.includes('tidak menutup apa pun'))
+  SEBAB_TAK_BISA_BEKU.length > 30 && SEBAB_TAK_BISA_BEKU.includes('tidak punya data yang bisa diubah'))
 // Dirujuk namanya, bukan disalin. Dua salinan kalimat yang sama pasti mulai berbeda
 // bunyi begitu salah satunya disunting (L78) — dan di sini bedanya akan muncul sebagai
 // layar dan API yang menolak dengan alasan berlainan.
@@ -463,9 +466,9 @@ cek('modul tanpa sakelar dijawab TIDAK_BEKU, bukan dilempar',
 // memakainya: pembekuan seluruh aplikasi berbunyi "Modul sedang dibekukan", lalu orang
 // bertanya ke penanggung jawab modulnya soal sesuatu yang berlaku di mana-mana (11.3).
 cek('spanduk menyebut pembekuan global sebagai global',
-  spanduk.includes('Seluruh aplikasi sedang dibekukan'))
+  spanduk.includes('Seluruh aplikasi sedang dalam mode hanya baca.'))
 cek('…dan tetap menyebut modul kalau memang cuma modulnya',
-  spanduk.includes('Modul sedang dibekukan'))
+  spanduk.includes('Modul ini sedang dalam mode hanya baca.'))
 
 console.log(`\n${lulus + gagal} pemeriksaan · ${lulus} lulus · ${gagal} gagal`)
 if (gagal > 0) {

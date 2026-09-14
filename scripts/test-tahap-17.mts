@@ -50,7 +50,7 @@ console.log('\nA · keteranganSakelar (penyebab, bukan kunci yang ditanyakan)')
 }
 {
   const k = keteranganSakelar({ [R]: 'maintenance', [`${R}_pesan`]: 'Tutup buku Juni', [`${R}_sampai`]: '2026-09-20T14:30' }, [B, R])
-  cek('sub mati → nama & kalimat SUB', k.label === 'BLUD — Realisasi' && k.pesan === 'Tutup buku Juni' && k.sampai === '20 September 2026, 14.30 WIB', k.sampai)
+  cek('sub mati → nama & kalimat SUB', k.label === 'Realisasi BLUD' && k.pesan === 'Tutup buku Juni' && k.sampai === '20 September 2026, 14.30 WIB', k.sampai)
 }
 {
   const k = keteranganSakelar({ [KUNCI_GLOBAL]: 'maintenance', [`${KUNCI_GLOBAL}_pesan`]: 'Migrasi server', [B]: 'maintenance' }, [B])
@@ -67,7 +67,7 @@ cek('BEKU tidak diumumkan (modul beku masih bisa dibuka)',
   label(daftarPemeliharaanDari({ app_status_dashboard: 'maintenance', app_status_iki: 'readonly' })) === 'Dashboard')
 cek('induk mati disebut SEKALI (lingkup Realisasi tidak menggandakannya)',
   label(daftarPemeliharaanDari({ [B]: 'maintenance' })) === 'BLUD')
-cek('sub mati sendirian disebut dengan namanya', label(daftarPemeliharaanDari({ [R]: 'maintenance' })) === 'BLUD — Realisasi')
+cek('sub mati sendirian disebut dengan namanya', label(daftarPemeliharaanDari({ [R]: 'maintenance' })) === 'Realisasi BLUD')
 cek('global mati → hanya global, bukan sepuluh modul',
   (() => { const d = daftarPemeliharaanDari({ [KUNCI_GLOBAL]: 'maintenance', app_status_dashboard: 'maintenance' }); return d.length === 1 && d[0].global })())
 cek('sakelar fitur (RIMA) bukan modul, tidak diumumkan', daftarPemeliharaanDari({ app_status_rima_query: 'maintenance' }).length === 0)

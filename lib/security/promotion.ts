@@ -174,7 +174,7 @@ export async function getActiveRoleCount(role: string): Promise<number> {
 /** Error kuota — caller bisa narrow `instanceof` untuk map ke HTTP 409. */
 export class QuotaFullError extends Error {
   constructor(public readonly role: string, public readonly count: number, public readonly quota: number) {
-    super(`Quota role ${role} sudah penuh (${count}/${quota}).`);
+    super(`Kuota peran ${role} sudah penuh (${count}/${quota}).`);
     this.name = 'QuotaFullError';
   }
 }

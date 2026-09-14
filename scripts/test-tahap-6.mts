@@ -37,7 +37,7 @@ console.log('\nA · dropdown peran bersama (T-8)')
 
 cek('kuota ditulis di label opsi', labelPeran('ADMIN', { role: 'ADMIN', count: 5, quota: 6, full: false }) === 'Admin Staff (5/6)',
   labelPeran('ADMIN', { role: 'ADMIN', count: 5, quota: 6, full: false }))
-cek('yang penuh dikatakan penuh', labelPeran('ADMIN', { role: 'ADMIN', count: 6, quota: 6, full: true }).includes('— penuh'))
+cek('yang penuh dikatakan penuh', labelPeran('ADMIN', { role: 'ADMIN', count: 6, quota: 6, full: true }) === 'Admin Staff (6/6, penuh)')
 // Peran tanpa kuota TIDAK diberi penanda "(0/0)" — angka yang tidak berarti apa-apa
 // tetap terbaca sebagai batas oleh yang melihatnya.
 cek('peran tanpa kuota tanpa penanda', labelPeran('PROGRAM', { role: 'PROGRAM', count: 9, quota: 0, full: false }) === 'Program')
@@ -127,8 +127,8 @@ cek('kuota peran ditampilkan', menuPanel.includes('kuota ${stat.count}/${stat.qu
 // peran penuh (§4.6).
 cek('baris pintunya BACA-SAJA, tanpa saklar',
   !/function PintuPeran\([\s\S]*?\n\}/.test(menuPanel) || !(/function PintuPeran\([\s\S]*?\n\}/.exec(menuPanel)![0].includes('onChange')))
-cek('…dan mengatakan pintunya diberikan per orang',
-  menuPanel.includes('harus diberikan <b>per orang</b> di Pusat Akses'))
+cek('…dan mengatakan aksesnya diberikan per orang',
+  menuPanel.includes('Harus diberikan <b>per orang</b> di Pusat Akses'))
 
 // ── D · R3 · warna & tombol berhenti diketik ─────────────────────────────────
 console.log('\nD · komponen & token')

@@ -38,12 +38,12 @@ interface PromotionRow {
 }
 
 const STATUS_COLORS: Record<Status, { color: string; bg: string; label: string }> = {
-  PENDING:   { color: 'var(--ap-warn)', bg: 'rgba(186,117,23,0.15)', label: 'Pending' },
-  COOLDOWN:  { color: 'var(--ap-aksen)', bg: 'var(--ap-aksen-bg2)', label: 'Cooldown' },
-  COMPLETED: { color: 'var(--ap-ok)', bg: 'rgba(29,158,117,0.15)', label: 'Completed' },
-  REJECTED:  { color: 'var(--ap-bad-fg)', bg: 'rgba(226,75,74,0.15)',  label: 'Rejected' },
-  EXPIRED:   { color: 'var(--ap-dim)', bg: 'var(--ap-line-tipis)', label: 'Expired' },
-  CANCELLED: { color: 'var(--ap-dim)', bg: 'var(--ap-line-tipis)', label: 'Cancelled' },
+  PENDING:   { color: 'var(--ap-warn)', bg: 'rgba(186,117,23,0.15)', label: 'Menunggu' },
+  COOLDOWN:  { color: 'var(--ap-aksen)', bg: 'var(--ap-aksen-bg2)', label: 'Masa tunggu' },
+  COMPLETED: { color: 'var(--ap-ok)', bg: 'rgba(29,158,117,0.15)', label: 'Selesai' },
+  REJECTED:  { color: 'var(--ap-bad-fg)', bg: 'rgba(226,75,74,0.15)',  label: 'Ditolak' },
+  EXPIRED:   { color: 'var(--ap-dim)', bg: 'var(--ap-line-tipis)', label: 'Kedaluwarsa' },
+  CANCELLED: { color: 'var(--ap-dim)', bg: 'var(--ap-line-tipis)', label: 'Dibatalkan' },
 };
 
 function StatusBadge({ s }: { s: Status }) {
@@ -73,7 +73,7 @@ export function PromotionRequestsPanel() {
       const res = await fetch(`/api/admin/promotion/list${statusParam}`);
       const json = await res.json() as { ok: boolean; data?: PromotionRow[]; message?: string };
       if (!res.ok || !json.ok) {
-        setError(json.message ?? 'Gagal load.');
+        setError(json.message ?? 'Gagal memuat daftar permohonan.');
         setRows([]);
       } else {
         // For HISTORY: filter out PENDING + COOLDOWN.
@@ -81,7 +81,7 @@ export function PromotionRequestsPanel() {
         setRows(tab === 'HISTORY' ? data.filter((r) => !['PENDING','COOLDOWN'].includes(r.status)) : data);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Network error.');
+      setError(e instanceof Error ? e.message : 'Jaringan bermasalah.');
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ export function PromotionRequestsPanel() {
       const res = await fetch(`/api/admin/promotion/${id}/approve`, { method: 'POST' });
       const json = await res.json() as { ok: boolean; message?: string };
       if (!res.ok || !json.ok) {
-        toast.error(json.message ?? 'Gagal approve.');
+        toast.error(json.message ?? 'Gagal menyetujui.');
       } else {
         setSelected(null);
         await load();
@@ -105,7 +105,7 @@ export function PromotionRequestsPanel() {
 
   async function handleReject(id: number, reason: string) {
     if (reason.trim().length < 10) {
-      toast.error('Alasan reject minimal 10 karakter.');
+      toast.error('Alasan penolakan minimal 10 karakter.');
       return;
     }
     setActing(true);
@@ -117,7 +117,7 @@ export function PromotionRequestsPanel() {
       });
       const json = await res.json() as { ok: boolean; message?: string };
       if (!res.ok || !json.ok) {
-        toast.error(json.message ?? 'Gagal reject.');
+        toast.error(json.message ?? 'Gagal menolak.');
       } else {
         setRejectingRow(null);
         setRejectReason('');
@@ -128,17 +128,17 @@ export function PromotionRequestsPanel() {
   }
 
   async function handleCancelCooldown(id: number) {
-    if (!(await confirmDialog({ title: 'Batalkan Cooldown', message: 'Batalkan cooldown? User akan diberi notif.', confirmLabel: 'Batalkan', variant: 'warning' }))) return;
+    if (!(await confirmDialog({ title: 'Batalkan masa tunggu?', message: 'Peran barunya tidak jadi berlaku. Pemohon akan diberi tahu lewat notifikasi.', confirmLabel: 'Batalkan', variant: 'warning' }))) return;
     setActing(true);
     try {
       const res = await fetch(`/api/admin/promotion/${id}/cancel-cooldown`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Cancelled by SA' }),
+        body: JSON.stringify({ reason: 'Dibatalkan Super Admin' }),
       });
       const json = await res.json() as { ok: boolean; message?: string };
       if (!res.ok || !json.ok) {
-        toast.error(json.message ?? 'Gagal cancel cooldown.');
+        toast.error(json.message ?? 'Gagal membatalkan masa tunggu.');
       } else {
         await load();
       }
@@ -160,12 +160,12 @@ export function PromotionRequestsPanel() {
               fontSize: 12, fontWeight: 600, fontFamily: 'Inter, sans-serif',
             }}
           >
-            {t === 'HISTORY' ? 'History' : STATUS_COLORS[t].label}
+            {t === 'HISTORY' ? 'Riwayat' : STATUS_COLORS[t].label}
           </button>
         ))}
         <div style={{ marginLeft: 'auto' }}>
           <PrimaButton variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
-            {loading ? 'Loading…' : 'Refresh'}
+            {loading ? 'Memuat…' : 'Muat ulang'}
           </PrimaButton>
         </div>
       </div>
@@ -186,9 +186,9 @@ export function PromotionRequestsPanel() {
           <thead>
             <tr style={{ background: 'rgba(124,92,252,0.08)' }}>
               <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Pemohon</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>From → To</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Dari → Ke</th>
               <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Status</th>
-              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Submitted</th>
+              <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--ap-dim)', fontWeight: 600 }}>Diajukan</th>
               <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--ap-dim)', fontWeight: 600 }}>Aksi</th>
             </tr>
           </thead>
@@ -211,10 +211,10 @@ export function PromotionRequestsPanel() {
                   {new Date(r.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 </td>
                 <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <PrimaButton variant="ghost" size="sm" onClick={() => setSelected(r)}>Review</PrimaButton>
+                  <PrimaButton variant="ghost" size="sm" onClick={() => setSelected(r)}>Periksa</PrimaButton>
                   {r.status === 'COOLDOWN' && (
                     <PrimaButton variant="warning" size="sm" onClick={() => void handleCancelCooldown(r.id)} disabled={acting}>
-                      Cancel Cooldown
+                      Batalkan masa tunggu
                     </PrimaButton>
                   )}
                 </td>
@@ -246,13 +246,13 @@ export function PromotionRequestsPanel() {
               <span style={{ color: 'var(--ap-dim)' }}>Pemohon</span>
               <span><b>{selected.nama_lengkap ?? selected.username}</b> ({selected.username}){selected.email ? ` · ${selected.email}` : ''}</span>
 
-              <span style={{ color: 'var(--ap-dim)' }}>Upgrade</span>
+              <span style={{ color: 'var(--ap-dim)' }}>Naik peran</span>
               <span>{ROLE_LABELS[selected.from_role] ?? selected.from_role} → <b>{ROLE_LABELS[selected.to_role] ?? selected.to_role}</b></span>
 
               <span style={{ color: 'var(--ap-dim)' }}>Status</span>
               <span><StatusBadge s={selected.status} /></span>
 
-              <span style={{ color: 'var(--ap-dim)' }}>Submitted</span>
+              <span style={{ color: 'var(--ap-dim)' }}>Diajukan</span>
               <span>{new Date(selected.created_at).toLocaleString('id-ID')}</span>
 
               <span style={{ color: 'var(--ap-dim)' }}>IP</span>
@@ -263,13 +263,13 @@ export function PromotionRequestsPanel() {
 
               {selected.rejected_reason && (
                 <>
-                  <span style={{ color: 'var(--ap-dim)', alignSelf: 'flex-start' }}>Alasan tolak</span>
+                  <span style={{ color: 'var(--ap-dim)', alignSelf: 'flex-start' }}>Alasan penolakan</span>
                   <span style={{ color: 'var(--ap-bad-fg)', whiteSpace: 'pre-wrap' }}>{selected.rejected_reason}</span>
                 </>
               )}
               {selected.approver_username && (
                 <>
-                  <span style={{ color: 'var(--ap-dim)' }}>Approver</span>
+                  <span style={{ color: 'var(--ap-dim)' }}>Disetujui oleh</span>
                   <span>{selected.approver_username}</span>
                 </>
               )}
@@ -280,16 +280,16 @@ export function PromotionRequestsPanel() {
               {selected.status === 'PENDING' && (
                 <>
                   <PrimaButton variant="danger" onClick={() => setRejectingRow(selected)} disabled={acting} iconLeft={<X size={14} />}>
-                    Reject
+                    Tolak
                   </PrimaButton>
                   <PrimaButton variant="success" onClick={() => void handleApprove(selected.id)} disabled={acting} iconLeft={<Check size={14} />}>
-                    {acting ? 'Approving…' : 'Approve'}
+                    {acting ? 'Menyetujui…' : 'Setujui'}
                   </PrimaButton>
                 </>
               )}
               {selected.status === 'COOLDOWN' && (
                 <PrimaButton variant="warning" onClick={() => void handleCancelCooldown(selected.id)} disabled={acting} iconLeft={<Clock size={14} />}>
-                  Cancel Cooldown
+                  Batalkan masa tunggu
                 </PrimaButton>
               )}
             </div>
@@ -314,13 +314,13 @@ export function PromotionRequestsPanel() {
             border: '1px solid rgba(226,75,74,0.3)',
             maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
           }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Reject permohonan #{rejectingRow.id}</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Tolak permohonan #{rejectingRow.id}</h3>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={4}
               maxLength={500}
-              placeholder="Alasan reject (min 10 karakter)…"
+              placeholder="Alasan penolakan (minimal 10 karakter)…"
               style={{
                 width: '100%', padding: 10, borderRadius: 6,
                 background: 'var(--ap-canvas)', color: 'var(--ap-fg)',
@@ -331,7 +331,7 @@ export function PromotionRequestsPanel() {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <PrimaButton variant="ghost" onClick={() => { setRejectingRow(null); setRejectReason(''); }} disabled={acting}>Batal</PrimaButton>
               <PrimaButton variant="danger" onClick={() => void handleReject(rejectingRow.id, rejectReason)} disabled={acting}>
-                {acting ? 'Rejecting…' : 'Reject'}
+                {acting ? 'Menolak…' : 'Tolak'}
               </PrimaButton>
             </div>
           </div>

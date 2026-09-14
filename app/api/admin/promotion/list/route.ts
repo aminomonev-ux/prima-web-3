@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     }
     if (session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN.' }, { status: 403 });
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin.' }, { status: 403 });
     }
     const limited = await promotionRateLimit(session.userId, 'list', 60);
     if (limited) return limited;

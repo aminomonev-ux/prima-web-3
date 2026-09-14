@@ -105,7 +105,7 @@ cek(`${barisMatriks} kombinasi: kartu = API DPA, kartu+sebagian = API Realisasi`
   const k = sakelarKartu({ muat: 'ada', data: { [INDUK]: 'online', [SUB]: 'readonly' } }, 'blud')
   cek('Realisasi beku sendirian: kartu BLUD menyebutnya, tidak berbunyi normal',
     k.keadaan === 'online' && k.sebagian.length === 1 && k.sebagian[0].keadaan === 'readonly'
-    && k.sebagian[0].kunci === SUB && k.sebagian[0].label === 'BLUD — Realisasi')
+    && k.sebagian[0].kunci === SUB && k.sebagian[0].label === 'Realisasi BLUD')
 }
 {
   const k = sakelarKartu({ muat: 'ada', data: { [INDUK]: 'readonly', [SUB]: 'readonly' } }, 'blud')
@@ -147,7 +147,7 @@ cek('sumber kalimat = sakelar penyebab', beku.includes('const sumber = sebab.kun
 cek('bagian disebut hanya kalau penyebabnya bukan modul itu sendiri',
   beku.includes("bagian: !global && sumber !== utama ? (LABEL_SAKELAR[sumber] ?? '') : ''"))
 const spanduk = buangKomentar(baca('components/ui/SpandukBeku.tsx'))
-cek('spanduk menyebut bagiannya', spanduk.includes('`${bagian} sedang dibekukan.`'))
+cek('spanduk menyebut bagiannya', spanduk.includes('`${bagian} sedang dalam mode hanya baca.`'))
 
 // ── D · K1=C: tombol tulis mati dengan sebab, lewat konteks, bukan izin ──────
 console.log('\nD · PrimaButton `menulis` + KunciTulisProvider (T12)')
@@ -160,7 +160,7 @@ const BEKU: InfoBeku = { beku: true, tembus: false, pesan: '', sampai: '', globa
 {
   const h = html(BEKU, { menulis: true })
   cek('beku: tombol menulis ber-aria-disabled', h.includes('aria-disabled="true"'))
-  cek('…dengan tooltip sebabnya', h.includes('data-tooltip="Modul ini sedang dibekukan admin, jadi menyimpan ditutup sementara."'))
+  cek('…dengan tooltip sebabnya', h.includes('data-tooltip="Modul ini sedang dalam mode hanya baca, jadi belum bisa menyimpan."'))
   // `disabled` akan memudarkan tooltip lewat opacity & membuatnya tak bisa difokus.
   cek('…BUKAN atribut disabled', !/\sdisabled(=""|\s|>)/.test(h))
 }
@@ -171,8 +171,8 @@ cek('tanpa provider: tombol menulis hidup', !renderToStaticMarkup(createElement(
 cek('tooltip asli tidak hilang saat tidak dikunci',
   html(null, { menulis: true, 'data-tooltip': 'Simpan ke server' }).includes('data-tooltip="Simpan ke server"'))
 cek('sebab menyebut bagian & global',
-  sebabKunciTulis({ global: false, bagian: 'BLUD — Realisasi' }).startsWith('BLUD — Realisasi sedang dibekukan')
-  && sebabKunciTulis({ global: true, bagian: '' }).startsWith('Seluruh aplikasi sedang dibekukan'))
+  sebabKunciTulis({ global: false, bagian: 'Realisasi BLUD' }).startsWith('Realisasi BLUD sedang dalam mode hanya baca')
+  && sebabKunciTulis({ global: true, bagian: '' }).startsWith('Seluruh aplikasi sedang dalam mode hanya baca'))
 
 const tombol = buangKomentar(baca('components/ui/PrimaButton.tsx'))
 // Klik yang dicegat juga menahan submit form (Renaksi memakai `type="submit"`).

@@ -189,7 +189,7 @@ const tolakMati = (pesan: string) => balasSakelar('MODUL_MATI', pesan);
 const tolakBeku = () =>
   balasSakelar(
     'MODUL_BACA_SAJA',
-    'Modul ini sedang dibekukan admin. Membuka dan mencetak tetap bisa, menyimpan ditutup sementara.',
+    'Modul ini sedang dalam mode hanya baca. Anda tetap bisa membuka dan mencetak, tapi belum bisa menyimpan.',
   );
 
 export async function modulMati(
@@ -203,7 +203,7 @@ export async function modulMati(
     return tolakMati('Modul sedang tidak tersedia. Coba lagi beberapa saat lagi.');
   }
   if (keadaan === 'maintenance') {
-    return tolakMati('Modul ini sedang dimatikan admin untuk pemeliharaan.');
+    return tolakMati('Modul ini sedang dalam pemeliharaan. Silakan coba lagi nanti.');
   }
   if (keadaan === 'readonly' && (await sedangMenulis())) return tolakBeku();
   return null;

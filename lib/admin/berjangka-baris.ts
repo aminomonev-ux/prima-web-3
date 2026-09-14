@@ -79,7 +79,7 @@ export function labelJangka(berakhir: string, hariIni: string): string {
   if (!tgl) return ''
   const sisa = sisaHari(berakhir, hariIni)
   if (sisa === null) return `terbuka sampai ${tgl}`
-  if (sisa < 0) return `sudah lewat ${tgl} — menunggu pencabutan otomatis`
+  if (sisa < 0) return `sudah lewat ${tgl}, menunggu dicabut otomatis`
   if (sisa === 0) return `terbuka sampai ${tgl} (hari terakhir)`
   return `terbuka sampai ${tgl} (${sisa} hari lagi)`
 }

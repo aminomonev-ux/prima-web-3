@@ -21,7 +21,7 @@
 //      tanpa menempel kertas. Yang ditulis di sini muncul di `/maintenance` dan di
 //      kartu `/menu` — dan hanya selama sakelarnya memang mati.
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { MessageSquare, ShieldCheck, ShieldAlert, Save, X, Snowflake, Power } from 'lucide-react';
+import { MessageSquare, ShieldCheck, ShieldAlert, Save, X, Lock, Power } from 'lucide-react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -89,11 +89,11 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
     // dihalangi dialog.
     if (kunci === KUNCI_GLOBAL && baru !== 'online') {
       const jadi = baru === 'maintenance'
-        ? 'Semua modul akan tertutup dan orang yang membukanya mendarat di halaman pemeliharaan.'
-        : 'Semua modul masih bisa dibuka dan dicetak, tapi tidak ada yang bisa menyimpan apa pun.';
+        ? 'Semua modul akan ditutup. Orang yang membukanya akan melihat halaman pemeliharaan.'
+        : 'Semua modul masih bisa dibuka dan dicetak, tapi tidak ada yang bisa menyimpan.';
       const lanjut = await confirmDialog({
         title: `${LABEL_KEADAAN[baru]} untuk seluruh aplikasi`,
-        message: `${jadi}\n\nAnda sendiri tetap bisa masuk sebagai SUPER_ADMIN, dan Admin Panel tidak ikut tertutup — jadi sakelar ini selalu bisa dikembalikan dari layar ini.\n\nTulis keterangannya sesudah ini supaya orang tahu sebabnya dan sampai kapan.`,
+        message: `${jadi}\n\nAnda tetap bisa masuk sebagai Super Admin, dan Admin Panel tidak ikut ditutup. Sakelar ini selalu bisa dikembalikan dari layar ini.\n\nSesudah ini, tulis keterangannya supaya orang tahu alasannya dan sampai kapan.`,
         confirmLabel: LABEL_KEADAAN[baru],
         variant: baru === 'maintenance' ? 'danger' : 'warning',
       });
@@ -119,18 +119,18 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
   return (
     <div>
       <div className="ap-section-title">SAKELAR APLIKASI</div>
-      {!isSA && <div className="ap-sk-ingat">Hanya SUPER_ADMIN yang dapat mengubah status aplikasi.</div>}
+      {!isSA && <div className="ap-sk-ingat">Hanya Super Admin yang dapat mengubah status aplikasi.</div>}
 
       {/* Ditulis di layar, bukan cuma di konsep. SUPER_ADMIN menembus ketiga keadaan —
           kalau tidak disebut, orang yang baru saja membekukan modul lalu masih bisa
           menyimpan akan menyimpulkan pembekuannya tidak bekerja. */}
       <div className="ap-sk-ingat">
-        <Snowflake size={14}/>
+        <Lock size={14}/>
         <span>
-          <b>BEKU</b> menutup penyimpanan tapi membiarkan modul dibuka, dibaca, dan dicetak —
-          untuk tutup buku &amp; rekonsiliasi, saat &ldquo;jangan diubah dulu ya&rdquo; di grup
-          WhatsApp bukan kontrol. <b>MAINTENANCE</b> menutup modulnya sama sekali.
-          SUPER_ADMIN tetap bisa menembus keduanya, jadi ujilah dengan akun lain.
+          <b>{LABEL_KEADAAN.readonly}</b>: modul tetap bisa dibuka, dibaca, dan dicetak, tapi tidak
+          bisa menyimpan. Cocok untuk tutup buku dan rekonsiliasi. <b>{LABEL_KEADAAN.maintenance}</b>:
+          modul ditutup sama sekali. Super Admin tetap bisa masuk dan menyimpan dalam kedua keadaan
+          ini, jadi cobalah dengan akun lain untuk memastikannya.
         </span>
       </div>
 
@@ -142,9 +142,9 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
           <Power size={14}/>
           <span>
             {globalVal === 'maintenance'
-              ? <><b>Seluruh aplikasi sedang DIMATIKAN.</b> Semua modul tertutup untuk semua orang selain SUPER_ADMIN.</>
-              : <><b>Seluruh aplikasi sedang DIBEKUKAN.</b> Semua modul masih bisa dibuka dan dicetak, tapi tidak ada yang bisa menyimpan.</>}
-            {' '}Admin Panel tidak ikut — kembalikan ke ONLINE lewat kartu paling atas kalau sudah selesai.
+              ? <><b>Seluruh aplikasi sedang dalam pemeliharaan.</b> Semua modul ditutup untuk semua orang kecuali Super Admin.</>
+              : <><b>Seluruh aplikasi sedang dalam mode hanya baca.</b> Semua modul masih bisa dibuka dan dicetak, tapi tidak ada yang bisa menyimpan.</>}
+            {' '}Admin Panel tidak ikut. Kalau sudah selesai, kembalikan ke {LABEL_KEADAAN.online} lewat kartu paling atas.
           </span>
         </div>
       )}
@@ -153,9 +153,9 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
         <div className="ap-sk-ingat">
           <MessageSquare size={14}/>
           <span>
-            {tanpaPesan.length} sakelar mati atau beku tanpa keterangan: {tanpaPesan.map(s=>s.label).join(', ')}.
-            Orang yang menabraknya cuma menemukan pintu tertutup atau tombol simpan yang mati,
-            tanpa tahu kenapa maupun sampai kapan.
+            {tanpaPesan.length} sakelar tidak aktif dan belum punya keterangan: {tanpaPesan.map(s=>s.label).join(', ')}.
+            Orang yang membukanya hanya melihat modul yang tertutup atau tombol simpan yang mati,
+            tanpa tahu alasannya dan sampai kapan.
           </span>
         </div>
       )}
@@ -170,7 +170,7 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
           // menyebut "induknya" akan mengirim orang memeriksa sakelar yang sebetulnya
           // masih hidup. Yang ditulis harus sakelar yang benar-benar menahannya.
           const dariAtas = isGlobal ? 'online' : globalVal !== 'online' ? globalVal : indukVal;
-          const namaAtas = !isGlobal && globalVal !== 'online' ? 'sakelar SELURUH APLIKASI' : 'induknya';
+          const namaAtas = !isGlobal && globalVal !== 'online' ? 'sakelar seluruh aplikasi' : 'modul induknya';
           const d        = draf[s.kunci];
           const adaTeks  = Boolean(pesan[s.kunci] || sampai[s.kunci]);
           const bolehIsi = isSA && (!isOnline || adaTeks);
@@ -202,8 +202,8 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                   {dariAtas !== 'online' && val === 'online' && (
                     <div className="ap-sk-sebab">
                       {dariAtas === 'readonly'
-                        ? `Sudah ikut beku karena ${namaAtas} dibekukan.`
-                        : `Sudah ikut mati karena ${namaAtas} dimatikan.`}
+                        ? `Ikut dalam mode hanya baca karena ${namaAtas} sedang hanya baca.`
+                        : `Ikut ditutup karena ${namaAtas} sedang dalam pemeliharaan.`}
                     </div>
                   )}
                 </div>

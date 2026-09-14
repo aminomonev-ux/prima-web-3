@@ -8,7 +8,7 @@
 //
 // Dipakai dua shell (BLUD, PK). Satu komponen, bukan dua salinan: dua kalimat yang
 // menjelaskan hal yang sama pasti mulai berbeda begitu salah satunya disunting (L78).
-import { Snowflake } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 type Props = {
   beku: boolean;
@@ -25,7 +25,7 @@ type Props = {
    * Aturan 11.3 — layar menyebut SEBABNYA, bukan cuma akibatnya.
    */
   global?: boolean;
-  /** Tahap 14a — nama bagian yang dibekukan kalau sebabnya sub-sakelar ("BLUD — Realisasi"). */
+  /** Tahap 14a — nama bagian yang dibekukan kalau sebabnya sub-sakelar ("Realisasi BLUD"). */
   bagian?: string;
 };
 
@@ -38,21 +38,18 @@ export default function SpandukBeku({ beku, tembus, pesan, sampai, global, bagia
       background: 'rgba(55,138,221,.12)', border: '1px solid rgba(55,138,221,.35)',
       color: '#378ADD', fontSize: 12, lineHeight: 1.6,
     }}>
-      <Snowflake size={15} style={{ flex: '0 0 auto', marginTop: 2 }}/>
+      <Lock size={15} style={{ flex: '0 0 auto', marginTop: 2 }}/>
       <div>
-        <b>{global ? 'Seluruh aplikasi sedang dibekukan.' : bagian ? `${bagian} sedang dibekukan.` : 'Modul sedang dibekukan.'}</b>{' '}
+        <b>{global ? 'Seluruh aplikasi sedang dalam mode hanya baca.' : bagian ? `${bagian} sedang dalam mode hanya baca.` : 'Modul ini sedang dalam mode hanya baca.'}</b>{' '}
         {tembus
           // Ditulis apa adanya. SUPER_ADMIN yang tidak diberi tahu akan mencoba
-          // menyimpan, berhasil, lalu menyimpulkan pembekuannya tidak bekerja.
-          ? <>Membuka, membaca, dan mencetak tetap bisa untuk semua orang; menyimpan ditutup —
-              <b> kecuali untuk Anda</b>, karena SUPER_ADMIN menembus sakelar. Ujilah dengan akun lain.</>
-          // Tahap 14b (K1=C): tombol simpan kini BENAR-BENAR mati di kesembilan modul
-          // (PrimaButton `menulis` + KunciTulisProvider), jadi kalimat ini akhirnya sama
-          // di semua modul. Tindakan tulis lain tetap dijaga API (503), dan sejak
-          // Tahap 13 penolakannya terbaca — maka kalimat keduanya bisa jujur.
-          : <>Membuka, membaca, dan mencetak tetap bisa. Tombol simpan dimatikan sampai
-              pembekuan selesai; tindakan lain yang mengubah data akan ditolak dengan
-              pesan.</>}
+          // menyimpan, berhasil, lalu menyimpulkan sakelarnya tidak bekerja.
+          ? <>Semua orang tetap bisa membuka, membaca, dan mencetak, tapi tidak bisa menyimpan.
+              <b> Anda masih bisa menyimpan</b> karena Anda Super Admin. Untuk memastikan, coba dengan akun lain.</>
+          // Tahap 14b (K1=C): tombol simpan BENAR-BENAR mati di kesembilan modul, dan
+          // tindakan tulis lain ditolak API dengan pesan yang terbaca (Tahap 13).
+          : <>Anda tetap bisa membuka, membaca, dan mencetak. Tombol simpan dimatikan sampai
+              mode ini selesai. Perubahan lain yang dicoba juga akan ditolak.</>}
         {pesan && <div style={{ marginTop: 6, whiteSpace: 'pre-line' }}>{pesan}</div>}
         {sampai && (
           <div style={{ marginTop: 4, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>

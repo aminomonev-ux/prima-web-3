@@ -28,7 +28,7 @@ export async function POST(
       return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     }
     if (session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN.' }, { status: 403 });
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin.' }, { status: 403 });
     }
     const limited = await promotionRateLimit(session.userId, 'approve', 10);
     if (limited) return limited;
@@ -52,14 +52,14 @@ export async function POST(
     try {
       await assertQuotaAvailable(reqRow.to_role);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Quota role penuh.';
+      const msg = e instanceof Error ? e.message : 'Kuota peran sudah penuh.';
       return NextResponse.json({ ok: false, message: msg }, { status: 409 });
     }
 
     const ok = await approveRequest(id, session.userId);
     if (!ok) {
       return NextResponse.json(
-        { ok: false, message: 'Permohonan sudah di-approve/reject oleh SA lain.' },
+        { ok: false, message: 'Permohonan ini sudah diproses Super Admin lain.' },
         { status: 409 },
       );
     }
@@ -80,7 +80,7 @@ export async function POST(
       void addPromotionNotif(
         u.username,
         'PROMOTION_APPROVED',
-        `Permohonan upgrade ${reqRow.from_role} → ${reqRow.to_role} di-approve. Role aktif dalam ${PROMOTION_COOLDOWN_MINUTES} menit.`,
+        `Permohonan naik peran ${reqRow.from_role} → ${reqRow.to_role} disetujui. Peran baru berlaku dalam ${PROMOTION_COOLDOWN_MINUTES} menit.`,
       );
       if (u.email) {
         void sendPromotionApprovedEmail(u.email, {
@@ -94,7 +94,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      message: `Permohonan di-approve. Cooldown ${PROMOTION_COOLDOWN_MINUTES} menit.`,
+      message: `Permohonan disetujui. Peran baru berlaku dalam ${PROMOTION_COOLDOWN_MINUTES} menit.`,
     });
   } catch (err) {
     console.error('[Promotion Approve Error]', err);

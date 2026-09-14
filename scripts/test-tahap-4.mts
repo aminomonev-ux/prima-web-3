@@ -75,11 +75,16 @@ for (const m of MODUL_APPS) {
   if (!m.sakelar || !m.dirApi) continue
   const info = infoSakelar(m.sakelar)
   cek(`${m.label} ber-route → wajib TERJAGA`, info?.terjaga === true)
-  cek(`…sebabnya menyebut ${m.dirApi}`, (info?.sebab ?? '').includes(m.dirApi))
+  // Tahap 18: kalimatnya untuk orang — menyatakan akibatnya, tanpa nama folder route.
+  cek(`…sebabnya menyatakan jalur data ${m.label} ikut tertutup`,
+    (info?.sebab ?? '').includes('jalur datanya ikut tertutup'))
+  cek(`…tanpa menyebut ${m.dirApi}`, !(info?.sebab ?? '').includes(m.dirApi))
 }
-cek('BLUD: sebab lencananya menyebut kedua penanda penjaga',
-  (infoSakelar('app_status_blud')?.sebab ?? '').includes('`bludMati`')
-  && (infoSakelar('app_status_blud')?.sebab ?? '').includes('`realisasiMati`'))
+cek('BLUD: registry tetap mencatat kedua penanda penjaga (yang dicari gate G)',
+  ['bludMati', 'realisasiMati'].every(p =>
+    MODUL_APPS.find(m => m.kunci === 'blud')?.penjagaApi?.penanda.includes(p)))
+cek('…tapi penanda kode tidak ditulis di kalimat lencananya',
+  !/`|bludMati|realisasiMati/.test(infoSakelar('app_status_blud')?.sebab ?? ''))
 cek('sub-sakelar Realisasi ikut terjaga oleh penjaga induknya',
   infoSakelar('app_status_blud_realisasi')?.terjaga === true)
 cek('Admin Panel memang tanpa sakelar (kunci yang tertinggal di dalam)',

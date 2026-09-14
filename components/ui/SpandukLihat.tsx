@@ -18,9 +18,9 @@ export default function SpandukLihat({ label }: { label: string }) {
     <div className="blud-spanduk-lihat">
       <Eye size={15} strokeWidth={2.3} />
       <span>
-        <strong>{label} — mode lihat.</strong>{' '}
-        Peran Anda boleh membaca dan mengunduh isinya, tapi tidak mengubahnya.
-        Hubungi pemegang menu ini bila ada yang perlu diperbaiki.
+        <strong>{label}: hanya bisa dilihat.</strong>{' '}
+        Peran Anda bisa membaca dan mengunduh isinya, tapi tidak bisa mengubahnya.
+        Kalau ada yang perlu diperbaiki, hubungi pemegang menu ini.
       </span>
     </div>
   )

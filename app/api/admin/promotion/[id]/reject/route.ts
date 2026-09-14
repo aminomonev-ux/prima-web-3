@@ -24,7 +24,7 @@ export async function POST(
       return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     }
     if (session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN.' }, { status: 403 });
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin.' }, { status: 403 });
     }
     const limited = await promotionRateLimit(session.userId, 'reject', 10);
     if (limited) return limited;
@@ -57,7 +57,7 @@ export async function POST(
     const ok = await rejectRequest(id, session.userId, reason);
     if (!ok) {
       return NextResponse.json(
-        { ok: false, message: 'Race condition — permohonan sudah berubah status.' },
+        { ok: false, message: 'Permohonan ini baru saja berubah status. Muat ulang halaman.' },
         { status: 409 },
       );
     }
@@ -77,7 +77,7 @@ export async function POST(
       void addPromotionNotif(
         u.username,
         'PROMOTION_REJECTED',
-        `Permohonan upgrade ${reqRow.from_role} → ${reqRow.to_role} ditolak. Alasan: ${reason}`,
+        `Permohonan naik peran ${reqRow.from_role} → ${reqRow.to_role} ditolak. Alasan: ${reason}`,
       );
       if (u.email) {
         void sendPromotionRejectedEmail(u.email, {

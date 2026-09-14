@@ -19,7 +19,7 @@ export async function POST(
       return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     }
     if (session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN.' }, { status: 403 });
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin.' }, { status: 403 });
     }
     const limited = await promotionRateLimit(session.userId, 'unlock', 10);
     if (limited) return limited;
@@ -44,7 +44,7 @@ export async function POST(
     });
     return NextResponse.json({
       ok: true,
-      message: `Lock promotion user ${rows[0].username} di-reset.`,
+      message: `Kunci permohonan naik peran ${rows[0].username} dibuka.`,
     });
   } catch (err) {
     console.error('[Promotion Unlock Error]', err);

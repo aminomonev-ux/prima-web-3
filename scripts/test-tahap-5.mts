@@ -63,7 +63,7 @@ const p = (k: string) => pintuProgram.find((b) => b.kunci === k)!
 cek('PK terbuka karena peran → kotak DIMATIKAN', p('perjanjian_kinerja').bisaDicentang === false)
 cek('…dan sebabnya menyebut nama perannya', p('perjanjian_kinerja').sebab.includes('Program'))
 cek('…dan menyatakan mencabut centang tidak menutupnya',
-  p('perjanjian_kinerja').sebab.includes('mencabut centang tidak menutupnya'))
+  p('perjanjian_kinerja').sebab.includes('Melepas centang tidak menutupnya'))
 cek('PK tetap TERBUKA', p('perjanjian_kinerja').terbuka === true)
 
 cek('BLUD terbuka karena grant → kotak HIDUP', p('blud').bisaDicentang === true)

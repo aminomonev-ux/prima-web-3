@@ -560,6 +560,38 @@ Patokan yang bisa diperiksa, bukan selera:
 **DoD:** daftar kalimat sebelum → sesudah disetujui pemilik lebih dulu; pemeriksaan
 statis yang menolak `—` dan daftar kiasan di string JSX/pesan galat berkas lingkup.
 
+**SELESAI (2026-09-14)** — dikerjakan atas pesan pemilik "lanjutkan sampai selesai, yang
+ditanya di akhir saja", jadi **persetujuan daftar kalimat menyusul**, bukan mendahului.
+Kalau ada bunyi yang tidak berkenan, gantinya satu baris dan uji Tahap 18 menunjuk tempatnya.
+- **18a** — `LABEL_KEADAAN` = AKTIF / HANYA BACA / PEMELIHARAAN; lencana `/menu` (termasuk
+  `SEBAGIAN …`), tombol Sakelar, spanduk, dan tooltip tombol simpan membacanya. Label
+  `BLUD — Realisasi` jadi **Realisasi BLUD**; `RIMA — Seluruh Bot` / `RIMA — Tanya Data (Q&A)`
+  jadi **RIMA (seluruh bot)** / **RIMA Tanya Data**.
+- **18b** — kalimat di 61 berkas lingkup ditulis ulang: sebab lencana TERJAGA berhenti
+  menyebut nama folder route & penanda gate G ("Layar dan jalur datanya ikut tertutup…"),
+  spanduk & dialog sakelar, Pemeriksaan (judul tujuh temuan), Pusat Akses, Peran, Tinjauan,
+  MintaAkses, pesan galat API admin. **Lingkup melebar dari rencana**: panel *Permintaan*
+  (naik peran) hampir seluruhnya Inggris (Approve/Reject/Cooldown/History) dan pesan API-nya
+  campur ("di-approve", "Probationary role kamu di-revoke") — ikut diterjemahkan, termasuk
+  `QuotaFullError` di `lib/security/promotion.ts`. Tombol **EMERGENCY LOGOUT** jadi
+  **PUTUSKAN SEMUA SESI**, REFRESH/LOADING jadi MUAT ULANG/MEMUAT.
+- **Sengaja TIDAK diubah**: `detail` jejak audit (riwayat lama & baru harus bisa dicari
+  dengan kata yang sama); nama pengenal di kode; judul kartu dasbor berbahasa Inggris murni
+  (SYSTEM INFO, QUICK STATS, SECURITY CHECKLIST, SESSION STATUS, INFO PROVIDER) — belum
+  diputuskan, ditanyakan ke pemilik; istilah ML di panel RIMA (intent, dataset training).
+- Pemindai kalimatnya lewat AST TypeScript (`scripts/_prosa-layar.ts`), bukan pencocokan
+  teks: `isBeku`, kelas `'beku'`, komentar, perbandingan kunci, log konsol, dan `detail`
+  audit tidak boleh menyalakkannya, sedangkan teks JSX, toast, dan template di
+  `data-tooltip` wajib tertangkap — kedua arah itu diuji dengan contoh jebakan.
+
+Uji: `scripts/test-tahap-18.mts` 43 pemeriksaan (864 kalimat dari 61 berkas), **15/15 mutasi
+tertangkap** — satu sempat LOLOS: "pintunya" tidak kena `\bpintu\b` karena akhiran -nya, jadi
+batas kata di belakang dibuang. Uji mutasi pertama juga menemukan positif palsu (alamat
+`/api/…/cancel-cooldown` terbaca kalimat karena sisipan template ditulis berspasi). Tahap
+4/5/6/9/11/12/14/17 disesuaikan ke kalimat baru dengan maksud yang sama, bukan dilonggarkan:
+Tahap 4 kini menegaskan sebab lencana menyatakan jalur data ikut tertutup DAN tidak menyebut
+folder route, sementara penanda `bludMati`/`realisasiMati` tetap ditagih dari registry.
+
 ---
 
 ## 6. Yang sengaja TIDAK dikerjakan

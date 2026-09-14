@@ -20,7 +20,7 @@ export async function POST(
       return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     }
     if (session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN.' }, { status: 403 });
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin.' }, { status: 403 });
     }
     const limited = await promotionRateLimit(session.userId, 'revoke-probation', 10);
     if (limited) return limited;
@@ -31,7 +31,7 @@ export async function POST(
 
     if (id === session.userId) {
       return NextResponse.json(
-        { ok: false, message: 'Tidak dapat revoke probation diri sendiri.' },
+        { ok: false, message: 'Masa percobaan akun sendiri tidak bisa dicabut.' },
         { status: 403 },
       );
     }
@@ -53,11 +53,11 @@ export async function POST(
     void addPromotionNotif(
       result.username,
       'PROMOTION_PROBATION_REVOKED',
-      `Probationary role kamu di-revoke. Role dikembalikan ke <b>${result.rolledBackTo}</b>. Silakan login ulang.`,
+      `Masa percobaan peran Anda dicabut. Peran Anda dikembalikan ke <b>${result.rolledBackTo}</b>. Silakan masuk ulang.`,
     );
     return NextResponse.json({
       ok: true,
-      message: `Probation user ${result.username} di-revoke. Role kembali ke ${result.rolledBackTo}.`,
+      message: `Masa percobaan ${result.username} dicabut. Perannya kembali ke ${result.rolledBackTo}.`,
     });
   } catch (err) {
     console.error('[Promotion RevokeProbation Error]', err);

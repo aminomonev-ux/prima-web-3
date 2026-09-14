@@ -62,7 +62,7 @@ export async function PATCH(req: NextRequest) {
 
     const hasil = await tolakPermintaan(id, session.userId, catatan)
     if (hasil.hasil === 'tidak-menunggu') {
-      return tolak('Permintaan itu sudah tidak menunggu — mungkin baru saja diputus orang lain.', 409, { code: 'SUDAH_DIPUTUS' })
+      return tolak('Permintaan itu sudah diproses, mungkin baru saja oleh admin lain.', 409, { code: 'SUDAH_DIPUTUS' })
     }
     const b = hasil.baris
 

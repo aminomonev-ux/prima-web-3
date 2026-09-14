@@ -62,7 +62,7 @@ export function TabAttackMonitor() {
 
   const STATS = [
     { label:'BRUTE FORCE',   val:totals.total_locked??0,  color:'red',    sub:'Akun dikunci' },
-    { label:'LOGIN GAGAL',   val:totals.total_failed??0,  color:'yellow', sub:'Password salah' },
+    { label:'LOGIN GAGAL',   val:totals.total_failed??0,  color:'yellow', sub:'Kata sandi salah' },
     { label:'LOGIN SUKSES',  val:totals.total_login??0,   color:'green',  sub:'Berhasil masuk' },
     { label:'WARNING',       val:totals.total_warn??0,    color:'cyan',   sub:'Event lain' },
     { label:'TOTAL LOG',     val:totals.total_all??0,     color:'cyan',   sub:'24 jam terakhir' },
@@ -72,7 +72,7 @@ export function TabAttackMonitor() {
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <div className="ap-section-title" style={{margin:0}}>ATTACK MONITOR</div>
-        <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>REFRESH</PrimaButton>
+        <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>MUAT ULANG</PrimaButton>
       </div>
 
       {/* Lebar kolom pindah ke `.ap-grid5` di admin.css — style sebaris hanya kalah oleh
@@ -89,9 +89,9 @@ export function TabAttackMonitor() {
       </div>
 
       <div className="ap-card" style={{marginBottom:16}}>
-        <div className="ap-card-title">AKTIVITAS LOGIN PER JAM — 12 JAM TERAKHIR</div>
+        <div className="ap-card-title">AKTIVITAS LOGIN PER JAM, 12 JAM TERAKHIR</div>
         {loading ? (
-          <div style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>LOADING...</div>
+          <div style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>MEMUAT…</div>
         ) : chart.length === 0 ? (
           <div style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>Belum ada data</div>
         ) : (
@@ -147,7 +147,7 @@ export function TabAttackMonitor() {
           </tr></thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>LOADING...</td></tr>
+              <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>MEMUAT…</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={5} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>Tidak ada log</td></tr>
             ) : filtered.map(row=>(

@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session || session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN yang dapat membuat akun.' }, { status: 403 });
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin yang dapat membuat akun.' }, { status: 403 });
     }
 
     // L-2: throttle endpoint create-user (defense-in-depth bila sesi SA disalahgunakan).
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     const raw    = await req.json().catch(() => null);
     const parsed = AdminUserCreateBodySchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? 'Body tidak valid.' }, { status: 400 });
+      return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? 'Data tidak valid.' }, { status: 400 });
     }
     const { username, email, password, role, nama_lengkap } = parsed.data;
 
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, message: 'Username atau email sudah terdaftar.' }, { status: 409 });
       }
       if (e instanceof QuotaFullError) {
-        return NextResponse.json({ ok: false, message: `Kuota role ${role} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
+        return NextResponse.json({ ok: false, message: `Kuota peran ${role} sudah penuh. Nonaktifkan dulu akun lain di peran itu.` }, { status: 409 });
       }
       throw e;
     }
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     // dikerjakan, dan menyuruh orang mencarinya lagi di daftar adalah pintu kedua yang
     // tidak perlu. Dibaca ulang, bukan dari `insertId`: baris INSERT-nya dibungkus
     // `withTransaction` yang memulangkan larik, bukan header hasil.
-    return NextResponse.json({ ok: true, message: `Akun ${username} dibuat & langsung aktif.`, data: { id: baruUntukJejak?.id ?? 0 } });
+    return NextResponse.json({ ok: true, message: `Akun ${username} dibuat dan langsung aktif.`, data: { id: baruUntukJejak?.id ?? 0 } });
 
   } catch (error) {
     console.error('[Admin Users POST Error]', error);
@@ -136,7 +136,7 @@ export async function PATCH(req: NextRequest) {
     const raw    = await req.json().catch(() => null);
     const parsed = AdminUsersPatchBodySchema.safeParse(raw);
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? 'Body tidak valid.' }, { status: 400 });
+      return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? 'Data tidak valid.' }, { status: 400 });
     }
     const data = parsed.data;
     const { id } = data;
@@ -157,7 +157,7 @@ export async function PATCH(req: NextRequest) {
     const AKSI_TERBUKA_UNTUK_ADMIN: readonly string[] = ['ubah-role'];
     if (session.role !== 'SUPER_ADMIN' && !AKSI_TERBUKA_UNTUK_ADMIN.includes(data.action)) {
       return NextResponse.json(
-        { ok: false, message: 'Hanya SUPER_ADMIN yang boleh melakukan aksi ini.' },
+        { ok: false, message: 'Hanya Super Admin yang boleh melakukan tindakan ini.' },
         { status: 403 },
       );
     }
@@ -189,7 +189,7 @@ export async function PATCH(req: NextRequest) {
       // pernah diubah siapa" cuma bisa dicari lewat `detail LIKE '%id=12%'` — yang ikut
       // cocok dengan id=120, id=123, id=127 (T-15).
       await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, targetUserId: id, detail: `Nonaktifkan user id=${id} [sesi aktif dicabut]` });
-      return NextResponse.json({ ok: true, message: 'User dinonaktifkan. Sesi yang sedang berjalan ikut dihentikan.' });
+      return NextResponse.json({ ok: true, message: 'Akun dinonaktifkan. Sesi yang sedang berjalan ikut dihentikan.' });
     }
 
     if (data.action === 'aktifkan') {
@@ -213,12 +213,12 @@ export async function PATCH(req: NextRequest) {
         });
       } catch (e) {
         if (e instanceof QuotaFullError) {
-          return NextResponse.json({ ok: false, message: `Kuota role ${targetCurrentRole} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
+          return NextResponse.json({ ok: false, message: `Kuota peran ${targetCurrentRole} sudah penuh. Nonaktifkan dulu akun lain di peran itu.` }, { status: 409 });
         }
         throw e;
       }
       await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, targetUserId: id, detail: `Aktifkan user id=${id} (role ${targetCurrentRole})` });
-      return NextResponse.json({ ok: true, message: 'User diaktifkan.' });
+      return NextResponse.json({ ok: true, message: 'Akun diaktifkan.' });
     }
 
     if (data.action === 'ubah-role') {
@@ -231,7 +231,7 @@ export async function PATCH(req: NextRequest) {
       if (session.role !== 'SUPER_ADMIN' &&
           (ADMIN_TIER_ROLES.includes(role) || ADMIN_TIER_ROLES.includes(targetCurrentRole))) {
         return NextResponse.json(
-          { ok: false, message: 'Hanya SUPER_ADMIN yang boleh menetapkan/mengubah role tier ADMIN.' },
+          { ok: false, message: 'Hanya Super Admin yang boleh menetapkan atau mengubah peran tingkat admin.' },
           { status: 403 }
         );
       }
@@ -257,7 +257,7 @@ export async function PATCH(req: NextRequest) {
         });
       } catch (e) {
         if (e instanceof QuotaFullError) {
-          return NextResponse.json({ ok: false, message: `Kuota role ${role} sudah penuh. Nonaktifkan akun lain di role tersebut dulu.` }, { status: 409 });
+          return NextResponse.json({ ok: false, message: `Kuota peran ${role} sudah penuh. Nonaktifkan dulu akun lain di peran itu.` }, { status: 409 });
         }
         throw e;
       }
@@ -266,7 +266,7 @@ export async function PATCH(req: NextRequest) {
       await writeAuditLog({ req, eventType: 'ROLE_CHANGE', userId: session.userId, username: session.username, targetUserId: id, detail: `user id=${id}: ${targetCurrentRole} → ${role}${probationWasActive ? ' [probation dibatalkan]' : ''}${izinDihapus ? ` [${izinDihapus} perkecualian menu dihapus]` : ''} · alasan: ${data.alasan}` });
       return NextResponse.json({
         ok: true,
-        message: `Role diubah ke ${role}.`
+        message: `Peran diubah menjadi ${role}.`
           + (izinDihapus ? ` ${izinDihapus} pengaturan menu khusus miliknya ikut terhapus.` : ''),
         izinDihapus,
       });
@@ -292,16 +292,16 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (data.action === 'reset-password') {
-      if (session.role !== 'SUPER_ADMIN') return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN.' }, { status: 403 });
+      if (session.role !== 'SUPER_ADMIN') return NextResponse.json({ ok: false, message: 'Hanya Super Admin.' }, { status: 403 });
       const hash = await hashPassword(data.password);
       await sql`UPDATE users SET password_hash = ${hash}, updated_at = NOW() WHERE id = ${id}`;
       await sql`UPDATE user_sessions SET invalidated_at = NOW() WHERE user_id = ${id} AND invalidated_at IS NULL`;
       await writeAuditLog({ req, eventType: 'USER_UPDATE', userId: session.userId, username: session.username, targetUserId: id, detail: `Reset password user id=${id}` });
-      return NextResponse.json({ ok: true, message: 'Password berhasil direset. Semua sesi user dihapus.' });
+      return NextResponse.json({ ok: true, message: 'Kata sandi berhasil direset. Semua sesinya dihentikan.' });
     }
 
     // discriminated union exhaustive: unreachable
-    return NextResponse.json({ ok: false, message: 'Action tidak dikenal.' }, { status: 400 });
+    return NextResponse.json({ ok: false, message: 'Tindakan tidak dikenal.' }, { status: 400 });
 
   } catch (error) {
     console.error('[Admin Users PATCH Error]', error);

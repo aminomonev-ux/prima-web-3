@@ -10,7 +10,7 @@ import {
   ArrowUpCircle, Clock, LayoutDashboard, KeyRound, Hourglass, CircleSlash,
 } from 'lucide-react';
 import { APP_NAME, APP_INSTANSI, ROLE_LABELS, ADMIN_ROLES } from '@/lib/constants';
-import { formatSampai, urlPemeliharaan } from '@/lib/registry/apps';
+import { formatSampai, LABEL_KEADAAN, urlPemeliharaan } from '@/lib/registry/apps';
 import { fetchJson } from '@/lib/shared/api';
 import PrimaButton from '@/components/ui/PrimaButton';
 import {
@@ -37,7 +37,7 @@ const APP_CARDS = [
     icon: LayoutDashboard,
     accent: '#378ADD',
     accentBg: 'rgba(55,138,221,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/dashboard',
     roles: null,
   },
@@ -48,7 +48,7 @@ const APP_CARDS = [
     icon: ClipboardList,
     accent: '#378ADD',
     accentBg: 'rgba(55,138,221,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/rencana-aksi',
     roles: null,
   },
@@ -59,7 +59,7 @@ const APP_CARDS = [
     icon: FileText,
     accent: '#EF9F27',
     accentBg: 'rgba(239,159,39,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/buku-besar-aset',
     roles: null,
   },
@@ -70,7 +70,7 @@ const APP_CARDS = [
     icon: Building2,
     accent: '#1D9E75',
     accentBg: 'rgba(29,158,117,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/blud',
     roles: null,
   },
@@ -81,7 +81,7 @@ const APP_CARDS = [
     icon: Handshake,
     accent: '#7C5CFC',
     accentBg: 'rgba(124,92,252,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/perjanjian-kinerja',
     roles: null,
   },
@@ -92,7 +92,7 @@ const APP_CARDS = [
     icon: ClipboardCheck,
     accent: '#7C5CFC',
     accentBg: 'rgba(124,92,252,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/iki',
     roles: null,
   },
@@ -103,7 +103,7 @@ const APP_CARDS = [
     icon: BookText,
     accent: '#378ADD',
     accentBg: 'rgba(55,138,221,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/lkjip',
     roles: null,
   },
@@ -114,7 +114,7 @@ const APP_CARDS = [
     icon: BarChart3,
     accent: '#1D9E75',
     accentBg: 'rgba(29,158,117,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/kinerja',
     roles: null,
   },
@@ -125,7 +125,7 @@ const APP_CARDS = [
     icon: FileText,
     accent: '#EF9F27',
     accentBg: 'rgba(239,159,39,0.12)',
-    badge: 'LIVE',
+    badge: 'AKTIF',
     href: '/usulan-kebutuhan',
     roles: null,
   },
@@ -794,7 +794,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                     <ShieldCheck size={18} color="#020F1C" strokeWidth={2.2} />
                     <span className="bc-name">{APP_NAME}</span>
                   </div>
-                  <div className="bc-status"><span className="dot" />Online</div>
+                  <div className="bc-status"><span className="dot" />Aktif</div>
                 </div>
               </div>
               <div className="bc-stats">
@@ -863,9 +863,10 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
               const bagian    = locked ? [] : st.sebagian;
               const bagianMaint = bagian.some(b => b.keadaan === 'maintenance');
 
-              const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : isBeku ? 'BEKU'
+              // Tahap 18 — istilah keadaan dari LABEL_KEADAAN, satu sumber dengan layar Sakelar.
+              const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? LABEL_KEADAAN.maintenance : isBeku ? LABEL_KEADAAN.readonly
                 : memuat ? 'MEMUAT' : takTerbaca ? 'BELUM TERBACA'
-                : bagian.length ? (bagianMaint ? 'SEBAGIAN MAINTENANCE' : 'SEBAGIAN BEKU') : card.badge;
+                : bagian.length ? `SEBAGIAN ${bagianMaint ? LABEL_KEADAAN.maintenance : LABEL_KEADAAN.readonly}` : card.badge;
               // Warna badge status (brutalist: teks gelap + border hitam): hijau=LIVE, merah=admin, amber=maint, abu=locked
               // `#9CA3AF` di sini LATAR badge, bukan warna teks — sengaja tidak ikut
               // dinaikkan ke #6B7280 seperti teks bantu lainnya. Teksnya gelap di atasnya,
@@ -883,10 +884,10 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                   role="button"
                   tabIndex={locked ? -1 : 0}
                   data-tooltip={
-                    isMaintSA ? 'Modul sedang maintenance. Anda bisa akses sebagai SUPER_ADMIN.'
-                    : isBeku ? 'Modul sedang dibekukan: membuka, membaca, dan mencetak tetap bisa; menyimpan ditutup sementara.'
+                    isMaintSA ? 'Modul ini sedang dalam pemeliharaan. Anda tetap bisa masuk karena Anda Super Admin.'
+                    : isBeku ? 'Modul ini sedang dalam mode hanya baca. Anda tetap bisa membuka dan mencetak, tapi belum bisa menyimpan.'
                     : takTerbaca ? 'Status modul ini gagal dimuat, jadi belum bisa dipastikan sedang aktif atau dalam pemeliharaan.'
-                    : bagian.length ? bagian.map(b => `${b.label} ${b.keadaan === 'maintenance' ? 'sedang dalam pemeliharaan' : 'sedang dibekukan'}.`).join(' ')
+                    : bagian.length ? bagian.map(b => `${b.label} ${b.keadaan === 'maintenance' ? 'sedang dalam pemeliharaan' : 'sedang dalam mode hanya baca'}.`).join(' ')
                     : ''
                   }
                   onKeyDown={e => e.key === 'Enter' && handleCardClick(card)}
@@ -916,7 +917,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                     {bagian.map(b => (
                       <div key={b.kunci} className="card-maint-note">
                         <div>
-                          <b>{b.label}</b> {b.keadaan === 'maintenance' ? 'sedang dalam pemeliharaan.' : 'sedang dibekukan.'}
+                          <b>{b.label}</b> {b.keadaan === 'maintenance' ? 'sedang dalam pemeliharaan.' : 'sedang dalam mode hanya baca.'}
                         </div>
                         {appPesan[b.kunci] && <div>{appPesan[b.kunci]}</div>}
                         {formatSampai(appSampai[b.kunci] ?? '') && (
@@ -928,7 +929,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                     ))}
                     {isMaintSA && (
                       <div style={{ fontSize: 10, color: '#EF9F27', fontWeight: 700, marginTop: 10 }}>
-                        👑 Bypass aktif · hanya terlihat oleh Anda
+                        👑 Anda tetap bisa masuk karena Anda Super Admin
                       </div>
                     )}
                   </div>

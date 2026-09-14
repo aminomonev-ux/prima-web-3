@@ -195,7 +195,7 @@ function DaftarMenu({
           fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, padding: 0, marginBottom: 8 }}
       >
         {lanjutanBuka ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        Pengaturan lanjutan — sembunyikan menu tertentu
+        Pengaturan lanjutan: sembunyikan menu tertentu
       </button>
 
       {lanjutanBuka && (
@@ -239,7 +239,7 @@ function DaftarMenu({
           <div key={t.label} style={{ fontSize: 10, color: 'var(--ma-dim)', marginTop: 6,
             display: 'flex', alignItems: 'center', gap: 5 }}>
             <ShieldCheck size={11} style={{ flexShrink: 0 }} />
-            {t.label}: {t.peran.join(' · ')} — sudah ditetapkan dari awal, tidak bisa diubah di sini
+            {t.label}: {t.peran.join(' · ')}. Sudah ditetapkan sejak awal dan tidak bisa diubah di sini.
           </div>
         ))}
       </div>
@@ -325,7 +325,7 @@ function PintuPeran({ role, jumlahUser }: { role: string; jumlahUser: number | n
       background: 'var(--ma-bg)', border: '1px solid var(--ma-line)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 9 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ma-dim)' }}>
-          Pintu modul peran {ROLE_LABELS[role] ?? role}
+          Akses modul peran {ROLE_LABELS[role] ?? role}
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--ma-dim)', fontFamily: "'JetBrains Mono', monospace" }}>
           {jumlahUser === null ? '—' : `${jumlahUser} pemegang aktif`}
@@ -348,8 +348,8 @@ function PintuPeran({ role, jumlahUser }: { role: string; jumlahUser: number | n
             {perluGrant.map(p => <span key={p.kunci} style={chip('diam')}>{p.label}</span>)}
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--ma-dim)', lineHeight: 1.6 }}>
-            Tertutup — harus diberikan <b>per orang</b> di Pusat Akses. Baris peran di bawah
-            mengatur izin <b>di dalam</b> modul, bukan pintunya.
+            Tertutup. Harus diberikan <b>per orang</b> di Pusat Akses. Pengaturan peran di bawah
+            mengatur izin <b>di dalam</b> modul, bukan akses masuk ke modulnya.
           </div>
         </>
       )}
@@ -384,7 +384,7 @@ export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
       });
       const j = await res.json() as { ok: boolean; message?: string; code?: string };
       if (!j.ok) {
-        if (j.code === 'BERUBAH') { toast.error(`${j.message} Ini yang terbaru — cek dulu sebelum menyimpan lagi.`); await reload(); return; }
+        if (j.code === 'BERUBAH') { toast.error(`${j.message} Layar sudah dimuat ulang. Periksa dulu sebelum menyimpan lagi.`); await reload(); return; }
         toast.error(j.message ?? 'Gagal menyimpan'); return;
       }
       toast.success(kosongkan ? `Aturan ${roleAktif} kembali seperti semula` : `Aturan ${roleAktif} tersimpan`);
@@ -406,8 +406,8 @@ export function MenuAccessRoleTab({ isSA }: { isSA: boolean }) {
           menghapus kalimatnya, melainkan menyebut tempatnya yang sekarang. */}
       <div style={{ fontSize: 11, color: 'var(--ma-dim)', marginBottom: 12, lineHeight: 1.7 }}>
         Aturan yang berlaku untuk semua orang dengan peran ini di modul {aplikasi.label}. Kalau
-        cuma satu orang yang perlu beda, atur di tab <b style={{ color: 'var(--ma-aksen)' }}>Pusat
-        Akses</b> — pilih orangnya, lalu buka daftar menu di bawah modulnya.
+        hanya satu orang yang perlu berbeda, atur di tab <b style={{ color: 'var(--ma-aksen)' }}>Pusat
+        Akses</b>: pilih orangnya, lalu buka daftar menu di bawah modulnya.
       </div>
 
       <PilihModul nilai={appKey} ubah={setAppKey} />
@@ -429,8 +429,8 @@ Berlaku untuk {data.jumlahUser} orang yang aktif dengan peran ini
 
       <div style={{ padding: '8px 12px', marginBottom: 14, borderRadius: 6, fontSize: 11, color: 'var(--ma-dim)',
         background: 'var(--ma-bg)', border: '1px solid var(--ma-line)' }}>
-        <b>SUPER_ADMIN</b> sengaja tidak bisa diatur dari sini. Kalau bisa, suatu saat ada yang
-        tanpa sengaja mencabut aksesnya sendiri, dan tidak ada lagi yang bisa membetulkannya.
+        <b>Super Admin</b> sengaja tidak bisa diatur dari sini. Kalau bisa, suatu saat ada yang
+        tanpa sengaja mencabut aksesnya sendiri, dan tidak ada lagi yang bisa memperbaikinya.
       </div>
 
       {muat || !data ? (
@@ -440,8 +440,8 @@ Berlaku untuk {data.jumlahUser} orang yang aktif dengan peran ini
           <DaftarMenu data={data} nilai={nilai} setNilai={setNilai} />
           {!isSA ? (
             <div style={{ fontSize: 11, color: 'var(--ma-warn)' }}>
-              Yang boleh mengubah aturan peran hanya SUPER_ADMIN, karena perubahannya kena ke
-              semua orang dengan peran ini sekaligus.
+              Hanya Super Admin yang boleh mengubah aturan peran, karena perubahannya berlaku
+              untuk semua orang dengan peran ini sekaligus.
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

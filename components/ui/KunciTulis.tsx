@@ -21,7 +21,7 @@ export function sebabKunciTulis(info: Pick<InfoBeku, 'global' | 'bagian'>): stri
   const siapa = info.global ? 'Seluruh aplikasi' : info.bagian || 'Modul ini';
   // Pendek: tooltip ini menempel di tombol, sedangkan penjelasan lengkapnya sudah ada di
   // spanduk. Kalimat panjang pertama terukur 745px dan terpotong di tepi kanan layar.
-  return `${siapa} sedang dibekukan admin, jadi menyimpan ditutup sementara.`;
+  return `${siapa} sedang dalam mode hanya baca, jadi belum bisa menyimpan.`;
 }
 
 /**

@@ -108,7 +108,7 @@ export function TabEmailNotif({ isSA }: { isSA:boolean }) {
   return (
     <div>
       <div className="ap-section-title">PENGATURAN EMAIL NOTIFIKASI</div>
-      {!isSA && <div className="ap-sk-ingat">Hanya SUPER_ADMIN yang dapat mengubah pengaturan email.</div>}
+      {!isSA && <div className="ap-sk-ingat">Hanya Super Admin yang dapat mengubah pengaturan email.</div>}
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,alignItems:'start'}}>
         {/* Konfigurasi */}
@@ -125,7 +125,7 @@ export function TabEmailNotif({ isSA }: { isSA:boolean }) {
             {!settings.enabled && isSA && (
               <div style={{fontSize:12,fontWeight:600,color:'var(--ap-warn-fg)',letterSpacing:.2,marginTop:12,marginBottom:8,padding:'10px 14px',background:'var(--ap-warn-bg)',border:'1px solid var(--ap-warn-line)',borderRadius:6,display:'flex',alignItems:'center',gap:10,boxShadow:'0 0 16px rgba(255,200,87,.15)'}}>
                 <span style={{fontSize:16,color:'var(--ap-warn-line)'}}>⚠</span>
-                <span>Aktifkan master toggle <b style={{color:'var(--ap-fg)'}}>Email Notifikasi Aktif</b> di atas untuk mengatur per-event.</span>
+                <span>Nyalakan <b style={{color:'var(--ap-fg)'}}>Email Notifikasi Aktif</b> di atas dulu untuk mengatur tiap jenis email.</span>
               </div>
             )}
             <div style={{opacity:!isSA||!settings.enabled?.4:1,transition:'opacity .2s',pointerEvents:!isSA||!settings.enabled?'none':'auto'}}>
@@ -140,12 +140,12 @@ export function TabEmailNotif({ isSA }: { isSA:boolean }) {
                   </label>
                 </div>
               ))}
-              <div style={{fontSize:10,color:'var(--ap-dim)',letterSpacing:.5,marginTop:14,marginBottom:4}}>PROMOTION ROLE</div>
+              <div style={{fontSize:10,color:'var(--ap-dim)',letterSpacing:.5,marginTop:14,marginBottom:4}}>NAIK PERAN</div>
               {[
-                ['onPromotionNew',       'Permohonan Upgrade Baru'],
-                ['onPromotionApproved',  'Upgrade di-Approve'],
-                ['onPromotionRejected',  'Upgrade di-Reject'],
-                ['onPromotionBootstrap', 'Bootstrap SUPER_ADMIN (alert)'],
+                ['onPromotionNew',       'Permohonan Naik Peran Baru'],
+                ['onPromotionApproved',  'Naik Peran Disetujui'],
+                ['onPromotionRejected',  'Naik Peran Ditolak'],
+                ['onPromotionBootstrap', 'Peringatan promosi awal ke Super Admin'],
               ].map(([k,l])=>(
                 <div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--ap-line-tipis)'}}>
                   <span style={{fontSize:12,color:'var(--ap-fg2)'}}>{l}</span>
@@ -174,7 +174,7 @@ export function TabEmailNotif({ isSA }: { isSA:boolean }) {
         {/* Email Quota */}
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
           <div className="ap-card">
-            <div className="ap-card-title">EMAIL QUOTA</div>
+            <div className="ap-card-title">KUOTA EMAIL</div>
             {quota ? (
               <>
                 <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,padding:'10px 14px',
@@ -224,7 +224,7 @@ export function TabEmailNotif({ isSA }: { isSA:boolean }) {
                 </div>
               </>
             ) : (
-              <div style={{textAlign:'center',padding:24,color:'var(--ap-dim)',fontSize:12}}>Memuat data quota...</div>
+              <div style={{textAlign:'center',padding:24,color:'var(--ap-dim)',fontSize:12}}>Memuat data kuota…</div>
             )}
           </div>
 
@@ -249,7 +249,7 @@ export function TabEmailNotif({ isSA }: { isSA:boolean }) {
       <div className="ap-card" style={{marginTop:16}}>
         <div className="ap-card-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>RIWAYAT EMAIL TERKIRIM (20 TERAKHIR)</span>
-          <span style={{fontSize:9,color:'var(--ap-dim)',letterSpacing:.5,fontWeight:400}}>AUTO-REFRESH 30s</span>
+          <span style={{fontSize:9,color:'var(--ap-dim)',letterSpacing:.5,fontWeight:400}}>DIPERBARUI TIAP 30 DETIK</span>
         </div>
         {logRows.length === 0 ? (
           <div style={{textAlign:'center',padding:24,color:'var(--ap-dim)',fontSize:12}}>Belum ada riwayat email.</div>
