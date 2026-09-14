@@ -1,19 +1,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { sql } from '@/lib/data/db';
 import { getSession, verifyPassword, hashPassword } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { checkRateLimit } from '@/lib/security/ratelimit';
-
-const schema = z.object({
-  passwordLama: z.string().min(1, 'Password lama wajib diisi'),
-  passwordBaru: z.string().min(8, 'Password baru minimal 8 karakter').max(100),
-  konfirmasi:   z.string().min(1, 'Konfirmasi password wajib diisi'),
-}).refine(d => d.passwordBaru === d.konfirmasi, {
-  message: 'Konfirmasi password tidak cocok',
-  path: ['konfirmasi'],
-});
+import { ChangePasswordBodySchema } from '@/lib/data/auth-schemas';
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +16,7 @@ export async function POST(req: NextRequest) {
     if (!rl.allowed) return NextResponse.json({ ok: false, message: `Terlalu banyak percobaan. Coba lagi dalam ${rl.resetIn} detik.` }, { status: 429, headers: { 'Retry-After': String(rl.resetIn) } });
 
     const body   = await req.json();
-    const parsed = schema.safeParse(body);
+    const parsed = ChangePasswordBodySchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message || 'Input tidak valid' }, { status: 400 });
     }

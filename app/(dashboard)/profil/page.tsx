@@ -4,10 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Eye, EyeOff, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
+import { StrongPasswordSchema } from '@/lib/data/auth-schemas';
 
 function checkStrength(p: string) {
   const r = { len: p.length >= 8, upper: /[A-Z]/.test(p), lower: /[a-z]/.test(p), num: /[0-9]/.test(p), sym: /[^A-Za-z0-9]/.test(p) };
   const s = Object.values(r).filter(Boolean).length;
+  // Skor 3 bisa lahir tanpa huruf besar/angka; label "Cukup" di situ menjanjikan yang ditolak server.
+  const memenuhi = r.len && r.upper && r.lower && r.num;
+  if (!memenuhi) return { r, s, lbl: 'Belum memenuhi syarat', col: '#f97316', pct: s*20 };
   return { r, s, lbl: ['','Sangat Lemah','Lemah','Cukup','Kuat','Sangat Kuat'][s]??'', col: ['#e5e7eb','#ef4444','#f97316','#eab308','#22c55e','#10b981'][s]??'#e5e7eb', pct: s*20 };
 }
 
@@ -27,7 +31,8 @@ export default function ProfilPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setErr('');
     if (!pwLama) { setErr('Password lama wajib diisi'); return; }
-    if (str.s < 3) { setErr('Password baru terlalu lemah (min. Cukup)'); return; }
+    const cekBaru = StrongPasswordSchema.safeParse(pwBaru);
+    if (!cekBaru.success) { setErr(cekBaru.error.issues[0]?.message ?? 'Password baru belum memenuhi syarat'); return; }
     if (pwBaru !== pwKonf) { setErr('Konfirmasi password tidak cocok'); return; }
     setLoading(true);
     try {
@@ -116,7 +121,7 @@ export default function ProfilPage() {
                     <KeyRound size={24} color="white" />
                   </div>
                   <p style={{ fontSize: 18, fontWeight: 800, color: '#1f2937', margin: 0 }}>Ganti Password</p>
-                  <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 3 }}>Buat password baru yang kuat untuk akun Anda</p>
+                  <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 3 }}>Minimal 8 karakter, memuat huruf besar, huruf kecil, dan angka</p>
                 </div>
 
                 {err && <div className="msg-err"><span>⚠</span><span>{err}</span></div>}
@@ -149,7 +154,7 @@ export default function ProfilPage() {
                         <div className="strength-bar-wrap"><div className="strength-bar" style={{ width: `${str.pct}%`, background: str.col }} /></div>
                         <div className="strength-label" style={{ color: str.col }}>{str.lbl}</div>
                         <ul className="req-list">
-                          {([['len','Min. 8 karakter'],['upper','Huruf besar (A-Z)'],['lower','Huruf kecil (a-z)'],['num','Angka (0-9)'],['sym','Karakter spesial (!@#...)']] as [keyof typeof str.r, string][]).map(([k,l]) => (
+                          {([['len','Minimal 8 karakter'],['upper','Huruf besar (A-Z)'],['lower','Huruf kecil (a-z)'],['num','Angka (0-9)'],['sym','Simbol (!@#...), tidak wajib']] as [keyof typeof str.r, string][]).map(([k,l]) => (
                             <li key={k} className={str.r[k] ? 'ok' : ''}>{l}</li>
                           ))}
                         </ul>

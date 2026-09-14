@@ -49,6 +49,20 @@ export const ResetPasswordBodySchema = z.object({
 });
 
 /**
+ * POST /api/auth/change-password — pemakai mengganti password sendiri.
+ * Wajib `StrongPasswordSchema`: pintu inilah yang dipakai menimpa password sementara dari
+ * Super Admin, jadi kalau cuma min(8) kebijakan akun baru bisa ditembus di langkah berikutnya.
+ */
+export const ChangePasswordBodySchema = z.object({
+  passwordLama: z.string().min(1, 'Password lama wajib diisi'),
+  passwordBaru: StrongPasswordSchema,
+  konfirmasi:   z.string().min(1, 'Konfirmasi password wajib diisi'),
+}).refine(d => d.passwordBaru === d.konfirmasi, {
+  message: 'Konfirmasi password tidak cocok',
+  path: ['konfirmasi'],
+});
+
+/**
  * POST /api/auth/forgot-password & /api/auth/resend-verification — minta link.
  */
 export const UsernameOrEmailBodySchema = z.object({

@@ -605,6 +605,10 @@ Nomor 2 (judul kartu dasbor Inggris) dan 3 (`detail` jejak audit) dibiarkan apa 
   **Temuan sampingan, tidak dikerjakan**: `/api/auth/change-password` hanya mewajibkan
   8 karakter, padahal baris "Password Policy" menulis A-Z+0-9 (`StrongPasswordSchema` dipakai
   pembuatan akun & reset admin, tidak di ganti sandi pemakai).
+  **Sudah dikerjakan**: body route kini `ChangePasswordBodySchema` di `lib/data/auth-schemas.ts`
+  (`passwordBaru` = `StrongPasswordSchema`), form `/profil` memakai skema yang sama sebagai
+  gerbang kirim. Gerbang lamanya "skor kekuatan ≥ 3" bisa lolos tanpa huruf besar dan angka.
+  Regresi: `npx tsx scripts/test-ganti-password-kuat.mts` (17), 3 uji mutasi tertangkap.
 - **Nomor 5 · `/api/upload/download` tunduk sakelar.** Route unduh tidak tahu berkas milik
   modul mana: kolom `uploaded_files.context` ada sejak L61 tapi tak satu pemanggil pun
   mengisinya. Kini `/api/upload` menulis modul asal yang SUDAH dicocokkan ke daftar
