@@ -125,9 +125,11 @@ cek('beku hanya menolak saat sedang MENULIS',
 
 // Kode balasan sendiri: penerimanya harus bisa membedakan "beku, membaca boleh" dari
 // "modul mati" — alasan yang sama dengan kenapa modulMati 503 dan bukan 403.
-cek('beku punya kode balasan sendiri', guard.includes("code: 'MODUL_BACA_SAJA'"))
+// Tahap 13 (T3): kedua balasan lewat `balasSakelar` supaya kalimatnya diisi ke tiga laci.
+cek('beku punya kode balasan sendiri',
+  /const tolakBeku = \(\) =>\s*balasSakelar\(\s*'MODUL_BACA_SAJA',/.test(guard))
 cek('…dan tetap 503, bukan 403',
-  badan(guard, 'const tolakBeku = ()').includes('status: 503'))
+  /const balasSakelar = [^\n]*\n[^\n]*\{ status: 503 \}\);/.test(guard))
 
 const bSedangMati = badan(guard, 'export async function modulSedangMati(')
 // Titik paling gampang salah di seluruh tahap ini: bentuk lama `!== 'online'`

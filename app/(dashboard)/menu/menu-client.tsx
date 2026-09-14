@@ -10,9 +10,12 @@ import {
   ArrowUpCircle, Clock, LayoutDashboard, KeyRound, Hourglass, CircleSlash,
 } from 'lucide-react';
 import { APP_NAME, APP_INSTANSI, ROLE_LABELS, ADMIN_ROLES } from '@/lib/constants';
+import { formatSampai, urlPemeliharaan } from '@/lib/registry/apps';
+import { fetchJson } from '@/lib/shared/api';
+import PrimaButton from '@/components/ui/PrimaButton';
 import {
-  formatSampai, KUNCI_GLOBAL, sebabTerburuk, urlPemeliharaan, type KeadaanSakelar,
-} from '@/lib/registry/apps';
+  kartuTerkunci, sakelarKartu, type MuatAkses, type MuatSakelar,
+} from './_kartu-sakelar';
 import type { Role } from '@/types';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { MintaAksesModal } from '@/components/akses/MintaAksesModal';
@@ -145,12 +148,12 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
   const dropRef             = useRef<HTMLDivElement>(null);
   const [dropOpen,    setDropOpen]    = useState(false);
   const [loggingOut,  setLoggingOut]  = useState(false);
-  const [appStatus,   setAppStatus]   = useState<Record<string, string>>({});
+  const [sakelar,     setSakelar]     = useState<MuatSakelar>({ muat: 'memuat' });
   // P6 — pesan & tenggat pemeliharaan, dari GET yang sama dengan statusnya. Kalau
   // dijemput terpisah, kartu bisa sempat berbunyi "MAINTENANCE" tanpa alasannya.
   const [appPesan,    setAppPesan]    = useState<Record<string, string>>({});
   const [appSampai,   setAppSampai]   = useState<Record<string, string>>({});
-  const [userAccess,  setUserAccess]  = useState<string[] | null>(null);
+  const [akses,       setAkses]       = useState<MuatAkses>({ muat: 'memuat' });
   // Promotion ladder state
   const [eligibleTargets, setEligibleTargets] = useState<readonly string[]>([]);
   const [activeReq, setActiveReq] = useState<{
@@ -180,15 +183,29 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
     document.cookie = `prima_theme=${themePreference};path=/;max-age=31536000;SameSite=Lax`;
   }, [themePreference]);
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/admin/app-status').then(r => r.json()),
-      fetch('/api/user/access').then(r => r.json()),
-    ]).then(([st, ac]) => {
-      if (st.ok) { setAppStatus(st.data); setAppPesan(st.pesan ?? {}); setAppSampai(st.sampai ?? {}); }
-      if (ac.ok) setUserAccess(ac.app_access);
-    }).catch(() => {});
+  // T18 — dua pemuatan TERPISAH. Dulu satu `Promise.all(...).catch(() => {})`: satu
+  // gagal membuang KEDUA hasil tanpa suara, lalu kartu maintenance berbunyi LIVE dan
+  // lencana TERKUNCI (beserta tautan "Minta akses") lenyap dari semua kartu.
+  const muatSakelar = useCallback(async () => {
+    setSakelar({ muat: 'memuat' });
+    const d = await fetchJson<Record<string, string>>('/api/admin/app-status');
+    if (!d.ok || !d.data) { setSakelar({ muat: 'gagal' }); return; }
+    setSakelar({ muat: 'ada', data: d.data });
+    setAppPesan((d.pesan as Record<string, string> | undefined) ?? {});
+    setAppSampai((d.sampai as Record<string, string> | undefined) ?? {});
   }, []);
+
+  const muatAkses = useCallback(async () => {
+    setAkses({ muat: 'memuat' });
+    const d = await fetchJson('/api/user/access');
+    const a = d.ok ? d.app_access : undefined;
+    if (a === null) setAkses({ muat: 'ada', akses: null });
+    else if (Array.isArray(a)) setAkses({ muat: 'ada', akses: a.filter((x): x is string => typeof x === 'string') });
+    else setAkses({ muat: 'gagal' });
+  }, []);
+
+  useEffect(() => { void muatSakelar(); }, [muatSakelar]);
+  useEffect(() => { void muatAkses(); }, [muatAkses]);
 
   const loadPermintaan = useCallback(async () => {
     try {
@@ -241,34 +258,12 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
   const isAdmin    = (ADMIN_ROLES as readonly string[]).includes(role);
   const visibleCards = APP_CARDS.filter(c => !c.roles || c.roles.includes(role));
 
-  function isLocked(card: typeof APP_CARDS[0]): boolean {
-    if (card.id === 'admin') return false;
-    return userAccess !== null && !userAccess.includes(card.id);
-  }
-
-  /**
-   * P12 — keadaan sebuah kartu, sakelar global sudah ikut diperhitungkan, beserta kunci
-   * sakelar yang MENYEBABKANNYA (dipakai untuk tautan `/maintenance` dan untuk mengambil
-   * pesan yang benar).
-   *
-   * Ditulis SEKALI. Aturan "Admin Panel tidak pernah ikut mati" sebelumnya tersebar di
-   * empat tempat di berkas ini; menambahkan sakelar global ke masing-masing berarti
-   * empat kesempatan untuk lupa satu — dan yang terlupa itu persis pintu untuk
-   * menyalakannya kembali.
-   */
-  function sakelarKartu(id: string): { keadaan: KeadaanSakelar; kunci: string } {
-    const kunciModul = `app_status_${id}`;
-    if (id === 'admin') return { keadaan: 'online', kunci: kunciModul };
-    const s = sebabTerburuk([
-      [KUNCI_GLOBAL, appStatus[KUNCI_GLOBAL]],
-      [kunciModul, appStatus[kunciModul]],
-    ]);
-    return { keadaan: s.keadaan, kunci: s.kunci ?? kunciModul };
-  }
-
+  // P12 — keadaan kartu (sakelar global ikut) ditulis SEKALI di `_kartu-sakelar.ts`.
+  // Status yang belum/gagal dimuat tidak memblokir klik: halaman modulnya sendiri
+  // memeriksa sakelar di server dan mengarahkan ke pemeliharaan kalau perlu.
   function handleCardClick(card: typeof APP_CARDS[0]) {
-    if (isLocked(card)) return;
-    const st = sakelarKartu(card.id);
+    if (kartuTerkunci(akses, card.id)) return;
+    const st = sakelarKartu(sakelar, card.id);
     if (st.keadaan === 'maintenance' && role !== 'SUPER_ADMIN') {
       router.push(urlPemeliharaan(st.kunci));
     } else {
@@ -508,6 +503,15 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
           white-space: pre-line;
         }
         .card-maint-sampai { margin-top: 4px; font-weight: 700; color: #EF9F27; }
+        .menu-gagal-muat {
+          display: flex; align-items: center; justify-content: space-between; gap: 12px;
+          margin-bottom: 14px; padding: 10px 12px;
+          font-size: 12px; line-height: 1.55; color: #B5D4F4;
+          background: rgba(239,159,39,.10);
+          border-left: 3px solid #EF9F27;
+          border-radius: 0 6px 6px 0;
+        }
+        [data-theme="light"] .menu-gagal-muat { color: #4B5563; }
 
         /* header band */
         .card-band {
@@ -809,18 +813,45 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
           {/* Section title */}
           <div className="m-section-title fade-up-2">Menu Aplikasi</div>
 
+          {(sakelar.muat === 'gagal' || akses.muat === 'gagal') && (
+            <div className="menu-gagal-muat fade-up-2" role="alert">
+              <div>
+                {sakelar.muat === 'gagal' && (
+                  <div>Status modul gagal dimuat. Kartu di bawah belum menunjukkan modul mana yang sedang dalam pemeliharaan.</div>
+                )}
+                {akses.muat === 'gagal' && (
+                  <div>Daftar akses Anda gagal dimuat. Kartu yang tidak bisa Anda buka belum ditandai terkunci.</div>
+                )}
+              </div>
+              <PrimaButton
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (sakelar.muat === 'gagal') void muatSakelar();
+                  if (akses.muat === 'gagal') void muatAkses();
+                }}
+              >
+                Coba lagi
+              </PrimaButton>
+            </div>
+          )}
+
           {/* App grid */}
           <div className="app-grid fade-up-2" data-rima="menu.daftar-app">
             {visibleCards.map(card => {
               const Icon      = card.icon;
-              const locked    = isLocked(card);
+              const locked    = kartuTerkunci(akses, card.id);
               // P12 — `statusKey` bukan lagi kunci modulnya, melainkan kunci sakelar
               // yang menyebabkan keadaan ini. Kalau yang mematikan sakelar global,
               // pesan yang ditempel di kartu harus pesan global: kartu MAINTENANCE
               // dengan keterangan kosong mengirim orang menelepon, dan itu persis yang
               // P6 hapus.
-              const st        = sakelarKartu(card.id);
+              const st        = sakelarKartu(sakelar, card.id);
               const statusKey = st.kunci;
+              // T18 — status yang belum atau gagal dimuat TIDAK boleh jatuh ke lencana
+              // bawaan kartu (LIVE): itu mengatakan "modul normal" tanpa dasar apa pun.
+              const memuat    = !locked && st.keadaan === 'memuat';
+              const takTerbaca = !locked && st.keadaan === 'tak-terbaca';
               const isMaint   = !locked && st.keadaan === 'maintenance' && role !== 'SUPER_ADMIN';
               const isMaintSA = !locked && st.keadaan === 'maintenance' && role === 'SUPER_ADMIN';
               // P5 — modul BEKU tetap bisa dibuka: kartunya TIDAK diabukan dan tetap
@@ -828,12 +859,13 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
               // maksudnya: orang tahu sebelum masuk bahwa hari ini cuma bisa membaca.
               const isBeku    = !locked && st.keadaan === 'readonly';
 
-              const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : isBeku ? 'BEKU' : card.badge;
+              const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : isBeku ? 'BEKU'
+                : memuat ? 'MEMUAT' : takTerbaca ? 'BELUM TERBACA' : card.badge;
               // Warna badge status (brutalist: teks gelap + border hitam): hijau=LIVE, merah=admin, amber=maint, abu=locked
               // `#9CA3AF` di sini LATAR badge, bukan warna teks — sengaja tidak ikut
               // dinaikkan ke #6B7280 seperti teks bantu lainnya. Teksnya gelap di atasnya,
               // jadi menggelapkan latarnya justru menurunkan kontras.
-              const stColor = locked ? '#9CA3AF' : (isMaint || isMaintSA) ? '#EF9F27' : isBeku ? '#378ADD' : card.id === 'admin' ? '#E24B4A' : '#2BD46A';
+              const stColor = (locked || memuat || takTerbaca) ? '#9CA3AF' : (isMaint || isMaintSA) ? '#EF9F27' : isBeku ? '#378ADD' : card.id === 'admin' ? '#E24B4A' : '#2BD46A';
               const initials = card.name.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase();
 
               return (
@@ -847,6 +879,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                   data-tooltip={
                     isMaintSA ? 'Modul sedang maintenance. Anda bisa akses sebagai SUPER_ADMIN.'
                     : isBeku ? 'Modul sedang dibekukan: membuka, membaca, dan mencetak tetap bisa; menyimpan ditutup sementara.'
+                    : takTerbaca ? 'Status modul ini gagal dimuat, jadi belum bisa dipastikan sedang aktif atau dalam pemeliharaan.'
                     : ''
                   }
                   onKeyDown={e => e.key === 'Enter' && handleCardClick(card)}

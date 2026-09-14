@@ -211,8 +211,10 @@ cek('nol route Admin Panel yang tunduk sakelar', menyentuhSakelar.length === 0,
   menyentuhSakelar.join(', '))
 
 const menu = buangKomentar(baca('app/(dashboard)/menu/menu-client.tsx'))
+// Tahap 13 (T18): `sakelarKartu` pindah ke berkas daun supaya perilakunya bisa diuji.
+const kartuSakelar = buangKomentar(baca('app/(dashboard)/menu/_kartu-sakelar.ts'))
 cek('kartu admin dijawab online tanpa membaca sakelar apa pun',
-  badan(menu, 'function sakelarKartu').includes("if (id === 'admin') return { keadaan: 'online', kunci: kunciModul }"))
+  badan(kartuSakelar, 'export function sakelarKartu').includes("if (id === 'admin') return { keadaan: 'online', kunci: kunciModul }"))
 // Perkecualiannya ditulis SEKALI. Sebelumnya `card.id !== 'admin'` tersebar di empat
 // tempat, dan menambahkan sakelar global ke masing-masing berarti empat kesempatan
 // untuk melewatkan satu.

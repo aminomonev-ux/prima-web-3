@@ -167,8 +167,19 @@ export async function keadaanModul(keys: string[], opts?: OpsiSakelar): Promise<
   return bacaKeadaan(keys);
 }
 
-const tolakMati = (pesan: string) =>
-  NextResponse.json({ ok: false, code: 'MODUL_MATI', error: pesan }, { status: 503 });
+/**
+ * T3 — kalimatnya diisi ke TIGA laci, bukan satu. Klien PRIMA membaca galat dari laci
+ * yang berbeda-beda: `message` (fetchJson, PK, Kinerja, BBA, Usulan, IKI), `error`
+ * (BLUD, Renaksi), `msg` (LKJIP — `app-guard.ts` sengaja mempertahankannya). Balasan
+ * ini keluar dari penjaga yang dipakai SEMUA modul, jadi dulu hanya berisi `error` dan
+ * kalimat pemeliharaan cuma sampai ke BLUD & Renaksi; sisanya menampilkan
+ * "HTTP 503 Service Unavailable" atau pesan cadangan. Menambah laci tidak mengubah
+ * laci yang sudah dibaca, jadi tak satu klien pun perlu disentuh.
+ */
+const balasSakelar = (code: 'MODUL_MATI' | 'MODUL_BACA_SAJA', pesan: string) =>
+  NextResponse.json({ ok: false, code, error: pesan, message: pesan, msg: pesan }, { status: 503 });
+
+const tolakMati = (pesan: string) => balasSakelar('MODUL_MATI', pesan);
 
 /**
  * 503 dan kode SENDIRI (`MODUL_BACA_SAJA`), terpisah dari `MODUL_MATI`. Penerimanya
@@ -176,13 +187,9 @@ const tolakMati = (pesan: string) =>
  * alasan yang sama persis dengan kenapa `modulMati` memulangkan 503 dan bukan 403.
  */
 const tolakBeku = () =>
-  NextResponse.json(
-    {
-      ok: false,
-      code: 'MODUL_BACA_SAJA',
-      error: 'Modul ini sedang dibekukan admin. Membuka dan mencetak tetap bisa, menyimpan ditutup sementara.',
-    },
-    { status: 503 },
+  balasSakelar(
+    'MODUL_BACA_SAJA',
+    'Modul ini sedang dibekukan admin. Membuka dan mencetak tetap bisa, menyimpan ditutup sementara.',
   );
 
 export async function modulMati(

@@ -10,7 +10,15 @@
 
 export type ApiResult<T = unknown> =
   | { ok: true; data?: T; message?: string; [k: string]: unknown }
-  | { ok: false; message: string; status?: number };
+  | { ok: false; message: string; status?: number; code?: string };
+
+export function pesanDari(body: Record<string, unknown>): string {
+  for (const laci of ['message', 'error', 'msg'] as const) {
+    const v = body[laci];
+    if (typeof v === 'string' && v.trim()) return v;
+  }
+  return '';
+}
 
 export async function fetchJson<T = unknown>(
   url: string,
@@ -36,8 +44,11 @@ export async function fetchJson<T = unknown>(
     // HTTP error — coba parse body JSON untuk message yang lebih spesifik
     try {
       const body = await res.json() as Record<string, unknown>;
-      const msg = (body.message as string) || `HTTP ${res.status} ${res.statusText}`.trim();
-      return { ok: false, message: msg, status: res.status };
+      // T3: route PRIMA menaruh kalimatnya di `message`, `error`, atau `msg` — membaca
+      // satu laci saja menampilkan "HTTP 503" padahal kalimatnya ada di laci sebelah.
+      const msg = pesanDari(body) || `HTTP ${res.status} ${res.statusText}`.trim();
+      const code = typeof body.code === 'string' ? body.code : undefined;
+      return { ok: false, message: msg, status: res.status, ...(code ? { code } : {}) };
     } catch {
       // Body bukan JSON (mis. HTML error page) → fallback ke status
       return {
