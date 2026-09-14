@@ -625,6 +625,11 @@ Nomor 2 (judul kartu dasbor Inggris) dan 3 (`detail` jejak audit) dibiarkan apa 
   tidak bisa mengunduh berkasnya sendiri. Migrasinya dijalankan di dev; **server kantor wajib
   diperiksa** (`SHOW COLUMNS FROM uploaded_files LIKE 'sniff_ok'`).
   Uji: `test-tahap-15.mts` bagian B/B2 (49 pemeriksaan), 8/8 mutasi tertangkap.
+- **Nomor 6 · `tesujiakun` dibersihkan** (data dev, tanpa kode) — lewat layar yang dibangun
+  Tahap 16, bukan SQL: Pusat Akses → spanduk "3 pemberian akses tidak menambah apa-apa: BLUD,
+  Dashboard, Renaksi & Kinerja" → Lepas centangnya → Simpan. Tanpa dialog alasan (tidak ada
+  akses yang tertutup). Hasil: `app_access` kosong, ketiga modul tetap "Terbuka karena peran
+  Admin Staff", jejak audit #1639 `USER_UPDATE` menyebut ketiganya.
 
 ---
 
