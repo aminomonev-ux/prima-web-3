@@ -13,7 +13,8 @@ import path from 'node:path'
 import { potongHandler } from './_potong-handler.mjs'
 import { jangkaYangBerarti, sisaHari, tanggalSah, tanggalSingkat } from '../lib/admin/berjangka-baris'
 import { PusatAksesSimpanSchema } from '../lib/data/admin-schemas'
-import { modul } from '../lib/registry/apps'
+import { kunciSakelarUntuk, modul } from '../lib/registry/apps'
+import { kunciSakelarBerkas, modulPengunggah, MODUL_PENGUNGGAH } from '../lib/security/unggahan-modul'
 
 let lulus = 0
 let gagal = 0
@@ -60,10 +61,18 @@ cek('POST memanggil modulMati', iMati >= 0)
 cek('…SEBELUM file dibaca', iMati >= 0 && iFile >= 0 && iMati < iFile)
 cek('…dengan peran (SUPER_ADMIN tetap menembus)', badanPost.includes('{ role: session.role })'))
 cek('…dan hasilnya dipulangkan', badanPost.includes('if (mati) return mati;'))
+cek('…memakai daftar modul bersama (unggah & unduh satu jawaban)',
+  badanPost.includes('modulMati(kunciSakelarBerkas(modulAsal)') && !unggah.includes('const MODUL_PENGUNGGAH'))
+const semuaKunciPengunggah = [...new Set(MODUL_PENGUNGGAH.flatMap((m) => kunciSakelarUntuk(m)))]
+const samaHimpunan = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
 cek('modul tak disebut → semua sakelar pemakai ditanya',
-  unggah.includes('[...new Set(MODUL_PENGUNGGAH.flatMap((m) => kunciSakelarUntuk(m)))]'))
-const daftarPengunggah = (unggah.match(/const MODUL_PENGUNGGAH = \[([^\]]*)\]/)?.[1] ?? '')
-  .split(',').map((s) => s.trim().replace(/'/g, '')).filter(Boolean)
+  samaHimpunan(kunciSakelarBerkas(null), semuaKunciPengunggah) && semuaKunciPengunggah.length >= 2,
+  kunciSakelarBerkas(null).join(','))
+cek('modul disebut → hanya sakelarnya sendiri',
+  samaHimpunan(kunciSakelarBerkas('lkjip'), kunciSakelarUntuk('lkjip'))
+  && !kunciSakelarBerkas('lkjip').some((k) => kunciSakelarUntuk('usulan_aset').includes(k)))
+cek('nilai karangan tidak dikenali sebagai modul', modulPengunggah('blud') === null && modulPengunggah("lkjip' OR 1") === null)
+const daftarPengunggah: string[] = [...MODUL_PENGUNGGAH]
 cek('tiap modul pengunggah bersakelar di registry',
   daftarPengunggah.length > 0 && daftarPengunggah.every((k) => Boolean(modul(k)?.sakelar)), daftarPengunggah.join(','))
 
@@ -80,6 +89,34 @@ for (const [f, t] of pemanggil) {
   cek(`${f.replace('app/(dashboard)/', '')}: ${kirim} unggahan menyebut modulnya`,
     kirim > 0 && disebut.length === kirim && disebut.every((m) => daftarPengunggah.includes(m)), disebut.join(','))
 }
+
+// ── B2 · /api/upload/download ikut sakelar (pertanyaan akhir nomor 5) ───────
+console.log('\nB2 · /api/upload/download ikut sakelar modul pemilik berkas')
+
+cek('unggahan mencatat modul pemilik dari daftar, bukan field bebas klien',
+  badanPost.includes('const context = modulAsal;') && !badanPost.includes("formData.get('context')"))
+const unduh = buangKomentar(baca('app/api/upload/download/route.ts'))
+const badanGet = potongHandler(unduh).find((h: { nama: string }) => h.nama === 'GET')?.badan ?? ''
+const iMatiUnduh = badanGet.indexOf('const mati = await modulMati(kunciSakelarBerkas(modulPengunggah(owner?.context)), { role: session.role });')
+const iPilihBaris = badanGet.indexOf('f.context')
+const iTolakPemilik = badanGet.indexOf('if (!isAdminTier)')
+const iDrive = badanGet.indexOf('getDriveClient()')
+cek('GET membaca context berkas', iPilihBaris >= 0)
+cek('…lalu memanggil modulMati dengan modul berkas & peran', iMatiUnduh > iPilihBaris)
+cek('…dan hasilnya dipulangkan', badanGet.slice(iMatiUnduh, iMatiUnduh + 200).includes('if (mati) return mati;'))
+cek('…sebelum pemeriksaan pemilik', iMatiUnduh >= 0 && iTolakPemilik > iMatiUnduh)
+cek('…dan sebelum Drive disentuh', iMatiUnduh >= 0 && iDrive > iMatiUnduh)
+
+const mig = baca('docs/migrations/migration-uploaded-files-modul.sql').replace(/^\s*--.*$/gm, '')
+cek('migrasi mengisi baris lama untuk kedua modul pengunggah',
+  MODUL_PENGUNGGAH.every((m) => mig.includes(`SET f.context = '${m}'`)))
+cek('…hanya baris yang masih kosong (aman diulang)', (mig.match(/WHERE f\.context IS NULL/g) ?? []).length === MODUL_PENGUNGGAH.length)
+cek('…dengan collation eksplisit (uploaded_files 0900_ai_ci vs usulan_items unicode_ci)',
+  (mig.match(/COLLATE utf8mb4_unicode_ci/g) ?? []).length >= 3)
+cek('…kunci payload LKJIP sama dengan yang ditulis editor',
+  mig.includes("'$.fileId'") && mig.includes("'$.imageFileId'")
+  && baca('app/(dashboard)/lkjip/[id]/editor-client.tsx').includes("payload: { judul: '', fileId: json.fileId, caption: '' }")
+  && baca('lib/lkjip/schemas.ts').includes("imageFileId: z.string()"))
 
 // ── C · Lantai SUPER_ADMIN dari baris terkunci (T7) ─────────────────────────
 console.log('\nC · lantai SUPER_ADMIN di dalam transaksi (T7)')

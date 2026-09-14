@@ -594,6 +594,40 @@ folder route, sementara penanda `bludMati`/`realisasiMati` tetap ditagih dari re
 
 ---
 
+### Susulan — jawaban pemilik atas pertanyaan akhir (2026-09-14)
+Pemilik: "1 oke, 4 buang kalau sudah tidak dipakai, 5 tutup, 6 bersihkan, sisanya biarkan".
+Nomor 2 (judul kartu dasbor Inggris) dan 3 (`detail` jejak audit) dibiarkan apa adanya.
+
+- **Nomor 4 · checklist Status** (`6eb1701`) — baris Turnstile, Rate Limit Register, dan Rate
+  Limit Reset PW dibuang: ketiganya fitur yang dimatikan edisi intranet (`verifyTurnstile`
+  no-op, endpoint register/forgot/reset menjawab 410), tapi tetap dicentang hijau dan ikut
+  menggelembungkan "CHECKS PASSED". "CSP Headers: CF + self only" jadi "self + nonce".
+  **Temuan sampingan, tidak dikerjakan**: `/api/auth/change-password` hanya mewajibkan
+  8 karakter, padahal baris "Password Policy" menulis A-Z+0-9 (`StrongPasswordSchema` dipakai
+  pembuatan akun & reset admin, tidak di ganti sandi pemakai).
+- **Nomor 5 · `/api/upload/download` tunduk sakelar.** Route unduh tidak tahu berkas milik
+  modul mana: kolom `uploaded_files.context` ada sejak L61 tapi tak satu pemanggil pun
+  mengisinya. Kini `/api/upload` menulis modul asal yang SUDAH dicocokkan ke daftar
+  (`lib/security/unggahan-modul.ts`, dipakai unggah & unduh — satu daftar, L78), bukan field
+  bebas klien. Unduh membaca modul itu lalu `modulMati`; tak diketahui → semua sakelar
+  pengunggah ditanya (sama dengan unggah). GET = metode baca, jadi HANYA BACA tetap boleh
+  mengunduh; yang menutup cuma pemeliharaan. Baris lama diisi
+  `migration-uploaded-files-modul.sql` dari `usulan_items.file_url` dan payload
+  `lkjip_block` (`fileId` / `imageFileId`) — **wajib `COLLATE` eksplisit**: `uploaded_files`
+  ber-collation bawaan server (0900_ai_ci), `usulan_items` unicode_ci, LIKE-nya ditolak MySQL
+  tanpa itu (terbukti di dev). Migrasi diuji di transaksi yang DIBATALKAN dengan data buatan:
+  1 berkas Usulan + 2 LKJIP terisi, berkas tak dirujuk tetap NULL, ulangan mengubah 0 baris.
+  **Live** (uji.program, bukan Super Admin): Usulan PEMELIHARAAN → 503 `MODUL_MATI`; hanya
+  LKJIP PEMELIHARAAN → lolos sakelar (sampai ke Drive); Usulan HANYA BACA → lolos.
+  **Ditemukan saat dijalankan**: basis data dev tidak punya kolom `uploaded_files.sniff_ok`
+  (`migration-upload-sniff-flag.sql` belum pernah dijalankan), jadi pencatatan pemilik saat
+  unggah gagal diam-diam dan pemeriksaan pemilik saat unduh selalu gagal → pemakai non-admin
+  tidak bisa mengunduh berkasnya sendiri. Migrasinya dijalankan di dev; **server kantor wajib
+  diperiksa** (`SHOW COLUMNS FROM uploaded_files LIKE 'sniff_ok'`).
+  Uji: `test-tahap-15.mts` bagian B/B2 (49 pemeriksaan), 8/8 mutasi tertangkap.
+
+---
+
 ## 6. Yang sengaja TIDAK dikerjakan
 
 - **Tidak menambah lapis izin per-menu ke tujuh modul** supaya tombolnya bisa

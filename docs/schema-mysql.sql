@@ -1218,7 +1218,7 @@ CREATE TABLE IF NOT EXISTS lkjip_versi (
 CREATE TABLE IF NOT EXISTS uploaded_files (
   file_id      VARCHAR(64)  NOT NULL,
   uploaded_by  INT          NULL,
-  context      VARCHAR(40)  NULL,
+  context      VARCHAR(40)  NULL,  -- modul pemilik ('lkjip' | 'usulan_aset'); sakelar /api/upload/download. NULL = tak diketahui → semua sakelar pengunggah ditanya
   sniff_ok     TINYINT(1)   NOT NULL DEFAULT 1,
   created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (file_id),

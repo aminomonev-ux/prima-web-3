@@ -9,6 +9,8 @@ import { getSession } from '@/lib/security/auth';
 import { sql, queryOne } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ADMIN_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
+import { modulMati } from '@/lib/security/guard';
+import { kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
 
 export const runtime = 'nodejs';
 
@@ -47,16 +49,26 @@ export async function GET(req: NextRequest) {
   //  · BIDANG verifikator → hanya file dari sub-bidang DALAM kelompoknya
   //  · sub-bidang biasa → hanya file miliknya sendiri
   //  · file legacy/tak terlacak (atau lookup gagal) → admin tier saja (fail-closed)
-  let owner: { uploaded_by: number | null; uploader_role: string | null; sniff_ok: number | null } | null = null;
+  type BarisBerkas = { uploaded_by: number | null; uploader_role: string | null; sniff_ok: number | null; context: string | null };
+  let owner: BarisBerkas | null = null;
   let lookupFailed = false;
   try {
-    owner = await queryOne<{ uploaded_by: number | null; uploader_role: string | null; sniff_ok: number | null }>(
-      sql`SELECT f.uploaded_by, u.role AS uploader_role, f.sniff_ok
+    owner = await queryOne<BarisBerkas>(
+      sql`SELECT f.uploaded_by, u.role AS uploader_role, f.sniff_ok, f.context
             FROM uploaded_files f
             LEFT JOIN users u ON u.id = f.uploaded_by
            WHERE f.file_id = ${id} LIMIT 1`,
     );
   } catch (e) { lookupFailed = true; console.error('[Download] uploaded_files lookup failed (run migration?)', e); }
+
+  // Pertanyaan akhir Fase F nomor 5: unduhan dulu di luar sakelar, jadi modul yang sedang
+  // PEMELIHARAAN tetap mengalirkan berkasnya. Modulnya dibaca dari baris berkas (diisi
+  // `/api/upload` sejak itu, baris lama lewat migration-uploaded-files-modul.sql); tak
+  // diketahui → semua modul pengunggah ditanya. GET = metode baca, jadi HANYA BACA tetap
+  // mengizinkan unduh — yang menutup cuma pemeliharaan. Sebelum pemeriksaan pemilik, supaya
+  // jawaban saat pemeliharaan sama untuk semua orang.
+  const mati = await modulMati(kunciSakelarBerkas(modulPengunggah(owner?.context)), { role: session.role });
+  if (mati) return mati;
 
   const isAdminTier = (ADMIN_ROLES as readonly string[]).includes(session.role);
   if (!isAdminTier) {

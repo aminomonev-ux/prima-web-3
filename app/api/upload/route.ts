@@ -10,29 +10,13 @@ import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { sql } from '@/lib/data/db';
 import { modulMati } from '@/lib/security/guard';
-import { kunciSakelarUntuk } from '@/lib/registry/apps';
+import { kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
 
 export const runtime = 'nodejs';
 
-/**
- * Fase F Tahap 15b (T2) — modul yang memakai route ini. Berkas ini di luar `dirApi` modul
- * mana pun, jadi gate G tidak memindainya, dan dulu ia tidak memanggil sakelar sama sekali:
- * membekukan atau mematikan LKJIP/Usulan tidak menghentikan unggahan ke Drive maupun baris
- * `uploaded_files`. Pemanggil menyebut modul asalnya lewat field `modul`.
- */
-const MODUL_PENGUNGGAH = ['lkjip', 'usulan_aset'] as const;
-
-/**
- * `modul` tidak disebut (tab lama yang belum dimuat ulang sesudah deploy) → SEMUA sakelar
- * pemakainya ditanya. Lebih membatasi daripada menebak, dan tidak memutus tab yang terbuka
- * selama modulnya memang hidup.
- */
-function kunciUnggah(modul: string | null): string[] {
-  const dipakai = MODUL_PENGUNGGAH.find((m) => m === modul);
-  return dipakai
-    ? kunciSakelarUntuk(dipakai)
-    : [...new Set(MODUL_PENGUNGGAH.flatMap((m) => kunciSakelarUntuk(m)))];
-}
+// Fase F Tahap 15b (T2): route ini di luar `dirApi` modul mana pun, jadi gate G tidak
+// memindainya — dulu membekukan LKJIP/Usulan tidak menghentikan unggahan ke Drive.
+// Pemanggil menyebut modul asalnya lewat field `modul`.
 
 const UPLOAD_RL_REQUESTS = 20;
 const UPLOAD_RL_WINDOW   = 60;
@@ -110,8 +94,8 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     // T2 — sebelum file disentuh: modul yang dibekukan/dimatikan tidak boleh tetap
     // menerima unggahan (POST = metode tulis, jadi beku ikut menolak).
-    const modulAsal = formData.get('modul');
-    const mati = await modulMati(kunciUnggah(typeof modulAsal === 'string' ? modulAsal : null), { role: session.role });
+    const modulAsal = modulPengunggah(formData.get('modul'));
+    const mati = await modulMati(kunciSakelarBerkas(modulAsal), { role: session.role });
     if (mati) return mati;
 
     const file = formData.get('file') as File | null;
@@ -157,7 +141,10 @@ export async function POST(req: NextRequest) {
     // L61: catat pemilik file → /api/upload/download bisa authorize per-file
     // (uploader atau role elevated), bukan sekadar "sudah login". Silent-fail
     // (jangan gagalkan upload kalau insert tracking error).
-    const context = (formData.get('context') as string | null)?.slice(0, 40) || null;
+    // `context` = modul pemilik, dibaca sakelar `/api/upload/download`. Diambil dari
+    // `modulAsal` yang sudah dicocokkan ke daftar, BUKAN field bebas dari klien: nilai
+    // karangan di sini akan membuat unduhan ditimbang terhadap sakelar modul lain.
+    const context = modulAsal;
     try {
       await sql`INSERT INTO uploaded_files (file_id, uploaded_by, context, sniff_ok) VALUES (${fileId}, ${session.userId}, ${context}, ${sniffOk ? 1 : 0})`;
     } catch (e) { console.error('[Upload] tracking insert failed', e); }
