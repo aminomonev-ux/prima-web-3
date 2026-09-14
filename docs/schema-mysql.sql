@@ -87,11 +87,8 @@ INSERT IGNORE INTO app_config (`key`, value) VALUES
   ('app_status_blud',               'online'),
   ('app_status_blud_realisasi',     'online'),  -- kill-switch sub-modul Realisasi (fail-closed, S4)
   ('app_status_perjanjian_kinerja', 'online'),
-  ('app_status_probis',             'online'),
   ('app_status_rencana_aksi',       'online'),
-  ('app_status_jp_renbang',         'online'),
   ('app_status_new_econtrolling',   'online'),
-  ('app_status_kinerja',            'online'),
   ('app_status_rima_query',         'online'),  -- kill-switch Q&A data Rima (fail-closed, G30)
   ('app_status_iki',                'online');
 

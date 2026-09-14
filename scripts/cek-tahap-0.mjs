@@ -56,8 +56,11 @@ console.log(`basis data  : ${E.MYSQL_DATABASE} @ ${E.MYSQL_HOST || 'localhost'}`
 console.log('')
 
 // ── 1. Sakelar ───────────────────────────────────────────────────────────────
+// `_pesan` / `_sampai` (P6) berawalan sama tapi berisi teks keterangan, bukan keadaan —
+// tanpa pengecualian ini keduanya ditandai `!!` seolah sakelar yang mati.
 const [sakelar] = await conn.query(
-  "SELECT `key`, value, updated_at FROM app_config WHERE `key` LIKE 'app_status_%' ORDER BY `key`",
+  "SELECT `key`, value, updated_at FROM app_config WHERE `key` LIKE 'app_status_%'"
+  + " AND `key` NOT LIKE '%\\_pesan' AND `key` NOT LIKE '%\\_sampai' ORDER BY `key`",
 )
 
 console.log('1) SAKELAR PEMELIHARAAN')
