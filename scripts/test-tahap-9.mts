@@ -216,7 +216,7 @@ cek('kartunya tetap membawa keterangan & tenggat',
 
 const halaman = buangKomentar(baca('app/maintenance/page.tsx'))
 cek('/maintenance hanya untuk modul yang benar-benar MATI',
-  halaman.includes("if (sebab.keadaan !== 'maintenance') return null")
+  halaman.includes("if (k.keadaan !== 'maintenance') return null")
   && !halaman.includes("!== 'online'"))
 
 const spanduk = buangKomentar(baca('components/ui/SpandukBeku.tsx'))

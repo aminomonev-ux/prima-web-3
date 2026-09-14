@@ -500,6 +500,32 @@ basis data. Tahap 7 disesuaikan (mengutip pembanding lama).
   supaya basis data yang lahir dari berkas acuan tidak punya satu sakelar tanpa baris.
 - Panduan pemasangan menyebut dua pemeriksaan Tahap 0 (`cek-tahap-0.mjs`, `@@sql_mode`).
 
+**SELESAI (2026-09-14).**
+- **K2 di halaman login** — `app/(auth)/login/page.tsx` jadi server component (formulir lama
+  dipindah `git mv` ke `login-form.tsx`); daftarnya dari `lib/security/pemeliharaan.ts` →
+  `daftarPemeliharaanDari` di registry. Hanya `maintenance`, disaring per PENYEBAB (induk
+  disebut sekali; global mati → satu baris). Nol route publik baru (uji mencocokkan
+  `PUBLIC_ROUTES` persis). Layar Sakelar kini menulis bahwa keterangannya terbaca sebelum login.
+  Live tanpa cookie sesi: "Dashboard sedang dalam pemeliharaan. BLUD sedang dalam
+  pemeliharaan. Anda tetap bisa masuk…", formulir tetap ada.
+- **`/maintenance` ikut dirapikan** (sisa dari Tahap 14): `keteranganSakelar` di registry
+  mengambil nama & kalimat dari sakelar PENYEBAB. Live: `?m=app_status_blud_realisasi` saat BLUD
+  dimatikan kini berbunyi **BLUD** (dulu "BLUD — Realisasi" dengan keterangan kosong).
+- **Font** — ternyata TIGA berkas, bukan satu: `app/error.tsx` & `app/not-found.tsx` juga
+  `@import` Google Fonts (galat CSP yang terlihat di /menu berasal dari `error.tsx`). Diganti
+  font lokal `@fontsource` yang sudah dimuat `app/layout.tsx`.
+- **T15** — seed ternyata kehilangan LIMA sakelar (global, dashboard, buku_besar_aset, lkjip,
+  sentinel_bot). Seed kini = `KUNCI_SAKELAR` (diuji), + `migration-seed-sakelar-lengkap.sql`
+  (INSERT IGNORE, dijalankan di dev: 1 baris, `sentinel_bot`).
+- Panduan: `cek-tahap-0.mjs` di daftar periksa & sesudah naik versi, `sql_mode` strict,
+  pemeriksaan BEKU, dua migrasi fase ini. Satu baris ganda "Nyalakan lagi." ikut dibuang.
+
+Uji: `scripts/test-tahap-17.mts` 34 pemeriksaan, **10/11 mutasi tertangkap** — yang lolos
+mutasi SETARA (`return [global]` lebih awal berlebih karena penyaring per penyebab sudah
+menyisakan satu baris), jadi barisnya dibuang, bukan ditambal ujinya. Satu asersi saya sempat
+selalu-lulus (membandingkan `PUBLIC_ROUTES` dengan dirinya sendiri) dan diganti daftar persis.
+Tahap 4/9/12 disesuaikan ke bentuk `/maintenance` yang baru.
+
 ---
 
 ### Tahap 18 — Bahasa layar Admin Panel & sakelar
@@ -585,13 +611,13 @@ Tahap 0 nomor 2 ─────────┘        │            │
 | T6 | `asal_paket.diubah: 1` di-hardcode | 16 | kode · **selesai** |
 | T7 | Lantai SA berdiri di `role_awal` klien | 15 | kode · **selesai** |
 | T8 | `app_status_dashboard` = maintenance sejak 3 Agu | 0 | live · **dinyalakan** (dev) |
-| T9 | `/maintenance` publik + font diblokir CSP sendiri | 17 (K2) | live |
+| T9 | `/maintenance` publik + font diblokir CSP sendiri | 17 (K2) | live · **selesai** |
 | T10 | Regex tanggal meloloskan `2026-13-45` | 15 | live · **selesai** |
 | T11 | Petunjuk menunjuk 5 tab yang tidak ada | 16 | live · **selesai** (+2 rujukan hantu lain) |
 | T12 | Spanduk BEKU berbohong di BLUD & PK | 14 (K1) | live · **selesai** |
 | T13 | Dashboard menawarkan BEKU yang nihil akibat | 14 | live · **selesai** |
 | T14 | `sakelarKartu` merangkai kunci sebagai teks | 14 | kode · **selesai** |
-| T15 | `app_status_global` tanpa baris seed | 17 | kode |
+| T15 | `app_status_global` tanpa baris seed | 17 | kode · **selesai** (+4 sakelar lain) |
 | T17 | Grant mubazir mustahil dibuang; jejaknya palsu | 16 (K3) | live · **selesai** |
 | T18 | `/menu` fail-open: satu fetch gagal → semua LIVE | 13 | live · **selesai** (13b83af) |
 | T19 | Pusat Akses: belum/gagal memuat berbunyi "0 orang" | 16 | live · **selesai** |

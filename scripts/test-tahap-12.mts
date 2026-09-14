@@ -243,14 +243,18 @@ cek('layar bisa membedakan global dari modul', beku.includes('global,') && beku.
 cek('TIDAK_BEKU ikut punya bendera itu', beku.includes("sampai: '', global: false, bagian: '' }"))
 
 const maint = buangKomentar(baca('app/maintenance/page.tsx'))
+// Fase F Tahap 17: dirapikan ke `keteranganSakelar` (registry), yang menyisipkan global
+// lewat `kunciDenganGlobal` dan mengambil nama + kalimat dari sakelar PENYEBAB.
 cek('/maintenance ikut menghitung sakelar global',
-  maint.includes('kunciDenganGlobal([kunci, ...(info.induk ? [info.induk] : [])])'))
+  maint.includes('const semua = kunciDenganGlobal(lingkup)')
+  && baca('lib/registry/apps.ts').includes('const sebab = sebabTerburuk(kunciDenganGlobal(kunci).map((k) => [k, nilai[k]] as const))'))
 cek('…dan menulis nama sakelar penyebabnya',
-  maint.includes('label: global ? LABEL_GLOBAL : info.label'))
+  maint.includes('return { label: k.label, pesan: k.pesan, sampai: k.sampai }')
+  && baca('lib/registry/apps.ts').includes("label: sumber ? (LABEL_SAKELAR[sumber] ?? sumber) : ''"))
 // `readonly` tetap BUKAN alasan menampilkan halaman pemeliharaan — modul beku harus
 // tetap bisa dibuka & dicetak (P5). Global yang beku pun tidak boleh mengubah itu.
 cek('beku tetap tidak memunculkan halaman pemeliharaan',
-  maint.includes("if (sebab.keadaan !== 'maintenance') return null"))
+  maint.includes("if (k.keadaan !== 'maintenance') return null"))
 
 cek('kartu /menu mengambil pesan dari sakelar penyebabnya',
   menu.includes('const statusKey = st.kunci'))

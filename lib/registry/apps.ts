@@ -463,6 +463,63 @@ export function urlPemeliharaan(kunciSakelar: string): string {
   return `/maintenance?m=${encodeURIComponent(kunciSakelar)}`
 }
 
+export type KeteranganSakelar = {
+  keadaan: KeadaanSakelar
+  /** Kunci sakelar PENYEBAB (global, modul, atau sub-sakelar). `null` saat online. */
+  kunci: string | null
+  global: boolean
+  label: string
+  pesan: string
+  /** Sudah diformat untuk dibaca manusia. */
+  sampai: string
+}
+
+/**
+ * Fase F Tahap 17 — keadaan sebuah lingkup sakelar BESERTA nama & kalimat dari sakelar
+ * yang MENYEBABKANNYA, dari peta `app_config` yang sudah dibaca.
+ *
+ * Dipakai halaman `/maintenance` dan pemberitahuan di halaman login (K2). Keduanya dulu
+ * (atau akan) menulis rumusnya sendiri; `/maintenance` mengambil label & pesan dari kunci
+ * yang DITANYAKAN, jadi tautan pemeliharaan Realisasi saat yang dimatikan BLUD berbunyi
+ * "BLUD — Realisasi" dengan keterangan kosong. Pembaca keenam dengan rumus sendiri adalah
+ * bentuk persis T1/T14.
+ */
+export function keteranganSakelar(
+  nilai: Readonly<Record<string, string | null | undefined>>,
+  kunci: readonly string[],
+): KeteranganSakelar {
+  const sebab = sebabTerburuk(kunciDenganGlobal(kunci).map((k) => [k, nilai[k]] as const))
+  const sumber = sebab.kunci
+  return {
+    keadaan: sebab.keadaan,
+    kunci: sumber,
+    global: sumber === KUNCI_GLOBAL,
+    label: sumber ? (LABEL_SAKELAR[sumber] ?? sumber) : '',
+    pesan: sumber ? (nilai[kunciPesan(sumber)] ?? '').trim() : '',
+    sampai: sumber ? formatSampai((nilai[kunciSampai(sumber)] ?? '').trim()) : '',
+  }
+}
+
+/**
+ * K2 — daftar pemeliharaan yang diumumkan di halaman login: satu baris per sakelar
+ * PENYEBAB yang sedang `maintenance`. `readonly` sengaja tidak ikut (modul beku masih bisa
+ * dibuka & dicetak). Disaring per PENYEBAB, jadi kalau sakelar global yang mati, tiap
+ * modul menunjuk kunci yang sama dan hanya satu baris yang tersisa — menyebut sepuluh
+ * modul untuk satu sebab membuat orang mengira sepuluh masalah.
+ */
+export function daftarPemeliharaanDari(
+  nilai: Readonly<Record<string, string | null | undefined>>,
+): KeteranganSakelar[] {
+  const hasil = new Map<string, KeteranganSakelar>()
+  for (const m of MODUL_APPS) {
+    for (const l of lingkupSakelarModul(m.kunci)) {
+      const k = keteranganSakelar(nilai, l.kunci)
+      if (k.keadaan === 'maintenance' && k.kunci && !hasil.has(k.kunci)) hasil.set(k.kunci, k)
+    }
+  }
+  return [...hasil.values()]
+}
+
 /** Bentuk `app_status_*_sampai` yang diterima: tanggal, boleh berjam. */
 export const RE_SAMPAI = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/
 

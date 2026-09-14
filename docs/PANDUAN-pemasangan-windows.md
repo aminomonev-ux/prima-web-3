@@ -86,14 +86,16 @@ Kode ini mengandalkan keduanya. Kalau berbeda, sebagian query berperilaku lain �
 dan bedanya halus, bukan error yang jelas kelihatan.
 
 ```sql
-SELECT @@sql_mode;          -- harus memuat ONLY_FULL_GROUP_BY
+SELECT @@sql_mode;          -- harus memuat ONLY_FULL_GROUP_BY, STRICT_TRANS_TABLES, NO_ZERO_DATE
 SELECT @@global.time_zone;  -- catat nilainya
 SHOW VARIABLES LIKE 'event_scheduler';  -- untuk §5
 ```
 
-`ONLY_FULL_GROUP_BY` adalah bawaan MySQL 8, jadi biasanya sudah benar. Kalau
-ternyata dimatikan di server ini, nyalakan lagi di `my.ini` — jangan sebaliknya
-menyesuaikan kode.
+Ketiganya bawaan MySQL 8, jadi biasanya sudah benar. Kalau ternyata dimatikan di
+server ini, nyalakan lagi di `my.ini` — jangan sebaliknya menyesuaikan kode.
+`STRICT_TRANS_TABLES` + `NO_ZERO_DATE` yang membuat tanggal karangan (mis. `2026-13-45`)
+ditolak basis data alih-alih disimpan diam-diam sebagai `0000-00-00`. Sejak 2026-09-14
+aplikasi juga menolaknya lebih dulu, tapi pagar keduanya tetap perlu ada.
 
 ---
 
@@ -556,12 +558,17 @@ Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
       (ini membuktikan pengaman login bekerja)
 - [ ] Buka `/menu` → kartu aplikasi muncul sesuai hak akses
 - [ ] Masuk `/blud/dpa` → tabel tampil tanpa error
-- [ ] Admin Panel → matikan satu modul → pastikan kartunya jadi abu **dan**
-      mengetik URL modul itu langsung dilempar ke halaman "Sedang Dalam Perbaikan".
+- [ ] `node scripts/cek-tahap-0.mjs` → baris **PUTUSAN** berbunyi `OK`, dan tidak ada
+      sakelar bertanda `!!` yang tidak sengaja dimatikan
+- [ ] Admin Panel → Sakelar → **MAINTENANCE** satu modul → pastikan kartunya jadi abu,
+      mengetik URL modul itu langsung dilempar ke halaman "Sedang Dalam Perbaikan",
+      **dan** halaman login (buka di jendela penyamaran) menyebut modul itu.
       Coba juga dengan akun **bukan** SUPER_ADMIN — SUPER_ADMIN memang sengaja
       tetap bisa masuk saat maintenance, jadi menguji pakai akun itu tidak
       membuktikan apa-apa. Lalu **nyalakan lagi** modulnya.
-      Nyalakan lagi.
+- [ ] Sakelar → **BEKU** satu modul → dengan akun bukan SUPER_ADMIN, layarnya tetap bisa
+      dibuka, spanduk pembekuan tampil, dan tombol Simpan terlihat tapi mati dengan
+      tooltip. Lalu nyalakan lagi.
 - [ ] Unduh satu berkas Excel/Word dari modul mana pun → berhasil
 - [ ] Jalankan **kelima** tugas cron dengan tangan (§5) → `cron.log` berisi `OK`
 - [ ] `Get-ScheduledTask -TaskName 'PRIMA*'` → semuanya terdaftar, dan
@@ -616,6 +623,14 @@ pm2 restart prima
 
 **Backup database dulu sebelum menjalankan migration apa pun.** Migration mengubah
 struktur tabel dan tidak bisa dibatalkan dengan tombol.
+
+Sesudah naik versi, jalankan `node scripts/cek-tahap-0.mjs` sekali. Ia hanya membaca,
+dan menunjukkan sakelar yang tertinggal dimatikan — sakelar kini benar-benar menutup
+layar & API, jadi sakelar lupa-dinyalakan dari masa lalu langsung terasa.
+
+Migration dari perbaikan audit akses (2026-09-14), keduanya aman diulang:
+`migration-hapus-sakelar-yatim.sql` (buang tiga sakelar tanpa modul) dan
+`migration-seed-sakelar-lengkap.sql` (lengkapi baris sakelar yang belum pernah diseed).
 
 ---
 

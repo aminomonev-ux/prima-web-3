@@ -5,7 +5,7 @@ export default function GlobalError() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&display=swap');
+        /* Fase F Tahap 17 (T9): @import Google Fonts dibuang — CSP proxy.ts (style-src 'self') memblokirnya, jadi fontnya tak pernah termuat dan tiap kunjungan melempar galat CSP. Font lokal @fontsource dari app/layout.tsx. */
         .err-body {
           min-height: 100vh;
           background: #020b14;
@@ -15,7 +15,7 @@ export default function GlobalError() {
           background-size: 40px 40px;
           display: flex; flex-direction: column;
           align-items: center; justify-content: center;
-          font-family: 'Exo 2', sans-serif;
+          font-family: 'Plus Jakarta Sans Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
           color: #e0f7ff;
         }
         .err-card {
@@ -48,7 +48,7 @@ export default function GlobalError() {
           background: rgba(0,212,255,.08);
           color: #00d4ff; font-size: 12px; font-weight: 700;
           letter-spacing: 1px; cursor: pointer;
-          font-family: 'Exo 2', sans-serif;
+          font-family: 'Plus Jakarta Sans Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
           transition: all .2s;
         }
         .err-btn:hover { background: rgba(0,212,255,.16); border-color: #00d4ff; }

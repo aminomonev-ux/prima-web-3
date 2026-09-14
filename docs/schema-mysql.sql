@@ -82,7 +82,15 @@ CREATE TABLE IF NOT EXISTS app_config (
   updated_at DATETIME      DEFAULT NOW() ON UPDATE NOW()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Fase F Tahap 17 (T15): daftar ini = `KUNCI_SAKELAR` di lib/registry/apps.ts, diperiksa
+-- scripts/test-tahap-17.mts. Baris yang tidak ada tetap terbaca online, tapi basis data yang
+-- lahir dari berkas ini tidak boleh punya sakelar tanpa baris (tidak tampil di cek-tahap-0).
 INSERT IGNORE INTO app_config (`key`, value) VALUES
+  ('app_status_global',             'online'),  -- P12: sakelar seluruh aplikasi
+  ('app_status_dashboard',          'online'),
+  ('app_status_buku_besar_aset',    'online'),
+  ('app_status_lkjip',              'online'),
+  ('app_status_sentinel_bot',       'online'),
   ('app_status_usulan_aset',        'online'),
   ('app_status_blud',               'online'),
   ('app_status_blud_realisasi',     'online'),  -- kill-switch sub-modul Realisasi (fail-closed, S4)

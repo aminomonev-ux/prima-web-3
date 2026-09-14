@@ -217,10 +217,12 @@ cek('nama modul diambil dari registry, bukan dari URL',
 // `!== 'online'` bukan lagi pertanyaan yang benar — ia ikut menelan modul yang cuma
 // dibekukan. Yang dijaga pemeriksaan ini TIDAK berubah: keadaannya dibaca dari DB, dan
 // hanya yang benar-benar mati yang boleh menampilkan halaman ini.
+// Fase F Tahap 17: keputusannya lewat `keteranganSakelar` di registry (penolong yang sama
+// dengan pemberitahuan di halaman login), dari baris yang baru dibaca.
 cek('status sakelar dibaca dari DB sebelum namanya ditampilkan',
-  mtBersih.includes('sebabTerburuk(kunciCek.map((k) => [k, peta.get(k)] as const))'))
+  mtBersih.includes('const k = keteranganSakelar(Object.fromEntries(rows.map((r) => [r.key, r.value])), lingkup)'))
 cek('sakelar yang TIDAK mati = nama tidak ditampilkan',
-  mtBersih.includes("!== 'maintenance') return null"))
+  mtBersih.includes("if (k.keadaan !== 'maintenance') return null"))
 cek('induk ikut ditanyakan (mematikan BLUD ikut menutup Realisasi)',
   mtBersih.includes('...(info.induk ? [info.induk] : [])'))
 cek('gagal baca DB = tidak terbukti, bukan diteruskan',

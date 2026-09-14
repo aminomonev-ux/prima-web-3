@@ -20,8 +20,7 @@
 // hanya jujur saat semuanya lancar bukan sakelar (pola `modulMati`).
 import { sql } from '@/lib/data/db';
 import {
-  formatSampai, infoSakelar, KUNCI_GLOBAL, kunciDenganGlobal, kunciPesan, kunciSampai,
-  LABEL_GLOBAL, sebabTerburuk,
+  infoSakelar, kunciDenganGlobal, kunciPesan, kunciSampai, keteranganSakelar,
 } from '@/lib/registry/apps';
 
 export const dynamic = 'force-dynamic';
@@ -40,30 +39,21 @@ async function buktikan(kunci: string | undefined): Promise<Terbukti> {
   // mematikan seluruh aplikasi membuat halaman ini menjawab "tidak terbukti" untuk tiap
   // modul — orangnya ditolak 503 lalu mendarat di halaman umum tanpa nama dan tanpa
   // kalimat, tepat pada pemadaman yang paling perlu dijelaskan.
-  const kunciCek = kunciDenganGlobal([kunci, ...(info.induk ? [info.induk] : [])]);
-  const berteks = [KUNCI_GLOBAL, kunci];
+  const lingkup = [...(info.induk ? [info.induk] : []), kunci];
+  const semua = kunciDenganGlobal(lingkup);
   try {
+    // Pesan & tenggat dibaca untuk SEMUA kunci lingkup: penyebabnya bisa induk.
     const rows = await sql`
       SELECT \`key\`, value FROM app_config
-      WHERE \`key\` IN (${[...kunciCek, ...berteks.map(kunciPesan), ...berteks.map(kunciSampai)]})
+      WHERE \`key\` IN (${[...semua, ...semua.map(kunciPesan), ...semua.map(kunciSampai)]})
     ` as { key: string; value: string }[];
-    const peta = new Map(rows.map((r) => [r.key, r.value]));
-    // P5: `readonly` BUKAN alasan menampilkan halaman ini. Modul beku tetap harus
-    // bisa dibuka & dicetak — halaman pemeliharaan yang tampil untuknya justru
-    // mengubah pembekuan jadi pemadaman. Karena itu `sebabTerburuk`, bukan
-    // pemeriksaan lama `!== 'online'` yang menganggap keduanya sama.
-    const sebab = sebabTerburuk(kunciCek.map((k) => [k, peta.get(k)] as const));
-    if (sebab.keadaan !== 'maintenance') return null;
-    // Yang ditulis di halaman ini nama sakelar yang MENYEBABKANNYA. Menyebut nama modul
-    // saat yang mati seluruh aplikasi membuat orang mencoba modul sebelah, lalu kembali
-    // dengan pertanyaan yang sama.
-    const global = sebab.kunci === KUNCI_GLOBAL;
-    const sumber = global ? KUNCI_GLOBAL : kunci;
-    return {
-      label: global ? LABEL_GLOBAL : info.label,
-      pesan: (peta.get(kunciPesan(sumber)) ?? '').trim(),
-      sampai: formatSampai((peta.get(kunciSampai(sumber)) ?? '').trim()),
-    };
+    // P5: `readonly` BUKAN alasan menampilkan halaman ini — modul beku tetap harus bisa
+    // dibuka & dicetak. Nama & kalimatnya dari sakelar PENYEBAB (`keteranganSakelar`,
+    // Tahap 17): dulu dari kunci yang ditanyakan, jadi Realisasi yang ikut mati karena
+    // BLUD dimatikan berbunyi "BLUD — Realisasi" dengan keterangan kosong.
+    const k = keteranganSakelar(Object.fromEntries(rows.map((r) => [r.key, r.value])), lingkup);
+    if (k.keadaan !== 'maintenance') return null;
+    return { label: k.label, pesan: k.pesan, sampai: k.sampai };
   } catch {
     return null;
   }
@@ -81,7 +71,7 @@ export default async function MaintenancePage({
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700;800&family=Share+Tech+Mono&display=swap');
+        /* Fase F Tahap 17 (T9): @import Google Fonts dibuang — CSP proxy.ts (style-src 'self') memblokirnya, jadi fontnya tak pernah termuat dan tiap kunjungan melempar galat CSP. Font lokal @fontsource dari app/layout.tsx. */
         @keyframes scanline { 0%{transform:translateY(0)} 100%{transform:translateY(100vh)} }
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         @keyframes pulse-glow { 0%,100%{box-shadow:0 0 20px rgba(255,204,0,.3)} 50%{box-shadow:0 0 50px rgba(255,204,0,.7),0 0 80px rgba(255,204,0,.3)} }
@@ -95,7 +85,7 @@ export default async function MaintenancePage({
           background-size: 40px 40px;
           display: flex; flex-direction: column;
           align-items: center; justify-content: center;
-          font-family: 'Exo 2', sans-serif;
+          font-family: 'Plus Jakarta Sans Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
           color: #e0f7ff;
           position: relative; overflow: hidden;
         }
@@ -126,7 +116,7 @@ export default async function MaintenancePage({
         .mn-icon { font-size: 36px; }
         .mn-tag {
           display: inline-block;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: 'JetBrains Mono', 'Geist Mono Variable', ui-monospace, monospace;
           font-size: 10px; letter-spacing: 3px;
           color: #ffcc00; padding: 4px 14px;
           border: 1px solid rgba(255,204,0,.4);
@@ -159,7 +149,7 @@ export default async function MaintenancePage({
         }
         .mn-sampai {
           display: inline-flex; align-items: center; gap: 8px;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: 'JetBrains Mono', 'Geist Mono Variable', ui-monospace, monospace;
           font-size: 11.5px; color: #ffcc00;
           padding: 6px 14px; margin-bottom: 24px;
           border: 1px solid rgba(255,204,0,.3);
@@ -172,7 +162,7 @@ export default async function MaintenancePage({
         }
         .mn-status {
           display: flex; align-items: center; justify-content: center; gap: 8px;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: 'JetBrains Mono', 'Geist Mono Variable', ui-monospace, monospace;
           font-size: 11px; color: #5a8ea8; margin-bottom: 28px;
         }
         .mn-status-dot {
@@ -188,7 +178,7 @@ export default async function MaintenancePage({
           background: rgba(0,212,255,.08);
           color: #00d4ff; font-size: 12px; font-weight: 700;
           letter-spacing: 1px; cursor: pointer;
-          font-family: 'Exo 2', sans-serif;
+          font-family: 'Plus Jakarta Sans Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
           transition: all .2s; text-decoration: none;
         }
         .mn-btn:hover {
@@ -199,7 +189,7 @@ export default async function MaintenancePage({
         .mn-footer {
           position: relative; z-index: 1;
           margin-top: 32px;
-          font-family: 'Share Tech Mono', monospace;
+          font-family: 'JetBrains Mono', 'Geist Mono Variable', ui-monospace, monospace;
           font-size: 10px; color: #2a4a5a; letter-spacing: 1px;
         }
         @media (prefers-reduced-motion: reduce) {

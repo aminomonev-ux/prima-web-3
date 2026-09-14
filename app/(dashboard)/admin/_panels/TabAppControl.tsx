@@ -258,6 +258,8 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                     value={d.pesan}
                     onChange={e=>setDraf(p=>({...p,[s.kunci]:{...p[s.kunci],pesan:e.target.value}}))}
                   />
+                  {/* Fase F Tahap 17 (K2): keterangan pemeliharaan tampil di halaman login. */}
+                  <div className="ap-sk-kosong">Keterangan saat pemeliharaan juga tampil di halaman login, jadi bisa dibaca orang yang belum masuk. Jangan tulis hal yang tidak boleh diketahui umum.</div>
                   <div className="ap-sk-baris">
                     <label className="ap-sk-lbl">Perkiraan selesai</label>
                     <input
