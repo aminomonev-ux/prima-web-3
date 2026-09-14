@@ -213,8 +213,10 @@ cek('nol route Admin Panel yang tunduk sakelar', menyentuhSakelar.length === 0,
 const menu = buangKomentar(baca('app/(dashboard)/menu/menu-client.tsx'))
 // Tahap 13 (T18): `sakelarKartu` pindah ke berkas daun supaya perilakunya bisa diuji.
 const kartuSakelar = buangKomentar(baca('app/(dashboard)/menu/_kartu-sakelar.ts'))
+// Tahap 14a (T14): perkecualiannya kini STRUKTURAL — modul tanpa sakelar di registry
+// (Admin Panel) tidak punya lingkup, jadi dijawab online sebelum status dibaca.
 cek('kartu admin dijawab online tanpa membaca sakelar apa pun',
-  badan(kartuSakelar, 'export function sakelarKartu').includes("if (id === 'admin') return { keadaan: 'online', kunci: kunciModul }"))
+  badan(kartuSakelar, 'export function sakelarKartu').includes("if (!utama) return { keadaan: 'online', kunci: '', sebagian: [] }"))
 // Perkecualiannya ditulis SEKALI. Sebelumnya `card.id !== 'admin'` tersebar di empat
 // tempat, dan menambahkan sakelar global ke masing-masing berarti empat kesempatan
 // untuk melewatkan satu.
@@ -233,11 +235,12 @@ cek('…dan memutuskan lewat sebabTerburuk, bukan keadaanTerburuk',
   beku.includes('const sebab = sebabTerburuk(') && !beku.includes('keadaanTerburuk('))
 // Pesan yang diambil dari sakelar modul saat sebabnya global = spanduk kosong, tepat
 // pada pembekuan yang paling luas akibatnya.
+// Tahap 14a: penyebabnya bisa juga sub-sakelar, jadi sumbernya `sebab.kunci` apa adanya.
 cek('kalimatnya diambil dari sakelar penyebabnya',
-  beku.includes('const sumber = global ? KUNCI_GLOBAL : utama')
+  beku.includes('const sumber = sebab.kunci ?? utama')
   && beku.includes('peta.get(kunciPesan(sumber))') && beku.includes('kunciSampai(sumber)'))
 cek('layar bisa membedakan global dari modul', beku.includes('global,') && beku.includes('global: boolean'))
-cek('TIDAK_BEKU ikut punya bendera itu', beku.includes("sampai: '', global: false }"))
+cek('TIDAK_BEKU ikut punya bendera itu', beku.includes("sampai: '', global: false, bagian: '' }"))
 
 const maint = buangKomentar(baca('app/maintenance/page.tsx'))
 cek('/maintenance ikut menghitung sakelar global',

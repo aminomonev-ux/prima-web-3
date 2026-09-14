@@ -325,7 +325,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             <PrimaButton variant="ghost" onClick={() => setForm(null)}>Batal</PrimaButton>
-            <PrimaButton variant="primary" onClick={saveForm} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
+            <PrimaButton menulis variant="primary" onClick={saveForm} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
           </div>
         </Modal>
       )}

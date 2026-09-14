@@ -86,7 +86,7 @@ export function BatasWaktuPanel({
             Periode aktif: <strong>{fmtTgl(bwMulai)}</strong> — <strong>{fmtTgl(bwSelesai)}</strong>
           </div>
         )}
-        <PrimaButton variant="primary" iconLeft={<Save size={14}/>} onClick={doSave} disabled={loading}>
+        <PrimaButton menulis variant="primary" iconLeft={<Save size={14}/>} onClick={doSave} disabled={loading}>
           {loading ? 'Menyimpan...' : 'Simpan Konfigurasi'}
         </PrimaButton>
       </div>

@@ -2,7 +2,9 @@
 // Berkas DAUN: hanya mengimpor registry yang juga nol-impor, supaya aturannya bisa diuji
 // sungguhan dari skrip, bukan dicocokkan ke teks komponen.
 
-import { KUNCI_GLOBAL, sebabTerburuk, type KeadaanSakelar } from '@/lib/registry/apps';
+import {
+  bacaKeadaan, kunciDenganGlobal, lingkupSakelarModul, sebabTerburuk, type KeadaanSakelar,
+} from '@/lib/registry/apps';
 
 /**
  * Hasil memuat `/api/admin/app-status`. Tiga keadaan, bukan "data atau objek kosong":
@@ -17,21 +19,33 @@ export type MuatSakelar =
 
 export type KeadaanKartu = KeadaanSakelar | 'memuat' | 'tak-terbaca';
 
+/** Bagian modul (sub-sakelar) yang keadaannya lebih membatasi daripada kartunya. */
+export type BagianKartu = { label: string; keadaan: KeadaanSakelar; kunci: string };
+
+const PERINGKAT: Record<KeadaanSakelar, number> = { online: 0, readonly: 1, maintenance: 2 };
+
 export function sakelarKartu(
   status: MuatSakelar,
   id: string,
-): { keadaan: KeadaanKartu; kunci: string } {
-  const kunciModul = `app_status_${id}`;
-  // Admin Panel tidak punya sakelar; ia tempat menyalakan kembali yang lain, jadi tidak
-  // boleh ikut "tak terbaca" saat status gagal dimuat.
-  if (id === 'admin') return { keadaan: 'online', kunci: kunciModul };
-  if (status.muat === 'memuat') return { keadaan: 'memuat', kunci: kunciModul };
-  if (status.muat === 'gagal') return { keadaan: 'tak-terbaca', kunci: kunciModul };
-  const s = sebabTerburuk([
-    [KUNCI_GLOBAL, status.data[KUNCI_GLOBAL]],
-    [kunciModul, status.data[kunciModul]],
-  ]);
-  return { keadaan: s.keadaan, kunci: s.kunci ?? kunciModul };
+): { keadaan: KeadaanKartu; kunci: string; sebagian: BagianKartu[] } {
+  // T14 — kuncinya dari registry, tidak dirangkai `app_status_${id}` sebagai teks.
+  const [utama, ...subLingkup] = lingkupSakelarModul(id);
+  // Modul tanpa sakelar (Admin Panel) tempat menyalakan kembali yang lain: tidak pernah
+  // ikut mati, dan tidak boleh ikut "tak terbaca" saat status gagal dimuat.
+  if (!utama) return { keadaan: 'online', kunci: '', sebagian: [] };
+  const kunciModul = utama.kunci[0];
+  if (status.muat === 'memuat') return { keadaan: 'memuat', kunci: kunciModul, sebagian: [] };
+  if (status.muat === 'gagal') return { keadaan: 'tak-terbaca', kunci: kunciModul, sebagian: [] };
+  const s = sebabTerburuk(kunciDenganGlobal(utama.kunci).map((k) => [k, status.data[k]] as const));
+  // T1 — sub-sakelar tidak mengubah keadaan KARTU (DPA tetap bisa dibuka saat Realisasi
+  // dimatikan, jadi kartunya tidak boleh mengirim orang ke halaman pemeliharaan), tapi
+  // kartunya wajib MENYEBUTNYA. Dulu Realisasi beku sendirian → kartu BLUD berbunyi LIVE.
+  const sebagian: BagianKartu[] = subLingkup.flatMap((l) => {
+    const kunciSub = l.kunci[l.kunci.length - 1];
+    const k = bacaKeadaan(status.data[kunciSub]);
+    return PERINGKAT[k] > PERINGKAT[s.keadaan] ? [{ label: l.label, keadaan: k, kunci: kunciSub }] : [];
+  });
+  return { keadaan: s.keadaan, kunci: s.kunci ?? kunciModul, sebagian };
 }
 
 /**

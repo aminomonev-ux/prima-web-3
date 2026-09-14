@@ -5,6 +5,7 @@ import { sql, queryOne } from '@/lib/data/db';
 import { modulSedangMati } from '@/lib/security/guard';
 import { urlPemeliharaan } from '@/lib/registry/apps';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 import type { Role } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -32,5 +33,5 @@ export default async function UsulanKebutuhanPage() {
   );
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
-  return <UsulanClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} beku={beku} />;
+  return <KunciTulisProvider beku={beku}><UsulanClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} beku={beku} /></KunciTulisProvider>;
 }

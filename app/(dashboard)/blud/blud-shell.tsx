@@ -42,7 +42,8 @@ const SEMUA_TILE: Tile[] = [
 const MAX_INLINE_TILES = 11
 
 import SpandukBeku from '@/components/ui/SpandukBeku'
-import type { InfoBeku } from '@/lib/security/beku'
+import { KunciTulisProvider } from '@/components/ui/KunciTulis'
+import { bekuUntukMenu, type BekuLingkup } from '@/lib/security/beku-lingkup'
 
 interface Props {
   username: string
@@ -52,12 +53,12 @@ interface Props {
    *  ribbon tidak punya kesempatan berbeda pendapat dengan route. */
   izin:     Partial<Record<MenuBlud, Izin>>
   themePreference: 'dark' | 'light'
-  /** P5 — keterangan pembekuan, diselesaikan di layout. */
-  beku: InfoBeku
+  /** P5 — keterangan pembekuan per lingkup sakelar, diselesaikan di layout (Tahap 14a). */
+  bekuLingkup: BekuLingkup[]
   children: React.ReactNode
 }
 
-export default function BludShell({ username, role, izin, themePreference, beku, children }: Props) {
+export default function BludShell({ username, role, izin, themePreference, bekuLingkup, children }: Props) {
   const pathname  = usePathname()
   const router    = useRouter()
   const [dropOpen, setDropOpen] = useState(false)
@@ -187,6 +188,8 @@ export default function BludShell({ username, role, izin, themePreference, beku,
     if (href === '/blud') return pathname === '/blud'
     return pathname === href || pathname.startsWith(href + '/')
   }
+  const menuAktif = TILES.find(t => isActive(t.href))?.menu ?? 'beranda'
+  const beku = bekuUntukMenu(bekuLingkup, menuAktif)
 
   return (
     <div style={{
@@ -548,8 +551,8 @@ export default function BludShell({ username, role, izin, themePreference, beku,
         backgroundSize: '48px 48px',
         padding: 20,
       } as React.CSSProperties}>
-        <SpandukBeku {...beku}/>
-        {children}
+        {beku && <SpandukBeku {...beku}/>}
+        <KunciTulisProvider beku={beku}>{children}</KunciTulisProvider>
       </main>
 
       <style>{`

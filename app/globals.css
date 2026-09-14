@@ -964,6 +964,13 @@ input, textarea { caret-color: #FBBF24; }
 .btn-prima:hover:not(:disabled) { background: rgba(124,92,252,.10); }
 .btn-prima:active:not(:disabled) { transform: translateY(1px); }
 .btn-prima:disabled { opacity: .45; cursor: not-allowed; }
+/* Fase F Tahap 14b — tombol tulis saat modul beku (PrimaButton `menulis`). Yang dipudarkan
+   ISINYA, bukan tombolnya: opacity di tombol ikut memudarkan tooltip ::after penjelasnya. */
+.btn-prima[aria-disabled="true"] { cursor: not-allowed; }
+.btn-prima[aria-disabled="true"] > .btn-prima-label,
+.btn-prima[aria-disabled="true"] > .btn-prima-icon { opacity: .45; }
+.btn-prima[aria-disabled="true"]:hover,
+.btn-prima[aria-disabled="true"]:active { background: transparent !important; transform: none !important; }
 .btn-prima:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px rgba(124,92,252,.55);
@@ -1431,6 +1438,19 @@ input, textarea { caret-color: #FBBF24; }
 /* Empty data-tooltip ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ suppress (untuk conditional tooltip yang berisi '') */
 [data-tooltip=""]::after,
 [data-tooltip=""]::before { display: none !important; }
+/* Fase F Tahap 14b — tooltip tombol tulis yang dikunci saat modul beku. Tombol tulis hampir
+   selalu di ujung KANAN toolbar/modal, dan tooltip bawaan (nowrap, dipusatkan) terukur
+   terpotong di tepi kanan layar. Di sini: boleh berbaris, lebar maks 240px, dijangkarkan ke
+   tepi kanan tombol. Kekhususan (0,6,0)/(0,7,0) sengaja melampaui aturan dasar (0,4,0) dan
+   :hover-nya (0,5,0); `width: max-content` wajib menyertai max-width (lihat catatan tooltip
+   di CLAUDE.md: tanpa itu lebar dihitung dari ruang sisa lalu tooltip diperas). */
+.btn-prima[aria-disabled="true"][data-tooltip]:not(select):not(input):not(textarea)::after {
+  white-space: normal; width: max-content; max-width: 240px; text-align: left;
+  left: auto; right: 0; transform: translateY(-4px);
+}
+.btn-prima[aria-disabled="true"][data-tooltip]:not(select):not(input):not(textarea):hover::after {
+  transform: translateY(0);
+}
 
 /* Variant: data-tooltip-pos="below" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â tooltip muncul DI BAWAH bukan di atas.
    Pakai untuk tombol di top bar / sticky atas yang tooltip atasnya ke-clip

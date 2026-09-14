@@ -190,7 +190,7 @@ export function BidangReviewModal({ header, onClose, onSuccess }: Props) {
         </div>
         <div className="modal-footer">
           <PrimaButton variant="ghost" onClick={onClose}>Batal</PrimaButton>
-          <PrimaButton variant="primary" iconLeft={<CheckCircle2 size={14}/>} onClick={doSubmit} disabled={loading}>
+          <PrimaButton menulis variant="primary" iconLeft={<CheckCircle2 size={14}/>} onClick={doSubmit} disabled={loading}>
             {loading ? 'Menyimpan...' : 'Simpan Review'}
           </PrimaButton>
         </div>

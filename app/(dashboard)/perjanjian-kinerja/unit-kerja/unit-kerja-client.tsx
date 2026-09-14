@@ -240,7 +240,7 @@ export default function UnitKerjaClient({ bolehUbah }: { bolehUbah: boolean }) {
                 onClick={addRow} disabled={loading || saving}>
                 Tambah Unit
               </PrimaButton>
-              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="primary" iconLeft={<Save size={14} />}
                 onClick={handleSave} disabled={loading || saving || dirtyCount === 0}>
                 {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
               </PrimaButton>

@@ -388,13 +388,13 @@ export default function FormClient({ editId, bolehUbah }: Props) {
                 data-tooltip={isFinal ? 'Dokumen FINAL — hubungi SUPER_ADMIN' : 'Hapus dokumen / reset form'} data-tooltip-pos="below">
                 {deleting ? 'Menghapus…' : (form.id ? 'Hapus' : 'Reset')}
               </PrimaButton>
-              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="primary" iconLeft={<Save size={14} />}
                 onClick={handleSave} disabled={saving || isFinal || isLoading}
                 data-tooltip={isFinal ? 'Dokumen sudah FINAL — tidak dapat diedit' : 'Simpan ke server'} data-tooltip-pos="below">
                 {saving ? 'Menyimpan…' : 'Simpan'}
               </PrimaButton>
               {form.id && !isFinal && (
-                <PrimaButton variant="success" iconLeft={<FileCheck2 size={14} />}
+                <PrimaButton menulis variant="success" iconLeft={<FileCheck2 size={14} />}
                   onClick={handleFinalize} disabled={finalizing || isLoading}
                   data-tooltip="Generate Word + kunci dokumen FINAL" data-tooltip-pos="below">
                   {finalizing ? 'Memproses…' : 'Finalisasi'}

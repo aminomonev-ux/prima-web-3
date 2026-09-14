@@ -2158,7 +2158,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
 
         {bolehUbah && (
           <div style={{ marginLeft: 'auto' }}>
-            <PrimaButton variant="primary" iconLeft={<Save className="w-3.5 h-3.5" />}
+            <PrimaButton menulis variant="primary" iconLeft={<Save className="w-3.5 h-3.5" />}
               disabled={saving} onClick={simpan} data-rima="pergeseran.simpan">
               {saving ? 'Menyimpan...' : 'Simpan'}
             </PrimaButton>

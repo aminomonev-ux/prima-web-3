@@ -607,8 +607,8 @@ export default function EditorClient({ username, role, themePreference, initialD
           </div>
           {!readOnly && (
             <div className="iki-actions-right">
-              <PrimaButton variant="warning" size="sm" iconLeft={<Lock size={15} />} onClick={handleFinalize} disabled={busy}>Finalisasi</PrimaButton>
-              <PrimaButton variant="primary" iconLeft={<Save size={16} />} onClick={() => handleSave()} disabled={busy || !dirty}>
+              <PrimaButton menulis variant="warning" size="sm" iconLeft={<Lock size={15} />} onClick={handleFinalize} disabled={busy}>Finalisasi</PrimaButton>
+              <PrimaButton menulis variant="primary" iconLeft={<Save size={16} />} onClick={() => handleSave()} disabled={busy || !dirty}>
                 {busy ? 'Menyimpan…' : dirty ? 'Simpan' : 'Tersimpan'}
               </PrimaButton>
             </div>

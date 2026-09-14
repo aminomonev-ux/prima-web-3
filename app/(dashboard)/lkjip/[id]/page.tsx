@@ -5,6 +5,7 @@ import { isLkjipRole } from '@/lib/lkjip/schemas';
 import { getDokumenDetail } from '@/lib/lkjip/data';
 import EditorClient from './editor-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -30,12 +31,14 @@ export default async function LkjipEditorPage({ params }: { params: Promise<{ id
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
-    <EditorClient
-      username={username}
-      role={role}
-      themePreference={themePreference}
-      initialDetail={detail}
-      beku={beku}
-    />
+    <KunciTulisProvider beku={beku}>
+      <EditorClient
+        username={username}
+        role={role}
+        themePreference={themePreference}
+        initialDetail={detail}
+        beku={beku}
+      />
+    </KunciTulisProvider>
   );
 }

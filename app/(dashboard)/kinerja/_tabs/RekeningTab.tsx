@@ -275,7 +275,7 @@ export default function RekeningTab({
               onClick={addRekRow} disabled={!rekForm.uraian.trim()}>
               {rekEditIdx !== null ? 'Update' : 'Tambah'}
             </PrimaButton>
-            <PrimaButton variant="success" iconLeft={<Save size={14} />}
+            <PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
               onClick={() => saveRekening()} disabled={saving || rekeningRows.length === 0}>
               {saving ? 'Menyimpan...' : 'Simpan'}
             </PrimaButton>

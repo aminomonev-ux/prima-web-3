@@ -267,7 +267,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
               </PrimaButton>
             )}
             {canEdit && (
-              <PrimaButton variant="success" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
                 onClick={() => savePendapatan()} disabled={saving}>
                 {saving ? 'Menyimpan...' : 'Simpan Pendapatan'}
               </PrimaButton>
@@ -333,7 +333,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
           </div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             {canEdit && (
-              <PrimaButton variant="success" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
                 onClick={() => saveCrr()} disabled={saving}>
                 {saving ? 'Menyimpan...' : 'Simpan CRR'}
               </PrimaButton>

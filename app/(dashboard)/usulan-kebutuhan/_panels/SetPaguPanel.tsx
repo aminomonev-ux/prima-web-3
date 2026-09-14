@@ -62,7 +62,7 @@ export function SetPaguPanel({ currentPagu, onSaved }: Props) {
             <div style={{fontSize:12,color:'#4b7a5a',marginTop:4}}>= {fmtRp(nominal)}</div>
           )}
         </div>
-        <PrimaButton variant="primary" iconLeft={<Save size={14}/>} onClick={doSave} disabled={loading || !nominal || nominal <= 0}>
+        <PrimaButton menulis variant="primary" iconLeft={<Save size={14}/>} onClick={doSave} disabled={loading || !nominal || nominal <= 0}>
           {loading ? 'Menyimpan...' : 'Simpan Pagu'}
         </PrimaButton>
       </div>

@@ -159,24 +159,28 @@ cek('dipasang sebelum cabang sesi',
   proxy.indexOf(`reqHeaders.set('${namaHeader}', req.method)`) < proxy.indexOf('const token = req.cookies.get'))
 cek('metodenya dari permintaan, bukan ditebak', proxy.includes('req.method'))
 
-// ── D · Izin BLUD & PK dijepit ───────────────────────────────────────────────
-console.log('\nD · izin per-menu dijepit ke LIHAT')
+// ── D · Izin BLUD & PK TIDAK lagi dijepit (Fase F Tahap 14b, K1=C) ─────────────
+// Bagian ini dulu menegaskan kebalikannya: `jepitBeku` menjepit EDIT→LIHAT saat beku.
+// Itu yang melahirkan T12 — tombol lenyap lewat izin, lalu `SpandukLihat` menyalahkan
+// peran. Kini izin cuma menjawab "siapa Anda"; tombolnya mati lewat `KunciTulisProvider`,
+// dan yang menahan tulisan penjaga sakelar yang dipanggil SEBELUM izin menu.
+console.log('\nD · izin per-menu tidak lagi menumpang keadaan modul')
 
-for (const [p, fn1, fn2, flag] of [
-  ['lib/blud/izin-server.ts', 'export async function izinBlud(', 'export async function petaIzinBlud(', "modul('blud')"],
-  ['lib/pk/izin-server.ts', 'export async function izinPk(', 'export async function petaIzinPk(', "modul('perjanjian_kinerja')"],
+for (const [p, fn1, fn2] of [
+  ['lib/blud/izin-server.ts', 'export async function izinBlud(', 'export async function petaIzinBlud('],
+  ['lib/pk/izin-server.ts', 'export async function izinPk(', 'export async function petaIzinPk('],
 ] as const) {
   const t = buangKomentar(baca(p))
-  cek(`${p} menanyakan pembekuan`, t.includes("from '@/lib/security/guard'") && t.includes('modulDibekukan'))
-  cek(`${p} membaca kunci sakelar dari registry`, t.includes(flag))
-  // Peran yang menembus (SUPER_ADMIN) tidak boleh ikut terjepit — dan itu hanya
-  // berlaku kalau perannya benar-benar dioper.
-  cek(`${p} mengoper role ke penjaga`, /modulDibekukan\(\[FLAG\], \{ role \}\)/.test(t))
-  cek(`${p} menjepit EDIT jadi LIHAT`, t.includes("beku && izin === 'EDIT' ? 'LIHAT' : izin"))
-  // L69 — perbaikan belum selesai sampai SEMUA jalurnya kena. Dua fungsi, dua-duanya.
-  cek(`${p} — jalur satu-menu ikut dijepit`, badan(t, fn1).includes('jepitBeku('))
-  cek(`${p} — jalur peta ikut dijepit`, badan(t, fn2).includes('jepitBeku('))
+  cek(`${p} tidak lagi menanyakan pembekuan`, !t.includes('modulDibekukan') && !t.includes("from '@/lib/security/guard'"))
+  cek(`${p} tidak lagi menjepit`, !t.includes('jepitBeku') && !t.includes("'LIHAT' : izin"))
+  // L69 — dua jalur, dua-duanya.
+  cek(`${p} — jalur satu-menu memulangkan izin apa adanya`, badan(t, fn1).includes('return izinMenu(role, menu, penimpa)'))
+  cek(`${p} — jalur peta memulangkan izin apa adanya`, badan(t, fn2).includes('peta[menu] = izinMenu(role, menu,'))
 }
+// Pencabutan di atas hanya aman selama penjaga sakelar mendahului izin menu & data di tiap
+// handler tulis. Pemeriksaannya ikut jalan di CI lewat skrip gate G.
+cek('urutan penjaga diperiksa di gate G',
+  JSON.parse(baca('package.json')).scripts['check:killswitch'].includes('scripts/cek-urutan-penjaga.mjs'))
 
 // ── E · Layar ────────────────────────────────────────────────────────────────
 console.log('\nE · layar')
@@ -223,26 +227,28 @@ for (const terlarang of ['lib/data/db', 'lib/security/guard', 'next/server', 'ne
 cek('tipe InfoBeku diimpor sebagai tipe saja',
   !spanduk.includes("from '@/lib/security/beku'"))
 cek('spanduk membedakan yang menembus', spanduk.includes('kecuali untuk Anda'))
-// Spanduk ini TIDAK mematikan tombol apa pun — `beku` cuma dioper ke komponennya, di
-// BLUD/PK maupun di enam modul berikutnya. Selama itu berlaku, menjanjikan "tombol
-// dimatikan" mengantar orang menekan tombol hidup lalu menerima galat umum yang tidak
-// menyebut pembekuan. Kalau suatu hari tombolnya BENAR-BENAR dimatikan, pemeriksaan ini
-// yang harus dicabut lebih dulu — sengaja, supaya kalimatnya tidak berubah diam-diam.
-cek('spanduk tidak menjanjikan tombol yang mati',
-  !spanduk.includes('dimatikan') && spanduk.includes('Menyimpan ditolak'))
+// Dulu pemeriksaan ini menegaskan spanduk TIDAK menjanjikan tombol mati, dengan catatan:
+// "kalau suatu hari tombolnya BENAR-BENAR dimatikan, pemeriksaan ini yang dicabut lebih
+// dulu". Hari itu Tahap 14b (K1=C). Janjinya kini hanya boleh ada BERSAMA mekanismenya.
+const tombol = buangKomentar(baca('components/ui/PrimaButton.tsx'))
+cek('spanduk menjanjikan tombol mati HANYA karena tombolnya memang mati',
+  spanduk.includes('Tombol simpan dimatikan')
+  && tombol.includes('const kunci = Boolean(menulis && dikunci)')
+  && tombol.includes('aria-disabled={kunci || undefined}'))
 
 for (const p of ['app/(dashboard)/blud/blud-shell.tsx', 'app/(dashboard)/perjanjian-kinerja/pk-shell.tsx']) {
   const t = buangKomentar(baca(p))
   cek(`${p} memasang spanduk`, t.includes('<SpandukBeku {...beku}/>'))
-  cek(`${p} mengimpor tipenya sebagai tipe`, t.includes("import type { InfoBeku }"))
+  cek(`${p} tidak mengimpor nilai dari lib/security/beku`,
+    !/import \{[^}]*\} from '@\/lib\/security\/beku'/.test(t.replace(/import type \{[^}]*\} from '@\/lib\/security\/beku'/g, '')))
+  cek(`${p} memasang kunci tulis di sekitar layarnya`, t.includes('<KunciTulisProvider beku={beku}>{children}</KunciTulisProvider>'))
 }
-for (const [p, kunci] of [
-  ['app/(dashboard)/blud/layout.tsx', 'app_status_blud'],
-  ['app/(dashboard)/perjanjian-kinerja/layout.tsx', 'app_status_perjanjian_kinerja'],
-] as const) {
-  const t = buangKomentar(baca(p))
-  cek(`${p} menyelesaikan keterangan beku di server`, t.includes(`infoBeku(['${kunci}'], role)`))
-}
+// Tahap 14a — kuncinya dari registry. BLUD menyelesaikan SEMUA lingkup (modul + Realisasi).
+cek('app/(dashboard)/blud/layout.tsx menyelesaikan keterangan beku tiap lingkup',
+  buangKomentar(baca('app/(dashboard)/blud/layout.tsx')).includes("lingkupSakelarModul('blud').map(")
+  && buangKomentar(baca('app/(dashboard)/blud/layout.tsx')).includes('infoBeku(l.kunci, role)'))
+cek('app/(dashboard)/perjanjian-kinerja/layout.tsx menyelesaikan keterangan beku di server',
+  buangKomentar(baca('app/(dashboard)/perjanjian-kinerja/layout.tsx')).includes("infoBeku(kunciSakelarUntuk('perjanjian_kinerja'), role)"))
 
 // ── F · Pagar di API ─────────────────────────────────────────────────────────
 console.log('\nF · pagar sakelar')
@@ -443,15 +449,15 @@ for (const m of MODUL_BERSAKELAR) {
 // sakelar A tapi menjelaskan sakelar B; dan karena keduanya nyaris selalu `online`,
 // selisih itu tidak bergejala sampai hari modulnya benar-benar dibekukan.
 cek('bekuLayarModul mengambil sakelarnya dari registry',
-  penjaga.includes('bekuLayarModul') && penjaga.includes('modul(kunci)?.sakelar'))
+  penjaga.includes('bekuLayarModul') && penjaga.includes('const sakelar = kunciSakelarUntuk(kunci)'))
 // Tanpa `role`, SUPER_ADMIN dapat kalimat "menyimpan ditutup" lalu berhasil menyimpan —
 // persis kesimpulan "sakelarnya tidak bekerja" yang spanduk ini dibuat untuk mencegah.
 cek('bekuLayarModul mengoper peran supaya yang menembus dapat kalimatnya sendiri',
-  penjaga.includes("infoBeku([sakelar], h.get('x-user-role')"))
-// Modul tanpa sakelar tidak boleh melempar: `modul()` memulangkan null untuk kunci yang
-// tidak dikenal, dan spanduk yang hilang tidak membuka satu pintu pun.
+  penjaga.includes("infoBeku(sakelar, h.get('x-user-role')"))
+// Modul tanpa sakelar tidak boleh melempar: registry memulangkan larik kosong untuk kunci
+// yang tidak dikenal, dan spanduk yang hilang tidak membuka satu pintu pun.
 cek('modul tanpa sakelar dijawab TIDAK_BEKU, bukan dilempar',
-  penjaga.includes('if (!sakelar) return TIDAK_BEKU'))
+  penjaga.includes('if (sakelar.length === 0) return TIDAK_BEKU'))
 
 // P12 — `InfoBeku.global` sudah ada sejak Tahap 12 tapi spanduknya tidak pernah
 // memakainya: pembekuan seluruh aplikasi berbunyi "Modul sedang dibekukan", lalu orang

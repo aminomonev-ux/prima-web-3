@@ -325,7 +325,7 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
             {/* "Tutup" itu bahasa jendela. Sebagai halaman, jalan pulangnya sudah
                 ada di remah jalan atas — tombol ini cuma akan membingungkan. */}
             {!asHalaman && <PrimaButton variant="ghost" size="sm" onClick={onClose}>Tutup</PrimaButton>}
-            <PrimaButton variant="primary" size="sm" iconLeft={<Save size={14} />}
+            <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />}
               disabled={busy || dirtyRows.length === 0} onClick={() => { void handleSave(); }}>
               {busy ? 'Menyimpan…' : `Simpan (${dirtyRows.length})`}
             </PrimaButton>

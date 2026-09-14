@@ -11,7 +11,7 @@
 // aplikasinya rusak, lalu menelepon — persis yang P6 hindari untuk sakelar mati.
 import { sql } from '@/lib/data/db'
 import {
-  formatSampai, KUNCI_GLOBAL, kunciDenganGlobal, kunciPesan, kunciSampai, sebabTerburuk,
+  formatSampai, KUNCI_GLOBAL, kunciDenganGlobal, kunciPesan, kunciSampai, LABEL_SAKELAR, sebabTerburuk,
 } from '@/lib/registry/apps'
 import { PERAN_TEMBUS_SAKELAR } from '@/lib/security/guard'
 
@@ -31,9 +31,16 @@ export type InfoBeku = {
    * (aturan 11.3 — layar menyebut sebabnya).
    */
   global: boolean
+  /**
+   * Tahap 14a — nama BAGIAN yang dibekukan kalau sebabnya sub-sakelar (mis. "BLUD —
+   * Realisasi"), string kosong kalau sebabnya modul itu sendiri atau global. Tanpa ini
+   * spanduk di layar Buku Kas berbunyi "Modul sedang dibekukan" padahal DPA di menu
+   * sebelah masih bisa disimpan.
+   */
+  bagian: string
 }
 
-export const TIDAK_BEKU: InfoBeku = { beku: false, tembus: false, pesan: '', sampai: '', global: false }
+export const TIDAK_BEKU: InfoBeku = { beku: false, tembus: false, pesan: '', sampai: '', global: false, bagian: '' }
 
 /**
  * `beku` SENGAJA tidak dimatikan untuk peran yang menembus.
@@ -55,25 +62,25 @@ export async function infoBeku(kunci: readonly string[], role?: string): Promise
     // Kalau tidak, membekukan seluruh aplikasi menutup tombol simpan di sembilan modul
     // tanpa satu spanduk pun menjelaskan kenapa: pagarnya berdiri, kalimatnya hilang.
     const semua = kunciDenganGlobal(kunci)
-    const berteks = [KUNCI_GLOBAL, utama]
     const rows = await sql`
       SELECT \`key\`, value FROM app_config
-      WHERE \`key\` IN (${[...semua, ...berteks.map(kunciPesan), ...berteks.map(kunciSampai)]})
+      WHERE \`key\` IN (${[...semua, ...semua.map(kunciPesan), ...semua.map(kunciSampai)]})
     ` as { key: string; value: string }[]
     const peta = new Map(rows.map((r) => [r.key, r.value]))
     const sebab = sebabTerburuk(semua.map((k) => [k, peta.get(k)] as const))
     if (sebab.keadaan !== 'readonly') return TIDAK_BEKU
-    // Kalimatnya diambil dari sakelar yang MENYEBABKANNYA. Mengambilnya selalu dari
-    // sakelar modul menghasilkan spanduk kosong tiap kali sebabnya global — dan pesan
-    // kosong itu justru muncul pada pembekuan yang paling luas akibatnya.
+    // Kalimatnya diambil dari sakelar yang MENYEBABKANNYA — global, modul, ATAU
+    // sub-sakelar. Dulu cuma global-atau-kunci-pertama, jadi Realisasi yang dibekukan
+    // sendirian menampilkan keterangan milik BLUD (biasanya kosong).
     const global = sebab.kunci === KUNCI_GLOBAL
-    const sumber = global ? KUNCI_GLOBAL : utama
+    const sumber = sebab.kunci ?? utama
     return {
       beku: true,
       tembus: Boolean(role && PERAN_TEMBUS_SAKELAR.includes(role)),
       pesan: (peta.get(kunciPesan(sumber)) ?? '').trim(),
       sampai: formatSampai((peta.get(kunciSampai(sumber)) ?? '').trim()),
       global,
+      bagian: !global && sumber !== utama ? (LABEL_SAKELAR[sumber] ?? '') : '',
     }
   } catch {
     return TIDAK_BEKU

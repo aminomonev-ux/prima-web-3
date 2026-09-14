@@ -220,7 +220,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
                 data-tooltip-pos="below">
                 Tambah Baris
               </PrimaButton>
-              <PrimaButton
+              <PrimaButton menulis
                 variant="primary"
                 iconLeft={<Save size={14} />}
                 onClick={handleSave}

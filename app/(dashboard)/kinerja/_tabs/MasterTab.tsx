@@ -438,7 +438,7 @@ export default function MasterTab({
               </PrimaButton>
             )}
             {masterEditId ? (
-              <PrimaButton variant="success" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
                 onClick={saveMaster} disabled={saving || !masterInput.trim()}>
                 Simpan Perubahan
               </PrimaButton>
@@ -451,7 +451,7 @@ export default function MasterTab({
                 {(() => {
                   const hasNew = masterRows.some(r => r.id === 0);
                   return (
-                    <PrimaButton variant="success" iconLeft={<Save size={14} />}
+                    <PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
                       onClick={saveAllMaster} disabled={saving || !hasNew}>
                       Simpan
                     </PrimaButton>

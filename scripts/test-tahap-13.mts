@@ -153,7 +153,7 @@ cek('kunci kartu dihitung lewat berkas daun', menu.includes('const locked    = k
 cek('tidak ada lagi salinan rumus kartu di komponen', !menu.includes('function sakelarKartu(') && !menu.includes('function isLocked('))
 // Kalau dua keadaan baru jatuh ke `card.badge`, kartunya kembali berbunyi LIVE.
 cek('lencana keadaan tak diketahui tidak jatuh ke LIVE',
-  menu.includes("memuat ? 'MEMUAT' : takTerbaca ? 'BELUM TERBACA' : card.badge"))
+  /memuat \? 'MEMUAT' : takTerbaca \? 'BELUM TERBACA'\s*: bagian\.length \? [^\n]* : card\.badge;/.test(menu))
 cek('orang diberi tahu dan diberi jalan mencoba lagi',
   menu.includes("(sakelar.muat === 'gagal' || akses.muat === 'gagal') && (")
   && menu.includes('if (sakelar.muat === \'gagal\') void muatSakelar();')

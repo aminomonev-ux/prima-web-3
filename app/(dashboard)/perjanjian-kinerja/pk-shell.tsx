@@ -30,6 +30,7 @@ const SEMUA_TILE: Tile[] = [
 ]
 
 import SpandukBeku from '@/components/ui/SpandukBeku'
+import { KunciTulisProvider } from '@/components/ui/KunciTulis'
 import type { InfoBeku } from '@/lib/security/beku'
 
 interface Props {
@@ -413,7 +414,7 @@ export default function PkShell({ username, role, izin, themePreference, beku, c
         padding: 20,
       } as React.CSSProperties}>
         <SpandukBeku {...beku}/>
-        {children}
+        <KunciTulisProvider beku={beku}>{children}</KunciTulisProvider>
       </main>
 
       <style>{`

@@ -398,7 +398,7 @@ export default function RealisasiTab({
               onClick={() => setShowRiwayat(true)}>
               Riwayat Simpan
             </PrimaButton></Tip>
-            <Tip label={versiLocked ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa simpan input baru.` : ''}><PrimaButton variant="success" iconLeft={<Save size={14} />}
+            <Tip label={versiLocked ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa simpan input baru.` : ''}><PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
               onClick={() => saveRealisasi()} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
             </PrimaButton></Tip>

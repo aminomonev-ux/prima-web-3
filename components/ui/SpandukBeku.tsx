@@ -25,9 +25,11 @@ type Props = {
    * Aturan 11.3 — layar menyebut SEBABNYA, bukan cuma akibatnya.
    */
   global?: boolean;
+  /** Tahap 14a — nama bagian yang dibekukan kalau sebabnya sub-sakelar ("BLUD — Realisasi"). */
+  bagian?: string;
 };
 
-export default function SpandukBeku({ beku, tembus, pesan, sampai, global }: Props) {
+export default function SpandukBeku({ beku, tembus, pesan, sampai, global, bagian }: Props) {
   if (!beku) return null;
   return (
     <div style={{
@@ -38,22 +40,19 @@ export default function SpandukBeku({ beku, tembus, pesan, sampai, global }: Pro
     }}>
       <Snowflake size={15} style={{ flex: '0 0 auto', marginTop: 2 }}/>
       <div>
-        <b>{global ? 'Seluruh aplikasi sedang dibekukan.' : 'Modul sedang dibekukan.'}</b>{' '}
+        <b>{global ? 'Seluruh aplikasi sedang dibekukan.' : bagian ? `${bagian} sedang dibekukan.` : 'Modul sedang dibekukan.'}</b>{' '}
         {tembus
           // Ditulis apa adanya. SUPER_ADMIN yang tidak diberi tahu akan mencoba
           // menyimpan, berhasil, lalu menyimpulkan pembekuannya tidak bekerja.
           ? <>Membuka, membaca, dan mencetak tetap bisa untuk semua orang; menyimpan ditutup —
               <b> kecuali untuk Anda</b>, karena SUPER_ADMIN menembus sakelar. Ujilah dengan akun lain.</>
-          // Dulu berbunyi "tombol simpan & hapus dimatikan". Tidak pernah benar: `beku`
-          // di BLUD & PK dipakai HANYA untuk merender spanduk ini, dan di enam modul
-          // berikutnya juga. Akibatnya orang membaca "tombolnya mati", menekan tombol
-          // yang jelas-jelas hidup, lalu menerima galat umum ("Gagal membuat dokumen")
-          // yang tidak menyebut pembekuan sama sekali — persis kebingungan yang spanduk
-          // ini dibuat untuk mencegah, dan spanduknya sendiri yang mengantar ke sana.
-          // Yang benar: pagarnya di API (503), bukan di tombol (L82).
-          : <>Membuka, membaca, dan mencetak tetap bisa. Menyimpan ditolak sampai
-              pembekuan selesai — tombolnya masih bisa ditekan, tapi simpanannya akan
-              gagal.</>}
+          // Tahap 14b (K1=C): tombol simpan kini BENAR-BENAR mati di kesembilan modul
+          // (PrimaButton `menulis` + KunciTulisProvider), jadi kalimat ini akhirnya sama
+          // di semua modul. Tindakan tulis lain tetap dijaga API (503), dan sejak
+          // Tahap 13 penolakannya terbaca — maka kalimat keduanya bisa jujur.
+          : <>Membuka, membaca, dan mencetak tetap bisa. Tombol simpan dimatikan sampai
+              pembekuan selesai; tindakan lain yang mengubah data akan ditolak dengan
+              pesan.</>}
         {pesan && <div style={{ marginTop: 6, whiteSpace: 'pre-line' }}>{pesan}</div>}
         {sampai && (
           <div style={{ marginTop: 4, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>

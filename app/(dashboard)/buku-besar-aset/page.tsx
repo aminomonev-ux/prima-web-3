@@ -5,6 +5,7 @@ import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { listAset, getAsetKpi, listKategori } from '@/lib/data/buku-besar-aset';
 import BukuBesarAsetClient from './buku-besar-aset-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -31,15 +32,17 @@ export default async function BukuBesarAsetPage() {
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
-    <BukuBesarAsetClient
-      username={username}
-      role={role}
-      themePreference={themePreference}
-      initialTahun={tahun}
-      initialResult={initial}
-      initialKpi={initialKpi}
-      kategori={kategori.map(k => k.nama)}
-      beku={beku}
-    />
+    <KunciTulisProvider beku={beku}>
+      <BukuBesarAsetClient
+        username={username}
+        role={role}
+        themePreference={themePreference}
+        initialTahun={tahun}
+        initialResult={initial}
+        initialKpi={initialKpi}
+        kategori={kategori.map(k => k.nama)}
+        beku={beku}
+      />
+    </KunciTulisProvider>
   );
 }

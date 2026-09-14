@@ -132,7 +132,7 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
       <EditorContent editor={editor} className="lk-tt-content" />
       {!readOnly && dirty && (
         <div className="lk-tt-save">
-          <PrimaButton variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => { onSave(editor.getHTML()); setDirty(false); }}>Simpan</PrimaButton>
+          <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => { onSave(editor.getHTML()); setDirty(false); }}>Simpan</PrimaButton>
         </div>
       )}
     </div>

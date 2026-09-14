@@ -1768,7 +1768,7 @@ export default function DpaClient({
               </PrimaButton>
             )}
 
-            <PrimaButton variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
+            <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
               disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
               {saving ? 'Menyimpan...' : periodeTulis ? 'Simpan Periode' : 'Simpan'}
             </PrimaButton>

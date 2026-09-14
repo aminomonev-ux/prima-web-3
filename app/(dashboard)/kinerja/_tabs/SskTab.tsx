@@ -366,7 +366,7 @@ export default function SskTab({
               onClick={() => setShowRiwayat(true)}>
               Riwayat Simpan
             </PrimaButton></Tip>
-            <Tip label={versiLocked ? 'Versi terkunci, tidak bisa disimpan' : ''}><PrimaButton variant="success" iconLeft={<Save size={14} />}
+            <Tip label={versiLocked ? 'Versi terkunci, tidak bisa disimpan' : ''}><PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
               onClick={() => saveSsk()} disabled={saving || versiLocked}>
               {saving ? 'Menyimpan...' : 'Simpan Semua'}
             </PrimaButton></Tip>

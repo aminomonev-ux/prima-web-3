@@ -30,6 +30,12 @@
 export type SubSakelar = {
   kunci: string
   label: string
+  /**
+   * Menu yang ikut dinaungi sub-sakelar ini. Juga dipakai sebagai `lingkup` penjaga API
+   * (`bludMati(role, 'realisasi')`). Tinggal di sini, bukan di berkas modul, supaya
+   * penjaga API, halaman, spanduk, dan kartu /menu membaca SATU daftar (Tahap 14a, T1).
+   */
+  menu: readonly string[]
 }
 
 export type PenjagaApi = {
@@ -57,6 +63,12 @@ export type Modul = {
   /** Direktori route API. `null` = tidak punya route sendiri. */
   dirApi: string | null
   penjagaApi?: PenjagaApi
+  /**
+   * Route di `dirApi` hanya membaca (GET saja), jadi membekukannya tidak menutup apa pun.
+   * BUKAN klaim yang dipercaya begitu saja: gate G menghitung handler tulis sungguhan dan
+   * gagal kalau tanda ini tidak cocok dengan isinya — ke dua arah (Tahap 14c, T13).
+   */
+  hanyaBaca?: boolean
   /** Punya izin per-menu (`menu_role_access`) — lihat `lib/registry/menu-apps.ts`. */
   punyaMenu: boolean
   /**
@@ -219,6 +231,39 @@ export function kunciDenganGlobal(keys: readonly string[]): string[] {
 }
 
 /**
+ * Tahap 14a (T1) — kunci sakelar yang mengatur SATU layar: sakelar modulnya, plus
+ * sub-sakelar yang menaungi `menu` itu. Tanpa sakelar global (disisipkan
+ * `kunciDenganGlobal` di pembaca, satu tempat).
+ *
+ * Sebelum fungsi ini, pertanyaan "modul ini sedang apa" dijawab di lima tempat dan hanya
+ * penjaga API yang ingat sub-sakelar: membekukan Realisasi membuat API menolak 503
+ * sementara spanduk & kartu /menu tetap berbunyi normal.
+ *
+ * Modul tak dikenal / tanpa sakelar → larik kosong.
+ */
+export function kunciSakelarUntuk(modulKunci: string, menu?: string): string[] {
+  const m = PETA.get(modulKunci)
+  if (!m?.sakelar) return []
+  const sub = menu ? (m.subSakelar ?? []).filter((s) => s.menu.includes(menu)).map((s) => s.kunci) : []
+  return [m.sakelar, ...sub]
+}
+
+/**
+ * Semua lingkup sakelar sebuah modul — untuk yang belum tahu layar mana yang dibuka
+ * (layout, kartu /menu). Lingkup pertama `menu: null` = seluruh modul.
+ */
+export function lingkupSakelarModul(
+  modulKunci: string,
+): { menu: readonly string[] | null; kunci: string[]; label: string }[] {
+  const m = PETA.get(modulKunci)
+  if (!m?.sakelar) return []
+  return [
+    { menu: null, kunci: [m.sakelar], label: m.label },
+    ...(m.subSakelar ?? []).map((s) => ({ menu: s.menu, kunci: [m.sakelar as string, s.kunci], label: s.label })),
+  ]
+}
+
+/**
  * Keadaan paling membatasi dari beberapa sakelar, BESERTA kunci yang menyebabkannya.
  *
  * Kuncinya ikut karena layar wajib menyebut SEBAB-nya (aturan 11.3): modul yang beku
@@ -327,10 +372,10 @@ export type InfoSakelar = {
 function infoModul(m: Modul): InfoSakelar[] {
   if (!m.sakelar) return []
   const penanda = m.penjagaApi?.penanda.map((p) => `\`${p}\``).join(' / ') ?? ''
-  // Bisa dibekukan = punya route API DAN penjaganya berdiri. Syaratnya sama persis
-  // dengan `MODUL_BERSAKELAR` (bahan gate G) — sengaja, karena pertanyaannya memang
-  // sama: apakah ada penjaga di jalur tulisnya.
-  const bisaBeku = m.dirApi !== null && m.penjagaApi !== undefined
+  // Bisa dibekukan = punya route API, penjaganya berdiri, DAN route itu memang menulis.
+  // Syarat ketiga baru di Tahap 14c: tanpa itu Dashboard (dua route GET) menawarkan BEKU
+  // yang tidak menutup apa pun (T13). `hanyaBaca` dicocokkan gate G ke handler sungguhan.
+  const bisaBeku = m.dirApi !== null && m.penjagaApi !== undefined && m.hanyaBaca !== true
   const utama: InfoSakelar = m.dirApi === null
     ? { kunci: m.sakelar, label: m.label, modulKunci: m.kunci, induk: null, terjaga: true, bisaBeku,
         sebab: 'Tidak punya route API sendiri — tidak ada yang perlu dijaga.' }

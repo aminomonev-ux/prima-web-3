@@ -204,7 +204,7 @@ export function MilikPanel({
             </p>
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <PrimaButton variant="ghost" size="sm" onClick={() => setKirSemModal(false)} disabled={kirSemLoading}>Batal</PrimaButton>
-              <PrimaButton variant="primary" size="sm" onClick={handleKirimSemua} disabled={kirSemLoading}>
+              <PrimaButton menulis variant="primary" size="sm" onClick={handleKirimSemua} disabled={kirSemLoading}>
                 {kirSemLoading ? 'Mengirim...' : 'Ya, Kirim Sekarang'}
               </PrimaButton>
             </div>

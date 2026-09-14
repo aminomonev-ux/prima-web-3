@@ -858,14 +858,20 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
               // bisa diklik. Yang berubah cuma lencananya, dan itu memang seluruh
               // maksudnya: orang tahu sebelum masuk bahwa hari ini cuma bisa membaca.
               const isBeku    = !locked && st.keadaan === 'readonly';
+              // T1 — bagian modul (sub-sakelar) yang lebih membatasi daripada kartunya.
+              // Kartunya tetap bisa diklik, tapi tidak boleh berbunyi normal.
+              const bagian    = locked ? [] : st.sebagian;
+              const bagianMaint = bagian.some(b => b.keadaan === 'maintenance');
 
               const badgeLabel = locked ? 'TERKUNCI' : (isMaint || isMaintSA) ? 'MAINTENANCE' : isBeku ? 'BEKU'
-                : memuat ? 'MEMUAT' : takTerbaca ? 'BELUM TERBACA' : card.badge;
+                : memuat ? 'MEMUAT' : takTerbaca ? 'BELUM TERBACA'
+                : bagian.length ? (bagianMaint ? 'SEBAGIAN MAINTENANCE' : 'SEBAGIAN BEKU') : card.badge;
               // Warna badge status (brutalist: teks gelap + border hitam): hijau=LIVE, merah=admin, amber=maint, abu=locked
               // `#9CA3AF` di sini LATAR badge, bukan warna teks — sengaja tidak ikut
               // dinaikkan ke #6B7280 seperti teks bantu lainnya. Teksnya gelap di atasnya,
               // jadi menggelapkan latarnya justru menurunkan kontras.
-              const stColor = (locked || memuat || takTerbaca) ? '#9CA3AF' : (isMaint || isMaintSA) ? '#EF9F27' : isBeku ? '#378ADD' : card.id === 'admin' ? '#E24B4A' : '#2BD46A';
+              const stColor = (locked || memuat || takTerbaca) ? '#9CA3AF' : (isMaint || isMaintSA || bagianMaint) ? '#EF9F27'
+                : (isBeku || bagian.length) ? '#378ADD' : card.id === 'admin' ? '#E24B4A' : '#2BD46A';
               const initials = card.name.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase();
 
               return (
@@ -880,6 +886,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                     isMaintSA ? 'Modul sedang maintenance. Anda bisa akses sebagai SUPER_ADMIN.'
                     : isBeku ? 'Modul sedang dibekukan: membuka, membaca, dan mencetak tetap bisa; menyimpan ditutup sementara.'
                     : takTerbaca ? 'Status modul ini gagal dimuat, jadi belum bisa dipastikan sedang aktif atau dalam pemeliharaan.'
+                    : bagian.length ? bagian.map(b => `${b.label} ${b.keadaan === 'maintenance' ? 'sedang dalam pemeliharaan' : 'sedang dibekukan'}.`).join(' ')
                     : ''
                   }
                   onKeyDown={e => e.key === 'Enter' && handleCardClick(card)}
@@ -906,6 +913,19 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
                         )}
                       </div>
                     )}
+                    {bagian.map(b => (
+                      <div key={b.kunci} className="card-maint-note">
+                        <div>
+                          <b>{b.label}</b> {b.keadaan === 'maintenance' ? 'sedang dalam pemeliharaan.' : 'sedang dibekukan.'}
+                        </div>
+                        {appPesan[b.kunci] && <div>{appPesan[b.kunci]}</div>}
+                        {formatSampai(appSampai[b.kunci] ?? '') && (
+                          <div className="card-maint-sampai">
+                            Diperkirakan selesai {formatSampai(appSampai[b.kunci] ?? '')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                     {isMaintSA && (
                       <div style={{ fontSize: 10, color: '#EF9F27', fontWeight: 700, marginTop: 10 }}>
                         👑 Bypass aktif · hanya terlihat oleh Anda

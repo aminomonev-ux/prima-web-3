@@ -701,7 +701,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
             )}
 
             <div className="flex justify-end pt-3">
-              <PrimaButton
+              <PrimaButton menulis
                 type="submit"
                 variant={editingId ? 'primary' : 'purple'}
                 size="md"

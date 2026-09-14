@@ -360,7 +360,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
             <input autoFocus value={renameModal.judul} onChange={e => setRenameModal({ ...renameModal, judul: e.target.value })} onKeyDown={e => e.key === 'Enter' && submitRename()} />
             <div className="lk-modal-actions">
               <PrimaButton variant="ghost" size="sm" onClick={() => setRenameModal(null)} disabled={busy}>Batal</PrimaButton>
-              <PrimaButton variant="primary" size="sm" onClick={submitRename} disabled={busy || !renameModal.judul.trim()}>Simpan</PrimaButton>
+              <PrimaButton menulis variant="primary" size="sm" onClick={submitRename} disabled={busy || !renameModal.judul.trim()}>Simpan</PrimaButton>
             </div>
           </div>
         </div>
@@ -459,7 +459,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
 
             <div className="lk-modal-actions">
               <PrimaButton variant="ghost" size="sm" onClick={() => setStyleModal(false)} disabled={busy}>Batal</PrimaButton>
-              <PrimaButton variant="primary" size="sm" onClick={saveStyle} disabled={busy}>Simpan</PrimaButton>
+              <PrimaButton menulis variant="primary" size="sm" onClick={saveStyle} disabled={busy}>Simpan</PrimaButton>
             </div>
           </div>
         </div>
@@ -1004,7 +1004,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
         <div className="lk-tabel-ctl">
           <button onClick={addRow}>+ Baris</button>
           <button onClick={addCol} disabled={ncol >= 12}>+ Kolom</button>
-          <PrimaButton variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave({ judul, kolom, align, colWidths, headerRows, rows })}>Simpan Tabel</PrimaButton>
+          <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave({ judul, kolom, align, colWidths, headerRows, rows })}>Simpan Tabel</PrimaButton>
         </div>
       )}
     </div>
@@ -1047,7 +1047,7 @@ function GambarEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly:
             : <span className="lk-uphint">Belum ada gambar — placeholder di Word</span>}
         </div>
       )}
-      {!readOnly && <div className="lk-save-row"><PrimaButton variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave({ judul, caption, fileId })}>Simpan</PrimaButton></div>}
+      {!readOnly && <div className="lk-save-row"><PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave({ judul, caption, fileId })}>Simpan</PrimaButton></div>}
     </div>
   );
 }
@@ -1205,7 +1205,7 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks }: { block: BlockNo
         <>
           <input className="lk-tabel-judul" value={caption} placeholder="Keterangan / caption (opsional)" onChange={e => setCaption(e.target.value)} />
           <div className="lk-save-row">
-            <PrimaButton variant="primary" size="sm" iconLeft={<Save size={14} />} disabled={saving} onClick={handleSave}>{saving ? 'Menyimpan…' : 'Simpan Grafik'}</PrimaButton>
+            <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} disabled={saving} onClick={handleSave}>{saving ? 'Menyimpan…' : 'Simpan Grafik'}</PrimaButton>
           </div>
         </>
       )}

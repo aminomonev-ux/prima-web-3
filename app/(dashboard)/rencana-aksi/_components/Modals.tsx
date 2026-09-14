@@ -113,7 +113,7 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
 
           <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
             <PrimaButton type="button" variant="ghost" size="sm" onClick={onClose}>Batal</PrimaButton>
-            <PrimaButton type="submit" variant="primary" size="sm" iconLeft={<Save size={14} />} disabled={busy}>
+            <PrimaButton menulis type="submit" variant="primary" size="sm" iconLeft={<Save size={14} />} disabled={busy}>
               {busy ? 'Menyimpan…' : 'Simpan Perubahan'}
             </PrimaButton>
           </div>

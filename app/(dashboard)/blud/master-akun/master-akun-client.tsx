@@ -189,7 +189,7 @@ export default function MasterAkunClient({ bolehUbah }: { bolehUbah: boolean }) 
                 onClick={() => fileRef.current?.click()} disabled={importing}>
                 {importing ? 'Memproses...' : 'Impor Excel'}
               </PrimaButton>
-              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="primary" iconLeft={<Save size={14} />}
                 onClick={() => simpan()} disabled={saving}>
                 {saving ? 'Menyimpan...' : 'Simpan'}
               </PrimaButton>

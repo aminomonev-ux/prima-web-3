@@ -6,6 +6,7 @@ import { getDokumen } from '@/lib/data/iki';
 import EditorClient from './editor-client';
 import type { IkiDokumen } from '../_lib/types';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -33,12 +34,14 @@ export default async function IkiEditorPage({ params }: { params: Promise<{ id: 
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
-    <EditorClient
-      username={username}
-      role={role}
-      themePreference={themePreference}
-      initialDoc={doc as unknown as IkiDokumen}
-      beku={beku}
-    />
+    <KunciTulisProvider beku={beku}>
+      <EditorClient
+        username={username}
+        role={role}
+        themePreference={themePreference}
+        initialDoc={doc as unknown as IkiDokumen}
+        beku={beku}
+      />
+    </KunciTulisProvider>
   );
 }

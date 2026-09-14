@@ -5,6 +5,7 @@ import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { listKategori } from '@/lib/data/buku-besar-aset';
 import MasterClient from './master-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -26,12 +27,14 @@ export default async function BukuBesarAsetMasterPage() {
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
-    <MasterClient
-      username={username}
-      role={role}
-      themePreference={themePreference}
-      initialKategori={initialKategori}
-      beku={beku}
-    />
+    <KunciTulisProvider beku={beku}>
+      <MasterClient
+        username={username}
+        role={role}
+        themePreference={themePreference}
+        initialKategori={initialKategori}
+        beku={beku}
+      />
+    </KunciTulisProvider>
   );
 }

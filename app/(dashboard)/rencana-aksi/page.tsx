@@ -5,6 +5,7 @@ import { isRencanaAksiRole } from '@/lib/data/rencana-aksi-schemas';
 import { modulSedangMati } from '@/lib/security/guard';
 import { urlPemeliharaan } from '@/lib/registry/apps';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 import { listRencanaAksi } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import RaClient from './ra-client';
@@ -58,15 +59,17 @@ export default async function RencanaAksiPage({
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
-    <RaClient
-      username={username}
-      role={role}
-      themePreference={themePreference}
-      initialTahun={tahun}
-      initialLevel={level}
-      initialMode={mode}
-      initialRows={initialRows}
-      beku={beku}
-    />
+    <KunciTulisProvider beku={beku}>
+      <RaClient
+        username={username}
+        role={role}
+        themePreference={themePreference}
+        initialTahun={tahun}
+        initialLevel={level}
+        initialMode={mode}
+        initialRows={initialRows}
+        beku={beku}
+      />
+    </KunciTulisProvider>
   );
 }

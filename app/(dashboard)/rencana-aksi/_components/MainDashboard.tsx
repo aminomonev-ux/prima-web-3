@@ -476,7 +476,7 @@ export default function MainDashboard({
             <div className="flex items-center gap-2">
               {/* Tombol "Matriks Bulanan" dihapus — matriks kini tampilan sederajat
                   di halaman pemilih menu Sub Kegiatan, bukan jendela dari sini. */}
-              <PrimaButton
+              <PrimaButton menulis
                 variant="success"
                 size="sm"
                 iconLeft={<Save size={13} />}

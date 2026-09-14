@@ -17,9 +17,7 @@ import { hasAppAccess, modulMati } from '@/lib/security/guard'
 import { isBludRole } from '@/lib/blud/schemas'
 import { LABEL_MENU, type MenuBlud } from '@/lib/blud/peran'
 import { izinBlud, petaIzinBlud } from '@/lib/blud/izin-server'
-
-export const FLAG_BLUD = 'app_status_blud'
-export const FLAG_BLUD_REALISASI = 'app_status_blud_realisasi'
+import { kunciSakelarUntuk } from '@/lib/registry/apps'
 
 /**
  * S4 — sakelar mati modul. Dipanggil di TIAP route, sesudah `getSession()` dan
@@ -41,9 +39,8 @@ export const FLAG_BLUD_REALISASI = 'app_status_blud_realisasi'
  * statis di `scripts/test-blud-killswitch.mjs`, bukan tsc.
  */
 export function bludMati(role?: string, lingkup?: 'realisasi') {
-  return lingkup === 'realisasi'
-    ? modulMati([FLAG_BLUD, FLAG_BLUD_REALISASI], { role })
-    : modulMati([FLAG_BLUD], { role })
+  // Tahap 14a — kuncinya dari registry, fungsi yang SAMA dengan spanduk & kartu /menu.
+  return modulMati(kunciSakelarUntuk('blud', lingkup), { role })
 }
 
 // Pesan di bawah ini sampai ke layar apa adanya lewat toast merah. Karena itu

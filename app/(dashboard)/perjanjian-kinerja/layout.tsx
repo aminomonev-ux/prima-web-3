@@ -10,7 +10,7 @@ import { PkYearProvider } from './_context/PkYearContext'
 import { sql, queryOne } from '@/lib/data/db'
 import { isPkRole } from '@/lib/data/pk-schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
-import { urlPemeliharaan } from '@/lib/registry/apps'
+import { kunciSakelarUntuk, urlPemeliharaan } from '@/lib/registry/apps'
 import { petaIzinPk } from '@/lib/pk/izin-server'
 import { infoBeku } from '@/lib/security/beku'
 import type { Role } from '@/types'
@@ -42,7 +42,7 @@ export default async function PerjanjianKinerjaLayout({ children }: { children: 
   // Tujuh menu sekali baca di sini, lalu dipakai ulang oleh `izinLayarPk` tiap halaman
   // lewat cache — kalau ribbon menghitung sendiri, ribbon dan halaman bisa berbeda.
   const izin = await petaIzinPk(Number(userId), role)
-  const beku = await infoBeku(['app_status_perjanjian_kinerja'], role)
+  const beku = await infoBeku(kunciSakelarUntuk('perjanjian_kinerja'), role)
 
   return (
     <PkYearProvider>

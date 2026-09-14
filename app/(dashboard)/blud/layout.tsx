@@ -6,7 +6,7 @@ import { sql, queryOne } from '@/lib/data/db'
 import { isBludRole } from '@/lib/blud/schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
 import { infoBeku } from '@/lib/security/beku'
-import { urlPemeliharaan } from '@/lib/registry/apps'
+import { lingkupSakelarModul, urlPemeliharaan } from '@/lib/registry/apps'
 import { petaIzinBlud } from '@/lib/blud/izin-server'
 import type { Role } from '@/types'
 
@@ -41,10 +41,14 @@ export default async function BludLayout({ children }: { children: React.ReactNo
   const izin = await petaIzinBlud(Number(userId), role)
   // P5 — dibaca di sini, bukan di tiap layar: layout ini dilewati semua layar BLUD,
   // sama alasannya dengan kenapa peta izin diselesaikan di sini.
-  const beku = await infoBeku(['app_status_blud'], role)
+  // Tahap 14a — SEMUA lingkup (modul + sub-sakelar Realisasi); shell memilih lewat menu
+  // aktif. Dulu cuma `app_status_blud`, jadi Realisasi beku tak bersuara di layarnya (T1).
+  const bekuLingkup = await Promise.all(
+    lingkupSakelarModul('blud').map(async (l) => ({ menu: l.menu, info: await infoBeku(l.kunci, role) })),
+  )
 
   return (
-    <BludShell username={username} role={role} izin={izin} themePreference={themePreference} beku={beku}>
+    <BludShell username={username} role={role} izin={izin} themePreference={themePreference} bekuLingkup={bekuLingkup}>
       {children}
     </BludShell>
   )

@@ -6,6 +6,7 @@ import { listDokumen } from '@/lib/data/iki';
 import IkiClient from './iki-client';
 import type { IkiListRow } from './_lib/types';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -27,12 +28,14 @@ export default async function IkiPage() {
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
-    <IkiClient
-      username={username}
-      role={role}
-      themePreference={themePreference}
-      initialRows={initial as IkiListRow[]}
-      beku={beku}
-    />
+    <KunciTulisProvider beku={beku}>
+      <IkiClient
+        username={username}
+        role={role}
+        themePreference={themePreference}
+        initialRows={initial as IkiListRow[]}
+        beku={beku}
+      />
+    </KunciTulisProvider>
   );
 }

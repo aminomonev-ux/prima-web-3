@@ -591,11 +591,11 @@ export function BuatPanel({
         }}>
           Reset Semua
         </PrimaButton>
-        <PrimaButton variant="warning" iconLeft={<Save size={14}/>} data-rima="usulan.btn-draft"
+        <PrimaButton menulis variant="warning" iconLeft={<Save size={14}/>} data-rima="usulan.btn-draft"
           onClick={()=>doSubmit(true)} disabled={buatLoading||!items.length||formDisabled}>
           {buatLoading?'Menyimpan...':'Draft'}
         </PrimaButton>
-        <PrimaButton variant="primary" iconLeft={<Send size={14}/>} data-rima="usulan.btn-ajukan"
+        <PrimaButton menulis variant="primary" iconLeft={<Send size={14}/>} data-rima="usulan.btn-ajukan"
           onClick={()=>doSubmit(false)} disabled={buatLoading||!items.length||formDisabled}>
           {buatLoading?'Mengirim...':'Kirim Usulan'}
         </PrimaButton>

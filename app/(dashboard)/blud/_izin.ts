@@ -8,10 +8,10 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { MENU_REALISASI, type Izin, type MenuBlud } from '@/lib/blud/peran'
+import type { Izin, MenuBlud } from '@/lib/blud/peran'
 import { petaIzinBlud, type PetaIzinBlud } from '@/lib/blud/izin-server'
 import { modulSedangMati } from '@/lib/security/guard'
-import { urlPemeliharaan } from '@/lib/registry/apps'
+import { kunciSakelarUntuk, urlPemeliharaan } from '@/lib/registry/apps'
 import type { Role } from '@/types'
 
 export type IzinLayar = {
@@ -52,9 +52,12 @@ export async function izinLayar(menu: MenuBlud): Promise<IzinLayar> {
   // Sengaja TIDAK digabung ke `bolehBuka`: "modul dimatikan" itu keadaan sementara
   // yang hilang sendiri, "Anda tidak berhak" harus ditanyakan ke admin. Menyatukan
   // keduanya membuat pesan yang satu terbaca sebagai yang lain.
-  if (MENU_REALISASI.includes(menu)
-      && await modulSedangMati(['app_status_blud_realisasi'], { role })) {
-    redirect(urlPemeliharaan('app_status_blud_realisasi'))
+  //
+  // Tahap 14a — daftar menunya dari registry (`subSakelar.menu`), sama dengan penjaga API.
+  // Induknya sudah diperiksa layout, jadi yang tersisa di sini hanya sub-sakelarnya.
+  const [, ...sub] = kunciSakelarUntuk('blud', menu)
+  if (sub.length > 0 && await modulSedangMati(sub, { role })) {
+    redirect(urlPemeliharaan(sub[0]))
   }
 
   return { role, bolehUbah: izin === 'EDIT', izin, peta }

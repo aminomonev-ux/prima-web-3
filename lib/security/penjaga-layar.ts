@@ -13,7 +13,7 @@
 // terbalik di salah satunya tanpa ada yang menyadarinya.
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { cekModul, modul, urlPemeliharaan } from '@/lib/registry/apps'
+import { cekModul, kunciSakelarUntuk, modul, urlPemeliharaan } from '@/lib/registry/apps'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
 import { infoBeku, TIDAK_BEKU, type InfoBeku } from '@/lib/security/beku'
 
@@ -68,8 +68,8 @@ export async function jagaLayarModul(kunci: string): Promise<void> {
  * (pagarnya berdiri di `modulMati`, yang tetap menolak).
  */
 export async function bekuLayarModul(kunci: string): Promise<InfoBeku> {
-  const sakelar = modul(kunci)?.sakelar
-  if (!sakelar) return TIDAK_BEKU
+  const sakelar = kunciSakelarUntuk(kunci)
+  if (sakelar.length === 0) return TIDAK_BEKU
   const h = await headers()
-  return infoBeku([sakelar], h.get('x-user-role') ?? undefined)
+  return infoBeku(sakelar, h.get('x-user-role') ?? undefined)
 }

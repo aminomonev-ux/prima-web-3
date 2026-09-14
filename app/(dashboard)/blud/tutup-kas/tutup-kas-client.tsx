@@ -411,7 +411,7 @@ export default function TutupKasClient(
                     <span className="tk-card-sub">
                       Sisa tahun lalu menurut berita acara Desember. Terkunci begitu Januari ditutup.
                     </span>
-                    <PrimaButton variant="primary" size="sm" iconLeft={<Save size={13} />}
+                    <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={13} />}
                       disabled={sibuk || !awalBerubah} onClick={() => void simpanSaldoAwal()}>
                       Simpan saldo awal
                     </PrimaButton>
@@ -489,11 +489,11 @@ export default function TutupKasClient(
             </label>
             {!bekuIsian && (
               <div className="tk-aksi">
-                <PrimaButton variant="ghost" iconLeft={<Save size={13} />} disabled={sibuk || !terisi}
+                <PrimaButton menulis variant="ghost" iconLeft={<Save size={13} />} disabled={sibuk || !terisi}
                   onClick={() => kirim(false)}>
                   Simpan Pemeriksaan
                 </PrimaButton>
-                <PrimaButton variant="success" iconLeft={<Lock size={13} />}
+                <PrimaButton menulis variant="success" iconLeft={<Lock size={13} />}
                   disabled={sibuk || !seimbang || adaPenghalang}
                   data-tooltip={
                     adaPenghalang ? 'Masih ada yang harus dibereskan'
@@ -557,7 +557,7 @@ export default function TutupKasClient(
                   onClick={() => setGu(p => [...p, { tgl_awal: awalBulan, tgl_akhir: akhirBulan, no_surat: '' }])}>
                   Tambah Rentang
                 </PrimaButton>
-                <PrimaButton variant="primary" size="sm" iconLeft={<Save size={13} />}
+                <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={13} />}
                   onClick={simpanGu} disabled={guSibuk}>
                   Simpan Periode GU
                 </PrimaButton>

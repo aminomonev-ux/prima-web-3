@@ -278,7 +278,7 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
                   Hapus Terpilih ({selectedCount})
                 </PrimaButton>
               )}
-              <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="primary" iconLeft={<Save size={14} />}
                 onClick={handleSave} disabled={loading || saving}>
                 {saving ? 'Menyimpan…' : `Simpan${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
               </PrimaButton>

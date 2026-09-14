@@ -6,6 +6,7 @@ import { isKinerjaRole } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard';
 import { urlPemeliharaan } from '@/lib/registry/apps';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
+import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 import type { Role } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -35,5 +36,5 @@ export default async function KinerjaPage() {
   );
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
-  return <KinerjaClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} beku={beku} />;
+  return <KunciTulisProvider beku={beku}><KinerjaClient userId={Number(userId)} role={role} username={username} themePreference={themePreference} beku={beku} /></KunciTulisProvider>;
 }

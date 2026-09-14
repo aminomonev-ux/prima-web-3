@@ -255,7 +255,7 @@ export default function PejabatSpjPanel({ bolehUbah }: { bolehUbah: boolean }) {
           ))}
           {bolehUbah && (
             <div className="pj-aksi">
-              <PrimaButton variant="primary" iconLeft={<Save size={13} />} onClick={simpan} disabled={sibuk}>
+              <PrimaButton menulis variant="primary" iconLeft={<Save size={13} />} onClick={simpan} disabled={sibuk}>
                 Simpan Pejabat
               </PrimaButton>
             </div>

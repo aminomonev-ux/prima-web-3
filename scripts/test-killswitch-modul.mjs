@@ -41,10 +41,21 @@ const KANDIDAT = MODUL_APPS_DATA.filter((m) => m.sakelar && m.dirApi);
 const TANPA_PENJAGA = KANDIDAT.filter((m) => !m.penjagaApi);
 const MODUL = KANDIDAT
   .filter((m) => m.penjagaApi)
-  .map((m) => ({ nama: m.label, dir: m.dirApi, lewat: m.penjagaApi.lewat, penanda: m.penjagaApi.penanda }));
+  .map((m) => ({
+    nama: m.label, dir: m.dirApi, lewat: m.penjagaApi.lewat, penanda: m.penjagaApi.penanda,
+    hanyaBaca: m.hanyaBaca === true,
+  }));
+
+const METODE_TULIS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 // Modul berpabrik: flag WAJIB dioper sebagai argumen ketiga buatGuardModul.
 const FLAG_PABRIK = /buatGuardModul\([^)]*['"]app_status_[a-z_]+['"]\s*\)/s;
+
+// Fase F Tahap 14d — penanda dicari PER HANDLER, bukan per berkas. Dulu `route.ts` yang
+// mengekspor GET+POST+PUT dan memanggil `bludMati` hanya di GET tetap lulus. Sejak K1
+// memutuskan tombol simpan tidak lagi disembunyikan lewat izin, `modulMati` satu-satunya
+// yang menahan tulisan saat beku — jaminannya harus per handler, bukan kebetulan.
+import { potongHandler, RE_EKSPOR_LAIN } from './_potong-handler.mjs';
 
 function cariRoute(dir) {
   const out = [];
@@ -61,6 +72,7 @@ function cariRoute(dir) {
 
 let gagal = 0;
 let diperiksa = 0;
+let diperiksaHandler = 0;
 
 for (const m of TANPA_PENJAGA) {
   console.log(`X  ${m.label}: punya sakelar '${m.sakelar}' dan route di ${m.dirApi}, tapi`);
@@ -86,24 +98,51 @@ for (const m of MODUL) {
   }
 
   const bolong = [];
+  let handlerModul = 0;
+  let handlerTulis = 0;
   for (const f of routes) {
     diperiksa++;
     const isi = fs.readFileSync(f, 'utf8');
+    if (RE_EKSPOR_LAIN.test(isi)) {
+      bolong.push(`${f}  (bentuk ekspor handler tidak dikenali — tulis sebagai \`export async function X(\`)`);
+      continue;
+    }
+    const handler = potongHandler(isi);
+    if (handler.length === 0) {
+      bolong.push(`${f}  (tidak ada handler yang dikenali)`);
+      continue;
+    }
     // Route yang tidak menyentuh sesi sama sekali (mis. webhook publik) tidak ada
     // di modul-modul ini; kalau suatu saat ada, kecualikan di sini dengan alasan.
-    if (!m.penanda.some((p) => isi.includes(p))) bolong.push(f);
+    for (const h of handler) {
+      handlerModul++;
+      if (METODE_TULIS.has(h.nama)) handlerTulis++;
+      if (!m.penanda.some((p) => h.badan.includes(p))) bolong.push(`${f}  ${h.nama}`);
+    }
+  }
+  diperiksaHandler += handlerModul;
+
+  // Tahap 14c — `hanyaBaca` menentukan apakah layar Sakelar menawarkan BEKU. Dicocokkan ke
+  // dua arah: mengaku baca padahal menulis = BEKU disembunyikan dari modul yang justru
+  // perlu dibekukan; tidak mengaku padahal tak menulis = tombol BEKU tanpa akibat (T13).
+  if (m.hanyaBaca && handlerTulis > 0) {
+    console.log(`X  ${m.nama}: bertanda \`hanyaBaca\` tapi punya ${handlerTulis} handler tulis — BEKU tidak akan ditawarkan untuknya.`);
+    gagal++;
+  } else if (!m.hanyaBaca && handlerTulis === 0) {
+    console.log(`X  ${m.nama}: tidak punya satu pun handler tulis. Tandai \`hanyaBaca: true\` di apps-data.mjs supaya BEKU tidak ditawarkan.`);
+    gagal++;
   }
 
   if (bolong.length > 0) {
-    console.log(`X  ${m.nama}: ${bolong.length} dari ${routes.length} route tidak menyebut ${m.penanda.map((p) => `'${p}'`).join(' / ')}:`);
+    console.log(`X  ${m.nama}: ${bolong.length} handler tidak menyebut ${m.penanda.map((p) => `'${p}'`).join(' / ')} di badannya sendiri:`);
     for (const b of bolong) console.log(`     ${b}`);
     gagal++;
   } else {
-    console.log(`OK ${m.nama}: ${routes.length} route, semuanya lewat sakelar (${m.lewat}).`);
+    console.log(`OK ${m.nama}: ${routes.length} route · ${handlerModul} handler, semuanya lewat sakelar (${m.lewat}).`);
   }
 }
 
-console.log(`\n${diperiksa} route diperiksa.`);
+console.log(`\n${diperiksa} route · ${diperiksaHandler} handler diperiksa.`);
 if (gagal > 0) {
   console.log(`GAGAL: ${gagal} modul bermasalah. Sakelar maintenance yang tidak menutup API sama saja dengan tidak ada.`);
   process.exit(1);

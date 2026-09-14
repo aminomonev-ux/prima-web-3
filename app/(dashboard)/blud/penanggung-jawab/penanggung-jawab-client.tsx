@@ -126,7 +126,7 @@ export default function PenanggungJawabClient({ bolehUbah }: { bolehUbah: boolea
 
         {bolehUbah && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <PrimaButton variant="primary" iconLeft={<Save size={14} />}
+            <PrimaButton menulis variant="primary" iconLeft={<Save size={14} />}
               onClick={() => simpan()} disabled={saving}>
               {saving ? 'Menyimpan...' : 'Simpan'}
             </PrimaButton>

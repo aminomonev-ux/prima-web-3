@@ -469,7 +469,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
             <DownloadButton variant="pdf" label="PDF" onClick={onPdf} disabled={!renderedData} />
             <DownloadButton variant="excel" label="Excel" onClick={onExcel} disabled={!renderedData} />
             {showSimpanPK && (
-              <PrimaButton variant="purple" iconLeft={<Save size={14} />}
+              <PrimaButton menulis variant="purple" iconLeft={<Save size={14} />}
                 onClick={onSimpanRekapPK} disabled={!renderedData}>
                 Simpan Rekap PK
               </PrimaButton>

@@ -1819,7 +1819,7 @@ export default function UsulanClient({ userId, role, username, themePreference, 
                       </p>
                       <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
                         <PrimaButton variant="ghost" size="sm" onClick={()=>setBulkModal(false)} disabled={bulkLoading}>Batal</PrimaButton>
-                        <PrimaButton variant="primary" size="sm" onClick={doBulkAcc} disabled={bulkLoading}>
+                        <PrimaButton menulis variant="primary" size="sm" onClick={doBulkAcc} disabled={bulkLoading}>
                           {bulkLoading ? 'Memproses...' : (role==='ADMIN_KABAG' ? '✅ Ya, ACC Semua' : '📋 Ya, Proses Semua')}
                         </PrimaButton>
                       </div>
