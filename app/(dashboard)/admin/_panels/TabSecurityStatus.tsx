@@ -9,19 +9,19 @@ import { fetchJson } from '@/lib/shared/api';
 import { APP_STATUS_LABELS, type AppStatus } from './_shared';
 import { bacaKeadaan, LABEL_KEADAAN } from '@/lib/registry/apps';
 
+// Edisi intranet mematikan Turnstile, registrasi publik, dan reset kata sandi lewat email
+// (docs/INTRANET-DELTA.md D2, D5–D7) — baris ketiganya dibuang, bukan dibiarkan centang hijau.
+// Checklist yang mengaku melindungi dengan fitur yang tidak ada lebih buruk daripada tidak ada.
 export const SEC_CHECKS = [
-  { label:'Cloudflare Turnstile', ok:true,  val:'Widget (CF)' },
   { label:'Brute-force Lock',     ok:true,  val:'5x → 15 menit' },
   { label:'Rate Limit Login',     ok:true,  val:'10 req/60s' },
-  { label:'Rate Limit Register',  ok:true,  val:'3 req/300s' },
   { label:'Password Policy',      ok:true,  val:'Min 8 + A-Z+0-9' },
   { label:'Bcrypt Hash',          ok:true,  val:'Cost 12' },
   { label:'JWT HS256',            ok:true,  val:'Cookie HTTP-Only' },
   { label:'Session Timeout',      ok:true,  val:'60 menit idle' },
   { label:'Session Tracking',     ok:true,  val:'DB + invalidate' },
-  { label:'CSP Headers',          ok:true,  val:'CF + self only' },
+  { label:'CSP Headers',          ok:true,  val:'self + nonce' },
   { label:'Audit Log',            ok:true,  val:'Semua event' },
-  { label:'Rate Limit Reset PW',  ok:true,  val:'3 req/10 menit' },
   { label:'HTTPS / HSTS',         ok:true,  val:'max-age=63072000' },
 ];
 

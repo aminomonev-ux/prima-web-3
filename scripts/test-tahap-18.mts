@@ -146,6 +146,24 @@ console.log('\nE · detail jejak audit tetap')
 cek('sesi darurat: detail lama utuh', baca('app/api/admin/sessions/route.ts').includes('detail: `Emergency logout: ${deleted} sesi dihapus`'))
 cek('persetujuan naik peran: detail lama utuh', baca('app/api/admin/promotion/[id]/approve/route.ts').includes('detail: `Approved reqId=${id} target=${reqRow.to_role}`'))
 
+// ── F · Checklist keamanan tidak mengaku memakai fitur yang sudah dimatikan ─
+// Pertanyaan akhir nomor 4. Edisi intranet mematikan Turnstile, registrasi publik, dan
+// reset kata sandi lewat email; checklist-nya tetap mencentang ketiganya hijau.
+console.log('\nF · checklist keamanan jujur')
+
+const status = baca('app/(dashboard)/admin/_panels/TabSecurityStatus.tsx')
+const labelCek = [...status.matchAll(/\{ label:'([^']+)',\s*ok:(true|false),\s*val:'([^']*)' \}/g)].map((m) => `${m[1]}=${m[3]}`)
+cek('checklist terbaca', labelCek.length >= 8, `${labelCek.length} baris`)
+cek('tanpa Turnstile (verifyTurnstile hanya no-op)',
+  !labelCek.some((l) => /turnstile/i.test(l)) && baca('lib/security/recaptcha.ts').includes('verifyTurnstile selalu pass'))
+for (const [nama, route] of [['Register', 'app/api/auth/register/route.ts'], ['Reset PW', 'app/api/auth/forgot-password/route.ts']] as const) {
+  cek(`tanpa Rate Limit ${nama} (endpoint-nya 410)`,
+    !labelCek.some((l) => l.includes(nama)) && baca(route).includes('status: 410'))
+}
+cek('CSP tidak lagi mengaku mengizinkan Cloudflare',
+  labelCek.includes('CSP Headers=self + nonce')
+  && !baca('proxy.ts').split('\n').some((b) => !/^\s*\/\//.test(b) && /cloudflare/i.test(b)))
+
 console.log(`\n${lulus + gagal} pemeriksaan · ${lulus} lulus · ${gagal} gagal`)
 if (gagal) { console.log('GAGAL — Tahap 18 tidak lagi utuh.'); process.exit(1) }
 console.log('Tahap 18 utuh.')
