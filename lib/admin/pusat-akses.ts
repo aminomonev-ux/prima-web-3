@@ -30,7 +30,7 @@ import {
   IzinBerubahError, bersihkanCacheIzin,
 } from '@/lib/data/menu-access'
 import { acquireBludLock } from '@/lib/data/locks'
-import { barisPintu, grantYangBerarti, type BerkasOrang, type BlokMenu } from '@/lib/admin/pintu-akses'
+import { barisPintu, grantMubazirDari, grantYangBerarti, type BerkasOrang, type BlokMenu } from '@/lib/admin/pintu-akses'
 import { jangkaYangBerarti } from '@/lib/admin/berjangka-baris'
 import { bacaJangka, tulisJangkaTx } from '@/lib/admin/akses-berjangka'
 import { tutupYangSudahTerbukaTx, type PermintaanDitutup } from '@/lib/admin/permintaan-akses'
@@ -268,7 +268,10 @@ export type PermintaanSimpan = {
 export type HasilSimpan = {
   peranBerubah: { dari: string; ke: string } | null
   grantDitambah: string[]
+  /** Grant yang BERARTI dan dilepas — pintunya tertutup. */
   grantDicabut: string[]
+  /** T17 — grant mubazir yang dilepas. Tidak menutup pintu apa pun; dicatat terpisah. */
+  grantDibersihkan: string[]
   izinDihapus: number
   modulMenuDitulis: string[]
   jangkaDitulis: number
@@ -291,7 +294,7 @@ export type HasilSimpan = {
  */
 export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpan> {
   const hasil: HasilSimpan = {
-    peranBerubah: null, grantDitambah: [], grantDicabut: [], izinDihapus: 0, modulMenuDitulis: [],
+    peranBerubah: null, grantDitambah: [], grantDicabut: [], grantDibersihkan: [], izinDihapus: 0, modulMenuDitulis: [],
     jangkaDitulis: 0, jangkaDihapus: 0, permintaanDisetujui: [],
   }
 
@@ -320,7 +323,11 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
     // aksi harian melatih orang mengetik "-" lalu terbawa ke aksi yang benar-benar
     // butuh dijelaskan.
     const grantCalon = grantYangBerarti(peranBaru, p.appAccess)
-    const grantBergeser = [...grantCalon].sort().join(',') !== [...appAccessLama].sort().join(',')
+    // T17 — dibandingkan dengan grant lama yang BERARTI, bukan `app_access` mentah. Grant
+    // mubazir yang terlepas tidak menggeser wewenang apa pun; dulu ia ikut dihitung,
+    // sehingga membersihkannya memaksa alasan dan tercatat sebagai ACCESS_REVOKE.
+    const grantLamaBerarti = grantYangBerarti(target.role, appAccessLama)
+    const grantBergeser = [...grantCalon].sort().join(',') !== [...grantLamaBerarti].sort().join(',')
     if ((gantiPeran || grantBergeser) && !p.alasan) {
       throw new AlasanWajibError(gantiPeran && grantBergeser ? 'peran dan pintu modul'
         : gantiPeran ? 'peran' : 'pintu modul')
@@ -348,7 +355,8 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
 
     const grantBaru = grantCalon
     hasil.grantDitambah = grantBaru.filter((k) => !appAccessLama.includes(k))
-    hasil.grantDicabut = appAccessLama.filter((k) => !grantBaru.includes(k))
+    hasil.grantDicabut = grantLamaBerarti.filter((k) => !grantBaru.includes(k))
+    hasil.grantDibersihkan = grantMubazirDari(target.role, appAccessLama).filter((k) => !grantBaru.includes(k))
     await tx`
       UPDATE users SET app_access = ${grantBaru.length ? JSON.stringify(grantBaru) : null},
         updated_at = NOW()

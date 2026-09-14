@@ -44,6 +44,11 @@ export type Temuan = {
   /** Ke mana orang harus pergi untuk membereskannya. */
   tindakan: string;
   contoh: string[];
+  /**
+   * T17 — orang yang bisa langsung dibuka berkasnya di Pusat Akses. Membuka saja, bukan
+   * membereskan: layar ini melaporkan (P10), keputusannya tetap di tombol Simpan.
+   */
+  orang?: { id: number; username: string }[];
 };
 
 // ─── Aturan (murni, tanpa DB) ────────────────────────────────────────────────
@@ -64,7 +69,7 @@ export function kuotaHampirPenuh(baris: readonly BarisKuota[]): { role: string; 
   return out.sort((a, z) => z.jumlah / z.kuota - a.jumlah / a.kuota);
 }
 
-export type BarisGrant = { username: string; role: string; appAccess: unknown };
+export type BarisGrant = { id?: number; username: string; role: string; appAccess: unknown };
 
 /**
  * Grant yang tidak menambah apa pun karena perannya sudah membuka modul itu.
@@ -134,9 +139,9 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
       ORDER BY last_login IS NOT NULL, last_login ASC
     ` as PromiseLike<{ username: string; last_login: Date | null }[]>,
     sql`
-      SELECT username, role, app_access FROM users
+      SELECT id, username, role, app_access FROM users
       WHERE status = 'AKTIF' AND deleted_at IS NULL AND app_access IS NOT NULL
-    ` as PromiseLike<{ username: string; role: string; app_access: unknown }[]>,
+    ` as PromiseLike<{ id: number; username: string; role: string; app_access: unknown }[]>,
     sql`SELECT app_key, menu_key, role FROM menu_role_access` as PromiseLike<{ app_key: string; menu_key: string; role: string }[]>,
     sql`
       SELECT m.app_key, m.menu_key, u.username FROM menu_user_access m
@@ -155,6 +160,11 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
 
   const kuota = kuotaHampirPenuh(peran.map((p) => ({ role: p.role, jumlah: nomor(p.n) })));
   const mubazir = grantMubazir(grant.map((g) => ({ username: g.username, role: g.role, appAccess: g.app_access })));
+  const pemilikMubazir = new Set(mubazir.map((m) => m.username));
+  const orangMubazir = grant
+    .filter((g) => pemilikMubazir.has(g.username))
+    .map((g) => ({ id: Number(g.id), username: g.username }))
+    .slice(0, MAKS_CONTOH);
   const yatim = izinMenuYatim([
     ...izinPeran.map((r) => ({ appKey: r.app_key, menuKey: r.menu_key, pemilik: `peran ${r.role}` })),
     ...izinOrang.map((r) => ({ appKey: r.app_key, menuKey: r.menu_key, pemilik: r.username ?? 'akun terhapus' })),
@@ -167,7 +177,7 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
       jumlah: kuota.length,
       keparahan: kuota.some((k) => k.jumlah >= k.kuota) ? 'merah' : kuota.length ? 'kuning' : 'aman',
       ringkas: `Peran yang sudah memakai ${Math.round(AMBANG_KUOTA * 100)}% kuotanya atau lebih. Kuota penuh sebaiknya diketahui sebelum ada yang perlu membuat akun, bukan saat sedang buru-buru.`,
-      tindakan: 'Nonaktifkan akun yang sudah tidak dipakai di tab Pengguna, atau naikkan kuotanya di lib/constants.ts.',
+      tindakan: 'Nonaktifkan akun yang sudah tidak dipakai di tab Pusat Akses, atau naikkan kuotanya di lib/constants.ts.',
       contoh: contohkan(kuota.map((k) => `${ROLE_LABELS[k.role] ?? k.role} — ${k.jumlah}/${k.kuota}`)),
     },
     {
@@ -176,7 +186,7 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
       jumlah: nganggur.length,
       keparahan: nganggur.length ? 'kuning' : 'aman',
       ringkas: `Akun berstatus AKTIF yang belum pernah login, atau tidak login lebih dari ${HARI_MENGANGGUR} hari. Akun hidup tanpa pemakai adalah pintu yang tidak dijaga siapa pun.`,
-      tindakan: 'Tanyakan pemiliknya; kalau memang sudah tidak dipakai, nonaktifkan di tab Pengguna.',
+      tindakan: 'Tanyakan pemiliknya; kalau memang sudah tidak dipakai, nonaktifkan di tab Pusat Akses.',
       contoh: contohkan(nganggur.map((u) => `${u.username} — ${u.last_login ? `terakhir ${new Date(u.last_login).toLocaleDateString('id-ID')}` : 'belum pernah login'}`)),
     },
     {
@@ -184,9 +194,12 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
       judul: 'Pemberian akses yang tidak menambah apa-apa',
       jumlah: mubazir.length,
       keparahan: mubazir.length ? 'kuning' : 'aman',
-      ringkas: 'Modul yang sudah terbuka oleh perannya, tapi tetap diberikan lagi lewat Atur Akses. Mencabutnya nol risiko — dan membiarkannya membuat satu pintu punya dua penjelasan.',
-      tindakan: 'Buang centangnya di tab Pengguna → Atur Akses Aplikasi.',
+      ringkas: 'Modul yang sudah terbuka oleh perannya, tapi tetap diberikan lagi per orang. Mencabutnya nol risiko — dan membiarkannya membuat satu pintu punya dua penjelasan.',
+      // T17 — dulu menunjuk tab yang tidak ada, dan di layar penggantinya kotak centang
+      // itu MATI. Kini ada jalannya: buka orangnya, tekan "Lepas centangnya", Simpan.
+      tindakan: 'Buka orangnya lewat tombol di bawah, tekan "Lepas centangnya" di tab Pusat Akses, lalu Simpan. Tidak ada pintu yang tertutup, jadi tidak ditanya alasan.',
       contoh: contohkan(mubazir.map((m) => `${m.username} · ${m.kunci} (${m.sebab})`)),
+      orang: orangMubazir,
     },
     {
       id: 'yatim',
@@ -194,7 +207,7 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
       jumlah: yatim.length,
       keparahan: yatim.length ? 'kuning' : 'aman',
       ringkas: 'Baris izin yang menunjuk menu yang sudah tidak ada — menu berganti nama atau dihapus, barisnya tertinggal. Matriksnya jadi bercerita tentang layar yang tak bisa dibuka siapa pun.',
-      tindakan: 'Buka tab Akses Menu dan simpan ulang modul yang bersangkutan; penyimpanan menulis ulang seluruh barisnya.',
+      tindakan: 'Buka tab Peran dan simpan ulang modul yang bersangkutan; penyimpanan menulis ulang seluruh barisnya.',
       contoh: contohkan(yatim.map((y) => `${y.appKey} · ${y.menuKey} (${y.pemilik})`)),
     },
     {
@@ -224,7 +237,7 @@ export async function jalankanPemeriksaan(): Promise<Temuan[]> {
       jumlah: sa.length,
       keparahan: sa.length > BATAS_SUPER_ADMIN ? 'kuning' : 'aman',
       ringkas: `Kunci induk sebaiknya sedikit. Lebih dari ${BATAS_SUPER_ADMIN} bukan pelanggaran, tapi angkanya harus terlihat, bukan ditemukan saat menelusuri jejak audit.`,
-      tindakan: 'Kalau ada yang sebenarnya cukup jadi Admin Staff, turunkan perannya di tab Pengguna.',
+      tindakan: 'Kalau ada yang sebenarnya cukup jadi Admin Staff, turunkan perannya di tab Pusat Akses.',
       contoh: contohkan(sa.map((u) => u.username)),
     },
   ];

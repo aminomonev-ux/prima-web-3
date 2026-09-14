@@ -450,6 +450,34 @@ terbaca sebagai hasil. Keadaan tiga (`memuat`/`gagal`/`ada`) + kalimat gagal + C
 
 **DoD:** `scripts/test-tahap-16.mts`, termasuk uji mutasi yang mengembalikan `diubah: 1`.
 
+**SELESAI (2026-09-14).**
+- **16a** — `hitungSuntinganPaket` (berkas daun `lib/admin/jejak-paket.ts`): layar memotret isi
+  form sesaat sesudah paket diterapkan, dan saat Simpan menghitung pintu + sel izin yang
+  berbeda. Draf mentah dibandingkan dengan draf mentah (versi pertama membandingkan draf
+  mentah dengan grant tersaring → pintu dari peran terhitung suntingan; dikoreksi sebelum uji).
+- **16b** — lima `tindakan` ke tab yang ada (Pusat Akses / Peran). Saat dibuka di layar
+  ketahuan DUA rujukan hantu lain yang tidak disebut konsep: `ringkas` temuan mubazir
+  ("lewat Atur Akses") dan daftar menu Admin Panel yang dipakai RIMA
+  (`lib/sentinel/module-menus.ts`: App Control, User Management, Active Sessions, …). Keduanya
+  diperbaiki; suite kini mencocokkan SELURUH teks temuan dan daftar RIMA ke label rel
+  `admin-client.tsx`.
+- **16c** — keputusan K3 (ditawarkan). Server: `grantBergeser` & `grantDicabut` dihitung dari
+  grant lama yang BERARTI (`grantYangBerarti(target.role, …)`); grant mubazir yang terlepas
+  masuk `grantDibersihkan`, dicatat `USER_UPDATE` "dibersihkan", tanpa alasan. Layar Pusat
+  Akses: spanduk "N pemberian akses tidak menambah apa-apa" + tombol **Lepas centangnya**
+  (mengisi form saja). Pemeriksaan: tombol **Buka {nama}** per orang. Penyimpangan kecil dari
+  konsep: centangnya TIDAK dilepas otomatis saat dibuka dari Pemeriksaan — satu klik
+  tambahan, supaya draf tidak pernah berubah tanpa tindakan yang terlihat.
+- **16d** (T19) — daftar Pusat Akses tiga keadaan; gagal memuat berbunyi "gagal dimuat" +
+  Coba lagi, jumlah orang hanya ditulis saat data ada.
+
+Uji: `scripts/test-tahap-16.mts` 36 pemeriksaan (`--env-file=.env.local`), **11/11 mutasi
+tertangkap**. Uji basis data pada `tesujiakun` (ADMIN, 3 grant mubazir): simpan tanpa alasan
+lolos, `dicabut=[]`, `dibersihkan=[blud,dashboard,rencana_aksi]`; `app_access` dipulihkan
+sesudahnya. Peramban: Pemeriksaan → Buka tesujiakun → spanduk → Lepas centangnya → Simpan
+menyala. **Simpan sengaja tidak ditekan** (akun sungguhan); jalur servernya dibuktikan uji
+basis data. Tahap 7 disesuaikan (mengutip pembanding lama).
+
 ---
 
 ### Tahap 17 — Kebersihan & pemasangan
@@ -554,19 +582,19 @@ Tahap 0 nomor 2 ─────────┘        │            │
 | T3 | Pesan 503 tidak sampai (`error` vs `message`) | 13 | live · **selesai** (13b83af) |
 | T4 | Spanduk BEKU absen di 7 modul | — | **selesai** (6089c82) |
 | T5 | `DELETE /api/admin/users` tanpa `mode`/`alasan` | 15 | live · **selesai** |
-| T6 | `asal_paket.diubah: 1` di-hardcode | 16 | kode |
+| T6 | `asal_paket.diubah: 1` di-hardcode | 16 | kode · **selesai** |
 | T7 | Lantai SA berdiri di `role_awal` klien | 15 | kode · **selesai** |
 | T8 | `app_status_dashboard` = maintenance sejak 3 Agu | 0 | live · **dinyalakan** (dev) |
 | T9 | `/maintenance` publik + font diblokir CSP sendiri | 17 (K2) | live |
 | T10 | Regex tanggal meloloskan `2026-13-45` | 15 | live · **selesai** |
-| T11 | Petunjuk menunjuk 5 tab yang tidak ada | 16 | live |
+| T11 | Petunjuk menunjuk 5 tab yang tidak ada | 16 | live · **selesai** (+2 rujukan hantu lain) |
 | T12 | Spanduk BEKU berbohong di BLUD & PK | 14 (K1) | live · **selesai** |
 | T13 | Dashboard menawarkan BEKU yang nihil akibat | 14 | live · **selesai** |
 | T14 | `sakelarKartu` merangkai kunci sebagai teks | 14 | kode · **selesai** |
 | T15 | `app_status_global` tanpa baris seed | 17 | kode |
-| T17 | Grant mubazir mustahil dibuang; jejaknya palsu | 16 (K3) | live |
+| T17 | Grant mubazir mustahil dibuang; jejaknya palsu | 16 (K3) | live · **selesai** |
 | T18 | `/menu` fail-open: satu fetch gagal → semua LIVE | 13 | live · **selesai** (13b83af) |
-| T19 | Pusat Akses: belum/gagal memuat berbunyi "0 orang" | 16 | live |
+| T19 | Pusat Akses: belum/gagal memuat berbunyi "0 orang" | 16 | live · **selesai** |
 
 > T16 tidak dipakai — penomorannya melompat saat temuan digabung; dibiarkan kosong supaya
 > nomor yang sudah dirujuk di catatan audit tidak bergeser artinya.

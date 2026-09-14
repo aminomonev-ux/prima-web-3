@@ -78,8 +78,11 @@ const lib = buangKomentar(baca('lib/admin/pusat-akses.ts'))
 // balik), jadi "apakah ini perubahan" yang dihitung di sana adalah tebakan yang bisa
 // meleset tepat pada kasus yang paling perlu dicatat — dua admin menyunting orang sama.
 cek('alasan diperiksa DI DALAM transaksi', lib.includes('throw new AlasanWajibError('))
+// Fase F Tahap 16c (T17): pembandingnya grant lama yang BERARTI (tetap dari baris
+// ber-FOR UPDATE). Grant mubazir yang terlepas tidak menggeser wewenang apa pun.
 cek('…dari grant lama yang dibaca di bawah FOR UPDATE',
-  lib.includes('const grantBergeser = [...grantCalon].sort().join(\',\') !== [...appAccessLama].sort().join(\',\')'))
+  lib.includes('const grantLamaBerarti = grantYangBerarti(target.role, appAccessLama)')
+  && lib.includes('const grantBergeser = [...grantCalon].sort().join(\',\') !== [...grantLamaBerarti].sort().join(\',\')'))
 cek('…dan syaratnya peran ATAU pintu modul bergeser',
   lib.includes('if ((gantiPeran || grantBergeser) && !p.alasan) {'))
 // Menyimpan tanpa menggeser wewenang (mis. cuma satu izin menu) tidak ditanya alasannya.

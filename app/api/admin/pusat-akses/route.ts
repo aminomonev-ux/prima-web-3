@@ -231,6 +231,14 @@ export async function PUT(req: NextRequest) {
         detail: `user id=${b.user_id}: -${hasil.grantDicabut.join(', ')}${sebab}`,
       })
     }
+    // T17 — BUKAN ACCESS_REVOKE: tidak ada pintu yang tertutup. Menyaring "siapa dicabut
+    // aksesnya" di Jejak Audit tidak boleh memunculkan pembersihan seperti ini.
+    if (hasil.grantDibersihkan.length) {
+      await writeAuditLog({
+        ...jejak, eventType: 'USER_UPDATE',
+        detail: `Pemberian akses mubazir dibersihkan user id=${b.user_id} (pintunya tetap terbuka lewat peran): ${hasil.grantDibersihkan.join(', ')}`,
+      })
+    }
     // P2 — tenggat itu BATAS wewenang, jadi menggesernya ikut dicatat. Baris sendiri,
     // bukan disisipkan ke ACCESS_GRANT: memberi akses tanpa batas waktu dan memberi
     // akses sampai 30 September adalah dua keputusan berbeda, dan yang membacanya

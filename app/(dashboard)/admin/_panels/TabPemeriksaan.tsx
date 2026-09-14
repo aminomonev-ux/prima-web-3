@@ -26,8 +26,12 @@ const KELAS = { merah: 'red', kuning: 'yellow', aman: 'green' } as const;
  * lencana dan isi layar bisa menyebut jumlah yang berbeda (L88).
  */
 export function TabPemeriksaan(
-  { temuan, loading, jam, err, onMuat }:
-  { temuan: Temuan[]; loading: boolean; jam: string; err: string; onMuat: () => void },
+  { temuan, loading, jam, err, onMuat, onKeAkses }:
+  {
+    temuan: Temuan[]; loading: boolean; jam: string; err: string; onMuat: () => void;
+    /** T17 — buka berkas orang di Pusat Akses. Membuka saja; tidak ada yang ditulis. */
+    onKeAkses: (userId: number) => void;
+  },
 ) {
   const perluDilihat = temuan.filter(t => t.keparahan !== 'aman').length;
 
@@ -73,6 +77,15 @@ export function TabPemeriksaan(
               </ul>
             )}
             {t.jumlah > 0 && <div className="ap-pm-tindakan">{t.tindakan}</div>}
+            {t.jumlah > 0 && t.orang && t.orang.length > 0 && (
+              <div className="ap-row" style={{gap:6,flexWrap:'wrap',marginTop:8}}>
+                {t.orang.map(o => (
+                  <PrimaButton key={o.id} variant="ghost" size="sm" onClick={() => onKeAkses(o.id)}>
+                    Buka {o.username}
+                  </PrimaButton>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

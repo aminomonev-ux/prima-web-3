@@ -278,7 +278,8 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
           <TabTinjauan onKeAkses={(id) => { setPilihOrang(id); setTab('pusat-akses'); }}/>
         )}
         {tab === 'pemeriksaan'     && isSA && (
-          <TabPemeriksaan temuan={temuan} loading={pmLoad} jam={pmJam} err={pmErr} onMuat={()=>void muatPemeriksaan()}/>
+          <TabPemeriksaan temuan={temuan} loading={pmLoad} jam={pmJam} err={pmErr} onMuat={()=>void muatPemeriksaan()}
+            onKeAkses={(id) => { setPilihOrang(id); setTab('pusat-akses'); }}/>
         )}
         </main>
       </div>

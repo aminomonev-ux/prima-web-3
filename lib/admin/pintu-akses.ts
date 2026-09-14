@@ -92,6 +92,17 @@ export function grantYangBerarti(role: string, dipilih: readonly string[]): stri
   return [...new Set(dipilih.filter((k) => bisa.has(k)))].sort()
 }
 
+/**
+ * Fase F Tahap 16c (T17) — kebalikan `grantYangBerarti`: kunci tersimpan yang TIDAK
+ * membuka apa pun untuk peran ini (sudah dari peran, terbuka untuk semua, tak bisa
+ * di-grant, atau tak dikenal). Membuangnya tidak menutup satu pintu pun, jadi ia
+ * PEMBERSIHAN, bukan pencabutan — dan tidak boleh menuntut alasan P9.
+ */
+export function grantMubazirDari(role: string, tersimpan: readonly string[]): string[] {
+  const berarti = new Set(grantYangBerarti(role, tersimpan))
+  return [...new Set(tersimpan.filter((k) => !berarti.has(k)))].sort()
+}
+
 // ─── Bentuk berkas orang ─────────────────────────────────────────────────────
 // Tipenya tinggal di berkas DAUN, bukan di `pusat-akses.ts` yang membaca DB. Sebabnya
 // bukan kerapian: `import type` memang terhapus saat kompilasi, tapi menaruh tipe di

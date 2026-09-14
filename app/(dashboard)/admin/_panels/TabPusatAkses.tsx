@@ -34,10 +34,11 @@ import { fetchJson } from '@/lib/shared/api';
 import { ROLE_LABELS } from '@/lib/constants';
 // Dari berkas DAUN, bukan dari `pusat-akses.ts` yang membaca DB — lihat kepala
 // `pintu-akses.ts` untuk sebabnya (halaman /admin sempat balas 500 karenanya).
-import { barisPintu, type BerkasOrang } from '@/lib/admin/pintu-akses';
+import { barisPintu, grantMubazirDari, grantYangBerarti, type BerkasOrang } from '@/lib/admin/pintu-akses';
 // Berkas DAUN juga — aturan tenggatnya murni, dan panel ini yang memakainya untuk
 // menyusun kalimat "12 hari lagi" tanpa menghitungnya sendiri.
 import { labelJangka, perluPerhatian, jangkaYangBerarti, HARI_PERINGATAN } from '@/lib/admin/berjangka-baris';
+import { hitungSuntinganPaket, type DrafAkses } from '@/lib/admin/jejak-paket';
 // Berkas DAUN juga — kalimat umur antrean & nama modul, tanpa berkas ini menghitungnya
 // sendiri. Tipe `BarisAntrean` ikut dari sana, bukan dari lapisan server (yang menyeret
 // mysql2 ke bundel peramban lewat satu impor NILAI — preseden Tahap 5).
@@ -106,6 +107,9 @@ export function TabPusatAkses(
   },
 ) {
   const [daftar, setDaftar]   = useState<Orang[]>([]);
+  // T19 — tiga keadaan. Dengan `daftar` saja, "sedang dimuat" dan "gagal dimuat" sama-sama
+  // berbunyi "Tidak ada yang cocok · 0 orang": admin bisa mengira seluruh akun lenyap.
+  const [daftarMuat, setDaftarMuat] = useState<'memuat' | 'gagal' | 'ada'>('memuat');
   const [cari, setCari]       = useState('');
   const [arsip, setArsip]     = useState(false);
   const [berkas, setBerkas]   = useState<BerkasOrang | null>(null);
@@ -119,7 +123,9 @@ export function TabPusatAkses(
   const [draMenu, setDraMenu]   = useState<Record<string, Record<string, Izin>>>({});
   const [draJangka, setDraJangka] = useState<Record<string, { berakhir: string; alasan: string }>>({});
   const [jangkaBuka, setJangkaBuka] = useState<Record<string, boolean>>({});
-  const [asalPaket, setAsalPaket] = useState<string | null>(null);
+  // T6 — nama paket BESERTA isi form sesaat sesudah ia diterapkan, supaya "berapa hal
+  // disunting sesudahnya" bisa dihitung saat Simpan, bukan dikarang.
+  const [asalPaket, setAsalPaket] = useState<{ nama: string; sesudah: DrafAkses } | null>(null);
   const [buatBuka, setBuatBuka]   = useState(false);
   const [paketBuka, setPaketBuka] = useState(false);
   const [garis, setGaris]         = useState<Peristiwa[] | null>(null);
@@ -146,8 +152,10 @@ export function TabPusatAkses(
     const p = new URLSearchParams();
     if (cari.trim()) p.set('cari', cari.trim());
     if (arsip) p.set('arsip', '1');
+    setDaftarMuat('memuat');
     const j = await fetchJson(`/api/admin/pusat-akses?${p}`) as { ok: boolean; data?: Orang[] };
-    if (j.ok && j.data) setDaftar(j.data);
+    if (j.ok && j.data) { setDaftar(j.data); setDaftarMuat('ada'); }
+    else setDaftarMuat('gagal');
   }, [cari, arsip]);
 
   const muatBerkas = useCallback(async (id: number) => {
@@ -259,6 +267,14 @@ export function TabPusatAkses(
     [berkas, draRole, draGrant],
   );
 
+  // T17 — centang yang tidak membuka apa pun. Kotaknya mati (pintunya terbuka lewat
+  // peran), jadi dulu tidak ada cara membuangnya dari layar ini. Tombolnya MENGISI FORM
+  // saja; yang menulis tetap Simpan, dan server mencatatnya sebagai pembersihan.
+  const mubazirDraf = useMemo(
+    () => berkas ? grantMubazirDari(draRole, draGrant) : [],
+    [berkas, draRole, draGrant],
+  );
+
   // Tanggal hari ini menurut peramban — dipakai HANYA untuk menyusun kalimat "n hari
   // lagi" di layar. Yang benar-benar memutuskan kapan akses dicabut adalah `CURDATE()`
   // di server, dan itu memang harus begitu: tenggat yang bergantung pada jam mesin
@@ -326,7 +342,9 @@ export function TabPusatAkses(
     for (const [app, peta] of Object.entries(p.menu)) menuBaru[app] = { ...(menuBaru[app] ?? {}), ...peta };
     setDraGrant(grantBaru);
     setDraMenu(menuBaru);
-    setAsalPaket(sebelum === JSON.stringify([[...grantBaru].sort(), menuBaru]) ? null : p.nama);
+    setAsalPaket(sebelum === JSON.stringify([[...grantBaru].sort(), menuBaru])
+      ? null
+      : { nama: p.nama, sesudah: { grant: grantBaru, menu: menuBaru } });
     toast.success(`Paket "${p.nama}" dimasukkan ke form. Periksa dulu, baru Simpan.`);
   }
 
@@ -340,7 +358,11 @@ export function TabPusatAkses(
     //
     // Server memeriksanya lagi di dalam transaksi, dari baris yang sudah dikunci —
     // pemeriksaan di sini untuk MEMINTA, bukan untuk menjamin.
-    const grantLama = [...berkas.appAccess].sort().join(',');
+    // T17 — grant lama yang BERARTI, sama dengan yang dibandingkan server. Dengan
+    // `berkas.appAccess` mentah, melepas centang mubazir terbaca "pintu ditutup" dan
+    // menuntut alasan untuk pintu yang tidak bergerak.
+    const grantLamaBerarti = grantYangBerarti(berkas.user.role, berkas.appAccess);
+    const grantLama = [...grantLamaBerarti].sort().join(',');
     const grantBaru = [...grantKirim].sort().join(',');
     const grantBergeser = grantLama !== grantBaru;
 
@@ -358,8 +380,8 @@ export function TabPusatAkses(
       });
       if (alasan === null) return;
     } else if (grantBergeser) {
-      const dibuka = grantKirim.filter(k => !berkas.appAccess.includes(k));
-      const ditutup = berkas.appAccess.filter(k => !grantKirim.includes(k));
+      const dibuka = grantKirim.filter(k => !grantLamaBerarti.includes(k));
+      const ditutup = grantLamaBerarti.filter(k => !grantKirim.includes(k));
       const nama = (k: string) => pintuDraf.find(b => b.kunci === k)?.label ?? k;
       alasan = await promptDialog({
         title: 'Simpan perubahan akses?',
@@ -397,7 +419,11 @@ export function TabPusatAkses(
         ),
         menu: peranBerubah ? {} : draMenu,
         versi: Object.fromEntries(berkas.menu.map(m => [m.appKey, m.versi])),
-        asal_paket: asalPaket ? { nama: asalPaket, diubah: 1 } : null,
+        // Draf mentah dibandingkan dengan draf mentah — dua sisi yang disaring beda cara
+        // akan menghitung pintu yang terbuka karena PERAN sebagai suntingan.
+        asal_paket: asalPaket
+          ? { nama: asalPaket.nama, diubah: hitungSuntinganPaket(asalPaket.sesudah, { grant: draGrant, menu: draMenu }) }
+          : null,
         ...(alasan ? { alasan } : {}),
       }),
     }) as {
@@ -547,9 +573,16 @@ export function TabPusatAkses(
               </div>
             </button>
           ))}
-          {daftar.length === 0 && <div className="ap-pa-kosong">Tidak ada yang cocok.</div>}
+          {daftarMuat === 'gagal' && (
+            <div className="ap-pa-kosong">
+              Daftar orang gagal dimuat.{' '}
+              <PrimaButton variant="ghost" size="sm" onClick={() => void muatDaftar()}>Coba lagi</PrimaButton>
+            </div>
+          )}
+          {daftarMuat === 'memuat' && daftar.length === 0 && <div className="ap-pa-kosong">Memuat daftar orang…</div>}
+          {daftarMuat === 'ada' && daftar.length === 0 && <div className="ap-pa-kosong">Tidak ada yang cocok.</div>}
         </div>
-        <div className="ap-pa-jumlah">{daftar.length} orang</div>
+        <div className="ap-pa-jumlah">{daftarMuat === 'ada' ? `${daftar.length} orang` : daftarMuat === 'memuat' ? 'memuat…' : 'gagal dimuat'}</div>
       </aside>
 
       <section className="ap-pa-kanan">
@@ -708,8 +741,23 @@ export function TabPusatAkses(
               </div>
             </div>
 
+            {mubazirDraf.length > 0 && (
+              <div className="ap-pa-catatan">
+                <PackageOpen size={13}/>
+                <span style={{ flex: 1 }}>
+                  {mubazirDraf.length} pemberian akses tidak menambah apa-apa:{' '}
+                  <b>{mubazirDraf.map(k => pintuDraf.find(b => b.kunci === k)?.label ?? k).join(', ')}</b>.
+                  {' '}Pintunya sudah terbuka lewat peran, jadi melepasnya tidak menutup apa pun.
+                </span>
+                <PrimaButton variant="ghost" size="sm" disabled={sibuk}
+                  onClick={() => setDraGrant(g => g.filter(k => !mubazirDraf.includes(k)))}>
+                  Lepas centangnya
+                </PrimaButton>
+              </div>
+            )}
+
             {asalPaket && (
-              <div className="ap-pa-catatan"><PackageOpen size={13}/> Form diisi dari paket <b>{asalPaket}</b>. Belum tersimpan.</div>
+              <div className="ap-pa-catatan"><PackageOpen size={13}/> Form diisi dari paket <b>{asalPaket.nama}</b>. Belum tersimpan.</div>
             )}
 
             <div className="ap-pa-pintu">

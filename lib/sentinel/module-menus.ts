@@ -48,8 +48,11 @@ export function moduleMenusFor(moduleId: string, role: Role | null): string[] {
       return ['Aset', 'Master']
     case 'lkjip': // lkjip-client.tsx — daftar dokumen + editor kerangka
       return ['Daftar Dokumen E-LKJIP (buat & susun laporan)']
-    case 'admin': // admin-client.tsx TABS (modul khusus SUPER_ADMIN)
-      return ['Active Sessions', 'App Control', 'Attack Monitor', 'User Management', 'Security Status', 'Broadcast', 'Audit Trail', 'Email Notif', 'Promotion Req']
+    case 'admin': // admin-client.tsx rel (modul khusus SUPER_ADMIN)
+      // Fase F Tahap 16b (T11) — dulu nama tab lama (App Control, User Management, …):
+      // RIMA menyuruh orang mencari tab yang tidak ada. `test-tahap-16.mts` mencocokkannya
+      // ke label rel `admin-client.tsx` apa adanya.
+      return ['Pusat Akses', 'Peran', 'Permintaan', 'Tinjauan', 'Sakelar', 'Sesi Aktif', 'Monitor', 'Status', 'Jejak Audit', 'Pemeriksaan', 'Broadcast', 'Email', 'RIMA']
     default:
       return []
   }
