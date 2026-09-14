@@ -18,6 +18,21 @@ export const HARI_PERINGATAN = 3
 /** `YYYY-MM-DD`. Bentuk yang sama dengan `<input type="date">` dan kolom DATE MySQL. */
 export const RE_TANGGAL = /^\d{4}-\d{2}-\d{2}$/
 
+/**
+ * Fase F Tahap 15d (T10) — bentuk DAN tanggal yang benar-benar ada di kalender.
+ *
+ * Regex saja meloloskan `2026-13-45` dan `2026-02-31`. Di MySQL strict itu berakhir
+ * ER_TRUNCATED_WRONG_VALUE → seluruh Simpan (peran + pintu + menu) dibatalkan dengan
+ * "Terjadi kesalahan server"; di MySQL longgar bisa tersimpan `0000-00-00` lalu dicabut
+ * cron. Dibulak-balik lewat `Date.UTC`: tanggal yang tidak ada bergeser ke bulan lain.
+ */
+export function tanggalSah(s: string): boolean {
+  if (!RE_TANGGAL.test(s)) return false
+  const [y, m, d] = s.split('-').map(Number)
+  const t = new Date(Date.UTC(y, m - 1, d))
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d
+}
+
 export type BarisBerjangka = {
   appKey: string
   /** `YYYY-MM-DD` — hari TERAKHIR akses masih berlaku. */
@@ -37,7 +52,7 @@ export type BarisBerjangka = {
  * ini", dan itu jawaban yang sangat berbeda dari "tidak tahu".
  */
 export function sisaHari(berakhir: string, hariIni: string): number | null {
-  if (!RE_TANGGAL.test(berakhir) || !RE_TANGGAL.test(hariIni)) return null
+  if (!tanggalSah(berakhir) || !tanggalSah(hariIni)) return null
   const a = Date.parse(`${berakhir}T00:00:00Z`)
   const b = Date.parse(`${hariIni}T00:00:00Z`)
   if (Number.isNaN(a) || Number.isNaN(b)) return null
@@ -48,7 +63,7 @@ const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'O
 
 /** `2026-09-30` → `30 Sep 2026`. String kosong untuk yang tidak berbentuk tanggal. */
 export function tanggalSingkat(iso: string): string {
-  if (!RE_TANGGAL.test(iso)) return ''
+  if (!tanggalSah(iso)) return ''
   const [y, m, d] = iso.split('-')
   return `${d} ${BULAN[Number(m) - 1] ?? m} ${y}`
 }
@@ -90,7 +105,7 @@ export function jangkaYangBerarti(
 ): BarisBerjangka[] {
   const punya = new Set(dipilih)
   return Object.entries(jangka)
-    .filter(([kunci, v]) => punya.has(kunci) && RE_TANGGAL.test(v.berakhir) && v.alasan.trim().length > 0)
+    .filter(([kunci, v]) => punya.has(kunci) && tanggalSah(v.berakhir) && v.alasan.trim().length > 0)
     .map(([appKey, v]) => ({ appKey, berakhir: v.berakhir, alasan: v.alasan.trim() }))
     .sort((a, b) => (a.appKey < b.appKey ? -1 : a.appKey > b.appKey ? 1 : 0))
 }

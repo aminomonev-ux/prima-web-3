@@ -309,38 +309,8 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
-  try {
-    const session = await getSession();
-    if (!session || session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN yang dapat menghapus akun.' }, { status: 403 });
-    }
-
-    const { searchParams } = req.nextUrl;
-    // SDL-M15 / BUG-W2: safeInt bukan parseInt.
-    const id = safeInt(searchParams.get('id'), 0);
-    if (!id) return NextResponse.json({ ok: false, message: 'ID user diperlukan.' }, { status: 400 });
-
-    const target = await sql`SELECT role, username FROM users WHERE id = ${id} LIMIT 1`;
-    if (!target.length) return NextResponse.json({ ok: false, message: 'User tidak ditemukan.' }, { status: 404 });
-
-    const t = target[0] as Record<string, unknown>;
-    if (t.role === 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Tidak dapat menghapus akun SUPER_ADMIN.' }, { status: 403 });
-    }
-    if (t.username === session.username) {
-      return NextResponse.json({ ok: false, message: 'Tidak dapat menghapus akun sendiri.' }, { status: 403 });
-    }
-
-    // Invalidate semua sesi aktif user terlebih dahulu
-    await sql`UPDATE user_sessions SET invalidated_at = NOW() WHERE user_id = ${id} AND invalidated_at IS NULL`;
-    await sql`DELETE FROM users WHERE id = ${id}`;
-    await writeAuditLog({ req, eventType: 'USER_DELETE', userId: session.userId, username: session.username, targetUserId: id, detail: `Hapus user ${t.username as string} (id=${id})` });
-
-    return NextResponse.json({ ok: true, message: `Akun ${t.username as string} berhasil dihapus. Slot kuota role dibebaskan.` });
-
-  } catch (error) {
-    console.error('[Admin Users DELETE Error]', error);
-    return NextResponse.json({ ok: false, message: 'Terjadi kesalahan server.' }, { status: 500 });
-  }
-}
+// `DELETE` DIBUANG di Fase F Tahap 15a (T5). Ia menghapus akun tanpa `mode` (arsip atau
+// hapus permanen) dan tanpa `alasan` P9, dua hal yang diwajibkan satu-satunya layar hapus
+// (Pusat Akses → `DELETE /api/admin/pusat-akses`). Nol pemanggil sejak tab User Management
+// dimatikan, tapi route yang masih menjawab tetap pintu (L82). Pintu hapus kedua berarti
+// dua set aturan; `scripts/test-tahap-15.mts` menjaga `DELETE FROM users` tetap satu tempat.

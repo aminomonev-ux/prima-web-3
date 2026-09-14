@@ -22,7 +22,7 @@ import {
 import { z } from 'zod'
 import {
   berkasOrang, hitungJejakOrang, simpanBerkasOrang, garisWaktuOrang,
-  AlasanWajibError, PeranBerubahError, BULAN_GARIS_WAKTU,
+  AlasanWajibError, LantaiSuperAdminError, PeranBerubahError, BULAN_GARIS_WAKTU,
 } from '@/lib/admin/pusat-akses'
 import { addNotif } from '@/lib/services/notifications'
 import { labelModul } from '@/lib/admin/permintaan-baris'
@@ -185,8 +185,8 @@ export async function PUT(req: NextRequest) {
     const b = parsed.data
 
     // SUPER_ADMIN tidak diatur dari sini — kalau barisnya bisa disunting, cepat atau
-    // lambat ada yang mengunci dirinya sendiri di luar (§4.5.4 nomor 5).
-    if (b.role_awal === 'SUPER_ADMIN') return tolak('Akses SUPER_ADMIN tidak dapat dibatasi.', 403)
+    // lambat ada yang mengunci dirinya sendiri di luar (§4.5.4 nomor 5). Diputuskan di
+    // dalam `simpanBerkasOrang` dari baris ber-`FOR UPDATE` (T7), bukan dari `role_awal`.
     if (b.user_id === session.userId) return tolak('Wewenang sendiri tidak diatur dari layar ini.', 403)
 
     const hasil = await simpanBerkasOrang({
@@ -265,6 +265,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ ok: true, data: hasil })
   } catch (e) {
     if (e instanceof AlasanWajibError) return tolak(e.message, 400, { code: 'ALASAN_WAJIB' })
+    if (e instanceof LantaiSuperAdminError) return tolak(e.message, 403, { code: 'LANTAI_SUPER_ADMIN' })
     if (e instanceof PeranBerubahError) return tolak(e.message, 409, { code: 'PERAN_BERUBAH' })
     if (e instanceof IzinBerubahError) {
       return tolak('Pengaturan menu orang ini baru saja diubah orang lain. Muat ulang dulu.', 409, { code: 'BERUBAH' })

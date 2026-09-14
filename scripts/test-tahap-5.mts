@@ -179,8 +179,11 @@ cek('kuota diperiksa saat peran berganti', lib.includes('await assertQuotaAvaila
 
 const rute = buangKomentar(baca('app/api/admin/pusat-akses/route.ts'))
 cek('seluruh route SUPER_ADMIN saja', rute.includes("session.role !== 'SUPER_ADMIN'"))
+// Fase F Tahap 15c (T7): lantainya pindah ke dalam transaksi, dari `role` baris yang
+// dikunci — bukan dari `role_awal` kiriman klien.
 cek('SUPER_ADMIN tidak bisa diatur dari sini',
-  rute.includes("if (b.role_awal === 'SUPER_ADMIN') return tolak("))
+  lib.includes("if (target.role === 'SUPER_ADMIN') throw new LantaiSuperAdminError()")
+  && rute.includes("if (e instanceof LantaiSuperAdminError) return tolak(e.message, 403"))
 cek('wewenang sendiri tidak diatur dari sini',
   rute.includes('if (b.user_id === session.userId) return tolak('))
 cek('bentrok dua admin dijawab 409, bukan ditimpa diam-diam',

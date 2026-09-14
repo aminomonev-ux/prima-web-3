@@ -9,8 +9,30 @@ import { getSession } from '@/lib/security/auth';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { sql } from '@/lib/data/db';
+import { modulMati } from '@/lib/security/guard';
+import { kunciSakelarUntuk } from '@/lib/registry/apps';
 
 export const runtime = 'nodejs';
+
+/**
+ * Fase F Tahap 15b (T2) — modul yang memakai route ini. Berkas ini di luar `dirApi` modul
+ * mana pun, jadi gate G tidak memindainya, dan dulu ia tidak memanggil sakelar sama sekali:
+ * membekukan atau mematikan LKJIP/Usulan tidak menghentikan unggahan ke Drive maupun baris
+ * `uploaded_files`. Pemanggil menyebut modul asalnya lewat field `modul`.
+ */
+const MODUL_PENGUNGGAH = ['lkjip', 'usulan_aset'] as const;
+
+/**
+ * `modul` tidak disebut (tab lama yang belum dimuat ulang sesudah deploy) → SEMUA sakelar
+ * pemakainya ditanya. Lebih membatasi daripada menebak, dan tidak memutus tab yang terbuka
+ * selama modulnya memang hidup.
+ */
+function kunciUnggah(modul: string | null): string[] {
+  const dipakai = MODUL_PENGUNGGAH.find((m) => m === modul);
+  return dipakai
+    ? kunciSakelarUntuk(dipakai)
+    : [...new Set(MODUL_PENGUNGGAH.flatMap((m) => kunciSakelarUntuk(m)))];
+}
 
 const UPLOAD_RL_REQUESTS = 20;
 const UPLOAD_RL_WINDOW   = 60;
@@ -86,6 +108,12 @@ export async function POST(req: NextRequest) {
     }
 
     const formData = await req.formData();
+    // T2 — sebelum file disentuh: modul yang dibekukan/dimatikan tidak boleh tetap
+    // menerima unggahan (POST = metode tulis, jadi beku ikut menolak).
+    const modulAsal = formData.get('modul');
+    const mati = await modulMati(kunciUnggah(typeof modulAsal === 'string' ? modulAsal : null), { role: session.role });
+    if (mati) return mati;
+
     const file = formData.get('file') as File | null;
     if (!file) return NextResponse.json({ ok: false, message: 'Tidak ada file yang dipilih.' }, { status: 400 });
     if (file.size > MAX_SIZE)

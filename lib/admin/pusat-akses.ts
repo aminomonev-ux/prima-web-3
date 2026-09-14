@@ -216,6 +216,22 @@ export class AlasanWajibError extends Error {
   }
 }
 
+/**
+ * Fase F Tahap 15c (T7) — SUPER_ADMIN tidak diatur dari Pusat Akses.
+ *
+ * Dulu diputuskan di route dari `role_awal`, nilai KIRIMAN klien. Tidak bisa ditembus hari
+ * ini karena `PeranBerubahError` di bawah ikut menangkapnya, tapi ia selamat karena pagar
+ * lain, bukan karena dirinya sendiri. Di sini ia berdiri di atas `role` baris yang sudah
+ * dikunci `FOR UPDATE`. `role_awal` tetap dipakai untuk pertanyaan yang memang miliknya:
+ * apakah layarnya basi.
+ */
+export class LantaiSuperAdminError extends Error {
+  constructor() {
+    super('Akses SUPER_ADMIN tidak dapat dibatasi.')
+    this.name = 'LantaiSuperAdminError'
+  }
+}
+
 export class PeranBerubahError extends Error {
   constructor() {
     super('Peran orang ini sudah diubah dari layar lain. Muat ulang dulu.')
@@ -287,6 +303,9 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
     ` as { role: string; username: string; app_access: unknown }[]
     const target = baris[0]
     if (!target) throw new Error('User tidak ditemukan.')
+    // T7 — sebelum pemeriksaan layar basi: jawabannya tidak boleh bergantung pada apa
+    // yang dikirim klien sebagai `roleAwal`.
+    if (target.role === 'SUPER_ADMIN') throw new LantaiSuperAdminError()
     // Layar yang dimuat saat orangnya masih PROGRAM lalu disimpan setelah orang lain
     // memindahkannya ke KEUANGAN akan menulis izin menu milik jabatan yang sudah
     // ditinggalkan. Sidik jari menu tidak menangkap ini — ia menjawab pertanyaan lain.

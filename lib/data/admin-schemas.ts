@@ -7,6 +7,7 @@ import { StrongPasswordSchema } from './auth-schemas';
 import { BIDANG_ROLES, SUBBIDANG_ROLES } from '@/lib/constants';
 import { KUNCI_GRANT } from '@/lib/registry/apps';
 import { MAKS_ALASAN, MIN_ALASAN } from '@/lib/admin/permintaan-baris';
+import { tanggalSah } from '@/lib/admin/berjangka-baris';
 
 // ─── Role enum ──────────────────────────────────────────────────────────────
 
@@ -176,7 +177,9 @@ export const PusatAksesSimpanSchema = z.object({
    * `max(20)` sama dengan `app_access` — tenggat tidak bisa lebih banyak dari pintunya.
    */
   berjangka: z.record(z.string(), z.object({
-    berakhir: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal berakhir tidak berbentuk YYYY-MM-DD.'),
+    // T10 — regex saja meloloskan 2026-13-45. Aturannya satu, di berkas daun yang juga
+    // dipakai layar (`jangkaYangBerarti`).
+    berakhir: z.string().refine(tanggalSah, 'Tanggal berakhir tidak valid (YYYY-MM-DD yang ada di kalender).'),
     alasan:   z.string().trim().min(4, 'Tulis dulu alasan peminjamannya.').max(255),
   })).default({}),
   /** Jejak P1: paket mana yang dipakai sebagai titik awal, dan berapa yang disunting. */

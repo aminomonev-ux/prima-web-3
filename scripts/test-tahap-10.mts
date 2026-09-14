@@ -182,7 +182,9 @@ cek('bentuk berkasnya menyebut tenggat', buangKomentar(baca('lib/admin/pintu-aks
 console.log('\nF · route')
 
 const skema = buangKomentar(baca('lib/data/admin-schemas.ts'))
-cek('bentuk tanggal divalidasi di server', skema.includes('berakhir: z.string().regex('))
+// Fase F Tahap 15d (T10): bentuk saja tidak cukup — regex meloloskan 2026-13-45. Kini
+// tanggal kalender yang sungguh ada, lewat penolong berkas daun yang juga dipakai layar.
+cek('tanggal divalidasi di server (bentuk DAN kalender)', skema.includes('berakhir: z.string().refine(tanggalSah,'))
 // Alasan peminjaman itu yang dibaca saat memutuskan perpanjangan — tanpa isi, baris
 // tenggatnya tidak bisa dinilai siapa pun enam bulan kemudian.
 // Dikutip UTUH berikut kalimatnya. Versi pertama cuma mencari `z.string().trim().min(4,`

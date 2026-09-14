@@ -162,6 +162,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     try {
       const fd = new FormData();
       fd.append('file', file, file.name || 'tempel.png');
+      fd.append('modul', 'lkjip');
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const json = await res.json();
       if (json.ok && json.fileId) {
@@ -1025,6 +1026,7 @@ function GambarEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly:
     try {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('modul', 'lkjip');
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const json = await res.json();
       if (json.ok && json.fileId) { setFileId(json.fileId); toast.success('Gambar terunggah'); }
@@ -1137,6 +1139,7 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks }: { block: BlockNo
           if (blob) {
             const fd = new FormData();
             fd.append('file', new File([blob], 'grafik.png', { type: 'image/png' }));
+            fd.append('modul', 'lkjip');
             const res = await fetch('/api/upload', { method: 'POST', body: fd });
             const j = await res.json();
             if (j.ok && j.fileId) { imageFileId = j.fileId; fileIdRef.current = j.fileId; }

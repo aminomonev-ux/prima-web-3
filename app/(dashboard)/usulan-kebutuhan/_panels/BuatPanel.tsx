@@ -176,7 +176,7 @@ export function BuatPanel({
     if (file.size > 10 * 1024 * 1024) { setUploadFileErr('Ukuran file maks. 10MB'); return; }
     setUploadingFile(true); setUploadFileErr('');
     try {
-      const fd = new FormData(); fd.append('file', file);
+      const fd = new FormData(); fd.append('file', file); fd.append('modul', 'usulan_aset');
       const { fetchJson } = await import('@/lib/shared/api');
       const d = await fetchJson<{ url: string }>('/api/upload', { method: 'POST', body: fd });
       if (d.ok) { updateCurrent('file_url', (d as { url?: string }).url || ''); }
