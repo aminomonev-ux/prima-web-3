@@ -9,7 +9,14 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteButton from '@/components/ui/DeleteButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
-import { fmtTs, fmtIdle, type SessionRow } from './_shared';
+import { ROLE_LABELS } from '@/lib/constants';
+import { fmtTs, fmtIdle, keadaanSesi, type KeadaanSesi, type SessionRow } from './_shared';
+
+const LENCANA_SESI: Record<KeadaanSesi, { kelas: string; titik: string; teks: string }> = {
+  aktif:    { kelas: 'badge-green',  titik: 'dot-active', teks: 'AKTIF' },
+  diam:     { kelas: 'badge-yellow', titik: 'dot-idle',   teks: 'DIAM' },
+  berakhir: { kelas: 'badge-gray',   titik: '',           teks: 'BERAKHIR' },
+};
 
 export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isSA:boolean }) {
   const [rows,    setRows]    = useState<SessionRow[]>([]);
@@ -44,15 +51,19 @@ export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isS
   // dan barisnya berdempetan di tabel yang bisa digulir cepat. `confirmDialog` di sini
   // bukan gesekan kosong: yang ditanyakan menyebut NAMA orangnya, jadi salah baris
   // ketahuan sebelum terjadi, bukan sesudah.
-  async function forceLogout(sid: string, username: string) {
-    const ya = await confirmDialog({
+  async function forceLogout(sid: string, username: string, berakhir: boolean) {
+    const ya = await confirmDialog(berakhir ? {
+      title: `Hapus catatan sesi ${username}?`,
+      message: 'Sesi ini sudah berakhir sendiri dan tidak bisa dipakai lagi. Menghapusnya hanya merapikan daftar ini.',
+      confirmLabel: 'Hapus catatan',
+    } : {
       title: `Putuskan sesi ${username}?`,
       message: 'Ia akan diminta masuk lagi saat membuka halaman berikutnya. Akun dan perannya tidak berubah.',
       confirmLabel: 'Putuskan sesi',
     });
     if (!ya) return;
     const j = await fetchJson(`/api/admin/sessions/${sid}`, { method:'DELETE' });
-    if (j.ok) { toast.success(`Sesi ${username} dihentikan.`); load(); } else toast.error(j.message);
+    if (j.ok) { toast.success(berakhir ? `Catatan sesi ${username} dihapus.` : `Sesi ${username} dihentikan.`); load(); } else toast.error(j.message);
   }
 
   async function doEmergency() {
@@ -108,9 +119,9 @@ export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isS
       </div>
 
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:10,flexWrap:'wrap'}}>
-        <div className="ap-section-title" style={{margin:0}}>DAFTAR SESI AKTIF</div>
+        <div className="ap-section-title" style={{margin:0}}>DAFTAR SESI</div>
         <div className="ap-row">
-          <input className="ap-input" style={{width:220}} placeholder="Cari username atau IP..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          <input className="ap-input" style={{width:240}} placeholder="Cari nama pengguna atau alamat IP…" value={search} onChange={e=>setSearch(e.target.value)}/>
           <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={load} disabled={loading}>MUAT ULANG</PrimaButton>
           {isSA && (
             <PrimaButton variant="danger" size="sm" iconLeft={<AlertTriangle size={12}/>}
@@ -125,32 +136,38 @@ export function TabSessions({ selfSessionId, isSA }: { selfSessionId:string; isS
         <div className="ap-table-wrap">
           <table className="ap-table">
             <thead><tr>
-              <th>USERNAME</th><th>ROLE</th><th>IP ADDRESS</th>
-              <th>LOGIN</th><th>LAST ACTIVE</th><th>IDLE</th><th>STATUS</th>
+              <th>NAMA PENGGUNA</th><th>PERAN</th><th>ALAMAT IP</th>
+              <th>MASUK</th><th>TERAKHIR AKTIF</th><th>LAMA DIAM</th><th>STATUS</th>
               <th>AKSI</th>
             </tr></thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={8} style={{textAlign:'center',padding:24,color:'var(--ap-dim)'}}>Tidak ada sesi aktif</td></tr>
               ) : filtered.map(r => {
-                const isSelf  = r.session_id === selfSessionId;
-                const idleSec = r.idle_seconds;
-                const isIdle  = idleSec > 1800;
+                const isSelf   = r.session_id === selfSessionId;
+                const keadaan  = keadaanSesi(r.idle_seconds);
+                const lencana  = LENCANA_SESI[keadaan];
+                const berakhir = keadaan === 'berakhir';
+                const aksi     = berakhir ? `Hapus catatan sesi ${r.username}` : `Putuskan sesi ${r.username}`;
                 return (
                   <tr key={r.session_id}>
                     <td style={{fontWeight:700,color:isSelf?'var(--ap-ok-fg)':'var(--ap-fg)'}}>{r.username}{isSelf&&<span style={{fontSize:9,marginLeft:4,color:'var(--ap-dim)'}}>(ANDA)</span>}</td>
-                    <td><span className="ap-badge badge-cyan">{r.role}</span></td>
+                    <td><span className="ap-badge badge-cyan">{ROLE_LABELS[r.role] ?? r.role}</span></td>
                     <td style={{fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>{r.ip_address??'-'}</td>
                     <td style={{fontSize:11,color:'var(--ap-dim)'}}>{fmtTs(r.created_at)}</td>
                     <td style={{fontSize:11,color:'var(--ap-dim)'}}>{fmtTs(r.last_active)}</td>
-                    <td className={isIdle?'yellow':'green'} style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>{fmtIdle(idleSec)}</td>
-                    <td><span className={`ap-badge ${isIdle?'badge-yellow':'badge-green'}`}><span className={isIdle?'dot-idle':'dot-active'}/>{isIdle?'IDLE':'AKTIF'}</span></td>
+                    <td className={keadaan === 'aktif' ? 'green' : keadaan === 'diam' ? 'yellow' : undefined}
+                      style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:700,whiteSpace:'nowrap',color:berakhir?'var(--ap-dim)':undefined}}>{fmtIdle(r.idle_seconds)}</td>
+                    <td>
+                      <span className={`ap-badge ${lencana.kelas}`}>{lencana.titik && <span className={lencana.titik}/>}{lencana.teks}</span>
+                      {berakhir && <div style={{fontSize:10,color:'var(--ap-dim)',marginTop:3}}>sudah tidak bisa dipakai</div>}
+                    </td>
                     <td>
                       {!isSelf ? (
                         <DeleteButton
-                          onClick={()=>{ void forceLogout(r.session_id, r.username); }}
-                          data-tooltip={`Putuskan sesi ${r.username}`}
-                          aria-label={`Putuskan sesi ${r.username}`}
+                          onClick={()=>{ void forceLogout(r.session_id, r.username, berakhir); }}
+                          data-tooltip={aksi}
+                          aria-label={aksi}
                         />
                       ) : (
                         <span style={{fontSize:10,color:'var(--ap-dim)',fontStyle:'italic'}}>Sesi Anda</span>

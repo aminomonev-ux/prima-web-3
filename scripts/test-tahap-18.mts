@@ -17,6 +17,8 @@ import { LABEL_KEADAAN, SEBAB_TAK_BISA_BEKU, infoSakelar } from '../lib/registry
 import { sebabKunciTulis } from '../components/ui/KunciTulis'
 import { labelPeran } from '../components/admin/PilihPeran'
 import { berkasDi, kalimat, prosaDari, prosaDariTeks, type Prosa } from './_prosa-layar'
+import { fmtIdle, keadaanSesi } from '../app/(dashboard)/admin/_panels/_shared'
+import { SESSION_INACTIVE_MINUTES } from '../lib/constants'
 
 let lulus = 0
 let gagal = 0
@@ -163,6 +165,27 @@ for (const [nama, route] of [['Register', 'app/api/auth/register/route.ts'], ['R
 cek('CSP tidak lagi mengaku mengizinkan Cloudflare',
   labelCek.includes('CSP Headers=self + nonce')
   && !baca('proxy.ts').split('\n').some((b) => !/^\s*\/\//.test(b) && /cloudflare/i.test(b)))
+
+// ── G · Daftar sesi ──────────────────────────────────────────────────────────
+// "1d" terbaca satu hari padahal satu detik, dan sesi yang sudah diputus `getSession`
+// sesudah 60 menit tetap berlencana IDLE sampai cron (8 jam; di laptop tanpa cron: selamanya).
+console.log('\nG · daftar sesi')
+
+cek('lama diam: detik ditulis utuh', fmtIdle(1) === '1 dtk', fmtIdle(1))
+cek('lama diam: menit', fmtIdle(12 * 60) === '12 mnt', fmtIdle(12 * 60))
+cek('lama diam: jam', fmtIdle(3 * 3600 + 59) === '3 jam', fmtIdle(3 * 3600 + 59))
+cek('lama diam: 435 jam jadi hari', fmtIdle(435 * 3600) === '18 hari', fmtIdle(435 * 3600))
+const batasSesi = SESSION_INACTIVE_MINUTES * 60
+cek('sesi di bawah separuh batas → aktif', keadaanSesi(batasSesi * 0.5 - 1) === 'aktif')
+cek('sesi separuh batas → diam (sama dengan system-status)', keadaanSesi(batasSesi * 0.5) === 'diam')
+cek('sesi tepat di batas getSession → masih diam', keadaanSesi(batasSesi) === 'diam')
+cek('sesi lewat batas getSession → berakhir', keadaanSesi(batasSesi + 1) === 'berakhir')
+cek('lencana BERAKHIR dipakai tabel, IDLE tidak lagi', sesi.includes("teks: 'BERAKHIR'") && sesi.includes('LENCANA_SESI[keadaan]') && !sesi.includes("isIdle?'IDLE':'AKTIF'") && !sesi.includes('idleSec > 1800'))
+cek('judul kolom berbahasa Indonesia',
+  sesi.includes('<th>NAMA PENGGUNA</th><th>PERAN</th><th>ALAMAT IP</th>') && sesi.includes('<th>TERAKHIR AKTIF</th><th>LAMA DIAM</th>')
+  && !/<th>(USERNAME|ROLE|IP ADDRESS|LAST ACTIVE|IDLE)<\/th>/.test(sesi))
+cek('peran ditulis dengan namanya, bukan kode', sesi.includes('{ROLE_LABELS[r.role] ?? r.role}') && !sesi.includes('badge-cyan">{r.role}'))
+cek('sesi berakhir: konfirmasi tidak mengaku memutus', sesi.includes('Sesi ini sudah berakhir sendiri dan tidak bisa dipakai lagi.'))
 
 console.log(`\n${lulus + gagal} pemeriksaan · ${lulus} lulus · ${gagal} gagal`)
 if (gagal) { console.log('GAGAL — Tahap 18 tidak lagi utuh.'); process.exit(1) }

@@ -5,7 +5,7 @@
 // ke berkas masing-masing, yang benar-benar dipakai bersama dipindah ke sini; yang cuma
 // dipakai satu panel ikut pindah ke panel itu, bukan menumpuk di sini.
 
-import { ROLE_LABELS } from '@/lib/constants';
+import { ROLE_LABELS, SESSION_INACTIVE_MINUTES } from '@/lib/constants';
 import { LABEL_SAKELAR } from '@/lib/registry/apps';
 
 /** Dipakai APP CONTROL (saklar) & SECURITY STATUS (daftar modul aktif). */
@@ -56,8 +56,25 @@ export function fmtTs(ts: string) {
   });
 }
 
+// Satuan ditulis utuh: "1d" dulu terbaca "1 day" padahal maksudnya 1 detik.
 export function fmtIdle(sec: number) {
-  if (sec < 60) return `${Math.floor(sec)}d`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-  return `${Math.floor(sec / 3600)}j`;
+  if (sec < 60) return `${Math.floor(sec)} dtk`;
+  if (sec < 3600) return `${Math.floor(sec / 60)} mnt`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} jam`;
+  return `${Math.floor(sec / 86400)} hari`;
+}
+
+export type KeadaanSesi = 'aktif' | 'diam' | 'berakhir';
+
+/**
+ * Batasnya dibaca dari konstanta yang sama dengan `getSession` (putus sesudah
+ * SESSION_INACTIVE_MINUTES) dan `system-status` (diam = separuhnya). Tanpa itu baris yang
+ * sudah tak bisa dipakai tampil "IDLE" sampai cron purge-retention menandainya, dan cron
+ * itu baru bertindak sesudah 8 jam — di mesin tanpa cron, tidak pernah.
+ */
+export function keadaanSesi(idleSec: number): KeadaanSesi {
+  const batas = SESSION_INACTIVE_MINUTES * 60;
+  if (idleSec > batas) return 'berakhir';
+  if (idleSec >= batas * 0.5) return 'diam';
+  return 'aktif';
 }
