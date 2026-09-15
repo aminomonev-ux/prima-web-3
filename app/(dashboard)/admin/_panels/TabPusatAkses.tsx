@@ -1042,6 +1042,7 @@ function KelolaPaket(
   const [ket, setKet]   = useState('');
   const [kerja, setKerja] = useState(false);
   const jumlahMenu = Object.values(calon.menu).reduce((a, v) => a + Object.keys(v).length, 0);
+  const kosong = calon.app_access.length === 0 && jumlahMenu === 0;
 
   async function kirim(body: Record<string, unknown>, kabar: string) {
     setKerja(true);
@@ -1062,26 +1063,27 @@ function KelolaPaket(
 
         <div className="ap-pa-catatan" style={{ marginBottom: 12 }}>
           <Info size={13}/>
-          Paket adalah titik awal, bukan ikatan. Menyuntingnya tidak mengubah wewenang
-          orang yang sudah terlanjur memakainya.
+          Paket menyimpan salinan pengaturan akses akun ini, supaya bisa dipakai lagi untuk
+          akun lain. Mengubah paket tidak mengubah akses akun yang sudah memakainya.
         </div>
 
         <div className="ap-pa-form">
-          <label className="ap-sk-lbl">Simpan pengaturan di layar sebagai paket</label>
+          <label className="ap-sk-lbl">Simpan pengaturan akun ini sebagai paket</label>
           <input className="ap-input" value={nama} onChange={e => setNama(e.target.value)}
             placeholder="Mis. Bendahara Pengeluaran"/>
           <input className="ap-input" value={ket} onChange={e => setKet(e.target.value)}
             placeholder="Keterangan singkat (opsional)"/>
           <div className="ap-pa-k-sub">
-            Akan menyimpan {calon.app_access.length} akses modul dan {jumlahMenu} pengaturan menu.
-            Peran tidak ikut disimpan dalam paket, karena perubahan peran terikat kuota dan diatur terpisah.
+            {kosong
+              ? 'Akun ini belum punya akses tambahan. Aksesnya masih bawaan dari peran akunnya, jadi belum ada yang bisa disimpan sebagai paket.'
+              : `Yang disimpan: ${calon.app_access.length} akses modul dan ${jumlahMenu} pengaturan menu. Peran tidak ikut disimpan.`}
           </div>
-          <PrimaButton size="sm" variant="primary" disabled={kerja || !nama.trim()}
+          <PrimaButton size="sm" variant="primary" disabled={kerja || kosong || !nama.trim()}
             onClick={() => void kirim(
               { aksi: 'simpan-paket', paket: { nama: nama.trim(), keterangan: ket.trim(), app_access: calon.app_access, menu: calon.menu } },
               `Paket "${nama.trim()}" disimpan.`,
             )}>
-            Simpan sebagai paket
+            Simpan paket
           </PrimaButton>
         </div>
 
