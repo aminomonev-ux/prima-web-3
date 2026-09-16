@@ -714,6 +714,14 @@ server {
 
 Dua baris yang **wajib** ada dan sering dilupakan:
 
+- **`TRUST_PROXY_HEADERS="true"` di `.env.local`** — tanpa ini aplikasi
+  **sengaja mengabaikan** `X-Real-IP` walau Nginx sudah memasangnya, dan semua
+  pemakai tetap terbaca `unknown`. Bawaannya memang mengabaikan: pada pemasangan
+  tanpa proxy header itu bisa dikarang siapa pun dari komputer LAN mana pun, dan
+  yang mengarangnya menembus setiap rem yang berkunci IP. Nyalakan hanya sesudah
+  **dua-duanya** benar: Nginx berdiri di depan, dan port 3000 sudah tertutup dari
+  jaringan. Nginx yang memasang `X-Real-IP` tidak menolong kalau orang masih bisa
+  melewatinya.
 - **`X-Real-IP`** — dipakai untuk mengenali IP pengguna. Tanpa ini semua pemakai
   terlihat datang dari satu IP (IP Nginx), sehingga jatah **10 permintaan login per
   menit per IP** ditanggung bersama sekantor. Gejalanya: jam sibuk pagi, sebagian

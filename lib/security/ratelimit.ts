@@ -134,12 +134,39 @@ export async function checkRateLimit(
   }
 }
 
-// SEC-W6: Leftmost X-Forwarded-For dapat di-spoof attacker (client-set header
-// di-append oleh proxy). Vercel set `x-real-ip` ke IP TCP source (tidak spoofable
-// dari client). Fallback ke RIGHTMOST entry XFF (entry yang ditambahkan oleh
-// proxy terdekat, bukan client). Tidak pakai `request.ip` karena dihapus di
-// Next.js 15+.
+/**
+ * Header IP hanya dipercaya kalau memang ADA proxy yang memasangnya.
+ *
+ * Alasan aslinya (SEC-W6) menyebut Vercel: di sana `x-real-ip` disetel platform ke
+ * IP TCP sumber dan klien tidak bisa menimpanya. PRIMA tidak jalan di Vercel. Ia
+ * jalan di PM2 yang mendengarkan `0.0.0.0:3000` langsung di LAN, dan pada
+ * pemasangan seperti itu `x-real-ip` cuma sebuah header biasa — siapa pun bisa
+ * mengarangnya, dan `proxy.ts` tidak menyaringnya (ia hanya menyaring `x-user-*`
+ * dan `x-prima-metode`).
+ *
+ * Akibatnya BUKAN sekadar catatan audit yang keliru. Setiap rem yang berkunci IP
+ * bisa ditembus dengan mengirim nilai acak tiap permintaan, karena embernya ikut
+ * berganti: `login-ip:` (rem kasar yang menjaga CPU dari bcrypt cost 12),
+ * `upload:`, `admin-create:<user>:<ip>`, `admin-menu-access:<user>:<ip>`. Yang
+ * pertama itu yang paling nyata — ia satu-satunya yang menahan banjir bcrypt.
+ *
+ * Bawaannya `false`, dan itu MEMULIHKAN anggapan yang sudah tertulis di
+ * `lib/constants.ts` (`LOGIN_IP_BURST` sengaja dibuat longgar "karena tanpa
+ * reverse-proxy `getClientIp` mengembalikan 'unknown' untuk SEMUA orang"). Jadi
+ * angkanya memang sudah disetel untuk keadaan ini; yang selama ini tidak benar
+ * adalah anggapan bahwa keadaan itu berlaku.
+ *
+ * Setel `true` HANYA kalau Nginx berdiri di depan dan port 3000 tertutup dari
+ * jaringan — dua syarat sekaligus, sebab Nginx yang memasang `X-Real-IP` tidak
+ * menolong kalau orang masih bisa melewatinya.
+ */
+const PERCAYA_HEADER_PROXY = process.env.TRUST_PROXY_HEADERS === 'true';
+
+// Leftmost X-Forwarded-For dapat di-spoof attacker (client-set header di-append
+// oleh proxy), jadi yang dibaca RIGHTMOST — entry yang ditambahkan proxy terdekat.
+// Tidak pakai `request.ip` karena dihapus di Next.js 15+.
 export function getClientIp(req: Request): string {
+  if (!PERCAYA_HEADER_PROXY) return 'unknown';
   const realIp = (req.headers as Headers).get('x-real-ip');
   if (realIp && realIp.trim()) return realIp.trim();
   const xff = (req.headers as Headers).get('x-forwarded-for');
