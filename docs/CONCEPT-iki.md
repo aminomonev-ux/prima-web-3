@@ -245,3 +245,26 @@ Kepatuhan wajib: Zod semua cabang tulis (L68) · `sqlInt` LIMIT/OFFSET (L66) · 
 
 Sisa terbuka (bisa diputuskan saat implementasi, default diusulkan):
 - **Hierarki kaskade atasan**: default = **pilih manual** dokumen IKI atasan lewat dropdown saat buat/edit dokumen (`atasan_dokumen_id`) — tanpa hardcode urutan jabatan & tanpa master mapping baru. Sederhana dan fleksibel terhadap perubahan struktur organisasi.
+
+---
+
+## Keputusan: NIP terbaca semua pemegang akses IKI (2026-09-16, temuan A10)
+
+`GET /api/iki/pejabat` memulangkan `unit_kerja, nama, jabatan, pangkat, nip` dari
+`pk_pejabat` kepada siapa pun yang lolos guard modul IKI. Master Pejabat sendiri dijaga
+`LANTAI_EDIT` (SUPER_ADMIN/ADMIN, tidak bisa ditembus matriks Admin Panel) — tapi lantai
+itu menjaga **penyuntingan**, bukan pembacaan. Jadi daftar NIP lengkap bisa diambil
+dalam satu permintaan GET oleh pemegang akses modul yang lebih luas daripada pemilik
+datanya.
+
+**Ditanyakan, dan dijawab: memang begitu.** NIP bukan data rahasia di lingkungan ini —
+ia tercetak di dokumen kepegawaian, SK, dan lembar tanda tangan yang beredar biasa di
+kantor. Pagar baca lintas-layar yang sengaja longgar sudah jadi keputusan modul PK
+(`CONCEPT-pk-peran.md`), dan ini konsekuensinya yang wajar: dokumen IKI memang perlu
+menyebut NIP pejabat dan atasannya, jadi menyembunyikannya dari penyusun dokumen hanya
+akan membuat orang menyalinnya dari tempat lain.
+
+Dicatat di sini supaya audit berikutnya tidak menemukannya lagi sebagai pertanyaan
+terbuka. **Kalau suatu hari jawabannya berubah**, jalan keluarnya dua: batasi endpoint
+itu ke peran yang memang menyusun dokumen IKI, atau pulangkan `nip` hanya untuk pejabat
+yang sedang dipilih — bukan untuk seluruh daftar.
