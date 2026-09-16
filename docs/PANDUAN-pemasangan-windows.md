@@ -225,20 +225,244 @@ dihidupkan.** Ia menulis daftar proses ke `C:\Users\<nama>\.pm2\dump.pm2`.
 
 **Auto-start: `pm2-startup install` TIDAK dipakai.** Paket `pm2-windows-startup` sudah
 lama tidak dipelihara, dan kemampuan `pm2 startup` bawaan memang hanya ada di Linux.
-Penggantinya satu tugas Task Scheduler bertrigger **saat login** yang menjalankan
-`pm2 resurrect`.
+Penggantinya satu tugas Task Scheduler (`PRIMA - hidupkan aplikasi`) yang menjalankan
+`D:\APLIKASI\pulihkan-prima.ps1`.
 
 Dua syarat yang menentukan tugas itu berhasil atau tidak:
 
 - **Berjalan sebagai PENGGUNA, bukan `SYSTEM`.** Data PM2 hidup di
   `C:\Users\<nama>\.pm2`; `SYSTEM` punya rumahnya sendiri dan akan bangun dengan
   daftar KOSONG — tugasnya sukses, aplikasinya tetap mati.
-- **Beri jeda ~60 detik sebelum `pm2 resurrect`.** Saat laptop baru menyala, MySQL
+- **Beri jeda ~60 detik sebelum menyentuh PM2.** Saat laptop baru menyala, MySQL
   masih bangun. Bukan kehati-hatian kosong: cadangan DB 2026-09-10 gagal persis karena
   menembak terlalu cepat (`Can't connect to MySQL server ... (10061)`).
 
-Pemicunya **"saat login"**, bukan "saat komputer menyala" — konsekuensi langsung dari
-syarat pertama: PM2 milik seorang pengguna, jadi harus ada yang login dulu.
+### ⚠️ Pemicu "saat login" saja TIDAK cukup
+
+Rancangan pertama (login → tunggu 60 detik → `pm2 resurrect`) terbukti bolong dua kali
+di laptop server, dan dua-duanya hanya ketahuan dari `cron.log`, bukan dari layar:
+
+- **2026-09-14** — laptop menyala dari mati total 07:29, akun yang benar login 07:29:29,
+  tapi tugasnya **tidak jalan sama sekali** (tak satu baris pun di `autostart.log`).
+  Aplikasi mati sampai laptop dimatikan 10:17; cron gagal 19 kali.
+- **2026-09-15** — tugasnya jalan dan aplikasi `Ready` 07:58, tapi sejak 08:02 sampai
+  10:00 setiap panggilan cron berbunyi `Unable to connect to the remote server`. Pulih
+  hanya karena ada yang me-restart tangan pukul 10:07.
+
+Kedua penyebab pastinya belum terbukti. Karena itu yang dipasang bukan tebakan
+penyebab, melainkan **jaring yang tidak bergantung pada penyebabnya**: skrip yang
+MEMERIKSA dulu, dipicu dari empat arah, termasuk tiap 15 menit.
+
+`D:\APLIKASI\pulihkan-prima.ps1` (sengaja ASCII saja — isi berhuruf khusus pernah membuat
+`autostart.log` penuh `GöéGöé`):
+
+```powershell
+# pulihkan-prima.ps1 - menghidupkan PRIMA saat login, buka kunci, bangun dari sleep, dan tiap 15 menit.
+# Kalau aplikasi sudah bisa dihubungi, skrip ini tidak melakukan apa-apa.
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+
+$log      = 'D:\APLIKASI\logs\autostart.log'
+$terakhir = 'D:\APLIKASI\logs\autostart-terakhir.txt'
+$jeda     = 'D:\APLIKASI\JEDA-PULIHKAN.txt'
+$pm2      = "$env:APPDATA\npm\pm2.cmd"
+$URL      = 'http://localhost:3000/login'
+
+if (-not (Test-Path 'D:\APLIKASI\logs')) {
+  New-Item -ItemType Directory -Path 'D:\APLIKASI\logs' -Force | Out-Null
+}
+
+function Tulis($pesan) {
+  "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') $pesan" | Add-Content -Path $log -Encoding UTF8
+}
+
+# Alamat sama dengan cron.ps1. Jawaban HTTP apa pun berarti aplikasinya hidup;
+# yang dianggap mati hanya yang tidak bisa tersambung sama sekali.
+function Test-Prima {
+  try {
+    Invoke-WebRequest -Uri $URL -UseBasicParsing -TimeoutSec 15 | Out-Null
+    return $true
+  } catch [System.Net.WebException] {
+    return ($null -ne $_.Exception.Response)
+  } catch {
+    return $false
+  }
+}
+
+function Tunggu-Prima([int]$detik) {
+  $batas = (Get-Date).AddSeconds($detik)
+  while ((Get-Date) -lt $batas) {
+    if (Test-Prima) { return $true }
+    Start-Sleep -Seconds 10
+  }
+  return $false
+}
+
+function Ada-Prima {
+  try {
+    $daftar = (& $pm2 jlist 2>$null | Out-String) | ConvertFrom-Json
+    return [bool]($daftar | Where-Object { $_.name -eq 'prima' })
+  } catch {
+    return $false
+  }
+}
+
+# Dipasang prima-jeda.ps1 saat aplikasi SENGAJA dimatikan. Jeda yang lebih tua dari
+# 8 jam dianggap terlupa: jeda yang tertinggal mematikan pemulihan tanpa ada yang sadar.
+if (Test-Path $jeda) {
+  if ((Get-Item $jeda).LastWriteTime -lt (Get-Date).AddHours(-8)) {
+    Tulis 'JEDA-PULIHKAN.txt lebih dari 8 jam, dianggap terlupa -> dihapus'
+    Remove-Item $jeda -Force
+  } else {
+    "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') DIJEDA" | Set-Content -Path $terakhir
+    exit 0
+  }
+}
+
+# Sehat = tidak menulis log (tiap 15 menit akan menenggelamkan baris yang penting);
+# cukup menimpa satu baris supaya tetap terbukti pemicunya jalan.
+if (Test-Prima) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') OK" | Set-Content -Path $terakhir; exit 0 }
+
+Tulis 'belum bisa dihubungi, menunggu 60 detik (MySQL mungkin masih menyala)'
+Start-Sleep -Seconds 60
+if (Test-Prima) { Tulis 'OK bisa dihubungi sesudah menunggu'; exit 0 }
+
+# Bukti keadaan SEBELUM ditangani: port 3000 masih didengarkan atau tidak, dan PM2 bilang apa.
+$dengar = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
+if ($dengar) { Tulis ('port 3000 didengarkan oleh pid ' + (($dengar | Select-Object -ExpandProperty OwningProcess -Unique) -join ', ')) } else { Tulis 'port 3000 TIDAK didengarkan siapa pun' }
+& $pm2 list 2>$null | Out-String | Add-Content -Path $log -Encoding UTF8
+
+if (Ada-Prima) {
+  Tulis 'prima ada di PM2 tapi tidak bisa dihubungi -> pm2 restart prima'
+  & $pm2 restart prima 2>$null | Out-String | Add-Content -Path $log -Encoding UTF8
+} else {
+  Tulis 'prima belum ada di PM2 -> pm2 resurrect'
+  & $pm2 resurrect 2>$null | Out-String | Add-Content -Path $log -Encoding UTF8
+}
+if (Tunggu-Prima 300) { Tulis 'OK bisa dihubungi'; exit 0 }
+
+Tulis 'masih tidak bisa dihubungi sesudah 5 menit -> pm2 restart prima sekali lagi'
+& $pm2 restart prima 2>$null | Out-String | Add-Content -Path $log -Encoding UTF8
+if (Tunggu-Prima 120) { Tulis 'OK bisa dihubungi sesudah restart kedua'; exit 0 }
+
+Tulis 'GAGAL tetap tidak bisa dihubungi. Keadaan PM2:'
+& $pm2 list 2>$null | Out-String | Add-Content -Path $log -Encoding UTF8
+exit 1
+```
+
+Mendaftarkan tugasnya — **empat pemicu**, PowerShell sebagai Administrator, ganti `ACER`
+dengan akun yang memegang PM2:
+
+```powershell
+$ns     = 'Root/Microsoft/Windows/TaskScheduler'
+$login  = New-ScheduledTaskTrigger -AtLogOn -User 'PROGRAM-RSJ\ACER'
+$buka   = New-CimInstance -CimClass (Get-CimClass -ClassName MSFT_TaskSessionStateChangeTrigger -Namespace $ns) -ClientOnly
+$buka.Enabled = $true; $buka.StateChange = 8; $buka.UserId = 'PROGRAM-RSJ\ACER'
+$bangun = New-CimInstance -CimClass (Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace $ns) -ClientOnly
+$bangun.Enabled = $true; $bangun.Subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Power-Troubleshooter''] and EventID=1]]</Select></Query></QueryList>'
+$ulang  = New-ScheduledTaskTrigger -Daily -At 06:30
+$ulang.Repetition = (New-ScheduledTaskTrigger -Once -At 06:30 -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Hours 14)).Repetition
+$ulang.Repetition.StopAtDurationEnd = $false
+$act = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-ExecutionPolicy Bypass -WindowStyle Hidden -File D:\APLIKASI\pulihkan-prima.ps1'
+$set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -MultipleInstances IgnoreNew
+$pri = New-ScheduledTaskPrincipal -UserId 'PROGRAM-RSJ\ACER' -LogonType Interactive -RunLevel Highest
+Register-ScheduledTask -TaskName 'PRIMA - hidupkan aplikasi' -Action $act -Trigger @($login, $buka, $bangun, $ulang) -Settings $set -Principal $pri -Force
+```
+
+| Pemicu | Menutup |
+|---|---|
+| Saat login | pemakaian normal pagi hari |
+| Saat buka kunci (`StateChange = 8`) | laptop dikunci lalu dipakai lagi |
+| Bangun dari sleep (Power-Troubleshooter ID 1 — *Fast Startup* juga tercatat di sini) | laptop dibuka tanpa login ulang |
+| Tiap 15 menit 06:30–20:30 | **semua yang lain**, termasuk kedua kejadian di atas |
+
+- **`StopAtDurationEnd = $false`** — bawaannya Windows MEMATIKAN PAKSA tugas yang masih
+  jalan saat jendela 14 jam habis; kalau itu jatuh di tengah restart, aplikasinya ikut terputus.
+- **Batas 20 menit, bukan 10** — jalur terburuk skrip (60 dtk + 5 mnt + restart + 2 mnt)
+  mendekati 10 menit.
+- **`IgnoreNew`** — pemicu yang datang saat skrip masih menangani restart dilewati, bukan
+  menumpuk restart kedua.
+
+Tugas ini tetap **hanya jalan selama akun itu login** (PM2 miliknya). Yang dijaga
+empat pemicu itu adalah "sudah login tapi aplikasi mati", bukan "belum ada yang login".
+
+Memeriksanya:
+
+```powershell
+Get-Content D:\APLIKASI\logs\autostart-terakhir.txt   # jam pemeriksaan terakhir: OK / DIJEDA
+Get-Content D:\APLIKASI\logs\autostart.log -Tail 20   # hanya berisi saat skrip BERTINDAK atau GAGAL
+```
+
+### Mematikan aplikasi dengan sengaja
+
+Dengan pemeriksaan tiap 15 menit, `pm2 stop prima` biasa **akan dibatalkan sendiri**
+dalam 15 menit — di tengah build pun. Pakai dua skrip ini:
+
+`D:\APLIKASI\prima-jeda.ps1`:
+
+```powershell
+# prima-jeda.ps1 - matikan PRIMA dengan sengaja (pemeliharaan).
+# Memasang JEDA-PULIHKAN.txt dulu supaya pulihkan-prima.ps1 tidak menyalakannya lagi.
+# Nyalakan kembali dengan prima-lanjut.ps1.
+$jeda = 'D:\APLIKASI\JEDA-PULIHKAN.txt'
+$log  = 'D:\APLIKASI\logs\autostart.log'
+$pm2  = "$env:APPDATA\npm\pm2.cmd"
+
+"dijeda $(Get-Date -f 'yyyy-MM-dd HH:mm:ss') oleh $env:USERNAME" | Set-Content -Path $jeda
+"$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') JEDA dipasang -> pm2 stop prima" | Add-Content -Path $log -Encoding UTF8
+& $pm2 stop prima
+
+Write-Host ''
+Write-Host 'PRIMA dimatikan. Pemulihan otomatis DITAHAN.' -ForegroundColor Yellow
+Write-Host 'Sesudah selesai, jalankan: D:\APLIKASI\prima-lanjut.ps1' -ForegroundColor Yellow
+Write-Host 'Kalau terlupa, jedanya dianggap kedaluwarsa sesudah 8 jam dan aplikasi dinyalakan otomatis.'
+```
+
+`D:\APLIKASI\prima-lanjut.ps1`:
+
+```powershell
+# prima-lanjut.ps1 - nyalakan kembali PRIMA sesudah prima-jeda.ps1.
+# Jeda SELALU dilepas, termasuk kalau aplikasinya gagal hidup: jeda yang tertinggal
+# mematikan pemulihan otomatis tanpa ada yang sadar.
+$jeda = 'D:\APLIKASI\JEDA-PULIHKAN.txt'
+$log  = 'D:\APLIKASI\logs\autostart.log'
+$pm2  = "$env:APPDATA\npm\pm2.cmd"
+$URL  = 'http://localhost:3000/login'
+
+function Test-Prima {
+  try {
+    Invoke-WebRequest -Uri $URL -UseBasicParsing -TimeoutSec 15 | Out-Null
+    return $true
+  } catch [System.Net.WebException] {
+    return ($null -ne $_.Exception.Response)
+  } catch {
+    return $false
+  }
+}
+
+& $pm2 restart prima
+
+$hidup = $false
+$batas = (Get-Date).AddSeconds(120)
+while ((Get-Date) -lt $batas) {
+  if (Test-Prima) { $hidup = $true; break }
+  Start-Sleep -Seconds 5
+}
+
+Remove-Item -Path $jeda -Force -ErrorAction SilentlyContinue
+
+Write-Host ''
+if ($hidup) {
+  "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') JEDA dilepas, aplikasi bisa dihubungi" | Add-Content -Path $log -Encoding UTF8
+  Write-Host 'PRIMA hidup lagi dan bisa dibuka. Pemulihan otomatis aktif kembali.' -ForegroundColor Green
+} else {
+  "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') JEDA dilepas, TAPI aplikasi belum bisa dihubungi sesudah 2 menit" | Add-Content -Path $log -Encoding UTF8
+  Write-Host 'Jeda sudah dilepas, TAPI PRIMA belum bisa dibuka sesudah 2 menit.' -ForegroundColor Red
+  Write-Host 'Periksa: pm2 logs prima --err --lines 30 --nostream' -ForegroundColor Red
+}
+```
+
+`prima-lanjut.ps1` memakai `pm2 restart`, bukan `pm2 start`: `restart` menyalakan proses
+yang sedang `stopped`, dan pada proses yang ternyata masih hidup ia tidak gagal.
 
 **Tetap di mode `fork` (satu proses).** Jangan pakai `-i max` / cluster. Alasannya
 di §7; ringkasnya: beberapa pembatas laju menghitung per-proses, jadi cluster
@@ -620,6 +844,11 @@ Baru kemudian:
 npm run build
 pm2 restart prima
 ```
+
+Selama build aplikasi lama tetap menyala, jadi layarnya bisa sempat galat beberapa
+menit. Kalau ingin aplikasinya mati bersih selama build, **jangan `pm2 stop prima`
+langsung** — pemeriksaan tiap 15 menit (§4) akan menyalakannya kembali di tengah build.
+Pakai `D:\APLIKASI\prima-jeda.ps1` → `npm run build` → `D:\APLIKASI\prima-lanjut.ps1`.
 
 **Backup database dulu sebelum menjalankan migration apa pun.** Migration mengubah
 struktur tabel dan tidak bisa dibatalkan dengan tombol.
