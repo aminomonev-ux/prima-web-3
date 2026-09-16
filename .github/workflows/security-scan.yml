@@ -11,6 +11,7 @@
 #   B. npm-audit — Dependency CVE check (block kalau ada HIGH baru)
 #   C. quality-gate — `npx tsc --noEmit` + `npm run lint` + `npm run rima:check` (NLU gate)
 #                     + Gate E token warna (`npm run check:tokens`)
+#                     + Gate H LIMIT/OFFSET sqlInt (`npm run check:sql`, L66)
 #   D. gitleaks — Secret scanning (JWT_SECRET / password DB / API key ter-commit) — config .gitleaks.toml
 #
 # Gate E (token warna) menumpang di job C, bukan job sendiri — pemeriksaannya
@@ -198,6 +199,18 @@ jobs:
       # Gate ketat sengaja TIDAK dipakai: yang selalu merah akan dimatikan orang.
       - name: Gate token warna (DESIGN-SYSTEM.md)
         run: npm run check:tokens
+
+      # ─── GATE H: LIMIT/OFFSET wajib lewat sqlInt (L66) ─────────────────────
+      # mysql2 menolak `LIMIT ?` pada prepared statement. Kelalaian ini LOLOS tsc
+      # (angkanya memang number yang sah), gagal hanya saat dijalankan, dan kalau
+      # pemanggilnya membungkus dengan try/catch best-effort — jalur retensi hampir
+      # selalu begitu — tidak ada gejala sama sekali; tabelnya sekadar tumbuh terus.
+      # Ditambahkan 2026-09-16 sesudah `lib/data/iki.ts` melanggarnya, tiga bulan
+      # sesudah L66 ditulis lengkap beserta peringatannya. Yang menemukannya audit,
+      # bukan mesin — dan itu bedanya pelajaran yang punya gate dengan yang cuma
+      # tertulis.
+      - name: Gate LIMIT/OFFSET sqlInt (L66)
+        run: npm run check:sql
 
       # ─── GATE F: Glyph PDF (WinAnsi) ───────────────────────────────────────
       # Font bawaan jsPDF cuma paham WinAnsi. Karakter di luar itu tidak bikin

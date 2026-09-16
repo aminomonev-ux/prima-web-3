@@ -3,7 +3,7 @@
 // optimistic lock dokumen-level (L48 CAS) + guard DRAFT.
 // Konsep: docs/CONCEPT-iki.md
 
-import { sql, queryOne, queryMany, execWrite, withTransaction, bulkInsert } from '@/lib/data/db';
+import { sql, sqlInt, queryOne, queryMany, execWrite, withTransaction, bulkInsert } from '@/lib/data/db';
 import type { SaveDokumenInput } from '@/lib/data/iki-schemas';
 
 export class IkiVersionConflictError extends Error {
@@ -435,11 +435,17 @@ export async function snapshotVersi(
     INSERT INTO iki_versi (dokumen_id, versi_ke, pemicu, snapshot, created_by)
     VALUES (${dokumenId}, ${next?.n ?? 1}, ${pemicu}, ${JSON.stringify(detail)}, ${userId})
   `);
+  // L66 — `sqlInt` WAJIB di LIMIT. mysql2 menolak `LIMIT ?` pada prepared statement
+  // (ER_WRONG_ARGUMENTS); diuji ke MySQL yang dipakai, bukan diduga. Sampai
+  // 2026-09-16 baris ini satu-satunya `LIMIT ${...}` telanjang di seluruh repo, dan
+  // akibatnya senyap sempurna: INSERT di atas berhasil, DELETE ini SELALU melempar,
+  // dan lemparannya ditelan try/catch best-effort di route finalize. Retensinya tidak
+  // pernah jalan sekali pun dan `iki_versi` tumbuh tanpa batas tanpa satu gejala.
   await execWrite(sql`
     DELETE FROM iki_versi WHERE dokumen_id = ${dokumenId} AND id NOT IN (
       SELECT id FROM (
         SELECT id FROM iki_versi WHERE dokumen_id = ${dokumenId}
-        ORDER BY versi_ke DESC LIMIT ${VERSI_RETENTION}
+        ORDER BY versi_ke DESC LIMIT ${sqlInt(VERSI_RETENTION)}
       ) keep
     )
   `);

@@ -11,6 +11,7 @@
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:pdf": "node scripts/check-pdf-glyphs.mjs",
     "check:killswitch": "node scripts/test-killswitch-modul.mjs && node scripts/cek-urutan-penjaga.mjs",
+    "check:sql": "node scripts/cek-sql-limit.mjs",
     "test:renaksi-audit": "node scripts/test-renaksi-audit.mjs",
     "test:kinerja-audit": "node scripts/test-kinerja-audit.mjs",
     "rima:train": "node scripts/rima-train.mjs",
