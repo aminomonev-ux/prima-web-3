@@ -7,7 +7,7 @@ import { MAX_LOGIN_ATTEMPTS, LOCK_DURATION_MINUTES, RATE_LIMIT_REQUESTS, RATE_LI
 import { verifyTurnstile } from '@/lib/security/recaptcha';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { addNotif } from '@/lib/services/notifications';
+import { addNotif, NOTIF_SUPER_ADMIN } from '@/lib/services/notifications';
 import crypto from 'crypto';
 import type { User } from '@/types';
 
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
         // Notif/audit lock hanya saat transisi tepat di threshold (sekali, bukan tiap attempt > MAX).
         if (newAttempts === MAX_LOGIN_ATTEMPTS) {
           await writeAuditLog({ req, eventType: 'ACCOUNT_LOCKED', userId: user.id, username: user.username, detail: `Locked ${LOCK_DURATION_MINUTES} min after ${newAttempts} failed attempts` });
-          await addNotif('SUPER_ADMIN', 'SUPER_ADMIN', 'BRUTE_FORCE', `🚨 Akun <b>${user.username}</b> dikunci setelah ${newAttempts}x gagal login dari IP ${getClientIp(req)}`);
+          await addNotif(NOTIF_SUPER_ADMIN, 'SUPER_ADMIN', 'BRUTE_FORCE', `🚨 Akun <b>${user.username}</b> dikunci setelah ${newAttempts}x gagal login dari IP ${getClientIp(req)}`);
         }
         return NextResponse.json(
           { ok: false, message: `Terlalu banyak percobaan. Akun terkunci ${LOCK_DURATION_MINUTES} menit.` },

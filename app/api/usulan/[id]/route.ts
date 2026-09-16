@@ -6,7 +6,7 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ADMIN_ROLES, BIDANG_ROLES, SUBBIDANG_ROLES, BIDANG_TO_SUBBIDANG, SUBBIDANG_TO_BIDANG } from '@/lib/constants';
 import { generateNoUsulan, updateHeaderStats } from '@/lib/data/usulan';
-import { addNotif, bidangRoleOf } from '@/lib/services/notifications';
+import { addNotif, bidangRoleOf, notifBidang } from '@/lib/services/notifications';
 import { isSafeFileUrl } from '@/lib/shared/url';
 import { usulanMati } from '../_guard';
 
@@ -151,7 +151,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const subBidang = h.sub_bidang as string;
       const br        = bidangRoleOf(subBidang);
       if (br) {
-        await addNotif(br, br, 'STATUS_CHANGE', `Usulan <b>${noUsulan}</b> (${subBidang}) dibatalkan oleh pengusul. Antrian review berkurang.`, noUsulan, subBidang);
+        // `notifBidang(br)`, bukan `br` telanjang — lihat baris serupa di jalur
+        // "revisi dikirim ulang" beberapa puluh baris di bawah, yang sejak awal
+        // memakai bentuk yang benar. Dua ejaan untuk maksud yang sama, di berkas
+        // yang sama, dan yang salah ini membuat Bidang tidak pernah tahu antrean
+        // reviewnya berkurang.
+        await addNotif(notifBidang(br), br, 'STATUS_CHANGE', `Usulan <b>${noUsulan}</b> (${subBidang}) dibatalkan oleh pengusul. Antrian review berkurang.`, noUsulan, subBidang);
       }
 
       await writeAuditLog({ req, eventType: 'USULAN_CANCEL', userId: session.userId, username: session.username, detail: `Cancel usulan ${noUsulan} (id=${usulanId}) — revert ke DRAFT` });
