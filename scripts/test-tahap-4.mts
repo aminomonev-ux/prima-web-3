@@ -264,7 +264,16 @@ cek('lencana Terjaga/Belum terjaga tampil', ac.includes("s.terjaga ? 'TERJAGA' :
 cek('sebab lencana merah selalu ikut tertulis, bukan cuma tooltip',
   ac.includes('{!s.terjaga && <div className="ap-sk-sebab">{s.sebab}</div>}'))
 // `title=` bawaan peramban dilarang DESIGN-SYSTEM — kotak putih tanpa tema.
-cek('tooltip pakai data-tooltip, bukan title=', !ac.includes('title={') && ac.includes('data-tooltip={s.sebab}'))
+//
+// Lencananya PINDAH dari `data-tooltip` pseudo ke portal `<Tip>` pada 2026-09-16:
+// ia duduk di dalam `.ap-card{overflow:hidden}`, jadi `::after` miliknya selalu
+// terpotong tepi kartu dan yang terbaca cuma potongan tengah kalimat. Dua-duanya
+// standar design system; yang membedakan cuma ada-tidaknya ancestor pengeklip,
+// jadi kembalinya `data-tooltip` di sini ikut ditolak.
+cek('tooltip lewat portal Tip, bukan title= maupun pseudo yang terpotong kartu',
+  !ac.includes('title={')
+  && ac.includes('<Tip label={s.sebab}>')
+  && !ac.includes('data-tooltip={s.sebab}'))
 cek('pesan & tenggat dikirim lewat POST yang sama', ac.includes('pesan: d.pesan, sampai: d.sampai'))
 
 const rt = buangKomentar(baca('app/api/admin/app-status/route.ts'))

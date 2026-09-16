@@ -126,7 +126,7 @@ const spanduk = baca('components/ui/SpandukBeku.tsx')
 cek('spanduk: "sedang dalam mode hanya baca"', spanduk.includes("'Modul ini sedang dalam mode hanya baca.'"))
 cek('spanduk: Super Admin disebut dengan nama yang dibaca orang', spanduk.includes('karena Anda Super Admin'))
 cek('tooltip tombol simpan terkunci', sebabKunciTulis({ global: false, bagian: '' }) === 'Modul ini sedang dalam mode hanya baca, jadi belum bisa menyimpan.')
-cek('sebab tombol HANYA BACA yang dimatikan', SEBAB_TAK_BISA_BEKU === 'Mode hanya baca ditujukan untuk layar yang tetap bisa dibuka dan dicetak sambil penyimpanannya ditahan. Bagian ini bukan layar semacam itu, jadi keadaan itu tidak ditawarkan di sini.')
+cek('sebab tombol HANYA BACA yang dimatikan', SEBAB_TAK_BISA_BEKU === 'Mode hanya baca untuk layar yang tetap bisa dibuka dan dicetak sambil penyimpanannya ditahan. Bagian ini bukan layar semacam itu.')
 cek('lencana TERJAGA menjelaskan akibat, bukan nama route',
   infoSakelar('app_status_iki')?.sebab === 'Layar dan jalur datanya ikut tertutup saat sakelar ini diubah. Diperiksa otomatis setiap ada perubahan kode.')
 cek('label sub-sakelar "Realisasi BLUD"', infoSakelar('app_status_blud_realisasi')?.label === 'Realisasi BLUD')

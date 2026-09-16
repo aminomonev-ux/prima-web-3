@@ -25,6 +25,7 @@ import { MessageSquare, ShieldCheck, ShieldAlert, Save, X, Lock, Power } from 'l
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import Tip from '@/components/ui/Tip';
 import { fetchJson } from '@/lib/shared/api';
 import {
   SAKELAR_INFO, formatSampai, bacaKeadaan, KEADAAN_SAKELAR, KUNCI_GLOBAL, LABEL_KEADAAN,
@@ -184,18 +185,31 @@ export function TabAppControl({ isSA }: { isSA:boolean }) {
                     <span className={`ap-badge ${val === 'online' ? 'badge-green' : val === 'readonly' ? 'badge-cyan' : 'badge-yellow'}`}>
                       {LABEL_KEADAAN[val]}
                     </span>
-                    {/* `data-tooltip`, bukan `title=` — kotak putih bawaan peramban
-                        dilarang DESIGN-SYSTEM, dan aturan `[data-tooltip]` di
-                        globals.css sudah berlaku di sini. */}
-                    <span
-                      className={`ap-badge ${s.terjaga?'badge-cyan':'badge-red'}`}
-                      data-tooltip={s.sebab}
-                    >
-                      {s.terjaga ? <ShieldCheck size={11}/> : <ShieldAlert size={11}/>}
-                      {s.terjaga ? 'TERJAGA' : 'BELUM TERJAGA'}
-                    </span>
+{/* Portal, BUKAN `data-tooltip` pseudo. Lencana ini duduk di dalam
+                        `.ap-card{overflow:hidden}`, jadi tooltip berupa `::after`
+                        miliknya SELALU terpotong tepi kartu — diukur: kalimat 122
+                        huruf di atas lencana 80px, di dalam kartu 632px. Yang terlihat
+                        cuma potongan tengahnya, tanpa awal maupun akhir kalimat.
+                        `Tip` merender ke `document.body` (di luar `.ap-body`, jadi
+                        reset Admin Panel tidak menyentuhnya) dan menaruh letaknya lewat
+                        `letakTip` yang sadar tepi layar. `title=` tetap dilarang
+                        DESIGN-SYSTEM. */}
+                    <Tip label={s.sebab}>
+                      <span className={`ap-badge ${s.terjaga?'badge-cyan':'badge-red'}`}>
+                        {s.terjaga ? <ShieldCheck size={11}/> : <ShieldAlert size={11}/>}
+                        {s.terjaga ? 'TERJAGA' : 'BELUM TERJAGA'}
+                      </span>
+                    </Tip>
                   </div>
                   {!s.terjaga && <div className="ap-sk-sebab">{s.sebab}</div>}
+                  {/* Sebab tombol HANYA BACA yang mati ditulis DI LAYAR, bukan cuma
+                      digantung di tooltipnya. Tooltip itu tidak pernah bisa muncul:
+                      `.ap-sk-seg` juga `overflow:hidden`, dan peramban tidak
+                      mengirim peristiwa tetikus ke tombol `disabled` — dua sebab
+                      yang masing-masing sudah cukup. Tombol mati wajib menyebut
+                      sebabnya (L79c), dan sebab yang tak terbaca sama saja dengan
+                      tidak ada. */}
+                  {isSA && !s.bisaBeku && <div className="ap-sk-sebab">{SEBAB_TAK_BISA_BEKU}</div>}
                   {/* Sakelar berjenjang: induk mati ikut mematikan, induk beku ikut
                       membekukan — dan kalimatnya harus menyebut yang MANA, kalau tidak
                       orang mengira turunannya masih bisa ditulis. */}

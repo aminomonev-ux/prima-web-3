@@ -512,7 +512,7 @@ export function infoSakelar(kunci: string): InfoSakelar | null {
  * pun", yang untuk sakelar bot tidak benar (readonly akan menutup POST-nya).
  */
 export const SEBAB_TAK_BISA_BEKU =
-  'Mode hanya baca ditujukan untuk layar yang tetap bisa dibuka dan dicetak sambil penyimpanannya ditahan. Bagian ini bukan layar semacam itu, jadi keadaan itu tidak ditawarkan di sini.'
+  'Mode hanya baca untuk layar yang tetap bisa dibuka dan dicetak sambil penyimpanannya ditahan. Bagian ini bukan layar semacam itu.'
 
 /** Sakelar yang tombolnya ada tapi tidak menutup apa pun di server — P10 nomor 6. */
 export const SAKELAR_TANPA_PENJAGA: readonly InfoSakelar[] = SAKELAR_INFO.filter((s) => !s.terjaga)
