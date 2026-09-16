@@ -8,6 +8,7 @@ import { assertQuotaAvailableTx, QuotaFullError } from '@/lib/security/promotion
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { hapusIzinOrang } from '@/lib/data/menu-access';
 import { RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS } from '@/lib/constants';
+import { putusSesiPengguna } from '@/lib/security/sesi';
 
 // Marker untuk membedakan konflik dup (409) dari error lain di dalam transaksi create-user.
 class DuplicateUserError extends Error {}
@@ -249,11 +250,16 @@ export async function PATCH(req: NextRequest) {
       // jadi kewenangan yang ikut berpindah diam-diam. Dihapus di transaksi yang sama
       // dengan perubahan perannya supaya tidak pernah ada keadaan setengah jalan.
       let izinDihapus = 0;
+      let sesiDiputus = 0;
       try {
         await withTransaction(async ({ tx }) => {
           if (role !== targetCurrentRole) await assertQuotaAvailableTx(role, tx);
           await tx`UPDATE users SET role = ${role}, probationary_until = NULL, probationary_from_role = NULL, updated_at = NOW() WHERE id = ${id}`;
           if (role !== targetCurrentRole) izinDihapus = await hapusIzinOrang(tx, id);
+          // A7 — pintu KEDUA yang mengubah users.role. Dipasang di sini juga, bukan
+          // hanya di Pusat Akses: pilihan yang cuma ada di satu pintu adalah pilihan
+          // yang berlaku saat orangnya kebetulan lewat pintu itu (L69).
+          if (data.putus_sesi && role !== targetCurrentRole) sesiDiputus = await putusSesiPengguna(tx, id);
         });
       } catch (e) {
         if (e instanceof QuotaFullError) {
@@ -263,11 +269,12 @@ export async function PATCH(req: NextRequest) {
       }
       // Jenisnya ROLE_CHANGE, bukan USER_UPDATE (C6): "siapa mengubah peran siapa bulan
       // lalu" harus bisa disaring, bukan dibaca satu per satu dari kolom `detail`.
-      await writeAuditLog({ req, eventType: 'ROLE_CHANGE', userId: session.userId, username: session.username, targetUserId: id, detail: `user id=${id}: ${targetCurrentRole} → ${role}${probationWasActive ? ' [probation dibatalkan]' : ''}${izinDihapus ? ` [${izinDihapus} perkecualian menu dihapus]` : ''} · alasan: ${data.alasan}` });
+      await writeAuditLog({ req, eventType: 'ROLE_CHANGE', userId: session.userId, username: session.username, targetUserId: id, detail: `user id=${id}: ${targetCurrentRole} → ${role}${probationWasActive ? ' [probation dibatalkan]' : ''}${izinDihapus ? ` [${izinDihapus} perkecualian menu dihapus]` : ''}${sesiDiputus ? ` [${sesiDiputus} sesi diputus]` : ''} · alasan: ${data.alasan}` });
       return NextResponse.json({
         ok: true,
         message: `Peran diubah menjadi ${role}.`
-          + (izinDihapus ? ` ${izinDihapus} pengaturan menu khusus miliknya ikut terhapus.` : ''),
+          + (izinDihapus ? ` ${izinDihapus} pengaturan menu khusus miliknya ikut terhapus.` : '')
+          + (sesiDiputus ? ` ${sesiDiputus} sesi aktifnya diputus — ia harus masuk lagi.` : ''),
         izinDihapus,
       });
     }

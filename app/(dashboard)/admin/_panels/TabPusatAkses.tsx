@@ -367,18 +367,23 @@ export function TabPusatAkses(
     const grantBergeser = grantLama !== grantBaru;
 
     let alasan: string | null = null;
+    // A7 — hanya berarti kalau peran benar-benar bergeser; dialog grant tidak
+    // menawarkannya, dan server pun mengabaikannya di cabang itu.
+    let putusSesi = false;
     if (peranBerubah) {
       // Ditanyakan di sini, bukan saat dropdown-nya digeser: selama belum Simpan,
       // pilihannya masih bisa dibatalkan. Inilah titik yang tidak bisa ditarik balik.
       const jumlahPerkecualian = berkas.menu.reduce((a, m) => a + Object.keys(m.orang).length, 0);
-      alasan = await konfirmasiUbahPeran({
+      const jawab = await konfirmasiUbahPeran({
         username: berkas.user.username,
         dari: berkas.user.role, ke: draRole,
         jumlahPerkecualian,
         probationAktif: berkas.masaPercobaan,
         stat: statKuota.find(s => s.role === draRole),
       });
-      if (alasan === null) return;
+      if (jawab === null) return;
+      alasan = jawab.alasan;
+      putusSesi = jawab.centang;
     } else if (grantBergeser) {
       const dibuka = grantKirim.filter(k => !grantLamaBerarti.includes(k));
       const ditutup = grantLamaBerarti.filter(k => !grantKirim.includes(k));
@@ -410,6 +415,7 @@ export function TabPusatAkses(
         user_id: berkas.user.id,
         role: draRole,
         role_awal: berkas.user.role,
+        putus_sesi: putusSesi,
         app_access: grantKirim,
         // Disaring dengan fungsi yang SAMA dengan yang dipakai server sesudah
         // menyimpan grant-nya. Layar yang menyaring dengan aturannya sendiri cepat

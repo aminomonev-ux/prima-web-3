@@ -84,6 +84,20 @@ export const AdminUsersPatchBodySchema = z.discriminatedUnion('action', [
     id:     UserIdSchema,
     role:   AssignableRoleEnum,
     alasan: AlasanWewenangSchema,
+  /**
+   * A7 — putuskan sesinya begitu perannya berubah. Mati secara bawaan.
+   *
+   * Ganti peran sengaja TIDAK mencabut sesi (T-2): melempar orang ke /login di tengah
+   * pengisian terlalu mahal untuk perubahan yang biasanya rutin, dan keepalive sudah
+   * menyegarkan perannya dalam hitungan menit. Tapi angka itu hanya berlaku untuk
+   * klien yang MENGIRIM keepalive — yang menutup tab lalu memakai cookie-nya dari
+   * `curl` mempertahankan peran lamanya sampai batas diam 60 menit.
+   *
+   * Jadi ini pilihan, bukan aturan: beda antara "rutin" dan "mendesak" cuma diketahui
+   * orang yang sedang menekan tombolnya. Untuk kasus "orangnya bermasalah", yang benar
+   * tetap Nonaktifkan akun — sesi yang diputus bisa login lagi semenit kemudian.
+   */
+    putus_sesi: z.boolean().default(false),
   }),
   // `set-app-access` DIBUANG di Tahap 7. Layar yang memakainya (tab User Management)
   // sudah dimatikan Tahap 5, jadi sejak itu ia jalur tulis tanpa satu pun pintu — dan
@@ -166,6 +180,20 @@ export const PusatAksesSimpanSchema = z.object({
    * menggeser satu izin menu) tidak perlu ditanya alasannya.
    */
   alasan:     AlasanWewenangSchema.optional(),
+  /**
+   * A7 — putuskan sesinya begitu perannya berubah. Mati secara bawaan.
+   *
+   * Ganti peran sengaja TIDAK mencabut sesi (T-2): melempar orang ke /login di tengah
+   * pengisian terlalu mahal untuk perubahan yang biasanya rutin, dan keepalive sudah
+   * menyegarkan perannya dalam hitungan menit. Tapi angka itu hanya berlaku untuk
+   * klien yang MENGIRIM keepalive — yang menutup tab lalu memakai cookie-nya dari
+   * `curl` mempertahankan peran lamanya sampai batas diam 60 menit.
+   *
+   * Jadi ini pilihan, bukan aturan: beda antara "rutin" dan "mendesak" cuma diketahui
+   * orang yang sedang menekan tombolnya. Untuk kasus "orangnya bermasalah", yang benar
+   * tetap Nonaktifkan akun — sesi yang diputus bisa login lagi semenit kemudian.
+   */
+  putus_sesi: z.boolean().default(false),
   menu:       z.record(z.string(), z.record(z.string(), IzinMenuEnum)).default({}),
   versi:      z.record(z.string(), z.string()).default({}),
   /**

@@ -193,6 +193,7 @@ export async function PUT(req: NextRequest) {
       userId: b.user_id,
       role: b.role,
       roleAwal: b.role_awal,
+      putusSesi: b.putus_sesi,
       appAccess: b.app_access,
       menu: b.menu,
       versi: b.versi,

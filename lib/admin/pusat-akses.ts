@@ -35,6 +35,7 @@ import { jangkaYangBerarti } from '@/lib/admin/berjangka-baris'
 import { bacaJangka, tulisJangkaTx } from '@/lib/admin/akses-berjangka'
 import { tutupYangSudahTerbukaTx, type PermintaanDitutup } from '@/lib/admin/permintaan-akses'
 import { assertQuotaAvailableTx } from '@/lib/security/promotion'
+import { putusSesiPengguna } from '@/lib/security/sesi'
 
 // Aturan pintunya + bentuk berkasnya tinggal di `pintu-akses.ts` — berkas DAUN tanpa
 // satu pun impor server. Berkas ini yang membaca DB, jadi ia TIDAK BOLEH jadi tempat
@@ -251,6 +252,11 @@ export type PermintaanSimpan = {
   /** P9 — wajib kalau peran atau pintu modulnya bergeser; diperiksa di dalam transaksi. */
   alasan?: string
   /**
+   * A7 — putuskan sesi aktifnya begitu perannya berubah. Hanya berlaku kalau
+   * perannya memang bergeser; menggeser satu izin menu bukan alasan memutus sesi.
+   */
+  putusSesi?: boolean
+  /**
    * P2 — tenggat per modul. Modul yang tidak disebut berarti tanpa batas waktu, jadi
    * menghilangkan sebuah kunci dari sini MENCABUT tenggatnya (bukan membiarkannya).
    */
@@ -267,6 +273,7 @@ export type PermintaanSimpan = {
 
 export type HasilSimpan = {
   peranBerubah: { dari: string; ke: string } | null
+  sesiDiputus: number
   grantDitambah: string[]
   /** Grant yang BERARTI dan dilepas — pintunya tertutup. */
   grantDicabut: string[]
@@ -294,7 +301,8 @@ export type HasilSimpan = {
  */
 export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpan> {
   const hasil: HasilSimpan = {
-    peranBerubah: null, grantDitambah: [], grantDicabut: [], grantDibersihkan: [], izinDihapus: 0, modulMenuDitulis: [],
+    peranBerubah: null, sesiDiputus: 0,
+    grantDitambah: [], grantDicabut: [], grantDibersihkan: [], izinDihapus: 0, modulMenuDitulis: [],
     jangkaDitulis: 0, jangkaDihapus: 0, permintaanDisetujui: [],
   }
 
@@ -351,6 +359,12 @@ export async function simpanBerkasOrang(p: PermintaanSimpan): Promise<HasilSimpa
       // cuma bahwa ia terjadi di transaksi yang sama dengan sisanya.
       hasil.izinDihapus += await hapusIzinOrang(tx, p.userId)
       hasil.peranBerubah = { dari: target.role, ke: peranBaru }
+
+      // A7 — di dalam transaksi yang SAMA. Kalau perubahan perannya gagal lalu
+      // di-rollback, orangnya tidak boleh terlempar keluar demi perubahan yang tidak
+      // pernah terjadi (L69-b). Hanya saat perannya benar-benar bergeser: menggeser
+      // satu izin menu bukan alasan memutus sesi siapa pun.
+      if (p.putusSesi) hasil.sesiDiputus = await putusSesiPengguna(tx, p.userId)
     }
 
     const grantBaru = grantCalon

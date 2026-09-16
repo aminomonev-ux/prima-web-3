@@ -102,13 +102,29 @@ export interface PromptOpts extends ConfirmOpts {
    * ditutup — dan satu simpanan bisa membawa perubahan lain yang tidak diminta pemohon.
    */
   nilaiAwal?: string;
+  /**
+   * A7 — satu kotak centang tambahan, MATI secara bawaan. Dipakai untuk pilihan yang
+   * menyertai keputusannya tapi bukan bagian wajibnya, mis. "putus sesinya sekarang"
+   * saat peran diubah.
+   *
+   * Ditawarkan di dialognya, bukan jadi aturan di server, karena beda antara "rutin"
+   * dan "mendesak" hanya diketahui orang yang sedang menekan tombolnya — pada detik
+   * itu. Kalau ada, bentuk balasannya berubah jadi objek; pemanggil lama yang tidak
+   * memakainya tidak tersentuh sama sekali (lihat overload di bawah).
+   */
+  centang?: { label: string; keterangan?: string };
 }
 
 /** `null` = dibatalkan. String = alasan yang diketik (sudah di-trim). */
 export type HasilPrompt = string | null;
 
-function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt) => void }) {
+/** Balasan saat `centang` dipakai. `null` = dibatalkan. */
+export type HasilPromptCentang = { alasan: string; centang: boolean } | null;
+
+function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt | HasilPromptCentang) => void }) {
   const [teks, setTeks] = useState(opts.nilaiAwal ?? '');
+  const [centang, setCentang] = useState(false);
+  const selesai = () => onDone(opts.centang ? { alasan: teks.trim(), centang } : teks.trim());
   const maks = opts.maxLength ?? 140;
   const min = opts.minLength ?? 4;
   const cukup = teks.trim().length >= min;
@@ -154,9 +170,24 @@ function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt)
           <span style={{ fontSize: 11, color: c.sub, fontFamily: "'JetBrains Mono',monospace" }}>{teks.length}/{maks}</span>
         </div>
 
+        {opts.centang && (
+          <label style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 16, cursor: 'pointer' }}>
+            <input type="checkbox" checked={centang} onChange={e => setCentang(e.target.checked)}
+              style={{ marginTop: 2, accentColor: '#EF9F27', width: 15, height: 15, flex: '0 0 auto' }} />
+            <span style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+              {opts.centang.label}
+              {opts.centang.keterangan && (
+                <span style={{ display: 'block', fontSize: 11.5, color: c.sub, marginTop: 2 }}>
+                  {opts.centang.keterangan}
+                </span>
+              )}
+            </span>
+          </label>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <PrimaButton variant="ghost" onClick={() => onDone(null)}>{opts.cancelLabel ?? 'Batal'}</PrimaButton>
-          <PrimaButton variant={opts.variant ?? 'warning'} disabled={!cukup} onClick={() => onDone(teks.trim())}>
+          <PrimaButton variant={opts.variant ?? 'warning'} disabled={!cukup} onClick={selesai}>
             {opts.confirmLabel ?? 'Lanjut'}
           </PrimaButton>
         </div>
@@ -165,13 +196,17 @@ function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt)
   );
 }
 
-export function promptDialog(opts: PromptOpts): Promise<HasilPrompt> {
+export function promptDialog(
+  opts: PromptOpts & { centang: NonNullable<PromptOpts['centang']> },
+): Promise<HasilPromptCentang>;
+export function promptDialog(opts: PromptOpts): Promise<HasilPrompt>;
+export function promptDialog(opts: PromptOpts): Promise<HasilPrompt | HasilPromptCentang> {
   if (typeof document === 'undefined') return Promise.resolve(null);
-  return new Promise<HasilPrompt>(resolve => {
+  return new Promise<HasilPrompt | HasilPromptCentang>(resolve => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = createRoot(host);
-    const done = (val: HasilPrompt) => {
+    const done = (val: HasilPrompt | HasilPromptCentang) => {
       root.unmount();
       host.remove();
       resolve(val);

@@ -27,7 +27,7 @@ interface Props {
   totalPages: number;
   total: number;
   setPage: (p: number) => void;
-  doChangeRole: (id: number, role: string, alasan: string) => void;
+  doChangeRole: (id: number, role: string, alasan: string, putusSesi: boolean) => void;
   /**
    * Panel ini terbuka untuk ADMIN **dan** SUPER_ADMIN, sementara `/admin` sesudah T-16
    * hanya untuk SUPER_ADMIN. Spanduk yang menyuruh ADMIN "buka Admin Panel" mengarahkan
@@ -48,15 +48,16 @@ export function KelolaUserPanel({
   async function gantiPeran(u: UserRow, peranBaru: string) {
     if (!peranBaru || peranBaru === u.role) return;
     // P9 — dialognya memulangkan ALASANNYA, bukan cuma ya/tidak. `null` = dibatalkan.
-    const alasan = await konfirmasiUbahPeran({
+    // A7 — sekalian jawaban kotak centang "putus sesinya sekarang".
+    const jawab = await konfirmasiUbahPeran({
       username: u.username,
       dari: u.role, ke: peranBaru,
       jumlahPerkecualian: u.menu_exceptions ?? 0,
       probationAktif: masihProbation(u.probationary_until),
       stat: statKuota.find(s => s.role === peranBaru),
     });
-    if (alasan === null) return;
-    doChangeRole(u.id, peranBaru, alasan);
+    if (jawab === null) return;
+    doChangeRole(u.id, peranBaru, jawab.alasan, jawab.centang);
   }
 
   return (

@@ -106,7 +106,9 @@ export type FaktaUbahPeran = {
  *
  * `null` = dibatalkan.
  */
-export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<string | null> {
+export async function konfirmasiUbahPeran(
+  f: FaktaUbahPeran,
+): Promise<{ alasan: string; centang: boolean } | null> {
   const baris: string[] = [
     `${f.username}: ${ROLE_LABELS[f.dari] ?? f.dari} → ${ROLE_LABELS[f.ke] ?? f.ke}.`,
   ]
@@ -122,7 +124,15 @@ export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<string | n
   if (f.stat && f.stat.quota > 0) {
     baris.push(`Kuota ${ROLE_LABELS[f.ke] ?? f.ke} sesudahnya: ${f.stat.count + 1}/${f.stat.quota}.`)
   }
-  baris.push('Orang ini tidak perlu keluar dari aplikasi. Peran barunya berlaku dalam satu menit.')
+  // A7 — kalimat lamanya berbunyi "Peran barunya berlaku dalam satu menit", dan angka
+  // itu terlalu menenangkan. Satu menit berlaku untuk yang aplikasinya TERBUKA, sebab
+  // penyegarnya (`keepalive`) dipicu klien. Yang menutup tab lalu memakai cookie-nya
+  // dari luar aplikasi mempertahankan peran lamanya sampai batas diam 60 menit.
+  // Angka yang menenangkan membuat orang memilih jalur yang salah pada hari yang salah.
+  baris.push(
+    'Ia tidak perlu keluar dari aplikasi: peran barunya berlaku dalam hitungan menit '
+    + 'selama aplikasinya terbuka.',
+  )
 
   return promptDialog({
     title: 'Ubah peran?',
@@ -132,6 +142,12 @@ export async function konfirmasiUbahPeran(f: FaktaUbahPeran): Promise<string | n
     confirmLabel: 'Ubah peran',
     cancelLabel: 'Batal',
     variant: 'warning',
+    centang: {
+      label: 'Putuskan sesinya sekarang',
+      keterangan: 'Ia langsung diminta masuk lagi, dan ketikan yang belum disimpan hilang. '
+        + 'Pakai kalau wewenangnya harus dicabut saat ini juga. Kalau orangnya bermasalah, '
+        + 'yang benar Nonaktifkan akun — sesi yang diputus bisa masuk lagi semenit kemudian.',
+    },
   })
 }
 
