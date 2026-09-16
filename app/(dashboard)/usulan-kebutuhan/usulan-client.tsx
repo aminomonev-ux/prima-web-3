@@ -302,7 +302,11 @@ export default function UsulanClient({ userId, role, username, themePreference, 
   const [putusanHeader, setPutusanHeader] = useState<UsulanHeader|null>(null);
   const [bulkModal,   setBulkModal]   = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkCount,   setBulkCount]   = useState<{total_item:number;total_header:number}|null>(null);
+  const [bulkCount,   setBulkCount]   = useState<{total_item:number;total_header:number;tahun?:string|null}|null>(null);
+  // Lingkup yang DIJAWAB SERVER, bukan saringan yang sedang dipegang layar. Keduanya
+  // sama dalam keadaan normal, tapi yang menentukan baris mana tersentuh adalah
+  // jawaban server — kalimat konfirmasi harus berdiri di atas itu.
+  const lingkupBulk = bulkCount?.tahun ? `tahun ${bulkCount.tahun}` : 'semua tahun anggaran';
 
   const cy = new Date().getFullYear();
   const tahunList = Array.from({length: cy+2-2024+1}, (_,i) => String(cy+2-i)); 
@@ -958,10 +962,19 @@ export default function UsulanClient({ userId, role, username, themePreference, 
   // PERF-C2 Tahap 7: openBidangReview/doBidangReview dipindah ke
   // _modals/BidangReviewModal.tsx (BUG-W4 optimistic locking dipertahankan).
 
+  // A5 — lingkupnya MENGIKUTI saringan tahun yang sedang aktif di daftar antrian
+  // (`filterTahunDU`, saringan yang sama yang dikirim ke GET /api/usulan). Sampai
+  // 2026-09-16 tombol ini tidak mengenal tahun sama sekali: layar bisa disaring ke
+  // 2026 sementara yang tersetujui item tahun mana pun, termasuk yang tidak pernah
+  // muncul di layarnya. Saringan kosong tetap berarti semua tahun — itu jujur,
+  // layarnya memang sedang menampilkan semua.
   async function openBulkModal() {
     setBulkCount(null); setBulkModal(true);
-    const actAs = role === 'SUPER_ADMIN' ? '?actAs=kasubag' : '';
-    const d = await fetchJson<{ total_item: number; total_header: number }>(`/api/usulan/putusan-bulk${actAs}`);
+    const qs = new URLSearchParams();
+    if (role === 'SUPER_ADMIN') qs.set('actAs', 'kasubag');
+    if (filterTahunDU) qs.set('tahun', filterTahunDU);
+    const d = await fetchJson<{ total_item: number; total_header: number; tahun?: string | null }>(
+      `/api/usulan/putusan-bulk${qs.toString() ? `?${qs}` : ''}`);
     if (d.ok) setBulkCount(d.data ?? null);
     else setBulkCount({ total_item: 0, total_header: 0 });
   }
@@ -970,9 +983,12 @@ export default function UsulanClient({ userId, role, username, themePreference, 
     setBulkLoading(true);
     try {
       const actAs = role === 'SUPER_ADMIN' ? 'kasubag' : '';
+      // Tahun dikirim EKSPLISIT dari saringan yang sama dengan penghitungnya; server
+      // tidak boleh menebaknya sendiri, kalau tidak angka di modal dan baris yang
+      // tersentuh bisa berasal dari dua pertanyaan berbeda.
       const d = await fetchJson('/api/usulan/putusan-bulk', {
         method: 'PUT',
-        body: JSON.stringify({ actAs }),
+        body: JSON.stringify({ actAs, tahun: filterTahunDU || '' }),
       });
       if (d.ok) {
         setBulkModal(false);
@@ -1789,7 +1805,7 @@ export default function UsulanClient({ userId, role, username, themePreference, 
                     <div style={{padding:'20px 0',textAlign:'center',color:'#6b7280',fontSize:13}}>Menghitung antrian...</div>
                   ) : bulkCount.total_item === 0 ? (
                     <div style={{padding:'12px 0'}}>
-                      <p style={{fontSize:13,color:'#6b7280'}}>Tidak ada usulan yang perlu diproses saat ini.</p>
+                      <p style={{fontSize:13,color:'#6b7280'}}>Tidak ada usulan {lingkupBulk} yang perlu diproses saat ini.</p>
                       <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}>
                         <PrimaButton variant="ghost" size="sm" onClick={()=>setBulkModal(false)}>Tutup</PrimaButton>
                       </div>
@@ -1810,8 +1826,8 @@ export default function UsulanClient({ userId, role, username, themePreference, 
                       </div>
                       <p style={{fontSize:13,color:'#B5D4F4',lineHeight:1.6,marginBottom:8}}>
                         {role==='ADMIN_KABAG'
-                          ? <>Semua <strong>{bulkCount.total_item} item</strong> dari <strong>{bulkCount.total_header} usulan</strong> akan disetujui final. Nominal menggunakan hasil revisi kasubag atau telaah admin.</>
-                          : <>Semua <strong>{bulkCount.total_item} item</strong> dari <strong>{bulkCount.total_header} usulan</strong> akan diteruskan ke Kabag. Nominal menggunakan hasil telaah admin.</>
+                          ? <><strong>{bulkCount.total_item} item</strong> dari <strong>{bulkCount.total_header} usulan</strong> {lingkupBulk} akan disetujui final. Nominal menggunakan hasil revisi kasubag atau telaah admin.</>
+                          : <><strong>{bulkCount.total_item} item</strong> dari <strong>{bulkCount.total_header} usulan</strong> {lingkupBulk} akan diteruskan ke Kabag. Nominal menggunakan hasil telaah admin.</>
                         }
                       </p>
                       <p style={{fontSize:12,color:'#FAC775',background:'rgba(186,117,23,.1)',borderRadius:6,padding:'8px 12px',marginBottom:20}}>
