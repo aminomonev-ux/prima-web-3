@@ -84,12 +84,32 @@ async function localLimit(key: string, maxRequests: number, windowSeconds: numbe
 // Pakai console.warn ber-throttle (1×/menit) supaya muncul di log PM2 tanpa spam.
 // TIDAK pakai writeAuditLog di sini: auditlog.ts sudah import getClientIp dari
 // file ini → circular import. Surfacing via server log sudah cukup untuk ops.
+//
+// DEGRADED sekarang HANYA untuk backend yang seharusnya jalan lalu gagal (2026-09-16).
+// Sebelumnya `backend === 'none'` ikut memakai kalimat ini, padahal kepala berkas di
+// atas sudah menyatakannya keadaan NORMAL edisi intranet. Akibatnya bukan sekadar log
+// berisik: PANDUAN §7 menyuruh operator memakai `findstr DEGRADED` sebagai alat deteksi
+// Redis mati, dan alat itu tidak bisa dipakai kalau kalimatnya sudah menyalak tiap 10
+// menit di server yang sehat — keepalive tab staf memanggil checkRateLimit, dan
+// throttle 1×/menit di bawah tidak menolongnya sama sekali. Pesan yang menyalak tiap
+// hari melatih orang berhenti membacanya, lalu yang sungguhan lewat tanpa dilihat.
+// Keadaan "memang sengaja tanpa backend" pindah ke catatSekaliModeMemori().
 let _lastRlWarn = 0;
 function warnDegraded(reason: string): void {
   const now = Date.now();
   if (now - _lastRlWarn < 60_000) return;
   _lastRlWarn = now;
   console.warn(`[RateLimit] DEGRADED (${reason}) — fallback limiter in-memory per-proses aktif. Cek backend Upstash/Redis.`);
+}
+
+// Bukan kegagalan, jadi bukan warn: keterangan SEKALI saja, saat rem pertama dipakai.
+// Sengaja tidak di tingkat modul — berkas ini ikut ter-import perkakas & skrip uji yang
+// tidak pernah membatasi laju apa pun, dan baris log di sana cuma kebisingan.
+let _sudahCatatMemori = false;
+function catatSekaliModeMemori(): void {
+  if (_sudahCatatMemori) return;
+  _sudahCatatMemori = true;
+  console.info('[RateLimit] mode memori per-proses (UPSTASH/REDIS_URL kosong). Ini konfigurasi normal edisi intranet: PM2 mode fork, satu proses, jadi hitungannya akurat. Alasan lengkap di PANDUAN §7.');
 }
 
 // V5-AUTH-04: fallback fixed-window IN-MEMORY (per-proses) menggantikan fail-open
@@ -126,7 +146,7 @@ export async function checkRateLimit(
     if (backend === 'local') {
       return await localLimit(key, maxRequests, windowSeconds);
     }
-    warnDegraded('tidak ada backend rate-limit dikonfigurasi (UPSTASH/REDIS_URL kosong)');
+    catatSekaliModeMemori();
     return memLimit(key, maxRequests, windowSeconds); // none: fallback in-memory (bukan fail-open)
   } catch (e) {
     warnDegraded(`backend error: ${String(e).slice(0, 120)}`);

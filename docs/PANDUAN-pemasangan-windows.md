@@ -233,9 +233,16 @@ Dua syarat yang menentukan tugas itu berhasil atau tidak:
 - **Berjalan sebagai PENGGUNA, bukan `SYSTEM`.** Data PM2 hidup di
   `C:\Users\<nama>\.pm2`; `SYSTEM` punya rumahnya sendiri dan akan bangun dengan
   daftar KOSONG — tugasnya sukses, aplikasinya tetap mati.
-- **Beri jeda ~60 detik sebelum menyentuh PM2.** Saat laptop baru menyala, MySQL
-  masih bangun. Bukan kehati-hatian kosong: cadangan DB 2026-09-10 gagal persis karena
+- **Tunggu MySQL-nya, jangan tunggu angka.** Saat laptop baru menyala, MySQL masih
+  bangun. Bukan kehati-hatian kosong: cadangan DB 2026-09-10 gagal persis karena
   menembak terlalu cepat (`Can't connect to MySQL server ... (10061)`).
+
+  Rancangan pertama memakai `Start-Sleep -Seconds 60`, dan angka itu tebakan. Kalau
+  MySQL butuh 70 detik, aplikasinya naik lebih dulu dan tiap kueri pertama berbunyi
+  `ECONNREFUSED 127.0.0.1:3306` di `pm2 logs` — ini yang membuat log merah muncul tiap
+  pagi. Menaikkan angkanya cuma memindahkan tebakan, dan membuat jaring 15-menit jadi
+  lamban tanpa alasan. Yang dipakai sekarang **fakta**: port 3306 menjawab atau tidak
+  (`Tunggu-MySQL` di skrip bawah).
 
 ### ⚠️ Pemicu "saat login" saja TIDAK cukup
 
@@ -297,6 +304,26 @@ function Tunggu-Prima([int]$detik) {
   return $false
 }
 
+# Menunggu MySQL BENAR-BENAR menjawab, bukan menunggu sekian detik. TcpClient dipakai
+# karena Test-NetConnection jauh lebih lambat dan ikut mencetak ke layar; port lokal
+# yang tertutup menolak seketika, jadi perulangan ini murah.
+function Tunggu-MySQL([int]$detikMaks = 300) {
+  $batas = (Get-Date).AddSeconds($detikMaks)
+  while ((Get-Date) -lt $batas) {
+    $sock = $null
+    try {
+      $sock = New-Object System.Net.Sockets.TcpClient
+      $sock.Connect('127.0.0.1', 3306)
+      if ($sock.Connected) { return $true }
+    } catch {
+    } finally {
+      if ($sock) { $sock.Close() }
+    }
+    Start-Sleep -Seconds 5
+  }
+  return $false
+}
+
 function Ada-Prima {
   try {
     $daftar = (& $pm2 jlist 2>$null | Out-String) | ConvertFrom-Json
@@ -322,9 +349,17 @@ if (Test-Path $jeda) {
 # cukup menimpa satu baris supaya tetap terbukti pemicunya jalan.
 if (Test-Prima) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') OK" | Set-Content -Path $terakhir; exit 0 }
 
-Tulis 'belum bisa dihubungi, menunggu 60 detik (MySQL mungkin masih menyala)'
-Start-Sleep -Seconds 60
-if (Test-Prima) { Tulis 'OK bisa dihubungi sesudah menunggu'; exit 0 }
+# Kalau MySQL belum siap, TETAP dilanjutkan - bukan exit. Menolak menyalakan aplikasi
+# karena databasenya bermasalah membuat dua hal mati sekaligus, dan yang kedua cuma
+# terlihat di log ini. Lebih baik aplikasinya hidup, halaman login terbuka, dan barisnya
+# menyebut apa yang sebenarnya kurang.
+Tulis 'belum bisa dihubungi, menunggu MySQL siap di port 3306'
+if (Tunggu-MySQL 300) {
+  Tulis 'MySQL menjawab di 3306'
+} else {
+  Tulis 'MySQL BELUM menjawab di 3306 sesudah 5 menit -> tetap dilanjutkan'
+}
+if (Test-Prima) { Tulis 'OK bisa dihubungi sesudah MySQL siap'; exit 0 }
 
 # Bukti keadaan SEBELUM ditangani: port 3000 masih didengarkan atau tidak, dan PM2 bilang apa.
 $dengar = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
@@ -766,15 +801,30 @@ REDIS_URL=redis://localhost:6379
 
 Restart PM2. **Tidak ada kode yang perlu diubah.**
 
-Sesekali intip apakah remnya diam-diam turun ke mode memori:
+Sesekali intip apakah ada rem yang jatuh tanpa diminta:
 
 ```bash
 pm2 logs prima --lines 500 | findstr DEGRADED
 ```
 
-Kalau muncul padahal `REDIS_URL` sudah diisi, Redis-nya mati. Aplikasi tetap jalan
-normal — tidak ada gejala yang kelihatan dari layar. Justru itu yang membuatnya
-perlu dicek sesekali.
+`DEGRADED` berarti tepat satu hal: backend yang **sudah dikonfigurasi** gagal
+dijangkau. Selama `REDIS_URL` masih kosong seperti sekarang, baris itu tidak pernah
+muncul — keadaan tanpa Redis dilaporkan **sekali** saat rem pertama dipakai, sebagai
+keterangan, bukan kegagalan:
+
+```
+[RateLimit] mode memori per-proses (UPSTASH/REDIS_URL kosong). Ini konfigurasi normal
+edisi intranet: PM2 mode fork, satu proses, jadi hitungannya akurat. Alasan lengkap di
+PANDUAN §7.
+```
+
+Sampai 2026-09-16 keduanya berbunyi `DEGRADED` sama persis. Akibatnya perintah di atas
+memulangkan ratusan baris di server yang **sehat** — tiap tab staf yang terbuka
+memanggil keepalive tiap 10 menit, dan tiap panggilan itu menyentuh rem. Alat
+deteksinya rusak sebelum sempat dipakai. Sekarang tidak lagi.
+
+Aplikasi tetap jalan normal saat Redis mati, tidak ada gejala yang kelihatan dari
+layar. Justru itu yang membuat baris ini perlu bisa dipercaya apa adanya.
 
 ---
 
