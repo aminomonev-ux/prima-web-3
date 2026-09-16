@@ -146,7 +146,7 @@ export async function konfirmasiUbahPeran(
       label: 'Putuskan sesinya sekarang',
       keterangan: 'Ia langsung diminta masuk lagi, dan ketikan yang belum disimpan hilang. '
         + 'Pakai kalau wewenangnya harus dicabut saat ini juga. Kalau orangnya bermasalah, '
-        + 'yang benar Nonaktifkan akun — sesi yang diputus bisa masuk lagi semenit kemudian.',
+        + 'yang benar Nonaktifkan akun: sesi yang diputus bisa masuk lagi semenit kemudian.',
     },
   })
 }

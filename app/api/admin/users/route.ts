@@ -274,7 +274,7 @@ export async function PATCH(req: NextRequest) {
         ok: true,
         message: `Peran diubah menjadi ${role}.`
           + (izinDihapus ? ` ${izinDihapus} pengaturan menu khusus miliknya ikut terhapus.` : '')
-          + (sesiDiputus ? ` ${sesiDiputus} sesi aktifnya diputus — ia harus masuk lagi.` : ''),
+          + (sesiDiputus ? ` ${sesiDiputus} sesi aktifnya diputus, jadi ia harus masuk lagi.` : ''),
         izinDihapus,
       });
     }

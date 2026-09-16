@@ -181,10 +181,26 @@ export async function hitungJejakOrang(userId: number): Promise<Jejak> {
     ORDER BY k.TABLE_NAME, k.COLUMN_NAME
   ` as { tabel: string; kolom: string; aturan: string }[]
 
-  const hasil = await Promise.all(kolom.map(async (k) => {
-    if (!IDENTIFIER.test(k.tabel) || !IDENTIFIER.test(k.kolom)) return null
-    return { tabel: k.tabel, kolom: k.kolom, aturan: k.aturan, jumlah: await hitungKolom(k.tabel, k.kolom, userId) }
-  }))
+  // Q3 — dijalankan BERKELOMPOK, bukan sekaligus. Daftar kolomnya datang dari
+  // `information_schema`, jadi jumlahnya bukan angka tetap: ia tumbuh sendiri tiap ada
+  // tabel baru yang menunjuk `users.id` (sudah di atas 30). Menembakkan semuanya
+  // serentak lewat satu `Promise.all` pada pool berisi 10 sambungan membuat satu klik
+  // "lihat jejak orang" memakai seluruh pool, dan permintaan lain — termasuk yang
+  // sedang menyimpan — ikut mengantre di belakangnya.
+  //
+  // Lima sekali jalan: cukup cepat untuk layar yang memang menunggu, dan menyisakan
+  // separuh pool untuk orang lain. Bukan satu kueri agregat, karena nama tabel &
+  // kolomnya dinamis — merangkainya jadi satu kueri raksasa menukar satu masalah
+  // dengan masalah yang lebih sulit diperiksa.
+  const KELOMPOK = 5
+  const hasil: ({ tabel: string; kolom: string; aturan: string; jumlah: number } | null)[] = []
+  for (let i = 0; i < kolom.length; i += KELOMPOK) {
+    const sepotong = await Promise.all(kolom.slice(i, i + KELOMPOK).map(async (k) => {
+      if (!IDENTIFIER.test(k.tabel) || !IDENTIFIER.test(k.kolom)) return null
+      return { tabel: k.tabel, kolom: k.kolom, aturan: k.aturan, jumlah: await hitungKolom(k.tabel, k.kolom, userId) }
+    }))
+    hasil.push(...sepotong)
+  }
 
   const isi = hasil.filter((h): h is NonNullable<typeof h> => h !== null && h.jumlah > 0)
   const kehilanganPemilik = isi.filter((h) => h.aturan === 'SET NULL').map(({ tabel, kolom, jumlah }) => ({ tabel, kolom, jumlah }))

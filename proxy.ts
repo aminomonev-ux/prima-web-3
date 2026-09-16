@@ -66,6 +66,14 @@ function buildCSP(nonce: string): string {
 const PUBLIC_ROUTES = [
   '/login',
   '/api/auth/login',
+  // Q5 — kelima route di bawah SUDAH PENSIUN (D5–D8): semuanya memulangkan 410 Gone
+  // tanpa membaca body dan tanpa menyentuh basis data. Mereka batu nisan, bukan
+  // permukaan yang hidup.
+  //
+  // Tetap didaftar di sini dengan sengaja: 410 harus bisa dijangkau TANPA sesi. Kalau
+  // dikeluarkan, penanda halaman lama dan tautan di email lama menghasilkan lemparan
+  // ke /login — orangnya mengira harus masuk dulu, lalu mencoba lagi, dan tidak pernah
+  // mendapat jawaban bahwa fiturnya memang sudah tidak ada.
   '/api/auth/register',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',

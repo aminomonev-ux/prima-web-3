@@ -19,34 +19,17 @@ export const StrongPasswordSchema = z
   .regex(/[a-z]/, 'Password harus mengandung huruf kecil')
   .regex(/[0-9]/, 'Password harus mengandung angka');
 
-/**
- * Token dari email link — 64 char hex (crypto.randomBytes(32).toString('hex')).
- * Max 256 untuk tolerance, min 32 untuk reject input pendek/kosong.
- */
-export const EmailTokenSchema = z
-  .string()
-  .trim()
-  .min(32, 'Token tidak valid')
-  .max(256, 'Token terlalu panjang');
-
-/**
- * Username atau email — string trimmed, min 3, max 200.
- */
-export const UsernameOrEmailSchema = z
-  .string()
-  .trim()
-  .min(3, 'Masukkan username atau email')
-  .max(200, 'Input terlalu panjang');
-
 // ─── Body Schemas per Endpoint ──────────────────────────────────────────────
-
-/**
- * POST /api/auth/reset-password — consume token + set password baru.
- */
-export const ResetPasswordBodySchema = z.object({
-  token:       EmailTokenSchema,
-  newPassword: StrongPasswordSchema,
-});
+//
+// Q5 (2026-09-16) — DIBUANG dari sini: `EmailTokenSchema`, `UsernameOrEmailSchema`,
+// `ResetPasswordBodySchema`, `UsernameOrEmailBodySchema`, beserta kedua tipenya.
+// Keempatnya milik alur email (reset kata sandi, verifikasi, kirim ulang) yang sudah
+// pensiun di edisi intranet — route-nya memulangkan 410 Gone tanpa membaca body sama
+// sekali. Diperiksa: nol pemakai di seluruh `app`, `lib`, `components`, dan `scripts`.
+//
+// Bentuk kata sandinya TIDAK ikut dibuang: `StrongPasswordSchema` dipakai
+// `ChangePasswordBodySchema` di bawah, dan itu pintu yang justru paling menentukan —
+// di situlah kata sandi sementara dari Super Admin ditimpa.
 
 /**
  * POST /api/auth/change-password — pemakai mengganti password sendiri.
@@ -62,12 +45,3 @@ export const ChangePasswordBodySchema = z.object({
   path: ['konfirmasi'],
 });
 
-/**
- * POST /api/auth/forgot-password & /api/auth/resend-verification — minta link.
- */
-export const UsernameOrEmailBodySchema = z.object({
-  usernameOrEmail: UsernameOrEmailSchema,
-});
-
-export type ResetPasswordBody       = z.infer<typeof ResetPasswordBodySchema>;
-export type UsernameOrEmailBody     = z.infer<typeof UsernameOrEmailBodySchema>;

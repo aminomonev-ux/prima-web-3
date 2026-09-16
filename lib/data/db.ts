@@ -22,7 +22,15 @@ function createPool(): mysql.Pool {
     ssl:              process.env.MYSQL_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
     waitForConnections: true,
     connectionLimit:  10,
+    // Q3 — `queueLimit: 0` berarti antrean TIDAK dibatasi: permintaan ke-11 dan
+    // seterusnya menunggu, tidak ditolak. Itu sengaja dipertahankan — menolak lebih
+    // awal hanya memindahkan kegagalan ke layar orang — tapi menunggu tanpa batas
+    // waktu bukan menunggu, itu menggantung. `connectTimeout` yang memberinya ujung.
     queueLimit:       0,
+    // MySQL ada di mesin yang sama (Laragon); 10 detik itu kelonggaran besar untuk
+    // sambungan lokal, dan tetap jauh lebih baik daripada menggantung selamanya saat
+    // MySQL-nya mati atau sedang dimuat ulang.
+    connectTimeout:   10_000,
     timezone:         '+07:00',
   });
 }
@@ -70,7 +78,16 @@ async function execute(query: string, params: unknown[]): Promise<unknown[]> {
 
 // Embed integer langsung ke SQL (bukan ? parameter) — aman untuk LIMIT/OFFSET
 export function sqlInt(n: number): SqlFragment {
-  return new SqlFragment(String(Math.floor(Math.max(0, n))), []);
+  // Q1 — nilai bukan-angka jatuh ke 0, tidak diteruskan apa adanya.
+  //
+  // `Math.max(0, NaN)` itu NaN, `Math.floor(NaN)` juga NaN, dan `String(NaN)` =
+  // "NaN" — yang lalu disisipkan MENTAH ke SQL (itu memang guna `SqlFragment`).
+  // Hasilnya galat sintaks MySQL, jadi `parseInt` yang meleset di sebuah query
+  // string dijawab 500 padahal semestinya 400.
+  //
+  // Bukan lubang penyuntikan: nilainya sudah melewati `Number`, jadi tidak ada teks
+  // yang bisa diselundupkan lewat sini. Yang diperbaiki bentuk kegagalannya.
+  return new SqlFragment(String(Number.isFinite(n) ? Math.floor(Math.max(0, n)) : 0), []);
 }
 
 // Convert JS Date → MySQL DATETIME string `YYYY-MM-DD HH:MM:SS` pakai LOCAL TIME.
@@ -246,30 +263,21 @@ export async function withTransaction<T>(
   }
 }
 
+/**
+ * Q2 — SATU penyusun kueri, bukan dua.
+ *
+ * Sampai 2026-09-16 badan fungsi ini menyalin `buildQuery` di atas baris demi baris:
+ * perulangan `strings.forEach` yang sama, cabang `SqlFragment` yang sama, cabang larik
+ * dengan `NULL` untuk larik kosong yang sama, cabang `?` dengan `?? null` yang sama.
+ * Bedanya cuma bentuk balasan — `SqlFragment` di sini, `{ query, params }` di sana.
+ *
+ * Dua salinan aturan yang sama pasti mulai berbeda begitu salah satunya disunting
+ * (L78), dan di sini bedanya paling mahal: menambah penanganan tipe nilai baru (mis.
+ * `Date` atau `Buffer`) di satu tempat membuat `sql` dan `tx` berbeda pendapat tentang
+ * apa yang masuk ke basis data — tanpa satu galat pun, dan pada fungsi yang dipakai
+ * hampir setiap berkas di repo ini.
+ */
 export function sql(strings: TemplateStringsArray, ...values: SqlValue[]): SqlFragment {
-  let query = '';
-  const params: unknown[] = [];
-
-  strings.forEach((str, i) => {
-    query += str;
-    if (i < values.length) {
-      const val = values[i];
-      if (val instanceof SqlFragment) {
-        query += val.query;
-        params.push(...val.params);
-      } else if (Array.isArray(val)) {
-        if (val.length === 0) {
-          query += 'NULL';
-        } else {
-          query += val.map(() => '?').join(', ');
-          params.push(...val);
-        }
-      } else {
-        query += '?';
-        params.push(val ?? null);
-      }
-    }
-  });
-
+  const { query, params } = buildQuery(strings, values);
   return new SqlFragment(query, params);
 }

@@ -1,7 +1,19 @@
 // ─── PRIMA — Central Route Guard helpers ──────────────────────────────────────
-// STANDAR WAJIB untuk SEMUA route API (L60/L61): proxy.ts TIDAK menjaga /api/* per
-// role — enforcement ada di tiap route. Route baru yang lupa guard = lubang akses
-// instan. Pakai helper ini, JANGAN cuma cek getSession() (itu hanya "sudah login").
+// ATURANNYA WAJIB, HELPERNYA TIDAK (L60/L61): proxy.ts TIDAK menjaga /api/* per role —
+// penegakannya ada di TIAP route, dan route baru yang lupa menjaga = lubang akses
+// instan. Yang wajib itu penjagaannya; `getSession()` telanjang tidak pernah cukup,
+// sebab ia cuma menjawab "sudah login".
+//
+// Q4 (2026-09-16) — kepala berkas ini dulu berbunyi "STANDAR WAJIB untuk SEMUA route
+// API", dan angkanya tidak pernah mendekati itu: 2 route dari 147 memakai ketiga
+// helper di bawah. Sisanya memakai penjaga modul (`bludMati` + `bolehEditMenu`,
+// `usulanMati`, pabrik `buatGuardModul`, …) yang justru LEBIH ketat — mereka mengenal
+// izin per-menu dan sakelar pemeliharaan, dua hal yang tidak diketahui helper di sini.
+// Jadi yang keliru kalimatnya, bukan 145 route itu. Dokumen yang menjanjikan
+// keseragaman yang tidak ada membuat pembacanya mengira sedang melihat 145
+// pelanggaran, lalu berhenti memercayai kepala berkas berikutnya.
+//
+// Dipakai untuk modul yang penjagaannya memang sesederhana peran + `app_access`:
 //
 //   requireSession()              → wajib login (self/identity endpoint)
 //   requireRole([roles])          → login + role ∈ allowed (akses berbasis role murni)
