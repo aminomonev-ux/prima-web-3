@@ -79,7 +79,7 @@ export type Modul = {
   alias?: readonly string[]
 }
 
-import { MODUL_APPS_DATA } from './apps-data.mjs'
+import { MODUL_APPS_DATA, SAKELAR_LAIN_DATA } from './apps-data.mjs'
 
 /** Daftar modul — isinya di `apps-data.mjs`, tipenya ditegakkan di sini. */
 export const MODUL_APPS: readonly Modul[] = MODUL_APPS_DATA as readonly Modul[]
@@ -140,34 +140,60 @@ export function cekModul(kunci: string) {
  * sendiri di App Control. Ditaruh di sini, bukan dibiarkan di berkas route, supaya
  * "daftar seluruh sakelar" tetap satu — itu seluruh gunanya berkas ini.
  */
+type Handler = {
+  /** Nama handler yang diekspor route: 'GET', 'POST', … */
+  metode: readonly string[]
+}
+
+export type PengecualianHandler = Handler & {
+  /**
+   * Kenapa handler ini SENGAJA dibiarkan terbuka. Wajib diisi: pengecualian tanpa
+   * alasan tertulis tidak bisa dibedakan dari kelalaian, dan gate G memperlakukan
+   * keduanya berbeda.
+   */
+  sebab: string
+}
+
+export type BerkasDijaga = Handler & {
+  berkas: string
+  /** Nama fungsi penjaga yang harus muncul di badan handler — sepadan `penjagaApi.penanda`. */
+  penanda: readonly string[]
+  kecuali?: readonly PengecualianHandler[]
+}
+
 export type SakelarLain = {
   kunci: string
   label: string
   /**
-   * Berkas server yang benar-benar MEMBACA sakelar ini. `null` = tidak ada satu pun —
+   * Handler server yang benar-benar MEMBACA sakelar ini. `null` = tidak ada satu pun —
    * dan itu bukan kelalaian pengisian, itu fakta yang wajib kelihatan (lihat lencana
    * `terjaga` di bawah).
+   *
+   * Menyebut HANDLER, bukan berkas: gate G untuk modul sudah belajar itu di Tahap 14d,
+   * karena `route.ts` yang menjaga di GET saja tetap lulus selama pemeriksaannya
+   * per berkas. Daftarnya ditagih ke kode sungguhan oleh
+   * `scripts/test-killswitch-modul.mjs` — lencana TERJAGA yang tidak bisa dibuktikan
+   * justru kebalikan dari gunanya (T-1).
    */
-  dijagaDi: readonly string[] | null
+  dijagaDi: readonly BerkasDijaga[] | null
+  /**
+   * Direktori route yang dimiliki sakelar ini. Kalau diisi, gate G menuntut SETIAP
+   * `route.ts` di dalamnya terdaftar di `dijagaDi` — route yang lahir besok tanpa
+   * didaftar akan menggagalkan CI, bukan lolos diam-diam. Sub-sakelar yang menumpang
+   * direktori induknya mengosongkannya.
+   */
+  dirApi?: string
+  /**
+   * Sakelar induk. Mematikan induk ikut mematikan yang ini, tidak sebaliknya — sama
+   * seperti BLUD → Realisasi. Yang menegakkannya route-nya sendiri (memeriksa dua
+   * kunci sekaligus); di sini ia dinyatakan supaya layar Sakelar ikut tahu.
+   */
+  induk?: string
   catatan?: string
 }
 
-export const SAKELAR_LAIN: readonly SakelarLain[] = [
-  {
-    kunci: 'app_status_sentinel_bot',
-    label: 'RIMA (seluruh bot)',
-    // Satu-satunya yang membacanya `components/sentinel/SentinelProvider.tsx`, dan itu
-    // berjalan DI PERAMBAN. Mematikannya menyembunyikan tombol RIMA, tidak menutup
-    // apa pun di server — bentuk T-1 yang sama, di modul yang berbeda.
-    dijagaDi: null,
-    catatan: 'Belum terjaga. Hanya menyembunyikan tombol RIMA di layar; jalur datanya tidak ikut tertutup.',
-  },
-  {
-    kunci: 'app_status_rima_query',
-    label: 'RIMA Tanya Data',
-    dijagaDi: ['app/api/rima/query/route.ts', 'app/api/rima/summary/route.ts'],
-  },
-]
+/** Isinya di `apps-data.mjs`, tipenya ditegakkan di sini — pola yang sama dengan `MODUL_APPS`. */
+export const SAKELAR_LAIN: readonly SakelarLain[] = SAKELAR_LAIN_DATA as readonly SakelarLain[]
 
 /**
  * P12 — sakelar seluruh aplikasi.
@@ -246,6 +272,26 @@ export function kunciSakelarUntuk(modulKunci: string, menu?: string): string[] {
   if (!m?.sakelar) return []
   const sub = menu ? (m.subSakelar ?? []).filter((s) => s.menu.includes(menu)).map((s) => s.kunci) : []
   return [m.sakelar, ...sub]
+}
+
+const PETA_SAKELAR_LAIN = new Map(SAKELAR_LAIN.map((s) => [s.kunci, s]))
+
+/**
+ * Kunci sebuah sakelar lintas-modul BESERTA induknya — bentuk siap dioper ke
+ * `modulMati`. Sepadan `kunciSakelarUntuk` untuk modul.
+ *
+ * Berjenjangnya dihitung DI SINI, bukan diketik ulang di tiap route. Route yang lupa
+ * menyertakan induknya akan lolos `tsc` DAN lolos gate G — penjaganya memang ada,
+ * cuma kuncinya kurang satu — lalu diam-diam tetap hidup saat induknya dimatikan.
+ * Itu persis bentuk kelalaian yang seluruh registry ini ada untuk membuangnya.
+ *
+ * Kunci yang tidak dikenal dipulangkan apa adanya: yang menolak `?m=` karangan
+ * `infoSakelar`, dan menjawab larik kosong di sini akan membuat route BERHENTI
+ * menjaga apa pun hanya karena kuncinya salah ketik.
+ */
+export function kunciSakelarLain(kunci: string): string[] {
+  const induk = PETA_SAKELAR_LAIN.get(kunci)?.induk
+  return induk ? [induk, kunci] : [kunci]
 }
 
 /**
@@ -434,13 +480,15 @@ export const SAKELAR_INFO: readonly InfoSakelar[] = [
     kunci: s.kunci,
     label: s.label,
     modulKunci: null,
-    induk: null,
+    induk: s.induk ?? null,
     terjaga: s.dijagaDi !== null,
-    // Keduanya sakelar BACA: satu cuma dibaca peramban, satu lagi menjaga dua
-    // endpoint yang dua-duanya GET. Tidak ada tulisan untuk dibekukan.
+    // BEKU tetap tidak ditawarkan walau RIMA kini menjaga dua jalur tulis (POST
+    // feedback & lampir). "RIMA hanya-baca" bukan keadaan yang berarti bagi pemakai,
+    // dan tombol yang hidup tanpa akibat adalah cacat tersendiri (L79c). Tanya Data
+    // memang tak punya tulisan sama sekali — kedua endpointnya GET.
     bisaBeku: false,
     sebab: s.dijagaDi
-      ? 'Jalur datanya ikut tertutup saat sakelar ini diubah.'
+      ? 'Jalur datanya ikut tertutup saat sakelar ini diubah. Diperiksa otomatis setiap ada perubahan kode.'
       : (s.catatan ?? 'Belum terjaga. Tidak ada jalur data yang ikut tertutup.'),
   })),
 ]
@@ -452,10 +500,19 @@ export function infoSakelar(kunci: string): InfoSakelar | null {
   return PETA_SAKELAR.get(kunci) ?? null
 }
 
-/** Alasan sebuah sakelar tidak menawarkan BEKU — dipakai layar & API supaya keduanya
- *  menolak dengan kalimat yang sama. */
+/**
+ * Alasan sebuah sakelar tidak menawarkan BEKU — dipakai layar & API supaya keduanya
+ * menolak dengan kalimat yang sama.
+ *
+ * Ditulis ulang 2026-09-16. Bunyi lamanya "tidak punya data yang bisa diubah" benar
+ * selama kedua pemakainya endpoint baca; begitu sakelar bot RIMA ikut menjaga dua jalur
+ * tulis (POST feedback & lampir), kalimat itu jadi berbohong tentang salah satunya.
+ * Yang sekarang menyebut alasan yang berlaku untuk keduanya — BEKU itu untuk LAYAR yang
+ * dibuka sambil penyimpanannya ditahan — dan berhenti mengklaim "tidak berpengaruh apa
+ * pun", yang untuk sakelar bot tidak benar (readonly akan menutup POST-nya).
+ */
 export const SEBAB_TAK_BISA_BEKU =
-  'Bagian ini tidak punya data yang bisa diubah, jadi mode hanya baca tidak berpengaruh apa pun.'
+  'Mode hanya baca ditujukan untuk layar yang tetap bisa dibuka dan dicetak sambil penyimpanannya ditahan. Bagian ini bukan layar semacam itu, jadi keadaan itu tidak ditawarkan di sini.'
 
 /** Sakelar yang tombolnya ada tapi tidak menutup apa pun di server — P10 nomor 6. */
 export const SAKELAR_TANPA_PENJAGA: readonly InfoSakelar[] = SAKELAR_INFO.filter((s) => !s.terjaga)

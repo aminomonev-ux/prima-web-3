@@ -21,6 +21,7 @@ import fs from 'node:fs'
 import {
   SAKELAR_INFO, SAKELAR_LAIN, SAKELAR_TANPA_PENJAGA, KUNCI_SAKELAR, LABEL_SAKELAR,
   kunciPesan, kunciSampai, formatSampai, urlPemeliharaan, infoSakelar, MODUL_APPS,
+  kunciSakelarLain,
 } from '../lib/registry/apps'
 import {
   kuotaHampirPenuh, grantMubazir, izinMenuYatim, contohkan, MAKS_CONTOH,
@@ -90,18 +91,36 @@ cek('sub-sakelar Realisasi ikut terjaga oleh penjaga induknya',
 cek('Admin Panel memang tanpa sakelar (kunci yang tertinggal di dalam)',
   MODUL_APPS.find(m => m.kunci === 'admin')?.sakelar === null)
 
-// Sakelar yang penjaganya cuma hidup di peramban TIDAK boleh mengaku terjaga. Gate G
-// memindai `app/api/*` dan tidak akan pernah melihatnya — di situlah lencana ini
-// mengambil alih (P10 nomor 6).
-cek('app_status_sentinel_bot dilaporkan BELUM terjaga',
-  infoSakelar('app_status_sentinel_bot')?.terjaga === false)
+// 2026-09-16 — `app_status_sentinel_bot` dulu ditandai BELUM terjaga, dan itu bukan
+// kelalaian pengisian melainkan fakta: satu-satunya pembacanya SentinelProvider.tsx,
+// yang berjalan di peramban. Sekarang keempat jalur datanya dijaga di server, dan
+// klaimnya ditagih ke kode sungguhan oleh gate G pass 2 — bukan dipercaya dari isi
+// registri, karena lencana TERJAGA yang tidak bisa dibuktikan justru kebalikan
+// gunanya (T-1).
+cek('app_status_sentinel_bot dilaporkan terjaga',
+  infoSakelar('app_status_sentinel_bot')?.terjaga === true)
 cek('app_status_rima_query dilaporkan terjaga',
   infoSakelar('app_status_rima_query')?.terjaga === true)
+
+// Tidak ada lagi sakelar yang tombolnya ada tapi tidak menutup apa pun — kartu merah
+// P10 nomor 6 di Admin Panel jadi hijau karenanya, tanpa panelnya disentuh.
 cek('SAKELAR_TANPA_PENJAGA = himpunan yang lencananya merah',
-  SAKELAR_TANPA_PENJAGA.length === SAKELAR_INFO.filter(s => !s.terjaga).length
-  && SAKELAR_TANPA_PENJAGA.length > 0)
+  SAKELAR_TANPA_PENJAGA.length === SAKELAR_INFO.filter(s => !s.terjaga).length)
+cek('tidak ada sakelar yang tidak menutup apa pun', SAKELAR_TANPA_PENJAGA.length === 0)
 cek('tiap SAKELAR_LAIN menyatakan di mana ia dijaga (boleh null, tidak boleh lupa)',
   SAKELAR_LAIN.every(s => s.dijagaDi === null || s.dijagaDi.length > 0))
+
+// Berjenjangnya dihitung registry, bukan diketik ulang di route. Route yang menyertakan
+// kunci Tanya Data saja akan lolos tsc DAN lolos gate G — penjaganya memang ada, cuma
+// kuncinya kurang satu — lalu tetap hidup saat seluruh bot dimatikan.
+cek('Tanya Data membawa kunci induknya', (() => {
+  const k = kunciSakelarLain('app_status_rima_query')
+  return k.includes('app_status_sentinel_bot') && k.includes('app_status_rima_query')
+})())
+cek('sakelar bot TIDAK membawa kunci anaknya (berjenjang satu arah)',
+  kunciSakelarLain('app_status_sentinel_bot').join() === 'app_status_sentinel_bot')
+cek('kunci asing dipulangkan apa adanya, bukan larik kosong',
+  kunciSakelarLain('app_status_karangan').join() === 'app_status_karangan')
 
 // ── B · Kunci & format P6 ────────────────────────────────────────────────────
 console.log('\nB · kunci pesan/tenggat & pembacaannya')

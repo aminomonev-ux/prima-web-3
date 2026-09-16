@@ -27,7 +27,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { MODUL_APPS_DATA } from '../lib/registry/apps-data.mjs';
+import { MODUL_APPS_DATA, SAKELAR_LAIN_DATA } from '../lib/registry/apps-data.mjs';
 
 // Modul yang punya sakelar DAN punya route: itulah yang wajib menjaganya. Modul tanpa
 // sakelar (Admin Panel) sengaja tidak diperiksa — mengunci pintu dari dalam.
@@ -142,7 +142,94 @@ for (const m of MODUL) {
   }
 }
 
-console.log(`\n${diperiksa} route · ${diperiksaHandler} handler diperiksa.`);
+// ── Pass 2 · sakelar lintas-modul (SAKELAR_LAIN) ─────────────────────────────
+//
+// 2026-09-16. Pass di atas hanya memindai MODUL — dan itu sebabnya sakelar RIMA hidup
+// bertahun-tahun tanpa satu pun route memeriksanya sementara gate ini lulus terus.
+// Bukan karena pemeriksaannya lemah, tapi karena daftarnya tidak pernah sampai ke sini
+// (T-1, pelajaran B5 lewat pintu kedua).
+//
+// Bedanya dengan pass modul: sakelar lintas-modul boleh punya handler yang SENGAJA
+// dibiarkan terbuka (mis. GET & PATCH feedback = panel admin, yang justru dibutuhkan
+// saat botnya dimatikan). Yang tidak boleh handler yang tidak disebut sama sekali —
+// itulah satu-satunya beda antara pengecualian dan kelalaian, dan `sebab` yang wajib
+// diisi yang membuat bedanya tertulis, bukan diingat.
+let handlerLain = 0;
+
+for (const s of SAKELAR_LAIN_DATA) {
+  if (!s.dijagaDi) {
+    console.log(`X  ${s.label}: sakelar '${s.kunci}' tidak dijaga satu pun handler server.`);
+    console.log('     Isi `dijagaDi` di lib/registry/apps-data.mjs, atau sakelarnya hanya');
+    console.log('     menyembunyikan tombol di layar sementara jalur datanya tetap terbuka.');
+    gagal++;
+    continue;
+  }
+
+  const bolong = [];
+  for (const d of s.dijagaDi) {
+    if (!fs.existsSync(d.berkas)) {
+      bolong.push(`${d.berkas}  (berkas tidak ada — daftarnya basi)`);
+      continue;
+    }
+    const isi = fs.readFileSync(d.berkas, 'utf8');
+    if (RE_EKSPOR_LAIN.test(isi)) {
+      bolong.push(`${d.berkas}  (bentuk ekspor handler tidak dikenali)`);
+      continue;
+    }
+    const handler = potongHandler(isi);
+    if (handler.length === 0) {
+      bolong.push(`${d.berkas}  (tidak ada handler yang dikenali)`);
+      continue;
+    }
+
+    const dijaga = new Set(d.metode);
+    const dikecualikan = new Map();
+    for (const k of d.kecuali ?? []) {
+      for (const m of k.metode) dikecualikan.set(m, k.sebab);
+    }
+
+    for (const h of handler) {
+      handlerLain++;
+      if (dijaga.has(h.nama)) {
+        if (!d.penanda.some((t) => h.badan.includes(t)))
+          bolong.push(`${d.berkas}  ${h.nama}  (tidak menyebut ${d.penanda.map((t) => `'${t}'`).join(' / ')})`);
+      } else if (dikecualikan.has(h.nama)) {
+        if (!String(dikecualikan.get(h.nama) ?? '').trim())
+          bolong.push(`${d.berkas}  ${h.nama}  (dikecualikan tanpa \`sebab\`)`);
+      } else {
+        bolong.push(`${d.berkas}  ${h.nama}  (tidak disebut di \`metode\` maupun \`kecuali\`)`);
+      }
+    }
+
+    // Daftar yang menyebut handler tak berwujud lulus tanpa memeriksa apa pun — bentuk
+    // penjaga hampa yang sama dengan berkas yang tidak ada.
+    const ada = new Set(handler.map((h) => h.nama));
+    for (const m of [...dijaga, ...dikecualikan.keys()])
+      if (!ada.has(m)) bolong.push(`${d.berkas}  ${m}  (didaftar, tapi handlernya tidak ada)`);
+  }
+
+  // Sampai di sini yang diperiksa hanya berkas yang DIDAFTAR. Route RIMA yang tidak
+  // disebut sama sekali akan lolos tanpa satu pemeriksaan pun — persis bentuk lubang
+  // yang pass ini dibuat untuk menutupnya (ketahuan lewat uji mutasi, bukan lewat
+  // membaca ulang kodenya). Karena itu direktorinya disapu, bukan cuma daftarnya.
+  if (s.dirApi) {
+    const terdaftar = new Set(s.dijagaDi.map((d) => d.berkas));
+    for (const f of cariRoute(s.dirApi)) {
+      const rel = path.relative('.', f).replace(/\\/g, '/');
+      if (!terdaftar.has(rel)) bolong.push(`${rel}  (ada di ${s.dirApi} tapi tidak terdaftar di \`dijagaDi\`)`);
+    }
+  }
+
+  if (bolong.length > 0) {
+    console.log(`X  ${s.label}: ${bolong.length} masalah pada penjaga sakelar '${s.kunci}':`);
+    for (const b of bolong) console.log(`     ${b}`);
+    gagal++;
+  } else {
+    console.log(`OK ${s.label}: ${s.dijagaDi.length} berkas, tiap handler disebut — dijaga atau dikecualikan beralasan.`);
+  }
+}
+
+console.log(`\n${diperiksa} route · ${diperiksaHandler} handler modul + ${handlerLain} handler lintas-modul diperiksa.`);
 if (gagal > 0) {
   console.log(`GAGAL: ${gagal} modul bermasalah. Sakelar maintenance yang tidak menutup API sama saja dengan tidak ada.`);
   process.exit(1);

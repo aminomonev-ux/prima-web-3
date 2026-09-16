@@ -5,6 +5,7 @@ import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { redactPii } from '@/lib/sentinel/redact';
+import { rimaMati } from '../_guard';
 
 // /api/rima/feedback — #2 fail-log mining + RAL-2/3 active learning
 // (CONCEPT-rima-v4-learning.md). POST: telemetri belajar (UNANSWERED /
@@ -31,6 +32,14 @@ const isFeedbackAdmin = (role: string) => role === 'SUPER_ADMIN' || role === 'AD
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+
+  // Telemetri bot — ikut mati bersama botnya. GET & PATCH di bawah SENGAJA tidak:
+  // keduanya panel admin RIMA FEEDBACK, dan membaca pertanyaan yang gagal dijawab
+  // adalah cara memperbaiki RIMA. Sakelar pemeliharaan yang ikut membutakan panel
+  // perbaikan membuat pemeliharaannya mustahil (registry mencatat pengecualian ini
+  // beserta alasannya, dan gate G menagihnya).
+  const mati = await rimaMati(session.role);
+  if (mati) return mati;
 
   const rl = await checkRateLimit(`rima-feedback:${session.userId}`, 30, 60);
   if (!rl.allowed)

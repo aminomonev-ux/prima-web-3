@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { hasAppAccess } from '@/lib/security/guard';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { RIMA_PROVIDERS, isRimaApp } from '@/lib/rima/registry';
+import { rimaTanyaMati } from '../_guard';
 
 // GET /api/rima/query — Q&A data-aware Rima (CONCEPT-rima-v3-data-aware.md §11, F6a).
 // Dispatch multi-modul via registry (usulan/bba/pk). READ-ONLY (GET-only, tak menulis
@@ -14,25 +14,17 @@ import { RIMA_PROVIDERS, isRimaApp } from '@/lib/rima/registry';
 // di provider) → audit. Angka SELALU dari query template, bukan klien/LLM.
 export const runtime = 'nodejs';
 
-const QUERY_FLAG = 'app_status_rima_query';
-
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
 
-    // G30 — kill-switch FAIL-CLOSED tunggal: governs SEMUA Q&A data (semua app).
-    // Flag bukan 'online' (atau gagal dibaca) → 503, bukan diam-diam lanjut.
-    let flag: string | undefined;
-    try {
-      const rows = await sql`SELECT value FROM app_config WHERE \`key\` = ${QUERY_FLAG}`;
-      flag = (rows[0] as { value?: string } | undefined)?.value;
-    } catch {
-      return NextResponse.json({ ok: false, message: 'Fitur tanya-data sedang tidak tersedia.' }, { status: 503 });
-    }
-    if (flag !== 'online') {
-      return NextResponse.json({ ok: false, message: 'Fitur tanya-data sedang dimatikan admin.' }, { status: 503 });
-    }
+    // G30 — kill-switch FAIL-CLOSED. Sejak 2026-09-16 lewat `modulMati` di guard.ts,
+    // bukan kueri `app_config` tulisan tangan: dua salinan aturan yang sama adalah
+    // bentuk T1/T14, dan salinan di sini melewatkan sakelar SELURUH APLIKASI. Ikut
+    // menutup saat sakelar bot dimatikan (induk, lihat `_guard.ts`).
+    const mati = await rimaTanyaMati(session.role);
+    if (mati) return mati;
 
     // G24 (app-level) — allowlist deny-by-default. Default 'usulan' = kompat klien lama.
     const { searchParams: p } = req.nextUrl;

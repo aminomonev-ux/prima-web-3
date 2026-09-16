@@ -5,6 +5,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, TahunSchema } from '@/lib/data/kinerja-schemas';
 import { parsePendapatanBuffer } from '@/lib/data/kinerja-import';
 import { buildRealisasiImport } from '@/lib/data/kinerja-import-match';
+import { rimaMati } from '../_guard';
 
 // Lampirkan-di-chat Rima (CONCEPT §23, Opsi A): user unggah Excel di chat → server
 // DETEKSI jenis (belanja vs pendapatan) + PARSE, balikkan hasil. READ-ONLY: file
@@ -27,6 +28,8 @@ async function sniffMime(buf: Buffer): Promise<string | null> {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
+  const mati = await rimaMati(session.role);
+  if (mati) return mati;
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole)))
     return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
   const limited = await kinerjaRateLimit(session.userId, 'rima-lampir', 20);

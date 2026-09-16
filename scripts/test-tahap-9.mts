@@ -72,8 +72,11 @@ console.log('\nA2 · sakelar yang punya jalur tulis')
 cek('modul ber-route API bisa dibekukan', infoSakelar('app_status_blud')?.bisaBeku === true)
 cek('sub-sakelar mewarisi dari induknya',
   infoSakelar('app_status_blud_realisasi')?.bisaBeku === true)
-// Keduanya sakelar BACA. Menawarkan BEKU di situ = tombol tanpa akibat.
-cek('sakelar yang hanya dibaca peramban TIDAK bisa dibekukan',
+// RIMA menjaga dua jalur tulis (POST feedback & lampir), jadi alasannya bukan lagi
+// "tak ada tulisan" melainkan keputusan: "RIMA hanya-baca" bukan keadaan yang
+// berarti bagi pemakai, dan tombol yang hidup tanpa akibat adalah cacat tersendiri
+// (L79c). Tanya Data memang tak punya tulisan sama sekali — kedua endpointnya GET.
+cek('sakelar seluruh bot TIDAK menawarkan BEKU',
   infoSakelar('app_status_sentinel_bot')?.bisaBeku === false)
 cek('sakelar yang endpointnya GET saja TIDAK bisa dibekukan',
   infoSakelar('app_status_rima_query')?.bisaBeku === false)
@@ -266,8 +269,15 @@ cek('BEKU ditolak di API untuk sakelar tanpa jalur tulis',
 cek('…dengan kalimat yang sama dengan layar', rute.includes('SEBAB_TAK_BISA_BEKU'))
 cek('kalimat itu tinggal di SATU tempat',
   hitung(buangKomentar(baca('lib/registry/apps.ts')), 'export const SEBAB_TAK_BISA_BEKU') === 1)
+// Kalimatnya tidak boleh mengklaim "tidak ada data yang diubah" maupun "tidak
+// berpengaruh apa pun": sakelar bot RIMA menjaga dua jalur TULIS, jadi dua-duanya
+// berbohong tentangnya. Yang benar untuk kedua pemakainya alasan BENTUKnya — BEKU
+// itu untuk layar, dan keduanya bukan layar.
 cek('…dan memang menjelaskan sebabnya, bukan sekadar melarang',
-  SEBAB_TAK_BISA_BEKU.length > 30 && SEBAB_TAK_BISA_BEKU.includes('tidak punya data yang bisa diubah'))
+  SEBAB_TAK_BISA_BEKU.length > 30 && SEBAB_TAK_BISA_BEKU.includes('bukan layar semacam itu'))
+cek('…tanpa mengklaim yang tidak benar untuk sakelar bot',
+  !SEBAB_TAK_BISA_BEKU.includes('tidak punya data yang bisa diubah')
+  && !SEBAB_TAK_BISA_BEKU.includes('tidak berpengaruh apa pun'))
 // Dirujuk namanya, bukan disalin. Dua salinan kalimat yang sama pasti mulai berbeda
 // bunyi begitu salah satunya disunting (L78) — dan di sini bedanya akan muncul sebagai
 // layar dan API yang menolak dengan alasan berlainan.
