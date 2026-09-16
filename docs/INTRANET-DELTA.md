@@ -58,3 +58,32 @@ SEC-C1 (JWT throw kalau env kosong) · V3-5 (lockout login atomik) · V3-4 (kuot
 - **L-2**: endpoint `POST /api/admin/users` (create-user) diberi rate-limit (`admin-create:<uid>:<ip>`).
 - **CSP**: origin `challenges.cloudflare.com` dibuang dari `script/connect/frame-src` di `proxy.ts` (Turnstile mati → izin mati).
 - **Doc**: wording "fail-open" diselaraskan → fallback throttle in-memory per-proses (V5-AUTH-04) di README/.env.example/ratelimit.ts.
+
+---
+
+## D1 susulan — jalur kirim email DIBUANG, bukan cuma dimatikan (2026-09-16)
+
+D1 mematikan email lewat `EMAIL_PLAN.provider === 'None'`, dan pintu untuk
+menghidupkannya kembali sengaja ditinggalkan: `detectProvider()` membaca env, jadi
+mengisi `GMAIL_USER` + `GMAIL_APP_PASSWORD` sudah cukup untuk membuatnya berjalan lagi
+tanpa menyentuh kode.
+
+**Pintu itu sekarang tidak ada.** `nodemailer` dibuang dari dependensi beserta
+`createTransporter` dan blok pengirimnya.
+
+Alasannya bukan keamanan jalur itu. Pagar `provider === 'None'` adalah pernyataan
+PERTAMA di `sendEmail`, jadi sejak D1 tidak ada satu pun email yang pernah dikirim dan
+keempat advisory nodemailer — semuanya soal mengirim dan mengurai alamat — tidak pernah
+bisa dijangkau. Yang menentukan: paket yang tidak pernah dipanggil tetap muncul di
+`npm audit`, sehingga gate B menuntut versinya dinaikkan berulang-ulang demi nol
+manfaat. Nodemailer menyumbang empat advisory sekaligus dalam satu kali audit.
+
+Yang TETAP ada dan tidak disentuh: `sendEmail` sebagai permukaan, pencatatan ke
+`email_log`, kuota harian, sakelar per-peristiwa, panel Email di Admin Panel, dan
+kelima pemanggilnya di alur promosi peran. Semuanya berperilaku persis seperti sebelum
+commit ini — `sendEmail` tetap memulangkan tanpa mengirim apa pun.
+
+**Kalau suatu hari RSJD punya relay SMTP kantor**, yang perlu dikerjakan: pasang
+kembali satu paket pengirim dan tulis ulang blok kirim di `lib/services/email.ts`
+(ditandai komentar di tempatnya). Bukan pekerjaan besar, tapi bukan lagi "isi dua baris
+env" — dan itu yang harus diketahui orang yang membaca D1 di kemudian hari.

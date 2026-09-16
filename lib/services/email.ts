@@ -7,7 +7,6 @@
 // - Provider auto-detect (Gmail vs SendGrid vs None) — sementara baru Gmail
 // - Logging ke table email_log (audit trail per send + status SENT/FAILED/SKIPPED_TOGGLE)
 
-import nodemailer from 'nodemailer';
 import { sql, sqlInt } from '@/lib/data/db';
 
 const GMAIL_USER = process.env.GMAIL_USER ?? '';
@@ -110,17 +109,6 @@ async function logEmail(
   }
 }
 
-// ─── Transporter ────────────────────────────────────────────────────────────
-
-function createTransporter() {
-  return nodemailer.createTransport({
-    host:   'smtp.gmail.com',
-    port:   465,
-    secure: true,
-    auth:   { user: GMAIL_USER, pass: GMAIL_PASS },
-  });
-}
-
 // ─── Public sendEmail (unified) ─────────────────────────────────────────────
 
 interface SendEmailOpts {
@@ -172,34 +160,26 @@ export async function sendEmail(opts: SendEmailOpts): Promise<{ ok: boolean; err
     }
   }
 
-  // 3. Credentials check.
-  if (!GMAIL_USER || !GMAIL_PASS) {
-    console.warn('[Email] GMAIL_USER or GMAIL_APP_PASSWORD not set — skipping send');
-    await logEmail(to, subject, eventType, 'SKIPPED_NO_CREDS', 'Gmail credentials missing');
-    return { ok: false, error: 'Gmail credentials not configured' };
-  }
-
-  // 4. BCC ke admin (kalau ter-isi).
-  const bccAdmin = await getConfigStr('email_notif_recipient');
-  const bcc = bccAdmin && bccAdmin.includes('@') ? bccAdmin : undefined;
-
-  // 5. Send.
-  try {
-    const transporter = createTransporter();
-    await transporter.sendMail({
-      from:    `"PRIMA RSJD Amino" <${GMAIL_USER}>`,
-      to,
-      ...(bcc ? { bcc } : {}),
-      subject,
-      html,
-    });
-    await logEmail(to, subject, eventType, 'SENT');
-    return { ok: true };
-  } catch (e) {
-    console.error('[Email] Send failed:', e);
-    await logEmail(to, subject, eventType, 'FAILED', String(e).slice(0, 1000));
-    return { ok: false, error: String(e) };
-  }
+  // 3. JALUR KIRIM SUDAH TIDAK ADA (2026-09-16).
+  //
+  // `nodemailer` dibuang dari dependensi. Bukan karena ia berbahaya di sini — pagar
+  // `EMAIL_PLAN.provider === 'None'` di atas adalah pernyataan PERTAMA fungsi ini, jadi
+  // sejak D1 tidak ada satu pun email yang pernah dikirim dan keempat advisory-nya
+  // (semuanya soal mengirim & mengurai alamat) tidak pernah bisa dijangkau.
+  //
+  // Yang membuatnya dibuang: paket yang tidak pernah dipanggil tetap muncul di
+  // `npm audit`, jadi gate B menuntut versinya dinaikkan berulang-ulang demi nol
+  // manfaat — dan nodemailer menyumbang EMPAT advisory sekaligus di satu kali audit.
+  // Sekali dibuang, permukaannya hilang untuk seterusnya.
+  //
+  // Yang IKUT HILANG, dan ini disengaja: dulu mengisi `GMAIL_USER` +
+  // `GMAIL_APP_PASSWORD` cukup untuk menghidupkan email lagi tanpa menyentuh kode.
+  // Pintu itu sudah tidak ada. Kalau suatu hari RSJD punya relay SMTP, yang perlu
+  // dikerjakan: pasang kembali satu paket dan tulis ulang blok ini. Sisanya —
+  // pencatatan, kuota, sakelar per-peristiwa, panel Email di Admin Panel — tetap utuh
+  // dan tidak perlu disentuh. Dicatat juga di docs/INTRANET-DELTA.md.
+  await logEmail(to, subject, eventType, 'SKIPPED_NO_PROVIDER', 'Jalur kirim dibuang (intranet edition)');
+  return { ok: false, error: 'Pengiriman email tidak tersedia di edisi intranet.' };
 }
 
 // ─── Role Promotion Ladder email templates (migration 037) ──────────────────
