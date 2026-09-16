@@ -37,16 +37,41 @@ fs.writeFileSync(path.join(outDir, 'stub-auth.js'),
 fs.writeFileSync(path.join(outDir, 'stub-ratelimit.js'),
   'exports.checkRateLimit = async () => ({ allowed: true });\n')
 
+// Kompilasi lewat tsconfig sementara, BUKAN daftar berkas di baris perintah.
+//
+// Sebabnya alias `@/`. `guard.ts` menjangkau registry lewat `@/lib/registry/apps`, dan
+// tsc yang dipanggil tanpa tsconfig tidak bisa meresolusi alias itu — berkasnya tidak
+// pernah masuk program, `apps.js` tidak pernah terbit, sementara hook
+// `Module._resolveFilename` di bawah tetap menunjuk ke situ. Menambahkan berkasnya satu
+// per satu ke baris perintah cuma memindahkan galatnya ke berkas berikutnya
+// (`waktu-wib`, lalu yang lain lagi): yang kurang bukan daftarnya, tapi PETA ALIASNYA.
+//
+// Gejalanya baru muncul saat `node_modules/.cache` kosong. Selama cache lama masih ada
+// — dari zaman sebelum guard.ts mengimpor registry — berkas itu tetap di tempatnya dan
+// tesnya lulus untuk alasan yang salah. Ketahuan sesudah `npm install` menghapus cache.
+const tsconfigUji = path.join(outDir, 'tsconfig.uji.json')
+fs.writeFileSync(tsconfigUji, JSON.stringify({
+  compilerOptions: {
+    outDir, rootDir: repo, baseUrl: repo, paths: { '@/*': ['./*'] },
+    module: 'commonjs', target: 'es2020', moduleResolution: 'node',
+    esModuleInterop: true, skipLibCheck: true, noEmitOnError: false, declaration: false,
+  },
+  files: [
+    'lib/security/guard.ts', 'lib/blud/permintaan-data.ts', 'lib/data/db.ts',
+    'lib/data/locks.ts', 'lib/shared/uuid.ts', 'lib/registry/apps.ts',
+  ].map((f) => path.join(repo, f)),
+}, null, 2))
+
 try {
-  execSync(
-    `npx tsc "${path.join(repo, 'lib/security/guard.ts')}"`
-    + ` "${path.join(repo, 'lib/blud/permintaan-data.ts')}" "${path.join(repo, 'lib/data/db.ts')}"`
-    + ` "${path.join(repo, 'lib/data/locks.ts')}" "${path.join(repo, 'lib/shared/uuid.ts')}"`
-    + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
-    + ' --esModuleInterop --skipLibCheck --moduleResolution node',
-    { cwd: repo, stdio: 'pipe' },
-  )
-} catch { /* impor `@/...` tak ter-resolve saat compile — .js tetap ditulis */ }
+  execSync(`npx tsc -p "${tsconfigUji}"`, { cwd: repo, stdio: 'pipe' })
+} catch { /* galat tipe tak menghalangi emit — .js tetap ditulis */ }
+
+// JavaScript polos; tsc tidak menyalinnya, sedangkan `apps.js` memanggilnya lewat
+// jalur relatif, jadi ia harus duduk di sebelahnya.
+fs.copyFileSync(
+  path.join(repo, 'lib/registry/apps-data.mjs'),
+  path.join(outDir, 'lib/registry/apps-data.mjs'),
+)
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {
@@ -155,6 +180,25 @@ try {
     }
   }
   periksa('Semua pemanggil mengoper session.role', lalai.length === 0, lalai.join(' · '))
+
+  // A6 — hapus versi anggaran wajib menghormati izin menu, bukan cuma peran.
+  // `bolehBukaMenu` lulus untuk LIHAT maupun EDIT, sedangkan `canHapusVersi` menimbang
+  // PERAN. Gabungan keduanya membiarkan seorang ADMIN yang izin menunya sengaja
+  // diturunkan jadi LIHAT lewat perkecualian per-orang tetap menghapus anggaran
+  // setahun — padahal menyimpan satu sel pun ditolak. tsc tidak menangkapnya:
+  // kedua fungsi bertanda tangan sama dan dua-duanya memulangkan boolean.
+  const hapusLonggar = []
+  for (const [berkas, menu] of [['dpa/route.ts', 'dpa'], ['pergeseran/route.ts', 'pergeseran']]) {
+    const isi = fs.readFileSync(path.join(repo, 'app', 'api', 'blud', berkas), 'utf8')
+    const i = isi.indexOf('canHapusVersi(session.role)')
+    if (i < 0) { hapusLonggar.push(`${berkas}: canHapusVersi hilang`); continue }
+    // Jendela SEBELUM pengetat peran: di situlah izin menu diperiksa.
+    const jendela = isi.slice(Math.max(0, i - 900), i)
+    if (!jendela.includes(`bolehEditMenu(session.userId, session.role, '${menu}')`))
+      hapusLonggar.push(`${berkas}: DELETE tidak lewat bolehEditMenu`)
+  }
+  periksa('Hapus versi menghormati izin menu (bukan cuma peran)',
+    hapusLonggar.length === 0, hapusLonggar.join(' · '))
 
   console.log('\n── R1: tolak permintaan tidak boleh bilang sukses palsu ──')
   await sql`DELETE FROM blud_permintaan WHERE tahun_anggaran = ${TAHUN}`

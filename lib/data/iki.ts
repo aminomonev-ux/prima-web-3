@@ -428,27 +428,48 @@ export async function snapshotVersi(
 ): Promise<void> {
   const detail = await getDokumen(dokumenId);
   if (!detail) return;
-  const next = await queryOne<{ n: number }>(
-    sql`SELECT COALESCE(MAX(versi_ke), 0) + 1 AS n FROM iki_versi WHERE dokumen_id = ${dokumenId}`,
-  );
-  await execWrite(sql`
-    INSERT INTO iki_versi (dokumen_id, versi_ke, pemicu, snapshot, created_by)
-    VALUES (${dokumenId}, ${next?.n ?? 1}, ${pemicu}, ${JSON.stringify(detail)}, ${userId})
-  `);
-  // L66 — `sqlInt` WAJIB di LIMIT. mysql2 menolak `LIMIT ?` pada prepared statement
-  // (ER_WRONG_ARGUMENTS); diuji ke MySQL yang dipakai, bukan diduga. Sampai
-  // 2026-09-16 baris ini satu-satunya `LIMIT ${...}` telanjang di seluruh repo, dan
-  // akibatnya senyap sempurna: INSERT di atas berhasil, DELETE ini SELALU melempar,
-  // dan lemparannya ditelan try/catch best-effort di route finalize. Retensinya tidak
-  // pernah jalan sekali pun dan `iki_versi` tumbuh tanpa batas tanpa satu gejala.
-  await execWrite(sql`
-    DELETE FROM iki_versi WHERE dokumen_id = ${dokumenId} AND id NOT IN (
-      SELECT id FROM (
-        SELECT id FROM iki_versi WHERE dokumen_id = ${dokumenId}
-        ORDER BY versi_ke DESC LIMIT ${sqlInt(VERSI_RETENTION)}
-      ) keep
-    )
-  `);
+
+  // L8/CQ-01 — memberi nomor lalu menyisipkannya itu DUA pernyataan, jadi keduanya
+  // wajib di dalam satu transaksi dan di bawah satu kunci. Yang dikunci baris
+  // DOKUMENNYA, bukan baris versinya: `SELECT … FOR UPDATE` pada baris yang belum ada
+  // tidak mengunci apa pun (L69-a), dan dokumen yang belum punya versi justru keadaan
+  // paling mungkin untuk dua klik berbarengan. Baris dokumennya pasti ada —
+  // `getDokumen` di atas baru saja membacanya.
+  //
+  // Tanpa ini akibatnya BUKAN dua baris ber-`versi_ke` sama: `uk_iki_versi
+  // (dokumen_id, versi_ke)` di skema sudah menolaknya (diperiksa di MySQL, indeksnya
+  // memang terpasang). Yang terjadi INSERT kedua melempar ER_DUP_ENTRY, lalu
+  // lemparannya ditelan try/catch best-effort di route finalize — jadi sebuah
+  // snapshot LENYAP tanpa ada yang tahu, sementara orangnya mengira versinya
+  // tersimpan. Jendelanya baru benar-benar terbuka sejak retensi di bawah berhenti
+  // selalu melempar (L66).
+  await withTransaction(async ({ tx }) => {
+    await tx`SELECT id FROM iki_dokumen WHERE id = ${dokumenId} FOR UPDATE`;
+    const mx = await tx`
+      SELECT COALESCE(MAX(versi_ke), 0) + 1 AS n FROM iki_versi WHERE dokumen_id = ${dokumenId}
+    ` as Array<{ n: number }>;
+    const versiKe = Number(mx[0]?.n ?? 1);
+
+    await tx`
+      INSERT INTO iki_versi (dokumen_id, versi_ke, pemicu, snapshot, created_by)
+      VALUES (${dokumenId}, ${versiKe}, ${pemicu}, ${JSON.stringify(detail)}, ${userId})
+    `;
+
+    // L66 — `sqlInt` WAJIB di LIMIT. mysql2 menolak `LIMIT ?` pada prepared statement
+    // (ER_WRONG_ARGUMENTS); diuji ke MySQL yang dipakai, bukan diduga. Sampai
+    // 2026-09-16 baris ini satu-satunya `LIMIT ${...}` telanjang di seluruh repo, dan
+    // akibatnya senyap sempurna: INSERT di atas berhasil, DELETE ini SELALU melempar,
+    // dan lemparannya ditelan try/catch best-effort di route finalize. Retensinya
+    // tidak pernah jalan sekali pun dan `iki_versi` tumbuh tanpa satu gejala.
+    await tx`
+      DELETE FROM iki_versi WHERE dokumen_id = ${dokumenId} AND id NOT IN (
+        SELECT id FROM (
+          SELECT id FROM iki_versi WHERE dokumen_id = ${dokumenId}
+          ORDER BY versi_ke DESC LIMIT ${sqlInt(VERSI_RETENTION)}
+        ) keep
+      )
+    `;
+  });
 }
 
 /** List riwayat metadata-only (anti-lemot — snapshot JSON tidak ikut). */

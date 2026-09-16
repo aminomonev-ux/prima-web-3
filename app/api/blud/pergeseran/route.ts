@@ -401,7 +401,15 @@ export async function DELETE(req: NextRequest) {
 
   const mati = await bludMati(session.role)
   if (mati) return mati
-  if (!(await bolehBukaMenu(session.userId, session.role, 'pergeseran'))) return forbidden()
+  // A6 — `bolehEditMenu`, BUKAN `bolehBukaMenu`. Yang kedua lulus untuk LIHAT maupun
+  // EDIT, sedangkan `canHapusVersi` menimbang PERAN, bukan izin menunya. Gabungan
+  // keduanya membiarkan seorang ADMIN yang izin menu pergeseran-nya sengaja diturunkan jadi
+  // LIHAT lewat perkecualian per-orang (`getPenimpa` di lib/data/menu-access.ts) tetap
+  // menghapus versi anggaran setahun — padahal menyimpan satu sel pun ditolak. Aksi
+  // paling merusak di modul ini satu-satunya yang tidak menghormati "baca saja".
+  // `canHapusVersi` TETAP berdiri sesudahnya sebagai lapis kedua (S5); yang berubah
+  // cuma bahwa ia kini berdiri DI ATAS izin menu, bukan berdampingan dengannya.
+  if (!(await bolehEditMenu(session.userId, session.role, 'pergeseran'))) return tolakEdit('pergeseran')
   // S5: sama dengan jalur DPA — akses modul membuka pintu, bukan wewenang hapus.
   if (!canHapusVersi(session.role)) {
     return NextResponse.json({
