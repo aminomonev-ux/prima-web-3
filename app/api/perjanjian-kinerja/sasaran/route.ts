@@ -11,9 +11,11 @@ import {
   PkQuerySchema,
   SasaranBodySchema,
 } from '@/lib/data/pk-schemas';
+import { pesanTolakan } from '@/lib/shared/pk-kolom';
 import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, pkMati } from '../_guard';
 
 export const dynamic = 'force-dynamic';
+
 
 type SasaranRow = {
   id: number;
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = SasaranBodySchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
+    return NextResponse.json({ ok: false, message: pesanTolakan(parsed.error.issues[0]) }, { status: 400 });
   }
   const { tahun, rows } = parsed.data;
 

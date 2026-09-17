@@ -14,6 +14,7 @@ import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit, TahunSchema } from '@/lib/data/pk-schemas';
+import { fmtTarget } from '@/lib/shared/target-renaksi';
 import { bolehEditMenu, tolakEdit, pkMati } from '../../_guard';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,10 @@ type RaSrc = {
   sub_kegiatan: string | null;
   indikator: string;
   satuan: string;
-  target_tahunan: number;
+  // DECIMAL(14,2) sejak migration-043 — mysql2 memulangkannya sebagai STRING demi
+  // menjaga presisi. Ditulis apa adanya di sini supaya tidak ada lagi yang mengira
+  // nilainya sudah berupa angka; `fmtTarget` yang mengubahnya.
+  target_tahunan: string;
 };
 
 type PkSasaranImportRow = {
@@ -43,13 +47,6 @@ type PkSasaranImportRow = {
   indikator_subkegiatan: string | null;
   target_subkegiatan: string | null;
 };
-
-/** Format target: "Persen" → "100%", lainnya → "12 Dokumen". Sync dengan screenshot Master Sasaran. */
-function fmtTarget(n: number, satuan: string): string {
-  const sat = satuan.trim();
-  if (/^persen$/i.test(sat) || sat === '%') return `${n}%`;
-  return `${n} ${sat}`.trim();
-}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();

@@ -97,14 +97,18 @@ export const StatusPkEnum = z.enum(['DRAFT','FINAL']);
  */
 export const SasaranBodySchema = z.object({
   tahun: TahunSchema,
+  // Angkanya CERMIN `docs/schema-mysql.sql`, bukan pilihan sendiri — kalau kolomnya
+  // dilebarkan lagi, daftar ini wajib ikut. Tiga kolom sasaran naik ke 500 mengikuti
+  // `rencana_aksi.outcome_*` yang jadi sumber tombol Import Renaksi
+  // (migration-pk-sasaran-lebar.sql); kolom target tetap 255, isinya "765 Orang".
   rows: z.array(z.object({
-    program:                z.string().trim().min(1, 'Program wajib').max(255),
+    program:                z.string().trim().min(1, 'Program wajib').max(500),
     indikator_program:      z.string().trim().max(500).optional().nullable(),
     target_program:         z.string().trim().max(255).optional().nullable(),
-    kegiatan:               z.string().trim().max(255).optional().nullable(),
+    kegiatan:               z.string().trim().max(500).optional().nullable(),
     indikator_kegiatan:     z.string().trim().max(500).optional().nullable(),
     target_kegiatan:        z.string().trim().max(255).optional().nullable(),
-    subkegiatan:            z.string().trim().max(255).optional().nullable(),
+    subkegiatan:            z.string().trim().max(500).optional().nullable(),
     indikator_subkegiatan:  z.string().trim().max(500).optional().nullable(),
     target_subkegiatan:     z.string().trim().max(255).optional().nullable(),
   })).min(1, 'Minimal 1 baris').max(200, 'Maks 200 baris per batch'),

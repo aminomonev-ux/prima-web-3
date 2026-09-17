@@ -7,6 +7,7 @@
 //   Target TW I-IV ← q1..q4_target
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/data/db';
+import { fmtTarget } from '@/lib/shared/target-renaksi';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ImportRenaksiQuerySchema, ikiRateLimit } from '@/lib/data/iki-schemas';
 import { guard } from '../_guard';
@@ -47,12 +48,6 @@ export type IkiRenaksiImportRow = {
   target_tw: [string, string, string, string];
 };
 
-/** Format target: "Persen"/"%" → "100%", lainnya → "12 Dokumen". Sync fmtTarget PK. */
-function fmtTarget(n: number, satuan: string): string {
-  const sat = satuan.trim();
-  if (/^persen$/i.test(sat) || sat === '%') return `${n}%`;
-  return `${n} ${sat}`.trim();
-}
 
 export async function GET(req: NextRequest) {
   const g = await guard();
@@ -102,12 +97,12 @@ export async function GET(req: NextRequest) {
       parent,
       indikator: r.indikator,
       jenis: r.jenis,
-      target_tahunan: fmtTarget(Number(r.target_tahunan), r.satuan),
+      target_tahunan: fmtTarget((r.target_tahunan), r.satuan),
       target_tw: [
-        fmtTarget(Number(r.q1_target), r.satuan),
-        fmtTarget(Number(r.q2_target), r.satuan),
-        fmtTarget(Number(r.q3_target), r.satuan),
-        fmtTarget(Number(r.q4_target), r.satuan),
+        fmtTarget((r.q1_target), r.satuan),
+        fmtTarget((r.q2_target), r.satuan),
+        fmtTarget((r.q3_target), r.satuan),
+        fmtTarget((r.q4_target), r.satuan),
       ],
     };
   });

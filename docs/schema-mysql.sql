@@ -1238,13 +1238,15 @@ CREATE INDEX idx_uploaded_files_user ON uploaded_files (uploaded_by);
 -- ─── pk_sasaran (Master Sasaran — referensi indikator + target) ───────────────
 CREATE TABLE IF NOT EXISTS pk_sasaran (
   id                       INT AUTO_INCREMENT PRIMARY KEY,
-  program                  VARCHAR(255) NOT NULL,
+  -- Tiga kolom sasaran 500, mengikuti `rencana_aksi.outcome_*` yang disalin tombol
+  -- Import Renaksi ke sini (migration-pk-sasaran-lebar.sql). Kolom target tetap 255.
+  program                  VARCHAR(500) NOT NULL,
   indikator_program        VARCHAR(500),
   target_program           VARCHAR(255),
-  kegiatan                 VARCHAR(255),
+  kegiatan                 VARCHAR(500),
   indikator_kegiatan       VARCHAR(500),
   target_kegiatan          VARCHAR(255),
-  subkegiatan              VARCHAR(255),
+  subkegiatan              VARCHAR(500),
   indikator_subkegiatan    VARCHAR(500),
   target_subkegiatan       VARCHAR(255),
   tahun                    VARCHAR(4) NOT NULL,
