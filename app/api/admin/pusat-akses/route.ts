@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
       }
       if (p.get('garisWaktu')) {
         // `bulan` ikut dipulangkan, bukan cuma barisnya: `audit_log` dipangkas cron
-        // retensi 12 bulan, jadi garis waktunya PUNYA UJUNG — dan layar yang tidak
+        // retensi (perubahan akses: 5 tahun), jadi garis waktunya PUNYA UJUNG — dan layar yang tidak
         // mengatakannya membiarkan orang menyimpulkan "tidak ada catatan" dari
         // "catatannya sudah dibuang" (§12 P8).
         return NextResponse.json({

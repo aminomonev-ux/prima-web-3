@@ -8,6 +8,15 @@ export const POLA_KUNCI_PAGU_BLUD = /^pagu_blud_(\d{4})$/;
 
 export const POLA_TAHUN_ANGGARAN = /^\d{4}$/;
 
+/**
+ * Keputusan pemilik aplikasi (30 Sep): angka pagu BLUD boleh DILIHAT semua pengguna; yang
+ * boleh MENGUBAH hanya peran di bawah. Dipakai `aturanConfig` (pagar API) DAN daftar panel
+ * Usulan (`getPanels` + cerminnya di Sentinel), supaya tombol dan pagarnya satu sumber.
+ */
+export const PERAN_PENGUBAH_PAGU: readonly string[] = ['SUPER_ADMIN', 'ADMIN', 'PROGRAM'];
+
+export const bolehUbahPagu = (role: string): boolean => PERAN_PENGUBAH_PAGU.includes(role);
+
 /** Kunci-kunci `pagu_blud_{tahun}` dari peta config → { tahun: nominal }. */
 export function paguPerTahunDariConfig(cfg: Record<string, string>): Record<string, number> {
   const hasil: Record<string, number> = {};

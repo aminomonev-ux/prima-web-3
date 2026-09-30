@@ -7,6 +7,7 @@
 // sidebar berubah, update di sini juga (khususnya Usulan yang role-gated).
 import type { Role } from '@/types'
 import { BIDANG_ROLES, SUBBIDANG_ROLES } from '@/lib/constants'
+import { bolehUbahPagu } from '@/lib/shared/pagu-blud'
 
 const isBidang = (r: Role | null) => !!r && (BIDANG_ROLES as readonly string[]).includes(r)
 const isSub    = (r: Role | null) => !!r && (SUBBIDANG_ROLES as readonly string[]).includes(r)
@@ -26,7 +27,7 @@ function usulanPanels(role: Role | null): string[] {
   if (role === 'ADMIN')       return ['dashboard', 'semua', 'data-admin', 'rekap', 'kelola-user', 'batas-waktu', 'set-pagu', 'hapus-usulan']
   if (role === 'ADMIN_KASUBAG' || role === 'ADMIN_KABAG') return ['dashboard', 'antrian', 'data-usulan', 'rekap-verif']
   if (isBidang(role)) return ['dashboard', 'bidang-antrian', 'bidang-data']
-  if (isSub(role))    return ['dashboard', 'buat', 'milik', 'tracking']
+  if (isSub(role))    return bolehUbahPagu(role!) ? ['dashboard', 'buat', 'milik', 'tracking', 'set-pagu'] : ['dashboard', 'buat', 'milik', 'tracking']
   return ['dashboard']
 }
 

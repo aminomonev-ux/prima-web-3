@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { BIDANG_ROLES, SUBBIDANG_ROLES, SATUAN_OPTIONS } from '@/lib/constants';
 import { safeRandomUUID } from '@/lib/shared/uuid';
-import { statusPagu } from '@/lib/shared/pagu-blud';
+import { statusPagu, bolehUbahPagu } from '@/lib/shared/pagu-blud';
 import type { Role } from '@/types';
 import {
   STATUS_BADGE, STATUS_GROUPS, fmtRp,
@@ -48,7 +48,8 @@ export function getPanels(role: Role): Panel[] {
   if (role === 'ADMIN')       return ['dashboard','semua','data-admin','rekap','kelola-user','batas-waktu','set-pagu','hapus-usulan'];
   if (role === 'ADMIN_KASUBAG' || role === 'ADMIN_KABAG') return ['dashboard','antrian','data-usulan','rekap-verif'];
   if (isBidang)    return ['dashboard','bidang-antrian','bidang-data'];
-  if (isSubBidang) return ['dashboard','buat','milik','tracking'];
+  // Pagu BLUD diubah SUPER_ADMIN, ADMIN, dan PROGRAM (keputusan 30 Sep, `PERAN_PENGUBAH_PAGU`).
+  if (isSubBidang) return bolehUbahPagu(role) ? ['dashboard','buat','milik','tracking','set-pagu'] : ['dashboard','buat','milik','tracking'];
   return ['dashboard'];
 }
 

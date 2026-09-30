@@ -5,7 +5,7 @@ import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ADMIN_ROLES } from '@/lib/constants';
-import { PUBLIC_CONFIG_KEYS, aturanConfig } from '@/lib/data/admin-schemas';
+import { aturanConfig, bolehTulisConfig, configTerbuka } from '@/lib/data/admin-schemas';
 
 
 export async function GET() {
@@ -17,12 +17,13 @@ export async function GET() {
     // tidak dijalankan di hot read-path.
     const rows = await sql`SELECT \`key\`, value FROM app_config`;
     const cfg: Record<string, string> = {};
-    // SDL-M13: filter pagu_blud_{tahun} (dan key sensitif lain di masa depan) untuk non-admin.
-    // Sibling POST sudah ADMIN-only; konsisten dengan defense-in-depth (C-SEC-1).
-    // GET tetap dipanggil oleh semua user untuk countdown deadline (batas_*).
+    // SDL-M13: non-admin hanya menerima kunci terbuka (`configTerbuka`) — sejak 30 Sep termasuk
+    // pagu BLUD, yang boleh dilihat semua pengguna (keputusan pemilik aplikasi).
+    // Penulisnya dijaga per kunci di POST (`aturanConfig`). GET dipanggil semua user untuk
+    // hitung mundur batas pengajuan (batas_*) dan batang pagu.
     const isAdmin = (ADMIN_ROLES as readonly string[]).includes(session.role);
     for (const r of rows as { key: string; value: string }[]) {
-      if (isAdmin || PUBLIC_CONFIG_KEYS.has(r.key)) {
+      if (isAdmin || configTerbuka(r.key)) {
         cfg[r.key] = r.value;
       }
     }
@@ -45,8 +46,7 @@ export async function POST(req: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
 
-    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(session.role);
-    if (!isAdmin) return NextResponse.json({ ok: false, message: 'Akses ditolak.' }, { status: 403 });
+    if (!bolehTulisConfig(session.role)) return NextResponse.json({ ok: false, message: 'Akses ditolak.' }, { status: 403 });
 
     const body   = await req.json();
     const parsed = updateSchema.safeParse(body);
@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
     // I3: daftar kunci + bentuk nilai + siapa yang boleh — satu tempat (`aturanConfig`).
     const aturan = aturanConfig(key);
     if (!aturan) return NextResponse.json({ ok: false, message: 'Key tidak valid.' }, { status: 400 });
-    if (aturan.hanyaSuperAdmin && session.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ ok: false, message: 'Hanya Super Admin yang dapat mengubah pengaturan ini.' }, { status: 403 });
+    if (!aturan.peran.includes(session.role)) {
+      return NextResponse.json({ ok: false, message: 'Anda tidak berwenang mengubah pengaturan ini.' }, { status: 403 });
     }
     const nilaiSah = aturan.nilai.safeParse(value);
     if (!nilaiSah.success) return NextResponse.json({ ok: false, message: nilaiSah.error.issues[0]?.message ?? 'Nilai tidak valid.' }, { status: 400 });

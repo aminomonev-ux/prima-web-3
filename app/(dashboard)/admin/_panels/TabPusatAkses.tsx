@@ -901,8 +901,8 @@ export function TabPusatAkses(
                       pada pertanyaan yang paling penting. */}
                   <div className="ap-pa-catatan">
                     <Info size={13}/>
-                    Jejak audit dipangkas otomatis setiap {garisBulan} bulan. Yang lebih
-                    lama dari itu memang sudah tidak ada, bukan berarti tidak pernah terjadi.
+                    Jejak perubahan akses yang lebih tua dari {garisBulan % 12 === 0 ? `${garisBulan / 12} tahun` : `${garisBulan} bulan`} dipangkas
+                    otomatis. Yang lebih lama dari itu memang sudah tidak ada, bukan berarti tidak pernah terjadi.
                   </div>
 
                   {garis.length === 0 ? (

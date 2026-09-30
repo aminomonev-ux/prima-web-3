@@ -7,6 +7,7 @@ import { withTransaction, sqlInt } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { verifyCronSecret } from '@/lib/security/cron-auth';
 import { SESSION_DURATION_HOURS } from '@/lib/constants';
+import { pangkasAuditLog } from '@/lib/security/retensi-audit';
 
 export async function POST(req: NextRequest) {
   // V4K-1: cron secret guard constant-time.
@@ -16,6 +17,7 @@ export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const result = {
     audit_log_deleted: 0,
+    audit_log_ip_dikosongkan: 0,
     user_sessions_ghost_invalidated: 0,
     user_sessions_deleted: 0,
     notifications_deleted: 0,
@@ -37,8 +39,11 @@ export async function POST(req: NextRequest) {
       ` as unknown as Array<{ affectedRows: number }>;
       result.user_sessions_ghost_invalidated = r0[0]?.affectedRows ?? 0;
 
-      const r1 = await tx`DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL 12 MONTH` as unknown as Array<{ affectedRows: number }>;
-      result.audit_log_deleted = r1[0]?.affectedRows ?? 0;
+      // I1 (keputusan 30 Sep): retensi per jenis peristiwa — perubahan data & akses 5 tahun
+      // (IP/peramban dikosongkan sesudah 12 bulan), sisanya 12 bulan. lib/security/retensi-audit.ts
+      const audit = await pangkasAuditLog(tx);
+      result.audit_log_deleted = audit.dihapus;
+      result.audit_log_ip_dikosongkan = audit.dianonimkan;
 
       const r2 = await tx`DELETE FROM user_sessions WHERE invalidated_at IS NOT NULL AND invalidated_at < NOW() - INTERVAL 90 DAY` as unknown as Array<{ affectedRows: number }>;
       result.user_sessions_deleted = r2[0]?.affectedRows ?? 0;

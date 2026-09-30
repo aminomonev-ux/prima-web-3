@@ -16,7 +16,10 @@
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
 import { statusPagu, paguPerTahunDariConfig, kunciPaguBlud, POLA_KUNCI_PAGU_BLUD } from '../lib/shared/pagu-blud'
-import { aturanConfig } from '../lib/data/admin-schemas'
+import { aturanConfig, bolehTulisConfig, configTerbuka } from '../lib/data/admin-schemas'
+import { getPanels } from '../app/(dashboard)/usulan-kebutuhan/_utils'
+import { moduleMenusFor } from '../lib/sentinel/module-menus'
+import type { Role } from '../types'
 import { BludNominalQuerySchema } from '../lib/data/pk-schemas'
 
 try {
@@ -81,16 +84,25 @@ cek('C7 pagu bertitik ditolak', !sah('pagu_blud_2026', '72.700.000.000'))
 cek('C8 pagu negatif ditolak', !sah('pagu_blud_2026', '-5'))
 sama('C9 kunci lama `pagu_blud` tidak lagi diterima', aturanConfig('pagu_blud'), null)
 sama('C10 kunci tak dikenal ditolak', aturanConfig('app_status_global'), null)
-cek('C11 pengaturan email hanya Super Admin (sesuai layar Email)',
-  aturanConfig('email_notif_enabled')?.hanyaSuperAdmin === true && aturanConfig('email_notif_recipient')?.hanyaSuperAdmin === true)
-cek('C12 batas waktu & pagu boleh admin Usulan', !aturanConfig('batas_mulai')?.hanyaSuperAdmin && !aturanConfig('pagu_blud_2026')?.hanyaSuperAdmin)
+const penulis = (k: string) => (aturanConfig(k)?.peran ?? []).join(',')
+sama('C11 pengaturan email hanya Super Admin (sesuai layar Email)', penulis('email_notif_enabled') + '|' + penulis('email_notif_recipient'), 'SUPER_ADMIN|SUPER_ADMIN')
+sama('C12 batas waktu tetap milik peran admin Usulan', penulis('batas_mulai'), 'SUPER_ADMIN,ADMIN,ADMIN_KASUBAG,ADMIN_KABAG')
+// Keputusan 30 Sep: pagu DILIHAT semua, DIUBAH hanya Super Admin, Admin Staff, dan PROGRAM.
+sama('C12b pengubah pagu', penulis('pagu_blud_2026'), 'SUPER_ADMIN,ADMIN,PROGRAM')
+for (const r of ['ADMIN_KASUBAG', 'ADMIN_KABAG', 'BIDANG_RENBANG', 'MDSI', 'DIKLAT']) {
+  cek(`C12c ${r} tidak bisa mengubah pagu`, !aturanConfig('pagu_blud_2026')?.peran.includes(r))
+}
+cek('C12d penyaring awal POST: PROGRAM lolos, sub-bidang lain tidak', bolehTulisConfig('PROGRAM') && !bolehTulisConfig('MDSI') && bolehTulisConfig('ADMIN_KASUBAG'))
+cek('C12e angka pagu terbuka untuk semua pengguna', configTerbuka('pagu_blud_2026') && configTerbuka('batas_mulai'))
+cek('C12f kunci lain tetap tertutup untuk non-admin', !configTerbuka('email_notif_enabled') && !configTerbuka('email_notif_recipient') && !configTerbuka('app_status_global'))
 cek('C13 alamat email penerima diperiksa', sah('email_notif_recipient', '') && sah('email_notif_recipient', 'a@b.id') && !sah('email_notif_recipient', 'bukan email'))
 
 const RUTE_CONFIG = kode('app/api/config/route.ts')
 cek('C14 route config memakai aturanConfig', RUTE_CONFIG.includes('const aturan = aturanConfig(key);'))
 cek('C15 route config memeriksa bentuk nilai', RUTE_CONFIG.includes('const nilaiSah = aturan.nilai.safeParse(value);'))
-cek('C16 route config memagari kunci khusus Super Admin',
-  RUTE_CONFIG.includes("if (aturan.hanyaSuperAdmin && session.role !== 'SUPER_ADMIN') {"))
+cek('C16 route config memagari penulis per kunci', RUTE_CONFIG.includes('if (!aturan.peran.includes(session.role)) {'))
+cek('C16b route config: penyaring awal POST', RUTE_CONFIG.includes("if (!bolehTulisConfig(session.role)) return NextResponse.json({ ok: false, message: 'Akses ditolak.' }, { status: 403 });"))
+cek('C16c route config: GET membuka kunci terbuka ke non-admin', RUTE_CONFIG.includes('if (isAdmin || configTerbuka(r.key)) {'))
 cek('C17 tidak ada lagi daftar kunci inline di route', !RUTE_CONFIG.includes('allowedKeys'))
 cek('C18 layar Batas Waktu menolak mulai sesudah selesai',
   kode('app/(dashboard)/usulan-kebutuhan/_panels/BatasWaktuPanel.tsx').includes('if (bwMulai && bwSelesai && bwMulai > bwSelesai) {'))
@@ -147,6 +159,12 @@ const UTILS = kode('app/(dashboard)/usulan-kebutuhan/_utils.tsx')
 cek('F9 PaguKpiBar memakai statusPagu', UTILS.includes('const st = statusPagu(kpi);'))
 cek('F10 semua tahun: batang diganti keterangan', UTILS.includes("{st.jenis === 'SEMUA_TAHUN' ? ("))
 cek('F11 Set Pagu menulis kunci per tahun', kode(`${PANEL_DIR}SetPaguPanel.tsx`).includes('body: JSON.stringify({ key: kunciPaguBlud(tahun), value: String(value) }),'))
+const adaSetPagu = (r: string) => getPanels(r as Role).includes('set-pagu')
+cek('F12 panel Set Pagu: Super Admin, Admin, PROGRAM', adaSetPagu('SUPER_ADMIN') && adaSetPagu('ADMIN') && adaSetPagu('PROGRAM'))
+cek('F13 panel Set Pagu tidak untuk peran lain', !['ADMIN_KASUBAG', 'ADMIN_KABAG', 'BIDANG_RENBANG', 'MDSI', 'DIKLAT'].some(adaSetPagu))
+// Cermin getPanels milik Sentinel (lib/sentinel/module-menus.ts) wajib sepakat (L69).
+cek('F14 Sentinel menawarkan Set Pagu BLUD ke PROGRAM', moduleMenusFor('usulan_aset', 'PROGRAM' as Role).includes('Set Pagu BLUD'))
+cek('F15 Sentinel tidak menawarkannya ke sub-bidang lain', !moduleMenusFor('usulan_aset', 'MDSI' as Role).includes('Set Pagu BLUD'))
 
 // ── G. PK (B6) ───────────────────────────────────────────────────────────────
 const PK = badan(kode('lib/data/pk.ts'), 'export async function getBludNominalByUnit(')

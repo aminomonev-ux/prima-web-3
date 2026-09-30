@@ -36,6 +36,7 @@ import { bacaJangka, tulisJangkaTx } from '@/lib/admin/akses-berjangka'
 import { tutupYangSudahTerbukaTx, type PermintaanDitutup } from '@/lib/admin/permintaan-akses'
 import { assertQuotaAvailableTx } from '@/lib/security/promotion'
 import { putusSesiPengguna } from '@/lib/security/sesi'
+import { RETENSI_AUDIT } from '@/lib/security/retensi-audit'
 
 // Aturan pintunya + bentuk berkasnya tinggal di `pintu-akses.ts` — berkas DAUN tanpa
 // satu pun impor server. Berkas ini yang membaca DB, jadi ia TIDAK BOLEH jadi tempat
@@ -482,14 +483,15 @@ async function tulisIzinOrangTx(
 // ─── Garis waktu satu orang (P8 lapis 1) ─────────────────────────────────────
 
 /**
- * Umur garis waktunya, dalam bulan. **Bukan pilihan tampilan** — ini kenyataan:
- * `app/api/cron/purge-retention` membuang `audit_log` yang lebih tua dari 12 bulan.
+ * Umur garis waktunya, dalam bulan. **Bukan pilihan tampilan** — ini kenyataan: garis
+ * waktu hanya memuat perubahan akun & akses, yang dipangkas cron sesudah 5 tahun
+ * (`RETENSI_AUDIT.panjangTahun`, lib/security/retensi-audit.ts).
  *
  * Angkanya tinggal di sini supaya layar bisa MENGATAKANNYA. Garis waktu yang berhenti
  * tanpa keterangan membuat orang menyimpulkan "tidak ada catatan" dari "catatannya sudah
  * dibuang" — dan itu kesimpulan yang salah pada pertanyaan yang paling penting.
  */
-export const BULAN_GARIS_WAKTU = 12
+export const BULAN_GARIS_WAKTU = RETENSI_AUDIT.panjangTahun * 12
 
 export type PeristiwaOrang = {
   id: number

@@ -159,13 +159,18 @@ cek('terbaru dulu', lib.includes('ORDER BY a.created_at DESC, a.id DESC'))
 cek('ada batas jumlah baris', lib.includes('LIMIT ${sqlInt(batas)}'))
 
 // Umur retensinya BUKAN pilihan tampilan — `purge-retention` benar-benar membuangnya.
+// Sejak I1 (keputusan 30 Sep) peristiwa akses — satu-satunya isi garis waktu — disimpan
+// 5 tahun lewat `pangkasAuditLog`; angkanya dibaca dari konstanta yang sama dengan cron-nya.
 const cron = baca('app/api/cron/purge-retention/route.ts')
+const retensi = baca('lib/security/retensi-audit.ts')
 cek('konstanta umur garis waktu = yang benar-benar dipangkas cron',
-  lib.includes('export const BULAN_GARIS_WAKTU = 12') && cron.includes('INTERVAL 12 MONTH'))
+  lib.includes('export const BULAN_GARIS_WAKTU = RETENSI_AUDIT.panjangTahun * 12')
+  && cron.includes('await pangkasAuditLog(tx)')
+  && retensi.includes('INTERVAL ${RETENSI_AUDIT.panjangTahun} YEAR'))
 
 const panel = buangKomentar(baca('app/(dashboard)/admin/_panels/TabPusatAkses.tsx'))
 cek('layar MENGATAKAN garis waktunya punya ujung',
-  panel.includes('Jejak audit dipangkas otomatis setiap {garisBulan} bulan'))
+  panel.includes('Jejak perubahan akses yang lebih tua dari {garisBulan % 12 === 0 ?'))
 // Layar yang diam soal itu membiarkan orang membaca "tidak ada catatan" dari
 // "catatannya sudah dibuang" — kesimpulan yang salah pada pertanyaan yang paling penting.
 cek('…dan angkanya datang dari server, bukan diketik di layar',

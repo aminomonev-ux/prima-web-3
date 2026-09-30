@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import { Extension, Mark, mergeAttributes } from '@tiptap/core';
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -76,10 +75,17 @@ interface Props {
 export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
   const editor = useEditor({
-    extensions: [StarterKit, Underline, TextAlign, TextStyle, OrderedListType],
+    // Tiptap v3 (K2, 2026-09-30): StarterKit kini membawa Underline sendiri, plus Link dan
+    // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
+    // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
+    // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
+    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
+    // v3 berhenti me-render ulang tiap transaksi; tombol bilah alat membaca `isActive` saat
+    // render, jadi tanpa ini "Tebal"/"Rata" tidak ikut menyala saat kursor pindah.
+    shouldRerenderOnTransaction: true,
     onUpdate: () => setDirty(true),
   });
 

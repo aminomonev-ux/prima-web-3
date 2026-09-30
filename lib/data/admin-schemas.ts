@@ -4,11 +4,11 @@
 
 import { z } from 'zod';
 import { StrongPasswordSchema } from './auth-schemas';
-import { BIDANG_ROLES, SUBBIDANG_ROLES } from '@/lib/constants';
+import { ADMIN_ROLES, BIDANG_ROLES, SUBBIDANG_ROLES } from '@/lib/constants';
 import { KUNCI_GRANT } from '@/lib/registry/apps';
 import { MAKS_ALASAN, MIN_ALASAN } from '@/lib/admin/permintaan-baris';
 import { tanggalSah } from '@/lib/admin/berjangka-baris';
-import { POLA_KUNCI_PAGU_BLUD } from '@/lib/shared/pagu-blud';
+import { POLA_KUNCI_PAGU_BLUD, PERAN_PENGUBAH_PAGU } from '@/lib/shared/pagu-blud';
 
 // ─── Role enum ──────────────────────────────────────────────────────────────
 
@@ -145,17 +145,19 @@ const TanggalAtauKosong = z.string().refine(v => v === '' || tanggalSah(v), 'Tan
 const NominalRupiah = z.string().regex(/^\d{1,15}$/, 'Pagu harus angka rupiah bulat, tanpa titik atau koma.');
 const EmailAtauKosong = z.string().max(254).refine(v => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Alamat email tidak sah.');
 
-export type AturanConfig = { nilai: z.ZodType<string>; hanyaSuperAdmin?: boolean };
+/** `peran` = siapa yang boleh MENULIS kunci ini. */
+export type AturanConfig = { nilai: z.ZodType<string>; peran: readonly string[] };
 
 // Layar Email menulis "Hanya Super Admin yang dapat mengubah pengaturan email" — pagarnya
 // harus di API juga, bukan cuma tombol yang dimatikan (L82).
-const EMAIL_SAKELAR: AturanConfig = { nilai: NilaiBenarSalah, hanyaSuperAdmin: true };
+const HANYA_SUPER_ADMIN: readonly string[] = ['SUPER_ADMIN'];
+const EMAIL_SAKELAR: AturanConfig = { nilai: NilaiBenarSalah, peran: HANYA_SUPER_ADMIN };
 
 const ATURAN_CONFIG: Record<string, AturanConfig> = {
-  batas_mulai:   { nilai: TanggalAtauKosong },
-  batas_selesai: { nilai: TanggalAtauKosong },
-  batas_pesan:   { nilai: z.string().max(500, 'Pesan maksimal 500 karakter.') },
-  batas_aktif:   { nilai: NilaiBenarSalah },
+  batas_mulai:   { nilai: TanggalAtauKosong, peran: ADMIN_ROLES },
+  batas_selesai: { nilai: TanggalAtauKosong, peran: ADMIN_ROLES },
+  batas_pesan:   { nilai: z.string().max(500, 'Pesan maksimal 500 karakter.'), peran: ADMIN_ROLES },
+  batas_aktif:   { nilai: NilaiBenarSalah, peran: ADMIN_ROLES },
   email_notif_enabled:               EMAIL_SAKELAR,
   email_notif_usulan_baru:           EMAIL_SAKELAR,
   email_notif_disetujui:             EMAIL_SAKELAR,
@@ -165,28 +167,37 @@ const ATURAN_CONFIG: Record<string, AturanConfig> = {
   email_notif_promotion_approved:    EMAIL_SAKELAR,
   email_notif_promotion_rejected:    EMAIL_SAKELAR,
   email_notif_promotion_bootstrap:   EMAIL_SAKELAR,
-  email_notif_recipient:             { nilai: EmailAtauKosong, hanyaSuperAdmin: true },
+  email_notif_recipient:             { nilai: EmailAtauKosong, peran: HANYA_SUPER_ADMIN },
 };
 
 /**
  * I3 (audit 2026-09-29) + T-14: SATU daftar kunci yang boleh ditulis `POST /api/config`,
- * lengkap dengan bentuk nilainya. Dulu route punya daftar inline tanpa pemeriksaan
- * bentuk — `batas_mulai` berisi teks bebas membuat jendela pengajuan diam-diam tidak
- * berlaku — sementara `ConfigKeyEnum` di sini tidak dipakai siapa pun.
- * Pagu BLUD per tahun anggaran (B5): `pagu_blud_{tahun}`.
+ * lengkap dengan bentuk nilainya dan siapa yang boleh. Dulu route punya daftar inline tanpa
+ * pemeriksaan bentuk — `batas_mulai` berisi teks bebas membuat jendela pengajuan diam-diam
+ * tidak berlaku — sementara `ConfigKeyEnum` di sini tidak dipakai siapa pun.
+ * Pagu BLUD per tahun anggaran (B5): `pagu_blud_{tahun}`, diubah oleh `PERAN_PENGUBAH_PAGU`.
  */
 export function aturanConfig(key: string): AturanConfig | null {
-  if (POLA_KUNCI_PAGU_BLUD.test(key)) return { nilai: NominalRupiah };
+  if (POLA_KUNCI_PAGU_BLUD.test(key)) return { nilai: NominalRupiah, peran: PERAN_PENGUBAH_PAGU };
   return Object.prototype.hasOwnProperty.call(ATURAN_CONFIG, key) ? ATURAN_CONFIG[key] : null;
 }
 
-/**
- * Key yang aman dilihat oleh non-admin (deadline pengajuan, info publik dalam org).
- * `pagu_blud_{tahun}` SENGAJA tidak masuk — angka anggaran tidak untuk SUB_BIDANG biasa.
- */
+/** Siapa pun yang boleh menulis SALAH SATU kunci config — penyaring awal `POST /api/config`. */
+export const bolehTulisConfig = (role: string): boolean =>
+  (ADMIN_ROLES as readonly string[]).includes(role) || PERAN_PENGUBAH_PAGU.includes(role);
+
+/** Key yang aman dilihat oleh non-admin (deadline pengajuan, info publik dalam org). */
 export const PUBLIC_CONFIG_KEYS: ReadonlySet<string> = new Set([
   'batas_mulai', 'batas_selesai', 'batas_pesan', 'batas_aktif',
 ]);
+
+/**
+ * Keputusan pemilik aplikasi (30 Sep): angka pagu BLUD boleh dilihat SEMUA pengguna —
+ * menggantikan penyaring lama SDL-M13 yang menyembunyikannya dari non-admin, padahal
+ * layar Usulan (lewat `/api/usulan/kpi`) sudah menampilkannya ke semua peran.
+ */
+export const configTerbuka = (key: string): boolean =>
+  PUBLIC_CONFIG_KEYS.has(key) || POLA_KUNCI_PAGU_BLUD.test(key);
 
 // ─── Pusat Akses (Tahap 5 · Fase C) ─────────────────────────────────────────
 
