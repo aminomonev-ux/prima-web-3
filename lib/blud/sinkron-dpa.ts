@@ -33,6 +33,7 @@ export interface BedaBaris {
 }
 
 export interface BedaSinkron {
+  /** Hanya baris yang angkanya diketik — induk tidak ikut (lihat `bedaSinkron`). */
   baris:           BedaBaris[]
   /** Selisih total pagu akar. ≠ 0 berarti pagu tahun itu ikut bergeser. */
   deltaPagu:       number
@@ -58,6 +59,14 @@ const n = (v: unknown): number => Number(v ?? 0)
  * rekening yang ikut disegarkan memang tujuan tombol ini; melaporkannya sebagai
  * "perubahan" akan menenggelamkan satu baris berbahaya di antara ratusan baris
  * penggantian nama, persis penyakit yang panel impor baru saja disembuhkan.
+ *
+ * Baris INDUK tidak didaftar (L85): angkanya penjumlahan anak, jadi satu daun
+ * yang turun 5 M dulu tampil lagi di tiap leluhurnya — BELANJA DAERAH, 5.1,
+ * 5.1.02.99 tiga kali — dan daun yang sebenarnya berubah terdorong ke bawah.
+ * Totalnya tetap terbaca lewat `deltaPagu`. Yang dikecualikan hanya induk di
+ * KEDUA sisi: baris yang berganti peran (daun jadi induk atau sebaliknya)
+ * tetap didaftar, sebab anak barunya masuk `barisBaru` dan anak lamanya
+ * `barisHilang` — tidak ada baris lain yang membawa angkanya.
  */
 export function bedaSinkron(
   sebelum: readonly PergeseranBarisInput[],
@@ -65,6 +74,9 @@ export function bedaSinkron(
 ): BedaSinkron {
   const lama = new Map<string, PergeseranBarisInput>()
   for (const r of sebelum) lama.set(r.row_id, r)
+
+  const indukLama = new Set(sebelum.map(r => r.parent_id))
+  const indukBaru = new Set(sesudah.map(r => r.parent_id))
 
   const baris: BedaBaris[] = []
   let barisBaru = 0
@@ -74,6 +86,7 @@ export function bedaSinkron(
     const a = lama.get(b.row_id)
     if (!a) { barisBaru++; continue }
     terpakai.add(b.row_id)
+    if (indukLama.has(b.row_id) && indukBaru.has(b.row_id)) continue
 
     const dJumlah     = n(b.jumlah) - n(a.jumlah)
     const dPergeseran = n(b.pergeseran) - n(a.pergeseran)

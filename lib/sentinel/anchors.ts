@@ -29,6 +29,7 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'dpa.salin-induk':        { page: '/blud/dpa', label: 'tombol Salin ke Induk', desc: 'Tombol Salin ke Induk menyalin kode rekening & uraian dari baris DPA di layar ke Master Akun dan Kode Besar — berguna kalau data induknya masih kosong sesudah impor.' },
   'dpa.form-baru':          { page: '/blud/dpa', label: 'tombol Form Baru', desc: 'Tombol Form Baru membangun kerangka DPA otomatis dari daftar Kode Besar — titik awal menyusun DPA baru.' },
   'dpa.salin-tahun':        { page: '/blud/dpa', label: 'tombol Salin Tahun Lain', desc: 'Tombol Salin Tahun Lain memuat isi DPA tahun sebelumnya ke form yang sedang dibuka — bisa dari DPA murni atau dari pagu pasca-pergeseran. Isinya baru ada di layar; tidak tersimpan sampai Simpan ditekan.' },
+  'dpa.salin-versi':        { page: '/blud/dpa', label: 'tombol Salin Versi Lain', desc: 'Tombol Salin Versi Lain mengambil isi versi DPA lain di tahun yang sama ke layar — misalnya memulai revisi dari arsip bulan lalu. Yang berganti hanya isi layar; tanggal simpannya tetap yang tertulis di sana, dan belum ada yang tersimpan sampai Simpan ditekan.' },
   'dpa.overlay-buat-form':  { page: '/blud/dpa', label: 'tombol Buat Form di overlay Kode Besar' },
   'dpa.kolom-uraian':       { page: '/blud/dpa', label: 'kolom Uraian (pencarian Master Akun)', desc: 'Kolom Uraian: ketik kata kunci lalu pilih dari Master Akun — kode rekening ikut terisi otomatis, tak perlu diketik.' },
   'dpa.kolom-vol':          { page: '/blud/dpa', label: 'kolom Vol baris rincian' },
@@ -44,7 +45,6 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'dpa.hapus-terpilih':     { page: '/blud/dpa', label: 'tombol Hapus Terpilih', destructive: true, desc: 'Tombol Hapus Terpilih menghapus baris-baris yang kamu centang. Aku hanya menunjukkannya — penghapusan kamu sendiri yang klik & putuskan.' },
   'dpa.simpan':             { page: '/blud/dpa', label: 'tombol Simpan DPA', desc: 'Tombol Simpan menyimpan DPA; sebelum tersimpan aku memeriksa entri ganda & konflik PJ, lalu versinya tercatat per tanggal.' },
 
-  // ── /blud/pergeseran ───────────────────────────────────────────────────────
   // ── /usulan-kebutuhan (F4c — tur usulan-buat-baru) ─────────────────────────
   'usulan.sidebar-grup-pengajuan': { page: '/usulan-kebutuhan', label: 'grup sidebar Pengajuan' },
   'usulan.sidebar-buat':  { page: '/usulan-kebutuhan', label: 'menu sidebar Buat Usulan' },
@@ -88,6 +88,7 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'lkjip.editor-blok':       { page: '/lkjip', label: 'panel isi bab terpilih di editor' },
   'lkjip.editor-addblock':   { page: '/lkjip', label: 'tombol tambah blok (Narasi/Tabel/Gambar/Grafik)', desc: 'Tombol tambah blok menyisipkan isi ke bab terpilih: Narasi (teks kaya), Tabel, Gambar, atau Grafik.' },
 
+  // ── /blud/pergeseran ───────────────────────────────────────────────────────
   'pergeseran.tahun-dropdown': { page: '/blud/pergeseran', label: 'dropdown pilih tahun anggaran' },
   'pergeseran.buat':           { page: '/blud/pergeseran', label: 'tombol Buat Pergeseran' },
   'pergeseran.sinkron-dpa':    { page: '/blud/pergeseran', label: 'tombol Sinkronkan DPA' },
@@ -96,6 +97,11 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'pergeseran.kolom-vol-p':    { page: '/blud/pergeseran', label: 'kolom Vol P (nilai sesudah)' },
   'pergeseran.kolom-harga-p':  { page: '/blud/pergeseran', label: 'kolom Harga P (nilai sesudah)' },
   'pergeseran.kolom-selisih':  { page: '/blud/pergeseran', label: 'kolom selisih pergeseran' },
+  'pergeseran.kolom-bertambah': { page: '/blud/pergeseran', label: 'kolom Bertambah', desc: 'Kolom Bertambah mencatat berapa yang masuk ke rekening itu. Kalau kosong, angkanya dihitung dari selisih; kalau rekeningnya ditambah dan dikurangi sekaligus, isi keduanya supaya ceritanya utuh.' },
+  'pergeseran.kolom-berkurang': { page: '/blud/pergeseran', label: 'kolom Berkurang', desc: 'Kolom Berkurang mencatat berapa yang keluar dari rekening itu. Kalau kosong, angkanya dihitung dari selisih; kalau ada Catatan Perpindahan, angkanya diambil dari catatan itu.' },
+  'pergeseran.tutup':          { page: '/blud/pergeseran', label: 'tombol Tutup Pergeseran', desc: 'Tombol Tutup Pergeseran mengunci hasil putaran ini dan menjadikannya patokan putaran berikutnya, supaya geseran putaran berikutnya tidak tercampur geseran putaran ini. Hasilnya muncul di layar dulu; tersimpan sesudah Simpan ditekan.' },
+  'pergeseran.salin-versi':    { page: '/blud/pergeseran', label: 'tombol Salin Versi Lain', desc: 'Tombol Salin Versi Lain mengambil isi versi pergeseran lain di tahun yang sama ke layar. Yang berganti hanya isi layar; tanggal simpannya tetap yang tertulis di sana, dan belum ada yang tersimpan sampai Simpan ditekan.' },
+  'pergeseran.catatan-perpindahan': { page: '/blud/pergeseran', label: 'tombol Catatan Perpindahan', desc: 'Tombol Catatan Perpindahan mencatat uang berpindah dari rekening mana ke rekening mana — kolom Bertambah dan Berkurang lalu terisi dari catatan itu.' },
   'pergeseran.kolom-pj':       { page: '/blud/pergeseran', label: 'kolom Penanggung Jawab', desc: 'Kolom Penanggung Jawab di Pergeseran mencerminkan isian DPA — hanya baris yang ditambah di layar ini yang bisa diisi sendiri. Gunanya supaya rekap PJ bisa dicetak dengan pagu sesudah digeser.' },
   'pergeseran.simpan':         { page: '/blud/pergeseran', label: 'tombol Simpan pergeseran' },
 }

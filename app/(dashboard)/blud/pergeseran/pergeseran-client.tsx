@@ -1935,7 +1935,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
               {pratinjauSinkron.beda.barisBaru > 0 && ` · ${pratinjauSinkron.beda.barisBaru} baris baru dari DPA`}
               {pratinjauSinkron.beda.barisHilang > 0 && ` · ${pratinjauSinkron.beda.barisHilang} baris hilang`}
               {Math.abs(pratinjauSinkron.beda.deltaPagu) >= 0.005 && (
-                <> · total pagu <strong style={{ color:'#FCD34D' }}>
+                <> · total pagu <strong className="sd-total">
                   {pratinjauSinkron.beda.deltaPagu > 0 ? '+' : '−'}{formatRupiah(Math.abs(pratinjauSinkron.beda.deltaPagu))}
                 </strong></>
               )}
@@ -1966,16 +1966,25 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
                 </thead>
                 <tbody>
                   {pratinjauSinkron.beda.baris.slice(0, 60).map(b => {
-                    const d = b.pergeseranBaru - b.pergeseranLama
+                    const d    = Math.round((b.pergeseranBaru - b.pergeseranLama) * 100) / 100
+                    const dDpa = Math.round((b.jumlahBaru - b.jumlahLama) * 100) / 100
                     return (
                       <tr key={b.row_id} style={{ borderTop:'1px solid #0C447C', color:'#B5D4F4' }}>
                         <td style={{ padding:'6px 10px' }}>
                           <span style={{ fontFamily:'var(--font-mono,monospace)', color:'#85B7EB' }}>{b.kode_rekening}</span>{' '}
                           {b.uraian}
+                          {/* Baris yang sudah digeser mempertahankan kolom P-nya, jadi yang berubah
+                              hanya kolom DPA — tanpa kalimat ini ia terdaftar dengan Selisih "—". */}
+                          {dDpa !== d && (
+                            <div style={{ fontSize:11, color:'#85B7EB', marginTop:2 }}>
+                              Kolom DPA {formatRupiah(b.jumlahLama)} → {formatRupiah(b.jumlahBaru)}
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--font-mono,monospace)' }}>{formatRupiah(b.pergeseranLama)}</td>
                         <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--font-mono,monospace)' }}>{formatRupiah(b.pergeseranBaru)}</td>
-                        <td style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--font-mono,monospace)', color: d === 0 ? '#85B7EB' : d > 0 ? '#1D9E75' : '#E24B4A' }}>
+                        <td className={`sd-selisih${d > 0 ? ' plus' : d < 0 ? ' minus' : ''}`}
+                          style={{ padding:'6px 10px', textAlign:'right', fontFamily:'var(--font-mono,monospace)' }}>
                           {d === 0 ? '—' : `${d > 0 ? '+' : '−'}${formatRupiah(Math.abs(d))}`}
                         </td>
                       </tr>

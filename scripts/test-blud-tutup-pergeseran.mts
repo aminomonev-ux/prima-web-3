@@ -9,7 +9,8 @@
 //   B. Sasaran basis: bulan berikutnya kalau sudah lewat, hari ini kalau belum.
 //   C. Dua pagar sasaran — menimpa versi yang ditutup, menimpa versi lain.
 //   D. Pembanding sinkron: nol perubahan lewat tanpa gangguan, ada perubahan
-//      dilaporkan lengkap dengan nominalnya.
+//      dilaporkan lengkap dengan nominalnya — sekali per daun, bukan diulang
+//      di tiap induknya (L85).
 //   E. Penomoran putaran dihitung, tidak disimpan.
 //   F. Skenario utuh Januari → Februari dengan angka dari konsep §1.
 //   G. Rantai kode: jejak penutupan sampai ke DB dan dibersihkan di SEMUA jalur
@@ -26,7 +27,7 @@ import {
 import { bedaSinkron, sinkronMengubahAngka } from '../lib/blud/sinkron-dpa'
 import { recalcPergeseranJumlah } from '../lib/blud/recalc'
 import { sasaranSimpan } from '../lib/blud/tanggal'
-import type { PergeseranBarisInput } from '../types'
+import type { PergeseranBarisInput, TipeBaris } from '../types'
 
 const AKAR = join(import.meta.dirname, '..')
 const baca = (p: string) => readFileSync(join(AKAR, p), 'utf8')
@@ -221,6 +222,53 @@ bab('D. Pembanding Sinkronkan DPA')
   cek('Pagu akar yang ikut bergeser terhitung',
     Math.abs(bedaSinkron(kini, naik).deltaPagu) === 0,
     'akar tidak ikut naik karena hanya daun yang diubah — delta akar tetap 0')
+
+  // L85: induk menjumlah anaknya. Dulu satu daun yang turun 5 M tampil lagi di
+  // BELANJA DAERAH, 5.1, dan 5.1.02.99 tiga kali — laporan pemakai 30 Sep.
+  const baris = (id: string, parent: string | null, tipe: TipeBaris, jml: number, p: number): PergeseranBarisInput => ({
+    kode_rekening: `K-${id}`, uraian: `Baris ${id}`, vol: parent ? 1 : null, satuan: null, harga: parent ? jml : null,
+    jumlah: jml, vol_p: parent ? 1 : null, harga_p: parent ? p : null, pergeseran: p, bertambah_berkurang: p - jml,
+    penanggung_jawab: '', keterangan: '', tipe_baris: tipe,
+    row_id: id, anggaran_key: `AK-${id}`, parent_id: parent, urutan: 0,
+  })
+  const bertingkat = (a: number, pa = a): PergeseranBarisInput[] => [
+    baris('r0', null, 'GRANDMASTER', a + 80_000_000, pa + 80_000_000),
+    baris('rX', 'r0', 'MASTER',      a + 50_000_000, pa + 50_000_000),
+    baris('rA', 'rX', 'CHILD',       a,              pa),
+    baris('rB', 'rX', 'CHILD',       50_000_000,     50_000_000),
+    baris('rC', 'r0', 'CHILD',       30_000_000,     30_000_000),
+  ]
+
+  const turun = bedaSinkron(bertingkat(100_000_000), bertingkat(95_000_000))
+  cek('Perubahan satu daun didaftar SEKALI, bukan di tiap leluhurnya',
+    turun.baris.length === 1 && turun.baris[0].row_id === 'rA',
+    turun.baris.map(b => b.row_id).join(','))
+  cek('…totalnya tetap terbaca lewat deltaPagu', turun.deltaPagu === -5_000_000)
+  cek('…dan dialognya tetap muncul', sinkronMengubahAngka(turun))
+
+  const tergeser = bedaSinkron(bertingkat(100_000_000, 80_000_000), bertingkat(120_000_000, 80_000_000))
+  cek('Daun yang sudah digeser: kolom DPA berubah, kolom P tetap → tetap didaftar',
+    tergeser.baris.length === 1 && tergeser.baris[0].row_id === 'rA'
+      && tergeser.baris[0].pergeseranLama === tergeser.baris[0].pergeseranBaru
+      && tergeser.baris[0].jumlahLama === 100_000_000 && tergeser.baris[0].jumlahBaru === 120_000_000,
+    'besar geserannya berubah dari −20 jt ke −40 jt walau pagunya sama')
+
+  // Berganti peran: anak baru masuk `barisBaru`, anak lama `barisHilang` — tidak
+  // ada baris lain yang membawa angkanya, jadi baris itu sendiri wajib tampil.
+  const lama = bertingkat(100_000_000)
+  const dipecah = [...lama.slice(0, 4), baris('rC', 'r0', 'MASTER', 25_000_000, 25_000_000),
+    baris('rN', 'rC', 'CHILD', 25_000_000, 25_000_000)]
+  const pecah = bedaSinkron(lama, dipecah)
+  cek('Daun yang jadi induk tetap didaftar',
+    pecah.baris.some(b => b.row_id === 'rC') && pecah.barisBaru === 1,
+    pecah.baris.map(b => b.row_id).join(','))
+  const dilebur = [lama[0], baris('rX', 'r0', 'CHILD', 140_000_000, 140_000_000), lama[4]]
+  const lebur = bedaSinkron(lama, dilebur)
+  cek('Induk yang jadi daun tetap didaftar',
+    lebur.baris.some(b => b.row_id === 'rX') && lebur.barisHilang === 2,
+    lebur.baris.map(b => b.row_id).join(','))
+  cek('…sedangkan induk di kedua sisi tidak',
+    !pecah.baris.some(b => b.row_id === 'r0') && !lebur.baris.some(b => b.row_id === 'r0'))
 }
 
 bab('E. Nomor putaran dihitung, tidak disimpan')
@@ -312,6 +360,22 @@ bab('G. Rantai kode')
     /sinkronMengubahAngka\(beda\)/.test(kPgs) && /setPratinjauSinkron/.test(kPgs))
   cek('Tombol sinkron tidak lagi dimatikan periode historis',
     !/disabled=\{injecting \|\| !rows\.length \|\| !!periodeTulis\}/.test(kPgs))
+
+  // Warna sebaris di sel tabel ditelan aturan borongan tema terang
+  // `table tbody td { color:#374151 !important }` — kolom Selisih dulu abu-abu.
+  const css = baca('app/globals.css').replace(/\/\*[\s\S]*?\*\//g, '')
+  cek('Warna Selisih pratinjau lewat kelas, bukan gaya sebaris',
+    /className=\{`sd-selisih\$\{d > 0 \? ' plus' : d < 0 \? ' minus' : ''\}`\}/.test(kPgs)
+      && !/color: d === 0 \? '#85B7EB'/.test(kPgs))
+  cek('…dan kelasnya punya pasangan tema terang',
+    /\[data-theme="light"\] table tbody td\.sd-selisih\.plus\s*\{ color: #0F5C44 !important; \}/.test(css)
+      && /\[data-theme="light"\] table tbody td\.sd-selisih\.minus \{ color: #A32E2D !important; \}/.test(css))
+  cek('Total pagu pratinjau terbaca di tema terang',
+    /<strong className="sd-total">/.test(kPgs) && /\[data-theme="light"\] \.sd-total \{ color: #854F0B; \}/.test(css),
+    '#FCD34D tidak punya pemetaan terang')
+  cek('Baris yang cuma berubah kolom DPA-nya diberi keterangan',
+    /\{dDpa !== d && \(\s*<div[^>]*>\s*Kolom DPA \{formatRupiah\(b\.jumlahLama\)\}/.test(kPgs),
+    'tanpa itu terdaftar dengan Selisih "—" tanpa sebab')
 
   cek('Tutup memindahkan sasaran lewat periode, bukan tanggal sendiri',
     /setPeriodeTulis\(konfirmTutup\.periode\)/.test(kPgs) && !/versi_tanggal:\s*['"`]\d{4}-/.test(kPgs),

@@ -3588,6 +3588,18 @@ tr.pg-total > td { border-top: 2px solid #0C447C; padding-top: 7px; padding-bott
 [data-theme="light"] tr.pg-total > td { border-top-color: rgba(0,0,0,.18); }
 [data-theme="light"] tr.pg-total > td:nth-child(1) { color: #0F0F12 !important; }
 
+/* Pratinjau Sinkronkan DPA. Kelas, bukan gaya sebaris: aturan borongan tema
+   terang `table tbody td { color:#374151 !important }` di blud-shell menelan
+   warna sebaris (kolom Selisih dulu abu-abu seluruhnya), dan #FCD34D tidak
+   punya pemetaan terang — total pagu nyaris tak terbaca di atas putih. */
+table tbody td.sd-selisih       { color: #85B7EB; }
+table tbody td.sd-selisih.plus  { color: #1D9E75 !important; }
+table tbody td.sd-selisih.minus { color: #E24B4A !important; }
+[data-theme="light"] table tbody td.sd-selisih.plus  { color: #0F5C44 !important; }
+[data-theme="light"] table tbody td.sd-selisih.minus { color: #A32E2D !important; }
+.sd-total { color: #FCD34D; }
+[data-theme="light"] .sd-total { color: #854F0B; }
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Bilah kepala modul di layar sempit — BLUD & PK (2026-09-10)
 

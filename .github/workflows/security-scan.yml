@@ -9,7 +9,8 @@
 # 4 job paralel:
 #   A. semgrep — SAST scan kode (OWASP Top 10, React, TypeScript, security-audit rules)
 #   B. npm-audit — Dependency CVE check (block kalau ada HIGH baru)
-#   C. quality-gate — `npx tsc --noEmit` + `npm run lint` + `npm run rima:check` (NLU gate)
+#   C. quality-gate — `npx tsc --noEmit` + `npm run lint` + Gate RIMA (bagian ber-node
+#                     dari `npm run rima:check`: NLU, persona, anchor tur, read-only)
 #                     + Gate E token warna (`npm run check:tokens`)
 #                     + Gate H LIMIT/OFFSET sqlInt (`npm run check:sql`, L66)
 #                     + Gate I tanggal DATE WIB vs UTC (`npm run check:tanggal`)
@@ -102,7 +103,7 @@ jobs:
           # naik jadi ">=2.0.0 <2.1.3" — 2.1.2 memang RENTAN, jadi allowlist itu selama
           # beberapa waktu membungkam temuan nyata, bukan false-positive.
           # Sekarang semua jalur brace-expansion sudah di-override ke versi patched
-          # (1.1.18 / 2.1.4 / 5.0.9), jadi tidak ada lagi yang perlu dibungkam. Advisory
+          # (1.1.21 / 2.1.7 / 5.0.12), jadi tidak ada lagi yang perlu dibungkam. Advisory
           # apa pun yang HIGH/CRITICAL di dependensi produksi mem-block build.
           #
           # Kalau suatu hari muncul advisory yang benar-benar tidak bisa diperbaiki:
@@ -121,6 +122,9 @@ jobs:
           #                           naik ke 2.1.3 — itu sebabnya allowlist lama gugur)
           #   GHSA-rgw5-rvv9-x895  → patched 1.1.18 / 2.1.4 / 5.0.9 (menembus mitigasi di atas;
           #                          SELURUH 4.x rentan, tidak ada 4.x yang aman)
+          #   GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7, GHSA-q2hr-2g5m-vwhr (terbit 2026-09-29)
+          #                        → patched 1.1.21 / 2.1.7 / 3.0.9 / 5.0.12 (rekursi tak terbatas
+          #                          & ekspansi kuadratik; lagi-lagi menembus tambalan sebelumnya)
           # Ambang di bawah memakai yang lebih ketat. 2026-08-04: 1.1.16 / 2.1.2 / 5.0.8 yang
           # dulu dianggap aman ternyata rentan — dinaikkan lewat `overrides` ber-kunci-versi di
           # package.json supaya tiap major tetap di major-nya (5.x ESM-only, menariknya ke
@@ -147,17 +151,17 @@ jobs:
             };
             const vulnerable = (v) => {
               const maj = Number(v.split(".")[0]);
-              if (maj === 1) return cmp(v, "1.1.18") < 0;
-              if (maj === 2) return cmp(v, "2.1.4") < 0;
-              if (maj === 3) return cmp(v, "3.0.1") < 0;
+              if (maj === 1) return cmp(v, "1.1.21") < 0;
+              if (maj === 2) return cmp(v, "2.1.7") < 0;
+              if (maj === 3) return cmp(v, "3.0.9") < 0;
               if (maj === 4) return true;
-              if (maj === 5) return cmp(v, "5.0.9") < 0;
+              if (maj === 5) return cmp(v, "5.0.12") < 0;
               return false;
             };
             const bad = [...found].filter(vulnerable);
             if (bad.length) {
               console.error("::error::brace-expansion versi RENTAN terpasang: " + bad.join(", "));
-              console.error("GHSA-mh99-v99m-4gvg / GHSA-rgw5-rvv9-x895 berlaku nyata utk versi ini — allowlist tak boleh membungkamnya. Naikkan/override ke versi patched.");
+              console.error("Advisory brace-expansion (GHSA-rgw5-rvv9-x895, GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7, GHSA-q2hr-2g5m-vwhr) berlaku nyata utk versi ini — allowlist tak boleh membungkamnya. Naikkan/override ke versi patched.");
               process.exit(1);
             }
             console.log("OK — brace-expansion terpasang [" + ([...found].sort(cmp).join(", ") || "none") + "] semuanya patched.");
@@ -249,6 +253,21 @@ jobs:
       # menangkapnya. Statis, tanpa DB, ~1 detik.
       - name: Gate sakelar maintenance (kill-switch modul)
         run: npm run check:killswitch
+
+      # ─── Gate RIMA: NLU, persona, anchor tur, read-only (G14/G15) ─────────
+      # Kepala berkas ini sejak commit pertama menyebut `rima:check`, tapi langkahnya
+      # tidak pernah ada — 6 penanda data-rima di layar BLUD lolos tanpa terdaftar
+      # sampai audit 2026-09-29 menemukannya. Yang dijalankan hanya bagian ber-`node`
+      # (~2 detik, tanpa DB); dua uji ber-tsx (detect/eval) tetap lewat `npm run
+      # rima:check` di lokal, sebab tsx bukan dependensi proyek dan `npx` akan
+      # mengunduhnya tanpa kunci versi di setiap jalan.
+      - name: Gate RIMA (NLU, persona, anchor, read-only)
+        run: |
+          node scripts/rima-train.mjs --check
+          node scripts/rima-nlu-test.mjs
+          node scripts/rima-lint-templates.mjs
+          node scripts/rima-anchor-check.mjs
+          node scripts/rima-readonly-check.mjs
 
   # ─── JOB D: Gitleaks (secret scanning) ─────────────────────────────────────
   # Scan working tree saat ini untuk rahasia ter-commit (token/password/key).
