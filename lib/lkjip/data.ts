@@ -3,12 +3,13 @@
 // canonical_id derive dari AUTO_INCREMENT id (anti-race, bukan MAX+1).
 // Nomor section TIDAK disimpan — dihitung di buildNumberedTree (numbering.ts).
 // Dokumen FINAL = immutable: semua mutasi struktur/isi ditolak (state-machine).
-import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, sqlInt } from '@/lib/data/db';
+import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, sqlInt, type TxSql } from '@/lib/data/db';
 import {
   buildNumberedTree, MAX_DEPTH,
   type SectionFlat, type SectionNode, type BlockNode,
 } from './numbering';
 import { parseBlockPayload, DEFAULT_STYLE, StyleConfigSchema, type StyleConfig, type BlockTipe, type DokumenQuery, type SectionCreate, type SectionMove } from './schemas';
+import { JUDUL_BAB_WAJIB, ALASAN_BAB, putusanPindah } from './aturan-bab';
 
 export class LkjipVersionConflictError extends Error {
   constructor() { super('Dokumen sudah diubah pengguna lain. Memuat versi terbaru.'); this.name = 'LkjipVersionConflictError'; }
@@ -21,6 +22,10 @@ export class LkjipFinalError extends Error {
 }
 export class LkjipStructureError extends Error {
   constructor(msg: string) { super(msg); this.name = 'LkjipStructureError'; }
+}
+/** B12: pindah/hapus yang melanggar aturan BAB (lib/lkjip/aturan-bab.ts) → 409. */
+export class LkjipAturanBabError extends Error {
+  constructor(msg: string) { super(msg); this.name = 'LkjipAturanBabError'; }
 }
 
 export interface LkjipDokumen {
@@ -43,7 +48,9 @@ export interface LkjipDetail extends LkjipDokumen {
 
 // ── Skeleton default (seed) — 4 BAB wajib (locked). Konsep §2.5. ──
 // LAMPIRAN ditambah manual oleh admin (hindari "BAB V" salah-romawi).
-const SEED_SKELETON: { judul: string; children: string[] }[] = [
+// Judulnya = JUDUL_BAB_WAJIB (aturan-bab.ts): migrasi & pulihkan versi mengenali BAB wajib
+// lewat daftar itu, jadi keduanya harus sama.
+const SEED_SKELETON: { judul: typeof JUDUL_BAB_WAJIB[number]; children: string[] }[] = [
   { judul: 'PENDAHULUAN', children: [
     'Latar Belakang', 'Isu-isu Strategis', 'Dukungan SDM, Sarana-Prasarana dan Anggaran',
     'Sistematika Penulisan', 'Tindak Lanjut atas Laporan Hasil Evaluasi SAKIP', 'Langkah Perbaikan Internal OPD',
@@ -159,14 +166,16 @@ export async function createDokumen(tahun: number, judul: string | undefined, us
     const canonical_id = `LKJIP-${String(id).padStart(6, '0')}`;
     await tx`UPDATE lkjip_dokumen SET canonical_id = ${canonical_id} WHERE id = ${id}`;
 
-    // Seed skeleton standar (BAB I–V) — hanya bila template 'standar'.
+    // Seed skeleton standar (BAB I–IV) — hanya bila template 'standar'.
     // 'kosong' → dokumen tanpa bab, user susun sendiri. locked=0 (default tak terkunci).
+    // B12: keempat BAB berbendera locked=1. Dulu 0 sejak awal, jadi "BAB I–IV terkunci"
+    // di panduan editor tidak pernah benar.
     if (template === 'standar') {
       for (let bi = 0; bi < SEED_SKELETON.length; bi++) {
         const bab = SEED_SKELETON[bi];
         const babRes = await tx`
           INSERT INTO lkjip_section (dokumen_id, parent_id, depth, urutan, judul, locked)
-          VALUES (${id}, NULL, 0, ${bi}, ${bab.judul}, 0)
+          VALUES (${id}, NULL, 0, ${bi}, ${bab.judul}, 1)
         ` as unknown as Array<{ insertId: number }>;
         const babId = Number(babRes[0]?.insertId ?? 0);
         if (bab.children.length > 0) {
@@ -275,18 +284,33 @@ export async function renameSection(id: number, judul: string): Promise<void> {
   await sql`UPDATE lkjip_section SET judul = ${judul} WHERE id = ${id}`;
 }
 
+/**
+ * Kunci baris dokumen dulu, baru status DRAFT diperiksa di bawah kunci itu — dua perubahan
+ * struktur di dokumen yang sama antre, dan tidak ada yang lolos di sela Finalisasi.
+ */
+async function kunciDokumenDraft(tx: TxSql, dokumenId: number): Promise<void> {
+  const rows = await tx`SELECT status FROM lkjip_dokumen WHERE id = ${dokumenId} FOR UPDATE` as Array<{ status: string }>;
+  if (!rows[0]) throw new LkjipNotFoundError();
+  if (rows[0].status === 'FINAL') throw new LkjipFinalError();
+}
+
+/**
+ * B12: bagian yang masih punya sub-bagian tidak bisa dihapus (semua tingkat). Dulu seluruh
+ * cabang ikut terhapus — "Hapus" pada BAB III membuang 5 sub-bab beserta isinya dan BAB IV
+ * bernomor ulang jadi BAB III. Anak dihitung di transaksi yang sama dengan DELETE-nya.
+ */
 export async function deleteSection(id: number): Promise<void> {
   const info = await getDokIdBySection(id);
   if (!info) throw new LkjipNotFoundError();
   if (info.status === 'FINAL') throw new LkjipFinalError();
 
-  const all = await queryMany<{ id: number; parent_id: number | null }>(sql`
-    SELECT id, parent_id FROM lkjip_section WHERE dokumen_id = ${info.dokumen_id}
-  `);
-  const subtree = collectSubtree(id, all);
   await withTransaction(async ({ tx }) => {
+    await kunciDokumenDraft(tx, Number(info.dokumen_id));
+    const anak = await tx`SELECT COUNT(*) AS n FROM lkjip_section WHERE parent_id = ${id}` as Array<{ n: number }>;
+    const n = Number(anak[0]?.n ?? 0);
+    if (n > 0) throw new LkjipAturanBabError(ALASAN_BAB.masihPunyaSub(n));
     // blocks ikut CASCADE via FK section_id saat section dihapus.
-    await tx`DELETE FROM lkjip_section WHERE id IN (${subtree})`;
+    await tx`DELETE FROM lkjip_section WHERE id = ${id}`;
   });
 }
 
@@ -315,40 +339,52 @@ export async function moveSection(input: SectionMove): Promise<void> {
   if (!node) throw new LkjipNotFoundError();
   await assertDraftByDoc(Number(node.dokumen_id));
 
-  const all = await queryMany<{ id: number; parent_id: number | null; depth: number; urutan: number }>(sql`
-    SELECT id, parent_id, depth, urutan FROM lkjip_section WHERE dokumen_id = ${node.dokumen_id}
-  `);
-  const norm = all.map(s => ({ id: Number(s.id), parent_id: s.parent_id == null ? null : Number(s.parent_id), depth: Number(s.depth), urutan: Number(s.urutan) }));
-  const subtreeIds = new Set(collectSubtree(input.id, norm));
-
-  // Validasi parent baru
-  let newDepth = 0;
-  if (input.new_parent_id != null) {
-    if (subtreeIds.has(input.new_parent_id)) throw new LkjipStructureError('Tidak bisa memindah node ke dalam keturunannya sendiri.');
-    const np = norm.find(s => s.id === input.new_parent_id);
-    if (!np) throw new LkjipNotFoundError('Induk tujuan tidak valid.');
-    newDepth = np.depth + 1;
-  }
-  // Cek tinggi subtree agar tidak melebihi MAX_DEPTH
-  const oldDepth = Number(node.depth);
-  let subtreeHeight = 0;
-  for (const sid of subtreeIds) {
-    const s = norm.find(n => n.id === sid)!;
-    subtreeHeight = Math.max(subtreeHeight, s.depth - oldDepth);
-  }
-  if (newDepth + subtreeHeight > MAX_DEPTH) throw new LkjipStructureError(`Kedalaman maksimal ${MAX_DEPTH + 1} tingkat.`);
-
-  const delta = newDepth - oldDepth;
-
-  // Reindex saudara baru: ambil saudara di parent tujuan (exclude node), sisipkan di new_index.
-  const newSiblings = norm
-    .filter(s => (s.parent_id ?? null) === (input.new_parent_id ?? null) && s.id !== input.id)
-    .sort((a, b) => (a.urutan - b.urutan) || (a.id - b.id))
-    .map(s => s.id);
-  const idx = Math.min(Math.max(0, input.new_index), newSiblings.length);
-  newSiblings.splice(idx, 0, input.id);
-
   await withTransaction(async ({ tx }) => {
+    // Pohon dibaca SESUDAH kunci dokumen — aturan BAB menilai urutan yang akan ditulis.
+    await kunciDokumenDraft(tx, Number(node.dokumen_id));
+    const all = await tx`
+      SELECT id, parent_id, depth, urutan, locked FROM lkjip_section WHERE dokumen_id = ${node.dokumen_id}
+    ` as Array<{ id: number; parent_id: number | null; depth: number; urutan: number; locked: number }>;
+    const norm = all.map(s => ({
+      id: Number(s.id), parent_id: s.parent_id == null ? null : Number(s.parent_id),
+      depth: Number(s.depth), urutan: Number(s.urutan), locked: Number(s.locked ?? 0),
+    }));
+    const self = norm.find(s => s.id === input.id);
+    if (!self) throw new LkjipNotFoundError();
+
+    // B12: BAB wajib tidak berpindah; bab tambahan tidak menyalip BAB wajib terakhir.
+    const putusan = putusanPindah(norm, input.id, input.new_parent_id ?? null, input.new_index);
+    if (!putusan.boleh) throw new LkjipAturanBabError(putusan.alasan);
+
+    const subtreeIds = new Set(collectSubtree(input.id, norm));
+
+    // Validasi parent baru
+    let newDepth = 0;
+    if (input.new_parent_id != null) {
+      if (subtreeIds.has(input.new_parent_id)) throw new LkjipStructureError('Tidak bisa memindah node ke dalam keturunannya sendiri.');
+      const np = norm.find(s => s.id === input.new_parent_id);
+      if (!np) throw new LkjipNotFoundError('Induk tujuan tidak valid.');
+      newDepth = np.depth + 1;
+    }
+    // Cek tinggi subtree agar tidak melebihi MAX_DEPTH
+    const oldDepth = self.depth;
+    let subtreeHeight = 0;
+    for (const sid of subtreeIds) {
+      const s = norm.find(n => n.id === sid)!;
+      subtreeHeight = Math.max(subtreeHeight, s.depth - oldDepth);
+    }
+    if (newDepth + subtreeHeight > MAX_DEPTH) throw new LkjipStructureError(`Kedalaman maksimal ${MAX_DEPTH + 1} tingkat.`);
+
+    const delta = newDepth - oldDepth;
+
+    // Reindex saudara baru: ambil saudara di parent tujuan (exclude node), sisipkan di new_index.
+    const newSiblings = norm
+      .filter(s => (s.parent_id ?? null) === (input.new_parent_id ?? null) && s.id !== input.id)
+      .sort((a, b) => (a.urutan - b.urutan) || (a.id - b.id))
+      .map(s => s.id);
+    const idx = Math.min(Math.max(0, input.new_index), newSiblings.length);
+    newSiblings.splice(idx, 0, input.id);
+
     await tx`UPDATE lkjip_section SET parent_id = ${input.new_parent_id ?? null}, depth = ${newDepth} WHERE id = ${input.id}`;
     if (delta !== 0) {
       for (const sid of subtreeIds) {

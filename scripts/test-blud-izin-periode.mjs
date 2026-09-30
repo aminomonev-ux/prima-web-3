@@ -8,7 +8,7 @@
 // Kenapa lapis 2 tidak boleh diganti tiruan: yang diuji urutan buka periode, dan
 // urutan itu ditentukan oleh isi tabel `blud_periode` yang sesungguhnya. Menirunya
 // berarti menguji tiruannya.
-import { execSync } from 'node:child_process'
+import { kompilasiUji } from './_kompilasi-uji.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import Module from 'node:module'
@@ -35,19 +35,11 @@ fs.writeFileSync(path.join(outDir, 'stub-next-server.js'),
 fs.writeFileSync(path.join(outDir, 'stub-ratelimit.js'),
   'exports.checkRateLimit = async () => ({ allowed: true });\n')
 
-try {
-  execSync(
-    `npx tsc "${path.join(repo, 'lib/blud/schemas.ts')}" "${path.join(repo, 'lib/blud/tutup-kas.ts')}"`
-    + ` "${path.join(repo, 'lib/data/db.ts')}" "${path.join(repo, 'lib/data/locks.ts')}"`
-    // Sejak `schemas.ts` meneruskan batas baris impor dari `import-dpa-shared`,
-    // rantainya sampai ke `format.ts` → `@/lib/shared/uuid`. Alias `@/…` tidak
-    // ter-resolve tsc telanjang, jadi berkasnya harus disebut eksplisit.
-    + ` "${path.join(repo, 'lib/shared/uuid.ts')}"`
-    + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
-    + ' --esModuleInterop --skipLibCheck --moduleResolution node',
-    { cwd: repo, stdio: 'pipe' },
-  )
-} catch { /* impor `@/...` tak ter-resolve saat compile — .js tetap ditulis */ }
+// Titik masuk saja — `kompilasiUji` mengikuti seluruh impornya, termasuk alias `@/…`
+// dan `apps-data.mjs` yang dulu tak pernah ikut tertulis (U1, audit 2026-09-29).
+kompilasiUji(repo, outDir, [
+  'lib/data/db.ts', 'lib/blud/schemas.ts', 'lib/blud/tutup-kas.ts', 'lib/blud/realisasi-schemas.ts',
+])
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {

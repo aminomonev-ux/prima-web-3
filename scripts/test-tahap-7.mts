@@ -185,8 +185,10 @@ const komp = buangKomentar(baca('components/admin/PilihPeran.tsx'))
 // lalu diisi seadanya — persis yang membuat kolom alasan berakhir berisi "-".
 cek('alasan diminta di dialog yang SAMA dengan peringatannya',
   komp.includes('return promptDialog({') && !komp.includes('confirmDialog('))
+// Sejak c6a9dd0 (A7, 2026-09-16) jawabannya membawa kotak centang "putus sesinya
+// sekarang" juga — bentuknya berubah, janjinya tidak: alasan dipulangkan, bukan ya/tidak.
 cek('dialognya memulangkan alasannya, bukan ya/tidak',
-  komp.includes('Promise<string | null>'))
+  komp.includes('Promise<{ alasan: string; centang: boolean } | null>'))
 
 const dialog = buangKomentar(baca('components/ui/ConfirmDialog.tsx'))
 cek('promptDialog tinggal seberkas dengan confirmDialog', dialog.includes('export function promptDialog('))
@@ -199,8 +201,8 @@ cek('tombol lanjut mati sampai alasannya cukup', dialog.includes('disabled={!cuk
 
 const ku = buangKomentar(baca('app/(dashboard)/usulan-kebutuhan/_panels/KelolaUserPanel.tsx'))
 cek('Usulan meneruskan alasannya, bukan membuangnya',
-  ku.includes('doChangeRole(u.id, peranBaru, alasan)'))
-cek('…dan membedakan batal dari alasan kosong', ku.includes('if (alasan === null) return;'))
+  ku.includes('doChangeRole(u.id, peranBaru, jawab.alasan, jawab.centang)'))
+cek('…dan membedakan batal dari alasan kosong', ku.includes('if (jawab === null) return;'))
 cek('Pusat Akses meminta alasan juga saat cuma pintunya bergeser',
   panel.includes('} else if (grantBergeser) {'))
 cek('…dan menyebut modul mana yang dibuka & ditutup',

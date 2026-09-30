@@ -3,10 +3,11 @@
 // Pattern: ownership filter L2 + safeInt L11 + withTransaction L7 untuk update replace.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, withTransaction, bulkInsert, safeInt } from '@/lib/data/db';
+import { sql, safeInt } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit, DokumenUpdateBodySchema } from '@/lib/data/pk-schemas';
+import { gantiIsiDokumen, PkVersiKonflikError } from '@/lib/data/pk';
 import { bolehEditMenu, bolehLihatSalahSatu, forbidden, tolakEdit, pkMati } from '../../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 
@@ -20,6 +21,7 @@ type DokumenHeader = {
   unit_pertama: string;  nama_pertama: string;  jabatan_pertama: string;  pangkat_pertama: string | null;  nip_pertama: string | null;
   unit_kedua: string;    nama_kedua: string;    jabatan_kedua: string;    pangkat_kedua: string | null;    nip_kedua: string | null;
   status: 'DRAFT' | 'FINAL';
+  version: number;
   has_file: 0 | 1;
   generated_filesize: number | null;
   generated_filename: string | null;
@@ -51,11 +53,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(session.role);
   const ownershipClause = isAdmin ? sql`` : sql`AND created_by = ${session.userId}`;
 
+  // B1: DATE lewat `DATE_FORMAT`, bukan objek Date — tengah malam WIB itu 17:00 UTC
+  // kemarin, dan form memotong string ISO-nya lalu menyimpan tanggal kemarin itu kembali.
   const headers = await sql`
-    SELECT id, tahun, tanggal_dokumen, jenis_pk,
+    SELECT id, tahun, DATE_FORMAT(tanggal_dokumen, '%Y-%m-%d') AS tanggal_dokumen, jenis_pk,
            unit_pertama, nama_pertama, jabatan_pertama, pangkat_pertama, nip_pertama,
            unit_kedua,   nama_kedua,   jabatan_kedua,   pangkat_kedua,   nip_kedua,
-           status,
+           status, version,
            CASE WHEN generated_file IS NOT NULL THEN 1 ELSE 0 END AS has_file,
            generated_filesize, generated_filename, generated_at,
            created_at, created_by
@@ -120,48 +124,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const d = parsed.data;
 
-  // Replace pattern: UPDATE header + DELETE lampiran/anggaran + bulkInsert baru
-  await withTransaction(async ({ tx, conn }) => {
-    await tx`
-      UPDATE pk_dokumen SET
-        tahun = ${d.tahun}, tanggal_dokumen = ${d.tanggal_dokumen}, jenis_pk = ${d.jenis_pk},
-        unit_pertama = ${d.unit_pertama}, nama_pertama = ${d.nama_pertama}, jabatan_pertama = ${d.jabatan_pertama},
-        pangkat_pertama = ${d.pangkat_pertama ?? null}, nip_pertama = ${d.nip_pertama ?? null},
-        unit_kedua = ${d.unit_kedua}, nama_kedua = ${d.nama_kedua}, jabatan_kedua = ${d.jabatan_kedua},
-        pangkat_kedua = ${d.pangkat_kedua ?? null}, nip_kedua = ${d.nip_kedua ?? null}
-      WHERE id = ${id}
-    `;
-    await tx`DELETE FROM pk_dokumen_lampiran WHERE dokumen_id = ${id}`;
-    await tx`DELETE FROM pk_dokumen_anggaran WHERE dokumen_id = ${id}`;
-
-    if (d.lampiran.length > 0) {
-      await bulkInsert(
-        'pk_dokumen_lampiran',
-        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','indikator','target','urutan'],
-        d.lampiran.map((l, i) => [
-          id, l.unit_kerja, l.level,
-          l.program ?? null, l.kegiatan ?? null, l.subkegiatan ?? null,
-          l.uraian, l.indikator ?? null, l.target ?? null,
-          l.urutan ?? i,
-        ]),
-        conn,
-      );
-    }
-    if (d.anggaran.length > 0) {
-      await bulkInsert(
-        'pk_dokumen_anggaran',
-        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','keterangan_sumber','nominal','urutan','auto_filled_from_blud'],
-        d.anggaran.map((a, i) => [
-          id, a.unit_kerja, a.level,
-          a.program ?? null, a.kegiatan ?? null, a.subkegiatan ?? null,
-          a.uraian, a.keterangan_sumber, a.nominal ?? 0,
-          a.urutan ?? i,
-          a.auto_filled_from_blud ?? false,
-        ]),
-        conn,
-      );
-    }
-  });
+  // Replace pattern: UPDATE header + DELETE lampiran/anggaran + bulkInsert baru —
+  // di lib/data/pk.ts, supaya kunci versinya (I4) bisa diuji terhadap DB sungguhan.
+  let versi: number;
+  try {
+    versi = await gantiIsiDokumen(id, d);
+  } catch (err) {
+    if (err instanceof PkVersiKonflikError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
+    throw err;
+  }
 
   await writeAuditLog({
     req,
@@ -171,7 +142,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     detail:    `Update dokumen PK id=${id} (${d.jenis_pk}), ${d.lampiran.length} lampiran + ${d.anggaran.length} anggaran`,
   });
 
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({ ok: true, id, version: versi });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

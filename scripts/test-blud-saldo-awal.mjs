@@ -9,7 +9,7 @@
 // sesudahnya (§4.6), dan (2) ia harus membeku begitu ada berita acara yang
 // ditandatangani di atasnya. Menirunya dengan tiruan berarti menguji tiruannya —
 // yang menentukan justru isi `blud_periode` dan `blud_realisasi_tx` sungguhan.
-import { execSync } from 'node:child_process'
+import { kompilasiUji } from './_kompilasi-uji.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import Module from 'node:module'
@@ -36,19 +36,12 @@ fs.writeFileSync(path.join(outDir, 'stub-next-server.js'),
 fs.writeFileSync(path.join(outDir, 'stub-ratelimit.js'),
   'exports.checkRateLimit = async () => ({ allowed: true });\n')
 
-try {
-  execSync(
-    // `lib/data/locks.ts` WAJIB disebut: `lib/blud/lock.ts` mengimpornya lewat
-    // alias `@/…` yang tidak ter-resolve tsc telanjang, jadi kalau tidak
-    // disebut, .js-nya tak pernah ditulis dan require-nya gagal ENOENT.
-    `npx tsc "${path.join(repo, 'lib/blud/tutup-kas.ts')}" "${path.join(repo, 'lib/blud/schemas.ts')}"`
-    + ` "${path.join(repo, 'lib/data/db.ts')}" "${path.join(repo, 'lib/data/locks.ts')}"`
-    + ` "${path.join(repo, 'lib/shared/uuid.ts')}"`
-    + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
-    + ' --esModuleInterop --skipLibCheck --moduleResolution node',
-    { cwd: repo, stdio: 'pipe' },
-  )
-} catch { /* impor `@/...` tak ter-resolve saat compile — .js tetap ditulis */ }
+// Titik masuk saja — `kompilasiUji` mengikuti seluruh impornya, termasuk alias `@/…`.
+// Daftar tulis-tangan yang dulu di sini mati diam-diam begitu `tanggal.ts` mulai
+// mengimpor `@/lib/shared/waktu-wib` (U1, audit 2026-09-29).
+kompilasiUji(repo, outDir, [
+  'lib/data/db.ts', 'lib/blud/tutup-kas.ts', 'lib/blud/realisasi-data.ts', 'lib/blud/realisasi-schemas.ts',
+])
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {

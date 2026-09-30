@@ -2,8 +2,9 @@
 // Auto-fill nominal Anggaran BLUD dari rekap_pk (Q1).
 // Strategy detail: lib/data/pk.ts:getBludNominalByUnit().
 //
-// GET /api/perjanjian-kinerja/blud-nominal?unit=Kasubbag%20Akuntansi
+// GET /api/perjanjian-kinerja/blud-nominal?unit=Kasubbag%20Akuntansi&tahun=2026
 //   → { ok: true, nominal: 1271998, versi_dpa: '2026-05-23', matched_labels: ['Kasubbag Akuntansi'] }
+//   versi_dpa null = tahun itu belum punya Rekap PK.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
@@ -28,11 +29,14 @@ export async function GET(req: NextRequest) {
   if (limited) return limited;
 
   const { searchParams } = new URL(req.url);
-  const q = BludNominalQuerySchema.safeParse({ unit: searchParams.get('unit') ?? undefined });
+  const q = BludNominalQuerySchema.safeParse({
+    unit: searchParams.get('unit') ?? undefined,
+    tahun: searchParams.get('tahun') ?? undefined,
+  });
   if (!q.success) {
     return NextResponse.json({ ok: false, message: 'Parameter tidak valid: ' + q.error.issues[0].message }, { status: 400 });
   }
 
-  const result = await getBludNominalByUnit(q.data.unit);
+  const result = await getBludNominalByUnit(q.data.unit, q.data.tahun);
   return NextResponse.json({ ok: true, ...result });
 }

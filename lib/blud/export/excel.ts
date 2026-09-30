@@ -7,6 +7,7 @@ import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-
 import type ExcelJS from 'exceljs'
 import type { ExportRow } from '@/lib/blud/cetak-data'
 import { arahDelta, HEX_NAIK, HEX_TURUN } from '@/lib/blud/export/warna-delta'
+import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 
 /** Warna teks sel delta dalam bentuk ARGB exceljs, atau `null` kalau tak berwarna. */
 function warnaDelta(namaKolom: string | undefined, nilai: unknown): string | null {
@@ -105,7 +106,7 @@ export async function exportToExcel(args: ExportExcelArgs): Promise<void> {
     return { width: 12 }
   })
 
-  const tag = (versi || tanggal || new Date().toISOString().slice(0, 10)).replace(/-/g, '')
+  const tag = (versi || tanggal || tanggalHariIniWIB()).replace(/-/g, '')
   const filename = `${slug(title)}_${tag}.xlsx`
   await downloadWorkbook(wb, filename)
 }

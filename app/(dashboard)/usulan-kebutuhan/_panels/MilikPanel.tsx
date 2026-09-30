@@ -13,7 +13,7 @@ import { SUBBIDANG_ROLES, BIDANG_ROLES, ROLE_LABELS, SUBBIDANG_TO_BIDANG } from 
 import type { Role } from '@/types';
 import type { UsulanHeader, KPIData } from '../_types';
 import { fmtRp, fmtTgl } from '../_types';
-import { StatusBadgesCell, StatusOptions, Pagination } from '../_utils';
+import { StatusBadgesCell, StatusOptions, Pagination, PaguKpiBar } from '../_utils';
 
 interface Props {
   role: Role;
@@ -67,48 +67,7 @@ export function MilikPanel({
 
   return (
     <div>
-      {kpi && (
-        <div className="pagu-bar-wrap" style={{marginBottom:12}}>
-          <div className="pagu-kpi-grid">
-            {[
-              {label:'Pagu BLUD',       val:kpi.pagu,            bg:'rgba(167,139,250,.12)', lc:'#A78BFA', vc:'#C4B5FD', sub:null},
-              {label:'Nilai Aktif',     val:kpi.nilai_aktif,     bg:'rgba(244,114,182,.12)', lc:'#F472B6', vc:'#F9A8D4', sub:bidangLabel},
-              {label:'Sedang Ditelaah', val:kpi.nilai_telaah,    bg:'rgba(239,159,39,.12)',  lc:'#EF9F27', vc:'#FAC775', sub:null},
-              {label:'Disetujui Kabag', val:kpi.nilai_disetujui, bg:'rgba(74,222,128,.12)',  lc:'#4ADE80', vc:'#86EFAC', sub:null},
-            ].map((c,i) => (
-              <div key={i} className="pagu-kpi-card" style={{background:c.bg}}>
-                <div className="pagu-kpi-label" style={{color:c.lc}}>{c.label}</div>
-                <div className="pagu-kpi-val" style={{color:c.vc}}>{fmtRp(c.val ?? 0)}</div>
-                {c.sub && <div style={{fontSize:10,color:c.lc,marginTop:2,fontWeight:600}}>{c.sub}</div>}
-              </div>
-            ))}
-          </div>
-          {(() => {
-            const paguUnset = !kpi.pagu || kpi.pagu <= 0;
-            const pct = paguUnset ? 0 : Math.min(100, (kpi.nilai_aktif / kpi.pagu) * 100);
-            const ok = !paguUnset && kpi.nilai_aktif <= kpi.pagu;
-            return (
-              <>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                  <span style={{fontSize:12,fontWeight:700,color:'#0a2e18'}}>Pagu BLUD</span>
-                  <span style={{fontSize:12,fontWeight:800,color:paguUnset?'#a16207':ok?'#0d7a3a':'#dc2626'}}>{paguUnset?'—':`${pct.toFixed(1)}%`}</span>
-                </div>
-                <div className="pagu-bar-track"><div className="pagu-bar-fill" style={{width:`${pct}%`, background:paguUnset?'#9ca3af':ok?undefined:'linear-gradient(90deg,#ef4444,#dc2626)'}}/></div>
-                <div className="pagu-bar-meta">
-                  <span>Pagu: {fmtRp(kpi.pagu)}</span>
-                  <span>|</span>
-                  <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
-                  {paguUnset
-                    ? <span className="pagu-flag warn">ⓘ Pagu belum diatur</span>
-                    : <span className={`pagu-flag ${ok?'ok':'over'}`}>{ok?'✓ Dalam batas pagu':'⚠ Melebihi pagu'}</span>}
-                </div>
-              </>
-            );
-          })()}
-          {/* Loading indicator (PaguKpiBar prop yang tidak dipakai disini karena render manual untuk subtitle bidangLabel) */}
-          {kpiLoading && <div style={{fontSize:10,color:'#85B7EB',marginTop:6,fontStyle:'italic'}}>Memuat KPI...</div>}
-        </div>
-      )}
+      <PaguKpiBar kpi={kpi} loading={kpiLoading} subNilai={bidangLabel}/>
       <div className="filter-bar">
         {(SUBBIDANG_ROLES as readonly string[]).includes(role) && SUBBIDANG_TO_BIDANG[role] && (
           <select className="filter-select" value={filterScope} onChange={e => setFilterScope(e.target.value as 'milik'|'satu_bidang')}>

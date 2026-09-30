@@ -4,6 +4,7 @@
 import { sql, queryOne, queryMany, withTransaction, bulkInsert, sqlInt } from '@/lib/data/db';
 import { getDokumen, LkjipNotFoundError, LkjipFinalError, LkjipVersionConflictError } from './data';
 import type { StyleConfig } from './schemas';
+import { judulBabWajib } from './aturan-bab';
 
 const RETENTION = 20; // simpan N versi terakhir per dokumen (prune otomatis)
 
@@ -119,9 +120,13 @@ export async function restoreVersi(versiId: number, dokumenId: number, expectedV
     const idMap = new Map<number, number>();
     for (const s of secs) {
       const parentNew = s.parent_old_id == null ? null : (idMap.get(s.parent_old_id) ?? null);
+      // B12: foto yang diambil sebelum BAB wajib berbendera (semuanya `locked: 0`) tidak
+      // boleh melepas kuncinya saat dipulihkan — dikenali dengan aturan yang sama dengan
+      // migration-lkjip-bab-wajib.sql.
+      const locked = s.locked || (s.parent_old_id == null && judulBabWajib(s.judul)) ? 1 : 0;
       const res = await tx`
         INSERT INTO lkjip_section (dokumen_id, parent_id, depth, urutan, judul, locked)
-        VALUES (${dokumenId}, ${parentNew}, ${s.depth}, ${s.urutan}, ${s.judul}, ${s.locked})
+        VALUES (${dokumenId}, ${parentNew}, ${s.depth}, ${s.urutan}, ${s.judul}, ${locked})
       ` as unknown as Array<{ insertId: number }>;
       idMap.set(s.old_id, Number(res[0]?.insertId ?? 0));
     }

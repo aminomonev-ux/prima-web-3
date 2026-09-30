@@ -7,8 +7,9 @@ import { sql } from '@/lib/data/db';
 import { getKinerjaKpi, SUMBER_LIST } from './kinerja';
 import { listRencanaAksi } from './rencana-aksi';
 import type { RaLevel } from './rencana-aksi-schemas';
-import { getDpaLatest, getDpaLatestDate, getDpaByDate } from '@/lib/blud/data';
+import { getDpaLatestDate, getDpaByDate } from '@/lib/blud/data';
 import { ringkasSerapan } from '@/lib/blud/serapan-ringkas';
+import { itemUsulanTahun } from './usulan';
 
 export interface UsulanSummary {
   total: number;
@@ -77,7 +78,8 @@ export interface DashboardSummary {
 const RA_LEVELS: RaLevel[] = ['tujuan', 'sasaran', 'program', 'kegiatan', 'sub-kegiatan'];
 const ON_TRACK_THRESHOLD = 90; // % capaian ≥ ini = on-track
 
-async function getUsulanSummary(): Promise<UsulanSummary> {
+// B5: widget & detail Usulan ikut pemilih tahun, seperti keempat modul lainnya.
+async function getUsulanSummary(tahun: string): Promise<UsulanSummary> {
   const [kpiRows, bidangRows] = await Promise.all([
     sql`
       SELECT
@@ -88,12 +90,12 @@ async function getUsulanSummary(): Promise<UsulanSummary> {
         COUNT(CASE WHEN status = 'DIAJUKAN' THEN 1 END)                                                AS menunggu_admin,
         COALESCE(SUM(CASE WHEN status = 'DISETUJUI' THEN nominal_disetujui ELSE 0 END), 0)             AS nilai_disetujui,
         COALESCE(SUM(CASE WHEN status NOT IN ('DITOLAK','DITOLAK_ADMIN','DITOLAK_BIDANG','DRAFT') THEN harga_est*qty ELSE 0 END), 0) AS nilai_aktif
-      FROM usulan_items`,
+      FROM usulan_items WHERE ${itemUsulanTahun(tahun)}`,
     sql`
       SELECT sub_bidang,
         COUNT(CASE WHEN status NOT IN ('DRAFT','DIAJUKAN_REVIEW','REVISI_BIDANG','DITOLAK_BIDANG') THEN 1 END) AS cnt,
         COALESCE(SUM(CASE WHEN status = 'DISETUJUI' THEN nominal_disetujui ELSE 0 END), 0)             AS nominal
-      FROM usulan_items
+      FROM usulan_items WHERE ${itemUsulanTahun(tahun)}
       GROUP BY sub_bidang ORDER BY cnt DESC LIMIT 8`,
   ]);
   const k = (kpiRows[0] ?? {}) as Record<string, unknown>;
@@ -224,7 +226,7 @@ export async function getDashboardSummary(
   opsi?: { bolehSerapanBlud?: boolean },
 ): Promise<DashboardSummary> {
   const [usulan, eanggaran, blud, ra] = await Promise.all([
-    getUsulanSummary(),
+    getUsulanSummary(tahun),
     getEanggaranSummary(tahun),
     getBludSummary(Number(tahun), opsi?.bolehSerapanBlud === true),
     getRenaksiAndRealisasi(Number(tahun)),
@@ -275,7 +277,7 @@ export type ModuleDetailData =
   | { modul: 'renaksi';           data: RenaksiDetail }
   | { modul: 'realisasi-kinerja'; data: RealisasiKinerjaDetail };
 
-async function getUsulanDetail(): Promise<UsulanDetail> {
+async function getUsulanDetail(tahun: string): Promise<UsulanDetail> {
   const [kpiRows, bidangRows] = await Promise.all([
     sql`
       SELECT
@@ -286,7 +288,7 @@ async function getUsulanDetail(): Promise<UsulanDetail> {
         COUNT(CASE WHEN status = 'DIAJUKAN' THEN 1 END)                                                AS menunggu_admin,
         COALESCE(SUM(CASE WHEN status = 'DISETUJUI' THEN nominal_disetujui ELSE 0 END), 0)             AS nilai_disetujui,
         COALESCE(SUM(CASE WHEN status NOT IN ('DITOLAK','DITOLAK_ADMIN','DITOLAK_BIDANG','DRAFT') THEN harga_est*qty ELSE 0 END), 0) AS nilai_aktif
-      FROM usulan_items`,
+      FROM usulan_items WHERE ${itemUsulanTahun(tahun)}`,
     sql`
       SELECT sub_bidang,
         COUNT(*)                                                                          AS total,
@@ -294,7 +296,7 @@ async function getUsulanDetail(): Promise<UsulanDetail> {
         COUNT(CASE WHEN status IN ('DITOLAK','DITOLAK_ADMIN') THEN 1 END)                 AS ditolak,
         COUNT(CASE WHEN status IN ('DITELAAH','DIPROSES') THEN 1 END)                     AS proses,
         COALESCE(SUM(CASE WHEN status = 'DISETUJUI' THEN nominal_disetujui ELSE 0 END),0) AS nominal
-      FROM usulan_items GROUP BY sub_bidang ORDER BY total DESC`,
+      FROM usulan_items WHERE ${itemUsulanTahun(tahun)} GROUP BY sub_bidang ORDER BY total DESC`,
   ]);
   const k = (kpiRows[0] ?? {}) as Record<string, unknown>;
   const kpi = {
@@ -334,11 +336,13 @@ async function getEanggaranDetail(tahun: string): Promise<EanggaranDetail> {
   };
 }
 
-async function getBludDetail(): Promise<BludDetail> {
-  const latest = await getDpaLatest();
-  if (!latest) return { kpi: { versi_tanggal: null, total_pagu: 0, leaf_baris: 0, total_baris: 0 }, kelompokPie: [], table: [] };
-  const versi_tanggal = latest.versi;
-  const rows = await getDpaByDate(latest.tahun, latest.versi);
+// B5: DPA milik TAHUN yang dipilih, sama dengan ringkasannya (`getBludSummary`). Dulu
+// `getDpaLatest()` — DPA terbaru tahun apa pun — jadi ringkasan dan "Lihat Detail" bisa
+// bicara tentang tahun yang berbeda.
+async function getBludDetail(tahun: number): Promise<BludDetail> {
+  const versi_tanggal = await getDpaLatestDate(tahun);
+  if (!versi_tanggal) return { kpi: { versi_tanggal: null, total_pagu: 0, leaf_baris: 0, total_baris: 0 }, kelompokPie: [], table: [] };
+  const rows = await getDpaByDate(tahun, versi_tanggal);
   const total_pagu = rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0;
   const uraianByKode = new Map(rows.map(r => [r.kode_rekening, r.uraian]));
   const leaf = rows.filter(r => (r.vol ?? 0) > 0 || (r.harga ?? 0) > 0);
@@ -392,9 +396,9 @@ async function getRealisasiKinerjaDetail(tahun: number): Promise<RealisasiKinerj
 
 export async function getModuleDetail(modul: DashModule, tahun: string): Promise<ModuleDetailData> {
   switch (modul) {
-    case 'usulan':            return { modul, data: await getUsulanDetail() };
+    case 'usulan':            return { modul, data: await getUsulanDetail(tahun) };
     case 'eanggaran':         return { modul, data: await getEanggaranDetail(tahun) };
-    case 'blud':              return { modul, data: await getBludDetail() };
+    case 'blud':              return { modul, data: await getBludDetail(Number(tahun)) };
     case 'renaksi':           return { modul, data: await getRenaksiDetail(Number(tahun)) };
     case 'realisasi-kinerja': return { modul, data: await getRealisasiKinerjaDetail(Number(tahun)) };
   }

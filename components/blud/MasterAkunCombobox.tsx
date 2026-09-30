@@ -5,6 +5,7 @@
 // On free typing: fires onChange(uraian) — parent boleh menerima sebagai input bebas.
 
 import { useState, useRef, useEffect, useMemo } from 'react'
+import Tip from '@/components/ui/Tip'
 import { createPortal } from 'react-dom'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 
@@ -208,14 +209,15 @@ function VirtualDropdown({
       increaseViewportBy={150}
       itemContent={(idx, o) => {
         const active = idx === highlight
+        // Teks penuh lewat Tip (portal): daftarnya bergulir, tooltip CSS akan terpotong.
         return (
+          <Tip label={`${o.kode}  ${o.uraian}`}>
           <button
             type="button"
             onMouseDown={e => { e.preventDefault(); onPick(o) }}
             onMouseEnter={() => onHover(idx)}
             className="ma-combo-item"
             data-active={active ? '1' : '0'}
-            title={`${o.kode}  ${o.uraian}`}  /* full text via native tooltip saat hover */
             style={{
               height: ITEM_HEIGHT, width: '100%',
               display: 'flex', alignItems: 'center', textAlign: 'left',
@@ -238,6 +240,7 @@ function VirtualDropdown({
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{o.uraian}</span>
           </button>
+          </Tip>
         )
       }}
     />

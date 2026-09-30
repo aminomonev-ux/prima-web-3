@@ -57,7 +57,7 @@ function cellText(cell: ExcelJS.Cell): string {
   // internal, bukan tampilan. Melokalkannya ke koma membuat nilai hasil rumus
   // (7.936508) salah dibaca sebagai pemisah ribuan saat dikonversi balik.
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : String(Math.round(v * 1e6) / 1e6);
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return v.toISOString().slice(0, 10); // tanggal-utc-ok: exceljs membaca sel tanggal sebagai tengah malam UTC
   return String(v).replace(/\s+/g, ' ').trim();
 }
 

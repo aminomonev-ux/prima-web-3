@@ -1,7 +1,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { sql, safeInt, queryOne } from '@/lib/data/db';
+import { sql, safeInt, queryOne, withTransaction } from '@/lib/data/db';
+import { QtyUsulanSchema, HargaUsulanSchema } from '@/lib/data/usulan-schemas';
 import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { updateHeaderStats } from '@/lib/data/usulan';
@@ -14,10 +15,11 @@ const decisionSchema = z.object({
   item_id:         z.number(),
   keputusan:       z.enum(['APPROVE', 'TOLAK', 'KEMBALIKAN', 'REVISI_LANGSUNG']),
   catatan:         z.string().optional(),
-  rev_nama:        z.string().optional(),
-  rev_spesifikasi: z.string().optional(),
-  rev_qty:         z.number().optional(),
-  rev_harga:       z.number().optional(),
+  // B10: batas SAMA dengan buat baru — revisi langsung Bidang dulu menerima qty 0/negatif.
+  rev_nama:        z.string().min(1).max(255).optional(),
+  rev_spesifikasi: z.string().max(2000).optional(),
+  rev_qty:         QtyUsulanSchema.optional(),
+  rev_harga:       HargaUsulanSchema.optional(),
 });
 
 const bodySchema = z.object({
@@ -86,51 +88,55 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    for (const d of decisions) {
-      if (d.keputusan === 'REVISI_LANGSUNG') {
-        const nama  = d.rev_nama        ?? null;
-        const spek  = d.rev_spesifikasi ?? null;
-        const qty   = d.rev_qty         ?? null;
-        const harga = d.rev_harga       ?? null;
+    // B11: seluruh keputusan satu transaksi — dulu perulangan `await` lepas; mati di
+    // tengah meninggalkan sebagian item sudah diputus, sebagian belum.
+    await withTransaction(async ({ tx }) => {
+      for (const d of decisions) {
+        if (d.keputusan === 'REVISI_LANGSUNG') {
+          const nama  = d.rev_nama        ?? null;
+          const spek  = d.rev_spesifikasi ?? null;
+          const qty   = d.rev_qty         ?? null;
+          const harga = d.rev_harga       ?? null;
 
-        // BUG-W7: *_asal = COALESCE(asal, current) → set hanya kalau masih NULL
-        // (revisi pertama). Pattern lama `CASE WHEN ${rev} != current THEN current
-        // ELSE asal END` salah: revisi kedua akan overwrite *_asal dengan nilai
-        // revisi pertama, kehilangan nilai original yang pertama kali pengusul submit.
-        await sql`
-          UPDATE usulan_items
-          SET status           = 'DIAJUKAN',
-              bidang_by        = ${session.username},
-              bidang_tgl       = CURRENT_DATE,
-              bidang_keputusan = 'REVISI_LANGSUNG',
-              bidang_catatan   = ${d.catatan ?? ''},
-              nama_asal        = COALESCE(nama_asal, nama_barang),
-              spesifikasi_asal = COALESCE(spesifikasi_asal, spesifikasi),
-              qty_asal         = COALESCE(qty_asal, qty),
-              harga_asal       = COALESCE(harga_asal, harga_est),
-              nama_barang      = COALESCE(${nama}, nama_barang),
-              spesifikasi      = COALESCE(${spek}, spesifikasi),
-              qty              = COALESCE(${qty},  qty),
-              harga_est        = COALESCE(${harga}, harga_est),
-              updated_at       = NOW()
-          WHERE id = ${d.item_id} AND usulan_id = ${usulanId} AND sub_bidang = ${h.sub_bidang} AND status = 'DIAJUKAN_REVIEW'
-        `;
-      } else {
-        const newStatus = d.keputusan === 'APPROVE' ? 'DIAJUKAN'
-                        : d.keputusan === 'TOLAK'   ? 'DITOLAK_BIDANG'
-                        : 'REVISI_BIDANG';
-        await sql`
-          UPDATE usulan_items
-          SET status           = ${newStatus},
-              bidang_by        = ${session.username},
-              bidang_tgl       = CURRENT_DATE,
-              bidang_keputusan = ${d.keputusan},
-              bidang_catatan   = ${d.catatan ?? ''},
-              updated_at       = NOW()
-          WHERE id = ${d.item_id} AND usulan_id = ${usulanId} AND sub_bidang = ${h.sub_bidang} AND status = 'DIAJUKAN_REVIEW'
-        `;
+          // BUG-W7: *_asal = COALESCE(asal, current) → set hanya kalau masih NULL
+          // (revisi pertama). Pattern lama `CASE WHEN ${rev} != current THEN current
+          // ELSE asal END` salah: revisi kedua akan overwrite *_asal dengan nilai
+          // revisi pertama, kehilangan nilai original yang pertama kali pengusul submit.
+          await tx`
+            UPDATE usulan_items
+            SET status           = 'DIAJUKAN',
+                bidang_by        = ${session.username},
+                bidang_tgl       = CURRENT_DATE,
+                bidang_keputusan = 'REVISI_LANGSUNG',
+                bidang_catatan   = ${d.catatan ?? ''},
+                nama_asal        = COALESCE(nama_asal, nama_barang),
+                spesifikasi_asal = COALESCE(spesifikasi_asal, spesifikasi),
+                qty_asal         = COALESCE(qty_asal, qty),
+                harga_asal       = COALESCE(harga_asal, harga_est),
+                nama_barang      = COALESCE(${nama}, nama_barang),
+                spesifikasi      = COALESCE(${spek}, spesifikasi),
+                qty              = COALESCE(${qty},  qty),
+                harga_est        = COALESCE(${harga}, harga_est),
+                updated_at       = NOW()
+            WHERE id = ${d.item_id} AND usulan_id = ${usulanId} AND sub_bidang = ${h.sub_bidang} AND status = 'DIAJUKAN_REVIEW'
+          `;
+        } else {
+          const newStatus = d.keputusan === 'APPROVE' ? 'DIAJUKAN'
+                          : d.keputusan === 'TOLAK'   ? 'DITOLAK_BIDANG'
+                          : 'REVISI_BIDANG';
+          await tx`
+            UPDATE usulan_items
+            SET status           = ${newStatus},
+                bidang_by        = ${session.username},
+                bidang_tgl       = CURRENT_DATE,
+                bidang_keputusan = ${d.keputusan},
+                bidang_catatan   = ${d.catatan ?? ''},
+                updated_at       = NOW()
+            WHERE id = ${d.item_id} AND usulan_id = ${usulanId} AND sub_bidang = ${h.sub_bidang} AND status = 'DIAJUKAN_REVIEW'
+          `;
+        }
       }
-    }
+    });
 
     await updateHeaderStats(usulanId);
 

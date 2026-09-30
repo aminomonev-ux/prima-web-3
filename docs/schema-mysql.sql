@@ -82,6 +82,9 @@ CREATE TABLE IF NOT EXISTS app_config (
   updated_at DATETIME      DEFAULT NOW() ON UPDATE NOW()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Kunci yang boleh ditulis layar + bentuk nilainya: `aturanConfig` (lib/data/admin-schemas.ts).
+-- Pagu BLUD Usulan per tahun anggaran: `pagu_blud_{tahun}` (B5, migration-pagu-blud-per-tahun.sql).
+
 -- Fase F Tahap 17 (T15): daftar ini = `KUNCI_SAKELAR` di lib/registry/apps.ts, diperiksa
 -- scripts/test-tahap-17.mts. Baris yang tidak ada tetap terbaca online, tapi basis data yang
 -- lahir dari berkas ini tidak boleh punya sakelar tanpa baris (tidak tampil di cek-tahap-0).
@@ -208,14 +211,29 @@ CREATE TABLE IF NOT EXISTS notifications (
   pesan      TEXT            NOT NULL,
   no_usulan  VARCHAR(100)    DEFAULT NULL,
   sub_bidang VARCHAR(100)    DEFAULT NULL,
-  dibaca     TINYINT(1)      NOT NULL DEFAULT 0,
   created_at DATETIME        NOT NULL DEFAULT NOW()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX idx_notif_recipient ON notifications (recipient, dibaca);
 CREATE INDEX idx_notif_created   ON notifications (created_at DESC);
--- migration 014 (PERF-C5): composite untuk fetch unread by recipient (covering index)
-CREATE INDEX idx_notif_recipient_full ON notifications (recipient, dibaca, created_at DESC);
+-- 2026-09-29 (B7): pengganti idx_notif_recipient & idx_notif_recipient_full, yang dibuang
+-- bersama kolom `dibaca` (migration-drop-notif-dibaca.sql).
+CREATE INDEX idx_notif_recipient_waktu ON notifications (recipient, created_at);
+
+-- ─── NOTIFIKASI DIBACA (per orang) ────────────────────────────────────────────
+-- 2026-09-29 (audit B7, migration-notifikasi-dibaca.sql). Status baca SATU baris per
+-- orang, bukan satu kolom per notifikasi: notifikasi antrean (`__ADMIN__`, `__KASUBAG__`,
+-- `__KABAG__`, `__BIDANG__<peran>`) dibaca banyak orang, dan satu kolom berarti membaca =
+-- membacakan untuk semua. Tidak ada baris = belum dibaca — kecuali notifikasi yang lebih
+-- tua dari akun pembacanya (`users.created_at`), yang dianggap sudah dibaca.
+CREATE TABLE IF NOT EXISTS notifikasi_dibaca (
+  notif_id     INT       NOT NULL,
+  user_id      INT       NOT NULL,
+  dibaca_pada  DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (notif_id, user_id),
+  INDEX idx_nd_user (user_id),
+  CONSTRAINT fk_nd_notif FOREIGN KEY (notif_id) REFERENCES notifications(id) ON DELETE CASCADE,
+  CONSTRAINT fk_nd_user  FOREIGN KEY (user_id)  REFERENCES users(id)         ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ─── AUDIT LOG ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -317,6 +335,8 @@ CREATE INDEX idx_km_tahun_tipe   ON kinerja_master (tahun, tipe);
 CREATE INDEX idx_km_sumber       ON kinerja_master (sumber);
 CREATE INDEX idx_km_program_ref  ON kinerja_master (program_ref(100));
 CREATE INDEX idx_km_kegiatan_ref ON kinerja_master (kegiatan_ref(100));
+-- U4 (audit 2026-09-29): ada di migration-kinerja-master-hierarki-ref.sql tapi tak pernah ditulis di sini.
+CREATE INDEX idx_km_subkegiatan_ref ON kinerja_master (subkegiatan_ref(100));
 
 -- ─── KINERJA REKENING ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS kinerja_rekening (
@@ -1170,6 +1190,7 @@ CREATE TABLE IF NOT EXISTS lkjip_section (
   depth       TINYINT         NOT NULL DEFAULT 0,
   urutan      INT             NOT NULL DEFAULT 0,
   judul       VARCHAR(255)    NOT NULL,
+  -- 1 = BAB wajib (B12, migration-lkjip-bab-wajib.sql): tak bisa dipindah; aturan di lib/lkjip/aturan-bab.ts
   locked      TINYINT         NOT NULL DEFAULT 0,
   created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1368,6 +1389,8 @@ CREATE TABLE IF NOT EXISTS pk_dokumen (
   pangkat_kedua        VARCHAR(100),
   nip_kedua            VARCHAR(50),
   status               ENUM('DRAFT','FINAL') NOT NULL DEFAULT 'DRAFT',
+  -- I4 (migration-pk-dokumen-version.sql): kunci versi PATCH & finalisasi (L48)
+  version              INT NOT NULL DEFAULT 0,
   generated_file       MEDIUMBLOB,
   generated_filesize   INT,
   generated_filename   VARCHAR(255),

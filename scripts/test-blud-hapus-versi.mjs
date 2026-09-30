@@ -11,7 +11,7 @@
 // lama; jalur HAPUS dulu tidak punya satu pun, padahal akibatnya sama dan lebih
 // senyap — `getPaguEfektif` selalu mengambil MAX(versi_tanggal), jadi menghapus
 // versi teratas memundurkan pagu SETAHUN penuh sementara alokasinya tetap tinggal.
-import { execSync } from 'node:child_process'
+import { kompilasiUji } from './_kompilasi-uji.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import Module from 'node:module'
@@ -35,24 +35,10 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
 
 fs.mkdirSync(outDir, { recursive: true })
 
-// Berkas yang hanya terjangkau lewat alias `@/…` WAJIB disebut satu per satu: tsc
-// telanjang tidak membaca `paths` di tsconfig, jadi ia diam-diam tidak menuliskan
-// .js-nya dan pemuatan baru meledak saat runtime (ENOENT). Impor relatif (`./pagu`,
-// `./lock`) ikut sendiri — yang perlu didaftarkan cuma ujung rantai aliasnya.
-const sumber = [
-  'lib/shared/uuid.ts',
-  'lib/data/db.ts', 'lib/data/locks.ts',
-  'lib/blud/lock.ts', 'lib/blud/pagu.ts', 'lib/blud/data.ts',
-  'lib/blud/anggaran-key.ts', 'lib/blud/schemas.ts',
-]
-try {
-  execSync(
-    `npx tsc ${sumber.map((f) => `"${path.join(repo, f)}"`).join(' ')}`
-    + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
-    + ' --esModuleInterop --skipLibCheck --moduleResolution node',
-    { cwd: repo, stdio: 'pipe' },
-  )
-} catch { /* impor `@/...` tak ter-resolve saat compile — .js tetap ditulis, itu yang dipakai */ }
+// Titik masuk saja — `kompilasiUji` mengikuti seluruh impornya, termasuk alias `@/…`.
+// Daftar tulis-tangan yang dulu di sini (dengan peringatan "WAJIB disebut satu per
+// satu") mati diam-diam begitu `tanggal.ts` mulai mengimpor `@/lib/shared/waktu-wib`.
+kompilasiUji(repo, outDir, ['lib/data/db.ts', 'lib/blud/data.ts'])
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {

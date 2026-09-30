@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { sql, withTransaction, safeInt } from '@/lib/data/db';
+import { sql, withTransaction, safeInt, bulkInsert } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ADMIN_ROLES, BIDANG_ROLES, SUBBIDANG_ROLES, BIDANG_TO_SUBBIDANG, SUBBIDANG_TO_BIDANG } from '@/lib/constants';
-import { generateNoUsulan, updateHeaderStats } from '@/lib/data/usulan';
+import { generateNoUsulan, updateHeaderStats, jendelaPengajuanTerbuka } from '@/lib/data/usulan';
+import { ItemUsulanSchema, JenisUsulanSchema, QtyUsulanSchema, HargaUsulanSchema } from '@/lib/data/usulan-schemas';
+import { PESAN_JENDELA_TUTUP } from '@/lib/shared/jendela-pengajuan';
 import { addNotif, bidangRoleOf, notifBidang } from '@/lib/services/notifications';
-import { isSafeFileUrl } from '@/lib/shared/url';
 import { usulanMati } from '../_guard';
 
 
@@ -102,7 +103,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const hasBidang = !!SUBBIDANG_TO_BIDANG[h.sub_bidang as string];
 
       if (curStatus === 'DRAFT') {
-        
+        // B3: pengiriman PERTAMA tunduk jendela pengajuan — dulu hanya POST yang
+        // bertanya, jadi "simpan draf lalu Ajukan" melewatinya.
+        if (!(await jendelaPengajuanTerbuka())) {
+          return NextResponse.json({ ok: false, message: PESAN_JENDELA_TUTUP }, { status: 403 });
+        }
         const targetStatus = hasBidang ? 'DIAJUKAN_REVIEW' : 'DIAJUKAN';
         await sql`UPDATE usulan_items SET status = ${targetStatus} WHERE usulan_id = ${usulanId} AND status = 'DRAFT'`;
         await updateHeaderStats(usulanId);
@@ -169,41 +174,47 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const h = rows[0] as Record<string,unknown>;
       if (h.created_by !== session.userId && session.role !== 'SUPER_ADMIN') return NextResponse.json({ ok: false, message: 'Bukan usulan Anda.' }, { status: 403 });
 
+      // B10: batas qty/harga SAMA dengan buat baru (lib/data/usulan-schemas.ts) — dulu
+      // jalur ini menerima 0 dan negatif, jadi total usulan bisa minus.
       const resubSchema = z.object({
         action: z.literal('resubmit_revisi_bidang'),
         items: z.array(z.object({
           item_id:     z.number(),
-          spesifikasi: z.string().optional(),
-          qty:         z.number().optional(),
-          harga_est:   z.number().optional(),
+          spesifikasi: z.string().max(2000).optional(),
+          qty:         QtyUsulanSchema.optional(),
+          harga_est:   HargaUsulanSchema.optional(),
         })).optional(),
       });
       const rp = resubSchema.safeParse(body);
       if (!rp.success) return NextResponse.json({ ok: false, message: rp.error.issues[0]?.message }, { status: 400 });
 
-      for (const it of rp.data.items ?? []) {
-        const spek  = it.spesifikasi ?? null;
-        const qty   = it.qty         ?? null;
-        const harga = it.harga_est   ?? null;
-        await sql`
-          UPDATE usulan_items
-          SET spesifikasi = COALESCE(${spek},  spesifikasi),
-              qty         = COALESCE(${qty},   qty),
-              harga_est   = COALESCE(${harga}, harga_est),
-              updated_at  = NOW()
-          WHERE id = ${it.item_id} AND usulan_id = ${usulanId} AND status = 'REVISI_BIDANG'
-        `;
-      }
+      // B11: perubahan item + pengembalian status satu transaksi — dulu perulangan
+      // `await` lepas; mati di tengah meninggalkan sebagian item terevisi.
+      await withTransaction(async ({ tx }) => {
+        for (const it of rp.data.items ?? []) {
+          const spek  = it.spesifikasi ?? null;
+          const qty   = it.qty         ?? null;
+          const harga = it.harga_est   ?? null;
+          await tx`
+            UPDATE usulan_items
+            SET spesifikasi = COALESCE(${spek},  spesifikasi),
+                qty         = COALESCE(${qty},   qty),
+                harga_est   = COALESCE(${harga}, harga_est),
+                updated_at  = NOW()
+            WHERE id = ${it.item_id} AND usulan_id = ${usulanId} AND status = 'REVISI_BIDANG'
+          `;
+        }
 
-      // O6: Reset ke NULL (sesuai schema DEFAULT NULL), bukan empty string.
-      // Sebelumnya inkonsisten ('') menyebabkan filter `IS NOT NULL AND != ''`.
-      await sql`
-        UPDATE usulan_items
-        SET status = 'DIAJUKAN_REVIEW',
-            bidang_by=NULL, bidang_tgl=NULL, bidang_keputusan=NULL, bidang_catatan=NULL,
-            updated_at = NOW()
-        WHERE usulan_id = ${usulanId} AND status = 'REVISI_BIDANG'
-      `;
+        // O6: Reset ke NULL (sesuai schema DEFAULT NULL), bukan empty string.
+        // Sebelumnya inkonsisten ('') menyebabkan filter `IS NOT NULL AND != ''`.
+        await tx`
+          UPDATE usulan_items
+          SET status = 'DIAJUKAN_REVIEW',
+              bidang_by=NULL, bidang_tgl=NULL, bidang_keputusan=NULL, bidang_catatan=NULL,
+              updated_at = NOW()
+          WHERE usulan_id = ${usulanId} AND status = 'REVISI_BIDANG'
+        `;
+      });
 
       await updateHeaderStats(usulanId);
 
@@ -219,39 +230,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (action === 'update_draft') {
 
+      // B4: skema item & jenis BERSAMA jalur buat baru. Dulu jalur ini menolak
+      // PERGESERAN (draf PERGESERAN tak bisa disimpan) dan tidak memeriksa tautan
+      // merek (V5-INJ-01 hanya terpasang di buat baru).
       const updateSchema = z.object({
         action:           z.literal('update_draft'),
         sub_bidang:       z.string().optional(),
         tahun_anggaran:   z.string().optional(),
-        jenis_usulan:     z.enum(['MURNI','PERUBAHAN']).optional(),
+        jenis_usulan:     JenisUsulanSchema.optional(),
         jenis_belanja:       z.string().optional(),
         is_draft:         z.boolean().default(true),
         updated_at_check: z.string().optional(),
-        items: z.array(z.object({
-          nama_barang: z.string().min(1),
-          spesifikasi: z.string().optional(),
-          qty:         z.number().min(1),
-          satuan:      z.string().min(1),
-          harga_est:   z.number().min(0),
-          prioritas:   z.enum(['TINGGI','SEDANG','RENDAH']),
-          alasan:      z.string().optional(),
-          url_merk1:   z.string().optional(),
-          url_merk2:   z.string().optional(),
-          url_merk3:   z.string().optional(),
-          file_url:    z.string().trim().optional().refine(v => !v || isSafeFileUrl(v), 'Lampiran tidak valid'),
-          sub_bidang:  z.string().optional(),
+        items: z.array(ItemUsulanSchema.extend({
+          sub_bidang:     z.string().optional(),
           jenis_belanja:  z.string().optional(),
-        })).min(1),
+        })).min(1).max(500),
       });
       const p = updateSchema.safeParse(body);
       if (!p.success) return NextResponse.json({ ok: false, message: p.error.issues[0]?.message }, { status: 400 });
 
       const { sub_bidang: newSubBidang, tahun_anggaran, jenis_usulan, jenis_belanja, items, is_draft, updated_at_check } = p.data;
-      const rows2 = await sql`SELECT created_by, status_ringkas, sub_bidang, updated_at FROM usulan_headers WHERE id = ${usulanId} LIMIT 1`;
+      const rows2 = await sql`SELECT created_by, status_ringkas, sub_bidang, updated_at, tahun_anggaran, jenis_usulan FROM usulan_headers WHERE id = ${usulanId} LIMIT 1`;
       if (!rows2.length) return NextResponse.json({ ok: false, message: 'Usulan tidak ditemukan.' }, { status: 404 });
       const h2 = rows2[0] as Record<string,unknown>;
       if (h2.created_by !== session.userId && session.role !== 'SUPER_ADMIN') return NextResponse.json({ ok: false, message: 'Bukan usulan Anda.' }, { status: 403 });
       if (h2.status_ringkas !== 'DRAFT') return NextResponse.json({ ok: false, message: 'Hanya DRAFT yang bisa diedit.' }, { status: 400 });
+      // B3: menyimpan draf sekaligus mengirim = pengiriman pertama, tunduk jendela.
+      if (!is_draft && !(await jendelaPengajuanTerbuka())) {
+        return NextResponse.json({ ok: false, message: PESAN_JENDELA_TUTUP }, { status: 403 });
+      }
 
       if (updated_at_check) {
         const dbUpdatedAt = new Date(h2.updated_at as string).getTime();
@@ -265,47 +272,58 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const subChanged    = !!newSubBidang && newSubBidang !== (h2.sub_bidang as string);
       const hasBidang     = !!SUBBIDANG_TO_BIDANG[effectiveSub];
       const newStatus     = is_draft ? 'DRAFT' : (hasBidang ? 'DIAJUKAN_REVIEW' : 'DIAJUKAN');
+      // B4: tidak dikirim = TETAP seperti tersimpan, bukan dikosongkan — dulu
+      // `tahun_anggaran ?? ''` menghapus tahun anggaran draf yang tidak menyebutnya.
+      const tahunEfektif  = tahun_anggaran ?? String(h2.tahun_anggaran ?? '');
+      const jenisEfektif  = jenis_usulan ?? String(h2.jenis_usulan ?? 'MURNI');
+      // B4: nomor baru ikut JENIS draf — tanpa jenis, draf PERUBAHAN/PERGESERAN yang
+      // ganti sub-bidang mendapat awalan MURNI (`UA-`).
       const finalNoUsulan = subChanged
-        ? await generateNoUsulan(effectiveSub, tahun_anggaran ? parseInt(tahun_anggaran) : undefined)
+        ? await generateNoUsulan(effectiveSub, tahunEfektif ? parseInt(tahunEfektif) : undefined, jenisEfektif)
         : null;
 
       // BUG-C2: UPDATE header + DELETE items + INSERT items dalam SATU transaksi.
       // Kalau ada step yang gagal → rollback semua (draft tidak jadi kosong / partial).
-      await withTransaction(async ({ tx }) => {
-        await tx`
+      const tersimpan = await withTransaction(async ({ tx, conn }) => {
+        // Status DRAFT ditegaskan lagi DI DALAM transaksi: pemeriksaan di atas bisa
+        // didahului tab lain yang mengirim draf yang sama di selanya.
+        const upd = await tx`
           UPDATE usulan_headers SET
             sub_bidang     = ${effectiveSub},
             jenis_belanja     = ${jenis_belanja ?? ''},
-            tahun_anggaran = ${tahun_anggaran ?? ''},
+            tahun_anggaran = ${tahunEfektif},
             ${jenis_usulan ? sql`jenis_usulan = ${jenis_usulan},` : sql``}
             status_ringkas = ${newStatus},
             ${finalNoUsulan ? sql`no_usulan = ${finalNoUsulan},` : sql``}
             updated_at     = NOW()
-          WHERE id = ${usulanId}
-        `;
+          WHERE id = ${usulanId} AND status_ringkas = 'DRAFT'
+        ` as Array<{ affectedRows?: number }>;
+        if (Number(upd[0]?.affectedRows ?? 0) === 0) return false;
 
         await tx`DELETE FROM usulan_items WHERE usulan_id = ${usulanId}`;
 
         const noUsulanRow = await tx`SELECT no_usulan, sub_bidang, pengusul FROM usulan_headers WHERE id = ${usulanId}`;
         const hdr = noUsulanRow[0] as Record<string,unknown>;
 
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          await tx`
-            INSERT INTO usulan_items
-              (usulan_id, no_usulan, no_item, sub_bidang, pengusul, jenis_belanja,
-               nama_barang, spesifikasi, qty, satuan, harga_est, prioritas, status,
-               alasan, url_merk1, url_merk2, url_merk3, file_url)
-            VALUES
-              (${usulanId}, ${hdr.no_usulan as string}, ${i+1},
-               ${effectiveSub}, ${hdr.pengusul as string}, ${item.jenis_belanja ?? jenis_belanja ?? ''},
-               ${item.nama_barang}, ${item.spesifikasi ?? ''}, ${item.qty}, ${item.satuan},
-               ${item.harga_est}, ${item.prioritas}, ${newStatus},
-               ${item.alasan ?? ''}, ${item.url_merk1 ?? ''}, ${item.url_merk2 ?? ''}, ${item.url_merk3 ?? ''},
-               ${item.file_url ?? ''})
-          `;
-        }
+        // PERF-C1: satu INSERT borongan, bukan satu per item.
+        await bulkInsert('usulan_items',
+          ['usulan_id','no_usulan','no_item','sub_bidang','pengusul','jenis_belanja',
+           'nama_barang','spesifikasi','qty','satuan','harga_est','prioritas','status',
+           'alasan','url_merk1','url_merk2','url_merk3','file_url'],
+          items.map((item, i) => [
+            usulanId, hdr.no_usulan as string, i + 1,
+            effectiveSub, hdr.pengusul as string, item.jenis_belanja ?? jenis_belanja ?? '',
+            item.nama_barang, item.spesifikasi ?? '', item.qty, item.satuan,
+            item.harga_est, item.prioritas, newStatus,
+            item.alasan ?? '', item.url_merk1 ?? '', item.url_merk2 ?? '', item.url_merk3 ?? '',
+            item.file_url ?? '',
+          ]),
+          conn);
+        return true;
       });
+      if (!tersimpan) {
+        return NextResponse.json({ ok: false, message: 'Usulan ini sudah tidak berstatus Draft. Muat ulang dulu sebelum menyimpan.' }, { status: 409 });
+      }
 
       await updateHeaderStats(usulanId);
       await writeAuditLog({ req, eventType: 'USULAN_UPDATE', userId: session.userId, username: session.username, detail: `Update draft id=${usulanId}${!is_draft ? ' → diajukan' : ''}` });

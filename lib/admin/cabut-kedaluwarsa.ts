@@ -17,6 +17,7 @@
 // lingkaran impor dengan `pusat-akses.ts`.
 
 import { queryOne, sql } from '@/lib/data/db'
+import { toDateStr } from '@/lib/shared/waktu-wib'
 import { modul } from '@/lib/registry/apps'
 import { addNotif } from '@/lib/services/notifications'
 import { tanggalSingkat, sisaHari } from '@/lib/admin/berjangka-baris'
@@ -123,9 +124,8 @@ async function sisaTenggat(userId: number, dibuang: Set<string>) {
     .filter((r) => !dibuang.has(r.app_key))
     .map((r) => ({
       appKey: r.app_key,
-      berakhir: r.berakhir_pada instanceof Date
-        ? `${r.berakhir_pada.getFullYear()}-${String(r.berakhir_pada.getMonth() + 1).padStart(2, '0')}-${String(r.berakhir_pada.getDate()).padStart(2, '0')}`
-        : String(r.berakhir_pada ?? '').slice(0, 10),
+      // I2: offset WIB eksplisit — getter lokal hanya benar selama proses Node ber-TZ WIB.
+      berakhir: toDateStr(r.berakhir_pada),
       alasan: r.alasan,
     }))
 }

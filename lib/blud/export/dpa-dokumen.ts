@@ -22,6 +22,7 @@ import { isLeafMode } from '@/lib/blud/recalc'
 import { uraiGeser, URAIAN_NOL } from '@/lib/blud/urai-geser'
 import { totalMutasi, type MutasiInput } from '@/lib/blud/mutasi'
 import { HEX_NAIK, HEX_TURUN } from '@/lib/blud/export/warna-delta'
+import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
 const INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO'
@@ -238,7 +239,7 @@ function selesaikanLembar(
 }
 
 function namaBerkas(awalan: string, tahun: number, versi: string | null): string {
-  const tag = (versi ?? new Date().toISOString().slice(0, 10)).replace(/-/g, '')
+  const tag = (versi ?? tanggalHariIniWIB()).replace(/-/g, '')
   return `${awalan}_${tahun}_${tag}.xlsx`
 }
 

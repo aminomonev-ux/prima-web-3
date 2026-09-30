@@ -163,19 +163,27 @@ async function ujiPergeseran() {
   const wb = await buatWorkbookPergeseran({ tahun: 2026, versi: '2026-02-01', rows, direktur: null });
   const ws = wb.worksheets[0];
 
-  cek('pergeseran: 12 kolom', ws.getRow(6).getCell(12).value === 'Jangkar', String(ws.getRow(6).getCell(12).value));
-  cek('pergeseran: Level tersembunyi', ws.getColumn(11).hidden === true);
-  cek('pergeseran: kolom Jumlah berumus', rumus(nilaiSel(ws, 'F8')) === 'SUM(F9:F10)', String(rumus(nilaiSel(ws, 'F8'))));
-  cek('pergeseran: kolom Pergeseran berumus', rumus(nilaiSel(ws, 'I8')) === 'SUM(I9:I10)', String(rumus(nilaiSel(ws, 'I8'))));
-  cek('pergeseran: daun pakai kolom G/H', rumus(nilaiSel(ws, 'I9')) === 'ROUND(G9*H9,0)', String(rumus(nilaiSel(ws, 'I9'))));
-  cek('pergeseran: selisih = pergeseran − jumlah', rumus(nilaiSel(ws, 'J9')) === 'I9-F9', String(rumus(nilaiSel(ws, 'J9'))));
+  // Kolom DICARI lewat nama header, bukan nomor tetap: dokumen ini sudah dua kali
+  // bertambah kolom (Bertambah/Berkurang L86, PJ/Keterangan) dan asersi bernomor tetap
+  // basi diam-diam tiap kali — U2, audit 2026-09-29. Pola `test-pergeseran-pj.mts`.
+  const header = [];
+  ws.getRow(6).eachCell({ includeEmpty: false }, (c, n) => { header[n] = c.value; });
+  const huruf = (nama) => { const n = header.indexOf(nama); return n > 0 ? String.fromCharCode(64 + n) : null; };
+  const [kJml, kPrg, kSel] = [huruf('Jumlah'), huruf('Pergeseran'), huruf('Selisih')];
+  cek('pergeseran: Jangkar kolom paling kanan', header.at(-1) === 'Jangkar', String(header.at(-1)));
+  cek('pergeseran: Level tersembunyi', header.indexOf('Level') > 0 && ws.getColumn(header.indexOf('Level')).hidden === true);
+  cek('pergeseran: Jangkar tersembunyi', ws.getColumn(header.length - 1).hidden === true);
+  cek('pergeseran: kolom Jumlah berumus', rumus(nilaiSel(ws, `${kJml}8`)) === `SUM(${kJml}9:${kJml}10)`, String(rumus(nilaiSel(ws, `${kJml}8`))));
+  cek('pergeseran: kolom Pergeseran berumus', rumus(nilaiSel(ws, `${kPrg}8`)) === `SUM(${kPrg}9:${kPrg}10)`, String(rumus(nilaiSel(ws, `${kPrg}8`))));
+  cek('pergeseran: daun pakai kolom Vol P/Harga P', rumus(nilaiSel(ws, `${kPrg}9`)) === `ROUND(${huruf('Vol P')}9*${huruf('Harga P')}9,0)`, String(rumus(nilaiSel(ws, `${kPrg}9`))));
+  cek('pergeseran: selisih = pergeseran − jumlah', rumus(nilaiSel(ws, `${kSel}9`)) === `${kPrg}9-${kJml}9`, String(rumus(nilaiSel(ws, `${kSel}9`))));
 
   const teks = [];
   ws.eachRow({ includeEmpty: false }, (r) => r.eachCell({ includeEmpty: false }, (c) => {
     if (typeof c.value === 'string') teks.push(c.value);
   }));
   cek('pergeseran: Direktur kosong berkerangka', teks.join('\n').includes('NIP. ..............................'));
-  cek('pergeseran: vol P tanpa format desimal', !ws.getCell('G9').numFmt, String(ws.getCell('G9').numFmt));
+  cek('pergeseran: vol P tanpa format desimal', !ws.getCell(`${huruf('Vol P')}9`).numFmt, String(ws.getCell(`${huruf('Vol P')}9`).numFmt));
 }
 
 async function ujiKosong() {

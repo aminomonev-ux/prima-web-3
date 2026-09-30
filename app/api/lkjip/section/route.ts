@@ -5,7 +5,7 @@ import {
 } from '@/lib/lkjip/schemas';
 import {
   addSection, renameSection, moveSection, deleteSection,
-  LkjipNotFoundError, LkjipFinalError, LkjipStructureError,
+  LkjipNotFoundError, LkjipFinalError, LkjipStructureError, LkjipAturanBabError,
 } from '@/lib/lkjip/data';
 import { guard } from '../_guard';
 
@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 
 function mapErr(err: unknown): NextResponse | null {
   if (err instanceof LkjipFinalError)     return NextResponse.json({ ok: false, msg: err.message }, { status: 409 });
+  if (err instanceof LkjipAturanBabError) return NextResponse.json({ ok: false, msg: err.message }, { status: 409 });
   if (err instanceof LkjipStructureError) return NextResponse.json({ ok: false, msg: err.message }, { status: 400 });
   if (err instanceof LkjipNotFoundError)  return NextResponse.json({ ok: false, msg: err.message }, { status: 404 });
   return null;

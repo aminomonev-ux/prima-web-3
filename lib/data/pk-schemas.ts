@@ -192,7 +192,17 @@ export const DokumenCreateBodySchema = z.object({
  * PATCH update — sama struktur dengan create, dipakai untuk replace pattern
  * (withTransaction DELETE lampiran/anggaran + bulkInsert baru — L7 BUG-C2).
  */
-export const DokumenUpdateBodySchema = DokumenCreateBodySchema;
+// I4: angka kunci WAJIB — opsional-dengan-cadangan persis perilaku lamanya (menimpa tanpa bertanya).
+export const DokumenUpdateBodySchema = DokumenCreateBodySchema.extend({
+  expected_version: z.number().int().min(0),
+});
+
+export const DokumenFinalizeBodySchema = z.object({
+  expected_version: z.number().int().min(0),
+});
+
+/** I4: simpanan lain masuk sejak dokumen ini dibuka (PATCH & finalisasi). */
+export const PESAN_VERSI_PK = 'Dokumen ini sudah diubah orang lain sejak Anda membukanya. Perubahan Anda BELUM tersimpan — muat ulang halaman untuk melihat versi terbaru, lalu ulangi perubahan Anda.';
 
 // ─── Query schemas ──────────────────────────────────────────────────────────
 
@@ -205,6 +215,9 @@ export const PkQuerySchema = z.object({
 
 export const BludNominalQuerySchema = z.object({
   unit: z.string().trim().min(1, 'Unit kerja wajib').max(255),
+  // B6: WAJIB, bukan opsional-dengan-cadangan — cadangan itu persis perilaku lamanya
+  // (rekap tahun apa pun yang kebetulan paling baru).
+  tahun: z.string().regex(/^\d{4}$/, 'Tahun dokumen wajib (YYYY)').transform(Number),
 });
 
 /**

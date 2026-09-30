@@ -59,7 +59,7 @@ function unwrap(v: unknown): unknown {
 function cellStr(v: unknown): string {
   const u = unwrap(v);
   if (u == null) return '';
-  if (u instanceof Date) return u.toISOString().slice(0, 10);
+  if (u instanceof Date) return u.toISOString().slice(0, 10); // tanggal-utc-ok: exceljs membaca sel tanggal sebagai tengah malam UTC
   return String(u).replace(/\s+/g, ' ').trim();
 }
 

@@ -8,6 +8,7 @@
 
 import type { ExportRow } from '@/lib/blud/cetak-data'
 import { arahDelta, RGB_NAIK, RGB_TURUN } from '@/lib/blud/export/warna-delta'
+import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 
 export interface ExportPdfArgs {
   menu:    string
@@ -103,7 +104,7 @@ export async function exportToPdf(args: ExportPdfArgs): Promise<void> {
   })
 
   // Filename
-  const tag = (versi || tanggal || new Date().toISOString().slice(0, 10)).replace(/-/g, '')
+  const tag = (versi || tanggal || tanggalHariIniWIB()).replace(/-/g, '')
   const filename = `${slug(title)}_${tag}.pdf`
   doc.save(filename)
 }

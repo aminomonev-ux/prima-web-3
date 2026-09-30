@@ -33,6 +33,11 @@ export async function GET() {
 
   if (!(await bolehBukaMenu(session.userId, session.role, 'pengaturan'))) return forbidden()
 
+  // B13: satu-satunya dari 41 handler BLUD yang dulu tanpa rem laju
+  // (ditemukan test-blud-ratelimit.mjs). Longgar — cuma pembacaan keadaan.
+  const limited = await bludRateLimit(session.userId, 'cadangan-json-status', 60)
+  if (limited) return limited
+
   try {
     return NextResponse.json({ ok: true, data: await statusCadanganJson() })
   } catch (e) {

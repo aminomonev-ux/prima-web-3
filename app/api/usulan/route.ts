@@ -5,10 +5,11 @@ import { sql, sqlInt, safeInt, escapeLike, withTransaction, bulkInsert } from '@
 import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { generateNoUsulan, updateHeaderStats } from '@/lib/data/usulan';
+import { generateNoUsulan, updateHeaderStats, jendelaPengajuanTerbuka } from '@/lib/data/usulan';
+import { ItemUsulanSchema, JenisUsulanSchema } from '@/lib/data/usulan-schemas';
+import { PESAN_JENDELA_TUTUP } from '@/lib/shared/jendela-pengajuan';
 import { SUBBIDANG_ROLES, ADMIN_ROLES, SUBBIDANG_TO_BIDANG, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
 import { addNotif, bidangRoleOf } from '@/lib/services/notifications';
-import { isSafeHttpUrl, isSafeFileUrl } from '@/lib/shared/url';
 import { usulanMati } from './_guard';
 
 
@@ -202,38 +203,16 @@ export async function GET(req: NextRequest) {
 }
 
 
-// V5-INJ-01: tolak skema non-http(s) (cegah `javascript:`/`data:` stored-XSS saat
-// link dirender sebagai <a href> di reviewer). Kosong tetap boleh.
-const optUrl = z.string().trim().optional()
-  .refine(v => !v || isSafeHttpUrl(v), 'URL harus diawali http:// atau https://');
-
-// file_url = path download internal dari /api/upload (relatif), bukan URL eksternal.
-const optFileUrl = z.string().trim().optional()
-  .refine(v => !v || isSafeFileUrl(v), 'Lampiran tidak valid');
-
-const itemSchema = z.object({
-  nama_barang:  z.string().min(1, 'Nama barang wajib diisi').max(255),
-  spesifikasi:  z.string().max(2000).optional(),
-  qty:          z.number().min(1, 'Jumlah minimal 1'),
-  satuan:       z.string().min(1).max(50),
-  harga_est:    z.number().min(0),
-  prioritas:    z.enum(['TINGGI', 'SEDANG', 'RENDAH']),
-  alasan:       z.string().max(2000).optional(),
-  url_merk1:    optUrl,
-  url_merk2:    optUrl,
-  url_merk3:    optUrl,
-  file_url:     optFileUrl,
-});
-
+// Skema item & jenis dipakai bersama `update_draft` — lihat lib/data/usulan-schemas.ts.
 const groupSchema = z.object({
   sub_bidang:  z.string().min(1, 'Sub bidang wajib dipilih').max(100),
   jenis_belanja:  z.string().max(255).optional(),
-  items:       z.array(itemSchema).min(1, 'Minimal 1 item per grup').max(500),
+  items:       z.array(ItemUsulanSchema).min(1, 'Minimal 1 item per grup').max(500),
 });
 
 const createSchema = z.object({
   tahun_anggaran: z.string().optional(),
-  jenis_usulan:   z.enum(['MURNI','PERUBAHAN','PERGESERAN']).default('MURNI'),
+  jenis_usulan:   JenisUsulanSchema.default('MURNI'),
   is_draft:       z.boolean().default(false),
   groups:         z.array(groupSchema).min(1, 'Minimal 1 grup'),
 });
@@ -257,35 +236,28 @@ export async function POST(req: NextRequest) {
 
     const { tahun_anggaran, jenis_usulan, groups, is_draft } = parsed.data;
 
-    if (!is_draft) {
-      const cfgRows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN ('batas_aktif','batas_mulai','batas_selesai')`;
-      const cfg: Record<string,string> = {};
-      (cfgRows as {key:string;value:string}[]).forEach(r => { cfg[r.key] = r.value; });
-      if (cfg.batas_aktif === 'true') {
-        const today = new Date(); today.setHours(0,0,0,0);
-        const mulai   = cfg.batas_mulai   ? new Date(cfg.batas_mulai)   : null;
-        const selesai = cfg.batas_selesai ? new Date(cfg.batas_selesai) : null;
-        if (mulai) mulai.setHours(0,0,0,0);
-        if (selesai) selesai.setHours(23,59,59,999);
-        const outOfRange = (mulai && today < mulai) || (selesai && today > selesai);
-        if (outOfRange) {
-          return NextResponse.json({ ok: false, message: 'Pengajuan usulan sedang ditutup. Usulan hanya dapat dikirim dalam periode yang ditentukan.' }, { status: 403 });
-        }
-      }
+    // B3: satu pemeriksa untuk keempat pintu kirim (lib/data/usulan.ts).
+    if (!is_draft && !(await jendelaPengajuanTerbuka())) {
+      return NextResponse.json({ ok: false, message: PESAN_JENDELA_TUTUP }, { status: 403 });
     }
 
     const baseNo = await generateNoUsulan(groups[0].sub_bidang, tahun_anggaran ? parseInt(tahun_anggaran) : undefined, jenis_usulan);
     const multiGroup = groups.length > 1;
-    const created: { no_usulan: string; id: number }[] = [];
-
-    for (let g = 0; g < groups.length; g++) {
-      const grp = groups[g];
-      const noUsulan  = multiGroup ? `${baseNo}-${g + 1}` : baseNo;
+    const rencana = groups.map((grp, g) => {
       const hasBidang = !!SUBBIDANG_TO_BIDANG[grp.sub_bidang];
-      const status    = is_draft ? 'DRAFT' : (hasBidang ? 'DIAJUKAN_REVIEW' : 'DIAJUKAN');
+      return {
+        grp, hasBidang,
+        noUsulan: multiGroup ? `${baseNo}-${g + 1}` : baseNo,
+        status:   is_draft ? 'DRAFT' : (hasBidang ? 'DIAJUKAN_REVIEW' : 'DIAJUKAN'),
+      };
+    });
 
-      // V5-USULAN-01: header + items atomic dalam 1 transaksi (cegah commit parsial).
-      const usulanId = await withTransaction(async ({ tx, conn }) => {
+    // B11: SEMUA grup dalam SATU transaksi. Dulu satu transaksi per grup: grup ke-2
+    // gagal → balasan 500 padahal grup ke-1 sudah tersimpan → orang mengirim ulang →
+    // usulan ganda. Sekarang tersimpan semua atau tidak sama sekali.
+    const created = await withTransaction(async ({ tx, conn }) => {
+      const hasil: { no_usulan: string; id: number }[] = [];
+      for (const { grp, noUsulan, status } of rencana) {
         const headerRows = await tx`
           INSERT INTO usulan_headers (no_usulan, pengusul, sub_bidang, jenis_belanja, tahun_anggaran, jenis_usulan, status_ringkas, created_by)
           VALUES (${noUsulan}, ${session.username}, ${grp.sub_bidang}, ${grp.jenis_belanja ?? ''},
@@ -303,13 +275,15 @@ export async function POST(req: NextRequest) {
            'nama_barang','spesifikasi','qty','satuan','harga_est','prioritas','status',
            'alasan','url_merk1','url_merk2','url_merk3','file_url'],
           itemRows, conn);
-        return hid;
-      });
+        hasil.push({ no_usulan: noUsulan, id: hid });
+      }
+      return hasil;
+    });
 
-      // Recompute stats setelah commit (idempoten — baca data ter-commit).
-      await updateHeaderStats(usulanId);
-      created.push({ no_usulan: noUsulan, id: usulanId });
-
+    // Turunan & notifikasi SESUDAH commit (CQ-01) — ringkasan membaca data ter-commit.
+    for (let i = 0; i < rencana.length; i++) {
+      const { grp, hasBidang, noUsulan } = rencana[i];
+      await updateHeaderStats(created[i].id);
       const pesanNotif = `Usulan baru dari <b>${session.username}</b> (${grp.sub_bidang}) — ${grp.items.length} item`;
       if (!is_draft) {
         if (hasBidang) {
@@ -364,10 +338,20 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ ok: false, message: 'Tidak ada usulan yang bisa dikirim.' }, { status: 400 });
     }
 
+    // B3: jendela tutup menahan DRAFT (pengiriman pertama) saja — kiriman ulang hasil
+    // revisi tetap boleh (keputusan pemilik aplikasi, 29 Sep).
+    const semua = headers as { id: number; status_ringkas: string; sub_bidang: string }[];
+    const terbuka = await jendelaPengajuanTerbuka();
+    const dikirim = terbuka ? semua : semua.filter(h => h.status_ringkas !== 'DRAFT');
+    const ditahan = semua.length - dikirim.length;
+    if (!dikirim.length) {
+      return NextResponse.json({ ok: false, message: PESAN_JENDELA_TUTUP }, { status: 403 });
+    }
+
     // V5-USULAN-03: semua transisi submit atomic dalam 1 transaksi.
     const submittedIds: number[] = [];
     await withTransaction(async ({ tx }) => {
-      for (const row of headers as { id: number; status_ringkas: string; sub_bidang: string }[]) {
+      for (const row of dikirim) {
         const { id: usulanId, status_ringkas, sub_bidang } = row;
         const hasBidang = !!SUBBIDANG_TO_BIDANG[sub_bidang];
 
@@ -385,8 +369,11 @@ export async function PUT(req: NextRequest) {
     for (const id of submittedIds) await updateHeaderStats(id);
     const count = submittedIds.length;
 
-    await writeAuditLog({ req, eventType: 'USULAN_UPDATE', userId: session.userId, username: session.username, detail: `Bulk submit ${count} usulan` });
-    return NextResponse.json({ ok: true, message: `${count} usulan berhasil dikirim.`, count });
+    const catatanDitahan = ditahan
+      ? ` ${ditahan} draf belum ikut terkirim karena periode pengajuan sedang ditutup.`
+      : '';
+    await writeAuditLog({ req, eventType: 'USULAN_UPDATE', userId: session.userId, username: session.username, detail: `Bulk submit ${count} usulan${ditahan ? ` (${ditahan} draf ditahan: periode tutup)` : ''}` });
+    return NextResponse.json({ ok: true, message: `${count} usulan berhasil dikirim.${catatanDitahan}`, count, ditahan });
 
   } catch (error) {
     console.error('[Usulan PUT Bulk Error]', error);

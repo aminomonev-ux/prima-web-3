@@ -156,7 +156,7 @@ export default function Sidebar({
       <div style={{ padding: sidebarHidden ? '10px 8px 6px' : '10px 14px 6px' }}>
         <select value={tahun} onChange={onTahunChange}
           className="kinerja-tahun-select" data-rima="kinerja.sidebar-tahun"
-          title={sidebarHidden ? `Tahun ${tahun}` : undefined}
+          aria-label="Tahun anggaran"
           style={{ width:'100%', border:'1.5px solid #0C447C', borderRadius:'9px', padding: sidebarHidden?'6px 4px':'7px 10px', fontSize: sidebarHidden?'11px':'13px', fontWeight:800, color:'#E6F1FB', background:'#042C53', cursor:'pointer', outline:'none', textAlign: sidebarHidden?'center':'left', textAlignLast: sidebarHidden?'center':'left' }}>
           {TAHUN_OPTIONS.map(y => <option key={y} value={y}>{sidebarHidden ? y : `Tahun ${y}`}</option>)}
         </select>

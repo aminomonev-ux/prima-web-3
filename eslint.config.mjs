@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // PRIMA: code lama yg sudah tidak dipakai (snapshot pre-refactor)
     "_archive/**",
+    // Worktree aplikasi Claude (salinan repo di commit lain) — bukan kode proyek ini (U3).
+    ".claude/**",
   ]),
 ]);
 

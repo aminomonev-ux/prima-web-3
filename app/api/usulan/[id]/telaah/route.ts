@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { sql, safeInt } from '@/lib/data/db';
+import { sql, safeInt, withTransaction } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { updateHeaderStats } from '@/lib/data/usulan';
@@ -58,43 +58,52 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const filtered  = decisions.filter(d => Number.isInteger(d.item_id) && validIds.has(d.item_id));
     if (!filtered.length) return NextResponse.json({ ok: false, message: 'Tidak ada item valid untuk ditelaah.' }, { status: 400 });
 
-    for (const d of filtered) {
-      const origRow = await sql`SELECT qty, harga_est FROM usulan_items WHERE id = ${d.item_id} AND usulan_id = ${usulanId} LIMIT 1`;
-      if (!origRow.length) continue;
-      const orig = origRow[0] as Record<string, unknown>;
-      const origQty   = Number(orig.qty);
-      const origHarga = Number(orig.harga_est);
+    // B11: seluruh telaah satu transaksi — dulu perulangan `await` lepas; mati di tengah
+    // meninggalkan usulan setengah ditelaah. Nilai asal dibaca SEKALI, di bawah kunci.
+    await withTransaction(async ({ tx }) => {
+      const asal = await tx`
+        SELECT id, qty, harga_est FROM usulan_items
+         WHERE usulan_id = ${usulanId} AND id IN (${filtered.map(d => d.item_id)}) FOR UPDATE
+      ` as { id: number; qty: unknown; harga_est: unknown }[];
+      const petaAsal = new Map(asal.map(r => [Number(r.id), r]));
 
-      let adminQty: number, adminHarga: number, adminNominal: number, nominalDisetujui: number;
+      for (const d of filtered) {
+        const orig = petaAsal.get(d.item_id);
+        if (!orig) continue;
+        const origQty   = Number(orig.qty);
+        const origHarga = Number(orig.harga_est);
 
-      if (d.status === 'DITOLAK_ADMIN') {
-        adminQty = origQty; adminHarga = origHarga; adminNominal = 0; nominalDisetujui = 0;
-      } else if (d.status === 'DIREVISI_ADMIN') {
-        adminQty   = (d.admin_qty   && d.admin_qty   > 0) ? d.admin_qty   : origQty;
-        adminHarga = (d.admin_harga && d.admin_harga > 0) ? d.admin_harga : origHarga;
-        adminNominal   = adminQty * adminHarga;
-        nominalDisetujui = adminNominal;
-      } else {
-        adminQty = origQty; adminHarga = origHarga;
-        adminNominal   = origQty * origHarga;
-        nominalDisetujui = adminNominal;
+        let adminQty: number, adminHarga: number, adminNominal: number, nominalDisetujui: number;
+
+        if (d.status === 'DITOLAK_ADMIN') {
+          adminQty = origQty; adminHarga = origHarga; adminNominal = 0; nominalDisetujui = 0;
+        } else if (d.status === 'DIREVISI_ADMIN') {
+          adminQty   = (d.admin_qty   && d.admin_qty   > 0) ? d.admin_qty   : origQty;
+          adminHarga = (d.admin_harga && d.admin_harga > 0) ? d.admin_harga : origHarga;
+          adminNominal   = adminQty * adminHarga;
+          nominalDisetujui = adminNominal;
+        } else {
+          adminQty = origQty; adminHarga = origHarga;
+          adminNominal   = origQty * origHarga;
+          nominalDisetujui = adminNominal;
+        }
+
+        await tx`
+          UPDATE usulan_items
+          SET status            = ${d.status},
+              nominal_disetujui = ${nominalDisetujui},
+              admin_by          = ${session.username},
+              admin_tgl         = CURRENT_DATE,
+              admin_rekomendasi = ${d.status},
+              admin_catatan     = ${d.catatan_admin ?? ''},
+              admin_qty         = ${adminQty},
+              admin_harga       = ${adminHarga},
+              admin_nominal     = ${adminNominal},
+              updated_at        = NOW()
+          WHERE id = ${d.item_id} AND usulan_id = ${usulanId} AND status = 'DIAJUKAN'
+        `;
       }
-
-      await sql`
-        UPDATE usulan_items
-        SET status            = ${d.status},
-            nominal_disetujui = ${nominalDisetujui},
-            admin_by          = ${session.username},
-            admin_tgl         = CURRENT_DATE,
-            admin_rekomendasi = ${d.status},
-            admin_catatan     = ${d.catatan_admin ?? ''},
-            admin_qty         = ${adminQty},
-            admin_harga       = ${adminHarga},
-            admin_nominal     = ${adminNominal},
-            updated_at        = NOW()
-        WHERE id = ${d.item_id} AND usulan_id = ${usulanId} AND status = 'DIAJUKAN'
-      `;
-    }
+    });
 
     await updateHeaderStats(usulanId);
 

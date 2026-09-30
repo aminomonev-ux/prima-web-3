@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { FileSpreadsheet, X, AlertTriangle, Upload } from 'lucide-react';
+import Tip from '@/components/ui/Tip';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import { uiTheme } from '@/lib/theme';
@@ -239,7 +240,7 @@ export default function ImportRkoModal({
                           </td>
                           <td style={{ ...tdNum, color: meleset ? '#E24B4A' : undefined }}>
                             {h.hasil ? fmtNum(jumlahBulan) : '—'}
-                            {meleset && <span title="tidak sama dengan pagu"> !</span>}
+                            {meleset && <Tip label="Jumlah 12 bulan tidak sama dengan pagu"><span> !</span></Tip>}
                           </td>
                           <td style={{ ...td, color: WARNA[h.status], fontWeight: 700 }}>{LABEL[h.status]}</td>
                         </tr>

@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { BIDANG_ROLES, SUBBIDANG_ROLES, SATUAN_OPTIONS } from '@/lib/constants';
 import { safeRandomUUID } from '@/lib/shared/uuid';
+import { statusPagu } from '@/lib/shared/pagu-blud';
 import type { Role } from '@/types';
 import {
   STATUS_BADGE, STATUS_GROUPS, fmtRp,
@@ -115,46 +116,57 @@ export const Pagination = React.memo(function Pagination({ page, pages, total, o
   );
 });
 
-// PaguKpiBar: ringkasan 4 KPI + progress bar pagu. Dipakai di Dashboard,
-// BidangAntrian, BidangData panels (pola repetitif sebelumnya inline 3x).
-// Pure presentational.
-export const PaguKpiBar = React.memo(function PaguKpiBar({ kpi, loading }: { kpi: KPIData | null; loading?: boolean }) {
+// PaguKpiBar: ringkasan 4 KPI + progress bar pagu — SATU komponen untuk Dashboard, Usulan
+// Saya, Semua/Data Admin, Antrian, dan kedua panel Bidang (dulu Dashboard & Usulan Saya
+// menyalin logikanya sendiri). B5: pagu berlaku per tahun anggaran (`statusPagu`).
+export const PaguKpiBar = React.memo(function PaguKpiBar({ kpi, loading, subNilai, className }: {
+  kpi: KPIData | null; loading?: boolean; subNilai?: string | null; className?: string;
+}) {
   if (!kpi) return null;
+  const st = statusPagu(kpi);
+  const adaPagu = st.jenis === 'DALAM' || st.jenis === 'MELEBIHI';
   const cards = [
-    {label:'Pagu BLUD',       val:kpi.pagu,             bg:'rgba(167,139,250,.12)', lc:'#A78BFA', vc:'#C4B5FD'},
-    {label:'Nilai Aktif',     val:kpi.nilai_aktif,      bg:'rgba(244,114,182,.12)', lc:'#F472B6', vc:'#F9A8D4'},
-    {label:'Sedang Ditelaah', val:kpi.nilai_telaah,     bg:'rgba(239,159,39,.12)',  lc:'#EF9F27', vc:'#FAC775'},
-    {label:'Disetujui Kabag', val:kpi.nilai_disetujui,  bg:'rgba(74,222,128,.12)',  lc:'#4ADE80', vc:'#86EFAC'},
+    {label:'Pagu BLUD',       val:adaPagu ? kpi.pagu : null, bg:'rgba(167,139,250,.12)', lc:'#A78BFA', vc:'#C4B5FD',
+     sub: st.jenis === 'SEMUA_TAHUN' ? 'Pilih satu tahun' : `TA ${st.tahun}`},
+    {label:'Nilai Aktif',     val:kpi.nilai_aktif,      bg:'rgba(244,114,182,.12)', lc:'#F472B6', vc:'#F9A8D4', sub:subNilai ?? null},
+    {label:'Sedang Ditelaah', val:kpi.nilai_telaah,     bg:'rgba(239,159,39,.12)',  lc:'#EF9F27', vc:'#FAC775', sub:null},
+    {label:'Disetujui Kabag', val:kpi.nilai_disetujui,  bg:'rgba(74,222,128,.12)',  lc:'#4ADE80', vc:'#86EFAC', sub:null},
   ];
-  const paguUnset = !kpi.pagu || kpi.pagu <= 0;
-  const pct = paguUnset ? 0 : Math.min(100, (kpi.nilai_aktif / kpi.pagu) * 100);
-  const ok  = !paguUnset && kpi.nilai_aktif <= kpi.pagu;
   return (
-    <div className="pagu-bar-wrap">
+    <div className={`pagu-bar-wrap${className ? ` ${className}` : ''}`}>
       <div className="pagu-kpi-grid">
         {cards.map((c,i) => (
           <div key={i} className="pagu-kpi-card" style={{background:c.bg}}>
             <div className="pagu-kpi-label" style={{color:c.lc}}>{c.label}</div>
-            <div className="pagu-kpi-val" style={{color:c.vc}}>{loading ? '...' : fmtRp(c.val ?? 0).replace('Rp\xa0','Rp ')}</div>
+            <div className="pagu-kpi-val" style={{color:c.vc}}>{loading ? '...' : c.val === null ? '—' : fmtRp(c.val ?? 0).replace('Rp\xa0','Rp ')}</div>
+            {c.sub && <div style={{fontSize:10,color:c.lc,marginTop:2,fontWeight:600}}>{c.sub}</div>}
           </div>
         ))}
       </div>
-      <div className="pagu-progress-label" style={{display:'flex',justifyContent:'space-between',fontSize:11,fontWeight:600,color:'#B5D4F4',marginBottom:4}}>
-        <span>Pagu BLUD</span><span>{paguUnset?'—':`${pct.toFixed(1)}%`}</span>
-      </div>
-      <div className="pagu-bar-track">
-        <div className="pagu-bar-fill" style={{width:`${pct}%`, background: paguUnset?'#64748b':ok ? undefined : 'linear-gradient(90deg,#ef4444,#dc2626)'}}/>
-      </div>
-      <div className="pagu-bar-meta">
-        <span>Pagu: {fmtRp(kpi.pagu)}</span>
-        <span style={{color:'#475569'}}>|</span>
-        <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
-        {paguUnset
-          ? <span className="pagu-flag warn">ⓘ Pagu belum diatur</span>
-          : ok
-            ? <span className="pagu-flag ok">✓ Dalam batas pagu</span>
-            : <span className="pagu-flag over">⚠ Melebihi pagu</span>}
-      </div>
+      {st.jenis === 'SEMUA_TAHUN' ? (
+        <div className="pagu-bar-meta">
+          <span className="pagu-flag warn">ⓘ Pagu BLUD berlaku per tahun anggaran — pilih satu tahun untuk membandingkan</span>
+        </div>
+      ) : (
+        <>
+          <div className="pagu-progress-label" style={{display:'flex',justifyContent:'space-between',fontSize:11,fontWeight:600,color:'#B5D4F4',marginBottom:4}}>
+            <span>Pagu BLUD TA {st.tahun}</span><span>{adaPagu ? `${st.pct.toFixed(1)}%` : '—'}</span>
+          </div>
+          <div className="pagu-bar-track">
+            <div className="pagu-bar-fill" style={{width:`${adaPagu ? st.pct : 0}%`, background: !adaPagu ? '#64748b' : st.jenis === 'DALAM' ? undefined : 'linear-gradient(90deg,#ef4444,#dc2626)'}}/>
+          </div>
+          <div className="pagu-bar-meta">
+            <span>Pagu: {adaPagu ? fmtRp(kpi.pagu ?? 0) : '—'}</span>
+            <span style={{color:'#475569'}}>|</span>
+            <span>Nilai Aktif: {fmtRp(kpi.nilai_aktif)}</span>
+            {st.jenis === 'BELUM_DIATUR'
+              ? <span className="pagu-flag warn">ⓘ Pagu TA {st.tahun} belum diatur</span>
+              : st.jenis === 'DALAM'
+                ? <span className="pagu-flag ok">✓ Dalam batas pagu</span>
+                : <span className="pagu-flag over">⚠ Melebihi pagu</span>}
+          </div>
+        </>
+      )}
     </div>
   );
 });

@@ -14,7 +14,9 @@ export type Panel =
 export interface KPIData {
   total: number; disetujui: number; ditolak: number;
   proses: number; menunggu_admin: number; nominal: number;
-  nilai_aktif: number; nilai_telaah: number; nilai_disetujui: number; pagu: number;
+  nilai_aktif: number; nilai_telaah: number; nilai_disetujui: number;
+  /** B5: pagu TAHUN `tahun`; `null` = saringan semua tahun (tidak ada pagu pembanding). */
+  pagu: number | null; tahun: string | null;
   chartStatus: { status: string; cnt: number }[];
   chartBidang: { sub_bidang: string; cnt: number; total_est: number; nominal_admin?: number; nominal_kasubag?: number; nominal_disetujui?: number }[];
   bidang_antrian: number; bidang_revisi: number; bidang_ditolak: number;

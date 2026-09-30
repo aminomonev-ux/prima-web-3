@@ -4,7 +4,8 @@
 //
 // Reference: docs/session/PK_REFACTOR_CONCEPT.md §3 + §9
 
-import { sql, queryMany, queryOne } from '@/lib/data/db';
+import { sql, queryMany, queryOne, withTransaction, bulkInsert } from '@/lib/data/db';
+import { PESAN_VERSI_PK, type DokumenUpdateBody } from './pk-schemas';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -112,9 +113,11 @@ export async function getPejabatByUnit(
  *  - Sub-keg level: exact match `nama_unit = penanggung_jawab.label` (via JOIN validate)
  *  - Keg/program level: aggregate via `pk_unit_kerja_blud_pj` mapping
  *  - Filter out baris agregat (`label = 'TOTAL BELANJA BLUD'`) via JOIN penanggung_jawab
- *  - Versi: pakai MAX(versi_dpa) (Sprint 0 caveat — OK untuk MVP)
+ *  - Versi: rekap terbaru TAHUN DOKUMEN PK (B6, audit 2026-09-29). Dulu `MAX(versi_dpa)`
+ *    tahun apa pun — PK 2026 yang disusun sesudah rekap 2027 ada terisi angka 2027.
+ *    Versinya dipulangkan sebagai teks `YYYY-MM-DD` supaya layar bisa menyebutnya.
  */
-export async function getBludNominalByUnit(unitKerja: string): Promise<{
+export async function getBludNominalByUnit(unitKerja: string, tahun: number): Promise<{
   nominal: number;
   versi_dpa: string | null;
   matched_labels: string[];
@@ -125,7 +128,7 @@ export async function getBludNominalByUnit(unitKerja: string): Promise<{
       sql`SELECT level FROM pk_unit_kerja WHERE nama_unit = ${unitKerja} LIMIT 1`,
     ),
     queryOne<{ versi: string | null }>(
-      sql`SELECT MAX(versi_dpa) AS versi FROM rekap_pk`,
+      sql`SELECT DATE_FORMAT(MAX(versi_dpa), '%Y-%m-%d') AS versi FROM rekap_pk WHERE tahun_anggaran = ${tahun}`,
     ),
   ]);
   if (!unit) return { nominal: 0, versi_dpa: null, matched_labels: [] };
@@ -138,7 +141,8 @@ export async function getBludNominalByUnit(unitKerja: string): Promise<{
       SELECT rp.label AS label, COALESCE(SUM(rp.nominal), 0) AS total
       FROM rekap_pk rp
       INNER JOIN penanggung_jawab pj ON pj.label = rp.label
-      WHERE rp.versi_dpa = ${versiDpa}
+      WHERE rp.tahun_anggaran = ${tahun}
+        AND rp.versi_dpa = ${versiDpa}
         AND rp.label = ${unitKerja}
       GROUP BY rp.label
     `);
@@ -156,7 +160,8 @@ export async function getBludNominalByUnit(unitKerja: string): Promise<{
     FROM rekap_pk rp
     INNER JOIN pk_unit_kerja_blud_pj m ON m.blud_pj_label = rp.label
     INNER JOIN penanggung_jawab pj      ON pj.label = rp.label
-    WHERE rp.versi_dpa = ${versiDpa}
+    WHERE rp.tahun_anggaran = ${tahun}
+      AND rp.versi_dpa = ${versiDpa}
       AND m.unit_pk = ${unitKerja}
     GROUP BY rp.label
   `);
@@ -166,4 +171,83 @@ export async function getBludNominalByUnit(unitKerja: string): Promise<{
     versi_dpa: versiDpa,
     matched_labels: rows.map(r => r.label),
   };
+}
+
+// ─── Simpan & kunci dokumen (I4, audit 2026-09-29) ──────────────────────────
+// Kunci versi (L48): dulu PATCH menulis ulang header + seluruh lampiran/anggaran tanpa
+// bertanya apakah dokumennya sudah diubah orang lain sejak dibuka — yang terakhir menang.
+
+export class PkVersiKonflikError extends Error {
+  constructor() { super(PESAN_VERSI_PK); this.name = 'PkVersiKonflikError'; }
+}
+
+/**
+ * Ganti isi dokumen DRAFT (header + seluruh lampiran/anggaran). Kuncinya ditegakkan oleh
+ * UPDATE header, SEBELUM baris lama dihapus — konflik membatalkan seluruh transaksi.
+ * Memulangkan angka kunci yang baru.
+ */
+export async function gantiIsiDokumen(id: number, d: DokumenUpdateBody): Promise<number> {
+  await withTransaction(async ({ tx, conn }) => {
+    const upd = await tx`
+      UPDATE pk_dokumen SET
+        tahun = ${d.tahun}, tanggal_dokumen = ${d.tanggal_dokumen}, jenis_pk = ${d.jenis_pk},
+        unit_pertama = ${d.unit_pertama}, nama_pertama = ${d.nama_pertama}, jabatan_pertama = ${d.jabatan_pertama},
+        pangkat_pertama = ${d.pangkat_pertama ?? null}, nip_pertama = ${d.nip_pertama ?? null},
+        unit_kedua = ${d.unit_kedua}, nama_kedua = ${d.nama_kedua}, jabatan_kedua = ${d.jabatan_kedua},
+        pangkat_kedua = ${d.pangkat_kedua ?? null}, nip_kedua = ${d.nip_kedua ?? null},
+        version = version + 1
+      WHERE id = ${id} AND version = ${d.expected_version} AND status = 'DRAFT'
+    ` as unknown as Array<{ affectedRows?: number }>;
+    if ((upd[0]?.affectedRows ?? 0) !== 1) throw new PkVersiKonflikError();
+    await tx`DELETE FROM pk_dokumen_lampiran WHERE dokumen_id = ${id}`;
+    await tx`DELETE FROM pk_dokumen_anggaran WHERE dokumen_id = ${id}`;
+
+    if (d.lampiran.length > 0) {
+      await bulkInsert(
+        'pk_dokumen_lampiran',
+        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','indikator','target','urutan'],
+        d.lampiran.map((l, i) => [
+          id, l.unit_kerja, l.level,
+          l.program ?? null, l.kegiatan ?? null, l.subkegiatan ?? null,
+          l.uraian, l.indikator ?? null, l.target ?? null,
+          l.urutan ?? i,
+        ]),
+        conn,
+      );
+    }
+    if (d.anggaran.length > 0) {
+      await bulkInsert(
+        'pk_dokumen_anggaran',
+        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','keterangan_sumber','nominal','urutan','auto_filled_from_blud'],
+        d.anggaran.map((a, i) => [
+          id, a.unit_kerja, a.level,
+          a.program ?? null, a.kegiatan ?? null, a.subkegiatan ?? null,
+          a.uraian, a.keterangan_sumber, a.nominal ?? 0,
+          a.urutan ?? i,
+          a.auto_filled_from_blud ?? false,
+        ]),
+        conn,
+      );
+    }
+  });
+  return d.expected_version + 1;
+}
+
+/**
+ * Kunci dokumen jadi FINAL bersama berkas Word-nya. Word dibuat dari isi DB sebelum
+ * fungsi ini dipanggil — kalau ada simpanan lain di selanya (atau layar memegang versi
+ * lama), angka kuncinya tidak cocok dan dokumen tidak dikunci dengan berkas yang berbeda isi.
+ */
+export async function kunciDokumenFinal(id: number, expectedVersion: number, berkas: { buffer: Buffer; filename: string }): Promise<void> {
+  const res = await sql`
+    UPDATE pk_dokumen SET
+      status              = 'FINAL',
+      generated_file      = ${berkas.buffer},
+      generated_filesize  = ${berkas.buffer.length},
+      generated_filename  = ${berkas.filename},
+      generated_at        = NOW(),
+      version             = version + 1
+    WHERE id = ${id} AND version = ${expectedVersion} AND status = 'DRAFT'
+  ` as unknown as Array<{ affectedRows?: number }>;
+  if ((res[0]?.affectedRows ?? 0) !== 1) throw new PkVersiKonflikError();
 }

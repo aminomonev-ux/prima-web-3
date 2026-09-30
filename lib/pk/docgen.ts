@@ -45,7 +45,7 @@ export type PkDokumenForGenerate = {
  */
 async function loadPkDokumenForGenerate(dokumenId: number): Promise<PkDokumenForGenerate | null> {
   const headers = await sql`
-    SELECT id, tahun, tanggal_dokumen, jenis_pk,
+    SELECT id, tahun, DATE_FORMAT(tanggal_dokumen, '%Y-%m-%d') AS tanggal_dokumen, jenis_pk,
            unit_pertama, nama_pertama, jabatan_pertama, pangkat_pertama, nip_pertama,
            unit_kedua,   nama_kedua,   jabatan_kedua,   pangkat_kedua,   nip_kedua
     FROM pk_dokumen
@@ -254,13 +254,15 @@ function fmtJabatanTtd(j: string | null | undefined): string {
 }
 
 /**
- * Format tanggal Indonesia: "23 Mei 2026"
+ * Format tanggal Indonesia: "23 Mei 2026".
+ * Dibaca dari teks 'YYYY-MM-DD', bukan `new Date(iso)` — konstruktor Date
+ * menafsirkannya sebagai UTC, dan hasilnya lalu bergantung zona waktu proses.
  */
-function fmtTanggalID(iso: string): string {
+export function fmtTanggalID(iso: string): string {
   const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+  if (!m) return String(iso);
+  return `${Number(m[3])} ${bulan[Number(m[2]) - 1] ?? m[2]} ${m[1]}`;
 }
 
 /**

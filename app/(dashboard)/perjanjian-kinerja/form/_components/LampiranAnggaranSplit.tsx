@@ -368,6 +368,21 @@ function AnggaranPanel({
     setForm(f => ({ ...f, anggaran: f.anggaran.filter((_, i) => i !== idx) }))
   }
 
+  // B6: rekap BLUD milik TAHUN DOKUMEN ini, dan versinya disebut di petunjuk. Tahun yang
+  // belum punya rekap dikatakan apa adanya — dulu terisi Rp 0 (atau angka tahun lain).
+  async function ambilNominalBlud(): Promise<{ nominal: number; sumber: string } | null> {
+    setBludLoading(true)
+    const d = await fetchJson<unknown>(`/api/perjanjian-kinerja/blud-nominal?unit=${encodeURIComponent(form.unit_pertama)}&tahun=${encodeURIComponent(form.tahun)}`)
+    setBludLoading(false)
+    if (!d.ok) { setHint(d.message); return null }
+    const r = d as unknown as { nominal: number; versi_dpa: string | null }
+    if (!r.versi_dpa) {
+      setHint(`Belum ada Rekap PK BLUD untuk TA ${form.tahun}. Simpan dulu lewat BLUD → Cetak → DPA · Penanggung Jawab → Simpan Rekap PK.`)
+      return null
+    }
+    return { nominal: r.nominal ?? 0, sumber: `Rekap PK TA ${form.tahun}, versi DPA ${r.versi_dpa.split('-').reverse().join('-')}` }
+  }
+
   // Pencil router (A2):
   // - keterangan=BLUD → auto-fill langsung
   // - keterangan lain → prompt "Tambah BLUD ke nominal saat ini?"
@@ -375,34 +390,21 @@ function AnggaranPanel({
     if (!form.unit_pertama) return
     setHint('')
     if (keterangan === 'BLUD') {
-      setBludLoading(true)
-      const d = await fetchJson<unknown>(`/api/perjanjian-kinerja/blud-nominal?unit=${encodeURIComponent(form.unit_pertama)}`)
-      setBludLoading(false)
-      if (d.ok) {
-        const r = d as unknown as { nominal: number }
-        setNominal(r.nominal ?? 0)
-        setAutoFilledFromBlud(true)
-        setHint(`BLUD auto-fill: ${fmtRp(r.nominal ?? 0)}`)
-      } else {
-        setHint(d.message)
-      }
+      const blud = await ambilNominalBlud()
+      if (!blud) return
+      setNominal(blud.nominal)
+      setAutoFilledFromBlud(true)
+      setHint(`BLUD auto-fill: ${fmtRp(blud.nominal)} (${blud.sumber})`)
     } else {
       // Prompt user
       const ok = await confirmDialog({ title: 'Tambah Nominal BLUD', message: `Tambahkan nominal BLUD aggregate ke nominal saat ini (${fmtRp(nominal)})?\n\nKeterangan akan tetap "${keterangan}".`, confirmLabel: 'Tambah', variant: 'success' })
       if (!ok) return
-      setBludLoading(true)
-      const d = await fetchJson<unknown>(`/api/perjanjian-kinerja/blud-nominal?unit=${encodeURIComponent(form.unit_pertama)}`)
-      setBludLoading(false)
-      if (d.ok) {
-        const r = d as unknown as { nominal: number }
-        const blud = r.nominal ?? 0
-        const total = (Number(nominal) || 0) + blud
-        setNominal(total)
-        setAutoFilledFromBlud(true)
-        setHint(`BLUD terambil: ${fmtRp(blud)} → Total: ${fmtRp(total)}`)
-      } else {
-        setHint(d.message)
-      }
+      const blud = await ambilNominalBlud()
+      if (!blud) return
+      const total = (Number(nominal) || 0) + blud.nominal
+      setNominal(total)
+      setAutoFilledFromBlud(true)
+      setHint(`BLUD terambil: ${fmtRp(blud.nominal)} → Total: ${fmtRp(total)} (${blud.sumber})`)
     }
   }
 

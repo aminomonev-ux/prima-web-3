@@ -8,20 +8,20 @@
 // paling sulit dilihat sampai ia meledak saat build.
 
 import { sql, sqlInt, type Penanya } from '@/lib/data/db'
+import { toDateStr } from '@/lib/shared/waktu-wib'
 import { HARI_PERINGATAN, type BarisBerjangka } from '@/lib/admin/berjangka-baris'
 
 export { HARI_PERINGATAN, type BarisBerjangka }
 
 export type JangkaTersimpan = Record<string, { berakhir: string; alasan: string }>
 
-/** `Date` MySQL → `YYYY-MM-DD` tanpa lewat zona waktu peramban. */
-function keIso(v: unknown): string {
-  if (v instanceof Date) {
-    const p = (n: number) => String(n).padStart(2, '0')
-    return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}`
-  }
-  return String(v ?? '').slice(0, 10)
-}
+/**
+ * `Date` MySQL → `YYYY-MM-DD`.
+ * I2: dulu memakai getter lokal (`getDate()`), yang benar hanya selama proses Node
+ * ber-TZ WIB. `toDateStr` menggeser dengan offset eksplisit, jadi tidak bergantung
+ * zona waktu mesin tempat server dipasang.
+ */
+const keIso = (v: unknown): string => toDateStr(v)
 
 export async function bacaJangka(userId: number): Promise<JangkaTersimpan> {
   const rows = await sql`

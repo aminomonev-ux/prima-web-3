@@ -12,6 +12,8 @@
 #   C. quality-gate — `npx tsc --noEmit` + `npm run lint` + `npm run rima:check` (NLU gate)
 #                     + Gate E token warna (`npm run check:tokens`)
 #                     + Gate H LIMIT/OFFSET sqlInt (`npm run check:sql`, L66)
+#                     + Gate I tanggal DATE WIB vs UTC (`npm run check:tanggal`)
+#                     + Gate J tooltip bawaan browser `title=` (`npm run check:tooltip`)
 #   D. gitleaks — Secret scanning (JWT_SECRET / password DB / API key ter-commit) — config .gitleaks.toml
 #
 # Gate E (token warna) menumpang di job C, bukan job sendiri — pemeriksaannya
@@ -211,6 +213,23 @@ jobs:
       # tertulis.
       - name: Gate LIMIT/OFFSET sqlInt (L66)
         run: npm run check:sql
+
+      # ─── GATE I: kolom DATE tidak boleh jatuh ke hari sebelumnya ───────────
+      # Pool mysql2 ber-`timezone: '+07:00'` memulangkan kolom DATE sebagai 00:00 WIB
+      # = 17:00 UTC kemarin. Memotong string ISO-nya atau me-String() objeknya lolos
+      # tsc, lalu salah di layar tertentu atau jam tertentu. Audit 2026-09-29 menemukan
+      # empat kejadian sekaligus — salah satunya membuat tanggal dokumen PK mundur
+      # sehari tiap kali disimpan. Daftar kolomnya dibaca dari schema-mysql.sql.
+      - name: Gate tanggal DATE (WIB vs UTC)
+        run: npm run check:tanggal
+
+      # ─── GATE J: tooltip bawaan browser (`title=`) ────────────────────────
+      # DESIGN-SYSTEM mewajibkan satu standar tooltip (data-tooltip / portal Tip).
+      # `title=` pada elemen HTML memunculkan kotak putih browser yang tidak ikut tema.
+      # Audit 2026-09-29 (K1) menemukan 27 sisa; dibaca lewat parser TypeScript supaya
+      # prop `title` milik KOMPONEN tidak ikut tertuduh. <iframe title> dikecualikan (WCAG).
+      - name: Gate tooltip bawaan browser
+        run: npm run check:tooltip
 
       # ─── GATE F: Glyph PDF (WinAnsi) ───────────────────────────────────────
       # Font bawaan jsPDF cuma paham WinAnsi. Karakter di luar itu tidak bikin

@@ -3,6 +3,7 @@
 // canonical_id stabil lintas-tahun, di-derive dari AUTO_INCREMENT id (anti-race, bukan MAX+1).
 // Kolom turunan (sisa/pct) TIDAK disimpan (Checkpoint D) — dihitung di mapper.
 import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, sqlInt } from '@/lib/data/db';
+import { toDateStr } from '@/lib/shared/waktu-wib';
 import { isValidStatusTransition, type BbaStatus, type BbaCreateInput, type BbaUpdateInput, type BbaRealisasiInput, type BbaQuery } from './buku-besar-aset-schemas';
 
 export class BbaVersionConflictError extends Error {
@@ -69,7 +70,7 @@ const SELECT_COLS = sql`
   b.id, b.canonical_id, b.tahun_anggaran, b.origin, b.usulan_item_id, b.usulan_no,
   b.usulan_keputusan, b.ditolak_oleh, b.sub_bidang, b.kode_rekening, b.uraian, b.kategori_aset,
   b.sumber_anggaran, b.vol, b.satuan, b.harga, b.nilai_rencana, b.status,
-  b.nilai_realisasi, b.vol_realisasi, b.tgl_realisasi,
+  b.nilai_realisasi, b.vol_realisasi, DATE_FORMAT(b.tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi,
   b.penanggung_jawab, b.keterangan, b.version,
   ui.pengusul AS pengusul,
   CASE b.ditolak_oleh
@@ -82,7 +83,7 @@ const SELECT_COLS = sql`
 
 const FROM_JOIN = sql`FROM buku_besar_aset b LEFT JOIN usulan_items ui ON ui.id = b.usulan_item_id`;
 
-function mapRow(r: Record<string, unknown>): BbaRow {
+export function mapRow(r: Record<string, unknown>): BbaRow {
   const nilai_rencana   = Number(r.nilai_rencana ?? 0);
   const nilai_realisasi = Number(r.nilai_realisasi ?? 0);
   return {
@@ -99,7 +100,9 @@ function mapRow(r: Record<string, unknown>): BbaRow {
     vol: Number(r.vol ?? 0), satuan: r.satuan as string | null, harga: Number(r.harga ?? 0),
     nilai_rencana, status: r.status as BbaStatus, nilai_realisasi,
     vol_realisasi: Number(r.vol_realisasi ?? 0),
-    tgl_realisasi: r.tgl_realisasi ? String(r.tgl_realisasi) : null,
+    // B2: `toDateStr`, bukan `String()` — objek Date yang di-String() berbunyi
+    // "Fri Jul 31 2026 00:00:00 GMT+0700 …", ditolak regex Zod saat realisasi disimpan ulang.
+    tgl_realisasi: r.tgl_realisasi ? toDateStr(r.tgl_realisasi) : null,
     penanggung_jawab: r.penanggung_jawab as string | null, keterangan: r.keterangan as string | null,
     version: Number(r.version ?? 0),
     // A3: over-realisasi tampil sisa minus apa adanya (konsisten dgn pct >100%), tidak disembunyikan jadi 0

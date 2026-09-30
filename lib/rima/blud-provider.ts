@@ -7,6 +7,7 @@
 
 import { sql, sqlInt } from '@/lib/data/db';
 import { isBludRole } from '@/lib/blud/schemas';
+import { toDateStr } from '@/lib/shared/waktu-wib';
 import { z } from 'zod';
 
 export const isBludRimaRole = isBludRole;
@@ -32,7 +33,8 @@ export async function runBludQuery(
      ORDER BY versi_tanggal DESC
      LIMIT ${sqlInt(ROW_CAP)}`;
   const list = (rows as Record<string, unknown>[]).map(r => {
-    const v = r.s instanceof Date ? r.s.toISOString().slice(0, 10) : String(r.s ?? '');
+    // B9: `toDateStr`, bukan `toISOString()` — kolom DATE tiba sebagai 17:00 UTC hari sebelumnya.
+    const v = toDateStr(r.s);
     return { status: v, label: v, count: Number(r.c ?? 0) };
   });
   const total = list.reduce((a, b) => a + b.count, 0);

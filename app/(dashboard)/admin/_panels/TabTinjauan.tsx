@@ -25,6 +25,7 @@ import { CheckCircle2, FileSpreadsheet, RefreshCw, ArrowRight } from 'lucide-rea
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { ROLE_LABELS } from '@/lib/constants';
+import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import {
   MODUL_TINJAUAN, tinjauanKeAoa, type BarisTinjauan,
 } from '@/lib/admin/tinjauan-baris';
@@ -95,7 +96,7 @@ export function TabTinjauan({ onKeAkses }: { onKeAkses: (userId: number) => void
           { wch: 10 }, { wch: 14 }, { wch: 16 },
         ],
       });
-      const stempel = new Date().toISOString().slice(0, 10);
+      const stempel = tanggalHariIniWIB();
       await downloadWorkbook(wb, `Tinjauan-Akses-${stempel}.xlsx`);
       toast.success('Berkas tinjauan diunduh.');
     } catch (e) {

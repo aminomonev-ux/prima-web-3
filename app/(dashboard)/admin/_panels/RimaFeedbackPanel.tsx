@@ -12,6 +12,7 @@ import { Download, MessageSquareWarning, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 
 interface LabelRow {
   question: string; jumlah: number; terakhir: string;
@@ -146,7 +147,7 @@ export function RimaFeedbackPanel() {
     const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `rima-labeled-${new Date().toISOString().slice(0, 10)}.jsonl`;
+    a.href = url; a.download = `rima-labeled-${tanggalHariIniWIB()}.jsonl`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`${data.length} baris dataset diekspor.`);

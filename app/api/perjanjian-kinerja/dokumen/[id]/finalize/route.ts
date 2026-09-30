@@ -3,10 +3,11 @@
 // Pattern: ownership L2 + withTransaction L7 + dynamic import L18.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, safeInt, withTransaction } from '@/lib/data/db';
+import { sql, safeInt } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { pkRateLimit } from '@/lib/data/pk-schemas';
+import { pkRateLimit, DokumenFinalizeBodySchema } from '@/lib/data/pk-schemas';
+import { kunciDokumenFinal, PkVersiKonflikError } from '@/lib/data/pk';
 import { bolehEditMenu, tolakEdit, pkMati } from '../../../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 import { generatePkDocument } from '@/lib/pk/docgen';
@@ -38,6 +39,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (rows[0].status === 'FINAL') {
     return NextResponse.json({ ok: false, message: 'Dokumen sudah FINAL' }, { status: 409 });
   }
+  const parsed = DokumenFinalizeBodySchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
+  }
+  const expectedVersion = parsed.data.expected_version;
 
   // Generate Word (dynamic import + render docxtemplater)
   let buffer: Buffer;
@@ -51,18 +57,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: false, message: 'Gagal generate Word: ' + msg }, { status: 500 });
   }
 
-  // Save BLOB + set FINAL atomic
-  await withTransaction(async ({ tx }) => {
-    await tx`
-      UPDATE pk_dokumen SET
-        status              = 'FINAL',
-        generated_file      = ${buffer},
-        generated_filesize  = ${buffer.length},
-        generated_filename  = ${filename},
-        generated_at        = NOW()
-      WHERE id = ${id}
-    `;
-  });
+  // Save BLOB + set FINAL — ber-kunci versi (I4, lib/data/pk.ts).
+  try {
+    await kunciDokumenFinal(id, expectedVersion, { buffer, filename });
+  } catch (err) {
+    if (err instanceof PkVersiKonflikError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
+    throw err;
+  }
 
   await writeAuditLog({
     req,

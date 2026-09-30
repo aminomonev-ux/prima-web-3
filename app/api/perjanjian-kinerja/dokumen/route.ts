@@ -71,8 +71,9 @@ export async function GET(req: NextRequest) {
   ` as { count: number }[];
 
   // PENTING: jangan SELECT generated_file (MEDIUMBLOB) di list — pakai has_file flag saja.
+  // B1: `DATE_FORMAT`, bukan objek Date — layar Riwayat membaca 10 karakter pertama.
   const rows = await sql`
-    SELECT id, tahun, tanggal_dokumen, jenis_pk,
+    SELECT id, tahun, DATE_FORMAT(tanggal_dokumen, '%Y-%m-%d') AS tanggal_dokumen, jenis_pk,
            unit_pertama, nama_pertama, jabatan_pertama,
            unit_kedua, nama_kedua,
            status,

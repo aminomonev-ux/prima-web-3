@@ -27,7 +27,13 @@ export function BatasWaktuPanel({
   const [err, setErr] = useState('');
 
   async function doSave() {
-    setErr(''); setOk(''); setLoading(true);
+    setErr(''); setOk('');
+    // Mulai sesudah selesai = jendela yang tidak pernah terbuka, tanpa satu pesan pun.
+    if (bwMulai && bwSelesai && bwMulai > bwSelesai) {
+      setErr('Tanggal mulai harus sama dengan atau sebelum tanggal selesai.');
+      return;
+    }
+    setLoading(true);
     try {
       const saveConfig = (key: string, value: string) =>
         fetchJson('/api/config', { method: 'POST', body: JSON.stringify({ key, value }) });

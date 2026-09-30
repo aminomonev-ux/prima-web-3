@@ -10,7 +10,7 @@ import {
   IndentIncrease, IndentDecrease, Pencil, Save, Table2, Image as ImageIcon, Type, Settings,
   BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
   AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Combine, Split, Copy, ClipboardPaste,
-  GripVertical, Undo2, Redo2, Upload, BarChart3, HelpCircle, MoreVertical,
+  GripVertical, Undo2, Redo2, Upload, BarChart3, HelpCircle, MoreVertical, Lock,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
@@ -29,6 +29,7 @@ import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
 import { FONT_CHOICES } from '@/lib/lkjip/style-constants';
 import type { StyleConfig } from '@/lib/lkjip/schemas';
+import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
 import { normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel, type TabelCell, type TabelAlign, type TabelNumFmt } from '@/lib/lkjip/tabel';
 
 const TiptapNarasi = dynamic(() => import('./TiptapNarasi'), {
@@ -46,6 +47,16 @@ interface Props {
 }
 
 type FlatNode = { node: SectionNode; parentId: number | null; index: number; siblings: SectionNode[] };
+type Tujuan = { parent: number | null; index: number };
+
+/** Ringkasan blok yang ikut hilang bersama bagiannya — ditulis di dialog Hapus. */
+function ringkasIsi(blocks: BlockNode[]): string {
+  const jumlah: Record<BlockNode['tipe'], number> = { NARASI: 0, TABEL: 0, GAMBAR: 0, GRAFIK: 0 };
+  for (const b of blocks) jumlah[b.tipe]++;
+  const daftar = ([['narasi', jumlah.NARASI], ['tabel', jumlah.TABEL], ['gambar', jumlah.GAMBAR], ['grafik', jumlah.GRAFIK]] as const)
+    .filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`);
+  return daftar.length ? `Ikut terhapus: ${daftar.join(', ')}.` : 'Bagian ini belum berisi blok.';
+}
 
 function flatten(tree: SectionNode[]): FlatNode[] {
   const out: FlatNode[] = [];
@@ -86,6 +97,11 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
 
   const readOnly = detail.status === 'FINAL';
   const flat = useMemo(() => flatten(detail.tree), [detail.tree]);
+  // B12: aturan BAB dinilai dengan fungsi yang SAMA dengan pagar di lib/lkjip/data.ts.
+  const bagian = useMemo<BagianRingkas[]>(
+    () => flat.map(f => ({ id: f.node.id, parent_id: f.parentId, urutan: f.node.urutan, locked: f.node.locked })),
+    [flat],
+  );
   const selected = useMemo(() => flat.find(f => f.node.id === selectedId)?.node ?? null, [flat, selectedId]);
 
   const refresh = useCallback(async () => {
@@ -123,7 +139,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     if (ok) { setRenameModal(null); await refresh(); }
   }
   async function delSection(f: FlatNode) {
-    if (!(await confirmDialog({ title: 'Hapus section', message: `Hapus "${f.node.nomor} ${f.node.judul}" beserta sub-bagian & isinya?`, variant: 'danger' }))) return;
+    if (!(await confirmDialog({ title: 'Hapus bagian', message: `Hapus "${f.node.nomor} ${f.node.judul}"?\n\n${ringkasIsi(f.node.blocks)}`, variant: 'danger' }))) return;
     const ok = await call(`/api/lkjip/section?id=${f.node.id}`, 'DELETE');
     if (ok) { if (selectedId === f.node.id) setSelectedId(null); await refresh(); }
   }
@@ -131,14 +147,23 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     const ok = await call('/api/lkjip/section', 'PATCH', { action: 'move', id, new_parent_id: newParentId, new_index: newIndex });
     if (ok) await refresh();
   }
-  function moveUp(f: FlatNode)   { if (f.index > 0) void move(f.node.id, f.parentId, f.index - 1); }
-  function moveDown(f: FlatNode) { if (f.index < f.siblings.length - 1) void move(f.node.id, f.parentId, f.index + 1); }
-  function indent(f: FlatNode)   { if (f.index > 0) { const prev = f.siblings[f.index - 1]; void move(f.node.id, prev.id, prev.children.length); } }
-  function outdent(f: FlatNode) {
-    if (f.parentId == null) return;
-    const parentFlat = flat.find(x => x.node.id === f.parentId)!;
-    void move(f.node.id, parentFlat.parentId, parentFlat.index + 1);
-  }
+  // Tujuan tiap aksi pindah — dipakai untuk MENGIRIM dan untuk MENILAI (putusanPindah),
+  // jadi tombol yang menyala pasti mengirim pindah yang diterima server.
+  const tujuanNaik    = (f: FlatNode): Tujuan | null => (f.index > 0 ? { parent: f.parentId, index: f.index - 1 } : null);
+  const tujuanTurun   = (f: FlatNode): Tujuan | null => (f.index < f.siblings.length - 1 ? { parent: f.parentId, index: f.index + 1 } : null);
+  const tujuanIndent  = (f: FlatNode): Tujuan | null => {
+    if (f.index === 0) return null;
+    const prev = f.siblings[f.index - 1];
+    return { parent: prev.id, index: prev.children.length };
+  };
+  const tujuanOutdent = (f: FlatNode): Tujuan | null => {
+    if (f.parentId == null) return null;
+    const parentFlat = flat.find(x => x.node.id === f.parentId);
+    return parentFlat ? { parent: parentFlat.parentId, index: parentFlat.index + 1 } : null;
+  };
+  const putusanTujuan = (f: FlatNode, t: Tujuan | null): Putusan | null =>
+    t ? putusanPindah(bagian, f.node.id, t.parent, t.index) : null;
+  function pindahKe(f: FlatNode, t: Tujuan | null) { if (t) void move(f.node.id, t.parent, t.index); }
 
   // ── Block ops ──
   async function addBlock(tipe: 'NARASI' | 'TABEL' | 'GAMBAR' | 'GRAFIK') {
@@ -276,6 +301,9 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                 onClick={() => setSelectedId(f.node.id)}
               >
                 <span className="lk-node-num">{f.node.nomor}</span>
+                {f.node.locked ? (
+                  <span className="lk-node-lock" data-tooltip="BAB wajib — tidak bisa dipindah, judulnya boleh diubah" data-tooltip-pos="right"><Lock size={11} /></span>
+                ) : null}
                 <span className="lk-node-judul">{f.node.judul}</span>
                 <span className="lk-node-dot">{f.node.blocks.length > 0 ? '●' : '○'}</span>
                 {!readOnly && (
@@ -506,15 +534,24 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
         const f = rowMenu.f;
         const close = () => setRowMenu(null);
         const run = (fn: () => void) => { fn(); close(); };
+        // Tombol mati BESERTA sebabnya (data-tooltip). Pagarnya tetap di server (L82).
+        const aksiPindah = (t: Tujuan | null) => {
+          const p = putusanTujuan(f, t);
+          return { disabled: !p || !p.boleh, alasan: p && !p.boleh ? p.alasan : undefined, onClick: () => run(() => pindahKe(f, t)) };
+        };
+        const pHapus = putusanHapus(bagian, f.node.id);
+        const parentNomor = f.parentId == null ? '' : (flat.find(x => x.node.id === f.parentId)?.node.nomor ?? '');
         const items: RowMenuItem[] = [
           { icon: <Pencil size={15} />, label: 'Ubah judul', onClick: () => run(() => setRenameModal({ id: f.node.id, judul: f.node.judul })) },
-          { icon: <CornerDownRight size={15} />, label: 'Tambah sub-bab', onClick: () => run(() => { setAddModal({ parentId: f.node.id, label: `sub-bab dari ${f.node.nomor}` }); setAddJudul(''); }) },
-          { icon: <Plus size={15} />, label: f.node.depth === 0 ? 'Tambah bab' : 'Tambah sub-bab (setelah ini)', onClick: () => run(() => { setAddModal({ parentId: f.parentId, label: `setelah ${f.node.nomor}` }); setAddJudul(''); }) },
-          { icon: <ChevronUp size={15} />, label: 'Naik', disabled: f.index === 0, onClick: () => run(() => moveUp(f)) },
-          { icon: <ChevronDown size={15} />, label: 'Turun', disabled: f.index >= f.siblings.length - 1, onClick: () => run(() => moveDown(f)) },
-          { icon: <IndentIncrease size={15} />, label: 'Jadikan sub-bab (indent)', disabled: f.index === 0, onClick: () => run(() => indent(f)) },
-          { icon: <IndentDecrease size={15} />, label: f.parentId == null ? 'Sudah di tingkat bab' : (f.node.depth === 1 ? 'Jadikan bab' : 'Naikkan satu tingkat'), disabled: f.parentId == null, onClick: () => run(() => outdent(f)) },
-          { icon: <DeleteIcon size={15} />, label: 'Hapus bagian ini', danger: true, onClick: () => run(() => delSection(f)) },
+          { icon: <CornerDownRight size={15} />, label: 'Tambah sub-bab', onClick: () => run(() => { setAddModal({ parentId: f.node.id, label: `di akhir sub-bab ${f.node.nomor}` }); setAddJudul(''); }) },
+          // Bagian baru selalu ditaruh DI AKHIR saudaranya (addSection) — bab baru otomatis
+          // sesudah BAB wajib. Label lama "setelah ini" tidak pernah benar.
+          { icon: <Plus size={15} />, label: f.parentId == null ? 'Tambah bab (di akhir)' : 'Tambah setingkat (di akhir)', onClick: () => run(() => { setAddModal({ parentId: f.parentId, label: f.parentId == null ? 'di akhir daftar bab' : `di akhir sub-bab ${parentNomor}` }); setAddJudul(''); }) },
+          { icon: <ChevronUp size={15} />, label: 'Naik', ...aksiPindah(tujuanNaik(f)) },
+          { icon: <ChevronDown size={15} />, label: 'Turun', ...aksiPindah(tujuanTurun(f)) },
+          { icon: <IndentIncrease size={15} />, label: 'Jadikan sub-bab (indent)', ...aksiPindah(tujuanIndent(f)) },
+          { icon: <IndentDecrease size={15} />, label: f.parentId == null ? 'Sudah di tingkat bab' : (f.node.depth === 1 ? 'Jadikan bab' : 'Naikkan satu tingkat'), ...aksiPindah(tujuanOutdent(f)) },
+          { icon: <DeleteIcon size={15} />, label: 'Hapus bagian ini', danger: true, disabled: !pHapus.boleh, alasan: pHapus.boleh ? undefined : pHapus.alasan, onClick: () => run(() => delSection(f)) },
         ];
         return <RowMenu x={rowMenu.x} y={rowMenu.y} items={items} onClose={close} />;
       })()}
@@ -554,7 +591,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
 // ════════════════════════════════════════════════════════════════
 // Menu aksi bagian — popover (portal), anti-clip scroll, auto-flip
 // ════════════════════════════════════════════════════════════════
-type RowMenuItem = { icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean; danger?: boolean };
+type RowMenuItem = { icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean; danger?: boolean; alasan?: string };
 function RowMenu({ x, y, items, onClose }: { x: number; y: number; items: RowMenuItem[]; onClose: () => void }) {
   const MW = 216, ITEM = 33, PAD = 7;
   const h = items.length * ITEM + PAD * 2;
@@ -569,6 +606,7 @@ function RowMenu({ x, y, items, onClose }: { x: number; y: number; items: RowMen
           <button key={i} type="button"
             className={`lk-rowmenu-item${it.danger ? ' danger' : ''}${it.disabled ? ' disabled' : ''}`}
             aria-disabled={it.disabled}
+            data-tooltip={it.disabled ? it.alasan : undefined} data-tooltip-pos="right"
             onClick={() => { if (!it.disabled) it.onClick(); }}>
             <span className="lk-rowmenu-ic">{it.icon}</span>
             <span className="lk-rowmenu-lb">{it.label}</span>
@@ -586,11 +624,12 @@ function RowMenu({ x, y, items, onClose }: { x: number; y: number; items: RowMen
 const PANDUAN: { t: string; b: React.ReactNode }[] = [
   { t: 'Struktur Outline (panel kiri)', b: (
     <ol>
-      <li>Panel kiri menampilkan pohon bab. <b>BAB I–IV terkunci</b> (ikon gembok) — tidak bisa dihapus atau dipindah.</li>
+      <li>Panel kiri menampilkan pohon bab. <b>BAB I–IV wajib</b> (ikon gembok): tidak bisa dipindah atau dijadikan sub-bab, tapi <b>judulnya boleh diubah</b>.</li>
       <li><b>Klik</b> judul bab / sub-bab → isinya tampil di panel tengah untuk diedit.</li>
-      <li><b>Tambah sub-bab</b>: arahkan ke bab induk, klik ikon <b>+</b>, ketik judul, lalu Simpan.</li>
-      <li><b>Ganti nama</b>: klik ikon <b>pensil</b> di baris bab.</li>
-      <li><b>Urutkan</b>: klik panah <b>↑ / ↓</b>. <b>Ubah level</b>: <b>indent</b> (jadi sub, mis. 1.3 → 1.3.1) atau <b>outdent</b> (naik level).</li>
+      <li>Semua aksi ada di tombol <b>⋮</b> di ujung kanan baris: <b>Ubah judul</b>, <b>Tambah sub-bab</b>, <b>Naik / Turun</b>, <b>Jadikan sub-bab</b> (mis. 1.3 → 1.2.1) atau <b>Jadikan bab</b>.</li>
+      <li><b>Bab tambahan</b> (mis. LAMPIRAN) selalu berada <b>sesudah BAB IV</b>, supaya nomor BAB I–IV tidak bergeser. Sub-bab bebas diatur.</li>
+      <li><b>Hapus</b>: bagian yang masih punya sub-bagian tidak bisa dihapus — hapus atau pindahkan sub-bagiannya dulu. Dialog hapus menyebut blok isi yang ikut terhapus.</li>
+      <li>Aksi yang sedang tidak boleh tampil redup; arahkan kursor ke sana untuk membaca sebabnya.</li>
       <li>Nomor (1, 1.1, 1.1.1) <b>dihitung otomatis</b> — jangan diketik manual.</li>
     </ol>
   ) },
@@ -885,20 +924,20 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
           <span className="lk-tt-sep" />
           <button data-tooltip="Tebal" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
           <span className="lk-tt-sep" />
-          <select className="lk-tt-sel" title="Baris header (header bertingkat dgn merge). 'Kolom' = pakai nama kolom; angka = N baris pertama jadi header." value={String(headerRows)}
+          <span className="lk-tt-tip" data-tooltip="Baris header (header bertingkat dgn merge). 'Kolom' = pakai nama kolom; angka = N baris pertama jadi header." data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Baris header (header bertingkat dgn merge). 'Kolom' = pakai nama kolom; angka = N baris pertama jadi header." value={String(headerRows)}
             onChange={e => { pushHist(); setHeaderRows(Number(e.target.value)); }}>
             <option value="0">Header: kolom</option>
             <option value="1">Header: 1 baris</option>
             <option value="2">Header: 2 baris</option>
             <option value="3">Header: 3 baris</option>
-          </select>
-          <select className="lk-tt-sel" title="Ukuran font" disabled={!rect} value=""
+          </select></span>
+          <span className="lk-tt-tip" data-tooltip="Ukuran font" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Ukuran font" disabled={!rect} value=""
             onChange={e => { const v = e.target.value; if (!v) return; if (v === 'reset') editCells(c => { delete c.fs; }); else editCells(c => { c.fs = +v; }); e.currentTarget.value = ''; }}>
             <option value="">Aa</option>
             {[9, 10, 11, 12, 14, 16, 18, 20, 24, 28].map(s => <option key={s} value={s}>{s}</option>)}
             <option value="reset">Reset</option>
-          </select>
-          <select className="lk-tt-sel" title="Garis sel" disabled={!rect} value=""
+          </select></span>
+          <span className="lk-tt-tip" data-tooltip="Garis sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Garis sel" disabled={!rect} value=""
             onChange={e => { const v = e.target.value; if (v) applyBorder(v); e.currentTarget.value = ''; }}>
             <option value="">Garis</option>
             <option value="all">Semua</option>
@@ -906,18 +945,18 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
             <option value="none">Tidak ada</option>
             <option value="t">+ Atas</option><option value="b">+ Bawah</option>
             <option value="l">+ Kiri</option><option value="r">+ Kanan</option>
-          </select>
-          <select className="lk-tt-sel" title="Format angka" disabled={!rect} value=""
+          </select></span>
+          <span className="lk-tt-tip" data-tooltip="Format angka" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Format angka" disabled={!rect} value=""
             onChange={e => { const v = e.target.value; if (!v) return; if (v === 'plain') editCells(c => { delete c.nf; delete c.dec; }); else editCells(c => { c.nf = v as TabelNumFmt; }); e.currentTarget.value = ''; }}>
             <option value="">123</option>
             <option value="num">Angka</option><option value="rp">Rupiah</option><option value="pct">Persen</option><option value="plain">Teks</option>
-          </select>
-          <select className="lk-tt-sel" title="Desimal" disabled={!rect} value=""
+          </select></span>
+          <span className="lk-tt-tip" data-tooltip="Desimal" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Desimal" disabled={!rect} value=""
             onChange={e => { const v = e.target.value; if (v === '') return; editCells(c => { c.dec = +v; }); e.currentTarget.value = ''; }}>
             <option value="">0,0</option>
             {[0, 1, 2, 3].map(d => <option key={d} value={d}>{d} des</option>)}
-          </select>
-          <select className="lk-tt-sel" title="Warna latar sel" disabled={!rect} value=""
+          </select></span>
+          <span className="lk-tt-tip" data-tooltip="Warna latar sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Warna latar sel" disabled={!rect} value=""
             onChange={e => { const v = e.target.value; if (!v) return; if (v === 'none') editCells(c => { delete c.bg; }); else editCells(c => { c.bg = v; }); e.currentTarget.value = ''; }}>
             <option value="">Latar</option>
             <option value="none">Tanpa</option>
@@ -926,7 +965,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
             <option value="E2EFDA">Hijau</option>
             <option value="DDEBF7">Biru</option>
             <option value="FCE4E4">Merah</option>
-          </select>
+          </select></span>
           <span className="lk-tt-sep" />
           <button data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect} onClick={doCopy}><Copy size={14} /></button>
           <button data-tooltip="Tempel (Ctrl+V)" data-tooltip-pos="below" disabled={!rect} onClick={doPaste}><ClipboardPaste size={14} /></button>
@@ -1245,6 +1284,7 @@ const ED_CSS = `
   .lk-node-judul { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #D6E6F7; }
   .lk-lock { color: #85B7EB; flex-shrink: 0; }
   .lk-node-dot { font-size: 9px; color: #5E8BBE; flex-shrink: 0; }
+  .lk-node-lock { display: inline-flex; flex-shrink: 0; color: #85B7EB; opacity: .75; }
   .lk-node-kebab { background: none; border: none; color: #85B7EB; cursor: pointer; padding: 4px; border-radius: 6px; display: inline-flex; flex-shrink: 0; opacity: .42; transition: opacity .15s, background .15s, color .15s; }
   .lk-node:hover .lk-node-kebab, .lk-node.active .lk-node-kebab { opacity: 1; }
   .lk-node-kebab:hover { background: rgba(124,92,252,0.22); color: #C9BCFF; opacity: 1; }
@@ -1254,7 +1294,9 @@ const ED_CSS = `
   @keyframes lk-rowmenu-in { from { opacity: 0; transform: translateY(-5px) scale(.97); } to { opacity: 1; transform: none; } }
   .lk-rowmenu-item { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border: none; background: none; color: #D6E6F7; cursor: pointer; border-radius: 6px; font-size: 12.5px; text-align: left; width: 100%; }
   .lk-rowmenu-item:hover:not(.disabled) { background: rgba(124,92,252,0.20); color: #fff; }
-  .lk-rowmenu-item.disabled { opacity: .4; cursor: not-allowed; }
+  /* Yang diredupkan isinya, bukan tombolnya: opacity pada tombol ikut meredupkan tooltip alasannya (::after). */
+  .lk-rowmenu-item.disabled { cursor: not-allowed; }
+  .lk-rowmenu-item.disabled > span { opacity: .4; }
   .lk-rowmenu-item.danger { color: #FCA5A5; border-top: 1px solid #0C447C; margin-top: 3px; padding-top: 9px; border-radius: 0 0 6px 6px; }
   .lk-rowmenu-item.danger:hover:not(.disabled) { background: rgba(226,75,74,0.18); color: #fff; }
   .lk-rowmenu-ic { display: inline-flex; flex-shrink: 0; color: #85B7EB; }
@@ -1372,6 +1414,8 @@ const ED_CSS = `
   .lk-tabel-tools button:disabled { opacity: .38; cursor: not-allowed; }
   .lk-tt-sep { width: 1px; height: 20px; background: #0C447C; margin: 0 3px; }
   .lk-tabel td.lk-cell-sel { outline: 2px solid #EF9F27; outline-offset: -2px; background: rgba(239,159,39,0.12); }
+  /* K1: select tak bisa menggambar ::after — tooltip-nya dipasang di pembungkus. */
+  .lk-tt-tip { display: inline-flex; }
   .lk-tt-sel { height: 28px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; font-size: 11px; padding: 0 4px; cursor: pointer; }
   .lk-tt-sel:disabled { opacity: .38; cursor: not-allowed; }
   .lk-tt-sel option { background: #020F1C; color: #E6F1FB; }
@@ -1427,6 +1471,7 @@ const ED_CSS = `
   [data-theme="light"] .lk-node-judul { color: #1F2937; }
   [data-theme="light"] .lk-node-num { color: #B26B00; }
   [data-theme="light"] .lk-node-kebab { color: #6B7280; }
+  [data-theme="light"] .lk-node-lock { color: #6B7280; }
   [data-theme="light"] .lk-node-kebab:hover { background: rgba(124,92,252,0.14); color: #6D28D9; }
   [data-theme="light"] .lk-rowmenu { background: #FFFFFF; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-rowmenu-item { color: #374151; }

@@ -5,7 +5,7 @@
 // `new Date(iso)`: konstruktor Date menafsirkan tanggal polos sebagai UTC lalu
 // menggesernya ke zona lokal, jadi 2026-07-01 bisa tampil 30 Jun.
 
-import { JAKARTA_OFFSET_MS, waktuSekarangWIB } from '@/lib/shared/waktu-wib'
+import { JAKARTA_OFFSET_MS, waktuSekarangWIB, tanggalHariIniWIB, toDateStr } from '@/lib/shared/waktu-wib'
 
 const BULAN_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 
@@ -18,49 +18,16 @@ export function formatTanggalId(iso: string | null | undefined): string {
 }
 
 /**
- * Selisih WIB terhadap UTC + stempel DATETIME-nya. Keduanya PINDAH ke
- * `lib/shared/waktu-wib.ts` saat E-Anggaran memerlukan jam yang sama untuk
- * `kinerja_riwayat_simpan`; di-re-export di sini supaya pemanggil lama tidak
- * disentuh. Diimpor DAN di-re-export: `export … from` tidak membuat binding
- * lokal, padahal `tanggalHariIniWIB` di bawah memakai offsetnya sendiri.
+ * Offset WIB, stempel DATETIME, tanggal hari ini, dan `toDateStr` — keempatnya
+ * tinggal di `lib/shared/waktu-wib.ts` (dua yang terakhir pindah 2026-09-29 saat
+ * PK, BBA, dan RIMA memerlukannya). Di-re-export di sini supaya pemanggil lama
+ * tidak disentuh. Diimpor DAN di-re-export: `export … from` tidak membuat binding
+ * lokal, padahal fungsi periode di bawah memakai `tanggalHariIniWIB`.
+ *
+ * `toDateStr` sengaja tidak di `data.ts`: `riwayat-simpan.ts` memakainya dan
+ * `data.ts` memanggil pencatat riwayat, jadi arah impornya tidak boleh berbalik.
  */
-export { JAKARTA_OFFSET_MS, waktuSekarangWIB }
-
-/**
- * Tanggal hari ini menurut WIB, bukan UTC.
- *
- * B4: `new Date().toISOString()` di browser mengembalikan tanggal KEMARIN antara
- * pukul 00:00–06:59 WIB. Dipakai sebagai `versi_tanggal`, simpanan dini hari
- * MENIMPA versi kemarin alih-alih membuka versi baru — dan tidak ada pagar yang
- * menahannya: `assertBludVersion` lolos (kuncinya memang kunci versi yang sedang
- * dibuka) dan ambang `SAFE_DROP_THRESHOLD` lolos (jumlah baris naik, bukan turun).
- *
- * @param sekarang epoch ms — parameter hanya untuk menguji batas pergantian hari.
- */
-export function tanggalHariIniWIB(sekarang: number = Date.now()): string {
-  return new Date(sekarang + JAKARTA_OFFSET_MS).toISOString().slice(0, 10)
-}
-
-/**
- * Kolom DATE dari MySQL → 'YYYY-MM-DD'.
- *
- * Pool memakai `timezone: '+07:00'`, jadi mysql2 menafsirkan kolom DATE sebagai
- * tengah malam di +07:00. Di server UTC, `toISOString()` menggesernya balik dan
- * bisa memulangkan tanggal SEBELUMNYA — 2026-07-01 tampil 30 Jun. Offset yang
- * sama ditambahkan supaya string ISO-nya mewakili tengah malam DATE aslinya.
- *
- * Tinggal di sini, bukan di `data.ts`, supaya `riwayat-simpan.ts` bisa
- * memakainya tanpa membentuk lingkaran modul — `data.ts` memanggil pencatat
- * riwayat, jadi arah impornya tidak boleh berbalik. `data.ts` me-re-export ini
- * agar 38 pemanggil lama tidak perlu disentuh.
- */
-export function toDateStr(v: unknown): string {
-  if (!v) return ''
-  if (v instanceof Date) {
-    return new Date(v.getTime() + JAKARTA_OFFSET_MS).toISOString().slice(0, 10)
-  }
-  return String(v).slice(0, 10)
-}
+export { JAKARTA_OFFSET_MS, waktuSekarangWIB, tanggalHariIniWIB, toDateStr }
 
 // ─── PERIODE VERSI HISTORIS ──────────────────────────────────────────────────
 // Aplikasi bisa mulai dipakai di tengah tahun; bulan-bulan sebelumnya perlu punya

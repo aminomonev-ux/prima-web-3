@@ -119,6 +119,73 @@ export function bidangRoleOf(subBidang: string): string {
   return (SUBBIDANG_TO_BIDANG as Record<string,string>)[subBidang] ?? '';
 }
 
+// ─── Status baca per orang (B7, audit 2026-09-29) ───────────────────────────
+// Dulu satu kolom `notifications.dibaca` per notifikasi. Notifikasi antrean dibaca banyak
+// orang, jadi membaca = membacakan untuk semua pemegang antreannya — dan penerima
+// SUPER_ADMIN mencakup antrean Kasubag & Kabag, sehingga "Tandai semua dibaca" milik
+// Super Admin memadamkan peringatan mereka. Kini satu baris per orang di
+// `notifikasi_dibaca`. Kuerinya tinggal di sini, bukan di route, supaya bisa diuji
+// terhadap basis data sungguhan (scripts/test-notif-dibaca.mts).
+
+export type NotifBaris = {
+  id: number; type: string; pesan: string; no_usulan: string | null; sub_bidang: string | null;
+  created_at: unknown; dibaca: boolean;
+};
+
+/**
+ * 50 notifikasi terbaru + jumlah yang BELUM dibaca orang ini. Notifikasi yang lebih tua
+ * dari akunnya dianggap sudah dibaca — akun baru tidak disambut antrean lama sebagai
+ * "baru". `unread` dihitung tersendiri: dulu dihitung dari 50 baris itu saja.
+ */
+export async function bacaNotifikasi(userId: number, role: string, username: string): Promise<{ data: NotifBaris[]; unread: number }> {
+  const recipients = buildNotifRecipients(role, username);
+  const [rows, hitung] = await Promise.all([
+    sql`
+      SELECT n.id, n.type, n.pesan, n.no_usulan, n.sub_bidang, n.created_at,
+             (d.user_id IS NOT NULL OR n.created_at < u.created_at) AS dibaca
+        FROM notifications n
+        JOIN users u ON u.id = ${userId}
+        LEFT JOIN notifikasi_dibaca d ON d.notif_id = n.id AND d.user_id = ${userId}
+       WHERE n.recipient IN (${recipients})
+       ORDER BY n.created_at DESC, n.id DESC
+       LIMIT 50
+    `,
+    sql`
+      SELECT COUNT(*) AS n
+        FROM notifications n
+        JOIN users u ON u.id = ${userId}
+       WHERE n.recipient IN (${recipients})
+         AND n.created_at >= u.created_at
+         AND NOT EXISTS (SELECT 1 FROM notifikasi_dibaca d WHERE d.notif_id = n.id AND d.user_id = ${userId})
+    `,
+  ]);
+  const data = (rows as Record<string, unknown>[]).map(r => ({ ...r, dibaca: Number(r.dibaca) === 1 }) as NotifBaris);
+  return { data, unread: Number((hitung[0] as { n?: unknown } | undefined)?.n ?? 0) };
+}
+
+/** Tandai SEMUA notifikasi yang boleh dibaca orang ini — untuk dirinya sendiri saja. */
+export async function tandaiSemuaDibaca(userId: number, role: string, username: string): Promise<void> {
+  const recipients = buildNotifRecipients(role, username);
+  await sql`
+    INSERT IGNORE INTO notifikasi_dibaca (notif_id, user_id)
+    SELECT n.id, ${userId}
+      FROM notifications n
+     WHERE n.recipient IN (${recipients})
+       AND NOT EXISTS (SELECT 1 FROM notifikasi_dibaca d WHERE d.notif_id = n.id AND d.user_id = ${userId})
+  `;
+}
+
+/** Tandai satu notifikasi. SEC-C4: hanya kalau memang dialamatkan ke orang ini. */
+export async function tandaiDibaca(notifId: number, userId: number, role: string, username: string): Promise<void> {
+  const recipients = buildNotifRecipients(role, username);
+  await sql`
+    INSERT IGNORE INTO notifikasi_dibaca (notif_id, user_id)
+    SELECT n.id, ${userId}
+      FROM notifications n
+     WHERE n.id = ${notifId} AND n.recipient IN (${recipients})
+  `;
+}
+
 // ─── Role Promotion Ladder notif helpers (migration 037) ────────────────────
 
 /** Tipe event promotion untuk kolom `notifications.type`. */

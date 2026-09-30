@@ -1,16 +1,25 @@
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { ADMIN_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
+import { itemUsulanTahun, paguBludTahun } from '@/lib/data/usulan';
+import { POLA_TAHUN_ANGGARAN } from '@/lib/shared/pagu-blud';
 import { usulanMati } from '../_guard';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
     const mati = await usulanMati(session.role);
     if (mati) return mati;
+
+    // B5: tahun anggaran mengikuti saringan layar. Tanpa tahun = semua tahun, dan
+    // pagu `null` — pagu hanya sah dibandingkan dengan nilai tahun yang sama.
+    const tahun = new URL(req.url).searchParams.get('tahun') || null;
+    if (tahun !== null && !POLA_TAHUN_ANGGARAN.test(tahun)) {
+      return NextResponse.json({ ok: false, message: 'Tahun anggaran tidak valid.' }, { status: 400 });
+    }
 
     const isAdmin   = (ADMIN_ROLES as readonly string[]).includes(session.role);
     const isKasubag = session.role === 'ADMIN_KASUBAG';
@@ -19,10 +28,11 @@ export async function GET() {
     const isBidang  = (BIDANG_ROLES as readonly string[]).includes(session.role);
     const allowedSubs = isBidang ? ((BIDANG_TO_SUBBIDANG as Record<string,string[]>)[session.role] ?? []) : [];
 
-    const cfgRows = await sql`SELECT value FROM app_config WHERE \`key\`='pagu_blud' LIMIT 1`;
-    const pagu = cfgRows.length ? Number((cfgRows[0] as Record<string,unknown>).value ?? 0) : 0;
+    const pagu = tahun ? await paguBludTahun(tahun) : null;
 
     if (isBidang && allowedSubs.length) {
+      const tahunHeader = tahun ? sql`AND tahun_anggaran = ${tahun}` : sql``;
+      const tahunItem   = tahun ? sql`AND ${itemUsulanTahun(tahun)}` : sql``;
       const [hRows, iRows, vRows] = await Promise.all([
         sql`SELECT
           COUNT(CASE WHEN status_ringkas = 'DIAJUKAN_REVIEW' THEN 1 END)  AS antrian,
@@ -31,16 +41,16 @@ export async function GET() {
           COUNT(CASE WHEN status_ringkas NOT IN ('DIAJUKAN_REVIEW','DRAFT') THEN 1 END) AS direview,
           COUNT(CASE WHEN status_ringkas NOT IN ('DIAJUKAN_REVIEW','REVISI_BIDANG','DITOLAK_BIDANG','DRAFT') THEN 1 END) AS diteruskan,
           COALESCE(SUM(CASE WHEN status_ringkas='DIAJUKAN_REVIEW' THEN total_nilai ELSE 0 END),0) AS nilai_antrian
-        FROM usulan_headers WHERE sub_bidang IN (${allowedSubs})`,
+        FROM usulan_headers WHERE sub_bidang IN (${allowedSubs}) ${tahunHeader}`,
         sql`SELECT sub_bidang, COUNT(*) as cnt, COALESCE(SUM(harga_est*qty),0) as total_est,
               COALESCE(SUM(CASE WHEN status='DISETUJUI' THEN nominal_disetujui ELSE 0 END),0) as nominal_disetujui
-          FROM usulan_items WHERE sub_bidang IN (${allowedSubs})
+          FROM usulan_items WHERE sub_bidang IN (${allowedSubs}) ${tahunItem}
           GROUP BY sub_bidang ORDER BY cnt DESC`,
         sql`SELECT
           COALESCE(SUM(CASE WHEN status NOT IN ('DITOLAK','DITOLAK_ADMIN','DITOLAK_BIDANG','DRAFT') THEN harga_est*qty ELSE 0 END),0) AS nilai_aktif,
           COALESCE(SUM(CASE WHEN status IN ('DITELAAH','DIPROSES') THEN harga_est*qty ELSE 0 END),0) AS nilai_telaah,
           COALESCE(SUM(CASE WHEN status='DISETUJUI' THEN nominal_disetujui ELSE 0 END),0) AS nilai_disetujui
-        FROM usulan_items WHERE sub_bidang IN (${allowedSubs})`,
+        FROM usulan_items WHERE sub_bidang IN (${allowedSubs}) ${tahunItem}`,
       ]);
       const h = hRows[0] as Record<string,unknown>;
       const v = vRows[0] as Record<string,unknown>;
@@ -50,7 +60,7 @@ export async function GET() {
         nilai_aktif:     Number(v.nilai_aktif ?? 0),
         nilai_telaah:    Number(v.nilai_telaah ?? 0),
         nilai_disetujui: Number(v.nilai_disetujui ?? 0),
-        pagu,
+        pagu, tahun,
         chartStatus: [], chartBidang: iRows,
         bidang_antrian:    Number(h.antrian ?? 0),
         bidang_revisi:     Number(h.revisi ?? 0),
@@ -61,8 +71,13 @@ export async function GET() {
       }});
     }
 
-    const scope  = isVerif ? sql`` : sql`WHERE usulan_id IN (SELECT id FROM usulan_headers WHERE created_by = ${session.userId})`;
-    const scopeH = isVerif ? sql`` : sql`WHERE h.created_by = ${session.userId}`;
+    // Pemohon hanya miliknya sendiri; verifikator semua. Tahun menyaring keduanya.
+    const syaratHeader = isVerif
+      ? (tahun ? sql`WHERE h.tahun_anggaran = ${tahun}` : null)
+      : (tahun ? sql`WHERE h.created_by = ${session.userId} AND h.tahun_anggaran = ${tahun}`
+               : sql`WHERE h.created_by = ${session.userId}`);
+    const scope  = syaratHeader ? sql`WHERE usulan_id IN (SELECT h.id FROM usulan_headers h ${syaratHeader})` : sql``;
+    const scopeH = syaratHeader ?? sql``;
 
     const [rows, chartStatus, chartBidang] = await Promise.all([
       isVerif
@@ -76,7 +91,7 @@ export async function GET() {
             COALESCE(SUM(CASE WHEN status NOT IN ('DITOLAK','DITOLAK_ADMIN','DITOLAK_BIDANG','DRAFT') THEN harga_est*qty ELSE 0 END),0) AS nilai_aktif,
             COALESCE(SUM(CASE WHEN status IN ('DITELAAH','DIPROSES') THEN harga_est*qty ELSE 0 END),0) AS nilai_telaah,
             COALESCE(SUM(CASE WHEN status='DISETUJUI' THEN nominal_disetujui ELSE 0 END),0)            AS nilai_disetujui
-          FROM usulan_items`
+          FROM usulan_items ${scope}`
         : sql`SELECT
             COUNT(*)                                                                                      AS total,
             COUNT(CASE WHEN i.status = 'DISETUJUI' THEN 1 END)                                           AS disetujui,
@@ -118,7 +133,7 @@ export async function GET() {
         nilai_aktif:     Number(kpi.nilai_aktif ?? 0),
         nilai_telaah:    Number(kpi.nilai_telaah ?? 0),
         nilai_disetujui: Number(kpi.nilai_disetujui ?? 0),
-        pagu,
+        pagu, tahun,
         chartStatus,
         chartBidang,
         bidang_antrian: 0, bidang_revisi: 0, bidang_ditolak: 0,

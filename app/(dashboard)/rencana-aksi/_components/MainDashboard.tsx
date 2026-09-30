@@ -513,7 +513,7 @@ export default function MainDashboard({
                   style={warnaNada
                     ? { borderColor: warnaNada, background: `color-mix(in srgb, ${warnaNada} 12%, transparent)` }
                     : { borderColor: 'var(--ra-border, #E2E8F0)' }}
-                  title={pctBulan != null ? `Capaian ${bln}: ${pctBulan.toFixed(1)}% dari target ${tulisDesimal(targetB)}` : undefined}
+                  data-tooltip={pctBulan != null ? `Capaian ${bln}: ${pctBulan.toFixed(1)}% dari target ${tulisDesimal(targetB)}` : undefined}
                 >
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-center">{bln}</label>
                   <PrimaNumberField

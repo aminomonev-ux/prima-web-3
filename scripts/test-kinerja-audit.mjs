@@ -4,7 +4,7 @@
 // MENYENTUH DB — hanya di TAHUN KOTAK PASIR '2099', dibersihkan di `finally`.
 // Yang diuji bagian yang tsc tidak bisa buktikan: bentuk subquery hitung anak &
 // saudara, dan pembacaan affectedRows (L53) pada UPDATE/DELETE.
-import { execSync } from 'node:child_process'
+import { kompilasiUji } from './_kompilasi-uji.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import Module from 'node:module'
@@ -24,16 +24,10 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
   if (!(t.slice(0, i).trim() in process.env)) process.env[t.slice(0, i).trim()] = v
 }
 
-fs.mkdirSync(outDir, { recursive: true })
-const sumber = ['lib/shared/uuid.ts', 'lib/data/db.ts', 'lib/data/kinerja.ts']
-try {
-  execSync(
-    `npx tsc ${sumber.map((f) => `"${path.join(repo, f)}"`).join(' ')}`
-    + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
-    + ' --esModuleInterop --skipLibCheck --moduleResolution node',
-    { cwd: repo, stdio: 'pipe' },
-  )
-} catch { /* alias @/... tak ter-resolve saat compile — .js tetap ditulis */ }
+// Titik masuk saja — `kompilasiUji` mengikuti seluruh impornya, termasuk alias `@/…`.
+// Daftar tiga berkas yang dulu di sini mati diam-diam begitu `kinerja.ts` mulai
+// mengimpor `@/lib/kinerja/riwayat-simpan`, `yatim`, `master-nama`, `versi` (U1).
+kompilasiUji(repo, outDir, ['lib/data/db.ts', 'lib/data/kinerja.ts'])
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (p, ...s) {

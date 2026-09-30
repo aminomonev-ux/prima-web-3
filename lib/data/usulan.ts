@@ -1,6 +1,33 @@
 // ─── PRIMA — Usulan Helper Functions ─────────────────────────────────────────
 import { sql } from '@/lib/data/db';
 import { SUBBIDANG_TO_BIDANG } from '@/lib/constants';
+import { jendelaTerbuka } from '@/lib/shared/jendela-pengajuan';
+import { kunciPaguBlud } from '@/lib/shared/pagu-blud';
+
+/** Pagu BLUD satu tahun anggaran (B5). Belum diatur = 0. */
+export async function paguBludTahun(tahun: string): Promise<number> {
+  const rows = await sql`SELECT value FROM app_config WHERE \`key\` = ${kunciPaguBlud(tahun)} LIMIT 1` as { value: string }[];
+  return rows.length ? Number(rows[0].value) || 0 : 0;
+}
+
+/**
+ * Saringan `usulan_items` per tahun anggaran. Tahunnya milik HEADER — item tidak
+ * menyimpannya — jadi disaring lewat usulan_id. Dipakai KPI Usulan & /dashboard (B5).
+ */
+export const itemUsulanTahun = (tahun: string) =>
+  sql`usulan_id IN (SELECT id FROM usulan_headers WHERE tahun_anggaran = ${tahun})`;
+
+/**
+ * Jendela pengajuan dibaca dari `app_config`. B3: dipanggil KEEMPAT pintu yang
+ * mengubah DRAFT jadi diajukan (POST, PATCH `ajukan`, PATCH `update_draft` bukan-draf,
+ * PUT kirim-semua) — dulu hanya POST yang bertanya.
+ */
+export async function jendelaPengajuanTerbuka(): Promise<boolean> {
+  const rows = await sql`SELECT \`key\`, value FROM app_config WHERE \`key\` IN ('batas_aktif','batas_mulai','batas_selesai')` as { key: string; value: string }[];
+  const cfg: Record<string, string> = {};
+  for (const r of rows) cfg[r.key] = r.value;
+  return jendelaTerbuka({ aktif: cfg.batas_aktif === 'true', mulai: cfg.batas_mulai ?? '', selesai: cfg.batas_selesai ?? '' });
+}
 
 // ─── Generate No. Usulan: <kode>-YYYYMM-XXXX ─────────────────────────────────
 // Prefix per jenis: MURNI=UA · PERUBAHAN=UAPB · PERGESERAN=UAPR. Prefix disjoint

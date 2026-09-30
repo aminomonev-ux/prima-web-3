@@ -33,6 +33,8 @@ export interface AnggaranRow {
 export interface PkFormState {
   id: number | null
   status: PkStatus
+  /** I4: angka kunci dari server — dikirim balik saat Simpan & Finalisasi. */
+  version: number
   tahun: string
   tanggal_dokumen: string
   jenis_pk: PkJenis

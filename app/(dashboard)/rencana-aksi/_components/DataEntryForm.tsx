@@ -837,7 +837,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         <td className="px-5 py-4 font-semibold text-slate-400">{idx + 1}</td>
                         {level === 'tujuan' && (
                           <td className="px-5 py-4 max-w-[200px] leading-relaxed">
-                            <span className="font-bold text-[#7C5CFC] text-[11px] block" title={row.program}>
+                            <span className="font-bold text-[#7C5CFC] text-[11px] block">
                               {row.program}
                             </span>
                           </td>
@@ -845,12 +845,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         {level === 'sasaran' && (
                           <>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-semibold text-[#7C5CFC] text-[11px] block" title={row.tujuan ?? ''}>
+                              <span className="font-semibold text-[#7C5CFC] text-[11px] block">
                                 {row.tujuan || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-bold text-[#10B981] text-[11px] block" title={row.program}>
+                              <span className="font-bold text-[#10B981] text-[11px] block">
                                 {row.program}
                               </span>
                             </td>
@@ -859,12 +859,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         {level === 'program' && (
                           <>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-semibold text-[#10B981] text-[11px] block" title={row.sasaran ?? ''}>
+                              <span className="font-semibold text-[#10B981] text-[11px] block">
                                 {row.sasaran || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-bold text-[#378ADD] text-[11px] block" title={row.program}>
+                              <span className="font-bold text-[#378ADD] text-[11px] block">
                                 {row.program}
                               </span>
                             </td>
@@ -873,12 +873,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         {level === 'kegiatan' && (
                           <>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-semibold text-[#378ADD] text-[11px] block" title={row.program}>
+                              <span className="font-semibold text-[#378ADD] text-[11px] block">
                                 {row.program}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
-                              <span className="font-bold text-[#EC4899] text-[11px] block" title={row.kegiatan ?? ''}>
+                              <span className="font-bold text-[#EC4899] text-[11px] block">
                                 {row.kegiatan || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
@@ -887,17 +887,17 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         {level === 'sub-kegiatan' && (
                           <>
                             <td className="px-5 py-4 max-w-[160px] leading-relaxed">
-                              <span className="font-semibold text-[#378ADD] text-[11px] block" title={row.program}>
+                              <span className="font-semibold text-[#378ADD] text-[11px] block">
                                 {row.program}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[160px] leading-relaxed">
-                              <span className="font-semibold text-[#EC4899] text-[11px] block" title={row.kegiatan ?? ''}>
+                              <span className="font-semibold text-[#EC4899] text-[11px] block">
                                 {row.kegiatan || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[160px] leading-relaxed">
-                              <span className="font-bold text-[#F59E0B] text-[11px] block" title={row.sub_kegiatan ?? ''}>
+                              <span className="font-bold text-[#F59E0B] text-[11px] block">
                                 {row.sub_kegiatan || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>

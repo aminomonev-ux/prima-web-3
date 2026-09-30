@@ -57,7 +57,7 @@ function bacaTeks(v: ExcelJS.CellValue): string {
   if (v == null) return ''
   if (typeof v === 'string') return v
   if (typeof v === 'number' || typeof v === 'boolean') return String(v)
-  if (v instanceof Date) return v.toISOString().slice(0, 10)
+  if (v instanceof Date) return v.toISOString().slice(0, 10) // tanggal-utc-ok: exceljs membaca sel tanggal sebagai tengah malam UTC
   const o = v as unknown as Record<string, unknown>
   if (Array.isArray(o.richText)) {
     return (o.richText as Array<{ text?: string }>).map(t => t.text ?? '').join('')

@@ -7,6 +7,7 @@
 import { fetchJson } from '@/lib/shared/api';
 import { loadExcelJs, downloadWorkbook, sanitizeCell } from '@/lib/shared/excel-export';
 import type { UsulanHeader, UsulanItem } from './_types';
+import { fmtTgl } from './_types';
 import type ExcelJS from 'exceljs';
 
 /** Helper: fetch all items per usulan ID dalam 1 round-trip. */
@@ -108,7 +109,9 @@ function renderSubBidangSheet(ws: ExcelJS.Worksheet, sub: string, rows: UsulanHe
 
     // Group header row (per usulan)
     curRow++;
-    ws.getCell(`A${curRow}`).value = `${g + 1}.  ${r.no_usulan}   |   ${r.tanggal?.slice(0, 10) ?? ''}   |   Pengusul: ${r.pengusul}   |   ${r.jenis_belanja || '-'}   |   Status: ${r.status_ringkas}`;
+    // B8: `fmtTgl` seperti layar — `tanggal` tiba sebagai ISO UTC (tengah malam WIB =
+    // 17:00 UTC kemarin), jadi 10 karakter pertamanya menyebut tanggal kemarin.
+    ws.getCell(`A${curRow}`).value = `${g + 1}.  ${r.no_usulan}   |   ${fmtTgl(r.tanggal)}   |   Pengusul: ${r.pengusul}   |   ${r.jenis_belanja || '-'}   |   Status: ${r.status_ringkas}`;
     ws.mergeCells(`A${curRow}:${colLetter(nCols - 1)}${curRow}`);
     for (let c = 0; c < nCols; c++) {
       const cell = ws.getCell(`${colLetter(c)}${curRow}`);
@@ -366,7 +369,7 @@ export async function exportPrint(title: string, rows: UsulanHeader[]) {
       gT += subtotal; gVA += a.va; gVK += a.vk; gDS += a.ds;
 
       doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(...darkGreen);
-      doc.text(`${g + 1}. ${r.no_usulan}  |  ${r.tanggal?.slice(0, 10) ?? ''}  |  ${r.pengusul}  |  ${r.jenis_belanja || '-'}  |  ${r.status_ringkas}`, 14, startY);
+      doc.text(`${g + 1}. ${r.no_usulan}  |  ${fmtTgl(r.tanggal)}  |  ${r.pengusul}  |  ${r.jenis_belanja || '-'}  |  ${r.status_ringkas}`, 14, startY);
       startY += 1;
 
       autoTable(doc, {

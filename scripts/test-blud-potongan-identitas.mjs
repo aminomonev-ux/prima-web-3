@@ -9,7 +9,7 @@
 // kerusakan B1 justru lahir dari cara data layer menulis ulang potongan
 // (DELETE + bulkInsert → id AUTO_INCREMENT baru), jadi menirunya di berkas uji
 // hanya akan membuktikan tiruannya sendiri.
-import { execSync } from 'node:child_process'
+import { kompilasiUji } from './_kompilasi-uji.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import Module from 'node:module'
@@ -37,20 +37,10 @@ fs.writeFileSync(path.join(outDir, 'stub-ratelimit.js'),
   'exports.checkRateLimit = async () => ({ allowed: true, success: true });\n')
 fs.writeFileSync(path.join(outDir, 'stub-auth.js'), 'exports.getSession = async () => null;\n')
 
-const berkas = [
-  'lib/blud/realisasi-data.ts', 'lib/blud/realisasi-schemas.ts', 'lib/blud/schemas.ts',
-  'lib/blud/alokasi-rule.ts', 'lib/blud/pagu.ts', 'lib/blud/data.ts', 'lib/blud/lock.ts',
-  'lib/blud/anggaran-key.ts', 'lib/blud/format.ts',
-  'lib/data/db.ts', 'lib/data/locks.ts', 'lib/shared/uuid.ts',
-]
-try {
-  execSync(
-    `npx tsc ${berkas.map((f) => `"${path.join(repo, f)}"`).join(' ')}`
-    + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020`
-    + ' --esModuleInterop --skipLibCheck --moduleResolution node',
-    { cwd: repo, stdio: 'pipe' },
-  )
-} catch { /* impor `@/...` tak ter-resolve saat compile — .js tetap ditulis */ }
+// Titik masuk saja — `kompilasiUji` mengikuti seluruh impornya, termasuk alias `@/…`.
+// Daftar tulis-tangan yang dulu di sini mati diam-diam begitu `tanggal.ts` mulai
+// mengimpor `@/lib/shared/waktu-wib` (U1, audit 2026-09-29).
+kompilasiUji(repo, outDir, ['lib/data/db.ts', 'lib/blud/realisasi-data.ts'])
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {

@@ -5,22 +5,24 @@
 // berganti. Justru di situ letak salahnya sebelum ini — `versi_tanggal` dihitung
 // dari `toISOString()`, jadi simpanan antara 00:00–06:59 WIB memakai tanggal
 // kemarin dan menimpa versi kemarin alih-alih membuka versi baru.
-import { execSync } from 'node:child_process'
-import fs from 'node:fs'
+import { kompilasiUji } from './_kompilasi-uji.mjs'
 import path from 'node:path'
-import { createRequire } from 'node:module'
+import Module, { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const outDir = path.join(repo, 'node_modules', '.cache', 'blud-tanggal-test')
 
-fs.mkdirSync(outDir, { recursive: true })
-execSync(
-  `npx tsc "${path.join(repo, 'lib/blud/tanggal.ts')}"`
-  + ` --outDir "${outDir}" --rootDir "${repo}" --module commonjs --target es2020 --skipLibCheck`,
-  { cwd: repo, stdio: 'pipe' },
-)
+// `tanggal.ts` kini me-re-export dari `@/lib/shared/waktu-wib`. Dulu skrip ini memanggil
+// `tsc` telanjang TANPA try/catch dan tanpa pengait alias, jadi galat alias itu membunuhnya
+// sebelum satu pemeriksaan pun berjalan (U1, audit 2026-09-29).
+kompilasiUji(repo, outDir, ['lib/blud/tanggal.ts'])
+const resolveAsli = Module._resolveFilename
+Module._resolveFilename = function (permintaan, ...sisa) {
+  if (permintaan.startsWith('@/')) return path.join(outDir, permintaan.slice(2) + '.js')
+  return resolveAsli.call(this, permintaan, ...sisa)
+}
 
 const { tanggalHariIniWIB } = require(path.join(outDir, 'lib/blud/tanggal.js'))
 

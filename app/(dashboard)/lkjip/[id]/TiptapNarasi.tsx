@@ -86,7 +86,7 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
   if (!editor) return <div className="lk-tt-loading">Memuat editor…</div>;
 
   const btn = (active: boolean, onClick: () => void, title: string, Icon: typeof Bold) => (
-    <button type="button" className={`lk-tt-btn${active ? ' on' : ''}`} title={title} onMouseDown={e => { e.preventDefault(); onClick(); }}>
+    <button type="button" className={`lk-tt-btn${active ? ' on' : ''}`} data-tooltip={title} data-tooltip-pos="below" aria-label={title} onMouseDown={e => { e.preventDefault(); onClick(); }}>
       <Icon size={14} />
     </button>
   );
@@ -103,7 +103,7 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
           <span className="lk-tt-sep" />
           {btn(editor.isActive('bulletList'), () => editor.chain().focus().toggleBulletList().run(), 'Bullet', List)}
           {btn(editor.isActive('orderedList') && editor.getAttributes('orderedList').listType !== 'a', () => editor.chain().focus().toggleOrderedList().updateAttributes('orderedList', { listType: null }).run(), 'Penomoran 1, 2, 3', ListOrdered)}
-          <button type="button" className={`lk-tt-btn lk-tt-abc${editor.isActive('orderedList') && editor.getAttributes('orderedList').listType === 'a' ? ' on' : ''}`} title="Penomoran a, b, c"
+          <button type="button" className={`lk-tt-btn lk-tt-abc${editor.isActive('orderedList') && editor.getAttributes('orderedList').listType === 'a' ? ' on' : ''}`} data-tooltip="Penomoran a, b, c" data-tooltip-pos="below" aria-label="Penomoran a, b, c"
             onMouseDown={e => { e.preventDefault();
               if (editor.isActive('orderedList') && editor.getAttributes('orderedList').listType === 'a') { editor.chain().focus().toggleOrderedList().run(); return; }
               const c = editor.chain().focus();
@@ -119,14 +119,17 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
           {btn(editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Sub-judul', Heading2)}
           {btn(editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Sub-sub-judul', Heading3)}
           <span className="lk-tt-sep" />
-          <input type="color" className="lk-tt-color" title="Warna teks" defaultValue="#e6f1fb"
-            onInput={(e) => editor.chain().focus().setMark('textStyle', { color: (e.target as HTMLInputElement).value }).run()} />
-          <select className="lk-tt-size" title="Ukuran teks" value=""
+          {/* K1: input & select tak bisa menggambar ::after — tooltip dipasang di pembungkus. */}
+          <span className="lk-tt-tip" data-tooltip="Warna teks" data-tooltip-pos="below">
+            <input type="color" className="lk-tt-color" aria-label="Warna teks" defaultValue="#e6f1fb"
+              onInput={(e) => editor.chain().focus().setMark('textStyle', { color: (e.target as HTMLInputElement).value }).run()} />
+          </span>
+          <span className="lk-tt-tip" data-tooltip="Ukuran teks" data-tooltip-pos="below"><select className="lk-tt-size" aria-label="Ukuran teks" value=""
             onChange={(e) => { const v = e.target.value; if (!v) return; if (v === 'reset') editor.chain().focus().unsetMark('textStyle').run(); else editor.chain().focus().setMark('textStyle', { fontSize: v }).run(); e.currentTarget.value = ''; }}>
             <option value="">A±</option>
             {['10px', '12px', '14px', '16px', '18px', '24px'].map(s => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
             <option value="reset">Reset</option>
-          </select>
+          </select></span>
         </div>
       )}
       <EditorContent editor={editor} className="lk-tt-content" />
@@ -141,6 +144,7 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
 
 const TT_CSS = `
   .lk-tt-loading { color: #85B7EB; font-size: 12.5px; padding: 10px; }
+  .lk-tt-tip { display: inline-flex; }
   .lk-tt-bar { display: flex; align-items: center; gap: 2px; padding: 4px; background: #020F1C; border: 1px solid #0C447C; border-bottom: none; border-radius: 6px 6px 0 0; }
   .lk-tt-btn { background: none; border: none; color: #B5D4F4; width: 28px; height: 28px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   .lk-tt-btn:hover { background: rgba(255,255,255,0.08); color: #E6F1FB; }

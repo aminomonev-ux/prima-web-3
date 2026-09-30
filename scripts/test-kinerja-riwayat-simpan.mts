@@ -246,7 +246,9 @@ bab('F. Stempel waktu WIB, bukan jam server');
 ok('stempel dari lib bersama, bukan berkas khas BLUD',
   RIWAYAT.includes("from '@/lib/shared/waktu-wib'"));
 ok('tanggal.ts tetap me-re-export supaya pemanggil lama utuh',
-  baca('lib/blud/tanggal.ts').includes('export { JAKARTA_OFFSET_MS, waktuSekarangWIB }'));
+  // Daftar re-export bertambah (audit 2026-09-29: tanggalHariIniWIB, toDateStr) — yang dijaga
+  // kedua nama lama tetap ada di dalamnya, bukan bunyi persis daftarnya.
+  /export \{[^}]*\bJAKARTA_OFFSET_MS\b[^}]*\bwaktuSekarangWIB\b[^}]*\}/.test(baca('lib/blud/tanggal.ts')));
 ok('INSERT memakai stempel WIB, bukan NOW()',
   RIWAYAT.includes('${waktuSekarangWIB()}') && !RIWAYAT.includes('NOW()'));
 

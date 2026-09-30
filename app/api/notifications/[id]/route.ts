@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, safeInt } from '@/lib/data/db';
+import { safeInt } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
-import { buildNotifRecipients } from '@/lib/services/notifications';
+import { tandaiDibaca } from '@/lib/services/notifications';
 
 export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,13 +13,9 @@ export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ i
     const notifId = safeInt(id, 0);
     if (!notifId) return NextResponse.json({ ok: false, message: 'Invalid id' }, { status: 400 });
 
-    // SEC-C4: ownership check — user hanya boleh mark-read notif yang ditujukan ke dia
-    const recipients = buildNotifRecipients(session.role, session.username);
-    await sql`
-      UPDATE notifications SET dibaca = TRUE
-      WHERE id = ${notifId} AND recipient IN (${recipients})
-    `;
-
+    // SEC-C4: hanya notifikasi yang dialamatkan ke orang ini. B7: yang ditandai status
+    // baca MILIKNYA sendiri — rekan seantrean tetap melihatnya belum dibaca.
+    await tandaiDibaca(notifId, session.userId, session.role, session.username);
     return NextResponse.json({ ok: true });
 
   } catch (error) {

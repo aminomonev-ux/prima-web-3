@@ -5,7 +5,7 @@ import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ADMIN_ROLES } from '@/lib/constants';
-import { PUBLIC_CONFIG_KEYS } from '@/lib/data/admin-schemas';
+import { PUBLIC_CONFIG_KEYS, aturanConfig } from '@/lib/data/admin-schemas';
 
 
 export async function GET() {
@@ -17,7 +17,7 @@ export async function GET() {
     // tidak dijalankan di hot read-path.
     const rows = await sql`SELECT \`key\`, value FROM app_config`;
     const cfg: Record<string, string> = {};
-    // SDL-M13: filter pagu_blud (dan key sensitif lain di masa depan) untuk non-admin.
+    // SDL-M13: filter pagu_blud_{tahun} (dan key sensitif lain di masa depan) untuk non-admin.
     // Sibling POST sudah ADMIN-only; konsisten dengan defense-in-depth (C-SEC-1).
     // GET tetap dipanggil oleh semua user untuk countdown deadline (batas_*).
     const isAdmin = (ADMIN_ROLES as readonly string[]).includes(session.role);
@@ -54,15 +54,14 @@ export async function POST(req: NextRequest) {
 
     const { key, value } = parsed.data;
 
-    const allowedKeys = [
-      'batas_mulai','batas_selesai','batas_pesan','batas_aktif','pagu_blud',
-      'email_notif_enabled',
-      'email_notif_usulan_baru','email_notif_disetujui','email_notif_ditolak','email_notif_revisi',
-      'email_notif_promotion_new_request','email_notif_promotion_approved',
-      'email_notif_promotion_rejected','email_notif_promotion_bootstrap',
-      'email_notif_recipient',
-    ];
-    if (!allowedKeys.includes(key)) return NextResponse.json({ ok: false, message: 'Key tidak valid.' }, { status: 400 });
+    // I3: daftar kunci + bentuk nilai + siapa yang boleh — satu tempat (`aturanConfig`).
+    const aturan = aturanConfig(key);
+    if (!aturan) return NextResponse.json({ ok: false, message: 'Key tidak valid.' }, { status: 400 });
+    if (aturan.hanyaSuperAdmin && session.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ ok: false, message: 'Hanya Super Admin yang dapat mengubah pengaturan ini.' }, { status: 403 });
+    }
+    const nilaiSah = aturan.nilai.safeParse(value);
+    if (!nilaiSah.success) return NextResponse.json({ ok: false, message: nilaiSah.error.issues[0]?.message ?? 'Nilai tidak valid.' }, { status: 400 });
 
     await sql`
       INSERT INTO app_config (\`key\`, value, updated_at)

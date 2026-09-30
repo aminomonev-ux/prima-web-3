@@ -12,6 +12,7 @@ import DeleteButton from '@/components/ui/DeleteButton'
 import PrimaButton from '@/components/ui/PrimaButton'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { cellNum, cellSampleHead, cellSample, pagerBtn } from '@/lib/shared/blud-table-styles'
+import Tip from '@/components/ui/Tip'
 
 type Level = 'L1' | 'L2' | 'L2.1'
 interface Row { kode: string; uraian: string; level: Level; parent_kode: string | null }
@@ -374,8 +375,13 @@ export default function KodeBesarClient({ bolehUbah }: { bolehUbah: boolean }) {
                     ) : !bolehUbah ? (
                       <span style={{ fontSize: 11 }}>{r.parent_kode ?? '—'}</span>
                     ) : (
+                      // K1: select tak bisa menggambar tooltip sendiri — Tip (portal) di pembungkusnya.
+                      <Tip label={r.parent_kode ? '' : 'Wajib pilih parent untuk L2.1'}>
+                      <span style={{ display: 'block' }}>
                       <select
                         value={r.parent_kode ?? ''}
+                        aria-label="Parent L2"
+                        aria-invalid={!r.parent_kode}
                         onChange={e => updateParent(realIdx, e.target.value || null)}
                         style={{
                           width: '100%', padding: '4px 6px', borderRadius: 4,
@@ -383,7 +389,6 @@ export default function KodeBesarClient({ bolehUbah }: { bolehUbah: boolean }) {
                           background: '#021A33', color: '#E6F1FB',
                           fontSize: 11, cursor: 'pointer',
                         }}
-                        title={!r.parent_kode ? 'Wajib pilih parent untuk L2.1' : ''}
                       >
                         <option value="">— Pilih L2 —</option>
                         {l2Options.map(l2 => (
@@ -392,6 +397,8 @@ export default function KodeBesarClient({ bolehUbah }: { bolehUbah: boolean }) {
                           </option>
                         ))}
                       </select>
+                      </span>
+                      </Tip>
                     )}
                   </td>
                   {bolehUbah && (

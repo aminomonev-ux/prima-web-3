@@ -60,6 +60,8 @@ import { getPanels } from './_utils';
 import { exportExcel, exportPrint } from './_exports';
 import { fetchJson } from '@/lib/shared/api';
 import { usePaginatedList } from '@/lib/shared/hooks';
+import { jendelaTerbuka } from '@/lib/shared/jendela-pengajuan';
+import { paguPerTahunDariConfig } from '@/lib/shared/pagu-blud';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 
 // PERF-W3: SWR untuk dedup & cache fetch endpoint KPI yang berat
@@ -282,9 +284,10 @@ export default function UsulanClient({ userId, role, username, themePreference, 
   const [bwAktif, setBwAktif]     = useState(false);
 
   
-  // PERF-C2 Tahap 8: SetPaguPanel self-contained — shell hanya simpan
-  // paguCurrent (untuk display + reuse di tempat lain).
-  const [paguCurrent, setPaguCurrent] = useState(0);
+  // PERF-C2 Tahap 8: SetPaguPanel self-contained — shell hanya simpan pagu per
+  // tahun anggaran (B5) + tahun yang dipilih di Dashboard.
+  const [paguPerTahun, setPaguPerTahun] = useState<Record<string, number>>({});
+  const [dashTahun, setDashTahun] = useState(() => String(new Date().getFullYear()));
 
   
   const [detailOpen, setDetailOpen]   = useState(false);
@@ -317,9 +320,20 @@ export default function UsulanClient({ userId, role, username, themePreference, 
   // dedupingInterval 30s. Pindah panel = pakai cache (no re-fetch). fetchRekap
   // share cache yang sama (slice .chartBidang) — single source of truth.
   const kpiEnabled = panel === 'dashboard' || panel === 'semua' || panel === 'antrian'
-                     || panel === 'rekap'   || panel === 'rekap-verif' || panel === 'data-admin';
+                     || panel === 'rekap'   || panel === 'rekap-verif' || panel === 'data-admin'
+                     || panel === 'milik'   || panel === 'bidang-antrian' || panel === 'bidang-data';
+  // B5: KPI & pagu ikut saringan tahun panel yang sedang terbuka — pagu berlaku per tahun
+  // anggaran, jadi membandingkannya dengan nilai tahun lain tidak berarti apa-apa.
+  const kpiTahun =
+    panel === 'dashboard'      ? dashTahun :
+    panel === 'milik'          ? filterTahun :
+    panel === 'semua'          ? filterTahunSemua :
+    panel === 'data-admin'     ? filterTahunDA :
+    panel === 'antrian'        ? filterAntrianTahun :
+    panel === 'bidang-antrian' ? filterBidangAntrianTahun :
+    panel === 'bidang-data'    ? filterBidangDataTahun : '';
   const { data: kpiData, isLoading: kpiSwrLoading, isValidating: kpiSwrValidating } = useSWR<KPIData>(
-    kpiEnabled ? '/api/usulan/kpi' : null,
+    kpiEnabled ? `/api/usulan/kpi${kpiTahun ? `?tahun=${kpiTahun}` : ''}` : null,
     swrFetcher,
     { dedupingInterval: 30_000, revalidateOnFocus: false, revalidateIfStale: false, keepPreviousData: true },
   );
@@ -342,7 +356,8 @@ export default function UsulanClient({ userId, role, username, themePreference, 
   const kpiValidatingRef = useRef(false);
   useEffect(() => { kpiValidatingRef.current = kpiSwrValidating; }, [kpiSwrValidating]);
   const fetchKPI = useCallback(async (force = false) => {
-    await swrMutate('/api/usulan/kpi', undefined, { revalidate: force || !kpiValidatingRef.current });
+    // Semua tahun sekaligus: simpan/putusan mengubah angka tahun mana pun yang sedang di-cache.
+    await swrMutate((k) => typeof k === 'string' && k.startsWith('/api/usulan/kpi'), undefined, { revalidate: force || !kpiValidatingRef.current });
   }, [swrMutate]);
 
   // bfcache & session guard — cegah akun lain muncul saat klik back
@@ -545,11 +560,11 @@ export default function UsulanClient({ userId, role, username, themePreference, 
       if (cfg.batas_selesai) setBwSelesai(cfg.batas_selesai);
       if (cfg.batas_pesan)   setBwPesan(cfg.batas_pesan);
       setBwAktif(cfg.batas_aktif === 'true');
-      if (cfg.pagu_blud)     setPaguCurrent(Number(cfg.pagu_blud) || 0);
+      setPaguPerTahun(paguPerTahunDariConfig(cfg));
       configLoadedRef.current = true;
     }
     // React Compiler: setState refs declared explicitly (stable, but rule needs presence).
-  }, [setBwMulai, setBwSelesai, setBwPesan, setBwAktif, setPaguCurrent]);
+  }, [setBwMulai, setBwSelesai, setBwPesan, setBwAktif, setPaguPerTahun]);
 
   useEffect(() => {
     if (panel === 'dashboard' || panel === 'batas-waktu' || panel === 'set-pagu' || panel === 'buat') fetchConfig();
@@ -729,8 +744,15 @@ export default function UsulanClient({ userId, role, username, themePreference, 
       const { header, items: rawItems } = d.data;
 
       
-      const tahunMatch = (u.no_usulan||'').match(/^UA-(\d{4})/);
-      const tahun = tahunMatch ? tahunMatch[1] : String(new Date().getFullYear());
+      // B4: tahun & jenis dibaca dari HEADER. Dulu tahun ditebak dari nomor `^UA-(\d{4})`
+      // — awalan PERUBAHAN/PERGESERAN (`UAPB-`/`UAPR-`) tak pernah cocok, jatuh ke tahun
+      // berjalan, lalu Simpan menimpa tahun anggaran draf diam-diam. Jenis tidak dimuat
+      // sama sekali, jadi yang terkirim pilihan terakhir sesi itu.
+      const tahunHeader = String(header.tahun_anggaran ?? '').trim();
+      const tahunMatch = (u.no_usulan||'').match(/^UA[A-Z]*-(\d{4})/);
+      const tahun = tahunHeader || (tahunMatch ? tahunMatch[1] : String(new Date().getFullYear()));
+      const jenisHeader = String(header.jenis_usulan ?? '');
+      setFJenis(jenisHeader === 'PERUBAHAN' || jenisHeader === 'PERGESERAN' ? jenisHeader : 'MURNI');
 
       
       const loadedItems: ItemForm[] = rawItems.map(it => ({
@@ -777,8 +799,12 @@ export default function UsulanClient({ userId, role, username, themePreference, 
   function doCancelByCreator(u: UsulanHeader) {
     // BUG-W4: pengusul cancel usulan yang masih DIAJUKAN_REVIEW. Item revert ke DRAFT,
     // bidang dapat notifikasi, audit log USULAN_CANCEL.
+    // B3: draf hasil pembatalan baru bisa dikirim lagi saat periode pengajuan terbuka —
+    // itu harus terbaca SEBELUM orangnya menekan Ya, bukan sesudah kirimnya ditolak.
+    const periodeTutup = !jendelaTerbuka({ aktif: bwAktif, mulai: bwMulai, selesai: bwSelesai });
     setConfirmDlg({
-      msg: `Batalkan usulan ${u.no_usulan}? Usulan akan kembali ke Draft dan bisa diedit ulang. Bidang akan diberitahu.`,
+      msg: `Batalkan usulan ${u.no_usulan}? Usulan akan kembali ke Draft dan bisa diedit ulang. Bidang akan diberitahu.`
+        + (periodeTutup ? ' Periode pengajuan sedang ditutup: sesudah dibatalkan, usulan ini baru bisa dikirim lagi saat periode dibuka kembali.' : ''),
       onOk: async () => {
         const d = await fetchJson(`/api/usulan/${u.id}`, {
           method: 'PATCH',
@@ -1736,6 +1762,7 @@ export default function UsulanClient({ userId, role, username, themePreference, 
                 bwAktif={bwAktif} bwMulai={bwMulai} bwSelesai={bwSelesai} bwPesan={bwPesan}
                 onRefresh={() => fetchKPI()}
                 isLight={isLight}
+                tahun={dashTahun} setTahun={setDashTahun} tahunList={tahunList}
               />
             )}
 
@@ -2000,8 +2027,9 @@ export default function UsulanClient({ userId, role, username, themePreference, 
             {/* ════ SET PAGU ════ */}
             {panel==='set-pagu' && (
               <SetPaguPanel
-                currentPagu={paguCurrent}
-                onSaved={(n) => { setPaguCurrent(n); fetchKPI(true); }}
+                paguPerTahun={paguPerTahun}
+                tahunList={tahunList}
+                onSaved={(tahun, n) => { setPaguPerTahun(prev => ({ ...prev, [tahun]: n })); fetchKPI(true); }}
               />
             )}
 

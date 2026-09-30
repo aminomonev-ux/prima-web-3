@@ -18,8 +18,7 @@ export async function POST(req: NextRequest) {
     audit_log_deleted: 0,
     user_sessions_ghost_invalidated: 0,
     user_sessions_deleted: 0,
-    notifications_read_deleted: 0,
-    notifications_unread_deleted: 0,
+    notifications_deleted: 0,
     users_anonymized: 0,
   };
 
@@ -44,11 +43,11 @@ export async function POST(req: NextRequest) {
       const r2 = await tx`DELETE FROM user_sessions WHERE invalidated_at IS NOT NULL AND invalidated_at < NOW() - INTERVAL 90 DAY` as unknown as Array<{ affectedRows: number }>;
       result.user_sessions_deleted = r2[0]?.affectedRows ?? 0;
 
-      const r3 = await tx`DELETE FROM notifications WHERE dibaca = TRUE AND created_at < NOW() - INTERVAL 6 MONTH` as unknown as Array<{ affectedRows: number }>;
-      result.notifications_read_deleted = r3[0]?.affectedRows ?? 0;
-
-      const r4 = await tx`DELETE FROM notifications WHERE dibaca = FALSE AND created_at < NOW() - INTERVAL 12 MONTH` as unknown as Array<{ affectedRows: number }>;
-      result.notifications_unread_deleted = r4[0]?.affectedRows ?? 0;
+      // B7 (audit 2026-09-29): status baca kini per orang (`notifikasi_dibaca`), jadi
+      // "sudah dibaca" bukan lagi satu nilai per notifikasi — aturan dua jalur 6/12 bulan
+      // diganti satu aturan umur. Baris `notifikasi_dibaca` ikut terhapus (FK CASCADE).
+      const r3 = await tx`DELETE FROM notifications WHERE created_at < NOW() - INTERVAL 12 MONTH` as unknown as Array<{ affectedRows: number }>;
+      result.notifications_deleted = r3[0]?.affectedRows ?? 0;
 
       // Anonimisasi users NONAKTIF >5 tahun (preserve FK, hapus PII).
       const r5 = await tx`

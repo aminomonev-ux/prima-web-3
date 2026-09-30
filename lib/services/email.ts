@@ -8,6 +8,7 @@
 // - Logging ke table email_log (audit trail per send + status SENT/FAILED/SKIPPED_TOGGLE)
 
 import { sql, sqlInt } from '@/lib/data/db';
+import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 
 const GMAIL_USER = process.env.GMAIL_USER ?? '';
 const GMAIL_PASS = process.env.GMAIL_APP_PASSWORD ?? '';
@@ -311,7 +312,7 @@ export async function sendPromotionBootstrapAlertEmail(
 
 export async function getEmailQuota() {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = tanggalHariIniWIB();
     const month = today.slice(0, 7);
     const rows = await sql`
       SELECT

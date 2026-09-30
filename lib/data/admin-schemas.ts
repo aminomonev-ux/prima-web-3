@@ -8,6 +8,7 @@ import { BIDANG_ROLES, SUBBIDANG_ROLES } from '@/lib/constants';
 import { KUNCI_GRANT } from '@/lib/registry/apps';
 import { MAKS_ALASAN, MIN_ALASAN } from '@/lib/admin/permintaan-baris';
 import { tanggalSah } from '@/lib/admin/berjangka-baris';
+import { POLA_KUNCI_PAGU_BLUD } from '@/lib/shared/pagu-blud';
 
 // ─── Role enum ──────────────────────────────────────────────────────────────
 
@@ -139,17 +140,49 @@ export type AdminUserCreateBody = z.infer<typeof AdminUserCreateBodySchema>;
 
 // ─── Config schema ──────────────────────────────────────────────────────────
 
+const NilaiBenarSalah = z.enum(['true', 'false'], { message: 'Nilai harus true atau false.' });
+const TanggalAtauKosong = z.string().refine(v => v === '' || tanggalSah(v), 'Tanggal harus berformat YYYY-MM-DD dan benar-benar ada.');
+const NominalRupiah = z.string().regex(/^\d{1,15}$/, 'Pagu harus angka rupiah bulat, tanpa titik atau koma.');
+const EmailAtauKosong = z.string().max(254).refine(v => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Alamat email tidak sah.');
+
+export type AturanConfig = { nilai: z.ZodType<string>; hanyaSuperAdmin?: boolean };
+
+// Layar Email menulis "Hanya Super Admin yang dapat mengubah pengaturan email" — pagarnya
+// harus di API juga, bukan cuma tombol yang dimatikan (L82).
+const EMAIL_SAKELAR: AturanConfig = { nilai: NilaiBenarSalah, hanyaSuperAdmin: true };
+
+const ATURAN_CONFIG: Record<string, AturanConfig> = {
+  batas_mulai:   { nilai: TanggalAtauKosong },
+  batas_selesai: { nilai: TanggalAtauKosong },
+  batas_pesan:   { nilai: z.string().max(500, 'Pesan maksimal 500 karakter.') },
+  batas_aktif:   { nilai: NilaiBenarSalah },
+  email_notif_enabled:               EMAIL_SAKELAR,
+  email_notif_usulan_baru:           EMAIL_SAKELAR,
+  email_notif_disetujui:             EMAIL_SAKELAR,
+  email_notif_ditolak:               EMAIL_SAKELAR,
+  email_notif_revisi:                EMAIL_SAKELAR,
+  email_notif_promotion_new_request: EMAIL_SAKELAR,
+  email_notif_promotion_approved:    EMAIL_SAKELAR,
+  email_notif_promotion_rejected:    EMAIL_SAKELAR,
+  email_notif_promotion_bootstrap:   EMAIL_SAKELAR,
+  email_notif_recipient:             { nilai: EmailAtauKosong, hanyaSuperAdmin: true },
+};
+
 /**
- * SDL-M13: config GET selalu return semua key, tapi non-admin di-filter di handler.
- * Whitelist key di sini untuk POST.
+ * I3 (audit 2026-09-29) + T-14: SATU daftar kunci yang boleh ditulis `POST /api/config`,
+ * lengkap dengan bentuk nilainya. Dulu route punya daftar inline tanpa pemeriksaan
+ * bentuk — `batas_mulai` berisi teks bebas membuat jendela pengajuan diam-diam tidak
+ * berlaku — sementara `ConfigKeyEnum` di sini tidak dipakai siapa pun.
+ * Pagu BLUD per tahun anggaran (B5): `pagu_blud_{tahun}`.
  */
-export const ConfigKeyEnum = z.enum([
-  'batas_mulai', 'batas_selesai', 'batas_pesan', 'batas_aktif', 'pagu_blud',
-]);
+export function aturanConfig(key: string): AturanConfig | null {
+  if (POLA_KUNCI_PAGU_BLUD.test(key)) return { nilai: NominalRupiah };
+  return Object.prototype.hasOwnProperty.call(ATURAN_CONFIG, key) ? ATURAN_CONFIG[key] : null;
+}
 
 /**
  * Key yang aman dilihat oleh non-admin (deadline pengajuan, info publik dalam org).
- * `pagu_blud` SENGAJA tidak masuk — angka anggaran tidak untuk SUB_BIDANG biasa.
+ * `pagu_blud_{tahun}` SENGAJA tidak masuk — angka anggaran tidak untuk SUB_BIDANG biasa.
  */
 export const PUBLIC_CONFIG_KEYS: ReadonlySet<string> = new Set([
   'batas_mulai', 'batas_selesai', 'batas_pesan', 'batas_aktif',

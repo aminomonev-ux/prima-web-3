@@ -21,13 +21,15 @@ import LampiranAnggaranSplit from './_components/LampiranAnggaranSplit'
 import PrimaButton from '@/components/ui/PrimaButton'
 import SpandukLihat from '@/components/pk/SpandukLihat'
 import DownloadButton from '@/components/ui/DownloadButton'
+import { tanggalHariIniWIB, toDateStr } from '@/lib/shared/waktu-wib'
 
 interface Props { editId: number | null; bolehUbah: boolean }
 
 function emptyForm(tahun: string): PkFormState {
-  const today = new Date().toISOString().slice(0, 10)
+  // B1: tanggal WIB — `toISOString()` memberi tanggal kemarin antara 00:00–06:59.
+  const today = tanggalHariIniWIB()
   return {
-    id: null, status: 'DRAFT', tahun,
+    id: null, status: 'DRAFT', version: 0, tahun,
     tanggal_dokumen: today, jenis_pk: 'MURNI',
     unit_pertama: '', nama_pertama: '', jabatan_pertama: '', pangkat_pertama: '', nip_pertama: '',
     unit_kedua: '',   nama_kedua: '',   jabatan_kedua: '',   pangkat_kedua: '',   nip_kedua: '',
@@ -117,8 +119,9 @@ export default function FormClient({ editId, bolehUbah }: Props) {
       setForm({
         id: editId,
         status: (h.status as 'DRAFT' | 'FINAL') ?? 'DRAFT',
+        version: Number(h.version ?? 0),
         tahun: String(h.tahun),
-        tanggal_dokumen: String(h.tanggal_dokumen).slice(0, 10),
+        tanggal_dokumen: toDateStr(h.tanggal_dokumen),
         jenis_pk: (h.jenis_pk as 'MURNI' | 'PERUBAHAN') ?? 'MURNI',
         unit_pertama: String(h.unit_pertama ?? ''),
         nama_pertama: String(h.nama_pertama ?? ''),
@@ -275,10 +278,13 @@ export default function FormClient({ editId, bolehUbah }: Props) {
     }
     const url = form.id ? `/api/perjanjian-kinerja/dokumen/${form.id}` : `/api/perjanjian-kinerja/dokumen`
     const method = form.id ? 'PATCH' : 'POST'
-    const d = await fetchJson<unknown>(url, { method, body: JSON.stringify(body) })
+    // I4: angka kunci versi yang DIBUKA; server menolak kalau sudah ada simpanan lain.
+    const kirim = form.id ? { ...body, expected_version: form.version } : body
+    const d = await fetchJson<unknown>(url, { method, body: JSON.stringify(kirim) })
     setSaving(false)
     if (d.ok) {
-      const r = d as unknown as { id: number }
+      const r = d as unknown as { id: number; version?: number }
+      if (typeof r.version === 'number') setForm(f => ({ ...f, version: r.version as number }))
       if (!form.id) {
         router.replace(`/perjanjian-kinerja/form?id=${r.id}`)
         showToast('ok', `Dokumen tersimpan (id #${r.id}). Anda sekarang di mode edit.`)
@@ -293,11 +299,11 @@ export default function FormClient({ editId, bolehUbah }: Props) {
   async function doFinalize() {
     if (!form.id) return
     setFinalizing(true)
-    const d = await fetchJson<unknown>(`/api/perjanjian-kinerja/dokumen/${form.id}/finalize`, { method: 'POST' })
+    const d = await fetchJson<unknown>(`/api/perjanjian-kinerja/dokumen/${form.id}/finalize`, { method: 'POST', body: JSON.stringify({ expected_version: form.version }) })
     setFinalizing(false)
     if (d.ok) {
       showToast('ok', 'Dokumen difinalisasi & Word digenerate. Klik Unduh untuk mendapatkan file.')
-      setForm(f => ({ ...f, status: 'FINAL' }))
+      setForm(f => ({ ...f, status: 'FINAL', version: f.version + 1 }))
     } else {
       showToast('err', d.message)
     }

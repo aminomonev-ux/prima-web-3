@@ -106,7 +106,7 @@ function cellText(cell: ExcelJS.Cell): string {
     }
     return (Number.isInteger(v) ? String(v) : String(Math.round(v * 10000) / 10000)).replace('.', ',');
   }
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return v.toISOString().slice(0, 10); // tanggal-utc-ok: exceljs membaca sel tanggal sebagai tengah malam UTC
   return String(v).replace(/\s+/g, ' ').trim();
 }
 
