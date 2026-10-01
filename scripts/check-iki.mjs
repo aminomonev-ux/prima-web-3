@@ -30,16 +30,6 @@ for (const t of want) {
   console.log(`  ${ok ? '✅' : '❌'} ${t}`)
 }
 
-// Cek flag app_status_iki (app_config / system_settings — coba dua-duanya)
-try {
-  const [f] = await conn.query(
-    `SELECT * FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME IN ('app_config','system_settings')`,
-  )
-  // tampilkan sekadar info tabel config yang ada
-} catch {}
-
 console.log(
   missing === 0
     ? '\n✅ Modul IKI SUDAH ada di database (3/3 tabel).'

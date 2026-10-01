@@ -91,6 +91,7 @@ export default function PkShell({ username, role, izin, themePreference, beku, c
   async function handleLogout() {
     setLoggingOut(true)
     await fetch('/api/auth/logout', { method: 'POST' })
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
     window.location.href = '/login'
   }
 

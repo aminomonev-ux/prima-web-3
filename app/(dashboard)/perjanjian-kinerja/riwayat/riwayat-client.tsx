@@ -89,6 +89,7 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
   }
 
   function handleDownload(id: number) {
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- unduhan berkas: router.push tidak bisa mengunduh
     window.location.href = `/api/perjanjian-kinerja/dokumen/${id}/download`
   }
 

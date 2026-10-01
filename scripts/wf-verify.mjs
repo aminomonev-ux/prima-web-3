@@ -22,7 +22,7 @@ async function main() {
   // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- Chrome DevTools CDP discovery di 127.0.0.1 (http-only by design, bukan request app)
   for (let i = 0; i < 40; i++) { try { const r = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json(); if (r.webSocketDebuggerUrl) { wsUrl = r.webSocketDebuggerUrl; break; } } catch {} await sleep(300); }
   ws = new WebSocket(wsUrl); await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
-  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { const { res, rej } = pend.get(m.id); pend.delete(m.id); m.error ? rej(new Error(m.error.message)) : res(m.result); } };
+  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { const { res, rej } = pend.get(m.id); pend.delete(m.id); if (m.error) rej(new Error(m.error.message)); else res(m.result); } };
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
   const { sessionId: S } = await send('Target.attachToTarget', { targetId, flatten: true });
   await send('Page.enable', {}, S); await send('Runtime.enable', {}, S);

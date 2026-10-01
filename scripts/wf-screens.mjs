@@ -28,7 +28,6 @@ const chrome = spawn(CHROME, [
 // ─── Minimal CDP client (flatten sessions) ───────────────────────────────────
 let ws, msgId = 0;
 const pending = new Map();
-const evHandlers = [];
 
 function send(method, params = {}, sessionId) {
   const id = ++msgId;
@@ -37,7 +36,6 @@ function send(method, params = {}, sessionId) {
     ws.send(JSON.stringify({ id, method, params, sessionId }));
   });
 }
-function onEvent(fn) { evHandlers.push(fn); }
 
 async function connect() {
   for (let i = 0; i < 40; i++) {
@@ -61,9 +59,7 @@ async function main() {
     if (m.id && pending.has(m.id)) {
       const { resolve, reject } = pending.get(m.id);
       pending.delete(m.id);
-      m.error ? reject(new Error(m.error.message)) : resolve(m.result);
-    } else if (m.method) {
-      for (const fn of evHandlers) fn(m);
+      if (m.error) reject(new Error(m.error.message)); else resolve(m.result);
     }
   };
 

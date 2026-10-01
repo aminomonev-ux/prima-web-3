@@ -73,7 +73,7 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
   const tabs = data ? Object.keys(data.bySumber) : [];
   const rows = data ? (data.bySumber[activeTab] ?? []) : [];
   const isIncluded = (r: MatchRow) => !!r.ssk_canonical_id && !excluded.has(r.source);
-  const toggle = (src: string) => setExcluded(p => { const n = new Set(p); n.has(src) ? n.delete(src) : n.add(src); return n; });
+  const toggle = (src: string) => setExcluded(p => { const n = new Set(p); if (n.has(src)) n.delete(src); else n.add(src); return n; });
   const includedOf = (sumber: string) => (data?.bySumber[sumber] ?? []).filter(isIncluded);
 
   async function savePeta() {

@@ -4,18 +4,20 @@
 // Ada TIGA pintu keluar dan ketiganya bekerja dengan mekanisme yang berbeda,
 // jadi satu jaring saja tidak cukup:
 //
-//   1. Muat ulang / tutup tab / tombol Keluar  → `beforeunload`. Tombol Keluar
-//      ikut tertangkap karena shell memakai `window.location.href`, yang memang
-//      membongkar dokumen.
+//   1. Muat ulang / tutup tab                  → `beforeunload`.
 //   2. Pindah menu lewat <Link>                → klik dicegat di fase CAPTURE.
 //      `beforeunload` tidak berbunyi untuk navigasi App Router — tidak ada
 //      dokumen yang dibongkar, jadi peramban tidak punya alasan bertanya.
-//   3. Tombol shell yang memanggil router.push → `bolehTinggalkanHalaman()`.
-//      Tombol bukan <a href>, jadi jaring nomor 2 tidak melihatnya.
+//   3. Tombol shell (Menu, Profil, Keluar)     → `bolehTinggalkanHalaman()`.
+//      Tombol bukan <a href>, jadi jaring nomor 2 tidak melihatnya. Keluar
+//      bertanya SEBELUM sesi dimatikan lalu memanggil `lepaskanPengingat()`:
+//      ia pindah lewat `window.location.href`, dan tanpa itu jaring nomor 1
+//      bertanya lagi SESUDAH sesinya mati (terbukti 2026-10-01).
 //
 // Dipakai layar DPA & Pergeseran BLUD, yang sejak L78 menahan hasil impor /
-// Form Baru / Salin Tahun / Pulihkan di FORM sampai Simpan ditekan. Sebelum ini
-// pekerjaan sebesar 558 baris bisa lenyap hanya karena satu klik menu.
+// Form Baru / Salin Tahun / Pulihkan di FORM sampai Simpan ditekan, dan Pusat
+// Akses di Admin Panel. Sebelum ini pekerjaan sebesar 558 baris bisa lenyap
+// hanya karena satu klik menu.
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -33,7 +35,8 @@ export function alasanBelumTersimpan(): string | null {
 
 /**
  * Dipanggil tombol navigasi yang BUKAN `<a href>` — di BLUD: "Menu", "Ganti
- * Password", dan "Keluar" di `blud-shell`. Memulangkan true kalau boleh lanjut.
+ * Password", dan "Keluar" di `blud-shell`; di Admin Panel: "Keluar".
+ * Memulangkan true kalau boleh lanjut.
  *
  * Khusus Keluar, ini WAJIB dipanggil sebelum sesi dimatikan: kalau urutannya
  * terbalik, menjawab "tetap di sini" meninggalkan orang di halaman yang
@@ -51,6 +54,16 @@ export async function bolehTinggalkanHalaman(): Promise<boolean> {
 }
 
 /**
+ * Dipanggil tepat sebelum `window.location.href` yang SUDAH disetujui lewat
+ * `bolehTinggalkanHalaman()`. Tanpa ini `beforeunload` bertanya kedua kalinya —
+ * pada Keluar, sesudah sesinya dimatikan, jadi menjawab "tetap di sini"
+ * meninggalkan orang di halaman yang tidak bisa menyimpan apa pun lagi.
+ */
+export function lepaskanPengingat(): void {
+  pesanAktif = null
+}
+
+/**
  * @param alasan kalimat yang dibacakan saat orang mau pergi, atau `null` kalau
  *               tidak ada yang perlu dijaga (sudah tersimpan / layar kosong).
  */
@@ -62,7 +75,10 @@ export function useIngatkanBelumTersimpan(alasan: string | null) {
     if (!alasan) return () => { pesanAktif = null }
 
     // Teksnya diabaikan peramban modern — yang penting dialognya muncul.
-    const onUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (!pesanAktif) return   // sudah dijawab lewat bolehTinggalkanHalaman()
+      e.preventDefault(); e.returnValue = ''
+    }
 
     const onClick = (e: MouseEvent) => {
       // Klik yang memang bukan navigasi biasa dibiarkan lewat: tombol tengah,

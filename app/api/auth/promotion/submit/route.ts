@@ -36,7 +36,7 @@ import {
   sendPromotionRequestSubmittedEmail,
   sendPromotionBootstrapAlertEmail,
 } from '@/lib/services/email';
-import { addPromotionNotif, notifySuperAdmins } from '@/lib/services/notifications';
+import { notifySuperAdmins } from '@/lib/services/notifications';
 import { sql } from '@/lib/data/db';
 
 export async function POST(req: NextRequest) {

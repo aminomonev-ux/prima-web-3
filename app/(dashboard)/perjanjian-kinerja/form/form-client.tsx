@@ -346,6 +346,7 @@ export default function FormClient({ editId, bolehUbah }: Props) {
 
   function handleDownload() {
     if (!form.id) return
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- unduhan berkas: router.push tidak bisa mengunduh
     window.location.href = `/api/perjanjian-kinerja/dokumen/${form.id}/download`
   }
 

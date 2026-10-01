@@ -11,7 +11,6 @@ import { sql, sqlInt } from '@/lib/data/db';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 
 const GMAIL_USER = process.env.GMAIL_USER ?? '';
-const GMAIL_PASS = process.env.GMAIL_APP_PASSWORD ?? '';
 
 // ─── Provider Auto-Detect ───────────────────────────────────────────────────
 
@@ -79,15 +78,6 @@ async function getConfigBool(key: string, defaultVal: boolean): Promise<boolean>
   }
 }
 
-async function getConfigStr(key: string): Promise<string | null> {
-  try {
-    const rows = await sql`SELECT value FROM app_config WHERE \`key\` = ${key} LIMIT 1` as Array<{ value: string }>;
-    return rows[0]?.value ?? null;
-  } catch {
-    return null;
-  }
-}
-
 // ─── Email Log (audit trail per send) ───────────────────────────────────────
 
 type EmailStatus = 'SENT' | 'FAILED' | 'SKIPPED_TOGGLE' | 'SKIPPED_NO_CREDS' | 'SKIPPED_NO_PROVIDER';
@@ -120,7 +110,7 @@ interface SendEmailOpts {
 }
 
 export async function sendEmail(opts: SendEmailOpts): Promise<{ ok: boolean; error?: string }> {
-  const { to, subject, html, eventType = 'GENERIC' } = opts;
+  const { to, subject, eventType = 'GENERIC' } = opts;
 
   // 0. INTRANET EDITION (D1 · docs/INTRANET-DELTA.md): email DIMATIKAN di v3.
   // No-op sukses-semu + log SKIPPED_NO_PROVIDER, supaya pemanggil (register/promotion/

@@ -70,6 +70,7 @@ export default function GlobalError() {
             <button className="err-btn secondary" onClick={() => { window.location.reload(); }}>
               ↺ Coba Lagi
             </button>
+            {/* eslint-disable-next-line @next/next/no-location-assign-relative-destination -- halaman darurat: muat ulang penuh membuang keadaan yang membawa ke sini */}
             <button className="err-btn" onClick={() => { window.location.href = '/menu'; }}>
               ← Kembali ke Menu
             </button>

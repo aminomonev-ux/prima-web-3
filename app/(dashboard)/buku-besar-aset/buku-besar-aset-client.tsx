@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Package, Layers, LayoutGrid, Plus, Search, RefreshCw, Download } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -53,6 +54,7 @@ const emptyForm = (tahun: number): FormState => ({
 });
 
 export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, initialKpi, kategori, beku }: Props) {
+  const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
   const searchRef = useRef<HTMLInputElement>(null);
@@ -423,8 +425,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       <FloatingDock isLight={isLight} limelight
         nav={[
           { icon: <Package size={17} />, label: 'Aset', onClick: () => {}, current: true },
-          { icon: <Layers size={17} />, label: 'Master', onClick: () => { window.location.href = '/buku-besar-aset/master'; } },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => { window.location.href = '/menu'; } },
+          { icon: <Layers size={17} />, label: 'Master', onClick: () => router.push('/buku-besar-aset/master') },
+          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={[
           { icon: <Plus size={17} />, label: 'Tambah', onClick: () => setForm(emptyForm(tahun)) },

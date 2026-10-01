@@ -71,7 +71,6 @@ function parseJson<T>(v: unknown, fallback: T): T {
 // ─── Master ──────────────────────────────────────────────────────────────────
 
 // _sumber param sengaja unused: API signature kompat, dipakai di sibling getMasterByTipe.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function getMasterRows(tahun: string, tipe: MasterTipe, _sumber?: SumberSSK | null) {
   return await sql`
     SELECT id, tahun, tipe, sumber, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut

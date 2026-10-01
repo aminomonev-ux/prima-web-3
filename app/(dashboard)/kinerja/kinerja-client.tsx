@@ -214,9 +214,13 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sidebarHidden]);
 
+  // Dipanggil Topbar lewat guardPending — pertanyaannya sudah dijawab SEBELUM sesi
+  // dimatikan. Ref dilepas supaya beforeunload tidak bertanya lagi sesudah sesinya mati.
   const handleLogout = useCallback(async () => {
     setLoggingOut(true);
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    pendingMasterRef.current = false;
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
     window.location.href = '/login';
   }, []);
 

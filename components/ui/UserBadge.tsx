@@ -3,6 +3,7 @@
 // Mengangkat pola kinerja-user-badge jadi komponen reusable. Token ikut DESIGN-SYSTEM.
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChevronDown, ShieldCheck, LogOut } from 'lucide-react';
 import { fetchJson } from '@/lib/shared/api';
 
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function UserBadge({ username, role, isLight }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -29,6 +31,7 @@ export default function UserBadge({ username, role, isLight }: Props) {
     if (loggingOut) return;
     setLoggingOut(true);
     try { await fetchJson('/api/auth/logout', { method: 'POST' }); } catch { /* tetap redirect */ }
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
     window.location.href = '/login';
   }
 
@@ -49,7 +52,7 @@ export default function UserBadge({ username, role, isLight }: Props) {
       </div>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 190, background: isLight ? 'rgba(255,255,255,0.98)' : 'rgba(4,44,83,.98)', backdropFilter: 'blur(20px)', borderRadius: 12, border: `1px solid ${isLight ? 'rgba(0,0,0,0.1)' : '#0C447C'}`, boxShadow: isLight ? '0 16px 48px rgba(0,0,0,.15)' : '0 16px 48px rgba(0,0,0,.5)', overflow: 'hidden', zIndex: 300 }}>
-          <button onClick={() => { setOpen(false); window.location.href = '/profil'; }}
+          <button onClick={() => { setOpen(false); router.push('/profil'); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', fontSize: 13, fontWeight: 500, color: isLight ? '#374151' : '#B5D4F4', cursor: 'pointer', border: 'none', background: 'none', width: '100%', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(0,0,0,.04)' : 'rgba(255,255,255,.05)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}>

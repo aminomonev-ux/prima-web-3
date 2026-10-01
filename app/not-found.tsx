@@ -62,6 +62,7 @@ export default function NotFound() {
           <p className="nf-desc">
             Modul atau halaman yang kamu akses belum tersedia atau sedang dalam pengembangan.
           </p>
+          {/* eslint-disable-next-line @next/next/no-location-assign-relative-destination -- halaman darurat: muat ulang penuh membuang keadaan yang membawa ke sini */}
           <button className="nf-btn" onClick={() => { window.location.href = '/menu'; }}>
             ← Kembali ke Menu
           </button>

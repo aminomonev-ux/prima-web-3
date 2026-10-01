@@ -25,6 +25,7 @@ import { TabAuditTrail } from './_panels/TabAuditTrail';
 import { TabEmailNotif } from './_panels/TabEmailNotif';
 import { TabPemeriksaan } from './_panels/TabPemeriksaan';
 import { fetchJson } from '@/lib/shared/api';
+import { bolehTinggalkanHalaman, lepaskanPengingat } from '@/lib/shared/belum-tersimpan';
 import type { Temuan } from '@/lib/admin/pemeriksaan';
 // Berkas DAUN — tipe saja, tapi jalurnya tetap penting: lapisan servernya menyeret
 // mysql2 ke bundel peramban lewat satu impor NILAI (preseden Tahap 5).
@@ -128,8 +129,14 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
   }, [railOpen]);
 
   async function handleLogout() {
+    // Ditanya SEBELUM sesinya dimatikan (pola blud-shell): Pusat Akses memasang
+    // pengingat belum-tersimpan, dan jawaban "tetap di sini" sesudah sesi mati
+    // berarti tertinggal di halaman yang Simpan-nya pasti ditolak 401.
+    if (!(await bolehTinggalkanHalaman())) return;
     setOut(true);
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    lepaskanPengingat();
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
     window.location.href = '/login';
   }
 

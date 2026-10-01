@@ -9,7 +9,7 @@
 # 4 job paralel:
 #   A. semgrep — SAST scan kode (OWASP Top 10, React, TypeScript, security-audit rules)
 #   B. npm-audit — Dependency CVE check (block kalau ada HIGH baru)
-#   C. quality-gate — `npx tsc --noEmit` + `npm run lint` + Gate RIMA (bagian ber-node
+#   C. quality-gate — `npx tsc --noEmit` + `npm run lint` (0 peringatan) + Gate RIMA (bagian ber-node
 #                     dari `npm run rima:check`: NLU, persona, anchor tur, read-only)
 #                     + Gate E token warna (`npm run check:tokens`)
 #                     + Gate H LIMIT/OFFSET sqlInt (`npm run check:sql`, L66)
@@ -194,8 +194,11 @@ jobs:
       - name: TypeScript compile check
         run: npx tsc --noEmit
 
+      # 0 peringatan sejak 2026-10-01 (K3). Peringatan dulu tidak memerahkan CI dan
+      # menumpuk sampai 69 — peringatan yang penting tenggelam di antara yang lama.
+      # Yang memang disengaja ditulis di tempat: `eslint-disable-next-line <aturan> -- <alasan>`.
       - name: ESLint
-        run: npm run lint
+        run: npm run lint -- --max-warnings 0
 
       # ─── GATE E: Token Warna (ratchet) ─────────────────────────────────────
       # Menahan warna BARU masuk, bukan membersihkan yang lama. Saat dipasang

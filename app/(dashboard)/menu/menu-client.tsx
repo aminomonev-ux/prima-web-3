@@ -275,6 +275,7 @@ export default function MenuClient({ userId: _userId, role, username, themePrefe
     setLoggingOut(true);
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
       window.location.href = '/login';
     } catch { setLoggingOut(false); }
   }

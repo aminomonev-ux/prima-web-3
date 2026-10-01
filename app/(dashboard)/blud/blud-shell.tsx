@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import { bolehTinggalkanHalaman } from '@/lib/shared/belum-tersimpan'
+import { bolehTinggalkanHalaman, lepaskanPengingat } from '@/lib/shared/belum-tersimpan'
 import { bolehBuka, type Izin, type MenuBlud } from '@/lib/blud/peran'
 import type { Role } from '@/types'
 
@@ -144,6 +144,8 @@ export default function BludShell({ username, role, izin, themePreference, bekuL
     if (!(await bolehTinggalkanHalaman())) return
     setLoggingOut(true)
     await fetch('/api/auth/logout', { method: 'POST' })
+    lepaskanPengingat()
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
     window.location.href = '/login'
   }
 

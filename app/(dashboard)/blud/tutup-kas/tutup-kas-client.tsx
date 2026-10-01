@@ -340,6 +340,7 @@ export default function TutupKasClient(
           {bolehUnduhSpj && (
             <PrimaButton variant="success" size="sm" iconLeft={<Download size={13} />}
               disabled={tahun == null}
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- unduhan berkas: router.push tidak bisa mengunduh
               onClick={() => { window.location.href = `/api/blud/realisasi/export?tahun=${tahun}&bulan=${bulan}` }}>
               Unduh SPJ Bulanan
             </PrimaButton>

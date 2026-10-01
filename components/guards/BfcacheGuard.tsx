@@ -23,6 +23,7 @@ export default function BfcacheGuard({ userId }: { userId: number }) {
           .then(r => r.json())
           .then(d => {
             if (!d.ok || String(d.userId) !== String(userId)) {
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- sesi sudah tidak cocok: halaman basi wajib dibuang utuh
               window.location.href = '/login';
             }
           })

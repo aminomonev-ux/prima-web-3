@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Package, Layers, LayoutGrid } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -19,6 +20,7 @@ type Props = { username: string; role: string; themePreference: 'dark' | 'light'
   beku: InfoBeku };
 
 export default function MasterClient({ username, role, themePreference, initialKategori, beku }: Props) {
+  const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
   const c = {
@@ -100,9 +102,9 @@ export default function MasterClient({ username, role, themePreference, initialK
 
       <FloatingDock isLight={isLight}
         nav={[
-          { icon: <Package size={17} />, label: 'Aset', onClick: () => { window.location.href = '/buku-besar-aset'; } },
+          { icon: <Package size={17} />, label: 'Aset', onClick: () => router.push('/buku-besar-aset') },
           { icon: <Layers size={17} />, label: 'Master', onClick: () => {}, current: true },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => { window.location.href = '/menu'; } },
+          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
       />
     </div>
