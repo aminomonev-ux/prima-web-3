@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Wallet, Coins, Percent, List, Database, CalendarDays, RefreshCw } from 'lucide-react';
+import { Wallet, Coins, Percent, List, Database, CalendarDays, RefreshCw, LayoutGrid, PieChart, Target, BarChart3, Info, CheckCircle2 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { useAbortableEffect } from '@/lib/shared/hooks';
@@ -129,7 +129,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
         <div>
           <div style={{ fontSize:'18px', fontWeight:800, color:cTextPrimary }}>
-            <i className="fas fa-th-large" style={{ color:cTextSub, marginRight:'8px' }} />Dashboard E-Anggaran
+            <LayoutGrid size="1em" style={{ color:cTextSub, marginRight:'8px', display:'inline', verticalAlign:'-0.125em' }} />Dashboard E-Anggaran
           </div>
           <div style={{ fontSize:'12px', color:cTextSub, fontWeight:600 }}>RSJD dr. Amino Gondohutomo</div>
         </div>
@@ -200,7 +200,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
       }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
           <div style={{ fontWeight:800, fontSize:'14px', color:cTextPrimary, letterSpacing:'.02em' }}>
-            <i className="fas fa-chart-pie" style={{ marginRight:'8px', color:cAccent }} />
+            <PieChart size="1em" style={{ marginRight:'8px', color:cAccent, display:'inline', verticalAlign:'-0.125em' }} />
             Distribusi Pagu per Sumber Anggaran
           </div>
           <div style={{ fontSize:'11px', fontWeight:600, color:cTextSub }}>
@@ -255,7 +255,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
                 display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
                 boxSizing:'border-box',
               }}>
-                <i className="fas fa-chart-pie" style={{ fontSize:'28px', color:'#475569', marginBottom:'6px' }} />
+                <PieChart size={28} style={{ color:'#475569', marginBottom:'6px' }} />
                 <div style={{ fontSize:'11px', color:'#85B7EB', fontWeight:600 }}>Belum ada data pagu</div>
               </div>
             )}
@@ -310,7 +310,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
             display:'flex', flexDirection:'column',
           }}>
             <div style={{ fontWeight:800, fontSize:'14px', color:cTextPrim, letterSpacing:'.02em', marginBottom:'12px' }}>
-              <i className="fas fa-bullseye" style={{ marginRight:'8px', color:gaugeColor }} />
+              <Target size="1em" style={{ marginRight:'8px', color:gaugeColor, display:'inline', verticalAlign:'-0.125em' }} />
               Capaian Serapan Total
             </div>
             <div style={{ position:'relative', width:GAUGE_SIZE, height:GAUGE_SIZE, margin:'0 auto' }}>
@@ -347,7 +347,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginTop:'14px' }}>
         <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'16px 18px', boxShadow: isLight ? '0 4px 16px rgba(0,0,0,.06)' : '0 4px 16px rgba(0,0,0,.3)' }}>
           <div style={{ fontWeight:700, fontSize:'13px', color:cTextPrimary, marginBottom:'14px' }}>
-            <i className="fas fa-chart-bar" style={{ marginRight:'6px', color:cTextSubAlt }} />Pagu per Sumber
+            <BarChart3 size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />Pagu per Sumber
           </div>
           {SUMBER_LIST.map(s => {
             const pagu = kpi?.pagu_per_sumber?.[s] ?? 0;
@@ -368,7 +368,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
 
         <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'16px 18px', boxShadow: isLight ? '0 4px 16px rgba(0,0,0,.06)' : '0 4px 16px rgba(0,0,0,.3)' }}>
           <div style={{ fontWeight:700, fontSize:'13px', color:cTextPrimary, marginBottom:'14px' }}>
-            <i className="fas fa-info-circle" style={{ marginRight:'6px', color:cTextSubAlt }} />Ringkasan
+            <Info size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />Ringkasan
           </div>
           <div style={{ fontSize:'12px', color:cTextSub, lineHeight:1.8 }}>
             <div>Tahun Anggaran: <strong style={{ color:cTextPrimary }}>{tahun}</strong></div>
@@ -376,7 +376,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
             <div>Total Item SSK: <strong style={{ color:cTextPrimary }}>{kpi?.total_ssk_rows??0} baris</strong></div>
             <div>Total Rekening: <strong style={{ color:cTextPrimary }}>{kpi?.total_rekening??0} rekening</strong></div>
             <div style={{ marginTop:'10px', padding:'8px 10px', background: isLight ? 'rgba(16,185,129,.10)' : 'rgba(29,158,117,.1)', borderRadius:'8px', border: isLight ? '1px solid rgba(16,185,129,.3)' : '1px solid rgba(29,158,117,.3)', color: isLight ? '#047857' : '#6EE7B7', fontSize:'11px' }}>
-              <i className="fas fa-check-circle" style={{ marginRight:'4px' }} />
+              <CheckCircle2 size="1em" style={{ marginRight:'4px', display:'inline', verticalAlign:'-0.125em' }} />
               Realisasi, CRR & Pendapatan tersedia di sidebar kiri.
             </div>
           </div>

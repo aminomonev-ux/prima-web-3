@@ -125,6 +125,7 @@ Header file/section comment tetap OK untuk navigasi (1-2 baris ringkas). Hindari
 
 ### Aturan UI wajib:
 - **Font**: Inter untuk semua UI copy; monospace (`JetBrains Mono`) untuk semua angka keuangan (rupiah, kode rekening, vol, harga)
+- **Ikon**: `lucide-react` saja. Stylesheet/ikon dari CDN (Font Awesome dll.) diblokir CSP `style-src 'self'` **tanpa galat di layar** dan tak terjangkau di intranet — 41 ikon E-Anggaran tak pernah tampil sejak commit awal sampai 2026-10-01; dijaga ESLint `no-restricted-syntax` (`<link href="http…">` & `className="fas fa-…"`). Ikon **sebaris teks** wajib `display:'inline'` + `verticalAlign` (preflight Tailwind menjadikan `svg` block → ikon turun ke baris sendiri); di dalam induk flex tidak perlu
 - **Radius**: 6px button/input · 10px card · 14px modal
 - **Warna**: HANYA gunakan token dari design system — jangan hardcode hex baru
 - **Button (WAJIB)**: Semua primary toolbar/modal/form CTA WAJIB pakai `<PrimaButton>` dari `components/ui/PrimaButton.tsx` — TIDAK BOLEH inline `<button style={...}>` atau shadcn `<Button>` untuk action utama. Variants: `primary` (Simpan), `success` (Approve/Inject/Excel), `danger` (Hapus), `purple` (Tambah/Ajukan/Form Baru), `warning` (Revisi), `ghost` (Batal/Cancel). Skip rules: row-action inline, pagination chevron, modal close X, tab pill, filter chip, shell navigation — tetap native. Spec lengkap → `docs/design/DESIGN-SYSTEM.md` section "PrimaButton"

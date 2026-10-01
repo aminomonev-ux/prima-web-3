@@ -9,7 +9,7 @@ import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
 import SoftSelect from '@/components/ui/SoftSelect';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
-import { ChevronDown, Printer } from 'lucide-react';
+import { ChevronDown, Printer, BarChart3, GitBranch } from 'lucide-react';
 import type { SumberSSK, RealRow } from '../_types';
 import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS } from '../_utils';
 import { hitungRekap, bulanTersedia, type ItemSskAktif } from '@/lib/kinerja/rekap';
@@ -238,7 +238,7 @@ export default function CetakTab({
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px' }}>
               <div>
                 <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary }}>
-                  <i className="fas fa-chart-bar" style={{ marginRight:'6px', color:'#0891b2' }} />
+                  <BarChart3 size="1em" style={{ marginRight:'6px', color:'#0891b2', display:'inline', verticalAlign:'-0.125em' }} />
                   Rekap Semua Sumber — {tahun}
                 </div>
                 <div style={{ fontSize:'11px', color:cTextSub, marginTop:'2px' }}>
@@ -248,7 +248,7 @@ export default function CetakTab({
                     tercetak: yang memilih perlu melihat akibat pilihannya
                     sebelum menekan unduh. */}
                 <div style={{ fontSize:'10px', color:cTextSub, marginTop:'2px' }}>
-                  <i className="fas fa-code-branch" style={{ marginRight:'4px' }} />{ringkasVersi}
+                  <GitBranch size="1em" style={{ marginRight:'4px', display:'inline', verticalAlign:'-0.125em' }} />{ringkasVersi}
                 </div>
               </div>
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center' }}>
@@ -359,10 +359,10 @@ export default function CetakTab({
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px' }}>
           <div>
             <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary }}>
-              <i className="fas fa-print" style={{ marginRight:'6px', color:theme.color }} />
+              <Printer size="1em" style={{ marginRight:'6px', color:theme.color, display:'inline', verticalAlign:'-0.125em' }} />
               Cetak Realisasi {realisasiSumber} — {tahun}
               <span style={{ marginLeft:'10px', fontSize:'10px', fontWeight:700, color:'#7C5CFC', background:'rgba(124,92,252,.12)', padding:'2px 8px', borderRadius:'6px', border:'1px solid rgba(124,92,252,.3)' }}>
-                <i className="fas fa-code-branch" style={{ marginRight:'4px' }} /> {versiLabel}
+                <GitBranch size="1em" style={{ marginRight:'4px', display:'inline', verticalAlign:'-0.125em' }} /> {versiLabel}
               </span>
             </div>
             <div style={{ fontSize:'11px', color:cTextSub, marginTop:'2px' }}>

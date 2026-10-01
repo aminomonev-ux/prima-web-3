@@ -13,7 +13,7 @@ import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS, MONTH_SHORT } from '../_utils
 import { exportLaporanExcel, exportLaporanPdf } from '../_exports';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, LineChart, Loader2, Wallet, Coins, Percent, ListChecks, BarChart3, Layers, Table } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -102,7 +102,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
       {/* Toolbar */}
       <div style={{ background:cToolbarBg, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'12px 16px', marginBottom:'16px', display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'center', justifyContent:'space-between' }}>
         <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary }}>
-          <i className="fas fa-chart-line" style={{ marginRight:'6px', color:cAccent }} />
+          <LineChart size="1em" style={{ marginRight:'6px', color:cAccent, display:'inline', verticalAlign:'-0.125em' }} />
           Laporan Konsolidasi {laporanSumber} — {tahun}
         </div>
         <div style={{ display:'flex', gap:'6px' }}>
@@ -116,7 +116,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
       </div>
 
       {loadingData ? (
-        <div style={{ padding:'40px', textAlign:'center', color:cTextSub }}><i className="fas fa-spinner fa-spin" style={{ marginRight:'8px' }} />Memuat laporan...</div>
+        <div style={{ padding:'40px', textAlign:'center', color:cTextSub }}><Loader2 size="1em" className="animate-spin" style={{ marginRight:'8px', display:'inline', verticalAlign:'-0.125em' }} />Memuat laporan...</div>
       ) : !d ? (
         <div style={{ padding:'40px', textAlign:'center', color:cTextSub, background:cSurface, borderRadius:'12px', border:`1px solid ${cBorder}` }}>
           Belum ada data untuk {laporanSumber} tahun {tahun}.
@@ -156,20 +156,20 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
           {/* KPI Summary Cards */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'20px' }}>
             {[
-              { label:'Total Pagu',         value: fmtRp(d.total_pagu),               icon:'fas fa-wallet',
+              { label:'Total Pagu',         value: fmtRp(d.total_pagu),               icon:Wallet,
                 bg:    isLight ? 'rgba(55,138,221,.14)' : 'rgba(55,138,221,.12)',
                 color: isLight ? '#0369A1' : '#7DD3FC' },
-              { label:'Real Keuangan',      value: fmtRp(d.total_real_keuangan),      icon:'fas fa-coins',
+              { label:'Real Keuangan',      value: fmtRp(d.total_real_keuangan),      icon:Coins,
                 bg:    isLight ? 'rgba(29,158,117,.14)' : 'rgba(29,158,117,.12)',
                 color: isLight ? '#047857' : '#6EE7B7' },
-              { label:'Serapan Keuangan',   value: d.pct_serapan.toFixed(2)+'%',      icon:'fas fa-percentage',
+              { label:'Serapan Keuangan',   value: d.pct_serapan.toFixed(2)+'%',      icon:Percent,
                 bg:    d.pct_serapan>=80 ? (isLight?'rgba(29,158,117,.14)':'rgba(29,158,117,.12)')
                      : d.pct_serapan>=50 ? (isLight?'rgba(186,117,23,.14)':'rgba(186,117,23,.12)')
                                          : (isLight?'rgba(226,75,74,.14)':'rgba(226,75,74,.12)'),
                 color: d.pct_serapan>=80 ? (isLight?'#047857':'#6EE7B7')
                      : d.pct_serapan>=50 ? (isLight?'#B45309':'#FAC775')
                                          : (isLight?'#B91C1C':'#FCA5A5') },
-              { label:'Capaian Fisik',      value: d.pct_fisik.toFixed(2)+'%',        icon:'fas fa-tasks',
+              { label:'Capaian Fisik',      value: d.pct_fisik.toFixed(2)+'%',        icon:ListChecks,
                 bg:    d.pct_fisik>=80 ? (isLight?'rgba(29,158,117,.14)':'rgba(29,158,117,.12)')
                      : d.pct_fisik>=50 ? (isLight?'rgba(186,117,23,.14)':'rgba(186,117,23,.12)')
                                        : (isLight?'rgba(226,75,74,.14)':'rgba(226,75,74,.12)'),
@@ -190,7 +190,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                     </div>
                   </div>
                   <div style={{ width:'38px', height:'38px', borderRadius:'10px', background: isLight ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.4)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px' }}>
-                    <i className={c.icon} />
+                    <c.icon size={16} />
                   </div>
                 </div>
                 {(c.label==='Serapan Keuangan'||c.label==='Capaian Fisik') && (
@@ -207,7 +207,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
             {/* Trend Bar Chart */}
             <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'16px 18px', boxShadow:cBoxShadow }}>
               <div style={{ fontWeight:700, fontSize:'13px', color:cTextPrimary, marginBottom:'14px' }}>
-                <i className="fas fa-chart-bar" style={{ marginRight:'6px', color:SSK_THEME[laporanSumber].color }} />
+                <BarChart3 size="1em" style={{ marginRight:'6px', color:SSK_THEME[laporanSumber].color, display:'inline', verticalAlign:'-0.125em' }} />
                 Trend Realisasi Keuangan per Bulan
               </div>
               {d.trend.length === 0 ? (
@@ -234,7 +234,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
             {/* Ringkasan semua sumber */}
             <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'16px 18px', boxShadow:cBoxShadow }}>
               <div style={{ fontWeight:700, fontSize:'13px', color:cTextPrimary, marginBottom:'12px' }}>
-                <i className="fas fa-layer-group" style={{ marginRight:'6px', color:cTextSubAlt }} />
+                <Layers size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />
                 Serapan per Sumber
               </div>
               {laporanAll.length === 0 ? (
@@ -263,7 +263,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
           {/* Tabel trend detail */}
           <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', overflow:'hidden', boxShadow:cBoxShadow }}>
             <div style={{ padding:'12px 16px', borderBottom:`1px solid ${cBorder}`, fontWeight:700, fontSize:'13px', color:cTextPrimary }}>
-              <i className="fas fa-table" style={{ marginRight:'6px', color:cTextSubAlt }} />
+              <Table size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />
               Detail Trend Bulanan — {laporanSumber}
             </div>
             <div style={{ overflowX:'auto' }}>

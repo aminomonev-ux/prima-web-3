@@ -23,7 +23,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import Tip from '@/components/ui/Tip';
-import { Download, Save, Check, Upload, History, Ban, Undo2 } from 'lucide-react';
+import { Download, Save, Check, Upload, History, Ban, Undo2, Table, Lock, Calculator, GitBranch } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -336,7 +336,7 @@ export default function SskTab({
         <div style={{ background:cSurfaceForm, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'12px 16px', marginBottom:'14px', display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary, display:'flex', flexWrap:'wrap', alignItems:'center', gap:'10px' }}>
             <span>
-              <i className="fas fa-table" style={{ marginRight:'6px', color:theme.color }} />
+              <Table size="1em" style={{ marginRight:'6px', color:theme.color, display:'inline', verticalAlign:'-0.125em' }} />
               {theme.label} — {tahun}
             </span>
             <VersiPickerKinerja
@@ -349,7 +349,7 @@ export default function SskTab({
             <span style={{ fontSize:'11px', fontWeight:500, color:cTextSub }}>{sskRows.length} baris</span>
             {versiLocked && (
               <span style={{ fontSize:'10px', fontWeight:700, color:'#B45309', background:'rgba(245,158,11,.15)', padding:'2px 8px', borderRadius:'6px', border:'1px solid rgba(245,158,11,.4)' }}>
-                <i className="fas fa-lock" style={{ marginRight:'4px' }} /> TERKUNCI (read-only)
+                <Lock size="1em" style={{ marginRight:'4px', display:'inline', verticalAlign:'-0.125em' }} /> TERKUNCI (read-only)
               </span>
             )}
           </div>
@@ -521,7 +521,7 @@ export default function SskTab({
                 <tfoot>
                   <tr>
                     <td colSpan={4} style={{ ...tfBase, textAlign:'right', textTransform:'uppercase', letterSpacing:'.04em', color: isLight?'#5B21B6':theme.color }}>
-                      <i className="fas fa-calculator" style={{ marginRight:'6px' }} />
+                      <Calculator size="1em" style={{ marginRight:'6px', display:'inline', verticalAlign:'-0.125em' }} />
                       Grand Total
                     </td>
                     <td style={tfRight}>{fmtNum(totalPagu)}</td>
@@ -547,7 +547,7 @@ export default function SskTab({
         <div onClick={() => setConfirmCreate(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
           <div onClick={e => e.stopPropagation()} style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'14px', padding:'24px', maxWidth:'440px', width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.4)' }}>
             <div style={{ fontSize:'15px', fontWeight:800, color:cTextPrimary, marginBottom:'10px' }}>
-              <i className="fas fa-code-branch" style={{ marginRight:'8px', color:'#7C5CFC' }} />
+              <GitBranch size="1em" style={{ marginRight:'8px', color:'#7C5CFC', display:'inline', verticalAlign:'-0.125em' }} />
               Buat Perubahan Baru
             </div>
             <div style={{ fontSize:'12px', color:cTextSub, lineHeight:1.7, marginBottom:'18px' }}>

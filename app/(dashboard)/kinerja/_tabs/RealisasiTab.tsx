@@ -16,7 +16,7 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
-import { Wand2, Save, Upload, Equal, History } from 'lucide-react';
+import { Wand2, Save, Upload, Equal, History, BarChart3, Lock, Coins, LineChart } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { laporanYatim } from '@/lib/kinerja/rekap';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi } from '@/lib/kinerja/hidrasi-ssk';
@@ -354,7 +354,7 @@ export default function RealisasiTab({
         <div>
           <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary, display:'flex', flexWrap:'wrap', alignItems:'center', gap:'12px' }}>
             <span>
-              <i className="fas fa-chart-bar" style={{ marginRight:'6px', color:theme.color }} />
+              <BarChart3 size="1em" style={{ marginRight:'6px', color:theme.color, display:'inline', verticalAlign:'-0.125em' }} />
               Realisasi {realisasiSumber} — {tahun}
             </span>
             <VersiPickerKinerja
@@ -371,7 +371,7 @@ export default function RealisasiTab({
             &nbsp;·&nbsp; Acuan: <strong style={{ color:cTextPrimary }}>{versiLabel}</strong>
             {versiLocked && (
               <span style={{ marginLeft:'10px', fontSize:'10px', fontWeight:700, color:'#B45309', background:'rgba(245,158,11,.15)', padding:'2px 8px', borderRadius:'6px', border:'1px solid rgba(245,158,11,.4)' }}>
-                <i className="fas fa-lock" style={{ marginRight:'4px' }} /> ARSIP (read-only)
+                <Lock size="1em" style={{ marginRight:'4px', display:'inline', verticalAlign:'-0.125em' }} /> ARSIP (read-only)
               </span>
             )}
           </div>
@@ -582,7 +582,7 @@ export default function RealisasiTab({
         return (
           <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', marginTop:'10px', justifyContent:'center' }}>
             <div style={{ ...cardBase, borderLeft:`3px solid ${theme.color}` }}>
-              <i className="fas fa-coins" style={{ color:theme.color, fontSize:'12px' }} />
+              <Coins size={12} style={{ color:theme.color, flexShrink:0 }} />
               <div style={{ display:'flex', flexDirection:'column', lineHeight:1.2 }}>
                 <span style={{ fontSize:'9px', fontWeight:700, color:cTextSub, textTransform:'uppercase', letterSpacing:'.04em' }}>
                   Total Real. Keuangan — {MONTH_LABELS[realisasiBulan-1]}
@@ -593,7 +593,7 @@ export default function RealisasiTab({
               </div>
             </div>
             <div style={{ ...cardBase, borderLeft:'3px solid #10B981' }}>
-              <i className="fas fa-chart-line" style={{ color:'#10B981', fontSize:'12px' }} />
+              <LineChart size={12} style={{ color:'#10B981', flexShrink:0 }} />
               <div style={{ display:'flex', flexDirection:'column', lineHeight:1.2 }}>
                 <span style={{ fontSize:'9px', fontWeight:700, color:cTextSub, textTransform:'uppercase', letterSpacing:'.04em' }}>
                   Total Real. Keuangan S/D {MONTH_LABELS[realisasiBulan-1]}

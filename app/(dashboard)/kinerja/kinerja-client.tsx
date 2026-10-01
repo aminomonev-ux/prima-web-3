@@ -554,8 +554,6 @@ export default function KinerjaClient({ userId, role, username, themePreference,
 
   return (
     <>
-      {/* FA Icons CDN */}
-      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
       <style>{`
         /* Sidebar */
         [data-theme="light"] .kinerja-sidebar{background:rgba(255,255,255,0.98)!important;border-right:1px solid rgba(0,0,0,0.08)!important;}

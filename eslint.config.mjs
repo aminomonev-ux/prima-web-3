@@ -25,6 +25,25 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    // CSP `style-src 'self'` (proxy.ts) memblokir stylesheet dari luar TANPA galat di layar —
+    // Font Awesome dari cdnjs membuat 41 ikon E-Anggaran tak pernah tampil sejak commit awal
+    // (diganti lucide-react 2026-10-01). Server kantor juga intranet: CDN memang tak terjangkau.
+    files: ["app/**/*.tsx", "components/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "warn",
+        {
+          selector: "JSXOpeningElement[name.name='link'] JSXAttribute[name.name='href'][value.value=/^(https?:)?\\/\\//]",
+          message: "Stylesheet dari luar diblokir CSP (style-src 'self') dan tak terjangkau di intranet. Pasang lokal, atau pakai ikon lucide-react.",
+        },
+        {
+          selector: "JSXAttribute[name.name='className'][value.value=/(^|\\s)fa[srbl]?\\s+fa-/]",
+          message: "Font Awesome tidak dimuat (diblokir CSP) — ikonnya tidak akan tampil. Pakai ikon lucide-react.",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

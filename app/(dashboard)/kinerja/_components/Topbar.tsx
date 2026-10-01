@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, Home, ShieldCheck, LogOut } from 'lucide-react';
+import { ChevronDown, Home, ShieldCheck, LogOut, Menu } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import type { Role } from '@/types';
 import type { KTab, SumberSSK } from '../_types';
@@ -66,7 +66,7 @@ export default function Topbar({
       <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
         <button className="lg:hidden" onClick={() => onSetSidebarOpen(p => !p)}
           style={{ border:'none', background:'none', cursor:'pointer', fontSize:'18px', color: isLight ? '#6B7280' : '#85B7EB' }}>
-          <i className="fas fa-bars" />
+          <Menu size="1em" />
         </button>
         <div className="kinerja-topbar-breadcrumb" style={{ fontSize:'13px', color:'#85B7EB' }}>
           <span style={{ fontWeight:800, background:'linear-gradient(135deg,#EF9F27,#FAC775)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>E-Anggaran</span>

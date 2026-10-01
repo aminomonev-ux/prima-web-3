@@ -9,6 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from 'recharts'
+import { BarChart3, Loader2 } from 'lucide-react'
 
 interface Props {
   tahun:    string
@@ -137,7 +138,7 @@ export default function BerandaCharts({ tahun, isLight }: Props) {
   if (loading) {
     return (
       <div style={{ ...cardSx, marginTop: '14px', textAlign: 'center', padding: '40px', color: cTextSub }}>
-        <i className="fas fa-spinner fa-spin" style={{ marginRight: '8px' }} />
+        <Loader2 size="1em" className="animate-spin" style={{ marginRight: '8px', display: 'inline', verticalAlign: '-0.125em' }} />
         Memuat chart...
       </div>
     )
@@ -149,7 +150,7 @@ export default function BerandaCharts({ tahun, isLight }: Props) {
       {/* ─── Chart 1: Pendapatan per Uraian ─────────────────────────────────── */}
       <div style={cardSx}>
         <div style={titleSx}>
-          <i className="fas fa-chart-bar" style={{ marginRight: '8px', color: '#7C3AED' }} />
+          <BarChart3 size="1em" style={{ marginRight: '8px', color: '#7C3AED', display: 'inline', verticalAlign: '-0.125em' }} />
           Pendapatan per Uraian — Target vs Realisasi
         </div>
         {chart1Data.length === 0 ? (
@@ -190,7 +191,7 @@ export default function BerandaCharts({ tahun, isLight }: Props) {
           return (
             <div key={s} style={cardSx}>
               <div style={titleSx}>
-                <i className="fas fa-chart-column" style={{ marginRight: '8px', color: color.real }} />
+                <BarChart3 size="1em" style={{ marginRight: '8px', color: color.real, display: 'inline', verticalAlign: '-0.125em' }} />
                 {s} — Target vs Realisasi per Bulan
               </div>
               {!hasData ? (

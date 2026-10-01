@@ -11,6 +11,7 @@ import { SUMBER_LIST, SSK_THEME } from '../_utils';
 import PrimaButton from '@/components/ui/PrimaButton';
 import Tip from '@/components/ui/Tip';
 import DeleteIcon from '@/components/ui/DeleteIcon';
+import { ShieldAlert, Settings, AlertTriangle, AlertCircle, Table, BarChart3, Asterisk, GitBranch, Eye } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -124,7 +125,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
         <div style={{ background: cDangerBg, border: `1.5px solid ${cDangerBor}`, borderRadius: '12px', padding: '24px', maxWidth: '440px', margin: '0 auto' }}>
-          <i className="fas fa-shield-alt" style={{ fontSize: '32px', color: '#E24B4A', marginBottom: '12px' }} />
+          <ShieldAlert size={32} style={{ color: '#E24B4A', margin: '0 auto 12px' }} />
           <div style={{ fontSize: '14px', fontWeight: 800, color: cTextPrimary, marginBottom: '8px' }}>
             Akses Dibatasi
           </div>
@@ -159,7 +160,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
     <div style={{ padding: '20px' }}>
       <div style={{ background: cSurface, border: `1px solid ${cBorder}`, borderRadius: '14px', padding: '24px', boxShadow: cBoxShadow, maxWidth: '720px' }}>
         <div style={{ fontSize: '15px', fontWeight: 800, color: cTextPrimary, marginBottom: '6px' }}>
-          <i className="fas fa-cog" style={{ marginRight: '8px', color: '#7C5CFC' }} />
+          <Settings size="1em" style={{ marginRight: '8px', color: '#7C5CFC', display: 'inline', verticalAlign: '-0.125em' }} />
           Pengaturan E-Anggaran
         </div>
         <div style={{ fontSize: '12px', color: cTextSub, marginBottom: '20px' }}>
@@ -169,7 +170,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
         {/* ─── Section: Reset Data ─────────────────────────────────────────── */}
         <div style={{ background: cDangerBg, border: `1.5px solid ${cDangerBor}`, borderRadius: '12px', padding: '20px' }}>
           <div style={{ fontSize: '13px', fontWeight: 800, color: '#E24B4A', marginBottom: '4px' }}>
-            <i className="fas fa-exclamation-triangle" style={{ marginRight: '6px' }} />
+            <AlertTriangle size="1em" style={{ marginRight: '6px', display: 'inline', verticalAlign: '-0.125em' }} />
             Reset Data
           </div>
           <div style={{ fontSize: '11px', color: cTextSub, marginBottom: '16px', lineHeight: 1.6 }}>
@@ -204,9 +205,9 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
             </label>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {[
-                { val: 'ssk',       label: 'SSK saja',         icon: 'fa-table' },
-                { val: 'realisasi', label: 'Realisasi saja',   icon: 'fa-chart-bar' },
-                { val: 'both',      label: 'Keduanya (full)',  icon: 'fa-exclamation-circle' },
+                { val: 'ssk',       label: 'SSK saja',         icon: Table },
+                { val: 'realisasi', label: 'Realisasi saja',   icon: BarChart3 },
+                { val: 'both',      label: 'Keduanya (full)',  icon: AlertCircle },
               ].map(opt => (
                 <button key={opt.val} onClick={() => setScope(opt.val as Scope)}
                   style={{
@@ -216,7 +217,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
                     cursor: 'pointer', fontSize: '12px', fontWeight: 700,
                     color: scope === opt.val ? '#E24B4A' : cTextPrimary,
                   }}>
-                  <i className={`fas ${opt.icon}`} style={{ marginRight: '6px' }} /> {opt.label}
+                  <opt.icon size="1em" style={{ marginRight: '6px', display: 'inline', verticalAlign: '-0.125em' }} /> {opt.label}
                 </button>
               ))}
             </div>
@@ -236,7 +237,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
                   cursor: 'pointer', fontSize: '11px', fontWeight: 700,
                   color: versiTarget === 'ALL' ? '#E24B4A' : cTextPrimary,
                 }}>
-                <i className="fas fa-asterisk" style={{ marginRight: '5px' }} /> SEMUA versi
+                <Asterisk size="1em" style={{ marginRight: '5px', display: 'inline', verticalAlign: '-0.125em' }} /> SEMUA versi
               </button>
               {versiOptions.map(opt => (
                 <button key={opt.key} onClick={() => setVersiTarget(opt.key)}
@@ -247,7 +248,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
                     cursor: 'pointer', fontSize: '11px', fontWeight: 700,
                     color: versiTarget === opt.key ? '#E24B4A' : cTextPrimary,
                   }}>
-                  <i className="fas fa-code-branch" style={{ marginRight: '5px' }} /> {opt.label}
+                  <GitBranch size="1em" style={{ marginRight: '5px', display: 'inline', verticalAlign: '-0.125em' }} /> {opt.label}
                   <span style={{ marginLeft: '6px', fontSize: '9px', fontWeight: 600, color: cTextSub }}>
                     (SSK={opt.sskCount}, Real={opt.realCount})
                   </span>
@@ -264,7 +265,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
           {/* Preview data yang akan dihapus */}
           <div style={{ background: cSurface, border: `1px solid ${cBorder}`, borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: cTextSub, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-              <i className="fas fa-eye" style={{ marginRight: '5px' }} /> Preview: data yang akan terhapus
+              <Eye size="1em" style={{ marginRight: '5px', display: 'inline', verticalAlign: '-0.125em' }} /> Preview: data yang akan terhapus
             </div>
             {loading ? (
               <div style={{ fontSize: '12px', color: cTextSub }}>Memuat...</div>
@@ -305,7 +306,7 @@ export default function PengaturanTab({ tahun, isLight = false, isSuperAdmin }: 
         <div onClick={() => !resetting && setShowConfirm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: cSurface, border: `2px solid #E24B4A`, borderRadius: '14px', padding: '24px', maxWidth: '500px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}>
             <div style={{ fontSize: '16px', fontWeight: 800, color: '#E24B4A', marginBottom: '10px' }}>
-              <i className="fas fa-exclamation-triangle" style={{ marginRight: '8px' }} />
+              <AlertTriangle size="1em" style={{ marginRight: '8px', display: 'inline', verticalAlign: '-0.125em' }} />
               Konfirmasi Reset Data
             </div>
             <div style={{ fontSize: '12px', color: cTextSub, lineHeight: 1.7, marginBottom: '16px' }}>

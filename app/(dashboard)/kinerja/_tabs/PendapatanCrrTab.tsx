@@ -19,6 +19,7 @@ import Tip from '@/components/ui/Tip';
 import { Save } from 'lucide-react';
 import { Pencil } from 'lucide-react';
 import { Upload } from 'lucide-react';
+import { Banknote, Loader2, ArrowDown, Percent } from 'lucide-react';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { CrrRow, PendRow, CrrInputField } from '../_types';
 import { CRR_BULAN_LABELS, initCrrRows, initPendapatanRows, recalcCrr } from '../_utils';
@@ -247,7 +248,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
       <div>
         <div style={{ background: isLight?'rgba(55,138,221,.14)':'rgba(55,138,221,.12)', border:'1px solid rgba(55,138,221,.3)', borderRadius:'12px', padding:'12px 16px', marginBottom:'12px', display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary }}>
-            <i className="fas fa-money-bill-wave" style={{ marginRight:'6px', color: isLight?'#0369A1':'#7DD3FC' }} />
+            <Banknote size="1em" style={{ marginRight:'6px', color: isLight?'#0369A1':'#7DD3FC', display:'inline', verticalAlign:'-0.125em' }} />
             Section 1 — Pendapatan (Target vs Realisasi) — {tahun}
           </div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center' }}>
@@ -277,7 +278,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
         </div>
 
         {loading ? (
-          <div style={{ padding:'30px', textAlign:'center', color:cTextSub }}><i className="fas fa-spinner fa-spin" style={{ marginRight:'8px' }} />Memuat...</div>
+          <div style={{ padding:'30px', textAlign:'center', color:cTextSub }}><Loader2 size="1em" className="animate-spin" style={{ marginRight:'8px', display:'inline', verticalAlign:'-0.125em' }} />Memuat...</div>
         ) : (
           <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', overflow:'hidden', boxShadow:cBoxShadow }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
@@ -318,7 +319,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
         )}
 
         <div style={{ marginTop:'10px', padding:'8px 14px', borderRadius:'8px', background: isLight?'rgba(124,92,252,.10)':'rgba(124,92,252,.1)', border:'1px solid rgba(124,92,252,.25)', fontSize:'11px', color: isLight?'#5B21B6':'#C4B5FD', display:'flex', alignItems:'center', gap:'8px' }}>
-          <i className="fas fa-arrow-down" />
+          <ArrowDown size="1em" style={{ flexShrink:0 }} />
           Kolom <strong>Realisasi</strong> Section 1 di atas otomatis mengisi kolom <strong>Pendapatan</strong> di Section 2 (CRR) di bawah.
         </div>
       </div>
@@ -327,7 +328,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
       <div>
         <div style={{ background: isLight?'rgba(186,117,23,.12)':'rgba(186,117,23,.1)', border:'1px solid rgba(186,117,23,.3)', borderRadius:'12px', padding:'12px 16px', marginBottom:'12px', display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary }}>
-            <i className="fas fa-percentage" style={{ marginRight:'6px', color:'#f59e0b' }} />
+            <Percent size="1em" style={{ marginRight:'6px', color:'#f59e0b', display:'inline', verticalAlign:'-0.125em' }} />
             Section 2 — CRR (Cost Recovery Rate) — {tahun}
             <span style={{ marginLeft:'10px', fontSize:'11px', fontWeight:500, color:cTextSub }}>Belanja BLUD & Daerah input · Pendapatan &amp; CRR otomatis</span>
           </div>
@@ -343,7 +344,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
         </div>
 
         {loading ? (
-          <div style={{ padding:'30px', textAlign:'center', color:cTextSub }}><i className="fas fa-spinner fa-spin" style={{ marginRight:'8px' }} />Memuat CRR...</div>
+          <div style={{ padding:'30px', textAlign:'center', color:cTextSub }}><Loader2 size="1em" className="animate-spin" style={{ marginRight:'8px', display:'inline', verticalAlign:'-0.125em' }} />Memuat CRR...</div>
         ) : (
           <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', overflowX:'auto', boxShadow:cBoxShadow }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px', tableLayout:'fixed' }}>
@@ -391,7 +392,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
                               disabled={filling}
                               style={{ width:'30px', height:'30px', borderRadius:'6px', border:`1.5px solid ${isLight?'#D97706':'#F59E0B'}`, background: filling ? (isLight?'#FBBF24':'rgba(245,158,11,.2)') : (isLight?'#F59E0B':'rgba(245,158,11,.3)'), cursor: filling ? 'not-allowed':'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all .18s', opacity: filling ? 0.6 : 1, boxShadow: isLight?'0 1px 3px rgba(217,119,6,.45)':'0 0 8px rgba(245,158,11,.4)' }}>
                               {filling
-                                ? <i className="fas fa-spinner fa-spin" style={{ fontSize:'12px', color: isLight?'#FFFFFF':'#FCD34D' }} />
+                                ? <Loader2 size={13} className="animate-spin" color={isLight?'#FFFFFF':'#FCD34D'} />
                                 : <Pencil size={13} color={isLight?'#FFFFFF':'#FCD34D'} />}
                             </button></Tip>
                           )}
