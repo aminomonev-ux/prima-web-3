@@ -111,6 +111,8 @@ Keempatnya sama persis dengan `dpa_blud`.
 
 Kalau rumus jadi satu-satunya penyimpan pohon, sekali file kena *paste as values* (atau dibuka-simpan ulang di WPS/Google Sheets yang kadang menulis ulang rumus) hierarkinya lenyap tanpa cadangan. Kolom `Level` (isi dari peta tipe→label yang sudah ada di `lib/blud/format.ts`) membuat importer tetap bisa menyusun pohon dari urutan baris + level lewat stack. Ongkosnya nyaris nol.
 
+**Cadangan, bukan sumber pertama.** Urutan baris + level hanya benar kalau tiap anak tinggal di blok induknya, dan data nyata tidak menjamin itu — lihat §3.10. Kolom Level memastikan **tipe** baris; **induk** dibaca dari rumus.
+
 ### 2.5 Kolom Jangkar — syarat impor yang aman
 
 `anggaran_key` adalah identitas baris anggaran lintas-versi, dan **`blud_realisasi_alokasi` menempel padanya**. Impor yang mengganti seluruh DPA dengan baris serba-baru akan mencetak `anggaran_key` baru pula, dan alokasi realisasi lama menunjuk ke sesuatu yang tidak ada lagi.
@@ -198,7 +200,7 @@ Aturan yang benar: **badan tabel berakhir di baris terakhir yang punya nilai di 
 
 **Lapis 2 — kedalaman mentah, tiga sumber.** Diambil sesuai ketersediaan, berurut dari yang paling pasti:
 
-1. Kolom `Level` — dibaca langsung, selesai.
+1. Kolom `Level` — **tipe** baris dibaca langsung; induknya tetap dari rujukan rumus (butir 2), Level + urutan baris cuma cadangan untuk baris yang tidak disebut rumus mana pun (§3.10).
 2. Rujukan rumus — `SUM(F8:F10)` / `=F8+F15` menyebut sendiri anaknya, jadi pohonnya dibaca dari situ.
 3. Posisi kolom kode — jumlah kolom terisi dari A–K.
 
@@ -235,6 +237,8 @@ Jadi algoritmanya **bukan menebak, tapi membaca dua kali lalu mencocokkan**. Bar
 
 Catatan soal *shared formula* (Excel menyimpan satu rumus induk, sisanya ditandai "sama seperti itu, digeser"). Dari 198 baris tersebut, **178 tetap menyimpan hasilnya** dan hanya **20 yang tidak** — dan ke-20 baris itu kolom vol serta harganya juga kosong, jadi memang baris kosong, bukan data yang hilang. Dampaknya kecil: untuk 20 baris itu angka file tidak bisa dipakai sebagai pembanding silang. Tetap dinyatakan di modal, bukan didiamkan.
 
+**Koreksi 2026-10-02:** ke-20 baris itu ternyata MENYIMPAN hasilnya — `<v>0</v>`. exceljs membuang hasil rumus bernilai 0 dari `cell.value`; sejak itu dibaca lewat `cell.result` (§3.10). Di keempat formulir kalibrasi, rumus yang benar-benar tanpa hasil: nol.
+
 ### 3.5 Kekotoran yang sudah diketahui ada
 
 Semuanya terverifikasi di `DPA BLUD 2026 F.xlsx`, jadi bukan kekhawatiran karangan:
@@ -244,7 +248,7 @@ Semuanya terverifikasi di `DPA BLUD 2026 F.xlsx`, jadi bukan kekhawatiran karang
 | Kolom bergeser | baris 46 `1 x 1 th` vs 130 `1 x th` | verifikasi isi per baris; rumus jadi rujukan utama |
 | Padding hilang | 692 `5\|2\|6` vs 693 `5\|2\|06`; 698 `7:1` vs 696 `7:01` | normalisasi segmen saat membandingkan |
 | Kode yatim | baris 38 `5\|1\|04\|01\|11` nyempil di blok `5\|1\|01\|99\|99` | ditahan + dilaporkan, tidak membatalkan impor |
-| Rumus tanpa hasil | 20 baris `sharedFormula` (mis. 26, 27, 36–38) | hitung sendiri; jangan dipakai sebagai pembanding |
+| Rumus tanpa hasil | 20 baris `sharedFormula` (mis. 26, 27, 36–38) | **bukan tanpa hasil** — hasilnya 0 dan dibuang exceljs; dibaca lewat `cell.result` (§3.10) |
 | Vol majemuk 3 faktor | baris 58 `1 x 12 bln` → `N*P*R` | vol = hasil kali faktor; naif = meleset 12× |
 | Kolom catatan campur | kol 20: `diklat`, `mdsi`, tapi juga `3702000` | cocokkan ke master `penanggung_jawab`; tidak cocok → `keterangan` (**L68**) |
 | Baris tanpa kode | 11 `BELANJA DAERAH`, 12 `BELANJA MODAL`; 48–62 baris per file | ditambatkan lewat stack |
@@ -270,7 +274,7 @@ Satu tombol **Impor** di toolbar DPA; dua bentuk file ditangani di dalam, bukan 
 
 Isi modal: panel pemetaan kolom (bisa dikoreksi manual) · panel pemetaan level (kedalaman file ↔ slot rantai, bisa digeser) · pratinjau pohon dengan indentasi + badge level · panel neraca (total hitung ulang vs total file) · daftar baris bermasalah · daftar realisasi terdampak (§3.6.3).
 
-Untuk file unduhan sendiri, modalnya praktis kosong: *"semua terbaca dari kolom Level, 0 baris perlu diperiksa."*
+Untuk file unduhan sendiri, modalnya praktis kosong: *"semua terbaca dari rumus penjumlahan + kolom Level, 0 baris perlu diperiksa."* Janji ini baru benar untuk data nyata sejak 2026-10-02 — lihat §3.10.
 
 Baris bermasalah **ditahan, tidak membatalkan seluruh impor** — sama seperti impor Renaksi.
 
@@ -338,6 +342,30 @@ Angka nyatanya pada DPA 2026 RSJD (558 baris, rantai sampai L7.1): tanpa batas a
 
 **Audit**: field opsional `sumber: 'DPA'` di kedua body schema — tanpa itu salinan borongan terbaca di riwayat persis seperti sunting biasa. Regresi: `node scripts/test-blud-salin-master.mjs` (60 pemeriksaan; terbukti menggigit lewat uji mutasi — mematikan sinyal pohon menjatuhkan 2, mematikan sinyal panjang menjatuhkan 2 lainnya).
 
+### 3.10 Impor balik unduhan sendiri — rumus dulu, Level cadangan (2026-10-02)
+
+**Gejala** (dilaporkan pemakai: "Excel hasil unduhan sistem tidak bisa diimpor kembali"). Excel DPA 2026 dari menu Cetak, diimpor balik, terbaca salah: total hitung ulang **Rp 103,27 M** padahal berkasnya Rp 68,38 M, 2 akar, 17 dari 558 baris salah induk. Kedua versi tersimpan (31 Jan & 29 Agu) sama-sama kena.
+
+**Sebab.** Untuk berkas berkolom Level, induk disusun dari Level + urutan baris lewat tumpukan (induk = baris terdekat di atasnya yang levelnya lebih dangkal). Itu hanya benar kalau tiap anak tinggal di blok induknya. Eksporter menulis baris menurut `urutan`, dan `urutan` data nyata bukan urutan pohon — dua baris Rp 0 tersimpan di luar bloknya:
+
+- *Tambahan penghasilan berdasarkan beban kerja* — Level 3, di antara Level 4.1 milik Gaji dan Tunjangan ASN; baris sesudahnya ikut pindah induk.
+- *Biaya jasafilm badge/TLD* — Level 1 **tanpa induk** di tengah blok Belanja Jasa; tumpukan menganggap pohon baru mulai dan menaruh **311 baris** sesudahnya di bawah akar palsu itu.
+
+Rumus SUM di berkas yang sama sudah menyebut anak tiap induk dengan tepat (`F14+…+F33+F35`) — pembacanya menghitung rumus itu lalu membuangnya kalau kolom Level ada. Uji round-trip lama tidak menangkapnya karena datanya 7 baris yang urutannya rapi.
+
+**Perbaikan** (`bacaDpaDariGrid`, cabang `pakaiLevel`): induk dari klaim rumus; Level menentukan tipe dan jadi cadangan bagi baris yang tidak disebut rumus mana pun. Klaim yang induknya tidak lebih dangkal dari anaknya **ditolak** — itu rumus sunting tangan, dan aturan ini yang menjamin induk tidak melingkar. Klaim disaring dulu baru dipilih yang terdekat, supaya klaim palsu yang kebetulan lebih dekat tidak menyingkirkan klaim sah. Cadangan dan penolakan sama-sama dilaporkan di peringatan. Diukur pada data 2026: induk cocok DB **558/558** (dulu 541), total berkas = hitung ulang, 0 baris bercatatan, 0 realisasi terdampak.
+
+**Ikut terbongkar — hasil rumus 0.** `cell.value` exceljs membuang hasil rumus bernilai 0 (getter-nya menyalin lewat `if (value)`), padahal berkasnya menyimpan `<v>0</v>` dan `cell.result` masih memegangnya → `nilaiSel()` di `import-dpa-grid.ts`. Peringatan "N baris tidak menyimpan hasil rumusnya" selama ini alarm palsu: 21 baris di unduhan 2026, 7/11/53/54 sel di keempat formulir kalibrasi — rumus yang benar-benar tanpa hasil: nol. Yang tersisa dilaporkan adalah sel Jumlah yang memang kosong, jadi kalimatnya diganti "tidak membawa angka di kolom Jumlah". Dua akibat yang dijaga:
+
+- Pagar baris sisa salin-tempel (b.108) diperluas ke angka **0** — b.108 2026 menyimpan hasil 0 yang dulu terbaca kosong; tanpa perluasan ini ia hidup lagi dan menelan Rp 170 juta. Pengecualiannya baris berlabel Level: unduhan PRIMA menulis label di tiap baris, jadi baris tanpa uraian & kode di sana tetap baris sah.
+- Formulir kalibrasi: baris & total identik dengan sebelumnya; 2026 F kini melaporkan **kedua** sisi ±80 juta yang saling menutupi (dulu satu sisi tak bisa dinilai karena anaknya bernilai 0).
+
+**Excel Pergeseran di Impor DPA ditolak** (keputusan pengguna 2026-10-02). Dokumen itu punya dua sisi berumus perkalian; pemilih kolom Jumlah menghitung rumusnya dan hasilnya SERI, jadi sisi yang terbaca ditentukan isi data, bukan aturan — apa pun sisinya, hasil geser hilang. Penandanya judul `Vol P` + `Harga P` (dokumen maupun rekap Cetak), jadi formulir provinsi yang kebetulan berkolom "Pergeseran" tetap diterima. Kalimatnya menyebut jalan keluar: unduh Excel DPA dari Cetak → DPA BLUD. Impor di layar Pergeseran: belum, tidak diminta.
+
+**Sengaja tidak dikerjakan:** menulis Excel dalam urutan pohon. Dokumen akan berbeda urutan dengan layar dan PDF, sedangkan impornya sudah tepat lewat rumus. Konsekuensinya jujur disebut: berkas yang rumusnya hilang SEMUA (*paste as values*) **dan** datanya tidak berurut tetap bisa salah induk — itulah gunanya peringatan "N baris tidak disebut rumus penjumlahan mana pun".
+
+Regresi: `npx tsx scripts/test-blud-impor-bolak-balik.mts` (40 pemeriksaan, tanpa berkas contoh & tanpa DB), **14 uji mutasi tertangkap**.
+
 ---
 
 ## 4. Rencana kerja
@@ -381,6 +409,7 @@ Tempat keputusan itu diambil memang di modal, sebelum commit — di situlah seli
 
 - Unduhan format **lama** (8 kolom datar, tanpa Level, tanpa rumus) sengaja **DITOLAK** dengan pesan yang menyuruh unduh ulang — bukan ditebak. Menebak di situ menghasilkan pohon yang tampak masuk akal tapi salah tanpa gejala.
 - Uji negatif: file dengan rumus dibuang (*paste as values*) → harus jatuh ke kolom Level dan tetap benar; file tanpa kolom Level **dan** tanpa rumus → harus melapor jujur bahwa hierarki ditebak.
+- `scripts/test-blud-impor-bolak-balik.mts` ✅ **40 pemeriksaan** (2026-10-02) — pohon yang urutannya TIDAK rapi (cermin data 2026), hasil rumus 0, Excel Pergeseran ditolak, rumus hilang semua/sebagian, klaim rumus palsu, baris sisa bernilai 0. Lihat §3.10.
 
 ### Kalibrasi
 

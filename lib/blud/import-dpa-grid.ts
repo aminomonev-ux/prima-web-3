@@ -77,6 +77,21 @@ function bacaAngka(v: ExcelJS.CellValue): number | null {
 }
 
 /**
+ * `cell.value` exceljs MEMBUANG hasil rumus yang bernilai 0 — getter-nya menyalin
+ * model lewat `if (value)` — padahal berkasnya menyimpan `<v>0</v>` dan
+ * `cell.result` masih memegangnya. Tanpa ini tiap baris bernilai nol terbaca
+ * "tidak menyimpan hasil rumusnya": 21 baris pada unduhan DPA 2026, 7–54 sel per
+ * formulir provinsi — dan yang benar-benar tanpa hasil di keempat formulir itu nol.
+ */
+function nilaiSel(sel: ExcelJS.Cell): ExcelJS.CellValue {
+  const v = sel.value
+  if (!v || typeof v !== 'object' || 'result' in v) return v
+  if (!('formula' in v) && !('sharedFormula' in v)) return v
+  const hasil = sel.result
+  return hasil === undefined ? v : ({ ...v, result: hasil } as ExcelJS.CellValue)
+}
+
+/**
  * Excel menyimpan satu rumus induk lalu menandai salinannya "sama seperti itu,
  * digeser". Di formulir 2026 ada 198 sel semacam itu, dan exceljs TIDAK
  * menerjemahkannya — `cell.formula` kosong. Tanpa perluasan ini, deteksi kolom
@@ -144,7 +159,7 @@ export async function bacaGridDpa(data: ArrayBuffer | Buffer): Promise<GridDpa> 
   for (let r = 1; r <= jumlahBaris; r++) {
     const barisIsi: SelGrid[] = []
     for (let c = 1; c <= jumlahKolom; c++) {
-      const nilai = ws.getRow(r).getCell(c).value
+      const nilai = nilaiSel(ws.getRow(r).getCell(c))
       const o = (nilai && typeof nilai === 'object' ? nilai : null) as unknown as Record<string, unknown> | null
       let rumus: string | null = null
       if (o && typeof o.formula === 'string') {

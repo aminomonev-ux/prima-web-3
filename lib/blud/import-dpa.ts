@@ -6,7 +6,8 @@
 // MEMBER bisa punya 9 dan 10 segmen, sementara induknya (CHILD) cuma 3.
 // Kedalaman diambil dari tiga sumber, berurut dari yang paling pasti:
 //
-//   1. kolom `Level`        → dibaca apa adanya (berkas unduhan PRIMA)
+//   1. kolom `Level`        → TIPE baris dibaca apa adanya (berkas unduhan PRIMA);
+//                             induknya tetap dari rumus, Level + urutan cadangan
 //   2. rujukan rumus        → `SUM(F9:F12)` menyebut sendiri siapa anaknya
 //   3. posisi kolom kode    → jumlah kolom segmen yang terisi (formulir manual)
 //
@@ -96,6 +97,24 @@ export class StrukturDpaTidakTerbacaError extends Error {
   }
 }
 
+/**
+ * Excel Pergeseran PRIMA memuat dua sisi — sebelum geser (Vol·Harga·Jumlah) dan
+ * sesudahnya (Vol P·Harga P·Pergeseran) — dengan rumus perkalian di keduanya.
+ * Dibaca sebagai DPA, kolom Jumlah dipilih lewat hitungan rumus yang SERI, jadi
+ * sisi yang terbaca ditentukan isi data, bukan aturan; apa pun sisinya, hasil
+ * gesernya hilang. Keputusan pengguna 2026-10-02: tolak, minta Excel DPA murni.
+ */
+export class BerkasPergeseranError extends StrukturDpaTidakTerbacaError {
+  constructor() {
+    super(
+      'Berkas ini Excel Pergeseran, bukan DPA murni. Impor DPA hanya bisa membaca Excel DPA — '
+      + 'kalau Excel Pergeseran dimasukkan ke sini, angka hasil pergeserannya akan hilang. '
+      + 'Silakan unduh Excel DPA dari menu Cetak → DPA BLUD, lalu impor berkas itu.',
+    )
+    this.name = 'BerkasPergeseranError'
+  }
+}
+
 // ─── Lapis 1 & 2: peta kolom ─────────────────────────────────────────────────
 
 /**
@@ -123,6 +142,18 @@ function cariKolomBerjudul(grid: GridDpa, pola: RegExp): number[] {
 }
 
 const barisDataMulai = (grid: GridDpa): number => Math.max(...barisJudul(grid)) + 1
+
+/** Penandanya judul `Vol P` + `Harga P` — hanya ada di unduhan PRIMA (dokumen
+ *  maupun rekap Cetak), jadi formulir provinsi tidak ikut tertolak. */
+function berkasPergeseran(grid: GridDpa): boolean {
+  const judul = new Set<string>()
+  for (const r of barisJudul(grid)) {
+    for (let c = 1; c <= grid.jumlahKolom; c++) {
+      judul.add(grid.sel(r, c).teks.replace(/\s+/g, ' ').trim().toLowerCase())
+    }
+  }
+  return judul.has('vol p') && judul.has('harga p')
+}
 
 /**
  * Kolom Jumlah dicari dari kolom mana yang paling banyak memuat rumus
@@ -337,20 +368,23 @@ function kumpulkanMentah(grid: GridDpa, kol: PetaKolom, akhir: number): Mentah[]
     const uraian = bacaUraian(grid, r, kol)
     const kode = gabungKode(grid, r, kol)
     const selJumlah = grid.sel(r, kol.jumlah)
-    // Baris yang cuma menyisakan RUMUS — tanpa uraian, tanpa kode, tanpa hasil
-    // tersimpan — adalah sisa salin-tempel, bukan data. Kalau ikut dibaca, ia
-    // menempel sebagai anak baris di atasnya lewat penambatan posisi, dan baris
+    const labelLevel = kol.level != null ? grid.sel(r, kol.level).teks.toLowerCase() : ''
+    // Baris yang cuma menyisakan RUMUS — tanpa uraian, tanpa kode, angkanya
+    // kosong atau nol — adalah sisa salin-tempel, bukan data. Kalau ikut dibaca,
+    // ia menempel sebagai anak baris di atasnya lewat penambatan posisi, dan baris
     // itu berubah dari daun jadi agregator sehingga vol × harga miliknya
     // DIBUANG. Di formulir 2026, b.108 semacam ini menelan Rp 170 juta milik
     // b.107 dan menyeret selisih Rp 351 juta sampai ke akar.
-    if (!uraian && !kode && selJumlah.angka == null) continue
+    // Nol ikut dihitung sejak hasil rumus 0 tidak lagi dibuang (`nilaiSel`):
+    // b.108 menyimpan hasil 0, dulu terbaca kosong. Baris berlabel Level tidak
+    // pernah sisa — unduhan PRIMA menuliskannya di tiap baris, kosong pun sah.
+    if (!uraian && !kode && !selJumlah.angka && !labelLevel) continue
 
     let segmenTerisi = segmenKode(grid, r, kol).length
     // Kode satu kolom (unduhan PRIMA): kedalaman tidak bisa dari jumlah kolom.
     if (kol.kode.akhir === kol.kode.awal && segmenTerisi) segmenTerisi = 1
 
     const angka = bacaAngkaBaris(grid, r, kol)
-    const labelLevel = kol.level != null ? grid.sel(r, kol.level).teks.toLowerCase() : ''
     hasil.push({
       barisExcel: r,
       kode,
@@ -416,6 +450,7 @@ export interface OpsiBacaDpa {
 }
 
 export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBacaDpa {
+  if (berkasPergeseran(grid)) throw new BerkasPergeseranError()
   const kolom = petakanKolom(grid)
   const barisAkhirData = cariAkhirData(grid, kolom.jumlah)
   const mentah = kumpulkanMentah(grid, kolom, barisAkhirData)
@@ -433,7 +468,8 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   const indexDariBarisExcel = new Map(mentah.map((m, i) => [m.barisExcel, i]))
   const posisi = kedalamanPosisi(mentah)
 
-  // Induk menurut rumus agregasi — sumber paling tegas setelah kolom Level.
+  // Induk menurut rumus agregasi — sumber paling tegas, juga di berkas berkolom
+  // Level (kolom itu cuma memastikan TIPE; lihat cabang `pakaiLevel`).
   //
   // Satu baris bisa diklaim DUA induk kalau rumus kakeknya melompati anaknya
   // sendiri: di formulir 2026 b.482 berbunyi `S484+S489+...` (melewati 483)
@@ -473,8 +509,39 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   let induk: (number | null)[]
   let sumber: SumberHierarki
   if (pakaiLevel) {
+    // Induk dari RUMUS; kolom Level menentukan tipe dan jadi cadangan. Level +
+    // urutan baris (tumpukan) hanya benar kalau tiap anak tinggal di blok
+    // induknya — DPA 2026 menyimpan baris Level 1 tanpa induk di tengah blok
+    // Belanja Jasa, dan tumpukan memindahkan 311 baris sesudahnya ke bawah akar
+    // palsu itu (17 induk salah, total Rp 103 M lawan Rp 68 M di berkas). Rumus
+    // SUM menyebut anaknya sendiri, tak peduli urutan. Klaim yang induknya tidak
+    // lebih dangkal dari anaknya ditolak: itu rumus sunting tangan, dan aturan
+    // inilah yang menjamin induk tidak melingkar.
     const peringkat = mentah.map(m => RANTAI_TIPE.indexOf(m.level as TipeBaris))
-    induk = indukDariKedalaman(peringkat)
+    const indukLevel = indukDariKedalaman(peringkat)
+    let klaimDitolak = 0
+    let ditebakLevel = 0
+    induk = mentah.map((_, i) => {
+      // Disaring DULU baru dipilih yang terdekat: klaim palsu yang kebetulan
+      // terdekat tidak boleh menyingkirkan klaim sah dari induk aslinya.
+      const pengklaimSah = (pengklaim.get(i) ?? []).filter(p => peringkat[p] < peringkat[i])
+      if (pengklaimSah.length) return Math.max(...pengklaimSah)
+      if (pengklaim.has(i)) klaimDitolak++
+      else if (indukLevel[i] != null) ditebakLevel++
+      return indukLevel[i]
+    })
+    if (klaimDitolak) {
+      peringatan.push(
+        `${klaimDitolak} baris disebut anak oleh rumus baris yang levelnya sama atau lebih dalam — `
+        + 'kemungkinan rumusnya disunting tangan. Induk baris itu diambil dari kolom Level.',
+      )
+    }
+    if (ditebakLevel) {
+      peringatan.push(
+        `${ditebakLevel} baris tidak disebut rumus penjumlahan mana pun — induknya diambil dari `
+        + 'kolom Level dan urutan baris. Periksa pratinjau pohon sebelum menyimpan.',
+      )
+    }
     sumber = 'level'
   } else if (dipakaiRumus > 0) {
     induk = mentah.map((_, i) => indukRumus[i] ?? indukPosisi[i])
@@ -639,10 +706,13 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
   // angkanya tidak cocok ikut ditandai — 54 baris di formulir Juli, dan hampir
   // semuanya cuma mewarisi selisih dari bawah. Daftar sepanjang itu melatih
   // orang mengabaikan panelnya.
+  // Kalimatnya bukan "tidak menyimpan hasil rumusnya": sejak hasil 0 tidak lagi
+  // dibuang (`nilaiSel`), di keempat formulir kalibrasi yang tersisa sel Jumlah
+  // yang memang kosong — rumus tanpa hasil di sana nol.
   const takTerbandingkan = baris.filter(b => b.jumlahFile == null)
   if (takTerbandingkan.length) {
     peringatan.push(
-      `${takTerbandingkan.length} baris tidak menyimpan hasil rumusnya di berkas `
+      `${takTerbandingkan.length} baris tidak membawa angka di kolom Jumlah berkas `
       + `(b.${takTerbandingkan.slice(0, 5).map(b => b.barisExcel).join(', b.')}`
       + `${takTerbandingkan.length > 5 ? ', …' : ''}) — angkanya tetap dihitung dari `
       + 'volume × harga, tapi tidak bisa diadu dengan angka di berkas.',

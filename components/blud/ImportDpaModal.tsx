@@ -66,7 +66,7 @@ interface HasilPreview {
 const rp =(n: number | null | undefined) => (n == null ? '—' : Number(n).toLocaleString('id-ID'))
 
 const LABEL_SUMBER: Record<string, string> = {
-  level:  'kolom Level (unduhan PRIMA — pasti)',
+  level:  'rumus penjumlahan + kolom Level (unduhan PRIMA)',
   rumus:  'rujukan rumus berkas (SUM/penjumlahan)',
   posisi: 'posisi kolom kode (DITEBAK — periksa pohonnya)',
 }
