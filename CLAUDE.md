@@ -140,7 +140,7 @@ Header file/section comment tetap OK untuk navigasi (1-2 baris ringkas). Hindari
 ---
 
 ## Stack
-Next.js 16.2.6 · React 19 · TypeScript · MySQL 8.4 (mysql2) · JWT (jose) · Zod · Upstash Redis (atau Redis lokal) · Cloudflare Turnstile
+Next.js 16.3.8 · React 19 · TypeScript · MySQL 8.4 (mysql2) · JWT (jose) · Zod · Upstash Redis (atau Redis lokal) · Cloudflare Turnstile
 Branch aktif: **mysql** — referensi schema: `docs/schema-mysql.sql` (bukan schema.sql/migrations — itu Postgres lama)
 
 **Deployment**: server IT kantor (Linux/Windows Server) + PM2 + Nginx + MySQL EVENT/crontab — **bukan Vercel**. Untuk cron job, pakai MySQL EVENT (rekomendasi) atau Linux crontab → JANGAN tulis logic yg assume `vercel.json` cron.
