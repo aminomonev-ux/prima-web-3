@@ -21,6 +21,7 @@ export {
   assertBludVersion,
   bumpBludVersion,
   acquireBludLock,
+  acquireBludLockBerbagi,
   dropBludVersion,
 } from '@/lib/data/locks'
 
@@ -76,11 +77,17 @@ export const BLUD_PERIODE_ENTITY = 'realisasi_periode'
  * `assertBludVersion` boleh mendahului — itu locking read, tidak melahirkan
  * snapshot.
  *
- * Selalu TERLUAR, dan itu yang membuatnya bebas-buntu: tidak ada jalur yang
- * memegang kunci pagu atau baris periode lebih dulu lalu meminta yang ini. Kalau
- * dipakaikan `BLUD_PERIODE_ENTITY` justru terbentuk siklus — hapus-versi
- * (periode-tahun → pagu) × Tutup Kas (periode-tahun → baris bulan) × catat BKU
- * (baris bulan → pagu).
+ * Selalu TERLUAR di jalur versi, dan itu yang membuatnya bebas-buntu: tidak ada
+ * jalur versi yang memegang kunci pagu atau baris periode lebih dulu lalu meminta
+ * yang ini. Kalau dipakaikan `BLUD_PERIODE_ENTITY` justru terbentuk siklus —
+ * hapus-versi (periode-tahun → pagu) × Tutup Kas (periode-tahun → baris bulan) ×
+ * catat BKU (baris bulan → pagu).
+ *
+ * Jalur belanja (R7) memegangnya BERBAGI, sesudah baris periode & nomor kuitansi
+ * tapi SEBELUM kunci pagu. Tetap bebas-buntu: jalur versi tidak pernah meminta baris
+ * periode/kuitansi, dan urutan "tahun → pagu" sama dengan jalur versi. Tanpa ini
+ * belanja yang commit di sela simpan/hapus versi lolos dengan pagu basi — dibuktikan
+ * `scripts/test-blud-race-perubahan.mjs`.
  */
 export const BLUD_VERSI_ENTITY = 'blud_versi_tahun'
 

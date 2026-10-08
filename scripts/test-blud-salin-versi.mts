@@ -75,6 +75,7 @@ const dpaBaris = (o: Partial<DpaBaris> & { row_id: string }): DpaBaris => ({
   penanggung_jawab: null, keterangan: null, tipe_baris: 'CHILD',
   anggaran_key: 'AK-1', parent_id: null, urutan: 0,
   origin: 'MANUAL', usulan_item_id: null, usulan_no: null,
+  vol_sebelum: null, satuan_sebelum: null, harga_sebelum: null, jumlah_sebelum: null,
   ...o,
 })
 

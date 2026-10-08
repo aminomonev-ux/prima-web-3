@@ -61,6 +61,7 @@ const tidur = (ms) => new Promise(r => setTimeout(r, ms))
 
 async function bersih(c) {
   await c.query('DELETE FROM blud_realisasi_tx WHERE tahun_anggaran = ?', [TAHUN]) // alokasi CASCADE
+  await c.query('DELETE FROM blud_dpa_perubahan WHERE tahun_anggaran = ?', [TAHUN])
   await c.query('DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ?', [TAHUN])
   await c.query('DELETE FROM dpa_blud WHERE tahun_anggaran = ?', [TAHUN])
   await c.query("DELETE FROM blud_locks WHERE key_id LIKE ? OR key_id LIKE ?", [`${TAHUN}:%`, `${TAHUN}`])
@@ -103,29 +104,45 @@ const toStr = v => (v instanceof Date
   : String(v).slice(0, 10))
 
 /**
+ * Cermin `sumberPaguTahun` (lib/blud/sumber-pagu.ts, aturan DPA Perubahan §8):
+ * M = penanda Perubahan terakhir yang masih punya DPA >= versi_mulai-nya; pagu =
+ * pergeseran terbaru beracuan >= M, kalau tidak ada → DPA terbaru. `tanpa` = versi
+ * pergeseran yang dibayangkan sudah terhapus (penerus).
+ */
+async function sumberPagu(c, tanpa = null) {
+  const [pn] = await c.query('SELECT versi_mulai FROM blud_dpa_perubahan WHERE tahun_anggaran = ? ORDER BY versi_mulai', [TAHUN])
+  const [dx] = await c.query('SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ?', [TAHUN])
+  const dpa = dx[0]?.v ? toStr(dx[0].v) : null
+  const hidup = pn.map(r => toStr(r.versi_mulai)).filter(m => dpa !== null && m <= dpa)
+  const M = hidup.length ? hidup[hidup.length - 1] : null
+  const [px] = await c.query(
+    `SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ?
+       AND (? IS NULL OR dpa_versi_tanggal >= ?) AND (? IS NULL OR versi_tanggal <> ?)`,
+    [TAHUN, M, M, tanpa, tanpa])
+  const pg = px[0]?.v ? toStr(px[0].v) : null
+  if (pg) return { tabel: 'pergeseran_dpa', versi: pg }
+  return dpa ? { tabel: 'dpa_blud', versi: dpa } : { tabel: null, versi: null }
+}
+
+/**
  * `pagarHapusVersi` + `paguPenerus` untuk pergeseran_dpa. Memulangkan alasan
  * penolakan, atau null kalau boleh lanjut.
  */
 async function pagarHapus(c, versi) {
-  const [mx] = await c.query('SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ?', [TAHUN])
-  const max = mx[0]?.v ? toStr(mx[0].v) : null
-  if (max !== versi) return null                      // bukan sumber pagu → lewat
+  const kini = await sumberPagu(c)
+  if (kini.tabel !== 'pergeseran_dpa' || kini.versi !== versi) return null   // bukan sumber pagu → lewat
 
-  const [pv] = await c.query(
-    'SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ? AND versi_tanggal < ?', [TAHUN, versi])
-  const penerus = pv[0]?.v ? toStr(pv[0].v) : null
-
+  const penerus = await sumberPagu(c, versi)
   let pagu = 0
-  if (penerus) {
+  if (penerus.tabel === 'pergeseran_dpa') {
     const [rows] = await c.query(
       'SELECT pergeseran AS p FROM pergeseran_dpa WHERE tahun_anggaran = ? AND versi_tanggal = ? AND anggaran_key = ?',
-      [TAHUN, penerus, KEY])
+      [TAHUN, penerus.versi, KEY])
     pagu = Number(rows[0]?.p ?? 0)
-  } else {
+  } else if (penerus.tabel === 'dpa_blud') {
     const [rows] = await c.query(
-      `SELECT jumlah AS p FROM dpa_blud WHERE tahun_anggaran = ? AND anggaran_key = ?
-        AND versi_tanggal = (SELECT MAX(versi_tanggal) FROM dpa_blud WHERE tahun_anggaran = ?)`,
-      [TAHUN, KEY, TAHUN])
+      'SELECT jumlah AS p FROM dpa_blud WHERE tahun_anggaran = ? AND versi_tanggal = ? AND anggaran_key = ?',
+      [TAHUN, penerus.versi, KEY])
     pagu = Number(rows[0]?.p ?? 0)
   }
 

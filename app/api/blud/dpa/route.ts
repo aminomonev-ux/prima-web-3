@@ -4,7 +4,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi, BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError, BludPaguDibawahRealisasiError, BludHistorisJadiPaguError } from '@/lib/blud/data'
+import {
+  getDpaHistory, getDpaByDate, getDpaLatestDate, getDpaVersion, getTahunList, saveDpa, deleteDpaVersi,
+  BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludVersiDirujukError,
+  BludPaguDibawahRealisasiError, BludHistorisJadiPaguError,
+  BludSasaranPerubahanError, BludDasarPerubahanBergeserError, BludBarisDasarHilangError,
+  BludPaksaPerubahanError, BludVersiDasarError,
+} from '@/lib/blud/data'
+import { BludPerubahanGandaError } from '@/lib/blud/perubahan-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
@@ -124,7 +131,7 @@ export async function POST(req: NextRequest) {
   }
   const {
     tahun_anggaran, versi_tanggal, rows, force, expected_version, sentinel_ack,
-    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan, asal_berkas, asal_impor, entri_historis,
+    turunkan_paksa, alasan_turun, asal_salin, asal_pulihkan, asal_berkas, asal_impor, asal_perubahan, entri_historis,
   } = parsed.data
 
   // Sejalan dengan jalur Pergeseran: menembus §4.3 harus disengaja DAN beralasan,
@@ -155,7 +162,7 @@ export async function POST(req: NextRequest) {
 
     const result = await saveDpa(
       tahun_anggaran, versi_tanggal, recalced, session.userId,
-      expected_version, force, turunkan_paksa, entri_historis,
+      expected_version, force, turunkan_paksa, entri_historis, asal_perubahan ?? null,
     )
 
     if (result.bentrokPagu.length > 0) {
@@ -195,7 +202,14 @@ export async function POST(req: NextRequest) {
       + `${asal_berkas ? ` · dimuat dari berkas "${asal_berkas.nama}" (versi ${asal_berkas.versi_tanggal}, simpan ke-${asal_berkas.versi_ke}, ${asal_berkas.disimpan_pada})` : ''}`
       // Pengganti `BLUD_DPA_IMPORT_COMMIT` yang dibuang bersama jalur tulis di
       // modal impor. Tanpa baris ini, versi hasil impor tak terbedakan dari ketikan.
-      + `${asal_impor ? ` · diimpor dari "${asal_impor.berkas}" (lembar "${asal_impor.lembar}", ${asal_impor.baris} baris terbaca)` : ''}`,
+      + `${asal_impor ? ` · diimpor dari "${asal_impor.berkas}" (lembar "${asal_impor.lembar}", ${asal_impor.baris} baris terbaca)` : ''}`
+      // Babak Perubahan. Yang MEMBUAT penanda disebut terang-terangan: tabel penanda
+      // menyimpan keadaan berjalan, baris ini yang menyimpan ceritanya.
+      + `${result.perubahan
+        ? (result.perubahan.dibuat
+          ? ` · MEMBUAT DPA PERUBAHAN ke-${result.perubahan.ke} (dasar ${result.perubahan.sumber_dasar === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} ${result.perubahan.versi_dasar})`
+          : ` · versi DPA Perubahan ke-${result.perubahan.ke}`)
+        : ''}`,
     })
     if (pjConflicts.length > 0) {
       await writeAuditLog({
@@ -269,6 +283,23 @@ export async function POST(req: NextRequest) {
     if (err instanceof BludPaguDibawahRealisasiError) {
       return NextResponse.json({
         ok: false, code: 'PAGU_DIBAWAH_REALISASI', error: err.message, detail: err.bentrok,
+        // R8: di babak Perubahan layar tidak boleh menawarkan "simpan paksa".
+        bisa_dipaksa: err.bisaDipaksa,
+      }, { status: 409 })
+    }
+    // DPA Perubahan — semuanya 409: barisnya sah, keadaan di server yang membuatnya
+    // belum boleh mendarat (pola dua pagar penutupan di route Pergeseran).
+    const perubahanGagal = err instanceof BludSasaranPerubahanError ? 'SASARAN_PERUBAHAN_TERPAKAI'
+      : err instanceof BludDasarPerubahanBergeserError ? 'DASAR_PERUBAHAN_BERGESER'
+      : err instanceof BludBarisDasarHilangError ? 'BARIS_DASAR_DIHAPUS'
+      : err instanceof BludPaksaPerubahanError ? 'TURUNKAN_PAKSA_DITUTUP'
+      : err instanceof BludVersiDasarError ? 'VERSI_DASAR_PERUBAHAN'
+      : err instanceof BludPerubahanGandaError ? 'PERUBAHAN_GANDA'
+      : null
+    if (perubahanGagal) {
+      return NextResponse.json({
+        ok: false, code: perubahanGagal, error: (err as Error).message,
+        ...(err instanceof BludBarisDasarHilangError ? { detail: err.hilang } : {}),
       }, { status: 409 })
     }
     console.error('[API /blud/dpa POST]', err)
@@ -337,7 +368,9 @@ export async function DELETE(req: NextRequest) {
       eventType: 'BLUD_DELETE_DPA_VERSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Hapus DPA ${parsedTahun.data}/${parsed.data}: ${result.dpa_rows} baris dpa_blud + ${result.rekap_pk_rows} baris rekap_pk · Alasan: ${parsedAlasan.data}`,
+      detail:    `Hapus DPA ${parsedTahun.data}/${parsed.data}: ${result.dpa_rows} baris dpa_blud + ${result.rekap_pk_rows} baris rekap_pk`
+        + `${result.penanda_dibuang > 0 ? ` · ${result.penanda_dibuang} penanda DPA Perubahan ikut dibuang (pagu kembali ke babak sebelumnya)` : ''}`
+        + ` · Alasan: ${parsedAlasan.data}`,
     })
     return NextResponse.json({
       ok: true,
@@ -347,6 +380,16 @@ export async function DELETE(req: NextRequest) {
   } catch (err) {
     // T1: ditahan pagar hapus — 409 dengan daftar barisnya, bentuk sama dengan
     // §4.3 di jalur simpan supaya panel bentrok di klien bisa dipakai ulang.
+    if (err instanceof BludVersiDasarError) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_DELETE_DPA_VERSI',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `DITOLAK — hapus DPA ${parsedTahun.data}/${parsed.data}: ${err.message} · Alasan: ${parsedAlasan.data}`,
+      })
+      return NextResponse.json({ ok: false, code: 'VERSI_DASAR_PERUBAHAN', error: err.message }, { status: 409 })
+    }
     if (err instanceof BludVersiTerpakaiError || err instanceof BludVersiDirujukError) {
       // Percobaan hapus yang ditahan tetap dicatat: yang gagal hari ini biasanya
       // dicoba lagi besok lewat jalan lain.

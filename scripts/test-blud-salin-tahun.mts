@@ -57,6 +57,7 @@ const dpaAsli: DpaBaris = {
   origin: 'USULAN',
   usulan_item_id: 4412,
   usulan_no: 'USL/2026/0088',
+  vol_sebelum: null, satuan_sebelum: null, harga_sebelum: null, jumlah_sebelum: null,
 }
 
 // ── A. DPA murni → tahun baru ────────────────────────────────────────────────

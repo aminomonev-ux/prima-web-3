@@ -10,6 +10,7 @@ import {
   getPergeseranMutasi,
   BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludHistorisJadiPaguError,
   BludPaguDibawahRealisasiError, BludSasaranTutupTerpakaiError,
+  BludAcuanSebelumPerubahanError, BludVersiDasarError,
 } from '@/lib/blud/data'
 import { BludSudahDitutupError, getTutupPergeseran } from '@/lib/blud/tutup-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
@@ -371,7 +372,19 @@ export async function POST(req: NextRequest) {
     if (err instanceof BludPaguDibawahRealisasiError) {
       return NextResponse.json({
         ok: false, code: 'PAGU_DIBAWAH_REALISASI', error: err.message, detail: err.bentrok,
+        bisa_dipaksa: err.bisaDipaksa,
       }, { status: 409 })
+    }
+    // DPA Perubahan (§9, §6): pergeseran babak lama disimpan ulang di babak baru, dan
+    // versi yang jadi dasar Perubahan. Keduanya 409 — keadaan server, bukan isian salah.
+    if (err instanceof BludAcuanSebelumPerubahanError) {
+      return NextResponse.json({
+        ok: false, code: 'PERGESERAN_ACUAN_SEBELUM_PERUBAHAN', error: err.message,
+        acuan: err.acuan, mulai: err.mulai,
+      }, { status: 409 })
+    }
+    if (err instanceof BludVersiDasarError) {
+      return NextResponse.json({ ok: false, code: 'VERSI_DASAR_PERUBAHAN', error: err.message }, { status: 409 })
     }
     // Dua pagar penutupan. Keduanya 409, bukan 400: barisnya sah, keadaan di
     // server yang membuatnya belum boleh mendarat — dan keduanya hilang sendiri
@@ -463,6 +476,16 @@ export async function DELETE(req: NextRequest) {
       ...result,
     })
   } catch (err) {
+    if (err instanceof BludVersiDasarError) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_DELETE_PERGESERAN_VERSI',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `DITOLAK — hapus Pergeseran ${parsedTahun.data}/${parsed.data}: ${err.message} · Alasan: ${parsedAlasan.data}`,
+      })
+      return NextResponse.json({ ok: false, code: 'VERSI_DASAR_PERUBAHAN', error: err.message }, { status: 409 })
+    }
     // T1: menghapus pergeseran terbaru memundurkan pagu setahun — ditahan kalau
     // ada baris yang jadi minus. Bentuk `detail` sama dengan §4.3 di jalur simpan.
     if (err instanceof BludVersiTerpakaiError) {

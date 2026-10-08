@@ -35,6 +35,7 @@ function bab(judul: string) { console.log(`\n── ${judul} ──`) }
 const dasar = {
   id: 0, versi_tanggal: '2026-01-01', satuan: null, penanggung_jawab: null, keterangan: null,
   anggaran_key: null, origin: 'MANUAL' as const, usulan_item_id: null, usulan_no: null,
+  vol_sebelum: null, satuan_sebelum: null, harga_sebelum: null, jumlah_sebelum: null,
 }
 
 /** 1 akar → 1 master → 3 daun. Total 1.000.000. */

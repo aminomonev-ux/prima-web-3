@@ -35,6 +35,12 @@ export function dpaKeInput(d: DpaBaris): DpaBarisInput {
     origin:           d.origin ?? 'MANUAL',
     usulan_item_id:   d.usulan_item_id ?? null,
     usulan_no:        d.usulan_no ?? null,
+    // Dipantulkan apa adanya supaya layar bisa menampilkannya. Yang dikirim balik
+    // tidak dipakai server — ia mengisinya sendiri dari versi dasar (konsep §6).
+    vol_sebelum:      d.vol_sebelum ?? null,
+    satuan_sebelum:   d.satuan_sebelum ?? null,
+    harga_sebelum:    d.harga_sebelum ?? null,
+    jumlah_sebelum:   d.jumlah_sebelum ?? null,
   }
 }
 
@@ -144,9 +150,13 @@ export function dpaKeTahunBaruInput(d: DpaBaris, urutan: number): DpaBarisInput 
   }
 }
 
+/** Jejak usulan sebuah baris DPA — pergeseran tidak menyimpannya sendiri. */
+export type JejakUsulan = Pick<DpaBaris, 'origin' | 'usulan_item_id' | 'usulan_no'>
+
 /**
- * Baris Pergeseran tahun sumber → titik awal form DPA tahun berikutnya, memakai
- * pagu PASCA-geser.
+ * Baris Pergeseran → baris DPA, memakai pagu PASCA-geser. Dasar "Jadikan DPA
+ * Perubahan" (konsep §5 langkah 3): tahunnya SAMA dan barisnya SAMA, jadi
+ * `anggaran_key` DIBAWA — realisasi yang menempel tetap menempel.
  *
  * Bisa satu lawan satu karena `pergeseran_dpa` menyimpan pasangan vol/harga
  * sendiri: `pergeseran = vol_p × harga_p` (`recalcPergeseranJumlah`), invarian
@@ -156,13 +166,17 @@ export function dpaKeTahunBaruInput(d: DpaBaris, urutan: number): DpaBarisInput 
  * balik jadi vol × harga lama tanpa pesan apa pun — itu yang tidak terjadi.
  *
  * `satuan` diambil apa adanya (Pergeseran tidak punya `satuan_p` — satuannya
- * memang cermin DPA), dan `bertambah_berkurang` tidak dibawa sama sekali:
- * selisih terhadap DPA hanya bermakna di dalam tahunnya sendiri. Alasan yang
- * sama membuang `bertambah`/`berkurang` — uraian geseran tahun lalu tidak
- * menjelaskan apa pun tentang pagu awal tahun baru. Tipe tujuannya
- * `DpaBarisInput` yang memang tidak punya kolom itu, jadi ini terjaga sendiri.
+ * memang cermin DPA), dan `bertambah_berkurang`/`bertambah`/`berkurang` tidak
+ * dibawa: tipe tujuannya `DpaBarisInput` yang memang tidak punya kolom itu.
+ *
+ * Pergeseran tidak menyimpan jejak usulan (`origin`/`usulan_*`), jadi jejak itu
+ * diambil dari baris DPA ACUAN-nya lewat `row_id`. Tanpa itu, Sentinel anti-dobel
+ * usulan buta di versi Perubahan. Kolom Sebelum TIDAK diisi di sini — milik server.
  */
-export function pergeseranKeTahunBaruInput(d: PergeseranBaris, urutan: number): DpaBarisInput {
+export function pergeseranKeDpaInput(
+  d: PergeseranBaris, urutan: number, jejakDpaAcuan?: ReadonlyMap<string, JejakUsulan>,
+): DpaBarisInput {
+  const jejak = jejakDpaAcuan?.get(d.row_id)
   return {
     kode_rekening:    d.kode_rekening,
     uraian:           d.uraian,
@@ -174,11 +188,27 @@ export function pergeseranKeTahunBaruInput(d: PergeseranBaris, urutan: number): 
     keterangan:       d.keterangan ?? '',
     tipe_baris:       d.tipe_baris,
     row_id:           d.row_id,
-    anggaran_key:     null,
+    anggaran_key:     d.anggaran_key ?? null,
     parent_id:        d.parent_id,
     urutan,
-    origin:           'MANUAL',
-    usulan_item_id:   null,
-    usulan_no:        null,
+    origin:           jejak?.origin ?? 'MANUAL',
+    usulan_item_id:   jejak?.usulan_item_id ?? null,
+    usulan_no:        jejak?.usulan_no ?? null,
+  }
+}
+
+/**
+ * Baris Pergeseran tahun sumber → titik awal form DPA tahun berikutnya. Pembungkus
+ * `pergeseranKeDpaInput` yang MELEPAS jangkar & jejak usulan (alasan di kepala
+ * bagian ini) — bukan salinan ketiga daftar kolom: kolom yang lupa didaftar di
+ * salah satu salinan terbuang tanpa suara.
+ */
+export function pergeseranKeTahunBaruInput(d: PergeseranBaris, urutan: number): DpaBarisInput {
+  return {
+    ...pergeseranKeDpaInput(d, urutan),
+    anggaran_key:   null,
+    origin:         'MANUAL',
+    usulan_item_id: null,
+    usulan_no:      null,
   }
 }

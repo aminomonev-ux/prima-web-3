@@ -238,6 +238,11 @@ export interface DpaBaris {
   origin: 'MANUAL' | 'USULAN'
   usulan_item_id: number | null
   usulan_no: string | null
+  /** DPA Perubahan — MILIK SERVER, dari versi dasar. `null` = murni / baris yang lahir di Perubahan. */
+  vol_sebelum: number | null
+  satuan_sebelum: string | null
+  harga_sebelum: number | null
+  jumlah_sebelum: number | null
 }
 
 export interface DpaBarisInput {
@@ -257,6 +262,12 @@ export interface DpaBarisInput {
   origin?: 'MANUAL' | 'USULAN'
   usulan_item_id?: number | null
   usulan_no?: string | null
+  // Opsional: foto riwayat & cadangan Drive lahir sebelum kolom ini ada. Isinya dari
+  // klien tidak pernah dipakai — server mengisinya sendiri (konsep §6).
+  vol_sebelum?: number | null
+  satuan_sebelum?: string | null
+  harga_sebelum?: number | null
+  jumlah_sebelum?: number | null
 }
 
 export interface PergeseranBaris {

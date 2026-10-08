@@ -28,6 +28,7 @@ function dpa(): DpaBaris[] {
   const dasar = {
     id: 0, versi_tanggal: '2026-01-01', satuan: null,
     anggaran_key: null, origin: 'MANUAL' as const, usulan_item_id: null, usulan_no: null,
+    vol_sebelum: null, satuan_sebelum: null, harga_sebelum: null, jumlah_sebelum: null,
   }
   return [
     { ...dasar, id: 1, kode_rekening: '5', uraian: 'BELANJA', vol: null, harga: null, jumlah: 300,

@@ -18,12 +18,15 @@ import {
 // Pengaturan bisa memakai komponen yang sama.
 import type { BentrokPagu } from './pagu'
 import {
-  sumberPaguPenerus, versiJadiSumberPagu, tabelSumber, type TabelAnggaran,
+  sumberPaguTahun, sumberPaguPenerus, versiJadiSumberPagu, tabelSumber,
+  penandaPerubahan, penandaUntukVersi,
+  type TabelAnggaran, type VersiTulis, type PenandaPerubahan,
 } from './sumber-pagu'
 import { ensureAnggaranKey } from './anggaran-key'
 import { toDateStr, formatTanggalId, labelPeriodeVersi } from './tanggal'
 import { catatRiwayatSimpan } from './riwayat-simpan'
 import { catatTutupPergeseran, hapusTutupTerkaitVersi } from './tutup-data'
+import { catatPerubahan, bersihkanPenandaYatim } from './perubahan-data'
 import type { MutasiInput } from './mutasi'
 import type {
   DpaBaris, DpaBarisInput,
@@ -156,17 +159,165 @@ export class BludVersiTerpakaiError extends Error {
  * larangan mutlak.
  */
 export class BludPaguDibawahRealisasiError extends Error {
-  constructor(public bentrok: BentrokPagu[]) {
+  /**
+   * `bisaDipaksa` = apakah layar boleh menawarkan "simpan paksa". Di babak
+   * Perubahan TIDAK (R8): kalimat "simpan ulang dengan konfirmasi" di sana menyuruh
+   * orang menekan tombol yang pasti ditolak.
+   */
+  constructor(public bentrok: BentrokPagu[], public bisaDipaksa = true) {
     const t = bentrok[0]
     const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
     super(
       `${bentrok.length} baris anggaran turun di bawah realisasi yang sudah terjadi — `
       + `${t.kode_rekening} ${t.hilang ? 'hilang dari versi ini' : `jadi ${rp(t.pagu_baru)}`} `
       + `padahal sudah terserap ${rp(t.terserap)} (kurang ${rp(t.minus)}). `
-      + 'Perbaiki angkanya, atau simpan ulang dengan konfirmasi kalau penurunan ini memang disengaja.',
+      + (bisaDipaksa
+        ? 'Perbaiki angkanya, atau simpan ulang dengan konfirmasi kalau penurunan ini memang disengaja.'
+        : 'Naikkan angkanya sampai menutup realisasi, atau betulkan dulu transaksinya di Buku Kas kalau salah catat.'),
     )
     this.name = 'BludPaguDibawahRealisasiError'
   }
+}
+
+// ─── DPA PERUBAHAN (docs/CONCEPT-blud-dpa-perubahan.md) ──────────────────────
+
+/**
+ * §5.1 — sasaran Perubahan harus versi DPA BARU, sesudah semua versi DPA yang ada.
+ *
+ * Dua bentuk, satu sebab. Tanggal yang sudah berisi DPA: menyimpan di situ menimpa
+ * DPA itu dan mengubah jenisnya — dan pergeseran yang mengacunya tiba-tiba "mengacu
+ * Perubahan", jadi pagunya mundur ke geseran lama tanpa pesan. Tanggal SEBELUM DPA
+ * terakhir: penandanya akan menjadikan DPA murni yang lebih baru ikut berlabel
+ * Perubahan. Konsep cuma menyebut yang pertama karena ia mengandaikan sasarannya
+ * hari ini; pemilih periode membuat yang kedua mungkin.
+ */
+export class BludSasaranPerubahanError extends Error {
+  constructor(public sasaran: string, public dpaTerakhir: string) {
+    const terpakai = dpaTerakhir === sasaran
+    super(
+      (terpakai
+        ? `${formatTanggalId(sasaran)} sudah punya simpanan DPA. `
+        : `Sudah ada versi DPA yang lebih baru (${formatTanggalId(dpaTerakhir)}) dari ${formatTanggalId(sasaran)}. `)
+      + 'DPA Perubahan harus lahir sebagai versi baru sesudah semua versi DPA yang ada — '
+      + 'kalau tidak, DPA yang sudah ada ikut berubah jenis jadi Perubahan.\n'
+      + (terpakai
+        ? 'Simpan Perubahan besok, atau hapus dulu versi DPA hari ini kalau memang salah simpan.'
+        : 'Pilih periode bulan berjalan, lalu simpan.'),
+    )
+    this.name = 'BludSasaranPerubahanError'
+  }
+}
+
+/** Dasar yang dilihat orangnya sudah bukan sumber pagu saat Simpan ditekan. */
+export class BludDasarPerubahanBergeserError extends Error {
+  constructor(public klaim: string, public kini: string | null) {
+    super(
+      `Angka yang dijadikan dasar Perubahan sudah bukan pagu yang berlaku (dasar di layar: ${klaim}`
+      + `${kini ? `, yang berlaku sekarang: ${kini}` : ', sekarang tahun ini tidak punya pagu'}). `
+      + 'Tekan Jadikan DPA Perubahan lagi supaya isinya diambil dari versi yang berlaku sekarang.',
+    )
+    this.name = 'BludDasarPerubahanBergeserError'
+  }
+}
+
+/** R4 — baris yang sudah ada sebelum Perubahan hilang dari simpanan. */
+export class BludBarisDasarHilangError extends Error {
+  constructor(public hilang: { anggaran_key: string; kode_rekening: string; uraian: string }[]) {
+    const t = hilang[0]
+    super(
+      `${hilang.length} baris yang sudah ada sebelum Perubahan hilang dari simpanan ini — `
+      + `mis. ${[t.kode_rekening, t.uraian].filter(Boolean).join(' ')}. `
+      + 'Di DPA Perubahan baris lama dinolkan, bukan dihapus: kosongkan Vol/Harga-nya, '
+      + 'supaya dokumen tetap mencatat angka sebelumnya menjadi Rp 0.',
+    )
+    this.name = 'BludBarisDasarHilangError'
+  }
+}
+
+/** R6 — pergeseran di babak Perubahan masih mengacu DPA sebelum Perubahan. */
+export class BludAcuanSebelumPerubahanError extends Error {
+  constructor(public versi: string, public acuan: string, public mulai: string, public ke: number) {
+    super(
+      `Pergeseran ${formatTanggalId(versi)} masih mengacu DPA ${formatTanggalId(acuan)}, padahal `
+      + `DPA Perubahan ke-${ke} berlaku sejak ${formatTanggalId(mulai)}. `
+      + 'Tekan Buat Pergeseran supaya isinya diambil dari DPA Perubahan.',
+    )
+    this.name = 'BludAcuanSebelumPerubahanError'
+  }
+}
+
+/** R8 — "turunkan paksa" ditutup untuk versi DPA Perubahan (keputusan #10). */
+export class BludPaksaPerubahanError extends Error {
+  constructor(public versi: string) {
+    super(
+      `DPA Perubahan (${formatTanggalId(versi)}) tidak boleh menganggarkan kurang dari uang yang sudah terpakai, `
+      + 'jadi simpan paksa tidak tersedia di sini. Naikkan angkanya sampai menutup realisasi, '
+      + 'atau betulkan dulu transaksinya di Buku Kas kalau salah catat.',
+    )
+    this.name = 'BludPaksaPerubahanError'
+  }
+}
+
+/**
+ * §6 — versi dasar Perubahan dikunci. Kolom Sebelum diambil dari situ pada SETIAP
+ * simpan, jadi mengubahnya menggeser kolom Sebelum di dokumen yang sudah dicetak.
+ * Pola `BludVersiDirujukError`.
+ */
+export class BludVersiDasarError extends Error {
+  constructor(public tabel: TabelAnggaran, public versi: string, public mulai: string, public ke: number) {
+    super(
+      `${tabel === 'pergeseran_dpa' ? 'Pergeseran' : 'DPA'} ${formatTanggalId(versi)} adalah dasar `
+      + `DPA Perubahan ke-${ke} (${formatTanggalId(mulai)}) — kolom Sebelum diambil dari situ, `
+      + 'jadi versi ini tidak bisa disimpan ulang maupun dihapus. '
+      + 'Kalau dasarnya memang salah, hapus dulu DPA Perubahan-nya.',
+    )
+    this.name = 'BludVersiDasarError'
+  }
+}
+
+/** §6 — dipanggil di keenam jalur tulis/hapus, dari daftar penanda yang dibaca di bawah kunci. */
+function tolakVersiDasar(penanda: PenandaPerubahan[], tabel: TabelAnggaran, versi: string): void {
+  const sumber = tabel === 'pergeseran_dpa' ? 'PERGESERAN' : 'DPA'
+  const i = penanda.findIndex(p => p.sumber_dasar === sumber && p.versi_dasar === versi)
+  if (i >= 0) throw new BludVersiDasarError(tabel, versi, penanda[i].versi_mulai, i + 1)
+}
+
+interface BarisSebelum {
+  kode_rekening: string; uraian: string
+  vol: number | null; satuan: string | null; harga: number | null; jumlah: number
+}
+
+/**
+ * Isi versi dasar per `anggaran_key` — bahan kolom Sebelum (§6) dan pagar R4.
+ * Pergeseran: angka SESUDAH digeser (`vol_p`/`harga_p`/`pergeseran`), karena itu
+ * yang jadi pagu dan yang dipindah ke kolom DPA saat Perubahan dibuat.
+ */
+async function barisDasar(tx: TxSql, tahun: number, p: PenandaPerubahan): Promise<Map<string, BarisSebelum>> {
+  const rows = p.sumber_dasar === 'PERGESERAN'
+    ? await tx`
+        SELECT anggaran_key, kode_rekening, uraian, vol_p AS vol, satuan, harga_p AS harga, pergeseran AS jumlah
+        FROM pergeseran_dpa
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${p.versi_dasar}
+          AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+      `
+    : await tx`
+        SELECT anggaran_key, kode_rekening, uraian, vol, satuan, harga, jumlah
+        FROM dpa_blud
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${p.versi_dasar}
+          AND anggaran_key IS NOT NULL AND anggaran_key <> ''
+      `
+  const peta = new Map<string, BarisSebelum>()
+  for (const r of rows as Record<string, unknown>[]) {
+    peta.set(String(r.anggaran_key), {
+      kode_rekening: String(r.kode_rekening ?? ''),
+      uraian: String(r.uraian ?? ''),
+      vol: r.vol != null ? Number(r.vol) : null,
+      satuan: r.satuan != null ? String(r.satuan) : null,
+      harga: r.harga != null ? Number(r.harga) : null,
+      jumlah: Number(r.jumlah ?? 0),
+    })
+  }
+  return peta
 }
 
 /** T1 — DPA yang masih jadi acuan sebuah Pergeseran (soft-FK `dpa_versi_tanggal`). */
@@ -258,10 +409,11 @@ async function paguPenerus(
  * bebas-deadlock §5.3 tetap utuh dan transaksi realisasi yang sedang berjalan
  * tidak bisa menyelinap di antara pemeriksaan ini dan DELETE-nya.
  *
- * Sisa risiko yang diterima sadar: rekening yang BELUM pernah punya alokasi tidak
- * ikut dikunci, jadi transaksi pertama untuk rekening itu masih bisa berbarengan
- * dengan penghapusan versi. Mengunci seluruh baris DPA (ratusan) untuk menutup
- * celah itu membuat operasi hapus jadi ratusan round-trip — harganya tidak sepadan.
+ * Rekening yang BELUM pernah punya alokasi tidak ikut dikunci di sini. Dulu itu sisa
+ * risiko yang diterima sadar; sejak R7 celahnya ditutup dari sisi belanja — transaksi
+ * belanja memegang kunci setahun BERBAGI, jadi tidak bisa berselang-seling dengan
+ * penghapusan ini (`kunciVersiTahunBerbagi` di realisasi-data.ts). Terbukti perlu:
+ * rekening yang cuma ada di DPA Perubahan jadi yatim tanpanya.
  */
 async function pagarHapusVersi(
   tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
@@ -317,14 +469,13 @@ async function pagarHapusVersi(
  */
 async function tolakHistorisJadiPagu(
   tx: TxSql,
-  table: 'dpa_blud' | 'pergeseran_dpa',
   tahun: number,
-  versi: string,
+  tulis: VersiTulis,
   entriHistoris: boolean,
 ): Promise<void> {
   if (!entriHistoris) return
-  if (await versiJadiSumberPagu(tx, table, tahun, versi)) {
-    throw new BludHistorisJadiPaguError(table, versi)
+  if (await versiJadiSumberPagu(tx, tahun, tulis)) {
+    throw new BludHistorisJadiPaguError(tulis.tabel, tulis.versi)
   }
 }
 
@@ -350,13 +501,14 @@ async function tolakHistorisJadiPagu(
  */
 async function pagarSimpanVersi(
   tx: TxSql,
-  table: 'dpa_blud' | 'pergeseran_dpa',
   tahun: number,
-  versi: string,
+  tulis: VersiTulis,
   baru: Map<string, BarisPaguVersi>,
   turunkanPaksa: boolean,
+  bisaDipaksa = true,
 ): Promise<BentrokPagu[]> {
-  if (!(await versiJadiSumberPagu(tx, table, tahun, versi))) return []
+  if (!(await versiJadiSumberPagu(tx, tahun, tulis))) return []
+  const { tabel: table, versi } = tulis
 
   const kunciRows = await tx`
     SELECT DISTINCT anggaran_key FROM blud_realisasi_alokasi
@@ -396,7 +548,7 @@ async function pagarSimpanVersi(
   }
   if (!bentrok.length) return []
   bentrok.sort((a, b) => b.minus - a.minus)
-  if (!turunkanPaksa) throw new BludPaguDibawahRealisasiError(bentrok)
+  if (!turunkanPaksa || !bisaDipaksa) throw new BludPaguDibawahRealisasiError(bentrok, bisaDipaksa)
   return bentrok
 }
 
@@ -422,6 +574,11 @@ export interface SimpanHasil {
    * hasil pemeriksaan di luar transaksi yang bisa sudah basi.
    */
   bentrokPagu: BentrokPagu[]
+  /**
+   * Babak Perubahan versi yang ditulis (`null` = murni / pergeseran). `dibuat` =
+   * simpanan inilah yang menerbitkan penandanya. Untuk baris audit.
+   */
+  perubahan: { ke: number; dibuat: boolean; sumber_dasar: 'PERGESERAN' | 'DPA'; versi_dasar: string } | null
 }
 
 /**
@@ -538,6 +695,10 @@ function normDpa(r: Record<string, unknown>): DpaBaris {
     origin: (r.origin === 'USULAN' ? 'USULAN' : 'MANUAL'),
     usulan_item_id: r.usulan_item_id != null ? Number(r.usulan_item_id) : null,
     usulan_no: r.usulan_no != null ? String(r.usulan_no) : null,
+    vol_sebelum: r.vol_sebelum != null ? Number(r.vol_sebelum) : null,
+    satuan_sebelum: r.satuan_sebelum != null ? String(r.satuan_sebelum) : null,
+    harga_sebelum: r.harga_sebelum != null ? Number(r.harga_sebelum) : null,
+    jumlah_sebelum: r.jumlah_sebelum != null ? Number(r.jumlah_sebelum) : null,
   }
 }
 
@@ -640,6 +801,7 @@ const DPA_COLUMNS = [
   'tahun_anggaran', 'versi_tanggal', 'kode_rekening', 'uraian', 'vol', 'satuan', 'harga', 'jumlah',
   'penanggung_jawab', 'keterangan', 'tipe_baris', 'row_id', 'anggaran_key', 'parent_id', 'urutan',
   'origin', 'usulan_item_id', 'usulan_no',
+  'vol_sebelum', 'satuan_sebelum', 'harga_sebelum', 'jumlah_sebelum',
 ]
 
 export async function saveDpa(
@@ -652,6 +814,12 @@ export async function saveDpa(
   turunkanPaksa = false,
   /** Versi bulan lampau — ditolak kalau justru akan jadi acuan pagu tahun itu. */
   entriHistoris = false,
+  /**
+   * Simpanan ini MEMBUAT DPA Perubahan dari dasar tsb. SENGAJA tidak diteruskan ke
+   * cabang `!incoming` di bawah — pola `asalTutup`: Perubahan selalu membawa baris
+   * (Zod `rows.min(1)`), dan versi kosong tidak bisa menjadi dokumen apa pun.
+   */
+  asalPerubahan: { sumber_dasar: 'PERGESERAN' | 'DPA'; versi_dasar: string } | null = null,
 ): Promise<SimpanHasil> {
   const incoming = rows.length
   const lockKey = bludVersiKey(tahun, versiTanggal)
@@ -665,10 +833,26 @@ export async function saveDpa(
       await withTransaction(async ({ tx }) => {
         await kunciVersiTahun(tx, tahun)
         await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
-        await tolakHistorisJadiPagu(tx, 'dpa_blud', tahun, versiTanggal, entriHistoris)
+        // L69 — cabang ini juga jalur tulis. Mengosongkan versi dasar sama dengan
+        // mengubahnya (§6), dan mengosongkan versi Perubahan membuang seluruh baris
+        // dasarnya (R4) — dua-duanya punya pintu yang benar: Hapus versi, dengan R5.
+        const penanda = await penandaPerubahan(tx, tahun)
+        tolakVersiDasar(penanda, 'dpa_blud', versiTanggal)
+        const babak = penandaUntukVersi(penanda, versiTanggal)
+        if (turunkanPaksa && babak) throw new BludPaksaPerubahanError(versiTanggal)
+        if (babak) {
+          const dasar = await barisDasar(tx, tahun, babak)
+          if (dasar.size) {
+            throw new BludBarisDasarHilangError([...dasar].map(([k, b]) => (
+              { anggaran_key: k, kode_rekening: b.kode_rekening, uraian: b.uraian }
+            )))
+          }
+        }
+        const tulis: VersiTulis = { tabel: 'dpa_blud', versi: versiTanggal }
+        await tolakHistorisJadiPagu(tx, tahun, tulis, entriHistoris)
         // Mengosongkan versi = pagunya jadi nol untuk semua baris. Kalau versi ini
         // yang sedang menyangga pagu, itu penurunan paling ekstrem yang mungkin.
-        bentrokKosong = await pagarSimpanVersi(tx, 'dpa_blud', tahun, versiTanggal, new Map(), turunkanPaksa)
+        bentrokKosong = await pagarSimpanVersi(tx, tahun, tulis, new Map(), turunkanPaksa, !babak)
         await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
         // L69: jalur ini paling mudah terlewat, dan justru riwayat paling berharga
@@ -678,20 +862,54 @@ export async function saveDpa(
           jenis: 'DPA', tahun, versiTanggal, versiKe: expectedVersion + 1,
           baris: [], totalNilai: 0, userId,
         })
+        // Versi kosong lenyap dari daftar, sama dengan dihapus — penanda yang tidak
+        // lagi punya DPA ikut dibuang (§4), kembaran `deleteDpaVersi`.
+        await bersihkanPenandaYatim(tx, tahun)
       })
-      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
+      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong, perubahan: null }
     }
-    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [] }
+    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [], perubahan: null }
   }
 
   const jangkar: Record<string, string> = {}
   const baruPagu = new Map<string, BarisPaguVersi>()
   let existing = 0
   let bentrokPagu: BentrokPagu[] = []
+  let perubahan: SimpanHasil['perubahan'] = null
   await withTransaction(async ({ tx, conn }) => {
     await kunciVersiTahun(tx, tahun)
     await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
-    await tolakHistorisJadiPagu(tx, 'dpa_blud', tahun, versiTanggal, entriHistoris)
+    // Penanda dibaca DI BAWAH kunci setahun — penanda baru hanya lahir di jalur ini,
+    // yang juga memegang kunci yang sama, jadi daftarnya tidak bisa bergeser di sela.
+    const penanda = await penandaPerubahan(tx, tahun)
+    tolakVersiDasar(penanda, 'dpa_blud', versiTanggal)
+
+    let babak: PenandaPerubahan | null
+    if (asalPerubahan) {
+      // §5.1 — sasaran harus sesudah SEMUA versi DPA yang ada (termasuk tanggalnya sendiri).
+      const sesudah = await tx`
+        SELECT versi_tanggal FROM dpa_blud
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal >= ${versiTanggal}
+        ORDER BY versi_tanggal DESC LIMIT 1
+      ` as { versi_tanggal?: unknown }[]
+      if (sesudah.length) throw new BludSasaranPerubahanError(versiTanggal, toDateStr(sesudah[0].versi_tanggal))
+      // Dasar yang dilihat di layar harus masih sumber pagu SAAT INI, di bawah kunci.
+      const kini = await sumberPaguTahun(tx, tahun)
+      const tabelKlaim = asalPerubahan.sumber_dasar === 'PERGESERAN' ? 'pergeseran_dpa' : 'dpa_blud'
+      if (tabelSumber(kini) !== tabelKlaim || kini.versi !== asalPerubahan.versi_dasar) {
+        throw new BludDasarPerubahanBergeserError(
+          `${asalPerubahan.sumber_dasar} ${asalPerubahan.versi_dasar}`,
+          kini.versi ? `${kini.sumber} ${kini.versi}` : null,
+        )
+      }
+      babak = { versi_mulai: versiTanggal, ...asalPerubahan }
+    } else {
+      babak = penandaUntukVersi(penanda, versiTanggal)
+    }
+    // R8 — diperiksa di sini, bukan cuma di route, supaya pemanggil lain ikut terjaga (L69).
+    if (turunkanPaksa && babak) throw new BludPaksaPerubahanError(versiTanggal)
+    const tulis: VersiTulis = { tabel: 'dpa_blud', versi: versiTanggal, mulaiPerubahan: !!asalPerubahan }
+    await tolakHistorisJadiPagu(tx, tahun, tulis, entriHistoris)
     // B-NEW-3 threshold dihitung DI DALAM tx (audit DPA 2026-06-11 B-3) — angka
     // segar setelah row lock, throw → rollback otomatis
     const cntRows = await tx`SELECT COUNT(*) AS cnt FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
@@ -706,22 +924,39 @@ export async function saveDpa(
     // Sengaja TIDAK bisa ditembus `force`: kehilangan jangkar tidak pernah
     // disengaja, dan akibatnya (realisasi yatim) tidak terlihat di layar mana pun.
     await periksaJangkar(tx, 'dpa_blud', tahun, berjangkar)
+
+    // §6 + R4: versi dasar dibaca SEKALI, untuk dua keperluan. Kolom Sebelum milik
+    // server — isian klien diabaikan, jadi jalan masuk apa pun (Simpan, impor, Salin
+    // Versi, Pulihkan) tidak bisa membuatnya salah. `force` tidak menembus R4: baris
+    // lama yang lenyap membawa realisasinya ikut lenyap dari dokumen.
+    const dasar = babak ? await barisDasar(tx, tahun, babak) : new Map<string, BarisSebelum>()
+    if (babak) {
+      const kunciMasuk = new Set(berjangkar.map(r => String(r.anggaran_key ?? '').trim()).filter(Boolean))
+      const hilang = [...dasar].filter(([k]) => !kunciMasuk.has(k))
+        .map(([k, b]) => ({ anggaran_key: k, kode_rekening: b.kode_rekening, uraian: b.uraian }))
+      if (hilang.length) throw new BludBarisDasarHilangError(hilang)
+    }
+
     const values = berjangkar.map(r => {
       const key = ensureAnggaranKey(r.anggaran_key)
       jangkar[r.row_id] = key
       baruPagu.set(key, {
         kode_rekening: r.kode_rekening, uraian: r.uraian, pagu: Number(r.jumlah ?? 0),
       })
+      const s = dasar.get(key)
       return [
         tahun, versiTanggal, r.kode_rekening, r.uraian, r.vol ?? null, r.satuan ?? null,
         r.harga ?? null, r.jumlah, r.penanggung_jawab ?? null, r.keterangan ?? null,
         r.tipe_baris, r.row_id, key, r.parent_id ?? null, r.urutan,
         r.origin ?? 'MANUAL', r.usulan_item_id ?? null, r.usulan_no ?? null,
+        s ? s.vol : null, s ? s.satuan : null, s ? s.harga : null, s ? s.jumlah : null,
       ]
     })
     // B2 — §4.3 di jalur DPA. Sebelum ini jalur simpan DPA tidak punya pagar pagu
     // sama sekali; selama tahun itu belum punya Pergeseran, DPA-lah pagu yang berlaku.
-    bentrokPagu = await pagarSimpanVersi(tx, 'dpa_blud', tahun, versiTanggal, baruPagu, turunkanPaksa)
+    // R2: simpanan yang MEMBUAT Perubahan ditanya dengan penanda khayalan — tanpa itu
+    // pergeseran lama tetap menang dan pagar ini dilewati tepat di simpanan pertama.
+    bentrokPagu = await pagarSimpanVersi(tx, tahun, tulis, baruPagu, turunkanPaksa, !babak)
     await tx`DELETE FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('dpa_blud', DPA_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'dpa_blud', lockKey, userId)
@@ -732,8 +967,22 @@ export async function saveDpa(
       jenis: 'DPA', tahun, versiTanggal, versiKe: expectedVersion + 1,
       baris: rows, totalNilai: rows.reduce((s, r) => s + Number(r.jumlah ?? 0), 0), userId,
     })
+    // Sesudah barisnya, di transaksi yang sama (pola `asal_tutup`): penanda tanpa
+    // baris — atau baris Perubahan tanpa penanda — berbohong soal dokumen yang ada.
+    if (asalPerubahan) {
+      await catatPerubahan(tx, {
+        tahun, versiMulai: versiTanggal, sumberDasar: asalPerubahan.sumber_dasar,
+        versiDasar: asalPerubahan.versi_dasar, userId,
+      })
+    }
+    if (babak) {
+      const ke = asalPerubahan
+        ? penanda.filter(p => p.versi_mulai < versiTanggal).length + 1
+        : penanda.findIndex(p => p.versi_mulai === babak.versi_mulai) + 1
+      perubahan = { ke, dibuat: !!asalPerubahan, sumber_dasar: babak.sumber_dasar, versi_dasar: babak.versi_dasar }
+    }
   })
-  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
+  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu, perubahan }
 }
 
 /**
@@ -744,6 +993,8 @@ export async function saveDpa(
 export async function deleteDpaVersi(tahun: number, versiTanggal: string): Promise<{
   dpa_rows: number;
   rekap_pk_rows: number;
+  /** Penanda DPA Perubahan yang ikut dibuang karena tidak tersisa satu pun versinya. */
+  penanda_dibuang: number;
 }> {
   const cntRows = await sql`SELECT COUNT(*) AS cnt FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
   const existing = Number(cntRows[0]?.cnt ?? 0)
@@ -754,8 +1005,10 @@ export async function deleteDpaVersi(tahun: number, versiTanggal: string): Promi
   const lockKey = bludVersiKey(tahun, versiTanggal)
   let dpaCount = 0
   let rekapCount = 0
+  let penandaDibuang = 0
   await withTransaction(async ({ tx }) => {
     await kunciVersiTahun(tx, tahun)
+    tolakVersiDasar(await penandaPerubahan(tx, tahun), 'dpa_blud', versiTanggal)
     // T1: dua pagar sebelum apa pun terhapus — realisasi yang menggantung, dan
     // soft-FK `pergeseran_dpa.dpa_versi_tanggal` yang akan menunjuk ke ruang kosong.
     const perujuk = await tx`
@@ -779,8 +1032,13 @@ export async function deleteDpaVersi(tahun: number, versiTanggal: string): Promi
     // 3. Drop lock row (cleanup, cegah orphan)
     await dropBludVersion(tx, 'dpa_blud', lockKey)
     await dropBludVersion(tx, 'rekap_pk', lockKey)
+    // 4. Penanda Perubahan yang tidak lagi punya satu pun versi DPA >= versi_mulai-nya
+    // (§4). `pagarHapusVersi` di atas SUDAH menghitung penerusnya tanpa penanda itu —
+    // pagu kembali ke pergeseran lama, dan rekening yang cuma ada di Perubahan
+    // diperiksa terhadap nol (R5). Di sini tabelnya disamakan dengan hitungan itu.
+    penandaDibuang = await bersihkanPenandaYatim(tx, tahun)
   })
-  return { dpa_rows: dpaCount, rekap_pk_rows: rekapCount }
+  return { dpa_rows: dpaCount, rekap_pk_rows: rekapCount, penanda_dibuang: penandaDibuang }
 }
 
 // ─── PERGESERAN ───────────────────────────────────────────────────────────────
@@ -853,8 +1111,12 @@ export async function savePergeseran(
       await withTransaction(async ({ tx }) => {
         await kunciVersiTahun(tx, tahun)
         await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
-        await tolakHistorisJadiPagu(tx, 'pergeseran_dpa', tahun, versiTanggal, entriHistoris)
-        bentrokKosong = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, new Map(), turunkanPaksa)
+        // L69 — mengosongkan versi dasar sama dengan mengubahnya (§6). R6 tidak
+        // berlaku di sini: tidak ada baris yang ditulis, jadi tidak ada acuan baru.
+        tolakVersiDasar(await penandaPerubahan(tx, tahun), 'pergeseran_dpa', versiTanggal)
+        const tulis: VersiTulis = { tabel: 'pergeseran_dpa', versi: versiTanggal, acuan: dpaVersiTanggal }
+        await tolakHistorisJadiPagu(tx, tahun, tulis, entriHistoris)
+        bentrokKosong = await pagarSimpanVersi(tx, tahun, tulis, new Map(), turunkanPaksa)
         await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
         await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
         // L69 — cermin jalur kosong+force di saveDpa. Ini jalur tulis KEEMPAT,
@@ -876,9 +1138,9 @@ export async function savePergeseran(
         // yang dikirim pemanggil, tidak ada baris untuk ditunjuknya.
         await tulisMutasi(tx, undefined, tahun, versiTanggal, [])
       })
-      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong }
+      return { existing, replaced: 0, newVersion: expectedVersion + 1, jangkar: {}, bentrokPagu: bentrokKosong, perubahan: null }
     }
-    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [] }
+    return { existing, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [], perubahan: null }
   }
 
   const jangkar: Record<string, string> = {}
@@ -888,7 +1150,20 @@ export async function savePergeseran(
   await withTransaction(async ({ tx, conn }) => {
     await kunciVersiTahun(tx, tahun)
     await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
-    await tolakHistorisJadiPagu(tx, 'pergeseran_dpa', tahun, versiTanggal, entriHistoris)
+    const penanda = await penandaPerubahan(tx, tahun)
+    tolakVersiDasar(penanda, 'pergeseran_dpa', versiTanggal)
+    // R6 — pergeseran bertanggal di babak Perubahan wajib mengacu DPA babak itu. Kalau
+    // tidak, pergeseran lama yang disimpan ulang jadi pagu lagi dan membatalkan
+    // Perubahan. Di sini, bukan di route, supaya cadangan `dpa_versi_tanggal ||
+    // getDpaLatestDate` di route dan pemanggil lain (Tutup) ikut terjaga (L82).
+    const babak = penandaUntukVersi(penanda, versiTanggal)
+    if (babak && dpaVersiTanggal < babak.versi_mulai) {
+      throw new BludAcuanSebelumPerubahanError(
+        versiTanggal, dpaVersiTanggal, babak.versi_mulai, penanda.indexOf(babak) + 1,
+      )
+    }
+    const tulis: VersiTulis = { tabel: 'pergeseran_dpa', versi: versiTanggal, acuan: dpaVersiTanggal }
+    await tolakHistorisJadiPagu(tx, tahun, tulis, entriHistoris)
     // B-NEW-3 threshold di dalam tx (audit DPA 2026-06-11 B-3)
     const cntRows = await tx`SELECT COUNT(*) AS cnt FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
     existing = Number(cntRows[0]?.cnt ?? 0)
@@ -926,7 +1201,7 @@ export async function savePergeseran(
     })
     // B3 — §4.3 pindah ke DALAM transaksi, di bawah kunci pagu. Di route ia hanya
     // pemeriksaan tanpa kunci: serapan bisa naik di sela pemeriksaan dan simpan.
-    bentrokPagu = await pagarSimpanVersi(tx, 'pergeseran_dpa', tahun, versiTanggal, baruPagu, turunkanPaksa)
+    bentrokPagu = await pagarSimpanVersi(tx, tahun, tulis, baruPagu, turunkanPaksa)
     await tx`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}`
     await bulkInsert('pergeseran_dpa', PERGESERAN_COLUMNS, values, conn)
     await bumpBludVersion(tx, 'pergeseran_dpa', lockKey, userId)
@@ -948,7 +1223,7 @@ export async function savePergeseran(
     }
     await tulisMutasi(tx, conn, tahun, versiTanggal, mutasi)
   })
-  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu }
+  return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu, perubahan: null }
 }
 
 // ─── CATATAN PERPINDAHAN ─────────────────────────────────────────────────────
@@ -1013,6 +1288,7 @@ export async function deletePergeseranVersi(tahun: number, versiTanggal: string)
   let tutupDibuang = 0
   await withTransaction(async ({ tx }) => {
     await kunciVersiTahun(tx, tahun)
+    tolakVersiDasar(await penandaPerubahan(tx, tahun), 'pergeseran_dpa', versiTanggal)
     // T1: menghapus Pergeseran TERBARU memundurkan pagu setahun penuh ke versi
     // sebelumnya (atau jatuh ke DPA) sementara alokasinya tetap tinggal.
     await pagarHapusVersi(tx, 'pergeseran_dpa', tahun, versiTanggal)

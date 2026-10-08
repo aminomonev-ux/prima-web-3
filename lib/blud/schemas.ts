@@ -237,6 +237,14 @@ export const DpaBarisInputSchema = z.object({
   origin:           z.enum(['MANUAL', 'USULAN']).optional(),
   usulan_item_id:   z.number().int().positive().nullable().optional(),
   usulan_no:        z.string().max(64).nullable().optional(),
+  // Kolom Sebelum DPA Perubahan. OPTIONAL: foto riwayat & cadangan Drive lahir
+  // sebelum kolom ini ada, dan mewajibkannya membuat Pulihkan → Simpan ditolak 400
+  // (pelajaran L86). Isinya diterima tapi TIDAK dipakai — server mengisinya sendiri
+  // dari versi dasar (konsep §6), jadi jalan masuk apa pun tidak bisa membuatnya salah.
+  vol_sebelum:      z.number().min(-1e13).max(1e13).nullable().optional(),
+  satuan_sebelum:   z.string().max(32).nullable().optional(),
+  harga_sebelum:    z.number().min(-1e15).max(1e15).nullable().optional(),
+  jumlah_sebelum:   z.number().min(-1e15).max(1e15).nullable().optional(),
 }).passthrough();
 
 /**
@@ -364,6 +372,20 @@ export const AsalTutupSchema = z.object({
 });
 
 /**
+ * Jejak "simpanan ini MEMBUAT DPA Perubahan" — pola `AsalTutupSchema`: tidak berhenti
+ * di baris audit, ia yang menerbitkan baris `blud_dpa_perubahan`.
+ *
+ * Dasarnya disebut dua-duanya (tabel + tanggal) supaya server bisa membandingkan
+ * dengan sumber pagu yang berlaku SAAT SIMPAN, di bawah kunci setahun. Kalau sudah
+ * bergeser sejak layar dibuka, simpanannya ditolak — bukan diam-diam memakai dasar
+ * yang lain dari yang dilihat orangnya.
+ */
+export const AsalPerubahanSchema = z.object({
+  sumber_dasar: z.enum(['PERGESERAN', 'DPA']),
+  versi_dasar:  TanggalSchema,
+});
+
+/**
  * Bentuk objeknya dipisah dari versi ber-refinement supaya bisa di-`.extend()`
  * — `.extend()` tidak ada pada hasil `.superRefine()`.
  */
@@ -382,6 +404,7 @@ const DpaBodyObject = z.object({
   asal_pulihkan:    AsalPulihkanSchema.optional(),
   asal_berkas:      AsalBerkasSchema.optional(),
   asal_impor:       AsalImporSchema.optional(),
+  asal_perubahan:   AsalPerubahanSchema.optional(),
   // Versi bulan yang sudah lewat, diisi belakangan (aplikasi mulai dipakai di
   // tengah tahun). Bukan sekadar penanda audit: jalur simpan memakainya untuk
   // menolak entri historis yang justru akan menjadi acuan pagu.
@@ -398,7 +421,19 @@ const DpaBodyObject = z.object({
  * meneruskannya ke `saveDpa`, sehingga dokumen historis yang ditolak lewat
  * Simpan justru diterima lewat Impor.
  */
-export const DpaBodySchema = DpaBodyObject.superRefine(pagarVersiTanggal);
+export const DpaBodySchema = DpaBodyObject.superRefine((d, ctx) => {
+  pagarVersiTanggal(d, ctx);
+  // Dasar Perubahan diambil dari versi yang SUDAH ada, jadi tidak mungkin lebih baru
+  // dari versi yang sedang ditulis. Pagar yang butuh membaca tabel (sasaran kosong,
+  // dasar masih berlaku) hidup di saveDpa, di bawah kunci.
+  if (d.asal_perubahan && d.asal_perubahan.versi_dasar > d.versi_tanggal) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['asal_perubahan', 'versi_dasar'],
+      message: `Dasar Perubahan (${d.asal_perubahan.versi_dasar}) lebih baru dari versi yang disimpan (${d.versi_tanggal}).`,
+    });
+  }
+});
 
 /**
  * Satu perpindahan: dari baris mana ke baris mana, berapa.

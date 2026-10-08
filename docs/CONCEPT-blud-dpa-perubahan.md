@@ -1,6 +1,6 @@
 # CONCEPT — DPA Perubahan (BLUD)
 
-> Status: **KONSEP v3** (2026-10-08) — Tahap 0 **terpasang**, Tahap 1–5 belum. Keputusan pemilik tercatat
+> Status: **KONSEP v3** (2026-10-08) — Tahap 0–1 **terpasang**, Tahap 2–5 belum. Keputusan pemilik tercatat
 > di §0; yang masih terbuka di §14.
 > Permintaan awal: DPA BLUD punya versi **Perubahan**, yang boleh menambah dan
 > mengurangi anggaran sehingga **totalnya berbeda** dari DPA murni.
@@ -396,7 +396,7 @@ Syarat dan penjaganya:
 | Tahap | Isi | Catatan |
 |---|---|---|
 | **0** ✅ | `sumberPaguTahun` menggantikan 6 salinan aturan pagu (+ subkueri `MAX` di `getPaguEfektif`) — `lib/blud/sumber-pagu.ts` | **selesai 2026-10-08**: tanpa perubahan perilaku, 0 beda pada 1.024 kombinasi versi; `test-blud-sumber-pagu.mts` (29), 11 uji mutasi tertangkap |
-| **1** | migrasi (4 kolom + tabel penanda), `schema-mysql.sql`, Zod, `pergeseranKeDpaInput`, `saveDpa` + `asal_perubahan`, pengisian Sebelum oleh server, pagar §5.1 / §6 / §9, aturan pagu §8, penanda ikut terhapus | inti data; uji DB balapan dua pembuatan bersamaan (pola `test-blud-race-hapus-versi.mjs`) |
+| **1** ✅ | migrasi (4 kolom + tabel penanda), `schema-mysql.sql`, Zod, `pergeseranKeDpaInput`, `saveDpa` + `asal_perubahan`, pengisian Sebelum oleh server, pagar §5.1 / §6 / §9, aturan pagu §8, penanda ikut terhapus | **selesai 2026-10-08** (lokal, belum di-commit): R1–R8 di `data.ts`/`sumber-pagu.ts`; §5.1 diperketat jadi "sesudah SEMUA versi DPA" (pemilih periode membuat sasaran lampau mungkin); **R7 terbukti nyata lalu ditutup** (kunci setahun berbagi + baca terkunci di jalur belanja); uji: sumber-pagu 54 · statis 53 · DB 51 (11 skenario) · balapan 10 (3 varian) · 21 uji mutasi tertangkap |
 | **2** | layar DPA: tombol + modal + kolom Sebelum + sakelar + lencana + aturan hapus | verifikasi di aplikasi dengan data 2026 (558 baris) |
 | **3** | layar Pergeseran: spanduk babak lama, kunci Buat Pergeseran, Sinkron dimatikan | |
 | **4** | Cetak Ringkas/Lengkap + kop penanda + impor §11.1–11.2 | menunggu §14 no. 1 untuk tata letak Lengkap |

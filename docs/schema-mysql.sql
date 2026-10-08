@@ -551,6 +551,12 @@ CREATE TABLE IF NOT EXISTS dpa_blud (
   origin           ENUM('MANUAL','USULAN') NOT NULL DEFAULT 'MANUAL' COMMENT 'Asal baris: input manual atau import usulan',
   usulan_item_id   INT               NULL COMMENT 'FK soft ke usulan_items.id (jejak import, non-unique: versioned)',
   usulan_no        VARCHAR(64)       NULL COMMENT 'No usulan asal (display/trace)',
+  -- DPA Perubahan (migration-blud-dpa-perubahan.sql): MILIK SERVER, diisi dari versi
+  -- dasar tiap Simpan di babak Perubahan. NULL = murni / baris yang lahir di Perubahan.
+  vol_sebelum      DECIMAL(18,4)     NULL COMMENT 'Perubahan: vol versi dasar (milik server, NULL = murni/baris baru)',
+  satuan_sebelum   VARCHAR(32)       NULL COMMENT 'Perubahan: satuan versi dasar',
+  harga_sebelum    DECIMAL(18,2)     NULL COMMENT 'Perubahan: harga versi dasar',
+  jumlah_sebelum   DECIMAL(18,2)     NULL COMMENT 'Perubahan: jumlah versi dasar',
   created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_tahun_versi  (tahun_anggaran, versi_tanggal),
@@ -655,6 +661,26 @@ CREATE TABLE IF NOT EXISTS blud_pergeseran_tutup (
   CONSTRAINT fk_bpt_user FOREIGN KEY (ditutup_oleh) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='BLUD - Penutupan putaran pergeseran (hasil putaran jadi patokan berikutnya)';
+
+-- ─── BLUD — DPA PERUBAHAN ────────────────────────────────────────────────────
+-- Penanda babak Perubahan, pola `blud_pergeseran_tutup`. Versi DPA bertanggal
+-- >= `versi_mulai` adalah versi Perubahan; nomor ke-n dihitung dari urutan (L55).
+-- PRIMARY KEY menolak pembuatan ganda (L69-a). Penanda dibuang bersama versi
+-- Perubahan terakhir. Konsep: docs/CONCEPT-blud-dpa-perubahan.md §4.
+-- Migration: migration-blud-dpa-perubahan.sql
+
+CREATE TABLE IF NOT EXISTS blud_dpa_perubahan (
+  tahun_anggaran SMALLINT UNSIGNED NOT NULL,
+  versi_mulai    DATE     NOT NULL COMMENT 'Versi DPA pertama yang berstatus Perubahan',
+  sumber_dasar   ENUM('PERGESERAN','DPA') NOT NULL COMMENT 'Tabel asal angka dasar — DPA hanya kalau tahun itu belum punya pergeseran',
+  versi_dasar    DATE     NOT NULL COMMENT 'Versi yang diambil — sumber kolom Sebelum',
+  dibuat_pada    DATETIME NOT NULL COMMENT 'Jam-menit WIB, distempel server',
+  dibuat_oleh    INT          NULL,
+  catatan        TEXT         NULL COMMENT 'Opsional: nomor/tanggal penetapan untuk kop cetak',
+  PRIMARY KEY (tahun_anggaran, versi_mulai),
+  CONSTRAINT fk_bdp_user FOREIGN KEY (dibuat_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='BLUD - Penanda DPA Perubahan (versi DPA >= versi_mulai = Perubahan)';
 
 -- ─── BLUD — MASTER AKUN ──────────────────────────────────────────────────────
 -- Tabel master daftar kode rekening + uraian. Dipakai sebagai source-of-truth

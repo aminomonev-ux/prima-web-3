@@ -11,7 +11,8 @@
 import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
 import type { TxSql, Penanya } from '@/lib/data/db'
 import {
-  acquireBludLock, BLUD_PAGU_ENTITY, BLUD_KWT_ENTITY, bludPaguKey, bludKwtKey,
+  acquireBludLock, acquireBludLockBerbagi, BLUD_PAGU_ENTITY, BLUD_KWT_ENTITY, bludPaguKey, bludKwtKey,
+  BLUD_VERSI_ENTITY, bludTahunKey,
 } from './lock'
 import { getPaguMap } from './pagu'
 import { sumberPaguTahun } from './sumber-pagu'
@@ -417,11 +418,17 @@ async function pastikanTahunPunyaDpa(tx: TxSql, tahun: number): Promise<void> {
  * seluruh pohon seperti `getPaguEfektif`. Versinya ditanyakan ke
  * `sumberPaguTahun` LEWAT `tx` — aturan yang sama dengan `getPaguSumber`, di
  * dalam transaksi ini (L69-b).
+ *
+ * R7 — "versi mana" juga dibaca TERKUNCI (FOR SHARE). Argumen K2 di atas berlaku
+ * untuknya persis sama: SELECT biasa membaca snapshot yang lahir di `nomorKuitansiBerikut`/
+ * `pastikanTahunPunyaDpa`, SEBELUM kunci didapat. Versi yang commit di sela-selanya
+ * tidak terlihat, dan belanja diperiksa terhadap pagu versi lama — terbukti di
+ * `scripts/test-blud-race-perubahan.mjs` (C terserap 25 jt, pagu Perubahan 20 jt).
  */
 async function bacaPaguTerkunci(
   tx: TxSql, tahun: number, keys: string[],
 ): Promise<Map<string, { pagu: number; kode_rekening: string; uraian: string }>> {
-  const { sumber, versi } = await sumberPaguTahun(tx, tahun)
+  const { sumber, versi } = await sumberPaguTahun(tx, tahun, {}, { terkunci: true })
 
   const rows = sumber === 'PERGESERAN'
     ? await tx`
@@ -449,6 +456,20 @@ async function bacaPaguTerkunci(
 }
 
 /**
+ * R7 — kunci setahun versi anggaran, BERBAGI: belanja satu sama lain tetap jalan
+ * bersamaan, tapi tidak bisa berselang-seling dengan simpan/hapus versi (yang
+ * memegangnya eksklusif, `kunciVersiTahun` di data.ts). Tanpa ini, rekening yang
+ * BELUM pernah punya alokasi lolos dari pagar simpan/hapus versi — daftar kunci
+ * mereka dibaca dari alokasi yang sudah ada — dan rekening yang cuma ada di DPA
+ * Perubahan jadi yatim saat Perubahan dihapus (terbukti, skenario H uji balapan).
+ * Urutan: sesudah baris periode & kuitansi, SEBELUM kunci pagu — lihat
+ * `BLUD_VERSI_ENTITY` untuk alasan bebas-buntunya.
+ */
+async function kunciVersiTahunBerbagi(tx: TxSql, tahun: number): Promise<void> {
+  await acquireBludLockBerbagi(tx, BLUD_VERSI_ENTITY, bludTahunKey(tahun))
+}
+
+/**
  * Kunci pagu + verifikasi serapan, ATOMIK di dalam transaksi pemanggil.
  *
  * `abaikanTxId` dipakai saat mengubah transaksi: alokasi lama miliknya sendiri
@@ -467,6 +488,8 @@ async function kunciDanPeriksaPagu(
   // punya anggaran sama sekali. Sekarang berdiri sendiri, sebelum cabang itu.
   await pastikanTahunPunyaDpa(tx, tahun)
   if (!alokasi.length) return
+
+  await kunciVersiTahunBerbagi(tx, tahun)
 
   // §5.3: urutkan MENAIK sebelum mengunci apa pun. Kunci satu per satu — dengan
   // `IN (...)` urutan pengambilan kunci ikut rencana eksekusi MySQL, jaminannya hilang.

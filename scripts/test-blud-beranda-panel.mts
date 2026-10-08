@@ -55,7 +55,7 @@ const b = (
 })
 
 const data: DataPagu = {
-  sumber: { sumber: 'PERGESERAN', versi: '2026-08-31' },
+  sumber: { sumber: 'PERGESERAN', versi: '2026-08-31', perubahan_ke: null },
   baris: [
     b('akar',   100_000_000, null,   false),
     b('induk',   20_000_000, 'akar', false),
