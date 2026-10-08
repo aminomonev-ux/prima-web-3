@@ -20,6 +20,7 @@
 | 7 | Perubahan **boleh lebih dari sekali** setahun; nomornya ke-1, ke-2, … dari urutan. |
 | 8 | Versi pergeseran diberi lencana babak (**MURNI** / **PERUBAHAN KE-n**), hanya di tahun yang punya Perubahan. **Nomor pergeseran berlanjut** setahun, tidak mulai dari 1 lagi (§9). |
 | 9 | Realisasi wajib dipagari di setiap jalur (§10). |
+| 10 | Pintu darurat "turunkan paksa" **ditutup** untuk versi Perubahan (R8). |
 
 ## 1. Contoh angka
 
@@ -282,7 +283,7 @@ ditandai, sisanya baru:
 | R5 | Hapus versi Perubahan memeriksa pagu PENERUS (`paguPenerus` lewat R1): pagu kembali ke pergeseran lama, dan rekening yang cuma ada di Perubahan (mis. D) menjadi tanpa pagu → ditolak kalau sudah terserap | Menghapus Perubahan sesudah belanja di rekening D dicatat | pagar sudah ada; penerusnya baru benar sesudah R1 |
 | R6 | Pergeseran bertanggal ≥ M wajib mengacu DPA ≥ M (§9) | Pergeseran lama disimpan ulang lalu jadi pagu lagi, membatalkan Perubahan | baru |
 | R7 | Kunci setahun (L84) sebagai perintah pertama di jalur simpan/hapus, kunci pagu per rekening urut menaik, pagu dibaca di bawah kunci (`bacaPaguTerkunci` lewat R1) | Transaksi belanja yang commit di sela pemeriksaan dan simpan Perubahan (TOCTOU) | sudah ada; R1 tidak boleh memindahkan pembacaan ke luar transaksi (fungsinya menerima `Penanya`) |
-| R8 | **Turunkan paksa** (`turunkan_paksa` + alasan wajib) **ditutup** untuk versi Perubahan | Pagu dokumen Perubahan resmi berada di bawah uang yang sudah terpakai | baru — §14 no. 2 |
+| R8 | **Turunkan paksa** (`turunkan_paksa` + alasan wajib) **ditutup** untuk versi Perubahan — diperiksa di `saveDpa`, bukan di route saja, supaya pemanggil lain ikut terjaga (L69) | Pagu dokumen Perubahan resmi berada di bawah uang yang sudah terpakai. Dokumen Perubahan yang sah tidak pernah menganggarkan kurang dari yang sudah dibelanjakan; kalau realisasinya salah catat, Buku Kasnya yang dibetulkan dulu | baru — keputusan #10 |
 | R9 | Sidik pagu `getPaguCap` ikut R1, jadi layar Realisasi yang sedang terbuka tahu pagunya berganti dan menampilkan "Pagu diperbarui" | Orang mencatat belanja terhadap angka lama di layar | sudah ada; terhubung lewat R1 |
 
 **Uji yang menyertainya** (bagian dari Definition of Done §15): uji DB balapan
@@ -389,13 +390,6 @@ Syarat dan penjaganya:
 
 1. **Contoh berkas dokumen perubahan** yang biasa dipakai kantor, untuk judul dan
    susunan kolom cetak format Lengkap. Tidak menghalangi Tahap 0–3.
-2. **R8 — turunkan paksa ditutup untuk Perubahan?** Jalur Simpan DPA/Pergeseran
-   sekarang punya pintu darurat: pagu boleh diturunkan di bawah uang terpakai asal
-   alasannya ditulis (masuk audit). Usulan: pintu itu **ditutup** untuk versi
-   Perubahan, karena dokumen Perubahan yang sah tidak pernah menganggarkan kurang
-   dari yang sudah dibelanjakan. Kalau realisasinya yang salah catat, yang
-   dibetulkan Buku Kasnya dulu. Kalau ditutup dan ternyata ada kasus sah yang
-   terhalang, pintunya bisa dibuka lagi tanpa membongkar apa pun.
 
 ## 15. Tahapan
 
