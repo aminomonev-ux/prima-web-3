@@ -50,6 +50,7 @@ PRIMA punya 102 findings audit dari multiple wave (Audit v1.0, Tahap 11/12/14/15
 | Pertanyaan berlingkup **setahun** (`MAX(versi_tanggal)` = siapa sumber pagu) dijawab **sebelum** kunci dipegang | Kunci setahun DULU, sebagai perintah **pertama** transaksi — snapshot lahir di `SELECT` biasa pertama | **L84** |
 | Sinyal "baris ini yang bergeser" (`bertambah_berkurang <> 0`) dipercaya apa adanya — padahal kolomnya **digulung ke induk**, jadi satu pergeseran tampil sedalam pohonnya | Buktikan dari KODE **dan** DATA sebelum memakainya; kalau digulung → saring **DAUN** | **L85** |
 | Kolom baru yang diketik manusia diisi juga oleh `recalc` "biar konsisten" | Recalc jalan TIAP KETIKAN — yang diketik tangan tidak boleh disentuhnya; simpan **hanya** yang manual, turunannya dihitung saat dipakai | **L86** |
+| Skrip uji membersihkan tabel bersama (`blud_locks`) cukup `WHERE entity=?` — `entity` itu dipakai data asli juga | Hapus **kunci ujinya persis** (`entity` + `key_id` tahun kotak pasir); `concurrency-test.js` 2026-10-08 menghapus gembok `kinerja_ssk 2026:GAJI:MURNI:0` v4 → tab terbuka 409 | **L92** |
 
 Anti-pattern terbaru (2026-06-15): **L66** `sqlInt()` utk `LIMIT`/`OFFSET` (mysql2 tolak `LIMIT ?` — lolos tsc, ketahuan saat live), **L67** cap jumlah sheet exceljs anti zip-bomb (di parser bersama), **L68** Zod + cek-eksistensi soft-FK di SEMUA cabang tulis termasuk tabel peta/lookup.
 
