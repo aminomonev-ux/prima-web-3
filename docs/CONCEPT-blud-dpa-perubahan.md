@@ -1,6 +1,6 @@
 # CONCEPT — DPA Perubahan (BLUD)
 
-> Status: **KONSEP v2** (2026-10-08) — belum ada kode. Keputusan pemilik tercatat
+> Status: **KONSEP v3** (2026-10-08) — belum ada kode. Keputusan pemilik tercatat
 > di §0; yang masih terbuka di §14.
 > Permintaan awal: DPA BLUD punya versi **Perubahan**, yang boleh menambah dan
 > mengurangi anggaran sehingga **totalnya berbeda** dari DPA murni.
@@ -11,11 +11,15 @@
 
 | # | Keputusan |
 |---|---|
-| 1 | Satu tombol di layar DPA BLUD — **Jadikan DPA Perubahan** — mengambil **pergeseran terakhir**, kolom P dipindah ke kolom DPA, lalu diberi tanda Perubahan. Pilihan "ambil dari DPA terkini" dari v1 dibuang. |
+| 1 | Satu tombol di layar DPA BLUD — **Jadikan DPA Perubahan** — mengambil **angka yang sedang jadi pagu**: pergeseran terakhir (kolom P dipindah ke kolom DPA), atau DPA terakhir kalau tahun itu belum punya pergeseran. Lalu diberi tanda Perubahan. Tidak ada pilihan sumber di layar. |
 | 2 | Tombol **mengisi layar dulu**; yang menyimpan tetap tombol Simpan (§5). |
 | 3 | Kolom **Sebelum** ikut dikerjakan, dengan sakelar untuk menyembunyikannya di layar, dan dua format cetak: **Ringkas** (kolom persis DPA murni) dan **Lengkap** (Sebelum · Sesudah · Bertambah/(Berkurang)) (§7). |
 | 4 | Impor mengenali jenis berkas sendiri (murni / Perubahan Ringkas / Perubahan Lengkap / Pergeseran) dan bertindak sesuai keadaan (§11). |
 | 5 | Impor-balik Excel unduhan PRIMA **ke versi yang sedang terbuka** disediakan sebagai jalur cadangan ("sunting di Excel lalu masukkan lagi"), dengan penjaga (§11.3). |
+| 6 | Baris yang sudah ada sebelum Perubahan **dinolkan, tidak dihapus**; baris yang lahir di Perubahan tetap bisa dihapus (§10). |
+| 7 | Perubahan **boleh lebih dari sekali** setahun; nomornya ke-1, ke-2, … dari urutan. |
+| 8 | Versi pergeseran diberi lencana babak (**MURNI** / **PERUBAHAN KE-n**), hanya di tahun yang punya Perubahan. **Nomor pergeseran berlanjut** setahun, tidak mulai dari 1 lagi (§9). |
+| 9 | Realisasi wajib dipagari di setiap jalur (§10). |
 
 ## 1. Contoh angka
 
@@ -69,7 +73,8 @@ Tidak ada kolom bendera di tiap baris. Tabel penanda baru, mengikuti pola
 CREATE TABLE blud_dpa_perubahan (
   tahun_anggaran SMALLINT UNSIGNED NOT NULL,
   versi_mulai    DATE     NOT NULL COMMENT 'Versi DPA pertama yang berstatus Perubahan',
-  versi_dasar    DATE     NOT NULL COMMENT 'Versi pergeseran yang diambil — sumber kolom Sebelum',
+  sumber_dasar   ENUM('PERGESERAN','DPA') NOT NULL COMMENT 'Tabel asal angka dasar — DPA hanya kalau tahun itu belum punya pergeseran',
+  versi_dasar    DATE     NOT NULL COMMENT 'Versi yang diambil — sumber kolom Sebelum',
   dibuat_pada    DATETIME NOT NULL COMMENT 'Jam-menit WIB, distempel server',
   dibuat_oleh    INT          NULL,
   catatan        TEXT         NULL COMMENT 'Opsional: nomor/tanggal penetapan untuk kop cetak',
@@ -91,11 +96,15 @@ CREATE TABLE blud_dpa_perubahan (
 
 ## 5. Tombol "Jadikan DPA Perubahan" — berhenti di FORM
 
-1. Tombolnya di layar DPA, di samping Salin Versi. Ia **mati** kalau tahun itu
-   belum punya pergeseran, dan alasannya tertulis di `data-tooltip` (L79c).
-2. Modal menampilkan versi pergeseran yang akan diambil: tanggal, jumlah baris,
-   dan total. Modal juga menyebut dua keadaan yang perlu diketahui sebelum
-   melanjutkan:
+1. Tombolnya di layar DPA, di samping Salin Versi. Sumbernya **yang sedang jadi
+   pagu**, ditanyakan ke `sumberPaguTahun` (§8), bukan dihitung ulang di layar:
+   pergeseran terakhir, atau DPA terakhir kalau belum ada pergeseran. Untuk Perubahan
+   ke-2 dan seterusnya, itu pergeseran terakhir babak Perubahan sebelumnya, atau
+   versi Perubahan terakhir. Kalau sumbernya DPA, pemetaannya `dpaKeInput` apa
+   adanya (langkah 3–4 hanya untuk sumber pergeseran).
+2. Modal menampilkan versi yang akan diambil: jenis, tanggal, jumlah baris, dan
+   total. Untuk sumber pergeseran, modal juga menyebut dua keadaan yang perlu
+   diketahui sebelum melanjutkan:
    - pergeseran itu disimpan sebagai **draft tak berimbang** (route mengizinkan
      `draft=true`) — selisihnya disebut;
    - DPA direvisi **sesudah** pergeseran itu tanpa disinkronkan — revisi itu tidak
@@ -147,18 +156,20 @@ penolakannya disusun tiga bagian: masalah, sebab, jalan keluar.
 Empat kolom baru di `dpa_blud`, NULL-able: `vol_sebelum`, `satuan_sebelum`,
 `harga_sebelum`, `jumlah_sebelum`.
 
-- **Diisi server pada SETIAP Simpan di babak Perubahan**, dari versi pergeseran
-  dasar (`versi_dasar` di tabel penanda), dicocokkan lewat `anggaran_key`. Isian
+- **Diisi server pada SETIAP Simpan di babak Perubahan**, dari versi dasar
+  (`sumber_dasar` + `versi_dasar` di tabel penanda; kolom `pergeseran`/`vol_p`/
+  `harga_p` untuk pergeseran, `jumlah`/`vol`/`harga` untuk DPA), dicocokkan lewat
+  `anggaran_key`. Isian
   kolom Sebelum dari layar maupun dari berkas **diabaikan**. Akibatnya, jalan masuk
   apa pun (Simpan, impor, Salin Versi, Pulihkan, Pulihkan Cadangan) tidak bisa
   membuat kolom Sebelum salah. Sejumlah penjaga yang dirancang di v1 untuk itu jadi
   tidak perlu.
 - Baris yang `anggaran_key`-nya tidak ada di versi dasar (lahir di Perubahan)
   bernilai NULL dan tampil "—". Baris DPA murni juga NULL.
-- **Versi pergeseran dasar dikunci.** Menyimpan ulang atau menghapusnya ditolak
-  `VERSI_DASAR_PERUBAHAN`, dengan pola yang sama seperti versi DPA yang dirujuk
-  pergeseran (`BludVersiDirujukError`). Tanpa kunci ini, kolom Sebelum di dokumen
-  yang sudah dicetak bisa bergeser pada simpanan berikutnya.
+- **Versi dasar dikunci**, baik pergeseran maupun DPA. Menyimpan ulang atau
+  menghapusnya ditolak `VERSI_DASAR_PERUBAHAN`, dengan pola yang sama seperti versi
+  DPA yang dirujuk pergeseran (`BludVersiDirujukError`). Tanpa kunci ini, kolom
+  Sebelum di dokumen yang sudah dicetak bisa bergeser pada simpanan berikutnya.
 - **Recalc tidak pernah menyentuhnya** (L86).
 - **Beku per baris tetap benar walau pohonnya diubah.** Anak baru di bawah induk A
   membuat sesudah-A naik dan sebelum-A tetap. Baris yang dipindah dari induk A ke
@@ -247,18 +258,44 @@ DPA Perubahan ke-1 · 9 Okt 2026".
   tertolak pagar pertama. Kalimat penolakannya menyebut Buat Pergeseran.
 - Sasaran pergeseran pertama babak baru tidak boleh sudah berisi versi pergeseran
   (pagar sasaran Tutup #2).
+- **Lencana babak** di daftar versi dan pil versi Pergeseran: **MURNI** /
+  **PERUBAHAN KE-n**, diturunkan dari acuannya (`dpa_versi_tanggal` ≥ `versi_mulai`),
+  tanpa kolom baru. Hanya muncul di tahun yang punya Perubahan; tahun lain tampil
+  persis seperti sekarang. **Nomor "Pergeseran ke-n" berlanjut** setahun (keputusan
+  #8): dua "Pergeseran ke-1" dalam satu tahun bisa tertukar di surat atau rekap yang
+  tidak memuat lencananya.
+- **Kop cetak Pergeseran** menyebut acuannya, mis. "mengacu DPA Perubahan ke-1
+  (9 Okt 2026)".
 
-## 10. Kenapa realisasi tidak terganggu
+## 10. Pagar realisasi (keputusan #9)
 
-- `anggaran_key` ikut dari pergeseran dasar, jadi alokasi Buku Kas tetap menempel
-  di baris yang sama.
-- Pagu turun di bawah terserap, atau baris berealisasi hilang, ditolak
-  `pagarSimpanVersi`. Pagar ini sudah ada, berjalan di bawah kunci pagu, dan aktif
-  karena Perubahan menjadi sumber pagu menurut §8.
-- **Usulan (§14): baris dasar dinolkan, tidak dihapus.** Di babak Perubahan, aksi
-  hapus pada baris yang punya kolom Sebelum mengosongkan vol/harga-nya, jadi
-  dokumen berbunyi "Rp X → Rp 0" dan tidak lenyap dari daftar. Baris yang lahir di
-  Perubahan tetap bisa dihapus biasa.
+Uang yang sudah keluar di Buku Kas tidak boleh kehilangan pagunya, dan tidak boleh
+lepas dari rekeningnya, lewat jalur mana pun. Daftar pagarnya — yang **sudah ada**
+ditandai, sisanya baru:
+
+| # | Pagar | Menjaga dari | Status |
+|---|---|---|---|
+| R1 | Aturan sumber pagu disatukan dan sadar Perubahan (§8) | Perubahan tersimpan tapi Buku Kas tetap memakai pagu lama — rekening baru tak bisa dibelanjakan, rekening yang dikurangi tetap bisa dibelanjakan sampai angka lama | baru |
+| R2 | `pagarSimpanVersi`: pagu baru < terserap → Simpan ditolak, menyebut rekening dan kurangnya | Perubahan, revisinya, atau impor-balik yang menurunkan pagu di bawah uang terpakai | sudah ada; aktif karena R1 menjadikan Perubahan sumber pagu |
+| R3 | `anggaran_key` dibawa dari versi dasar; `periksaJangkar` menolak baris dikenal tanpa jangkar, tidak bisa ditembus `force` | Realisasi lepas dari rekeningnya (jadi yatim) | jangkar dibawa: baru; pemeriksaan: sudah ada |
+| R4 | Baris lama dinolkan, tidak dihapus (keputusan #6) | Baris berealisasi lenyap dari dokumen. Kalau baris itu sudah terpakai, menolkannya pun ditolak R2 | baru |
+| R5 | Hapus versi Perubahan memeriksa pagu PENERUS (`paguPenerus` lewat R1): pagu kembali ke pergeseran lama, dan rekening yang cuma ada di Perubahan (mis. D) menjadi tanpa pagu → ditolak kalau sudah terserap | Menghapus Perubahan sesudah belanja di rekening D dicatat | pagar sudah ada; penerusnya baru benar sesudah R1 |
+| R6 | Pergeseran bertanggal ≥ M wajib mengacu DPA ≥ M (§9) | Pergeseran lama disimpan ulang lalu jadi pagu lagi, membatalkan Perubahan | baru |
+| R7 | Kunci setahun (L84) sebagai perintah pertama di jalur simpan/hapus, kunci pagu per rekening urut menaik, pagu dibaca di bawah kunci (`bacaPaguTerkunci` lewat R1) | Transaksi belanja yang commit di sela pemeriksaan dan simpan Perubahan (TOCTOU) | sudah ada; R1 tidak boleh memindahkan pembacaan ke luar transaksi (fungsinya menerima `Penanya`) |
+| R8 | **Turunkan paksa** (`turunkan_paksa` + alasan wajib) **ditutup** untuk versi Perubahan | Pagu dokumen Perubahan resmi berada di bawah uang yang sudah terpakai | baru — §14 no. 2 |
+| R9 | Sidik pagu `getPaguCap` ikut R1, jadi layar Realisasi yang sedang terbuka tahu pagunya berganti dan menampilkan "Pagu diperbarui" | Orang mencatat belanja terhadap angka lama di layar | sudah ada; terhubung lewat R1 |
+
+**Uji yang menyertainya** (bagian dari Definition of Done §15): uji DB balapan
+**transaksi belanja × simpan Perubahan** dan **transaksi belanja × hapus Perubahan**
+pada tahun uji 2099, pola `test-blud-race-hapus-versi.mjs` (dijalankan dua kali,
+tanpa dan dengan kunci, supaya terbukti pagarnya yang menahan, bukan kebetulan),
+plus uji mutasi untuk R1–R8.
+
+Aturan hapus di layar (R4): di babak Perubahan, aksi hapus pada baris yang punya
+kolom Sebelum mengosongkan vol/harga-nya, jadi dokumen berbunyi "Rp X → Rp 0" dan
+tidak lenyap dari daftar. Baris yang lahir di Perubahan tetap bisa dihapus biasa.
+Pagarnya juga di server, bukan cuma tombol (L82): simpanan Perubahan yang membuang
+baris ber-Sebelum ditolak.
 
 ## 11. Impor
 
@@ -350,14 +387,15 @@ Syarat dan penjaganya:
 
 ## 14. Masih terbuka
 
-1. **Baris dasar dinolkan, tidak dihapus** (§10) — usulan, belum dijawab.
-2. **Perubahan lebih dari sekali setahun** boleh, atau dibatasi satu? Strukturnya
-   sudah mendukung banyak (penanda kedua `M2 > M1`).
-3. **Contoh berkas dokumen perubahan** yang biasa dipakai kantor, untuk judul dan
-   susunan kolom cetak.
-4. **Tahun tanpa pergeseran**: tombol mati (keputusan saat ini), atau tombol
-   mengambil DPA terkini sebagai gantinya? Yang kedua tetap satu pilihan — "ambil
-   yang sedang jadi pagu" — tanpa mengembalikan dua opsi v1.
+1. **Contoh berkas dokumen perubahan** yang biasa dipakai kantor, untuk judul dan
+   susunan kolom cetak format Lengkap. Tidak menghalangi Tahap 0–3.
+2. **R8 — turunkan paksa ditutup untuk Perubahan?** Jalur Simpan DPA/Pergeseran
+   sekarang punya pintu darurat: pagu boleh diturunkan di bawah uang terpakai asal
+   alasannya ditulis (masuk audit). Usulan: pintu itu **ditutup** untuk versi
+   Perubahan, karena dokumen Perubahan yang sah tidak pernah menganggarkan kurang
+   dari yang sudah dibelanjakan. Kalau realisasinya yang salah catat, yang
+   dibetulkan Buku Kasnya dulu. Kalau ditutup dan ternyata ada kasus sah yang
+   terhalang, pintunya bisa dibuka lagi tanpa membongkar apa pun.
 
 ## 15. Tahapan
 
@@ -367,7 +405,7 @@ Syarat dan penjaganya:
 | **1** | migrasi (4 kolom + tabel penanda), `schema-mysql.sql`, Zod, `pergeseranKeDpaInput`, `saveDpa` + `asal_perubahan`, pengisian Sebelum oleh server, pagar §5.1 / §6 / §9, aturan pagu §8, penanda ikut terhapus | inti data; uji DB balapan dua pembuatan bersamaan (pola `test-blud-race-hapus-versi.mjs`) |
 | **2** | layar DPA: tombol + modal + kolom Sebelum + sakelar + lencana + aturan hapus | verifikasi di aplikasi dengan data 2026 (558 baris) |
 | **3** | layar Pergeseran: spanduk babak lama, kunci Buat Pergeseran, Sinkron dimatikan | |
-| **4** | Cetak Ringkas/Lengkap + kop penanda + impor §11.1–11.2 | menunggu §14 no. 3 untuk tata letak Lengkap |
+| **4** | Cetak Ringkas/Lengkap + kop penanda + impor §11.1–11.2 | menunggu §14 no. 1 untuk tata letak Lengkap |
 | **5** | impor-balik ke versi terbuka §11.3 | jalur cadangan |
 
 **Definition of Done**: `npx tsx scripts/test-blud-dpa-perubahan.mts` beserta uji
