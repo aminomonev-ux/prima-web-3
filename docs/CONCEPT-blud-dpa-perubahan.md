@@ -1,6 +1,6 @@
 # CONCEPT — DPA Perubahan (BLUD)
 
-> Status: **KONSEP v3** (2026-10-08) — belum ada kode. Keputusan pemilik tercatat
+> Status: **KONSEP v3** (2026-10-08) — Tahap 0 **terpasang**, Tahap 1–5 belum. Keputusan pemilik tercatat
 > di §0; yang masih terbuka di §14.
 > Permintaan awal: DPA BLUD punya versi **Perubahan**, yang boleh menambah dan
 > mengurangi anggaran sehingga **totalnya berbeda** dari DPA murni.
@@ -395,7 +395,7 @@ Syarat dan penjaganya:
 
 | Tahap | Isi | Catatan |
 |---|---|---|
-| **0** | `sumberPaguTahun` menggantikan 6 salinan aturan pagu | tanpa perubahan perilaku; uji membuktikan hasil identik |
+| **0** ✅ | `sumberPaguTahun` menggantikan 6 salinan aturan pagu (+ subkueri `MAX` di `getPaguEfektif`) — `lib/blud/sumber-pagu.ts` | **selesai 2026-10-08**: tanpa perubahan perilaku, 0 beda pada 1.024 kombinasi versi; `test-blud-sumber-pagu.mts` (29), 11 uji mutasi tertangkap |
 | **1** | migrasi (4 kolom + tabel penanda), `schema-mysql.sql`, Zod, `pergeseranKeDpaInput`, `saveDpa` + `asal_perubahan`, pengisian Sebelum oleh server, pagar §5.1 / §6 / §9, aturan pagu §8, penanda ikut terhapus | inti data; uji DB balapan dua pembuatan bersamaan (pola `test-blud-race-hapus-versi.mjs`) |
 | **2** | layar DPA: tombol + modal + kolom Sebelum + sakelar + lencana + aturan hapus | verifikasi di aplikasi dengan data 2026 (558 baris) |
 | **3** | layar Pergeseran: spanduk babak lama, kunci Buat Pergeseran, Sinkron dimatikan | |

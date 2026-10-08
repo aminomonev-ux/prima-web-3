@@ -14,10 +14,12 @@ import {
   assertBludVersion, bumpBludVersion, dropBludVersion, getBludVersion, bludVersiKey,
   acquireBludLock, BLUD_PAGU_ENTITY, bludPaguKey, BLUD_VERSI_ENTITY, bludTahunKey,
 } from './lock'
-// Tipe saja — `pagu.ts` mengimpor `toDateStr` dari berkas ini, jadi impor nilai
-// akan membuat lingkaran modul. Bentuk hasilnya sengaja sama dengan pagar §4.3
-// supaya panel bentrok di layar Pengaturan bisa memakai komponen yang sama.
+// Bentuk hasilnya sengaja sama dengan pagar §4.3 supaya panel bentrok di layar
+// Pengaturan bisa memakai komponen yang sama.
 import type { BentrokPagu } from './pagu'
+import {
+  sumberPaguPenerus, versiJadiSumberPagu, tabelSumber, type TabelAnggaran,
+} from './sumber-pagu'
 import { ensureAnggaranKey } from './anggaran-key'
 import { toDateStr, formatTanggalId, labelPeriodeVersi } from './tanggal'
 import { catatRiwayatSimpan } from './riwayat-simpan'
@@ -205,16 +207,6 @@ async function barisBerjangkar(
   return map
 }
 
-async function versiSebelum(
-  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
-): Promise<string | null> {
-  const rows = table === 'dpa_blud'
-    ? await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal < ${versi}`
-    : await tx`SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal < ${versi}`
-  const v = (rows as { v?: unknown }[])[0]?.v
-  return v ? toDateStr(v) : null
-}
-
 /**
  * Kunci setahun untuk SEMUA jalur yang menulis atau menghapus versi anggaran.
  * Alasan lengkapnya di `BLUD_VERSI_ENTITY`; ringkasnya "versi mana yang jadi
@@ -240,37 +232,21 @@ async function kunciVersiTahun(tx: TxSql, tahun: number): Promise<void> {
  * yang sedang berlaku, jadi menghapusnya tidak menggeser pagu sama sekali
  * (mis. versi DPA lama di tahun yang sudah punya Pergeseran).
  *
- * Aturan penerusnya persis `getPaguSumber`: Pergeseran terbaru menang atas DPA,
- * dan yang dipakai selalu `MAX(versi_tanggal)`.
+ * Siapa penerusnya dijawab `sumberPaguPenerus` — aturan yang sama dengan
+ * `getPaguSumber`, dari satu tempat (sumber-pagu.ts). Termasuk kasus pergeseran
+ * terakhir hilang lalu pagu jatuh kembali ke DPA terbaru.
  */
 async function paguPenerus(
-  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
+  tx: TxSql, table: TabelAnggaran, tahun: number, versi: string,
 ): Promise<{ rows: Map<string, BarisPaguVersi>; versi: string | null } | null> {
-  const pgs = await tx`SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
-  const maxPergeseran = pgs[0]?.v ? toDateStr(pgs[0].v) : null
-
-  if (table === 'dpa_blud') {
-    if (maxPergeseran) return null // pagu diambil dari Pergeseran, DPA tidak menyentuhnya
-    const dpa = await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
-    if (!dpa[0]?.v || toDateStr(dpa[0].v) !== versi) return null
-    const penerus = await versiSebelum(tx, 'dpa_blud', tahun, versi)
-    return {
-      rows: penerus ? await barisBerjangkar(tx, 'dpa_blud', tahun, penerus) : new Map(),
-      versi: penerus,
-    }
-  }
-
-  if (maxPergeseran !== versi) return null
-  const penerus = await versiSebelum(tx, 'pergeseran_dpa', tahun, versi)
-  if (penerus) {
-    return { rows: await barisBerjangkar(tx, 'pergeseran_dpa', tahun, penerus), versi: penerus }
-  }
-  // Pergeseran terakhir hilang → pagu jatuh kembali ke DPA terbaru.
-  const dpa = await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
-  const dpaVersi = dpa[0]?.v ? toDateStr(dpa[0].v) : null
+  const penerus = await sumberPaguPenerus(tx, table, tahun, versi)
+  if (!penerus) return null
+  const tabelPenerus = tabelSumber(penerus)
   return {
-    rows: dpaVersi ? await barisBerjangkar(tx, 'dpa_blud', tahun, dpaVersi) : new Map(),
-    versi: dpaVersi,
+    rows: tabelPenerus && penerus.versi
+      ? await barisBerjangkar(tx, tabelPenerus, tahun, penerus.versi)
+      : new Map(),
+    versi: penerus.versi,
   }
 }
 
@@ -332,31 +308,6 @@ async function pagarHapusVersi(
     bentrok.sort((a, b) => b.minus - a.minus)
     throw new BludVersiTerpakaiError(bentrok, penerus.versi)
   }
-}
-
-/**
- * Apakah versi yang sedang DITULIS akan menentukan pagu efektif tahun itu?
- * Cerminan `paguPenerus` untuk arah sebaliknya.
- *
- * Menyimpan versi DPA lama di tahun yang sudah punya Pergeseran — atau yang sudah
- * punya DPA bertanggal lebih baru — tidak menggeser pagu satu rupiah pun. Pagar
- * §4.3 tidak berlaku di situ, dan menyalakannya hanya menghasilkan penolakan yang
- * tidak bisa dijelaskan ke pengguna.
- */
-async function versiJadiSumberPagu(
-  tx: TxSql, table: 'dpa_blud' | 'pergeseran_dpa', tahun: number, versi: string,
-): Promise<boolean> {
-  const pgs = await tx`SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
-  const maxPergeseran = pgs[0]?.v ? toDateStr(pgs[0].v) : null
-
-  if (table === 'pergeseran_dpa') return !maxPergeseran || versi >= maxPergeseran
-
-  // B2 — selama tahun itu belum punya Pergeseran, DPA-lah pagu yang berlaku
-  // (`getPaguSumber`). Begitu ada Pergeseran, mengubah DPA tidak menyentuh pagu.
-  if (maxPergeseran) return false
-  const dpa = await tx`SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}` as { v?: unknown }[]
-  const maxDpa = dpa[0]?.v ? toDateStr(dpa[0].v) : null
-  return !maxDpa || versi >= maxDpa
 }
 
 /**

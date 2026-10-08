@@ -4,14 +4,10 @@
 // Pagu TIDAK PERNAH disalin ke tabel realisasi. Menyalinnya berarti basi begitu
 // ada pergeseran baru — persis penyakit berkas Excel yang digantikan modul ini.
 //
-//   Pagu efektif (tahun T, baris X)
-//     = baris X pada Pergeseran versi TERBARU tahun T   (kolom `pergeseran`)
-//     → kalau tahun T belum punya Pergeseran, dari DPA versi TERBARU (kolom `jumlah`)
-//
-// Kolom `pergeseran` = pagu SESUDAH digeser (bukan nilai deltanya — itu
-// `bertambah_berkurang`). Lihat recalcPergeseranJumlah di recalc.ts.
+//   Pagu efektif (tahun T, baris X) = baris X pada versi yang ditunjuk
+//   `sumberPaguTahun` (sumber-pagu.ts) — aturannya tinggal di sana, satu tempat.
 import { sql } from '@/lib/data/db'
-import { toDateStr } from './data'
+import { sumberPaguTahun, type SumberPagu } from './sumber-pagu'
 import type { TipeBaris } from '@/types'
 
 export interface BarisPagu {
@@ -25,10 +21,7 @@ export interface BarisPagu {
   is_leaf: boolean
 }
 
-export interface PaguSumber {
-  sumber: 'PERGESERAN' | 'DPA' | 'KOSONG'
-  versi: string | null
-}
+export type PaguSumber = SumberPagu
 
 interface BarisMentah {
   anggaran_key: unknown
@@ -73,51 +66,40 @@ function susun(rows: BarisMentah[]): BarisPagu[] {
 
 /**
  * Dari mana pagu tahun ini diambil — dipakai UI untuk memberi tahu pengguna.
- *
- * `toDateStr` WAJIB, jangan `String(v).slice(0,10)`: kolom DATE dikembalikan
- * mysql2 sebagai objek Date, dan `String(Date)` berbunyi "Sun Jul 26 2026 …"
- * sehingga potongannya jadi "Sun Jul 26". Selain salah di layar, string itu
- * dipakai lagi sebagai parameter DATE di getPaguCap → MySQL menolak dengan
- * ER_WRONG_VALUE dan deteksi perubahan pagu §4.4 mati diam-diam.
+ * `versi` dipakai lagi sebagai parameter DATE di getPaguCap, jadi ia harus
+ * berbentuk 'YYYY-MM-DD' — `sumberPaguTahun` yang menjaminnya.
  */
 export async function getPaguSumber(tahun: number): Promise<PaguSumber> {
-  const pgs = await sql`
-    SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}
-  ` as { v?: unknown }[]
-  if (pgs[0]?.v) return { sumber: 'PERGESERAN', versi: toDateStr(pgs[0].v) }
-
-  const dpa = await sql`
-    SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}
-  ` as { v?: unknown }[]
-  if (dpa[0]?.v) return { sumber: 'DPA', versi: toDateStr(dpa[0].v) }
-
-  return { sumber: 'KOSONG', versi: null }
+  return sumberPaguTahun(sql, tahun)
 }
 
 /**
  * Pohon baris anggaran + pagu efektif tahun tsb, urut tampilan.
  * Array kosong = tahun itu belum punya DPA (§4.8) — pemanggil wajib menolak
  * input realisasi, bukan menampilkan layar kosong tanpa keterangan.
+ *
+ * Barisnya diambil dari `versi` yang ditunjuk sumbernya, BUKAN subkueri
+ * `MAX(versi_tanggal)` sendiri: subkueri itu salinan ketujuh aturan sumber pagu,
+ * dan begitu aturannya tidak lagi sama dengan "versi terbaru" (DPA Perubahan)
+ * ia diam-diam membaca versi yang salah.
  */
 export async function getPaguEfektif(tahun: number): Promise<BarisPagu[]> {
-  const { sumber } = await getPaguSumber(tahun)
-  if (sumber === 'KOSONG') return []
+  const { sumber, versi } = await getPaguSumber(tahun)
+  if (sumber === 'KOSONG' || !versi) return []
 
   const rows = sumber === 'PERGESERAN'
     ? await sql`
         SELECT anggaran_key, kode_rekening, uraian, tipe_baris, row_id, parent_id, urutan,
                pergeseran AS pagu
         FROM pergeseran_dpa
-        WHERE tahun_anggaran = ${tahun}
-          AND versi_tanggal = (SELECT MAX(versi_tanggal) FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun})
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
         ORDER BY urutan ASC
       `
     : await sql`
         SELECT anggaran_key, kode_rekening, uraian, tipe_baris, row_id, parent_id, urutan,
                jumlah AS pagu
         FROM dpa_blud
-        WHERE tahun_anggaran = ${tahun}
-          AND versi_tanggal = (SELECT MAX(versi_tanggal) FROM dpa_blud WHERE tahun_anggaran = ${tahun})
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
         ORDER BY urutan ASC
       `
 

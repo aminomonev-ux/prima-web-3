@@ -14,7 +14,7 @@ import {
   acquireBludLock, BLUD_PAGU_ENTITY, BLUD_KWT_ENTITY, bludPaguKey, bludKwtKey,
 } from './lock'
 import { getPaguMap } from './pagu'
-import { toDateStr } from './data'
+import { sumberPaguTahun } from './sumber-pagu'
 import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
   BludPaguTerlampauiError, BludTxConflictError, BludAlokasiTerlarangError,
@@ -414,35 +414,25 @@ async function pastikanTahunPunyaDpa(tx: TxSql, tahun: number): Promise<void> {
  * dan alasan itu gugur.
  *
  * Sengaja sempit: hanya key yang diminta dan hanya kolom yang dipakai — bukan
- * seluruh pohon seperti `getPaguEfektif`. Aturan sumbernya tetap `getPaguSumber`:
- * Pergeseran terbaru menang atas DPA terbaru.
+ * seluruh pohon seperti `getPaguEfektif`. Versinya ditanyakan ke
+ * `sumberPaguTahun` LEWAT `tx` — aturan yang sama dengan `getPaguSumber`, di
+ * dalam transaksi ini (L69-b).
  */
 async function bacaPaguTerkunci(
   tx: TxSql, tahun: number, keys: string[],
 ): Promise<Map<string, { pagu: number; kode_rekening: string; uraian: string }>> {
-  const pgs = await tx`
-    SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun}
-  ` as { v?: unknown }[]
-  const versiPergeseran = pgs[0]?.v ? toDateStr(pgs[0].v) : null
+  const { sumber, versi } = await sumberPaguTahun(tx, tahun)
 
-  let versiDpa: string | null = null
-  if (!versiPergeseran) {
-    const dpa = await tx`
-      SELECT MAX(versi_tanggal) AS v FROM dpa_blud WHERE tahun_anggaran = ${tahun}
-    ` as { v?: unknown }[]
-    versiDpa = dpa[0]?.v ? toDateStr(dpa[0].v) : null
-  }
-
-  const rows = versiPergeseran
+  const rows = sumber === 'PERGESERAN'
     ? await tx`
         SELECT anggaran_key, kode_rekening, uraian, pergeseran AS pagu FROM pergeseran_dpa
-        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiPergeseran}
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
           AND anggaran_key IN (${keys})
         FOR UPDATE
       `
     : await tx`
         SELECT anggaran_key, kode_rekening, uraian, jumlah AS pagu FROM dpa_blud
-        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiDpa}
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
           AND anggaran_key IN (${keys})
         FOR UPDATE
       `

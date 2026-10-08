@@ -27,6 +27,9 @@ function cek(nama: string, syarat: boolean, catatan = '') {
 
 const kLock = kode(baca('lib/blud/lock.ts'))
 const kData = kode(baca('lib/blud/data.ts'))
+// Aturan sumber pagu pindah ke sini (Tahap 0 DPA Perubahan) — perilakunya diuji
+// sungguhan di scripts/test-blud-sumber-pagu.mts.
+const kSumber = kode(baca('lib/blud/sumber-pagu.ts'))
 
 console.log('\n── A. Entity kuncinya sendiri ──')
 cek('BLUD_VERSI_ENTITY ada', /export const BLUD_VERSI_ENTITY = '[^']+'/.test(kLock))
@@ -59,7 +62,8 @@ cek('deletePergeseranVersi memanggil pagarHapusVersi',
   /pagarHapusVersi\(tx, 'pergeseran_dpa', tahun, versiTanggal\)/.test(kData))
 cek('deleteDpaVersi ikut', /pagarHapusVersi\(tx, 'dpa_blud', tahun, versiTanggal\)/.test(kData))
 cek('paguPenerus masih memulangkan null utk versi non-terbaru',
-  /if \(maxPergeseran !== versi\) return null/.test(kData),
+  /await sumberPaguPenerus\(tx, table, tahun, versi\)\s*\n\s*if \(!penerus\) return null/.test(kData)
+  && /if \(tabelSumber\(kini\) !== tabel \|\| kini\.versi !== versi\) return null/.test(kSumber),
   'jalan cepat itu SAH — yang dulu salah cuma dibacanya tanpa kunci')
 
 console.log(`\n${lulus} pemeriksaan LULUS · ${gagal} GAGAL`)
