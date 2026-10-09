@@ -355,6 +355,10 @@ export const AsalImporSchema = z.object({
   berkas: z.string().trim().max(120),
   lembar: z.string().trim().max(60),
   baris:  z.coerce.number().int().min(0),
+  // Konsep Perubahan §11.3 butir 7: membedakan impor ke periode kosong dari impor-balik
+  // yang MENIMPA versi tersimpan — dua kejadian yang sangat berbeda di baris audit.
+  ke_versi_terbuka: TanggalSchema.optional(),
+  simpanan_berkas:  z.coerce.number().int().min(0).nullable().optional(),
 });
 
 /**

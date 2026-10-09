@@ -302,7 +302,7 @@ console.log('\n── F. Sambungan ──')
   cek('F2 Cetak: babak pergeseran dari ACUAN-nya, bukan tanggal simpan',
     cetak.includes('menu === \'pergeseran\' && acuan ? keBabak(penandaSegar, acuan)'))
   cek('F3 Cetak: Ringkas membawa perubahanKe',
-    cetak.includes('await exportDpaDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe })'))
+    /await exportDpaDokumen\(\{\s*tahun, versi: rawVersi, rows: rawRows as DpaBaris\[\], direktur, perubahanKe: rawBabakKe,/.test(cetak))
   cek('F4 Cetak: view Lengkap → exportDpaPerubahanDokumen',
     cetak.includes('await exportDpaPerubahanDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe })'))
   cek('F5 Cetak: Pergeseran membawa acuanPerubahanKe', cetak.includes('mutasi: rawMutasi, acuanPerubahanKe: rawBabakKe,'))
@@ -316,20 +316,25 @@ console.log('\n── F. Sambungan ──')
 
   const modal = kode(baca('components/blud/ImportDpaModal.tsx'))
   cek('F10 Modal impor mengirim sasaran', modal.includes("form.append('sasaran', sasaran)"))
-  cek('F11 Modal: tombol Masukkan HILANG saat ditolak', modal.includes("{hasil && putusan.jenis !== 'tolak' && ("))
+  // Sejak Tahap 5 putusan §11.2 digabung dengan penjaga impor-balik (§11.3) ke `tolak` &
+  // `peringatan` — yang dijaga tetap sama: tolak menyembunyikan tombol, peringatan ditanya.
+  cek('F11 Modal: tombol Masukkan HILANG saat ditolak',
+    modal.includes("tolak: b?.tolak ?? (putusan.jenis === 'tolak' ? putusan.pesan : null),") && modal.includes('{hasil && !tolak && ('))
   cek('F12 Modal: peringatan ditanyakan lewat confirmDialog sebelum onTerapkan',
-    /if \(putusan\.jenis === 'peringatan' && !\(await confirmDialog\(\{[\s\S]*?\}\)\)\) return\s*onTerapkan\(/.test(modal))
-  cek('F13 Modal: terapkan menolak sendiri saat tolak', modal.includes("if (!hasil || putusan.jenis === 'tolak') return"))
+    /if \(peringatan\.length && !\(await confirmDialog\(\{[\s\S]*?\}\)\)\) return\s*const asal/.test(modal)
+      && modal.includes("...(putusan.jenis === 'peringatan' ? [putusan.pesan] : [])"))
+  cek('F13 Modal: terapkan menolak sendiri saat tolak', modal.includes('if (!hasil || tolak) return'))
   cek('F13b Modal: sasaran disebut sebagai TANGGAL (bukan "bulan berjalan (hari ini)" berkurung ganda)',
     modal.includes('sasaranLabel: formatTanggalId(sasaran),'))
   cek('F13c Modal: peringatan memakai kelas bertema, bukan kuning sebaris',
-    /\{putusan\.jenis === 'peringatan' && \(\s*<div className="blud-imp-badge-warn"/.test(modal))
+    /\{!tolak && peringatan\.map\(p => \(\s*<div key=\{p\} className="blud-imp-badge-warn"/.test(modal))
   const dpa = kode(baca('app/(dashboard)/blud/dpa/dpa-client.tsx'))
   // `sasaran={sasaran}` juga dipakai dua modal lain — yang diperiksa elemen ImportDpaModal-nya sendiri.
   const elImpor = dpa.slice(dpa.indexOf('<ImportDpaModal'), dpa.indexOf('/>', dpa.indexOf('<ImportDpaModal')))
   cek('F14 layar DPA mengoper sasaran Simpan ke modal impor', elImpor.includes('sasaran={sasaran}'))
   const rute = kode(baca('app/api/blud/dpa/import/route.ts'))
-  cek('F15 route: babak dinilai pada SASARAN', rute.includes('keBabak(await getPerubahan(tahun), sasaranParsed.data)'))
+  cek('F15 route: babak dinilai pada SASARAN',
+    rute.includes('const babak = keBabak(penanda, sasaranParsed.data)') && rute.includes('await getPerubahan(tahun)'))
   cek('F16 route: pembanding = versi DPA berlaku di sasaran',
     rute.includes('await getDpaVersiBerlaku(tahun, sasaranParsed.data)'))
   cek('F17 route: hasil membawa perubahanKe, versiKop, tujuan',

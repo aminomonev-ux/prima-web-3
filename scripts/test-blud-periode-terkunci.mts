@@ -251,8 +251,11 @@ bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')
     /const alasanKunciBorongan = versi\s*\n\s*\? `Versi \$\{formatTanggalId\(versi\)\}/.test(dpa))
   cek('DPA: Form Baru ikut terkunci',
     /disabled=\{!!alasanKunciBorongan\}[\s\S]{0,120}onClick=\{mulaiFormBaru\}/.test(dpa))
-  cek('DPA: Impor ikut terkunci',
-    /disabled=\{!!alasanKunciBorongan\}[\s\S]{0,140}setImportDpaBuka\(true\)/.test(dpa))
+  // Impor DILEPAS dari kunci ini sejak DPA Perubahan Tahap 5 (§11.3): di atas versi
+  // tersimpan ia hanya menerima Excel unduhan PRIMA versi itu (jangkar utuh), dan
+  // penjaganya di server — `test-blud-impor-balik.mts` bagian C & F.
+  cek('DPA: Impor TIDAK lagi terkunci versi tersimpan',
+    !/disabled=\{!!alasanKunciBorongan\}[\s\S]{0,140}(setImportDpaBuka\(true\)|bukaImpor)/.test(dpa))
   // Patokan Salin Tahun SENGAJA berbeda: sasarannya tahun yang dibuka, bukan
   // slot versi — memilih periode historis mengosongkan layar, dan tahunnya
   // tetap berisi.
@@ -261,7 +264,7 @@ bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')
   cek('DPA: Salin Tahun tetap menjaga syarat lama',
     /alasanKunciSalinTahun = tahunList\.filter\(t => t !== tahun\)\.length === 0/.test(dpa))
   cek('DPA: alasan kunci dipakai sebagai tooltip',
-    (dpa.match(/data-tooltip=\{alasanKunciBorongan\}/g) ?? []).length === 2)
+    (dpa.match(/data-tooltip=\{alasanKunciBorongan\}/g) ?? []).length === 1)
   // "Salin ke Induk" TIDAK mengganti tabel — ia membaca baris yang ada.
   cek('DPA: Salin ke Induk tidak ikut terkunci',
     /disabled=\{!rows\.length\}[\s\S]{0,120}setSalinBuka\(true\)/.test(dpa))

@@ -23,6 +23,7 @@ import { uraiGeser, URAIAN_NOL } from '@/lib/blud/urai-geser'
 import { totalMutasi, type MutasiInput } from '@/lib/blud/mutasi'
 import { HEX_NAIK, HEX_TURUN, KOLOM_SELISIH_PERUBAHAN } from '@/lib/blud/export/warna-delta'
 import { tanggalHariIniWIB, formatTanggalId } from '@/lib/blud/tanggal'
+import { teksPenandaUnduhan } from '@/lib/blud/impor-balik'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
 const INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO'
@@ -279,6 +280,12 @@ export interface UnduhDokumenArgs<T> {
   perubahanKe?: number | null
   /** Pergeseran: acuannya DPA Perubahan ke berapa (§9 "kop menyebut acuannya"). */
   acuanPerubahanKe?: number | null
+  /**
+   * DPA: angka kunci versi saat diunduh ("simpanan ke-n"). Ditulis sebagai penanda
+   * unduhan di kolom Jangkar supaya impor-balik ke versi terbuka bisa menyebut berkas
+   * yang basi (konsep Perubahan §11.3).
+   */
+  simpananKe?: number | null
 }
 
 /** Kop baris 5 dokumen DPA versi Perubahan — satu rumus untuk Ringkas & Lengkap. */
@@ -288,7 +295,7 @@ export function kopPerubahan(ke: number, versi: string | null): string {
 
 /** Dipisah dari unduhan supaya bisa diuji di Node tanpa DOM (`test-dpa-export.mjs`). */
 export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise<ExcelJS.Workbook> {
-  const { tahun, rows, direktur = null, perubahanKe = null, versi } = args
+  const { tahun, rows, direktur = null, perubahanKe = null, versi, simpananKe = null } = args
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('Data kosong — tidak ada yang bisa diunduh')
   }
@@ -301,6 +308,12 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
 
   // Format Ringkas DPA Perubahan = tata letak DPA murni + kop penanda (konsep §7).
   tulisJudul(ws, kolTampak, 'RINCIAN BELANJA ANGGARAN', tahun, perubahanKe ? kopPerubahan(perubahanKe, versi) : undefined)
+  // Di kolom Jangkar yang tersembunyi, di luar sel gabung kop — tidak tercetak, tapi
+  // bertahan disunting Excel seperti isi Jangkar itu sendiri.
+  if (versi && simpananKe != null) {
+    ws.getRow(1).getCell(KOLOM_DPA.indexOf('Jangkar') + 1).value =
+      sanitizeCell(teksPenandaUnduhan({ tahun, versi, simpananKe }))
+  }
   tulisHeader(ws, KOLOM_DPA)
 
   for (const r of pohon.urut) {

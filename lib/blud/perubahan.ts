@@ -213,14 +213,17 @@ export function alasanKunciPerubahan(a: {
 // Format Lengkap & dokumen dua blok sudah ditolak PARSER (tak satu baris pun bisa
 // dibaca dengan benar). Yang tersisa di sini aturan yang bergantung pada TUJUAN.
 
-/** "Terbaca: Excel DPA Perubahan ke-1 · unduhan PRIMA · versi 8 Okt 2026 · 558 baris" */
+/** "Terbaca: Excel DPA Perubahan ke-1 · unduhan PRIMA · versi 8 Okt 2026 · simpanan ke-3 · 558 baris" */
 export function kalimatTerbaca(a: {
   perubahanKe: number | null; versiKop: string | null; unduhanPrima: boolean; baris: number
+  /** Penanda unduhan (§11.3) — versi untuk berkas murni yang kopnya tidak menyebutnya. */
+  unduhan?: { versi: string; simpananKe: number } | null
 }): string {
   return [
     a.perubahanKe ? `Excel DPA Perubahan ke-${a.perubahanKe}` : 'Excel DPA murni',
     a.unduhanPrima ? 'unduhan PRIMA' : 'formulir luar',
-    a.versiKop ? `versi ${a.versiKop}` : null,
+    a.versiKop ? `versi ${a.versiKop}` : a.unduhan ? `versi ${formatTanggalId(a.unduhan.versi)}` : null,
+    a.unduhan ? `simpanan ke-${a.unduhan.simpananKe}` : null,
     `${a.baris} baris`,
   ].filter(Boolean).join(' · ')
 }

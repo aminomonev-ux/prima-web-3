@@ -25,7 +25,8 @@ import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { TIPE_LABEL } from '@/lib/blud/format'
-import { kalimatTerbaca, putusanImpor } from '@/lib/blud/perubahan'
+import { formatSelisih, kalimatTerbaca, putusanImpor } from '@/lib/blud/perubahan'
+import type { BandingImporBalik } from '@/lib/blud/impor-balik'
 import { formatTanggalId } from '@/lib/blud/tanggal'
 import type { DpaBarisInput } from '@/types'
 // Tipe di-impor secara TYPE-ONLY (terhapus saat kompilasi); pemetanya diambil
@@ -48,7 +49,23 @@ interface JangkarTerdampak {
  * `lib/blud/schemas.ts`. Gunanya satu: memperpanjang baris audit `BLUD_SAVE_DPA`,
  * pengganti `BLUD_DPA_IMPORT_COMMIT` yang ikut hilang bersama jalur tulisnya.
  */
-export type AsalImpor = { berkas: string; lembar: string; baris: number }
+export type AsalImpor = {
+  berkas: string; lembar: string; baris: number
+  /** Impor-balik (§11.3): versi tersimpan yang isinya diganti, dan simpanan asal berkasnya. */
+  ke_versi_terbuka?: string
+  simpanan_berkas?: number | null
+}
+
+/** Cermin `ImporBalik` di route impor. */
+interface ImporBalik {
+  versi: string
+  simpananKini: number
+  simpananBerkas: number | null
+  tolak: string | null
+  peringatan: string[]
+  rows: DpaBarisInput[] | null
+  banding: BandingImporBalik | null
+}
 
 interface HasilPreview {
   namaBerkas: string
@@ -69,6 +86,9 @@ interface HasilPreview {
   versiKop: string | null
   /** Babak sasaran Simpan menurut server — null kalau sasaran tak terkirim. */
   tujuan: { babak: number | null; pembanding: { versi: string; total: number } | null } | null
+  unduhan: { tahun: number; versi: string; simpananKe: number } | null
+  /** Hanya bila modal dibuka di atas versi tersimpan. */
+  imporBalik: ImporBalik | null
 }
 
 const rp =(n: number | null | undefined) => (n == null ? '—' : Number(n).toLocaleString('id-ID'))
@@ -80,7 +100,7 @@ const LABEL_SUMBER: Record<string, string> = {
 }
 
 export default function ImportDpaModal({
-  tahun, periodeLabel, sasaran, onTutup, onTerapkan,
+  tahun, periodeLabel, sasaran, versiTerbuka, onTutup, onTerapkan,
 }: {
   tahun: number
   /** Nama periode yang akan jadi tujuan Simpan — ditampilkan apa adanya supaya
@@ -88,8 +108,15 @@ export default function ImportDpaModal({
   periodeLabel: string
   /** Tanggal sasaran Simpan (`sasaranSimpan`) — server menilai babaknya (§11.2). */
   sasaran: string
+  /**
+   * Versi tersimpan yang sedang terbuka di layar ('' = tidak ada). Terisi = impor-balik
+   * (§11.3): hanya Excel unduhan PRIMA dari versi itu yang diterima, dan isinya
+   * DIPASANG di atas versi itu — bukan menggantikan tabel dengan baris serba-baru.
+   */
+  versiTerbuka: string
   onTutup: () => void
-  onTerapkan: (rows: DpaBarisInput[], asal: AsalImpor) => void
+  /** `simpananKini` = angka kunci versi terbuka yang dibaca server saat pratinjau (L77). */
+  onTerapkan: (rows: DpaBarisInput[], asal: AsalImpor, simpananKini?: number) => void
 }) {
   const [sibuk, setSibuk] = useState(false)
   const [hasil, setHasil] = useState<HasilPreview | null>(null)
@@ -103,6 +130,7 @@ export default function ImportDpaModal({
       form.append('file', file)
       form.append('tahun', String(tahun))
       form.append('sasaran', sasaran)
+      if (versiTerbuka) form.append('versi_terbuka', versiTerbuka)
       const res = await fetch('/api/blud/dpa/import?step=preview', { method: 'POST', body: form })
       let json: { ok?: boolean; data?: HasilPreview; error?: string }
       try { json = await res.json() } catch { toast.error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.'); return }
@@ -116,7 +144,7 @@ export default function ImportDpaModal({
     } finally {
       setSibuk(false)
     }
-  }, [tahun, sasaran])
+  }, [tahun, sasaran, versiTerbuka])
 
   const putusan = useMemo(() => (hasil?.tujuan
     ? putusanImpor({
@@ -131,6 +159,18 @@ export default function ImportDpaModal({
       })
     : { jenis: 'boleh' as const }), [hasil, sasaran])
 
+  // §11.3 di atas §11.2: penolakan dari salah satunya cukup; peringatan keduanya
+  // ditanyakan bersama dalam SATU dialog, bukan dua dialog beruntun yang dilatih diklik.
+  const { balik, tolak, peringatan, barisMasuk } = useMemo(() => {
+    const b = hasil?.imporBalik ?? null
+    return {
+      balik: b,
+      tolak: b?.tolak ?? (putusan.jenis === 'tolak' ? putusan.pesan : null),
+      peringatan: [...(b?.peringatan ?? []), ...(putusan.jenis === 'peringatan' ? [putusan.pesan] : [])],
+      barisMasuk: b?.rows ?? null,
+    }
+  }, [hasil, putusan])
+
   /**
    * Tidak ada permintaan jaringan di sini — hasil pratinjau langsung dioper ke
    * form. Seluruh pemeriksaan berat (pohon, jangkar, ambang penurunan baris,
@@ -139,21 +179,28 @@ export default function ImportDpaModal({
    * (`entri_historis`) terpasang di satu jalur saja.
    */
   const terapkan = useCallback(async () => {
-    if (!hasil || putusan.jenis === 'tolak') return
-    // §11.2 "peringatan dulu" — ditanyakan di depan tombol, bukan sekadar tertulis
-    // di panel yang bisa terlewat di bawah pratinjau pohon.
-    if (putusan.jenis === 'peringatan' && !(await confirmDialog({
-      title: 'Jenis berkas tidak cocok dengan tujuan Simpan',
-      message: putusan.pesan,
+    if (!hasil || tolak) return
+    // §11.2/§11.3 "peringatan dulu" — ditanyakan di depan tombol, bukan sekadar
+    // tertulis di panel yang bisa terlewat di bawah pratinjau pohon.
+    if (peringatan.length && !(await confirmDialog({
+      title: balik ? 'Periksa sebelum menimpa isi versi ini' : 'Jenis berkas tidak cocok dengan tujuan Simpan',
+      message: peringatan.join('\n\n'),
       confirmLabel: 'Tetap Masukkan ke Form',
       variant: 'warning',
     }))) return
-    onTerapkan(keDpaBarisInput(hasil.baris), {
+    const asal: AsalImpor = {
       berkas: hasil.namaBerkas.slice(0, 120),
       lembar: hasil.namaLembar.slice(0, 60),
       baris:  hasil.baris.length,
-    })
-  }, [hasil, putusan, onTerapkan])
+    }
+    // Impor-balik memasang GABUNGAN buatan server (jangkar → row_id versi, baris yang
+    // hilang mengikuti aturan hapus §10), bukan baris berkas apa adanya.
+    if (balik && barisMasuk) {
+      onTerapkan(barisMasuk, { ...asal, ke_versi_terbuka: balik.versi, simpanan_berkas: balik.simpananBerkas }, balik.simpananKini)
+    } else {
+      onTerapkan(keDpaBarisInput(hasil.baris), asal)
+    }
+  }, [hasil, tolak, peringatan, balik, barisMasuk, onTerapkan])
 
   const bermasalah = hasil?.baris.filter(b => b.catatan.length) ?? []
   const selisih = hasil && hasil.totalFile != null ? hasil.totalFile - hasil.totalHitung : null
@@ -191,11 +238,20 @@ export default function ImportDpaModal({
         <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!hasil && (
             <div style={{ textAlign: 'center', padding: '28px 12px' }}>
-              <p className="blud-imp-muted" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>
-                Pilih berkas <strong>.xlsx</strong> — boleh formulir DPA dari provinsi, boleh hasil
-                unduhan PRIMA. Hierarkinya dibaca dari rumus atau kolom Level di dalam berkas;
-                <strong> tidak ada yang ditulis ke basis data</strong> sampai Anda menekan Simpan.
-              </p>
+              {versiTerbuka ? (
+                <p className="blud-imp-muted" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>
+                  Versi <strong>{formatTanggalId(versiTerbuka)}</strong> sedang terbuka. Pilih Excel unduhan PRIMA
+                  dari versi ini (menu Cetak → DPA BLUD) yang sudah Anda sunting — isinya dipasang di atas
+                  versi ini, dan perubahannya ditampilkan dulu. Formulir dari luar diimpor ke periode yang
+                  belum punya versi. <strong>Tidak ada yang ditulis ke basis data</strong> sampai Anda menekan Simpan.
+                </p>
+              ) : (
+                <p className="blud-imp-muted" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 16 }}>
+                  Pilih berkas <strong>.xlsx</strong> — boleh formulir DPA dari provinsi, boleh hasil
+                  unduhan PRIMA. Hierarkinya dibaca dari rumus atau kolom Level di dalam berkas;
+                  <strong> tidak ada yang ditulis ke basis data</strong> sampai Anda menekan Simpan.
+                </p>
+              )}
               <PrimaButton variant="purple" iconLeft={<Upload size={14} />} disabled={sibuk}
                 onClick={() => inputRef.current?.click()}>
                 {sibuk ? 'Membaca berkas…' : 'Pilih Berkas'}
@@ -205,24 +261,27 @@ export default function ImportDpaModal({
 
           {hasil && (
             <>
-              {putusan.jenis === 'tolak' && (
+              {tolak && (
                 <Panel judul="Berkas ini tidak bisa dimasukkan" bahaya>
-                  <p style={{ fontSize: 11.5, lineHeight: 1.6 }}>{putusan.pesan}</p>
+                  <p style={{ fontSize: 11.5, lineHeight: 1.6 }}>{tolak}</p>
                 </Panel>
               )}
               {/* Kelas peringatan modal ini (berpasangan tema terang), bukan warna sebaris:
                   kuning #FAC775 di atas latar terang #FAFAFA nyaris tak terbaca. */}
-              {putusan.jenis === 'peringatan' && (
-                <div className="blud-imp-badge-warn" role="status" style={{ padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.6 }}>
-                  <strong>Periksa dulu jenis berkasnya.</strong> {putusan.pesan}
+              {!tolak && peringatan.map(p => (
+                <div key={p} className="blud-imp-badge-warn" role="status" style={{ padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.6 }}>
+                  <strong>Periksa dulu.</strong> {p}
                 </div>
-              )}
+              ))}
+
+              {balik?.banding && <PanelBanding versi={balik.versi} simpananKini={balik.simpananKini} banding={balik.banding} />}
 
               <Panel judul="Yang terbaca dari berkas">
                 <Baris label="Terbaca">
                   {kalimatTerbaca({
                     perubahanKe: hasil.perubahanKe, versiKop: hasil.versiKop,
                     unduhanPrima: hasil.kolom.jangkar != null, baris: hasil.baris.length,
+                    unduhan: hasil.unduhan,
                   })}
                 </Baris>
                 <Baris label="Berkas">{hasil.namaBerkas}</Baris>
@@ -356,7 +415,7 @@ export default function ImportDpaModal({
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,.08)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,.08)' }}>
           <PrimaButton variant="ghost" onClick={onTutup} disabled={sibuk}>Batal</PrimaButton>
           {hasil && (
             <PrimaButton variant="ghost" iconLeft={<Upload size={13} />} disabled={sibuk}
@@ -364,12 +423,75 @@ export default function ImportDpaModal({
               Ganti Berkas
             </PrimaButton>
           )}
-          {hasil && putusan.jenis !== 'tolak' && (
+          {hasil && !tolak && (
             <PrimaButton variant="primary" disabled={sibuk} onClick={() => void terapkan()}>
-              Masukkan {hasil.baris.length} baris ke Form
+              Masukkan {(barisMasuk ?? hasil.baris).length} baris ke Form
             </PrimaButton>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * §11.3 butir 5 — "bandingkan dulu, baru terapkan" (L82b). Yang dicantumkan DAUN:
+ * induk menjumlah anaknya, jadi mendaftarnya menulis satu perubahan sedalam pohonnya (L85).
+ */
+function PanelBanding({ versi, simpananKini, banding }: { versi: string; simpananKini: number; banding: BandingImporBalik }) {
+  const selisih = banding.totalBaru - banding.totalLama
+  const kosong = !banding.berubah.length && !banding.baru.length && !banding.dinolkan.length
+    && !banding.dihapus.length && !banding.lainBerubah
+  return (
+    <Panel judul={`Dibandingkan dengan versi ${formatTanggalId(versi)} · simpanan ke-${simpananKini}`}>
+      <Baris label="Total">
+        Rp {rp(banding.totalLama)} → Rp {rp(banding.totalBaru)}
+        {' · '}selisih <strong>{formatSelisih(selisih, n => `Rp ${rp(n)}`)}</strong>
+      </Baris>
+      {kosong && <Baris label="Perubahan">Tidak ada yang berubah — isi berkas sama dengan versi ini.</Baris>}
+      <DaftarBanding judul="Angka berubah" isi={banding.berubah.map(b => ({
+        kunci: `${b.kode}|${b.uraian}`, label: b.uraian, kode: b.kode,
+        nilai: `${rp(b.lama)} → ${rp(b.baru)}`,
+      }))} />
+      <DaftarBanding judul="Baris baru" isi={banding.baru.map(b => ({
+        kunci: `${b.kode}|${b.uraian}`, label: b.uraian, kode: b.kode, nilai: rp(b.jumlah),
+      }))} />
+      <DaftarBanding
+        judul="Tidak ada di berkas — dinolkan"
+        catatan="Baris ini sudah ada sebelum Perubahan, jadi tetap tercatat dengan angka Rp 0 (aturan hapus DPA Perubahan)."
+        isi={banding.dinolkan.map(b => ({ kunci: `${b.kode}|${b.uraian}`, label: b.uraian, kode: b.kode, nilai: `${rp(b.jumlah)} → 0` }))} />
+      <DaftarBanding judul="Tidak ada di berkas — dihapus" isi={banding.dihapus.map(b => ({
+        kunci: `${b.kode}|${b.uraian}`, label: b.uraian, kode: b.kode, nilai: rp(b.jumlah),
+      }))} />
+      {banding.lainBerubah > 0 && (
+        <Baris label="Lainnya">
+          {banding.lainBerubah} baris berubah uraian, kode, penanggung jawab, keterangan, susunan, atau vol/harga tanpa mengubah jumlah.
+        </Baris>
+      )}
+    </Panel>
+  )
+}
+
+function DaftarBanding({ judul, catatan, isi }: {
+  judul: string; catatan?: string
+  isi: Array<{ kunci: string; label: string; kode: string; nilai: string }>
+}) {
+  if (!isi.length) return null
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700 }}>{judul} — {isi.length}</div>
+      {catatan && <div className="blud-imp-muted" style={{ fontSize: 11, lineHeight: 1.5 }}>{catatan}</div>}
+      {/* Berbaris, bukan dipaksa satu baris: di layar 375px kode 28 karakter + uraian
+          mendorong nilainya keluar dan memunculkan bilah gulir mendatar. */}
+      <div style={{ maxHeight: 130, overflowY: 'auto', overflowX: 'hidden', fontSize: 11, marginTop: 4 }}>
+        {isi.slice(0, 60).map((x, i) => (
+          <div key={`${x.kunci}|${i}`} style={{ display: 'flex', flexWrap: 'wrap', columnGap: 8, padding: '2px 0' }}>
+            {x.kode && <span className="blud-imp-muted" style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{x.kode}</span>}
+            <span style={{ flex: '1 1 160px', minWidth: 0 }}>{x.label || <em className="blud-imp-muted">(tanpa uraian)</em>}</span>
+            <span style={{ fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: 'auto' }}>{x.nilai}</span>
+          </div>
+        ))}
+        {isi.length > 60 && <div className="blud-imp-muted">… dan {isi.length - 60} lagi</div>}
       </div>
     </div>
   )
@@ -402,9 +524,9 @@ function Panel({ judul, bahaya, children }: { judul: string; bahaya?: boolean; c
 
 function Baris({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', gap: 10, fontSize: 11.5, padding: '2px 0', lineHeight: 1.6 }}>
-      <span className="blud-imp-muted" style={{ minWidth: 148 }}>{label}</span>
-      <span style={{ flex: 1 }}>{children}</span>
+    <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 10, fontSize: 11.5, padding: '2px 0', lineHeight: 1.6 }}>
+      <span className="blud-imp-muted" style={{ flex: '0 0 148px' }}>{label}</span>
+      <span style={{ flex: '1 1 220px', minWidth: 0 }}>{children}</span>
     </div>
   )
 }

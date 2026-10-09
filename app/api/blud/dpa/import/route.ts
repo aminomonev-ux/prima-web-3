@@ -22,10 +22,26 @@ import { bolehEditMenu, tolakEdit, unauthorized, bludMati } from '../../_guard'
 import { bacaGridDpa, BerkasDpaTidakDikenalError } from '@/lib/blud/import-dpa-grid'
 import { bacaDpaDariGrid, StrukturDpaTidakTerbacaError } from '@/lib/blud/import-dpa'
 import { getPenanggungJawab } from '@/lib/blud/penanggung-jawab-data'
-import { jangkarDipakaiRealisasi, getDpaVersiBerlaku, getDpaByDate } from '@/lib/blud/data'
+import { jangkarDipakaiRealisasi, getDpaVersiBerlaku, getDpaByDate, getDpaVersion } from '@/lib/blud/data'
 import { getPerubahan } from '@/lib/blud/perubahan-data'
 import { keBabak } from '@/lib/blud/perubahan'
 import { totalAkarDpa } from '@/lib/blud/salin-versi'
+import { keDpaBarisInput } from '@/lib/blud/import-dpa-shared'
+import { dpaKeInput } from '@/lib/blud/row-map'
+import { formatTanggalId } from '@/lib/blud/tanggal'
+import { periksaImporBalik, gabungImporBalik, type BandingImporBalik } from '@/lib/blud/impor-balik'
+import type { DpaBarisInput } from '@/types'
+
+/** Jawaban impor-balik ke versi terbuka (§11.3) — `rows` siap dipasang ke form kalau tidak ditolak. */
+interface ImporBalik {
+  versi: string
+  simpananKini: number
+  simpananBerkas: number | null
+  tolak: string | null
+  peringatan: string[]
+  rows: DpaBarisInput[] | null
+  banding: BandingImporBalik | null
+}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -115,19 +131,56 @@ async function tanganiPreview(
       penanggungJawabSah: master.map((m) => m.label),
     })
 
+    const sasaranParsed = TanggalSchema.safeParse(form?.get('sasaran'))
+    const versiTerbukaParsed = TanggalSchema.safeParse(form?.get('versi_terbuka'))
+    const penanda = sasaranParsed.success || versiTerbukaParsed.success ? await getPerubahan(tahun) : []
+
+    // Konsep Perubahan §11.3 — impor-balik ke versi yang sedang terbuka. Isi versi dan
+    // angka kuncinya dibaca DI SINI, bukan dipercaya dari layar: layar bisa memegang
+    // suntingan yang belum tersimpan, dan angka kunci wajib segar dari server (L77).
+    let imporBalik: ImporBalik | null = null
+    if (versiTerbukaParsed.success) {
+      const versi = versiTerbukaParsed.data
+      const [barisVersi, simpananKini] = await Promise.all([getDpaByDate(tahun, versi), getDpaVersion(tahun, versi)])
+      const dasar = { versi, simpananKini, simpananBerkas: hasil.unduhan?.simpananKe ?? null }
+      if (!barisVersi.length) {
+        imporBalik = {
+          ...dasar, rows: null, banding: null, peringatan: [],
+          tolak: `Versi ${formatTanggalId(versi)} tidak ditemukan lagi — mungkin baru dihapus. Muat ulang halaman DPA.`,
+        }
+      } else {
+        const versiInput = barisVersi.map(dpaKeInput)
+        const putusan = periksaImporBalik(
+          { adaKolomJangkar: hasil.kolom.jangkar != null, perubahanKe: hasil.perubahanKe, unduhan: hasil.unduhan, baris: hasil.baris },
+          {
+            tahun, versi, simpananKini, babak: keBabak(penanda, versi),
+            jangkar: new Set(versiInput.map(r => r.anggaran_key ?? '').filter(Boolean)),
+          },
+        )
+        if (putusan.tolak !== null) {
+          imporBalik = { ...dasar, rows: null, banding: null, peringatan: [], tolak: putusan.tolak }
+        } else {
+          const g = gabungImporBalik(versiInput, keDpaBarisInput(hasil.baris))
+          imporBalik = { ...dasar, rows: g.rows, banding: g.banding, peringatan: putusan.peringatan, tolak: null }
+        }
+      }
+    }
+
     // Jangkar yang akan hilang kalau baris hasil impor dipakai — `periksaJangkar`
-    // di saveDpa TIDAK menangkap ini (baris impor semuanya row_id baru).
+    // di saveDpa TIDAK menangkap ini (baris impor semuanya row_id baru). Impor-balik
+    // dibandingkan dengan hasil GABUNGAN-nya: baris yang dinolkan tetap membawa jangkar.
     const terpakai = await jangkarDipakaiRealisasi(tahun)
-    const jangkarBaru = new Set(hasil.baris.map(b => b.jangkar).filter(Boolean) as string[])
+    const jangkarBaru = new Set(
+      (imporBalik?.rows ? imporBalik.rows.map(r => r.anggaran_key) : hasil.baris.map(b => b.jangkar)).filter(Boolean) as string[],
+    )
     const realisasiTerdampak = terpakai.filter(t => !jangkarBaru.has(t.anggaran_key))
 
     // Konsep Perubahan §11.2 — jenis berkas dinilai terhadap babak SASARAN Simpan, bukan
     // terhadap tahun: arsip akhir bulan sebelum Perubahan tetap murni walau tahunnya
     // sudah punya Perubahan. `sasaran` tak dikirim (tab lama) → babak tidak dinilai.
-    const sasaranParsed = TanggalSchema.safeParse(form?.get('sasaran'))
     let tujuan: { babak: number | null; pembanding: { versi: string; total: number } | null } | null = null
     if (sasaranParsed.success) {
-      const babak = keBabak(await getPerubahan(tahun), sasaranParsed.data)
+      const babak = keBabak(penanda, sasaranParsed.data)
       let pembanding: { versi: string; total: number } | null = null
       // Selisih total untuk peringatan "berkas murni ke versi Perubahan" — terhadap
       // versi DPA yang berlaku di tanggal sasaran, yaitu angka yang akan digantikan.
@@ -149,7 +202,8 @@ async function tanganiPreview(
         + `${hasil.baris.length} baris, sumber hierarki ${hasil.baris[0]?.sumberHierarki ?? '-'}, `
         + `total ${hasil.totalHitung}, ditahan ${hasil.ditahan.length}, `
         + `realisasi terdampak ${realisasiTerdampak.length}`
-        + `${hasil.perubahanKe ? `, berkas DPA Perubahan ke-${hasil.perubahanKe}` : ''}`,
+        + `${hasil.perubahanKe ? `, berkas DPA Perubahan ke-${hasil.perubahanKe}` : ''}`
+        + `${imporBalik ? `, impor-balik ke versi ${imporBalik.versi}${imporBalik.tolak ? ' (ditolak)' : ''}` : ''}`,
     })
 
     return NextResponse.json({
@@ -172,7 +226,9 @@ async function tanganiPreview(
         realisasiTerdampak,
         perubahanKe: hasil.perubahanKe,
         versiKop: hasil.versiKop,
+        unduhan: hasil.unduhan,
         tujuan,
+        imporBalik,
       },
     })
   } catch (err) {

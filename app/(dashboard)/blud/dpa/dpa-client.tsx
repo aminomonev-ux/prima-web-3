@@ -1576,20 +1576,41 @@ export default function DpaClient({
    * menghasilkan versi Agustus. Sekarang ia cuma mengisi layar; yang menulis
    * tetap satu tombol Simpan, dengan target `periodeTulis` yang sama.
    */
-  function terapkanImpor(baris: DpaBarisInput[], asal: AsalImpor) {
+  function terapkanImpor(baris: DpaBarisInput[], asal: AsalImpor, simpananKini?: number) {
     setRows(recalcDpaJumlah(baris))
-    setVersi('')
     setBelumTersimpan(true)
+    // Impor-balik (§11.3) berhenti di FORM seperti Salin Versi (L80): versi tetap
+    // terbuka, dan angka kuncinya diganti yang dibaca server saat pratinjau (L77) —
+    // dialog "berkas basi" sudah menimbang simpanan sesudah berkas diunduh, jadi
+    // yang menyimpan di SELA pratinjau dan Simpan tetap dijawab 409.
+    const balik = !!asal.ke_versi_terbuka && asal.ke_versi_terbuka === versi
+    if (balik) { if (simpananKini != null) setVersion(simpananKini) }
+    else setVersi('')
     asalImporRef.current    = asal
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
     asalBerkasRef.current   = null
     asalPerubahanRef.current = null
     setImportDpaBuka(false)
-    showToast(`${baris.length} baris dibaca dari "${asal.berkas}" — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
+    showToast(balik
+      ? `${baris.length} baris dari "${asal.berkas}" dipasang di atas versi ${formatTanggalId(versi)} — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`
+      : `${baris.length} baris dibaca dari "${asal.berkas}" — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
     // Tawaran menyalin data induk menunggu barisnya benar-benar ada di layar —
-    // modalnya membaca `rows`, bukan muatan pratinjau impor.
-    if (bolehSalinInduk) setSalinBuka(true)
+    // modalnya membaca `rows`, bukan muatan pratinjau impor. Impor-balik tidak
+    // menawarkannya: barisnya memang sudah dari versi ini.
+    if (bolehSalinInduk && !balik) setSalinBuka(true)
+  }
+
+  /** Impor mengganti seluruh isi layar — suntingan yang belum tersimpan ditanyakan dulu. */
+  async function bukaImpor() {
+    if (rows.length > 0 && belumTersimpan && !(await confirmDialog({
+      title:   'Ganti isi layar dengan hasil impor?',
+      message: `Ada ${rows.length} baris di layar yang belum tersimpan. Hasil impor nanti menggantikannya.`,
+      confirmLabel: 'Lanjut Impor',
+      cancelLabel:  'Batal',
+      variant:      'warning',
+    }))) return
+    setImportDpaBuka(true)
   }
 
   /**
@@ -1794,6 +1815,12 @@ export default function DpaClient({
   const alasanKunciBorongan = versi
     ? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
     : ''
+  // Impor SENGAJA tidak ikut kunci itu lagi (konsep Perubahan §11.3): di atas versi
+  // tersimpan ia hanya menerima Excel unduhan PRIMA dari versi itu — jangkarnya utuh,
+  // sifatnya sama dengan Pulihkan Cadangan — dan penjaganya di server (`periksaImporBalik`).
+  const tooltipImpor = versi
+    ? `Masukkan lagi Excel unduhan versi ${formatTanggalId(versi)} yang sudah disunting — formulir dari luar hanya ke periode yang belum punya versi`
+    : undefined
   // Salin Tahun patokannya SENGAJA berbeda: sasarannya tahun yang sedang dibuka,
   // bukan slot versi. Menyalin ke tahun yang sudah berisi tidak pernah benar,
   // sekalipun layarnya kebetulan kosong karena sedang memilih periode historis.
@@ -1928,8 +1955,8 @@ export default function DpaClient({
 
             {bolehImpor && (
               <PrimaButton variant="success" size="sm" iconLeft={<Upload className="w-3.5 h-3.5" />}
-                disabled={!!alasanKunciBorongan} data-tooltip={alasanKunciBorongan}
-                onClick={() => setImportDpaBuka(true)} data-rima="dpa.impor">
+                data-tooltip={tooltipImpor}
+                onClick={() => { void bukaImpor() }} data-rima="dpa.impor">
                 Impor
               </PrimaButton>
             )}
@@ -2119,6 +2146,7 @@ export default function DpaClient({
           tahun={tahun}
           periodeLabel={periodeTulis ? formatTanggalId(periodeTulis) : 'bulan berjalan (hari ini)'}
           sasaran={sasaran}
+          versiTerbuka={versi}
           onTutup={() => setImportDpaBuka(false)}
           onTerapkan={terapkanImpor}
         />

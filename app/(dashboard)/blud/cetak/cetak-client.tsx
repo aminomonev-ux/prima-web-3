@@ -106,6 +106,9 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   // DPA: babak versi yang dicetak · Pergeseran: babak acuannya. Dipotret saat Cetak,
   // sama seperti `rawVersi` — kop berkas harus cocok dgn tabel yang tercetak.
   const [rawBabakKe, setRawBabakKe] = useState<number | null>(null)
+  // DPA: angka kunci versi yang dicetak ("simpanan ke-n") — penanda unduhan untuk
+  // impor-balik (konsep Perubahan §11.3). Dipotret bersama barisnya, bukan diambil saat unduh.
+  const [rawSimpanan, setRawSimpanan] = useState<number | null>(null)
   // Untuk lencana History & view Lengkap; kop berkas memakai bacaan segar di onCetak.
   const [penanda, setPenanda] = useState<PenandaPerubahan[]>([])
   // Judul + kepala tabel milik view yang menyusun barisnya — dioper ke eksporter
@@ -127,6 +130,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     setRawRows(null)
     setRawVersi(null)
     setRawBabakKe(null)
+    setRawSimpanan(null)
     setHistoryVersi('')
     setTanggal('')
     setHistoryList([])
@@ -213,6 +217,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     setRawVersi(null)
     setRawMutasi(null)
     setRawBabakKe(null)
+    setRawSimpanan(null)
     try {
       // Pilih endpoint per menu — reuse existing API
       let path = ''
@@ -234,6 +239,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       const j = await r.json() as {
         ok: boolean; data?: unknown; versi_tanggal?: string | null; error?: string
         mutasi?: MutasiInput[]
+        version?: number
       }
       if (!j.ok) { toast.error(j.error ?? 'Data tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
 
@@ -268,6 +274,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       setRawVersi(j.versi_tanggal ?? historyVersi ?? tanggal ?? null)
       setRawMutasi(mutasi)
       setRawBabakKe(babakKe)
+      setRawSimpanan(menu === 'dpa' && typeof j.version === 'number' ? j.version : null)
     } catch (e) {
       toast.error('Dokumen gagal disusun: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -346,7 +353,9 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         const direktur = await ambilDirektur(tahun)
         if (dokumenDpa) {
           // Ringkas: tata letak DPA murni, kop "DPA PERUBAHAN KE-n" kalau versinya Perubahan.
-          await exportDpaDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe })
+          await exportDpaDokumen({
+            tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe, simpananKe: rawSimpanan,
+          })
         } else if (dokumenPerubahan) {
           await exportDpaPerubahanDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe })
         } else {
@@ -367,7 +376,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     } catch (e) {
       toast.error('Berkas Excel gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
+  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, rawSimpanan, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
 
   // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
   const onSimpanRekapPK = useCallback(async () => {

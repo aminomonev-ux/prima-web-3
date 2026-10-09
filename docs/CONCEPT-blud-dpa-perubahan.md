@@ -1,6 +1,6 @@
 # CONCEPT — DPA Perubahan (BLUD)
 
-> Status: **KONSEP v3** (2026-10-08) — Tahap 0–4 **terpasang**, Tahap 5 belum. Keputusan pemilik tercatat
+> Status: **KONSEP v3** (2026-10-08) — Tahap 0–5 **terpasang**. Keputusan pemilik tercatat
 > di §0 (susunan cetak Lengkap di §7); §14 kini tanpa butir terbuka.
 > Permintaan awal: DPA BLUD punya versi **Perubahan**, yang boleh menambah dan
 > mengurangi anggaran sehingga **totalnya berbeda** dari DPA murni.
@@ -197,7 +197,8 @@ Empat kolom baru di `dpa_blud`, NULL-able: `vol_sebelum`, `satuan_sebelum`,
 - **Cetak versi Perubahan, dua format**:
   - **Ringkas**: tata letak DPA murni. Kopnya (baris 5) berbunyi "DPA PERUBAHAN KE-n ·
     versi …" — itu juga penanda yang dibaca Impor. Angka kunci simpanan (bahan penjaga
-    §11.3) **belum** ditulis; masuk Tahap 5 bersama jalurnya.
+    §11.3) ditulis Tahap 5 sebagai *penanda unduhan* di kolom Jangkar yang tersembunyi,
+    bukan di kop yang terlihat — berlaku untuk Excel DPA murni juga (§11.3).
   - **Lengkap**: Kode · Uraian · **SEBELUM PERUBAHAN** (Vol · Satuan · Harga · Jumlah) ·
     **SESUDAH PERUBAHAN** (Vol · Satuan · Harga · Jumlah) · Bertambah/(Berkurang) · % ·
     PJ · Ket, kepala dua tingkat. *Ditetapkan 2026-10-09* dari contoh kantor
@@ -392,6 +393,37 @@ Syarat dan penjaganya:
    supaya baris audit bisa membedakan impor ke periode kosong dari impor yang
    menimpa versi tersimpan.
 
+*Terpasang 2026-10-09 (Tahap 5)* — `lib/blud/impor-balik.ts` (fungsi murni, dipakai route
+impor). Keputusan yang diambil saat membangunnya:
+
+- **Penanda unduhan, bukan kop.** "PRIMA DPA 2099 · versi 2099-07-31 · simpanan ke-3"
+  ditulis eksporter di sel baris 1 kolom Jangkar — kolom tersembunyi di luar sel gabung
+  kop. Dokumen cetak tidak memuat angka mesin, dan kolom tersembunyi bertahan disunting
+  Excel persis seperti isi Jangkar yang memang dibaca balik. Ditulis untuk Excel DPA murni
+  **dan** Ringkas; format Lengkap tidak (memang tidak bisa diimpor). Angkanya `version`
+  yang dipulangkan GET DPA bersama barisnya, dipotret saat Cetak.
+- **Berkas dari versi lain ditolak lewat penandanya.** Butir 3 menyebut "versi lain"
+  sebagai sumber jangkar asing, padahal jangkar *bertahan* lintas versi setahun — pemeriksaan
+  jangkar tidak akan pernah menangkapnya. Penanda yang menangkap: tahun atau versi yang beda
+  → tolak dengan jalan keluarnya.
+- **Unduhan lama tanpa penanda tetap diterima, dengan peringatan** bahwa kesegarannya tidak
+  bisa dipastikan. Menolaknya membuang semua berkas yang sudah beredar sebelum Tahap 5.
+- **Dipasang lewat jangkar, bukan menggantikan.** Baris berpasangan memakai `row_id` versi
+  itu, jadi baris versi yang tidak ada di berkas otomatis menunjuk induk yang benar saat
+  aturan hapus §10 (`hapusAtauNolkan`) mempertahankannya. Yang tidak terbawa Excel —
+  `origin`/`usulan_*` dan kolom Sebelum untuk layar — diambil dari pasangannya; tanpa itu
+  impor-balik diam-diam memutus tautan ke Usulan. Baris yang bertahan disisip sesudah
+  subpohon kakaknya, karena tabel digambar menurut urutan baris.
+- **Server yang memegang isi versi & angka kuncinya** (route menerima `versi_terbuka`), bukan
+  layar: layar bisa memegang suntingan yang belum tersimpan. Angka kunci layar diganti angka
+  yang dibaca saat pratinjau (L77) — dialog "berkas basi" sudah menimbang simpanan sesudah
+  berkas diunduh, sedangkan yang menyimpan di sela pratinjau dan Simpan tetap dijawab 409.
+- **Neraca mencantumkan DAUN** (berubah · baru · dinolkan · dihapus) + total akar lama → baru;
+  induk menjumlah anaknya, jadi mendaftarnya menulis satu perubahan sedalam pohonnya (L85).
+- Tombol **Impor** tidak lagi ikut `alasanKunciBorongan`; **Form Baru** tetap. Membuka Impor
+  saat layar memegang isian belum tersimpan kini ditanya dulu (kedua mode). Tawaran "Salin ke
+  Induk" tidak muncul sesudah impor-balik — barisnya memang sudah dari versi ini.
+
 ## 12. Jalur lain yang ikut disesuaikan
 
 - **Salin Versi** di babak Perubahan hanya menawarkan sumber dari babak yang sama.
@@ -428,7 +460,7 @@ Syarat dan penjaganya:
 | **2** ✅ | layar DPA: tombol + modal + kolom Sebelum + sakelar + lencana + aturan hapus | **selesai 2026-10-09**: `lib/blud/perubahan.ts` (fungsi murni) + `perubahan-dasar.ts` + `JadikanPerubahanModal` + GET `mode=babak`/`dasar-perubahan`; label "Pagu dari DPA Perubahan ke-n" di Realisasi/Buku Kas/Beranda. Diverifikasi di aplikasi pada 2099 (salinan 558 baris DPA 2026, 2026 hanya dibaca): Jadikan → Simpan → penanda + 558/558 Sebelum terisi server, lencana PERUBAHAN KE-1/MURNI, hapus = nolkan, R2/R8 ditolak tanpa "Tetap Lanjut", sakelar diingat, tema terang, 375 px. Uji `test-blud-dpa-perubahan-layar.mts` (76), 30 uji mutasi tertangkap. §7 sakelar direvisi (lihat di sana) |
 | **3** ✅ | layar Pergeseran: spanduk babak lama, kunci Buat Pergeseran, Sinkron dimatikan | **selesai 2026-10-09**: fungsi murni `babakLama`/`spandukBabakLama`/`bukaKunciBabakLama`/`pergeseranBerlaku` di `lib/blud/perubahan.ts`. Tambahan di luar daftar asal: (a) kunci Buat Pergeseran hanya dibuka bila SASARAN Simpan sudah di babak Perubahan — membukanya di arsip akhir bulan lampau akan menimpa arsip itu; (b) Tutup Pergeseran ikut mati di isi babak lama (server tetap menolak lewat R6); (c) lencana **BERLAKU** di daftar versi Pergeseran & Pengaturan = sumber pagu, bukan sekadar yang terbaru — pergeseran terbaru bisa babak lama; (d) pagar server `BludSasaranBabakLamaError` (409 `SASARAN_BABAK_LAMA`, tak bisa ditembus `force`) untuk bullet "sasaran pergeseran pertama babak baru" yang belum ada di Tahap 1; (e) `GET mode=babak` terbuka bagi menu Pergeseran. Diverifikasi di 2099. Kop cetak (bullet terakhir §9) masuk Tahap 4 |
 | **4** ✅ | Cetak Ringkas/Lengkap + kop penanda + impor §11.1–11.2 | **selesai 2026-10-09**: `buatWorkbookDpaPerubahan`/`exportDpaPerubahanDokumen` + `kopPerubahan` (dpa-dokumen.ts), view `dpaPerubahan` + `judulDpa`/`persenSelisih` (cetak-data.ts), menu Cetak membaca penanda SEGAR tiap Cetak (babak pergeseran dari ACUAN-nya), parser: `BerkasPerubahanLengkapError` · `BerkasDuaSisiError` · kop Ringkas → `perubahanKe`/`versiKop`, `putusanImpor`/`kalimatTerbaca` (perubahan.ts), route impor menilai babak sasaran + pembanding. Diverifikasi di 2099 (salinan DPA 2026, 2026 hanya dibaca): 1.630 rumus Excel Lengkap dihitung ulang dari data asli — 0 meleset; tiga berkas unduhan aplikasi sendiri diimpor balik lewat route & modal (peringatan + konfirmasi, tolak tanpa tombol Masukkan, Lengkap ditolak). Uji `test-blud-dpa-perubahan-cetak.mts` (86), 34 uji mutasi tertangkap. Angka kunci di kop → Tahap 5 |
-| **5** | impor-balik ke versi terbuka §11.3 | jalur cadangan |
+| **5** ✅ | impor-balik ke versi terbuka §11.3 | **selesai 2026-10-09**: `lib/blud/impor-balik.ts` (`teksPenandaUnduhan`/`bacaTeksPenandaUnduhan` · `periksaImporBalik` · `gabungImporBalik`), penanda unduhan di kolom Jangkar tersembunyi (`simpananKe` dari Cetak), parser → `unduhan`, route impor menerima `versi_terbuka`, modal: panel pembanding + tolak/peringatan gabungan, layar DPA: Impor lepas dari kunci borongan, angka kunci segar, `asal_impor.ke_versi_terbuka` di audit. Keputusan di §11.3. Uji `test-blud-impor-balik.mts` |
 
 **Definition of Done**: `npx tsx scripts/test-blud-dpa-perubahan.mts` beserta uji
 mutasi untuk setiap pagar (pemeriksaan "tidak boleh ada lagi" membuang komentar

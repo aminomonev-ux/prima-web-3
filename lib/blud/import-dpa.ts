@@ -17,6 +17,7 @@ import type { TipeBaris } from '@/types'
 import { hitungJumlah, LABEL_KE_TIPE, RANTAI_TIPE } from './format'
 import { BLUD_IMPOR_MAKS_BARIS, keDpaBarisInput } from './import-dpa-shared'
 import { recalcDpaJumlah } from './recalc'
+import { bacaTeksPenandaUnduhan, type PenandaUnduhan } from './impor-balik'
 import {
   barisAnakDariRumus, faktorPerkalian,
   type GridDpa, type SelGrid,
@@ -95,6 +96,12 @@ export interface HasilBacaDpa {
   perubahanKe: number | null
   /** Teks versi di kop yang sama ("8 Okt 2099") — hanya untuk ditampilkan. */
   versiKop: string | null
+  /**
+   * Penanda unduhan PRIMA (kolom Jangkar tersembunyi): versi & simpanan ke berapa berkas
+   * ini diunduh — bahan penjaga impor-balik ke versi terbuka (§11.3). `null` = formulir
+   * luar atau unduhan sebelum penanda ini ada.
+   */
+  unduhan: PenandaUnduhan | null
 }
 
 export class StrukturDpaTidakTerbacaError extends Error {
@@ -193,6 +200,17 @@ function bacaKopPerubahan(grid: GridDpa): { ke: number; versi: string | null } |
     for (let c = 1; c <= grid.jumlahKolom; c++) {
       const m = POLA_KOP_PERUBAHAN.exec(grid.sel(r, c).teks)
       if (m) return { ke: Number(m[1]), versi: m[2]?.trim() || null }
+    }
+  }
+  return null
+}
+
+/** Penanda unduhan di atas header — ditulis `teksPenandaUnduhan()` lewat dpa-dokumen.ts. */
+function bacaPenandaUnduhan(grid: GridDpa): PenandaUnduhan | null {
+  for (let r = 1; r < grid.barisHeader; r++) {
+    for (let c = 1; c <= grid.jumlahKolom; c++) {
+      const p = bacaTeksPenandaUnduhan(grid.sel(r, c).teks)
+      if (p) return p
     }
   }
   return null
@@ -400,12 +418,20 @@ function bacaSatuan(grid: GridDpa, r: number, kol: PetaKolom): string | null {
  * ikut jadi akar palsu.
  */
 const POLA_SEGMEN = /^[0-9A-Za-z][0-9A-Za-z.-]{0,7}$/
+/**
+ * Kode SATU kolom (unduhan PRIMA) berisi kode utuh, bukan segmen — "5.1.01.99.99.999.01"
+ * 19 karakter. Pola segmen 8 karakter membuat setiap kode lebih panjang terbaca KOSONG:
+ * 268 dari 558 baris DPA 2026 kehilangan kode rekening tiap kali unduhannya diimpor
+ * (ketahuan saat impor-balik Tahap 5 membandingkan per kolom). Batas 64 = kolom DB & Zod.
+ */
+const POLA_KODE_UTUH = /^[0-9A-Za-z][0-9A-Za-z.-]{0,63}$/
 
 function segmenKode(grid: GridDpa, r: number, kol: PetaKolom): string[] {
   const segmen: string[] = []
+  const pola = kol.kode.akhir === kol.kode.awal ? POLA_KODE_UTUH : POLA_SEGMEN
   for (let c = kol.kode.awal; c <= kol.kode.akhir; c++) {
     const t = grid.sel(r, c).teks
-    if (!t || !POLA_SEGMEN.test(t)) break
+    if (!t || !pola.test(t)) break
     segmen.push(t)
   }
   return segmen
@@ -848,6 +874,7 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     sumberSelisih: sumberSisa,
     perubahanKe: kop?.ke ?? null,
     versiKop: kop?.versi ?? null,
+    unduhan: bacaPenandaUnduhan(grid),
   }
 }
 

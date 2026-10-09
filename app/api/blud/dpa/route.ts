@@ -234,6 +234,9 @@ export async function POST(req: NextRequest) {
       // Pengganti `BLUD_DPA_IMPORT_COMMIT` yang dibuang bersama jalur tulis di
       // modal impor. Tanpa baris ini, versi hasil impor tak terbedakan dari ketikan.
       + `${asal_impor ? ` · diimpor dari "${asal_impor.berkas}" (lembar "${asal_impor.lembar}", ${asal_impor.baris} baris terbaca)` : ''}`
+      + `${asal_impor?.ke_versi_terbuka
+        ? ` · impor-balik ke versi terbuka ${asal_impor.ke_versi_terbuka} (berkas dari simpanan ke-${asal_impor.simpanan_berkas ?? '?'})`
+        : ''}`
       // Babak Perubahan. Yang MEMBUAT penanda disebut terang-terangan: tabel penanda
       // menyimpan keadaan berjalan, baris ini yang menyimpan ceritanya.
       + `${result.perubahan

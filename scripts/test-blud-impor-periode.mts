@@ -143,10 +143,15 @@ bab('C. Rantai asal_impor — modal → klien → Zod → audit')
   const rute  = baca(RUTE_DPA)
   const skema = baca(SKEMA)
 
+  // Sejak impor-balik (§11.3) jejaknya disusun sekali lalu dioper di DUA jalur —
+  // gabungan server (ke versi terbuka) dan baris berkas apa adanya (periode kosong).
+  const modalKode = kode(modal)
   cek('Modal mengirim berkas+lembar+baris',
-    /onTerapkan\(keDpaBarisInput[\s\S]{0,200}berkas:[\s\S]{0,120}lembar:[\s\S]{0,120}baris:/.test(modal))
+    /const asal: AsalImpor = \{\s*berkas:[\s\S]{0,120}lembar:[\s\S]{0,120}baris:/.test(modalKode)
+      && modalKode.includes('onTerapkan(keDpaBarisInput(hasil.baris), asal)')
+      && modalKode.includes('onTerapkan(barisMasuk, { ...asal,'))
   cek('Klien menyimpannya di asalImporRef',
-    /function terapkanImpor[\s\S]{0,600}asalImporRef\.current\s*=\s*asal/.test(dpa))
+    /function terapkanImpor[\s\S]{0,600}asalImporRef\.current\s*=\s*asal/.test(kode(dpa)))
   // Mata rantai yang paling gampang putus: ref-nya ada, tapi lupa ikut di body.
   cek('Klien mengirim asal_impor di body Simpan',
     dpa.includes('asal_impor: asalImporRef.current'))
