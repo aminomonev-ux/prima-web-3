@@ -181,8 +181,12 @@ const css = baca('app/globals.css')
 cek('isi tombol dipudarkan, bukan tombolnya (tooltip tetap terbaca)',
   css.includes('.btn-prima[aria-disabled="true"] > .btn-prima-label'))
 // Terukur di peramban: kalimat 745px nowrap yang dipusatkan terpotong di tepi kanan layar.
-cek('tooltip tombol terkunci boleh berbaris & dijangkarkan ke kanan',
-  /\.btn-prima\[aria-disabled="true"\]\[data-tooltip\]:not\(select\):not\(input\):not\(textarea\)::after \{[^}]*white-space: normal; width: max-content; max-width: 240px;[^}]*right: 0;/.test(css))
+// Sejak 2026-10-09 lewat portal (`clip-path` tombol memotong `::after`, tooltip pseudo-nya
+// tak pernah terlihat): berbaris di `.blud-tip-portal`, letak sadar tepi dari `letakTip`.
+cek('tooltip tombol terkunci boleh berbaris & tidak terpotong tepi layar',
+  tombol.includes('letakTip(e.currentTarget.getBoundingClientRect(), document.documentElement.clientWidth)')
+  && tombol.includes('{tooltip && letak && <TipLayang label={tooltip} pos={letak} />}')
+  && /\.blud-tip-portal \{[^}]*white-space: normal;\s*width: max-content;\s*max-width: var\(--tip-maks, 280px\);/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')))
 cek('kalimat tooltip pendek (penjelasan lengkap di spanduk)',
   sebabKunciTulis({ global: false, bagian: '' }).length <= 80)
 

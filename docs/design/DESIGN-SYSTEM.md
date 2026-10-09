@@ -948,7 +948,11 @@ input[type="date"] { color-scheme: dark; }
 
 **Mana yang dipakai kapan:**
 - Kalau tombol di sticky / modal / topbar (tidak ada ancestor `overflow:auto`) → pakai CSS pseudo (`data-tooltip`)
-- Kalau tombol di scrollable table / nested scroll area → pakai portal helper
+- Kalau tombol di scrollable table / nested scroll area → pakai portal helper (`<Tip>` di `components/ui/Tip.tsx`, letak sadar-tepi dari `lib/shared/tip-posisi.ts`)
+- **`<PrimaButton data-tooltip="…">` sudah portal dengan sendirinya** (sejak 2026-10-09) — cukup oper `data-tooltip`, jangan dibungkus `<Tip>`. Pseudo `::after` tidak bisa dipakai di sana: `clip-path` sudut-terpotong `.btn-prima` ikut memotongnya, jadi sejak awal tooltip PrimaButton tak pernah terlihat. Portalnya dipicu **pointer** event karena React menelan mouse event pada tombol `disabled` (dan tombol mati justru yang paling sering membawa tooltip).
+- Elemen ber-`clip-path`, `mask`, atau `opacity < 1` (mis. tombol `:disabled`) juga memotong / memudarkan pseudo-nya sendiri → pakai portal.
+
+**Tooltip pseudo yang tidak tampil tidak menempati tata letak**: selagi tidak di-hover, `::after`/`::before` diciutkan lewat `scale: 0` (ditunda 180ms saat keluar supaya fade-out tetap utuh). Tanpa itu kalimat panjang yang dipusatkan memperlebar HALAMAN walau opacity-nya 0 — terukur di layar DPA 1014px → 1230px. Jangan menampilkan tooltip pseudo lewat keadaan selain `:hover` tanpa menyesuaikan aturan ciut ini.
 
 **Variant — tooltip muncul DI BAWAH (tambahan attribute `data-tooltip-pos="below"`):**
 Untuk tombol di top bar / area sticky atas yang tooltip default (atas) ke-clip oleh viewport top edge.

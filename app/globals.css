@@ -1377,7 +1377,10 @@ input, textarea { caret-color: #FBBF24; }
   box-shadow: 0 6px 20px rgba(239,159,39,.35), 0 2px 6px rgba(0,0,0,.4);
   transform: translate(var(--tip-tx), var(--tip-ty));
   pointer-events: none;
-  z-index: 1100;
+  /* Di atas SEMUA lapisan (modal & panel melayang sampai 10000): portal hidup di `body`, jadi tidak
+     lagi menumpang konteks tumpukan pemiliknya seperti tooltip pseudo — PrimaButton di dalam
+     modal ber-z 9999 akan menaruh tooltipnya DI BAWAH modal itu kalau angka ini lebih kecil. */
+  z-index: 100000;
   animation: blud-tip-fade .18s ease-out;
 }
 @keyframes blud-tip-fade {
@@ -1438,19 +1441,26 @@ input, textarea { caret-color: #FBBF24; }
 /* Empty data-tooltip ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ suppress (untuk conditional tooltip yang berisi '') */
 [data-tooltip=""]::after,
 [data-tooltip=""]::before { display: none !important; }
-/* Fase F Tahap 14b — tooltip tombol tulis yang dikunci saat modul beku. Tombol tulis hampir
-   selalu di ujung KANAN toolbar/modal, dan tooltip bawaan (nowrap, dipusatkan) terukur
-   terpotong di tepi kanan layar. Di sini: boleh berbaris, lebar maks 240px, dijangkarkan ke
-   tepi kanan tombol. Kekhususan (0,6,0)/(0,7,0) sengaja melampaui aturan dasar (0,4,0) dan
-   :hover-nya (0,5,0); `width: max-content` wajib menyertai max-width (lihat catatan tooltip
-   di CLAUDE.md: tanpa itu lebar dihitung dari ruang sisa lalu tooltip diperas). */
-.btn-prima[aria-disabled="true"][data-tooltip]:not(select):not(input):not(textarea)::after {
-  white-space: normal; width: max-content; max-width: 240px; text-align: left;
-  left: auto; right: 0; transform: translateY(-4px);
+/* Tooltip yang TIDAK sedang tampil tetap ikut tata letak (opacity 0 bukan display: none),
+   jadi kalimat panjang yang dipusatkan memperlebar HALAMAN walau tak terlihat — terukur di
+   layar DPA: 1014px jadi 1230px, di 375px jadi 592px; halaman bisa digeser ke samping dan
+   `scrollIntoView` ikut menggeser seluruhnya. Diciutkan lewat `scale` (sifat terpisah dari
+   `transform`, jadi tidak bertabrakan dgn transform milik varian di bawah). Masuk: muncul
+   seketika — transisi milik aturan dasar tidak menyebut `scale`, dan opacity-nya masih 0;
+   keluar: ditahan selama fade 180ms, baru diciutkan. */
+[data-tooltip]:not(:hover):not(select):not(input):not(textarea)::after,
+[data-tooltip]:not(:hover):not(select):not(input):not(textarea)::before {
+  scale: 0;
+  transition: opacity .18s ease, transform .18s ease, scale 0s linear .18s;
 }
-.btn-prima[aria-disabled="true"][data-tooltip]:not(select):not(input):not(textarea):hover::after {
-  transform: translateY(0);
-}
+/* PrimaButton TIDAK memakai tooltip pseudo. `clip-path` sudut-terpotong `.btn-prima` ikut
+   memotong `::after`, jadi sejak commit awal tooltip tombol ini tak pernah terlihat (dan pada
+   tombol `disabled`, opacity .45 memudarkannya di bawah tetangganya) — tapi tetap ikut tata
+   letak. Kalimatnya kini tampil lewat portal milik PrimaButton (`TipLayang` + `letakTip`:
+   berbaris, sadar tepi layar); `data-tooltip` tetap dipasang sebagai sumber kalimatnya.
+   Kekhususan (0,2,1) melampaui aturan dasar (0,1,4). */
+.btn-prima[data-tooltip]::after,
+.btn-prima[data-tooltip]::before { content: none; }
 
 /* Variant: data-tooltip-pos="below" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â tooltip muncul DI BAWAH bukan di atas.
    Pakai untuk tombol di top bar / sticky atas yang tooltip atasnya ke-clip
@@ -2254,11 +2264,15 @@ input, textarea { caret-color: #FBBF24; }
 /* Sticky L1 row di bawah thead (replace .row-grandmaster sticky lama) */
 .blud-scroll-wrapper.v2 tbody tr.lv-l1 td {
   position: sticky; top: 36px; z-index: 2;
-  background: #042C53;  /* SOLID, opaque saat sticky-scroll */
+  /* SOLID, opaque saat sticky-scroll. `!important` WAJIB: `.dpa-table.v2 tbody td`
+     memasang `background: transparent !important` untuk semua sel, dan tanpa ini sel
+     L1 tembus pandang — angka baris yang digulir di bawahnya terbaca bertumpuk
+     ("68.383.000.000" di atas "9.930.723.000"). Tema terang sudah ber-!important. */
+  background: #042C53 !important;
   /* Shadow bawah cover gap 6px antar row + drop shadow halus utk pisahkan dari row scroll */
   box-shadow: 0 6px 0 #0F172A, 0 10px 12px rgba(0,0,0,.35);
 }
-.blud-scroll-wrapper.v2 tbody tr.lv-l1:hover td { background: #334155; }
+.blud-scroll-wrapper.v2 tbody tr.lv-l1:hover td { background: #334155 !important; }
 
 /* Light mode override — bg terang, border-left tetap colored per level */
 [data-theme="light"] .blud-scroll-wrapper.v2 { background: #F5F5F7; border-color: rgba(139,92,246,.18); }

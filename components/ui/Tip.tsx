@@ -47,15 +47,25 @@ export default function Tip({ label, children }: { label: string; children: Reac
   return (
     <>
       {child}
-      {label && pos && typeof window !== 'undefined' && createPortal(
-        <div className="blud-tip-portal" style={{
-          position: 'fixed', top: pos.top, left: pos.left,
-          '--tip-tx': pos.tx, '--tip-ty': pos.ty, '--tip-maks': `${pos.lebar}px`,
-        } as CSSProperties}>
-          {label}
-        </div>,
-        document.body,
-      )}
+      {label && pos && <TipLayang label={label} pos={pos} />}
     </>
+  )
+}
+
+/**
+ * Kotak tooltip portal — satu bentuk untuk `Tip` dan `PrimaButton`. Letaknya dari
+ * `letakTip`; kotaknya hidup di `document.body`, jadi tidak ikut terpotong `clip-path`
+ * atau dipudarkan `opacity` pemiliknya, dan tidak menempati tata letak selagi tak tampil.
+ */
+export function TipLayang({ label, pos }: { label: string; pos: LetakTip }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <div className="blud-tip-portal" role="tooltip" style={{
+      position: 'fixed', top: pos.top, left: pos.left,
+      '--tip-tx': pos.tx, '--tip-ty': pos.ty, '--tip-maks': `${pos.lebar}px`,
+    } as CSSProperties}>
+      {label}
+    </div>,
+    document.body,
   )
 }
