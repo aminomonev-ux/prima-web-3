@@ -71,6 +71,9 @@ async function cleanup(pool) {
   // Izin menu (T10) — peran uji saja; peran asli tidak pernah disentuh.
   await pool.query(`DELETE FROM menu_role_access WHERE role = ?`, [TEST_ROLE]);
   await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [IZIN_ENTITY, IZIN_KEY]);
+  // Kinerja SSK (T6) — tahun kotak pasir 9999; gembok dibatasi key_id, entity-nya dipakai data asli.
+  await pool.query(`DELETE FROM kinerja_ssk WHERE tahun = ?`, [KIN_TAHUN]);
+  await pool.query(`DELETE FROM blud_locks WHERE entity = ? AND key_id = ?`, [KIN_ENTITY, KIN_KEY]);
 }
 
 // Mirror login-fail ATOMIK (fix V3-5): satu statement increment + conditional lock.
@@ -234,7 +237,7 @@ async function testRaCas(pool) {
 // Mirror Kinerja saveSskBatch (versi AKTIF): whole-replace DELETE+INSERT TANPA CAS/version-check.
 // Cek apakah save barengan ke versi sama → lost-update tanpa conflict (gap vs BLUD L51).
 // Mirror FIX V3-6 saveSskBatch: assert version (blud_locks FOR UPDATE) → DELETE+INSERT → bump.
-const KIN_ENTITY = 'kinerja_ssk', KIN_KEY = '9999:GAJI:MURNI:0';
+const KIN_ENTITY = 'kinerja_ssk', KIN_TAHUN = '9999', KIN_KEY = `${KIN_TAHUN}:GAJI:MURNI:0`;
 async function sskSave(pool, tahun, sumber, marker, expected) {
   const conn = await pool.getConnection();
   try {
@@ -256,9 +259,10 @@ async function sskSave(pool, tahun, sumber, marker, expected) {
   finally { conn.release(); }
 }
 async function testKinerjaLostUpdate(pool) {
-  const tahun = '9999', sumber = 'GAJI';
+  const tahun = KIN_TAHUN, sumber = 'GAJI';
   await pool.query(`DELETE FROM kinerja_ssk WHERE tahun=?`, [tahun]);
-  await pool.query(`DELETE FROM blud_locks WHERE entity=?`, [KIN_ENTITY]);
+  // Wajib ber-key_id: `entity` saja ikut menghapus gembok SSK asli (2026-10-08: '2026:GAJI:MURNI:0' v4 hilang).
+  await pool.query(`DELETE FROM blud_locks WHERE entity=? AND key_id=?`, [KIN_ENTITY, KIN_KEY]);
   await pool.query(`INSERT INTO blud_locks (entity,key_id,version) VALUES (?,?,0)`, [KIN_ENTITY, KIN_KEY]);
   // 2 writer barengan dgn baseline version=0 (FIX V3-6 aktif).
   const out = await Promise.all([1, 2].map(m => sskSave(pool, tahun, sumber, m, 0)));
@@ -266,7 +270,7 @@ async function testKinerjaLostUpdate(pool) {
   const errored = out.filter(x => typeof x === 'string' && x.startsWith('conflict:'));
   const [rows] = await pool.query(`SELECT canonical_id FROM kinerja_ssk WHERE tahun=? AND sumber=?`, [tahun, sumber]);
   await pool.query(`DELETE FROM kinerja_ssk WHERE tahun=?`, [tahun]);
-  await pool.query(`DELETE FROM blud_locks WHERE entity=?`, [KIN_ENTITY]);
+  await pool.query(`DELETE FROM blud_locks WHERE entity=? AND key_id=?`, [KIN_ENTITY, KIN_KEY]);
   return { graceful, errored: errored.length, errSample: errored[0] || '', surviving: rows.length };
 }
 
