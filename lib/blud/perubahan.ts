@@ -35,6 +35,90 @@ export function jenisSumberPagu(s: { sumber: string; perubahan_ke?: number | nul
   return ke ? `DPA Perubahan ke-${ke}` : 'DPA'
 }
 
+/**
+ * "DASAR PERUBAHAN KE-n" untuk versi yang jadi sumber kolom Sebelum — versi itu dikunci
+ * server (§6: tidak bisa disimpan ulang maupun dihapus), jadi layar penghapusan wajib
+ * menyebutnya SEBELUM orang mencoba.
+ */
+export function catatanDasar(
+  penanda: readonly PenandaPerubahan[], sumber: 'DPA' | 'PERGESERAN', versi: string,
+): string | undefined {
+  const i = penanda.findIndex(p => p.sumber_dasar === sumber && p.versi_dasar === versi)
+  return i < 0 ? undefined : `DASAR PERUBAHAN KE-${i + 1}`
+}
+
+/**
+ * Nomor babak yang ikut lenyap kalau versi DPA `versi` dihapus. Cermin
+ * `bersihkanPenandaYatim` di server: penanda dibuang bila tak ada lagi versi DPA ≥
+ * `versi_mulai`-nya. Menghapus versi Perubahan TERAKHIR membuang babaknya — pagu
+ * tahun itu kembali ke sumber sebelum Perubahan (R5); itu yang diperingatkan dialog.
+ */
+export function babakIkutDihapus(
+  penanda: readonly PenandaPerubahan[], versiDpa: readonly string[], versi: string,
+): number[] {
+  const sisa = versiDpa.filter(v => v !== versi)
+  return penanda.flatMap((p, i) => (sisa.some(v => v >= p.versi_mulai) ? [] : [i + 1]))
+}
+
+// ─── Pergeseran sesudah Perubahan (konsep §9) ───────────────────────────────
+// Babak pergeseran diturunkan dari ACUAN-nya (`dpa_versi_tanggal`), bukan dari tanggal
+// simpannya: pergeseran bertanggal hari Perubahan yang disimpan SEBELUM Perubahan tetap
+// mengacu DPA murni — babak lama.
+
+/** Pergeseran beracuan sebelum Perubahan TERAKHIR: tidak lagi menentukan pagu. */
+export function babakLama(penanda: readonly PenandaPerubahan[], acuan: string): boolean {
+  const akhir = penanda[penanda.length - 1]
+  return !!akhir && !!acuan && acuan < akhir.versi_mulai
+}
+
+/**
+ * Kalimat spanduk layar Pergeseran untuk isi babak lama; '' = bukan babak lama. Peran
+ * yang hanya bisa melihat tidak disuruh menekan tombol yang tidak ada di layarnya.
+ */
+export function spandukBabakLama(penanda: readonly PenandaPerubahan[], acuan: string, bisaUbah = true): string {
+  if (!babakLama(penanda, acuan)) return ''
+  const akhir = penanda[penanda.length - 1]
+  return `DPA Perubahan ke-${penanda.length} berlaku sejak ${formatTanggalId(akhir.versi_mulai)}. `
+    + `Pergeseran ini mengacu DPA ${formatTanggalId(acuan)} — sebelum Perubahan — dan tidak lagi menentukan pagu.`
+    + (bisaUbah ? ' Tekan Buat Pergeseran untuk memulai dari DPA Perubahan.' : '')
+}
+
+/**
+ * Kunci "Buat Pergeseran" saat isi layar babak lama (konsep §9: satu-satunya jalan keluar
+ * tidak boleh terkunci justru saat dibutuhkan).
+ *   null → aturan ini tidak berlaku, pakai kunci biasa (bukan babak lama, ATAU sasaran
+ *          Simpan masih sebelum Perubahan — arsip akhir bulan lampau yang dibuka: membuka
+ *          kunci di sana berarti menimpa arsip itu dengan tabel baru);
+ *   ''   → boleh;
+ *   teks → sasaran sudah berisi pergeseran babak lama (cermin `BludSasaranBabakLamaError`).
+ */
+export function bukaKunciBabakLama(
+  penanda: readonly PenandaPerubahan[], acuanLayar: string, sasaran: string,
+  history: readonly { versi_tanggal: string; dpa_versi_tanggal?: string }[],
+): string | null {
+  const akhir = penanda[penanda.length - 1]
+  if (!babakLama(penanda, acuanLayar) || !akhir || sasaran < akhir.versi_mulai) return null
+  const lama = history.find(h => h.versi_tanggal === sasaran && babakLama(penanda, h.dpa_versi_tanggal ?? ''))
+  return lama
+    ? `${formatTanggalId(sasaran)} sudah berisi pergeseran sebelum Perubahan — pergeseran DPA Perubahan `
+      + `ke-${penanda.length} tidak boleh menimpanya. Buat besok, atau hapus dulu pergeseran lama itu di menu Pengaturan.`
+    : ''
+}
+
+/**
+ * Versi pergeseran yang pantas berlencana BERLAKU ("yang jadi acuan realisasi"). Tanpa
+ * Perubahan: yang terbaru, persis perilaku lama. Dengan Perubahan: hanya yang memang
+ * sumber pagu — pergeseran terbaru bisa babak lama, dan lencana BERLAKU di sana bohong.
+ */
+export function pergeseranBerlaku(
+  penanda: readonly PenandaPerubahan[],
+  sumber: { sumber: string; versi: string | null } | null,
+  terbaru: string | undefined,
+): string | null {
+  if (!penanda.length) return terbaru ?? null
+  return sumber?.sumber === 'PERGESERAN' ? sumber.versi : null
+}
+
 /** Baris yang sudah ada sebelum Perubahan — server mengisi Sebelum-nya lewat `anggaran_key`. */
 export const berSebelum = (r: Pick<DpaBarisInput, 'jumlah_sebelum'>): boolean => r.jumlah_sebelum != null
 

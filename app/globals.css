@@ -773,6 +773,13 @@ input, textarea { caret-color: #FBBF24; }
    daftar versi. */
 @media (max-width: 520px) {
   .versi-dropdown .versi-trigger .versi-meta { display: none; }
+  /* Daftar versinya juga dibatasi selebar layar dan barisnya boleh berbaris: lencana
+     babak "· PERUBAHAN KE-1" memanjangkan baris sampai menu selebar 407px di layar 375px —
+     halaman ikut melebar ke 444px dan ujung barisnya terpotong (terukur 2026-10-09).
+     56px ≈ tepi kiri pil (37px: lapang halaman + kartu) + lapang kanan 16px. Potongan
+     keterangan (`.versi-item-meta`) tetap `nowrap`, jadi yang turun baris potongan utuh. */
+  .versi-menu { max-width: calc(100vw - 56px); white-space: normal; }
+  .versi-item { flex-wrap: wrap; }
 }
 
 /* ─── Neo-Brutalist variant (E-Anggaran VersiPickerKinerja only) ─────────────

@@ -39,6 +39,10 @@ import {
   catatanVersi, totalPaguAkar, type TutupPergeseran, type AsalTutup,
 } from '@/lib/blud/tutup-pergeseran'
 import { bedaSinkron, sinkronMengubahAngka, type BedaSinkron } from '@/lib/blud/sinkron-dpa'
+import {
+  babakLama, spandukBabakLama, bukaKunciBabakLama, pergeseranBerlaku, catatanBabak,
+} from '@/lib/blud/perubahan'
+import type { PenandaPerubahan, SumberPagu } from '@/lib/blud/sumber-pagu'
 import SalinVersiModal from '@/components/blud/SalinVersiModal'
 import MuatBerkasButton from '@/components/blud/MuatBerkasButton'
 import type { BerkasCadangan } from '@/lib/blud/cadangan-berkas'
@@ -1014,7 +1018,7 @@ function AddPergeseranBarisModal({
 
 export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [rows,      setRows]      = useState<PergeseranBarisInput[]>([])
-  const [history,   setHistory]   = useState<{ versi_tanggal: string }[]>([])
+  const [history,   setHistory]   = useState<{ versi_tanggal: string; dpa_versi_tanggal?: string }[]>([])
   const [riwayat,   setRiwayat]   = useState<SimpananItem[]>([])
   const [versi,     setVersi]     = useState('')
   const [dpaVersi,  setDpaVersi]  = useState('')
@@ -1206,6 +1210,23 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       if (json.ok) { setHistory(json.data); setTutupList(json.tutup ?? []) }
     } catch { /* skip */ }
   }, [tahun])
+
+  // DPA Perubahan (konsep §9): penanda + sumber pagu setahun — lencana babak, lencana
+  // BERLAKU, spanduk babak lama, kunci tombol. Gagal dimuat = layar tampil seperti tahun
+  // tanpa Perubahan; pagar sesungguhnya tetap di server (R6, sasaran babak lama).
+  const [babak, setBabak] = useState<{ penanda: PenandaPerubahan[]; sumber: SumberPagu | null }>({ penanda: [], sumber: null })
+  const loadBabak = useCallback(async () => {
+    try {
+      const res  = await fetch(`/api/blud/dpa?mode=babak&tahun=${tahun}`)
+      const json = await res.json()
+      // Gagal → kosong, bukan penanda tahun sebelumnya yang tertinggal di state.
+      setBabak(json.ok ? { penanda: json.penanda ?? [], sumber: json.sumber ?? null } : { penanda: [], sumber: null })
+    } catch { setBabak({ penanda: [], sumber: null }) }
+  }, [tahun])
+  const penanda = babak.penanda
+  // Patokannya ACUAN baris di layar (`dpaVersi`), bukan versi yang dibuka: isi yang
+  // disalin/dipulihkan dari babak lama sama-sama tidak lagi menentukan pagu.
+  const isiBabakLama = rows.length > 0 && babakLama(penanda, dpaVersi)
 
   const loadRiwayat = useCallback(async () => {
     try {
@@ -1708,6 +1729,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   /** Alasan tombol Tutup mati — kosong berarti hidup. Sekaligus jadi tooltipnya (L79c). */
   const alasanKunciTutup = !rows.length
     ? 'Belum ada tabelnya.'
+    // §9 — server tetap menolaknya (R6), tapi menunggu sampai Simpan berarti orang sudah
+    // membaca lembar penutupan untuk dokumen yang tidak lagi menentukan pagu.
+    : isiBabakLama
+      ? 'Pergeseran ini mengacu DPA sebelum Perubahan dan tidak lagi menentukan pagu — menutupnya tidak ada gunanya. Tekan Buat Pergeseran untuk memulai dari DPA Perubahan.'
     : !versi
       ? 'Simpan dulu versi pergeserannya. Yang ditutup harus versi yang sudah tercatat, bukan isian di layar.'
       : belumTersimpan
@@ -1846,7 +1871,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         // bulan berjalan, bukan di bulan yang barusan disimpan.
         setPeriodeTulis(periodeUntukVersi(versiTanggal))
         setBelumTersimpan(false)
-        loadHistory(); loadTahunList(); loadRiwayat()
+        // `loadBabak` — simpanan ini bisa jadi sumber pagu baru (lencana BERLAKU).
+        loadHistory(); loadTahunList(); loadRiwayat(); loadBabak()
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pemulihan/salinan.
         asalPulihkanRef.current = null
         asalBerkasRef.current   = null
@@ -1875,7 +1901,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
 
   useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
   // loadPergeseran/loadHistory ber-dep [tahun] → efek refire saat tahun berganti.
-  useEffect(() => { void (async () => { await loadPergeseran(); await loadHistory(); await loadRiwayat() })() }, [loadPergeseran, loadHistory, loadRiwayat])
+  useEffect(() => { void (async () => { await loadPergeseran(); await loadHistory(); await loadRiwayat(); await loadBabak() })() }, [loadPergeseran, loadHistory, loadRiwayat, loadBabak])
 
   // B6: status DRAFT diturunkan dari delta akar (tidak disimpan) — badge live,
   // hilang sendiri begitu angka berimbang. Sumber hitungannya sama persis
@@ -1899,11 +1925,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // DPA" SENGAJA tidak ikut: ia memperbarui kolom sisi DPA di tempat, menjaga
   // `row_id` dan vol_p/harga_p, jadi jangkarnya utuh dan itu pekerjaan normal
   // pada versi yang sudah tersimpan.
-  const alasanKunciBorongan = versi
-    ? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
-    : ''
   // Sasaran Simpan, satu rumus dengan tombol Simpan (`sasaranSimpan`).
   const sasaran = sasaranSimpan(periodeTulis)
+  // §9 — pengecualian babak lama: Buat Pergeseran adalah satu-satunya jalan ke DPA
+  // Perubahan, jadi ia tidak boleh terkunci justru di sini. `null` = aturan biasa.
+  const kunciBabakLama = bukaKunciBabakLama(penanda, dpaVersi, sasaran, history)
+  const alasanKunciBorongan = !versi
+    ? ''
+    : kunciBabakLama ?? `Versi ${formatTanggalId(versi)} sedang terbuka. Pilih periode yang belum punya versi, atau hapus versinya dulu di menu Pengaturan.`
   // Cermin layar DPA: Salin Versi SENGAJA di luar `alasanKunciBorongan`. "Buat
   // Pergeseran" dikunci karena menarik DPA — baris yang jangkarnya belum ada;
   // Salin Versi mengambil baris pergeseran tahun yang sama dengan jangkar utuh,
@@ -1914,10 +1943,19 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // terbaca: versi yang DITUTUP (dokumen putaran itu) dan versi BASIS yang lahir
   // darinya. Tanpa keduanya, daftar versi cuma menampilkan deretan tanggal dan
   // "kenapa versi ini selisihnya nol" tidak terjawab di mana pun.
+  // Ditambah lencana babak (§9) — diturunkan dari ACUAN-nya; tahun tanpa Perubahan
+  // tidak berlencana apa pun (`catatanBabak` memulangkan undefined).
   const historyBerlencana = useMemo(
-    () => history.map(h => ({ ...h, catatan: catatanVersi(tutupList, h.versi_tanggal) })),
-    [history, tutupList],
+    () => history.map(h => ({
+      ...h,
+      catatan: [catatanVersi(tutupList, h.versi_tanggal), catatanBabak(penanda, h.dpa_versi_tanggal ?? '')]
+        .filter(Boolean).join(' · ') || undefined,
+    })),
+    [history, tutupList, penanda],
   )
+  // BERLAKU = yang jadi acuan realisasi. Sesudah Perubahan, pergeseran terbaru bisa babak
+  // lama yang tidak lagi menentukan pagu — lencana di situ bohong.
+  const berlakuVersi = pergeseranBerlaku(penanda, babak.sumber, history[0]?.versi_tanggal)
 
   return (
     <div className="space-y-4">
@@ -2106,10 +2144,16 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
                 servernya mengambil DPA yang BERLAKU pada sasaran Simpan, jadi
                 sebabnya hilang dan tombolnya hidup lagi di periode historis —
                 menutup Januari lalu menyamakan dengan DPA Januari kini bisa. */}
+            {/* §9 — mati di isi babak lama: `injectDpaKePergeseran` mempertahankan
+                vol_p/harga_p baris yang "sudah digeser", jadi geseran lama akan ditempel
+                di atas angka DPA Perubahan (L82b lewat pintu lain). Simpannya sendiri
+                tetap dijaga server (R6 + sasaran babak lama). */}
             <PrimaButton variant="success" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
-              disabled={injecting || !rows.length}
+              disabled={injecting || !rows.length || isiBabakLama}
               onClick={() => { void inject() }}
-              data-tooltip={`Samakan kode, uraian, volume, dan harga dengan DPA yang berlaku pada ${formatTanggalId(sasaran)} — perubahannya ditampilkan dulu sebelum diterapkan`}
+              data-tooltip={isiBabakLama
+                ? 'Pergeseran ini mengacu DPA sebelum Perubahan. Menyamakannya akan menempel geseran lama di atas angka DPA Perubahan — tekan Buat Pergeseran untuk memulai dari DPA Perubahan.'
+                : `Samakan kode, uraian, volume, dan harga dengan DPA yang berlaku pada ${formatTanggalId(sasaran)} — perubahannya ditampilkan dulu sebelum diterapkan`}
               data-rima="pergeseran.sinkron-dpa">
               {injecting ? 'Membandingkan…' : 'Sinkronkan DPA'}
             </PrimaButton>
@@ -2152,6 +2196,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
             riwayat={riwayat}
             onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
             belumTersimpan={belumTersimpan}
+            berlaku={berlakuVersi}
           />
         </div>
 
@@ -2189,6 +2234,12 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       </div>
 
       {!bolehUbah && <SpandukLihat menu="pergeseran" />}
+
+      {/* §9 — isi babak lama. Kabar, bukan kesalahan: dokumennya sah, cuma tidak lagi
+          menentukan pagu. Tidak ada tombol baru; kalimatnya menunjuk tombol yang ada. */}
+      {isiBabakLama && (
+        <div className="tp-ingat" role="status">{spandukBabakLama(penanda, dpaVersi, bolehUbah)}</div>
+      )}
 
       {/* Search bar + Legenda functional (filter level) */}
       <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'8px 16px', display:'flex', flexWrap:'wrap', gap:10, alignItems:'center' }}>

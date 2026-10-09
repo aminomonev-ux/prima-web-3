@@ -52,6 +52,12 @@ interface Props {
    * Pulihkan, Salin Versi, Tutup) — satu kebohongan, satu tempat memperbaikinya.
    */
   belumTersimpan?: boolean
+  /**
+   * Versi berlencana BERLAKU. Tanpa prop: yang terbaru (`items[0]`). `null`: tidak ada —
+   * dipakai layar Pergeseran sesudah DPA Perubahan, saat pergeseran terbaru masih babak
+   * lama dan tidak lagi menentukan pagu (`pergeseranBerlaku`).
+   */
+  berlaku?: string | null
 }
 
 const formatTanggal = formatTanggalId
@@ -63,7 +69,7 @@ function jamMenit(waktu: string): string {
 }
 
 export default function VersiDropdown({
-  value, items, onChange, placeholder = '— Pilih Versi —', riwayat, onPulihkan, belumTersimpan,
+  value, items, onChange, placeholder = '— Pilih Versi —', riwayat, onPulihkan, belumTersimpan, berlaku,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [terbuka, setTerbuka] = useState<string | null>(null)
@@ -81,7 +87,7 @@ export default function VersiDropdown({
 
   const selected = items.find(i => i.versi_tanggal === value)
   // Asumsi item[0] = terbaru karena API sudah ORDER BY versi_tanggal DESC
-  const berlakuTanggal = items[0]?.versi_tanggal
+  const berlakuTanggal = berlaku === undefined ? items[0]?.versi_tanggal : berlaku
 
   const simpananUntuk = (tgl: string) => (riwayat ?? []).filter(s => s.versi_tanggal === tgl)
 

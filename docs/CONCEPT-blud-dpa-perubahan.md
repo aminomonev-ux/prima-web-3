@@ -1,6 +1,6 @@
 # CONCEPT — DPA Perubahan (BLUD)
 
-> Status: **KONSEP v3** (2026-10-08) — Tahap 0–2 **terpasang**, Tahap 3–5 belum. Keputusan pemilik tercatat
+> Status: **KONSEP v3** (2026-10-08) — Tahap 0–3 **terpasang**, Tahap 4–5 belum. Keputusan pemilik tercatat
 > di §0; yang masih terbuka di §14.
 > Permintaan awal: DPA BLUD punya versi **Perubahan**, yang boleh menambah dan
 > mengurangi anggaran sehingga **totalnya berbeda** dari DPA murni.
@@ -402,7 +402,7 @@ Syarat dan penjaganya:
 | **0** ✅ | `sumberPaguTahun` menggantikan 6 salinan aturan pagu (+ subkueri `MAX` di `getPaguEfektif`) — `lib/blud/sumber-pagu.ts` | **selesai 2026-10-08**: tanpa perubahan perilaku, 0 beda pada 1.024 kombinasi versi; `test-blud-sumber-pagu.mts` (29), 11 uji mutasi tertangkap |
 | **1** ✅ | migrasi (4 kolom + tabel penanda), `schema-mysql.sql`, Zod, `pergeseranKeDpaInput`, `saveDpa` + `asal_perubahan`, pengisian Sebelum oleh server, pagar §5.1 / §6 / §9, aturan pagu §8, penanda ikut terhapus | **selesai 2026-10-08** (`51bc31a`): R1–R8 di `data.ts`/`sumber-pagu.ts`; §5.1 diperketat jadi "sesudah SEMUA versi DPA" (pemilih periode membuat sasaran lampau mungkin); **R7 terbukti nyata lalu ditutup** (kunci setahun berbagi + baca terkunci di jalur belanja); uji: sumber-pagu 54 · statis 53 · DB 51 (11 skenario) · balapan 10 (3 varian) · 21 uji mutasi tertangkap |
 | **2** ✅ | layar DPA: tombol + modal + kolom Sebelum + sakelar + lencana + aturan hapus | **selesai 2026-10-09**: `lib/blud/perubahan.ts` (fungsi murni) + `perubahan-dasar.ts` + `JadikanPerubahanModal` + GET `mode=babak`/`dasar-perubahan`; label "Pagu dari DPA Perubahan ke-n" di Realisasi/Buku Kas/Beranda. Diverifikasi di aplikasi pada 2099 (salinan 558 baris DPA 2026, 2026 hanya dibaca): Jadikan → Simpan → penanda + 558/558 Sebelum terisi server, lencana PERUBAHAN KE-1/MURNI, hapus = nolkan, R2/R8 ditolak tanpa "Tetap Lanjut", sakelar diingat, tema terang, 375 px. Uji `test-blud-dpa-perubahan-layar.mts` (76), 30 uji mutasi tertangkap. §7 sakelar direvisi (lihat di sana) |
-| **3** | layar Pergeseran: spanduk babak lama, kunci Buat Pergeseran, Sinkron dimatikan | |
+| **3** ✅ | layar Pergeseran: spanduk babak lama, kunci Buat Pergeseran, Sinkron dimatikan | **selesai 2026-10-09**: fungsi murni `babakLama`/`spandukBabakLama`/`bukaKunciBabakLama`/`pergeseranBerlaku` di `lib/blud/perubahan.ts`. Tambahan di luar daftar asal: (a) kunci Buat Pergeseran hanya dibuka bila SASARAN Simpan sudah di babak Perubahan — membukanya di arsip akhir bulan lampau akan menimpa arsip itu; (b) Tutup Pergeseran ikut mati di isi babak lama (server tetap menolak lewat R6); (c) lencana **BERLAKU** di daftar versi Pergeseran & Pengaturan = sumber pagu, bukan sekadar yang terbaru — pergeseran terbaru bisa babak lama; (d) pagar server `BludSasaranBabakLamaError` (409 `SASARAN_BABAK_LAMA`, tak bisa ditembus `force`) untuk bullet "sasaran pergeseran pertama babak baru" yang belum ada di Tahap 1; (e) `GET mode=babak` terbuka bagi menu Pergeseran. Diverifikasi di 2099. Kop cetak (bullet terakhir §9) masuk Tahap 4 |
 | **4** | Cetak Ringkas/Lengkap + kop penanda + impor §11.1–11.2 | menunggu §14 no. 1 untuk tata letak Lengkap |
 | **5** | impor-balik ke versi terbuka §11.3 | jalur cadangan |
 

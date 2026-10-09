@@ -61,13 +61,16 @@ export async function GET(req: NextRequest) {
   // membuka pohon DPA lengkap, dan itu kebocoran sungguhan.
   // `dasar-perubahan` memulangkan baris sumber pagu (bisa pergeseran) yang sudah
   // dipetakan — hanya untuk yang memang bisa menekan "Jadikan DPA Perubahan".
-  const boleh = mode === 'tahun-list'
-    ? await bolehModulBlud(session.userId, session.role)
-    : mode === 'history' || mode === 'babak'
-      ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'cetak', 'pengaturan'])
-      : mode === 'dasar-perubahan'
-        ? await bolehEditMenu(session.userId, session.role, 'dpa')
-        : await bolehBukaMenu(session.userId, session.role, 'dpa')
+  // `babak` (tanggal penanda + sumber pagu, tanpa satu angka uang pun) juga dibaca layar
+  // Pergeseran — lencana, spanduk babak lama, kunci tombol. Guard menyebut menu yang
+  // MENAMPILKAN datanya; tanpa 'pergeseran' pemegang menu itu dapat 403 dan semua
+  // penanda di layarnya diam.
+  const boleh =
+      mode === 'tahun-list'      ? await bolehModulBlud(session.userId, session.role)
+    : mode === 'history'         ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'cetak', 'pengaturan'])
+    : mode === 'babak'           ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'pergeseran', 'cetak', 'pengaturan'])
+    : mode === 'dasar-perubahan' ? await bolehEditMenu(session.userId, session.role, 'dpa')
+    :                              await bolehBukaMenu(session.userId, session.role, 'dpa')
   if (!boleh) return forbidden()
 
   // R4 — membaca satu tahun DPA tidak murah. 60/menit longgar untuk pemakaian

@@ -10,7 +10,7 @@ import {
   getPergeseranMutasi,
   BludReplaceSafetyError, BludJangkarHilangError, BludVersiTerpakaiError, BludHistorisJadiPaguError,
   BludPaguDibawahRealisasiError, BludSasaranTutupTerpakaiError,
-  BludAcuanSebelumPerubahanError, BludVersiDasarError,
+  BludAcuanSebelumPerubahanError, BludVersiDasarError, BludSasaranBabakLamaError,
 } from '@/lib/blud/data'
 import { BludSudahDitutupError, getTutupPergeseran } from '@/lib/blud/tutup-data'
 import { BludVersionConflictError } from '@/lib/blud/lock'
@@ -385,6 +385,11 @@ export async function POST(req: NextRequest) {
     }
     if (err instanceof BludVersiDasarError) {
       return NextResponse.json({ ok: false, code: 'VERSI_DASAR_PERUBAHAN', error: err.message }, { status: 409 })
+    }
+    if (err instanceof BludSasaranBabakLamaError) {
+      return NextResponse.json({
+        ok: false, code: 'SASARAN_BABAK_LAMA', error: err.message, acuan_lama: err.acuanLama, mulai: err.mulai,
+      }, { status: 409 })
     }
     // Dua pagar penutupan. Keduanya 409, bukan 400: barisnya sah, keadaan di
     // server yang membuatnya belum boleh mendarat — dan keduanya hilang sendiri

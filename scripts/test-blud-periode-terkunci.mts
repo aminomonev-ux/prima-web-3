@@ -275,8 +275,10 @@ bab('D. Tombol borongan dikunci saat versi tersimpan terbuka')
   // Syarat `!!periodeTulis` dicabut 2026-08-29: dulu tombol ini dimatikan pada
   // periode historis karena servernya selalu mengambil DPA TERBARU. Sekarang ia
   // mengambil DPA yang BERLAKU pada sasaran Simpan, jadi sebabnya hilang.
+  // Satu-satunya kunci tambahan sejak DPA Perubahan (konsep §9): isi babak lama — itu
+  // soal ACUAN barisnya, bukan soal versi terbuka atau periode.
   cek('Pergeseran: Sinkronkan DPA sengaja tidak ikut terkunci',
-    /disabled=\{injecting \|\| !rows\.length\}/.test(pgs)
+    /disabled=\{injecting \|\| !rows\.length \|\| isiBabakLama\}/.test(pgs)
     && !/disabled=\{injecting[^}]*alasanKunciBorongan/.test(pgs))
   cek('Pergeseran: Sinkronkan DPA tidak lagi dimatikan periode historis',
     !/disabled=\{injecting \|\| !rows\.length \|\| !!periodeTulis\}/.test(pgs),

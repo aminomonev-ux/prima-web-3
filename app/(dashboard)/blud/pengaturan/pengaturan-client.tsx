@@ -20,6 +20,8 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import PejabatSpjPanel from '@/components/blud/PejabatSpjPanel'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { kelompokkanPerTahun, type GrupTahun } from '@/lib/blud/pengaturan-grup'
+import { catatanBabak, catatanDasar, babakIkutDihapus, pergeseranBerlaku } from '@/lib/blud/perubahan'
+import type { PenandaPerubahan, SumberPagu } from '@/lib/blud/sumber-pagu'
 // Dari `riwayat-konstanta`, BUKAN `riwayat-simpan`: berkas kedua mengimpor
 // mysql2, dan satu angka yang ditarik dari sana menyeret seluruh driver MySQL ke
 // bundel peramban ("Can't resolve 'net'"). Karena layout dashboard ada di jejak
@@ -59,6 +61,9 @@ interface BentrokPagu {
 type Tertahan =
   | { kode: 'VERSI_TERPAKAI'; pesan: string; detail: BentrokPagu[]; penerus: string | null }
   | { kode: 'VERSI_DIRUJUK';  pesan: string; perujuk: string[] }
+  /** DPA Perubahan §6 — versi dasar dikunci. Kalimatnya menyuruh langkah tertentu (hapus
+   *  Perubahan-nya dulu); di toast 4 detik ia lenyap sementara "Hapus Permanen" tetap menyala. */
+  | { kode: 'VERSI_DASAR_PERUBAHAN'; pesan: string }
 
 const ID_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
 function formatTanggal(iso: string): string {
@@ -66,6 +71,7 @@ function formatTanggal(iso: string): string {
   if (!m) return iso
   return `${m[3]} ${ID_MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`
 }
+const keterangan = (...bagian: (string | undefined)[]) => bagian.filter(Boolean).join(' · ')
 
 
 export default function PengaturanClient(
@@ -74,6 +80,9 @@ export default function PengaturanClient(
 ) {
   const [dpaList,   setDpaList]   = useState<DpaVersi[]>([])
   const [pergList,  setPergList]  = useState<PergeseranVersi[]>([])
+  // Penanda DPA Perubahan per tahun anggaran — sumber lencana babak & peringatan hapus.
+  const [penanda,   setPenanda]   = useState<Record<number, PenandaPerubahan[]>>({})
+  const [sumberPagu, setSumberPagu] = useState<Record<number, SumberPagu | null>>({})
   const [loading,   setLoading]   = useState(true)
   const [err,       setErr]       = useState<string | null>(null)
 
@@ -90,15 +99,37 @@ export default function PengaturanClient(
     [tahunDiketik, target],
   )
   const alasanCukup = alasan.trim().length >= 10
+  const babakDibuang = target?.kind === 'dpa'
+    ? babakIkutDihapus(
+        penanda[target.tahun] ?? [],
+        dpaList.filter(v => v.tahun_anggaran === target.tahun).map(v => v.versi_tanggal),
+        target.versi,
+      )
+    : []
 
+  // Lencana babak & tanda dasar ikut di keterangan baris — di layar PENGHAPUSAN orang
+  // harus tahu versi mana yang membawa Perubahan dan mana yang dikunci sebagai dasarnya.
   const dpaGrup  = useMemo(
-    () => kelompokkanPerTahun(dpaList, v => `${v.jumlah_baris} baris`),
-    [dpaList],
+    () => kelompokkanPerTahun(dpaList, v => keterangan(
+      `${v.jumlah_baris} baris`,
+      catatanBabak(penanda[v.tahun_anggaran] ?? [], v.versi_tanggal),
+      catatanDasar(penanda[v.tahun_anggaran] ?? [], 'DPA', v.versi_tanggal),
+    )),
+    [dpaList, penanda],
   )
+  // Babak pergeseran diturunkan dari ACUAN-nya (konsep §9), bukan dari tanggal simpannya.
+  // BERLAKU pergeseran = yang jadi acuan realisasi, rumus yang sama dgn layar Pergeseran:
+  // sesudah Perubahan, pergeseran terbaru bisa babak lama yang tidak lagi menentukan pagu.
   const pergGrup = useMemo(
-    () => kelompokkanPerTahun(pergList,
-      v => `${v.jumlah_baris} baris · mengacu DPA yang disimpan ${formatTanggal(v.dpa_versi_tanggal)}`),
-    [pergList],
+    () => kelompokkanPerTahun(pergList, v => keterangan(
+      `${v.jumlah_baris} baris · mengacu DPA yang disimpan ${formatTanggal(v.dpa_versi_tanggal)}`,
+      catatanBabak(penanda[v.tahun_anggaran] ?? [], v.dpa_versi_tanggal),
+      catatanDasar(penanda[v.tahun_anggaran] ?? [], 'PERGESERAN', v.versi_tanggal),
+    )).map(g => {
+      const berlaku = pergeseranBerlaku(penanda[g.tahun] ?? [], sumberPagu[g.tahun] ?? null, g.rows[0]?.versi)
+      return { ...g, rows: g.rows.map(r => ({ ...r, berlaku: r.versi === berlaku })) }
+    }),
+    [pergList, penanda, sumberPagu],
   )
 
   // ─── Data fetch ────────────────────────────────────────────────────────────
@@ -113,17 +144,27 @@ export default function PengaturanClient(
       const years: number[] = (tRes.ok && tJson.ok && Array.isArray(tJson.data)) ? tJson.data : []
       const dpaAll:  DpaVersi[]        = []
       const pergAll: PergeseranVersi[] = []
+      const penandaAll: Record<number, PenandaPerubahan[]> = {}
+      const sumberAll:  Record<number, SumberPagu | null> = {}
       for (const y of years) {
-        const [dRes, pRes] = await Promise.all([
+        const [dRes, pRes, bRes] = await Promise.all([
           fetch(`/api/blud/dpa?mode=history&tahun=${y}`, { cache: 'no-store' }),
           fetch(`/api/blud/pergeseran?mode=history&tahun=${y}`, { cache: 'no-store' }),
+          fetch(`/api/blud/dpa?mode=babak&tahun=${y}`, { cache: 'no-store' }),
         ])
-        const [dJson, pJson] = await Promise.all([dRes.json(), pRes.json()])
+        const [dJson, pJson, bJson] = await Promise.all([dRes.json(), pRes.json(), bRes.json()])
         if (dRes.ok && dJson.ok) for (const v of (dJson.data ?? [])) dpaAll.push({ ...v, tahun_anggaran: y })
         if (pRes.ok && pJson.ok) for (const v of (pJson.data ?? [])) pergAll.push({ ...v, tahun_anggaran: y })
+        // Gagal dimuat = tanpa lencana; server tetap memegang pagarnya.
+        if (bRes.ok && bJson.ok && Array.isArray(bJson.penanda)) {
+          penandaAll[y] = bJson.penanda
+          sumberAll[y]  = bJson.sumber ?? null
+        }
       }
       setDpaList(dpaAll)
       setPergList(pergAll)
+      setPenanda(penandaAll)
+      setSumberPagu(sumberAll)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -164,9 +205,14 @@ export default function PengaturanClient(
           setTertahan({ kode: 'VERSI_DIRUJUK', pesan: json.error, perujuk: json.perujuk ?? [] })
           return
         }
+        if (res.status === 409 && json.code === 'VERSI_DASAR_PERUBAHAN') {
+          setTertahan({ kode: 'VERSI_DASAR_PERUBAHAN', pesan: json.error })
+          return
+        }
         throw new Error(json.error || 'Versi belum terhapus. Coba lagi sebentar lagi.')
       }
-      showToast(json.message || 'Versi berhasil dihapus', true)
+      showToast((json.message || 'Versi berhasil dihapus')
+        + (Number(json.penanda_dibuang) > 0 ? ' — DPA Perubahan-nya ikut dibatalkan, pagu kembali ke versi sebelum Perubahan.' : ''), true)
       closeModal()
       await loadAll()
     } catch (e) {
@@ -349,6 +395,12 @@ export default function PengaturanClient(
               {target.kind === 'dpa' && (
                 <div style={{ marginTop: 6, color: '#FCA5A5', fontSize: 11.5 }}>
                   ⚠ Rekap Penanggung Jawab untuk versi ini juga akan ikut terhapus.
+                </div>
+              )}
+              {target.kind === 'dpa' && babakDibuang.length > 0 && (
+                <div style={{ marginTop: 6, color: '#FCA5A5', fontSize: 11.5 }}>
+                  ⚠ Ini versi terakhir DPA Perubahan ke-{babakDibuang.join(', ke-')}. Menghapusnya ikut
+                  membatalkan Perubahan itu: pagu tahun {target.tahun} kembali ke versi sebelum Perubahan.
                 </div>
               )}
             </div>

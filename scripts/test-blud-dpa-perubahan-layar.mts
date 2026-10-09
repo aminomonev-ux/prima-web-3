@@ -17,6 +17,8 @@ import {
   keBabak, catatanBabak, jenisSumberPagu, berSebelum, selisihSebelum, formatSelisih,
   totalSebelumSesudah, hapusAtauNolkan, alasanKunciPerubahan,
   KUNCI_TAMPIL_SEBELUM, bacaTampilSebelum, simpanTampilSebelum,
+  catatanDasar, babakIkutDihapus,
+  babakLama, spandukBabakLama, bukaKunciBabakLama, pergeseranBerlaku,
 } from '../lib/blud/perubahan'
 import type { PenandaPerubahan } from '../lib/blud/sumber-pagu'
 import type { DpaBarisInput } from '../types'
@@ -236,8 +238,11 @@ cek('modal: fetch & json dipisah dalam try/catch', /const res = await fetch[\s\S
 // ─── C. Route GET ────────────────────────────────────────────────────────────
 console.log('\n── C. Route GET /api/blud/dpa ──')
 const ROUTE = kode(baca('app/api/blud/dpa/route.ts'))
-cek('mode babak: pagar sama dengan daftar versi', ROUTE.includes(`mode === 'history' || mode === 'babak'\n      ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'cetak', 'pengaturan'])`))
-cek('mode dasar-perubahan: hanya yang bisa MENYUNTING DPA', ROUTE.includes(`mode === 'dasar-perubahan'\n        ? await bolehEditMenu(session.userId, session.role, 'dpa')`))
+cek('mode babak: pagar daftar versi + menu Pergeseran (yang menampilkannya)',
+  ROUTE.includes(`mode === 'babak'           ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'pergeseran', 'cetak', 'pengaturan'])`))
+cek('mode history: pagarnya TIDAK ikut melebar',
+  ROUTE.includes(`mode === 'history'         ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'cetak', 'pengaturan'])`))
+cek('mode dasar-perubahan: hanya yang bisa MENYUNTING DPA', ROUTE.includes(`mode === 'dasar-perubahan' ? await bolehEditMenu(session.userId, session.role, 'dpa')`))
 cek('…keduanya di bawah rate limit yang sama', ROUTE.indexOf("bludRateLimit(session.userId, 'view-dpa', 60)") < ROUTE.indexOf("if (mode === 'babak')"))
 cek('…dasar-perubahan diaudit (BLUD_VIEW_DPA, dibatasi bolehCatatView)',
   /if \(mode === 'dasar-perubahan'\) \{[\s\S]{0,300}bolehCatatView[\s\S]{0,200}eventType: 'BLUD_VIEW_DPA'/.test(ROUTE))
@@ -250,6 +255,109 @@ for (const p of ['app/(dashboard)/blud/realisasi/realisasi-client.tsx', 'app/(da
   cek(`${p.split('/').at(-1)}: tidak ada lagi ternary 'Pergeseran' : 'DPA' sendiri`, !/=== 'PERGESERAN' \? 'Pergeseran' : 'DPA'/.test(isi))
 }
 cek('ringkasSerapan membawa perubahan_ke ke Beranda', /perubahan_ke/.test(kode(baca('lib/blud/serapan-ringkas.ts'))))
+
+// ─── E. Layar Pengaturan (hapus versi) ───────────────────────────────────────
+console.log('\n── E. Pengaturan: lencana babak & hapus versi Perubahan ──')
+{
+  const pd = [
+    { versi_mulai: '2026-08-15', sumber_dasar: 'PERGESERAN', versi_dasar: '2026-08-10' },
+    { versi_mulai: '2026-10-09', sumber_dasar: 'DPA', versi_dasar: '2026-09-30' },
+  ] as PenandaPerubahan[]
+  cek('catatanDasar: versi sumber kolom Sebelum ditandai sesuai jenisnya',
+    catatanDasar(pd, 'PERGESERAN', '2026-08-10') === 'DASAR PERUBAHAN KE-1' && catatanDasar(pd, 'DPA', '2026-09-30') === 'DASAR PERUBAHAN KE-2')
+  cek('catatanDasar: tanggal sama tapi JENIS beda bukan dasar', catatanDasar(pd, 'DPA', '2026-08-10') === undefined)
+  const versi = ['2026-10-09', '2026-09-30', '2026-08-15', '2026-01-31']
+  cek('babakIkutDihapus: versi Perubahan TERAKHIR → babaknya ikut lenyap', babakIkutDihapus(pd, versi, '2026-10-09').join() === '2')
+  cek('babakIkutDihapus: masih ada versi lain di babak itu → tidak ada yang lenyap',
+    babakIkutDihapus(pd, [...versi, '2026-10-12'], '2026-10-09').length === 0)
+  cek('babakIkutDihapus: versi murni dihapus → tidak ada yang lenyap', babakIkutDihapus(pd, versi, '2026-01-31').length === 0)
+  // Cermin `bersihkanPenandaYatim`: penanda ke-1 masih "hidup" lewat versi ≥ 15 Agu yang
+  // mana pun — termasuk versi babak ke-2.
+  cek('babakIkutDihapus: babak lama tetap hidup selama ada versi DPA sesudahnya',
+    babakIkutDihapus(pd, versi, '2026-08-15').length === 0)
+}
+{
+  const PG = kode(baca('app/(dashboard)/blud/pengaturan/pengaturan-client.tsx'))
+  cek('Pengaturan: penanda dimuat per tahun lewat mode=babak', PG.includes('fetch(`/api/blud/dpa?mode=babak&tahun=${y}`'))
+  cek('Pengaturan: lencana DPA = babak versi itu + tanda dasar',
+    PG.includes("catatanBabak(penanda[v.tahun_anggaran] ?? [], v.versi_tanggal),")
+    && PG.includes("catatanDasar(penanda[v.tahun_anggaran] ?? [], 'DPA', v.versi_tanggal),"))
+  cek('Pengaturan: babak pergeseran diturunkan dari ACUAN-nya (§9)',
+    PG.includes("catatanBabak(penanda[v.tahun_anggaran] ?? [], v.dpa_versi_tanggal),")
+    && PG.includes("catatanDasar(penanda[v.tahun_anggaran] ?? [], 'PERGESERAN', v.versi_tanggal),"))
+  cek('Pengaturan: penolakan versi dasar jadi panel, bukan toast 4 detik',
+    /if \(res\.status === 409 && json\.code === 'VERSI_DASAR_PERUBAHAN'\) \{\s*setTertahan\(\{ kode: 'VERSI_DASAR_PERUBAHAN', pesan: json\.error \}\)\s*return/.test(PG))
+  cek('Pengaturan: dialog hapus DPA memperingatkan babak yang ikut dibatalkan',
+    PG.includes("{target.kind === 'dpa' && babakDibuang.length > 0 && (") && PG.includes('babakIkutDihapus('))
+  cek('Pengaturan: toast sukses menyebut Perubahan yang ikut dibatalkan', PG.includes('Number(json.penanda_dibuang) > 0'))
+}
+
+// ─── G. Tahap 3: layar Pergeseran sesudah Perubahan (§9) ─────────────────────
+console.log('\n── G. Pergeseran sesudah Perubahan ──')
+{
+  const pd = [{ versi_mulai: '2026-10-09', sumber_dasar: 'PERGESERAN', versi_dasar: '2026-10-08' }] as PenandaPerubahan[]
+  cek('babakLama: acuan sebelum Perubahan terakhir', babakLama(pd, '2026-10-07') && !babakLama(pd, '2026-10-09'))
+  cek('babakLama: tahun tanpa Perubahan / acuan kosong → bukan', !babakLama([], '2026-10-07') && !babakLama(pd, ''))
+  const s = spandukBabakLama(pd, '2026-10-07')
+  cek('spanduk: menyebut babak, tanggal mulai, acuan, dan tombol jalan keluarnya',
+    /Perubahan ke-1 berlaku sejak 09 Okt 2026/.test(s) && /07 Okt 2026/.test(s) && /Tekan Buat Pergeseran/.test(s))
+  cek('spanduk: peran hanya-lihat tidak disuruh menekan tombol', !/Buat Pergeseran/.test(spandukBabakLama(pd, '2026-10-07', false)))
+  cek('spanduk: kosong untuk isi babak baru', spandukBabakLama(pd, '2026-10-09') === '')
+  const h = [{ versi_tanggal: '2026-10-08', dpa_versi_tanggal: '2026-10-07' }, { versi_tanggal: '2026-09-30', dpa_versi_tanggal: '2026-08-29' }]
+  cek('bukaKunci: isi babak lama + sasaran di babak baru → boleh', bukaKunciBabakLama(pd, '2026-10-07', '2026-10-10', h) === '')
+  cek('bukaKunci: sasaran masih sebelum Perubahan (arsip lampau) → aturan biasa',
+    bukaKunciBabakLama(pd, '2026-08-29', '2026-09-30', h) === null)
+  cek('bukaKunci: isi bukan babak lama → aturan biasa', bukaKunciBabakLama(pd, '2026-10-09', '2026-10-10', h) === null)
+  cek('bukaKunci: sasaran berisi pergeseran babak lama → ditolak dgn alasan',
+    /sudah berisi pergeseran sebelum Perubahan/.test(bukaKunciBabakLama(pd, '2026-10-07', '2026-10-09',
+      [...h, { versi_tanggal: '2026-10-09', dpa_versi_tanggal: '2026-10-07' }]) ?? ''))
+  cek('pergeseranBerlaku: tanpa Perubahan → yang terbaru (perilaku lama)', pergeseranBerlaku([], null, '2026-10-08') === '2026-10-08')
+  cek('pergeseranBerlaku: sumber pagu DPA Perubahan → tidak ada pergeseran yang berlaku',
+    pergeseranBerlaku(pd, { sumber: 'DPA', versi: '2026-10-09' }, '2026-10-08') === null)
+  cek('pergeseranBerlaku: sumber pagu pergeseran → versi itu',
+    pergeseranBerlaku(pd, { sumber: 'PERGESERAN', versi: '2026-10-12' }, '2026-10-12') === '2026-10-12')
+}
+{
+  const PL = kode(baca('app/(dashboard)/blud/pergeseran/pergeseran-client.tsx'))
+  cek('Pergeseran: penanda dimuat saat tahun berganti DAN sesudah Simpan',
+    PL.includes('await loadRiwayat(); await loadBabak() })() }, [loadPergeseran, loadHistory, loadRiwayat, loadBabak])')
+    && PL.includes('loadHistory(); loadTahunList(); loadRiwayat(); loadBabak()'))
+  cek('Pergeseran: gagal muat → penanda dikosongkan, bukan sisa tahun lain',
+    PL.includes('} catch { setBabak({ penanda: [], sumber: null }) }') && PL.includes(': { penanda: [], sumber: null })'))
+  cek('Pergeseran: babak lama diukur dari ACUAN baris di layar', PL.includes('const isiBabakLama = rows.length > 0 && babakLama(penanda, dpaVersi)'))
+  cek('Pergeseran: Buat Pergeseran lewat bukaKunciBabakLama dulu, baru kunci biasa',
+    PL.includes('const kunciBabakLama = bukaKunciBabakLama(penanda, dpaVersi, sasaran, history)')
+    && /const alasanKunciBorongan = !versi\s*\? ''\s*: kunciBabakLama \?\? `Versi/.test(PL))
+  cek('Pergeseran: Sinkronkan DPA mati di isi babak lama', PL.includes('disabled={injecting || !rows.length || isiBabakLama}'))
+  cek('Pergeseran: Tutup mati di isi babak lama (sebelum lembar penutupan dibuka)',
+    /const alasanKunciTutup = !rows\.length\s*\? 'Belum ada tabelnya\.'\s*: isiBabakLama\s*\?/.test(PL))
+  cek('Pergeseran: lencana babak dari acuan di daftar versi', PL.includes("catatanBabak(penanda, h.dpa_versi_tanggal ?? '')"))
+  cek('Pergeseran: BERLAKU dari sumber pagu', PL.includes('const berlakuVersi = pergeseranBerlaku(penanda, babak.sumber, history[0]?.versi_tanggal)')
+    && PL.includes('berlaku={berlakuVersi}'))
+  cek('Pergeseran: spanduk babak lama dirender', PL.includes('{isiBabakLama && (') && PL.includes('spandukBabakLama(penanda, dpaVersi, bolehUbah)'))
+  const VD = kode(baca('components/blud/VersiDropdown.tsx'))
+  cek('VersiDropdown: tanpa prop berlaku = items[0] (pemakai lama tak tersentuh)',
+    VD.includes('const berlakuTanggal = berlaku === undefined ? items[0]?.versi_tanggal : berlaku'))
+  const PG = kode(baca('app/(dashboard)/blud/pengaturan/pengaturan-client.tsx'))
+  cek('Pengaturan: BERLAKU pergeseran memakai rumus yang sama',
+    PG.includes('const berlaku = pergeseranBerlaku(penanda[g.tahun] ?? [], sumberPagu[g.tahun] ?? null, g.rows[0]?.versi)'))
+  const DATA = kode(baca('lib/blud/data.ts'))
+  cek('Server: pagar sasaran babak lama di savePergeseran, SEBELUM ambang turun drastis',
+    DATA.indexOf('throw new BludSasaranBabakLamaError(') > 0
+    && DATA.indexOf('throw new BludSasaranBabakLamaError(') < DATA.indexOf("throw new BludReplaceSafetyError('pergeseran_dpa'"))
+  cek('Server: route memetakan SASARAN_BABAK_LAMA ke 409', kode(baca('app/api/blud/pergeseran/route.ts')).includes("code: 'SASARAN_BABAK_LAMA'"))
+}
+
+// ─── F. Lebar ponsel ─────────────────────────────────────────────────────────
+console.log('\n── F. Lebar ponsel ──')
+cek('modal Jadikan: kaki modal boleh berbaris (catatan tidak diperas & terpotong)',
+  /display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end'[\s\S]{0,200}marginRight: 'auto', flex: '1 1 180px'/.test(MODAL))
+{
+  const css = baca('app/globals.css').replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '')
+  const media = /@media \(max-width: 520px\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+  cek('daftar versi dibatasi selebar layar & boleh berbaris di ≤520px',
+    media.includes('.versi-menu { max-width: calc(100vw - 56px); white-space: normal; }') && media.includes('.versi-item { flex-wrap: wrap; }'))
+}
 
 console.log(`\n${lulus} lulus, ${gagal} gagal`)
 if (gagal) process.exit(1)

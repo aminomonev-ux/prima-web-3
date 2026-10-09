@@ -297,6 +297,21 @@ try {
     }))
     const e = await galat(() => simpanPg(P2, V0, pgDari(dpaM1)))
     periksa('Pergeseran >= M beracuan DPA murni → ACUAN_SEBELUM_PERUBAHAN', e?.name === 'BludAcuanSebelumPerubahanError' && e.mulai === M, e?.name)
+
+    // §9 — pergeseran babak LAMA bertanggal hari Perubahan (disimpan pagi, Perubahan
+    // siang). Disisipkan langsung: lewat savePergeseran ia kini sudah ditolak R6.
+    await sql`INSERT INTO pergeseran_dpa (tahun_anggaran, versi_tanggal, dpa_versi_tanggal, kode_rekening, uraian, vol, satuan, harga, jumlah,
+                vol_p, harga_p, pergeseran, bertambah_berkurang, tipe_baris, row_id, anggaran_key, parent_id, urutan)
+              SELECT tahun_anggaran, ${M}, dpa_versi_tanggal, kode_rekening, uraian, vol, satuan, harga, jumlah,
+                vol_p, harga_p, pergeseran, bertambah_berkurang, tipe_baris, row_id, anggaran_key, parent_id, urutan
+              FROM pergeseran_dpa WHERE tahun_anggaran = ${TAHUN} AND versi_tanggal = ${P1}`
+    const e2 = await galat(() => savePergeseran(TAHUN, M, M_1, pgDari(dpaM1), USER, 0, true))
+    periksa('Babak baru menimpa pergeseran babak lama di tanggal sama → SASARAN_BABAK_LAMA, force tak menembus',
+      e2?.name === 'BludSasaranBabakLamaError' && e2.acuanLama === V0 && e2.mulai === M, e2?.name)
+    const lama = await getPergeseranByDate(TAHUN, M)
+    periksa('…pergeseran babak lama masih utuh', lama.length === pgP1.length && lama.every(r => r.dpa_versi_tanggal === V0))
+    await sql`DELETE FROM pergeseran_dpa WHERE tahun_anggaran = ${TAHUN} AND versi_tanggal = ${M}`
+
     await simpanPg(P2, M_1, pgDari(dpaM1))
     const s = await getPaguSumber(TAHUN)
     periksa('Beracuan DPA Perubahan → diterima DAN jadi sumber pagu', s.sumber === 'PERGESERAN' && s.versi === P2 && s.perubahan_ke === 1, `${s.sumber} ${s.versi}`)

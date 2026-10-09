@@ -246,6 +246,22 @@ export class BludAcuanSebelumPerubahanError extends Error {
   }
 }
 
+/**
+ * §9 — pergeseran babak baru menyasar tanggal yang sudah berisi pergeseran babak LAMA
+ * (disimpan pagi, Perubahan dibuat siang hari yang sama). Simpan itu hapus-lalu-tulis-
+ * ulang, jadi dokumen babak lama akan lenyap; `force` tidak berhak menembusnya.
+ */
+export class BludSasaranBabakLamaError extends Error {
+  constructor(public versi: string, public acuanLama: string, public mulai: string, public ke: number) {
+    super(
+      `Tanggal ${formatTanggalId(versi)} sudah berisi pergeseran sebelum Perubahan (mengacu DPA `
+      + `${formatTanggalId(acuanLama)}). Menyimpan pergeseran DPA Perubahan ke-${ke} di tanggal yang sama akan menghapusnya.\n`
+      + 'Simpan besok — atau, kalau pergeseran lama itu memang tidak diperlukan, hapus dulu di menu Pengaturan.',
+    )
+    this.name = 'BludSasaranBabakLamaError'
+  }
+}
+
 /** R8 — "turunkan paksa" ditutup untuk versi DPA Perubahan (keputusan #10). */
 export class BludPaksaPerubahanError extends Error {
   constructor(public versi: string) {
@@ -1167,6 +1183,15 @@ export async function savePergeseran(
     // B-NEW-3 threshold di dalam tx (audit DPA 2026-06-11 B-3)
     const cntRows = await tx`SELECT COUNT(*) AS cnt FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { cnt: unknown }[]
     existing = Number(cntRows[0]?.cnt ?? 0)
+    // §9 — sebelum ambang turun drastis: menimpa babak lama bukan soal jumlah baris, jadi
+    // jawabannya tidak boleh ditawar `force` lewat dialog ambang itu.
+    if (babak && existing > 0) {
+      const acuanAda = await tx`SELECT MIN(dpa_versi_tanggal) AS acuan FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versiTanggal}` as { acuan: unknown }[]
+      const acuanLama = toDateStr(acuanAda[0]?.acuan)
+      if (acuanLama && acuanLama < babak.versi_mulai) {
+        throw new BludSasaranBabakLamaError(versiTanggal, acuanLama, babak.versi_mulai, penanda.indexOf(babak) + 1)
+      }
+    }
     if (!force && existing > 0 && incoming < existing * SAFE_DROP_THRESHOLD) {
       throw new BludReplaceSafetyError('pergeseran_dpa', existing, incoming, ((existing - incoming) / existing) * 100)
     }

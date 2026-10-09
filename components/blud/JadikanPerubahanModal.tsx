@@ -170,8 +170,10 @@ export default function JadikanPerubahanModal({
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,.08)' }}>
-          <span className="blud-imp-muted" style={{ fontSize: 11.5, marginRight: 'auto' }}>
+        {/* Berbaris di layar sempit: tanpa itu catatan diperas jadi kolom selebar satu kata
+            lalu terpotong di tepi kiri modal (terukur di 375px). */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', alignItems: 'center', padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,.08)' }}>
+          <span className="blud-imp-muted" style={{ fontSize: 11.5, marginRight: 'auto', flex: '1 1 180px' }}>
             Belum tersimpan — tekan Simpan sesudah diperiksa.
           </span>
           <PrimaButton variant="ghost" onClick={onTutup}>Batal</PrimaButton>
