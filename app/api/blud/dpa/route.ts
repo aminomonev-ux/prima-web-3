@@ -11,7 +11,9 @@ import {
   BludSasaranPerubahanError, BludDasarPerubahanBergeserError, BludBarisDasarHilangError,
   BludPaksaPerubahanError, BludVersiDasarError,
 } from '@/lib/blud/data'
-import { BludPerubahanGandaError } from '@/lib/blud/perubahan-data'
+import { BludPerubahanGandaError, getPerubahan } from '@/lib/blud/perubahan-data'
+import { getDasarPerubahan } from '@/lib/blud/perubahan-dasar'
+import { getPaguSumber } from '@/lib/blud/pagu'
 import { BludVersionConflictError } from '@/lib/blud/lock'
 import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { recalcDpaJumlah, validateTreeIntegrity } from '@/lib/blud/recalc'
@@ -57,11 +59,15 @@ export async function GET(req: NextRequest) {
   // Pagar per-MODE, bukan per-handler — satu handler ini melayani tiga bentuk data
   // dengan kepekaan berbeda. Melebarkan seluruh GET demi dropdown tahun akan ikut
   // membuka pohon DPA lengkap, dan itu kebocoran sungguhan.
+  // `dasar-perubahan` memulangkan baris sumber pagu (bisa pergeseran) yang sudah
+  // dipetakan — hanya untuk yang memang bisa menekan "Jadikan DPA Perubahan".
   const boleh = mode === 'tahun-list'
     ? await bolehModulBlud(session.userId, session.role)
-    : mode === 'history'
+    : mode === 'history' || mode === 'babak'
       ? await bolehLihatSalahSatu(session.userId, session.role, ['dpa', 'cetak', 'pengaturan'])
-      : await bolehBukaMenu(session.userId, session.role, 'dpa')
+      : mode === 'dasar-perubahan'
+        ? await bolehEditMenu(session.userId, session.role, 'dpa')
+        : await bolehBukaMenu(session.userId, session.role, 'dpa')
   if (!boleh) return forbidden()
 
   // R4 — membaca satu tahun DPA tidak murah. 60/menit longgar untuk pemakaian
@@ -82,6 +88,28 @@ export async function GET(req: NextRequest) {
     if (mode === 'history') {
       const data = await getDpaHistory(tahun)
       return NextResponse.json({ ok: true, data, tahun })
+    }
+
+    // DPA Perubahan: penanda (lencana MURNI/PERUBAHAN KE-n, sakelar Sebelum) +
+    // sumber pagu yang berlaku — ringan, dimuat bersama daftar versi.
+    if (mode === 'babak') {
+      const [penanda, sumber] = await Promise.all([getPerubahan(tahun), getPaguSumber(tahun)])
+      return NextResponse.json({ ok: true, tahun, penanda, sumber })
+    }
+
+    // Bahan modal "Jadikan DPA Perubahan" — baris sumber pagu yang sudah dipetakan.
+    if (mode === 'dasar-perubahan') {
+      const dasar = await getDasarPerubahan(tahun)
+      if (dasar && await bolehCatatView(session.userId, `dasar-perubahan:${tahun}:${dasar.versi_dasar}`)) {
+        await writeAuditLog({
+          req,
+          eventType: 'BLUD_VIEW_DPA',
+          userId:    session.userId,
+          username:  session.username,
+          detail:    `Buka dasar DPA Perubahan ${tahun}: ${dasar.sumber_dasar === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} ${dasar.versi_dasar}, ${dasar.jumlah_baris} baris`,
+        })
+      }
+      return NextResponse.json({ ok: true, tahun, dasar })
     }
 
     const versi = tanggal ?? await getDpaLatestDate(tahun)

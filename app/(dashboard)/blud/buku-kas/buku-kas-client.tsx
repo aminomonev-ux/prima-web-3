@@ -18,6 +18,7 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import { formatTanggalId } from '@/lib/blud/tanggal'
+import { jenisSumberPagu } from '@/lib/blud/perubahan'
 import TransaksiModal, { type BarisPaguUI, type TransaksiAwal } from '@/components/blud/TransaksiModal'
 import { LABEL_POTONGAN, type JenisPotongan } from '@/lib/blud/alokasi-rule'
 import BakiRekeningPanel from '@/components/blud/BakiRekeningPanel'
@@ -74,7 +75,7 @@ export default function BukuKasClient({
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
   const [data, setData] = useState<BukuKasData | null>(null)
   const [baris, setBaris] = useState<BarisPaguUI[]>([])
-  const [sumber, setSumber] = useState<{ sumber: string; versi: string | null } | null>(null)
+  const [sumber, setSumber] = useState<{ sumber: string; versi: string | null; perubahan_ke?: number | null } | null>(null)
   const [diparkir, setDiparkir] = useState(0)
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -205,7 +206,7 @@ export default function BukuKasClient({
 
         {sumber && sumber.sumber !== 'KOSONG' && (
           <span className="blud-imp-pill on-purple">
-            Pagu dari {sumber.sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {formatTanggalId(sumber.versi)}
+            Pagu dari {jenisSumberPagu(sumber)} {formatTanggalId(sumber.versi)}
           </span>
         )}
         {terkunci && (

@@ -13,6 +13,7 @@ import {
 import { fmtRp } from '@/lib/shared/utils'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import type { SerapanRingkas } from '@/lib/blud/serapan-ringkas'
+import { jenisSumberPagu } from '@/lib/blud/perubahan'
 import type { PanelRealisasi, StatusSerapan, VersiPergeseran } from '@/lib/blud/beranda-panel'
 import { bolehSegarkan, jamPendek, JEDA_SEGARKAN_MS, PERISTIWA_AKTIF } from '@/lib/blud/segarkan'
 import type { RingkasTutupKas } from '@/lib/blud/tutup-kas'
@@ -190,7 +191,7 @@ export default function DashboardClient(p: Props) {
         : s.pct > 0 && s.pct < 0.05 ? '< 0,1%'
         : `${s.pct.toFixed(1).replace('.', ',')}%`,
       sub:   s.versi
-        ? `Pagu ${s.sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} ${fmtTgl(s.versi)}`
+        ? `Pagu ${jenisSumberPagu(s)} ${fmtTgl(s.versi)}`
         : 'Belum ada pagu',
       Icon:  Gauge,
       color: '#3B82F6',

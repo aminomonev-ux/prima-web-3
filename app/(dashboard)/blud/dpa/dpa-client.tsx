@@ -8,8 +8,14 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   ChevronUp, ChevronDown, Save,
-  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox, CalendarClock, Copy,
+  AlertTriangle, X, FilePlus, Search, ExternalLink, Upload, Inbox, CalendarClock, Copy, FileDiff,
 } from 'lucide-react'
+import JadikanPerubahanModal, { type AsalPerubahan } from '@/components/blud/JadikanPerubahanModal'
+import {
+  keBabak, catatanBabak, berSebelum, selisihSebelum, formatSelisih, totalSebelumSesudah,
+  hapusAtauNolkan, alasanKunciPerubahan, bacaTampilSebelum, simpanTampilSebelum,
+} from '@/lib/blud/perubahan'
+import type { PenandaPerubahan, SumberPagu } from '@/lib/blud/sumber-pagu'
 import ImportDpaModal, { type AsalImpor } from '@/components/blud/ImportDpaModal'
 import SalinMasterModal from '@/components/blud/SalinMasterModal'
 import SalinTahunModal from '@/components/blud/SalinTahunModal'
@@ -196,6 +202,7 @@ interface AksiBaris {
  */
 const DpaRow = memo(function DpaRow({
   row, idx, terakhir, terpilih, disorot, isAgg, bolehUbah, akunOptions, pjOptions, partners, aksi,
+  tampilSebelum,
 }: {
   row:          DpaBarisInput
   idx:          number
@@ -208,6 +215,8 @@ const DpaRow = memo(function DpaRow({
   pjOptions:    string[]
   partners:     { row_id: string; kode: string; uraian: string; pj: string }[] | undefined
   aksi:         AksiBaris
+  /** DPA Perubahan: kolom Sebelum + Bertambah/(Berkurang), hanya-baca. */
+  tampilSebelum: boolean
 }) {
   // CHAIN: row di EDITABLE_TYPES jadi AGGREGATOR (vol/harga read-only)
   // saat punya minimal 1 anak. Revert ke LEAF saat anak habis.
@@ -342,6 +351,29 @@ const DpaRow = memo(function DpaRow({
         </strong>
       </td>
 
+      {/* ─ DPA Perubahan: Sebelum (milik server, hanya-baca) + Bertambah/(Berkurang) ─
+          Selisih tidak disimpan (§6) — dihitung di sini. Baris yang lahir di
+          Perubahan tidak punya Sebelum: "—", dan selisihnya seluruh angkanya. */}
+      {tampilSebelum && (() => {
+        const d = selisihSebelum(row)
+        return (
+          <>
+            <td style={{ textAlign: 'right', fontSize: 12, opacity: .72 }}>
+              {isAgg ? '—' : (row.vol_sebelum ?? '—')}
+            </td>
+            <td style={{ textAlign: 'right', fontSize: 12, opacity: .72 }}>
+              {isAgg ? '—' : (row.harga_sebelum != null ? formatRupiah(row.harga_sebelum) : '—')}
+            </td>
+            <td style={{ textAlign: 'right', fontSize: 12, opacity: .72 }}>
+              {row.jumlah_sebelum != null ? formatRupiah(row.jumlah_sebelum) : '—'}
+            </td>
+            <td className={`sd-selisih${d > 0 ? ' plus' : d < 0 ? ' minus' : ''}`} style={{ textAlign: 'right', fontSize: 12, fontWeight: 700 }}>
+              {formatSelisih(d, formatRupiah)}
+            </td>
+          </>
+        )
+      })()}
+
       {/* Penanggung Jawab — combobox dari master data */}
       <td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -404,6 +436,7 @@ const DpaRow = memo(function DpaRow({
 
 function DpaTable({
   rows, onChange, akunOptions, pjOptions, hiddenLevels, highlightId, bolehUbah,
+  tampilSebelum,
 }: {
   rows: DpaBarisInput[]
   onChange: (rows: DpaBarisInput[]) => void
@@ -413,6 +446,8 @@ function DpaTable({
   highlightId:  string | null
   /** LIHAT: seluruh isian jadi teks, kolom aksi & checkbox tidak dirender. */
   bolehUbah:    boolean
+  /** Kolom Sebelum + Bertambah/(Berkurang) dirender (sakelar nyala DAN layar memegang Sebelum). */
+  tampilSebelum: boolean
 }) {
   const [blocked,   setBlocked]   = useState<BlockedInfo | null>(null)
   const [addParent, setAddParent] = useState<DpaBarisInput | null>(null)
@@ -616,6 +651,19 @@ function DpaTable({
       setDelGuard({ uraian: target.uraian || 'baris ini', childCount: directChildren.length })
       return
     }
+    // R4 (konsep §10): di DPA Perubahan baris lama DINOLKAN, tidak dihapus — dokumen
+    // tetap mencatat "Rp X → Rp 0". Pagarnya juga di server; ini supaya orang tidak
+    // baru tahu saat Simpan ditolak. Patokannya barisnya sendiri, bukan versi/sasaran.
+    if (berSebelum(target)) {
+      const nama = target.uraian || target.kode_rekening || 'tanpa uraian'
+      if (!target.jumlah && target.vol == null && target.harga == null) {
+        toast.info(`"${nama}" sudah nol. Baris yang sudah ada sebelum Perubahan tetap tercatat di dokumen.`)
+        return
+      }
+      onChange(recalcDpaJumlah(rows.map(r => r.row_id === rowId ? { ...r, vol: null, harga: null, jumlah: 0 } : r)))
+      toast.success(`"${nama}" dinolkan, bukan dihapus — dokumen Perubahan mencatat ${formatRupiah(target.jumlah_sebelum ?? 0)} → Rp 0`)
+      return
+    }
     const filtered = rows
       .filter(r => r.row_id !== rowId)
       .map((r, i) => ({ ...r, urutan: i }))
@@ -714,6 +762,21 @@ function DpaTable({
   const deleteSelected = useCallback(async () => {
     const count = selectedRowIds.size
     if (count === 0) return
+    const hasil = hapusAtauNolkan(rows, selectedRowIds)
+    if (hasil.dinolkan > 0) {
+      const ok = await confirmDialog({
+        title: `Hapus ${count} baris terpilih?`,
+        message: `${hasil.dinolkan} baris yang sudah ada sebelum Perubahan DINOLKAN — tetap tercatat di dokumen sebagai "Rp sekian → Rp 0". `
+          + `${hasil.dihapus} baris yang lahir di Perubahan dihapus. Belum tersimpan sampai Anda menekan Simpan.`,
+        confirmLabel: 'Lanjutkan',
+        variant: 'danger',
+      })
+      if (!ok) return
+      onChange(recalcDpaJumlah(hasil.rows.map((r, i) => ({ ...r, urutan: i }))))
+      clearSelection()
+      toast.success(`${hasil.dinolkan} baris dinolkan, ${hasil.dihapus} baris dihapus — tekan Simpan untuk menetapkannya`)
+      return
+    }
     const ok = await confirmDialog({
       title: `Hapus ${count} baris?`,
       message: `${count} baris yang dicentang akan dihapus sekaligus, beserta baris di bawahnya. Belum permanen — baru hilang dari database setelah Anda menekan Simpan.`,
@@ -830,6 +893,14 @@ function DpaTable({
               <th style={{ width: 114 }}>Satuan</th>{/* was 120, -5% */}
               <th style={{ width: 148, textAlign: 'right' }}>Harga (Rp)</th>
               <th style={{ width: 158, textAlign: 'right' }}>Jumlah (Rp)</th>
+              {tampilSebelum && (
+                <>
+                  <th style={{ width: 70, textAlign: 'right' }}>Vol Sebelum</th>
+                  <th style={{ width: 130, textAlign: 'right' }}>Harga Sebelum</th>
+                  <th style={{ width: 140, textAlign: 'right' }}>Jumlah Sebelum</th>
+                  <th style={{ width: 140, textAlign: 'right' }}>Bertambah/(Berkurang)</th>
+                </>
+              )}
               <th data-rima="dpa.kolom-pj" style={{ width: 136 }}>Penanggung Jawab</th>{/* was 124, +10% */}
               {bolehUbah && <th style={{ width: 44, textAlign: 'center' }}>Aksi</th>}
             </tr>
@@ -854,6 +925,7 @@ function DpaTable({
                   pjOptions={pjOptions}
                   partners={pjConflictPartners.get(row.row_id)}
                   aksi={aksi}
+                  tampilSebelum={tampilSebelum}
                 />
               )
             })}
@@ -977,6 +1049,18 @@ export default function DpaClient({
   // modal impor berhenti menulis sendiri, `BLUD_DPA_IMPORT_COMMIT` tidak ada lagi
   // — ini satu-satunya yang menyatakan versi itu lahir dari sebuah berkas.
   const asalImporRef = useRef<AsalImpor | null>(null)
+  /**
+   * Isi layar ini MEMBUAT DPA Perubahan dari dasar tsb. Pola `asal_tutup`: tidak
+   * berhenti di baris audit — server menerbitkan penanda dari sini. WAJIB dilepas di
+   * setiap jalur yang mengganti isi layar dan sesudah Simpan berhasil; kalau
+   * tertinggal, simpanan berikutnya mencoba membuat Perubahan kedua.
+   */
+  const asalPerubahanRef = useRef<AsalPerubahan | null>(null)
+  const [jadikanBuka, setJadikanBuka] = useState(false)
+  // Penanda Perubahan + sumber pagu tahun ini — dari server, tidak dihitung di layar.
+  const [babak, setBabak] = useState<{ penanda: PenandaPerubahan[]; sumber: SumberPagu | null }>({ penanda: [], sumber: null })
+  // Kenyamanan per orang (localStorage, try/catch di dalamnya). Bawaan nyala.
+  const [tampilSebelum, setTampilSebelum] = useState<boolean>(bacaTampilSebelum)
   const bolehSalinInduk = bolehUbahMasterAkun || bolehUbahKodeBesar
   const [rows,        setRows]        = useState<DpaBarisInput[]>([])
   const [history,     setHistory]     = useState<{ versi_tanggal: string; jumlah_baris: number }[]>([])
@@ -1043,6 +1127,9 @@ export default function DpaClient({
   const [bentrokPagu, setBentrokPagu] = useState<{
     versiTanggal: string
     detail: { kode_rekening: string; uraian: string; pagu_baru: number; terserap: number; minus: number; hilang: boolean }[]
+    /** R8: di DPA Perubahan server menutup "simpan paksa" — tombolnya tidak boleh ditawarkan. */
+    bisaDipaksa: boolean
+    pesan: string
   } | null>(null)
   const [alasanTurun, setAlasanTurun] = useState('')
 
@@ -1135,12 +1222,21 @@ export default function DpaClient({
         asalPulihkanRef.current = null
         asalBerkasRef.current   = null
         asalImporRef.current    = null
+        asalPerubahanRef.current = null
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       showToast('Data DPA tidak bisa dimuat — periksa sambungan, lalu muat ulang halaman.', false)
     }
     finally   { setLoading(false) }
+  }, [tahun])
+
+  const loadBabak = useCallback(async () => {
+    try {
+      const res  = await fetch(`/api/blud/dpa?mode=babak&tahun=${tahun}`)
+      const json = await res.json()
+      if (json.ok) setBabak({ penanda: json.penanda ?? [], sumber: json.sumber ?? null })
+    } catch { /* lencana & tombol Perubahan menunggu muatan berikutnya */ }
   }, [tahun])
 
   const loadHistory = useCallback(async () => {
@@ -1210,6 +1306,7 @@ export default function DpaClient({
       asalSalinRef.current  = null
       asalBerkasRef.current = null
       asalImporRef.current  = null
+      asalPerubahanRef.current = null
       asalPulihkanRef.current = { id: s.id, versi_ke: s.versi_ke, disimpan_pada: s.disimpan_pada }
       showToast(`${json.data.jumlah_baris} baris dari simpanan pukul ${s.disimpan_pada.slice(11, 16)} dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
     } catch (e) {
@@ -1234,7 +1331,7 @@ export default function DpaClient({
 
   useEffect(() => { void (async () => { await loadTahunList() })() }, [loadTahunList])
   // loadDpa/loadHistory ber-dep [tahun] → efek ini refire saat tahun berganti.
-  useEffect(() => { void (async () => { await loadDpa(); await loadHistory(); await loadRiwayat() })() }, [loadDpa, loadHistory, loadRiwayat])
+  useEffect(() => { void (async () => { await loadDpa(); await loadHistory(); await loadRiwayat(); await loadBabak() })() }, [loadDpa, loadHistory, loadRiwayat, loadBabak])
 
   // L78 — hasil impor/Form Baru/Salin Tahun/Pulihkan hidup di FORM sampai Simpan
   // ditekan. Sebelum ini satu klik menu, satu Ctrl+R, atau satu klik Keluar bisa
@@ -1293,12 +1390,16 @@ export default function DpaClient({
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
           asal_berkas: asalBerkasRef.current ?? undefined,
           asal_impor: asalImporRef.current ?? undefined,
+          asal_perubahan: asalPerubahanRef.current ?? undefined,
         }),
       })
       const json = await res.json()
       if (res.status === 409 && json.code === 'PAGU_DIBAWAH_REALISASI') {
         setAlasanTurun('')
-        setBentrokPagu({ versiTanggal, detail: json.detail ?? [] })
+        setBentrokPagu({
+          versiTanggal, detail: json.detail ?? [],
+          bisaDipaksa: json.bisa_dipaksa !== false, pesan: String(json.error ?? ''),
+        })
         return
       }
       if (res.status === 409 && json.code === 'VERSION_CONFLICT') {
@@ -1363,7 +1464,7 @@ export default function DpaClient({
         // bulan yang sama.
         setPeriodeTulis(periodeUntukVersi(versiTanggal))
         setBelumTersimpan(false)
-        loadHistory(); loadTahunList(); loadRiwayat()
+        loadHistory(); loadTahunList(); loadRiwayat(); loadBabak()
         if (typeof json.version === 'number') setVersion(json.version)
         serapJangkar(json.jangkar)
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi salinan.
@@ -1371,6 +1472,8 @@ export default function DpaClient({
         asalPulihkanRef.current = null
         asalBerkasRef.current   = null
         asalImporRef.current    = null
+        // Penandanya sudah terbit — simpanan berikutnya revisi biasa, bukan Perubahan baru.
+        asalPerubahanRef.current = null
       } else {
         showToast(json.error || json.message || 'Belum tersimpan. Coba lagi.', false)
       }
@@ -1414,6 +1517,7 @@ export default function DpaClient({
     asalPulihkanRef.current = null
     asalBerkasRef.current   = null
     asalImporRef.current    = null
+    asalPerubahanRef.current = null
     setOverlayItems(null)
     setOverwriteConfirm(null)
     showToast(`Kerangka ${built.length} baris dibuat dari Kode Besar — belum tersimpan, isi dulu lalu tekan Simpan.`)
@@ -1461,6 +1565,7 @@ export default function DpaClient({
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
     asalImporRef.current    = null
+    asalPerubahanRef.current = null
     showToast(`${data.rows.length} baris dari berkas cadangan dimuat — belum tersimpan, periksa lalu tekan Simpan.`)
   }
 
@@ -1479,6 +1584,7 @@ export default function DpaClient({
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
     asalBerkasRef.current   = null
+    asalPerubahanRef.current = null
     setImportDpaBuka(false)
     showToast(`${baris.length} baris dibaca dari "${asal.berkas}" — belum tersimpan, periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
     // Tawaran menyalin data induk menunggu barisnya benar-benar ada di layar —
@@ -1517,6 +1623,9 @@ export default function DpaClient({
     setVersi('')
     setPeriodeTulis('')
     setBelumTersimpan(false)
+    // `loadDpa` juga melepasnya, tapi hanya kalau muatannya berhasil — penanda
+    // Perubahan tahun lama tidak boleh menumpang ke tahun baru lewat muatan yang gagal.
+    asalPerubahanRef.current = null
   }
 
   async function gantiPeriode(tanggal: string) {
@@ -1548,6 +1657,7 @@ export default function DpaClient({
     asalPulihkanRef.current = null
     asalBerkasRef.current   = null
     asalImporRef.current    = null
+    asalPerubahanRef.current = null
     if (tanggal) {
       setRows([])
       setVersi('')
@@ -1582,6 +1692,7 @@ export default function DpaClient({
     }
     setVersi(v)
     setPeriodeTulis(periodeUntukVersi(v))
+    asalPerubahanRef.current = null
     await loadDpa(v)
   }
 
@@ -1595,6 +1706,7 @@ export default function DpaClient({
     asalPulihkanRef.current = null
     asalBerkasRef.current   = null
     asalImporRef.current    = null
+    asalPerubahanRef.current = null
     setSalinTahunBuka(false)
     const label = asal.sumber === 'DPA' ? `DPA ${asal.tahun}` : `Pergeseran ${asal.tahun}`
     showToast(`${baris.length} baris disalin dari ${label} — belum tersimpan, periksa lalu tekan Simpan.`)
@@ -1620,9 +1732,29 @@ export default function DpaClient({
     asalPulihkanRef.current = null
     asalBerkasRef.current   = null
     asalImporRef.current    = null
+    asalPerubahanRef.current = null
     setSalinVersiBuka(false)
     showToast(`${baris.length} baris disalin dari versi ${formatTanggalId(asal.versi)} — belum tersimpan, `
       + `periksa lalu tekan ${periodeTulis ? 'Simpan Periode' : 'Simpan'}.`)
+  }
+
+  /**
+   * "Jadikan DPA Perubahan" — berhenti di FORM, pola `terapkanSalinVersi`: isi layar
+   * diganti angka yang sedang jadi pagu, sasaran Simpan TIDAK disentuh (L80). Yang
+   * menulis tetap Simpan; `asal_perubahan` yang membuat server menerbitkan penanda.
+   * Kolom Sebelum di baris ini cuma pratinjau — server mengisinya sendiri.
+   */
+  function terapkanPerubahan(baris: DpaBarisInput[], asal: AsalPerubahan) {
+    setRows(recalcDpaJumlah(baris))
+    setBelumTersimpan(true)
+    asalPerubahanRef.current = asal
+    asalSalinRef.current    = null
+    asalPulihkanRef.current = null
+    asalBerkasRef.current   = null
+    asalImporRef.current    = null
+    setJadikanBuka(false)
+    showToast(`${baris.length} baris dari ${asal.sumber_dasar === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} `
+      + `${formatTanggalId(asal.versi_dasar)} dimuat sebagai dasar Perubahan — belum tersimpan, ubah lalu tekan Simpan.`)
   }
 
   // Handler tombol "Buat Form" di overlay — branch: overwrite-confirm atau langsung
@@ -1680,7 +1812,38 @@ export default function DpaClient({
   // memutus tautan ke belanja yang sudah tercatat. Salin Versi mengambil baris
   // dari tahun yang SAMA dengan jangkar utuh — dan sasaran yang sudah berisi
   // justru pemakaian utamanya: "mulai versi hari ini dari angka Juli".
-  const alasanKunciVersi = alasanKunciSalinVersi(tahun, history, [versi, sasaran])
+  // ── DPA Perubahan (konsep §7, §12) ─────────────────────────────────────────
+  const penanda = babak.penanda
+  const babakSasaran = keBabak(penanda, sasaran)
+  // Kolom Sebelum & sakelarnya mengikuti ISI layar, bukan versi yang dibuka atau
+  // sasaran Simpan: membuka versi murni saat hari ini sudah di babak Perubahan dulu
+  // menampilkan "Sebelum 0 → Sesudah 68 M (+68 M)" — angka yang tidak pernah ada.
+  const adaSebelum = useMemo(() => rows.some(berSebelum), [rows])
+  const kolomSebelum = adaSebelum && tampilSebelum
+  const totalPerubahan = useMemo(() => totalSebelumSesudah(rows), [rows])
+  const alasanKunciJadikan = alasanKunciPerubahan({
+    sumber: babak.sumber?.sumber ?? null,
+    dpaTerakhir: history[0]?.versi_tanggal ?? null,
+    sasaran,
+  })
+  const historyBerlabel = useMemo(
+    () => history.map(h => ({ ...h, catatan: catatanBabak(penanda, h.versi_tanggal) })),
+    [history, penanda],
+  )
+  // §12 — di babak Perubahan, Salin Versi hanya menawarkan sumber dari babak yang
+  // SAMA dengan sasaran. Kolom Sebelum tetap aman (milik server), tapi menyalin
+  // angka murni ke slot Perubahan hampir pasti salah pencet.
+  const historySalin = useMemo(
+    () => (penanda.length ? history.filter(h => keBabak(penanda, h.versi_tanggal) === babakSasaran) : history),
+    [history, penanda, babakSasaran],
+  )
+  function gantiTampilSebelum() {
+    const nyala = !tampilSebelum
+    setTampilSebelum(nyala)
+    simpanTampilSebelum(nyala)
+  }
+
+  const alasanKunciVersi = alasanKunciSalinVersi(tahun, historySalin, [versi, sasaran])
 
   return (
     <div className="space-y-4">
@@ -1712,7 +1875,7 @@ export default function DpaClient({
         <div data-rima="dpa.versi-dropdown" style={{ display:'inline-flex' }}>
           <VersiDropdown
             value={versi}
-            items={history}
+            items={historyBerlabel}
             onChange={v => { void bukaVersi(v) }}
             placeholder="— Pilih Versi —"
             riwayat={riwayat}
@@ -1732,7 +1895,7 @@ export default function DpaClient({
         )}
 
         {bolehUbah && (
-          <div style={{ display:'flex', gap:8, marginLeft:'auto' }}>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginLeft:'auto' }}>
             <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
               disabled={!!alasanKunciBorongan} data-tooltip={alasanKunciBorongan}
               onClick={mulaiFormBaru} data-rima="dpa.form-baru">
@@ -1751,6 +1914,16 @@ export default function DpaClient({
                 || `Ambil isi versi lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
               onClick={() => setSalinVersiBuka(true)} data-rima="dpa.salin-versi">
               Salin Versi Lain
+            </PrimaButton>
+
+            {/* Konsep §5: di samping Salin Versi — sama-sama MENGISI layar dari angka
+                tahun yang sama, dengan jangkar utuh. Tidak ikut `alasanKunciBorongan`. */}
+            <PrimaButton variant="purple" size="sm" iconLeft={<FileDiff className="w-3.5 h-3.5" />}
+              disabled={!!alasanKunciJadikan}
+              data-tooltip={alasanKunciJadikan
+                || `Ambil angka yang sedang jadi pagu ${tahun} ke layar, lalu ubah sebagai DPA Perubahan ke-${penanda.length + 1}`}
+              onClick={() => setJadikanBuka(true)}>
+              Jadikan DPA Perubahan
             </PrimaButton>
 
             {bolehImpor && (
@@ -1860,7 +2033,35 @@ export default function DpaClient({
         })()}
         </span>
         <span style={{ color:'#85B7EB', marginLeft:4, fontSize:11 }}>✎ = bisa input vol &amp; harga</span>
+        {adaSebelum && (
+          <button
+            type="button"
+            className={`blud-legend-chip ${tampilSebelum ? 'is-active' : 'is-hidden'}`}
+            style={{ marginLeft: 'auto' }}
+            aria-pressed={tampilSebelum}
+            data-tooltip-pos="left"
+            data-tooltip={tampilSebelum
+              ? 'Sembunyikan kolom Sebelum — tabel kembali persis DPA murni'
+              : 'Tampilkan kolom Sebelum dan Bertambah/(Berkurang)'}
+            onClick={gantiTampilSebelum}
+          >
+            <FileDiff size={12} /> Kolom Sebelum
+          </button>
+        )}
       </div>
+
+      {/* Baris total DPA Perubahan (§7): "Sebelum Rp 180 jt → Sesudah Rp 210 jt (+30 jt)". */}
+      {kolomSebelum && rows.length > 0 && (
+        <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'8px 16px', display:'flex', flexWrap:'wrap', alignItems:'center', gap:10, fontSize:12, color:'#85B7EB' }}>
+          <span>Sebelum <strong style={{ color:'#E6F1FB', fontFamily:'var(--font-mono, monospace)' }}>{formatRupiah(totalPerubahan.sebelum)}</strong></span>
+          <span>→</span>
+          <span>Sesudah <strong style={{ color:'#E6F1FB', fontFamily:'var(--font-mono, monospace)' }}>{formatRupiah(totalPerubahan.sesudah)}</strong></span>
+          <strong className={`sd-selisih-teks${totalPerubahan.selisih > 0 ? ' plus' : totalPerubahan.selisih < 0 ? ' minus' : ''}`}
+            style={{ fontFamily:'var(--font-mono, monospace)' }}>
+            {formatSelisih(totalPerubahan.selisih, formatRupiah)}
+          </strong>
+        </div>
+      )}
 
       {/* Konten utama */}
       {loading ? (
@@ -1909,7 +2110,8 @@ export default function DpaClient({
           </div>
         </div>
       ) : (
-        <DpaTable rows={rows} onChange={ubahRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah} />
+        <DpaTable rows={rows} onChange={ubahRows} akunOptions={akunOptions} pjOptions={pjOptions} hiddenLevels={hiddenLevels} highlightId={highlightId} bolehUbah={bolehUbah}
+          tampilSebelum={kolomSebelum} />
       )}
 
       {importDpaBuka && (
@@ -1946,7 +2148,7 @@ export default function DpaClient({
         <SalinVersiModal<DpaBaris, DpaBarisInput>
           tahun={tahun}
           jenis="DPA"
-          history={history}
+          history={historySalin}
           versiTerbuka={versi}
           sasaran={sasaran}
           jumlahDiLayar={rows.length}
@@ -1954,6 +2156,17 @@ export default function DpaClient({
           hitungTotal={totalAkarDpa}
           onTutup={() => setSalinVersiBuka(false)}
           onSalin={terapkanSalinVersi}
+        />
+      )}
+
+      {jadikanBuka && (
+        <JadikanPerubahanModal
+          tahun={tahun}
+          sasaran={sasaran}
+          keBerikut={penanda.length + 1}
+          jumlahDiLayar={rows.length}
+          onTutup={() => setJadikanBuka(false)}
+          onTerapkan={terapkanPerubahan}
         />
       )}
 
@@ -2001,8 +2214,9 @@ export default function DpaClient({
 
             <div className="rl-reg-body">
               <div className="bk-warn">
-                Uangnya sudah keluar. Menyimpan DPA ini membuat baris di bawah jadi minus di layar
-                Realisasi sampai diperbaiki.
+                {bentrokPagu.bisaDipaksa
+                  ? 'Uangnya sudah keluar. Menyimpan DPA ini membuat baris di bawah jadi minus di layar Realisasi sampai diperbaiki.'
+                  : bentrokPagu.pesan}
               </div>
 
               <table className="dpa-table rl-reg-table">
@@ -2028,26 +2242,32 @@ export default function DpaClient({
                 </tbody>
               </table>
 
-              <label className="bk-field">
-                <span className="blud-imp-muted">Alasannya apa? Wajib diisi, minimal 10 huruf. Ini ikut tercatat dan bisa ditanyakan kembali di kemudian hari.</span>
-                <textarea className="blud-imp-input" rows={3} value={alasanTurun}
-                  onChange={e => setAlasanTurun(e.target.value)}
-                  placeholder="Contoh: pagu dikoreksi mengikuti DPA definitif atas disposisi Direktur tanggal …" />
-              </label>
+              {/* R8: di DPA Perubahan "simpan paksa" ditutup server. Menawarkannya di
+                  sini menyuruh orang menekan tombol yang pasti ditolak. */}
+              {bentrokPagu.bisaDipaksa && (
+                <label className="bk-field">
+                  <span className="blud-imp-muted">Alasannya apa? Wajib diisi, minimal 10 huruf. Ini ikut tercatat dan bisa ditanyakan kembali di kemudian hari.</span>
+                  <textarea className="blud-imp-input" rows={3} value={alasanTurun}
+                    onChange={e => setAlasanTurun(e.target.value)}
+                    placeholder="Contoh: pagu dikoreksi mengikuti DPA definitif atas disposisi Direktur tanggal …" />
+                </label>
+              )}
 
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <PrimaButton variant="ghost" onClick={() => setBentrokPagu(null)} disabled={saving}>
-                  Batal
+                  {bentrokPagu.bisaDipaksa ? 'Batal' : 'Perbaiki angkanya'}
                 </PrimaButton>
-                <PrimaButton variant="danger" disabled={saving || alasanTurun.trim().length < 10}
-                  onClick={() => {
-                    const v = bentrokPagu.versiTanggal
-                    paksaTurunRef.current = alasanTurun.trim()
-                    setBentrokPagu(null); setSaving(true)
-                    void doSimpanInternal(v).finally(() => setSaving(false))
-                  }}>
-                  Tetap Lanjut
-                </PrimaButton>
+                {bentrokPagu.bisaDipaksa && (
+                  <PrimaButton variant="danger" disabled={saving || alasanTurun.trim().length < 10}
+                    onClick={() => {
+                      const v = bentrokPagu.versiTanggal
+                      paksaTurunRef.current = alasanTurun.trim()
+                      setBentrokPagu(null); setSaving(true)
+                      void doSimpanInternal(v).finally(() => setSaving(false))
+                    }}>
+                    Tetap Lanjut
+                  </PrimaButton>
+                )}
               </div>
             </div>
           </div>

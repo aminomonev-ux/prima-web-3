@@ -16,6 +16,7 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import { formatTanggalId } from '@/lib/blud/tanggal'
+import { jenisSumberPagu } from '@/lib/blud/perubahan'
 import RegisterPanel from '@/components/blud/RegisterPanel'
 import TautanMenu from '@/components/blud/TautanMenu'
 import PratinjauSerapanModal from '@/components/blud/PratinjauSerapanModal'
@@ -87,7 +88,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
   const [bulan, setBulan] = useState(new Date().getMonth() + 1)
   const [saring, setSaring] = useState<SaringBaris>(saringAwal ?? 'semua')
   const [rows, setRows] = useState<BarisRealisasi[]>([])
-  const [sumber, setSumber] = useState<{ sumber: string; versi: string | null } | null>(null)
+  const [sumber, setSumber] = useState<{ sumber: string; versi: string | null; perubahan_ke?: number | null } | null>(null)
   const [loading, setLoading] = useState(true)
   const [cari, setCari] = useState('')
   const [tutup, setTutup] = useState<Set<string>>(new Set())
@@ -324,7 +325,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
 
         {sumber && sumber.sumber !== 'KOSONG' && (
           <span className="blud-imp-pill on-purple">
-            Pagu dari {sumber.sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {formatTanggalId(sumber.versi)}
+            Pagu dari {jenisSumberPagu(sumber)} {formatTanggalId(sumber.versi)}
           </span>
         )}
 

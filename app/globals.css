@@ -3597,6 +3597,11 @@ table tbody td.sd-selisih.plus  { color: #1D9E75 !important; }
 table tbody td.sd-selisih.minus { color: #E24B4A !important; }
 [data-theme="light"] table tbody td.sd-selisih.plus  { color: #0F5C44 !important; }
 [data-theme="light"] table tbody td.sd-selisih.minus { color: #A32E2D !important; }
+/* Kembarannya di luar tabel — baris total DPA Perubahan ("Sebelum → Sesudah (+30 jt)"). */
+.sd-selisih-teks.plus  { color: #1D9E75; }
+.sd-selisih-teks.minus { color: #E24B4A; }
+[data-theme="light"] .sd-selisih-teks.plus  { color: #0F5C44; }
+[data-theme="light"] .sd-selisih-teks.minus { color: #A32E2D; }
 .sd-total { color: #FCD34D; }
 [data-theme="light"] .sd-total { color: #854F0B; }
 

@@ -21,6 +21,8 @@ export interface SerapanRingkas {
   sumber: PaguSumber['sumber']
   /** Versi pagu acuan — WAJIB ikut ditampilkan; angka pagu tanpa versi tidak bisa diperiksa. */
   versi: string | null
+  /** Babak DPA Perubahan yang berlaku (null = murni) — untuk label kartu. */
+  perubahan_ke?: number | null
   pagu: number
   terserap: number
   sisa: number
@@ -198,6 +200,7 @@ export async function ringkasSerapan(tahun: number, pra?: DataPagu): Promise<Ser
   return {
     sumber: sumber.sumber,
     versi: sumber.versi,
+    perubahan_ke: sumber.perubahan_ke,
     pagu,
     terserap,
     sisa: pagu - terserap,
