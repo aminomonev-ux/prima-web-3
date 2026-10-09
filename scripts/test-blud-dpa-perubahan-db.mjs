@@ -33,7 +33,7 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
   if (!(t.slice(0, i).trim() in process.env)) process.env[t.slice(0, i).trim()] = v
 }
 
-kompilasiUji(repo, outDir, ['lib/data/db.ts', 'lib/blud/data.ts', 'lib/blud/pagu.ts', 'lib/blud/row-map.ts'])
+kompilasiUji(repo, outDir, ['lib/data/db.ts', 'lib/blud/data.ts', 'lib/blud/pagu.ts', 'lib/blud/row-map.ts', 'lib/blud/impor-balik.ts'])
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (permintaan, ...sisa) {
   if (permintaan.startsWith('@/')) return path.join(outDir, permintaan.slice(2) + '.js')
@@ -43,7 +43,8 @@ Module._resolveFilename = function (permintaan, ...sisa) {
 const { sql } = require(path.join(outDir, 'lib/data/db.js'))
 const data = require(path.join(outDir, 'lib/blud/data.js'))
 const { getPaguSumber, getPaguEfektif } = require(path.join(outDir, 'lib/blud/pagu.js'))
-const { pergeseranKeDpaInput } = require(path.join(outDir, 'lib/blud/row-map.js'))
+const { pergeseranKeDpaInput, dpaKeInput } = require(path.join(outDir, 'lib/blud/row-map.js'))
+const { gabungImporBalik } = require(path.join(outDir, 'lib/blud/impor-balik.js'))
 const { saveDpa, savePergeseran, deleteDpaVersi, deletePergeseranVersi, getDpaByDate, getDpaVersion, getPergeseranByDate, getPergeseranVersion } = data
 
 const TAHUN = 2099
@@ -157,6 +158,31 @@ try {
   console.log('\n── 8a. Versi dasar DPA dikunci ──')
   periksa('Simpan ulang DPA dasar → VERSI_DASAR', await tangkap(() => simpanDpa(V0, pohonDpa({ A: 80, B: 70, C: 30 }))) === 'BludVersiDasarError')
   periksa('Hapus DPA dasar → VERSI_DASAR', await tangkap(() => deleteDpaVersi(TAHUN, V0)) === 'BludVersiDasarError')
+  await bersihkan()
+
+  // Impor-balik (§11.3) ke versi MURNI yang jadi sumber pagu: rekening berealisasi yang
+  // dibuang di Excel tidak dinolkan (aturan §10 hanya untuk baris ber-Sebelum), jadi yang
+  // menjaga belanjanya pagar §4.3 di jalur Simpan — bukan `periksaJangkar`, yang hanya
+  // menangkap baris yang DIKIRIM tanpa jangkar.
+  console.log('\n── 12. Impor-balik versi murni: rekening berealisasi dibuang di Excel ──')
+  {
+    await simpanDpa(V0, pohonDpa({ A: 80, B: 70, C: 30 }))
+    await serap('AK-uji-B', 65 * JT)
+    const versi = (await getDpaByDate(TAHUN, V0)).map(dpaKeInput)
+    const berkas = versi.filter(r => r.row_id !== 'r-B')
+      .map(r => ({ ...r, row_id: `x${r.row_id}`, parent_id: r.parent_id ? `x${r.parent_id}` : null }))
+    const { rows, banding } = gabungImporBalik(versi, berkas)
+    periksa('gabung: B (murni, tanpa Sebelum) dihapus & tercatat di neraca',
+      !rows.some(r => r.anggaran_key === 'AK-uji-B') && banding.dihapus.some(d => d.uraian === 'Rekening B' && d.jumlah === 70 * JT))
+    const e = await galat(() => simpanDpa(V0, rows))
+    periksa('Simpan tanpa B → PAGU_DIBAWAH_REALISASI, B tercatat HILANG',
+      e?.name === 'BludPaguDibawahRealisasiError' && e.bentrok?.some(b => b.anggaran_key === 'AK-uji-B' && b.hilang && b.terserap === 65 * JT), e?.name)
+    periksa('…versi murni boleh dipaksa dengan alasan (bisaDipaksa)', e?.bisaDipaksa === true)
+    periksa('…tidak ada yang tertulis', (await getDpaByDate(TAHUN, V0)).length === 4)
+    const r = await simpanDpa(V0, rows, { paksa: true })
+    periksa('…dipaksa → diterima, bentroknya dipulangkan untuk audit',
+      r.bentrokPagu.some(b => b.anggaran_key === 'AK-uji-B' && b.hilang) && (await getDpaByDate(TAHUN, V0)).length === 3)
+  }
   await bersihkan()
 
   // ══ Fase II — contoh §1: DPA murni + Pergeseran (A80 B70 C30), B terserap 65 ══

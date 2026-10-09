@@ -326,11 +326,15 @@ export default function ImportDpaModal({
               ))}
 
               {hasil.realisasiTerdampak.length > 0 && (
-                <Panel judul={`Belanja yang kehilangan posnya — ${hasil.realisasiTerdampak.length} baris`} bahaya>
+                <Panel judul={`Belanja yang akan kehilangan posnya — ${hasil.realisasiTerdampak.length} baris`} bahaya>
+                  {/* Kalimat lama berbunyi "setelah impor dijalankan, … tidak lagi punya pos" — padahal impor
+                      tidak menulis apa pun, dan Simpan ke versi yang menentukan pagu menahannya dulu (§4.3,
+                      `pagarSimpanVersi`: rekening yang hilang = pagu 0 di bawah terserap). */}
                   <p style={{ fontSize: 11.5, lineHeight: 1.6, marginBottom: 8 }}>
-                    Belanja berikut tercatat pada baris anggaran yang <strong>tidak ada</strong> di berkas impor.
-                    Setelah impor dijalankan, pengeluaran ini tidak lagi punya pos anggaran — angkanya tetap
-                    ada di Buku Kas, tapi tidak terhitung ke pagu mana pun.
+                    Belanja berikut tercatat pada baris anggaran yang <strong>tidak ada</strong> di {balik ? 'hasil impor' : 'berkas impor'}.
+                    Kalau versi ini yang menentukan pagu, Simpan akan berhenti dulu dan menyebut rekeningnya.
+                    Kalau tetap dilanjutkan, pengeluaran ini tidak lagi punya pos anggaran — angkanya tetap ada di
+                    Buku Kas, tapi tidak terhitung ke pagu mana pun. Untuk mempertahankannya, kembalikan barisnya di Excel.
                   </p>
                   <div style={{ maxHeight: 150, overflowY: 'auto', fontSize: 11 }}>
                     {hasil.realisasiTerdampak.slice(0, 40).map(t => (

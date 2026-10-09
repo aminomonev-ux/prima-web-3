@@ -171,6 +171,12 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
+          # 2026-10-09: sisa 5 HIGH di sini satu rantai DEV saja — braces (GHSA-vfj7-8cjw-p6xm,
+          # "<=3.0.3") lewat micromatch → fast-glob → @next/eslint-plugin-next. BELUM ADA braces
+          # yang ditambal (3.0.3 = terbaru), jadi `overrides` tidak bisa menolong; tawaran
+          # `npm audit fix --force` = turunkan eslint-config-next ke 14.x (merusak lint Next 16, L56).
+          # Polanya glob konfigurasi ESLint milik sendiri, bukan masukan pengguna, dan tidak ikut
+          # terpasang di server. Tinjau ulang begitu braces > 3.0.3 terbit.
           echo "=== Full audit (including dev) ==="
           npm audit --audit-level=moderate || true
 
