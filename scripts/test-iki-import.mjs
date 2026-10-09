@@ -4,11 +4,11 @@
 // Default folder = arsip kalibrasi 20 file IKI STRUKTURAL FINAL 2026.
 // Exit code 1 kalau ada file gagal parse / struktur TW rusak — aman untuk CI lokal.
 
-import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import Module, { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { kompilasiUji } from './_kompilasi-uji.mjs';
 
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -20,14 +20,17 @@ if (!fs.existsSync(root)) {
   process.exit(1);
 }
 
-// Compile parser ke cache (di dalam repo supaya require exceljs resolve ke node_modules)
+// Compile parser ke cache (di dalam repo supaya require exceljs resolve ke node_modules).
+// `kompilasiUji`, bukan `tsc` telanjang: parser kini mengimpor `@/lib/shared/excel-sel`
+// (hasil rumus 0, 2026-10-09) — kasus U1 di _kompilasi-uji.mjs.
 const outDir = path.join(repo, 'node_modules', '.cache', 'iki-import-test');
-fs.mkdirSync(outDir, { recursive: true });
-execSync(
-  `npx tsc "${path.join(repo, 'lib/iki/import-excel.ts')}" --outDir "${outDir}" --module commonjs --target es2020 --esModuleInterop --skipLibCheck`,
-  { cwd: repo, stdio: 'inherit' },
-);
-const { parseIkiExcel } = require(path.join(outDir, 'import-excel.js'));
+kompilasiUji(repo, outDir, ['lib/iki/import-excel.ts']);
+const resolveAsli = Module._resolveFilename;
+Module._resolveFilename = function (permintaan, ...sisa) {
+  if (permintaan.startsWith('@/')) return path.join(outDir, permintaan.slice(2) + '.js');
+  return resolveAsli.call(this, permintaan, ...sisa);
+};
+const { parseIkiExcel } = require(path.join(outDir, 'lib/iki/import-excel.js'));
 
 function* walk(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

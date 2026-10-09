@@ -3,6 +3,7 @@
 // Helper abstrak pola umum: build sheet dari AOA, style header, set col widths, trigger download.
 
 import type ExcelJS from 'exceljs';
+import { polosSelExcel } from './excel-sel';
 
 // Dynamic import — exceljs ~600KB, hanya load saat user klik tombol export.
 let _exceljsPromise: Promise<typeof import('exceljs')> | null = null;
@@ -146,9 +147,12 @@ export async function readXlsxAsAoa(file: File): Promise<unknown[][]> {
   if (!ws) return [];
   const aoa: unknown[][] = [];
   ws.eachRow({ includeEmpty: false }, (row) => {
-    // row.values: [, c1, c2, ...] (index 0 = empty per exceljs convention)
-    const values = row.values as unknown[];
-    aoa.push(values.slice(1).map(v => v ?? ''));
+    // Nilai POLOS per sel, bukan `row.values` mentah: sel berumus/richText dulu sampai
+    // ke pemanggil sebagai objek, dan `String(r[0])` di layar Master Akun & Kode Besar
+    // menjadikannya kode "[object Object]" (rumus ber-hasil 0 malah tanpa hasil sama sekali).
+    const baris: unknown[] = [];
+    for (let c = 1; c <= row.cellCount; c++) baris.push(polosSelExcel(row.getCell(c)) ?? '');
+    aoa.push(baris);
   });
   return aoa;
 }

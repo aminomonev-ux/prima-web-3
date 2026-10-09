@@ -13,6 +13,7 @@
 // menyimpannya, dan angkanya akan langsung ditimpa hasil hitungan.
 
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
 
 export interface LaporanLeaf {
@@ -181,7 +182,7 @@ export async function parseLaporanRealisasiBuffer(
     for (let r = 1; r <= maxR; r++) {
       const row = ws.getRow(r);
       const t: string[] = []; const m: unknown[] = [];
-      for (let c = 1; c <= maxC; c++) { t.push(cellStr(row.getCell(c).value)); m.push(row.getCell(c).value); }
+      for (let c = 1; c <= maxC; c++) { const v = nilaiSelExcel(row.getCell(c)); t.push(cellStr(v)); m.push(v); }
       grid.push(t); mentah.push(m);
     }
     rows.push(...bacaSheet(grid, mentah, sanitizeImportText(ws.name), warnings));

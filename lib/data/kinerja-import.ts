@@ -9,6 +9,7 @@
 //  • SIMPLE — baris = nama bulan (Jan..Des), kolom Target/Realisasi (mis. hasil
 //             export app sendiri); ambil langsung per baris bulan.
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 
 export interface ParsedPendMonth {
   bulan_ke:  number;        // 1..12
@@ -100,7 +101,7 @@ function sheetGrid(ws: ExcelJS.Worksheet): Grid {
   for (let r = 1; r <= maxR; r++) {
     const row = ws.getRow(r);
     const arr: unknown[] = [];
-    for (let c = 1; c <= maxC; c++) arr.push(row.getCell(c).value);
+    for (let c = 1; c <= maxC; c++) arr.push(nilaiSelExcel(row.getCell(c)));
     grid.push(arr);
   }
   return grid;

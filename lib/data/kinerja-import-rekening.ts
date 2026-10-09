@@ -8,6 +8,7 @@
 // diterima, sebab yang membedakan cuma satu kata dan menolaknya tidak menjaga apa pun.
 
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
 import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
 import type { SumberSSK } from '@/app/(dashboard)/kinerja/_types';
@@ -123,7 +124,7 @@ function sheetGrid(ws: ExcelJS.Worksheet): Grid {
   for (let r = 1; r <= maxR; r++) {
     const row = ws.getRow(r);
     const arr: string[] = [];
-    for (let c = 1; c <= maxC; c++) arr.push(cellStr(row.getCell(c).value));
+    for (let c = 1; c <= maxC; c++) arr.push(cellStr(nilaiSelExcel(row.getCell(c))));
     grid.push(arr);
   }
   return grid;

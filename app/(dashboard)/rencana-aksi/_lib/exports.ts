@@ -6,6 +6,7 @@ import type { CetakFilter } from './cetak-filter';
 import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader } from './cetak-filter';
 import { sanitizeCell } from '@/lib/shared/excel-export';
 import { tulisDesimal } from '@/lib/shared/desimal';
+import { polosSelExcel } from '@/lib/shared/excel-sel';
 
 let _pdf: Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
 function loadPdf() {
@@ -372,19 +373,21 @@ export async function parseMatrixBulananXlsx(file: File): Promise<Map<number, (n
   const ws = wb.worksheets[0];
   if (!ws) throw new Error('Sheet pertama tidak ditemukan');
   const h = ws.getRow(1);
-  if (String(h.getCell(1).value ?? '').trim().toUpperCase() !== 'ID'
-    || String(h.getCell(7).value ?? '').trim() !== 'Jan') {
+  if (String(polosSelExcel(h.getCell(1)) ?? '').trim().toUpperCase() !== 'ID'
+    || String(polosSelExcel(h.getCell(7)) ?? '').trim() !== 'Jan') {
     throw new Error('Format tidak dikenali — pakai file hasil "Unduh Excel" dari matriks ini');
   }
   const out = new Map<number, (number | null)[]>();
   const maxRow = Math.min(ws.rowCount, 1001);
   for (let i = 2; i <= maxRow; i++) {
     const row = ws.getRow(i);
-    const id = Number(row.getCell(1).value);
+    const id = Number(polosSelExcel(row.getCell(1)));
     if (!Number.isInteger(id) || id <= 0) continue;
     const months: (number | null)[] = [];
     for (let c = 7; c <= 18; c++) {
-      const v = row.getCell(c).value;
+      // Nilai polos: sel berumus (=A+B, atau rumus ber-hasil 0) dulu terbaca kosong lewat
+      // `parseFloat(String(objek))` — padahal orang lumrah menjumlah di Excel sebelum impor.
+      const v = polosSelExcel(row.getCell(c));
       if (v == null || v === '') { months.push(null); continue; }
       const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
       months.push(Number.isFinite(n) && n >= 0 ? n : null);

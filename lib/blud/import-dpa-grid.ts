@@ -10,6 +10,7 @@
 //   baris header  dicari lewat teks, bukan nomor
 //   nomor kolom   Jumlah di S (2026) tapi T (2024/2025)
 import type ExcelJS from 'exceljs'
+import { nilaiSelExcel } from '@/lib/shared/excel-sel'
 
 /** L67 — cap jumlah lembar yang diperiksa, tameng zip-bomb. */
 const MAKS_LEMBAR = 20
@@ -76,20 +77,9 @@ function bacaAngka(v: ExcelJS.CellValue): number | null {
   return null
 }
 
-/**
- * `cell.value` exceljs MEMBUANG hasil rumus yang bernilai 0 — getter-nya menyalin
- * model lewat `if (value)` — padahal berkasnya menyimpan `<v>0</v>` dan
- * `cell.result` masih memegangnya. Tanpa ini tiap baris bernilai nol terbaca
- * "tidak menyimpan hasil rumusnya": 21 baris pada unduhan DPA 2026, 7–54 sel per
- * formulir provinsi — dan yang benar-benar tanpa hasil di keempat formulir itu nol.
- */
-function nilaiSel(sel: ExcelJS.Cell): ExcelJS.CellValue {
-  const v = sel.value
-  if (!v || typeof v !== 'object' || 'result' in v) return v
-  if (!('formula' in v) && !('sharedFormula' in v)) return v
-  const hasil = sel.result
-  return hasil === undefined ? v : ({ ...v, result: hasil } as ExcelJS.CellValue)
-}
+// Hasil rumus bernilai 0 dibaca lewat `nilaiSelExcel` (lib/shared/excel-sel.ts) — tanpa
+// itu tiap baris bernilai nol terbaca "tidak menyimpan hasil rumusnya": 21 baris pada
+// unduhan DPA 2026, 7–54 sel per formulir provinsi.
 
 /**
  * Excel menyimpan satu rumus induk lalu menandai salinannya "sama seperti itu,
@@ -123,7 +113,7 @@ function pilihLembar(wb: ExcelJS.Workbook): { ws: ExcelJS.Worksheet; barisHeader
     const batasKolom = Math.min(ws.columnCount, MAKS_KOLOM)
     for (let r = 1; r <= batas; r++) {
       for (let c = 1; c <= batasKolom; c++) {
-        if (POLA_HEADER.test(bacaTeks(ws.getRow(r).getCell(c).value))) {
+        if (POLA_HEADER.test(bacaTeks(nilaiSelExcel(ws.getRow(r).getCell(c))))) {
           return { ws, barisHeader: r }
         }
       }
@@ -148,7 +138,7 @@ export async function bacaGridDpa(data: ArrayBuffer | Buffer): Promise<GridDpa> 
   const rumusInduk = new Map<string, string>()
   for (let r = 1; r <= jumlahBaris; r++) {
     for (let c = 1; c <= jumlahKolom; c++) {
-      const v = ws.getRow(r).getCell(c).value as unknown as Record<string, unknown> | null
+      const v = nilaiSelExcel(ws.getRow(r).getCell(c)) as unknown as Record<string, unknown> | null
       if (v && typeof v === 'object' && typeof v.formula === 'string') {
         rumusInduk.set(`${r}:${c}`, v.formula)
       }
@@ -159,7 +149,7 @@ export async function bacaGridDpa(data: ArrayBuffer | Buffer): Promise<GridDpa> 
   for (let r = 1; r <= jumlahBaris; r++) {
     const barisIsi: SelGrid[] = []
     for (let c = 1; c <= jumlahKolom; c++) {
-      const nilai = nilaiSel(ws.getRow(r).getCell(c))
+      const nilai = nilaiSelExcel(ws.getRow(r).getCell(c))
       const o = (nilai && typeof nilai === 'object' ? nilai : null) as unknown as Record<string, unknown> | null
       let rumus: string | null = null
       if (o && typeof o.formula === 'string') {

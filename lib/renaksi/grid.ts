@@ -8,6 +8,7 @@
 //           merge tidak boleh "menular" jadi label anak)
 
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 
 export type Grid = string[][];
 export interface GridResult {
@@ -51,7 +52,7 @@ function unwrap(v: unknown): unknown {
 }
 
 function cellText(cell: ExcelJS.Cell): string {
-  const v = unwrap(cell.value);
+  const v = unwrap(nilaiSelExcel(cell));
   if (v == null) return '';
   // Angka dibiarkan format kanonik (titik desimal) — grid ini representasi
   // internal, bukan tampilan. Melokalkannya ke koma membuat nilai hasil rumus

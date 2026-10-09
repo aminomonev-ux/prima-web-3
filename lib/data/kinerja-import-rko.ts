@@ -11,6 +11,7 @@
 // menulis pecahan 0,0562; aplikasi menulis 5,62) jadi tidak relevan sama sekali.
 
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
 import type { BarisRko } from '@/lib/kinerja/gabung-rko';
 import type { SskMonths, SumberSSK } from '@/app/(dashboard)/kinerja/_types';
@@ -145,7 +146,7 @@ function sheetGrid(ws: ExcelJS.Worksheet): { teks: string[][]; mentah: unknown[]
     const row = ws.getRow(r);
     const t: string[] = [];
     const m: unknown[] = [];
-    for (let c = 1; c <= maxC; c++) { t.push(cellStr(row.getCell(c).value)); m.push(row.getCell(c).value); }
+    for (let c = 1; c <= maxC; c++) { const v = nilaiSelExcel(row.getCell(c)); t.push(cellStr(v)); m.push(v); }
     teks.push(t); mentah.push(m);
   }
   return { teks, mentah };

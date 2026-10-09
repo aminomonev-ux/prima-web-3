@@ -12,6 +12,7 @@
 //    (hanya diambil hint jabatan atasan — data atasan dari Master PK di preview)
 
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 
 export interface ImportIkiTriwulan {
   triwulan: 1 | 2 | 3 | 4;
@@ -97,7 +98,7 @@ function unwrap(v: unknown): unknown {
 
 // numFmt-aware: 0.37 berformat persen → "37%"; desimal lain pakai koma (gaya file)
 function cellText(cell: ExcelJS.Cell): string {
-  const v = unwrap(cell.value);
+  const v = unwrap(nilaiSelExcel(cell));
   if (v == null) return '';
   if (typeof v === 'number') {
     if (/%/.test(cell.numFmt ?? '')) {

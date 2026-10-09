@@ -10,11 +10,11 @@
 //   • Progres/Pengulangan: TW IV == target tahunan
 // Exit 1 kalau ada invarian gagal — aman dipakai sebelum commit.
 
-import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import Module, { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { kompilasiUji } from './_kompilasi-uji.mjs';
 
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -26,14 +26,16 @@ if (!fs.existsSync(target)) {
   process.exit(1);
 }
 
+// `kompilasiUji`, bukan `tsc` telanjang: sejak grid.ts mengimpor `@/lib/shared/excel-sel`
+// (hasil rumus 0, 2026-10-09) daftar berkas tetap di sini mati — kasus U1 di _kompilasi-uji.mjs.
 const outDir = path.join(repo, 'node_modules', '.cache', 'renaksi-import-test');
-fs.mkdirSync(outDir, { recursive: true });
-execSync(
-  `npx tsc "${path.join(repo, 'lib/renaksi/grid.ts')}" "${path.join(repo, 'lib/renaksi/import-renaksi.ts')}"`
-  + ` --outDir "${outDir}" --module commonjs --target es2020 --esModuleInterop --skipLibCheck --moduleResolution node`,
-  { cwd: repo, stdio: 'inherit' },
-);
-const { parseRenaksiFile } = require(path.join(outDir, 'import-renaksi.js'));
+kompilasiUji(repo, outDir, ['lib/renaksi/import-renaksi.ts']);
+const resolveAsli = Module._resolveFilename;
+Module._resolveFilename = function (permintaan, ...sisa) {
+  if (permintaan.startsWith('@/')) return path.join(outDir, permintaan.slice(2) + '.js');
+  return resolveAsli.call(this, permintaan, ...sisa);
+};
+const { parseRenaksiFile } = require(path.join(outDir, 'lib/renaksi/import-renaksi.js'));
 
 function* walk(p) {
   if (fs.statSync(p).isFile()) { yield p; return; }

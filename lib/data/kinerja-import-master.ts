@@ -8,6 +8,7 @@
 // ditebak, sebab menebak tipe berarti menaruh nama di daftar yang salah.
 
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import { sanitizeImportText } from './kinerja-import';
 import type { EntriMaster } from '@/lib/kinerja/gabung-rekening';
 import type { MasterTipe } from '@/app/(dashboard)/kinerja/_types';
@@ -83,15 +84,15 @@ export async function parseMasterImport(buf: Buffer): Promise<ParseMasterResult>
     for (let r = 2; r <= maxR; r++) {   // baris 1 = header
       if (rows.length >= MAX_ROWS) { warnings.push(`Berkas berisi lebih dari ${MAX_ROWS} entri — sisanya dilewati.`); break; }
       const row = ws.getRow(r);
-      const nama = cellStr(row.getCell(2).value, MAXLEN_NAMA);
+      const nama = cellStr(nilaiSelExcel(row.getCell(2)), MAXLEN_NAMA);
       if (!nama) continue;
       if (nama.toLowerCase() === 'nama') continue;   // echo header
       rows.push({
         tipe, nama,
         ...induk(tipe,
-          cellStr(row.getCell(3).value, MAXLEN_REF),
-          cellStr(row.getCell(4).value, MAXLEN_REF),
-          cellStr(row.getCell(5).value, MAXLEN_REF)),
+          cellStr(nilaiSelExcel(row.getCell(3)), MAXLEN_REF),
+          cellStr(nilaiSelExcel(row.getCell(4)), MAXLEN_REF),
+          cellStr(nilaiSelExcel(row.getCell(5)), MAXLEN_REF)),
       });
     }
   }

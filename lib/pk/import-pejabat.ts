@@ -6,6 +6,7 @@
 // (sinonim struktural: Kepala Bagian=Kabag, Kepala Bidang=Kabid, dst).
 
 import ExcelJS from 'exceljs';
+import { nilaiSelExcel } from '@/lib/shared/excel-sel';
 import PizZip from 'pizzip';
 
 export type ImportFormat = 'xlsx' | 'csv' | 'docx';
@@ -288,7 +289,7 @@ function sheetGrid(ws: ExcelJS.Worksheet): Grid {
   for (let r = 1; r <= maxR; r++) {
     const row = ws.getRow(r);
     const arr: string[] = [];
-    for (let c = 1; c <= maxC; c++) arr.push(cellStr(row.getCell(c).value));
+    for (let c = 1; c <= maxC; c++) arr.push(cellStr(nilaiSelExcel(row.getCell(c))));
     grid.push(arr);
   }
   return grid;
