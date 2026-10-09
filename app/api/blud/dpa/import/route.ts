@@ -17,12 +17,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
-import { bludRateLimit, canImporDpa, TahunSchema } from '@/lib/blud/schemas'
+import { bludRateLimit, canImporDpa, TahunSchema, TanggalSchema } from '@/lib/blud/schemas'
 import { bolehEditMenu, tolakEdit, unauthorized, bludMati } from '../../_guard'
 import { bacaGridDpa, BerkasDpaTidakDikenalError } from '@/lib/blud/import-dpa-grid'
 import { bacaDpaDariGrid, StrukturDpaTidakTerbacaError } from '@/lib/blud/import-dpa'
 import { getPenanggungJawab } from '@/lib/blud/penanggung-jawab-data'
-import { jangkarDipakaiRealisasi } from '@/lib/blud/data'
+import { jangkarDipakaiRealisasi, getDpaVersiBerlaku, getDpaByDate } from '@/lib/blud/data'
+import { getPerubahan } from '@/lib/blud/perubahan-data'
+import { keBabak } from '@/lib/blud/perubahan'
+import { totalAkarDpa } from '@/lib/blud/salin-versi'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -118,6 +121,23 @@ async function tanganiPreview(
     const jangkarBaru = new Set(hasil.baris.map(b => b.jangkar).filter(Boolean) as string[])
     const realisasiTerdampak = terpakai.filter(t => !jangkarBaru.has(t.anggaran_key))
 
+    // Konsep Perubahan §11.2 — jenis berkas dinilai terhadap babak SASARAN Simpan, bukan
+    // terhadap tahun: arsip akhir bulan sebelum Perubahan tetap murni walau tahunnya
+    // sudah punya Perubahan. `sasaran` tak dikirim (tab lama) → babak tidak dinilai.
+    const sasaranParsed = TanggalSchema.safeParse(form?.get('sasaran'))
+    let tujuan: { babak: number | null; pembanding: { versi: string; total: number } | null } | null = null
+    if (sasaranParsed.success) {
+      const babak = keBabak(await getPerubahan(tahun), sasaranParsed.data)
+      let pembanding: { versi: string; total: number } | null = null
+      // Selisih total untuk peringatan "berkas murni ke versi Perubahan" — terhadap
+      // versi DPA yang berlaku di tanggal sasaran, yaitu angka yang akan digantikan.
+      if (babak && hasil.perubahanKe == null) {
+        const versi = await getDpaVersiBerlaku(tahun, sasaranParsed.data)
+        if (versi) pembanding = { versi, total: totalAkarDpa(await getDpaByDate(tahun, versi)) }
+      }
+      tujuan = { babak, pembanding }
+    }
+
     await writeAuditLog({
       req,
       eventType: 'BLUD_DPA_IMPORT_PREVIEW',
@@ -128,7 +148,8 @@ async function tanganiPreview(
       detail:    `Pratinjau impor DPA ${tahun} dari "${file.name.slice(0, 120)}" (lembar "${hasil.namaLembar.slice(0, 40)}"): `
         + `${hasil.baris.length} baris, sumber hierarki ${hasil.baris[0]?.sumberHierarki ?? '-'}, `
         + `total ${hasil.totalHitung}, ditahan ${hasil.ditahan.length}, `
-        + `realisasi terdampak ${realisasiTerdampak.length}`,
+        + `realisasi terdampak ${realisasiTerdampak.length}`
+        + `${hasil.perubahanKe ? `, berkas DPA Perubahan ke-${hasil.perubahanKe}` : ''}`,
     })
 
     return NextResponse.json({
@@ -149,6 +170,9 @@ async function tanganiPreview(
         perbaikan: hasil.perbaikan,
         sumberSelisih: hasil.sumberSelisih,
         realisasiTerdampak,
+        perubahanKe: hasil.perubahanKe,
+        versiKop: hasil.versiKop,
+        tujuan,
       },
     })
   } catch (err) {

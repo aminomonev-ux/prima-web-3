@@ -27,9 +27,12 @@ export const HEX_TURUN = 'E24B4A'
 export const RGB_NAIK: [number, number, number] = [0x1D, 0x9E, 0x75]
 export const RGB_TURUN: [number, number, number] = [0xE2, 0x4B, 0x4A]
 
+/** Kolom selisih bertanda dokumen DPA Perubahan — nama dari dokumen kantor. */
+export const KOLOM_SELISIH_PERUBAHAN = 'Bertambah/ (Berkurang)'
+
 const KOLOM_NAIK = 'Bertambah'
 const KOLOM_TURUN = 'Berkurang'
-const KOLOM_BERTANDA = 'Selisih'
+const KOLOM_BERTANDA = new Set(['Selisih', KOLOM_SELISIH_PERUBAHAN])
 
 /**
  * Arah warna satu sel, atau `null` kalau kolomnya bukan kolom delta — atau
@@ -40,13 +43,13 @@ const KOLOM_BERTANDA = 'Selisih'
  * tenggelam. Ini sama dengan yang dilakukan pratinjau HTML.
  */
 export function arahDelta(namaKolom: string, nilai: unknown): ArahDelta | null {
-  if (namaKolom !== KOLOM_NAIK && namaKolom !== KOLOM_TURUN && namaKolom !== KOLOM_BERTANDA) {
+  if (namaKolom !== KOLOM_NAIK && namaKolom !== KOLOM_TURUN && !KOLOM_BERTANDA.has(namaKolom)) {
     return null
   }
   const n = typeof nilai === 'number' ? nilai : Number(nilai)
   if (!Number.isFinite(n) || n === 0) return null
   // Berkurang disimpan sebagai angka POSITIF — merahnya dari kolomnya, bukan
-  // dari tandanya. Hanya Selisih yang bertanda.
+  // dari tandanya. Hanya Selisih & Bertambah/(Berkurang) yang bertanda.
   if (namaKolom === KOLOM_NAIK) return 'naik'
   if (namaKolom === KOLOM_TURUN) return 'turun'
   return n > 0 ? 'naik' : 'turun'

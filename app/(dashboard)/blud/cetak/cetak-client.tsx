@@ -19,15 +19,35 @@ import type { DpaBaris, PergeseranBaris } from '@/types'
 import type { PejabatDokumen } from '@/lib/blud/export/dpa-dokumen'
 import { catatanVersi, type TutupPergeseran } from '@/lib/blud/tutup-pergeseran'
 import type { MutasiInput } from '@/lib/blud/mutasi'
+import { catatanBabak, keBabak } from '@/lib/blud/perubahan'
+import type { PenandaPerubahan } from '@/lib/blud/sumber-pagu'
 
 // ── Types lokal (sinkron dengan lib/blud/cetak-data.ts) ──
 type Menu = 'dpa' | 'pergeseran' | 'master-akun'
-type ViewDpa = 'dpa' | 'penanggungJawab'
+type ViewDpa = 'dpa' | 'dpaPerubahan' | 'penanggungJawab'
 type ViewPergeseran = 'rekapPergeseran' | 'penanggungJawab' | 'daftarPerpindahan'
 type ViewMasterAkun = 'masterAkun'
 type View = ViewDpa | ViewPergeseran | ViewMasterAkun
 
-interface VersiOption { versi: string; jumlah_baris: number; catatan?: string }
+interface VersiOption {
+  versi: string
+  jumlah_baris: number
+  catatan?: string
+  /** Pergeseran saja — babaknya diturunkan dari ACUAN, bukan tanggal simpannya (§9). */
+  dpa_versi_tanggal?: string
+}
+
+/** Penanda DPA Perubahan tahun itu — dibaca SEGAR tiap Cetak (dokumen tidak boleh basi). */
+async function muatPenanda(tahun: number, signal?: AbortSignal): Promise<PenandaPerubahan[]> {
+  try {
+    const r = await fetch(`/api/blud/dpa?mode=babak&tahun=${tahun}`, { signal })
+    if (!r.ok) return []
+    const j = await r.json() as { ok?: boolean; penanda?: PenandaPerubahan[] }
+    return j.ok && Array.isArray(j.penanda) ? j.penanda : []
+  } catch {
+    return []
+  }
+}
 
 const MENU_LABELS: Record<Menu, string> = {
   'dpa':         'DPA BLUD',
@@ -38,6 +58,8 @@ const MENU_LABELS: Record<Menu, string> = {
 const VIEW_OPTIONS: Record<Menu, Array<{ value: View; label: string }>> = {
   'dpa': [
     { value: 'dpa',              label: 'DPA BLUD' },
+    // Hanya ditawarkan di tahun yang punya Perubahan — lihat `opsiView`.
+    { value: 'dpaPerubahan',     label: 'DPA PERUBAHAN (Lengkap)' },
     { value: 'penanggungJawab',  label: 'PENANGGUNG JAWAB' },
   ],
   'pergeseran': [
@@ -81,6 +103,11 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   // barisnya. Tanpa disimpan di sini, kolom Bertambah/Berkurang di berkas jatuh
   // ke turunan selisih dan berbeda dari yang tampil di layar Pergeseran.
   const [rawMutasi, setRawMutasi] = useState<MutasiInput[] | null>(null)
+  // DPA: babak versi yang dicetak · Pergeseran: babak acuannya. Dipotret saat Cetak,
+  // sama seperti `rawVersi` — kop berkas harus cocok dgn tabel yang tercetak.
+  const [rawBabakKe, setRawBabakKe] = useState<number | null>(null)
+  // Untuk lencana History & view Lengkap; kop berkas memakai bacaan segar di onCetak.
+  const [penanda, setPenanda] = useState<PenandaPerubahan[]>([])
   // Judul + kepala tabel milik view yang menyusun barisnya — dioper ke eksporter
   // supaya daftar kolom punya satu sumber (lihat ExportPdfArgs.columns).
   const [renderedMeta, setRenderedMeta] = useState<{ title: string; columns: string[] } | null>(null)
@@ -99,6 +126,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     setRenderedData(null)
     setRawRows(null)
     setRawVersi(null)
+    setRawBabakKe(null)
     setHistoryVersi('')
     setTanggal('')
     setHistoryList([])
@@ -132,7 +160,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         if (!r.ok) return
         const j = await r.json() as {
           ok: boolean
-          data?: Array<{ versi_tanggal: string; jumlah_baris: number }>
+          data?: Array<{ versi_tanggal: string; jumlah_baris: number; dpa_versi_tanggal?: string }>
           // Cuma dikirim endpoint Pergeseran — DPA tidak punya penutupan.
           tutup?: TutupPergeseran[]
         }
@@ -142,11 +170,32 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
           versi: d.versi_tanggal,
           jumlah_baris: d.jumlah_baris,
           catatan: catatanVersi(tutup, d.versi_tanggal),
+          dpa_versi_tanggal: d.dpa_versi_tanggal,
         })))
       } catch { /* abort */ }
     })()
     return () => ctrl.abort()
   }, [menu, tahun])
+
+  useEffect(() => {
+    if (menu === 'master-akun') return
+    const ctrl = new AbortController()
+    ;(async () => {
+      const list = await muatPenanda(tahun, ctrl.signal)
+      if (ctrl.signal.aborted) return
+      setPenanda(list)
+      // Tahun tanpa Perubahan tidak menawarkan view Lengkap; pilihan yang tertinggal
+      // di sana membuat <select> menampilkan opsi lain dari yang sedang berlaku.
+      if (!list.length) setView(v => (v === 'dpaPerubahan' ? 'dpa' : v))
+    })()
+    return () => ctrl.abort()
+  }, [menu, tahun])
+
+  const opsiView = VIEW_OPTIONS[menu].filter(v => v.value !== 'dpaPerubahan' || penanda.length > 0)
+  const labelVersi = (v: VersiOption) => [
+    v.catatan,
+    catatanBabak(penanda, menu === 'pergeseran' ? v.dpa_versi_tanggal ?? '' : v.versi),
+  ].filter(Boolean).join(' · ')
 
   // Saringan "yang bergeser" hanya masuk akal di Rekap Pergeseran. Rekap PJ
   // sengaja TIDAK ikut: panel auditnya mencocokkan total rekap terhadap pagu DPA
@@ -163,6 +212,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     setRawRows(null)
     setRawVersi(null)
     setRawMutasi(null)
+    setRawBabakKe(null)
     try {
       // Pilih endpoint per menu — reuse existing API
       let path = ''
@@ -176,13 +226,25 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         path = '/api/blud/master-akun'
       }
 
-      const r = await fetch(path)
+      const [r, penandaSegar] = await Promise.all([
+        fetch(path),
+        menu === 'master-akun' ? Promise.resolve([]) : muatPenanda(tahun),
+      ])
       if (!r.ok) { toast.error('Data tidak bisa dimuat — periksa sambungan, lalu coba lagi.'); return }
       const j = await r.json() as {
         ok: boolean; data?: unknown; versi_tanggal?: string | null; error?: string
         mutasi?: MutasiInput[]
       }
       if (!j.ok) { toast.error(j.error ?? 'Data tidak bisa dimuat. Coba lagi sebentar lagi.'); return }
+
+      // DPA: babak versi yang dicetak. Pergeseran: babak ACUAN-nya — tanggal simpannya
+      // tidak menentukan apa pun (§9).
+      const versiDicetak = j.versi_tanggal ?? historyVersi ?? ''
+      const acuan = menu === 'pergeseran' && Array.isArray(j.data)
+        ? (j.data[0] as PergeseranBaris | undefined)?.dpa_versi_tanggal ?? '' : ''
+      const babakKe = menu === 'dpa' ? keBabak(penandaSegar, versiDicetak)
+        : menu === 'pergeseran' && acuan ? keBabak(penandaSegar, acuan)
+        : null
 
       // Render HTML via cetak-data helper (client-side aggregation)
       const { renderCetakHtml, kalimatCakupan } = await import('@/lib/blud/cetak-data')
@@ -193,6 +255,8 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
         versi: j.versi_tanggal ?? historyVersi ?? null, tanggal,
         hanyaBergeser: saring,
         mutasi,
+        perubahanKe: menu === 'dpa' ? babakKe : null,
+        acuanPerubahanKe: menu === 'pergeseran' ? babakKe : null,
       })
       setRenderedHtml(result.html)
       setRenderedData(result.rows)
@@ -203,6 +267,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
       setRawRows(j.data ?? null)
       setRawVersi(j.versi_tanggal ?? historyVersi ?? tanggal ?? null)
       setRawMutasi(mutasi)
+      setRawBabakKe(babakKe)
     } catch (e) {
       toast.error('Dokumen gagal disusun: ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -267,6 +332,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   const onExcel = useCallback(async () => {
     if (!renderedData) { toast.warning('Tekan Cetak dulu supaya datanya muncul.'); return }
     const dokumenDpa = menu === 'dpa' && view === 'dpa'
+    const dokumenPerubahan = menu === 'dpa' && view === 'dpaPerubahan'
     // Saringan aktif → JANGAN lewat eksporter dokumen. Berkas itu membangun
     // rumus `SUM(anak)` dari posisi baris; begitu sebagian anak tidak ikut,
     // Excel menjumlah yang tersisa saja dan baris induk memuat angka BERBEDA
@@ -274,16 +340,19 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     // beredar ke orang lain. Yang tersaring turun sebagai rekap nilai statis.
     const dokumenPergeseran = menu === 'pergeseran' && view === 'rekapPergeseran' && !hanyaBergeser
     try {
-      if ((dokumenDpa || dokumenPergeseran) && Array.isArray(rawRows) && rawRows.length) {
-        const { exportDpaDokumen, exportPergeseranDokumen } =
+      if ((dokumenDpa || dokumenPerubahan || dokumenPergeseran) && Array.isArray(rawRows) && rawRows.length) {
+        const { exportDpaDokumen, exportDpaPerubahanDokumen, exportPergeseranDokumen } =
           await import('@/lib/blud/export/dpa-dokumen')
         const direktur = await ambilDirektur(tahun)
         if (dokumenDpa) {
-          await exportDpaDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur })
+          // Ringkas: tata letak DPA murni, kop "DPA PERUBAHAN KE-n" kalau versinya Perubahan.
+          await exportDpaDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe })
+        } else if (dokumenPerubahan) {
+          await exportDpaPerubahanDokumen({ tahun, versi: rawVersi, rows: rawRows as DpaBaris[], direktur, perubahanKe: rawBabakKe })
         } else {
           await exportPergeseranDokumen({
             tahun, versi: rawVersi, rows: rawRows as PergeseranBaris[], direktur,
-            mutasi: rawMutasi,
+            mutasi: rawMutasi, acuanPerubahanKe: rawBabakKe,
           })
         }
         void logExport('xlsx')
@@ -298,7 +367,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     } catch (e) {
       toast.error('Berkas Excel gagal dibuat: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
+  }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
 
   // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
   const onSimpanRekapPK = useCallback(async () => {
@@ -322,6 +391,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
   }, [renderedData, menu, view, historyVersi, tahun])
 
   const showSimpanPK = bolehSimpanRekap && menu === 'dpa' && view === 'penanggungJawab'
+  const adaBaris = Array.isArray(renderedData) && renderedData.length > 0
 
   // ── Toolbar ──
   return (
@@ -408,7 +478,7 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
           <div>
             <div className="cetak-field-label">View</div>
             <select className="cetak-select" value={view} onChange={e => setView(e.target.value as View)}>
-              {VIEW_OPTIONS[menu].map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+              {opsiView.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
             </select>
           </div>
           {menu !== 'master-akun' && (
@@ -432,11 +502,14 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
               </div>
               <select className="cetak-select" value={historyVersi} onChange={e => setHistoryVersi(e.target.value)}>
                 <option value="">— Terbaru —</option>
-                {historyList.map(v => (
-                  <option key={v.versi} value={v.versi}>
-                    {v.versi} ({v.jumlah_baris} baris){v.catatan ? ` · ${v.catatan}` : ''}
-                  </option>
-                ))}
+                {historyList.map(v => {
+                  const label = labelVersi(v)
+                  return (
+                    <option key={v.versi} value={v.versi}>
+                      {v.versi} ({v.jumlah_baris} baris){label ? ` · ${label}` : ''}
+                    </option>
+                  )
+                })}
               </select>
             </div>
           )}
@@ -466,8 +539,10 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
               onClick={onCetak} disabled={loading}>
               {loading ? 'Memuat...' : 'Cetak'}
             </PrimaButton>
-            <DownloadButton variant="pdf" label="PDF" onClick={onPdf} disabled={!renderedData} />
-            <DownloadButton variant="excel" label="Excel" onClick={onExcel} disabled={!renderedData} />
+            {/* Tabel tanpa baris (versi murni di view Lengkap, saringan yang kosong) tidak punya
+                apa pun untuk diunduh — tombol yang ujungnya "Data kosong" dimatikan sejak awal. */}
+            <DownloadButton variant="pdf" label="PDF" onClick={onPdf} disabled={!adaBaris} />
+            <DownloadButton variant="excel" label="Excel" onClick={onExcel} disabled={!adaBaris} />
             {showSimpanPK && (
               <PrimaButton menulis variant="purple" iconLeft={<Save size={14} />}
                 onClick={onSimpanRekapPK} disabled={!renderedData}>

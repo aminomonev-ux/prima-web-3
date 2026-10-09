@@ -209,6 +209,71 @@ export function alasanKunciPerubahan(a: {
   return ''
 }
 
+// ─── Impor (konsep §11.1–11.2) ──────────────────────────────────────────────
+// Format Lengkap & dokumen dua blok sudah ditolak PARSER (tak satu baris pun bisa
+// dibaca dengan benar). Yang tersisa di sini aturan yang bergantung pada TUJUAN.
+
+/** "Terbaca: Excel DPA Perubahan ke-1 · unduhan PRIMA · versi 8 Okt 2026 · 558 baris" */
+export function kalimatTerbaca(a: {
+  perubahanKe: number | null; versiKop: string | null; unduhanPrima: boolean; baris: number
+}): string {
+  return [
+    a.perubahanKe ? `Excel DPA Perubahan ke-${a.perubahanKe}` : 'Excel DPA murni',
+    a.unduhanPrima ? 'unduhan PRIMA' : 'formulir luar',
+    a.versiKop ? `versi ${a.versiKop}` : null,
+    `${a.baris} baris`,
+  ].filter(Boolean).join(' · ')
+}
+
+export type PutusanImpor =
+  | { jenis: 'boleh' }
+  | { jenis: 'tolak'; pesan: string }
+  | { jenis: 'peringatan'; pesan: string }
+
+/**
+ * Berkas × babak sasaran Simpan (§11.2). Dinilai terhadap SASARAN, bukan tahun: arsip
+ * akhir bulan sebelum Perubahan tetap murni walau tahunnya sudah punya Perubahan.
+ *   Ringkas → sasaran murni      : tolak — Perubahan lahir lewat Jadikan DPA Perubahan
+ *                                  (yang membawa dasar & menerbitkan penanda), bukan Impor.
+ *   murni   → sasaran Perubahan  : peringatan + selisih total, lalu boleh.
+ *   Ringkas ke-n → babak ke-m    : peringatan (nomor babak berbeda).
+ */
+export function putusanImpor(a: {
+  perubahanKe: number | null
+  babakSasaran: number | null
+  sasaranLabel: string
+  totalBerkas: number
+  pembanding: { versi: string; total: number } | null
+  fmt: (n: number) => string
+}): PutusanImpor {
+  if (a.perubahanKe && !a.babakSasaran) {
+    return {
+      jenis: 'tolak',
+      pesan: `Berkas ini DPA Perubahan ke-${a.perubahanKe}, sedangkan tujuan Simpan (${a.sasaranLabel}) masih DPA murni. `
+        + 'DPA Perubahan dibuat lewat tombol Jadikan DPA Perubahan — bukan lewat Impor.',
+    }
+  }
+  if (!a.perubahanKe && a.babakSasaran) {
+    const banding = a.pembanding
+      ? ` Total berkas ${a.fmt(a.totalBerkas)}, DPA Perubahan yang berlaku (versi ${formatTanggalId(a.pembanding.versi)}) `
+        + `${a.fmt(a.pembanding.total)} — selisih ${formatSelisih(a.totalBerkas - a.pembanding.total, a.fmt)}.`
+      : ''
+    return {
+      jenis: 'peringatan',
+      pesan: `Berkas ini DPA murni, sedangkan tujuan Simpan (${a.sasaranLabel}) sudah DPA Perubahan ke-${a.babakSasaran}. `
+        + `Mengimpornya mengganti angka Perubahan dengan angka murni.${banding}`,
+    }
+  }
+  if (a.perubahanKe && a.babakSasaran && a.perubahanKe !== a.babakSasaran) {
+    return {
+      jenis: 'peringatan',
+      pesan: `Berkas ini DPA Perubahan ke-${a.perubahanKe}, sedangkan tujuan Simpan (${a.sasaranLabel}) `
+        + `sudah DPA Perubahan ke-${a.babakSasaran}. Pastikan ini memang angka yang mau dipakai.`,
+    }
+  }
+  return { jenis: 'boleh' }
+}
+
 // ─── Sakelar "Tampilkan kolom Sebelum" ───────────────────────────────────────
 // Kenyamanan per orang, jadi localStorage — dan dibungkus try/catch: jendela privat
 // atau data situs yang diblokir membuat aksesornya melempar. Bawaannya NYALA (§7):

@@ -88,6 +88,13 @@ export interface HasilBacaDpa {
   perbaikan: PerbaikanImpor[]
   /** Baris yang MELAHIRKAN sisa selisih; yang cuma mewarisi tidak ikut. */
   sumberSelisih: SumberSelisih[]
+  /**
+   * Kop "DPA PERUBAHAN KE-n" (format Ringkas, konsep Perubahan §11.1) — satu-satunya
+   * pembeda dari DPA murni, kolomnya sama persis. `null` = murni / formulir luar.
+   */
+  perubahanKe: number | null
+  /** Teks versi di kop yang sama ("8 Okt 2099") — hanya untuk ditampilkan. */
+  versiKop: string | null
 }
 
 export class StrukturDpaTidakTerbacaError extends Error {
@@ -113,6 +120,82 @@ export class BerkasPergeseranError extends StrukturDpaTidakTerbacaError {
     )
     this.name = 'BerkasPergeseranError'
   }
+}
+
+/**
+ * Format Lengkap DPA Perubahan (Sebelum | Sesudah). Konsep Perubahan §11.2: dua set
+ * Vol/Harga/Jumlah membuat pembaca bisa mengambil sisi Sebelum, dan angka Perubahan
+ * hilang tanpa terasa. Kolom Sebelum memang tidak perlu dibaca dari berkas mana pun —
+ * server yang mengisinya.
+ */
+export class BerkasPerubahanLengkapError extends StrukturDpaTidakTerbacaError {
+  constructor() {
+    super(
+      'Berkas ini DPA Perubahan format Lengkap — ada dua kelompok angka, Sebelum dan Sesudah. '
+      + 'Impor hanya bisa membaca satu kelompok, dan bisa salah mengambil yang Sebelum. '
+      + 'Silakan unduh format Ringkas dari menu Cetak → DPA BLUD (pilih versi Perubahannya), lalu impor berkas itu.',
+    )
+    this.name = 'BerkasPerubahanLengkapError'
+  }
+}
+
+/**
+ * Dokumen berkepala dua blok angka yang BUKAN unduhan PRIMA — misalnya dokumen
+ * pergeseran kantor (blok "JANUARI" | "2026", tiap blok punya JUMLAH). Sebelum
+ * pagar ini berkas itu DITERIMA dan dibaca campur: vol, harga, jumlah dari blok kanan,
+ * satuan dari blok kiri — hasilnya tampak wajar, padahal setengah barisnya salah sisi.
+ */
+export class BerkasDuaSisiError extends StrukturDpaTidakTerbacaError {
+  constructor(jumlahBlok: number) {
+    super(
+      `Berkas ini punya ${jumlahBlok} kolom JUMLAH — dua kelompok angka berdampingan (misalnya sebelum dan sesudah pergeseran). `
+      + 'Impor DPA hanya bisa membaca satu kelompok, dan kelompok mana yang terbaca tidak bisa dipastikan. '
+      + 'Hapus kelompok yang tidak dipakai di Excel lalu impor lagi, atau impor Excel DPA dari menu Cetak → DPA BLUD.',
+    )
+    this.name = 'BerkasDuaSisiError'
+  }
+}
+
+/** Teks judul (semua baris header) — dirapikan, huruf kecil, sel gabung terbaca sekali per kolom. */
+function teksJudulPerKolom(grid: GridDpa): Map<number, Set<string>> {
+  const hasil = new Map<number, Set<string>>()
+  for (const r of barisJudul(grid)) {
+    for (let c = 1; c <= grid.jumlahKolom; c++) {
+      const t = grid.sel(r, c).teks.replace(/\s+/g, ' ').trim().toLowerCase()
+      if (!t) continue
+      const ada = hasil.get(c)
+      if (ada) ada.add(t)
+      else hasil.set(c, new Set([t]))
+    }
+  }
+  return hasil
+}
+
+function berkasPerubahanLengkap(grid: GridDpa): boolean {
+  const semua = [...teksJudulPerKolom(grid).values()].flatMap(s => [...s])
+  return semua.some(t => /^sebelum perubahan$/.test(t)) && semua.some(t => /^sesudah perubahan$/.test(t))
+}
+
+/** Banyaknya KOLOM berjudul Jumlah — sel gabung dua baris header tetap dihitung satu. */
+function hitungKolomJumlah(grid: GridDpa): number {
+  let n = 0
+  for (const judul of teksJudulPerKolom(grid).values()) {
+    if ([...judul].some(t => /^jumlah( \(rp\.?\))?$/.test(t))) n++
+  }
+  return n
+}
+
+const POLA_KOP_PERUBAHAN = /DPA\s+PERUBAHAN\s+KE-?\s*(\d+)(?:\s*·\s*versi\s+(.+))?/i
+
+/** Kop di atas header — ditulis `kopPerubahan()` di dpa-dokumen.ts. */
+function bacaKopPerubahan(grid: GridDpa): { ke: number; versi: string | null } | null {
+  for (let r = 1; r < grid.barisHeader; r++) {
+    for (let c = 1; c <= grid.jumlahKolom; c++) {
+      const m = POLA_KOP_PERUBAHAN.exec(grid.sel(r, c).teks)
+      if (m) return { ke: Number(m[1]), versi: m[2]?.trim() || null }
+    }
+  }
+  return null
 }
 
 // ─── Lapis 1 & 2: peta kolom ─────────────────────────────────────────────────
@@ -451,6 +534,12 @@ export interface OpsiBacaDpa {
 
 export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBacaDpa {
   if (berkasPergeseran(grid)) throw new BerkasPergeseranError()
+  // Lengkap lebih dulu: ia juga punya dua kolom Jumlah, tapi kalimatnya menunjuk jalan
+  // yang lebih tepat (unduh Ringkas) daripada pesan umum dua blok.
+  if (berkasPerubahanLengkap(grid)) throw new BerkasPerubahanLengkapError()
+  const kolomJumlah = hitungKolomJumlah(grid)
+  if (kolomJumlah >= 2) throw new BerkasDuaSisiError(kolomJumlah)
+  const kop = bacaKopPerubahan(grid)
   const kolom = petakanKolom(grid)
   const barisAkhirData = cariAkhirData(grid, kolom.jumlah)
   const mentah = kumpulkanMentah(grid, kolom, barisAkhirData)
@@ -757,6 +846,8 @@ export function bacaDpaDariGrid(grid: GridDpa, opsi: OpsiBacaDpa = {}): HasilBac
     peringatan,
     perbaikan,
     sumberSelisih: sumberSisa,
+    perubahanKe: kop?.ke ?? null,
+    versiKop: kop?.versi ?? null,
   }
 }
 

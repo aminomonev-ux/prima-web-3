@@ -18,12 +18,15 @@
 // Yang wajib terlihat sebelum orang memasukkannya ke form: dari mana
 // hierarkinya dibaca, selisih total berkas vs hitung ulang, baris bermasalah,
 // dan alokasi realisasi yang jangkarnya akan hilang.
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
 import { Upload, FileSpreadsheet, X } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { TIPE_LABEL } from '@/lib/blud/format'
+import { kalimatTerbaca, putusanImpor } from '@/lib/blud/perubahan'
+import { formatTanggalId } from '@/lib/blud/tanggal'
 import type { DpaBarisInput } from '@/types'
 // Tipe di-impor secara TYPE-ONLY (terhapus saat kompilasi); pemetanya diambil
 // dari modul ringan. Mengambil keduanya dari `import-dpa.ts` akan menyeret
@@ -61,6 +64,11 @@ interface HasilPreview {
   perbaikan: PerbaikanImpor[]
   sumberSelisih: SumberSelisih[]
   realisasiTerdampak: JangkarTerdampak[]
+  /** Kop "DPA PERUBAHAN KE-n" berkas (format Ringkas); null = murni. */
+  perubahanKe: number | null
+  versiKop: string | null
+  /** Babak sasaran Simpan menurut server — null kalau sasaran tak terkirim. */
+  tujuan: { babak: number | null; pembanding: { versi: string; total: number } | null } | null
 }
 
 const rp =(n: number | null | undefined) => (n == null ? '—' : Number(n).toLocaleString('id-ID'))
@@ -72,12 +80,14 @@ const LABEL_SUMBER: Record<string, string> = {
 }
 
 export default function ImportDpaModal({
-  tahun, periodeLabel, onTutup, onTerapkan,
+  tahun, periodeLabel, sasaran, onTutup, onTerapkan,
 }: {
   tahun: number
   /** Nama periode yang akan jadi tujuan Simpan — ditampilkan apa adanya supaya
    *  tujuannya terbaca SEBELUM berkas masuk form, bukan lewat toast sesudahnya. */
   periodeLabel: string
+  /** Tanggal sasaran Simpan (`sasaranSimpan`) — server menilai babaknya (§11.2). */
+  sasaran: string
   onTutup: () => void
   onTerapkan: (rows: DpaBarisInput[], asal: AsalImpor) => void
 }) {
@@ -92,6 +102,7 @@ export default function ImportDpaModal({
       const form = new FormData()
       form.append('file', file)
       form.append('tahun', String(tahun))
+      form.append('sasaran', sasaran)
       const res = await fetch('/api/blud/dpa/import?step=preview', { method: 'POST', body: form })
       let json: { ok?: boolean; data?: HasilPreview; error?: string }
       try { json = await res.json() } catch { toast.error('Jawaban dari server tidak terbaca. Coba lagi sebentar lagi.'); return }
@@ -105,7 +116,20 @@ export default function ImportDpaModal({
     } finally {
       setSibuk(false)
     }
-  }, [tahun])
+  }, [tahun, sasaran])
+
+  const putusan = useMemo(() => (hasil?.tujuan
+    ? putusanImpor({
+        perubahanKe: hasil.perubahanKe,
+        babakSasaran: hasil.tujuan.babak,
+        // Tanggal konkret, bukan `periodeLabel`: "bulan berjalan (hari ini)" di dalam kurung
+        // kalimat putusan jadi "((…))" (ketahuan saat dicoba di aplikasi).
+        sasaranLabel: formatTanggalId(sasaran),
+        totalBerkas: hasil.totalHitung,
+        pembanding: hasil.tujuan.pembanding,
+        fmt: n => `Rp ${rp(n)}`,
+      })
+    : { jenis: 'boleh' as const }), [hasil, sasaran])
 
   /**
    * Tidak ada permintaan jaringan di sini — hasil pratinjau langsung dioper ke
@@ -114,14 +138,22 @@ export default function ImportDpaModal({
    * Simpan halaman DPA. Menaruhnya di dua tempat pernah membuat satu pagar
    * (`entri_historis`) terpasang di satu jalur saja.
    */
-  const terapkan = useCallback(() => {
-    if (!hasil) return
+  const terapkan = useCallback(async () => {
+    if (!hasil || putusan.jenis === 'tolak') return
+    // §11.2 "peringatan dulu" — ditanyakan di depan tombol, bukan sekadar tertulis
+    // di panel yang bisa terlewat di bawah pratinjau pohon.
+    if (putusan.jenis === 'peringatan' && !(await confirmDialog({
+      title: 'Jenis berkas tidak cocok dengan tujuan Simpan',
+      message: putusan.pesan,
+      confirmLabel: 'Tetap Masukkan ke Form',
+      variant: 'warning',
+    }))) return
     onTerapkan(keDpaBarisInput(hasil.baris), {
       berkas: hasil.namaBerkas.slice(0, 120),
       lembar: hasil.namaLembar.slice(0, 60),
       baris:  hasil.baris.length,
     })
-  }, [hasil, onTerapkan])
+  }, [hasil, putusan, onTerapkan])
 
   const bermasalah = hasil?.baris.filter(b => b.catatan.length) ?? []
   const selisih = hasil && hasil.totalFile != null ? hasil.totalFile - hasil.totalHitung : null
@@ -173,7 +205,26 @@ export default function ImportDpaModal({
 
           {hasil && (
             <>
+              {putusan.jenis === 'tolak' && (
+                <Panel judul="Berkas ini tidak bisa dimasukkan" bahaya>
+                  <p style={{ fontSize: 11.5, lineHeight: 1.6 }}>{putusan.pesan}</p>
+                </Panel>
+              )}
+              {/* Kelas peringatan modal ini (berpasangan tema terang), bukan warna sebaris:
+                  kuning #FAC775 di atas latar terang #FAFAFA nyaris tak terbaca. */}
+              {putusan.jenis === 'peringatan' && (
+                <div className="blud-imp-badge-warn" role="status" style={{ padding: '9px 12px', borderRadius: 8, fontSize: 11.5, lineHeight: 1.6 }}>
+                  <strong>Periksa dulu jenis berkasnya.</strong> {putusan.pesan}
+                </div>
+              )}
+
               <Panel judul="Yang terbaca dari berkas">
+                <Baris label="Terbaca">
+                  {kalimatTerbaca({
+                    perubahanKe: hasil.perubahanKe, versiKop: hasil.versiKop,
+                    unduhanPrima: hasil.kolom.jangkar != null, baris: hasil.baris.length,
+                  })}
+                </Baris>
                 <Baris label="Berkas">{hasil.namaBerkas}</Baris>
                 <Baris label="Lembar">&quot;{hasil.namaLembar}&quot; · header baris {hasil.barisHeader} · data s/d baris {hasil.barisAkhirData}</Baris>
                 <Baris label="Sumber hierarki">
@@ -313,8 +364,8 @@ export default function ImportDpaModal({
               Ganti Berkas
             </PrimaButton>
           )}
-          {hasil && (
-            <PrimaButton variant="primary" disabled={sibuk} onClick={terapkan}>
+          {hasil && putusan.jenis !== 'tolak' && (
+            <PrimaButton variant="primary" disabled={sibuk} onClick={() => void terapkan()}>
               Masukkan {hasil.baris.length} baris ke Form
             </PrimaButton>
           )}

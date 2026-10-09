@@ -15,6 +15,8 @@ import { hitungDeltaPergeseranRoot } from './recalc'
 import { uraiGeser, URAIAN_NOL } from './urai-geser'
 import { buangMutasiYatim, totalMutasi, type MutasiInput } from './mutasi'
 import { auditRekapPJ } from './audit-pj'
+import { berSebelum, selisihSebelum, formatSelisih, totalSebelumSesudah } from './perubahan'
+import { KOLOM_SELISIH_PERUBAHAN } from './export/warna-delta'
 import type { AuditResult, AuditPjRow } from './audit-pj'
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -22,7 +24,7 @@ import type { AuditResult, AuditPjRow } from './audit-pj'
 // ──────────────────────────────────────────────────────────────────────────
 
 export type Menu = 'dpa' | 'pergeseran' | 'master-akun'
-export type View = 'dpa' | 'penanggungJawab' | 'rekapPergeseran' | 'masterAkun' | 'daftarPerpindahan'
+export type View = 'dpa' | 'dpaPerubahan' | 'penanggungJawab' | 'rekapPergeseran' | 'masterAkun' | 'daftarPerpindahan'
 
 export interface RenderArgs {
   menu:    Menu
@@ -41,6 +43,10 @@ export interface RenderArgs {
    * 12jt tercetak "33 / —" padahal layar menunjukkan "45 / 12".
    */
   mutasi?: readonly MutasiInput[] | null
+  /** DPA: babak Perubahan versi yang dicetak (`keBabak`); `null` = murni. */
+  perubahanKe?: number | null
+  /** Pergeseran: acuannya DPA Perubahan ke berapa (konsep Perubahan §9). */
+  acuanPerubahanKe?: number | null
 }
 
 // Output shape — `rows` di sini sudah-aggregated (PJ grouping, etc.) untuk export
@@ -184,10 +190,13 @@ export function saringYangBergeser<T extends {
 // Main entry point
 // ──────────────────────────────────────────────────────────────────────────
 export function renderCetakHtml(args: RenderArgs): RenderResult {
-  const { menu, view, rows, versi, tanggal, hanyaBergeser, mutasi } = args
+  const { menu, view, rows, versi, tanggal, hanyaBergeser, mutasi, perubahanKe = null, acuanPerubahanKe = null } = args
 
   if (menu === 'dpa' && view === 'dpa') {
-    return renderDpaView(rows as DpaBaris[], versi ?? tanggal)
+    return renderDpaView(rows as DpaBaris[], versi ?? tanggal, perubahanKe)
+  }
+  if (menu === 'dpa' && view === 'dpaPerubahan') {
+    return renderDpaPerubahanView(rows as DpaBaris[], versi ?? tanggal, perubahanKe)
   }
   if (menu === 'dpa' && view === 'penanggungJawab') {
     return renderPjView(rows as DpaBaris[], versi ?? tanggal, 'dpa')
@@ -225,6 +234,7 @@ export function renderCetakHtml(args: RenderArgs): RenderResult {
         ? { ditampilkan: tampil.length, total: asli.length, catatanTakTampil: takTampil }
         : null,
       mutasi,
+      acuanPerubahanKe,
     )
   }
   if (menu === 'pergeseran' && view === 'daftarPerpindahan') {
@@ -244,9 +254,20 @@ export function renderCetakHtml(args: RenderArgs): RenderResult {
 // ──────────────────────────────────────────────────────────────────────────
 // View: DPA BLUD — tabel hierarchical, semua kolom
 // ──────────────────────────────────────────────────────────────────────────
-function renderDpaView(rows: DpaBaris[], versi: string | null): RenderResult {
+/**
+ * Judul cetak versi DPA — SATU rumus untuk pratinjau, PDF, dan nama berkasnya. Format
+ * Ringkas DPA Perubahan (konsep §7) = tata letak DPA murni dgn judul yang menyebut
+ * babaknya; tanpa itu dua dokumen beda angka berjudul sama persis.
+ */
+export function judulDpa(versi: string | null, perubahanKe: number | null, lengkap = false): string {
+  const nama = lengkap ? `DPA Perubahan${perubahanKe ? ` ke-${perubahanKe}` : ''} (Lengkap)`
+    : perubahanKe ? `DPA Perubahan ke-${perubahanKe}` : 'Rekap DPA BLUD'
+  return `${nama}${versi ? ` — ${versi}` : ''}`
+}
+
+function renderDpaView(rows: DpaBaris[], versi: string | null, perubahanKe: number | null): RenderResult {
   const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Penanggung Jawab', 'Keterangan']
-  const title = `Rekap DPA BLUD${versi ? ` — ${versi}` : ''}`
+  const title = judulDpa(versi, perubahanKe)
 
   // Sort by urutan (preserve hierarchy)
   const sorted = [...rows].sort((a, b) => a.urutan - b.urutan)
@@ -270,6 +291,92 @@ function renderDpaView(rows: DpaBaris[], versi: string | null): RenderResult {
     html += `<td>${esc(r.satuan ?? '')}</td>`
     html += `<td style="text-align:right;font-family:monospace;">${fmt(r.harga)}</td>`
     html += `<td style="text-align:right;font-family:monospace;font-weight:600;">${fmt(r.jumlah)}</td>`
+    html += `<td>${esc(r.penanggung_jawab ?? '')}</td>`
+    html += `<td>${esc(r.keterangan ?? '')}</td>`
+    html += `</tr>`
+  }
+  html += `</tbody></table>`
+
+  return { html, rows: exportRows, meta: { title, columns } }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// View: DPA Perubahan — format Lengkap (konsep Perubahan §7), Sebelum | Sesudah
+// ──────────────────────────────────────────────────────────────────────────
+
+const KEPALA_TEBAL = ['GRANDMASTER', 'MASTER', 'LEADER', 'PLETON-LEADER', 'KETUA-KELOMPOK-A', 'KETUA-KELOMPOK-B', 'L7-HEAD', 'L8-HEAD']
+
+/** "12,50%" · "—" bila Sebelum nol (rekening lahir di Perubahan) · '' bila tak bergeser. */
+export function persenSelisih(sebelum: number, selisih: number): string {
+  if (Math.abs(selisih) < 0.005) return ''
+  if (!sebelum) return '—'
+  return `${(selisih / sebelum * 100).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
+}
+
+function renderDpaPerubahanView(rows: DpaBaris[], versi: string | null, perubahanKe: number | null): RenderResult {
+  const columns = [
+    'Kode Rekening', 'Uraian',
+    'Vol Sebelum', 'Satuan Sebelum', 'Harga Sebelum', 'Jumlah Sebelum',
+    'Vol', 'Satuan', 'Harga', 'Jumlah',
+    KOLOM_SELISIH_PERUBAHAN, '%', 'Penanggung Jawab', 'Keterangan',
+  ]
+  const title = judulDpa(versi, perubahanKe, true)
+
+  // Versi murni tidak punya sisi Sebelum — mencetaknya berbunyi "Sebelum 0 → Sesudah
+  // 68 M" di tiap baris (pelajaran Tahap 2). `rows: []` mematikan PDF & Excel.
+  if (!perubahanKe || !rows.some(berSebelum)) {
+    const html = `<h4 style="margin:0 0 12px;color:inherit;font-weight:800;">${esc(title)}</h4>`
+      + `<div style="padding:20px;color:#85B7EB;font-style:italic;">`
+      + `Versi ${esc(versi ?? 'ini')} adalah DPA murni — tidak punya kolom Sebelum. `
+      + `Pilih versi DPA Perubahan di History, atau cetak lewat view DPA BLUD.</div>`
+    return { html, rows: [], meta: { title, columns } }
+  }
+
+  const sorted = [...rows].sort((a, b) => a.urutan - b.urutan)
+  const exportRows: ExportRow[] = sorted.map(r => {
+    const sebelum = Number(r.jumlah_sebelum ?? 0)
+    const selisih = selisihSebelum(r)
+    return [
+      r.kode_rekening, r.uraian,
+      r.vol_sebelum ?? '', r.satuan_sebelum ?? '', r.harga_sebelum ?? '', berSebelum(r) ? sebelum : '',
+      r.vol ?? '', r.satuan ?? '', r.harga ?? '', r.jumlah,
+      selisih, persenSelisih(sebelum, selisih),
+      r.penanggung_jawab ?? '', r.keterangan ?? '',
+    ]
+  })
+
+  const total = totalSebelumSesudah(sorted)
+  let html = `<h4 style="margin:0 0 6px;color:inherit;font-weight:800;">${esc(title)}</h4>`
+  html += `<div style="margin:0 0 12px;font-size:12.5px;">Total: Sebelum <strong>${formatRupiah(total.sebelum)}</strong>`
+    // Tanpa kurung pembungkus: berkurang SUDAH berkurung ("(1.739.765.500)") — dibungkus lagi
+    // jadi "((…))" (ketahuan saat dicoba di aplikasi, data 2099).
+    + ` → Sesudah <strong>${formatRupiah(total.sesudah)}</strong> · selisih <strong>${esc(formatSelisih(total.selisih, formatRupiah))}</strong></div>`
+  html += `<table><thead><tr>`
+  html += `<th rowspan="2">Kode Rekening</th><th rowspan="2">Uraian</th>`
+  html += `<th colspan="4" style="text-align:center;">SEBELUM PERUBAHAN</th>`
+  html += `<th colspan="4" style="text-align:center;">SESUDAH PERUBAHAN</th>`
+  html += `<th rowspan="2">${esc(KOLOM_SELISIH_PERUBAHAN)}</th><th rowspan="2">%</th>`
+  html += `<th rowspan="2">Penanggung Jawab</th><th rowspan="2">Keterangan</th></tr><tr>`
+  for (let i = 0; i < 2; i++) html += `<th>Vol</th><th>Satuan</th><th>Harga</th><th>Jumlah</th>`
+  html += `</tr></thead><tbody>`
+  for (const r of sorted) {
+    const rowStyle = KEPALA_TEBAL.includes(r.tipe_baris) ? ' style="font-weight:700;"' : ''
+    const sebelum = Number(r.jumlah_sebelum ?? 0)
+    const selisih = selisihSebelum(r)
+    const warna = selisih > 0 ? '#6EE7B7' : selisih < 0 ? '#FCA5A5' : ''
+    html += `<tr${rowStyle}>`
+    html += `<td>${esc(r.kode_rekening)}</td>`
+    html += `<td>${esc(r.uraian)}</td>`
+    html += `<td style="text-align:right;font-family:monospace;">${r.vol_sebelum ?? ''}</td>`
+    html += `<td>${esc(r.satuan_sebelum ?? '')}</td>`
+    html += `<td style="text-align:right;font-family:monospace;">${fmt(r.harga_sebelum)}</td>`
+    html += `<td style="text-align:right;font-family:monospace;">${fmt(r.jumlah_sebelum)}</td>`
+    html += `<td style="text-align:right;font-family:monospace;">${r.vol ?? ''}</td>`
+    html += `<td>${esc(r.satuan ?? '')}</td>`
+    html += `<td style="text-align:right;font-family:monospace;">${fmt(r.harga)}</td>`
+    html += `<td style="text-align:right;font-family:monospace;font-weight:600;">${fmt(r.jumlah)}</td>`
+    html += `<td style="text-align:right;font-family:monospace;font-weight:600;color:${warna};">${selisih ? esc(formatSelisih(selisih, formatRupiah)) : ''}</td>`
+    html += `<td style="text-align:right;font-family:monospace;color:${warna};">${esc(persenSelisih(sebelum, selisih))}</td>`
     html += `<td>${esc(r.penanggung_jawab ?? '')}</td>`
     html += `<td>${esc(r.keterangan ?? '')}</td>`
     html += `</tr>`
@@ -459,9 +566,13 @@ function renderPergeseranView(
   /** Non-null = daftar sudah disaring "hanya yang bergeser". */
   sebagian: CakupanCetak | null,
   mutasi?: readonly MutasiInput[] | null,
+  acuanPerubahanKe: number | null = null,
 ): RenderResult {
   const columns = ['Kode Rekening', 'Uraian', 'Vol', 'Satuan', 'Harga', 'Jumlah', 'Vol P', 'Harga P', 'Pergeseran', 'Bertambah', 'Berkurang', 'Selisih', 'Penanggung Jawab', 'Keterangan']
-  const title = `Rekap Pergeseran${sebagian ? ' — Yang Bergeser' : ''}${versi ? `: ${versi}` : ' (Terakhir)'}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
+  // Kop menyebut acuannya (konsep Perubahan §9) — dua pergeseran bertanggal berdekatan
+  // bisa mengacu DPA berbeda, dan hanya satu yang menentukan pagu.
+  const title = `Rekap Pergeseran${sebagian ? ' — Yang Bergeser' : ''}${versi ? `: ${versi}` : ' (Terakhir)'}`
+    + `${acuanPerubahanKe ? ` · mengacu DPA Perubahan ke-${acuanPerubahanKe}` : ''}${deltaRoot !== 0 ? ' (DRAFT)' : ''}`
 
   if (sebagian && rows.length === 0) {
     // Tabel kosong tanpa keterangan terbaca seperti kegagalan memuat data.

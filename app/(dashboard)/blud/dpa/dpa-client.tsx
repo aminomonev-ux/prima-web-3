@@ -2118,6 +2118,7 @@ export default function DpaClient({
         <ImportDpaModal
           tahun={tahun}
           periodeLabel={periodeTulis ? formatTanggalId(periodeTulis) : 'bulan berjalan (hari ini)'}
+          sasaran={sasaran}
           onTutup={() => setImportDpaBuka(false)}
           onTerapkan={terapkanImpor}
         />

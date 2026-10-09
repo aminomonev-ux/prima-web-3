@@ -21,8 +21,8 @@ import { TIPE_LABEL } from '@/lib/blud/format'
 import { isLeafMode } from '@/lib/blud/recalc'
 import { uraiGeser, URAIAN_NOL } from '@/lib/blud/urai-geser'
 import { totalMutasi, type MutasiInput } from '@/lib/blud/mutasi'
-import { HEX_NAIK, HEX_TURUN } from '@/lib/blud/export/warna-delta'
-import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
+import { HEX_NAIK, HEX_TURUN, KOLOM_SELISIH_PERUBAHAN } from '@/lib/blud/export/warna-delta'
+import { tanggalHariIniWIB, formatTanggalId } from '@/lib/blud/tanggal'
 import type { DpaBaris, PergeseranBaris, TipeBaris } from '@/types'
 
 const INSTANSI = 'RSJD Dr. AMINO GONDOHUTOMO'
@@ -63,7 +63,8 @@ interface Pohon<T extends BarisPohon> {
   kedalaman: Map<string, number>
 }
 
-function siapkanPohon<T extends BarisPohon>(rows: T[]): Pohon<T> {
+/** `barisAwal` — baris Excel data pertama; format Lengkap berkepala dua tingkat. */
+function siapkanPohon<T extends BarisPohon>(rows: T[], barisAwal = BARIS_DATA_1): Pohon<T> {
   const urut = [...rows].sort((a, b) => a.urutan - b.urutan)
 
   const anak = new Map<string, T[]>()
@@ -75,7 +76,7 @@ function siapkanPohon<T extends BarisPohon>(rows: T[]): Pohon<T> {
   }
 
   const barisExcel = new Map<string, number>()
-  urut.forEach((r, i) => barisExcel.set(r.row_id, BARIS_DATA_1 + i))
+  urut.forEach((r, i) => barisExcel.set(r.row_id, barisAwal + i))
 
   // Kedalaman untuk indentasi uraian — dari pohon, bukan dari tipe_baris, karena
   // rantai level boleh melompat (CHILD → MEMBER tanpa LEADER di data nyata).
@@ -153,11 +154,18 @@ function garisSemua(argb = 'FFBFBFBF'): Partial<ExcelJS.Borders> {
   return { top: sisi, left: sisi, bottom: sisi, right: sisi }
 }
 
-function tulisJudul(ws: ExcelJS.Worksheet, kolTerakhir: number, judul: string, tahun: number): void {
+/**
+ * `penanda` (baris 5, yang dulu kosong) — "DPA PERUBAHAN KE-n · versi …" atau acuan
+ * pergeseran. Untuk DPA ia juga PENANDA yang dibaca Impor (konsep Perubahan §11.1):
+ * Excel Perubahan Ringkas tidak punya beda kolom dengan DPA murni, jadi hanya kop
+ * ini yang membedakannya.
+ */
+function tulisJudul(ws: ExcelJS.Worksheet, kolTerakhir: number, judul: string, tahun: number, penanda?: string): void {
   const baris = [judul, 'BADAN LAYANAN UMUM DAERAH', `${INSTANSI} ${PROVINSI}`, `TAHUN ANGGARAN ${tahun}`]
+  if (penanda) baris.push(penanda)
   baris.forEach((teks, i) => {
     const r = ws.getRow(i + 1)
-    r.getCell(1).value = teks
+    r.getCell(1).value = sanitizeCell(teks)
     ws.mergeCells(i + 1, 1, i + 1, kolTerakhir)
     r.getCell(1).font = { bold: true, size: i === 0 ? 13 : 11 }
     r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
@@ -232,10 +240,11 @@ function selesaikanLembar(
   ws: ExcelJS.Worksheet,
   lebar: number[],
   kolom: readonly string[],
+  barisBeku = BARIS_HEADER,
 ): void {
   lebar.forEach((w, i) => { ws.getColumn(i + 1).width = w })
   kolomCadangan(kolom).forEach(c => { ws.getColumn(c).hidden = true })
-  ws.views = [{ state: 'frozen', ySplit: BARIS_HEADER }]
+  ws.views = [{ state: 'frozen', ySplit: barisBeku }]
 }
 
 function namaBerkas(awalan: string, tahun: number, versi: string | null): string {
@@ -263,11 +272,23 @@ export interface UnduhDokumenArgs<T> {
    * dokumen yang cuma memuat hasilnya.
    */
   mutasi?: readonly MutasiInput[] | null
+  /**
+   * DPA: babak Perubahan versi ini (`keBabak`), `null`/tanpa = murni. Menulis kop
+   * "DPA PERUBAHAN KE-n" — format Ringkas (konsep Perubahan §7) dan penanda Impor.
+   */
+  perubahanKe?: number | null
+  /** Pergeseran: acuannya DPA Perubahan ke berapa (§9 "kop menyebut acuannya"). */
+  acuanPerubahanKe?: number | null
+}
+
+/** Kop baris 5 dokumen DPA versi Perubahan — satu rumus untuk Ringkas & Lengkap. */
+export function kopPerubahan(ke: number, versi: string | null): string {
+  return `DPA PERUBAHAN KE-${ke}${versi ? ` · versi ${formatTanggalId(versi)}` : ''}`
 }
 
 /** Dipisah dari unduhan supaya bisa diuji di Node tanpa DOM (`test-dpa-export.mjs`). */
 export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise<ExcelJS.Workbook> {
-  const { tahun, rows, direktur = null } = args
+  const { tahun, rows, direktur = null, perubahanKe = null, versi } = args
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('Data kosong — tidak ada yang bisa diunduh')
   }
@@ -278,7 +299,8 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
   const pohon = siapkanPohon(rows)
   const kolTampak = kolomTampak(KOLOM_DPA)
 
-  tulisJudul(ws, kolTampak, 'RINCIAN BELANJA ANGGARAN', tahun)
+  // Format Ringkas DPA Perubahan = tata letak DPA murni + kop penanda (konsep §7).
+  tulisJudul(ws, kolTampak, 'RINCIAN BELANJA ANGGARAN', tahun, perubahanKe ? kopPerubahan(perubahanKe, versi) : undefined)
   tulisHeader(ws, KOLOM_DPA)
 
   for (const r of pohon.urut) {
@@ -318,7 +340,156 @@ export async function buatWorkbookDpa(args: UnduhDokumenArgs<DpaBaris>): Promise
 
 export async function exportDpaDokumen(args: UnduhDokumenArgs<DpaBaris>): Promise<void> {
   const wb = await buatWorkbookDpa(args)
-  await downloadWorkbook(wb, namaBerkas('DPA_BLUD', args.tahun, args.versi))
+  const awalan = args.perubahanKe ? `DPA_BLUD_PERUBAHAN${args.perubahanKe}` : 'DPA_BLUD'
+  await downloadWorkbook(wb, namaBerkas(awalan, args.tahun, args.versi))
+}
+
+// ─── DPA Perubahan — format Lengkap ──────────────────────────────────────────
+// Bentuk dokumen pergeseran kantor ("DPA BLUD PERGESERAN JANUARI.xlsx"): dua blok
+// angka berkepala dua tingkat, lalu Bertambah/(Berkurang) dan %. Keputusan pemilik
+// 2026-10-09: judul blok SEBELUM/SESUDAH PERUBAHAN, kop TANPA baris Program/Kegiatan,
+// kolom % ikut (Sebelum nol → "—"), tanda tangan Direktur saja.
+// Tanpa kolom Level/Jangkar: format ini SENGAJA tidak bisa diimpor (konsep §11.2 —
+// dua set Vol/Harga/Jumlah membuat pembaca bisa mengambil sisi Sebelum).
+
+const KOLOM_PERUBAHAN = [
+  'Kode Rekening', 'Uraian',
+  'Vol', 'Satuan', 'Harga', 'Jumlah',
+  'Vol', 'Satuan', 'Harga', 'Jumlah',
+  KOLOM_SELISIH_PERUBAHAN, '%', 'Penanggung Jawab', 'Keterangan',
+]
+const LEBAR_PERUBAHAN = [26, 46, 8, 10, 16, 18, 8, 10, 16, 18, 18, 9, 22, 24]
+const BLOK_PERUBAHAN = [
+  { judul: 'SEBELUM PERUBAHAN', dari: 3, sampai: 6 },
+  { judul: 'SESUDAH PERUBAHAN', dari: 7, sampai: 10 },
+] as const
+const KOL_SELISIH_P = KOLOM_PERUBAHAN.indexOf(KOLOM_SELISIH_PERUBAHAN) + 1
+const KOL_PERSEN_P = KOLOM_PERUBAHAN.indexOf('%') + 1
+const BARIS_HEADER_BAWAH = BARIS_HEADER + 1
+const BARIS_DATA_PERUBAHAN = BARIS_HEADER + 2
+/** Gaya dokumen anggaran — berkurang dalam kurung, nol "-" — sama dgn `formatSelisih` di layar. */
+const RUPIAH_SELISIH = '#,##0;(#,##0);"-"'
+const PERSEN_SELISIH = '0.00%;(0.00%);"-"'
+
+/**
+ * Sisi Sebelum mengikuti pohon VERSI DASAR, bukan pohon sekarang: rekening yang
+ * dulu daun lalu diberi anak di Perubahan dulunya bernilai vol × harga sendiri,
+ * sedangkan anak-anak barunya Sebelum-nya nol — `SUM` di situ menghitung ulang
+ * 10 juta jadi 0 begitu Excel menghitung. Jadi baris ini dianggap induk di sisi
+ * Sebelum hanya kalau ada anaknya yang SUDAH ada di versi dasar.
+ */
+function selSebelum(r: DpaBaris, pohon: Pohon<DpaBaris>): ExcelJS.CellValue {
+  const nilai = Number(r.jumlah_sebelum ?? 0)
+  const anak = pohon.anak.get(r.row_id) ?? []
+  if (anak.some(c => c.jumlah_sebelum != null)) {
+    const barisAnak = anak.map(c => pohon.barisExcel.get(c.row_id)).filter((n): n is number => n != null)
+    return { formula: rumusAgregat('F', barisAnak), result: nilai }
+  }
+  const baris = pohon.barisExcel.get(r.row_id)
+  if (baris == null || r.vol_sebelum == null || r.harga_sebelum == null) return nilai
+  return { formula: rumusDaun('C', 'E', baris), result: nilai }
+}
+
+function tulisHeaderPerubahan(ws: ExcelJS.Worksheet): void {
+  const atas = ws.getRow(BARIS_HEADER)
+  const bawah = ws.getRow(BARIS_HEADER_BAWAH)
+  KOLOM_PERUBAHAN.forEach((teks, i) => {
+    const c = i + 1
+    if (BLOK_PERUBAHAN.some(b => c >= b.dari && c <= b.sampai)) {
+      bawah.getCell(c).value = teks
+    } else {
+      atas.getCell(c).value = teks
+      ws.mergeCells(BARIS_HEADER, c, BARIS_HEADER_BAWAH, c)
+    }
+  })
+  for (const b of BLOK_PERUBAHAN) {
+    atas.getCell(b.dari).value = b.judul
+    ws.mergeCells(BARIS_HEADER, b.dari, BARIS_HEADER, b.sampai)
+  }
+  for (const r of [atas, bawah]) {
+    for (let c = 1; c <= KOLOM_PERUBAHAN.length; c++) {
+      const sel = r.getCell(c)
+      sel.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 }
+      sel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1855BB' } }
+      sel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+      sel.border = garisSemua('FFFFFFFF')
+    }
+    r.height = 20
+  }
+}
+
+export async function buatWorkbookDpaPerubahan(args: UnduhDokumenArgs<DpaBaris>): Promise<ExcelJS.Workbook> {
+  const { tahun, rows, direktur = null, perubahanKe = null, versi } = args
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Data kosong — tidak ada yang bisa diunduh')
+  }
+  // Tanpa satu baris ber-Sebelum ini DPA murni: dokumennya akan berbunyi "Sebelum 0
+  // → Sesudah 68 M" di semua baris — angka yang tidak pernah ada (pelajaran Tahap 2).
+  if (!perubahanKe || !rows.some(r => r.jumlah_sebelum != null)) {
+    throw new Error('Versi ini DPA murni — format Lengkap hanya untuk versi DPA Perubahan.')
+  }
+
+  const ExcelJSLib = await loadExcelJs()
+  const wb = new ExcelJSLib.Workbook()
+  const ws = wb.addWorksheet(`DPA Perubahan ${tahun}`)
+  const pohon = siapkanPohon(rows, BARIS_DATA_PERUBAHAN)
+  const kolTampak = KOLOM_PERUBAHAN.length
+
+  tulisJudul(ws, kolTampak, 'RINCIAN BELANJA ANGGARAN', tahun, kopPerubahan(perubahanKe, versi))
+  tulisHeaderPerubahan(ws)
+
+  for (const r of pohon.urut) {
+    const nomor = pohon.barisExcel.get(r.row_id)!
+    const baris = ws.getRow(nomor)
+    const punyaAnak = (pohon.anak.get(r.row_id)?.length ?? 0) > 0
+    const sebelum = Number(r.jumlah_sebelum ?? 0)
+    const selisih = Number(r.jumlah ?? 0) - sebelum
+
+    baris.getCell(1).value = sanitizeCell(r.kode_rekening ?? '')
+    baris.getCell(2).value = sanitizeCell(r.uraian ?? '')
+    // Rekening yang lahir di Perubahan: Sebelum kosong, Jumlah-nya 0 (bukan teks) —
+    // SUM induk dan rumus Bertambah butuh angka.
+    baris.getCell(3).value = r.vol_sebelum ?? ''
+    baris.getCell(4).value = sanitizeCell(r.satuan_sebelum ?? '')
+    baris.getCell(5).value = r.harga_sebelum ?? ''
+    baris.getCell(6).value = selSebelum(r, pohon)
+    baris.getCell(7).value = r.vol ?? ''
+    baris.getCell(8).value = sanitizeCell(r.satuan ?? '')
+    baris.getCell(9).value = r.harga ?? ''
+    baris.getCell(10).value = selNilai(r, pohon, { vol: 'G', harga: 'I', nilai: 'J' }, r.jumlah, { vol: r.vol, harga: r.harga })
+    // Rumus, bukan nilai mati: berkasnya bisa diperiksa sendiri (pola kolom Selisih Pergeseran).
+    baris.getCell(KOL_SELISIH_P).value = { formula: `J${nomor}-F${nomor}`, result: selisih }
+    baris.getCell(KOL_PERSEN_P).value = {
+      formula: `IF(F${nomor}=0,"—",K${nomor}/F${nomor})`,
+      result: sebelum ? selisih / sebelum : '—',
+    }
+    baris.getCell(13).value = sanitizeCell(r.penanggung_jawab ?? '')
+    baris.getCell(14).value = sanitizeCell(r.keterangan ?? '')
+
+    const warna = new Map<number, string>()
+    if (selisih > 0) warna.set(KOL_SELISIH_P, WARNA_NAIK)
+    else if (selisih < 0) warna.set(KOL_SELISIH_P, WARNA_TURUN)
+    hiasBarisData(baris, {
+      kolomAngka: [3, 5, 6, 7, 9, 10, KOL_SELISIH_P, KOL_PERSEN_P],
+      kolomVolume: [3, 7],
+      kolTerakhir: kolTampak,
+      indent: pohon.kedalaman.get(r.row_id) ?? 0,
+      tebal: punyaAnak,
+      warna,
+    })
+    baris.getCell(KOL_SELISIH_P).numFmt = RUPIAH_SELISIH
+    baris.getCell(KOL_PERSEN_P).numFmt = PERSEN_SELISIH
+  }
+
+  const akhirData = BARIS_DATA_PERUBAHAN + pohon.urut.length - 1
+  tulisTandaTangan(ws, akhirData + 3, 9, kolTampak, direktur)
+  selesaikanLembar(ws, LEBAR_PERUBAHAN, KOLOM_PERUBAHAN, BARIS_HEADER_BAWAH)
+  return wb
+}
+
+export async function exportDpaPerubahanDokumen(args: UnduhDokumenArgs<DpaBaris>): Promise<void> {
+  const wb = await buatWorkbookDpaPerubahan(args)
+  await downloadWorkbook(wb, namaBerkas(`DPA_BLUD_PERUBAHAN${args.perubahanKe ?? ''}_LENGKAP`, args.tahun, args.versi))
 }
 
 // ─── Pergeseran ──────────────────────────────────────────────────────────────
@@ -348,7 +519,7 @@ const KOL_SELISIH = KOLOM_PERGESERAN.indexOf('Selisih') + 1
 export async function buatWorkbookPergeseran(
   args: UnduhDokumenArgs<PergeseranBaris>,
 ): Promise<ExcelJS.Workbook> {
-  const { tahun, rows, direktur = null, mutasi = null } = args
+  const { tahun, rows, direktur = null, mutasi = null, acuanPerubahanKe = null } = args
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('Data kosong — tidak ada yang bisa diunduh')
   }
@@ -360,7 +531,9 @@ export async function buatWorkbookPergeseran(
   const urai = uraiGeser(rows, mutasi)
   const kolTampak = kolomTampak(KOLOM_PERGESERAN)
 
-  tulisJudul(ws, kolTampak, 'PERGESERAN RINCIAN BELANJA ANGGARAN', tahun)
+  const acuan = rows[0]?.dpa_versi_tanggal ?? null
+  tulisJudul(ws, kolTampak, 'PERGESERAN RINCIAN BELANJA ANGGARAN', tahun,
+    acuanPerubahanKe ? `Mengacu DPA Perubahan ke-${acuanPerubahanKe}${acuan ? ` (${formatTanggalId(acuan)})` : ''}` : undefined)
   tulisHeader(ws, KOLOM_PERGESERAN)
 
   for (const r of pohon.urut) {
