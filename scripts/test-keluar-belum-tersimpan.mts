@@ -108,8 +108,15 @@ const PASANGAN: Record<string, string> = {
   const shell = kode('app/(dashboard)/kinerja/kinerja-client.tsx')
   cek('C5 handleLogout: logout → ref dilepas → pindah',
     urut(badan(shell, 'const handleLogout = useCallback('), LOGOUT, 'pendingMasterRef.current = false', PINDAH))
-  cek('C6 beforeunload E-Anggaran memang bertanya lewat ref yang sama',
-    urut(badan(shell, 'function handleBeforeUnload'), 'if (pendingMasterRef.current)', 'e.preventDefault()'))
+  cek('C6 beforeunload E-Anggaran bertanya lewat penjaga yang sama dengan guardPending',
+    urut(badan(shell, 'function handleBeforeUnload'), 'if (alasanTinggalkan())', 'e.preventDefault()'))
+  // Sejak 2026-10-12 penjaganya juga menanyakan Realisasi & RKO yang belum tersimpan
+  // (docs/CONCEPT-kinerja-simpan-realisasi.md §4), bukan Master saja.
+  const penjaga = badan(shell, 'const alasanTinggalkan = useCallback(')
+  cek('C7 penjaga E-Anggaran memuat Master DAN Realisasi/RKO',
+    penjaga.includes('pendingMasterRef.current') && penjaga.includes('alasanRef.current'))
+  cek('C8 Keluar melepas pengingat Realisasi/RKO juga',
+    urut(badan(shell, 'const handleLogout = useCallback('), LOGOUT, 'alasanRef.current = null', PINDAH))
 }
 
 // ── D. K3: pindah-halaman-penuh yang disengaja menulis alasannya ──────────────

@@ -524,7 +524,9 @@ for (const f of [
   const nama = f.split('/').pop()!;
   ok(`M1 ${nama} menangani PENURUNAN_DRASTIS`,
      s.includes("'PENURUNAN_DRASTIS'") && s.includes('konfirmasiPenurunan('));
-  ok(`M2 ${nama} mengulang dengan force`, /\(true\); return; \}/.test(s));
+  // Argumen kedua boleh ikut (SskTab meneruskan persetujuan bulan tertutup) — yang
+  // dijaga cuma: ulangannya MEMBAWA force=true.
+  ok(`M2 ${nama} mengulang dengan force`, /\(true(, \w+)?\); return; \}/.test(s));
 }
 
 const rt = readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8');
@@ -1229,7 +1231,10 @@ console.log('\n-- Y. A4: Pulihkan menghidrasi ulang dari SSK versi terbuka ----'
   const rt = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8'));
   // Hidrasi WAJIB mendahului recalc - kebalikannya melahirkan persen dari pagu foto.
   ok('Y30 Pulihkan menghidrasi ulang sebelum recalc',
-     /recalcAllRealisasi\(hidrasiUlang\(isi as RealRow\[\], sskRows, sskVersi\)\)/.test(rt));
+     // Sejak Tutup Bulan, hasil hidrasi digabung dulu dgn baris bulan tertutup yang
+     // dipertahankan — recalc tetap berjalan SESUDAH hidrasi, atas gabungan itu.
+     /const pulih = hidrasiUlang\(isi as RealRow\[\], sskRows, sskVersi\);[\s\S]*?setRealisasiRows\(recalcAllRealisasi\(isiBaru\)\)/.test(rt)
+     && /\.\.\.pulih\.filter\(/.test(rt));
   ok('Y31 Init memakai peta yang sama', /const petaSsk = petaHidrasi\(sskRows\)/.test(rt));
   ok('Y32 Init memakai rumus yang sama', /\.\.\.hidrasiDariSsk\(petaSsk\.get\(cid\), b\)/.test(rt));
   // Salinan rumus di layar sudah tidak ada - kalau kembali, dua tempat bisa
@@ -1956,7 +1961,7 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   ok('AE40 cabang versi-eksplisit ikut membawa bendera dinolkan',
      /versi: \{ tipe: versiTipe, seq: versiSeq, dinolkan \}/.test(rtAE));
   ok('AE41 benderanya datang dari kueri yang sama dengan itemnya, bukan kueri kedua',
-     /const \{ rows, itemSsk, dinolkan \} = await getRealisasiHydrated\(tahun, sumber, versiTipe, versiSeq\)/.test(rtAE)
+     /\[\{ rows, itemSsk, dinolkan \}, version, tertutup\] = await Promise\.all\(\[\s*getRealisasiHydrated\(tahun, sumber, versiTipe, versiSeq\)/.test(rtAE)
      && !/versiDinolkanSsk/.test(rtAE));
 
   // Laporan/KPI/Beranda SENGAJA tanpa pemilih: pertanyaannya "sekarang

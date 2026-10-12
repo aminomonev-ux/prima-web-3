@@ -204,6 +204,10 @@ export const SskBodySchema = z.object({
   // Pagar simpan: menyatakan "saya memang mau mengosongkan / memangkas drastis".
   // Tanpa ini larik kosong dulu tetap menghapus seluruh (tahun, sumber).
   force:      z.boolean().optional(),
+  // "Sudah dibaca": target/pagu bulan yang realisasinya sudah ditutup memang mau diubah.
+  // Peringatan, bukan pagar — sengaja terpisah dari `force` supaya menjawab satu
+  // pertanyaan tidak diam-diam menjawab pertanyaan lain.
+  setuju_bulan_tertutup: z.boolean().optional(),
   rows:       z.array(SskRowSchema).max(5000, 'Maks 5000 baris per batch'),
 });
 
@@ -247,6 +251,17 @@ export const RealisasiBodySchema = z.object({
   expected_version: z.number().int().optional(), // V3-6 optimistic lock
   force:  z.boolean().optional(),
   rows:   z.array(RealRowSchema).max(10000, 'Maks 10000 baris per batch'),
+});
+
+/**
+ * POST /api/kinerja/realisasi/tutup-bulan — Tutup / Buka satu bulan realisasi.
+ * Urutannya (berurutan, buka dari belakang) dijaga server di `tutup-bulan.ts`.
+ */
+export const TutupBulanBodySchema = z.object({
+  tahun:  TahunSchema,
+  sumber: SumberSchema,
+  bulan:  BulanSchema,
+  aksi:   z.enum(['TUTUP', 'BUKA']),
 });
 
 /**

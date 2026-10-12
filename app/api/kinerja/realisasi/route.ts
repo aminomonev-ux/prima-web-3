@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getRealisasiRows, getRealisasiHydrated, saveRealisasiBatch, getKinerjaVersion, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
+import { getRealisasiRows, getRealisasiHydrated, saveRealisasiBatch, getKinerjaVersion, penyimpanTerakhir, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import type { RealRow } from '@/lib/data/kinerja';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RealisasiBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
+import { kalimatRingkasan } from '@/lib/kinerja/banding-realisasi';
+import { KinerjaBulanTertutupError } from '@/lib/kinerja/tutup-bulan';
+import { daftarBulanTertutup } from '@/lib/kinerja/tutup-bulan-data';
+import { sql } from '@/lib/data/db';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -37,12 +41,17 @@ export async function GET(req: NextRequest) {
     // memilih versi yang habis dinol-kan di layar Cetak membuat spanduknya diam
     // — dan pagu Rp 0 tanpa keterangan itu yang A9 ada untuk mencegahnya. Ia
     // datang dari kueri yang SAMA dengan itemnya, bukan kueri COUNT tersendiri.
-    const { rows, itemSsk, dinolkan } = await getRealisasiHydrated(tahun, sumber, versiTipe, versiSeq);
-    const version = await getKinerjaVersion('kinerja_realisasi', `${tahun}:${sumber}`);
+    const [{ rows, itemSsk, dinolkan }, version, tertutup] = await Promise.all([
+      getRealisasiHydrated(tahun, sumber, versiTipe, versiSeq),
+      getKinerjaVersion('kinerja_realisasi', `${tahun}:${sumber}`),
+      // Satu balasan dengan barisnya: layar yang menampilkan angka bulan tertutup
+      // tidak boleh mendapat jawaban "tertutup atau tidak" dari pemuatan lain (L88).
+      daftarBulanTertutup(sql, tahun, sumber),
+    ]);
     // A8: `itemSsk` ikut di KEDUA cabang. Satu bentuk balasan, bukan dua yang
     // berbeda tergantung ada-tidaknya parameter versi — beda bentuk yang tidak
     // disengaja itu yang membuat `sumber` di RealRow jadi jebakan (bentuk T1).
-    return NextResponse.json({ ok: true, rows, itemSsk, versi: { tipe: versiTipe, seq: versiSeq, dinolkan }, version });
+    return NextResponse.json({ ok: true, rows, itemSsk, versi: { tipe: versiTipe, seq: versiSeq, dinolkan }, version, tertutup });
   }
 
   // Tanpa parameter versi → versi AKTIF (bukan lagi MURNI-0 paksa). Versinya ikut
@@ -66,12 +75,16 @@ export async function PUT(req: NextRequest) {
   const { tahun, sumber, rows, expected_version, force, asal_pulihkan } = parsed.data;
 
   // Cast ke type yang ditunggu saveRealisasiBatch — Zod schema passthrough sudah handle extra fields
+  let hasil;
   try {
-    await saveRealisasiBatch(tahun, sumber, rows as Omit<RealRow, 'id' | 'tahun' | 'sumber'>[], session.userId, expected_version, force ?? false);
+    hasil = await saveRealisasiBatch(tahun, sumber, rows as Omit<RealRow, 'id' | 'tahun' | 'sumber'>[], session.userId, expected_version, force ?? false);
   } catch (err) {
     // V3-6: optimistic-lock conflict → 409 dengan code agar client bisa auto-reload.
     if (err instanceof KinerjaVersionConflictError) {
-      return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message, actual: err.actual }, { status: 409 });
+      // Siapa & jam berapa: layar memasang ketikan di atas isi terbaru dan menyebut
+      // pemicunya — 'diubah pengguna lain' tanpa nama tidak bisa ditindaklanjuti.
+      const { oleh, pada } = await penyimpanTerakhir('kinerja_realisasi', `${tahun}:${sumber}`);
+      return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message, actual: err.actual, oleh, pada }, { status: 409 });
     }
     // Pagar simpan: klien menerjemahkannya jadi konfirmasi lalu mengulang dengan force.
     if (err instanceof KinerjaReplaceSafetyError) {
@@ -80,18 +93,31 @@ export async function PUT(req: NextRequest) {
         { status: 409 },
       );
     }
+    // Pagar, bukan peringatan — dan sengaja tidak bisa ditembus `force`.
+    if (err instanceof KinerjaBulanTertutupError) {
+      return NextResponse.json(
+        { ok: false, code: 'BULAN_TERTUTUP', message: err.message, pelanggaran: err.pelanggaran.slice(0, 50) },
+        { status: 409 },
+      );
+    }
     const msg = err instanceof Error ? err.message : 'Gagal menyimpan';
     return NextResponse.json({ ok: false, message: msg }, { status: 409 });
   }
 
   const version = await getKinerjaVersion('kinerja_realisasi', `${tahun}:${sumber}`);
-  await writeAuditLog({
-    req,
-    eventType: 'KINERJA_SAVE_REALISASI',
-    userId:    session.userId,
-    username:  session.username,
-    detail:    `Simpan realisasi ${sumber} tahun ${tahun}: ${rows.length} baris` + jejakPulihkan(asal_pulihkan),
-  });
+  // Isi identik = tidak ada yang ditulis, jadi tidak ada yang perlu dicatat.
+  if (!hasil.tidakBerubah) {
+    await writeAuditLog({
+      req,
+      eventType: 'KINERJA_SAVE_REALISASI',
+      userId:    session.userId,
+      username:  session.username,
+      // Yang benar-benar berubah, bukan "180 baris": Simpan selalu mengirim setahun.
+      detail:    `Simpan realisasi ${sumber} tahun ${tahun}: ${kalimatRingkasan(hasil.perBulan, 12)} `
+        + `(${rows.length} baris dikirim)` + jejakPulihkan(asal_pulihkan),
+    });
+  }
 
-  return NextResponse.json({ ok: true, saved: rows.length, version });
+  return NextResponse.json({ ok: true, saved: rows.length, version,
+    tidak_berubah: hasil.tidakBerubah, ringkasan: hasil.perBulan });
 }

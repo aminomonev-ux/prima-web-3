@@ -10,7 +10,7 @@
 
 export type ApiResult<T = unknown> =
   | { ok: true; data?: T; message?: string; [k: string]: unknown }
-  | { ok: false; message: string; status?: number; code?: string };
+  | { ok: false; message: string; status?: number; code?: string; [k: string]: unknown };
 
 export function pesanDari(body: Record<string, unknown>): string {
   for (const laci of ['message', 'error', 'msg'] as const) {
@@ -48,7 +48,11 @@ export async function fetchJson<T = unknown>(
       // satu laci saja menampilkan "HTTP 503" padahal kalimatnya ada di laci sebelah.
       const msg = pesanDari(body) || `HTTP ${res.status} ${res.statusText}`.trim();
       const code = typeof body.code === 'string' ? body.code : undefined;
-      return { ok: false, message: msg, status: res.status, ...(code ? { code } : {}) };
+      // Sisa isi balasan IKUT diteruskan: 409 membawa bahan untuk kalimatnya sendiri
+      // (`existing`/`incoming` pagar penurunan, `pelanggaran` bulan tertutup, `oleh`/`pada`
+      // bentrok). Dulu hanya message/status/code yang lolos, jadi dialog penurunan
+      // E-Anggaran berbunyi "tersimpan 0 baris, akan ditulis 0 baris".
+      return { ...body, ok: false, message: msg, status: res.status, ...(code ? { code } : {}) };
     } catch {
       // Body bukan JSON (mis. HTML error page) → fallback ke status
       return {

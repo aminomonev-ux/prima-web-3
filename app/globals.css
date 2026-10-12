@@ -3299,6 +3299,20 @@ button:hover .prima-del-top { transform: rotate(160deg); }
   background: rgba(245,158,11,.12); border: 1px solid #F59E0B; color: #FCD34D;
 }
 [data-theme="light"] .tp-ingat { background: rgba(245,158,11,.10); color: #92400E; }
+
+/* E-Anggaran Realisasi — Tutup Bulan (docs/CONCEPT-kinerja-simpan-realisasi.md §5).
+   Kelas berpasangan dgn [data-theme="light"], bukan warna sebaris: warna sebaris tidak
+   ikut dipetakan ulang tema terang (pelajaran .tp-ingat). */
+.kn-tutup {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin: -6px 0 14px; padding: 8px 12px; border-radius: 10px;
+  font-size: 11.5px; line-height: 1.5;
+  background: rgba(4,44,83,.5); border: 1px solid #0C447C; color: #B5D4F4;
+}
+.kn-tutup > span { flex: 1 1 260px; }
+.kn-tutup-terkunci { background: rgba(245,158,11,.12); border-color: #F59E0B; color: #FCD34D; }
+[data-theme="light"] .kn-tutup { background: rgba(139,92,246,.05); border-color: rgba(139,92,246,.2); color: #374151; }
+[data-theme="light"] .kn-tutup-terkunci { background: rgba(245,158,11,.10); border-color: #F59E0B; color: #92400E; }
 [data-theme="light"] .rl-diff { background: #fff; border: 1px solid #E1E7EE; }
 [data-theme="light"] .rl-diff-judul { color: #5B7392; }
 [data-theme="light"] .rl-reg-ringkas { color: #5B7392; }

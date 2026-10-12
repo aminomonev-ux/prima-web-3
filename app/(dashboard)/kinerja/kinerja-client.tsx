@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 // O2: Tab dynamic-imported supaya bundle initial /kinerja tidak include
 // semua tab. Tab di-load on-demand saat user pertama kali navigasi ke sana.
 const DashboardTab = lazy(() => import('./_tabs/DashboardTab'));
@@ -28,6 +28,9 @@ import { SUMBER_LIST, recalcAllRealisasi } from './_utils';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
 import { versiUntukPilihan, type PilihanVersiRekap, type SlotVersiSsk,
   type VersiSumberRekap } from '@/lib/kinerja/versi';
+import { bandingRealisasi, kalimatBelumTersimpan } from '@/lib/kinerja/banding-realisasi';
+import { jumlahSskBerubah } from '@/lib/kinerja/sunting-ssk';
+import type { BulanTertutup } from '@/lib/kinerja/tutup-bulan';
 import Sidebar from './_components/Sidebar';
 import Topbar from './_components/Topbar';
 import { bolehBatalkanFinal } from '@/lib/constants';
@@ -101,6 +104,12 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   const [sskVersi,    setSskVersi]    = useState<{ tipe: 'MURNI'|'PERUBAHAN'; seq: number }>({ tipe: 'MURNI', seq: 0 });
   const [sskVersion,  setSskVersion]  = useState(0); // V3-6 optimistic lock baseline (dari GET)
   const [realVersion, setRealVersion] = useState(0); // V3-6 optimistic lock baseline realisasi
+  /**
+   * Isi TERSIMPAN terakhir (dari GET / sesudah Simpan). "Belum tersimpan" dihitung dari
+   * layar vs dasar ini, bukan bendera yang dinyalakan di tiap jalur (L79b) — ketik,
+   * Init, Impor, Samakan, Pulihkan terdeteksi tanpa satu pun bisa lupa memasangnya.
+   */
+  const [sskDasar,    setSskDasar]    = useState<SskRow[]>([]);
 
   // Form states
   // O2: masterInput, masterEditId, 3 ref state dipindah ke _tabs/MasterTab.
@@ -119,6 +128,9 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   const [realisasiSumber, setRealisasiSumber] = useState<SumberSSK>('GAJI');
   const [realisasiBulan,  setRealisasiBulan]  = useState<number>(new Date().getMonth() + 1);
   const [realisasiRows,   setRealisasiRows]   = useState<RealRow[]>([]);
+  const [realDasar,       setRealDasar]       = useState<RealRow[]>([]);
+  /** Bulan realisasi yang sudah ditutup — datang di balasan yang sama dengan barisnya (L88). */
+  const [realTertutup,    setRealTertutup]    = useState<BulanTertutup[]>([]);
   const [realisasiAllRows, setRealisasiAllRows] = useState<RealRow[]>([]);
   // A8: item SSK versi aktif SEMUA sumber — penyebut Rekap. Datang dari balasan
   // yang sama dengan barisnya, jadi "versi mana" cuma punya satu jawaban (L88).
@@ -161,13 +173,6 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   // Loaded guard (avoid double-fetch)
   const loaded = useRef<Record<string,boolean>>({});
 
-  // Tahun change: reset loaded guard supaya semua tab re-fetch dgn tahun baru.
-  // React 19: pisah dari inline JSX agar mutasi ref tidak terdeteksi sbg "during render".
-  const handleTahunChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setTahun(e.target.value);
-    loaded.current = {};
-  }, []);
-
   // Ref untuk melacak pending master rows (dipakai di beforeunload listener).
   // O2: di-set via callback `onPendingChange` dari MasterTab (state lokal panel).
   const pendingMasterRef = useRef(false);
@@ -175,28 +180,71 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     pendingMasterRef.current = hasPending;
   }, []);
 
+  // ─── Belum tersimpan: Realisasi & RKO ──────────────────────────────────────
+  // Layar Realisasi menampilkan SATU bulan tapi memegang setahun, dan hampir tiap
+  // pergantian konteks (sumber, versi, tahun, menu) memuat ulang lalu menimpa layar —
+  // dulu tanpa satu pertanyaan pun. Docs/CONCEPT-kinerja-simpan-realisasi.md §4.
+  const bandingReal = useMemo(() => bandingRealisasi(realDasar, realisasiRows), [realDasar, realisasiRows]);
+  const sskBerubah  = useMemo(() => jumlahSskBerubah(sskDasar, sskRows), [sskDasar, sskRows]);
+  const alasanBelumTersimpan = useMemo(() => {
+    const bagian: string[] = [];
+    if (bandingReal.adaPerubahan) bagian.push(`Realisasi ${realisasiSumber}: ${kalimatBelumTersimpan(bandingReal.perBulan)}`);
+    if (sskBerubah > 0) bagian.push(`RKO ${activeSumber}: ${sskBerubah} baris`);
+    return bagian.length > 0 ? bagian.join('\n') : null;
+  }, [bandingReal, sskBerubah, realisasiSumber, activeSumber]);
+  // Lewat ref: `guardPending` & beforeunload dipasang sekali dan dipakai Topbar/Sidebar.
+  const alasanRef = useRef<string | null>(null);
+  const buangRef  = useRef<() => void>(() => {});
+  useEffect(() => {
+    alasanRef.current = alasanBelumTersimpan;
+    // "Tinggalkan" = isiannya DIBUANG: layar dikembalikan ke isi tersimpan, kalau tidak
+    // isian yang sudah ditinggalkan tetap tercatat "belum tersimpan" dan setiap
+    // pergantian berikutnya menanyakannya lagi.
+    buangRef.current = () => { setRealisasiRows(realDasar); setSskRows(sskDasar); };
+  }, [alasanBelumTersimpan, realDasar, sskDasar]);
+
+  /** Kalimat isian yang belum tersimpan di seluruh shell, `null` kalau aman. */
+  const alasanTinggalkan = useCallback((): string | null => {
+    const bagian = [
+      pendingMasterRef.current ? 'Master Rekening: ada data baru' : null,
+      alasanRef.current,
+    ].filter(Boolean);
+    return bagian.length > 0 ? bagian.join('\n') : null;
+  }, []);
+
   // Guard browser refresh / close tab
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
-      if (pendingMasterRef.current) {
+      if (alasanTinggalkan()) {
         e.preventDefault();
         e.returnValue = '';
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  }, [alasanTinggalkan]);
 
-  /** Guard navigasi jika ada data master baru belum disimpan.
-   *  O2: pakai pendingMasterRef.current (di-update via callback dari MasterTab).
-   *  useCallback supaya ref-access tidak terdeteksi sebagai during-render. */
+  /** Guard tiap pergantian yang membuang isi layar: menu, sumber, versi, tahun, Keluar.
+   *  useCallback + ref supaya ref-access tidak terdeteksi sebagai during-render. */
   const guardPending = useCallback((action: () => void) => {
-    if (pendingMasterRef.current) {
-      showConfirm('Ada data baru di Master Rekening yang belum disimpan.\nAbaikan dan lanjutkan?', action);
+    const alasan = alasanTinggalkan();
+    if (alasan) {
+      showConfirm(`Ada isian yang belum disimpan:\n${alasan}\n\nAbaikan dan lanjutkan?`, () => { buangRef.current(); action(); });
     } else {
       action();
     }
-  }, []);
+  }, [alasanTinggalkan]);
+
+  // Tahun change: reset loaded guard supaya semua tab re-fetch dgn tahun baru.
+  // React 19: pisah dari inline JSX agar mutasi ref tidak terdeteksi sbg "during render".
+  // Lewat guardPending: ganti tahun memuat ulang semua tab dan menimpa isian di layar.
+  const handleTahunChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const t = e.target.value;
+    guardPending(() => {
+      setTahun(t);
+      loaded.current = {};
+    });
+  }, [guardPending]);
 
   // Click-outside untuk tutup sidebar flyout (saat collapsed).
   // Drop-user click-outside dipindah ke <Topbar/> (refs scope di sana).
@@ -220,6 +268,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     setLoggingOut(true);
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     pendingMasterRef.current = false;
+    alasanRef.current = null;
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Keluar wajib muat ulang penuh: sisa sesi ikut terbuang
     window.location.href = '/login';
   }, []);
@@ -278,10 +327,18 @@ export default function KinerjaClient({ userId, role, username, themePreference,
 
   // Refactor Versi: auto-set sskVersi ke LATEST (seq tertinggi) saat ganti sumber/tahun.
   // Default UX: user lihat versi terbaru, bukan MURNI (yang biasanya sudah locked).
+  // Nomor giliran tiap pemuat: pergantian sumber/versi/tab memicu beberapa pemuatan
+  // berturut-turut, dan jawaban yang datang TERLAMBAT tidak boleh menimpa yang terbaru —
+  // layarnya akan berisi angka sumber/versi lain di bawah label yang benar.
+  const giliranVersiRef = useRef(0);
+  const giliranSskRef   = useRef(0);
+  const giliranRealRef  = useRef(0);
+
   const ensureLatestVersi = useCallback(async (sumber: SumberSSK) => {
+    const giliran = ++giliranVersiRef.current;
     try {
       const d = await fetchJson<unknown>(`/api/kinerja/ssk/versi-list?tahun=${tahun}&sumber=${sumber}`);
-      if (!d.ok) return;
+      if (!d.ok || giliran !== giliranVersiRef.current) return;
       const items = ((d as unknown as { items: { versi_tipe: 'MURNI'|'PERUBAHAN'; versi_seq: number }[] }).items) ?? [];
       if (items.length === 0) { setSskVersi({ tipe: 'MURNI', seq: 0 }); return; }
       // Cari latest: max seq, prefer PERUBAHAN > MURNI di seq sama
@@ -295,34 +352,52 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   }, [tahun]);
 
   const fetchSsk = useCallback(async (sumber: SumberSSK, versiTipe?: 'MURNI'|'PERUBAHAN', versiSeq?: number) => {
+    const giliran = ++giliranSskRef.current;
     setLoadingData(true);
     const vt = versiTipe ?? sskVersi.tipe;
     const vs = versiSeq  ?? sskVersi.seq;
     try {
       const d = await fetchJson<unknown>(`/api/kinerja/ssk?tahun=${tahun}&sumber=${sumber}&versi_tipe=${vt}&versi_seq=${vs}`);
+      if (giliran !== giliranSskRef.current) return;
       if (d.ok) {
-        setSskRows((d as unknown as { rows: SskRow[] }).rows);
+        const rows = (d as unknown as { rows: SskRow[] }).rows;
+        setSskRows(rows);
+        setSskDasar(rows);
         setSskVersion(Number((d as unknown as { version?: number }).version ?? 0));
       } else toast.error(d.message || 'Gagal memuat SSK');
-    } finally { setLoadingData(false); }
+    } finally { if (giliran === giliranSskRef.current) setLoadingData(false); }
+  }, [tahun, sskVersi.tipe, sskVersi.seq]);
+
+  /**
+   * Isi realisasi tersimpan TANPA memasangnya ke layar — dipakai pemuat biasa DAN
+   * penggabung bentrok 409 (yang harus membandingkan dulu sebelum memasang apa pun).
+   */
+  const ambilRealisasi = useCallback(async (sumber: SumberSSK, versiTipe?: 'MURNI'|'PERUBAHAN', versiSeq?: number) => {
+    const vt = versiTipe ?? sskVersi.tipe;
+    const vs = versiSeq  ?? sskVersi.seq;
+    const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${sumber}&versi_tipe=${vt}&versi_seq=${vs}`);
+    if (!d.ok) return { ok: false as const, message: d.message };
+    const j = d as unknown as { rows: RealRow[]; version?: number; tertutup?: BulanTertutup[] };
+    // Refactor Versi: GET hydrated path mengembalikan kolom turunan ter-recalc dari server.
+    // Tetap panggil recalcAllRealisasi (idempotent) supaya konsisten dgn UI lama saat user edit.
+    return { ok: true as const, rows: recalcAllRealisasi(j.rows), version: Number(j.version ?? 0), tertutup: j.tertutup ?? [] };
   }, [tahun, sskVersi.tipe, sskVersi.seq]);
 
   const fetchRealisasi = useCallback(async (sumber: SumberSSK, versiTipe?: 'MURNI'|'PERUBAHAN', versiSeq?: number) => {
+    const giliran = ++giliranRealRef.current;
     setLoadingData(true);
-    const vt = versiTipe ?? sskVersi.tipe;
-    const vs = versiSeq  ?? sskVersi.seq;
     try {
-      const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${sumber}&versi_tipe=${vt}&versi_seq=${vs}`);
-      if (d.ok) {
-        // Refactor Versi: GET hydrated path mengembalikan kolom turunan ter-recalc dari server.
-        // Tetap panggil recalcAllRealisasi (idempotent) supaya konsisten dgn UI lama saat user edit.
-        const rows = (d as unknown as { rows: RealRow[] }).rows;
-        setRealisasiRows(recalcAllRealisasi(rows));
-        setRealVersion(Number((d as unknown as { version?: number }).version ?? 0));
+      const h = await ambilRealisasi(sumber, versiTipe, versiSeq);
+      if (giliran !== giliranRealRef.current) return;
+      if (h.ok) {
+        setRealisasiRows(h.rows);
+        setRealDasar(h.rows);
+        setRealVersion(h.version);
+        setRealTertutup(h.tertutup);
       }
-      else toast.error(d.message || 'Gagal memuat realisasi');
-    } finally { setLoadingData(false); }
-  }, [tahun, sskVersi.tipe, sskVersi.seq]);
+      else toast.error(h.message || 'Gagal memuat realisasi');
+    } finally { if (giliran === giliranRealRef.current) setLoadingData(false); }
+  }, [ambilRealisasi]);
 
   /**
    * `pilihan` dioper eksplisit, bukan dibaca dari state: pemilihnya memanggil
@@ -458,8 +533,14 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   // O2: useEffect untuk fetchKpi() dipindah ke DashboardTab (panel-lokal).
   // O2: useEffect fetchMaster dipindah ke _tabs/MasterTab (panel-lokal).
   useEffect(() => { if (activeTab === 'rekening') fetchRekening(activeSumber); }, [activeTab, activeSumber, tahun, fetchRekening]);
-  // Refactor Versi: auto-set versi latest saat sumber/tahun berubah
-  useEffect(() => { ensureLatestVersi(activeSumber); }, [activeSumber, tahun, ensureLatestVersi]);
+  // Refactor Versi: auto-set versi latest saat sumber/tahun berubah.
+  // Versi acuan dipakai bersama tab RKO (sumber `activeSumber`) dan tab Realisasi/Cetak
+  // (sumber `realisasiSumber`) — keduanya BISA berbeda. Dulu yang dipakai selalu
+  // `activeSumber`, jadi membuka Realisasi BLUD sementara GAJI sudah PERUBAHAN-1 memuat
+  // BLUD dengan versi yang tidak ia punya: semua baris yatim, Init berkata "SSK kosong".
+  const tabRealisasi = activeTab === 'realisasi' || activeTab === 'cetak';
+  const sumberVersi = tabRealisasi ? realisasiSumber : activeSumber;
+  useEffect(() => { ensureLatestVersi(sumberVersi); }, [sumberVersi, tahun, ensureLatestVersi]);
   useEffect(() => {
     if (activeTab === 'ssk') {
       fetchSsk(activeSumber);
@@ -517,6 +598,12 @@ export default function KinerjaClient({ userId, role, username, themePreference,
       if (tab !== 'realisasi' && tab !== 'cetak') setRealOpen(false);
     });
   }, [guardPending]);
+
+  // Pergantian di DALAM tab yang memuat ulang lalu menimpa layar — lewat penjaga yang sama.
+  const gantiSumberRealisasi = useCallback((s: SumberSSK) => guardPending(() => setRealisasiSumber(s)), [guardPending]);
+  const gantiSumberRko       = useCallback((s: SumberSSK) => guardPending(() => setActiveSumber(s)), [guardPending]);
+  const pilihVersi = useCallback((v: { tipe: 'MURNI'|'PERUBAHAN'; seq: number }) =>
+    guardPending(() => setSskVersi(v)), [guardPending]);
 
   // ── Sidebar/Topbar di-extract ke _components/{Sidebar,Topbar}.tsx — eliminasi
   // rule react-hooks/refs (refs trace via guardPending closure).
@@ -784,7 +871,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   sskRows={sskRows}
                   setSskRows={setSskRows}
                   activeSumber={activeSumber}
-                  setActiveSumber={setActiveSumber}
+                  setActiveSumber={gantiSumberRko}
                   rekeningRows={rekeningRows}
                   tahun={tahun}
                   canEdit={canEdit}
@@ -794,9 +881,12 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   isLight={isLight}
                   sskVersi={sskVersi}
                   setSskVersi={setSskVersi}
+                  pilihVersi={pilihVersi}
                   sskVersion={sskVersion}
                   setSskVersion={setSskVersion}
                   refetchSsk={() => fetchSsk(activeSumber)}
+                  sskBerubah={sskBerubah}
+                  setSskDasar={setSskDasar}
                 />
               </Suspense>
             )}
@@ -804,7 +894,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
               <Suspense fallback={<div style={{ padding:'40px', textAlign:'center', color:'#85B7EB' }}>Memuat...</div>}>
                 <RealisasiTab
                   realisasiSumber={realisasiSumber}
-                  setRealisasiSumber={setRealisasiSumber}
+                  setRealisasiSumber={gantiSumberRealisasi}
                   realisasiBulan={realisasiBulan}
                   setRealisasiBulan={setRealisasiBulan}
                   realisasiRows={realisasiRows}
@@ -817,10 +907,16 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   setSaving={setSaving}
                   isLight={isLight}
                   sskVersi={sskVersi}
-                  setSskVersi={setSskVersi}
+                  pilihVersi={pilihVersi}
                   realVersion={realVersion}
                   setRealVersion={setRealVersion}
                   refetchReal={() => fetchRealisasi(realisasiSumber)}
+                  realDasar={realDasar}
+                  setRealDasar={setRealDasar}
+                  bandingReal={bandingReal}
+                  realTertutup={realTertutup}
+                  setRealTertutup={setRealTertutup}
+                  ambilRealisasi={ambilRealisasi}
                   autoOpenImport={autoImportReal}
                   onImportConsumed={consumeImportReal}
                 />

@@ -41,15 +41,21 @@ interface Props {
   // Refactor Versi (Checkpoint C):
   sskVersi: VersiValue;
   setSskVersi: React.Dispatch<React.SetStateAction<VersiValue>>;
+  /** Ganti versi lewat pemilih — melalui penjaga belum-tersimpan shell. */
+  pilihVersi: (v: VersiValue) => void;
   sskVersion: number; // V3-6 optimistic lock baseline
   setSskVersion: React.Dispatch<React.SetStateAction<number>>;
   refetchSsk: () => void;
+  /** Baris yang berbeda dari isi tersimpan (lib/kinerja/sunting-ssk.ts). */
+  sskBerubah: number;
+  setSskDasar: React.Dispatch<React.SetStateAction<SskRow[]>>;
 }
 
 export default function SskTab({
   sskRows, setSskRows, activeSumber, setActiveSumber,
   rekeningRows, tahun, canEdit, loadingData, saving, setSaving,
-  isLight = false, sskVersi, setSskVersi, sskVersion, setSskVersion, refetchSsk,
+  isLight = false, sskVersi, setSskVersi, pilihVersi, sskVersion, setSskVersion, refetchSsk,
+  sskBerubah, setSskDasar,
 }: Props) {
   // ─── Versi list + locked detect ─────────────────────────────────────────
   const [showImport,    setShowImport]    = useState(false);
@@ -242,7 +248,7 @@ export default function SskTab({
     toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
   }
 
-  async function saveSsk(force = false) {
+  async function saveSsk(force = false, setujuBulanTertutup = false) {
     if (versiLocked) { toast.error(`Versi ${versiLabel} sudah dikunci, tidak bisa diubah.`); return; }
     setSaving(true);
     try {
@@ -253,11 +259,13 @@ export default function SskTab({
           versi_tipe: sskVersi.tipe, versi_seq: sskVersi.seq,
           expected_version: sskVersion, // V3-6 optimistic lock
           force,
+          setuju_bulan_tertutup: setujuBulanTertutup,
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
         }),
       });
       if (d.ok) {
         toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} baris SSK ${versiLabel}`);
+        setSskDasar(sskRows);
         // Refetch versi-list + rows (sinkron baseline version terbaru)
         fetchVersiList();
         refetchSsk();
@@ -269,7 +277,18 @@ export default function SskTab({
         refetchSsk();
       } else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
         const ok = await konfirmasiPenurunan(`SSK ${activeSumber} ${versiLabel}`, d as unknown as JawabanPagar);
-        if (ok) { setSaving(false); await saveSsk(true); return; }
+        if (ok) { setSaving(false); await saveSsk(true, setujuBulanTertutup); return; }
+      } else if ((d as unknown as { code?: string }).code === 'TARGET_BULAN_TERTUTUP') {
+        // Peringatan, bukan penolakan: koreksi RKO itu sah, tapi laporan bulan yang
+        // realisasinya sudah ditutup ikut bergeser bila versi ini jadi pembanding.
+        const ok = await confirmDialog({
+          title:        'Target bulan yang sudah ditutup ikut berubah',
+          message:      `${d.message}\n\nTetap simpan?`,
+          confirmLabel: 'Tetap simpan',
+          cancelLabel:  'Batal',
+          variant:      'warning',
+        });
+        if (ok) { setSaving(false); await saveSsk(force, true); return; }
       } else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
@@ -343,10 +362,25 @@ export default function SskTab({
               value={sskVersi}
               items={versiItems}
               loading={versiLoading}
-              onChange={v => { setSskVersi(v); refetchSsk(); }}
-              onCreatePerubahan={() => setConfirmCreate(true)}
+              onChange={v => pilihVersi(v)}
+              onCreatePerubahan={() => {
+                // Buat Perubahan menyalin isi TERSIMPAN. Suntingan yang belum disimpan
+                // tidak ikut tersalin, lalu terbuang saat layar pindah ke versi baru — dan
+                // versi ini sudah terkunci, jadi tidak bisa disimpan lagi ke sana.
+                if (sskBerubah > 0) {
+                  toast.error(`Ada ${sskBerubah} baris RKO ${versiLabel} yang belum disimpan. Buat Perubahan menyalin isi yang `
+                    + 'TERSIMPAN, jadi suntingan itu tidak akan ikut. Simpan dulu, baru buat Perubahan.', { duration: 9000 });
+                  return;
+                }
+                setConfirmCreate(true);
+              }}
             />
             <span style={{ fontSize:'11px', fontWeight:500, color:cTextSub }}>{sskRows.length} baris</span>
+            {sskBerubah > 0 && (
+              <span style={{ fontSize:'11px', fontWeight:700, color: isLight?'#854F0B':'#FAC775' }}>
+                · {sskBerubah} baris belum tersimpan
+              </span>
+            )}
             {versiLocked && (
               <span style={{ fontSize:'10px', fontWeight:700, color:'#B45309', background:'rgba(245,158,11,.15)', padding:'2px 8px', borderRadius:'6px', border:'1px solid rgba(245,158,11,.4)' }}>
                 <Lock size="1em" style={{ marginRight:'4px', display:'inline', verticalAlign:'-0.125em' }} /> TERKUNCI (read-only)

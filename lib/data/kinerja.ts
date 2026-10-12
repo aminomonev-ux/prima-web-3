@@ -4,6 +4,13 @@ import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simp
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '@/lib/kinerja/master-nama';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
+import { bandingRealisasi, pelanggaranBulanTertutup, type BarisBanding, type RingkasBulan } from '@/lib/kinerja/banding-realisasi';
+import {
+  REALISASI_LOCK_ENTITY, realisasiLockKey, KinerjaBulanTertutupError,
+  perubahanTargetTertutup, KinerjaTargetTertutupError,
+} from '@/lib/kinerja/tutup-bulan';
+import { bulanTertutupSet } from '@/lib/kinerja/tutup-bulan-data';
+import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
 import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
@@ -456,6 +463,21 @@ export class KinerjaVersionConflictError extends Error {
     this.name = 'KinerjaVersionConflictError';
   }
 }
+/**
+ * Siapa & jam berapa gembok ini terakhir dinaikkan — untuk kalimat 409 "Budi menyimpan
+ * pukul 10:42". Dibaca dari baris gembok itu sendiri, bukan audit: bump-nya satu
+ * transaksi dengan tulisannya, jadi mustahil menunjuk simpanan yang lain.
+ */
+export async function penyimpanTerakhir(entity: string, keyId: string): Promise<{ oleh: string | null; pada: string | null }> {
+  const rows = await sql`
+    SELECT COALESCE(u.nama_lengkap, u.username) AS oleh, DATE_FORMAT(l.updated_at, '%H:%i') AS pada
+    FROM blud_locks l LEFT JOIN users u ON u.id = l.updated_by
+    WHERE l.entity = ${entity} AND l.key_id = ${keyId}
+    LIMIT 1
+  ` as { oleh?: unknown; pada?: unknown }[];
+  return { oleh: rows[0]?.oleh ? String(rows[0].oleh) : null, pada: rows[0]?.pada ? String(rows[0].pada) : null };
+}
+
 export async function getKinerjaVersion(entity: string, keyId: string): Promise<number> {
   const rows = await sql`SELECT version FROM blud_locks WHERE entity = ${entity} AND key_id = ${keyId} LIMIT 1` as { version?: unknown }[];
   return Number(rows[0]?.version ?? 0);
@@ -647,6 +669,7 @@ export async function saveSskBatch(
   versiSeq: number = 0,
   expectedVersion?: number,
   force = false,
+  setujuBulanTertutup = false,
 ) {
   // PERF-C1: DELETE + bulk INSERT atomic (1 round-trip).
   // Refactor Versi (Checkpoint C): scope DELETE & INSERT per (versi_tipe, versi_seq) — versi
@@ -686,6 +709,25 @@ export async function saveSskBatch(
       throw new Error(`Versi ${versiTipe}-${versiSeq} sudah dikunci, tidak bisa diubah.`);
     }
     pagarReplace(`SSK ${sumber} ${versiTipe}-${versiSeq}`, Number(ada?.n ?? 0), rows.length, force);
+
+    // Peringatan, bukan pagar: koreksi RKO itu sah, tapi capaian & deviasi bulan yang
+    // realisasinya sudah ditutup ikut bergeser — orangnya harus tahu sebelum menulis.
+    if (!setujuBulanTertutup) {
+      const tertutup = await bulanTertutupSet(tx, tahun, sumber);
+      if (tertutup.size > 0) {
+        const lamaRko = await tx`
+          SELECT canonical_id, uraian, uraian_ssk, pagu, months
+          FROM kinerja_ssk
+          WHERE tahun = ${tahun} AND sumber = ${sumber}
+            AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
+          ORDER BY urut, id
+        ` as Record<string, unknown>[];
+        const ubah = perubahanTargetTertutup(
+          lamaRko.map(r => ({ ...r, months: parseJson<SskMonths>(r.months, emptyMonths()) })),
+          rows, tertutup);
+        if (ubah.length > 0) throw new KinerjaTargetTertutupError(ubah, [...tertutup]);
+      }
+    }
 
     await tx`
       DELETE FROM kinerja_ssk
@@ -979,6 +1021,13 @@ export async function getRealisasiHydrated(
   return { rows: recalcAllRealisasiServer(realRows, { sskByCanonical }), itemSsk, dinolkan };
 }
 
+/** Apa yang sebenarnya berubah oleh satu Simpan — untuk audit & toast. */
+export interface HasilSimpanRealisasi {
+  /** Isinya identik dengan yang tersimpan: tidak ada yang ditulis sama sekali. */
+  tidakBerubah: boolean;
+  perBulan: RingkasBulan[];
+}
+
 export async function saveRealisasiBatch(
   tahun: string,
   sumber: SumberSSK,
@@ -990,13 +1039,18 @@ export async function saveRealisasiBatch(
   userId: number,
   expectedVersion?: number,
   force = false,
-) {
+): Promise<HasilSimpanRealisasi> {
   // PERF-C1: DELETE + bulk INSERT atomic.
   // Refactor Versi (Checkpoint C fix): WAJIB include ssk_canonical_id, ssk_versi_tipe, ssk_versi_seq
   // di INSERT — kalau tidak, save akan wipe linkage ke SSK → semua kolom turunan jadi 0.
-  const lockEntity = 'kinerja_realisasi';
-  const lockKey = `${tahun}:${sumber}`;
+  const lockEntity = REALISASI_LOCK_ENTITY;
+  const lockKey = realisasiLockKey(tahun, sumber);
+  let hasil: HasilSimpanRealisasi = { tidakBerubah: true, perBulan: [] };
   await withTransaction(async ({ tx, conn }) => {
+    // Gembok SELALU diambil, bukan hanya saat `expected_version` dikirim: Tutup Bulan
+    // memakai gembok yang sama, dan pagar bulan tertutup di bawah hanya berarti kalau
+    // tidak ada yang bisa menutup bulan di sela pembacaannya. INSERT IGNORE dulu (L69-a).
+    await acquireBludLock(tx, lockEntity, lockKey);
     // V3-6: optimistic lock (reuse blud_locks, pola L51).
     if (expectedVersion !== undefined) {
       const vrows = await tx`
@@ -1005,19 +1059,36 @@ export async function saveRealisasiBatch(
       const current = Number(vrows[0]?.version ?? 0);
       if (current !== expectedVersion) throw new KinerjaVersionConflictError(expectedVersion, current);
     }
-    const [ada] = await tx`
-      SELECT COUNT(*) AS n FROM kinerja_realisasi WHERE tahun = ${tahun} AND sumber = ${sumber}
-    ` as { n: unknown }[];
-    pagarReplace(`Realisasi ${sumber} ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+    // Urutan `bulan, id` = urutan yang dipulangkan GET ke layar: baris kembar
+    // dipasangkan menurut kemunculannya (banding-realisasi.ts).
+    const lama = await tx`
+      SELECT bulan, ssk_canonical_id, ssk_versi_tipe, ssk_versi_seq, keterangan,
+             program, kegiatan, subkegiatan, uraian_ssk, real_fisik, real_keuangan,
+             updated_by, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+      FROM kinerja_realisasi
+      WHERE tahun = ${tahun} AND sumber = ${sumber}
+      ORDER BY bulan, id
+    ` as (BarisBanding & { updated_by: number | null; updated_at: string })[];
+    pagarReplace(`Realisasi ${sumber} ${tahun}`, lama.length, rows.length, force);
+
+    const tertutup = await bulanTertutupSet(tx, tahun, sumber);
+    const langgar = pelanggaranBulanTertutup(lama, rows, tertutup);
+    if (langgar.length > 0) throw new KinerjaBulanTertutupError(langgar);
+
+    const banding = bandingRealisasi(lama, rows);
+    // Isinya identik: tidak ada yang perlu ditulis. Angka gembok tidak naik dan tidak
+    // ada foto riwayat — 50 slot riwayat tidak boleh habis oleh klik Simpan iseng.
+    if (!banding.adaPerubahan) return;
+    hasil = { tidakBerubah: false, perBulan: banding.perBulan };
 
     await tx`DELETE FROM kinerja_realisasi WHERE tahun = ${tahun} AND sumber = ${sumber}`;
-    if (expectedVersion !== undefined) {
-      await tx`
-        INSERT INTO blud_locks (entity, key_id, version, updated_by)
-        VALUES (${lockEntity}, ${lockKey}, 1, ${userId})
-        ON DUPLICATE KEY UPDATE version = version + 1, updated_by = ${userId}
-      `;
-    }
+    // Dinaikkan pada SETIAP tulisan, termasuk pemanggil tanpa `expected_version`:
+    // tab lain yang masih memegang angka lama harus tahu isinya sudah bergeser.
+    await tx`
+      INSERT INTO blud_locks (entity, key_id, version, updated_by)
+      VALUES (${lockEntity}, ${lockKey}, 1, ${userId})
+      ON DUPLICATE KEY UPDATE version = version + 1, updated_by = ${userId}
+    `;
     // SEBELUM `return` di bawah, bukan di akhir fungsi. Simpanan kosong yang
     // dipaksa `force` justru yang paling perlu bisa ditarik balik — menaruhnya
     // sesudah `return` melewatkan tepat kasus itu (L69).
@@ -1028,26 +1099,37 @@ export async function saveRealisasiBatch(
       userId,
     });
     if (rows.length === 0) return;
+    // Baris yang isinya tidak berubah membawa jejak LAMANYA. Dulu tiap Simpan
+    // menstempel ke-12 bulan dengan orang & jam simpanan terakhir, jadi "siapa yang
+    // terakhir mengubah Januari" tidak bisa dijawab dari tabel ini sama sekali.
+    const sekarang = waktuSekarangWIB();
     // Checkpoint D: kolom turunan sudah di-DROP. INSERT cuma input persisten + identitas.
-    const values = rows.map(r => [
-      tahun, sumber, r.bulan,
-      r.ssk_canonical_id ?? '',
-      r.ssk_versi_tipe ?? 'MURNI',
-      r.ssk_versi_seq ?? 0,
-      r.keterangan,
-      r.program ?? '', r.kegiatan ?? '', r.subkegiatan ?? '', r.uraian_ssk ?? '',
-      r.real_fisik, r.real_keuangan, userId,
-    ]);
+    const values = rows.map((r, i) => {
+      const iLama = banding.pasanganSama.get(i);
+      const jejak = iLama === undefined ? null : lama[iLama];
+      return [
+        tahun, sumber, r.bulan,
+        r.ssk_canonical_id ?? '',
+        r.ssk_versi_tipe ?? 'MURNI',
+        r.ssk_versi_seq ?? 0,
+        r.keterangan,
+        r.program ?? '', r.kegiatan ?? '', r.subkegiatan ?? '', r.uraian_ssk ?? '',
+        r.real_fisik ?? 0, r.real_keuangan,
+        jejak ? jejak.updated_by : userId,
+        jejak ? jejak.updated_at : sekarang,
+      ];
+    });
     await bulkInsert(
       'kinerja_realisasi',
       ['tahun','sumber','bulan',
        'ssk_canonical_id','ssk_versi_tipe','ssk_versi_seq',
        'keterangan','program','kegiatan','subkegiatan','uraian_ssk',
-       'real_fisik','real_keuangan','updated_by'],
+       'real_fisik','real_keuangan','updated_by','updated_at'],
       values,
       conn,
     );
   });
+  return hasil;
 }
 
 // ─── Pendapatan CRR ───────────────────────────────────────────────────────────

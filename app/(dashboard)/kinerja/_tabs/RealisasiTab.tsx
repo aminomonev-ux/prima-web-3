@@ -4,7 +4,7 @@
 // State realisasi (sumber, bulan, rows) TIDAK lokal — di-share dengan CetakTab
 // (rekap mode konsumsi realisasiAllRows). Tetap di shell, di-pass via props.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
@@ -16,17 +16,28 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
-import { Wand2, Save, Upload, Equal, History, BarChart3, Lock, Coins, LineChart } from 'lucide-react';
+import { Wand2, Save, Upload, Equal, History, BarChart3, Lock, LockOpen, Coins, LineChart } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { laporanYatim } from '@/lib/kinerja/rekap';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi } from '@/lib/kinerja/hidrasi-ssk';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '@/lib/kinerja/samakan-target';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
+import {
+  gabungBentrok, terapkanPilihanBentrok, kalimatRingkasan, kalimatBelumTersimpan, NAMA_BULAN,
+  type HasilBanding, type RingkasBulan, type PelanggaranTertutup,
+} from '@/lib/kinerja/banding-realisasi';
+import { alasanTolakTutup, alasanTolakBuka, type BulanTertutup } from '@/lib/kinerja/tutup-bulan';
 import ImportRealisasiModal from '@/components/kinerja/ImportRealisasiModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
 import { useLampir, type LampirRealisasiData } from '@/lib/sentinel/lampir-store';
 import { uiTheme } from '@/lib/theme';
+
+/** 'YYYY-MM-DD HH:MM:SS' → '12 Okt 2026 10:42'. */
+function fmtStempel(s: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(s);
+  return m ? `${Number(m[3])} ${MONTH_SHORT[Number(m[2]) - 1]} ${m[1]} ${m[4]}:${m[5]}` : s;
+}
 
 interface Props {
   realisasiSumber: SumberSSK;
@@ -44,10 +55,19 @@ interface Props {
   isLight?: boolean;
   // Refactor Versi (Checkpoint C):
   sskVersi: VersiValue;
-  setSskVersi: React.Dispatch<React.SetStateAction<VersiValue>>;
+  /** Ganti versi acuan — lewat penjaga belum-tersimpan shell, karena memuat ulang layar. */
+  pilihVersi: (v: VersiValue) => void;
   realVersion: number;       // V3-6 optimistic lock baseline
   setRealVersion: React.Dispatch<React.SetStateAction<number>>;
   refetchReal: () => void;
+  /** Isi tersimpan terakhir — pembanding "belum tersimpan" & gabung bentrok. */
+  realDasar: RealRow[];
+  setRealDasar: React.Dispatch<React.SetStateAction<RealRow[]>>;
+  bandingReal: HasilBanding;
+  realTertutup: BulanTertutup[];
+  setRealTertutup: React.Dispatch<React.SetStateAction<BulanTertutup[]>>;
+  ambilRealisasi: (sumber: SumberSSK) => Promise<
+    { ok: true; rows: RealRow[]; version: number; tertutup: BulanTertutup[] } | { ok: false; message?: string }>;
   // IK-4 #5: dipicu Rima lewat /kinerja?import=realisasi → buka modal Import sekali.
   autoOpenImport?: boolean;
   onImportConsumed?: () => void;
@@ -56,9 +76,21 @@ interface Props {
 export default function RealisasiTab({
   realisasiSumber, setRealisasiSumber, realisasiBulan, setRealisasiBulan,
   realisasiRows, setRealisasiRows, sskRows, tahun, canEdit, loadingData, saving, setSaving,
-  isLight = false, sskVersi, setSskVersi, realVersion, setRealVersion, refetchReal,
+  isLight = false, sskVersi, pilihVersi, realVersion, setRealVersion, refetchReal,
+  realDasar, setRealDasar, bandingReal, realTertutup, setRealTertutup, ambilRealisasi,
   autoOpenImport = false, onImportConsumed,
 }: Props) {
+  // ─── Tutup Bulan & belum tersimpan (docs/CONCEPT-kinerja-simpan-realisasi.md) ──
+  const tertutupSet = useMemo(() => new Set(realTertutup.map(b => b.bulan)), [realTertutup]);
+  const bulanBelum  = useMemo(() => new Set(bandingReal.perBulan.map(x => x.bulan)), [bandingReal]);
+  const bulanIniTertutup = tertutupSet.has(realisasiBulan);
+  const infoTutupIni = realTertutup.find(b => b.bulan === realisasiBulan) ?? null;
+  const namaBulanIni = MONTH_LABELS[realisasiBulan - 1];
+  const alasanTutup = alasanTolakTutup([...tertutupSet], realisasiBulan)
+    ?? (bulanBelum.has(realisasiBulan) ? `Simpan dulu ketikan ${namaBulanIni} — yang dikunci angka yang TERSIMPAN.` : null);
+  const alasanBuka = alasanTolakBuka([...tertutupSet], realisasiBulan);
+  // Bulan tertutup hanya-baca di layar juga — pagarnya tetap di server (L82).
+  const bisaSunting = canEdit && !bulanIniTertutup;
   // Refactor Versi: list versi yang ada (untuk pill chip)
   const [versiItems,   setVersiItems]   = useState<VersiKinerja[]>([]);
   const [versiLoading, setVersiLoading] = useState(false);
@@ -79,8 +111,18 @@ export default function RealisasiTab({
   // IK-4: terapkan hasil Import (sumber yang sedang dibuka) ke DRAFT realisasi —
   // isi real_keuangan baris SSK pada bulan yang sesuai, lalu recalc turunan.
   // TIDAK menyimpan: user klik "Simpan Semua" (Model A′).
-  function applyImport(items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) {
+  function applyImport(semua: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) {
     asalPulihkanRef.current = null;
+    // Bulan tertutup dilewati DI SINI juga, bukan cuma ditolak server saat Simpan:
+    // ditolak belakangan berarti seluruh simpanan gagal karena satu bulan yang
+    // memang tidak boleh berubah.
+    const items = semua.filter(it => !tertutupSet.has(it.bulan_ke));
+    const dilewati = semua.length - items.length;
+    if (dilewati > 0) {
+      const bulan = [...new Set(semua.filter(it => tertutupSet.has(it.bulan_ke)).map(it => it.bulan_ke))]
+        .sort((a, b) => a - b).map(b => MONTH_LABELS[b - 1]);
+      toast.info(`${dilewati} baris di bulan yang sudah ditutup (${bulan.join(', ')}) dilewati.`, { duration: 8000 });
+    }
     setRealisasiRows(p => recalcAllRealisasi(p.map(r => {
       const hit = items.find(it => it.ssk_canonical_id === r.ssk_canonical_id && it.bulan_ke === r.bulan);
       if (!hit) return r;
@@ -153,6 +195,7 @@ export default function RealisasiTab({
   }
 
   async function samakanBulanIni() {
+    if (bulanIniTertutup) return;
     const { kosong, berisi } = ringkasSamakan(realisasiRows, realisasiBulan);
     const namaBulan = MONTH_LABELS[realisasiBulan-1];
     if (kosong === 0) {
@@ -267,10 +310,119 @@ export default function RealisasiTab({
       toast.error('Angka kunci versi tidak terbaca, jadi pemulihan dibatalkan. Coba lagi sebentar lagi.');
       return;
     }
-    setRealisasiRows(recalcAllRealisasi(hidrasiUlang(isi as RealRow[], sskRows, sskVersi)));
+    const pulih = hidrasiUlang(isi as RealRow[], sskRows, sskVersi);
+    // Bulan yang sudah ditutup TIDAK ikut dipulihkan — angkanya dikunci, dan memuatnya
+    // hanya membuat Simpan berikutnya ditolak seluruhnya.
+    const isiBaru = tertutupSet.size === 0 ? pulih : [
+      ...realisasiRows.filter(r => tertutupSet.has(r.bulan)),
+      ...pulih.filter(r => !tertutupSet.has(r.bulan)),
+    ].sort((a, b) => a.bulan - b.bulan);
+    setRealisasiRows(recalcAllRealisasi(isiBaru));
     setRealVersion(version);
     asalPulihkanRef.current = { id: item.id, disimpan_pada: item.disimpan_pada };
-    toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
+    const lewat = tertutupSet.size > 0
+      ? ` Bulan yang sudah ditutup (${[...tertutupSet].sort((a, b) => a - b).map(b => MONTH_LABELS[b - 1]).join(', ')}) tidak ikut dipulihkan.`
+      : '';
+    toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.${lewat}`, { duration: lewat ? 9000 : 4000 });
+  }
+
+  /**
+   * 409 VERSION_CONFLICT: orang lain menyimpan sumber yang sama sementara layar ini
+   * diketik. Dulu layar langsung dimuat ulang dan ketikannya terbuang. Kini ketikan
+   * (layar vs dasar) dipasang di atas isi terbaru; sel yang diubah dua orang dengan
+   * angka berbeda ditanyakan. Tetap BERHENTI DI FORM — tidak menyimpan otomatis (L78);
+   * angka kuncinya dari muatan terbaru, bukan yang lama (L77).
+   */
+  async function gabungSesudahBentrok(d409: { oleh?: string | null; pada?: string | null }) {
+    const h = await ambilRealisasi(realisasiSumber);
+    if (!h.ok) {
+      toast.error('Data realisasi sudah diubah pengguna lain, dan isi terbarunya gagal dimuat. '
+        + 'Ketikan Anda masih di layar — coba Simpan lagi sebentar lagi.', { duration: 9000 });
+      return;
+    }
+    const g = gabungBentrok(realDasar, realisasiRows, h.rows, new Set(h.tertutup.map(x => x.bulan)));
+    const siapa = d409.oleh ? `${d409.oleh}${d409.pada ? ` (pukul ${d409.pada})` : ''}` : 'Pengguna lain';
+    const bagian = [`${siapa} menyimpan realisasi ${realisasiSumber} sementara Anda mengetik`
+      + (g.orangLain.length > 0 ? ` — ${kalimatRingkasan(g.orangLain)}.` : '.')];
+    if (g.dipasang > 0) bagian.push(`Ketikan Anda (${g.dipasang} baris) sudah dipasang di atas data terbaru dan BELUM tersimpan. Periksa, lalu tekan Simpan lagi.`);
+    if (g.tidakBisa.length > 0) {
+      const sebab = { hilang: 'barisnya sudah tidak ada', tertutup: 'bulannya baru saja ditutup', 'diubah-orang-lain': 'diubah orang lain' } as const;
+      bagian.push(`Tidak bisa dipasang: ${g.tidakBisa.slice(0, 5).map(x => `${x.label} (${NAMA_BULAN[x.bulan - 1]}, ${sebab[x.alasan]})`).join('; ')}`
+        + (g.tidakBisa.length > 5 ? `; dan ${g.tidakBisa.length - 5} lainnya.` : '.'));
+    }
+    let rows = g.rows;
+    if (g.bentrok.length > 0) {
+      const daftar = g.bentrok.slice(0, 8).map(b =>
+        `• ${b.label} — ${NAMA_BULAN[b.bulan - 1]}, ${b.kolom === 'real_keuangan' ? 'real keuangan' : 'real fisik'}: `
+        + `Anda ${fmtNum(b.milikSaya)} · tersimpan ${fmtNum(b.tersimpan)}`).join('\n');
+      const pakaiSaya = await confirmDialog({
+        title:   'Angka yang sama diubah dua orang',
+        message: `${bagian.join('\n\n')}\n\n${g.bentrok.length} sel diubah Anda DAN orang lain dengan angka berbeda:\n${daftar}`
+          + (g.bentrok.length > 8 ? `\n• dan ${g.bentrok.length - 8} lainnya` : ''),
+        confirmLabel: 'Pakai angka saya',
+        cancelLabel:  'Pakai angka tersimpan',
+        variant:      'warning',
+      });
+      rows = terapkanPilihanBentrok(rows, g.bentrok, pakaiSaya ? 'saya' : 'tersimpan');
+      // Dialognya tidak menyebut ini kalau satu-satunya ketikan justru sel yang bentrok.
+      if (pakaiSaya || g.dipasang > 0) {
+        toast.info(`${pakaiSaya ? 'Angka Anda dipasang' : 'Angka tersimpan dipertahankan; ketikan Anda yang lain tetap di layar'} — `
+          + 'belum tersimpan, tekan Simpan lagi.', { duration: 7000 });
+      }
+    } else {
+      toast.warning(bagian.join(' '), { duration: 12000 });
+    }
+    setRealisasiRows(recalcAllRealisasi(rows));
+    setRealDasar(h.rows);
+    setRealVersion(h.version);
+    setRealTertutup(h.tertutup);
+  }
+
+  /** 409 BULAN_TERTUTUP: tawarkan membuang perubahan di bulan tertutup saja. */
+  async function tanganiBulanTertutup(d: { message?: string; pelanggaran?: PelanggaranTertutup[] }) {
+    const bulan = [...new Set((d.pelanggaran ?? []).map(p => p.bulan))].sort((a, b) => a - b);
+    const nama = bulan.map(b => MONTH_LABELS[b - 1]).join(', ');
+    const h = await ambilRealisasi(realisasiSumber);
+    if (h.ok) setRealTertutup(h.tertutup);
+    const buang = await confirmDialog({
+      title:   'Bulan sudah ditutup',
+      message: `${d.message ?? ''}\n\nBuang perubahan di ${nama} dan kembalikan ke angka tersimpan? Perubahan di bulan lain tetap di layar.`,
+      confirmLabel: `Buang perubahan ${nama}`,
+      cancelLabel:  'Biarkan dulu',
+      variant:      'warning',
+    });
+    if (!buang) return;
+    const kena = new Set(bulan);
+    setRealisasiRows(p => recalcAllRealisasi([
+      ...p.filter(r => !kena.has(r.bulan)),
+      ...realDasar.filter(r => kena.has(r.bulan)),
+    ].sort((a, b) => a.bulan - b.bulan)));
+    toast.info(`Perubahan di ${nama} dibuang. Tekan Simpan lagi untuk bulan lainnya.`);
+  }
+
+  async function tutupAtauBuka(aksi: 'TUTUP' | 'BUKA') {
+    const ok = await confirmDialog(aksi === 'TUTUP' ? {
+      title:   `Tutup realisasi ${namaBulanIni}?`,
+      message: `Angka realisasi ${namaBulanIni} ${realisasiSumber} ${tahun} dikunci: Simpan tidak bisa lagi mengubahnya `
+        + `sampai bulan ini dibuka kembali.\n\nBulan ditutup berurutan, dan yang bisa dibuka hanya bulan tertutup terakhir.`,
+      confirmLabel: `Tutup ${namaBulanIni}`,
+      variant:      'success',
+    } : {
+      title:   `Buka kembali ${namaBulanIni}?`,
+      message: `Angka realisasi ${namaBulanIni} ${realisasiSumber} ${tahun} bisa diubah lagi lewat Simpan. `
+        + `Kalau ${namaBulanIni} sudah dilaporkan, koreksi sesudah ini tidak akan sama dengan laporannya.`,
+      confirmLabel: `Buka ${namaBulanIni}`,
+      variant:      'warning',
+    });
+    if (!ok) return;
+    const d = await fetchJson<unknown>('/api/kinerja/realisasi/tutup-bulan', {
+      method: 'POST',
+      body: JSON.stringify({ tahun, sumber: realisasiSumber, bulan: realisasiBulan, aksi }),
+    });
+    if (d.ok) {
+      setRealTertutup((d as unknown as { tertutup: BulanTertutup[] }).tertutup ?? []);
+      toast.success(aksi === 'TUTUP' ? `${namaBulanIni} ditutup.` : `${namaBulanIni} dibuka kembali.`);
+    } else toast.error(d.message || 'Gagal');
   }
 
   async function saveRealisasi(force = false) {
@@ -282,15 +434,21 @@ export default function RealisasiTab({
         body: JSON.stringify({ tahun, sumber: realisasiSumber, rows, expected_version: realVersion, force,
           asal_pulihkan: asalPulihkanRef.current ?? undefined }),
       });
+      const kode = (d as unknown as { code?: string }).code;
       if (d.ok) {
-        toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} baris realisasi`);
-        setRealisasiRows(rows); refetchReal();
+        // Yang benar-benar berubah, bukan "180 baris": Simpan selalu mengirim setahun.
+        const j = d as unknown as { tidak_berubah?: boolean; ringkasan?: RingkasBulan[] };
+        if (j.tidak_berubah) toast.info('Tidak ada angka yang berubah — tidak ada yang ditulis.');
+        else toast.success(`Tersimpan — ${kalimatRingkasan(j.ringkasan ?? [])}`, { duration: 6000 });
+        setRealisasiRows(rows); setRealDasar(rows); refetchReal();
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pulihan.
         asalPulihkanRef.current = null;
       }
-      else if ((d as unknown as { code?: string }).code === 'VERSION_CONFLICT') {
-        toast.error('Data realisasi sudah diubah pengguna lain — memuat versi terbaru.');
-        refetchReal();
+      else if (kode === 'VERSION_CONFLICT') {
+        await gabungSesudahBentrok(d as unknown as { oleh?: string | null; pada?: string | null });
+      }
+      else if (kode === 'BULAN_TERTUTUP') {
+        await tanganiBulanTertutup(d as unknown as { message?: string; pelanggaran?: PelanggaranTertutup[] });
       }
       // Pagar simpan: barisnya turun drastis / kosong. Ditanyakan, bukan ditolak
       // buntu — mengosongkan satu sumber dengan sengaja itu pekerjaan yang sah.
@@ -361,7 +519,7 @@ export default function RealisasiTab({
               value={sskVersi}
               items={versiItems}
               loading={versiLoading}
-              onChange={v => setSskVersi(v)}
+              onChange={v => pilihVersi(v)}
               /* onCreatePerubahan disengaja undefined — versi baru dibuat dari SSK, bukan Realisasi */
             />
           </div>
@@ -375,6 +533,13 @@ export default function RealisasiTab({
               </span>
             )}
           </div>
+          {/* Layar menampilkan SATU bulan tapi Simpan mengirim setahun — ketikan di bulan
+              lain yang terlupa harus tetap terlihat dari sini. */}
+          {bandingReal.adaPerubahan && (
+            <div style={{ fontSize:'11px', fontWeight:700, marginTop:'6px', color: isLight?'#854F0B':'#FAC775' }}>
+              Belum tersimpan: {kalimatBelumTersimpan(bandingReal.perBulan)}
+            </div>
+          )}
         </div>
         {canEdit && (
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
@@ -388,9 +553,11 @@ export default function RealisasiTab({
             </PrimaButton></Tip>
             <Tip label={versiLocked
               ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa input baru.`
-              : `Isi Real Fisik ${MONTH_LABELS[realisasiBulan-1]} sama dengan targetnya, hanya baris yang masih kosong`}>
+              : bulanIniTertutup
+                ? `${namaBulanIni} sudah ditutup — angkanya tidak bisa diubah.`
+                : `Isi Real Fisik ${MONTH_LABELS[realisasiBulan-1]} sama dengan targetnya, hanya baris yang masih kosong`}>
               <PrimaButton variant="warning" iconLeft={<Equal size={14} />}
-                onClick={samakanBulanIni} disabled={versiLocked}>
+                onClick={samakanBulanIni} disabled={versiLocked || bulanIniTertutup}>
                 Samakan Target
               </PrimaButton>
             </Tip>
@@ -435,8 +602,12 @@ export default function RealisasiTab({
           const b = i + 1;
           const active = realisasiBulan === b;
           const count = realisasiRows.filter(r => r.bulan === b).length;
+          const tutup = tertutupSet.has(b);
+          const belum = bulanBelum.has(b);
           return (
-            <button key={b} onClick={() => setRealisasiBulan(b)} style={{
+            <button key={b} onClick={() => setRealisasiBulan(b)}
+              data-tooltip={[tutup ? 'Sudah ditutup' : '', belum ? 'Ada ketikan belum tersimpan' : ''].filter(Boolean).join(' · ') || undefined}
+              style={{
               flex:'1 0 auto', minWidth:'52px', padding:'5px 6px', borderRadius:'7px', border:'none',
               cursor:'pointer', fontSize:'11px', fontWeight: active ? 800 : 600,
               background: active ? theme.color : (isLight?'#FFFFFF':'rgba(4,44,83,.5)'),
@@ -444,7 +615,14 @@ export default function RealisasiTab({
               boxShadow: active ? `0 2px 8px ${theme.color}44` : '0 1px 3px rgba(0,0,0,.06)',
               transition:'all .15s', position:'relative',
             }}>
+              {tutup && <Lock size={10} style={{ display:'inline', verticalAlign:'-0.05em', marginRight:'3px' }} />}
               {label}
+              {belum && (
+                <span aria-label="belum tersimpan" style={{
+                  position:'absolute', top:'-3px', left:'-3px', width:'9px', height:'9px', borderRadius:'50%',
+                  background:'#EF9F27', border:`2px solid ${isLight?'#FFFFFF':'#020F1C'}`,
+                }} />
+              )}
               {count > 0 && (
                 <span style={{
                   position:'absolute', top:'-4px', right:'-3px',
@@ -458,6 +636,41 @@ export default function RealisasiTab({
           );
         })}
       </div>
+
+      {/* Tutup Bulan — per sumber, berurutan (lib/kinerja/tutup-bulan.ts) */}
+      {bulanIniTertutup ? (
+        <div className="kn-tutup kn-tutup-terkunci">
+          <Lock size={14} style={{ flexShrink:0 }} />
+          <span>
+            <strong>{namaBulanIni} {tahun} sudah ditutup</strong>
+            {infoTutupIni && <> oleh {infoTutupIni.ditutup_oleh ?? 'pengguna yang sudah dihapus'}, {fmtStempel(infoTutupIni.ditutup_pada)}</>}.
+            {' '}Angkanya tidak bisa diubah — buka dulu bulan ini kalau memang perlu dikoreksi.
+          </span>
+          {canEdit && (
+            <Tip label={alasanBuka ?? `Angka ${namaBulanIni} bisa diubah lagi lewat Simpan`}>
+              <PrimaButton menulis variant="warning" iconLeft={<LockOpen size={14} />}
+                onClick={() => tutupAtauBuka('BUKA')} disabled={!!alasanBuka}>
+                Buka {namaBulanIni}
+              </PrimaButton>
+            </Tip>
+          )}
+        </div>
+      ) : canEdit && (
+        <div className="kn-tutup">
+          <span>
+            {tertutupSet.size > 0
+              ? <>Tertutup s/d <strong>{MONTH_LABELS[Math.max(...tertutupSet) - 1]}</strong>. </>
+              : <>Belum ada bulan yang ditutup. </>}
+            Menutup bulan mengunci angka realisasinya supaya tidak berubah sesudah dilaporkan.
+          </span>
+          <Tip label={alasanTutup ?? `Kunci angka realisasi ${namaBulanIni} ${realisasiSumber}`}>
+            <PrimaButton menulis variant="success" iconLeft={<Lock size={14} />}
+              onClick={() => tutupAtauBuka('TUTUP')} disabled={!!alasanTutup}>
+              Tutup {namaBulanIni}
+            </PrimaButton>
+          </Tip>
+        </div>
+      )}
 
       {/* Info: editable vs auto columns */}
       <div style={{ display:'flex', gap:'12px', marginBottom:'10px', fontSize:'11px' }}>
@@ -513,7 +726,7 @@ export default function RealisasiTab({
                     <span style={{ color:cTextSub, fontSize:'12px' }}>{(row.target_fisik||0).toFixed(2)}%</span>
                   </td>
                   <td style={{ padding:'3px 6px', borderBottom:cBorderHair }}>
-                    {canEdit
+                    {bisaSunting
                       ? (
                         <span style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
                           <InputNominal value={row.real_fisik||0} onChange={v => updateRealInput(idx,'real_fisik',v)}
@@ -539,7 +752,7 @@ export default function RealisasiTab({
                       : <span style={{ color: isLight?'#15803D':'#16a34a', fontWeight:700 }}>{fmtNum(row.real_fisik)}</span>}
                   </td>
                   <td style={{ padding:'3px 6px', borderBottom:cBorderHair }}>
-                    {canEdit
+                    {bisaSunting
                       ? <InputNominal value={row.real_keuangan||0} onChange={v => updateRealInput(idx,'real_keuangan',v)}
                           style={{ ...inpBase, width:'120px', textAlign:'right', borderColor: isLight?'#10b981':'#86efac' }} />
                       : <span style={{ color: isLight?'#15803D':'#16a34a', fontWeight:700 }}>{fmtNum(row.real_keuangan)}</span>}

@@ -6,6 +6,7 @@ import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, SskBodySchema, jej
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
 import { hitungDinolkan } from '@/lib/kinerja/nol-kan';
+import { KinerjaTargetTertutupError } from '@/lib/kinerja/tutup-bulan';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -46,12 +47,13 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = SskBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version, force, asal_pulihkan } = parsed.data;
+  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version, force, asal_pulihkan, setuju_bulan_tertutup } = parsed.data;
   const versiTipe = versi_tipe ?? 'MURNI';
   const versiSeq  = versi_seq  ?? 0;
 
   try {
-    await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version, force ?? false);
+    await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version, force ?? false,
+      setuju_bulan_tertutup ?? false);
   } catch (err) {
     // V3-6: optimistic-lock conflict → 409 dengan code agar client bisa auto-reload.
     if (err instanceof KinerjaVersionConflictError) {
@@ -60,6 +62,14 @@ export async function PUT(req: NextRequest) {
     if (err instanceof KinerjaReplaceSafetyError) {
       return NextResponse.json(
         { ok: false, code: 'PENURUNAN_DRASTIS', message: err.message, existing: err.existing, incoming: err.incoming },
+        { status: 409 },
+      );
+    }
+    // Peringatan, bukan penolakan: klien menanyakannya lalu mengulang dengan
+    // `setuju_bulan_tertutup` (docs/CONCEPT-kinerja-simpan-realisasi.md §5).
+    if (err instanceof KinerjaTargetTertutupError) {
+      return NextResponse.json(
+        { ok: false, code: 'TARGET_BULAN_TERTUTUP', message: err.message, perubahan: err.perubahan.slice(0, 50) },
         { status: 409 },
       );
     }
@@ -80,6 +90,7 @@ export async function PUT(req: NextRequest) {
     // menjawab kenapa pagu setahun tiba-tiba mengecil.
     detail:    `Simpan SSK ${sumber} ${tahun} ${versiTipe}-${versiSeq}: ${rows.length} baris`
       + (hitungDinolkan(rows) > 0 ? ` (${hitungDinolkan(rows)} dinol-kan)` : '')
+      + (setuju_bulan_tertutup ? ' — mengubah target/pagu bulan yang realisasinya sudah ditutup (sudah diperingatkan)' : '')
       + jejakPulihkan(asal_pulihkan),
   });
 

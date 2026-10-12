@@ -17,6 +17,12 @@ import { kinerjaRateLimit, TahunSchema, SumberSchema, VersiTipeSchema, VersiSeqS
 import { pickVersiAktif } from '@/lib/kinerja/versi';
 import { kinerjaMati } from '../_guard';
 import { bolehBatalkanFinal } from '@/lib/constants';
+import { acquireBludLock } from '@/lib/data/locks';
+import { REALISASI_LOCK_ENTITY, realisasiLockKey } from '@/lib/kinerja/tutup-bulan';
+import { adaBulanTertutup } from '@/lib/kinerja/tutup-bulan-data';
+
+/** Realisasi sumber ini punya bulan tertutup — Reset ditolak sampai dibuka. */
+class ResetBulanTertutupError extends Error {}
 
 const BodySchema = z.object({
   tahun:      TahunSchema,
@@ -60,9 +66,15 @@ export async function POST(req: NextRequest) {
   let deletedSsk = 0;
   let deletedRealisasi = 0;
 
+  try {
   await withTransaction(async ({ tx }) => {
     // Realisasi dihapus DULU supaya tidak ada FK orphan
     if (scope === 'realisasi' || scope === 'both') {
+      // Bulan tertutup = angka yang sudah dilaporkan. Reset tidak boleh jadi pintu
+      // belakangnya: buka dulu bulannya (tercatat di audit), baru Reset. Gembok yang
+      // sama dengan Simpan & Tutup Bulan, supaya tidak ada bulan yang ditutup di sela.
+      await acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber));
+      if (await adaBulanTertutup(tx, tahun, sumber)) throw new ResetBulanTertutupError();
       // L53: sql/tx wrapper return non-SELECT hasil sebagai Array<{affectedRows}>,
       // BUKAN object — akses lewat [0]. Cast object langsung diam-diam selalu 0
       // → audit log + UI tampilkan "0 baris dihapus" padahal data benar terhapus.
@@ -132,6 +144,15 @@ export async function POST(req: NextRequest) {
       }
     }
   });
+  } catch (e) {
+    if (e instanceof ResetBulanTertutupError) {
+      return NextResponse.json({
+        ok: false, code: 'BULAN_TERTUTUP',
+        message: `Realisasi ${sumber} ${tahun} punya bulan yang sudah ditutup. Buka dulu bulannya di layar Realisasi (mulai dari bulan terakhir), baru Reset.`,
+      }, { status: 409 });
+    }
+    throw e;
+  }
 
   await writeAuditLog({
     req,

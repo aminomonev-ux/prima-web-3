@@ -529,6 +529,20 @@ CREATE TABLE IF NOT EXISTS kinerja_riwayat_simpan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Riwayat tiap klik Simpan SSK/Realisasi/Rekening — snapshot, tidak dirujuk siapa pun';
 
+-- Tutup Bulan Realisasi (migration-kinerja-bulan-tutup.sql). Ada baris = tertutup;
+-- urutan & pagarnya di lib/kinerja/tutup-bulan.ts + saveRealisasiBatch.
+CREATE TABLE IF NOT EXISTS kinerja_bulan_tutup (
+  tahun         VARCHAR(10)  NOT NULL COMMENT 'Ikut kinerja_* — VARCHAR, bukan SMALLINT',
+  sumber        ENUM('GAJI','BLUD','HARLEP','PROMKES','SARPRAS',
+                     'OBAT','PEMELIHARAAN','PEMBANGUNAN') NOT NULL,
+  bulan         TINYINT      NOT NULL COMMENT '1=Jan, 12=Des',
+  ditutup_oleh  INT              NULL,
+  ditutup_pada  DATETIME     NOT NULL COMMENT 'WIB, distempel server',
+  PRIMARY KEY (tahun, sumber, bulan),
+  CONSTRAINT fk_kbt_user FOREIGN KEY (ditutup_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Bulan realisasi E-Anggaran yang sudah ditutup — angkanya tidak bisa diubah Simpan';
+
 -- ─── BLUD — DPA & PERGESERAN ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS dpa_blud (

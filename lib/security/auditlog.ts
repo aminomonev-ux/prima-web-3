@@ -69,6 +69,8 @@ export type AuditEventType =
   | 'KINERJA_VERSI_LOCKED'     // (reserved) manual lock versi
   | 'KINERJA_VERSI_SWITCH'     // (reserved) UI switch versi aktif — telemetry-grade
   | 'KINERJA_DATA_RESET'       // POST /api/kinerja/reset — destructive bulk delete (SUPER_ADMIN only)
+  | 'KINERJA_TUTUP_BULAN'      // POST /api/kinerja/realisasi/tutup-bulan aksi=TUTUP — angka bulan itu dikunci
+  | 'KINERJA_BUKA_BULAN'       // POST /api/kinerja/realisasi/tutup-bulan aksi=BUKA
   // ─── Usulan ───────────────────────────────────────────────────────────────
   | 'TELAAH_USULAN'
   | 'REVIEW_BIDANG'
