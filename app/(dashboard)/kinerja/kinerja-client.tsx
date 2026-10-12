@@ -351,22 +351,29 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     } catch { /* fallback ke MURNI seq=0 */ }
   }, [tahun]);
 
+  /** Isi RKO tersimpan TANPA memasangnya — pemuat biasa DAN penggabung bentrok 409. */
+  const ambilSsk = useCallback(async (sumber: SumberSSK, versiTipe?: 'MURNI'|'PERUBAHAN', versiSeq?: number) => {
+    const vt = versiTipe ?? sskVersi.tipe;
+    const vs = versiSeq  ?? sskVersi.seq;
+    const d = await fetchJson<unknown>(`/api/kinerja/ssk?tahun=${tahun}&sumber=${sumber}&versi_tipe=${vt}&versi_seq=${vs}`);
+    if (!d.ok) return { ok: false as const, message: d.message };
+    const j = d as unknown as { rows: SskRow[]; version?: number };
+    return { ok: true as const, rows: j.rows, version: Number(j.version ?? 0) };
+  }, [tahun, sskVersi.tipe, sskVersi.seq]);
+
   const fetchSsk = useCallback(async (sumber: SumberSSK, versiTipe?: 'MURNI'|'PERUBAHAN', versiSeq?: number) => {
     const giliran = ++giliranSskRef.current;
     setLoadingData(true);
-    const vt = versiTipe ?? sskVersi.tipe;
-    const vs = versiSeq  ?? sskVersi.seq;
     try {
-      const d = await fetchJson<unknown>(`/api/kinerja/ssk?tahun=${tahun}&sumber=${sumber}&versi_tipe=${vt}&versi_seq=${vs}`);
+      const h = await ambilSsk(sumber, versiTipe, versiSeq);
       if (giliran !== giliranSskRef.current) return;
-      if (d.ok) {
-        const rows = (d as unknown as { rows: SskRow[] }).rows;
-        setSskRows(rows);
-        setSskDasar(rows);
-        setSskVersion(Number((d as unknown as { version?: number }).version ?? 0));
-      } else toast.error(d.message || 'Gagal memuat SSK');
+      if (h.ok) {
+        setSskRows(h.rows);
+        setSskDasar(h.rows);
+        setSskVersion(h.version);
+      } else toast.error(h.message || 'Gagal memuat SSK');
     } finally { if (giliran === giliranSskRef.current) setLoadingData(false); }
-  }, [tahun, sskVersi.tipe, sskVersi.seq]);
+  }, [ambilSsk]);
 
   /**
    * Isi realisasi tersimpan TANPA memasangnya ke layar — dipakai pemuat biasa DAN
@@ -886,7 +893,9 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   setSskVersion={setSskVersion}
                   refetchSsk={() => fetchSsk(activeSumber)}
                   sskBerubah={sskBerubah}
+                  sskDasar={sskDasar}
                   setSskDasar={setSskDasar}
+                  ambilSsk={ambilSsk}
                 />
               </Suspense>
             )}

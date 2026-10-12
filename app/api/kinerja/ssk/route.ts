@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getSskRows, saveSskBatch, getKinerjaVersion, KinerjaVersionConflictError, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
+import { getSskRows, saveSskBatch, getKinerjaVersion, penyimpanTerakhir, KinerjaVersionConflictError, KinerjaReplaceSafetyError, KinerjaVersiTerkunciError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, SskBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
@@ -55,9 +55,14 @@ export async function PUT(req: NextRequest) {
     await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version, force ?? false,
       setuju_bulan_tertutup ?? false);
   } catch (err) {
-    // V3-6: optimistic-lock conflict → 409 dengan code agar client bisa auto-reload.
+    // V3-6: layar memasang ketikan di atas isi terbaru (bentrok-ssk.ts) dan menyebut
+    // siapa & jam berapa — cermin route Realisasi.
     if (err instanceof KinerjaVersionConflictError) {
-      return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message, actual: err.actual }, { status: 409 });
+      const { oleh, pada } = await penyimpanTerakhir('kinerja_ssk', `${tahun}:${sumber}:${versiTipe}:${versiSeq}`);
+      return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message, actual: err.actual, oleh, pada }, { status: 409 });
+    }
+    if (err instanceof KinerjaVersiTerkunciError) {
+      return NextResponse.json({ ok: false, code: 'VERSI_TERKUNCI', message: err.message }, { status: 409 });
     }
     if (err instanceof KinerjaReplaceSafetyError) {
       return NextResponse.json(

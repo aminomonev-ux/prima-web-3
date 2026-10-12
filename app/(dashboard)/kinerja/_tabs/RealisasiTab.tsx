@@ -111,7 +111,10 @@ export default function RealisasiTab({
   // IK-4: terapkan hasil Import (sumber yang sedang dibuka) ke DRAFT realisasi —
   // isi real_keuangan baris SSK pada bulan yang sesuai, lalu recalc turunan.
   // TIDAK menyimpan: user klik "Simpan Semua" (Model A′).
-  function applyImport(semua: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) {
+  // Memulangkan jumlah baris yang BENAR-BENAR diisi — modal memakainya untuk
+  // toast-nya; menghitung sendiri dari isi berkas berbunyi "4 baris diisi"
+  // padahal 2 di antaranya dilewati karena bulannya tertutup.
+  function applyImport(semua: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]): number {
     asalPulihkanRef.current = null;
     // Bulan tertutup dilewati DI SINI juga, bukan cuma ditolak server saat Simpan:
     // ditolak belakangan berarti seluruh simpanan gagal karena satu bulan yang
@@ -121,6 +124,10 @@ export default function RealisasiTab({
     if (dilewati > 0) {
       const bulan = [...new Set(semua.filter(it => tertutupSet.has(it.bulan_ke)).map(it => it.bulan_ke))]
         .sort((a, b) => a - b).map(b => MONTH_LABELS[b - 1]);
+      if (items.length === 0) {
+        toast.error(`Semua ${dilewati} baris berada di bulan yang sudah ditutup (${bulan.join(', ')}) — tidak ada yang diisi.`, { duration: 8000 });
+        return 0;
+      }
       toast.info(`${dilewati} baris di bulan yang sudah ditutup (${bulan.join(', ')}) dilewati.`, { duration: 8000 });
     }
     setRealisasiRows(p => recalcAllRealisasi(p.map(r => {
@@ -132,6 +139,7 @@ export default function RealisasiTab({
         ? { ...r, real_keuangan: hit.realisasi }
         : { ...r, real_keuangan: hit.realisasi, real_fisik: hit.real_fisik };
     })));
+    return items.length;
   }
 
   // IK-4 #5: buka modal Import sekali saat datang via ?import=realisasi. Bila ada

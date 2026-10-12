@@ -15,6 +15,7 @@ import {
 } from '../lib/kinerja/banding-realisasi'
 import { alasanTolakTutup, alasanTolakBuka, perubahanTargetTertutup, kalimatPelanggaran } from '../lib/kinerja/tutup-bulan'
 import { jumlahSskBerubah } from '../lib/kinerja/sunting-ssk'
+import { gabungBentrokSsk, terapkanPilihanBentrokSsk, kalimatSelBentrokSsk } from '../lib/kinerja/bentrok-ssk'
 
 let lulus = 0
 const gagal: string[] = []
@@ -236,6 +237,12 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   ok('G22 Gabung: angka kunci & dasar dari muatan TERBARU (L77)', urut(gab, 'gabungBentrok(realDasar, realisasiRows, h.rows,', 'setRealDasar(h.rows);', 'setRealVersion(h.version);'))
   ok('G23 Gabung: tidak menyimpan otomatis (L78)', !gab.includes("fetchJson<unknown>('/api/kinerja/realisasi'") && !gab.includes('saveRealisasi('))
   ok('G24 Impor melewati bulan tertutup', badan(RT, 'real_fisik?: number }[])').includes('semua.filter(it => !tertutupSet.has(it.bulan_ke))'))
+  // Ditemukan saat dicoba di layar: toast modal menghitung isi BERKAS ("4 baris diisi")
+  // padahal 2 di antaranya dilewati karena Januari tertutup.
+  const imporModal = badan(kode('components/kinerja/ImportRealisasiModal.tsx'), 'function terapkan()')
+  ok('G24b Toast impor menyebut baris yang BENAR-BENAR diisi', urut(imporModal, 'const masuk = onApply(items);', 'if (masuk > 0) toast.success(`${masuk} baris diisi')
+    && !imporModal.includes('${items.length} baris diisi')
+    && badan(RT, 'real_fisik?: number }[])').includes('return items.length;'))
   ok('G25 Pulihkan mempertahankan bulan tertutup', urut(badan(RT, 'item: { id: number; disimpan_pada: string })'),
     '...realisasiRows.filter(r => tertutupSet.has(r.bulan))', '...pulih.filter(r => !tertutupSet.has(r.bulan))'))
   ok('G26 Samakan mati di bulan tertutup', badan(RT, 'async function samakanBulanIni(').includes('if (bulanIniTertutup) return;')
@@ -257,7 +264,7 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
     && urut(badan(KC, 'const fetchSsk = useCallback('), '++giliranSskRef.current', 'if (giliran !== giliranSskRef.current) return;')
     && urut(badan(KC, 'const ensureLatestVersi = useCallback('), '++giliranVersiRef.current', 'giliran !== giliranVersiRef.current'))
   ok('G34 Shell: pemuat mengisi dasar bersama barisnya', urut(badan(KC, 'const fetchRealisasi = useCallback('), 'setRealisasiRows(h.rows);', 'setRealDasar(h.rows);', 'setRealTertutup(h.tertutup);')
-    && urut(badan(KC, 'const fetchSsk = useCallback('), 'setSskRows(rows);', 'setSskDasar(rows);'))
+    && urut(badan(KC, 'const fetchSsk = useCallback('), 'setSskRows(h.rows);', 'setSskDasar(h.rows);', 'setSskVersion(h.version);'))
   ok('G35 Shell: pergantian sumber & versi di dalam tab lewat penjaga', KC.includes('setRealisasiSumber={gantiSumberRealisasi}')
     && KC.includes('setActiveSumber={gantiSumberRko}') && (KC.match(/pilihVersi=\{pilihVersi\}/g) ?? []).length === 2)
   ok('G36 Shell: ganti tahun lewat penjaga', urut(badan(KC, 'const handleTahunChange = useCallback('), 'guardPending(() => {', 'setTahun(t);'))
@@ -292,6 +299,122 @@ console.log('\n── H. fetchJson meneruskan isi balasan 409 ──────
   } finally {
     globalThis.fetch = asli
   }
+}
+
+console.log('\n── I. Tahap 4 — gabung bentrok RKO ──────────────────────────────')
+{
+  const bln = (v: number) => ({ jan: v, feb: v, mar: v, apr: v, mei: v, jun: v, jul: v, agu: v, sep: v, okt: v, nov: v, des: v })
+  type B = { canonical_id?: string; uraian_ssk: string; uraian: string; pagu: number; months: Record<string, number>; is_nullified?: boolean }
+  const s = (cid: string, pagu = 1200, m = 100, lain: Partial<B> = {}): B =>
+    ({ canonical_id: cid, uraian_ssk: 'U', uraian: `Rek ${cid}`, pagu, months: bln(m), ...lain })
+  const ubahBulan = (r: B, k: string, v: number): B => ({ ...r, months: { ...r.months, [k]: v } })
+  const dasar = [s('A'), s('B'), s('C')]
+
+  {
+    const g = gabungBentrokSsk(dasar, [ubahBulan(dasar[0], 'mar', 500), dasar[1], dasar[2]], [dasar[0], ubahBulan(dasar[1], 'jun', 700), dasar[2]])
+    ok('I1 beda baris → dua-duanya bertahan, tanpa bentrok', g.bentrok.length === 0 && g.dipasang === 1
+      && g.rows[0].months.mar === 500 && g.rows[1].months.jun === 700)
+  }
+  {
+    const g = gabungBentrokSsk(dasar, [ubahBulan(dasar[0], 'mar', 500), dasar[1], dasar[2]], [ubahBulan(dasar[0], 'jun', 700), dasar[1], dasar[2]])
+    ok('I2 baris sama, bulan beda → per sel, tanpa bentrok', g.bentrok.length === 0 && g.rows[0].months.mar === 500 && g.rows[0].months.jun === 700)
+  }
+  {
+    const g = gabungBentrokSsk(dasar, [ubahBulan(dasar[0], 'mar', 500), dasar[1], dasar[2]], [ubahBulan(dasar[0], 'mar', 900), dasar[1], dasar[2]])
+    ok('I3 sel sama, angka beda → bentrok; isi tersimpan yang tinggal', g.bentrok.length === 1 && g.bentrok[0].kolom === 'mar'
+      && g.bentrok[0].milikSaya === 500 && g.bentrok[0].tersimpan === 900 && g.rows[0].months.mar === 900)
+    ok('I4 "pakai angka saya" menulis ketikan', terapkanPilihanBentrokSsk(g.rows, g.bentrok, 'saya')[0].months.mar === 500)
+    ok('I5 "pakai angka tersimpan" membiarkan', terapkanPilihanBentrokSsk(g.rows, g.bentrok, 'tersimpan')[0].months.mar === 900)
+  }
+  {
+    const g = gabungBentrokSsk(dasar, [ubahBulan(dasar[0], 'mar', 500), dasar[1], dasar[2]], [ubahBulan(dasar[0], 'mar', 500), dasar[1], dasar[2]])
+    ok('I6 angka sama di kedua pihak → bukan bentrok', g.bentrok.length === 0 && g.rows[0].months.mar === 500)
+  }
+  {
+    const g = gabungBentrokSsk(dasar, [{ ...dasar[0], pagu: 2400 }, dasar[1], dasar[2]], [dasar[0], dasar[1], dasar[2]])
+    ok('I7 pagu ikut digabung', g.rows[0].pagu === 2400 && g.dipasang === 1)
+  }
+  {
+    const baru: B = { uraian_ssk: 'U', uraian: 'Rek BARU', pagu: 50, months: bln(5) }
+    const g = gabungBentrokSsk(dasar, [...dasar, baru], dasar)
+    ok('I8 baris hasil Inject ikut, di belakang', g.rows.length === 4 && g.rows[3].uraian === 'Rek BARU' && g.dipasang === 1)
+    const milikLain = s('K-LAIN', 50, 5, { uraian: 'Rek BARU' })
+    const g2 = gabungBentrokSsk(dasar, [...dasar, baru], [...dasar, milikLain])
+    ok('I9 rekening yang sama sudah ditambahkan orang lain → SATU baris, bukan dua', g2.rows.length === 4
+      && g2.rows.filter(r => r.uraian === 'Rek BARU').length === 1 && g2.rows[3].canonical_id === 'K-LAIN' && g2.bentrok.length === 0)
+    const g2b = gabungBentrokSsk(dasar, [...dasar, baru, { ...baru, pagu: 70 }], [...dasar, milikLain])
+    ok('I9b dua baris baru bernama sama, orang lain menambah satu → yang kedua tetap ikut', g2b.rows.length === 5
+      && g2b.rows.filter(r => r.uraian === 'Rek BARU').length === 2 && g2b.rows[4].pagu === 70)
+    const g3 = gabungBentrokSsk(dasar, [...dasar, { ...baru, pagu: 80 }], [...dasar, milikLain])
+    ok('I10 …dgn angka berbeda → bentrok pada baris orang itu', g3.rows.length === 4 && g3.bentrok.some(b => b.kolom === 'pagu' && b.milikSaya === 80)
+      && terapkanPilihanBentrokSsk(g3.rows, g3.bentrok, 'saya')[3].pagu === 80)
+  }
+  {
+    const g = gabungBentrokSsk(dasar, [dasar[0], dasar[2]], dasar)
+    ok('I11 baris yang saya hapus & tak disentuh orang lain → ikut terhapus', g.rows.length === 2 && !g.rows.some(r => r.canonical_id === 'B'))
+    const g2 = gabungBentrokSsk(dasar, [dasar[0], dasar[2]], [dasar[0], ubahBulan(dasar[1], 'jan', 1), dasar[2]])
+    ok('I12 …tapi diubah orang lain → dipertahankan & disebut', g2.rows.some(r => r.canonical_id === 'B')
+      && g2.tidakBisa.some(x => x.alasan === 'diubah-orang-lain'))
+  }
+  {
+    const g = gabungBentrokSsk(dasar, [ubahBulan(dasar[0], 'mar', 500), dasar[1], dasar[2]], [dasar[1], dasar[2]])
+    ok('I13 ketikan di baris yang dihapus orang lain → disebut "hilang", tidak dihidupkan lagi', g.rows.length === 2
+      && g.tidakBisa.length === 1 && g.tidakBisa[0].alasan === 'hilang')
+  }
+  {
+    // Nol-kan: diputuskan UTUH. Per sel, "pakai tersimpan" di Februari melahirkan baris
+    // dinol-kan yang masih bertarget Februari.
+    const nol = { ...dasar[0], is_nullified: true, pagu: 0, months: bln(0) }
+    const lain = ubahBulan(dasar[0], 'feb', 999)
+    const g = gabungBentrokSsk(dasar, [nol, dasar[1], dasar[2]], [lain, dasar[1], dasar[2]])
+    ok('I14 nol-kan × suntingan orang lain → tidak dipasang sebagian', g.rows[0].is_nullified !== true && g.rows[0].months.feb === 999 && g.rows[0].pagu === 1200)
+    const saya = terapkanPilihanBentrokSsk(g.rows, g.bentrok, 'saya')[0]
+    ok('I15 …"saya" = baris dinol-kan utuh', saya.is_nullified === true && saya.pagu === 0 && Object.values(saya.months).every(v => v === 0))
+    const tersimpan = terapkanPilihanBentrokSsk(g.rows, g.bentrok, 'tersimpan')[0]
+    ok('I16 …"tersimpan" = baris orang lain utuh', tersimpan.is_nullified !== true && tersimpan.months.feb === 999 && tersimpan.months.mar === 100)
+    const g2 = gabungBentrokSsk(dasar, [nol, dasar[1], dasar[2]], dasar)
+    ok('I17 nol-kan tanpa saingan → dipasang utuh', g2.rows[0].is_nullified === true && g2.rows[0].pagu === 0 && g2.bentrok.length === 0)
+    const g3 = gabungBentrokSsk(dasar, [ubahBulan(dasar[0], 'mar', 500), dasar[1], dasar[2]], [nol, dasar[1], dasar[2]])
+    ok('I18 orang lain nol-kan × suntingan saya → ditanyakan utuh, tidak menempel di baris dinol-kan', g3.rows[0].is_nullified === true
+      && g3.rows[0].months.mar === 0 && g3.bentrok.some(b => b.kolom === 'is_nullified'))
+  }
+  {
+    const terbaru = [ubahBulan(dasar[0], 'mar', 9), dasar[1], dasar[2]]
+    const g = gabungBentrokSsk(dasar, dasar.map(x => ({ ...x })), terbaru)
+    ok('I19 tanpa ketikan → isi terbaru apa adanya', g.dipasang === 0 && g.bentrok.length === 0 && g.rows[0].months.mar === 9)
+    ok('I20 hasil tidak berbagi objek dgn isi terbaru (layar bebas disunting)', g.rows.every((r, i) => r !== terbaru[i] && r.months !== terbaru[i].months))
+  }
+  ok('I21 kalimat sel bentrok', kalimatSelBentrokSsk({ kunci: 'c:A#0', label: 'Rek A', kolom: 'feb', milikSaya: 10, tersimpan: 12 }, n => String(n))
+    === '• Rek A — target Feb: Anda 10 · tersimpan 12'
+    && kalimatSelBentrokSsk({ kunci: 'c:A#0', label: 'Rek A', kolom: 'is_nullified', milikSaya: 1, tersimpan: 0 }, n => String(n)).endsWith('nol-kan: Anda ya · tersimpan tidak'))
+
+  const ST = kode('app/(dashboard)/kinerja/_tabs/SskTab.tsx')
+  const save = badan(ST, 'async function saveSsk(')
+  ok('I22 Layar RKO: 409 bentrok digabung, tidak lagi dimuat ulang buta', urut(save, "'VERSION_CONFLICT'", 'await gabungSesudahBentrok(')
+    && !/'VERSION_CONFLICT'\) \{\s*toast\.error\([^)]*\);\s*refetchSsk\(\);/.test(save))
+  // Penanda di UJUNG tanda tangan: parameternya bertipe objek, `{` pertama milik tipe itu.
+  const gab = badan(ST, 'pada?: string | null })')
+  ok('I23 Gabung RKO: dasar & angka kunci dari muatan TERBARU (L77)', urut(gab, 'gabungBentrokSsk(sskDasar, sskRows, h.rows)', 'setSskDasar(h.rows);', 'setSskVersion(h.version);'))
+  ok('I24 …turunan dihitung ulang lewat rumus tunggal', gab.includes('setSskRows(rows.map(r => ({ ...r, ...hitungTurunanRko(r.pagu, r.months) })));'))
+  ok('I25 …tidak menyimpan otomatis (L78)', !gab.includes("'/api/kinerja/ssk'") && !gab.includes('saveSsk('))
+  // Cabangnya dipotong sampai `} else if` berikutnya — pesannya memuat `${…}`, jadi
+  // pola `[^}]*` berhenti di tengah kalimat dan tak pernah sampai ke kodenya.
+  const cabangKunci = save.slice(save.indexOf("'VERSI_TERKUNCI'"), save.indexOf('} else if', save.indexOf("'VERSI_TERKUNCI'")))
+  ok('I26 Versi baru terkunci → ketikan TETAP di layar, daftar versi disegarkan', cabangKunci.includes('fetchVersiList();')
+    && !cabangKunci.includes('refetchSsk(') && !cabangKunci.includes('setSskRows('))
+  const sRoute = kode('app/api/kinerja/ssk/route.ts')
+  ok('I27 Route RKO: 409 bentrok menyebut siapa & jam dari gembok versi itu', sRoute.includes("penyimpanTerakhir('kinerja_ssk', `${tahun}:${sumber}:${versiTipe}:${versiSeq}`)")
+    && sRoute.includes("code: 'VERSION_CONFLICT', message: err.message, actual: err.actual, oleh, pada"))
+  ok('I28 …versi terkunci punya kode sendiri', sRoute.includes('err instanceof KinerjaVersiTerkunciError') && sRoute.includes("code: 'VERSI_TERKUNCI'")
+    && badan(kode('lib/data/kinerja.ts'), 'setujuBulanTertutup = false,\n)').includes('throw new KinerjaVersiTerkunciError(versiTipe, versiSeq);'))
+  const KC = kode('app/(dashboard)/kinerja/kinerja-client.tsx')
+  ok('I29 Shell: SskTab menerima dasar & pemuat tanpa-pasang', KC.includes('sskDasar={sskDasar}') && KC.includes('ambilSsk={ambilSsk}')
+    && urut(badan(KC, 'const fetchSsk = useCallback('), 'await ambilSsk(sumber, versiTipe, versiSeq)'))
+  // Perilakunya diuji di MySQL (suite -db [8]); di sini urutannya: induk dibaca SEBELUM DELETE.
+  const sskF = badan(kode('lib/data/kinerja.ts'), 'setujuBulanTertutup = false,\n)')
+  ok('I30 Simpan RKO membawa parent_versi_id lama (dibaca sebelum DELETE, bukan dari klien)',
+    urut(sskF, 'SELECT canonical_id, parent_versi_id FROM kinerja_ssk', 'DELETE FROM kinerja_ssk', 'canonical, indukPer.get(canonical) ?? null,')
+    && !sskF.slice(sskF.indexOf('const values = rows.map('), sskF.indexOf('await bulkInsert(')).includes('r.parent_versi_id'))
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)

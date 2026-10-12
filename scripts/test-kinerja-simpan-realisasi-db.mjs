@@ -37,7 +37,7 @@ Module._resolveFilename = function (permintaan, ...sisa) {
 }
 
 const { sql } = require(path.join(outDir, 'lib/data/db.js'))
-const { saveRealisasiBatch, saveSskBatch, getKinerjaVersion } = require(path.join(outDir, 'lib/data/kinerja.js'))
+const { saveRealisasiBatch, saveSskBatch, getKinerjaVersion, penyimpanTerakhir } = require(path.join(outDir, 'lib/data/kinerja.js'))
 const { tutupBulanRealisasi, bukaBulanRealisasi, daftarBulanTertutup } = require(path.join(outDir, 'lib/kinerja/tutup-bulan-data.js'))
 const mysql = require('mysql2/promise')
 
@@ -45,6 +45,7 @@ const TAHUN = '2099'
 const SUMBER = 'GAJI'
 const KUNCI_REAL = `${TAHUN}:${SUMBER}`
 const KUNCI_SSK = `${TAHUN}:${SUMBER}:MURNI:0`
+const KUNCI_SSK_P1 = `${TAHUN}:${SUMBER}:PERUBAHAN:1`
 const BULAN = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des']
 
 let gagal = 0
@@ -66,6 +67,7 @@ async function bersihkan() {
   await sql`DELETE FROM kinerja_ssk WHERE tahun = ${TAHUN}`
   await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_realisasi' AND key_id = ${KUNCI_REAL}`
   await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_ssk' AND key_id = ${KUNCI_SSK}`
+  await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_ssk' AND key_id = ${KUNCI_SSK_P1}`
 }
 
 function bulanKosong() { return Object.fromEntries(BULAN.map(b => [b, 0])) }
@@ -254,6 +256,57 @@ try {
       await c.end()
     }
   }
+
+  console.log('\n[7] Bentrok RKO (Tahap 4): siapa penyimpannya & versi yang baru dikunci')
+  {
+    const vSsk = await getKinerjaVersion('kinerja_ssk', KUNCI_SSK)
+    let e = await galat(() => saveSskBatch(TAHUN, SUMBER, sskBaris(), USER, 'MURNI', 0, vSsk - 1, false, true))
+    periksa('Angka kunci basi → VERSION_CONFLICT', e?.name === 'KinerjaVersionConflictError')
+    const p = await penyimpanTerakhir('kinerja_ssk', KUNCI_SSK)
+    const nama = (await sql`SELECT COALESCE(nama_lengkap, username) AS n FROM users WHERE id = ${USER}`)[0].n
+    periksa('…dialog menyebut nama & jam penyimpan terakhir', p.oleh === nama && /^\d\d:\d\d$/.test(p.pada ?? ''), `${p.oleh} ${p.pada}`)
+    // "Buat Perubahan" orang lain terselip: versinya terkunci, angka kuncinya TIDAK naik.
+    await sql`UPDATE kinerja_ssk SET locked_at = NOW() WHERE tahun = ${TAHUN} AND sumber = ${SUMBER} AND versi_tipe = 'MURNI' AND versi_seq = 0`
+    e = await galat(() => saveSskBatch(TAHUN, SUMBER, sskBaris(), USER, 'MURNI', 0, vSsk, false, true))
+    periksa('Versi terkunci → KinerjaVersiTerkunciError (kode sendiri)', e?.name === 'KinerjaVersiTerkunciError', e?.message)
+    const terkunci = await sql`SELECT COUNT(*) AS n FROM kinerja_ssk WHERE tahun = ${TAHUN} AND sumber = ${SUMBER} AND locked_at IS NOT NULL`
+    periksa('…tidak ada yang tertulis, kuncinya utuh', (await getKinerjaVersion('kinerja_ssk', KUNCI_SSK)) === vSsk && Number(terkunci[0].n) === 2)
+  }
+
+  console.log('\n[8] parent_versi_id bertahan saat versi Perubahan disimpan')
+  {
+    // Cermin route "Buat Perubahan": salin MURNI-0 (sudah terkunci di [7]) ke PERUBAHAN-1,
+    // induk = id baris asal.
+    await sql`
+      INSERT INTO kinerja_ssk (tahun, sumber, versi_tipe, versi_seq, canonical_id, parent_versi_id, is_nullified,
+        uraian_ssk, uraian, program, kegiatan, subkegiatan, pagu, months, months_pct, total, total_pct, urut, updated_by)
+      SELECT tahun, sumber, 'PERUBAHAN', 1, canonical_id, id, is_nullified,
+        uraian_ssk, uraian, program, kegiatan, subkegiatan, pagu, months, months_pct, total, total_pct, urut, updated_by
+      FROM kinerja_ssk WHERE tahun = ${TAHUN} AND sumber = ${SUMBER} AND versi_tipe = 'MURNI' AND versi_seq = 0`
+    const idMurni = Object.fromEntries((await sql`
+      SELECT canonical_id AS c, id FROM kinerja_ssk
+      WHERE tahun = ${TAHUN} AND sumber = ${SUMBER} AND versi_tipe = 'MURNI' AND versi_seq = 0`).map(r => [r.c, Number(r.id)]))
+    const induk = async () => Object.fromEntries((await sql`
+      SELECT canonical_id AS c, parent_versi_id AS p FROM kinerja_ssk
+      WHERE tahun = ${TAHUN} AND sumber = ${SUMBER} AND versi_tipe = 'PERUBAHAN' AND versi_seq = 1`)
+      .map(r => [r.c, r.p === null ? null : Number(r.p)]))
+
+    const baru = { uraian_ssk: 'Uji', uraian: 'Belanja uji baru', program: 'P', kegiatan: 'K', subkegiatan: 'S',
+      pagu: 0, months: bulanKosong(), months_pct: bulanKosong(), total: 0, total_pct: 0, is_nullified: false }
+    // parent_versi_id dari klien sengaja dikirim ngawur — kolom itu milik server.
+    const isi = [...sskBaris({ 'K-UJI-A': { pagu: 1_250_000_000, parent_versi_id: 1 } }), baru]
+    await saveSskBatch(TAHUN, SUMBER, isi, USER, 'PERUBAHAN', 1, 0, false, true)
+    let p = await induk()
+    periksa('Simpan pertama: baris lama tetap menunjuk baris MURNI asalnya', p['K-UJI-A'] === idMurni['K-UJI-A']
+      && p['K-UJI-B'] === idMurni['K-UJI-B'], JSON.stringify(p))
+    periksa('…isian parent_versi_id dari klien diabaikan', p['K-UJI-A'] !== 1)
+    periksa('…rekening baru di Perubahan tanpa induk', Object.keys(p).length === 3
+      && Object.entries(p).filter(([c]) => !(c in idMurni)).every(([, v]) => v === null))
+    await saveSskBatch(TAHUN, SUMBER, sskBaris(), USER, 'PERUBAHAN', 1, 1, true, true)
+    p = await induk()
+    periksa('Simpan kedua: tautan tetap (bukan cuma selamat sekali)', p['K-UJI-A'] === idMurni['K-UJI-A']
+      && p['K-UJI-B'] === idMurni['K-UJI-B'] && Object.keys(p).length === 2)
+  }
 } finally {
   await bersihkan()
   const sisa = await sql`
@@ -262,7 +315,7 @@ try {
          + (SELECT COUNT(*) FROM kinerja_riwayat_simpan WHERE tahun = ${TAHUN})
          + (SELECT COUNT(*) FROM kinerja_bulan_tutup WHERE tahun = ${TAHUN})
          + (SELECT COUNT(*) FROM blud_locks WHERE (entity = 'kinerja_realisasi' AND key_id = ${KUNCI_REAL})
-                                               OR (entity = 'kinerja_ssk' AND key_id = ${KUNCI_SSK})) AS n
+                                               OR (entity = 'kinerja_ssk' AND key_id IN (${KUNCI_SSK}, ${KUNCI_SSK_P1}))) AS n
   `
   periksa('Kotak pasir 2099 bersih setelah uji', Number(sisa[0]?.n ?? -1) === 0)
 }

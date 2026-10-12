@@ -522,6 +522,18 @@ export class KinerjaVersiBentrokError extends Error {
   }
 }
 
+/**
+ * Simpan RKO ke versi yang sudah terkunci — biasanya "Buat Perubahan" orang lain
+ * terselip saat layar ini diketik. Kelas sendiri supaya layar bisa menjelaskannya
+ * dan menyegarkan daftar versi; galat polos cuma terbaca sebagai toast.
+ */
+export class KinerjaVersiTerkunciError extends Error {
+  constructor(public tipe: string, public seq: number) {
+    super(`Versi ${tipe}-${seq} sudah dikunci, tidak bisa diubah.`);
+    this.name = 'KinerjaVersiTerkunciError';
+  }
+}
+
 // ─── Pagar simpan: replace-all tidak boleh menghapus tanpa ada yang menyatakan ──
 //
 // KEENAM jalur simpan modul ini (SSK, Realisasi, Rekening, Nomenklatur, CRR,
@@ -706,7 +718,7 @@ export async function saveSskBatch(
       FOR UPDATE
     ` as { n: unknown; locked_at: unknown }[];
     if (ada?.locked_at) {
-      throw new Error(`Versi ${versiTipe}-${versiSeq} sudah dikunci, tidak bisa diubah.`);
+      throw new KinerjaVersiTerkunciError(versiTipe, versiSeq);
     }
     pagarReplace(`SSK ${sumber} ${versiTipe}-${versiSeq}`, Number(ada?.n ?? 0), rows.length, force);
 
@@ -729,6 +741,18 @@ export async function saveSskBatch(
       }
     }
 
+    // `parent_versi_id` milik SERVER: ditanam "Buat Perubahan" (id baris versi asal) dan
+    // tidak pernah dikirim layar. Hapus-tulis-ulang di bawah dulu menulisnya NULL, jadi
+    // Simpan pertama di versi Perubahan memutus tautannya. Dibawa lewat canonical_id; aman
+    // karena induknya baris versi asal yang sudah terkunci — tak pernah ditulis ulang.
+    const indukRows = await tx`
+      SELECT canonical_id, parent_versi_id FROM kinerja_ssk
+      WHERE tahun = ${tahun} AND sumber = ${sumber}
+        AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
+        AND parent_versi_id IS NOT NULL
+    ` as { canonical_id: unknown; parent_versi_id: unknown }[];
+    const indukPer = new Map(indukRows.map(r => [String(r.canonical_id), Number(r.parent_versi_id)]));
+
     await tx`
       DELETE FROM kinerja_ssk
       WHERE tahun = ${tahun} AND sumber = ${sumber}
@@ -744,7 +768,7 @@ export async function saveSskBatch(
           : `K-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 6)}`;
         return [
           tahun, sumber,
-          versiTipe, versiSeq, canonical, /* parent_versi_id */ null, /* is_nullified */ r.is_nullified ? 1 : 0,
+          versiTipe, versiSeq, canonical, indukPer.get(canonical) ?? null, /* is_nullified */ r.is_nullified ? 1 : 0,
           r.uraian_ssk, r.uraian,
           r.program ?? '', r.kegiatan ?? '', r.subkegiatan ?? '',
           r.pagu, JSON.stringify(r.months), JSON.stringify(r.months_pct),

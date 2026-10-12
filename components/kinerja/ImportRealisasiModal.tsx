@@ -33,7 +33,8 @@ interface Props {
   /** §23 Lampirkan: hasil parse dari chat Rima — modal langsung tampil tanpa unggah ulang. */
   preload?: ImportData;
   preloadName?: string;
-  onApply: (items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) => void;
+  /** Memulangkan jumlah baris yang benar-benar diisi (bulan tertutup dilewati layar). */
+  onApply: (items: { ssk_canonical_id: string; bulan_ke: number; realisasi: number; real_fisik?: number }[]) => number;
   onClose: () => void;
 }
 
@@ -96,8 +97,8 @@ export default function ImportRealisasiModal({ tahun, currentSumber, isLight = f
       ...(laporan ? { real_fisik: r.real_fisik ?? 0 } : {}),
     }));
     if (items.length === 0) { toast.error(`Tidak ada baris cocok untuk ${currentSumber}`); return; }
-    onApply(items);
-    toast.success(`${items.length} baris diisi ke Realisasi ${currentSumber} — periksa lalu klik Simpan`);
+    const masuk = onApply(items);
+    if (masuk > 0) toast.success(`${masuk} baris diisi ke Realisasi ${currentSumber} — periksa lalu klik Simpan`);
     onClose();
   }
 

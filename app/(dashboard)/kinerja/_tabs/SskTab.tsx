@@ -15,6 +15,8 @@ import { exportSskExcel, exportSskPdf } from '../_exports';
 import ImportRkoModal from '@/components/kinerja/ImportRkoModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import { hitungTurunanRko } from '@/lib/kinerja/gabung-rko';
+import { gabungBentrokSsk, terapkanPilihanBentrokSsk, kalimatSelBentrokSsk } from '@/lib/kinerja/bentrok-ssk';
+import { jumlahSskBerubah } from '@/lib/kinerja/sunting-ssk';
 import { nolkanBaris, aktifkanBaris, sudahDinolkan, perluPeriksaHapus, pesanHapusSsk } from '@/lib/kinerja/nol-kan';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
@@ -48,14 +50,18 @@ interface Props {
   refetchSsk: () => void;
   /** Baris yang berbeda dari isi tersimpan (lib/kinerja/sunting-ssk.ts). */
   sskBerubah: number;
+  /** Isi terakhir dari server — pembanding "ketikan saya" saat bentrok 409. */
+  sskDasar: SskRow[];
   setSskDasar: React.Dispatch<React.SetStateAction<SskRow[]>>;
+  ambilSsk: (sumber: SumberSSK, versiTipe?: 'MURNI' | 'PERUBAHAN', versiSeq?: number) =>
+    Promise<{ ok: true; rows: SskRow[]; version: number } | { ok: false; message?: string }>;
 }
 
 export default function SskTab({
   sskRows, setSskRows, activeSumber, setActiveSumber,
   rekeningRows, tahun, canEdit, loadingData, saving, setSaving,
   isLight = false, sskVersi, setSskVersi, pilihVersi, sskVersion, setSskVersion, refetchSsk,
-  sskBerubah, setSskDasar,
+  sskBerubah, sskDasar, setSskDasar, ambilSsk,
 }: Props) {
   // ─── Versi list + locked detect ─────────────────────────────────────────
   const [showImport,    setShowImport]    = useState(false);
@@ -248,6 +254,59 @@ export default function SskTab({
     toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
   }
 
+  /**
+   * 409 VERSION_CONFLICT: orang lain menyimpan versi RKO yang sama sementara layar ini
+   * diketik. Dulu layar langsung dimuat ulang dan ketikannya terbuang. Kini ketikan
+   * (layar vs dasar) dipasang di atas isi terbaru (lib/kinerja/bentrok-ssk.ts); sel yang
+   * diubah dua orang dengan angka berbeda ditanyakan. Tetap BERHENTI DI FORM (L78);
+   * angka kunci dari muatan terbaru (L77). Cermin `gabungSesudahBentrok` Realisasi.
+   */
+  async function gabungSesudahBentrok(d409: { oleh?: string | null; pada?: string | null }) {
+    const h = await ambilSsk(activeSumber, sskVersi.tipe, sskVersi.seq);
+    if (!h.ok) {
+      toast.error(`RKO ${activeSumber} ${versiLabel} sudah diubah pengguna lain, dan isi terbarunya gagal dimuat. `
+        + 'Ketikan Anda masih di layar — coba Simpan lagi sebentar lagi.', { duration: 9000 });
+      return;
+    }
+    const g = gabungBentrokSsk(sskDasar, sskRows, h.rows);
+    const orangLain = jumlahSskBerubah(sskDasar, h.rows);
+    const siapa = d409.oleh ? `${d409.oleh}${d409.pada ? ` (pukul ${d409.pada})` : ''}` : 'Pengguna lain';
+    const bagian = [`${siapa} menyimpan RKO ${activeSumber} ${versiLabel} sementara Anda mengetik`
+      + (orangLain > 0 ? ` — ${orangLain} baris berubah.` : '.')];
+    if (g.dipasang > 0) bagian.push(`Ketikan Anda (${g.dipasang} baris) sudah dipasang di atas data terbaru dan BELUM tersimpan. Periksa, lalu tekan Simpan lagi.`);
+    if (g.tidakBisa.length > 0) {
+      const sebab = {
+        hilang:              'barisnya sudah dihapus orang lain',
+        'diubah-orang-lain': 'Anda menghapusnya, tapi orang lain baru mengubahnya — barisnya dipertahankan',
+      } as const;
+      bagian.push(`Tidak bisa dipasang: ${g.tidakBisa.slice(0, 5).map(x => `${x.label} (${sebab[x.alasan]})`).join('; ')}`
+        + (g.tidakBisa.length > 5 ? `; dan ${g.tidakBisa.length - 5} lainnya.` : '.'));
+    }
+    let rows = g.rows;
+    if (g.bentrok.length > 0) {
+      const daftar = g.bentrok.slice(0, 8).map(b => kalimatSelBentrokSsk(b, fmtNum)).join('\n');
+      const pakaiSaya = await confirmDialog({
+        title:   'Angka yang sama diubah dua orang',
+        message: `${bagian.join('\n\n')}\n\n${g.bentrok.length} sel diubah Anda DAN orang lain dengan angka berbeda:\n${daftar}`
+          + (g.bentrok.length > 8 ? `\n• dan ${g.bentrok.length - 8} lainnya` : ''),
+        confirmLabel: 'Pakai angka saya',
+        cancelLabel:  'Pakai angka tersimpan',
+        variant:      'warning',
+      });
+      rows = terapkanPilihanBentrokSsk(rows, g.bentrok, pakaiSaya ? 'saya' : 'tersimpan');
+      if (pakaiSaya || g.dipasang > 0) {
+        toast.info(`${pakaiSaya ? 'Angka Anda dipasang' : 'Angka tersimpan dipertahankan; ketikan Anda yang lain tetap di layar'} — `
+          + 'belum tersimpan, tekan Simpan lagi.', { duration: 7000 });
+      }
+    } else {
+      toast.warning(bagian.join(' '), { duration: 12000 });
+    }
+    setSskRows(rows.map(r => ({ ...r, ...hitungTurunanRko(r.pagu, r.months) })));
+    setSskDasar(h.rows);
+    setSskVersion(h.version);
+    fetchVersiList();
+  }
+
   async function saveSsk(force = false, setujuBulanTertutup = false) {
     if (versiLocked) { toast.error(`Versi ${versiLabel} sudah dikunci, tidak bisa diubah.`); return; }
     setSaving(true);
@@ -272,9 +331,14 @@ export default function SskTab({
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pulihan.
         asalPulihkanRef.current = null;
       } else if ((d as unknown as { code?: string }).code === 'VERSION_CONFLICT') {
-        // V3-6: edit barengan → muat ulang versi terbaru (mirror RA L49).
-        toast.error('Data SSK sudah diubah pengguna lain — memuat versi terbaru.');
-        refetchSsk();
+        await gabungSesudahBentrok(d as unknown as { oleh?: string | null; pada?: string | null });
+      } else if ((d as unknown as { code?: string }).code === 'VERSI_TERKUNCI') {
+        // "Buat Perubahan" orang lain terselip saat layar ini diketik. Ketikannya SENGAJA
+        // tetap di layar — memuat ulang di sini membuangnya tanpa jalan kembali.
+        toast.error(`Versi ${versiLabel} baru saja dikunci — sudah ada versi Perubahan yang lebih baru. `
+          + 'Isian di layar BELUM tersimpan dan tidak bisa disimpan ke versi ini. Unduh Excel dulu bila perlu, '
+          + 'lalu buka versi Perubahan terbaru dan masukkan lagi di sana.', { duration: 15000 });
+        fetchVersiList();
       } else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
         const ok = await konfirmasiPenurunan(`SSK ${activeSumber} ${versiLabel}`, d as unknown as JawabanPagar);
         if (ok) { setSaving(false); await saveSsk(true, setujuBulanTertutup); return; }

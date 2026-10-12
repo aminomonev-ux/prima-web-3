@@ -1,8 +1,9 @@
 # Konsep — Simpan Realisasi & RKO E-Anggaran: tidak membuang ketikan, berjejak, bisa ditutup per bulan
 
-Status: disetujui pemilik aplikasi 2026-10-12 ("eksekusi"). Tahap 1–3 SELESAI 2026-10-12; Tahap 4 ditunda.
+Status: disetujui pemilik aplikasi 2026-10-12 ("eksekusi"). Tahap 1–3 SELESAI 2026-10-12; Tahap 4
+SELESAI 2026-10-12 ("coba aja").
 
-Hasil: uji `scripts/test-kinerja-simpan-realisasi.mts` (108) + `-db.mjs` (38, MySQL, 2099), 36 uji
+Hasil: uji `scripts/test-kinerja-simpan-realisasi.mts` (140) + `-db.mjs` (46, MySQL, 2099), 61 uji
 mutasi tertangkap, diverifikasi ujung-ke-ujung di peramban pada kotak pasir 2099 (§8).
 
 ## 1. Masalah
@@ -119,7 +120,29 @@ menyimpan realisasi** ("biar mudah"); target RKO bulan tertutup yang berubah cuk
   Peringatan, bukan blokir (koreksi RKO sah). Pembandingnya isi tersimpan versi itu.
 - Batas sengaja: yang dikunci hanya angka **realisasi**; target & pagu tetap ikut versi.
 
-## 6. Tahap 4 (ditunda) — gabung bentrok untuk RKO
+## 6. Tahap 4 — gabung bentrok untuk RKO (tanpa migrasi)
+
+409 `VERSION_CONFLICT` di layar RKO dulu memuat ulang dan membuang ketikan. Kini polanya sama
+dgn Realisasi (§4), lewat `lib/kinerja/bentrok-ssk.ts` (murni):
+
+- **Identitas baris = `canonical_id`** (RKO satu baris per rekening, tanpa bulan). Baris hasil
+  Inject/Impor belum ber-canonical → dicocokkan lewat `uraian_ssk + uraian` dengan baris yang
+  DITAMBAHKAN orang lain (begitu tersimpan baris orang itu sudah ber-canonical, kuncinya tak
+  akan pernah sama) — dua orang meng-Inject rekening yang sama menghasilkan SATU baris.
+- **Yang digabung 14 nilai per baris**: pagu, 12 target bulan, bendera nol-kan. Label tidak
+  (layar RKO tidak bisa menyuntingnya). Turunan dihitung ulang lewat `hitungTurunanRko`.
+- **Nol-kan diputuskan UTUH**: bila salah satu pihak menyentuh benderanya dan pihak lain juga
+  mengubah baris itu, seluruh baris ditanyakan. Digabung per sel, "pakai angka tersimpan" di
+  Februari bisa melahirkan baris dinol-kan yang masih bertarget.
+- Baris yang saya hapus ikut terhapus hanya kalau orang lain tidak mengubahnya; ketikan di
+  baris yang dihapus orang lain disebut, tidak dihidupkan lagi.
+- Dialog menyebut siapa & jam (gembok `kinerja_ssk:{tahun}:{sumber}:{versi}`), angka kunci &
+  `dasar` dari muatan terbaru (L77), tidak menyimpan otomatis (L78).
+- **Versi yang baru dikunci** (Buat Perubahan orang lain terselip): `KinerjaVersiTerkunciError`
+  → 409 `VERSI_TERKUNCI`. Ketikan SENGAJA tetap di layar (memuat ulang membuangnya), daftar
+  versi disegarkan sehingga lencana TERKUNCI muncul & Simpan mati, toast menyebut jalan
+  keluarnya. Memindahkan ketikan ke versi Perubahan otomatis TIDAK dikerjakan (pemuat versi
+  berganti lewat efek dan akan menimpa hasil gabungan).
 
 ## 7. Uji
 
@@ -136,5 +159,18 @@ Simpan. Tahap 2 di peramban dgn dua tab.
   belum tersimpan → toast sesudah pilihan.
 - Pemilih tahun E-Anggaran hanya sampai 2040; uji layar 2099 menyisipkan opsinya lewat skrip
   halaman (tanpa mengubah kode).
-- TIDAK dicoba lewat layar: Impor Excel di bulan tertutup (panel peramban tidak bisa
-  mengunggah berkas) — dijaga uji statis G24 + mutasi.
+- Impor Excel di bulan tertutup dicoba lewat layar (berkas disisipkan ke `input[type=file]`
+  lewat skrip halaman): Januari tertutup tetap utuh beserta stempelnya, Oktober terisi, Simpan
+  "Oktober: 2 baris berubah". Yang ketahuan: toast modal menghitung isi BERKAS ("4 baris
+  diisi") padahal 2 dilewati → `onApply` kini memulangkan jumlah yang benar-benar diisi (G24b);
+  bila semuanya di bulan tertutup, satu toast galat saja.
+- Tahap 4 diuji di peramban dgn "orang lain" yang menyimpan lewat API di sela ketikan: sel
+  bersama → dialog + "Pakai angka saya" → Simpan; baris berbeda → keduanya bertahan tanpa
+  dialog; Buat Perubahan terselip → `VERSI_TERKUNCI`, ketikan tetap, TERKUNCI tampil.
+- Ditemukan saat membaca, lalu diperbaiki: `saveSskBatch` menulis `parent_versi_id = NULL` untuk
+  setiap baris, jadi Simpan pertama di versi PERUBAHAN memutus tautan yang dipasang Buat
+  Perubahan (tanpa gejala — kolom itu tidak dibaca kode mana pun; identitas lintas versi dipegang
+  `canonical_id`). Kini dibaca dari baris lama di transaksi yang sama SEBELUM DELETE dan dibawa
+  lewat `canonical_id`; isian klien diabaikan (milik server); rekening baru di Perubahan tetap
+  NULL. Aman karena induknya baris versi asal yang sudah terkunci. Baris yang tautannya sudah
+  terlanjur kosong di server TIDAK diisi ulang — isiannya harus menebak versi asal.

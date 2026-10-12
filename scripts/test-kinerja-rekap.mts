@@ -1323,8 +1323,10 @@ console.log('\n-- Z. A6: Buat Perubahan atomik, dan bentroknya dijawab 409 -----
   ok('Z14 pagar locked_at dibaca di dalam transaksi', iPagar > iTxSave && iTxSave >= 0,
      `tx ${iTxSave}, pagar ${iPagar}`);
   ok('Z15 dan mengunci barisnya', /MAX\(locked_at\)[\s\S]{0,220}?FOR UPDATE/.test(badanSave));
+  // Kalimatnya pindah ke kelas galat (Tahap 4: layar butuh kode VERSI_TERKUNCI sendiri).
   ok('Z16 penolakannya tetap menyebut versinya',
-     /Versi \$\{versiTipe\}-\$\{versiSeq\} sudah dikunci/.test(badanSave));
+     badanSave.includes('throw new KinerjaVersiTerkunciError(versiTipe, versiSeq);')
+     && /super\(`Versi \$\{tipe\}-\$\{seq\} sudah dikunci/.test(kj));
   // Kalau ada yang mengembalikannya ke luar transaksi, `sql` biasa akan muncul
   // lagi di badan fungsi ini.
   ok('Z17 tidak ada lagi kueri lepas di saveSskBatch', !/\bawait sql`/.test(badanSave));
