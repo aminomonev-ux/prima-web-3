@@ -674,7 +674,11 @@ export default function BludShell({ username, role, izin, themePreference, bekuL
         [data-theme="light"] [style*="6EE7B7" i],
         [data-theme="light"] [style*="rgb(110, 231, 183)"]{color:#047857!important;}
         [data-theme="light"] [style*="FAC775" i],
-        [data-theme="light"] [style*="rgb(250, 199, 117)"]{color:#B45309!important;}
+        [data-theme="light"] [style*="rgb(250, 199, 117)"],
+        [data-theme="light"] [style*="FCD34D" i],
+        [data-theme="light"] [style*="rgb(252, 211, 77)"],
+        [data-theme="light"] [style*="FBBF24" i],
+        [data-theme="light"] [style*="rgb(251, 191, 36)"]{color:#B45309!important;}
         [data-theme="light"] [style*="EF9F27" i]:not(svg),
         [data-theme="light"] [style*="rgb(239, 159, 39)"]:not(svg){color:#7C3AED!important;}
       `}</style>
