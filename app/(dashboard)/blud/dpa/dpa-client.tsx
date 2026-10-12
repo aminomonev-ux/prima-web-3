@@ -21,6 +21,7 @@ import SalinMasterModal from '@/components/blud/SalinMasterModal'
 import SalinTahunModal from '@/components/blud/SalinTahunModal'
 import SalinVersiModal from '@/components/blud/SalinVersiModal'
 import MuatBerkasButton from '@/components/blud/MuatBerkasButton'
+import KelompokAksi from '@/components/blud/KelompokAksi'
 import type { BerkasCadangan } from '@/lib/blud/cadangan-berkas'
 import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
@@ -1874,104 +1875,117 @@ export default function DpaClient({
 
   return (
     <div className="space-y-4">
-      {/* Header / Toolbar */}
-      <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'10px 16px', display:'flex', flexWrap:'wrap', alignItems:'center', gap:12 }}>
-        <h1 style={{ fontWeight:800, fontSize:14, color:'#E6F1FB' }}>Form BLUD — DPA BLUD</h1>
+      {/* Header / Toolbar — dua baris tetap: konteks + Simpan, lalu aksi berkelompok
+          (susunan sama dgn layar Pergeseran). Dulu satu deretan yang membungkus sendiri,
+          jadi letak tombol ikut lebar layar. */}
+      <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'10px 16px', display:'flex', flexDirection:'column', gap:10 }}>
+        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12 }}>
+          <h1 style={{ fontWeight:800, fontSize:14, color:'#E6F1FB' }}>Form BLUD — DPA BLUD</h1>
 
-        {/* Tahun Anggaran — dimensi di atas versi (pilih tahun dulu) */}
-        <div data-rima="dpa.tahun-dropdown" style={{ display:'inline-flex' }}>
-          <TahunDropdown
-            value={tahun}
-            items={tahunList}
-            current={CURRENT_YEAR}
-            onChange={t => { void gantiTahun(t) }}
-          />
+          {/* Tahun Anggaran — dimensi di atas versi (pilih tahun dulu) */}
+          <div data-rima="dpa.tahun-dropdown" style={{ display:'inline-flex' }}>
+            <TahunDropdown
+              value={tahun}
+              items={tahunList}
+              current={CURRENT_YEAR}
+              onChange={t => { void gantiTahun(t) }}
+            />
+          </div>
+
+          {bolehUbah && (
+            <PeriodeVersiSelect
+              tahun={tahun}
+              versiTerpakai={history.map(h => h.versi_tanggal)}
+              value={periodeTulis}
+              onChange={t => { void gantiPeriode(t) }}
+            />
+          )}
+
+          {/* History selector — custom pill dropdown */}
+          {/* data-rima: anchor tur RIMA F3 — wrapper inline-flex (display:contents rect-nya kosong) */}
+          <div data-rima="dpa.versi-dropdown" style={{ display:'inline-flex' }}>
+            <VersiDropdown
+              value={versi}
+              items={historyBerlabel}
+              onChange={v => { void bukaVersi(v) }}
+              placeholder="— Pilih Versi —"
+              riwayat={riwayat}
+              onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
+              belumTersimpan={belumTersimpan}
+            />
+          </div>
+
+          {/* Berdampingan dengan dropdown versi, BUKAN di sebelah Impor: Impor
+              MENYUSUN dari Excel, ini MENGEMBALIKAN foto simpanan. Duduk bersebelahan
+              membuat keduanya terbaca sekeluarga padahal berlawanan. */}
+          {bolehUbah && (
+            <MuatBerkasButton
+              jenis="DPA" tahun={tahun}
+              onMuat={(d, n) => { void muatDariBerkas(d, n) }}
+            />
+          )}
+
+          {bolehUbah && (
+            <div style={{ marginLeft:'auto' }}>
+              <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
+                disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
+                {saving ? 'Menyimpan...' : periodeTulis ? 'Simpan Periode' : 'Simpan'}
+              </PrimaButton>
+            </div>
+          )}
         </div>
 
         {bolehUbah && (
-          <PeriodeVersiSelect
-            tahun={tahun}
-            versiTerpakai={history.map(h => h.versi_tanggal)}
-            value={periodeTulis}
-            onChange={t => { void gantiPeriode(t) }}
-          />
-        )}
-
-        {/* History selector — custom pill dropdown */}
-        {/* data-rima: anchor tur RIMA F3 — wrapper inline-flex (display:contents rect-nya kosong) */}
-        <div data-rima="dpa.versi-dropdown" style={{ display:'inline-flex' }}>
-          <VersiDropdown
-            value={versi}
-            items={historyBerlabel}
-            onChange={v => { void bukaVersi(v) }}
-            placeholder="— Pilih Versi —"
-            riwayat={riwayat}
-            onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
-            belumTersimpan={belumTersimpan}
-          />
-        </div>
-
-        {/* Berdampingan dengan dropdown versi, BUKAN di sebelah Impor: Impor
-            MENYUSUN dari Excel, ini MENGEMBALIKAN foto simpanan. Duduk bersebelahan
-            membuat keduanya terbaca sekeluarga padahal berlawanan. */}
-        {bolehUbah && (
-          <MuatBerkasButton
-            jenis="DPA" tahun={tahun}
-            onMuat={(d, n) => { void muatDariBerkas(d, n) }}
-          />
-        )}
-
-        {bolehUbah && (
-          <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginLeft:'auto' }}>
-            <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
-              disabled={!!alasanKunciBorongan} data-tooltip={alasanKunciBorongan}
-              onClick={mulaiFormBaru} data-rima="dpa.form-baru">
-              Form Baru
-            </PrimaButton>
-
-            <PrimaButton variant="ghost" size="sm" iconLeft={<CalendarClock className="w-3.5 h-3.5" />}
-              disabled={!!alasanKunciSalinTahun} data-tooltip={alasanKunciSalinTahun}
-              onClick={() => setSalinTahunBuka(true)} data-rima="dpa.salin-tahun">
-              Salin Tahun Lain
-            </PrimaButton>
-
-            <PrimaButton variant="ghost" size="sm" iconLeft={<Copy className="w-3.5 h-3.5" />}
-              disabled={!!alasanKunciVersi}
-              data-tooltip={alasanKunciVersi
-                || `Ambil isi versi lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
-              onClick={() => setSalinVersiBuka(true)} data-rima="dpa.salin-versi">
-              Salin Versi Lain
-            </PrimaButton>
-
-            {/* Konsep §5: di samping Salin Versi — sama-sama MENGISI layar dari angka
-                tahun yang sama, dengan jangkar utuh. Tidak ikut `alasanKunciBorongan`. */}
-            <PrimaButton variant="purple" size="sm" iconLeft={<FileDiff className="w-3.5 h-3.5" />}
-              disabled={!!alasanKunciJadikan}
-              data-tooltip={alasanKunciJadikan
-                || `Ambil angka yang sedang jadi pagu ${tahun} ke layar, lalu ubah sebagai DPA Perubahan ke-${penanda.length + 1}`}
-              onClick={() => setJadikanBuka(true)}>
-              Jadikan DPA Perubahan
-            </PrimaButton>
-
-            {bolehImpor && (
-              <PrimaButton variant="success" size="sm" iconLeft={<Upload className="w-3.5 h-3.5" />}
-                data-tooltip={tooltipImpor}
-                onClick={() => { void bukaImpor() }} data-rima="dpa.impor">
-                Impor
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px 12px', borderTop:'1px solid #0C447C', paddingTop:10 }}>
+            <KelompokAksi label="Isi tabel">
+              <PrimaButton variant="purple" size="sm" iconLeft={<FilePlus className="w-3.5 h-3.5" />}
+                disabled={!!alasanKunciBorongan} data-tooltip={alasanKunciBorongan}
+                onClick={mulaiFormBaru} data-rima="dpa.form-baru">
+                Form Baru
               </PrimaButton>
-            )}
 
-            {bolehSalinInduk && (
-              <PrimaButton variant="ghost" size="sm" iconLeft={<Inbox className="w-3.5 h-3.5" />}
-                disabled={!rows.length} onClick={() => setSalinBuka(true)} data-rima="dpa.salin-induk">
-                Salin ke Induk
+              {bolehImpor && (
+                <PrimaButton variant="success" size="sm" iconLeft={<Upload className="w-3.5 h-3.5" />}
+                  data-tooltip={tooltipImpor}
+                  onClick={() => { void bukaImpor() }} data-rima="dpa.impor">
+                  Impor
+                </PrimaButton>
+              )}
+
+              <PrimaButton variant="ghost" size="sm" iconLeft={<CalendarClock className="w-3.5 h-3.5" />}
+                disabled={!!alasanKunciSalinTahun} data-tooltip={alasanKunciSalinTahun}
+                onClick={() => setSalinTahunBuka(true)} data-rima="dpa.salin-tahun">
+                Salin Tahun Lain
               </PrimaButton>
-            )}
 
-            <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
-              disabled={saving || !rows.length} onClick={simpan} data-rima="dpa.simpan">
-              {saving ? 'Menyimpan...' : periodeTulis ? 'Simpan Periode' : 'Simpan'}
-            </PrimaButton>
+              <PrimaButton variant="ghost" size="sm" iconLeft={<Copy className="w-3.5 h-3.5" />}
+                disabled={!!alasanKunciVersi}
+                data-tooltip={alasanKunciVersi
+                  || `Ambil isi versi lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
+                onClick={() => setSalinVersiBuka(true)} data-rima="dpa.salin-versi">
+                Salin Versi Lain
+              </PrimaButton>
+            </KelompokAksi>
+
+            <KelompokAksi label="Lanjutan" garis>
+              {/* Konsep §5: tepat sesudah Salin Versi (beda kelompok, tetap bersebelahan) —
+                  sama-sama MENGISI layar dari angka tahun yang sama, dengan jangkar utuh.
+                  Tidak ikut `alasanKunciBorongan`. */}
+              <PrimaButton variant="purple" size="sm" iconLeft={<FileDiff className="w-3.5 h-3.5" />}
+                disabled={!!alasanKunciJadikan}
+                data-tooltip={alasanKunciJadikan
+                  || `Ambil angka yang sedang jadi pagu ${tahun} ke layar, lalu ubah sebagai DPA Perubahan ke-${penanda.length + 1}`}
+                onClick={() => setJadikanBuka(true)}>
+                Jadikan DPA Perubahan
+              </PrimaButton>
+
+              {bolehSalinInduk && (
+                <PrimaButton variant="ghost" size="sm" iconLeft={<Inbox className="w-3.5 h-3.5" />}
+                  disabled={!rows.length} onClick={() => setSalinBuka(true)} data-rima="dpa.salin-induk">
+                  Salin ke Induk
+                </PrimaButton>
+              )}
+            </KelompokAksi>
           </div>
         )}
       </div>

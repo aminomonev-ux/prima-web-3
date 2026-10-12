@@ -3277,6 +3277,13 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .rl-banner { background: rgba(124,92,252,.09); color: #534AB7; }
 [data-theme="light"] .rl-minus-banner { background: rgba(226,75,74,.08); color: #A32E2D; }
 
+/* Garis pemisah kelompok tombol toolbar DPA & Pergeseran (KelompokAksi). Hanya di
+   layar lebar: begitu kelompok turun ke baris baru, garis kirinya berdiri di awal
+   baris seperti salah gambar. 1024px = lebar terkecil yang memuat kedua kelompok. */
+.blud-kelompok-garis { border-left: 1px solid #0C447C; padding-left: 12px; }
+[data-theme="light"] .blud-kelompok-garis { border-left-color: rgba(139,92,246,0.18); }
+@media (max-width: 1023px) { .blud-kelompok-garis { border-left: none; padding-left: 0; } }
+
 /* Tutup Pergeseran — dua kotak peringatan di lembar konfirmasi & pratinjau
    sinkron. Kelas, bukan gaya sebaris: warna sebaris tidak ikut ditimpa tema
    terang, dan teks merah muda di atas latar merah muda memang sempat tidak

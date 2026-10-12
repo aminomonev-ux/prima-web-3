@@ -45,6 +45,7 @@ import {
 import type { PenandaPerubahan, SumberPagu } from '@/lib/blud/sumber-pagu'
 import SalinVersiModal from '@/components/blud/SalinVersiModal'
 import MuatBerkasButton from '@/components/blud/MuatBerkasButton'
+import KelompokAksi from '@/components/blud/KelompokAksi'
 import type { BerkasCadangan } from '@/lib/blud/cadangan-berkas'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import { useIngatkanBelumTersimpan } from '@/lib/shared/belum-tersimpan'
@@ -2105,131 +2106,139 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         </div>
       )}
 
-      {/* Header */}
-      <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'10px 16px', display:'flex', flexWrap:'wrap', alignItems:'center', gap:10 }}>
-        <h1 style={{ fontWeight:800, fontSize:14, color:'#E6F1FB' }}>Pergeseran DPA</h1>
+      {/* Header — dua baris tetap: konteks + Simpan, lalu aksi berkelompok (susunan sama
+          dgn layar DPA). Dulu satu deretan yang membungkus sendiri, jadi pemilih versi
+          jatuh ke baris kedua dan letak tombol ikut lebar layar. */}
+      <div style={{ background:'#042C53', border:'1px solid #0C447C', borderRadius:10, padding:'10px 16px', display:'flex', flexDirection:'column', gap:10 }}>
+        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12 }}>
+          <h1 style={{ fontWeight:800, fontSize:14, color:'#E6F1FB' }}>Pergeseran DPA</h1>
 
-        {/* Tahun Anggaran — pilih tahun dulu (§2.1) */}
-        <div data-rima="pergeseran.tahun-dropdown" style={{ display:'inline-flex' }}>
-          <TahunDropdown
-            value={tahun}
-            items={tahunList}
-            current={CURRENT_YEAR}
-            onChange={t => { void gantiTahun(t) }}
-          />
-        </div>
-
-        {bolehUbah && (
-          <PeriodeVersiSelect
-            tahun={tahun}
-            versiTerpakai={history.map(h => h.versi_tanggal)}
-            value={periodeTulis}
-            onChange={v => { void gantiPeriode(v) }}
-          />
-        )}
-
-        {bolehUbah && (
-          <>
-            <PrimaButton variant="purple" iconLeft={<Sparkles className="w-3.5 h-3.5" />}
-              disabled={loading || !!alasanKunciBorongan} onClick={generate}
-              data-tooltip={alasanKunciBorongan
-                || 'Salin isi DPA terbaru tahun ini jadi tabel pergeseran baru'}
-              data-rima="pergeseran.buat">
-              Buat Pergeseran
-            </PrimaButton>
-
-            {/* Pagar 5 dulu MEMATIKAN tombol ini pada periode historis, karena
-                `inject` selalu menarik DPA TERBARU: menekannya di Pergeseran
-                Januari akan menimpa kolom DPA dengan angka Agustus. Sekarang
-                servernya mengambil DPA yang BERLAKU pada sasaran Simpan, jadi
-                sebabnya hilang dan tombolnya hidup lagi di periode historis —
-                menutup Januari lalu menyamakan dengan DPA Januari kini bisa. */}
-            {/* §9 — mati di isi babak lama: `injectDpaKePergeseran` mempertahankan
-                vol_p/harga_p baris yang "sudah digeser", jadi geseran lama akan ditempel
-                di atas angka DPA Perubahan (L82b lewat pintu lain). Simpannya sendiri
-                tetap dijaga server (R6 + sasaran babak lama). */}
-            <PrimaButton variant="success" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
-              disabled={injecting || !rows.length || isiBabakLama}
-              onClick={() => { void inject() }}
-              data-tooltip={isiBabakLama
-                ? 'Pergeseran ini mengacu DPA sebelum Perubahan. Menyamakannya akan menempel geseran lama di atas angka DPA Perubahan — tekan Buat Pergeseran untuk memulai dari DPA Perubahan.'
-                : `Samakan kode, uraian, volume, dan harga dengan DPA yang berlaku pada ${formatTanggalId(sasaran)} — perubahannya ditampilkan dulu sebelum diterapkan`}
-              data-rima="pergeseran.sinkron-dpa">
-              {injecting ? 'Membandingkan…' : 'Sinkronkan DPA'}
-            </PrimaButton>
-
-            <PrimaButton variant="warning" iconLeft={<Lock className="w-3.5 h-3.5" />}
-              disabled={loading || !!alasanKunciTutup} onClick={mulaiTutup}
-              data-tooltip={alasanKunciTutup
-                || `Kunci hasil pergeseran ${formatTanggalId(versi)} dan jadikan patokan putaran berikutnya`}
-              data-rima="pergeseran.tutup">
-              Tutup Pergeseran
-            </PrimaButton>
-
-            <PrimaButton variant="ghost" iconLeft={<Copy className="w-3.5 h-3.5" />}
-              disabled={loading || !!alasanKunciVersi}
-              data-tooltip={alasanKunciVersi
-                || `Ambil isi versi pergeseran lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
-              onClick={() => setSalinVersiBuka(true)} data-rima="pergeseran.salin-versi">
-              Salin Versi Lain
-            </PrimaButton>
-
-            {/* Pintu 1 — jalan masuknya. SENGAJA di luar `alasanKunciBorongan`:
-                tombol-tombol itu dikunci karena membawa baris dari LUAR; yang ini
-                tidak menyentuh satu baris pun, cuma menjelaskan yang sudah ada. */}
-            <PrimaButton variant="ghost" iconLeft={<Shuffle className="w-3.5 h-3.5" />}
-              disabled={loading || rows.length === 0}
-              data-tooltip="Catat uang berpindah dari rekening mana ke rekening mana — kolom Bertambah/Berkurang dihitung dari sini"
-              onClick={() => bukaCatatan(null)} data-rima="pergeseran.catatan-perpindahan">
-              Catatan Perpindahan{mutasi.length > 0 ? ` · ${mutasi.length}` : ''}
-            </PrimaButton>
-          </>
-        )}
-
-        {/* data-rima: anchor tur RIMA F3 — wrapper inline-flex (display:contents rect-nya kosong) */}
-        <div data-rima="pergeseran.versi-dropdown" style={{ display:'inline-flex' }}>
-          <VersiDropdown
-            value={versi}
-            items={historyBerlencana}
-            onChange={v => { void bukaVersi(v) }}
-            placeholder="— Pilih History —"
-            riwayat={riwayat}
-            onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
-            belumTersimpan={belumTersimpan}
-            berlaku={berlakuVersi}
-          />
-        </div>
-
-        {/* Berdampingan dengan dropdown versi, BUKAN di deretan tombol penyusun:
-            keduanya keluarga pemulihan. Waktu ia duduk di sebelah Impor, orang
-            wajar mengira ia cara membuat tabel baru. */}
-        {bolehUbah && (
-          <MuatBerkasButton
-            jenis="PERGESERAN" tahun={tahun}
-            onMuat={(d, n) => { void muatDariBerkas(d, n) }}
-          />
-        )}
-
-        {bolehUbah && (
-          <div style={{ marginLeft: 'auto' }}>
-            <PrimaButton menulis variant="primary" iconLeft={<Save className="w-3.5 h-3.5" />}
-              disabled={saving} onClick={simpan} data-rima="pergeseran.simpan">
-              {saving ? 'Menyimpan...' : 'Simpan'}
-            </PrimaButton>
+          {/* Tahun Anggaran — pilih tahun dulu (§2.1) */}
+          <div data-rima="pergeseran.tahun-dropdown" style={{ display:'inline-flex' }}>
+            <TahunDropdown
+              value={tahun}
+              items={tahunList}
+              current={CURRENT_YEAR}
+              onChange={t => { void gantiTahun(t) }}
+            />
           </div>
-        )}
 
-        {dpaVersi && (
-          <span data-rima="pergeseran.sumber-dpa" style={{ fontSize:11, color:'#85B7EB', display:'flex', alignItems:'center', gap:4 }}>
-            <Calendar style={{ width:12, height:12 }} /> Sumber DPA: {dpaVersi}
-          </span>
-        )}
+          {bolehUbah && (
+            <PeriodeVersiSelect
+              tahun={tahun}
+              versiTerpakai={history.map(h => h.versi_tanggal)}
+              value={periodeTulis}
+              onChange={v => { void gantiPeriode(v) }}
+            />
+          )}
 
-        {deltaBerimbang !== 0 && (
-          <span style={{ fontSize:11, fontWeight:800, color:'#FCD34D', background:'rgba(245,158,11,.15)', border:'1px solid #F59E0B', borderRadius:999, padding:'3px 10px', display:'inline-flex', alignItems:'center', gap:5 }}>
-            <AlertTriangle style={{ width:12, height:12 }} />
-            DRAFT — belum berimbang ({deltaBerimbang > 0 ? '+' : '−'}{formatRupiah(Math.abs(deltaBerimbang))})
-          </span>
+          {/* data-rima: anchor tur RIMA F3 — wrapper inline-flex (display:contents rect-nya kosong) */}
+          <div data-rima="pergeseran.versi-dropdown" style={{ display:'inline-flex' }}>
+            <VersiDropdown
+              value={versi}
+              items={historyBerlencana}
+              onChange={v => { void bukaVersi(v) }}
+              placeholder="— Pilih History —"
+              riwayat={riwayat}
+              onPulihkan={bolehUbah ? pulihkanSimpanan : undefined}
+              belumTersimpan={belumTersimpan}
+              berlaku={berlakuVersi}
+            />
+          </div>
+
+          {/* Berdampingan dengan dropdown versi, BUKAN di deretan tombol penyusun:
+              keduanya keluarga pemulihan. Waktu ia duduk di sebelah Impor, orang
+              wajar mengira ia cara membuat tabel baru. */}
+          {bolehUbah && (
+            <MuatBerkasButton
+              jenis="PERGESERAN" tahun={tahun}
+              onMuat={(d, n) => { void muatDariBerkas(d, n) }}
+            />
+          )}
+
+          <div style={{ marginLeft:'auto', display:'flex', flexWrap:'wrap', alignItems:'center', gap:10 }}>
+            {deltaBerimbang !== 0 && (
+              <span style={{ fontSize:11, fontWeight:800, color:'#FCD34D', background:'rgba(245,158,11,.15)', border:'1px solid #F59E0B', borderRadius:999, padding:'3px 10px', display:'inline-flex', alignItems:'center', gap:5 }}>
+                <AlertTriangle style={{ width:12, height:12 }} />
+                DRAFT — belum berimbang ({deltaBerimbang > 0 ? '+' : '−'}{formatRupiah(Math.abs(deltaBerimbang))})
+              </span>
+            )}
+
+            {dpaVersi && (
+              <span data-rima="pergeseran.sumber-dpa" style={{ fontSize:11, color:'#85B7EB', display:'flex', alignItems:'center', gap:4 }}>
+                <Calendar style={{ width:12, height:12 }} /> Sumber DPA: {dpaVersi}
+              </span>
+            )}
+
+            {bolehUbah && (
+              <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save className="w-3.5 h-3.5" />}
+                disabled={saving} onClick={simpan} data-rima="pergeseran.simpan">
+                {saving ? 'Menyimpan...' : 'Simpan'}
+              </PrimaButton>
+            )}
+          </div>
+        </div>
+
+        {bolehUbah && (
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px 12px', borderTop:'1px solid #0C447C', paddingTop:10 }}>
+            <KelompokAksi label="Isi tabel">
+              <PrimaButton variant="purple" size="sm" iconLeft={<Sparkles className="w-3.5 h-3.5" />}
+                disabled={loading || !!alasanKunciBorongan} onClick={generate}
+                data-tooltip={alasanKunciBorongan
+                  || 'Salin isi DPA terbaru tahun ini jadi tabel pergeseran baru'}
+                data-rima="pergeseran.buat">
+                Buat Pergeseran
+              </PrimaButton>
+
+              {/* Pagar 5 dulu MEMATIKAN tombol ini pada periode historis, karena
+                  `inject` selalu menarik DPA TERBARU: menekannya di Pergeseran
+                  Januari akan menimpa kolom DPA dengan angka Agustus. Sekarang
+                  servernya mengambil DPA yang BERLAKU pada sasaran Simpan, jadi
+                  sebabnya hilang dan tombolnya hidup lagi di periode historis —
+                  menutup Januari lalu menyamakan dengan DPA Januari kini bisa. */}
+              {/* §9 — mati di isi babak lama: `injectDpaKePergeseran` mempertahankan
+                  vol_p/harga_p baris yang "sudah digeser", jadi geseran lama akan ditempel
+                  di atas angka DPA Perubahan (L82b lewat pintu lain). Simpannya sendiri
+                  tetap dijaga server (R6 + sasaran babak lama). */}
+              <PrimaButton variant="success" size="sm" iconLeft={<RefreshCw className="w-3.5 h-3.5" />}
+                disabled={injecting || !rows.length || isiBabakLama}
+                onClick={() => { void inject() }}
+                data-tooltip={isiBabakLama
+                  ? 'Pergeseran ini mengacu DPA sebelum Perubahan. Menyamakannya akan menempel geseran lama di atas angka DPA Perubahan — tekan Buat Pergeseran untuk memulai dari DPA Perubahan.'
+                  : `Samakan kode, uraian, volume, dan harga dengan DPA yang berlaku pada ${formatTanggalId(sasaran)} — perubahannya ditampilkan dulu sebelum diterapkan`}
+                data-rima="pergeseran.sinkron-dpa">
+                {injecting ? 'Membandingkan…' : 'Sinkronkan DPA'}
+              </PrimaButton>
+
+              <PrimaButton variant="ghost" size="sm" iconLeft={<Copy className="w-3.5 h-3.5" />}
+                disabled={loading || !!alasanKunciVersi}
+                data-tooltip={alasanKunciVersi
+                  || `Ambil isi versi pergeseran lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
+                onClick={() => setSalinVersiBuka(true)} data-rima="pergeseran.salin-versi">
+                Salin Versi Lain
+              </PrimaButton>
+            </KelompokAksi>
+
+            <KelompokAksi label="Lanjutan" garis>
+              {/* Pintu 1 — jalan masuknya. SENGAJA di luar `alasanKunciBorongan`:
+                  tombol-tombol itu dikunci karena membawa baris dari LUAR; yang ini
+                  tidak menyentuh satu baris pun, cuma menjelaskan yang sudah ada. */}
+              <PrimaButton variant="ghost" size="sm" iconLeft={<Shuffle className="w-3.5 h-3.5" />}
+                disabled={loading || rows.length === 0}
+                data-tooltip="Catat uang berpindah dari rekening mana ke rekening mana — kolom Bertambah/Berkurang dihitung dari sini"
+                onClick={() => bukaCatatan(null)} data-rima="pergeseran.catatan-perpindahan">
+                Catatan Perpindahan{mutasi.length > 0 ? ` · ${mutasi.length}` : ''}
+              </PrimaButton>
+
+              <PrimaButton variant="warning" size="sm" iconLeft={<Lock className="w-3.5 h-3.5" />}
+                disabled={loading || !!alasanKunciTutup} onClick={mulaiTutup}
+                data-tooltip={alasanKunciTutup
+                  || `Kunci hasil pergeseran ${formatTanggalId(versi)} dan jadikan patokan putaran berikutnya`}
+                data-rima="pergeseran.tutup">
+                Tutup Pergeseran
+              </PrimaButton>
+            </KelompokAksi>
+          </div>
         )}
       </div>
 
