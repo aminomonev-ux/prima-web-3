@@ -196,6 +196,15 @@ export async function POST(req: NextRequest) {
       expected_version, force, turunkan_paksa, entri_historis, asal_perubahan ?? null,
     )
 
+    // Isinya sama dengan versi yang berlaku pada sasaran — tidak ada yang ditulis, jadi
+    // tidak ada yang diaudit (pola Simpan Realisasi E-Anggaran).
+    if (result.tidakBerubah) {
+      return NextResponse.json({
+        ok: true, tidak_berubah: true, versi_berlaku: result.tidakBerubah.versiBerlaku,
+        tahun: tahun_anggaran, versi: versi_tanggal, version: result.newVersion,
+      })
+    }
+
     if (result.bentrokPagu.length > 0) {
       const b = result.bentrokPagu
       await writeAuditLog({

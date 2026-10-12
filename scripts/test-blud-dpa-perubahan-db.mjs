@@ -156,7 +156,10 @@ try {
     periksa('getPaguSumber → DPA Perubahan ke-1', s.sumber === 'DPA' && s.versi === M && s.perubahan_ke === 1, `${s.sumber} ${s.versi} ke-${s.perubahan_ke}`)
   }
   console.log('\n── 8a. Versi dasar DPA dikunci ──')
-  periksa('Simpan ulang DPA dasar → VERSI_DASAR', await tangkap(() => simpanDpa(V0, pohonDpa({ A: 80, B: 70, C: 30 }))) === 'BludVersiDasarError')
+  // Isinya HARUS berbeda (A 81): isi yang sama tidak menulis apa pun lagi dan dilewati
+  // sebelum pagar ini (docs/CONCEPT-blud-simpan-identik.md) — yang dijaga pagar ini tulisan.
+  periksa('Simpan ulang DPA dasar → VERSI_DASAR', await tangkap(() => simpanDpa(V0, pohonDpa({ A: 81, B: 70, C: 30 }))) === 'BludVersiDasarError')
+  periksa('…isi yang sama dilewati tanpa menulis', (await simpanDpa(V0, pohonDpa({ A: 80, B: 70, C: 30 }))).tidakBerubah?.versiBerlaku === V0)
   periksa('Hapus DPA dasar → VERSI_DASAR', await tangkap(() => deleteDpaVersi(TAHUN, V0)) === 'BludVersiDasarError')
   await bersihkan()
 
@@ -308,8 +311,9 @@ try {
   }
 
   console.log('\n── 8b. Versi dasar pergeseran dikunci ──')
+  // Isi berbeda (geser A→C 1 jt) — isi yang sama dilewati sebelum pagar ini (simpan-identik).
   periksa('Simpan ulang pergeseran dasar P1 → VERSI_DASAR',
-    await tangkap(() => simpanPg(P1, V0, pohonPergeseran({ A: 80, B: 70, C: 30 }, { A: 80, B: 70, C: 30 }))) === 'BludVersiDasarError')
+    await tangkap(() => simpanPg(P1, V0, pohonPergeseran({ A: 80, B: 70, C: 30 }, { A: 79, B: 70, C: 31 }))) === 'BludVersiDasarError')
   periksa('Hapus pergeseran dasar P1 → VERSI_DASAR', await tangkap(() => deletePergeseranVersi(TAHUN, P1)) === 'BludVersiDasarError')
 
   console.log('\n── 7. Pergeseran sesudah Perubahan (R6) ──')

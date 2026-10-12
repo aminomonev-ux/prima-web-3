@@ -249,6 +249,13 @@ export async function POST(req: NextRequest) {
       session.userId, expected_version, force, turunkan_paksa, entri_historis,
       asal_tutup ?? null, mutasi,
     )
+    // Cermin route DPA: tidak ada yang ditulis → tanpa audit, tanpa sapuan permintaan.
+    if (result.tidakBerubah) {
+      return NextResponse.json({
+        ok: true, tidak_berubah: true, versi_berlaku: result.tidakBerubah.versiBerlaku,
+        tahun: tahun_anggaran, versi: versi_tanggal, dpa_versi: dpaVersi, version: result.newVersion,
+      })
+    }
     const bentrok = result.bentrokPagu
 
     if (bentrok.length > 0) {

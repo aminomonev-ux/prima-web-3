@@ -33,7 +33,7 @@ type MungkinBerAcuanDpa = { dpa_versi_tanggal?: string | null }
 
 export default function SalinVersiModal<TRaw, TInput>({
   tahun, jenis, history, versiTerbuka, sasaran, jumlahDiLayar,
-  petakan, hitungTotal, onTutup, onSalin,
+  petakan, hitungTotal, onTutup, onSalin, sumberAwal,
 }: {
   tahun:         number
   jenis:         SumberSalin
@@ -47,13 +47,16 @@ export default function SalinVersiModal<TRaw, TInput>({
   hitungTotal:   (rows: TInput[]) => number
   onTutup:       () => void
   onSalin:       (rows: TInput[], asal: AsalSalin, dpaVersi: string | null) => void
+  /** Sumber yang langsung terpilih — dari dialog jebakan arsip ("bawa isi 30 Sep ke sini"). */
+  sumberAwal?:   string | null
 }) {
   const pilihan = useMemo(
     () => sumberSalinTersedia(history, [versiTerbuka, sasaran]),
     [history, versiTerbuka, sasaran],
   )
 
-  const [sumber,  setSumber]  = useState<string>(pilihan[0]?.versi_tanggal ?? '')
+  const [sumber,  setSumber]  = useState<string>(
+    pilihan.find(p => p.versi_tanggal === sumberAwal)?.versi_tanggal ?? pilihan[0]?.versi_tanggal ?? '')
   const [memuat,  setMemuat]  = useState(false)
   const [sibuk,   setSibuk]   = useState(false)
   const [baris,   setBaris]   = useState<TInput[]>([])

@@ -9,7 +9,7 @@
 //   kalau tidak 2 tahun disimpan tanggal sama saling menimpa (§1).
 
 import { sql, withTransaction, bulkInsert } from '@/lib/data/db'
-import type { TxSql } from '@/lib/data/db'
+import type { TxSql, Penanya } from '@/lib/data/db'
 import {
   assertBludVersion, bumpBludVersion, dropBludVersion, getBludVersion, bludVersiKey,
   acquireBludLock, BLUD_PAGU_ENTITY, bludPaguKey, BLUD_VERSI_ENTITY, bludTahunKey,
@@ -25,6 +25,7 @@ import {
 import { ensureAnggaranKey } from './anggaran-key'
 import { toDateStr, formatTanggalId, labelPeriodeVersi } from './tanggal'
 import { catatRiwayatSimpan } from './riwayat-simpan'
+import { isiDpaSama, isiPergeseranSama } from './isi-sama'
 import { catatTutupPergeseran, hapusTutupTerkaitVersi } from './tutup-data'
 import { catatPerubahan, bersihkanPenandaYatim } from './perubahan-data'
 import type { MutasiInput } from './mutasi'
@@ -595,6 +596,40 @@ export interface SimpanHasil {
    * simpanan inilah yang menerbitkan penandanya. Untuk baris audit.
    */
   perubahan: { ke: number; dibuat: boolean; sumber_dasar: 'PERGESERAN' | 'DPA'; versi_dasar: string } | null
+  /**
+   * Isinya sama persis dengan versi yang berlaku pada tanggal sasaran, jadi TIDAK ADA
+   * yang ditulis (lib/blud/isi-sama.ts). Route tidak mengaudit, layar tidak berpindah versi.
+   */
+  tidakBerubah?: { versiBerlaku: string }
+}
+
+/**
+ * Versi yang BERLAKU pada tanggal sasaran (terakhir ≤ sasaran) beserta isinya — pembanding
+ * Simpan identik. Dibaca lewat `tx`, di bawah kunci setahun (L69-b).
+ */
+async function dpaBerlakuPada(tx: TxSql, tahun: number, sasaran: string): Promise<{ versi: string; rows: DpaBaris[] } | null> {
+  const versi = await getDpaVersiBerlaku(tahun, sasaran, tx)
+  if (!versi) return null
+  const rows = await tx`SELECT * FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}` as Record<string, unknown>[]
+  return { versi, rows: rows.map(normDpa) }
+}
+
+async function pergeseranBerlakuPada(tx: TxSql, tahun: number, sasaran: string): Promise<{
+  versi: string; rows: PergeseranBaris[]; acuan: string; mutasi: MutasiInput[]
+} | null> {
+  const versi = await getPergeseranVersiBerlaku(tahun, sasaran, tx)
+  if (!versi) return null
+  const rows = (await tx`SELECT * FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}` as Record<string, unknown>[])
+    .map(normPergeseran)
+  const mutasi = (await tx`
+    SELECT dari_row, ke_row, nilai, keterangan FROM pergeseran_mutasi
+    WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
+    ORDER BY urutan ASC, id ASC
+  ` as Record<string, unknown>[]).map(r => ({
+    dari_row: String(r.dari_row), ke_row: String(r.ke_row), nilai: Number(r.nilai ?? 0),
+    keterangan: r.keterangan != null ? String(r.keterangan) : null,
+  }))
+  return { versi, rows, acuan: rows[0]?.dpa_versi_tanggal ?? '', mutasi }
 }
 
 /**
@@ -794,9 +829,19 @@ export async function getDpaLatestDate(tahun: number): Promise<string | null> {
  * bulan berjalan sedikit pun; yang berubah hanya jalur periode historis, yang
  * memang selama ini salah.
  */
-export async function getDpaVersiBerlaku(tahun: number, tanggal: string): Promise<string | null> {
-  const rows = await sql`
+export async function getDpaVersiBerlaku(tahun: number, tanggal: string, q: Penanya = sql): Promise<string | null> {
+  const rows = await q`
     SELECT MAX(versi_tanggal) AS v FROM dpa_blud
+    WHERE tahun_anggaran = ${tahun} AND versi_tanggal <= ${tanggal}
+  `
+  const v = (rows as Record<string, unknown>[])[0]?.v
+  return v ? toDateStr(v) : null
+}
+
+/** Kembaran `getDpaVersiBerlaku` untuk pergeseran — pembanding Simpan identik. */
+export async function getPergeseranVersiBerlaku(tahun: number, tanggal: string, q: Penanya = sql): Promise<string | null> {
+  const rows = await q`
+    SELECT MAX(versi_tanggal) AS v FROM pergeseran_dpa
     WHERE tahun_anggaran = ${tahun} AND versi_tanggal <= ${tanggal}
   `
   const v = (rows as Record<string, unknown>[])[0]?.v
@@ -892,9 +937,22 @@ export async function saveDpa(
   let existing = 0
   let bentrokPagu: BentrokPagu[] = []
   let perubahan: SimpanHasil['perubahan'] = null
+  // `as`: ditulis di dalam callback, jadi TS tidak boleh menyempitkannya ke `null`.
+  let tidakBerubah = null as { versi: string; baris: number } | null
   await withTransaction(async ({ tx, conn }) => {
     await kunciVersiTahun(tx, tahun)
     await assertBludVersion(tx, 'dpa_blud', lockKey, expectedVersion)
+    // Simpan yang tidak mengubah apa pun tidak menulis apa pun (lib/blud/isi-sama.ts):
+    // sesudah angka kunci diperiksa — kunci basi tetap 409 — dan sebelum pagar lain,
+    // karena tidak ada tulisan yang perlu dijaga. Pembuat Perubahan tidak ikut: isi yang
+    // sama pun tetap menerbitkan babak baru.
+    if (!asalPerubahan) {
+      const berlaku = await dpaBerlakuPada(tx, tahun, versiTanggal)
+      if (berlaku && isiDpaSama(rows, berlaku.rows)) {
+        tidakBerubah = { versi: berlaku.versi, baris: berlaku.versi === versiTanggal ? berlaku.rows.length : 0 }
+        return
+      }
+    }
     // Penanda dibaca DI BAWAH kunci setahun — penanda baru hanya lahir di jalur ini,
     // yang juga memegang kunci yang sama, jadi daftarnya tidak bisa bergeser di sela.
     const penanda = await penandaPerubahan(tx, tahun)
@@ -998,6 +1056,10 @@ export async function saveDpa(
       perubahan = { ke, dibuat: !!asalPerubahan, sumber_dasar: babak.sumber_dasar, versi_dasar: babak.versi_dasar }
     }
   })
+  if (tidakBerubah) {
+    return { existing: tidakBerubah.baris, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [],
+      perubahan: null, tidakBerubah: { versiBerlaku: tidakBerubah.versi } }
+  }
   return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu, perubahan }
 }
 
@@ -1163,9 +1225,20 @@ export async function savePergeseran(
   const baruPagu = new Map<string, BarisPaguVersi>()
   let existing = 0
   let bentrokPagu: BentrokPagu[] = []
+  // `as`: ditulis di dalam callback, jadi TS tidak boleh menyempitkannya ke `null`.
+  let tidakBerubah = null as { versi: string; baris: number } | null
   await withTransaction(async ({ tx, conn }) => {
     await kunciVersiTahun(tx, tahun)
     await assertBludVersion(tx, 'pergeseran_dpa', lockKey, expectedVersion)
+    // Cermin `saveDpa` (L69). Penutupan tidak ikut: ia menerbitkan baris
+    // `blud_pergeseran_tutup`, dan pergeseran tanpa geseran yang ditutup isinya sama.
+    if (!asalTutup) {
+      const berlaku = await pergeseranBerlakuPada(tx, tahun, versiTanggal)
+      if (berlaku && isiPergeseranSama({ rows, acuan: dpaVersiTanggal, mutasi }, berlaku)) {
+        tidakBerubah = { versi: berlaku.versi, baris: berlaku.versi === versiTanggal ? berlaku.rows.length : 0 }
+        return
+      }
+    }
     const penanda = await penandaPerubahan(tx, tahun)
     tolakVersiDasar(penanda, 'pergeseran_dpa', versiTanggal)
     // R6 — pergeseran bertanggal di babak Perubahan wajib mengacu DPA babak itu. Kalau
@@ -1248,6 +1321,10 @@ export async function savePergeseran(
     }
     await tulisMutasi(tx, conn, tahun, versiTanggal, mutasi)
   })
+  if (tidakBerubah) {
+    return { existing: tidakBerubah.baris, replaced: 0, newVersion: expectedVersion, jangkar: {}, bentrokPagu: [],
+      perubahan: null, tidakBerubah: { versiBerlaku: tidakBerubah.versi } }
+  }
   return { existing, replaced: incoming, newVersion: expectedVersion + 1, jangkar, bentrokPagu, perubahan: null }
 }
 

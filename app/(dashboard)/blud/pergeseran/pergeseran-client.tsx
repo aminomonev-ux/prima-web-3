@@ -10,7 +10,8 @@ import { toast } from 'sonner'
 import { Save, Sparkles, RefreshCw, Calendar, X, AlertTriangle, Search, Copy, Lock, Shuffle } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
-import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
+import { kalimatTidakBerubah, jebakanArsip } from '@/lib/blud/isi-sama'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import RowActionsMenu from '@/components/blud/RowActionsMenu'
 import { InputNominal } from '@/components/ui/input-nominal'
@@ -1044,6 +1045,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // Sepadan, untuk baris yang datang dari versi lain tahun yang sama.
   const asalSalinRef = useRef<AsalSalin | null>(null)
   const [salinVersiBuka, setSalinVersiBuka] = useState(false)
+  /** Sumber Salin Versi yang langsung terpilih — diisi dialog jebakan arsip saja. */
+  const [salinVersiAwal, setSalinVersiAwal] = useState<string | null>(null)
   // ── Catatan Perpindahan ────────────────────────────────────────────────────
   // Konsep: docs/CONCEPT-blud-catatan-perpindahan.md. State layar, bukan ref:
   // angkanya ikut menentukan kolom Bertambah/Berkurang, jadi tabelnya harus
@@ -1494,13 +1497,14 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
    * menghasilkan ratusan baris yang belum tersimpan di mana pun, dan berpindah
    * periode membuangnya tanpa sepatah kata pun.
    */
-  async function gantiPeriode(tanggal: string) {
-    if (tanggal === periodeTulis) return
+  /** `false` = tidak jadi berpindah (orangnya memilih tetap di sini). */
+  async function gantiPeriode(tanggal: string): Promise<boolean> {
+    if (tanggal === periodeTulis) return true
     // Periode yang SUDAH punya arsip: memilihnya berarti MEMBUKA arsip itu,
     // bukan menyiapkan yang baru — cermin layar DPA.
     if (tanggal && history.some(h => h.versi_tanggal === tanggal)) {
       await bukaVersi(tanggal)
-      return
+      return true
     }
     // Patokannya `belumTersimpan`, BUKAN `versi` kosong — sesudah Pulihkan atau
     // sesudah satu sel disunting, `versi` terisi padahal isinya belum tersimpan.
@@ -1513,7 +1517,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         cancelLabel:  'Tetap di sini',
         variant:      'danger',
       })
-      if (!buang) return
+      if (!buang) return false
     }
     setPeriodeTulis(tanggal)
     // Mengganti periode LEWAT PEMILIH berarti tabelnya dibuang atau dimuat ulang,
@@ -1531,6 +1535,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     } else {
       await loadPergeseran()
     }
+    return true
   }
 
   /** Ganti tahun anggaran — sepadan `gantiPeriode`, dan sama-sama mengganti layar. */
@@ -1745,6 +1750,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   async function simpan() {
     if (!rows.length) { showToast('Tabel masih kosong — belum ada yang bisa disimpan.', false); return }
     if (submittingRef.current) return
+    if (!(await lolosJebakanArsip())) return
     submittingRef.current = true
     try {
       // RIMA F1 pre-save (CONCEPT §4): critical blokir, warning konfirmasi, ack → audit G8
@@ -1776,6 +1782,37 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       setSaving(true)
       await doSimpanInternal(sasaranSimpan(periodeTulis))
     } finally { submittingRef.current = false; setSaving(false) }
+  }
+
+  /**
+   * Jebakan arsip — cermin layar DPA (penjelasan lengkap di `lolosJebakanArsip` sana).
+   * Penutupan tidak ditanya: sasarannya dipilih `terapkanTutup`, dan sasaran yang sudah
+   * berisi ditolak server (`SASARAN_TUTUP_TERPAKAI`). `true` = lanjut menyimpan.
+   */
+  async function lolosJebakanArsip(): Promise<boolean> {
+    if (asalTutupRef.current) return true
+    const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal))
+    if (!j) return true
+    const pilih = await pilihDialog({
+      title:   `Simpan ke arsip ${formatTanggalId(j.arsip)}?`,
+      message: `Simpan akan MENIMPA arsip pergeseran ${formatTanggalId(j.arsip)} — bukan versi bulan ini `
+        + `(terbaru ${formatTanggalId(j.terbaru)}).\n\n`
+        + `Kalau maksud Anda membawa isi ${formatTanggalId(j.arsip)} ke bulan ini (misalnya membetulkan `
+        + `salah ketik), pakai Salin Versi Lain: layar pindah ke periode bulan berjalan dan arsip ini `
+        + `langsung terpilih sebagai sumbernya.`,
+      confirmLabel: 'Pakai Salin Versi Lain',
+      variant:      'purple',
+      altLabel:     `Tetap simpan ke ${formatTanggalId(j.arsip)}`,
+      altVariant:   'warning',
+    })
+    if (pilih === 'utama') await bawaKeBulanIni(j.arsip)
+    return pilih === 'lain'
+  }
+
+  async function bawaKeBulanIni(arsip: string) {
+    if (!(await gantiPeriode(''))) return
+    setSalinVersiAwal(arsip)
+    setSalinVersiBuka(true)
   }
 
   // Audit BLUD v1.2 (B-NEW-3): split jadi internal supaya bisa retry dengan force=true
@@ -1862,6 +1899,16 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       // Simpan lagi sesudah itu harus tetap tercatat sebagai penutupan.
       if (res.status === 409 && (json.code === 'SASARAN_TUTUP_TERPAKAI' || json.code === 'SUDAH_DITUTUP')) {
         toast.error(json.error, { duration: 9000 })
+        return
+      }
+      if (json.ok && json.tidak_berubah) {
+        // Cermin layar DPA: tidak ada yang ditulis, jadi versi & periode TIDAK berpindah.
+        // `asalTutupRef` tidak disentuh — penutupan tidak pernah dilewati server.
+        showToast(kalimatTidakBerubah({ versiBerlaku: String(json.versi_berlaku), sasaran: versiTanggal, tanggal: formatTanggalId }))
+        setBelumTersimpan(false)
+        asalPulihkanRef.current = null
+        asalBerkasRef.current   = null
+        asalSalinRef.current    = null
         return
       }
       if (json.ok) {
@@ -2214,7 +2261,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
                 disabled={loading || !!alasanKunciVersi}
                 data-tooltip={alasanKunciVersi
                   || `Ambil isi versi pergeseran lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
-                onClick={() => setSalinVersiBuka(true)} data-rima="pergeseran.salin-versi">
+                onClick={() => { setSalinVersiAwal(null); setSalinVersiBuka(true) }} data-rima="pergeseran.salin-versi">
                 Salin Versi Lain
               </PrimaButton>
             </KelompokAksi>
@@ -2368,6 +2415,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
           hitungTotal={totalAkarPergeseran}
           onTutup={() => setSalinVersiBuka(false)}
           onSalin={terapkanSalinVersi}
+          sumberAwal={salinVersiAwal}
         />
       )}
 

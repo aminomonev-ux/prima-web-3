@@ -26,7 +26,8 @@ import type { BerkasCadangan } from '@/lib/blud/cadangan-berkas'
 import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
-import { confirmDialog } from '@/components/ui/ConfirmDialog'
+import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
+import { kalimatTidakBerubah, jebakanArsip } from '@/lib/blud/isi-sama'
 import Tip from '@/components/ui/Tip'
 import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
@@ -1032,6 +1033,8 @@ export default function DpaClient({
   const [salinBuka,    setSalinBuka]    = useState(false)
   const [salinTahunBuka, setSalinTahunBuka] = useState(false)
   const [salinVersiBuka, setSalinVersiBuka] = useState(false)
+  /** Sumber Salin Versi yang langsung terpilih — diisi dialog jebakan arsip saja. */
+  const [salinVersiAwal, setSalinVersiAwal] = useState<string | null>(null)
   // Asal salinan disimpan sampai Simpan ditekan — semata untuk baris detail audit.
   // Dilepas begitu barisnya diubah lewat jalur lain supaya jejaknya tidak berbohong.
   const asalSalinRef = useRef<AsalSalin | null>(null)
@@ -1346,6 +1349,7 @@ export default function DpaClient({
   async function simpan() {
     if (!rows.length) { showToast('Form masih kosong — belum ada yang bisa disimpan.', false); return }
     if (submittingRef.current) return
+    if (!(await lolosJebakanArsip())) return
     submittingRef.current = true
     paksaTurunRef.current = null
     paksaDropRef.current = false
@@ -1357,6 +1361,38 @@ export default function DpaClient({
       setSaving(true)
       await doSimpanInternal(sasaranSimpan(periodeTulis))
     } finally { submittingRef.current = false; setSaving(false) }
+  }
+
+  /**
+   * Jebakan arsip: membuka/memulihkan arsip akhir bulan lampau memindahkan sasaran Simpan
+   * ke arsip itu (L79), padahal orangnya biasanya ingin MEMBAWA isinya ke bulan ini.
+   * Simpan lalu diam-diam menimpa arsip. Ditanya dulu; jalan utamanya (dan Enter) Salin
+   * Versi Lain — menyalin mengganti ISI, sasaran tetap bulan berjalan (L80).
+   * `true` = lanjut menyimpan.
+   */
+  async function lolosJebakanArsip(): Promise<boolean> {
+    const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal))
+    if (!j) return true
+    const pilih = await pilihDialog({
+      title:   `Simpan ke arsip ${formatTanggalId(j.arsip)}?`,
+      message: `Simpan akan MENIMPA arsip ${formatTanggalId(j.arsip)} — bukan versi bulan ini `
+        + `(terbaru ${formatTanggalId(j.terbaru)}).\n\n`
+        + `Kalau maksud Anda membawa isi ${formatTanggalId(j.arsip)} ke bulan ini (misalnya membetulkan `
+        + `salah ketik), pakai Salin Versi Lain: layar pindah ke periode bulan berjalan dan arsip ini `
+        + `langsung terpilih sebagai sumbernya.`,
+      confirmLabel: 'Pakai Salin Versi Lain',
+      variant:      'purple',
+      altLabel:     `Tetap simpan ke ${formatTanggalId(j.arsip)}`,
+      altVariant:   'warning',
+    })
+    if (pilih === 'utama') await bawaKeBulanIni(j.arsip)
+    return pilih === 'lain'
+  }
+
+  async function bawaKeBulanIni(arsip: string) {
+    if (!(await gantiPeriode(''))) return
+    setSalinVersiAwal(arsip)
+    setSalinVersiBuka(true)
   }
 
   // Audit BLUD v1.2 (B-NEW-3): split jadi internal supaya bisa di-retry dengan force=true
@@ -1451,6 +1487,17 @@ export default function DpaClient({
       }
       if (res.status === 409 && json.code === 'HISTORIS_JADI_PAGU') {
         showToast(json.error, false)
+        return
+      }
+      if (json.ok && json.tidak_berubah) {
+        // Tidak ada yang ditulis (lib/blud/isi-sama.ts): versi & periode TIDAK berpindah —
+        // tidak ada versi baru untuk dibuka — dan angka kunci tetap.
+        showToast(kalimatTidakBerubah({ versiBerlaku: String(json.versi_berlaku), sasaran: versiTanggal, tanggal: formatTanggalId }))
+        setBelumTersimpan(false)
+        asalSalinRef.current    = null
+        asalPulihkanRef.current = null
+        asalBerkasRef.current   = null
+        asalImporRef.current    = null
         return
       }
       if (json.ok) {
@@ -1650,14 +1697,15 @@ export default function DpaClient({
     asalPerubahanRef.current = null
   }
 
-  async function gantiPeriode(tanggal: string) {
-    if (tanggal === periodeTulis) return
+  /** `false` = tidak jadi berpindah (orangnya memilih tetap di sini). */
+  async function gantiPeriode(tanggal: string): Promise<boolean> {
+    if (tanggal === periodeTulis) return true
     // Periode yang SUDAH punya arsip: memilihnya berarti MEMBUKA arsip itu,
     // bukan menyiapkan yang baru. Mengosongkan layar di sini jadi jebakan —
     // layar kosong dengan sasaran Simpan yang justru sudah berisi.
     if (tanggal && history.some(h => h.versi_tanggal === tanggal)) {
       await bukaVersi(tanggal)
-      return
+      return true
     }
     // Membuang pekerjaan orang tanpa bertanya tidak boleh. Patokannya
     // `belumTersimpan`, BUKAN `versi` kosong: sesudah Pulihkan atau sesudah satu
@@ -1672,7 +1720,7 @@ export default function DpaClient({
         cancelLabel:  'Tetap di sini',
         variant:      'danger',
       })
-      if (!buang) return
+      if (!buang) return false
     }
     setPeriodeTulis(tanggal)
     asalSalinRef.current    = null
@@ -1688,6 +1736,7 @@ export default function DpaClient({
     } else {
       await loadDpa()
     }
+    return true
   }
 
   /**
@@ -1962,7 +2011,7 @@ export default function DpaClient({
                 disabled={!!alasanKunciVersi}
                 data-tooltip={alasanKunciVersi
                   || `Ambil isi versi lain tahun ${tahun} ke layar ini — sasaran Simpan tetap ${formatTanggalId(sasaran)}`}
-                onClick={() => setSalinVersiBuka(true)} data-rima="dpa.salin-versi">
+                onClick={() => { setSalinVersiAwal(null); setSalinVersiBuka(true) }} data-rima="dpa.salin-versi">
                 Salin Versi Lain
               </PrimaButton>
             </KelompokAksi>
@@ -2199,6 +2248,7 @@ export default function DpaClient({
           hitungTotal={totalAkarDpa}
           onTutup={() => setSalinVersiBuka(false)}
           onSalin={terapkanSalinVersi}
+          sumberAwal={salinVersiAwal}
         />
       )}
 

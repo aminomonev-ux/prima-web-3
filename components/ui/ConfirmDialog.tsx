@@ -3,6 +3,7 @@
 // Imperative + promise-based: if (!(await confirmDialog({ message }))) return;
 // Mount portal sendiri (createRoot) → tak perlu hook / render manual di komponen.
 // Tema dideteksi dari <html data-theme>. Esc / klik luar / Batal = false.
+// `pilihDialog` = varian tiga tombol (lihat di bawah), badan tampilannya sama.
 
 import { createRoot } from 'react-dom/client';
 import { useEffect, useState } from 'react';
@@ -18,11 +19,17 @@ export interface ConfirmOpts {
   variant?: Variant;
 }
 
-function ConfirmUI({ opts, onDone }: { opts: ConfirmOpts; onDone: (v: boolean) => void }) {
+/** Balasan `pilihDialog`: tombol utama, tombol ketiga, atau dibatalkan (Esc/klik luar/Batal). */
+export type HasilPilih = 'utama' | 'lain' | null;
+
+function ConfirmUI({ opts, onDone }: {
+  opts: ConfirmOpts & { altLabel?: string; altVariant?: Variant };
+  onDone: (v: HasilPilih) => void;
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onDone(false);
-      if (e.key === 'Enter') onDone(true);
+      if (e.key === 'Escape') onDone(null);
+      if (e.key === 'Enter') onDone('utama');
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -37,34 +44,52 @@ function ConfirmUI({ opts, onDone }: { opts: ConfirmOpts; onDone: (v: boolean) =
   };
 
   return (
-    <div onClick={() => onDone(false)}
+    <div onClick={() => onDone(null)}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000, padding: 16 }}>
       <div onClick={e => e.stopPropagation()} role="alertdialog" aria-modal="true"
         style={{ background: c.card, color: c.text, border: `1px solid ${c.border}`, borderRadius: 14, padding: 22, width: 'min(420px,94vw)', boxShadow: isLight ? '0 24px 60px rgba(0,0,0,.18)' : '0 24px 60px rgba(0,0,0,.6)' }}>
         {opts.title && <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 8px' }}>{opts.title}</h2>}
         <div style={{ fontSize: 13.5, lineHeight: 1.5, color: c.sub, whiteSpace: 'pre-line', marginBottom: 18 }}>{opts.message}</div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <PrimaButton variant="ghost" onClick={() => onDone(false)}>{opts.cancelLabel ?? 'Batal'}</PrimaButton>
-          <PrimaButton variant={opts.variant ?? 'danger'} onClick={() => onDone(true)}>{opts.confirmLabel ?? 'Hapus'}</PrimaButton>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
+          <PrimaButton variant="ghost" onClick={() => onDone(null)}>{opts.cancelLabel ?? 'Batal'}</PrimaButton>
+          {opts.altLabel && (
+            <PrimaButton variant={opts.altVariant ?? 'warning'} onClick={() => onDone('lain')}>{opts.altLabel}</PrimaButton>
+          )}
+          <PrimaButton variant={opts.variant ?? 'danger'} onClick={() => onDone('utama')}>{opts.confirmLabel ?? 'Hapus'}</PrimaButton>
         </div>
       </div>
     </div>
   );
 }
 
-export function confirmDialog(opts: ConfirmOpts): Promise<boolean> {
-  if (typeof document === 'undefined') return Promise.resolve(false);
-  return new Promise<boolean>(resolve => {
+function pasang(opts: ConfirmOpts & { altLabel?: string; altVariant?: Variant }): Promise<HasilPilih> {
+  if (typeof document === 'undefined') return Promise.resolve(null);
+  return new Promise<HasilPilih>(resolve => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = createRoot(host);
-    const done = (val: boolean) => {
+    const done = (val: HasilPilih) => {
       root.unmount();
       host.remove();
       resolve(val);
     };
     root.render(<ConfirmUI opts={opts} onDone={done} />);
   });
+}
+
+export function confirmDialog(opts: ConfirmOpts): Promise<boolean> {
+  return pasang(opts).then(v => v === 'utama');
+}
+
+/**
+ * Konfirmasi dengan TIGA jalan: tombol utama (`'utama'`, juga Enter), tombol ketiga
+ * (`'lain'`), atau batal (`null`, juga Esc/klik luar). Untuk dialog yang menawarkan
+ * jalan yang lebih aman di samping "tetap lanjut" — tombol utamanya jalan aman itu,
+ * jadi Enter tidak pernah memilih yang berisiko. `confirmDialog` tidak diubah bentuk
+ * balasannya (30-an pemanggil mengharapkan `boolean`).
+ */
+export function pilihDialog(opts: ConfirmOpts & { altLabel: string; altVariant?: Variant }): Promise<HasilPilih> {
+  return pasang(opts);
 }
 
 // ─── promptDialog — konfirmasi yang MEMINTA satu kalimat ─────────────────────

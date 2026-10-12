@@ -161,8 +161,11 @@ bab('B. Keempat pintu memakai aturan yang sama')
     cek(`${nama}: Pulihkan snapshot menyetel periode`,
       isi.includes('setPeriodeTulis(periodeUntukVersi(s.versi_tanggal))'))
     // Pintu 1 sudah dipasang di L78b — dijaga supaya tidak hilang lagi.
+    // Dipotong per badan fungsi, bukan jendela 900 karakter: baris yang sah (mis. `return
+    // false` untuk pemanggil jebakan arsip) menggeser kodenya keluar jendela.
+    const gp = isi.slice(isi.indexOf('async function gantiPeriode'), isi.indexOf('async function ', isi.indexOf('async function gantiPeriode') + 1))
     cek(`${nama}: Ganti periode masih menggerakkan layar`,
-      /async function gantiPeriode[\s\S]{0,900}setRows\(\[\]\)[\s\S]{0,120}setVersi\(''\)/.test(isi))
+      gp.length > 0 && /setRows\(\[\]\)[\s\S]{0,120}setVersi\(''\)/.test(gp))
     cek(`${nama}: Daftar versi tidak lagi menyetel versi mentah`,
       !/onChange=\{v => \{ setVersi\(v\)/.test(isi))
   }
