@@ -412,3 +412,46 @@ stempel 12:13 → 12:14 dengan posisi gulir tetap di 86.4.
 Regresi: `npx tsx scripts/test-blud-beranda-panel.mts` (50) — **7 uji mutasi
 tertangkap**, satu lebih banyak dari yang direncanakan di §8: penyaring daun §2.2
 ikut dijaga, karena itu justru keputusan yang dugaan awalnya keliru.
+
+## 11. Rincian yang bisa diklik + kartu DPA Perubahan (2026-10-13)
+
+Permintaan pemilik aplikasi: panel "Rekening yang Digeser" bisa diklik ke menunya atau
+dibuka rinciannya; kartu "Δ Pergeseran Net" diganti kartu Perubahan. Nol tabel, kolom,
+migrasi, endpoint.
+
+**Rincian per versi** (`components/blud/RekeningDigeserModal.tsx`, aturan di
+`lib/blud/rekening-digeser.ts` — murni, tanpa impor): tombol "Rincian" di kepala versi dan
+"+N rekening lainnya" membuka modal berisi SEMUA rekening versi itu, dipisah Bertambah /
+Berkurang dengan totalnya + kotak cari (menyaring daftar, bukan totalnya), dan keterangan
+berimbang / belum berimbang (draf). Datanya sudah dimuat kueri panel yang sama
+(`VersiPergeseran.semua`) — dulu dipotong jadi 4 lalu sisanya dibuang. Totalnya selisih
+BERSIH per rekening daun, bukan kolom uraian Bertambah/Berkurang tabel Pergeseran (yang
+bisa memecah satu rekening jadi +45 / −12) — modalnya menyebut itu. Tipenya pindah ke modul
+murni: modal klien yang mengimpor nilai dari `beranda-panel.ts` menyeret mysql2 ke bundel.
+
+**Tautan ke layar Pergeseran**: rekening di panel & modal → `/blud/pergeseran?tahun=&versi=&fokus=`.
+`?fokus=` sudah ada (notifikasi); yang ditambah `?tahun=` (dipakai sejak muatan pertama)
+dan `?versi=` (dibuka lewat `bukaVersi`, BUKAN `loadPergeseran` — periode ikut versinya,
+L79; versi yang sudah tidak ada disebut, layar tetap di versi terbaru). Sorotan MENUNGGU
+versi itu terbuka dan barisnya selesai dimuat (`tungguVersiTautan`, termasuk `loading`):
+`bukaVersi` memindah `versi` sebelum barisnya tiba, dan sorotan yang tidak menunggu
+jatuh di versi terbaru. Tautan hanya bagi yang boleh membuka menu Pergeseran (aturan kartu
+KPI) dan hanya untuk baris berjangkar.
+
+**Kartu DPA Perubahan** menggantikan Δ Pergeseran Net (nyaris selalu Rp 0 — pergeseran
+wajib berimbang): "Ke-n", "Sejak <tanggal> · +Rp X" (`formatSelisih`), dan Sebelum → Sesudah
+versi DPA terbaru lewat `ringkasPerubahan` → `totalSebelumSesudah` (rumus bilah total
+layar DPA — dua layar, satu angka). Sebelum = dasar babak TERAKHIR. Tanpa penanda: "DPA
+tahun ini masih murni"; baris versi tidak dibaca sama sekali. Nilainya "Ke-1", bukan
+"Perubahan ke-1": di kartu sempit kalimat panjang patah tepat di tanda hubungnya.
+
+**Ditemukan saat dijalankan**: hijau `#34D399` tak terbaca di atas putih → kelas
+`.blud-digeser-naik` dgn padanan tema terang. Diverifikasi di 2099 (2026 hanya dibaca):
+kartu "Ke-1 · Sejak 13 Okt 2026 · +Rp 5.000.000 · Rp 68.383.000.000 → Rp 68.388.000.000"
+(cocok kartu Total Anggaran); modal +6 jt / −6 jt berimbang, pencarian; klik rekening versi
+31 Agu → layar membuka 2099 · Periode Agustus · 31 Agu dan menyorot TEPAT SEKALI baris itu
+(dicatat MutationObserver — tidak ada sorotan dini di versi terbaru); versi yang sudah
+tidak ada → toast + versi terbaru; tema terang; 375 px tanpa gulir samping.
+Regresi: `npx tsx scripts/test-blud-beranda-digeser.mts` (49), **24 uji mutasi tertangkap**
+— dua sempat LOLOS krn asersi saya sendiri: kode rekening data uji memuat teks uraiannya
+(pencarian cocok lewat kode), dan potongan efek tautan menjulur ke `toast.warning` lain.

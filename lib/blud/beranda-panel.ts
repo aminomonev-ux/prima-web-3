@@ -16,6 +16,7 @@ import { EPS_PRATINJAU, mepetSetahun } from './pratinjau-serapan'
 import { gulungKeAtas } from './pagu'
 import type { DataPagu } from './serapan-ringkas'
 import { tanggalHariIniWIB, toDateStr } from './tanggal'
+import type { RekeningGeser, VersiPergeseran } from './rekening-digeser'
 
 /** Berapa rekening ditampilkan per versi / per panel sebelum diringkas jadi "N lainnya". */
 export const BATAS_REKENING = 4
@@ -24,22 +25,9 @@ export const BATAS_REALISASI = 5
 
 // ── Panel 1 — rekening yang digeser ─────────────────────────────────────────
 
-export interface RekeningGeser {
-  kode_rekening: string
-  uraian: string
-  /** `bertambah_berkurang` apa adanya — bertanda, jadi tanda itu yang diwarnai. */
-  nominal: number
-}
-
-export interface VersiPergeseran {
-  versi_tanggal: string
-  jumlah_baris: number
-  /** "Pergeseran ke-1 · ditutup 28 Feb 2026" / "basis dari 31 Jan 2026". */
-  catatan?: string
-  rekening: RekeningGeser[]
-  /** Sisa yang tidak muat ditampilkan — 0 kalau semuanya masuk. */
-  lainnya: number
-}
+// Tipenya tinggal di modul murni: modal rincian (klien) memakainya, dan berkas ini
+// mengimpor `sql` — satu impor nilai dari sini menyeret mysql2 ke bundel peramban.
+export type { RekeningGeser, VersiPergeseran } from './rekening-digeser'
 
 /**
  * Riwayat pergeseran, TETAP berkelompok per versi.
@@ -82,7 +70,7 @@ export async function riwayatPergeseran(tahun: number): Promise<VersiPergeseran[
 
   const [geserMentah, tutup] = await Promise.all([
     (async () => await sql`
-      SELECT p.versi_tanggal, p.kode_rekening, p.uraian, p.bertambah_berkurang, p.urutan
+      SELECT p.versi_tanggal, p.anggaran_key, p.kode_rekening, p.uraian, p.bertambah_berkurang, p.urutan
       FROM pergeseran_dpa p
       WHERE p.tahun_anggaran = ${tahun}
         AND p.versi_tanggal >= ${sejak}
@@ -104,6 +92,7 @@ export async function riwayatPergeseran(tahun: number): Promise<VersiPergeseran[
     const v = toDateStr(r.versi_tanggal)
     const daftar = perVersi.get(v) ?? []
     daftar.push({
+      anggaran_key: r.anggaran_key ? String(r.anggaran_key) : null,
       kode_rekening: String(r.kode_rekening ?? ''),
       uraian: String(r.uraian ?? ''),
       nominal: Number(r.bertambah_berkurang ?? 0),
@@ -118,6 +107,8 @@ export async function riwayatPergeseran(tahun: number): Promise<VersiPergeseran[
       catatan: catatanVersi(tutup, v.versi_tanggal),
       rekening: semua.slice(0, BATAS_REKENING),
       lainnya: Math.max(0, semua.length - BATAS_REKENING),
+      // Sudah dimuat kueri yang sama — modal rincian tidak butuh endpoint baru (§11).
+      semua,
     }
   })
 }

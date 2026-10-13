@@ -3284,6 +3284,18 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 [data-theme="light"] .blud-kelompok-garis { border-left-color: rgba(139,92,246,0.18); }
 @media (max-width: 1023px) { .blud-kelompok-garis { border-left: none; padding-left: 0; } }
 
+/* Modal rincian "Rekening yang digeser" (Beranda BLUD). Latar lewat kelas, bukan gaya
+   sebaris: Beranda sering dibuka bertema terang, dan warna sebaris tidak ikut dipetakan. */
+.blud-digeser-modal { background: #042C53; }
+[data-theme="light"] .blud-digeser-modal { background: #FAFAFA; }
+.blud-digeser-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 720px) { .blud-digeser-grid { grid-template-columns: minmax(0, 1fr); } }
+.blud-digeser-naik  { color: #34D399; }
+.blud-digeser-turun { color: #E24B4A; }
+[data-theme="light"] .blud-digeser-naik { color: #0F5C44; }
+.blud-digeser-baris:hover { background: rgba(255,255,255,.05); }
+[data-theme="light"] .blud-digeser-baris:hover { background: rgba(0,0,0,.04); }
+
 /* Tutup Pergeseran — dua kotak peringatan di lembar konfirmasi & pratinjau
    sinkron. Kelas, bukan gaya sebaris: warna sebaris tidak ikut ditimpa tema
    terang, dan teks merah muda di atas latar merah muda memang sempat tidak

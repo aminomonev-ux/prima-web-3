@@ -7,14 +7,16 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  FileText, Shuffle, Clock, TrendingUp, Layers,
+  FileText, Shuffle, Clock, TrendingUp, FileDiff,
   Wallet, Gauge, Coins, TriangleAlert, CalendarCheck, BarChart3, RefreshCw,
 } from 'lucide-react'
 import { fmtRp } from '@/lib/shared/utils'
 import TahunDropdown from '@/components/blud/TahunDropdown'
+import RekeningDigeserModal from '@/components/blud/RekeningDigeserModal'
 import type { SerapanRingkas } from '@/lib/blud/serapan-ringkas'
-import { jenisSumberPagu } from '@/lib/blud/perubahan'
-import type { PanelRealisasi, StatusSerapan, VersiPergeseran } from '@/lib/blud/beranda-panel'
+import { jenisSumberPagu, formatSelisih, type RingkasPerubahan } from '@/lib/blud/perubahan'
+import type { PanelRealisasi, StatusSerapan } from '@/lib/blud/beranda-panel'
+import { tautanPergeseran, type VersiPergeseran } from '@/lib/blud/rekening-digeser'
 import { bolehSegarkan, jamPendek, JEDA_SEGARKAN_MS, PERISTIWA_AKTIF } from '@/lib/blud/segarkan'
 import type { RingkasTutupKas } from '@/lib/blud/tutup-kas'
 
@@ -29,7 +31,8 @@ type Props = {
   dpaLatestTotal: number
   pgLatestVersi:  string | null
   pgLatestRows:   number
-  pgLatestDelta:  number
+  /** Babak DPA Perubahan terakhir + Sebelum → Sesudah; `null` = DPA tahun ini masih murni. */
+  perubahan:      RingkasPerubahan | null
   pgHistory:      VersiPergeseran[]
   /** Kartu KPI menuju menu lain. Kalau menunya tertutup bagi orang ini, kartunya
    *  tetap tampil (angkanya tetap berguna) tapi tidak bisa diklik — mengarahkannya
@@ -82,6 +85,8 @@ const WARNA_STATUS: Record<StatusSerapan, string> = {
 
 export default function DashboardClient(p: Props) {
   const router = useRouter()
+  /** Versi yang rinciannya sedang dibuka di modal "Rekening yang digeser". */
+  const [rincianVersi, setRincianVersi] = useState<VersiPergeseran | null>(null)
 
   // Beranda itu server component `force-dynamic` — dia sudah menghitung ulang
   // tiap kali DIBUKA. Yang belum: halaman yang SUDAH terbuka tidak menengok lagi.
@@ -120,7 +125,12 @@ export default function DashboardClient(p: Props) {
   }, [router])
 
   // KPI cards definition — warna fixed per metric, container theme-aware via CSS
-  const cards = [
+  const cards: {
+    label: string; value: string; sub: string; href: string; color: string
+    Icon: React.ComponentType<{ size?: number; strokeWidth?: number }>
+    /** Baris kecil di bawah `sub` — kartu Perubahan: Sebelum → Sesudah. */
+    nota?: string | null
+  }[] = [
     {
       label: 'DPA BLUD — Versi Terbaru',
       value: fmtTgl(p.dpaLatestVersi),
@@ -145,13 +155,20 @@ export default function DashboardClient(p: Props) {
       color: '#EC4899',
       href:  '/blud/pergeseran',
     },
+    // Menggantikan "Δ Pergeseran Net" — pergeseran wajib berimbang, jadi kartu itu
+    // nyaris selalu berbunyi Rp 0 dan tidak memberi tahu apa pun.
     {
-      label: 'Δ Pergeseran Net',
-      value: fmtRp(p.pgLatestDelta),
-      sub:   p.pgLatestDelta >= 0 ? 'Bertambah' : 'Berkurang',
-      Icon:  Layers,
-      color: p.pgLatestDelta >= 0 ? '#10B981' : '#EF4444',
-      href:  '/blud/pergeseran',
+      label: 'DPA Perubahan',
+      // "Ke-1", bukan "Perubahan ke-1": labelnya sudah menyebut Perubahan, dan di kartu
+      // yang sempit kalimat panjang patah tepat di tanda hubungnya ("Perubahan ke-" / "1").
+      value: p.perubahan ? `Ke-${p.perubahan.ke}` : 'Belum ada',
+      sub:   p.perubahan
+        ? `Sejak ${fmtTgl(p.perubahan.versi_mulai)} · ${formatSelisih(p.perubahan.selisih, fmtRp)}`
+        : 'DPA tahun ini masih murni',
+      nota:  p.perubahan ? `${fmtRp(p.perubahan.sebelum)} → ${fmtRp(p.perubahan.sesudah)}` : null,
+      Icon:  FileDiff,
+      color: '#8B5CF6',
+      href:  '/blud/dpa',
     },
   ]
 
@@ -292,6 +309,15 @@ export default function DashboardClient(p: Props) {
         .blud-versi-nol {
           font-size: 11px; color: #85B7EB; font-style: italic; opacity: .7; padding: 5px 0 0 10px;
         }
+        /* Pembuka modal rincian — "+N rekening lainnya" & "Rincian". Tombol, jadi gaya
+           bawaan peramban (latar, garis, huruf) wajib dibuang dulu. */
+        .blud-versi-tombol {
+          background: none; border: none; cursor: pointer; font-family: inherit;
+          font-size: 11px; font-weight: 700; color: #85B7EB; padding: 0;
+          text-decoration: underline; text-underline-offset: 2px;
+        }
+        button.blud-versi-nol.blud-versi-tombol { padding: 5px 0 0 10px; font-weight: 600; opacity: .9; }
+        .blud-versi-tombol:hover { color: #E6F1FB; }
 
         .blud-segar {
           display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
@@ -362,6 +388,8 @@ export default function DashboardClient(p: Props) {
         [data-theme="light"] a.blud-rek:hover { background: rgba(0,0,0,.03); }
         [data-theme="light"] .blud-versi-blok { border-color: rgba(0,0,0,.06); }
         [data-theme="light"] .blud-versi-nol  { color: #6B7280; }
+        [data-theme="light"] .blud-versi-tombol { color: #6B7280; }
+        [data-theme="light"] .blud-versi-tombol:hover { color: #0F0F12; }
         [data-theme="light"] .blud-segar      { color: #6B7280; border-color: rgba(0,0,0,.12); }
         [data-theme="light"] .blud-segar:hover{ color: #0F0F12; border-color: rgba(0,0,0,.28); }
       `}</style>
@@ -400,8 +428,9 @@ export default function DashboardClient(p: Props) {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="blud-kpi-label" style={{ color: c.color }}>{c.label}</div>
-                  <div className="blud-kpi-value" style={{ color: c.color, fontFamily: c.label.includes('Total') || c.label.startsWith('Δ') ? "'JetBrains Mono', monospace" : undefined }}>{c.value}</div>
+                  <div className="blud-kpi-value" style={{ color: c.color, fontFamily: c.label.includes('Total') ? "'JetBrains Mono', monospace" : undefined }}>{c.value}</div>
                   <div className="blud-kpi-sub" style={{ color: c.color }}>{c.sub}</div>
+                  {c.nota && <div className="blud-kpi-sub bk-num-inline" style={{ color: c.color, marginTop: 3 }}>{c.nota}</div>}
                 </div>
                 <div className="blud-kpi-icon-box" style={{ background: c.color, color: '#FFFFFF' }}>
                   <Icon size={20} strokeWidth={2.2} />
@@ -585,32 +614,59 @@ export default function DashboardClient(p: Props) {
               <div className="blud-versi-head">
                 <span className="blud-history-tgl">{fmtTgl(v.versi_tanggal)}</span>
                 <span className="blud-history-meta">{v.catatan ?? `${v.jumlah_baris} baris`}</span>
+                {v.semua.length > 0 && (
+                  <button type="button" className="blud-versi-tombol" style={{ marginLeft: 'auto' }}
+                    onClick={() => setRincianVersi(v)}>
+                    Rincian
+                  </button>
+                )}
               </div>
               {v.rekening.length === 0 ? (
                 <div className="blud-versi-nol">belum ada rekening yang digeser</div>
               ) : (
                 <>
-                  {v.rekening.map((r, i) => (
+                  {v.rekening.map((r, i) => {
                     // Kode rekening bisa KOSONG — baris rincian di bawah kelompok
                     // memang tidak bernomor. Jadi ia tidak bisa jadi `key`, dan
                     // barisnya tidak boleh menyisakan baris meta kosong.
-                    <div key={`${v.versi_tanggal}-${i}`} className="blud-history-row blud-rek">
-                      <div style={{ minWidth: 0 }}>
-                        <div className="blud-history-tgl blud-rek-nama">{r.uraian}</div>
-                        {r.kode_rekening && <div className="blud-history-meta">{r.kode_rekening}</div>}
-                      </div>
-                      <div className="blud-history-val" style={{ color: r.nominal >= 0 ? '#34D399' : '#E24B4A' }}>
-                        {r.nominal >= 0 ? '+' : '−'}{fmtRp(Math.abs(r.nominal))}
-                      </div>
-                    </div>
-                  ))}
-                  {v.lainnya > 0 && <div className="blud-versi-nol">+{v.lainnya} rekening lainnya</div>}
+                    const isi = (
+                      <>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="blud-history-tgl blud-rek-nama">{r.uraian}</div>
+                          {r.kode_rekening && <div className="blud-history-meta">{r.kode_rekening}</div>}
+                        </div>
+                        <div className="blud-history-val" style={{ color: r.nominal >= 0 ? '#34D399' : '#E24B4A' }}>
+                          {r.nominal >= 0 ? '+' : '−'}{fmtRp(Math.abs(r.nominal))}
+                        </div>
+                      </>
+                    )
+                    // Tautan hanya bagi yang boleh membuka menu Pergeseran (aturan kartu
+                    // KPI), dan hanya untuk baris berjangkar — `?fokus=` mencari jangkarnya.
+                    return p.bolehPergeseran && r.anggaran_key ? (
+                      <Link key={`${v.versi_tanggal}-${i}`} className="blud-history-row blud-rek"
+                        href={tautanPergeseran({ tahun: p.tahun, versi: v.versi_tanggal, anggaran_key: r.anggaran_key })}>
+                        {isi}
+                      </Link>
+                    ) : (
+                      <div key={`${v.versi_tanggal}-${i}`} className="blud-history-row blud-rek">{isi}</div>
+                    )
+                  })}
+                  {v.lainnya > 0 && (
+                    <button type="button" className="blud-versi-nol blud-versi-tombol" onClick={() => setRincianVersi(v)}>
+                      +{v.lainnya} rekening lainnya
+                    </button>
+                  )}
                 </>
               )}
             </div>
           ))}
         </div>
       </div>
+
+      {rincianVersi && (
+        <RekeningDigeserModal tahun={p.tahun} versi={rincianVersi} bolehBuka={p.bolehPergeseran}
+          onTutup={() => setRincianVersi(null)} />
+      )}
     </div>
   )
 }

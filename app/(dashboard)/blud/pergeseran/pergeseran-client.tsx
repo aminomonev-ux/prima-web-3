@@ -12,6 +12,7 @@ import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
 import { kalimatTidakBerubah, jebakanArsip, dialogJebakanArsip } from '@/lib/blud/isi-sama'
+import { tahunDariTautan, versiDariTautan } from '@/lib/blud/rekening-digeser'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import RowActionsMenu from '@/components/blud/RowActionsMenu'
 import { InputNominal } from '@/components/ui/input-nominal'
@@ -1090,7 +1091,10 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   } | null>(null)
   // Tahun Anggaran (CONCEPT-blud-tahun-anggaran §2.1) — pilih tahun dulu, sama pola DPA.
   const CURRENT_YEAR = new Date().getFullYear()
-  const [tahun,     setTahun]     = useState<number>(CURRENT_YEAR)
+  // Tautan Beranda (`?tahun=&versi=&fokus=`, lib/blud/rekening-digeser.ts): tahunnya
+  // dipakai sejak muatan pertama, versinya dibuka begitu daftar versinya datang.
+  const searchParams = useSearchParams()
+  const [tahun,     setTahun]     = useState<number>(() => tahunDariTautan(searchParams.get('tahun')) ?? CURRENT_YEAR)
   const [tahunList, setTahunList] = useState<number[]>([])
   const [loading,   setLoading]   = useState(false)
   const [injecting, setInjecting] = useState(false)
@@ -1137,11 +1141,29 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   // §4.1: notifikasi permintaan menautkan ke ?fokus=<anggaran_key>. Barisnya
   // disorot + di-scroll, tapi TETAP KOSONG — angkanya ditentukan pengelola,
   // sistem hanya mengantar ke tempat yang benar. Sekali sorot per tautan.
-  const searchParams = useSearchParams()
   const fokus = searchParams.get('fokus')
+  const versiTautan = searchParams.get('versi')
+  // Tautan yang menyebut versi: sorotan MENUNGGU versi itu terbuka dan barisnya selesai
+  // dimuat. Tanpa ini ia jatuh di versi terbaru yang dimuat lebih dulu — menyorot baris
+  // yang salah, atau berbunyi "tidak ada di versi ini". `history` kosong = daftar versi
+  // belum datang; `loading` = `bukaVersi` sudah memindah `versi` tapi barisnya belum tiba.
+  const tungguVersiTautan = !!versiTautan && (loading || (versi !== versiTautan
+    && (history.length === 0 || versiDariTautan(versiTautan, history) !== null)))
   const fokusSudah = useRef<string | null>(null)
+  const versiTautanSudah = useRef(false)
   useEffect(() => {
-    if (!fokus || !rows.length || fokusSudah.current === fokus) return
+    if (!versiTautan || versiTautanSudah.current || !history.length) return
+    versiTautanSudah.current = true
+    const v = versiDariTautan(versiTautan, history)
+    if (!v) {
+      toast.warning(`Versi ${formatTanggalId(versiTautan)} sudah tidak ada — yang terbuka versi terbaru.`)
+      return
+    }
+    if (v !== versi) void bukaVersi(v)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per tautan; `bukaVersi` fungsi biasa (identitas baru tiap render), `versi` dibaca saat daftarnya datang
+  }, [versiTautan, history])
+  useEffect(() => {
+    if (!fokus || !rows.length || fokusSudah.current === fokus || tungguVersiTautan) return
     const match = rows.find(r => r.anggaran_key === fokus)
     fokusSudah.current = fokus
     const sorot = setTimeout(() => {
@@ -1159,7 +1181,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     }, 60)
     const padam = setTimeout(() => setHighlightId(null), 6000)
     return () => { clearTimeout(sorot); clearTimeout(padam) }
-  }, [fokus, rows])
+  }, [fokus, rows, tungguVersiTautan])
 
   // Master akun (dropdown Uraian) + master PJ (dropdown Penanggung Jawab), keduanya
   // hanya terpakai di baris baru hasil add manual.

@@ -5,6 +5,8 @@ import { muatDataPagu, ringkasSerapan } from '@/lib/blud/serapan-ringkas'
 import { riwayatPergeseran, realisasiTerbaru } from '@/lib/blud/beranda-panel'
 import { ringkasTutupKas } from '@/lib/blud/tutup-kas'
 import { waktuSekarangWIB } from '@/lib/blud/tanggal'
+import { getPerubahan } from '@/lib/blud/perubahan-data'
+import { ringkasPerubahan, type RingkasPerubahan } from '@/lib/blud/perubahan'
 import { modulSedangMati } from '@/lib/security/guard'
 import DashboardClient from './dashboard-client'
 import { izinLayar } from './_izin'
@@ -32,23 +34,23 @@ async function getDpaTotal(tahun: number, versi: string | null): Promise<number>
   return Number(fb?.total ?? 0)
 }
 
-async function getPergeseranDelta(tahun: number, versi: string | null): Promise<number> {
-  if (!versi) return 0
-  const r = await queryOne<{ total: string | number | null }>(
-    sql`SELECT COALESCE(SUM(bertambah_berkurang), 0) AS total
-        FROM pergeseran_dpa
-        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi} AND tipe_baris = 'GRANDMASTER'`
+/**
+ * Kartu "DPA Perubahan" — menggantikan kartu Δ Pergeseran Net, yang selalu Rp 0 karena
+ * pergeseran wajib berimbang. Baris versi terbaru dibaca hanya kalau tahun ini punya
+ * penanda Perubahan; hitungannya `ringkasPerubahan` (rumus bilah total layar DPA).
+ */
+async function getRingkasPerubahan(tahun: number, versi: string | null): Promise<RingkasPerubahan | null> {
+  const penanda = await getPerubahan(tahun)
+  if (!penanda.length || !versi) return null
+  const rows = await queryMany<{ row_id: string; parent_id: string | null; jumlah: unknown; jumlah_sebelum: unknown }>(
+    sql`SELECT row_id, parent_id, jumlah, jumlah_sebelum FROM dpa_blud
+        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}`
   )
-  const grand = Number(r?.total ?? 0)
-  if (grand !== 0) return grand
-  const fb = await queryOne<{ total: string | number | null }>(
-    sql`SELECT COALESCE(SUM(bertambah_berkurang), 0) AS total
-        FROM pergeseran_dpa
-        WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
-          AND (parent_id IS NULL OR parent_id = '')
-          AND tipe_baris <> 'GRANDMASTER'`
-  )
-  return Number(fb?.total ?? 0)
+  return ringkasPerubahan(penanda, versi, rows.map(r => ({
+    row_id: r.row_id, parent_id: r.parent_id,
+    jumlah: Number(r.jumlah ?? 0),
+    jumlah_sebelum: r.jumlah_sebelum == null ? null : Number(r.jumlah_sebelum),
+  })))
 }
 
 // B2: reuse toDateStr dari data.ts (offset +07:00, fix B-CQ-1) — getter lokal
@@ -100,7 +102,7 @@ export default async function BludLandingPage({ searchParams }: { searchParams: 
   const dpaLatestRows = Number(dpaCountRow?.c ?? 0)
   const pgLatestRows  = Number(pgCountRow?.c ?? 0)
   const dpaLatestTotal = await getDpaTotal(tahun, dpaLatestVersi)
-  const pgLatestDelta  = await getPergeseranDelta(tahun, pgLatestVersi)
+  const perubahan      = await getRingkasPerubahan(tahun, dpaLatestVersi)
 
   // Panel kiri dulu "5 versi DPA + total pagunya", panel kanan "5 versi
   // Pergeseran + Δ Net". Keduanya diganti isinya: yang satu jadi rekening yang
@@ -146,7 +148,7 @@ export default async function BludLandingPage({ searchParams }: { searchParams: 
       dpaLatestTotal={dpaLatestTotal}
       pgLatestVersi={pgLatestVersi}
       pgLatestRows={pgLatestRows}
-      pgLatestDelta={pgLatestDelta}
+      perubahan={perubahan}
       pgHistory={pgHistory}
       panelRealisasi={panelRealisasi}
       dimuatPada={waktuSekarangWIB()}

@@ -148,6 +148,34 @@ export function totalSebelumSesudah(rows: readonly Pick<DpaBarisInput, 'parent_i
   return { sebelum, sesudah, selisih: sesudah - sebelum }
 }
 
+/** Kartu "DPA Perubahan" di Beranda — `null` = tahun ini DPA-nya masih murni. */
+export interface RingkasPerubahan {
+  ke: number
+  versi_mulai: string
+  sebelum: number
+  sesudah: number
+  selisih: number
+}
+
+/**
+ * Babak Perubahan TERAKHIR + Sebelum → Sesudah versi DPA terbaru, lewat
+ * `totalSebelumSesudah` — rumus yang sama dgn bilah total layar DPA, jadi kedua layar
+ * menyebut angka yang sama. Sebelum = dasar babak terakhir itu (kolom `*_sebelum` diisi
+ * server dari dasar babaknya sendiri), bukan DPA murni.
+ *
+ * Versi terbaru selalu ≥ `versi_mulai` babak terakhir (penanda yatim dibuang di
+ * transaksi hapus versi); kalau tidak, tidak ada angka yang jujur untuk ditampilkan.
+ */
+export function ringkasPerubahan(
+  penanda: readonly { versi_mulai: string }[],
+  versiDpaTerbaru: string | null,
+  rows: readonly Pick<DpaBarisInput, 'parent_id' | 'row_id' | 'jumlah' | 'jumlah_sebelum'>[],
+): RingkasPerubahan | null {
+  const akhir = penanda[penanda.length - 1]
+  if (!akhir || !versiDpaTerbaru || versiDpaTerbaru < akhir.versi_mulai) return null
+  return { ke: penanda.length, versi_mulai: akhir.versi_mulai, ...totalSebelumSesudah(rows) }
+}
+
 /**
  * R4 di layar: "hapus" pada baris yang sudah ada sebelum Perubahan berarti
  * MENOLKAN (vol & harga dikosongkan, baris tetap tercatat "Rp X → Rp 0"); yang lahir
