@@ -16,16 +16,17 @@
 //   - addChild/addSibling wrappers tetap di caller (depend on local addChildCore)
 //     dengan menggunakan setPjMutation dari hook
 //
-// Hook generic untuk row type yang punya field PJ + tree structure.
+// Hook generic untuk row type yang punya field PJ + tree structure — dipakai layar DPA
+// DAN layar Pergeseran (2026-10-13: Pergeseran dulu tanpa penjaga sama sekali, padahal
+// PJ-nya bisa diubah di semua baris). Bedanya cuma awalan id baris (`idAwalan`).
 
 'use client'
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   detectPjConflict, validateAllPj,
-  type PjConflictRow, type PjGlobalConflict,
+  type PjConflictRow, type PjGlobalConflict, type PjRowLike,
 } from '@/lib/blud/pj-conflict'
-import type { DpaBarisInput } from '@/types'
 
 export interface PjConflictState {
   rowId:        string
@@ -47,25 +48,28 @@ export interface PjConflictPartner {
   pj:     string
 }
 
-interface UseSentinelPjGuardParams {
-  rows:     DpaBarisInput[]
-  updateRow: (rowId: string, field: keyof DpaBarisInput, value: unknown) => void
+interface UseSentinelPjGuardParams<T extends PjRowLike> {
+  rows:     T[]
+  /** Hanya dipanggil untuk `penanggung_jawab`; `null` = dikosongkan. */
+  updateRow: (rowId: string, field: 'penanggung_jawab', value: string | null) => void
+  /** Awalan id `<tr>` baris — `dpa-row-` (bawaan) atau `perg-row-`. */
+  idAwalan?: string
 }
 
-interface UseSentinelPjGuardReturn {
+interface UseSentinelPjGuardReturn<T extends PjRowLike> {
   pjConflict:         PjConflictState | null
   setPjConflict:      (s: PjConflictState | null) => void
   pjMutation:         PjMutationState | null
   setPjMutation:      (s: PjMutationState | null) => void
-  handlePjChange:     (row: DpaBarisInput, raw: string) => void
+  handlePjChange:     (row: T, raw: string) => void
   jumpToRow:          (rowId: string) => void
   pjConflictPairs:    PjGlobalConflict[]
   pjConflictPartners: Map<string, PjConflictPartner[]>
 }
 
-export function useSentinelPjGuard({
-  rows, updateRow,
-}: UseSentinelPjGuardParams): UseSentinelPjGuardReturn {
+export function useSentinelPjGuard<T extends PjRowLike>({
+  rows, updateRow, idAwalan = 'dpa-row-',
+}: UseSentinelPjGuardParams<T>): UseSentinelPjGuardReturn<T> {
   const [pjConflict, setPjConflict] = useState<PjConflictState | null>(null)
   const [pjMutation, setPjMutation] = useState<PjMutationState | null>(null)
 
@@ -104,7 +108,7 @@ export function useSentinelPjGuard({
 
   // Jump-to-row + flash animation untuk tombol Lompat di banner Sentinel PJ.
   const jumpToRow = useCallback((rowId: string) => {
-    const el = document.getElementById(`dpa-row-${rowId}`)
+    const el = document.getElementById(`${idAwalan}${rowId}`)
     if (!el) return
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     el.classList.remove('pj-sentinel-row-flash')
@@ -112,14 +116,14 @@ export function useSentinelPjGuard({
     void (el as HTMLElement).offsetWidth
     el.classList.add('pj-sentinel-row-flash')
     window.setTimeout(() => el.classList.remove('pj-sentinel-row-flash'), 1700)
-  }, [])
+  }, [idAwalan])
 
   // Sentinel PJ — intercept saat user assign PJ baru.
   // Skip check kalau:
   //   - value kosong/null (clear PJ → no conflict possible)
   //   - row sudah punya PJ + value baru juga PJ (edit, bukan tambah) — keputusan #2
   // Cek konflik kalau: row sebelumnya kosong → user isi PJ baru.
-  const handlePjChange = useCallback((row: DpaBarisInput, raw: string) => {
+  const handlePjChange = useCallback((row: T, raw: string) => {
     const newPj   = raw.trim()
     const prevPj  = (row.penanggung_jawab ?? '').trim()
     const isClear = newPj === ''

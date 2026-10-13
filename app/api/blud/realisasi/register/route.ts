@@ -4,9 +4,13 @@
 // Keluaran murni: daftar transaksi yang membebani satu baris anggaran + saldo
 // anggaran berjalan. Tidak ada menu tersendiri — ini panel drill-down di layar
 // Realisasi, dibuka dengan mengklik satu baris.
+//
+// ?pj=<label> → transaksi seluruh rekening milik satu Penanggung Jawab (`pj=` kosong =
+// rekening tanpa PJ) — rincian tampilan Per PJ (lib/blud/realisasi-pj.ts). Pagar & batas
+// lajunya sama: datanya bagian dari layar Realisasi yang sama.
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
-import { getRegister } from '@/lib/blud/realisasi-data'
+import { getRegister, getRegisterPj } from '@/lib/blud/realisasi-data'
 import { TahunSchema, bludRateLimit } from '@/lib/blud/schemas'
 import { bolehLihat, forbidden, unauthorized, realisasiMati } from '../_guard'
 
@@ -29,12 +33,26 @@ export async function GET(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: 'Tahun anggaran tidak dikenali. Pilih tahun antara 2000 dan 2100.' }, { status: 400 })
   }
+  const bulanNum = Number(searchParams.get('sampai_bulan'))
+  const sampaiBulan = Number.isInteger(bulanNum) && bulanNum >= 1 && bulanNum <= 12 ? bulanNum : undefined
+
+  if (searchParams.has('pj')) {
+    const pj = (searchParams.get('pj') ?? '').trim()
+    if (pj.length > 128) {
+      return NextResponse.json({ ok: false, error: 'Nama penanggung jawab terlalu panjang.' }, { status: 400 })
+    }
+    try {
+      return NextResponse.json({ ok: true, data: await getRegisterPj(parsed.data, pj, sampaiBulan) })
+    } catch (err) {
+      console.error('[API /blud/realisasi/register?pj GET]', err)
+      return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })
+    }
+  }
+
   const anggaranKey = (searchParams.get('anggaran_key') ?? '').trim()
   if (!anggaranKey || anggaranKey.length > 64) {
     return NextResponse.json({ ok: false, error: 'Baris anggaran yang dimaksud tidak disebutkan.' }, { status: 400 })
   }
-  const bulanNum = Number(searchParams.get('sampai_bulan'))
-  const sampaiBulan = Number.isInteger(bulanNum) && bulanNum >= 1 && bulanNum <= 12 ? bulanNum : undefined
 
   try {
     const data = await getRegister(parsed.data, anggaranKey, sampaiBulan)

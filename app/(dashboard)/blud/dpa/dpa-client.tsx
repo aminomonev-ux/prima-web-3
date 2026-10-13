@@ -54,7 +54,7 @@ import TahunDropdown from '@/components/blud/TahunDropdown'
 import PeriodeVersiSelect from '@/components/blud/PeriodeVersiSelect'
 import SpandukLihat from '@/components/blud/SpandukLihat'
 import { PjConflictDialog, PjMutationDialog } from '@/components/blud/PjGuardDialogs'
-import { findAncestorPjOnAdd } from '@/lib/blud/pj-conflict'
+import { findAncestorPjOnAdd, labelBarisPj } from '@/lib/blud/pj-conflict'
 import { useSentinelPjGuard } from '@/lib/blud/use-sentinel-pj-guard'
 import { useSentinelFeed, useSentinelPreSave } from '@/components/sentinel/SentinelProvider'
 import { useIngatkanBelumTersimpan } from '@/lib/shared/belum-tersimpan'
@@ -826,13 +826,13 @@ function DpaTable({
                 type="button"
                 className="pj-jump"
                 onClick={() => jumpToRow(p.conflict.row_id)}
-              >{p.conflict.kode_rekening || '?'}</button></Tip>
+              >{labelBarisPj(p.conflict)}</button></Tip>
               <span style={{ opacity: .55 }}>↔</span>
               <Tip label={`Descendant: ${p.row.uraian} → ${p.row.pj}`}><button
                 type="button"
                 className="pj-jump"
                 onClick={() => jumpToRow(p.row.row_id)}
-              >{p.row.kode_rekening || '?'}</button></Tip>
+              >{labelBarisPj(p.row)}</button></Tip>
               {i < Math.min(pjConflictPairs.length, 10) - 1 && <span style={{ opacity: .35, marginLeft: 4 }}>·</span>}
             </span>
           ))}

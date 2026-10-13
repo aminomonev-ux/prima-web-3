@@ -14,7 +14,8 @@ import {
   acquireBludLock, acquireBludLockBerbagi, BLUD_PAGU_ENTITY, BLUD_KWT_ENTITY, bludPaguKey, bludKwtKey,
   BLUD_VERSI_ENTITY, bludTahunKey,
 } from './lock'
-import { getPaguMap } from './pagu'
+import { getPaguMap, getPaguEfektif } from './pagu'
+import { kunciMilikPj } from './realisasi-pj'
 import { sumberPaguTahun } from './sumber-pagu'
 import {
   BludPeriodeTertutupError, BludTahunTanpaDpaError, BludAlokasiTidakSeimbangError,
@@ -310,6 +311,77 @@ export async function getRegister(
     total,
     sisa,
   }
+}
+
+export interface RegisterPjRow {
+  id: number
+  tanggal: string
+  bulan: number
+  no_kwt: number | null
+  uraian: string
+  jenis: JenisTransaksi
+  anggaran_key: string
+  kode_rekening: string
+  uraian_rekening: string
+  /** Bagian kuitansi ini yang membebani rekening milik PJ ini. */
+  nilai: number
+  /** Seluruh alokasi kuitansi itu — lebih besar dari `nilai` bila dibagi ke rekening lain. */
+  total_kuitansi: number
+}
+
+/**
+ * Transaksi yang membebani rekening milik satu PJ (`pj` kosong = rekening tanpa PJ).
+ * Rekeningnya ditentukan `kunciMilikPj` — aturan yang SAMA dgn rekap layar — dari versi
+ * sumber pagu, jadi jumlah `nilai` di sini = angka PJ itu di tabel Realisasi.
+ * Satu kuitansi bisa dibagi ke rekening PJ berbeda: yang dipulangkan hanya bagiannya.
+ */
+export async function getRegisterPj(
+  tahun: number,
+  pj: string,
+  sampaiBulan?: number,
+): Promise<{ pj: string; rows: RegisterPjRow[]; total: number }> {
+  const baris = await getPaguEfektif(tahun)
+  const keys = [...kunciMilikPj(baris, pj)]
+  if (!keys.length) return { pj, rows: [], total: 0 }
+  const peta = new Map(baris.map(b => [b.anggaran_key, b]))
+  const rows = sampaiBulan == null
+    ? await sql`
+        SELECT t.id, t.tanggal, t.bulan, t.no_kwt, t.uraian, t.jenis, a.anggaran_key, a.nilai,
+               (SELECT COALESCE(SUM(a2.nilai), 0) FROM blud_realisasi_alokasi a2 WHERE a2.tx_id = t.id) AS total_tx
+        FROM blud_realisasi_alokasi a
+        JOIN blud_realisasi_tx t ON t.id = a.tx_id
+        WHERE a.tahun_anggaran = ${tahun} AND a.anggaran_key IN (${keys})
+        ORDER BY t.tanggal ASC, t.id ASC
+      `
+    : await sql`
+        SELECT t.id, t.tanggal, t.bulan, t.no_kwt, t.uraian, t.jenis, a.anggaran_key, a.nilai,
+               (SELECT COALESCE(SUM(a2.nilai), 0) FROM blud_realisasi_alokasi a2 WHERE a2.tx_id = t.id) AS total_tx
+        FROM blud_realisasi_alokasi a
+        JOIN blud_realisasi_tx t ON t.id = a.tx_id
+        WHERE a.tahun_anggaran = ${tahun} AND a.anggaran_key IN (${keys})
+          AND t.bulan <= ${sampaiBulan}
+        ORDER BY t.tanggal ASC, t.id ASC
+      `
+  let total = 0
+  const daftar: RegisterPjRow[] = (rows as Record<string, unknown>[]).map((r) => {
+    const nilai = Number(r.nilai ?? 0)
+    total += nilai
+    const rek = peta.get(String(r.anggaran_key))
+    return {
+      id: Number(r.id),
+      tanggal: toDate(r.tanggal),
+      bulan: Number(r.bulan),
+      no_kwt: r.no_kwt != null ? Number(r.no_kwt) : null,
+      uraian: String(r.uraian ?? ''),
+      jenis: String(r.jenis) as JenisTransaksi,
+      anggaran_key: String(r.anggaran_key),
+      kode_rekening: rek?.kode_rekening ?? '',
+      uraian_rekening: rek?.uraian ?? '',
+      nilai,
+      total_kuitansi: Number(r.total_tx ?? 0),
+    }
+  })
+  return { pj, rows: daftar, total }
 }
 
 /**

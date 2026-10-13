@@ -19,6 +19,12 @@ export interface BarisPagu {
   urutan: number
   pagu: number
   is_leaf: boolean
+  /**
+   * PJ baris ITU SENDIRI di versi sumber pagu ('' = kosong). PJ efektif sebuah rekening
+   * (dari induk terdekat) dihitung `lib/blud/realisasi-pj.ts`, bukan di sini. Opsional:
+   * pemanggil lama yang menyusun baris sendiri (uji, pratinjau) tidak perlu mengisinya.
+   */
+  penanggung_jawab?: string
 }
 
 export type PaguSumber = SumberPagu
@@ -32,6 +38,7 @@ interface BarisMentah {
   parent_id: unknown
   urutan: unknown
   pagu: unknown
+  penanggung_jawab?: unknown
 }
 
 function susun(rows: BarisMentah[]): BarisPagu[] {
@@ -59,6 +66,7 @@ function susun(rows: BarisMentah[]): BarisPagu[] {
       urutan: Number(r.urutan ?? 0),
       pagu: Number(r.pagu ?? 0),
       is_leaf: !punyaAnak.has(rowId),
+      penanggung_jawab: String(r.penanggung_jawab ?? ''),
     })
   }
   return hasil
@@ -90,14 +98,14 @@ export async function getPaguEfektif(tahun: number): Promise<BarisPagu[]> {
   const rows = sumber === 'PERGESERAN'
     ? await sql`
         SELECT anggaran_key, kode_rekening, uraian, tipe_baris, row_id, parent_id, urutan,
-               pergeseran AS pagu
+               pergeseran AS pagu, penanggung_jawab
         FROM pergeseran_dpa
         WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
         ORDER BY urutan ASC
       `
     : await sql`
         SELECT anggaran_key, kode_rekening, uraian, tipe_baris, row_id, parent_id, urutan,
-               jumlah AS pagu
+               jumlah AS pagu, penanggung_jawab
         FROM dpa_blud
         WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}
         ORDER BY urutan ASC

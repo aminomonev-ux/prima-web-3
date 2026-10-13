@@ -6,8 +6,8 @@
 // Sibling beda cabang (tidak segaris vertikal) → BOLEH ber-PJ berbeda.
 //
 // Dipakai 3 layer:
-//   1. Client (dpa-client.tsx)         — pre-emptive warning saat user assign PJ
-//   2. Server (POST /api/blud/dpa)     — validation reject save kalau ada konflik
+//   1. Client (dpa-client.tsx, pergeseran-client.tsx) — pre-emptive warning saat user assign PJ
+//   2. Server (POST /api/blud/dpa & /pergeseran)      — dicatat ke audit, TIDAK menolak simpan
 //   3. Audit  (audit-pj.ts)            — post-facto report di Cetak BLUD
 //
 // L1: getAncestors port dari audit-pj.ts (iteratif anti-stack-overflow)
@@ -214,6 +214,16 @@ export function validateAllPj<T extends PjRowLike>(rows: T[]): PjGlobalConflict[
   return validatePjRules(rows)
     .filter((f): f is PjChainConflictFinding => f.kind === 'chain-conflict')
     .map(f => ({ row: f.row, conflict: f.conflict }))
+}
+
+/** Tulisan tombol lompat di spanduk konflik. Baris rincian lazim tanpa kode rekening —
+ *  dulu tampil "?" sehingga orang tak tahu baris mana yang dimaksud sebelum mengekliknya. */
+export function labelBarisPj(b: Pick<PjConflictRow, 'kode_rekening' | 'uraian'>): string {
+  const kode = b.kode_rekening.trim()
+  if (kode) return kode
+  const uraian = b.uraian.replace(/\s+/g, ' ').trim()
+  if (!uraian) return '?'
+  return uraian.length > 28 ? `${uraian.slice(0, 27)}…` : uraian
 }
 
 /**

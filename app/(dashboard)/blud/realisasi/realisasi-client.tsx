@@ -11,8 +11,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ChevronRight, ChevronDown, Search, TriangleAlert, ArrowUp, ArrowDown, Plus, CalendarDays, Calculator } from 'lucide-react'
+import { ChevronRight, ChevronDown, Search, TriangleAlert, ArrowUp, ArrowDown, Plus, CalendarDays, Calculator, UserRound } from 'lucide-react'
 import PrimaButton from '@/components/ui/PrimaButton'
+import DownloadButton from '@/components/ui/DownloadButton'
+import RealisasiPjModal from '@/components/blud/RealisasiPjModal'
+import {
+  rekapPerPj, kunciMilikPj, pilihanPj, LABEL_TANPA_PJ, type RekapPj,
+} from '@/lib/blud/realisasi-pj'
 import TahunDropdown from '@/components/blud/TahunDropdown'
 import OpsiDropdown from '@/components/blud/OpsiDropdown'
 import { formatTanggalId } from '@/lib/blud/tanggal'
@@ -42,7 +47,12 @@ export interface BarisRealisasi {
   sd_bulan: number | null
   sisa: number
   persen: number
+  /** PJ baris itu sendiri di versi sumber pagu — PJ efektifnya dihitung `realisasi-pj.ts`. */
+  penanggung_jawab?: string | null
 }
+
+/** Nilai "semua PJ" di pemilih saringan — `''` sudah dipakai untuk "Belum ada PJ". */
+const SEMUA_PJ = '\u0001semua'
 
 interface Cap { sumber: string; versi: string | null; baris: number; sidik: number; terserap: number }
 
@@ -96,6 +106,12 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
   const [perubahan, setPerubahan] = useState<Perubahan | null>(null)
   const [lihatPerubahan, setLihatPerubahan] = useState(false)
   const [pratinjauBuka, setPratinjauBuka] = useState(false)
+  // Realisasi per Penanggung Jawab (docs/CONCEPT-blud-realisasi-pj.md).
+  const [tampilan, setTampilan] = useState<'rekening' | 'pj'>('rekening')
+  /** Saringan tabel per rekening: `SEMUA_PJ`, label PJ, atau `''` = belum ada PJ. */
+  const [saringPj, setSaringPj] = useState<string>(SEMUA_PJ)
+  const [pjBuka, setPjBuka] = useState<RekapPj | null>(null)
+  const [mengunduh, setMengunduh] = useState<'excel' | 'pdf' | null>(null)
 
   // Foto pagu terakhir yang dilihat pengguna — pembanding untuk chip ▲▼ (§4.4 lapis 1).
   const paguLama = useRef<Map<string, { pagu: number; kode: string; uraian: string }> | null>(null)
@@ -238,14 +254,28 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
     return s
   }, [rows])
 
+  // Rekap per PJ — dari baris yang SAMA dgn tabel (sudah digulung server), jadi angkanya
+  // mustahil berbeda dgn kolom s.d. di baris induk ber-PJ.
+  const rekapPj = useMemo(() => rekapPerPj(rows), [rows])
+  // Saringan yang PJ-nya tidak ada di data ini (ganti tahun/versi) dianggap lepas —
+  // diturunkan, bukan disetel ulang lewat efek, jadi tabel tidak pernah kosong tanpa sebab.
+  const rekapTersaring = saringPj === SEMUA_PJ ? null
+    : saringPj === '' ? rekapPj.tanpaPj : (rekapPj.baris.find(b => b.pj === saringPj) ?? null)
+  const saringAktif = rekapTersaring ? saringPj : SEMUA_PJ
+  const milikPj = useMemo(
+    () => (saringAktif === SEMUA_PJ ? null : kunciMilikPj(rows, saringAktif)),
+    [rows, saringAktif],
+  )
+
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase()
-    if (q || saring !== 'semua') {
+    if (q || saring !== 'semua' || milikPj) {
       // Leluhurnya ikut dibawa, sama seperti pencarian: baris tanpa induknya
       // kehilangan konteks program/kegiatan, dan indentasinya jadi menggantung.
       const induk = new Map(rows.map(r => [r.anggaran_key, r.parent_key]))
       const perlu = new Set<string>()
       for (const r of rows) {
+        if (milikPj && !milikPj.has(r.anggaran_key)) continue
         if (q && !`${r.kode_rekening} ${r.uraian}`.toLowerCase().includes(q)) continue
         if (saring === 'menembus' && !(r.is_leaf && lebihPagu(r))) continue
         if (saring === 'mepet' && !barisMepet(r)) continue
@@ -265,7 +295,23 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
       }
       return true
     })
-  }, [rows, cari, tutup, saring])
+  }, [rows, cari, tutup, saring, milikPj])
+
+  const namaBulan = NAMA_BULAN[bulan - 1]
+  async function unduh(jenis: 'excel' | 'pdf') {
+    if (tahun == null || !sumber) return
+    setMengunduh(jenis)
+    try {
+      const m = await import('@/lib/blud/export/realisasi-pj')
+      const arg = {
+        tahun, namaBulan, rows, hasil: rekapPj,
+        sumber: `Pagu dari ${jenisSumberPagu(sumber)} ${formatTanggalId(sumber.versi)}`,
+      }
+      await (jenis === 'excel' ? m.unduhRealisasiPjExcel(arg) : m.unduhRealisasiPjPdf(arg))
+    } catch {
+      toast.error('Berkas tidak bisa dibuat. Coba lagi sebentar lagi.')
+    } finally { setMengunduh(null) }
+  }
 
   const akar = useMemo(() => rows.filter(r => !r.parent_key), [rows])
   const total = useMemo(() => ({
@@ -329,13 +375,43 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
           </span>
         )}
 
-        <div className="rl-cari">
-          <Search className="w-3.5 h-3.5" />
-          <input className="blud-imp-input" placeholder="Cari kode / uraian…"
-            value={cari} onChange={e => setCari(e.target.value)} />
+        {/* Dua cara membaca angka yang SAMA: per rekening (pohon) atau per penanggung jawab. */}
+        <div style={{ display: 'inline-flex', gap: 6 }} role="tablist" aria-label="Tampilan">
+          {([['rekening', 'Per Rekening'], ['pj', 'Per PJ']] as const).map(([k, t]) => (
+            <button key={k} type="button" role="tab" aria-selected={tampilan === k}
+              className={`rl-saring-chip ${tampilan === k ? 'aktif' : ''}`}
+              onClick={() => setTampilan(k)}>{t}</button>
+          ))}
         </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        {tampilan === 'rekening' && (
+          <div className="rl-cari">
+            <Search className="w-3.5 h-3.5" />
+            <input className="blud-imp-input" placeholder="Cari kode / uraian…"
+              value={cari} onChange={e => setCari(e.target.value)} />
+          </div>
+        )}
+        {tampilan === 'rekening' && rekapPj.baris.length > 0 && (
+          <OpsiDropdown
+            value={saringAktif}
+            items={[{ value: SEMUA_PJ, label: 'Semua PJ' }, ...pilihanPj(rekapPj)]}
+            onChange={setSaringPj}
+            icon={<UserRound className="w-3.5 h-3.5 versi-icon" />}
+            ariaLabel="Saring penanggung jawab"
+          />
+        )}
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {tampilan === 'pj' && (
+            <>
+              <DownloadButton label={mengunduh === 'excel' ? 'Menyiapkan…' : 'Excel'} variant="excel" size="sm"
+                disabled={tanpaDpa || rows.length === 0 || mengunduh !== null} onClick={() => unduh('excel')}
+                data-tooltip="Unduh Realisasi per PJ (rekap + rincian rekening) — angka persis seperti di layar" />
+              <DownloadButton label={mengunduh === 'pdf' ? 'Menyiapkan…' : 'PDF'} variant="pdf" size="sm"
+                disabled={tanpaDpa || rows.length === 0 || mengunduh !== null} onClick={() => unduh('pdf')}
+                data-tooltip="Unduh Realisasi per PJ sebagai PDF" />
+            </>
+          )}
           {/* Tahap 2 — murni pembacaan, barisnya dipinjam dari state ini. Tanpa
               pagu tidak ada yang bisa dibandingkan, jadi tombolnya ikut mati. */}
           <PrimaButton variant="ghost" size="sm" iconLeft={<Calculator className="w-3.5 h-3.5" />}
@@ -344,11 +420,15 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
             onClick={() => setPratinjauBuka(true)}>
             Pratinjau Serapan
           </PrimaButton>
-          <PrimaButton variant="ghost" size="sm" onClick={() => setTutup(new Set())}>Buka semua</PrimaButton>
-          <PrimaButton variant="ghost" size="sm"
-            onClick={() => setTutup(new Set(rows.filter(r => punyaAnak.has(r.anggaran_key)).map(r => r.anggaran_key)))}>
-            Ciutkan
-          </PrimaButton>
+          {tampilan === 'rekening' && (
+            <>
+              <PrimaButton variant="ghost" size="sm" onClick={() => setTutup(new Set())}>Buka semua</PrimaButton>
+              <PrimaButton variant="ghost" size="sm"
+                onClick={() => setTutup(new Set(rows.filter(r => punyaAnak.has(r.anggaran_key)).map(r => r.anggaran_key)))}>
+                Ciutkan
+              </PrimaButton>
+            </>
+          )}
         </div>
       </div>
 
@@ -431,7 +511,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
 
       {/* Dengan 391 baris, mencari warna sambil menggulir tetap pekerjaan manual —
           yang menghapusnya penyaring, bukan warnanya. */}
-      {(menembus.length > 0 || mepet.length > 0 || saring !== 'semua') && (
+      {tampilan === 'rekening' && (menembus.length > 0 || mepet.length > 0 || saring !== 'semua') && (
         <div className="rl-saring">
           <span className="rl-saring-teks">
             {menembus.length > 0 && <><b>{menembus.length}</b> menembus pagu</>}
@@ -465,6 +545,86 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
         </div>
       )}
 
+      {tampilan === 'rekening' && rekapTersaring && (
+        <div className="rl-banner">
+          <span>
+            Saringan <b>{saringPj || LABEL_TANPA_PJ}</b>: {rekapTersaring.rekening} rekening · pagu{' '}
+            <b className="bk-num-inline">Rp {rp(rekapTersaring.pagu)}</b> · s.d. {namaBulan}{' '}
+            <b className="bk-num-inline">Rp {rp(rekapTersaring.sd_bulan)}</b>. Baris JUMLAH di bawah tetap seluruh anggaran.
+          </span>
+          <button className="blud-imp-link" onClick={() => setSaringPj(SEMUA_PJ)}>Lepas saringan</button>
+        </div>
+      )}
+
+      {tampilan === 'pj' && rekapPj.konflik > 0 && (
+        <div className="bk-warn">
+          {/* Satu <span>: `.bk-warn` menata anak langsungnya sebagai kolom-kolom flex. */}
+          <span>
+            <b>{rekapPj.konflik} baris ber-PJ</b> yang induknya juga ber-PJ — di sini dihitung ke PJ induk saja
+            (di Cetak Rekap PJ ia tampil di dua PJ). Bereskan di menu <TautanMenu href="/blud/pergeseran" boleh={bolehPergeseran}>Pergeseran</TautanMenu> atau{' '}
+            <TautanMenu href="/blud/dpa" boleh={bolehDpa}>DPA BLUD</TautanMenu> (penandanya ⚠ di kolom PJ).
+          </span>
+        </div>
+      )}
+
+      {tampilan === 'pj' ? (
+        <div className="blud-scroll-wrapper">
+          <table className="dpa-table rl-table">
+            <thead>
+              <tr>
+                <th>Penanggung Jawab</th>
+                <th style={{ width: 90 }}>Rekening</th>
+                <th style={{ width: 130 }}>Pagu</th>
+                <th style={{ width: 120 }}>{namaBulan}</th>
+                <th style={{ width: 120 }}>s.d. Bln Lalu</th>
+                <th style={{ width: 130 }}>s.d. {namaBulan}</th>
+                <th style={{ width: 130 }}>Sisa s.d. {namaBulan}</th>
+                <th style={{ width: 64 }}>%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && <tr><td colSpan={8} className="bk-kosong">Memuat…</td></tr>}
+              {!loading && rekapPj.baris.length === 0 && (
+                <tr><td colSpan={8} className="bk-kosong">
+                  Belum ada Penanggung Jawab di {sumber ? `${jenisSumberPagu(sumber)} ${formatTanggalId(sumber.versi)}` : 'versi pagu ini'} —
+                  isi kolom PJ di menu DPA atau Pergeseran.
+                </td></tr>
+              )}
+              {!loading && [...rekapPj.baris, ...(rekapPj.tanpaPj ? [rekapPj.tanpaPj] : [])].map(b => (
+                <tr key={b.pj || '\u0000tanpa'} className={b.pj ? '' : 'rl-induk'}>
+                  <td>
+                    <button className="rl-uraian" onClick={() => setPjBuka(b)}
+                      data-tooltip="Lihat rekening & transaksinya">
+                      {b.pj || LABEL_TANPA_PJ}
+                    </button>
+                  </td>
+                  <td className="bk-c bk-num-inline">{b.rekening}</td>
+                  <td className="bk-r bk-num-inline">{rpKosong(b.pagu)}</td>
+                  <td className="bk-r bk-num-inline">{rpKosong(b.bulan_ini)}</td>
+                  <td className="bk-r bk-num-inline">{rpKosong(b.bulan_lalu)}</td>
+                  <td className="bk-r bk-num-inline">{rpKosong(b.sd_bulan)}</td>
+                  <td className="bk-r bk-num-inline rl-sisa">{rp(b.sisa)}</td>
+                  <td className="bk-c bk-num-inline">{b.pagu > 0 ? Math.round(b.persen) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+            {!loading && !!rows.length && (
+              <tfoot>
+                <tr className="bk-total">
+                  <td className="bk-r">JUMLAH</td>
+                  <td className="bk-c bk-num-inline">{rekapPj.total.rekening}</td>
+                  <td className="bk-r bk-num-inline">{rp(rekapPj.total.pagu)}</td>
+                  <td className="bk-r bk-num-inline">{rpKosong(rekapPj.total.bulan_ini)}</td>
+                  <td className="bk-r bk-num-inline">{rpKosong(rekapPj.total.bulan_lalu)}</td>
+                  <td className="bk-r bk-num-inline">{rpKosong(rekapPj.total.sd_bulan)}</td>
+                  <td className="bk-r bk-num-inline">{rp(rekapPj.total.sisa)}</td>
+                  <td className="bk-c bk-num-inline">{rekapPj.total.pagu > 0 ? Math.round(rekapPj.total.persen) : '—'}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      ) : (
       <div className="blud-scroll-wrapper">
         <table className="dpa-table rl-table">
           <thead>
@@ -548,6 +708,19 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
           )}
         </table>
       </div>
+      )}
+
+      {tahun != null && pjBuka && (
+        <RealisasiPjModal
+          tahun={tahun}
+          bulan={bulan}
+          namaBulan={namaBulan}
+          rekap={pjBuka}
+          rows={rows}
+          onBukaRekening={r => { setPjBuka(null); setFokus(r) }}
+          onTutup={() => setPjBuka(null)}
+        />
+      )}
 
       {tahun != null && fokus && (
         <RegisterPanel

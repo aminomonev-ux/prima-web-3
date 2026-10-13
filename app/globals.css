@@ -3296,6 +3296,14 @@ button:hover .prima-del-top { transform: rotate(160deg); }
 .blud-digeser-baris:hover { background: rgba(255,255,255,.05); }
 [data-theme="light"] .blud-digeser-baris:hover { background: rgba(0,0,0,.04); }
 
+/* Realisasi per PJ — lima angka ringkas di kepala modal rincian PJ; berbaris di ponsel. */
+.rl-pj-ringkas { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+/* Tabel modal hidup di luar `.blud-scroll-wrapper`, jadi tak kebagian jarak sel tabel utama —
+   tanpa ini kolom Sisa & % menempel ("60.000.0000"). */
+.rl-pj-tabel th, .rl-pj-tabel td { padding: 6px 8px; border-bottom: 1px solid rgba(127,127,127,.15); vertical-align: top; }
+.rl-pj-tabel .bk-r { white-space: nowrap; }
+@media (max-width: 720px) { .rl-pj-ringkas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* Tutup Pergeseran — dua kotak peringatan di lembar konfirmasi & pratinjau
    sinkron. Kelas, bukan gaya sebaris: warna sebaris tidak ikut ditimpa tema
    terang, dan teks merah muda di atas latar merah muda memang sempat tidak

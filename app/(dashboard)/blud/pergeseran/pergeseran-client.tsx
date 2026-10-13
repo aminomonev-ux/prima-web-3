@@ -27,6 +27,10 @@ import CatatanPerpindahanModal from '@/components/blud/CatatanPerpindahanModal'
 import { BLUD_SIMPAN_MAKS_BARIS } from '@/lib/blud/import-dpa-shared'
 import MasterAkunCombobox, { type AkunOption } from '@/components/blud/MasterAkunCombobox'
 import PenanggungJawabCombobox from '@/components/blud/PenanggungJawabCombobox'
+import { PjConflictDialog, PjMutationDialog } from '@/components/blud/PjGuardDialogs'
+import { useSentinelPjGuard, type PjConflictPartner } from '@/lib/blud/use-sentinel-pj-guard'
+import { findAncestorPjOnAdd, labelBarisPj } from '@/lib/blud/pj-conflict'
+import Tip from '@/components/ui/Tip'
 import VersiDropdown from '@/components/blud/VersiDropdown'
 import type { SimpananItem } from '@/components/blud/VersiDropdown'
 import TahunDropdown from '@/components/blud/TahunDropdown'
@@ -134,6 +138,9 @@ interface AksiBarisPg {
   tutupTawaran:   (rowId: string) => void
   bukaCatatan:    (rowId: string) => void
   abaikanCatatan: (rowId: string) => void
+  /** Sentinel PJ — cermin layar DPA: isian PJ lewat penjaga rantai, ⚠ melompat ke pasangannya. */
+  handlePjChange: (row: PergeseranBarisInput, raw: string) => void
+  jumpToRow:      (rowId: string) => void
 }
 
 const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatRupiah(v) : '-'
@@ -147,7 +154,7 @@ const fmtRp = (v: number | null | undefined) => (v != null && v !== 0) ? formatR
  * bukan Set, bukan Map — dan seluruh penangan lewat satu objek `aksi`.
  */
 const PergeseranRow = memo(function PergeseranRow({
-  row, terpilih, disorot, isAgg, bolehUbah, akunOptions, pjOptions, aksi,
+  row, terpilih, disorot, isAgg, bolehUbah, akunOptions, pjOptions, partners, aksi,
   uBertambah, uBerkurang, diurai, salahUrai, tawarHarga, tawarMeleset,
   perluCatatan, dariCatatan,
 }: {
@@ -158,6 +165,8 @@ const PergeseranRow = memo(function PergeseranRow({
   bolehUbah:   boolean
   akunOptions: AkunOption[]
   pjOptions:   string[]
+  /** Pasangan konflik PJ satu rantai — identitasnya tetap selama `rows` tetap (useMemo hook). */
+  partners:    PjConflictPartner[] | undefined
   aksi:        AksiBarisPg
   /** Uraian EFEKTIF — sudah termasuk rollup induk. Dioper sebagai dua angka,
    *  bukan satu objek: objek lahir baru tiap render dan `memo` berhenti
@@ -370,22 +379,40 @@ const PergeseranRow = memo(function PergeseranRow({
           memutar lewat menu DPA untuk sesuatu yang cuma berlaku di dokumen ini.
           Catatan: "Sinkronkan DPA" tetap menimpanya dari DPA — itu memang
           tugasnya, dan `bedaSinkron` sengaja hanya melaporkan selisih UANG.
-          Sengaja tanpa penjaga konflik chain seperti DPA: pemiliknya DPA,
-          dan chain-conflict tetap ketahuan di panel audit menu Cetak. */}
+          Penjaga rantai = DPA (2026-10-13): memperingatkan, tidak menolak. PJ di
+          sini kini juga dipakai Realisasi per PJ, jadi PJ ganda satu rantai
+          menyesatkan dua layar, bukan cuma Cetak. */}
       <td>
-        {bolehUbah ? (
-          <PenanggungJawabCombobox
-            value={row.penanggung_jawab ?? ''}
-            options={pjOptions}
-            onChange={v => aksi.updateText(row.row_id, 'penanggung_jawab', v ?? '')}
-            style={{ color: isGM ? 'var(--blud-l1-text)' : undefined }}
-            placeholder="— Pilih PJ —"
-          />
-        ) : (
-          <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
-            {row.penanggung_jawab || '-'}
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {bolehUbah ? (
+              <PenanggungJawabCombobox
+                value={row.penanggung_jawab ?? ''}
+                options={pjOptions}
+                onChange={v => aksi.handlePjChange(row, v ?? '')}
+                style={{ color: isGM ? 'var(--blud-l1-text)' : undefined }}
+                placeholder="— Pilih PJ —"
+              />
+            ) : (
+              <span style={{ fontSize: 12, color: isGM ? 'var(--blud-l1-text)' : undefined }}>
+                {row.penanggung_jawab || '-'}
+              </span>
+            )}
+          </div>
+          {row.penanggung_jawab && partners && partners.length > 0 && (
+            <button
+              type="button"
+              aria-label="Konflik PJ satu rantai — klik untuk lompat"
+              data-tooltip={partners.length === 1
+                ? `PJ ganda satu rantai dgn ${partners[0].kode || '—'} · ${partners[0].uraian || '(tanpa uraian)'} → PJ ${partners[0].pj}. Klik untuk lompat.`
+                : `PJ ganda satu rantai dgn ${partners.length} baris (terdekat: ${partners[0].kode || '—'}). Klik untuk lompat.`}
+              onClick={() => aksi.jumpToRow(partners[0].row_id)}
+              style={{ display: 'inline-flex', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}
+            >
+              <AlertTriangle style={{ width: 14, height: 14, color: '#E24B4A' }} />
+            </button>
+          )}
+        </div>
       </td>
 
       {/* Keterangan — sama aturannya dengan PJ */}
@@ -617,6 +644,17 @@ function PergeseranTable({
     onChange(rowsRef.current.map(r => r.row_id === rowId ? { ...r, [field]: value } : r))
   }, [onChange])
 
+  // Sentinel PJ — hook yang sama dgn layar DPA (memperingatkan, tidak menolak).
+  const updatePj = useCallback((rowId: string, _field: 'penanggung_jawab', value: string | null) => {
+    updateText(rowId, 'penanggung_jawab', value ?? '')
+  }, [updateText])
+  const {
+    pjConflict, setPjConflict,
+    pjMutation, setPjMutation,
+    handlePjChange, jumpToRow,
+    pjConflictPairs, pjConflictPartners,
+  } = useSentinelPjGuard({ rows, updateRow: updatePj, idAwalan: 'perg-row-' })
+
   // Pick dari Master Akun → fill kode + uraian sekaligus
   const pickAkun = useCallback((rowId: string, akun: AkunOption) => {
     onChange(rowsRef.current.map(r => r.row_id === rowId ? { ...r, kode_rekening: akun.kode, uraian: akun.uraian } : r))
@@ -624,8 +662,7 @@ function PergeseranTable({
 
   // Add baris baru sebagai child dari parent — CHAIN: leaf parent switch ke
   // aggregator (clear vol_p/harga_p) saat anak pertama ditambahkan.
-  const addChild = useCallback((tipe: TipeBaris, parentRowId: string) => {
-    const rows = rowsRef.current
+  const addChildCore = useCallback((tipe: TipeBaris, parentRowId: string, rows: PergeseranBarisInput[]) => {
     const parentIdx = rows.findIndex(r => r.row_id === parentRowId)
     if (parentIdx === -1) return
     const parent = rows[parentIdx]
@@ -675,9 +712,27 @@ function PergeseranTable({
     }, 80)
   }, [onChange])
 
-  // Tambah baris level sama (sibling) — tipe & parent sama, sisip setelah subtree baris ini
-  const addSibling = useCallback((row: PergeseranBarisInput) => {
+  /**
+   * Sentinel PJ — cermin `addChild` layar DPA: anak baru di bawah baris ber-PJ masuk
+   * rantai PJ itu, jadi ditanya dulu (tetap / kosongkan PJ leluhur / batal).
+   */
+  const addChild = useCallback((tipe: TipeBaris, parentRowId: string) => {
     const rows = rowsRef.current
+    const ancestorsPj = findAncestorPjOnAdd(rows, parentRowId)
+    if (ancestorsPj.length === 0) { addChildCore(tipe, parentRowId, rows); return }
+    setPjMutation({
+      ancestorsPj,
+      proceed: (clearAncestor: boolean) => {
+        const sumber = clearAncestor
+          ? rows.map(r => ancestorsPj.some(a => a.row_id === r.row_id) ? { ...r, penanggung_jawab: '' } : r)
+          : rows
+        addChildCore(tipe, parentRowId, sumber)
+      },
+    })
+  }, [addChildCore, setPjMutation])
+
+  // Tambah baris level sama (sibling) — tipe & parent sama, sisip setelah subtree baris ini
+  const addSiblingCore = useCallback((row: PergeseranBarisInput, rows: PergeseranBarisInput[]) => {
     const idx = rows.findIndex(r => r.row_id === row.row_id)
     if (idx === -1 || !row.parent_id) return
 
@@ -715,6 +770,22 @@ function PergeseranTable({
       window.setTimeout(() => el.classList.remove('pj-sentinel-row-flash'), 1700)
     }, 80)
   }, [onChange])
+
+  /** Sentinel PJ — cermin `addSibling` layar DPA: saudara baru ikut rantai PJ induknya. */
+  const addSibling = useCallback((row: PergeseranBarisInput) => {
+    const rows = rowsRef.current
+    const ancestorsPj = findAncestorPjOnAdd(rows, row.parent_id)
+    if (ancestorsPj.length === 0) { addSiblingCore(row, rows); return }
+    setPjMutation({
+      ancestorsPj,
+      proceed: (clearAncestor: boolean) => {
+        const sumber = clearAncestor
+          ? rows.map(r => ancestorsPj.some(a => a.row_id === r.row_id) ? { ...r, penanggung_jawab: '' } : r)
+          : rows
+        addSiblingCore(row, sumber)
+      },
+    })
+  }, [addSiblingCore, setPjMutation])
 
   // Multi-hapus — reuse seleksi cascade Sentinel Swap (geser tidak dipakai di Pergeseran).
   // Hanya baris baru (pgnew_*) yang dapat checkbox; descendant baris baru selalu baru juga.
@@ -769,9 +840,9 @@ function PergeseranTable({
   const aksi = useMemo(() => ({
     updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
     bukaTambahAnak: setAddParent, setUraian, terapkanUraian, tutupTawaran,
-    bukaCatatan: onBukaCatatan, abaikanCatatan,
+    bukaCatatan: onBukaCatatan, abaikanCatatan, handlePjChange, jumpToRow,
   }), [updateVolHarga, updateText, pickAkun, toggleCheckbox, addSibling, deleteBaris,
-       setUraian, terapkanUraian, tutupTawaran, onBukaCatatan, abaikanCatatan])
+       setUraian, terapkanUraian, tutupTawaran, onBukaCatatan, abaikanCatatan, handlePjChange, jumpToRow])
 
   // Uraian efektif seluruh pohon — dihitung SEKALI, bukan per baris: memanggil
   // `uraiGeser` di dalam map membuat rollup-nya O(n²) pada 558 baris.
@@ -809,6 +880,32 @@ function PergeseranTable({
 
   return (
     <>
+      {/* Sentinel PJ — spanduk pasangan PJ ganda satu rantai, cermin layar DPA. */}
+      {pjConflictPairs.length > 0 && (
+        <div className="pj-sentinel-banner">
+          <AlertTriangle style={{ width: 16, height: 16, color: '#E24B4A', flexShrink: 0 }} />
+          <strong>{pjConflictPairs.length} konflik Penanggung Jawab</strong>
+          <span style={{ opacity: .75 }}>
+            ditemukan di rantai vertikal — Cetak Rekap PJ akan menampilkan uangnya di dua PJ, Realisasi per PJ memasukkannya ke PJ induk. Klik tombol untuk lompat ke baris:
+          </span>
+          {pjConflictPairs.slice(0, 10).map((p, i) => (
+            <span key={`${p.row.row_id}-${p.conflict.row_id}`} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <Tip label={`Induk: ${p.conflict.uraian} → ${p.conflict.pj}`}><button
+                type="button" className="pj-jump" onClick={() => jumpToRow(p.conflict.row_id)}
+              >{labelBarisPj(p.conflict)}</button></Tip>
+              <span style={{ opacity: .55 }}>↔</span>
+              <Tip label={`Turunan: ${p.row.uraian} → ${p.row.pj}`}><button
+                type="button" className="pj-jump" onClick={() => jumpToRow(p.row.row_id)}
+              >{labelBarisPj(p.row)}</button></Tip>
+              {i < Math.min(pjConflictPairs.length, 10) - 1 && <span style={{ opacity: .35, marginLeft: 4 }}>·</span>}
+            </span>
+          ))}
+          {pjConflictPairs.length > 10 && (
+            <span style={{ opacity: .65, fontStyle: 'italic' }}>… +{pjConflictPairs.length - 10} lagi</span>
+          )}
+        </div>
+      )}
+
       {/* Pintu 0 — supaya fiturnya ditemukan. Tanpa ini pemakai harus sudah tahu
           tombolnya ada sebelum bisa memakainya (konsep §4.1). */}
       {bolehUbah && tampilkanSpandukAtas && (
@@ -903,6 +1000,7 @@ function PergeseranTable({
                   bolehUbah={bolehUbah}
                   akunOptions={akunOptions}
                   pjOptions={pjOptions}
+                  partners={pjConflictPartners.get(row.row_id)}
                   aksi={aksi}
                   uBertambah={petaUrai.get(row.row_id)?.bertambah ?? 0}
                   uBerkurang={petaUrai.get(row.row_id)?.berkurang ?? 0}
@@ -972,6 +1070,28 @@ function PergeseranTable({
           </div>
         </div>
       )}
+
+      {/* Sentinel PJ — dialog yang sama dgn layar DPA */}
+      <PjConflictDialog
+        open={pjConflict !== null}
+        newPj={pjConflict?.newPj ?? ''}
+        targetUraian={pjConflict?.targetUraian ?? ''}
+        ancestors={pjConflict?.ancestors ?? []}
+        descendants={pjConflict?.descendants ?? []}
+        onConfirm={() => {
+          if (!pjConflict) return
+          updatePj(pjConflict.rowId, 'penanggung_jawab', pjConflict.newPj)
+          setPjConflict(null)
+        }}
+        onCancel={() => setPjConflict(null)}
+      />
+      <PjMutationDialog
+        open={pjMutation !== null}
+        ancestorsPj={pjMutation?.ancestorsPj ?? []}
+        onKeep={() => { pjMutation?.proceed(false); setPjMutation(null) }}
+        onClear={() => { pjMutation?.proceed(true); setPjMutation(null) }}
+        onCancel={() => setPjMutation(null)}
+      />
     </>
   )
 }

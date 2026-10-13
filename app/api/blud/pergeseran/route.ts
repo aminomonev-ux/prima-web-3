@@ -18,6 +18,7 @@ import { tanggalHariIniWIB } from '@/lib/blud/tanggal'
 import { selesaikanPermintaanTerpenuhi } from '@/lib/blud/permintaan-data'
 import { addNotif } from '@/lib/services/notifications'
 import { recalcPergeseranJumlah, validateTreeIntegrity, hitungDeltaPergeseranRoot } from '@/lib/blud/recalc'
+import { validateAllPj } from '@/lib/blud/pj-conflict'
 import { periksaUraian, pesanUraianTidakCocok } from '@/lib/blud/urai-geser'
 import { periksaMutasi, periksaSasaranMutasi, pesanMutasiTidakCocok } from '@/lib/blud/mutasi'
 import { canHapusVersi, PergeseranBodySchema, TanggalSchema, TahunSchema, AlasanHapusSchema, bludRateLimit, bolehCatatView } from '@/lib/blud/schemas'
@@ -171,6 +172,8 @@ export async function POST(req: NextRequest) {
     }
 
     const recalced = recalcPergeseranJumlah(rows)
+    // Sentinel PJ — cermin route DPA: dicatat, tidak menolak (layar sudah bertanya).
+    const pjConflicts = validateAllPj(recalced)
 
     // B6: pergeseran WAJIB berimbang — pagu total tidak boleh berubah.
     // Kecuali draft=true: simpan progres dgn pengakuan eksplisit, status draft
@@ -286,8 +289,18 @@ export async function POST(req: NextRequest) {
         // Penutupan punya kolomnya sendiri di `blud_pergeseran_tutup`, tapi baris
         // ini tetap menyebutnya: audit dibaca berurutan sebagai satu cerita, dan
         // "kenapa versi ini selisihnya nol" harus terjawab tanpa membuka tabel lain.
-        + `${asal_tutup ? ` · BASIS dari penutupan Pergeseran ${asal_tutup.versi_ditutup} (kolom pergeseran disalin ke kolom kiri, pagu tidak berubah)` : ''}`,
+        + `${asal_tutup ? ` · BASIS dari penutupan Pergeseran ${asal_tutup.versi_ditutup} (kolom pergeseran disalin ke kolom kiri, pagu tidak berubah)` : ''}`
+        + `${pjConflicts.length > 0 ? ` · PJ chain conflict: ${pjConflicts.length}` : ''}`,
     })
+    if (pjConflicts.length > 0) {
+      await writeAuditLog({
+        req,
+        eventType: 'BLUD_PJ_CHAIN_CONFLICT',
+        userId:    session.userId,
+        username:  session.username,
+        detail:    `Pergeseran versi ${versi_tanggal} disimpan dgn ${pjConflicts.length} konflik PJ chain: ${pjConflicts.slice(0, 5).map(c => `[${c.row.kode_rekening} ${c.row.uraian} ↔ ${c.conflict.kode_rekening} ${c.conflict.uraian}]`).join('; ')}${pjConflicts.length > 5 ? '; …' : ''}`,
+      })
+    }
     // §4.1/§4.2: permintaan bendahara yang sudah terpenuhi ditutup sendiri +
     // notifikasi balik. Sengaja SETELAH commit dan dibungkus try sendiri —
     // gagal menutup permintaan tidak boleh membatalkan pergeseran yang benar.
