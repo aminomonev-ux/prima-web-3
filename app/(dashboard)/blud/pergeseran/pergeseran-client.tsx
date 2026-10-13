@@ -1047,6 +1047,8 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   const [salinVersiBuka, setSalinVersiBuka] = useState(false)
   /** Sumber Salin Versi yang langsung terpilih — diisi dialog jebakan arsip saja. */
   const [salinVersiAwal, setSalinVersiAwal] = useState<string | null>(null)
+  /** Arsip yang SUDAH sengaja ditulis di layar ini (termasuk basis Tutup) — cermin layar DPA. */
+  const arsipDisengajaRef = useRef<string | null>(null)
   // ── Catatan Perpindahan ────────────────────────────────────────────────────
   // Konsep: docs/CONCEPT-blud-catatan-perpindahan.md. State layar, bukan ref:
   // angkanya ikut menentukan kolom Bertambah/Berkurang, jadi tabelnya harus
@@ -1358,6 +1360,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       // berjalan.
       setPeriodeTulis(periodeUntukVersi(s.versi_tanggal))
       setBelumTersimpan(true)
+      arsipDisengajaRef.current = null
       // Acuan DPA ikut dipulihkan dari snapshot — kalau tidak, Simpan berikutnya
       // memakai acuan yang kebetulan sedang terpilih di layar, bukan acuan aslinya.
       if (json.data.dpa_versi_tanggal) setDpaVersi(json.data.dpa_versi_tanggal)
@@ -1520,6 +1523,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       if (!buang) return false
     }
     setPeriodeTulis(tanggal)
+    arsipDisengajaRef.current = null
     // Mengganti periode LEWAT PEMILIH berarti tabelnya dibuang atau dimuat ulang,
     // jadi jejak penutupan tidak lagi menggambarkan apa yang ada di layar.
     // Perpindahan periode yang dilakukan `terapkanTutup` sengaja TIDAK lewat sini
@@ -1558,6 +1562,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     setMutasi([])
     setLewatiCatatan(false)
     setPeriodeTulis('')
+    arsipDisengajaRef.current = null
     setBelumTersimpan(false)
   }
 
@@ -1581,6 +1586,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     }
     setVersi(v)
     setPeriodeTulis(periodeUntukVersi(v))
+    arsipDisengajaRef.current = null
     await loadPergeseran(v)
   }
 
@@ -1791,7 +1797,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
    */
   async function lolosJebakanArsip(): Promise<boolean> {
     if (asalTutupRef.current) return true
-    const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal))
+    const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal), arsipDisengajaRef.current)
     if (!j) return true
     const pilih = await pilihDialog({
       title:   `Simpan ke arsip ${formatTanggalId(j.arsip)}?`,
@@ -1806,6 +1812,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
       altVariant:   'warning',
     })
     if (pilih === 'utama') await bawaKeBulanIni(j.arsip)
+    if (pilih === 'lain') arsipDisengajaRef.current = j.arsip
     return pilih === 'lain'
   }
 
@@ -1919,6 +1926,9 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
         // bulan berjalan, bukan di bulan yang barusan disimpan.
         setPeriodeTulis(periodeUntukVersi(versiTanggal))
         setBelumTersimpan(false)
+        // Koreksi berikutnya ke tempat yang sama tidak ditanya jebakan arsip — termasuk
+        // sesudah Tutup: basisnya arsip baru, dan periodenya sengaja tetap di sana (L79).
+        arsipDisengajaRef.current = versiTanggal
         // `loadBabak` — simpanan ini bisa jadi sumber pagu baru (lencana BERLAKU).
         loadHistory(); loadTahunList(); loadRiwayat(); loadBabak()
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pemulihan/salinan.

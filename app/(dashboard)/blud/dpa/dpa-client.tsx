@@ -1035,6 +1035,12 @@ export default function DpaClient({
   const [salinVersiBuka, setSalinVersiBuka] = useState(false)
   /** Sumber Salin Versi yang langsung terpilih — diisi dialog jebakan arsip saja. */
   const [salinVersiAwal, setSalinVersiAwal] = useState<string | null>(null)
+  /**
+   * Arsip yang di layar ini SUDAH sengaja ditulis — koreksi berikutnya ke sana tidak ditanya
+   * jebakan arsip lagi. Dilepas begitu isi layar datang dari jalan lain (buka versi, Pulihkan,
+   * ganti periode, ganti tahun): itulah jebakan yang memang harus ditanya.
+   */
+  const arsipDisengajaRef = useRef<string | null>(null)
   // Asal salinan disimpan sampai Simpan ditekan — semata untuk baris detail audit.
   // Dilepas begitu barisnya diubah lewat jalur lain supaya jejaknya tidak berbohong.
   const asalSalinRef = useRef<AsalSalin | null>(null)
@@ -1307,6 +1313,7 @@ export default function DpaClient({
       // berjalan — pintu ketiga dari bug yang sama, lewat tombol Pulihkan.
       setPeriodeTulis(periodeUntukVersi(s.versi_tanggal))
       setBelumTersimpan(true)
+      arsipDisengajaRef.current = null
       asalSalinRef.current  = null
       asalBerkasRef.current = null
       asalImporRef.current  = null
@@ -1371,7 +1378,7 @@ export default function DpaClient({
    * `true` = lanjut menyimpan.
    */
   async function lolosJebakanArsip(): Promise<boolean> {
-    const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal))
+    const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal), arsipDisengajaRef.current)
     if (!j) return true
     const pilih = await pilihDialog({
       title:   `Simpan ke arsip ${formatTanggalId(j.arsip)}?`,
@@ -1386,6 +1393,7 @@ export default function DpaClient({
       altVariant:   'warning',
     })
     if (pilih === 'utama') await bawaKeBulanIni(j.arsip)
+    if (pilih === 'lain') arsipDisengajaRef.current = j.arsip
     return pilih === 'lain'
   }
 
@@ -1512,6 +1520,9 @@ export default function DpaClient({
         // bulan yang sama.
         setPeriodeTulis(periodeUntukVersi(versiTanggal))
         setBelumTersimpan(false)
+        // Koreksi berikutnya ke tempat yang sama tidak ditanya jebakan arsip — orangnya
+        // baru saja menulis ke sana (mis. Simpan Periode Juli sementara Agustus sudah ada).
+        arsipDisengajaRef.current = versiTanggal
         loadHistory(); loadTahunList(); loadRiwayat(); loadBabak()
         if (typeof json.version === 'number') setVersion(json.version)
         serapJangkar(json.jangkar)
@@ -1691,6 +1702,7 @@ export default function DpaClient({
     setTahun(t)
     setVersi('')
     setPeriodeTulis('')
+    arsipDisengajaRef.current = null
     setBelumTersimpan(false)
     // `loadDpa` juga melepasnya, tapi hanya kalau muatannya berhasil — penanda
     // Perubahan tahun lama tidak boleh menumpang ke tahun baru lewat muatan yang gagal.
@@ -1723,6 +1735,7 @@ export default function DpaClient({
       if (!buang) return false
     }
     setPeriodeTulis(tanggal)
+    arsipDisengajaRef.current = null
     asalSalinRef.current    = null
     asalPulihkanRef.current = null
     asalBerkasRef.current   = null
@@ -1763,6 +1776,7 @@ export default function DpaClient({
     }
     setVersi(v)
     setPeriodeTulis(periodeUntukVersi(v))
+    arsipDisengajaRef.current = null
     asalPerubahanRef.current = null
     await loadDpa(v)
   }

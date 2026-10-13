@@ -91,6 +91,9 @@ console.log('\n── C. jebakanArsip ──────────────
   ok('C3 arsip ada tapi ia yang terbaru → tidak ada jebakan', jebakanArsip('2099-10-06', v) === null)
   const j = jebakanArsip('2099-09-30', v)
   ok('C4 arsip ada & ada versi lebih baru → jebakan', j?.arsip === '2099-09-30' && j.terbaru === '2099-10-06')
+  ok('C5 arsip yang barusan sengaja ditulis → koreksi berikutnya tidak ditanya', jebakanArsip('2099-09-30', v, '2099-09-30') === null)
+  ok('C6 arsip sengaja yang LAIN tidak membebaskan arsip ini', jebakanArsip('2099-09-30', v, '2099-01-10')?.arsip === '2099-09-30')
+  ok('C7 tanpa arsip sengaja (null) → perilaku lama', jebakanArsip('2099-09-30', v, null)?.arsip === '2099-09-30')
 }
 
 console.log('\n── D. kalimatTidakBerubah ───────────────────────────────────────')
@@ -150,6 +153,24 @@ console.log('\n── E. Sambungan (L69) ─────────────
     ok(`E13 ${nama}: tombol toolbar membuka Salin Versi TANPA sumber terpilih`, K.includes('onClick={() => { setSalinVersiAwal(null); setSalinVersiBuka(true) }}')
       && K.includes('sumberAwal={salinVersiAwal}'))
     ok(`E14 ${nama}: gantiPeriode melapor batal`, badan(K, 'async function gantiPeriode(tanggal: string): Promise<boolean>').includes('if (!buang) return false'))
+
+    // Arsip yang sengaja ditulis tidak ditanya lagi pada koreksi berikutnya.
+    ok(`E19 ${nama}: jebakan menimbang arsip yang sudah sengaja ditulis`,
+      lj.includes('jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal), arsipDisengajaRef.current)'))
+    ok(`E20 ${nama}: "Tetap simpan" mengingat arsipnya`, lj.includes("if (pilih === 'lain') arsipDisengajaRef.current = j.arsip"))
+    const iSukses = K.indexOf('if (json.ok) {', K.indexOf('if (json.ok && json.tidak_berubah) {'))
+    ok(`E21 ${nama}: Simpan berhasil mengingat sasarannya (termasuk basis Tutup)`,
+      iSukses > 0 && badan(K.slice(iSukses), 'if (json.ok)').includes('arsipDisengajaRef.current = versiTanggal'))
+    // Dilepas hanya SESUDAH orangnya jadi berpindah — batal berarti layar & ingatannya tetap.
+    const pintu: [string, string, string][] = [
+      ['bukaVersi', 'async function bukaVersi(v: string)', 'if (!buang) return'],
+      ['gantiPeriode', 'async function gantiPeriode(tanggal: string): Promise<boolean>', 'if (!buang) return false'],
+      ['gantiTahun', 'async function gantiTahun(t: number)', 'if (!buang) return'],
+      ['pulihkanSimpanan', 'const pulihkanSimpanan = useCallback(async (s: SimpananItem) =>', "throw new Error('Angka kunci versi tidak bisa diambil"],
+    ]
+    for (const [fn, penanda, sesudah] of pintu) {
+      ok(`E22 ${nama}: ${fn} melepas arsip sengaja sesudah jadi berpindah`, urut(badan(K, penanda), sesudah, 'arsipDisengajaRef.current = null'))
+    }
   }
   ok('E15 Pergeseran: penutupan tidak ditanya jebakan', badan(kode('app/(dashboard)/blud/pergeseran/pergeseran-client.tsx'),
     'async function lolosJebakanArsip(): Promise<boolean>').includes('if (asalTutupRef.current) return true'))

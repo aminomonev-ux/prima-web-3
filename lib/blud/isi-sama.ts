@@ -99,9 +99,18 @@ export function kalimatTidakBerubah(a: { versiBerlaku: string; sasaran: string; 
  * padahal ada versi yang lebih baru. Biasanya orangnya membuka/memulihkan arsip itu untuk
  * MEMBAWA isinya ke bulan ini — tapi Simpan menimpa arsipnya (L79: sasaran ikut versi
  * yang dibuka). Jalur yang benar Salin Versi Lain (L80). `null` = tidak ada jebakan.
+ *
+ * `arsipDisengaja` = arsip yang di layar ini SUDAH sengaja ditulis (berhasil disimpan, basis
+ * Tutup Pergeseran, atau dipilih "Tetap simpan"). Koreksi berikutnya ke arsip itu tidak
+ * ditanya lagi — dialog yang berbunyi tiap koreksi sah melatih orang menekan "Tetap simpan"
+ * tanpa membaca, persis saat jebakan sungguhan datang.
  */
-export function jebakanArsip(periodeTulis: string, versiTersimpan: readonly string[]): { arsip: string; terbaru: string } | null {
-  if (!periodeTulis || !versiTersimpan.includes(periodeTulis)) return null
+export function jebakanArsip(
+  periodeTulis: string,
+  versiTersimpan: readonly string[],
+  arsipDisengaja: string | null = null,
+): { arsip: string; terbaru: string } | null {
+  if (!periodeTulis || periodeTulis === arsipDisengaja || !versiTersimpan.includes(periodeTulis)) return null
   const terbaru = versiTersimpan.reduce((m, v) => (v > m ? v : m), '')
   return terbaru > periodeTulis ? { arsip: periodeTulis, terbaru } : null
 }

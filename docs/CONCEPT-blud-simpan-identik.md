@@ -60,12 +60,30 @@ Saat Simpan menyasar arsip yang SUDAH berisi dan ada versi yang lebih baru
 Penutupan Pergeseran tidak ditanya: sasarannya dipilih `terapkanTutup`, dan sasaran yang
 sudah berisi ditolak server. `confirmDialog` tidak diubah bentuk balasannya.
 
+### 3.1 Arsip yang sengaja ditulis (susulan 2026-10-13)
+
+Ditemukan saat menguji Tutup di peramban: sesudah basis 30 Sep tersimpan, periode tetap di
+September (L79) — dan koreksi berikutnya ditanya "akan MENIMPA arsip 30 Sep". Sama di DPA
+sesudah "Simpan Periode Juli" sementara Agustus sudah ada, dan sesudah memilih "Tetap
+simpan". Data tidak rusak, tapi dialog yang berbunyi di tiap koreksi sah melatih orang
+menekan "Tetap simpan" tanpa membaca — persis saat jebakan sungguhan datang.
+
+Tiap layar mengingat **arsip yang sudah sengaja ditulis** (`arsipDisengajaRef`, parameter
+ketiga `jebakanArsip`): diisi sesudah Simpan berhasil (termasuk basis Tutup) dan saat
+"Tetap simpan" dipilih. Dilepas begitu isi layar datang dari jalan lain — buka versi dari
+daftar, Pulihkan riwayat, ganti periode, ganti tahun — dan hanya sesudah orangnya JADI
+berpindah (batal di dialog buang-isian = layar & ingatannya tetap). Jebakan aslinya
+(membuka/memulihkan arsip lalu Simpan) tetap ditanya. Hanya di layar; nol endpoint.
+
 ## 4. Uji
 
-`npx tsx scripts/test-blud-simpan-identik.mts` (56) + `node scripts/test-blud-simpan-identik-db.mjs`
+`npx tsx scripts/test-blud-simpan-identik.mts` (73) + `node scripts/test-blud-simpan-identik-db.mjs`
 (19, MySQL kotak pasir 2099 — termasuk bolak-balik layar `getDpaByDate → dpaKeInput`, yang
-membuktikan aturannya menggigit di pemakaian nyata), 29 uji mutasi tertangkap. Diverifikasi
-di peramban pada salinan DPA 2026 di 2099.
+membuktikan aturannya menggigit di pemakaian nyata), 45 uji mutasi tertangkap (16 untuk
+§3.1). Diverifikasi di peramban pada salinan DPA 2026 di 2099; §3.1: Tutup → Simpan →
+koreksi tanpa dialog, buka arsip dari daftar → ditanya lagi, "Tetap simpan" → koreksi
+berikutnya tanpa dialog, DPA dua koreksi sungguhan ke arsip 30 Sep (11 Okt tak tersentuh),
+Pulihkan → ditanya lagi.
 
 Akibat ke uji lama: dua pemeriksaan "simpan ulang versi dasar → VERSI_DASAR"
 (`test-blud-dpa-perubahan-db.mjs`) dulu mengirim isi yang SAMA — kini dilewati sebelum
