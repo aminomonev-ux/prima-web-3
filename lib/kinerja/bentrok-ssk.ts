@@ -15,8 +15,10 @@
 //   tersimpan" untuk Februari bisa melahirkan baris dinol-kan yang masih bertarget.
 //
 // Label (program/kegiatan/uraian) tidak digabung: layar RKO tidak bisa menyuntingnya,
-// asalnya Master Rekening lewat Inject/Impor. MURNI, tanpa impor.
+// asalnya Master Rekening lewat Inject/Impor. MURNI — hanya mengimpor modul murni lain.
 // Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §6
+
+import { sen } from './banding-realisasi'
 
 export interface BarisSskBentrok {
   canonical_id?: string | null
@@ -31,8 +33,6 @@ export const KUNCI_BULAN_SSK = ['jan','feb','mar','apr','mei','jun','jul','agu',
 export type BulanSsk = typeof KUNCI_BULAN_SSK[number]
 export type KolomSsk = 'pagu' | BulanSsk | 'is_nullified'
 export const KOLOM_SSK: readonly KolomSsk[] = ['pagu', ...KUNCI_BULAN_SSK, 'is_nullified']
-
-const sen = (v: unknown) => Math.round((Number(v) || 0) * 100)
 
 /** Nilai pembanding satu kolom: rupiah dalam sen, bendera 0/1. */
 function nilai(r: BarisSskBentrok, kol: KolomSsk): number {

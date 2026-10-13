@@ -130,8 +130,17 @@ export default function RealisasiTab({
       }
       toast.info(`${dilewati} baris di bulan yang sudah ditutup (${bulan.join(', ')}) dilewati.`, { duration: 8000 });
     }
+    // Hanya yang punya baris di layar yang terisi — bulan yang belum di-Init tidak punya
+    // baris, dan menghitungnya ikut "diisi" mengulang cacat toast di atas.
+    const cocok = items.filter(it => realisasiRows.some(r => r.ssk_canonical_id === it.ssk_canonical_id && r.bulan === it.bulan_ke));
+    const tanpaBaris = items.length - cocok.length;
+    if (cocok.length === 0) {
+      toast.error(`Tidak ada baris di layar untuk ${items.length} baris berkas ini — jalankan Init untuk bulannya dulu, lalu impor lagi.`, { duration: 8000 });
+      return 0;
+    }
+    if (tanpaBaris > 0) toast.info(`${tanpaBaris} baris berkas tidak punya baris di layar (bulannya belum di-Init) — dilewati.`, { duration: 8000 });
     setRealisasiRows(p => recalcAllRealisasi(p.map(r => {
-      const hit = items.find(it => it.ssk_canonical_id === r.ssk_canonical_id && it.bulan_ke === r.bulan);
+      const hit = cocok.find(it => it.ssk_canonical_id === r.ssk_canonical_id && it.bulan_ke === r.bulan);
       if (!hit) return r;
       // `real_fisik` hanya ikut pada berkas bentuk 'laporan'. Untuk laporan belanja
       // ia undefined, dan sel yang sudah diisi tangan sengaja tidak disentuh.
@@ -139,7 +148,7 @@ export default function RealisasiTab({
         ? { ...r, real_keuangan: hit.realisasi }
         : { ...r, real_keuangan: hit.realisasi, real_fisik: hit.real_fisik };
     })));
-    return items.length;
+    return cocok.length;
   }
 
   // IK-4 #5: buka modal Import sekali saat datang via ?import=realisasi. Bila ada
@@ -349,7 +358,7 @@ export default function RealisasiTab({
       return;
     }
     const g = gabungBentrok(realDasar, realisasiRows, h.rows, new Set(h.tertutup.map(x => x.bulan)));
-    const siapa = d409.oleh ? `${d409.oleh}${d409.pada ? ` (pukul ${d409.pada})` : ''}` : 'Pengguna lain';
+    const siapa = d409.oleh ? `${d409.oleh}${d409.pada ? ` (${d409.pada})` : ''}` : 'Pengguna lain';
     const bagian = [`${siapa} menyimpan realisasi ${realisasiSumber} sementara Anda mengetik`
       + (g.orangLain.length > 0 ? ` — ${kalimatRingkasan(g.orangLain)}.` : '.')];
     if (g.dipasang > 0) bagian.push(`Ketikan Anda (${g.dipasang} baris) sudah dipasang di atas data terbaru dan BELUM tersimpan. Periksa, lalu tekan Simpan lagi.`);

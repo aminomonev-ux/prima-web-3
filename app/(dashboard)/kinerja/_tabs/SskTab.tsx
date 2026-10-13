@@ -270,7 +270,7 @@ export default function SskTab({
     }
     const g = gabungBentrokSsk(sskDasar, sskRows, h.rows);
     const orangLain = jumlahSskBerubah(sskDasar, h.rows);
-    const siapa = d409.oleh ? `${d409.oleh}${d409.pada ? ` (pukul ${d409.pada})` : ''}` : 'Pengguna lain';
+    const siapa = d409.oleh ? `${d409.oleh}${d409.pada ? ` (${d409.pada})` : ''}` : 'Pengguna lain';
     const bagian = [`${siapa} menyimpan RKO ${activeSumber} ${versiLabel} sementara Anda mengetik`
       + (orangLain > 0 ? ` — ${orangLain} baris berubah.` : '.')];
     if (g.dipasang > 0) bagian.push(`Ketikan Anda (${g.dipasang} baris) sudah dipasang di atas data terbaru dan BELUM tersimpan. Periksa, lalu tekan Simpan lagi.`);

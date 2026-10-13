@@ -27,7 +27,7 @@ import DeleteButton from '@/components/ui/DeleteButton'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
-import { kalimatTidakBerubah, jebakanArsip } from '@/lib/blud/isi-sama'
+import { kalimatTidakBerubah, jebakanArsip, dialogJebakanArsip } from '@/lib/blud/isi-sama'
 import Tip from '@/components/ui/Tip'
 import { InputNominal } from '@/components/ui/input-nominal'
 import { formatRupiah, genRowId, TIPE_LABEL } from '@/lib/blud/format'
@@ -1373,34 +1373,60 @@ export default function DpaClient({
   /**
    * Jebakan arsip: membuka/memulihkan arsip akhir bulan lampau memindahkan sasaran Simpan
    * ke arsip itu (L79), padahal orangnya biasanya ingin MEMBAWA isinya ke bulan ini.
-   * Simpan lalu diam-diam menimpa arsip. Ditanya dulu; jalan utamanya (dan Enter) Salin
-   * Versi Lain — menyalin mengganti ISI, sasaran tetap bulan berjalan (L80).
-   * `true` = lanjut menyimpan.
+   * Simpan lalu diam-diam menimpa arsip. Ditanya dulu; jalan utamanya (dan Enter) membawa
+   * isinya ke bulan berjalan (`dialogJebakanArsip` memilih caranya). `true` = lanjut menyimpan.
    */
   async function lolosJebakanArsip(): Promise<boolean> {
     const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal), arsipDisengajaRef.current)
     if (!j) return true
+    const isiLayar = belumTersimpan
+    const d = dialogJebakanArsip({ ...j, hariIni: sasaranSimpan(''), isiLayarBelumTersimpan: isiLayar, tanggal: formatTanggalId })
     const pilih = await pilihDialog({
       title:   `Simpan ke arsip ${formatTanggalId(j.arsip)}?`,
-      message: `Simpan akan MENIMPA arsip ${formatTanggalId(j.arsip)} — bukan versi bulan ini `
-        + `(terbaru ${formatTanggalId(j.terbaru)}).\n\n`
-        + `Kalau maksud Anda membawa isi ${formatTanggalId(j.arsip)} ke bulan ini (misalnya membetulkan `
-        + `salah ketik), pakai Salin Versi Lain: layar pindah ke periode bulan berjalan dan arsip ini `
-        + `langsung terpilih sebagai sumbernya.`,
-      confirmLabel: 'Pakai Salin Versi Lain',
+      message: d.message,
+      confirmLabel: d.confirmLabel,
       variant:      'purple',
       altLabel:     `Tetap simpan ke ${formatTanggalId(j.arsip)}`,
       altVariant:   'warning',
     })
-    if (pilih === 'utama') await bawaKeBulanIni(j.arsip)
+    if (pilih === 'utama') await bawaKeBulanIni(j.arsip, isiLayar)
     if (pilih === 'lain') arsipDisengajaRef.current = j.arsip
     return pilih === 'lain'
   }
 
-  async function bawaKeBulanIni(arsip: string) {
+  async function bawaKeBulanIni(arsip: string, isiLayar: boolean) {
+    // Salin Versi menyalin arsip TERSIMPAN — isi layar yang belum tersimpan akan terbuang.
+    if (isiLayar) { await bawaIsiLayarKeBulanIni(); return }
     if (!(await gantiPeriode(''))) return
     setSalinVersiAwal(arsip)
     setSalinVersiBuka(true)
+  }
+
+  /**
+   * Isi layar TETAP, sasaran Simpan pindah ke bulan berjalan — pengecualian L80 yang sama
+   * dgn Tutup Pergeseran: perpindahannya ADALAH pilihan orangnya, disebut di dialog dan
+   * terlihat di pemilih periode. Angka kunci versi hari ini diambil segar (L77).
+   */
+  async function bawaIsiLayarKeBulanIni() {
+    const hariIni = sasaranSimpan('')
+    const sudahAda = history.some(h => h.versi_tanggal === hariIni)
+    let v = 0
+    if (sudahAda) {
+      try {
+        const res  = await fetch(`/api/blud/dpa?tahun=${tahun}&tanggal=${encodeURIComponent(hariIni)}`)
+        const json = await res.json()
+        if (!res.ok || typeof json.version !== 'number') throw new Error()
+        v = json.version
+      } catch {
+        showToast('Angka kunci versi hari ini tidak bisa diambil — isi layar tetap di arsip. Coba lagi sebentar lagi.', false)
+        return
+      }
+    }
+    setPeriodeTulis('')
+    setVersi(sudahAda ? hariIni : '')
+    setVersion(v)
+    arsipDisengajaRef.current = null
+    showToast(`Isi layar dibawa ke bulan berjalan — Simpan akan menulis versi ${formatTanggalId(hariIni)}. Belum tersimpan, periksa lalu tekan Simpan.`)
   }
 
   // Audit BLUD v1.2 (B-NEW-3): split jadi internal supaya bisa di-retry dengan force=true

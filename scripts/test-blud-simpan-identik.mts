@@ -8,7 +8,7 @@
 // Konsep: docs/CONCEPT-blud-simpan-identik.md
 
 import { readFileSync } from 'node:fs'
-import { isiDpaSama, isiPergeseranSama, jebakanArsip, kalimatTidakBerubah } from '../lib/blud/isi-sama'
+import { isiDpaSama, isiPergeseranSama, jebakanArsip, kalimatTidakBerubah, dialogJebakanArsip } from '../lib/blud/isi-sama'
 
 let lulus = 0
 const gagal: string[] = []
@@ -94,6 +94,13 @@ console.log('\n── C. jebakanArsip ──────────────
   ok('C5 arsip yang barusan sengaja ditulis → koreksi berikutnya tidak ditanya', jebakanArsip('2099-09-30', v, '2099-09-30') === null)
   ok('C6 arsip sengaja yang LAIN tidak membebaskan arsip ini', jebakanArsip('2099-09-30', v, '2099-01-10')?.arsip === '2099-09-30')
   ok('C7 tanpa arsip sengaja (null) → perilaku lama', jebakanArsip('2099-09-30', v, null)?.arsip === '2099-09-30')
+  const t = (x: string) => `<${x}>`
+  const tersimpan = dialogJebakanArsip({ arsip: 'a', terbaru: 'b', hariIni: 'h', isiLayarBelumTersimpan: false, tanggal: t })
+  const belum = dialogJebakanArsip({ arsip: 'a', terbaru: 'b', hariIni: 'h', isiLayarBelumTersimpan: true, tanggal: t, jenis: 'pergeseran' })
+  ok('C8 layar = arsip tersimpan → Salin Versi Lain', tersimpan.confirmLabel === 'Pakai Salin Versi Lain' && tersimpan.message.includes('Salin Versi Lain'))
+  ok('C9 layar belum tersimpan → bawa isi layar, menyebut sasaran barunya', belum.confirmLabel === 'Bawa ke bulan ini'
+    && belum.message.includes('pindah ke <h>') && !belum.message.includes('Salin Versi'))
+  ok('C10 jenis arsip disebut', belum.message.includes('arsip pergeseran <a>') && tersimpan.message.includes('arsip <a> — bukan versi bulan ini (terbaru <b>)'))
 }
 
 console.log('\n── D. kalimatTidakBerubah ───────────────────────────────────────')
@@ -110,13 +117,13 @@ console.log('\n── E. Sambungan (L69) ─────────────
   // Cabang kosong+force punya assert sendiri lebih dulu — patokannya yang TERAKHIR sebelum pemeriksaan.
   const sesudahAssert = (s: string, tabel: string) => s.slice(s.lastIndexOf(`await assertBludVersion(tx, '${tabel}', lockKey, expectedVersion)`))
   ok('E1 saveDpa: diperiksa SESUDAH angka kunci, SEBELUM pagar lain & DELETE', urut(sesudahAssert(sDpa, 'dpa_blud'),
-    'if (!asalPerubahan) {', 'const berlaku = await dpaBerlakuPada(tx, tahun, versiTanggal)',
+    'if (!asalPerubahan) {', 'const berlaku = await dpaBerlakuPada(tx, tahun, versiTanggal, rows.length)',
     'if (berlaku && isiDpaSama(rows, berlaku.rows)) {', 'return', 'const penanda = await penandaPerubahan(tx, tahun)', 'DELETE FROM dpa_blud'))
   ok('E2 saveDpa: hasil dilewati tanpa naik angka kunci', sDpa.includes('newVersion: expectedVersion, jangkar: {}')
     && sDpa.includes('tidakBerubah: { versiBerlaku: tidakBerubah.versi }'))
   const sPg = badan(D, 'mutasi: MutasiInput[] | undefined = undefined,\n): Promise<SimpanHasil>')
   ok('E3 savePergeseran: cermin, penutupan dikecualikan', urut(sesudahAssert(sPg, 'pergeseran_dpa'),
-    'if (!asalTutup) {', 'const berlaku = await pergeseranBerlakuPada(tx, tahun, versiTanggal)',
+    'if (!asalTutup) {', 'const berlaku = await pergeseranBerlakuPada(tx, tahun, versiTanggal, rows.length)',
     'isiPergeseranSama({ rows, acuan: dpaVersiTanggal, mutasi }, berlaku)', 'return', 'DELETE FROM pergeseran_dpa'))
   // Penanda di UJUNG tanda tangan: tipe kembaliannya `Promise<{ … }>` punya `{` sendiri.
   const bDpa = badan(D, 'rows: DpaBaris[] } | null>')
@@ -124,6 +131,9 @@ console.log('\n── E. Sambungan (L69) ─────────────
   ok('E4 pembanding dibaca lewat tx (L69-b)', bDpa.includes('await getDpaVersiBerlaku(tahun, sasaran, tx)') && bDpa.includes('await tx`')
     && !bDpa.includes('await sql`') && bPg.includes('await getPergeseranVersiBerlaku(tahun, sasaran, tx)')
     && !bPg.includes('await sql`') && bPg.includes('FROM pergeseran_mutasi'))
+  // Susulan audit: jumlah baris beda = pasti beda — COUNT dulu, seluruh versi baru dibaca bila sama.
+  ok('E4b pembanding membaca seluruh versi hanya bila jumlah barisnya sama', [bDpa, bPg].every(b =>
+    urut(b, 'SELECT COUNT(*) AS n FROM', 'if (Number(n) !== jumlahBaru) return null', 'SELECT * FROM')))
   // Satu definisi "versi yang berlaku pada tanggal" (L78) — bukan query MAX kedua di sini.
   const vbDpa = badan(D, 'export async function getDpaVersiBerlaku(tahun: number, tanggal: string, q: Penanya = sql)')
   const vbPg = badan(D, 'export async function getPergeseranVersiBerlaku(tahun: number, tanggal: string, q: Penanya = sql)')
@@ -145,11 +155,19 @@ console.log('\n── E. Sambungan (L69) ─────────────
     ok(`E10 ${nama}: Simpan bertanya jebakan arsip SEBELUM mengunci tombol`, urut(simpan, 'if (submittingRef.current) return',
       'if (!(await lolosJebakanArsip())) return', 'submittingRef.current = true'))
     const lj = badan(K, 'async function lolosJebakanArsip(): Promise<boolean>')
-    ok(`E11 ${nama}: jalan utama (Enter) = Salin Versi Lain, lanjut simpan hanya lewat tombol ketiga`,
-      lj.includes("confirmLabel: 'Pakai Salin Versi Lain'") && lj.includes("if (pilih === 'utama') await bawaKeBulanIni(j.arsip)")
-      && lj.includes("return pilih === 'lain'"))
-    ok(`E12 ${nama}: Salin Versi dibuka SESUDAH pindah ke bulan berjalan, arsip terpilih`, urut(badan(K, 'async function bawaKeBulanIni(arsip: string)'),
-      "if (!(await gantiPeriode(''))) return", 'setSalinVersiAwal(arsip)', 'setSalinVersiBuka(true)'))
+    ok(`E11 ${nama}: jalan utama (Enter) = bawa ke bulan ini, lanjut simpan hanya lewat tombol ketiga`,
+      urut(lj, 'const isiLayar = belumTersimpan', 'isiLayarBelumTersimpan: isiLayar', 'confirmLabel: d.confirmLabel',
+        "if (pilih === 'utama') await bawaKeBulanIni(j.arsip, isiLayar)") && lj.includes("return pilih === 'lain'"))
+    const bawa = badan(K, 'async function bawaKeBulanIni(arsip: string, isiLayar: boolean)')
+    ok(`E12 ${nama}: isi tersimpan → Salin Versi SESUDAH pindah ke bulan berjalan, arsip terpilih`, urut(bawa,
+      'if (isiLayar) { await bawaIsiLayarKeBulanIni(); return }', "if (!(await gantiPeriode(''))) return", 'setSalinVersiAwal(arsip)', 'setSalinVersiBuka(true)'))
+    // Susulan audit: isi layar belum tersimpan (pulihan riwayat / suntingan) dulu ikut dibuang
+    // oleh gantiPeriode('') lalu diganti arsip TERSIMPAN. Kini isinya tetap, sasarannya pindah.
+    const isiLayarKe = badan(K, 'async function bawaIsiLayarKeBulanIni()')
+    ok(`E23 ${nama}: isi belum tersimpan dibawa apa adanya, angka kunci hari ini segar`, urut(isiLayarKe,
+      "const hariIni = sasaranSimpan('')", "typeof json.version !== 'number'", 'return', "setPeriodeTulis('')",
+      "setVersi(sudahAda ? hariIni : '')", 'setVersion(v)')
+      && !/setRows\(|gantiPeriode\(|setBelumTersimpan\(/.test(isiLayarKe))
     ok(`E13 ${nama}: tombol toolbar membuka Salin Versi TANPA sumber terpilih`, K.includes('onClick={() => { setSalinVersiAwal(null); setSalinVersiBuka(true) }}')
       && K.includes('sumberAwal={salinVersiAwal}'))
     ok(`E14 ${nama}: gantiPeriode melapor batal`, badan(K, 'async function gantiPeriode(tanggal: string): Promise<boolean>').includes('if (!buang) return false'))
@@ -176,7 +194,15 @@ console.log('\n── E. Sambungan (L69) ─────────────
     'async function lolosJebakanArsip(): Promise<boolean>').includes('if (asalTutupRef.current) return true'))
 
   const C = kode('components/ui/ConfirmDialog.tsx')
-  ok('E16 pilihDialog: Esc = batal, Enter = jalan utama', C.includes("if (e.key === 'Escape') onDone(null);") && C.includes("if (e.key === 'Enter') onDone('utama');"))
+  // Susulan audit: Enter pada tombol dialog yang difokus = tombol itu (Tab ke Batal + Enter
+  // dulu menyetujui), dan Enter yang dipakai dialog tidak ikut menekan tombol halaman.
+  ok('E16 pilihDialog: Esc = batal, Enter = jalan utama kecuali fokus di tombol dialog', urut(C,
+    "if (e.key === 'Escape') onDone(null);", "if (e.key !== 'Enter') return;",
+    "if (t instanceof HTMLElement && kotakRef.current?.contains(t) && t.closest('button')) return;",
+    'e.preventDefault();', "onDone('utama');") && C.includes('<div ref={kotakRef}'))
+  // Penanda di UJUNG tanda tangan `pasang`: tipe parameternya punya `{` sendiri.
+  ok('E16b dialog selesai sekali saja (keydown + klik dari satu tekanan)', urut(badan(C, 'altLabel?: string; altVariant?: Variant }): Promise<HasilPilih>'),
+    'let selesai = false;', 'if (selesai) return;', 'selesai = true;', 'root.unmount();'))
   ok('E17 confirmDialog tetap boolean (30-an pemanggil)', C.includes("return pasang(opts).then(v => v === 'utama');"))
   ok('E18 SalinVersiModal memilih sumberAwal hanya kalau memang tersedia', kode('components/blud/SalinVersiModal.tsx')
     .includes('pilihan.find(p => p.versi_tanggal === sumberAwal)?.versi_tanggal ?? pilihan[0]?.versi_tanggal ?? \'\''))

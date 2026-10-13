@@ -6,7 +6,7 @@
 // `pilihDialog` = varian tiga tombol (lihat di bawah), badan tampilannya sama.
 
 import { createRoot } from 'react-dom/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PrimaButton from './PrimaButton';
 
 type Variant = 'danger' | 'primary' | 'warning' | 'success' | 'purple';
@@ -26,10 +26,19 @@ function ConfirmUI({ opts, onDone }: {
   opts: ConfirmOpts & { altLabel?: string; altVariant?: Variant };
   onDone: (v: HasilPilih) => void;
 }) {
+  const kotakRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onDone(null);
-      if (e.key === 'Enter') onDone('utama');
+      if (e.key !== 'Enter') return;
+      // Enter pada tombol dialog yang sedang difokus = tombol ITU (klik bawaan peramban).
+      // Dulu Enter selalu tombol utama: Tab ke Batal lalu Enter malah menyetujui.
+      const t = e.target;
+      if (t instanceof HTMLElement && kotakRef.current?.contains(t) && t.closest('button')) return;
+      // Fokus masih di tombol halaman yang membuka dialog ini: tanpa preventDefault,
+      // Enter yang sama ikut menekan tombol itu lagi di belakang dialog.
+      e.preventDefault();
+      onDone('utama');
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -46,7 +55,7 @@ function ConfirmUI({ opts, onDone }: {
   return (
     <div onClick={() => onDone(null)}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000, padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} role="alertdialog" aria-modal="true"
+      <div ref={kotakRef} onClick={e => e.stopPropagation()} role="alertdialog" aria-modal="true"
         style={{ background: c.card, color: c.text, border: `1px solid ${c.border}`, borderRadius: 14, padding: 22, width: 'min(420px,94vw)', boxShadow: isLight ? '0 24px 60px rgba(0,0,0,.18)' : '0 24px 60px rgba(0,0,0,.6)' }}>
         {opts.title && <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 8px' }}>{opts.title}</h2>}
         <div style={{ fontSize: 13.5, lineHeight: 1.5, color: c.sub, whiteSpace: 'pre-line', marginBottom: 18 }}>{opts.message}</div>
@@ -68,7 +77,11 @@ function pasang(opts: ConfirmOpts & { altLabel?: string; altVariant?: Variant })
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = createRoot(host);
+    let selesai = false;
     const done = (val: HasilPilih) => {
+      // Sekali saja: keydown dan klik bisa datang dari satu tekanan tombol.
+      if (selesai) return;
+      selesai = true;
       root.unmount();
       host.remove();
       resolve(val);
@@ -85,7 +98,8 @@ export function confirmDialog(opts: ConfirmOpts): Promise<boolean> {
  * Konfirmasi dengan TIGA jalan: tombol utama (`'utama'`, juga Enter), tombol ketiga
  * (`'lain'`), atau batal (`null`, juga Esc/klik luar). Untuk dialog yang menawarkan
  * jalan yang lebih aman di samping "tetap lanjut" — tombol utamanya jalan aman itu,
- * jadi Enter tidak pernah memilih yang berisiko. `confirmDialog` tidak diubah bentuk
+ * jadi Enter tanpa memilih tombol tidak pernah memilih yang berisiko (Enter pada tombol
+ * yang SENGAJA difokus lewat Tab = tombol itu). `confirmDialog` tidak diubah bentuk
  * balasannya (30-an pemanggil mengharapkan `boolean`).
  */
 export function pilihDialog(opts: ConfirmOpts & { altLabel: string; altVariant?: Variant }): Promise<HasilPilih> {

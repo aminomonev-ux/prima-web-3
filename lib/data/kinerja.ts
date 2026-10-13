@@ -10,7 +10,6 @@ import {
   perubahanTargetTertutup, KinerjaTargetTertutupError,
 } from '@/lib/kinerja/tutup-bulan';
 import { bulanTertutupSet } from '@/lib/kinerja/tutup-bulan-data';
-import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
 import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
@@ -464,13 +463,20 @@ export class KinerjaVersionConflictError extends Error {
   }
 }
 /**
- * Siapa & jam berapa gembok ini terakhir dinaikkan — untuk kalimat 409 "Budi menyimpan
- * pukul 10:42". Dibaca dari baris gembok itu sendiri, bukan audit: bump-nya satu
+ * Siapa & kapan gembok ini terakhir dinaikkan — untuk kalimat 409 "Budi (pukul 10:42)
+ * menyimpan". Dibaca dari baris gembok itu sendiri, bukan audit: bump-nya satu
  * transaksi dengan tulisannya, jadi mustahil menunjuk simpanan yang lain.
+ *
+ * `pada` sudah berbentuk frasa: "pukul 10:42" untuk hari ini, "12/10/2026 pukul 16:05"
+ * untuk hari lain — tab yang dibiarkan terbuka semalam tidak boleh mendengar simpanan
+ * kemarin seolah terjadi selagi ia mengetik. Hari ini menurut jam MySQL, jam yang sama
+ * yang menulis `updated_at`.
  */
 export async function penyimpanTerakhir(entity: string, keyId: string): Promise<{ oleh: string | null; pada: string | null }> {
   const rows = await sql`
-    SELECT COALESCE(u.nama_lengkap, u.username) AS oleh, DATE_FORMAT(l.updated_at, '%H:%i') AS pada
+    SELECT COALESCE(u.nama_lengkap, u.username) AS oleh,
+           CONCAT(IF(DATE(l.updated_at) = CURDATE(), '', DATE_FORMAT(l.updated_at, '%d/%m/%Y ')),
+                  'pukul ', DATE_FORMAT(l.updated_at, '%H:%i')) AS pada
     FROM blud_locks l LEFT JOIN users u ON u.id = l.updated_by
     WHERE l.entity = ${entity} AND l.key_id = ${keyId}
     LIMIT 1
@@ -728,7 +734,7 @@ export async function saveSskBatch(
       const tertutup = await bulanTertutupSet(tx, tahun, sumber);
       if (tertutup.size > 0) {
         const lamaRko = await tx`
-          SELECT canonical_id, uraian, uraian_ssk, pagu, months
+          SELECT canonical_id, uraian, uraian_ssk, pagu, months, is_nullified
           FROM kinerja_ssk
           WHERE tahun = ${tahun} AND sumber = ${sumber}
             AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
@@ -1126,7 +1132,10 @@ export async function saveRealisasiBatch(
     // Baris yang isinya tidak berubah membawa jejak LAMANYA. Dulu tiap Simpan
     // menstempel ke-12 bulan dengan orang & jam simpanan terakhir, jadi "siapa yang
     // terakhir mengubah Januari" tidak bisa dijawab dari tabel ini sama sekali.
-    const sekarang = waktuSekarangWIB();
+    // Jam MySQL, bukan `waktuSekarangWIB()`: kolom ini selama ini diisi DEFAULT NOW() dan
+    // baris yang tidak berubah membawa nilai lamanya apa adanya — dua jam berbeda di satu
+    // kolom bergeser 7 jam bila zona MySQL server bukan WIB.
+    const [{ s: sekarang }] = await tx`SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS s` as { s: string }[];
     // Checkpoint D: kolom turunan sudah di-DROP. INSERT cuma input persisten + identitas.
     const values = rows.map((r, i) => {
       const iLama = banding.pasanganSama.get(i);

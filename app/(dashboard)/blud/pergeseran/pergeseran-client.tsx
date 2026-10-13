@@ -11,7 +11,7 @@ import { Save, Sparkles, RefreshCw, Calendar, X, AlertTriangle, Search, Copy, Lo
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
-import { kalimatTidakBerubah, jebakanArsip } from '@/lib/blud/isi-sama'
+import { kalimatTidakBerubah, jebakanArsip, dialogJebakanArsip } from '@/lib/blud/isi-sama'
 import { useSentinelSwap } from '@/lib/blud/use-sentinel-swap'
 import RowActionsMenu from '@/components/blud/RowActionsMenu'
 import { InputNominal } from '@/components/ui/input-nominal'
@@ -1799,27 +1799,52 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
     if (asalTutupRef.current) return true
     const j = jebakanArsip(periodeTulis, history.map(h => h.versi_tanggal), arsipDisengajaRef.current)
     if (!j) return true
+    const isiLayar = belumTersimpan
+    const d = dialogJebakanArsip({
+      ...j, hariIni: sasaranSimpan(''), isiLayarBelumTersimpan: isiLayar, tanggal: formatTanggalId, jenis: 'pergeseran',
+    })
     const pilih = await pilihDialog({
       title:   `Simpan ke arsip ${formatTanggalId(j.arsip)}?`,
-      message: `Simpan akan MENIMPA arsip pergeseran ${formatTanggalId(j.arsip)} — bukan versi bulan ini `
-        + `(terbaru ${formatTanggalId(j.terbaru)}).\n\n`
-        + `Kalau maksud Anda membawa isi ${formatTanggalId(j.arsip)} ke bulan ini (misalnya membetulkan `
-        + `salah ketik), pakai Salin Versi Lain: layar pindah ke periode bulan berjalan dan arsip ini `
-        + `langsung terpilih sebagai sumbernya.`,
-      confirmLabel: 'Pakai Salin Versi Lain',
+      message: d.message,
+      confirmLabel: d.confirmLabel,
       variant:      'purple',
       altLabel:     `Tetap simpan ke ${formatTanggalId(j.arsip)}`,
       altVariant:   'warning',
     })
-    if (pilih === 'utama') await bawaKeBulanIni(j.arsip)
+    if (pilih === 'utama') await bawaKeBulanIni(j.arsip, isiLayar)
     if (pilih === 'lain') arsipDisengajaRef.current = j.arsip
     return pilih === 'lain'
   }
 
-  async function bawaKeBulanIni(arsip: string) {
+  async function bawaKeBulanIni(arsip: string, isiLayar: boolean) {
+    // Salin Versi menyalin arsip TERSIMPAN — isi layar yang belum tersimpan akan terbuang.
+    if (isiLayar) { await bawaIsiLayarKeBulanIni(); return }
     if (!(await gantiPeriode(''))) return
     setSalinVersiAwal(arsip)
     setSalinVersiBuka(true)
+  }
+
+  /** Cermin layar DPA: isi layar tetap (beserta acuan & catatannya), sasaran pindah ke bulan berjalan. */
+  async function bawaIsiLayarKeBulanIni() {
+    const hariIni = sasaranSimpan('')
+    const sudahAda = history.some(h => h.versi_tanggal === hariIni)
+    let v = 0
+    if (sudahAda) {
+      try {
+        const res  = await fetch(`/api/blud/pergeseran?tahun=${tahun}&tanggal=${encodeURIComponent(hariIni)}`)
+        const json = await res.json()
+        if (!res.ok || typeof json.version !== 'number') throw new Error()
+        v = json.version
+      } catch {
+        showToast('Angka kunci versi hari ini tidak bisa diambil — isi layar tetap di arsip. Coba lagi sebentar lagi.', false)
+        return
+      }
+    }
+    setPeriodeTulis('')
+    setVersi(sudahAda ? hariIni : '')
+    setVersion(v)
+    arsipDisengajaRef.current = null
+    showToast(`Isi layar dibawa ke bulan berjalan — Simpan akan menulis versi ${formatTanggalId(hariIni)}. Belum tersimpan, periksa lalu tekan Simpan.`)
   }
 
   // Audit BLUD v1.2 (B-NEW-3): split jadi internal supaya bisa retry dengan force=true

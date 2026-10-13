@@ -264,7 +264,11 @@ try {
     periksa('Angka kunci basi → VERSION_CONFLICT', e?.name === 'KinerjaVersionConflictError')
     const p = await penyimpanTerakhir('kinerja_ssk', KUNCI_SSK)
     const nama = (await sql`SELECT COALESCE(nama_lengkap, username) AS n FROM users WHERE id = ${USER}`)[0].n
-    periksa('…dialog menyebut nama & jam penyimpan terakhir', p.oleh === nama && /^\d\d:\d\d$/.test(p.pada ?? ''), `${p.oleh} ${p.pada}`)
+    periksa('…dialog menyebut nama & jam penyimpan terakhir', p.oleh === nama && /^pukul \d\d:\d\d$/.test(p.pada ?? ''), `${p.oleh} ${p.pada}`)
+    // Simpanan kemarin tidak boleh terbaca "pukul 16:05" seolah terjadi selagi mengetik.
+    await sql`UPDATE blud_locks SET updated_at = NOW() - INTERVAL 1 DAY WHERE entity = 'kinerja_ssk' AND key_id = ${KUNCI_SSK}`
+    const kemarin = await penyimpanTerakhir('kinerja_ssk', KUNCI_SSK)
+    periksa('…simpanan hari lain menyebut tanggalnya', /^\d\d\/\d\d\/\d{4} pukul \d\d:\d\d$/.test(kemarin.pada ?? ''), kemarin.pada)
     // "Buat Perubahan" orang lain terselip: versinya terkunci, angka kuncinya TIDAK naik.
     await sql`UPDATE kinerja_ssk SET locked_at = NOW() WHERE tahun = ${TAHUN} AND sumber = ${SUMBER} AND versi_tipe = 'MURNI' AND versi_seq = 0`
     e = await galat(() => saveSskBatch(TAHUN, SUMBER, sskBaris(), USER, 'MURNI', 0, vSsk, false, true))

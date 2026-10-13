@@ -114,3 +114,33 @@ export function jebakanArsip(
   const terbaru = versiTersimpan.reduce((m, v) => (v > m ? v : m), '')
   return terbaru > periodeTulis ? { arsip: periodeTulis, terbaru } : null
 }
+
+/**
+ * Isi dialog jebakan arsip — satu sumber untuk layar DPA & Pergeseran. Jalan amannya
+ * bergantung pada ISI layar:
+ * - layar = arsip tersimpan → Salin Versi Lain (pratinjau + jejak `asal_salin`);
+ * - layar BELUM tersimpan (pulihan riwayat, suntingan) → Salin Versi akan menyalin arsip
+ *   TERSIMPAN dan membuang isi ini, jadi yang dibawa justru isi layarnya: isinya tetap,
+ *   sasaran Simpan pindah ke bulan berjalan.
+ */
+export function dialogJebakanArsip(a: {
+  arsip: string; terbaru: string; hariIni: string; isiLayarBelumTersimpan: boolean
+  tanggal: (t: string) => string; jenis?: string
+}): { message: string; confirmLabel: string } {
+  const t = a.tanggal
+  const kepala = `Simpan akan MENIMPA arsip ${a.jenis ? `${a.jenis} ` : ''}${t(a.arsip)} — bukan versi bulan ini `
+    + `(terbaru ${t(a.terbaru)}).\n\n`
+  return a.isiLayarBelumTersimpan
+    ? {
+        confirmLabel: 'Bawa ke bulan ini',
+        message: kepala + `Isi di layar belum tersimpan di mana pun (hasil Pulihkan atau suntingan). Kalau maksud `
+          + `Anda membawanya ke bulan ini, pilih Bawa ke bulan ini: isinya tetap di layar, sasaran Simpan `
+          + `pindah ke ${t(a.hariIni)}, lalu tekan Simpan.`,
+      }
+    : {
+        confirmLabel: 'Pakai Salin Versi Lain',
+        message: kepala + `Kalau maksud Anda membawa isi ${t(a.arsip)} ke bulan ini (misalnya membetulkan `
+          + `salah ketik), pakai Salin Versi Lain: layar pindah ke periode bulan berjalan dan arsip ini `
+          + `langsung terpilih sebagai sumbernya.`,
+      }
+}

@@ -13,7 +13,7 @@ import {
   bandingRealisasi, kalimatRingkasan, kalimatBelumTersimpan, gabungBentrok, terapkanPilihanBentrok,
   pelanggaranBulanTertutup, kunciRealisasi, type BarisBanding,
 } from '../lib/kinerja/banding-realisasi'
-import { alasanTolakTutup, alasanTolakBuka, perubahanTargetTertutup, kalimatPelanggaran } from '../lib/kinerja/tutup-bulan'
+import { alasanTolakTutup, alasanTolakBuka, perubahanTargetTertutup, kalimatPelanggaran, KinerjaTargetTertutupError } from '../lib/kinerja/tutup-bulan'
 import { jumlahSskBerubah } from '../lib/kinerja/sunting-ssk'
 import { gabungBentrokSsk, terapkanPilihanBentrokSsk, kalimatSelBentrokSsk } from '../lib/kinerja/bentrok-ssk'
 
@@ -169,6 +169,15 @@ console.log('\n── E. perubahanTargetTertutup (RKO) ────────�
   ok('E4 pagu berubah → disebut (bulan null)', perubahanTargetTertutup(lama, [{ ...lama[0], pagu: 1300 }], T).some(p => p.bulan === null))
   ok('E5 rekening baru bernol → tidak', perubahanTargetTertutup(lama, [...lama, { canonical_id: '', uraian: 'Baru', pagu: 0, months: bln(0) }], T).length === 0)
   ok('E6 rekening bertarget Januari dihapus → disebut', perubahanTargetTertutup(lama, [], T).some(p => p.bulan === 1 && p.baru === 0))
+  // Susulan audit: bendera saja yang berubah — angkanya sama, tapi realisasi rekening itu
+  // keluar/masuk hitungan bulan tertutup (jadi/batal yatim).
+  const nol = [{ canonical_id: 'Z', uraian: 'Rek Z', pagu: 0, months: bln(0), is_nullified: 0 }]
+  const pNol = perubahanTargetTertutup(nol, [{ ...nol[0], is_nullified: true as unknown as number }], T)
+  ok('E7 nol-kan baris berpagu 0 → disebut (bendera)', pNol.length === 1 && pNol[0].nolkan === true && pNol[0].baru === 1)
+  ok('E8 Aktifkan (bendera saja) → disebut', perubahanTargetTertutup([{ ...nol[0], is_nullified: 1 }], [{ ...nol[0], is_nullified: false as unknown as number }], T)
+    .some(p => p.nolkan && p.lama === 1 && p.baru === 0))
+  ok('E9 bendera DB 1 = bendera layar true → tidak disebut', perubahanTargetTertutup([{ ...nol[0], is_nullified: 1 }], [{ ...nol[0], is_nullified: true as unknown as number }], T).length === 0)
+  ok('E10 kalimatnya menyebut nol-kan', new KinerjaTargetTertutupError(pNol, [1, 2]).message.includes('Rek Z (dinol-kan)'))
 }
 
 console.log('\n── F. jumlahSskBerubah ──────────────────────────────────────────')
@@ -198,10 +207,14 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   ok('G4 …angka gembok naik tanpa syarat expectedVersion', urut(simpan, 'DELETE FROM kinerja_realisasi', 'ON DUPLICATE KEY UPDATE version = version + 1')
     && !/if \(expectedVersion !== undefined\) \{\s*await tx`\s*INSERT INTO blud_locks/.test(simpan))
   ok('G5 …jejak lama untuk baris tak berubah', simpan.includes('jejak ? jejak.updated_by : userId') && simpan.includes('jejak ? jejak.updated_at : sekarang'))
+  // Susulan audit: satu kolom, satu jam — jam MySQL (DEFAULT NOW() selama ini), bukan jam JS WIB.
+  ok('G5b …stempel baris berubah dari jam MySQL', simpan.includes("SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS s")
+    && !simpan.includes('waktuSekarangWIB('))
   ok('G6 …bulan tertutup dibaca lewat tx (di bawah gembok)', simpan.includes('await bulanTertutupSet(tx, tahun, sumber)'))
   const sskF = badan(K, 'setujuBulanTertutup = false,\n)')
   ok('G7 Simpan RKO: peringatan bulan tertutup SEBELUM DELETE, bisa disetujui', urut(sskF, 'if (!setujuBulanTertutup) {',
     'perubahanTargetTertutup(', 'throw new KinerjaTargetTertutupError(', 'DELETE FROM kinerja_ssk'))
+  ok('G7b …bendera nol-kan lama ikut dibaca untuk peringatan', sskF.includes('SELECT canonical_id, uraian, uraian_ssk, pagu, months, is_nullified'))
 
   const rRoute = kode('app/api/kinerja/realisasi/route.ts')
   ok('G8 Route Realisasi: 409 BULAN_TERTUTUP', rRoute.includes("code: 'BULAN_TERTUTUP'") && rRoute.includes('err instanceof KinerjaBulanTertutupError'))
@@ -242,7 +255,11 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   const imporModal = badan(kode('components/kinerja/ImportRealisasiModal.tsx'), 'function terapkan()')
   ok('G24b Toast impor menyebut baris yang BENAR-BENAR diisi', urut(imporModal, 'const masuk = onApply(items);', 'if (masuk > 0) toast.success(`${masuk} baris diisi')
     && !imporModal.includes('${items.length} baris diisi')
-    && badan(RT, 'real_fisik?: number }[])').includes('return items.length;'))
+    && badan(RT, 'real_fisik?: number }[])').includes('return cocok.length;'))
+  // Susulan audit: baris berkas tanpa baris di layar (bulan belum di-Init) tidak terisi.
+  ok('G24c Impor hanya menghitung baris yang PUNYA baris di layar', urut(badan(RT, 'real_fisik?: number }[])'),
+    'const cocok = items.filter(it => realisasiRows.some(r => r.ssk_canonical_id === it.ssk_canonical_id && r.bulan === it.bulan_ke));',
+    'if (cocok.length === 0) {', 'return 0;', 'const hit = cocok.find(', 'return cocok.length;'))
   ok('G25 Pulihkan mempertahankan bulan tertutup', urut(badan(RT, 'item: { id: number; disimpan_pada: string })'),
     '...realisasiRows.filter(r => tertutupSet.has(r.bulan))', '...pulih.filter(r => !tertutupSet.has(r.bulan))'))
   ok('G26 Samakan mati di bulan tertutup', badan(RT, 'async function samakanBulanIni(').includes('if (bulanIniTertutup) return;')

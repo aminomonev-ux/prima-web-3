@@ -4,7 +4,8 @@
 // Akses DB-nya di `tutup-bulan-data.ts`.
 // Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §5
 
-import { NAMA_BULAN, type PelanggaranTertutup } from './banding-realisasi'
+import { NAMA_BULAN, sen, type PelanggaranTertutup } from './banding-realisasi'
+import { KUNCI_BULAN_SSK } from './bentrok-ssk'
 // `import type` — terhapus saat kompilasi, jadi layar tidak ikut menarik mysql2.
 import type { SumberSSK } from '@/lib/data/kinerja'
 
@@ -75,6 +76,8 @@ export interface BarisRko {
   uraian_ssk?:   string | null
   pagu?:         number | string | null
   months?:       Record<string, unknown> | null
+  /** Layar: boolean; DB: TINYINT 0/1. */
+  is_nullified?: boolean | number | null
 }
 
 export interface PerubahanTargetTertutup {
@@ -83,11 +86,15 @@ export interface PerubahanTargetTertutup {
   bulan: number | null
   lama:  number
   baru:  number
+  /**
+   * Bendera nol-kan yang dibalik (lama/baru = 0/1). Angkanya bisa tetap sama — baris
+   * berpagu 0 yang dinol-kan, atau Aktifkan yang hanya membalik bendera — padahal
+   * realisasi rekening itu ikut keluar/masuk hitungan bulan tertutup (jadi/batal yatim).
+   */
+  nolkan?: true
 }
 
-const KUNCI_BULAN = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'] as const
-
-const sen = (v: unknown) => Math.round((Number(v) || 0) * 100)
+const dinolkan = (r: BarisRko | undefined) => Number(r?.is_nullified ?? 0) === 1
 
 /**
  * Target bulan tertutup (dan pagu) yang akan berubah kalau RKO ini disimpan. Bukan
@@ -112,8 +119,11 @@ export function perubahanTargetTertutup(
     if (sen(l?.pagu) !== sen(b?.pagu)) {
       hasil.push({ label: label(r), bulan: null, lama: sen(l?.pagu) / 100, baru: sen(b?.pagu) / 100 })
     }
+    if (l && b && dinolkan(l) !== dinolkan(b)) {
+      hasil.push({ label: label(r), bulan: null, lama: dinolkan(l) ? 1 : 0, baru: dinolkan(b) ? 1 : 0, nolkan: true })
+    }
     for (const bulan of [...tertutup].sort((x, y) => x - y)) {
-      const m = KUNCI_BULAN[bulan - 1]
+      const m = KUNCI_BULAN_SSK[bulan - 1]
       if (!m) continue
       const a = sen(l?.months?.[m])
       const z = sen(b?.months?.[m])
@@ -132,7 +142,9 @@ export class KinerjaTargetTertutupError extends Error {
 
 export function kalimatTargetTertutup(p: readonly PerubahanTargetTertutup[], tertutup: readonly number[], maks = 5): string {
   const rentang = [...tertutup].sort((a, b) => a - b).map(b => NAMA_BULAN[b - 1])
-  const nama = (x: PerubahanTargetTertutup) => x.bulan === null ? `${x.label} (pagu)` : `${x.label} (target ${NAMA_BULAN[x.bulan - 1]})`
+  const nama = (x: PerubahanTargetTertutup) =>
+    x.nolkan ? `${x.label} (${x.baru ? 'dinol-kan' : 'diaktifkan lagi'})`
+    : x.bulan === null ? `${x.label} (pagu)` : `${x.label} (target ${NAMA_BULAN[x.bulan - 1]})`
   const contoh = p.slice(0, maks).map(nama)
   const sisa = p.length - maks
   return `Realisasi ${rentang.join(', ')} sudah ditutup. Simpanan ini mengubah ${p.length} angka yang `

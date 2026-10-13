@@ -606,19 +606,27 @@ export interface SimpanHasil {
 /**
  * Versi yang BERLAKU pada tanggal sasaran (terakhir ≤ sasaran) beserta isinya — pembanding
  * Simpan identik. Dibaca lewat `tx`, di bawah kunci setahun (L69-b).
+ *
+ * `null` = tidak mungkin sama: tidak ada versi, atau jumlah barisnya sudah berbeda dari
+ * `jumlahBaru` — dicek lewat COUNT dulu supaya simpanan yang menambah/membuang baris tidak
+ * membaca seluruh versi di bawah kunci setahun hanya untuk dibuang.
  */
-async function dpaBerlakuPada(tx: TxSql, tahun: number, sasaran: string): Promise<{ versi: string; rows: DpaBaris[] } | null> {
+async function dpaBerlakuPada(tx: TxSql, tahun: number, sasaran: string, jumlahBaru: number): Promise<{ versi: string; rows: DpaBaris[] } | null> {
   const versi = await getDpaVersiBerlaku(tahun, sasaran, tx)
   if (!versi) return null
+  const [{ n }] = await tx`SELECT COUNT(*) AS n FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}` as { n: unknown }[]
+  if (Number(n) !== jumlahBaru) return null
   const rows = await tx`SELECT * FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}` as Record<string, unknown>[]
   return { versi, rows: rows.map(normDpa) }
 }
 
-async function pergeseranBerlakuPada(tx: TxSql, tahun: number, sasaran: string): Promise<{
+async function pergeseranBerlakuPada(tx: TxSql, tahun: number, sasaran: string, jumlahBaru: number): Promise<{
   versi: string; rows: PergeseranBaris[]; acuan: string; mutasi: MutasiInput[]
 } | null> {
   const versi = await getPergeseranVersiBerlaku(tahun, sasaran, tx)
   if (!versi) return null
+  const [{ n }] = await tx`SELECT COUNT(*) AS n FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}` as { n: unknown }[]
+  if (Number(n) !== jumlahBaru) return null
   const rows = (await tx`SELECT * FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND versi_tanggal = ${versi}` as Record<string, unknown>[])
     .map(normPergeseran)
   const mutasi = (await tx`
@@ -947,7 +955,7 @@ export async function saveDpa(
     // karena tidak ada tulisan yang perlu dijaga. Pembuat Perubahan tidak ikut: isi yang
     // sama pun tetap menerbitkan babak baru.
     if (!asalPerubahan) {
-      const berlaku = await dpaBerlakuPada(tx, tahun, versiTanggal)
+      const berlaku = await dpaBerlakuPada(tx, tahun, versiTanggal, rows.length)
       if (berlaku && isiDpaSama(rows, berlaku.rows)) {
         tidakBerubah = { versi: berlaku.versi, baris: berlaku.versi === versiTanggal ? berlaku.rows.length : 0 }
         return
@@ -1233,7 +1241,7 @@ export async function savePergeseran(
     // Cermin `saveDpa` (L69). Penutupan tidak ikut: ia menerbitkan baris
     // `blud_pergeseran_tutup`, dan pergeseran tanpa geseran yang ditutup isinya sama.
     if (!asalTutup) {
-      const berlaku = await pergeseranBerlakuPada(tx, tahun, versiTanggal)
+      const berlaku = await pergeseranBerlakuPada(tx, tahun, versiTanggal, rows.length)
       if (berlaku && isiPergeseranSama({ rows, acuan: dpaVersiTanggal, mutasi }, berlaku)) {
         tidakBerubah = { versi: berlaku.versi, baris: berlaku.versi === versiTanggal ? berlaku.rows.length : 0 }
         return

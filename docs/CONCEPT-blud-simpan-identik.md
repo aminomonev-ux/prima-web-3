@@ -75,12 +75,34 @@ daftar, Pulihkan riwayat, ganti periode, ganti tahun — dan hanya sesudah orang
 berpindah (batal di dialog buang-isian = layar & ingatannya tetap). Jebakan aslinya
 (membuka/memulihkan arsip lalu Simpan) tetap ditanya. Hanya di layar; nol endpoint.
 
+### 3.2 Isi layar yang belum tersimpan (susulan audit kode 2026-10-13)
+
+"Pakai Salin Versi Lain" menyalin arsip **tersimpan**. Kalau isi layar belum tersimpan —
+simpanan lama dari Riwayat Simpan yang dipulihkan, atau salah ketik yang sudah dibetulkan
+di arsip yang dibuka — `gantiPeriode('')` membuangnya (sesudah bertanya) lalu Salin Versi
+memasang arsip tersimpan: yang dibawa ke bulan ini justru BUKAN yang orangnya maksud.
+
+`dialogJebakanArsip` (murni, satu sumber kalimat untuk dua layar) kini memilih jalan
+amannya dari `belumTersimpan`:
+- isi layar = arsip tersimpan → **Pakai Salin Versi Lain** seperti §3;
+- isi layar belum tersimpan → **Bawa ke bulan ini**: isinya tetap, sasaran Simpan pindah
+  ke bulan berjalan (`bawaIsiLayarKeBulanIni`) — pengecualian L80 yang sama dengan Tutup
+  Pergeseran: perpindahannya ADALAH pilihan orangnya, disebut di dialog, terlihat di
+  pemilih periode. Angka kunci versi hari ini diambil segar (L77); gagal diambil = tidak
+  pindah. Jejak asal (`asal_pulihkan` dll.) tetap, karena isinya memang dari sana.
+
+Sekaligus `ConfirmDialog`: Enter pada tombol dialog yang **difokus lewat Tab** = tombol
+itu (dulu selalu tombol utama — Tab ke Batal lalu Enter malah menyetujui hapus), Enter
+yang dipakai dialog tidak ikut menekan tombol halaman di belakangnya (`preventDefault`),
+dan dialog selesai sekali saja.
+
 ## 4. Uji
 
-`npx tsx scripts/test-blud-simpan-identik.mts` (73) + `node scripts/test-blud-simpan-identik-db.mjs`
+`npx tsx scripts/test-blud-simpan-identik.mts` (80) + `node scripts/test-blud-simpan-identik-db.mjs`
 (19, MySQL kotak pasir 2099 — termasuk bolak-balik layar `getDpaByDate → dpaKeInput`, yang
-membuktikan aturannya menggigit di pemakaian nyata), 45 uji mutasi tertangkap (16 untuk
-§3.1). Diverifikasi di peramban pada salinan DPA 2026 di 2099; §3.1: Tutup → Simpan →
+membuktikan aturannya menggigit di pemakaian nyata), 59 uji mutasi tertangkap (16 untuk
+§3.1, 14 untuk §3.2 + dialog + jalan pintas COUNT). Pembanding membaca COUNT dulu: jumlah
+baris berbeda = pasti berbeda, seluruh versi baru dibaca bila jumlahnya sama. Diverifikasi di peramban pada salinan DPA 2026 di 2099; §3.1: Tutup → Simpan →
 koreksi tanpa dialog, buka arsip dari daftar → ditanya lagi, "Tetap simpan" → koreksi
 berikutnya tanpa dialog, DPA dua koreksi sungguhan ke arsip 30 Sep (11 Okt tak tersentuh),
 Pulihkan → ditanya lagi.

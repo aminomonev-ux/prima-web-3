@@ -3,8 +3,11 @@
 // Dipakai pengingat "belum tersimpan" shell E-Anggaran dan penahan "Buat Perubahan":
 // Buat Perubahan menyalin isi TERSIMPAN, jadi suntingan di layar yang belum disimpan
 // tidak ikut tersalin lalu terbuang saat layar pindah ke versi baru — dan versi lamanya
-// sudah terkunci. MURNI, tanpa impor.
+// sudah terkunci. MURNI — hanya mengimpor modul murni lain.
 // Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §4
+
+import { sen } from './banding-realisasi'
+import { KUNCI_BULAN_SSK } from './bentrok-ssk'
 
 export interface BarisSskSunting {
   canonical_id?: string | null
@@ -18,16 +21,12 @@ export interface BarisSskSunting {
   is_nullified?: boolean | null
 }
 
-const KUNCI_BULAN = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'] as const
-
-const sen = (v: unknown) => Math.round((Number(v) || 0) * 100)
-
 /** Yang diketik/diubah orang saja — `months_pct`, `total`, `urut` turunan atau diatur server. */
 function sidik(r: BarisSskSunting): string {
   return JSON.stringify([
     String(r.canonical_id ?? ''), String(r.uraian_ssk ?? ''), String(r.uraian ?? ''),
     String(r.program ?? ''), String(r.kegiatan ?? ''), String(r.subkegiatan ?? ''),
-    sen(r.pagu), ...KUNCI_BULAN.map(k => sen(r.months?.[k])), !!r.is_nullified,
+    sen(r.pagu), ...KUNCI_BULAN_SSK.map(k => sen(r.months?.[k])), !!r.is_nullified,
   ])
 }
 

@@ -3,8 +3,9 @@
 Status: disetujui pemilik aplikasi 2026-10-12 ("eksekusi"). Tahap 1–3 SELESAI 2026-10-12; Tahap 4
 SELESAI 2026-10-12 ("coba aja").
 
-Hasil: uji `scripts/test-kinerja-simpan-realisasi.mts` (140) + `-db.mjs` (46, MySQL, 2099), 61 uji
-mutasi tertangkap, diverifikasi ujung-ke-ujung di peramban pada kotak pasir 2099 (§8).
+Hasil: uji `scripts/test-kinerja-simpan-realisasi.mts` (147) + `-db.mjs` (47, MySQL, 2099), 68 uji
+mutasi tertangkap, diverifikasi ujung-ke-ujung di peramban pada kotak pasir 2099 (§8). Susulan
+audit kode 2026-10-13 di §9.
 
 ## 1. Masalah
 
@@ -174,3 +175,26 @@ Simpan. Tahap 2 di peramban dgn dua tab.
   lewat `canonical_id`; isian klien diabaikan (milik server); rekening baru di Perubahan tetap
   NULL. Aman karena induknya baris versi asal yang sudah terkunci. Baris yang tautannya sudah
   terlanjur kosong di server TIDAK diisi ulang — isiannya harus menebak versi asal.
+
+## 9. Susulan audit kode (2026-10-13)
+
+- **Peringatan target bulan tertutup menimbang bendera nol-kan.** Nol-kan biasa sudah
+  memicunya lewat pagu yang jadi 0, tapi yang HANYA membalik bendera lolos: Aktifkan (angkanya
+  sengaja tidak dikembalikan) dan nol-kan baris yang pagunya memang 0 — padahal realisasi
+  rekening itu keluar/masuk hitungan bulan tertutup (jadi/batal yatim). Bendera DB 0/1 dan
+  layar `true/false` disamakan; kalimatnya "Rek X (dinol-kan / diaktifkan lagi)".
+- **`kinerja_realisasi.updated_at` satu jam.** Baris yang berubah dulu distempel
+  `waktuSekarangWIB()` (jam JS) sementara kolom itu selama ini diisi `DEFAULT NOW()` dan baris
+  yang tak berubah membawa nilai lamanya — dua jam di satu kolom, bergeser 7 jam bila zona
+  MySQL server bukan WIB. Kini `NOW()` MySQL dibaca sekali di transaksi yang sama.
+- **409 menyebut tanggal kalau bukan hari ini.** `penyimpanTerakhir` dulu `%H:%i` saja, jadi
+  tab yang dibiarkan terbuka semalam mendengar simpanan kemarin "pukul 16:05" seolah terjadi
+  selagi mengetik. `pada` kini frasa jadi: "pukul 10:42" / "12/10/2026 pukul 16:05".
+- **Toast Impor menghitung baris yang punya baris di layar.** Bulan yang belum di-Init tidak
+  punya baris, jadi isinya tidak terpasang — dulu tetap terhitung "diisi". Kini dilewati +
+  disebut; nol cocok = satu toast galat "jalankan Init dulu".
+- `sen()` dan daftar 12 kunci bulan tidak lagi disalin di empat modul (`banding-realisasi.ts`
+  / `bentrok-ssk.ts` jadi sumbernya).
+- Dinilai tidak perlu diubah: gabung bentrok tidak menggabung label (uraian/keterangan) —
+  layar RKO dan Realisasi memang tidak bisa menyuntingnya (asalnya Master Rekening / Init),
+  sudah tertulis di kepala `bentrok-ssk.ts`.
