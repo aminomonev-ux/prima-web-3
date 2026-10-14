@@ -315,11 +315,15 @@ cek('target negatif tetap ditolak', tolakTargetNegatif)
 // ─── Dokumen cetak ──────────────────────────────────────────────────────────
 console.log('\nG4. Dokumen')
 
+// Format sel PDF pindah ke `tulisSelCetak` (cetak-filter.ts) bersama kolom Capaian, 2026-10-14.
+const filterCetak = kode(baca('app/(dashboard)/rencana-aksi/_lib/cetak-filter.ts'))
 cek('PDF Cetak gabungan memformat angka non-rupiah',
-  /typeof v === 'number'\) return c\.money \? v\.toLocaleString\('id-ID'\) : tulisDesimal\(v\)/.test(ekspor),
+  /hdr\.flat\.map\(c => tulisSelCetak\(c, c\.value\(h, rollup\)\)\)/.test(ekspor)
+    && /if \(c\.money\) return v\.toLocaleString\('id-ID'\);\s*return tulisDesimal\(v\);/.test(filterCetak)
+    && /if \(c\.persen && typeof v !== 'string'\) return tulisCapaian\(v\);/.test(filterCetak),
   'kalau tidak, tabel yang sama berbunyi 7,5 di layar dan 7.5 di PDF')
 cek('Excel Cetak gabungan TETAP angka',
-  /row\.getCell\(c\.key\)\.value = typeof v === 'string' \? sanitizeCell\(v\) : v/.test(ekspor),
+  /cell\.value = typeof v === 'string' \? sanitizeCell\(v\) : v/.test(ekspor),
   'selnya harus bisa dihitung')
 cek('kolom target di DB tetap DECIMAL(14,2)',
   /target_rpjmd\s+DECIMAL\(14,2\)/.test(skema) && /target_tahunan\s+DECIMAL\(14,2\)/.test(skema),

@@ -138,7 +138,8 @@ export const PENANDA_TANGAN = [
 // orang di layar. Menghitung ulang di sini berarti dua sumber kebenaran untuk
 // satu tabel, dan cepat atau lambat keduanya berbeda pendapat.
 
-const REKAP_HEADER = [
+// Diekspor: tabel LKJIP yang tertaut ke Rekap memakai judul & catatan yang SAMA (lib/lkjip/sumber).
+export const REKAP_HEADER = [
   'No', 'Uraian', 'Anggaran (Rp)', 'Target s/d Bln Ini (%)',
   'Realisasi Fisik s/d Bln Ini (Rp)', 'Realisasi Fisik s/d Bln Ini (%)', 'Deviasi Fisik (%)',
   'Tingkat Capaian Fisik (%)',
@@ -175,7 +176,7 @@ export interface RekapExportParams {
 
 /** Catatan yatim ikut dibawa: tanpa ini, dokumen yang dibaca di luar aplikasi
  *  tidak bisa dijelaskan kenapa totalnya lebih kecil dari kas yang keluar. */
-function catatanYatim(yatim: LaporanYatim): string | null {
+export function catatanYatim(yatim: LaporanYatim): string | null {
   if (yatim.jumlahBaris === 0) return null;
   return `Catatan: ${yatim.jumlahItem} rekening (${yatim.jumlahBaris} baris, realisasi keuangan `
     + `${fmtNum(yatim.nominal)}) TIDAK ikut dihitung — rekeningnya sudah tidak ada di SSK acuan `
@@ -190,7 +191,7 @@ function catatanYatim(yatim: LaporanYatim): string | null {
  * keterangan akan dibaca sebagai "anggarannya belum dipakai", padahal dokumen
  * ini tidak punya cara membedakannya dari "datanya belum dimasukkan".
  */
-function catatanTanpaRealisasi(tanpaRealisasi: boolean, namaBulan: string, tahun: string): string | null {
+export function catatanTanpaRealisasi(tanpaRealisasi: boolean, namaBulan: string, tahun: string): string | null {
   if (!tanpaRealisasi) return null;
   return `Catatan: belum ada data realisasi yang diisi s/d ${namaBulan} ${tahun}. `
     + 'Angka Realisasi Rp 0 di atas berarti datanya belum dimasukkan ke sistem — '
@@ -204,7 +205,7 @@ function catatanTanpaRealisasi(tanpaRealisasi: boolean, namaBulan: string, tahun
  * bawahnya adalah akibat langsung dari keadaan ini, dan membacanya lebih dulu
  * membuat orang mengira ada dua masalah berbeda.
  */
-function catatanDinolkan(sumberDinolkan: string[]): string | null {
+export function catatanDinolkan(sumberDinolkan: string[]): string | null {
   if (sumberDinolkan.length === 0) return null;
   return `Catatan: seluruh baris SSK ${sumberDinolkan.join(', ')} dinol-kan, jadi pagu & targetnya `
     + 'Rp 0 dan TIDAK ikut menyumbang ke total di atas. Itu disengaja, bukan data yang belum diisi.';

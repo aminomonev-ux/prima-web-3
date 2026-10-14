@@ -24,10 +24,10 @@ import type { InfoBeku } from '@/lib/security/beku';
 import type {
   SumberSSK, KTab, MasterRow, RekeningRow, SskRow, RealRow,
 } from './_types';
-import { SUMBER_LIST, recalcAllRealisasi } from './_utils';
+import { recalcAllRealisasi } from './_utils';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
-import { versiUntukPilihan, type PilihanVersiRekap, type SlotVersiSsk,
-  type VersiSumberRekap } from '@/lib/kinerja/versi';
+import type { PilihanVersiRekap, VersiSumberRekap } from '@/lib/kinerja/versi';
+import { muatBahanRekap } from '@/lib/kinerja/muat-rekap';
 import { bandingRealisasi, kalimatBelumTersimpan } from '@/lib/kinerja/banding-realisasi';
 import { jumlahSskBerubah } from '@/lib/kinerja/sunting-ssk';
 import type { BulanTertutup } from '@/lib/kinerja/tutup-bulan';
@@ -417,77 +417,18 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     const giliran = ++giliranMuatRef.current;
     setLoadingData(true);
     try {
-      // Partial fail OK: per-sumber gagal → return [] untuk yang itu saja,
-      // sumber lain tetap tampil. Tidak ada toast individual untuk avoid spam
-      // (5 toast kalau semua endpoint down) — silent per-row mirror original.
-      const results = await Promise.all(
-        SUMBER_LIST.map(async s => {
-          const kosong = { sumber: s, rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[],
-                           dinolkan: false, versi: null as VersiSumberRekap | null };
-          let param = '';
-          // Diuji POSITIF (`=== 'murni'`), bukan `!== 'berlaku'`: dengan
-          // negasi, pilihan ketiga yang ditambahkan nanti akan diam-diam masuk
-          // ke cabang ini dan memuat versi BERLAKU sementara label & nama
-          // berkasnya mengumumkan pilihan baru itu.
-          if (pilihan === 'murni') {
-            // Versinya DIRESOLUSI dari daftar versi sumber itu, bukan ditulis
-            // `MURNI-0` mati — nomor urut MURNI tidak dijamin 0 di mana pun.
-            const dv = await fetchJson<unknown>(`/api/kinerja/ssk/versi-list?tahun=${tahun}&sumber=${s}`);
-            const slot = dv.ok ? ((dv as { items?: SlotVersiSsk[] }).items ?? []) : [];
-            const diminta = versiUntukPilihan(slot, pilihan);
-            // Sumber punya SSK tapi tidak punya versi murni (MURNI-nya dihapus
-            // lewat Reset; `parent_versi_id` ber-ON DELETE SET NULL sehingga
-            // PERUBAHAN-nya tetap hidup). TIDAK dimuat — jatuh ke versi berlaku
-            // akan membuat layar berbunyi "murni" sambil menampilkan angka
-            // perubahan. Disebut apa adanya di label & kop lewat `tipe: null`.
-            if (!diminta) {
-              return slot.length > 0
-                ? { ...kosong, versi: { sumber: s, tipe: null, seq: 0 } }
-                : kosong;
-            }
-            param = `&versi_tipe=${diminta.tipe}&versi_seq=${diminta.seq}`;
-          }
-          const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${s}${param}`);
-          if (!d.ok) return kosong;
-          const j = d as { rows?: RealRow[]; itemSsk?: ItemSskAktif[];
-                           versi?: { tipe?: 'MURNI'|'PERUBAHAN'; seq?: number; dinolkan?: boolean } };
-          // Ditandai di sini: larik hasilnya datar, dan unduhan gabungan perlu
-          // memisahkannya kembali per sumber.
-          return {
-            sumber: s,
-            rows: (j.rows ?? []).map(r => ({ ...r, sumber: s })),
-            itemSsk: j.itemSsk ?? [],
-            // A9: dibaca dari balasan server, BUKAN disimpulkan dari
-            // `itemSsk.length === 0` — daftar kosong punya dua sebab yang
-            // berbeda (belum diisi vs sengaja dinol-kan) dan menebaknya justru
-            // menghapus perbedaan yang seluruh perbaikan ini menjaganya.
-            dinolkan: j.versi?.dinolkan === true,
-            versi: { sumber: s, tipe: j.versi?.tipe ?? 'MURNI', seq: Number(j.versi?.seq ?? 0) },
-          };
-        })
-      );
+      // Partial fail OK: sumber yang gagal kosong sendiri, sumber lain tetap tampil, tanpa
+      // toast per sumber. Resepnya di lib/kinerja/muat-rekap.ts — dipakai juga tabel LKJIP
+      // yang tertaut ke Rekap, jadi keduanya mustahil berbeda angka.
+      const bahan = await muatBahanRekap(tahun, pilihan, url => fetchJson<unknown>(url));
       // Hasil dari giliran yang sudah ditinggalkan DIBUANG, tidak dipasang:
       // memasangnya berarti angka dari pilihan lama duduk di bawah label
       // pilihan baru.
       if (giliran !== giliranMuatRef.current) return;
-      // BUG-FIX: recalc setelah fetch supaya deviasi_keuangan pakai rumus baru
-      // (akum % keu - akum tgt fisik). DB row masih simpan nilai lama.
-      setRealisasiAllRows(recalcAllRealisasi(results.flatMap(x => x.rows)));
-      setRealisasiAllItems(results.flatMap(x => x.itemSsk));
-      setSumberDinolkan(results.filter(x => x.dinolkan).map(x => x.sumber));
-      // Hanya sumber yang punya isi yang dicatat versinya: kop yang menyebut 8
-      // sumber padahal satu yang berdata cuma bising. Sumber ber-`tipe: null`
-      // TETAP masuk — ia punya SSK, cuma tidak punya versi untuk pilihan ini,
-      // dan menghilangkannya dari daftar adalah bentuk cacat yang sama dgn A9.
-      // `x.dinolkan` WAJIB ikut jadi alasan masuk: versi yang habis dinol-kan
-      // TIDAK punya item dan bisa belum punya realisasi, jadi tanpa syarat ini
-      // ia hilang dari daftar versi di kop — padahal catatan di bawah tabel
-      // justru sedang membicarakannya. Sumber lenyap tanpa keterangan itu
-      // bentuk cacat yang sama dengan A9.
-      setVersiRekap(results
-        .filter(x => x.versi !== null
-          && (x.versi.tipe === null || x.dinolkan || x.itemSsk.length > 0 || x.rows.length > 0))
-        .map(x => x.versi as VersiSumberRekap));
+      setRealisasiAllRows(bahan.rows);
+      setRealisasiAllItems(bahan.items);
+      setSumberDinolkan(bahan.dinolkan);
+      setVersiRekap(bahan.versiRekap);
       rekapPernahDimuatRef.current = true;
     } finally {
       // Hanya giliran terakhir yang boleh mematikan penanda memuat; kalau tidak,

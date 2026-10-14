@@ -3,7 +3,8 @@
 // CetakPanel (render) DAN exports.ts (PDF/Excel) supaya hasil cetak = layar.
 
 import type { RaRow, RaLevel, HierarchyRow } from './types';
-import { buildHierarchyRows, outcomeOf, realisasiAkhirTahun, anggaranRollup } from './types';
+import { buildHierarchyRows, outcomeOf, realisasiAkhirTahun, anggaranRollup, capaianTahunan } from './types';
+import { tulisDesimal, tulisPersen } from '@/lib/shared/desimal';
 
 export type ColMode = 'both' | 'target' | 'realisasi';
 
@@ -127,7 +128,22 @@ export interface CetakColumn {
   header: string;
   align: 'left' | 'right' | 'center';
   money?: boolean;
+  persen?: boolean;
   value: (h: HierarchyRow, rollup: RaRow[]) => string | number | null;
+}
+
+/** Teks capaian — layar Cetak & PDF. `null` = Progres Negatif belum diisi (`capaianTahunan`). */
+export function tulisCapaian(p: number | null): string {
+  return p === null ? '—' : tulisPersen(p);
+}
+
+/** Teks sel PDF — format yang sama dengan sel di layar Cetak. */
+export function tulisSelCetak(c: CetakColumn, v: string | number | null): string {
+  if (c.persen && typeof v !== 'string') return tulisCapaian(v);
+  if (v == null) return '';
+  if (typeof v !== 'number') return v;
+  if (c.money) return v.toLocaleString('id-ID');
+  return tulisDesimal(v);
 }
 
 // Header bergrup: lead (rowSpan 2) · grup TW (colSpan = jumlah sub T/R) · tail.
@@ -174,7 +190,13 @@ export function cetakHeader(f: CetakFilter): CetakHeader {
   }
 
   const tail: CetakColumn[] = [];
-  if (showReal) tail.push({ key: 'akhir', header: 'Real Akhir', align: 'right', value: h => realisasiAkhirTahun(h.source) });
+  if (showReal) {
+    tail.push(
+      { key: 'akhir', header: 'Real Akhir', align: 'right', value: h => realisasiAkhirTahun(h.source) },
+      // Kolom ini dulu hanya ada di tabel layar — PDF & Excel melompat dari Real Akhir ke Anggaran.
+      { key: 'capaian', header: 'Capaian', align: 'right', persen: true, value: h => capaianTahunan(h.source) },
+    );
+  }
   if (f.showAnggaran) {
     tail.push({ key: 'anggaran', header: 'Anggaran (Rp)', align: 'right', money: true,
       value: (h, rollup) => anggaranRollup(h.source.level, h.source, rollup) });

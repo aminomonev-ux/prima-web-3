@@ -6,10 +6,10 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import SoftSelect from '@/components/ui/SoftSelect';
 import type { RaRow, RaLevel, HierarchyRow } from '../_lib/types';
-import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, outcomeOf, anggaranRollup, hitungCapaianPct, warnaCapaian } from '../_lib/types';
+import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, outcomeOf, anggaranRollup, capaianTahunan, warnaCapaian } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import type { CetakFilter, ColMode } from '../_lib/cetak-filter';
-import { DEFAULT_CETAK_FILTER, ALL_LEVELS, buildCetakRows, cetakRollupBase } from '../_lib/cetak-filter';
+import { DEFAULT_CETAK_FILTER, ALL_LEVELS, buildCetakRows, cetakRollupBase, tulisCapaian } from '../_lib/cetak-filter';
 import { apiListAll } from '../_lib/api';
 import { buildCombinedPdf, exportCombinedPdf, exportCombinedXlsx } from '../_lib/exports';
 
@@ -415,13 +415,13 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
               const outcome = outcomeOf(r);
               const ang = anggaranRollup(r.level, r, rollupRows);
               const realAkhir = realisasiAkhirTahun(r);
-              const capaian = hitungCapaianPct(r.target_tahunan, realAkhir, r.jenis);
+              const capaian = capaianTahunan(r);
               // Indentasi pohon (mode hirarki saja) → child makin menjorok; flat = rata.
               const depth = { tujuan: 0, sasaran: 1, program: 2, kegiatan: 3, 'sub-kegiatan': 4 }[r.level];
               const indent = filter.mode === 'hirarki' ? { paddingLeft: 12 + depth * 18 } : undefined;
               return (
-                // Key pakai h.no (incremental, unik by construction). BUKAN r.id —
-                // beberapa hierarchy rows bisa share source.id kalau parent name duplikat.
+                // Key pakai h.no (incremental, unik by construction). source.id kini juga unik
+                // (penjaga `used` di buildHierarchyRows), tapi h.no tidak bergantung padanya.
                 <tr key={h.no} className={`hover:bg-slate-50/50 transition-colors ${h.isOrphan ? 'bg-[#E24B4A]/5' : ''}`}>
                   <td className="px-3 py-2 text-slate-400" style={{ ...moneyFont, boxShadow: `inset 4px 0 0 ${fillColor}` }}>{h.no}</td>
                   <td className="px-3 py-2 font-bold leading-snug" style={{ color: h.tujuan ? fillColor : '#CBD5E1', ...(h.tujuan ? indent : {}) }}>{h.tujuan || ''}</td>
@@ -453,14 +453,14 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
                         <div className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-slate-200">
                           <div
                             className="h-full rounded-full"
-                            style={{ width: `${Math.min(100, capaian)}%`, background: warnaCapaian(capaian) }}
+                            style={{ width: `${Math.min(100, capaian ?? 0)}%`, background: warnaCapaian(capaian) }}
                           />
                         </div>
                         <span
                           className="font-bold whitespace-nowrap"
                           style={{ ...moneyFont, color: warnaCapaian(capaian), minWidth: 54, textAlign: 'right' }}
                         >
-                          {capaian.toFixed(2)}%
+                          {tulisCapaian(capaian)}
                         </span>
                       </div>
                     </td>

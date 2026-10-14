@@ -1,10 +1,10 @@
 'use client';
 
 import type { RaRow } from './types';
-import { realisasiAkhirTahun, quartersOf, LEVEL_LABELS, outcomeOf, hitungCapaianPct } from './types';
+import { realisasiAkhirTahun, quartersOf, LEVEL_LABELS, outcomeOf, capaianTahunan, capaianRpjmd, capaianTriwulan } from './types';
 import type { CetakFilter } from './cetak-filter';
-import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader } from './cetak-filter';
-import { sanitizeCell } from '@/lib/shared/excel-export';
+import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, tulisSelCetak } from './cetak-filter';
+import { sanitizeCell, loadExcelJs } from '@/lib/shared/excel-export';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import { polosSelExcel } from '@/lib/shared/excel-sel';
 
@@ -15,11 +15,8 @@ function loadPdf() {
   return _pdf;
 }
 
-let _xlsx: Promise<typeof import('exceljs')> | null = null;
-function loadXlsx() {
-  if (!_xlsx) _xlsx = import('exceljs');
-  return _xlsx;
-}
+// Penolong bersama: menangani interop CJS sehingga berkas ini juga bisa dijalankan uji di Node.
+const loadXlsx = loadExcelJs;
 
 function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -163,12 +160,7 @@ export async function buildCombinedPdf(allRows: RaRow[], tahun: number, filter: 
   autoTable(doc, {
     startY: 26,
     head,
-    body: hier.map(h => hdr.flat.map(c => {
-      const v = c.value(h, rollup);
-      if (v == null) return '';
-      if (typeof v === 'number') return c.money ? v.toLocaleString('id-ID') : tulisDesimal(v);
-      return v;
-    })),
+    body: hier.map(h => hdr.flat.map(c => tulisSelCetak(c, c.value(h, rollup)))),
     styles: { fontSize: 7, cellPadding: 1.5 },
     headStyles: { fillColor: [124, 92, 252], textColor: 255, fontSize: 7, halign: 'center' },
     columnStyles: { 0: { cellWidth: 8 } },
@@ -183,6 +175,13 @@ export async function exportCombinedPdf(allRows: RaRow[], tahun: number, filter:
 }
 
 export async function exportCombinedXlsx(allRows: RaRow[], tahun: number, filter: CetakFilter = DEFAULT_CETAK_FILTER) {
+  const wb = await buatWorkbookGabungan(allRows, filter);
+  const buf = await wb.xlsx.writeBuffer();
+  saveBlob(new Blob([buf]), `rencana-aksi-${tahun}-gabungan.xlsx`);
+}
+
+/** Dipisah dari unduhannya supaya isi berkasnya bisa diperiksa uji regresi. */
+export async function buatWorkbookGabungan(allRows: RaRow[], filter: CetakFilter = DEFAULT_CETAK_FILTER) {
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Renaksi & Kinerja');
@@ -228,12 +227,20 @@ export async function exportCombinedXlsx(allRows: RaRow[], tahun: number, filter
     const row = ws.getRow(dataIdx++);
     for (const c of flat) {
       const v = c.value(h, rollup);
-      row.getCell(c.key).value = typeof v === 'string' ? sanitizeCell(v) : v;
+      const cell = row.getCell(c.key);
+      // Persen tetap ANGKA supaya bisa dihitung di Excel: 85,5 disimpan 0,855 berformat 0.00%.
+      if (c.persen && typeof v === 'number') {
+        cell.value = v / 100;
+        cell.numFmt = '0.00%';
+      } else if (c.persen && v == null) {
+        cell.value = tulisSelCetak(c, v);
+      } else {
+        cell.value = typeof v === 'string' ? sanitizeCell(v) : v;
+      }
     }
   }
 
-  const buf = await wb.xlsx.writeBuffer();
-  saveBlob(new Blob([buf]), `rencana-aksi-${tahun}-gabungan.xlsx`);
+  return wb;
 }
 
 // ─── Export 1 indikator (Dashboard Kinerja) ────────────────────────────────
@@ -242,9 +249,9 @@ export async function exportIndikatorPdf(row: RaRow) {
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const realAkhir = realisasiAkhirTahun(row);
-  // R4: Progres Negatif dibalik via hitungCapaianPct
-  const pctTh = hitungCapaianPct(row.target_tahunan, realAkhir, row.jenis);
-  const pctRp = hitungCapaianPct(row.target_rpjmd, realAkhir, row.jenis);
+  const pctTh = capaianTahunan(row);
+  const pctRp = capaianRpjmd(row);
+  const persen = (p: number | null) => p === null ? '—' : p.toFixed(2) + '%';
 
   doc.setFontSize(13);
   doc.text(`${LEVEL_LABELS[row.level]} — Tahun ${row.tahun}`, 14, 14);
@@ -263,8 +270,8 @@ export async function exportIndikatorPdf(row: RaRow) {
       ['Target RPJMD', tulisDesimal(row.target_rpjmd)],
       ['Target Tahunan', tulisDesimal(row.target_tahunan)],
       ['Realisasi Akhir Tahun', tulisDesimal(realAkhir)],
-      ['Capaian Tahunan (%)', pctTh.toFixed(2) + '%'],
-      ['Capaian RPJMD (%)', pctRp.toFixed(2) + '%'],
+      ['Capaian Tahunan (%)', persen(pctTh)],
+      ['Capaian RPJMD (%)', persen(pctRp)],
     ],
     styles: { fontSize: 9, cellPadding: 2 },
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
@@ -275,7 +282,7 @@ export async function exportIndikatorPdf(row: RaRow) {
     startY: qStart,
     head: [['Triwulan', 'Target', 'Realisasi', 'Capaian (%)']],
     body: quartersOf(row).map(q => {
-      const pct = q.target > 0 ? hitungCapaianPct(q.target, q.realisasi, row.jenis) : null;
+      const pct = q.target > 0 ? capaianTriwulan(row, q.id) : null;
       return [`TW ${q.id}`, tulisDesimal(q.target), tulisDesimal(q.realisasi), pct === null ? '-' : pct.toFixed(2) + '%'];
     }),
     styles: { fontSize: 9 },
@@ -314,8 +321,8 @@ export async function exportIndikatorXlsx(row: RaRow) {
   head.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF9F27' } };
   quartersOf(row).forEach(q => {
-    const pct = hitungCapaianPct(q.target, q.realisasi, row.jenis);
-    ws.addRow([`TW ${q.id}`, q.target, q.realisasi, pct]);
+    const pct = capaianTriwulan(row, q.id);
+    ws.addRow([`TW ${q.id}`, q.target, q.realisasi, pct ?? '—']);
   });
   ws.getColumn(1).width = 25;
   ws.getColumn(2).width = 18;

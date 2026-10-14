@@ -319,9 +319,11 @@ ok('P14 bundel memakai penyusun yang sama dengan unduhan satuan',
    /tulisSheetData\(wb, baris, bagian\.sumber\)/.test(exP));
 ok('P15 sumber tanpa baris tidak melahirkan sheet kosong',
    (exP.match(/if \(baris\.length === 0\) continue;/g) || []).length === 2);
-ok('P16 baris ditandai sumbernya di fetchRealisasiAll',
+// Resep pemuatan Rekap pindah ke lib/kinerja/muat-rekap.ts (2026-10-14) — dipakai layar
+// Cetak DAN tabel tertaut LKJIP. Pemeriksaan resepnya membaca berkas itu.
+ok('P16 baris ditandai sumbernya di muatBahanRekap',
    /\.map\(r => \(\{ \.\.\.r, sumber: s \}\)\)/.test(
-     readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8')));
+     readFileSync('lib/kinerja/muat-rekap.ts', 'utf8')));
 ok('P17 tanpa sumber dicentang, hasilnya rekap saja seperti sebelumnya',
    /exportBundelExcel\(\{ \.\.\.paramRekap\(\), detail: d \}\) : exportRekapExcel\(paramRekap\(\)\)/.test(ctP));
 
@@ -1528,8 +1530,9 @@ console.log('\n-- AB. A8: penyebut Rekap disemai dari SSK, bukan dari realisasi 
      (rtA8.match(/ok: true, rows, itemSsk/g) || []).length, 2);
 
   const shA8 = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
+  const mrA8 = bersihkanKomentar(readFileSync('lib/kinerja/muat-rekap.ts', 'utf8'));
   ok('AB33 layar mengumpulkan itemSsk semua sumber',
-     /setRealisasiAllItems\(results\.flatMap\(x => x\.itemSsk\)\)/.test(shA8));
+     /items: results\.flatMap\(x => x\.itemSsk\)/.test(mrA8) && /setRealisasiAllItems\(bahan\.items\)/.test(shA8));
   ok('AB34 dan mengopernya ke tab Cetak', /realisasiAllItems=\{realisasiAllItems\}/.test(shA8));
 
   const ctA8 = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8'));
@@ -1783,8 +1786,10 @@ console.log('\n-- AD. A9: daftar calon versi lengkap, angkanya yang disaring --'
   ok('AD38 dan menunjukkan jalan keluarnya', dtAD.includes('Pengaturan → Reset'));
 
   const kcAD = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
+  const mrAD = bersihkanKomentar(readFileSync('lib/kinerja/muat-rekap.ts', 'utf8'));
   ok('AD39 benderanya dibaca dari balasan server, bukan ditebak dari itemSsk kosong',
-     /dinolkan: j\.versi\?\.dinolkan === true/.test(kcAD) && !/itemSsk\.length === 0/.test(kcAD));
+     /dinolkan: j\.versi\?\.dinolkan === true/.test(mrAD) && !/itemSsk\.length === 0/.test(mrAD)
+     && /setSumberDinolkan\(bahan\.dinolkan\)/.test(kcAD));
   ok('AD40 dan dioper ke layar Cetak', /sumberDinolkan=\{sumberDinolkan\}/.test(kcAD));
 }
 
@@ -1947,11 +1952,12 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   const kcAE = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/kinerja-client.tsx', 'utf8'));
   ok('AE35 bawaannya "berlaku" — jawaban benar tanpa memilih apa pun',
      /useState<PilihanVersiRekap>\('berlaku'\)/.test(kcAE));
+  const mrAE = bersihkanKomentar(readFileSync('lib/kinerja/muat-rekap.ts', 'utf8'));
   ok('AE36 versi murni DIRESOLUSI dari daftar versi, bukan MURNI-0 mati',
-     /versi-list\?tahun=/.test(kcAE) && /versiUntukPilihan\(slot, pilihan\)/.test(kcAE)
-     && !/versi_tipe=MURNI&versi_seq=0/.test(kcAE));
+     /versi-list\?tahun=/.test(mrAE) && /versiUntukPilihan\(slot, pilihan\)/.test(mrAE)
+     && !/versi_tipe=MURNI&versi_seq=0/.test(mrAE) && !/versi_tipe=MURNI&versi_seq=0/.test(kcAE));
   ok('AE37 tanpa versi murni: TIDAK dimuat, bukan jatuh ke versi berlaku',
-     /if \(!diminta\) \{/.test(kcAE));
+     /if \(!diminta\) \{/.test(mrAE));
   ok('AE38 ganti pilihan = ganti pilihan DAN muat ulang, satu tindakan',
      /setPilihanVersi\(v\);\s*\n\s*void fetchRealisasiAll\(v\);/.test(kcAE));
   ok('AE39 pilihannya dioper eksplisit, tidak dibaca dari state yang belum berganti',
@@ -1985,7 +1991,7 @@ console.log('\n-- AF. Perbaikan hasil audit: label tidak boleh berbohong --');
   ok('AF1 pemuatan Rekap bernomor giliran', /const giliran = \+\+giliranMuatRef\.current;/.test(kcAF));
   ok('AF2 hasil giliran basi DIBUANG sebelum state disentuh',
      /if \(giliran !== giliranMuatRef\.current\) return;/.test(kcAF));
-  const iSet = kcAF.indexOf('setRealisasiAllRows(recalcAllRealisasi');
+  const iSet = kcAF.indexOf('setRealisasiAllRows(bahan.rows)');
   const iBuang = kcAF.indexOf('if (giliran !== giliranMuatRef.current) return;');
   ok('AF3 pagar itu berdiri SEBELUM setter pertama', iBuang > 0 && iBuang < iSet);
   ok('AF4 hanya giliran terakhir yang mematikan penanda memuat',
@@ -2008,14 +2014,19 @@ console.log('\n-- AF. Perbaikan hasil audit: label tidak boleh berbohong --');
 
   // Syaratnya diuji positif: pilihan ketiga tidak boleh diam-diam masuk ke
   // cabang "murni" lalu memuat versi berlaku.
-  ok('AF9 cabang versi diuji positif', /if \(pilihan === 'murni'\) \{/.test(kcAF));
-  ok('AF10 bukan negasi', !/if \(pilihan !== 'berlaku'\) \{/.test(kcAF));
+  const mrAF = bersihkanKomentar(readFileSync('lib/kinerja/muat-rekap.ts', 'utf8'));
+  ok('AF9 cabang versi diuji positif', /if \(pilihan === 'murni'\) \{/.test(mrAF));
+  ok('AF10 bukan negasi', !/if \(pilihan !== 'berlaku'\) \{/.test(mrAF) && !/if \(pilihan !== 'berlaku'\) \{/.test(kcAF));
+  ok('AF12 layar Cetak memuat lewat resep bersama dgn pilihan yang dioper',
+     /await muatBahanRekap\(tahun, pilihan, /.test(kcAF) && !/SUMBER_LIST\.map/.test(kcAF));
+  ok('AF13 recalc tetap dijalankan atas gabungan semua sumber',
+     /rows: recalcAllRealisasi\(results\.flatMap\(x => x\.rows\)\)/.test(mrAF));
 
   // Sumber yang habis dinol-kan tidak punya item dan bisa belum punya
   // realisasi -- tanpa `dinolkan` di syaratnya ia hilang dari daftar versi kop
   // padahal catatan di bawah tabel sedang membicarakannya.
   ok('AF11 sumber dinol-kan tetap masuk daftar versi kop',
-     /x\.versi\.tipe === null \|\| x\.dinolkan \|\| x\.itemSsk\.length > 0/.test(kcAF));
+     /x\.versi\.tipe === null \|\| x\.dinolkan \|\| x\.itemSsk\.length > 0/.test(mrAF));
 
   // Kop rekap: satu sumber untuk teks, gaya, dan jumlah baris.
   const exAF = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8'));

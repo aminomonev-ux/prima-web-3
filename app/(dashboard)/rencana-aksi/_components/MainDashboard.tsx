@@ -9,7 +9,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Sparkline12 from './Sparkline12';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
-import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, nadaCapaian, BULAN_LABELS } from '../_lib/types';
+import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, capaianTahunan, capaianRpjmd, capaianTriwulan, nadaCapaian, BULAN_LABELS } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
 
 interface Props {
@@ -55,8 +55,8 @@ function TautanDataEntry({ label, disabled, onClick }: { label: string; disabled
   );
 }
 
-function getColors(pct: number) {
-  if (pct <= 0) return { text: 'text-[#78909C]', badge: 'bg-[#78909C] text-white', progress: 'bg-[#BDC3C7]' };
+function getColors(pct: number | null) {
+  if (pct === null || pct <= 0) return { text: 'text-[#78909C]', badge: 'bg-[#78909C] text-white', progress: 'bg-[#BDC3C7]' };
   switch (nadaCapaian(pct)) {
     case 'tercapai': return { text: 'text-[#1D9E75]', badge: 'bg-[#1D9E75] text-white',   progress: 'bg-[#1D9E75]' };
     case 'waspada':  return { text: 'text-[#EF9F27]', badge: 'bg-[#EF9F27] text-[#020F1C]', progress: 'bg-[#EF9F27]' };
@@ -201,9 +201,10 @@ export default function MainDashboard({
   } as RaRow;
 
   const realAkhir = activeRow ? realisasiAkhirTahun(activeRow) : 0;
-  // R4: Progres Negatif dibalik via hitungCapaianPct — over-target tampil merah
-  const nilaiAkhirTahun = hitungCapaianPct(data.target_tahunan, realAkhir, data.jenis);
-  const nilaiRpjmd      = hitungCapaianPct(data.target_rpjmd, realAkhir, data.jenis);
+  // R4: Progres Negatif dibalik via hitungCapaianPct — over-target tampil merah;
+  // yang belum diisi → null ("—"), bukan 200% "Selesai".
+  const nilaiAkhirTahun = capaianTahunan(data);
+  const nilaiRpjmd      = capaianRpjmd(data);
   const colorAkhirTahun = getColors(nilaiAkhirTahun);
   const colorRpjmd      = getColors(nilaiRpjmd);
 
@@ -591,7 +592,7 @@ export default function MainDashboard({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {quartersOf(data).map((q) => {
           // R4: Progres Negatif dibalik (2 − real/target) — over-target = merah
-          const pct = hitungCapaianPct(q.target, q.realisasi, data.jenis);
+          const pct = capaianTriwulan(data, q.id);
           const c = getColors(pct);
           return (
             <div key={q.id} className="group relative rounded-2xl bg-white p-5 shadow-xs hover:shadow-md transition-all duration-300 border border-slate-100 flex flex-col justify-between">
@@ -624,13 +625,13 @@ export default function MainDashboard({
                   <span className="text-slate-400">Nilai</span>
                   <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-bold ${c.badge}`}
                         style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                    Nilai {pct.toFixed(0)}%
+                    Nilai {pct === null ? '—' : `${pct.toFixed(0)}%`}
                   </span>
                 </div>
               </div>
 
               <div className="w-full h-1 bg-slate-50 rounded-full overflow-hidden">
-                <div style={{ width: `${Math.min(pct, 100)}%` }} className={`h-full ${c.progress}`} />
+                <div style={{ width: `${Math.min(pct ?? 0, 100)}%` }} className={`h-full ${c.progress}`} />
               </div>
             </div>
           );
@@ -682,7 +683,7 @@ function Selector({ label, value, options, onChange, disabled = false }: {
 
 function EvalCard({ title, badge, badgeClass, target, realisasi, nilai, progressLabel, colorText, colorProgress }: {
   title: string; badge: string; badgeClass: string;
-  target: number; realisasi: number; nilai: number;
+  target: number; realisasi: number; nilai: number | null;
   progressLabel: string; colorText: string; colorProgress: string;
 }) {
   return (
@@ -696,17 +697,17 @@ function EvalCard({ title, badge, badgeClass, target, realisasi, nilai, progress
         <div className="grid grid-cols-3 gap-2 border-b border-slate-50 pb-4 mb-4">
           <Stat label="Target" value={tulisDesimal(target)} />
           <Stat label="Realisasi" value={tulisDesimal(realisasi)} />
-          <Stat label="Nilai" value={`${nilai.toFixed(2)}%`} colorClass={colorText} align="right" />
+          <Stat label="Nilai" value={nilai === null ? '—' : `${nilai.toFixed(2)}%`} colorClass={colorText} align="right" />
         </div>
       </div>
 
       <div>
         <div className="flex justify-between items-center text-[11px] mb-1.5">
           <span className="text-slate-400 font-medium">{progressLabel}</span>
-          <span className={`font-bold ${colorText}`}>{nilai >= 100 ? '✓ Selesai' : `${nilai.toFixed(1)}%`}</span>
+          <span className={`font-bold ${colorText}`}>{nilai === null ? '—' : nilai >= 100 ? '✓ Selesai' : `${nilai.toFixed(1)}%`}</span>
         </div>
         <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden relative">
-          <div style={{ width: `${Math.min(nilai, 100)}%` }} className={`h-full rounded-full transition-all duration-1000 ease-out ${colorProgress}`} />
+          <div style={{ width: `${Math.min(nilai ?? 0, 100)}%` }} className={`h-full rounded-full transition-all duration-1000 ease-out ${colorProgress}`} />
         </div>
       </div>
     </div>

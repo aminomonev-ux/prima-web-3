@@ -62,6 +62,18 @@ export function tulisDesimal(n: number | null | undefined, desimal: number = DES
   return bulatkanDesimal(n, desimal).toLocaleString('id-ID', { maximumFractionDigits: desimal });
 }
 
+/**
+ * Persen → teks layar/PDF dengan koma: 85,5 → "85,50%". Desimalnya selalu tampil
+ * supaya kolom persen rata dibaca; `toFixed` menulis "85.50%" bertitik, berbeda
+ * dari angka berkoma di sel sebelahnya.
+ */
+export function tulisPersen(n: number | null | undefined, desimal = 2): string {
+  if (n == null || !Number.isFinite(n)) return '';
+  return bulatkanDesimal(n, desimal).toLocaleString('id-ID', {
+    minimumFractionDigits: desimal, maximumFractionDigits: desimal,
+  }) + '%';
+}
+
 /** Buang huruf & simbol dari ketikan, sisakan angka + pemisah + tanda minus. */
 export function bersihkanKetikan(s: string): string {
   return s.replace(/[^\d.,-]/g, '');

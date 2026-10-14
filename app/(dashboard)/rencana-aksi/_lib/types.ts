@@ -287,6 +287,44 @@ export function realisasiAkhirTahun(row: RaRow): number {
   return 0;
 }
 
+const BULAN_TRIWULAN: Record<1 | 2 | 3 | 4, number[]> = { 1: [0, 1, 2], 2: [3, 4, 5], 3: [6, 7, 8], 4: [9, 10, 11] };
+
+/**
+ * Sudah ada realisasi yang diisi (setahun, atau satu triwulan)? Bulanan membedakan null
+ * vs 0 (R3). Triwulan `NOT NULL DEFAULT 0` tidak bisa — 0 dianggap belum terekam, konvensi
+ * yang sama dengan `realisasiAkhirTahun`. Akibatnya nol SUNGGUHAN di level non-sub-kegiatan
+ * (yang tak punya realisasi bulanan) terbaca "belum diisi".
+ */
+export function adaRealisasi(row: RaRow, triwulan?: 1 | 2 | 3 | 4): boolean {
+  const qs = triwulan ? [triwulan] : ([1, 2, 3, 4] as const);
+  const bulanan = row.bulan_realisasi;
+  if (Array.isArray(bulanan)) return qs.some(q => BULAN_TRIWULAN[q].some(i => bulanan[i] != null));
+  return qs.some(q => row[`q${q}_realisasi`] !== 0);
+}
+
+/**
+ * Capaian yang `null` ("—") untuk Progres Negatif yang belum diisi: di jenis itu realisasi 0
+ * = capaian terbaik, jadi tanpa ini indikator kosong tercatat 200% "selesai". Jenis lain
+ * tetap angka — 0% dari realisasi kosong tidak menyesatkan.
+ */
+function capaianAtauKosong(row: RaRow, target: number, realisasi: number, triwulan?: 1 | 2 | 3 | 4): number | null {
+  if (row.jenis === 'Progres Negatif' && !adaRealisasi(row, triwulan)) return null;
+  return hitungCapaianPct(target, realisasi, row.jenis);
+}
+
+/** Capaian akhir tahun — kolom "Capaian" menu Cetak: layar, PDF, dan Excel memanggil ini. */
+export function capaianTahunan(row: RaRow): number | null {
+  return capaianAtauKosong(row, row.target_tahunan, realisasiAkhirTahun(row));
+}
+
+export function capaianRpjmd(row: RaRow): number | null {
+  return capaianAtauKosong(row, row.target_rpjmd, realisasiAkhirTahun(row));
+}
+
+export function capaianTriwulan(row: RaRow, triwulan: 1 | 2 | 3 | 4): number | null {
+  return capaianAtauKosong(row, row[`q${triwulan}_target`], row[`q${triwulan}_realisasi`], triwulan);
+}
+
 /**
  * Anggaran (Rp) untuk row di menu Realisasi. Anggaran tersimpan di level
  * sub-kegiatan; level di atasnya = SUM seluruh sub-kegiatan keturunan (match

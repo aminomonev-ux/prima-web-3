@@ -176,6 +176,34 @@ export const NarasiPayloadSchema = z.object({
   continueList: z.boolean().optional().default(false), // lanjutkan penomoran list dari blok sebelumnya
 }).transform(p => ({ html: sanitizeNarasiHtml(p.html), continueList: p.continueList === true }));
 
+// Tabel tertaut ke modul (docs/CONCEPT-lkjip-tabel-tertaut.md). WAJIB terdaftar di sini: Zod
+// membuang kunci yang tidak dikenalnya, jadi tanpa ini resepnya hilang diam-diam saat Simpan —
+// tabelnya tampak benar, tombol Perbarui lenyap begitu halaman dimuat ulang.
+const IsiKolomSchema = z.discriminatedUnion('jenis', [
+  z.object({ jenis: z.literal('sumber'), kunci: z.string().min(1).max(64) }),
+  z.object({ jenis: z.literal('nomor') }),
+  z.object({ jenis: z.literal('rumus'), ekspresi: z.string().trim().min(1).max(200) }),
+]);
+const KolomTautSchema = z.object({
+  isi:        IsiKolomSchema,
+  format:     z.enum(['teks', 'angka', 'rp', 'persen']).optional(),
+  desimal:    z.coerce.number().int().min(0).max(6).optional(),
+  gabungSama: z.boolean().optional(),
+  bertingkat: z.boolean().optional(),
+});
+const KunciBarisSchema = z.string().min(1).max(2000);
+export const TautanSchema = z.object({
+  sumber:      z.enum(['kinerja-rekap', 'renaksi-cetak']),
+  setelan:     z.record(z.string(), z.unknown()).refine(s => JSON.stringify(s).length <= 4000, 'Setelan tautan terlalu besar'),
+  kolom:       z.array(KolomTautSchema).min(1).max(12),
+  kunciBaris:  z.array(KunciBarisSchema).max(500),
+  sembunyi:    z.array(KunciBarisSchema).max(2000).default([]),
+  tebalInduk:  z.boolean().default(true),
+  ditarikPada: z.string().max(32),
+  ringkas:     z.string().max(500),
+  catatan:     z.array(z.string().max(1000)).max(20).default([]),
+});
+
 export const TabelPayloadSchema = z.object({
   judul: z.string().max(255).default(''),
   kolom: z.array(z.string().max(255)).min(1, 'Minimal 1 kolom').max(12),
@@ -183,6 +211,18 @@ export const TabelPayloadSchema = z.object({
   colWidths: z.array(z.coerce.number().int().min(24).max(2000)).max(12).default([]),
   headerRows: z.coerce.number().int().min(0).max(4).default(0),
   rows:  z.array(z.array(CellSchema).max(12)).max(500).default([]),
+  tautan: TautanSchema.optional(),
+}).superRefine((p, ctx) => {
+  if (!p.tautan) return;
+  // Resep menempel pada KOLOM dan BARIS tabel; kalau tidak sejajar, Perbarui berikutnya
+  // menaruh angka di kolom/baris yang salah tanpa galat.
+  if (p.tautan.kolom.length !== p.kolom.length) {
+    ctx.addIssue({ code: 'custom', message: 'Tabel tertaut tidak konsisten: jumlah kolom berbeda dari pemetaannya.' });
+  }
+  const badan = p.rows.length - Math.min(p.headerRows, p.rows.length);
+  if (p.tautan.kunciBaris.length !== badan) {
+    ctx.addIssue({ code: 'custom', message: 'Tabel tertaut tidak konsisten: jumlah baris berbeda dari hasil tarikannya.' });
+  }
 });
 
 export const GambarPayloadSchema = z.object({
@@ -207,6 +247,9 @@ export const GrafikPayloadSchema = z.object({
   valueCol:    z.coerce.number().int().min(0).max(11).default(1),
   imageFileId: z.string().max(200).default(''),
   caption:     z.string().max(500).default(''),
+  // Sidik data tabel saat gambarnya dibuat — editor membandingkannya untuk menandai grafik
+  // yang gambarnya sudah tidak sesuai tabelnya (mis. sesudah tabel tertaut diperbarui).
+  tabelSidik:  z.string().max(64).default(''),
 });
 
 export const BLOCK_TIPES = ['NARASI', 'TABEL', 'GAMBAR', 'GRAFIK'] as const;

@@ -103,6 +103,12 @@ export interface BarisRekap extends AngkaRekap {
   label:  string;
   indent: number;
   tebal:  boolean;
+  /**
+   * Identitas baris yang bertahan lintas muat ulang — jalur nama program › kegiatan ›
+   * subkegiatan › uraian SSK (› canonical_id di kedalaman rekening). Dipakai tabel LKJIP
+   * yang tertaut ke Rekap untuk mengenali baris yang sama sesudah Perbarui.
+   */
+  kunci:  string;
 }
 
 /** Baris realisasi yang canonical_id-nya tidak ada di SSK versi acuan. */
@@ -328,9 +334,9 @@ export function hitungRekap(
 
   const baris: BarisRekap[] = [];
   let no = 0;
-  const dorong = (label: string, angka: AngkaRekap, indent: number, tebal: boolean) => {
+  const dorong = (label: string, angka: AngkaRekap, indent: number, tebal: boolean, jalur: string[]) => {
     no += 1;
-    baris.push({ no, label, indent, tebal, ...angka });
+    baris.push({ no, label, indent, tebal, kunci: JSON.stringify(jalur), ...angka });
   };
 
   const total = jumlahkan(items);
@@ -340,7 +346,7 @@ export function hitungRekap(
     return { baris, yatim, dobel, bulanTersedia: tersedia, tanpaRealisasi };
   }
 
-  dorong(labelGrandTotal, total, 0, true);
+  dorong(labelGrandTotal, total, 0, true, ['T']);
 
   const pohon = new Map<string, Map<string, Map<string, Map<string, ItemRekap[]>>>>();
   for (const it of items) {
@@ -357,24 +363,25 @@ export function hitungRekap(
   for (const [program, kegMap] of pohon) {
     const itemProgram = Array.from(kegMap.values())
       .flatMap(sm => Array.from(sm.values()).flatMap(sk => Array.from(sk.values()).flat()));
-    dorong(program, jumlahkan(itemProgram), 1, true);
+    dorong(program, jumlahkan(itemProgram), 1, true, ['P', program]);
     if (kedalaman === 'program') continue;
 
     for (const [kegiatan, subMap] of kegMap) {
       const itemKegiatan = Array.from(subMap.values()).flatMap(sk => Array.from(sk.values()).flat());
-      dorong(kegiatan, jumlahkan(itemKegiatan), 2, false);
+      dorong(kegiatan, jumlahkan(itemKegiatan), 2, false, ['P', program, kegiatan]);
       if (kedalaman === 'kegiatan') continue;
 
       for (const [subkegiatan, sskMap] of subMap) {
         const itemSub = Array.from(sskMap.values()).flat();
-        dorong(`** ${subkegiatan}`, jumlahkan(itemSub), 3, false);
+        dorong(`** ${subkegiatan}`, jumlahkan(itemSub), 3, false, ['P', program, kegiatan, subkegiatan]);
         if (kedalaman === 'subkegiatan') continue;
 
         for (const [uraianSsk, daftar] of sskMap) {
-          dorong(uraianSsk, jumlahkan(daftar), 4, false);
+          dorong(uraianSsk, jumlahkan(daftar), 4, false, ['P', program, kegiatan, subkegiatan, uraianSsk]);
           if (kedalaman !== 'full') continue;
           for (const it of daftar) {
-            dorong(it.keterangan, hitungAngka(it.pagu, it.targetRp, it.realFisik, it.realKeu, it.realKeuBulanIni), 5, false);
+            dorong(it.keterangan, hitungAngka(it.pagu, it.targetRp, it.realFisik, it.realKeu, it.realKeuBulanIni), 5, false,
+              ['P', program, kegiatan, subkegiatan, uraianSsk, it.cid]);
           }
         }
       }

@@ -5,6 +5,8 @@
 // dan copy/paste antar sel. Backward-compatible: sel lama string → { v }.
 // Dipakai editor (client), docgen (server), schemas (zod transform).
 
+import { bulatkanDesimal } from '@/lib/shared/desimal';
+
 export type TabelAlign = 'left' | 'center' | 'right' | 'justify';
 export type TabelVAlign = 'top' | 'middle' | 'bottom';
 export type TabelNumFmt = 'num' | 'rp' | 'pct';
@@ -223,7 +225,8 @@ function cellNumber(rows: TabelCell[][], r: number, c: number, seen: Set<string>
   return parseNumber(v);
 }
 
-const FUNCS = new Set(['SUM', 'AVERAGE', 'AVG', 'MIN', 'MAX', 'COUNT', 'ABS', 'ROUND', 'IF', 'AND', 'OR', 'NOT']);
+// Diekspor: rumus kolom tabel tertaut (tautan.ts) memeriksa nama fungsi terhadap daftar yang sama.
+export const FUNCS = new Set(['SUM', 'AVERAGE', 'AVG', 'MIN', 'MAX', 'COUNT', 'ABS', 'ROUND', 'IF', 'AND', 'OR', 'NOT']);
 
 function evalFormula(expr: string, rows: TabelCell[][], r: number, c: number, seen: Set<string>): number {
   const key = `${r}:${c}`;
@@ -318,7 +321,8 @@ export function formatNumber(n: number, nf?: TabelNumFmt, dec?: number): string 
   if (!Number.isFinite(n)) return '#ERR';
   const value = nf === 'pct' ? n * 100 : n;   // persen: persis Excel (0,5 → 50%)
   const d = Math.max(0, Math.min(6, dec ?? 0));
-  const fixed = value.toFixed(d);
+  // `toFixed` langsung tergelincir IEEE-754: 2,675 tersimpan 2,67499… → "2.67". Dibulatkan dulu.
+  const fixed = bulatkanDesimal(value, d).toFixed(d);
   const neg = fixed.startsWith('-');
   const [intPart, frac] = (neg ? fixed.slice(1) : fixed).split('.');
   const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -327,6 +331,30 @@ export function formatNumber(n: number, nf?: TabelNumFmt, dec?: number): string 
   if (nf === 'rp') return `Rp ${body}`;
   if (nf === 'pct') return `${body}%`;
   return body;
+}
+
+/** Teks angka gaya Indonesia ("1.250.000", "7,5", "Rp 2.000", "85,5%") → angka. */
+function angkaTeksId(v: string): number {
+  let t = v.replace(/rp|%|\s/gi, '');
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  else if ((t.match(/\./g) ?? []).length > 1 || /^-?\d{1,3}\.\d{3}$/.test(t)) t = t.replace(/\./g, '');
+  const n = parseFloat(t.replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Angka sel sebagaimana TAMPIL (persen 0,85 berformat % → 85) — bahan grafik dari blok tabel.
+ * Dulu grafik mem-parse teks tampilan dengan `parseFloat`: "74.154.779.000" terbaca 74,154 dan
+ * "7,5" terbaca 75. Sel berformat menyimpan angka mentah, jadi yang mentah itu yang dibaca.
+ */
+export function angkaSel(rows: TabelCell[][], r: number, c: number): number {
+  const cell = rows[r]?.[c];
+  if (!cell) return 0;
+  const v = (cell.v ?? '').trim();
+  const n = v.startsWith('=') ? evalFormula(v.slice(1), rows, r, c, new Set())
+    : cell.nf ? parseNumber(v) : angkaTeksId(v);
+  if (!Number.isFinite(n)) return 0;
+  return cell.nf === 'pct' ? n * 100 : n;
 }
 
 /** Nilai tampil sel: hitung rumus + terapkan format angka. */

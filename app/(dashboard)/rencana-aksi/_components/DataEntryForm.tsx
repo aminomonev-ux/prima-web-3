@@ -15,7 +15,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Tip from '@/components/ui/Tip';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
-import { outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS, hitungCapaianPct, realisasiAkhirTahun } from '../_lib/types';
+import { outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS, capaianTahunan } from '../_lib/types';
 import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
 import ImportRenaksiModal from './ImportRenaksiModal';
@@ -158,8 +158,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     // langsung jadi merah tanpa satu data pun disentuh — jadi tunjukkan angka
     // sebelum–sesudahnya, bukan kalimat teori tentang rumus.
     if (barisAsli && jenis !== barisAsli.jenis) {
-      const sebelum = hitungCapaianPct(barisAsli.target_tahunan, realisasiAkhirTahun(barisAsli), barisAsli.jenis);
-      const sesudah = hitungCapaianPct(targetTahunan, realisasiAkhirTahun({ ...barisAsli, jenis }), jenis);
+      const sebelum = capaianTahunan(barisAsli);
+      const sesudah = capaianTahunan({ ...barisAsli, jenis, target_tahunan: targetTahunan });
+      const persen = (p: number | null) => p === null ? '— (realisasi belum diisi)' : `${p.toFixed(2)}%`;
       // Kalau target ikut diubah, angka "sesudah" memuat KEDUA perubahan. Tanpa
       // catatan ini orang akan mengira seluruh lonjakannya akibat jenis saja.
       const catatanTarget = targetBerubah
@@ -170,8 +171,8 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         message:
           `${barisAsli.jenis} → ${jenis}\n\n` +
           `Cara realisasi dihitung ikut berubah, padahal datanya tidak Anda sentuh.\n\n` +
-          `Capaian sekarang : ${sebelum.toFixed(2)}%\n` +
-          `Setelah diubah   : ${sesudah.toFixed(2)}%\n\n` +
+          `Capaian sekarang : ${persen(sebelum)}\n` +
+          `Setelah diubah   : ${persen(sesudah)}\n\n` +
           `Angka ini juga yang muncul di Realisasi Kinerja dan di laporan cetak.` +
           catatanTarget,
         confirmLabel: 'Ya, ubah jenisnya',

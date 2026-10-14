@@ -11,6 +11,7 @@ import {
   BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
   AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Combine, Split, Copy, ClipboardPaste,
   GripVertical, Undo2, Redo2, Upload, BarChart3, HelpCircle, MoreVertical, Lock,
+  Link2, Unlink, RefreshCw, SlidersHorizontal,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
@@ -30,12 +31,17 @@ import type { InfoBeku } from '@/lib/security/beku';
 import { FONT_CHOICES } from '@/lib/lkjip/style-constants';
 import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
-import { normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel, type TabelCell, type TabelAlign, type TabelNumFmt } from '@/lib/lkjip/tabel';
+import { normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, angkaSel, colLabel, type TabelCell, type TabelAlign, type TabelNumFmt } from '@/lib/lkjip/tabel';
+import { bangunBadan, bandingPerbarui, kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, sidikGrafik, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
+import { fetchJson } from '@/lib/shared/api';
+import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 
 const TiptapNarasi = dynamic(() => import('./TiptapNarasi'), {
   ssr: false,
   loading: () => <div style={{ color: '#85B7EB', fontSize: 12.5, padding: 10 }}>Memuat editor…</div>,
 });
+// Dimuat saat dibuka saja: penghubung sumber menyeret kode E-Anggaran & Renaksi.
+const TautanModal = dynamic(() => import('./TautanModal'), { ssr: false });
 
 interface Props {
   username: string;
@@ -344,7 +350,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     setDragIdx(null);
                     void reorderBlocks(selected.id, ids);
                   }}>
-                  <BlockEditor block={b} readOnly={readOnly} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
+                  <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
                         onDragStart={e => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; }}
@@ -728,7 +734,7 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // ════════════════════════════════════════════════════════════════
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
-function BlockEditor({ block, readOnly, onSave, onDelete, dragHandle, tableBlocks }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[] }) {
+function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHandle, tableBlocks }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[] }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
@@ -744,16 +750,21 @@ function BlockEditor({ block, readOnly, onSave, onDelete, dragHandle, tableBlock
         {!readOnly && <button className="lk-block-del" data-tooltip="Hapus blok" data-tooltip-pos="below" onClick={onDelete}><DeleteIcon size={13} /></button>}
       </div>
       {block.tipe === 'NARASI' && <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} readOnly={readOnly} onSave={html => onSave({ html, continueList })} />}
-      {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} onSave={onSave} />}
+      {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} tahunDokumen={tahunDokumen} onSave={onSave} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
       {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} />}
     </div>
   );
 }
 
-type TabelP = { judul: string; kolom: string[]; align: TabelAlign[]; colWidths?: number[]; headerRows?: number; rows: TabelCell[][] };
-function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void }) {
+type TabelP = { judul: string; kolom: string[]; align: TabelAlign[]; colWidths?: number[]; headerRows?: number; rows: TabelCell[][]; tautan?: Tautan };
+function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void }) {
   const p0 = block.payload as Partial<TabelP>;
+  // Tabel tertaut (docs/CONCEPT-lkjip-tabel-tertaut.md): badan diisi dari modul, kepala milik pengguna.
+  const [tautan, setTautan] = useState<Tautan | undefined>(p0.tautan);
+  const [modalTaut, setModalTaut] = useState(false);
+  const [menarik, setMenarik] = useState(false);
+  const terkait = !!tautan;
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [kolom, setKolom] = useState<string[]>(p0.kolom?.length ? p0.kolom : ['Kolom 1']);
   const [align, setAlign] = useState<TabelAlign[]>(
@@ -796,6 +807,10 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
     ? { r1: Math.min(sel.ar, sel.fr), r2: Math.max(sel.ar, sel.fr), c1: Math.min(sel.ac, sel.fc), c2: Math.max(sel.ac, sel.fc) }
     : null;
   const inRect = (r: number, c: number) => !!rect && r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2;
+  // Selama tertaut, badan diisi ulang tiap Perbarui: sunting, format, atau gabung di sana akan
+  // tertimpa — jadi dikunci. Kepala tabel tetap bebas.
+  const diBadan = (r: number) => terkait && r >= headerRows;
+  const rectBadan = terkait && !!rect && rect.r2 >= headerRows;
 
   const setCell = (ri: number, ci: number, v: string) =>
     setRows(r => r.map((row, i) => i === ri ? row.map((c, j) => j === ci ? { ...c, v } : c) : row));
@@ -842,7 +857,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
     else setSel({ ar: r, ac: c, fr: r, fc: c });
   };
   const editCells = (fn: (cell: TabelCell) => void) => {
-    if (!rect) return;
+    if (!rect || rectBadan) return;
     pushHist();
     setRows(prev => prev.map((row, r) => row.map((cell, c) =>
       (r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2 && !cell.h)
@@ -850,9 +865,9 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
         : cell)));
   };
 
-  const canMerge = !!rect && (rect.r1 !== rect.r2 || rect.c1 !== rect.c2);
+  const canMerge = !!rect && !rectBadan && (rect.r1 !== rect.r2 || rect.c1 !== rect.c2);
   const origin = rect ? rows[rect.r1]?.[rect.c1] : undefined;
-  const canUnmerge = !!origin && ((origin.cs ?? 1) > 1 || (origin.rs ?? 1) > 1);
+  const canUnmerge = !!origin && !rectBadan && ((origin.cs ?? 1) > 1 || (origin.rs ?? 1) > 1);
   const doMerge = () => { if (!rect) return; pushHist(); setRows(mergeCells(rows, rect.r1, rect.c1, rect.r2, rect.c2, ncol)); setSel({ ar: rect.r1, ac: rect.c1, fr: rect.r1, fc: rect.c1 }); };
   const doUnmerge = () => { if (!rect) return; pushHist(); setRows(unmergeAt(rows, rect.r1, rect.c1, ncol)); };
 
@@ -870,7 +885,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
     try { navigator.clipboard?.writeText(rangeToTSV(clipRef.current)); } catch { /* best-effort */ }
     toast.success('Sel disalin');
   };
-  const doPaste = () => { if (rect && clipRef.current) { pushHist(); setRows(pasteRange(rows, rect.r1, rect.c1, clipRef.current, ncol)); } };
+  const doPaste = () => { if (rect && !rectBadan && clipRef.current) { pushHist(); setRows(pasteRange(rows, rect.r1, rect.c1, clipRef.current, ncol)); } };
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (readOnly || !(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
@@ -880,7 +895,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
     if (k === 'c' && multi) { e.preventDefault(); doCopy(); }
   };
   const onPaste = (e: React.ClipboardEvent) => {
-    if (readOnly || !rect) return;
+    if (readOnly || !rect || rectBadan) return;
     const text = e.clipboardData.getData('text/plain');
     if (!text) return;
     // Tempelan internal yang sama persis → pakai versi kaya-format.
@@ -899,6 +914,74 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
     // selain itu (1 nilai) → biarkan paste native ke input sel.
   };
 
+  const payloadSekarang = (): PayloadTabel => ({ judul, kolom, align, colWidths, headerRows, rows, ...(tautan ? { tautan } : {}) });
+  /** Hubungkan / Perbarui / Lepas langsung disimpan: ketiganya keputusan yang sudah ditanyakan. */
+  const pasangDanSimpan = (p: PayloadTabel) => {
+    setKolom(p.kolom); setAlign(p.align as TabelAlign[]);
+    setColWidths(p.kolom.map((_, i) => p.colWidths?.[i] ?? DEF_W));
+    setHeaderRows(p.headerRows ?? 0); setRows(p.rows); setTautan(p.tautan);
+    // Riwayat urungkan dikosongkan: memulihkan baris tanpa ikut memulihkan resepnya membuat
+    // keduanya tidak sejajar lagi (server menolaknya, tapi layar sudah terlanjur salah).
+    setPast([]); setFuture([]); setSel(null); setEditKey(null);
+    onSave(p);
+  };
+  // Tertaut: jumlah baris kepala diubah dengan MENYISIP/membuang baris di atas badan, bukan
+  // dengan "meminjam" baris badan jadi kepala — kunci tiap baris badan harus tetap sejajar.
+  const gantiBarisKepala = (n: number) => {
+    pushHist();
+    if (!terkait) { setHeaderRows(n); return; }
+    const hr = jumlahBarisKepala({ headerRows, rows });
+    setRows(r => n > hr
+      ? [...r.slice(0, hr), ...Array.from({ length: n - hr }, () => kolom.map(() => ({ v: '' }) as TabelCell)), ...r.slice(hr)]
+      : sanitizeRows([...r.slice(0, n), ...r.slice(hr)], ncol));
+    setHeaderRows(n);
+  };
+  async function perbarui() {
+    if (!tautan) return;
+    setMenarik(true);
+    try {
+      const { DAFTAR_SUMBER } = await import('@/lib/lkjip/sumber');
+      const sumber = DAFTAR_SUMBER[tautan.sumber];
+      const hasil = await sumber.tarik(tautan.setelan, url => fetchJson<unknown>(url), tahunDokumen);
+      const badan = bangunBadan(hasil, tautan);
+      const hr = jumlahBarisKepala({ headerRows, rows });
+      const ringkas = bandingPerbarui({ rows: rows.slice(hr), kunciBaris: tautan.kunciBaris }, badan, tautan.kolom);
+      const metaSama = hasil.ringkas === tautan.ringkas && JSON.stringify(hasil.catatan) === JSON.stringify(tautan.catatan);
+      if (ringkas.sama && metaSama && !badan.kolomHilang.length) {
+        toast.success(`Sudah sama dengan ${sumber.modul} saat ini — tidak ada yang perlu diperbarui.`);
+        return;
+      }
+      const rowsBaru = pasangBadan(payloadSekarang(), badan);
+      if (!rowsBaru) { toast.error(pesanLewatBatas(badan.rows.length, hr)); return; }
+      const peringatan = badan.kolomHilang.length
+        ? `\n\nKolom ${badan.kolomHilang.map(colLabel).join(', ')} menunjuk kolom sumber yang tidak ada lagi dan akan kosong — atur lewat Atur Bentuk.`
+        : '';
+      const ok = await confirmDialog({
+        title: `Perbarui dari ${sumber.modul}?`,
+        message: `${kalimatPerbarui(ringkas)}\n\nSumber: ${hasil.ringkas}${peringatan}\n\nKepala tabel, pilihan kolom, dan baris yang disembunyikan tetap seperti sekarang.`,
+        confirmLabel: 'Terapkan',
+        variant: 'warning',
+      });
+      if (!ok) return;
+      pasangDanSimpan({
+        ...payloadSekarang(), rows: rowsBaru,
+        tautan: { ...tautan, kunciBaris: badan.kunciBaris, ditarikPada: waktuSekarangWIB().slice(0, 16), ringkas: hasil.ringkas, catatan: hasil.catatan },
+      });
+    } catch (e) {
+      toast.error(e instanceof Error && e.name === 'GagalTarik' ? e.message : 'Gagal menarik data. Coba lagi.');
+    } finally { setMenarik(false); }
+  }
+  async function lepas() {
+    if (!tautan) return;
+    const ok = await confirmDialog({
+      title: 'Lepas tautan?',
+      message: 'Tabel jadi tabel biasa: isinya tetap, semua sel bisa disunting dan digabung, tapi tombol Perbarui hilang — angkanya tidak bisa lagi diambil ulang dari modul.\n\nKalau berubah pikiran, pulihkan lewat Riwayat versi dokumen.',
+      confirmLabel: 'Lepas tautan',
+      variant: 'warning',
+    });
+    if (ok) pasangDanSimpan(lepasTautan(payloadSekarang()));
+  }
+
   const vAlignCss = (va?: TabelCell['va']) => va === 'middle' ? 'middle' : va === 'bottom' ? 'bottom' : 'top';
 
   return (
@@ -913,31 +996,31 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
           <button data-tooltip="Gabung sel" data-tooltip-pos="below" disabled={!canMerge} onClick={doMerge}><Combine size={14} /></button>
           <button data-tooltip="Pisah sel" data-tooltip-pos="below" disabled={!canUnmerge} onClick={doUnmerge}><Split size={14} /></button>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Rata kiri" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.al = 'left'; })}><AlignLeft size={14} /></button>
-          <button data-tooltip="Rata tengah" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.al = 'center'; })}><AlignCenter size={14} /></button>
-          <button data-tooltip="Rata kanan" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.al = 'right'; })}><AlignRight size={14} /></button>
-          <button data-tooltip="Rata kiri-kanan" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.al = 'justify'; })}><AlignJustify size={14} /></button>
+          <button data-tooltip="Rata kiri" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'left'; })}><AlignLeft size={14} /></button>
+          <button data-tooltip="Rata tengah" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'center'; })}><AlignCenter size={14} /></button>
+          <button data-tooltip="Rata kanan" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'right'; })}><AlignRight size={14} /></button>
+          <button data-tooltip="Rata kiri-kanan" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'justify'; })}><AlignJustify size={14} /></button>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Vertikal atas" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.va = 'top'; })}>⤒</button>
-          <button data-tooltip="Vertikal tengah" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.va = 'middle'; })}>⇕</button>
-          <button data-tooltip="Vertikal bawah" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.va = 'bottom'; })}>⤓</button>
+          <button data-tooltip="Vertikal atas" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.va = 'top'; })}>⤒</button>
+          <button data-tooltip="Vertikal tengah" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.va = 'middle'; })}>⇕</button>
+          <button data-tooltip="Vertikal bawah" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.va = 'bottom'; })}>⤓</button>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Tebal" data-tooltip-pos="below" disabled={!rect} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
+          <button data-tooltip="Tebal" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
           <span className="lk-tt-sep" />
           <span className="lk-tt-tip" data-tooltip="Baris header (header bertingkat dgn merge). 'Kolom' = pakai nama kolom; angka = N baris pertama jadi header." data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Baris header (header bertingkat dgn merge). 'Kolom' = pakai nama kolom; angka = N baris pertama jadi header." value={String(headerRows)}
-            onChange={e => { pushHist(); setHeaderRows(Number(e.target.value)); }}>
+            onChange={e => gantiBarisKepala(Number(e.target.value))}>
             <option value="0">Header: kolom</option>
             <option value="1">Header: 1 baris</option>
             <option value="2">Header: 2 baris</option>
             <option value="3">Header: 3 baris</option>
           </select></span>
-          <span className="lk-tt-tip" data-tooltip="Ukuran font" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Ukuran font" disabled={!rect} value=""
+          <span className="lk-tt-tip" data-tooltip="Ukuran font" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Ukuran font" disabled={!rect || rectBadan} value=""
             onChange={e => { const v = e.target.value; if (!v) return; if (v === 'reset') editCells(c => { delete c.fs; }); else editCells(c => { c.fs = +v; }); e.currentTarget.value = ''; }}>
             <option value="">Aa</option>
             {[9, 10, 11, 12, 14, 16, 18, 20, 24, 28].map(s => <option key={s} value={s}>{s}</option>)}
             <option value="reset">Reset</option>
           </select></span>
-          <span className="lk-tt-tip" data-tooltip="Garis sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Garis sel" disabled={!rect} value=""
+          <span className="lk-tt-tip" data-tooltip="Garis sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Garis sel" disabled={!rect || rectBadan} value=""
             onChange={e => { const v = e.target.value; if (v) applyBorder(v); e.currentTarget.value = ''; }}>
             <option value="">Garis</option>
             <option value="all">Semua</option>
@@ -946,17 +1029,17 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
             <option value="t">+ Atas</option><option value="b">+ Bawah</option>
             <option value="l">+ Kiri</option><option value="r">+ Kanan</option>
           </select></span>
-          <span className="lk-tt-tip" data-tooltip="Format angka" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Format angka" disabled={!rect} value=""
+          <span className="lk-tt-tip" data-tooltip="Format angka" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Format angka" disabled={!rect || rectBadan} value=""
             onChange={e => { const v = e.target.value; if (!v) return; if (v === 'plain') editCells(c => { delete c.nf; delete c.dec; }); else editCells(c => { c.nf = v as TabelNumFmt; }); e.currentTarget.value = ''; }}>
             <option value="">123</option>
             <option value="num">Angka</option><option value="rp">Rupiah</option><option value="pct">Persen</option><option value="plain">Teks</option>
           </select></span>
-          <span className="lk-tt-tip" data-tooltip="Desimal" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Desimal" disabled={!rect} value=""
+          <span className="lk-tt-tip" data-tooltip="Desimal" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Desimal" disabled={!rect || rectBadan} value=""
             onChange={e => { const v = e.target.value; if (v === '') return; editCells(c => { c.dec = +v; }); e.currentTarget.value = ''; }}>
             <option value="">0,0</option>
             {[0, 1, 2, 3].map(d => <option key={d} value={d}>{d} des</option>)}
           </select></span>
-          <span className="lk-tt-tip" data-tooltip="Warna latar sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Warna latar sel" disabled={!rect} value=""
+          <span className="lk-tt-tip" data-tooltip="Warna latar sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Warna latar sel" disabled={!rect || rectBadan} value=""
             onChange={e => { const v = e.target.value; if (!v) return; if (v === 'none') editCells(c => { delete c.bg; }); else editCells(c => { c.bg = v; }); e.currentTarget.value = ''; }}>
             <option value="">Latar</option>
             <option value="none">Tanpa</option>
@@ -968,7 +1051,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
           </select></span>
           <span className="lk-tt-sep" />
           <button data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect} onClick={doCopy}><Copy size={14} /></button>
-          <button data-tooltip="Tempel (Ctrl+V)" data-tooltip-pos="below" disabled={!rect} onClick={doPaste}><ClipboardPaste size={14} /></button>
+          <button data-tooltip="Tempel (Ctrl+V)" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={doPaste}><ClipboardPaste size={14} /></button>
         </div>
       )}
 
@@ -976,7 +1059,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
         <div className="lk-fbar">
           <span className="lk-fbar-ref">{sel ? colLabel(sel.ac) + (sel.ar + 1) : '—'}</span>
           <span className="lk-fbar-fx">fx</span>
-          <input className="lk-fbar-in" disabled={!sel}
+          <input className="lk-fbar-in" disabled={!sel || diBadan(sel.ar)}
             value={sel ? (rows[sel.ar]?.[sel.ac]?.v ?? '') : ''}
             placeholder="Pilih sel — ketik teks atau = untuk rumus (mis. =A1+B1)"
             onFocus={e => { if (sel) { pushHist(); setBarFocused(true); editInputRef.current = e.currentTarget; } }}
@@ -1004,7 +1087,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
                       <select value={align[ci] ?? 'left'} onChange={e => { pushHist(); setAlign(a => a.map((x, i) => i === ci ? e.target.value as TabelAlign : x)); }}>
                         <option value="left">kiri</option><option value="center">tengah</option><option value="right">kanan</option><option value="justify">justify</option>
                       </select>
-                      <button data-tooltip="Hapus kolom" data-tooltip-pos="below" disabled={ncol <= 1} onClick={() => delCol(ci)}>×</button>
+                      <button data-tooltip={terkait ? 'Kolom tabel tertaut diatur lewat Atur Bentuk' : 'Hapus kolom'} data-tooltip-pos="below" disabled={ncol <= 1 || terkait} onClick={() => delCol(ci)}>×</button>
                     </div>
                   )}
                   {!readOnly && <span className="lk-colresize" onMouseDown={e => onResizeDown(ci, e)} />}
@@ -1015,7 +1098,7 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
           <tbody>
             {rows.map((row, ri) => (
               <tr key={ri} className={ri < headerRows ? 'lk-hrow' : undefined}>
-                <td className="lk-rownum">{ri + 1}{!readOnly && <button data-tooltip="Hapus baris" data-tooltip-pos="below" onClick={() => delRow(ri)}>×</button>}</td>
+                <td className="lk-rownum">{ri + 1}{!readOnly && !diBadan(ri) && <button data-tooltip="Hapus baris" data-tooltip-pos="below" onClick={() => delRow(ri)}>×</button>}</td>
                 {row.map((cell, ci) => cell.h ? null : (
                   <td key={ci} colSpan={cell.cs ?? 1} rowSpan={cell.rs ?? 1}
                     className={inRect(ri, ci) ? 'lk-cell-sel' : undefined}
@@ -1025,10 +1108,10 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
                       value={(editKey === `${ri}:${ci}` || (barFocused && sel?.ar === ri && sel?.ac === ci)) ? cell.v : displayValue(rows, ri, ci)}
                       readOnly={readOnly || editKey !== `${ri}:${ci}`}
                       style={{ textAlign: (cell.al ?? align[ci] ?? 'left'), fontWeight: cell.b ? 700 : undefined, fontSize: cell.fs ? `${cell.fs}px` : undefined, color: cell.bg ? '#0F0F12' : undefined }}
-                      onDoubleClick={e => { if (readOnly) return; pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); n.select(); }); }}
+                      onDoubleClick={e => { if (readOnly || diBadan(ri)) return; pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); n.select(); }); }}
                       onKeyDown={e => {
                         if (editKey === `${ri}:${ci}`) { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); } }
-                        else if (!readOnly && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); }); }
+                        else if (!readOnly && !diBadan(ri) && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); }); }
                       }}
                       onBlur={() => setEditKey(k => (k === `${ri}:${ci}` ? null : k))}
                       onChange={e => setCell(ri, ci, e.target.value)} />
@@ -1040,12 +1123,57 @@ function TabelEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: 
         </table>
       </div>
 
+      {tautan && (
+        // Keterangan sumber hanya di editor — tidak ikut ke Word (keputusan pemilik, konsep K3).
+        <div className="lk-taut-bar">
+          <div className="lk-taut-bar-info">
+            <Link2 size={13} style={{ flexShrink: 0 }} />
+            <span>Tertaut: <b>{tautan.ringkas}</b> · ditarik {tulisWaktuTarik(tautan.ditarikPada)}</span>
+          </div>
+          {tautan.catatan.length > 0 && (
+            <ul className="lk-taut-bar-catatan">{tautan.catatan.map((c, i) => <li key={i}>{c}</li>)}</ul>
+          )}
+          {!readOnly && (
+            <div className="lk-taut-bar-aksi">
+              <button onClick={() => void perbarui()} disabled={menarik}><RefreshCw size={13} /> {menarik ? 'Menarik…' : 'Perbarui'}</button>
+              <button onClick={() => setModalTaut(true)} disabled={menarik}><SlidersHorizontal size={13} /> Atur Bentuk</button>
+              <button onClick={() => void lepas()} disabled={menarik}><Unlink size={13} /> Lepas Tautan</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {!readOnly && (
         <div className="lk-tabel-ctl">
-          <button onClick={addRow}>+ Baris</button>
-          <button onClick={addCol} disabled={ncol >= 12}>+ Kolom</button>
-          <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave({ judul, kolom, align, colWidths, headerRows, rows })}>Simpan Tabel</PrimaButton>
+          <button onClick={addRow} disabled={terkait} data-tooltip={terkait ? 'Baris tabel tertaut mengikuti sumbernya — atur lewat Atur Bentuk' : undefined} data-tooltip-pos="below">+ Baris</button>
+          <button onClick={addCol} disabled={ncol >= 12 || terkait} data-tooltip={terkait ? 'Kolom tabel tertaut diatur lewat Atur Bentuk' : undefined} data-tooltip-pos="below">+ Kolom</button>
+          {!terkait && (
+            <button onClick={() => setModalTaut(true)} data-tooltip="Isi tabel dari menu Cetak E-Anggaran atau Renaksi — angkanya bisa diperbarui nanti" data-tooltip-pos="below">
+              <Link2 size={12} style={{ display: 'inline', verticalAlign: '-0.125em' }} /> Hubungkan ke Modul
+            </button>
+          )}
+          <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave(payloadSekarang())}>Simpan Tabel</PrimaButton>
         </div>
+      )}
+
+      {modalTaut && (
+        <TautanModal
+          payload={payloadSekarang()}
+          tahunDokumen={tahunDokumen}
+          onTutup={() => setModalTaut(false)}
+          onTerapkan={async p => {
+            if (!tautan && rows.slice(jumlahBarisKepala({ headerRows, rows })).some(r => r.some(c => c.v.trim()))) {
+              const ok = await confirmDialog({
+                title: 'Ganti isi tabel?',
+                message: 'Badan tabel ini sudah berisi ketikan. Menghubungkannya ke modul MENGGANTI isi badan dengan data sumber; kepala tabel tetap.',
+                confirmLabel: 'Ganti isinya', variant: 'warning',
+              });
+              if (!ok) return;
+            }
+            setModalTaut(false);
+            pasangDanSimpan(p);
+          }}
+        />
       )}
     </div>
   );
@@ -1096,11 +1224,14 @@ function GambarEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly:
 // ── Grafik (pie/bar/line) — recharts → PNG (html2canvas-pro) → embed Word ──
 const GRAFIK_COLORS = ['#7C5CFC', '#EF9F27', '#1D9E75', '#E24B4A', '#3B82F6', '#EC4899', '#14B8A6', '#BA7517', '#06B6D4', '#8B5CF6'];
 type GrafikDatum = { label: string; value: number };
-type GrafikP = { judul: string; chartType: 'pie' | 'bar' | 'line'; source: 'manual' | 'tabel'; data: GrafikDatum[]; tabelBlockId: number | null; labelCol: number; valueCol: number; imageFileId: string; caption: string };
+type GrafikP = { judul: string; chartType: 'pie' | 'bar' | 'line'; source: 'manual' | 'tabel'; data: GrafikDatum[]; tabelBlockId: number | null; labelCol: number; valueCol: number; imageFileId: string; caption: string; tabelSidik?: string };
 
 function GrafikRender({ type, data }: { type: 'pie' | 'bar' | 'line'; data: GrafikDatum[] }) {
   const W = 520, H = 300;
   const axisTick = { fontSize: 11, fill: '#334155' };
+  // Angka sumbu bergaya Indonesia (20.000.000.000, bukan 20000000000) — gambarnya masuk dokumen resmi.
+  const sumbuId = (v: number) => Number(v).toLocaleString('id-ID');
+  const sumbuLebar = Math.min(110, 14 + 7 * Math.max(...data.map(d => sumbuId(Math.abs(d.value)).length), 1));
   if (type === 'pie') {
     return (
       <PieChart width={W} height={H}>
@@ -1115,7 +1246,7 @@ function GrafikRender({ type, data }: { type: 'pie' | 'bar' | 'line'; data: Graf
     return (
       <LineChart width={W} height={H} data={data} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-        <XAxis dataKey="label" tick={axisTick} /><YAxis tick={axisTick} />
+        <XAxis dataKey="label" tick={axisTick} /><YAxis tick={axisTick} tickFormatter={sumbuId} width={sumbuLebar} />
         <RTooltip /><Line type="monotone" dataKey="value" name="Nilai" stroke="#7C5CFC" strokeWidth={2} dot={{ r: 3 }} />
       </LineChart>
     );
@@ -1123,7 +1254,7 @@ function GrafikRender({ type, data }: { type: 'pie' | 'bar' | 'line'; data: Graf
   return (
     <BarChart width={W} height={H} data={data} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
       <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-      <XAxis dataKey="label" tick={axisTick} /><YAxis tick={axisTick} />
+      <XAxis dataKey="label" tick={axisTick} /><YAxis tick={axisTick} tickFormatter={sumbuId} width={sumbuLebar} />
       <RTooltip />
       <Bar dataKey="value" name="Nilai" radius={[4, 4, 0, 0]}>
         {data.map((_, i) => <Cell key={i} fill={GRAFIK_COLORS[i % GRAFIK_COLORS.length]} />)}
@@ -1153,11 +1284,13 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks }: { block: BlockNo
   const tableKolom = ((selTable?.payload as { kolom?: string[] })?.kolom) ?? [];
 
   const tableRows = source === 'tabel' && selTable ? normalizeRows((selTable.payload as { rows?: unknown }).rows) : [];
+  // Baris kepala (header bertingkat) bukan data — dulu ikut tergambar sebagai batang bernilai 0.
+  const kepalaGrafik = Math.max(0, Math.min(Number((selTable?.payload as { headerRows?: number })?.headerRows) || 0, tableRows.length));
   const chartData: GrafikDatum[] = source === 'manual'
     ? data.map(d => ({ label: d.label || '-', value: Number(d.value) || 0 })).filter(d => d.value !== 0 || d.label !== '-')
-    : tableRows.map((r, ri) => ({
-        label: String(r[labelCol]?.v ?? '') || `Baris ${ri + 1}`,
-        value: parseFloat(String(displayValue(tableRows, ri, valueCol)).replace(/[^0-9.\-]/g, '')) || 0,
+    : tableRows.slice(kepalaGrafik).map((r, i) => ({
+        label: String(r[labelCol]?.v ?? '').trim() || `Baris ${i + 1}`,
+        value: angkaSel(tableRows, kepalaGrafik + i, valueCol),
       }));
 
   const addRow = () => setData(d => [...d, { label: `Kategori ${d.length + 1}`, value: 0 }]);
@@ -1186,13 +1319,24 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks }: { block: BlockNo
           }
         } catch { toast.error('Gagal membuat gambar grafik'); }
       }
-      onSave({ judul, chartType, source, data, tabelBlockId, labelCol, valueCol, imageFileId, caption });
+      onSave({ judul, chartType, source, data, tabelBlockId, labelCol, valueCol, imageFileId, caption,
+        tabelSidik: source === 'tabel' ? sidikGrafik(chartData) : '' });
     } finally { setSaving(false); }
   };
+  // Gambar di Word dibuat saat Simpan — kalau data tabelnya berubah sesudahnya (mis. tabel tertaut
+  // diperbarui), gambar itu basi walau pratinjau di sini sudah ikut berubah.
+  const gambarBasi = source === 'tabel' && !!p0.imageFileId && !!p0.tabelSidik
+    && p0.source === 'tabel' && p0.tabelBlockId === tabelBlockId && p0.tabelSidik !== sidikGrafik(chartData);
 
   return (
     <div className="lk-grafik-ed">
       <input className="lk-tabel-judul" value={judul} readOnly={readOnly} placeholder="Judul grafik (tanpa nomor — nomor otomatis)" onChange={e => setJudul(e.target.value)} />
+      {gambarBasi && (
+        <div className="lk-grafik-basi">
+          Data tabelnya sudah berubah sejak grafik ini disimpan — gambar di Word masih memakai data lama.
+          {!readOnly && ' Tekan Simpan pada grafik ini untuk menggambar ulang.'}
+        </div>
+      )}
       {!readOnly && (
         <div className="lk-grafik-tools">
           <label>Jenis
@@ -1404,10 +1548,25 @@ const ED_CSS = `
   .lk-colctl { display: flex; align-items: center; gap: 3px; padding: 2px 4px; }
   .lk-colctl select { background: #020F1C; color: #B5D4F4; border: 1px solid #0C447C; border-radius: 4px; font-size: 10px; }
   .lk-colctl button, .lk-rownum button { background: none; border: none; color: #FCA5A5; cursor: pointer; font-size: 14px; line-height: 1; }
+  .lk-colctl button:disabled { opacity: .35; cursor: not-allowed; }
   .lk-rownum { background: rgba(255,255,255,0.03); color: #85B7EB; font-size: 11px; text-align: center; padding: 4px 6px; white-space: nowrap; }
   .lk-tabel-ctl { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
   .lk-tabel-ctl > button { background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
-  .lk-tabel-ctl > button:hover { border-color: #185FA5; color: #E6F1FB; }
+  .lk-tabel-ctl > button:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; }
+  .lk-tabel-ctl > button:disabled { opacity: .4; cursor: not-allowed; }
+  .lk-taut-bar { margin-top: 10px; padding: 8px 10px; border: 1px solid rgba(124,92,252,0.5); border-radius: 8px; background: rgba(124,92,252,0.10); display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; color: #B5D4F4; }
+  .lk-taut-bar-info { display: flex; align-items: flex-start; gap: 6px; line-height: 1.5; }
+  .lk-taut-bar-info b { color: #E6F1FB; font-weight: 700; }
+  .lk-taut-bar-catatan { margin: 0; padding-left: 20px; color: #FBBF24; line-height: 1.5; }
+  .lk-taut-bar-aksi { display: flex; gap: 6px; flex-wrap: wrap; }
+  .lk-taut-bar-aksi button { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .lk-taut-bar-aksi button:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; }
+  .lk-taut-bar-aksi button:disabled { opacity: .45; cursor: not-allowed; }
+  .lk-grafik-basi { padding: 7px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.5; background: rgba(239,159,39,0.12); border: 1px solid #EF9F27; color: #FBBF24; }
+  [data-theme="light"] .lk-taut-bar { background: #EDE7FE; border-color: rgba(124,92,252,.45); color: #374151; }
+  [data-theme="light"] .lk-taut-bar-info b { color: #111827; }
+  [data-theme="light"] .lk-taut-bar-catatan, [data-theme="light"] .lk-grafik-basi { color: #B45309; }
+  [data-theme="light"] .lk-taut-bar-aksi button { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
   .lk-tabel-tools { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 8px; padding: 6px; background: rgba(255,255,255,0.03); border: 1px solid #0C447C; border-radius: 8px; }
   .lk-tabel-tools button { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 7px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1; }
   .lk-tabel-tools button:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; background: rgba(255,255,255,0.09); }
@@ -1437,7 +1596,8 @@ const ED_CSS = `
   .lk-ab.tabel  { background: rgba(55,138,221,0.22); border-color: #378ADD; color: #BFE0FF; }
   .lk-ab.gambar { background: rgba(29,158,117,0.22); border-color: #1D9E75; color: #A7ECCF; }
 
-  .lk-modal-bg { position: fixed; inset: 0; background: rgba(2,15,28,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  /* 450: di atas FloatingDock (400) — dulu 100, jadi di ponsel kaki modal yang tinggi (Simpan/Batal) tertutup dock; di bawah confirmDialog (4000). */
+  .lk-modal-bg { position: fixed; inset: 0; background: rgba(2,15,28,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 450; }
   .lk-modal { background: #042C53; border: 1px solid #0C447C; border-radius: 14px; padding: 22px; width: 400px; max-width: 92vw; }
   .lk-modal h3 { margin: 0 0 12px; font-size: 16px; font-weight: 800; }
   .lk-modal input { width: 100%; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 9px 11px; color: #E6F1FB; font-size: 14px; margin-bottom: 14px; }

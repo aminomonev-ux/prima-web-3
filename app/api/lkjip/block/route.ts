@@ -51,7 +51,10 @@ export async function PATCH(req: NextRequest) {
       const parsed = BlockUpdateSchema.safeParse(raw);
       if (!parsed.success) return NextResponse.json({ ok: false, msg: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
       await updateBlock(parsed.data.id, parsed.data.payload);
-      await writeAuditLog({ req, eventType: 'LKJIP_BLOCK_UPDATE', userId: g.session.userId, username: g.session.username, detail: `LKJIP update block id=${parsed.data.id}` });
+      // Tabel tertaut: jejaknya menyebut sumber angkanya, supaya "angka ini dari mana" bisa dijawab dari audit.
+      const ringkas = (parsed.data.payload as { tautan?: { ringkas?: unknown } } | null)?.tautan?.ringkas;
+      const jejakTautan = typeof ringkas === 'string' ? ` · tertaut: ${ringkas.slice(0, 200)}` : '';
+      await writeAuditLog({ req, eventType: 'LKJIP_BLOCK_UPDATE', userId: g.session.userId, username: g.session.username, detail: `LKJIP update block id=${parsed.data.id}${jejakTautan}` });
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
