@@ -1,7 +1,7 @@
 'use client';
 
 import type { RaRow } from './types';
-import { realisasiAkhirTahun, quartersOf, LEVEL_LABELS, outcomeOf, capaianTahunan, capaianRpjmd, capaianTriwulan } from './types';
+import { realisasiAkhirTahun, tulisRealisasi, quartersOf, LEVEL_LABELS, outcomeOf, capaianTahunan, capaianRpjmd, capaianTriwulan } from './types';
 import type { CetakFilter } from './cetak-filter';
 import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, tulisSelCetak } from './cetak-filter';
 import { sanitizeCell, loadExcelJs } from '@/lib/shared/excel-export';
@@ -97,11 +97,11 @@ export async function exportListXlsx(rows: RaRow[], tahun: number, level: RaRow[
       outcome: sanitizeCell(outcomeOf(r)),
       indikator: sanitizeCell(r.indikator), jenis: sanitizeCell(r.jenis), satuan: sanitizeCell(r.satuan),
       rpjmd: r.target_rpjmd, tahunan: r.target_tahunan,
-      q1t: r.q1_target, q1r: r.q1_realisasi,
-      q2t: r.q2_target, q2r: r.q2_realisasi,
-      q3t: r.q3_target, q3r: r.q3_realisasi,
-      q4t: r.q4_target, q4r: r.q4_realisasi,
-      akhir: realisasiAkhirTahun(r),
+      q1t: r.q1_target, q1r: r.q1_realisasi ?? '—',
+      q2t: r.q2_target, q2r: r.q2_realisasi ?? '—',
+      q3t: r.q3_target, q3r: r.q3_realisasi ?? '—',
+      q4t: r.q4_target, q4r: r.q4_realisasi ?? '—',
+      akhir: realisasiAkhirTahun(r) ?? '—',
     });
   });
 
@@ -232,7 +232,7 @@ export async function buatWorkbookGabungan(allRows: RaRow[], filter: CetakFilter
       if (c.persen && typeof v === 'number') {
         cell.value = v / 100;
         cell.numFmt = '0.00%';
-      } else if (c.persen && v == null) {
+      } else if ((c.persen || c.realisasi) && v == null) {
         cell.value = tulisSelCetak(c, v);
       } else {
         cell.value = typeof v === 'string' ? sanitizeCell(v) : v;
@@ -269,7 +269,7 @@ export async function exportIndikatorPdf(row: RaRow) {
       ['Satuan', row.satuan],
       ['Target RPJMD', tulisDesimal(row.target_rpjmd)],
       ['Target Tahunan', tulisDesimal(row.target_tahunan)],
-      ['Realisasi Akhir Tahun', tulisDesimal(realAkhir)],
+      ['Realisasi Akhir Tahun', tulisRealisasi(realAkhir)],
       ['Capaian Tahunan (%)', persen(pctTh)],
       ['Capaian RPJMD (%)', persen(pctRp)],
     ],
@@ -283,7 +283,7 @@ export async function exportIndikatorPdf(row: RaRow) {
     head: [['Triwulan', 'Target', 'Realisasi', 'Capaian (%)']],
     body: quartersOf(row).map(q => {
       const pct = q.target > 0 ? capaianTriwulan(row, q.id) : null;
-      return [`TW ${q.id}`, tulisDesimal(q.target), tulisDesimal(q.realisasi), pct === null ? '-' : pct.toFixed(2) + '%'];
+      return [`TW ${q.id}`, tulisDesimal(q.target), tulisRealisasi(q.realisasi), pct === null ? '-' : pct.toFixed(2) + '%'];
     }),
     styles: { fontSize: 9 },
     headStyles: { fillColor: [239, 159, 39] },
@@ -310,7 +310,7 @@ export async function exportIndikatorXlsx(row: RaRow) {
     ['Satuan', row.satuan],
     ['Target RPJMD', row.target_rpjmd],
     ['Target Tahunan', row.target_tahunan],
-    ['Realisasi Akhir', realAkhir],
+    ['Realisasi Akhir', realAkhir ?? '—'],
   ];
   meta.forEach(([k, v]) => {
     const r = ws.addRow([k, sanitizeCell(v)]);
@@ -322,7 +322,7 @@ export async function exportIndikatorXlsx(row: RaRow) {
   head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF9F27' } };
   quartersOf(row).forEach(q => {
     const pct = capaianTriwulan(row, q.id);
-    ws.addRow([`TW ${q.id}`, q.target, q.realisasi, pct ?? '—']);
+    ws.addRow([`TW ${q.id}`, q.target, q.realisasi ?? '—', pct ?? '—']);
   });
   ws.getColumn(1).width = 25;
   ws.getColumn(2).width = 18;

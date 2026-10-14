@@ -1,6 +1,6 @@
 # Konsep — Tabel LKJIP yang Tertaut ke Modul (E-Anggaran & Renaksi)
 
-Status: **Tahap 1 dikerjakan** (2026-10-14). Catatan pelaksanaan di §17.
+Status: **Tahap 1 & 2 dikerjakan** (2026-10-14). Catatan pelaksanaan di §17 (Tahap 1) dan §18 (Tahap 2).
 
 ## 1. Kebutuhan
 
@@ -251,9 +251,10 @@ ditanya lewat `confirmDialog`. Riwayat Versi LKJIP tetap bisa mengembalikan kead
 ## 16. Tahapan
 
 - **Tahap 1** — §4–§11 untuk dua sumber.
-- **Tahap 2** — kolom isian tangan per baris (diingat per kunci; yang kehilangan barisnya
+- **Tahap 2** ✅ — kolom isian tangan per baris (diingat per kunci; yang kehilangan barisnya
   disebut di ringkasan Perbarui), Periksa kesegaran semua tabel tertaut, templat satu klik
   ("Tabel Pengukuran Kinerja", "Realisasi Anggaran per Program"), sumber Laporan per sumber dana.
+  Catatan pelaksanaan §18.
 - **Tahap 3** — angka sebaris di narasi ("Realisasi anggaran sebesar Rp X (Y%)"), sumber PK & BLUD.
 
 ## 17. Catatan pelaksanaan Tahap 1
@@ -284,7 +285,89 @@ Yang berbeda dari rancangan di atas, dan sebabnya:
 - **Ikut dikerjakan (keputusan pemilik)**: Capaian Progres Negatif yang realisasinya belum diisi
   ditulis "—", bukan 200% — `capaianTahunan`/`capaianRpjmd`/`capaianTriwulan` di
   `rencana-aksi/_lib/types.ts`, dipakai layar Indikator, Cetak (layar/PDF/Excel), unduhan per
-  indikator, dan dialog ubah jenis. Batasnya: realisasi triwulan `NOT NULL DEFAULT 0`, jadi di level
-  non-sub-kegiatan (tanpa realisasi bulanan) nol SUNGGUHAN juga terbaca "belum diisi".
+  indikator, dan dialog ubah jenis. ~~Batasnya: realisasi triwulan `NOT NULL DEFAULT 0`~~ — ditutup di
+  §18.5: kolomnya kini boleh NULL, jadi nol sungguhan di level mana pun tercatat 200%.
 
 Regresi: `npx tsx scripts/test-lkjip-tabel-tertaut.mts` + `npx tsx scripts/test-renaksi-cetak-kolom.mts`.
+
+## 18. Catatan pelaksanaan Tahap 2
+
+### 18.1 Kolom isian tangan
+- Pilihan "Isi dari…" keempat: **Isian tangan (diketik sendiri)** — mis. "Keterangan", "Analisis".
+  Disimpan di resep sebagai peta `nilai: { [kunci baris]: teks }`, jadi ketikan **ikut barisnya**
+  saat Perbarui mengubah urutan atau menambah baris; sel di kolom itu satu-satunya sel badan yang
+  bisa diketik (sel lain tetap terkunci, K2).
+- Peta dibaca dari badan tabel SAAT Simpan/Perbarui/Atur Bentuk (`ambilIsianTangan`), bukan dari
+  simpanan terakhir — ketikan yang belum disimpan tidak hilang oleh Perbarui. Baris yang
+  disembunyikan tidak ada di badan, jadi isiannya dibiarkan di peta; menampilkannya lagi
+  memunculkan ketikannya lagi.
+- **Rumus ditolak** di kolom tangan (toast): rumus sel menunjuk nomor baris, dan nomor baris bergeser
+  tiap Perbarui. Penggantinya isi "Rumus". **Gabung sama tidak berlaku** di kolom tangan — sel yang
+  tertutup gabungan kehilangan ketikannya. Format angka tidak ditawarkan (isiannya teks).
+- Baris yang **hilang dari sumber** (bukan sekadar disembunyikan) membuat isiannya yatim: dialog
+  Perbarui menyebutnya beserta teksnya ("Program C: "Tercapai"") sebelum dibuang dari resep.
+- Atur Bentuk yang menghapus kolom tangan atau mengganti isinya **bertanya dulu** berapa isian ikut
+  hilang; memilih tangan lagi di kolom yang sama mengembalikan isiannya selama modal masih terbuka.
+
+### 18.2 Periksa Tabel Tertaut (kesegaran)
+- Tombol dock **Periksa Tabel** (hanya muncul bila dokumen punya tabel tertaut): semua tabel tertaut
+  dibandingkan dengan sumbernya sekarang — "sama", "berbeda: 4 sel berubah · 1 baris baru", atau
+  "Butuh akses …". Tabel dengan resep sumber yang sama ditarik **sekali**.
+- **Hanya membaca.** Tiap baris punya tombol **Buka** (pindah ke bagiannya, tabel disorot); yang
+  memperbarui tetap tombol Perbarui di tabel itu. Alasannya: editor tabel memegang isinya di state
+  lokal yang hanya diisi saat dibuka — kalau panel dokumen menulis ke blok, editor yang sedang
+  terbuka menimpanya lagi dengan isi lama pada Simpan berikutnya.
+- Penilaiannya **satu fungsi** dengan tombol Perbarui (`nilaiPerbarui` di `tautan.ts`) — dua aturan
+  "apa yang dianggap berubah" pasti berbeda pendapat suatu hari (L78).
+- **Finalisasi memeriksa dulu**: dokumen FINAL tidak bisa diperbarui lagi, jadi tabel yang tertinggal
+  dari sumbernya ditanyakan sebelum dikunci — *Lihat & perbarui dulu* (tombol utama, Enter) /
+  *Tetap finalisasi* / Batal. Gagal memeriksa (jaringan) tidak menahan finalisasi.
+
+### 18.3 Templat satu klik
+Ditawarkan hanya untuk tabel baru (belum dibentuk), dan hanya **mengisi modal** — pratinjau &
+Masukkan tetap di tangan orangnya (nol jalur tulis baru, L78):
+- **Pengukuran Kinerja** — Renaksi, indikator level sasaran: No · Sasaran Strategis (gabung sama) ·
+  Indikator Kinerja · Satuan · Target · Realisasi · Capaian (%).
+- **Realisasi Anggaran per Program** — Rekap E-Anggaran s/d Desember, versi berlaku: Program ·
+  Anggaran · Realisasi · Realisasi (%) · Sisa (`=B-C`). **Tanpa kolom No**: Rekap menaruh TOTAL di
+  baris pertama, jadi nomor urut memberinya "1".
+- **Realisasi Anggaran per Sumber Dana** — sumber baru §18.4.
+Judul tabel yang masih kosong diisi "‹nama templat› Tahun ‹tahun dokumen›".
+
+### 18.4 Sumber "E-Anggaran · Laporan per Sumber Dana"
+`lib/lkjip/sumber/kinerja-laporan.ts`, dari `GET /api/kinerja/laporan` yang dipakai tab Laporan
+(nol endpoint baru — akses & sakelar E-Anggaran berlaku sendiri). Dua tampilan:
+- **Per sumber dana** — kolom No · Sumber Dana · Total Pagu · Real Keuangan · Serapan (%) · Sisa ·
+  Target Fisik · Real Fisik · Capaian Fisik (%) · Versi SSK Acuan, plus baris **JUMLAH** di akhir
+  (nomor kosong, tebal). JUMLAH dijumlah dalam rupiah lalu persennya diturunkan dengan rumus server
+  (`round(x/pagu×10000)/100`, L89) — bukan rata-rata persen. **Capaian Fisik = real fisik ÷ PAGU**,
+  bukan ÷ target fisik: itu rumus `pct_fisik` server, dan JUMLAH wajib memakai yang sama. Sumber dana
+  tanpa pagu maupun realisasi tidak ditampilkan dan disebut di catatan.
+- **Per bulan** — satu sumber dana, sejajar tabel "Detail Trend Bulanan": 12 bulan + JUMLAH; bulan
+  tanpa realisasi kosong (bukan 0).
+Kolom katalog bergantung tampilannya, jadi `SumberTabel.kolom`/`kolomBawaan` kini menerima setelan.
+
+### 18.5 Ikut dikerjakan: nol sungguhan Progres Negatif (Renaksi)
+`rencana_aksi.q1..q4_realisasi` kini **NULL = belum diisi, 0 = nol nyata** — arti yang sama dengan null
+di `bulan_realisasi` (R3). Migrasi `migration-renaksi-realisasi-null.sql` (**wajib dijalankan sebelum
+kodenya dipasang**) mengubah kolomnya dan mengisi NULL untuk 0 lama yang memang dibaca "belum diisi"
+(kecuali triwulan yang bulan-bulannya terisi); `updated_at` dipertahankan. Akibatnya:
+- Modal triwulan boleh dikosongkan (= belum diisi); Reset Realisasi menulis NULL; baris baru, impor,
+  dan salin tahun lahir NULL; turunan bulanan memberi NULL untuk triwulan tanpa bulan terisi
+  (target triwulan tetap angka, `deriveTargetQuarters`).
+- `realisasiAkhirTahun` memakai triwulan TERAKHIR yang diisi (dulu "terakhir yang > 0") dan
+  memulangkan null bila belum ada; Akumulatif menjumlah yang diisi saja.
+- Tampilan: realisasi belum diisi ditulis "—" (layar Indikator, Data Entry, Cetak layar/PDF/Excel,
+  unduhan per indikator, tabel LKJIP), nol tetap "0". Capaian jenis lain yang belum diisi tetap 0%.
+
+### 18.6 Ikut dikerjakan: Pulihkan versi memutus grafik dari tabelnya
+Ditemukan saat menguji Simpan Versi → Pulihkan pada dokumen bertabel tertaut. Resep `tautan` ikut
+kembali utuh (payload disalin apa adanya), **tapi** GRAFIK yang mengambil data dari tabel menyimpan
+`tabelBlockId` — id blok — dan Pulihkan menulis ulang semua blok dengan id baru, jadi grafik menunjuk
+blok yang sudah tidak ada (cacat lama, bukan khas tabel tertaut). Kini foto menyimpan `id` blok dan
+Pulihkan memetakan ulang rujukannya (`petakanRujukanGrafik`); foto lama tanpa id dipetakan lewat
+letak tabel itu sekarang (bab + urutan); tidak ketemu → null (grafik minta dipilihkan tabel lagi).
+
+Regresi Tahap 2: `test-lkjip-tabel-tertaut.mts` bagian L–O, `test-lkjip-versi-tertaut.mts` (DB 2099),
+`test-renaksi-audit.mjs` (bagian "kosong ≠ nol", DB 2099), `test-renaksi-cetak-kolom.mts`,
+`test-renaksi-desimal.mts`.

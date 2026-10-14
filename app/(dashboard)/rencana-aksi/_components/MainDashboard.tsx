@@ -9,7 +9,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Sparkline12 from './Sparkline12';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
-import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, capaianTahunan, capaianRpjmd, capaianTriwulan, nadaCapaian, BULAN_LABELS } from '../_lib/types';
+import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, tulisRealisasi, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, capaianTahunan, capaianRpjmd, capaianTriwulan, nadaCapaian, BULAN_LABELS } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
 
 interface Props {
@@ -26,7 +26,7 @@ interface Props {
   setSelectedKegiatan: (v: string) => void;
   setSelectedSubKegiatan: (v: string) => void;
   setSelectedIndicator: (v: string) => void;
-  onOpenQuarterModal: (quarter: { id: 1 | 2 | 3 | 4; target: number; realisasi: number; name: string }) => void;
+  onOpenQuarterModal: (quarter: { id: 1 | 2 | 3 | 4; target: number; realisasi: number | null; name: string }) => void;
   /** Buka baris ini di Data Entry — satu-satunya tempat Jenis & Target diubah. */
   onUbahDiDataEntry: () => void;
   onOpenDetailModal: () => void;
@@ -193,14 +193,14 @@ export default function MainDashboard({
     outcome_sub_kegiatan: null,
     target_rpjmd: 0,
     target_tahunan: 0,
-    q1_target: 0, q1_realisasi: 0,
-    q2_target: 0, q2_realisasi: 0,
-    q3_target: 0, q3_realisasi: 0,
-    q4_target: 0, q4_realisasi: 0,
+    q1_target: 0, q1_realisasi: null,
+    q2_target: 0, q2_realisasi: null,
+    q3_target: 0, q3_realisasi: null,
+    q4_target: 0, q4_realisasi: null,
     version: 0,
   } as RaRow;
 
-  const realAkhir = activeRow ? realisasiAkhirTahun(activeRow) : 0;
+  const realAkhir = activeRow ? realisasiAkhirTahun(activeRow) : null;
   // R4: Progres Negatif dibalik via hitungCapaianPct — over-target tampil merah;
   // yang belum diisi → null ("—"), bukan 200% "Selesai".
   const nilaiAkhirTahun = capaianTahunan(data);
@@ -256,7 +256,7 @@ export default function MainDashboard({
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Realisasi</div>
             <div className="text-sm font-bold text-slate-800" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-              {tulisDesimal(realAkhir)} <span className="text-[11px] font-normal text-slate-500">{data.satuan}</span>
+              {tulisRealisasi(realAkhir)} <span className="text-[11px] font-normal text-slate-500">{data.satuan}</span>
             </div>
           </div>
         </div>
@@ -551,7 +551,7 @@ export default function MainDashboard({
                 <div key={lbl}>
                   <span className="text-[9px] font-semibold text-slate-400 block">{lbl}</span>
                   <span className="text-sm font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                    {tulisDesimal(derivedRealisasi[i])}
+                    {tulisRealisasi(derivedRealisasi[i])}
                   </span>
                 </div>
               ))}
@@ -619,7 +619,7 @@ export default function MainDashboard({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Realisasi</span>
-                  <span className="font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.realisasi)}</span>
+                  <span className="font-bold text-slate-700" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisRealisasi(q.realisasi)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Nilai</span>
@@ -683,7 +683,7 @@ function Selector({ label, value, options, onChange, disabled = false }: {
 
 function EvalCard({ title, badge, badgeClass, target, realisasi, nilai, progressLabel, colorText, colorProgress }: {
   title: string; badge: string; badgeClass: string;
-  target: number; realisasi: number; nilai: number | null;
+  target: number; realisasi: number | null; nilai: number | null;
   progressLabel: string; colorText: string; colorProgress: string;
 }) {
   return (
@@ -696,7 +696,7 @@ function EvalCard({ title, badge, badgeClass, target, realisasi, nilai, progress
 
         <div className="grid grid-cols-3 gap-2 border-b border-slate-50 pb-4 mb-4">
           <Stat label="Target" value={tulisDesimal(target)} />
-          <Stat label="Realisasi" value={tulisDesimal(realisasi)} />
+          <Stat label="Realisasi" value={tulisRealisasi(realisasi)} />
           <Stat label="Nilai" value={nilai === null ? '—' : `${nilai.toFixed(2)}%`} colorClass={colorText} align="right" />
         </div>
       </div>

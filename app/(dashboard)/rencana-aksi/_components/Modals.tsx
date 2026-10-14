@@ -5,7 +5,7 @@ import { X, Save, AlertTriangle, Sparkles, RotateCcw } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import type { RaRow } from '../_lib/types';
-import { quartersOf, realisasiAkhirTahun, LEVEL_LABELS, outcomeOf } from '../_lib/types';
+import { quartersOf, realisasiAkhirTahun, tulisRealisasi, LEVEL_LABELS, outcomeOf } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import { apiUpdateQuarter, apiResetRealisasi, VersionConflictError } from '../_lib/api';
 
@@ -33,7 +33,7 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
     const q = quartersOf(row).find(x => x.id === quarterId);
     submittingRef.current = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (q) { setTarget(String(q.target)); setRealisasi(String(q.realisasi)); setErrorMsg(''); setBusy(false); }
+    if (q) { setTarget(String(q.target)); setRealisasi(q.realisasi == null ? '' : String(q.realisasi)); setErrorMsg(''); setBusy(false); }
   }, [row, quarterId]);
 
   if (!row || !quarterId) return null;
@@ -43,8 +43,9 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
     e.preventDefault();
     if (submittingRef.current) return;
     const targetNum = parseFloat(target) || 0;
-    const realisasiNum = parseFloat(realisasi) || 0;
-    if (targetNum < 0 || realisasiNum < 0) { setErrorMsg('Nilai Target dan Realisasi tidak boleh negatif.'); return; }
+    // Kosong = belum diisi (null) — beda dari 0, yang bagi Progres Negatif capaian terbaik.
+    const realisasiNum = realisasi.trim() === '' ? null : (parseFloat(realisasi) || 0);
+    if (targetNum < 0 || (realisasiNum ?? 0) < 0) { setErrorMsg('Nilai Target dan Realisasi tidak boleh negatif.'); return; }
     submittingRef.current = true;
     setBusy(true);
     try {
@@ -100,11 +101,12 @@ export function QuarterModal({ row, quarterId, onClose, onSaved, notify }: Quart
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-600 block">Realisasi ({qName})</label>
             <PrimaNumberField
-              min={0} desimal={2} required value={realisasi}
+              min={0} desimal={2} value={realisasi}
               onChange={(e) => setRealisasi(e.target.value)}
               onFocus={(e) => e.target.select()}
-              placeholder="Contoh: 7"
+              placeholder="Kosongkan bila belum ada"
             />
+            <p className="text-[11px] text-slate-400">Kosong = belum diisi. Ketik 0 hanya bila realisasinya memang nol.</p>
           </div>
 
           <div className="rounded-xl bg-[#378ADD]/5 border border-[#378ADD]/20 p-3 text-xs text-[#1F3F73] leading-normal">
@@ -225,13 +227,13 @@ export function DetailModal({ row, isOpen, onClose, anggaran }: DetailModalProps
               <div className="rounded-xl border border-slate-100 p-3 bg-white">
                 <span className="text-slate-400 block font-medium">Tahunan ({row.tahun})</span>
                 <span className="text-lg font-bold text-slate-800" style={moneyFont}>
-                  {tulisDesimal(realAkhir)} dari {tulisDesimal(row.target_tahunan)} {row.satuan}
+                  {tulisRealisasi(realAkhir)} dari {tulisDesimal(row.target_tahunan)} {row.satuan}
                 </span>
               </div>
               <div className="rounded-xl border border-slate-100 p-3 bg-white">
                 <span className="text-slate-400 block font-medium">RPJMD</span>
                 <span className="text-lg font-bold text-slate-800" style={moneyFont}>
-                  {tulisDesimal(realAkhir)} dari {tulisDesimal(row.target_rpjmd)} {row.satuan}
+                  {tulisRealisasi(realAkhir)} dari {tulisDesimal(row.target_rpjmd)} {row.satuan}
                 </span>
               </div>
             </div>

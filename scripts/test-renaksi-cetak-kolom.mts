@@ -34,8 +34,9 @@ const dasar: Omit<RaRow, 'id' | 'level' | 'program' | 'indikator'> = {
   outcome_program: null, outcome_kegiatan: null, outcome_sub_kegiatan: null,
   kegiatan: null, sub_kegiatan: null, jenis: 'Akumulatif', satuan: '%',
   target_rpjmd: 0, target_tahunan: 0,
-  q1_target: 0, q1_realisasi: 0, q2_target: 0, q2_realisasi: 0,
-  q3_target: 0, q3_realisasi: 0, q4_target: 0, q4_realisasi: 0,
+  // null = belum diisi (migration-renaksi-realisasi-null); 0 = nol SUNGGUHAN.
+  q1_target: 0, q1_realisasi: null, q2_target: 0, q2_realisasi: null,
+  q3_target: 0, q3_realisasi: null, q4_target: 0, q4_realisasi: null,
   anggaran_nominal: null, bulan_target: null, bulan_realisasi: null, version: 1,
 }
 const tujuan: RaRow   = { ...dasar, id: 1, level: 'tujuan', program: 'Tujuan Uji', indikator: 'Indeks Tujuan' }
@@ -60,8 +61,12 @@ const semua = [tujuan, sasaran, program, kegiatan, sub, pnKosong]
 const bulan = (isi: (number | null)[]) => [...isi, ...Array(12 - isi.length).fill(null)] as (number | null)[]
 const pnNolNyata: RaRow = { ...pnKosong, id: 7, level: 'sub-kegiatan', bulan_realisasi: bulan([null, 0]) }
 const pnBulanKosong: RaRow = { ...pnKosong, id: 8, level: 'sub-kegiatan', bulan_realisasi: bulan([]), q1_realisasi: 2 }
-const pnSebagian: RaRow = { ...pnKosong, id: 9, q1_target: 4, q1_realisasi: 3, q2_target: 4, q2_realisasi: 0 }
-const akumKosong: RaRow = { ...sasaran, id: 10, q1_realisasi: 0, q2_realisasi: 0, q3_realisasi: 0, q4_realisasi: 0 }
+// TW I berisi 3, TW II–IV belum diisi.
+const pnSebagian: RaRow = { ...pnKosong, id: 9, q1_target: 4, q1_realisasi: 3, q2_target: 4 }
+const akumKosong: RaRow = { ...sasaran, id: 10, q1_realisasi: null, q2_realisasi: null, q3_realisasi: null, q4_realisasi: null }
+// Kasus yang dulu MUSTAHIL (NOT NULL DEFAULT 0): level tanpa bulanan, realisasi memang 0.
+const pnNolTriwulan: RaRow = { ...pnKosong, id: 11, q1_target: 4, q1_realisasi: 3, q2_target: 4, q2_realisasi: 0 }
+const akumNolNyata: RaRow = { ...sasaran, id: 12, q1_realisasi: 0, q2_realisasi: null, q3_realisasi: null, q4_realisasi: null }
 
 const kunciEkor = (f: CetakFilter) => cetakHeader(f).tail.map(c => c.key)
 
@@ -85,7 +90,7 @@ ok('B1 Akumulatif 85 dari 100 = 85', capaianTahunan(sasaran) === 85)
 ok('B2 Progres Negatif dibalik: 8 dari 10 = 120', capaianTahunan(program) === 120)
 ok('B3 target nol → 0 (seperti layar)', capaianTahunan(tujuan) === 0)
 ok('B4 yang sudah berisi = hitungCapaianPct(target_tahunan, realisasi akhir, jenis)',
-  semua.filter(r => r !== pnKosong).every(r => capaianTahunan(r) === hitungCapaianPct(r.target_tahunan, realisasiAkhirTahun(r), r.jenis)))
+  semua.filter(r => r !== pnKosong).every(r => capaianTahunan(r) === hitungCapaianPct(r.target_tahunan, realisasiAkhirTahun(r) ?? 0, r.jenis)))
 ok('B5 Progres Negatif belum diisi → null, bukan 200', capaianTahunan(pnKosong) === null,
   String(capaianTahunan(pnKosong)))
 ok('B6 ...RPJMD-nya juga null', capaianRpjmd(pnKosong) === null)
@@ -97,6 +102,16 @@ ok('B9 jenis lain yang belum diisi tetap ANGKA 0', capaianTahunan(akumKosong) ==
 ok('B10 per triwulan: TW I berisi dihitung, TW II kosong → null',
   capaianTriwulan(pnSebagian, 1) === hitungCapaianPct(4, 3, 'Progres Negatif') && capaianTriwulan(pnSebagian, 2) === null)
 ok('B11 Progres Negatif yang berisi tetap dihitung setahun', capaianTahunan(pnSebagian) === hitungCapaianPct(4, 3, 'Progres Negatif'))
+
+console.log('\nB2. Nol sungguhan di triwulan (kolom boleh NULL)')
+ok('B12 Progres Negatif TW II = 0 nyata → TW II 200 (capaian terbaik), bukan "—"',
+  capaianTriwulan(pnNolTriwulan, 2) === 200, String(capaianTriwulan(pnNolTriwulan, 2)))
+ok('B13 ...dan setahun memakai triwulan TERAKHIR yang diisi (0), bukan yang terakhir > 0',
+  realisasiAkhirTahun(pnNolTriwulan) === 0 && capaianTahunan(pnNolTriwulan) === 200, String(capaianTahunan(pnNolTriwulan)))
+ok('B14 Akumulatif: yang belum diisi tidak dijumlah, nol nyata ikut — 0 ≠ kosong',
+  realisasiAkhirTahun(akumNolNyata) === 0 && realisasiAkhirTahun(akumKosong) === null)
+ok('B15 Akumulatif sebagian: jumlah triwulan yang diisi saja',
+  realisasiAkhirTahun({ ...akumKosong, q1_realisasi: 2.5, q3_realisasi: 1 }) === 3.5)
 
 console.log('\nC. Format persen')
 ok('C1 85,5 → "85,50%"', tulisPersen(85.5) === '85,50%', tulisPersen(85.5))
@@ -114,6 +129,12 @@ ok('D3 angka biasa → koma desimal', tulisSelCetak(kolPolos, 7.5) === '7,5')
 ok('D4 null → "" & teks apa adanya', tulisSelCetak(kolPolos, null) === '' && tulisSelCetak(kolPolos, 'abc') === 'abc')
 ok('D5 capaian kosong → "—" (layar & PDF lewat tulisCapaian yang sama)',
   tulisSelCetak(kolCapaian!, null) === '—' && tulisCapaian(null) === '—' && tulisCapaian(85.5) === '85,50%')
+const kolAkhir = cetakHeader(DEFAULT_CETAK_FILTER).tail.find(c => c.key === 'akhir')!
+const kolTwR = cetakHeader({ ...DEFAULT_CETAK_FILTER, showTw: true }).twQuarters[0].sub.find(c => c.key === 'tw1r')!
+ok('D6 realisasi belum diisi → "—" (Real Akhir & TW R), nol tetap "0"',
+  tulisSelCetak(kolAkhir, null) === '—' && tulisSelCetak(kolTwR, null) === '—' && tulisSelCetak(kolTwR, 0) === '0',
+  `${tulisSelCetak(kolAkhir, null)} ${tulisSelCetak(kolTwR, null)} ${tulisSelCetak(kolTwR, 0)}`)
+ok('D7 kolom bukan realisasi tetap kosong untuk null (Tujuan/Sasaran di baris bawah)', tulisSelCetak(kolPolos, null) === '')
 
 console.log('\nE. Workbook Excel sungguhan')
 const wb = await buatWorkbookGabungan(semua, DEFAULT_CETAK_FILTER)
@@ -136,6 +157,9 @@ ok('E5 tidak dibulatkan di sel (1/3 utuh)', typeof selKeg?.value === 'number' &&
 ok('E6 Progres Negatif 120% → 1,2', barisData('Angka Kejadian')?.getCell(iCap).value === 1.2)
 ok('E7 Progres Negatif belum diisi → "—", bukan 2 (200%)', barisData('Net Death Rate')?.getCell(iCap).value === '—',
   String(barisData('Net Death Rate')?.getCell(iCap).value))
+ok('E8 Real Akhir belum diisi → "—"; yang berisi tetap ANGKA',
+  barisData('Net Death Rate')?.getCell(iAkhir).value === '—' && barisData('Angka Kejadian')?.getCell(iAkhir).value === 8,
+  `${barisData('Net Death Rate')?.getCell(iAkhir).value} / ${barisData('Angka Kejadian')?.getCell(iAkhir).value}`)
 
 console.log('\nF. PDF sungguhan')
 let pdfTeks = ''

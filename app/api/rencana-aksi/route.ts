@@ -185,7 +185,7 @@ export async function PATCH(req: NextRequest) {
       await writeAuditLog({
         req, eventType: 'RA_UPDATE_QUARTER',
         userId: g.session.userId, username: g.session.username,
-        detail: `id=${p.id} TW${p.quarter}: target=${p.target} realisasi=${p.realisasi}`,
+        detail: `id=${p.id} TW${p.quarter}: target=${p.target} realisasi=${p.realisasi ?? 'kosong'}`,
       });
     } else if (action === 'bulan-realisasi') {
       const p = parsed.data.payload;

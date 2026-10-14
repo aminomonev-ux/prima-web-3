@@ -70,10 +70,11 @@ export interface RaRow {
   satuan: string;
   target_rpjmd: number;
   target_tahunan: number;
-  q1_target: number;  q1_realisasi: number;
-  q2_target: number;  q2_realisasi: number;
-  q3_target: number;  q3_realisasi: number;
-  q4_target: number;  q4_realisasi: number;
+  /** null = belum diisi, 0 = nol nyata (migration-renaksi-realisasi-null). */
+  q1_target: number;  q1_realisasi: number | null;
+  q2_target: number;  q2_realisasi: number | null;
+  q3_target: number;  q3_realisasi: number | null;
+  q4_target: number;  q4_realisasi: number | null;
   anggaran_nominal: number | null;
   bulan_target: MonthVal[] | null;
   bulan_realisasi: MonthVal[] | null;
@@ -85,12 +86,14 @@ type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulang
 /**
  * Derive q1-q4 dari 12 target bulanan per `jenis` (Opsi A).
  *   Akumulatif            → TWn = SUM 3 bulan triwulan itu
- *   Progres Pos/Neg/Ulang → TWn = bulan TERAKHIR terisi (>0) dalam triwulan itu (snapshot)
+ *   Progres Pos/Neg/Ulang → TWn = bulan TERAKHIR terisi (non-null) dalam triwulan itu (snapshot)
+ *   Triwulan yang ketiga bulannya belum diisi → null (realisasi: "belum diisi"; target: `?? 0`).
  * Sync dengan client helper di app/(dashboard)/rencana-aksi/_lib/types.ts.
  */
-function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [number, number, number, number] {
-  const seg = (start: number): number => {
+function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [MonthVal, MonthVal, MonthVal, MonthVal] {
+  const seg = (start: number): MonthVal => {
     const part = months.slice(start, start + 3);
+    if (part.every(v => v == null)) return null;
     // Sama dengan helper klien: pecahan biner (7,5 + 2,68 + 3,25 = 13,430000000000001)
     // dibulatkan di tempat penjumlahannya. Kolom q*_target DECIMAL(14,2) memang
     // akan membulatkannya juga, tapi diam-diam — dan angka itu keburu dipakai
@@ -98,9 +101,15 @@ function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [number,
     if (jenis === 'Akumulatif') return bulatkanDesimal(part.reduce((a: number, b) => a + (b ?? 0), 0));
     // R3: "terisi" = non-null — 0 nyata ikut terekam (capaian terbaik Progres Negatif)
     for (let i = part.length - 1; i >= 0; i--) { const v = part[i]; if (v != null) return v; }
-    return 0;
+    return null;
   };
   return [seg(0), seg(3), seg(6), seg(9)];
+}
+
+/** Target triwulan tetap NOT NULL — bulan target yang kosong dihitung 0, seperti dulu. */
+function deriveTargetQuarters(months: MonthVal[], jenis: RaJenis): [number, number, number, number] {
+  const [a, b, c, d] = deriveQuartersFromMonthly(months, jenis);
+  return [a ?? 0, b ?? 0, c ?? 0, d ?? 0];
 }
 
 // R3: format simpan v2 `{v:2,m:[...]}` — null = belum diisi, 0 = nol nyata.
@@ -125,10 +134,13 @@ const monthsToJson = (m: MonthVal[]): string => JSON.stringify({ v: 2, m });
 // R6: kolom DECIMAL (migration 043) — mysql2 kembalikan string → normalisasi Number.
 function normNumerics(r: RaRow): void {
   r.target_rpjmd = Number(r.target_rpjmd); r.target_tahunan = Number(r.target_tahunan);
-  r.q1_target = Number(r.q1_target); r.q1_realisasi = Number(r.q1_realisasi);
-  r.q2_target = Number(r.q2_target); r.q2_realisasi = Number(r.q2_realisasi);
-  r.q3_target = Number(r.q3_target); r.q3_realisasi = Number(r.q3_realisasi);
-  r.q4_target = Number(r.q4_target); r.q4_realisasi = Number(r.q4_realisasi);
+  // Number(null) = 0 — realisasi WAJIB lolos sebagai null, itu satu-satunya
+  // pembeda "belum diisi" dari nol sungguhan.
+  const angkaAtauKosong = (v: number | null): number | null => (v == null ? null : Number(v));
+  r.q1_target = Number(r.q1_target); r.q1_realisasi = angkaAtauKosong(r.q1_realisasi);
+  r.q2_target = Number(r.q2_target); r.q2_realisasi = angkaAtauKosong(r.q2_realisasi);
+  r.q3_target = Number(r.q3_target); r.q3_realisasi = angkaAtauKosong(r.q3_realisasi);
+  r.q4_target = Number(r.q4_target); r.q4_realisasi = angkaAtauKosong(r.q4_realisasi);
   r.anggaran_nominal = r.anggaran_nominal == null ? null : Number(r.anggaran_nominal);
 }
 
@@ -185,7 +197,7 @@ export async function upsertRencanaAksi(
     && Array.isArray(data.bulan_target) && data.bulan_target.length === 12;
   const bulanTargetJson = hasMonthly ? monthsToJson(data.bulan_target as MonthVal[]) : null;
   const [dq1, dq2, dq3, dq4] = hasMonthly
-    ? deriveQuartersFromMonthly(data.bulan_target as MonthVal[], data.jenis)
+    ? deriveTargetQuarters(data.bulan_target as MonthVal[], data.jenis)
     : [data.q1_target, data.q2_target, data.q3_target, data.q4_target];
 
   // Satu jalur tulis untuk SEMUA edit baris yang sudah ada — dipanggil dari dua
@@ -439,7 +451,7 @@ export async function assertPeriodeTerbuka(tahun: number): Promise<void> {
 
 export async function updateQuarter(
   id: number, quarter: 1 | 2 | 3 | 4,
-  target: number, realisasi: number, userId: number, expectedVersion: number,
+  target: number, realisasi: number | null, userId: number, expectedVersion: number,
 ): Promise<void> {
   const row = await getRencanaAksiById(id);
   if (!row) throw new RaVersionConflictError();
@@ -534,7 +546,7 @@ export async function updateJenis(
   // realisasi. Dulu inilah pintu bocor paling licin dari Kunci Periode.
   await assertPeriodeTerbuka(Number(row.tahun));
   const [t1, t2, t3, t4] = row.bulan_target
-    ? deriveQuartersFromMonthly(row.bulan_target, jenis)
+    ? deriveTargetQuarters(row.bulan_target, jenis)
     : [row.q1_target, row.q2_target, row.q3_target, row.q4_target];
   const [r1, r2, r3, r4] = row.bulan_realisasi
     ? deriveQuartersFromMonthly(row.bulan_realisasi, jenis)
@@ -551,7 +563,7 @@ export async function updateJenis(
 }
 
 /**
- * Reset realisasi 1 indikator → q1-q4 realisasi = 0. Target tetap.
+ * Reset realisasi 1 indikator → q1-q4 realisasi = NULL (belum diisi, bukan nol). Target tetap.
  * Sengaja tidak pakai version check — aksi destruktif manual user yang sadar konsekuensi (sudah ada confirm 4-digit di UI).
  */
 export async function resetRealisasi(id: number, userId: number): Promise<void> {
@@ -564,7 +576,7 @@ export async function resetRealisasi(id: number, userId: number): Promise<void> 
   // mengisi ulang kuartal dari data stale (reset seperti tidak pernah terjadi)
   await sql`
     UPDATE rencana_aksi
-    SET q1_realisasi=0, q2_realisasi=0, q3_realisasi=0, q4_realisasi=0,
+    SET q1_realisasi=NULL, q2_realisasi=NULL, q3_realisasi=NULL, q4_realisasi=NULL,
         bulan_realisasi=NULL,
         version=version+1, updated_by=${userId}
     WHERE id=${id}

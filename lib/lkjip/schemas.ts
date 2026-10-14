@@ -179,10 +179,17 @@ export const NarasiPayloadSchema = z.object({
 // Tabel tertaut ke modul (docs/CONCEPT-lkjip-tabel-tertaut.md). WAJIB terdaftar di sini: Zod
 // membuang kunci yang tidak dikenalnya, jadi tanpa ini resepnya hilang diam-diam saat Simpan —
 // tabelnya tampak benar, tombol Perbarui lenyap begitu halaman dimuat ulang.
+const KunciBarisSchema = z.string().min(1).max(2000);
 const IsiKolomSchema = z.discriminatedUnion('jenis', [
   z.object({ jenis: z.literal('sumber'), kunci: z.string().min(1).max(64) }),
   z.object({ jenis: z.literal('nomor') }),
   z.object({ jenis: z.literal('rumus'), ekspresi: z.string().trim().min(1).max(200) }),
+  // Isian tangan per kunci baris — termasuk baris yang sedang disembunyikan.
+  z.object({
+    jenis: z.literal('tangan'),
+    nilai: z.record(KunciBarisSchema, z.string().max(2000)).default({})
+      .refine(n => Object.keys(n).length <= 2000, 'Isian tangan terlalu banyak'),
+  }),
 ]);
 const KolomTautSchema = z.object({
   isi:        IsiKolomSchema,
@@ -191,9 +198,8 @@ const KolomTautSchema = z.object({
   gabungSama: z.boolean().optional(),
   bertingkat: z.boolean().optional(),
 });
-const KunciBarisSchema = z.string().min(1).max(2000);
 export const TautanSchema = z.object({
-  sumber:      z.enum(['kinerja-rekap', 'renaksi-cetak']),
+  sumber:      z.enum(['kinerja-rekap', 'renaksi-cetak', 'kinerja-laporan']),
   setelan:     z.record(z.string(), z.unknown()).refine(s => JSON.stringify(s).length <= 4000, 'Setelan tautan terlalu besar'),
   kolom:       z.array(KolomTautSchema).min(1).max(12),
   kunciBaris:  z.array(KunciBarisSchema).max(500),

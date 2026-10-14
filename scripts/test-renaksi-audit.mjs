@@ -211,6 +211,59 @@ async function main() {
   }), UID)
   rk = await RA.getRencanaAksiById(idK)
   periksa('Kode bisa dikosongkan dengan sengaja', rk.kode === null, `kode=${rk.kode}`)
+
+  // migration-renaksi-realisasi-null: NULL = belum diisi, 0 = nol nyata. Dulu kolomnya
+  // NOT NULL DEFAULT 0, jadi Progres Negatif yang memang 0 terbaca "belum diisi".
+  console.log('\n── Realisasi triwulan: kosong ≠ nol ──')
+  const triwulan = (x) => [x.q1_realisasi, x.q2_realisasi, x.q3_realisasi, x.q4_realisasi]
+    .map((v) => (v == null ? null : Number(v)))
+  const idN = await RA.upsertRencanaAksi({ ...dasar({ indikator: 'IND-nol', jenis: 'Progres Negatif' }), level: 'sasaran', program: 'SAS-NOL', kegiatan: null, sub_kegiatan: null }, UID)
+  let rn = await RA.getRencanaAksiById(idN)
+  periksa('Baris baru: keempat triwulan NULL (belum diisi), bukan 0', JSON.stringify(triwulan(rn)) === '[null,null,null,null]', JSON.stringify(triwulan(rn)))
+  await RA.updateQuarter(idN, 2, 4, 0, UID, rn.version)
+  rn = await RA.getRencanaAksiById(idN)
+  periksa('Modal TW: 0 tersimpan sebagai 0 nyata', JSON.stringify(triwulan(rn)) === '[null,0,null,null]', JSON.stringify(triwulan(rn)))
+  await RA.updateQuarter(idN, 2, 4, null, UID, rn.version)
+  rn = await RA.getRencanaAksiById(idN)
+  periksa('Modal TW dikosongkan → NULL lagi', rn.q2_realisasi === null, `q2=${rn.q2_realisasi}`)
+  await RA.updateQuarter(idN, 1, 4, 3, UID, rn.version)
+  rn = await RA.getRencanaAksiById(idN)
+  await RA.updateJenis(idN, 'Akumulatif', UID, rn.version)
+  rn = await RA.getRencanaAksiById(idN)
+  periksa('Ganti jenis (tanpa bulanan) tidak mengubah NULL jadi 0', JSON.stringify(triwulan(rn)) === '[3,null,null,null]', JSON.stringify(triwulan(rn)))
+  await RA.resetRealisasi(idN, UID)
+  rn = await RA.getRencanaAksiById(idN)
+  periksa('Reset realisasi → NULL (belum diisi), bukan 0', JSON.stringify(triwulan(rn)) === '[null,null,null,null]', JSON.stringify(triwulan(rn)))
+
+  const idM = await RA.upsertRencanaAksi(dasar({ indikator: 'IND-nol-bulanan', jenis: 'Progres Negatif' }), UID)
+  let rm = await RA.getRencanaAksiById(idM)
+  await RA.updateBulanRealisasi(idM, bulan(null, 0, null, null, null, null, 5), UID, rm.version)
+  rm = await RA.getRencanaAksiById(idM)
+  periksa('Bulanan: TW berisi nol nyata = 0, TW tanpa bulan terisi = NULL',
+    JSON.stringify(triwulan(rm)) === '[0,null,5,null]', JSON.stringify(triwulan(rm)))
+  await RA.updateJenis(idM, 'Akumulatif', UID, rm.version)
+  rm = await RA.getRencanaAksiById(idM)
+  periksa('…ganti jenis menghitung ulang, TW kosong tetap NULL', JSON.stringify(triwulan(rm)) === '[0,null,5,null]', JSON.stringify(triwulan(rm)))
+  // Target bulanan hanya Januari: TW II–IV target tidak punya bulan terisi → tetap 0 (NOT NULL),
+  // tidak ikut aturan "kosong = NULL" milik realisasi.
+  await RA.upsertRencanaAksi(dasar({ id: idM, indikator: 'IND-nol-bulanan', jenis: 'Progres Positif', bulan_target: bulan(5), expected_version: rm.version }), UID)
+  rm = await RA.getRencanaAksiById(idM)
+  periksa('…lewat form Data Entry juga (COALESCE tidak menghidupkan 0)', JSON.stringify(triwulan(rm)) === '[0,null,5,null]', JSON.stringify(triwulan(rm)))
+  const targetTw = [rm.q1_target, rm.q2_target, rm.q3_target, rm.q4_target].map((v) => (v == null ? null : Number(v)))
+  periksa('Target triwulan dari bulan target yang kosong = 0, bukan NULL', JSON.stringify(targetTw) === '[5,0,0,0]', JSON.stringify(targetTw))
+  await RA.updateJenis(idM, 'Akumulatif', UID, rm.version)
+  rm = await RA.getRencanaAksiById(idM)
+  periksa('…juga sesudah ganti jenis', [rm.q2_target, rm.q3_target, rm.q4_target].every((v) => v !== null && Number(v) === 0),
+    JSON.stringify([rm.q1_target, rm.q2_target, rm.q3_target, rm.q4_target]))
+
+  await RA.updateQuarter(idN, 3, 4, 2, UID, (await RA.getRencanaAksiById(idN)).version)
+  await sql`UPDATE rencana_aksi SET tahun = ${TH_SUMBER} WHERE id = ${idN}`
+  await sql`DELETE FROM rencana_aksi WHERE tahun = ${TH_TUJUAN}`
+  await sql`DELETE FROM blud_locks WHERE entity = 'RA_DUPLIKASI' AND key_id IN (${[String(TH_TUJUAN), String(TH_SUMBER)]})`
+  await RA.duplicateYear(TH_SUMBER, TH_TUJUAN, UID)
+  const [salinanNol] = await sql`SELECT q1_realisasi, q2_realisasi, q3_realisasi, q4_realisasi FROM rencana_aksi WHERE tahun = ${TH_TUJUAN} AND indikator = 'IND-nol'`
+  periksa('Salin ke tahun lain: realisasi ikut KOSONG (NULL), bukan 0', salinanNol && JSON.stringify(triwulan(salinanNol)) === '[null,null,null,null]',
+    JSON.stringify(salinanNol && triwulan(salinanNol)))
 }
 
 try {

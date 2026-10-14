@@ -31,7 +31,7 @@ import {
   UpdateQuarterSchema, UpdateBulanRealisasiSchema, BulanBulkSchema,
   UpsertRencanaAksiSchema, UpdateTargetsSchema, ImportCommitSchema,
 } from '../lib/data/rencana-aksi-schemas'
-import { deriveQuartersFromMonthly, realisasiAkhirTahun } from '../app/(dashboard)/rencana-aksi/_lib/types'
+import { deriveQuartersFromMonthly, realisasiAkhirTahun, tulisRealisasi } from '../app/(dashboard)/rencana-aksi/_lib/types'
 import type { RaRow } from '../app/(dashboard)/rencana-aksi/_lib/types'
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -97,6 +97,10 @@ console.log('\nB. Pagar server: nilai yang tersimpan = nilai yang ditampilkan')
 const tw = UpdateQuarterSchema.parse({ id: 1, quarter: 1, target: 10.005, realisasi: 7.567, expected_version: 0 })
 cek('realisasi TW dibulatkan 2 desimal', tw.realisasi === 7.57, `7.567 → ${tw.realisasi}`)
 cek('target TW ikut dibulatkan', tw.target === 10.01, `10.005 → ${tw.target}`)
+const twKosong = UpdateQuarterSchema.parse({ id: 1, quarter: 2, target: 4, realisasi: null, expected_version: 0 })
+const twNol = UpdateQuarterSchema.parse({ id: 1, quarter: 2, target: 4, realisasi: 0, expected_version: 0 })
+cek('realisasi TW kosong tetap null (belum diisi), nol tetap 0', twKosong.realisasi === null && twNol.realisasi === 0,
+  `${twKosong.realisasi} / ${twNol.realisasi} — z.coerce akan menjadikan null 0`)
 
 const bulan = UpdateBulanRealisasiSchema.parse({
   id: 1, expected_version: 0,
@@ -151,7 +155,10 @@ cek('kisi 12 bulan minta 2 desimal', /desimal=\{2\}/.test(kisi))
 cek('kisi masih membaca e.target.value sebagai angka', /parseFloat\(e\.target\.value\)/.test(kisi))
 
 const twSrc = kode(baca(F_TW))
-cek('modal Triwulan: Realisasi 2 desimal', /min=\{0\} desimal=\{2\} required value=\{realisasi\}/.test(twSrc))
+cek('modal Triwulan: Realisasi 2 desimal, boleh kosong (= belum diisi)', /min=\{0\} desimal=\{2\} value=\{realisasi\}/.test(twSrc))
+cek('modal Triwulan: isian kosong dikirim null, bukan 0', /const realisasiNum = realisasi\.trim\(\) === '' \? null :/.test(twSrc))
+cek('modal Triwulan: realisasi belum diisi dimuat sebagai isian kosong, bukan "null"',
+  /setRealisasi\(q\.realisasi == null \? '' : String\(q\.realisasi\)\)/.test(twSrc))
 cek('modal Triwulan: Target ikut 2 desimal', /min=\{0\} desimal=\{2\} required value=\{target\}/.test(twSrc),
   'satu form, satu aturan')
 
@@ -170,24 +177,26 @@ cek('paste blok Excel tetap lewat parseVal', /arr\[m\] = parseVal\(cell\)/.test(
 // ─── E. Tampilan: angka mentah tidak lagi dicetak apa adanya ────────────────
 console.log('\nE. Tampilan angka')
 
-cek('kartu Triwulan: realisasi berkoma', /\{tulisDesimal\(q\.realisasi\)\}/.test(kisi))
+cek('kartu Triwulan: realisasi berkoma', /\{tulisRealisasi\(q\.realisasi\)\}/.test(kisi))
+cek('tulisRealisasi berkoma, nol tetap "0", kosong "—"',
+  tulisRealisasi(7.5) === '7,5' && tulisRealisasi(0) === '0' && tulisRealisasi(null) === '—')
 cek('kartu Triwulan: target berkoma', /\{tulisDesimal\(q\.target\)\}/.test(kisi))
-cek('pratinjau TW otomatis berkoma', /\{tulisDesimal\(derivedRealisasi\[i\]\)\}/.test(kisi))
+cek('pratinjau TW otomatis berkoma', /\{tulisRealisasi\(derivedRealisasi\[i\]\)\}/.test(kisi))
 cek('target bulan di bawah sel berkoma', /target \$\{tulisDesimal\(targetB\)\}/.test(kisi))
-cek('kartu evaluasi berkoma', /value=\{tulisDesimal\(target\)\}/.test(kisi) && /value=\{tulisDesimal\(realisasi\)\}/.test(kisi))
+cek('kartu evaluasi berkoma', /value=\{tulisDesimal\(target\)\}/.test(kisi) && /value=\{tulisRealisasi\(realisasi\)\}/.test(kisi))
 cek('tidak ada lagi {q.realisasi} mentah', !/>\{q\.realisasi\}</.test(kisi))
 cek('tidak ada lagi {realAkhir} mentah di layar utama', !/\{realAkhir\} <span/.test(kisi))
 
 const cetak = kode(baca(F_CETAK))
-cek('tabel Cetak: TW berkoma', /\{tulisDesimal\(r\[`q\$\{q\}_realisasi`\]\)\}/.test(cetak))
-cek('tabel Cetak: realisasi akhir berkoma', /\{tulisDesimal\(realAkhir\)\}/.test(cetak))
+cek('tabel Cetak: TW berkoma', /\{tulisRealisasi\(r\[`q\$\{q\}_realisasi`\]\)\}/.test(cetak))
+cek('tabel Cetak: realisasi akhir berkoma', /\{tulisRealisasi\(realAkhir\)\}/.test(cetak))
 
 const ekspor = kode(baca(F_EKSPOR))
 cek('PDF rekap berkoma', /`\$\{tulisDesimal\(r\.q1_realisasi\)\}\/\$\{tulisDesimal\(r\.q1_target\)\}`/.test(ekspor))
-cek('PDF detail berkoma', /\['Realisasi Akhir Tahun', tulisDesimal\(realAkhir\)\]/.test(ekspor))
+cek('PDF detail berkoma', /\['Realisasi Akhir Tahun', tulisRealisasi\(realAkhir\)\]/.test(ekspor))
 cek('Excel TETAP angka, bukan teks',
-  /q1r: r\.q1_realisasi,/.test(ekspor),
-  'sel Excel harus bisa dihitung')
+  /q1r: r\.q1_realisasi \?\? '—',/.test(ekspor),
+  'sel Excel harus bisa dihitung — "—" hanya untuk yang belum diisi')
 
 // ─── F. Kolom DB tidak berubah ──────────────────────────────────────────────
 console.log('\nF. Skema')
@@ -227,6 +236,7 @@ cek('kosong pada target bulanan tetap null, bukan nol',
 
 cek('tabel Data Entry: RPJMD berkoma', /\{tulisDesimal\(row\.target_rpjmd\)\}/.test(entry))
 cek('tabel Data Entry: tahunan berkoma', /\{tulisDesimal\(row\.target_tahunan\)\}/.test(entry))
+cek('tabel Data Entry: realisasi TW belum diisi "—"', /\{tulisRealisasi\(q\.r\)\}/.test(entry))
 cek('tidak ada lagi {row.target_tahunan} mentah', !/\{row\.target_tahunan\}/.test(entry))
 cek('spanduk "target diubah" berkoma',
   /\{tulisDesimal\(barisAsli\.target_tahunan\)\}/.test(entry) && /\{tulisDesimal\(targetTahunan\)\}/.test(entry),
@@ -247,7 +257,7 @@ cek('TW dari 3 bulan berdesimal dibulatkan', twAkum[0] === 10.37,
   `penjumlahan apa adanya ${1 + 1.04 + 8.33}`)
 cek('bulan kosong dianggap nol saat menjumlah',
   deriveQuartersFromMonthly(bulan12([2.5]), 'Akumulatif')[0] === 2.5)
-cek('triwulan lain tidak ikut terisi', twAkum[1] === 0 && twAkum[2] === 0 && twAkum[3] === 0)
+cek('triwulan lain tidak ikut terisi (null = belum diisi)', twAkum[1] === null && twAkum[2] === null && twAkum[3] === null)
 
 const twSnapshot = deriveQuartersFromMonthly(bulan12([1.11, 2.22, 3.33]), 'Progres Positif')
 cek('Progres: TW = bulan terakhir terisi, tanpa dijumlah', twSnapshot[0] === 3.33)
@@ -266,7 +276,7 @@ const dataLayer = kode(baca(F_DATA))
 cek('penjumlahan klien dibulatkan di tempatnya', /bulatkanDesimal\(part\.reduce/.test(tipe))
 cek('penjumlahan server dibulatkan di tempatnya', /bulatkanDesimal\(part\.reduce/.test(dataLayer),
   'dua salinan rumus — keduanya wajib, kalau tidak layar & DB berbeda pendapat')
-cek('realisasi akhir tahun ikut dibulatkan', /bulatkanDesimal\(qs\.reduce/.test(tipe))
+cek('realisasi akhir tahun ikut dibulatkan', /bulatkanDesimal\(terisi\.reduce/.test(tipe))
 
 // ─── Pagar server untuk target ──────────────────────────────────────────────
 console.log('\nG3. Pagar server: target')

@@ -4,6 +4,7 @@
 import type { HasilTarik, Tautan } from '../tautan';
 import type { AmbilJson } from './umum';
 import { setelanKinerjaRekap, tarikKinerjaRekap, KOLOM_BAWAAN_KINERJA, KOLOM_KINERJA_REKAP } from './kinerja-rekap';
+import { setelanKinerjaLaporan, tarikKinerjaLaporan, kolomBawaanLaporan, kolomLaporan } from './kinerja-laporan';
 import { setelanRenaksiCetak, tarikRenaksiCetak, KOLOM_BAWAAN_RENAKSI, kolomRenaksi } from './renaksi-cetak';
 import type { KolomSumber } from '../tautan';
 
@@ -16,9 +17,10 @@ export interface SumberTabel {
   /** Normalisasi setelan tersimpan (masukan bisa dari payload lama/rusak). */
   setelan:     (raw: unknown, tahunDokumen: number) => Record<string, unknown>;
   tarik:       (setelan: Record<string, unknown>, ambil: AmbilJson, tahunDokumen: number) => Promise<HasilTarik>;
-  /** Kolom yang tersedia tanpa perlu menarik data — untuk pemetaan sebelum pratinjau. */
-  kolom:       () => KolomSumber[];
-  kolomBawaan: string[];
+  /** Kolom yang tersedia tanpa perlu menarik data — untuk pemetaan sebelum pratinjau. Bisa bergantung setelan. */
+  kolom:       (setelan?: Record<string, unknown>) => KolomSumber[];
+  /** Pemetaan bawaan tabel baru (kunci kolom sumber). */
+  kolomBawaan: (setelan?: Record<string, unknown>) => string[];
 }
 
 export const DAFTAR_SUMBER: Record<IdSumber, SumberTabel> = {
@@ -29,7 +31,16 @@ export const DAFTAR_SUMBER: Record<IdSumber, SumberTabel> = {
     setelan: (raw, tahun) => ({ ...setelanKinerjaRekap(raw, tahun) }),
     tarik: (s, ambil, tahun) => tarikKinerjaRekap(setelanKinerjaRekap(s, tahun), ambil),
     kolom: () => KOLOM_KINERJA_REKAP,
-    kolomBawaan: KOLOM_BAWAAN_KINERJA,
+    kolomBawaan: () => KOLOM_BAWAAN_KINERJA,
+  },
+  'kinerja-laporan': {
+    id: 'kinerja-laporan',
+    label: 'E-Anggaran · Laporan per Sumber Dana',
+    modul: 'E-Anggaran',
+    setelan: (raw, tahun) => ({ ...setelanKinerjaLaporan(raw, tahun) }),
+    tarik: (s, ambil, tahun) => tarikKinerjaLaporan(setelanKinerjaLaporan(s, tahun), ambil),
+    kolom: s => kolomLaporan(s),
+    kolomBawaan: s => kolomBawaanLaporan(s),
   },
   'renaksi-cetak': {
     id: 'renaksi-cetak',
@@ -37,9 +48,9 @@ export const DAFTAR_SUMBER: Record<IdSumber, SumberTabel> = {
     modul: 'Rencana Aksi',
     setelan: (raw, tahun) => ({ ...setelanRenaksiCetak(raw, tahun) }),
     tarik: (s, ambil, tahun) => tarikRenaksiCetak(setelanRenaksiCetak(s, tahun), ambil),
-    kolom: kolomRenaksi,
-    kolomBawaan: KOLOM_BAWAAN_RENAKSI,
+    kolom: () => kolomRenaksi(),
+    kolomBawaan: () => KOLOM_BAWAAN_RENAKSI,
   },
 };
 
-export const URUTAN_SUMBER: IdSumber[] = ['kinerja-rekap', 'renaksi-cetak'];
+export const URUTAN_SUMBER: IdSumber[] = ['kinerja-rekap', 'kinerja-laporan', 'renaksi-cetak'];

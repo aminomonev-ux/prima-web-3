@@ -129,6 +129,8 @@ export interface CetakColumn {
   align: 'left' | 'right' | 'center';
   money?: boolean;
   persen?: boolean;
+  /** Kolom realisasi: `null` = belum diisi → ditulis "—", beda dari nol. */
+  realisasi?: boolean;
   value: (h: HierarchyRow, rollup: RaRow[]) => string | number | null;
 }
 
@@ -140,7 +142,7 @@ export function tulisCapaian(p: number | null): string {
 /** Teks sel PDF — format yang sama dengan sel di layar Cetak. */
 export function tulisSelCetak(c: CetakColumn, v: string | number | null): string {
   if (c.persen && typeof v !== 'string') return tulisCapaian(v);
-  if (v == null) return '';
+  if (v == null) return c.realisasi ? '—' : '';
   if (typeof v !== 'number') return v;
   if (c.money) return v.toLocaleString('id-ID');
   return tulisDesimal(v);
@@ -184,7 +186,7 @@ export function cetakHeader(f: CetakFilter): CetakHeader {
     for (const q of [1, 2, 3, 4] as const) {
       const sub: CetakColumn[] = [];
       if (showT) sub.push({ key: `tw${q}t`, header: 'T', align: 'right', value: h => h.source[`q${q}_target`] });
-      if (showR) sub.push({ key: `tw${q}r`, header: 'R', align: 'right', value: h => h.source[`q${q}_realisasi`] });
+      if (showR) sub.push({ key: `tw${q}r`, header: 'R', align: 'right', realisasi: true, value: h => h.source[`q${q}_realisasi`] });
       twQuarters.push({ q, sub });
     }
   }
@@ -192,7 +194,7 @@ export function cetakHeader(f: CetakFilter): CetakHeader {
   const tail: CetakColumn[] = [];
   if (showReal) {
     tail.push(
-      { key: 'akhir', header: 'Real Akhir', align: 'right', value: h => realisasiAkhirTahun(h.source) },
+      { key: 'akhir', header: 'Real Akhir', align: 'right', realisasi: true, value: h => realisasiAkhirTahun(h.source) },
       // Kolom ini dulu hanya ada di tabel layar — PDF & Excel melompat dari Real Akhir ke Anggaran.
       { key: 'capaian', header: 'Capaian', align: 'right', persen: true, value: h => capaianTahunan(h.source) },
     );

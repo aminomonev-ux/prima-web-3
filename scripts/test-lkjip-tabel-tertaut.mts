@@ -5,6 +5,8 @@
 // G: skema simpan (resep tidak boleh dibuang Zod). H–I: kedua penghubung dengan jawaban API
 // tiruan. J: pemuat Rekap lama vs baru (kinerja-client → lib/kinerja/muat-rekap.ts) HARUS sama.
 // K: sambungan editor (komentar dibuang dulu — L82c).
+// Tahap 2 — L: kolom isian tangan · M: sumber Laporan per sumber dana · N: templat ·
+// O: Periksa kesegaran & penahan Finalisasi.
 //
 // Jalankan: npx tsx scripts/test-lkjip-tabel-tertaut.mts
 
@@ -12,8 +14,13 @@ import { readFileSync } from 'node:fs'
 import {
   selDariNilai, periksaRumusKolom, bangunBadan, pasangBadan, bandingPerbarui, kalimatPerbarui,
   lepasTautan, tulisWaktuTarik, sidikGrafik, jumlahBarisKepala, KOSONG, BATAS_BARIS,
+  ambilIsianTangan, nilaiPerbarui, isianYatim, kalimatIsianYatim, jumlahIsianTangan,
   type HasilTarik, type KolomTaut, type Tautan, type PayloadTabel,
 } from '../lib/lkjip/tautan'
+import { kumpulkanTabelTertaut, periksaKesegaran } from '../lib/lkjip/kesegaran'
+import { tarikKinerjaLaporan, setelanKinerjaLaporan, kolomLaporan, kolomBawaanLaporan } from '../lib/lkjip/sumber/kinerja-laporan'
+import { DAFTAR_TEMPLAT } from '../lib/lkjip/sumber/templat'
+import type { LaporanSumber } from '../app/(dashboard)/kinerja/_types'
 import { displayValue, buildTableMeta, angkaSel, type TabelCell } from '../lib/lkjip/tabel'
 import { TabelPayloadSchema, GrafikPayloadSchema } from '../lib/lkjip/schemas'
 import { tarikKinerjaRekap, setelanKinerjaRekap, KOLOM_KINERJA_REKAP } from '../lib/lkjip/sumber/kinerja-rekap'
@@ -305,7 +312,7 @@ console.log('\nI. Penghubung Renaksi Cetak')
 const raDasar = {
   tahun: 2099, kode: null, tujuan: null, outcome_program: null, outcome_kegiatan: null, outcome_sub_kegiatan: null,
   kegiatan: null, sub_kegiatan: null, satuan: '%', target_rpjmd: 0,
-  q1_target: 0, q1_realisasi: 0, q2_target: 0, q2_realisasi: 0, q3_target: 0, q3_realisasi: 0, q4_target: 0, q4_realisasi: 0,
+  q1_target: 0, q1_realisasi: null, q2_target: 0, q2_realisasi: null, q3_target: 0, q3_realisasi: null, q4_target: 0, q4_realisasi: null,
   anggaran_nominal: null, bulan_target: null, bulan_realisasi: null, version: 1,
 }
 const RA: RaRow[] = [
@@ -336,6 +343,15 @@ const iNdr = bRa.rows.findIndex(r => r[1].v === 'Net Death Rate')
 const iKepuasan = bRa.rows.findIndex(r => r[1].v === 'Indeks Kepuasan')
 ok('I4 tabel Pengukuran Kinerja: sasaran yang punya 2 indikator digabung', bRa.rows[Math.min(iNdr, iKepuasan)][0].rs === 2)
 ok('I5 Progres Negatif belum diisi → "—", bukan 200%', bRa.rows[iNdr][4].v === KOSONG, bRa.rows[iNdr][4].v)
+ok('I5b Real Akhir yang belum diisi → "—", bukan sel kosong', bRa.rows[iNdr][3].v === KOSONG, JSON.stringify(bRa.rows[iNdr][3]))
+const tRaNol = await tarikRenaksiCetak(sRa, async url => {
+  const lv = /level=([a-z-]+)/.exec(url)?.[1] as RaLevel
+  return { ok: true, data: structuredClone(RA.filter(r => r.level === lv).map(r => (r.id === 12 ? { ...r, q1_realisasi: 0 } : r))) }
+})
+const bRaNol = bangunBadan(tRaNol, { kolom: [{ isi: { jenis: 'sumber', kunci: 'indikator' } }, { isi: { jenis: 'sumber', kunci: 'akhir' } }, { isi: { jenis: 'sumber', kunci: 'capaian' } }], sembunyi: [], tebalInduk: false })
+const iNdrNol = bRaNol.rows.findIndex(r => r[0].v === 'Net Death Rate')
+ok('I5c NDR yang memang 0 → Real Akhir 0, Capaian 200%', bRaNol.rows[iNdrNol][1].v === '0' && tampil(bRaNol.rows, iNdrNol, 2) === '200,00%',
+  `${bRaNol.rows[iNdrNol][1].v} / ${tampil(bRaNol.rows, iNdrNol, 2)}`)
 ok('I6 capaian berisi: 84 dari 80 → "105,00%"', tampil(bRa.rows, iKepuasan, 4) === '105,00%', tampil(bRa.rows, iKepuasan, 4))
 ok('I7 catatan menjelaskan "—"', tRa.catatan.some(c => c.includes('Progres Negatif belum diisi')), tRa.catatan.join(' | '))
 ok('I8 pilihan fokus dari data', tRa.fokus.sasaran.join() === 'Meningkatnya Mutu,Menurunnya Kejadian' && tRa.fokus.program.join() === 'Program Mutu')
@@ -345,7 +361,7 @@ ok('I9 tanpa akses Rencana Aksi → kalimat menyebut modulnya', pesanRa.startsWi
 const tFokus = await tarikRenaksiCetak({ ...setelanRenaksiCetak({}, 2099), fProgram: 'Program Mutu' }, ambilRa)
 ok('I10 fokus program menyaring pohon (+ leluhurnya)', tFokus.baris.some(b => b.kunci === 'ra:21') && !tFokus.baris.some(b => b.kunci === 'ra:13'))
 ok('I11 daftar sumber: dua penghubung, kolom bawaan ada di katalognya',
-  Object.values(DAFTAR_SUMBER).every(s => s.kolomBawaan.every(k => s.kolom().some(x => x.kunci === k))))
+  Object.values(DAFTAR_SUMBER).every(s => s.kolomBawaan().every(k => s.kolom().some(x => x.kunci === k))))
 
 // ─── J. Pemuat Rekap lama vs baru ─────────────────────────────────────────────
 console.log('\nJ. Pemuat Rekap: lama (kinerja-client sebelum dipindah) = baru')
@@ -394,14 +410,17 @@ ok('J gagal per sumber kini dilaporkan (dulu diam)', bahanGagal.gagal.some(g => 
 console.log('\nK. Sambungan editor & lain-lain')
 const ed = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
 const tabelEd = ed.slice(ed.indexOf('function TabelEditor('), ed.indexOf('function GambarEditor('))
-ok('K1 Simpan Tabel menyimpan resep juga (payloadSekarang)', tabelEd.includes('onClick={() => onSave(payloadSekarang())}')
-  && tabelEd.includes('...(tautan ? { tautan } : {})'))
-ok('K2 sunting/format/gabung/tempel dikunci di badan tertaut',
+ok('K1 Simpan Tabel menyimpan resep juga — dengan isian tangan terbaru (payloadSekarang)',
+  tabelEd.includes('onClick={() => onSave(payloadSekarang())}')
+  && tabelEd.includes('...(tautan ? { tautan: ambilIsianTangan(tautan, rows.slice(jumlahBarisKepala({ headerRows, rows }))) } : {})'))
+ok('K2 sunting/format/gabung/tempel dikunci di badan tertaut (kecuali kolom isian tangan untuk mengetik)',
   tabelEd.includes('const rectBadan = terkait && !!rect && rect.r2 >= headerRows;')
   && tabelEd.includes('if (!rect || rectBadan) return;')
   && tabelEd.includes('const canMerge = !!rect && !rectBadan')
-  && tabelEd.includes('if (readOnly || diBadan(ri)) return;')
-  && tabelEd.includes("!readOnly && !diBadan(ri) && (e.key === 'Enter'"))
+  && tabelEd.includes('const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c);')
+  && tabelEd.includes('if (readOnly || terkunci(ri, ci)) return;')
+  && tabelEd.includes("!readOnly && !terkunci(ri, ci) && (e.key === 'Enter'")
+  && tabelEd.includes('disabled={!sel || terkunci(sel.ar, sel.ac)}'))
 ok('K3 tombol format memakai kunci badan (Salin tetap boleh)',
   (tabelEd.match(/disabled=\{!rect \|\| rectBadan\}/g) ?? []).length === 14 && tabelEd.includes('data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect}'))
 ok('K4 tambah/hapus baris & kolom dimatikan selama tertaut',
@@ -414,9 +433,11 @@ ok('K5 jumlah baris kepala diubah tanpa memakan baris badan', tabelEd.includes('
 ok('K6 riwayat urungkan dikosongkan saat resep berganti', badan(tabelEd, 'const pasangDanSimpan =').includes('setPast([]); setFuture([]);'))
 const perb = badan(tabelEd, 'async function perbarui(')
 ok('K7 Perbarui: bandingkan dulu, tidak menulis kalau sama, tanya sebelum menulis',
-  perb.indexOf('if (ringkas.sama && metaSama') > 0 && perb.indexOf('if (ringkas.sama && metaSama') < perb.indexOf('await confirmDialog(')
+  perb.indexOf('if (nilai.sama) {') > 0 && perb.indexOf('if (nilai.sama) {') < perb.indexOf('await confirmDialog(')
   && perb.indexOf('await confirmDialog(') < perb.indexOf('pasangDanSimpan(') && /if \(!ok\) return;\s*pasangDanSimpan\(/.test(perb))
-ok('K8 Perbarui memakai resep yang SAMA & tidak menghitung Nomor urut', perb.includes('bangunBadan(hasil, tautan)') && perb.includes('badan, tautan.kolom)'))
+ok('K8 Perbarui memakai penilaian BERSAMA (nilaiPerbarui) & resep sesudahnya',
+  perb.includes('const nilai = nilaiPerbarui(sekarang, hasil);') && perb.includes('tautan: { ...nilai.tautanBaru, ditarikPada:')
+  && perb.includes('kalimatIsianYatim(nilai.yatim,') && !perb.includes('bangunBadan('))
 ok('K9 modal dimuat saat dibuka saja', /const TautanModal = dynamic\(\(\) => import\('\.\/TautanModal'\), \{ ssr: false \}\)/.test(ed))
 ok('K10 keterangan sumber TIDAK masuk Word (docgen tak mengenal tautan)', !/tautan|ringkas|ditarikPada/.test(kode('lib/lkjip/docgen.ts')))
 ok('K11 audit simpan blok menyebut sumbernya', kode('app/api/lkjip/block/route.ts').includes('` · tertaut: ${ringkas.slice(0, 200)}`'))
@@ -435,6 +456,150 @@ const modal = kode('app/(dashboard)/lkjip/[id]/TautanModal.tsx')
 ok('K15 modal berhenti di FORM — tidak memanggil API tulis', !/method:\s*'(POST|PATCH|PUT|DELETE)'/.test(modal) && modal.includes('onTerapkan({ ...dasar, rows: rowsBaru, tautan })'))
 ok('K16 modal menolak Masukkan selama ada masalah (rumus, kolom hilang, batas, basi)',
   modal.includes('if (!hasil || !badan || !rowsBaru || !resep || masalah.length) return;') && modal.includes('disabled={memuat || masalah.length > 0}'))
+
+// ─── L. Kolom isian tangan (Tahap 2) ──────────────────────────────────────────
+console.log('\nL. Kolom isian tangan')
+const hasilT: HasilTarik = {
+  kolom: [{ kunci: 'label', label: 'Uraian', jenis: 'teks' }, { kunci: 'nilai', label: 'Nilai', jenis: 'angka' }], catatan: [], ringkas: 'uji',
+  baris: ['A', 'B', 'C'].map((h, i) => ({ kunci: h.toLowerCase(), label: `Program ${h}`, sel: { label: `Program ${h}`, nilai: i + 1 } })),
+}
+const kolomT: KolomTaut[] = [{ isi: { jenis: 'sumber', kunci: 'label' } }, { isi: { jenis: 'tangan', nilai: { b: 'Kendala anggaran', c: 'Tercapai' } } }]
+const bT = bangunBadan(hasilT, { kolom: kolomT, sembunyi: [], tebalInduk: false })
+ok('L1 isian tangan dipasang per KUNCI baris', bT.rows[0][1].v === '' && bT.rows[1][1].v === 'Kendala anggaran' && bT.rows[2][1].v === 'Tercapai',
+  bT.rows.map(r => r[1].v).join(' | '))
+const bAcak = bangunBadan({ ...hasilT, baris: [hasilT.baris[2], hasilT.baris[0], hasilT.baris[1]] }, { kolom: kolomT, sembunyi: [], tebalInduk: false })
+ok('L2 urutan sumber berubah → isian ikut barisnya, bukan nomor barisnya', bAcak.rows[0][1].v === 'Tercapai' && bAcak.rows[2][1].v === 'Kendala anggaran')
+const bKembar = bangunBadan(hasilT, { kolom: [kolomT[0], { isi: { jenis: 'tangan', nilai: { b: 'Sama', c: 'Sama' } }, gabungSama: true }], sembunyi: [], tebalInduk: false })
+ok('L3 "Gabung sama" tidak berlaku untuk kolom tangan (sel tertutup kehilangan ketikannya)',
+  bKembar.rows[1][1].v === 'Sama' && bKembar.rows[2][1].v === 'Sama' && !bKembar.rows[1][1].rs && !bKembar.rows[2][1].h)
+const tautT: Tautan = { sumber: 'kinerja-rekap', setelan: {}, kolom: kolomT, kunciBaris: bT.kunciBaris, sembunyi: [], tebalInduk: false, ditarikPada: '2099-01-01 00:00', ringkas: 'uji', catatan: [] }
+const nilaiTangan = (t: Tautan, c = 1) => (t.kolom[c].isi as { jenis: 'tangan'; nilai: Record<string, string> }).nilai
+const badanKetik = bT.rows.map((r, i) => r.map((s, c) => (c !== 1 ? s : i === 0 ? { v: 'Baru diketik' } : i === 2 ? { v: '  ' } : s)))
+const tSinkron = ambilIsianTangan(tautT, badanKetik)
+ok('L4 ketikan terbaru masuk peta, yang dikosongkan dibuang', JSON.stringify(nilaiTangan(tSinkron)) === JSON.stringify({ b: 'Kendala anggaran', a: 'Baru diketik' }),
+  JSON.stringify(nilaiTangan(tSinkron)))
+const tSembunyi: Tautan = { ...tautT, kolom: [kolomT[0], { isi: { jenis: 'tangan', nilai: { b: 'Kendala anggaran', z: 'Isian baris tersembunyi' } } }] }
+ok('L5 isian baris yang disembunyikan tidak disentuh (tidak ada di badan)', nilaiTangan(ambilIsianTangan(tSembunyi, bT.rows)).z === 'Isian baris tersembunyi')
+const payloadT: PayloadTabel & { tautan: Tautan } = { judul: '', kolom: ['Uraian', 'Ket'], align: [], headerRows: 0, rows: bT.rows, tautan: tautT }
+const hasilTanpaC: HasilTarik = { ...hasilT, baris: hasilT.baris.slice(0, 2) }
+const nT = nilaiPerbarui(payloadT, hasilTanpaC)
+ok('L6 baris sumber hilang → isiannya yatim, disebut, dan dibuang dari resep baru',
+  nT.yatim.length === 1 && nT.yatim[0].kunci === 'c' && !nT.sama && !('c' in nilaiTangan(nT.tautanBaru)) && nilaiTangan(nT.tautanBaru).b === 'Kendala anggaran')
+ok('L7 kalimat yatim menyebut baris & isinya', kalimatIsianYatim(nT.yatim, { rows: bT.rows, kunciBaris: bT.kunciBaris }).includes('Program C: "Tercapai"'),
+  kalimatIsianYatim(nT.yatim, { rows: bT.rows, kunciBaris: bT.kunciBaris }))
+ok('L8 tanpa perubahan apa pun → sama (isian tangan tidak dihitung sebagai perubahan)', nilaiPerbarui(payloadT, hasilT).sama)
+const nSembunyiHilang = nilaiPerbarui({ ...payloadT, tautan: tSembunyi }, hasilT)
+ok('L9 baris TERSEMBUNYI yang hilang dari sumber: isiannya ikut dibuang, Perbarui tetap menulis',
+  !nSembunyiHilang.sama && nSembunyiHilang.ringkas.sama && isianYatim(tSembunyi, new Set(hasilT.baris.map(b => b.kunci))).map(y => y.kunci).join() === 'z')
+const zT = TabelPayloadSchema.safeParse({ ...payloadT, tautan: tSinkron })
+ok('L10 skema menyimpan isian tangan (tidak dibuang Zod)', zT.success && JSON.stringify(nilaiTangan(zT.data.tautan as Tautan)) === JSON.stringify(nilaiTangan(tSinkron)))
+ok('L11 jumlahIsianTangan', jumlahIsianTangan(kolomT[1]) === 2 && jumlahIsianTangan(kolomT[0]) === 0 && jumlahIsianTangan(null) === 0)
+ok('L12 editor: kolom tangan menolak rumus (nomor baris bergeser tiap Perbarui)',
+  tabelEd.includes("if (diBadan(r) && kolomTangan.has(c) && v.trimStart().startsWith('=')) {") && tabelEd.includes('onChange={e => ubahSel(ri, ci, e.target.value)} />'))
+ok('L13 modal: opsi isian tangan + tanya dulu sebelum isian terbuang',
+  modal.includes('<option value="tangan">') && modal.includes('if (tanganHilang > 0 && !(await confirmDialog({'))
+
+// ─── M. Sumber Laporan per sumber dana ────────────────────────────────────────
+console.log('\nM. E-Anggaran · Laporan per sumber dana')
+const yatimNol = { jumlahBaris: 0, jumlahItem: 0, nominal: 0, contoh: [] }
+const lap = (sumber: SumberSSK, pagu: number, real: number, lain: Partial<LaporanSumber> = {}): LaporanSumber => ({
+  // Target fisik SENGAJA ≠ pagu: kalau sama, "÷ pagu" dan "÷ target" memberi angka yang sama (M4 buta).
+  sumber, total_pagu: pagu, total_target_fisik: pagu * 0.8, total_real_keuangan: real, total_real_fisik: real * 0.9,
+  pct_serapan: pagu > 0 ? Math.round((real / pagu) * 10000) / 100 : 0, pct_fisik: pagu > 0 ? Math.round(((real * 0.9) / pagu) * 10000) / 100 : 0,
+  bulan_terakhir: 3, trend: [], yatim: yatimNol, versi_aktif: { tipe: 'MURNI', seq: 0 }, versi_dinolkan: false, ...lain,
+})
+const LAP: LaporanSumber[] = SUMBER_LIST.map(s => (s === 'GAJI'
+  ? lap('GAJI', 1_000_000_000, 333_333_333, {
+    versi_aktif: { tipe: 'PERUBAHAN', seq: 1 },
+    trend: [1, 2, 3].map(b => ({ bulan: b, real_keuangan: 111_111_111, pct_keuangan: 11.11, akum_keuangan: 111_111_111 * b, akum_pct_keuangan: 11.11 * b, real_fisik: 99_999_999.9, akum_pct_fisik: 10 * b })),
+  })
+  : s === 'BLUD' ? lap('BLUD', 2_000_000_000, 1_500_000_000, { yatim: { jumlahBaris: 2, jumlahItem: 1, nominal: 5_000_000, contoh: [] } })
+    : lap(s, 0, 0)))
+const ambilLap: AmbilJson = async url => {
+  const m = /sumber=([A-Z]+)/.exec(url)
+  return { ok: true, data: m ? LAP.find(x => x.sumber === m[1]) : LAP }
+}
+const tL = await tarikKinerjaLaporan(setelanKinerjaLaporan({}, 2099), ambilLap)
+ok('M1 per sumber dana: hanya sumber yang punya pagu/realisasi, JUMLAH di akhir', tL.baris.map(b => b.kunci).join() === 'lap:GAJI,lap:BLUD,lap:JUMLAH',
+  tL.baris.map(b => b.kunci).join())
+ok('M2 angka baris = angka server apa adanya (layar Laporan)',
+  tL.baris[0].sel.pctKeu === LAP[0].pct_serapan && tL.baris[0].sel.pagu === 1_000_000_000 && tL.baris[0].sel.sisa === 1_000_000_000 - 333_333_333)
+const jmlL = tL.baris[2].sel
+ok('M3 JUMLAH dijumlah dalam RUPIAH lalu persennya diturunkan (L89), bukan rata-rata persen',
+  jmlL.pagu === 3_000_000_000 && jmlL.realKeu === 1_833_333_333 && jmlL.pctKeu === Math.round((1_833_333_333 / 3_000_000_000) * 10000) / 100
+  && jmlL.pctKeu !== (LAP[0].pct_serapan + LAP[1].pct_serapan) / 2, JSON.stringify(jmlL))
+ok('M4 Capaian Fisik JUMLAH = real fisik ÷ PAGU (rumus server), nomornya kosong',
+  jmlL.pctFisik === Math.round(((333_333_333 * 0.9 + 1_500_000_000 * 0.9) / 3_000_000_000) * 10000) / 100 && jmlL.no === null)
+ok('M5 versi acuan ditulis per sumber', tL.baris[0].sel.versi === 'Perubahan-1' && tL.ringkas.includes('GAJI Perubahan-1') && tL.ringkas.includes('BLUD Murni'), tL.ringkas)
+ok('M6 catatan: yatim & sumber tanpa data disebut',
+  tL.catatan.some(c => c.includes('TIDAK ikut dihitung') && c.includes('(BLUD)')) && tL.catatan.some(c => c.includes('HARLEP') && c.includes('tidak ditampilkan')),
+  tL.catatan.join(' | '))
+const tB = await tarikKinerjaLaporan(setelanKinerjaLaporan({ tampilan: 'bulanan', sumber: 'GAJI' }, 2099), ambilLap)
+ok('M7 per bulan: 12 bulan + JUMLAH', tB.baris.length === 13 && tB.baris[12].kunci === 'bln:JUMLAH' && tB.baris[0].label === 'Januari', tB.baris[0].label)
+ok('M8 bulan tanpa realisasi → kosong, bukan 0', tB.baris[11].sel.realKeu === null && tB.baris[2].sel.akumKeu === 333_333_333)
+ok('M9 JUMLAH per bulan = total & persen server', tB.baris[12].sel.realKeu === LAP[0].total_real_keuangan && tB.baris[12].sel.akumPctKeu === LAP[0].pct_serapan)
+let pesanLap = ''
+try { await tarikKinerjaLaporan(setelanKinerjaLaporan({}, 2099), async () => ({ ok: false, status: 403, message: 'Akses ditolak' })) } catch (e) { pesanLap = (e as Error).message }
+ok('M10 tanpa akses → kalimat menyebut modulnya', pesanLap.startsWith('Butuh akses E-Anggaran'), pesanLap)
+ok('M11 kolom & kolom bawaan mengikuti tampilan',
+  kolomLaporan({ tampilan: 'bulanan' }).some(k => k.kunci === 'akumKeu') && !kolomLaporan({}).some(k => k.kunci === 'akumKeu')
+  && (['sumber', 'bulanan'] as const).every(t => kolomBawaanLaporan({ tampilan: t }).every(k => kolomLaporan({ tampilan: t }).some(x => x.kunci === k))))
+ok('M12 terdaftar di DAFTAR_SUMBER & diterima skema simpan',
+  DAFTAR_SUMBER['kinerja-laporan'].modul === 'E-Anggaran' && TabelPayloadSchema.safeParse({ ...payloadT, tautan: { ...tautT, sumber: 'kinerja-laporan' } }).success)
+ok('M13 memakai endpoint layar Laporan yang sudah ada (nol endpoint baru)', kode('lib/lkjip/sumber/kinerja-laporan.ts').includes('`/api/kinerja/laporan?tahun=${tahun}`'))
+
+// ─── N. Templat satu klik ────────────────────────────────────────────────────
+console.log('\nN. Templat')
+for (const t of DAFTAR_TEMPLAT) {
+  const s = DAFTAR_SUMBER[t.sumber].setelan({ ...t.setelan, tahun: 2099 }, 2099)
+  const katalog = new Set(DAFTAR_SUMBER[t.sumber].kolom(s).map(k => k.kunci))
+  ok(`N ${t.id}: kolom menunjuk kolom sumber yang ada & rumusnya sah`,
+    t.kolom.length <= 12 && t.kolom.every((k, i) => (k.taut.isi.jenis === 'sumber' ? katalog.has(k.taut.isi.kunci)
+      : k.taut.isi.jenis === 'rumus' ? !('galat' in periksaRumusKolom(k.taut.isi.ekspresi, t.kolom.length, i)) : true)))
+  ok(`N ${t.id}: setelannya lolos normalisasi tanpa berubah arti`, Object.entries(t.setelan).every(([k, v]) => JSON.stringify(s[k]) === JSON.stringify(v)))
+}
+const tProg = DAFTAR_TEMPLAT.find(t => t.id === 'anggaran-program')!
+const bProg = bangunBadan({ kolom: KOLOM_KINERJA_REKAP, catatan: [], ringkas: 'x',
+  baris: [{ kunci: '["T"]', label: 'RSJD', tebal: true, sel: { label: 'RSJD', pagu: 1000, realKeu: 400, pctKeu: 40 } }] },
+{ kolom: tProg.kolom.map(k => k.taut), sembunyi: [], tebalInduk: true })
+ok('N anggaran-program: Sisa = Anggaran − Realisasi', angkaSel(bProg.rows, 0, 4) === 600 && bProg.kolomHilang.length === 0, String(angkaSel(bProg.rows, 0, 4)))
+const tPk = DAFTAR_TEMPLAT.find(t => t.id === 'pengukuran-kinerja')!
+const bPk = bangunBadan(await tarikRenaksiCetak(setelanRenaksiCetak(tPk.setelan, 2099), ambilRa), { kolom: tPk.kolom.map(k => k.taut), sembunyi: [], tebalInduk: true })
+ok('N pengukuran-kinerja: sasaran ber-2 indikator digabung, nomor urut per indikator',
+  bPk.rows.some(r => (r[1].rs ?? 1) === 2) && bPk.rows.map(r => r[0].v).join() === '1,2,3' && bPk.kolomHilang.length === 0, bPk.rows.map(r => r[0].v).join())
+const tSd = DAFTAR_TEMPLAT.find(t => t.id === 'anggaran-sumber-dana')!
+const bSd = bangunBadan(tL, { kolom: tSd.kolom.map(k => k.taut), sembunyi: [], tebalInduk: true })
+ok('N anggaran-sumber-dana: JUMLAH di akhir, tanpa nomor, tebal', bSd.rows[2][0].v === '' && bSd.rows[2][1].v === 'JUMLAH' && !!bSd.rows[2][1].b && bSd.rows[0][0].v === '1')
+ok('N modal: templat hanya untuk tabel baru & cuma mengisi form', modal.includes('{kosongAwal && (') && badan(modal, 'function pakaiTemplat(').includes('void tarik(t.sumber, s);'))
+
+// ─── O. Periksa kesegaran & Finalisasi ────────────────────────────────────────
+console.log('\nO. Periksa tabel tertaut')
+const blokTabel = (id: number, tautan?: Tautan) => ({ id, tipe: 'TABEL', payload: { judul: `T${id}`, kolom: ['Uraian', 'Ket'], align: [], headerRows: 0, rows: bT.rows, ...(tautan ? { tautan } : {}) } })
+const dokO = [
+  { id: 1, nomor: 'BAB III', judul: 'AKUNTABILITAS', blocks: [blokTabel(11, tautT), blokTabel(12), { id: 13, tipe: 'NARASI', payload: { html: '' } }] },
+  { id: 2, nomor: '3.2', judul: 'Anggaran', blocks: [blokTabel(21, { ...tautT }), blokTabel(22, { ...tautT, sumber: 'renaksi-cetak', setelan: { x: 1 } })] },
+]
+const daftarO = kumpulkanTabelTertaut(dokO)
+ok('O1 hanya blok TABEL bertautan yang dikumpulkan, beserta letaknya', daftarO.map(t => t.blockId).join() === '11,21,22' && daftarO[0].letak === 'BAB III AKUNTABILITAS')
+let jumlahTarik = 0
+const hasilO = await periksaKesegaran(daftarO, async sumber => {
+  jumlahTarik++
+  if (sumber === 'renaksi-cetak') throw Object.assign(new Error('Butuh akses Rencana Aksi.'), { name: 'GagalTarik' })
+  return hasilT
+})
+ok('O2 resep sumber yang sama ditarik SEKALI', jumlahTarik === 2, String(jumlahTarik))
+ok('O3 status sama / gagal dengan kalimat modulnya',
+  hasilO[0].status === 'sama' && hasilO[1].status === 'sama' && hasilO[2].status === 'gagal' && hasilO[2].pesan === 'Butuh akses Rencana Aksi.')
+const hasilO2 = await periksaKesegaran(daftarO.slice(0, 1), async () => hasilTanpaC)
+const ringkasO2 = hasilO2[0].status === 'berubah' ? hasilO2[0].ringkas : ''
+ok('O4 berubah: kalimat menyebut baris hilang & isian tangan yatim', ringkasO2.includes('1 baris hilang') && ringkasO2.includes('1 isian tangan kehilangan barisnya'), ringkasO2)
+const finalFn = badan(ed, 'async function finalize(')
+ok('O5 Finalisasi memeriksa tabel tertaut DULU & menawarkan memperbaruinya',
+  finalFn.indexOf('await jalankanPeriksa(tertaut)') > 0 && finalFn.indexOf('await jalankanPeriksa(tertaut)') < finalFn.indexOf('await kirimFinal()')
+  && finalFn.includes("confirmLabel: 'Lihat & perbarui dulu', altLabel: 'Tetap finalisasi'"))
+ok('O6 panel Periksa hanya membaca (tak ada simpan blok di jalurnya)',
+  !badan(ed, 'async function bukaPeriksa(').includes('saveBlock') && !badan(ed, 'async function jalankanPeriksa(').includes('saveBlock') && !kode('lib/lkjip/kesegaran.ts').includes('fetch('))
+ok('O7 Periksa & tombol Perbarui memakai penilaian yang SAMA', kode('lib/lkjip/kesegaran.ts').includes('nilaiPerbarui(t.payload, await tarikan.get(kunci)!)'))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
 if (gagal.length) { console.log('GAGAL: ' + gagal.join(' | ')); process.exit(1) }

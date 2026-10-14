@@ -171,9 +171,9 @@ async function getBludSummary(tahun: number, bolehSerapan: boolean): Promise<Blu
   };
 }
 
-function sumQuarters(r: { q1_target: number; q2_target: number; q3_target: number; q4_target: number; q1_realisasi: number; q2_realisasi: number; q3_realisasi: number; q4_realisasi: number }) {
+function sumQuarters(r: { q1_target: number; q2_target: number; q3_target: number; q4_target: number; q1_realisasi: number | null; q2_realisasi: number | null; q3_realisasi: number | null; q4_realisasi: number | null }) {
   const target = r.q1_target + r.q2_target + r.q3_target + r.q4_target;
-  const real   = r.q1_realisasi + r.q2_realisasi + r.q3_realisasi + r.q4_realisasi;
+  const real   = (r.q1_realisasi ?? 0) + (r.q2_realisasi ?? 0) + (r.q3_realisasi ?? 0) + (r.q4_realisasi ?? 0);
   return { target, real };
 }
 

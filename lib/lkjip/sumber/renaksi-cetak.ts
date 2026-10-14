@@ -8,7 +8,7 @@ import type { RaLevel, RaRow } from '@/app/(dashboard)/rencana-aksi/_lib/types';
 import {
   ALL_LEVELS, DEFAULT_CETAK_FILTER, buildCetakRows, cetakHeader, cetakRollupBase, type CetakFilter,
 } from '@/app/(dashboard)/rencana-aksi/_lib/cetak-filter';
-import type { HasilTarik, JenisKolomSumber, KolomSumber } from '../tautan';
+import { KOSONG, type HasilTarik, type JenisKolomSumber, type KolomSumber } from '../tautan';
 import { GagalTarik, pesanDitolak, angkaDalam, type AmbilJson } from './umum';
 
 export interface SetelanRenaksiCetak {
@@ -100,7 +100,10 @@ export async function tarikRenaksiCetak(s: SetelanRenaksiCetak, ambil: AmbilJson
       kunci: `ra:${h.source.id}`,
       label: h.source.indikator,
       indent: s.mode === 'hirarki' ? KEDALAMAN[h.source.level] : 0,
-      sel: Object.fromEntries(kolomSpek.map(c => [c.key, c.value(h, rollup)])),
+      sel: Object.fromEntries(kolomSpek.map(c => {
+        const v = c.value(h, rollup);
+        return [c.key, c.realisasi && v == null ? KOSONG : v];
+      })),
     })),
     catatan,
     ringkas: `Renaksi · Cetak ${s.tahun} · ${levelTampil}${fokus ? ` · fokus "${fokus}"` : ''}`,

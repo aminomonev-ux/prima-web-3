@@ -4,20 +4,22 @@
 // baru lewat `onTerapkan`; yang menulis ke server tetap TabelEditor (simpan blok biasa).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Plus, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { X, Plus, ChevronLeft, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { DAFTAR_SUMBER, URUTAN_SUMBER, type IdSumber } from '@/lib/lkjip/sumber';
 import { GagalTarik } from '@/lib/lkjip/sumber/umum';
 import { LABEL_KEDALAMAN } from '@/lib/lkjip/sumber/kinerja-rekap';
 import { LABEL_LEVEL, type PilihanFokus } from '@/lib/lkjip/sumber/renaksi-cetak';
+import { DAFTAR_TEMPLAT, type TemplatTabel } from '@/lib/lkjip/sumber/templat';
 import {
-  bangunBadan, pasangBadan, periksaRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, BATAS_KOLOM,
+  bangunBadan, pasangBadan, periksaRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, jumlahIsianTangan, BATAS_KOLOM,
   type HasilTarik, type KolomTaut, type KolomSumber, type PayloadTabel, type Tautan, type FormatKolom,
 } from '@/lib/lkjip/tautan';
 import { displayValue, buildTableMeta, colLabel, type TabelCell, type TabelAlign } from '@/lib/lkjip/tabel';
-import { CRR_BULAN_LABELS } from '@/app/(dashboard)/kinerja/_utils';
+import { CRR_BULAN_LABELS, SUMBER_LIST } from '@/app/(dashboard)/kinerja/_utils';
 import { ALL_LEVELS } from '@/app/(dashboard)/rencana-aksi/_lib/cetak-filter';
 import type { RaLevel } from '@/app/(dashboard)/rencana-aksi/_lib/types';
 
@@ -28,7 +30,8 @@ interface Props {
   onTutup: () => void;
 }
 
-type KolomForm = { judul: string; taut: KolomTaut | null; align: TabelAlign; lebar?: number; asal: number | null };
+/** `tanganAsal`: isian tangan kolom ini saat modal dibuka — kembali kalau isinya diganti lalu dipilih tangan lagi. */
+type KolomForm = { judul: string; taut: KolomTaut | null; align: TabelAlign; lebar?: number; asal: number | null; tanganAsal?: Record<string, string> };
 type HasilModal = HasilTarik & { fokus?: PilihanFokus };
 
 const LEBAR_BAWAAN = 140;
@@ -41,16 +44,20 @@ function tabelKosong(p: PayloadTabel): boolean {
   return (p.headerRows ?? 0) === 0 && p.kolom.every(judulBawaan) && p.rows.every(r => r.every(c => !c.v.trim()));
 }
 
-function kolomAwal(p: PayloadTabel, sumberId: IdSumber): KolomForm[] {
-  const katalog = DAFTAR_SUMBER[sumberId].kolom();
+function kolomAwal(p: PayloadTabel, sumberId: IdSumber, setelan: Record<string, unknown>): KolomForm[] {
+  const katalog = DAFTAR_SUMBER[sumberId].kolom(setelan);
   const perKunci = new Map(katalog.map(k => [k.kunci, k]));
   if (p.tautan) {
-    return p.kolom.map((judul, i) => ({
-      judul, taut: p.tautan!.kolom[i] ?? null, align: (p.align[i] as TabelAlign) ?? 'left', lebar: p.colWidths?.[i], asal: i,
-    }));
+    return p.kolom.map((judul, i) => {
+      const taut = p.tautan!.kolom[i] ?? null;
+      return {
+        judul, taut, align: (p.align[i] as TabelAlign) ?? 'left', lebar: p.colWidths?.[i], asal: i,
+        tanganAsal: taut?.isi.jenis === 'tangan' ? taut.isi.nilai : undefined,
+      };
+    });
   }
   if (tabelKosong(p)) {
-    return DAFTAR_SUMBER[sumberId].kolomBawaan.map(kunci => ({
+    return DAFTAR_SUMBER[sumberId].kolomBawaan(setelan).map(kunci => ({
       judul: perKunci.get(kunci)?.label ?? kunci,
       taut: { isi: { jenis: 'sumber', kunci } },
       align: alignJenis(perKunci.get(kunci)),
@@ -77,17 +84,20 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   const [sumberId, setSumberId] = useState<IdSumber>(awalSumber);
   const [setelan, setSetelan] = useState<Record<string, unknown>>(
     () => DAFTAR_SUMBER[awalSumber].setelan(payload.tautan?.setelan, tahunDokumen));
-  const [kolom, setKolom] = useState<KolomForm[]>(() => kolomAwal(payload, awalSumber));
+  const [kolom, setKolom] = useState<KolomForm[]>(
+    () => kolomAwal(payload, awalSumber, DAFTAR_SUMBER[awalSumber].setelan(payload.tautan?.setelan, tahunDokumen)));
   const [sembunyi, setSembunyi] = useState<string[]>(payload.tautan?.sembunyi ?? []);
   const [tebalInduk, setTebalInduk] = useState(payload.tautan?.tebalInduk ?? true);
   const [hasil, setHasil] = useState<HasilModal | null>(null);
   const [ditarikDengan, setDitarikDengan] = useState('');
   const [memuat, setMemuat] = useState(false);
   const [galat, setGalat] = useState('');
-  const kosongAwal = useRef(tabelKosong(payload) && !payload.tautan);
+  const [judulTemplat, setJudulTemplat] = useState('');
+  // Keadaan saat modal DIBUKA — tidak ikut berubah selama modal terbuka.
+  const [kosongAwal] = useState(() => tabelKosong(payload) && !payload.tautan);
 
   const sumber = DAFTAR_SUMBER[sumberId];
-  const katalog = hasil?.kolom ?? sumber.kolom();
+  const katalog = hasil?.kolom ?? sumber.kolom(setelan);
   const perKunci = useMemo(() => new Map(katalog.map(k => [k.kunci, k])), [katalog]);
   const grupKatalog = useMemo(() => {
     const g = new Map<string, KolomSumber[]>();
@@ -98,12 +108,13 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   const sidikSetelan = JSON.stringify([sumberId, setelan]);
   const basi = hasil !== null && ditarikDengan !== sidikSetelan;
 
-  async function tarik() {
+  // Argumen eksplisit untuk templat: state sumber/setelan yang baru disetel belum berlaku di klik yang sama.
+  async function tarik(id: IdSumber = sumberId, s: Record<string, unknown> = setelan) {
     setMemuat(true); setGalat('');
     try {
-      const h = await sumber.tarik(setelan, url => fetchJson<unknown>(url), tahunDokumen);
+      const h = await DAFTAR_SUMBER[id].tarik(s, url => fetchJson<unknown>(url), tahunDokumen);
       setHasil(h);
-      setDitarikDengan(sidikSetelan);
+      setDitarikDengan(JSON.stringify([id, s]));
     } catch (e) {
       setHasil(null);
       setGalat(e instanceof GagalTarik ? e.message : 'Gagal menarik data. Coba lagi.');
@@ -124,13 +135,22 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
 
   function gantiSumber(id: IdSumber) {
     if (id === sumberId) return;
-    const katalogBaru = new Set(DAFTAR_SUMBER[id].kolom().map(k => k.kunci));
+    const setelanBaru = DAFTAR_SUMBER[id].setelan(undefined, tahunDokumen);
+    const katalogBaru = new Set(DAFTAR_SUMBER[id].kolom(setelanBaru).map(k => k.kunci));
     setSumberId(id);
-    setSetelan(DAFTAR_SUMBER[id].setelan(undefined, tahunDokumen));
+    setSetelan(setelanBaru);
     setHasil(null); setGalat(''); setSembunyi([]);
-    setKolom(kosongAwal.current
-      ? kolomAwal({ ...payload, tautan: undefined }, id)
+    setKolom(kosongAwal
+      ? kolomAwal({ ...payload, tautan: undefined }, id, setelanBaru)
       : ks => ks.map(k => (k.taut?.isi.jenis === 'sumber' && !katalogBaru.has(k.taut.isi.kunci) ? { ...k, taut: null } : k)));
+  }
+
+  function pakaiTemplat(t: TemplatTabel) {
+    const s = DAFTAR_SUMBER[t.sumber].setelan({ ...t.setelan, tahun: tahunDokumen }, tahunDokumen);
+    setSumberId(t.sumber); setSetelan(s); setSembunyi([]); setTebalInduk(true);
+    setKolom(t.kolom.map(k => ({ judul: k.judul, taut: k.taut, align: k.align, asal: null })));
+    setJudulTemplat(`${t.label} Tahun ${tahunDokumen}`);
+    void tarik(t.sumber, s);
   }
 
   const ubahKolom = (i: number, f: (k: KolomForm) => KolomForm) => setKolom(ks => ks.map((k, j) => (j === i ? f(k) : k)));
@@ -139,6 +159,12 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
       if (nilai === '') return { ...k, taut: null };
       if (nilai === 'nomor') return { ...k, taut: { isi: { jenis: 'nomor' } }, judul: judulBawaan(k.judul) ? 'No' : k.judul, align: judulBawaan(k.judul) ? 'center' : k.align };
       if (nilai === 'rumus') return { ...k, taut: { isi: { jenis: 'rumus', ekspresi: k.taut?.isi.jenis === 'rumus' ? k.taut.isi.ekspresi : '' } } };
+      if (nilai === 'tangan') {
+        return {
+          ...k, taut: { isi: { jenis: 'tangan', nilai: k.tanganAsal ?? {} } },
+          judul: judulBawaan(k.judul) ? 'Keterangan' : k.judul, align: judulBawaan(k.judul) ? 'left' : k.align,
+        };
+      }
       const kunci = nilai.slice(2);
       const ks = perKunci.get(kunci);
       const judulBaru = judulBawaan(k.judul) || k.asal === null;
@@ -175,6 +201,7 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
     [payload.rows, hr, kolom]);
   const dasar: PayloadTabel = {
     ...payload,
+    judul: payload.judul.trim() ? payload.judul : judulTemplat,
     kolom: kolom.map(k => k.judul),
     align: kolom.map(k => k.align),
     colWidths: kolom.map(k => k.lebar ?? LEBAR_BAWAAN),
@@ -191,8 +218,19 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   if (badan?.kolomHilang.length) masalah.push(`Kolom ${badan.kolomHilang.map(colLabel).join(', ')} menunjuk kolom sumber yang tidak ada lagi — pilih isinya lagi.`);
   if (badan && !rowsBaru) masalah.push(pesanLewatBatas(badan.rows.length, hr));
 
-  function masukkan() {
+  // Isian tangan yang kolomnya dihapus atau diganti isinya — ketikan orang, jadi ditanyakan dulu.
+  const tanganHilang = (payload.tautan?.kolom ?? []).reduce((n, kt, i) => {
+    const tetap = kolom.some(k => k.asal === i && k.taut?.isi.jenis === 'tangan');
+    return tetap ? n : n + jumlahIsianTangan(kt);
+  }, 0);
+
+  async function masukkan() {
     if (!hasil || !badan || !rowsBaru || !resep || masalah.length) return;
+    if (tanganHilang > 0 && !(await confirmDialog({
+      title: 'Buang isian tangan?',
+      message: `${tanganHilang} isian yang diketik di kolom isian tangan ikut hilang karena kolomnya dihapus atau isinya diganti.`,
+      confirmLabel: 'Buang & masukkan', variant: 'warning',
+    }))) return;
     const tautan: Tautan = {
       sumber: sumberId, setelan, kolom: resep.kolom, kunciBaris: badan.kunciBaris,
       sembunyi, tebalInduk, ditarikPada: waktuSekarangWIB().slice(0, 16), ringkas: hasil.ringkas, catatan: hasil.catatan,
@@ -204,6 +242,12 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   const adaTingkat = !!hasil?.baris.some(b => (b.indent ?? 0) > 0);
   const sembunyiSet = new Set(sembunyi);
   const setS = (kunci: string, nilai: unknown) => setSetelan(s => ({ ...s, [kunci]: nilai }));
+  // Laporan: tampilan per sumber dan per bulan punya kolom berbeda — tabel baru ikut kolom bawaannya.
+  function gantiTampilan(v: string) {
+    const s = { ...setelan, tampilan: v };
+    setSetelan(s); setSembunyi([]);
+    if (kosongAwal) setKolom(kolomAwal({ ...payload, tautan: undefined }, sumberId, s));
+  }
 
   return (
     <div className="lk-modal-bg" onClick={() => !memuat && onTutup()}>
@@ -215,6 +259,20 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
         </div>
 
         <div className="lk-taut-body">
+          {kosongAwal && (
+            <section className="lk-taut-sec">
+              <div className="lk-taut-judul"><Sparkles size={12} style={{ display: 'inline', verticalAlign: '-0.125em' }} /> Mulai cepat dari templat</div>
+              <div className="lk-taut-templat">
+                {DAFTAR_TEMPLAT.map(t => (
+                  <button key={t.id} type="button" onClick={() => pakaiTemplat(t)} disabled={memuat}>
+                    <b>{t.label}</b><span>{t.keterangan}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="lk-hint">Templat mengisi sumber, setelan, dan kolom di bawah — semuanya masih bisa diubah sebelum dimasukkan.</p>
+            </section>
+          )}
+
           <section className="lk-taut-sec">
             <div className="lk-taut-judul">1. Sumber data</div>
             <div className="lk-taut-grid">
@@ -244,6 +302,22 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
                       {Object.entries(LABEL_KEDALAMAN).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                     </select>
                   </label>
+                </>
+              ) : sumberId === 'kinerja-laporan' ? (
+                <>
+                  <label>Tampilan
+                    <select value={String(setelan.tampilan)} onChange={e => gantiTampilan(e.target.value)}>
+                      <option value="sumber">Per sumber dana (+ jumlah)</option>
+                      <option value="bulanan">Per bulan, satu sumber dana</option>
+                    </select>
+                  </label>
+                  {setelan.tampilan === 'bulanan' && (
+                    <label>Sumber dana
+                      <select value={String(setelan.sumber)} onChange={e => setS('sumber', e.target.value)}>
+                        {SUMBER_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </label>
+                  )}
                 </>
               ) : (
                 <>
@@ -319,13 +393,20 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
                       <optgroup label="Lainnya">
                         <option value="nomor">Nomor urut</option>
                         <option value="rumus">Rumus (dari kolom lain)…</option>
+                        <option value="tangan">Isian tangan (diketik sendiri)</option>
                       </optgroup>
                     </select>
                     {isi?.jenis === 'rumus' && (
                       <input className="lk-taut-rumus" value={isi.ekspresi} placeholder="mis. =C-D atau =D/C" aria-label={`Rumus kolom ${colLabel(i)}`}
                         onChange={e => ubahTaut(i, { isi: { jenis: 'rumus', ekspresi: e.target.value } })} />
                     )}
-                    {isi && isi.jenis !== 'nomor' && (
+                    {isi?.jenis === 'tangan' && (
+                      <span className="lk-taut-ket">
+                        Diketik langsung di tabel; isiannya ikut barisnya saat Perbarui
+                        {jumlahIsianTangan(k.taut) > 0 ? ` · ${jumlahIsianTangan(k.taut)} terisi` : ''}.
+                      </span>
+                    )}
+                    {isi && isi.jenis !== 'nomor' && isi.jenis !== 'tangan' && (
                       <>
                         <select value={formatEfektif} aria-label="Format angka" onChange={e => ubahTaut(i, { format: e.target.value as FormatKolom })}>
                           <option value="teks">Teks</option><option value="angka">Angka</option>
@@ -338,7 +419,7 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
                         </select>
                       </>
                     )}
-                    {isi && (
+                    {isi && isi.jenis !== 'tangan' && (
                       <label className="lk-taut-inline" data-tooltip="Baris berurutan yang isinya sama digabung jadi satu sel (mis. Sasaran yang punya beberapa indikator)" data-tooltip-pos="below">
                         <input type="checkbox" checked={!!k.taut?.gabungSama} onChange={e => ubahTaut(i, { gabungSama: e.target.checked })} />Gabung sama
                       </label>
@@ -474,6 +555,12 @@ const TAUT_CSS = `
   .lk-taut-daftar { max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 8px; border: 1px solid #0C447C; border-radius: 8px; padding: 6px; background: #020F1C; }
   .lk-taut-inline.baris { padding-top: 2px; padding-bottom: 2px; }
   .lk-taut-inline .tebal { font-weight: 700; color: #E6F1FB; }
+  .lk-taut-templat { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+  .lk-taut-templat button { display: flex; flex-direction: column; gap: 3px; text-align: left; background: #020F1C; border: 1px solid #0C447C; border-radius: 10px; padding: 9px 11px; color: #E6F1FB; cursor: pointer; font-size: 12.5px; }
+  .lk-taut-templat button span { font-size: 11px; color: #85B7EB; line-height: 1.4; }
+  .lk-taut-templat button:hover:not(:disabled) { border-color: #7C5CFC; }
+  .lk-taut-templat button:disabled { opacity: .5; cursor: not-allowed; }
+  .lk-taut-ket { font-size: 11px; color: #85B7EB; }
   .lk-taut-pratinjau { overflow-x: auto; }
   .lk-taut-pratinjau table { border-collapse: collapse; font-size: 11.5px; min-width: 100%; }
   .lk-taut-pratinjau th, .lk-taut-pratinjau td { border: 1px solid #0C447C; padding: 4px 6px; vertical-align: top; color: #E6F1FB; }
@@ -490,6 +577,9 @@ const TAUT_CSS = `
   [data-theme="light"] .lk-taut-inline .tebal { color: #0F0F12; }
   [data-theme="light"] .lk-taut select, [data-theme="light"] .lk-taut .lk-taut-grid input, [data-theme="light"] .lk-taut input.lk-taut-nama, [data-theme="light"] .lk-taut input.lk-taut-rumus { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
   [data-theme="light"] .lk-taut-ctl button, [data-theme="light"] .lk-taut-tambah { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
+  [data-theme="light"] .lk-taut-templat button { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
+  [data-theme="light"] .lk-taut-templat button span, [data-theme="light"] .lk-taut-ket { color: #6B7280; }
+  [data-theme="light"] .lk-taut-templat button:hover:not(:disabled) { border-color: #7C5CFC; }
   [data-theme="light"] .lk-taut-ok { color: #0E7A55; }
   [data-theme="light"] .lk-taut-peringatan, [data-theme="light"] .lk-taut-catatan, [data-theme="light"] .lk-taut-masalah { color: #B45309; }
   [data-theme="light"] .lk-taut-galat { color: #B91C1C; }

@@ -69,7 +69,7 @@ export async function apiDelete(id: number): Promise<void> {
   await jsonOrThrow(r);
 }
 
-export async function apiUpdateQuarter(id: number, quarter: 1 | 2 | 3 | 4, target: number, realisasi: number, expected_version: number): Promise<void> {
+export async function apiUpdateQuarter(id: number, quarter: 1 | 2 | 3 | 4, target: number, realisasi: number | null, expected_version: number): Promise<void> {
   const r = await fetch('/api/rencana-aksi', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

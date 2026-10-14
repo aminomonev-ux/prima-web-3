@@ -37,7 +37,9 @@ export interface HasilTarik {
 export type IsiKolom =
   | { jenis: 'sumber'; kunci: string }
   | { jenis: 'nomor' }
-  | { jenis: 'rumus'; ekspresi: string };
+  | { jenis: 'rumus'; ekspresi: string }
+  /** Diketik orangnya, diingat per KUNCI baris — ikut barisnya saat Perbarui mengubah urutan. */
+  | { jenis: 'tangan'; nilai: Record<string, string> };
 export type FormatKolom = 'teks' | 'angka' | 'rp' | 'persen';
 export interface KolomTaut {
   isi:         IsiKolom;
@@ -50,7 +52,7 @@ export interface KolomTaut {
 }
 
 export interface Tautan {
-  sumber:      'kinerja-rekap' | 'renaksi-cetak';
+  sumber:      'kinerja-rekap' | 'renaksi-cetak' | 'kinerja-laporan';
   setelan:     Record<string, unknown>;
   /** Sejajar dengan `kolom` tabel — pemetaan menempel pada KOLOM, bukan posisi. */
   kolom:       KolomTaut[];
@@ -198,7 +200,8 @@ function hitungRumusBaris(baris: TabelCell[], kolom: KolomTaut[]): void {
 function gabungOtomatis(rows: TabelCell[][], kolom: KolomTaut[]): void {
   let segmen: [number, number][] = rows.length ? [[0, rows.length]] : [];
   kolom.forEach((k, c) => {
-    if (!k.gabungSama) return;
+    // Isian tangan tidak digabung: sel yang tertutup gabungan akan kehilangan ketikannya.
+    if (!k.gabungSama || k.isi.jenis === 'tangan') return;
     const baru: [number, number][] = [];
     for (const [awal, akhir] of segmen) {
       let i = awal;
@@ -244,6 +247,7 @@ export function bangunBadan(hasil: HasilTarik, resep: Pick<Tautan, 'kolom' | 'se
     const baris: TabelCell[] = resep.kolom.map(k => {
       if (k.isi.jenis === 'nomor') return { v: String(urut + 1) };
       if (k.isi.jenis === 'rumus') return { v: '' };
+      if (k.isi.jenis === 'tangan') return { v: k.isi.nilai[b.kunci] ?? '' };
       const ks = sumber.get(k.isi.kunci);
       if (!ks) return { v: '' };
       const sel = selDariNilai(b.sel[ks.kunci], ks.jenis, k.format ?? formatBawaan(ks.jenis), k.desimal);
@@ -336,6 +340,93 @@ export function kalimatPerbarui(r: RingkasPerbarui): string {
   if (r.barisHilang.length) bagian.push(`${r.barisHilang.length} baris hilang (${r.barisHilang.slice(0, 3).join('; ')}${r.barisHilang.length > 3 ? '; …' : ''})`);
   if (r.urutanBerubah) bagian.push('urutan baris berubah');
   return bagian.length ? bagian.join(' · ') : 'Tidak ada yang berubah.';
+}
+
+/**
+ * Resep dengan isian tangan yang SEKARANG ada di badan tabel (`badan` = baris sesudah kepala,
+ * sejajar `kunciBaris`). Baris yang disembunyikan tidak ada di badan, jadi isiannya dibiarkan
+ * apa adanya di peta — menampilkannya lagi memunculkan ketikannya lagi.
+ */
+export function ambilIsianTangan(t: Tautan, badan: TabelCell[][]): Tautan {
+  if (!t.kolom.some(k => k.isi.jenis === 'tangan')) return t;
+  return {
+    ...t,
+    kolom: t.kolom.map((k, c) => {
+      if (k.isi.jenis !== 'tangan') return k;
+      const nilai = { ...k.isi.nilai };
+      t.kunciBaris.forEach((kunci, i) => {
+        const v = badan[i]?.[c]?.v ?? '';
+        if (v.trim()) nilai[kunci] = v; else delete nilai[kunci];
+      });
+      return { ...k, isi: { jenis: 'tangan' as const, nilai } };
+    }),
+  };
+}
+
+export const jumlahIsianTangan = (k: KolomTaut | null | undefined): number =>
+  k?.isi.jenis === 'tangan' ? Object.keys(k.isi.nilai).length : 0;
+
+export interface IsianYatim { kolom: number; kunci: string; nilai: string }
+
+/** Isian tangan yang barisnya sudah tidak ada di sumber (bukan sekadar disembunyikan). */
+export function isianYatim(t: Pick<Tautan, 'kolom'>, kunciSumber: Set<string>): IsianYatim[] {
+  return t.kolom.flatMap((k, c) => (k.isi.jenis !== 'tangan' ? []
+    : Object.entries(k.isi.nilai).filter(([kunci]) => !kunciSumber.has(kunci)).map(([kunci, nilai]) => ({ kolom: c, kunci, nilai }))));
+}
+
+function buangIsianYatim(t: Tautan, kunciSumber: Set<string>): Tautan {
+  return {
+    ...t,
+    kolom: t.kolom.map(k => (k.isi.jenis !== 'tangan' ? k : {
+      ...k, isi: { jenis: 'tangan' as const, nilai: Object.fromEntries(Object.entries(k.isi.nilai).filter(([kunci]) => kunciSumber.has(kunci))) },
+    })),
+  };
+}
+
+const potong = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/** Kalimat dialog Perbarui untuk isian tangan yang akan dibuang — ketikan orang tidak boleh hilang diam-diam. */
+export function kalimatIsianYatim(yatim: IsianYatim[], lama: { rows: TabelCell[][]; kunciBaris: string[] }): string {
+  if (!yatim.length) return '';
+  const pos = new Map(lama.kunciBaris.map((k, i) => [k, i]));
+  const contoh = yatim.slice(0, 3).map(y => {
+    const i = pos.get(y.kunci);
+    return `${i === undefined ? '(baris tersembunyi)' : labelBaris(lama.rows[i] ?? [])}: "${potong(y.nilai, 60)}"`;
+  });
+  return `${yatim.length} isian tangan kehilangan barisnya dan akan dibuang — salin dulu kalau masih perlu: `
+    + `${contoh.join('; ')}${yatim.length > 3 ? '; …' : ''}`;
+}
+
+export interface PenilaianPerbarui {
+  badan:     HasilBadan;
+  ringkas:   RingkasPerbarui;
+  /** Keterangan & catatan sumber sama dengan tarikan terakhir. */
+  metaSama:  boolean;
+  yatim:     IsianYatim[];
+  /** Tidak ada apa pun yang perlu ditulis. */
+  sama:      boolean;
+  /** Resep sesudah Perbarui (tanpa `ditarikPada` baru — jamnya milik pemanggil). */
+  tautanBaru: Tautan;
+}
+
+/**
+ * Satu penilaian untuk tombol Perbarui di tabel DAN Periksa Kesegaran se-dokumen — dua salinan
+ * aturan "apa yang dianggap berubah" pasti berbeda pendapat suatu hari (L78).
+ */
+export function nilaiPerbarui(payload: PayloadTabel & { tautan: Tautan }, hasil: HasilTarik): PenilaianPerbarui {
+  const hr = jumlahBarisKepala(payload);
+  const badanLama = payload.rows.slice(hr);
+  const t = ambilIsianTangan(payload.tautan, badanLama);
+  const badan = bangunBadan(hasil, t);
+  const ringkas = bandingPerbarui({ rows: badanLama, kunciBaris: t.kunciBaris }, badan, t.kolom);
+  const metaSama = hasil.ringkas === t.ringkas && JSON.stringify(hasil.catatan) === JSON.stringify(t.catatan);
+  const kunciSumber = new Set(hasil.baris.map(b => b.kunci));
+  const yatim = isianYatim(t, kunciSumber);
+  return {
+    badan, ringkas, metaSama, yatim,
+    sama: ringkas.sama && metaSama && !badan.kolomHilang.length && !yatim.length,
+    tautanBaru: { ...buangIsianYatim(t, kunciSumber), kunciBaris: badan.kunciBaris, ringkas: hasil.ringkas, catatan: hasil.catatan },
+  };
 }
 
 /**

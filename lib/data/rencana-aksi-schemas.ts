@@ -55,9 +55,8 @@ export const JenisSchema = z.enum(['Akumulatif', 'Progres Positif', 'Progres Neg
 // lewat pintu mana pun — termasuk pemanggil yang tidak lewat layar.
 const AngkaDesimal = z.coerce.number().min(0).transform((v) => bulatkanDesimal(v));
 // R3: null = belum diisi, 0 = nol nyata. JANGAN z.coerce (null→0).
-const BulanArray = z
-  .array(z.number().min(0).nullable().transform((v) => (v == null ? null : bulatkanDesimal(v))))
-  .length(12);
+const AngkaAtauKosong = z.number().min(0).nullable().transform((v) => (v == null ? null : bulatkanDesimal(v)));
+const BulanArray = z.array(AngkaAtauKosong).length(12);
 
 // ─── Upsert body (Data Entry → Save) ───────────────────────────────────────
 
@@ -127,7 +126,8 @@ export const UpdateQuarterSchema = z.object({
   id: z.number().int().positive(),
   quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   target: AngkaDesimal,
-  realisasi: AngkaDesimal,
+  // Kosong = belum diisi (null), bukan 0 — 0 nyata adalah capaian terbaik Progres Negatif.
+  realisasi: AngkaAtauKosong,
   expected_version: z.coerce.number().int().min(0),
 });
 

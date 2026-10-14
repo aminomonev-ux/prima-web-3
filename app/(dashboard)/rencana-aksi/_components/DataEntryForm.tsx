@@ -15,7 +15,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Tip from '@/components/ui/Tip';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
-import { outcomeOf, deriveQuartersFromMonthly, BULAN_LABELS, capaianTahunan } from '../_lib/types';
+import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
 import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
 import ImportRenaksiModal from './ImportRenaksiModal';
@@ -72,7 +72,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   // sasaran tidak punya kode, jadi isiannya tidak ditampilkan di sana.
   const punyaKode = level === 'program' || level === 'kegiatan' || isSub;
   // Opsi A: untuk sub-kegiatan, q1-q4 di-derive dari target bulanan (preview live).
-  const derivedQ = deriveQuartersFromMonthly(bulanTarget, jenis);
+  const derivedQ = deriveTargetQuarters(bulanTarget, jenis);
 
   useEffect(() => {
     // Jangan kosongkan form kalau ada permintaan membuka baris tertentu (datang
@@ -952,8 +952,8 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         ].map((q, i) => [
                           <td key={`t${i}`} className="px-2 py-4 text-center text-slate-500 border-l border-slate-100"
                               style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.t)}</td>,
-                          <td key={`r${i}`} className={`px-2 py-4 text-center font-bold ${q.r > 0 ? 'text-[#1D9E75]' : 'text-slate-500'}`}
-                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisDesimal(q.r)}</td>,
+                          <td key={`r${i}`} className={`px-2 py-4 text-center font-bold ${q.r == null ? 'text-slate-300' : q.r > 0 ? 'text-[#1D9E75]' : 'text-slate-500'}`}
+                              style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{tulisRealisasi(q.r)}</td>,
                         ])}
                         <td className="px-5 py-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">

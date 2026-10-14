@@ -1,4 +1,4 @@
-import { bulatkanDesimal } from '@/lib/shared/desimal';
+import { bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 
 export type RaLevel = 'tujuan' | 'sasaran' | 'program' | 'kegiatan' | 'sub-kegiatan';
 export type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
@@ -21,10 +21,11 @@ export interface RaRow {
   satuan: string;
   target_rpjmd: number;
   target_tahunan: number;
-  q1_target: number;  q1_realisasi: number;
-  q2_target: number;  q2_realisasi: number;
-  q3_target: number;  q3_realisasi: number;
-  q4_target: number;  q4_realisasi: number;
+  /** null = belum diisi, 0 = nol nyata — sama dengan arti null di bulanan (R3). */
+  q1_target: number;  q1_realisasi: number | null;
+  q2_target: number;  q2_realisasi: number | null;
+  q3_target: number;  q3_realisasi: number | null;
+  q4_target: number;  q4_realisasi: number | null;
   anggaran_nominal: number | null;
   bulan_target: (number | null)[] | null;
   bulan_realisasi: (number | null)[] | null;
@@ -40,20 +41,28 @@ export const BULAN_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'A
  * Derive q1-q4 dari 12 target bulanan per `jenis` (Opsi A). Preview client-side;
  * server (lib/data/rencana-aksi.ts) yang otoritatif. Wajib sync dengan server.
  *   Akumulatif            → TWn = SUM 3 bulan triwulan itu
- *   Progres Pos/Neg/Ulang → TWn = bulan TERAKHIR terisi (>0) dalam triwulan itu
+ *   Progres Pos/Neg/Ulang → TWn = bulan TERAKHIR terisi (non-null) dalam triwulan itu
+ *   Triwulan yang ketiga bulannya belum diisi → null.
  */
-export function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [number, number, number, number] {
-  const seg = (start: number): number => {
+export function deriveQuartersFromMonthly(months: MonthVal[], jenis: RaJenis): [MonthVal, MonthVal, MonthVal, MonthVal] {
+  const seg = (start: number): MonthVal => {
     const part = months.slice(start, start + 3);
+    if (part.every(v => v == null)) return null;
     // Menjumlah pecahan biner: 7,5 + 2,68 + 3,25 memulangkan 13,430000000000001.
     // Dibulatkan di sini, di tempat penjumlahannya, supaya angka itu tidak pernah
     // lahir — bukan disembunyikan belakangan oleh pemformat di layar.
     if (jenis === 'Akumulatif') return bulatkanDesimal(part.reduce((a: number, b) => a + (b ?? 0), 0));
     // R3: "terisi" = non-null — 0 nyata ikut terekam
     for (let i = part.length - 1; i >= 0; i--) { const v = part[i]; if (v != null) return v; }
-    return 0;
+    return null;
   };
   return [seg(0), seg(3), seg(6), seg(9)];
+}
+
+/** Target triwulan tidak pernah kosong — bulan target yang kosong dihitung 0, seperti dulu. */
+export function deriveTargetQuarters(months: MonthVal[], jenis: RaJenis): [number, number, number, number] {
+  const [a, b, c, d] = deriveQuartersFromMonthly(months, jenis);
+  return [a ?? 0, b ?? 0, c ?? 0, d ?? 0];
 }
 
 /**
@@ -259,7 +268,7 @@ export function outcomeOf(row: RaRow): string {
   return '';
 }
 
-export function quartersOf(row: RaRow): { id: 1 | 2 | 3 | 4; name: string; target: number; realisasi: number }[] {
+export function quartersOf(row: RaRow): { id: 1 | 2 | 3 | 4; name: string; target: number; realisasi: number | null }[] {
   return [
     { id: 1, name: 'Triwulan 1', target: row.q1_target, realisasi: row.q1_realisasi },
     { id: 2, name: 'Triwulan 2', target: row.q2_target, realisasi: row.q2_realisasi },
@@ -268,38 +277,26 @@ export function quartersOf(row: RaRow): { id: 1 | 2 | 3 | 4; name: string; targe
   ];
 }
 
-export function realisasiAkhirTahun(row: RaRow): number {
-  const qs = [row.q1_realisasi, row.q2_realisasi, row.q3_realisasi, row.q4_realisasi];
-  if (row.jenis === 'Akumulatif') return bulatkanDesimal(qs.reduce((a, b) => a + b, 0));
-  // Progres Positif/Negatif/Pengulangan: snapshot terbaru.
-  // R3: kalau ada data bulanan, pakai bulan TERAKHIR non-null (0 nyata terekam).
+/** null = belum ada satu pun realisasi yang diisi (bukan nol). */
+export function realisasiAkhirTahun(row: RaRow): number | null {
+  const terisi = [row.q1_realisasi, row.q2_realisasi, row.q3_realisasi, row.q4_realisasi]
+    .filter((q): q is number => q != null);
+  if (row.jenis === 'Akumulatif') return terisi.length ? bulatkanDesimal(terisi.reduce((a, b) => a + b, 0)) : null;
+  // Progres Positif/Negatif/Pengulangan: snapshot terbaru — bulan TERAKHIR non-null kalau
+  // ada data bulanan (R3), selain itu triwulan terakhir yang diisi (0 nyata ikut terekam).
   if (Array.isArray(row.bulan_realisasi)) {
     for (let i = row.bulan_realisasi.length - 1; i >= 0; i--) {
       const v = row.bulan_realisasi[i];
       if (v != null) return v;
     }
-    return 0;
+    return null;
   }
-  // Tanpa bulanan: fallback kuartal terakhir >0 (konvensi lama, 0 tak terekam).
-  for (let i = qs.length - 1; i >= 0; i--) {
-    if (qs[i] > 0) return qs[i];
-  }
-  return 0;
+  return terisi.length ? terisi[terisi.length - 1] : null;
 }
 
-const BULAN_TRIWULAN: Record<1 | 2 | 3 | 4, number[]> = { 1: [0, 1, 2], 2: [3, 4, 5], 3: [6, 7, 8], 4: [9, 10, 11] };
-
-/**
- * Sudah ada realisasi yang diisi (setahun, atau satu triwulan)? Bulanan membedakan null
- * vs 0 (R3). Triwulan `NOT NULL DEFAULT 0` tidak bisa — 0 dianggap belum terekam, konvensi
- * yang sama dengan `realisasiAkhirTahun`. Akibatnya nol SUNGGUHAN di level non-sub-kegiatan
- * (yang tak punya realisasi bulanan) terbaca "belum diisi".
- */
-export function adaRealisasi(row: RaRow, triwulan?: 1 | 2 | 3 | 4): boolean {
-  const qs = triwulan ? [triwulan] : ([1, 2, 3, 4] as const);
-  const bulanan = row.bulan_realisasi;
-  if (Array.isArray(bulanan)) return qs.some(q => BULAN_TRIWULAN[q].some(i => bulanan[i] != null));
-  return qs.some(q => row[`q${q}_realisasi`] !== 0);
+/** Realisasi → teks tabel: belum diisi "—", nol tetap "0". */
+export function tulisRealisasi(n: number | null): string {
+  return n == null ? '—' : tulisDesimal(n);
 }
 
 /**
@@ -307,22 +304,22 @@ export function adaRealisasi(row: RaRow, triwulan?: 1 | 2 | 3 | 4): boolean {
  * = capaian terbaik, jadi tanpa ini indikator kosong tercatat 200% "selesai". Jenis lain
  * tetap angka — 0% dari realisasi kosong tidak menyesatkan.
  */
-function capaianAtauKosong(row: RaRow, target: number, realisasi: number, triwulan?: 1 | 2 | 3 | 4): number | null {
-  if (row.jenis === 'Progres Negatif' && !adaRealisasi(row, triwulan)) return null;
-  return hitungCapaianPct(target, realisasi, row.jenis);
+function capaianAtauKosong(jenis: RaJenis, target: number, realisasi: number | null): number | null {
+  if (realisasi == null && jenis === 'Progres Negatif') return null;
+  return hitungCapaianPct(target, realisasi ?? 0, jenis);
 }
 
 /** Capaian akhir tahun — kolom "Capaian" menu Cetak: layar, PDF, dan Excel memanggil ini. */
 export function capaianTahunan(row: RaRow): number | null {
-  return capaianAtauKosong(row, row.target_tahunan, realisasiAkhirTahun(row));
+  return capaianAtauKosong(row.jenis, row.target_tahunan, realisasiAkhirTahun(row));
 }
 
 export function capaianRpjmd(row: RaRow): number | null {
-  return capaianAtauKosong(row, row.target_rpjmd, realisasiAkhirTahun(row));
+  return capaianAtauKosong(row.jenis, row.target_rpjmd, realisasiAkhirTahun(row));
 }
 
 export function capaianTriwulan(row: RaRow, triwulan: 1 | 2 | 3 | 4): number | null {
-  return capaianAtauKosong(row, row[`q${triwulan}_target`], row[`q${triwulan}_realisasi`], triwulan);
+  return capaianAtauKosong(row.jenis, row[`q${triwulan}_target`], row[`q${triwulan}_realisasi`]);
 }
 
 /**

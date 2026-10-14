@@ -19,7 +19,7 @@ import {
 } from 'recharts';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
-import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
@@ -32,7 +32,8 @@ import { FONT_CHOICES } from '@/lib/lkjip/style-constants';
 import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
 import { normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, angkaSel, colLabel, type TabelCell, type TabelAlign, type TabelNumFmt } from '@/lib/lkjip/tabel';
-import { bangunBadan, bandingPerbarui, kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, sidikGrafik, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
+import { kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, sidikGrafik, ambilIsianTangan, nilaiPerbarui, kalimatIsianYatim, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
+import { kumpulkanTabelTertaut, periksaKesegaran, type HasilPeriksa, type TabelTertaut } from '@/lib/lkjip/kesegaran';
 import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 
@@ -109,6 +110,10 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     [flat],
   );
   const selected = useMemo(() => flat.find(f => f.node.id === selectedId)?.node ?? null, [flat, selectedId]);
+  // Tabel tertaut se-dokumen, dari isi yang TERSIMPAN (sama dengan yang akan difinalkan & dicetak).
+  const tertaut = useMemo(() => kumpulkanTabelTertaut(flat.map(f => f.node)), [flat]);
+  const [periksa, setPeriksa] = useState<{ daftar: TabelTertaut[]; hasil: HasilPeriksa[] | null } | null>(null);
+  const [sorotBlok, setSorotBlok] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -250,10 +255,50 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     if (ok) { setStyleModal(false); await refresh(); toast.success('Pengaturan dokumen disimpan'); }
   }
 
-  async function finalize() {
-    if (!(await confirmDialog({ title: 'Finalisasi dokumen', message: 'Dokumen akan dikunci dan tidak bisa diubah lagi. Lanjutkan?', variant: 'warning', confirmLabel: 'Finalisasi' }))) return;
+  // ── Tabel tertaut: periksa kesegaran (hanya membaca; memperbarui lewat tombol di tabelnya) ──
+  async function jalankanPeriksa(daftar: TabelTertaut[]): Promise<HasilPeriksa[]> {
+    const { DAFTAR_SUMBER } = await import('@/lib/lkjip/sumber');
+    return periksaKesegaran(daftar, (sumber, setelan) => DAFTAR_SUMBER[sumber].tarik(setelan, url => fetchJson<unknown>(url), detail.tahun));
+  }
+  async function bukaPeriksa() {
+    if (!tertaut.length) { toast.info('Dokumen ini belum punya tabel yang tertaut ke modul.'); return; }
+    setPeriksa({ daftar: tertaut, hasil: null });
+    try { setPeriksa({ daftar: tertaut, hasil: await jalankanPeriksa(tertaut) }); }
+    catch { setPeriksa(null); toast.error('Gagal memeriksa tabel tertaut. Coba lagi.'); }
+  }
+  function bukaTabel(t: TabelTertaut) {
+    setPeriksa(null); setSelectedId(t.sectionId); setSorotBlok(t.blockId);
+    setTimeout(() => document.getElementById(`lk-blok-${t.blockId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+    setTimeout(() => setSorotBlok(b => (b === t.blockId ? null : b)), 2600);
+  }
+
+  async function kirimFinal() {
     const ok = await call(`/api/lkjip/${detail.id}/finalize`, 'POST', { id: detail.id, expected_version: detail.version });
     if (ok) { await refresh(); toast.success('Dokumen difinalisasi'); }
+  }
+  async function finalize() {
+    // Dokumen FINAL tidak bisa diperbarui lagi — tabel yang sudah tertinggal dari sumbernya
+    // ditanyakan SEKARANG, bukan ditemukan sesudah dicetak.
+    if (tertaut.length) {
+      const tunggu = toast.loading('Memeriksa tabel tertaut…');
+      let hasil: HasilPeriksa[] = [];
+      try { hasil = await jalankanPeriksa(tertaut); } catch { /* gagal memeriksa ≠ alasan menahan finalisasi */ } finally { toast.dismiss(tunggu); }
+      const beda = hasil.filter(h => h.status !== 'sama');
+      if (beda.length) {
+        const nama = (id: number) => { const t = tertaut.find(x => x.blockId === id); return t ? `${t.letak} — ${t.judul}` : 'Tabel'; };
+        const daftar = beda.slice(0, 5).map(h => `• ${nama(h.blockId)}: ${h.status === 'gagal' ? h.pesan : h.status === 'berubah' ? h.ringkas : ''}`).join('\n');
+        const pilihan = await pilihDialog({
+          title: 'Tabel tertaut belum sama dengan sumbernya',
+          message: `${beda.length} dari ${tertaut.length} tabel tertaut berbeda dari modul sumbernya saat ini:\n${daftar}${beda.length > 5 ? '\n• …' : ''}\n\nSesudah final, tabel tidak bisa diperbarui lagi.`,
+          confirmLabel: 'Lihat & perbarui dulu', altLabel: 'Tetap finalisasi', variant: 'warning', altVariant: 'danger',
+        });
+        if (pilihan === 'utama') { setPeriksa({ daftar: tertaut, hasil }); return; }
+        if (pilihan === 'lain') await kirimFinal();
+        return;
+      }
+    }
+    if (!(await confirmDialog({ title: 'Finalisasi dokumen', message: 'Dokumen akan dikunci dan tidak bisa diubah lagi. Lanjutkan?', variant: 'warning', confirmLabel: 'Finalisasi' }))) return;
+    await kirimFinal();
   }
 
   const dockActions = readOnly
@@ -265,6 +310,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     : [
         { icon: <Save size={17} />, label: 'Simpan Versi', onClick: () => void saveVersi() },
         { icon: <History size={17} />, label: 'Riwayat', onClick: () => void openHistory() },
+        ...(tertaut.length ? [{ icon: <RefreshCw size={17} />, label: 'Periksa Tabel', onClick: () => void bukaPeriksa() }] : []),
         { icon: <Settings size={17} />, label: 'Pengaturan', onClick: () => { setStyleForm(detail.style_config); setStyleModal(true); } },
         { icon: <Download size={17} />, label: 'Unduh Word', onClick: () => window.open(`/api/lkjip/${detail.id}/generate`, '_blank') },
         { icon: <CheckCircle2 size={17} />, label: 'Finalisasi', onClick: () => void finalize() },
@@ -339,7 +385,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
               </div>
               {selected.blocks.length === 0 && <div className="lk-noblock">Belum ada blok. Tambah blok di bawah.</div>}
               {selected.blocks.map((b, idx) => (
-                <div key={b.id} className={`lk-block-wrap${dragIdx !== null ? ' dragmode' : ''}${dragIdx === idx ? ' dragging' : ''}`}
+                <div key={b.id} id={`lk-blok-${b.id}`} className={`lk-block-wrap${dragIdx !== null ? ' dragmode' : ''}${dragIdx === idx ? ' dragging' : ''}${sorotBlok === b.id ? ' sorot' : ''}`}
                   onDragOver={e => { if (dragIdx !== null && dragIdx !== idx) e.preventDefault(); }}
                   onDrop={e => {
                     e.preventDefault();
@@ -382,6 +428,41 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
             <div className="lk-modal-actions">
               <PrimaButton variant="ghost" size="sm" onClick={() => setAddModal(null)} disabled={busy}>Batal</PrimaButton>
               <PrimaButton variant="purple" size="sm" onClick={submitAdd} disabled={busy || !addJudul.trim()}>Tambah</PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Periksa tabel tertaut */}
+      {periksa && (
+        <div className="lk-modal-bg" onClick={() => setPeriksa(null)}>
+          <div className="lk-modal lk-modal-wide" role="dialog" aria-label="Periksa tabel tertaut" onClick={e => e.stopPropagation()}>
+            <h3>Periksa Tabel Tertaut</h3>
+            <p className="lk-hint">Isi tabel yang sudah tersimpan dibandingkan dengan modul sumbernya sekarang. Tidak ada yang diubah — buka tabelnya lalu tekan <b>Perbarui</b> di sana.</p>
+            {!periksa.hasil ? (
+              <div className="lk-hint">Menarik data sumber…</div>
+            ) : (
+              <ul className="lk-periksa">
+                {periksa.daftar.map(t => {
+                  const h = periksa.hasil!.find(x => x.blockId === t.blockId);
+                  return (
+                    <li key={t.blockId} className={h?.status}>
+                      <div className="lk-periksa-info">
+                        <b>{t.judul}</b>
+                        <span>{t.letak} · {t.payload.tautan.ringkas}</span>
+                        <span className="lk-periksa-status">
+                          {h?.status === 'sama' ? 'Sudah sama dengan sumbernya.' : h?.status === 'berubah' ? `Berbeda: ${h.ringkas}.` : h?.pesan}
+                        </span>
+                      </div>
+                      <button onClick={() => bukaTabel(t)}>Buka</button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="lk-modal-actions">
+              <PrimaButton variant="ghost" size="sm" onClick={() => setPeriksa(null)}>Tutup</PrimaButton>
+              <PrimaButton variant="purple" size="sm" iconLeft={<RefreshCw size={14} />} disabled={!periksa.hasil} onClick={() => void bukaPeriksa()}>Periksa Ulang</PrimaButton>
             </div>
           </div>
         </div>
@@ -811,6 +892,17 @@ function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNo
   // tertimpa — jadi dikunci. Kepala tabel tetap bebas.
   const diBadan = (r: number) => terkait && r >= headerRows;
   const rectBadan = terkait && !!rect && rect.r2 >= headerRows;
+  // Kolom isian tangan (Tahap 2) tetap bisa diketik di badan — isinya diingat per kunci baris.
+  const kolomTangan = new Set(tautan?.kolom.flatMap((k, i) => (k.isi.jenis === 'tangan' ? [i] : [])) ?? []);
+  const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c);
+  const ubahSel = (r: number, c: number, v: string) => {
+    // Rumus sel menunjuk nomor baris, dan nomor baris bergeser tiap Perbarui.
+    if (diBadan(r) && kolomTangan.has(c) && v.trimStart().startsWith('=')) {
+      toast.info('Kolom isian tangan tidak menerima rumus — pakai isi "Rumus" lewat Atur Bentuk.', { id: 'tangan-rumus' });
+      return;
+    }
+    setCell(r, c, v);
+  };
 
   const setCell = (ri: number, ci: number, v: string) =>
     setRows(r => r.map((row, i) => i === ri ? row.map((c, j) => j === ci ? { ...c, v } : c) : row));
@@ -914,10 +1006,15 @@ function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNo
     // selain itu (1 nilai) → biarkan paste native ke input sel.
   };
 
-  const payloadSekarang = (): PayloadTabel => ({ judul, kolom, align, colWidths, headerRows, rows, ...(tautan ? { tautan } : {}) });
+  // Isian tangan dibaca dari badan SAAT INI — peta di resep ikut ketikan terakhir, bukan simpanan terakhir.
+  const payloadSekarang = (): PayloadTabel => ({
+    judul, kolom, align, colWidths, headerRows, rows,
+    ...(tautan ? { tautan: ambilIsianTangan(tautan, rows.slice(jumlahBarisKepala({ headerRows, rows }))) } : {}),
+  });
   /** Hubungkan / Perbarui / Lepas langsung disimpan: ketiganya keputusan yang sudah ditanyakan. */
   const pasangDanSimpan = (p: PayloadTabel) => {
-    setKolom(p.kolom); setAlign(p.align as TabelAlign[]);
+    // Judul ikut: templat mengisi judul yang masih kosong — tanpa ini Simpan Tabel berikutnya mengosongkannya lagi.
+    setJudul(p.judul); setKolom(p.kolom); setAlign(p.align as TabelAlign[]);
     setColWidths(p.kolom.map((_, i) => p.colWidths?.[i] ?? DEF_W));
     setHeaderRows(p.headerRows ?? 0); setRows(p.rows); setTautan(p.tautan);
     // Riwayat urungkan dikosongkan: memulihkan baris tanpa ikut memulihkan resepnya membuat
@@ -943,19 +1040,20 @@ function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNo
       const { DAFTAR_SUMBER } = await import('@/lib/lkjip/sumber');
       const sumber = DAFTAR_SUMBER[tautan.sumber];
       const hasil = await sumber.tarik(tautan.setelan, url => fetchJson<unknown>(url), tahunDokumen);
-      const badan = bangunBadan(hasil, tautan);
+      const sekarang = payloadSekarang() as PayloadTabel & { tautan: Tautan };
+      const nilai = nilaiPerbarui(sekarang, hasil);
       const hr = jumlahBarisKepala({ headerRows, rows });
-      const ringkas = bandingPerbarui({ rows: rows.slice(hr), kunciBaris: tautan.kunciBaris }, badan, tautan.kolom);
-      const metaSama = hasil.ringkas === tautan.ringkas && JSON.stringify(hasil.catatan) === JSON.stringify(tautan.catatan);
-      if (ringkas.sama && metaSama && !badan.kolomHilang.length) {
+      if (nilai.sama) {
         toast.success(`Sudah sama dengan ${sumber.modul} saat ini — tidak ada yang perlu diperbarui.`);
         return;
       }
-      const rowsBaru = pasangBadan(payloadSekarang(), badan);
+      const { badan, ringkas } = nilai;
+      const rowsBaru = pasangBadan(sekarang, badan);
       if (!rowsBaru) { toast.error(pesanLewatBatas(badan.rows.length, hr)); return; }
-      const peringatan = badan.kolomHilang.length
+      const yatim = kalimatIsianYatim(nilai.yatim, { rows: rows.slice(hr), kunciBaris: tautan.kunciBaris });
+      const peringatan = (badan.kolomHilang.length
         ? `\n\nKolom ${badan.kolomHilang.map(colLabel).join(', ')} menunjuk kolom sumber yang tidak ada lagi dan akan kosong — atur lewat Atur Bentuk.`
-        : '';
+        : '') + (yatim ? `\n\n${yatim}` : '');
       const ok = await confirmDialog({
         title: `Perbarui dari ${sumber.modul}?`,
         message: `${kalimatPerbarui(ringkas)}\n\nSumber: ${hasil.ringkas}${peringatan}\n\nKepala tabel, pilihan kolom, dan baris yang disembunyikan tetap seperti sekarang.`,
@@ -963,10 +1061,7 @@ function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNo
         variant: 'warning',
       });
       if (!ok) return;
-      pasangDanSimpan({
-        ...payloadSekarang(), rows: rowsBaru,
-        tautan: { ...tautan, kunciBaris: badan.kunciBaris, ditarikPada: waktuSekarangWIB().slice(0, 16), ringkas: hasil.ringkas, catatan: hasil.catatan },
-      });
+      pasangDanSimpan({ ...sekarang, rows: rowsBaru, tautan: { ...nilai.tautanBaru, ditarikPada: waktuSekarangWIB().slice(0, 16) } });
     } catch (e) {
       toast.error(e instanceof Error && e.name === 'GagalTarik' ? e.message : 'Gagal menarik data. Coba lagi.');
     } finally { setMenarik(false); }
@@ -1059,13 +1154,13 @@ function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNo
         <div className="lk-fbar">
           <span className="lk-fbar-ref">{sel ? colLabel(sel.ac) + (sel.ar + 1) : '—'}</span>
           <span className="lk-fbar-fx">fx</span>
-          <input className="lk-fbar-in" disabled={!sel || diBadan(sel.ar)}
+          <input className="lk-fbar-in" disabled={!sel || terkunci(sel.ar, sel.ac)}
             value={sel ? (rows[sel.ar]?.[sel.ac]?.v ?? '') : ''}
             placeholder="Pilih sel — ketik teks atau = untuk rumus (mis. =A1+B1)"
             onFocus={e => { if (sel) { pushHist(); setBarFocused(true); editInputRef.current = e.currentTarget; } }}
             onBlur={() => setBarFocused(false)}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); } }}
-            onChange={e => { if (sel) setCell(sel.ar, sel.ac, e.target.value); }} />
+            onChange={e => { if (sel) ubahSel(sel.ar, sel.ac, e.target.value); }} />
         </div>
       )}
 
@@ -1101,20 +1196,20 @@ function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNo
                 <td className="lk-rownum">{ri + 1}{!readOnly && !diBadan(ri) && <button data-tooltip="Hapus baris" data-tooltip-pos="below" onClick={() => delRow(ri)}>×</button>}</td>
                 {row.map((cell, ci) => cell.h ? null : (
                   <td key={ci} colSpan={cell.cs ?? 1} rowSpan={cell.rs ?? 1}
-                    className={inRect(ri, ci) ? 'lk-cell-sel' : undefined}
+                    className={[inRect(ri, ci) ? 'lk-cell-sel' : '', diBadan(ri) && kolomTangan.has(ci) ? 'lk-cell-tangan' : ''].filter(Boolean).join(' ') || undefined}
                     style={{ verticalAlign: vAlignCss(cell.va), background: cell.bg ? `#${cell.bg}` : undefined }}
                     onMouseDown={e => onCellDown(ri, ci, e)}>
                     <input
                       value={(editKey === `${ri}:${ci}` || (barFocused && sel?.ar === ri && sel?.ac === ci)) ? cell.v : displayValue(rows, ri, ci)}
                       readOnly={readOnly || editKey !== `${ri}:${ci}`}
                       style={{ textAlign: (cell.al ?? align[ci] ?? 'left'), fontWeight: cell.b ? 700 : undefined, fontSize: cell.fs ? `${cell.fs}px` : undefined, color: cell.bg ? '#0F0F12' : undefined }}
-                      onDoubleClick={e => { if (readOnly || diBadan(ri)) return; pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); n.select(); }); }}
+                      onDoubleClick={e => { if (readOnly || terkunci(ri, ci)) return; pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); n.select(); }); }}
                       onKeyDown={e => {
                         if (editKey === `${ri}:${ci}`) { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); } }
-                        else if (!readOnly && !diBadan(ri) && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); }); }
+                        else if (!readOnly && !terkunci(ri, ci) && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); }); }
                       }}
                       onBlur={() => setEditKey(k => (k === `${ri}:${ci}` ? null : k))}
-                      onChange={e => setCell(ri, ci, e.target.value)} />
+                      onChange={e => ubahSel(ri, ci, e.target.value)} />
                   </td>
                 ))}
               </tr>
@@ -1573,6 +1668,32 @@ const ED_CSS = `
   .lk-tabel-tools button:disabled { opacity: .38; cursor: not-allowed; }
   .lk-tt-sep { width: 1px; height: 20px; background: #0C447C; margin: 0 3px; }
   .lk-tabel td.lk-cell-sel { outline: 2px solid #EF9F27; outline-offset: -2px; background: rgba(239,159,39,0.12); }
+  /* Kolom isian tangan di tabel tertaut — satu-satunya sel badan yang bisa diketik. */
+  .lk-tabel td.lk-cell-tangan { background: rgba(124,92,252,0.08); box-shadow: inset 2px 0 0 rgba(124,92,252,0.55); }
+  .lk-block-wrap.sorot { box-shadow: 0 0 0 2px #7C5CFC; }
+  .lk-periksa { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; }
+  .lk-periksa li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: #020F1C; border: 1px solid #0C447C; border-left-width: 3px; border-radius: 8px; }
+  .lk-periksa li.sama { border-left-color: #1D9E75; }
+  .lk-periksa li.berubah { border-left-color: #EF9F27; }
+  .lk-periksa li.gagal { border-left-color: #E24B4A; }
+  .lk-periksa-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 12px; color: #85B7EB; }
+  .lk-periksa-info b { color: #E6F1FB; font-size: 13px; }
+  .lk-periksa li.sama .lk-periksa-status { color: #7BE0BD; }
+  .lk-periksa li.berubah .lk-periksa-status { color: #FBBF24; }
+  .lk-periksa li.gagal .lk-periksa-status { color: #FCA5A5; }
+  .lk-periksa button { flex-shrink: 0; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .lk-periksa button:hover { border-color: #185FA5; color: #E6F1FB; }
+  [data-theme="light"] .lk-tabel td.lk-cell-tangan { background: rgba(124,92,252,0.07); }
+  [data-theme="light"] .lk-periksa li { background: #F9FAFB; border-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .lk-periksa li.sama { border-left-color: #1D9E75; }
+  [data-theme="light"] .lk-periksa li.berubah { border-left-color: #EF9F27; }
+  [data-theme="light"] .lk-periksa li.gagal { border-left-color: #E24B4A; }
+  [data-theme="light"] .lk-periksa-info { color: #6B7280; }
+  [data-theme="light"] .lk-periksa-info b { color: #0F0F12; }
+  [data-theme="light"] .lk-periksa li.sama .lk-periksa-status { color: #0E7A55; }
+  [data-theme="light"] .lk-periksa li.berubah .lk-periksa-status { color: #B45309; }
+  [data-theme="light"] .lk-periksa li.gagal .lk-periksa-status { color: #B91C1C; }
+  [data-theme="light"] .lk-periksa button { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
   /* K1: select tak bisa menggambar ::after — tooltip-nya dipasang di pembungkus. */
   .lk-tt-tip { display: inline-flex; }
   .lk-tt-sel { height: 28px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; font-size: 11px; padding: 0 4px; cursor: pointer; }

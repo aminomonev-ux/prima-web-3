@@ -6,7 +6,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import SoftSelect from '@/components/ui/SoftSelect';
 import type { RaRow, RaLevel, HierarchyRow } from '../_lib/types';
-import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, outcomeOf, anggaranRollup, capaianTahunan, warnaCapaian } from '../_lib/types';
+import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, tulisRealisasi, outcomeOf, anggaranRollup, capaianTahunan, warnaCapaian } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import type { CetakFilter, ColMode } from '../_lib/cetak-filter';
 import { DEFAULT_CETAK_FILTER, ALL_LEVELS, buildCetakRows, cetakRollupBase, tulisCapaian } from '../_lib/cetak-filter';
@@ -442,10 +442,10 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
                   <td className="px-3 py-2 text-right font-bold text-slate-700" style={moneyFont}>{tulisDesimal(r.target_tahunan)}</td>
                   {quarters.map(q => [
                     showT ? <td key={`t${q}`} className="px-2 py-2 text-center text-slate-500 border-l border-slate-100" style={moneyFont}>{tulisDesimal(r[`q${q}_target`])}</td> : null,
-                    showR ? <td key={`r${q}`} className="px-2 py-2 text-center font-semibold text-slate-700" style={moneyFont}>{tulisDesimal(r[`q${q}_realisasi`])}</td> : null,
+                    showR ? <td key={`r${q}`} className="px-2 py-2 text-center font-semibold text-slate-700" style={moneyFont}>{tulisRealisasi(r[`q${q}_realisasi`])}</td> : null,
                   ])}
                   {showReal && (
-                    <td className="px-3 py-2 text-right font-bold text-[#EF9F27]" style={moneyFont}>{tulisDesimal(realAkhir)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-[#EF9F27]" style={moneyFont}>{tulisRealisasi(realAkhir)}</td>
                   )}
                   {showReal && (
                     <td className="px-3 py-2">
