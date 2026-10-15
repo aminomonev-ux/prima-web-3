@@ -371,3 +371,113 @@ letak tabel itu sekarang (bab + urutan); tidak ketemu → null (grafik minta dip
 Regresi Tahap 2: `test-lkjip-tabel-tertaut.mts` bagian L–O, `test-lkjip-versi-tertaut.mts` (DB 2099),
 `test-renaksi-audit.mjs` (bagian "kosong ≠ nol", DB 2099), `test-renaksi-cetak-kolom.mts`,
 `test-renaksi-desimal.mts`.
+
+## 19. Tahap 3 — angka sebaris, sumber PK & BLUD (dikerjakan 2026-10-15)
+
+Nol tabel, kolom, migrasi, dan endpoint baru — sama seperti Tahap 1–2: penarikan lewat GET modul
+sumber yang sudah ada, jadi akses & sakelar modul sumber berlaku sendiri. Keputusan pemilik:
+angka sebaris **tanpa rumus**, BLUD **Per Rekening + Per PJ**, PK **satu dokumen FINAL per tabel**
+(tanpa penggabungan — "modul PK sudah final, tidak perlu ditambahkan apa pun").
+
+### 19.1 Angka sebaris di narasi
+Kalimat seperti *"Realisasi anggaran sebesar **Rp 33.214.000.000 (87,25%)**"* yang angkanya diambil
+dari modul dan bisa diperbarui, bukan diketik ulang.
+- **Menyisipkan**: tombol **# Angka** di bilah alat narasi → `AngkaModal.tsx`: sumber + setelan
+  (5 sumber, komponen setelan yang SAMA dengan modal tabel) → Tarik → pilih **kolom**, cari &
+  pilih **baris** (nilai kolom terpilih tampil di samping tiap baris) → format & desimal →
+  pratinjau → **Sisipkan** di posisi kursor. Modal berhenti di FORM (L78): yang menyimpan tetap
+  tombol Simpan narasi.
+- **Bentuk di naskah**: `<span data-angka="a3">Rp 33.214.000.000</span>` — node Tiptap `angkaTaut`
+  (atom sebaris: tak bisa disunting sebagian, Backspace menghapus seluruhnya), chip ungu tipis di
+  editor. Resep di `payload.angka[a3]` = `{ sumber, setelan, kunciBaris, kolom, format, desimal?,
+  labelBaris, labelKolom, ringkas, ditarikPada }`. Teks di dalam span = satu-satunya "angka
+  sekarang"; resep tidak menyimpan salinannya, jadi keduanya tidak bisa berbeda.
+- **Penyaring**: `<span data-angka>` dibentuk ulang dari pola `[a-z0-9]{1,12}` (atribut lain dibuang);
+  id tak sah jatuh ke aturan span biasa. **`angka` WAJIB terdaftar di `NarasiPayloadSchema`** (Zod
+  membuang kunci tak dikenal) — maksimal 200 per blok, resep yang span-nya sudah dihapus dibuang
+  saat Simpan (`resepTerpakai`).
+- **Word**: teks angka biasa. `docgen.ts` tidak tahu soal resep. **Ditemukan saat merancang**: penutup
+  `</span>` dulu memolos-kan warna, padahal angka di dalam teks berwarna menghasilkan span
+  bersarang — teks SESUDAH angka kehilangan warnanya di Word. Kini tumpukan gaya span: penutup
+  memulihkan gaya induknya (`narasiToXml` diekspor supaya bisa diuji).
+- **Perbarui angka (n)**: satu tarikan per resep sumber (`kunciTarikan`) → `bandingAngka` →
+  sama = tidak menulis (toast); berubah = dialog lama → baru → **Terapkan & simpan**; baris/kolom
+  yang tak ada lagi di sumber **dibiarkan** & disebut "tidak ditemukan lagi" (bukan diganti 0);
+  sumber yang gagal disebut kalimat modulnya.
+- **Periksa & Finalisasi**: panel kini **Periksa Data Modul** (dock), memeriksa tabel DAN narasi
+  ber-angka dengan SATU penarik bersama (`periksaSemua` → `penarikBersama`); Finalisasi menahan
+  keduanya (`semuaTertaut`).
+- **Ditemukan saat dicoba di peramban**: (a) kolom rupiah di kalimat bawaannya **"Rp …"**
+  (`formatBawaanAngka`) — tabel sengaja tanpa "Rp" karena judul kolomnya sudah "(Rp)", kalimat tidak
+  punya judul; (b) menyisipkan beberapa angka dari sumber yang sama berarti menyetel ulang sumber,
+  tahun, dan menarik lagi tiap kali → modal kini dibuka di sumber & setelan **angka terakhir** narasi
+  itu dan langsung menarik; (c) angka yang "tidak ditemukan lagi" tidak ikut distempel `ditarikPada`
+  saat Perbarui (teksnya memang tidak ditarik ulang).
+- **Catatan menguji**: perintah `focus()` Tiptap di Chrome desktop berjalan lewat
+  `requestAnimationFrame`. Panel peramban yang tersembunyi menahan rAF, sehingga di situ ketikan
+  sesudah Sisipkan tampak "hilang" atau mendahului angkanya — itu artefak panel, bukan cacat (dengan
+  rAF berjalan ±16 ms, ketikan jatuh tepat sesudah angka). Skrip uji layar: ganti
+  `window.requestAnimationFrame` dengan `setTimeout(…, 16)` dulu.
+- **Sengaja tidak**: rumus di angka sebaris; mengenali angka yang ditempel dari blok lain (span tanpa
+  resep di blok ini tetap teks biasa, tidak ikut Perbarui).
+
+### 19.2 Sumber "PK · Perjanjian Kinerja" (`lib/lkjip/sumber/pk.ts`)
+`GET /api/perjanjian-kinerja/dokumen` (ditelusuri per halaman; route membatasi 100) + `/dokumen/[id]`
+— aturan PK berlaku apa adanya: akses menu PK, non-admin hanya melihat PK buatannya.
+- **Setelan**: tahun · **Pihak Pertama** (daftarnya baru diketahui sesudah Tarik — `HasilTarik.pilihan`
+  — dari PK FINAL yang bisa dilihat akun ini) · versi **Berlaku** (Perubahan FINAL terbaru, kalau tidak
+  Murni) / **Murni** · tampilan **Sasaran, indikator & target** / **Anggaran**. Tanpa pihak bawaan:
+  Direktur memang tidak bisa jadi Pihak Pertama (`selectable_as_pertama = 0`).
+- **Hanya FINAL**: draf Perubahan yang lebih baru diabaikan; pihak yang cuma punya draf → "masih
+  draf — finalkan dulu di modul PK"; tidak ada sama sekali → "Belum ada PK … yang FINAL".
+- Dokumen **dipilih ulang tiap Perbarui** (bukan id mati) — PK Perubahan yang terbit belakangan ikut.
+- **Kunci baris dari ISI** (tingkat + program/kegiatan/sub + uraian + indikator/sumber dana), baris
+  kembar diberi `#2` — id lampiran berganti tiap PK disimpan (hapus-tulis-ulang).
+- **Anggaran: JUMLAH = tingkat teratas yang ada saja** — dokumen yang memuat program DAN kegiatan
+  akan terhitung dobel kalau semuanya dijumlah; catatannya menyebut itu.
+
+### 19.3 Sumber "BLUD · Realisasi Anggaran" (`lib/lkjip/sumber/blud-realisasi.ts`)
+`GET /api/blud/realisasi/pagu?tahun=&bulan=` — data layar Realisasi (akses menu Realisasi/Buku Kas +
+sakelar Realisasi), angka sudah digulung server.
+- **Setelan**: tahun · s/d bulan (bawaan Desember) · **Per rekening** (sampai tingkat n, bawaan 3;
+  rekening yang pagu & realisasinya nol disembunyikan, bisa dimatikan) / **Per Penanggung Jawab**
+  (`rekapPerPj`, rumus chip Per PJ di layar — "Belum ada PJ" + JUMLAH = total akar).
+- Kolom: Kode Rekening · Uraian · Pagu · Realisasi s/d bulan · Sisa · Serapan (%) (per PJ: PJ ·
+  Jumlah Rekening · …). Tingkat = rantai induk; induk yang tak ada di versi pagu = akar.
+- JUMLAH per rekening **hanya bila ada lebih dari satu akar yang BERISI** — dengan satu akar
+  (BELANJA DAERAH) baris akar sudah memuat semuanya. Ditemukan di data 2026: dua akar lain bernilai
+  nol membuat JUMLAH muncul dan cuma mengulang angka BELANJA DAERAH.
+- **Urutan pohon, bukan `urutan` DPA** (`urutPohon`) — ditemukan di data 2026: route memulangkan
+  "BELANJA MODAL" tingkat 3 sesudah blok Belanja Operasi, jadi tabel bertingkat yang disaring per
+  tingkat membuatnya tampak anak Operasi (padahal Operasi 50,87 M = Pegawai 9,93 M + Barang & Jasa
+  40,94 M). Layar Realisasi tidak kena karena menampilkan seluruh baris apa adanya.
+- Catatan: sumber pagu (`jenisSumberPagu` + tanggal versi) dan jumlah rekening yang tidak ikut.
+- **Tidak jadi**: catatan belanja yang rekeningnya tidak ada di versi pagu — route pagu tidak
+  memulangkannya, dan menghitungnya butuh endpoint lain (melanggar "nol endpoint baru").
+
+### 19.4 Templat tambahan
+*Realisasi Anggaran BLUD per Kelompok Belanja* (Per rekening **tingkat 3** — tingkat 2 cuma Belanja
+Operasi/Modal; Pegawai · Barang & Jasa · Modal ada di tingkat 3) dan *Perjanjian Kinerja* (No ·
+Sasaran digabung · Indikator · Target; Pihak Pertama dipilih sesudah menarik).
+
+### 19.5 Bagian bersama
+- `SetelanSumber.tsx`: isian sumber + setelan untuk modal tabel DAN modal angka — satu bentuk setelan
+  per sumber (L78). `taut-css.ts`: gaya `.lk-taut-*` bersama (modal tabel dimuat terpisah; mengimpor
+  gayanya dari situ akan ikut menyeret seluruh modal tabel).
+- Daftar sumber skema (`SUMBER_TAUTAN` di `schemas.ts`) = `URUTAN_SUMBER` = kunci `DAFTAR_SUMBER` —
+  dijaga uji, supaya sumber baru tidak bisa terdaftar di satu tempat saja.
+
+### 19.6 Diverifikasi di aplikasi (2026-10-15)
+Dokumen LKJIP kotak pasir 2099 (dihapus sesudahnya) + PK uji 2099 (2 FINAL Murni/Perubahan + 1 draf,
+dihapus sesudahnya); BLUD 2026 hanya dibaca. Narasi "Pagu belanja BLUD tahun 2026 sebesar
+**Rp 68.383.000.000**, serapannya **0,00%**." tersimpan dengan html bersih + 2 resep; Perbarui saat sama
+= hanya toast; angka dibuat basi lewat API → dialog "Rp 60.000.000.000 → Rp 68.383.000.000" + angka
+yang barisnya hilang dibiarkan → tersimpan; panel Periksa memuat tabel PK (sama) & narasi (berbeda);
+Finalisasi ditahan ("1 dari 2 blok tertaut …"), dokumen tetap draf. Templat Perjanjian Kinerja: daftar
+Pihak Pertama hanya yang FINAL, PK Perubahan 01 Agu terpakai (target 85 % / 45 menit), sasaran kembar
+digabung. BLUD Per PJ 2026: semua "Belum ada PJ", JUMLAH = Rp 68.383.000.000. Word dari generator
+sungguhan: angka jadi teks biasa, tanpa `data-angka`. Tema terang & 375 px (modal muat, tanpa gulir
+samping). **Belum**: tata letak editor LKJIP di ponsel memang sudah sempit sebelum ini (panel kerangka
+memakan seluruh lebar) — tidak disentuh.
+
+Regresi Tahap 3: `npx tsx scripts/test-lkjip-angka-modul.mts` (59) — **53 uji mutasi tertangkap**. Dua sempat bermasalah di putaran pertama: mutan "pola id longgar" TIDAK SAH (regex penyaring ternyata rusak saat ditulis lewat skrip shell — `\s` jadi `s`; ditulis ulang dengan lookbehind + uji spasi di sekitar `=` dan `x-data-angka`), dan "rekening nol tak disembunyikan" LOLOS karena data uji tak punya rekening nol di tingkat ≤ 3 (kini ada baris `NOL`).

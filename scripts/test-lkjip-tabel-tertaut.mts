@@ -595,11 +595,11 @@ const ringkasO2 = hasilO2[0].status === 'berubah' ? hasilO2[0].ringkas : ''
 ok('O4 berubah: kalimat menyebut baris hilang & isian tangan yatim', ringkasO2.includes('1 baris hilang') && ringkasO2.includes('1 isian tangan kehilangan barisnya'), ringkasO2)
 const finalFn = badan(ed, 'async function finalize(')
 ok('O5 Finalisasi memeriksa tabel tertaut DULU & menawarkan memperbaruinya',
-  finalFn.indexOf('await jalankanPeriksa(tertaut)') > 0 && finalFn.indexOf('await jalankanPeriksa(tertaut)') < finalFn.indexOf('await kirimFinal()')
+  finalFn.indexOf('await jalankanPeriksa()') > 0 && finalFn.indexOf('await jalankanPeriksa()') < finalFn.indexOf('await kirimFinal()')
   && finalFn.includes("confirmLabel: 'Lihat & perbarui dulu', altLabel: 'Tetap finalisasi'"))
 ok('O6 panel Periksa hanya membaca (tak ada simpan blok di jalurnya)',
   !badan(ed, 'async function bukaPeriksa(').includes('saveBlock') && !badan(ed, 'async function jalankanPeriksa(').includes('saveBlock') && !kode('lib/lkjip/kesegaran.ts').includes('fetch('))
-ok('O7 Periksa & tombol Perbarui memakai penilaian yang SAMA', kode('lib/lkjip/kesegaran.ts').includes('nilaiPerbarui(t.payload, await tarikan.get(kunci)!)'))
+ok('O7 Periksa & tombol Perbarui memakai penilaian yang SAMA', kode('lib/lkjip/kesegaran.ts').includes('nilaiPerbarui(t.payload, await bersama(t.payload.tautan.sumber, t.payload.tautan.setelan))'))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
 if (gagal.length) { console.log('GAGAL: ' + gagal.join(' | ')); process.exit(1) }

@@ -32,6 +32,8 @@ export interface HasilTarik {
   baris:   BarisSumber[];
   catatan: string[];
   ringkas: string;
+  /** Pilihan setelan yang baru diketahui sesudah menarik (mis. Pihak Pertama PK). */
+  pilihan?: Record<string, string[]>;
 }
 
 export type IsiKolom =
@@ -52,7 +54,7 @@ export interface KolomTaut {
 }
 
 export interface Tautan {
-  sumber:      'kinerja-rekap' | 'renaksi-cetak' | 'kinerja-laporan';
+  sumber:      'kinerja-rekap' | 'renaksi-cetak' | 'kinerja-laporan' | 'blud-realisasi' | 'pk';
   setelan:     Record<string, unknown>;
   /** Sejajar dengan `kolom` tabel — pemetaan menempel pada KOLOM, bukan posisi. */
   kolom:       KolomTaut[];

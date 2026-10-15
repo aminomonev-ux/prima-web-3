@@ -65,4 +65,31 @@ export const DAFTAR_TEMPLAT: TemplatTabel[] = [
       { judul: 'Sisa Anggaran (Rp)', align: 'right', taut: sumber('sisa') },
     ],
   },
+  {
+    id: 'anggaran-blud-kelompok',
+    label: 'Realisasi Anggaran BLUD per Kelompok Belanja',
+    keterangan: 'Pagu · realisasi · serapan · sisa sampai tingkat kelompok belanja, s/d Desember (BLUD Realisasi)',
+    sumber: 'blud-realisasi',
+    setelan: { tampilan: 'rekening', sdBulan: 12, kedalaman: 3, sembunyikanNol: true },
+    kolom: [
+      { judul: 'Uraian', align: 'left', taut: sumber('uraian', { bertingkat: true }) },
+      { judul: 'Pagu (Rp)', align: 'right', taut: sumber('pagu') },
+      { judul: 'Realisasi (Rp)', align: 'right', taut: sumber('realisasi') },
+      { judul: 'Serapan (%)', align: 'right', taut: sumber('persen') },
+      { judul: 'Sisa (Rp)', align: 'right', taut: sumber('sisa') },
+    ],
+  },
+  {
+    id: 'perjanjian-kinerja',
+    label: 'Perjanjian Kinerja',
+    keterangan: 'Sasaran · indikator · target dari satu PK FINAL (pilih Pihak Pertama sesudah menarik)',
+    sumber: 'pk',
+    setelan: { versi: 'berlaku', tampilan: 'kinerja' },
+    kolom: [
+      { judul: 'No', align: 'center', taut: { isi: { jenis: 'nomor' } } },
+      { judul: 'Sasaran', align: 'left', taut: sumber('uraian', { gabungSama: true }) },
+      { judul: 'Indikator Kinerja', align: 'left', taut: sumber('indikator') },
+      { judul: 'Target', align: 'center', taut: sumber('target') },
+    ],
+  },
 ];

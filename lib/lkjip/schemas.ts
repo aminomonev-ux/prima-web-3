@@ -6,6 +6,7 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import { MAX_DEPTH } from './numbering';
 import { FONT_CHOICES } from './style-constants';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
+import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
 // users.app_access include 'lkjip' (diatur Admin Panel → User Management). Pola BBA/Rencana Aksi.
@@ -82,6 +83,9 @@ export function sanitizeNarasiHtml(html: string): string {
       return isAlpha ? '<ol type="a">' : '<ol>';
     }
     if (t === 'span') {
+      // Angka tertaut (konsep §19.1): id dibentuk ulang dari pola sempit, gaya lain tidak ikut.
+      const angka = /(?<![-a-zA-Z])data-angka\s*=\s*["']([a-z0-9]{1,12})["']/.exec(String(attrs || ''));
+      if (angka) return `<span data-angka="${angka[1]}">`;
       const out: string[] = [];
       const col = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))/i.exec(String(attrs || ''));
       if (col) out.push(`color:${col[1].toLowerCase().replace(/\s+/g, '')}`);
@@ -171,10 +175,34 @@ const CellSchema = z.union([
   }),
 ]).transform(c => (typeof c === 'string' ? { v: c } : c));
 
+const SUMBER_TAUTAN = ['kinerja-rekap', 'renaksi-cetak', 'kinerja-laporan', 'blud-realisasi', 'pk'] as const;
+const SetelanTautanSchema = z.record(z.string(), z.unknown()).refine(s => JSON.stringify(s).length <= 4000, 'Setelan tautan terlalu besar');
+const FormatKolomSchema = z.enum(['teks', 'angka', 'rp', 'persen']);
+
+// Resep angka sebaris — WAJIB terdaftar (alasan sama dgn TautanSchema di bawah).
+const ResepAngkaSchema = z.object({
+  sumber:      z.enum(SUMBER_TAUTAN),
+  setelan:     SetelanTautanSchema,
+  kunciBaris:  z.string().min(1).max(2000),
+  kolom:       z.string().min(1).max(64),
+  format:      FormatKolomSchema,
+  desimal:     z.coerce.number().int().min(0).max(6).optional(),
+  labelBaris:  z.string().max(500),
+  labelKolom:  z.string().max(255),
+  ringkas:     z.string().max(500),
+  ditarikPada: z.string().max(32),
+});
+
 export const NarasiPayloadSchema = z.object({
   html: z.string().max(50000).default(''),
   continueList: z.boolean().optional().default(false), // lanjutkan penomoran list dari blok sebelumnya
-}).transform(p => ({ html: sanitizeNarasiHtml(p.html), continueList: p.continueList === true }));
+  angka: z.record(z.string().regex(POLA_ID_ANGKA), ResepAngkaSchema).default({})
+    .refine(a => Object.keys(a).length <= BATAS_ANGKA, `Maksimal ${BATAS_ANGKA} angka tertaut per blok`),
+}).transform(p => {
+  const html = sanitizeNarasiHtml(p.html);
+  // Resep yang span-nya sudah dihapus dari naskah dibuang — tidak menumpuk.
+  return { html, continueList: p.continueList === true, angka: resepTerpakai(html, p.angka) };
+});
 
 // Tabel tertaut ke modul (docs/CONCEPT-lkjip-tabel-tertaut.md). WAJIB terdaftar di sini: Zod
 // membuang kunci yang tidak dikenalnya, jadi tanpa ini resepnya hilang diam-diam saat Simpan —
@@ -193,14 +221,14 @@ const IsiKolomSchema = z.discriminatedUnion('jenis', [
 ]);
 const KolomTautSchema = z.object({
   isi:        IsiKolomSchema,
-  format:     z.enum(['teks', 'angka', 'rp', 'persen']).optional(),
+  format:     FormatKolomSchema.optional(),
   desimal:    z.coerce.number().int().min(0).max(6).optional(),
   gabungSama: z.boolean().optional(),
   bertingkat: z.boolean().optional(),
 });
 export const TautanSchema = z.object({
-  sumber:      z.enum(['kinerja-rekap', 'renaksi-cetak', 'kinerja-laporan']),
-  setelan:     z.record(z.string(), z.unknown()).refine(s => JSON.stringify(s).length <= 4000, 'Setelan tautan terlalu besar'),
+  sumber:      z.enum(SUMBER_TAUTAN),
+  setelan:     SetelanTautanSchema,
   kolom:       z.array(KolomTautSchema).min(1).max(12),
   kunciBaris:  z.array(KunciBarisSchema).max(500),
   sembunyi:    z.array(KunciBarisSchema).max(2000).default([]),

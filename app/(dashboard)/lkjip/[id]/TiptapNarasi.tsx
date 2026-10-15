@@ -1,11 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Extension, Mark, mergeAttributes } from '@tiptap/core';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save } from 'lucide-react';
+import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { fetchJson } from '@/lib/shared/api';
+import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
+import { angkaDiHtml, bandingAngka, idAngkaBaru, kalimatAngka, kunciTarikan, resepTerpakai, type ResepAngka } from '@/lib/lkjip/angka';
+import type { HasilTarik } from '@/lib/lkjip/tautan';
+
+const AngkaModal = dynamic(() => import('./AngkaModal'), { ssr: false });
 
 // Ekstensi ringan (tanpa dependency baru) — atribut text-align pada paragraf/heading.
 const TextAlign = Extension.create({
@@ -66,20 +75,63 @@ const TextStyle = Mark.create({
   },
 });
 
+// Angka tertaut ke modul (konsep §19.1): atom sebaris — tidak bisa disunting sebagian, Backspace
+// menghapus seluruhnya. Teksnya disimpan sebagai isi span; resepnya di payload.angka[id].
+const AngkaTaut = Node.create({
+  name: 'angkaTaut',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-angka'),
+        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-angka': attrs.id }),
+      },
+      teks: {
+        default: '',
+        parseHTML: (el: HTMLElement) => el.textContent ?? '',
+        renderHTML: () => ({}),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-angka]', priority: 60 }];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes), String(node.attrs.teks ?? '')];
+  },
+  renderText({ node }) {
+    return String(node.attrs.teks ?? '');
+  },
+});
+
 interface Props {
   initialHtml: string;
+  initialAngka?: Record<string, ResepAngka>;
+  tahunDokumen: number;
   readOnly: boolean;
-  onSave: (html: string) => void;
+  onSave: (html: string, angka: Record<string, ResepAngka>) => void;
 }
 
-export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
+export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
+  const [angka, setAngka] = useState<Record<string, ResepAngka>>(initialAngka ?? {});
+  const [modalAngka, setModalAngka] = useState(false);
+  const [memperbarui, setMemperbarui] = useState(false);
+  // Beberapa angka satu kalimat biasanya dari sumber yang sama — modal dibuka lagi di sana.
+  const [sumberTerakhir, setSumberTerakhir] = useState<Pick<ResepAngka, 'sumber' | 'setelan'> | null>(() => {
+    const semua = Object.values(initialAngka ?? {});
+    return semua.length ? { sumber: semua[semua.length - 1].sumber, setelan: semua[semua.length - 1].setelan } : null;
+  });
   const editor = useEditor({
     // Tiptap v3 (K2, 2026-09-30): StarterKit kini membawa Underline sendiri, plus Link dan
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
     // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
     // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
-    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType],
+    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
@@ -90,6 +142,73 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
   });
 
   if (!editor) return <div className="lk-tt-loading">Memuat editor…</div>;
+  const ed = editor;
+
+  let jumlahAngka = 0;
+  ed.state.doc.descendants(n => { if (n.type.name === 'angkaTaut' && angka[String(n.attrs.id)]) jumlahAngka++; });
+
+  function simpan(angkaKini: Record<string, ResepAngka> = angka) {
+    const html = ed.getHTML();
+    onSave(html, resepTerpakai(html, angkaKini));
+    setDirty(false);
+  }
+
+  function sisipkanAngka(teks: string, resep: ResepAngka) {
+    const id = idAngkaBaru([...Object.keys(angka), ...angkaDiHtml(ed.getHTML()).keys()]);
+    setAngka(a => ({ ...a, [id]: resep }));
+    setSumberTerakhir({ sumber: resep.sumber, setelan: resep.setelan });
+    ed.chain().focus().insertContent({ type: 'angkaTaut', attrs: { id, teks } }).run();
+    setModalAngka(false);
+  }
+
+  // Satu tarikan per resep sumber; sama → tidak menulis apa pun (konsep §19.1).
+  async function perbaruiAngka() {
+    const html = ed.getHTML();
+    const resep = resepTerpakai(html, angka);
+    if (!Object.keys(resep).length) return;
+    setMemperbarui(true);
+    try {
+      const { DAFTAR_SUMBER } = await import('@/lib/lkjip/sumber');
+      const hasilPer = new Map<string, HasilTarik>();
+      const gagal = new Map<string, string>();
+      for (const r of Object.values(resep)) {
+        const k = kunciTarikan(r);
+        if (hasilPer.has(k) || gagal.has(k)) continue;
+        try { hasilPer.set(k, await DAFTAR_SUMBER[r.sumber].tarik(r.setelan, url => fetchJson<unknown>(url), tahunDokumen)); }
+        catch (e) { gagal.set(k, e instanceof Error && e.name === 'GagalTarik' ? e.message : 'Gagal menarik data. Coba lagi.'); }
+      }
+      const banding = bandingAngka(html, resep, hasilPer);
+      const berubah = banding.filter(b => b.status === 'berubah');
+      const catatanGagal = gagal.size ? `\n\nTidak bisa diperiksa: ${[...gagal.values()][0]}` : '';
+      if (!berubah.length) {
+        if (!banding.length && gagal.size) toast.error([...gagal.values()][0]);
+        else toast.info(`${kalimatAngka(banding) === 'Tidak ada yang berubah.' ? 'Semua angka sudah sama dengan sumbernya.' : kalimatAngka(banding)}${catatanGagal}`);
+        return;
+      }
+      if (!(await confirmDialog({
+        title: 'Perbarui angka dari modul?',
+        message: `${kalimatAngka(banding)}.${catatanGagal}`,
+        confirmLabel: 'Terapkan & simpan', variant: 'warning',
+      }))) return;
+      const baru = new Map(berubah.map(b => [b.id, b.baru!]));
+      const tr = ed.state.tr;
+      ed.state.doc.descendants((n, pos) => {
+        const id = String(n.attrs.id);
+        if (n.type.name === 'angkaTaut' && baru.has(id)) tr.setNodeMarkup(pos, undefined, { ...n.attrs, teks: baru.get(id) });
+      });
+      ed.view.dispatch(tr);
+      const kini = waktuSekarangWIB().slice(0, 16);
+      // Angka yang tak ditemukan lagi tidak ikut distempel: teksnya memang tidak ditarik ulang.
+      const hilang = new Set(banding.filter(b => b.status === 'hilang').map(b => b.id));
+      const angkaBaru = Object.fromEntries(Object.entries(resep).map(([id, r]) => {
+        const h = hasilPer.get(kunciTarikan(r));
+        return [id, h && !hilang.has(id) ? { ...r, ringkas: h.ringkas.slice(0, 500), ditarikPada: kini } : r];
+      }));
+      setAngka(angkaBaru);
+      simpan(angkaBaru);
+      toast.success(`${berubah.length} angka diperbarui.`);
+    } finally { setMemperbarui(false); }
+  }
 
   const btn = (active: boolean, onClick: () => void, title: string, Icon: typeof Bold) => (
     <button type="button" className={`lk-tt-btn${active ? ' on' : ''}`} data-tooltip={title} data-tooltip-pos="below" aria-label={title} onMouseDown={e => { e.preventDefault(); onClick(); }}>
@@ -136,14 +255,26 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
             {['10px', '12px', '14px', '16px', '18px', '24px'].map(s => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
             <option value="reset">Reset</option>
           </select></span>
+          <span className="lk-tt-sep" />
+          <button type="button" className="lk-tt-btn lk-tt-teks" data-tooltip="Sisipkan angka dari E-Anggaran, Renaksi, BLUD, atau PK — bisa diperbarui nanti" data-tooltip-pos="below"
+            aria-label="Angka dari Modul" onMouseDown={e => { e.preventDefault(); setModalAngka(true); }}>
+            <Hash size={13} /> Angka
+          </button>
         </div>
       )}
       <EditorContent editor={editor} className="lk-tt-content" />
-      {!readOnly && dirty && (
+      {!readOnly && (dirty || jumlahAngka > 0) && (
         <div className="lk-tt-save">
-          <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => { onSave(editor.getHTML()); setDirty(false); }}>Simpan</PrimaButton>
+          {jumlahAngka > 0 && (
+            <PrimaButton menulis variant="purple" size="sm" iconLeft={<RefreshCw size={14} />} disabled={memperbarui} onClick={() => void perbaruiAngka()}
+              data-tooltip="Tarik ulang sumbernya, lalu tunjukkan angka yang berubah sebelum diterapkan">
+              {memperbarui ? 'Memeriksa…' : `Perbarui angka (${jumlahAngka})`}
+            </PrimaButton>
+          )}
+          {dirty && <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => simpan()}>Simpan</PrimaButton>}
         </div>
       )}
+      {modalAngka && <AngkaModal tahunDokumen={tahunDokumen} awal={sumberTerakhir} onSisipkan={sisipkanAngka} onTutup={() => setModalAngka(false)} />}
     </div>
   );
 }
@@ -151,7 +282,7 @@ export default function TiptapNarasi({ initialHtml, readOnly, onSave }: Props) {
 const TT_CSS = `
   .lk-tt-loading { color: #85B7EB; font-size: 12.5px; padding: 10px; }
   .lk-tt-tip { display: inline-flex; }
-  .lk-tt-bar { display: flex; align-items: center; gap: 2px; padding: 4px; background: #020F1C; border: 1px solid #0C447C; border-bottom: none; border-radius: 6px 6px 0 0; }
+  .lk-tt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px; background: #020F1C; border: 1px solid #0C447C; border-bottom: none; border-radius: 6px 6px 0 0; }
   .lk-tt-btn { background: none; border: none; color: #B5D4F4; width: 28px; height: 28px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   .lk-tt-btn:hover { background: rgba(255,255,255,0.08); color: #E6F1FB; }
   .lk-tt-btn.on { background: rgba(124,92,252,0.22); color: #C9BCFF; }
@@ -175,7 +306,10 @@ const TT_CSS = `
   .lk-tt-content .ProseMirror li { margin: 2px 0; }
   .lk-tt-content .ProseMirror li > p { margin: 0; }
   .lk-tt-content .ProseMirror p.is-editor-empty:first-child::before { content: 'Tulis narasi…'; color: #5E8BBE; float: left; height: 0; pointer-events: none; }
-  .lk-tt-save { margin-top: 10px; display: flex; justify-content: flex-end; }
+  .lk-tt-save { margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .lk-tt-teks { width: auto; gap: 4px; padding: 0 7px; font-size: 11.5px; font-weight: 600; }
+  .lk-tt-content .ProseMirror span[data-angka] { background: rgba(124,92,252,0.16); border: 1px solid rgba(124,92,252,0.45); border-radius: 4px; padding: 0 3px; white-space: nowrap; cursor: default; }
+  .lk-tt-content .ProseMirror span[data-angka].ProseMirror-selectednode { outline: 2px solid #7C5CFC; outline-offset: 1px; }
 
   [data-theme="light"] .lk-tt-bar { background: #F3F4F6; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-tt-btn { color: #4B5563; }

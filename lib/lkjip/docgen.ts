@@ -93,7 +93,7 @@ function buildNumbering(instances: { numId: number; abs: number }[]): string {
 // Tidak diterapkan ke heading & list item (list pakai hanging indent dari numbering).
 // continueList: blok ini melanjutkan penomoran list dari blok sebelumnya (abs sama)
 // → list PERTAMA yang dibuka pakai-ulang numId terakhir (a,b,c lanjut, bukan restart).
-function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, alloc?: NumAlloc, continueList = false): string {
+export function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, alloc?: NumAlloc, continueList = false): string {
   if (!html || !html.trim()) return '';
   // CT_PPr: <w:ind> WAJIB sebelum <w:jc>. indXml dipasang di paragraf isi saja.
   const indXml = indentTwips > 0 ? `<w:ind w:firstLine="${indentTwips}"/>` : '';
@@ -109,6 +109,8 @@ function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, al
   let headingLevel = 0;
   let runColor: string | null = null;
   let runSize: number | null = null;
+  // Span bisa bersarang (warna yang membungkus angka tertaut): penutup memulihkan gaya induknya.
+  const spanInduk: { color: string | null; size: number | null }[] = [];
   const marks = { b: false, i: false, u: false, s: false };
 
   const curRpr = () => {
@@ -164,12 +166,13 @@ function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, al
         case 'u': marks.u = !closing; break;
         case 's': case 'strike': case 'del': marks.s = !closing; break;
         case 'span':
-          if (closing) { runColor = null; runSize = null; }
+          if (closing) { const induk = spanInduk.pop(); runColor = induk?.color ?? null; runSize = induk?.size ?? null; }
           else {
+            spanInduk.push({ color: runColor, size: runSize });
             const cm = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{3,6}|rgb\([^)]*\))/i.exec(tok);
-            runColor = cm ? colorToHex6(cm[1]) : null;
+            if (cm) runColor = colorToHex6(cm[1]);
             const sm = /font-size\s*:\s*(\d{1,3})px/i.exec(tok);
-            runSize = sm ? Math.round(parseInt(sm[1], 10) * 1.5) : null;
+            if (sm) runSize = Math.round(parseInt(sm[1], 10) * 1.5);
           }
           break;
         case 'ul':

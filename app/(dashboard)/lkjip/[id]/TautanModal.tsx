@@ -9,19 +9,16 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
-import { DAFTAR_SUMBER, URUTAN_SUMBER, type IdSumber } from '@/lib/lkjip/sumber';
+import { DAFTAR_SUMBER, type IdSumber } from '@/lib/lkjip/sumber';
 import { GagalTarik } from '@/lib/lkjip/sumber/umum';
-import { LABEL_KEDALAMAN } from '@/lib/lkjip/sumber/kinerja-rekap';
-import { LABEL_LEVEL, type PilihanFokus } from '@/lib/lkjip/sumber/renaksi-cetak';
 import { DAFTAR_TEMPLAT, type TemplatTabel } from '@/lib/lkjip/sumber/templat';
 import {
   bangunBadan, pasangBadan, periksaRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, jumlahIsianTangan, BATAS_KOLOM,
-  type HasilTarik, type KolomTaut, type KolomSumber, type PayloadTabel, type Tautan, type FormatKolom,
+  type KolomTaut, type KolomSumber, type PayloadTabel, type Tautan, type FormatKolom,
 } from '@/lib/lkjip/tautan';
 import { displayValue, buildTableMeta, colLabel, type TabelCell, type TabelAlign } from '@/lib/lkjip/tabel';
-import { CRR_BULAN_LABELS, SUMBER_LIST } from '@/app/(dashboard)/kinerja/_utils';
-import { ALL_LEVELS } from '@/app/(dashboard)/rencana-aksi/_lib/cetak-filter';
-import type { RaLevel } from '@/app/(dashboard)/rencana-aksi/_lib/types';
+import SetelanSumber, { type HasilSetelan } from './SetelanSumber';
+import { TAUT_CSS } from './taut-css';
 
 interface Props {
   payload: PayloadTabel;
@@ -32,7 +29,7 @@ interface Props {
 
 /** `tanganAsal`: isian tangan kolom ini saat modal dibuka — kembali kalau isinya diganti lalu dipilih tangan lagi. */
 type KolomForm = { judul: string; taut: KolomTaut | null; align: TabelAlign; lebar?: number; asal: number | null; tanganAsal?: Record<string, string> };
-type HasilModal = HasilTarik & { fokus?: PilihanFokus };
+type HasilModal = HasilSetelan;
 
 const LEBAR_BAWAAN = 140;
 const judulBawaan = (s: string) => s.trim() === '' || /^Kolom \d+$/.test(s.trim());
@@ -242,7 +239,7 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   const adaTingkat = !!hasil?.baris.some(b => (b.indent ?? 0) > 0);
   const sembunyiSet = new Set(sembunyi);
   const setS = (kunci: string, nilai: unknown) => setSetelan(s => ({ ...s, [kunci]: nilai }));
-  // Laporan: tampilan per sumber dan per bulan punya kolom berbeda — tabel baru ikut kolom bawaannya.
+  // Tampilan yang punya kolom berbeda (Laporan, BLUD, PK) — tabel baru ikut kolom bawaannya.
   function gantiTampilan(v: string) {
     const s = { ...setelan, tampilan: v };
     setSetelan(s); setSembunyi([]);
@@ -275,85 +272,7 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
 
           <section className="lk-taut-sec">
             <div className="lk-taut-judul">1. Sumber data</div>
-            <div className="lk-taut-grid">
-              <label>Sumber
-                <select value={sumberId} onChange={e => gantiSumber(e.target.value as IdSumber)}>
-                  {URUTAN_SUMBER.map(id => <option key={id} value={id}>{DAFTAR_SUMBER[id].label}</option>)}
-                </select>
-              </label>
-              <label>Tahun
-                <input type="number" min={2000} max={2100} value={Number(setelan.tahun)} onChange={e => setS('tahun', Number(e.target.value))} />
-              </label>
-              {sumberId === 'kinerja-rekap' ? (
-                <>
-                  <label>S/D bulan
-                    <select value={Number(setelan.sdBulan)} onChange={e => setS('sdBulan', Number(e.target.value))}>
-                      {CRR_BULAN_LABELS.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
-                    </select>
-                  </label>
-                  <label>Versi SSK
-                    <select value={String(setelan.versi)} onChange={e => setS('versi', e.target.value)}>
-                      <option value="berlaku">Versi Berlaku</option>
-                      <option value="murni">Versi Murni (sebelum perubahan)</option>
-                    </select>
-                  </label>
-                  <label>Kedalaman
-                    <select value={String(setelan.kedalaman)} onChange={e => setS('kedalaman', e.target.value)}>
-                      {Object.entries(LABEL_KEDALAMAN).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                    </select>
-                  </label>
-                </>
-              ) : sumberId === 'kinerja-laporan' ? (
-                <>
-                  <label>Tampilan
-                    <select value={String(setelan.tampilan)} onChange={e => gantiTampilan(e.target.value)}>
-                      <option value="sumber">Per sumber dana (+ jumlah)</option>
-                      <option value="bulanan">Per bulan, satu sumber dana</option>
-                    </select>
-                  </label>
-                  {setelan.tampilan === 'bulanan' && (
-                    <label>Sumber dana
-                      <select value={String(setelan.sumber)} onChange={e => setS('sumber', e.target.value)}>
-                        {SUMBER_LIST.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </label>
-                  )}
-                </>
-              ) : (
-                <>
-                  <label>Tampilan
-                    <select value={String(setelan.mode)} onChange={e => setS('mode', e.target.value)}>
-                      <option value="hirarki">Pohon (bertingkat)</option>
-                      <option value="flat">Daftar per level</option>
-                    </select>
-                  </label>
-                  <div className="lk-taut-cek">Level
-                    <span>
-                      {ALL_LEVELS.map(l => {
-                        const lv = setelan.levels as Record<RaLevel, boolean>;
-                        return (
-                          <label key={l} className="lk-taut-inline">
-                            <input type="checkbox" checked={!!lv?.[l]} onChange={e => setS('levels', { ...lv, [l]: e.target.checked })} />
-                            {LABEL_LEVEL[l]}
-                          </label>
-                        );
-                      })}
-                    </span>
-                  </div>
-                  {(['fTujuan', 'fSasaran', 'fProgram'] as const).map(f => {
-                    const daftar = hasil?.fokus?.[f === 'fTujuan' ? 'tujuan' : f === 'fSasaran' ? 'sasaran' : 'program'] ?? [];
-                    return (
-                      <label key={f}>Fokus {f.slice(1)}
-                        <select value={String(setelan[f] ?? '')} disabled={!hasil?.fokus} onChange={e => setS(f, e.target.value)}>
-                          <option value="">{hasil?.fokus ? 'Semua' : 'Tarik data dulu'}</option>
-                          {daftar.map(n => <option key={n} value={n}>{n}</option>)}
-                        </select>
-                      </label>
-                    );
-                  })}
-                </>
-              )}
-            </div>
+            <SetelanSumber sumberId={sumberId} setelan={setelan} hasil={hasil} onSumber={gantiSumber} onUbah={setS} onTampilan={gantiTampilan} />
             <div className="lk-taut-aksi">
               <PrimaButton variant="purple" size="sm" iconLeft={<RefreshCw size={14} />} onClick={() => void tarik()} disabled={memuat}>
                 {memuat ? 'Menarik…' : hasil ? 'Tarik Ulang' : 'Tarik Data'}
@@ -513,76 +432,3 @@ function Pratinjau({ kolom, align, headerRows, rows }: { kolom: string[]; align:
     </div>
   );
 }
-
-const TAUT_CSS = `
-  .lk-taut { width: min(1120px, 96vw); max-height: 92vh; display: flex; flex-direction: column; padding: 18px 20px; }
-  .lk-taut-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .lk-taut-head h3 { margin: 0; }
-  .lk-taut-x { background: none; border: none; color: #85B7EB; cursor: pointer; padding: 4px; border-radius: 6px; display: inline-flex; }
-  .lk-taut-x:hover { color: #E6F1FB; background: rgba(255,255,255,0.06); }
-  .lk-taut-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; margin: 10px 0; }
-  .lk-taut-sec { border: 1px solid #0C447C; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
-  .lk-taut-judul { font-size: 12px; font-weight: 800; letter-spacing: .03em; color: #85B7EB; margin-bottom: 10px; }
-  .lk-taut-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
-  .lk-taut-grid > label, .lk-taut-cek { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 600; color: #B5D4F4; }
-  .lk-taut-cek > span { display: flex; flex-wrap: wrap; gap: 8px; }
-  .lk-taut select, .lk-taut .lk-taut-grid input, .lk-taut input.lk-taut-nama, .lk-taut input.lk-taut-rumus { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; color: #E6F1FB; padding: 6px 8px; font-size: 12.5px; margin: 0; width: auto; }
-  .lk-taut .lk-taut-grid input { width: 100%; }
-  .lk-taut select:focus, .lk-taut input:focus { outline: none; border-color: #185FA5; }
-  .lk-taut select:disabled { opacity: .5; cursor: not-allowed; }
-  .lk-taut-aksi { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
-  .lk-taut-ok { font-size: 11.5px; color: #7BE0BD; }
-  .lk-taut-peringatan { font-size: 11.5px; color: #FBBF24; }
-  .lk-taut-galat { margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 12px; background: rgba(226,75,74,0.14); border: 1px solid #E24B4A; color: #FCA5A5; }
-  .lk-taut-galat.kecil { flex-basis: 100%; margin-top: 2px; padding: 4px 8px; }
-  .lk-taut-catatan, .lk-taut-masalah { margin: 10px 0 0; padding: 8px 12px 8px 26px; border-radius: 8px; font-size: 11.5px; line-height: 1.5; background: rgba(239,159,39,0.12); border: 1px solid #EF9F27; color: #FBBF24; display: flex; flex-direction: column; gap: 3px; }
-  .lk-taut-masalah { margin: 0 0 10px; }
-  .lk-taut-kolom { display: flex; flex-direction: column; gap: 6px; }
-  .lk-taut-baris { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border: 1px solid #0C447C; border-radius: 8px; background: #020F1C; }
-  .lk-taut-baris.kurang { border-color: #EF9F27; }
-  .lk-taut-huruf { font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 12px; color: #EF9F27; min-width: 16px; }
-  .lk-taut input.lk-taut-nama { width: 170px; }
-  .lk-taut-isi { max-width: 260px; }
-  .lk-taut input.lk-taut-rumus { width: 150px; font-family: 'JetBrains Mono', monospace; }
-  .lk-taut-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: #B5D4F4; cursor: pointer; user-select: none; }
-  .lk-taut .lk-taut-inline input { accent-color: #7C5CFC; margin: 0; width: auto; padding: 0; }
-  .lk-taut-ctl { display: inline-flex; gap: 2px; margin-left: auto; }
-  .lk-taut-ctl button { background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
-  .lk-taut-ctl button:disabled { opacity: .35; cursor: not-allowed; }
-  .lk-taut-ctl button:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; }
-  .lk-taut-tambah { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
-  .lk-taut-tambah:disabled { opacity: .4; cursor: not-allowed; }
-  .lk-taut-daftar { max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 8px; border: 1px solid #0C447C; border-radius: 8px; padding: 6px; background: #020F1C; }
-  .lk-taut-inline.baris { padding-top: 2px; padding-bottom: 2px; }
-  .lk-taut-inline .tebal { font-weight: 700; color: #E6F1FB; }
-  .lk-taut-templat { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
-  .lk-taut-templat button { display: flex; flex-direction: column; gap: 3px; text-align: left; background: #020F1C; border: 1px solid #0C447C; border-radius: 10px; padding: 9px 11px; color: #E6F1FB; cursor: pointer; font-size: 12.5px; }
-  .lk-taut-templat button span { font-size: 11px; color: #85B7EB; line-height: 1.4; }
-  .lk-taut-templat button:hover:not(:disabled) { border-color: #7C5CFC; }
-  .lk-taut-templat button:disabled { opacity: .5; cursor: not-allowed; }
-  .lk-taut-ket { font-size: 11px; color: #85B7EB; }
-  .lk-taut-pratinjau { overflow-x: auto; }
-  .lk-taut-pratinjau table { border-collapse: collapse; font-size: 11.5px; min-width: 100%; }
-  .lk-taut-pratinjau th, .lk-taut-pratinjau td { border: 1px solid #0C447C; padding: 4px 6px; vertical-align: top; color: #E6F1FB; }
-  .lk-taut-pratinjau th, .lk-taut-pratinjau tr.kepala td { background: rgba(133,183,235,0.13); font-weight: 700; text-align: center; }
-  @media (max-width: 520px) {
-    .lk-taut { padding: 14px 12px; }
-    .lk-taut input.lk-taut-nama, .lk-taut .lk-taut-isi, .lk-taut input.lk-taut-rumus { width: 100%; max-width: none; }
-  }
-  [data-theme="light"] .lk-taut-sec, [data-theme="light"] .lk-taut-baris, [data-theme="light"] .lk-taut-daftar { border-color: rgba(0,0,0,.12); }
-  [data-theme="light"] .lk-taut-baris, [data-theme="light"] .lk-taut-daftar { background: #F9FAFB; }
-  [data-theme="light"] .lk-taut-baris.kurang { border-color: #EF9F27; }
-  [data-theme="light"] .lk-taut-judul, [data-theme="light"] .lk-taut-x { color: #6B7280; }
-  [data-theme="light"] .lk-taut-grid > label, [data-theme="light"] .lk-taut-cek, [data-theme="light"] .lk-taut-inline { color: #374151; }
-  [data-theme="light"] .lk-taut-inline .tebal { color: #0F0F12; }
-  [data-theme="light"] .lk-taut select, [data-theme="light"] .lk-taut .lk-taut-grid input, [data-theme="light"] .lk-taut input.lk-taut-nama, [data-theme="light"] .lk-taut input.lk-taut-rumus { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
-  [data-theme="light"] .lk-taut-ctl button, [data-theme="light"] .lk-taut-tambah { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
-  [data-theme="light"] .lk-taut-templat button { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
-  [data-theme="light"] .lk-taut-templat button span, [data-theme="light"] .lk-taut-ket { color: #6B7280; }
-  [data-theme="light"] .lk-taut-templat button:hover:not(:disabled) { border-color: #7C5CFC; }
-  [data-theme="light"] .lk-taut-ok { color: #0E7A55; }
-  [data-theme="light"] .lk-taut-peringatan, [data-theme="light"] .lk-taut-catatan, [data-theme="light"] .lk-taut-masalah { color: #B45309; }
-  [data-theme="light"] .lk-taut-galat { color: #B91C1C; }
-  [data-theme="light"] .lk-taut-pratinjau th, [data-theme="light"] .lk-taut-pratinjau td { border-color: rgba(0,0,0,.12); color: #0F0F12; }
-  [data-theme="light"] .lk-taut-pratinjau th, [data-theme="light"] .lk-taut-pratinjau tr.kepala td { background: #EDEDED; }
-`;

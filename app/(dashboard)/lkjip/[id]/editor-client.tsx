@@ -33,7 +33,8 @@ import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
 import { normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, angkaSel, colLabel, type TabelCell, type TabelAlign, type TabelNumFmt } from '@/lib/lkjip/tabel';
 import { kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, sidikGrafik, ambilIsianTangan, nilaiPerbarui, kalimatIsianYatim, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
-import { kumpulkanTabelTertaut, periksaKesegaran, type HasilPeriksa, type TabelTertaut } from '@/lib/lkjip/kesegaran';
+import { kumpulkanTabelTertaut, kumpulkanNarasiTertaut, periksaSemua, type HasilPeriksa, type ItemPeriksa } from '@/lib/lkjip/kesegaran';
+import type { ResepAngka } from '@/lib/lkjip/angka';
 import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 
@@ -110,9 +111,11 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     [flat],
   );
   const selected = useMemo(() => flat.find(f => f.node.id === selectedId)?.node ?? null, [flat, selectedId]);
-  // Tabel tertaut se-dokumen, dari isi yang TERSIMPAN (sama dengan yang akan difinalkan & dicetak).
+  // Tabel & angka sebaris tertaut se-dokumen, dari isi yang TERSIMPAN (sama dengan yang akan difinalkan & dicetak).
   const tertaut = useMemo(() => kumpulkanTabelTertaut(flat.map(f => f.node)), [flat]);
-  const [periksa, setPeriksa] = useState<{ daftar: TabelTertaut[]; hasil: HasilPeriksa[] | null } | null>(null);
+  const narasiTertaut = useMemo(() => kumpulkanNarasiTertaut(flat.map(f => f.node)), [flat]);
+  const semuaTertaut = useMemo<ItemPeriksa[]>(() => [...tertaut, ...narasiTertaut], [tertaut, narasiTertaut]);
+  const [periksa, setPeriksa] = useState<{ daftar: ItemPeriksa[]; hasil: HasilPeriksa[] | null } | null>(null);
   const [sorotBlok, setSorotBlok] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
@@ -255,18 +258,18 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     if (ok) { setStyleModal(false); await refresh(); toast.success('Pengaturan dokumen disimpan'); }
   }
 
-  // ── Tabel tertaut: periksa kesegaran (hanya membaca; memperbarui lewat tombol di tabelnya) ──
-  async function jalankanPeriksa(daftar: TabelTertaut[]): Promise<HasilPeriksa[]> {
+  // ── Tabel & angka tertaut: periksa kesegaran (hanya membaca; memperbarui lewat tombol di bloknya) ──
+  async function jalankanPeriksa(): Promise<HasilPeriksa[]> {
     const { DAFTAR_SUMBER } = await import('@/lib/lkjip/sumber');
-    return periksaKesegaran(daftar, (sumber, setelan) => DAFTAR_SUMBER[sumber].tarik(setelan, url => fetchJson<unknown>(url), detail.tahun));
+    return periksaSemua(tertaut, narasiTertaut, (sumber, setelan) => DAFTAR_SUMBER[sumber].tarik(setelan, url => fetchJson<unknown>(url), detail.tahun));
   }
   async function bukaPeriksa() {
-    if (!tertaut.length) { toast.info('Dokumen ini belum punya tabel yang tertaut ke modul.'); return; }
-    setPeriksa({ daftar: tertaut, hasil: null });
-    try { setPeriksa({ daftar: tertaut, hasil: await jalankanPeriksa(tertaut) }); }
-    catch { setPeriksa(null); toast.error('Gagal memeriksa tabel tertaut. Coba lagi.'); }
+    if (!semuaTertaut.length) { toast.info('Dokumen ini belum punya tabel atau angka yang tertaut ke modul.'); return; }
+    setPeriksa({ daftar: semuaTertaut, hasil: null });
+    try { setPeriksa({ daftar: semuaTertaut, hasil: await jalankanPeriksa() }); }
+    catch { setPeriksa(null); toast.error('Gagal memeriksa data modul. Coba lagi.'); }
   }
-  function bukaTabel(t: TabelTertaut) {
+  function bukaTabel(t: ItemPeriksa) {
     setPeriksa(null); setSelectedId(t.sectionId); setSorotBlok(t.blockId);
     setTimeout(() => document.getElementById(`lk-blok-${t.blockId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
     setTimeout(() => setSorotBlok(b => (b === t.blockId ? null : b)), 2600);
@@ -277,22 +280,22 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     if (ok) { await refresh(); toast.success('Dokumen difinalisasi'); }
   }
   async function finalize() {
-    // Dokumen FINAL tidak bisa diperbarui lagi — tabel yang sudah tertinggal dari sumbernya
-    // ditanyakan SEKARANG, bukan ditemukan sesudah dicetak.
-    if (tertaut.length) {
-      const tunggu = toast.loading('Memeriksa tabel tertaut…');
+    // Dokumen FINAL tidak bisa diperbarui lagi — tabel & angka yang sudah tertinggal dari
+    // sumbernya ditanyakan SEKARANG, bukan ditemukan sesudah dicetak.
+    if (semuaTertaut.length) {
+      const tunggu = toast.loading('Memeriksa data modul…');
       let hasil: HasilPeriksa[] = [];
-      try { hasil = await jalankanPeriksa(tertaut); } catch { /* gagal memeriksa ≠ alasan menahan finalisasi */ } finally { toast.dismiss(tunggu); }
+      try { hasil = await jalankanPeriksa(); } catch { /* gagal memeriksa ≠ alasan menahan finalisasi */ } finally { toast.dismiss(tunggu); }
       const beda = hasil.filter(h => h.status !== 'sama');
       if (beda.length) {
-        const nama = (id: number) => { const t = tertaut.find(x => x.blockId === id); return t ? `${t.letak} — ${t.judul}` : 'Tabel'; };
+        const nama = (id: number) => { const t = semuaTertaut.find(x => x.blockId === id); return t ? `${t.letak} — ${t.judul}` : 'Blok'; };
         const daftar = beda.slice(0, 5).map(h => `• ${nama(h.blockId)}: ${h.status === 'gagal' ? h.pesan : h.status === 'berubah' ? h.ringkas : ''}`).join('\n');
         const pilihan = await pilihDialog({
-          title: 'Tabel tertaut belum sama dengan sumbernya',
-          message: `${beda.length} dari ${tertaut.length} tabel tertaut berbeda dari modul sumbernya saat ini:\n${daftar}${beda.length > 5 ? '\n• …' : ''}\n\nSesudah final, tabel tidak bisa diperbarui lagi.`,
+          title: 'Data modul belum sama dengan sumbernya',
+          message: `${beda.length} dari ${semuaTertaut.length} blok tertaut (tabel/angka) berbeda dari modul sumbernya saat ini:\n${daftar}${beda.length > 5 ? '\n• …' : ''}\n\nSesudah final, tabel & angka tidak bisa diperbarui lagi.`,
           confirmLabel: 'Lihat & perbarui dulu', altLabel: 'Tetap finalisasi', variant: 'warning', altVariant: 'danger',
         });
-        if (pilihan === 'utama') { setPeriksa({ daftar: tertaut, hasil }); return; }
+        if (pilihan === 'utama') { setPeriksa({ daftar: semuaTertaut, hasil }); return; }
         if (pilihan === 'lain') await kirimFinal();
         return;
       }
@@ -310,7 +313,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     : [
         { icon: <Save size={17} />, label: 'Simpan Versi', onClick: () => void saveVersi() },
         { icon: <History size={17} />, label: 'Riwayat', onClick: () => void openHistory() },
-        ...(tertaut.length ? [{ icon: <RefreshCw size={17} />, label: 'Periksa Tabel', onClick: () => void bukaPeriksa() }] : []),
+        ...(semuaTertaut.length ? [{ icon: <RefreshCw size={17} />, label: 'Periksa Data Modul', onClick: () => void bukaPeriksa() }] : []),
         { icon: <Settings size={17} />, label: 'Pengaturan', onClick: () => { setStyleForm(detail.style_config); setStyleModal(true); } },
         { icon: <Download size={17} />, label: 'Unduh Word', onClick: () => window.open(`/api/lkjip/${detail.id}/generate`, '_blank') },
         { icon: <CheckCircle2 size={17} />, label: 'Finalisasi', onClick: () => void finalize() },
@@ -433,12 +436,12 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
         </div>
       )}
 
-      {/* Periksa tabel tertaut */}
+      {/* Periksa tabel & angka tertaut */}
       {periksa && (
         <div className="lk-modal-bg" onClick={() => setPeriksa(null)}>
-          <div className="lk-modal lk-modal-wide" role="dialog" aria-label="Periksa tabel tertaut" onClick={e => e.stopPropagation()}>
-            <h3>Periksa Tabel Tertaut</h3>
-            <p className="lk-hint">Isi tabel yang sudah tersimpan dibandingkan dengan modul sumbernya sekarang. Tidak ada yang diubah — buka tabelnya lalu tekan <b>Perbarui</b> di sana.</p>
+          <div className="lk-modal lk-modal-wide" role="dialog" aria-label="Periksa data modul" onClick={e => e.stopPropagation()}>
+            <h3>Periksa Data Modul</h3>
+            <p className="lk-hint">Tabel dan angka tertaut yang sudah tersimpan dibandingkan dengan modul sumbernya sekarang. Tidak ada yang diubah — buka bloknya lalu tekan <b>Perbarui</b> (tabel) atau <b>Perbarui angka</b> (narasi).</p>
             {!periksa.hasil ? (
               <div className="lk-hint">Menarik data sumber…</div>
             ) : (
@@ -449,7 +452,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     <li key={t.blockId} className={h?.status}>
                       <div className="lk-periksa-info">
                         <b>{t.judul}</b>
-                        <span>{t.letak} · {t.payload.tautan.ringkas}</span>
+                        <span>{t.letak} · {t.ringkas}</span>
                         <span className="lk-periksa-status">
                           {h?.status === 'sama' ? 'Sudah sama dengan sumbernya.' : h?.status === 'berubah' ? `Berbeda: ${h.ringkas}.` : h?.pesan}
                         </span>
@@ -823,14 +826,17 @@ function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHand
         <span className="lk-block-headl">{dragHandle}<span className="lk-block-tag">{block.tipe}</span>
           {block.tipe === 'NARASI' && !readOnly && (
             <label className="lk-block-cont" data-tooltip="Lanjutkan penomoran daftar (a,b,c / 1,2,3) dari blok narasi sebelumnya — untuk daftar yang terpotong tabel/gambar" data-tooltip-pos="below">
-              <input type="checkbox" checked={continueList} onChange={e => { const v = e.target.checked; setContinueList(v); onSave({ html: (block.payload as { html?: string })?.html ?? '', continueList: v }); }} />
+              <input type="checkbox" checked={continueList} onChange={e => { const v = e.target.checked; setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); }} />
               Lanjut daftar
             </label>
           )}
         </span>
         {!readOnly && <button className="lk-block-del" data-tooltip="Hapus blok" data-tooltip-pos="below" onClick={onDelete}><DeleteIcon size={13} /></button>}
       </div>
-      {block.tipe === 'NARASI' && <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} readOnly={readOnly} onSave={html => onSave({ html, continueList })} />}
+      {block.tipe === 'NARASI' && (
+        <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
+          tahunDokumen={tahunDokumen} readOnly={readOnly} onSave={(html, angka) => onSave({ html, continueList, angka })} />
+      )}
       {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} tahunDokumen={tahunDokumen} onSave={onSave} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
       {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} />}

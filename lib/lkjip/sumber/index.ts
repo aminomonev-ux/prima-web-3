@@ -6,6 +6,8 @@ import type { AmbilJson } from './umum';
 import { setelanKinerjaRekap, tarikKinerjaRekap, KOLOM_BAWAAN_KINERJA, KOLOM_KINERJA_REKAP } from './kinerja-rekap';
 import { setelanKinerjaLaporan, tarikKinerjaLaporan, kolomBawaanLaporan, kolomLaporan } from './kinerja-laporan';
 import { setelanRenaksiCetak, tarikRenaksiCetak, KOLOM_BAWAAN_RENAKSI, kolomRenaksi } from './renaksi-cetak';
+import { setelanPk, tarikPk, kolomPk, kolomBawaanPk } from './pk';
+import { setelanBludRealisasi, tarikBludRealisasi, kolomBlud, kolomBawaanBlud } from './blud-realisasi';
 import type { KolomSumber } from '../tautan';
 
 export type IdSumber = Tautan['sumber'];
@@ -51,6 +53,24 @@ export const DAFTAR_SUMBER: Record<IdSumber, SumberTabel> = {
     kolom: () => kolomRenaksi(),
     kolomBawaan: () => KOLOM_BAWAAN_RENAKSI,
   },
+  'blud-realisasi': {
+    id: 'blud-realisasi',
+    label: 'BLUD · Realisasi Anggaran',
+    modul: 'BLUD Realisasi',
+    setelan: (raw, tahun) => ({ ...setelanBludRealisasi(raw, tahun) }),
+    tarik: (s, ambil, tahun) => tarikBludRealisasi(setelanBludRealisasi(s, tahun), ambil),
+    kolom: s => kolomBlud(s),
+    kolomBawaan: s => kolomBawaanBlud(s),
+  },
+  'pk': {
+    id: 'pk',
+    label: 'PK · Perjanjian Kinerja',
+    modul: 'Perjanjian Kinerja',
+    setelan: (raw, tahun) => ({ ...setelanPk(raw, tahun) }),
+    tarik: (s, ambil, tahun) => tarikPk(setelanPk(s, tahun), ambil),
+    kolom: s => kolomPk(s),
+    kolomBawaan: s => kolomBawaanPk(s),
+  },
 };
 
-export const URUTAN_SUMBER: IdSumber[] = ['kinerja-rekap', 'kinerja-laporan', 'renaksi-cetak'];
+export const URUTAN_SUMBER: IdSumber[] = ['kinerja-rekap', 'kinerja-laporan', 'renaksi-cetak', 'blud-realisasi', 'pk'];
