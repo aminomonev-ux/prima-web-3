@@ -11,6 +11,7 @@ import {
   kolomRekapPj, kolomRincianPj, tabelRekapPj, tabelRincianPj, LABEL_TANPA_PJ,
   type BarisPj, type HasilRekapPj, type SelEkspor,
 } from '@/lib/blud/realisasi-pj'
+import { kalimatDiLuarPagu, type DiLuarPagu } from '@/lib/blud/di-luar-pagu'
 
 export interface ArgEksporPj {
   tahun:     number
@@ -19,6 +20,8 @@ export interface ArgEksporPj {
   sumber:    string
   hasil:     HasilRekapPj
   rows:      readonly BarisPj[]
+  /** `di_luar_pagu` route pagu — titik waktunya sama dgn kolom s.d. di berkas. */
+  diLuar?:   DiLuarPagu | null
 }
 
 const NAMA_BERKAS = (a: ArgEksporPj, ext: string) => `Realisasi-per-PJ-${a.namaBulan}-${a.tahun}.${ext}`
@@ -28,7 +31,7 @@ function judul(a: ArgEksporPj): string {
 }
 
 /** Catatan yang wajib ikut ke berkas — angka yang dibawa ke rapat tidak boleh kehilangan sebabnya. */
-function catatan(a: ArgEksporPj): string[] {
+export function catatanEksporPj(a: ArgEksporPj): string[] {
   const c = [
     'PJ sebuah rekening = PJ di baris itu atau induk terdekatnya, menurut versi yang jadi sumber pagu sekarang.',
   ]
@@ -36,6 +39,10 @@ function catatan(a: ArgEksporPj): string[] {
     c.push(`${a.hasil.konflik} baris ber-PJ yang induknya juga ber-PJ — dihitung ke PJ induk saja, supaya uangnya tidak terhitung dua kali.`)
   }
   if (a.hasil.tanpaPj) c.push(`"${LABEL_TANPA_PJ}" = rekening yang rantainya tidak ber-PJ di DPA/Pergeseran.`)
+  // Tanpa kalimat ini JUMLAH berkas lebih kecil dari kas yang keluar, dan orang yang cuma
+  // memegang berkasnya tidak punya cara mengetahui sebabnya.
+  const luar = a.diLuar ? kalimatDiLuarPagu(a.diLuar, `s.d. ${a.namaBulan}`) : null
+  if (luar) c.push(luar)
   return c
 }
 
@@ -48,12 +55,20 @@ function lembar(
   kolom: string[], isi: SelEkspor[][], angkaMulai: number, lebar: number[],
 ) {
   const ws = wb.addWorksheet(nama)
-  const kop = [judul(a), `${a.sumber} · dicetak dari PRIMA BLUD`, ...catatan(a)]
+  const kop = [judul(a), `${a.sumber} · dicetak dari PRIMA BLUD`, ...catatanEksporPj(a)]
+  // Sel gabungan tidak menyesuaikan tinggi barisnya sendiri — kalimat yang lebih panjang dari
+  // lebar tabel dibungkus dan barisnya ditinggikan, kalau tidak sisa kalimatnya tak terlihat.
+  const hurufPerBaris = lebar.reduce((s, w) => s + w, 0) * 1.1
   kop.forEach((t, i) => {
     ws.addRow([t])
     ws.mergeCells(i + 1, 1, i + 1, kolom.length)
     const c = ws.getRow(i + 1).getCell(1)
     c.font = i === 0 ? { bold: true, size: 12 } : { size: 9, italic: i > 1, color: { argb: i > 1 ? 'FF854F0B' : 'FF374151' } }
+    const baris = Math.ceil(t.length / hurufPerBaris)
+    if (i > 0 && baris > 1) {
+      c.alignment = { wrapText: true, vertical: 'top' }
+      ws.getRow(i + 1).height = 12.5 * baris
+    }
   })
   ws.addRow([])
   const barisKepala = kop.length + 2
@@ -79,21 +94,27 @@ function lembar(
   ws.views = [{ state: 'frozen', ySplit: barisKepala }]
 }
 
-export async function unduhRealisasiPjExcel(a: ArgEksporPj): Promise<void> {
+/** Dipisah dari tombolnya supaya isi berkas bisa diuji di Node, bukan dicocokkan ke sumbernya. */
+export async function buatWorkbookRealisasiPj(a: ArgEksporPj): Promise<ExcelJS.Workbook> {
   const ExcelJSLib = await loadExcelJs()
   const wb = new ExcelJSLib.Workbook()
   lembar(wb, 'Rekap per PJ', a, kolomRekapPj(a.namaBulan), tabelRekapPj(a.hasil), 1,
     [34, 10, 18, 16, 18, 18, 18, 7])
   lembar(wb, 'Rincian Rekening', a, kolomRincianPj(a.namaBulan), tabelRincianPj(a.rows, a.hasil), 3,
     [26, 28, 42, 17, 15, 17, 17, 17, 7])
-  await downloadWorkbook(wb, NAMA_BERKAS(a, 'xlsx'))
+  return wb
+}
+
+export async function unduhRealisasiPjExcel(a: ArgEksporPj): Promise<void> {
+  await downloadWorkbook(await buatWorkbookRealisasiPj(a), NAMA_BERKAS(a, 'xlsx'))
 }
 
 // ─── PDF ─────────────────────────────────────────────────────────────────────
 
 const fmt = (c: SelEkspor) => (typeof c === 'number' ? c.toLocaleString('id-ID') : c)
 
-export async function unduhRealisasiPjPdf(a: ArgEksporPj): Promise<void> {
+/** Dipisah dari tombolnya supaya isi berkas bisa diuji di Node. */
+export async function buatPdfRealisasiPj(a: ArgEksporPj) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const lebarHal = doc.internal.pageSize.getWidth()
@@ -103,7 +124,13 @@ export async function unduhRealisasiPjPdf(a: ArgEksporPj): Promise<void> {
   doc.text(`${a.sumber} · RSJD Dr. Amino Gondohutomo · PRIMA BLUD`, lebarHal / 2, 18.5, { align: 'center' })
   let y = 23.5
   doc.setTextColor(133, 79, 11)
-  for (const t of catatan(a)) { doc.text(t, lebarHal / 2, y, { align: 'center' }); y += 4.2 }
+  // Dibungkus selebar tabel: catatan belanja di luar versi pagu bisa ratusan huruf, dan satu
+  // baris rata-tengah sepanjang itu jatuh di luar kedua tepi halaman.
+  for (const t of catatanEksporPj(a)) {
+    for (const baris of doc.splitTextToSize(t, lebarHal - 20) as string[]) {
+      doc.text(baris, lebarHal / 2, y, { align: 'center' }); y += 4.2
+    }
+  }
   doc.setTextColor(0)
 
   const gaya = {
@@ -140,5 +167,9 @@ export async function unduhRealisasiPjPdf(a: ArgEksporPj): Promise<void> {
     doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(120)
     doc.text(`Halaman ${i} dari ${jml}`, lebarHal / 2, doc.internal.pageSize.getHeight() - 6, { align: 'center' })
   }
-  doc.save(NAMA_BERKAS(a, 'pdf'))
+  return doc
+}
+
+export async function unduhRealisasiPjPdf(a: ArgEksporPj): Promise<void> {
+  (await buatPdfRealisasiPj(a)).save(NAMA_BERKAS(a, 'pdf'))
 }

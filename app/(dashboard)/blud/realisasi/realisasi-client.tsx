@@ -307,7 +307,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
     try {
       const m = await import('@/lib/blud/export/realisasi-pj')
       const arg = {
-        tahun, namaBulan, rows, hasil: rekapPj,
+        tahun, namaBulan, rows, hasil: rekapPj, diLuar,
         sumber: `Pagu dari ${jenisSumberPagu(sumber)} ${formatTanggalId(sumber.versi)}`,
       }
       await (jenis === 'excel' ? m.unduhRealisasiPjExcel(arg) : m.unduhRealisasiPjPdf(arg))

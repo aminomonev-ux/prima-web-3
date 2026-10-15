@@ -126,8 +126,12 @@ Realisasi per PJ membaca PJ dari Pergeseran (sumber pagu terbaru). Kini **cermin
 
 ## 10. Uji
 
-- `npx tsx scripts/test-blud-realisasi-pj.mts` (57) — A–D perilaku fungsi murni, E–G
-  sambungan server/layar/Pergeseran (komentar dibuang dulu, L82c).
+- `npx tsx scripts/test-blud-realisasi-pj.mts` (67) — A–D perilaku fungsi murni, E–G
+  sambungan server/layar/Pergeseran (komentar dibuang dulu, L82c); §F2 (susulan
+  2026-10-15) membangun Excel & PDF sungguhan di Node dan memeriksa catatan **belanja di
+  luar versi pagu** di berkasnya — dibungkus, baris Excel ditinggikan, baris PDF muat di
+  halaman (konsep serapan §9.1a susulan kedua). Tetap BUKAN baris tabel (§9 di atas):
+  angkanya disebut di kop catatan, total tabel tidak berubah. 6 uji mutasi tertangkap.
 - `node scripts/test-blud-realisasi-pj-db.mjs` (14) — MySQL kotak pasir 2099: transaksi
   per PJ = angka rekap, kuitansi terbagi, PJ ganda, tanpa PJ, batas bulan.
 - 26 uji mutasi tertangkap.

@@ -159,6 +159,63 @@ console.log('\n── F. Layar Realisasi ─────────────
   const X = readFileSync('lib/blud/export/realisasi-pj.ts', 'utf8')
   ok('F9 berkas ekspor tanpa impor pustaka berat di tingkat atas', !/^import .*from 'jspdf/m.test(X) && !/^import (?!type).*from 'exceljs'/m.test(X)
     && X.includes("import('jspdf')"))
+  ok('F10 unduhan membawa di_luar_pagu yang SAMA dgn spanduk layar', C.includes('hasil: rekapPj, diLuar,'))
+}
+
+// Berkasnya dibangun sungguhan (exceljs & jsPDF jalan di Node) — yang diperiksa isi berkas,
+// bukan teks sumbernya.
+console.log('\n── F2. Belanja di luar versi pagu di berkas unduhan ─────────────')
+{
+  const E = await import('../lib/blud/export/realisasi-pj')
+  const { kalimatDiLuarPagu } = await import('../lib/blud/di-luar-pagu')
+  const diLuar = {
+    nilai: 19_000_000, rekening: 5,
+    contoh: [
+      { anggaran_key: 'X', kode: '5.1.02.02.01.0099', uraian: 'Biaya film badge/TLD untuk petugas radiologi instalasi penunjang medik', nilai: 15_000_000 },
+      { anggaran_key: 'Y', kode: '5.1.02.01.01.0024', uraian: 'Belanja alat tulis kantor ruang rawat inap kelas tiga gedung lama', nilai: 3_000_000 },
+      { anggaran_key: 'Z', kode: '5.1.02.03.02.0035', uraian: 'Pemeliharaan alat kesehatan yang sudah dipindah ke rekening baru', nilai: 1_000_000 },
+    ],
+  }
+  const arg = { tahun: 2097, namaBulan: 'April', sumber: 'Pagu dari Pergeseran 01 Mar 2097', hasil: h, rows }
+  const kalimat = kalimatDiLuarPagu(diLuar, 's.d. April')!
+  const cat = E.catatanEksporPj({ ...arg, diLuar })
+  ok('I1 catatan berkas = kalimat bersama (titik waktu "s.d. April"), di urutan terakhir', cat[cat.length - 1] === kalimat, cat.join(' | '))
+  ok('I2 tanpa belanja di luar pagu / tanpa isian → tanpa kalimat',
+    !E.catatanEksporPj({ ...arg, diLuar: { nilai: 0, rekening: 0, contoh: [] } }).some(c => c.startsWith('Belanja'))
+    && !E.catatanEksporPj(arg).some(c => c.startsWith('Belanja')))
+
+  const wb = await E.buatWorkbookRealisasiPj({ ...arg, diLuar })
+  for (const nama of ['Rekap per PJ', 'Rincian Rekening']) {
+    const ws = wb.getWorksheet(nama)!
+    let noCat = 0
+    let noKepala = 0
+    ws.eachRow((r, no) => {
+      const v = String(r.getCell(1).value ?? '')
+      if (v === kalimat) noCat = no
+      if (!noKepala && (v === 'Penanggung Jawab' || v === 'PJ')) noKepala = no
+    })
+    const sel = noCat ? ws.getRow(noCat).getCell(1) : null
+    ok(`I3 Excel "${nama}": kalimat utuh di kop, dibungkus & barisnya ditinggikan (sel gabung tak menyesuaikan sendiri)`,
+      !!sel && sel.alignment?.wrapText === true && (ws.getRow(noCat).height ?? 0) > 12.5,
+      `baris ${noCat}, tinggi ${noCat ? ws.getRow(noCat).height : '-'}`)
+    ok(`I4 Excel "${nama}": kepala kolom tetap tepat di bawah kop (+1 baris kosong)`, noKepala === cat.length + 4, `kepala di ${noKepala}, catatan ${cat.length}`)
+  }
+  const wbBersih = await E.buatWorkbookRealisasiPj(arg)
+  let adaBelanja = false
+  wbBersih.getWorksheet('Rekap per PJ')!.eachRow(r => { if (String(r.getCell(1).value ?? '').startsWith('Belanja')) adaBelanja = true })
+  ok('I5 Excel tanpa belanja di luar pagu tetap seperti dulu', !adaBelanja)
+
+  const doc = await E.buatPdfRealisasiPj({ ...arg, diLuar })
+  const pdf = doc.output()
+  ok('I6 PDF memuat kalimatnya (awal & contoh rekening)', pdf.includes('Belanja Rp 19.000.000 s.d. April dari 5 rekening') && pdf.includes('film badge/TLD'))
+  // Potongan teks PDF `(…) Tj`; baris pertama kalimat diukur dgn huruf yang sama dgn catatannya.
+  const teks = [...pdf.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(m => m[1].replace(/\\([()\\])/g, '$1'))
+  const awal = teks.find(t => t.startsWith('Belanja Rp 19.000.000'))
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
+  const lebarAwal = awal ? doc.getTextWidth(awal) : Infinity
+  ok('I7 PDF: kalimat panjang dibungkus — baris pertamanya muat di antara tepi halaman',
+    !!awal && awal.length < kalimat.length && lebarAwal <= doc.internal.pageSize.getWidth() - 20,
+    `${awal?.length ?? '-'} huruf, ${lebarAwal.toFixed(1)} mm`)
 }
 
 console.log('\n── G. Penjaga PJ di Pergeseran (cermin DPA) ─────────────────────')

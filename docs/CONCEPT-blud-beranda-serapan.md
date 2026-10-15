@@ -369,8 +369,26 @@ contoh, bukan semua kunci. Pemakainya: spanduk amber layar Realisasi (kedua tamp
 JUMLAH Per PJ juga tanpa uang ini; jalan keluarnya memindah transaksi lewat Buku Kas,
 sebab membuat ulang rekening di Pergeseran melahirkan `anggaran_key` baru) dan catatan
 tabel LKJIP (`kalimatDiLuarPagu`). Nol kolom/tabel/migrasi/endpoint — isian baru di
-jawaban route yang sudah ada. Unduhan Excel/PDF Realisasi per PJ BELUM membawanya.
+jawaban route yang sudah ada.
 Regresi: `npx tsx scripts/test-blud-di-luar-pagu.mts` (35, bagian F MySQL tahun 2097).
+
+**Susulan kedua — unduhan Excel/PDF Realisasi per PJ.** Berkas yang dibawa ke rapat
+punya masalah yang sama dan lebih parah: orang yang cuma memegang berkasnya tidak bisa
+membuka layar untuk melihat spanduknya. `catatanEksporPj` kini menambahkan kalimat yang
+sama dengan LKJIP ("Belanja Rp … s.d. April dari n rekening … TIDAK ikut dihitung di
+tabel: …"), dari `di_luar_pagu` yang SAMA dengan spanduk layar (dioper `unduh()`, bukan
+ditarik ulang). Kalimatnya bisa ratusan huruf, jadi dua hal ikut dibetulkan: PDF dulu
+menulis tiap catatan sebagai SATU baris rata-tengah (`splitTextToSize` selebar tabel
+sekarang), Excel menaruhnya di sel gabung yang tidak menyesuaikan tinggi barisnya sendiri
+(dibungkus + tinggi dihitung dari panjang kalimat). Pembuat workbook/PDF dipisah dari
+tombolnya (`buatWorkbookRealisasiPj`/`buatPdfRealisasiPj`) — exceljs & jsPDF jalan di
+Node, jadi uji `test-blud-realisasi-pj.mts` §F2 memeriksa ISI berkas: sel kop, bungkus,
+tinggi baris, letak kepala kolom, dan lebar baris pertama kalimat di PDF diukur
+`getTextWidth` terhadap halaman. Satu pemeriksaan sempat lulus untuk alasan yang salah:
+"kalimat utuh tidak ada di PDF" selalu benar karena "…" di uraian terpotong disandikan
+jsPDF — diganti pengukuran lebar. Diverifikasi di peramban (2097, Per PJ s.d. April):
+Excel baris 5 tinggi 25 pt + dibungkus di kedua lembar, PDF dua baris di dalam tepi.
+
 
 **Hitungan menembus/mepet tetap dari baris DAUN** (§5.1c) — pertanyaannya berbeda,
 dan `hitungPratinjau` sudah menyaringnya begitu. Satu kueri boleh memulangkan
