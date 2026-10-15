@@ -452,8 +452,22 @@ sakelar Realisasi), angka sudah digulung server.
   tingkat membuatnya tampak anak Operasi (padahal Operasi 50,87 M = Pegawai 9,93 M + Barang & Jasa
   40,94 M). Layar Realisasi tidak kena karena menampilkan seluruh baris apa adanya.
 - Catatan: sumber pagu (`jenisSumberPagu` + tanggal versi) dan jumlah rekening yang tidak ikut.
-- **Tidak jadi**: catatan belanja yang rekeningnya tidak ada di versi pagu — route pagu tidak
-  memulangkannya, dan menghitungnya butuh endpoint lain (melanggar "nol endpoint baru").
+- **Belanja di luar versi pagu** (susulan hari yang sama, keputusan pemilik): alokasi yang
+  rekeningnya sudah dibuang versi pagu tidak punya baris, jadi JUMLAH tabel diam-diam lebih kecil
+  dari kas yang keluar. Rancangan awal menolaknya ("butuh endpoint lain") — itu terlalu keras:
+  merakitnya dari GET Buku Kas memang mungkin, tapi 12 tarikan per Perbarui + salinan kedua rumus
+  Beranda. Yang dipasang: route pagu memulangkan `di_luar_pagu` (rumus Beranda yang sama,
+  `lib/blud/di-luar-pagu.ts`, titik waktu = s/d bulan setelan) dan tarikan ini menambah SATU
+  kalimat catatan — "Belanja Rp … s/d April dari n rekening yang sudah tidak ada di versi pagu ini
+  TIDAK ikut dihitung di tabel: kode uraian (Rp …); …". Angkanya disebut, tidak dijumlahkan ke
+  baris mana pun (sama dengan §9.1a konsep Beranda). Catatan hidup di editor, tidak di Word.
+- **Judul kolom ikut setelan** (ditemukan saat menguji susulan di atas): label "Realisasi s/d
+  Desember" diisikan ke judul kolom saat kolomnya dipilih, lalu tidak berganti ketika s/d bulan
+  diubah — tabel s/d April terbit berjudul "s/d Desember". `judulIkutSetelan` (`tautan.ts`):
+  judul yang masih SAMA PERSIS dengan label lama ikut label baru, judul yang sudah diketik
+  dibiarkan; dipanggil tiap ubah setelan & ganti tampilan di modal tabel. Tabel yang terlanjur
+  tersimpan dengan judul basi tidak dibetulkan sendiri (judulnya tak lagi sama dengan label
+  setelannya, jadi terbaca sebagai ketikan) — ketik ulang judulnya.
 
 ### 19.4 Templat tambahan
 *Realisasi Anggaran BLUD per Kelompok Belanja* (Per rekening **tingkat 3** — tingkat 2 cuma Belanja
@@ -479,5 +493,13 @@ digabung. BLUD Per PJ 2026: semua "Belum ada PJ", JUMLAH = Rp 68.383.000.000. Wo
 sungguhan: angka jadi teks biasa, tanpa `data-angka`. Tema terang & 375 px (modal muat, tanpa gulir
 samping). **Belum**: tata letak editor LKJIP di ponsel memang sudah sempit sebelum ini (panel kerangka
 memakan seluruh lebar) — tidak disentuh.
+
+Susulan "di luar versi pagu" diverifikasi pada DPA + Pergeseran + transaksi kotak pasir 2097 (dibuat
+& dihapus `test-blud-di-luar-pagu.mts`): layar Realisasi s/d Oktober "Rp 18.000.000 … 2 rekening",
+s/d April "Rp 19.000.000 … 3 rekening" (pengembalian rekening ketiga baru Mei), Per PJ ikut, tema
+terang & 375 px (tanpa gulir samping); tabel LKJIP 2099 bersumber BLUD 2097 s/d April memuat
+kalimatnya, tersimpan lolos skema; judul kolom berganti "s/d Desember" → "s/d April".
+Regresi susulan: `npx tsx scripts/test-blud-di-luar-pagu.mts` (35) + `test-lkjip-angka-modul.mts`
+(62) — **23 uji mutasi tertangkap**.
 
 Regresi Tahap 3: `npx tsx scripts/test-lkjip-angka-modul.mts` (59) — **53 uji mutasi tertangkap**. Dua sempat bermasalah di putaran pertama: mutan "pola id longgar" TIDAK SAH (regex penyaring ternyata rusak saat ditulis lewat skrip shell — `\s` jadi `s`; ditulis ulang dengan lookbehind + uji spasi di sekitar `=` dan `x-data-angka`), dan "rekening nol tak disembunyikan" LOLOS karena data uji tak punya rekening nol di tingkat ≤ 3 (kini ada baris `NOL`).

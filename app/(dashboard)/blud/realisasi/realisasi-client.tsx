@@ -26,6 +26,7 @@ import RegisterPanel from '@/components/blud/RegisterPanel'
 import TautanMenu from '@/components/blud/TautanMenu'
 import PratinjauSerapanModal from '@/components/blud/PratinjauSerapanModal'
 import { EPS_PRATINJAU, AMBANG_MEPET, mepetSetahun } from '@/lib/blud/pratinjau-serapan'
+import { daftarDiLuarPagu, type DiLuarPagu } from '@/lib/blud/di-luar-pagu'
 
 const CURRENT_YEAR = new Date().getFullYear()
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -99,6 +100,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
   const [saring, setSaring] = useState<SaringBaris>(saringAwal ?? 'semua')
   const [rows, setRows] = useState<BarisRealisasi[]>([])
   const [sumber, setSumber] = useState<{ sumber: string; versi: string | null; perubahan_ke?: number | null } | null>(null)
+  const [diLuar, setDiLuar] = useState<DiLuarPagu | null>(null)
   const [loading, setLoading] = useState(true)
   const [cari, setCari] = useState('')
   const [tutup, setTutup] = useState<Set<string>>(new Set())
@@ -181,6 +183,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
 
       setRows(data)
       setSumber(json.pagu_sumber ?? null)
+      setDiLuar(json.di_luar_pagu ?? null)
     } catch {
       toast.error('Server tidak bisa dihubungi. Periksa sambungan, lalu coba lagi.')
     } finally {
@@ -542,6 +545,20 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
           Ada realisasi <b className="bk-num-inline">Rp {rp(setelahBulanIni)}</b> di bulan
           sesudahnya, jadi sisa anggaran yang sebenarnya masih bisa dibelanjakan hari ini
           adalah <b className="bk-num-inline">Rp {rp(total.pagu - total.terserap)}</b>.
+        </div>
+      )}
+
+      {/* Alokasi yang rekeningnya dibuang versi pagu ini tidak punya baris untuk digulung —
+          tanpa kalimat ini JUMLAH tabel diam-diam lebih kecil dari kas yang keluar. */}
+      {diLuar && diLuar.rekening > 0 && (
+        <div className="bk-warn">
+          <span>
+            Ada belanja <b className="bk-num-inline">Rp {rp(diLuar.nilai)}</b> sampai {namaBulan} dari{' '}
+            <b>{diLuar.rekening} rekening yang sudah tidak ada di versi pagu ini</b>, jadi tidak ikut dihitung
+            di tabel: {daftarDiLuarPagu(diLuar)}. Pindahkan transaksinya ke rekening yang masih ada lewat Buku Kas —
+            membuat ulang rekening dengan nama yang sama di{' '}
+            <TautanMenu href="/blud/pergeseran" boleh={bolehPergeseran}>Pergeseran</TautanMenu> tidak menyambungkannya kembali.
+          </span>
         </div>
       )}
 

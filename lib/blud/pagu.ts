@@ -8,6 +8,7 @@
 //   `sumberPaguTahun` (sumber-pagu.ts) — aturannya tinggal di sana, satu tempat.
 import { sql } from '@/lib/data/db'
 import { sumberPaguTahun, type SumberPagu } from './sumber-pagu'
+import { toDateStr } from './tanggal'
 import type { TipeBaris } from '@/types'
 
 export interface BarisPagu {
@@ -143,6 +144,36 @@ export async function getTerserap(
     map.set(String(r.k), Number(r.n ?? 0))
   }
   return map
+}
+
+/**
+ * Kode & uraian rekening yang SUDAH tidak ada di versi pagu berlaku, dari versi terakhir
+ * (DPA atau Pergeseran) yang masih memuatnya — untuk menyebut belanja di luar versi pagu
+ * dengan nama yang dikenali orang, bukan `anggaran_key`. Kunci yang tak ditemukan di versi
+ * mana pun tidak dipulangkan.
+ */
+export async function getRekeningLama(
+  tahun: number,
+  keys: readonly string[],
+): Promise<Map<string, { kode: string; uraian: string }>> {
+  if (!keys.length) return new Map()
+  const rows = await sql`
+    SELECT anggaran_key AS k, kode_rekening AS kode, uraian, versi_tanggal AS v, 0 AS src
+    FROM dpa_blud WHERE tahun_anggaran = ${tahun} AND anggaran_key IN (${[...keys]})
+    UNION ALL
+    SELECT anggaran_key, kode_rekening, uraian, versi_tanggal, 1
+    FROM pergeseran_dpa WHERE tahun_anggaran = ${tahun} AND anggaran_key IN (${[...keys]})
+  ` as Record<string, unknown>[]
+  // Urutan kemunculan baris UNION tidak dijamin — urutannya ditentukan di sini. Tanggal sama
+  // di DPA & Pergeseran: Pergeseran yang menang, ia yang terakhir dilihat orang sebagai pagunya.
+  const urutan = (r: Record<string, unknown>) => `${toDateStr(r.v)}#${Number(r.src ?? 0)}`
+  const terakhir = new Map<string, Record<string, unknown>>()
+  for (const r of rows) {
+    const k = String(r.k ?? '')
+    const ada = terakhir.get(k)
+    if (k && (!ada || urutan(r) > urutan(ada))) terakhir.set(k, r)
+  }
+  return new Map([...terakhir].map(([k, r]) => [k, { kode: String(r.kode ?? ''), uraian: String(r.uraian ?? '') }]))
 }
 
 // ── Fase 3 — serapan per periode, sidik pagu, pagar §4.3 ────────────────────

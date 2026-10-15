@@ -274,6 +274,28 @@ export interface PayloadTabel {
   tautan?: Tautan;
 }
 
+/**
+ * Label kolom sumber bisa bergantung setelan ("Realisasi s/d Desember" BLUD). Judul yang masih
+ * sama persis dengan label LAMA ikut label baru — tanpa ini tabel s/d April terbit berjudul
+ * "s/d Desember". Judul yang sudah diketik orangnya dibiarkan. Tak ada yang berubah → larik sama.
+ */
+export function judulIkutSetelan<K extends { judul: string; taut: KolomTaut | null }>(
+  kolom: K[], lama: readonly KolomSumber[], baru: readonly KolomSumber[],
+): K[] {
+  const labelLama = new Map(lama.map(k => [k.kunci, k.label]));
+  const labelBaru = new Map(baru.map(k => [k.kunci, k.label]));
+  let berubah = false;
+  const hasil = kolom.map(k => {
+    if (k.taut?.isi.jenis !== 'sumber') return k;
+    const l = labelLama.get(k.taut.isi.kunci);
+    const b = labelBaru.get(k.taut.isi.kunci);
+    if (!l || !b || l === b || k.judul.trim() !== l) return k;
+    berubah = true;
+    return { ...k, judul: b };
+  });
+  return berubah ? hasil : kolom;
+}
+
 export function jumlahBarisKepala(p: Pick<PayloadTabel, 'headerRows' | 'rows'>): number {
   return Math.max(0, Math.min(p.headerRows ?? 0, p.rows.length));
 }

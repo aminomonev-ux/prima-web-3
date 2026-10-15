@@ -9,6 +9,7 @@ import { GagalTarik, pesanDitolak, angkaDalam, type AmbilJson } from './umum';
 import { rekapPerPj, LABEL_TANPA_PJ, type BarisPj, type RekapPj } from '@/lib/blud/realisasi-pj';
 import { jenisSumberPagu } from '@/lib/blud/perubahan';
 import { formatTanggalId } from '@/lib/blud/tanggal';
+import { kalimatDiLuarPagu, type DiLuarPagu } from '@/lib/blud/di-luar-pagu';
 
 export type TampilanBlud = 'rekening' | 'pj';
 export interface SetelanBludRealisasi {
@@ -59,6 +60,7 @@ interface BarisLayar extends BarisPj { sisa: number; persen: number }
 interface JawabanPagu {
   data?: BarisLayar[];
   pagu_sumber?: { sumber: 'PERGESERAN' | 'DPA' | 'KOSONG'; versi: string | null; perubahan_ke?: number | null };
+  di_luar_pagu?: DiLuarPagu;
 }
 
 /** Tingkat tiap baris dari rantai induknya (akar = 1). Induk yang tak ada di versi ini = akar. */
@@ -112,7 +114,7 @@ const angkaPj = (r: RekapPj, realisasi: number) => ({ pagu: r.pagu, realisasi, s
 export async function tarikBludRealisasi(s: SetelanBludRealisasi, ambil: AmbilJson): Promise<HasilTarik> {
   const d = await ambil(`/api/blud/realisasi/pagu?tahun=${s.tahun}&bulan=${s.sdBulan}`);
   if (!d.ok) throw new GagalTarik(pesanDitolak(MODUL, d.status, d.message ?? ''));
-  const { data: rows = [], pagu_sumber: sumber } = d as JawabanPagu;
+  const { data: rows = [], pagu_sumber: sumber, di_luar_pagu: diLuar } = d as JawabanPagu;
   const kolom = kolomBlud(s);
   const bulan = NAMA_BULAN[s.sdBulan - 1];
 
@@ -160,6 +162,10 @@ export async function tarikBludRealisasi(s: SetelanBludRealisasi, ambil: AmbilJs
     const dibuang = rows.length - tampil.length;
     if (dibuang) catatan.push(`${dibuang} rekening tidak ikut (lebih dalam dari tingkat ${s.kedalaman}${s.sembunyikanNol ? ' atau pagu & realisasinya nol' : ''}).`);
   }
+  // Uangnya sudah keluar tapi rekeningnya dibuang versi pagu ini — tidak punya baris di tabel
+  // mana pun, jadi tanpa kalimat ini total realisasi diam-diam lebih kecil dari kas yang keluar.
+  const luar = diLuar ? kalimatDiLuarPagu(diLuar, `s/d ${bulan}`) : null;
+  if (luar) catatan.push(luar.slice(0, 1000));
 
   return {
     kolom, baris, catatan,

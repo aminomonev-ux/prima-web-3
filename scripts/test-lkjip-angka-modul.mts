@@ -278,6 +278,21 @@ ok('E10 kosong (belum ada DPA/Pergeseran) → tanpa baris + kalimat', (await tar
 ok('E11 403/503 → kalimat menyebut modul BLUD Realisasi',
   (await gagalDengan(tarikBludRealisasi(sB(), ambilBlud(undefined, 403).ambil))).includes('Butuh akses BLUD Realisasi')
   && (await gagalDengan(tarikBludRealisasi(sB(), ambilBlud(undefined, 503).ambil))).includes('pemeliharaan'))
+{
+  const { judulIkutSetelan } = await import('../lib/lkjip/tautan')
+  const { kolomBlud } = await import('../lib/lkjip/sumber/blud-realisasi')
+  const sumberKol = (kunci: string, judul: string) => ({ judul, taut: { isi: { jenis: 'sumber' as const, kunci } } })
+  const ks = [sumberKol('realisasi', 'Realisasi s/d Desember'), sumberKol('pagu', 'Pagu'), { judul: 'Realisasi s/d Desember', taut: null },
+    sumberKol('realisasi', 'Realisasi 2097 (diketik)')]
+  const hasil = judulIkutSetelan(ks, kolomBlud({ sdBulan: 12 }), kolomBlud({ sdBulan: 4 }))
+  ok('E12 ganti s/d bulan: judul yang masih label lama ikut ("… s/d April"); judul ketikan & kolom tanpa tautan dibiarkan',
+    hasil.map(k => k.judul).join('|') === 'Realisasi s/d April|Pagu|Realisasi s/d Desember|Realisasi 2097 (diketik)', hasil.map(k => k.judul).join('|'))
+  ok('E13 tak ada label yang berubah → larik yang SAMA (state tidak dibangunkan sia-sia)',
+    judulIkutSetelan(ks, kolomBlud({ sdBulan: 12 }), kolomBlud({ sdBulan: 12 })) === ks)
+  const modal = kode('app/(dashboard)/lkjip/[id]/TautanModal.tsx')
+  ok('E14 modal tabel: tiap ubah setelan & ganti tampilan menyesuaikan judul dari katalog lama → baru',
+    (modal.match(/setKolom\(ks => judulIkutSetelan\(ks, sumber\.kolom\(setelan\), sumber\.kolom\(s\)\)\)/g) ?? []).length === 2)
+}
 
 // ─── F. Periksa untuk narasi ──────────────────────────────────────────────────
 console.log('\nF. Periksa narasi')

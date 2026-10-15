@@ -9,8 +9,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'
 import {
-  getPaguEfektif, getPaguSumber, getTerserap, getSerapanPeriode, getPaguCap, gulungKeAtas,
+  getPaguEfektif, getPaguSumber, getTerserap, getSerapanPeriode, getPaguCap, gulungKeAtas, getRekeningLama,
 } from '@/lib/blud/pagu'
+import { hitungDiLuarPagu, BATAS_CONTOH_DI_LUAR_PAGU, type DiLuarPagu } from '@/lib/blud/di-luar-pagu'
 import { bludRateLimit, TahunSchema } from '@/lib/blud/schemas'
 import { bolehLihatSalahSatu, forbidden, unauthorized, realisasiMati } from '../_guard'
 
@@ -81,7 +82,21 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ ok: true, data, tahun, bulan, pagu_sumber: sumber })
+    // Belanja yang rekeningnya sudah dibuang versi pagu ini tidak punya baris di `data` —
+    // disebut terpisah, pada titik waktu yang SAMA dengan kolom s.d. di atas.
+    const nilaiAcuan = periode
+      ? new Map([...periode].map(([key, v]) => [key, v.bulan_ini + v.bulan_lalu]))
+      : terserap
+    const luar = baris.length ? hitungDiLuarPagu(baris, nilaiAcuan) : { nilai: 0, kunci: [] }
+    const contoh = luar.kunci.slice(0, BATAS_CONTOH_DI_LUAR_PAGU)
+    const nama = await getRekeningLama(tahun, contoh.map(k => k.anggaran_key))
+    const di_luar_pagu: DiLuarPagu = {
+      nilai: luar.nilai,
+      rekening: luar.kunci.length,
+      contoh: contoh.map(k => ({ ...k, kode: nama.get(k.anggaran_key)?.kode ?? '', uraian: nama.get(k.anggaran_key)?.uraian ?? '' })),
+    }
+
+    return NextResponse.json({ ok: true, data, tahun, bulan, pagu_sumber: sumber, di_luar_pagu })
   } catch (err) {
     console.error('[API /blud/realisasi/pagu GET]', err)
     return NextResponse.json({ ok: false, error: 'Ada gangguan di server. Coba lagi sebentar lagi.' }, { status: 500 })

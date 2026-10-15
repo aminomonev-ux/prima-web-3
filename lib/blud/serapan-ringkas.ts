@@ -15,6 +15,7 @@ import {
   type BarisPagu, type PaguSumber,
 } from './pagu'
 import { EPS_PRATINJAU, mepetSetahun } from './pratinjau-serapan'
+import { hitungDiLuarPagu } from './di-luar-pagu'
 import { toDateStr } from './tanggal'
 
 export interface SerapanRingkas {
@@ -138,16 +139,9 @@ export function hitungRingkas(
     terserap += gulung.get(b.anggaran_key) ?? 0
   }
 
-  const adaDiPohon = new Set(baris.map(b => b.anggaran_key))
-  let yatim = 0
-  let yatimRekening = 0
-  for (const [key, nilai] of terserapMap) {
-    // Nol dilewati: rekening yang pengembaliannya menutup belanjanya bukan uang
-    // yang hilang dari hitungan, dan menyebutnya cuma menambah kebisingan.
-    if (adaDiPohon.has(key) || Math.abs(nilai) <= EPS_PRATINJAU) continue
-    yatim += nilai
-    yatimRekening++
-  }
+  const diLuar = hitungDiLuarPagu(baris, terserapMap)
+  const yatim = diLuar.nilai
+  const yatimRekening = diLuar.kunci.length
 
   let menembus = 0
   let mepet = 0

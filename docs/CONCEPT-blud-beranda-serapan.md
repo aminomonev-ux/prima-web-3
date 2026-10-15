@@ -357,6 +357,21 @@ berarti "anggaran terpakai".
 Nilai nol dilewati (`EPS_PRATINJAU`): rekening yang pengembaliannya menutup
 belanjanya bukan uang yang hilang dari hitungan.
 
+**Susulan 2026-10-15 — aturannya pindah ke satu tempat.** Yang sama juga terjadi di
+layar Realisasi dan di tabel LKJIP bersumber BLUD: JUMLAH-nya diam-diam lebih kecil
+dari kas yang keluar. Aturannya kini `hitungDiLuarPagu` di `lib/blud/di-luar-pagu.ts`
+(MURNI), dipakai `hitungRingkas` (Beranda, setahun) DAN `GET /api/blud/realisasi/pagu`
+— route itu memulangkan `di_luar_pagu { nilai, rekening, contoh[≤3] }` pada titik waktu
+yang SAMA dengan kolom s.d. tabelnya (dengan `bulan` = s.d. bulan itu, tanpa = setahun).
+Nama contoh diambil `getRekeningLama` (`pagu.ts`) dari versi TERAKHIR — DPA atau
+Pergeseran, tanggal sama → Pergeseran — yang masih memuat rekening itu; hanya untuk
+contoh, bukan semua kunci. Pemakainya: spanduk amber layar Realisasi (kedua tampilan —
+JUMLAH Per PJ juga tanpa uang ini; jalan keluarnya memindah transaksi lewat Buku Kas,
+sebab membuat ulang rekening di Pergeseran melahirkan `anggaran_key` baru) dan catatan
+tabel LKJIP (`kalimatDiLuarPagu`). Nol kolom/tabel/migrasi/endpoint — isian baru di
+jawaban route yang sudah ada. Unduhan Excel/PDF Realisasi per PJ BELUM membawanya.
+Regresi: `npx tsx scripts/test-blud-di-luar-pagu.mts` (35, bagian F MySQL tahun 2097).
+
 **Hitungan menembus/mepet tetap dari baris DAUN** (§5.1c) — pertanyaannya berbeda,
 dan `hitungPratinjau` sudah menyaringnya begitu. Satu kueri boleh memulangkan
 dua-duanya, asal keduanya tidak tertukar.

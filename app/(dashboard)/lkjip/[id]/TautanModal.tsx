@@ -13,7 +13,7 @@ import { DAFTAR_SUMBER, type IdSumber } from '@/lib/lkjip/sumber';
 import { GagalTarik } from '@/lib/lkjip/sumber/umum';
 import { DAFTAR_TEMPLAT, type TemplatTabel } from '@/lib/lkjip/sumber/templat';
 import {
-  bangunBadan, pasangBadan, periksaRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, jumlahIsianTangan, BATAS_KOLOM,
+  bangunBadan, pasangBadan, periksaRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, jumlahIsianTangan, judulIkutSetelan, BATAS_KOLOM,
   type KolomTaut, type KolomSumber, type PayloadTabel, type Tautan, type FormatKolom,
 } from '@/lib/lkjip/tautan';
 import { displayValue, buildTableMeta, colLabel, type TabelCell, type TabelAlign } from '@/lib/lkjip/tabel';
@@ -238,12 +238,17 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   const adaTebal = !!hasil?.baris.some(b => b.tebal);
   const adaTingkat = !!hasil?.baris.some(b => (b.indent ?? 0) > 0);
   const sembunyiSet = new Set(sembunyi);
-  const setS = (kunci: string, nilai: unknown) => setSetelan(s => ({ ...s, [kunci]: nilai }));
+  function setS(kunci: string, nilai: unknown) {
+    const s = { ...setelan, [kunci]: nilai };
+    setSetelan(s);
+    setKolom(ks => judulIkutSetelan(ks, sumber.kolom(setelan), sumber.kolom(s)));
+  }
   // Tampilan yang punya kolom berbeda (Laporan, BLUD, PK) — tabel baru ikut kolom bawaannya.
   function gantiTampilan(v: string) {
     const s = { ...setelan, tampilan: v };
     setSetelan(s); setSembunyi([]);
     if (kosongAwal) setKolom(kolomAwal({ ...payload, tautan: undefined }, sumberId, s));
+    else setKolom(ks => judulIkutSetelan(ks, sumber.kolom(setelan), sumber.kolom(s)));
   }
 
   return (
