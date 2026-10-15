@@ -131,6 +131,15 @@ if (c) {
     gr = blok.find(b => b.tipe === 'GRAFIK')!
     ok('B8 foto lama: grafik tetap menemukan tabelnya lewat letak', gr.payload.tabelBlockId === tb.id, `${gr.payload.tabelBlockId} vs ${tb.id}`)
     ok('B9 foto lama: resep tautan tetap utuh', samaIsi(tb.payload.tautan, TabelPayloadSchema.parse(tabel).tautan))
+
+    // Tanggal: dulu String(Date) = "Wed Oct 14 2026 …" — panel Riwayat menampilkannya mentah.
+    const POLA = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
+    const daftarVersi = await V.listVersi(dokId)
+    const [jamDb] = await k.query(`SELECT DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS f FROM lkjip_versi WHERE id = ?`, [daftarVersi[0].id]) as [Array<{ f: string }>, unknown]
+    ok('B11 Riwayat: created_at "YYYY-MM-DD HH:MM:SS" = jam tersimpan', daftarVersi.every(v => POLA.test(v.created_at)) && daftarVersi[0].created_at === jamDb[0].f,
+      `${daftarVersi[0].created_at} vs ${jamDb[0].f}`)
+    const dok = (await L.getDokumen(dokId))!
+    ok('B12 dokumen: created_at & updated_at berbentuk jam yang terbaca', POLA.test(dok.created_at) && POLA.test(dok.updated_at), `${dok.created_at} / ${dok.updated_at}`)
   } finally {
     await k.query('DELETE FROM lkjip_dokumen WHERE judul = ?', [JUDUL_UJI])
   }

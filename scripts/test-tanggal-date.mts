@@ -15,9 +15,9 @@
 // datanya tidak menyala — sisanya jalan di mesin mana pun.
 
 import { readFileSync } from 'node:fs'
-import { toDateStr, tanggalHariIniWIB } from '../lib/shared/waktu-wib'
+import { toDateStr, toDatetimeStr, tanggalHariIniWIB } from '../lib/shared/waktu-wib'
 import * as tanggalBlud from '../lib/blud/tanggal'
-import { kolomDate, periksaIsi } from './cek-tanggal-date.mjs'
+import { kolomDate, kolomWaktu, periksaIsi } from './cek-tanggal-date.mjs'
 
 // Env dimuat SEBELUM modul yang menyentuh `db.ts` diimpor — pool dibuat saat modul itu
 // dievaluasi, jadi impor statis di atas akan membuatnya dengan kredensial kosong.
@@ -115,6 +115,39 @@ sama('E10 penanda tanggal-utc-ok membebaskan baris itu',
 sama('E11 kalimat di dalam komentar tidak dituduh', kena('/** dulu `new Date().toISOString().slice(0, 10)` */\nconst x = 1').length, 0)
 sama('E12 kolom bukan DATE tidak dituduh', kena('const s = r.no_usulan.slice(0, 10)').length, 0)
 
+// ── G. Kolom DATETIME/TIMESTAMP (susulan 2026-10-14) ─────────────────────────
+// `String(Date)` = "Wed Oct 14 2026 13:41:35 GMT+0700 (…)": panel Riwayat LKJIP menampilkannya
+// mentah, `tutup-data.ts` memotongnya 19 huruf jadi "Wed Oct 14 2026 13:".
+const skemaTeks = baca('docs/schema-mysql.sql')
+const kolomJam = kolomWaktu(skemaTeks).filter((k: string) => !kolom.includes(k))
+cek('G1 daftar DATETIME dibaca dari skema: created_at, ditutup_pada, locked_at, finalized_at',
+  ['created_at', 'ditutup_pada', 'locked_at', 'finalized_at'].every(k => kolomJam.includes(k)))
+cek('G2 kolom DATE tidak masuk daftar DATETIME', !kolomJam.includes('tanggal_dokumen') && !kolomJam.includes('versi_tanggal'))
+const kenaJam = (teks: string) => periksaIsi(teks, kolom, kolomJam).map((s: { kode: string }) => s.kode)
+cek('G3 menangkap String(r.created_at) (bentuk lama Riwayat LKJIP)', kenaJam("    created_at: String(r.created_at ?? ''),").includes('STRING-WAKTU'))
+cek('G4 menangkap String(...).slice(0, 19) (bentuk lama tutup-data BLUD)',
+  kenaJam("    ditutup_pada:  String(r.ditutup_pada ?? '').slice(0, 19).replace('T', ' '),").includes('STRING-WAKTU'))
+cek('G5 menangkap row?.ditutup_at (bentuk lama tutup-kas)', kenaJam('    ditutup_at: row?.ditutup_at != null ? String(row.ditutup_at) : null,').includes('STRING-WAKTU'))
+sama('G6 toDatetimeStr tidak dituduh', kenaJam('    created_at: toDatetimeStr(r.created_at),').length, 0)
+sama('G7 penanda tanggal-utc-ok membebaskan (token CAS Usulan berupa teks ISO)',
+  kenaJam("setEditingUpdatedAt(String(header.updated_at ?? '')); // tanggal-utc-ok: teks ISO untuk CAS").length, 0)
+sama('G8 tanpa daftar DATETIME aturan lama tetap seperti dulu', kena("    created_at: String(r.created_at ?? ''),").length, 0)
+
+// toDatetimeStr — kembaran toDateStr untuk DATETIME.
+sama('G9 Date → jam dinding WIB', toDatetimeStr(new Date('2026-10-14T06:41:35Z')), '2026-10-14 13:41:35')
+sama('G10 lewat tengah malam WIB tidak mundur sehari', toDatetimeStr(new Date('2026-10-13T17:30:00Z')), '2026-10-14 00:30:00')
+sama('G11 teks DATE_FORMAT apa adanya', toDatetimeStr('2026-10-14 13:41:35'), '2026-10-14 13:41:35')
+sama('G12 teks ISO ber-Z digeser ke WIB (JSON dari Date)', toDatetimeStr('2026-10-14T06:41:35.000Z'), '2026-10-14 13:41:35')
+sama('G13 kosong/null → ""', toDatetimeStr(null) + toDatetimeStr('') + toDatetimeStr(undefined), '')
+sama('G14 Date tak sah → "" (bukan "Invalid Date")', toDatetimeStr(new Date('bukan tanggal')), '')
+cek('G16 gerbang CI benar-benar mengoper daftar DATETIME ke pemeriksa',
+  kode('scripts/cek-tanggal-date.mjs').includes("periksaIsi(fs.readFileSync(f, 'utf8'), kolom, kolomJam)")
+  && kode('scripts/cek-tanggal-date.mjs').includes('const kolomJam = kolomWaktu(skema).filter('))
+// Repo nyata: sepuluh tempat lama sudah lewat penolong (gerbang juga memindai seluruh repo).
+for (const f of ['lib/lkjip/data.ts', 'lib/lkjip/versi.ts', 'lib/blud/pejabat-data.ts', 'lib/blud/tutup-data.ts', 'lib/blud/tutup-kas.ts', 'lib/data/kinerja.ts', 'app/api/kinerja/ssk/versi-list/route.ts']) {
+  sama(`G15 ${f} bebas String(kolom DATETIME)`, periksaIsi(baca(f), kolom, kolomJam).filter((s: { kode: string }) => s.kode === 'STRING-WAKTU').length, 0)
+}
+
 // ── F. Basis data sungguhan (dilewati kalau MySQL mati) ──────────────────────
 try {
   const { sql } = await import('../lib/data/db')
@@ -122,6 +155,12 @@ try {
   cek('F1 mysql2 memang memulangkan objek Date untuk DATE', r.d instanceof Date)
   sama('F2 toDateStr atas nilai sungguhan', toDateStr(r.d), '2026-07-31')
   sama('F3 DATE_FORMAT memulangkan teks yang benar', r.f, '2026-07-31')
+  const [w] = await sql`SELECT CAST('2026-10-14 13:41:35' AS DATETIME) AS d` as { d: unknown }[]
+  cek('F4 mysql2 memulangkan objek Date untuk DATETIME juga', w.d instanceof Date)
+  sama('F5 toDatetimeStr atas DATETIME sungguhan = jam yang tersimpan', toDatetimeStr(w.d), '2026-10-14 13:41:35')
+  // Baris tabel sungguhan: hasil penolong = DATE_FORMAT MySQL atas kolom yang sama.
+  const [u] = await sql`SELECT created_at AS d, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS f FROM users ORDER BY id LIMIT 1` as { d: unknown; f: string }[]
+  if (u) sama('F6 users.created_at: toDatetimeStr = DATE_FORMAT', toDatetimeStr(u.d), u.f)
 } catch (e) {
   const kodeGalat = (e as { code?: string }).code ?? ''
   if (/ECONNREFUSED|ER_ACCESS_DENIED|ETIMEDOUT|ENOTFOUND/.test(kodeGalat)) console.log(`  --  F dilewati: MySQL tidak terjangkau (${kodeGalat})`)

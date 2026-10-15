@@ -13,6 +13,7 @@
 import { sql } from '@/lib/data/db'
 import type { TxSql } from '@/lib/data/db'
 import { waktuSekarangWIB, toDateStr } from './tanggal'
+import { toDatetimeStr } from '@/lib/shared/waktu-wib'
 import type { TutupPergeseran } from './tutup-pergeseran'
 
 /** Dilempar kalau versi itu sudah pernah ditutup — ditangkap route jadi 409. */
@@ -113,7 +114,7 @@ export async function getTutupPergeseran(tahun: number): Promise<TutupPergeseran
   return rows.map(r => ({
     versi_ditutup: toDateStr(r.versi_ditutup),
     versi_basis:   toDateStr(r.versi_basis),
-    ditutup_pada:  String(r.ditutup_pada ?? '').slice(0, 19).replace('T', ' '),
+    ditutup_pada:  toDatetimeStr(r.ditutup_pada),
     ditutup_oleh:  r.ditutup_oleh ? String(r.ditutup_oleh) : null,
   }))
 }

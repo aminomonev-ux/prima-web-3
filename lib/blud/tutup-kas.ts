@@ -11,6 +11,7 @@
 import { sql, withTransaction } from '@/lib/data/db'
 import type { Penanya, TxSql } from '@/lib/data/db'
 import { acquireBludLock, BLUD_PERIODE_ENTITY, bludPeriodeKey } from './lock'
+import { toDatetimeStr } from '@/lib/shared/waktu-wib'
 import { getSaldoAwal, saldoAwalSudahDitetapkan } from './realisasi-data'
 import {
   BludPeriodeTertutupError, BludTutupTidakSeimbangError, BludTutupTerhalangError,
@@ -246,7 +247,7 @@ export async function getNeracaKas(tahun: number, bulan: number): Promise<Neraca
     no_surat: row?.no_surat != null ? String(row.no_surat) : null,
     tgl_surat: toIso(row?.tgl_surat),
     ditutup_oleh: row?.ditutup_oleh != null ? String(row.ditutup_oleh) : null,
-    ditutup_at: row?.ditutup_at != null ? String(row.ditutup_at) : null,
+    ditutup_at: row?.ditutup_at != null ? toDatetimeStr(row.ditutup_at) : null,
     penghalang: pesan,
     jumlah_baki: baki,
     saldo_awal_terkunci: tertutup.length > 0,

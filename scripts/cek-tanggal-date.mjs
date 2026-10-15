@@ -21,6 +21,11 @@
 // Daftar kolom DATE dibaca dari `docs/schema-mysql.sql`, bukan diketik — kolom DATE baru
 // otomatis ikut terjaga.
 //
+// Susulan 2026-10-14: kolom DATETIME/TIMESTAMP juga tiba sebagai objek Date, dan
+// `String(r.created_at)` = "Wed Oct 14 2026 13:41:35 GMT+0700 (…)" — panel Riwayat LKJIP
+// menampilkannya mentah, `tutup-data.ts` memotongnya jadi "Wed Oct 14 2026 13:". Aturan
+// STRING-WAKTU menolak `String()` atas kolom itu; jalannya `toDatetimeStr()`.
+//
 // Jalankan: node scripts/cek-tanggal-date.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,6 +47,17 @@ export function kolomDate(skema) {
   return [...nama].sort();
 }
 
+/** Nama kolom bertipe DATETIME/TIMESTAMP dari DDL acuan. */
+export function kolomWaktu(skema) {
+  const nama = new Set();
+  const bersih = skema.replace(/--[^\n]*/g, '');
+  for (const baris of bersih.split('\n')) {
+    const m = /^\s*`?([a-z_][a-z0-9_]*)`?\s+(DATETIME|TIMESTAMP)\b/i.exec(baris);
+    if (m && !/^(PRIMARY|UNIQUE|KEY|INDEX|CONSTRAINT|FOREIGN)$/i.test(m[1])) nama.add(m[1].toLowerCase());
+  }
+  return [...nama].sort();
+}
+
 /** Komentar blok & baris-penuh dibuang, TANPA menggeser nomor baris. */
 function buangKomentar(teks) {
   return teks
@@ -53,14 +69,16 @@ function buangKomentar(teks) {
  * Pelanggaran pada satu isi berkas. Dipisah dari pemindai berkas supaya uji regresi
  * bisa memberinya teks buatan (uji mutasi), bukan cuma mencocokkan repo apa adanya.
  */
-export function periksaIsi(isi, kolom) {
+export function periksaIsi(isi, kolom, kolomJam = []) {
   const asli = isi.split('\n');
   const tanpaKomentar = buangKomentar(isi).split('\n');
   const daftar = kolom.map((k) => k.replace(/[^a-z0-9_]/gi, '')).join('|');
+  const daftarJam = kolomJam.map((k) => k.replace(/[^a-z0-9_]/gi, '')).join('|');
   const aturan = [
     { kode: 'ISO-POTONG', re: /\.toISOString\(\)\s*\.(slice|substring|substr)\(\s*0\s*,\s*10\s*\)|\.toISOString\(\)\s*\.split\(\s*['"]T['"]\s*\)\s*\[\s*0\s*\]/ },
     { kode: 'STRING-DATE', re: new RegExp(`\\bString\\(\\s*[\\w.?\\[\\]'"]*\\.(${daftar})\\b`) },
     { kode: 'POTONG-DATE', re: new RegExp(`\\.(${daftar})\\s*\\)?\\s*\\??\\.(slice|substring|substr)\\(\\s*0\\s*,\\s*10\\s*\\)`) },
+    ...(daftarJam ? [{ kode: 'STRING-WAKTU', re: new RegExp(`\\bString\\(\\s*[\\w.?\\[\\]'"]*\\.(${daftarJam})\\b`) }] : []),
   ];
   const salah = [];
   tanpaKomentar.forEach((baris, i) => {
@@ -88,27 +106,31 @@ function berkas(dir) {
 
 function utama() {
   const akarRepo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const kolom = kolomDate(fs.readFileSync(path.join(akarRepo, 'docs', 'schema-mysql.sql'), 'utf8'));
+  const skema = fs.readFileSync(path.join(akarRepo, 'docs', 'schema-mysql.sql'), 'utf8');
+  const kolom = kolomDate(skema);
+  const kolomJam = kolomWaktu(skema).filter((k) => !kolom.includes(k));
   let dipindai = 0;
   const temuan = [];
   for (const akar of AKAR) {
     for (const f of berkas(path.join(akarRepo, akar))) {
       dipindai++;
-      for (const s of periksaIsi(fs.readFileSync(f, 'utf8'), kolom)) {
+      for (const s of periksaIsi(fs.readFileSync(f, 'utf8'), kolom, kolomJam)) {
         temuan.push(`${path.relative(akarRepo, f).replace(/\\/g, '/')}:${s.baris}  [${s.kode}]  ${s.teks}`);
       }
     }
   }
-  console.log(`${dipindai} berkas dipindai · ${kolom.length} kolom DATE dijaga (dari schema-mysql.sql).`);
+  console.log(`${dipindai} berkas dipindai · ${kolom.length} kolom DATE + ${kolomJam.length} kolom DATETIME/TIMESTAMP dijaga (dari schema-mysql.sql).`);
   if (temuan.length) {
-    console.log(`\nX  ${temuan.length} pemakaian tanggal yang bisa jatuh ke hari sebelumnya:`);
+    console.log(`\nX  ${temuan.length} pemakaian tanggal/jam yang salah dibaca:`);
     for (const t of temuan) console.log(`     ${t}`);
     console.log('\nKolom DATE tiba sebagai 00:00 WIB = 17:00 UTC kemarin. Pakai DATE_FORMAT(kolom, \'%Y-%m-%d\')');
     console.log('di SQL, atau toDateStr() / tanggalHariIniWIB() dari lib/shared/waktu-wib.ts.');
+    console.log('Kolom DATETIME/TIMESTAMP tiba sebagai objek Date — String() menulis "Wed Oct 14 2026 …".');
+    console.log('Pakai toDatetimeStr() dari lib/shared/waktu-wib.ts.');
     console.log(`Pengecualian yang sah: beri penanda "// ${PENANDA} <alasan>" di baris yang sama.`);
     process.exit(1);
   }
-  console.log('LULUS: tidak ada kolom DATE yang dipotong/di-String() mentah.');
+  console.log('LULUS: tidak ada kolom DATE yang dipotong/di-String() mentah, tidak ada DATETIME yang di-String().');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) utama();

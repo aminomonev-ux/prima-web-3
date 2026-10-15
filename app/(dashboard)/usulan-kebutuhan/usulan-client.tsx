@@ -779,7 +779,7 @@ export default function UsulanClient({ userId, role, username, themePreference, 
       // BuatPanel mounts on setPanel('buat') below with fresh currentItem/editingIdx.
       setEditingUsulanId(u.id);
       setEditingUsulanNo(u.no_usulan);
-      setEditingUpdatedAt(String(header.updated_at ?? ''));
+      setEditingUpdatedAt(String(header.updated_at ?? '')); // tanggal-utc-ok: sudah teks ISO dari JSON; server membandingkannya sebagai SAAT (getTime) untuk kunci optimistik — jam dinding tanpa zona justru merusaknya
       setBuatOk(`Draft ${u.no_usulan} dimuat — ${loadedItems.length} item. Tambah item baru atau edit item yang ada.`);
       setPanel('buat');
     } catch { showToast('Gagal memuat draft.'); }

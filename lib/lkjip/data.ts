@@ -10,6 +10,7 @@ import {
 } from './numbering';
 import { parseBlockPayload, DEFAULT_STYLE, StyleConfigSchema, type StyleConfig, type BlockTipe, type DokumenQuery, type SectionCreate, type SectionMove } from './schemas';
 import { JUDUL_BAB_WAJIB, ALASAN_BAB, putusanPindah } from './aturan-bab';
+import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 
 export class LkjipVersionConflictError extends Error {
   constructor() { super('Dokumen sudah diubah pengguna lain. Memuat versi terbaru.'); this.name = 'LkjipVersionConflictError'; }
@@ -81,9 +82,9 @@ function mapDokumen(r: Record<string, unknown>): LkjipDokumen {
     status: (r.status ?? 'DRAFT') as 'DRAFT' | 'FINAL',
     style_config: parseStyleConfig(r.style_config),
     version: Number(r.version ?? 0),
-    finalized_at: r.finalized_at ? String(r.finalized_at) : null,
-    created_at: String(r.created_at ?? ''),
-    updated_at: String(r.updated_at ?? ''),
+    finalized_at: r.finalized_at ? toDatetimeStr(r.finalized_at) : null,
+    created_at: toDatetimeStr(r.created_at),
+    updated_at: toDatetimeStr(r.updated_at),
   };
 }
 

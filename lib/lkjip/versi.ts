@@ -5,6 +5,7 @@ import { sql, queryOne, queryMany, withTransaction, bulkInsert, sqlInt } from '@
 import { getDokumen, LkjipNotFoundError, LkjipFinalError, LkjipVersionConflictError } from './data';
 import type { StyleConfig } from './schemas';
 import { judulBabWajib } from './aturan-bab';
+import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 
 const RETENTION = 20; // simpan N versi terakhir per dokumen (prune otomatis)
 
@@ -81,10 +82,7 @@ export async function setVersiDrive(versiId: number, fileId: string, name: strin
 
 export async function listVersi(dokumenId: number): Promise<VersiMeta[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT v.id, v.versi_no, v.label, v.drive_file_id, v.drive_name,
-           -- Teks 'YYYY-MM-DD HH:MM:SS', bukan objek Date: String(Date) = "Wed Oct 14 2026 …" dan
-           -- pemformat tanggal di panel Riwayat tidak bisa membacanya (tampil mentah).
-           DATE_FORMAT(v.created_at, '%Y-%m-%d %H:%i:%s') AS created_at, u.username AS created_by_name
+    SELECT v.id, v.versi_no, v.label, v.drive_file_id, v.drive_name, v.created_at, u.username AS created_by_name
     FROM lkjip_versi v LEFT JOIN users u ON u.id = v.created_by
     WHERE v.dokumen_id = ${dokumenId}
     ORDER BY v.versi_no DESC LIMIT 100
@@ -92,7 +90,8 @@ export async function listVersi(dokumenId: number): Promise<VersiMeta[]> {
   return rows.map(r => ({
     id: Number(r.id), versi_no: Number(r.versi_no), label: (r.label as string | null) ?? null,
     drive_file_id: (r.drive_file_id as string | null) ?? null, drive_name: (r.drive_name as string | null) ?? null,
-    created_at: String(r.created_at ?? ''), created_by_name: (r.created_by_name as string | null) ?? null,
+    // Bukan String(Date) = "Wed Oct 14 2026 …": pemformat tanggal panel Riwayat tidak bisa membacanya.
+    created_at: toDatetimeStr(r.created_at), created_by_name: (r.created_by_name as string | null) ?? null,
   }));
 }
 

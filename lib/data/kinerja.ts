@@ -4,6 +4,7 @@ import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simp
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { punyaAnak, alasanTolakGantiNama, pesanTolakGantiNama } from '@/lib/kinerja/master-nama';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
+import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 import { bandingRealisasi, pelanggaranBulanTertutup, type BarisBanding, type RingkasBulan } from '@/lib/kinerja/banding-realisasi';
 import {
   REALISASI_LOCK_ENTITY, realisasiLockKey, KinerjaBulanTertutupError,
@@ -450,7 +451,7 @@ export async function getSskRows(
     versi_tipe:   (r.versi_tipe === 'PERUBAHAN' ? 'PERUBAHAN' : 'MURNI') as 'MURNI'|'PERUBAHAN',
     versi_seq:    Number(r.versi_seq ?? 0),
     is_nullified: Number(r.is_nullified ?? 0) === 1,
-    locked_at:    r.locked_at ? String(r.locked_at) : null,
+    locked_at:    r.locked_at ? toDatetimeStr(r.locked_at) : null,
   } as SskRow));
 }
 

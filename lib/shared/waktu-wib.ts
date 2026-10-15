@@ -52,3 +52,23 @@ export function toDateStr(v: unknown): string {
   }
   return String(v).slice(0, 10)
 }
+
+/**
+ * Kolom DATETIME/TIMESTAMP dari MySQL → 'YYYY-MM-DD HH:MM:SS' (jam dinding WIB).
+ *
+ * mysql2 memulangkan objek Date, dan `String(Date)` = "Wed Oct 14 2026 13:41:35 GMT+0700 (…)":
+ * tidak terbaca pemformat tanggal mana pun (panel Riwayat LKJIP menampilkannya mentah), dan
+ * kalau dipotong 19 huruf jadi "Wed Oct 14 2026 13:". Teks berzona (ISO ber-Z) diperlakukan
+ * sebagai satu saat lalu digeser ke WIB; teks tanpa zona dianggap sudah jam dinding WIB
+ * (hasil `DATE_FORMAT` di SQL) dan hanya dirapikan bentuknya.
+ */
+export function toDatetimeStr(v: unknown): string {
+  if (!v) return ''
+  const saat = v instanceof Date ? v
+    : typeof v === 'string' && /(Z|[+-]\d\d:?\d\d)$/.test(v.trim()) ? new Date(v.trim())
+      : null
+  if (saat) {
+    return Number.isNaN(saat.getTime()) ? '' : new Date(saat.getTime() + JAKARTA_OFFSET_MS).toISOString().slice(0, 19).replace('T', ' ')
+  }
+  return String(v).slice(0, 19).replace('T', ' ')
+}

@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { sql } from '@/lib/data/db';
+import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 import { isKinerjaRole, KinerjaQuerySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../../_guard';
@@ -47,8 +48,8 @@ export async function GET(req: NextRequest) {
     versi_tipe:   String(r.versi_tipe ?? 'MURNI') as 'MURNI' | 'PERUBAHAN',
     versi_seq:    Number(r.versi_seq ?? 0),
     jumlah_baris: Number(r.jumlah_baris ?? 0),
-    locked_at:    r.locked_at ? String(r.locked_at) : null,
-    updated_at:   r.updated_at ? String(r.updated_at) : null,
+    locked_at:    r.locked_at ? toDatetimeStr(r.locked_at) : null,
+    updated_at:   r.updated_at ? toDatetimeStr(r.updated_at) : null,
   }));
 
   return NextResponse.json({ ok: true, items });

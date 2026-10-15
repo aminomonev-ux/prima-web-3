@@ -12,6 +12,7 @@
 // pk_pejabat di jalur cetak, dan tidak ada FK yang bisa menariknya.
 import { sql, withTransaction, bulkInsert, toMysqlDatetime } from '@/lib/data/db'
 import type { JabatanSpj } from './realisasi-schemas'
+import { toDatetimeStr } from '@/lib/shared/waktu-wib'
 
 export interface PejabatSpj {
   jabatan: JabatanSpj
@@ -51,7 +52,7 @@ export async function listPejabat(tahun: number): Promise<PejabatSpj[]> {
     pangkat: teks(r.pangkat),
     jabatan_teks: teks(r.jabatan_teks),
     pk_pejabat_id: r.pk_pejabat_id != null ? Number(r.pk_pejabat_id) : null,
-    disalin_at: r.disalin_at != null ? String(r.disalin_at) : null,
+    disalin_at: r.disalin_at != null ? toDatetimeStr(r.disalin_at) : null,
   }))
 }
 
