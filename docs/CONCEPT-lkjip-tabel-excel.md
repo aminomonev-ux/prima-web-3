@@ -449,8 +449,21 @@ Nol tabel, kolom, migrasi, maupun endpoint.
   - Word dibangkitkan dari isi tersimpan dan XML-nya dibaca: `keepNext`, `tblHeader` 2 baris, `cantSplit`, `gridSpan`/`vMerge`.
   - Tema terang dicek.
 
-### Belum diverifikasi
+### Dibuka di Microsoft Word sungguhan (2026-10-18, susulan)
 
-- Berkas **belum dibuka di Microsoft Word**; yang diperiksa baru XML-nya.
-- Lebar ponsel 375 px belum dicek.
-- Tarik data dengan baris sungguhan belum dicoba, karena sumber 2099 kosong.
+Dokumen kotak pasir dibangkitkan, dibuka lewat Word 16 (COM), diekspor ke PDF, dan halamannya dirender ke gambar.
+
+- Tabel didorong turun satu paragraf demi satu paragraf di 45 posisi:
+
+  | Keadaan | Judul terpisah | Baris terbelah | Kepala tertinggal sendirian |
+  |---|---|---|---|
+  | Dengan perbaikan | 0 | 0 | 0 |
+  | Tanpa ikatan kepala (W2 tetap) | 0 | 0 | 13 |
+  | Tanpa W1/W2 | 4 | 309 | 4 |
+
+- **Temuan: kepala tabel tertinggal sendirian di dasar halaman.** Ini akibat samping W2: baris data yang tak muat pindah utuh ke halaman berikut, kepalanya tertinggal. Perbaikannya: paragraf kepala diberi `keepNext`.
+- **Temuan lama: teks sel menempel ke garis kiri.** `styles.xml` tak punya gaya "Normal Table". Kini `tblCellMar` 108 dxa (bawaan Word).
+  - Akibatnya: pada tabel yang disusutkan ke lebar kertas, kolomnya jadi sempit (8 kolom ≈ 1,9 cm), dan angka panjang terpotong ke baris kedua. Jalan keluarnya halaman melintang (Tahap W).
+- Tabel 8 kolom bawaan muat di bidang tulis (439,2 ≤ 439,4 pt). Sel galat tercetak "—".
+- Tarik data E-Anggaran 2026 sungguhan (hanya dibaca) dengan kepala bertingkat yang disusun di kisi modal berhasil sampai ke editor.
+- **375 px:** halaman tidak melebar. Tapi editor LKJIP memang tidak punya tata letak ponsel (`.lk-ed-grid` = `320px 1fr` tanpa media query), jadi panel isinya tinggal 55 px. Ini sudah begitu sebelum Tahap A.
