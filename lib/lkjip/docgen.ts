@@ -251,9 +251,12 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
       if (fill) tcPr.push(`<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>`);
       const csz = cell.fs ? cell.fs * 2 : cellSz;
       const align = cell.al ?? (isHeader ? 'center' : colAlign[c]);
+      // Kepala diikat ke baris sesudahnya: sejak baris badan `cantSplit` (W2), baris data yang tak
+      // muat pindah utuh ke halaman berikut dan kepalanya dulu tertinggal sendirian di dasar halaman.
+      const ikat = isHeader ? '<w:keepNext/>' : '';
       const body = m.kind === 'vcont'
-        ? `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>`
-        : `<w:p><w:pPr><w:jc w:val="${jcOf(align)}"/><w:spacing w:after="0"/></w:pPr>` +
+        ? `<w:p><w:pPr>${ikat}<w:spacing w:after="0"/></w:pPr></w:p>`
+        : `<w:p><w:pPr>${ikat}<w:jc w:val="${jcOf(align)}"/><w:spacing w:after="0"/></w:pPr>` +
           `<w:r>${rPr(font, csz, { bold: isHeader || !!cell.b })}<w:t xml:space="preserve">${escapeXml(teksSelWord(rows, r, c))}</w:t></w:r></w:p>`;
       cells += `<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${body}</w:tc>`;
     }
@@ -265,14 +268,17 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
   const headerRow = hrCount > 0 ? '' : `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>` +
     kolom.map((k, ci) =>
       `<w:tc><w:tcPr><w:tcW w:w="${widths[ci]}" w:type="dxa"/>${border}<w:shd w:val="clear" w:color="auto" w:fill="${headerFill}"/></w:tcPr>` +
-      `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr>` +
+      `<w:p><w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr>` +
       `<w:r>${rPr(font, cellSz, { bold: true })}<w:t xml:space="preserve">${escapeXml(k)}</w:t></w:r></w:p></w:tc>`,
     ).join('') + `</w:tr>`;
   const dataRows = rows.map((_row, r) => renderRow(r, r < hrCount)).join('');
 
   const table = `<w:tbl>` +
-    `<w:tblPr><w:tblW w:w="${widths.reduce((a, b) => a + b, 0)}" w:type="dxa"/><w:jc w:val="center"/><w:tblLayout w:type="fixed"/>` +
+    `<w:tblPr><w:tblW w:w="${widths.reduce((a, b) => a + b, 0)}" w:type="dxa"/><w:jc w:val="center"/>` +
     `<w:tblBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideH w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="single" w:sz="4" w:color="000000"/></w:tblBorders>` +
+    // Jarak isi sel = bawaan Word (0,19 cm). Tanpa ini teks sel menempel ke garis kiri — styles.xml
+    // dokumen ini tak punya gaya "Normal Table" yang biasanya membawa jarak itu.
+    `<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar>` +
     `</w:tblPr><w:tblGrid>${widths.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${headerRow}${dataRows}</w:tbl>`;
   return caption('Tabel', p.judul ?? '', font, sz, true) + table + para('', font, sz);
 }

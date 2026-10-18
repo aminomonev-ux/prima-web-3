@@ -208,6 +208,12 @@ const xml = buildTabelXml({ judul: 'Uji', kolom: ['A', 'B'], headerRows: 1, rows
 ok('H1 W1: judul tabel diikat ke tabelnya (keepNext)', xml.startsWith('<w:p><w:pPr><w:pStyle w:val="Caption"/><w:keepNext/>'))
 ok('H2 W2: baris badan juga tidak boleh terbelah halaman (cantSplit)', /<w:tr><w:trPr><w:cantSplit\/><\/w:trPr><w:tc>/.test(xml) && (xml.match(/<w:cantSplit\/>/g) ?? []).length === 2)
 ok('H3 E7: sel galat dicetak "—", Word tak pernah menerima #ERR', xml.includes('>—</w:t>') && !xml.includes('#ERR'))
+// Ditemukan saat dibuka di Microsoft Word: sejak W2, baris data yang tak muat pindah utuh ke
+// halaman berikut dan KEPALA-nya tertinggal sendirian di dasar halaman.
+const parBaris = (x: string, i: number) => (x.split('<w:tr>')[i + 1] ?? '').match(/<w:p><w:pPr>.*?<\/w:pPr>/g) ?? []
+ok('H2b kepala diikat ke baris sesudahnya (keepNext di tiap paragraf kepala), badan tidak',
+  parBaris(xml, 0).length === 2 && parBaris(xml, 0).every(p => p.includes('<w:keepNext/>')) && parBaris(xml, 1).every(p => !p.includes('<w:keepNext/>')))
+ok('H2c tabel membawa jarak isi sel (teks tidak menempel ke garis)', xml.includes('<w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar>'))
 const lebar8 = buildTabelXml({ kolom: Array.from({ length: 8 }, (_, i) => `K${i}`), colWidths: Array.from({ length: 8 }, () => 140), headerRows: 1, rows: [Array.from({ length: 8 }, () => sel('x'))] }, 'Arial', 24, 'D9D9D9')
 const grid8 = [...lebar8.matchAll(/<w:gridCol w:w="(\d+)"\/>/g)].map(m => Number(m[1]))
 ok('H4 T3: 8 kolom bawaan (16.800 dxa) disusutkan ke bidang tulis A4', grid8.reduce((a, b) => a + b, 0) <= LEBAR_TULIS_DXA && grid8.every(w => w === grid8[0]), String(grid8))
