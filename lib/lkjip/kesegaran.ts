@@ -5,6 +5,7 @@
 
 import { nilaiPerbarui, kalimatPerbarui, type HasilTarik, type PayloadTabel, type Tautan } from './tautan';
 import { angkaDiHtml, bandingAngka, kalimatAngka, kunciTarikan, type ResepAngka } from './angka';
+import { normalizeRows, daftarSelGalat } from './tabel';
 
 /** Yang ditampilkan panel Periksa — sama untuk tabel & narasi. */
 export interface ItemPeriksa {
@@ -57,6 +58,21 @@ export function kumpulkanTabelTertaut(bagian: BagianDok[]): TabelTertaut[] {
       judul: (p.judul ?? '').trim() || 'Tabel tanpa judul',
       ringkas: p.tautan.ringkas ?? '',
       payload: { judul: p.judul ?? '', kolom: p.kolom, align: p.align ?? [], colWidths: p.colWidths, headerRows: p.headerRows, rows: p.rows, tautan: p.tautan },
+    }];
+  }));
+}
+
+/** Tabel (tertaut atau bukan) yang punya sel rumus galat — di Word dicetak "—", jadi disebut sebelum Finalisasi (E7). */
+export interface TabelGalat extends ItemPeriksa { sel: string[] }
+export function kumpulkanSelGalat(bagian: BagianDok[]): TabelGalat[] {
+  return bagian.flatMap(s => s.blocks.flatMap(b => {
+    const p = b.payload as { judul?: string; rows?: unknown; tautan?: { ringkas?: string } } | null;
+    if (b.tipe !== 'TABEL' || !p) return [];
+    const sel = daftarSelGalat(normalizeRows(p.rows));
+    if (!sel.length) return [];
+    return [{
+      blockId: b.id, sectionId: s.id, letak: `${s.nomor} ${s.judul}`.trim(),
+      judul: (p.judul ?? '').trim() || 'Tabel tanpa judul', ringkas: p.tautan?.ringkas ?? '', sel,
     }];
   }));
 }

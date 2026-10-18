@@ -13,11 +13,15 @@ import { DAFTAR_SUMBER, type IdSumber } from '@/lib/lkjip/sumber';
 import { GagalTarik } from '@/lib/lkjip/sumber/umum';
 import { DAFTAR_TEMPLAT, type TemplatTabel } from '@/lib/lkjip/sumber/templat';
 import {
-  bangunBadan, pasangBadan, periksaRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, jumlahIsianTangan, judulIkutSetelan, BATAS_KOLOM,
+  bangunBadan, pasangBadan, periksaRumusKolom, petakanRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, jumlahIsianTangan, judulIkutSetelan, BATAS_KOLOM,
   type KolomTaut, type KolomSumber, type PayloadTabel, type Tautan, type FormatKolom,
 } from '@/lib/lkjip/tautan';
-import { displayValue, buildTableMeta, colLabel, type TabelCell, type TabelAlign } from '@/lib/lkjip/tabel';
+import {
+  displayValue, buildTableMeta, colLabel, pastikanKepalaSel, namaKolomDariKepala, letakAwal, rapikanLetak, selMilikKolom,
+  sisipKolom, hapusKolom as hapusKolomTabel, tukarKolomSel, kolomSegabung, type TabelCell, type TabelAlign, type BentukTabel,
+} from '@/lib/lkjip/tabel';
 import SetelanSumber, { type HasilSetelan } from './SetelanSumber';
+import KisiKepala from './KisiKepala';
 import { TAUT_CSS } from './taut-css';
 
 interface Props {
@@ -27,8 +31,14 @@ interface Props {
   onTutup: () => void;
 }
 
-/** `tanganAsal`: isian tangan kolom ini saat modal dibuka — kembali kalau isinya diganti lalu dipilih tangan lagi. */
-type KolomForm = { judul: string; taut: KolomTaut | null; align: TabelAlign; lebar?: number; asal: number | null; tanganAsal?: Record<string, string> };
+/**
+ * `tanganAsal`: isian tangan kolom ini saat modal dibuka — kembali kalau isinya diganti lalu dipilih tangan lagi.
+ * `nama`: nama kolom lama — hanya cadangan kalau kolomnya tak punya sel judul. JUDUL kolom tinggal
+ * di kisi kepala (E4: satu judul, satu tempat), bukan di sini.
+ */
+type KolomForm = { nama: string; taut: KolomTaut | null; align: TabelAlign; lebar?: number; asal: number | null; tanganAsal?: Record<string, string> };
+/** Kolom + kisi kepala + letak judul tiap kolom — selalu diubah BERSAMA supaya tak pernah tidak sejajar. */
+type BentukModal = { kolom: KolomForm[]; kepala: TabelCell[][]; letak: (number | null)[] };
 type HasilModal = HasilSetelan;
 
 const LEBAR_BAWAAN = 140;
@@ -36,41 +46,76 @@ const judulBawaan = (s: string) => s.trim() === '' || /^Kolom \d+$/.test(s.trim(
 const alignJenis = (k: KolomSumber | undefined): TabelAlign => (k && k.jenis !== 'teks' ? 'right' : 'left');
 const BARIS_PRATINJAU = 25;
 
-/** Tabel yang belum diisi apa pun — boleh diberi kolom bawaan sumber. */
+/** Tabel yang belum diisi apa pun (kepala cuma judul bawaan "Kolom N") — boleh diberi kolom bawaan sumber. */
 function tabelKosong(p: PayloadTabel): boolean {
-  return (p.headerRows ?? 0) === 0 && p.kolom.every(judulBawaan) && p.rows.every(r => r.every(c => !c.v.trim()));
+  const pk = pastikanKepalaSel(p);
+  const hr = jumlahBarisKepala(pk);
+  return hr <= 1 && pk.kolom.every(judulBawaan)
+    && pk.rows.slice(0, hr).every(r => r.every(c => judulBawaan(c.v)))
+    && pk.rows.slice(hr).every(r => r.every(c => !c.v.trim()));
 }
 
-function kolomAwal(p: PayloadTabel, sumberId: IdSumber, setelan: Record<string, unknown>): KolomForm[] {
+const kepalaSatuBaris = (judul: string[]): TabelCell[][] => [judul.map(v => ({ v }))];
+const bentukKepala = (b: BentukModal): BentukTabel =>
+  ({ rows: b.kepala, kolom: b.kolom.map(k => k.nama), align: b.kolom.map(k => k.align), colWidths: b.kolom.map(k => k.lebar ?? LEBAR_BAWAAN), headerRows: b.kepala.length });
+const judulKolom = (b: BentukModal, i: number): string => { const r = b.letak[i]; return r == null ? '' : b.kepala[r]?.[i]?.v ?? ''; };
+/** Judul kolom ditulis ke SEL miliknya di kisi kepala. Kolom yang tertutup gabungan tak punya sel → dibiarkan. */
+function denganJudul(b: BentukModal, i: number, v: string): BentukModal {
+  const r = b.letak[i];
+  if (r == null) return b;
+  return { ...b, kepala: b.kepala.map((row, ri) => (ri === r ? row.map((cell, ci) => (ci === i ? { ...cell, v } : cell)) : row)) };
+}
+/** T4: rumus kolom mengikuti kolomnya saat dipindah/dihapus (`peta[lama]` = indeks baru, null = dihapus). */
+const petakanRumus = (ks: KolomForm[], peta: (number | null)[]): KolomForm[] =>
+  ks.map(k => (k.taut?.isi.jenis === 'rumus' ? { ...k, taut: { ...k.taut, isi: { jenis: 'rumus' as const, ekspresi: petakanRumusKolom(k.taut.isi.ekspresi, peta) } } } : k));
+function ikutSetelan(b: BentukModal, lama: readonly KolomSumber[], baru: readonly KolomSumber[]): BentukModal {
+  const sebelum = b.kolom.map((k, i) => ({ judul: judulKolom(b, i), taut: k.taut }));
+  const sesudah = judulIkutSetelan(sebelum, lama, baru);
+  if (sesudah === sebelum) return b;
+  return sesudah.reduce((acc, k, i) => (k.judul === sebelum[i].judul ? acc : denganJudul(acc, i, k.judul)), b);
+}
+
+function bentukAwal(p: PayloadTabel, sumberId: IdSumber, setelan: Record<string, unknown>): BentukModal {
   const katalog = DAFTAR_SUMBER[sumberId].kolom(setelan);
   const perKunci = new Map(katalog.map(k => [k.kunci, k]));
+  if (!p.tautan && tabelKosong(p)) {
+    const kunci = DAFTAR_SUMBER[sumberId].kolomBawaan(setelan);
+    const judul = kunci.map(k => perKunci.get(k)?.label ?? k);
+    return {
+      kolom: kunci.map((k, i) => ({ nama: judul[i], taut: { isi: { jenis: 'sumber', kunci: k } }, align: alignJenis(perKunci.get(k)), asal: null })),
+      kepala: kepalaSatuBaris(judul), letak: kunci.map(() => 0),
+    };
+  }
+  // E1: kepala selalu berupa sel — tabel lama ber-headerRows 0 dapat 1 baris kepala berisi nama kolom.
+  const pk = pastikanKepalaSel(p);
+  const hr = jumlahBarisKepala(pk);
+  const kepala = hr > 0 ? pk.rows.slice(0, hr).map(r => r.map(c => ({ ...c }))) : kepalaSatuBaris(p.kolom);
+  const letak = letakAwal(kepala, p.kolom);
   if (p.tautan) {
-    return p.kolom.map((judul, i) => {
-      const taut = p.tautan!.kolom[i] ?? null;
-      return {
-        judul, taut, align: (p.align[i] as TabelAlign) ?? 'left', lebar: p.colWidths?.[i], asal: i,
-        tanganAsal: taut?.isi.jenis === 'tangan' ? taut.isi.nilai : undefined,
-      };
-    });
+    return {
+      kolom: p.kolom.map((nama, i) => {
+        const taut = p.tautan!.kolom[i] ?? null;
+        return {
+          nama, taut, align: (p.align[i] as TabelAlign) ?? 'left', lebar: p.colWidths?.[i], asal: i,
+          tanganAsal: taut?.isi.jenis === 'tangan' ? taut.isi.nilai : undefined,
+        };
+      }),
+      kepala, letak,
+    };
   }
-  if (tabelKosong(p)) {
-    return DAFTAR_SUMBER[sumberId].kolomBawaan(setelan).map(kunci => ({
-      judul: perKunci.get(kunci)?.label ?? kunci,
-      taut: { isi: { jenis: 'sumber', kunci } },
-      align: alignJenis(perKunci.get(kunci)),
-      asal: null,
-    }));
-  }
-  // Tabel yang sudah dibentuk sendiri: judul & kepalanya dipertahankan, isinya ditebak dari judul
+  // Tabel yang sudah dibentuk sendiri: kepalanya dipertahankan, isinya ditebak dari judul
   // yang sama persis dengan judul kolom sumber — sisanya dipilih orangnya.
   const perJudul = new Map(katalog.map(k => [k.label.trim().toLowerCase(), k]));
-  return p.kolom.map((judul, i) => {
-    const cocok = perJudul.get(judul.trim().toLowerCase());
-    return {
-      judul, taut: cocok ? { isi: { jenis: 'sumber', kunci: cocok.kunci } } : null,
-      align: (p.align[i] as TabelAlign) ?? 'left', lebar: p.colWidths?.[i], asal: i,
-    };
-  });
+  return {
+    kolom: p.kolom.map((nama, i) => {
+      const cocok = perJudul.get(nama.trim().toLowerCase());
+      return {
+        nama, taut: cocok ? { isi: { jenis: 'sumber', kunci: cocok.kunci } } : null,
+        align: (p.align[i] as TabelAlign) ?? 'left', lebar: p.colWidths?.[i], asal: i,
+      };
+    }),
+    kepala, letak,
+  };
 }
 
 const nilaiIsi = (t: KolomTaut | null): string =>
@@ -81,8 +126,9 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   const [sumberId, setSumberId] = useState<IdSumber>(awalSumber);
   const [setelan, setSetelan] = useState<Record<string, unknown>>(
     () => DAFTAR_SUMBER[awalSumber].setelan(payload.tautan?.setelan, tahunDokumen));
-  const [kolom, setKolom] = useState<KolomForm[]>(
-    () => kolomAwal(payload, awalSumber, DAFTAR_SUMBER[awalSumber].setelan(payload.tautan?.setelan, tahunDokumen)));
+  const [bentuk, setBentuk] = useState<BentukModal>(
+    () => bentukAwal(payload, awalSumber, DAFTAR_SUMBER[awalSumber].setelan(payload.tautan?.setelan, tahunDokumen)));
+  const { kolom, kepala, letak } = bentuk;
   const [sembunyi, setSembunyi] = useState<string[]>(payload.tautan?.sembunyi ?? []);
   const [tebalInduk, setTebalInduk] = useState(payload.tautan?.tebalInduk ?? true);
   const [hasil, setHasil] = useState<HasilModal | null>(null);
@@ -137,53 +183,69 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
     setSumberId(id);
     setSetelan(setelanBaru);
     setHasil(null); setGalat(''); setSembunyi([]);
-    setKolom(kosongAwal
-      ? kolomAwal({ ...payload, tautan: undefined }, id, setelanBaru)
-      : ks => ks.map(k => (k.taut?.isi.jenis === 'sumber' && !katalogBaru.has(k.taut.isi.kunci) ? { ...k, taut: null } : k)));
+    setBentuk(b => (kosongAwal
+      ? bentukAwal({ ...payload, tautan: undefined }, id, setelanBaru)
+      : { ...b, kolom: b.kolom.map(k => (k.taut?.isi.jenis === 'sumber' && !katalogBaru.has(k.taut.isi.kunci) ? { ...k, taut: null } : k)) }));
   }
 
   function pakaiTemplat(t: TemplatTabel) {
     const s = DAFTAR_SUMBER[t.sumber].setelan({ ...t.setelan, tahun: tahunDokumen }, tahunDokumen);
     setSumberId(t.sumber); setSetelan(s); setSembunyi([]); setTebalInduk(true);
-    setKolom(t.kolom.map(k => ({ judul: k.judul, taut: k.taut, align: k.align, asal: null })));
+    setBentuk({
+      kolom: t.kolom.map(k => ({ nama: k.judul, taut: k.taut, align: k.align, asal: null })),
+      kepala: kepalaSatuBaris(t.kolom.map(k => k.judul)), letak: t.kolom.map(() => 0),
+    });
     setJudulTemplat(`${t.label} Tahun ${tahunDokumen}`);
     void tarik(t.sumber, s);
   }
 
-  const ubahKolom = (i: number, f: (k: KolomForm) => KolomForm) => setKolom(ks => ks.map((k, j) => (j === i ? f(k) : k)));
+  const ubahKolom = (i: number, f: (k: KolomForm) => KolomForm) => setBentuk(b => ({ ...b, kolom: b.kolom.map((k, j) => (j === i ? f(k) : k)) }));
   function pilihIsi(i: number, nilai: string) {
-    ubahKolom(i, k => {
-      if (nilai === '') return { ...k, taut: null };
-      if (nilai === 'nomor') return { ...k, taut: { isi: { jenis: 'nomor' } }, judul: judulBawaan(k.judul) ? 'No' : k.judul, align: judulBawaan(k.judul) ? 'center' : k.align };
-      if (nilai === 'rumus') return { ...k, taut: { isi: { jenis: 'rumus', ekspresi: k.taut?.isi.jenis === 'rumus' ? k.taut.isi.ekspresi : '' } } };
+    setBentuk(b => {
+      const k = b.kolom[i];
+      const judul = judulKolom(b, i);
+      const pasang = (taut: KolomTaut | null, judulBaru?: string, align?: TabelAlign) => {
+        const nb = { ...b, kolom: b.kolom.map((x, j) => (j === i ? { ...x, taut, align: align ?? x.align } : x)) };
+        return judulBaru === undefined ? nb : denganJudul(nb, i, judulBaru);
+      };
+      if (nilai === '') return pasang(null);
+      if (nilai === 'nomor') return judulBawaan(judul) ? pasang({ isi: { jenis: 'nomor' } }, 'No', 'center') : pasang({ isi: { jenis: 'nomor' } });
+      if (nilai === 'rumus') return pasang({ isi: { jenis: 'rumus', ekspresi: k.taut?.isi.jenis === 'rumus' ? k.taut.isi.ekspresi : '' } });
       if (nilai === 'tangan') {
-        return {
-          ...k, taut: { isi: { jenis: 'tangan', nilai: k.tanganAsal ?? {} } },
-          judul: judulBawaan(k.judul) ? 'Keterangan' : k.judul, align: judulBawaan(k.judul) ? 'left' : k.align,
-        };
+        const taut: KolomTaut = { isi: { jenis: 'tangan', nilai: k.tanganAsal ?? {} } };
+        return judulBawaan(judul) ? pasang(taut, 'Keterangan', 'left') : pasang(taut);
       }
       const kunci = nilai.slice(2);
       const ks = perKunci.get(kunci);
-      const judulBaru = judulBawaan(k.judul) || k.asal === null;
-      return {
-        ...k,
-        taut: { isi: { jenis: 'sumber', kunci }, gabungSama: k.taut?.gabungSama, bertingkat: k.taut?.bertingkat },
-        judul: judulBaru ? (ks?.label ?? kunci) : k.judul,
-        align: judulBaru ? alignJenis(ks) : k.align,
-      };
+      const taut: KolomTaut = { isi: { jenis: 'sumber', kunci }, gabungSama: k.taut?.gabungSama, bertingkat: k.taut?.bertingkat };
+      return judulBawaan(judul) || k.asal === null ? pasang(taut, ks?.label ?? kunci, alignJenis(ks)) : pasang(taut);
     });
   }
   const ubahTaut = (i: number, ubah: Partial<KolomTaut>) =>
     ubahKolom(i, k => (k.taut ? { ...k, taut: { ...k.taut, ...ubah } } : k));
-  const tambahKolom = () => setKolom(ks => (ks.length >= BATAS_KOLOM ? ks
-    : [...ks, { judul: `Kolom ${ks.length + 1}`, taut: null, align: 'left', asal: null }]));
-  const hapusKolom = (i: number) => setKolom(ks => (ks.length <= 1 ? ks : ks.filter((_, j) => j !== i)));
-  const geser = (i: number, arah: -1 | 1) => setKolom(ks => {
+  // Kolom baru: judulnya ditaruh di sel miliknya di kisi kepala (§4.6).
+  const tambahKolom = () => setBentuk(b => {
+    if (b.kolom.length >= BATAS_KOLOM) return b;
+    const n = b.kolom.length;
+    const t = sisipKolom(bentukKepala(b), n, 1);
+    const judul = `Kolom ${n + 1}`;
+    return denganJudul({ kolom: [...b.kolom, { nama: judul, taut: null, align: 'left', asal: null }], kepala: t.rows, letak: [...b.letak, selMilikKolom(t.rows, t.rows.length, n)] }, n, judul);
+  });
+  // Gabungan judul yang terpotong terlihat langsung di kisi; rumus kolom lain ikut huruf barunya (T4).
+  const hapusKolom = (i: number) => setBentuk(b => {
+    if (b.kolom.length <= 1) return b;
+    const t = hapusKolomTabel(bentukKepala(b), i, i);
+    const peta = b.kolom.map((_, c) => (c < i ? c : c === i ? null : c - 1));
+    return { kolom: petakanRumus(b.kolom.filter((_, j) => j !== i), peta), kepala: t.rows, letak: rapikanLetak(t.rows, b.letak.filter((_, j) => j !== i)) };
+  });
+  const geser = (i: number, arah: -1 | 1) => setBentuk(b => {
     const j = i + arah;
-    if (j < 0 || j >= ks.length) return ks;
-    const salin = [...ks];
-    [salin[i], salin[j]] = [salin[j], salin[i]];
-    return salin;
+    if (j < 0 || j >= b.kolom.length) return b;
+    const ks = [...b.kolom]; [ks[i], ks[j]] = [ks[j], ks[i]];
+    const lt = [...b.letak]; [lt[i], lt[j]] = [lt[j], lt[i]];
+    const kp = tukarKolomSel(b.kepala, i, j, b.kolom.length);
+    const peta = b.kolom.map((_, c) => (c === i ? j : c === j ? i : c));
+    return { kolom: petakanRumus(ks, peta), kepala: kp, letak: rapikanLetak(kp, lt) };
   });
 
   const lengkap = kolom.every(k => k.taut !== null);
@@ -192,18 +254,16 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `resep` lahir baru tiap render; isinya = kolom/sembunyi/tebalInduk
     [hasil, kolom, sembunyi, tebalInduk]);
 
-  const hr = jumlahBarisKepala(payload);
-  const kepalaBaru = useMemo(
-    () => payload.rows.slice(0, hr).map(r => kolom.map(k => (k.asal !== null && r[k.asal] ? { ...r[k.asal] } : { v: '' } as TabelCell))),
-    [payload.rows, hr, kolom]);
+  const hr = kepala.length;
+  // E2: nama kolom = judul di sel miliknya (grafik memilih seri lewat nama kolom).
   const dasar: PayloadTabel = {
     ...payload,
     judul: payload.judul.trim() ? payload.judul : judulTemplat,
-    kolom: kolom.map(k => k.judul),
+    kolom: namaKolomDariKepala(kepala, hr, kolom.map(k => k.nama), letak),
     align: kolom.map(k => k.align),
     colWidths: kolom.map(k => k.lebar ?? LEBAR_BAWAAN),
     headerRows: hr,
-    rows: kepalaBaru,
+    rows: kepala,
   };
   const rowsBaru = badan ? pasangBadan(dasar, badan) : null;
 
@@ -241,14 +301,14 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   function setS(kunci: string, nilai: unknown) {
     const s = { ...setelan, [kunci]: nilai };
     setSetelan(s);
-    setKolom(ks => judulIkutSetelan(ks, sumber.kolom(setelan), sumber.kolom(s)));
+    setBentuk(b => ikutSetelan(b, sumber.kolom(setelan), sumber.kolom(s)));
   }
   // Tampilan yang punya kolom berbeda (Laporan, BLUD, PK) — tabel baru ikut kolom bawaannya.
   function gantiTampilan(v: string) {
     const s = { ...setelan, tampilan: v };
     setSetelan(s); setSembunyi([]);
-    if (kosongAwal) setKolom(kolomAwal({ ...payload, tautan: undefined }, sumberId, s));
-    else setKolom(ks => judulIkutSetelan(ks, sumber.kolom(setelan), sumber.kolom(s)));
+    if (kosongAwal) setBentuk(bentukAwal({ ...payload, tautan: undefined }, sumberId, s));
+    else setBentuk(b => ikutSetelan(b, sumber.kolom(setelan), sumber.kolom(s)));
   }
 
   return (
@@ -293,9 +353,8 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
 
           <section className="lk-taut-sec">
             <div className="lk-taut-judul">2. Kolom tabel ({kolom.length}/{BATAS_KOLOM})</div>
-            {hr > 0 && (
-              <p className="lk-hint">Kepala tabel Anda ({hr} baris, termasuk gabungan selnya) dipertahankan. Memindah atau menghapus kolom bisa memotong gabungan judul — periksa lagi sesudahnya.</p>
-            )}
+            <KisiKepala kepala={kepala} letak={letak} lebar={kolom.map(k => k.lebar ?? LEBAR_BAWAAN)}
+              onUbah={(kp, lt) => setBentuk(b => ({ ...b, kepala: kp, letak: lt }))} />
             <div className="lk-taut-kolom">
               {kolom.map((k, i) => {
                 const isi = k.taut?.isi;
@@ -305,8 +364,10 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
                 return (
                   <div key={i} className={`lk-taut-baris${k.taut ? '' : ' kurang'}`}>
                     <span className="lk-taut-huruf">{colLabel(i)}</span>
-                    <input className="lk-taut-nama" value={k.judul} placeholder="Judul kolom" aria-label={`Judul kolom ${colLabel(i)}`}
-                      onChange={e => ubahKolom(i, x => ({ ...x, judul: e.target.value }))} />
+                    <input className="lk-taut-nama" value={judulKolom(bentuk, i)} aria-label={`Judul kolom ${colLabel(i)}`}
+                      disabled={letak[i] == null}
+                      placeholder={letak[i] == null ? `digabung dengan ${kolomSegabung(kepala, i).map(colLabel).join(', ')} — ubah di kisi` : 'Judul kolom'}
+                      onChange={e => { const v = e.target.value; setBentuk(b => denganJudul(b, i, v)); }} />
                     <select className="lk-taut-isi" value={nilaiIsi(k.taut)} aria-label={`Isi kolom ${colLabel(i)}`} onChange={e => pilihIsi(i, e.target.value)}>
                       <option value="">— Isi dari… —</option>
                       {grupKatalog.map(([grup, daftar]) => (

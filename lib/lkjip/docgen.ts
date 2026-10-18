@@ -8,7 +8,7 @@
 import { getDokumenDetail } from './data';
 import { flattenTree, type SectionNode, type BlockNode } from './numbering';
 import { DEFAULT_STYLE, type StyleConfig } from './schemas';
-import { normalizeRows, buildTableMeta, displayValue } from './tabel';
+import { normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord } from './tabel';
 import { getDriveClient } from '@/lib/services/drive';
 
 function escapeXml(s: unknown): string {
@@ -201,15 +201,17 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
 }
 
 // ── Caption ber-SEQ (auto-nomor + masuk Daftar Tabel/Gambar) ──
-function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number): string {
+// Judul tabel di ATAS tabel → `keepNext` (W1: tanpa ini judul bisa tertinggal sendirian di dasar
+// halaman). Judul gambar/grafik di BAWAH, jadi yang diikat paragraf gambarnya (`drawingPara`).
+function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number, keepNext = false): string {
   const capSz = Math.max(18, sz - 2);
   const lead = `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve">${label} </w:t></w:r>`;
   const seq = field(` SEQ ${label} \\* ARABIC `, '1');
   const tail = text.trim() ? `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve"> </w:t></w:r><w:r>${rPr(font, capSz)}<w:t xml:space="preserve">${escapeXml(text.trim())}</w:t></w:r>` : '';
-  return `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="center"/></w:pPr>${lead}${seq}${tail}</w:p>`;
+  return `<w:p><w:pPr><w:pStyle w:val="Caption"/>${keepNext ? '<w:keepNext/>' : ''}<w:jc w:val="center"/></w:pPr>${lead}${seq}${tail}</w:p>`;
 }
 
-function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string): string {
+export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string): string {
   const p = (payload ?? {}) as { judul?: string; kolom?: string[]; align?: string[]; colWidths?: number[]; rows?: unknown };
   const kolom = Array.isArray(p.kolom) ? p.kolom : [];
   const colAlign = Array.isArray(p.align) ? p.align : [];
@@ -217,10 +219,8 @@ function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: s
   const ncol = kolom.length;
   const rows = normalizeRows(p.rows).map(r => { while (r.length < ncol) r.push({ v: '' }); return r.slice(0, ncol); });
   const meta = buildTableMeta(rows, ncol);
-  const totalW = 9000;
-  // Lebar kolom: pakai colWidths (px → dxa, 1px≈15) bila lengkap; selain itu bagi rata.
-  const pxW = Array.isArray(p.colWidths) && p.colWidths.length === ncol ? p.colWidths : null;
-  const widths = pxW ? pxW.map(w => Math.max(360, Math.round(Number(w) * 15))) : kolom.map(() => Math.floor(totalW / ncol));
+  // Lebar kolom: colWidths (px → dxa) bila lengkap, selain itu bagi rata; disusutkan ke lebar kertas (T3).
+  const widths = lebarKolomWord(p.colWidths, ncol);
   const spanW = (c: number, cs: number) => { let s = 0; for (let i = c; i < c + cs && i < ncol; i++) s += widths[i]; return s; };
   const border = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>`;
   const sideXml = (tag: string, w: number | undefined) =>
@@ -254,10 +254,11 @@ function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: s
       const body = m.kind === 'vcont'
         ? `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>`
         : `<w:p><w:pPr><w:jc w:val="${jcOf(align)}"/><w:spacing w:after="0"/></w:pPr>` +
-          `<w:r>${rPr(font, csz, { bold: isHeader || !!cell.b })}<w:t xml:space="preserve">${escapeXml(displayValue(rows, r, c))}</w:t></w:r></w:p>`;
+          `<w:r>${rPr(font, csz, { bold: isHeader || !!cell.b })}<w:t xml:space="preserve">${escapeXml(teksSelWord(rows, r, c))}</w:t></w:r></w:p>`;
       cells += `<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${body}</w:tc>`;
     }
-    const trPr = isHeader ? `<w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>` : '';
+    // W2: baris badan juga `cantSplit` — dulu baris berteks panjang bisa terbelah dua halaman.
+    const trPr = isHeader ? `<w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>` : `<w:trPr><w:cantSplit/></w:trPr>`;
     return `<w:tr>${trPr}${cells}</w:tr>`;
   };
   // Header = kolom thead (1 baris, default) ATAU hrCount baris pertama rows (header bertingkat).
@@ -273,10 +274,10 @@ function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: s
     `<w:tblPr><w:tblW w:w="${widths.reduce((a, b) => a + b, 0)}" w:type="dxa"/><w:jc w:val="center"/><w:tblLayout w:type="fixed"/>` +
     `<w:tblBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideH w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="single" w:sz="4" w:color="000000"/></w:tblBorders>` +
     `</w:tblPr><w:tblGrid>${widths.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${headerRow}${dataRows}</w:tbl>`;
-  return caption('Tabel', p.judul ?? '', font, sz) + table + para('', font, sz);
+  return caption('Tabel', p.judul ?? '', font, sz, true) + table + para('', font, sz);
 }
 
-type ImageInfo = { id: number; relId: string; mediaName: string; ext: string; wEmu: number; hEmu: number };
+export type ImageInfo = { id: number; relId: string; mediaName: string; ext: string; wEmu: number; hEmu: number };
 
 function sniffImgExt(buf: Buffer): string | null {
   if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50) return 'png';
@@ -313,7 +314,8 @@ function drawingPara(info: ImageInfo): string {
   const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
   const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
-  return `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr><w:r><w:drawing>` +
+  // keepNext: gambar tidak boleh terpisah dari judulnya yang ada di bawahnya (W1).
+  return `<w:p><w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr><w:r><w:drawing>` +
     `<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="${WP}">` +
     `<wp:extent cx="${info.wEmu}" cy="${info.hEmu}"/><wp:docPr id="${info.id}" name="Gambar${info.id}"/>` +
     `<a:graphic xmlns:a="${A}"><a:graphicData uri="${PIC}">` +
@@ -323,7 +325,7 @@ function drawingPara(info: ImageInfo): string {
     `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
 
-function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>): string {
+export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>): string {
   const p = (payload ?? {}) as { judul?: string; fileId?: string; caption?: string };
   const text = [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
   const info = p.fileId ? imgMap.get(p.fileId) : undefined;

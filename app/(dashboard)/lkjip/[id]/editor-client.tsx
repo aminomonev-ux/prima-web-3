@@ -9,9 +9,7 @@ import {
   Download, CornerDownRight, Plus, ChevronUp, ChevronDown,
   IndentIncrease, IndentDecrease, Pencil, Save, Table2, Image as ImageIcon, Type, Settings,
   BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
-  AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Combine, Split, Copy, ClipboardPaste,
-  GripVertical, Undo2, Redo2, Upload, BarChart3, HelpCircle, MoreVertical, Lock,
-  Link2, Unlink, RefreshCw, SlidersHorizontal,
+  GripVertical, Upload, BarChart3, HelpCircle, MoreVertical, Lock, RefreshCw,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
@@ -31,19 +29,17 @@ import type { InfoBeku } from '@/lib/security/beku';
 import { FONT_CHOICES } from '@/lib/lkjip/style-constants';
 import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
-import { normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, angkaSel, colLabel, type TabelCell, type TabelAlign, type TabelNumFmt } from '@/lib/lkjip/tabel';
-import { kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, sidikGrafik, ambilIsianTangan, nilaiPerbarui, kalimatIsianYatim, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
-import { kumpulkanTabelTertaut, kumpulkanNarasiTertaut, periksaSemua, type HasilPeriksa, type ItemPeriksa } from '@/lib/lkjip/kesegaran';
+import { normalizeRows, angkaSel } from '@/lib/lkjip/tabel';
+import { sidikGrafik } from '@/lib/lkjip/tautan';
+import { kumpulkanTabelTertaut, kumpulkanNarasiTertaut, kumpulkanSelGalat, periksaSemua, type HasilPeriksa, type ItemPeriksa } from '@/lib/lkjip/kesegaran';
 import type { ResepAngka } from '@/lib/lkjip/angka';
 import { fetchJson } from '@/lib/shared/api';
-import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
+import TabelEditor from './TabelEditor';
 
 const TiptapNarasi = dynamic(() => import('./TiptapNarasi'), {
   ssr: false,
   loading: () => <div style={{ color: '#85B7EB', fontSize: 12.5, padding: 10 }}>Memuat editor…</div>,
 });
-// Dimuat saat dibuka saja: penghubung sumber menyeret kode E-Anggaran & Renaksi.
-const TautanModal = dynamic(() => import('./TautanModal'), { ssr: false });
 
 interface Props {
   username: string;
@@ -184,7 +180,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     if (!selected) return;
     const payload =
       tipe === 'NARASI' ? { html: '' }
-      : tipe === 'TABEL' ? { judul: '', kolom: ['Kolom 1', 'Kolom 2'], align: ['left', 'left'], rows: [] }
+      : tipe === 'TABEL' ? { judul: '', kolom: ['Kolom 1', 'Kolom 2'], align: ['left', 'left'], headerRows: 1, rows: [[{ v: 'Kolom 1' }, { v: 'Kolom 2' }], [{ v: '' }, { v: '' }]] }
       : tipe === 'GRAFIK' ? { judul: '', chartType: 'bar', source: 'manual', data: [{ label: 'Kategori 1', value: 10 }, { label: 'Kategori 2', value: 20 }, { label: 'Kategori 3', value: 15 }], tabelBlockId: null, labelCol: 0, valueCol: 1, imageFileId: '', caption: '' }
       : { judul: '', fileId: '', caption: '' };
     const ok = await call('/api/lkjip/block', 'POST', { section_id: selected.id, tipe, payload });
@@ -280,6 +276,19 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     if (ok) { await refresh(); toast.success('Dokumen difinalisasi'); }
   }
   async function finalize() {
+    // E7: sel rumus galat dicetak "—" di Word — disebut SEKARANG, bukan ditemukan di dokumen yang sudah dicetak.
+    const galat = kumpulkanSelGalat(flat.map(f => f.node));
+    if (galat.length) {
+      const jumlah = galat.reduce((n, t) => n + t.sel.length, 0);
+      const daftar = galat.slice(0, 5).map(t => `• ${t.letak} — ${t.judul}: ${t.sel.slice(0, 6).join(', ')}${t.sel.length > 6 ? ', …' : ''}`).join('\n');
+      const pilihan = await pilihDialog({
+        title: 'Ada sel rumus yang tidak bisa dihitung',
+        message: `${jumlah} sel rumus di ${galat.length} tabel galat (#ERR / #REF!) dan di Word dicetak "—":\n${daftar}${galat.length > 5 ? '\n• …' : ''}`,
+        confirmLabel: 'Lihat dulu', altLabel: 'Tetap lanjut', variant: 'warning', altVariant: 'danger',
+      });
+      if (pilihan === 'utama') { bukaTabel(galat[0]); return; }
+      if (pilihan !== 'lain') return;
+    }
     // Dokumen FINAL tidak bisa diperbarui lagi — tabel & angka yang sudah tertinggal dari
     // sumbernya ditanyakan SEKARANG, bukan ditemukan sesudah dicetak.
     if (semuaTertaut.length) {
@@ -764,10 +773,11 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
   { t: 'Tabel', b: (
     <ol>
       <li>Tambah blok <b>Tabel</b>.</li>
-      <li>Atur jumlah kolom dan ketik judul tiap kolom.</li>
-      <li>Klik sel untuk mengisi; <b>menempel data dari Excel</b> didukung.</li>
-      <li><b>Lebar kolom</b>: seret garis batas. <b>Gabung sel</b>: pilih beberapa sel lalu <b>Merge</b>.</li>
-      <li>Baris header otomatis berwarna (warnanya diatur di Pengaturan Dokumen).</li>
+      <li>Baris paling atas adalah <b>kepala tabel</b> — ketik judul kolom di sana. Jumlah baris kepala (1–3) diatur di bilah alat; baris disisip/dibuang tepat di atas isi tabel.</li>
+      <li>Seperti Excel: <b>seret</b> untuk memblok, panah/Tab/Enter untuk berpindah, langsung mengetik untuk menimpa, <b>F2</b>/dobel-klik untuk menyunting, <b>Esc</b> membatalkan.</li>
+      <li><b>Delete</b> mengosongkan isi blok (formatnya tetap). Klik huruf kolom / nomor baris untuk memilih satu kolom/baris penuh, lalu <b>Sisip ▾ / Hapus ▾</b> (atau Ctrl+Shift+= / Ctrl+−) — sebanyak yang dipilih.</li>
+      <li><b>Lebar kolom</b>: seret garis di antara huruf kolom (lebarnya tampil dalam cm); dobel-klik garis = paskan ke isi. Garis putus-putus = batas kertas.</li>
+      <li><b>Menempel data dari Excel</b> didukung. Rumus (mis. <code>=A2+B2</code>) ikut bergeser saat baris/kolom disisip atau dihapus.</li>
     </ol>
   ) },
   { t: 'Gambar & Grafik', b: (
@@ -840,442 +850,6 @@ function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHand
       {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} tahunDokumen={tahunDokumen} onSave={onSave} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
       {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} />}
-    </div>
-  );
-}
-
-type TabelP = { judul: string; kolom: string[]; align: TabelAlign[]; colWidths?: number[]; headerRows?: number; rows: TabelCell[][]; tautan?: Tautan };
-function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void }) {
-  const p0 = block.payload as Partial<TabelP>;
-  // Tabel tertaut (docs/CONCEPT-lkjip-tabel-tertaut.md): badan diisi dari modul, kepala milik pengguna.
-  const [tautan, setTautan] = useState<Tautan | undefined>(p0.tautan);
-  const [modalTaut, setModalTaut] = useState(false);
-  const [menarik, setMenarik] = useState(false);
-  const terkait = !!tautan;
-  const [judul, setJudul] = useState(p0.judul ?? '');
-  const [kolom, setKolom] = useState<string[]>(p0.kolom?.length ? p0.kolom : ['Kolom 1']);
-  const [align, setAlign] = useState<TabelAlign[]>(
-    (p0.align as TabelAlign[] | undefined)?.length ? (p0.align as TabelAlign[]) : (p0.kolom?.length ? p0.kolom : ['Kolom 1']).map(() => 'left'),
-  );
-  const [rows, setRows] = useState<TabelCell[][]>(() => sanitizeRows(normalizeRows(p0.rows), (p0.kolom?.length ? p0.kolom : ['Kolom 1']).length));
-  const [sel, setSel] = useState<{ ar: number; ac: number; fr: number; fc: number } | null>(null);
-  const [editKey, setEditKey] = useState<string | null>(null);   // sel yg sedang diedit inline (double-klik/F2)
-  const [barFocused, setBarFocused] = useState(false);           // sedang mengetik di formula bar
-  const clipRef = useRef<TabelCell[][] | null>(null);
-  const editInputRef = useRef<HTMLInputElement | null>(null);
-  const ncol = kolom.length;
-  const DEF_W = 140;
-  const [colWidths, setColWidths] = useState<number[]>(() => {
-    const n = (p0.kolom?.length ? p0.kolom : ['Kolom 1']).length;
-    return Array.from({ length: n }, (_, i) => p0.colWidths?.[i] ?? DEF_W);
-  });
-  const [headerRows, setHeaderRows] = useState<number>(p0.headerRows ?? 0);
-  type Snap = { kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; rows: TabelCell[][] };
-  const [past, setPast] = useState<Snap[]>([]);
-  const [future, setFuture] = useState<Snap[]>([]);
-  const resizeRef = useRef<{ ci: number; x: number; w: number } | null>(null);
-  const snap = (): Snap => ({ kolom, align, colWidths, headerRows, rows });
-  const sameSnap = (a: Snap, b: Snap) => JSON.stringify(a) === JSON.stringify(b);
-  const pushHist = () => { const s = snap(); setPast(p => (p.length && sameSnap(p[p.length - 1], s)) ? p : [...p, s].slice(-60)); setFuture([]); };
-  const restoreSnap = (s: Snap) => { setKolom(s.kolom); setAlign(s.align); setColWidths(s.colWidths); setHeaderRows(s.headerRows); setRows(s.rows); setSel(null); setEditKey(null); setBarFocused(false); };
-  const undo = () => { if (!past.length) return; const prev = past[past.length - 1]; setFuture(f => [snap(), ...f].slice(0, 60)); setPast(p => p.slice(0, -1)); restoreSnap(prev); };
-  const redo = () => { if (!future.length) return; const nxt = future[0]; setPast(p => [...p, snap()].slice(-60)); setFuture(f => f.slice(1)); restoreSnap(nxt); };
-  const onResizeDown = (ci: number, e: React.MouseEvent) => {
-    if (readOnly) return;
-    e.preventDefault(); e.stopPropagation();
-    pushHist();
-    resizeRef.current = { ci, x: e.clientX, w: colWidths[ci] ?? DEF_W };
-    const move = (ev: MouseEvent) => { const rz = resizeRef.current; if (!rz) return; const next = Math.max(60, Math.min(800, rz.w + (ev.clientX - rz.x))); setColWidths(cw => cw.map((x, i) => i === rz.ci ? next : x)); };
-    const up = () => { resizeRef.current = null; window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
-    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
-  };
-
-  const rect = sel
-    ? { r1: Math.min(sel.ar, sel.fr), r2: Math.max(sel.ar, sel.fr), c1: Math.min(sel.ac, sel.fc), c2: Math.max(sel.ac, sel.fc) }
-    : null;
-  const inRect = (r: number, c: number) => !!rect && r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2;
-  // Selama tertaut, badan diisi ulang tiap Perbarui: sunting, format, atau gabung di sana akan
-  // tertimpa — jadi dikunci. Kepala tabel tetap bebas.
-  const diBadan = (r: number) => terkait && r >= headerRows;
-  const rectBadan = terkait && !!rect && rect.r2 >= headerRows;
-  // Kolom isian tangan (Tahap 2) tetap bisa diketik di badan — isinya diingat per kunci baris.
-  const kolomTangan = new Set(tautan?.kolom.flatMap((k, i) => (k.isi.jenis === 'tangan' ? [i] : [])) ?? []);
-  const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c);
-  const ubahSel = (r: number, c: number, v: string) => {
-    // Rumus sel menunjuk nomor baris, dan nomor baris bergeser tiap Perbarui.
-    if (diBadan(r) && kolomTangan.has(c) && v.trimStart().startsWith('=')) {
-      toast.info('Kolom isian tangan tidak menerima rumus — pakai isi "Rumus" lewat Atur Bentuk.', { id: 'tangan-rumus' });
-      return;
-    }
-    setCell(r, c, v);
-  };
-
-  const setCell = (ri: number, ci: number, v: string) =>
-    setRows(r => r.map((row, i) => i === ri ? row.map((c, j) => j === ci ? { ...c, v } : c) : row));
-  const addRow = () => { pushHist(); setRows(r => sanitizeRows([...r, kolom.map(() => ({ v: '' }))], ncol)); };
-  const delRow = (ri: number) => { pushHist(); setRows(r => sanitizeRows(r.filter((_, i) => i !== ri), ncol)); setSel(null); };
-  const addCol = () => {
-    pushHist();
-    setKolom(k => [...k, `Kolom ${k.length + 1}`]); setAlign(a => [...a, 'left']); setColWidths(cw => [...cw, DEF_W]);
-    setRows(r => sanitizeRows(r.map(row => [...row, { v: '' }]), ncol + 1));
-  };
-  const delCol = (ci: number) => {
-    if (ncol <= 1) return;
-    pushHist();
-    setKolom(k => k.filter((_, i) => i !== ci)); setAlign(a => a.filter((_, i) => i !== ci)); setColWidths(cw => cw.filter((_, i) => i !== ci));
-    setRows(r => sanitizeRows(r.map(row => row.filter((_, i) => i !== ci)), ncol - 1)); setSel(null);
-  };
-
-  const insertRef = (er: number, ec: number, r: number, c: number) => {
-    const ref = colLabel(c) + (r + 1);
-    const el = editInputRef.current;
-    const cur = rows[er]?.[ec]?.v ?? '';
-    const from = el?.selectionStart ?? cur.length;
-    const to = el?.selectionEnd ?? from;
-    setCell(er, ec, cur.slice(0, from) + ref + cur.slice(to));
-    requestAnimationFrame(() => {
-      const node = editInputRef.current;
-      if (node) { node.focus(); const p = from + ref.length; node.setSelectionRange(p, p); }
-    });
-  };
-  const onCellDown = (r: number, c: number, e: React.MouseEvent) => {
-    if (readOnly) return;
-    // Mode rumus: sedang mengetik '=' (inline edit / formula bar) → klik sel ini menyisipkan referensinya (cara Excel).
-    const ek = editKey ? editKey.split(':').map(Number) : (barFocused && sel ? [sel.ar, sel.ac] : null);
-    if (ek) {
-      const [er, ec] = ek;
-      const editing = rows[er]?.[ec];
-      if (editing && editing.v.trim().startsWith('=') && !(er === r && ec === c)) {
-        e.preventDefault();
-        insertRef(er, ec, r, c);
-        return;
-      }
-    }
-    if (e.shiftKey && sel) setSel({ ...sel, fr: r, fc: c });
-    else setSel({ ar: r, ac: c, fr: r, fc: c });
-  };
-  const editCells = (fn: (cell: TabelCell) => void) => {
-    if (!rect || rectBadan) return;
-    pushHist();
-    setRows(prev => prev.map((row, r) => row.map((cell, c) =>
-      (r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2 && !cell.h)
-        ? (() => { const n = { ...cell }; fn(n); return n; })()
-        : cell)));
-  };
-
-  const canMerge = !!rect && !rectBadan && (rect.r1 !== rect.r2 || rect.c1 !== rect.c2);
-  const origin = rect ? rows[rect.r1]?.[rect.c1] : undefined;
-  const canUnmerge = !!origin && !rectBadan && ((origin.cs ?? 1) > 1 || (origin.rs ?? 1) > 1);
-  const doMerge = () => { if (!rect) return; pushHist(); setRows(mergeCells(rows, rect.r1, rect.c1, rect.r2, rect.c2, ncol)); setSel({ ar: rect.r1, ac: rect.c1, fr: rect.r1, fc: rect.c1 }); };
-  const doUnmerge = () => { if (!rect) return; pushHist(); setRows(unmergeAt(rows, rect.r1, rect.c1, ncol)); };
-
-  const applyBorder = (opt: string) => editCells(c => {
-    const bd = { ...(c.bd ?? {}) };
-    if (opt === 'all') { bd.t = 4; bd.r = 4; bd.b = 4; bd.l = 4; }
-    else if (opt === 'thick') { bd.t = 12; bd.r = 12; bd.b = 12; bd.l = 12; }
-    else if (opt === 'none') { bd.t = 0; bd.r = 0; bd.b = 0; bd.l = 0; }
-    else if (opt === 't' || opt === 'r' || opt === 'b' || opt === 'l') bd[opt] = 4;
-    c.bd = bd;
-  });
-  const doCopy = () => {
-    if (!rect) return;
-    clipRef.current = extractRange(rows, rect.r1, rect.c1, rect.r2, rect.c2);
-    try { navigator.clipboard?.writeText(rangeToTSV(clipRef.current)); } catch { /* best-effort */ }
-    toast.success('Sel disalin');
-  };
-  const doPaste = () => { if (rect && !rectBadan && clipRef.current) { pushHist(); setRows(pasteRange(rows, rect.r1, rect.c1, clipRef.current, ncol)); } };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (readOnly || !(e.ctrlKey || e.metaKey)) return;
-    const k = e.key.toLowerCase();
-    if (k === 'z' && !e.shiftKey) { if (!editKey && !barFocused) { e.preventDefault(); undo(); } return; }
-    if (k === 'y' || (k === 'z' && e.shiftKey)) { if (!editKey && !barFocused) { e.preventDefault(); redo(); } return; }
-    const multi = !!rect && (rect.r1 !== rect.r2 || rect.c1 !== rect.c2);
-    if (k === 'c' && multi) { e.preventDefault(); doCopy(); }
-  };
-  const onPaste = (e: React.ClipboardEvent) => {
-    if (readOnly || !rect || rectBadan) return;
-    const text = e.clipboardData.getData('text/plain');
-    if (!text) return;
-    // Tempelan internal yang sama persis → pakai versi kaya-format.
-    if (clipRef.current && rangeToTSV(clipRef.current) === text) {
-      e.preventDefault();
-      pushHist();
-      setRows(pasteRange(rows, rect.r1, rect.c1, clipRef.current, ncol));
-      return;
-    }
-    // Tempelan grid dari Excel/Google Sheets (ada tab/baris) → parse TSV.
-    if (/[\t\n]/.test(text.replace(/\n+$/, ''))) {
-      e.preventDefault();
-      pushHist();
-      setRows(pasteRange(rows, rect.r1, rect.c1, parseTSV(text), ncol));
-    }
-    // selain itu (1 nilai) → biarkan paste native ke input sel.
-  };
-
-  // Isian tangan dibaca dari badan SAAT INI — peta di resep ikut ketikan terakhir, bukan simpanan terakhir.
-  const payloadSekarang = (): PayloadTabel => ({
-    judul, kolom, align, colWidths, headerRows, rows,
-    ...(tautan ? { tautan: ambilIsianTangan(tautan, rows.slice(jumlahBarisKepala({ headerRows, rows }))) } : {}),
-  });
-  /** Hubungkan / Perbarui / Lepas langsung disimpan: ketiganya keputusan yang sudah ditanyakan. */
-  const pasangDanSimpan = (p: PayloadTabel) => {
-    // Judul ikut: templat mengisi judul yang masih kosong — tanpa ini Simpan Tabel berikutnya mengosongkannya lagi.
-    setJudul(p.judul); setKolom(p.kolom); setAlign(p.align as TabelAlign[]);
-    setColWidths(p.kolom.map((_, i) => p.colWidths?.[i] ?? DEF_W));
-    setHeaderRows(p.headerRows ?? 0); setRows(p.rows); setTautan(p.tautan);
-    // Riwayat urungkan dikosongkan: memulihkan baris tanpa ikut memulihkan resepnya membuat
-    // keduanya tidak sejajar lagi (server menolaknya, tapi layar sudah terlanjur salah).
-    setPast([]); setFuture([]); setSel(null); setEditKey(null);
-    onSave(p);
-  };
-  // Tertaut: jumlah baris kepala diubah dengan MENYISIP/membuang baris di atas badan, bukan
-  // dengan "meminjam" baris badan jadi kepala — kunci tiap baris badan harus tetap sejajar.
-  const gantiBarisKepala = (n: number) => {
-    pushHist();
-    if (!terkait) { setHeaderRows(n); return; }
-    const hr = jumlahBarisKepala({ headerRows, rows });
-    setRows(r => n > hr
-      ? [...r.slice(0, hr), ...Array.from({ length: n - hr }, () => kolom.map(() => ({ v: '' }) as TabelCell)), ...r.slice(hr)]
-      : sanitizeRows([...r.slice(0, n), ...r.slice(hr)], ncol));
-    setHeaderRows(n);
-  };
-  async function perbarui() {
-    if (!tautan) return;
-    setMenarik(true);
-    try {
-      const { DAFTAR_SUMBER } = await import('@/lib/lkjip/sumber');
-      const sumber = DAFTAR_SUMBER[tautan.sumber];
-      const hasil = await sumber.tarik(tautan.setelan, url => fetchJson<unknown>(url), tahunDokumen);
-      const sekarang = payloadSekarang() as PayloadTabel & { tautan: Tautan };
-      const nilai = nilaiPerbarui(sekarang, hasil);
-      const hr = jumlahBarisKepala({ headerRows, rows });
-      if (nilai.sama) {
-        toast.success(`Sudah sama dengan ${sumber.modul} saat ini — tidak ada yang perlu diperbarui.`);
-        return;
-      }
-      const { badan, ringkas } = nilai;
-      const rowsBaru = pasangBadan(sekarang, badan);
-      if (!rowsBaru) { toast.error(pesanLewatBatas(badan.rows.length, hr)); return; }
-      const yatim = kalimatIsianYatim(nilai.yatim, { rows: rows.slice(hr), kunciBaris: tautan.kunciBaris });
-      const peringatan = (badan.kolomHilang.length
-        ? `\n\nKolom ${badan.kolomHilang.map(colLabel).join(', ')} menunjuk kolom sumber yang tidak ada lagi dan akan kosong — atur lewat Atur Bentuk.`
-        : '') + (yatim ? `\n\n${yatim}` : '');
-      const ok = await confirmDialog({
-        title: `Perbarui dari ${sumber.modul}?`,
-        message: `${kalimatPerbarui(ringkas)}\n\nSumber: ${hasil.ringkas}${peringatan}\n\nKepala tabel, pilihan kolom, dan baris yang disembunyikan tetap seperti sekarang.`,
-        confirmLabel: 'Terapkan',
-        variant: 'warning',
-      });
-      if (!ok) return;
-      pasangDanSimpan({ ...sekarang, rows: rowsBaru, tautan: { ...nilai.tautanBaru, ditarikPada: waktuSekarangWIB().slice(0, 16) } });
-    } catch (e) {
-      toast.error(e instanceof Error && e.name === 'GagalTarik' ? e.message : 'Gagal menarik data. Coba lagi.');
-    } finally { setMenarik(false); }
-  }
-  async function lepas() {
-    if (!tautan) return;
-    const ok = await confirmDialog({
-      title: 'Lepas tautan?',
-      message: 'Tabel jadi tabel biasa: isinya tetap, semua sel bisa disunting dan digabung, tapi tombol Perbarui hilang — angkanya tidak bisa lagi diambil ulang dari modul.\n\nKalau berubah pikiran, pulihkan lewat Riwayat versi dokumen.',
-      confirmLabel: 'Lepas tautan',
-      variant: 'warning',
-    });
-    if (ok) pasangDanSimpan(lepasTautan(payloadSekarang()));
-  }
-
-  const vAlignCss = (va?: TabelCell['va']) => va === 'middle' ? 'middle' : va === 'bottom' ? 'bottom' : 'top';
-
-  return (
-    <div className="lk-tabel-ed" onKeyDown={onKeyDown} onPaste={onPaste}>
-      <input className="lk-tabel-judul" value={judul} readOnly={readOnly} placeholder="Judul tabel (tanpa nomor — nomor otomatis)" onChange={e => setJudul(e.target.value)} />
-
-      {!readOnly && (
-        <div className="lk-tabel-tools">
-          <button data-tooltip="Urungkan (Ctrl+Z)" data-tooltip-pos="below" disabled={!past.length} onClick={undo}><Undo2 size={14} /></button>
-          <button data-tooltip="Ulangi (Ctrl+Y)" data-tooltip-pos="below" disabled={!future.length} onClick={redo}><Redo2 size={14} /></button>
-          <span className="lk-tt-sep" />
-          <button data-tooltip="Gabung sel" data-tooltip-pos="below" disabled={!canMerge} onClick={doMerge}><Combine size={14} /></button>
-          <button data-tooltip="Pisah sel" data-tooltip-pos="below" disabled={!canUnmerge} onClick={doUnmerge}><Split size={14} /></button>
-          <span className="lk-tt-sep" />
-          <button data-tooltip="Rata kiri" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'left'; })}><AlignLeft size={14} /></button>
-          <button data-tooltip="Rata tengah" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'center'; })}><AlignCenter size={14} /></button>
-          <button data-tooltip="Rata kanan" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'right'; })}><AlignRight size={14} /></button>
-          <button data-tooltip="Rata kiri-kanan" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.al = 'justify'; })}><AlignJustify size={14} /></button>
-          <span className="lk-tt-sep" />
-          <button data-tooltip="Vertikal atas" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.va = 'top'; })}>⤒</button>
-          <button data-tooltip="Vertikal tengah" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.va = 'middle'; })}>⇕</button>
-          <button data-tooltip="Vertikal bawah" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.va = 'bottom'; })}>⤓</button>
-          <span className="lk-tt-sep" />
-          <button data-tooltip="Tebal" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
-          <span className="lk-tt-sep" />
-          <span className="lk-tt-tip" data-tooltip="Baris header (header bertingkat dgn merge). 'Kolom' = pakai nama kolom; angka = N baris pertama jadi header." data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Baris header (header bertingkat dgn merge). 'Kolom' = pakai nama kolom; angka = N baris pertama jadi header." value={String(headerRows)}
-            onChange={e => gantiBarisKepala(Number(e.target.value))}>
-            <option value="0">Header: kolom</option>
-            <option value="1">Header: 1 baris</option>
-            <option value="2">Header: 2 baris</option>
-            <option value="3">Header: 3 baris</option>
-          </select></span>
-          <span className="lk-tt-tip" data-tooltip="Ukuran font" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Ukuran font" disabled={!rect || rectBadan} value=""
-            onChange={e => { const v = e.target.value; if (!v) return; if (v === 'reset') editCells(c => { delete c.fs; }); else editCells(c => { c.fs = +v; }); e.currentTarget.value = ''; }}>
-            <option value="">Aa</option>
-            {[9, 10, 11, 12, 14, 16, 18, 20, 24, 28].map(s => <option key={s} value={s}>{s}</option>)}
-            <option value="reset">Reset</option>
-          </select></span>
-          <span className="lk-tt-tip" data-tooltip="Garis sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Garis sel" disabled={!rect || rectBadan} value=""
-            onChange={e => { const v = e.target.value; if (v) applyBorder(v); e.currentTarget.value = ''; }}>
-            <option value="">Garis</option>
-            <option value="all">Semua</option>
-            <option value="thick">Tebal</option>
-            <option value="none">Tidak ada</option>
-            <option value="t">+ Atas</option><option value="b">+ Bawah</option>
-            <option value="l">+ Kiri</option><option value="r">+ Kanan</option>
-          </select></span>
-          <span className="lk-tt-tip" data-tooltip="Format angka" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Format angka" disabled={!rect || rectBadan} value=""
-            onChange={e => { const v = e.target.value; if (!v) return; if (v === 'plain') editCells(c => { delete c.nf; delete c.dec; }); else editCells(c => { c.nf = v as TabelNumFmt; }); e.currentTarget.value = ''; }}>
-            <option value="">123</option>
-            <option value="num">Angka</option><option value="rp">Rupiah</option><option value="pct">Persen</option><option value="plain">Teks</option>
-          </select></span>
-          <span className="lk-tt-tip" data-tooltip="Desimal" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Desimal" disabled={!rect || rectBadan} value=""
-            onChange={e => { const v = e.target.value; if (v === '') return; editCells(c => { c.dec = +v; }); e.currentTarget.value = ''; }}>
-            <option value="">0,0</option>
-            {[0, 1, 2, 3].map(d => <option key={d} value={d}>{d} des</option>)}
-          </select></span>
-          <span className="lk-tt-tip" data-tooltip="Warna latar sel" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Warna latar sel" disabled={!rect || rectBadan} value=""
-            onChange={e => { const v = e.target.value; if (!v) return; if (v === 'none') editCells(c => { delete c.bg; }); else editCells(c => { c.bg = v; }); e.currentTarget.value = ''; }}>
-            <option value="">Latar</option>
-            <option value="none">Tanpa</option>
-            <option value="D9D9D9">Abu</option>
-            <option value="FFF2CC">Kuning</option>
-            <option value="E2EFDA">Hijau</option>
-            <option value="DDEBF7">Biru</option>
-            <option value="FCE4E4">Merah</option>
-          </select></span>
-          <span className="lk-tt-sep" />
-          <button data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect} onClick={doCopy}><Copy size={14} /></button>
-          <button data-tooltip="Tempel (Ctrl+V)" data-tooltip-pos="below" disabled={!rect || rectBadan} onClick={doPaste}><ClipboardPaste size={14} /></button>
-        </div>
-      )}
-
-      {!readOnly && (
-        <div className="lk-fbar">
-          <span className="lk-fbar-ref">{sel ? colLabel(sel.ac) + (sel.ar + 1) : '—'}</span>
-          <span className="lk-fbar-fx">fx</span>
-          <input className="lk-fbar-in" disabled={!sel || terkunci(sel.ar, sel.ac)}
-            value={sel ? (rows[sel.ar]?.[sel.ac]?.v ?? '') : ''}
-            placeholder="Pilih sel — ketik teks atau = untuk rumus (mis. =A1+B1)"
-            onFocus={e => { if (sel) { pushHist(); setBarFocused(true); editInputRef.current = e.currentTarget; } }}
-            onBlur={() => setBarFocused(false)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); } }}
-            onChange={e => { if (sel) ubahSel(sel.ar, sel.ac, e.target.value); }} />
-        </div>
-      )}
-
-      <div className="lk-tabel-scroll">
-        <table className="lk-tabel" style={{ tableLayout: 'fixed', width: 'auto' }}>
-          <colgroup>
-            <col style={{ width: 38 }} />
-            {kolom.map((_, ci) => <col key={ci} style={{ width: colWidths[ci] ?? DEF_W }} />)}
-          </colgroup>
-          <thead>
-            <tr>
-              <th className="lk-rownum"></th>
-              {kolom.map((k, ci) => (
-                <th key={ci} style={{ position: 'relative' }}>
-                  <input value={k} readOnly={readOnly} onFocus={() => pushHist()} onChange={e => setKolom(kk => kk.map((x, i) => i === ci ? e.target.value : x))} />
-                  {!readOnly && (
-                    <div className="lk-colctl">
-                      <span className="lk-collabel">{colLabel(ci)}</span>
-                      <select value={align[ci] ?? 'left'} onChange={e => { pushHist(); setAlign(a => a.map((x, i) => i === ci ? e.target.value as TabelAlign : x)); }}>
-                        <option value="left">kiri</option><option value="center">tengah</option><option value="right">kanan</option><option value="justify">justify</option>
-                      </select>
-                      <button data-tooltip={terkait ? 'Kolom tabel tertaut diatur lewat Atur Bentuk' : 'Hapus kolom'} data-tooltip-pos="below" disabled={ncol <= 1 || terkait} onClick={() => delCol(ci)}>×</button>
-                    </div>
-                  )}
-                  {!readOnly && <span className="lk-colresize" onMouseDown={e => onResizeDown(ci, e)} />}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => (
-              <tr key={ri} className={ri < headerRows ? 'lk-hrow' : undefined}>
-                <td className="lk-rownum">{ri + 1}{!readOnly && !diBadan(ri) && <button data-tooltip="Hapus baris" data-tooltip-pos="below" onClick={() => delRow(ri)}>×</button>}</td>
-                {row.map((cell, ci) => cell.h ? null : (
-                  <td key={ci} colSpan={cell.cs ?? 1} rowSpan={cell.rs ?? 1}
-                    className={[inRect(ri, ci) ? 'lk-cell-sel' : '', diBadan(ri) && kolomTangan.has(ci) ? 'lk-cell-tangan' : ''].filter(Boolean).join(' ') || undefined}
-                    style={{ verticalAlign: vAlignCss(cell.va), background: cell.bg ? `#${cell.bg}` : undefined }}
-                    onMouseDown={e => onCellDown(ri, ci, e)}>
-                    <input
-                      value={(editKey === `${ri}:${ci}` || (barFocused && sel?.ar === ri && sel?.ac === ci)) ? cell.v : displayValue(rows, ri, ci)}
-                      readOnly={readOnly || editKey !== `${ri}:${ci}`}
-                      style={{ textAlign: (cell.al ?? align[ci] ?? 'left'), fontWeight: cell.b ? 700 : undefined, fontSize: cell.fs ? `${cell.fs}px` : undefined, color: cell.bg ? '#0F0F12' : undefined }}
-                      onDoubleClick={e => { if (readOnly || terkunci(ri, ci)) return; pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); n.select(); }); }}
-                      onKeyDown={e => {
-                        if (editKey === `${ri}:${ci}`) { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.currentTarget.blur(); } }
-                        else if (!readOnly && !terkunci(ri, ci) && (e.key === 'Enter' || e.key === 'F2')) { e.preventDefault(); pushHist(); setEditKey(`${ri}:${ci}`); const n = e.currentTarget; editInputRef.current = n; requestAnimationFrame(() => { n.focus(); }); }
-                      }}
-                      onBlur={() => setEditKey(k => (k === `${ri}:${ci}` ? null : k))}
-                      onChange={e => ubahSel(ri, ci, e.target.value)} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {tautan && (
-        // Keterangan sumber hanya di editor — tidak ikut ke Word (keputusan pemilik, konsep K3).
-        <div className="lk-taut-bar">
-          <div className="lk-taut-bar-info">
-            <Link2 size={13} style={{ flexShrink: 0 }} />
-            <span>Tertaut: <b>{tautan.ringkas}</b> · ditarik {tulisWaktuTarik(tautan.ditarikPada)}</span>
-          </div>
-          {tautan.catatan.length > 0 && (
-            <ul className="lk-taut-bar-catatan">{tautan.catatan.map((c, i) => <li key={i}>{c}</li>)}</ul>
-          )}
-          {!readOnly && (
-            <div className="lk-taut-bar-aksi">
-              <button onClick={() => void perbarui()} disabled={menarik}><RefreshCw size={13} /> {menarik ? 'Menarik…' : 'Perbarui'}</button>
-              <button onClick={() => setModalTaut(true)} disabled={menarik}><SlidersHorizontal size={13} /> Atur Bentuk</button>
-              <button onClick={() => void lepas()} disabled={menarik}><Unlink size={13} /> Lepas Tautan</button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!readOnly && (
-        <div className="lk-tabel-ctl">
-          <button onClick={addRow} disabled={terkait} data-tooltip={terkait ? 'Baris tabel tertaut mengikuti sumbernya — atur lewat Atur Bentuk' : undefined} data-tooltip-pos="below">+ Baris</button>
-          <button onClick={addCol} disabled={ncol >= 12 || terkait} data-tooltip={terkait ? 'Kolom tabel tertaut diatur lewat Atur Bentuk' : undefined} data-tooltip-pos="below">+ Kolom</button>
-          {!terkait && (
-            <button onClick={() => setModalTaut(true)} data-tooltip="Isi tabel dari menu Cetak E-Anggaran atau Renaksi — angkanya bisa diperbarui nanti" data-tooltip-pos="below">
-              <Link2 size={12} style={{ display: 'inline', verticalAlign: '-0.125em' }} /> Hubungkan ke Modul
-            </button>
-          )}
-          <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave(payloadSekarang())}>Simpan Tabel</PrimaButton>
-        </div>
-      )}
-
-      {modalTaut && (
-        <TautanModal
-          payload={payloadSekarang()}
-          tahunDokumen={tahunDokumen}
-          onTutup={() => setModalTaut(false)}
-          onTerapkan={async p => {
-            if (!tautan && rows.slice(jumlahBarisKepala({ headerRows, rows })).some(r => r.some(c => c.v.trim()))) {
-              const ok = await confirmDialog({
-                title: 'Ganti isi tabel?',
-                message: 'Badan tabel ini sudah berisi ketikan. Menghubungkannya ke modul MENGGANTI isi badan dengan data sumber; kepala tabel tetap.',
-                confirmLabel: 'Ganti isinya', variant: 'warning',
-              });
-              if (!ok) return;
-            }
-            setModalTaut(false);
-            pasangDanSimpan(p);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -1645,11 +1219,6 @@ const ED_CSS = `
   [data-theme="light"] .lk-grafik-tools, [data-theme="light"] .lk-grafik-preview { background: #F9FAFB; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-grafik-tools select, [data-theme="light"] .lk-grafik-row input { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
   [data-theme="light"] .lk-grafik-add { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
-  .lk-tabel th input { font-family: 'Inter', sans-serif; font-weight: 700; }
-  .lk-colctl { display: flex; align-items: center; gap: 3px; padding: 2px 4px; }
-  .lk-colctl select { background: #020F1C; color: #B5D4F4; border: 1px solid #0C447C; border-radius: 4px; font-size: 10px; }
-  .lk-colctl button, .lk-rownum button { background: none; border: none; color: #FCA5A5; cursor: pointer; font-size: 14px; line-height: 1; }
-  .lk-colctl button:disabled { opacity: .35; cursor: not-allowed; }
   .lk-rownum { background: rgba(255,255,255,0.03); color: #85B7EB; font-size: 11px; text-align: center; padding: 4px 6px; white-space: nowrap; }
   .lk-tabel-ctl { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
   .lk-tabel-ctl > button { background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
@@ -1673,7 +1242,28 @@ const ED_CSS = `
   .lk-tabel-tools button:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; background: rgba(255,255,255,0.09); }
   .lk-tabel-tools button:disabled { opacity: .38; cursor: not-allowed; }
   .lk-tt-sep { width: 1px; height: 20px; background: #0C447C; margin: 0 3px; }
-  .lk-tabel td.lk-cell-sel { outline: 2px solid #EF9F27; outline-offset: -2px; background: rgba(239,159,39,0.12); }
+  .lk-tabel td.lk-cell-sel { background: rgba(239,159,39,0.12); }
+  .lk-tabel td.lk-cell-aktif { outline: 2px solid #EF9F27; outline-offset: -2px; }
+  .lk-tabel td.lk-cell-galat .lk-sel-isi { color: #FCA5A5; font-weight: 700; }
+  .lk-tabel-scroll { position: relative; }
+  .lk-tabel-scroll:focus-within .lk-cell-aktif { outline-width: 2px; }
+  .lk-tangkap { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; resize: none; border: 0; padding: 0; }
+  .lk-tabel-kanvas { position: relative; display: inline-block; min-width: 100%; }
+  .lk-sel-isi { padding: 7px 8px; min-height: 31px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #E6F1FB; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: cell; user-select: none; }
+  .lk-tabel tr.lk-hrow .lk-sel-isi { font-weight: 700; }
+  .lk-tabel th.lk-colhead { position: relative; color: #85B7EB; font-size: 11px; font-weight: 700; text-align: center; padding: 4px 0; cursor: s-resize; user-select: none; }
+  .lk-tabel th.lk-colhead.aktif, .lk-tabel td.lk-rownum.aktif { background: rgba(239,159,39,0.18); color: #EF9F27; }
+  .lk-tabel .lk-rownum { cursor: e-resize; user-select: none; }
+  .lk-tabel th.lk-sudut { cursor: pointer; }
+  .lk-colresize { right: -4px; width: 8px; }
+  .lk-lebar-tip { position: absolute; top: -26px; right: -4px; z-index: 5; background: #020F1C; border: 1px solid #EF9F27; color: #EF9F27; border-radius: 6px; padding: 2px 6px; font-size: 11px; white-space: nowrap; pointer-events: none; }
+  .lk-batas-kertas { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed #85B7EB; opacity: .45; pointer-events: none; }
+  .lk-batas-kertas.lewat { border-left-color: #EF9F27; opacity: .9; }
+  .lk-tabel-petunjuk { margin-top: 6px; font-size: 11px; color: #85B7EB; line-height: 1.5; }
+  .lk-tabel-lebar, .lk-tabel-galat { margin-top: 8px; padding: 7px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.5; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .lk-tabel-lebar { background: rgba(239,159,39,0.12); border: 1px solid #EF9F27; color: #FBBF24; }
+  .lk-tabel-lebar button { background: rgba(255,255,255,0.05); border: 1px solid #EF9F27; color: #FBBF24; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .lk-tabel-galat { background: rgba(226,75,74,0.12); border: 1px solid #E24B4A; color: #FCA5A5; }
   /* Kolom isian tangan di tabel tertaut — satu-satunya sel badan yang bisa diketik. */
   .lk-tabel td.lk-cell-tangan { background: rgba(124,92,252,0.08); box-shadow: inset 2px 0 0 rgba(124,92,252,0.55); }
   .lk-block-wrap.sorot { box-shadow: 0 0 0 2px #7C5CFC; }
@@ -1782,7 +1372,17 @@ const ED_CSS = `
   [data-theme="light"] .lk-tabel-tools button { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #374151; }
   [data-theme="light"] .lk-tabel-tools button:hover:not(:disabled) { border-color: #7C5CFC; color: #111827; background: #F9FAFB; }
   [data-theme="light"] .lk-tt-sep { background: rgba(0,0,0,.12); }
-  [data-theme="light"] .lk-tabel td.lk-cell-sel { outline-color: #7C5CFC; background: rgba(124,92,252,0.12); }
+  [data-theme="light"] .lk-tabel td.lk-cell-sel { background: rgba(124,92,252,0.12); }
+  [data-theme="light"] .lk-tabel td.lk-cell-aktif { outline-color: #7C5CFC; }
+  [data-theme="light"] .lk-sel-isi { color: #0F0F12; }
+  [data-theme="light"] .lk-tabel td.lk-cell-galat .lk-sel-isi { color: #E24B4A; }
+  [data-theme="light"] .lk-tabel th.lk-colhead { color: #6B7280; }
+  [data-theme="light"] .lk-tabel th.lk-colhead.aktif, [data-theme="light"] .lk-tabel td.lk-rownum.aktif { background: rgba(124,92,252,0.14); color: #7C5CFC; }
+  [data-theme="light"] .lk-lebar-tip { background: #FFFFFF; border-color: #7C5CFC; color: #7C5CFC; }
+  [data-theme="light"] .lk-batas-kertas { border-left-color: #6B7280; }
+  [data-theme="light"] .lk-tabel-petunjuk { color: #6B7280; }
+  [data-theme="light"] .lk-tabel-lebar, [data-theme="light"] .lk-tabel-lebar button { color: #B45309; }
+  [data-theme="light"] .lk-tabel-galat { color: #E24B4A; }
   [data-theme="light"] .lk-tt-sel { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #374151; }
   [data-theme="light"] .lk-tt-sel option { background: #FFFFFF; color: #374151; }
   [data-theme="light"] .lk-collabel { color: #7C5CFC; }

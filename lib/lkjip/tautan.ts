@@ -8,11 +8,11 @@
 //
 // MURNI: aman klien & server, tanpa jaringan/DB.
 
-import { displayValue, colLabel, sanitizeRows, FUNCS, type TabelCell, type TabelNumFmt } from './tabel';
+import { nilaiRumus, colLabel, sanitizeRows, FUNCS, RUJUKAN_HILANG, BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, type TabelCell, type TabelNumFmt } from './tabel';
 import { bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 
-export const BATAS_KOLOM = 12;
-export const BATAS_BARIS = 500;
+export const BATAS_KOLOM = BATAS_KOLOM_TABEL;
+export const BATAS_BARIS = BATAS_BARIS_TABEL;
 /** Sel yang tidak bisa dihitung: Progres Negatif belum diisi, rumus gagal (bagi nol, kolom kosong). */
 export const KOSONG = '—';
 const INDENT = '    ';
@@ -109,12 +109,34 @@ const ANGKA = /^\d+\.?\d*$|^\.\d+$/;
 export type PeriksaRumus = { rujukan: number[]; terjemahan: string } | { galat: string };
 
 /**
+ * T4: rumus kolom (`=C-D`) mengikuti kolomnya saat kolom dipindah atau dihapus di modal.
+ * `peta[lama]` = indeks baru, `null` = kolomnya dihapus → `#REF!` (Masukkan ditahan sampai ditulis ulang).
+ * Dulu memindah kolom C membuat rumus diam-diam menunjuk kolom lain.
+ */
+export function petakanRumusKolom(ekspresi: string, peta: (number | null)[]): string {
+  const toks = ekspresi.match(TOKEN_RUMUS) ?? [];
+  let keluar = '', i = 0, pos = 0;
+  for (const t of toks) {
+    const di = ekspresi.indexOf(t, pos);
+    keluar += ekspresi.slice(pos, di);
+    pos = di + t.length;
+    const huruf = /^[A-Za-z]+$/.test(t) && toks[i + 1] !== '(' && !FUNCS.has(t.toUpperCase());
+    i++;
+    if (!huruf) { keluar += t; continue; }
+    const baru = peta[indeksKolom(t)];
+    keluar += baru === undefined ? t : baru === null ? RUJUKAN_HILANG : colLabel(baru);
+  }
+  return keluar + ekspresi.slice(pos);
+}
+
+/**
  * Rumus kolom ditulis dengan HURUF kolom tanpa nomor baris (`=C-D`), berlaku untuk tiap baris.
  * `terjemahan` = rumus sel untuk tabel satu baris (`C1-D1`), dihitung evaluator tabel yang sama.
  */
 export function periksaRumusKolom(ekspresi: string, ncol: number, kolomSendiri: number): PeriksaRumus {
   const teks = ekspresi.trim().replace(/^=/, '').trim();
   if (!teks) return { galat: 'Rumus masih kosong.' };
+  if (teks.includes(RUJUKAN_HILANG)) return { galat: 'Rumus merujuk kolom yang sudah dihapus — tulis ulang rumusnya.' };
   const toks = teks.match(TOKEN_RUMUS) ?? [];
   const rujukan = new Set<number>();
   const keluar: string[] = [];
@@ -181,8 +203,9 @@ function hitungRumusBaris(baris: TabelCell[], kolom: KolomTaut[]): void {
       if (!p.rujukan.every(r => selesai.has(r))) return;
       selesai.add(c); maju = true;
       if (p.rujukan.some(r => angkaSel(baris[r]) === null)) { baris[c] = { v: KOSONG }; return; }
-      const satuBaris: TabelCell[][] = [baris.map((s, i) => ({ v: i === c ? `=${p.terjemahan}` : String(angkaSel(s) ?? '') }))];
-      const hasil = Number(displayValue(satuBaris, 0, c));
+      // Sel bantu berformat angka → dibaca sebagai angka MESIN ("0.125" bukan "125" gaya ribuan).
+      const satuBaris: TabelCell[][] = [baris.map((s, i) => (i === c ? { v: `=${p.terjemahan}` } : { v: String(angkaSel(s) ?? ''), nf: 'num' as const }))];
+      const hasil = nilaiRumus(satuBaris, 0, c);
       const k = kolom[c];
       baris[c] = Number.isFinite(hasil)
         ? selDariNilai(hasil, 'angka', k.format ?? 'angka', k.desimal)

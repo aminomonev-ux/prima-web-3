@@ -51,6 +51,18 @@ export const TAUT_CSS = `
   .lk-taut-pratinjau table { border-collapse: collapse; font-size: 11.5px; min-width: 100%; }
   .lk-taut-pratinjau th, .lk-taut-pratinjau td { border: 1px solid #0C447C; padding: 4px 6px; vertical-align: top; color: #E6F1FB; }
   .lk-taut-pratinjau th, .lk-taut-pratinjau tr.kepala td { background: rgba(133,183,235,0.13); font-weight: 700; text-align: center; }
+  .lk-kisi { margin-bottom: 12px; }
+  .lk-kisi-alat { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .lk-kisi-alat button { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .lk-kisi-alat button:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; }
+  .lk-kisi-alat button:disabled { opacity: .4; cursor: not-allowed; }
+  .lk-kisi-tabel { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+  .lk-kisi-tabel th { color: #85B7EB; font-size: 10.5px; font-weight: 700; padding: 2px; text-align: center; }
+  .lk-kisi-tabel td { position: relative; border: 1px solid #0C447C; background: rgba(133,183,235,0.13); padding: 0; vertical-align: middle; }
+  .lk-kisi-tabel td.pilih { background: rgba(239,159,39,0.18); box-shadow: inset 0 0 0 1px #EF9F27; }
+  .lk-taut .lk-kisi-tabel td input { width: 100%; background: transparent; border: none; color: #E6F1FB; padding: 14px 6px 6px; font-size: 12px; font-weight: 700; text-align: center; }
+  .lk-taut .lk-kisi-tabel td input:focus { outline: 1px solid #185FA5; }
+  .lk-kisi-tanda { position: absolute; top: 1px; left: 4px; font-size: 9.5px; font-weight: 700; color: #EF9F27; pointer-events: none; }
   @media (max-width: 520px) {
     .lk-taut { padding: 14px 12px; }
     .lk-taut input.lk-taut-nama, .lk-taut .lk-taut-isi, .lk-taut input.lk-taut-rumus { width: 100%; max-width: none; }
@@ -71,4 +83,10 @@ export const TAUT_CSS = `
   [data-theme="light"] .lk-taut-galat { color: #B91C1C; }
   [data-theme="light"] .lk-taut-pratinjau th, [data-theme="light"] .lk-taut-pratinjau td { border-color: rgba(0,0,0,.12); color: #0F0F12; }
   [data-theme="light"] .lk-taut-pratinjau th, [data-theme="light"] .lk-taut-pratinjau tr.kepala td { background: #EDEDED; }
+  [data-theme="light"] .lk-kisi-alat button { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
+  [data-theme="light"] .lk-kisi-tabel th { color: #6B7280; }
+  [data-theme="light"] .lk-kisi-tabel td { background: #EDEDED; border-color: rgba(0,0,0,.15); }
+  [data-theme="light"] .lk-kisi-tabel td.pilih { background: rgba(124,92,252,0.14); box-shadow: inset 0 0 0 1px #7C5CFC; }
+  [data-theme="light"] .lk-taut .lk-kisi-tabel td input { color: #0F0F12; }
+  [data-theme="light"] .lk-kisi-tanda { color: #B45309; }
 `;

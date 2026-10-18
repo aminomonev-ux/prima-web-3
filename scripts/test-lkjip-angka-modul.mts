@@ -291,7 +291,8 @@ ok('E11 403/503 → kalimat menyebut modul BLUD Realisasi',
     judulIkutSetelan(ks, kolomBlud({ sdBulan: 12 }), kolomBlud({ sdBulan: 12 })) === ks)
   const modal = kode('app/(dashboard)/lkjip/[id]/TautanModal.tsx')
   ok('E14 modal tabel: tiap ubah setelan & ganti tampilan menyesuaikan judul dari katalog lama → baru',
-    (modal.match(/setKolom\(ks => judulIkutSetelan\(ks, sumber\.kolom\(setelan\), sumber\.kolom\(s\)\)\)/g) ?? []).length === 2)
+    (modal.match(/setBentuk\(b => ikutSetelan\(b, sumber\.kolom\(setelan\), sumber\.kolom\(s\)\)\)/g) ?? []).length === 2
+    && modal.includes('const sesudah = judulIkutSetelan(sebelum, lama, baru);'))
 }
 
 // ─── F. Periksa untuk narasi ──────────────────────────────────────────────────

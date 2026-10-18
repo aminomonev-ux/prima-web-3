@@ -409,7 +409,8 @@ ok('J gagal per sumber kini dilaporkan (dulu diam)', bahanGagal.gagal.some(g => 
 // ─── K. Sambungan editor ──────────────────────────────────────────────────────
 console.log('\nK. Sambungan editor & lain-lain')
 const ed = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
-const tabelEd = ed.slice(ed.indexOf('function TabelEditor('), ed.indexOf('function GambarEditor('))
+// TabelEditor dipisah dari editor-client.tsx (docs/CONCEPT-lkjip-tabel-excel.md §7).
+const tabelEd = kode('app/(dashboard)/lkjip/[id]/TabelEditor.tsx')
 ok('K1 Simpan Tabel menyimpan resep juga — dengan isian tangan terbaru (payloadSekarang)',
   tabelEd.includes('onClick={() => onSave(payloadSekarang())}')
   && tabelEd.includes('...(tautan ? { tautan: ambilIsianTangan(tautan, rows.slice(jumlahBarisKepala({ headerRows, rows }))) } : {})'))
@@ -418,18 +419,22 @@ ok('K2 sunting/format/gabung/tempel dikunci di badan tertaut (kecuali kolom isia
   && tabelEd.includes('if (!rect || rectBadan) return;')
   && tabelEd.includes('const canMerge = !!rect && !rectBadan')
   && tabelEd.includes('const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c);')
-  && tabelEd.includes('if (readOnly || terkunci(ri, ci)) return;')
-  && tabelEd.includes("!readOnly && !terkunci(ri, ci) && (e.key === 'Enter'")
+  && badan(tabelEd, 'const mulaiSunting =').includes('if (terkunci(r, c)) {')
+  && badan(tabelEd, 'const kosongkan =').includes('const boleh = (r: number, c: number) => !terkunci(r, c);')
+  && badan(tabelEd, 'async function tempel(').includes('if (rectBadan) {')
   && tabelEd.includes('disabled={!sel || terkunci(sel.ar, sel.ac)}'))
 ok('K3 tombol format memakai kunci badan (Salin tetap boleh)',
-  (tabelEd.match(/disabled=\{!rect \|\| rectBadan\}/g) ?? []).length === 14 && tabelEd.includes('data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect}'))
+  tabelEd.includes('const kunciBlok = !rect || rectBadan;') && (tabelEd.match(/disabled=\{kunciBlok\}/g) ?? []).length === 14
+  && tabelEd.includes('data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect}'))
 ok('K4 tambah/hapus baris & kolom dimatikan selama tertaut',
-  tabelEd.includes('onClick={addRow} disabled={terkait}') && tabelEd.includes('disabled={ncol >= 12 || terkait}')
-  && tabelEd.includes('disabled={ncol <= 1 || terkait}') && tabelEd.includes('!readOnly && !diBadan(ri) && <button'))
+  tabelEd.includes('disabled={terkait} data-tooltip={terkait ?') && tabelEd.includes('disabled={ncol >= BATAS_KOLOM_TABEL || terkait}')
+  && badan(tabelEd, 'function sisip(').includes('if (terkait && !keKepala) {') && badan(tabelEd, 'function sisip(').includes('if (terkait) { toast.info(PESAN_KOLOM_TAUT); return; }')
+  && badan(tabelEd, 'function hapusBarisPilihan(').includes('if (terkait && r2 >= headerRows) {')
+  && badan(tabelEd, 'function hapusKolomPilihan(').includes('if (terkait) { toast.info(PESAN_KOLOM_TAUT); return; }'))
 const kepalaFn = badan(tabelEd, 'const gantiBarisKepala =')
-ok('K5 jumlah baris kepala diubah tanpa memakan baris badan', tabelEd.includes('onChange={e => gantiBarisKepala(Number(e.target.value))}')
-  && kepalaFn.includes('if (!terkait) { setHeaderRows(n); return; }') && kepalaFn.includes('...r.slice(hr)]')
-  && kepalaFn.includes('sanitizeRows([...r.slice(0, n), ...r.slice(hr)], ncol)'))
+// E3: sejak konsep ala Excel, aturan "sisip di atas badan" berlaku untuk SEMUA tabel (dulu hanya tertaut).
+ok('K5 jumlah baris kepala diubah tanpa memakan baris badan', tabelEd.includes('onChange={e => void gantiBarisKepala(Number(e.target.value))}')
+  && kepalaFn.includes('pasangBentuk(ubahJumlahKepala(bentuk(), n));') && !kepalaFn.includes('setHeaderRows(n)'))
 ok('K6 riwayat urungkan dikosongkan saat resep berganti', badan(tabelEd, 'const pasangDanSimpan =').includes('setPast([]); setFuture([]);'))
 const perb = badan(tabelEd, 'async function perbarui(')
 ok('K7 Perbarui: bandingkan dulu, tidak menulis kalau sama, tanya sebelum menulis',
@@ -438,7 +443,8 @@ ok('K7 Perbarui: bandingkan dulu, tidak menulis kalau sama, tanya sebelum menuli
 ok('K8 Perbarui memakai penilaian BERSAMA (nilaiPerbarui) & resep sesudahnya',
   perb.includes('const nilai = nilaiPerbarui(sekarang, hasil);') && perb.includes('tautan: { ...nilai.tautanBaru, ditarikPada:')
   && perb.includes('kalimatIsianYatim(nilai.yatim,') && !perb.includes('bangunBadan('))
-ok('K9 modal dimuat saat dibuka saja', /const TautanModal = dynamic\(\(\) => import\('\.\/TautanModal'\), \{ ssr: false \}\)/.test(ed))
+ok('K9 modal dimuat saat dibuka saja', /const TautanModal = dynamic\(\(\) => import\('\.\/TautanModal'\), \{ ssr: false \}\)/.test(tabelEd)
+  && ed.includes("import TabelEditor from './TabelEditor';") && !ed.includes('function TabelEditor('))
 ok('K10 keterangan sumber TIDAK masuk Word (docgen tak mengenal tautan)', !/tautan|ringkas|ditarikPada/.test(kode('lib/lkjip/docgen.ts')))
 ok('K11 audit simpan blok menyebut sumbernya', kode('app/api/lkjip/block/route.ts').includes('` · tertaut: ${ringkas.slice(0, 200)}`'))
 ok('K12 grafik menyimpan sidik data tabel & menandai gambar basi',
