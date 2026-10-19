@@ -215,6 +215,10 @@ function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: strin
   return `<w:p><w:pPr><w:pStyle w:val="Caption"/>${keepNext ? '<w:keepNext/>' : ''}<w:jc w:val="${jc}"/></w:pPr>${lead}${seq}${tail}</w:p>`;
 }
 
+// Isi sel berspasi tunggal. Tanpa ini sel mewarisi spasi dokumen (bawaan 1,5) dan tabel memanjang
+// separuh lagi dari semestinya — terlihat di Word 2026-10-19.
+const SPASI_SEL = '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>';
+
 export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string, nomor = 1): string {
   const p = (payload ?? {}) as { judul?: string; kolom?: string[]; align?: string[]; colWidths?: number[]; rows?: unknown };
   const kolom = Array.isArray(p.kolom) ? p.kolom : [];
@@ -272,8 +276,8 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
       const ikat = isHeader || (atur.utuh && r < nrow - 1) || (!!sumber && r === nrow - 1) ? '<w:keepNext/>' : '';
       // Urutan anak pPr menurut skema: keepNext, spacing, jc.
       const body = m.kind === 'vcont'
-        ? `<w:p><w:pPr>${ikat}<w:spacing w:after="0"/></w:pPr></w:p>`
-        : `<w:p><w:pPr>${ikat}<w:spacing w:after="0"/><w:jc w:val="${jcOf(align)}"/></w:pPr>` +
+        ? `<w:p><w:pPr>${ikat}${SPASI_SEL}</w:pPr></w:p>`
+        : `<w:p><w:pPr>${ikat}${SPASI_SEL}<w:jc w:val="${jcOf(align)}"/></w:pPr>` +
           `<w:r>${rPr(font, csz, { bold: isHeader || !!cell.b })}<w:t xml:space="preserve">${escapeXml(teksSelWord(rows, r, c))}</w:t></w:r></w:p>`;
       cells += `<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${body}</w:tc>`;
     }
@@ -288,7 +292,7 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
   const headerRow = hrCount > 0 ? '' : `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>` +
     kolom.map((k, ci) =>
       `<w:tc><w:tcPr><w:tcW w:w="${widths[ci]}" w:type="dxa"/>${borderKepalaLama}<w:shd w:val="clear" w:color="auto" w:fill="${headerFill}"/></w:tcPr>` +
-      `<w:p><w:pPr><w:keepNext/><w:spacing w:after="0"/><w:jc w:val="center"/></w:pPr>` +
+      `<w:p><w:pPr><w:keepNext/>${SPASI_SEL}<w:jc w:val="center"/></w:pPr>` +
       `<w:r>${rPr(font, cellSz, { bold: true })}<w:t xml:space="preserve">${escapeXml(k)}</w:t></w:r></w:p></w:tc>`,
     ).join('') + `</w:tr>`;
   const dataRows = rows.map((_row, r) => renderRow(r, r < hrCount)).join('');

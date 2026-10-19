@@ -630,14 +630,66 @@ function panjangkanRentang(v: string, dari: number, ke: number): string {
 }
 
 const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// Angka murni gaya Indonesia: "1.250.000", "7,5", "-12". Kode berawalan nol ("0101") dan deretan
+// digit > 15 (NIP) sengaja tidak — Excel akan membuang nol depannya / memotong digitnya.
+const ANGKA_MURNI_ID = /^-?(?:[1-9]\d{0,2}(?:\.\d{3})+|[1-9]\d{0,14}|0)(?:,\d+)?$/;
+
+/** Kode format Excel (sintaks baku) untuk `mso-number-format`, sudah di-escape untuk CSS. */
+function formatExcel(nf: TabelNumFmt | undefined, dec: number, ribuan: boolean): string | null {
+  const d = Math.max(0, Math.min(6, dec));
+  const dasar = (nf === 'pct' ? '0' : ribuan || nf ? '#,##0' : '0') + (d > 0 ? '.' + '0'.repeat(d) : '');
+  if (!nf && !ribuan && d === 0) return null;
+  const esc = dasar.replace(/[#,.]/g, ch => '\\' + ch);
+  if (nf === 'rp') return `\\0022Rp\\0022\\\\ ${esc}`;
+  if (nf === 'pct') return `${esc}%`;
+  return esc;
+}
+
 /**
- * Blok terpilih sebagai `<table>` untuk papan klip (§12.4): Word & Excel menempelnya lengkap dengan
+ * Nilai angka sel untuk Excel (`x:num`) — lepas dari setelan bahasa Excel. Dibuktikan di Excel
+ * 2026-10-19: dengan pemisah gaya Inggris, "1.250.000" & "79,01" yang ditempel masuk sebagai TEKS
+ * (SUM diam-diam tak menghitungnya); dengan `x:num` keduanya angka. Persen = pecahan (12,5% → 0.125).
+ */
+export function angkaUntukExcel(rows: TabelCell[][], r: number, c: number): { nilai: number; format: string | null } | null {
+  const cell = rows[r]?.[c];
+  if (!cell || cell.h) return null;
+  const v = (cell.v ?? '').trim();
+  if (!v) return null;
+  if (v.startsWith('=')) {
+    const n = evalFormula(v.slice(1), rows, r, c, new Set());
+    if (!Number.isFinite(n)) return null;
+    return { nilai: bulatkanDesimal(n, 10), format: formatExcel(cell.nf, cell.dec ?? 0, Math.abs(n) >= 1000) };
+  }
+  if (cell.nf) {
+    const n = angkaMentah(cell);
+    return Number.isFinite(n) ? { nilai: n, format: formatExcel(cell.nf, cell.dec ?? 0, true) } : null;
+  }
+  // Ketikan polos "Rp 2.000" / "85,5%" juga angka — tanpa format sel, tapi bentuknya jelas.
+  const rp = /^Rp\s?/i.test(v), pct = v.endsWith('%');
+  const inti = v.replace(/^Rp\s?/i, '').replace(/%$/, '').trim();
+  if (!ANGKA_MURNI_ID.test(inti) || (rp && pct)) return null;
+  const desimal = inti.includes(',') ? inti.length - inti.indexOf(',') - 1 : 0;
+  const n = angkaTeksId(inti);
+  if (pct) return { nilai: bulatkanDesimal(n / 100, 10), format: formatExcel('pct', desimal, false) };
+  return { nilai: n, format: formatExcel(rp ? 'rp' : undefined, desimal, inti.includes('.')) };
+}
+
+/** Format Teks Excel: sel yang BUKAN angka masuk persis seperti tampil — tanpa ini "0101" jadi 101. */
+const FORMAT_TEKS_EXCEL = '\\@';
+
+/**
+ * Blok terpilih sebagai tabel HTML untuk papan klip (§12.4): Word & Excel menempelnya lengkap dengan
  * gabungan, tebal, latar, dan perataan — TSV saja kehilangan semuanya. Gabungan yang terpotong batas
- * blok dipangkas ke blok; teksnya hanya ikut bila sel asalnya di dalam blok.
+ * blok dipangkas ke blok; teksnya hanya ikut bila sel asalnya di dalam blok. Dibungkus
+ * `<html xmlns:x>` karena Excel hanya membaca `x:num` bila namespace-nya dinyatakan di `<html>` —
+ * di `<table>` tidak cukup (diuji); Chrome membungkusnya lagi dan Excel tetap membacanya.
  */
 export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: number) => string, sel: (r: number, c: number) => TabelCell = (r, c) => rows[r][c]): string {
   const ditulis = new Set<string>();
-  let html = '<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse">';
+  // Lebar kolom sengaja tidak dikirim: diukur 2026-10-19, Word menyesuaikan lebar dgn isinya dan
+  // Excel mempertahankan lebar kolom tujuannya — <col width> diabaikan keduanya.
+  let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><body><table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse">';
   for (let r = k.r1; r <= k.r2; r++) {
     html += '<tr>';
     for (let c = k.c1; c <= k.c2; c++) {
@@ -646,18 +698,24 @@ export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: n
       const r2 = Math.min(a.r + a.rs - 1, k.r2), c2 = Math.min(a.c + a.cs - 1, k.c2);
       for (let rr = r; rr <= r2; rr++) for (let cc = c; cc <= c2; cc++) ditulis.add(`${rr}:${cc}`);
       const cell = sel(a.r, a.c);
+      const asal = a.r === r && a.c === c;
+      const angka = asal ? angkaUntukExcel(rows, r, c) : null;
+      const isi = asal ? teks(r, c) : '';
+      const formatSel = angka ? angka.format : isi.trim() ? FORMAT_TEKS_EXCEL : null;
       const gaya = [
         cell.b ? 'font-weight:bold' : '',
         cell.bg ? `background:#${cell.bg}` : '',
         cell.al ? `text-align:${cell.al}` : '',
         cell.va ? `vertical-align:${cell.va}` : '',
+        formatSel ? `mso-number-format:'${formatSel}'` : '',
       ].filter(Boolean).join(';');
       const span = (c2 > c ? ` colspan="${c2 - c + 1}"` : '') + (r2 > r ? ` rowspan="${r2 - r + 1}"` : '');
-      html += `<td${span}${gaya ? ` style="${gaya}"` : ''}>${a.r === r && a.c === c ? escHtml(teks(r, c)) : ''}</td>`;
+      const xnum = angka ? ` x:num="${angka.nilai}"` : '';
+      html += `<td${span}${xnum}${gaya ? ` style="${gaya}"` : ''}>${escHtml(isi)}</td>`;
     }
     html += '</tr>';
   }
-  return `${html}</table>`;
+  return `${html}</table></body></html>`;
 }
 
 export interface Kotak { r1: number; c1: number; r2: number; c2: number }

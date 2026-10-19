@@ -529,11 +529,10 @@ Dokumen uji 15 halaman: tabel tegak bergaya, dua tabel melintang di BAB III (sat
 
 ### Belum dicoba / sengaja tidak
 
-- Salinan HTML belum ditempel ke Word/Excel sungguhan; yang diuji isi papan klip dari event salinnya. Teks tegak tidak ikut HTML.
+- ~~Salinan HTML belum ditempel ke Word/Excel sungguhan~~ · ~~375 px~~ · ~~spasi sel 1,5~~ — dicoba hari yang sama (§14.2).
 - Pratinjau Drive/ponsel (alasan cache `SEQ`) belum dicoba.
-- 375 px tidak dicek; editor LKJIP memang belum punya tata letak ponsel (§13).
 - ~~Penilai rumus belum mengenal rujukan absolut~~ — **dibereskan hari yang sama** (lihat §14.1).
-- Spasi baris di sel tabel ikut spasi dokumen (1,5), jadi tabel memanjang. Tidak disentuh.
+- ~~Spasi baris di sel tabel ikut spasi dokumen (1,5)~~ — kini spasi tunggal (§14.2).
 
 ### 14.1 Rujukan absolut di rumus sel (susulan 2026-10-19)
 
@@ -546,3 +545,31 @@ Ditemukan saat menguji Tahap W: `=$B$3` dan `=SUM(B2:B4)+$B$3` jadi `#ERR`.
 - **`$` yang bukan bagian rujukan utuh kini galat**: `=$$B2` dulu terbaca 20, `=$5` dulu terbaca 5. Pembatasannya khusus `$`; karakter asing lain tetap seperti dulu, karena itu perubahan perilaku di luar tugas ini.
 - **Rumus KOLOM tabel tertaut sengaja tetap menolak `$`**: rumus kolom berlaku per baris, dan hurufnya diganti otomatis saat kolom dipindah di modal (`petakanRumusKolom`), jadi `$` tidak punya arti di sana. Menerimanya berarti `petakanRumusKolom` ikut harus diubah. Yang diubah hanya kalimatnya: dari `Tanda "$" tidak dikenal` menjadi "tulis huruf kolomnya saja (mis. C-D, bukan $C-$D)".
 - **Uji:** `test-lkjip-tabel-excel.mts` C9–C13 (suite jadi 97); **6 uji mutasi tertangkap**.
+
+### 14.2 Tiga hal yang dicoba sesudahnya (2026-10-19)
+
+**1. Spasi baris di sel tabel → spasi tunggal.** Sel dulu mewarisi spasi dokumen (bawaan 1,5).
+- Kini semua paragraf sel memakai `SPASI_SEL` (`w:line="240"`), termasuk jalur kepala lama tanpa baris kepala.
+- Di Word sungguhan, tabel 40 baris melintang turun dari 5 halaman (8–12) ke 3 halaman (8–10). Satu baris badan tegak 13,2 pt. Teks tegak tetap utuh.
+- Ini mengubah tampilan **semua** tabel lama di unduhan Word berikutnya: lebih rapat, tanpa perubahan isi.
+
+**2. Salin → tempel ke Word & Excel sungguhan.** Diuji lewat tombol Salin aplikasi (papan klip sistem berisi `HTML Format` + teks), lalu ditempel lewat COM.
+- **Word:** gabungan, tebal, latar berselang/kuning, perataan, dan nomor otomatis ikut utuh.
+- **Excel:** gabungan `A1:A2`/`C1:F1`, tebal, latar, dan perataan ikut; angka masuk sebagai angka.
+- **Temuan 1 — angka gaya Indonesia jadi TEKS di Excel bersetelan Inggris.**
+  - Dengan pemisah Inggris, "1.250.000" dan "79,01" masuk sebagai teks, sehingga SUM diam-diam tak menghitungnya. Di Excel komputer ini (pemisah Indonesia) keduanya sudah angka.
+  - Perbaikan: sel angka membawa `x:num` (nilai mesin; persen = pecahan) + `mso-number-format`.
+  - Diuji: `x:num` hanya dihormati bila namespace `xmlns:x` dinyatakan di `<html>`, bukan di `<table>`. Karena itu `blokKeHtml` membungkus dokumen `<html xmlns:x>` sendiri; Chrome membungkusnya lagi dan Excel tetap membacanya.
+  - Hasil: di dua setelan bahasa, angka = angka dan `=SUM` = 3.750.000.
+  - "Rp 2.000" dan "85,5%" yang diketik polos ikut dikenali.
+- **Temuan 2 — kode "0101" jadi angka 101.** Ini dilakukan Excel sendiri, walau tanpa `x:num`. Sel yang bukan angka kini berformat Teks Excel (`mso-number-format:'\@'`); "0101" dan "5.1.02" tetap teks di dua setelan.
+  - Kode berawalan nol dan deretan digit > 15 (NIP) sengaja tidak pernah dianggap angka.
+- **Dicoba lalu dicabut — lebar kolom lewat `<col width>`.** Diukur: Word menyesuaikan lebar dengan isinya, dan Excel mempertahankan lebar kolom tujuan; keduanya mengabaikan `<col>`. Akibatnya kolom Rupiah panjang tampil "########" sampai batas kolomnya diklik dua kali. Itu perilaku Excel, bukan aplikasi.
+- **Uji lewat Ctrl+C buatan alat peramban tidak memicu salin;** yang diuji tombol Salin (jalurnya `execCommand('copy')` → handler yang sama). Ctrl+C dari papan ketik sungguhan belum dicoba.
+
+**3. Editor di 375 px.**
+- Dulu kerangka 320 px menyisakan ± 55 px untuk isi. Kini (media query ≤ 760 px, di AKHIR CSS supaya menang atas aturan berkekhususan sama) kerangka naik ke atas (maks 34vh, bisa digulir) dan isi mendapat seluruh lebar layar. Halaman tidak melebar (`scrollWidth` 375).
+- Ditemukan saat dilihat: judul dokumen di bilah atas terjepit sampai lebar 0 oleh tombol tema + lencana akun (266 px). Kini judul berbaris sendiri.
+- Desktop tidak berubah (kisi `320px 1fr`).
+
+Uji: `test-lkjip-tabel-word.mts` jadi 80 (F29 spasi, D4–D9 salin-ke-Excel, H12 ponsel); **14 uji mutasi tertangkap**. Satu sempat lolos karena data uji: sel tertutup gabungan berisi teks, jadi "bukan angka" lulus dengan sendirinya. Setelan pemisah Excel yang diubah untuk uji dikembalikan di blok `finally` (dicek: sistem=True, `,` `.`).

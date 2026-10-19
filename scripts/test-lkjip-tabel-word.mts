@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs'
 import PizZip from 'pizzip'
 import {
   bacaAtur, teksSumber, ratakanLebar, lebarKolomWord, paskanKeKertas, lebarKertasPx, gayaSel, selBergaya, nomorUlang,
-  blokKeHtml, sisipKolom, hapusKolom, sanitizeRows, displayValue, posisiBarisBaru, sisipBarisBaru, normalizeCell, extractRange, tanpaFormat, tinggiBarisTegak, perkiraLebarTeks,
+  blokKeHtml, angkaUntukExcel, sisipKolom, hapusKolom, sanitizeRows, displayValue, posisiBarisBaru, sisipBarisBaru, normalizeCell, extractRange, tanpaFormat, tinggiBarisTegak, perkiraLebarTeks,
   ATUR_BAWAAN, WARNA_SELANG, GARIS_JUMLAH, LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
   type TabelCell, type BentukTabel,
 } from '../lib/lkjip/tabel'
@@ -140,14 +140,43 @@ const kepala2 = sanitizeRows([
   [sel('A < B & "C"'), sel('5', { b: true }), sel('6', { bg: 'E2EFDA', al: 'right' })],
 ], 3)
 const html = blokKeHtml(kepala2, { r1: 0, c1: 0, r2: 2, c2: 2 }, (r, c) => kepala2[r][c].v)
+const TEKS_X = `style="mso-number-format:'\\@'"`
 ok('D1 gabungan jadi rowspan/colspan, sel tertutup tidak ditulis',
-  html.includes('<td rowspan="2">Uraian</td>') && html.includes('<td colspan="2">Target</td>') && hitung(html, /<td/g) === 7, html)
+  html.includes(`<td rowspan="2" ${TEKS_X}>Uraian</td>`) && html.includes(`<td colspan="2" ${TEKS_X}>Target</td>`) && hitung(html, /<td/g) === 7, html)
 ok('D2 teks di-escape, tebal/latar/perataan ikut',
   html.includes('A &lt; B &amp; &quot;C&quot;') && html.includes('font-weight:bold') && html.includes('background:#E2EFDA;text-align:right'))
 const potongBlok = blokKeHtml(kepala2, { r1: 1, c1: 0, r2: 2, c2: 1 }, (r, c) => kepala2[r][c].v)
 ok('D3 gabungan yang terpotong batas blok dipangkas; teks asal di luar blok tidak ikut',
-  potongBlok.startsWith('<table') && potongBlok.includes('<tr><td></td><td>TW I</td></tr>') && !potongBlok.includes('Uraian')
+  potongBlok.includes('<table') && potongBlok.includes(`<tr><td></td><td ${TEKS_X}>TW I</td></tr>`) && !potongBlok.includes('Uraian')
   && !potongBlok.includes('basi') && !html.includes('basi'), potongBlok)
+// Dibuktikan di Excel 2026-10-19: dengan pemisah gaya Inggris "1.250.000"/"79,01" tempelan jadi TEKS;
+// x:num dihormati HANYA bila namespace-nya dinyatakan di <html> (di <table> saja tidak).
+const ax = (v: string, x: Partial<TabelCell> = {}) => angkaUntukExcel([[sel(v, x)]], 0, 0)
+ok('D4 angka polos gaya Indonesia → nilai mesin + format Excel (ribuan/desimal sesuai tampilan)',
+  ax('1.250.000')?.nilai === 1250000 && ax('1.250.000')?.format === '\\#\\,\\#\\#0' && ax('7,5')?.nilai === 7.5 && ax('7,5')?.format === '0\\.0'
+  && ax('12')?.nilai === 12 && ax('12')?.format === null && ax('-3')?.nilai === -3 && ax('1.250.000,25')?.format === '\\#\\,\\#\\#0\\.00', JSON.stringify(ax('7,5')))
+ok('D5 yang BUKAN angka murni tetap teks: kode berawalan nol, kode rekening, NIP 18 digit, teks, titik desimal gaya Inggris',
+  ['0101', '5.1.02', '196512311990031001', 'A1', '1.25', '', 'Rp', '%'].every(v => ax(v) === null),
+  ['0101', '5.1.02', '196512311990031001', '1.25'].map(v => JSON.stringify(ax(v))).join(' '))
+ok('D6 sel berformat: persen = pecahan, Rupiah & Angka dgn desimalnya',
+  ax('0.125', { nf: 'pct', dec: 1 })?.nilai === 0.125 && ax('0.125', { nf: 'pct', dec: 1 })?.format === '0\\.0%'
+  && ax('1250000', { nf: 'rp' })?.format === '\\0022Rp\\0022\\\\ \\#\\,\\#\\#0' && ax('1250000.5', { nf: 'num', dec: 2 })?.format === '\\#\\,\\#\\#0\\.00')
+// Sel tertutup gabungan berisi ANGKA basi — kalau tidak, "bukan angka" lulus karena isinya teks.
+const rumusX = [baris('10', '20'), [sel('=SUM(A1:B1)'), sel('=A1/0')], [sel('7', { h: true }), sel('5')]]
+ok('D7 rumus → hasilnya; rumus galat & sel tertutup gabungan → bukan angka',
+  angkaUntukExcel(rumusX, 1, 0)?.nilai === 30 && angkaUntukExcel(rumusX, 1, 0)?.format === null && angkaUntukExcel(rumusX, 1, 1) === null && angkaUntukExcel(rumusX, 2, 0) === null
+  && angkaUntukExcel([[sel('1000'), sel('=A1*2')]], 0, 1)?.format === '\\#\\,\\#\\#0' && angkaUntukExcel([[sel('0.2'), sel('=A1/2', { nf: 'pct' })]], 0, 1)?.nilai === 0.1)
+const htmlAngka = blokKeHtml([baris('Uraian', 'Nilai'), baris('Kode 0101', '1.250.000')], { r1: 0, c1: 0, r2: 1, c2: 1 }, (r, c) => [['Uraian', 'Nilai'], ['Kode 0101', '1.250.000']][r][c])
+ok('D8 dibungkus <html xmlns:x>; x:num hanya di sel angka, teks tanpa x:num',
+  htmlAngka.startsWith('<html xmlns:x="urn:schemas-microsoft-com:office:excel"><body><table') && htmlAngka.endsWith('</table></body></html>')
+  && htmlAngka.includes('<td x:num="1250000" style="mso-number-format:\'\\#\\,\\#\\#0\'">1.250.000</td>') && hitung(htmlAngka, /x:num=/g) === 1, htmlAngka)
+// Ditemukan saat ditempel ke Excel: "0101" (teks) jadi angka 101 — Excel sendiri yang mengubahnya.
+const htmlTeks = blokKeHtml([[sel('0101'), sel('Rp 2.000'), sel('85,5%'), sel('')]], { r1: 0, c1: 0, r2: 0, c2: 3 }, (r, c) => ['0101', 'Rp 2.000', '85,5%', ''][c])
+ok('D9 teks diberi format Teks Excel (0101 tetap 0101); "Rp 2.000"/"85,5%" polos = angka; sel kosong tanpa format',
+  htmlTeks.includes(`<td ${TEKS_X}>0101</td>`) && htmlTeks.includes('x:num="2000"') && htmlTeks.includes('x:num="0.855"')
+  && htmlTeks.endsWith('<td></td></tr></table></body></html>') && ax('Rp 2.000')?.format === '\\0022Rp\\0022\\\\ \\#\\,\\#\\#0' && ax('85,5%')?.format === '0\\.0%'
+  && ax('Rp 5%') === null, htmlTeks)
+
 
 // ─── E. Nomor Tabel/Gambar/Grafik ─────────────────────────────────────────────
 console.log('\nE. Nomor objek: editor = cache SEQ Word (§12.4)')
@@ -212,7 +241,13 @@ const xmlNo = buildTabelXml(pTabel({ kolomNomor: 0, gaya: { jumlah: true }, rows
 const noWord = trs(xmlNo).map(t => /<w:t xml:space="preserve">([^<]*)<\/w:t>/.exec(t)?.[1]).join('|')
 ok('F10 kolom No. dicetak urut dari fungsi yang sama (baris JUMLAH tanpa nomor)', noWord === 'No|1|2|', noWord)
 ok('F11 urutan pPr sel sesuai skema: keepNext → spacing → jc (tak ada jc mendahului spacing)',
-  xmlLama.includes('<w:keepNext/><w:spacing w:after="0"/><w:jc w:val="center"/>') && !/<w:jc w:val="[a-z]+"\/><w:spacing w:after="0"\/>/.test(xmlLama))
+  xmlLama.includes('<w:keepNext/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/>') && !/<w:jc w:val="[a-z]+"\/><w:spacing /.test(xmlLama))
+// Dibuka di Word 2026-10-19: sel mewarisi spasi dokumen 1,5 sehingga tabel memanjang separuh lagi.
+const xmlKepalaLama = buildTabelXml({ kolom: ['A', 'B'], rows: [baris('1', '2')] }, 'Arial', 24, 'EDEDED')
+ok('F29 semua paragraf sel berspasi tunggal (juga kepala lama tanpa baris kepala); tak ada sel yang mewarisi spasi dokumen',
+  hitung(xmlLama, /<w:tc>/g) === 12 && hitung(xmlLama, /<w:spacing w:after="0" w:line="240" w:lineRule="auto"\/>/g) === 12
+  && hitung(xmlKepalaLama, /<w:spacing w:after="0" w:line="240" w:lineRule="auto"\/>/g) === 4 && !xmlLama.includes('<w:spacing w:after="0"/>'),
+  `${hitung(xmlLama, /<w:tc>/g)} sel, ${hitung(xmlLama, /w:line="240"/g)} tunggal`)
 
 // Dokumen utuh: tabel melintang di tengah BAB III
 const tb = (judul: string, melintang = false) => tabel(judul, melintang ? { melintang: true } : {})
@@ -347,6 +382,15 @@ ok('H9 teks tegak = format sel (kunci badan tertaut berlaku); garis kertas ikut 
 ok('H10 nomor blok & pemilih tabel grafik memakai nomorObjek (sama dengan Word)',
   ec.includes('const nomorBlok = useMemo(() => nomorObjek(detail.tree), [detail.tree]);') && ec.includes('nomor={nomorBlok.get(b.id)}')
   && ec.includes('`Tabel ${nomorBlok?.get(b.id)?.nomor ?? i + 1}`'))
+// 375 px: kerangka 320 px dulu menyisakan ± 55 px untuk isi, dan judul dokumen terjepit sampai lebar 0.
+// Media query WAJIB sesudah aturan berkekhususan sama (sempat ditaruh di atas lalu kalah).
+const iMedia = ec.indexOf('@media (max-width: 760px)'), mediaCss = ec.slice(iMedia, ec.indexOf('}\n`;', iMedia) + 1)
+ok('H12 tata letak ponsel: kerangka di atas, isi selebar layar, judul berbaris sendiri — dan menang atas aturan sebelumnya',
+  [ec.indexOf('.lk-tree { border-right: 1px solid'), ec.indexOf('.lk-editor { overflow-y: auto'), ec.indexOf('[data-theme="light"] .lk-tree { background')]
+    .every(i => i > 0 && i < iMedia)
+  && mediaCss.includes('.lk-ed-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }')
+  && mediaCss.includes('.lk-tree { border-right: none; border-bottom: 1px solid #0C447C; max-height: 34vh; }')
+  && mediaCss.includes('.lk-ed-title { flex: 1 1 100%; }') && mediaCss.includes('flex-wrap: wrap'))
 ok('H11 Sumber: satu langkah urungkan per sunting (bukan per huruf)', te.includes("onFocus={() => { if (!readOnly) pushHist(); }}") && te.includes('onChange={e => setAtur(a => ({ ...a, sumber: e.target.value }))}'))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)

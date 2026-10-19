@@ -1429,4 +1429,20 @@ const ED_CSS = `
   [data-theme="light"] .lk-vact { background: #F3F4F6; border-color: rgba(0,0,0,.12); color: #4B5563; }
   [data-theme="light"] .lk-vact:hover { border-color: #8B5CF6; color: #0F0F12; background: #EDE9FE; }
   [data-theme="light"] .lk-vact.warn { color: #B45309; }
+
+  /* Layar sempit: kerangka 320 px dulu menyisakan ± 55 px untuk isi di 375 px. Kerangka naik ke
+     atas, tingginya dibatasi & bisa digulir sendiri, isi mendapat seluruh lebar layar. Ditaruh paling
+     akhir supaya menang atas aturan berkekhususan sama di atas. */
+  @media (max-width: 760px) {
+    .lk-ed-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    .lk-tree { border-right: none; border-bottom: 1px solid #0C447C; max-height: 34vh; }
+    [data-theme="light"] .lk-tree { border-bottom-color: rgba(0,0,0,.1); }
+    .lk-tree-list { padding-bottom: 8px; }
+    .lk-editor { padding: 14px 12px 120px; }
+    /* Tombol tema + lencana akun memakan ± 266 px — judul dokumen dulu terjepit sampai lebar 0. */
+    .lk-ed-top { padding: 8px 12px; flex-wrap: wrap; row-gap: 6px; }
+    .lk-ed-title { flex: 1 1 100%; }
+    .lk-ed-judul { max-width: none; }
+    .lk-ed-topright { margin-left: auto; }
+  }
 `;
