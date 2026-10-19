@@ -3721,3 +3721,18 @@ table tbody td.sd-selisih.minus { color: #E24B4A !important; }
   .prima-hdr-brand { display: none !important; }
   .prima-hdr { padding-left: 12px !important; padding-right: 12px !important; }
 }
+
+/* FloatingDock di layar sempit — editor LKJIP punya 8 tombol = 514 px, jadi di 375 px "Daftar" &
+   "Panduan" jatuh SELURUHNYA di luar layar dan tak bisa ditekan (terukur 2026-10-19). Isinya kini bisa
+   digeser mendatar; tepinya memudar sebagai tanda masih ada tombol. Mask hanya di pembungkus isi
+   supaya latar & garis dock tidak ikut memudar. Tooltip ::after ikut terpotong — di layar sentuh memang tak ada hover. */
+@media (max-width: 560px) {
+  .prima-dock { max-width: calc(100vw - 16px); }
+  .prima-dock-isi {
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+  }
+  .prima-dock-isi::-webkit-scrollbar { display: none; }
+  .prima-dock-isi > * { flex-shrink: 0; }
+}

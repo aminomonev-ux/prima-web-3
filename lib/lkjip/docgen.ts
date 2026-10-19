@@ -6,7 +6,7 @@
 //  - settings.xml updateFields=true → Word refresh field saat dibuka
 // escapeXml WAJIB di semua teks user. PERF-C3/L18: pizzip dynamic-import.
 import { getDokumenDetail } from './data';
-import { flattenTree, nomorObjek, type SectionNode, type BlockNode } from './numbering';
+import { flattenTree, nomorObjek, type SectionNode, type BlockNode, type JenisObjek } from './numbering';
 import { DEFAULT_STYLE, type StyleConfig } from './schemas';
 import {
   normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord, bacaAtur, lebarTulisDxa, teksSumber, gayaSel, selBergaya, nomorUlang, tinggiBarisTegak,
@@ -310,7 +310,7 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
     ? `<w:p><w:pPr><w:spacing w:before="60" w:after="0"/><w:jc w:val="left"/></w:pPr><w:r>${rPr(font, Math.max(16, sz - 4), { italic: true })}<w:t xml:space="preserve">${escapeXml(sumber)}</w:t></w:r></w:p>`
     : '';
   // Judul mengikuti letak tabel: tabel rata kiri dengan judul di tengah terlihat lepas dari tabelnya.
-  return caption('Tabel', p.judul ?? '', font, sz, true, nomor, atur.posisi === 'kiri' ? 'left' : 'center') + table + baris + para('', font, sz);
+  return caption('Tabel', teksKeterangan('TABEL', p), font, sz, true, nomor, atur.posisi === 'kiri' ? 'left' : 'center') + table + baris + para('', font, sz);
 }
 
 export type ImageInfo = { id: number; relId: string; mediaName: string; ext: string; wEmu: number; hEmu: number };
@@ -361,9 +361,15 @@ function drawingPara(info: ImageInfo): string {
     `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
 
+/** Teks sesudah "Tabel n" / "Gambar n" / "Grafik n" — SATU rumusan untuk keterangan di isi dan isi awal daftarnya. */
+function teksKeterangan(tipe: string, payload: unknown): string {
+  const p = (payload ?? {}) as { judul?: string; caption?: string };
+  return tipe === 'TABEL' ? p.judul ?? '' : [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
+}
+
 export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor = 1): string {
   const p = (payload ?? {}) as { judul?: string; fileId?: string; caption?: string };
-  const text = [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
+  const text = teksKeterangan('GAMBAR', payload);
   const info = p.fileId ? imgMap.get(p.fileId) : undefined;
   const body = info ? drawingPara(info) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
   return body + caption('Gambar', text, font, sz, false, nomor) + para('', font, sz);
@@ -371,16 +377,20 @@ export function buildGambarXml(payload: unknown, font: string, sz: number, imgMa
 
 function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor = 1): string {
   const p = (payload ?? {}) as { judul?: string; imageFileId?: string; caption?: string };
-  const text = [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
+  const text = teksKeterangan('GRAFIK', payload);
   const info = p.imageFileId ? imgMap.get(p.imageFileId) : undefined;
   const body = info ? drawingPara(info) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
   return body + caption('Grafik', text, font, sz, false, nomor) + para('', font, sz);
 }
 
+/** Teks judul bagian di isi DAN di isi awal Daftar Isi. */
+function teksJudulBagian(node: SectionNode): string {
+  return node.depth === 0 ? `${node.nomor} ${node.judul}`.toUpperCase() : `${node.nomor} ${node.judul}`;
+}
+
 function buildHeadingXml(node: SectionNode): string {
   const lvl = Math.min(Math.max(node.depth + 1, 1), 6);
-  const text = node.depth === 0 ? `${node.nomor} ${node.judul}`.toUpperCase() : `${node.nomor} ${node.judul}`;
-  return `<w:p><w:pPr><w:pStyle w:val="Heading${lvl}"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+  return `<w:p><w:pPr><w:pStyle w:val="Heading${lvl}"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(teksJudulBagian(node))}</w:t></w:r></w:p>`;
 }
 
 function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<string, ImageInfo>, headerFill: string, indentTwips = 0, alloc?: NumAlloc, nomor = 1): string {
@@ -394,9 +404,34 @@ function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<strin
 }
 
 // ── Halaman daftar otomatis (TOC fields) ──
-function indexPage(title: string, instr: string, font: string): string {
+export type EntriDaftar = { teks: string; tingkat: number };
+export const CATATAN_DAFTAR = 'Nomor halaman muncul saat dibuka di Microsoft Word (klik kanan daftar ini → Update Field).';
+// Isi awal field = daftarnya sendiri TANPA nomor halaman (hanya Word yang bisa menghitungnya). Penampil
+// yang tidak menyegarkan field — pratinjau Google Drive, ponsel, Word yang menolak "Update" — dulu cuma
+// menampilkan "Klik kanan → Update Field" (diuji 2026-10-19). Word menimpa seluruhnya saat memperbarui.
+function indexPage(title: string, instr: string, font: string, sz: number, entri: EntriDaftar[], kosong: string): string {
+  const baris = entri.length ? entri : [{ teks: kosong, tingkat: 0 }];
+  const pPr = (t: number) => `<w:pPr><w:spacing w:after="60" w:line="276" w:lineRule="auto"/><w:ind w:left="${t * 440}"/><w:jc w:val="left"/></w:pPr>`;
+  const run = (teks: string, italic = false) => `<w:r>${rPr(font, sz, { italic })}<w:t xml:space="preserve">${escapeXml(teks)}</w:t></w:r>`;
+  const buka = `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${instr}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`;
   return para(title, font, 28, { bold: true, align: 'center' }) +
-    `<w:p><w:pPr><w:jc w:val="left"/></w:pPr>${field(instr, 'Klik kanan → Update Field untuk memuat daftar & nomor halaman.')}</w:p>`;
+    baris.map((e, i) => `<w:p>${pPr(e.tingkat)}${i === 0 ? buka : ''}${run(e.teks)}</w:p>`).join('') +
+    `<w:p>${pPr(0)}${run(CATATAN_DAFTAR, true)}<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
+}
+
+/** Entri awal keempat daftar, dari pohon yang SAMA dengan isi (judul bagian & nomor `nomorObjek`). */
+export function entriDaftar(tree: SectionNode[], nomor: Map<number, { jenis: JenisObjek; nomor: number }>): Record<'isi' | JenisObjek, EntriDaftar[]> {
+  const out: Record<'isi' | JenisObjek, EntriDaftar[]> = { isi: [], Tabel: [], Gambar: [], Grafik: [] };
+  for (const node of flattenTree(tree)) {
+    out.isi.push({ teks: teksJudulBagian(node), tingkat: Math.min(node.depth, 5) });
+    for (const b of node.blocks) {
+      const n = nomor.get(b.id);
+      if (!n) continue;
+      const teks = teksKeterangan(b.tipe, b.payload).trim();
+      out[n.jenis].push({ teks: `${n.jenis} ${n.nomor}${teks ? ` ${teks}` : ''}`, tingkat: 0 });
+    }
+  }
+  return out;
 }
 
 // ── Page/section helpers (footer + nomor halaman) ──
@@ -504,18 +539,19 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
 
   // Front-matter: (Kata Pengantar bila ada) + 4 halaman daftar, dipisah page-break.
   const kp = kataPengantarPage(cfg, font, sz, alloc);
+  const nomor = nomorObjek(tree);
+  const entri = entriDaftar(tree, nomor);
   const daftar = [
     ...(kp ? [kp] : []),
-    indexPage('DAFTAR ISI', ` TOC \\o "1-6" \\h \\z \\u `, font),
-    indexPage('DAFTAR TABEL', ` TOC \\h \\z \\c "Tabel" `, font),
-    indexPage('DAFTAR GAMBAR', ` TOC \\h \\z \\c "Gambar" `, font),
-    indexPage('DAFTAR GRAFIK', ` TOC \\h \\z \\c "Grafik" `, font),
+    indexPage('DAFTAR ISI', ` TOC \\o "1-6" \\h \\z \\u `, font, sz, entri.isi, 'Belum ada bagian.'),
+    indexPage('DAFTAR TABEL', ` TOC \\h \\z \\c "Tabel" `, font, sz, entri.Tabel, 'Belum ada tabel.'),
+    indexPage('DAFTAR GAMBAR', ` TOC \\h \\z \\c "Gambar" `, font, sz, entri.Gambar, 'Belum ada gambar.'),
+    indexPage('DAFTAR GRAFIK', ` TOC \\h \\z \\c "Grafik" `, font, sz, entri.Grafik, 'Belum ada grafik.'),
   ].join(pageBreak());
 
   // Isi dipotong per judul/blok bersama orientasinya. Tabel "Cetak melintang" mendapat section
   // melintang sendiri (§12.2); judul bagian yang LANGSUNG diikuti tabel melintang ikut melintang —
   // kalau tidak, judulnya tertinggal sendirian di halaman tegak sebelumnya.
-  const nomor = nomorObjek(tree);
   const potongan: (Potongan & { judul: boolean })[] = [];
   for (const node of flattenTree(tree)) {
     potongan.push({ judul: true, melintang: false, xml: buildHeadingXml(node) });

@@ -410,7 +410,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     setDragIdx(null);
                     void reorderBlocks(selected.id, ids);
                   }}>
-                  <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
+                  <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} warnaKepalaTabel={detail.style_config.tableHeaderFill} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
                     nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
@@ -832,7 +832,7 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
 type NomorBlok = Map<number, { jenis: JenisObjek; nomor: number }>;
-function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: { jenis: JenisObjek; nomor: number }; nomorBlok?: NomorBlok }) {
+function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: { jenis: JenisObjek; nomor: number }; nomorBlok?: NomorBlok }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
@@ -852,7 +852,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHand
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
           tahunDokumen={tahunDokumen} readOnly={readOnly} onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
-      {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} tahunDokumen={tahunDokumen} onSave={onSave} />}
+      {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} tahunDokumen={tahunDokumen} warnaKepala={warnaKepalaTabel} onSave={onSave} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
       {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} />}
     </div>

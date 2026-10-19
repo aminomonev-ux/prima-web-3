@@ -71,7 +71,9 @@ export default function FloatingDock({ nav, actions = [], isLight, limelight = f
   );
 
   return (
-    <div style={{ position: 'fixed', left: '50%', bottom: 18, transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: c.bg, border: `1px solid ${c.border}`, borderRadius: 18, boxShadow: isLight ? '0 16px 44px rgba(0,0,0,.18)' : '0 16px 44px rgba(0,0,0,.55)', backdropFilter: 'blur(16px)', zIndex: 400 }}>
+    // Isi dibungkus `.prima-dock-isi` supaya di layar sempit bisa digeser mendatar tanpa ikut memudarkan latar & garis dock (globals.css).
+    <div className="prima-dock" style={{ position: 'fixed', left: '50%', bottom: 18, transform: 'translateX(-50%)', background: c.bg, border: `1px solid ${c.border}`, borderRadius: 18, boxShadow: isLight ? '0 16px 44px rgba(0,0,0,.18)' : '0 16px 44px rgba(0,0,0,.55)', backdropFilter: 'blur(16px)', zIndex: 400 }}>
+      <div className="prima-dock-isi" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px' }}>
       {limelight && (
         <div ref={beamRef} aria-hidden="true"
           style={{ position: 'absolute', top: 0, left: -999, width: 34, height: 4, borderRadius: 99, background: isLight ? 'linear-gradient(90deg,#6D28D9,#7C5CFC)' : 'linear-gradient(90deg,#EF9F27,#FBBF24)', boxShadow: isLight ? '0 0 10px 2px rgba(124,92,252,.5)' : '0 0 12px 2px rgba(239,159,39,.65)', pointerEvents: 'none', zIndex: 1, transition: beamReady ? 'left .4s cubic-bezier(.4,0,.2,1)' : undefined }}>
@@ -81,6 +83,7 @@ export default function FloatingDock({ nav, actions = [], isLight, limelight = f
       {nav.map((it, i) => renderItem(it, 'nav', i))}
       {actions.length > 0 && <div style={{ width: 1, height: 34, background: c.border, margin: '0 4px', position: 'relative', zIndex: 2 }} />}
       {actions.map((it, j) => renderItem(it, 'action', nav.length + j))}
+      </div>
     </div>
   );
 }

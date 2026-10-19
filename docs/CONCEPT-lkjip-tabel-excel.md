@@ -530,7 +530,7 @@ Dokumen uji 15 halaman: tabel tegak bergaya, dua tabel melintang di BAB III (sat
 ### Belum dicoba / sengaja tidak
 
 - ~~Salinan HTML belum ditempel ke Word/Excel sungguhan~~ · ~~375 px~~ · ~~spasi sel 1,5~~ — dicoba hari yang sama (§14.2).
-- Pratinjau Drive/ponsel (alasan cache `SEQ`) belum dicoba.
+- ~~Pratinjau Drive/ponsel (alasan cache `SEQ`) belum dicoba~~ — dicoba lewat Word tanpa pembaruan field (§14.3).
 - ~~Penilai rumus belum mengenal rujukan absolut~~ — **dibereskan hari yang sama** (lihat §14.1).
 - ~~Spasi baris di sel tabel ikut spasi dokumen (1,5)~~ — kini spasi tunggal (§14.2).
 
@@ -573,3 +573,39 @@ Ditemukan saat menguji Tahap W: `=$B$3` dan `=SUM(B2:B4)+$B$3` jadi `#ERR`.
 - Desktop tidak berubah (kisi `320px 1fr`).
 
 Uji: `test-lkjip-tabel-word.mts` jadi 80 (F29 spasi, D4–D9 salin-ke-Excel, H12 ponsel); **14 uji mutasi tertangkap**. Satu sempat lolos karena data uji: sel tertutup gabungan berisi teks, jadi "bukan angka" lulus dengan sendirinya. Setelan pemisah Excel yang diubah untuk uji dikembalikan di blok `finally` (dicek: sistem=True, `,` `.`).
+
+### 14.3 Temuan §14.2 dibereskan + uji yang tersisa (2026-10-19)
+
+**Salinan ke Word/Excel kini membawa format yang dulu hilang** (`selSalinan` + `blokKeHtml`, aturannya sama dengan `buildTabelXml`):
+- Kepala: tebal, rata & vertikal tengah, berlatar **warna kepala dokumen** (Pengaturan → `tableHeaderFill`, dioper editor → `TabelEditor`). Latar sel sendiri tetap menang.
+- **Garis per sel**: tanpa ketentuan 0,5 pt, `0` = tanpa garis, `n` = n/8 pt (`w:sz`). Jadi garis atas tebal JUMLAH (1,5 pt), gaya garis mendatar, dan menu Garis ikut tersalin.
+- Ukuran huruf sel ikut.
+- **Teks tegak**: `mso-rotate:90` diputar Word DAN Excel. `layout-flow:vertical` (tulisan Word sendiri) justru membuat Excel **menumpuk huruf** ke bawah, jadi tidak dipakai.
+  - Excel juga membungkus "TW I" jadi tiga potong di baris pendek. Ia mengabaikan tinggi `<tr>` (dicoba juga dgn `mso-height-source`), tapi meninggikan barisnya sendiri bila sel tegak `white-space:nowrap`.
+  - Tinggi `<tr>` tetap dikirim karena Word menghormatinya.
+- **Hasil rumus tanpa format** dulu kehilangan desimal di Excel ("57.755.803.079,01" → "…079"). Kini desimal format Excel = desimal yang tampil (`formatUmum`).
+- **Lebar kolom**: empat cara dicoba di Excel (`<col width>`, gaya `mso-width-source`, `width` di `<table>`, lebar `<td>`) — semuanya diabaikan.
+  - Penggantinya **petunjuk sekali per editor** sesudah Salin, hanya bila blok berisi angka lebih panjang dari "1.250.000" (`perluPetunjukLebar`). Teks tidak dihitung karena Excel membiarkannya meluber.
+
+Semua dibuktikan dengan menempel ke Word & Excel sungguhan (gambar PDF hasil tempel dibandingkan), termasuk dari papan klip sistem yang diisi tombol Salin aplikasi.
+
+**Tombol ikon bilah alat tabel bernama** (`aria-label`, 16 tombol) — sebelumnya hanya `data-tooltip`, yang tidak dibaca pembaca layar.
+
+**FloatingDock di ponsel — temuan saat diukur, lebih parah dari dugaan.**
+- Dock editor LKJIP selebar 514 px. Di layar 375 px, "Daftar" (x −57…−3) dan "Panduan" (378…432) jatuh **seluruhnya di luar layar** dan tak bisa ditekan.
+- Diperbaiki sekali di komponen bersama (8 layar memakainya): isi dibungkus `.prima-dock-isi`.
+- Di ≤ 560 px dock selebar layar dan isinya digeser mendatar. Tombol tidak menyusut, dan tepinya memudar lewat `mask` di pembungkus isi saja, supaya latar & garis dock tidak ikut memudar.
+- Desktop tidak berubah: lebar & tinggi dock sama, lampu sorot tetap tepat di tombol aktif.
+
+**Pratinjau tanpa pembaruan field (Drive/ponsel) — temuan.**
+- Dibuktikan lewat Word yang membuka berkas tanpa `updateFields` (cara penampil yang tidak menghitung field). Nomor "Tabel 1/2/3/4" di keterangan sudah benar (cache `SEQ`).
+- Masalahnya di halaman daftar: **Daftar Isi/Tabel/Gambar/Grafik hanya berisi "Klik kanan → Update Field…"**. Hal yang sama terlihat di Word bila pertanyaan pembaruan dijawab Tidak.
+- Kini isi awal tiap field TOC = daftarnya sendiri **tanpa nomor halaman** (hanya Word yang bisa menghitungnya), plus satu baris catatan miring. Entri dibuat `entriDaftar`, yang memakai judul bagian & rumusan keterangan yang SAMA dengan isi (`teksJudulBagian`, `teksKeterangan` — dua salinan teks keterangan sebelumnya disatukan). Daftar kosong menulis "Belum ada tabel." dsb.
+- Word yang memperbarui tetap mengganti seluruhnya dengan nomor halaman, dan catatannya hilang (dirender ulang dan dicek).
+
+**Tetap belum bisa diuji dari sini:**
+- **Ctrl+C dari papan ketik fisik.** Kendali layar tidak boleh mengoperasikan jendela Claude, dan peramban lain hanya bisa dilihat. Yang terbukti: keydown Ctrl+C tidak dicegah (`defaultPrevented` = false, peramban yang menjalankan salin); event `copy` di kisi menghasilkan TSV + HTML yang benar dan petunjuk lebar muncul; tombol Salin (jalur yang sama) mengisi papan klip sistem.
+- **Pratinjau Google Drive sungguhan.** Butuh mengunggah ke Drive kantor; diganti uji Word tanpa pembaruan field.
+- **Word di komputer kantor dan Excel yang benar-benar berbahasa Inggris.**
+
+Uji: `test-lkjip-tabel-word.mts` 80 → **92** (D10–D15, F30–F32, H13–H15; F15/F16 kini mencari teks SESUDAH halaman daftar karena judul & keterangan juga tertulis di sana), **25 uji mutasi tertangkap**. Suite Excel 97, tertaut 156, angka 62, bab wajib 57, tooltip-tombol 26, keluar-belum-tersimpan 16 tetap hijau.

@@ -20,7 +20,7 @@ import {
   normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel,
   selGalat, daftarSelGalat, nilaiKetikan, pastikanKepalaSel, namaKolomDariKepala, sisipBaris, hapusBaris, sisipKolom, hapusKolom,
   kosongkanBlok, tanpaFormat, teksDiBaris, ubahJumlahKepala, paskanKeKertas, pxKeCm,
-  bacaAtur, gayaSel, selBergaya, nomorUlang, ratakanLebar, blokKeHtml, asalSel, sisipBarisBaru, lebarKertasPx, posisiBarisBaru,
+  bacaAtur, gayaSel, selBergaya, nomorUlang, ratakanLebar, blokKeHtml, selSalinan, perluPetunjukLebar, asalSel, sisipBarisBaru, lebarKertasPx, posisiBarisBaru,
   BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, BATAS_BARIS_KEPALA, LEBAR_KOLOM_BAWAAN, GARIS_JUMLAH,
   type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel, type AturTabel, type GayaTabel, type PosisiTabel, type TabelBorder,
 } from '@/lib/lkjip/tabel';
@@ -58,7 +58,7 @@ const garisCss = (bd?: TabelBorder): React.CSSProperties => {
   return out;
 };
 
-export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void }) {
+export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala = '', onSave }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepala?: string; onSave: (p: unknown) => void }) {
   // E1: tabel lama ber-headerRows 0 dijadikan 1 baris kepala berisi nama kolom saat dibuka — keluaran
   // Word-nya sama; baru tersimpan begitu orangnya menekan Simpan Tabel.
   const [awal] = useState(() => {
@@ -89,6 +89,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
   const [barFocused, setBarFocused] = useState(false);           // sedang mengetik di formula bar
   const barAwal = useRef('');
   const clipRef = useRef<TabelCell[][] | null>(null);
+  const petunjukLebarRef = useRef(false);
   const [adaSalinan, setAdaSalinan] = useState(false);
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const tangkapRef = useRef<HTMLTextAreaElement | null>(null);
@@ -362,13 +363,16 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
     if (!rect) return;
     clipRef.current = extractRange(rowsTampil, rect.r1, rect.c1, rect.r2, rect.c2);
     setAdaSalinan(true);
-    const html = blokKeHtml(rowsTampil, rect, (r, c) => displayValue(rowsTampil, r, c), (r, c) => {
-      const s = efektif(r, c);
-      return { ...s, b: s.b || r < headerRows, al: s.al ?? (r < headerRows ? 'center' : align[c]) };
-    });
+    const teks = (r: number, c: number) => displayValue(rowsTampil, r, c);
+    const html = blokKeHtml(rowsTampil, rect, teks, (r, c) => selSalinan(efektif(r, c), r < headerRows, align[c], warnaKepala));
     e.clipboardData.setData('text/plain', tsvPilihan);
     e.clipboardData.setData('text/html', html);
     e.preventDefault();
+    // Excel tidak ikut melebarkan kolom (diukur) — sekali per editor, hanya bila ada angka yang tak muat.
+    if (!petunjukLebarRef.current && perluPetunjukLebar(rowsTampil, rect, teks)) {
+      petunjukLebarRef.current = true;
+      toast.info('Tersalin. Kalau di Excel muncul "####", klik dua kali garis batas kolomnya — Excel tidak ikut melebarkan kolom.', { duration: 7000 });
+    }
   };
   useEffect(() => {
     const t = tangkapRef.current;
@@ -594,8 +598,8 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
       {!readOnly && (
         // Tombol tidak mengambil fokus dari kisi — papan ketik tetap jalan sesudah menekan tombol.
         <div className="lk-tabel-tools" onMouseDown={e => { if ((e.target as HTMLElement).closest('button')) e.preventDefault(); }}>
-          <button data-tooltip="Urungkan (Ctrl+Z)" data-tooltip-pos="below" disabled={!past.length} onClick={undo}><Undo2 size={14} /></button>
-          <button data-tooltip="Ulangi (Ctrl+Y)" data-tooltip-pos="below" disabled={!future.length} onClick={redo}><Redo2 size={14} /></button>
+          <button aria-label="Urungkan" data-tooltip="Urungkan (Ctrl+Z)" data-tooltip-pos="below" disabled={!past.length} onClick={undo}><Undo2 size={14} /></button>
+          <button aria-label="Ulangi" data-tooltip="Ulangi (Ctrl+Y)" data-tooltip-pos="below" disabled={!future.length} onClick={redo}><Redo2 size={14} /></button>
           <span className="lk-tt-sep" />
           <span className="lk-tt-tip" data-tooltip="Sisip sebanyak baris/kolom yang dipilih (Ctrl+Shift+=)" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Sisip baris atau kolom" disabled={!rect} value=""
             onChange={e => { pilihanSel<'atas' | 'bawah' | 'kiri' | 'kanan'>(e.target.value, sisip); e.currentTarget.value = ''; }}>
@@ -615,22 +619,22 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
             <option value="isi">Kosongkan isi (Delete)</option><option value="format" disabled={kunciBlok}>Hapus format</option>
           </select></span>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Gabung sel" data-tooltip-pos="below" disabled={!canMerge} onClick={doMerge}><Combine size={14} /></button>
-          <button data-tooltip="Pisah sel" data-tooltip-pos="below" disabled={!canUnmerge} onClick={doUnmerge}><Split size={14} /></button>
+          <button aria-label="Gabung sel" data-tooltip="Gabung sel" data-tooltip-pos="below" disabled={!canMerge} onClick={doMerge}><Combine size={14} /></button>
+          <button aria-label="Pisah sel" data-tooltip="Pisah sel" data-tooltip-pos="below" disabled={!canUnmerge} onClick={doUnmerge}><Split size={14} /></button>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Rata kiri" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('left')}><AlignLeft size={14} /></button>
-          <button data-tooltip="Rata tengah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('center')}><AlignCenter size={14} /></button>
-          <button data-tooltip="Rata kanan" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('right')}><AlignRight size={14} /></button>
-          <button data-tooltip="Rata kiri-kanan" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('justify')}><AlignJustify size={14} /></button>
+          <button aria-label="Rata kiri" data-tooltip="Rata kiri" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('left')}><AlignLeft size={14} /></button>
+          <button aria-label="Rata tengah" data-tooltip="Rata tengah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('center')}><AlignCenter size={14} /></button>
+          <button aria-label="Rata kanan" data-tooltip="Rata kanan" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('right')}><AlignRight size={14} /></button>
+          <button aria-label="Rata kiri-kanan" data-tooltip="Rata kiri-kanan" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => rata('justify')}><AlignJustify size={14} /></button>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Vertikal atas" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'top'; })}>⤒</button>
-          <button data-tooltip="Vertikal tengah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'middle'; })}>⇕</button>
-          <button data-tooltip="Vertikal bawah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'bottom'; })}>⤓</button>
+          <button aria-label="Rata vertikal atas" data-tooltip="Vertikal atas" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'top'; })}>⤒</button>
+          <button aria-label="Rata vertikal tengah" data-tooltip="Vertikal tengah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'middle'; })}>⇕</button>
+          <button aria-label="Rata vertikal bawah" data-tooltip="Vertikal bawah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'bottom'; })}>⤓</button>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Tebal" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
-          <button data-tooltip="Teks tegak (dibaca dari bawah ke atas) — untuk kepala kolom sempit" data-tooltip-pos="below" disabled={kunciBlok}
+          <button aria-label="Tebal" data-tooltip="Tebal" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
+          <button aria-label="Teks tegak" data-tooltip="Teks tegak (dibaca dari bawah ke atas) — untuk kepala kolom sempit" data-tooltip-pos="below" disabled={kunciBlok}
             onClick={() => { const tegak = !origin?.rot; editCells(c => { if (tegak) c.rot = true; else delete c.rot; }); }}><RotateCcw size={14} /></button>
-          <button data-tooltip="Ratakan lebar kolom yang dipilih" data-tooltip-pos="below" disabled={!rect || rect.c2 <= rect.c1}
+          <button aria-label="Ratakan lebar kolom" data-tooltip="Ratakan lebar kolom yang dipilih" data-tooltip-pos="below" disabled={!rect || rect.c2 <= rect.c1}
             onClick={ratakanKolom}><Columns3 size={14} /></button>
           <span className="lk-tt-sep" />
           <span className="lk-tt-tip" data-tooltip="Jumlah baris kepala tabel — baris disisip/dibuang tepat di atas badan" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Jumlah baris kepala tabel" value={String(headerRows)}
@@ -674,8 +678,8 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
             <option value="FCE4E4">Merah</option>
           </select></span>
           <span className="lk-tt-sep" />
-          <button data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect} onClick={doCopy}><Copy size={14} /></button>
-          <button data-tooltip="Tempel (Ctrl+V)" data-tooltip-pos="below" disabled={kunciBlok || !adaSalinan} onClick={() => { if (clipRef.current) void tempel(clipRef.current); }}><ClipboardPaste size={14} /></button>
+          <button aria-label="Salin" data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect} onClick={doCopy}><Copy size={14} /></button>
+          <button aria-label="Tempel" data-tooltip="Tempel (Ctrl+V)" data-tooltip-pos="below" disabled={kunciBlok || !adaSalinan} onClick={() => { if (clipRef.current) void tempel(clipRef.current); }}><ClipboardPaste size={14} /></button>
         </div>
       )}
 

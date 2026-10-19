@@ -659,7 +659,12 @@ export function angkaUntukExcel(rows: TabelCell[][], r: number, c: number): { ni
   if (v.startsWith('=')) {
     const n = evalFormula(v.slice(1), rows, r, c, new Set());
     if (!Number.isFinite(n)) return null;
-    return { nilai: bulatkanDesimal(n, 10), format: formatExcel(cell.nf, cell.dec ?? 0, Math.abs(n) >= 1000) };
+    const nilai = bulatkanDesimal(n, 10);
+    // Tanpa format sel, layar menulis SEMUA desimalnya (`formatUmum`) — Excel harus sama, kalau tidak
+    // "57.755.803.079,01" tampil "57.755.803.079" (terlihat di Excel 2026-10-19).
+    const s = String(nilai), titik = s.indexOf('.');
+    const dec = cell.nf ? (cell.dec ?? 0) : titik < 0 || /e/i.test(s) ? 0 : s.length - titik - 1;
+    return { nilai, format: formatExcel(cell.nf, dec, Math.abs(n) >= 1000) };
   }
   if (cell.nf) {
     const n = angkaMentah(cell);
@@ -679,6 +684,24 @@ export function angkaUntukExcel(rows: TabelCell[][], r: number, c: number): { ni
 const FORMAT_TEKS_EXCEL = '\\@';
 
 /**
+ * Sel yang disalin = sel seperti dicetak Word (`buildTabelXml`): kepala tebal, rata tengah, berlatar
+ * warna kepala dokumen bila tak berlatar sendiri; badan ikut perataan kolomnya. `cell` sudah bergaya
+ * tabel (`selBergaya`) — garis JUMLAH & berselang ikut dari situ.
+ */
+export function selSalinan(cell: TabelCell, kepala: boolean, alignKolom: TabelAlign | undefined, warnaKepala: string): TabelCell {
+  return {
+    ...cell,
+    b: cell.b || kepala,
+    al: cell.al ?? (kepala ? 'center' : alignKolom),
+    va: cell.va ?? (kepala ? 'middle' : undefined),
+    bg: cell.bg ?? (kepala && warnaKepala ? warnaKepala : undefined),
+  };
+}
+
+/** Garis sel dgn aturan `buildTabelXml`: tanpa ketentuan = tipis 0,5 pt, ≤ 0 = tanpa garis, n = n/8 pt (`w:sz`). */
+const garisCss = (w: number | undefined) => (w === undefined ? '.5pt solid windowtext' : w <= 0 ? 'none' : `${w / 8}pt solid windowtext`);
+
+/**
  * Blok terpilih sebagai tabel HTML untuk papan klip (§12.4): Word & Excel menempelnya lengkap dengan
  * gabungan, tebal, latar, dan perataan — TSV saja kehilangan semuanya. Gabungan yang terpotong batas
  * blok dipangkas ke blok; teksnya hanya ikut bila sel asalnya di dalam blok. Dibungkus
@@ -688,10 +711,16 @@ const FORMAT_TEKS_EXCEL = '\\@';
 export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: number) => string, sel: (r: number, c: number) => TabelCell = (r, c) => rows[r][c]): string {
   const ditulis = new Set<string>();
   // Lebar kolom sengaja tidak dikirim: diukur 2026-10-19, Word menyesuaikan lebar dgn isinya dan
-  // Excel mempertahankan lebar kolom tujuannya — <col width> diabaikan keduanya.
+  // Excel mempertahankan lebar kolom tujuannya — <col width>, gaya mso-width-source, dan lebar <td>
+  // diabaikan semuanya. Petunjuknya ditampilkan editor sesudah Salin (`perluPetunjukLebar`).
+  // Baris bertulisan tegak: tinggi <tr> dihormati Word tapi DIABAIKAN Excel (diuji, juga dgn
+  // mso-height-source); Excel baru meninggikan barisnya sendiri bila sel tegaknya `nowrap` (lihat bawah).
+  let adaTegak = false;
+  for (let r = k.r1; r <= k.r2 && !adaTegak; r++) for (let c = k.c1; c <= k.c2; c++) if (rows[r]?.[c]?.rot && !rows[r][c].h) { adaTegak = true; break; }
+  const tinggi = adaTegak ? tinggiBarisTegak(rows.map((row, r) => row.map((cell, c) => (cell.h ? cell : sel(r, c)))), 0, 12) : [];
   let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><body><table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse">';
   for (let r = k.r1; r <= k.r2; r++) {
-    html += '<tr>';
+    html += tinggi[r] ? `<tr style="height:${tinggi[r] / 20}pt">` : '<tr>';
     for (let c = k.c1; c <= k.c2; c++) {
       if (ditulis.has(`${r}:${c}`)) continue;
       const a = asalSel(rows, r, c);
@@ -702,11 +731,18 @@ export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: n
       const angka = asal ? angkaUntukExcel(rows, r, c) : null;
       const isi = asal ? teks(r, c) : '';
       const formatSel = angka ? angka.format : isi.trim() ? FORMAT_TEKS_EXCEL : null;
+      const bd = cell.bd;
       const gaya = [
         cell.b ? 'font-weight:bold' : '',
+        cell.fs ? `font-size:${cell.fs}pt` : '',
         cell.bg ? `background:#${cell.bg}` : '',
         cell.al ? `text-align:${cell.al}` : '',
         cell.va ? `vertical-align:${cell.va}` : '',
+        bd ? `border-top:${garisCss(bd.t)};border-right:${garisCss(bd.r)};border-bottom:${garisCss(bd.b)};border-left:${garisCss(bd.l)}` : `border:${garisCss(undefined)}`,
+        // Teks tegak: `mso-rotate:90` diputar Word DAN Excel (diuji 2026-10-19); `layout-flow:vertical`
+        // justru membuat Excel menumpuk hurufnya ke bawah. Tanpa `nowrap` Excel membungkus "TW I" di
+        // baris pendek jadi tiga potong; dengan `nowrap` ia meninggikan barisnya sendiri.
+        cell.rot ? 'mso-rotate:90;white-space:nowrap' : '',
         formatSel ? `mso-number-format:'${formatSel}'` : '',
       ].filter(Boolean).join(';');
       const span = (c2 > c ? ` colspan="${c2 - c + 1}"` : '') + (r2 > r ? ` rowspan="${r2 - r + 1}"` : '');
@@ -716,6 +752,22 @@ export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: n
     html += '</tr>';
   }
   return `${html}</table></body></html>`;
+}
+
+/** Panjang teks angka yang terbukti muat di kolom Excel bawaan (lebar 8,11): "1.250.000". */
+const MUAT_KOLOM_EXCEL = 9;
+/**
+ * Adakah ANGKA di blok yang akan tampil "####" di kolom Excel selebar bawaan? Teks tidak dihitung —
+ * Excel membiarkan teks meluber ke sel sebelah, angka tidak (diukur 2026-10-19: "Rp 74.154.779.000" → ####).
+ */
+export function perluPetunjukLebar(rows: TabelCell[][], k: Kotak, teks: (r: number, c: number) => string): boolean {
+  for (let r = k.r1; r <= k.r2; r++) {
+    for (let c = k.c1; c <= k.c2; c++) {
+      if (rows[r]?.[c]?.h) continue;
+      if (teks(r, c).length > MUAT_KOLOM_EXCEL && angkaUntukExcel(rows, r, c)) return true;
+    }
+  }
+  return false;
 }
 
 export interface Kotak { r1: number; c1: number; r2: number; c2: number }
