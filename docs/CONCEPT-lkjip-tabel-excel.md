@@ -1,7 +1,7 @@
 # Konsep — Tabel LKJIP ala Excel + Kepala Tabel di Modal
 
-Status: **Tahap A selesai dikerjakan** (2026-10-18, belum di-commit) — catatan pelaksanaan di §13. Tahap W, B, C belum.
-Susulan 2026-10-18: §12 **ala Word**. W1–W2 masuk Tahap A, sisanya Tahap W (baru) dan Tahap C. Isi §12 masih menunggu pilihan pemilik.
+Status: **Tahap A selesai** (2026-10-18, §13) · **Tahap W selesai dikerjakan** (2026-10-19, belum di-commit, §14). Tahap B dan C belum.
+Susulan 2026-10-18: §12 **ala Word**. W1–W2 masuk Tahap A, sisanya Tahap W dan Tahap C.
 Kelanjutan `docs/CONCEPT-lkjip-tabel-tertaut.md` — aturan kunci tabel tertaut di sana tetap berlaku.
 
 ## 1. Yang diminta
@@ -467,3 +467,82 @@ Dokumen kotak pasir dibangkitkan, dibuka lewat Word 16 (COM), diekspor ke PDF, d
 - Tabel 8 kolom bawaan muat di bidang tulis (439,2 ≤ 439,4 pt). Sel galat tercetak "—".
 - Tarik data E-Anggaran 2026 sungguhan (hanya dibaca) dengan kepala bertingkat yang disusun di kisi modal berhasil sampai ke editor.
 - **375 px:** halaman tidak melebar. Tapi editor LKJIP memang tidak punya tata letak ponsel (`.lk-ed-grid` = `320px 1fr` tanpa media query), jadi panel isinya tinggal 55 px. Ini sudah begitu sebelum Tahap A.
+
+## 14. Pelaksanaan Tahap W (2026-10-19)
+
+Semua butir §12.2–12.4 dikerjakan. Nol tabel, kolom, migrasi, dan endpoint: pengaturannya kunci payload blok TABEL dan didaftarkan di `TabelPayloadSchema` (Zod membuang kunci yang tak dikenal).
+
+| Fitur | Bentuk |
+|---|---|
+| Kertas melintang per tabel | `melintang` → `kelompokSection` + `sectBreakRapat` di `docgen.ts`. `start=1` hanya di section isi pertama. Footer melintang sendiri (`footer2.xml`, rId5, tab kanan 13.720). Judul bagian yang langsung diikuti tabel melintang ikut melintang. Kalau isi dibuka tabel melintang, daftar tetap tegak. |
+| Posisi tabel | `posisi` tengah/kiri/penuh. Penuh → `lebarKolomWord(…, rentang)` tepat selebar bidang tulis. Kiri → judul ikut rata kiri. |
+| Ratakan lebar kolom | `ratakanLebar` (jumlah lebar tetap) |
+| Jaga tetap utuh | `utuh` → `keepNext` di semua baris kecuali yang terakhir |
+| Gaya tabel | `gaya { selang, jumlah, mendatar }` → `gayaSel` + `selBergaya`. Format sel menang, gaya tidak ditulis ke sel, jadi bertahan sesudah Perbarui. |
+| Baris Sumber | `sumber` → `teksSumber` ("Sumber:" tidak digandakan); baris terakhir tabel diikat ke situ |
+| Teks tegak | sel `rot` → `textDirection btLr` + tinggi baris minimum (`tinggiBarisTegak`) |
+| Kolom No. otomatis | `kolomNomor` → `nomorUlang`, diturunkan saat digambar. Ikut sisip/hapus kolom lewat `BentukTabel`. Tidak berlaku di tabel tertaut. |
+| Tab di sel terakhir | `sisipBarisBaru` (satu aturan dengan "+ Baris") |
+| Nomor tabel di editor | `nomorObjek` di `numbering.ts` — fungsi yang sama mengisi cache field `SEQ` |
+| Salin ke Word/Excel | `blokKeHtml`; `onCopy` menulis `text/plain` + `text/html` |
+
+### Yang berubah dari konsep saat dikerjakan
+
+- **Baris JUMLAH tidak diberi nomor.** Konsep hanya menyebut judul kelompok. Tanpa ini baris "JUMLAH" bernomor.
+- **Baris baru masuk di ATAS baris JUMLAH** (Tab dan "+ Baris") bila gaya jumlah dipakai.
+  - Ditemukan di layar: baris kosong yang baru jadi baris "jumlah", dan JUMLAH ikut bernomor.
+  - Rentang di baris JUMLAH yang berakhir tepat di baris data terakhir ikut dipanjangkan (`=SUM(C3:C7)` → `C3:C8`), seperti tabel Excel. Tanpa itu totalnya diam-diam kurang. Rumus lain tetap memakai aturan geser biasa.
+- **Teks tegak butuh tinggi baris.** Terbukti di Word: baris bertinggi otomatis tidak meninggi, "TW I" pecah jadi "TW" / "I".
+  - Tinggi minimum = perkiraan lebar teks Arial (`perkiraLebarTeks`) + 6 pt → `trHeight atLeast`.
+  - Sel tegak yang menutup beberapa baris membagi kebutuhannya ke baris-baris itu.
+- **Judul tabel rata kiri ikut rata kiri.**
+- **Kursor sesudah Tab** pindah ke kolom pertama yang bisa diketik, bukan kolom No. otomatis yang menolak ketikan.
+- **Urutan anak `tcPr`/`pPr` dirapikan** ke urutan skema OOXML (`vAlign` sesudah `tcBorders`/`shd`; `spacing` sebelum `jc`). Word selama ini tetap membukanya, tapi `textDirection` baru butuh tempat yang benar.
+- `rakitDocx` dipisah dari `generateLkjipDocx`, supaya dokumen utuh bisa dibangkitkan di uji tanpa DB/Drive.
+- Editor kini menggambar garis sel (`bd`: 0 = tanpa garis, tebal = 2 px). Dulu format garis tidak terlihat di editor sama sekali.
+
+### Uji
+
+- `npx tsx scripts/test-lkjip-tabel-word.mts` (72) memeriksa XML dari `rakitDocx` sungguhan. **63 uji mutasi tertangkap**. Tiga sempat lolos, semuanya karena data uji:
+  - baris jumlah kebetulan bernomor genap;
+  - sel tertutup gabungan tanpa teks;
+  - tidak ada rentang yang berakhir di baris lain.
+- Suite lama tetap hijau: tabel-excel 92, tertaut 156, angka 62, bab-wajib 57. K3 jadi 15 tombol format; K10 sekarang memeriksa garis kertas yang ikut orientasi.
+- tsc, ESLint `--max-warnings 0`, Gate E, dan Gate J lolos.
+
+### Dibuka di Microsoft Word sungguhan
+
+Dokumen uji 15 halaman: tabel tegak bergaya, dua tabel melintang di BAB III (satu 40 baris), tabel garis mendatar selebar kertas, dan tabel rata kiri.
+
+- Nomor halaman isi 1–2 tegak, 3–7 melintang, 8 tegak, 9 melintang, 10 tegak: bersambung. Romawi i–iv tetap.
+- Daftar Tabel menyebut halaman yang benar: Tabel 1 → 2, Tabel 2 → 3, Tabel 3 → 9, Tabel 4/5 → 10.
+- BAB III dan 3.1 ikut halaman melintang. Kepala tabel 40 baris diulang tiap halaman. Sumber menempel di baris terakhir. Nomor halaman melintang ada di tepi kanan 24,2 cm.
+- Ekspor PDF sempat macet. Sebabnya otomasi COM yang dijalankan langsung di host PowerShell alat (instance pertama yang tertinggal), bukan dokumennya. Lima varian (dengan/tanpa teks tegak, melintang, utuh, Sumber, penyegaran field) lancar semua di proses Word tersendiri.
+
+### Peramban (dokumen kotak pasir 2099, dihapus sesudahnya)
+
+- Kepala blok bertulisan "Tabel 2"; teks tegak tampil tegak; kolom No. 1–5 dan JUMLAH tanpa nomor; berselang; garis atas JUMLAH tebal.
+- Melintang menghapus peringatan lebar. Tab di baris data terakhir menyisip di atas JUMLAH.
+- Simpan lalu muat ulang: semua pengaturan dan `rot` bertahan lewat skema server.
+- Rute Word menjawab 200 (docx). Salin menghasilkan HTML ber-`rowspan`/`colspan`/latar + TSV.
+- Tema terang terbaca; tema akun uji dikembalikan ke gelap.
+
+### Belum dicoba / sengaja tidak
+
+- Salinan HTML belum ditempel ke Word/Excel sungguhan; yang diuji isi papan klip dari event salinnya. Teks tegak tidak ikut HTML.
+- Pratinjau Drive/ponsel (alasan cache `SEQ`) belum dicoba.
+- 375 px tidak dicek; editor LKJIP memang belum punya tata letak ponsel (§13).
+- ~~Penilai rumus belum mengenal rujukan absolut~~ — **dibereskan hari yang sama** (lihat §14.1).
+- Spasi baris di sel tabel ikut spasi dokumen (1,5), jadi tabel memanjang. Tidak disentuh.
+
+### 14.1 Rujukan absolut di rumus sel (susulan 2026-10-19)
+
+Ditemukan saat menguji Tahap W: `=$B$3` dan `=SUM(B2:B4)+$B$3` jadi `#ERR`.
+
+- **Sebabnya:** tokenizer `evalFormula` mengenal rujukan hanya sebagai huruf+angka, dan karakter lain dilewatinya diam-diam. `$B$3` terpecah jadi `B` dan `3`, lalu `B` tanpa nomor baris membuat rumusnya galat. Padahal penggeser rumus (`geserRujukanRumus`) sejak Tahap A sudah mempertahankan `$`.
+- **Perbaikan:** `$B$3`, `B$3`, `$B3`, dan rentang `$B$2:$B$4` dikenali lalu `$`-nya dibuang saat menilai, jadi nilainya sama dengan `B3`.
+  - `$` hanya bermakna saat rumus disalin-geser, dan itu belum ada (isi-seret = Tahap B).
+  - Sisip/hapus baris tetap menggeser rujukan ber-`$`, sama dengan Excel.
+- **`$` yang bukan bagian rujukan utuh kini galat**: `=$$B2` dulu terbaca 20, `=$5` dulu terbaca 5. Pembatasannya khusus `$`; karakter asing lain tetap seperti dulu, karena itu perubahan perilaku di luar tugas ini.
+- **Rumus KOLOM tabel tertaut sengaja tetap menolak `$`**: rumus kolom berlaku per baris, dan hurufnya diganti otomatis saat kolom dipindah di modal (`petakanRumusKolom`), jadi `$` tidak punya arti di sana. Menerimanya berarti `petakanRumusKolom` ikut harus diubah. Yang diubah hanya kalimatnya: dari `Tanda "$" tidak dikenal` menjadi "tulis huruf kolomnya saja (mis. C-D, bukan $C-$D)".
+- **Uji:** `test-lkjip-tabel-excel.mts` C9–C13 (suite jadi 97); **6 uji mutasi tertangkap**.

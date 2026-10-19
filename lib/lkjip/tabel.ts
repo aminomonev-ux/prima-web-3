@@ -25,6 +25,7 @@ export interface TabelCell {
   nf?: TabelNumFmt;    // format angka
   dec?: number;        // jumlah desimal untuk nf
   bg?: string;         // warna latar sel (hex 6 digit tanpa '#')
+  rot?: boolean;       // teks tegak (dibaca dari bawah ke atas) — kepala kolom sempit
 }
 
 export function normalizeCell(c: unknown): TabelCell {
@@ -48,6 +49,7 @@ export function normalizeCell(c: unknown): TabelCell {
     if (o.nf === 'num' || o.nf === 'rp' || o.nf === 'pct') cell.nf = o.nf;
     if (typeof o.dec === 'number' && o.dec >= 0) cell.dec = Math.min(6, Math.floor(o.dec));
     if (typeof o.bg === 'string' && /^[0-9a-fA-F]{6}$/.test(o.bg)) cell.bg = o.bg.toUpperCase();
+    if (o.rot === true) cell.rot = true;
     return cell;
   }
   return { v: '' };
@@ -161,6 +163,7 @@ export function extractRange(rows: TabelCell[][], r1: number, c1: number, r2: nu
         if (src.nf) cell.nf = src.nf;
         if (src.dec != null) cell.dec = src.dec;
         if (src.bg) cell.bg = src.bg;
+        if (src.rot) cell.rot = true;
       }
       row.push(cell);
     }
@@ -241,7 +244,14 @@ function evalFormula(expr: string, rows: TabelCell[][], r: number, c: number, se
   if (seen.has(key)) return NaN;
   const next = new Set(seen); next.add(key);
   try {
-    const toks = expr.match(/[A-Za-z]+\d+|[A-Za-z]+|\d+\.?\d*|\.\d+|>=|<=|<>|!=|==|[-+*/^(),:%<>=]/g) ?? [];
+    // Rujukan absolut gaya Excel ($B$3, B$3, $B3) dikenali lalu `$`-nya dibuang: nilainya sama dengan B3.
+    // `$` hanya bermakna saat rumus disalin-geser (belum ada di sini); sisip/hapus baris tetap menggesernya,
+    // sama dengan Excel. Dulu `$` dilewati tokenizer sehingga $B$3 terpecah jadi "B" + "3" → #ERR.
+    const mentah = expr.match(/\$?[A-Za-z]+\$?\d+|[A-Za-z]+|\d+\.?\d*|\.\d+|>=|<=|<>|!=|==|[-+*/^(),:%<>=]/g) ?? [];
+    // `$` yang bukan bagian rujukan utuh ($$B2, $5) = salah ketik → galat, bukan dilewati diam-diam.
+    const jumlahDolar = (s: string) => s.split('$').length - 1;
+    if (jumlahDolar(expr) !== jumlahDolar(mentah.join(''))) return NaN;
+    const toks = mentah.map(t => t.replace(/\$/g, ''));
     let pos = 0;
     const peek = () => toks[pos];
     const eat = () => toks[pos++];
@@ -445,25 +455,209 @@ export const DXA_PER_PX = 15;
 /** Bidang tulis A4 di antara margin docgen (`PGSZ`/`PGMAR`): 11.907 − 1.418 − 1.701 dxa ≈ 15,5 cm. */
 export const LEBAR_TULIS_DXA = 8788;
 export const LEBAR_KERTAS_PX = Math.floor(LEBAR_TULIS_DXA / DXA_PER_PX);
+/** Halaman melintang, margin sama: 16.839 − 1.701 − 1.418 dxa ≈ 24,2 cm. */
+export const LEBAR_TULIS_MELINTANG_DXA = 13720;
+export const lebarTulisDxa = (melintang: boolean): number => (melintang ? LEBAR_TULIS_MELINTANG_DXA : LEBAR_TULIS_DXA);
+export const lebarKertasPx = (melintang: boolean): number => Math.floor(lebarTulisDxa(melintang) / DXA_PER_PX);
 export const pxKeCm = (px: number): number => (px * DXA_PER_PX) / 567;
 
 /**
  * Lebar kolom Word (dxa). Tabel yang lebih lebar dari bidang tulis disusutkan sebanding (T3):
  * 5 kolom bawaan = 10.500 dxa sudah masuk margin, 8 kolom = 16.800 dxa (± 29,6 cm) keluar kertas.
+ * `rentang` (posisi "Selebar kertas"): direntangkan sebanding sampai tepat selebar bidang tulis.
  */
-export function lebarKolomWord(colWidths: unknown, ncol: number): number[] {
+export function lebarKolomWord(colWidths: unknown, ncol: number, lebarTulis = LEBAR_TULIS_DXA, rentang = false): number[] {
   const pxW = Array.isArray(colWidths) && colWidths.length === ncol ? colWidths : null;
   const mentah = pxW ? pxW.map(w => Math.max(360, Math.round(Number(w) * DXA_PER_PX))) : Array.from({ length: ncol }, () => Math.floor(9000 / ncol));
   const total = mentah.reduce((a, b) => a + b, 0);
-  if (total <= LEBAR_TULIS_DXA) return mentah;
-  return mentah.map(w => Math.max(300, Math.floor((w * LEBAR_TULIS_DXA) / total)));
+  if (rentang && ncol > 0) {
+    const hasil = mentah.map(w => Math.floor((w * lebarTulis) / total));
+    hasil[ncol - 1] += lebarTulis - hasil.reduce((a, b) => a + b, 0);
+    return hasil;
+  }
+  if (total <= lebarTulis) return mentah;
+  return mentah.map(w => Math.max(300, Math.floor((w * lebarTulis) / total)));
 }
 
 /** Lebar kolom editor yang dipaskan ke lebar kertas, sebanding (tombol "Paskan ke lebar kertas"). */
-export function paskanKeKertas(colWidths: number[]): number[] {
+export function paskanKeKertas(colWidths: number[], lebarPx = LEBAR_KERTAS_PX): number[] {
   const total = colWidths.reduce((a, b) => a + b, 0);
-  if (total <= LEBAR_KERTAS_PX) return colWidths;
-  return colWidths.map(w => Math.max(30, Math.floor((w * LEBAR_KERTAS_PX) / total)));
+  if (total <= lebarPx) return colWidths;
+  return colWidths.map(w => Math.max(30, Math.floor((w * lebarPx) / total)));
+}
+
+/** "Ratakan lebar kolom" (Distribute Columns Word): kolom c1..c2 sama lebar, jumlahnya tetap. */
+export function ratakanLebar(colWidths: number[], c1: number, c2: number): number[] {
+  const n = c2 - c1 + 1;
+  if (n < 2) return colWidths;
+  const total = colWidths.slice(c1, c2 + 1).reduce((a, b) => a + b, 0);
+  const dasar = Math.floor(total / n), sisa = total - dasar * n;
+  return colWidths.map((w, i) => (i < c1 || i > c2 ? w : dasar + (i - c1 < sisa ? 1 : 0)));
+}
+
+// ── Pengaturan cetak per tabel (Tahap W, konsep §12.2–12.3) ─────────────────
+export type PosisiTabel = 'tengah' | 'kiri' | 'penuh';
+export interface GayaTabel { selang?: boolean; jumlah?: boolean; mendatar?: boolean }
+export interface AturTabel { melintang: boolean; posisi: PosisiTabel; gaya: GayaTabel; sumber: string; utuh: boolean; kolomNomor: number | null }
+export const ATUR_BAWAAN: AturTabel = { melintang: false, posisi: 'tengah', gaya: {}, sumber: '', utuh: false, kolomNomor: null };
+
+/** Dari payload apa pun — simpanan lama tanpa kolom ini = bawaan. Kolom No. tidak berlaku di tabel tertaut (punya Nomor urut sendiri). */
+export function bacaAtur(p: unknown): AturTabel {
+  const o = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>;
+  const g = (o.gaya && typeof o.gaya === 'object' ? o.gaya : {}) as Record<string, unknown>;
+  const ncol = Array.isArray(o.kolom) ? o.kolom.length : 0;
+  const kn = o.kolomNomor;
+  const gaya: GayaTabel = {};
+  if (g.selang === true) gaya.selang = true;
+  if (g.jumlah === true) gaya.jumlah = true;
+  if (g.mendatar === true) gaya.mendatar = true;
+  return {
+    melintang: o.melintang === true,
+    posisi: o.posisi === 'kiri' || o.posisi === 'penuh' ? o.posisi : 'tengah',
+    gaya,
+    sumber: typeof o.sumber === 'string' ? o.sumber : '',
+    utuh: o.utuh === true,
+    kolomNomor: !o.tautan && typeof kn === 'number' && Number.isInteger(kn) && kn >= 0 && kn < ncol ? kn : null,
+  };
+}
+
+/** Baris di bawah tabel. "Sumber:" yang diketik sendiri tidak digandakan. */
+export function teksSumber(sumber: string): string {
+  const isi = sumber.trim().replace(/^sumber\s*:\s*/i, '');
+  return isi ? `Sumber: ${isi}` : '';
+}
+
+export const WARNA_SELANG = 'F2F2F2';
+export const GARIS_JUMLAH = 12;
+/**
+ * Sumbangan gaya tabel untuk baris `r` — dihitung saat menggambar, TIDAK ditulis ke sel (keputusan #8),
+ * jadi bertahan sesudah Perbarui dan berlaku juga di badan tabel tertaut yang terkunci.
+ */
+export function gayaSel(gaya: GayaTabel, nrow: number, headerRows: number, r: number): Partial<TabelCell> {
+  const out: Partial<TabelCell> = {};
+  const badan = r >= headerRows;
+  const jumlah = !!gaya.jumlah && badan && r === nrow - 1;
+  if (gaya.selang && badan && !jumlah && (r - headerRows) % 2 === 1) out.bg = WARNA_SELANG;
+  if (jumlah) { out.b = true; out.bd = { t: GARIS_JUMLAH }; }
+  if (gaya.mendatar) out.bd = { ...(out.bd ?? {}), l: 0, r: 0 };
+  return out;
+}
+
+/** Perkiraan lebar teks Arial (pt) — huruf besar & angka lebih lebar; tebal ± 8% lebih lebar. */
+export function perkiraLebarTeks(teks: string, pt: number, tebal: boolean): number {
+  let em = 0;
+  for (const ch of teks) em += /[ .,:;!|iIlj'()]/.test(ch) ? 0.28 : /[MW]/.test(ch) ? 0.92 : /[A-Z]/.test(ch) ? 0.68 : /[0-9]/.test(ch) ? 0.56 : 0.53;
+  return em * pt * (tebal ? 1.08 : 1);
+}
+
+/**
+ * Tinggi minimum (dxa) tiap baris yang memuat teks tegak; 0 = tidak perlu. Word TIDAK meninggikan
+ * baris bertinggi otomatis untuk teks tegak — ia membungkusnya ("TW" / "I"), terbukti di Word
+ * 2026-10-19. Sel tegak yang menutup beberapa baris membagi kebutuhannya ke baris-baris itu.
+ */
+export function tinggiBarisTegak(rows: TabelCell[][], headerRows: number, ptBawaan: number): number[] {
+  const tinggi = rows.map(() => 0);
+  rows.forEach((row, r) => row.forEach((cell, c) => {
+    if (cell.h || !cell.rot) return;
+    const teks = teksSelWord(rows, r, c);
+    if (!teks) return;
+    const pt = perkiraLebarTeks(teks, cell.fs ?? ptBawaan, r < headerRows || !!cell.b) + 6;
+    const rs = Math.max(1, Math.min(cell.rs ?? 1, rows.length - r));
+    const perBaris = Math.ceil((pt * 20) / rs / 20) * 20;
+    for (let i = r; i < r + rs; i++) tinggi[i] = Math.max(tinggi[i], perBaris);
+  }));
+  return tinggi;
+}
+
+/** Sel yang digambar: format sel sendiri menang atas gaya tabel (per sisi garis). */
+export function selBergaya(cell: TabelCell, gaya: Partial<TabelCell>): TabelCell {
+  if (!gaya.bg && !gaya.b && !gaya.bd) return cell;
+  const hasil: TabelCell = { ...cell };
+  if (gaya.bg && !cell.bg) hasil.bg = gaya.bg;
+  if (gaya.b) hasil.b = true;
+  if (gaya.bd) hasil.bd = { ...gaya.bd, ...(cell.bd ?? {}) };
+  return hasil;
+}
+
+/**
+ * Kolom No. otomatis (§12.3): badan diberi 1, 2, 3… dari atas. Dilewati: sel yang tertutup gabungan
+ * (lanjutan butir dua baris, atau bagian gabungan mendatar), sel yang ia sendiri gabungan mendatar
+ * (judul kelompok), dan baris JUMLAH bila gaya itu dipakai. Larik yang sama dipulangkan bila tak ada yang berubah.
+ */
+export function nomorUlang(rows: TabelCell[][], headerRows: number, kolom: number | null, lewatiAkhir = false): TabelCell[][] {
+  if (kolom === null) return rows;
+  let n = 0, berubah = false;
+  const hasil = rows.map((row, r) => {
+    const cell = row[kolom];
+    if (r < headerRows || !cell || cell.h || (cell.cs ?? 1) > 1 || (lewatiAkhir && r === rows.length - 1)) return row;
+    const v = String(++n);
+    if (cell.v === v) return row;
+    berubah = true;
+    return row.map((c, i) => (i === kolom ? { ...c, v } : c));
+  });
+  return berubah ? hasil : rows;
+}
+
+/**
+ * Indeks baris baru dari "+ Baris" / Tab di sel terakhir. Dengan gaya baris JUMLAH, baris baru masuk
+ * DI ATAS baris jumlah — kalau di bawahnya, baris kosong itulah yang jadi "jumlah" dan JUMLAH ikut bernomor.
+ */
+export function posisiBarisBaru(nrow: number, headerRows: number, jumlah: boolean): number {
+  return jumlah && nrow - 1 >= headerRows ? nrow - 1 : nrow;
+}
+
+/**
+ * "+ Baris" / Tab di sel terakhir — SATU aturan untuk keduanya. Baris yang masuk di atas JUMLAH ikut
+ * terhitung: rentang di baris JUMLAH yang berakhir tepat di baris data terakhir dipanjangkan ke baris
+ * baru (cara tabel Excel). Tanpa ini `=SUM(C3:C7)` tetap C3:C7 dan totalnya diam-diam kurang.
+ */
+export function sisipBarisBaru(rows: TabelCell[][], headerRows: number, ncol: number, jumlah: boolean): { rows: TabelCell[][]; di: number } {
+  const di = posisiBarisBaru(rows.length, headerRows, jumlah);
+  const hasil = sisipBarisSel(rows, di, 1, ncol);
+  if (di === rows.length) return { rows: hasil, di };
+  const j = hasil.length - 1;
+  hasil[j] = hasil[j].map(cell => (cell.v.trimStart().startsWith('=') ? { ...cell, v: panjangkanRentang(cell.v, di - 1, di) } : cell));
+  return { rows: hasil, di };
+}
+
+/** Rentang rumus yang baris akhirnya `dari` (0-based) dipanjangkan sampai `ke`; rujukan tunggal tidak disentuh. */
+function panjangkanRentang(v: string, dari: number, ke: number): string {
+  return v.replace(REF_RUMUS, (m: string, d1: string, h1: string, d2: string, a1: string, d3: string | undefined, h2: string | undefined, d4: string | undefined, a2: string | undefined, off: number, src: string) => {
+    if (off > 0 && /[A-Za-z0-9_#]/.test(src[off - 1])) return m;
+    if (h2 === undefined || a2 === undefined || Number(a2) - 1 !== dari || Number(a1) - 1 > dari) return m;
+    return `${d1}${h1}${d2}${a1}:${d3 ?? ''}${h2}${d4 ?? ''}${ke + 1}`;
+  });
+}
+
+const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/**
+ * Blok terpilih sebagai `<table>` untuk papan klip (§12.4): Word & Excel menempelnya lengkap dengan
+ * gabungan, tebal, latar, dan perataan — TSV saja kehilangan semuanya. Gabungan yang terpotong batas
+ * blok dipangkas ke blok; teksnya hanya ikut bila sel asalnya di dalam blok.
+ */
+export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: number) => string, sel: (r: number, c: number) => TabelCell = (r, c) => rows[r][c]): string {
+  const ditulis = new Set<string>();
+  let html = '<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse">';
+  for (let r = k.r1; r <= k.r2; r++) {
+    html += '<tr>';
+    for (let c = k.c1; c <= k.c2; c++) {
+      if (ditulis.has(`${r}:${c}`)) continue;
+      const a = asalSel(rows, r, c);
+      const r2 = Math.min(a.r + a.rs - 1, k.r2), c2 = Math.min(a.c + a.cs - 1, k.c2);
+      for (let rr = r; rr <= r2; rr++) for (let cc = c; cc <= c2; cc++) ditulis.add(`${rr}:${cc}`);
+      const cell = sel(a.r, a.c);
+      const gaya = [
+        cell.b ? 'font-weight:bold' : '',
+        cell.bg ? `background:#${cell.bg}` : '',
+        cell.al ? `text-align:${cell.al}` : '',
+        cell.va ? `vertical-align:${cell.va}` : '',
+      ].filter(Boolean).join(';');
+      const span = (c2 > c ? ` colspan="${c2 - c + 1}"` : '') + (r2 > r ? ` rowspan="${r2 - r + 1}"` : '');
+      html += `<td${span}${gaya ? ` style="${gaya}"` : ''}>${a.r === r && a.c === c ? escHtml(teks(r, c)) : ''}</td>`;
+    }
+    html += '</tr>';
+  }
+  return `${html}</table>`;
 }
 
 export interface Kotak { r1: number; c1: number; r2: number; c2: number }
@@ -674,7 +868,7 @@ function hapusKolomSel(rows: TabelCell[][], dari: number, sampai: number, ncol: 
 }
 
 /** Bentuk tabel di editor — larik paralel (`kolom`/`align`/`colWidths`) ikut tiap sisip/hapus kolom. */
-export interface BentukTabel { rows: TabelCell[][]; kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number }
+export interface BentukTabel { rows: TabelCell[][]; kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; kolomNomor?: number | null }
 
 /** `keKepala`: baris baru ikut kepala (disisip di bawah baris kepala terakhir yang dipilih). */
 export function sisipBaris(t: BentukTabel, di: number, n: number, keKepala = false): BentukTabel {
@@ -695,15 +889,19 @@ export function sisipKolom(t: BentukTabel, di: number, n: number): BentukTabel {
     kolom: isi(t.kolom, i => `Kolom ${di + i + 1}`),
     align: isi(t.align.slice(0, t.kolom.length), (): TabelAlign => 'left'),
     colWidths: isi(t.colWidths.slice(0, t.kolom.length), () => LEBAR_KOLOM_BAWAAN),
+    // Kolom No. ikut bergeser seperti align/colWidths (§12.3).
+    ...(t.kolomNomor != null && t.kolomNomor >= di ? { kolomNomor: t.kolomNomor + n } : {}),
   };
 }
 
 export function hapusKolom(t: BentukTabel, dari: number, sampai: number): BentukTabel {
   const tetap = <T>(arr: T[]) => arr.filter((_, c) => c < dari || c > sampai);
+  const kn = t.kolomNomor;
   return {
     ...t,
     rows: hapusKolomSel(t.rows, dari, sampai, t.kolom.length),
     kolom: tetap(t.kolom), align: tetap(t.align), colWidths: tetap(t.colWidths),
+    ...(kn == null || kn < dari ? {} : { kolomNomor: kn > sampai ? kn - (sampai - dari + 1) : null }),
   };
 }
 

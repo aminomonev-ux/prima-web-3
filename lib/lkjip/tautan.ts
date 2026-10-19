@@ -172,6 +172,9 @@ export function periksaRumusKolom(ekspresi: string, ncol: number, kolomSendiri: 
       continue;
     }
     if (ANGKA.test(t) || OPERATOR.test(t)) { keluar.push(t); continue; }
+    // `$` sengaja tidak diterima: rumus kolom berlaku per baris dan hurufnya diganti otomatis saat kolom
+    // dipindah — rujukan absolut tidak punya arti di sini (beda dgn rumus sel, yang menerimanya).
+    if (t === '$') return { galat: 'Tanda $ tidak dipakai di rumus kolom — tulis huruf kolomnya saja (mis. C-D, bukan $C-$D).' };
     return { galat: `Tanda "${t}" tidak dikenal di rumus.` };
   }
   return { rujukan: [...rujukan].sort((a, b) => a - b), terjemahan: keluar.join('') };

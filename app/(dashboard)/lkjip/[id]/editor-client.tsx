@@ -22,7 +22,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDetail } from '@/lib/lkjip/data';
-import type { SectionNode, BlockNode } from '@/lib/lkjip/numbering';
+import { nomorObjek, type SectionNode, type BlockNode, type JenisObjek } from '@/lib/lkjip/numbering';
 import type { VersiMeta } from '@/lib/lkjip/versi';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
@@ -101,6 +101,8 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
 
   const readOnly = detail.status === 'FINAL';
   const flat = useMemo(() => flatten(detail.tree), [detail.tree]);
+  // Nomor Tabel/Gambar/Grafik = fungsi yang sama dengan cache field SEQ di Word (§12.4).
+  const nomorBlok = useMemo(() => nomorObjek(detail.tree), [detail.tree]);
   // B12: aturan BAB dinilai dengan fungsi yang SAMA dengan pagar di lib/lkjip/data.ts.
   const bagian = useMemo<BagianRingkas[]>(
     () => flat.map(f => ({ id: f.node.id, parent_id: f.parentId, urutan: f.node.urutan, locked: f.node.locked })),
@@ -409,6 +411,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     void reorderBlocks(selected.id, ids);
                   }}>
                   <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
+                    nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
                         onDragStart={e => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; }}
@@ -828,12 +831,14 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // ════════════════════════════════════════════════════════════════
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
-function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHandle, tableBlocks }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[] }) {
+type NomorBlok = Map<number, { jenis: JenisObjek; nomor: number }>;
+function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: { jenis: JenisObjek; nomor: number }; nomorBlok?: NomorBlok }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
       <div className="lk-block-head">
         <span className="lk-block-headl">{dragHandle}<span className="lk-block-tag">{block.tipe}</span>
+          {nomor && <span className="lk-block-nomor">{nomor.jenis} {nomor.nomor}</span>}
           {block.tipe === 'NARASI' && !readOnly && (
             <label className="lk-block-cont" data-tooltip="Lanjutkan penomoran daftar (a,b,c / 1,2,3) dari blok narasi sebelumnya — untuk daftar yang terpotong tabel/gambar" data-tooltip-pos="below">
               <input type="checkbox" checked={continueList} onChange={e => { const v = e.target.checked; setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); }} />
@@ -849,7 +854,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, onSave, onDelete, dragHand
       )}
       {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} tahunDokumen={tahunDokumen} onSave={onSave} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
-      {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} />}
+      {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} />}
     </div>
   );
 }
@@ -941,7 +946,7 @@ function GrafikRender({ type, data }: { type: 'pie' | 'bar' | 'line'; data: Graf
 // recharts butuh DOM → render client-only (cegah SSR; section pertama auto-terpilih saat load).
 const GrafikRenderClient = dynamic(() => Promise.resolve({ default: GrafikRender }), { ssr: false });
 
-function GrafikEditor({ block, readOnly, onSave, tableBlocks }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; tableBlocks: BlockNode[] }) {
+function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; tableBlocks: BlockNode[]; nomorBlok?: NomorBlok }) {
   const p0 = block.payload as Partial<GrafikP>;
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
@@ -1029,7 +1034,11 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks }: { block: BlockNo
             <>
               <label>Tabel
                 <select value={tabelBlockId ?? ''} onChange={e => setTabelBlockId(e.target.value ? Number(e.target.value) : null)}>
-                  {tableBlocks.map((b, i) => <option key={b.id} value={b.id}>{(b.payload as { judul?: string })?.judul || `Tabel ${i + 1}`}</option>)}
+                  {tableBlocks.map((b, i) => {
+                    const judul = (b.payload as { judul?: string })?.judul;
+                    const label = `Tabel ${nomorBlok?.get(b.id)?.nomor ?? i + 1}`;
+                    return <option key={b.id} value={b.id}>{judul ? `${label} · ${judul}` : label}</option>;
+                  })}
                 </select>
               </label>
               <label>Label
@@ -1260,6 +1269,13 @@ const ED_CSS = `
   .lk-batas-kertas { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed #85B7EB; opacity: .45; pointer-events: none; }
   .lk-batas-kertas.lewat { border-left-color: #EF9F27; opacity: .9; }
   .lk-tabel-petunjuk { margin-top: 6px; font-size: 11px; color: #85B7EB; line-height: 1.5; }
+  .lk-block-nomor { font-size: 11px; font-weight: 700; color: #E6F1FB; }
+  .lk-tabel-sumber { width: 100%; margin-top: 6px; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; color: #B5D4F4; padding: 6px 10px; font-size: 12px; font-style: italic; }
+  .lk-tabel-atur { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 8px; }
+  .lk-tabel-atur-judul { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: #85B7EB; text-transform: uppercase; }
+  .lk-tabel-atur-cek { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #B5D4F4; cursor: pointer; }
+  .lk-sel-isi.tegak { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; min-height: 0; margin: 0 auto; text-overflow: clip; }
+  .lk-tabel td.lk-cell-nomor .lk-sel-isi { color: #85B7EB; }
   .lk-tabel-lebar, .lk-tabel-galat { margin-top: 8px; padding: 7px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.5; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
   .lk-tabel-lebar { background: rgba(239,159,39,0.12); border: 1px solid #EF9F27; color: #FBBF24; }
   .lk-tabel-lebar button { background: rgba(255,255,255,0.05); border: 1px solid #EF9F27; color: #FBBF24; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
@@ -1362,6 +1378,11 @@ const ED_CSS = `
   [data-theme="light"] .lk-editor-empty, [data-theme="light"] .lk-noblock { color: #6B7280; }
   [data-theme="light"] .lk-block { background: #FFFFFF; border-color: rgba(0,0,0,.1); box-shadow: 0 1px 3px rgba(15,15,18,.05); }
   [data-theme="light"] .lk-block-tag { color: #6B7280; }
+  [data-theme="light"] .lk-block-nomor { color: #0F0F12; }
+  [data-theme="light"] .lk-tabel-sumber { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #374151; }
+  [data-theme="light"] .lk-tabel-atur-judul { color: #6B7280; }
+  [data-theme="light"] .lk-tabel-atur-cek { color: #374151; }
+  [data-theme="light"] .lk-tabel td.lk-cell-nomor .lk-sel-isi { color: #6B7280; }
   [data-theme="light"] .lk-tabel-judul, [data-theme="light"] .lk-gambar-ed input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
   [data-theme="light"] .lk-tabel th { background: #F3F4F6; }
   [data-theme="light"] .lk-tabel th, [data-theme="light"] .lk-tabel td { border-color: rgba(0,0,0,.12); }

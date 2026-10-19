@@ -96,6 +96,23 @@ ok('C6 kolom: sisip sebelum D → C1-E1; hapus C → #REF!-C1',
 ok('C7 nama fungsi & angka tidak disentuh; teks biasa dibiarkan',
   geserRujukanRumus('=ROUND(B2,1)', { sumbu: 'baris', sisip: 0, n: 1 }) === '=ROUND(B3,1)' && geserRujukanRumus('A1 bukan rumus', { sumbu: 'baris', sisip: 0, n: 1 }) === 'A1 bukan rumus')
 ok('C8 tanda $ dipertahankan', geserRujukanRumus('=$A$2+A$2', { sumbu: 'baris', sisip: 0, n: 1 }) === '=$A$3+A$3')
+// Rujukan absolut dulu #ERR: tokenizer melewati `$`, jadi $B$2 terpecah jadi "B" + "2".
+const mutlak = [baris('A', '10'), baris('B', '20'), baris('C', '5'), baris('X', '')]
+const nilaiMutlak = (f: string) => { const r = mutlak.map(b => b.map(c => ({ ...c }))); r[3][1].v = f; return displayValue(r, 3, 1) }
+ok('C9 rujukan absolut dinilai sama dengan rujukan biasa ($B$2, B$2, $B2, huruf kecil)',
+  ['=$B$2', '=B$2', '=$B2', '=$b$2', '=B2'].every(f => nilaiMutlak(f) === '20'), ['=$B$2', '=B$2', '=$B2'].map(nilaiMutlak).join(','))
+ok('C10 rentang & fungsi ber-$: SUM($B$1:$B$3) = 35, campuran + rujukan tunggal = 45, rentang telanjang = 35',
+  nilaiMutlak('=SUM($B$1:$B$3)') === '35' && nilaiMutlak('=SUM($B1:B$3)+$B$1') === '45' && nilaiMutlak('=$B$1:$B$3') === '35' && nilaiMutlak('=MAX($B$1:$B$3)*2') === '40',
+  [nilaiMutlak('=SUM($B$1:$B$3)'), nilaiMutlak('=SUM($B1:B$3)+$B$1'), nilaiMutlak('=$B$1:$B$3')].join(','))
+const mutlakGeser = sisipBarisSel([...mutlak.slice(0, 3), [sel('X'), sel('=$B$2*2')]], 0, 1, 2)
+ok('C11 sisip baris di atas: $B$2 bergeser jadi $B$3 (cara Excel) dan nilainya tetap 40',
+  mutlakGeser[4][1].v === '=$B$3*2' && displayValue(mutlakGeser, 4, 1) === '40', `${mutlakGeser[4][1].v} = ${displayValue(mutlakGeser, 4, 1)}`)
+ok('C12 `$` yang bukan bagian rujukan utuh = galat, bukan dilewati diam-diam (dulu =$$B2 terbaca 20, =$5 terbaca 5)',
+  nilaiMutlak('=$B$') === '#ERR' && nilaiMutlak('=$$B2') === '#ERR' && nilaiMutlak('=$5') === '#ERR' && nilaiMutlak('=5') === '5',
+  ['=$B$', '=$$B2', '=$5'].map(nilaiMutlak).join(','))
+ok('C13 rumus KOLOM tertaut tetap menolak $ — dengan kalimat yang menunjuk cara benar',
+  ((periksaRumusKolom('=$C-D', 4, 0) as { galat?: string }).galat ?? '').includes('Tanda $ tidak dipakai di rumus kolom')
+  && ((periksaRumusKolom('=C-$D', 4, 0) as { galat?: string }).galat ?? '').includes('bukan $C-$D'))
 
 // ─── D. Sisip / hapus baris & kolom ───────────────────────────────────────────
 console.log('\nD. Sisip/hapus baris & kolom')
@@ -280,7 +297,7 @@ ok('K7 T6: tempelan lebih lebar ditawari tambah kolom, sisanya DISEBUT',
 ok('K8 ketikan di sel berformat dirapikan dari keadaan TERKINI (bukan closure lama)', badan(te, 'const rapikanKetikan =').includes('nilaiKetikan(c, c.v)') && badan(te, 'const selesaiSunting = (arah?: { dr: number; dc: number }) =>').includes('rapikanKetikan(s.r, s.c);'))
 ok('K9 kepala N baris = sisip/buang di atas badan (E3) untuk SEMUA tabel', badan(te, 'const gantiBarisKepala = async').includes('pasangBentuk(ubahJumlahKepala(bentuk(), n));'))
 ok('K10 lebar kolom: pegangan tiap garis + cm + dobel-klik paskan + garis batas kertas',
-  te.includes('onDoubleClick={e => { e.stopPropagation(); paskanIsi(ci); }}') && te.includes('{cm(lebarTip.px)} cm') && te.includes('left: 38 + LEBAR_KERTAS_PX'))
+  te.includes('onDoubleClick={e => { e.stopPropagation(); paskanIsi(ci); }}') && te.includes('{cm(lebarTip.px)} cm') && te.includes('left: 38 + kertasPx'))
 ok('K11 editor & kisi modal memakai SATU hook pilihan (E5)', te.includes("import { usePilihanSel } from './usePilihanSel';") && kisiSrc.includes("import { usePilihanSel } from './usePilihanSel';"))
 ok('K12 kisi modal tidak punya aturan gabung sendiri (pakai gabungKepala/rapikanKepala/unmergeAt)',
   !kisiSrc.includes('mergeCells(') && kisiSrc.includes('gabungKepala(kepala, letak, rencana, tambahBaris)') && kisiSrc.includes('rapikanKepala(kepala, letak)') && kisiSrc.includes('unmergeAt(kepala, k.r1, k.c1, ncol)'))

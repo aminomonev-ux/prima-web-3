@@ -6,9 +6,12 @@
 //  - settings.xml updateFields=true → Word refresh field saat dibuka
 // escapeXml WAJIB di semua teks user. PERF-C3/L18: pizzip dynamic-import.
 import { getDokumenDetail } from './data';
-import { flattenTree, type SectionNode, type BlockNode } from './numbering';
+import { flattenTree, nomorObjek, type SectionNode, type BlockNode } from './numbering';
 import { DEFAULT_STYLE, type StyleConfig } from './schemas';
-import { normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord } from './tabel';
+import {
+  normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord, bacaAtur, lebarTulisDxa, teksSumber, gayaSel, selBergaya, nomorUlang, tinggiBarisTegak,
+  LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
+} from './tabel';
 import { getDriveClient } from '@/lib/services/drive';
 
 function escapeXml(s: unknown): string {
@@ -203,24 +206,31 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
 // ── Caption ber-SEQ (auto-nomor + masuk Daftar Tabel/Gambar) ──
 // Judul tabel di ATAS tabel → `keepNext` (W1: tanpa ini judul bisa tertinggal sendirian di dasar
 // halaman). Judul gambar/grafik di BAWAH, jadi yang diikat paragraf gambarnya (`drawingPara`).
-function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number, keepNext = false): string {
+// `nomor` = angka cache field SEQ dari `nomorObjek` — Word menyegarkannya sendiri, penampil lain tidak.
+function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number, keepNext = false, nomor = 1, jc: 'center' | 'left' = 'center'): string {
   const capSz = Math.max(18, sz - 2);
   const lead = `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve">${label} </w:t></w:r>`;
-  const seq = field(` SEQ ${label} \\* ARABIC `, '1');
+  const seq = field(` SEQ ${label} \\* ARABIC `, String(nomor));
   const tail = text.trim() ? `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve"> </w:t></w:r><w:r>${rPr(font, capSz)}<w:t xml:space="preserve">${escapeXml(text.trim())}</w:t></w:r>` : '';
-  return `<w:p><w:pPr><w:pStyle w:val="Caption"/>${keepNext ? '<w:keepNext/>' : ''}<w:jc w:val="center"/></w:pPr>${lead}${seq}${tail}</w:p>`;
+  return `<w:p><w:pPr><w:pStyle w:val="Caption"/>${keepNext ? '<w:keepNext/>' : ''}<w:jc w:val="${jc}"/></w:pPr>${lead}${seq}${tail}</w:p>`;
 }
 
-export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string): string {
+export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string, nomor = 1): string {
   const p = (payload ?? {}) as { judul?: string; kolom?: string[]; align?: string[]; colWidths?: number[]; rows?: unknown };
   const kolom = Array.isArray(p.kolom) ? p.kolom : [];
   const colAlign = Array.isArray(p.align) ? p.align : [];
   if (kolom.length === 0) return '';
   const ncol = kolom.length;
-  const rows = normalizeRows(p.rows).map(r => { while (r.length < ncol) r.push({ v: '' }); return r.slice(0, ncol); });
+  const atur = bacaAtur(p);
+  const rowsMentah = normalizeRows(p.rows).map(r => { while (r.length < ncol) r.push({ v: '' }); return r.slice(0, ncol); });
+  const hrCount = Math.max(0, Math.min(Number((p as { headerRows?: number }).headerRows) || 0, rowsMentah.length));
+  const rows = nomorUlang(rowsMentah, hrCount, atur.kolomNomor, !!atur.gaya.jumlah);
+  const nrow = rows.length;
   const meta = buildTableMeta(rows, ncol);
-  // Lebar kolom: colWidths (px → dxa) bila lengkap, selain itu bagi rata; disusutkan ke lebar kertas (T3).
-  const widths = lebarKolomWord(p.colWidths, ncol);
+  // Lebar kolom: colWidths (px → dxa) bila lengkap, selain itu bagi rata; disusutkan ke lebar kertas (T3),
+  // lebar kertas melintang bila tabel dicetak melintang, direntangkan bila posisinya "selebar kertas".
+  const widths = lebarKolomWord(p.colWidths, ncol, lebarTulisDxa(atur.melintang), atur.posisi === 'penuh');
+  const sumber = teksSumber(atur.sumber);
   const spanW = (c: number, cs: number) => { let s = 0; for (let i = c; i < c + cs && i < ncol; i++) s += widths[i]; return s; };
   const border = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>`;
   const sideXml = (tag: string, w: number | undefined) =>
@@ -233,54 +243,70 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
   const jcOf = (a: string | undefined) => a === 'right' ? 'right' : a === 'center' ? 'center' : a === 'justify' ? 'both' : 'left';
   const vaOf = (v: string | undefined) => v === 'middle' ? 'center' : v === 'bottom' ? 'bottom' : 'top';
 
-  const hrCount = Math.max(0, Math.min(Number((p as { headerRows?: number }).headerRows) || 0, rows.length));
+  const tinggiTegak = tinggiBarisTegak(rows, hrCount, cellSz / 2);
   const renderRow = (r: number, isHeader: boolean): string => {
     let cells = '';
+    // Gaya tabel dihitung di sini, tidak tersimpan di sel; format sel sendiri tetap menang (keputusan #8).
+    const tambahan = gayaSel(atur.gaya, nrow, hrCount, r);
     for (let c = 0; c < ncol; c++) {
       const m = meta[r][c];
       if (m.kind === 'skip') continue;
-      const cell = rows[r][c] ?? { v: '' };
+      const cell = selBergaya(rows[r][c] ?? { v: '' }, tambahan);
+      // Urutan anak tcPr mengikuti skema OOXML: tcW, gridSpan, vMerge, tcBorders, shd, textDirection, vAlign.
       const tcPr = [`<w:tcW w:w="${spanW(c, m.cs)}" w:type="dxa"/>`];
       if (m.cs > 1) tcPr.push(`<w:gridSpan w:val="${m.cs}"/>`);
       if (m.kind === 'origin' && m.rs > 1) tcPr.push(`<w:vMerge w:val="restart"/>`);
       if (m.kind === 'vcont') tcPr.push(`<w:vMerge w:val="continue"/>`);
-      if (cell.va) tcPr.push(`<w:vAlign w:val="${vaOf(cell.va)}"/>`);
-      else if (isHeader) tcPr.push(`<w:vAlign w:val="center"/>`);
       tcPr.push(borderOf(cell.bd));
       const fill = cell.bg ? cell.bg : (isHeader ? headerFill : '');
       if (fill) tcPr.push(`<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>`);
+      if (cell.rot) tcPr.push(`<w:textDirection w:val="btLr"/>`);
+      if (cell.va) tcPr.push(`<w:vAlign w:val="${vaOf(cell.va)}"/>`);
+      else if (isHeader) tcPr.push(`<w:vAlign w:val="center"/>`);
       const csz = cell.fs ? cell.fs * 2 : cellSz;
       const align = cell.al ?? (isHeader ? 'center' : colAlign[c]);
       // Kepala diikat ke baris sesudahnya: sejak baris badan `cantSplit` (W2), baris data yang tak
       // muat pindah utuh ke halaman berikut dan kepalanya dulu tertinggal sendirian di dasar halaman.
-      const ikat = isHeader ? '<w:keepNext/>' : '';
+      // "Jaga tetap utuh" mengikat semua baris kecuali yang terakhir (cara Word); baris terakhir
+      // diikat ke baris Sumber supaya keterangannya tidak lepas ke halaman berikut.
+      const ikat = isHeader || (atur.utuh && r < nrow - 1) || (!!sumber && r === nrow - 1) ? '<w:keepNext/>' : '';
+      // Urutan anak pPr menurut skema: keepNext, spacing, jc.
       const body = m.kind === 'vcont'
         ? `<w:p><w:pPr>${ikat}<w:spacing w:after="0"/></w:pPr></w:p>`
-        : `<w:p><w:pPr>${ikat}<w:jc w:val="${jcOf(align)}"/><w:spacing w:after="0"/></w:pPr>` +
+        : `<w:p><w:pPr>${ikat}<w:spacing w:after="0"/><w:jc w:val="${jcOf(align)}"/></w:pPr>` +
           `<w:r>${rPr(font, csz, { bold: isHeader || !!cell.b })}<w:t xml:space="preserve">${escapeXml(teksSelWord(rows, r, c))}</w:t></w:r></w:p>`;
       cells += `<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${body}</w:tc>`;
     }
     // W2: baris badan juga `cantSplit` — dulu baris berteks panjang bisa terbelah dua halaman.
-    const trPr = isHeader ? `<w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>` : `<w:trPr><w:cantSplit/></w:trPr>`;
+    // Baris bertulisan tegak diberi tinggi minimum — Word tidak meninggikannya sendiri (teksnya terbungkus).
+    const tinggi = tinggiTegak[r] ? `<w:trHeight w:val="${tinggiTegak[r]}" w:hRule="atLeast"/>` : '';
+    const trPr = isHeader ? `<w:trPr><w:tblHeader/><w:cantSplit/>${tinggi}</w:trPr>` : `<w:trPr><w:cantSplit/>${tinggi}</w:trPr>`;
     return `<w:tr>${trPr}${cells}</w:tr>`;
   };
   // Header = kolom thead (1 baris, default) ATAU hrCount baris pertama rows (header bertingkat).
+  const borderKepalaLama = atur.gaya.mendatar ? borderOf({ l: 0, r: 0 }) : border;
   const headerRow = hrCount > 0 ? '' : `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>` +
     kolom.map((k, ci) =>
-      `<w:tc><w:tcPr><w:tcW w:w="${widths[ci]}" w:type="dxa"/>${border}<w:shd w:val="clear" w:color="auto" w:fill="${headerFill}"/></w:tcPr>` +
-      `<w:p><w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr>` +
+      `<w:tc><w:tcPr><w:tcW w:w="${widths[ci]}" w:type="dxa"/>${borderKepalaLama}<w:shd w:val="clear" w:color="auto" w:fill="${headerFill}"/></w:tcPr>` +
+      `<w:p><w:pPr><w:keepNext/><w:spacing w:after="0"/><w:jc w:val="center"/></w:pPr>` +
       `<w:r>${rPr(font, cellSz, { bold: true })}<w:t xml:space="preserve">${escapeXml(k)}</w:t></w:r></w:p></w:tc>`,
     ).join('') + `</w:tr>`;
   const dataRows = rows.map((_row, r) => renderRow(r, r < hrCount)).join('');
 
+  const garis = (tag: string, ada: boolean) => (ada ? `<w:${tag} w:val="single" w:sz="4" w:color="000000"/>` : `<w:${tag} w:val="nil"/>`);
+  const tegak = !atur.gaya.mendatar;
   const table = `<w:tbl>` +
-    `<w:tblPr><w:tblW w:w="${widths.reduce((a, b) => a + b, 0)}" w:type="dxa"/><w:jc w:val="center"/>` +
-    `<w:tblBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideH w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="single" w:sz="4" w:color="000000"/></w:tblBorders>` +
+    `<w:tblPr><w:tblW w:w="${widths.reduce((a, b) => a + b, 0)}" w:type="dxa"/><w:jc w:val="${atur.posisi === 'kiri' ? 'left' : 'center'}"/>` +
+    `<w:tblBorders>${garis('top', true)}${garis('left', tegak)}${garis('bottom', true)}${garis('right', tegak)}${garis('insideH', true)}${garis('insideV', tegak)}</w:tblBorders>` +
     // Jarak isi sel = bawaan Word (0,19 cm). Tanpa ini teks sel menempel ke garis kiri — styles.xml
     // dokumen ini tak punya gaya "Normal Table" yang biasanya membawa jarak itu.
     `<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar>` +
     `</w:tblPr><w:tblGrid>${widths.map(w => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${headerRow}${dataRows}</w:tbl>`;
-  return caption('Tabel', p.judul ?? '', font, sz, true) + table + para('', font, sz);
+  const baris = sumber
+    ? `<w:p><w:pPr><w:spacing w:before="60" w:after="0"/><w:jc w:val="left"/></w:pPr><w:r>${rPr(font, Math.max(16, sz - 4), { italic: true })}<w:t xml:space="preserve">${escapeXml(sumber)}</w:t></w:r></w:p>`
+    : '';
+  // Judul mengikuti letak tabel: tabel rata kiri dengan judul di tengah terlihat lepas dari tabelnya.
+  return caption('Tabel', p.judul ?? '', font, sz, true, nomor, atur.posisi === 'kiri' ? 'left' : 'center') + table + baris + para('', font, sz);
 }
 
 export type ImageInfo = { id: number; relId: string; mediaName: string; ext: string; wEmu: number; hEmu: number };
@@ -331,20 +357,20 @@ function drawingPara(info: ImageInfo): string {
     `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
 
-export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>): string {
+export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor = 1): string {
   const p = (payload ?? {}) as { judul?: string; fileId?: string; caption?: string };
   const text = [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
   const info = p.fileId ? imgMap.get(p.fileId) : undefined;
   const body = info ? drawingPara(info) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
-  return body + caption('Gambar', text, font, sz) + para('', font, sz);
+  return body + caption('Gambar', text, font, sz, false, nomor) + para('', font, sz);
 }
 
-function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>): string {
+function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor = 1): string {
   const p = (payload ?? {}) as { judul?: string; imageFileId?: string; caption?: string };
   const text = [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
   const info = p.imageFileId ? imgMap.get(p.imageFileId) : undefined;
   const body = info ? drawingPara(info) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
-  return body + caption('Grafik', text, font, sz) + para('', font, sz);
+  return body + caption('Grafik', text, font, sz, false, nomor) + para('', font, sz);
 }
 
 function buildHeadingXml(node: SectionNode): string {
@@ -353,12 +379,12 @@ function buildHeadingXml(node: SectionNode): string {
   return `<w:p><w:pPr><w:pStyle w:val="Heading${lvl}"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<string, ImageInfo>, headerFill: string, indentTwips = 0, alloc?: NumAlloc): string {
+function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<string, ImageInfo>, headerFill: string, indentTwips = 0, alloc?: NumAlloc, nomor = 1): string {
   switch (b.tipe) {
     case 'NARASI': { const p = (b.payload as { html?: string; continueList?: boolean }) ?? {}; return narasiToXml(p.html ?? '', font, sz, indentTwips, alloc, p.continueList === true); }
-    case 'TABEL':  return buildTabelXml(b.payload, font, sz, headerFill);
-    case 'GAMBAR': return buildGambarXml(b.payload, font, sz, imgMap);
-    case 'GRAFIK': return buildGrafikXml(b.payload, font, sz, imgMap);
+    case 'TABEL':  return buildTabelXml(b.payload, font, sz, headerFill, nomor);
+    case 'GAMBAR': return buildGambarXml(b.payload, font, sz, imgMap, nomor);
+    case 'GRAFIK': return buildGrafikXml(b.payload, font, sz, imgMap, nomor);
     default:       return '';
   }
 }
@@ -371,22 +397,40 @@ function indexPage(title: string, instr: string, font: string): string {
 
 // ── Page/section helpers (footer + nomor halaman) ──
 const PGSZ = `<w:pgSz w:w="11907" w:h="16839"/>`;
+const PGSZ_MELINTANG = `<w:pgSz w:w="16839" w:h="11907" w:orient="landscape"/>`;
 const PGMAR = `<w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1701" w:header="708" w:footer="708" w:gutter="0"/>`;
 
-function sectProps(opts: { footer: boolean; numFmt?: 'lowerRoman' | 'decimal'; start?: number }): string {
-  const fref = opts.footer ? `<w:footerReference r:id="rId4" w:type="default"/>` : '';
+// Halaman melintang memakai footer sendiri (rId5): tab kanan teks footer harus di tepi kanan bidang tulisnya.
+function sectProps(opts: { footer: boolean; numFmt?: 'lowerRoman' | 'decimal'; start?: number; melintang?: boolean }): string {
+  const fref = opts.footer ? `<w:footerReference r:id="${opts.melintang ? 'rId5' : 'rId4'}" w:type="default"/>` : '';
   const pgnum = opts.numFmt ? `<w:pgNumType w:fmt="${opts.numFmt}"${opts.start ? ` w:start="${opts.start}"` : ''}/>` : '';
-  return `${fref}${PGSZ}${PGMAR}${pgnum}`;
+  return `${fref}${opts.melintang ? PGSZ_MELINTANG : PGSZ}${PGMAR}${pgnum}`;
 }
 const sectBreak = (props: string) => `<w:p><w:pPr><w:sectPr>${props}</w:sectPr></w:pPr></w:p>`;
+// Pemisah section di dalam isi dibuat setipis mungkin: paragrafnya ikut memakan tempat, dan di
+// dasar halaman yang penuh tabel ia sendirian bisa melahirkan halaman kosong.
+const sectBreakRapat = (props: string) =>
+  `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/></w:rPr><w:sectPr>${props}</w:sectPr></w:pPr></w:p>`;
 
-function buildFooterXml(cfg: StyleConfig): string {
+type Potongan = { melintang: boolean; xml: string };
+/** Potongan isi yang berurutan dengan orientasi sama digabung jadi satu section. */
+export function kelompokSection(potongan: Potongan[]): Potongan[] {
+  const seg: Potongan[] = [];
+  for (const p of potongan) {
+    const akhir = seg[seg.length - 1];
+    if (akhir && akhir.melintang === p.melintang) akhir.xml += p.xml;
+    else seg.push({ melintang: p.melintang, xml: p.xml });
+  }
+  return seg.length ? seg : [{ melintang: false, xml: '' }];
+}
+
+export function buildFooterXml(cfg: StyleConfig, lebarTulis = LEBAR_TULIS_DXA): string {
   const font = cfg.fontFamily;
   const sz = Math.max(18, Math.round(cfg.fontSizePt * 2) - 4);
   const pageField = field(' PAGE \\* MERGEFORMAT ', '1');
   const text = (cfg.footerText ?? '').trim();
   const p = text
-    ? `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="8788"/></w:tabs></w:pPr>` +
+    ? `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="${lebarTulis}"/></w:tabs></w:pPr>` +
       `<w:r>${rPr(font, sz)}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>` +
       `<w:r><w:tab/></w:r>${pageField}</w:p>`
     : `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${pageField}</w:p>`;
@@ -442,7 +486,7 @@ function kataPengantarPage(cfg: StyleConfig, font: string, sz: number, alloc?: N
   return title + para('', font, sz) + isi + sig;
 }
 
-function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, tahun: number, imgMap: Map<string, ImageInfo>, alloc: NumAlloc): string {
+export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, tahun: number, imgMap: Map<string, ImageInfo>, alloc: NumAlloc): string {
   const font = cfg.fontFamily;
   const sz = Math.round(cfg.fontSizePt * 2);
   const indentTwips = Math.round((cfg.firstLineIndentCm ?? 0) * 567); // 1cm ≈ 567 twips
@@ -464,21 +508,43 @@ function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, tahun: 
     indexPage('DAFTAR GRAFIK', ` TOC \\h \\z \\c "Grafik" `, font),
   ].join(pageBreak());
 
-  const sections = flattenTree(tree).map(node =>
-    buildHeadingXml(node) + node.blocks.map(b => buildBlockXml(b, font, sz, imgMap, cfg.tableHeaderFill, indentTwips, alloc)).join(''),
-  ).join('');
+  // Isi dipotong per judul/blok bersama orientasinya. Tabel "Cetak melintang" mendapat section
+  // melintang sendiri (§12.2); judul bagian yang LANGSUNG diikuti tabel melintang ikut melintang —
+  // kalau tidak, judulnya tertinggal sendirian di halaman tegak sebelumnya.
+  const nomor = nomorObjek(tree);
+  const potongan: (Potongan & { judul: boolean })[] = [];
+  for (const node of flattenTree(tree)) {
+    potongan.push({ judul: true, melintang: false, xml: buildHeadingXml(node) });
+    for (const b of node.blocks) {
+      const xml = buildBlockXml(b, font, sz, imgMap, cfg.tableHeaderFill, indentTwips, alloc, nomor.get(b.id)?.nomor);
+      potongan.push({ judul: false, melintang: b.tipe === 'TABEL' && xml !== '' && bacaAtur(b.payload).melintang, xml });
+    }
+  }
+  for (let i = potongan.length - 2; i >= 0; i--) if (potongan[i].judul && potongan[i + 1].melintang) potongan[i].melintang = true;
+  const isi = kelompokSection(potongan);
+
+  // Nomor halaman isi mulai dari 1 HANYA di section isi pertama; section sesudahnya (melintang,
+  // lalu tegak lagi) tanpa `start` supaya nomornya bersambung, bukan kembali ke 1 sesudah tabel melintang.
+  const propsIsi = (melintang: boolean, pertama: boolean) => cfg.pageNumber
+    ? sectProps({ footer: true, numFmt: 'decimal', start: pertama ? 1 : undefined, melintang })
+    : sectProps({ footer: false, melintang });
+  const rangkai = (seg: Potongan[]) => seg.map((s, i) => i < seg.length - 1
+    ? s.xml + sectBreakRapat(propsIsi(s.melintang, i === 0))
+    : `${s.xml}<w:sectPr>${propsIsi(s.melintang, i === 0)}</w:sectPr>`).join('');
 
   // Penomoran: cover (tanpa nomor) · daftar (romawi i,ii) · isi (arab 1,2) — bila pageNumber+romanFront.
   let body: string;
-  if (!cfg.pageNumber) {
-    body = `${cover}${pageBreak()}${daftar}${pageBreak()}${sections}<w:sectPr>${sectProps({ footer: false })}</w:sectPr>`;
-  } else if (cfg.romanFront) {
+  if (cfg.pageNumber && cfg.romanFront) {
     body = `${cover}${sectBreak(sectProps({ footer: false }))}` +
-      `${daftar}${sectBreak(sectProps({ footer: true, numFmt: 'lowerRoman', start: 1 }))}` +
-      `${sections}<w:sectPr>${sectProps({ footer: true, numFmt: 'decimal', start: 1 })}</w:sectPr>`;
+      `${daftar}${sectBreak(sectProps({ footer: true, numFmt: 'lowerRoman', start: 1 }))}` + rangkai(isi);
   } else {
-    body = `${cover}${sectBreak(sectProps({ footer: false }))}` +
-      `${daftar}${pageBreak()}${sections}<w:sectPr>${sectProps({ footer: true, numFmt: 'decimal', start: 1 })}</w:sectPr>`;
+    // Daftar berbagi section dengan awal isi. Kalau isi dibuka tabel melintang, daftar tetap tegak:
+    // section-nya diakhiri sendiri (pemisah section sudah membuka halaman baru, jadi tanpa pageBreak).
+    const awal = cfg.pageNumber ? `${cover}${sectBreak(sectProps({ footer: false }))}` : `${cover}${pageBreak()}`;
+    const seg = isi[0].melintang
+      ? [{ melintang: false, xml: daftar }, ...isi]
+      : [{ melintang: false, xml: `${daftar}${pageBreak()}${isi[0].xml}` }, ...isi.slice(1)];
+    body = awal + rangkai(seg);
   }
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -495,6 +561,7 @@ const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` 
   `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>` +
   `<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>` +
   `<Override PartName="/word/footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>` +
+  `<Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>` +
   `</Types>`;
 
 const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -508,6 +575,7 @@ const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
   `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>` +
   `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>` +
   `<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer.xml"/>` +
+  `<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>` +
   `</Relationships>`;
 
 const SETTINGS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -559,9 +627,17 @@ async function collectImages(tree: SectionNode[]): Promise<{ map: Map<string, Im
 export async function generateLkjipDocx(dokumenId: number): Promise<{ buffer: Buffer; filename: string }> {
   const detail = await getDokumenDetail(dokumenId);
   if (!detail) throw new Error(`Dokumen LKJIP id=${dokumenId} tidak ditemukan`);
-  const cfg = detail.style_config ?? DEFAULT_STYLE;
-  const images = await collectImages(detail.tree);
+  return rakitDocx(detail, await collectImages(detail.tree));
+}
 
+type BahanDocx = { tree: SectionNode[]; judul: string; tahun: number; canonical_id: string; style_config?: StyleConfig | null };
+type GambarDocx = Awaited<ReturnType<typeof collectImages>>;
+/** Merakit berkas .docx dari pohon dokumen — dipisah dari pengambilan data supaya bisa diuji tanpa DB/Drive. */
+export async function rakitDocx(
+  detail: BahanDocx,
+  images: GambarDocx = { map: new Map(), media: [], relsXml: '', ctXml: '' },
+): Promise<{ buffer: Buffer; filename: string }> {
+  const cfg = detail.style_config ?? DEFAULT_STYLE;
   const PizZipMod = await import('pizzip');
   const PizZip = PizZipMod.default;
   const zip = new PizZip();
@@ -574,6 +650,7 @@ export async function generateLkjipDocx(dokumenId: number): Promise<{ buffer: Bu
   zip.file('word/numbering.xml', buildNumbering(numAlloc.instances));
   zip.file('word/settings.xml', SETTINGS_XML);
   zip.file('word/footer.xml', buildFooterXml(cfg));
+  zip.file('word/footer2.xml', buildFooterXml(cfg, LEBAR_TULIS_MELINTANG_DXA));
   zip.file('word/document.xml', docXml);
   for (const mf of images.media) zip.file(mf.name, mf.buf);
 

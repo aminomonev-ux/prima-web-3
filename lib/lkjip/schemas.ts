@@ -172,6 +172,7 @@ const CellSchema = z.union([
     nf:  z.enum(['num', 'rp', 'pct']).optional(),
     dec: z.coerce.number().int().min(0).max(6).optional(),
     bg:  z.string().regex(/^[0-9a-fA-F]{6}$/).optional(),
+    rot: z.boolean().optional(),
   }),
 ]).transform(c => (typeof c === 'string' ? { v: c } : c));
 
@@ -246,6 +247,13 @@ export const TabelPayloadSchema = z.object({
   headerRows: z.coerce.number().int().min(0).max(4).default(0),
   rows:  z.array(z.array(CellSchema).max(12)).max(500).default([]),
   tautan: TautanSchema.optional(),
+  // Pengaturan cetak (Tahap W, konsep tabel-excel §12) — WAJIB terdaftar, alasan sama dgn `tautan`.
+  melintang:  z.boolean().default(false),
+  posisi:     z.enum(['tengah', 'kiri', 'penuh']).default('tengah'),
+  gaya:       z.object({ selang: z.boolean().optional(), jumlah: z.boolean().optional(), mendatar: z.boolean().optional() }).default({}),
+  sumber:     z.string().max(300).default(''),
+  utuh:       z.boolean().default(false),
+  kolomNomor: z.number().int().min(0).max(11).nullable().default(null),
 }).superRefine((p, ctx) => {
   if (!p.tautan) return;
   // Resep menempel pada KOLOM dan BARIS tabel; kalau tidak sejajar, Perbarui berikutnya

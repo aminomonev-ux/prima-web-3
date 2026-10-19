@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Combine, Split, Copy, ClipboardPaste,
-  Undo2, Redo2, Save, Link2, Unlink, RefreshCw, SlidersHorizontal,
+  Undo2, Redo2, Save, Link2, Unlink, RefreshCw, SlidersHorizontal, RotateCcw, Columns3,
 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
@@ -20,8 +20,9 @@ import {
   normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel,
   selGalat, daftarSelGalat, nilaiKetikan, pastikanKepalaSel, namaKolomDariKepala, sisipBaris, hapusBaris, sisipKolom, hapusKolom,
   kosongkanBlok, tanpaFormat, teksDiBaris, ubahJumlahKepala, paskanKeKertas, pxKeCm,
-  BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, BATAS_BARIS_KEPALA, LEBAR_KOLOM_BAWAAN, LEBAR_KERTAS_PX,
-  type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel,
+  bacaAtur, gayaSel, selBergaya, nomorUlang, ratakanLebar, blokKeHtml, asalSel, sisipBarisBaru, lebarKertasPx, posisiBarisBaru,
+  BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, BATAS_BARIS_KEPALA, LEBAR_KOLOM_BAWAAN, GARIS_JUMLAH,
+  type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel, type AturTabel, type GayaTabel, type PosisiTabel, type TabelBorder,
 } from '@/lib/lkjip/tabel';
 import { kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, ambilIsianTangan, nilaiPerbarui, kalimatIsianYatim, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
 import { fetchJson } from '@/lib/shared/api';
@@ -32,16 +33,30 @@ import { usePilihanSel } from './usePilihanSel';
 const TautanModal = dynamic(() => import('./TautanModal'), { ssr: false });
 
 type TabelP = { judul: string; kolom: string[]; align: TabelAlign[]; colWidths?: number[]; headerRows?: number; rows: TabelCell[][]; tautan?: Tautan };
-type Snap = { kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; rows: TabelCell[][] };
+type Snap = { kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; rows: TabelCell[][]; atur: AturTabel };
 type Sunting = { r: number; c: number; awal: string; ganti: boolean };
 
 const PESAN_BADAN = 'Badan tabel tertaut mengikuti sumbernya — ubah lewat Atur Bentuk, atau Lepas Tautan untuk menyunting bebas.';
 const PESAN_KOLOM_TAUT = 'Kolom tabel tertaut diatur lewat Atur Bentuk.';
+const PESAN_NOMOR = 'Kolom No. diisi otomatis 1, 2, 3… — matikan lewat pilihan "No. otomatis" di bawah tabel untuk mengetiknya sendiri.';
 const ARAH: Record<string, { dr: number; dc: number }> = {
   ArrowUp: { dr: -1, dc: 0 }, ArrowDown: { dr: 1, dc: 0 }, ArrowLeft: { dr: 0, dc: -1 }, ArrowRight: { dr: 0, dc: 1 },
 };
 const potong = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const cm = (px: number) => pxKeCm(px).toFixed(1).replace('.', ',');
+/** Garis sel di layar: 0 = tanpa garis, tebal (≥ GARIS_JUMLAH) = 2px; selain itu garis biasa dari CSS. */
+const garisCss = (bd?: TabelBorder): React.CSSProperties => {
+  if (!bd) return {};
+  const out: React.CSSProperties = {};
+  const sisi = [['t', 'Top'], ['r', 'Right'], ['b', 'Bottom'], ['l', 'Left']] as const;
+  for (const [k, nama] of sisi) {
+    const w = bd[k];
+    if (w === undefined) continue;
+    if (w <= 0) out[`border${nama}Style`] = 'hidden';
+    else if (w >= GARIS_JUMLAH) { out[`border${nama}Style`] = 'solid'; out[`border${nama}Width`] = 2; }
+  }
+  return out;
+};
 
 export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; onSave: (p: unknown) => void }) {
   // E1: tabel lama ber-headerRows 0 dijadikan 1 baris kepala berisi nama kolom saat dibuka — keluaran
@@ -63,6 +78,8 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
   const [rows, setRows] = useState<TabelCell[][]>(awal.rows);
   const [colWidths, setColWidths] = useState<number[]>(() => awal.kolom0.map((_, i) => awal.p0.colWidths?.[i] ?? LEBAR_KOLOM_BAWAAN));
   const [headerRows, setHeaderRows] = useState<number>(awal.headerRows);
+  // Pengaturan cetak (Tahap W): kertas melintang, posisi, gaya, Sumber, jaga utuh, kolom No.
+  const [atur, setAtur] = useState<AturTabel>(() => bacaAtur(awal.p0));
   const ncol = kolom.length;
   const pil = usePilihanSel(rows, ncol);
   const { sel } = pil;
@@ -81,14 +98,20 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
   const resizeRef = useRef<{ ci: number; x: number; w: number } | null>(null);
   const [lebarTip, setLebarTip] = useState<{ ci: number; px: number } | null>(null);
 
-  const snap = (): Snap => ({ kolom, align, colWidths, headerRows, rows });
+  const snap = (): Snap => ({ kolom, align, colWidths, headerRows, rows, atur });
   const sameSnap = (a: Snap, b: Snap) => JSON.stringify(a) === JSON.stringify(b);
   const pushHist = () => { const s = snap(); setPast(p => (p.length && sameSnap(p[p.length - 1], s)) ? p : [...p, s].slice(-60)); setFuture([]); };
-  const restoreSnap = (s: Snap) => { setKolom(s.kolom); setAlign(s.align); setColWidths(s.colWidths); setHeaderRows(s.headerRows); setRows(s.rows); pakaiSunting(null); setBarFocused(false); };
+  const restoreSnap = (s: Snap) => { setKolom(s.kolom); setAlign(s.align); setColWidths(s.colWidths); setHeaderRows(s.headerRows); setRows(s.rows); setAtur(s.atur); pakaiSunting(null); setBarFocused(false); };
   const undo = () => { if (!past.length) return; const prev = past[past.length - 1]; setFuture(f => [snap(), ...f].slice(0, 60)); setPast(p => p.slice(0, -1)); restoreSnap(prev); };
   const redo = () => { if (!future.length) return; const nxt = future[0]; setPast(p => [...p, snap()].slice(-60)); setFuture(f => f.slice(1)); restoreSnap(nxt); };
-  const bentuk = (): BentukTabel => ({ rows, kolom, align, colWidths, headerRows });
-  const pasangBentuk = (b: BentukTabel) => { setRows(b.rows); setKolom(b.kolom); setAlign(b.align); setColWidths(b.colWidths); setHeaderRows(b.headerRows); };
+  // Kolom No. ikut bergeser saat kolom disisip/dihapus — lewat bentuk tabel yang sama dgn align/colWidths.
+  const bentuk = (): BentukTabel => ({ rows, kolom, align, colWidths, headerRows, kolomNomor: atur.kolomNomor });
+  const pasangBentuk = (b: BentukTabel) => {
+    setRows(b.rows); setKolom(b.kolom); setAlign(b.align); setColWidths(b.colWidths); setHeaderRows(b.headerRows);
+    if (b.kolomNomor !== atur.kolomNomor) setAtur(a => ({ ...a, kolomNomor: b.kolomNomor ?? null }));
+  };
+  const ubahAtur = (ubah: Partial<AturTabel>) => { pushHist(); setAtur(a => ({ ...a, ...ubah })); };
+  const ubahGaya = (ubah: Partial<GayaTabel>) => ubahAtur({ gaya: { ...atur.gaya, ...ubah } });
   const pakaiSunting = (s: Sunting | null) => { suntingRef.current = s; setSunting(s); };
   // Papan ketik ditangkap textarea tersembunyi berisi TSV blok terpilih: Ctrl+C bawaan peramban
   // langsung menyalinnya (tanpa izin clipboard — aplikasi ini di intranet http), dan Ctrl+V sampai di onPaste.
@@ -101,6 +124,13 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
   // Kolom isian tangan (Tahap 2) tetap bisa diketik di badan — isinya diingat per kunci baris.
   const kolomTangan = new Set(tautan?.kolom.flatMap((k, i) => (k.isi.jenis === 'tangan' ? [i] : [])) ?? []);
   const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c);
+  // Kolom No. otomatis (§12.3): nomornya diturunkan dari bentuk tabel tiap kali digambar, jadi selalu
+  // urut sesudah sisip/hapus/tempel; yang disimpan dan dicetak hasil turunan yang sama.
+  const kolomNo = terkait || atur.kolomNomor === null || atur.kolomNomor >= ncol ? null : atur.kolomNomor;
+  const rowsTampil = useMemo(() => nomorUlang(rows, headerRows, kolomNo, !!atur.gaya.jumlah), [rows, headerRows, kolomNo, atur.gaya.jumlah]);
+  const diNomor = (r: number, c: number) => kolomNo !== null && c === kolomNo && r >= headerRows;
+  /** Sel yang digambar: gaya tabel di bawah format sel sendiri — editor & Word memakai fungsi yang sama. */
+  const efektif = (r: number, c: number) => selBergaya(rowsTampil[r][c], gayaSel(atur.gaya, rowsTampil.length, headerRows, r));
   const ubahSel = (r: number, c: number, v: string) => {
     // Rumus sel menunjuk nomor baris, dan nomor baris bergeser tiap Perbarui.
     if (diBadan(r) && kolomTangan.has(c) && v.trimStart().startsWith('=')) {
@@ -120,6 +150,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
   const mulaiSunting = (r: number, c: number, ketikan?: string) => {
     if (readOnly || !rows[r]?.[c] || rows[r][c].h) return;
     if (terkunci(r, c)) { toast.info(PESAN_BADAN, { id: 'badan-terkunci' }); return; }
+    if (diNomor(r, c)) { toast.info(PESAN_NOMOR, { id: 'kolom-nomor' }); return; }
     pushHist();
     if (ketikan !== undefined && !ubahSel(r, c, ketikan)) return;
     pakaiSunting({ r, c, awal: rows[r][c].v, ganti: ketikan !== undefined });
@@ -209,14 +240,15 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
   /** Delete/Backspace: isi seluruh blok dikosongkan, formatnya tetap (cara Excel). */
   const kosongkan = () => {
     if (!rect || readOnly) return;
-    const boleh = (r: number, c: number) => !terkunci(r, c);
+    const boleh = (r: number, c: number) => !terkunci(r, c) && !diNomor(r, c);
     let ada = false, ditahan = false;
     for (let r = rect.r1; r <= rect.r2; r++) for (let c = rect.c1; c <= rect.c2; c++) {
       const cell = rows[r]?.[c];
       if (!cell || cell.h || cell.v === '') continue;
       if (boleh(r, c)) ada = true; else ditahan = true;
     }
-    if (!ada) { if (ditahan) toast.info(PESAN_BADAN, { id: 'badan-terkunci' }); return; }
+    // Kolom No. tidak pernah aktif di tabel tertaut, jadi yang menahan cukup dibedakan dari `terkait`.
+    if (!ada) { if (ditahan) toast.info(terkait ? PESAN_BADAN : PESAN_NOMOR, { id: 'badan-terkunci' }); return; }
     pushHist();
     setRows(kosongkanBlok(rows, rect, boleh));
   };
@@ -251,6 +283,26 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
     pasangBentuk(sisipKolom(bentuk(), di, n));
     pil.setSel({ ar: rect.r1, ac: di, fr: rect.r2, fc: di + n - 1 });
   }
+  // Tab di sel terakhir menambah baris baru (cara Word, §12.4) — tidak di badan tabel tertaut.
+  // "Terakhir" = baris data paling bawah: dengan gaya JUMLAH, baris barunya masuk di atas JUMLAH.
+  const barisBaruDi = () => posisiBarisBaru(rows.length, headerRows, !!atur.gaya.jumlah);
+  const diSelTerakhir = (r: number, c: number) => {
+    const br = barisBaruDi() - 1;
+    if (br < 0) return false;
+    const akhir = asalSel(rows, br, ncol - 1), kini = asalSel(rows, r, c);
+    return akhir.r === kini.r && akhir.c === kini.c;
+  };
+  const barisBaruDiAkhir = () => {
+    if (terkait || rows.length >= BATAS_BARIS_TABEL) return false;
+    const di = barisBaruDi();
+    pushHist();
+    // Bentuk fungsional: ketikan yang baru dirapikan `selesaiSunting` di render yang sama tidak tertimpa.
+    setRows(r => sisipBarisBaru(r, headerRows, ncol, !!atur.gaya.jumlah).rows);
+    // Kursor ke sel pertama yang bisa diketik — kolom No. otomatis menolak ketikan.
+    const ac = kolomNo === 0 && ncol > 1 ? 1 : 0;
+    pil.setSel({ ar: di, ac, fr: di, fc: ac });
+    return true;
+  };
   function hapusBarisPilihan() {
     if (!rect || readOnly) return;
     const { r1, r2 } = rect;
@@ -304,16 +356,30 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
   };
 
   // ── Salin & tempel ─────────────────────────────────────────────────────────────
-  const tsvPilihan = useMemo(() => (rect ? rangeToTSV(extractRange(rows, rect.r1, rect.c1, rect.r2, rect.c2)) : ''), [rows, rect]);
+  const tsvPilihan = useMemo(() => (rect ? rangeToTSV(extractRange(rowsTampil, rect.r1, rect.c1, rect.r2, rect.c2)) : ''), [rowsTampil, rect]);
+  /** Ctrl+C mengisi papan klip dengan TSV (tempel antarsel) DAN tabel HTML ber-gabungan untuk Word/Excel (§12.4). */
+  const salinKePapan = (e: React.ClipboardEvent) => {
+    if (!rect) return;
+    clipRef.current = extractRange(rowsTampil, rect.r1, rect.c1, rect.r2, rect.c2);
+    setAdaSalinan(true);
+    const html = blokKeHtml(rowsTampil, rect, (r, c) => displayValue(rowsTampil, r, c), (r, c) => {
+      const s = efektif(r, c);
+      return { ...s, b: s.b || r < headerRows, al: s.al ?? (r < headerRows ? 'center' : align[c]) };
+    });
+    e.clipboardData.setData('text/plain', tsvPilihan);
+    e.clipboardData.setData('text/html', html);
+    e.preventDefault();
+  };
   useEffect(() => {
     const t = tangkapRef.current;
     if (t && document.activeElement === t) t.select();
   }, [tsvPilihan]);
   const doCopy = () => {
     if (!rect) return;
-    clipRef.current = extractRange(rows, rect.r1, rect.c1, rect.r2, rect.c2);
+    clipRef.current = extractRange(rowsTampil, rect.r1, rect.c1, rect.r2, rect.c2);
     setAdaSalinan(true);
     fokusGrid();
+    // execCommand memicu `onCopy` textarea (salinKePapan) — TSV + HTML sekaligus.
     try { if (!document.execCommand('copy')) void navigator.clipboard?.writeText(rangeToTSV(clipRef.current)); } catch { /* best-effort */ }
     toast.success('Sel disalin');
   };
@@ -360,7 +426,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
     const ctrl = e.ctrlKey || e.metaKey;
     const k = e.key;
     const kl = k.toLowerCase();
-    if (ctrl && kl === 'c') { if (rect) { clipRef.current = extractRange(rows, rect.r1, rect.c1, rect.r2, rect.c2); setAdaSalinan(true); } return; }
+    if (ctrl && kl === 'c') return;   // peramban memicu onCopy (salinKePapan)
     if (ctrl && kl === 'a') { e.preventDefault(); pil.pilihSemua(); return; }
     if (readOnly) {
       if (ARAH[k]) { e.preventDefault(); pil.gerak(ARAH[k].dr, ARAH[k].dc, { perluas: e.shiftKey, lompat: ctrl }); }
@@ -373,7 +439,12 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
     if (ctrl && e.shiftKey && (k === '+' || k === '=')) { e.preventDefault(); void sisipDariPintasan(); return; }
     if (!sel) { if (ARAH[k]) { e.preventDefault(); pil.keSel(0, 0); } return; }
     if (ARAH[k]) { e.preventDefault(); pil.gerak(ARAH[k].dr, ARAH[k].dc, { perluas: e.shiftKey, lompat: ctrl }); return; }
-    if (k === 'Tab') { e.preventDefault(); pil.gerak(0, e.shiftKey ? -1 : 1); return; }
+    if (k === 'Tab') {
+      e.preventDefault();
+      if (!e.shiftKey && diSelTerakhir(sel.ar, sel.ac) && barisBaruDiAkhir()) return;
+      pil.gerak(0, e.shiftKey ? -1 : 1);
+      return;
+    }
     if (k === 'Enter') { e.preventDefault(); pil.gerak(e.shiftKey ? -1 : 1, 0); return; }
     if (k === 'Home') { e.preventDefault(); pil.keSel(ctrl ? 0 : sel.ar, 0); return; }
     if (k === 'End') { e.preventDefault(); pil.keSel(ctrl ? rows.length - 1 : sel.ar, ncol - 1); return; }
@@ -421,20 +492,33 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
     setColWidths(cw => cw.map((x, i) => (i === ci ? w : x)));
   };
   const lebarTotal = colWidths.reduce((a, b) => a + b, 0);
-  const lebihKertas = lebarTotal > LEBAR_KERTAS_PX;
+  // Batas kertas mengikuti orientasi tabel: 15,5 cm tegak, 24,2 cm melintang (§12.2).
+  const kertasPx = lebarKertasPx(atur.melintang);
+  const lebihKertas = lebarTotal > kertasPx;
+  /** "Ratakan lebar kolom" (Distribute Columns): kolom yang dipilih sama lebar, jumlahnya tetap. */
+  const ratakanKolom = () => {
+    if (!rect || rect.c2 <= rect.c1) return;
+    pushHist();
+    setColWidths(ratakanLebar(colWidths, rect.c1, rect.c2));
+  };
 
   // ── Simpan, Perbarui, Lepas ───────────────────────────────────────────────────
   // Isian tangan dibaca dari badan SAAT INI — peta di resep ikut ketikan terakhir, bukan simpanan terakhir.
-  const payloadSekarang = (): PayloadTabel => ({
-    judul, kolom: namaKolomDariKepala(rows, headerRows, kolom), align, colWidths, headerRows, rows,
+  // Pengaturan cetak ikut tiap payload — juga lewat modal Atur Bentuk & Perbarui, yang menyalin payload ini.
+  // Baris yang disimpan = yang tampil (kolom No. sudah terisi), jadi grafik & Word membaca angka yang sama.
+  const payloadSekarang = (): PayloadTabel & AturTabel => ({
+    judul, kolom: namaKolomDariKepala(rows, headerRows, kolom), align, colWidths, headerRows, rows: rowsTampil,
+    ...atur, sumber: atur.sumber.trim(), kolomNomor: kolomNo,
     ...(tautan ? { tautan: ambilIsianTangan(tautan, rows.slice(jumlahBarisKepala({ headerRows, rows }))) } : {}),
   });
   /** Hubungkan / Perbarui / Lepas langsung disimpan: ketiganya keputusan yang sudah ditanyakan. */
-  const pasangDanSimpan = (p: PayloadTabel) => {
+  const pasangDanSimpan = (masuk: PayloadTabel) => {
+    // Tabel tertaut punya Nomor urut sendiri — kolom No. otomatis dilepas begitu dihubungkan.
+    const p = masuk.tautan ? { ...masuk, kolomNomor: null } : masuk;
     // Judul ikut: templat mengisi judul yang masih kosong — tanpa ini Simpan Tabel berikutnya mengosongkannya lagi.
     setJudul(p.judul); setKolom(p.kolom); setAlign(p.align as TabelAlign[]);
     setColWidths(p.kolom.map((_, i) => p.colWidths?.[i] ?? LEBAR_KOLOM_BAWAAN));
-    setHeaderRows(p.headerRows ?? 0); setRows(p.rows); setTautan(p.tautan);
+    setHeaderRows(p.headerRows ?? 0); setRows(p.rows); setTautan(p.tautan); setAtur(bacaAtur(p));
     // Riwayat urungkan dikosongkan: memulihkan baris tanpa ikut memulihkan resepnya membuat
     // keduanya tidak sejajar lagi (server menolaknya, tapi layar sudah terlanjur salah).
     setPast([]); setFuture([]); pil.setSel(null); pakaiSunting(null);
@@ -484,7 +568,20 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
     if (ok) pasangDanSimpan(lepasTautan(payloadSekarang()));
   }
 
-  const galat = useMemo(() => daftarSelGalat(rows), [rows]);
+  const galat = useMemo(() => daftarSelGalat(rowsTampil), [rowsTampil]);
+  /** Memilih kolom No.: isi badan kolom itu diganti nomor urut — ditanya dulu kalau ada teks lain. */
+  const pilihKolomNomor = async (v: string) => {
+    if (v === '') { ubahAtur({ kolomNomor: null }); return; }
+    const c = Number(v);
+    const lain = nomorUlang(rows, headerRows, c, !!atur.gaya.jumlah)
+      .flatMap((row, r) => (r >= headerRows && row[c] !== rows[r][c] && rows[r][c].v.trim() ? [rows[r][c].v.trim()] : []));
+    if (lain.length && !(await confirmDialog({
+      title: `Kolom ${colLabel(c)} jadi nomor urut?`,
+      message: `Isi badan kolom ${colLabel(c)} diganti 1, 2, 3… — ${lain.length} sel berisi teks lain, mis. ${lain.slice(0, 3).map(t => `"${potong(t)}"`).join(', ')}.`,
+      confirmLabel: 'Ganti jadi nomor', variant: 'warning',
+    }))) return;
+    ubahAtur({ kolomNomor: c });
+  };
   const vAlignCss = (va?: TabelCell['va']) => va === 'middle' ? 'middle' : va === 'bottom' ? 'bottom' : 'top';
   const diPilih = (r: number, c: number) => !!rect && r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2;
   const kunciBlok = !rect || rectBadan;
@@ -531,6 +628,10 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
           <button data-tooltip="Vertikal bawah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'bottom'; })}>⤓</button>
           <span className="lk-tt-sep" />
           <button data-tooltip="Tebal" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
+          <button data-tooltip="Teks tegak (dibaca dari bawah ke atas) — untuk kepala kolom sempit" data-tooltip-pos="below" disabled={kunciBlok}
+            onClick={() => { const tegak = !origin?.rot; editCells(c => { if (tegak) c.rot = true; else delete c.rot; }); }}><RotateCcw size={14} /></button>
+          <button data-tooltip="Ratakan lebar kolom yang dipilih" data-tooltip-pos="below" disabled={!rect || rect.c2 <= rect.c1}
+            onClick={ratakanKolom}><Columns3 size={14} /></button>
           <span className="lk-tt-sep" />
           <span className="lk-tt-tip" data-tooltip="Jumlah baris kepala tabel — baris disisip/dibuang tepat di atas badan" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Jumlah baris kepala tabel" value={String(headerRows)}
             onChange={e => void gantiBarisKepala(Number(e.target.value))}>
@@ -582,7 +683,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
         <div className="lk-fbar">
           <span className="lk-fbar-ref">{sel ? colLabel(sel.ac) + (sel.ar + 1) : '—'}</span>
           <span className="lk-fbar-fx">fx</span>
-          <input className="lk-fbar-in" disabled={!sel || terkunci(sel.ar, sel.ac)}
+          <input className="lk-fbar-in" disabled={!sel || terkunci(sel.ar, sel.ac) || diNomor(sel.ar, sel.ac)}
             value={sel ? (rows[sel.ar]?.[sel.ac]?.v ?? '') : ''}
             placeholder="Pilih sel — ketik teks atau = untuk rumus (mis. =A1+B1)"
             onFocus={e => { if (sel) { pushHist(); barAwal.current = rows[sel.ar]?.[sel.ac]?.v ?? ''; setBarFocused(true); editInputRef.current = e.currentTarget; } }}
@@ -603,7 +704,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
             const masuk = e.nativeEvent as InputEvent;
             if (!readOnly && sel && masuk.inputType === 'insertText' && masuk.data) mulaiSunting(sel.ar, sel.ac, masuk.data);
           }}
-          onKeyDown={onGridKey} onPaste={onPaste} onCopy={() => { if (rect) clipRef.current = extractRange(rows, rect.r1, rect.c1, rect.r2, rect.c2); }} />
+          onKeyDown={onGridKey} onPaste={onPaste} onCopy={salinKePapan} />
         <div className="lk-tabel-kanvas">
           <table className="lk-tabel" style={{ tableLayout: 'fixed', width: 'auto' }}>
             <colgroup>
@@ -625,23 +726,25 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, ri) => (
+              {rowsTampil.map((row, ri) => (
                 <tr key={ri} className={ri < headerRows ? 'lk-hrow' : undefined}>
                   <td className={`lk-rownum${rect && ri >= rect.r1 && ri <= rect.r2 ? ' aktif' : ''}`}
                     onMouseDown={e => { if (e.button !== 0) return; e.preventDefault(); pil.pilihBaris(ri, e.shiftKey); fokusGrid(); }}
                     onMouseEnter={() => pil.seretBaris(ri)}>{ri + 1}</td>
                   {row.map((cell, ci) => {
                     if (cell.h) return null;
+                    const ef = efektif(ri, ci);
                     const sedang = sunting?.r === ri && sunting?.c === ci;
-                    const tampil = sedang || (barFocused && sel?.ar === ri && sel?.ac === ci) ? cell.v : displayValue(rows, ri, ci);
-                    const gaya: React.CSSProperties = { textAlign: (cell.al ?? (ri < headerRows ? 'center' : align[ci]) ?? 'left'), fontWeight: cell.b ? 700 : undefined, fontSize: cell.fs ? `${cell.fs}px` : undefined, color: cell.bg ? '#0F0F12' : undefined };
+                    const tampil = sedang || (barFocused && sel?.ar === ri && sel?.ac === ci) ? cell.v : displayValue(rowsTampil, ri, ci);
+                    const gaya: React.CSSProperties = { textAlign: (ef.al ?? (ri < headerRows ? 'center' : align[ci]) ?? 'left'), fontWeight: ef.b ? 700 : undefined, fontSize: ef.fs ? `${ef.fs}px` : undefined, color: ef.bg ? '#0F0F12' : undefined };
                     return (
                       <td key={ci} data-rc={`${ri}:${ci}`} colSpan={cell.cs ?? 1} rowSpan={cell.rs ?? 1}
                         className={[
                           diPilih(ri, ci) ? 'lk-cell-sel' : '', sel?.ar === ri && sel?.ac === ci ? 'lk-cell-aktif' : '',
                           diBadan(ri) && kolomTangan.has(ci) ? 'lk-cell-tangan' : '', !sedang && selGalat(tampil) ? 'lk-cell-galat' : '',
+                          diNomor(ri, ci) ? 'lk-cell-nomor' : '',
                         ].filter(Boolean).join(' ') || undefined}
-                        style={{ verticalAlign: vAlignCss(cell.va), background: cell.bg ? `#${cell.bg}` : undefined }}
+                        style={{ verticalAlign: vAlignCss(ef.va), background: ef.bg ? `#${ef.bg}` : undefined, ...garisCss(ef.bd) }}
                         onMouseDown={e => onSelDown(ri, ci, e)}
                         onMouseEnter={() => pil.seretSel(ri, ci)}
                         onDoubleClick={() => mulaiSunting(ri, ci)}>
@@ -652,7 +755,11 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
                             onKeyDown={e => {
                               e.stopPropagation();
                               if (e.key === 'Enter') { e.preventDefault(); selesaiSunting({ dr: e.shiftKey ? -1 : 1, dc: 0 }); }
-                              else if (e.key === 'Tab') { e.preventDefault(); selesaiSunting({ dr: 0, dc: e.shiftKey ? -1 : 1 }); }
+                              else if (e.key === 'Tab') {
+                                e.preventDefault();
+                                if (!e.shiftKey && diSelTerakhir(ri, ci)) { selesaiSunting(); barisBaruDiAkhir(); }
+                                else selesaiSunting({ dr: 0, dc: e.shiftKey ? -1 : 1 });
+                              }
                               else if (e.key === 'Escape') { e.preventDefault(); batalSunting(); }
                               // Mulai dengan mengetik (bukan F2) → panah menyelesaikan & pindah, seperti Excel.
                               else if (sunting?.ganti && ARAH[e.key] && !e.shiftKey) { e.preventDefault(); selesaiSunting(ARAH[e.key]); }
@@ -660,7 +767,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
                             onBlur={() => selesaiSunting()}
                             onChange={e => ubahSel(ri, ci, e.target.value)} />
                         ) : (
-                          <div className="lk-sel-isi" style={gaya}>{tampil}</div>
+                          <div className={`lk-sel-isi${ef.rot ? ' tegak' : ''}`} style={gaya}>{tampil}</div>
                         )}
                       </td>
                     );
@@ -669,21 +776,60 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
               ))}
             </tbody>
           </table>
-          {/* Batas bidang tulis A4 (15,5 cm) — kolom di kanannya keluar kertas di Word. */}
-          <div className={`lk-batas-kertas${lebihKertas ? ' lewat' : ''}`} style={{ left: 38 + LEBAR_KERTAS_PX }} aria-hidden />
+          {/* Batas bidang tulis (15,5 cm tegak / 24,2 cm melintang) — kolom di kanannya keluar kertas di Word. */}
+          <div className={`lk-batas-kertas${lebihKertas ? ' lewat' : ''}`} style={{ left: 38 + kertasPx }} aria-hidden />
         </div>
       </div>
+
+      {(!readOnly || atur.sumber.trim()) && (
+        <input className="lk-tabel-sumber" value={atur.sumber} readOnly={readOnly} maxLength={300} aria-label="Sumber tabel"
+          placeholder="Sumber (opsional) — mis. Bagian Keuangan, 2026 · dicetak miring di bawah tabel"
+          onFocus={() => { if (!readOnly) pushHist(); }}
+          onChange={e => setAtur(a => ({ ...a, sumber: e.target.value }))} />
+      )}
+
+      {!readOnly && (
+        <div className="lk-tabel-atur">
+          <span className="lk-tabel-atur-judul">Cetak</span>
+          <span className="lk-tt-tip" data-tooltip="Melintang: tabel ini dapat halaman melintang sendiri (± 24,2 cm), nomor halaman tetap bersambung" data-tooltip-pos="below">
+            <select className="lk-tt-sel" aria-label="Arah kertas" value={atur.melintang ? '1' : ''} onChange={e => ubahAtur({ melintang: e.target.value === '1' })}>
+              <option value="">Kertas tegak</option><option value="1">Kertas melintang</option>
+            </select></span>
+          <span className="lk-tt-tip" data-tooltip="Letak tabel di halaman. Selebar kertas: kolom direntangkan sebanding sampai ke kedua margin" data-tooltip-pos="below">
+            <select className="lk-tt-sel" aria-label="Posisi tabel" value={atur.posisi} onChange={e => ubahAtur({ posisi: e.target.value as PosisiTabel })}>
+              <option value="tengah">Di tengah</option><option value="kiri">Rata kiri</option><option value="penuh">Selebar kertas</option>
+            </select></span>
+          <span className="lk-tt-tip" data-tooltip={terkait ? 'Tabel tertaut punya Nomor urut sendiri — atur lewat Atur Bentuk' : 'Kolom yang diisi 1, 2, 3… sendiri; baris judul kelompok (sel gabungan) dilewati'} data-tooltip-pos="below">
+            <select className="lk-tt-sel" aria-label="Kolom nomor otomatis" disabled={terkait} value={kolomNo === null ? '' : String(kolomNo)} onChange={e => void pilihKolomNomor(e.target.value)}>
+              <option value="">No. otomatis: —</option>
+              {kolom.map((_, c) => <option key={c} value={c}>No. otomatis: kolom {colLabel(c)}</option>)}
+            </select></span>
+          <label className="lk-tabel-atur-cek" data-tooltip="Latar abu muda selang-seling di badan tabel" data-tooltip-pos="below">
+            <input type="checkbox" checked={!!atur.gaya.selang} onChange={e => ubahGaya({ selang: e.target.checked })} /> Berselang
+          </label>
+          <label className="lk-tabel-atur-cek" data-tooltip="Baris terakhir dicetak tebal dengan garis atas tebal — untuk baris JUMLAH" data-tooltip-pos="below">
+            <input type="checkbox" checked={!!atur.gaya.jumlah} onChange={e => ubahGaya({ jumlah: e.target.checked })} /> Baris jumlah
+          </label>
+          <label className="lk-tabel-atur-cek" data-tooltip="Tanpa garis tegak — gaya laporan modern" data-tooltip-pos="below">
+            <input type="checkbox" checked={!!atur.gaya.mendatar} onChange={e => ubahGaya({ mendatar: e.target.checked })} /> Garis mendatar
+          </label>
+          <label className="lk-tabel-atur-cek" data-tooltip="Tabel tidak dipotong ke halaman berikut selama muat satu halaman" data-tooltip-pos="below">
+            <input type="checkbox" checked={atur.utuh} onChange={e => ubahAtur({ utuh: e.target.checked })} /> Jaga utuh
+          </label>
+        </div>
+      )}
 
       {!readOnly && (
         <div className="lk-tabel-petunjuk">
           Seret untuk memblok · klik huruf kolom / nomor baris untuk satu kolom/baris penuh · Delete mengosongkan ·
-          Sisip/Hapus ▾ sebanyak yang dipilih · seret garis di antara huruf kolom untuk lebarnya (dobel-klik = paskan isi)
+          Sisip/Hapus ▾ sebanyak yang dipilih · seret garis di antara huruf kolom untuk lebarnya (dobel-klik = paskan isi) ·
+          Tab di sel terakhir menambah baris · Ctrl+C bisa ditempel ke Word/Excel lengkap dengan gabungannya
         </div>
       )}
       {lebihKertas && (
         <div className="lk-tabel-lebar">
-          <span>Lebar tabel {cm(lebarTotal)} cm — lebih lebar dari kertas ({cm(LEBAR_KERTAS_PX)} cm). Di Word tabel disusutkan otomatis, jadi kolomnya lebih sempit dari yang terlihat di sini.</span>
-          {!readOnly && <button onClick={() => { pushHist(); setColWidths(paskanKeKertas(colWidths)); }}>Paskan ke lebar kertas</button>}
+          <span>Lebar tabel {cm(lebarTotal)} cm — lebih lebar dari kertas {atur.melintang ? 'melintang' : 'tegak'} ({cm(kertasPx)} cm). Di Word tabel disusutkan otomatis, jadi kolomnya lebih sempit dari yang terlihat di sini{atur.melintang ? '' : ' — atau cetak tabel ini di kertas melintang (pilihan Cetak di bawah tabel)'}.</span>
+          {!readOnly && <button onClick={() => { pushHist(); setColWidths(paskanKeKertas(colWidths, kertasPx)); }}>Paskan ke lebar kertas</button>}
         </div>
       )}
       {galat.length > 0 && (
@@ -714,7 +860,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, onSave }: {
 
       {!readOnly && (
         <div className="lk-tabel-ctl">
-          <button onClick={() => { if (rows.length >= BATAS_BARIS_TABEL) { toast.info(`Satu tabel paling banyak ${BATAS_BARIS_TABEL} baris.`); return; } pushHist(); pasangBentuk(sisipBaris(bentuk(), rows.length, 1)); }} disabled={terkait} data-tooltip={terkait ? 'Baris tabel tertaut mengikuti sumbernya — atur lewat Atur Bentuk' : undefined} data-tooltip-pos="below">+ Baris</button>
+          <button onClick={() => { if (rows.length >= BATAS_BARIS_TABEL) { toast.info(`Satu tabel paling banyak ${BATAS_BARIS_TABEL} baris.`); return; } pushHist(); setRows(sisipBarisBaru(rows, headerRows, ncol, !!atur.gaya.jumlah).rows); }} disabled={terkait} data-tooltip={terkait ? 'Baris tabel tertaut mengikuti sumbernya — atur lewat Atur Bentuk' : undefined} data-tooltip-pos="below">+ Baris</button>
           <button onClick={() => { pushHist(); pasangBentuk(sisipKolom(bentuk(), ncol, 1)); }} disabled={ncol >= BATAS_KOLOM_TABEL || terkait} data-tooltip={terkait ? PESAN_KOLOM_TAUT : undefined} data-tooltip-pos="below">+ Kolom</button>
           {!terkait && (
             <button onClick={() => setModalTaut(true)} data-tooltip="Isi tabel dari menu Cetak E-Anggaran atau Renaksi — angkanya bisa diperbarui nanti" data-tooltip-pos="below">

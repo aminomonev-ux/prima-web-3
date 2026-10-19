@@ -143,3 +143,27 @@ export function flattenTree(nodes: SectionNode[]): SectionNode[] {
   walk(nodes);
   return out;
 }
+
+export type JenisObjek = 'Tabel' | 'Gambar' | 'Grafik';
+
+/**
+ * Nomor Tabel/Gambar/Grafik per blok, urut seperti di Word (pohon depth-first, blok menurut urutan).
+ * SATU fungsi untuk editor dan angka cache field SEQ di docgen — penampil yang tidak menyegarkan
+ * field dulu menulis "Tabel 1" di semua tabel. TABEL tanpa kolom tidak digambar docgen, jadi tidak dihitung.
+ */
+export function nomorObjek(tree: SectionNode[]): Map<number, { jenis: JenisObjek; nomor: number }> {
+  const hitung: Record<JenisObjek, number> = { Tabel: 0, Gambar: 0, Grafik: 0 };
+  const out = new Map<number, { jenis: JenisObjek; nomor: number }>();
+  for (const node of flattenTree(tree)) {
+    for (const b of node.blocks) {
+      const jenis: JenisObjek | null = b.tipe === 'TABEL' ? 'Tabel' : b.tipe === 'GAMBAR' ? 'Gambar' : b.tipe === 'GRAFIK' ? 'Grafik' : null;
+      if (!jenis) continue;
+      if (jenis === 'Tabel') {
+        const kolom = (b.payload as { kolom?: unknown } | null)?.kolom;
+        if (!Array.isArray(kolom) || kolom.length === 0) continue;
+      }
+      out.set(b.id, { jenis, nomor: ++hitung[jenis] });
+    }
+  }
+  return out;
+}
