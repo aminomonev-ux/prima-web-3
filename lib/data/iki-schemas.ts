@@ -157,7 +157,14 @@ export const FinalizeSchema = z.object({
 
 export const DuplicateSchema = z.object({
   tahun_target: TahunSchema,
+  // Opsional: tab lama yang tidak mengirimnya tetap menyalin jenis yang sama (perilaku lama).
+  jenis_target: JenisDokumenSchema.optional(),
 });
+
+export const SalinTahunSchema = z.object({
+  tahun_sumber: TahunSchema,
+  tahun_target: TahunSchema,
+}).refine(v => v.tahun_sumber < v.tahun_target, 'Tahun sumber harus sebelum tahun tujuan');
 
 export const ImportRenaksiQuerySchema = z.object({
   tahun: z.coerce.number().int().min(2020).max(2100),

@@ -20,6 +20,7 @@ export type IkiListRow = {
   pangkat: string | null;
   status: 'DRAFT' | 'FINAL';
   version: number;
+  atasan_dokumen_id: number | null;
   updated_at: string;
   jumlah_rhk: number;
 };

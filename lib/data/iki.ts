@@ -5,6 +5,7 @@
 
 import { sql, sqlInt, queryOne, queryMany, execWrite, withTransaction, bulkInsert } from '@/lib/data/db';
 import type { SaveDokumenInput } from '@/lib/data/iki-schemas';
+import { pilihDokumenAtasan, rencanaSalinTahun } from '@/lib/iki/beranda';
 
 export class IkiVersionConflictError extends Error {
   constructor() { super('Dokumen sudah diubah pengguna lain. Muat ulang halaman.'); }
@@ -81,7 +82,7 @@ export async function listDokumen(tahun?: string) {
   const rows = tahun
     ? await sql`
         SELECT d.id, d.tahun, d.varian, d.jenis, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
-               d.updated_at, COUNT(r.id) AS jumlah_rhk
+               d.atasan_dokumen_id, d.updated_at, COUNT(r.id) AS jumlah_rhk
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id
         WHERE d.tahun = ${tahun}
@@ -89,7 +90,7 @@ export async function listDokumen(tahun?: string) {
         ORDER BY d.tahun DESC, d.varian = 'DIREKTUR' DESC, d.jabatan ASC, d.jenis ASC`
     : await sql`
         SELECT d.id, d.tahun, d.varian, d.jenis, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
-               d.updated_at, COUNT(r.id) AS jumlah_rhk
+               d.atasan_dokumen_id, d.updated_at, COUNT(r.id) AS jumlah_rhk
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id
         GROUP BY d.id
@@ -172,28 +173,38 @@ export async function getDokumen(id: number): Promise<IkiDokumenDetail | null> {
 }
 
 /**
- * Duplikasi dokumen ke tahun lain: header + seluruh RHK & triwulan disalin,
- * status/version/tanggal_ttd di-reset. renaksi_id & atasan_rhk_id di-NULL-kan
- * (id milik tahun lama, pasti basi). atasan_dokumen_id di-resolve best-effort
- * via NIP dokumen atasan lama di tahun target.
+ * Duplikasi dokumen: header + seluruh RHK & triwulan disalin, status/version/tanggal_ttd
+ * di-reset. renaksi_id & atasan_rhk_id di-NULL-kan (id milik tahun lama, pasti basi).
+ * atasan_dokumen_id di-resolve best-effort via NIP dokumen atasan lama di tahun target.
+ *
+ * `jenisTarget` (konsep beranda §6): tanpa itu jenis ikut sumbernya, seperti dulu. Tahun
+ * baru dibuka dengan MURNI walau sumbernya Perubahan tahun lalu, dan Perubahan bisa
+ * disalin dari Murni tahun yang SAMA — yang ditolak hanya tahun DAN jenis yang sama.
  */
-export async function duplicateDokumen(id: number, tahunTarget: string, userId: number): Promise<number> {
+export async function duplicateDokumen(
+  id: number, tahunTarget: string, userId: number, jenisTarget?: 'MURNI' | 'PERUBAHAN',
+): Promise<{ id: number; atasanLepas: boolean }> {
   const src = await getDokumen(id);
   if (!src) throw new IkiNotFoundError();
-  if (src.tahun === tahunTarget) throw new Error('Tahun tujuan sama dengan tahun sumber.');
+  const jenis = jenisTarget ?? src.jenis;
+  if (src.tahun === tahunTarget && src.jenis === jenis) throw new Error('Tahun dan jenis tujuan sama dengan dokumen sumber.');
   const dup = await queryOne<{ id: number }>(
-    sql`SELECT id FROM iki_dokumen WHERE nip = ${src.nip} AND tahun = ${tahunTarget} AND jabatan = ${src.jabatan} AND jenis = ${src.jenis} LIMIT 1`,
+    sql`SELECT id FROM iki_dokumen WHERE nip = ${src.nip} AND tahun = ${tahunTarget} AND jabatan = ${src.jabatan} AND jenis = ${jenis} LIMIT 1`,
   );
-  if (dup) throw new Error(`Dokumen IKI untuk NIP ${src.nip} jabatan ${src.jabatan} tahun ${tahunTarget} sudah ada.`);
+  if (dup) throw new Error(`Dokumen IKI ${jenis === 'PERUBAHAN' ? 'Perubahan' : 'Murni'} untuk NIP ${src.nip} jabatan ${src.jabatan} tahun ${tahunTarget} sudah ada.`);
 
   let atasanTarget: number | null = null;
   if (src.atasan_dokumen_id) {
-    const found = await queryOne<{ id: number }>(
-      sql`SELECT b.id FROM iki_dokumen a
+    // Calon = dokumen orang yang sama (NIP) di tahun tujuan. Dulu `LIMIT 1` tanpa urutan:
+    // pejabat Plt. memegang dua jabatan (Plt. Wadir Pelayanan + Kabid Pelayanan Medis, data
+    // 2026), jadi Kabid Penunjang bisa tertaut ke jabatan atasannya yang SALAH. Pilihannya
+    // di `pilihDokumenAtasan` (murni, teruji).
+    const calon = await queryMany<{ id: number; jabatan: string; jenis: 'MURNI' | 'PERUBAHAN'; jabatan_lama: string }>(
+      sql`SELECT b.id, b.jabatan, b.jenis, a.jabatan AS jabatan_lama FROM iki_dokumen a
           JOIN iki_dokumen b ON b.nip = a.nip AND b.tahun = ${tahunTarget}
-          WHERE a.id = ${src.atasan_dokumen_id} LIMIT 1`,
+          WHERE a.id = ${src.atasan_dokumen_id}`,
     );
-    atasanTarget = found?.id ?? null;
+    if (calon.length) atasanTarget = pilihDokumenAtasan(calon[0].jabatan_lama, calon, jenis);
   }
 
   let newId = 0;
@@ -203,7 +214,7 @@ export async function duplicateDokumen(id: number, tahunTarget: string, userId: 
         INSERT INTO iki_dokumen (tahun, varian, jenis, opd, nama, nip, jabatan, pangkat, ikhtisar,
           nama_atasan, nip_atasan, jabatan_atasan, pangkat_atasan, kota_ttd,
           atasan_dokumen_id, created_by, updated_by)
-        VALUES (${tahunTarget}, ${src.varian}, ${src.jenis}, ${src.opd}, ${src.nama}, ${src.nip}, ${src.jabatan},
+        VALUES (${tahunTarget}, ${src.varian}, ${jenis}, ${src.opd}, ${src.nama}, ${src.nip}, ${src.jabatan},
           ${src.pangkat}, ${src.ikhtisar}, ${src.nama_atasan}, ${src.nip_atasan},
           ${src.jabatan_atasan}, ${src.pangkat_atasan}, ${src.kota_ttd},
           ${atasanTarget}, ${userId}, ${userId})
@@ -244,7 +255,50 @@ export async function duplicateDokumen(id: number, tahunTarget: string, userId: 
     }
     throw err;
   }
-  return newId;
+  return { id: newId, atasanLepas: src.atasan_dokumen_id != null && atasanTarget == null };
+}
+
+export type HasilSalinTahun = {
+  dibuat: { id: number; sumber_id: number; jabatan: string; atasan_lepas: boolean }[];
+  dilewati: { sumber_id: number; jabatan: string; alasan: string }[];
+};
+
+/** Galat yang boleh diteruskan apa adanya ke pengguna (bukan galat server). */
+export function galatDuplikatDikenal(err: unknown): string | null {
+  const m = err instanceof Error ? err.message : '';
+  return m.includes('sudah ada') || m.includes('sama dengan dokumen sumber') ? m : null;
+}
+
+/**
+ * "Salin semua dari {tahun lalu}" (konsep beranda §4): tiap jabatan tahun sumber yang belum
+ * punya Murni di tahun tujuan dibuatkan MURNI. Daftar & urutannya dari `rencanaSalinTahun`
+ * — fungsi yang SAMA dengan yang menghitung angka di tombolnya.
+ *
+ * Satu transaksi per dokumen, berurutan, bukan satu transaksi besar: penaut atasan di
+ * `duplicateDokumen` membaca dokumen atasan yang barusan dibuat, dan ia memakai koneksi
+ * pool (L69-b). Akibatnya gagal di tengah meninggalkan sebagian — aman, karena menjalankan
+ * ulang melewati yang sudah ada (jabatan yang sudah punya Murni tidak masuk rencana).
+ */
+export async function salinTahun(tahunSumberIki: string, tahunTarget: string, userId: number): Promise<HasilSalinTahun> {
+  const baca = async (t: string) => ((await listDokumen(t)) as Record<string, unknown>[]).map(r => ({
+    id: Number(r.id), tahun: String(r.tahun), varian: r.varian as 'STANDAR' | 'DIREKTUR',
+    jenis: r.jenis as 'MURNI' | 'PERUBAHAN', nama: String(r.nama), nip: String(r.nip),
+    jabatan: String(r.jabatan), status: r.status as 'DRAFT' | 'FINAL',
+    atasan_dokumen_id: r.atasan_dokumen_id == null ? null : Number(r.atasan_dokumen_id),
+  }));
+  const rencana = rencanaSalinTahun([...await baca(tahunSumberIki), ...await baca(tahunTarget)], tahunSumberIki, tahunTarget);
+  const hasil: HasilSalinTahun = { dibuat: [], dilewati: [] };
+  for (const s of rencana) {
+    try {
+      const r = await duplicateDokumen(s.id, tahunTarget, userId, 'MURNI');
+      hasil.dibuat.push({ id: r.id, sumber_id: s.id, jabatan: s.jabatan, atasan_lepas: r.atasanLepas });
+    } catch (err) {
+      const dikenal = galatDuplikatDikenal(err);
+      if (!dikenal) console.error('[IKI Salin Tahun Error]', err);
+      hasil.dilewati.push({ sumber_id: s.id, jabatan: s.jabatan, alasan: dikenal ?? 'Terjadi kesalahan server.' });
+    }
+  }
+  return hasil;
 }
 
 /**

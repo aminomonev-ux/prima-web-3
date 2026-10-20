@@ -7,11 +7,12 @@ import IkiClient from './iki-client';
 import type { IkiListRow } from './_lib/types';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
+import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
-export default async function IkiPage() {
+export default async function IkiPage({ searchParams }: { searchParams: Promise<{ tahun?: string }> }) {
   const h = await headers();
   const userId   = h.get('x-user-id');
   const role     = h.get('x-user-role');
@@ -26,6 +27,7 @@ export default async function IkiPage() {
   const beku = await bekuLayarModul('iki');
   const initial = await listDokumen();
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
+  const { tahun } = await searchParams;
 
   return (
     <KunciTulisProvider beku={beku}>
@@ -35,6 +37,10 @@ export default async function IkiPage() {
         themePreference={themePreference}
         initialRows={initial as IkiListRow[]}
         beku={beku}
+        tahunAwal={/^\d{4}$/.test(tahun ?? '') ? tahun! : null}
+        // Tahun berjalan dari server (WIB), bukan `new Date()` di komponen: peramban dan
+        // server bisa beda tahun di malam pergantian tahun → hydration mismatch.
+        tahunSekarang={tanggalHariIniWIB().slice(0, 4)}
       />
     </KunciTulisProvider>
   );

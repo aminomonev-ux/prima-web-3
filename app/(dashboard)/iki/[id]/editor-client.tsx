@@ -341,7 +341,7 @@ export default function EditorClient({ username, role, themePreference, initialD
 
       <header className="iki-topbar">
         <div className="iki-brand">
-          <button className="iki-back" onClick={() => router.push('/iki')} data-tooltip="Kembali ke daftar" data-tooltip-pos="below"><ArrowLeft size={17} /></button>
+          <button className="iki-back" onClick={() => router.push(`/iki?tahun=${doc.tahun}`)} data-tooltip="Kembali ke daftar" data-tooltip-pos="below"><ArrowLeft size={17} /></button>
           <ClipboardCheck size={18} /> IKI {doc.tahun}
           <span className="iki-brand-sub">{doc.jabatan || '—'}</span>
           <span className={`iki-badge ${readOnly ? 'final' : 'draft'}`}>{doc.status}</span>
@@ -618,7 +618,7 @@ export default function EditorClient({ username, role, themePreference, initialD
 
       <FloatingDock isLight={isLight} limelight
         nav={[
-          { icon: <ClipboardCheck size={17} />, label: 'Daftar IKI', onClick: () => router.push('/iki') },
+          { icon: <ClipboardCheck size={17} />, label: 'Daftar IKI', onClick: () => router.push(`/iki?tahun=${doc.tahun}`) },
           { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={[
