@@ -18,7 +18,7 @@ import {
 } from '@/lib/lkjip/tautan';
 import {
   displayValue, buildTableMeta, colLabel, pastikanKepalaSel, namaKolomDariKepala, letakAwal, rapikanLetak, selMilikKolom,
-  sisipKolom, hapusKolom as hapusKolomTabel, tukarKolomSel, kolomSegabung, type TabelCell, type TabelAlign, type BentukTabel,
+  sisipKolom, hapusKolom as hapusKolomTabel, tukarKolomSel, kolomSegabung, kepalaBertingkat, type TabelCell, type TabelAlign, type BentukTabel,
 } from '@/lib/lkjip/tabel';
 import SetelanSumber, { type HasilSetelan } from './SetelanSumber';
 import KisiKepala from './KisiKepala';
@@ -191,9 +191,11 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   function pakaiTemplat(t: TemplatTabel) {
     const s = DAFTAR_SUMBER[t.sumber].setelan({ ...t.setelan, tahun: tahunDokumen }, tahunDokumen);
     setSumberId(t.sumber); setSetelan(s); setSembunyi([]); setTebalInduk(true);
+    // Templat berkepala bertingkat (Tahap B): judul kelompok di baris 1, judul kolom di baris 2.
+    const { kepala: kp, letak: lt } = kepalaBertingkat(t.kolom.map(k => k.judul), t.kelompok);
     setBentuk({
       kolom: t.kolom.map(k => ({ nama: k.judul, taut: k.taut, align: k.align, asal: null })),
-      kepala: kepalaSatuBaris(t.kolom.map(k => k.judul)), letak: t.kolom.map(() => 0),
+      kepala: kp, letak: lt,
     });
     setJudulTemplat(`${t.label} Tahun ${tahunDokumen}`);
     void tarik(t.sumber, s);

@@ -437,9 +437,10 @@ ok('H8 Ctrl+C / tombol Salin mengisi papan klip dengan TSV DAN HTML',
 ok('H9 teks tegak = format sel (kunci badan tertaut berlaku); garis kertas ikut orientasi',
   te.includes("disabled={kunciBlok}\n            onClick={() => { const tegak = !origin?.rot;") && te.includes('const kertasPx = lebarKertasPx(atur.melintang);')
   && te.includes('paskanKeKertas(colWidths, kertasPx)'))
+// Tahap C §12.5: nomor bisa per BAB — label ("3.1") dari fungsi yang sama, setelan dokumen ikut.
 ok('H10 nomor blok & pemilih tabel grafik memakai nomorObjek (sama dengan Word)',
-  ec.includes('const nomorBlok = useMemo(() => nomorObjek(detail.tree), [detail.tree]);') && ec.includes('nomor={nomorBlok.get(b.id)}')
-  && ec.includes('`Tabel ${nomorBlok?.get(b.id)?.nomor ?? i + 1}`'))
+  ec.includes('const nomorBlok = useMemo(() => nomorObjek(detail.tree, detail.style_config.nomorPerBab), [detail.tree, detail.style_config.nomorPerBab]);') && ec.includes('nomor={nomorBlok.get(b.id)}')
+  && ec.includes('`Tabel ${nomorBlok?.get(b.id)?.label ?? i + 1}`') && ec.includes('{nomor && <span className="lk-block-nomor">{sebutObjek(nomor)}</span>}'))
 // 375 px: kerangka 320 px dulu menyisakan ± 55 px untuk isi, dan judul dokumen terjepit sampai lebar 0.
 // Media query WAJIB sesudah aturan berkekhususan sama (sempat ditaruh di atas lalu kalah).
 const iMedia = ec.indexOf('@media (max-width: 760px)'), mediaCss = ec.slice(iMedia, ec.indexOf('}\n`;', iMedia) + 1)
@@ -451,7 +452,8 @@ ok('H12 tata letak ponsel: kerangka di atas, isi selebar layar, judul berbaris s
   && mediaCss.includes('.lk-ed-title { flex: 1 1 100%; }') && mediaCss.includes('flex-wrap: wrap'))
 const alatTabel = te.slice(te.indexOf('className="lk-tabel-tools"'), te.indexOf('className="lk-fbar"'))
 ok('H13 tiap tombol ikon bilah alat tabel bernama untuk pembaca layar (aria-label), bukan cuma tooltip',
-  alatTabel.length > 1000 && hitung(alatTabel, /<button(?![^>]*aria-label=)/g) === 0 && hitung(alatTabel, /<button aria-label="[^"]+"/g) === 16, String(hitung(alatTabel, /<button aria-label="[^"]+"/g)))
+  // 16 + Tahap B/C: miring, garis bawah, kuas, potong, Σ, urutkan ×2, cari.
+  alatTabel.length > 1000 && hitung(alatTabel, /<button(?![^>]*aria-label=)/g) === 0 && hitung(alatTabel, /<button aria-label="[^"]+"/g) === 24, String(hitung(alatTabel, /<button aria-label="[^"]+"/g)))
 const salinB = badan(te, 'const salinKePapan = (e: React.ClipboardEvent) =>')
 ok('H14 salinan memakai selSalinan + warna kepala dokumen; petunjuk lebar kolom sekali per editor',
   salinB.includes('selSalinan(efektif(r, c), r < headerRows, align[c], warnaKepala)')

@@ -1,6 +1,6 @@
 # Konsep — Tabel LKJIP ala Excel + Kepala Tabel di Modal
 
-Status: **Tahap A selesai** (2026-10-18, §13) · **Tahap W selesai dikerjakan** (2026-10-19, belum di-commit, §14). Tahap B dan C belum.
+Status: **Tahap A selesai** (2026-10-18, §13) · **Tahap W selesai** (2026-10-19, §14) · **Tahap B & C selesai dikerjakan** (2026-10-20, belum di-commit, §15).
 Susulan 2026-10-18: §12 **ala Word**. W1–W2 masuk Tahap A, sisanya Tahap W dan Tahap C.
 Kelanjutan `docs/CONCEPT-lkjip-tabel-tertaut.md` — aturan kunci tabel tertaut di sana tetap berlaku.
 
@@ -609,3 +609,52 @@ Semua dibuktikan dengan menempel ke Word & Excel sungguhan (gambar PDF hasil tem
 - **Word di komputer kantor dan Excel yang benar-benar berbahasa Inggris.**
 
 Uji: `test-lkjip-tabel-word.mts` 80 → **92** (D10–D15, F30–F32, H13–H15; F15/F16 kini mencari teks SESUDAH halaman daftar karena judul & keterangan juga tertulis di sana), **25 uji mutasi tertangkap**. Suite Excel 97, tertaut 156, angka 62, bab wajib 57, tooltip-tombol 26, keluar-belum-tersimpan 16 tetap hijau.
+
+## 15. Pelaksanaan Tahap B & C (2026-10-20)
+
+Nol tabel, kolom, migrasi, dan endpoint. Field sel baru `i` (miring), `u` (garis bawah), `fc` (warna huruf) terdaftar di `CellSchema`, `normalizeCell`, dan SATU daftar `KUNCI_FORMAT` (`formatSel`) yang dipakai salin, kuas, dan isi-seret. Pengaturan baru `style_config.nomorPerBab` terdaftar di `StyleConfigSchema` + `DEFAULT_STYLE`. Aturannya fungsi murni di `lib/lkjip/tabel.ts`; layar hanya keadaan.
+
+### Tahap B — ala Excel tambahan
+
+| Fitur | Isi |
+| Potong (Ctrl+X) | `onCut`: salin TSV + HTML lalu kosongkan blok; Ctrl+Z mengembalikan |
+| Tempel nilai (Ctrl+Shift+V) | keydown menandai waktu peristiwa (`e.timeStamp`), `paste` sesudahnya membaca nilai saja; format sel TUJUAN tetap, angka di sel berformat disimpan angka mesin (`tempelNilai` + `nilaiKetikan`). Dari tabel sendiri: hasil rumus, bukan rumusnya (`nilaiSaja`) |
+| Papan klip internal | BERSAMA semua tabel di halaman (`papanInternal`), membawa rumus, format, dan GABUNGAN (`ambilBlok`) |
+| Isi-seret | pegangan di pojok blok; ke bawah atau ke kanan. Deret: angka ≥ 2 contoh (ribuan tetap ribuan, tahun tanpa titik), bulan panjang/pendek (berputar), TW I–IV / Triwulan 1–4, teks berakhiran angka (nol depan dipertahankan). Selain itu disalin berulang; rumus bergeser relatif, `$` tetap (`geserRumusRelatif`). Melewati gabungan ditolak dengan alasan; sel terkunci/kolom No. dilewati |
+| Format | Ctrl+B/I/U (patokan sel AKTIF, bukan dibalik per sel), warna huruf, kuas format (pola diulang menutup blok, format lama tujuan DIGANTI), Alt+Enter = baris baru di sel → `<w:br/>` di Word & `<br style="mso-data-placement:same-cell">` di salinan. Teks panjang kini terbungkus seperti di Word |
+| Σ AutoSum (Alt+=) | sel kosong → `=SUM` deret angka bersambung di atasnya (berhenti di kepala, teks, sel kosong) atau di kirinya; blok angka penuh → jumlahnya di bawah tiap kolom / di kanan satu baris |
+| Bilah status | Jumlah · Rata-rata dari sel ANGKA (`nilaiAngkaSel`, teks/kode/galat tidak), Banyak = sel berisi |
+| Menu klik-kanan | 16 aksi; yang tak berlaku tampil mati dengan alasannya; hapus memakai `DeleteIcon` |
+| Kepala tetap terlihat | wadah tabel bergulir sendiri (maks 70vh); huruf kolom & tiap baris kepala `sticky` dengan jarak atas yang diukur; latar PEKAT |
+| Templat bertingkat | `kepalaBertingkat` + templat baru "Capaian Kinerja per Triwulan" (Realisasi › TW I–IV) dan "Realisasi Fisik & Keuangan per Program" (Fisik › Target/Realisasi, Keuangan › Rp/%) |
+
+### Tahap C
+
+- **Tempel dari Excel/Word/Google Sheets lengkap** (`htmlKeSel`): gabungan colspan/rowspan (sel sesudah rowspan bergeser ke kolom yang benar), tebal/miring/garis bawah/warna/latar/tengah vertikal/teks tegak — gaya Excel dibaca dari KELAS di `<style>`, Word dari `<b>/<i>/<u>` pembungkus seluruh isi & paragraf. Ukuran huruf sengaja tidak dibawa. Rata bawah tidak dibawa (bawaan Excel & Sheets, ditulis di tiap sel).
+- **Urutkan** A→Z / Z→A menurut kolom sel aktif (satu sel = seluruh badan): angka < teks < kosong (kosong selalu di bawah, juga Z→A), bilangan alami tak peka huruf besar, kepala & baris JUMLAH tidak ikut, rumus ikut barisnya. Gabungan antarbaris ditolak. Tabel tertaut ditolak.
+- **Cari & ganti** (Ctrl+F / Ctrl+H): tak peka huruf besar, juga cocok di TAMPILAN angka berformat; yang hanya cocok di tampilan / terkunci tidak diganti dan disebut.
+- **Nomor per BAB + rujukan silang (§12.5)**: `nomorObjek(tree, perBab)` → "Tabel 3.1" (nomor mulai lagi tiap bagian teratas, sub-bagian ikut BAB-nya). Word: "Tabel 3." + `SEQ Tabel \* ARABIC \s 1`; tiap judul objek diberi bookmark `_RefLkjip<id blok>` yang menutup label + nomor saja. Narasi: tombol **Rujukan** menyisipkan atom `<span data-rujuk="id blok">` (penyaring: angka saja); teksnya disegarkan dari nomor SEKARANG tanpa memunculkan Simpan; di Word jadi field `REF _RefLkjip<id> \h` dengan teks awal nomor sekarang. Rujukan ke blok yang sudah dihapus → "Tabel ?" (merah di editor) dan disebut Finalisasi (`kumpulkanRujukanPutus`). **Pulihkan versi** memetakan `data-rujuk` ke id blok baru (`petakanRujukanNarasi`, lewat id foto atau letak blok untuk foto lama) — cacat yang dulu memutus grafik dari tabelnya.
+
+### Yang berubah dari konsep saat dikerjakan
+
+- **Excel 365 TIDAK menulis `x:num`** (papan klip asli ditangkap lewat COM): teks tampil satu-satunya bahan angka. Excel bersetelan Inggris menulis "1,250,000" / "57,755,803,079.01" di HTML **dan** TSV — dulu terbaca 1,25 dan 57,755. Penandanya `mso-displayed-decimal-separator:"\."` di `<style>` Excel → `angkaInggrisKeId` membalik pemisahnya. `x:num` (Excel lama) & `data-sheets-value` (Google Sheets) tetap dibaca bila ada; desimal mengikuti yang TAMPIL ("13%", bukan "12,50%").
+- **TSV Word memecah sel berparagraf** jadi beberapa baris dan membuang sel gabungan — jadi tempel nilai (Ctrl+Shift+V) juga membaca HTML-nya bila ada.
+- **TSV kini bergaya Excel**: sel berisi tab/baris baru/berawalan kutip dibungkus "…" (dulu baris baru diganti spasi).
+- **Tempel ke sel yang tertutup gabungan dari luar blok** dulu menyimpan isinya tapi tak pernah tampil — kini gabungan yang menyentuh area tempel dilepas (`lepasGabunganDi`).
+- **Menu klik-kanan memakai `kunci` + satu `pilihMenu`**, bukan fungsi di tiap butir: aturan React compiler menolak fungsi yang memegang ref kisi tersimpan di larik yang dibuat saat render. `RowMenu` pindah ke berkas sendiri (dipakai juga menu pohon dokumen), tingginya DIUKUR (16 butir = 584 px, perkiraan rumus 542 px membuat butir terakhir jatuh di bawah layar).
+- **Ditemukan saat dicoba, cacat lama ikut dibereskan**: (a) modal Pengaturan Dokumen setinggi ± 1.180 px tanpa gulir — di layar laptop (768–950 px) judul dan tombol Simpan/Batal terpotong dan tak bisa ditekan → `.lk-modal` dibatasi tinggi layar & bisa digulir; (b) menu klik-kanan (z 300) tertutup FloatingDock (z 400) → 450; (c) huruf kolom tidak `sticky` karena `.lk-tabel th.lk-colhead { position: relative }` lebih spesifik → aturan sticky (0,2,2); (d) cadangan `navigator.clipboard.writeText` tombol Salin melempar *unhandled rejection* saat halaman tak fokus → ditangkap.
+
+### Uji
+
+- `npx tsx scripts/test-lkjip-tabel-bc.mts` (**131**), termasuk tiga papan klip ASLI di `scripts/fixtures/lkjip-papan-klip/` (Excel pemisah Indonesia, Excel pemisah Inggris, Word — disalin lewat COM, jalur pengguna & sisa byte papan klip dibuang). **64 uji mutasi tertangkap**. Putaran pertama 47/57: sisanya data uji yang tidak menguji klaimnya (kepala tabel berteks sehingga AutoSum berhenti sendiri, rowspan hanya di kolom terakhir, JUMLAH yang kebetulan sudah di urutan akhir, pemeriksaan CSS yang hanya mencocokkan awalan aturan) dan dua mutan tak sah (menghapus `if` membuat `else if` yatim) — semua dibetulkan lalu dijalankan ulang.
+- `test-lkjip-versi-tertaut.mts` (DB 2099) ditambah B14/B15: rujukan narasi ikut id blok baru sesudah Pulihkan, juga foto lama tanpa id.
+- Suite lama disesuaikan maksudnya sama (hitungan tombol 16 → 24, tombol format terkunci 15 → 18, `RowMenu` pindah berkas, Word lewat `runSel`).
+- **Microsoft Word sungguhan** (COM, proses tersendiri): sesudah Word menghitung field-nya sendiri judul tertulis Tabel 2.1 / 3.1 / 3.2 / Gambar 3.1 / Tabel 3.3 (`\s 1` bekerja dengan Heading1 tanpa penomoran daftar Word); REF menampilkan "Tabel 3.2", "Tabel 3.3", "Gambar 3.1", "Tabel 2.1"; rujukan putus "Tabel ?"; Daftar Tabel benar; sel miring merah bergaris bawah + baris baru (`<br>`) benar. Dibuka TANPA pembaruan field: isinya sama persis (cache). Mode berurutan: Tabel 1–4, REF "Tabel 3".
+- **Peramban** (dokumen kotak pasir 2099, dihapus sesudahnya): rujukan disisip → disimpan → bertahan muat ulang; ganti ke per BAB → narasi jadi "Tabel 3.2 / 3.1" tanpa tombol Simpan; isi-seret (Sasaran/Jan/1.250.000/rumus), bilah status, Tab menambah baris, Alt+=, urutkan, cari & ganti, Ctrl+B/I/U, kuas, menu klik-kanan (Salin→Tempel, Sisip), tempel HTML Excel-Inggris (gabungan, format, angka dibalik), Ctrl+Shift+V, Ctrl+X, Alt+Enter, kepala tetap terlihat di tabel 30 baris, Simpan Tabel (i/u/fc & baris baru lewat skema server), rute Word 200, tema terang, 375 px (menu 81–321 px, halaman tidak melebar).
+- Seretan alat peramban tidak memicu `mouseenter` di sel antara, jadi seret-blok & isi-seret diuji lewat peristiwa tetikus di halaman (mousedown → mouseout/mouseover → mouseup) — tetikus sungguhan belum dicoba.
+
+### Belum dicoba / sengaja tidak
+
+- Tetikus & papan ketik FISIK (seret pegangan, Ctrl+Shift+V asli peramban) — dari sini hanya peristiwa buatan.
+- Excel yang benar-benar berbahasa Inggris (yang diuji: Excel ini dengan pemisah diubah ke gaya Inggris lalu dikembalikan).
+- Isi-seret ke atas/kiri (konsep hanya bawah/kanan).

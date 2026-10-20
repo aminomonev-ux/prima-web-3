@@ -47,6 +47,7 @@ export const StyleConfigSchema = z.object({
   footerText:   z.string().max(120).default(''),
   romanFront:   z.boolean().default(true),    // cover bebas-nomor, daftar romawi (i,ii), isi arab (1,2)
   tableHeaderFill: z.string().regex(/^[0-9a-fA-F]{6}$/).default('EDEDED'),   // warna latar header tabel (hex tanpa #)
+  nomorPerBab:  z.boolean().default(false),   // "Tabel 3.1" (nomor mulai lagi tiap BAB) — konsep tabel-excel §12.5
   // Kata Pengantar (front-matter, setelah cover sebelum Daftar Isi) + blok tanda tangan
   kataPengantarHtml: z.string().max(20000).default(''),
   ttdTempatTanggal:  z.string().max(120).default(''),
@@ -56,7 +57,7 @@ export const StyleConfigSchema = z.object({
   ttdNip:            z.string().max(60).default(''),
 }).transform(c => ({ ...c, kataPengantarHtml: sanitizeNarasiHtml(c.kataPengantarHtml) }));
 export type StyleConfig = z.infer<typeof StyleConfigSchema>;
-export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12, lineSpacing: 1.5, align: 'both', spaceAfterPt: 6, firstLineIndentCm: 1.27, pageNumber: true, footerText: '', romanFront: true, tableHeaderFill: 'EDEDED', kataPengantarHtml: '', ttdTempatTanggal: '', ttdJabatan: '', ttdNama: '', ttdPangkat: '', ttdNip: '' };
+export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12, lineSpacing: 1.5, align: 'both', spaceAfterPt: 6, firstLineIndentCm: 1.27, pageNumber: true, footerText: '', romanFront: true, tableHeaderFill: 'EDEDED', nomorPerBab: false, kataPengantarHtml: '', ttdTempatTanggal: '', ttdJabatan: '', ttdNama: '', ttdPangkat: '', ttdNip: '' };
 
 // Sanitizer narasi (server-safe, no DOM) — whitelist tag, buang semua atribut.
 // Defense-in-depth: Tiptap re-parse saat load + docgen parse ke OOXML (bukan innerHTML).
@@ -86,6 +87,9 @@ export function sanitizeNarasiHtml(html: string): string {
       // Angka tertaut (konsep §19.1): id dibentuk ulang dari pola sempit, gaya lain tidak ikut.
       const angka = /(?<![-a-zA-Z])data-angka\s*=\s*["']([a-z0-9]{1,12})["']/.exec(String(attrs || ''));
       if (angka) return `<span data-angka="${angka[1]}">`;
+      // Rujukan silang ke Tabel/Gambar/Grafik (konsep tabel-excel §12.5): id blok, angka saja.
+      const rujuk = /(?<![-a-zA-Z])data-rujuk\s*=\s*["'](\d{1,12})["']/.exec(String(attrs || ''));
+      if (rujuk) return `<span data-rujuk="${rujuk[1]}">`;
       const out: string[] = [];
       const col = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))/i.exec(String(attrs || ''));
       if (col) out.push(`color:${col[1].toLowerCase().replace(/\s+/g, '')}`);
@@ -173,6 +177,10 @@ const CellSchema = z.union([
     dec: z.coerce.number().int().min(0).max(6).optional(),
     bg:  z.string().regex(/^[0-9a-fA-F]{6}$/).optional(),
     rot: z.boolean().optional(),
+    // Tahap B (konsep tabel-excel §5.8) — WAJIB terdaftar: Zod membuang kunci yang tak dikenalnya.
+    i:   z.boolean().optional(),
+    u:   z.boolean().optional(),
+    fc:  z.string().regex(/^[0-9a-fA-F]{6}$/).optional(),
   }),
 ]).transform(c => (typeof c === 'string' ? { v: c } : c));
 

@@ -106,21 +106,55 @@ export interface BlokSekarang { id: number; section_id: number; urutan: number; 
  * menunjuk blok yang sudah tidak ada.
  */
 export function petakanRujukanGrafik(masuk: BlokPulih[], sekarang: BlokSekarang[]): { id: number; payload: Record<string, unknown> }[] {
-  const petaId = new Map<number, number>();
-  for (const m of masuk) if (m.snap.id != null) petaId.set(m.snap.id, m.idBaru);
-  const lewatLetak = (idLama: number): number | null => {
-    const kini = sekarang.find(b => Number(b.id) === idLama && b.tipe === 'TABEL');
-    if (!kini) return null;
-    return masuk.find(m => m.snap.tipe === 'TABEL' && m.sidLama === Number(kini.section_id) && m.snap.urutan === Number(kini.urutan))?.idBaru ?? null;
-  };
+  const ke = petaBlokBaru(masuk, sekarang);
   const ubah: { id: number; payload: Record<string, unknown> }[] = [];
   for (const m of masuk) {
     if (m.snap.tipe !== 'GRAFIK' || !m.snap.payload || typeof m.snap.payload !== 'object') continue;
     const p = m.snap.payload as Record<string, unknown>;
     const lama = Number(p.tabelBlockId);
     if (!Number.isInteger(lama) || lama <= 0) continue;
-    const baru = petaId.get(lama) ?? (m.snap.id == null ? lewatLetak(lama) : null);
+    const baru = ke(lama, m, 'TABEL');
     if (baru !== lama) ubah.push({ id: m.idBaru, payload: { ...p, tabelBlockId: baru } });
+  }
+  return ubah;
+}
+
+/**
+ * id blok LAMA → id blok BARU sesudah Pulihkan. Lewat `id` foto; foto lama (tanpa id) lewat letak
+ * blok itu SEKARANG (bab + urutan + tipe) yang dicocokkan dengan letaknya di foto. Tidak ketemu → null.
+ */
+function petaBlokBaru(masuk: BlokPulih[], sekarang: BlokSekarang[]) {
+  const petaId = new Map<number, number>();
+  for (const m of masuk) if (m.snap.id != null) petaId.set(m.snap.id, m.idBaru);
+  const lewatLetak = (idLama: number, tipe?: string): number | null => {
+    const kini = sekarang.find(b => Number(b.id) === idLama && (!tipe || b.tipe === tipe));
+    if (!kini) return null;
+    return masuk.find(m => m.snap.tipe === kini.tipe && m.sidLama === Number(kini.section_id) && m.snap.urutan === Number(kini.urutan))?.idBaru ?? null;
+  };
+  return (idLama: number, perujuk: BlokPulih, tipe?: string): number | null =>
+    petaId.get(idLama) ?? (perujuk.snap.id == null ? lewatLetak(idLama, tipe) : null);
+}
+
+/**
+ * Rujukan silang di narasi (`<span data-rujuk="id">`, konsep tabel-excel §12.5) menunjuk ID BLOK —
+ * cacat yang sama dgn grafik: tanpa pemetaan, semua rujukan sesudah Pulihkan jadi "Tabel ?".
+ * Yang tujuannya tak ditemukan dibiarkan menunjuk id lama (tetap tertulis "?", dan Finalisasi menyebutnya).
+ */
+export function petakanRujukanNarasi(masuk: BlokPulih[], sekarang: BlokSekarang[]): { id: number; payload: Record<string, unknown> }[] {
+  const ke = petaBlokBaru(masuk, sekarang);
+  const ubah: { id: number; payload: Record<string, unknown> }[] = [];
+  for (const m of masuk) {
+    if (m.snap.tipe !== 'NARASI' || !m.snap.payload || typeof m.snap.payload !== 'object') continue;
+    const p = m.snap.payload as Record<string, unknown>;
+    if (typeof p.html !== 'string' || !p.html.includes('data-rujuk')) continue;
+    let berubah = false;
+    const html = p.html.replace(/data-rujuk="(\d{1,12})"/g, (asli, id: string) => {
+      const baru = ke(Number(id), m);
+      if (baru === null || baru === Number(id)) return asli;
+      berubah = true;
+      return `data-rujuk="${baru}"`;
+    });
+    if (berubah) ubah.push({ id: m.idBaru, payload: { ...p, html } });
   }
   return ubah;
 }
@@ -189,8 +223,8 @@ export async function restoreVersi(versiId: number, dokumenId: number, expectedV
     ` as unknown as Array<{ id: number }>;
     if (baru.length !== urutMasuk.length) return;
     const masuk = urutMasuk.map((u, i) => ({ ...u, idBaru: Number(baru[i].id) }));
-    // Hanya blok GRAFIK yang rujukannya berubah — sedikit per dokumen, tiap baris payload-nya sendiri.
-    for (const u of petakanRujukanGrafik(masuk, sekarang)) {
+    // Hanya blok GRAFIK & NARASI yang rujukannya berubah — sedikit per dokumen, tiap baris payload-nya sendiri.
+    for (const u of [...petakanRujukanGrafik(masuk, sekarang), ...petakanRujukanNarasi(masuk, sekarang)]) {
       await tx`UPDATE lkjip_block SET payload = ${JSON.stringify(u.payload)} WHERE id = ${u.id}`;
     }
   });

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
@@ -22,7 +21,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDetail } from '@/lib/lkjip/data';
-import { nomorObjek, type SectionNode, type BlockNode, type JenisObjek } from '@/lib/lkjip/numbering';
+import { nomorObjek, sebutObjek, daftarObjekRujukan, type SectionNode, type BlockNode, type NomorObjek, type ObjekRujukan } from '@/lib/lkjip/numbering';
 import type { VersiMeta } from '@/lib/lkjip/versi';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
@@ -31,10 +30,11 @@ import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
 import { normalizeRows, angkaSel } from '@/lib/lkjip/tabel';
 import { sidikGrafik } from '@/lib/lkjip/tautan';
-import { kumpulkanTabelTertaut, kumpulkanNarasiTertaut, kumpulkanSelGalat, periksaSemua, type HasilPeriksa, type ItemPeriksa } from '@/lib/lkjip/kesegaran';
+import { kumpulkanTabelTertaut, kumpulkanNarasiTertaut, kumpulkanSelGalat, kumpulkanRujukanPutus, periksaSemua, type HasilPeriksa, type ItemPeriksa } from '@/lib/lkjip/kesegaran';
 import type { ResepAngka } from '@/lib/lkjip/angka';
 import { fetchJson } from '@/lib/shared/api';
 import TabelEditor from './TabelEditor';
+import { RowMenu, type RowMenuItem } from './RowMenu';
 
 const TiptapNarasi = dynamic(() => import('./TiptapNarasi'), {
   ssr: false,
@@ -102,7 +102,9 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   const readOnly = detail.status === 'FINAL';
   const flat = useMemo(() => flatten(detail.tree), [detail.tree]);
   // Nomor Tabel/Gambar/Grafik = fungsi yang sama dengan cache field SEQ di Word (§12.4).
-  const nomorBlok = useMemo(() => nomorObjek(detail.tree), [detail.tree]);
+  const nomorBlok = useMemo(() => nomorObjek(detail.tree, detail.style_config.nomorPerBab), [detail.tree, detail.style_config.nomorPerBab]);
+  // Tujuan rujukan silang di narasi (§12.5) — urut seperti di dokumen, nomornya SEKARANG.
+  const daftarObjek = useMemo(() => daftarObjekRujukan(detail.tree, nomorBlok), [detail.tree, nomorBlok]);
   // B12: aturan BAB dinilai dengan fungsi yang SAMA dengan pagar di lib/lkjip/data.ts.
   const bagian = useMemo<BagianRingkas[]>(
     () => flat.map(f => ({ id: f.node.id, parent_id: f.parentId, urutan: f.node.urutan, locked: f.node.locked })),
@@ -291,6 +293,18 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
       if (pilihan === 'utama') { bukaTabel(galat[0]); return; }
       if (pilihan !== 'lain') return;
     }
+    // §12.5: rujukan silang ke Tabel/Gambar/Grafik yang sudah dihapus tercetak "Tabel ?".
+    const putus = kumpulkanRujukanPutus(flat.map(f => f.node), new Set(nomorBlok.keys()));
+    if (putus.length) {
+      const daftar = putus.slice(0, 5).map(t => `• ${t.letak}: ${t.jumlah} rujukan`).join('\n');
+      const pilihan = await pilihDialog({
+        title: 'Ada rujukan ke tabel/gambar yang sudah dihapus',
+        message: `Narasi berikut menyebut tabel, gambar, atau grafik yang tidak ada lagi — di Word tertulis "Tabel ?":\n${daftar}${putus.length > 5 ? '\n• …' : ''}`,
+        confirmLabel: 'Lihat dulu', altLabel: 'Tetap lanjut', variant: 'warning', altVariant: 'danger',
+      });
+      if (pilihan === 'utama') { bukaTabel(putus[0]); return; }
+      if (pilihan !== 'lain') return;
+    }
     // Dokumen FINAL tidak bisa diperbarui lagi — tabel & angka yang sudah tertinggal dari
     // sumbernya ditanyakan SEKARANG, bukan ditemukan sesudah dicetak.
     if (semuaTertaut.length) {
@@ -411,7 +425,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     void reorderBlocks(selected.id, ids);
                   }}>
                   <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} warnaKepalaTabel={detail.style_config.tableHeaderFill} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
-                    nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok}
+                    nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok} daftarObjek={daftarObjek}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
                         onDragStart={e => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; }}
@@ -563,6 +577,12 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                   <option value="FFF2CC">Kuning muda</option>
                 </select>
               </label>
+              <label>Nomor tabel, gambar &amp; grafik
+                <select value={styleForm.nomorPerBab ? '1' : '0'} onChange={e => setStyleForm({ ...styleForm, nomorPerBab: e.target.value === '1' })}>
+                  <option value="0">Berurutan (Tabel 1, 2, 3)</option>
+                  <option value="1">Per BAB (Tabel 3.1, 3.2)</option>
+                </select>
+              </label>
             </div>
 
             <div className="lk-sf-divider">Kata Pengantar &amp; Tanda Tangan (opsional — tampil setelah cover, sebelum Daftar Isi)</div>
@@ -691,36 +711,6 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
 }
 
 // ════════════════════════════════════════════════════════════════
-// Menu aksi bagian — popover (portal), anti-clip scroll, auto-flip
-// ════════════════════════════════════════════════════════════════
-type RowMenuItem = { icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean; danger?: boolean; alasan?: string };
-function RowMenu({ x, y, items, onClose }: { x: number; y: number; items: RowMenuItem[]; onClose: () => void }) {
-  const MW = 216, ITEM = 33, PAD = 7;
-  const h = items.length * ITEM + PAD * 2;
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  const left = x + MW > vw - 8 ? Math.max(8, x - MW - 32) : x;       // flip ke kiri kalau mentok kanan
-  const top = y + h > vh - 8 ? Math.max(8, vh - h - 8) : y;          // naik kalau mentok bawah
-  return createPortal(
-    <div className="lk-rowmenu-bg" onMouseDown={onClose}>
-      <div className="lk-rowmenu" style={{ left, top, width: MW }} onMouseDown={e => e.stopPropagation()}>
-        {items.map((it, i) => (
-          <button key={i} type="button"
-            className={`lk-rowmenu-item${it.danger ? ' danger' : ''}${it.disabled ? ' disabled' : ''}`}
-            aria-disabled={it.disabled}
-            data-tooltip={it.disabled ? it.alasan : undefined} data-tooltip-pos="right"
-            onClick={() => { if (!it.disabled) it.onClick(); }}>
-            <span className="lk-rowmenu-ic">{it.icon}</span>
-            <span className="lk-rowmenu-lb">{it.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-// ════════════════════════════════════════════════════════════════
 // Panduan penggunaan (modal accordion) — step-by-step untuk penyusun
 // ════════════════════════════════════════════════════════════════
 const PANDUAN: { t: string; b: React.ReactNode }[] = [
@@ -831,14 +821,14 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // ════════════════════════════════════════════════════════════════
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
-type NomorBlok = Map<number, { jenis: JenisObjek; nomor: number }>;
-function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: { jenis: JenisObjek; nomor: number }; nomorBlok?: NomorBlok }) {
+type NomorBlok = Map<number, NomorObjek>;
+function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[] }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
       <div className="lk-block-head">
         <span className="lk-block-headl">{dragHandle}<span className="lk-block-tag">{block.tipe}</span>
-          {nomor && <span className="lk-block-nomor">{nomor.jenis} {nomor.nomor}</span>}
+          {nomor && <span className="lk-block-nomor">{sebutObjek(nomor)}</span>}
           {block.tipe === 'NARASI' && !readOnly && (
             <label className="lk-block-cont" data-tooltip="Lanjutkan penomoran daftar (a,b,c / 1,2,3) dari blok narasi sebelumnya — untuk daftar yang terpotong tabel/gambar" data-tooltip-pos="below">
               <input type="checkbox" checked={continueList} onChange={e => { const v = e.target.checked; setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); }} />
@@ -850,7 +840,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
       </div>
       {block.tipe === 'NARASI' && (
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
-          tahunDokumen={tahunDokumen} readOnly={readOnly} onSave={(html, angka) => onSave({ html, continueList, angka })} />
+          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
       {block.tipe === 'TABEL'  && <TabelEditor block={block} readOnly={readOnly} tahunDokumen={tahunDokumen} warnaKepala={warnaKepalaTabel} onSave={onSave} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
@@ -1036,7 +1026,7 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
                 <select value={tabelBlockId ?? ''} onChange={e => setTabelBlockId(e.target.value ? Number(e.target.value) : null)}>
                   {tableBlocks.map((b, i) => {
                     const judul = (b.payload as { judul?: string })?.judul;
-                    const label = `Tabel ${nomorBlok?.get(b.id)?.nomor ?? i + 1}`;
+                    const label = `Tabel ${nomorBlok?.get(b.id)?.label ?? i + 1}`;
                     return <option key={b.id} value={b.id}>{judul ? `${label} · ${judul}` : label}</option>;
                   })}
                 </select>
@@ -1117,7 +1107,9 @@ const ED_CSS = `
   .lk-node:hover .lk-node-kebab, .lk-node.active .lk-node-kebab { opacity: 1; }
   .lk-node-kebab:hover { background: rgba(124,92,252,0.22); color: #C9BCFF; opacity: 1; }
 
-  .lk-rowmenu-bg { position: fixed; inset: 0; z-index: 300; }
+  /* 450 = lapisan modal: di atas FloatingDock (400) — menu klik-kanan tabel setinggi ± 540 px dulu
+     tertutup dock di bagian bawahnya (Kosongkan, Hapus baris/kolom); di bawah confirmDialog (4000). */
+  .lk-rowmenu-bg { position: fixed; inset: 0; z-index: 450; }
   .lk-rowmenu { position: fixed; background: #042C53; border: 1px solid #0C447C; border-radius: 10px; padding: 7px; box-shadow: 0 14px 34px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 1px; animation: lk-rowmenu-in .14s ease both; }
   @keyframes lk-rowmenu-in { from { opacity: 0; transform: translateY(-5px) scale(.97); } to { opacity: 1; transform: none; } }
   .lk-rowmenu-item { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border: none; background: none; color: #D6E6F7; cursor: pointer; border-radius: 6px; font-size: 12.5px; text-align: left; width: 100%; }
@@ -1129,7 +1121,11 @@ const ED_CSS = `
   .lk-rowmenu-item.danger:hover:not(.disabled) { background: rgba(226,75,74,0.18); color: #fff; }
   .lk-rowmenu-ic { display: inline-flex; flex-shrink: 0; color: #85B7EB; }
   .lk-rowmenu-item:hover:not(.disabled) .lk-rowmenu-ic, .lk-rowmenu-item.danger .lk-rowmenu-ic { color: inherit; }
-  .lk-rowmenu-lb { white-space: nowrap; }
+  .lk-rowmenu-lb { white-space: nowrap; flex: 1; }
+  .lk-rowmenu-item.pisah { border-top: 1px solid #0C447C; margin-top: 3px; padding-top: 9px; border-radius: 0 0 6px 6px; }
+  .lk-rowmenu-kb { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #85B7EB; opacity: .8; white-space: nowrap; }
+  [data-theme="light"] .lk-rowmenu-item.pisah { border-top-color: rgba(0,0,0,.1); }
+  [data-theme="light"] .lk-rowmenu-kb { color: #6B7280; }
   .lk-tree-foot { padding: 10px 12px; border-top: 1px solid #0C447C; }
 
   .lk-editor { overflow-y: auto; padding: 22px 26px 120px; min-height: 0; }
@@ -1258,7 +1254,8 @@ const ED_CSS = `
   .lk-tabel-scroll:focus-within .lk-cell-aktif { outline-width: 2px; }
   .lk-tangkap { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; resize: none; border: 0; padding: 0; }
   .lk-tabel-kanvas { position: relative; display: inline-block; min-width: 100%; }
-  .lk-sel-isi { padding: 7px 8px; min-height: 31px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #E6F1FB; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: cell; user-select: none; }
+  /* Teks panjang terbungkus seperti di Word (§5.8) — dulu satu baris terpotong "…" padahal Word membungkusnya. */
+  .lk-sel-isi { padding: 7px 8px; min-height: 31px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.35; color: #E6F1FB; white-space: pre-wrap; overflow-wrap: break-word; overflow: hidden; cursor: cell; user-select: none; }
   .lk-tabel tr.lk-hrow .lk-sel-isi { font-weight: 700; }
   .lk-tabel th.lk-colhead { position: relative; color: #85B7EB; font-size: 11px; font-weight: 700; text-align: center; padding: 4px 0; cursor: s-resize; user-select: none; }
   .lk-tabel th.lk-colhead.aktif, .lk-tabel td.lk-rownum.aktif { background: rgba(239,159,39,0.18); color: #EF9F27; }
@@ -1317,6 +1314,50 @@ const ED_CSS = `
   .lk-fbar-fx { font-style: italic; font-family: Georgia, 'Times New Roman', serif; color: #85B7EB; padding: 0 10px; border-right: 1px solid #0C447C; font-size: 13px; }
   .lk-fbar-in { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #E6F1FB; padding: 7px 10px; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
   .lk-fbar-in:disabled { color: #5E8BBE; }
+  textarea.lk-fbar-in { resize: none; line-height: 1.4; align-self: stretch; }
+
+  /* ── Tahap B/C (konsep tabel-excel §5.6–5.11, §8) ── */
+  /* Kepala & huruf kolom tetap terlihat (§5.11): wadah bergulir sendiri, sel kepala sticky dgn latar
+     PEKAT (lapisan warna di atas warna blok) — latar tembus pandang memperlihatkan isi yang lewat di bawahnya. */
+  .lk-tabel-scroll { max-height: 70vh; overflow: auto; }
+  /* (0,2,2): harus mengalahkan ".lk-tabel th.lk-colhead { position: relative }" (0,2,1) — dengan
+     kekhususan di bawahnya huruf kolom ikut tergulir pergi (terukur −500 px, 2026-10-20). */
+  .lk-tabel-scroll .lk-tabel thead th { position: sticky; top: 0; z-index: 3; background: linear-gradient(rgba(255,255,255,0.03), rgba(255,255,255,0.03)), #042C53; }
+  .lk-tabel-scroll .lk-tabel thead th.lk-colhead.aktif { background: linear-gradient(rgba(239,159,39,0.18), rgba(239,159,39,0.18)), #042C53; }
+  .lk-tabel-scroll tr.lk-hrow > td { position: sticky; top: var(--lk-atas, 0); z-index: 2; background: linear-gradient(rgba(133,183,235,0.13), rgba(133,183,235,0.13)), #042C53; }
+  .lk-tabel-scroll tr.lk-hrow > td.lk-cell-sel { background: linear-gradient(rgba(239,159,39,0.12), rgba(239,159,39,0.12)), linear-gradient(rgba(133,183,235,0.13), rgba(133,183,235,0.13)), #042C53; }
+  .lk-tabel-scroll tr.lk-hrow > td.lk-rownum.aktif { background: linear-gradient(rgba(239,159,39,0.18), rgba(239,159,39,0.18)), #042C53; }
+  .lk-tabel textarea.lk-sel-edit { display: block; width: 100%; min-width: 0; background: transparent; border: none; color: #E6F1FB; padding: 7px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.35; resize: none; overflow: hidden; outline: 1px solid #185FA5; }
+  .lk-tabel td.lk-pojok { position: relative; }
+  .lk-isi-pegangan { position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px; background: #EF9F27; border: 1px solid #020F1C; cursor: crosshair; z-index: 4; }
+  .lk-tabel td.lk-cell-isi { outline: 1px dashed #EF9F27; outline-offset: -2px; }
+  .lk-tabel-scroll.lk-kuas .lk-sel-isi { cursor: copy; }
+  .lk-tabel-tools button.on { background: rgba(239,159,39,0.18); border-color: #EF9F27; color: #EF9F27; }
+  .lk-menu-teks { display: inline-flex; justify-content: center; width: 14px; font-size: 13px; line-height: 1; }
+  .lk-tabel-status { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; font-size: 11.5px; color: #85B7EB; }
+  .lk-tabel-status b { color: #E6F1FB; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .lk-cari { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; padding: 6px 8px; border: 1px solid #0C447C; border-radius: 6px; background: #020F1C; }
+  .lk-cari-ic { color: #85B7EB; flex-shrink: 0; }
+  .lk-cari-in { flex: 1 1 140px; min-width: 0; background: rgba(255,255,255,0.04); border: 1px solid #0C447C; border-radius: 6px; color: #E6F1FB; padding: 5px 8px; font-size: 12.5px; }
+  .lk-cari-in:focus { outline: none; border-color: #185FA5; }
+  .lk-cari-n { font-size: 11px; color: #85B7EB; min-width: 64px; }
+  .lk-cari button { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .lk-cari button:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; }
+  .lk-cari button:disabled { opacity: .38; cursor: not-allowed; }
+  .lk-cari-teks { padding: 0 10px !important; }
+  [data-theme="light"] .lk-tabel tr.lk-hrow td.lk-cell-sel { background: linear-gradient(rgba(124,92,252,0.12), rgba(124,92,252,0.12)), #EDEDED; }
+  [data-theme="light"] .lk-tabel-scroll .lk-tabel thead th { background: #F3F4F6; }
+  [data-theme="light"] .lk-tabel-scroll .lk-tabel thead th.lk-colhead.aktif, [data-theme="light"] .lk-tabel-scroll tr.lk-hrow > td.lk-rownum.aktif { background: linear-gradient(rgba(124,92,252,0.14), rgba(124,92,252,0.14)), #F3F4F6; }
+  [data-theme="light"] .lk-tabel textarea.lk-sel-edit { color: #0F0F12; outline-color: #7C5CFC; }
+  [data-theme="light"] .lk-isi-pegangan { background: #7C5CFC; border-color: #FFFFFF; }
+  [data-theme="light"] .lk-tabel td.lk-cell-isi { outline-color: #7C5CFC; }
+  [data-theme="light"] .lk-tabel-tools button.on { background: rgba(124,92,252,0.14); border-color: #7C5CFC; color: #7C5CFC; }
+  [data-theme="light"] .lk-tabel-status { color: #6B7280; }
+  [data-theme="light"] .lk-tabel-status b { color: #0F0F12; }
+  [data-theme="light"] .lk-cari { background: #FFFFFF; border-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .lk-cari-in { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .lk-cari-ic, [data-theme="light"] .lk-cari-n { color: #6B7280; }
+  [data-theme="light"] .lk-cari button { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #374151; }
 
   .lk-gambar-ed { display: flex; flex-direction: column; gap: 8px; }
   .lk-gambar-ed input { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; color: #E6F1FB; padding: 8px 10px; font-size: 13px; }
@@ -1331,7 +1372,9 @@ const ED_CSS = `
 
   /* 450: di atas FloatingDock (400) — dulu 100, jadi di ponsel kaki modal yang tinggi (Simpan/Batal) tertutup dock; di bawah confirmDialog (4000). */
   .lk-modal-bg { position: fixed; inset: 0; background: rgba(2,15,28,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 450; }
-  .lk-modal { background: #042C53; border: 1px solid #0C447C; border-radius: 14px; padding: 22px; width: 400px; max-width: 92vw; }
+  /* Dibatasi tinggi layar & bisa digulir: modal Pengaturan Dokumen setinggi ± 1.180 px, dulu di layar laptop
+     (768–950 px) judul dan tombol Simpan/Batal-nya terpotong tanpa bisa digulir (terukur 2026-10-20). */
+  .lk-modal { background: #042C53; border: 1px solid #0C447C; border-radius: 14px; padding: 22px; width: 400px; max-width: 92vw; max-height: calc(100vh - 24px); overflow-y: auto; }
   .lk-modal h3 { margin: 0 0 12px; font-size: 16px; font-weight: 800; }
   .lk-modal input { width: 100%; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 9px 11px; color: #E6F1FB; font-size: 14px; margin-bottom: 14px; }
   .lk-modal input:focus { outline: none; border-color: #185FA5; }

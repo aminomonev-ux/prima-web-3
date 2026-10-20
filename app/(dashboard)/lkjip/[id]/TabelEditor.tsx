@@ -1,33 +1,40 @@
 'use client';
-// Editor blok TABEL LKJIP ala Excel — docs/CONCEPT-lkjip-tabel-excel.md (Tahap A).
+// Editor blok TABEL LKJIP ala Excel — docs/CONCEPT-lkjip-tabel-excel.md (Tahap A, B, C).
 // Memblok (seret, Shift, huruf kolom, nomor baris), papan ketik ala Excel, Delete mengosongkan,
 // sisip/hapus baris & kolom sebanyak yang dipilih (gabungan & rumus ikut), lebar kolom di tiap garis.
+// Tahap B: potong, tempel nilai, isi-seret, miring/garis bawah/warna huruf, kuas format, Alt+Enter,
+// Σ AutoSum, bilah status, menu klik-kanan, kepala tetap terlihat. Tahap C: tempel dari Excel/Word
+// lengkap dengan gabungan, urutkan blok, cari & ganti.
 // Kepala tabel selalu berupa sel (E1); nama kolom diisi dari judul di kepala (E2).
 // Tabel tertaut (CONCEPT-lkjip-tabel-tertaut.md): badan terkunci kecuali kolom isian tangan (E8).
 // Aturannya di lib/lkjip/tabel.ts (murni, diuji); berkas ini hanya keadaan layar.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import {
-  AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Combine, Split, Copy, ClipboardPaste,
-  Undo2, Redo2, Save, Link2, Unlink, RefreshCw, SlidersHorizontal, RotateCcw, Columns3,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Combine, Split, Copy, ClipboardPaste, Scissors,
+  Undo2, Redo2, Save, Link2, Unlink, RefreshCw, SlidersHorizontal, RotateCcw, Columns3, Paintbrush, Sigma, Search, X,
+  ChevronUp, ChevronDown, ArrowDownAZ, ArrowDownZA, ClipboardType, Eraser,
 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
+import DeleteIcon from '@/components/ui/DeleteIcon';
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
 import type { BlockNode } from '@/lib/lkjip/numbering';
 import {
-  normalizeRows, sanitizeRows, mergeCells, unmergeAt, extractRange, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel,
+  normalizeRows, sanitizeRows, mergeCells, unmergeAt, pasteRange, rangeToTSV, parseTSV, displayValue, colLabel,
   selGalat, daftarSelGalat, nilaiKetikan, pastikanKepalaSel, namaKolomDariKepala, sisipBaris, hapusBaris, sisipKolom, hapusKolom,
   kosongkanBlok, tanpaFormat, teksDiBaris, ubahJumlahKepala, paskanKeKertas, pxKeCm,
   bacaAtur, gayaSel, selBergaya, nomorUlang, ratakanLebar, blokKeHtml, selSalinan, perluPetunjukLebar, asalSel, sisipBarisBaru, lebarKertasPx, posisiBarisBaru,
+  ambilBlok, extractRange, isiSeret, ringkasBlok, autoJumlah, tempelFormat, nilaiSaja, tempelNilai, htmlKeSel, urutkanBlok, cariSel, gantiDiSel, gantiSemua, formatUmum,
   BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, BATAS_BARIS_KEPALA, LEBAR_KOLOM_BAWAAN, GARIS_JUMLAH,
-  type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel, type AturTabel, type GayaTabel, type PosisiTabel, type TabelBorder,
+  type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel, type AturTabel, type GayaTabel, type PosisiTabel, type TabelBorder, type Kotak,
 } from '@/lib/lkjip/tabel';
 import { kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, ambilIsianTangan, nilaiPerbarui, kalimatIsianYatim, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
 import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { usePilihanSel } from './usePilihanSel';
+import { RowMenu, type RowMenuItem } from './RowMenu';
 
 // Dimuat saat dibuka saja: penghubung sumber menyeret kode E-Anggaran & Renaksi.
 const TautanModal = dynamic(() => import('./TautanModal'), { ssr: false });
@@ -43,6 +50,13 @@ const ARAH: Record<string, { dr: number; dc: number }> = {
   ArrowUp: { dr: -1, dc: 0 }, ArrowDown: { dr: 1, dc: 0 }, ArrowLeft: { dr: 0, dc: -1 }, ArrowRight: { dr: 0, dc: 1 },
 };
 const potong = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** Papan klip internal BERSAMA semua tabel di halaman: Ctrl+C di satu tabel lalu Ctrl+V di tabel lain
+ *  tetap membawa rumus, format, dan gabungan. Dicocokkan dengan TSV papan klip sistem supaya salinan
+ *  dari aplikasi lain sesudahnya tidak tertukar dengan yang lama. */
+let papanInternal: { tsv: string; sel: TabelCell[][]; nilai: string[][] } | null = null;
+const simpanPapanInternal = (p: NonNullable<typeof papanInternal>) => { papanInternal = p; };
+const WARNA_HURUF: [string, string][] = [['C00000', 'Merah'], ['0070C0', 'Biru'], ['00B050', 'Hijau'], ['ED7D31', 'Oranye'], ['7F7F7F', 'Abu']];
+const angkaStatus = (n: number) => formatUmum(Math.abs(n) >= 1 ? Math.round(n * 100) / 100 : n);
 const cm = (px: number) => pxKeCm(px).toFixed(1).replace('.', ',');
 /** Garis sel di layar: 0 = tanpa garis, tebal (≥ GARIS_JUMLAH) = 2px; selain itu garis biasa dari CSS. */
 const garisCss = (bd?: TabelBorder): React.CSSProperties => {
@@ -88,16 +102,25 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
   const suntingRef = useRef<Sunting | null>(null);
   const [barFocused, setBarFocused] = useState(false);           // sedang mengetik di formula bar
   const barAwal = useRef('');
-  const clipRef = useRef<TabelCell[][] | null>(null);
   const petunjukLebarRef = useRef(false);
   const [adaSalinan, setAdaSalinan] = useState(false);
-  const editInputRef = useRef<HTMLInputElement | null>(null);
+  const editInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const tangkapRef = useRef<HTMLTextAreaElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [past, setPast] = useState<Snap[]>([]);
   const [future, setFuture] = useState<Snap[]>([]);
   const resizeRef = useRef<{ ci: number; x: number; w: number } | null>(null);
   const [lebarTip, setLebarTip] = useState<{ ci: number; px: number } | null>(null);
+  // Tahap B/C
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [kuas, setKuas] = useState<TabelCell[][] | null>(null);
+  const kuasSiap = useRef(false);
+  const [isi, setIsi] = useState<{ dari: Kotak; ke: Kotak } | null>(null);
+  /** Ctrl+Shift+V: peramban memicu `paste` sesudahnya — tanda ini yang membedakannya dari Ctrl+V. */
+  const tempelNilaiPada = useRef(0);
+  const [cari, setCari] = useState<{ ganti: boolean; kata: string; dengan: string; ke: number } | null>(null);
+  const cariRef = useRef<HTMLInputElement | null>(null);
+  const [atasKepala, setAtasKepala] = useState<number[]>([]);
 
   const snap = (): Snap => ({ kolom, align, colWidths, headerRows, rows, atur });
   const sameSnap = (a: Snap, b: Snap) => JSON.stringify(a) === JSON.stringify(b);
@@ -189,6 +212,12 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
       if (node) { node.focus(); const p = from + ref.length; node.setSelectionRange(p, p); }
     });
   };
+  /** Alt+Enter = baris baru DI DALAM sel (§5.8) → `<w:br/>` di Word. */
+  const sisipGantiBaris = (el: HTMLTextAreaElement, r: number, c: number) => {
+    const a = el.selectionStart, b = el.selectionEnd;
+    if (!ubahSel(r, c, `${el.value.slice(0, a)}\n${el.value.slice(b)}`)) return;
+    requestAnimationFrame(() => { const n = editInputRef.current; if (n) n.setSelectionRange(a + 1, a + 1); });
+  };
   const onSelDown = (r: number, c: number, e: React.MouseEvent) => {
     if (e.button !== 0) return;
     // Mode rumus: sedang mengetik '=' (di sel / formula bar) → klik sel lain menyisipkan rujukannya (cara Excel).
@@ -201,6 +230,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
     }
     e.preventDefault();
     if (s) selesaiSunting();
+    if (kuas) kuasSiap.current = true;
     pil.pilihSel(r, c, e.shiftKey);
     fokusGrid();
   };
@@ -259,6 +289,52 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
     setRows(prev => prev.map((row, r) => row.map((cell, c) =>
       (r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2 ? tanpaFormat(cell) : cell))));
   };
+  /** Tebal/miring/garis bawah ala Excel: patokannya sel AKTIF — menyala → seluruh blok dimatikan, sebaliknya dinyalakan. */
+  const ubahGayaHuruf = (k: 'b' | 'i' | 'u') => {
+    if (rectBadan) { toast.info(PESAN_BADAN, { id: 'badan-terkunci' }); return; }
+    const nyala = !(sel && rows[sel.ar]?.[sel.ac]?.[k]);
+    editCells(c => { if (nyala) c[k] = true; else delete c[k]; });
+  };
+
+  // ── Kuas format (§5.8): salin format blok, lalu blok berikutnya yang dipilih menerimanya ─────
+  const mulaiKuas = () => {
+    if (kuas) { setKuas(null); return; }
+    if (!rect) return;
+    setKuas(extractRange(rows, rect.r1, rect.c1, rect.r2, rect.c2));
+    toast.info('Kuas format: pilih sel atau blok tujuan. Esc membatalkan.', { id: 'kuas' });
+  };
+  const pakaiKuas = () => {
+    const pola = kuas;
+    setKuas(null);
+    if (!pola || !rect) return;
+    if (rectBadan) { toast.info(PESAN_BADAN, { id: 'badan-terkunci' }); return; }
+    pushHist();
+    setRows(r => tempelFormat(r, rect, pola, rr => !diBadan(rr)));
+  };
+
+  // ── Σ AutoSum & urutkan ────────────────────────────────────────────────────────
+  const bolehIsi = (r: number, c: number) => !terkunci(r, c) && !diNomor(r, c);
+  const jumlahOtomatis = () => {
+    if (!rect || readOnly) return;
+    const h = autoJumlah(rows, rect, headerRows, bolehIsi);
+    if (!h.sel.length) { toast.info('Tidak ada deret angka tepat di atas atau di kiri sel terpilih — atau sel tujuannya sudah berisi.'); return; }
+    pushHist();
+    setRows(h.rows);
+    if (h.sel.length === 1) pil.keSel(h.sel[0].r, h.sel[0].c);
+  };
+  function urutkan(turun: boolean) {
+    if (!rect || readOnly) return;
+    if (terkait) { toast.info('Urutan baris tabel tertaut mengikuti sumbernya — atur lewat Atur Bentuk.'); return; }
+    // Satu sel / kolom penuh = seluruh badan diurut menurut kolom itu (Excel meluaskan ke datanya).
+    const satu = (rect.r1 === rect.r2 && rect.c1 === rect.c2) || pil.penuhKolom;
+    const blok: Kotak = satu ? { r1: headerRows, c1: 0, r2: rows.length - 1, c2: ncol - 1 } : rect;
+    const kol = Math.min(Math.max(sel?.ac ?? blok.c1, blok.c1), blok.c2);
+    const h = urutkanBlok(rows, blok, kol, turun, headerRows, !!atur.gaya.jumlah);
+    if ('galat' in h) { toast.info(h.galat); return; }
+    pushHist();
+    setRows(h.rows);
+    toast.success(`Diurutkan menurut kolom ${colLabel(kol)} (${turun ? 'Z → A' : 'A → Z'}).`, { id: 'urut' });
+  }
 
   // ── Sisip / hapus baris & kolom sebanyak yang dipilih (§5.4) ──────────────────
   function sisip(arah: 'atas' | 'bawah' | 'kiri' | 'kanan') {
@@ -358,11 +434,22 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
 
   // ── Salin & tempel ─────────────────────────────────────────────────────────────
   const tsvPilihan = useMemo(() => (rect ? rangeToTSV(extractRange(rowsTampil, rect.r1, rect.c1, rect.r2, rect.c2)) : ''), [rowsTampil, rect]);
+  /** Isi papan internal — gabungan ikut (`ambilBlok`), nilai saja disiapkan untuk Ctrl+Shift+V. */
+  const isiPapanInternal = () => {
+    if (!rect) return;
+    const nilai: string[][] = [];
+    for (let r = rect.r1; r <= rect.r2; r++) {
+      const b: string[] = [];
+      for (let c = rect.c1; c <= rect.c2; c++) b.push(nilaiSaja(rowsTampil, r, c));
+      nilai.push(b);
+    }
+    simpanPapanInternal({ tsv: tsvPilihan, sel: ambilBlok(rowsTampil, rect), nilai });
+    setAdaSalinan(true);
+  };
   /** Ctrl+C mengisi papan klip dengan TSV (tempel antarsel) DAN tabel HTML ber-gabungan untuk Word/Excel (§12.4). */
   const salinKePapan = (e: React.ClipboardEvent) => {
     if (!rect) return;
-    clipRef.current = extractRange(rowsTampil, rect.r1, rect.c1, rect.r2, rect.c2);
-    setAdaSalinan(true);
+    isiPapanInternal();
     const teks = (r: number, c: number) => displayValue(rowsTampil, r, c);
     const html = blokKeHtml(rowsTampil, rect, teks, (r, c) => selSalinan(efektif(r, c), r < headerRows, align[c], warnaKepala));
     e.clipboardData.setData('text/plain', tsvPilihan);
@@ -378,18 +465,51 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
     const t = tangkapRef.current;
     if (t && document.activeElement === t) t.select();
   }, [tsvPilihan]);
-  const doCopy = () => {
+  const doCopy = (diam = false) => {
     if (!rect) return;
-    clipRef.current = extractRange(rowsTampil, rect.r1, rect.c1, rect.r2, rect.c2);
-    setAdaSalinan(true);
+    isiPapanInternal();
     fokusGrid();
     // execCommand memicu `onCopy` textarea (salinKePapan) — TSV + HTML sekaligus.
-    try { if (!document.execCommand('copy')) void navigator.clipboard?.writeText(rangeToTSV(clipRef.current)); } catch { /* best-effort */ }
-    toast.success('Sel disalin');
+    // Cadangan writeText ditolak bila halaman tak fokus / izin papan klip diblokir — ditangkap, bukan dibiarkan jadi unhandledRejection.
+    try { if (!document.execCommand('copy')) navigator.clipboard?.writeText(tsvPilihan).catch(() => { /* papan internal tetap terisi */ }); } catch { /* best-effort */ }
+    if (!diam) toast.success('Sel disalin');
   };
+  /** Ctrl+X (§5.6): salin lalu langsung kosongkan — Ctrl+Z mengembalikannya (lebih sederhana dari Excel yang menunggu ditempel). */
+  const potongKePapan = (e: React.ClipboardEvent) => {
+    if (!rect) return;
+    salinKePapan(e);
+    if (!readOnly) kosongkan();
+  };
+  const doCut = () => { doCopy(true); if (!readOnly) kosongkan(); };
+
+  /** Tempel nilai saja (Ctrl+Shift+V): format sel TUJUAN tetap. Di badan tertaut hanya kolom isian tangan, tanpa rumus. */
+  function tempelNilaiDari(nilai: string[][]) {
+    if (!rect || readOnly || !nilai.length) return;
+    const lebar = Math.max(...nilai.map(r => r.length));
+    if (rect.c1 + lebar > ncol) toast.info(`${rect.c1 + lebar - ncol} kolom terakhir tempelan tidak muat — tabel ini ${ncol} kolom.`);
+    const muatBaris = Math.max(0, BATAS_BARIS_TABEL - rect.r1);
+    if (nilai.length > muatBaris) toast.info(`${nilai.length - muatBaris} baris terakhir tempelan tidak muat — satu tabel paling banyak ${BATAS_BARIS_TABEL} baris.`);
+    if (terkait && rect.r1 + nilai.length > rows.length) { toast.info(PESAN_BADAN, { id: 'badan-terkunci' }); return; }
+    let ditahan = 0;
+    const boleh = (r: number, c: number, teks: string) => {
+      const ok = bolehIsi(r, c) && !(diBadan(r) && teks.trimStart().startsWith('='));
+      if (!ok) ditahan++;
+      return ok;
+    };
+    pushHist();
+    const hasil = tempelNilai(rows, rect.r1, rect.c1, nilai.slice(0, muatBaris).map(r => r.slice(0, ncol - rect.c1)), ncol, boleh);
+    setRows(hasil);
+    if (ditahan) toast.info(terkait ? `${ditahan} sel dilewati — ${PESAN_BADAN}` : `${ditahan} sel kolom No. dilewati — nomornya diisi otomatis.`, { id: 'badan-terkunci' });
+  }
   async function tempel(grid: TabelCell[][]) {
     if (!rect || readOnly || !grid.length) return;
-    if (rectBadan) { toast.info(PESAN_BADAN, { id: 'badan-terkunci' }); return; }
+    // Badan tertaut: hanya nilai ke kolom isian tangan (§6) — format & gabungan di sana tertimpa tiap Perbarui.
+    if (rectBadan) {
+      const kolomTempel = Array.from({ length: Math.max(...grid.map(r => r.length)) }, (_, j) => rect.c1 + j);
+      if (kolomTempel.every(c => kolomTangan.has(c))) { tempelNilaiDari(grid.map(r => r.map(c => c.v))); return; }
+      toast.info(PESAN_BADAN, { id: 'badan-terkunci' });
+      return;
+    }
     let b = bentuk();
     const lebar = Math.max(...grid.map(r => r.length));
     const kurang = rect.c1 + lebar - ncol;
@@ -418,10 +538,26 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
   const onPaste = (e: React.ClipboardEvent) => {
     if (readOnly || suntingRef.current) return;
     const text = e.clipboardData.getData('text/plain');
+    const html = e.clipboardData.getData('text/html');
     e.preventDefault();
-    if (!text) return;
-    // Tempelan internal yang sama persis → pakai versi kaya-format.
-    void tempel(clipRef.current && rangeToTSV(clipRef.current) === text.replace(/\r?\n$/, '') ? clipRef.current : parseTSV(text));
+    // Waktu kejadian keydown & paste satu sumber jam (timeStamp peristiwa) — tanpa Date.now() di komponen.
+    const nilaiSaja = tempelNilaiPada.current > 0 && e.timeStamp - tempelNilaiPada.current < 1500;
+    tempelNilaiPada.current = 0;
+    if (!text && !html) return;
+    // Tempelan internal yang sama persis → pakai versi kaya-format (rumus, format, gabungan).
+    const internal = papanInternal && papanInternal.tsv === text.replace(/\r?\n$/, '') ? papanInternal : null;
+    if (internal) { if (nilaiSaja) tempelNilaiDari(internal.nilai); else void tempel(internal.sel); return; }
+    // Tahap C: dari Excel/Word/Google Sheets lengkap dengan gabungan & tebal; tanpa tabel HTML → TSV.
+    // Tempel nilai juga membaca HTML-nya: TSV Word memecah sel berparagraf jadi beberapa baris, dan
+    // angka Excel bersetelan Inggris hanya bisa dikenali dari pernyataan pemisah di HTML-nya.
+    const dariHtml = html ? htmlKeSel(html) : null;
+    if (nilaiSaja) { tempelNilaiDari(dariHtml ? dariHtml.map(r => r.map(c => (c.h ? '' : c.v))) : parseTSV(text).map(r => r.map(c => c.v))); return; }
+    void tempel(dariHtml || parseTSV(text));
+  };
+  /** Tombol & menu Tempel hanya bisa memakai papan internal — peramban tidak memberi isi papan klip sistem tanpa Ctrl+V. */
+  const tempelInternal = (nilai: boolean) => {
+    if (!papanInternal) return;
+    if (nilai) tempelNilaiDari(papanInternal.nilai); else void tempel(papanInternal.sel);
   };
 
   // ── Papan ketik di kisi (§5.2) ─────────────────────────────────────────────────
@@ -430,15 +566,20 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
     const ctrl = e.ctrlKey || e.metaKey;
     const k = e.key;
     const kl = k.toLowerCase();
-    if (ctrl && kl === 'c') return;   // peramban memicu onCopy (salinKePapan)
+    if (ctrl && (kl === 'c' || kl === 'x')) return;   // peramban memicu onCopy / onCut
     if (ctrl && kl === 'a') { e.preventDefault(); pil.pilihSemua(); return; }
+    if (ctrl && (kl === 'f' || kl === 'h')) { e.preventDefault(); bukaCari(kl === 'h' && !readOnly); return; }
+    if (k === 'Escape' && (kuas || isi)) { e.preventDefault(); setKuas(null); setIsi(null); return; }
     if (readOnly) {
       if (ARAH[k]) { e.preventDefault(); pil.gerak(ARAH[k].dr, ARAH[k].dc, { perluas: e.shiftKey, lompat: ctrl }); }
       return;
     }
     if (ctrl && kl === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if (ctrl && (kl === 'y' || (kl === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
-    if (ctrl && kl === 'v') return;   // biarkan peramban memicu onPaste
+    // Ctrl+Shift+V: peramban tetap memicu onPaste (sebagai teks polos) — tandanya dibaca di sana.
+    if (ctrl && kl === 'v') { if (e.shiftKey) tempelNilaiPada.current = e.timeStamp; return; }
+    if (ctrl && !e.shiftKey && (kl === 'b' || kl === 'i' || kl === 'u')) { e.preventDefault(); ubahGayaHuruf(kl); return; }
+    if (e.altKey && (k === '=' || k === '+')) { e.preventDefault(); jumlahOtomatis(); return; }
     if (ctrl && (k === '-' || k === '_')) { e.preventDefault(); void hapusDariPintasan(); return; }
     if (ctrl && e.shiftKey && (k === '+' || k === '=')) { e.preventDefault(); void sisipDariPintasan(); return; }
     if (!sel) { if (ARAH[k]) { e.preventDefault(); pil.keSel(0, 0); } return; }
@@ -462,6 +603,99 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
     if (fr === undefined || document.activeElement !== tangkapRef.current) return;
     gridRef.current?.querySelector(`[data-rc="${fr}:${fc}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [fr, fc]);
+
+  // ── Kuas & isi-seret selesai saat tombol tetikus dilepas (di mana pun) ───────
+  // Effect event: pendengar `mouseup` dipasang sekali, tapi memakai keadaan render TERAKHIR.
+  const lepasTetikus = useEffectEvent(() => {
+    if (isi) {
+      const { dari, ke } = isi;
+      setIsi(null);
+      if (ke.r2 === dari.r2 && ke.c2 === dari.c2) return;
+      const h = isiSeret(rows, dari, ke, bolehIsi);
+      if ('galat' in h) { toast.info(h.galat); return; }
+      pushHist();
+      setRows(h.rows);
+      pil.setSel({ ar: dari.r1, ac: dari.c1, fr: ke.r2, fc: ke.c2 });
+      return;
+    }
+    // Hanya sesudah memilih TUJUAN: mouseup klik tombol Kuas sendiri juga sampai ke sini.
+    if (kuas && kuasSiap.current) { kuasSiap.current = false; pakaiKuas(); }
+  });
+  useEffect(() => {
+    const lepas = () => { requestAnimationFrame(() => lepasTetikus()); };
+    window.addEventListener('mouseup', lepas);
+    return () => window.removeEventListener('mouseup', lepas);
+  }, []);
+  const mulaiIsi = (e: React.MouseEvent) => {
+    if (!rect || readOnly || e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    setIsi({ dari: rect, ke: rect });
+  };
+  /** Isi-seret mengikuti arah terjauh dari pojok blok: ke bawah atau ke kanan (konsep §5.7). */
+  const seretIsi = (r: number, c: number) => setIsi(s => {
+    if (!s) return s;
+    const k = s.dari, dr = r - k.r2, dc = c - k.c2;
+    const ke = dr > 0 && dr >= dc ? { ...k, r2: r } : dc > 0 ? { ...k, c2: c } : k;
+    return ke.r2 === s.ke.r2 && ke.c2 === s.ke.c2 ? s : { ...s, ke };
+  });
+  const diIsi = (r: number, c: number) => !!isi && r >= isi.ke.r1 && r <= isi.ke.r2 && c >= isi.ke.c1 && c <= isi.ke.c2
+    && !(r >= isi.dari.r1 && r <= isi.dari.r2 && c >= isi.dari.c1 && c <= isi.dari.c2);
+  const pojok = rect && !readOnly && !sunting ? asalSel(rows, rect.r2, rect.c2) : null;
+
+  // ── Cari & ganti (Tahap C) ─────────────────────────────────────────────────────
+  const kataCari = cari?.kata ?? '';
+  const temuan = useMemo(() => (kataCari ? cariSel(rowsTampil, kataCari) : []), [rowsTampil, kataCari]);
+  function bukaCari(ganti: boolean) {
+    setCari(c => ({ ganti, kata: c?.kata ?? '', dengan: c?.dengan ?? '', ke: 0 }));
+    requestAnimationFrame(() => { cariRef.current?.focus(); cariRef.current?.select(); });
+  }
+  const tutupCari = () => { setCari(null); fokusGrid(); };
+  const keTemuan = (i: number) => {
+    if (!temuan.length) return;
+    const j = ((i % temuan.length) + temuan.length) % temuan.length;
+    setCari(c => (c ? { ...c, ke: j } : c));
+    pil.keSel(temuan[j].r, temuan[j].c);
+    requestAnimationFrame(() => gridRef.current?.querySelector(`[data-rc="${temuan[j].r}:${temuan[j].c}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+  };
+  const gantiSekarang = () => {
+    if (!cari?.kata || !temuan.length) return;
+    const t = temuan[Math.min(cari.ke, temuan.length - 1)];
+    if (!bolehIsi(t.r, t.c)) { toast.info(terkait ? PESAN_BADAN : PESAN_NOMOR, { id: 'badan-terkunci' }); keTemuan(cari.ke + 1); return; }
+    const cell = rows[t.r][t.c];
+    const g = gantiDiSel(cell.v, cari.kata, cari.dengan);
+    if (!g.n) { toast.info('Cocok di tampilan sel saja (angka berformat) — sunting selnya langsung.'); keTemuan(cari.ke + 1); return; }
+    pushHist();
+    setCell(t.r, t.c, nilaiKetikan(cell, g.v));
+  };
+  const gantiSemuanya = () => {
+    if (!cari?.kata) return;
+    const h = gantiSemua(rows, cari.kata, cari.dengan, bolehIsi);
+    if (!h.n) { toast.info(h.ditahan ? `${h.ditahan} sel cocok tapi tidak bisa diganti (terkunci, kolom No., atau hanya cocok di tampilan angka).` : 'Tidak ditemukan.'); return; }
+    pushHist();
+    setRows(h.rows);
+    toast.success(`${h.n} diganti di ${h.sel} sel${h.ditahan ? ` · ${h.ditahan} sel dilewati (terkunci, kolom No., atau hanya cocok di tampilan angka)` : ''}.`);
+  };
+
+  // ── Kepala & huruf kolom tetap terlihat saat tabel panjang digulir (§5.11) ─────
+  // Tiap baris kepala `position: sticky` dengan jarak atas = tinggi huruf kolom + baris kepala di atasnya.
+  useLayoutEffect(() => {
+    const tabel = gridRef.current?.querySelector('table.lk-tabel');
+    if (!tabel) return;
+    const huruf = (tabel.querySelector('thead tr') as HTMLElement | null)?.offsetHeight ?? 0;
+    const tinggi = Array.from(tabel.querySelectorAll('tbody tr.lk-hrow')).map(tr => (tr as HTMLElement).offsetHeight);
+    const atas = tinggi.map((_, i) => huruf + tinggi.slice(0, i).reduce((a, b) => a + b, 0));
+    setAtasKepala(p => (p.length === atas.length && p.every((x, i) => x === atas[i]) ? p : atas));
+  }, [rowsTampil, colWidths, headerRows, sunting, atur]);
+
+  // ── Menu klik-kanan (§5.10): aksi yang tak berlaku tampil mati beserta alasannya ─
+  const bukaMenu = (e: React.MouseEvent, pilih: () => void, kena: boolean) => {
+    e.preventDefault();
+    if (suntingRef.current) selesaiSunting();
+    if (!kena) pilih();
+    fokusGrid();
+    setMenu({ x: e.clientX, y: e.clientY });
+  };
+  const ringkas = useMemo(() => (rect ? ringkasBlok(rowsTampil, rect) : null), [rowsTampil, rect]);
 
   // ── Lebar kolom: pegangan di tiap garis, dobel-klik = paskan isi (§5.5) ───────
   const onResizeDown = (ci: number, e: React.MouseEvent) => {
@@ -591,6 +825,31 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
   const kunciBlok = !rect || rectBadan;
   const pilihanSel = <T extends string>(v: string, fn: (v: T) => void) => { if (v) fn(v as T); };
 
+  /** Aksi menu klik-kanan: tutup menu, jalankan, kembalikan fokus ke kisi (papan ketik tetap jalan). */
+  const pilihMenu = (kunci: string) => {
+    setMenu(null);
+    switch (kunci) {
+      case 'potong': doCut(); break;
+      case 'salin': doCopy(); break;
+      case 'tempel': tempelInternal(false); break;
+      case 'tempel-nilai': tempelInternal(true); break;
+      case 'sisip-atas': sisip('atas'); break;
+      case 'sisip-bawah': sisip('bawah'); break;
+      case 'sisip-kiri': sisip('kiri'); break;
+      case 'sisip-kanan': sisip('kanan'); break;
+      case 'urut-az': urutkan(false); break;
+      case 'urut-za': urutkan(true); break;
+      case 'gabung': doMerge(); break;
+      case 'pisah': doUnmerge(); break;
+      case 'format': hapusFormatBlok(); break;
+      case 'kosongkan': kosongkan(); break;
+      case 'hapus-baris': hapusBarisPilihan(); break;
+      case 'hapus-kolom': hapusKolomPilihan(); break;
+    }
+    fokusGrid();
+  };
+  const tutupMenu = () => { setMenu(null); fokusGrid(); };
+
   return (
     <div className="lk-tabel-ed">
       <input className="lk-tabel-judul" value={judul} readOnly={readOnly} placeholder="Judul tabel (tanpa nomor — nomor otomatis)" onChange={e => setJudul(e.target.value)} />
@@ -631,7 +890,17 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
           <button aria-label="Rata vertikal tengah" data-tooltip="Vertikal tengah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'middle'; })}>⇕</button>
           <button aria-label="Rata vertikal bawah" data-tooltip="Vertikal bawah" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.va = 'bottom'; })}>⤓</button>
           <span className="lk-tt-sep" />
-          <button aria-label="Tebal" data-tooltip="Tebal" data-tooltip-pos="below" disabled={kunciBlok} onClick={() => editCells(c => { c.b = !c.b; })}><Bold size={14} /></button>
+          <button aria-label="Tebal" data-tooltip="Tebal (Ctrl+B)" data-tooltip-pos="below" disabled={kunciBlok} className={origin?.b ? 'on' : undefined} onClick={() => ubahGayaHuruf('b')}><Bold size={14} /></button>
+          <button aria-label="Miring" data-tooltip="Miring (Ctrl+I)" data-tooltip-pos="below" disabled={kunciBlok} className={origin?.i ? 'on' : undefined} onClick={() => ubahGayaHuruf('i')}><Italic size={14} /></button>
+          <button aria-label="Garis bawah" data-tooltip="Garis bawah (Ctrl+U)" data-tooltip-pos="below" disabled={kunciBlok} className={origin?.u ? 'on' : undefined} onClick={() => ubahGayaHuruf('u')}><Underline size={14} /></button>
+          <span className="lk-tt-tip" data-tooltip="Warna huruf" data-tooltip-pos="below"><select className="lk-tt-sel" aria-label="Warna huruf" disabled={kunciBlok} value=""
+            onChange={e => { const v = e.target.value; if (!v) return; if (v === 'none') editCells(c => { delete c.fc; }); else editCells(c => { c.fc = v; }); e.currentTarget.value = ''; }}>
+            <option value="">A</option>
+            <option value="none">Otomatis</option>
+            {WARNA_HURUF.map(([hex, nama]) => <option key={hex} value={hex}>{nama}</option>)}
+          </select></span>
+          <button aria-label="Kuas format" data-tooltip={kuas ? 'Kuas aktif — pilih blok tujuan (Esc membatalkan)' : 'Kuas format: salin format blok ini ke blok lain'} data-tooltip-pos="below"
+            disabled={!rect && !kuas} className={kuas ? 'on' : undefined} onClick={mulaiKuas}><Paintbrush size={14} /></button>
           <button aria-label="Teks tegak" data-tooltip="Teks tegak (dibaca dari bawah ke atas) — untuk kepala kolom sempit" data-tooltip-pos="below" disabled={kunciBlok}
             onClick={() => { const tegak = !origin?.rot; editCells(c => { if (tegak) c.rot = true; else delete c.rot; }); }}><RotateCcw size={14} /></button>
           <button aria-label="Ratakan lebar kolom" data-tooltip="Ratakan lebar kolom yang dipilih" data-tooltip-pos="below" disabled={!rect || rect.c2 <= rect.c1}
@@ -678,8 +947,14 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
             <option value="FCE4E4">Merah</option>
           </select></span>
           <span className="lk-tt-sep" />
-          <button aria-label="Salin" data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect} onClick={doCopy}><Copy size={14} /></button>
-          <button aria-label="Tempel" data-tooltip="Tempel (Ctrl+V)" data-tooltip-pos="below" disabled={kunciBlok || !adaSalinan} onClick={() => { if (clipRef.current) void tempel(clipRef.current); }}><ClipboardPaste size={14} /></button>
+          <button aria-label="Potong" data-tooltip="Potong (Ctrl+X)" data-tooltip-pos="below" disabled={!rect} onClick={doCut}><Scissors size={14} /></button>
+          <button aria-label="Salin" data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect} onClick={() => doCopy()}><Copy size={14} /></button>
+          <button aria-label="Tempel" data-tooltip="Tempel (Ctrl+V) · nilai saja: Ctrl+Shift+V" data-tooltip-pos="below" disabled={!rect || (!adaSalinan && !papanInternal)} onClick={() => tempelInternal(false)}><ClipboardPaste size={14} /></button>
+          <span className="lk-tt-sep" />
+          <button aria-label="Jumlah otomatis" data-tooltip="Σ Jumlah otomatis (Alt+=) — deret angka di atas atau di kiri sel" data-tooltip-pos="below" disabled={!rect} onClick={jumlahOtomatis}><Sigma size={14} /></button>
+          <button aria-label="Urutkan A ke Z" data-tooltip="Urutkan A → Z menurut kolom sel aktif" data-tooltip-pos="below" disabled={!rect || terkait} onClick={() => urutkan(false)}><ArrowDownAZ size={14} /></button>
+          <button aria-label="Urutkan Z ke A" data-tooltip="Urutkan Z → A menurut kolom sel aktif" data-tooltip-pos="below" disabled={!rect || terkait} onClick={() => urutkan(true)}><ArrowDownZA size={14} /></button>
+          <button aria-label="Cari dan ganti" data-tooltip="Cari & ganti (Ctrl+F / Ctrl+H)" data-tooltip-pos="below" className={cari ? 'on' : undefined} onClick={() => (cari ? tutupCari() : bukaCari(false))}><Search size={14} /></button>
         </div>
       )}
 
@@ -687,20 +962,48 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
         <div className="lk-fbar">
           <span className="lk-fbar-ref">{sel ? colLabel(sel.ac) + (sel.ar + 1) : '—'}</span>
           <span className="lk-fbar-fx">fx</span>
-          <input className="lk-fbar-in" disabled={!sel || terkunci(sel.ar, sel.ac) || diNomor(sel.ar, sel.ac)}
+          {/* textarea, bukan input: <input> membuang baris baru (Alt+Enter) dari nilainya. */}
+          <textarea className="lk-fbar-in" disabled={!sel || terkunci(sel.ar, sel.ac) || diNomor(sel.ar, sel.ac)}
+            rows={Math.min(4, Math.max(1, (sel ? (rows[sel.ar]?.[sel.ac]?.v ?? '') : '').split('\n').length))}
             value={sel ? (rows[sel.ar]?.[sel.ac]?.v ?? '') : ''}
             placeholder="Pilih sel — ketik teks atau = untuk rumus (mis. =A1+B1)"
             onFocus={e => { if (sel) { pushHist(); barAwal.current = rows[sel.ar]?.[sel.ac]?.v ?? ''; setBarFocused(true); editInputRef.current = e.currentTarget; } }}
             onBlur={() => { setBarFocused(false); if (sel) rapikanKetikan(sel.ar, sel.ac); }}
             onKeyDown={e => {
-              if (e.key === 'Enter') { e.preventDefault(); fokusGrid(); }
+              if (e.key === 'Enter' && e.altKey) { e.preventDefault(); if (sel) sisipGantiBaris(e.currentTarget, sel.ar, sel.ac); }
+              else if (e.key === 'Enter') { e.preventDefault(); fokusGrid(); }
               else if (e.key === 'Escape') { e.preventDefault(); if (sel) { setCell(sel.ar, sel.ac, barAwal.current); setPast(p => p.slice(0, -1)); } fokusGrid(); }
             }}
             onChange={e => { if (sel) ubahSel(sel.ar, sel.ac, e.target.value); }} />
         </div>
       )}
 
-      <div className="lk-tabel-scroll" ref={gridRef}>
+      {cari && (
+        <div className="lk-cari" role="search">
+          <Search size={13} className="lk-cari-ic" />
+          <input ref={cariRef} className="lk-cari-in" value={cari.kata} placeholder="Cari di tabel…" aria-label="Cari di tabel"
+            onChange={e => setCari(c => (c ? { ...c, kata: e.target.value, ke: 0 } : c))}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); keTemuan(cari.ke + (e.shiftKey ? -1 : 1) * (temuan.length && sel && temuan[cari.ke]?.r === sel.ar && temuan[cari.ke]?.c === sel.ac ? 1 : 0)); }
+              else if (e.key === 'Escape') { e.preventDefault(); tutupCari(); }
+            }} />
+          <span className="lk-cari-n">{cari.kata ? (temuan.length ? `${Math.min(cari.ke, temuan.length - 1) + 1} dari ${temuan.length}` : 'tidak ada') : ''}</span>
+          <button aria-label="Temuan sebelumnya" disabled={!temuan.length} onClick={() => keTemuan(cari.ke - 1)}><ChevronUp size={14} /></button>
+          <button aria-label="Temuan berikutnya" disabled={!temuan.length} onClick={() => keTemuan(cari.ke + 1)}><ChevronDown size={14} /></button>
+          {!readOnly && (cari.ganti ? (
+            <>
+              <input className="lk-cari-in" value={cari.dengan} placeholder="Ganti dengan…" aria-label="Ganti dengan"
+                onChange={e => setCari(c => (c ? { ...c, dengan: e.target.value } : c))}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); gantiSekarang(); } else if (e.key === 'Escape') { e.preventDefault(); tutupCari(); } }} />
+              <button className="lk-cari-teks" disabled={!temuan.length} onClick={gantiSekarang}>Ganti</button>
+              <button className="lk-cari-teks" disabled={!temuan.length} onClick={gantiSemuanya}>Ganti semua</button>
+            </>
+          ) : <button className="lk-cari-teks" onClick={() => setCari(c => (c ? { ...c, ganti: true } : c))}>Ganti…</button>)}
+          <button aria-label="Tutup pencarian" onClick={tutupCari}><X size={14} /></button>
+        </div>
+      )}
+
+      <div className={`lk-tabel-scroll${kuas ? ' lk-kuas' : ''}`} ref={gridRef}>
         <textarea ref={tangkapRef} className="lk-tangkap" aria-label="Sel tabel terpilih" value={tsvPilihan} readOnly={readOnly}
           // Ketikan biasa ditangani onKeyDown; teks yang masuk TANPA keydown (IME, papan ketik ponsel,
           // alat bantu) tiba di sini — dipakai untuk mulai menyunting, isinya tetap TSV blok terpilih.
@@ -708,7 +1011,7 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
             const masuk = e.nativeEvent as InputEvent;
             if (!readOnly && sel && masuk.inputType === 'insertText' && masuk.data) mulaiSunting(sel.ar, sel.ac, masuk.data);
           }}
-          onKeyDown={onGridKey} onPaste={onPaste} onCopy={salinKePapan} />
+          onKeyDown={onGridKey} onPaste={onPaste} onCopy={salinKePapan} onCut={potongKePapan} />
         <div className="lk-tabel-kanvas">
           <table className="lk-tabel" style={{ tableLayout: 'fixed', width: 'auto' }}>
             <colgroup>
@@ -720,7 +1023,8 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
                 <th className="lk-rownum lk-sudut" onMouseDown={e => { e.preventDefault(); pil.pilihSemua(); fokusGrid(); }} aria-label="Pilih semua sel" />
                 {kolom.map((_, ci) => (
                   <th key={ci} className={`lk-colhead${rect && ci >= rect.c1 && ci <= rect.c2 ? ' aktif' : ''}`}
-                    onMouseDown={e => { if (e.button !== 0) return; e.preventDefault(); pil.pilihKolom(ci, e.shiftKey); fokusGrid(); }}
+                    onMouseDown={e => { if (e.button !== 0) return; e.preventDefault(); if (kuas) kuasSiap.current = true; pil.pilihKolom(ci, e.shiftKey); fokusGrid(); }}
+                    onContextMenu={e => bukaMenu(e, () => pil.setSel({ ar: 0, ac: ci, fr: rows.length - 1, fc: ci }), !!rect && pil.penuhKolom && ci >= rect.c1 && ci <= rect.c2)}
                     onMouseEnter={() => pil.seretKolom(ci)}>
                     {colLabel(ci)}
                     {lebarTip?.ci === ci && <span className="lk-lebar-tip">{cm(lebarTip.px)} cm</span>}
@@ -731,34 +1035,42 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
             </thead>
             <tbody>
               {rowsTampil.map((row, ri) => (
-                <tr key={ri} className={ri < headerRows ? 'lk-hrow' : undefined}>
+                <tr key={ri} className={ri < headerRows ? 'lk-hrow' : undefined}
+                  style={ri < headerRows && atasKepala[ri] !== undefined ? ({ '--lk-atas': `${atasKepala[ri]}px` } as React.CSSProperties) : undefined}>
                   <td className={`lk-rownum${rect && ri >= rect.r1 && ri <= rect.r2 ? ' aktif' : ''}`}
-                    onMouseDown={e => { if (e.button !== 0) return; e.preventDefault(); pil.pilihBaris(ri, e.shiftKey); fokusGrid(); }}
+                    onMouseDown={e => { if (e.button !== 0) return; e.preventDefault(); if (kuas) kuasSiap.current = true; pil.pilihBaris(ri, e.shiftKey); fokusGrid(); }}
+                    onContextMenu={e => bukaMenu(e, () => pil.setSel({ ar: ri, ac: 0, fr: ri, fc: ncol - 1 }), !!rect && pil.penuhBaris && ri >= rect.r1 && ri <= rect.r2)}
                     onMouseEnter={() => pil.seretBaris(ri)}>{ri + 1}</td>
                   {row.map((cell, ci) => {
                     if (cell.h) return null;
                     const ef = efektif(ri, ci);
                     const sedang = sunting?.r === ri && sunting?.c === ci;
                     const tampil = sedang || (barFocused && sel?.ar === ri && sel?.ac === ci) ? cell.v : displayValue(rowsTampil, ri, ci);
-                    const gaya: React.CSSProperties = { textAlign: (ef.al ?? (ri < headerRows ? 'center' : align[ci]) ?? 'left'), fontWeight: ef.b ? 700 : undefined, fontSize: ef.fs ? `${ef.fs}px` : undefined, color: ef.bg ? '#0F0F12' : undefined };
+                    const gaya: React.CSSProperties = {
+                      textAlign: (ef.al ?? (ri < headerRows ? 'center' : align[ci]) ?? 'left'), fontWeight: ef.b ? 700 : undefined, fontSize: ef.fs ? `${ef.fs}px` : undefined,
+                      fontStyle: ef.i ? 'italic' : undefined, textDecoration: ef.u ? 'underline' : undefined,
+                      color: ef.fc ? `#${ef.fc}` : ef.bg ? '#0F0F12' : undefined,
+                    };
                     return (
                       <td key={ci} data-rc={`${ri}:${ci}`} colSpan={cell.cs ?? 1} rowSpan={cell.rs ?? 1}
                         className={[
                           diPilih(ri, ci) ? 'lk-cell-sel' : '', sel?.ar === ri && sel?.ac === ci ? 'lk-cell-aktif' : '',
                           diBadan(ri) && kolomTangan.has(ci) ? 'lk-cell-tangan' : '', !sedang && selGalat(tampil) ? 'lk-cell-galat' : '',
-                          diNomor(ri, ci) ? 'lk-cell-nomor' : '',
+                          diNomor(ri, ci) ? 'lk-cell-nomor' : '', diIsi(ri, ci) ? 'lk-cell-isi' : '', pojok?.r === ri && pojok?.c === ci ? 'lk-pojok' : '',
                         ].filter(Boolean).join(' ') || undefined}
                         style={{ verticalAlign: vAlignCss(ef.va), background: ef.bg ? `#${ef.bg}` : undefined, ...garisCss(ef.bd) }}
                         onMouseDown={e => onSelDown(ri, ci, e)}
-                        onMouseEnter={() => pil.seretSel(ri, ci)}
+                        onContextMenu={e => bukaMenu(e, () => pil.keSel(ri, ci), diPilih(ri, ci))}
+                        onMouseEnter={() => (isi ? seretIsi(ri, ci) : pil.seretSel(ri, ci))}
                         onDoubleClick={() => mulaiSunting(ri, ci)}>
                         {sedang ? (
-                          <input autoFocus value={cell.v} style={gaya}
+                          <textarea autoFocus value={cell.v} style={gaya} className="lk-sel-edit" rows={Math.max(1, cell.v.split('\n').length)}
                             ref={n => { if (n) editInputRef.current = n; }}
                             onFocus={e => { const n = e.currentTarget; const p = n.value.length; n.setSelectionRange(p, p); }}
                             onKeyDown={e => {
                               e.stopPropagation();
-                              if (e.key === 'Enter') { e.preventDefault(); selesaiSunting({ dr: e.shiftKey ? -1 : 1, dc: 0 }); }
+                              if (e.key === 'Enter' && e.altKey) { e.preventDefault(); sisipGantiBaris(e.currentTarget, ri, ci); }
+                              else if (e.key === 'Enter') { e.preventDefault(); selesaiSunting({ dr: e.shiftKey ? -1 : 1, dc: 0 }); }
                               else if (e.key === 'Tab') {
                                 e.preventDefault();
                                 if (!e.shiftKey && diSelTerakhir(ri, ci)) { selesaiSunting(); barisBaruDiAkhir(); }
@@ -773,6 +1085,9 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
                         ) : (
                           <div className={`lk-sel-isi${ef.rot ? ' tegak' : ''}`} style={gaya}>{tampil}</div>
                         )}
+                        {pojok?.r === ri && pojok?.c === ci && (
+                          <span className="lk-isi-pegangan" aria-hidden onMouseDown={mulaiIsi} />
+                        )}
                       </td>
                     );
                   })}
@@ -784,6 +1099,15 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
           <div className={`lk-batas-kertas${lebihKertas ? ' lewat' : ''}`} style={{ left: 38 + kertasPx }} aria-hidden />
         </div>
       </div>
+
+      {/* Bilah status (§5.9): mencocokkan angka tanpa menulis rumus. */}
+      {ringkas && ringkas.banyak >= 2 && (
+        <div className="lk-tabel-status" aria-live="polite">
+          {ringkas.banyakAngka > 0 && <span>Jumlah <b>{angkaStatus(ringkas.jumlah)}</b></span>}
+          {ringkas.rataRata !== null && <span>Rata-rata <b>{angkaStatus(ringkas.rataRata)}</b></span>}
+          <span>Banyak <b>{ringkas.banyak}</b></span>
+        </div>
+      )}
 
       {(!readOnly || atur.sumber.trim()) && (
         <input className="lk-tabel-sumber" value={atur.sumber} readOnly={readOnly} maxLength={300} aria-label="Sumber tabel"
@@ -825,9 +1149,11 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
 
       {!readOnly && (
         <div className="lk-tabel-petunjuk">
-          Seret untuk memblok · klik huruf kolom / nomor baris untuk satu kolom/baris penuh · Delete mengosongkan ·
-          Sisip/Hapus ▾ sebanyak yang dipilih · seret garis di antara huruf kolom untuk lebarnya (dobel-klik = paskan isi) ·
-          Tab di sel terakhir menambah baris · Ctrl+C bisa ditempel ke Word/Excel lengkap dengan gabungannya
+          Seret untuk memblok · klik huruf kolom / nomor baris untuk satu kolom/baris penuh · klik kanan untuk semua aksi ·
+          Delete mengosongkan · seret kotak kecil di pojok blok untuk mengisi ke bawah/kanan (1, 2 → 3 · Jan → Feb · TW I → II) ·
+          Alt+Enter baris baru di dalam sel · Alt+= jumlah otomatis · Ctrl+Shift+V tempel nilai saja · Ctrl+F cari ·
+          tempelan dari Excel/Word membawa gabungan & tebalnya · seret garis di antara huruf kolom untuk lebarnya (dobel-klik = paskan isi) ·
+          Tab di sel terakhir menambah baris
         </div>
       )}
       {lebihKertas && (
@@ -874,6 +1200,31 @@ export default function TabelEditor({ block, readOnly, tahunDokumen, warnaKepala
           <PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave(payloadSekarang())}>Simpan Tabel</PrimaButton>
         </div>
       )}
+
+      {menu && rect && (() => {
+        const alasanBadan = PESAN_BADAN;
+        const badanTaut = terkait && rect.r2 >= headerRows;
+        const lewatBatasKolom = ncol + (rect.c2 - rect.c1 + 1) > BATAS_KOLOM_TABEL;
+        const items: RowMenuItem[] = [
+          { icon: <Scissors size={14} />, label: 'Potong', pintasan: 'Ctrl+X', kunci: 'potong', disabled: readOnly, alasan: 'Dokumen terkunci' },
+          { icon: <Copy size={14} />, label: 'Salin', pintasan: 'Ctrl+C', kunci: 'salin' },
+          { icon: <ClipboardPaste size={14} />, label: 'Tempel', pintasan: 'Ctrl+V', kunci: 'tempel', disabled: readOnly || !papanInternal, alasan: readOnly ? 'Dokumen terkunci' : 'Belum ada yang disalin dari tabel — dari aplikasi lain pakai Ctrl+V' },
+          { icon: <ClipboardType size={14} />, label: 'Tempel nilai saja', pintasan: 'Ctrl+Shift+V', kunci: 'tempel-nilai', disabled: readOnly || !papanInternal, alasan: readOnly ? 'Dokumen terkunci' : 'Belum ada yang disalin dari tabel — dari aplikasi lain pakai Ctrl+Shift+V' },
+          { icon: <span className="lk-menu-teks">↑</span>, label: `Sisip ${rect.r2 - rect.r1 + 1} baris di atas`, kunci: 'sisip-atas', disabled: readOnly || badanTaut, alasan: readOnly ? 'Dokumen terkunci' : alasanBadan, pisah: true },
+          { icon: <span className="lk-menu-teks">↓</span>, label: `Sisip ${rect.r2 - rect.r1 + 1} baris di bawah`, kunci: 'sisip-bawah', disabled: readOnly || badanTaut, alasan: readOnly ? 'Dokumen terkunci' : alasanBadan },
+          { icon: <span className="lk-menu-teks">←</span>, label: `Sisip ${rect.c2 - rect.c1 + 1} kolom di kiri`, kunci: 'sisip-kiri', disabled: readOnly || terkait || lewatBatasKolom, alasan: readOnly ? 'Dokumen terkunci' : terkait ? PESAN_KOLOM_TAUT : `Tabel paling banyak ${BATAS_KOLOM_TABEL} kolom` },
+          { icon: <span className="lk-menu-teks">→</span>, label: `Sisip ${rect.c2 - rect.c1 + 1} kolom di kanan`, kunci: 'sisip-kanan', disabled: readOnly || terkait || lewatBatasKolom, alasan: readOnly ? 'Dokumen terkunci' : terkait ? PESAN_KOLOM_TAUT : `Tabel paling banyak ${BATAS_KOLOM_TABEL} kolom` },
+          { icon: <ArrowDownAZ size={14} />, label: 'Urutkan A → Z', kunci: 'urut-az', disabled: readOnly || terkait, alasan: readOnly ? 'Dokumen terkunci' : 'Urutan baris tabel tertaut mengikuti sumbernya', pisah: true },
+          { icon: <ArrowDownZA size={14} />, label: 'Urutkan Z → A', kunci: 'urut-za', disabled: readOnly || terkait, alasan: readOnly ? 'Dokumen terkunci' : 'Urutan baris tabel tertaut mengikuti sumbernya' },
+          { icon: <Combine size={14} />, label: 'Gabung sel', kunci: 'gabung', disabled: readOnly || !canMerge, alasan: rectBadan ? alasanBadan : 'Pilih lebih dari satu sel', pisah: true },
+          { icon: <Split size={14} />, label: 'Pisah sel', kunci: 'pisah', disabled: readOnly || !canUnmerge, alasan: rectBadan ? alasanBadan : 'Sel ini tidak digabung' },
+          { icon: <Eraser size={14} />, label: 'Hapus format', kunci: 'format', disabled: readOnly || rectBadan, alasan: readOnly ? 'Dokumen terkunci' : alasanBadan },
+          { icon: <span className="lk-menu-teks">⌫</span>, label: 'Kosongkan isi', pintasan: 'Delete', kunci: 'kosongkan', disabled: readOnly, alasan: 'Dokumen terkunci' },
+          { icon: <DeleteIcon size={14} />, label: `Hapus ${rect.r2 - rect.r1 + 1} baris`, pintasan: 'Ctrl+−', kunci: 'hapus-baris', danger: true, disabled: readOnly || (terkait && rect.r2 >= headerRows), alasan: readOnly ? 'Dokumen terkunci' : alasanBadan },
+          { icon: <DeleteIcon size={14} />, label: `Hapus ${rect.c2 - rect.c1 + 1} kolom`, kunci: 'hapus-kolom', danger: true, disabled: readOnly || terkait || rect.c2 - rect.c1 + 1 >= ncol, alasan: readOnly ? 'Dokumen terkunci' : terkait ? PESAN_KOLOM_TAUT : 'Tabel harus punya minimal 1 kolom' },
+        ];
+        return <RowMenu x={menu.x} y={menu.y} items={items} onPilih={pilihMenu} onClose={tutupMenu} lebar={248} />;
+      })()}
 
       {modalTaut && (
         <TautanModal

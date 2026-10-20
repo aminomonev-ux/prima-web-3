@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus } from 'lucide-react';
+import type { ObjekRujukan } from '@/lib/lkjip/numbering';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
@@ -108,16 +109,54 @@ const AngkaTaut = Node.create({
   },
 });
 
+// Rujukan silang ke Tabel/Gambar/Grafik (konsep tabel-excel §12.5): atom sebaris yang menyimpan ID BLOK.
+// Teksnya ("Tabel 3.1") disegarkan dari nomor sekarang tiap editor dibuka; di Word jadi field REF.
+const RujukTaut = Node.create({
+  name: 'rujukTaut',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-rujuk'),
+        renderHTML: (attrs: Record<string, unknown>) => ({ 'data-rujuk': attrs.id }),
+      },
+      teks: {
+        default: '',
+        parseHTML: (el: HTMLElement) => el.textContent ?? '',
+        renderHTML: () => ({}),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-rujuk]', priority: 60 }];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const putus = String(node.attrs.teks ?? '').endsWith(' ?');
+    return ['span', mergeAttributes(HTMLAttributes, putus ? { class: 'rujuk-putus' } : {}), String(node.attrs.teks ?? '')];
+  },
+  renderText({ node }) {
+    return String(node.attrs.teks ?? '');
+  },
+});
+const META_SEGAR = 'lkjipRujukSegar';
+
 interface Props {
   initialHtml: string;
   initialAngka?: Record<string, ResepAngka>;
   tahunDokumen: number;
   readOnly: boolean;
+  /** Tabel/Gambar/Grafik yang bisa dirujuk — nomornya SEKARANG (`daftarObjekRujukan`). */
+  objek?: ObjekRujukan[];
   onSave: (html: string, angka: Record<string, ResepAngka>) => void;
 }
 
-export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, onSave }: Props) {
+export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
+  const [pilihRujuk, setPilihRujuk] = useState(false);
   const [angka, setAngka] = useState<Record<string, ResepAngka>>(initialAngka ?? {});
   const [modalAngka, setModalAngka] = useState(false);
   const [memperbarui, setMemperbarui] = useState(false);
@@ -131,15 +170,41 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
     // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
     // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
-    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut],
+    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut, RujukTaut],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
     // v3 berhenti me-render ulang tiap transaksi; tombol bilah alat membaca `isActive` saat
     // render, jadi tanpa ini "Tebal"/"Rata" tidak ikut menyala saat kursor pindah.
     shouldRerenderOnTransaction: true,
-    onUpdate: () => setDirty(true),
+    // Penyegaran nomor rujukan bukan suntingan orangnya — tidak memunculkan tombol Simpan.
+    onUpdate: ({ transaction }) => { if (!transaction.getMeta(META_SEGAR)) setDirty(true); },
   });
+
+  // Nomor rujukan mengikuti dokumen SEKARANG: tabel yang disisip di depannya menggeser "Tabel 3.1" jadi 3.2.
+  const petaRujuk = useMemo(() => new Map((objek ?? []).map(o => [String(o.id), o.sebut])), [objek]);
+  useEffect(() => {
+    if (!editor) return;
+    const tr = editor.state.tr;
+    let ubah = false;
+    editor.state.doc.descendants((n, pos) => {
+      if (n.type.name !== 'rujukTaut') return;
+      const teks = petaRujuk.get(String(n.attrs.id)) ?? `${String(n.attrs.teks ?? '').split(' ')[0] || 'Tabel'} ?`;
+      if (teks !== n.attrs.teks) { tr.setNodeMarkup(pos, undefined, { ...n.attrs, teks }); ubah = true; }
+    });
+    if (ubah) editor.view.dispatch(tr.setMeta(META_SEGAR, true).setMeta('addToHistory', false));
+  }, [editor, petaRujuk]);
+
+  // Daftar rujukan menutup saat klik di luar / Esc — tombolnya tidak mengambil fokus (kursor narasi tetap).
+  const rujukRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (!pilihRujuk) return;
+    const luar = (e: MouseEvent) => { if (!rujukRef.current?.contains(e.target as globalThis.Node)) setPilihRujuk(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPilihRujuk(false); };
+    document.addEventListener('mousedown', luar);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', luar); document.removeEventListener('keydown', esc); };
+  }, [pilihRujuk]);
 
   if (!editor) return <div className="lk-tt-loading">Memuat editor…</div>;
   const ed = editor;
@@ -151,6 +216,11 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     const html = ed.getHTML();
     onSave(html, resepTerpakai(html, angkaKini));
     setDirty(false);
+  }
+
+  function sisipkanRujukan(o: ObjekRujukan) {
+    ed.chain().focus().insertContent({ type: 'rujukTaut', attrs: { id: String(o.id), teks: o.sebut } }).run();
+    setPilihRujuk(false);
   }
 
   function sisipkanAngka(teks: string, resep: ResepAngka) {
@@ -260,6 +330,22 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
             aria-label="Angka dari Modul" onMouseDown={e => { e.preventDefault(); setModalAngka(true); }}>
             <Hash size={13} /> Angka
           </button>
+          <span className="lk-tt-rujuk" ref={rujukRef}>
+            <button type="button" className={`lk-tt-btn lk-tt-teks${pilihRujuk ? ' on' : ''}`} aria-expanded={pilihRujuk} aria-label="Rujukan ke tabel, gambar, atau grafik"
+              data-tooltip="Sisipkan rujukan &quot;Tabel 3.1&quot; — nomornya ikut berubah bila tabel lain disisip di depannya" data-tooltip-pos="below"
+              onMouseDown={e => { e.preventDefault(); setPilihRujuk(v => !v); }}>
+              <BookmarkPlus size={13} /> Rujukan
+            </button>
+            {pilihRujuk && (
+              <div className="lk-tt-rujuk-menu" role="listbox" aria-label="Pilih yang dirujuk">
+                {objek?.length ? objek.map(o => (
+                  <button key={o.id} type="button" role="option" aria-selected={false} onMouseDown={e => { e.preventDefault(); sisipkanRujukan(o); }}>
+                    <b>{o.sebut}</b>{o.judul ? <span>{o.judul}</span> : null}
+                  </button>
+                )) : <div className="lk-tt-rujuk-kosong">Belum ada tabel, gambar, atau grafik bernomor di dokumen ini.</div>}
+              </div>
+            )}
+          </span>
         </div>
       )}
       <EditorContent editor={editor} className="lk-tt-content" />
@@ -310,6 +396,22 @@ const TT_CSS = `
   .lk-tt-teks { width: auto; gap: 4px; padding: 0 7px; font-size: 11.5px; font-weight: 600; }
   .lk-tt-content .ProseMirror span[data-angka] { background: rgba(124,92,252,0.16); border: 1px solid rgba(124,92,252,0.45); border-radius: 4px; padding: 0 3px; white-space: nowrap; cursor: default; }
   .lk-tt-content .ProseMirror span[data-angka].ProseMirror-selectednode { outline: 2px solid #7C5CFC; outline-offset: 1px; }
+  .lk-tt-content .ProseMirror span[data-rujuk] { background: rgba(55,138,221,0.16); border: 1px solid rgba(55,138,221,0.5); border-radius: 4px; padding: 0 3px; white-space: nowrap; cursor: default; }
+  .lk-tt-content .ProseMirror span[data-rujuk].rujuk-putus { background: rgba(226,75,74,0.14); border-color: #E24B4A; color: #FCA5A5; }
+  .lk-tt-content .ProseMirror span[data-rujuk].ProseMirror-selectednode { outline: 2px solid #378ADD; outline-offset: 1px; }
+  .lk-tt-rujuk { position: relative; display: inline-flex; }
+  .lk-tt-rujuk-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 320px; max-width: 80vw; max-height: 280px; overflow-y: auto; background: #042C53; border: 1px solid #0C447C; border-radius: 10px; padding: 6px; box-shadow: 0 14px 34px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 1px; }
+  .lk-tt-rujuk-menu button { display: flex; gap: 8px; align-items: baseline; text-align: left; width: 100%; background: none; border: none; color: #D6E6F7; padding: 7px 9px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+  .lk-tt-rujuk-menu button:hover { background: rgba(124,92,252,0.20); color: #fff; }
+  .lk-tt-rujuk-menu button b { white-space: nowrap; color: #85B7EB; }
+  .lk-tt-rujuk-menu button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lk-tt-rujuk-kosong { padding: 8px 10px; font-size: 12px; color: #85B7EB; }
+  [data-theme="light"] .lk-tt-rujuk-menu { background: #FFFFFF; border-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .lk-tt-rujuk-menu button { color: #374151; }
+  [data-theme="light"] .lk-tt-rujuk-menu button:hover { background: rgba(124,92,252,0.12); color: #111827; }
+  [data-theme="light"] .lk-tt-rujuk-menu button b { color: #1E5FA5; }
+  [data-theme="light"] .lk-tt-rujuk-kosong { color: #6B7280; }
+  [data-theme="light"] .lk-tt-content .ProseMirror span[data-rujuk].rujuk-putus { color: #E24B4A; }
 
   [data-theme="light"] .lk-tt-bar { background: #F3F4F6; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-tt-btn { color: #4B5563; }

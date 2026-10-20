@@ -423,9 +423,10 @@ ok('K2 sunting/format/gabung/tempel dikunci di badan tertaut (kecuali kolom isia
   && badan(tabelEd, 'const kosongkan =').includes('const boleh = (r: number, c: number) => !terkunci(r, c) && !diNomor(r, c);')
   && badan(tabelEd, 'async function tempel(').includes('if (rectBadan) {')
   && tabelEd.includes('disabled={!sel || terkunci(sel.ar, sel.ac) || diNomor(sel.ar, sel.ac)}'))
-// 15 = 14 tombol format Tahap A + "Teks tegak" (Tahap W) — format sel, jadi ikut terkunci di badan tertaut.
+// 18 = 14 tombol format Tahap A + "Teks tegak" (Tahap W) + miring, garis bawah, warna huruf (Tahap B)
+// — format sel, jadi ikut terkunci di badan tertaut.
 ok('K3 tombol format memakai kunci badan (Salin tetap boleh)',
-  tabelEd.includes('const kunciBlok = !rect || rectBadan;') && (tabelEd.match(/disabled=\{kunciBlok\}/g) ?? []).length === 15
+  tabelEd.includes('const kunciBlok = !rect || rectBadan;') && (tabelEd.match(/disabled=\{kunciBlok\}/g) ?? []).length === 18
   && tabelEd.includes('data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect}'))
 ok('K4 tambah/hapus baris & kolom dimatikan selama tertaut',
   tabelEd.includes('disabled={terkait} data-tooltip={terkait ?') && tabelEd.includes('disabled={ncol >= BATAS_KOLOM_TABEL || terkait}')

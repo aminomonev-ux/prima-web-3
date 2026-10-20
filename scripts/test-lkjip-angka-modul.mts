@@ -326,7 +326,7 @@ const tt = kode('app/(dashboard)/lkjip/[id]/TiptapNarasi.tsx')
 const ed = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
 const tm = kode('app/(dashboard)/lkjip/[id]/TautanModal.tsx')
 const am = kode('app/(dashboard)/lkjip/[id]/AngkaModal.tsx')
-ok('G1 node angka = atom sebaris, dibaca dari span[data-angka]', /name: 'angkaTaut'[\s\S]*inline: true,[\s\S]*atom: true/.test(tt) && tt.includes("tag: 'span[data-angka]'") && tt.includes('AngkaTaut]'))
+ok('G1 node angka = atom sebaris, dibaca dari span[data-angka]', /name: 'angkaTaut'[\s\S]*inline: true,[\s\S]*atom: true/.test(tt) && tt.includes("tag: 'span[data-angka]'") && /OrderedListType, AngkaTaut[,\]]/.test(tt))
 ok('G2 Simpan narasi mengirim resep yang terpakai saja', badan(tt, 'function simpan(').includes('onSave(html, resepTerpakai(html, angkaKini))'))
 const perbarui = badan(tt, 'async function perbaruiAngka(')
 ok('G3 Perbarui angka: tidak ada yang berubah → berhenti SEBELUM menulis; menulis hanya sesudah konfirmasi',

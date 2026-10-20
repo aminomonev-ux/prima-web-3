@@ -308,7 +308,8 @@ ok('K14 modal T4: hapus & geser kolom memetakan rumus kolom',
 ok('K15 modal tetap berhenti di FORM', !/method:\s*'(POST|PATCH|PUT|DELETE)'/.test(modal + kisiSrc) && modal.includes('onTerapkan({ ...dasar, rows: rowsBaru, tautan })'))
 const fin = badan(ed, 'async function finalize(')
 ok('K16 E7: Finalisasi menyebut sel galat SEBELUM mengirim', fin.includes('kumpulkanSelGalat(flat.map(f => f.node))') && fin.indexOf('kumpulkanSelGalat(') < fin.indexOf('await kirimFinal()'))
-ok('K17 docgen mencetak lewat teksSelWord (bukan displayValue mentah)', docgen.includes('escapeXml(teksSelWord(rows, r, c))') && !docgen.includes('displayValue('))
+// Tahap B: isi sel lewat `runSel` (miring/garis bawah/warna + baris baru) — yang dicetak tetap teksSelWord.
+ok('K17 docgen mencetak lewat teksSelWord (bukan displayValue mentah)', docgen.includes('runSel(teksSelWord(rows, r, c), font, csz,') && docgen.includes('<w:t xml:space="preserve">${escapeXml(t)}</w:t>') && !docgen.includes('displayValue('))
 ok('K18 batas kolom/baris SATU tempat (tautan memakai milik tabel)', kode('lib/lkjip/tautan.ts').includes('export const BATAS_KOLOM = BATAS_KOLOM_TABEL;'))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)

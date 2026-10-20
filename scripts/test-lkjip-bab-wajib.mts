@@ -107,7 +107,8 @@ cek('D6 route: pelanggaran aturan BAB → 409',
   kode('app/api/lkjip/section/route.ts').includes('if (err instanceof LkjipAturanBabError) return NextResponse.json({ ok: false, msg: err.message }, { status: 409 });'))
 cek('D7 pulihkan versi mengenali BAB wajib di foto lama',
   kode('lib/lkjip/versi.ts').includes('const locked = s.locked || (s.parent_old_id == null && judulBabWajib(s.judul)) ? 1 : 0;'))
-const EDITOR = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
+// Menu aksi bagian pindah ke RowMenu.tsx (dipakai juga menu klik-kanan tabel, Tahap B) — maksudnya sama.
+const EDITOR = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx') + kode('app/(dashboard)/lkjip/[id]/RowMenu.tsx')
 cek('D8 editor menilai pindah dengan fungsi yang sama', EDITOR.includes('t ? putusanPindah(bagian, f.node.id, t.parent, t.index) : null;'))
 cek('D9 editor mengirim pindah dari tujuan yang sama', EDITOR.includes('function pindahKe(f: FlatNode, t: Tujuan | null) { if (t) void move(f.node.id, t.parent, t.index); }'))
 cek('D10 Hapus mati beserta alasannya',

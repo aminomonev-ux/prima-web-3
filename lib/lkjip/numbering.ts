@@ -145,25 +145,60 @@ export function flattenTree(nodes: SectionNode[]): SectionNode[] {
 }
 
 export type JenisObjek = 'Tabel' | 'Gambar' | 'Grafik';
+/**
+ * `nomor` = angka field SEQ (mulai ulang tiap BAB bila per BAB), `label` = yang tertulis ("3.1" / "7"),
+ * `awalan` = teks sebelum SEQ di Word ("3." per BAB, "" berurutan).
+ */
+export interface NomorObjek { jenis: JenisObjek; nomor: number; label: string; awalan: string }
 
 /**
  * Nomor Tabel/Gambar/Grafik per blok, urut seperti di Word (pohon depth-first, blok menurut urutan).
  * SATU fungsi untuk editor dan angka cache field SEQ di docgen — penampil yang tidak menyegarkan
  * field dulu menulis "Tabel 1" di semua tabel. TABEL tanpa kolom tidak digambar docgen, jadi tidak dihitung.
+ * `perBab` (konsep tabel-excel §12.5): "Tabel 3.1" — nomor mulai lagi di tiap bagian teratas (BAB),
+ * angka BAB-nya urutan BAB itu (BAB III → 3).
  */
-export function nomorObjek(tree: SectionNode[]): Map<number, { jenis: JenisObjek; nomor: number }> {
+export function nomorObjek(tree: SectionNode[], perBab = false): Map<number, NomorObjek> {
+  const out = new Map<number, NomorObjek>();
   const hitung: Record<JenisObjek, number> = { Tabel: 0, Gambar: 0, Grafik: 0 };
-  const out = new Map<number, { jenis: JenisObjek; nomor: number }>();
+  tree.forEach((bab, i) => {
+    if (perBab) { hitung.Tabel = 0; hitung.Gambar = 0; hitung.Grafik = 0; }
+    const awalan = perBab ? `${i + 1}.` : '';
+    for (const node of flattenTree([bab])) {
+      for (const b of node.blocks) {
+        const jenis: JenisObjek | null = b.tipe === 'TABEL' ? 'Tabel' : b.tipe === 'GAMBAR' ? 'Gambar' : b.tipe === 'GRAFIK' ? 'Grafik' : null;
+        if (!jenis) continue;
+        if (jenis === 'Tabel') {
+          const kolom = (b.payload as { kolom?: unknown } | null)?.kolom;
+          if (!Array.isArray(kolom) || kolom.length === 0) continue;
+        }
+        const nomor = ++hitung[jenis];
+        out.set(b.id, { jenis, nomor, label: `${awalan}${nomor}`, awalan });
+      }
+    }
+  });
+  return out;
+}
+
+/** "Tabel 3.1" — teks rujukan silang & isi awal Daftar Tabel. */
+export const sebutObjek = (n: Pick<NomorObjek, 'jenis' | 'label'>): string => `${n.jenis} ${n.label}`;
+
+/** Tujuan rujukan silang di narasi — semua Tabel/Gambar/Grafik bernomor, urut seperti di dokumen. */
+export interface ObjekRujukan { id: number; sebut: string; judul: string }
+export function daftarObjekRujukan(tree: SectionNode[], nomor: Map<number, NomorObjek>): ObjekRujukan[] {
+  const out: ObjekRujukan[] = [];
   for (const node of flattenTree(tree)) {
     for (const b of node.blocks) {
-      const jenis: JenisObjek | null = b.tipe === 'TABEL' ? 'Tabel' : b.tipe === 'GAMBAR' ? 'Gambar' : b.tipe === 'GRAFIK' ? 'Grafik' : null;
-      if (!jenis) continue;
-      if (jenis === 'Tabel') {
-        const kolom = (b.payload as { kolom?: unknown } | null)?.kolom;
-        if (!Array.isArray(kolom) || kolom.length === 0) continue;
-      }
-      out.set(b.id, { jenis, nomor: ++hitung[jenis] });
+      const n = nomor.get(b.id);
+      if (!n) continue;
+      const p = (b.payload ?? {}) as { judul?: unknown; caption?: unknown };
+      out.push({ id: b.id, sebut: sebutObjek(n), judul: String(p.judul || p.caption || '').trim() });
     }
   }
   return out;
+}
+
+/** Id blok yang dirujuk naskah narasi (`<span data-rujuk="…">`). */
+export function rujukanDiHtml(html: string): number[] {
+  return [...String(html ?? '').matchAll(/data-rujuk\s*=\s*["']?(\d{1,12})/g)].map(m => Number(m[1]));
 }

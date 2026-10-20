@@ -95,6 +95,9 @@ if (c) {
     }
     const { id: tabelIdLama } = await L.addBlock(bab3.id, 'TABEL', tabel)
     const { id: grafikIdLama } = await L.addBlock(bab3.id, 'GRAFIK', { judul: 'Grafik uji', source: 'tabel', tabelBlockId: tabelIdLama, labelCol: 1, valueCol: 2 })
+    // Rujukan silang di narasi (konsep tabel-excel §12.5) — menunjuk id blok, jadi kena cacat yang sama dgn grafik.
+    await L.addBlock(bab3.id, 'NARASI', { html: `<p>Lihat <span data-rujuk="${tabelIdLama}">Tabel 1</span> berikut.</p>` })
+    const rujukanNarasi = (bl: Awaited<ReturnType<typeof blokDok>>) => String(bl.find(b => b.tipe === 'NARASI' && String(b.payload.html ?? '').includes('data-rujuk'))?.payload.html ?? '')
 
     const { id: versiId } = await V.saveVersi(dokId, 'sebelum lepas', userId)
     const [fotoBaris] = await k.query('SELECT snapshot FROM lkjip_versi WHERE id = ?', [versiId]) as [Array<{ snapshot: unknown }>, unknown]
@@ -118,6 +121,7 @@ if (c) {
       lewatSkema.success ? '' : lewatSkema.error.message)
     ok('B6 grafik menunjuk tabel yang BARU', gr.payload.tabelBlockId === tb.id, `${gr.payload.tabelBlockId} vs ${tb.id}`)
     ok('B7 isi grafik lain utuh', gr.payload.judul === 'Grafik uji' && gr.payload.source === 'tabel' && gr.payload.valueCol === 2)
+    ok('B14 rujukan silang di narasi menunjuk tabel yang BARU', rujukanNarasi(blok).includes(`data-rujuk="${tb.id}"`) && rujukanNarasi(blok).includes('berikut'), rujukanNarasi(blok))
 
     // Foto lama (sebelum perbaikan) tidak memuat id blok — dipetakan lewat letak tabel sekarang.
     const versiBaru = await V.saveVersi(dokId, 'akan dibuat lama', userId)
@@ -131,6 +135,7 @@ if (c) {
     gr = blok.find(b => b.tipe === 'GRAFIK')!
     ok('B8 foto lama: grafik tetap menemukan tabelnya lewat letak', gr.payload.tabelBlockId === tb.id, `${gr.payload.tabelBlockId} vs ${tb.id}`)
     ok('B9 foto lama: resep tautan tetap utuh', samaIsi(tb.payload.tautan, TabelPayloadSchema.parse(tabel).tautan))
+    ok('B15 foto lama: rujukan narasi menemukan tabelnya lewat letak', rujukanNarasi(blok).includes(`data-rujuk="${tb.id}"`), rujukanNarasi(blok))
 
     // Tanggal: dulu String(Date) = "Wed Oct 14 2026 …" — panel Riwayat menampilkannya mentah.
     const POLA = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/

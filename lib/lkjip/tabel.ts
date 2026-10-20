@@ -26,7 +26,13 @@ export interface TabelCell {
   dec?: number;        // jumlah desimal untuk nf
   bg?: string;         // warna latar sel (hex 6 digit tanpa '#')
   rot?: boolean;       // teks tegak (dibaca dari bawah ke atas) — kepala kolom sempit
+  i?: boolean;         // miring
+  u?: boolean;         // garis bawah
+  fc?: string;         // warna huruf (hex 6 digit tanpa '#')
 }
+
+/** Format sel tanpa isi & gabungan — kuas format, salin format. Field format BARU wajib didaftar di sini. */
+const KUNCI_FORMAT = ['al', 'va', 'b', 'i', 'u', 'fs', 'bd', 'nf', 'dec', 'bg', 'fc', 'rot'] as const;
 
 export function normalizeCell(c: unknown): TabelCell {
   if (typeof c === 'string') return { v: c };
@@ -50,6 +56,9 @@ export function normalizeCell(c: unknown): TabelCell {
     if (typeof o.dec === 'number' && o.dec >= 0) cell.dec = Math.min(6, Math.floor(o.dec));
     if (typeof o.bg === 'string' && /^[0-9a-fA-F]{6}$/.test(o.bg)) cell.bg = o.bg.toUpperCase();
     if (o.rot === true) cell.rot = true;
+    if (o.i === true) cell.i = true;
+    if (o.u === true) cell.u = true;
+    if (typeof o.fc === 'string' && /^[0-9a-fA-F]{6}$/.test(o.fc)) cell.fc = o.fc.toUpperCase();
     return cell;
   }
   return { v: '' };
@@ -146,6 +155,18 @@ export function buildTableMeta(rows: TabelCell[][], ncol: number): CellMeta[][] 
   return meta;
 }
 
+/** Format sel saja (tanpa isi, gabungan, dan tanda tertutup). */
+export function formatSel(src: TabelCell | undefined): Partial<TabelCell> {
+  const out: Partial<TabelCell> = {};
+  if (!src) return out;
+  for (const k of KUNCI_FORMAT) {
+    const v = src[k];
+    if (v === undefined || v === null || v === false || v === '') continue;
+    (out as Record<string, unknown>)[k] = k === 'bd' ? { ...(v as TabelBorder) } : v;
+  }
+  return out;
+}
+
 // ── Copy / paste antar sel (nilai + format, tanpa merge) ──────────────────────
 export function extractRange(rows: TabelCell[][], r1: number, c1: number, r2: number, c2: number): TabelCell[][] {
   const out: TabelCell[][] = [];
@@ -153,27 +174,50 @@ export function extractRange(rows: TabelCell[][], r1: number, c1: number, r2: nu
     const row: TabelCell[] = [];
     for (let c = c1; c <= c2; c++) {
       const src = rows[r]?.[c];
-      const cell: TabelCell = { v: src?.v ?? '' };
-      if (src) {
-        if (src.al) cell.al = src.al;
-        if (src.va) cell.va = src.va;
-        if (src.b) cell.b = src.b;
-        if (src.fs) cell.fs = src.fs;
-        if (src.bd) cell.bd = { ...src.bd };
-        if (src.nf) cell.nf = src.nf;
-        if (src.dec != null) cell.dec = src.dec;
-        if (src.bg) cell.bg = src.bg;
-        if (src.rot) cell.rot = true;
-      }
-      row.push(cell);
+      row.push({ v: src?.v ?? '', ...formatSel(src) });
     }
     out.push(row);
   }
   return out;
 }
 
+/**
+ * Blok untuk papan klip internal — seperti `extractRange` tetapi gabungan IKUT (dipangkas ke tepi
+ * blok), sama dengan Excel. Sel tertutup gabungan yang asalnya di luar blok jadi sel biasa kosong.
+ */
+export function ambilBlok(rows: TabelCell[][], k: Kotak): TabelCell[][] {
+  const out = extractRange(rows, k.r1, k.c1, k.r2, k.c2);
+  for (let r = k.r1; r <= k.r2; r++) {
+    for (let c = k.c1; c <= k.c2; c++) {
+      const cell = rows[r]?.[c];
+      if (!cell || cell.h) continue;
+      const cs = Math.min(cell.cs ?? 1, k.c2 - c + 1), rs = Math.min(cell.rs ?? 1, k.r2 - r + 1);
+      if (cs > 1) out[r - k.r1][c - k.c1].cs = cs;
+      if (rs > 1) out[r - k.r1][c - k.c1].rs = rs;
+    }
+  }
+  return sanitizeRows(out, k.c2 - k.c1 + 1);
+}
+
+/**
+ * Gabungan yang menyentuh kotak `k` dilepas (isi sel asalnya tetap). Tempelan dulu jatuh ke sel yang
+ * masih tertutup gabungan dari LUAR kotak — isinya tersimpan tapi tak pernah tampil.
+ */
+export function lepasGabunganDi(rows: TabelCell[][], k: Kotak, ncol: number): TabelCell[][] {
+  let kena = false;
+  const next = rows.map(row => row.map(cell => ({ ...cell })));
+  next.forEach((row, r) => row.forEach((cell, c) => {
+    if (cell.h || ((cell.cs ?? 1) <= 1 && (cell.rs ?? 1) <= 1)) return;
+    const r2 = r + (cell.rs ?? 1) - 1, c2 = c + (cell.cs ?? 1) - 1;
+    if (r2 < k.r1 || r > k.r2 || c2 < k.c1 || c > k.c2) return;
+    delete cell.cs; delete cell.rs; kena = true;
+  }));
+  return kena ? sanitizeRows(next, ncol) : rows;
+}
+
 export function pasteRange(rows: TabelCell[][], r1: number, c1: number, clip: TabelCell[][], ncol: number): TabelCell[][] {
-  const next = rows.map(r => r.map(c => ({ ...c })));
+  const lebar = Math.max(0, ...clip.map(r => r.length));
+  const next = lepasGabunganDi(rows, { r1, c1, r2: r1 + clip.length - 1, c2: Math.min(ncol - 1, c1 + lebar - 1) }, ncol).map(r => r.map(c => ({ ...c })));
   const need = r1 + clip.length;
   while (next.length < need) next.push(Array.from({ length: ncol }, () => ({ v: '' } as TabelCell)));
   for (let i = 0; i < clip.length; i++) {
@@ -186,15 +230,45 @@ export function pasteRange(rows: TabelCell[][], r1: number, c1: number, clip: Ta
   return sanitizeRows(next, ncol);
 }
 
+/**
+ * TSV ala Excel: sel berisi tab/baris baru (Alt+Enter) atau berawalan kutip dibungkus "…" dan kutipnya
+ * digandakan — dulu baris barunya diganti spasi, jadi isi sel bertingkat rusak saat disalin.
+ */
 export function rangeToTSV(grid: TabelCell[][]): string {
-  return grid.map(row => row.map(c => (c.v ?? '').replace(/\t/g, ' ').replace(/\n/g, ' ')).join('\t')).join('\n');
+  const kutip = (s: string) => (/[\t\n\r]/.test(s) || s.startsWith('"') ? `"${s.replace(/"/g, '""')}"` : s);
+  return grid.map(row => row.map(c => kutip(c.v ?? '')).join('\t')).join('\n');
 }
 
-/** Parse teks clipboard (TSV dari Excel/Google Sheets) → grid sel (nilai saja). */
+/** Parse teks clipboard (TSV dari Excel/Google Sheets) → grid sel (nilai saja). Sel "…" Excel dibaca utuh. */
 export function parseTSV(text: string): TabelCell[][] {
-  const body = String(text).replace(/\r\n?/g, '\n').replace(/\n+$/, '');
-  if (!body) return [];
-  return body.split('\n').map(line => line.split('\t').map(v => ({ v } as TabelCell)));
+  const s = String(text).replace(/\r\n?/g, '\n');
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let i = 0;
+  while (i <= s.length) {
+    let isi: string | null = null;
+    if (s[i] === '"') {
+      // Terkutip hanya bila kutip penutupnya diikuti tab/baris baru/akhir teks — selain itu teks biasa.
+      let j = i + 1, t = '';
+      for (; j < s.length; j++) {
+        if (s[j] !== '"') { t += s[j]; continue; }
+        if (s[j + 1] === '"') { t += '"'; j++; continue; }
+        break;
+      }
+      if (j < s.length && (j + 1 === s.length || s[j + 1] === '\t' || s[j + 1] === '\n')) { isi = t; i = j + 1; }
+    }
+    if (isi === null) {
+      let j = i;
+      while (j < s.length && s[j] !== '\t' && s[j] !== '\n') j++;
+      isi = s.slice(i, j); i = j;
+    }
+    row.push(isi);
+    if (i >= s.length) { rows.push(row); break; }
+    if (s[i] === '\n') { rows.push(row); row = []; }
+    i++;
+  }
+  while (rows.length && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === '') rows.pop();
+  return rows.map(r => r.map(v => ({ v } as TabelCell)));
 }
 
 // ── Rumus + format angka ──────────────────────────────────────────────────────
@@ -734,6 +808,9 @@ export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: n
       const bd = cell.bd;
       const gaya = [
         cell.b ? 'font-weight:bold' : '',
+        cell.i ? 'font-style:italic' : '',
+        cell.u ? 'text-decoration:underline' : '',
+        cell.fc ? `color:#${cell.fc}` : '',
         cell.fs ? `font-size:${cell.fs}pt` : '',
         cell.bg ? `background:#${cell.bg}` : '',
         cell.al ? `text-align:${cell.al}` : '',
@@ -747,7 +824,8 @@ export function blokKeHtml(rows: TabelCell[][], k: Kotak, teks: (r: number, c: n
       ].filter(Boolean).join(';');
       const span = (c2 > c ? ` colspan="${c2 - c + 1}"` : '') + (r2 > r ? ` rowspan="${r2 - r + 1}"` : '');
       const xnum = angka ? ` x:num="${angka.nilai}"` : '';
-      html += `<td${span}${xnum}${gaya ? ` style="${gaya}"` : ''}>${escHtml(isi)}</td>`;
+      // Baris baru di dalam sel (Alt+Enter): `mso-data-placement:same-cell` membuat Excel tetap satu sel.
+      html += `<td${span}${xnum}${gaya ? ` style="${gaya}"` : ''}>${escHtml(isi).replace(/\n/g, '<br style="mso-data-placement:same-cell">')}</td>`;
     }
     html += '</tr>';
   }
@@ -1193,4 +1271,516 @@ export function rapikanKepala(kepala: TabelCell[][], letak: (number | null)[]): 
 export function kolomSegabung(kepala: TabelCell[][], c: number): number[] {
   const a = asalSel(kepala, Math.max(0, kepala.length - 1), c);
   return Array.from({ length: a.cs }, (_, i) => a.c + i).filter(x => x !== c);
+}
+
+/**
+ * Kepala bertingkat untuk templat (Tahap B): kolom dalam satu kelompok mendapat judul kelompok di
+ * baris 1 (digabung mendatar) dan judulnya sendiri di baris 2; kolom lain digabung setinggi 2 baris.
+ */
+export function kepalaBertingkat(judul: string[], kelompok: { judul: string; dari: number; sampai: number }[] = []): { kepala: TabelCell[][]; letak: (number | null)[] } {
+  const n = judul.length;
+  const sah = kelompok.filter(g => g.dari >= 0 && g.sampai < n && g.sampai > g.dari);
+  if (!sah.length) return { kepala: [judul.map(v => ({ v }))], letak: judul.map(() => 0) };
+  const diKelompok = (c: number) => sah.find(g => c >= g.dari && c <= g.sampai);
+  const atas: TabelCell[] = judul.map((j, c) => {
+    const g = diKelompok(c);
+    if (!g) return { v: j, rs: 2 };
+    return c === g.dari ? { v: g.judul, cs: g.sampai - g.dari + 1 } : { v: '' };
+  });
+  const bawah: TabelCell[] = judul.map((j, c) => ({ v: diKelompok(c) ? j : '' }));
+  return { kepala: sanitizeRows([atas, bawah], n), letak: judul.map((_, c) => (diKelompok(c) ? 1 : 0)) };
+}
+
+// ═══ Tahap B — ala Excel tambahan (konsep §5.6–5.11) ══════════════════════════
+
+/**
+ * Rumus yang disalin / diisi-seret `dr` baris & `dc` kolom (§5.7): rujukan tanpa `$` ikut bergeser,
+ * yang ber-`$` tetap — cara Excel. Rujukan yang jatuh sebelum A1 → `#REF!`.
+ */
+export function geserRumusRelatif(v: string, dr: number, dc: number): string {
+  if (!v.trimStart().startsWith('=') || (!dr && !dc)) return v;
+  return v.replace(REF_RUMUS, (m: string, d1: string, h1: string, d2: string, a1: string, d3: string | undefined, h2: string | undefined, d4: string | undefined, a2: string | undefined, off: number, src: string) => {
+    if (off > 0 && /[A-Za-z0-9_#]/.test(src[off - 1])) return m;
+    const satu = (dc$: string, h: string, dr$: string, a: string): string | null => {
+      const c = indeksHuruf(h) + (dc$ ? 0 : dc), r = Number(a) - 1 + (dr$ ? 0 : dr);
+      return c < 0 || r < 0 ? null : `${dc$}${colLabel(c)}${dr$}${r + 1}`;
+    };
+    const a = satu(d1, h1, d2, a1);
+    if (h2 === undefined || a2 === undefined) return a ?? RUJUKAN_HILANG;
+    const b = satu(d3 ?? '', h2, d4 ?? '', a2);
+    return a && b ? `${a}:${b}` : RUJUKAN_HILANG;
+  });
+}
+
+const BULAN_PANJANG = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+const BULAN_PENDEK = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
+const ROMAWI_TW = ['I', 'II', 'III', 'IV'];
+const POLA_TW = /^(TW|Triwulan)(\s*)(IV|III|II|I|[1-4])$/i;
+
+/** Huruf besar/kecil keluaran mengikuti contohnya: "JAN" → "FEB", "Jan" → "Feb", "jan" → "feb". */
+function ikutHuruf(contoh: string, kata: string): string {
+  if (contoh === contoh.toUpperCase() && /[A-Z]/.test(contoh)) return kata.toUpperCase();
+  if (contoh[0] === contoh[0]?.toUpperCase()) return kata[0].toUpperCase() + kata.slice(1);
+  return kata;
+}
+
+/** Langkah deret: 1 contoh = +1; ≥ 2 contoh = selisih rata (harus bulat untuk deret berindeks). */
+function langkahDeret(idx: number[], bulat: boolean): number | null {
+  if (idx.length < 2) return 1;
+  const l = (idx[idx.length - 1] - idx[0]) / (idx.length - 1);
+  if (bulat && !Number.isInteger(l)) return null;
+  for (let i = 1; i < idx.length; i++) if (Math.abs(idx[i] - idx[i - 1] - l) > 1e-9) return null;
+  return l;
+}
+
+/**
+ * Deret isi-seret dari isi sel contoh (§5.7) → fungsi "nilai ke-k sesudah contoh terakhir", atau
+ * null = bukan deret (disalin berulang apa adanya). Angka butuh ≥ 2 contoh (satu angka disalin, cara Excel).
+ */
+export function deretIsi(contoh: TabelCell[]): ((k: number) => string) | null {
+  const teks = contoh.map(c => (c.v ?? '').trim());
+  if (!teks.length || teks.some(t => !t || t.startsWith('='))) return null;
+  // Angka: "1.250.000" tetap bergaya ribuan; "2026" tetap tanpa titik (tahun, kode).
+  if (contoh.length >= 2 && contoh.every(c => (c.nf && ANGKA_MESIN.test(c.v.trim())) || ANGKA_MURNI_ID.test(c.v.trim()))) {
+    const n = contoh.map(c => (c.nf && ANGKA_MESIN.test(c.v.trim()) ? Number(c.v) : angkaTeksId(c.v.trim())));
+    const l = langkahDeret(n, false);
+    if (l === null) return null;
+    const mesin = !!contoh[contoh.length - 1].nf;
+    const ribuan = teks.some(t => /\d\.\d{3}/.test(t));
+    return k => {
+      const x = bulatkanDesimal(n[n.length - 1] + l * k, 10);
+      if (mesin) return String(x);
+      return ribuan ? formatUmum(x) : String(x).replace('.', ',');
+    };
+  }
+  for (const daftar of [BULAN_PANJANG, BULAN_PENDEK]) {
+    const idx = teks.map(t => daftar.indexOf(t.toLowerCase()));
+    if (idx.every(i => i >= 0)) {
+      const l = langkahDeret(idx, true);
+      if (l === null) return null;
+      const akhir = teks[teks.length - 1];
+      return k => ikutHuruf(akhir, daftar[(((idx[idx.length - 1] + l * k) % 12) + 12) % 12]);
+    }
+  }
+  const tw = teks.map(t => POLA_TW.exec(t));
+  if (tw.every(Boolean)) {
+    const idx = tw.map(m => (/^\d$/.test(m![3]) ? Number(m![3]) - 1 : ROMAWI_TW.indexOf(m![3].toUpperCase())));
+    const l = langkahDeret(idx, true);
+    if (l === null) return null;
+    const m = tw[tw.length - 1]!;
+    const arab = /^\d$/.test(m[3]);
+    return k => {
+      const i = (((idx[idx.length - 1] + l * k) % 4) + 4) % 4;
+      return `${m[1]}${m[2]}${arab ? String(i + 1) : ROMAWI_TW[i]}`;
+    };
+  }
+  // Teks berakhiran angka: "Sasaran 1" → "Sasaran 2"; nol depan dipertahankan ("Lampiran 01" → "02").
+  const ekor = teks.map(t => /^(.*\D)(\d{1,9})$/.exec(t));
+  if (ekor.every(Boolean) && ekor.every(m => m![1] === ekor[0]![1])) {
+    const idx = ekor.map(m => Number(m![2]));
+    const l = langkahDeret(idx, true);
+    if (l === null) return null;
+    const akhir = ekor[ekor.length - 1]!;
+    const lebar = akhir[2].startsWith('0') ? akhir[2].length : 0;
+    return k => `${akhir[1]}${String(Math.max(0, idx[idx.length - 1] + l * k)).padStart(lebar, '0')}`;
+  }
+  return null;
+}
+
+export type HasilBlok = { rows: TabelCell[][] } | { galat: string };
+
+/**
+ * Isi-seret (fill handle, §5.7): blok `sumber` diperpanjang sampai `sampai` — ke bawah atau ke kanan.
+ * Tiap kolom (ke bawah) / baris (ke kanan) diperiksa sendiri: deret → dilanjutkan, selain itu disalin
+ * berulang. Rumus disalin dengan rujukan relatif (`geserRumusRelatif`). Format ikut contohnya.
+ */
+export function isiSeret(rows: TabelCell[][], sumber: Kotak, sampai: Kotak, boleh: (r: number, c: number) => boolean = () => true): HasilBlok {
+  const bawah = sampai.r2 > sumber.r2, kanan = !bawah && sampai.c2 > sumber.c2;
+  if (!bawah && !kanan) return { rows };
+  const area: Kotak = { r1: sumber.r1, c1: sumber.c1, r2: bawah ? sampai.r2 : sumber.r2, c2: kanan ? sampai.c2 : sumber.c2 };
+  for (let r = area.r1; r <= area.r2; r++) {
+    for (let c = area.c1; c <= area.c2; c++) {
+      const cell = rows[r]?.[c];
+      if (!cell) return { galat: 'Isi-seret melewati batas tabel.' };
+      if (cell.h || (cell.cs ?? 1) > 1 || (cell.rs ?? 1) > 1) return { galat: 'Isi-seret tidak bisa melewati sel gabungan — pisah dulu gabungannya.' };
+    }
+  }
+  const next = rows.map(row => row.map(cell => ({ ...cell })));
+  const lajur = bawah ? [sumber.c1, sumber.c2] : [sumber.r1, sumber.r2];
+  const panjang = bawah ? sumber.r2 - sumber.r1 + 1 : sumber.c2 - sumber.c1 + 1;
+  for (let j = lajur[0]; j <= lajur[1]; j++) {
+    const pos = (i: number) => (bawah ? { r: sumber.r1 + i, c: j } : { r: j, c: sumber.c1 + i });
+    const contoh = Array.from({ length: panjang }, (_, i) => { const p = pos(i); return rows[p.r][p.c]; });
+    const deret = deretIsi(contoh);
+    const akhir = bawah ? area.r2 - sumber.r1 : area.c2 - sumber.c1;
+    for (let i = panjang; i <= akhir; i++) {
+      const p = pos(i);
+      if (!boleh(p.r, p.c)) continue;
+      const asal = contoh[i % panjang];
+      const v = deret ? deret(i - panjang + 1) : geserRumusRelatif(asal.v, bawah ? i - (i % panjang) : 0, bawah ? 0 : i - (i % panjang));
+      next[p.r][p.c] = { v, ...formatSel(asal) };
+    }
+  }
+  return { rows: next };
+}
+
+/**
+ * Angka sel SEPERTI TAMPIL (persen ×100), atau null bila sel bukan angka — bilah status, AutoSum,
+ * urutkan. Beda dgn `angkaSel` yang memulangkan 0 untuk teks: di sini teks tidak boleh ikut dihitung.
+ */
+export function nilaiAngkaSel(rows: TabelCell[][], r: number, c: number): number | null {
+  const cell = rows[r]?.[c];
+  if (!cell || cell.h) return null;
+  const v = (cell.v ?? '').trim();
+  if (!v) return null;
+  if (v.startsWith('=')) {
+    if (v.includes(RUJUKAN_HILANG)) return null;
+    const n = evalFormula(v.slice(1), rows, r, c, new Set());
+    return Number.isFinite(n) ? (cell.nf === 'pct' ? n * 100 : n) : null;
+  }
+  if (cell.nf && ANGKA_MESIN.test(v)) return cell.nf === 'pct' ? Number(v) * 100 : Number(v);
+  const inti = v.replace(/^Rp\s?/i, '').replace(/%$/, '').trim();
+  return ANGKA_MURNI_ID.test(inti) ? angkaTeksId(inti) : null;
+}
+
+/** Bilah status (§5.9): Jumlah & Rata-rata dari sel ANGKA, Banyak = sel berisi (COUNTA Excel). */
+export function ringkasBlok(rows: TabelCell[][], k: Kotak): { jumlah: number; rataRata: number | null; banyak: number; banyakAngka: number } {
+  let jumlah = 0, banyak = 0, banyakAngka = 0;
+  for (let r = k.r1; r <= k.r2; r++) {
+    for (let c = k.c1; c <= k.c2; c++) {
+      const cell = rows[r]?.[c];
+      if (!cell || cell.h || !(cell.v ?? '').trim()) continue;
+      banyak++;
+      const n = nilaiAngkaSel(rows, r, c);
+      if (n !== null) { jumlah += n; banyakAngka++; }
+    }
+  }
+  return { jumlah: bulatkanDesimal(jumlah, 10), rataRata: banyakAngka ? bulatkanDesimal(jumlah / banyakAngka, 10) : null, banyak, banyakAngka };
+}
+
+/**
+ * Σ AutoSum (§5.9). Sel KOSONG di blok diberi `=SUM(...)` deret angka bersambung tepat di atasnya
+ * (berhenti di kepala, sel teks, atau sel kosong) — atau di kirinya bila di atasnya tak ada angka.
+ * Blok yang seluruhnya angka: jumlahnya ditaruh di sel kosong sesudahnya — di bawah tiap kolom,
+ * atau di kanan bila blok itu satu baris.
+ */
+export function autoJumlah(rows: TabelCell[][], k: Kotak, headerRows: number, boleh: (r: number, c: number) => boolean = () => true): { rows: TabelCell[][]; sel: { r: number; c: number }[] } {
+  const angka = (r: number, c: number) => r >= headerRows && nilaiAngkaSel(rows, r, c) !== null;
+  const kosong = (r: number, c: number) => { const cell = rows[r]?.[c]; return !!cell && !cell.h && !(cell.v ?? '').trim() && boleh(r, c); };
+  const tulis: { r: number; c: number; v: string }[] = [];
+  const rumus = (a: { r: number; c: number }, b: { r: number; c: number }) => `=SUM(${colLabel(a.c)}${a.r + 1}:${colLabel(b.c)}${b.r + 1})`;
+  const deretAtas = (r: number, c: number) => { let a = r - 1; while (a - 1 >= 0 && angka(a - 1, c)) a--; return angka(r - 1, c) ? a : -1; };
+  const deretKiri = (r: number, c: number) => { let a = c - 1; while (a - 1 >= 0 && angka(r, a - 1)) a--; return c - 1 >= 0 && angka(r, c - 1) ? a : -1; };
+  let adaKosong = false;
+  for (let r = k.r1; r <= k.r2; r++) {
+    for (let c = k.c1; c <= k.c2; c++) {
+      if (!kosong(r, c)) continue;
+      adaKosong = true;
+      const a = deretAtas(r, c);
+      if (a >= 0) { tulis.push({ r, c, v: rumus({ r: a, c }, { r: r - 1, c }) }); continue; }
+      const b = deretKiri(r, c);
+      if (b >= 0) tulis.push({ r, c, v: rumus({ r, c: b }, { r, c: c - 1 }) });
+    }
+  }
+  if (!adaKosong) {
+    const adaAngka = (ra: number, ca: number, rb: number, cb: number) => {
+      for (let r = ra; r <= rb; r++) for (let c = ca; c <= cb; c++) if (angka(r, c)) return true;
+      return false;
+    };
+    if (k.r1 === k.r2 && k.c2 > k.c1) {
+      if (kosong(k.r1, k.c2 + 1) && adaAngka(k.r1, k.c1, k.r1, k.c2)) tulis.push({ r: k.r1, c: k.c2 + 1, v: rumus({ r: k.r1, c: k.c1 }, { r: k.r1, c: k.c2 }) });
+    } else {
+      for (let c = k.c1; c <= k.c2; c++) {
+        if (kosong(k.r2 + 1, c) && adaAngka(k.r1, c, k.r2, c)) tulis.push({ r: k.r2 + 1, c, v: rumus({ r: k.r1, c }, { r: k.r2, c }) });
+      }
+    }
+  }
+  if (!tulis.length) return { rows, sel: [] };
+  const next = rows.map(row => row.map(cell => ({ ...cell })));
+  for (const t of tulis) next[t.r][t.c].v = t.v;
+  return { rows: next, sel: tulis.map(({ r, c }) => ({ r, c })) };
+}
+
+/** Kuas format (§5.8): format pola diulang menutup blok; isi & gabungan sel tujuan tetap. */
+export function tempelFormat(rows: TabelCell[][], k: Kotak, pola: TabelCell[][], boleh: (r: number, c: number) => boolean = () => true): TabelCell[][] {
+  const pr = pola.length, pc = Math.max(0, ...pola.map(r => r.length));
+  if (!pr || !pc) return rows;
+  return rows.map((row, r) => row.map((cell, c) => {
+    if (r < k.r1 || r > k.r2 || c < k.c1 || c > k.c2 || cell.h || !boleh(r, c)) return cell;
+    const p = pola[(r - k.r1) % pr]?.[(c - k.c1) % pc];
+    return { ...tanpaFormat(cell), ...formatSel(p) };
+  }));
+}
+
+/**
+ * "Nilai saja" sebuah sel (§5.6 tempel nilai): rumus → hasilnya, angka berformat → angkanya, gaya
+ * Indonesia tanpa format (seperti Excel "Paste Values" ke sel umum). Rumus galat → kosong.
+ */
+export function nilaiSaja(rows: TabelCell[][], r: number, c: number): string {
+  const cell = rows[r]?.[c];
+  if (!cell || cell.h) return '';
+  const v = (cell.v ?? '').trim();
+  if (v.startsWith('=')) {
+    if (v.includes(RUJUKAN_HILANG)) return '';
+    const n = evalFormula(v.slice(1), rows, r, c, new Set());
+    return Number.isFinite(n) ? formatUmum(n) : '';
+  }
+  if (cell.nf && ANGKA_MESIN.test(v)) return formatUmum(Number(v));
+  return cell.v;
+}
+
+/**
+ * Tempel nilai (Ctrl+Shift+V): teks ditulis ke sel tujuan dan FORMAT TUJUAN dipertahankan — angka
+ * di sel berformat disimpan sebagai angka mesin (`nilaiKetikan`). Sel tertutup gabungan dilewati.
+ */
+export function tempelNilai(rows: TabelCell[][], r1: number, c1: number, nilai: string[][], ncol: number, boleh: (r: number, c: number, teks: string) => boolean = () => true): TabelCell[][] {
+  const next = rows.map(row => row.map(cell => ({ ...cell })));
+  while (next.length < r1 + nilai.length) next.push(Array.from({ length: ncol }, () => ({ v: '' } as TabelCell)));
+  nilai.forEach((baris, i) => baris.forEach((teks, j) => {
+    const r = r1 + i, c = c1 + j;
+    const cell = next[r]?.[c];
+    if (!cell || cell.h || !boleh(r, c, teks)) return;
+    next[r][c] = { ...cell, v: nilaiKetikan(cell, teks) };
+  }));
+  return sanitizeRows(next, ncol);
+}
+
+// ═══ Tahap C — tempel dari Excel/Word lengkap, urutkan, cari & ganti (konsep §5.6, §8) ═══════
+
+const ENTITAS: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+function urai(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === '#') { const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m; }
+    return ENTITAS[e.toLowerCase()] ?? m;
+  });
+}
+
+function bacaCss(teks: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const bagian of teks.split(';')) {
+    const i = bagian.indexOf(':');
+    if (i > 0) out[bagian.slice(0, i).trim().toLowerCase()] = bagian.slice(i + 1).trim().replace(/\s*!important$/i, '');
+  }
+  return out;
+}
+
+const WARNA_NAMA: Record<string, string> = { red: 'FF0000', blue: '0000FF', green: '008000', yellow: 'FFFF00', white: 'FFFFFF', black: '000000', gray: '808080', grey: '808080', orange: 'FFA500' };
+function hexWarna(v: string | undefined): string | null {
+  if (!v) return null;
+  const t = v.trim().toLowerCase();
+  let m = /^#([0-9a-f]{6})$/.exec(t); if (m) return m[1].toUpperCase();
+  m = /^#([0-9a-f]{3})$/.exec(t); if (m) return m[1].split('').map(x => x + x).join('').toUpperCase();
+  m = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/.exec(t);
+  if (m) return [m[1], m[2], m[3]].map(n => Math.min(255, Number(n)).toString(16).padStart(2, '0')).join('').toUpperCase();
+  return WARNA_NAMA[t] ?? null;
+}
+
+/**
+ * Angka sel tempelan yang punya nilai MESIN (`x:num` Excel, `data-sheets-value` Google Sheets) ditulis
+ * gaya Indonesia: Excel bersetelan Inggris menempel "1,250,000" yang dulu terbaca 1,25. Desimalnya
+ * mengikuti yang tampil; teks berangka polos ("2026", kode) dibiarkan tanpa titik ribuan.
+ */
+export function angkaDariTempelan(n: number, tampil: string): string {
+  const t = tampil.trim();
+  if (/^-?\d+$/.test(t) && Number(t) === n) return t;
+  const pct = /%\s*$/.test(t), rp = /rp/i.test(t);
+  const nilai = pct ? n * 100 : n;
+  const bulat = Math.abs(nilai - Math.round(nilai)) < 1e-9;
+  // Desimal = yang TAMPIL ("13%" untuk 0,125 berformat 0%) — tempelan memuat apa yang dilihat orangnya.
+  const m = /[.,](\d+)\D*$/.exec(t);
+  const dec = bulat ? 0 : Math.min(6, m ? m[1].length : 0);
+  const badan = formatNumber(nilai, undefined, dec);
+  return rp ? `Rp ${badan}` : pct ? `${badan}%` : badan;
+}
+
+/**
+ * Angka bergaya Inggris ("1,250,000", "57,755,803,079.01", "12.5%") → gaya Indonesia. Dipakai hanya
+ * bila Excel MENYATAKAN pemisah desimalnya titik — Excel 365 tidak lagi menulis `x:num`, jadi teks
+ * tampilnya satu-satunya bahan (diukur 2026-10-20), dan "1,250,000" dulu terbaca 1,25.
+ */
+export function angkaInggrisKeId(teks: string): string {
+  const m = /^(Rp\s?)?(-?)(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(%?)$/.exec(teks.trim());
+  if (!m) return teks;
+  return `${m[1] ?? ''}${m[2]}${m[3].replace(/,/g, '.')}${m[4] ? `,${m[4].slice(1)}` : ''}${m[5]}`;
+}
+
+/**
+ * Tabel HTML papan klip → sel LENGKAP dengan gabungan & format (Tahap C) — Excel (gaya lewat kelas
+ * `.xlNN` di <style>), Word (<b>/<i>/<u> & paragraf), Google Sheets (gaya sebaris), dan salinan PRIMA
+ * sendiri. Ukuran huruf sengaja tidak dibawa: tabel mengikuti huruf dokumen. null = bukan tabel.
+ */
+export function htmlKeSel(html: string): TabelCell[][] | null {
+  const s = String(html ?? '');
+  const awal = s.search(/<table\b/i);
+  if (awal < 0) return null;
+  const kelas = new Map<string, Record<string, string>>();
+  let dasarTd: Record<string, string> = {};
+  for (const gaya of s.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+    const isi = gaya[1].replace(/<!--|-->/g, '');
+    for (const m of isi.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      const css = bacaCss(m[2]);
+      for (const pemilih of m[1].split(',').map(x => x.trim())) {
+        const k = /^(?:td)?\.([A-Za-z0-9_-]+)$/.exec(pemilih);
+        if (k) kelas.set(k[1], { ...(kelas.get(k[1]) ?? {}), ...css });
+        else if (/^td$/i.test(pemilih)) dasarTd = { ...dasarTd, ...css };
+      }
+    }
+  }
+  // Excel menulis pemisah tampilannya di <style>: `mso-displayed-decimal-separator:"\."` = setelan Inggris.
+  const desimalTitik = /mso-displayed-decimal-separator\s*:\s*"\\?\."/i.test(s);
+  const akhir = s.search(/<\/table>/i);
+  const badan = s.slice(awal, akhir > awal ? akhir : undefined);
+  const atribut = (a: string, nama: string) => {
+    const m = new RegExp(`(?:^|\\s)${nama}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(a);
+    return m ? (m[1] ?? m[2] ?? m[3] ?? '') : undefined;
+  };
+  type Mentah = { cell: TabelCell; cs: number; rs: number };
+  const baris: Mentah[][] = [];
+  for (const potong of badan.split(/<tr\b/i).slice(1)) {
+    const tr = potong.split(/<\/tr>/i)[0];
+    const sel: Mentah[] = [];
+    for (const t of tr.split(/<t[dh]\b/i).slice(1)) {
+      const tutup = t.indexOf('>');
+      const attr = t.slice(0, tutup);
+      const dalam = t.slice(tutup + 1).split(/<\/t[dh]>/i)[0];
+      const css = { ...dasarTd, ...(kelas.get(atribut(attr, 'class') ?? '') ?? {}), ...bacaCss(atribut(attr, 'style') ?? '') };
+      const cssKhusus = { ...(kelas.get(atribut(attr, 'class') ?? '') ?? {}), ...bacaCss(atribut(attr, 'style') ?? '') };
+      const teks = urai(dalam.replace(/<!--[\s\S]*?-->/g, '').replace(/[\r\n\t ]+/g, ' ')
+        .replace(/<br\b[^>]*>/gi, '\n').replace(/<\/p>\s*/gi, '\n').replace(/<[^>]+>/g, ''))
+        .split('\n').map(x => x.replace(/\u00a0/g, ' ').trim()).join('\n').replace(/^\n+|\n+$/g, '');
+      // Tanda format pembungkus SELURUH isi (Word): <b>teks</b> → tebal.
+      const bungkus = (tag: string) => {
+        if (!new RegExp(`<(${tag})\\b`, 'i').test(dalam)) return false;
+        const sisa = dalam.replace(new RegExp(`<(${tag})\\b[^>]*>[\\s\\S]*?</\\1>`, 'gi'), '').replace(/<[^>]+>/g, '');
+        return !urai(sisa).replace(/\u00a0/g, ' ').trim();
+      };
+      const cell: TabelCell = { v: teks };
+      const fw = (css['font-weight'] ?? '').toLowerCase();
+      if (fw === 'bold' || fw === 'bolder' || Number(fw) >= 600 || bungkus('b|strong')) cell.b = true;
+      if ((css['font-style'] ?? '').toLowerCase() === 'italic' || bungkus('i|em')) cell.i = true;
+      if (/underline/i.test(css['text-decoration'] ?? '') || bungkus('u')) cell.u = true;
+      const al = (cssKhusus['text-align'] ?? atribut(attr, 'align') ?? '').toLowerCase();
+      if (al === 'center' || al === 'right' || al === 'justify') cell.al = al;
+      // Hanya "tengah" yang dibawa: rata bawah adalah bawaan Excel & Google Sheets (tertulis di tiap sel),
+      // sedangkan bawaan tabel dokumen rata atas — membawanya membuat seluruh tempelan turun ke dasar sel.
+      const va = (cssKhusus['vertical-align'] ?? atribut(attr, 'valign') ?? '').toLowerCase();
+      if (va === 'middle' || va === 'center') cell.va = 'middle';
+      const bg = hexWarna(css['background'] ?? css['background-color'] ?? atribut(attr, 'bgcolor'));
+      if (bg && bg !== 'FFFFFF') cell.bg = bg;
+      const fc = hexWarna(css['color']);
+      if (fc && fc !== '000000') cell.fc = fc;
+      if (css['mso-rotate'] === '90') cell.rot = true;
+      const xnum = atribut(attr, 'x:num');
+      const sheets = /"3"\s*:\s*(-?[\d.eE+-]+)/.exec(urai(atribut(attr, 'data-sheets-value') ?? ''));
+      const n = xnum !== undefined && xnum !== '' ? Number(xnum) : sheets ? Number(sheets[1]) : NaN;
+      if (Number.isFinite(n) && teks) cell.v = angkaDariTempelan(n, teks);
+      else if (desimalTitik && teks) cell.v = angkaInggrisKeId(teks);
+      const cs = Math.max(1, Math.min(BATAS_KOLOM_TABEL, Number(atribut(attr, 'colspan')) || 1));
+      const rs = Math.max(1, Math.min(BATAS_BARIS_TABEL, Number(atribut(attr, 'rowspan')) || 1));
+      sel.push({ cell, cs, rs });
+    }
+    baris.push(sel);
+  }
+  // Tata letak tabel HTML: sel melompati kolom yang masih tertutup rowspan baris di atasnya.
+  const grid: (TabelCell | undefined)[][] = [];
+  baris.forEach((sel, r) => {
+    grid[r] ??= [];
+    let c = 0;
+    for (const m of sel) {
+      while (grid[r][c]) c++;
+      for (let rr = r; rr < r + m.rs; rr++) {
+        grid[rr] ??= [];
+        for (let cc = c; cc < c + m.cs; cc++) grid[rr][cc] = rr === r && cc === c ? { ...m.cell, ...(m.cs > 1 ? { cs: m.cs } : {}), ...(m.rs > 1 ? { rs: m.rs } : {}) } : { v: '', h: true };
+      }
+      c += m.cs;
+    }
+  });
+  const nrow = Math.min(baris.length, BATAS_BARIS_TABEL);
+  const ncol = Math.max(0, ...grid.slice(0, nrow).map(r => r?.length ?? 0));
+  if (!nrow || !ncol) return null;
+  const hasil = Array.from({ length: nrow }, (_, r) => Array.from({ length: ncol }, (_, c) => grid[r]?.[c] ?? { v: '' }));
+  return sanitizeRows(hasil, ncol);
+}
+
+/** Kunci urut sel: angka < teks < kosong (kosong selalu di bawah, juga saat Z→A — cara Excel). */
+function kunciUrut(rows: TabelCell[][], r: number, c: number): { jenis: 0 | 1 | 2; n: number; t: string } {
+  const a = asalSel(rows, r, c);
+  const n = nilaiAngkaSel(rows, a.r, a.c);
+  if (n !== null) return { jenis: 0, n, t: '' };
+  const t = displayValue(rows, a.r, a.c).trim();
+  return t ? { jenis: 1, n: 0, t } : { jenis: 2, n: 0, t: '' };
+}
+
+/**
+ * Urutkan blok (Tahap C): baris badan di dalam blok diurut menurut `kolom`; hanya kolom blok yang
+ * berpindah (cara Excel). Kepala tidak ikut, baris JUMLAH (`lewatiAkhir`) tidak ikut. Gabungan
+ * antarbaris di blok ditolak — memindahkan setengah gabungan merusaknya. Rumus yang berpindah ikut
+ * bergeser seperti disalin (`geserRumusRelatif`).
+ */
+export function urutkanBlok(rows: TabelCell[][], k: Kotak, kolom: number, turun: boolean, headerRows: number, lewatiAkhir = false): HasilBlok {
+  const r1 = Math.max(k.r1, headerRows);
+  const r2 = lewatiAkhir && k.r2 === rows.length - 1 ? k.r2 - 1 : k.r2;
+  if (r2 <= r1) return { galat: 'Pilih minimal dua baris badan tabel untuk diurutkan.' };
+  if (kolom < k.c1 || kolom > k.c2) return { galat: 'Kolom kunci harus di dalam blok.' };
+  for (let r = r1; r <= r2; r++) {
+    for (let c = k.c1; c <= k.c2; c++) {
+      const a = asalSel(rows, r, c);
+      if (a.r !== r || a.rs > 1 || a.c < k.c1 || a.c + a.cs - 1 > k.c2) return { galat: 'Blok berisi sel gabungan yang memotong baris atau tepi blok — pisah dulu gabungannya.' };
+    }
+  }
+  const urut = Array.from({ length: r2 - r1 + 1 }, (_, i) => r1 + i).map(r => ({ r, kunci: kunciUrut(rows, r, kolom) }));
+  urut.sort((x, y) => {
+    if (x.kunci.jenis !== y.kunci.jenis) return x.kunci.jenis - y.kunci.jenis;
+    if (x.kunci.jenis === 2) return x.r - y.r;
+    const beda = x.kunci.jenis === 0 ? x.kunci.n - y.kunci.n : x.kunci.t.localeCompare(y.kunci.t, 'id', { numeric: true, sensitivity: 'base' });
+    return (turun ? -beda : beda) || x.r - y.r;
+  });
+  const next = rows.map(row => row.map(cell => ({ ...cell })));
+  urut.forEach(({ r: dari }, i) => {
+    const ke = r1 + i;
+    for (let c = k.c1; c <= k.c2; c++) {
+      const cell = rows[dari][c];
+      next[ke][c] = { ...cell, v: geserRumusRelatif(cell.v, ke - dari, 0) };
+    }
+  });
+  return { rows: sanitizeRows(next, rows[0]?.length ?? 0) };
+}
+
+const polaCari = (kata: string, hurufBesar: boolean) => new RegExp(kata.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), hurufBesar ? 'g' : 'gi');
+
+/** Cari di tabel (Tahap C): isi sel (termasuk rumus) ATAU teks tampilnya ("1.250.000" di sel Rupiah bermesin 1250000). */
+export function cariSel(rows: TabelCell[][], kata: string, hurufBesar = false): { r: number; c: number }[] {
+  if (!kata) return [];
+  const pola = polaCari(kata, hurufBesar);
+  const out: { r: number; c: number }[] = [];
+  rows.forEach((row, r) => row.forEach((cell, c) => {
+    if (cell.h) return;
+    pola.lastIndex = 0;
+    if (pola.test(cell.v)) { out.push({ r, c }); return; }
+    pola.lastIndex = 0;
+    if (pola.test(displayValue(rows, r, c))) out.push({ r, c });
+  }));
+  return out;
+}
+
+/** Ganti di isi sel. Kecocokan yang hanya ada di teks TAMPIL (angka berformat) tidak bisa diganti di sini. */
+export function gantiDiSel(v: string, kata: string, dengan: string, hurufBesar = false): { v: string; n: number } {
+  if (!kata) return { v, n: 0 };
+  let n = 0;
+  const baru = v.replace(polaCari(kata, hurufBesar), () => { n++; return dengan; });
+  return { v: baru, n };
+}
+
+/** Ganti semua: `ditahan` = sel cocok yang tidak boleh disunting (badan tertaut, kolom No.) atau hanya cocok di tampilannya. */
+export function gantiSemua(rows: TabelCell[][], kata: string, dengan: string, boleh: (r: number, c: number) => boolean = () => true, hurufBesar = false): { rows: TabelCell[][]; n: number; sel: number; ditahan: number } {
+  let n = 0, sel = 0, ditahan = 0;
+  const cocok = new Set(cariSel(rows, kata, hurufBesar).map(p => `${p.r}:${p.c}`));
+  const next = rows.map((row, r) => row.map((cell, c) => {
+    if (!cocok.has(`${r}:${c}`)) return cell;
+    const g = gantiDiSel(cell.v, kata, dengan, hurufBesar);
+    if (!g.n || !boleh(r, c)) { ditahan++; return cell; }
+    n += g.n; sel++;
+    return { ...cell, v: nilaiKetikan(cell, g.v) };
+  }));
+  return { rows: n ? next : rows, n, sel, ditahan };
 }

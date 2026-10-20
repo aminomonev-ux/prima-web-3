@@ -6,6 +6,7 @@
 import { nilaiPerbarui, kalimatPerbarui, type HasilTarik, type PayloadTabel, type Tautan } from './tautan';
 import { angkaDiHtml, bandingAngka, kalimatAngka, kunciTarikan, type ResepAngka } from './angka';
 import { normalizeRows, daftarSelGalat } from './tabel';
+import { rujukanDiHtml } from './numbering';
 
 /** Yang ditampilkan panel Periksa — sama untuk tabel & narasi. */
 export interface ItemPeriksa {
@@ -74,6 +75,21 @@ export function kumpulkanSelGalat(bagian: BagianDok[]): TabelGalat[] {
       blockId: b.id, sectionId: s.id, letak: `${s.nomor} ${s.judul}`.trim(),
       judul: (p.judul ?? '').trim() || 'Tabel tanpa judul', ringkas: p.tautan?.ringkas ?? '', sel,
     }];
+  }));
+}
+
+/**
+ * Narasi yang merujuk Tabel/Gambar/Grafik yang sudah tidak ada (§12.5) — di Word tertulis "Tabel ?",
+ * jadi disebut sebelum Finalisasi. `ada` = id blok yang bernomor sekarang (`nomorObjek`).
+ */
+export interface NarasiRujukanPutus extends ItemPeriksa { jumlah: number }
+export function kumpulkanRujukanPutus(bagian: BagianDok[], ada: Set<number>): NarasiRujukanPutus[] {
+  return bagian.flatMap(s => s.blocks.flatMap(b => {
+    const p = b.payload as { html?: string } | null;
+    if (b.tipe !== 'NARASI' || !p?.html) return [];
+    const putus = rujukanDiHtml(p.html).filter(id => !ada.has(id));
+    if (!putus.length) return [];
+    return [{ blockId: b.id, sectionId: s.id, letak: `${s.nomor} ${s.judul}`.trim(), judul: 'Narasi', ringkas: '', jumlah: putus.length }];
   }));
 }
 

@@ -6,7 +6,7 @@
 //  - settings.xml updateFields=true → Word refresh field saat dibuka
 // escapeXml WAJIB di semua teks user. PERF-C3/L18: pizzip dynamic-import.
 import { getDokumenDetail } from './data';
-import { flattenTree, nomorObjek, type SectionNode, type BlockNode, type JenisObjek } from './numbering';
+import { flattenTree, nomorObjek, sebutObjek, type SectionNode, type BlockNode, type JenisObjek, type NomorObjek } from './numbering';
 import { DEFAULT_STYLE, type StyleConfig } from './schemas';
 import {
   normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord, bacaAtur, lebarTulisDxa, teksSumber, gayaSel, selBergaya, nomorUlang, tinggiBarisTegak,
@@ -96,7 +96,12 @@ function buildNumbering(instances: { numId: number; abs: number }[]): string {
 // Tidak diterapkan ke heading & list item (list pakai hanging indent dari numbering).
 // continueList: blok ini melanjutkan penomoran list dari blok sebelumnya (abs sama)
 // → list PERTAMA yang dibuka pakai-ulang numId terakhir (a,b,c lanjut, bukan restart).
-export function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, alloc?: NumAlloc, continueList = false): string {
+/**
+ * `rujuk`: blok → "Tabel 3.1" saat ini (§12.5). Span `data-rujuk` jadi field REF ke bookmark judul objek itu,
+ * dengan teks awal nomor SEKARANG (bukan teks yang tersimpan, yang basi begitu tabel lain disisip di depannya).
+ * Rujukan ke blok yang sudah dihapus jadi "Tabel ?". Tanpa `rujuk` (Kata Pengantar) teks tersimpan dipakai apa adanya.
+ */
+export function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, alloc?: NumAlloc, continueList = false, rujuk?: Map<number, string>): string {
   if (!html || !html.trim()) return '';
   // CT_PPr: <w:ind> WAJIB sebelum <w:jc>. indXml dipasang di paragraf isi saja.
   const indXml = indentTwips > 0 ? `<w:ind w:firstLine="${indentTwips}"/>` : '';
@@ -113,7 +118,9 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
   let runColor: string | null = null;
   let runSize: number | null = null;
   // Span bisa bersarang (warna yang membungkus angka tertaut): penutup memulihkan gaya induknya.
-  const spanInduk: { color: string | null; size: number | null }[] = [];
+  const spanInduk: { color: string | null; size: number | null; rujukan: boolean }[] = [];
+  // Rujukan silang yang sedang dibuka: teks di dalam span-nya dikumpulkan lalu diganti field REF saat span ditutup.
+  let rujukan: { id: number; teks: string } | null = null;
   const marks = { b: false, i: false, u: false, s: false };
 
   const curRpr = () => {
@@ -130,7 +137,20 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
   const pushText = (txt: string) => {
     const t = decodeEntities(txt);
     if (!t) return;
+    if (rujukan && rujuk) { rujukan.teks += t; return; }
     runs.push(`<w:r>${curRpr()}<w:t xml:space="preserve">${escapeXml(t)}</w:t></w:r>`);
+  };
+  const tutupRujukan = () => {
+    if (!rujukan || !rujuk) return;
+    const label = rujuk.get(rujukan.id);
+    const t = (s: string) => `<w:r>${curRpr()}<w:t xml:space="preserve">${escapeXml(s)}</w:t></w:r>`;
+    if (!label) runs.push(t(`${rujukan.teks.trim().split(/\s+/)[0] || 'Tabel'} ?`));
+    else {
+      runs.push(`<w:r>${curRpr()}<w:fldChar w:fldCharType="begin"/></w:r>`,
+        `<w:r>${curRpr()}<w:instrText xml:space="preserve"> REF ${namaPenanda(rujukan.id)} \\h </w:instrText></w:r>`,
+        `<w:r>${curRpr()}<w:fldChar w:fldCharType="separate"/></w:r>`, t(label),
+        `<w:r>${curRpr()}<w:fldChar w:fldCharType="end"/></w:r>`);
+    }
   };
   const flush = (pPrInner = '') => {
     if (runs.length === 0) return;
@@ -169,9 +189,14 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
         case 'u': marks.u = !closing; break;
         case 's': case 'strike': case 'del': marks.s = !closing; break;
         case 'span':
-          if (closing) { const induk = spanInduk.pop(); runColor = induk?.color ?? null; runSize = induk?.size ?? null; }
-          else {
-            spanInduk.push({ color: runColor, size: runSize });
+          if (closing) {
+            const induk = spanInduk.pop();
+            if (induk?.rujukan) { tutupRujukan(); rujukan = null; }
+            runColor = induk?.color ?? null; runSize = induk?.size ?? null;
+          } else {
+            const rj = /(?<![-a-zA-Z])data-rujuk\s*=\s*["']?(\d{1,12})/.exec(tok);
+            spanInduk.push({ color: runColor, size: runSize, rujukan: !!rj && !rujukan });
+            if (rj && !rujukan) rujukan = { id: Number(rj[1]), teks: '' };
             const cm = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{3,6}|rgb\([^)]*\))/i.exec(tok);
             if (cm) runColor = colorToHex6(cm[1]);
             const sm = /font-size\s*:\s*(\d{1,3})px/i.exec(tok);
@@ -207,19 +232,40 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
 // Judul tabel di ATAS tabel → `keepNext` (W1: tanpa ini judul bisa tertinggal sendirian di dasar
 // halaman). Judul gambar/grafik di BAWAH, jadi yang diikat paragraf gambarnya (`drawingPara`).
 // `nomor` = angka cache field SEQ dari `nomorObjek` — Word menyegarkannya sendiri, penampil lain tidak.
-function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number, keepNext = false, nomor = 1, jc: 'center' | 'left' = 'center'): string {
+/** Nomor & penanda rujukan sebuah judul objek. `blokId` → bookmark tujuan rujukan silang di narasi (§12.5). */
+export type NomorJudul = { nomor: number; awalan?: string; blokId?: number };
+/** Bookmark "Tabel 3.1" — awalan `_Ref` = bookmark tersembunyi, cara Word menamai tujuan rujukan silang. */
+export const namaPenanda = (blokId: number) => `_RefLkjip${blokId}`;
+const ID_PENANDA = (blokId: number) => 900000 + blokId;
+const judulNomor = (n: number | NomorJudul): NomorJudul => (typeof n === 'number' ? { nomor: n } : n);
+
+function caption(label: 'Tabel' | 'Gambar' | 'Grafik', text: string, font: string, sz: number, keepNext = false, n: NomorJudul = { nomor: 1 }, jc: 'center' | 'left' = 'center'): string {
   const capSz = Math.max(18, sz - 2);
-  const lead = `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve">${label} </w:t></w:r>`;
-  const seq = field(` SEQ ${label} \\* ARABIC `, String(nomor));
+  const awalan = n.awalan ?? '';
+  const lead = `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve">${label} ${escapeXml(awalan)}</w:t></w:r>`;
+  // Per BAB: "Tabel 3." + SEQ yang mulai ulang di tiap Heading 1 (`\s 1`) — judul BAB memakai gaya Heading1.
+  const seq = field(` SEQ ${label} \\* ARABIC${awalan ? ' \\s 1' : ''} `, String(n.nomor));
   const tail = text.trim() ? `<w:r>${rPr(font, capSz, { bold: true })}<w:t xml:space="preserve"> </w:t></w:r><w:r>${rPr(font, capSz)}<w:t xml:space="preserve">${escapeXml(text.trim())}</w:t></w:r>` : '';
-  return `<w:p><w:pPr><w:pStyle w:val="Caption"/>${keepNext ? '<w:keepNext/>' : ''}<w:jc w:val="${jc}"/></w:pPr>${lead}${seq}${tail}</w:p>`;
+  // Bookmark menutup label + nomor saja ("Tabel 3.1") — REF di narasi menampilkan persis itu.
+  const buka = n.blokId ? `<w:bookmarkStart w:id="${ID_PENANDA(n.blokId)}" w:name="${namaPenanda(n.blokId)}"/>` : '';
+  const tutup = n.blokId ? `<w:bookmarkEnd w:id="${ID_PENANDA(n.blokId)}"/>` : '';
+  return `<w:p><w:pPr><w:pStyle w:val="Caption"/>${keepNext ? '<w:keepNext/>' : ''}<w:jc w:val="${jc}"/></w:pPr>${buka}${lead}${seq}${tutup}${tail}</w:p>`;
 }
 
 // Isi sel berspasi tunggal. Tanpa ini sel mewarisi spasi dokumen (bawaan 1,5) dan tabel memanjang
 // separuh lagi dari semestinya — terlihat di Word 2026-10-19.
 const SPASI_SEL = '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>';
 
-export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string, nomor = 1): string {
+/**
+ * Isi satu sel tabel: tebal/miring/garis bawah/warna huruf (Tahap B) + baris baru di dalam sel
+ * (Alt+Enter) → `<w:br/>`. Urutan anak rPr menurut skema: rFonts, b, i, u, color, sz.
+ */
+export function runSel(teks: string, font: string, sz: number, f: { b?: boolean; i?: boolean; u?: boolean; fc?: string }): string {
+  const pr = `<w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>${f.b ? '<w:b/>' : ''}${f.i ? '<w:i/>' : ''}${f.u ? '<w:u w:val="single"/>' : ''}${f.fc ? `<w:color w:val="${f.fc}"/>` : ''}<w:sz w:val="${sz}"/></w:rPr>`;
+  return `<w:r>${pr}${teks.split('\n').map(t => `<w:t xml:space="preserve">${escapeXml(t)}</w:t>`).join('<w:br/>')}</w:r>`;
+}
+
+export function buildTabelXml(payload: unknown, font: string, sz: number, headerFill: string, nomor: number | NomorJudul = 1): string {
   const p = (payload ?? {}) as { judul?: string; kolom?: string[]; align?: string[]; colWidths?: number[]; rows?: unknown };
   const kolom = Array.isArray(p.kolom) ? p.kolom : [];
   const colAlign = Array.isArray(p.align) ? p.align : [];
@@ -277,8 +323,7 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
       // Urutan anak pPr menurut skema: keepNext, spacing, jc.
       const body = m.kind === 'vcont'
         ? `<w:p><w:pPr>${ikat}${SPASI_SEL}</w:pPr></w:p>`
-        : `<w:p><w:pPr>${ikat}${SPASI_SEL}<w:jc w:val="${jcOf(align)}"/></w:pPr>` +
-          `<w:r>${rPr(font, csz, { bold: isHeader || !!cell.b })}<w:t xml:space="preserve">${escapeXml(teksSelWord(rows, r, c))}</w:t></w:r></w:p>`;
+        : `<w:p><w:pPr>${ikat}${SPASI_SEL}<w:jc w:val="${jcOf(align)}"/></w:pPr>${runSel(teksSelWord(rows, r, c), font, csz, { ...cell, b: isHeader || !!cell.b })}</w:p>`;
       cells += `<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${body}</w:tc>`;
     }
     // W2: baris badan juga `cantSplit` — dulu baris berteks panjang bisa terbelah dua halaman.
@@ -310,7 +355,7 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
     ? `<w:p><w:pPr><w:spacing w:before="60" w:after="0"/><w:jc w:val="left"/></w:pPr><w:r>${rPr(font, Math.max(16, sz - 4), { italic: true })}<w:t xml:space="preserve">${escapeXml(sumber)}</w:t></w:r></w:p>`
     : '';
   // Judul mengikuti letak tabel: tabel rata kiri dengan judul di tengah terlihat lepas dari tabelnya.
-  return caption('Tabel', teksKeterangan('TABEL', p), font, sz, true, nomor, atur.posisi === 'kiri' ? 'left' : 'center') + table + baris + para('', font, sz);
+  return caption('Tabel', teksKeterangan('TABEL', p), font, sz, true, judulNomor(nomor), atur.posisi === 'kiri' ? 'left' : 'center') + table + baris + para('', font, sz);
 }
 
 export type ImageInfo = { id: number; relId: string; mediaName: string; ext: string; wEmu: number; hEmu: number };
@@ -367,20 +412,20 @@ function teksKeterangan(tipe: string, payload: unknown): string {
   return tipe === 'TABEL' ? p.judul ?? '' : [p.judul, p.caption].filter(x => x && x.trim()).join(' — ');
 }
 
-export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor = 1): string {
+export function buildGambarXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1): string {
   const p = (payload ?? {}) as { judul?: string; fileId?: string; caption?: string };
   const text = teksKeterangan('GAMBAR', payload);
   const info = p.fileId ? imgMap.get(p.fileId) : undefined;
   const body = info ? drawingPara(info) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
-  return body + caption('Gambar', text, font, sz, false, nomor) + para('', font, sz);
+  return body + caption('Gambar', text, font, sz, false, judulNomor(nomor)) + para('', font, sz);
 }
 
-function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor = 1): string {
+function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<string, ImageInfo>, nomor: number | NomorJudul = 1): string {
   const p = (payload ?? {}) as { judul?: string; imageFileId?: string; caption?: string };
   const text = teksKeterangan('GRAFIK', payload);
   const info = p.imageFileId ? imgMap.get(p.imageFileId) : undefined;
   const body = info ? drawingPara(info) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
-  return body + caption('Grafik', text, font, sz, false, nomor) + para('', font, sz);
+  return body + caption('Grafik', text, font, sz, false, judulNomor(nomor)) + para('', font, sz);
 }
 
 /** Teks judul bagian di isi DAN di isi awal Daftar Isi. */
@@ -393,9 +438,9 @@ function buildHeadingXml(node: SectionNode): string {
   return `<w:p><w:pPr><w:pStyle w:val="Heading${lvl}"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(teksJudulBagian(node))}</w:t></w:r></w:p>`;
 }
 
-function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<string, ImageInfo>, headerFill: string, indentTwips = 0, alloc?: NumAlloc, nomor = 1): string {
+function buildBlockXml(b: BlockNode, font: string, sz: number, imgMap: Map<string, ImageInfo>, headerFill: string, indentTwips = 0, alloc?: NumAlloc, nomor: number | NomorJudul = 1, rujuk?: Map<number, string>): string {
   switch (b.tipe) {
-    case 'NARASI': { const p = (b.payload as { html?: string; continueList?: boolean }) ?? {}; return narasiToXml(p.html ?? '', font, sz, indentTwips, alloc, p.continueList === true); }
+    case 'NARASI': { const p = (b.payload as { html?: string; continueList?: boolean }) ?? {}; return narasiToXml(p.html ?? '', font, sz, indentTwips, alloc, p.continueList === true, rujuk); }
     case 'TABEL':  return buildTabelXml(b.payload, font, sz, headerFill, nomor);
     case 'GAMBAR': return buildGambarXml(b.payload, font, sz, imgMap, nomor);
     case 'GRAFIK': return buildGrafikXml(b.payload, font, sz, imgMap, nomor);
@@ -420,7 +465,7 @@ function indexPage(title: string, instr: string, font: string, sz: number, entri
 }
 
 /** Entri awal keempat daftar, dari pohon yang SAMA dengan isi (judul bagian & nomor `nomorObjek`). */
-export function entriDaftar(tree: SectionNode[], nomor: Map<number, { jenis: JenisObjek; nomor: number }>): Record<'isi' | JenisObjek, EntriDaftar[]> {
+export function entriDaftar(tree: SectionNode[], nomor: Map<number, NomorObjek>): Record<'isi' | JenisObjek, EntriDaftar[]> {
   const out: Record<'isi' | JenisObjek, EntriDaftar[]> = { isi: [], Tabel: [], Gambar: [], Grafik: [] };
   for (const node of flattenTree(tree)) {
     out.isi.push({ teks: teksJudulBagian(node), tingkat: Math.min(node.depth, 5) });
@@ -428,7 +473,7 @@ export function entriDaftar(tree: SectionNode[], nomor: Map<number, { jenis: Jen
       const n = nomor.get(b.id);
       if (!n) continue;
       const teks = teksKeterangan(b.tipe, b.payload).trim();
-      out[n.jenis].push({ teks: `${n.jenis} ${n.nomor}${teks ? ` ${teks}` : ''}`, tingkat: 0 });
+      out[n.jenis].push({ teks: `${sebutObjek(n)}${teks ? ` ${teks}` : ''}`, tingkat: 0 });
     }
   }
   return out;
@@ -539,8 +584,10 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
 
   // Front-matter: (Kata Pengantar bila ada) + 4 halaman daftar, dipisah page-break.
   const kp = kataPengantarPage(cfg, font, sz, alloc);
-  const nomor = nomorObjek(tree);
+  const nomor = nomorObjek(tree, cfg.nomorPerBab === true);
   const entri = entriDaftar(tree, nomor);
+  // Rujukan silang di narasi (§12.5): blok → "Tabel 3.1" saat ini; blok yang sudah dihapus tidak ada di peta.
+  const rujuk = new Map([...nomor].map(([id, n]) => [id, sebutObjek(n)]));
   const daftar = [
     ...(kp ? [kp] : []),
     indexPage('DAFTAR ISI', ` TOC \\o "1-6" \\h \\z \\u `, font, sz, entri.isi, 'Belum ada bagian.'),
@@ -556,7 +603,8 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
   for (const node of flattenTree(tree)) {
     potongan.push({ judul: true, melintang: false, xml: buildHeadingXml(node) });
     for (const b of node.blocks) {
-      const xml = buildBlockXml(b, font, sz, imgMap, cfg.tableHeaderFill, indentTwips, alloc, nomor.get(b.id)?.nomor);
+      const n = nomor.get(b.id);
+      const xml = buildBlockXml(b, font, sz, imgMap, cfg.tableHeaderFill, indentTwips, alloc, n ? { nomor: n.nomor, awalan: n.awalan, blokId: b.id } : 1, rujuk);
       potongan.push({ judul: false, melintang: b.tipe === 'TABEL' && xml !== '' && bacaAtur(b.payload).melintang, xml });
     }
   }
