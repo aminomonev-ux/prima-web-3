@@ -38,6 +38,7 @@ import {
   ASPEK_B_OPTIONS, ASPEK_C_OPTIONS, emptyRhk, emptyTriwulan,
   pejabatOptionValue, resolvePejabat,
 } from '../_lib/types';
+import { isianRenaksi, isiGrupDariRenaksi, renaksiDipakai } from '../_lib/isi-renaksi';
 
 interface Props {
   username: string;
@@ -72,6 +73,8 @@ export default function EditorClient({ username, role, themePreference, initialD
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  /** Grup yang sedang diisi lewat "Isi dari Renaksi" (null = jendela tertutup). */
+  const [isiGrupNo, setIsiGrupNo] = useState<number | null>(null);
   const [pejabat, setPejabat] = useState<PejabatSuggest[]>([]);
   const [atasanCandidates, setAtasanCandidates] = useState<IkiListRow[]>([]);
   const [staleDismissed, setStaleDismissed] = useState(false);
@@ -156,6 +159,14 @@ export default function EditorClient({ username, role, themePreference, initialD
       return { ...d, rhk: [...d.rhk, ...added] };
     });
     setDirty(true);
+  }
+  function isiGrupRenaksi(noUrut: number, pilihan: RenaksiImportRow[]) {
+    const { diisi, baru, dilewati } = isiGrupDariRenaksi(doc.rhk, noUrut, pilihan);
+    setDoc(d => ({ ...d, rhk: isiGrupDariRenaksi(d.rhk, noUrut, pilihan).rhk }));
+    setDirty(true);
+    setIsiGrupNo(null);
+    const rincian = [diisi && `${diisi} kartu diisi`, baru && `${baru} kartu baru`].filter(Boolean).join(', ');
+    toast.success(`Grup ${noUrut}: ${rincian}${dilewati ? ` · ${dilewati} kartu yang sudah berisi tidak disentuh` : ''}`);
   }
   function addRhkToGroup(noUrut: number) {
     setDoc(d => {
@@ -677,7 +688,13 @@ export default function EditorClient({ username, role, themePreference, initialD
                   </label>
                 )}
                 {!readOnly && (
-                  <PrimaButton variant="ghost" size="sm" iconLeft={<Plus size={14} />} onClick={() => addRhkToGroup(noUrut)}>RHK</PrimaButton>
+                  <span className="iki-group-aksi">
+                    <PrimaButton variant="ghost" size="sm" iconLeft={<Import size={14} />} onClick={() => setIsiGrupNo(noUrut)}
+                      data-tooltip="Isi RHK, indikator, cara hitung, target tahunan & TW dari Rencana Aksi — kartu yang sudah berisi tidak disentuh">
+                      Isi dari Renaksi
+                    </PrimaButton>
+                    <PrimaButton variant="ghost" size="sm" iconLeft={<Plus size={14} />} onClick={() => addRhkToGroup(noUrut)}>RHK</PrimaButton>
+                  </span>
                 )}
               </div>
 
@@ -787,6 +804,7 @@ export default function EditorClient({ username, role, themePreference, initialD
           atasanDokumenId={doc.atasan_dokumen_id}
           atasanCandidates={atasanCandidates}
           custom={isCustom}
+          dipakai={renaksiDipakai(doc.rhk)}
           onClose={() => setShowImport(false)}
           onImport={(groups) => {
             if (isCustom) { imporKeTabel(groups); return; }
@@ -794,6 +812,22 @@ export default function EditorClient({ username, role, themePreference, initialD
             setShowImport(false);
             toast.success(`${groups.length} grup RHK ditambahkan`);
           }}
+        />
+      )}
+
+      {isiGrupNo !== null && !readOnly && !isCustom && (
+        <ImportModal
+          tahun={doc.tahun}
+          atasanDokumenId={doc.atasan_dokumen_id}
+          atasanCandidates={atasanCandidates}
+          custom={false}
+          dipakai={renaksiDipakai(doc.rhk)}
+          isiGrup={{
+            noUrut: isiGrupNo,
+            rhkAtasan: doc.rhk.find(r => r.no_urut === isiGrupNo)?.rhk_intervensi ?? null,
+            onIsi: rows => isiGrupRenaksi(isiGrupNo, rows),
+          }}
+          onClose={() => setIsiGrupNo(null)}
         />
       )}
 
@@ -865,14 +899,18 @@ export default function EditorClient({ username, role, themePreference, initialD
 /** Kunci pilihan baris atasan: id RHK, atau urutan bila atasannya CUSTOM (tabel tak punya id baris). */
 const kunciAtasan = (a: AtasanRhkRow, i: number) => (a.atasan_rhk_id != null ? `a${a.atasan_rhk_id}` : `ai${i}`);
 
-function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose, onImport }: {
+function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, dipakai, isiGrup, onClose, onImport }: {
   tahun: string;
   atasanDokumenId: number | null;
   atasanCandidates: IkiListRow[];
   /** Dokumen CUSTOM: hasilnya jadi baris tabel lewat peran kolom, bukan grup RHK. */
   custom: boolean;
+  /** renaksi_id → grup yang sudah memakainya (tanda saja, tetap bisa dipilih). */
+  dipakai: Map<number, number>;
+  /** Mode "Isi dari Renaksi": hanya tab Renaksi, hasilnya mengisi grup itu (`isiGrupDariRenaksi`), bukan grup baru. */
+  isiGrup?: { noUrut: number; rhkAtasan: string | null; onIsi: (rows: RenaksiImportRow[]) => void };
   onClose: () => void;
-  onImport: (groups: Partial<IkiRhk>[][]) => void;
+  onImport?: (groups: Partial<IkiRhk>[][]) => void;
 }) {
   const [tab, setTab] = useState<'renaksi' | 'atasan'>('renaksi');
   const [loading, setLoading] = useState(false);
@@ -928,19 +966,17 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose
   }
 
   function submit() {
+    if (isiGrup) {
+      const rows = (renaksiRows ?? []).filter(r => selected.has(`r${r.renaksi_id}`));
+      if (rows.length === 0) { toast.error('Belum ada baris dipilih'); return; }
+      isiGrup.onIsi(rows);
+      return;
+    }
     const groups: Partial<IkiRhk>[][] = [];
     if (tab === 'renaksi') {
       for (const r of renaksiRows ?? []) {
         if (!selected.has(`r${r.renaksi_id}`)) continue;
-        groups.push([{
-          rhk_intervensi: r.sasaran_induk || r.parent || null,
-          rhk: r.rhk,
-          indikator: r.indikator,
-          aspek_b: r.jenis,
-          target_tahunan: r.target_tahunan,
-          renaksi_id: r.renaksi_id,
-          triwulan: emptyTriwulan().map((t, i) => ({ ...t, target_tw: r.target_tw[i] ?? '0' })),
-        }]);
+        groups.push([{ rhk_intervensi: r.sasaran_induk || r.parent || null, ...isianRenaksi(r, emptyTriwulan()) }]);
       }
     } else {
       // Grup ikut struktur atasan: item se-no_urut atasan → 1 grup (share RHK-diintervensi),
@@ -961,7 +997,7 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose
       }
     }
     if (groups.length === 0) { toast.error('Belum ada baris dipilih'); return; }
-    onImport(groups);
+    onImport?.(groups);
   }
 
   const q = search.trim().toLowerCase();
@@ -975,13 +1011,17 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose
     <div className="iki-modal-bg" onClick={onClose}>
       <div className="iki-modal iki-modal-lg" onClick={e => e.stopPropagation()}>
         <div className="iki-modal-head">
-          <h3>Ambil Rencana Hasil Kerja</h3>
+          <h3>{isiGrup ? `Isi Grup ${isiGrup.noUrut} dari Rencana Aksi` : 'Ambil Rencana Hasil Kerja'}</h3>
           <button className="iki-act" onClick={onClose}><X size={15} /></button>
         </div>
-        <div className="iki-tabs">
-          <button className={`iki-tab${tab === 'renaksi' ? ' on' : ''}`} onClick={() => { setTab('renaksi'); setSelected(new Set()); }}>Dari Rencana Aksi</button>
-          <button className={`iki-tab${tab === 'atasan' ? ' on' : ''}`} onClick={() => { setTab('atasan'); setSelected(new Set()); }}>Dari IKI Atasan</button>
-        </div>
+        {isiGrup ? (
+          isiGrup.rhkAtasan && <p className="iki-modal-ctx"><span>RHK atasan grup ini</span>{isiGrup.rhkAtasan}</p>
+        ) : (
+          <div className="iki-tabs">
+            <button className={`iki-tab${tab === 'renaksi' ? ' on' : ''}`} onClick={() => { setTab('renaksi'); setSelected(new Set()); }}>Dari Rencana Aksi</button>
+            <button className={`iki-tab${tab === 'atasan' ? ' on' : ''}`} onClick={() => { setTab('atasan'); setSelected(new Set()); }}>Dari IKI Atasan</button>
+          </div>
+        )}
 
         {tab === 'atasan' && (
           <select className="iki-modal-select" value={atasanId} onChange={e => setAtasanId(e.target.value ? Number(e.target.value) : '')}>
@@ -1003,6 +1043,7 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose
               <div>
                 <div className="iki-modal-row-title"><span className={`iki-lvl lvl-${r.level}`}>{r.level}</span> {r.rhk}</div>
                 <div className="iki-modal-row-sub">{r.indikator} · <b className="mono">{r.target_tahunan}</b> · {r.jenis}</div>
+                {dipakai.has(r.renaksi_id) && <div className="iki-src">↳ sudah dipakai di grup {dipakai.get(r.renaksi_id)}</div>}
               </div>
             </label>
           ))}
@@ -1024,7 +1065,9 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose
         </div>
 
         <p className="iki-hint">
-          {custom
+          {isiGrup
+            ? 'Kartu kosong di grup ini diisi lebih dulu — RHK, indikator, cara hitung (ikut jenis indikator Renaksi), target tahunan & target TW; sisanya jadi kartu baru di grup yang sama. Kartu yang sudah berisi dan RHK atasan grup tidak disentuh.'
+            : custom
             ? (tab === 'renaksi'
               ? 'Tiap baris terpilih menjadi baris tabel: kolom bertanda peran (RHK, indikator, cara hitung, target) terisi otomatis — tetap bisa diedit. Baris berurutan dengan RHK atasan yang sama digabung.'
               : 'RHK atasan terpilih masuk ke kolom bertanda "RHK yang diintervensi" sebagai baris baru — isi RHK Anda sendiri setelahnya.')
@@ -1034,7 +1077,7 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose
         </p>
         <div className="iki-modal-actions">
           <PrimaButton variant="ghost" size="sm" onClick={onClose}>Batal</PrimaButton>
-          <PrimaButton variant="success" size="sm" iconLeft={<Import size={14} />} onClick={submit}>Tambahkan ({selected.size})</PrimaButton>
+          <PrimaButton variant="success" size="sm" iconLeft={<Import size={14} />} onClick={submit}>{isiGrup ? 'Isi' : 'Tambahkan'} ({selected.size})</PrimaButton>
         </div>
       </div>
     </div>
@@ -1089,6 +1132,7 @@ const ED_CSS = `
   .iki-group-no { flex: none; width: 30px; height: 30px; border-radius: 8px; background: rgba(239,159,39,0.14); border: 1px solid rgba(239,159,39,0.4); color: #F5C77E; font-family: 'JetBrains Mono', monospace; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; margin-top: 18px; }
   .iki-move { display: inline-flex; gap: 3px; }
   .iki-group-head .iki-move { flex-direction: column; gap: 2px; margin-top: 15px; }
+  .iki-group-aksi { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
   .iki-move-btn { width: 26px; height: 19px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; cursor: pointer; transition: all .12s; }
   .iki-move-btn:hover:not(:disabled) { border-color: #185FA5; color: #E6F1FB; background: rgba(255,255,255,0.09); }
   .iki-move-btn:disabled { opacity: .35; cursor: not-allowed; }
@@ -1117,6 +1161,8 @@ const ED_CSS = `
   .iki-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .iki-modal h3 { margin: 0; font-size: 15px; font-weight: 800; }
   .iki-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .iki-modal-ctx { margin: 0 0 12px; padding: 8px 10px; border: 1px solid rgba(124,92,252,0.4); border-radius: 8px; background: rgba(124,92,252,0.1); font-size: 12px; line-height: 1.5; }
+  .iki-modal-ctx span { display: block; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #B9A6FF; margin-bottom: 2px; }
   .iki-tab { flex: 1; background: #020F1C; border: 1px solid #0C447C; color: #B5D4F4; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .iki-tab.on { border-color: #1D9E75; color: #7BE0BD; background: rgba(29,158,117,0.1); }
   .iki-modal-select, .iki-modal-search { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 8px 10px; color: #E6F1FB; font-size: 12.5px; margin-bottom: 10px; width: 100%; }
@@ -1170,6 +1216,8 @@ const ED_CSS = `
   [data-theme="light"] .iki-modal-row:hover { background: #F3F4F6; }
   [data-theme="light"] .iki-modal-row-sub, [data-theme="light"] .iki-modal-info, [data-theme="light"] .iki-hint { color: #6B7280; }
   [data-theme="light"] .iki-src { color: #067154; }
+  [data-theme="light"] .iki-modal-ctx { background: rgba(124,92,252,0.06); }
+  [data-theme="light"] .iki-modal-ctx span { color: #5B21B6; }
   [data-theme="light"] .iki-stale-banner { background: #FEF6E7; border-color: rgba(186,117,23,0.4); color: #92610A; }
   [data-theme="light"] .iki-warn-box { background: #FEF6E7; border-color: rgba(186,117,23,0.4); color: #92610A; }
   [data-theme="light"] .iki-warn-item { color: #A16207; }
@@ -1185,5 +1233,8 @@ const ED_CSS = `
     .iki-topbar { padding: 10px 14px; flex-wrap: wrap; row-gap: 6px; }
     .iki-brand-sub { display: none; }
     .iki-sec { padding: 14px 12px; }
+    /* Dua tombol bertumpuk (Isi dari Renaksi + RHK) selebar 122 px mendesak kepala grup keluar kartu → baris sendiri. */
+    .iki-group-head { flex-wrap: wrap; }
+    .iki-group-aksi { flex-direction: row; flex-basis: 100%; justify-content: flex-end; flex-wrap: wrap; }
   }
 `;

@@ -186,6 +186,17 @@ Sumber pejabat = **`pk_pejabat` (reuse dari modul PK)** sebagai suggest/autofill
 Rantai: **Direktur** (puncak, RHK ← sasaran renaksi) → **Wadir** mengintervensi RHK Direktur → **Kabid/Kabag** mengintervensi RHK Wadir → **Kasubag** mengintervensi RHK Kabag.
 Picker kolom 2 punya **2 tab**: "Dari Rencana Aksi" (sasaran) dan "Dari IKI Atasan" (`iki_rhk` dokumen `atasan_dokumen_id`, tahun sama).
 
+### 4.3 "Isi dari Renaksi" per grup (2026-10-21, permintaan pemilik)
+Tab "Dari IKI Atasan" hanya mengisi RHK yang diintervensi + cara hitung; RHK, indikator, target tahunan & target TW tetap diketik. Tombol **Isi dari Renaksi** di kepala grup (sebelah **+ RHK**, STANDAR & DIREKTUR) mengisi empat hal itu dari Renaksi ke grup yang SUDAH ada:
+- **Kartu kosong diisi lebih dulu** (urutan kartu); "kosong" = RHK, indikator, target tahunan & target TW belum diketik (isian lain tidak menentukan). Sisa pilihan jadi **kartu baru di grup yang sama**, membawa RHK atasan grup seperti tombol + RHK.
+- **Kartu yang sudah berisi tidak disentuh** (keputusan pemilik) — yang sudah dibuat dibiarkan; untuk mengganti, hapus kartunya dulu.
+- **Cara hitung ikut jenis indikator Renaksi**, bukan atasan (keputusan pemilik): target TW yang diambil dihitung menurut jenis itu, dan peringatan TW vs tahunan memakainya.
+- RHK atasan & tautan `atasan_rhk_id` kartu yang diisi tetap; uraian & target aksi kartu dipertahankan. Kartu bisa bertanda dua ("dari Renaksi" + "dari IKI Atasan") — kedua kolom memang sudah ada.
+- Baris Renaksi yang sudah dipakai di dokumen diberi tanda "sudah dipakai di grup N" (kedua jendela), tetap bisa dipilih.
+- Berhenti di form (L78): yang menulis tetap tombol Simpan halaman. Nol endpoint/kolom/migrasi — data dari `GET /api/iki/import-renaksi`.
+
+Aturannya MURNI di `app/(dashboard)/iki/_lib/isi-renaksi.ts` (`isianRenaksi` — dipakai juga tab "Dari Rencana Aksi", satu pemeta; `isiGrupDariRenaksi`; `renaksiDipakai`). Regresi: `npx tsx scripts/test-iki-isi-renaksi.mts` (42), 18 uji mutasi tertangkap. Di layar ≤ 760 px kedua tombol pindah ke baris sendiri (bertumpuk 122 px mendesak kepala grup keluar kartu).
+
 ---
 
 ## 5. Output PDF + Excel — border sama persis
