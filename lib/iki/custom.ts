@@ -8,7 +8,7 @@ import {
   teksSelWord, DXA_PER_PX, GARIS_JUMLAH, LEBAR_KOLOM_BAWAAN, BATAS_BARIS_KEPALA,
   type TabelCell, type TabelAlign, type GayaTabel,
 } from '@/lib/lkjip/tabel';
-import { bacaPeran, type PetaPeran } from './peran';
+import { bacaPeran, tataLetak, type PetaPeran } from './peran';
 
 /** Keputusan pemilik 2026-10-21 (§9 #4) — LKJIP tetap 12 karena halaman Word tegak. */
 export const BATAS_KOLOM_IKI = 24;
@@ -60,6 +60,51 @@ export function tabelCustomAwal(): TabelCustom {
   };
 }
 
+export type BentukSeperti = 'STANDAR' | 'DIREKTUR';
+const ROMAWI_TW = ['I', 'II', 'III', 'IV'];
+
+/**
+ * Bentuk awal CUSTOM yang SAMA dengan form STANDAR (11 kolom bernomor, 12 fisik) atau DIREKTUR (8 kolom, 10 fisik):
+ * kepala 3 baris persis `buildIkiGrid` (lib/iki/layout.ts), satu blok pola 4 baris TW, lebar dari `pdfWidths`,
+ * dan peran kolomnya sudah bertanda — jadi Ambil dari Renaksi/Atasan & pemeriksaan target langsung jalan
+ * (CONCEPT-iki-custom §12). Kepala di sini WAJIB ikut bila kepala `buildIkiGrid` berubah (dijaga uji).
+ */
+export function tabelSeperti(varian: BentukSeperti): TabelCustom {
+  const dir = varian === 'DIREKTUR';
+  const ncol = dir ? 10 : 12;
+  const h = (): TabelCell => ({ v: '' });
+  const kepala: TabelCell[][] = dir
+    ? [
+      [sel('No.', { rs: 2 }), sel('Rencana Hasil Kerja', { rs: 2 }), sel('Indikator Kinerja Individu', { cs: 2, rs: 2 }), h(),
+        sel('Target\nTahunan', { rs: 2 }), sel('Formulasi', { rs: 2 }), sel('Target Triwulan', { cs: 2, rs: 2 }), h(), sel('Rencana Aksi Triwulan', { cs: 2 }), h()],
+      [h(), h(), h(), h(), h(), h(), h(), h(), sel('Uraian'), sel('Target')],
+      [sel('1'), sel('2'), sel('3', { cs: 2 }), h(), sel('4'), sel('5'), sel('6', { cs: 2 }), h(), sel('7'), sel('8')],
+    ]
+    : [
+      [sel('No.', { rs: 2 }), sel('Rencana Hasil Kerja\nyang diintervensi', { rs: 2 }), sel('Rencana Hasil Kerja', { rs: 2 }),
+        sel('Indikator Kinerja Individu', { cs: 2, rs: 2 }), h(), sel('Target\nTahunan', { rs: 2 }), sel('Formulasi & Ekspetasi\nPimpinan', { rs: 2 }),
+        sel('Target Triwulan', { cs: 3, rs: 2 }), h(), h(), sel('Rencana Aksi Triwulan', { cs: 2 }), h()],
+      [h(), h(), h(), h(), h(), h(), h(), h(), h(), h(), sel('Uraian'), sel('Target')],
+      [sel('1'), sel('2'), sel('3'), sel('4'), sel('5'), sel('6'), sel('7'), sel('8'), sel('9', { cs: 2 }), h(), sel('10'), sel('11')],
+    ];
+  // Kolom pertama TW (romawi): sesudahnya per baris TW, sebelumnya per RHK (digabung 4 baris).
+  const awalTw = dir ? 6 : 8;
+  const blok = ROMAWI_TW.map((romawi, i) => Array.from({ length: ncol }, (_, c): TabelCell =>
+    (c < awalTw ? (i === 0 ? { v: '', rs: 4 } : { v: '' }) : { v: c === awalTw ? romawi : '' })));
+  const mm = dir ? [10, 40, 26, 40, 18, 48, 10, 16, 55, 18] : [8, 30, 30, 22, 30, 16, 38, 16, 9, 14, 52, 16];
+  const pxPerMm = lebarTulisPx('A4') / mm.reduce((a, b) => a + b, 0);
+  const align: TabelAlign[] = dir
+    ? ['center', 'left', 'left', 'left', 'center', 'left', 'center', 'center', 'left', 'center']
+    : ['center', 'left', 'left', 'left', 'left', 'center', 'left', 'center', 'center', 'center', 'left', 'center'];
+  const peran = dir
+    ? { rhk: 1, aspek: 2, indikator: 3, target_tahunan: 4, triwulan: 6, target_tw: 7, aksi_tw: 8, target_aksi: 9 }
+    : { rhk_intervensi: 1, rhk: 2, aspek: 3, indikator: 4, target_tahunan: 5, cara_hitung: 7, triwulan: 8, target_tw: 9, aksi_tw: 10, target_aksi: 11 };
+  return bacaTabelCustom({
+    kolom: Array.from({ length: ncol }, (_, c) => `Kolom ${c + 1}`), align, colWidths: mm.map(w => Math.round(w * pxPerMm)),
+    headerRows: 3, rows: [...kepala, ...blok], kolomNomor: 0, gaya: {}, kertas: 'A4', peran,
+  });
+}
+
 const ALIGN: TabelAlign[] = ['left', 'center', 'right', 'justify'];
 
 /**
@@ -107,25 +152,26 @@ export function jumlahBarisBadan(t: TabelCustom): number {
   return Math.max(0, t.rows.length - t.headerRows);
 }
 
-/** Badan tabel berisi ketikan? Kolom No. otomatis tidak dihitung — nomor saja belum isi. */
+/** Badan tabel berisi ketikan? Kolom No. otomatis & label I–IV di Kolom TW tidak dihitung — nomor/label saja belum isi. */
 export function adaIsiBadan(t: TabelCustom): boolean {
-  return t.rows.slice(t.headerRows).some(row => row.some((c, i) => i !== t.kolomNomor && !c.h && c.v.trim() !== ''));
+  return t.rows.slice(t.headerRows).some(row => row.some((c, i) => i !== t.kolomNomor && i !== t.peran.triwulan && !c.h && c.v.trim() !== ''));
 }
 
 /**
  * Templat menyimpan BENTUK (konsep §4): kepala utuh, lebar, rata, gaya, kertas, peran kolom. Badan dibawa
  * hanya bila diminta; kalau tidak, tersisa satu baris kosong yang mewarisi format baris badan pertama — pola
- * barisnya, bukan isinya. Gabungan badan ikut dibuang: ia menunjuk baris yang tidak ikut. Kecuali blok
- * pertama yang tergabung tegak (TW menurun, 4 baris per indikator — §11.2): blok itu dibawa utuh beserta
- * gabungannya, tanpa teks, supaya impor berikutnya punya pola bloknya.
+ * barisnya, bukan isinya. Gabungan badan ikut dibuang: ia menunjuk baris yang tidak ikut. Kecuali tabel
+ * TW menurun (4 baris per indikator — §11.2): blok butir pertama dibawa beserta gabungannya, tanpa teks,
+ * supaya impor berikutnya punya pola bloknya.
  */
 export function bentukTemplat(t: TabelCustom, bawaIsi: boolean): TabelCustom {
   if (bawaIsi) return t;
   const ncol = t.kolom.length;
   const contoh = t.rows[t.headerRows];
-  const tinggiBlok = contoh ? Math.max(1, ...contoh.filter(c => !c.h).map(c => c.rs ?? 1)) : 1;
-  if (tinggiBlok > 1) {
-    const blok = t.rows.slice(t.headerRows, t.headerRows + tinggiBlok).map(row => row.map(c => ({ ...c, v: '' })));
+  if (contoh && tataLetak(t.peran) === 'menurun') {
+    // Satu butir = 4 baris; gabungan yang lebih tinggi (kelompok RHK atasan) terpotong di batas blok oleh sanitizeRows.
+    // Label I–IV di Kolom TW ikut — itu bentuk, bukan isi.
+    const blok = t.rows.slice(t.headerRows, t.headerRows + 4).map(row => row.map((c, ci) => ({ ...c, v: ci === t.peran.triwulan ? c.v : '' })));
     return { ...t, rows: sanitizeRows([...t.rows.slice(0, t.headerRows), ...blok], ncol) };
   }
   const pola: TabelCell[] = Array.from({ length: ncol }, (_, c) => {

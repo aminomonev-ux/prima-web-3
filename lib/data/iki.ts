@@ -6,7 +6,7 @@
 import { sql, sqlInt, queryOne, queryMany, execWrite, withTransaction, bulkInsert } from '@/lib/data/db';
 import type { SaveDokumenInput } from '@/lib/data/iki-schemas';
 import { pilihDokumenAtasan, rencanaSalinTahun } from '@/lib/iki/beranda';
-import { bacaTabelCustom, tabelCustomAwal } from '@/lib/iki/custom';
+import { bacaTabelCustom, tabelCustomAwal, tabelSeperti, type BentukSeperti } from '@/lib/iki/custom';
 import { rhkAtasanDariTabel } from '@/lib/iki/peran';
 import type { IkiVarian } from '@/lib/iki/layout';
 
@@ -124,6 +124,7 @@ export async function createDokumen(input: {
   tahun: string; varian: IkiVarian; jenis?: 'MURNI' | 'PERUBAHAN';
   nama: string; nip: string; jabatan: string; pangkat?: string | null;
   templat_id?: number | null;
+  bentuk_awal?: BentukSeperti | null;
 }, userId: number): Promise<number> {
   const jenis = input.jenis ?? 'MURNI';
   // CUSTOM: tabel awal DISALIN dari templat (konsep §4) — mengubah templat sesudahnya tidak menggeser dokumen ini.
@@ -136,7 +137,7 @@ export async function createDokumen(input: {
       tabel = JSON.stringify(bacaTabelCustom(typeof t.payload === 'string' ? JSON.parse(t.payload) : t.payload));
       templatId = input.templat_id;
     } else {
-      tabel = JSON.stringify(tabelCustomAwal());
+      tabel = JSON.stringify(input.bentuk_awal ? tabelSeperti(input.bentuk_awal) : tabelCustomAwal());
     }
   }
   const label = jenis === 'PERUBAHAN' ? ' (Perubahan)' : '';

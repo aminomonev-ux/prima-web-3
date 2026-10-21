@@ -114,8 +114,10 @@ export const CreateDokumenSchema = z.object({
   nip: z.string().trim().min(1, 'NIP wajib').max(50),
   jabatan: z.string().trim().min(1, 'Jabatan wajib').max(255),
   pangkat: z.string().trim().max(100).nullable().optional(),
-  // Varian CUSTOM: tabel awal disalin dari templat ini (tanpa = bentuk bawaan `tabelCustomAwal`).
+  // Varian CUSTOM: tabel awal disalin dari templat ini, atau dari bentuk "Seperti STANDAR/DIREKTUR" (`tabelSeperti`);
+  // tanpa keduanya = tabel kosong 4 kolom (`tabelCustomAwal`). Templat menang bila keduanya dikirim.
   templat_id: z.number().int().positive().nullable().optional(),
+  bentuk_awal: z.enum(['STANDAR', 'DIREKTUR']).nullable().optional(),
 });
 
 // ─── Save dokumen (header + seluruh RHK, replace-all) ────────────────────────

@@ -47,7 +47,8 @@ export async function POST(req: NextRequest) {
     await writeAuditLog({
       req, eventType: 'IKI_CREATE', userId: g.session.userId, username: g.session.username,
       detail: `Buat dokumen IKI id=${id} ${parsed.data.jabatan} (${parsed.data.nama}) tahun ${parsed.data.tahun} varian ${parsed.data.varian}`
-        + (parsed.data.varian === 'CUSTOM' && parsed.data.templat_id ? ` dari templat id=${parsed.data.templat_id}` : ''),
+        + (parsed.data.varian === 'CUSTOM' && parsed.data.templat_id ? ` dari templat id=${parsed.data.templat_id}`
+          : parsed.data.varian === 'CUSTOM' && parsed.data.bentuk_awal ? ` bentuk seperti ${parsed.data.bentuk_awal}` : ''),
     });
     return NextResponse.json({ ok: true, id });
   } catch (err) {

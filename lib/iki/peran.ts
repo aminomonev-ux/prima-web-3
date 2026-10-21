@@ -12,6 +12,7 @@ import { validateRhkTargets, type TargetWarning } from './validate';
 export const DAFTAR_PERAN = [
   { kunci: 'rhk_intervensi', label: 'RHK yang diintervensi', ringkas: 'RHK atasan', kelompok: 'isi' },
   { kunci: 'rhk', label: 'Rencana Hasil Kerja', ringkas: 'RHK', kelompok: 'isi' },
+  { kunci: 'aspek', label: 'Aspek (a/b/c)', ringkas: 'Aspek', kelompok: 'isi' },
   { kunci: 'indikator', label: 'Indikator', ringkas: 'Indikator', kelompok: 'isi' },
   { kunci: 'cara_hitung', label: 'Cara hitung', ringkas: 'Cara hitung', kelompok: 'isi' },
   { kunci: 'target_tahunan', label: 'Target tahunan', ringkas: 'Target', kelompok: 'isi' },
@@ -21,6 +22,8 @@ export const DAFTAR_PERAN = [
   { kunci: 'tw4', label: 'TW IV', ringkas: 'TW IV', kelompok: 'mendatar' },
   { kunci: 'triwulan', label: 'Kolom TW (I–IV)', ringkas: 'TW', kelompok: 'menurun' },
   { kunci: 'target_tw', label: 'Target TW', ringkas: 'Target TW', kelompok: 'menurun' },
+  { kunci: 'aksi_tw', label: 'Rencana Aksi (uraian)', ringkas: 'Ren. Aksi', kelompok: 'menurun' },
+  { kunci: 'target_aksi', label: 'Target Aksi', ringkas: 'Target Aksi', kelompok: 'menurun' },
 ] as const;
 
 export type PeranKolom = typeof DAFTAR_PERAN[number]['kunci'];
@@ -29,7 +32,9 @@ export const KUNCI_PERAN = DAFTAR_PERAN.map(p => p.kunci) as [PeranKolom, ...Per
 export const KELOMPOK_PERAN: Record<string, string> = { isi: 'Isi', mendatar: 'TW mendatar (4 kolom)', menurun: 'TW menurun (4 baris per indikator)' };
 
 const MENDATAR: readonly PeranKolom[] = ['tw1', 'tw2', 'tw3', 'tw4'];
-const MENURUN: readonly PeranKolom[] = ['triwulan', 'target_tw'];
+const MENURUN: readonly PeranKolom[] = ['triwulan', 'target_tw', 'aksi_tw', 'target_aksi'];
+/** Kolom yang isinya per BARIS TW — tidak pernah digabung 4 baris, beda dengan kolom per indikator. */
+const PER_TW: readonly PeranKolom[] = MENURUN;
 /** TW mendatar dan menurun saling meniadakan (keputusan #5) — menandai yang satu melepas yang lain. */
 export const lepasPeran = (k: PeranKolom): readonly PeranKolom[] => (MENDATAR.includes(k) ? MENURUN : MENURUN.includes(k) ? MENDATAR : []);
 
@@ -51,6 +56,15 @@ export type TataLetak = 'mendatar' | 'menurun';
 export const tataLetak = (p: PetaPeran): TataLetak => (MENURUN.some(k => p[k] !== undefined) ? 'menurun' : 'mendatar');
 const TINGGI_MENURUN = 4;
 const ROMAWI = ['I', 'II', 'III', 'IV'];
+/** Isian bawaan RHK baru STANDAR (`emptyRhk` di app/(dashboard)/iki/_lib/types.ts) — kolom Aspek ditulis seperti `aspekText` layout.ts. */
+const ASPEK_A_BAWAAN = 'Kuantitatif';
+const ASPEK_C_BAWAAN = 'Utama';
+export const teksAspek = (cara: string) => `a. ${ASPEK_A_BAWAAN}\nb. ${cara}\nc. ${ASPEK_C_BAWAAN}`;
+/** Cara hitung dari teks kolom Aspek ("a. …\nb. Akumulatif\nc. …") — DIREKTUR tidak punya kolom cara hitung sendiri. */
+export function caraDariAspek(teks: string): string {
+  const m = teks.match(/(?:^|\n)\s*b\s*[.)]\s*([^\n]*)/i);
+  return m ? m[1].trim() : '';
+}
 
 // ── Menebak dari judul kolom ───────────────────────────────────────────────────
 
@@ -82,6 +96,11 @@ export function tebakPeran(judul: string[]): PetaPeran {
   cari('rhk', j => /rencana hasil kerja|\brhk\b/.test(j));
   cari('indikator', j => /\bindikator\b/.test(j));
   cari('cara_hitung', j => /cara (peng)?hitung|cara perhitungan|aspek b|\bjenis\b/.test(j));
+  cari('aspek', j => /\baspek\b/.test(j));
+  if (!MENDATAR.some(k => peta[k] !== undefined)) {
+    cari('target_aksi', j => /\btarget aksi\b|rencana aksi(?: \w+)* target$/.test(j));
+    cari('aksi_tw', j => /rencana aksi|\buraian\b/.test(j));
+  }
   cari('target_tahunan', j => /\btarget\b/.test(j) && !/\b(tw|triwulan|aksi)\b/.test(j));
   return peta as PetaPeran;
 }
@@ -140,7 +159,7 @@ export function itemDariTabel(t: TabelBerperan): ItemTabel[] {
   };
   const isi = (r: number): Omit<ItemTabel, 'tw'> => ({
     baris: r + 1, rhk_intervensi: teks(r, p.rhk_intervensi), rhk: teks(r, p.rhk), indikator: teks(r, p.indikator),
-    cara_hitung: teks(r, p.cara_hitung), target_tahunan: teks(r, p.target_tahunan),
+    cara_hitung: p.cara_hitung !== undefined ? teks(r, p.cara_hitung) : caraDariAspek(teks(r, p.aspek)), target_tahunan: teks(r, p.target_tahunan),
   });
   const kosong = (it: ItemTabel) => !it.rhk_intervensi && !it.rhk && !it.indikator && !it.target_tahunan && it.tw.every(v => !v);
   const hasil: ItemTabel[] = [];
@@ -184,7 +203,7 @@ export function itemDariTabel(t: TabelBerperan): ItemTabel[] {
 
 const adaTw = (p: PetaPeran) => MENDATAR.some(k => p[k] !== undefined) || p.target_tw !== undefined;
 /** Kolom TW ditandai tapi Cara hitung tidak — pemeriksaan tidak bisa jalan, dan layar menyebutnya. */
-export const perluCaraHitung = (p: PetaPeran): boolean => adaTw(p) && p.target_tahunan !== undefined && p.cara_hitung === undefined;
+export const perluCaraHitung = (p: PetaPeran): boolean => adaTw(p) && p.target_tahunan !== undefined && p.cara_hitung === undefined && p.aspek === undefined;
 
 /** Peringatan target TW vs tahunan — aturan `validateRhkTargets` yang SAMA dengan STANDAR, lunak. */
 export function validasiTabelCustom(t: TabelBerperan): TargetWarning[] {
@@ -250,7 +269,7 @@ function polaBlok(t: BentukBerperan, akhir: number, tinggi: number): TabelCell[]
   const ncol = t.kolom.length;
   const r0 = t.headerRows;
   if (r0 > akhir) {
-    const perTw = new Set([t.peran.triwulan, t.peran.target_tw]);
+    const perTw = new Set(PER_TW.map(k => t.peran[k]));
     const baris = Array.from({ length: tinggi }, (_, i) => Array.from({ length: ncol }, (_, c): TabelCell =>
       (i === 0 && tinggi > 1 && !perTw.has(c) ? { v: '', rs: tinggi } : { v: '' })));
     return sanitizeRows(baris, ncol);
@@ -260,25 +279,25 @@ function polaBlok(t: BentukBerperan, akhir: number, tinggi: number): TabelCell[]
   if (k === tinggi) {
     return sanitizeRows(t.rows.slice(r0, r0 + k).map(row => row.map(c => ({ ...c, v: '' }))), ncol);
   }
-  const baris = Array.from({ length: tinggi }, (_, i) => awal.map((c): TabelCell => {
+  // Blok pertama bisa lebih tinggi dari satu butir: kelompok RHK atasan yang tergabung (No. & RHK atasan 8 baris
+  // untuk dua butir). Kolom per butir tetap 4 baris — jadi patokannya "menutup setinggi satu butir", bukan seluruh blok.
+  const tegak = (c: TabelCell) => tinggi > 1 && k > 1 && !c.h && (c.rs ?? 1) >= Math.min(k, tinggi);
+  const baris = Array.from({ length: tinggi }, (_, i) => t.rows[r0 + Math.min(i, k - 1)].map((c, ci): TabelCell => {
     const f = formatSaja(c);
-    if (i === 0 && !c.h) {
-      if ((c.cs ?? 1) > 1) f.cs = c.cs;
-      if (tinggi > 1 && k > 1 && (c.rs ?? 1) >= k) f.rs = tinggi;
-    }
+    const asal = awal[ci];
+    if (asal.h) return f;
+    if (i === 0 && tegak(asal)) f.rs = tinggi;
+    // Gabungan mendatar baris pertama berlaku juga di baris-baris lain blok (kecuali yang tertutup gabungan tegak).
+    if ((asal.cs ?? 1) > 1 && (i === 0 || !tegak(asal))) f.cs = asal.cs;
     return f;
   }));
-  // Gabungan mendatar baris pertama berlaku juga di baris-baris lain blok (kecuali yang tertutup gabungan tegak).
-  for (let i = 1; i < tinggi; i++) {
-    awal.forEach((c, ci) => { if (!c.h && (c.cs ?? 1) > 1 && !((c.rs ?? 1) >= k && k > 1)) baris[i][ci].cs = c.cs; });
-  }
   return sanitizeRows(baris, ncol);
 }
 
 /** Baris ujung badan yang masih kosong (dipakai dulu), tanpa memotong gabungan dari atas. */
 function awalUjungKosong(t: BentukBerperan, akhir: number): number {
   const ncol = t.kolom.length;
-  const kosongBaris = (r: number) => t.rows[r].every((c, ci) => c.h || ci === t.kolomNomor || c.v.trim() === '');
+  const kosongBaris = (r: number) => t.rows[r].every((c, ci) => c.h || ci === t.kolomNomor || ci === t.peran.triwulan || c.v.trim() === '');
   let s = akhir + 1;
   while (s - 1 >= t.headerRows && kosongBaris(s - 1)) s--;
   for (let ulang = true; ulang;) {
@@ -327,7 +346,9 @@ export function isiDariImpor(t: BentukBerperan, items: ItemImpor[], batasBaris: 
   periksa('rhk_intervensi', 'RHK yang diintervensi', it => it.rhk_intervensi);
   periksa('rhk', 'Rencana Hasil Kerja', it => it.rhk);
   periksa('indikator', 'Indikator', it => it.indikator);
-  periksa('cara_hitung', 'Cara hitung', it => it.cara_hitung);
+  // Tanpa kolom Cara hitung, cara hitung tetap tercatat di baris "b." kolom Aspek (bentuk DIREKTUR).
+  if (kol('cara_hitung') === undefined && kol('aspek') !== undefined) { if (adaData(it => it.cara_hitung)) terisi++; }
+  else periksa('cara_hitung', 'Cara hitung', it => it.cara_hitung);
   periksa('target_tahunan', 'Target tahunan', it => it.target_tahunan);
   if (menurun) periksa('target_tw', 'Target TW', it => (it.tw ?? []).join(''));
   else MENDATAR.forEach((k, i) => periksa(k, `Target TW ${ROMAWI[i]}`, it => it.tw?.[i]));
@@ -355,6 +376,7 @@ export function isiDariImpor(t: BentukBerperan, items: ItemImpor[], batasBaris: 
     tulis(0, kol('rhk'), it.rhk);
     tulis(0, kol('indikator'), it.indikator);
     tulis(0, kol('cara_hitung'), it.cara_hitung);
+    if ((it.cara_hitung ?? '').trim()) tulis(0, kol('aspek'), teksAspek(it.cara_hitung!.trim()));
     tulis(0, kol('target_tahunan'), it.target_tahunan);
     if (menurun) {
       for (let i = 0; i < TINGGI_MENURUN; i++) {
@@ -390,6 +412,9 @@ export function isiDariImpor(t: BentukBerperan, items: ItemImpor[], batasBaris: 
         const r1 = di + i * tinggi, r2 = di + (j + 1) * tinggi - 1;
         rows = gabungTegak(rows, r1, r2, cAtasan, ncol);
         if (t.kolomNomor !== null && t.kolomNomor < ncol && t.kolomNomor !== cAtasan) rows = gabungTegak(rows, r1, r2, t.kolomNomor, ncol);
+        const cRhk = kol('rhk');
+        const rhk0 = normTeks(items[i].rhk);
+        if (cRhk !== undefined && rhk0 && items.slice(i, j + 1).every(it => normTeks(it.rhk) === rhk0)) rows = gabungTegak(rows, r1, r2, cRhk, ncol);
       }
       i = j + 1;
     }

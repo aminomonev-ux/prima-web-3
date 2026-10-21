@@ -257,7 +257,7 @@ export default function EditorClient({ username, role, themePreference, initialD
     if (!h) { toast.error('Tabel sedang tidak bisa diubah.'); return; }
     if (!h.ok) { toast.error(h.pesan, { duration: 8000 }); return; }
     setShowImport(false);
-    const lewat = h.tanpaKolom.length ? ` Tidak diisi karena belum ada kolom bertanda: ${h.tanpaKolom.join(', ')}.` : '';
+    const lewat = h.tanpaKolom.length ? ` Tidak dimasukkan karena tabel ini tidak punya kolom bertanda untuknya: ${h.tanpaKolom.join(', ')}.` : '';
     toast.success(`${h.baris} butir masuk ke tabel — periksa lalu Simpan. Ctrl+Z di tabel membatalkannya.${lewat}`, { duration: lewat ? 10000 : 5000 });
   }
 

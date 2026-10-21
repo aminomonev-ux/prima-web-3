@@ -33,7 +33,8 @@ interface Props {
   tahunSekarang: string;
 }
 
-type FormBuat = { tahun: string; varian: IkiVarian; jenis: IkiJenisDokumen; nama: string; nip: string; jabatan: string; pangkat: string; templat_id: number | null };
+type BentukAwal = 'STANDAR' | 'DIREKTUR' | 'KOSONG';
+type FormBuat = { tahun: string; varian: IkiVarian; jenis: IkiJenisDokumen; nama: string; nip: string; jabatan: string; pangkat: string; templat_id: number | null; bentuk_awal: BentukAwal };
 
 const labelJenis = (j: JenisIki) => (j === 'PERUBAHAN' ? 'Perubahan' : 'Murni');
 const MAX_ZIP = 100;
@@ -49,7 +50,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
   const [showImportExcel, setShowImportExcel] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<FormBuat>({
-    tahun: tahunSekarang, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', templat_id: null,
+    tahun: tahunSekarang, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', templat_id: null, bentuk_awal: 'STANDAR',
   });
 
   // Templat tabel varian Custom (docs/CONCEPT-iki-custom.md §4) — dimuat saat varian itu dipilih.
@@ -211,7 +212,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
   }
 
   function openCreate(isi?: Partial<FormBuat>) {
-    setForm({ tahun, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', templat_id: null, ...isi });
+    setForm({ tahun, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', templat_id: null, bentuk_awal: 'STANDAR', ...isi });
     setGantiNamaTemplat(null);
     setShowCreate(true);
   }
@@ -271,7 +272,11 @@ export default function IkiClient({ username, role, themePreference, initialRows
     try {
       const res = await fetch('/api/iki', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, templat_id: form.varian === 'CUSTOM' ? form.templat_id : null }),
+        body: JSON.stringify({
+          ...form,
+          templat_id: form.varian === 'CUSTOM' ? form.templat_id : null,
+          bentuk_awal: form.varian === 'CUSTOM' && !form.templat_id && form.bentuk_awal !== 'KOSONG' ? form.bentuk_awal : null,
+        }),
       });
       const json = await res.json();
       if (!json.ok) { toast.error(json.message ?? 'Gagal membuat dokumen'); return; }
@@ -673,9 +678,16 @@ export default function IkiClient({ username, role, themePreference, initialRows
             {form.varian === 'CUSTOM' && (
               <div className="iki-field">
                 <span>Bentuk tabel awal</span>
-                <select value={form.templat_id ?? ''} disabled={templat === null}
-                  onChange={e => { setForm(f => ({ ...f, templat_id: e.target.value ? Number(e.target.value) : null })); setGantiNamaTemplat(null); }}>
-                  <option value="">{templat === null ? 'Memuat templat…' : 'Tabel bawaan (4 kolom: No., RHK, Indikator, Target)'}</option>
+                <select value={form.templat_id ?? `bawaan:${form.bentuk_awal}`}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setForm(f => (v.startsWith('bawaan:') ? { ...f, templat_id: null, bentuk_awal: v.slice(7) as BentukAwal } : { ...f, templat_id: Number(v) }));
+                    setGantiNamaTemplat(null);
+                  }}>
+                  <option value="bawaan:STANDAR">Seperti STANDAR (11 kolom) — bisa ditambah kolom</option>
+                  <option value="bawaan:DIREKTUR">Seperti DIREKTUR (8 kolom) — bisa ditambah kolom</option>
+                  <option value="bawaan:KOSONG">Tabel kosong (4 kolom: No., RHK, Indikator, Target)</option>
+                  {templat === null && <option disabled>Memuat templat tersimpan…</option>}
                   {(templat ?? []).map(t => <option key={t.id} value={t.id}>{t.nama} — {t.ncol} kolom</option>)}
                 </select>
                 {templatTerpilih && (gantiNamaTemplat === null ? (
@@ -693,7 +705,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
                     <button type="button" onClick={() => setGantiNamaTemplat(null)}>Batal</button>
                   </span>
                 ))}
-                <span className="iki-suggest-hint">Tabel DISALIN ke dokumen — mengubah atau menghapus templat sesudahnya tidak menyentuh dokumen ini. Templat dibuat dari editor dokumen Custom (tombol &ldquo;Simpan sebagai templat&rdquo;).</span>
+                <span className="iki-suggest-hint">&ldquo;Seperti STANDAR/DIREKTUR&rdquo; = kepala & kolom persis form bawaan dengan peran kolom sudah ditandai, jadi Ambil dari Renaksi / Atasan langsung jalan; kolom bisa ditambah sesudahnya. Tabel DISALIN ke dokumen — mengubah atau menghapus templat sesudahnya tidak menyentuh dokumen ini. Templat dibuat dari editor dokumen Custom (tombol &ldquo;Simpan sebagai templat&rdquo;).</span>
               </div>
             )}
             <label className="iki-field">

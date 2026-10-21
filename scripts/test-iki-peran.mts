@@ -5,7 +5,8 @@
 // A peta peran & pergeserannya bersama kolom (mesin tabel bersama). B menebak dari judul. C impor mendatar
 // (baris kosong dipakai dulu, di atas JUMLAH, gabung RHK atasan sama). D impor menurun (blok 4 baris, pola blok).
 // E pembaca baris: pemeriksaan target & kaskade. F bentuk tersimpan, templat, skema. G sambungan layar & route.
-// H MySQL sungguhan di tahun kotak pasir 2090 lewat fungsi data asli, lalu dibersihkan.
+// I bentuk "Seperti STANDAR/DIREKTUR" (§12): kepala & isi cetak dibandingkan SEL PER SEL dengan buildIkiGrid, lalu
+// berkas Excel kedua varian dibandingkan. H MySQL sungguhan di tahun kotak pasir 2090 lewat fungsi data asli, lalu dibersihkan.
 
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
@@ -13,7 +14,9 @@ import {
   bacaPeran, tebakPeran, tataLetak, isiDariImpor, itemDariTabel, validasiTabelCustom, rhkAtasanDariTabel, perluCaraHitung,
   bacaCaraHitung, bacaNomorTw, lepasPeran, KUNCI_PERAN, type ItemImpor, type BentukBerperan,
 } from '../lib/iki/peran'
-import { bacaTabelCustom, tabelCustomAwal, bentukTemplat, BATAS_KOLOM_IKI, type TabelCustom } from '../lib/iki/custom'
+import { bacaTabelCustom, tabelCustomAwal, tabelSeperti, bentukTemplat, adaIsiBadan, susunKisiCetak, BATAS_KOLOM_IKI, type TabelCustom } from '../lib/iki/custom'
+import { buildIkiGrid, type IkiGridDokumen } from '../lib/iki/layout'
+import { caraDariAspek, teksAspek } from '../lib/iki/peran'
 import { sisipKolom, hapusKolom, aturPeranKolom, judulBertingkat, nomorUlang, sanitizeRows, type TabelCell } from '../lib/lkjip/tabel'
 import { TabelCustomSchema } from '../lib/data/iki-schemas'
 
@@ -48,13 +51,13 @@ const renaksi = (atasan: string, rhk: string, ind: string, tahunan: string, tw: 
 
 console.log('A. Peta peran & pergeserannya')
 {
-  ok('A1 kunci & kelompok: 5 isi, 4 TW mendatar, 2 TW menurun', KUNCI_PERAN.length === 11)
+  ok('A1 kunci & kelompok: 6 isi, 4 TW mendatar, 4 TW menurun', KUNCI_PERAN.length === 14)
   const p = bacaPeran({ rhk: 1, indikator: 1, tw1: 3, target_tw: 4, asing: 2, target_tahunan: 9, cara_hitung: 2.5 }, 6)
   ok('A2 bacaPeran: satu kolom satu peran (yang belakangan menang), kunci asing/di luar tabel/bukan bulat dibuang',
     p.rhk === undefined && p.indikator === 1 && !('asing' in p) && p.target_tahunan === undefined && p.cara_hitung === undefined, JSON.stringify(p))
   ok('A3 bacaPeran: TW mendatar & menurun tidak hidup berdampingan (menurun dibaca belakangan → menang)', p.tw1 === undefined && p.target_tw === 4, JSON.stringify(p))
   ok('A4 lepasPeran: TW I melepas menurun, Target TW melepas mendatar, RHK tidak melepas apa pun',
-    lepasPeran('tw1').join() === 'triwulan,target_tw' && lepasPeran('target_tw').join() === 'tw1,tw2,tw3,tw4' && lepasPeran('rhk').length === 0)
+    lepasPeran('tw1').join() === 'triwulan,target_tw,aksi_tw,target_aksi' && lepasPeran('target_tw').join() === 'tw1,tw2,tw3,tw4' && lepasPeran('rhk').length === 0)
   const a = aturPeranKolom({ rhk: 1, tw1: 4, tw2: 5 }, 'target_tw', 6, lepasPeran('target_tw'))
   ok('A5 aturPeranKolom: menandai Target TW melepas TW I–IV', JSON.stringify(a) === JSON.stringify({ rhk: 1, target_tw: 6 }), JSON.stringify(a))
   ok('A6 aturPeranKolom: kolom yang sudah berperan lain pindah tangan; null melepas tanpa menyentuh yang lain',
@@ -78,8 +81,9 @@ console.log('\nB. Menebak dari judul')
   ok('B1 mendatar: semua peran terbaca di kolomnya', JSON.stringify(std) === JSON.stringify({ tw1: 6, tw2: 7, tw3: 8, tw4: 9, rhk_intervensi: 1, rhk: 2, indikator: 3, cara_hitung: 4, target_tahunan: 5 }), JSON.stringify(std))
   const bps = tebakPeran(['No', 'RHK Atasan yang Diintervensi', 'Rencana Hasil Kerja', 'Aspek', 'Indikator Kinerja Individu', 'Target',
     'Triwulan', 'Target Triwulan', 'Rencana Aksi', 'Target Aksi'])
-  ok('B2 menurun ala BPSDMD: "Triwulan" = kolom TW, "Target Triwulan" = Target TW, Target Aksi tidak disangka target',
-    bps.triwulan === 6 && bps.target_tw === 7 && bps.target_tahunan === 5 && bps.rhk_intervensi === 1 && bps.rhk === 2 && bps.indikator === 4 && tataLetak(bps) === 'menurun', JSON.stringify(bps))
+  ok('B2 menurun ala BPSDMD: "Triwulan" = kolom TW, "Target Triwulan" = Target TW, Rencana Aksi & Target Aksi per TW, Aspek terbaca',
+    bps.triwulan === 6 && bps.target_tw === 7 && bps.aksi_tw === 8 && bps.target_aksi === 9 && bps.target_tahunan === 5 && bps.rhk_intervensi === 1
+    && bps.rhk === 2 && bps.indikator === 4 && bps.aspek === 3 && tataLetak(bps) === 'menurun', JSON.stringify(bps))
   const bert = tebakPeran(['Target Triwulan TW', 'Target Triwulan Target', 'TW1', 'Indikator'])
   ok('B3 kepala bertingkat "Target Triwulan" + "TW"/"Target"; "TW1" tanpa spasi = TW I (mendatar menang, menurun tak ditebak)',
     bert.tw1 === 2 && bert.triwulan === undefined && bert.indikator === 3, JSON.stringify(bert))
@@ -166,6 +170,9 @@ console.log('\nD. Impor menurun (4 baris per indikator)')
   const g = hg.ok ? pasang(dgn, hg) : null
   ok('D6 menurun + RHK atasan sama: sel atasan & No. tergabung 8 baris, RHK tetap per blok', !!g && g.rows[1][1].rs === 8 && g.rows[1][0].rs === 8 && g.rows[1][2].rs === 4 && g.rows[5][2].v === 'b')
   ok('D7 impor atasan (tanpa target) ke menurun tetap berbentuk blok berlabel I–IV', !!g && g.rows.length === 9 && g.rows[8][3].v === 'IV')
+  const aksi = { ...kosong, peran: { ...peranM, aksi_tw: 6 } }
+  const ha = impor(aksi, [renaksi('', 'R1', 'I1', '100', ['10', '40', '70', '100'])])
+  ok('D8 badan kosong + kolom Rencana Aksi bertanda: kolom itu TIDAK digabung (per baris TW)', ha.ok && !ha.bentuk.rows[1][6].rs && !ha.bentuk.rows[2][6].h && ha.bentuk.rows[1][1].rs === 4)
 }
 
 console.log('\nE. Pembaca baris: pemeriksaan target & kaskade')
@@ -238,8 +245,9 @@ console.log('\nF. Bentuk tersimpan, templat, skema')
       [sel('', { rs: 4 }), sel('B', { rs: 4 }), sel('I'), sel('1')], baris('', '', 'II', '2'), baris('', '', 'III', '3'), baris('', '', 'IV', '4')],
   })
   const tpl = bentukTemplat(blok, false)
-  ok('F7 templat dari tabel menurun membawa BLOK pertama (4 baris, gabungannya utuh, tanpa teks) + perannya',
-    tpl.rows.length === 5 && tpl.rows[1][1].rs === 4 && tpl.rows[1][1].b === true && tpl.rows.slice(1).every(r => r.every(c => c.v === '')) && JSON.stringify(tpl.peran) === JSON.stringify(blok.peran))
+  ok('F7 templat dari tabel menurun membawa BLOK pertama (4 baris, gabungannya utuh, tanpa teks kecuali label I–IV) + perannya',
+    tpl.rows.length === 5 && tpl.rows[1][1].rs === 4 && tpl.rows[1][1].b === true && tpl.rows.slice(1).every(r => r.every((c, ci) => ci === 2 || c.v === ''))
+    && tpl.rows.slice(1).map(r => r[2].v).join() === 'I,II,III,IV' && JSON.stringify(tpl.peran) === JSON.stringify(blok.peran))
   const dariTpl = impor(bacaTabelCustom(tpl), [{ rhk: 'Baru', tw: ['5', '6', '7', '8'] }])
   ok('F8 impor ke tabel dari templat itu: blok kosong dipakai, pola gabungannya ditiru', dariTpl.ok && dariTpl.bentuk.rows.length === 5 && dariTpl.bentuk.rows[1][1].v === 'Baru' && dariTpl.bentuk.rows[1][1].rs === 4 && dariTpl.bentuk.rows[4][3].v === '8')
   const datar = bentukTemplat(tabelCustomAwal(), false)
@@ -269,6 +277,107 @@ console.log('\nG. Sambungan layar & route')
     rt.indexOf('await guard()') < rt.indexOf('getRhkAtasan(') && rt.includes('{ ok: true, atasan, rows, catatan }') && !rt.includes('FROM iki_rhk'))
   const ty = sumber('app/(dashboard)/iki/_lib/types.ts')
   ok('G12 tipe klien: atasan_rhk_id boleh kosong', ty.includes('atasan_rhk_id: number | null;'))
+  const lc = tanpaKomentar(sumber('app/(dashboard)/iki/iki-client.tsx'))
+  ok('G13 Buat IKI: pilihan Seperti STANDAR/DIREKTUR (bawaan STANDAR) dan bentuk_awal ikut terkirim — templat tersimpan menang',
+    lc.includes('<option value="bawaan:STANDAR">') && lc.includes('<option value="bawaan:DIREKTUR">') && lc.includes("templat_id: null, bentuk_awal: 'STANDAR',")
+    && lc.includes("bentuk_awal: form.varian === 'CUSTOM' && !form.templat_id && form.bentuk_awal !== 'KOSONG' ? form.bentuk_awal : null,"))
+}
+
+console.log('\nI. Bentuk "Seperti STANDAR / DIREKTUR" (§12)')
+type SelGrid = { text: string; cs: number; rs: number; al?: string } | null
+/** Kepala kisi cetak CUSTOM → bentuk `IkiHeadCell[][]` buildIkiGrid (sel asal saja, urut kiri→kanan). */
+const kepalaKisi = (t: TabelCustom) => susunKisiCetak(t).baris.slice(0, t.headerRows)
+  .map(row => row.flatMap(c => (c ? [{ text: c.teks, colSpan: c.cs, rowSpan: c.rs }] : [])))
+const kepalaGrid = (g: ReturnType<typeof buildIkiGrid>) => g.head.map(row => row.map(c => ({ text: c.text, colSpan: c.colSpan ?? 1, rowSpan: c.rowSpan ?? 1 })))
+const badanKisi = (t: TabelCustom): SelGrid[][] => susunKisiCetak(t).baris.slice(t.headerRows)
+  .map(row => row.map(c => (c ? { text: c.teks, cs: c.cs, rs: c.rs, al: c.al } : null)))
+const badanGrid = (g: ReturnType<typeof buildIkiGrid>): SelGrid[][] => g.body
+  .map(row => row.map(c => (c ? { text: c.text, cs: 1, rs: c.rowSpan ?? 1, al: c.align ?? 'left' } : null)))
+const tw = (t: string[]) => t.map((target_tw, i) => ({ triwulan: i + 1, target_tw, uraian: null, target_aksi: '' }))
+const rhkStd = (no: number, atasan: string | null, rhk: string, ind: string, cara: string, target: string, t: string[]) =>
+  ({ no_urut: no, rhk_intervensi: atasan, rhk, aspek_a: 'Kuantitatif', aspek_b: cara, aspek_c: 'Utama', indikator: ind, target_tahunan: target, formulasi: null, ekspektasi: null, triwulan: tw(t) })
+const dokumen = (varian: 'STANDAR' | 'DIREKTUR' | 'CUSTOM', rhk: IkiGridDokumen['rhk'], tabel_custom?: unknown): IkiGridDokumen => ({
+  varian, jenis: 'MURNI', opd: 'RSJD', nama: 'Uji', nip: '1', jabatan: 'KASI UJI', pangkat: null, ikhtisar: null,
+  nama_atasan: 'Atasan', nip_atasan: '2', jabatan_atasan: 'KABID', pangkat_atasan: null, kota_ttd: 'Semarang', tanggal_ttd: '2026-01-15', rhk, tabel_custom,
+})
+const butir = [
+  renaksi('Sasaran satu', 'RHK sama', 'Indikator A', '100%', ['25%', '50%', '75%', '100%'], 'Akumulatif'),
+  renaksi('Sasaran satu', 'RHK sama', 'Indikator B', '90%', ['80%', '85%', '88%', '90%'], 'Progres Positif'),
+  renaksi('Sasaran dua', 'RHK lain', 'Indikator C', '4 Dok', ['1', '1', '1', '1'], 'Akumulatif'),
+]
+const sama = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+const bedaPertama = (a: SelGrid[][], b: SelGrid[][]) => {
+  for (let r = 0; r < Math.max(a.length, b.length); r++) for (let c = 0; c < Math.max(a[r]?.length ?? 0, b[r]?.length ?? 0); c++) {
+    if (!sama(a[r]?.[c], b[r]?.[c])) return `baris ${r} kolom ${c}: custom ${JSON.stringify(a[r]?.[c])} vs bawaan ${JSON.stringify(b[r]?.[c])}`
+  }
+  return ''
+}
+{
+  for (const v of ['STANDAR', 'DIREKTUR'] as const) {
+    const t = tabelSeperti(v)
+    ok(`I1 ${v}: kepala 3 baris SAMA dengan buildIkiGrid (teks, gabungan)`, sama(kepalaKisi(t), kepalaGrid(buildIkiGrid(dokumen(v, [])))), JSON.stringify(kepalaKisi(t)))
+    ok(`I2 ${v}: lebar kolom sebanding pdfWidths, menurun, belum berisi (label I–IV bukan isi)`, t.kolom.length === (v === 'STANDAR' ? 12 : 10)
+      && tataLetak(t.peran) === 'menurun' && !adaIsiBadan(t) && t.rows.slice(3).map(r => r[v === 'STANDAR' ? 8 : 6].v).join() === 'I,II,III,IV')
+  }
+  const std = impor(tabelSeperti('STANDAR'), butir)
+  const tStd = std.ok ? pasang(tabelSeperti('STANDAR'), std) : null
+  const gStd = buildIkiGrid(dokumen('STANDAR', [
+    rhkStd(1, 'Sasaran satu', 'RHK sama', 'Indikator A', 'Akumulatif', '100%', ['25%', '50%', '75%', '100%']),
+    rhkStd(1, 'Sasaran satu', 'RHK sama', 'Indikator B', 'Progres Positif', '90%', ['80%', '85%', '88%', '90%']),
+    rhkStd(2, 'Sasaran dua', 'RHK lain', 'Indikator C', 'Akumulatif', '4 Dok', ['1', '1', '1', '1']),
+  ]))
+  ok('I3 STANDAR: isi cetak sesudah Ambil dari Renaksi SAMA sel per sel dengan dokumen STANDAR yang sama (No. & RHK atasan per kelompok, RHK sama digabung, aspek a/b/c, rata)',
+    !!tStd && !bedaPertama(badanKisi(tStd), badanGrid(gStd)), tStd ? bedaPertama(badanKisi(tStd), badanGrid(gStd)) : 'impor gagal')
+  ok('I4 STANDAR: tanpa satu pun "isian tidak punya kolom"', std.ok && std.tanpaKolom.length === 0, std.ok ? std.tanpaKolom.join() : '')
+  const dir = impor(tabelSeperti('DIREKTUR'), butir.map(b => ({ ...b, rhk_intervensi: null })))
+  const tDir = dir.ok ? pasang(tabelSeperti('DIREKTUR'), dir) : null
+  const gDir = buildIkiGrid(dokumen('DIREKTUR', [
+    rhkStd(1, null, 'RHK sama', 'Indikator A', 'Akumulatif', '100%', ['25%', '50%', '75%', '100%']),
+    rhkStd(2, null, 'RHK sama', 'Indikator B', 'Progres Positif', '90%', ['80%', '85%', '88%', '90%']),
+    rhkStd(3, null, 'RHK lain', 'Indikator C', 'Akumulatif', '4 Dok', ['1', '1', '1', '1']),
+  ]))
+  ok('I5 DIREKTUR: isi cetak sesudah Ambil dari Renaksi SAMA sel per sel dengan dokumen DIREKTUR yang sama', !!tDir && !bedaPertama(badanKisi(tDir), badanGrid(gDir)), tDir ? bedaPertama(badanKisi(tDir), badanGrid(gDir)) : 'impor gagal')
+  ok('I5b DIREKTUR: cara hitung tercatat di kolom Aspek, jadi TIDAK disebut "tak punya kolom"', dir.ok && dir.tanpaKolom.length === 0
+    && impor(tabelSeperti('DIREKTUR'), butir).ok, dir.ok ? dir.tanpaKolom.join() : '')
+  ok('I6 DIREKTUR: cara hitung dibaca dari baris "b." kolom Aspek (tak punya kolom cara hitung) → pemeriksaan target jalan',
+    caraDariAspek(teksAspek('Progres Negatif')) === 'Progres Negatif' && !!tDir && !perluCaraHitung(tDir.peran)
+    && validasiTabelCustom({ ...tDir, rows: tDir.rows.map((r, i) => (i === 3 ? r.map((c, ci) => (ci === 7 ? { ...c, v: '5' } : c)) : r)) }).length === 1)
+  const at = tStd ? rhkAtasanDariTabel(tStd) : []
+  ok('I7 kaskade dari CUSTOM "Seperti STANDAR": RHK tergabung dihitung sekali, cara hitung ikut', at.length === 2 && at[0].rhk === 'RHK sama' && at[1].aspek_b === 'Akumulatif', JSON.stringify(at))
+  const judul = tabelSeperti('STANDAR')
+  ok('I8 baris penomoran kepala (1, 2, 3 …) tidak ikut jadi judul kolom', judulBertingkat(judul.rows, 3, 0) === 'No.' && judulBertingkat(judul.rows, 3, 8) === 'Target Triwulan'
+    && judulBertingkat(sanitizeRows([[sel('No', { rs: 2 }), sel('Triwulan', { cs: 2 }), sel('')], [sel(''), sel('1'), sel('2')]], 3), 2, 2) === 'Triwulan 2')
+  const lagi = tStd ? impor(tStd, [renaksi('Sasaran tiga', 'RHK baru', 'Indikator D', '3', ['1', '1', '1', '0'])]) : null
+  const tLagi = lagi?.ok ? pasang(tStd!, lagi) : null
+  ok('I11 blok pertama = kelompok tergabung 8 baris: butir berikutnya tetap 4 baris dengan kolom per-RHK digabung, kolom per TW tidak',
+    !!tLagi && tLagi.rows.length === 19 && [0, 1, 2, 3, 4, 5, 6, 7].every(c => tLagi.rows[15][c].rs === 4) && [8, 9, 10, 11].every(c => !tLagi.rows[15][c].rs && !tLagi.rows[16][c].h)
+    && tLagi.rows[15][2].v === 'RHK baru', tLagi ? JSON.stringify(tLagi.rows[15].map(c => c.rs ?? 1)) : 'impor gagal')
+  const tpl = bentukTemplat(tStd!, false)
+  ok('I9 templat dari dokumen "Seperti STANDAR" yang sudah berisi: kepala + satu blok pola, label I–IV tetap, isi lain kosong',
+    tpl.rows.length === 7 && tpl.rows.slice(3).map(r => r[8].v).join() === 'I,II,III,IV' && tpl.rows[3][2].v === '' && tpl.rows[3][2].rs === 4)
+
+  const { buildIkiExcelBytes } = await import('../lib/iki/export-excel')
+  const ExcelJS = (await import('exceljs')).default
+  const isiExcel = async (doc: IkiGridDokumen) => {
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(Buffer.from(await buildIkiExcelBytes(doc, '2026')) as never)
+    const ws = wb.worksheets[0]
+    const mulai = (() => { for (let r = 1; r <= ws.rowCount; r++) if (String(ws.getCell(r, 1).value ?? '').startsWith('No.')) return r; return 0 })()
+    const sel: string[] = []
+    for (let r = mulai; r < mulai + 3 + 12; r++) for (let c = 1; c <= 12; c++) sel.push(String(ws.getCell(r, c).value ?? ''))
+    const gabung = (ws.model.merges as string[]).filter(m => Number(m.match(/\d+/)![0]) >= mulai && Number(m.match(/\d+/)![0]) < mulai + 15).sort()
+    return { mulai, sel, gabung }
+  }
+  const eStd = await isiExcel(dokumen('STANDAR', [
+    rhkStd(1, 'Sasaran satu', 'RHK sama', 'Indikator A', 'Akumulatif', '100%', ['25%', '50%', '75%', '100%']),
+    rhkStd(1, 'Sasaran satu', 'RHK sama', 'Indikator B', 'Progres Positif', '90%', ['80%', '85%', '88%', '90%']),
+    rhkStd(2, 'Sasaran dua', 'RHK lain', 'Indikator C', 'Akumulatif', '4 Dok', ['1', '1', '1', '1']),
+  ]))
+  const eCus = await isiExcel(dokumen('CUSTOM', [], tStd))
+  const bedaSel = eStd.sel.findIndex((v, i) => v !== eCus.sel[i])
+  ok('I10 Excel: tabel CUSTOM "Seperti STANDAR" sama dengan Excel STANDAR — isi tiap sel & semua gabungan',
+    eStd.mulai > 0 && eCus.mulai > 0 && bedaSel < 0 && sama(eStd.gabung, eCus.gabung),
+    bedaSel >= 0 ? `sel ke-${bedaSel}: "${eCus.sel[bedaSel]}" vs "${eStd.sel[bedaSel]}"` : `gabung custom ${eCus.gabung.join(' ')} | bawaan ${eStd.gabung.join(' ')}`)
 }
 
 console.log('\nH. MySQL sungguhan (kotak pasir 2090)')
@@ -324,6 +433,11 @@ if (c) {
     const rs = await D.getRhkAtasan(idStd)
     ok('H4 atasan STANDAR tetap dari iki_rhk dengan id barisnya', rs?.rows.length === 1 && typeof rs.rows[0].atasan_rhk_id === 'number' && rs.rows[0].rhk === 'RHK std' && rs.catatan === null)
     ok('H5 dokumen tak ada → null (route 404)', (await D.getRhkAtasan(999999999)) === null)
+    const masukDir = S.CreateDokumenSchema.parse({ tahun: '2090', varian: 'CUSTOM', nama: `${NAMA} Dir`, nip: 'UJI-P3', jabatan: 'DIREKTUR UJI', bentuk_awal: 'DIREKTUR' })
+    const idDir = await D.createDokumen(masukDir, userId)
+    const dDir = await D.getDokumen(idDir)
+    ok('H7 Buat IKI CUSTOM "Seperti DIREKTUR": tabel awal = tabelSeperti(DIREKTUR) beserta perannya', sama(bacaTabelCustom(dDir!.tabel_custom), tabelSeperti('DIREKTUR')))
+    ok('H8 skema Buat IKI menolak bentuk awal asing', !S.CreateDokumenSchema.safeParse({ ...masukDir, bentuk_awal: 'LAIN' }).success)
   } finally {
     await bersih()
     const [sisa] = await k.query("SELECT COUNT(*) AS n FROM iki_dokumen WHERE tahun = '2090'") as [Array<{ n: number }>, unknown]

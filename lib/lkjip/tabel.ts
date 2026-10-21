@@ -1085,10 +1085,22 @@ export function aturPeranKolom(peran: Record<string, number>, kunci: string, kol
   return hasil;
 }
 
+/**
+ * Baris kepala berisi nomor kolom saja (1, 2, 3 … seperti kepala IKI STANDAR): tiap selnya asal di baris
+ * itu sendiri dan semuanya angka. Sub-judul "1 2 3 4" di bawah "Triwulan" bukan penomoran — sebagian
+ * selnya tertutup gabungan dari baris di atasnya.
+ */
+function barisPenomoran(rows: TabelCell[][], r: number): boolean {
+  const row = rows[r] ?? [];
+  const nomor = row.filter(cell => !cell.h).map(cell => cell.v.trim());
+  return row.length > 1 && row.every((_, c) => asalSel(rows, r, c).r === r) && nomor.every((v, i) => v === String(i + 1));
+}
+
 /** Judul kolom dari SEMUA baris kepala yang menutupnya ("Target Triwulan" + "II") — bahan menebak peran. */
 export function judulBertingkat(rows: TabelCell[][], headerRows: number, c: number): string {
   const bagian: string[] = [];
   for (let r = 0; r < Math.min(headerRows, rows.length); r++) {
+    if (barisPenomoran(rows, r)) continue;
     const a = asalSel(rows, r, c);
     if (a.r !== r) continue;
     const t = (rows[a.r]?.[a.c]?.v ?? '').trim();
