@@ -8,6 +8,7 @@ import {
   teksSelWord, DXA_PER_PX, GARIS_JUMLAH, LEBAR_KOLOM_BAWAAN, BATAS_BARIS_KEPALA,
   type TabelCell, type TabelAlign, type GayaTabel,
 } from '@/lib/lkjip/tabel';
+import { bacaPeran, type PetaPeran } from './peran';
 
 /** Keputusan pemilik 2026-10-21 (§9 #4) — LKJIP tetap 12 karena halaman Word tegak. */
 export const BATAS_KOLOM_IKI = 24;
@@ -36,6 +37,8 @@ export type TabelCustom = {
   kolomNomor: number | null;
   gaya: GayaTabel;
   kertas: KertasIki;
+  /** Peran kolom (§11) — impor Renaksi/atasan & pemeriksaan target membaca kolom bertanda. */
+  peran: PetaPeran;
 };
 
 const sel = (v: string, extra: Partial<TabelCell> = {}): TabelCell => ({ v, ...extra });
@@ -53,6 +56,7 @@ export function tabelCustomAwal(): TabelCustom {
     kolomNomor: 0,
     gaya: {},
     kertas: 'A4',
+    peran: { rhk: 1, indikator: 2, target_tahunan: 3 },
   };
 }
 
@@ -95,6 +99,7 @@ export function bacaTabelCustom(raw: unknown): TabelCustom {
     kolomNomor: typeof kn === 'number' && Number.isInteger(kn) && kn >= 0 && kn < ncol ? kn : null,
     gaya,
     kertas: o.kertas === 'F4' ? 'F4' : 'A4',
+    peran: bacaPeran(o.peran, ncol),
   };
 }
 
@@ -108,14 +113,21 @@ export function adaIsiBadan(t: TabelCustom): boolean {
 }
 
 /**
- * Templat menyimpan BENTUK (konsep §4): kepala utuh, lebar, rata, gaya, kertas. Badan dibawa hanya bila
- * diminta; kalau tidak, tersisa satu baris kosong yang mewarisi format baris badan pertama — pola
- * barisnya, bukan isinya. Gabungan badan ikut dibuang: ia menunjuk baris yang tidak ikut.
+ * Templat menyimpan BENTUK (konsep §4): kepala utuh, lebar, rata, gaya, kertas, peran kolom. Badan dibawa
+ * hanya bila diminta; kalau tidak, tersisa satu baris kosong yang mewarisi format baris badan pertama — pola
+ * barisnya, bukan isinya. Gabungan badan ikut dibuang: ia menunjuk baris yang tidak ikut. Kecuali blok
+ * pertama yang tergabung tegak (TW menurun, 4 baris per indikator — §11.2): blok itu dibawa utuh beserta
+ * gabungannya, tanpa teks, supaya impor berikutnya punya pola bloknya.
  */
 export function bentukTemplat(t: TabelCustom, bawaIsi: boolean): TabelCustom {
   if (bawaIsi) return t;
   const ncol = t.kolom.length;
   const contoh = t.rows[t.headerRows];
+  const tinggiBlok = contoh ? Math.max(1, ...contoh.filter(c => !c.h).map(c => c.rs ?? 1)) : 1;
+  if (tinggiBlok > 1) {
+    const blok = t.rows.slice(t.headerRows, t.headerRows + tinggiBlok).map(row => row.map(c => ({ ...c, v: '' })));
+    return { ...t, rows: sanitizeRows([...t.rows.slice(0, t.headerRows), ...blok], ncol) };
+  }
   const pola: TabelCell[] = Array.from({ length: ncol }, (_, c) => {
     const asal = contoh?.[c];
     if (!asal || asal.h) return { v: '' };

@@ -11,7 +11,7 @@
 // Tabel tertaut (CONCEPT-lkjip-tabel-tertaut.md): badan terkunci kecuali kolom isian tangan (E8).
 // Aturannya di lib/lkjip/tabel.ts (murni, diuji); berkas ini hanya keadaan layar.
 
-import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useEffectEvent, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type Ref } from 'react';
 import { toast } from 'sonner';
 import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Combine, Split, Copy, ClipboardPaste, Scissors,
@@ -26,7 +26,7 @@ import {
   selGalat, daftarSelGalat, nilaiKetikan, pastikanKepalaSel, namaKolomDariKepala, sisipBaris, hapusBaris, sisipKolom, hapusKolom,
   kosongkanBlok, tanpaFormat, teksDiBaris, ubahJumlahKepala, paskanKeKertas, pxKeCm,
   bacaAtur, gayaSel, selBergaya, nomorUlang, ratakanLebar, blokKeHtml, selSalinan, perluPetunjukLebar, asalSel, sisipBarisBaru, lebarKertasPx, posisiBarisBaru,
-  ambilBlok, extractRange, isiSeret, ringkasBlok, autoJumlah, tempelFormat, nilaiSaja, tempelNilai, htmlKeSel, urutkanBlok, cariSel, gantiDiSel, gantiSemua, formatUmum,
+  aturPeranKolom, judulBertingkat, ambilBlok, extractRange, isiSeret, ringkasBlok, autoJumlah, tempelFormat, nilaiSaja, tempelNilai, htmlKeSel, urutkanBlok, cariSel, gantiDiSel, gantiSemua, formatUmum,
   BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, BATAS_BARIS_KEPALA, LEBAR_KOLOM_BAWAAN, GARIS_JUMLAH,
   type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel, type AturTabel, type GayaTabel, type PosisiTabel, type TabelBorder, type Kotak,
 } from '@/lib/lkjip/tabel';
@@ -42,8 +42,22 @@ export type FiturLkjip = {
   TautanModal: ComponentType<{ payload: PayloadTabel; tahunDokumen: number; onTerapkan: (p: PayloadTabel) => void; onTutup: () => void }>;
 };
 
-type TabelP = { judul: string; kolom: string[]; align: TabelAlign[]; colWidths?: number[]; headerRows?: number; rows: TabelCell[][]; tautan?: Tautan };
-type Snap = { kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; rows: TabelCell[][]; atur: AturTabel };
+/** Peran kolom (IKI CUSTOM, CONCEPT-iki-custom §11) — daftar dari pemakai; komponen ini tidak mengenal artinya. */
+export type PilihanPeran = { kunci: string; label: string; ringkas: string; kelompok: string; lepas: readonly string[] };
+export type FiturPeran = {
+  daftar: readonly PilihanPeran[];
+  kelompok: Record<string, string>;
+  /** Judul bertingkat tiap kolom → peran (Tebak dari judul). */
+  tebak: (judul: string[]) => Record<string, number>;
+  catatan?: string;
+};
+/** Bentuk yang diterima pengubah dari luar (impor IKI) — pengaturan yang memengaruhi letak baris ikut dikirim. */
+export type BentukEditor = BentukTabel & { gaya: GayaTabel; kolomNomor: number | null; peran: Record<string, number> };
+/** Pemakai mengubah ISI lewat sini (bisa diurungkan Ctrl+Z); null dari pengubah = batal. */
+export type TabelEditorHandle = { ubahBentuk: (ubah: (b: BentukEditor) => BentukTabel | null) => boolean };
+
+type TabelP = { judul: string; kolom: string[]; align: TabelAlign[]; colWidths?: number[]; headerRows?: number; rows: TabelCell[][]; tautan?: Tautan; peran?: unknown };
+type Snap = { kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; rows: TabelCell[][]; atur: AturTabel; peran: Record<string, number> };
 type Sunting = { r: number; c: number; awal: string; ganti: boolean };
 
 const PESAN_BADAN = 'Badan tabel tertaut mengikuti sumbernya — ubah lewat Atur Bentuk, atau Lepas Tautan untuk menyunting bebas.';
@@ -76,7 +90,7 @@ const garisCss = (bd?: TabelBorder): React.CSSProperties => {
 };
 
 export default function TabelEditor({
-  payload, readOnly, warnaKepala = '', batasKolom = BATAS_KOLOM_TABEL, kertas, onSave, onUbah, lkjip,
+  payload, readOnly, warnaKepala = '', batasKolom = BATAS_KOLOM_TABEL, kertas, onSave, onUbah, lkjip, peranKolom, ref,
 }: {
   payload: unknown;
   readOnly: boolean;
@@ -90,6 +104,9 @@ export default function TabelEditor({
   /** Tiap perubahan dilaporkan — untuk halaman yang menyimpan tabel bersama isian lain lewat SATU tombol (IKI). */
   onUbah?: (p: unknown) => void;
   lkjip?: FiturLkjip;
+  /** Panel Peran kolom + label di huruf kolom; perannya ikut payload & ikut bergeser bersama kolom. */
+  peranKolom?: FiturPeran;
+  ref?: Ref<TabelEditorHandle>;
 }) {
   // E1: tabel lama ber-headerRows 0 dijadikan 1 baris kepala berisi nama kolom saat dibuka — keluaran
   // Word-nya sama; baru tersimpan begitu orangnya menekan Simpan Tabel.
@@ -112,6 +129,11 @@ export default function TabelEditor({
   const [headerRows, setHeaderRows] = useState<number>(awal.headerRows);
   // Pengaturan cetak (Tahap W): kertas melintang, posisi, gaya, Sumber, jaga utuh, kolom No.
   const [atur, setAtur] = useState<AturTabel>(() => bacaAtur(awal.p0));
+  const [peran, setPeran] = useState<Record<string, number>>(() => {
+    const o = (awal.p0.peran && typeof awal.p0.peran === 'object' ? awal.p0.peran : {}) as Record<string, unknown>;
+    const sah = new Set(peranKolom?.daftar.map(d => d.kunci) ?? []);
+    return Object.fromEntries(Object.entries(o).filter(([k, c]) => sah.has(k) && Number.isInteger(c) && (c as number) >= 0 && (c as number) < awal.kolom0.length)) as Record<string, number>;
+  });
   const ncol = kolom.length;
   const pil = usePilihanSel(rows, ncol);
   const { sel } = pil;
@@ -141,17 +163,18 @@ export default function TabelEditor({
   const [atasKepala, setAtasKepala] = useState<number[]>([]);
   const sidikTerlaporRef = useRef<string | null>(null);
 
-  const snap = (): Snap => ({ kolom, align, colWidths, headerRows, rows, atur });
+  const snap = (): Snap => ({ kolom, align, colWidths, headerRows, rows, atur, peran });
   const sameSnap = (a: Snap, b: Snap) => JSON.stringify(a) === JSON.stringify(b);
   const pushHist = () => { const s = snap(); setPast(p => (p.length && sameSnap(p[p.length - 1], s)) ? p : [...p, s].slice(-60)); setFuture([]); };
-  const restoreSnap = (s: Snap) => { setKolom(s.kolom); setAlign(s.align); setColWidths(s.colWidths); setHeaderRows(s.headerRows); setRows(s.rows); setAtur(s.atur); pakaiSunting(null); setBarFocused(false); };
+  const restoreSnap = (s: Snap) => { setKolom(s.kolom); setAlign(s.align); setColWidths(s.colWidths); setHeaderRows(s.headerRows); setRows(s.rows); setAtur(s.atur); setPeran(s.peran); pakaiSunting(null); setBarFocused(false); };
   const undo = () => { if (!past.length) return; const prev = past[past.length - 1]; setFuture(f => [snap(), ...f].slice(0, 60)); setPast(p => p.slice(0, -1)); restoreSnap(prev); };
   const redo = () => { if (!future.length) return; const nxt = future[0]; setPast(p => [...p, snap()].slice(-60)); setFuture(f => f.slice(1)); restoreSnap(nxt); };
   // Kolom No. ikut bergeser saat kolom disisip/dihapus — lewat bentuk tabel yang sama dgn align/colWidths.
-  const bentuk = (): BentukTabel => ({ rows, kolom, align, colWidths, headerRows, kolomNomor: atur.kolomNomor });
+  const bentuk = (): BentukTabel => ({ rows, kolom, align, colWidths, headerRows, kolomNomor: atur.kolomNomor, ...(peranKolom ? { peran } : {}) });
   const pasangBentuk = (b: BentukTabel) => {
     setRows(b.rows); setKolom(b.kolom); setAlign(b.align); setColWidths(b.colWidths); setHeaderRows(b.headerRows);
     if (b.kolomNomor !== atur.kolomNomor) setAtur(a => ({ ...a, kolomNomor: b.kolomNomor ?? null }));
+    if (b.peran) setPeran(b.peran);
   };
   const ubahAtur = (ubah: Partial<AturTabel>) => { pushHist(); setAtur(a => ({ ...a, ...ubah })); };
   const ubahGaya = (ubah: Partial<GayaTabel>) => ubahAtur({ gaya: { ...atur.gaya, ...ubah } });
@@ -768,6 +791,7 @@ export default function TabelEditor({
     judul, kolom: namaKolomDariKepala(rows, headerRows, kolom), align, colWidths, headerRows, rows: rowsTampil,
     ...atur, sumber: atur.sumber.trim(), kolomNomor: kolomNo,
     ...(tautan ? { tautan: ambilIsianTangan(tautan, rows.slice(jumlahBarisKepala({ headerRows, rows }))) } : {}),
+    ...(peranKolom ? { peran } : {}),
   });
   /** Hubungkan / Perbarui / Lepas langsung disimpan: ketiganya keputusan yang sudah ditanyakan. */
   const pasangDanSimpan = (masuk: PayloadTabel) => {
@@ -839,7 +863,7 @@ export default function TabelEditor({
     sidikTerlaporRef.current = sidik;
     onUbah(p);
   });
-  useEffect(() => { laporUbah(); }, [judul, kolom, align, colWidths, headerRows, rowsTampil, atur, tautan]);
+  useEffect(() => { laporUbah(); }, [judul, kolom, align, colWidths, headerRows, rowsTampil, atur, tautan, peran]);
   /** Memilih kolom No.: isi badan kolom itu diganti nomor urut — ditanya dulu kalau ada teks lain. */
   const pilihKolomNomor = async (v: string) => {
     if (v === '') { ubahAtur({ kolomNomor: null }); return; }
@@ -853,6 +877,44 @@ export default function TabelEditor({
     }))) return;
     ubahAtur({ kolomNomor: c });
   };
+
+  // ── Peran kolom (IKI CUSTOM §11) ─────────────────────────────────────────────
+  const defPeran = new Map((peranKolom?.daftar ?? []).map(d => [d.kunci, d]));
+  const peranDi = new Map<number, PilihanPeran>();
+  for (const [k, c] of Object.entries(peran)) { const d = defPeran.get(k); if (d) peranDi.set(c, d); }
+  const judulKolom = useMemo(() => kolom.map((k, c) => judulBertingkat(rows, headerRows, c) || k), [kolom, rows, headerRows]);
+  const pasangPeran = (d: PilihanPeran, v: string) => {
+    pushHist();
+    setPeran(p => aturPeranKolom(p, d.kunci, v === '' ? null : Number(v), d.lepas));
+  };
+  /** Tebakan DIGABUNG ke tanda yang sudah ada (tebakan menang bila bentrok) — tanda yang dipasang tangan tidak hilang. */
+  const tebakPeranKolom = () => {
+    if (!peranKolom) return;
+    let p = { ...peran };
+    let n = 0;
+    for (const [k, c] of Object.entries(peranKolom.tebak(judulKolom))) {
+      const d = defPeran.get(k);
+      if (!d || c === kolomNo || p[k] === c) continue;
+      p = aturPeranKolom(p, k, c, d.lepas);
+      n++;
+    }
+    if (!n) { toast.info('Tidak ada judul kolom baru yang dikenali — tandai sendiri lewat pilihan di sebelahnya.'); return; }
+    pushHist();
+    setPeran(p);
+    toast.success(`${n} kolom ditandai dari judulnya — periksa lagi sebelum dipakai.`);
+  };
+  useImperativeHandle(ref, () => ({
+    ubahBentuk: ubah => {
+      if (readOnly || terkait) return false;
+      const hasil = ubah({ ...bentuk(), gaya: atur.gaya, kolomNomor: kolomNo, peran });
+      if (!hasil) return false;
+      pushHist();
+      pasangBentuk(hasil);
+      pil.setSel(null);
+      pakaiSunting(null);
+      return true;
+    },
+  }));
   const vAlignCss = (va?: TabelCell['va']) => va === 'middle' ? 'middle' : va === 'bottom' ? 'bottom' : 'top';
   const diPilih = (r: number, c: number) => !!rect && r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2;
   const kunciBlok = !rect || rectBadan;
@@ -1063,7 +1125,8 @@ export default function TabelEditor({
                     onContextMenu={e => bukaMenu(e, () => pil.setSel({ ar: 0, ac: ci, fr: rows.length - 1, fc: ci }), !!rect && pil.penuhKolom && ci >= rect.c1 && ci <= rect.c2)}
                     onMouseEnter={() => pil.seretKolom(ci)}>
                     {colLabel(ci)}
-                    {lebarTip?.ci === ci && <span className="lk-lebar-tip">{cm(lebarTip.px)} cm</span>}
+                    {peranDi.has(ci) && <span className="lk-peran-tag">{peranDi.get(ci)!.ringkas}</span>}
+                    {lebarTip?.ci === ci &&<span className="lk-lebar-tip">{cm(lebarTip.px)} cm</span>}
                     {!readOnly && <span className="lk-colresize" onMouseDown={e => onResizeDown(ci, e)} onDoubleClick={e => { e.stopPropagation(); paskanIsi(ci); }} />}
                   </th>
                 ))}
@@ -1184,6 +1247,26 @@ export default function TabelEditor({
               <input type="checkbox" checked={atur.utuh} onChange={e => ubahAtur({ utuh: e.target.checked })} /> Jaga utuh
             </label>
           )}
+        </div>
+      )}
+
+      {peranKolom && !readOnly && (
+        <div className="lk-tabel-atur lk-peran">
+          <span className="lk-tabel-atur-judul">Peran kolom</span>
+          {Object.entries(peranKolom.kelompok).map(([kel, judulKel]) => (
+            <span key={kel} className="lk-peran-grup">
+              <span className="lk-peran-grup-judul">{judulKel}</span>
+              {peranKolom.daftar.filter(d => d.kelompok === kel).map(d => (
+                <select key={d.kunci} className={`lk-tt-sel${peran[d.kunci] !== undefined ? ' on' : ''}`} aria-label={`Kolom ${d.label}`}
+                  value={peran[d.kunci] === undefined ? '' : String(peran[d.kunci])} onChange={e => pasangPeran(d, e.target.value)}>
+                  <option value="">{d.label}: —</option>
+                  {kolom.map((_, c) => (c === kolomNo ? null : <option key={c} value={c}>{d.label}: {colLabel(c)} · {potong(judulKolom[c], 28)}</option>))}
+                </select>
+              ))}
+            </span>
+          ))}
+          <button className="lk-peran-tebak" onClick={tebakPeranKolom}>Tebak dari judul</button>
+          {peranKolom.catatan && <span className="lk-peran-catatan">{peranKolom.catatan}</span>}
         </div>
       )}
 

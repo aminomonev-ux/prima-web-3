@@ -4,7 +4,7 @@
    Varian CUSTOM (docs/CONCEPT-iki-custom.md): bagian II = editor tabel bersama (components/tabel), disimpan
    bersama Data Pribadi oleh SATU tombol Simpan halaman (§9.4). */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -15,9 +15,13 @@ import {
 import { validateRhkTargets } from '@/lib/iki/validate';
 import { stripGolongan } from '@/lib/iki/layout';
 import {
-  bacaTabelCustom, bentukTemplat, lebarTulisPx, BATAS_KOLOM_IKI, DAFTAR_KERTAS, KERTAS_IKI, WARNA_KEPALA_IKI, type KertasIki,
+  bacaTabelCustom, bentukTemplat, lebarTulisPx, BATAS_KOLOM_IKI, BATAS_BARIS_IKI, DAFTAR_KERTAS, KERTAS_IKI, WARNA_KEPALA_IKI, type KertasIki,
 } from '@/lib/iki/custom';
-import TabelEditor from '@/components/tabel/TabelEditor';
+import {
+  PILIHAN_PERAN, KELOMPOK_PERAN, tebakPeran, isiDariImpor, validasiTabelCustom, perluCaraHitung,
+  type BentukBerperan, type HasilImpor, type ItemImpor,
+} from '@/lib/iki/peran';
+import TabelEditor, { type FiturPeran, type TabelEditorHandle } from '@/components/tabel/TabelEditor';
 import { TABEL_CSS } from '@/components/tabel/tabel-css';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
@@ -44,6 +48,14 @@ interface Props {
   beku: InfoBeku;
 }
 
+/** Panel Peran kolom di editor tabel bersama (docs/CONCEPT-iki-custom.md §11). */
+const FITUR_PERAN: FiturPeran = {
+  daftar: PILIHAN_PERAN,
+  kelompok: KELOMPOK_PERAN,
+  tebak: judul => tebakPeran(judul) as Record<string, number>,
+  catatan: 'Dipakai "Ambil dari Renaksi / Atasan" dan pemeriksaan target TW. Target triwulan mendatar (4 kolom TW I–IV) ATAU menurun (Kolom TW + Target TW, 4 baris per indikator) — memilih yang satu melepas yang lain.',
+};
+
 type VersiRow = {
   id: number;
   versi_ke: number;
@@ -69,7 +81,11 @@ export default function EditorClient({ username, role, themePreference, initialD
   const readOnly = doc.status === 'FINAL';
   const isDir = doc.varian === 'DIREKTUR';
   const isCustom = doc.varian === 'CUSTOM';
-  const kertas: KertasIki = isCustom ? bacaTabelCustom(doc.tabel_custom).kertas : 'A4';
+  const tabel = useMemo(() => (isCustom ? bacaTabelCustom(doc.tabel_custom) : null), [isCustom, doc.tabel_custom]);
+  const kertas: KertasIki = tabel?.kertas ?? 'A4';
+  const tabelRef = useRef<TabelEditorHandle>(null);
+  /** Impor butuh minimal satu kolom isian bertanda — Kolom TW (I–IV) saja tidak mengisi apa pun. */
+  const adaPeranIsi = !!tabel && Object.keys(tabel.peran).some(k => k !== 'triwulan');
   const [modalTemplat, setModalTemplat] = useState<{ nama: string; bawaIsi: boolean; menyimpan: boolean } | null>(null);
 
   useEffect(() => {
@@ -118,7 +134,8 @@ export default function EditorClient({ username, role, themePreference, initialD
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
   }, [doc.rhk]);
 
-  const targetWarnings = useMemo(() => validateRhkTargets(doc.rhk), [doc.rhk]);
+  // Satu daftar peringatan untuk layar & dialog Finalisasi; CUSTOM membaca tabel lewat peran kolom (§11.4).
+  const targetWarnings = useMemo(() => (tabel ? validasiTabelCustom(tabel) : validateRhkTargets(doc.rhk)), [tabel, doc.rhk]);
   const warnByGroup = useMemo(() => new Set(targetWarnings.map(w => w.no_urut)), [targetWarnings]);
 
   // No grup dihitung DI DALAM functional updater — nextNoUrut dari closure doc
@@ -224,6 +241,24 @@ export default function EditorClient({ username, role, themePreference, initialD
       toast.error('Gagal terhubung ke server');
       setModalTemplat(m => (m ? { ...m, menyimpan: false } : m));
     }
+  }
+
+  function imporKeTabel(groups: Partial<IkiRhk>[][]) {
+    const items: ItemImpor[] = groups.flat().map(r => ({
+      rhk_intervensi: r.rhk_intervensi, rhk: r.rhk, indikator: r.indikator, cara_hitung: r.aspek_b,
+      target_tahunan: r.target_tahunan, tw: r.triwulan?.map(t => t.target_tw),
+    }));
+    const keluar: { hasil?: HasilImpor } = {};
+    tabelRef.current?.ubahBentuk(b => {
+      keluar.hasil = isiDariImpor(b as BentukBerperan, items, BATAS_BARIS_IKI);
+      return keluar.hasil.ok ? keluar.hasil.bentuk : null;
+    });
+    const h = keluar.hasil;
+    if (!h) { toast.error('Tabel sedang tidak bisa diubah.'); return; }
+    if (!h.ok) { toast.error(h.pesan, { duration: 8000 }); return; }
+    setShowImport(false);
+    const lewat = h.tanpaKolom.length ? ` Tidak diisi karena belum ada kolom bertanda: ${h.tanpaKolom.join(', ')}.` : '';
+    toast.success(`${h.baris} butir masuk ke tabel — periksa lalu Simpan. Ctrl+Z di tabel membatalkannya.${lewat}`, { duration: lewat ? 10000 : 5000 });
   }
 
   function applyPejabat(p: PejabatSuggest, target: 'diri' | 'atasan') {
@@ -413,7 +448,7 @@ export default function EditorClient({ username, role, themePreference, initialD
           <div className="iki-stale-banner">
             <AlertTriangle size={15} />
             <span>Dokumen IKI <b>atasan berubah</b> setelah save terakhir dokumen ini — tinjau ulang {isCustom ? 'isian tabel yang merujuk RHK atasan' : <>kolom &ldquo;RHK yang diintervensi&rdquo;</>}.</span>
-            {!isCustom && <PrimaButton variant="warning" size="sm" onClick={() => setShowImport(true)}>Tinjau Import Atasan</PrimaButton>}
+            <PrimaButton variant="warning" size="sm" onClick={() => setShowImport(true)}>Tinjau Import Atasan</PrimaButton>
             <button className="iki-stale-x" data-tooltip="Abaikan" data-tooltip-pos="below" onClick={() => setStaleDismissed(true)}><X size={14} /></button>
           </div>
         )}
@@ -537,15 +572,35 @@ export default function EditorClient({ username, role, themePreference, initialD
                 </label>
                 <PrimaButton variant="ghost" size="sm" iconLeft={<LayoutTemplate size={15} />}
                   onClick={() => setModalTemplat({ nama: '', bawaIsi: false, menyimpan: false })}>Simpan sebagai templat</PrimaButton>
+                {!readOnly && (
+                  <PrimaButton variant="success" size="sm" iconLeft={<Import size={15} />} onClick={() => setShowImport(true)} disabled={!adaPeranIsi}
+                    data-tooltip={adaPeranIsi ? undefined : 'Tandai dulu kolom mana yang berisi RHK, indikator, atau target — panel "Peran kolom" di bawah tabel'}>
+                    Ambil dari Renaksi / Atasan
+                  </PrimaButton>
+                )}
               </div>
             </div>
+            {!readOnly && targetWarnings.length > 0 && (
+              <div className="iki-warn-box">
+                <AlertTriangle size={14} />
+                <div>
+                  <b>Target triwulan tidak konsisten ({targetWarnings.length}):</b>
+                  {targetWarnings.map((w, i) => <div key={i} className="iki-warn-item">{w.message}</div>)}
+                </div>
+              </div>
+            )}
+            {!readOnly && tabel && perluCaraHitung(tabel.peran) && (
+              <p className="iki-sec-hint">Kolom <b>Cara hitung</b> belum ditandai, jadi target TW belum bisa diperiksa terhadap target tahunan (Akumulatif = jumlah TW, Progres = TW IV).</p>
+            )}
             <TabelEditor
+              ref={tabelRef}
               payload={doc.tabel_custom}
               readOnly={readOnly}
               warnaKepala={WARNA_KEPALA_IKI}
               batasKolom={BATAS_KOLOM_IKI}
               kertas={{ px: lebarTulisPx(kertas), nama: KERTAS_IKI[kertas].nama }}
               onUbah={ubahTabel}
+              peranKolom={FITUR_PERAN}
             />
           </section>
         )}
@@ -711,8 +766,10 @@ export default function EditorClient({ username, role, themePreference, initialD
           tahun={doc.tahun}
           atasanDokumenId={doc.atasan_dokumen_id}
           atasanCandidates={atasanCandidates}
+          custom={isCustom}
           onClose={() => setShowImport(false)}
           onImport={(groups) => {
+            if (isCustom) { imporKeTabel(groups); return; }
             addGroups(groups);
             setShowImport(false);
             toast.success(`${groups.length} grup RHK ditambahkan`);
@@ -785,10 +842,15 @@ export default function EditorClient({ username, role, themePreference, initialD
 
 /* ── Modal import: 2 tab (Renaksi / IKI Atasan) ─────────────────────────────── */
 
-function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImport }: {
+/** Kunci pilihan baris atasan: id RHK, atau urutan bila atasannya CUSTOM (tabel tak punya id baris). */
+const kunciAtasan = (a: AtasanRhkRow, i: number) => (a.atasan_rhk_id != null ? `a${a.atasan_rhk_id}` : `ai${i}`);
+
+function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, onClose, onImport }: {
   tahun: string;
   atasanDokumenId: number | null;
   atasanCandidates: IkiListRow[];
+  /** Dokumen CUSTOM: hasilnya jadi baris tabel lewat peran kolom, bukan grup RHK. */
+  custom: boolean;
   onClose: () => void;
   onImport: (groups: Partial<IkiRhk>[][]) => void;
 }) {
@@ -796,6 +858,7 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
   const [loading, setLoading] = useState(false);
   const [renaksiRows, setRenaksiRows] = useState<RenaksiImportRow[] | null>(null);
   const [atasanRows, setAtasanRows] = useState<AtasanRhkRow[] | null>(null);
+  const [catatanAtasan, setCatatanAtasan] = useState<string | null>(null);
   const [atasanId, setAtasanId] = useState<number | ''>(atasanDokumenId ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
@@ -814,10 +877,11 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
   const loadAtasan = useCallback(async (dokumenId: number) => {
     setLoading(true);
     setAtasanRows(null);
+    setCatatanAtasan(null);
     try {
       const res = await fetch(`/api/iki/import-atasan?dokumen_id=${dokumenId}`);
       const json = await res.json();
-      if (json.ok) setAtasanRows(json.rows);
+      if (json.ok) { setAtasanRows(json.rows); setCatatanAtasan(json.catatan ?? null); }
       else toast.error(json.message ?? 'Gagal memuat IKI atasan');
     } catch { toast.error('Gagal terhubung ke server'); }
     finally { setLoading(false); }
@@ -862,8 +926,8 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
       // Grup ikut struktur atasan: item se-no_urut atasan → 1 grup (share RHK-diintervensi),
       // no_urut atasan beda → grup terpisah.
       const byNoUrut = new Map<number, AtasanRhkRow[]>();
-      for (const a of atasanRows ?? []) {
-        if (!selected.has(`a${a.atasan_rhk_id}`)) continue;
+      for (const [i, a] of (atasanRows ?? []).entries()) {
+        if (!selected.has(kunciAtasan(a, i))) continue;
         const list = byNoUrut.get(a.no_urut) ?? [];
         list.push(a);
         byNoUrut.set(a.no_urut, list);
@@ -884,7 +948,7 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
   const shownRenaksi = (renaksiRows ?? []).filter(r =>
     r.level !== 'tujuan' &&
     (!q || r.rhk.toLowerCase().includes(q) || r.indikator.toLowerCase().includes(q) || r.nama.toLowerCase().includes(q)));
-  const shownAtasan = (atasanRows ?? []).filter(a =>
+  const shownAtasan = (atasanRows ?? []).map((a, i) => ({ a, k: kunciAtasan(a, i) })).filter(({ a }) =>
     !q || a.rhk.toLowerCase().includes(q) || a.indikator.toLowerCase().includes(q));
 
   return (
@@ -926,11 +990,11 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
             <div className="iki-modal-info">Pilih dokumen IKI atasan dulu. RHK atasan menjadi kolom &quot;RHK yang diintervensi&quot;.</div>
           )}
           {!loading && tab === 'atasan' && atasanId !== '' && shownAtasan.length === 0 && atasanRows !== null && (
-            <div className="iki-modal-info">Dokumen atasan belum punya baris RHK.</div>
+            <div className="iki-modal-info">{catatanAtasan ?? 'Dokumen atasan belum punya baris RHK.'}</div>
           )}
-          {!loading && tab === 'atasan' && shownAtasan.map(a => (
-            <label key={a.atasan_rhk_id} className="iki-modal-row">
-              <input type="checkbox" checked={selected.has(`a${a.atasan_rhk_id}`)} onChange={() => toggle(`a${a.atasan_rhk_id}`)} />
+          {!loading && tab === 'atasan' && shownAtasan.map(({ a, k }) => (
+            <label key={k} className="iki-modal-row">
+              <input type="checkbox" checked={selected.has(k)} onChange={() => toggle(k)} />
               <div>
                 <div className="iki-modal-row-title"><span className="iki-lvl lvl-atasan">No.{a.no_urut}</span> {a.rhk}</div>
                 <div className="iki-modal-row-sub">{a.indikator} · <b className="mono">{a.target_tahunan}</b></div>
@@ -940,9 +1004,13 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, onClose, onImpo
         </div>
 
         <p className="iki-hint">
-          {tab === 'renaksi'
-            ? 'Tiap baris terpilih menjadi 1 grup RHK: teks RHK/indikator/cara hitung/target TW terisi otomatis — tetap bisa diedit.'
-            : 'RHK atasan terpilih menjadi kolom "RHK yang diintervensi" grup baru — isi RHK Anda sendiri setelahnya.'}
+          {custom
+            ? (tab === 'renaksi'
+              ? 'Tiap baris terpilih menjadi baris tabel: kolom bertanda peran (RHK, indikator, cara hitung, target) terisi otomatis — tetap bisa diedit. Baris berurutan dengan RHK atasan yang sama digabung.'
+              : 'RHK atasan terpilih masuk ke kolom bertanda "RHK yang diintervensi" sebagai baris baru — isi RHK Anda sendiri setelahnya.')
+            : tab === 'renaksi'
+              ? 'Tiap baris terpilih menjadi 1 grup RHK: teks RHK/indikator/cara hitung/target TW terisi otomatis — tetap bisa diedit.'
+              : 'RHK atasan terpilih menjadi kolom "RHK yang diintervensi" grup baru — isi RHK Anda sendiri setelahnya.'}
         </p>
         <div className="iki-modal-actions">
           <PrimaButton variant="ghost" size="sm" onClick={onClose}>Batal</PrimaButton>

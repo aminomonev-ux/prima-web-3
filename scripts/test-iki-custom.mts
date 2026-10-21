@@ -212,7 +212,8 @@ console.log('\nG. Sambungan layar & route')
   ok('G2 editor bersama: "Simpan Tabel" hanya bila ada onSave (IKI satu tombol Simpan, §9.4)', te.includes('{onSave && <PrimaButton'))
   ok('G3 onUbah: isi saat dibuka jadi patokan, tidak dilaporkan', te.includes('if (sidikTerlaporRef.current === null) { sidikTerlaporRef.current = sidik; return; }') && te.includes('if (sidik === sidikTerlaporRef.current) return;'))
   ok('G4 fitur khas LKJIP hanya lewat prop lkjip (judul, sumber, Hubungkan)', te.includes('{lkjip && <input className="lk-tabel-judul"') && te.includes('{lkjip && (!readOnly || atur.sumber.trim())') && te.includes('{!terkait && lkjip && ('))
-  const tagEditor = (/<TabelEditor[\s\S]*?\/>/.exec(ed) ?? [''])[0]
+  // \s: `useRef<TabelEditorHandle>` juga diawali '<TabelEditor'.
+  const tagEditor = (/<TabelEditor\s[\s\S]*?\/>/.exec(ed) ?? [''])[0]
   ok('G5 IKI: editor dengan batas 24, kertas, onUbah — TANPA onSave', tagEditor.includes('batasKolom={BATAS_KOLOM_IKI}') && tagEditor.includes('onUbah={ubahTabel}') && !tagEditor.includes('onSave') && tagEditor.includes('kertas={{ px: lebarTulisPx(kertas)'))
   ok('G6 IKI simpan: tabel ikut, RHK kosong untuk CUSTOM', ed.includes('rhk: isCustom ? [] : doc.rhk,') && ed.includes('tabel_custom: isCustom ? doc.tabel_custom : null,'))
   ok('G7 IKI: varian CUSTOM tidak bisa dipilih ulang di editor', ed.includes('<select value="CUSTOM" disabled>') && !/<option value="CUSTOM">CUSTOM \(tabel sendiri\)<\/option>[\s\S]{0,40}<option value="STANDAR"/.test(ed))

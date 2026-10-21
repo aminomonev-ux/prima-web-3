@@ -7,6 +7,7 @@ import { sql, sqlInt, queryOne, queryMany, execWrite, withTransaction, bulkInser
 import type { SaveDokumenInput } from '@/lib/data/iki-schemas';
 import { pilihDokumenAtasan, rencanaSalinTahun } from '@/lib/iki/beranda';
 import { bacaTabelCustom, tabelCustomAwal } from '@/lib/iki/custom';
+import { rhkAtasanDariTabel } from '@/lib/iki/peran';
 import type { IkiVarian } from '@/lib/iki/layout';
 
 export class IkiVersionConflictError extends Error {
@@ -158,6 +159,35 @@ export async function createDokumen(input: {
     }
     throw err;
   }
+}
+
+/** Baris RHK atasan untuk kaskade (Ambil dari IKI Atasan & penaut Impor Excel). */
+export type RhkAtasanRow = { atasan_rhk_id: number | null; no_urut: number; rhk: string; indikator: string; target_tahunan: string; aspek_b: string };
+export type RhkAtasanHasil = { atasan: { id: number; nama: string; jabatan: string; tahun: string; varian: IkiVarian }; rows: RhkAtasanRow[]; catatan: string | null };
+
+/**
+ * STANDAR/DIREKTUR dari `iki_rhk`; CUSTOM dari tabelnya lewat peran kolom (CONCEPT-iki-custom §11.3) — dulu atasan
+ * CUSTOM selalu terbaca "belum punya baris RHK". Tabel tak punya id baris, jadi `atasan_rhk_id` kosong (kolomnya NULL-able).
+ */
+export async function getRhkAtasan(dokumenId: number): Promise<RhkAtasanHasil | null> {
+  const atasan = await queryOne<RhkAtasanHasil['atasan'] & { tabel_custom: unknown }>(
+    sql`SELECT id, nama, jabatan, tahun, varian, tabel_custom FROM iki_dokumen WHERE id = ${dokumenId} LIMIT 1`,
+  );
+  if (!atasan) return null;
+  const { tabel_custom: tabel, ...kepala } = atasan;
+  if (kepala.varian === 'CUSTOM') {
+    const t = bacaTabelCustom(typeof tabel === 'string' ? JSON.parse(tabel) : tabel);
+    const rows = rhkAtasanDariTabel(t).map(r => ({ atasan_rhk_id: null, ...r }));
+    const catatan = t.peran.rhk === undefined
+      ? 'Dokumen atasan berbentuk tabel CUSTOM dan belum menandai kolom Rencana Hasil Kerja — minta penyusunnya menandai lewat panel Peran kolom.'
+      : null;
+    return { atasan: kepala, rows, catatan };
+  }
+  const rows = await queryMany<RhkAtasanRow>(sql`
+    SELECT id AS atasan_rhk_id, no_urut, rhk, indikator, target_tahunan, aspek_b
+    FROM iki_rhk WHERE dokumen_id = ${kepala.id}
+    ORDER BY no_urut ASC, urutan ASC`);
+  return { atasan: kepala, rows, catatan: null };
 }
 
 export async function getDokumen(id: number): Promise<IkiDokumenDetail | null> {

@@ -8,6 +8,7 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { AlignSchema, buatCellSchema } from '@/lib/lkjip/schemas';
 import { BATAS_KOLOM_IKI, BATAS_BARIS_IKI } from '@/lib/iki/custom';
+import { KUNCI_PERAN } from '@/lib/iki/peran';
 import { BATAS_BARIS_KEPALA } from '@/lib/lkjip/tabel';
 
 // ─── Role allow-list ─────────────────────────────────────────────────────────
@@ -98,6 +99,8 @@ export const TabelCustomSchema = z.object({
   kolomNomor: z.number().int().min(0).max(BATAS_KOLOM_IKI - 1).nullable().default(null),
   gaya: z.object({ selang: z.boolean().optional(), jumlah: z.boolean().optional(), mendatar: z.boolean().optional() }).default({}),
   kertas: z.enum(['A4', 'F4']).default('A4'),
+  // Peran kolom (§11): peran → indeks kolom. Kerapiannya (satu peran satu kolom, mendatar ⇄ menurun) dijaga bacaPeran saat ditulis.
+  peran: z.partialRecord(z.enum(KUNCI_PERAN), z.number().int().min(0).max(BATAS_KOLOM_IKI - 1)).default({}),
 }).refine(t => JSON.stringify(t).length <= BATAS_JSON_TABEL, 'Isi tabel terlalu besar');
 export type TabelCustomInput = z.infer<typeof TabelCustomSchema>;
 

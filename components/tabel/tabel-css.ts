@@ -93,6 +93,15 @@ export const TABEL_CSS = `
   .lk-tt-sel { height: 28px; background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; font-size: 11px; padding: 0 4px; cursor: pointer; }
   .lk-tt-sel:disabled { opacity: .38; cursor: not-allowed; }
   .lk-tt-sel option { background: #020F1C; color: #E6F1FB; }
+  /* Peran kolom (IKI CUSTOM §11): panel di bawah tabel + label kecil di huruf kolom. */
+  .lk-peran { padding: 8px 10px; border: 1px dashed #0C447C; border-radius: 10px; }
+  .lk-peran-grup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lk-peran-grup-judul { font-size: 10.5px; font-weight: 600; color: #85B7EB; }
+  .lk-tt-sel.on { border-color: #EF9F27; color: #E6F1FB; }
+  .lk-peran-tebak { height: 28px; padding: 0 10px; border-radius: 6px; background: transparent; border: 1px solid #0C447C; color: #B5D4F4; font-size: 11px; cursor: pointer; }
+  .lk-peran-tebak:hover { border-color: #185FA5; color: #E6F1FB; }
+  .lk-peran-catatan { flex-basis: 100%; font-size: 11px; color: #85B7EB; line-height: 1.5; }
+  .lk-tabel th.lk-colhead .lk-peran-tag { display: block; padding: 0 3px; font-size: 9px; font-weight: 700; line-height: 1.3; color: #EF9F27; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lk-fbar { display: flex; align-items: center; margin-bottom: 8px; border: 1px solid #0C447C; border-radius: 6px; overflow: hidden; background: #020F1C; }
   .lk-fbar-ref { min-width: 54px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: #EF9F27; padding: 6px 8px; border-right: 1px solid #0C447C; }
   .lk-fbar-fx { font-style: italic; font-family: Georgia, 'Times New Roman', serif; color: #85B7EB; padding: 0 10px; border-right: 1px solid #0C447C; font-size: 13px; }
@@ -173,6 +182,11 @@ export const TABEL_CSS = `
   [data-theme="light"] .lk-tabel-galat { color: #E24B4A; }
   [data-theme="light"] .lk-tt-sel { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #374151; }
   [data-theme="light"] .lk-tt-sel option { background: #FFFFFF; color: #374151; }
+  [data-theme="light"] .lk-peran { border-color: rgba(0,0,0,.15); }
+  [data-theme="light"] .lk-peran-grup-judul, [data-theme="light"] .lk-peran-catatan { color: #6B7280; }
+  [data-theme="light"] .lk-tt-sel.on { border-color: #7C5CFC; color: #111827; }
+  [data-theme="light"] .lk-peran-tebak { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
+  [data-theme="light"] .lk-tabel th.lk-colhead .lk-peran-tag { color: #B45309; }
   [data-theme="light"] .lk-fbar { background: #FFFFFF; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-fbar-ref { color: #5B21B6; border-right-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-fbar-fx { color: #6B7280; border-right-color: rgba(0,0,0,.12); }

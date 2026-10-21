@@ -106,7 +106,8 @@ export type RenaksiImportRow = {
 };
 
 export type AtasanRhkRow = {
-  atasan_rhk_id: number;
+  /** Kosong bila atasannya CUSTOM — tabel tidak punya id baris (docs/CONCEPT-iki-custom.md §11.3). */
+  atasan_rhk_id: number | null;
   no_urut: number;
   rhk: string;
   indikator: string;

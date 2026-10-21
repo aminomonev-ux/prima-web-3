@@ -1055,8 +1055,47 @@ function hapusKolomSel(rows: TabelCell[][], dari: number, sampai: number, ncol: 
   return sanitizeRows(salin, ncol - (sampai - dari + 1));
 }
 
-/** Bentuk tabel di editor — larik paralel (`kolom`/`align`/`colWidths`) ikut tiap sisip/hapus kolom. */
-export interface BentukTabel { rows: TabelCell[][]; kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; kolomNomor?: number | null }
+/**
+ * Bentuk tabel di editor — larik paralel (`kolom`/`align`/`colWidths`) ikut tiap sisip/hapus kolom.
+ * `peran` (peran → indeks kolom, IKI CUSTOM — CONCEPT-iki-custom §11) ikut bergeser seperti kolom No.
+ */
+export interface BentukTabel { rows: TabelCell[][]; kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; kolomNomor?: number | null; peran?: Record<string, number> }
+
+/** Peran kolom sesudah kolom disisip/dihapus: yang kolomnya terhapus lepas, yang di kanannya bergeser. */
+export function geserPeran(peran: Record<string, number>, g: Geser & { sumbu: 'kolom' }): Record<string, number> {
+  const hasil: Record<string, number> = {};
+  for (const [k, c] of Object.entries(peran)) {
+    const baru = geserIndeks(c, g);
+    if (baru !== null) hasil[k] = baru;
+  }
+  return hasil;
+}
+
+/**
+ * Menandai kolom `kolom` dengan `kunci` (null = melepas). Satu peran satu kolom, satu kolom satu peran;
+ * `lepas` = peran yang ditiadakan peran ini (TW mendatar ⇄ menurun).
+ */
+export function aturPeranKolom(peran: Record<string, number>, kunci: string, kolom: number | null, lepas: readonly string[] = []): Record<string, number> {
+  const hasil: Record<string, number> = {};
+  for (const [k, c] of Object.entries(peran)) {
+    if (k === kunci || (kolom !== null && (c === kolom || lepas.includes(k)))) continue;
+    hasil[k] = c;
+  }
+  if (kolom !== null) hasil[kunci] = kolom;
+  return hasil;
+}
+
+/** Judul kolom dari SEMUA baris kepala yang menutupnya ("Target Triwulan" + "II") — bahan menebak peran. */
+export function judulBertingkat(rows: TabelCell[][], headerRows: number, c: number): string {
+  const bagian: string[] = [];
+  for (let r = 0; r < Math.min(headerRows, rows.length); r++) {
+    const a = asalSel(rows, r, c);
+    if (a.r !== r) continue;
+    const t = (rows[a.r]?.[a.c]?.v ?? '').trim();
+    if (t && bagian[bagian.length - 1] !== t) bagian.push(t);
+  }
+  return bagian.join(' ');
+}
 
 /** `keKepala`: baris baru ikut kepala (disisip di bawah baris kepala terakhir yang dipilih). */
 export function sisipBaris(t: BentukTabel, di: number, n: number, keKepala = false): BentukTabel {
@@ -1079,6 +1118,7 @@ export function sisipKolom(t: BentukTabel, di: number, n: number): BentukTabel {
     colWidths: isi(t.colWidths.slice(0, t.kolom.length), () => LEBAR_KOLOM_BAWAAN),
     // Kolom No. ikut bergeser seperti align/colWidths (§12.3).
     ...(t.kolomNomor != null && t.kolomNomor >= di ? { kolomNomor: t.kolomNomor + n } : {}),
+    ...(t.peran ? { peran: geserPeran(t.peran, { sumbu: 'kolom', sisip: di, n }) } : {}),
   };
 }
 
@@ -1090,6 +1130,7 @@ export function hapusKolom(t: BentukTabel, dari: number, sampai: number): Bentuk
     rows: hapusKolomSel(t.rows, dari, sampai, t.kolom.length),
     kolom: tetap(t.kolom), align: tetap(t.align), colWidths: tetap(t.colWidths),
     ...(kn == null || kn < dari ? {} : { kolomNomor: kn > sampai ? kn - (sampai - dari + 1) : null }),
+    ...(t.peran ? { peran: geserPeran(t.peran, { sumbu: 'kolom', hapus: [dari, sampai] }) } : {}),
   };
 }
 

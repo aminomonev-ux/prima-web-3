@@ -1,6 +1,6 @@
 # CONCEPT — IKI varian CUSTOM (tabel bebas ala LKJIP)
 
-> Status: **keputusan diambil 2026-10-21, dieksekusi** (Tahap 0–2). Keputusan → §9.
+> Status: **keputusan diambil 2026-10-21, dieksekusi** (Tahap 0–3). Keputusan → §9.
 > Terkait: `docs/CONCEPT-iki.md` (varian STANDAR/DIREKTUR), `docs/CONCEPT-lkjip-tabel-excel.md` (mesin tabel yang dipakai ulang).
 
 ## 1. Masalah
@@ -87,7 +87,7 @@ Tahap 3 (opsional): **peran kolom** — tandai kolom sebagai RHK / Indikator / T
 | 0 | Pindahkan editor tabel LKJIP ke komponen bersama, tanpa perubahan perilaku | suite LKJIP hijau = syarat lulus | **selesai 2026-10-21** |
 | 1 | Varian CUSTOM: buat, sunting tabel, simpan (CAS `version`), PDF, Excel, Zip, versi, duplikat | migrasi `migration-iki-custom.sql` | **selesai 2026-10-21** |
 | 2 | Templat: simpan dari dokumen, pakai saat Buat IKI, kelola (ganti nama/hapus) | | **selesai 2026-10-21** |
-| 3 | Peran kolom → impor Renaksi/atasan & validasi untuk CUSTOM | opsional | belum |
+| 3 | Peran kolom → impor Renaksi/atasan & validasi untuk CUSTOM | opsional — rancangan §11 | **selesai 2026-10-21** |
 
 ## 9. Keputusan (pemilik, 2026-10-21)
 
@@ -129,3 +129,62 @@ Di LKJIP editor tabel punya tombol "Simpan Tabel" sendiri (satu blok = satu simp
 **Tahap 1–2.** `lib/iki/custom.ts` (MURNI): `TabelCustom`, `bacaTabelCustom`, `tabelCustomAwal`, `bentukTemplat`, `susunKisiCetak` (SATU penyusun kisi untuk PDF & Excel — rumus dihitung, galat "—", kolom No., gaya tabel lewat `gayaSel`/`selBergaya` yang sama dengan editor, kepala abu IKI), `lebarKolomMm`. Kertas F4 = Folio 8,5 × 13 in (Excel `paperSize` 14; tipe exceljs tidak mengenal nilai itu, Excel mengenalnya). Teks tegak di PDF digambar sendiri di `didDrawCell` (autoTable tidak memutar teks); **garis bawah huruf tidak tampil di PDF** (jsPDF tidak mendukung) — Excel membawanya. Data: `listDokumen` menghitung baris badan untuk CUSTOM; `createDokumen` menyalin templat (bukan merujuk); `saveDokumen` menolak tukar varian (`IkiVarianTerkunciError` → 409 `VARIAN_TERKUNCI`); duplikat & pulihkan versi membawa tabel. Templat: `/api/iki/templat` (GET/POST/PATCH/DELETE, `guard()` modul IKI, audit `IKI_CREATE/UPDATE/DELETE`). Layar: modal Buat IKI (varian ketiga + pilih/ganti nama/hapus templat), editor (Kertas, Simpan sebagai templat, tabel di bagian II), lencana CUSTOM & "N baris" di daftar, Impor Excel tidak menawarkan "timpa" dokumen CUSTOM.
 
 **Uji.** `npx tsx scripts/test-iki-custom.mts` (89; bagian H MySQL kotak pasir 2094–2095, auto-bersih), **46 uji mutasi tertangkap** — 2 sempat LOLOS, keduanya kelemahan tes: tabel 24 kolom D1 dibangun lewat `bacaTabelCustom` yang ikut terpangkas batas mutan (A3 pun membandingkan dengan konstanta yang diuji), dan H6 `rows[3][3]` meledak alih-alih mencatat FAIL. Di peramban (tahun 2096, dibersihkan): buat CUSTOM lewat modal, 4 → 20 → berhenti 24 kolom, rumus & No. otomatis, F4 menggeser garis kertas, Simpan & muat ulang, Paskan ke lebar kertas, Simpan sebagai templat → Buat dari templat (ganti nama di modal), PDF F4 (dibuka di penampil) & Excel (disadap, tidak terunduh), 409 tukar varian lewat permintaan langsung, tema terang, 375 px. **Belum dicoba:** Unduh Zip berisi dokumen CUSTOM lewat layar (aturannya teruji: `alasanTakBisaCetak`), membuka berkas Excel CUSTOM di Microsoft Excel sungguhan.
+
+## 11. Tahap 3 — peran kolom (keputusan pemilik 2026-10-21)
+
+**Masalah.** Tabel CUSTOM tidak menyatakan kolom mana berisi RHK atau target, jadi tiga fitur STANDAR mati di sana: Ambil dari Rencana Aksi, Ambil dari IKI Atasan, dan peringatan target TW vs tahunan. Ada satu lubang lagi: kaskade **dari** atasan CUSTOM juga mati — `import-atasan` membaca `iki_rhk`, padahal dokumen CUSTOM tidak punya baris di sana. Bawahan dari atasan CUSTOM (STANDAR maupun CUSTOM) melihat "belum punya baris RHK".
+
+**Keputusan:**
+
+| # | Pertanyaan | Keputusan |
+|---|---|---|
+| 5 | Letak target triwulan | **Dua-duanya** — mendatar (TW I–IV empat kolom, satu indikator = satu baris) atau menurun ala BPSDMD (satu kolom Target TW, empat baris per indikator); mana yang berlaku ditentukan kolom yang ditandai |
+| 6 | Baris ber-RHK atasan sama saat impor | **Digabung** — sel "RHK yang diintervensi" dan No. digabung untuk baris berurutan yang RHK atasannya sama (satu nomor per RHK atasan, seperti STANDAR) |
+
+### 11.1 Peran
+
+| Peran | Isi dari Renaksi | Isi dari atasan |
+|---|---|---|
+| RHK yang diintervensi | sasaran induk / induk | RHK atasan |
+| Rencana Hasil Kerja | outcome (cadangan: nama) | — |
+| Indikator | indikator | — |
+| Cara hitung (aspek b) | jenis | aspek b atasan |
+| Target tahunan | target tahunan | — |
+| TW I · TW II · TW III · TW IV (mendatar) | target TW | — |
+| Kolom TW · Target TW (menurun) | I–IV · target TW | I–IV |
+
+- Satu peran = satu kolom, satu kolom = satu peran. TW mendatar dan TW menurun saling meniadakan: menandai yang satu melepas yang lain, jadi tidak ada keadaan "dua-duanya" yang harus ditebak artinya.
+- Disimpan sebagai `TabelCustom.peran` (peran → indeks kolom), **ikut bergeser** saat kolom disisip/dihapus lewat `BentukTabel` — jalur yang sama dengan kolom No. otomatis. Kolom yang dihapus melepas perannya. Mesin tabel LKJIP tidak berubah perilaku: kunci itu hanya ada bila pemakainya mengirimnya.
+- Templat membawa peran (templat = bentuk). Tabel awal tanpa templat langsung bertanda RHK/Indikator/Target tahunan.
+- Penanda di layar: panel **Peran kolom** di bawah tabel (satu pilihan per peran, pola "No. otomatis") + label kecil di huruf kolom. Tombol **Tebak dari judul** membaca judul kepala bertingkat ("Target Triwulan" + "II" → TW II).
+
+### 11.2 Impor ke tabel
+
+- Tombol **Ambil dari Renaksi / Atasan** di bagian II CUSTOM membuka modal yang SAMA dengan STANDAR. Hasilnya mengubah ISI layar lewat editor tabel (bisa diurungkan Ctrl+Z); yang menyimpan tetap tombol Simpan halaman (L78).
+- **Pola baris = blok badan pertama** (baris pertama + rentang gabungan tegaknya): format & gabungan disalin, teks tidak. Menurun butuh blok 4 baris; bila polanya bukan 4 baris, kolom yang di pola menutup seluruh blok digabung 4 baris, sisanya tidak. Tanpa pola sama sekali (badan kosong), menurun menggabung semua kolom kecuali Kolom TW & Target TW — Rencana Aksi per triwulan perlu dipisah sendiri sekali, lalu Simpan sebagai templat.
+- **Baris kosong di ujung badan dipakai dulu** (tabel baru berisi 3 baris kosong), sisanya disisip di atas baris JUMLAH bila gaya itu dipakai — rentang `=SUM(…)` di baris JUMLAH ikut memanjang (aturan `sisipBarisBaru`).
+- Keputusan #6: baris berurutan dengan RHK yang diintervensi sama digabung di kolom peran itu **dan** kolom No. otomatis — penomoran per RHK atasan, seperti STANDAR. Hanya di antara baris hasil impor yang sama.
+- Isian yang tidak punya kolom bertanda (mis. Renaksi membawa Target TW tapi tidak ada kolom TW) **disebut** di pemberitahuan, bukan dibuang diam-diam.
+- Jejak sumber (`renaksi_id`, `atasan_rhk_id`) tidak disimpan per baris — tabel tidak punya identitas baris. Spanduk "atasan berubah" tetap jalan (milik kepala dokumen).
+
+### 11.3 Atasan CUSTOM sebagai sumber kaskade
+
+`import-atasan` membaca tabel atasan CUSTOM lewat peran: satu baris per RHK (RHK berurutan yang sama — sel tergabung — dihitung sekali), `atasan_rhk_id` kosong (tabel tak punya id baris; kolom itu memang boleh NULL). Atasan CUSTOM tanpa kolom RHK bertanda dijawab dengan kalimat yang menyebut sebabnya.
+
+### 11.4 Pemeriksaan target
+
+Satu fungsi pembaca baris (`itemDariTabel`) dipakai pemeriksaan DAN kaskade: mendatar = tiap baris badan; menurun = blok menurut gabungan kolom jangkar (Target tahunan → Indikator → RHK), TW dibaca dari Kolom TW (I/II/III/IV, 1–4, "TW I") atau urutan barisnya. Aturannya `validateRhkTargets` yang sama dengan STANDAR, lunak, ikut dialog Finalisasi. Cara hitung dibaca dari teks sel ("akumulatif", "progres positif", …); tanpa kolom Cara hitung, pemeriksaan tidak menebak dan layar menyebutnya.
+
+**Tidak termasuk:** Impor Excel BPSDMD ke dokumen CUSTOM (pembacanya dikalibrasi ke 11/8 kolom).
+
+### 11.5 Hasil eksekusi (2026-10-21)
+
+- **Aturan** di `lib/iki/peran.ts` (MURNI): `DAFTAR_PERAN`/`bacaPeran`/`tebakPeran`, `isiDariImpor` (impor), `itemDariTabel` (SATU pembaca untuk `validasiTabelCustom` DAN `rhkAtasanDariTabel`). `TabelCustom.peran` terdaftar di `TabelCustomSchema` (`z.partialRecord`) dan dibaca `bacaTabelCustom`.
+- **Mesin tabel bersama**: `BentukTabel.peran` digeser `sisipKolom`/`hapusKolom` lewat `geserPeran` (kunci itu hanya muncul bila pemakainya mengirimnya — keluaran LKJIP identik); `aturPeranKolom` + `judulBertingkat` di `lib/lkjip/tabel.ts`. `TabelEditor` dapat prop `peranKolom` (panel + label di huruf kolom; peran ikut payload, riwayat urungkan, dan laporan `onUbah`) dan pegangan `ref` → `ubahBentuk(fn)`: pengubah dari luar masuk lewat riwayat urungkan, ditolak saat hanya-baca/tertaut.
+- **Layar IKI**: tombol "Ambil dari Renaksi / Atasan" di bagian II CUSTOM (mati + alasannya bila belum ada kolom isian bertanda), modal yang SAMA dengan STANDAR, peringatan target CUSTOM (layar + Finalisasi), petunjuk bila Cara hitung belum ditandai, "Tinjau Import Atasan" di spanduk atasan-berubah kini juga untuk CUSTOM.
+- **Kaskade**: `getRhkAtasan` (`lib/data/iki.ts`) satu jalur untuk semua varian; route `import-atasan` memakainya dan mengirim `catatan`. Pilihan baris di modal tidak lagi berkunci id (atasan CUSTOM tak punya id baris).
+- **Templat** dari tabel menurun membawa blok pertamanya (4 baris, gabungan utuh, tanpa teks) — impor berikutnya meniru polanya. Templat mendatar tetap kepala + satu baris pola.
+
+**Uji.** `npx tsx scripts/test-iki-peran.mts` (73; bagian H MySQL kotak pasir 2090, auto-bersih), **25 uji mutasi tertangkap** (0 lolos). Suite lama hijau: IKI custom 89, beranda 74, roundtrip 22; LKJIP excel 97, word 92, bc 131, tertaut 160, angka 62, bab-wajib 57; tooltip 26; keluar 16. Tiga pemeriksaan lama yang mencocokkan teks sumber disesuaikan (`rows, atur, peran });`; regex `<TabelEditor` di suite CUSTOM kini `<TabelEditor\s` karena `useRef<TabelEditorHandle>` juga cocok). Gerbang tsc, ESLint, E, F, G, H, I, J lulus.
+
+**Di peramban** (kotak pasir 2089, dibersihkan): tabel awal langsung bertanda, membuka dokumen tidak menyalakan "belum tersimpan"; impor Renaksi ke 3 baris kosong (2 terisi, sisanya dibuang) + pemberitahuan kolom yang tidak ada; Urungkan/Ulangi; tambah 6 kolom + judul → Tebak dari judul menandai keenamnya tepat; impor lagi → dua program sesasaran digabung di No. & RHK atasan; TW IV diubah → peringatan "Baris 3 — …"; Simpan → muat ulang utuh; kaskade dari atasan CUSTOM menurun (2 RHK); impor ke tabel menurun (blok 4 baris berlabel I–IV mengikuti pola); tema terang; 375 px tanpa geser mendatar; konsol bersih. **Belum dicoba di layar:** bawahan STANDAR mengambil dari atasan CUSTOM (jalurnya sama dan teruji di MySQL, H2/H4).
