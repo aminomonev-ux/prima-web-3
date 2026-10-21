@@ -6,6 +6,8 @@
 import { sql, sqlInt, queryOne, queryMany, execWrite, withTransaction, bulkInsert } from '@/lib/data/db';
 import type { SaveDokumenInput } from '@/lib/data/iki-schemas';
 import { pilihDokumenAtasan, rencanaSalinTahun } from '@/lib/iki/beranda';
+import { bacaTabelCustom, tabelCustomAwal } from '@/lib/iki/custom';
+import type { IkiVarian } from '@/lib/iki/layout';
 
 export class IkiVersionConflictError extends Error {
   constructor() { super('Dokumen sudah diubah pengguna lain. Muat ulang halaman.'); }
@@ -16,11 +18,22 @@ export class IkiFinalError extends Error {
 export class IkiNotFoundError extends Error {
   constructor() { super('Dokumen IKI tidak ditemukan.'); }
 }
+/**
+ * CUSTOM ⇄ STANDAR/DIREKTUR (docs/CONCEPT-iki-custom.md §9.3): simpan itu hapus-lalu-tulis-ulang, jadi
+ * menukar varian membuang seluruh RHK atau seluruh tabel tanpa satu pertanyaan pun. Ditolak di sini — juga
+ * menutup pintu lain yang sama (Impor Excel "timpa isi", pulihkan versi).
+ */
+export class IkiVarianTerkunciError extends Error {
+  constructor() { super('Varian CUSTOM tidak bisa ditukar dengan STANDAR/DIREKTUR (atau sebaliknya) — isinya berbeda jenis. Buat dokumen baru dengan varian yang diinginkan.'); }
+}
+export class IkiTemplatTidakAdaError extends Error {
+  constructor() { super('Templat tabel tidak ditemukan — mungkin baru saja dihapus.'); }
+}
 
 export type IkiDokumenRow = {
   id: number;
   tahun: string;
-  varian: 'STANDAR' | 'DIREKTUR';
+  varian: IkiVarian;
   jenis: 'MURNI' | 'PERUBAHAN';
   opd: string;
   nama: string;
@@ -37,6 +50,9 @@ export type IkiDokumenRow = {
   atasan_dokumen_id: number | null;
   status: 'DRAFT' | 'FINAL';
   version: number;
+  /** Varian CUSTOM saja (lib/iki/custom.ts TabelCustom); NULL untuk STANDAR/DIREKTUR. */
+  tabel_custom: unknown | null;
+  templat_id: number | null;
 };
 
 export type IkiTriwulanRow = {
@@ -78,11 +94,16 @@ export type IkiVersiMeta = {
   created_at: string;
 };
 
+/** "N RHK" di daftar; untuk CUSTOM = baris badan tabelnya (baris dikurangi kepala) — kolom `varian` yang membedakan labelnya. */
+const JUMLAH_ISI = sql`CASE WHEN d.varian = 'CUSTOM'
+  THEN GREATEST(COALESCE(JSON_LENGTH(d.tabel_custom, '$.rows'), 0) - CAST(COALESCE(d.tabel_custom->>'$.headerRows', '0') AS SIGNED), 0)
+  ELSE COUNT(r.id) END AS jumlah_rhk`;
+
 export async function listDokumen(tahun?: string) {
   const rows = tahun
     ? await sql`
         SELECT d.id, d.tahun, d.varian, d.jenis, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
-               d.atasan_dokumen_id, d.updated_at, COUNT(r.id) AS jumlah_rhk
+               d.atasan_dokumen_id, d.updated_at, ${JUMLAH_ISI}
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id
         WHERE d.tahun = ${tahun}
@@ -90,7 +111,7 @@ export async function listDokumen(tahun?: string) {
         ORDER BY d.tahun DESC, d.varian = 'DIREKTUR' DESC, d.jabatan ASC, d.jenis ASC`
     : await sql`
         SELECT d.id, d.tahun, d.varian, d.jenis, d.nama, d.nip, d.jabatan, d.pangkat, d.status, d.version,
-               d.atasan_dokumen_id, d.updated_at, COUNT(r.id) AS jumlah_rhk
+               d.atasan_dokumen_id, d.updated_at, ${JUMLAH_ISI}
         FROM iki_dokumen d
         LEFT JOIN iki_rhk r ON r.dokumen_id = d.id
         GROUP BY d.id
@@ -99,10 +120,24 @@ export async function listDokumen(tahun?: string) {
 }
 
 export async function createDokumen(input: {
-  tahun: string; varian: 'STANDAR' | 'DIREKTUR'; jenis?: 'MURNI' | 'PERUBAHAN';
+  tahun: string; varian: IkiVarian; jenis?: 'MURNI' | 'PERUBAHAN';
   nama: string; nip: string; jabatan: string; pangkat?: string | null;
+  templat_id?: number | null;
 }, userId: number): Promise<number> {
   const jenis = input.jenis ?? 'MURNI';
+  // CUSTOM: tabel awal DISALIN dari templat (konsep §4) — mengubah templat sesudahnya tidak menggeser dokumen ini.
+  let tabel: string | null = null;
+  let templatId: number | null = null;
+  if (input.varian === 'CUSTOM') {
+    if (input.templat_id) {
+      const t = await queryOne<{ payload: unknown }>(sql`SELECT payload FROM iki_templat WHERE id = ${input.templat_id} LIMIT 1`);
+      if (!t) throw new IkiTemplatTidakAdaError();
+      tabel = JSON.stringify(bacaTabelCustom(typeof t.payload === 'string' ? JSON.parse(t.payload) : t.payload));
+      templatId = input.templat_id;
+    } else {
+      tabel = JSON.stringify(tabelCustomAwal());
+    }
+  }
   const label = jenis === 'PERUBAHAN' ? ' (Perubahan)' : '';
   // UNIQUE (nip, tahun, jabatan, jenis) — 1 orang boleh dokumen per jabatan (Plt.)
   // + Murni/Perubahan berdampingan
@@ -112,8 +147,8 @@ export async function createDokumen(input: {
   if (dup) throw new Error(`Dokumen IKI${label} untuk NIP ${input.nip} jabatan ${input.jabatan} tahun ${input.tahun} sudah ada.`);
   try {
     const res = await execWrite(sql`
-      INSERT INTO iki_dokumen (tahun, varian, jenis, nama, nip, jabatan, pangkat, created_by, updated_by)
-      VALUES (${input.tahun}, ${input.varian}, ${jenis}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${input.pangkat || null}, ${userId}, ${userId})
+      INSERT INTO iki_dokumen (tahun, varian, jenis, tabel_custom, templat_id, nama, nip, jabatan, pangkat, created_by, updated_by)
+      VALUES (${input.tahun}, ${input.varian}, ${jenis}, ${tabel}, ${templatId}, ${input.nama}, ${input.nip}, ${input.jabatan}, ${input.pangkat || null}, ${userId}, ${userId})
     `);
     return res.insertId;
   } catch (err) {
@@ -130,10 +165,12 @@ export async function getDokumen(id: number): Promise<IkiDokumenDetail | null> {
     sql`SELECT id, tahun, varian, jenis, opd, nama, nip, jabatan, pangkat, ikhtisar,
                nama_atasan, nip_atasan, jabatan_atasan, pangkat_atasan, kota_ttd,
                DATE_FORMAT(tanggal_ttd, '%Y-%m-%d') AS tanggal_ttd,
-               atasan_dokumen_id, status, version
+               atasan_dokumen_id, status, version, tabel_custom, templat_id
         FROM iki_dokumen WHERE id = ${id} LIMIT 1`,
   );
   if (!doc) return null;
+  // mysql2 memulangkan kolom JSON sudah terurai; kalau datang sebagai teks, diurai di sini — pemanggil selalu menerima objek.
+  if (typeof doc.tabel_custom === 'string') doc.tabel_custom = JSON.parse(doc.tabel_custom);
   const rhkRows = await queryMany<Omit<IkiRhkRow, 'triwulan'>>(
     sql`SELECT id, no_urut, rhk_intervensi, rhk, aspek_a, aspek_b, aspek_c, indikator,
                target_tahunan, formulasi, ekspektasi, renaksi_id, atasan_rhk_id, urutan
@@ -211,10 +248,11 @@ export async function duplicateDokumen(
   try {
     await withTransaction(async ({ tx, conn }) => {
       const ins = await tx`
-        INSERT INTO iki_dokumen (tahun, varian, jenis, opd, nama, nip, jabatan, pangkat, ikhtisar,
+        INSERT INTO iki_dokumen (tahun, varian, jenis, tabel_custom, templat_id, opd, nama, nip, jabatan, pangkat, ikhtisar,
           nama_atasan, nip_atasan, jabatan_atasan, pangkat_atasan, kota_ttd,
           atasan_dokumen_id, created_by, updated_by)
-        VALUES (${tahunTarget}, ${src.varian}, ${jenis}, ${src.opd}, ${src.nama}, ${src.nip}, ${src.jabatan},
+        VALUES (${tahunTarget}, ${src.varian}, ${jenis}, ${src.tabel_custom == null ? null : JSON.stringify(src.tabel_custom)}, ${src.templat_id},
+          ${src.opd}, ${src.nama}, ${src.nip}, ${src.jabatan},
           ${src.pangkat}, ${src.ikhtisar}, ${src.nama_atasan}, ${src.nip_atasan},
           ${src.jabatan_atasan}, ${src.pangkat_atasan}, ${src.kota_ttd},
           ${atasanTarget}, ${userId}, ${userId})
@@ -281,7 +319,7 @@ export function galatDuplikatDikenal(err: unknown): string | null {
  */
 export async function salinTahun(tahunSumberIki: string, tahunTarget: string, userId: number): Promise<HasilSalinTahun> {
   const baca = async (t: string) => ((await listDokumen(t)) as Record<string, unknown>[]).map(r => ({
-    id: Number(r.id), tahun: String(r.tahun), varian: r.varian as 'STANDAR' | 'DIREKTUR',
+    id: Number(r.id), tahun: String(r.tahun), varian: r.varian as IkiVarian,
     jenis: r.jenis as 'MURNI' | 'PERUBAHAN', nama: String(r.nama), nip: String(r.nip),
     jabatan: String(r.jabatan), status: r.status as 'DRAFT' | 'FINAL',
     atasan_dokumen_id: r.atasan_dokumen_id == null ? null : Number(r.atasan_dokumen_id),
@@ -308,12 +346,13 @@ export async function salinTahun(tahunSumberIki: string, tahunTarget: string, us
  * berurutan — innodb_autoinc_lock_mode=2 bisa interleaved).
  */
 export async function saveDokumen(id: number, input: SaveDokumenInput, userId: number): Promise<number> {
-  const current = await queryOne<{ status: string; version: number }>(
-    sql`SELECT status, version FROM iki_dokumen WHERE id = ${id} LIMIT 1`,
+  const current = await queryOne<{ status: string; version: number; varian: IkiVarian }>(
+    sql`SELECT status, version, varian FROM iki_dokumen WHERE id = ${id} LIMIT 1`,
   );
   if (!current) throw new IkiNotFoundError();
   if (current.status === 'FINAL') throw new IkiFinalError();
   if (current.version !== input.expected_version) throw new IkiVersionConflictError();
+  if ((current.varian === 'CUSTOM') !== (input.varian === 'CUSTOM')) throw new IkiVarianTerkunciError();
 
   // L68: soft-FK existence checks di luar transaksi (read-only)
   if (input.atasan_dokumen_id) {
@@ -347,6 +386,7 @@ export async function saveDokumen(id: number, input: SaveDokumenInput, userId: n
       UPDATE iki_dokumen SET
         varian = ${input.varian},
         jenis = ${input.jenis ?? 'MURNI'},
+        tabel_custom = ${input.varian === 'CUSTOM' && input.tabel_custom ? JSON.stringify(bacaTabelCustom(input.tabel_custom)) : null},
         opd = ${input.opd},
         nama = ${input.nama},
         nip = ${input.nip},
@@ -569,6 +609,8 @@ export async function restoreVersi(dokumenId: number, versiId: number, userId: n
     kota_ttd: snap.kota_ttd,
     tanggal_ttd: snap.tanggal_ttd,
     atasan_dokumen_id: snap.atasan_dokumen_id,
+    // Foto sebelum varian CUSTOM ada tidak punya kolom ini — mereka memang STANDAR/DIREKTUR.
+    tabel_custom: snap.varian === 'CUSTOM' ? (snap.tabel_custom as SaveDokumenInput['tabel_custom']) ?? null : null,
     rhk: snap.rhk.map((r) => ({
       no_urut: r.no_urut,
       rhk_intervensi: r.rhk_intervensi,
@@ -592,4 +634,53 @@ export async function restoreVersi(dokumenId: number, versiId: number, userId: n
     })),
   };
   return saveDokumen(dokumenId, input, userId);
+}
+
+// ─── Templat tabel CUSTOM (docs/CONCEPT-iki-custom.md §4) ────────────────────
+// Dikelola semua pemegang akses IKI (keputusan #2). Dokumen MENYALIN payload saat dibuat, jadi
+// mengubah/menghapus templat tidak menyentuh dokumen mana pun — `iki_dokumen.templat_id` cuma jejak.
+
+export type IkiTemplatRow = { id: number; nama: string; ncol: number; nrow: number; updated_at: string };
+
+export class IkiTemplatNamaDipakaiError extends Error {
+  constructor(nama: string) { super(`Nama templat "${nama}" sudah dipakai — pilih nama lain.`); }
+}
+
+export async function listTemplat(): Promise<IkiTemplatRow[]> {
+  return queryMany<IkiTemplatRow>(sql`
+    SELECT id, nama, JSON_LENGTH(payload, '$.kolom') AS ncol, JSON_LENGTH(payload, '$.rows') AS nrow,
+           DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') AS updated_at
+    FROM iki_templat ORDER BY nama ASC`);
+}
+
+const dupNama = (err: unknown) => (err as { code?: string }).code === 'ER_DUP_ENTRY';
+
+export async function buatTemplat(nama: string, payload: unknown, userId: number): Promise<number> {
+  try {
+    const res = await execWrite(sql`
+      INSERT INTO iki_templat (nama, payload, created_by, updated_by)
+      VALUES (${nama}, ${JSON.stringify(bacaTabelCustom(payload))}, ${userId}, ${userId})`);
+    return res.insertId;
+  } catch (err) {
+    if (dupNama(err)) throw new IkiTemplatNamaDipakaiError(nama);
+    throw err;
+  }
+}
+
+export async function ubahNamaTemplat(id: number, nama: string, userId: number): Promise<void> {
+  try {
+    const res = await execWrite(sql`UPDATE iki_templat SET nama = ${nama}, updated_by = ${userId} WHERE id = ${id}`);
+    if (res.affectedRows === 0) throw new IkiTemplatTidakAdaError();
+  } catch (err) {
+    if (dupNama(err)) throw new IkiTemplatNamaDipakaiError(nama);
+    throw err;
+  }
+}
+
+/** Memulangkan nama templat yang dihapus (untuk jejak audit). */
+export async function hapusTemplat(id: number): Promise<string> {
+  const t = await queryOne<{ nama: string }>(sql`SELECT nama FROM iki_templat WHERE id = ${id} LIMIT 1`);
+  if (!t) throw new IkiTemplatTidakAdaError();
+  await execWrite(sql`DELETE FROM iki_templat WHERE id = ${id}`);
+  return t.nama;
 }

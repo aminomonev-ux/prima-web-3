@@ -153,14 +153,15 @@ export const SectionMoveSchema = z.object({
 export const SectionDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
 
 // ── Block payloads ───────────────────────────────────────────────
-const AlignSchema = z.enum(['left', 'center', 'right', 'justify']);
+export const AlignSchema = z.enum(['left', 'center', 'right', 'justify']);
 const VAlignSchema = z.enum(['top', 'middle', 'bottom']);
 // Sel tabel: string (legacy) ATAU objek (merge/format). Selalu dinormalisasi ke objek.
-const CellSchema = z.union([
+// Pabrik karena batas colspan = batas kolom pemakainya: LKJIP 12, IKI CUSTOM 24 (docs/CONCEPT-iki-custom.md §9.1).
+export const buatCellSchema = (batasKolom: number) => z.union([
   z.string().max(2000),
   z.object({
     v:  z.string().max(2000).default(''),
-    cs: z.coerce.number().int().min(1).max(12).optional(),
+    cs: z.coerce.number().int().min(1).max(batasKolom).optional(),
     rs: z.coerce.number().int().min(1).max(500).optional(),
     h:  z.boolean().optional(),
     al: AlignSchema.optional(),
@@ -183,6 +184,7 @@ const CellSchema = z.union([
     fc:  z.string().regex(/^[0-9a-fA-F]{6}$/).optional(),
   }),
 ]).transform(c => (typeof c === 'string' ? { v: c } : c));
+const CellSchema = buatCellSchema(12);
 
 const SUMBER_TAUTAN = ['kinerja-rekap', 'renaksi-cetak', 'kinerja-laporan', 'blud-realisasi', 'pk'] as const;
 const SetelanTautanSchema = z.record(z.string(), z.unknown()).refine(s => JSON.stringify(s).length <= 4000, 'Setelan tautan terlalu besar');

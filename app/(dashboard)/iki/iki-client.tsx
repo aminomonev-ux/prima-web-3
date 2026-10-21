@@ -15,8 +15,8 @@ import { stripGolongan } from '@/lib/iki/layout';
 import { susunPohon, ringkasPohon, saringPohon, dokumenZip, jalurZip, type BarisPohon, type JenisIki } from '@/lib/iki/beranda';
 import ImportIkiModal from './ImportIkiModal';
 import PohonIki, { type AksiPohon } from './PohonIki';
-import { pejabatOptionValue, resolvePejabat, nameInitials } from './_lib/types';
-import type { IkiJenisDokumen, IkiListRow, IkiVarian, PejabatSuggest } from './_lib/types';
+import { pejabatOptionValue, resolvePejabat, nameInitials, labelJumlahIsi } from './_lib/types';
+import type { IkiJenisDokumen, IkiListRow, IkiTemplat, IkiVarian, PejabatSuggest } from './_lib/types';
 import { bolehBatalkanFinal } from '@/lib/constants';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
@@ -33,7 +33,7 @@ interface Props {
   tahunSekarang: string;
 }
 
-type FormBuat = { tahun: string; varian: IkiVarian; jenis: IkiJenisDokumen; nama: string; nip: string; jabatan: string; pangkat: string };
+type FormBuat = { tahun: string; varian: IkiVarian; jenis: IkiJenisDokumen; nama: string; nip: string; jabatan: string; pangkat: string; templat_id: number | null };
 
 const labelJenis = (j: JenisIki) => (j === 'PERUBAHAN' ? 'Perubahan' : 'Murni');
 const MAX_ZIP = 100;
@@ -49,8 +49,58 @@ export default function IkiClient({ username, role, themePreference, initialRows
   const [showImportExcel, setShowImportExcel] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<FormBuat>({
-    tahun: tahunSekarang, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '',
+    tahun: tahunSekarang, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', templat_id: null,
   });
+
+  // Templat tabel varian Custom (docs/CONCEPT-iki-custom.md §4) — dimuat saat varian itu dipilih.
+  const [templat, setTemplat] = useState<IkiTemplat[] | null>(null);
+  const [gantiNamaTemplat, setGantiNamaTemplat] = useState<string | null>(null);
+  const perluTemplat = showCreate && form.varian === 'CUSTOM';
+  useEffect(() => {
+    if (!perluTemplat) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/iki/templat');
+        const json = await res.json();
+        if (alive) setTemplat(json.ok ? json.rows : []);
+      } catch { if (alive) setTemplat([]); }
+    })();
+    return () => { alive = false; };
+  }, [perluTemplat]);
+  const templatTerpilih = templat?.find(t => t.id === form.templat_id) ?? null;
+
+  async function simpanNamaTemplat() {
+    const nama = gantiNamaTemplat?.trim();
+    if (!templatTerpilih || !nama) return;
+    try {
+      const res = await fetch('/api/iki/templat', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: templatTerpilih.id, nama }),
+      });
+      const json = await res.json();
+      if (!json.ok) { toast.error(json.message ?? 'Gagal mengganti nama'); return; }
+      setTemplat(ts => (ts ?? []).map(t => (t.id === templatTerpilih.id ? { ...t, nama } : t)).sort((a, b) => a.nama.localeCompare(b.nama)));
+      setGantiNamaTemplat(null);
+      toast.success('Nama templat diganti');
+    } catch { toast.error('Gagal terhubung ke server'); }
+  }
+  async function hapusTemplatTerpilih() {
+    if (!templatTerpilih) return;
+    if (!(await confirmDialog({
+      title: 'Hapus templat',
+      message: `Hapus templat "${templatTerpilih.nama}"? Dokumen yang sudah dibuat darinya tidak berubah — isinya sudah disalin saat dibuat.`,
+      variant: 'danger',
+    }))) return;
+    try {
+      const res = await fetch(`/api/iki/templat?id=${templatTerpilih.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!json.ok) { toast.error(json.message ?? 'Gagal menghapus templat'); return; }
+      setTemplat(ts => (ts ?? []).filter(t => t.id !== templatTerpilih.id));
+      setForm(f => ({ ...f, templat_id: null }));
+      toast.success('Templat dihapus');
+    } catch { toast.error('Gagal terhubung ke server'); }
+  }
 
   // Suggest dari pk_pejabat (Master Pejabat PK) — pola sama dengan editor,
   // best-effort: gagal fetch = form tetap manual.
@@ -78,7 +128,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
       nip: p.nip ?? f.nip,
       jabatan: p.jabatan || f.jabatan,
       pangkat: stripGolongan(p.pangkat),
-      varian: p.jabatan?.trim().toUpperCase() === 'DIREKTUR' ? 'DIREKTUR' : f.varian,
+      varian: f.varian !== 'CUSTOM' && p.jabatan?.trim().toUpperCase() === 'DIREKTUR' ? 'DIREKTUR' : f.varian,
     }));
   }
 
@@ -161,7 +211,8 @@ export default function IkiClient({ username, role, themePreference, initialRows
   }
 
   function openCreate(isi?: Partial<FormBuat>) {
-    setForm({ tahun, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', ...isi });
+    setForm({ tahun, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', templat_id: null, ...isi });
+    setGantiNamaTemplat(null);
     setShowCreate(true);
   }
   function identitasBaris(b: BarisPohon<IkiListRow>): Partial<FormBuat> {
@@ -220,7 +271,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
     try {
       const res = await fetch('/api/iki', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, templat_id: form.varian === 'CUSTOM' ? form.templat_id : null }),
       });
       const json = await res.json();
       if (!json.ok) { toast.error(json.message ?? 'Gagal membuat dokumen'); return; }
@@ -368,7 +419,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
     try {
       // Hanya pustaka format terpilih yang di-import — exceljs ~600KB, jspdf sekelas;
       // memuat keduanya membuat unduhan PDF ikut menunggu paket yang tak dipakai.
-      const [{ default: PizZip }, { ikiFilename }, gen] = await Promise.all([
+      const [{ default: PizZip }, { ikiFilename, alasanTakBisaCetak }, gen] = await Promise.all([
         import('pizzip'),
         import('@/lib/iki/layout'),
         zipFormat === 'xlsx'
@@ -384,7 +435,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
         try {
           const res = await fetch(`/api/iki/${r.id}`);
           const json = await res.json();
-          if (!json.ok || !json.data?.rhk?.length) { skipped++; continue; }
+          if (!json.ok || alasanTakBisaCetak(json.data)) { skipped++; continue; }
           berkas.push({
             jenis: r.jenis,
             nama: `${r.status === 'DRAFT' ? 'DRAFT_' : ''}${ikiFilename(json.data, r.tahun, zipFormat)}`,
@@ -392,7 +443,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
           });
         } catch { skipped++; }
       }
-      if (berkas.length === 0) { toast.error('Tidak ada dokumen yang bisa di-export (RHK kosong?)'); return; }
+      if (berkas.length === 0) { toast.error('Tidak ada dokumen yang bisa di-export (RHK / tabel kosong?)'); return; }
       const zip = new PizZip();
       jalurZip(berkas).forEach((jalur, i) => zip.file(jalur, berkas[i].bytes));
       const blob = zip.generate({ type: 'blob', compression: 'DEFLATE' });
@@ -408,7 +459,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ format: zipFormat, mode: 'massal', tahun, jumlah: berkas.length }),
       }).catch(() => {});
-      toast.success(`${berkas.length} ${labelFormat} di-zip${skipped ? `, ${skipped} dilewati (RHK kosong/gagal)` : ''}`);
+      toast.success(`${berkas.length} ${labelFormat} di-zip${skipped ? `, ${skipped} dilewati (isi kosong/gagal)` : ''}`);
       setShowZip(false);
     } catch { toast.error('Gagal membuat zip'); }
     finally { setZipBusy(false); setZipProgress(''); }
@@ -546,6 +597,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
                         <div className="iki-badges">
                           {selectMode && <span className={`iki-check${selected.has(d.id) ? ' on' : ''}`}>{selected.has(d.id) && <Check size={13} strokeWidth={3} />}</span>}
                           {d.varian === 'DIREKTUR' && <span className="iki-badge dir">DIREKTUR</span>}
+                          {d.varian === 'CUSTOM' && <span className="iki-badge custom">CUSTOM</span>}
                           {d.jenis === 'PERUBAHAN' && <span className="iki-badge ubah">PERUBAHAN</span>}
                           <span className={`iki-badge ${d.status === 'FINAL' ? 'final' : 'draft'}`}>{d.status}</span>
                         </div>
@@ -554,7 +606,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
                       <div className="iki-card-nama">{d.nama}</div>
                       <div className="iki-card-foot">
                         <span className="iki-cnip">NIP {d.nip}</span>
-                        <span className="iki-rhk">{d.jumlah_rhk} RHK</span>
+                        <span className="iki-rhk">{labelJumlahIsi(d)}</span>
                       </div>
                       {!selectMode && (
                         <div className="iki-card-actions" onClick={e => e.stopPropagation()}>
@@ -606,15 +658,44 @@ export default function IkiClient({ username, role, themePreference, initialRows
             </label>
             <label className="iki-field">
               <span>Varian Form</span>
-              <div className="iki-tpl">
+              <div className="iki-tpl tiga">
                 <button type="button" className={`iki-tpl-opt${form.varian === 'STANDAR' ? ' on' : ''}`} onClick={() => setForm(f => ({ ...f, varian: 'STANDAR' }))}>
                   <b>Standar</b><span>11 kolom + RHK diintervensi (Wadir/Kabid/Kabag/Kasubag)</span>
                 </button>
                 <button type="button" className={`iki-tpl-opt${form.varian === 'DIREKTUR' ? ' on' : ''}`} onClick={() => setForm(f => ({ ...f, varian: 'DIREKTUR' }))}>
                   <b>Direktur</b><span>8 kolom, ttd tunggal (pejabat puncak)</span>
                 </button>
+                <button type="button" className={`iki-tpl-opt${form.varian === 'CUSTOM' ? ' on' : ''}`} onClick={() => setForm(f => ({ ...f, varian: 'CUSTOM' }))}>
+                  <b>Custom</b><span>Tabel dirancang sendiri — sampai 24 kolom, gabung sel bebas</span>
+                </button>
               </div>
             </label>
+            {form.varian === 'CUSTOM' && (
+              <div className="iki-field">
+                <span>Bentuk tabel awal</span>
+                <select value={form.templat_id ?? ''} disabled={templat === null}
+                  onChange={e => { setForm(f => ({ ...f, templat_id: e.target.value ? Number(e.target.value) : null })); setGantiNamaTemplat(null); }}>
+                  <option value="">{templat === null ? 'Memuat templat…' : 'Tabel bawaan (4 kolom: No., RHK, Indikator, Target)'}</option>
+                  {(templat ?? []).map(t => <option key={t.id} value={t.id}>{t.nama} — {t.ncol} kolom</option>)}
+                </select>
+                {templatTerpilih && (gantiNamaTemplat === null ? (
+                  <span className="iki-tpl-kelola">
+                    <button type="button" onClick={() => setGantiNamaTemplat(templatTerpilih.nama)}>Ganti nama</button>
+                    <button type="button" className="bahaya" onClick={() => void hapusTemplatTerpilih()}>Hapus templat</button>
+                    <span>diubah {templatTerpilih.updated_at}</span>
+                  </span>
+                ) : (
+                  <span className="iki-tpl-kelola">
+                    <input value={gantiNamaTemplat} maxLength={150} aria-label="Nama templat baru" autoFocus
+                      onChange={e => setGantiNamaTemplat(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void simpanNamaTemplat(); } else if (e.key === 'Escape') setGantiNamaTemplat(null); }} />
+                    <button type="button" onClick={() => void simpanNamaTemplat()}>Simpan</button>
+                    <button type="button" onClick={() => setGantiNamaTemplat(null)}>Batal</button>
+                  </span>
+                ))}
+                <span className="iki-suggest-hint">Tabel DISALIN ke dokumen — mengubah atau menghapus templat sesudahnya tidak menyentuh dokumen ini. Templat dibuat dari editor dokumen Custom (tombol &ldquo;Simpan sebagai templat&rdquo;).</span>
+              </div>
+            )}
             <label className="iki-field">
               <span>Jenis Dokumen</span>
               <select value={form.jenis} onChange={e => setForm(f => ({ ...f, jenis: e.target.value as IkiJenisDokumen }))}>
@@ -839,6 +920,7 @@ const LIST_CSS = `
   .iki-badge.draft { background: rgba(124,92,252,0.16); color: #B9A6FF; border: 1px solid rgba(124,92,252,0.4); }
   .iki-badge.final { background: rgba(29,158,117,0.16); color: #7BE0BD; border: 1px solid rgba(29,158,117,0.4); }
   .iki-badge.dir { background: rgba(239,159,39,0.14); color: #F5C77E; border: 1px solid rgba(239,159,39,0.4); }
+  .iki-badge.custom { background: rgba(55,138,221,0.15); color: #8FC1F2; border: 1px solid rgba(55,138,221,0.4); }
   .iki-badge.ubah { background: rgba(186,117,23,0.16); color: #FAC775; border: 1px solid rgba(186,117,23,0.45); }
   .iki-card-jabatan { font-size: 13px; font-weight: 700; line-height: 1.35; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 35px; }
   .iki-card-nama { font-size: 12px; color: #B5D4F4; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -856,6 +938,13 @@ const LIST_CSS = `
   .iki-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: #B5D4F4; margin-bottom: 12px; }
   .iki-field input { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 9px 11px; color: #E6F1FB; font-size: 13px; }
   .iki-field input:focus { outline: none; border-color: #185FA5; }
+  .iki-field select { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 9px 11px; color: #E6F1FB; font-size: 13px; font-family: inherit; }
+  .iki-tpl-kelola { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: #85B7EB; }
+  .iki-tpl-kelola button { background: rgba(255,255,255,0.05); border: 1px solid #0C447C; color: #B5D4F4; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 11.5px; }
+  .iki-tpl-kelola button:hover { border-color: #185FA5; color: #E6F1FB; }
+  .iki-tpl-kelola button.bahaya { color: #FCA5A5; }
+  .iki-tpl-kelola button.bahaya:hover { border-color: #E24B4A; }
+  .iki-tpl-kelola input { flex: 1 1 160px; min-width: 0; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 5px 8px; color: #E6F1FB; font-size: 12px; }
   .iki-hint { font-size: 11.5px; color: #85B7EB; line-height: 1.5; margin: 0 0 18px; }
   .iki-suggest-hint { font-size: 10.5px; color: #7BE0BD; line-height: 1.4; }
   .iki-tpl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -951,6 +1040,11 @@ const LIST_CSS = `
   [data-theme="light"] .iki-suggest-hint { color: #0F8A63; }
   [data-theme="light"] .iki-field input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
   [data-theme="light"] .iki-tpl-opt { background: #F9FAFB; border-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .iki-badge.custom { background: #E0EDFB; color: #1E5FA5; border-color: rgba(55,138,221,.45); }
+  [data-theme="light"] .iki-field select, [data-theme="light"] .iki-tpl-kelola input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .iki-tpl-kelola { color: #6B7280; }
+  [data-theme="light"] .iki-tpl-kelola button { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #374151; }
+  [data-theme="light"] .iki-tpl-kelola button.bahaya { color: #DC2626; }
   [data-theme="light"] .iki-tpl-opt b { color: #111827; }
   [data-theme="light"] .iki-tpl-opt span { color: #6B7280; }
   [data-theme="light"] .iki-tpl-opt.on { border-color: #7C5CFC; background: rgba(124,92,252,0.1); }

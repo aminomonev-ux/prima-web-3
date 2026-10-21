@@ -1,6 +1,6 @@
 # CONCEPT — IKI varian CUSTOM (tabel bebas ala LKJIP)
 
-> Status: **konsep, belum dieksekusi** (2026-10-20). Keputusan bertanda **[USULAN]** menunggu jawaban pemilik.
+> Status: **keputusan diambil 2026-10-21, dieksekusi** (Tahap 0–2). Keputusan → §9.
 > Terkait: `docs/CONCEPT-iki.md` (varian STANDAR/DIREKTUR), `docs/CONCEPT-lkjip-tabel-excel.md` (mesin tabel yang dipakai ulang).
 
 ## 1. Masalah
@@ -14,9 +14,9 @@ Yang diminta: varian **ketiga** yang tabelnya dirancang sendiri di web — kolom
 | Bagian | Asal isi | Bisa diubah bentuknya? |
 |---|---|---|
 | Judul (`docTitle`, + " PERUBAHAN") | bawaan | tidak |
-| I. Data Pribadi (OPD, Nama, NIP, Jabatan, Ikhtisar) | kolom `iki_dokumen` | tidak **[USULAN]** |
+| I. Data Pribadi (OPD, Nama, NIP, Jabatan, Ikhtisar) | kolom `iki_dokumen` | tidak (keputusan #1) |
 | **II. Tabel** | **tabel bebas** | **ya — seluruhnya** |
-| Blok tanda tangan (`buildTtd`) | kolom `iki_dokumen` | tidak **[USULAN]** |
+| Blok tanda tangan (`buildTtd`) | kolom `iki_dokumen` | tidak (keputusan #1) |
 
 Sebab Data Pribadi & tanda tangan tetap bawaan: isinya sudah ada di `iki_dokumen` (autofill dari Master Pejabat PK), dan kalau ikut jadi sel bebas, nama/NIP/pangkat harus diketik ulang di tiap dokumen — sumber salah ketik yang baru saja kejadian (pangkat kosong di server kantor, 2026-10-20).
 
@@ -37,7 +37,7 @@ Satu tahun ± 20 dokumen dengan bentuk tabel yang sama. Merancang gabungan sel 2
 - **Simpan sebagai templat** dari dokumen CUSTOM mana pun: menyimpan BENTUK (kepala, lebar kolom, rata, gabungan kepala, pola baris contoh) — bukan isinya.
 - **Buat dari templat** di modal Buat IKI (varian CUSTOM → pilih templat).
 - Dokumen **menyalin** templat saat dibuat. Mengubah/menghapus templat sesudahnya **tidak** mengubah dokumen yang sudah ada — dokumen FINAL yang sudah ditandatangani tidak boleh bergeser diam-diam (pelajaran yang sama dengan snapshot LKJIP & Rekap PJ BLUD).
-- Hak mengelola templat: **SA/Admin** **[USULAN]** — templat dipakai semua orang, mengubahnya mengubah titik awal semua dokumen baru. Memakai templat: semua pemegang akses IKI.
+- Hak mengelola templat: **semua pemegang akses IKI** (keputusan #2) — buat, ganti nama, hapus; tiap aksi tercatat di audit. Menghapus/mengubah templat tidak menyentuh dokumen yang sudah dibuat darinya.
 
 ## 5. Data model (draf — final saat eksekusi)
 
@@ -67,7 +67,7 @@ CREATE TABLE iki_templat (
 ## 6. Unduhan
 
 - **PDF** (jspdf-autotable — mendukung `rowSpan`/`colSpan`) & **Excel** (exceljs `mergeCells`) membaca kisi yang sama lewat SATU penyusun rangka, cermin peran `buildIkiGrid` untuk STANDAR/DIREKTUR.
-- Lebar kolom disusutkan ke lebar bidang tulis A4 mendatar (± 281 mm) — pola `lebarKolomWord` LKJIP. Kertas F4/Legal **[USULAN: belum, cukup A4]**.
+- Lebar kolom disusutkan sebanding ke lebar bidang tulis kertas mendatar — **A4 (± 281 mm) atau F4 (± 314 mm), dipilih per dokumen** (keputusan #3) — pola `lebarKolomWord` LKJIP.
 - Format sel (tebal, miring, rata, teks tegak, warna kepala) ikut ke keduanya; sel kepala diulang di tiap halaman PDF.
 - Unduh Zip, Riwayat Versi (`iki_versi.snapshot` ikut membawa `tabel_custom`), dan Duplikat ke tahun lain ikut menangani varian ini.
 
@@ -82,15 +82,50 @@ Tahap 3 (opsional): **peran kolom** — tandai kolom sebagai RHK / Indikator / T
 
 ## 8. Tahapan
 
-| Tahap | Isi | Catatan |
+| Tahap | Isi | Catatan | Status |
+|---|---|---|---|
+| 0 | Pindahkan editor tabel LKJIP ke komponen bersama, tanpa perubahan perilaku | suite LKJIP hijau = syarat lulus | **selesai 2026-10-21** |
+| 1 | Varian CUSTOM: buat, sunting tabel, simpan (CAS `version`), PDF, Excel, Zip, versi, duplikat | migrasi `migration-iki-custom.sql` | **selesai 2026-10-21** |
+| 2 | Templat: simpan dari dokumen, pakai saat Buat IKI, kelola (ganti nama/hapus) | | **selesai 2026-10-21** |
+| 3 | Peran kolom → impor Renaksi/atasan & validasi untuk CUSTOM | opsional | belum |
+
+## 9. Keputusan (pemilik, 2026-10-21)
+
+| # | Pertanyaan | Keputusan |
 |---|---|---|
-| 0 | Pindahkan editor tabel LKJIP ke komponen bersama, tanpa perubahan perilaku | suite LKJIP hijau = syarat lulus |
-| 1 | Varian CUSTOM: buat, sunting tabel, simpan (CAS `version`), PDF, Excel, Zip, versi, duplikat | migrasi `migration-iki-custom.sql` |
-| 2 | Templat: simpan dari dokumen, pakai saat Buat IKI, kelola (ganti nama/hapus) | |
-| 3 | Peran kolom → impor Renaksi/atasan & validasi untuk CUSTOM | opsional |
+| 1 | Data Pribadi & tanda tangan | **Tetap bawaan** — yang dirancang bebas hanya tabel bagian II |
+| 2 | Pengelola templat | **Semua pemegang akses IKI** (buat, ganti nama, hapus) — jejaknya di audit `IKI_*` |
+| 3 | Kertas | **A4 atau F4 mendatar, dipilih per dokumen** (ikut tersimpan di templat) |
+| 4 | Batas kolom | **24** (LKJIP tetap 12) |
 
-## 9. Keputusan yang ditunggu
+### 9.1 Batas kolom — temuan saat eksekusi
 
-1. Data Pribadi & tanda tangan tetap bawaan? **[USULAN: ya]**
-2. Pengelola templat: SA/Admin saja, atau semua pemegang akses IKI? **[USULAN: SA/Admin]**
-3. Kertas: A4 mendatar saja, atau perlu F4/Legal? **[USULAN: A4 dulu]**
+Mesin tabel LKJIP membatasi **12 kolom** di empat tempat: `BATAS_KOLOM_TABEL` (editor: sisip, tempel, "+ Kolom"), `TabelPayloadSchema` (`kolom`/`align`/`colWidths`/baris `.max(12)`), `CellSchema.cs` `.max(12)`, dan `htmlKeSel` (colspan tempelan dijepit 12). Sebabnya halaman Word A4 tegak. IKI tidak boleh ikut batas itu, LKJIP tidak boleh ikut longgar:
+- editor menerima `batasKolom` (bawaan `BATAS_KOLOM_TABEL`), `htmlKeSel(html, batasKolom)` idem;
+- skema sel jadi pabrik `buatCellSchema(batasKolom)` — LKJIP memanggilnya dengan 12, IKI dengan 24.
+
+Lebar per kolom di kertas (huruf PDF 7 pt): A4 mendatar 281 mm, F4 mendatar 314 mm (margin 8 mm). 20 kolom ≈ 14 mm/kolom di A4, ≈ 15,7 mm di F4 — cukup untuk angka/target; kolom teks panjang (RHK) perlu dilebarkan dan yang lain menyempit. Lebar kolom editor disusutkan sebanding ke lebar kertas saat dicetak (pola `lebarKolomWord`).
+
+### 9.2 Tanda tangan CUSTOM
+
+Satu aturan: **Nama Atasan terisi → dua blok** (Mengetahui atasan + pegawai, seperti STANDAR); **kosong → satu blok** pegawai di kanan. Tidak ada pilihan terpisah yang bisa berbeda pendapat dengan isiannya.
+
+### 9.3 Varian CUSTOM tidak bisa ditukar
+
+STANDAR ⇄ DIREKTUR tetap bisa ditukar di editor (isinya sama-sama RHK). CUSTOM ⇄ lainnya **ditolak di server** (`IkiVarianTerkunciError`): simpan itu hapus-lalu-tulis-ulang, jadi menukar ke CUSTOM membuang seluruh RHK dan sebaliknya membuang tabelnya — tanpa satu pertanyaan pun. Pintu lain yang sama: Impor Excel "timpa isi dokumen yang sudah ada" ke dokumen CUSTOM ikut ditolak pagar yang sama (L69).
+
+### 9.4 Satu tombol Simpan
+
+Di LKJIP editor tabel punya tombol "Simpan Tabel" sendiri (satu blok = satu simpanan). Di IKI tabel adalah bagian dokumen yang disimpan bersama Data Pribadi & tanda tangan oleh tombol **Simpan** halaman (CAS `version`) — editor melaporkan perubahan lewat `onUbah`, tanpa tombol simpan kedua (L78: satu sasaran, satu penulis).
+
+## 10. Hasil eksekusi (2026-10-21)
+
+**Tahap 0 — editor bersama.** `TabelEditor.tsx`, `usePilihanSel.ts`, `RowMenu.tsx` pindah ke `components/tabel/`; CSS tabel (174 aturan, urutan dipertahankan) ke `components/tabel/tabel-css.ts` dan disisipkan ke ED_CSS LKJIP di tempat aturan tabel pertama dulu berada. Props netral: `payload`, `batasKolom`, `kertas`, `onSave` (tombol "Simpan Tabel") / `onUbah` (tiap perubahan, isi saat dibuka jadi patokan), `lkjip` (judul, sumber, cetak Word, tautan — modal tautannya dioper editor LKJIP, komponen bersama tidak menjangkau berkas layar LKJIP). Bukti tanpa perubahan perilaku: potret gaya terhitung 147 elemen × 41 properti di tema gelap & terang identik sebelum/sesudah (2 selisih = keadaan `:focus`), suite LKJIP hijau (jalur berkas di ujinya disesuaikan).
+
+**Cacat lama ikut dibereskan (terlihat di layar, bukan dari kode):**
+- Tabel editor ber-`width: 'auto'` DIPERAS ke lebar wadahnya bila kolomnya lebih lebar — LKJIP 5 × 140 px tampil 107–122 px, IKI 20 kolom 17 px. Lebar yang diatur (dan dicetak Word) tidak sama dengan yang tampil, garis batas kertas meleset dari kolomnya. Kini lebar tabel = jumlah lebar kolom, wadahnya bergulir mendatar.
+- Editor IKI tidak punya tata letak ponsel: kisi Data Pribadi 3 kolom memaksa halaman ± 572 px di layar 375 px (semua varian). Media query ≤ 760 px.
+
+**Tahap 1–2.** `lib/iki/custom.ts` (MURNI): `TabelCustom`, `bacaTabelCustom`, `tabelCustomAwal`, `bentukTemplat`, `susunKisiCetak` (SATU penyusun kisi untuk PDF & Excel — rumus dihitung, galat "—", kolom No., gaya tabel lewat `gayaSel`/`selBergaya` yang sama dengan editor, kepala abu IKI), `lebarKolomMm`. Kertas F4 = Folio 8,5 × 13 in (Excel `paperSize` 14; tipe exceljs tidak mengenal nilai itu, Excel mengenalnya). Teks tegak di PDF digambar sendiri di `didDrawCell` (autoTable tidak memutar teks); **garis bawah huruf tidak tampil di PDF** (jsPDF tidak mendukung) — Excel membawanya. Data: `listDokumen` menghitung baris badan untuk CUSTOM; `createDokumen` menyalin templat (bukan merujuk); `saveDokumen` menolak tukar varian (`IkiVarianTerkunciError` → 409 `VARIAN_TERKUNCI`); duplikat & pulihkan versi membawa tabel. Templat: `/api/iki/templat` (GET/POST/PATCH/DELETE, `guard()` modul IKI, audit `IKI_CREATE/UPDATE/DELETE`). Layar: modal Buat IKI (varian ketiga + pilih/ganti nama/hapus templat), editor (Kertas, Simpan sebagai templat, tabel di bagian II), lencana CUSTOM & "N baris" di daftar, Impor Excel tidak menawarkan "timpa" dokumen CUSTOM.
+
+**Uji.** `npx tsx scripts/test-iki-custom.mts` (89; bagian H MySQL kotak pasir 2094–2095, auto-bersih), **46 uji mutasi tertangkap** — 2 sempat LOLOS, keduanya kelemahan tes: tabel 24 kolom D1 dibangun lewat `bacaTabelCustom` yang ikut terpangkas batas mutan (A3 pun membandingkan dengan konstanta yang diuji), dan H6 `rows[3][3]` meledak alih-alih mencatat FAIL. Di peramban (tahun 2096, dibersihkan): buat CUSTOM lewat modal, 4 → 20 → berhenti 24 kolom, rumus & No. otomatis, F4 menggeser garis kertas, Simpan & muat ulang, Paskan ke lebar kertas, Simpan sebagai templat → Buat dari templat (ganti nama di modal), PDF F4 (dibuka di penampil) & Excel (disadap, tidak terunduh), 409 tukar varian lewat permintaan langsung, tema terang, 375 px. **Belum dicoba:** Unduh Zip berisi dokumen CUSTOM lewat layar (aturannya teruji: `alasanTakBisaCetak`), membuka berkas Excel CUSTOM di Microsoft Excel sungguhan.

@@ -180,7 +180,8 @@ export default function ImportIkiModal({ rows, onClose, onDone, initialJenis = '
   const totalRhk = parsed?.groups.reduce((s, g) => s + g.rhkList.length, 0) ?? 0;
   const canApply = !!parsed && !!pemilik && !!pemilik.nama && !!pemilik.nip && /^\d{4}$/.test(tahun)
     && (parsed.varian !== 'STANDAR' || !!atasan)
-    && (!dupRow || (dupRow.status === 'DRAFT' && timpa));
+    // Dokumen CUSTOM berisi tabel, bukan RHK — menimpanya dengan hasil impor ditolak server juga (konsep iki-custom §9.3).
+    && (!dupRow || (dupRow.status === 'DRAFT' && dupRow.varian !== 'CUSTOM' && timpa));
 
   async function apply() {
     if (!parsed || !pemilik) return;
@@ -332,9 +333,11 @@ export default function ImportIkiModal({ rows, onClose, onDone, initialJenis = '
             )}
 
             {dupRow && (
-              <div className={`iki-imp-box ${dupRow.status === 'FINAL' ? 'err' : 'warn'}`}>
+              <div className={`iki-imp-box ${dupRow.status === 'FINAL' || dupRow.varian === 'CUSTOM' ? 'err' : 'warn'}`}>
                 <AlertCircle size={14} />
-                {dupRow.status === 'FINAL' ? (
+                {dupRow.varian === 'CUSTOM' ? (
+                  <span>Dokumen {dupRow.jabatan} ({dupRow.nama}) tahun {tahun} sudah ada sebagai varian <b>CUSTOM</b> (tabel sendiri) — isinya tidak bisa ditimpa hasil impor RHK. Pilih jenis dokumen lain atau batalkan.</span>
+                ) : dupRow.status === 'FINAL' ? (
                   <span>Dokumen {dupRow.jabatan} ({dupRow.nama}) tahun {tahun} sudah <b>FINAL</b> — tidak bisa ditimpa. Buka kunci dulu atau batalkan.</span>
                 ) : (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>

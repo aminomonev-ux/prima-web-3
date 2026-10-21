@@ -1,6 +1,8 @@
 'use client';
 /* Editor dokumen IKI — Data Pribadi + grup RHK (4 baris TW per RHK) +
-   import Renaksi / IKI Atasan + export PDF/Excel (lib/iki). */
+   import Renaksi / IKI Atasan + export PDF/Excel (lib/iki).
+   Varian CUSTOM (docs/CONCEPT-iki-custom.md): bagian II = editor tabel bersama (components/tabel), disimpan
+   bersama Data Pribadi oleh SATU tombol Simpan halaman (§9.4). */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -8,10 +10,15 @@ import { toast } from 'sonner';
 import {
   ClipboardCheck, ArrowLeft, Save, Lock, Unlock, Plus, Download,
   FileSpreadsheet, FileText, Import, LayoutGrid, X,
-  AlertTriangle, History, ChevronUp, ChevronDown,
+  AlertTriangle, History, ChevronUp, ChevronDown, LayoutTemplate,
 } from 'lucide-react';
 import { validateRhkTargets } from '@/lib/iki/validate';
 import { stripGolongan } from '@/lib/iki/layout';
+import {
+  bacaTabelCustom, bentukTemplat, lebarTulisPx, BATAS_KOLOM_IKI, DAFTAR_KERTAS, KERTAS_IKI, WARNA_KEPALA_IKI, type KertasIki,
+} from '@/lib/iki/custom';
+import TabelEditor from '@/components/tabel/TabelEditor';
+import { TABEL_CSS } from '@/components/tabel/tabel-css';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -61,6 +68,9 @@ export default function EditorClient({ username, role, themePreference, initialD
 
   const readOnly = doc.status === 'FINAL';
   const isDir = doc.varian === 'DIREKTUR';
+  const isCustom = doc.varian === 'CUSTOM';
+  const kertas: KertasIki = isCustom ? bacaTabelCustom(doc.tabel_custom).kertas : 'A4';
+  const [modalTemplat, setModalTemplat] = useState<{ nama: string; bawaIsi: boolean; menyimpan: boolean } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -187,6 +197,35 @@ export default function EditorClient({ username, role, themePreference, initialD
     setDirty(true);
   }
 
+  // Editor tabel melaporkan tiap perubahan; kertas dipilih di luar editor, jadi dipertahankan di sini.
+  function ubahTabel(p: unknown) {
+    setDoc(d => ({ ...d, tabel_custom: { ...(p as object), kertas: bacaTabelCustom(d.tabel_custom).kertas } }));
+    setDirty(true);
+  }
+  function gantiKertas(k: KertasIki) {
+    setDoc(d => ({ ...d, tabel_custom: { ...(d.tabel_custom as object), kertas: k } }));
+    setDirty(true);
+  }
+
+  /** Templat = BENTUK tabel saat ini (termasuk yang belum disimpan) — dokumen tidak ikut ditulis (konsep §4). */
+  async function simpanTemplat() {
+    if (!modalTemplat?.nama.trim()) { toast.error('Nama templat wajib diisi'); return; }
+    setModalTemplat(m => (m ? { ...m, menyimpan: true } : m));
+    try {
+      const res = await fetch('/api/iki/templat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nama: modalTemplat.nama.trim(), payload: bentukTemplat(bacaTabelCustom(doc.tabel_custom), modalTemplat.bawaIsi) }),
+      });
+      const json = await res.json();
+      if (!json.ok) { toast.error(json.message ?? 'Gagal menyimpan templat'); setModalTemplat(m => (m ? { ...m, menyimpan: false } : m)); return; }
+      toast.success(`Templat "${modalTemplat.nama.trim()}" tersimpan — bisa dipilih saat Buat IKI varian Custom`);
+      setModalTemplat(null);
+    } catch {
+      toast.error('Gagal terhubung ke server');
+      setModalTemplat(m => (m ? { ...m, menyimpan: false } : m));
+    }
+  }
+
   function applyPejabat(p: PejabatSuggest, target: 'diri' | 'atasan') {
     const pangkat = stripGolongan(p.pangkat) || null;
     if (target === 'diri') {
@@ -216,7 +255,8 @@ export default function EditorClient({ username, role, themePreference, initialD
         kota_ttd: doc.kota_ttd,
         tanggal_ttd: doc.tanggal_ttd,
         atasan_dokumen_id: doc.atasan_dokumen_id,
-        rhk: doc.rhk,
+        rhk: isCustom ? [] : doc.rhk,
+        tabel_custom: isCustom ? doc.tabel_custom : null,
       };
       const res = await fetch(`/api/iki/${doc.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -226,6 +266,8 @@ export default function EditorClient({ username, role, themePreference, initialD
       if (!json.ok) {
         if (json.code === 'VERSION_CONFLICT') {
           toast.error('Dokumen diubah pengguna lain — muat ulang halaman.');
+        } else if (json.code === 'VARIAN_TERKUNCI') {
+          toast.error(json.message, { duration: 8000 });
         } else {
           toast.error(json.message ?? 'Gagal menyimpan');
         }
@@ -337,7 +379,8 @@ export default function EditorClient({ username, role, themePreference, initialD
 
   return (
     <div className={`iki-ed-body${isLight ? ' light' : ''}`}>
-      <style>{ED_CSS}</style>
+      {/* Satu string: dua anak teks di <style> dirangkai beda oleh SSR & klien → hydration mismatch. */}
+      <style>{isCustom ? ED_CSS + TABEL_CSS : ED_CSS}</style>
 
       <header className="iki-topbar">
         <div className="iki-brand">
@@ -346,6 +389,7 @@ export default function EditorClient({ username, role, themePreference, initialD
           <span className="iki-brand-sub">{doc.jabatan || '—'}</span>
           <span className={`iki-badge ${readOnly ? 'final' : 'draft'}`}>{doc.status}</span>
           {isDir && <span className="iki-badge dir">DIREKTUR</span>}
+          {isCustom && <span className="iki-badge custom">CUSTOM</span>}
           {doc.jenis === 'PERUBAHAN' && <span className="iki-badge ubah">PERUBAHAN</span>}
         </div>
         <div className="iki-topbar-right">
@@ -368,8 +412,8 @@ export default function EditorClient({ username, role, themePreference, initialD
         {!readOnly && doc.atasan_stale && !staleDismissed && (
           <div className="iki-stale-banner">
             <AlertTriangle size={15} />
-            <span>Dokumen IKI <b>atasan berubah</b> setelah save terakhir dokumen ini — tinjau ulang kolom &ldquo;RHK yang diintervensi&rdquo;.</span>
-            <PrimaButton variant="warning" size="sm" onClick={() => setShowImport(true)}>Tinjau Import Atasan</PrimaButton>
+            <span>Dokumen IKI <b>atasan berubah</b> setelah save terakhir dokumen ini — tinjau ulang {isCustom ? 'isian tabel yang merujuk RHK atasan' : <>kolom &ldquo;RHK yang diintervensi&rdquo;</>}.</span>
+            {!isCustom && <PrimaButton variant="warning" size="sm" onClick={() => setShowImport(true)}>Tinjau Import Atasan</PrimaButton>}
             <button className="iki-stale-x" data-tooltip="Abaikan" data-tooltip-pos="below" onClick={() => setStaleDismissed(true)}><X size={14} /></button>
           </div>
         )}
@@ -382,10 +426,15 @@ export default function EditorClient({ username, role, themePreference, initialD
               <input value={doc.opd} disabled={readOnly} onChange={e => patchDoc({ opd: e.target.value })} />
             </label>
             <label className="iki-f"><span>Varian Form</span>
-              <select value={doc.varian} disabled={readOnly} onChange={e => patchDoc({ varian: e.target.value as IkiDokumen['varian'] })}>
-                <option value="STANDAR">STANDAR (11 kolom)</option>
-                <option value="DIREKTUR">DIREKTUR (8 kolom)</option>
-              </select>
+              {/* CUSTOM ⇄ lainnya tidak bisa ditukar (konsep §9.3) — server menolaknya juga. */}
+              {isCustom ? (
+                <select value="CUSTOM" disabled><option value="CUSTOM">CUSTOM (tabel sendiri)</option></select>
+              ) : (
+                <select value={doc.varian} disabled={readOnly} onChange={e => patchDoc({ varian: e.target.value as IkiDokumen['varian'] })}>
+                  <option value="STANDAR">STANDAR (11 kolom)</option>
+                  <option value="DIREKTUR">DIREKTUR (8 kolom)</option>
+                </select>
+              )}
             </label>
             <label className="iki-f"><span>Jenis Dokumen</span>
               <select value={doc.jenis} disabled={readOnly} onChange={e => patchDoc({ jenis: e.target.value as IkiDokumen['jenis'] })}>
@@ -419,7 +468,8 @@ export default function EditorClient({ username, role, themePreference, initialD
 
         {/* ── Atasan + TTD ── */}
         <section className="iki-sec">
-          <h2 className="iki-sec-title">{isDir ? 'Tanda Tangan' : 'Atasan (blok "Mengetahui") & Tanda Tangan'}</h2>
+          <h2 className="iki-sec-title">{isDir ? 'Tanda Tangan' : isCustom ? 'Atasan (blok "Mengetahui", opsional) & Tanda Tangan' : 'Atasan (blok "Mengetahui") & Tanda Tangan'}</h2>
+          {isCustom && <p className="iki-sec-hint">Nama Atasan diisi = dua tanda tangan (Mengetahui atasan + pegawai). Dikosongkan = satu tanda tangan pegawai di kanan.</p>}
           <div className="iki-form-grid">
             {!isDir && (<>
               <label className="iki-f"><span>Dokumen IKI Atasan (kaskade)</span>
@@ -473,7 +523,35 @@ export default function EditorClient({ username, role, themePreference, initialD
           </div>
         </section>
 
+        {/* ── II. TABEL CUSTOM ── */}
+        {isCustom && (
+          <section className="iki-sec">
+            <div className="iki-sec-head">
+              <h2 className="iki-sec-title">II · Form Indikator Kinerja Individu</h2>
+              <div className="iki-sec-actions">
+                <label className="iki-kertas">
+                  <span>Kertas</span>
+                  <select value={kertas} disabled={readOnly} onChange={e => gantiKertas(e.target.value as KertasIki)}>
+                    {DAFTAR_KERTAS.map(k => <option key={k} value={k}>{KERTAS_IKI[k].nama}</option>)}
+                  </select>
+                </label>
+                <PrimaButton variant="ghost" size="sm" iconLeft={<LayoutTemplate size={15} />}
+                  onClick={() => setModalTemplat({ nama: '', bawaIsi: false, menyimpan: false })}>Simpan sebagai templat</PrimaButton>
+              </div>
+            </div>
+            <TabelEditor
+              payload={doc.tabel_custom}
+              readOnly={readOnly}
+              warnaKepala={WARNA_KEPALA_IKI}
+              batasKolom={BATAS_KOLOM_IKI}
+              kertas={{ px: lebarTulisPx(kertas), nama: KERTAS_IKI[kertas].nama }}
+              onUbah={ubahTabel}
+            />
+          </section>
+        )}
+
         {/* ── II. FORM RHK ── */}
+        {!isCustom && (
         <section className="iki-sec">
           <div className="iki-sec-head">
             <h2 className="iki-sec-title">II · Form Indikator Kinerja Individu</h2>
@@ -597,6 +675,7 @@ export default function EditorClient({ username, role, themePreference, initialD
             </div>
           ))}
         </section>
+        )}
 
         {/* ── Aksi bawah ── */}
         <div className="iki-actions-bar">
@@ -639,6 +718,36 @@ export default function EditorClient({ username, role, themePreference, initialD
             toast.success(`${groups.length} grup RHK ditambahkan`);
           }}
         />
+      )}
+
+      {modalTemplat && (
+        <div className="iki-modal-bg" onClick={() => !modalTemplat.menyimpan && setModalTemplat(null)}>
+          <div className="iki-modal" onClick={e => e.stopPropagation()}>
+            <div className="iki-versi-head">
+              <h3><LayoutTemplate size={16} /> Simpan sebagai Templat</h3>
+              <button className="iki-act" aria-label="Tutup" onClick={() => setModalTemplat(null)} disabled={modalTemplat.menyimpan}><X size={15} /></button>
+            </div>
+            <p className="iki-versi-hint">
+              Menyimpan BENTUK tabel ini (kepala, lebar & rata kolom, gaya, kertas) supaya dokumen lain bisa dibuat darinya.
+              Dokumen yang sudah dibuat dari templat tidak ikut berubah kalau templatnya diubah atau dihapus.
+            </p>
+            <label className="iki-f"><span>Nama templat</span>
+              <input autoFocus value={modalTemplat.nama} maxLength={150} placeholder="mis. IKI Kepala Seksi 2027"
+                onChange={e => setModalTemplat(m => (m ? { ...m, nama: e.target.value } : m))}
+                onKeyDown={e => { if (e.key === 'Enter') void simpanTemplat(); }} />
+            </label>
+            <label className="iki-cek">
+              <input type="checkbox" checked={modalTemplat.bawaIsi} onChange={e => setModalTemplat(m => (m ? { ...m, bawaIsi: e.target.checked } : m))} />
+              Bawa juga isi baris (tanpa centang: kepala tabel + satu baris kosong berformat)
+            </label>
+            <div className="iki-modal-actions">
+              <PrimaButton variant="ghost" size="sm" onClick={() => setModalTemplat(null)} disabled={modalTemplat.menyimpan}>Batal</PrimaButton>
+              <PrimaButton variant="purple" size="sm" menulis onClick={() => void simpanTemplat()} disabled={modalTemplat.menyimpan}>
+                {modalTemplat.menyimpan ? 'Menyimpan…' : 'Simpan Templat'}
+              </PrimaButton>
+            </div>
+          </div>
+        </div>
       )}
 
       {showRiwayat && (
@@ -857,6 +966,7 @@ const ED_CSS = `
   .iki-badge.final { background: rgba(29,158,117,0.16); color: #7BE0BD; border: 1px solid rgba(29,158,117,0.4); }
   .iki-badge.dir { background: rgba(239,159,39,0.14); color: #F5C77E; border: 1px solid rgba(239,159,39,0.4); }
   .iki-badge.ubah { background: rgba(186,117,23,0.16); color: #FAC775; border: 1px solid rgba(186,117,23,0.45); }
+  .iki-badge.custom { background: rgba(55,138,221,0.15); color: #8FC1F2; border: 1px solid rgba(55,138,221,0.4); }
   .iki-ed-main { max-width: 1120px; margin: 0 auto; padding: 26px 22px; }
   .iki-final-banner { display: flex; align-items: center; gap: 10px; background: rgba(29,158,117,0.1); border: 1px solid rgba(29,158,117,0.4); color: #7BE0BD; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; font-weight: 600; margin-bottom: 18px; }
   .iki-stale-banner { display: flex; align-items: center; gap: 10px; background: rgba(186,117,23,0.12); border: 1px solid rgba(186,117,23,0.45); color: #F5C77E; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 18px; }
@@ -935,6 +1045,12 @@ const ED_CSS = `
   .iki-lvl.lvl-atasan { background: rgba(124,92,252,0.15); color: #B9A6FF; border-color: rgba(124,92,252,0.4); }
   .iki-hint { font-size: 11px; color: #85B7EB; line-height: 1.5; margin: 0 0 14px; }
   .iki-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .iki-sec-hint { font-size: 11.5px; color: #85B7EB; line-height: 1.5; margin: -6px 0 12px; }
+  .iki-kertas { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #85B7EB; }
+  .iki-kertas select { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 6px 8px; color: #E6F1FB; font-size: 12px; font-family: inherit; }
+  .iki-kertas select:disabled { opacity: .55; cursor: not-allowed; }
+  .iki-cek { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #B5D4F4; margin: 12px 0 16px; cursor: pointer; line-height: 1.45; }
+  .iki-cek input { margin-top: 2px; accent-color: #7C5CFC; }
 
   /* ── LIGHT THEME ── */
   [data-theme="light"] .iki-ed-body { background: #F5F5F7; color: #0F0F12; }
@@ -946,6 +1062,10 @@ const ED_CSS = `
   [data-theme="light"] .iki-sec-title { color: #B26B00; }
   [data-theme="light"] .iki-f { color: #6B7280; }
   [data-theme="light"] .iki-f input, [data-theme="light"] .iki-f textarea, [data-theme="light"] .iki-f select { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .iki-badge.custom { background: #E0EDFB; color: #1E5FA5; border-color: rgba(55,138,221,.45); }
+  [data-theme="light"] .iki-sec-hint, [data-theme="light"] .iki-kertas { color: #6B7280; }
+  [data-theme="light"] .iki-kertas select { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .iki-cek { color: #374151; }
   [data-theme="light"] .iki-group { background: #FAFAFB; border-color: rgba(0,0,0,.09); }
   [data-theme="light"] .iki-rhk { background: #FFFFFF; border-color: rgba(0,0,0,.09); }
   [data-theme="light"] .iki-tw th { color: #6B7280; border-bottom-color: rgba(0,0,0,.1); }
@@ -968,4 +1088,14 @@ const ED_CSS = `
   [data-theme="light"] .iki-warn-ico { color: #B26B00; }
   [data-theme="light"] .iki-versi-hint, [data-theme="light"] .iki-versi-meta { color: #6B7280; }
   [data-theme="light"] .iki-versi-row { border-color: rgba(0,0,0,.12); }
+
+  /* Layar sempit: kisi Data Pribadi 3 kolom (dan RHK 4 kolom) dulu memaksa halaman selebar ± 572 px di
+     ponsel 375 px — sejak awal, semua varian (terukur 2026-10-21). Ditaruh paling akhir supaya menang. */
+  @media (max-width: 760px) {
+    .iki-ed-main { padding: 16px 12px; }
+    .iki-form-grid, .iki-rhk-grid { grid-template-columns: minmax(0, 1fr); }
+    .iki-topbar { padding: 10px 14px; flex-wrap: wrap; row-gap: 6px; }
+    .iki-brand-sub { display: none; }
+    .iki-sec { padding: 14px 12px; }
+  }
 `;

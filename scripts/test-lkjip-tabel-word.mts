@@ -403,7 +403,7 @@ ok('G4 sel: rot dibaca normalizeCell, ikut disalin, dibuang "hapus format"',
 
 // ─── H. Sambungan layar ───────────────────────────────────────────────────────
 console.log('\nH. Sambungan layar')
-const te = kode('app/(dashboard)/lkjip/[id]/TabelEditor.tsx')
+const te = kode('components/tabel/TabelEditor.tsx')
 const ec = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
 ok('H1 Simpan membawa pengaturan cetak & baris YANG TAMPIL (kolom No. terisi)',
   badan(te, 'const payloadSekarang = (): PayloadTabel & AturTabel =>').includes('rows: rowsTampil,')
@@ -435,7 +435,7 @@ ok('H8 Ctrl+C / tombol Salin mengisi papan klip dengan TSV DAN HTML',
   te.includes('onCopy={salinKePapan}') && badan(te, 'const salinKePapan = (e: React.ClipboardEvent) =>').includes("e.clipboardData.setData('text/html', html);")
   && badan(te, 'const salinKePapan = (e: React.ClipboardEvent) =>').includes("e.clipboardData.setData('text/plain', tsvPilihan);"))
 ok('H9 teks tegak = format sel (kunci badan tertaut berlaku); garis kertas ikut orientasi',
-  te.includes("disabled={kunciBlok}\n            onClick={() => { const tegak = !origin?.rot;") && te.includes('const kertasPx = lebarKertasPx(atur.melintang);')
+  te.includes("disabled={kunciBlok}\n            onClick={() => { const tegak = !origin?.rot;") && te.includes('const kertasPx = kertas?.px ?? lebarKertasPx(atur.melintang);')
   && te.includes('paskanKeKertas(colWidths, kertasPx)'))
 // Tahap C §12.5: nomor bisa per BAB — label ("3.1") dari fungsi yang sama, setelan dokumen ikut.
 ok('H10 nomor blok & pemilih tabel grafik memakai nomorObjek (sama dengan Word)',

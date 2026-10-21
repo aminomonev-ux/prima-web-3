@@ -1,6 +1,6 @@
 'use client';
 // Menu aksi popover (portal) — anti-clip scroll, auto-flip. Dipakai menu bagian di pohon dokumen
-// dan menu klik-kanan tabel (konsep tabel-excel §5.10). Gaya `.lk-rowmenu*` ada di ED_CSS editor.
+// dan menu klik-kanan tabel (konsep tabel-excel §5.10). Gaya `.lk-rowmenu*` ada di ./tabel-css.ts.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';

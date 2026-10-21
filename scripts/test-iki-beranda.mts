@@ -183,7 +183,8 @@ ok('I10 route salin-tahun: guard (sakelar & beku) + Zod + rate limit', rSalin.in
 const data = tanpaKomentar(sumber('lib/data/iki.ts'))
 ok('I11 salinTahun memakai rencanaSalinTahun yang sama dengan layar', data.includes('const rencana = rencanaSalinTahun([...await baca(tahunSumberIki), ...await baca(tahunTarget)], tahunSumberIki, tahunTarget);'))
 ok('I12 penaut atasan lewat pilihDokumenAtasan (jabatan lama, lalu jenis)', data.includes('if (calon.length) atasanTarget = pilihDokumenAtasan(calon[0].jabatan_lama, calon, jenis);'))
-ok('I13 listDokumen membawa atasan_dokumen_id (kedua cabang)', (data.match(/d\.atasan_dokumen_id, d\.updated_at, COUNT\(r\.id\) AS jumlah_rhk/g) ?? []).length === 2)
+// Kolom jumlah kini ${JUMLAH_ISI} (CUSTOM menghitung baris tabel, konsep iki-custom §5); COUNT(r.id) tetap cabang lainnya.
+ok('I13 listDokumen membawa atasan_dokumen_id (kedua cabang)', (data.match(/d\.atasan_dokumen_id, d\.updated_at, \$\{JUMLAH_ISI\}/g) ?? []).length === 2 && /ELSE COUNT\(r\.id\) END AS jumlah_rhk/.test(data))
 const editor = tanpaKomentar(sumber('app/(dashboard)/iki/[id]/editor-client.tsx'))
 ok('I14 Kembali dari editor pulang ke tahun dokumennya', (editor.match(/router\.push\(`\/iki\?tahun=\$\{doc\.tahun\}`\)/g) ?? []).length === 2)
 

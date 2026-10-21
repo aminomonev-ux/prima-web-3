@@ -271,7 +271,7 @@ ok('J1 hanya tabel bergalat yang disebut, lengkap dengan alamat selnya', gl.leng
 // ─── K. Sambungan layar ───────────────────────────────────────────────────────
 console.log('\nK. Sambungan layar')
 const ed = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
-const te = kode('app/(dashboard)/lkjip/[id]/TabelEditor.tsx')
+const te = kode('components/tabel/TabelEditor.tsx')
 const kisiSrc = kode('app/(dashboard)/lkjip/[id]/KisiKepala.tsx')
 const modal = kode('app/(dashboard)/lkjip/[id]/TautanModal.tsx')
 const docgen = kode('lib/lkjip/docgen.ts')
@@ -298,7 +298,7 @@ ok('K8 ketikan di sel berformat dirapikan dari keadaan TERKINI (bukan closure la
 ok('K9 kepala N baris = sisip/buang di atas badan (E3) untuk SEMUA tabel', badan(te, 'const gantiBarisKepala = async').includes('pasangBentuk(ubahJumlahKepala(bentuk(), n));'))
 ok('K10 lebar kolom: pegangan tiap garis + cm + dobel-klik paskan + garis batas kertas',
   te.includes('onDoubleClick={e => { e.stopPropagation(); paskanIsi(ci); }}') && te.includes('{cm(lebarTip.px)} cm') && te.includes('left: 38 + kertasPx'))
-ok('K11 editor & kisi modal memakai SATU hook pilihan (E5)', te.includes("import { usePilihanSel } from './usePilihanSel';") && kisiSrc.includes("import { usePilihanSel } from './usePilihanSel';"))
+ok('K11 editor & kisi modal memakai SATU hook pilihan (E5)', te.includes("import { usePilihanSel } from './usePilihanSel';") && kisiSrc.includes("import { usePilihanSel } from '@/components/tabel/usePilihanSel';"))
 ok('K12 kisi modal tidak punya aturan gabung sendiri (pakai gabungKepala/rapikanKepala/unmergeAt)',
   !kisiSrc.includes('mergeCells(') && kisiSrc.includes('gabungKepala(kepala, letak, rencana, tambahBaris)') && kisiSrc.includes('rapikanKepala(kepala, letak)') && kisiSrc.includes('unmergeAt(kepala, k.r1, k.c1, ncol)'))
 ok('K13 modal: kisi kepala ada, judul kolom = sel di kisi (E4), petunjuk "periksa lagi" lama hilang',

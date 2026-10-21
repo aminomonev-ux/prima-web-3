@@ -410,7 +410,7 @@ ok('J gagal per sumber kini dilaporkan (dulu diam)', bahanGagal.gagal.some(g => 
 console.log('\nK. Sambungan editor & lain-lain')
 const ed = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
 // TabelEditor dipisah dari editor-client.tsx (docs/CONCEPT-lkjip-tabel-excel.md §7).
-const tabelEd = kode('app/(dashboard)/lkjip/[id]/TabelEditor.tsx')
+const tabelEd = kode('components/tabel/TabelEditor.tsx')
 ok('K1 Simpan Tabel menyimpan resep juga — dengan isian tangan terbaru (payloadSekarang)',
   tabelEd.includes('onClick={() => onSave(payloadSekarang())}')
   && tabelEd.includes('...(tautan ? { tautan: ambilIsianTangan(tautan, rows.slice(jumlahBarisKepala({ headerRows, rows }))) } : {})'))
@@ -429,7 +429,7 @@ ok('K3 tombol format memakai kunci badan (Salin tetap boleh)',
   tabelEd.includes('const kunciBlok = !rect || rectBadan;') && (tabelEd.match(/disabled=\{kunciBlok\}/g) ?? []).length === 18
   && tabelEd.includes('data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect}'))
 ok('K4 tambah/hapus baris & kolom dimatikan selama tertaut',
-  tabelEd.includes('disabled={terkait} data-tooltip={terkait ?') && tabelEd.includes('disabled={ncol >= BATAS_KOLOM_TABEL || terkait}')
+  tabelEd.includes('disabled={terkait} data-tooltip={terkait ?') && tabelEd.includes('disabled={ncol >= batasKolom || terkait}')
   && badan(tabelEd, 'function sisip(').includes('if (terkait && !keKepala) {') && badan(tabelEd, 'function sisip(').includes('if (terkait) { toast.info(PESAN_KOLOM_TAUT); return; }')
   && badan(tabelEd, 'function hapusBarisPilihan(').includes('if (terkait && r2 >= headerRows) {')
   && badan(tabelEd, 'function hapusKolomPilihan(').includes('if (terkait) { toast.info(PESAN_KOLOM_TAUT); return; }'))
@@ -445,8 +445,10 @@ ok('K7 Perbarui: bandingkan dulu, tidak menulis kalau sama, tanya sebelum menuli
 ok('K8 Perbarui memakai penilaian BERSAMA (nilaiPerbarui) & resep sesudahnya',
   perb.includes('const nilai = nilaiPerbarui(sekarang, hasil);') && perb.includes('tautan: { ...nilai.tautanBaru, ditarikPada:')
   && perb.includes('kalimatIsianYatim(nilai.yatim,') && !perb.includes('bangunBadan('))
-ok('K9 modal dimuat saat dibuka saja', /const TautanModal = dynamic\(\(\) => import\('\.\/TautanModal'\), \{ ssr: false \}\)/.test(tabelEd)
-  && ed.includes("import TabelEditor from './TabelEditor';") && !ed.includes('function TabelEditor('))
+// Editor tabel pindah ke components/tabel (konsep iki-custom §3): modalnya dioper editor LKJIP lewat prop `lkjip`.
+ok('K9 modal dimuat saat dibuka saja', /const TautanModal = dynamic\(\(\) => import\('\.\/TautanModal'\), \{ ssr: false \}\)/.test(ed)
+  && ed.includes('lkjip={{ tahunDokumen, TautanModal }}') && !/import[^;]*TautanModal/.test(tabelEd)
+  && ed.includes("import TabelEditor from '@/components/tabel/TabelEditor';") && !ed.includes('function TabelEditor('))
 ok('K10 keterangan sumber TIDAK masuk Word (docgen tak mengenal tautan)', !/tautan|ringkas|ditarikPada/.test(kode('lib/lkjip/docgen.ts')))
 ok('K11 audit simpan blok menyebut sumbernya', kode('app/api/lkjip/block/route.ts').includes('` · tertaut: ${ringkas.slice(0, 200)}`'))
 ok('K12 grafik menyimpan sidik data tabel & menandai gambar basi',

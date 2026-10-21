@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { safeInt } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { CreateDokumenSchema, TahunSchema, BulkDeleteSchema, ikiRateLimit } from '@/lib/data/iki-schemas';
-import { listDokumen, createDokumen, deleteDokumen, bulkDeleteDokumen, IkiFinalError, IkiNotFoundError } from '@/lib/data/iki';
+import { listDokumen, createDokumen, deleteDokumen, bulkDeleteDokumen, IkiFinalError, IkiNotFoundError, IkiTemplatTidakAdaError } from '@/lib/data/iki';
 import { guard } from './_guard';
 import { bolehBatalkanFinal } from '@/lib/constants';
 
@@ -46,10 +46,12 @@ export async function POST(req: NextRequest) {
     const id = await createDokumen(parsed.data, g.session.userId);
     await writeAuditLog({
       req, eventType: 'IKI_CREATE', userId: g.session.userId, username: g.session.username,
-      detail: `Buat dokumen IKI id=${id} ${parsed.data.jabatan} (${parsed.data.nama}) tahun ${parsed.data.tahun} varian ${parsed.data.varian}`,
+      detail: `Buat dokumen IKI id=${id} ${parsed.data.jabatan} (${parsed.data.nama}) tahun ${parsed.data.tahun} varian ${parsed.data.varian}`
+        + (parsed.data.varian === 'CUSTOM' && parsed.data.templat_id ? ` dari templat id=${parsed.data.templat_id}` : ''),
     });
     return NextResponse.json({ ok: true, id });
   } catch (err) {
+    if (err instanceof IkiTemplatTidakAdaError) return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
     const isDup = err instanceof Error && err.message.includes('sudah ada');
     if (!isDup) console.error('[IKI POST Error]', err);
     // Jangan bocorkan err.message mentah (bisa berisi pesan MySQL) ke klien

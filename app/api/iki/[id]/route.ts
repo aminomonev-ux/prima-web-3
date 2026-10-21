@@ -5,7 +5,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { SaveDokumenSchema, ikiRateLimit } from '@/lib/data/iki-schemas';
 import {
   getDokumen, saveDokumen,
-  IkiVersionConflictError, IkiFinalError, IkiNotFoundError,
+  IkiVersionConflictError, IkiFinalError, IkiNotFoundError, IkiVarianTerkunciError,
 } from '@/lib/data/iki';
 import { guard } from '../_guard';
 
@@ -47,7 +47,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const newVersion = await saveDokumen(id, parsed.data, g.session.userId);
     await writeAuditLog({
       req, eventType: 'IKI_UPDATE', userId: g.session.userId, username: g.session.username,
-      detail: `Simpan dokumen IKI id=${id} (${parsed.data.rhk.length} RHK, versi ${newVersion})`,
+      detail: `Simpan dokumen IKI id=${id} (${parsed.data.tabel_custom ? `tabel CUSTOM ${parsed.data.tabel_custom.kolom.length} kolom × ${parsed.data.tabel_custom.rows.length} baris` : `${parsed.data.rhk.length} RHK`}, versi ${newVersion})`,
     });
     return NextResponse.json({ ok: true, version: newVersion });
   } catch (err) {
@@ -55,6 +55,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
     }
     if (err instanceof IkiFinalError)    return NextResponse.json({ ok: false, message: err.message }, { status: 409 });
+    if (err instanceof IkiVarianTerkunciError) {
+      return NextResponse.json({ ok: false, code: 'VARIAN_TERKUNCI', message: err.message }, { status: 409 });
+    }
     if (err instanceof IkiNotFoundError) return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan server.';
     const known = message.includes('tidak ditemukan') || message.includes('atasan');

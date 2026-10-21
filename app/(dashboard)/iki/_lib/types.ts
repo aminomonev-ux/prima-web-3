@@ -1,7 +1,7 @@
 // Types client-side modul IKI — mirror payload API app/api/iki/* .
 // JANGAN import dari lib/data/iki.ts di client (module server, tarik mysql2).
 
-export type IkiVarian = 'STANDAR' | 'DIREKTUR';
+export type IkiVarian = 'STANDAR' | 'DIREKTUR' | 'CUSTOM';
 export type IkiJenisDokumen = 'MURNI' | 'PERUBAHAN';
 export type IkiAspekB = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
 export type IkiAspekC = 'Utama' | 'Penunjang';
@@ -71,7 +71,18 @@ export type IkiDokumen = {
   /** Server-computed: dokumen atasan diubah setelah save terakhir (banner lunak, DRAFT saja) */
   atasan_stale?: boolean;
   rhk: IkiRhk[];
+  /** Varian CUSTOM saja — `TabelCustom` (lib/iki/custom.ts); null untuk STANDAR/DIREKTUR. */
+  tabel_custom?: unknown;
+  templat_id?: number | null;
 };
+
+/** "12 RHK" / "8 baris" — CUSTOM tidak punya RHK; `jumlah_rhk`-nya = baris badan tabel (lib/data/iki.ts). */
+export function labelJumlahIsi(d: Pick<IkiListRow, 'varian' | 'jumlah_rhk'>): string {
+  return `${d.jumlah_rhk} ${d.varian === 'CUSTOM' ? 'baris' : 'RHK'}`;
+}
+
+/** Baris GET /api/iki/templat — templat tabel varian CUSTOM (docs/CONCEPT-iki-custom.md §4). */
+export type IkiTemplat = { id: number; nama: string; ncol: number; nrow: number; updated_at: string };
 
 export type PejabatSuggest = {
   unit_kerja: string;

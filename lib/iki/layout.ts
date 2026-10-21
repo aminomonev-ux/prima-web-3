@@ -5,8 +5,12 @@
 //   STANDAR  — 11 kolom bernomor (12 kolom fisik; kolom 9 = romawi+nilai)
 //   DIREKTUR — 8 kolom bernomor (10 kolom fisik; kolom 3 & 6 span 2 fisik)
 // Pure module tanpa import server — aman dipakai client component.
+// CUSTOM (tabel dirancang sendiri) tidak lewat buildIkiGrid — kisinya dari `susunKisiCetak` (lib/iki/custom.ts);
+// judul, Data Pribadi, dan tanda tangan tetap dari sini (docs/CONCEPT-iki-custom.md §2).
 
-export type IkiVarian = 'STANDAR' | 'DIREKTUR';
+import { adaIsiBadan, bacaTabelCustom } from './custom';
+
+export type IkiVarian = 'STANDAR' | 'DIREKTUR' | 'CUSTOM';
 export type IkiJenisDokumen = 'MURNI' | 'PERUBAHAN';
 
 /** Judul dokumen — sumber tunggal PDF/Excel/editor. PERUBAHAN → suffix " PERUBAHAN". */
@@ -29,6 +33,8 @@ export type IkiGridDokumen = {
   pangkat_atasan: string | null;
   kota_ttd: string;
   tanggal_ttd: string | null; // YYYY-MM-DD
+  /** Varian CUSTOM saja — isi `iki_dokumen.tabel_custom`, dibaca lewat `bacaTabelCustom`. */
+  tabel_custom?: unknown;
   rhk: {
     no_urut: number;
     rhk_intervensi: string | null;
@@ -215,7 +221,11 @@ export function stripGolongan(pangkat: string | null | undefined): string {
   return (pangkat ?? '').replace(/\s*\(\s*[IVX]+\s*\/\s*[a-e]\s*\)/gi, '').replace(/\s+/g, ' ').trim();
 }
 
-/** Blok tanda tangan per varian (docs/CONCEPT-iki.md §2.4). */
+/**
+ * Blok tanda tangan per varian (docs/CONCEPT-iki.md §2.4). CUSTOM (konsep iki-custom §9.2): Nama Atasan
+ * terisi = dua blok seperti STANDAR, kosong = satu blok pegawai — tanpa pilihan terpisah yang bisa
+ * berbeda pendapat dengan isiannya.
+ */
 export function buildTtd(doc: IkiGridDokumen): { kiri: TtdBlock | null; kanan: TtdBlock } {
   const tgl = tanggalIndo(doc.tanggal_ttd);
   if (doc.varian === 'DIREKTUR') {
@@ -229,8 +239,9 @@ export function buildTtd(doc: IkiGridDokumen): { kiri: TtdBlock | null; kanan: T
       },
     };
   }
+  const tanpaAtasan = doc.varian === 'CUSTOM' && !doc.nama_atasan?.trim();
   return {
-    kiri: {
+    kiri: tanpaAtasan ? null : {
       lines: ['Mengetahui', doc.jabatan_atasan ?? ''],
       nama: doc.nama_atasan ?? '',
       pangkat: stripGolongan(doc.pangkat_atasan),
@@ -243,6 +254,12 @@ export function buildTtd(doc: IkiGridDokumen): { kiri: TtdBlock | null; kanan: T
       nip: `NIP. ${doc.nip}`,
     },
   };
+}
+
+/** Kalimat penolakan kalau tidak ada yang bisa dicetak; null = boleh diunduh. Satu aturan untuk tombol unduh & zip. */
+export function alasanTakBisaCetak(doc: IkiGridDokumen): string | null {
+  if (doc.varian === 'CUSTOM') return adaIsiBadan(bacaTabelCustom(doc.tabel_custom)) ? null : 'Tabel belum berisi — tidak ada yang bisa di-export';
+  return doc.rhk.length === 0 ? 'Belum ada baris RHK — tidak ada yang bisa di-export' : null;
 }
 
 export function ikiFilename(doc: IkiGridDokumen, tahun: string, ext: 'pdf' | 'xlsx'): string {

@@ -433,7 +433,7 @@ ok('O3 narasi tanpa rujukan tidak disentuh; grafik tetap lewat fungsi lamanya',
 
 // ─── P. Sambungan layar ───────────────────────────────────────────────────────
 console.log('\nP. Sambungan layar')
-const te = kode('app/(dashboard)/lkjip/[id]/TabelEditor.tsx')
+const te = kode('components/tabel/TabelEditor.tsx')
 const ec = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
 const tt = kode('app/(dashboard)/lkjip/[id]/TiptapNarasi.tsx')
 const vs = kode('lib/lkjip/versi.ts')
@@ -446,7 +446,7 @@ ok('P1 Ctrl+X = onCut (salin lalu kosongkan); Ctrl+Shift+V ditandai lalu dibaca 
   && pasteB.includes('const nilaiSaja = tempelNilaiPada.current > 0 && e.timeStamp - tempelNilaiPada.current < 1500;')
   && pasteB.includes('if (internal) { if (nilaiSaja) tempelNilaiDari(internal.nilai); else void tempel(internal.sel); return; }'))
 ok('P2 tempel dari aplikasi lain: HTML (gabungan) dulu, TSV cadangan — juga untuk tempel nilai; papan internal BERSAMA semua tabel halaman',
-  pasteB.includes('const dariHtml = html ? htmlKeSel(html) : null;') && pasteB.includes('void tempel(dariHtml || parseTSV(text));')
+  pasteB.includes('const dariHtml = html ? htmlKeSel(html, batasKolom) : null;') && pasteB.includes('void tempel(dariHtml || parseTSV(text));')
   && pasteB.includes("tempelNilaiDari(dariHtml ? dariHtml.map(r => r.map(c => (c.h ? '' : c.v)))") && te.includes('let papanInternal:')
   && badan(te, 'const isiPapanInternal = () =>').includes('simpanPapanInternal({ tsv: tsvPilihan, sel: ambilBlok(rowsTampil, rect), nilai });')
   && te.includes('const simpanPapanInternal = (p: NonNullable<typeof papanInternal>) => { papanInternal = p; };'))
@@ -482,8 +482,9 @@ ok('P10b tiap aksi menu punya jalannya di pilihMenu (dan sebaliknya) — aksi ta
   kunciMenu.length === 16 && new Set(kunciMenu).size === 16 && kasusMenu.length === 16 && kunciMenu.every(k => kasusMenu.includes(k)), `${kunciMenu.length}/${kasusMenu.length}`)
 ok('P11 menu klik-kanan baris/kolom memilih TANPA mode seret (contextmenu Windows datang sesudah mouseup)',
   te.includes('onContextMenu={e => bukaMenu(e, () => pil.setSel({ ar: 0, ac: ci, fr: rows.length - 1, fc: ci })') && te.includes('onContextMenu={e => bukaMenu(e, () => pil.setSel({ ar: ri, ac: 0, fr: ri, fc: ncol - 1 })'))
-ok('P12 RowMenu satu komponen untuk pohon dokumen & tabel', ec.includes("import { RowMenu, type RowMenuItem } from './RowMenu';") && te.includes("import { RowMenu, type RowMenuItem } from './RowMenu';") && !ec.includes('function RowMenu('))
-const css = ec.slice(ec.indexOf('const ED_CSS = `'))
+ok('P12 RowMenu satu komponen untuk pohon dokumen & tabel', ec.includes("import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';") && te.includes("import { RowMenu, type RowMenuItem } from './RowMenu';") && !ec.includes('function RowMenu('))
+// CSS tabel pindah ke components/tabel/tabel-css.ts dan disisipkan ke ED_CSS (konsep iki-custom §3).
+const css = ec.slice(ec.indexOf('const ED_CSS = `')).replace('${TABEL_CSS}', kode('components/tabel/tabel-css.ts'))
 ok('P13 kepala & huruf kolom sticky dgn latar PEKAT; wadah bergulir sendiri; jarak atas tiap baris kepala diukur',
   css.includes('.lk-tabel-scroll { max-height: 70vh; overflow: auto; }') && css.includes('.lk-tabel-scroll .lk-tabel thead th { position: sticky; top: 0; z-index: 3; background: linear-gradient(rgba(255,255,255,0.03), rgba(255,255,255,0.03)), #042C53; }')
   // Kekhususan (0,2,2) WAJIB di atas `.lk-tabel th.lk-colhead { position: relative }` (0,2,1) — di bawahnya huruf kolom tergulir pergi.

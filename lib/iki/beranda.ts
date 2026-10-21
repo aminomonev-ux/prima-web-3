@@ -9,7 +9,7 @@ export type JenisIki = 'MURNI' | 'PERUBAHAN';
 export type DokBeranda = {
   id: number;
   tahun: string;
-  varian: 'STANDAR' | 'DIREKTUR';
+  varian: 'STANDAR' | 'DIREKTUR' | 'CUSTOM';
   jenis: JenisIki;
   nama: string;
   nip: string;

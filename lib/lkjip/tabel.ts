@@ -1609,7 +1609,7 @@ export function angkaInggrisKeId(teks: string): string {
  * `.xlNN` di <style>), Word (<b>/<i>/<u> & paragraf), Google Sheets (gaya sebaris), dan salinan PRIMA
  * sendiri. Ukuran huruf sengaja tidak dibawa: tabel mengikuti huruf dokumen. null = bukan tabel.
  */
-export function htmlKeSel(html: string): TabelCell[][] | null {
+export function htmlKeSel(html: string, batasKolom = BATAS_KOLOM_TABEL): TabelCell[][] | null {
   const s = String(html ?? '');
   const awal = s.search(/<table\b/i);
   if (awal < 0) return null;
@@ -1675,7 +1675,7 @@ export function htmlKeSel(html: string): TabelCell[][] | null {
       const n = xnum !== undefined && xnum !== '' ? Number(xnum) : sheets ? Number(sheets[1]) : NaN;
       if (Number.isFinite(n) && teks) cell.v = angkaDariTempelan(n, teks);
       else if (desimalTitik && teks) cell.v = angkaInggrisKeId(teks);
-      const cs = Math.max(1, Math.min(BATAS_KOLOM_TABEL, Number(atribut(attr, 'colspan')) || 1));
+      const cs = Math.max(1, Math.min(batasKolom, Number(atribut(attr, 'colspan')) || 1));
       const rs = Math.max(1, Math.min(BATAS_BARIS_TABEL, Number(atribut(attr, 'rowspan')) || 1));
       sel.push({ cell, cs, rs });
     }

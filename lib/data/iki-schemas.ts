@@ -6,6 +6,9 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
+import { AlignSchema, buatCellSchema } from '@/lib/lkjip/schemas';
+import { BATAS_KOLOM_IKI, BATAS_BARIS_IKI } from '@/lib/iki/custom';
+import { BATAS_BARIS_KEPALA } from '@/lib/lkjip/tabel';
 
 // ─── Role allow-list ─────────────────────────────────────────────────────────
 
@@ -45,7 +48,7 @@ export const TahunSchema = z.string().regex(/^\d{4}$/, 'Tahun 4 digit').refine(
   'Tahun harus 2020-2100',
 );
 
-export const VarianSchema = z.enum(['STANDAR', 'DIREKTUR']);
+export const VarianSchema = z.enum(['STANDAR', 'DIREKTUR', 'CUSTOM']);
 export type IkiVarian = z.infer<typeof VarianSchema>;
 
 export const JenisDokumenSchema = z.enum(['MURNI', 'PERUBAHAN']);
@@ -81,6 +84,23 @@ export const RhkSchema = z.object({
   triwulan: z.array(TriwulanSchema).length(4, 'Wajib 4 baris triwulan'),
 });
 
+// ─── Tabel varian CUSTOM (docs/CONCEPT-iki-custom.md §5) ─────────────────────
+// Sel = skema sel LKJIP yang SAMA (pabrik `buatCellSchema`), batasnya milik IKI (24 kolom, §9.1).
+// Kunci yang tak terdaftar dibuang Zod diam-diam — kunci baru di `TabelCustom` WAJIB didaftar di sini.
+const BATAS_JSON_TABEL = 2_000_000;
+export const TabelCustomSchema = z.object({
+  kolom: z.array(z.string().max(255)).min(1, 'Tabel minimal 1 kolom').max(BATAS_KOLOM_IKI, `Tabel paling banyak ${BATAS_KOLOM_IKI} kolom`),
+  align: z.array(AlignSchema).max(BATAS_KOLOM_IKI).default([]),
+  colWidths: z.array(z.coerce.number().int().min(24).max(2000)).max(BATAS_KOLOM_IKI).default([]),
+  headerRows: z.coerce.number().int().min(0).max(BATAS_BARIS_KEPALA).default(1),
+  rows: z.array(z.array(buatCellSchema(BATAS_KOLOM_IKI)).max(BATAS_KOLOM_IKI)).min(1, 'Tabel minimal 1 baris')
+    .max(BATAS_BARIS_IKI, `Tabel paling banyak ${BATAS_BARIS_IKI} baris`),
+  kolomNomor: z.number().int().min(0).max(BATAS_KOLOM_IKI - 1).nullable().default(null),
+  gaya: z.object({ selang: z.boolean().optional(), jumlah: z.boolean().optional(), mendatar: z.boolean().optional() }).default({}),
+  kertas: z.enum(['A4', 'F4']).default('A4'),
+}).refine(t => JSON.stringify(t).length <= BATAS_JSON_TABEL, 'Isi tabel terlalu besar');
+export type TabelCustomInput = z.infer<typeof TabelCustomSchema>;
+
 // ─── Create dokumen ──────────────────────────────────────────────────────────
 
 export const CreateDokumenSchema = z.object({
@@ -91,6 +111,8 @@ export const CreateDokumenSchema = z.object({
   nip: z.string().trim().min(1, 'NIP wajib').max(50),
   jabatan: z.string().trim().min(1, 'Jabatan wajib').max(255),
   pangkat: z.string().trim().max(100).nullable().optional(),
+  // Varian CUSTOM: tabel awal disalin dari templat ini (tanpa = bentuk bawaan `tabelCustomAwal`).
+  templat_id: z.number().int().positive().nullable().optional(),
 });
 
 // ─── Save dokumen (header + seluruh RHK, replace-all) ────────────────────────
@@ -113,7 +135,15 @@ export const SaveDokumenSchema = z.object({
   tanggal_ttd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD').nullable().optional(),
   atasan_dokumen_id: z.number().int().positive().nullable().optional(),
   rhk: z.array(RhkSchema).max(50, 'Maksimal 50 baris RHK'),
+  tabel_custom: TabelCustomSchema.nullable().optional(),
 }).superRefine((v, ctx) => {
+  // CUSTOM berisi tabel, bukan RHK — dua isian untuk satu dokumen = dua sumber kebenaran (konsep §5).
+  if (v.varian === 'CUSTOM') {
+    if (!v.tabel_custom) ctx.addIssue({ code: 'custom', path: ['tabel_custom'], message: 'Varian CUSTOM wajib berisi tabel' });
+    if (v.rhk.length) ctx.addIssue({ code: 'custom', path: ['rhk'], message: 'Varian CUSTOM tidak memakai baris RHK' });
+    return;
+  }
+  if (v.tabel_custom) ctx.addIssue({ code: 'custom', path: ['tabel_custom'], message: 'Tabel bebas hanya untuk varian CUSTOM' });
   if (v.varian === 'DIREKTUR') {
     // Varian DIREKTUR: tanpa atasan, tanpa RHK-diintervensi, tanpa Ekspektasi
     if (v.atasan_dokumen_id) {
@@ -165,6 +195,11 @@ export const SalinTahunSchema = z.object({
   tahun_sumber: TahunSchema,
   tahun_target: TahunSchema,
 }).refine(v => v.tahun_sumber < v.tahun_target, 'Tahun sumber harus sebelum tahun tujuan');
+
+// ─── Templat tabel CUSTOM (konsep §4) — dikelola semua pemegang akses IKI (keputusan #2) ──────
+const NamaTemplatSchema = z.string().trim().min(1, 'Nama templat wajib').max(150);
+export const TemplatBuatSchema = z.object({ nama: NamaTemplatSchema, payload: TabelCustomSchema });
+export const TemplatUbahSchema = z.object({ id: z.number().int().positive(), nama: NamaTemplatSchema });
 
 export const ImportRenaksiQuerySchema = z.object({
   tahun: z.coerce.number().int().min(2020).max(2100),

@@ -7,7 +7,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Check, ChevronDown, ChevronRight, Copy, Lock, Plus } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import type { BarisPohon } from '@/lib/iki/beranda';
-import type { IkiListRow } from './_lib/types';
+import { labelJumlahIsi, type IkiListRow } from './_lib/types';
 
 export type AksiPohon = {
   buka: (d: IkiListRow) => void;
@@ -125,7 +125,7 @@ function SelJenis({ d, modePilih, terpilih, aksi, children }: {
         aria-label={`${modePilih ? (on ? 'Batal pilih' : 'Pilih') : 'Buka'} IKI ${d.jenis === 'PERUBAHAN' ? 'Perubahan' : 'Murni'} ${d.jabatan}`}>
         {modePilih && <span className={`iki-check${on ? ' on' : ''}`}>{on && <Check size={12} strokeWidth={3} />}</span>}
         <span className={`iki-badge ${d.status === 'FINAL' ? 'final' : 'draft'}`}>{d.status}</span>
-        <span className="iki-prhk">{d.jumlah_rhk} RHK</span>
+        <span className="iki-prhk">{labelJumlahIsi(d)}</span>
       </button>
       {!modePilih && (
         <span className="iki-pakt">

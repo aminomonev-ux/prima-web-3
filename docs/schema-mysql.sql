@@ -1487,8 +1487,10 @@ CREATE TABLE IF NOT EXISTS pk_dokumen_anggaran (
 CREATE TABLE IF NOT EXISTS iki_dokumen (
   id                INT AUTO_INCREMENT PRIMARY KEY,
   tahun             VARCHAR(4) NOT NULL,
-  varian            ENUM('STANDAR','DIREKTUR') NOT NULL DEFAULT 'STANDAR',
+  varian            ENUM('STANDAR','DIREKTUR','CUSTOM') NOT NULL DEFAULT 'STANDAR',
   jenis             ENUM('MURNI','PERUBAHAN') NOT NULL DEFAULT 'MURNI' COMMENT 'PERUBAHAN → judul + " PERUBAHAN" (migration-iki-jenis.sql)',
+  tabel_custom      JSON NULL COMMENT 'Varian CUSTOM: bentuk + isi tabel bagian II (lib/iki/custom.ts TabelCustom); NULL untuk STANDAR/DIREKTUR (migration-iki-custom.sql)',
+  templat_id        INT NULL COMMENT 'Soft-FK iki_templat — jejak asal saja, isinya sudah DISALIN saat dokumen dibuat',
   opd               VARCHAR(255) NOT NULL DEFAULT 'RSJD dr. Amino Gondohutomo Provinsi Jawa Tengah',
   nama              VARCHAR(255) NOT NULL,
   nip               VARCHAR(50)  NOT NULL,
@@ -1561,6 +1563,20 @@ CREATE TABLE IF NOT EXISTS iki_versi (
   CONSTRAINT fk_iki_versi_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='IKI - riwayat versi (snapshot otomatis saat finalize/unfinalize) - migration-iki-versi.sql';
+
+CREATE TABLE IF NOT EXISTS iki_templat (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  nama        VARCHAR(150) NOT NULL,
+  payload     JSON NOT NULL COMMENT 'TabelCustom (lib/iki/custom.ts) — bentuk tabel; disalin ke dokumen, tidak dirujuk',
+  created_by  INT NULL,
+  updated_by  INT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_iki_templat_nama (nama),
+  CONSTRAINT fk_iki_templat_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_iki_templat_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='IKI - templat tabel varian CUSTOM (migration-iki-custom.sql)';
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Selesai. MySQL 8.0.13+ required (functional index pada users).

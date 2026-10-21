@@ -11,7 +11,7 @@ import {
   colLabel, unmergeAt, sisipBarisSel, hapusBarisSel, rapikanLetak, rencanaGabungKepala, gabungKepala, rapikanKepala,
   BATAS_BARIS_KEPALA, type TabelCell,
 } from '@/lib/lkjip/tabel';
-import { usePilihanSel } from './usePilihanSel';
+import { usePilihanSel } from '@/components/tabel/usePilihanSel';
 
 interface Props {
   kepala: TabelCell[][];
