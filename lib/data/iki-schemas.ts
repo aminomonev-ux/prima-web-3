@@ -101,6 +101,7 @@ export const TabelCustomSchema = z.object({
   kertas: z.enum(['A4', 'F4']).default('A4'),
   // Peran kolom (§11): peran → indeks kolom. Kerapiannya (satu peran satu kolom, mendatar ⇄ menurun) dijaga bacaPeran saat ditulis.
   peran: z.partialRecord(z.enum(KUNCI_PERAN), z.number().int().min(0).max(BATAS_KOLOM_IKI - 1)).default({}),
+  ttd: z.enum(['BIASA', 'DIREKTUR']).default('BIASA'),
 }).refine(t => JSON.stringify(t).length <= BATAS_JSON_TABEL, 'Isi tabel terlalu besar');
 export type TabelCustomInput = z.infer<typeof TabelCustomSchema>;
 

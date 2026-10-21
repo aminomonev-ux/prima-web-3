@@ -15,7 +15,7 @@ import {
 import { validateRhkTargets } from '@/lib/iki/validate';
 import { stripGolongan } from '@/lib/iki/layout';
 import {
-  bacaTabelCustom, bentukTemplat, lebarTulisPx, BATAS_KOLOM_IKI, BATAS_BARIS_IKI, DAFTAR_KERTAS, KERTAS_IKI, WARNA_KEPALA_IKI, type KertasIki,
+  bacaTabelCustom, bentukTemplat, lebarTulisPx, BATAS_KOLOM_IKI, BATAS_BARIS_IKI, DAFTAR_KERTAS, KERTAS_IKI, WARNA_KEPALA_IKI, type KertasIki, type GayaTtd,
 } from '@/lib/iki/custom';
 import {
   PILIHAN_PERAN, KELOMPOK_PERAN, tebakPeran, isiDariImpor, validasiTabelCustom, perluCaraHitung,
@@ -83,6 +83,8 @@ export default function EditorClient({ username, role, themePreference, initialD
   const isCustom = doc.varian === 'CUSTOM';
   const tabel = useMemo(() => (isCustom ? bacaTabelCustom(doc.tabel_custom) : null), [isCustom, doc.tabel_custom]);
   const kertas: KertasIki = tabel?.kertas ?? 'A4';
+  /** Tanda tangan bergaya DIREKTUR (varian DIREKTUR, atau CUSTOM "Seperti DIREKTUR") — tanpa blok atasan. */
+  const ttdDir = isDir || tabel?.ttd === 'DIREKTUR';
   const tabelRef = useRef<TabelEditorHandle>(null);
   /** Impor butuh minimal satu kolom isian bertanda — Kolom TW (I–IV) saja tidak mengisi apa pun. */
   const adaPeranIsi = !!tabel && Object.keys(tabel.peran).some(k => k !== 'triwulan');
@@ -214,9 +216,16 @@ export default function EditorClient({ username, role, themePreference, initialD
     setDirty(true);
   }
 
-  // Editor tabel melaporkan tiap perubahan; kertas dipilih di luar editor, jadi dipertahankan di sini.
+  // Editor tabel melaporkan tiap perubahan; kertas & gaya tanda tangan dipilih di luar editor, jadi dipertahankan di sini.
   function ubahTabel(p: unknown) {
-    setDoc(d => ({ ...d, tabel_custom: { ...(p as object), kertas: bacaTabelCustom(d.tabel_custom).kertas } }));
+    setDoc(d => {
+      const luar = bacaTabelCustom(d.tabel_custom);
+      return { ...d, tabel_custom: { ...(p as object), kertas: luar.kertas, ttd: luar.ttd } };
+    });
+    setDirty(true);
+  }
+  function gantiTtd(g: GayaTtd) {
+    setDoc(d => ({ ...d, tabel_custom: { ...(d.tabel_custom as object), ttd: g } }));
     setDirty(true);
   }
   function gantiKertas(k: KertasIki) {
@@ -503,10 +512,14 @@ export default function EditorClient({ username, role, themePreference, initialD
 
         {/* ── Atasan + TTD ── */}
         <section className="iki-sec">
-          <h2 className="iki-sec-title">{isDir ? 'Tanda Tangan' : isCustom ? 'Atasan (blok "Mengetahui", opsional) & Tanda Tangan' : 'Atasan (blok "Mengetahui") & Tanda Tangan'}</h2>
-          {isCustom && <p className="iki-sec-hint">Nama Atasan diisi = dua tanda tangan (Mengetahui atasan + pegawai). Dikosongkan = satu tanda tangan pegawai di kanan.</p>}
+          <h2 className="iki-sec-title">{ttdDir ? 'Tanda Tangan' : isCustom ? 'Atasan (blok "Mengetahui", opsional) & Tanda Tangan' : 'Atasan (blok "Mengetahui") & Tanda Tangan'}</h2>
+          {isCustom && (
+            <p className="iki-sec-hint">{ttdDir
+              ? 'Tanda tangan seperti DIREKTUR: satu blok "Mengetahui, tanggal / jabatan / OPD" di kanan, tanpa atasan — ubah lewat pilihan "Tanda tangan" di bagian II.'
+              : 'Nama Atasan diisi = dua tanda tangan (Mengetahui atasan + pegawai). Dikosongkan = satu tanda tangan pegawai di kanan.'}</p>
+          )}
           <div className="iki-form-grid">
-            {!isDir && (<>
+            {!ttdDir && (<>
               <label className="iki-f"><span>Dokumen IKI Atasan (kaskade)</span>
                 <select value={doc.atasan_dokumen_id ?? ''} disabled={readOnly}
                   onChange={e => {
@@ -568,6 +581,13 @@ export default function EditorClient({ username, role, themePreference, initialD
                   <span>Kertas</span>
                   <select value={kertas} disabled={readOnly} onChange={e => gantiKertas(e.target.value as KertasIki)}>
                     {DAFTAR_KERTAS.map(k => <option key={k} value={k}>{KERTAS_IKI[k].nama}</option>)}
+                  </select>
+                </label>
+                <label className="iki-kertas">
+                  <span>Tanda tangan</span>
+                  <select value={tabel?.ttd ?? 'BIASA'} disabled={readOnly} onChange={e => gantiTtd(e.target.value as GayaTtd)}>
+                    <option value="BIASA">Seperti STANDAR (atasan + pegawai)</option>
+                    <option value="DIREKTUR">Seperti DIREKTUR (satu blok)</option>
                   </select>
                 </label>
                 <PrimaButton variant="ghost" size="sm" iconLeft={<LayoutTemplate size={15} />}

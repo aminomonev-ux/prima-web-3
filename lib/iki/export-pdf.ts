@@ -178,6 +178,8 @@ const rgb = (hex: string | undefined, cadangan: [number, number, number]): [numb
 /** mm — garis biasa sama dengan STANDAR (0,15), tebal = baris JUMLAH / pilihan "Tebal". */
 const TEBAL_GARIS: Record<GarisCetak, number> = { 0: 0, 1: 0.15, 2: 0.5 };
 const FONT_PDF = 7;
+/** Kepala tabel 7,5 pt — sama dengan `headStyles.fontSize` STANDAR/DIREKTUR (§12: bentuk "Seperti …" harus identik). */
+const FONT_KEPALA_PDF = 7.5;
 const PAD_PDF = 1.2;
 
 /**
@@ -192,7 +194,7 @@ function opsiTabelCustom(pdf: JsPdf, t: ReturnType<typeof bacaTabelCustom>, star
   const keBaris = (baris: (SelCetak | null)[][], bagian: 'head' | 'body'): RowInput[] => baris.map((row, r) =>
     row.flatMap((s, c): CellDef[] => {
       if (!s) return [];
-      const fs = s.fs ?? FONT_PDF;
+      const fs = s.fs ?? (bagian === 'head' ? FONT_KEPALA_PDF : FONT_PDF);
       let tinggiTegak = 0;
       if (s.rot) {
         tegak.set(`${bagian}:${r}:${c}`, s);
@@ -232,7 +234,7 @@ function opsiTabelCustom(pdf: JsPdf, t: ReturnType<typeof bacaTabelCustom>, star
       if (data.section === 'foot') return;
       const s = tegak.get(`${data.section}:${data.row.index}:${data.column.index}`);
       if (!s) return;
-      const fs = s.fs ?? FONT_PDF;
+      const fs = s.fs ?? (data.section === 'head' ? FONT_KEPALA_PDF : FONT_PDF);
       pdf.setFont('helvetica', s.b && s.i ? 'bolditalic' : s.b ? 'bold' : s.i ? 'italic' : 'normal');
       pdf.setFontSize(fs);
       pdf.setTextColor(...rgb(s.fc, BLACK));

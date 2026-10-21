@@ -224,11 +224,12 @@ export function stripGolongan(pangkat: string | null | undefined): string {
 /**
  * Blok tanda tangan per varian (docs/CONCEPT-iki.md §2.4). CUSTOM (konsep iki-custom §9.2): Nama Atasan
  * terisi = dua blok seperti STANDAR, kosong = satu blok pegawai — tanpa pilihan terpisah yang bisa
- * berbeda pendapat dengan isiannya.
+ * berbeda pendapat dengan isiannya. Kecuali CUSTOM bertanda tangan DIREKTUR (§12, bentuk "Seperti DIREKTUR"):
+ * blok tunggal "Mengetahui" persis varian DIREKTUR.
  */
 export function buildTtd(doc: IkiGridDokumen): { kiri: TtdBlock | null; kanan: TtdBlock } {
   const tgl = tanggalIndo(doc.tanggal_ttd);
-  if (doc.varian === 'DIREKTUR') {
+  if (doc.varian === 'DIREKTUR' || (doc.varian === 'CUSTOM' && bacaTabelCustom(doc.tabel_custom).ttd === 'DIREKTUR')) {
     return {
       kiri: null,
       kanan: {

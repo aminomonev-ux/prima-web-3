@@ -15,6 +15,8 @@ export const BATAS_KOLOM_IKI = 24;
 export const BATAS_BARIS_IKI = 500;
 
 export type KertasIki = 'A4' | 'F4';
+/** Tanda tangan CUSTOM (§12): BIASA = aturan §9.2 (atasan bila diisi + pegawai); DIREKTUR = satu blok "Mengetahui" persis varian DIREKTUR. */
+export type GayaTtd = 'BIASA' | 'DIREKTUR';
 export const DAFTAR_KERTAS: KertasIki[] = ['A4', 'F4'];
 /** Ukuran kertas MENDATAR (mm). Excel: paperSize 9 = A4, 14 = Folio 8,5 × 13 in (= F4). */
 export const KERTAS_IKI: Record<KertasIki, { nama: string; lebarMm: number; tinggiMm: number; excelPaperSize: number }> = {
@@ -39,6 +41,7 @@ export type TabelCustom = {
   kertas: KertasIki;
   /** Peran kolom (§11) — impor Renaksi/atasan & pemeriksaan target membaca kolom bertanda. */
   peran: PetaPeran;
+  ttd: GayaTtd;
 };
 
 const sel = (v: string, extra: Partial<TabelCell> = {}): TabelCell => ({ v, ...extra });
@@ -57,6 +60,7 @@ export function tabelCustomAwal(): TabelCustom {
     gaya: {},
     kertas: 'A4',
     peran: { rhk: 1, indikator: 2, target_tahunan: 3 },
+    ttd: 'BIASA',
   };
 }
 
@@ -101,7 +105,7 @@ export function tabelSeperti(varian: BentukSeperti): TabelCustom {
     : { rhk_intervensi: 1, rhk: 2, aspek: 3, indikator: 4, target_tahunan: 5, cara_hitung: 7, triwulan: 8, target_tw: 9, aksi_tw: 10, target_aksi: 11 };
   return bacaTabelCustom({
     kolom: Array.from({ length: ncol }, (_, c) => `Kolom ${c + 1}`), align, colWidths: mm.map(w => Math.round(w * pxPerMm)),
-    headerRows: 3, rows: [...kepala, ...blok], kolomNomor: 0, gaya: {}, kertas: 'A4', peran,
+    headerRows: 3, rows: [...kepala, ...blok], kolomNomor: 0, gaya: {}, kertas: 'A4', peran, ttd: dir ? 'DIREKTUR' : 'BIASA',
   });
 }
 
@@ -145,6 +149,7 @@ export function bacaTabelCustom(raw: unknown): TabelCustom {
     gaya,
     kertas: o.kertas === 'F4' ? 'F4' : 'A4',
     peran: bacaPeran(o.peran, ncol),
+    ttd: o.ttd === 'DIREKTUR' ? 'DIREKTUR' : 'BIASA',
   };
 }
 

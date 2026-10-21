@@ -277,6 +277,9 @@ console.log('\nG. Sambungan layar & route')
     rt.indexOf('await guard()') < rt.indexOf('getRhkAtasan(') && rt.includes('{ ok: true, atasan, rows, catatan }') && !rt.includes('FROM iki_rhk'))
   const ty = sumber('app/(dashboard)/iki/_lib/types.ts')
   ok('G12 tipe klien: atasan_rhk_id boleh kosong', ty.includes('atasan_rhk_id: number | null;'))
+  ok('G14 IKI: gaya tanda tangan dipertahankan saat editor tabel melapor (payload editor tidak membawanya) & blok atasan disembunyikan bila bergaya DIREKTUR',
+    ed.includes('tabel_custom: { ...(p as object), kertas: luar.kertas, ttd: luar.ttd }') && ed.includes("const ttdDir = isDir || tabel?.ttd === 'DIREKTUR';")
+    && ed.includes('{!ttdDir && (<>') && ed.includes('onChange={e => gantiTtd(e.target.value as GayaTtd)}'))
   const lc = tanpaKomentar(sumber('app/(dashboard)/iki/iki-client.tsx'))
   ok('G13 Buat IKI: pilihan Seperti STANDAR/DIREKTUR (bawaan STANDAR) dan bentuk_awal ikut terkirim — templat tersimpan menang',
     lc.includes('<option value="bawaan:STANDAR">') && lc.includes('<option value="bawaan:DIREKTUR">') && lc.includes("templat_id: null, bentuk_awal: 'STANDAR',")
@@ -356,28 +359,60 @@ const bedaPertama = (a: SelGrid[][], b: SelGrid[][]) => {
   ok('I9 templat dari dokumen "Seperti STANDAR" yang sudah berisi: kepala + satu blok pola, label I–IV tetap, isi lain kosong',
     tpl.rows.length === 7 && tpl.rows.slice(3).map(r => r[8].v).join() === 'I,II,III,IV' && tpl.rows[3][2].v === '' && tpl.rows[3][2].rs === 4)
 
+  // Berkas SUNGGUHAN dari pengekspor yang dipakai tombol unduh — dokumen bawaan vs CUSTOM "Seperti …" berisi sama.
+  const rhkBawaan = (v: 'STANDAR' | 'DIREKTUR') => [
+    rhkStd(1, v === 'STANDAR' ? 'Sasaran satu' : null, 'RHK sama', 'Indikator A', 'Akumulatif', '100%', ['25%', '50%', '75%', '100%']),
+    rhkStd(v === 'STANDAR' ? 1 : 2, v === 'STANDAR' ? 'Sasaran satu' : null, 'RHK sama', 'Indikator B', 'Progres Positif', '90%', ['80%', '85%', '88%', '90%']),
+    rhkStd(v === 'STANDAR' ? 2 : 3, v === 'STANDAR' ? 'Sasaran dua' : null, 'RHK lain', 'Indikator C', 'Akumulatif', '4 Dok', ['1', '1', '1', '1']),
+  ]
+  const tabelDari = (v: 'STANDAR' | 'DIREKTUR') => (v === 'STANDAR' ? tStd : tDir)
   const { buildIkiExcelBytes } = await import('../lib/iki/export-excel')
+  const { buildIkiPdfBytes } = await import('../lib/iki/export-pdf')
   const ExcelJS = (await import('exceljs')).default
-  const isiExcel = async (doc: IkiGridDokumen) => {
+  /** Seluruh lembar: isi, gabungan, huruf, rata, isian abu — per sel ASAL (sel tertutup gabungan tidak tampil). */
+  const lembar = async (doc: IkiGridDokumen) => {
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.load(Buffer.from(await buildIkiExcelBytes(doc, '2026')) as never)
     const ws = wb.worksheets[0]
-    const mulai = (() => { for (let r = 1; r <= ws.rowCount; r++) if (String(ws.getCell(r, 1).value ?? '').startsWith('No.')) return r; return 0 })()
     const sel: string[] = []
-    for (let r = mulai; r < mulai + 3 + 12; r++) for (let c = 1; c <= 12; c++) sel.push(String(ws.getCell(r, c).value ?? ''))
-    const gabung = (ws.model.merges as string[]).filter(m => Number(m.match(/\d+/)![0]) >= mulai && Number(m.match(/\d+/)![0]) < mulai + 15).sort()
-    return { mulai, sel, gabung }
+    for (let r = 1; r <= ws.rowCount; r++) for (let c = 1; c <= 12; c++) {
+      const x = ws.getCell(r, c)
+      if (x.isMerged && x.master.address !== x.address) continue
+      const isi = (x.fill as { fgColor?: { argb?: string } } | undefined)?.fgColor?.argb ?? ''
+      sel.push(`${x.address}=${String(x.value ?? '')}|${x.font?.size ?? ''}${x.font?.bold ? 'B' : ''}${x.font?.underline ? 'U' : ''}${x.font?.italic ? 'I' : ''}`
+        + `|${x.alignment?.horizontal ?? ''}/${x.alignment?.vertical ?? ''}/${x.alignment?.wrapText ? 'w' : ''}|${isi}`)
+    }
+    return { sel, gabung: [...(ws.model.merges as string[])].sort(), kertas: `${ws.pageSetup.paperSize}/${ws.pageSetup.orientation}` }
   }
-  const eStd = await isiExcel(dokumen('STANDAR', [
-    rhkStd(1, 'Sasaran satu', 'RHK sama', 'Indikator A', 'Akumulatif', '100%', ['25%', '50%', '75%', '100%']),
-    rhkStd(1, 'Sasaran satu', 'RHK sama', 'Indikator B', 'Progres Positif', '90%', ['80%', '85%', '88%', '90%']),
-    rhkStd(2, 'Sasaran dua', 'RHK lain', 'Indikator C', 'Akumulatif', '4 Dok', ['1', '1', '1', '1']),
-  ]))
-  const eCus = await isiExcel(dokumen('CUSTOM', [], tStd))
-  const bedaSel = eStd.sel.findIndex((v, i) => v !== eCus.sel[i])
-  ok('I10 Excel: tabel CUSTOM "Seperti STANDAR" sama dengan Excel STANDAR — isi tiap sel & semua gabungan',
-    eStd.mulai > 0 && eCus.mulai > 0 && bedaSel < 0 && sama(eStd.gabung, eCus.gabung),
-    bedaSel >= 0 ? `sel ke-${bedaSel}: "${eCus.sel[bedaSel]}" vs "${eStd.sel[bedaSel]}"` : `gabung custom ${eCus.gabung.join(' ')} | bawaan ${eStd.gabung.join(' ')}`)
+  for (const v of ['STANDAR', 'DIREKTUR'] as const) {
+    const a = await lembar(dokumen(v, rhkBawaan(v))), b = await lembar(dokumen('CUSTOM', [], tabelDari(v)))
+    const i = a.sel.findIndex((x, k) => x !== b.sel[k])
+    ok(`I10 Excel ${v}: SELURUH lembar CUSTOM "Seperti ${v}" = Excel ${v} (judul, Data Pribadi, tabel, tanda tangan; isi, gabungan, huruf, rata, abu, kertas)`,
+      a.sel.length > 100 && a.sel.length === b.sel.length && i < 0 && sama(a.gabung, b.gabung) && a.kertas === b.kertas,
+      i >= 0 ? `bawaan ${a.sel[i]} | custom ${b.sel[i]}` : `sel ${a.sel.length}/${b.sel.length}, gabung beda ${a.gabung.filter(g => !b.gabung.includes(g)).join(' ')} | ${b.gabung.filter(g => !a.gabung.includes(g)).join(' ')}`)
+  }
+  // PDF: posisi & ukuran tiap teks lewat pdfjs. Batas kolom dari lebar editor (px bulat) boleh bergeser ≤ 1 pt.
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const teksPdf = async (doc: IkiGridDokumen) => {
+    const d = await pdfjs.getDocument({ data: new Uint8Array(await buildIkiPdfBytes(doc)), useSystemFonts: false, verbosity: 0 }).promise
+    const hasil: { s: string; x: number; y: number; pt: number; hal: number }[] = []
+    for (let h = 1; h <= d.numPages; h++) {
+      const tc = await (await d.getPage(h)).getTextContent()
+      for (const it of tc.items as { str: string; transform: number[] }[]) if (it.str.trim()) hasil.push({ s: it.str, x: it.transform[4], y: it.transform[5], pt: Math.hypot(it.transform[0], it.transform[1]), hal: h })
+    }
+    return hasil.sort((p, q) => p.hal - q.hal || q.y - p.y || p.x - q.x)
+  }
+  for (const v of ['STANDAR', 'DIREKTUR'] as const) {
+    const a = await teksPdf(dokumen(v, rhkBawaan(v))), b = await teksPdf(dokumen('CUSTOM', [], tabelDari(v)))
+    const i = a.findIndex((p, k) => !b[k] || p.s !== b[k].s || p.hal !== b[k].hal || Math.abs(p.y - b[k].y) > 0.3 || Math.abs(p.x - b[k].x) > 1 || Math.abs(p.pt - b[k].pt) > 0.01)
+    ok(`I12 PDF ${v}: tiap teks sama isi, halaman, baris (±0,3 pt) & ukuran huruf; batas kolom ≤ 1 pt — kepala 7,5 pt, tanda tangan ${v === 'DIREKTUR' ? 'satu blok "Mengetahui"' : 'dua blok'}`,
+      a.length > 80 && a.length === b.length && i < 0,
+      i >= 0 ? `bawaan "${a[i].s}" (${a[i].x.toFixed(1)},${a[i].y.toFixed(1)}) ${a[i].pt.toFixed(1)}pt | custom ${b[i] ? `"${b[i].s}" (${b[i].x.toFixed(1)},${b[i].y.toFixed(1)}) ${b[i].pt.toFixed(1)}pt` : '—'}` : `${a.length} vs ${b.length} teks`)
+  }
+  ok('I13 tanda tangan: "Seperti DIREKTUR" bertanda DIREKTUR, tersimpan lewat skema & ikut templat; tabel lama/STANDAR = BIASA',
+    tabelSeperti('DIREKTUR').ttd === 'DIREKTUR' && tabelSeperti('STANDAR').ttd === 'BIASA' && tabelCustomAwal().ttd === 'BIASA'
+    && (TabelCustomSchema.parse(tabelSeperti('DIREKTUR')) as { ttd: string }).ttd === 'DIREKTUR' && bentukTemplat(tabelSeperti('DIREKTUR'), false).ttd === 'DIREKTUR'
+    && bacaTabelCustom({ kolom: ['A'], rows: [[{ v: 'A' }]] }).ttd === 'BIASA')
 }
 
 console.log('\nH. MySQL sungguhan (kotak pasir 2090)')
