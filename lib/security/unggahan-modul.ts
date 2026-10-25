@@ -5,7 +5,7 @@
 // tangan, dan daftar modulnya harus satu supaya unggah & unduh tidak berbeda pendapat (L78).
 import { kunciSakelarUntuk } from '@/lib/registry/apps';
 
-export const MODUL_PENGUNGGAH = ['lkjip', 'usulan_aset'] as const;
+export const MODUL_PENGUNGGAH = ['lkjip', 'usulan_aset', 'buku_besar_aset'] as const;
 export type ModulPengunggah = (typeof MODUL_PENGUNGGAH)[number];
 
 /** Nilai dari klien atau kolom `uploaded_files.context` → modul yang dikenal, atau `null`. */

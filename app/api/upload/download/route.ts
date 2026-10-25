@@ -11,6 +11,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { ADMIN_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants';
 import { modulMati } from '@/lib/security/guard';
 import { kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
+import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 
 export const runtime = 'nodejs';
 
@@ -83,7 +84,15 @@ export async function GET(req: NextRequest) {
       const subs = (BIDANG_TO_SUBBIDANG as Record<string, string[]>)[session.role] ?? [];
       bidangAllowed = !!owner.uploader_role && subs.includes(owner.uploader_role);
     }
-    if (!isOwner && !bidangAllowed) return await deny();
+    // BBA modul kolaboratif (AUTHZ-02): bukti/referensi yang diunggah rekan harus bisa
+    // dibuka semua pemegang akses BBA. Dikunci pada context BERKAS ITU SENDIRI — menempel
+    // file_id modul lain ke item BBA tidak memberi akses apa pun. app_access dari DB, bukan JWT.
+    let bbaAllowed = false;
+    if (owner.context === 'buku_besar_aset') {
+      const akses = await queryOne<{ app_access: string[] | null }>(sql`SELECT app_access FROM users WHERE id = ${session.userId} LIMIT 1`);
+      bbaAllowed = isAsetRole(session.role, akses?.app_access ?? null);
+    }
+    if (!isOwner && !bidangAllowed && !bbaAllowed) return await deny();
   }
 
   try {

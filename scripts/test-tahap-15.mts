@@ -108,9 +108,12 @@ cek('…sebelum pemeriksaan pemilik', iMatiUnduh >= 0 && iTolakPemilik > iMatiUn
 cek('…dan sebelum Drive disentuh', iMatiUnduh >= 0 && iDrive > iMatiUnduh)
 
 const mig = baca('docs/migrations/migration-uploaded-files-modul.sql').replace(/^\s*--.*$/gm, '')
-cek('migrasi mengisi baris lama untuk kedua modul pengunggah',
-  MODUL_PENGUNGGAH.every((m) => mig.includes(`SET f.context = '${m}'`)))
-cek('…hanya baris yang masih kosong (aman diulang)', (mig.match(/WHERE f\.context IS NULL/g) ?? []).length === MODUL_PENGUNGGAH.length)
+// Pengisi baris lama hanya untuk modul yang SUDAH mengunggah sebelum kolom `context` ada.
+// Buku Besar Aset lahir sebagai pengunggah sesudahnya (2026-10-22) — tak punya baris lama.
+const PENGUNGGAH_LAMA = ['lkjip', 'usulan_aset']
+cek('migrasi mengisi baris lama untuk kedua modul pengunggah lama',
+  PENGUNGGAH_LAMA.every((m) => (MODUL_PENGUNGGAH as readonly string[]).includes(m) && mig.includes(`SET f.context = '${m}'`)))
+cek('…hanya baris yang masih kosong (aman diulang)', (mig.match(/WHERE f\.context IS NULL/g) ?? []).length === PENGUNGGAH_LAMA.length)
 cek('…dengan collation eksplisit (uploaded_files 0900_ai_ci vs usulan_items unicode_ci)',
   (mig.match(/COLLATE utf8mb4_unicode_ci/g) ?? []).length >= 3)
 cek('…kunci payload LKJIP sama dengan yang ditulis editor',

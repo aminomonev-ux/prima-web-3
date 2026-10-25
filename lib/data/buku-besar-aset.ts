@@ -2,9 +2,15 @@
 // CRUD tabel `buku_besar_aset`. Optimistic lock per-row via kolom `version` (L48 CAS).
 // canonical_id stabil lintas-tahun, di-derive dari AUTO_INCREMENT id (anti-race, bukan MAX+1).
 // Kolom turunan (sisa/pct) TIDAK disimpan (Checkpoint D) — dihitung di mapper.
-import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, sqlInt } from '@/lib/data/db';
+import type mysql from 'mysql2/promise';
+import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, sqlInt, type Penanya } from '@/lib/data/db';
 import { toDateStr } from '@/lib/shared/waktu-wib';
-import { isValidStatusTransition, type BbaStatus, type BbaCreateInput, type BbaUpdateInput, type BbaRealisasiInput, type BbaQuery } from './buku-besar-aset-schemas';
+import { isSafeFileUrl } from '@/lib/shared/url';
+import {
+  kelengkapanRef, kelengkapanBukti, referensiSah, rapikanReferensi, tautanAman, MAKS_BUKTI,
+  type KelengkapanRef, type KelengkapanBukti, type ReferensiIsian, type JenisBukti,
+} from '@/lib/bba/referensi';
+import { isValidStatusTransition, type BbaStatus, type BbaCreateInput, type BbaUpdateInput, type BbaRealisasiInput, type BbaQuery, type ReferensiInput, type BuktiCreateInput } from './buku-besar-aset-schemas';
 
 export class BbaVersionConflictError extends Error {
   constructor() { super('Data sudah diubah pengguna lain. Memuat versi terbaru.'); this.name = 'BbaVersionConflictError'; }
@@ -23,6 +29,12 @@ export class BbaRealisasiRangeError extends Error {
 }
 export class BbaStatusMismatchError extends Error {
   constructor(msg: string) { super(msg); this.name = 'BbaStatusMismatchError'; }
+}
+export class BbaBerkasTidakDikenalError extends Error {
+  constructor() { super('Berkas tidak dikenal sebagai unggahan Buku Besar Aset. Unggah ulang berkasnya dari modal item.'); this.name = 'BbaBerkasTidakDikenalError'; }
+}
+export class BbaBuktiPenuhError extends Error {
+  constructor() { super(`Bukti dukung paling banyak ${MAKS_BUKTI} per item.`); this.name = 'BbaBuktiPenuhError'; }
 }
 
 // A3: status & angka realisasi tidak boleh saling bertentangan
@@ -64,6 +76,13 @@ export interface BbaRow {
   // Provenance (LEFT JOIN usulan_items — null bila MANUAL / item usulan terhapus):
   pengusul: string | null;
   catatan_penolakan: string | null;
+  // url_merk1–3 usulan yang aman (http/https) — isi awal referensi selama belum ada yang tersimpan (§4.1).
+  tautan_usulan: string[];
+  lampiran_usulan: string | null;
+  // Ringkasan referensi & bukti — diisi `isiRingkasan`; `mapRow` saja = belum dihitung (nol).
+  ref: KelengkapanRef;
+  bukti: KelengkapanBukti | null;
+  jumlah_bukti: number;
 }
 
 const SELECT_COLS = sql`
@@ -78,7 +97,8 @@ const SELECT_COLS = sql`
     WHEN 'KASUBAG' THEN ui.kasubag_catatan
     WHEN 'KABAG'   THEN ui.kabag_catatan
     ELSE NULL
-  END AS catatan_penolakan
+  END AS catatan_penolakan,
+  ui.url_merk1, ui.url_merk2, ui.url_merk3, ui.file_url AS lampiran_usulan
 `;
 
 const FROM_JOIN = sql`FROM buku_besar_aset b LEFT JOIN usulan_items ui ON ui.id = b.usulan_item_id`;
@@ -110,7 +130,44 @@ export function mapRow(r: Record<string, unknown>): BbaRow {
     pct_realisasi: nilai_rencana > 0 ? Math.round((nilai_realisasi / nilai_rencana) * 10000) / 100 : 0,
     pengusul: r.pengusul as string | null,
     catatan_penolakan: r.catatan_penolakan as string | null,
+    ...ringkasan(r.status as string, tautanAman([r.url_merk1, r.url_merk2, r.url_merk3] as (string | null)[]), [], []),
+    lampiran_usulan: isSafeFileUrl(r.lampiran_usulan as string | null) ? String(r.lampiran_usulan).trim() : null,
   };
+}
+
+type BahanRef = Pick<ReferensiIsian, 'harga' | 'url' | 'file_id'>;
+
+function ringkasan(status: string, tautan: string[], refs: BahanRef[], jenisBukti: string[]) {
+  return {
+    tautan_usulan: tautan,
+    ref: kelengkapanRef(refs.filter(referensiSah).length, refs.length, tautan.length),
+    bukti: kelengkapanBukti(jenisBukti, status),
+    jumlah_bukti: jenisBukti.length,
+  };
+}
+
+/**
+ * Kolom Ref & Bukti dihitung di TS lewat `lib/bba/referensi.ts`, bukan `COUNT(CASE …)` di
+ * SQL: aturan "referensi sah" cukup satu, dan modal memakai fungsi yang sama.
+ */
+async function isiRingkasan(rows: BbaRow[]): Promise<BbaRow[]> {
+  if (rows.length === 0) return rows;
+  const ids = rows.map(r => r.id);
+  const [refRows, buktiRows] = await Promise.all([
+    queryMany<Record<string, unknown>>(sql`SELECT aset_id, harga, url, file_id FROM bba_referensi_harga WHERE aset_id IN (${ids})`),
+    queryMany<Record<string, unknown>>(sql`SELECT aset_id, jenis FROM bba_lampiran WHERE aset_id IN (${ids})`),
+  ]);
+  const refPer = new Map<number, BahanRef[]>();
+  for (const r of refRows) {
+    const k = Number(r.aset_id);
+    refPer.set(k, [...(refPer.get(k) ?? []), { harga: r.harga == null ? null : Number(r.harga), url: r.url as string | null, file_id: r.file_id as string | null }]);
+  }
+  const buktiPer = new Map<number, string[]>();
+  for (const b of buktiRows) {
+    const k = Number(b.aset_id);
+    buktiPer.set(k, [...(buktiPer.get(k) ?? []), String(b.jenis)]);
+  }
+  return rows.map(r => ({ ...r, ...ringkasan(r.status, r.tautan_usulan, refPer.get(r.id) ?? [], buktiPer.get(r.id) ?? []) }));
 }
 
 export interface BbaListResult { rows: BbaRow[]; total: number; page: number; limit: number }
@@ -168,7 +225,7 @@ export async function listAset(f: BbaQuery): Promise<BbaListResult> {
     LIMIT ${sqlInt(f.limit)} OFFSET ${sqlInt(offset)}
   `);
   const totalRow = await queryOne<{ total: number }>(sql`SELECT COUNT(*) AS total FROM buku_besar_aset b ${where}`);
-  return { rows: rows.map(mapRow), total: Number(totalRow?.total ?? 0), page: f.page, limit: f.limit };
+  return { rows: await isiRingkasan(rows.map(mapRow)), total: Number(totalRow?.total ?? 0), page: f.page, limit: f.limit };
 }
 
 export async function getAsetById(id: number): Promise<BbaRow | null> {
@@ -176,8 +233,105 @@ export async function getAsetById(id: number): Promise<BbaRow | null> {
   return r ? mapRow(r) : null;
 }
 
+// ─── Referensi harga & bukti dukung (CONCEPT-bba-perencanaan §4) ────────────
+export interface BbaBukti {
+  id: number; aset_id: number; jenis: JenisBukti; nama: string;
+  url: string | null; file_id: string | null; keterangan: string | null;
+  created_at: string; oleh: string | null;
+}
+export interface BbaDetail { item: BbaRow; referensi: ReferensiIsian[]; bukti: BbaBukti[] }
+
+async function listReferensi(asetId: number): Promise<ReferensiIsian[]> {
+  const rows = await queryMany<Record<string, unknown>>(sql`
+    SELECT sumber, nama_penyedia, url, harga, DATE_FORMAT(tgl_cek, '%Y-%m-%d') AS tgl_cek, file_id
+    FROM bba_referensi_harga WHERE aset_id = ${asetId} ORDER BY urutan ASC, id ASC
+  `);
+  return rows.map(r => ({
+    sumber: r.sumber as ReferensiIsian['sumber'],
+    nama_penyedia: r.nama_penyedia as string | null,
+    url: r.url as string | null,
+    harga: r.harga == null ? null : Number(r.harga),
+    tgl_cek: r.tgl_cek as string | null,
+    file_id: r.file_id as string | null,
+  }));
+}
+
+export async function listBukti(asetId: number): Promise<BbaBukti[]> {
+  const rows = await queryMany<Record<string, unknown>>(sql`
+    SELECT l.id, l.aset_id, l.jenis, l.nama, l.url, l.file_id, l.keterangan,
+           DATE_FORMAT(l.created_at, '%Y-%m-%d %H:%i') AS created_at, u.username AS oleh
+    FROM bba_lampiran l LEFT JOIN users u ON u.id = l.created_by
+    WHERE l.aset_id = ${asetId} ORDER BY l.created_at DESC, l.id DESC
+  `);
+  return rows.map(r => ({
+    id: Number(r.id), aset_id: Number(r.aset_id), jenis: r.jenis as JenisBukti, nama: String(r.nama ?? ''),
+    url: r.url as string | null, file_id: r.file_id as string | null, keterangan: r.keterangan as string | null,
+    created_at: (r.created_at as string | null) ?? '', oleh: r.oleh as string | null, // sudah teks: DATE_FORMAT di SQL
+  }));
+}
+
+export async function getAsetDetail(id: number): Promise<BbaDetail | null> {
+  const row = await getAsetById(id);
+  if (!row) return null;
+  const [[item], referensi, bukti] = await Promise.all([isiRingkasan([row]), listReferensi(id), listBukti(id)]);
+  return { item, referensi, bukti };
+}
+
+/** L68: `file_id` yang ditempel harus unggahan BBA sendiri — berkas modul lain tidak bisa "dipinjam" lewat sini. */
+async function pastikanBerkasBba(q: Penanya, fileIds: (string | null | undefined)[]): Promise<void> {
+  const unik = [...new Set(fileIds.filter((f): f is string => !!f))];
+  if (unik.length === 0) return;
+  const rows = await q`SELECT file_id FROM uploaded_files WHERE file_id IN (${unik}) AND context = 'buku_besar_aset'`;
+  if (rows.length !== unik.length) throw new BbaBerkasTidakDikenalError();
+}
+
+const KOLOM_REFERENSI = ['aset_id', 'urutan', 'sumber', 'nama_penyedia', 'url', 'harga', 'tgl_cek', 'file_id'] as const;
+
+/** Hapus-lalu-tulis-ulang, di transaksi pemanggil (sesudah CAS item). Larik kosong = mengosongkan dengan sengaja. */
+async function gantiReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: number, input: ReferensiInput[]): Promise<void> {
+  const daftar = rapikanReferensi(input.map(r => ({
+    sumber: r.sumber, nama_penyedia: r.nama_penyedia ?? null, url: r.url ?? null,
+    harga: r.harga ?? null, tgl_cek: r.tgl_cek ?? null, file_id: r.file_id ?? null,
+  })));
+  await pastikanBerkasBba(q, daftar.map(r => r.file_id));
+  await q`DELETE FROM bba_referensi_harga WHERE aset_id = ${asetId}`;
+  await bulkInsert('bba_referensi_harga', KOLOM_REFERENSI, daftar.map((r, i) => [
+    asetId, i + 1, r.sumber, r.nama_penyedia, r.url, r.harga, r.tgl_cek, r.file_id,
+  ]), conn);
+}
+
+export async function tambahBukti(input: BuktiCreateInput, userId: number): Promise<{ canonical_id: string; bukti: BbaBukti[] }> {
+  const canonical_id = await withTransaction(async ({ tx }) => {
+    // Kunci baris item: batas MAKS_BUKTI dihitung di bawah kunci, dua tab yang menambah
+    // berbarengan tidak sama-sama lolos di hitungan 29. Versi item TIDAK dinaikkan (§4.2).
+    const aset = await tx`SELECT canonical_id FROM buku_besar_aset WHERE id = ${input.aset_id} FOR UPDATE` as Array<{ canonical_id: string }>;
+    if (aset.length === 0) throw new BbaNotFoundError();
+    const hitung = await tx`SELECT COUNT(*) AS n FROM bba_lampiran WHERE aset_id = ${input.aset_id}` as Array<{ n: number }>;
+    if (Number(hitung[0]?.n ?? 0) >= MAKS_BUKTI) throw new BbaBuktiPenuhError();
+    await pastikanBerkasBba(tx, [input.file_id]);
+    await tx`
+      INSERT INTO bba_lampiran (aset_id, jenis, nama, url, file_id, keterangan, created_by)
+      VALUES (${input.aset_id}, ${input.jenis}, ${input.nama}, ${input.url || null}, ${input.file_id || null}, ${input.keterangan || null}, ${userId})
+    `;
+    return aset[0].canonical_id;
+  });
+  return { canonical_id, bukti: await listBukti(input.aset_id) };
+}
+
+/** Melepas catatan bukti saja — berkas di Drive TIDAK dihapus (bukti audit tidak boleh lenyap, §4.2). */
+export async function hapusBukti(id: number): Promise<{ aset_id: number; canonical_id: string; nama: string; bukti: BbaBukti[] } | null> {
+  const lama = await queryOne<Record<string, unknown>>(sql`
+    SELECT l.aset_id, l.nama, b.canonical_id FROM bba_lampiran l JOIN buku_besar_aset b ON b.id = l.aset_id WHERE l.id = ${id} LIMIT 1
+  `);
+  if (!lama) return null;
+  const res = await sql`DELETE FROM bba_lampiran WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
+  if ((res[0]?.affectedRows ?? 0) === 0) return null;
+  const aset_id = Number(lama.aset_id);
+  return { aset_id, canonical_id: String(lama.canonical_id ?? ''), nama: String(lama.nama ?? ''), bukti: await listBukti(aset_id) };
+}
+
 export async function createAset(input: BbaCreateInput, userId: number): Promise<{ id: number; canonical_id: string }> {
-  return withTransaction(async ({ tx }) => {
+  return withTransaction(async ({ tx, conn }) => {
     const res = await tx`
       INSERT INTO buku_besar_aset
         (canonical_id, tahun_anggaran, kode_rekening, uraian, kategori_aset, sumber_anggaran,
@@ -190,6 +344,7 @@ export async function createAset(input: BbaCreateInput, userId: number): Promise
     // canonical_id atomik dari AUTO_INCREMENT id (tanpa race MAX+1):
     const canonical_id = `BBA-${String(id).padStart(6, '0')}`;
     await tx`UPDATE buku_besar_aset SET canonical_id = ${canonical_id} WHERE id = ${id}`;
+    if (input.referensi?.length) await gantiReferensi(tx, conn, id, input.referensi);
     return { id, canonical_id };
   });
 }
@@ -236,11 +391,15 @@ export async function updateAset(input: BbaUpdateInput, userId: number, bolehKor
   if (input.penanggung_jawab !== undefined) set = sql`${set}, penanggung_jawab = ${input.penanggung_jawab}`;
   if (input.keterangan !== undefined)       set = sql`${set}, keterangan = ${input.keterangan}`;
   if (input.status !== undefined)           set = sql`${set}, status = ${input.status}`;
-  const res = await sql`
-    UPDATE buku_besar_aset SET ${set}
-    WHERE id = ${input.id} AND version = ${input.expected_version}
-  `;
-  assertCas(res);
+  // Referensi ikut Simpan item yang SAMA (satu tombol, satu transaksi, satu CAS — §4.1/L78).
+  await withTransaction(async ({ tx, conn }) => {
+    const res = await tx`
+      UPDATE buku_besar_aset SET ${set}
+      WHERE id = ${input.id} AND version = ${input.expected_version}
+    `;
+    assertCas(res);
+    if (input.referensi !== undefined) await gantiReferensi(tx, conn, input.id, input.referensi);
+  });
   // A4: jejak koreksi mundur dari terminal (caller tulis ke audit log)
   return { koreksiMundur: cur.status === 'REALISASI_PENUH' && input.status !== undefined && input.status !== 'REALISASI_PENUH' };
 }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import {
-  BbaQuerySchema, BbaCreateSchema, BbaUpdateSchema, BbaDeleteSchema, bbaRateLimit,
+  BbaQuerySchema, BbaCreateSchema, BbaUpdateSchema, BbaDeleteSchema, BbaDetailSchema, bbaRateLimit,
 } from '@/lib/data/buku-besar-aset-schemas';
 import {
-  listAset, getAsetKpi, createAset, updateAset, deleteAset,
+  listAset, getAsetKpi, getAsetDetail, createAset, updateAset, deleteAset,
   BbaVersionConflictError, BbaTransitionError, BbaNotFoundError, BbaUsulanLockedError,
-  BbaRealisasiRangeError, BbaStatusMismatchError,
+  BbaRealisasiRangeError, BbaStatusMismatchError, BbaBerkasTidakDikenalError,
 } from '@/lib/data/buku-besar-aset';
 import { guard } from './_guard';
 import { bolehBatalkanFinal } from '@/lib/constants';
@@ -15,6 +15,15 @@ export async function GET(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
   const { searchParams } = new URL(req.url);
+  // ?id= → satu item + referensi + bukti (modal item, §4.4). Muatan segar tiap buka: angka
+  // kunci `version` untuk Simpan diambil dari sini, bukan dari baris tabel yang bisa basi (L77).
+  if (searchParams.has('id')) {
+    const p = BbaDetailSchema.safeParse({ id: searchParams.get('id') });
+    if (!p.success) return NextResponse.json({ ok: false, message: 'ID tidak valid' }, { status: 400 });
+    const detail = await getAsetDetail(p.data.id);
+    if (!detail) return NextResponse.json({ ok: false, message: 'Data aset tidak ditemukan.' }, { status: 404 });
+    return NextResponse.json({ ok: true, ...detail });
+  }
   const parsed = BbaQuerySchema.safeParse({
     tahun:    searchParams.get('tahun')    ?? undefined,
     status:   searchParams.get('status')   ?? undefined,
@@ -40,8 +49,16 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = BbaCreateSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { id, canonical_id } = await createAset(parsed.data, g.session.userId);
-  await writeAuditLog({ req, eventType: 'BBA_CREATE', userId: g.session.userId, username: g.session.username, detail: `BBA create ${canonical_id} (${parsed.data.tahun_anggaran}) ${parsed.data.uraian.slice(0, 60)}` });
+  let hasil: { id: number; canonical_id: string };
+  try {
+    hasil = await createAset(parsed.data, g.session.userId);
+  } catch (err) {
+    if (err instanceof BbaBerkasTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    throw err;
+  }
+  const { id, canonical_id } = hasil;
+  const ref = parsed.data.referensi?.length ? ` referensi=${parsed.data.referensi.length}` : '';
+  await writeAuditLog({ req, eventType: 'BBA_CREATE', userId: g.session.userId, username: g.session.username, detail: `BBA create ${canonical_id} (${parsed.data.tahun_anggaran}) ${parsed.data.uraian.slice(0, 60)}${ref}` });
   return NextResponse.json({ ok: true, id, canonical_id });
 }
 
@@ -62,9 +79,11 @@ export async function PATCH(req: NextRequest) {
     if (err instanceof BbaRealisasiRangeError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaStatusMismatchError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
+    if (err instanceof BbaBerkasTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
-  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${parsed.data.status ? ' status=' + parsed.data.status : ''}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh Admin)' : ''}` });
+  const ref = parsed.data.referensi !== undefined ? ` referensi=${parsed.data.referensi.length}` : '';
+  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${parsed.data.status ? ' status=' + parsed.data.status : ''}${ref}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh Admin)' : ''}` });
   return NextResponse.json({ ok: true });
 }
 

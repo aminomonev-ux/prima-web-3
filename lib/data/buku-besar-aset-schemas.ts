@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
+import { isSafeHttpUrl } from '@/lib/shared/url';
+import { SUMBER_REFERENSI, JENIS_BUKTI, MAKS_REFERENSI } from '@/lib/bba/referensi';
 
 // K5: akses dasar SUPER_ADMIN + ADMIN (staf). Role lain via users.app_access
 // include 'buku_besar_aset' (diatur Admin Panel → User Management). Pola Rencana Aksi.
@@ -72,6 +74,35 @@ export const BbaQuerySchema = z.object({
   limit:     z.coerce.number().int().min(1).max(200).default(50),
 });
 
+// ─── Referensi harga & bukti dukung (CONCEPT-bba-perencanaan §4) ────────────
+const TanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD');
+const TautanSchema  = z.string().trim().max(2048).refine(isSafeHttpUrl, 'Tautan harus diawali http:// atau https://');
+// Bentuk id berkas Drive — sama dengan `safeId` di /api/upload/download.
+const FileIdSchema  = z.string().regex(/^[\w-]{20,64}$/, 'Id berkas tidak valid');
+
+export const ReferensiSchema = z.object({
+  sumber:        z.enum(SUMBER_REFERENSI),
+  nama_penyedia: z.string().trim().max(255).nullish(),
+  url:           TautanSchema.nullish(),
+  harga:         z.number().min(0).nullish(),
+  tgl_cek:       TanggalSchema.nullish(),
+  file_id:       FileIdSchema.nullish(),
+}).refine(r => !!(r.nama_penyedia || r.url || r.harga || r.tgl_cek || r.file_id), 'Referensi harga kosong');
+
+// L87: `undefined` = jangan sentuh referensi tersimpan; larik (termasuk kosong) = ganti semua.
+const ReferensiDaftarSchema = z.array(ReferensiSchema).max(MAKS_REFERENSI, `Referensi harga paling banyak ${MAKS_REFERENSI}`).optional();
+
+export const BuktiCreateSchema = z.object({
+  aset_id:    z.number().int().positive(),
+  jenis:      z.enum(JENIS_BUKTI),
+  nama:       z.string().trim().min(1, 'Nama bukti wajib').max(255),
+  url:        TautanSchema.nullish(),
+  file_id:    FileIdSchema.nullish(),
+  keterangan: z.string().trim().max(500).nullish(),
+}).refine(b => !!(b.url || b.file_id), 'Bukti perlu berkas atau tautan');
+export const BuktiDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
+export const BbaDetailSchema   = z.object({ id: z.coerce.number().int().positive() });
+
 export const BbaCreateSchema = z.object({
   tahun_anggaran:   TahunSchema,
   kode_rekening:    z.string().max(64).nullish(),
@@ -83,6 +114,7 @@ export const BbaCreateSchema = z.object({
   harga:            z.number().min(0).default(0),
   penanggung_jawab: z.string().max(128).nullish(),
   keterangan:       z.string().max(4000).nullish(),
+  referensi:        ReferensiDaftarSchema,
 });
 
 export const BbaUpdateSchema = z.object({
@@ -98,6 +130,7 @@ export const BbaUpdateSchema = z.object({
   penanggung_jawab: z.string().max(128).nullish(),
   keterangan:       z.string().max(4000).nullish(),
   status:           StatusSchema.optional(),
+  referensi:        ReferensiDaftarSchema,
 });
 
 export const BbaRealisasiSchema = z.object({
@@ -128,3 +161,5 @@ export type BbaUpdateInput       = z.infer<typeof BbaUpdateSchema>;
 export type BbaRealisasiInput    = z.infer<typeof BbaRealisasiSchema>;
 export type BbaQuery             = z.infer<typeof BbaQuerySchema>;
 export type BbaImportUsulanInput = z.infer<typeof BbaImportUsulanSchema>;
+export type ReferensiInput       = z.infer<typeof ReferensiSchema>;
+export type BuktiCreateInput     = z.infer<typeof BuktiCreateSchema>;

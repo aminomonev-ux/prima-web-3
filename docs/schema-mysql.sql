@@ -1192,6 +1192,43 @@ INSERT IGNORE INTO bba_kategori_aset (nama, urutan) VALUES
   ('KONSTRUKSI DALAM PENGERJAAN (KDP)', 5),
   ('ALKES & ALDOK', 6);
 
+-- BBA referensi harga + bukti dukung per item (migration-bba-referensi-bukti.sql,
+-- docs/CONCEPT-bba-perencanaan.md §4). Referensi ditulis ulang tiap Simpan item (satu
+-- transaksi + CAS item); bukti ditulis per aksi tanpa menaikkan version item. Hapus bukti
+-- = lepas catatan, berkas Drive tetap. Aturan "sah"/kelengkapan di lib/bba/referensi.ts.
+CREATE TABLE IF NOT EXISTS bba_referensi_harga (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  aset_id       BIGINT UNSIGNED NOT NULL,
+  urutan        TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  sumber        ENUM('EKATALOG','TOKO_DARING','TOKO_LURING','LAINNYA') NOT NULL DEFAULT 'LAINNYA',
+  nama_penyedia VARCHAR(255)  NULL,
+  url           VARCHAR(2048) NULL,
+  harga         DECIMAL(18,2) NULL,
+  tgl_cek       DATE          NULL,
+  file_id       VARCHAR(64)   NULL COMMENT 'Soft-FK uploaded_files.file_id (context buku_besar_aset) — tangkapan layar/nota',
+  PRIMARY KEY (id),
+  KEY idx_bra_aset (aset_id, urutan),
+  CONSTRAINT fk_bra_aset FOREIGN KEY (aset_id) REFERENCES buku_besar_aset(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  COMMENT='BBA — referensi harga per item (survei harga); ditulis ulang tiap Simpan item';
+
+CREATE TABLE IF NOT EXISTS bba_lampiran (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  aset_id     BIGINT UNSIGNED NOT NULL,
+  jenis       ENUM('BUKTI_BELI','BAST','FOTO','LAINNYA') NOT NULL,
+  nama        VARCHAR(255)  NOT NULL,
+  url         VARCHAR(2048) NULL,
+  file_id     VARCHAR(64)   NULL COMMENT 'Soft-FK uploaded_files.file_id (context buku_besar_aset)',
+  keterangan  VARCHAR(500)  NULL,
+  created_by  INT           NULL,
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_bl_aset (aset_id, jenis),
+  CONSTRAINT fk_bl_aset FOREIGN KEY (aset_id)    REFERENCES buku_besar_aset(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bl_user FOREIGN KEY (created_by) REFERENCES users(id)          ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  COMMENT='BBA — bukti dukung per item; ditulis per aksi (tambah/hapus), hapus tidak menyentuh Drive';
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- LKJIP Builder — modul baru (migration-lkjip.sql)
 -- Penyusun dokumen LKJIP/SAKIP tahunan berbasis outline-tree + blok.
@@ -1279,7 +1316,7 @@ CREATE TABLE IF NOT EXISTS lkjip_versi (
 CREATE TABLE IF NOT EXISTS uploaded_files (
   file_id      VARCHAR(64)  NOT NULL,
   uploaded_by  INT          NULL,
-  context      VARCHAR(40)  NULL,  -- modul pemilik ('lkjip' | 'usulan_aset'); sakelar /api/upload/download. NULL = tak diketahui → semua sakelar pengunggah ditanya
+  context      VARCHAR(40)  NULL,  -- modul pemilik ('lkjip' | 'usulan_aset' | 'buku_besar_aset'); sakelar /api/upload/download (+ aturan unduh BBA). NULL = tak diketahui → semua sakelar pengunggah ditanya
   sniff_ok     TINYINT(1)   NOT NULL DEFAULT 1,
   created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (file_id),

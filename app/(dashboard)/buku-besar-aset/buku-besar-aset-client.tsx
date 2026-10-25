@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Package, Layers, LayoutGrid, Plus, Search, RefreshCw, Download } from 'lucide-react';
+import { Package, Layers, LayoutGrid, Plus, Search, RefreshCw, Download, Paperclip, ListChecks } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import DeleteButton from '@/components/ui/DeleteButton';
@@ -15,19 +15,16 @@ import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { InputNominal } from '@/components/ui/input-nominal';
-import SatuanCombobox from '@/components/shared/SatuanCombobox';
 import { fetchJson } from '@/lib/shared/api';
+import { perluReferensi, buktiBelumLengkap } from '@/lib/bba/referensi';
 import type { BbaRow, BbaListResult, BbaKpi, BbaImportCandidate } from '@/lib/data/buku-besar-aset';
 import type { BbaStatus } from '@/lib/data/buku-besar-aset-schemas';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
+import ModalItem, { LencanaRef, LencanaBukti, STATUS_COLOR, type TabItem } from './_components/ModalItem';
 
 const STATUSES: BbaStatus[] = ['DIRENCANAKAN', 'REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'];
 const SUMBER = ['BLUD', 'APBD', 'DAK', 'LAINNYA'] as const;
-const STATUS_COLOR: Record<BbaStatus, string> = {
-  DIRENCANAKAN: '#7C5CFC', REALISASI_PENUH: '#1D9E75', REALISASI_SEBAGIAN: '#BA7517',
-  TIDAK_TEREALISASI: '#E24B4A',
-};
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 
@@ -35,23 +32,12 @@ type Props = { username: string; role: string; themePreference: 'dark' | 'light'
   /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
   beku: InfoBeku };
 
-type FormState = {
-  id?: number; expected_version?: number;
-  tahun_anggaran: number; uraian: string; kode_rekening: string; kategori_aset: string;
-  sumber_anggaran: string; vol: number; satuan: string; harga: number;
-  penanggung_jawab: string; keterangan: string; status?: BbaStatus;
-  origin?: BbaRow['origin']; usulan_keputusan?: BbaRow['usulan_keputusan']; nilai_rencana?: number;
-};
-
 type ImportGroup   = { count: number; total: number; items: BbaImportCandidate[] };
 type ImportPreview = { tahun: number; disetujui: ImportGroup; ditolak: ImportGroup };
+/** Modal item (§4.4): `daftar` null = Tambah item, tanpa daftar kiri. */
+type BukaModal = { daftar: BbaRow[] | null; id: number | null; tab: TabItem; saringan: 'BELUM' | 'SEMUA' };
 
 const DITOLAK_LABEL: Record<string, string> = { ADMIN: 'Ditolak Admin', KASUBAG: 'Ditolak Kasubag', KABAG: 'Ditolak Kabag' };
-
-const emptyForm = (tahun: number): FormState => ({
-  tahun_anggaran: tahun, uraian: '', kode_rekening: '', kategori_aset: '', sumber_anggaran: 'BLUD',
-  vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '',
-});
 
 export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, initialKpi, kategori, beku }: Props) {
   const router = useRouter();
@@ -76,7 +62,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [fOrigin, setFOrigin] = useState('');
   const [tab, setTab] = useState<'' | 'DISETUJUI' | 'DITOLAK'>('');
   const [q, setQ] = useState('');
-  const [form, setForm] = useState<FormState | null>(null);
+  const [fKelengkapan, setFKelengkapan] = useState<'' | 'REF' | 'BUKTI'>('');
+  const [modal, setModal] = useState<BukaModal | null>(null);
   const [realForm, setRealForm] = useState<{ row: BbaRow; nilai: number; vol: number; tgl: string; status: BbaStatus } | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | 'EMPTY' | null>(null);
   const [detailRow, setDetailRow] = useState<BbaRow | null>(null);
@@ -111,23 +98,16 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tahun, fStatus, fSumber, fOrigin, tab]);
 
-  async function saveForm() {
-    if (!form) return;
-    if (!form.uraian.trim()) { toast.error('Uraian wajib diisi'); return; }
-    setSaving(true);
-    try {
-      const isEdit = !!form.id;
-      const isUsulan = form.origin === 'USULAN';
-      // Baris asal-usulan: uraian/vol/harga terkunci server-side → tidak dikirim.
-      const body = isEdit
-        ? { id: form.id, expected_version: form.expected_version ?? 0, kode_rekening: form.kode_rekening || null, kategori_aset: form.kategori_aset || null, sumber_anggaran: form.sumber_anggaran, satuan: form.satuan || null, penanggung_jawab: form.penanggung_jawab || null, keterangan: form.keterangan || null, ...(isUsulan ? {} : { uraian: form.uraian, vol: form.vol, harga: form.harga, status: form.status }) }
-        : { tahun_anggaran: form.tahun_anggaran, uraian: form.uraian, kode_rekening: form.kode_rekening || null, kategori_aset: form.kategori_aset || null, sumber_anggaran: form.sumber_anggaran, vol: form.vol, satuan: form.satuan || null, harga: form.harga, penanggung_jawab: form.penanggung_jawab || null, keterangan: form.keterangan || null };
-      const d = await fetchJson<unknown>('/api/buku-besar-aset', { method: isEdit ? 'PATCH' : 'POST', body: JSON.stringify(body) });
-      if (d.ok) { toast.success(isEdit ? 'Tersimpan' : 'Item ditambahkan'); setForm(null); load(); }
-      else if ((d as { code?: string }).code === 'VERSION_CONFLICT') { toast.error('Data sudah diubah pengguna lain — memuat ulang.'); setForm(null); load(); }
-      else toast.error(d.message || 'Gagal menyimpan');
-    } finally { setSaving(false); }
-  }
+  // Saringan kelengkapan bekerja atas baris yang SUDAH dimuat (≤ 200) — aturannya fungsi
+  // murni `lib/bba/referensi.ts`, bukan kueri kedua yang bisa berbeda pendapat.
+  const rowsTampil = fKelengkapan === 'REF' ? rows.filter(perluReferensi)
+    : fKelengkapan === 'BUKTI' ? rows.filter(r => buktiBelumLengkap(r.bukti))
+    : rows;
+  const perluRef = rows.filter(perluReferensi);
+
+  const bukaItem = (r: BbaRow, tab: TabItem) => setModal({ daftar: rowsTampil, id: r.id, tab, saringan: 'SEMUA' });
+  const bukaBaru = () => setModal({ daftar: null, id: null, tab: 'data', saringan: 'SEMUA' });
+  const bukaLengkapi = () => perluRef.length > 0 && setModal({ daftar: perluRef, id: perluRef[0].id, tab: 'ref', saringan: 'BELUM' });
 
   async function saveRealisasi() {
     if (!realForm) return;
@@ -177,7 +157,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   }
 
   async function del(row: BbaRow) {
-    if (!(await confirmDialog({ title: 'Hapus Item', message: `Hapus "${row.uraian}" (${row.canonical_id})?`, confirmLabel: 'Hapus' }))) return;
+    const ikut = row.ref.n > 0 || row.jumlah_bukti > 0 ? ' Referensi harga dan catatan bukti dukungnya ikut terhapus; berkas di Drive tetap.' : '';
+    if (!(await confirmDialog({ title: 'Hapus Item', message: `Hapus "${row.uraian}" (${row.canonical_id})?${ikut}`, confirmLabel: 'Hapus' }))) return;
     const d = await fetchJson<unknown>(`/api/buku-besar-aset?id=${row.id}`, { method: 'DELETE' });
     if (d.ok) { toast.success('Dihapus'); load(); } else toast.error(d.message || 'Gagal hapus');
   }
@@ -211,7 +192,11 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {canImport && <PrimaButton variant="purple" data-rima="bba.tarik-usulan" onClick={openImportPreview} disabled={saving}><Download size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Tarik dari Usulan Kebutuhan</PrimaButton>}
-          <PrimaButton variant="purple" data-rima="bba.tambah-item" onClick={() => setForm(emptyForm(tahun))}>+ Tambah Item</PrimaButton>
+          <PrimaButton variant="warning" onClick={bukaLengkapi} disabled={perluRef.length === 0}
+            data-tooltip={perluRef.length === 0 ? 'Semua item yang dimuat sudah punya 3 referensi harga sah' : 'Buka item yang referensi harganya belum lengkap satu per satu'}>
+            <ListChecks size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Lengkapi referensi ({perluRef.length})
+          </PrimaButton>
+          <PrimaButton variant="purple" data-rima="bba.tambah-item" onClick={bukaBaru}>+ Tambah Item</PrimaButton>
         </div>
       </div>
 
@@ -254,6 +239,18 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         <PrimaButton variant="primary" onClick={load} disabled={loading}>{loading ? 'Memuat…' : 'Terapkan'}</PrimaButton>
       </div>
 
+      {/* Saringan kelengkapan (CONCEPT-bba-perencanaan §4.4) */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        {([['', 'Semua'], ['REF', 'Referensi belum lengkap'], ['BUKTI', 'Bukti belum lengkap']] as const).map(([val, label]) => (
+          <button key={label} type="button" onClick={() => setFKelengkapan(val)}
+            style={{ padding: '4px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: 20, cursor: 'pointer',
+              border: `1px solid ${fKelengkapan === val ? '#EF9F27' : c.border}`, background: fKelengkapan === val ? 'rgba(239,159,39,.15)' : 'transparent', color: fKelengkapan === val ? '#EF9F27' : c.sub }}>
+            {label}{val === 'REF' ? ` (${perluRef.length})` : val === 'BUKTI' ? ` (${rows.filter(r => buktiBelumLengkap(r.bukti)).length})` : ''}
+          </button>
+        ))}
+        {fKelengkapan && rows.length < total && <span style={{ fontSize: 11, color: c.sub }}>dihitung dari {rows.length} item yang dimuat</span>}
+      </div>
+
       {/* Tabel */}
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -261,16 +258,17 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
             <th style={th}>Kode</th><th style={th}>Asal</th><th style={th}>Kode Rek</th><th style={th}>Uraian</th><th style={th}>Sumber</th>
             <th style={{ ...th, textAlign: 'right' }}>Rencana</th><th style={{ ...th, textAlign: 'right' }}>Realisasi</th>
             <th style={{ ...th, textAlign: 'right' }}>Sisa</th><th style={{ ...th, textAlign: 'center' }}>Unit Real.</th>
-            <th style={th}>Status</th><th style={th}>PJ</th><th style={{ ...th, textAlign: 'center' }}>Aksi</th>
+            <th style={th}>Status</th><th style={{ ...th, textAlign: 'center' }}>Ref</th><th style={{ ...th, textAlign: 'center' }}>Bukti</th>
+            <th style={th}>PJ</th><th style={{ ...th, textAlign: 'center' }}>Aksi</th>
           </tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td style={{ ...td, textAlign: 'center', color: c.sub, padding: 24 }} colSpan={12}>Tidak ada data.</td></tr>}
-            {rows.map((r, i) => {
+            {rowsTampil.length === 0 && <tr><td style={{ ...td, textAlign: 'center', color: c.sub, padding: 24 }} colSpan={14}>{rows.length === 0 ? 'Tidak ada data.' : 'Tidak ada item yang cocok dengan saringan ini.'}</td></tr>}
+            {rowsTampil.map((r, i) => {
               const isRejected = r.usulan_keputusan === 'DITOLAK';
               return (
-              <tr key={r.id} style={{ background: i % 2 ? c.rowOdd : 'transparent', opacity: isRejected ? .75 : 1 }}>
+              <tr key={r.id} onClick={() => bukaItem(r, 'data')} style={{ background: i % 2 ? c.rowOdd : 'transparent', opacity: isRejected ? .75 : 1, cursor: 'pointer' }}>
                 <td style={{ ...td, fontFamily: MONO, fontSize: 11 }}>{r.canonical_id}</td>
-                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                <td style={{ ...td, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                   {r.origin === 'USULAN'
                     ? <Tip label="Lihat detail usulan"><button onClick={() => setDetailRow(r)} style={{ background: 'rgba(124,92,252,.15)', border: '1px solid #7C5CFC', color: '#7C5CFC', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, cursor: 'pointer', fontFamily: MONO }}>{r.usulan_no}</button></Tip>
                     : <span style={{ border: `1px solid ${c.border}`, color: c.sub, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20 }}>Manual</span>}
@@ -287,10 +285,19 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                     ? <span style={{ background: '#E24B4A', color: '#fff', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap' }}>{DITOLAK_LABEL[r.ditolak_oleh ?? ''] ?? 'Ditolak'}</span>
                     : <span style={{ background: STATUS_COLOR[r.status], color: '#fff', fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, whiteSpace: 'nowrap' }}>{r.status}</span>}
                 </td>
+                <td style={{ ...td, textAlign: 'center' }}><LencanaRef row={r} /></td>
+                <td style={{ ...td, textAlign: 'center' }}><LencanaBukti bukti={r.bukti} /></td>
                 <td style={{ ...td, fontSize: 11 }}>{r.penanggung_jawab || '—'}</td>
-                <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                    <Tip label="Edit"><EditButton onClick={() => setForm({ id: r.id, expected_version: r.version, tahun_anggaran: r.tahun_anggaran, uraian: r.uraian, kode_rekening: r.kode_rekening || '', kategori_aset: r.kategori_aset || '', sumber_anggaran: r.sumber_anggaran, vol: r.vol, satuan: r.satuan || '', harga: r.harga, penanggung_jawab: r.penanggung_jawab || '', keterangan: r.keterangan || '', status: r.status, origin: r.origin, usulan_keputusan: r.usulan_keputusan, nilai_rencana: r.nilai_rencana })} /></Tip>
+                    <Tip label="Edit"><EditButton onClick={() => bukaItem(r, 'data')} /></Tip>
+                    <Tip label={r.jumlah_bukti ? `Bukti dukung (${r.jumlah_bukti})` : 'Bukti dukung'}>
+                      <button type="button" aria-label="Bukti dukung" onClick={() => bukaItem(r, 'bukti')}
+                        style={{ position: 'relative', width: 30, height: 30, borderRadius: '50%', border: `1px solid ${c.border}`, background: 'transparent', color: r.jumlah_bukti ? '#1D9E75' : c.sub, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Paperclip size={13} />
+                        {r.jumlah_bukti > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#1D9E75', color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 10, padding: '0 4px', fontFamily: MONO }}>{r.jumlah_bukti}</span>}
+                      </button>
+                    </Tip>
                     {!isRejected && <span data-rima="bba.row-realisasi"><Tip label="Set realisasi"><RealisasiButton onClick={() => setRealForm({ row: r, nilai: r.nilai_realisasi, vol: r.vol_realisasi, tgl: r.tgl_realisasi || '', status: r.status === 'DIRENCANAKAN' ? 'REALISASI_PENUH' : r.status })} /></Tip></span>}
                     <Tip label="Hapus"><DeleteButton onClick={() => del(r)} iconSize={12} /></Tip>
                   </div>
@@ -301,35 +308,10 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         </table>
       </div>
 
-      {/* Modal Entry */}
-      {form && (
-        <Modal title={form.id ? 'Edit Item' : 'Tambah Item'} c={c} onClose={() => setForm(null)}>
-          {form.origin === 'USULAN' && (
-            <div style={{ fontSize: 12, color: '#7C5CFC', background: 'rgba(124,92,252,.12)', border: '1px solid rgba(124,92,252,.4)', borderRadius: 6, padding: '6px 10px', marginBottom: 12 }}>
-              Baris asal Usulan Kebutuhan — uraian, vol, dan harga terkunci (sumber kebenaran: usulan).
-            </div>
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Tahun"><PrimaNumberField value={form.tahun_anggaran} disabled={!!form.id} onChange={e => setForm({ ...form, tahun_anggaran: Number(e.target.value) })} /></Field>
-            <Field label="Sumber"><select value={form.sumber_anggaran} onChange={e => setForm({ ...form, sumber_anggaran: e.target.value })} style={inp}>{SUMBER.map(s => <option key={s}>{s}</option>)}</select></Field>
-            <Field label="Uraian *" full><input value={form.uraian} readOnly={form.origin === 'USULAN'} onChange={e => setForm({ ...form, uraian: e.target.value })} style={form.origin === 'USULAN' ? { ...inp, opacity: .7, cursor: 'not-allowed' } : inp} /></Field>
-            <Field label="Kode Rekening"><input value={form.kode_rekening} onChange={e => setForm({ ...form, kode_rekening: e.target.value })} style={{ ...inp, fontFamily: MONO }} /></Field>
-            <Field label="Kategori Aset"><SatuanCombobox value={form.kategori_aset} onChange={v => setForm({ ...form, kategori_aset: v })} options={kategori} style={inp} placeholder="Pilih / ketik kategori…" /></Field>
-            <Field label="Vol"><PrimaNumberField value={form.vol} disabled={form.origin === 'USULAN'} onChange={e => setForm({ ...form, vol: Number(e.target.value) })} /></Field>
-            <Field label="Satuan"><SatuanCombobox value={form.satuan} onChange={v => setForm({ ...form, satuan: v })} style={inp} placeholder="Pilih / ketik satuan…" /></Field>
-            <Field label="Harga">{form.origin === 'USULAN'
-              ? <input type="text" readOnly value={fmtRp(form.harga)} style={{ ...num, opacity: .7, cursor: 'not-allowed' }} />
-              : <InputNominal value={form.harga} onChange={v => setForm({ ...form, harga: v })} style={num} />}</Field>
-            <Field label={form.origin === 'USULAN' ? 'Nilai Rencana (dari putusan usulan)' : 'Nilai Rencana (vol × harga)'}><input type="text" readOnly value={fmtRp(form.origin === 'USULAN' ? (form.nilai_rencana ?? 0) : form.vol * form.harga)} style={{ ...num, opacity: .7, cursor: 'not-allowed' }} /></Field>
-            <Field label="Penanggung Jawab" full><input value={form.penanggung_jawab} onChange={e => setForm({ ...form, penanggung_jawab: e.target.value })} style={inp} /></Field>
-            {form.id && form.origin !== 'USULAN' && <Field label="Status"><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as BbaStatus })} style={inp}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></Field>}
-            <Field label="Keterangan" full><textarea value={form.keterangan} onChange={e => setForm({ ...form, keterangan: e.target.value })} style={{ ...inp, minHeight: 54 }} /></Field>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-            <PrimaButton variant="ghost" onClick={() => setForm(null)}>Batal</PrimaButton>
-            <PrimaButton menulis variant="primary" onClick={saveForm} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
-          </div>
-        </Modal>
+      {/* Modal item — Data item / Referensi harga / Bukti dukung (CONCEPT-bba-perencanaan §4.4) */}
+      {modal && (
+        <ModalItem c={c} daftar={modal.daftar} awalId={modal.id} tabAwal={modal.tab} saringanAwal={modal.saringan}
+          tahun={tahun} kategori={kategori} onTutup={() => setModal(null)} onTersimpan={() => void load()} />
       )}
 
       {/* Modal Realisasi */}
@@ -344,6 +326,16 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
               {(['REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'] as BbaStatus[]).map(s => <option key={s}>{s}</option>)}
             </select></Field>
           </div>
+          {/* §4.2: realisasi tanpa bukti = peringatan, tidak memblokir */}
+          {realForm.status !== 'TIDAK_TEREALISASI' && realForm.row.jumlah_bukti === 0 && (
+            <div style={{ fontSize: 12, color: '#BA7517', marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>Item ini belum punya bukti dukung (bukti beli, BAST, foto).</span>
+              <button type="button" onClick={() => { const r = realForm.row; setRealForm(null); bukaItem(r, 'bukti'); }}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#7C5CFC', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontSize: 12 }}>
+                Buka bukti dukung
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             <PrimaButton variant="ghost" onClick={() => setRealForm(null)}>Batal</PrimaButton>
             <PrimaButton variant="success" data-rima="bba.realisasi-simpan" onClick={saveRealisasi} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan Realisasi'}</PrimaButton>
@@ -429,7 +421,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
           { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
         ]}
         actions={[
-          { icon: <Plus size={17} />, label: 'Tambah', onClick: () => setForm(emptyForm(tahun)) },
+          { icon: <Plus size={17} />, label: 'Tambah', onClick: bukaBaru },
           { icon: <Search size={17} />, label: 'Filter', onClick: () => searchRef.current?.focus() },
           { icon: <RefreshCw size={17} />, label: 'Muat Ulang', onClick: () => load() },
         ]}
