@@ -17,6 +17,21 @@ export function getDriveClient() {
   return google.drive({ version: 'v3', auth: oauth2 });
 }
 
+/**
+ * Kode HTTP dari galat Google API (GaxiosError), atau null. Jangan mencocokkan pesannya:
+ * berkas yang tidak ada berbunyi "File not found: <id>.", alasan `notFound` hanya ada di
+ * `errors[]` — pencocokan `/notFound|404/` atas pesan dulu membuatnya jadi 500.
+ */
+export function kodeGalatDrive(err: unknown): number | null {
+  if (!err || typeof err !== 'object') return null;
+  const e = err as { status?: unknown; code?: unknown; response?: { status?: unknown } };
+  for (const v of [e.response?.status, e.status, e.code]) {
+    const n = Number(v);
+    if (Number.isInteger(n) && n >= 400 && n < 600) return n;
+  }
+  return null;
+}
+
 /** Upload buffer ke folder Drive. Return id + nama file. */
 export async function uploadBufferToDrive(opts: {
   buffer: Buffer; name: string; mimeType: string; folderId: string;

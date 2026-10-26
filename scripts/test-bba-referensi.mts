@@ -4,7 +4,8 @@
 //   npx tsx scripts/test-bba-referensi.mts
 //
 // A `lib/bba/referensi.ts` (murni): tebak sumber, referensi sah, ringkasan harga, kelengkapan, slot dari usulan.
-// B skema Zod. C sambungan sumber (aturan unduh BBA, L87 referensi, satu jalur unggah, retensi audit).
+// B skema Zod. C sambungan sumber (aturan unduh BBA, L87 referensi, satu jalur unggah, retensi audit,
+// folder Drive BBA, berkas Drive hilang = 404, muatan tabel yang basi dibuang).
 // D MySQL sungguhan di tahun kotak pasir 2089 lewat fungsi data asli, lalu dibersihkan.
 
 import { readFileSync } from 'node:fs'
@@ -136,6 +137,34 @@ const rBukti = tanpaKomentar(sumber('app/api/buku-besar-aset/bukti/route.ts'))
 ok('C14 route bukti: tiap handler lewat guard modul lebih dulu', (rBukti.match(/const g = await guard\(\);\s*if \(!g\.ok\) return g\.res;/g) ?? []).length === 2)
 const skema = sumber('docs/schema-mysql.sql')
 ok('C15 skema acuan memuat kedua tabel baru', skema.includes('CREATE TABLE IF NOT EXISTS bba_referensi_harga (') && skema.includes('CREATE TABLE IF NOT EXISTS bba_lampiran ('))
+
+const { folderUnggahan } = await import('../lib/security/unggahan-modul')
+const envUji = { GOOGLE_DRIVE_FOLDER_ID: 'umum', GOOGLE_DRIVE_FOLDER_ID_BBA: ' bba ' }
+ok('C16 unggahan BBA ke folder BBA; modul lain & modul tak dikenal tetap ke folder umum', folderUnggahan('buku_besar_aset', envUji) === 'bba'
+  && folderUnggahan('lkjip', envUji) === 'umum' && folderUnggahan('usulan_aset', envUji) === 'umum' && folderUnggahan(null, envUji) === 'umum')
+ok('C17 folder BBA belum disetel/kosong → jatuh ke folder umum (server lama tetap bisa unggah)', folderUnggahan('buku_besar_aset', { GOOGLE_DRIVE_FOLDER_ID: 'umum' }) === 'umum'
+  && folderUnggahan('buku_besar_aset', { GOOGLE_DRIVE_FOLDER_ID: 'umum', GOOGLE_DRIVE_FOLDER_ID_BBA: '  ' }) === 'umum')
+ok('C18 route unggah memakai folderUnggahan(modulAsal), bukan env umum langsung', tanpaKomentar(sumber('app/api/upload/route.ts')).includes('const folderId = folderUnggahan(modulAsal);')
+  && !tanpaKomentar(sumber('app/api/upload/route.ts')).includes('process.env.GOOGLE_DRIVE_FOLDER_ID'))
+
+const { kodeGalatDrive } = await import('../lib/services/drive')
+// Bentuk galat Drive sungguhan untuk berkas yang tidak ada (diukur 2026-10-26): pesannya
+// "File not found: <id>." — tanpa "404"/"notFound" — kodenya di status/code/response.status.
+const galatHilang = Object.assign(new Error('File not found: UJIBBA_x.'), { status: 404, code: 404, response: { status: 404 } })
+ok('C19 kodeGalatDrive membaca status, bukan pesan', kodeGalatDrive(galatHilang) === 404 && kodeGalatDrive({ response: { status: 404 } }) === 404
+  && kodeGalatDrive({ code: '404' }) === 404 && kodeGalatDrive({ code: 'ECONNRESET' }) === null && kodeGalatDrive(new Error('File not found: x')) === null && kodeGalatDrive(null) === null)
+ok('C20 route unduh: berkas Drive yang hilang = 404 lewat kodeGalatDrive', unduh.includes('if (kodeGalatDrive(err) === 404) {') && !unduh.includes('/notFound|404/i'))
+
+const badanLoad = klien.slice(klien.indexOf('const load = useCallback('), klien.indexOf('const rowsTampil'))
+const iJawab = badanLoad.indexOf('const d = await fetchJson<unknown>(`/api/buku-besar-aset?${params}`);')
+const iBasi = badanLoad.indexOf('if (nomor !== nomorMuat.current) return;')
+ok('C21 tabel: jawaban muatan yang sudah basi dibuang SEBELUM mengisi baris', iJawab >= 0 && iBasi > iJawab && iBasi < badanLoad.indexOf('setRows(r.rows)')
+  && badanLoad.includes('const nomor = ++nomorMuat.current;') && badanLoad.includes('finally { if (nomor === nomorMuat.current) setLoading(false); }'))
+const rumusKunci = /const kunciSaringan = (`[^`]+`);/.exec(klien)?.[1] ?? '?'
+ok('C22 tabel: muat otomatis berpatokan saringan yang terakhir dimuat, tahun setengah diketik dilewati', !badanLoad.includes('didMount')
+  && badanLoad.includes('if (kunciTermuat.current === kunciSaringan || tahun < 2020 || tahun > 2100) return;'))
+ok('C23 tabel: tiap muatan mencatat saringannya dengan rumus kunci yang SAMA (kalau tidak, kembali ke tahun awal tak memuat ulang)',
+  rumusKunci.includes('${tahun}') && badanLoad.includes(`kunciTermuat.current = ${rumusKunci};`))
 
 console.log('\nD. MySQL sungguhan (kotak pasir 2089)')
 const TAHUN = 2089

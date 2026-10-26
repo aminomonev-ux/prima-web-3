@@ -12,6 +12,7 @@ import { ADMIN_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants'
 import { modulMati } from '@/lib/security/guard';
 import { kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
+import { kodeGalatDrive } from '@/lib/services/drive';
 
 export const runtime = 'nodejs';
 
@@ -134,7 +135,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/notFound|404/i.test(msg)) {
+    if (kodeGalatDrive(err) === 404) {
       return NextResponse.json({ ok: false, message: 'File tidak ditemukan.' }, { status: 404 });
     }
     console.error('[Upload Download Error]', msg);

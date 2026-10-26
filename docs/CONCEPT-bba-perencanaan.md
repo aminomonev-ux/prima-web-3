@@ -196,6 +196,15 @@ Aturan unduh BBA dicoba dengan akun staf sub-bidang:
 
 Unggah berkas ke Drive sungguhan **tidak** dicoba dari layar. Jalur `/api/upload` dipakai apa adanya; yang baru hanya nama modul `buku_besar_aset`, dan nama itu diuji di bagian C.
 
+**Susulan 2026-10-26:**
+
+- **Folder Drive sendiri untuk BBA** (`GOOGLE_DRIVE_FOLDER_ID_BBA`, kosong = ikut `GOOGLE_DRIVE_FOLDER_ID`). Aturannya `folderUnggahan(modul)` di `lib/security/unggahan-modul.ts`, daftar modul yang sama dengan sakelar unggah/unduh. Token aplikasi ber-scope `drive.file`: aplikasi tidak bisa MEMBACA folder buatan pemilik (`files.get` = 404), tapi tetap bisa menaruh berkas di dalamnya — jadi "folder tidak ditemukan" saat memeriksa bukan tanda unggahan akan gagal.
+- **Unggah sungguhan dicoba dari layar**: bukti berkas (tab Bukti) dan referensi berkas-saja (tab Referensi, terhitung sah). Keduanya mendarat di folder BBA, terbuka 200 lewat `/api/upload/download`, dan staf sub-bidang ber-akses BBA bisa membuka berkas yang diunggah admin. Berkas uji dipindah ke Sampah Drive sesudahnya.
+- **Dua cacat lama dibereskan:**
+  - Tabel BBA menampilkan muatan yang datang terlambat (ganti tahun saat muatan lama belum pulang → tabel berisi tahun lain/kosong). `load()` kini bernomor giliran; muat otomatis berpatokan saringan yang terakhir dimuat (bukan "sudah mount" — efek ganda strict mode dulu menembak muatan tahun awal), dan tahun setengah diketik ("208") tidak dimuat.
+  - Berkas yang tidak ada di Drive dijawab 500. Pesan galat Drive berbunyi "File not found: <id>." tanpa "404"/"notFound", jadi pencocokan pesan tak pernah kena; kini `kodeGalatDrive(err)` (`lib/services/drive.ts`) membaca kodenya.
+- Suite jadi 71 pemeriksaan; 12 uji mutasi susulan tertangkap.
+
 ## 5. Tahap 2 — Master Barang, status Dalam Proses, tampilan Per Barang
 
 ### 5.1 Master Barang (menutup T3)

@@ -10,7 +10,7 @@ import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { sql } from '@/lib/data/db';
 import { modulMati } from '@/lib/security/guard';
-import { kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
+import { folderUnggahan, kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
 
 export const runtime = 'nodejs';
 
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
     // tapi ditandai sniff_ok=0 → /api/upload/download serve attachment, bukan inline.
     const sniffOk = sniffed !== null;
 
-    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
+    const folderId = folderUnggahan(modulAsal);
     if (!folderId) throw new Error('GOOGLE_DRIVE_FOLDER_ID belum dikonfigurasi di .env');
     const drive = getDriveClient();
 

@@ -150,6 +150,8 @@ GOOGLE_OAUTH_REFRESH_TOKEN=
 GOOGLE_DRIVE_FOLDER_ID=
 GOOGLE_DRIVE_FOLDER_ID_LKJIP=
 GOOGLE_DRIVE_FOLDER_ID_BACKUP=
+# Bukti & referensi harga Buku Besar Aset; kosong = ikut GOOGLE_DRIVE_FOLDER_ID
+GOOGLE_DRIVE_FOLDER_ID_BBA=
 
 # ── Backup ────────────────────────────────────────────────
 BACKUP_ENC_PASSWORD=<acak>

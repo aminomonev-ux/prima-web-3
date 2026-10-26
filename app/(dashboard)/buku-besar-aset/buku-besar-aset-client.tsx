@@ -70,7 +70,14 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [saving, setSaving] = useState(false);
   const canImport = role === 'ADMIN' || role === 'SUPER_ADMIN';
 
+  // Jawaban muatan bisa tiba tidak berurutan (ganti tahun saat muatan lama belum pulang) —
+  // hanya muatan TERAKHIR yang boleh mengisi tabel, kalau tidak tabel menampilkan tahun lain.
+  const nomorMuat = useRef(0);
+  const kunciSaringan = `${tahun}|${fStatus}|${fSumber}|${fOrigin}|${tab}`;
+  const kunciTermuat = useRef(kunciSaringan);
   const load = useCallback(async () => {
+    const nomor = ++nomorMuat.current;
+    kunciTermuat.current = `${tahun}|${fStatus}|${fSumber}|${fOrigin}|${tab}`;
     setLoading(true);
     try {
       const params = new URLSearchParams({ tahun: String(tahun), page: '1', limit: '200' });
@@ -80,23 +87,26 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       if (tab)     params.set('keputusan', tab);
       if (q.trim()) params.set('q', q.trim());
       const d = await fetchJson<unknown>(`/api/buku-besar-aset?${params}`);
+      if (nomor !== nomorMuat.current) return;
       if (d.ok) {
         const r = d as unknown as BbaListResult & { kpi?: BbaKpi };
         setRows(r.rows); setTotal(r.total);
         if (r.kpi) setKpi(r.kpi);
       } else toast.error(d.message || 'Gagal memuat');
-    } finally { setLoading(false); }
+    } finally { if (nomor === nomorMuat.current) setLoading(false); }
   }, [tahun, fStatus, fSumber, fOrigin, tab, q]);
 
+
   // Auto-refresh saat ganti tahun/status/sumber (debounce supaya ketik tahun tak spam).
-  // Skip mount awal (initialResult sudah dimuat server). Pencarian teks (q) tetap manual.
-  const didMount = useRef(false);
+  // Patokannya saringan yang terakhir DIMUAT, bukan "sudah mount" — efek ganda strict mode
+  // dulu menembak muatan tahun awal yang bisa pulang belakangan. Tahun setengah diketik
+  // (mis. "208") tidak dimuat. Pencarian teks (q) tetap manual.
   useEffect(() => {
-    if (!didMount.current) { didMount.current = true; return; }
+    if (kunciTermuat.current === kunciSaringan || tahun < 2020 || tahun > 2100) return;
     const t = setTimeout(() => { void load(); }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tahun, fStatus, fSumber, fOrigin, tab]);
+  }, [kunciSaringan]);
 
   // Saringan kelengkapan bekerja atas baris yang SUDAH dimuat (≤ 200) — aturannya fungsi
   // murni `lib/bba/referensi.ts`, bukan kueri kedua yang bisa berbeda pendapat.

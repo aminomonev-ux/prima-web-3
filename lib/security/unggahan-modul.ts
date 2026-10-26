@@ -22,3 +22,16 @@ export function kunciSakelarBerkas(modul: ModulPengunggah | null): string[] {
     ? kunciSakelarUntuk(modul)
     : [...new Set(MODUL_PENGUNGGAH.flatMap((m) => kunciSakelarUntuk(m)))];
 }
+
+const ENV_FOLDER_KHUSUS: Partial<Record<ModulPengunggah, string>> = {
+  buku_besar_aset: 'GOOGLE_DRIVE_FOLDER_ID_BBA',
+};
+
+/**
+ * Folder Drive tujuan unggahan. Modul berfolder khusus yang env-nya belum diisi jatuh ke
+ * folder umum `GOOGLE_DRIVE_FOLDER_ID` — server yang belum menyetelnya tetap bisa mengunggah.
+ */
+export function folderUnggahan(modul: ModulPengunggah | null, env: Record<string, string | undefined> = process.env): string {
+  const kunci = modul ? ENV_FOLDER_KHUSUS[modul] : undefined;
+  return (kunci ? env[kunci]?.trim() : '') || (env.GOOGLE_DRIVE_FOLDER_ID?.trim() ?? '');
+}
