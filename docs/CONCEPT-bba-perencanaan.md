@@ -1,6 +1,6 @@
 # CONCEPT — Buku Besar Aset untuk perencanaan: referensi harga, bukti dukung, per barang, kondisi eksisting
 
-> Status: **Tahap 1 dieksekusi 2026-10-22** (catatan eksekusi → §4.7); Tahap 2–3 masih konsep. Keputusan terbuka → §9. Desain layar dipilih pemilik 2026-10-22 → §4.4.
+> Status: **Tahap 1 dieksekusi 2026-10-22** (catatan eksekusi → §4.7); **Tahap 2 dieksekusi 2026-10-26** (→ §5.6); Tahap 3 masih konsep. Keputusan terbuka → §9. Desain layar dipilih pemilik 2026-10-22 → §4.4.
 > Lingkup: **internal untuk perencanaan.** Pembukuan Barang Milik Daerah tetap di aplikasi BMD resmi RS; PRIMA tidak menyainginya (§8).
 > Konsep awal BBA (`docs/session/buku-besar-aset/CONCEPT.md`) tidak ikut ter-copas ke workspace ini; acuan yang dipakai di sini: kode + `docs/schema-mysql.sql`.
 
@@ -277,6 +277,26 @@ ALTER TABLE buku_besar_aset
 ### 5.5 Berkas yang disentuh
 
 Migrasi + skema · `lib/bba/barang.ts` (baru, MURNI) · schemas (status, transisi, barang) · data layer (barang CRUD + gabung, agregasi, tautan otomatis di `commitImportUsulan`, `barang_id` di create/update — cek eksistensi L68) · `app/api/buku-besar-aset/barang/route.ts` (baru) · `realisasi/route.ts` · halaman Master (tab Barang) · client (Per Barang, combobox, strip, spanduk belum ditautkan) · RIMA provider · sentinel knowledge · audit `BBA_BARANG_*` + retensi.
+
+### 5.6 Catatan eksekusi Tahap 2 (2026-10-26)
+
+Migrasi `migration-bba-barang-proses.sql` — **wajib dijalankan di server kantor sebelum kodenya dipasang** (daftar BBA membaca `barang_id`/`tgl_proses`).
+
+Yang berbeda dari rancangan, beserta sebabnya:
+
+- **Status hanya diubah lewat modal Proses & Realisasi.** Pilihan status di tab Data item (khusus item manual) DIBUANG, dan `status` dicabut dari skema PATCH item. Kalau tetap ada, DIPROSES bisa dipasang dari form tanpa tanggal proses — dua pintu, dua aturan. Koreksi mundur dari Realisasi Penuh (khusus Admin) tetap ada, kini di modal Proses & Realisasi. Aturan transisi pindah ke `lib/bba/status.ts` (murni) supaya pilihan di layar = aturan server.
+- **"Buat barang baru" tidak menulis apa pun saat dipilih.** Namanya ikut body Simpan item (`barang_baru`) dan barangnya dibuat (atau dipakai yang bernama sama) di transaksi Simpan yang sama. Simpan gagal/batal → tidak ada barang yatim di Master (L78).
+- **Simpan item memeriksa versi DULU di bawah kunci** (`SELECT … FOR UPDATE`), baru menentukan barang. Ditemukan saat diuji: modal yang dibuka sebelum barangnya digabung orang lain dulu ditolak "barang tidak ditemukan", padahal yang benar 409 lalu muat ulang.
+- **Tautkan sekaligus tidak memakai angka kunci.** Daftarnya dipotret dari tabel yang bisa basi (L77); pertanyaan yang tepat "item ini masih tanpa barang?" — yang sudah ditautkan orang lain di sela-selanya dilewati dan dihitung, tidak ditimpa. Versi item tetap dinaikkan supaya modal yang terbuka dapat 409.
+- **Gabungkan menaikkan versi item yang dipindah**, dengan alasan yang sama.
+- **Saran tautan = nama barang yang jadi awalan UTUH uraian** ("Laptop" untuk "Laptop Core i5", bukan untuk "Laptopan"); yang terpanjang menang. Tarik dari Usulan hanya menautkan nama yang SAMA persis (sesudah dirapikan) dan tidak pernah membuat barang baru.
+- **Spanduk "belum ditautkan" juga di tampilan Per Item**, bukan hanya baris penutup Per Barang — kalau tidak, orang yang tidak membuka Per Barang tidak pernah menautkan.
+- **Tampilan Per Barang tidak mengikuti saringan** status/sumber/asal (pernah dibeli & dalam proses lintas tahun); layar menuliskannya. Baris Jumlah = Total Rencana tanpa saringan.
+- Warna DIPROSES = token `info` #378ADD.
+
+Uji: `npx tsx scripts/test-bba-barang.mts` (72 pemeriksaan; bagian D memakai MySQL kotak pasir 2086–2088 dan membersihkan diri), 27 uji mutasi tertangkap.
+
+Dicoba di peramban dengan data kotak pasir 2087–2089, lalu dibersihkan: Per Barang (angka cocok dengan kartu; Jumlah = Total Rencana), kartu barang, Tautkan sekaligus (saran, buat baru, nama diubah), barang baru dari modal item (dibuat saat Simpan, kategori ikut item), Dalam Proses → diterima (tgl_proses tetap), Master → Barang (tambah, ubah, gabung, hapus; hapus barang terpakai ditolak), tema terang, 375 px. Ditemukan saat dilihat: tabel riwayat di kolom tengah modal (250 px) meluap ke samping → harga ringkas "13,5 jt" + "(ini)" di baris sendiri; tabel Master Barang di 375 px → kategori/satuan/jumlah item jadi satu baris keterangan di bawah nama.
 
 ## 6. Tahap 3 — Kondisi eksisting
 

@@ -11,15 +11,16 @@ import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
-import type { KategoriAset } from '@/lib/data/buku-besar-aset';
+import type { KategoriAset, BbaBarang } from '@/lib/data/buku-besar-aset';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
+import BarangPanel from './BarangPanel';
 
-type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialKategori: KategoriAset[];
+type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialKategori: KategoriAset[]; initialBarang: BbaBarang[];
   /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
   beku: InfoBeku };
 
-export default function MasterClient({ username, role, themePreference, initialKategori, beku }: Props) {
+export default function MasterClient({ username, role, themePreference, initialKategori, initialBarang, beku }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -33,6 +34,7 @@ export default function MasterClient({ username, role, themePreference, initialK
   const [rows, setRows] = useState<KategoriAset[]>(initialKategori);
   const [nama, setNama] = useState('');
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<'KATEGORI' | 'BARANG'>('KATEGORI');
 
   const load = useCallback(async () => {
     const d = await fetchJson<unknown>('/api/buku-besar-aset/kategori');
@@ -65,7 +67,7 @@ export default function MasterClient({ username, role, themePreference, initialK
         <div style={{ fontSize: 13, color: c.sub }}>
           <span style={{ fontWeight: 800, background: 'linear-gradient(135deg,#EF9F27,#FAC775)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Buku Besar Aset</span>
           <span style={{ margin: '0 6px', color: isLight ? '#D1D5DB' : '#185FA5' }}>/</span>
-          <span style={{ color: isLight ? '#374151' : '#B5D4F4', fontWeight: 600 }}>Master Kategori</span>
+          <span style={{ color: isLight ? '#374151' : '#B5D4F4', fontWeight: 600 }}>Master {tab === 'BARANG' ? 'Barang' : 'Kategori'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ThemeToggle initialTheme={themePreference} onThemeChange={setTheme} />
@@ -73,8 +75,21 @@ export default function MasterClient({ username, role, themePreference, initialK
         </div>
       </header>
 
-      <div style={{ padding: '24px 28px 100px', maxWidth: 720, margin: '0 auto' }}>
+      <div style={{ padding: '24px 16px 100px', maxWidth: tab === 'BARANG' ? 900 : 720, margin: '0 auto' }}>
         <SpandukBeku {...beku}/>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {([['KATEGORI', 'Kategori'], ['BARANG', 'Barang']] as const).map(([val, label]) => (
+            <button key={val} type="button" onClick={() => setTab(val)}
+              style={{ padding: '5px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 20, cursor: 'pointer',
+                border: `1px solid ${tab === val ? '#EF9F27' : c.border}`, background: tab === val ? 'rgba(239,159,39,.15)' : 'transparent', color: tab === val ? '#EF9F27' : c.sub }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {tab === 'BARANG' ? <>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>🧾 Master Barang</h1>
+          <BarangPanel c={c} awal={initialBarang} kategori={rows.map(r => r.nama)} />
+        </> : <>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>🗂️ Master Kategori Aset</h1>
         <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 18 }}>Daftar kategori untuk dropdown di form item · {rows.length} kategori</div>
 
@@ -98,6 +113,7 @@ export default function MasterClient({ username, role, themePreference, initialK
             </tbody>
           </table>
         </div>
+        </>}
       </div>
 
       <FloatingDock isLight={isLight}

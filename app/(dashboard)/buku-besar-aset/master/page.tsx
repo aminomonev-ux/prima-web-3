@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
-import { listKategori } from '@/lib/data/buku-besar-aset';
+import { listKategori, listBarang } from '@/lib/data/buku-besar-aset';
 import MasterClient from './master-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
@@ -23,7 +23,7 @@ export default async function BukuBesarAsetMasterPage() {
   if (!isAsetRole(role, row?.app_access ?? null)) redirect('/menu');
 
   const beku = await bekuLayarModul('buku_besar_aset');
-  const initialKategori = await listKategori();
+  const [initialKategori, initialBarang] = await Promise.all([listKategori(), listBarang()]);
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
@@ -33,6 +33,7 @@ export default async function BukuBesarAsetMasterPage() {
         role={role}
         themePreference={themePreference}
         initialKategori={initialKategori}
+        initialBarang={initialBarang}
         beku={beku}
       />
     </KunciTulisProvider>

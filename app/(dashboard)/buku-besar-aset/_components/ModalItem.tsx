@@ -22,16 +22,19 @@ import {
   referensiSah, perluReferensi, kelengkapanBukti, buktiBelumLengkap,
   type ReferensiIsian, type JenisBukti, type KelengkapanBukti,
 } from '@/lib/bba/referensi';
-import type { BbaRow, BbaBukti, BbaDetail } from '@/lib/data/buku-besar-aset';
-import type { BbaStatus } from '@/lib/data/buku-besar-aset-schemas';
+import { saranBarang, type BarangRingan } from '@/lib/bba/barang';
+import type { BbaStatus } from '@/lib/bba/status';
+import type { BbaRow, BbaBukti, BbaDetail, BbaBarang } from '@/lib/data/buku-besar-aset';
+import PilihBarang, { type PilihanBarang } from './PilihBarang';
+import KartuBarang from './KartuBarang';
 
 export type TabItem = 'data' | 'ref' | 'bukti';
 export type Warna = { card: string; text: string; sub: string; border: string; input: string; canvas: string; rowOdd: string };
 
-const STATUSES: BbaStatus[] = ['DIRENCANAKAN', 'REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'];
 const SUMBER_ANGGARAN = ['BLUD', 'APBD', 'DAK', 'LAINNYA'] as const;
+// DIPROSES = token `info` (#378ADD) — DESIGN-SYSTEM, bukan warna baru.
 export const STATUS_COLOR: Record<BbaStatus, string> = {
-  DIRENCANAKAN: '#7C5CFC', REALISASI_PENUH: '#1D9E75', REALISASI_SEBAGIAN: '#BA7517', TIDAK_TEREALISASI: '#E24B4A',
+  DIRENCANAKAN: '#7C5CFC', DIPROSES: '#378ADD', REALISASI_PENUH: '#1D9E75', REALISASI_SEBAGIAN: '#BA7517', TIDAK_TEREALISASI: '#E24B4A',
 };
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -59,21 +62,26 @@ export function LencanaBukti({ bukti }: { bukti: KelengkapanBukti | null }) {
 }
 
 // ─── Isian Data item ──────────────────────────────────────────────────────────
+// Status sengaja TIDAK di sini — satu pintu: modal Proses & Realisasi (§5.2).
 type IsianItem = {
   tahun_anggaran: number; uraian: string; kode_rekening: string; kategori_aset: string; sumber_anggaran: string;
-  vol: number; satuan: string; harga: number; penanggung_jawab: string; keterangan: string; status: BbaStatus | null;
+  vol: number; satuan: string; harga: number; penanggung_jawab: string; keterangan: string; barang: PilihanBarang;
 };
 
 const isianKosong = (tahun: number): IsianItem => ({
   tahun_anggaran: tahun, uraian: '', kode_rekening: '', kategori_aset: '', sumber_anggaran: 'BLUD',
-  vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '', status: null,
+  vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '', barang: null,
 });
 
 const isianDari = (r: BbaRow): IsianItem => ({
   tahun_anggaran: r.tahun_anggaran, uraian: r.uraian, kode_rekening: r.kode_rekening || '', kategori_aset: r.kategori_aset || '',
   sumber_anggaran: r.sumber_anggaran, vol: r.vol, satuan: r.satuan || '', harga: r.harga,
-  penanggung_jawab: r.penanggung_jawab || '', keterangan: r.keterangan || '', status: r.status,
+  penanggung_jawab: r.penanggung_jawab || '', keterangan: r.keterangan || '',
+  barang: r.barang_id ? { id: r.barang_id, nama: r.barang_nama ?? '' } : null,
 });
+
+/** Isian barang → isi body Simpan. Barang baru dibuat server di transaksi Simpan yang sama (L78). */
+const bodyBarang = (p: PilihanBarang) => !p ? { barang_id: null } : 'id' in p ? { barang_id: p.id } : { barang_baru: p.baru };
 
 type Muatan = { item: BbaRow; referensiTersimpan: number };
 type Dasar = { isian: IsianItem; refs: ReferensiIsian[] };
@@ -118,7 +126,13 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   const [dasar, setDasar] = useState<Dasar>(() => ({ isian: isianKosong(tahun), refs: [] }));
   const [galatMuat, setGalatMuat] = useState('');
   const [menyimpan, setMenyimpan] = useState(false);
+  const [daftarBarang, setDaftarBarang] = useState<BarangRingan[]>([]);
   const nomorMuat = useRef(0);
+
+  async function muatBarang() {
+    const d = await fetchJson<unknown>('/api/buku-besar-aset/barang');
+    if (d.ok) setDaftarBarang((d as unknown as { data: BbaBarang[] }).data.map(b => ({ id: b.id, nama: b.nama })));
+  }
 
   const modeBaru = aktifId === null;
   const memuat = !modeBaru && muatan?.item.id !== aktifId && !galatMuat;
@@ -161,6 +175,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   // di badan effect ditolak react-hooks/set-state-in-effect.
   useEffect(() => {
     if (awalId !== null) void Promise.resolve().then(() => muat(awalId));
+    void Promise.resolve().then(muatBarang);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dimuat sekali saat modal dibuka; berpindah item lewat pindahKe
   }, []);
 
@@ -206,14 +221,17 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
       sumber_anggaran: isian.sumber_anggaran, satuan: isian.satuan || null,
       penanggung_jawab: isian.penanggung_jawab || null, keterangan: isian.keterangan || null,
     };
-    // L87: referensi hanya dikirim kalau berubah — `undefined` di server = jangan sentuh.
+    // L87: referensi & barang hanya dikirim kalau berubah — `undefined` di server = jangan sentuh.
     const refBerubah = !referensiSama(refs, dasar.refs);
+    const barangBerubah = JSON.stringify(isian.barang) !== JSON.stringify(dasar.isian.barang);
     const body = modeBaru
-      ? { tahun_anggaran: isian.tahun_anggaran, uraian: isian.uraian, vol: isian.vol, harga: isian.harga, ...dataUmum, ...(rapi.length ? { referensi: rapi } : {}) }
+      ? { tahun_anggaran: isian.tahun_anggaran, uraian: isian.uraian, vol: isian.vol, harga: isian.harga, ...dataUmum,
+          ...(isian.barang ? bodyBarang(isian.barang) : {}), ...(rapi.length ? { referensi: rapi } : {}) }
       : {
           id: item!.id, expected_version: item!.version, ...dataUmum,
           // Baris asal-usulan: uraian/vol/harga terkunci server-side → tidak dikirim (T8).
-          ...(isUsulan ? {} : { uraian: isian.uraian, vol: isian.vol, harga: isian.harga, status: isian.status ?? undefined }),
+          ...(isUsulan ? {} : { uraian: isian.uraian, vol: isian.vol, harga: isian.harga }),
+          ...(barangBerubah ? bodyBarang(isian.barang) : {}),
           ...(refBerubah ? { referensi: rapi } : {}),
         };
 
@@ -228,6 +246,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
         return;
       }
       onTersimpan();
+      if (isian.barang && 'baru' in isian.barang) void muatBarang();
       if (modeBaru) {
         toast.success('Item ditambahkan — referensi & bukti dukung bisa dilengkapi di sini.');
         const id = Number((d as unknown as { id: number }).id);
@@ -315,7 +334,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
             </div>
           )}
 
-          {/* Kolom tengah — kartu item (Tahap 1: ringkasan; barang & kondisi menyusul §5/§6) */}
+          {/* Kolom tengah — kartu item + kartu barang (§4.4/§5.3; kondisi eksisting menyusul §6) */}
           <div className="bba-mi-kartu" style={{ borderRight: `1px solid ${c.border}` }}>
             {modeBaru ? (
               <div style={{ fontSize: 12.5, color: c.sub, lineHeight: 1.6 }}>
@@ -326,6 +345,22 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
               <KartuItem item={item} kBukti={kBukti} c={c} />
             ) : (
               <div style={{ fontSize: 12.5, color: galatMuat ? '#E24B4A' : c.sub }}>{galatMuat || 'Memuat…'}</div>
+            )}
+            {(modeBaru || item) && (
+              <div className="bba-mi-barang" style={{ borderTop: `1px solid ${c.border}`, marginTop: 12, paddingTop: 10 }}>
+                {isian.barang && 'id' in isian.barang ? <>
+                  <KartuBarang barangId={isian.barang.id} tahun={isian.tahun_anggaran} c={c} tandaiTahun={isian.tahun_anggaran} ringkas />
+                  {isian.barang.id !== item?.barang_id && (
+                    <div style={{ fontSize: 11, color: '#BA7517', marginTop: 6 }}>Belum disimpan — angka di atas belum memuat item ini.</div>
+                  )}
+                </> : isian.barang ? (
+                  <div style={{ fontSize: 12, color: c.sub, lineHeight: 1.5 }}>Barang baru <b style={{ color: c.text }}>“{isian.barang.baru}”</b> dibuat saat Simpan — belum ada riwayat.</div>
+                ) : (
+                  <div style={{ fontSize: 12, color: c.sub, lineHeight: 1.5 }}>
+                    Belum ditautkan ke barang. Pilih barangnya di <b>Data item</b> supaya riwayat beli dan yang sedang diproses terlihat di sini.
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -353,6 +388,11 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                     <Field label="Tahun"><PrimaNumberField value={isian.tahun_anggaran} disabled={!modeBaru} onChange={e => setIsian({ ...isian, tahun_anggaran: Number(e.target.value) })} /></Field>
                     <Field label="Sumber"><select value={isian.sumber_anggaran} onChange={e => setIsian({ ...isian, sumber_anggaran: e.target.value })} style={inp}>{SUMBER_ANGGARAN.map(s => <option key={s}>{s}</option>)}</select></Field>
                     <Field label="Uraian *" full><input value={isian.uraian} readOnly={isUsulan} onChange={e => setIsian({ ...isian, uraian: e.target.value })} style={isUsulan ? { ...inp, ...kunci } : inp} /></Field>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 11, opacity: .8 }}>Barang <span style={{ opacity: .8 }}>— jenis barang untuk riwayat beli (spesifikasi tetap di uraian)</span></span>
+                      <PilihBarang daftar={daftarBarang} nilai={isian.barang} saran={isian.barang ? null : saranBarang(isian.uraian, daftarBarang)}
+                        onUbah={barang => setIsian({ ...isian, barang })} c={c} inp={inp} />
+                    </div>
                     <Field label="Kode Rekening"><input value={isian.kode_rekening} onChange={e => setIsian({ ...isian, kode_rekening: e.target.value })} style={{ ...inp, fontFamily: MONO }} /></Field>
                     <Field label="Kategori Aset"><SatuanCombobox value={isian.kategori_aset} onChange={v => setIsian({ ...isian, kategori_aset: v })} options={kategori} style={inp} placeholder="Pilih / ketik kategori…" /></Field>
                     <Field label="Vol"><PrimaNumberField value={isian.vol} disabled={isUsulan} onChange={e => setIsian({ ...isian, vol: Number(e.target.value) })} /></Field>
@@ -362,7 +402,6 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                       : <InputNominal value={isian.harga} onChange={v => setIsian({ ...isian, harga: v })} style={num} />}</Field>
                     <Field label={isUsulan ? 'Nilai Rencana (dari putusan usulan)' : 'Nilai Rencana (vol × harga)'}><input type="text" readOnly value={fmtRp(isUsulan ? (item?.nilai_rencana ?? 0) : isian.vol * isian.harga)} style={{ ...num, ...kunci }} /></Field>
                     <Field label="Penanggung Jawab" full><input value={isian.penanggung_jawab} onChange={e => setIsian({ ...isian, penanggung_jawab: e.target.value })} style={inp} /></Field>
-                    {!modeBaru && !isUsulan && isian.status && <Field label="Status"><select value={isian.status} onChange={e => setIsian({ ...isian, status: e.target.value as BbaStatus })} style={inp}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></Field>}
                     <Field label="Keterangan" full><textarea value={isian.keterangan} onChange={e => setIsian({ ...isian, keterangan: e.target.value })} style={{ ...inp, minHeight: 54 }} /></Field>
                   </div>
                 ) : tab === 'ref' ? (

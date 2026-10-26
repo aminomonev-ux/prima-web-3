@@ -5,7 +5,8 @@ import { setRealisasi, BbaVersionConflictError, BbaTransitionError, BbaNotFoundE
 import { guard } from '../_guard';
 import { bolehBatalkanFinal } from '@/lib/constants';
 
-// PATCH /api/buku-besar-aset/realisasi — set nilai realisasi + status (REALISASI_*).
+// PATCH /api/buku-besar-aset/realisasi — Proses & Realisasi: status (termasuk Dalam Proses, §5.2)
+// + angka realisasi. Satu-satunya pintu yang mengubah status item.
 export async function PATCH(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
@@ -25,6 +26,6 @@ export async function PATCH(req: NextRequest) {
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
     throw err;
   }
-  await writeAuditLog({ req, eventType: 'BBA_REALISASI', userId: g.session.userId, username: g.session.username, detail: `BBA realisasi id=${parsed.data.id} nilai=${parsed.data.nilai_realisasi} vol=${parsed.data.vol_realisasi} status=${parsed.data.status}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh SUPER_ADMIN)' : ''}` });
+  await writeAuditLog({ req, eventType: 'BBA_REALISASI', userId: g.session.userId, username: g.session.username, detail: `BBA realisasi id=${parsed.data.id} nilai=${parsed.data.nilai_realisasi} vol=${parsed.data.vol_realisasi} status=${parsed.data.status}${parsed.data.status === 'DIPROSES' && parsed.data.tgl_proses ? ` tgl_proses=${parsed.data.tgl_proses}` : ''}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh SUPER_ADMIN)' : ''}` });
   return NextResponse.json({ ok: true });
 }

@@ -17,13 +17,15 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { InputNominal } from '@/components/ui/input-nominal';
 import { fetchJson } from '@/lib/shared/api';
 import { perluReferensi, buktiBelumLengkap } from '@/lib/bba/referensi';
+import { BBA_STATUSES, LABEL_STATUS, pilihanStatusRealisasi, statusSebelumTerima, type BbaStatus } from '@/lib/bba/status';
+import { bolehBatalkanFinal } from '@/lib/constants';
 import type { BbaRow, BbaListResult, BbaKpi, BbaImportCandidate } from '@/lib/data/buku-besar-aset';
-import type { BbaStatus } from '@/lib/data/buku-besar-aset-schemas';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
 import ModalItem, { LencanaRef, LencanaBukti, STATUS_COLOR, type TabItem } from './_components/ModalItem';
+import PerBarang from './_components/PerBarang';
+import ModalTautkan from './_components/ModalTautkan';
 
-const STATUSES: BbaStatus[] = ['DIRENCANAKAN', 'REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'];
 const SUMBER = ['BLUD', 'APBD', 'DAK', 'LAINNYA'] as const;
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -64,7 +66,11 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [q, setQ] = useState('');
   const [fKelengkapan, setFKelengkapan] = useState<'' | 'REF' | 'BUKTI'>('');
   const [modal, setModal] = useState<BukaModal | null>(null);
-  const [realForm, setRealForm] = useState<{ row: BbaRow; nilai: number; vol: number; tgl: string; status: BbaStatus } | null>(null);
+  const [tampilan, setTampilan] = useState<'ITEM' | 'BARANG'>('ITEM');
+  const [segarkanBarang, setSegarkanBarang] = useState(0);
+  const [tautkanBuka, setTautkanBuka] = useState(false);
+  // tgl = tanggal realisasi; tglProses = tanggal pesan/kontrak (status Dalam Proses, §5.2)
+  const [realForm, setRealForm] = useState<{ row: BbaRow; nilai: number; vol: number; tgl: string; tglProses: string; status: BbaStatus } | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | 'EMPTY' | null>(null);
   const [detailRow, setDetailRow] = useState<BbaRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -96,6 +102,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     } finally { if (nomor === nomorMuat.current) setLoading(false); }
   }, [tahun, fStatus, fSumber, fOrigin, tab, q]);
 
+  /** Sesudah ada yang tertulis: tabel item DAN tampilan Per Barang ikut segar. */
+  const muatUlang = () => { void load(); setSegarkanBarang(n => n + 1); };
 
   // Auto-refresh saat ganti tahun/status/sumber (debounce supaya ketik tahun tak spam).
   // Patokannya saringan yang terakhir DIMUAT, bukan "sudah mount" — efek ganda strict mode
@@ -125,14 +133,21 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     // A3: pre-check konsistensi status ↔ angka (server juga menolak)
     if (realForm.status === 'REALISASI_PENUH' && realForm.vol !== realForm.row.vol) { toast.error(`Status Realisasi Penuh mengharuskan unit realisasi = ${realForm.row.vol}`); return; }
     if (realForm.status === 'TIDAK_TEREALISASI' && (realForm.vol !== 0 || realForm.nilai !== 0)) { toast.error('Status Tidak Terealisasi mengharuskan unit & nilai realisasi 0'); return; }
+    const sebelumTerima = statusSebelumTerima(realForm.status);
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/buku-besar-aset/realisasi', {
         method: 'PATCH',
-        body: JSON.stringify({ id: realForm.row.id, expected_version: realForm.row.version, nilai_realisasi: realForm.nilai, vol_realisasi: realForm.vol, tgl_realisasi: realForm.tgl || null, status: realForm.status }),
+        body: JSON.stringify({
+          id: realForm.row.id, expected_version: realForm.row.version,
+          nilai_realisasi: sebelumTerima ? 0 : realForm.nilai, vol_realisasi: sebelumTerima ? 0 : realForm.vol,
+          tgl_realisasi: sebelumTerima ? null : realForm.tgl || null,
+          tgl_proses: realForm.status === 'DIPROSES' ? realForm.tglProses || null : null,
+          status: realForm.status,
+        }),
       });
-      if (d.ok) { toast.success('Realisasi tersimpan'); setRealForm(null); load(); }
-      else if ((d as { code?: string }).code === 'VERSION_CONFLICT') { toast.error('Data sudah diubah pengguna lain — memuat ulang.'); setRealForm(null); load(); }
+      if (d.ok) { toast.success(realForm.status === 'DIPROSES' ? 'Tersimpan — item dalam proses' : 'Realisasi tersimpan'); setRealForm(null); muatUlang(); }
+      else if ((d as { code?: string }).code === 'VERSION_CONFLICT') { toast.error('Data sudah diubah pengguna lain — memuat ulang.'); setRealForm(null); muatUlang(); }
       else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }
@@ -160,8 +175,9 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     try {
       const d = await fetchJson<unknown>('/api/buku-besar-aset/import-usulan', { method: 'POST', body: JSON.stringify({ mode: 'commit', tahun }) });
       if (d.ok) {
-        toast.success(`${(d as unknown as { inserted: number }).inserted} item ditarik dari Usulan Kebutuhan`);
-        setImportPreview(null); load();
+        const h = d as unknown as { inserted: number; tertaut?: number };
+        toast.success(`${h.inserted} item ditarik dari Usulan Kebutuhan${h.tertaut ? ` · ${h.tertaut} langsung tertaut ke barang` : ''}`);
+        setImportPreview(null); muatUlang();
       } else toast.error(d.message || 'Gagal menarik data');
     } finally { setSaving(false); }
   }
@@ -170,8 +186,15 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     const ikut = row.ref.n > 0 || row.jumlah_bukti > 0 ? ' Referensi harga dan catatan bukti dukungnya ikut terhapus; berkas di Drive tetap.' : '';
     if (!(await confirmDialog({ title: 'Hapus Item', message: `Hapus "${row.uraian}" (${row.canonical_id})?${ikut}`, confirmLabel: 'Hapus' }))) return;
     const d = await fetchJson<unknown>(`/api/buku-besar-aset?id=${row.id}`, { method: 'DELETE' });
-    if (d.ok) { toast.success('Dihapus'); load(); } else toast.error(d.message || 'Gagal hapus');
+    if (d.ok) { toast.success('Dihapus'); muatUlang(); } else toast.error(d.message || 'Gagal hapus');
   }
+
+  const bukaRealisasi = (r: BbaRow) => setRealForm({
+    row: r, nilai: r.nilai_realisasi, vol: r.vol_realisasi, tgl: r.tgl_realisasi || '', tglProses: r.tgl_proses || '',
+    status: statusSebelumTerima(r.status) ? 'REALISASI_PENUH' : r.status,
+  });
+  // Item tahun ini (yang dimuat) tanpa barang — usulan ditolak tidak dihitung, seperti KPI & Per Barang.
+  const belumBarang = rows.filter(r => r.barang_id === null && r.usulan_keputusan !== 'DITOLAK').length;
 
   const inp: React.CSSProperties = { border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 9px', fontSize: 13, color: c.text, background: c.input };
   const num: React.CSSProperties = { ...inp, fontFamily: MONO, textAlign: 'right' };
@@ -227,27 +250,52 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       </div>
 
       {/* Tab keputusan usulan (Semua | Disetujui | Ditolak) */}
-      <div data-rima="bba.tab-keputusan" style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        {([['', 'Semua'], ['DISETUJUI', 'Disetujui'], ['DITOLAK', 'Ditolak']] as const).map(([val, label]) => (
-          <button key={label} onClick={() => setTab(val)}
-            style={{ padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 20, cursor: 'pointer',
-              border: `1px solid ${tab === val ? (val === 'DITOLAK' ? '#E24B4A' : val === 'DISETUJUI' ? '#1D9E75' : '#EF9F27') : c.border}`,
-              background: tab === val ? (val === 'DITOLAK' ? 'rgba(226,75,74,.15)' : val === 'DISETUJUI' ? 'rgba(29,158,117,.15)' : 'rgba(239,159,39,.15)') : 'transparent',
-              color: tab === val ? (val === 'DITOLAK' ? '#E24B4A' : val === 'DISETUJUI' ? '#1D9E75' : '#EF9F27') : c.sub }}>
-            {label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div data-rima="bba.tab-keputusan" style={{ display: 'flex', gap: 6 }}>
+          {([['', 'Semua'], ['DISETUJUI', 'Disetujui'], ['DITOLAK', 'Ditolak']] as const).map(([val, label]) => (
+            <button key={label} onClick={() => setTab(val)}
+              style={{ padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 20, cursor: 'pointer',
+                border: `1px solid ${tab === val ? (val === 'DITOLAK' ? '#E24B4A' : val === 'DISETUJUI' ? '#1D9E75' : '#EF9F27') : c.border}`,
+                background: tab === val ? (val === 'DITOLAK' ? 'rgba(226,75,74,.15)' : val === 'DISETUJUI' ? 'rgba(29,158,117,.15)' : 'rgba(239,159,39,.15)') : 'transparent',
+                color: tab === val ? (val === 'DITOLAK' ? '#E24B4A' : val === 'DISETUJUI' ? '#1D9E75' : '#EF9F27') : c.sub }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <span style={{ flex: 1 }} />
+        {/* §5.3: Per Item | Per Barang */}
+        <div style={{ display: 'inline-flex', border: `1px solid ${c.border}`, borderRadius: 20, overflow: 'hidden' }}>
+          {([['ITEM', 'Per Item'], ['BARANG', 'Per Barang']] as const).map(([val, label]) => (
+            <button key={val} type="button" onClick={() => setTampilan(val)}
+              style={{ padding: '5px 14px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: tampilan === val ? 'rgba(239,159,39,.15)' : 'transparent', color: tampilan === val ? '#EF9F27' : c.sub }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Filter */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <PrimaNumberField value={tahun} onChange={e => setTahun(Number(e.target.value))} style={{ width: 90 }} title="Tahun" />
-        <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={inp}><option value="">Semua status</option>{STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+        <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={inp}><option value="">Semua status</option>{BBA_STATUSES.map(s => <option key={s} value={s}>{LABEL_STATUS[s]}</option>)}</select>
         <select value={fSumber} onChange={e => setFSumber(e.target.value)} style={inp}><option value="">Semua sumber</option>{SUMBER.map(s => <option key={s} value={s}>{s}</option>)}</select>
         <select value={fOrigin} onChange={e => setFOrigin(e.target.value)} style={inp}><option value="">Semua asal</option><option value="MANUAL">Manual</option><option value="USULAN">Dari Usulan</option></select>
         <input data-rima="bba.filter-cari" ref={searchRef} value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load(); }} placeholder="Cari uraian/kode/no. usulan…" style={{ ...inp, flex: 1, minWidth: 160 }} />
         <PrimaButton variant="primary" onClick={load} disabled={loading}>{loading ? 'Memuat…' : 'Terapkan'}</PrimaButton>
       </div>
+
+      {tampilan === 'BARANG' ? (
+        <PerBarang tahun={tahun} c={c} segarkan={segarkanBarang} onTautkan={() => setTautkanBuka(true)} />
+      ) : (<>
+      {/* §5.1: item tanpa barang → riwayat beli tidak bisa dijawab untuknya */}
+      {belumBarang > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10, padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(186,117,23,.45)', background: 'rgba(186,117,23,.08)', fontSize: 12.5 }}>
+          <span style={{ color: '#BA7517', fontWeight: 600 }}>{belumBarang} item {tahun} belum ditautkan ke barang</span>
+          <span style={{ color: c.sub, flex: 1, minWidth: 200 }}>— tanpa barang, riwayat beli dan yang sedang diproses tidak terlihat saat merencanakan.</span>
+          <PrimaButton variant="warning" size="sm" onClick={() => setTautkanBuka(true)}>Tautkan</PrimaButton>
+        </div>
+      )}
 
       {/* Saringan kelengkapan (CONCEPT-bba-perencanaan §4.4) */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -308,7 +356,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                         {r.jumlah_bukti > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#1D9E75', color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 10, padding: '0 4px', fontFamily: MONO }}>{r.jumlah_bukti}</span>}
                       </button>
                     </Tip>
-                    {!isRejected && <span data-rima="bba.row-realisasi"><Tip label="Set realisasi"><RealisasiButton onClick={() => setRealForm({ row: r, nilai: r.nilai_realisasi, vol: r.vol_realisasi, tgl: r.tgl_realisasi || '', status: r.status === 'DIRENCANAKAN' ? 'REALISASI_PENUH' : r.status })} /></Tip></span>}
+                    {!isRejected && <span data-rima="bba.row-realisasi"><Tip label="Proses & realisasi"><RealisasiButton onClick={() => bukaRealisasi(r)} /></Tip></span>}
                     <Tip label="Hapus"><DeleteButton onClick={() => del(r)} iconSize={12} /></Tip>
                   </div>
                 </td>
@@ -317,27 +365,42 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
           </tbody>
         </table>
       </div>
+      </>)}
 
       {/* Modal item — Data item / Referensi harga / Bukti dukung (CONCEPT-bba-perencanaan §4.4) */}
       {modal && (
         <ModalItem c={c} daftar={modal.daftar} awalId={modal.id} tabAwal={modal.tab} saringanAwal={modal.saringan}
-          tahun={tahun} kategori={kategori} onTutup={() => setModal(null)} onTersimpan={() => void load()} />
+          tahun={tahun} kategori={kategori} onTutup={() => setModal(null)} onTersimpan={muatUlang} />
       )}
 
-      {/* Modal Realisasi */}
-      {realForm && (
-        <Modal title={`Realisasi — ${realForm.row.canonical_id}`} c={c} onClose={() => setRealForm(null)}>
+      {tautkanBuka && <ModalTautkan tahun={tahun} c={c} onTutup={() => setTautkanBuka(false)} onSelesai={() => { setTautkanBuka(false); muatUlang(); }} />}
+
+      {/* Modal Proses & Realisasi — satu-satunya pintu ubah status (§5.2) */}
+      {realForm && (() => {
+        const sebelumTerima = statusSebelumTerima(realForm.status);
+        return (
+        <Modal title={`Proses & Realisasi — ${realForm.row.canonical_id}`} c={c} onClose={() => setRealForm(null)}>
           <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 10 }}>{realForm.row.uraian} · Rencana <b style={{ fontFamily: MONO }}>{fmtRp(realForm.row.nilai_rencana)}</b> · Vol <b style={{ fontFamily: MONO }}>{realForm.row.vol} {realForm.row.satuan || ''}</b></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Nilai Realisasi"><InputNominal value={realForm.nilai} onChange={v => setRealForm({ ...realForm, nilai: v, status: suggestStatus(realForm.vol, v, realForm.row) })} style={num} /></Field>
-            <Field label={`Unit Realisasi (0 – ${realForm.row.vol})`}><PrimaNumberField value={realForm.vol} onChange={e => { const v = Number(e.target.value); setRealForm({ ...realForm, vol: v, status: suggestStatus(v, realForm.nilai, realForm.row) }); }} /></Field>
-            <Field label="Tgl Realisasi"><input type="date" value={realForm.tgl} onChange={e => setRealForm({ ...realForm, tgl: e.target.value })} style={inp} /></Field>
-            <Field label="Status"><select value={realForm.status} onChange={e => setRealForm({ ...realForm, status: e.target.value as BbaStatus })} style={inp}>
-              {(['REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'] as BbaStatus[]).map(s => <option key={s}>{s}</option>)}
+            <Field label="Status" full><select value={realForm.status} onChange={e => setRealForm({ ...realForm, status: e.target.value as BbaStatus })} style={inp}>
+              {pilihanStatusRealisasi(realForm.row.status, bolehBatalkanFinal(role)).map(s => <option key={s} value={s}>{LABEL_STATUS[s]}{s === realForm.row.status ? ' (sekarang)' : ''}</option>)}
             </select></Field>
+            {sebelumTerima ? <>
+              <div style={{ gridColumn: '1 / -1', fontSize: 12, color: c.sub }}>
+                {realForm.status === 'DIPROSES'
+                  ? 'Sudah dipesan/dikontrak, barang belum diterima. Unit & nilai realisasi tetap 0 sampai barangnya datang.'
+                  : 'Kembali direncanakan (pesanan batal). Unit & nilai realisasi 0, tanggal proses dikosongkan.'}
+              </div>
+              {realForm.status === 'DIPROSES' && <Field label="Tanggal proses (pesan/kontrak)"><input type="date" value={realForm.tglProses} onChange={e => setRealForm({ ...realForm, tglProses: e.target.value })} style={inp} /></Field>}
+            </> : <>
+              <Field label="Nilai Realisasi"><InputNominal value={realForm.nilai} onChange={v => setRealForm({ ...realForm, nilai: v, status: suggestStatus(realForm.vol, v, realForm.row) })} style={num} /></Field>
+              <Field label={`Unit Realisasi (0 – ${realForm.row.vol})`}><PrimaNumberField value={realForm.vol} onChange={e => { const v = Number(e.target.value); setRealForm({ ...realForm, vol: v, status: suggestStatus(v, realForm.nilai, realForm.row) }); }} /></Field>
+              <Field label="Tgl Realisasi"><input type="date" value={realForm.tgl} onChange={e => setRealForm({ ...realForm, tgl: e.target.value })} style={inp} /></Field>
+              {realForm.row.tgl_proses && <Field label="Diproses sejak"><input type="text" readOnly value={realForm.row.tgl_proses} style={{ ...inp, opacity: .7, fontFamily: MONO }} /></Field>}
+            </>}
           </div>
           {/* §4.2: realisasi tanpa bukti = peringatan, tidak memblokir */}
-          {realForm.status !== 'TIDAK_TEREALISASI' && realForm.row.jumlah_bukti === 0 && (
+          {!sebelumTerima && realForm.status !== 'TIDAK_TEREALISASI' && realForm.row.jumlah_bukti === 0 && (
             <div style={{ fontSize: 12, color: '#BA7517', marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Item ini belum punya bukti dukung (bukti beli, BAST, foto).</span>
               <button type="button" onClick={() => { const r = realForm.row; setRealForm(null); bukaItem(r, 'bukti'); }}
@@ -348,10 +411,11 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
             <PrimaButton variant="ghost" onClick={() => setRealForm(null)}>Batal</PrimaButton>
-            <PrimaButton variant="success" data-rima="bba.realisasi-simpan" onClick={saveRealisasi} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan Realisasi'}</PrimaButton>
+            <PrimaButton variant="success" data-rima="bba.realisasi-simpan" onClick={saveRealisasi} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
           </div>
         </Modal>
-      )}
+        );
+      })()}
 
       {/* Modal Tarik dari Usulan — kosong (notif bertema, bukan alert native — L58) */}
       {importPreview === 'EMPTY' && (
@@ -433,7 +497,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         actions={[
           { icon: <Plus size={17} />, label: 'Tambah', onClick: bukaBaru },
           { icon: <Search size={17} />, label: 'Filter', onClick: () => searchRef.current?.focus() },
-          { icon: <RefreshCw size={17} />, label: 'Muat Ulang', onClick: () => load() },
+          { icon: <RefreshCw size={17} />, label: 'Muat Ulang', onClick: muatUlang },
         ]}
       />
     </div>

@@ -5,11 +5,13 @@ import {
 } from '@/lib/data/buku-besar-aset-schemas';
 import {
   listAset, getAsetKpi, getAsetDetail, createAset, updateAset, deleteAset,
-  BbaVersionConflictError, BbaTransitionError, BbaNotFoundError, BbaUsulanLockedError,
-  BbaRealisasiRangeError, BbaStatusMismatchError, BbaBerkasTidakDikenalError,
+  BbaVersionConflictError, BbaNotFoundError, BbaUsulanLockedError,
+  BbaRealisasiRangeError, BbaStatusMismatchError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError,
 } from '@/lib/data/buku-besar-aset';
 import { guard } from './_guard';
-import { bolehBatalkanFinal } from '@/lib/constants';
+
+const ketBarang = (d: { barang_id?: number | null; barang_baru?: string | null }) =>
+  d.barang_baru ? ` barang_baru="${d.barang_baru.slice(0, 40)}"` : d.barang_id !== undefined ? ` barang_id=${d.barang_id}` : '';
 
 export async function GET(req: NextRequest) {
   const g = await guard();
@@ -53,12 +55,12 @@ export async function POST(req: NextRequest) {
   try {
     hasil = await createAset(parsed.data, g.session.userId);
   } catch (err) {
-    if (err instanceof BbaBerkasTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
   const { id, canonical_id } = hasil;
   const ref = parsed.data.referensi?.length ? ` referensi=${parsed.data.referensi.length}` : '';
-  await writeAuditLog({ req, eventType: 'BBA_CREATE', userId: g.session.userId, username: g.session.username, detail: `BBA create ${canonical_id} (${parsed.data.tahun_anggaran}) ${parsed.data.uraian.slice(0, 60)}${ref}` });
+  await writeAuditLog({ req, eventType: 'BBA_CREATE', userId: g.session.userId, username: g.session.username, detail: `BBA create ${canonical_id} (${parsed.data.tahun_anggaran}) ${parsed.data.uraian.slice(0, 60)}${ref}${ketBarang(parsed.data)}` });
   return NextResponse.json({ ok: true, id, canonical_id });
 }
 
@@ -69,21 +71,19 @@ export async function PATCH(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = BbaUpdateSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  let koreksiMundur = false;
   try {
-    ({ koreksiMundur } = await updateAset(parsed.data, g.session.userId, bolehBatalkanFinal(g.session.role)));
+    await updateAset(parsed.data, g.session.userId);
   } catch (err) {
     if (err instanceof BbaVersionConflictError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', message: err.message }, { status: 409 });
-    if (err instanceof BbaTransitionError)      return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaUsulanLockedError)    return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaRealisasiRangeError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaStatusMismatchError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
-    if (err instanceof BbaBerkasTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
   const ref = parsed.data.referensi !== undefined ? ` referensi=${parsed.data.referensi.length}` : '';
-  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${parsed.data.status ? ' status=' + parsed.data.status : ''}${ref}${koreksiMundur ? ' (koreksi mundur REALISASI_PENUH oleh Admin)' : ''}` });
+  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${ref}${ketBarang(parsed.data)}` });
   return NextResponse.json({ ok: true });
 }
 

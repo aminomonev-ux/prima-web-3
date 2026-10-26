@@ -49,9 +49,9 @@ export async function POST(req: NextRequest) {
   }
 
   const limited = await bbaRateLimit(g.session.userId, 'import', 10); if (limited) return limited;
-  let inserted = 0;
+  let inserted = 0, tertaut = 0;
   try {
-    ({ inserted } = await commitImportUsulan(tahun, g.session.userId));
+    ({ inserted, tertaut } = await commitImportUsulan(tahun, g.session.userId));
   } catch (err) {
     // UNIQUE uq_bba_usulan_item: import paralel menabrak → konflik, bukan 500.
     if ((err as { code?: string })?.code === 'ER_DUP_ENTRY') {
@@ -59,6 +59,6 @@ export async function POST(req: NextRequest) {
     }
     throw err;
   }
-  await writeAuditLog({ req, eventType: 'BBA_IMPORT_USULAN', userId: g.session.userId, username: g.session.username, detail: `BBA tarik dari Usulan tahun=${tahun} inserted=${inserted}` });
-  return NextResponse.json({ ok: true, tahun, inserted });
+  await writeAuditLog({ req, eventType: 'BBA_IMPORT_USULAN', userId: g.session.userId, username: g.session.username, detail: `BBA tarik dari Usulan tahun=${tahun} inserted=${inserted} tertaut_barang=${tertaut}` });
+  return NextResponse.json({ ok: true, tahun, inserted, tertaut });
 }

@@ -1126,6 +1126,23 @@ INSERT IGNORE INTO app_config (`key`, value) VALUES
 -- lock per-row (L48 CAS). Konsep: docs/session/buku-besar-aset/CONCEPT.md.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- BBA Master Barang (migration-bba-barang-proses.sql, docs/CONCEPT-bba-perencanaan.md §5).
+-- Jenis barang di tingkat perencanaan ("Laptop", "Kursi Roda") — kunci riwayat beli & eksisting.
+-- Nama dirapikan `rapikanNamaBarang` (lib/bba/barang.ts); kolasi ci menolak kembar beda huruf.
+-- Dibuat SEBELUM buku_besar_aset karena fk_bba_barang menunjuk ke sini.
+CREATE TABLE IF NOT EXISTS bba_barang (
+  id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  nama          VARCHAR(160) NOT NULL,
+  kategori_aset VARCHAR(64)  NULL,
+  satuan        VARCHAR(32)  NULL,
+  created_by    INT          NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_bba_barang_nama (nama),
+  CONSTRAINT fk_bba_barang_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  COMMENT='BBA — master jenis barang (kunci riwayat beli & eksisting)';
+
 CREATE TABLE IF NOT EXISTS buku_besar_aset (
   id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   canonical_id      VARCHAR(20)     NOT NULL DEFAULT '',
@@ -1140,13 +1157,17 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
   kode_rekening     VARCHAR(64)     NULL,
   uraian            TEXT            NOT NULL,
   kategori_aset     VARCHAR(64)     NULL,
+  -- migration-bba-barang-proses: jenis barang (Master Barang); NULL = belum ditautkan
+  barang_id         INT UNSIGNED    NULL,
   sumber_anggaran   ENUM('BLUD','APBD','DAK','LAINNYA') NOT NULL DEFAULT 'BLUD',
   vol               DECIMAL(18,2)   NOT NULL DEFAULT 0,
   satuan            VARCHAR(32)     NULL,
   harga             DECIMAL(18,2)   NOT NULL DEFAULT 0,
   nilai_rencana     DECIMAL(18,2)   NOT NULL DEFAULT 0,
-  status            ENUM('DIRENCANAKAN','REALISASI_PENUH','REALISASI_SEBAGIAN','TIDAK_TEREALISASI')
+  status            ENUM('DIRENCANAKAN','DIPROSES','REALISASI_PENUH','REALISASI_SEBAGIAN','TIDAK_TEREALISASI')
                     NOT NULL DEFAULT 'DIRENCANAKAN',
+  -- DIPROSES = sudah dipesan/dikontrak, barang belum diterima (CONCEPT-bba-perencanaan §5.2)
+  tgl_proses        DATE            NULL,
   nilai_realisasi   DECIMAL(18,2)   NOT NULL DEFAULT 0,
   vol_realisasi     DECIMAL(18,2)   NOT NULL DEFAULT 0,
   tgl_realisasi     DATE            NULL,
@@ -1166,8 +1187,10 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
   KEY idx_im_canonical    (canonical_id),
   KEY idx_im_status       (status),
   KEY idx_im_tahun_status (tahun_anggaran, status),
+  KEY idx_bba_barang      (barang_id),
   CONSTRAINT fk_im_created FOREIGN KEY (created_by)     REFERENCES users(id)            ON DELETE SET NULL,
-  CONSTRAINT fk_im_updated FOREIGN KEY (updated_by)     REFERENCES users(id)            ON DELETE SET NULL
+  CONSTRAINT fk_im_updated FOREIGN KEY (updated_by)     REFERENCES users(id)            ON DELETE SET NULL,
+  CONSTRAINT fk_bba_barang FOREIGN KEY (barang_id)      REFERENCES bba_barang(id)       ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='Buku Besar Aset (BBA) — register belanja modal lintas-tahun + lifecycle status';
 

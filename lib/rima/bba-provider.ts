@@ -9,14 +9,12 @@
 
 import { sql, sqlInt } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
+import { LABEL_STATUS } from '@/lib/bba/status';
 import { z } from 'zod';
 
 export const isBbaRimaRole = isAsetRole;
 
-const BBA_LABELS: Record<string, string> = {
-  DIRENCANAKAN: 'Direncanakan', REALISASI_PENUH: 'Realisasi Penuh',
-  REALISASI_SEBAGIAN: 'Realisasi Sebagian', TIDAK_TEREALISASI: 'Tidak Terealisasi',
-};
+const BBA_LABELS: Record<string, string> = LABEL_STATUS;
 
 // G24 — slot allowlist. canonical_id dibatasi ketat (prefix BBA-, ≤20 sesuai kolom).
 export const BbaSlotSchema = z.object({
@@ -28,9 +26,10 @@ export const BbaSlotSchema = z.object({
 export type BbaSlot = z.infer<typeof BbaSlotSchema>;
 
 const ROW_CAP = 50; // L39 — array cap
-const BBA_INBOX_STATUS = 'DIRENCANAKAN'; // belum direalisasi = menunggu realisasi
+// Menunggu realisasi = belum diterima: Direncanakan + Dalam Proses (pesanan belum datang, §5.2).
+const BBA_INBOX_STATUS = ['DIRENCANAKAN', 'DIPROSES'] as const;
 
-/** #4 — aset menunggu realisasi (DIRENCANAKAN). BBA tanpa ownership per-baris (cermin route). */
+/** #4 — aset menunggu realisasi. BBA tanpa ownership per-baris (cermin route). */
 export async function bbaInboxCount(
   _role: string, _userId: number, tahun?: string,
 ): Promise<{ label: string | null; aksi: string; count: number; total_nilai: number }> {
@@ -38,9 +37,9 @@ export async function bbaInboxCount(
   const rows = await sql`
     SELECT COUNT(*) AS c, COALESCE(SUM(nilai_rencana),0) AS nilai
       FROM buku_besar_aset
-     WHERE status = ${BBA_INBOX_STATUS} ${tahunFrag}`;
+     WHERE status IN (${[...BBA_INBOX_STATUS]}) ${tahunFrag}`;
   const r = (rows as Record<string, unknown>[])[0] ?? {};
-  return { label: BBA_LABELS[BBA_INBOX_STATUS], aksi: 'menunggu realisasi', count: Number(r.c ?? 0), total_nilai: Number(r.nilai ?? 0) };
+  return { label: BBA_INBOX_STATUS.map(s => BBA_LABELS[s]).join(' / '), aksi: 'menunggu realisasi', count: Number(r.c ?? 0), total_nilai: Number(r.nilai ?? 0) };
 }
 
 export async function runBbaQuery(
@@ -110,7 +109,7 @@ export async function runBbaQuery(
 
   if (slot.intent === 'inbox') {
     const ic = await bbaInboxCount(_role, _userId, slot.tahun);
-    return { ok: true, data: { kind: 'inbox', status: BBA_INBOX_STATUS, label: ic.label, aksi: ic.aksi, count: ic.count, total_nilai: ic.total_nilai, tahun: slot.tahun ?? null } };
+    return { ok: true, data: { kind: 'inbox', status: BBA_INBOX_STATUS.join(','), label: ic.label, aksi: ic.aksi, count: ic.count, total_nilai: ic.total_nilai, tahun: slot.tahun ?? null } };
   }
 
   if (slot.intent === 'rincian') {

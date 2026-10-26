@@ -10,7 +10,15 @@ import {
   kelengkapanRef, kelengkapanBukti, referensiSah, rapikanReferensi, tautanAman, MAKS_BUKTI,
   type KelengkapanRef, type KelengkapanBukti, type ReferensiIsian, type JenisBukti,
 } from '@/lib/bba/referensi';
-import { isValidStatusTransition, type BbaStatus, type BbaCreateInput, type BbaUpdateInput, type BbaRealisasiInput, type BbaQuery, type ReferensiInput, type BuktiCreateInput } from './buku-besar-aset-schemas';
+import { isValidStatusTransition, statusSebelumTerima, STATUS_BELUM_TEREALISASI, LABEL_STATUS } from '@/lib/bba/status';
+import {
+  rapikanNamaBarang, kunciNamaBarang, barangBernamaSama, ringkasPerBarang, ringkasKosong, riwayatPerTahun,
+  type BahanBarang, type BahanRefBarang, type RingkasBarang, type BarisRiwayat,
+} from '@/lib/bba/barang';
+import type {
+  BbaStatus, BbaCreateInput, BbaUpdateInput, BbaRealisasiInput, BbaQuery, ReferensiInput, BuktiCreateInput,
+  BarangCreateInput, BarangUpdateInput, BarangTautkanInput,
+} from './buku-besar-aset-schemas';
 
 export class BbaVersionConflictError extends Error {
   constructor() { super('Data sudah diubah pengguna lain. Memuat versi terbaru.'); this.name = 'BbaVersionConflictError'; }
@@ -36,6 +44,15 @@ export class BbaBerkasTidakDikenalError extends Error {
 export class BbaBuktiPenuhError extends Error {
   constructor() { super(`Bukti dukung paling banyak ${MAKS_BUKTI} per item.`); this.name = 'BbaBuktiPenuhError'; }
 }
+export class BbaBarangTidakDikenalError extends Error {
+  constructor() { super('Barang tidak ditemukan — mungkin baru saja digabung atau dihapus. Pilih ulang barangnya.'); this.name = 'BbaBarangTidakDikenalError'; }
+}
+export class BbaBarangKembarError extends Error {
+  constructor(nama: string) { super(`Barang "${nama}" sudah ada di Master Barang.`); this.name = 'BbaBarangKembarError'; }
+}
+export class BbaBarangDipakaiError extends Error {
+  constructor(n: number) { super(`Barang ini dipakai ${n} item. Gabungkan ke barang lain dulu (tombol Gabungkan), baru barangnya hilang dari daftar.`); this.name = 'BbaBarangDipakaiError'; }
+}
 
 // A3: status & angka realisasi tidak boleh saling bertentangan
 function assertStatusConsistent(status: BbaStatus, vol: number, volReal: number, nilaiReal: number): void {
@@ -58,12 +75,15 @@ export interface BbaRow {
   kode_rekening: string | null;
   uraian: string;
   kategori_aset: string | null;
+  barang_id: number | null;
+  barang_nama: string | null;
   sumber_anggaran: 'BLUD' | 'APBD' | 'DAK' | 'LAINNYA';
   vol: number;
   satuan: string | null;
   harga: number;
   nilai_rencana: number;
   status: BbaStatus;
+  tgl_proses: string | null;
   nilai_realisasi: number;
   vol_realisasi: number;
   tgl_realisasi: string | null;
@@ -88,7 +108,9 @@ export interface BbaRow {
 const SELECT_COLS = sql`
   b.id, b.canonical_id, b.tahun_anggaran, b.origin, b.usulan_item_id, b.usulan_no,
   b.usulan_keputusan, b.ditolak_oleh, b.sub_bidang, b.kode_rekening, b.uraian, b.kategori_aset,
+  b.barang_id, g.nama AS barang_nama,
   b.sumber_anggaran, b.vol, b.satuan, b.harga, b.nilai_rencana, b.status,
+  DATE_FORMAT(b.tgl_proses, '%Y-%m-%d') AS tgl_proses,
   b.nilai_realisasi, b.vol_realisasi, DATE_FORMAT(b.tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi,
   b.penanggung_jawab, b.keterangan, b.version,
   ui.pengusul AS pengusul,
@@ -101,7 +123,7 @@ const SELECT_COLS = sql`
   ui.url_merk1, ui.url_merk2, ui.url_merk3, ui.file_url AS lampiran_usulan
 `;
 
-const FROM_JOIN = sql`FROM buku_besar_aset b LEFT JOIN usulan_items ui ON ui.id = b.usulan_item_id`;
+const FROM_JOIN = sql`FROM buku_besar_aset b LEFT JOIN usulan_items ui ON ui.id = b.usulan_item_id LEFT JOIN bba_barang g ON g.id = b.barang_id`;
 
 export function mapRow(r: Record<string, unknown>): BbaRow {
   const nilai_rencana   = Number(r.nilai_rencana ?? 0);
@@ -116,9 +138,12 @@ export function mapRow(r: Record<string, unknown>): BbaRow {
     ditolak_oleh: r.ditolak_oleh as BbaRow['ditolak_oleh'],
     sub_bidang: r.sub_bidang as string | null,
     kode_rekening: r.kode_rekening as string | null, uraian: String(r.uraian ?? ''),
-    kategori_aset: r.kategori_aset as string | null, sumber_anggaran: (r.sumber_anggaran ?? 'BLUD') as BbaRow['sumber_anggaran'],
+    kategori_aset: r.kategori_aset as string | null,
+    barang_id: r.barang_id == null ? null : Number(r.barang_id), barang_nama: r.barang_nama as string | null,
+    sumber_anggaran: (r.sumber_anggaran ?? 'BLUD') as BbaRow['sumber_anggaran'],
     vol: Number(r.vol ?? 0), satuan: r.satuan as string | null, harga: Number(r.harga ?? 0),
     nilai_rencana, status: r.status as BbaStatus, nilai_realisasi,
+    tgl_proses: r.tgl_proses ? toDateStr(r.tgl_proses) : null,
     vol_realisasi: Number(r.vol_realisasi ?? 0),
     // B2: `toDateStr`, bukan `String()` — objek Date yang di-String() berbunyi
     // "Fri Jul 31 2026 00:00:00 GMT+0700 …", ditolak regex Zod saat realisasi disimpan ulang.
@@ -202,7 +227,7 @@ export async function getAsetKpi(f: BbaQuery): Promise<BbaKpi> {
       COALESCE(SUM(CASE WHEN b.usulan_keputusan = 'DITOLAK' THEN 0 ELSE b.vol END), 0)             AS vol_rencana,
       COALESCE(SUM(CASE WHEN b.usulan_keputusan = 'DITOLAK' THEN 0 ELSE b.vol_realisasi END), 0)   AS vol_real,
       COALESCE(SUM(CASE WHEN (b.usulan_keputusan IS NULL OR b.usulan_keputusan <> 'DITOLAK')
-                         AND b.status IN ('DIRENCANAKAN', 'TIDAK_TEREALISASI') THEN 1 ELSE 0 END), 0) AS backlog
+                         AND b.status IN (${[...STATUS_BELUM_TEREALISASI]}) THEN 1 ELSE 0 END), 0) AS backlog
     FROM buku_besar_aset b ${where}
   `);
   const rencana   = Number(r?.rencana ?? 0);
@@ -330,14 +355,43 @@ export async function hapusBukti(id: number): Promise<{ aset_id: number; canonic
   return { aset_id, canonical_id: String(lama.canonical_id ?? ''), nama: String(lama.nama ?? ''), bukti: await listBukti(aset_id) };
 }
 
+// ─── Tautan barang (§5.1) ───────────────────────────────────────────────────
+
+/** L68: barang yang ditunjuk harus ada. FOR SHARE — `gabungBarang` (FOR UPDATE) menunggu, bukan menyalip. */
+async function pastikanBarang(q: Penanya, ids: number[]): Promise<void> {
+  const unik = [...new Set(ids)];
+  if (unik.length === 0) return;
+  const rows = await q`SELECT id FROM bba_barang WHERE id IN (${unik}) FOR SHARE`;
+  if (rows.length !== unik.length) throw new BbaBarangTidakDikenalError();
+}
+
+/** Pakai barang yang bernama sama (kolasi ci) atau buat baru — dalam transaksi pemanggil. */
+async function barangDariNama(q: Penanya, namaMentah: string, userId: number, bawaan: { kategori_aset?: string | null; satuan?: string | null } = {}): Promise<number> {
+  const nama = rapikanNamaBarang(namaMentah);
+  const res = await q`
+    INSERT INTO bba_barang (nama, kategori_aset, satuan, created_by)
+    VALUES (${nama}, ${bawaan.kategori_aset || null}, ${bawaan.satuan || null}, ${userId})
+    ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
+  ` as unknown as Array<{ insertId: number }>;
+  return Number(res[0]?.insertId ?? 0);
+}
+
+/** `undefined` = jangan sentuh, `null` = lepas, angka = barang terpilih/baru. */
+async function tentukanBarang(q: Penanya, input: { barang_id?: number | null; barang_baru?: string | null; kategori_aset?: string | null; satuan?: string | null }, userId: number): Promise<number | null | undefined> {
+  if (input.barang_baru) return barangDariNama(q, input.barang_baru, userId, input);
+  if (input.barang_id) { await pastikanBarang(q, [input.barang_id]); return input.barang_id; }
+  return input.barang_id === null ? null : undefined;
+}
+
 export async function createAset(input: BbaCreateInput, userId: number): Promise<{ id: number; canonical_id: string }> {
   return withTransaction(async ({ tx, conn }) => {
+    const barangId = (await tentukanBarang(tx, input, userId)) ?? null;
     const res = await tx`
       INSERT INTO buku_besar_aset
-        (canonical_id, tahun_anggaran, kode_rekening, uraian, kategori_aset, sumber_anggaran,
+        (canonical_id, tahun_anggaran, kode_rekening, uraian, kategori_aset, barang_id, sumber_anggaran,
          vol, satuan, harga, nilai_rencana, status, penanggung_jawab, keterangan, created_by, updated_by)
       VALUES
-        ('', ${input.tahun_anggaran}, ${input.kode_rekening ?? null}, ${input.uraian}, ${input.kategori_aset ?? null}, ${input.sumber_anggaran},
+        ('', ${input.tahun_anggaran}, ${input.kode_rekening ?? null}, ${input.uraian}, ${input.kategori_aset ?? null}, ${barangId}, ${input.sumber_anggaran},
          ${input.vol}, ${input.satuan ?? null}, ${input.harga}, ${input.vol * input.harga}, 'DIRENCANAKAN', ${input.penanggung_jawab ?? null}, ${input.keterangan ?? null}, ${userId}, ${userId})
     ` as unknown as Array<{ insertId: number }>;
     const id = Number(res[0]?.insertId ?? 0);
@@ -363,20 +417,18 @@ function assertUsulanEditable(cur: BbaRow, input: BbaUpdateInput): void {
     throw new BbaUsulanLockedError('Volume baris asal usulan terkunci (sumber: Usulan Kebutuhan).');
   if (input.harga !== undefined && input.harga !== cur.harga)
     throw new BbaUsulanLockedError('Harga baris asal usulan terkunci (sumber: Usulan Kebutuhan).');
-  if (cur.usulan_keputusan === 'DITOLAK' && input.status !== undefined && input.status !== cur.status)
-    throw new BbaUsulanLockedError('Baris usulan DITOLAK: status realisasi terkunci.');
 }
 
-export async function updateAset(input: BbaUpdateInput, userId: number, bolehKoreksiMundur = false): Promise<{ koreksiMundur: boolean }> {
+/** Data item + referensi + tautan barang. Status tidak lewat sini — satu pintu `setRealisasi` (§5.2). */
+export async function updateAset(input: BbaUpdateInput, userId: number): Promise<void> {
   const cur = await getAsetById(input.id);
   if (!cur) throw new BbaNotFoundError();
   assertUsulanEditable(cur, input);
-  if (input.status && !isValidStatusTransition(cur.status, input.status, bolehKoreksiMundur)) throw new BbaTransitionError(cur.status, input.status);
   // A2: vol rencana tidak boleh turun di bawah realisasi tersimpan ("5/2 unit")
   const volBaru = input.vol ?? cur.vol;
   if (volBaru < cur.vol_realisasi) throw new BbaRealisasiRangeError(cur.vol_realisasi, volBaru);
-  // A3: status akhir harus konsisten dgn angka realisasi tersimpan
-  assertStatusConsistent(input.status ?? cur.status, volBaru, cur.vol_realisasi, cur.nilai_realisasi);
+  // A3: status tersimpan harus tetap konsisten dgn vol baru (REALISASI_PENUH ⇒ unit realisasi = vol)
+  assertStatusConsistent(cur.status, volBaru, cur.vol_realisasi, cur.nilai_realisasi);
   // nilai_rencana USULAN = nominal putusan (bisa ≠ vol×harga) → jangan dihitung ulang.
   const nilaiRencana = cur.origin === 'USULAN' ? cur.nilai_rencana : volBaru * (input.harga ?? cur.harga);
   // A5: undefined = pertahankan, null = kosongkan — jangan dilipat ke COALESCE. version CAS (L48).
@@ -390,18 +442,22 @@ export async function updateAset(input: BbaUpdateInput, userId: number, bolehKor
   if (input.harga !== undefined)            set = sql`${set}, harga = ${input.harga}`;
   if (input.penanggung_jawab !== undefined) set = sql`${set}, penanggung_jawab = ${input.penanggung_jawab}`;
   if (input.keterangan !== undefined)       set = sql`${set}, keterangan = ${input.keterangan}`;
-  if (input.status !== undefined)           set = sql`${set}, status = ${input.status}`;
-  // Referensi ikut Simpan item yang SAMA (satu tombol, satu transaksi, satu CAS — §4.1/L78).
+  // Referensi & tautan barang ikut Simpan item yang SAMA (satu tombol, satu transaksi, satu CAS — §4.1/§5.1/L78).
+  // CAS gagal → barang baru yang barusan dibuat ikut batal (rollback).
   await withTransaction(async ({ tx, conn }) => {
+    // Versi diperiksa DULU di bawah kunci: modal basi (mis. barangnya baru digabung orang lain)
+    // harus dapat 409 lalu memuat ulang, bukan "barang tidak ditemukan" — dan tanpa sempat membuat barang.
+    const kini = await tx`SELECT version FROM buku_besar_aset WHERE id = ${input.id} FOR UPDATE` as Array<{ version: number }>;
+    if (Number(kini[0]?.version) !== input.expected_version) throw new BbaVersionConflictError();
+    const barangId = await tentukanBarang(tx, { ...input, kategori_aset: input.kategori_aset ?? cur.kategori_aset, satuan: input.satuan ?? cur.satuan }, userId);
+    const setAkhir = barangId === undefined ? set : sql`${set}, barang_id = ${barangId}`;
     const res = await tx`
-      UPDATE buku_besar_aset SET ${set}
+      UPDATE buku_besar_aset SET ${setAkhir}
       WHERE id = ${input.id} AND version = ${input.expected_version}
     `;
     assertCas(res);
     if (input.referensi !== undefined) await gantiReferensi(tx, conn, input.id, input.referensi);
   });
-  // A4: jejak koreksi mundur dari terminal (caller tulis ke audit log)
-  return { koreksiMundur: cur.status === 'REALISASI_PENUH' && input.status !== undefined && input.status !== 'REALISASI_PENUH' };
 }
 
 export async function setRealisasi(input: BbaRealisasiInput, userId: number, bolehKoreksiMundur = false): Promise<{ koreksiMundur: boolean }> {
@@ -412,13 +468,22 @@ export async function setRealisasi(input: BbaRealisasiInput, userId: number, bol
   if (input.vol_realisasi > cur.vol)
     throw new BbaRealisasiRangeError(input.vol_realisasi, cur.vol);
   if (!isValidStatusTransition(cur.status, input.status, bolehKoreksiMundur)) throw new BbaTransitionError(cur.status, input.status);
+  // §5.2: barang belum diterima (Direncanakan/Dalam Proses) ⇒ realisasi 0
+  if (statusSebelumTerima(input.status) && (input.vol_realisasi !== 0 || input.nilai_realisasi !== 0))
+    throw new BbaStatusMismatchError(`Status ${LABEL_STATUS[input.status]} mengharuskan unit & nilai realisasi 0 — barangnya belum diterima.`);
   // A3: REALISASI_PENUH ⇒ vol_realisasi = vol; TIDAK_TEREALISASI ⇒ realisasi 0
   assertStatusConsistent(input.status, cur.vol, input.vol_realisasi, input.nilai_realisasi);
+  // tgl_proses = tanggal pesan/kontrak: diisi saat DIPROSES, dikosongkan bila pesanan batal (kembali
+  // Direncanakan), dibiarkan apa adanya saat barang diterima — jejak "dipesan kapan" tidak hilang.
+  const tglProses = input.status === 'DIPROSES' ? (input.tgl_proses ?? cur.tgl_proses ?? null)
+    : input.status === 'DIRENCANAKAN' ? null : cur.tgl_proses;
+  const tglRealisasi = statusSebelumTerima(input.status) ? null : (input.tgl_realisasi ?? null);
   const res = await sql`
     UPDATE buku_besar_aset SET
       nilai_realisasi = ${input.nilai_realisasi},
       vol_realisasi   = ${input.vol_realisasi},
-      tgl_realisasi   = ${input.tgl_realisasi ?? null},
+      tgl_realisasi   = ${tglRealisasi},
+      tgl_proses      = ${tglProses},
       status          = ${input.status},
       version         = version + 1,
       updated_by      = ${userId}
@@ -444,6 +509,7 @@ export interface BbaImportCandidate {
   usulan_no: string;
   sub_bidang: string;
   pengusul: string;
+  nama_barang: string;
   uraian: string;
   vol: number;
   satuan: string;
@@ -490,6 +556,7 @@ function mapCandidate(r: Record<string, unknown>): BbaImportCandidate {
     usulan_no: String(r.no_usulan ?? ''),
     sub_bidang: String(r.sub_bidang ?? ''),
     pengusul: String(r.pengusul ?? ''),
+    nama_barang: String(r.nama_barang ?? ''),
     uraian: spesifikasi ? `${String(r.nama_barang ?? '')} — ${spesifikasi}` : String(r.nama_barang ?? ''),
     vol, satuan: String(r.satuan ?? 'unit'), harga, nilai_rencana, keputusan, ditolak_oleh,
   };
@@ -500,28 +567,32 @@ export async function listImportCandidates(tahun: number): Promise<BbaImportCand
   return rows.map(mapCandidate);
 }
 
-export async function commitImportUsulan(tahun: number, userId: number): Promise<{ inserted: number }> {
+export async function commitImportUsulan(tahun: number, userId: number): Promise<{ inserted: number; tertaut: number }> {
   return withTransaction(async ({ tx, conn }) => {
     // Re-query di dalam transaksi (anti TOCTOU); UNIQUE uq_bba_usulan_item = jaring terakhir.
     const rows = await tx`${candidateQuery(tahun)}` as unknown as Record<string, unknown>[];
     const cands = (rows as Record<string, unknown>[]).map(mapCandidate);
-    if (cands.length === 0) return { inserted: 0 };
+    if (cands.length === 0) return { inserted: 0, tertaut: 0 };
+    // §5.1: nama_barang yang (sesudah dirapikan) sama dengan nama barang di Master tertaut
+    // otomatis; sisanya NULL — ditautkan lewat spanduk "belum ditautkan". Tidak membuat barang baru.
+    const daftarBarang = (await tx`SELECT id, nama FROM bba_barang FOR SHARE` as Array<{ id: number; nama: string }>).map(b => ({ id: Number(b.id), nama: String(b.nama) }));
+    const barangPer = cands.map(c => barangBernamaSama(c.nama_barang, daftarBarang)?.id ?? null);
     const { affectedRows } = await bulkInsert('buku_besar_aset', [
       'canonical_id', 'tahun_anggaran', 'origin', 'usulan_item_id', 'usulan_no',
-      'usulan_keputusan', 'ditolak_oleh', 'sub_bidang', 'uraian', 'sumber_anggaran',
+      'usulan_keputusan', 'ditolak_oleh', 'sub_bidang', 'uraian', 'barang_id', 'sumber_anggaran',
       'vol', 'satuan', 'harga', 'nilai_rencana', 'status', 'penanggung_jawab',
       'created_by', 'updated_by',
-    ], cands.map(c => [
+    ], cands.map((c, i) => [
       // uq_im_canonical_tahun: '' ganda di tahun sama = duplicate → placeholder unik per baris.
       `TMP-${c.usulan_item_id}`, tahun, 'USULAN', c.usulan_item_id, c.usulan_no,
-      c.keputusan, c.ditolak_oleh, c.sub_bidang, c.uraian, 'BLUD',
+      c.keputusan, c.ditolak_oleh, c.sub_bidang, c.uraian, barangPer[i], 'BLUD',
       c.vol, c.satuan, c.harga, c.nilai_rencana,
       c.keputusan === 'DISETUJUI' ? 'DIRENCANAKAN' : 'TIDAK_TEREALISASI', c.sub_bidang,
       userId, userId,
     ]), conn);
     // canonical_id atomik dari AUTO_INCREMENT id, pola createAset (anti-race MAX+1).
     await tx`UPDATE buku_besar_aset SET canonical_id = CONCAT('BBA-', LPAD(id, 6, '0')) WHERE origin = 'USULAN' AND canonical_id LIKE 'TMP-%'`;
-    return { inserted: affectedRows };
+    return { inserted: affectedRows, tertaut: barangPer.filter(b => b !== null).length };
   });
 }
 
@@ -543,4 +614,179 @@ export async function createKategori(nama: string): Promise<{ id: number }> {
 export async function deleteKategori(id: number): Promise<boolean> {
   const res = await sql`DELETE FROM bba_kategori_aset WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
   return (res[0]?.affectedRows ?? 0) > 0;
+}
+
+// ─── Master Barang (CONCEPT-bba-perencanaan §5) ─────────────────────────────
+export interface BbaBarang { id: number; nama: string; kategori_aset: string | null; satuan: string | null; jumlah_item: number }
+
+const kodeGalat = (e: unknown) => (e as { code?: string }).code;
+
+export async function listBarang(): Promise<BbaBarang[]> {
+  const rows = await queryMany<Record<string, unknown>>(sql`
+    SELECT g.id, g.nama, g.kategori_aset, g.satuan, COUNT(b.id) AS jumlah_item
+    FROM bba_barang g LEFT JOIN buku_besar_aset b ON b.barang_id = g.id
+    GROUP BY g.id, g.nama, g.kategori_aset, g.satuan
+    ORDER BY g.nama ASC LIMIT 2000
+  `);
+  return rows.map(r => ({
+    id: Number(r.id), nama: String(r.nama ?? ''), kategori_aset: r.kategori_aset as string | null,
+    satuan: r.satuan as string | null, jumlah_item: Number(r.jumlah_item ?? 0),
+  }));
+}
+
+export async function createBarang(input: BarangCreateInput, userId: number): Promise<{ id: number; nama: string }> {
+  const nama = rapikanNamaBarang(input.nama);
+  try {
+    const res = await sql`
+      INSERT INTO bba_barang (nama, kategori_aset, satuan, created_by)
+      VALUES (${nama}, ${input.kategori_aset || null}, ${input.satuan || null}, ${userId})
+    ` as unknown as Array<{ insertId: number }>;
+    return { id: Number(res[0]?.insertId ?? 0), nama };
+  } catch (e) {
+    if (kodeGalat(e) === 'ER_DUP_ENTRY') throw new BbaBarangKembarError(nama);
+    throw e;
+  }
+}
+
+export async function updateBarang(input: BarangUpdateInput): Promise<boolean> {
+  let set = sql`id = id`;
+  if (input.nama !== undefined)          set = sql`${set}, nama = ${rapikanNamaBarang(input.nama)}`;
+  if (input.kategori_aset !== undefined) set = sql`${set}, kategori_aset = ${input.kategori_aset || null}`;
+  if (input.satuan !== undefined)        set = sql`${set}, satuan = ${input.satuan || null}`;
+  try {
+    const res = await sql`UPDATE bba_barang SET ${set} WHERE id = ${input.id}` as unknown as Array<{ affectedRows?: number }>;
+    return (res[0]?.affectedRows ?? 0) > 0;
+  } catch (e) {
+    if (kodeGalat(e) === 'ER_DUP_ENTRY') throw new BbaBarangKembarError(rapikanNamaBarang(input.nama));
+    throw e;
+  }
+}
+
+/** Barang yang masih dipakai item ditolak dengan jumlahnya (FK RESTRICT = jaring terakhir). */
+export async function hapusBarang(id: number): Promise<{ nama: string } | null> {
+  return withTransaction(async ({ tx }) => {
+    const ada = await tx`SELECT nama FROM bba_barang WHERE id = ${id} FOR UPDATE` as Array<{ nama: string }>;
+    if (ada.length === 0) return null;
+    const dipakai = await tx`SELECT COUNT(*) AS n FROM buku_besar_aset WHERE barang_id = ${id}` as Array<{ n: number }>;
+    const n = Number(dipakai[0]?.n ?? 0);
+    if (n > 0) throw new BbaBarangDipakaiError(n);
+    await tx`DELETE FROM bba_barang WHERE id = ${id}`;
+    return { nama: String(ada[0].nama) };
+  });
+}
+
+/**
+ * Gabungkan A ke B: semua item A pindah ke B lalu A dihapus, satu transaksi. Versi item ikut
+ * naik — modal yang sedang membuka item itu memegang barang A, simpanannya harus 409, bukan
+ * menulis balik barang yang sudah tidak ada.
+ */
+export async function gabungBarang(dari: number, ke: number, userId: number): Promise<{ dipindah: number; nama_dari: string; nama_ke: string }> {
+  return withTransaction(async ({ tx }) => {
+    const rows = await tx`SELECT id, nama FROM bba_barang WHERE id IN (${[dari, ke]}) FOR UPDATE` as Array<{ id: number; nama: string }>;
+    const nama = new Map(rows.map(r => [Number(r.id), String(r.nama)]));
+    if (!nama.has(dari) || !nama.has(ke)) throw new BbaBarangTidakDikenalError();
+    const res = await tx`UPDATE buku_besar_aset SET barang_id = ${ke}, version = version + 1, updated_by = ${userId} WHERE barang_id = ${dari}` as unknown as Array<{ affectedRows?: number }>;
+    await tx`DELETE FROM bba_barang WHERE id = ${dari}`;
+    return { dipindah: Number(res[0]?.affectedRows ?? 0), nama_dari: nama.get(dari)!, nama_ke: nama.get(ke)! };
+  });
+}
+
+/**
+ * Tautkan sekaligus (spanduk "belum ditautkan"). Hanya item yang MASIH tanpa barang yang diisi —
+ * yang sudah ditautkan orang lain di sela-selanya dilewati & dihitung, tidak ditimpa.
+ */
+export async function tautkanBarang(input: BarangTautkanInput, userId: number): Promise<{ ditautkan: number; dilewati: number; barang_baru: number }> {
+  return withTransaction(async ({ tx }) => {
+    await pastikanBarang(tx, input.pasangan.flatMap(p => p.barang_id ? [p.barang_id] : []));
+    const asetIds = input.pasangan.map(p => p.aset_id);
+    const info = await tx`SELECT id, kategori_aset, satuan FROM buku_besar_aset WHERE id IN (${asetIds})` as Array<{ id: number; kategori_aset: string | null; satuan: string | null }>;
+    const infoPer = new Map(info.map(r => [Number(r.id), r]));
+    const baru = new Map<string, number>();
+    const perBarang = new Map<number, number[]>();
+    for (const p of input.pasangan) {
+      let id = p.barang_id ?? 0;
+      if (!id) {
+        const k = kunciNamaBarang(p.barang_baru);
+        id = baru.get(k) ?? await barangDariNama(tx, p.barang_baru!, userId, infoPer.get(p.aset_id) ?? {});
+        baru.set(k, id);
+      }
+      perBarang.set(id, [...(perBarang.get(id) ?? []), p.aset_id]);
+    }
+    let ditautkan = 0;
+    for (const [barangId, ids] of perBarang) {
+      const res = await tx`
+        UPDATE buku_besar_aset SET barang_id = ${barangId}, version = version + 1, updated_by = ${userId}
+        WHERE id IN (${ids}) AND barang_id IS NULL
+      ` as unknown as Array<{ affectedRows?: number }>;
+      ditautkan += Number(res[0]?.affectedRows ?? 0);
+    }
+    return { ditautkan, dilewati: input.pasangan.length - ditautkan, barang_baru: baru.size };
+  });
+}
+
+function bahanDari(r: Record<string, unknown>): BahanBarang {
+  return {
+    barang_id: r.barang_id == null ? null : Number(r.barang_id),
+    tahun_anggaran: Number(r.tahun_anggaran), status: r.status as BbaStatus,
+    usulan_keputusan: r.usulan_keputusan as BahanBarang['usulan_keputusan'],
+    vol: Number(r.vol ?? 0), vol_realisasi: Number(r.vol_realisasi ?? 0),
+    nilai_rencana: Number(r.nilai_rencana ?? 0), nilai_realisasi: Number(r.nilai_realisasi ?? 0),
+    tgl_realisasi: (r.tgl_realisasi as string | null) ?? null, // sudah teks: DATE_FORMAT di SQL
+  };
+}
+const KOLOM_BAHAN = sql`barang_id, tahun_anggaran, status, usulan_keputusan, vol, vol_realisasi, nilai_rencana, nilai_realisasi, DATE_FORMAT(tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi`;
+
+export type BarisPerBarang = RingkasBarang & { id: number; nama: string; kategori_aset: string | null; satuan: string | null };
+export interface BelumDitautkan { id: number; canonical_id: string; uraian: string; kategori_aset: string | null; satuan: string | null; nilai_rencana: number }
+export interface PerBarangTahun {
+  tahun: number;
+  rows: BarisPerBarang[];
+  belum: { item: number; direncanakan: number; rencana: number; daftar: BelumDitautkan[] };
+}
+
+/** Tampilan Per Barang tahun T (§5.3). Kueri hanya mengambil bahan; hitungannya `ringkasPerBarang`. */
+export async function perBarangTahun(tahun: number): Promise<PerBarangTahun> {
+  const [bahanRows, barang, belumRows] = await Promise.all([
+    queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_BAHAN} FROM buku_besar_aset WHERE tahun_anggaran <= ${tahun} AND (barang_id IS NOT NULL OR tahun_anggaran = ${tahun})`),
+    listBarang(),
+    queryMany<Record<string, unknown>>(sql`
+      SELECT id, canonical_id, uraian, kategori_aset, satuan, nilai_rencana FROM buku_besar_aset
+      WHERE tahun_anggaran = ${tahun} AND barang_id IS NULL AND (usulan_keputusan IS NULL OR usulan_keputusan <> 'DITOLAK')
+      ORDER BY canonical_id ASC LIMIT 500
+    `),
+  ]);
+  const { perBarang, belum } = ringkasPerBarang(bahanRows.map(bahanDari), tahun);
+  const rows = barang.filter(b => perBarang.has(b.id))
+    .map(b => ({ id: b.id, nama: b.nama, kategori_aset: b.kategori_aset, satuan: b.satuan, ...perBarang.get(b.id)! }))
+    .sort((a, b) => b.rencana_tahun - a.rencana_tahun || a.nama.localeCompare(b.nama, 'id'));
+  const daftar = belumRows.map(r => ({
+    id: Number(r.id), canonical_id: String(r.canonical_id ?? ''), uraian: String(r.uraian ?? ''),
+    kategori_aset: r.kategori_aset as string | null, satuan: r.satuan as string | null, nilai_rencana: Number(r.nilai_rencana ?? 0),
+  }));
+  return { tahun, rows, belum: { ...belum, daftar } };
+}
+
+export interface DetailBarang { barang: Omit<BbaBarang, 'jumlah_item'>; ringkas: RingkasBarang; riwayat: BarisRiwayat[] }
+
+/** Kartu barang: angka tahun T + riwayat per tahun + rata-rata referensi per tahun (tren harga). */
+export async function detailBarang(id: number, tahun: number): Promise<DetailBarang | null> {
+  const barang = await queryOne<Record<string, unknown>>(sql`SELECT id, nama, kategori_aset, satuan FROM bba_barang WHERE id = ${id} LIMIT 1`);
+  if (!barang) return null;
+  const [bahanRows, refRows] = await Promise.all([
+    queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_BAHAN} FROM buku_besar_aset WHERE barang_id = ${id}`),
+    queryMany<Record<string, unknown>>(sql`
+      SELECT r.harga, r.url, r.file_id, b.tahun_anggaran FROM bba_referensi_harga r
+      JOIN buku_besar_aset b ON b.id = r.aset_id
+      WHERE b.barang_id = ${id} AND (b.usulan_keputusan IS NULL OR b.usulan_keputusan <> 'DITOLAK')
+    `),
+  ]);
+  const bahan = bahanRows.map(bahanDari);
+  const refs: BahanRefBarang[] = refRows.map(r => ({
+    harga: r.harga == null ? null : Number(r.harga), url: r.url as string | null, file_id: r.file_id as string | null, tahun_anggaran: Number(r.tahun_anggaran),
+  }));
+  const ringkas = ringkasPerBarang(bahan, tahun).perBarang.get(id) ?? ringkasKosong();
+  return {
+    barang: { id: Number(barang.id), nama: String(barang.nama ?? ''), kategori_aset: barang.kategori_aset as string | null, satuan: barang.satuan as string | null },
+    ringkas, riwayat: riwayatPerTahun(bahan, refs),
+  };
 }

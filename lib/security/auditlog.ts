@@ -20,6 +20,11 @@ export type AuditEventType =
   | 'BBA_KATEGORI_DELETE'
   | 'BBA_BUKTI_ADD'
   | 'BBA_BUKTI_DELETE'
+  | 'BBA_BARANG_ADD'
+  | 'BBA_BARANG_UPDATE'
+  | 'BBA_BARANG_DELETE'
+  | 'BBA_BARANG_GABUNG'
+  | 'BBA_BARANG_TAUTKAN'
   // ─── LKJIP ─────────────────────────────────────────────────────────
   | 'LKJIP_CREATE'
   | 'LKJIP_UPDATE'
