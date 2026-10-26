@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { sql, queryOne } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
-import { listKategori, listBarang } from '@/lib/data/buku-besar-aset';
+import { listKategori, listBarang, listLokasi } from '@/lib/data/buku-besar-aset';
 import MasterClient from './master-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
@@ -10,7 +10,8 @@ import { KunciTulisProvider } from '@/components/ui/KunciTulis';
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
-export default async function BukuBesarAsetMasterPage() {
+export default async function BukuBesarAsetMasterPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
   const h = await headers();
   const userId   = h.get('x-user-id');
   const role     = h.get('x-user-role');
@@ -23,7 +24,7 @@ export default async function BukuBesarAsetMasterPage() {
   if (!isAsetRole(role, row?.app_access ?? null)) redirect('/menu');
 
   const beku = await bekuLayarModul('buku_besar_aset');
-  const [initialKategori, initialBarang] = await Promise.all([listKategori(), listBarang()]);
+  const [initialKategori, initialBarang, initialLokasi] = await Promise.all([listKategori(), listBarang(), listLokasi()]);
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
 
   return (
@@ -34,6 +35,8 @@ export default async function BukuBesarAsetMasterPage() {
         themePreference={themePreference}
         initialKategori={initialKategori}
         initialBarang={initialBarang}
+        initialLokasi={initialLokasi}
+        tabAwal={tab === 'barang' ? 'BARANG' : tab === 'lokasi' ? 'LOKASI' : 'KATEGORI'}
         beku={beku}
       />
     </KunciTulisProvider>

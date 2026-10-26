@@ -8,6 +8,7 @@ import { isSafeHttpUrl } from '@/lib/shared/url';
 import { SUMBER_REFERENSI, JENIS_BUKTI, MAKS_REFERENSI } from '@/lib/bba/referensi';
 import { BBA_STATUSES } from '@/lib/bba/status';
 import { PANJANG_NAMA_BARANG } from '@/lib/bba/barang';
+import { MAKS_UNIT, MAKS_BARIS_PENDATAAN } from '@/lib/bba/eksisting';
 
 // K5: akses dasar SUPER_ADMIN + ADMIN (staf). Role lain via users.app_access
 // include 'buku_besar_aset' (diatur Admin Panel → User Management). Pola Rencana Aksi.
@@ -189,7 +190,32 @@ export type BbaRealisasiInput    = z.infer<typeof BbaRealisasiSchema>;
 export type BbaQuery             = z.infer<typeof BbaQuerySchema>;
 export type BbaImportUsulanInput = z.infer<typeof BbaImportUsulanSchema>;
 export type ReferensiInput       = z.infer<typeof ReferensiSchema>;
+// ─── Kondisi eksisting (§6) ─────────────────────────────────────────────────
+const NamaLokasiSchema = z.string().trim().min(1, 'Nama lokasi wajib').max(160);
+export const LokasiCreateSchema = z.object({ nama: NamaLokasiSchema });
+export const LokasiUpdateSchema = z.object({ id: z.number().int().positive(), nama: NamaLokasiSchema });
+export const LokasiDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
+
+const UnitSchema = z.number().int('Jumlah unit harus bilangan bulat').min(0).max(MAKS_UNIT);
+// Satu Simpan = satu lokasi × satu tanggal; baris yang tidak dikirim tidak disentuh (bukan replace-all lokasi).
+export const EksistingSimpanSchema = z.object({
+  lokasi_id: z.number().int().positive(),
+  tgl_cek:   TanggalSchema,
+  baris: z.array(z.object({
+    barang_id:    z.number().int().positive(),
+    baik:         UnitSchema,
+    rusak_ringan: UnitSchema,
+    rusak_berat:  UnitSchema,
+    catatan:      z.string().trim().max(500).nullish(),
+    file_id:      FileIdSchema.nullish(),
+  })).min(1, 'Belum ada barang yang didata').max(MAKS_BARIS_PENDATAAN)
+    .refine(b => new Set(b.map(x => x.barang_id)).size === b.length, 'Barang yang sama muncul dua kali'),
+});
+export const EksistingFormSchema = z.object({ lokasi_id: z.coerce.number().int().positive(), tgl: TanggalSchema });
+export const EksistingDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
+
 export type BuktiCreateInput     = z.infer<typeof BuktiCreateSchema>;
+export type EksistingSimpanInput = z.infer<typeof EksistingSimpanSchema>;
 export type BarangCreateInput    = z.infer<typeof BarangCreateSchema>;
 export type BarangUpdateInput    = z.infer<typeof BarangUpdateSchema>;
 export type BarangTautkanInput   = z.infer<typeof BarangTautkanSchema>;

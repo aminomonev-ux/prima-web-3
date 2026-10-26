@@ -1,6 +1,6 @@
 # CONCEPT — Buku Besar Aset untuk perencanaan: referensi harga, bukti dukung, per barang, kondisi eksisting
 
-> Status: **Tahap 1 dieksekusi 2026-10-22** (catatan eksekusi → §4.7); **Tahap 2 dieksekusi 2026-10-26** (→ §5.6); Tahap 3 masih konsep. Keputusan terbuka → §9. Desain layar dipilih pemilik 2026-10-22 → §4.4.
+> Status: **Tahap 1 dieksekusi 2026-10-22** (catatan eksekusi → §4.7); **Tahap 2 dieksekusi 2026-10-26** (→ §5.6); **Tahap 3 dieksekusi 2026-10-26** (→ §6.6). Keputusan terbuka → §9. Desain layar dipilih pemilik 2026-10-22 → §4.4.
 > Lingkup: **internal untuk perencanaan.** Pembukuan Barang Milik Daerah tetap di aplikasi BMD resmi RS; PRIMA tidak menyainginya (§8).
 > Konsep awal BBA (`docs/session/buku-besar-aset/CONCEPT.md`) tidak ikut ter-copas ke workspace ini; acuan yang dipakai di sini: kode + `docs/schema-mysql.sql`.
 
@@ -356,6 +356,33 @@ CREATE TABLE bba_eksisting (
 ### 6.5 Berkas yang disentuh
 
 Migrasi + skema · `lib/bba/eksisting.ts` (baru, MURNI: yang berlaku per lokasi, total, "perlu didata ulang") · data layer + `app/api/buku-besar-aset/eksisting/route.ts` + lokasi CRUD · halaman Master (tab Lokasi) · client (pendataan per lokasi, kartu barang, kolom Eksisting, saringan) · audit `BBA_EKSISTING_*` / `BBA_LOKASI_*` + retensi.
+
+### 6.6 Catatan eksekusi Tahap 3 (2026-10-26)
+
+Migrasi `migration-bba-eksisting.sql` — **wajib dijalankan di server kantor sebelum kodenya dipasang, sesudah** `migration-bba-barang-proses.sql` (FK ke `bba_barang`).
+
+Yang berbeda dari rancangan, beserta sebabnya:
+
+- **Gabungkan barang ditolak bila kedua barang didata di lokasi DAN tanggal yang sama.** Rancangan menulis "pendataan dipindah apa adanya", tapi dua baris itu tidak bisa berdampingan (`uq_be_cek`), dan memilih/menjumlah salah satunya diam-diam bisa membuang atau menggandakan barang fisik. Pesannya menyebut lokasi & tanggalnya, dengan jalan keluar: hapus salah satu pendataan dulu.
+- **Hapus pendataan (koreksi) ditambahkan** di riwayat kartu barang — jalan keluar penolakan di atas, sekaligus untuk salah catat di tanggal yang sudah lewat. Pendataan sebelumnya kembali berlaku.
+- **Tanda "perlu didata ulang" sesudah gabung butuh jejak** yang tidak ada di draf: kolom `digabung_dari` + `digabung_pada` diisi saat baris dipindah. Lokasi ditandai bila riwayatnya berasal dari dua barang DAN pendataan yang berlaku dicatat sebelum gabung; mendata lagi lokasi itu menghapus tandanya. Asal yang sudah tercatat dari gabungan sebelumnya dipertahankan (lebih baik menandai berlebih daripada lolos).
+- **Angka terakhir tidak disalin otomatis ke form.** Ditampilkan sebagai pembanding; kotak kosong semua = barang itu tidak didata kali ini. Tombol "Isi sama seperti terakhir" ada untuk barang yang dicek dan tidak berubah — harus ditekan. Kalau disalin diam-diam, barang yang tidak benar-benar dicek ikut tercatat "dicek hari ini".
+- **Satu Simpan = satu lokasi × satu tanggal, hanya barang yang dikirim yang ditimpa.** Baris lokasi dikunci dulu (`FOR UPDATE`) supaya dua pendataan berbarengan di lokasi yang sama antre.
+- **Barang yang hanya punya pendataan** (inventaris lama yang tak pernah dibeli lewat BBA) ikut tampil di Per Barang. Hapus barang/lokasi yang punya pendataan ditolak dengan jumlahnya.
+- **Eksisting = keadaan terkini**, bukan "per tahun T" — Per Barang menuliskannya "(terkini)".
+- Urutan lokasi mengikuti urutan dibuat; tidak ada layar ubah urutan (belum dibutuhkan).
+- Jejak gabung & `created_at` berpresisi detik: pendataan yang tersimpan di detik yang sama dengan gabung dianggap belum sesudahnya.
+
+Uji: `npx tsx scripts/test-bba-eksisting.mts` (49 pemeriksaan; bagian D di MySQL memakai barang/lokasi berawalan UJIBBA3 dan item tahun kotak pasir 2086–2088, lalu dibersihkan), 18 uji mutasi tertangkap.
+
+Dicoba di peramban dengan data kotak pasir, lalu dibersihkan:
+
+- Per Barang: kolom Eksisting, saringan "Ada rusak berat", barang yang hanya punya pendataan.
+- Kartu barang: bar kondisi, per lokasi, kalimat "perlu didata ulang", dan riwayat pendataan.
+- "+ Pendataan" dari kartu barang: angka terakhir hanya jadi petunjuk, satu barang tersimpan. Sesudahnya patokan "perlu didata ulang" pindah ke lokasi terlama yang masih berlaku, dan kartu memuat ulang sendiri.
+- Kolom tengah modal item.
+- Master → Lokasi: hapus lokasi yang punya pendataan ditolak dengan jumlahnya.
+- Form pendataan di lebar 375 px.
 
 ## 7. Aturan yang berlaku di semua tahap
 

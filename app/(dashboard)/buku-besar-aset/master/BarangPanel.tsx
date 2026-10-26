@@ -68,7 +68,7 @@ export default function BarangPanel({ c, awal, kategori }: Props) {
     if (!ke) return;
     if (!(await confirmDialog({
       title: 'Gabungkan barang',
-      message: `${gabung.dari.jumlah_item} item "${gabung.dari.nama}" dipindah ke "${ke.nama}", lalu "${gabung.dari.nama}" dihapus dari Master. Riwayat belinya ikut pindah.`,
+      message: `${gabung.dari.jumlah_item} item${gabung.dari.jumlah_pendataan ? ` dan ${gabung.dari.jumlah_pendataan} pendataan eksisting` : ''} "${gabung.dari.nama}" dipindah ke "${ke.nama}", lalu "${gabung.dari.nama}" dihapus dari Master. Riwayat beli dan pendataannya ikut pindah; lokasi yang didata kedua barang ditandai "perlu didata ulang".`,
       confirmLabel: 'Gabungkan', variant: 'warning',
     }))) return;
     setSibuk(true);
@@ -123,14 +123,14 @@ export default function BarangPanel({ c, awal, kategori }: Props) {
               <tr key={r.id} style={{ background: i % 2 ? c.rowOdd : 'transparent' }}>
                 <td style={td} colSpan={3}>
                   <b>{r.nama}</b>
-                  <div style={{ color: c.sub, fontSize: 11.5 }}>{[r.kategori_aset, r.satuan, `${r.jumlah_item} item`].filter(Boolean).join(' · ')}</div>
+                  <div style={{ color: c.sub, fontSize: 11.5 }}>{[r.kategori_aset, r.satuan, `${r.jumlah_item} item`, r.jumlah_pendataan ? `${r.jumlah_pendataan} pendataan` : ''].filter(Boolean).join(' · ')}</div>
                 </td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', width: 1 }}>
                   <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                     <Tip label="Ubah"><EditButton onClick={() => setUbah({ id: r.id, nama: r.nama, kategori_aset: r.kategori_aset ?? '', satuan: r.satuan ?? '' })} /></Tip>
                     <PrimaButton variant="ghost" size="sm" disabled={rows.length < 2} onClick={() => setGabung({ dari: r, ke: null })}>Gabungkan…</PrimaButton>
-                    {r.jumlah_item > 0
-                      ? <Tip label={`Dipakai ${r.jumlah_item} item — gabungkan ke barang lain dulu`}><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} onClick={() => {}} /></span></Tip>
+                    {r.jumlah_item + r.jumlah_pendataan > 0
+                      ? <Tip label="Masih dipakai item/pendataan — gabungkan ke barang lain dulu"><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
                       : <Tip label="Hapus"><DeleteButton iconSize={12} onClick={() => void hapus(r)} /></Tip>}
                   </div>
                 </td>

@@ -87,10 +87,10 @@ type Muatan = { item: BbaRow; referensiTersimpan: number };
 type Dasar = { isian: IsianItem; refs: ReferensiIsian[] };
 
 const refBaru = (): ReferensiIsian => ({ sumber: 'LAINNYA', nama_penyedia: null, url: null, harga: null, tgl_cek: null, file_id: null });
-const unduhBerkas = (fileId: string) => `/api/upload/download?id=${encodeURIComponent(fileId)}`;
+export const unduhBerkas = (fileId: string) => `/api/upload/download?id=${encodeURIComponent(fileId)}`;
 
-/** SATU jalur unggah untuk referensi & bukti — berkasnya ber-context `buku_besar_aset` (aturan unduh BBA, §4.3). */
-async function unggahBerkas(file: File): Promise<{ fileId: string; filename: string } | null> {
+/** SATU jalur unggah untuk referensi, bukti, & foto pendataan — berkasnya ber-context `buku_besar_aset` (aturan unduh BBA, §4.3). */
+export async function unggahBerkas(file: File): Promise<{ fileId: string; filename: string } | null> {
   if (file.size > 10 * 1024 * 1024) { toast.error('Ukuran berkas maksimal 10 MB'); return null; }
   const fd = new FormData(); fd.append('file', file); fd.append('modul', 'buku_besar_aset');
   const d = await fetchJson<unknown>('/api/upload', { method: 'POST', body: fd });

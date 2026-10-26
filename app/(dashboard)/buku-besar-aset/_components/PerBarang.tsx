@@ -9,6 +9,8 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import type { PerBarangTahun, BarisPerBarang } from '@/lib/data/buku-besar-aset';
 import KartuBarang from './KartuBarang';
+import BarKondisi from './BarKondisi';
+import ModalPendataan from './ModalPendataan';
 import type { Warna } from './ModalItem';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -27,6 +29,10 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
   const [data, setData] = useState<PerBarangTahun | null>(null);
   const [galat, setGalat] = useState('');
   const [buka, setBuka] = useState<BarisPerBarang | null>(null);
+  // §6.1: pendataan per lokasi (tanpa barang) atau dari kartu barang (barangnya langsung ada di form)
+  const [pendataan, setPendataan] = useState<{ barang: BarisPerBarang | null } | null>(null);
+  const [segarLokal, setSegarLokal] = useState(0);
+  const [hanyaRB, setHanyaRB] = useState(false);
   const nomor = useRef(0);
 
   useEffect(() => {
@@ -38,7 +44,7 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
       if (!d.ok) { setGalat(d.message || 'Gagal memuat'); return; }
       setGalat(''); setData(d as unknown as PerBarangTahun);
     });
-  }, [tahun, segarkan]);
+  }, [tahun, segarkan, segarLokal]);
 
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 11, color: c.sub, textAlign: 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '7px 10px', fontSize: 12.5, color: c.text, borderBottom: `1px solid ${c.border}` };
@@ -47,14 +53,30 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
   if (galat) return <div style={{ fontSize: 12.5, color: '#E24B4A', padding: 12 }}>{galat}</div>;
   if (!data || data.tahun !== tahun) return <div style={{ fontSize: 12.5, color: c.sub, padding: 12 }}>Memuat…</div>;
   const jumlahRencana = data.rows.reduce((s, r) => s + r.rencana_tahun, 0) + data.belum.rencana;
+  // §6.3: kandidat pengganti. Jumlah kolom Rencana tetap dari SEMUA baris — saringan ini hanya menyembunyikan.
+  const adaRB = data.rows.filter(r => (r.eksisting?.kondisi.rusak_berat ?? 0) > 0);
+  const rows = hanyaRB ? adaRB : data.rows;
+  const selesaiPendataan = () => { setPendataan(null); setSegarLokal(n => n + 1); };
 
   return (
     <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button type="button" onClick={() => setHanyaRB(v => !v)}
+          style={{ padding: '4px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: 20, cursor: 'pointer',
+            border: `1px solid ${hanyaRB ? '#E24B4A' : c.border}`, background: hanyaRB ? 'rgba(226,75,74,.12)' : 'transparent', color: hanyaRB ? '#E24B4A' : c.sub }}>
+          Ada rusak berat ({adaRB.length})
+        </button>
+        <span style={{ flex: 1 }} />
+        <PrimaButton variant="purple" size="sm" onClick={() => setPendataan({ barang: null })}
+          data-tooltip="Opname per ruangan: catat jumlah baik / rusak ringan / rusak berat tiap barang">
+          Pendataan eksisting
+        </PrimaButton>
+      </div>
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>
             <th style={th}>Barang</th>
-            <th style={th}>Eksisting</th>
+            <th style={th}>Eksisting (terkini)</th>
             <th style={{ ...th, textAlign: 'right' }}>Pernah dibeli</th>
             <th style={{ ...th, textAlign: 'right' }}>Dalam proses</th>
             <th style={{ ...th, textAlign: 'right' }}>Direncanakan {tahun}</th>
@@ -62,13 +84,21 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
             <th style={{ ...th, textAlign: 'right' }}>Rencana {tahun}</th>
           </tr></thead>
           <tbody>
-            {data.rows.length === 0 && data.belum.item === 0 && <tr><td style={{ ...td, textAlign: 'center', color: c.sub, padding: 24 }} colSpan={7}>Tidak ada data.</td></tr>}
-            {data.rows.map((r, i) => {
+            {rows.length === 0 && (hanyaRB || data.belum.item === 0) && <tr><td style={{ ...td, textAlign: 'center', color: c.sub, padding: 24 }} colSpan={7}>{hanyaRB ? 'Tidak ada barang dengan unit rusak berat.' : 'Tidak ada data.'}</td></tr>}
+            {rows.map((r, i) => {
               const sat = r.satuan || 'unit';
               return (
                 <tr key={r.id} onClick={() => setBuka(r)} style={{ background: i % 2 ? c.rowOdd : 'transparent', cursor: 'pointer' }}>
                   <td style={td}><b>{r.nama}</b>{r.kategori_aset ? <span style={{ fontSize: 11, color: c.sub }}> · {r.kategori_aset}</span> : null}</td>
-                  <td style={{ ...td, color: c.sub, fontSize: 11.5 }}>Belum didata</td>
+                  <td style={{ ...td, minWidth: 150 }}>
+                    {r.eksisting
+                      ? <>
+                          <BarKondisi k={r.eksisting.kondisi} sub={c.sub} ringkas />
+                          <div style={{ fontSize: 10.5, color: c.sub }}>{r.eksisting.lokasi.length} lokasi</div>
+                          {r.eksisting.perlu_ulang.length > 0 && <div style={{ fontSize: 10.5, color: '#BA7517', fontWeight: 600 }}>perlu didata ulang</div>}
+                        </>
+                      : <span style={{ color: c.sub, fontSize: 11.5 }}>Belum didata</span>}
+                  </td>
                   <td style={tdNum}>
                     {r.dibeli > 0 ? <>{fmtVol(r.dibeli)} {sat}<div style={{ fontSize: 10.5, color: c.sub }}>{r.tahun_beli_terakhir}{r.harga_beli_terakhir ? ` · ${fmtRp(r.harga_beli_terakhir)}/${sat}` : ''}</div></> : <span style={{ color: c.sub }}>—</span>}
                   </td>
@@ -79,7 +109,7 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
                 </tr>
               );
             })}
-            {data.belum.item > 0 && (
+            {data.belum.item > 0 && !hanyaRB && (
               <tr style={{ background: 'rgba(186,117,23,.08)' }}>
                 <td style={td} colSpan={2}>
                   <span style={{ fontWeight: 600, color: '#BA7517' }}>Belum ditautkan ({data.belum.item} item)</span>
@@ -93,14 +123,15 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
               </tr>
             )}
           </tbody>
-          <tfoot><tr>
+          {!hanyaRB && <tfoot><tr>
             <td style={{ ...td, fontWeight: 700 }} colSpan={6}>Jumlah <span style={{ fontWeight: 400, fontSize: 11, color: c.sub }}>— sama dengan Total Rencana tanpa saringan; usulan ditolak tidak dihitung</span></td>
             <td style={{ ...tdNum, fontWeight: 700 }}>{fmtRp(jumlahRencana)}</td>
-          </tr></tfoot>
+          </tr></tfoot>}
         </table>
       </div>
       <div style={{ fontSize: 11.5, color: c.sub, marginTop: 8 }}>
-        Pernah dibeli & dalam proses dihitung s.d. {tahun} (pesanan tahun lalu bisa belum datang). Saringan status/sumber/asal di atas tidak berlaku di tampilan ini.
+        Pernah dibeli & dalam proses dihitung s.d. {tahun} (pesanan tahun lalu bisa belum datang). Eksisting = pendataan terbaru tiap lokasi;
+        pembelian sesudah pendataan tidak ditambahkan otomatis (ditandai &quot;perlu didata ulang&quot;). Saringan status/sumber/asal di atas tidak berlaku di tampilan ini.
       </div>
       {buka && (
         <div onClick={() => setBuka(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
@@ -108,9 +139,13 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="button" aria-label="Tutup" onClick={() => setBuka(null)} style={{ background: 'none', border: 'none', color: c.text, cursor: 'pointer', display: 'flex' }}><X size={18} /></button>
             </div>
-            <KartuBarang barangId={buka.id} tahun={tahun} c={c} tandaiTahun={tahun} />
+            <KartuBarang barangId={buka.id} tahun={tahun} c={c} tandaiTahun={tahun} versi={segarLokal} onPendataan={() => setPendataan({ barang: buka })} />
           </div>
         </div>
+      )}
+      {pendataan && (
+        <ModalPendataan c={c} barangAwal={pendataan.barang ? { id: pendataan.barang.id, nama: pendataan.barang.nama, satuan: pendataan.barang.satuan } : null}
+          onTutup={() => setPendataan(null)} onTersimpan={selesaiPendataan} />
       )}
     </>
   );
