@@ -35,7 +35,7 @@ dari separuh berkasnya tidak bernomor).
 
 | Perangkat | Versi | Catatan |
 |---|---|---|
-| **Node.js** | **20.x LTS** | Jangan 22/24. CI proyek ini memakai Node 20 + npm 10.8.2; versi lain bisa menghasilkan `package-lock.json` yang tidak cocok (pelajaran L57). |
+| **Node.js** | **22.x LTS, minimal 22.23.4** | Node 20 habis masa dukungannya 30 Apr 2026 — tak lagi menerima perbaikan keamanan (rilis keamanan 21 Okt 2026 hanya untuk 22/24/26). Yang wajib sama dengan CI adalah **npm 10.8.2**, bukan versi Node-nya: npm lain bisa menghasilkan `package-lock.json` yang tidak cocok (pelajaran L57). Sesudah memasang/menaikkan Node, periksa `npm -v` lagi — installer Node membawa npm-nya sendiri. |
 | **MySQL** | **8.0.13+** (ideal 8.4) | Skema memakai `DEFAULT (expr)` yang baru ada sejak 8.0.13. |
 | **PM2** | terbaru | `npm install -g pm2` — **tanpa** `pm2-windows-startup`, lihat §4 |
 | **Nginx for Windows** | terbaru stabil | Sebagai reverse proxy + HTTPS. |
