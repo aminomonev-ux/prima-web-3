@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { KategoriCreateSchema, KategoriDeleteSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { listKategori, createKategori, deleteKategori } from '@/lib/data/buku-besar-aset';
-import { guard } from '../_guard';
+import { guard, tolakKecualiEdit } from '../_guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +16,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'master'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'kategori', 30); if (limited) return limited;
   const raw = await req.json().catch(() => null);
   const parsed = KategoriCreateSchema.safeParse(raw);
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'master'); if (ditolak) return ditolak;
   const { searchParams } = new URL(req.url);
   const parsed = KategoriDeleteSchema.safeParse({ id: searchParams.get('id') ?? undefined });
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'ID tidak valid' }, { status: 400 });

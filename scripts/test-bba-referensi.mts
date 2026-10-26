@@ -274,10 +274,21 @@ if (c) {
     const penuh = await coba(() => D.tambahBukti({ aset_id: id, jenis: 'FOTO', nama: 'ke-31', url: 'https://a.id' }, userId))
     ok('D18 batas 30 bukti per item dijaga server', penuh instanceof D.BbaBuktiPenuhError && (await D.listBukti(id)).length === 30)
 
-    await D.updateAset({ id, expected_version: await versiDb(id), referensi: [{ sumber: 'LAINNYA', harga: 1, url: 'https://a.id' }] }, userId)
-    await D.deleteAset(id)
-    const [yatim] = await k.query('SELECT (SELECT COUNT(*) FROM bba_referensi_harga WHERE aset_id = ?) AS r, (SELECT COUNT(*) FROM bba_lampiran WHERE aset_id = ?) AS b', [id, id]) as [Array<{ r: number; b: number }>, unknown]
-    ok('D19 hapus item → referensi & bukti ikut terhapus (CASCADE)', Number(yatim[0].r) === 0 && Number(yatim[0].b) === 0)
+    // Sejak Tahap A (docs/CONCEPT-bba-buku-aset.md §10 butir 7) item terealisasi tidak bisa dihapus
+    // dan referensinya beku — CASCADE tinggal berlaku untuk rencana yang belum diproses.
+    const hitungRb = async () => {
+      const [x] = await k.query('SELECT (SELECT COUNT(*) FROM bba_referensi_harga WHERE aset_id = ?) AS r, (SELECT COUNT(*) FROM bba_lampiran WHERE aset_id = ?) AS b', [id, id]) as [Array<{ r: number; b: number }>, unknown]
+      return `${x[0].r}/${x[0].b}`
+    }
+    const sebelum = await hitungRb()
+    const bekuRef = await coba(async () => D.updateAset({ id, expected_version: await versiDb(id), referensi: [{ sumber: 'LAINNYA', harga: 1, url: 'https://a.id' }] }, userId))
+    const tolakHapus = await coba(() => D.deleteAset(id))
+    ok('D19 item terealisasi: referensi beku & hapus ditolak — referensi & bukti tetap', bekuRef instanceof D.BbaReferensiBekuError
+      && tolakHapus instanceof D.BbaRiwayatTerkunciError && await hitungRb() === sebelum && sebelum.endsWith('/30'), sebelum)
+    const draf = await D.createAset({ tahun_anggaran: TAHUN, uraian: `${UJI} Draf`, sumber_anggaran: 'BLUD', vol: 1, harga: 1, referensi: [{ sumber: 'LAINNYA', harga: 5, url: 'https://a.id' }] }, userId)
+    await D.deleteAset(draf.id)
+    const [yatim] = await k.query('SELECT COUNT(*) AS r FROM bba_referensi_harga WHERE aset_id = ?', [draf.id]) as [Array<{ r: number }>, unknown]
+    ok('D19b rencana belum diproses & tanpa bukti boleh dihapus — referensinya ikut (CASCADE)', Number(yatim[0].r) === 0)
   } finally {
     await bersih()
     const [sisa] = await k.query("SELECT (SELECT COUNT(*) FROM buku_besar_aset WHERE tahun_anggaran = ?) AS a, (SELECT COUNT(*) FROM usulan_items WHERE no_usulan = ?) AS u, (SELECT COUNT(*) FROM uploaded_files WHERE file_id LIKE 'UJIBBA\\_%') AS f",

@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { BarangGabungSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { gabungBarang, BbaBarangTidakDikenalError, BbaGabungBentrokError } from '@/lib/data/buku-besar-aset';
-import { guard } from '../../_guard';
+import { guard, tolakKecualiEdit } from '../../_guard';
 
 // POST /api/buku-besar-aset/barang/gabung { dari, ke } — semua item barang `dari` pindah ke `ke`,
 // lalu `dari` dihapus. Satu transaksi (§5.1); versi item yang dipindah ikut naik.
 export async function POST(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'master'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'barang-gabung', 10); if (limited) return limited;
   const parsed = BarangGabungSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });

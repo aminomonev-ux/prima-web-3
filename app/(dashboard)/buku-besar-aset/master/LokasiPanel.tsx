@@ -14,7 +14,7 @@ import type { BbaLokasi } from '@/lib/data/buku-besar-aset';
 
 type Warna = { card: string; text: string; sub: string; border: string; rowOdd: string; input: string };
 
-export default function LokasiPanel({ c, awal }: { c: Warna; awal: BbaLokasi[] }) {
+export default function LokasiPanel({ c, awal, bolehUbah }: { c: Warna; awal: BbaLokasi[]; bolehUbah: boolean }) {
   const [rows, setRows] = useState<BbaLokasi[]>(awal);
   const [nama, setNama] = useState('');
   const [ubah, setUbah] = useState<{ id: number; nama: string } | null>(null);
@@ -60,10 +60,10 @@ export default function LokasiPanel({ c, awal }: { c: Warna; awal: BbaLokasi[] }
       <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 12, lineHeight: 1.5 }}>
         Ruangan tempat pendataan kondisi eksisting (opname berjalan ruangan demi ruangan). Pendataannya di tampilan Per Barang → <b>Pendataan eksisting</b>.
       </div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+      {bolehUbah && <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         <input value={nama} onChange={e => setNama(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void tambah(); }} placeholder="Nama lokasi / ruangan baru…" maxLength={160} style={{ ...inp, flex: 1 }} aria-label="Nama lokasi" />
         <PrimaButton variant="purple" onClick={() => void tambah()} disabled={sibuk}>+ Tambah</PrimaButton>
-      </div>
+      </div>}
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody>
@@ -85,12 +85,12 @@ export default function LokasiPanel({ c, awal }: { c: Warna; awal: BbaLokasi[] }
                   <div style={{ color: c.sub, fontSize: 11.5 }}>{l.jumlah_pendataan > 0 ? `${l.jumlah_barang} barang · ${l.jumlah_pendataan} pendataan` : 'belum ada pendataan'}</div>
                 </td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', width: 1 }}>
-                  <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  {bolehUbah && <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                     <Tip label="Ganti nama"><EditButton onClick={() => setUbah({ id: l.id, nama: l.nama })} /></Tip>
                     {l.jumlah_pendataan > 0
                       ? <Tip label={`Punya ${l.jumlah_pendataan} pendataan — tidak bisa dihapus`}><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
                       : <Tip label="Hapus"><DeleteButton iconSize={12} onClick={() => void hapus(l)} /></Tip>}
-                  </div>
+                  </div>}
                 </td>
               </tr>
             ))}

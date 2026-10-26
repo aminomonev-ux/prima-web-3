@@ -48,3 +48,27 @@ export function pilihanStatusRealisasi(dari: BbaStatus, bolehKoreksiMundur = fal
 export function statusSebelumTerima(status: BbaStatus): boolean {
   return status === 'DIRENCANAKAN' || status === 'DIPROSES';
 }
+
+/**
+ * Sejak barangnya dipesan, survei harga = catatan sejarah ("dulu dibandingkan dengan apa"),
+ * bukan draf (docs/CONCEPT-bba-buku-aset.md §7.4, §10 butir 7). Pesanan batal → kembali
+ * Direncanakan → terbuka lagi.
+ */
+export function referensiBeku(status: BbaStatus): boolean {
+  return status !== 'DIRENCANAKAN';
+}
+
+/**
+ * Alasan item TIDAK boleh dihapus, atau `null`. Satu kalimat untuk route DAN tombol Hapus.
+ * Hapus item ikut membuang referensi & bukti (ON DELETE CASCADE) — padahal itulah bahan
+ * "pembelian sebelumnya" saat barang yang sama direncanakan lagi (§7.7).
+ */
+export function alasanTakBisaHapus(status: BbaStatus, jumlahBukti: number): string | null {
+  if (status !== 'DIRENCANAKAN') {
+    return `Item berstatus ${LABEL_STATUS[status]} tidak bisa dihapus — jejak rencana dan pembeliannya dipakai saat merencanakan barang yang sama berikutnya.`;
+  }
+  if (jumlahBukti > 0) {
+    return `Item ini punya ${jumlahBukti} bukti dukung, jadi tidak bisa dihapus. Kalau buktinya salah unggah, lepas dulu di tab Bukti dukung.`;
+  }
+  return null;
+}

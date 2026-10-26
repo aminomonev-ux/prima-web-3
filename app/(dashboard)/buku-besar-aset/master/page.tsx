@@ -6,6 +6,7 @@ import { listKategori, listBarang, listLokasi } from '@/lib/data/buku-besar-aset
 import MasterClient from './master-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
+import { izinLayarBba } from '../_izin';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -23,6 +24,7 @@ export default async function BukuBesarAsetMasterPage({ searchParams }: { search
   );
   if (!isAsetRole(role, row?.app_access ?? null)) redirect('/menu');
 
+  const { peta } = await izinLayarBba('master');
   const beku = await bekuLayarModul('buku_besar_aset');
   const [initialKategori, initialBarang, initialLokasi] = await Promise.all([listKategori(), listBarang(), listLokasi()]);
   const themePreference = (row?.theme_preference ?? 'dark') as 'dark' | 'light';
@@ -38,6 +40,7 @@ export default async function BukuBesarAsetMasterPage({ searchParams }: { search
         initialLokasi={initialLokasi}
         tabAwal={tab === 'barang' ? 'BARANG' : tab === 'lokasi' ? 'LOKASI' : 'KATEGORI'}
         beku={beku}
+        izin={peta}
       />
     </KunciTulisProvider>
   );

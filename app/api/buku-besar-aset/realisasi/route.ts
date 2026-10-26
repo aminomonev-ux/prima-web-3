@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { BbaRealisasiSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { setRealisasi, BbaVersionConflictError, BbaTransitionError, BbaNotFoundError, BbaUsulanLockedError, BbaRealisasiRangeError, BbaStatusMismatchError } from '@/lib/data/buku-besar-aset';
-import { guard } from '../_guard';
+import { guard, tolakKecualiEdit } from '../_guard';
 import { bolehBatalkanFinal } from '@/lib/constants';
 
 // PATCH /api/buku-besar-aset/realisasi — Proses & Realisasi: status (termasuk Dalam Proses, §5.2)
@@ -10,6 +10,7 @@ import { bolehBatalkanFinal } from '@/lib/constants';
 export async function PATCH(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'pengadaan'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'realisasi', 60); if (limited) return limited;
   const raw = await req.json().catch(() => null);
   const parsed = BbaRealisasiSchema.safeParse(raw);

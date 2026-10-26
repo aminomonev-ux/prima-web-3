@@ -17,6 +17,7 @@ import { acquireBludLock } from '@/lib/data/locks'
 
 export const APP_BLUD = 'blud'
 export const APP_PK = 'perjanjian_kinerja'
+export const APP_BBA = 'buku_besar_aset'
 
 const IZIN_SAH: readonly Izin[] = ['EDIT', 'LIHAT', 'TIDAK']
 

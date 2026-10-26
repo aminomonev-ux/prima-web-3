@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Package, Layers, LayoutGrid, Plus, Search, RefreshCw, Download, Paperclip, ListChecks } from 'lucide-react';
+import { Plus, Search, RefreshCw, Download, Paperclip, ListChecks } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import DeleteButton from '@/components/ui/DeleteButton';
@@ -17,14 +17,16 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { InputNominal } from '@/components/ui/input-nominal';
 import { fetchJson } from '@/lib/shared/api';
 import { perluReferensi, buktiBelumLengkap } from '@/lib/bba/referensi';
-import { BBA_STATUSES, LABEL_STATUS, pilihanStatusRealisasi, statusSebelumTerima, type BbaStatus } from '@/lib/bba/status';
+import { BBA_STATUSES, LABEL_STATUS, pilihanStatusRealisasi, statusSebelumTerima, alasanTakBisaHapus, type BbaStatus } from '@/lib/bba/status';
 import { bolehBatalkanFinal } from '@/lib/constants';
 import type { BbaRow, BbaListResult, BbaKpi, BbaImportCandidate } from '@/lib/data/buku-besar-aset';
 import SpandukBeku from '@/components/ui/SpandukBeku';
+import SpandukLihat from '@/components/ui/SpandukLihat';
 import type { InfoBeku } from '@/lib/security/beku';
 import ModalItem, { LencanaRef, LencanaBukti, STATUS_COLOR, type TabItem } from './_components/ModalItem';
 import PerBarang from './_components/PerBarang';
 import ModalTautkan from './_components/ModalTautkan';
+import BbaNav, { navDockBba, type PetaIzinLayar } from './_components/BbaNav';
 
 const SUMBER = ['BLUD', 'APBD', 'DAK', 'LAINNYA'] as const;
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -32,7 +34,9 @@ const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 
 type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialTahun: number; initialResult: BbaListResult; initialKpi: BbaKpi; kategori: string[];
   /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
-  beku: InfoBeku };
+  beku: InfoBeku;
+  /** Izin lima bagian (lib/bba/peran.ts) — hanya menyembunyikan tombol; pagarnya di route. */
+  izin: PetaIzinLayar };
 
 type ImportGroup   = { count: number; total: number; items: BbaImportCandidate[] };
 type ImportPreview = { tahun: number; disetujui: ImportGroup; ditolak: ImportGroup };
@@ -41,7 +45,7 @@ type BukaModal = { daftar: BbaRow[] | null; id: number | null; tab: TabItem; sar
 
 const DITOLAK_LABEL: Record<string, string> = { ADMIN: 'Ditolak Admin', KASUBAG: 'Ditolak Kasubag', KABAG: 'Ditolak Kabag' };
 
-export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, initialKpi, kategori, beku }: Props) {
+export default function BukuBesarAsetClient({ username, role, themePreference, initialTahun, initialResult, initialKpi, kategori, beku, izin }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -74,7 +78,11 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [importPreview, setImportPreview] = useState<ImportPreview | 'EMPTY' | null>(null);
   const [detailRow, setDetailRow] = useState<BbaRow | null>(null);
   const [saving, setSaving] = useState(false);
-  const canImport = role === 'ADMIN' || role === 'SUPER_ADMIN';
+  // Rencana: tambah/ubah/hapus item, referensi, tarik usulan, tautkan barang. Pengadaan: Proses &
+  // Realisasi. Bukti dukung dipegang keduanya. Pendataan eksisting milik Buku Aset (Umum Aset).
+  const bolehRencana = izin.rencana === 'EDIT';
+  const bolehPengadaan = izin.pengadaan === 'EDIT';
+  const bolehBukti = bolehRencana || bolehPengadaan;
 
   // Jawaban muatan bisa tiba tidak berurutan (ganti tahun saat muatan lama belum pulang) —
   // hanya muatan TERAKHIR yang boleh mengisi tabel, kalau tidak tabel menampilkan tahun lain.
@@ -183,7 +191,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   }
 
   async function del(row: BbaRow) {
-    const ikut = row.ref.n > 0 || row.jumlah_bukti > 0 ? ' Referensi harga dan catatan bukti dukungnya ikut terhapus; berkas di Drive tetap.' : '';
+    const ikut = row.ref.n > 0 ? ' Referensi harganya ikut terhapus — item ini belum diproses, jadi belum jadi catatan pembelian.' : '';
     if (!(await confirmDialog({ title: 'Hapus Item', message: `Hapus "${row.uraian}" (${row.canonical_id})?${ikut}`, confirmLabel: 'Hapus' }))) return;
     const d = await fetchJson<unknown>(`/api/buku-besar-aset?id=${row.id}`, { method: 'DELETE' });
     if (d.ok) { toast.success('Dihapus'); muatUlang(); } else toast.error(d.message || 'Gagal hapus');
@@ -208,7 +216,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         <div style={{ fontSize: 13, color: c.sub }}>
           <span style={{ fontWeight: 800, background: 'linear-gradient(135deg,#EF9F27,#FAC775)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Buku Besar Aset</span>
           <span style={{ margin: '0 6px', color: isLight ? '#D1D5DB' : '#185FA5' }}>/</span>
-          <span style={{ color: isLight ? '#374151' : '#B5D4F4', fontWeight: 600 }}>Register {tahun}</span>
+          <span style={{ color: isLight ? '#374151' : '#B5D4F4', fontWeight: 600 }}>Rencana {tahun}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ThemeToggle initialTheme={themePreference} onThemeChange={setTheme} />
@@ -217,19 +225,26 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       </header>
 
       <div style={{ padding: '24px 28px 100px' }}>
+      <BbaNav aktif="rencana" peta={izin} c={c} />
       <SpandukBeku {...beku}/>
+      {!bolehBukti && <SpandukLihat label="Rencana" />}
+      {!bolehRencana && bolehPengadaan && (
+        <div style={{ fontSize: 12.5, color: c.sub, margin: '0 0 14px', padding: '8px 12px', borderRadius: 10, border: `1px solid ${c.border}` }}>
+          Anda memegang bagian <b style={{ color: c.text }}>Pengadaan</b>: Proses &amp; Realisasi dan bukti dukung bisa diisi; data rencana dan referensi harga hanya bisa dilihat.
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📦 Buku Besar Aset</h1>
           <div style={{ fontSize: 12.5, color: c.sub }}>Register belanja modal lintas-tahun · {total} item{rows.length < total ? ` (menampilkan ${rows.length} — KPI tetap dihitung dari seluruh data)` : ''}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {canImport && <PrimaButton variant="purple" data-rima="bba.tarik-usulan" onClick={openImportPreview} disabled={saving}><Download size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Tarik dari Usulan Kebutuhan</PrimaButton>}
-          <PrimaButton variant="warning" onClick={bukaLengkapi} disabled={perluRef.length === 0}
+          {bolehRencana && <PrimaButton variant="purple" data-rima="bba.tarik-usulan" onClick={openImportPreview} disabled={saving}><Download size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Tarik dari Usulan Kebutuhan</PrimaButton>}
+          {bolehRencana && <PrimaButton variant="warning" onClick={bukaLengkapi} disabled={perluRef.length === 0}
             data-tooltip={perluRef.length === 0 ? 'Semua item yang dimuat sudah punya 3 referensi harga sah' : 'Buka item yang referensi harganya belum lengkap satu per satu'}>
             <ListChecks size={14} style={{ marginRight: 5, verticalAlign: -2 }} />Lengkapi referensi ({perluRef.length})
-          </PrimaButton>
-          <PrimaButton variant="purple" data-rima="bba.tambah-item" onClick={bukaBaru}>+ Tambah Item</PrimaButton>
+          </PrimaButton>}
+          {bolehRencana && <PrimaButton variant="purple" data-rima="bba.tambah-item" onClick={bukaBaru}>+ Tambah Item</PrimaButton>}
         </div>
       </div>
 
@@ -286,10 +301,10 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       </div>
 
       {tampilan === 'BARANG' ? (
-        <PerBarang tahun={tahun} c={c} segarkan={segarkanBarang} onTautkan={() => setTautkanBuka(true)} />
+        <PerBarang tahun={tahun} c={c} segarkan={segarkanBarang} onTautkan={bolehRencana ? () => setTautkanBuka(true) : undefined} bolehPendataan={izin.aset === 'EDIT'} />
       ) : (<>
       {/* §5.1: item tanpa barang → riwayat beli tidak bisa dijawab untuknya */}
-      {belumBarang > 0 && (
+      {belumBarang > 0 && bolehRencana && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10, padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(186,117,23,.45)', background: 'rgba(186,117,23,.08)', fontSize: 12.5 }}>
           <span style={{ color: '#BA7517', fontWeight: 600 }}>{belumBarang} item {tahun} belum ditautkan ke barang</span>
           <span style={{ color: c.sub, flex: 1, minWidth: 200 }}>— tanpa barang, riwayat beli dan yang sedang diproses tidak terlihat saat merencanakan.</span>
@@ -348,7 +363,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                 <td style={{ ...td, fontSize: 11 }}>{r.penanggung_jawab || '—'}</td>
                 <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                    <Tip label="Edit"><EditButton onClick={() => bukaItem(r, 'data')} /></Tip>
+                    <Tip label={bolehRencana ? 'Edit' : 'Lihat'}><EditButton onClick={() => bukaItem(r, 'data')} /></Tip>
                     <Tip label={r.jumlah_bukti ? `Bukti dukung (${r.jumlah_bukti})` : 'Bukti dukung'}>
                       <button type="button" aria-label="Bukti dukung" onClick={() => bukaItem(r, 'bukti')}
                         style={{ position: 'relative', width: 30, height: 30, borderRadius: '50%', border: `1px solid ${c.border}`, background: 'transparent', color: r.jumlah_bukti ? '#1D9E75' : c.sub, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -356,8 +371,13 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                         {r.jumlah_bukti > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#1D9E75', color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 10, padding: '0 4px', fontFamily: MONO }}>{r.jumlah_bukti}</span>}
                       </button>
                     </Tip>
-                    {!isRejected && <span data-rima="bba.row-realisasi"><Tip label="Proses & realisasi"><RealisasiButton onClick={() => bukaRealisasi(r)} /></Tip></span>}
-                    <Tip label="Hapus"><DeleteButton onClick={() => del(r)} iconSize={12} /></Tip>
+                    {!isRejected && bolehPengadaan && <span data-rima="bba.row-realisasi"><Tip label="Proses & realisasi"><RealisasiButton onClick={() => bukaRealisasi(r)} /></Tip></span>}
+                    {bolehRencana && (() => {
+                      const alasan = alasanTakBisaHapus(r.status, r.jumlah_bukti);
+                      return alasan
+                        ? <Tip label={alasan}><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
+                        : <Tip label="Hapus"><DeleteButton onClick={() => del(r)} iconSize={12} /></Tip>;
+                    })()}
                   </div>
                 </td>
               </tr>
@@ -370,7 +390,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       {/* Modal item — Data item / Referensi harga / Bukti dukung (CONCEPT-bba-perencanaan §4.4) */}
       {modal && (
         <ModalItem c={c} daftar={modal.daftar} awalId={modal.id} tabAwal={modal.tab} saringanAwal={modal.saringan}
-          tahun={tahun} kategori={kategori} onTutup={() => setModal(null)} onTersimpan={muatUlang} />
+          tahun={tahun} kategori={kategori} bolehUbah={bolehRencana} bolehBukti={bolehBukti} onTutup={() => setModal(null)} onTersimpan={muatUlang} />
       )}
 
       {tautkanBuka && <ModalTautkan tahun={tahun} c={c} onTutup={() => setTautkanBuka(false)} onSelesai={() => { setTautkanBuka(false); muatUlang(); }} />}
@@ -489,13 +509,9 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       </div>
 
       <FloatingDock isLight={isLight} limelight
-        nav={[
-          { icon: <Package size={17} />, label: 'Aset', onClick: () => {}, current: true },
-          { icon: <Layers size={17} />, label: 'Master', onClick: () => router.push('/buku-besar-aset/master') },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
-        ]}
+        nav={navDockBba(izin, 'rencana', href => router.push(href))}
         actions={[
-          { icon: <Plus size={17} />, label: 'Tambah', onClick: bukaBaru },
+          ...(bolehRencana ? [{ icon: <Plus size={17} />, label: 'Tambah', onClick: bukaBaru }] : []),
           { icon: <Search size={17} />, label: 'Filter', onClick: () => searchRef.current?.focus() },
           { icon: <RefreshCw size={17} />, label: 'Muat Ulang', onClick: muatUlang },
         ]}

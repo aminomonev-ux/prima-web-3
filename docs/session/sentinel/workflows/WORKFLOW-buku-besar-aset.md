@@ -1,7 +1,7 @@
 # WORKFLOW — Buku Besar Aset / BBA (`/buku-besar-aset`)
 
 **Fungsi**: register belanja modal lintas-tahun — catat rencana aset (manual atau tarik dari Usulan final), set realisasi (nilai + unit + tanggal), pantau KPI (Total Rencana/Realisasi/% Terakomodir/backlog/unit). Status 4: DIRENCANAKAN / REALISASI_PENUH / REALISASI_SEBAGIAN / TIDAK_TEREALISASI. `nilai_rencana` = vol × harga otomatis (server).
-**Role**: `ASET_ALLOWED_ROLES = ['SUPER_ADMIN','ADMIN']` (`lib/data/buku-besar-aset-schemas.ts` → `isAsetRole`); role lain via grant app_access `'buku_besar_aset'`. Tombol "Tarik dari Usulan Kebutuhan" hanya ADMIN/SUPER_ADMIN (`canImport` di client + guard endpoint).
+**Role**: masuk modul = SUPER_ADMIN/ADMIN/RUMAH TANGGA/PROGRAM (`peranBawaan` registry) atau grant app_access `'buku_besar_aset'`. Di dalam, izin per bagian (Buku Aset · Rencana · Pengadaan · Master · Cetak) dari `lib/bba/peran.ts` + Admin Panel: "Tarik dari Usulan Kebutuhan" & item = izin EDIT Rencana, Proses & Realisasi = EDIT Pengadaan (lihat `docs/CONCEPT-bba-buku-aset.md` §3.1).
 **File sumber**: `app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx`, `app/api/buku-besar-aset/` (`route.ts`, `realisasi/route.ts`, `import-usulan/route.ts`, `_guard.ts`), `lib/data/buku-besar-aset.ts`. Sub-halaman master kategori: `/buku-besar-aset/master`.
 
 ## Flowchart alur end-to-end

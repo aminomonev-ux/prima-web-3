@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Package, Layers, LayoutGrid } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteButton from '@/components/ui/DeleteButton';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -13,18 +12,22 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import type { KategoriAset, BbaBarang, BbaLokasi } from '@/lib/data/buku-besar-aset';
 import SpandukBeku from '@/components/ui/SpandukBeku';
+import SpandukLihat from '@/components/ui/SpandukLihat';
 import type { InfoBeku } from '@/lib/security/beku';
 import BarangPanel from './BarangPanel';
 import LokasiPanel from './LokasiPanel';
+import BbaNav, { navDockBba, type PetaIzinLayar } from '../_components/BbaNav';
 
 type TabMaster = 'KATEGORI' | 'BARANG' | 'LOKASI';
 type Props = { username: string; role: string; themePreference: 'dark' | 'light'; initialKategori: KategoriAset[]; initialBarang: BbaBarang[];
   initialLokasi: BbaLokasi[]; tabAwal: TabMaster;
   /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
-  beku: InfoBeku };
+  beku: InfoBeku;
+  izin: PetaIzinLayar };
 
-export default function MasterClient({ username, role, themePreference, initialKategori, initialBarang, initialLokasi, tabAwal, beku }: Props) {
+export default function MasterClient({ username, role, themePreference, initialKategori, initialBarang, initialLokasi, tabAwal, beku, izin }: Props) {
   const router = useRouter();
+  const bolehUbah = izin.master === 'EDIT';
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
   const c = {
@@ -79,7 +82,9 @@ export default function MasterClient({ username, role, themePreference, initialK
       </header>
 
       <div style={{ padding: '24px 16px 100px', maxWidth: tab === 'BARANG' ? 900 : 720, margin: '0 auto' }}>
+        <BbaNav aktif="master" peta={izin} c={c} />
         <SpandukBeku {...beku}/>
+        {!bolehUbah && <SpandukLihat label="Master" />}
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
           {([['KATEGORI', 'Kategori'], ['BARANG', 'Barang'], ['LOKASI', 'Lokasi']] as const).map(([val, label]) => (
             <button key={val} type="button" onClick={() => setTab(val)}
@@ -91,18 +96,20 @@ export default function MasterClient({ username, role, themePreference, initialK
         </div>
         {tab === 'BARANG' ? <>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>🧾 Master Barang</h1>
-          <BarangPanel c={c} awal={initialBarang} kategori={rows.map(r => r.nama)} />
+          <BarangPanel c={c} awal={initialBarang} kategori={rows.map(r => r.nama)} bolehUbah={bolehUbah} />
         </> : tab === 'LOKASI' ? <>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📍 Master Lokasi</h1>
-          <LokasiPanel c={c} awal={initialLokasi} />
+          <LokasiPanel c={c} awal={initialLokasi} bolehUbah={bolehUbah} />
         </> : <>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>🗂️ Master Kategori Aset</h1>
         <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 18 }}>Daftar kategori untuk dropdown di form item · {rows.length} kategori</div>
 
+        {bolehUbah && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
           <input value={nama} onChange={e => setNama(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="Nama kategori baru…" style={{ ...inp, flex: 1 }} />
           <PrimaButton variant="purple" onClick={add} disabled={saving}>{saving ? 'Menyimpan…' : '+ Tambah'}</PrimaButton>
         </div>
+        )}
 
         <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -112,7 +119,7 @@ export default function MasterClient({ username, role, themePreference, initialK
                 <tr key={r.id} style={{ background: i % 2 ? c.rowOdd : 'transparent' }}>
                   <td style={td}>{r.nama}</td>
                   <td style={{ ...td, textAlign: 'right', width: 60 }}>
-                    <DeleteButton onClick={() => del(r)} data-tooltip="Hapus" iconSize={12} />
+                    {bolehUbah && <DeleteButton onClick={() => del(r)} data-tooltip="Hapus" iconSize={12} />}
                   </td>
                 </tr>
               ))}
@@ -122,13 +129,7 @@ export default function MasterClient({ username, role, themePreference, initialK
         </>}
       </div>
 
-      <FloatingDock isLight={isLight}
-        nav={[
-          { icon: <Package size={17} />, label: 'Aset', onClick: () => router.push('/buku-besar-aset') },
-          { icon: <Layers size={17} />, label: 'Master', onClick: () => {}, current: true },
-          { icon: <LayoutGrid size={17} />, label: 'Menu', onClick: () => router.push('/menu') },
-        ]}
-      />
+      <FloatingDock isLight={isLight} nav={navDockBba(izin, 'master', href => router.push(href))} />
     </div>
   );
 }

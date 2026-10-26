@@ -672,10 +672,10 @@
       "grant-semua": true
     },
     "PROGRAM": {
-      "null": false,
-      "kosong": false,
+      "null": true,
+      "kosong": true,
       "grant-sendiri": true,
-      "grant-lain": false,
+      "grant-lain": true,
       "grant-semua": true
     },
     "MDSI": {
@@ -693,10 +693,10 @@
       "grant-semua": true
     },
     "RUMAH TANGGA": {
-      "null": false,
-      "kosong": false,
+      "null": true,
+      "kosong": true,
       "grant-sendiri": true,
-      "grant-lain": false,
+      "grant-lain": true,
       "grant-semua": true
     },
     "TUKMAS": {

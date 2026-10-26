@@ -22,10 +22,13 @@ type Props = {
   c: Warna;
   /** Dinaikkan induk sesudah ada yang tertulis (item/tautan) — memicu muat ulang. */
   segarkan: number;
-  onTautkan: () => void;
+  /** Tanpa izin EDIT Rencana tidak diisi — tombol Tautkan tidak ditawarkan. */
+  onTautkan?: () => void;
+  /** Pendataan eksisting = pekerjaan Buku Aset (izin EDIT bagian Aset). */
+  bolehPendataan: boolean;
 };
 
-export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
+export default function PerBarang({ tahun, c, segarkan, onTautkan, bolehPendataan }: Props) {
   const [data, setData] = useState<PerBarangTahun | null>(null);
   const [galat, setGalat] = useState('');
   const [buka, setBuka] = useState<BarisPerBarang | null>(null);
@@ -67,10 +70,10 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
           Ada rusak berat ({adaRB.length})
         </button>
         <span style={{ flex: 1 }} />
-        <PrimaButton variant="purple" size="sm" onClick={() => setPendataan({ barang: null })}
+        {bolehPendataan && <PrimaButton variant="purple" size="sm" onClick={() => setPendataan({ barang: null })}
           data-tooltip="Opname per ruangan: catat jumlah baik / rusak ringan / rusak berat tiap barang">
           Pendataan eksisting
-        </PrimaButton>
+        </PrimaButton>}
       </div>
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -113,7 +116,7 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
               <tr style={{ background: 'rgba(186,117,23,.08)' }}>
                 <td style={td} colSpan={2}>
                   <span style={{ fontWeight: 600, color: '#BA7517' }}>Belum ditautkan ({data.belum.item} item)</span>
-                  <span style={{ marginLeft: 10 }}><PrimaButton variant="warning" size="sm" onClick={onTautkan}>Tautkan</PrimaButton></span>
+                  {onTautkan && <span style={{ marginLeft: 10 }}><PrimaButton variant="warning" size="sm" onClick={onTautkan}>Tautkan</PrimaButton></span>}
                 </td>
                 <td style={{ ...tdNum, color: c.sub }}>—</td>
                 <td style={{ ...tdNum, color: c.sub }}>—</td>
@@ -139,7 +142,7 @@ export default function PerBarang({ tahun, c, segarkan, onTautkan }: Props) {
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="button" aria-label="Tutup" onClick={() => setBuka(null)} style={{ background: 'none', border: 'none', color: c.text, cursor: 'pointer', display: 'flex' }}><X size={18} /></button>
             </div>
-            <KartuBarang barangId={buka.id} tahun={tahun} c={c} tandaiTahun={tahun} versi={segarLokal} onPendataan={() => setPendataan({ barang: buka })} />
+            <KartuBarang barangId={buka.id} tahun={tahun} c={c} tandaiTahun={tahun} versi={segarLokal} onPendataan={bolehPendataan ? () => setPendataan({ barang: buka }) : undefined} />
           </div>
         </div>
       )}

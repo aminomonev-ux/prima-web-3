@@ -7,8 +7,9 @@ import {
   listAset, getAsetKpi, getAsetDetail, createAset, updateAset, deleteAset,
   BbaVersionConflictError, BbaNotFoundError, BbaUsulanLockedError,
   BbaRealisasiRangeError, BbaStatusMismatchError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError,
+  BbaRiwayatTerkunciError, BbaReferensiBekuError,
 } from '@/lib/data/buku-besar-aset';
-import { guard } from './_guard';
+import { guard, tolakKecualiEdit } from './_guard';
 
 const ketBarang = (d: { barang_id?: number | null; barang_baru?: string | null }) =>
   d.barang_baru ? ` barang_baru="${d.barang_baru.slice(0, 40)}"` : d.barang_id !== undefined ? ` barang_id=${d.barang_id}` : '';
@@ -47,6 +48,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'rencana'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'create', 30); if (limited) return limited;
   const raw = await req.json().catch(() => null);
   const parsed = BbaCreateSchema.safeParse(raw);
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'rencana'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'update', 60); if (limited) return limited;
   const raw = await req.json().catch(() => null);
   const parsed = BbaUpdateSchema.safeParse(raw);
@@ -80,6 +83,7 @@ export async function PATCH(req: NextRequest) {
     if (err instanceof BbaStatusMismatchError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
     if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaReferensiBekuError)   return NextResponse.json({ ok: false, code: 'REFERENSI_BEKU', message: err.message }, { status: 409 });
     throw err;
   }
   const ref = parsed.data.referensi !== undefined ? ` referensi=${parsed.data.referensi.length}` : '';
@@ -90,11 +94,18 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'rencana'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'delete', 30); if (limited) return limited;
   const { searchParams } = new URL(req.url);
   const parsed = BbaDeleteSchema.safeParse({ id: searchParams.get('id') ?? undefined });
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'ID tidak valid' }, { status: 400 });
-  const ok = await deleteAset(parsed.data.id);
+  let ok = false;
+  try {
+    ok = await deleteAset(parsed.data.id);
+  } catch (err) {
+    if (err instanceof BbaRiwayatTerkunciError) return NextResponse.json({ ok: false, code: 'RIWAYAT_TERKUNCI', message: err.message }, { status: 409 });
+    throw err;
+  }
   if (!ok) return NextResponse.json({ ok: false, message: 'Data tidak ditemukan' }, { status: 404 });
   await writeAuditLog({ req, eventType: 'BBA_DELETE', userId: g.session.userId, username: g.session.username, detail: `BBA delete id=${parsed.data.id}` });
   return NextResponse.json({ ok: true });

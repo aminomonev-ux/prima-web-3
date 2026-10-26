@@ -6,6 +6,7 @@ import { listAset, getAsetKpi, listKategori } from '@/lib/data/buku-besar-aset';
 import BukuBesarAsetClient from './buku-besar-aset-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
+import { izinLayarBba } from './_izin';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -22,6 +23,7 @@ export default async function BukuBesarAsetPage() {
   );
   if (!isAsetRole(role, row?.app_access ?? null)) redirect('/menu');
 
+  const { peta } = await izinLayarBba('rencana');
   const beku = await bekuLayarModul('buku_besar_aset');
   const tahun = new Date().getFullYear();
   const [initial, kategori, initialKpi] = await Promise.all([
@@ -42,6 +44,7 @@ export default async function BukuBesarAsetPage() {
         initialKpi={initialKpi}
         kategori={kategori.map(k => k.nama)}
         beku={beku}
+        izin={peta}
       />
     </KunciTulisProvider>
   );

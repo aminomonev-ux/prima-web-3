@@ -11,10 +11,12 @@ import {
 } from '@/lib/bba/eksisting';
 import { isSafeFileUrl } from '@/lib/shared/url';
 import {
-  kelengkapanRef, kelengkapanBukti, referensiSah, rapikanReferensi, tautanAman, MAKS_BUKTI,
+  kelengkapanRef, kelengkapanBukti, referensiSah, rapikanReferensi, referensiSama, slotDariUsulan, tautanAman, MAKS_BUKTI,
   type KelengkapanRef, type KelengkapanBukti, type ReferensiIsian, type JenisBukti,
 } from '@/lib/bba/referensi';
-import { isValidStatusTransition, statusSebelumTerima, STATUS_BELUM_TEREALISASI, LABEL_STATUS } from '@/lib/bba/status';
+import {
+  isValidStatusTransition, statusSebelumTerima, referensiBeku, alasanTakBisaHapus, STATUS_BELUM_TEREALISASI, LABEL_STATUS,
+} from '@/lib/bba/status';
 import {
   rapikanNamaBarang, kunciNamaBarang, barangBernamaSama, ringkasPerBarang, ringkasKosong, riwayatPerTahun,
   type BahanBarang, type BahanRefBarang, type RingkasBarang, type BarisRiwayat,
@@ -78,6 +80,15 @@ export class BbaLokasiDipakaiError extends Error {
 }
 export class BbaTanggalCekError extends Error {
   constructor(hariIni: string) { super(`Tanggal cek tidak boleh sesudah hari ini (${hariIni}).`); this.name = 'BbaTanggalCekError'; }
+}
+export class BbaRiwayatTerkunciError extends Error {
+  constructor(alasan: string) { super(alasan); this.name = 'BbaRiwayatTerkunciError'; }
+}
+export class BbaReferensiBekuError extends Error {
+  constructor(status: BbaStatus) {
+    super(`Referensi harga item berstatus ${LABEL_STATUS[status]} tidak bisa diubah — itu catatan harga saat membeli. Muat ulang item untuk membuang perubahan referensinya.`);
+    this.name = 'BbaReferensiBekuError';
+  }
 }
 
 // A3: status & angka realisasi tidak boleh saling bertentangan
@@ -338,12 +349,17 @@ async function pastikanBerkasBba(q: Penanya, fileIds: (string | null | undefined
 
 const KOLOM_REFERENSI = ['aset_id', 'urutan', 'sumber', 'nama_penyedia', 'url', 'harga', 'tgl_cek', 'file_id'] as const;
 
+const isianReferensi = (input: ReferensiInput[]): ReferensiIsian[] => rapikanReferensi(input.map(r => ({
+  sumber: r.sumber, nama_penyedia: r.nama_penyedia ?? null, url: r.url ?? null,
+  harga: r.harga ?? null, tgl_cek: r.tgl_cek ?? null, file_id: r.file_id ?? null,
+})));
+
 /** Hapus-lalu-tulis-ulang, di transaksi pemanggil (sesudah CAS item). Larik kosong = mengosongkan dengan sengaja. */
 async function gantiReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: number, input: ReferensiInput[]): Promise<void> {
-  const daftar = rapikanReferensi(input.map(r => ({
-    sumber: r.sumber, nama_penyedia: r.nama_penyedia ?? null, url: r.url ?? null,
-    harga: r.harga ?? null, tgl_cek: r.tgl_cek ?? null, file_id: r.file_id ?? null,
-  })));
+  await tulisReferensi(q, conn, asetId, isianReferensi(input));
+}
+
+async function tulisReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: number, daftar: ReferensiIsian[]): Promise<void> {
   await pastikanBerkasBba(q, daftar.map(r => r.file_id));
   await q`DELETE FROM bba_referensi_harga WHERE aset_id = ${asetId}`;
   await bulkInsert('bba_referensi_harga', KOLOM_REFERENSI, daftar.map((r, i) => [
@@ -450,6 +466,12 @@ export async function updateAset(input: BbaUpdateInput, userId: number): Promise
   const cur = await getAsetById(input.id);
   if (!cur) throw new BbaNotFoundError();
   assertUsulanEditable(cur, input);
+  // §10 butir 7. Status & referensi tersimpan dibaca di luar kunci, tapi keduanya hanya berubah
+  // lewat jalur yang menaikkan `version` — bacaan basi berakhir 409 di CAS di bawah.
+  if (input.referensi !== undefined && referensiBeku(cur.status)
+      && !referensiSama(isianReferensi(input.referensi), await listReferensi(input.id))) {
+    throw new BbaReferensiBekuError(cur.status);
+  }
   // A2: vol rencana tidak boleh turun di bawah realisasi tersimpan ("5/2 unit")
   const volBaru = input.vol ?? cur.vol;
   if (volBaru < cur.vol_realisasi) throw new BbaRealisasiRangeError(cur.vol_realisasi, volBaru);
@@ -504,25 +526,44 @@ export async function setRealisasi(input: BbaRealisasiInput, userId: number, bol
   const tglProses = input.status === 'DIPROSES' ? (input.tgl_proses ?? cur.tgl_proses ?? null)
     : input.status === 'DIRENCANAKAN' ? null : cur.tgl_proses;
   const tglRealisasi = statusSebelumTerima(input.status) ? null : (input.tgl_realisasi ?? null);
-  const res = await sql`
-    UPDATE buku_besar_aset SET
-      nilai_realisasi = ${input.nilai_realisasi},
-      vol_realisasi   = ${input.vol_realisasi},
-      tgl_realisasi   = ${tglRealisasi},
-      tgl_proses      = ${tglProses},
-      status          = ${input.status},
-      version         = version + 1,
-      updated_by      = ${userId}
-    WHERE id = ${input.id} AND version = ${input.expected_version}
-  `;
-  assertCas(res);
+  await withTransaction(async ({ tx, conn }) => {
+    const res = await tx`
+      UPDATE buku_besar_aset SET
+        nilai_realisasi = ${input.nilai_realisasi},
+        vol_realisasi   = ${input.vol_realisasi},
+        tgl_realisasi   = ${tglRealisasi},
+        tgl_proses      = ${tglProses},
+        status          = ${input.status},
+        version         = version + 1,
+        updated_by      = ${userId}
+      WHERE id = ${input.id} AND version = ${input.expected_version}
+    `;
+    assertCas(res);
+    // Tautan usulan selama ini hanya dibaca lewat JOIN (isi awal slot referensi). Begitu
+    // referensinya beku, tautan itu ditulis jadi referensi tersimpan — kalau tidak, ia ikut
+    // berubah/hilang bersama usulannya, padahal itulah yang dibandingkan saat membeli (§15).
+    if (referensiBeku(input.status) && !referensiBeku(cur.status) && cur.tautan_usulan.length > 0) {
+      const ada = await tx`SELECT COUNT(*) AS n FROM bba_referensi_harga WHERE aset_id = ${input.id}` as Array<{ n: number }>;
+      if (Number(ada[0]?.n ?? 0) === 0) await tulisReferensi(tx, conn, input.id, slotDariUsulan(cur.tautan_usulan));
+    }
+  });
   // A4: jejak koreksi mundur dari terminal (caller tulis ke audit log)
   return { koreksiMundur: cur.status === 'REALISASI_PENUH' && input.status !== 'REALISASI_PENUH' };
 }
 
+/** §10 butir 7: hanya rencana yang belum diproses & tanpa bukti. Ditolak = BbaRiwayatTerkunciError. */
 export async function deleteAset(id: number): Promise<boolean> {
-  const res = await sql`DELETE FROM buku_besar_aset WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
-  return (res[0]?.affectedRows ?? 0) > 0;
+  return withTransaction(async ({ tx }) => {
+    // Kunci baris yang sama dengan `tambahBukti` (FOR UPDATE) dan CAS `setRealisasi` — bukti
+    // atau status proses yang masuk di sela pemeriksaan & DELETE menunggu, tidak menyalip.
+    const r = await tx`SELECT status FROM buku_besar_aset WHERE id = ${id} FOR UPDATE` as Array<{ status: BbaStatus }>;
+    if (r.length === 0) return false;
+    const bukti = await tx`SELECT COUNT(*) AS n FROM bba_lampiran WHERE aset_id = ${id}` as Array<{ n: number }>;
+    const alasan = alasanTakBisaHapus(r[0].status, Number(bukti[0]?.n ?? 0));
+    if (alasan) throw new BbaRiwayatTerkunciError(alasan);
+    const res = await tx`DELETE FROM buku_besar_aset WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
+    return (res[0]?.affectedRows ?? 0) > 0;
+  });
 }
 
 // ─── Import Belanja Modal dari Usulan Kebutuhan ─────────────────────────────

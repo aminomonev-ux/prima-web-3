@@ -20,6 +20,9 @@ import {
   LABEL_MENU_PK, LANTAI_EDIT, MENU_BACA_SAJA_PK, MENU_PK,
   izinMenu as izinMenuPk, type MenuPk,
 } from '@/lib/pk/peran'
+import {
+  LABEL_MENU_BBA, MENU_BACA_SAJA_BBA, MENU_BBA, izinMenu as izinMenuBba, type MenuBba,
+} from '@/lib/bba/peran'
 
 export type { Izin }
 
@@ -68,6 +71,11 @@ export function keyMenuPk(menu: MenuPk): string {
   return `perjanjian_kinerja.${menu.replace(/-/g, '_')}`
 }
 
+/** `aset` → `buku_besar_aset.aset` — awalan = key `app_access` BBA, alasannya sama dengan PK. */
+export function keyMenuBba(menu: MenuBba): string {
+  return `buku_besar_aset.${menu}`
+}
+
 export const MENU_APPS: readonly AplikasiMenu[] = [
   {
     key: 'blud',
@@ -88,6 +96,16 @@ export const MENU_APPS: readonly AplikasiMenu[] = [
       label: LABEL_MENU_PK[m],
       bacaSaja: MENU_BACA_SAJA_PK.includes(m),
       editHanyaPeran: LANTAI_EDIT[m],
+    })),
+  },
+  {
+    key: 'buku_besar_aset',
+    label: 'Buku Besar Aset',
+    peranUtama: ['ADMIN', 'RUMAH TANGGA', 'PROGRAM'],
+    menus: MENU_BBA.map((m) => ({
+      key: keyMenuBba(m),
+      label: LABEL_MENU_BBA[m],
+      bacaSaja: MENU_BACA_SAJA_BBA.includes(m),
     })),
   },
 ]
@@ -119,6 +137,7 @@ type PenyelesaiIzin = (role: string, penimpa: Izin | null) => Izin
 const PENYELESAI = new Map<string, PenyelesaiIzin>([
   ...MENU_BLUD.map((m) => [keyMenuBlud(m), (role: string, p: Izin | null) => izinMenuBlud(role, m, p)] as const),
   ...MENU_PK.map((m) => [keyMenuPk(m), (role: string, p: Izin | null) => izinMenuPk(role, m, p)] as const),
+  ...MENU_BBA.map((m) => [keyMenuBba(m), (role: string, p: Izin | null) => izinMenuBba(role, m, p)] as const),
 ])
 
 export function izinMenuRegistry(

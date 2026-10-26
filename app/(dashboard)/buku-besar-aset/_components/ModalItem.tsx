@@ -23,7 +23,7 @@ import {
   type ReferensiIsian, type JenisBukti, type KelengkapanBukti,
 } from '@/lib/bba/referensi';
 import { saranBarang, type BarangRingan } from '@/lib/bba/barang';
-import type { BbaStatus } from '@/lib/bba/status';
+import { referensiBeku, LABEL_STATUS, type BbaStatus } from '@/lib/bba/status';
 import type { BbaRow, BbaBukti, BbaDetail, BbaBarang } from '@/lib/data/buku-besar-aset';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
 import KartuBarang from './KartuBarang';
@@ -108,12 +108,19 @@ type Props = {
   saringanAwal: 'BELUM' | 'SEMUA';
   tahun: number;
   kategori: string[];
+  /** Izin EDIT bagian Rencana — tanpa itu modal hanya untuk membaca (pagarnya tetap di route). */
+  bolehUbah: boolean;
+  /** Bukti dukung dipegang Rencana ATAU Pengadaan. */
+  bolehBukti: boolean;
   onTutup: () => void;
   /** Ada yang tertulis ke server (item/referensi/bukti) — tabel induk memuat ulang. */
   onTersimpan: () => void;
 };
 
-export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, saringanAwal, tahun, kategori, onTutup, onTersimpan }: Props) {
+/** `<fieldset disabled>` mematikan semua isian & tombol di dalamnya sekaligus — satu saklar, bukan satu per field. */
+const FIELDSET_POLOS: React.CSSProperties = { border: 0, padding: 0, margin: 0, minWidth: 0 };
+
+export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, saringanAwal, tahun, kategori, bolehUbah, bolehBukti, onTutup, onTersimpan }: Props) {
   const [daftar, setDaftar] = useState<BbaRow[]>(daftarAwal ?? []);
   const [belumSaatBuka] = useState(() => new Set((daftarAwal ?? []).filter(perluReferensi).map(r => r.id)));
   const [saringan, setSaringan] = useState<'BELUM' | 'SEMUA'>(saringanAwal);
@@ -138,6 +145,8 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   const memuat = !modeBaru && muatan?.item.id !== aktifId && !galatMuat;
   const item = !modeBaru && muatan?.item.id === aktifId ? muatan.item : null;
   const isUsulan = item?.origin === 'USULAN';
+  // §10 butir 7 — server menolak perubahan referensi item yang sudah diproses (REFERENSI_BEKU).
+  const refBeku = !!item && referensiBeku(item.status);
   // Dihitung dari daftar bukti di layar — bukti ditulis per aksi, jadi ini selalu angka tersimpan terbaru.
   const kBukti = item ? kelengkapanBukti(bukti.map(b => b.jenis), item.status) : null;
 
@@ -379,6 +388,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
               {memuat ? <div style={{ fontSize: 12.5, color: c.sub }}>Memuat…</div>
                 : galatMuat ? <div style={{ fontSize: 12.5, color: '#E24B4A' }}>{galatMuat}</div>
                 : tab === 'data' ? (
+                  <fieldset disabled={!bolehUbah} style={FIELDSET_POLOS}>
                   <div className="bba-mi-grid2">
                     {isUsulan && (
                       <div style={{ gridColumn: '1 / -1', fontSize: 12, color: '#7C5CFC', background: 'rgba(124,92,252,.12)', border: '1px solid rgba(124,92,252,.4)', borderRadius: 6, padding: '6px 10px' }}>
@@ -404,8 +414,16 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                     <Field label="Penanggung Jawab" full><input value={isian.penanggung_jawab} onChange={e => setIsian({ ...isian, penanggung_jawab: e.target.value })} style={inp} /></Field>
                     <Field label="Keterangan" full><textarea value={isian.keterangan} onChange={e => setIsian({ ...isian, keterangan: e.target.value })} style={{ ...inp, minHeight: 54 }} /></Field>
                   </div>
+                  </fieldset>
                 ) : tab === 'ref' ? (
+                  <fieldset disabled={!bolehUbah || refBeku} style={FIELDSET_POLOS}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {refBeku && item && (
+                      <div style={{ fontSize: 12, color: c.sub, background: 'rgba(124,92,252,.10)', border: '1px solid rgba(124,92,252,.35)', borderRadius: 6, padding: '6px 10px', lineHeight: 1.5 }}>
+                        Referensi dibekukan sejak item <b style={{ color: c.text }}>{LABEL_STATUS[item.status]}</b> — ini catatan harga saat membeli,
+                        dipakai lagi waktu barang yang sama direncanakan berikutnya. Harga satuan tetap bisa diubah di Data item.
+                      </div>
+                    )}
                     {refs.length === 0 && <div style={{ fontSize: 12.5, color: c.sub }}>Belum ada referensi harga. Target 3 referensi — e-Katalog, toko daring, atau penawaran toko.</div>}
                     {refs.map((r, i) => (
                       <BarisReferensi key={i} r={r} nomor={i + 1} c={c} inp={inp} num={num} ikonBtn={ikonBtn} dariUsulan={dariUsulan(r)}
@@ -438,8 +456,9 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                       </>}
                     </div>
                   </div>
+                  </fieldset>
                 ) : item ? (
-                  <PanelBukti item={item} bukti={bukti} kBukti={kBukti} c={c} inp={inp} ikonBtn={ikonBtn}
+                  <PanelBukti item={item} bukti={bukti} kBukti={kBukti} c={c} inp={inp} ikonBtn={ikonBtn} bolehUbah={bolehBukti}
                     onBerubah={b => { setBukti(b); onTersimpan(); }} />
                 ) : null}
             </div>
@@ -450,11 +469,16 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderTop: `1px solid ${c.border}`, flexWrap: 'wrap' }}>
           {tampilDaftar && <PrimaButton variant="ghost" disabled={idSebelum === null} onClick={() => idSebelum !== null && void pindahKe(idSebelum)}>← Sebelumnya</PrimaButton>}
           <span style={{ flex: 1, fontSize: 11.5, color: belumTersimpan ? '#BA7517' : c.sub }}>{belumTersimpan ? 'Ada perubahan yang belum disimpan' : ''}</span>
+          {bolehUbah && (
           <PrimaButton menulis variant={tampilDaftar ? 'ghost' : 'primary'} disabled={menyimpan || memuat || !!galatMuat || !belumTersimpan}
             data-tooltip={!belumTersimpan && !menyimpan ? 'Belum ada perubahan' : undefined} onClick={() => void simpan(false)}>
             {menyimpan ? 'Menyimpan…' : 'Simpan'}
           </PrimaButton>
-          {tampilDaftar && (
+          )}
+          {tampilDaftar && !bolehUbah && (
+            <PrimaButton variant="ghost" disabled={idBerikut === null} onClick={() => idBerikut !== null && void pindahKe(idBerikut)}>Berikutnya →</PrimaButton>
+          )}
+          {tampilDaftar && bolehUbah && (
             <PrimaButton menulis variant="primary" disabled={menyimpan || memuat || !!galatMuat || idBerikut === null}
               data-tooltip={idBerikut === null ? 'Ini item terakhir di daftar' : undefined} onClick={() => void simpan(true)}>
               {belumTersimpan ? 'Simpan dan berikutnya →' : 'Berikutnya →'}
@@ -561,8 +585,8 @@ function BarisReferensi({ r, nomor, c, inp, num, ikonBtn, dariUsulan, ubah, hapu
   );
 }
 
-function PanelBukti({ item, bukti, kBukti, c, inp, ikonBtn, onBerubah }: GayaInput & {
-  item: BbaRow; bukti: BbaBukti[]; kBukti: KelengkapanBukti | null; onBerubah: (b: BbaBukti[]) => void;
+function PanelBukti({ item, bukti, kBukti, c, inp, ikonBtn, bolehUbah, onBerubah }: GayaInput & {
+  item: BbaRow; bukti: BbaBukti[]; kBukti: KelengkapanBukti | null; bolehUbah: boolean; onBerubah: (b: BbaBukti[]) => void;
 }) {
   const [jenis, setJenis] = useState<JenisBukti>('BUKTI_BELI');
   const [nama, setNama] = useState('');
@@ -610,9 +634,11 @@ function PanelBukti({ item, bukti, kBukti, c, inp, ikonBtn, onBerubah }: GayaInp
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ fontSize: 11.5, color: c.sub, background: 'rgba(124,92,252,.08)', border: '1px solid rgba(124,92,252,.3)', borderRadius: 6, padding: '6px 10px' }}>
-        Bukti tersimpan langsung saat ditambah atau dihapus — tidak menunggu tombol Simpan.
-      </div>
+      {bolehUbah && (
+        <div style={{ fontSize: 11.5, color: c.sub, background: 'rgba(124,92,252,.08)', border: '1px solid rgba(124,92,252,.3)', borderRadius: 6, padding: '6px 10px' }}>
+          Bukti tersimpan langsung saat ditambah atau dihapus — tidak menunggu tombol Simpan.
+        </div>
+      )}
       {buktiBelumLengkap(kBukti) && (
         <div style={{ fontSize: 12, color: '#BA7517' }}>
           Bukti {kBukti!.n}/{kBukti!.target}: lengkapi bukti beli, BAST, dan foto barang.
@@ -634,11 +660,11 @@ function PanelBukti({ item, bukti, kBukti, c, inp, ikonBtn, onBerubah }: GayaInp
               <div style={{ fontSize: 11, color: c.sub }}>{b.keterangan ? `${b.keterangan} · ` : ''}{b.oleh ?? '—'} · <span style={{ fontFamily: MONO }}>{b.created_at}</span></div>
             </div>
             {href && <Tip label={b.file_id ? 'Buka berkas' : 'Buka tautan'}><a href={href} target="_blank" rel="noopener noreferrer" style={{ ...ikonBtn, textDecoration: 'none' }} aria-label="Buka bukti"><ExternalLink size={14} /></a></Tip>}
-            <Tip label="Lepas bukti ini"><DeleteButton iconSize={12} onClick={() => void hapus(b)} /></Tip>
+            {bolehUbah && <Tip label="Lepas bukti ini"><DeleteButton iconSize={12} onClick={() => void hapus(b)} /></Tip>}
           </div>
         );
       })}
-      {bukti.length < MAKS_BUKTI ? (
+      {!bolehUbah ? null : bukti.length < MAKS_BUKTI ? (
         <div style={{ border: `1px dashed ${c.border}`, borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="bba-mi-ref-a">
             <select value={jenis} onChange={e => setJenis(e.target.value as JenisBukti)} style={inp} aria-label="Jenis bukti">

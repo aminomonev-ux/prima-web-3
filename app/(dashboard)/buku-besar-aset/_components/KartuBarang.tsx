@@ -33,7 +33,7 @@ type Props = {
   ringkas?: boolean;
   /** Dinaikkan induk sesudah pendataan disimpan — memuat ulang kartu. */
   versi?: number;
-  /** Ada → tombol "+ Pendataan" (pendataan barang ini di satu lokasi, §6.1). */
+  /** Ada → tombol "+ Pendataan" dan koreksi riwayat pendataan (izin EDIT bagian Aset). */
   onPendataan?: () => void;
 };
 
@@ -159,7 +159,7 @@ export default function KartuBarang({ barangId, tahun, c, tandaiTahun, ringkas, 
                   {i === 0 ? 'berlaku' : ''}{e.digabung_dari ? `${i === 0 ? ' · ' : ''}dari “${e.digabung_dari}”` : ''}{e.catatan ? ` · ${e.catatan}` : ''}
                 </span>
                 {e.file_id && <Tip label="Buka foto"><a href={unduhBerkas(e.file_id)} target="_blank" rel="noopener noreferrer" aria-label="Buka foto" style={{ color: '#1D9E75', display: 'inline-flex' }}><Paperclip size={13} /></a></Tip>}
-                <Tip label="Hapus pendataan ini (koreksi)"><DeleteButton iconSize={11} onClick={() => void hapusPendataan(e)} /></Tip>
+                {onPendataan && <Tip label="Hapus pendataan ini (koreksi)"><DeleteButton iconSize={11} onClick={() => void hapusPendataan(e)} /></Tip>}
               </div>
             ))}
           </div>

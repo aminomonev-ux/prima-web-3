@@ -17,9 +17,9 @@ type Warna = { card: string; text: string; sub: string; border: string; rowOdd: 
 type Isian = { nama: string; kategori_aset: string; satuan: string };
 const kosong: Isian = { nama: '', kategori_aset: '', satuan: '' };
 
-type Props = { c: Warna; awal: BbaBarang[]; kategori: string[] };
+type Props = { c: Warna; awal: BbaBarang[]; kategori: string[]; bolehUbah: boolean };
 
-export default function BarangPanel({ c, awal, kategori }: Props) {
+export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
   const [rows, setRows] = useState<BbaBarang[]>(awal);
   const [baru, setBaru] = useState<Isian>(kosong);
   const [ubah, setUbah] = useState<{ id: number } & Isian | null>(null);
@@ -92,12 +92,12 @@ export default function BarangPanel({ c, awal, kategori }: Props) {
         Kembar seperti “Laptop” / “Laptop Kantor”? Pakai <b>Gabungkan</b>.
       </div>
       <datalist id="bba-kategori-barang">{kategori.map(k => <option key={k} value={k} />)}</datalist>
-      <div className="bba-mb-form" style={{ marginBottom: 14 }}>
+      {bolehUbah && <div className="bba-mb-form" style={{ marginBottom: 14 }}>
         <input value={baru.nama} onChange={e => setBaru({ ...baru, nama: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') void tambah(); }} placeholder="Nama barang baru…" maxLength={160} style={inp} aria-label="Nama barang" />
         <input value={baru.kategori_aset} onChange={e => setBaru({ ...baru, kategori_aset: e.target.value })} list="bba-kategori-barang" placeholder="Kategori (opsional)" maxLength={64} style={inp} aria-label="Kategori" />
         <input value={baru.satuan} onChange={e => setBaru({ ...baru, satuan: e.target.value })} placeholder="Satuan" maxLength={32} style={inp} aria-label="Satuan" />
         <PrimaButton variant="purple" onClick={() => void tambah()} disabled={sibuk}>+ Tambah</PrimaButton>
-      </div>
+      </div>}
       {rows.length > 8 && <input value={cari} onChange={e => setCari(e.target.value)} placeholder="Cari barang…" style={{ ...inp, width: '100%', marginBottom: 10 }} aria-label="Cari barang" />}
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -126,13 +126,13 @@ export default function BarangPanel({ c, awal, kategori }: Props) {
                   <div style={{ color: c.sub, fontSize: 11.5 }}>{[r.kategori_aset, r.satuan, `${r.jumlah_item} item`, r.jumlah_pendataan ? `${r.jumlah_pendataan} pendataan` : ''].filter(Boolean).join(' · ')}</div>
                 </td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', width: 1 }}>
-                  <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  {bolehUbah && <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                     <Tip label="Ubah"><EditButton onClick={() => setUbah({ id: r.id, nama: r.nama, kategori_aset: r.kategori_aset ?? '', satuan: r.satuan ?? '' })} /></Tip>
                     <PrimaButton variant="ghost" size="sm" disabled={rows.length < 2} onClick={() => setGabung({ dari: r, ke: null })}>Gabungkan…</PrimaButton>
                     {r.jumlah_item + r.jumlah_pendataan > 0
                       ? <Tip label="Masih dipakai item/pendataan — gabungkan ke barang lain dulu"><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
                       : <Tip label="Hapus"><DeleteButton iconSize={12} onClick={() => void hapus(r)} /></Tip>}
-                  </div>
+                  </div>}
                 </td>
               </tr>
             ))}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { BuktiCreateSchema, BuktiDeleteSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { tambahBukti, hapusBukti, BbaNotFoundError, BbaBuktiPenuhError, BbaBerkasTidakDikenalError } from '@/lib/data/buku-besar-aset';
-import { guard } from '../_guard';
+import { guard, tolakKecualiEdit } from '../_guard';
 
 // Bukti dukung ditulis per aksi, BUKAN lewat Simpan item (CONCEPT-bba-perencanaan §4.2):
 // menunda sampai Simpan meninggalkan berkas Drive yatim tiap kali modal dibatalkan.
@@ -12,6 +12,7 @@ import { guard } from '../_guard';
 export async function POST(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'rencana', 'pengadaan'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'bukti', 60); if (limited) return limited;
   const raw = await req.json().catch(() => null);
   const parsed = BuktiCreateSchema.safeParse(raw);
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'rencana', 'pengadaan'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'bukti', 60); if (limited) return limited;
   const { searchParams } = new URL(req.url);
   const parsed = BuktiDeleteSchema.safeParse({ id: searchParams.get('id') ?? undefined });

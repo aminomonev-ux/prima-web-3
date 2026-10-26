@@ -45,8 +45,8 @@ export function moduleMenusFor(moduleId: string, role: Role | null): string[] {
       return ['Beranda', 'Master Sasaran', 'Master Program', 'Form PK', 'Riwayat', 'Master Pejabat', 'Master Unit']
     case 'rencana_aksi': // rencana-aksi Sidebar.tsx (Indikator + Data Entry)
       return ['Indikator Kinerja (Tujuan, Sasaran, Program, Kegiatan, Sub Kegiatan)', 'Data Entry (Tujuan, Sasaran, Program, Kegiatan, Sub Kegiatan)']
-    case 'buku_besar_aset': // buku-besar-aset-client.tsx nav
-      return ['Aset', 'Master']
+    case 'buku_besar_aset': // HALAMAN_BBA di buku-besar-aset/_components/BbaNav.tsx
+      return ['Rencana', 'Master']
     case 'lkjip': // lkjip-client.tsx — daftar dokumen + editor kerangka
       return ['Daftar Dokumen E-LKJIP (buat & susun laporan)']
     case 'admin': // admin-client.tsx rel (modul khusus SUPER_ADMIN)

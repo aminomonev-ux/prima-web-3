@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { BbaImportUsulanSchema, BBA_IMPORT_ALLOWED_ROLES, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
+import { BbaImportUsulanSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { listImportCandidates, commitImportUsulan, type BbaImportCandidate } from '@/lib/data/buku-besar-aset';
-import { guard } from '../_guard';
+import { guard, tolakKecualiEdit } from '../_guard';
 
 // Tarik Belanja Modal final (DISETUJUI/DITOLAK/DITOLAK_ADMIN) dari Usulan Kebutuhan ke BBA.
-// L61: guard sendiri + role tambahan — aksi lintas modul khusus ADMIN/SUPER_ADMIN (CONCEPT §8).
+// Menimbang usulan = pekerjaan Perencanaan (docs/CONCEPT-bba-buku-aset.md §3), jadi pagarnya
+// izin EDIT bagian Rencana — dulu khusus ADMIN/SUPER_ADMIN, yang membuat role PROGRAM tak bisa.
 async function guardImport() {
   const g = await guard();
   if (!g.ok) return g;
-  if (!(BBA_IMPORT_ALLOWED_ROLES as readonly string[]).includes(g.session.role)) {
-    return { ok: false as const, res: NextResponse.json({ ok: false, message: 'Akses ditolak: tarik dari Usulan khusus Admin.' }, { status: 403 }) };
-  }
+  const ditolak = await tolakKecualiEdit(g.session, 'rencana');
+  if (ditolak) return { ok: false as const, res: ditolak };
   return g;
 }
 

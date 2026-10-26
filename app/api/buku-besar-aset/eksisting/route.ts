@@ -5,7 +5,7 @@ import {
   formPendataan, simpanPendataan, hapusPendataan,
   BbaLokasiTidakDikenalError, BbaBarangTidakDikenalError, BbaBerkasTidakDikenalError, BbaTanggalCekError,
 } from '@/lib/data/buku-besar-aset';
-import { guard } from '../_guard';
+import { guard, tolakKecualiEdit } from '../_guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'aset'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'eksisting', 30); if (limited) return limited;
   const parsed = EksistingSimpanSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
+  const ditolak = await tolakKecualiEdit(g.session, 'aset'); if (ditolak) return ditolak;
   const limited = await bbaRateLimit(g.session.userId, 'eksisting', 30); if (limited) return limited;
   const parsed = EksistingDeleteSchema.safeParse({ id: new URL(req.url).searchParams.get('id') ?? undefined });
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'ID tidak valid' }, { status: 400 });

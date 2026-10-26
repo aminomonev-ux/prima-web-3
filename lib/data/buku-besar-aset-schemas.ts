@@ -142,9 +142,7 @@ export const BbaRealisasiSchema = z.object({
 
 export const BbaDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
 
-// Import Belanja Modal dari Usulan Kebutuhan — khusus ADMIN/SUPER_ADMIN
-// (akses lintas modul, lihat CONCEPT-import-usulan.md §8).
-export const BBA_IMPORT_ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+// Import Belanja Modal dari Usulan Kebutuhan — pagarnya izin EDIT bagian Rencana (route).
 export const BbaImportUsulanSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('preview'), tahun: TahunSchema }),
   z.object({ mode: z.literal('commit'),  tahun: TahunSchema }),
