@@ -27,3 +27,10 @@ export async function tolakKecualiEdit(s: GuardedSession, ...menus: MenuBba[]): 
     message: `Izin Anda di bagian ${nama} hanya melihat — perubahan tidak disimpan. Hubungi Admin kalau memang perlu mengubahnya.`,
   }, { status: 403 });
 }
+
+/** Endpoint BACA: bagian yang MENAMPILKAN datanya harus terbuka (bukan TIDAK). */
+export async function tolakKecualiLihat(s: GuardedSession, menu: MenuBba): Promise<NextResponse | null> {
+  const peta = await petaIzinBba(s.userId, s.role);
+  if (peta[menu] !== 'TIDAK') return null;
+  return NextResponse.json({ ok: false, code: 'MENU_TERTUTUP', message: `Bagian ${LABEL_MENU_BBA[menu]} tidak dibuka untuk akun Anda.` }, { status: 403 });
+}

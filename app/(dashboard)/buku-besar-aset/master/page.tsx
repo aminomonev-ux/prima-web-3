@@ -38,7 +38,7 @@ export default async function BukuBesarAsetMasterPage({ searchParams }: { search
         initialKategori={initialKategori}
         initialBarang={initialBarang}
         initialLokasi={initialLokasi}
-        tabAwal={tab === 'barang' ? 'BARANG' : tab === 'lokasi' ? 'LOKASI' : 'KATEGORI'}
+        tabAwal={tab === 'barang' ? 'BARANG' : tab === 'lokasi' ? 'LOKASI' : tab === 'pengaturan' ? 'PENGATURAN' : 'KATEGORI'}
         beku={beku}
         izin={peta}
       />

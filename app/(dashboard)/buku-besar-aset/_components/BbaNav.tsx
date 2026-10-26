@@ -4,14 +4,16 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { BookOpen, ClipboardList, ShoppingCart, Layers, Printer, LayoutGrid, Eye } from 'lucide-react';
-import { MENU_BBA, LABEL_MENU_BBA, type MenuBba, type Izin } from '@/lib/bba/peran';
+import { MENU_BBA, LABEL_MENU_BBA, MENU_BACA_SAJA_BBA, type MenuBba, type Izin } from '@/lib/bba/peran';
 
 export type PetaIzinLayar = Record<MenuBba, Izin>;
 
 /** Halaman yang sudah ada. Bagian tanpa halaman tidak ditawarkan (izinnya tetap bisa diatur di Admin Panel). */
 export const HALAMAN_BBA: Partial<Record<MenuBba, string>> = {
+  aset:    '/buku-besar-aset/aset',
   rencana: '/buku-besar-aset',
   master:  '/buku-besar-aset/master',
+  cetak:   '/buku-besar-aset/cetak',
 };
 
 const IKON: Record<MenuBba, ReactNode> = {
@@ -41,13 +43,15 @@ export default function BbaNav({ aktif, peta, c }: { aktif: MenuBba; peta: PetaI
     <nav aria-label="Bagian Buku Besar Aset" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
       {bagianTerbuka(peta).map(m => {
         const kini = m === aktif;
+        // Cetak memang tanpa jalur tulis bagi siapa pun — ikon "hanya melihat" di situ menyesatkan.
+        const hanyaLihat = peta[m] === 'LIHAT' && !MENU_BACA_SAJA_BBA.includes(m);
         return (
           <Link key={m} href={HALAMAN_BBA[m]!} aria-current={kini ? 'page' : undefined}
-            data-tooltip={peta[m] === 'LIHAT' ? 'Izin Anda di bagian ini: hanya melihat' : undefined}
+            data-tooltip={hanyaLihat ? 'Izin Anda di bagian ini: hanya melihat' : undefined}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 20, textDecoration: 'none',
               border: `1px solid ${kini ? '#EF9F27' : c.border}`, background: kini ? 'rgba(239,159,39,.15)' : 'transparent', color: kini ? '#EF9F27' : c.sub }}>
             {LABEL_MENU_BBA[m]}
-            {peta[m] === 'LIHAT' && <Eye size={12} style={{ opacity: .7 }} />}
+            {hanyaLihat && <Eye size={12} style={{ opacity: .7 }} />}
           </Link>
         );
       })}

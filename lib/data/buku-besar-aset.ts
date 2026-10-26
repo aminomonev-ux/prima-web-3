@@ -57,8 +57,8 @@ export class BbaBarangKembarError extends Error {
   constructor(nama: string) { super(`Barang "${nama}" sudah ada di Master Barang.`); this.name = 'BbaBarangKembarError'; }
 }
 export class BbaBarangDipakaiError extends Error {
-  constructor(item: number, pendataan = 0) {
-    const dipakai = [item > 0 ? `${item} item` : '', pendataan > 0 ? `${pendataan} pendataan eksisting` : ''].filter(Boolean).join(' dan ');
+  constructor(item: number, pendataan = 0, aset = 0) {
+    const dipakai = [item > 0 ? `${item} item` : '', pendataan > 0 ? `${pendataan} pendataan eksisting` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
     super(`Barang ini dipakai ${dipakai}. Gabungkan ke barang lain dulu (tombol Gabungkan), baru barangnya hilang dari daftar.`);
     this.name = 'BbaBarangDipakaiError';
   }
@@ -76,7 +76,11 @@ export class BbaLokasiKembarError extends Error {
   constructor(nama: string) { super(`Lokasi "${nama}" sudah ada.`); this.name = 'BbaLokasiKembarError'; }
 }
 export class BbaLokasiDipakaiError extends Error {
-  constructor(n: number) { super(`Lokasi ini punya ${n} pendataan eksisting, jadi tidak bisa dihapus. Ganti namanya kalau yang salah hanya namanya.`); this.name = 'BbaLokasiDipakaiError'; }
+  constructor(n: number, aset = 0) {
+    const dipakai = [n > 0 ? `${n} pendataan eksisting` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
+    super(`Lokasi ini punya ${dipakai}, jadi tidak bisa dihapus. Ganti namanya kalau yang salah hanya namanya.`);
+    this.name = 'BbaLokasiDipakaiError';
+  }
 }
 export class BbaTanggalCekError extends Error {
   constructor(hariIni: string) { super(`Tanggal cek tidak boleh sesudah hari ini (${hariIni}).`); this.name = 'BbaTanggalCekError'; }
@@ -418,8 +422,8 @@ async function barangDariNama(q: Penanya, namaMentah: string, userId: number, ba
   return Number(res[0]?.insertId ?? 0);
 }
 
-/** `undefined` = jangan sentuh, `null` = lepas, angka = barang terpilih/baru. */
-async function tentukanBarang(q: Penanya, input: { barang_id?: number | null; barang_baru?: string | null; kategori_aset?: string | null; satuan?: string | null }, userId: number): Promise<number | null | undefined> {
+/** `undefined` = jangan sentuh, `null` = lepas, angka = barang terpilih/baru. Dipakai juga kartu aset (bba-aset.ts). */
+export async function tentukanBarang(q: Penanya, input: { barang_id?: number | null; barang_baru?: string | null; kategori_aset?: string | null; satuan?: string | null }, userId: number): Promise<number | null | undefined> {
   if (input.barang_baru) return barangDariNama(q, input.barang_baru, userId, input);
   if (input.barang_id) { await pastikanBarang(q, [input.barang_id]); return input.barang_id; }
   return input.barang_id === null ? null : undefined;
@@ -684,7 +688,7 @@ export async function deleteKategori(id: number): Promise<boolean> {
 }
 
 // ─── Master Barang (CONCEPT-bba-perencanaan §5) ─────────────────────────────
-export interface BbaBarang { id: number; nama: string; kategori_aset: string | null; satuan: string | null; jumlah_item: number; jumlah_pendataan: number }
+export interface BbaBarang { id: number; nama: string; kategori_aset: string | null; satuan: string | null; jumlah_item: number; jumlah_pendataan: number; jumlah_aset: number }
 
 const kodeGalat = (e: unknown) => (e as { code?: string }).code;
 
@@ -692,12 +696,14 @@ export async function listBarang(): Promise<BbaBarang[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
     SELECT g.id, g.nama, g.kategori_aset, g.satuan,
            (SELECT COUNT(*) FROM buku_besar_aset b WHERE b.barang_id = g.id) AS jumlah_item,
-           (SELECT COUNT(*) FROM bba_eksisting e WHERE e.barang_id = g.id) AS jumlah_pendataan
+           (SELECT COUNT(*) FROM bba_eksisting e WHERE e.barang_id = g.id) AS jumlah_pendataan,
+           (SELECT COUNT(*) FROM bba_aset a WHERE a.barang_id = g.id) AS jumlah_aset
     FROM bba_barang g ORDER BY g.nama ASC LIMIT 2000
   `);
   return rows.map(r => ({
     id: Number(r.id), nama: String(r.nama ?? ''), kategori_aset: r.kategori_aset as string | null,
     satuan: r.satuan as string | null, jumlah_item: Number(r.jumlah_item ?? 0), jumlah_pendataan: Number(r.jumlah_pendataan ?? 0),
+    jumlah_aset: Number(r.jumlah_aset ?? 0),
   }));
 }
 
@@ -736,10 +742,11 @@ export async function hapusBarang(id: number): Promise<{ nama: string } | null> 
     if (ada.length === 0) return null;
     const dipakai = await tx`
       SELECT (SELECT COUNT(*) FROM buku_besar_aset WHERE barang_id = ${id}) AS item,
-             (SELECT COUNT(*) FROM bba_eksisting WHERE barang_id = ${id}) AS pendataan
-    ` as Array<{ item: number; pendataan: number }>;
-    const item = Number(dipakai[0]?.item ?? 0), pendataan = Number(dipakai[0]?.pendataan ?? 0);
-    if (item > 0 || pendataan > 0) throw new BbaBarangDipakaiError(item, pendataan);
+             (SELECT COUNT(*) FROM bba_eksisting WHERE barang_id = ${id}) AS pendataan,
+             (SELECT COUNT(*) FROM bba_aset WHERE barang_id = ${id}) AS aset
+    ` as Array<{ item: number; pendataan: number; aset: number }>;
+    const item = Number(dipakai[0]?.item ?? 0), pendataan = Number(dipakai[0]?.pendataan ?? 0), aset = Number(dipakai[0]?.aset ?? 0);
+    if (item > 0 || pendataan > 0 || aset > 0) throw new BbaBarangDipakaiError(item, pendataan, aset);
     await tx`DELETE FROM bba_barang WHERE id = ${id}`;
     return { nama: String(ada[0].nama) };
   });
@@ -765,6 +772,13 @@ export async function gabungBarang(dari: number, ke: number, userId: number): Pr
     ` as Array<{ nama: string; tgl: string }>;
     if (bentrok.length > 0) throw new BbaGabungBentrokError(bentrok.map(b => `${b.nama} (${fmtTanggal(b.tgl)})`));
     const res = await tx`UPDATE buku_besar_aset SET barang_id = ${ke}, version = version + 1, updated_by = ${userId} WHERE barang_id = ${dari}` as unknown as Array<{ affectedRows?: number }>;
+    // Buku Aset ikut pindah (L69 — barang dirujuk dari tiga tabel), dengan jejak di riwayat tiap aset.
+    await tx`
+      INSERT INTO bba_aset_riwayat (aset_id, jenis, sebelum, sesudah, catatan, oleh)
+      SELECT id, 'UBAH', JSON_OBJECT('barang', ${nama.get(dari)!}), JSON_OBJECT('barang', ${nama.get(ke)!}), 'Gabungkan barang', ${userId}
+      FROM bba_aset WHERE barang_id = ${dari}
+    `;
+    await tx`UPDATE bba_aset SET barang_id = ${ke}, version = version + 1, updated_by = ${userId} WHERE barang_id = ${dari}`;
     // Asal yang sudah tercatat (gabungan sebelumnya) dipertahankan: menandai berlebih lebih aman daripada lolos.
     const resE = await tx`
       UPDATE bba_eksisting SET barang_id = ${ke}, digabung_dari = COALESCE(digabung_dari, ${nama.get(dari)!}), digabung_pada = NOW()
@@ -891,7 +905,7 @@ export async function perBarangTahun(tahun: number): Promise<PerBarangTahun> {
 }
 
 export interface DetailBarang {
-  barang: Omit<BbaBarang, 'jumlah_item' | 'jumlah_pendataan'>; ringkas: RingkasBarang; riwayat: BarisRiwayat[];
+  barang: Omit<BbaBarang, 'jumlah_item' | 'jumlah_pendataan' | 'jumlah_aset'>; ringkas: RingkasBarang; riwayat: BarisRiwayat[];
   /** Kondisi eksisting (§6) + riwayat pendataan per lokasi; tanpa pendataan → eksisting.lokasi kosong. */
   eksisting: RingkasEksisting; riwayat_eksisting: { lokasi_id: number; lokasi: string; baris: BarisEksisting[] }[];
 }
@@ -923,15 +937,16 @@ export async function detailBarang(id: number, tahun: number): Promise<DetailBar
 }
 
 // ─── Master Lokasi (§6.1) ───────────────────────────────────────────────────
-export interface BbaLokasi { id: number; nama: string; urutan: number; jumlah_pendataan: number; jumlah_barang: number }
+export interface BbaLokasi { id: number; nama: string; urutan: number; jumlah_pendataan: number; jumlah_barang: number; jumlah_aset: number }
 
 export async function listLokasi(): Promise<BbaLokasi[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT l.id, l.nama, l.urutan, COUNT(e.id) AS jumlah_pendataan, COUNT(DISTINCT e.barang_id) AS jumlah_barang
+    SELECT l.id, l.nama, l.urutan, COUNT(e.id) AS jumlah_pendataan, COUNT(DISTINCT e.barang_id) AS jumlah_barang,
+           (SELECT COUNT(*) FROM bba_aset a WHERE a.lokasi_id = l.id) AS jumlah_aset
     FROM bba_lokasi l LEFT JOIN bba_eksisting e ON e.lokasi_id = l.id
     GROUP BY l.id, l.nama, l.urutan ORDER BY l.urutan ASC, l.nama ASC LIMIT 1000
   `);
-  return rows.map(r => ({ id: Number(r.id), nama: String(r.nama ?? ''), urutan: Number(r.urutan ?? 0), jumlah_pendataan: Number(r.jumlah_pendataan ?? 0), jumlah_barang: Number(r.jumlah_barang ?? 0) }));
+  return rows.map(r => ({ id: Number(r.id), nama: String(r.nama ?? ''), urutan: Number(r.urutan ?? 0), jumlah_pendataan: Number(r.jumlah_pendataan ?? 0), jumlah_barang: Number(r.jumlah_barang ?? 0), jumlah_aset: Number(r.jumlah_aset ?? 0) }));
 }
 
 export async function createLokasi(namaMentah: string): Promise<{ id: number; nama: string }> {
@@ -963,8 +978,10 @@ export async function hapusLokasi(id: number): Promise<{ nama: string } | null> 
   return withTransaction(async ({ tx }) => {
     const ada = await tx`SELECT nama FROM bba_lokasi WHERE id = ${id} FOR UPDATE` as Array<{ nama: string }>;
     if (ada.length === 0) return null;
-    const n = await tx`SELECT COUNT(*) AS n FROM bba_eksisting WHERE lokasi_id = ${id}` as Array<{ n: number }>;
-    if (Number(n[0]?.n ?? 0) > 0) throw new BbaLokasiDipakaiError(Number(n[0].n));
+    const n = await tx`
+      SELECT (SELECT COUNT(*) FROM bba_eksisting WHERE lokasi_id = ${id}) AS n, (SELECT COUNT(*) FROM bba_aset WHERE lokasi_id = ${id}) AS aset
+    ` as Array<{ n: number; aset: number }>;
+    if (Number(n[0]?.n ?? 0) > 0 || Number(n[0]?.aset ?? 0) > 0) throw new BbaLokasiDipakaiError(Number(n[0].n), Number(n[0].aset));
     await tx`DELETE FROM bba_lokasi WHERE id = ${id}`;
     return { nama: String(ada[0].nama) };
   });

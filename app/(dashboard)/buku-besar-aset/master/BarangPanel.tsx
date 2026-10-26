@@ -123,14 +123,14 @@ export default function BarangPanel({ c, awal, kategori, bolehUbah }: Props) {
               <tr key={r.id} style={{ background: i % 2 ? c.rowOdd : 'transparent' }}>
                 <td style={td} colSpan={3}>
                   <b>{r.nama}</b>
-                  <div style={{ color: c.sub, fontSize: 11.5 }}>{[r.kategori_aset, r.satuan, `${r.jumlah_item} item`, r.jumlah_pendataan ? `${r.jumlah_pendataan} pendataan` : ''].filter(Boolean).join(' · ')}</div>
+                  <div style={{ color: c.sub, fontSize: 11.5 }}>{[r.kategori_aset, r.satuan, `${r.jumlah_item} item`, r.jumlah_pendataan ? `${r.jumlah_pendataan} pendataan` : '', r.jumlah_aset ? `${r.jumlah_aset} aset` : ''].filter(Boolean).join(' · ')}</div>
                 </td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', width: 1 }}>
                   {bolehUbah && <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                     <Tip label="Ubah"><EditButton onClick={() => setUbah({ id: r.id, nama: r.nama, kategori_aset: r.kategori_aset ?? '', satuan: r.satuan ?? '' })} /></Tip>
                     <PrimaButton variant="ghost" size="sm" disabled={rows.length < 2} onClick={() => setGabung({ dari: r, ke: null })}>Gabungkan…</PrimaButton>
-                    {r.jumlah_item + r.jumlah_pendataan > 0
-                      ? <Tip label="Masih dipakai item/pendataan — gabungkan ke barang lain dulu"><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
+                    {r.jumlah_item + r.jumlah_pendataan + r.jumlah_aset > 0
+                      ? <Tip label="Masih dipakai item/pendataan/aset — gabungkan ke barang lain dulu"><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
                       : <Tip label="Hapus"><DeleteButton iconSize={12} onClick={() => void hapus(r)} /></Tip>}
                   </div>}
                 </td>

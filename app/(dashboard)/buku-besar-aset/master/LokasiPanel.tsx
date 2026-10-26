@@ -87,8 +87,8 @@ export default function LokasiPanel({ c, awal, bolehUbah }: { c: Warna; awal: Bb
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', width: 1 }}>
                   {bolehUbah && <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                     <Tip label="Ganti nama"><EditButton onClick={() => setUbah({ id: l.id, nama: l.nama })} /></Tip>
-                    {l.jumlah_pendataan > 0
-                      ? <Tip label={`Punya ${l.jumlah_pendataan} pendataan — tidak bisa dihapus`}><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
+                    {l.jumlah_pendataan + l.jumlah_aset > 0
+                      ? <Tip label={`Punya ${[l.jumlah_pendataan ? `${l.jumlah_pendataan} pendataan` : '', l.jumlah_aset ? `${l.jumlah_aset} aset` : ''].filter(Boolean).join(' dan ')} — tidak bisa dihapus`}><span style={{ display: 'inline-flex', opacity: .35 }}><DeleteButton disabled iconSize={12} /></span></Tip>
                       : <Tip label="Hapus"><DeleteButton iconSize={12} onClick={() => void hapus(l)} /></Tip>}
                   </div>}
                 </td>
