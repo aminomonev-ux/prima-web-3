@@ -11,6 +11,8 @@ import { fetchJson } from '@/lib/shared/api';
 import { KOLOM_KIB, NAMA_GOLONGAN, LABEL_KONDISI, KOLOM_POKOK } from '@/lib/bba/kib';
 import { namaTampil } from '@/lib/bba/aset';
 import { statusCek, fmtTanggal, bolehBerRuang, punyaKondisi } from '@/lib/bba/kondisi';
+import { LABEL_JENIS, LABEL_ANGGARAN } from '@/lib/bba/rencana';
+import { LABEL_STATUS } from '@/lib/bba/status';
 import type { DetailAset } from '@/lib/data/bba-aset';
 import type { BbaBarang } from '@/lib/data/buku-besar-aset';
 import type { BarangRingan } from '@/lib/bba/barang';
@@ -158,6 +160,19 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
                   : <span style={{ fontSize: 12.5 }}>{a.barang_nama ?? <span style={{ color: c.sub }}>Belum ditautkan</span>}</span>}
               </div>
             </fieldset>
+
+            {d!.rencana.length > 0 && <>
+              <div style={{ fontSize: 11, color: c.sub, margin: '16px 0 4px', fontWeight: 600 }}>RENCANA TERKAIT</div>
+              {d!.rencana.map(x => (
+                <div key={x.id} style={{ display: 'flex', gap: 10, fontSize: 12, padding: '5px 0', borderBottom: `1px dashed ${c.border}` }}>
+                  <span style={{ fontFamily: MONO, color: c.sub, whiteSpace: 'nowrap' }}>{x.tahun} · {x.canonical_id}</span>
+                  <span style={{ minWidth: 0 }}>
+                    <b>{x.jenis ? LABEL_JENIS[x.jenis] : 'Rencana'}</b> · {x.uraian}
+                    <span style={{ color: c.sub }}> · {LABEL_STATUS[x.status]} · {LABEL_ANGGARAN[x.anggaran].toLowerCase()}</span>
+                  </span>
+                </div>
+              ))}
+            </>}
 
             <div style={{ fontSize: 11, color: c.sub, margin: '16px 0 4px', fontWeight: 600 }}>RIWAYAT</div>
             {d!.riwayat.length === 0 && <div style={{ fontSize: 12, color: c.sub }}>Belum ada riwayat.</div>}

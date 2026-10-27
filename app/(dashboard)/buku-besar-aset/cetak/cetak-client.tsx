@@ -1,7 +1,7 @@
 'use client';
 // Cetak & Excel (docs/CONCEPT-bba-buku-aset.md §9, §14): KIB A–F, KIR per ruangan, hasil sensus,
-// Rekapitulasi BMD, Buku Inventaris — bentuk ekspor sistem aset provinsi — dan format kerja PRIMA.
-// Daftar rencana per tahun menyusul (Tahap D). Semua disusun server (`/aset/excel`).
+// Rekapitulasi BMD, Buku Inventaris — bentuk ekspor sistem aset provinsi — format kerja PRIMA, dan
+// daftar rencana per tahun (Tahap D). Semua disusun server (`/aset/excel`).
 import { useState } from 'react';
 import { FileSpreadsheet } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -41,6 +41,7 @@ export default function CetakClient({ username, role, themePreference, beku, izi
   const berisi = ruangan.filter(r => r.n > 0);
   const [ruang, setRuang] = useState('SEMUA');
   const [tahunSensus, setTahunSensus] = useState(String(tahunIni));
+  const [tahunRencana, setTahunRencana] = useState(String(tahunIni + 1));
   return (
     <BbaShell username={username} role={role} themePreference={themePreference} beku={beku} izin={izin} aktif="cetak" remah="Cetak & Excel">
       {c => {
@@ -52,6 +53,7 @@ export default function CetakClient({ username, role, themePreference, beku, izi
         const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 10 };
         const nRuang = ruang === 'SEMUA' ? berisi.reduce((s, r) => s + r.n, 0) : ruangan.find(r => String(r.id) === ruang)?.n ?? 0;
         const tahunSah = /^\d{4}$/.test(tahunSensus);
+        const tahunRencanaSah = /^\d{4}$/.test(tahunRencana);
         return (<>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>🖨️ Cetak & Excel</h1>
           <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 6, lineHeight: 1.6 }}>
@@ -89,13 +91,17 @@ export default function CetakClient({ username, role, themePreference, beku, izi
 
           {judulBagian('FORMAT KERJA PRIMA')}
           <div style={grid}>
-            <Kartu c={c} judul="Buku Aset lengkap" ket="satu lembar datar + nama sehari-hari, ruangan, gedung, kondisi & siapa yang mengecek, barang — untuk disaring sendiri" n={total}>
+            <Kartu c={c} judul="Buku Aset lengkap" ket="satu lembar datar + nama sehari-hari, ruangan, gedung, kondisi & siapa yang mengecek, barang, rencana terkait — untuk disaring sendiri" n={total}>
               {tombol({ jenis: 'KERJA' }, total)}
+            </Kartu>
+            <Kartu c={c} judul="Daftar rencana per tahun" ket={`per jenis rencana, dengan jumlah & kondisi yang dimiliki tiap barang · tahun ${tahunRencanaSah ? tahunRencana : '…'}`}>
+              <input value={tahunRencana} onChange={e => setTahunRencana(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" aria-label="Tahun rencana" style={{ ...inp, width: 70, fontFamily: MONO }} />
+              {tahunRencanaSah ? <PrimaButton variant="success" size="sm" onClick={() => unduh({ jenis: 'RENCANA', tahun: tahunRencana })}>Unduh Excel</PrimaButton> : <span style={{ fontSize: 11.5, color: c.sub }}>isi tahun</span>}
             </Kartu>
           </div>
           <div style={{ fontSize: 11.5, color: c.sub, marginTop: 12, lineHeight: 1.5 }}>
             Hasil sensus: kolom Kondisi hanya diisi register yang diperiksa di PRIMA pada tahun itu; &ldquo;Tidak Ada&rdquo; di rekap sensus selalu 0 karena
-            PRIMA belum mencatat aset yang tidak ditemukan. Daftar rencana per tahun menyusul di tahap berikutnya.
+            PRIMA belum mencatat aset yang tidak ditemukan.
           </div>
         </>);
       }}

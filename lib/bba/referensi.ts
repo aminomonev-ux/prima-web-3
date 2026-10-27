@@ -46,6 +46,8 @@ export function tebakSumber(url: string | null | undefined): SumberReferensi | n
 export type ReferensiIsian = {
   sumber: SumberReferensi;
   nama_penyedia: string | null;
+  /** Tahap D buku aset — dibaca lagi sebagai "pembelian sebelumnya" (§7.7). Referensi lama tanpa kolom ini. */
+  merk_tipe?: string | null;
   url: string | null;
   harga: number | null;
   tgl_cek: string | null;
@@ -132,12 +134,13 @@ export function rapikanReferensi(daftar: readonly ReferensiIsian[]): ReferensiIs
     .map((r) => ({
       sumber: r.sumber,
       nama_penyedia: teks(r.nama_penyedia),
+      merk_tipe: teks(r.merk_tipe),
       url: teks(r.url),
       harga: r.harga != null && r.harga > 0 ? r.harga : null,
       tgl_cek: teks(r.tgl_cek),
       file_id: teks(r.file_id),
     }))
-    .filter((r) => r.nama_penyedia || r.url || r.harga != null || r.tgl_cek || r.file_id);
+    .filter((r) => r.nama_penyedia || r.merk_tipe || r.url || r.harga != null || r.tgl_cek || r.file_id);
 }
 
 export function referensiSama(a: readonly ReferensiIsian[], b: readonly ReferensiIsian[]): boolean {

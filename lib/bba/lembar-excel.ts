@@ -187,6 +187,8 @@ export type AsetKerja = AsetRingan & {
   gedung_nama?: string | null
   barang_nama?: string | null
   kondisi_oleh_nama?: string | null
+  /** "2027 Penggantian BBA-000123; …" — rencana yang menjadikan aset ini sasaran (Tahap D). */
+  rencana_terkait?: string | null
 }
 
 const LABEL_CEK = { BELUM: 'Belum dicek', LEWAT: 'Perlu dicek ulang', TERKINI: 'Terkini' } as const
@@ -213,6 +215,7 @@ const KOLOM_KERJA: [judul: string, lebar: number, nilai: (a: AsetKerja, batas: s
   ['Dicek Oleh', 20, a => (a.kondisi_sumber === 'CEK' ? a.kondisi_oleh_nama ?? '' : '')],
   ['Status Cek', 12, (a, batas) => { const s = statusCek(a, batas); return s ? LABEL_CEK[s] : '' }],
   ['Keterangan', 30, a => a.keterangan ?? ''],
+  ['Rencana Terkait', 32, a => a.rencana_terkait ?? ''],
   ['Status', 9, a => a.status],
 ]
 

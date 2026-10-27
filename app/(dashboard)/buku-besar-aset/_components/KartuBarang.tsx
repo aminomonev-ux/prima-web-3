@@ -9,9 +9,12 @@ import Link from 'next/link';
 import { fetchJson } from '@/lib/shared/api';
 import { LABEL_STATUS, type BbaStatus } from '@/lib/bba/status';
 import { fmtTanggal, type Kondisi } from '@/lib/bba/kondisi';
-import type { DetailBarang } from '@/lib/data/buku-besar-aset';
+import type { DetailBarang, PembelianLalu, KibLalu } from '@/lib/data/buku-besar-aset';
+import { petunjukRencana, type JenisRencana } from '@/lib/bba/rencana';
+import { LABEL_SUMBER, LABEL_JENIS_BUKTI, type ReferensiIsian } from '@/lib/bba/referensi';
+import { safeHref } from '@/lib/shared/url';
 import BarKondisi, { WARNA_KONDISI } from './BarKondisi';
-import type { Warna } from './ModalItem';
+import { unduhBerkas, type Warna } from './ModalItem';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -29,12 +32,30 @@ type Props = {
   ringkas?: boolean;
   /** Dinaikkan induk sesudah ada yang tertulis — memuat ulang kartu. */
   versi?: number;
+  /** Jenis rencana yang sedang diisi — memunculkan petunjuk §8 (bukan larangan). */
+  jenis?: JenisRencana | null;
+  /** Item yang sedang dibuka tidak ikut "pembelian sebelumnya". */
+  kecualiId?: number;
+  /** Ada → tombol "Pakai sebagai referensi" di pembelian sebelumnya (§7.7). */
+  onPakaiReferensi?: (r: ReferensiIsian) => void;
 };
 
-export default function KartuBarang({ barangId, tahun, c, tandaiTahun, ringkas, versi = 0 }: Props) {
+export default function KartuBarang({ barangId, tahun, c, tandaiTahun, ringkas, versi = 0, jenis = null, kecualiId, onPakaiReferensi }: Props) {
   const [detail, setDetail] = useState<DetailBarang | null>(null);
   const [galat, setGalat] = useState('');
+  const [beli, setBeli] = useState<{ barang: number; prima: PembelianLalu[]; kib: KibLalu[] } | null>(null);
   const nomor = useRef(0);
+  const nomorBeli = useRef(0);
+
+  useEffect(() => {
+    const n = ++nomorBeli.current;
+    void Promise.resolve().then(async () => {
+      const d = await fetchJson<unknown>(`/api/buku-besar-aset/pembelian?barang=${barangId}${kecualiId ? `&kecuali=${kecualiId}` : ''}`);
+      if (n !== nomorBeli.current || !d.ok) return;
+      const x = d as unknown as { prima: PembelianLalu[]; kib: KibLalu[] };
+      setBeli({ barang: barangId, prima: x.prima, kib: x.kib });
+    });
+  }, [barangId, kecualiId, versi]);
 
   useEffect(() => {
     if (tahun < 2020 || tahun > 2100) return; // tahun setengah diketik di Tambah item
@@ -60,10 +81,19 @@ export default function KartuBarang({ barangId, tahun, c, tandaiTahun, ringkas, 
     [`Direncanakan ${tahun}`, <span key="r" style={{ fontFamily: MONO }}>{fmtVol(r.direncanakan)} {satuan}</span>],
   ];
 
+  const petunjuk = petunjukRencana(jenis, m.jumlah > 0 ? m : null, satuan);
+  const pembelian = beli?.barang === barangId ? beli : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ fontSize: 11, color: c.sub }}>Barang</div>
       <div style={{ fontSize: 13, fontWeight: 700 }}>{barang.nama}{barang.kategori_aset ? <span style={{ fontWeight: 400, color: c.sub, fontSize: 11.5 }}> · {barang.kategori_aset}</span> : null}</div>
+
+      {petunjuk.length > 0 && (
+        <div role="note" style={{ border: '1px solid rgba(186,117,23,.5)', background: 'rgba(186,117,23,.10)', borderRadius: 8, padding: '6px 9px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {petunjuk.map(p => <span key={p} style={{ fontSize: 11.5, color: '#BA7517', lineHeight: 1.45 }}>{p}</span>)}
+        </div>
+      )}
 
       {/* §8: yang dimiliki = register Buku Aset yang ditautkan ke barang ini (dihitung, bukan diketik) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '6px 0', fontSize: 12, borderBottom: `1px solid ${c.border}` }}>
@@ -127,6 +157,56 @@ export default function KartuBarang({ barangId, tahun, c, tandaiTahun, ringkas, 
           </table>
         </div>
       )}
+
+      {/* §7.7: pembelian sebelumnya barang yang sama — referensi, bukti, dan kondisinya sekarang */}
+      {pembelian && (pembelian.prima.length > 0 || pembelian.kib.length > 0) && <>
+        <div style={{ fontSize: 11, color: c.sub, marginTop: 10 }}>Pembelian sebelumnya</div>
+        {pembelian.prima.map(p => (
+          <div key={p.id} style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>
+            <div>
+              <b style={{ fontFamily: MONO }}>{p.tahun}</b> · {fmtVol(p.vol_realisasi)} {p.satuan || satuan}
+              {p.harga_satuan ? <> · <span style={{ fontFamily: MONO }}>{fmtRp(p.harga_satuan)}</span>/{p.satuan || satuan}</> : null}
+              {p.tgl_realisasi ? <span style={{ color: c.sub }}> · diterima {fmtTanggal(p.tgl_realisasi)}</span> : null}
+            </div>
+            {p.referensi.length > 0 && <div style={{ color: c.sub }}>dibandingkan waktu itu:</div>}
+            {p.referensi.map((r, i) => {
+              const href = safeHref(r.url);
+              return (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <span style={{ minWidth: 0 }}>
+                    {[r.merk_tipe, r.nama_penyedia, LABEL_SUMBER[r.sumber]].filter(Boolean).join(' · ')}
+                    {r.harga ? <> · <span style={{ fontFamily: MONO }}>{fmtRp(r.harga)}</span></> : null}
+                    {r.tgl_cek ? <span style={{ color: c.sub }}> · dicek {fmtTanggal(r.tgl_cek)}</span> : null}
+                  </span>
+                  {href && <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#378ADD' }}>tautan</a>}
+                  {r.file_id && <a href={unduhBerkas(r.file_id)} target="_blank" rel="noopener noreferrer" style={{ color: '#1D9E75' }}>berkas</a>}
+                  {onPakaiReferensi && <button type="button" onClick={() => onPakaiReferensi(r)}
+                    style={{ background: 'none', border: 'none', color: '#7C5CFC', cursor: 'pointer', padding: 0, fontSize: 11.5, textDecoration: 'underline' }}>Pakai sebagai referensi</button>}
+                </div>
+              );
+            })}
+            {p.bukti.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {p.bukti.map(b => {
+                  const href = b.file_id ? unduhBerkas(b.file_id) : safeHref(b.url);
+                  return href ? <a key={b.id} href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#1D9E75' }}>{LABEL_JENIS_BUKTI[b.jenis]}</a> : null;
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+        {pembelian.kib.length > 0 && (
+          <div style={{ fontSize: 11.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ color: c.sub }}>Di Buku Aset per tahun perolehan (termasuk sebelum PRIMA):</span>
+            {pembelian.kib.map(k => (
+              <span key={k.tahun ?? 'x'}>
+                <b style={{ fontFamily: MONO }}>{k.tahun ?? '—'}</b> · {k.jumlah} {satuan}{k.merk.length ? ` · ${k.merk.join(', ')}` : ''}
+                <span style={{ color: c.sub }}> · kondisi sekarang </span><AngkaKondisi k={{ baik: k.baik, rusak_ringan: k.rusak_ringan, rusak_berat: k.rusak_berat, total: k.jumlah }} />
+              </span>
+            ))}
+          </div>
+        )}
+      </>}
     </div>
   );
 }

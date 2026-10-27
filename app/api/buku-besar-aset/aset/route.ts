@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
-import { AsetDaftarSchema, AsetIdSchema, AsetIdsSchema, AsetOpnameSchema, UbahAsetSchema } from '@/lib/data/bba-aset-schemas';
-import { daftarAset, detailAset, asetMenurutId, asetOpname, batasCekSekarang, ubahAset, AsetVersiError, AsetTidakAdaError } from '@/lib/data/bba-aset';
+import { AsetDaftarSchema, AsetIdSchema, AsetIdsSchema, AsetOpnameSchema, AsetSasaranCariSchema, UbahAsetSchema } from '@/lib/data/bba-aset-schemas';
+import {
+  daftarAset, detailAset, asetMenurutId, asetOpname, asetUntukSasaran, batasCekSekarang, ubahAset, AsetVersiError, AsetTidakAdaError,
+} from '@/lib/data/bba-aset';
 import { BbaBarangTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../_guard';
 
@@ -25,6 +27,11 @@ export async function GET(req: NextRequest) {
     const p = AsetIdsSchema.safeParse({ ids: sp.get('ids') });
     if (!p.success) return NextResponse.json({ ok: false, message: 'Daftar register tidak valid' }, { status: 400 });
     return NextResponse.json({ ok: true, rows: await asetMenurutId(p.data.ids) });
+  }
+  if (sp.has('sasaran')) {
+    const p = AsetSasaranCariSchema.safeParse({ barang: sp.get('barang') || undefined, q: sp.get('q') || undefined });
+    if (!p.success) return NextResponse.json({ ok: false, message: 'Pencarian tidak valid' }, { status: 400 });
+    return NextResponse.json({ ok: true, rows: await asetUntukSasaran(p.data) });
   }
   if (sp.has('ruang') || sp.has('gedung')) {
     const p = AsetOpnameSchema.safeParse(sp.has('ruang') ? { ruang: sp.get('ruang') } : { gedung: sp.get('gedung') });

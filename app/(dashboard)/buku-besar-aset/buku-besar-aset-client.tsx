@@ -26,6 +26,8 @@ import type { InfoBeku } from '@/lib/security/beku';
 import ModalItem, { LencanaRef, LencanaBukti, STATUS_COLOR, type TabItem } from './_components/ModalItem';
 import PerBarang from './_components/PerBarang';
 import ModalTautkan from './_components/ModalTautkan';
+import SaranTahunLalu from './_components/SaranTahunLalu';
+import { JENIS_RENCANA, LABEL_JENIS, ANGGARAN, LABEL_ANGGARAN, bolehDitandai, type Anggaran } from '@/lib/bba/rencana';
 import BbaNav, { navDockBba, type PetaIzinLayar } from './_components/BbaNav';
 
 const SUMBER = ['BLUD', 'APBD', 'DAK', 'LAINNYA'] as const;
@@ -69,6 +71,10 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [tab, setTab] = useState<'' | 'DISETUJUI' | 'DITOLAK'>('');
   const [q, setQ] = useState('');
   const [fKelengkapan, setFKelengkapan] = useState<'' | 'REF' | 'BUKTI'>('');
+  const [fJenis, setFJenis] = useState('');
+  const [fAnggaran, setFAnggaran] = useState('');
+  const [pilih, setPilih] = useState<Set<number>>(new Set());
+  const [menandai, setMenandai] = useState(false);
   const [modal, setModal] = useState<BukaModal | null>(null);
   const [tampilan, setTampilan] = useState<'ITEM' | 'BARANG'>('ITEM');
   const [segarkanBarang, setSegarkanBarang] = useState(0);
@@ -87,11 +93,11 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   // Jawaban muatan bisa tiba tidak berurutan (ganti tahun saat muatan lama belum pulang) —
   // hanya muatan TERAKHIR yang boleh mengisi tabel, kalau tidak tabel menampilkan tahun lain.
   const nomorMuat = useRef(0);
-  const kunciSaringan = `${tahun}|${fStatus}|${fSumber}|${fOrigin}|${tab}`;
+  const kunciSaringan = `${tahun}|${fStatus}|${fSumber}|${fOrigin}|${tab}|${fJenis}|${fAnggaran}`;
   const kunciTermuat = useRef(kunciSaringan);
   const load = useCallback(async () => {
     const nomor = ++nomorMuat.current;
-    kunciTermuat.current = `${tahun}|${fStatus}|${fSumber}|${fOrigin}|${tab}`;
+    kunciTermuat.current = `${tahun}|${fStatus}|${fSumber}|${fOrigin}|${tab}|${fJenis}|${fAnggaran}`;
     setLoading(true);
     try {
       const params = new URLSearchParams({ tahun: String(tahun), page: '1', limit: '200' });
@@ -99,16 +105,35 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       if (fSumber) params.set('sumber', fSumber);
       if (fOrigin) params.set('origin', fOrigin);
       if (tab)     params.set('keputusan', tab);
+      if (fJenis)  params.set('jenis', fJenis);
+      if (fAnggaran) params.set('anggaran', fAnggaran);
       if (q.trim()) params.set('q', q.trim());
       const d = await fetchJson<unknown>(`/api/buku-besar-aset?${params}`);
       if (nomor !== nomorMuat.current) return;
       if (d.ok) {
         const r = d as unknown as BbaListResult & { kpi?: BbaKpi };
-        setRows(r.rows); setTotal(r.total);
+        setRows(r.rows); setTotal(r.total); setPilih(new Set());
         if (r.kpi) setKpi(r.kpi);
       } else toast.error(d.message || 'Gagal memuat');
     } finally { if (nomor === nomorMuat.current) setLoading(false); }
-  }, [tahun, fStatus, fSumber, fOrigin, tab, q]);
+  }, [tahun, fStatus, fSumber, fOrigin, tab, fJenis, fAnggaran, q]);
+
+  /** §7.4: tanda anggaran borongan. Angka kunci dari baris yang dimuat — basi = 409, daftar dimuat ulang (L77). */
+  async function tandai(anggaran: Anggaran) {
+    const item = rows.filter(r => pilih.has(r.id)).map(r => ({ id: r.id, expected_version: r.version }));
+    if (item.length === 0) return;
+    setMenandai(true);
+    try {
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/anggaran', { method: 'POST', body: JSON.stringify({ anggaran, item }) }) as unknown as { ok: boolean; code?: string; message?: string; ditandai?: number; alasan?: string[] };
+      if (!d.ok) {
+        toast.error(d.alasan?.length ? `${d.message}` : d.message || 'Gagal menandai');
+        if (d.code === 'VERSION_CONFLICT') void load();
+        return;
+      }
+      toast.success(d.ditandai ? `${d.ditandai} rencana ditandai ${LABEL_ANGGARAN[anggaran].toLowerCase()}` : 'Tidak ada yang berubah');
+      muatUlang();
+    } finally { setMenandai(false); }
+  }
 
   /** Sesudah ada yang tertulis: tabel item DAN tampilan Per Barang ikut segar. */
   const muatUlang = () => { void load(); setSegarkanBarang(n => n + 1); };
@@ -296,6 +321,8 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={inp}><option value="">Semua status</option>{BBA_STATUSES.map(s => <option key={s} value={s}>{LABEL_STATUS[s]}</option>)}</select>
         <select value={fSumber} onChange={e => setFSumber(e.target.value)} style={inp}><option value="">Semua sumber</option>{SUMBER.map(s => <option key={s} value={s}>{s}</option>)}</select>
         <select value={fOrigin} onChange={e => setFOrigin(e.target.value)} style={inp}><option value="">Semua asal</option><option value="MANUAL">Manual</option><option value="USULAN">Dari Usulan</option></select>
+        <select value={fJenis} onChange={e => setFJenis(e.target.value)} style={inp} aria-label="Jenis rencana"><option value="">Semua jenis</option>{JENIS_RENCANA.map(j => <option key={j} value={j}>{LABEL_JENIS[j]}</option>)}<option value="KOSONG">Belum digolongkan</option></select>
+        <select value={fAnggaran} onChange={e => setFAnggaran(e.target.value)} style={inp} aria-label="Anggaran"><option value="">Semua anggaran</option>{ANGGARAN.map(a => <option key={a} value={a}>{LABEL_ANGGARAN[a]}</option>)}</select>
         <input data-rima="bba.filter-cari" ref={searchRef} value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load(); }} placeholder="Cari uraian/kode/no. usulan…" style={{ ...inp, flex: 1, minWidth: 160 }} />
         <PrimaButton variant="primary" onClick={load} disabled={loading}>{loading ? 'Memuat…' : 'Terapkan'}</PrimaButton>
       </div>
@@ -309,6 +336,19 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
           <span style={{ color: '#BA7517', fontWeight: 600 }}>{belumBarang} item {tahun} belum ditautkan ke barang</span>
           <span style={{ color: c.sub, flex: 1, minWidth: 200 }}>— tanpa barang, riwayat beli dan yang sedang diproses tidak terlihat saat merencanakan.</span>
           <PrimaButton variant="warning" size="sm" onClick={() => setTautkanBuka(true)}>Tautkan</PrimaButton>
+        </div>
+      )}
+
+      <SaranTahunLalu tahun={tahun} c={c} bolehUbah={bolehRencana} segarkan={segarkanBarang} onDisalin={muatUlang} />
+
+      {bolehRencana && pilih.size > 0 && (
+        <div style={{ position: 'sticky', top: 56, zIndex: 5, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10, padding: '8px 12px', background: c.card, border: '1px solid #EF9F27', borderRadius: 10 }}>
+          <b style={{ fontSize: 12.5 }}>{pilih.size} rencana dipilih</b>
+          <span style={{ flex: 1 }} />
+          <PrimaButton menulis variant="success" size="sm" disabled={menandai} onClick={() => void tandai('DIDANAI')}>Tandai didanai</PrimaButton>
+          <PrimaButton menulis variant="danger" size="sm" disabled={menandai} onClick={() => void tandai('TIDAK_DIDANAI')}>Tidak didanai</PrimaButton>
+          <PrimaButton menulis variant="ghost" size="sm" disabled={menandai} onClick={() => void tandai('BELUM')}>Belum ditandai</PrimaButton>
+          <PrimaButton variant="ghost" size="sm" onClick={() => setPilih(new Set())}>Batal pilih</PrimaButton>
         </div>
       )}
 
@@ -328,18 +368,26 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>
-            <th style={th}>Kode</th><th style={th}>Asal</th><th style={th}>Kode Rek</th><th style={th}>Uraian</th><th style={th}>Sumber</th>
+            {bolehRencana && <th style={{ ...th, width: 1 }}>
+              <input type="checkbox" aria-label="Pilih semua rencana yang tampil" checked={rowsTampil.length > 0 && rowsTampil.every(r => pilih.has(r.id))}
+                onChange={e => setPilih(e.target.checked ? new Set(rowsTampil.filter(bolehDitandai).map(r => r.id)) : new Set())} />
+            </th>}
+            <th style={th}>Kode</th><th style={th}>Asal</th><th style={th}>Kode Rek</th><th style={th}>Uraian</th><th style={th}>Jenis</th><th style={th}>Anggaran</th><th style={th}>Sumber</th>
             <th style={{ ...th, textAlign: 'right' }}>Rencana</th><th style={{ ...th, textAlign: 'right' }}>Realisasi</th>
             <th style={{ ...th, textAlign: 'right' }}>Sisa</th><th style={{ ...th, textAlign: 'center' }}>Unit Real.</th>
             <th style={th}>Status</th><th style={{ ...th, textAlign: 'center' }}>Ref</th><th style={{ ...th, textAlign: 'center' }}>Bukti</th>
             <th style={th}>PJ</th><th style={{ ...th, textAlign: 'center' }}>Aksi</th>
           </tr></thead>
           <tbody>
-            {rowsTampil.length === 0 && <tr><td style={{ ...td, textAlign: 'center', color: c.sub, padding: 24 }} colSpan={14}>{rows.length === 0 ? 'Tidak ada data.' : 'Tidak ada item yang cocok dengan saringan ini.'}</td></tr>}
+            {rowsTampil.length === 0 && <tr><td style={{ ...td, textAlign: 'center', color: c.sub, padding: 24 }} colSpan={bolehRencana ? 17 : 16}>{rows.length === 0 ? 'Tidak ada data.' : 'Tidak ada item yang cocok dengan saringan ini.'}</td></tr>}
             {rowsTampil.map((r, i) => {
               const isRejected = r.usulan_keputusan === 'DITOLAK';
               return (
-              <tr key={r.id} onClick={() => bukaItem(r, 'data')} style={{ background: i % 2 ? c.rowOdd : 'transparent', opacity: isRejected ? .75 : 1, cursor: 'pointer' }}>
+              <tr key={r.id} onClick={() => bukaItem(r, 'data')} style={{ background: pilih.has(r.id) ? 'rgba(239,159,39,.08)' : i % 2 ? c.rowOdd : 'transparent', opacity: isRejected ? .75 : 1, cursor: 'pointer' }}>
+                {bolehRencana && <td style={td} onClick={e => e.stopPropagation()}>
+                  {!isRejected && <input type="checkbox" aria-label={`Pilih ${r.canonical_id}`} checked={pilih.has(r.id)}
+                    onChange={e => setPilih(p => { const x = new Set(p); if (e.target.checked) x.add(r.id); else x.delete(r.id); return x; })} />}
+                </td>}
                 <td style={{ ...td, fontFamily: MONO, fontSize: 11 }}>{r.canonical_id}</td>
                 <td style={{ ...td, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                   {r.origin === 'USULAN'
@@ -347,7 +395,11 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                     : <span style={{ border: `1px solid ${c.border}`, color: c.sub, fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20 }}>Manual</span>}
                 </td>
                 <td style={{ ...td, fontFamily: MONO, fontSize: 11 }}>{r.kode_rekening || '—'}</td>
-                <td style={td}>{r.uraian}</td>
+                <td style={td}>{r.uraian}{r.jumlah_sasaran > 0 && <span style={{ display: 'block', fontSize: 10.5, color: c.sub }}>{r.jumlah_sasaran} aset sasaran</span>}</td>
+                <td style={{ ...td, fontSize: 11.5, whiteSpace: 'nowrap', color: r.jenis_rencana ? c.text : '#BA7517' }}>{r.jenis_rencana ? LABEL_JENIS[r.jenis_rencana] : 'belum digolongkan'}</td>
+                <td style={{ ...td, fontSize: 11.5, whiteSpace: 'nowrap', fontWeight: 600, color: r.anggaran === 'DIDANAI' ? '#1D9E75' : r.anggaran === 'TIDAK_DIDANAI' ? '#E24B4A' : c.sub }}>
+                  {isRejected ? '—' : LABEL_ANGGARAN[r.anggaran]}
+                </td>
                 <td style={td}>{r.sumber_anggaran}</td>
                 <td style={tdNum}>{fmtRp(r.nilai_rencana)}</td>
                 <td style={tdNum}>{fmtRp(r.nilai_realisasi)}</td>

@@ -24,8 +24,10 @@ import {
 } from '@/lib/bba/referensi';
 import { saranBarang, type BarangRingan } from '@/lib/bba/barang';
 import { referensiBeku, LABEL_STATUS, type BbaStatus } from '@/lib/bba/status';
-import type { BbaRow, BbaBukti, BbaDetail, BbaBarang } from '@/lib/data/buku-besar-aset';
+import type { BbaRow, BbaBukti, BbaDetail, BbaBarang, SasaranRencana } from '@/lib/data/buku-besar-aset';
+import { JENIS_RENCANA, LABEL_JENIS, KAPAN_JENIS, LABEL_ANGGARAN, type JenisRencana } from '@/lib/bba/rencana';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
+import PilihSasaran from './PilihSasaran';
 import KartuBarang from './KartuBarang';
 
 export type TabItem = 'data' | 'ref' | 'bukti';
@@ -66,18 +68,23 @@ export function LencanaBukti({ bukti }: { bukti: KelengkapanBukti | null }) {
 type IsianItem = {
   tahun_anggaran: number; uraian: string; kode_rekening: string; kategori_aset: string; sumber_anggaran: string;
   vol: number; satuan: string; harga: number; penanggung_jawab: string; keterangan: string; barang: PilihanBarang;
+  // Tahap D buku aset (§7.3). `sasaran` = id register terurut — labelnya di state terpisah.
+  jenis_rencana: JenisRencana | ''; alasan: string; sasaran: number[];
 };
 
 const isianKosong = (tahun: number): IsianItem => ({
   tahun_anggaran: tahun, uraian: '', kode_rekening: '', kategori_aset: '', sumber_anggaran: 'BLUD',
-  vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '', barang: null,
+  vol: 0, satuan: '', harga: 0, penanggung_jawab: '', keterangan: '', barang: null, jenis_rencana: '', alasan: '', sasaran: [],
 });
 
-const isianDari = (r: BbaRow): IsianItem => ({
+const urutId = (xs: readonly { id: number }[]) => xs.map(x => x.id).sort((a, b) => a - b);
+
+const isianDari = (r: BbaRow, sasaran: readonly SasaranRencana[]): IsianItem => ({
   tahun_anggaran: r.tahun_anggaran, uraian: r.uraian, kode_rekening: r.kode_rekening || '', kategori_aset: r.kategori_aset || '',
   sumber_anggaran: r.sumber_anggaran, vol: r.vol, satuan: r.satuan || '', harga: r.harga,
   penanggung_jawab: r.penanggung_jawab || '', keterangan: r.keterangan || '',
   barang: r.barang_id ? { id: r.barang_id, nama: r.barang_nama ?? '' } : null,
+  jenis_rencana: r.jenis_rencana ?? '', alasan: r.alasan ?? '', sasaran: urutId(sasaran),
 });
 
 /** Isian barang → isi body Simpan. Barang baru dibuat server di transaksi Simpan yang sama (L78). */
@@ -86,7 +93,7 @@ const bodyBarang = (p: PilihanBarang) => !p ? { barang_id: null } : 'id' in p ? 
 type Muatan = { item: BbaRow; referensiTersimpan: number };
 type Dasar = { isian: IsianItem; refs: ReferensiIsian[] };
 
-const refBaru = (): ReferensiIsian => ({ sumber: 'LAINNYA', nama_penyedia: null, url: null, harga: null, tgl_cek: null, file_id: null });
+const refBaru = (): ReferensiIsian => ({ sumber: 'LAINNYA', nama_penyedia: null, merk_tipe: null, url: null, harga: null, tgl_cek: null, file_id: null });
 export const unduhBerkas = (fileId: string) => `/api/upload/download?id=${encodeURIComponent(fileId)}`;
 
 /** SATU jalur unggah untuk referensi, bukti, & foto pendataan — berkasnya ber-context `buku_besar_aset` (aturan unduh BBA, §4.3). */
@@ -134,6 +141,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   const [galatMuat, setGalatMuat] = useState('');
   const [menyimpan, setMenyimpan] = useState(false);
   const [daftarBarang, setDaftarBarang] = useState<BarangRingan[]>([]);
+  const [infoSasaran, setInfoSasaran] = useState<SasaranRencana[]>([]);
   const nomorMuat = useRef(0);
 
   async function muatBarang() {
@@ -170,7 +178,8 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
     // Selama belum ada referensi tersimpan, slot diisi dari tautan usulan (§4.1) — dan itu
     // jadi DASAR pembanding, jadi membuka item tanpa mengetik apa pun tidak berbunyi "belum tersimpan".
     const refsAwal = det.referensi.length > 0 ? det.referensi : slotDariUsulan(det.item.tautan_usulan);
-    const isianAwal = isianDari(det.item);
+    const isianAwal = isianDari(det.item, det.sasaran);
+    setInfoSasaran(det.sasaran);
     setGalatMuat('');
     setMuatan({ item: det.item, referensiTersimpan: det.referensi.length });
     setIsian(isianAwal);
@@ -229,19 +238,23 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
       kode_rekening: isian.kode_rekening || null, kategori_aset: isian.kategori_aset || null,
       sumber_anggaran: isian.sumber_anggaran, satuan: isian.satuan || null,
       penanggung_jawab: isian.penanggung_jawab || null, keterangan: isian.keterangan || null,
+      jenis_rencana: isian.jenis_rencana || null, alasan: isian.alasan.trim() || null,
     };
-    // L87: referensi & barang hanya dikirim kalau berubah — `undefined` di server = jangan sentuh.
+    // L87: referensi, barang & aset sasaran hanya dikirim kalau berubah — `undefined` di server = jangan sentuh.
     const refBerubah = !referensiSama(refs, dasar.refs);
     const barangBerubah = JSON.stringify(isian.barang) !== JSON.stringify(dasar.isian.barang);
+    const sasaranBerubah = JSON.stringify(isian.sasaran) !== JSON.stringify(dasar.isian.sasaran);
     const body = modeBaru
       ? { tahun_anggaran: isian.tahun_anggaran, uraian: isian.uraian, vol: isian.vol, harga: isian.harga, ...dataUmum,
-          ...(isian.barang ? bodyBarang(isian.barang) : {}), ...(rapi.length ? { referensi: rapi } : {}) }
+          ...(isian.barang ? bodyBarang(isian.barang) : {}), ...(rapi.length ? { referensi: rapi } : {}),
+          ...(isian.sasaran.length ? { aset_sasaran: isian.sasaran } : {}) }
       : {
           id: item!.id, expected_version: item!.version, ...dataUmum,
           // Baris asal-usulan: uraian/vol/harga terkunci server-side → tidak dikirim (T8).
           ...(isUsulan ? {} : { uraian: isian.uraian, vol: isian.vol, harga: isian.harga }),
           ...(barangBerubah ? bodyBarang(isian.barang) : {}),
           ...(refBerubah ? { referensi: rapi } : {}),
+          ...(sasaranBerubah ? { aset_sasaran: isian.sasaran } : {}),
         };
 
     setMenyimpan(true);
@@ -271,6 +284,14 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
         void pindahKe(idBerikut, true);
       } else void muat(id);
     } finally { setMenyimpan(false); }
+  }
+
+  /** §7.7 "Pakai sebagai referensi": menyalin ke ISIAN saja; tanggal ceknya tetap tanggal lama — kelihatan perlu dicek ulang. */
+  function pakaiReferensi(r: ReferensiIsian) {
+    if (refs.length >= MAKS_REFERENSI) { toast.error(`Referensi harga paling banyak ${MAKS_REFERENSI}`); return; }
+    setRefs(rs => [...rs, { ...r }]);
+    setTab('ref');
+    toast.success('Ditambahkan ke referensi — tanggal cek lama dipertahankan; cek ulang harganya.');
   }
 
   const ringkas = ringkasHarga(refs);
@@ -358,7 +379,9 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
             {(modeBaru || item) && (
               <div className="bba-mi-barang" style={{ borderTop: `1px solid ${c.border}`, marginTop: 12, paddingTop: 10 }}>
                 {isian.barang && 'id' in isian.barang ? <>
-                  <KartuBarang barangId={isian.barang.id} tahun={isian.tahun_anggaran} c={c} tandaiTahun={isian.tahun_anggaran} ringkas />
+                  <KartuBarang barangId={isian.barang.id} tahun={isian.tahun_anggaran} c={c} tandaiTahun={isian.tahun_anggaran} ringkas
+                    jenis={isian.jenis_rencana || null} kecualiId={item?.id}
+                    onPakaiReferensi={bolehUbah && !refBeku ? pakaiReferensi : undefined} />
                   {isian.barang.id !== item?.barang_id && (
                     <div style={{ fontSize: 11, color: '#BA7517', marginTop: 6 }}>Belum disimpan — angka di atas belum memuat item ini.</div>
                   )}
@@ -402,6 +425,22 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                       <span style={{ fontSize: 11, opacity: .8 }}>Barang <span style={{ opacity: .8 }}>— jenis barang untuk riwayat beli (spesifikasi tetap di uraian)</span></span>
                       <PilihBarang daftar={daftarBarang} nilai={isian.barang} saran={isian.barang ? null : saranBarang(isian.uraian, daftarBarang)}
                         onUbah={barang => setIsian({ ...isian, barang })} c={c} inp={inp} />
+                    </div>
+                    <Field label="Jenis rencana" full>
+                      <select value={isian.jenis_rencana} onChange={e => setIsian({ ...isian, jenis_rencana: e.target.value as JenisRencana | '' })} style={inp}>
+                        <option value="">— belum digolongkan —</option>
+                        {JENIS_RENCANA.map(j => <option key={j} value={j}>{LABEL_JENIS[j]} — {KAPAN_JENIS[j]}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Alasan" full>
+                      <textarea value={isian.alasan} maxLength={1000} onChange={e => setIsian({ ...isian, alasan: e.target.value })} style={{ ...inp, minHeight: 48 }}
+                        placeholder={isian.jenis_rencana === 'PENGGANTIAN' ? 'mis. ganti 2 unit rusak berat perolehan 2016' : isian.jenis_rencana === 'PENAMBAHAN' ? 'mis. tempat tidur ICU 6 → 8 pada 2027' : 'Kenapa rencana ini perlu'} />
+                    </Field>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 11, opacity: .8 }}>Aset sasaran <span style={{ opacity: .8 }}>— register di Buku Aset yang diganti, diperbaiki, atau direhab</span></span>
+                      <PilihSasaran c={c} inp={inp} barangId={isian.barang && 'id' in isian.barang ? isian.barang.id : null}
+                        dipilih={isian.sasaran.map(id => infoSasaran.find(x => x.id === id)).filter((x): x is SasaranRencana => !!x)}
+                        onUbah={xs => { setInfoSasaran(lama => [...lama.filter(x => !xs.some(y => y.id === x.id)), ...xs]); setIsian({ ...isian, sasaran: urutId(xs) }); }} />
                     </div>
                     <Field label="Kode Rekening"><input value={isian.kode_rekening} onChange={e => setIsian({ ...isian, kode_rekening: e.target.value })} style={{ ...inp, fontFamily: MONO }} /></Field>
                     <Field label="Kategori Aset"><SatuanCombobox value={isian.kategori_aset} onChange={v => setIsian({ ...isian, kategori_aset: v })} options={kategori} style={inp} placeholder="Pilih / ketik kategori…" /></Field>
@@ -506,6 +545,8 @@ function KartuItem({ item, kBukti, c }: { item: BbaRow; kBukti: KelengkapanBukti
     ['Harga satuan', <span key="h" style={{ fontFamily: MONO }}>{fmtRp(item.harga)}</span>],
     ['Nilai rencana', <span key="n" style={{ fontFamily: MONO }}>{fmtRp(item.nilai_rencana)}</span>],
     ['Realisasi', ditolak ? '—' : <span key="r" style={{ fontFamily: MONO }}>{fmtVol(item.vol_realisasi)}/{fmtVol(item.vol)} · {fmtRp(item.nilai_realisasi)}</span>],
+    ['Jenis', item.jenis_rencana ? LABEL_JENIS[item.jenis_rencana] : <span key="j" style={{ color: '#BA7517' }}>belum digolongkan</span>],
+    ['Anggaran', <span key="ang" style={{ color: item.anggaran === 'DIDANAI' ? '#1D9E75' : item.anggaran === 'TIDAK_DIDANAI' ? '#E24B4A' : c.sub, fontWeight: 600 }}>{LABEL_ANGGARAN[item.anggaran]}</span>],
     ['Asal', item.origin === 'USULAN'
       ? <span key="a">Usulan <span style={{ fontFamily: MONO }}>{item.usulan_no}</span>{item.sub_bidang ? ` · ${item.sub_bidang}` : ''}</span>
       : 'Manual'],
@@ -560,6 +601,7 @@ function BarisReferensi({ r, nomor, c, inp, num, ikonBtn, dariUsulan, ubah, hapu
         <input value={r.nama_penyedia ?? ''} placeholder="Penyedia / toko" onChange={e => ubah({ ...r, nama_penyedia: e.target.value })} style={inp} aria-label="Nama penyedia" />
         <InputNominal nullable value={r.harga} placeholder="Harga satuan" onChange={v => ubah({ ...r, harga: v })} style={num} />
       </div>
+      <input value={r.merk_tipe ?? ''} maxLength={160} placeholder="Merk / tipe (mis. Omron HEM-7120)" onChange={e => ubah({ ...r, merk_tipe: e.target.value })} style={inp} aria-label="Merk dan tipe" />
       <div className="bba-mi-ref-b">
         <input value={r.url ?? ''} placeholder="https://… (e-Katalog, Shopee, Tokopedia)"
           onChange={e => { const url = e.target.value; ubah({ ...r, url, sumber: tebakSumber(url) ?? r.sumber }); }}

@@ -21,6 +21,8 @@ import {
 
 export { batasCekSekarang, bacaPengaturanBba };
 import type { CatatKondisiInput, PindahAsetInput, TautkanBarangAsetInput } from '@/lib/data/bba-aset-schemas';
+import { LABEL_JENIS, type JenisRencana, type Anggaran } from '@/lib/bba/rencana';
+import type { BbaStatus } from '@/lib/bba/status';
 
 export class AsetVersiError extends Error {
   constructor(n = 1) {
@@ -176,6 +178,25 @@ export async function asetOpname(f: { ruang: number } | { gedung: number }): Pro
   return rows.map(r => ({ ...petakanRingan(r), lokasi_nama: (r.lokasi_nama as string | null) ?? null }));
 }
 
+/**
+ * Calon aset sasaran rencana (Tahap D): register aktif barang itu, dan/atau hasil pencarian (gedung
+ * untuk rehab tidak selalu ditautkan ke barang). Rusak berat lebih dulu — calon penggantian.
+ */
+export async function asetUntukSasaran(f: { barang?: number; q?: string }): Promise<AsetOpname[]> {
+  if (!f.barang && !f.q?.trim()) return [];
+  let w = sql`a.status = 'AKTIF'`;
+  if (f.barang) w = sql`${w} AND a.barang_id = ${f.barang}`;
+  if (f.q?.trim()) {
+    const p = `%${escapeLike(f.q.trim())}%`;
+    w = sql`${w} AND (a.nama LIKE ${p} OR a.nama_resmi LIKE ${p} OR a.kode_barang LIKE ${p} OR a.register LIKE ${p} OR a.keterangan LIKE ${p})`;
+  }
+  const rows = await queryMany<Record<string, unknown>>(sql`
+    SELECT ${KOLOM_RINGAN}, l.nama AS lokasi_nama FROM bba_aset a LEFT JOIN bba_lokasi l ON l.id = a.lokasi_id
+    WHERE ${w} ORDER BY FIELD(a.kondisi, 'B', 'RR', 'RB') DESC, a.tahun_perolehan, a.kode_barang, a.register LIMIT 200
+  `);
+  return rows.map(r => ({ ...petakanRingan(r), lokasi_nama: (r.lokasi_nama as string | null) ?? null }));
+}
+
 export interface GedungPilihan { id: number; nama: string; kode_barang: string | null; register: string | null; ruangan: number }
 
 /** Pilihan gedung (KIB C aktif) untuk Master Ruangan & opname per gedung. */
@@ -321,6 +342,8 @@ export interface RiwayatAset {
   catatan: string | null; file_id: string | null; oleh: string | null; pada: string;
 }
 export interface AsetTerkait { id: number; golongan: Golongan; nama: string; register: string | null; tahun: number | null }
+/** Rencana yang menjadikan aset ini sasaran (Tahap D) — diganti, diperbaiki, direhab. */
+export interface RencanaTerkait { id: number; canonical_id: string; tahun: number; jenis: JenisRencana | null; status: BbaStatus; anggaran: Anggaran; uraian: string }
 export interface DetailAset {
   aset: AsetRingan & { version: number; barang_id: number | null; barang_nama: string | null; lokasi_nama: string | null; kondisi_tgl: string | null; kondisi_oleh: string | null };
   riwayat: RiwayatAset[];
@@ -328,6 +351,7 @@ export interface DetailAset {
   tanah: AsetTerkait | null;
   /** Tanah → bangunan & jaringan yang menunjuk tanah ini. */
   diAtasnya: AsetTerkait[];
+  rencana: RencanaTerkait[];
 }
 
 const terkait = (r: Record<string, unknown>): AsetTerkait => ({
@@ -353,7 +377,7 @@ export async function detailAset(id: number): Promise<DetailAset | null> {
   };
   const kodeTanahIni = aset.golongan === 'A' && aset.kode_barang && aset.register ? kodeTanah(aset.kode_barang, aset.register) : null;
   const rujukanTanah = typeof aset.kib.nomor_kode_tanah === 'string' ? aset.kib.nomor_kode_tanah.trim() : '';
-  const [riw, tanah, diAtasnya] = await Promise.all([
+  const [riw, tanah, diAtasnya, rencana] = await Promise.all([
     queryMany<Record<string, unknown>>(sql`
       SELECT r.id, r.jenis, r.sebelum, r.sesudah, r.catatan, r.file_id, u.username AS oleh, DATE_FORMAT(r.dicatat_pada, '%Y-%m-%d %H:%i') AS dicatat
       FROM bba_aset_riwayat r LEFT JOIN users u ON u.id = r.oleh WHERE r.aset_id = ${id} ORDER BY r.dicatat_pada DESC, r.id DESC LIMIT 100
@@ -367,6 +391,11 @@ export async function detailAset(id: number): Promise<DetailAset | null> {
       WHERE golongan IN ('C','D','F') AND status = 'AKTIF' AND JSON_UNQUOTE(JSON_EXTRACT(kib, '$.nomor_kode_tanah')) = ${kodeTanahIni}
       ORDER BY kode_barang, register LIMIT 200
     `) : Promise.resolve([]),
+    queryMany<Record<string, unknown>>(sql`
+      SELECT b.id, b.canonical_id, b.tahun_anggaran, b.jenis_rencana, b.status, b.anggaran, b.uraian
+      FROM bba_rencana_aset ra JOIN buku_besar_aset b ON b.id = ra.rencana_id
+      WHERE ra.aset_id = ${id} ORDER BY b.tahun_anggaran DESC, b.canonical_id LIMIT 50
+    `),
   ]);
   return {
     aset,
@@ -377,6 +406,10 @@ export async function detailAset(id: number): Promise<DetailAset | null> {
     })),
     tanah: tanah ? terkait(tanah) : null,
     diAtasnya: diAtasnya.map(terkait),
+    rencana: rencana.map(x => ({
+      id: Number(x.id), canonical_id: String(x.canonical_id ?? ''), tahun: Number(x.tahun_anggaran), jenis: (x.jenis_rencana as JenisRencana | null) ?? null,
+      status: x.status as BbaStatus, anggaran: x.anggaran as Anggaran, uraian: String(x.uraian ?? ''),
+    })),
   };
 }
 
@@ -537,7 +570,9 @@ export async function asetUntukKib(golongan: Golongan): Promise<AsetRingan[]> {
 /** Seluruh buku aktif + nama-nama tambahan PRIMA (sensus, BI, Rekap, format kerja). */
 export async function asetAktifLengkap(): Promise<AsetKerja[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT ${KOLOM_RINGAN}, a.kib, l.nama AS lokasi_nama, COALESCE(gd.nama, gd.nama_resmi) AS gedung_nama, g.nama AS barang_nama, u.username AS kondisi_oleh_nama
+    SELECT ${KOLOM_RINGAN}, a.kib, l.nama AS lokasi_nama, COALESCE(gd.nama, gd.nama_resmi) AS gedung_nama, g.nama AS barang_nama, u.username AS kondisi_oleh_nama,
+           (SELECT GROUP_CONCAT(CONCAT(b.tahun_anggaran, '|', COALESCE(b.jenis_rencana, ''), '|', b.canonical_id) ORDER BY b.tahun_anggaran DESC SEPARATOR ';')
+              FROM bba_rencana_aset ra JOIN buku_besar_aset b ON b.id = ra.rencana_id WHERE ra.aset_id = a.id) AS rencana_terkait
     FROM bba_aset a
     LEFT JOIN bba_lokasi l ON l.id = a.lokasi_id
     LEFT JOIN bba_aset gd ON gd.id = l.gedung_aset_id
@@ -548,6 +583,10 @@ export async function asetAktifLengkap(): Promise<AsetKerja[]> {
   return rows.map(r => ({
     ...petakanRingan(r), lokasi_nama: (r.lokasi_nama as string | null) ?? null, gedung_nama: (r.gedung_nama as string | null) ?? null,
     barang_nama: (r.barang_nama as string | null) ?? null, kondisi_oleh_nama: (r.kondisi_oleh_nama as string | null) ?? null,
+    rencana_terkait: r.rencana_terkait ? String(r.rencana_terkait).split(';').map(s => {
+      const [tahun, jenis, kode] = s.split('|');
+      return `${tahun} ${jenis ? LABEL_JENIS[jenis as JenisRencana] : 'rencana'} ${kode}`;
+    }).join('; ') : null,
   }));
 }
 

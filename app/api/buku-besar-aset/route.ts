@@ -7,7 +7,7 @@ import {
   listAset, getAsetKpi, getAsetDetail, createAset, updateAset, deleteAset,
   BbaVersionConflictError, BbaNotFoundError, BbaUsulanLockedError,
   BbaRealisasiRangeError, BbaStatusMismatchError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError,
-  BbaRiwayatTerkunciError, BbaReferensiBekuError,
+  BbaRiwayatTerkunciError, BbaReferensiBekuError, BbaSasaranTidakDikenalError,
 } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from './_guard';
 
@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
     pj:        searchParams.get('pj')        ?? undefined,
     origin:    searchParams.get('origin')    ?? undefined,
     keputusan: searchParams.get('keputusan') ?? undefined,
+    jenis:     searchParams.get('jenis')     ?? undefined,
+    anggaran:  searchParams.get('anggaran')  ?? undefined,
     q:         searchParams.get('q')         ?? undefined,
     page:     searchParams.get('page')     ?? undefined,
     limit:    searchParams.get('limit')    ?? undefined,
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
   try {
     hasil = await createAset(parsed.data, g.session.userId);
   } catch (err) {
-    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaSasaranTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
   const { id, canonical_id } = hasil;
@@ -82,12 +84,14 @@ export async function PATCH(req: NextRequest) {
     if (err instanceof BbaRealisasiRangeError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaStatusMismatchError)  return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
-    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaSasaranTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaReferensiBekuError)   return NextResponse.json({ ok: false, code: 'REFERENSI_BEKU', message: err.message }, { status: 409 });
     throw err;
   }
   const ref = parsed.data.referensi !== undefined ? ` referensi=${parsed.data.referensi.length}` : '';
-  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${ref}${ketBarang(parsed.data)}` });
+  const sas = parsed.data.aset_sasaran !== undefined ? ` sasaran=${parsed.data.aset_sasaran.length}` : '';
+  const jenis = parsed.data.jenis_rencana !== undefined ? ` jenis=${parsed.data.jenis_rencana ?? 'kosong'}` : '';
+  await writeAuditLog({ req, eventType: 'BBA_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA update id=${parsed.data.id}${ref}${sas}${jenis}${ketBarang(parsed.data)}` });
   return NextResponse.json({ ok: true });
 }
 

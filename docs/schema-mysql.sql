@@ -1159,6 +1159,9 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
   kategori_aset     VARCHAR(64)     NULL,
   -- migration-bba-barang-proses: jenis barang (Master Barang); NULL = belum ditautkan
   barang_id         INT UNSIGNED    NULL,
+  -- migration-bba-rencana (Tahap D buku aset): NULL = rencana lama belum digolongkan
+  jenis_rencana     ENUM('PENGGANTIAN','PENAMBAHAN','PENGADAAN_BARU','PEMELIHARAAN','REHAB') NULL,
+  alasan            VARCHAR(1000)   NULL,
   sumber_anggaran   ENUM('BLUD','APBD','DAK','LAINNYA') NOT NULL DEFAULT 'BLUD',
   vol               DECIMAL(18,2)   NOT NULL DEFAULT 0,
   satuan            VARCHAR(32)     NULL,
@@ -1166,6 +1169,12 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
   nilai_rencana     DECIMAL(18,2)   NOT NULL DEFAULT 0,
   status            ENUM('DIRENCANAKAN','DIPROSES','REALISASI_PENUH','REALISASI_SEBAGIAN','TIDAK_TEREALISASI')
                     NOT NULL DEFAULT 'DIRENCANAKAN',
+  -- Tanda "masuk anggaran" oleh Perencanaan (migration-bba-rencana); vol/nilai = yang didanai
+  anggaran          ENUM('BELUM','DIDANAI','TIDAK_DIDANAI') NOT NULL DEFAULT 'BELUM',
+  anggaran_vol      DECIMAL(18,2)   NULL,
+  anggaran_nilai    DECIMAL(18,2)   NULL,
+  anggaran_pada     DATETIME        NULL,
+  anggaran_oleh     INT             NULL,
   -- DIPROSES = sudah dipesan/dikontrak, barang belum diterima (CONCEPT-bba-perencanaan §5.2)
   tgl_proses        DATE            NULL,
   nilai_realisasi   DECIMAL(18,2)   NOT NULL DEFAULT 0,
@@ -1180,8 +1189,11 @@ CREATE TABLE IF NOT EXISTS buku_besar_aset (
   updated_by        INT             NULL,
   created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  asal_rencana_id   BIGINT UNSIGNED NULL COMMENT 'Disalin dari rencana tahun lalu yang tidak didanai',
   PRIMARY KEY (id),
   UNIQUE KEY uq_im_canonical_tahun (canonical_id, tahun_anggaran),
+  KEY idx_bba_anggaran (tahun_anggaran, anggaran),
+  KEY idx_bba_asal_rencana (asal_rencana_id),
   UNIQUE KEY uq_bba_usulan_item (usulan_item_id),
   KEY idx_im_tahun        (tahun_anggaran),
   KEY idx_im_canonical    (canonical_id),
@@ -1225,6 +1237,7 @@ CREATE TABLE IF NOT EXISTS bba_referensi_harga (
   urutan        TINYINT UNSIGNED NOT NULL DEFAULT 1,
   sumber        ENUM('EKATALOG','TOKO_DARING','TOKO_LURING','LAINNYA') NOT NULL DEFAULT 'LAINNYA',
   nama_penyedia VARCHAR(255)  NULL,
+  merk_tipe     VARCHAR(160)  NULL COMMENT 'Tahap D buku aset — dibaca lagi sebagai pembelian sebelumnya',
   url           VARCHAR(2048) NULL,
   harga         DECIMAL(18,2) NULL,
   tgl_cek       DATE          NULL,
@@ -1356,6 +1369,18 @@ CREATE TABLE IF NOT EXISTS bba_aset_riwayat (
   CONSTRAINT fk_bar_oleh FOREIGN KEY (oleh) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='BBA — riwayat aset (impor, ubah, kondisi, pindah, terima, register, rehab, hapus)';
+
+-- Aset sasaran rencana (migration-bba-rencana, Tahap D): yang diganti, diperbaiki, atau direhab.
+-- Ditulis ulang tiap Simpan item, di transaksi CAS item yang sama.
+CREATE TABLE IF NOT EXISTS bba_rencana_aset (
+  rencana_id BIGINT UNSIGNED NOT NULL,
+  aset_id    BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (rencana_id, aset_id),
+  KEY idx_bra_aset_sasaran (aset_id),
+  CONSTRAINT fk_bra_rencana FOREIGN KEY (rencana_id) REFERENCES buku_besar_aset(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bra_aset_sasaran FOREIGN KEY (aset_id) REFERENCES bba_aset(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  COMMENT='BBA — aset sasaran rencana (yang diganti, diperbaiki, direhab)';
 -- ═══════════════════════════════════════════════════════════════════════════
 -- LKJIP Builder — modul baru (migration-lkjip.sql)
 -- Penyusun dokumen LKJIP/SAKIP tahunan berbasis outline-tree + blok.

@@ -30,6 +30,12 @@ export const AsetIdsSchema = z.object({
 /** Register untuk opname: satu ruangan ATAU satu gedung (gedungnya + isi ruangan-ruangan di dalamnya). */
 export const AsetOpnameSchema = z.union([z.object({ ruang: IdPositif }), z.object({ gedung: IdPositif })]);
 
+/** Calon aset sasaran rencana (modal item, Tahap D). */
+export const AsetSasaranCariSchema = z.object({
+  barang: IdPositif.optional(),
+  q: z.string().trim().max(100).optional(),
+});
+
 export const UbahAsetSchema = z.object({
   id: z.number().int().positive(),
   expected_version: z.number().int().min(0),
@@ -64,7 +70,7 @@ export const TautkanBarangAsetSchema = z.object({
 }).refine(d => !(d.barang_baru && d.barang_id), { message: 'Pilih barang yang ada ATAU buat baru, bukan keduanya' })
   .refine(d => d.barang_baru !== undefined || d.barang_id !== undefined, { message: 'Pilih barangnya dulu' });
 
-export const JENIS_EXCEL = ['KIB', 'KIR', 'SENSUS', 'REKAP', 'BI', 'KERJA'] as const;
+export const JENIS_EXCEL = ['KIB', 'KIR', 'SENSUS', 'REKAP', 'BI', 'KERJA', 'RENCANA'] as const;
 export const AsetExcelSchema = z.discriminatedUnion('jenis', [
   z.object({ jenis: z.literal('KIB'), golongan: z.union([Golongan, z.literal('SEMUA')]) }),
   /** SEMUA = satu lembar per ruangan yang berisi. */
@@ -73,6 +79,7 @@ export const AsetExcelSchema = z.discriminatedUnion('jenis', [
   z.object({ jenis: z.literal('REKAP') }),
   z.object({ jenis: z.literal('BI') }),
   z.object({ jenis: z.literal('KERJA') }),
+  z.object({ jenis: z.literal('RENCANA'), tahun: z.coerce.number().int().min(2020).max(2100) }),
 ]);
 
 export type CatatKondisiInput = z.infer<typeof CatatKondisiSchema>;

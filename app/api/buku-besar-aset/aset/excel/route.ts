@@ -8,6 +8,8 @@ import {
   tulisLembarSensus, tulisRekapSensus, tulisLembarKir, tulisBukuInventaris, tulisRekapBmd, tulisLembarKerja, namaLembarAman,
 } from '@/lib/bba/lembar-excel';
 import { masukBukuResmi } from '@/lib/bba/lembar';
+import { tulisDaftarRencana } from '@/lib/bba/rencana-excel';
+import { rencanaUntukExcel } from '@/lib/data/buku-besar-aset';
 import { GOLONGAN, type Golongan } from '@/lib/bba/kib';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import { guard, tolakKecualiLihat } from '../../_guard';
@@ -60,6 +62,11 @@ async function susun(wb: import('exceljs').Workbook, p: AsetExcelInput, tanggal:
       const [aset, batas] = await Promise.all([asetAktifLengkap(), batasCekSekarang()]);
       tulisLembarKerja(wb, aset, batas);
       return { nama: `Buku-Aset-PRIMA-${tanggal}.xlsx`, register: aset.length };
+    }
+    case 'RENCANA': {
+      const { rows, dimiliki, sasaran } = await rencanaUntukExcel(p.tahun);
+      tulisDaftarRencana(wb, p.tahun, rows, dimiliki, sasaran);
+      return { nama: `Daftar-Rencana-${p.tahun}-${tanggal}.xlsx`, register: rows.length };
     }
   }
 }

@@ -8,6 +8,7 @@ import { isSafeHttpUrl } from '@/lib/shared/url';
 import { SUMBER_REFERENSI, JENIS_BUKTI, MAKS_REFERENSI } from '@/lib/bba/referensi';
 import { BBA_STATUSES } from '@/lib/bba/status';
 import { PANJANG_NAMA_BARANG } from '@/lib/bba/barang';
+import { JENIS_RENCANA, ANGGARAN } from '@/lib/bba/rencana';
 
 // K5: akses dasar SUPER_ADMIN + ADMIN (staf). Role lain via users.app_access
 // include 'buku_besar_aset' (diatur Admin Panel → User Management). Pola Rencana Aksi.
@@ -52,6 +53,9 @@ export const BbaQuerySchema = z.object({
   pj:        z.string().max(128).optional(),
   origin:    OriginSchema.optional(),
   keputusan: KeputusanSchema.optional(),
+  // Tahap D: 'KOSONG' = belum digolongkan (rencana lama)
+  jenis:     z.union([z.enum(JENIS_RENCANA), z.literal('KOSONG')]).optional(),
+  anggaran:  z.enum(ANGGARAN).optional(),
   q:         z.string().max(120).optional(),
   page:      z.coerce.number().int().min(1).default(1),
   limit:     z.coerce.number().int().min(1).max(200).default(50),
@@ -66,11 +70,12 @@ export const FileIdSchema  = z.string().regex(/^[\w-]{20,64}$/, 'Id berkas tidak
 export const ReferensiSchema = z.object({
   sumber:        z.enum(SUMBER_REFERENSI),
   nama_penyedia: z.string().trim().max(255).nullish(),
+  merk_tipe:     z.string().trim().max(160).nullish(),
   url:           TautanSchema.nullish(),
   harga:         z.number().min(0).nullish(),
   tgl_cek:       TanggalSchema.nullish(),
   file_id:       FileIdSchema.nullish(),
-}).refine(r => !!(r.nama_penyedia || r.url || r.harga || r.tgl_cek || r.file_id), 'Referensi harga kosong');
+}).refine(r => !!(r.nama_penyedia || r.merk_tipe || r.url || r.harga || r.tgl_cek || r.file_id), 'Referensi harga kosong');
 
 // L87: `undefined` = jangan sentuh referensi tersimpan; larik (termasuk kosong) = ganti semua.
 const ReferensiDaftarSchema = z.array(ReferensiSchema).max(MAKS_REFERENSI, `Referensi harga paling banyak ${MAKS_REFERENSI}`).optional();
@@ -93,6 +98,14 @@ const NamaBarangSchema = z.string().trim().min(1, 'Nama barang wajib').max(PANJA
 const satuBarang = (b: { barang_id?: number | null; barang_baru?: string | null }) => !(b.barang_id && b.barang_baru);
 const PESAN_SATU_BARANG = 'Pilih barang yang ada ATAU buat barang baru, bukan keduanya';
 
+// Tahap D buku aset (docs/CONCEPT-bba-buku-aset.md §7.3). Aset sasaran: `undefined` = jangan sentuh
+// (L87), larik = ganti semua di transaksi Simpan item yang sama.
+export const MAKS_ASET_SASARAN = 200;
+const JenisRencanaSchema = z.enum(JENIS_RENCANA);
+const AlasanSchema = z.string().trim().max(1000);
+const AsetSasaranSchema = z.array(z.number().int().positive()).max(MAKS_ASET_SASARAN, `Aset sasaran paling banyak ${MAKS_ASET_SASARAN}`)
+  .refine(xs => new Set(xs).size === xs.length, 'Aset sasaran yang sama muncul dua kali').optional();
+
 export const BbaCreateSchema = z.object({
   tahun_anggaran:   TahunSchema,
   kode_rekening:    z.string().max(64).nullish(),
@@ -107,6 +120,9 @@ export const BbaCreateSchema = z.object({
   penanggung_jawab: z.string().max(128).nullish(),
   keterangan:       z.string().max(4000).nullish(),
   referensi:        ReferensiDaftarSchema,
+  jenis_rencana:    JenisRencanaSchema.nullish(),
+  alasan:           AlasanSchema.nullish(),
+  aset_sasaran:     AsetSasaranSchema,
 }).refine(satuBarang, PESAN_SATU_BARANG);
 
 // Status TIDAK lagi diubah lewat sini — satu pintu: modal Proses & Realisasi (`setRealisasi`, §5.2).
@@ -126,7 +142,24 @@ export const BbaUpdateSchema = z.object({
   penanggung_jawab: z.string().max(128).nullish(),
   keterangan:       z.string().max(4000).nullish(),
   referensi:        ReferensiDaftarSchema,
+  jenis_rencana:    JenisRencanaSchema.nullish(),
+  alasan:           AlasanSchema.nullish(),
+  aset_sasaran:     AsetSasaranSchema,
 }).refine(satuBarang, PESAN_SATU_BARANG);
+
+/** Tanda anggaran borongan (§7.4) — tiap item membawa angka kuncinya; satu basi = seluruhnya 409. */
+export const AnggaranSchema = z.object({
+  anggaran: z.enum(ANGGARAN),
+  item: z.array(z.object({ id: z.number().int().positive(), expected_version: z.number().int().min(0) }))
+    .min(1, 'Belum ada rencana yang dipilih').max(1000)
+    .refine(xs => new Set(xs.map(x => x.id)).size === xs.length, 'Rencana yang sama muncul dua kali'),
+});
+
+/** Salin rencana tahun lalu yang tidak didanai ke tahun `tahun` (§14). */
+export const SalinTahunLaluSchema = z.object({
+  tahun: TahunSchema,
+  ids: z.array(z.number().int().positive()).min(1, 'Belum ada rencana yang dipilih').max(500),
+});
 
 export const BbaRealisasiSchema = z.object({
   id:               z.number().int().positive(),
@@ -203,6 +236,8 @@ export const LokasiDeleteSchema = z.object({ id: z.coerce.number().int().positiv
 
 export type BuktiCreateInput     = z.infer<typeof BuktiCreateSchema>;
 export type LokasiUpdateInput    = z.infer<typeof LokasiUpdateSchema>;
+export type AnggaranInput        = z.infer<typeof AnggaranSchema>;
+export type SalinTahunLaluInput  = z.infer<typeof SalinTahunLaluSchema>;
 export type BarangCreateInput    = z.infer<typeof BarangCreateSchema>;
 export type BarangUpdateInput    = z.infer<typeof BarangUpdateSchema>;
 export type BarangTautkanInput   = z.infer<typeof BarangTautkanSchema>;
