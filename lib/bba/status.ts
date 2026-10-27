@@ -15,38 +15,27 @@ export const LABEL_STATUS: Record<BbaStatus, string> = {
 /** "Belum terealisasi" di KPI & inbox RIMA. DIPROSES ikut: barangnya belum diterima. */
 export const STATUS_BELUM_TEREALISASI: readonly BbaStatus[] = ['DIRENCANAKAN', 'DIPROSES', 'TIDAK_TEREALISASI'];
 
-// Matriks transisi sah (server-validated). Terminal → array kosong.
-// DIPROSES → DIRENCANAKAN = pesanan batal, barangnya tetap direncanakan (§5.2).
-export const BBA_STATUS_TRANSITIONS: Record<BbaStatus, BbaStatus[]> = {
-  DIRENCANAKAN:       ['DIPROSES', 'REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI'],
-  DIPROSES:           ['REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI', 'DIRENCANAKAN'],
-  REALISASI_SEBAGIAN: ['REALISASI_PENUH', 'TIDAK_TEREALISASI'],
-  TIDAK_TEREALISASI:  ['REALISASI_SEBAGIAN', 'REALISASI_PENUH'],
-  REALISASI_PENUH:    [],
-};
-
-export function isValidStatusTransition(from: BbaStatus, to: BbaStatus, bolehKoreksiMundur = false): boolean {
-  if (from === to) return true; // idempotent: edit field lain tanpa ganti status
-  // A4: koreksi mundur dari terminal REALISASI_PENUH — khusus Admin (SUPER_ADMIN/
-  // ADMIN, lihat PERAN_PEMBATAL_FINAL), dicatat audit log. Nama parameternya dulu
-  // `superAdminOverride`; diganti karena yang menentukan sekarang KEWENANGANNYA,
-  // bukan satu peran tertentu — nama lama akan menyesatkan pembaca berikutnya.
-  if (bolehKoreksiMundur && from === 'REALISASI_PENUH') return true;
-  return BBA_STATUS_TRANSITIONS[from]?.includes(to) ?? false;
-}
-
-/** Status yang boleh dipilih di modal Proses & Realisasi untuk item berstatus `dari` (termasuk tetap). */
-export function pilihanStatusRealisasi(dari: BbaStatus, bolehKoreksiMundur = false): BbaStatus[] {
-  return BBA_STATUSES.filter(s => isValidStatusTransition(dari, s, bolehKoreksiMundur));
-}
-
 /**
- * Barang belum diterima → unit & nilai realisasi wajib 0. Dipakai `setRealisasi` dan modal Proses &
- * Realisasi (isian angka dikunci 0). Sengaja TIDAK dipasang di jalur edit item: baris lama
- * berstatus Direncanakan yang kebetulan berangka realisasi tidak boleh mendadak tak bisa disunting.
+ * Status yang diubah tangan lewat "Proses" (docs/CONCEPT-bba-buku-aset.md §7.4). Diterima sebagian/penuh
+ * TIDAK ada di sini: sejak Tahap E keduanya turunan Σ penerimaan (`ringkasPenerimaan`) — satu jalur tulis.
+ * DIPROSES → DIRENCANAKAN = pesanan batal, barangnya tetap direncanakan (§5.2).
  */
-export function statusSebelumTerima(status: BbaStatus): boolean {
-  return status === 'DIRENCANAKAN' || status === 'DIPROSES';
+export const STATUS_PROSES = ['DIRENCANAKAN', 'DIPROSES', 'TIDAK_TEREALISASI'] as const satisfies readonly BbaStatus[];
+export type StatusProses = typeof STATUS_PROSES[number];
+
+/** Pilihan di modal Proses untuk item berstatus `dari` — kosong begitu ada barang yang diterima. */
+export function pilihanStatusProses(dari: BbaStatus): readonly StatusProses[] {
+  return dari === 'REALISASI_PENUH' || dari === 'REALISASI_SEBAGIAN' ? [] : STATUS_PROSES;
+}
+
+/** Pagar `ubahStatusProses` (server) DAN tombol Simpan modal. Pesanan hanya untuk rencana yang didanai (§16). */
+export function alasanTolakProses(r: { status: BbaStatus; anggaran: string; usulan_keputusan: string | null }, ke: StatusProses, jumlahPenerimaan: number): string | null {
+  if (r.usulan_keputusan === 'DITOLAK') return 'Usulan ini ditolak — catatan sejarah, statusnya tidak diubah.';
+  if (jumlahPenerimaan > 0 || pilihanStatusProses(r.status).length === 0)
+    return 'Sudah ada barang yang diterima — statusnya mengikuti penerimaan. Salah catat? Hapus penerimaannya dulu.';
+  if (ke !== 'DIRENCANAKAN' && ke !== r.status && r.anggaran !== 'DIDANAI')
+    return 'Rencana ini belum ditandai didanai — Perencanaan menandainya dulu, baru bisa diproses.';
+  return null;
 }
 
 /**

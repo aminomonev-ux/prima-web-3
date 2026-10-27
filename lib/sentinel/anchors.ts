@@ -65,8 +65,8 @@ export const RIMA_ANCHORS: Record<string, RimaAnchor> = {
   'bba.kpi-cards':        { page: '/buku-besar-aset', label: 'kartu KPI (Total Rencana, Realisasi, % Terakomodir)' },
   'bba.tab-keputusan':    { page: '/buku-besar-aset', label: 'tab Semua / Disetujui / Ditolak' },
   'bba.filter-cari':      { page: '/buku-besar-aset', label: 'kolom Cari uraian/kode/no. usulan' },
-  'bba.row-realisasi':    { page: '/buku-besar-aset', label: 'ikon Set realisasi di baris', desc: 'Ikon Set realisasi dipakai mengisi realisasi (nilai + unit terpakai) saat aset benar-benar dibeli — status menyesuaikan otomatis.' },
-  'bba.realisasi-simpan': { page: '/buku-besar-aset', label: 'tombol Simpan Realisasi' },
+  'bba.row-realisasi':    { page: '/buku-besar-aset', label: 'ikon Proses & penerimaan di baris', desc: 'Ikon Proses & penerimaan dipakai menandai pesanan dan mencatat penerimaan barang — realisasi & status diterima mengikuti penerimaan.' },
+  'bba.realisasi-simpan': { page: '/buku-besar-aset', label: 'tombol Simpan status (Proses & Penerimaan)' },
 
   // ── /kinerja (F4e — tur kinerja-keliling; sidebar selalu ada) ──────────────
   'kinerja.sidebar-tahun':     { page: '/kinerja', label: 'selektor Tahun di sidebar' },

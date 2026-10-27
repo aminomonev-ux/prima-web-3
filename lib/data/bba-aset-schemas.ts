@@ -13,6 +13,7 @@ export const AsetDaftarSchema = z.object({
   tahun: z.coerce.number().int().min(1800).max(2200).optional(),
   kondisi: z.enum(['B', 'RR', 'RB', 'BELUM_DICEK', 'PERLU_DICEK']).optional(),
   status: z.enum(['AKTIF', 'DIHAPUS']).optional(),
+  tanda: z.enum(['BELUM_TEREGISTER', 'SIAP_DIHAPUS']).optional(),
   /** 0 = peralatan (B/E) yang belum punya ruangan. */
   lokasi: z.coerce.number().int().min(0).optional(),
   gedung: IdPositif.optional(),

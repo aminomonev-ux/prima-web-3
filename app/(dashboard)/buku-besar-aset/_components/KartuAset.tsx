@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { X, Paperclip } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
+import DeleteIcon from '@/components/ui/DeleteIcon';
 import { fetchJson } from '@/lib/shared/api';
 import { KOLOM_KIB, NAMA_GOLONGAN, LABEL_KONDISI, KOLOM_POKOK } from '@/lib/bba/kib';
 import { namaTampil } from '@/lib/bba/aset';
@@ -18,6 +19,7 @@ import type { BbaBarang } from '@/lib/data/buku-besar-aset';
 import type { BarangRingan } from '@/lib/bba/barang';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
 import { ModalKondisi, ModalPindah } from './AksiAset';
+import { ModalRegister, ModalHapusAset } from './AksiTerima';
 import { unduhBerkas } from './ModalItem';
 import type { WarnaBba } from './BbaShell';
 
@@ -39,7 +41,7 @@ function ringkasPerubahan(sebelum: Record<string, unknown> | null, sesudah: Reco
 
 export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersimpan }: Props) {
   const [d, setD] = useState<(DetailAset & { batas: string }) | null>(null);
-  const [aksi, setAksi] = useState<'kondisi' | 'pindah' | null>(null);
+  const [aksi, setAksi] = useState<'kondisi' | 'pindah' | 'register' | 'hapus' | null>(null);
   const [galat, setGalat] = useState('');
   const [nama, setNama] = useState('');
   const [barang, setBarang] = useState<PilihanBarang>(null);
@@ -115,7 +117,8 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
           {galat ? <div style={{ color: '#E24B4A', fontSize: 12.5 }}>{galat}</div> : !a ? <div style={{ color: c.sub, fontSize: 12.5 }}>Memuat…</div> : (<>
             <div style={{ fontSize: 11, color: c.sub, marginBottom: 4, fontWeight: 600 }}>DARI KIB PROVINSI</div>
             {baris('Nama resmi', a.nama_resmi)}
-            {a.kode_barang && baris('Kode barang', a.kode_barang, true)}
+            {a.kode_barang ? baris('Kode barang', a.kode_barang, true)
+              : baris('Kode barang & register', <span style={{ color: '#BA7517' }}>Belum teregister — isi sesudah dicatat di sistem provinsi (atau cocok otomatis saat Impor KIB)</span>)}
             {a.register && baris('Register', a.register, true)}
             {baris(a.golongan === 'F' ? 'Nilai kontrak' : 'Harga', fmtRp(a.harga), true)}
             {a.asal_usul && baris('Asal usul', a.asal_usul)}
@@ -135,6 +138,9 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
             )}
 
             <div style={{ fontSize: 11, color: c.sub, margin: '14px 0 4px', fontWeight: 600 }}>DI PRIMA</div>
+            {a.status === 'DIHAPUS' && baris('Dihapus', <span style={{ color: '#E24B4A' }}>SK {a.hapus_sk_nomor ?? '—'}{a.hapus_sk_tgl ? ` · ${fmtTanggal(a.hapus_sk_tgl)}` : ''}</span>)}
+            {a.siap_dihapus && baris('Penggantian', <span style={{ color: '#E24B4A' }}>Sudah diganti lewat pengadaan — siap diusulkan dihapus</span>)}
+            {a.dari_rencana && baris('Dari pengadaan', a.dari_rencana, true)}
             {a.golongan !== 'A' && baris('Kondisi', a.kondisi
               ? <span>{LABEL_KONDISI[a.kondisi]}{a.kondisi_sumber === 'CEK'
                   ? <span style={{ color: c.sub }}> — dicek {a.kondisi_oleh ?? '—'}{a.kondisi_tgl ? `, ${fmtTanggal(a.kondisi_tgl)}` : ''}</span>
@@ -142,10 +148,12 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
                   {statusCek(a, d!.batas) === 'LEWAT' && <span style={{ color: '#BA7517', fontWeight: 600 }}> · perlu dicek ulang</span>}</span>
               : <span style={{ color: '#BA7517' }}>Belum dicek</span>)}
             {bolehBerRuang(a.golongan) && baris('Ruangan', a.lokasi_nama ?? <span style={{ color: c.sub }}>Belum ditempatkan</span>)}
-            {bolehUbah && a.status === 'AKTIF' && (punyaKondisi(a.golongan) || bolehBerRuang(a.golongan)) && (
+            {bolehUbah && a.status === 'AKTIF' && (
               <div style={{ display: 'flex', gap: 8, margin: '8px 0 2px', flexWrap: 'wrap' }}>
                 {punyaKondisi(a.golongan) && <PrimaButton variant="success" size="sm" onClick={() => setAksi('kondisi')}>Catat kondisi</PrimaButton>}
                 {bolehBerRuang(a.golongan) && <PrimaButton variant="purple" size="sm" onClick={() => setAksi('pindah')}>Pindah ruangan</PrimaButton>}
+                {!a.kode_barang && <PrimaButton variant="primary" size="sm" onClick={() => setAksi('register')}>Isi register</PrimaButton>}
+                <PrimaButton variant="danger" size="sm" iconLeft={<DeleteIcon size={13} />} onClick={() => setAksi('hapus')}>Hapus dengan SK</PrimaButton>
               </div>
             )}
             <fieldset disabled={!bolehUbah} style={{ border: 0, padding: 0, margin: '8px 0 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -199,6 +207,8 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
       </div>
       {aksi === 'kondisi' && <ModalKondisi c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
       {aksi === 'pindah' && <ModalPindah c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
+      {aksi === 'register' && a && <ModalRegister c={c} id={id} versi={a.version} golongan={a.golongan} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
+      {aksi === 'hapus' && a && <ModalHapusAset c={c} id={id} versi={a.version} nama={namaTampil(a)} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
     </div>
   );
 }

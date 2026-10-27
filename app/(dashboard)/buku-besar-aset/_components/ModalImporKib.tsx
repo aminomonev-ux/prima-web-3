@@ -51,7 +51,7 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
       const r = await kirim(berkas, 'simpan');
       if (!r.ok) { setTolak(r.isi); setPratinjau(null); toast.error(r.isi.message || 'Gagal menyimpan'); return; }
       const t = (r.isi as { tersimpan: HasilSimpanImpor }).tersimpan;
-      toast.success(`Impor selesai — ${t.baru} baru, ${t.berubah} diperbarui, ${t.sama} sama`);
+      toast.success(`Impor selesai — ${t.baru} baru${t.cocok ? `, ${t.cocok} mengisi barang yang belum teregister` : ''}, ${t.berubah} diperbarui, ${t.sama} sama`);
       onTersimpan();
     } finally { setSibuk(''); }
   }
@@ -59,7 +59,7 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
   const th: React.CSSProperties = { padding: '6px 8px', fontSize: 11, color: c.sub, textAlign: 'right', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '6px 8px', fontSize: 12, borderBottom: `1px solid ${c.border}`, fontFamily: MONO, textAlign: 'right' };
   const p = pratinjau?.rencana;
-  const adaPerubahan = !!p && p.perGolongan.some(g => g.baru + g.berubah > 0);
+  const adaPerubahan = !!p && p.perGolongan.some(g => g.baru + g.cocok + g.berubah > 0);
 
   return (
     <div onClick={() => sibuk !== 'simpan' && onTutup()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
@@ -96,13 +96,14 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', border: `1px solid ${c.border}`, borderRadius: 10 }}>
               <thead><tr>
-                <th style={{ ...th, textAlign: 'left' }}>Golongan</th><th style={th}>Baru</th><th style={th}>Diperbarui</th><th style={th}>Sama</th>
+                <th style={{ ...th, textAlign: 'left' }}>Golongan</th><th style={th}>Baru</th><th style={th}>Mengisi belum teregister</th><th style={th}>Diperbarui</th><th style={th}>Sama</th>
                 <th style={th}>Tak ada di berkas</th><th style={th}>Sudah dihapus di PRIMA</th>
               </tr></thead>
               <tbody>{p.perGolongan.map(g => (
                 <tr key={g.golongan}>
                   <td style={{ ...td, textAlign: 'left', fontFamily: 'inherit' }}>KIB {g.golongan} · {NAMA_GOLONGAN[g.golongan as Golongan]}</td>
                   <td style={{ ...td, color: g.baru ? '#1D9E75' : undefined }}>{g.baru}</td>
+                  <td style={{ ...td, color: g.cocok ? '#1D9E75' : undefined }}>{g.cocok}</td>
                   <td style={{ ...td, color: g.berubah ? '#EF9F27' : undefined }}>{g.berubah}</td>
                   <td style={td}>{g.sama}</td>
                   <td style={{ ...td, color: g.tidakDiBerkas ? '#BA7517' : undefined }}>{g.tidakDiBerkas}</td>
@@ -110,6 +111,12 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
                 </tr>
               ))}</tbody>
             </table>
+            {p.contohCocok.length > 0 && (
+              <details open>
+                <summary style={{ cursor: 'pointer' }}>Barang diterima yang mendapat register dari berkas ({p.contohCocok.length}{p.contohCocok.length === 20 ? '+' : ''}) — dicocokkan lewat golongan, tahun perolehan, dan harga</summary>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{p.contohCocok.map((x, i) => <li key={i}>{x.nama} <span style={{ fontFamily: MONO, color: c.sub }}>→ {x.register ?? ''}{x.tahun ? ` · ${x.tahun}` : ''}</span></li>)}</ul>
+              </details>
+            )}
             {p.contohBerubah.length > 0 && (
               <details>
                 <summary style={{ cursor: 'pointer' }}>Yang diperbarui ({p.contohBerubah.length}{p.contohBerubah.length === 50 ? '+' : ''})</summary>

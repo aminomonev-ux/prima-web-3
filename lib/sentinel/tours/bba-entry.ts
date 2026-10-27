@@ -11,8 +11,8 @@ export const bbaEntry: TourScript = {
     { anchor: 'bba.tambah-item', text: 'Catat belanja modal baru di sini — Tambah Item. Di modalnya, Nilai Rencana dihitung otomatis = volume × harga, bukan diketik.' },
     { anchor: 'bba.tarik-usulan', text: 'Atau tarik langsung dari Usulan yang sudah final disetujui — praktis, tidak perlu ketik ulang. (Khusus Admin.)' },
     { anchor: 'bba.kpi-cards', text: 'Ringkasan register tahun ini: total rencana vs realisasi, persen terakomodir, dan sisa yang belum terealisasi.' },
-    { anchor: 'bba.row-realisasi', text: 'Setelah belanja benar-benar terjadi, klik ikon realisasi di barisnya untuk mengisi nilai + unit yang terpakai.' },
+    { anchor: 'bba.row-realisasi', text: 'Saat barang dipesan atau datang, klik ikon Proses & penerimaan di barisnya — realisasi dihitung dari penerimaan yang dicatat.' },
     { anchor: 'bba.tab-keputusan', text: 'Filter asal item — baris dari usulan yang Ditolak tetap dicatat sebagai sejarah, tapi tidak dihitung di KPI.' },
   ],
-  closing: 'Selesai! 😊 Statusnya (penuh/sebagian/tidak terealisasi) disarankan otomatis saat kamu isi realisasi. Tanya aku kapan pun ya.',
+  closing: 'Selesai! 😊 Status diterima penuh/sebagian mengikuti penerimaan barang yang kamu catat. Tanya aku kapan pun ya.',
 }

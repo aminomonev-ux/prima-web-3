@@ -9,28 +9,26 @@ import { fmtTanggal, batasCek, ringkasDimiliki, ringkasDimilikiPerBarang, type D
 import { KUNCI_PENGATURAN, bacaPengaturan, type PengaturanBba } from '@/lib/bba/pengaturan';
 import type { Golongan, Kondisi } from '@/lib/bba/kib';
 import { alasanTakBisaUbahAnggaran, bolehDitandai, type JenisRencana, type Anggaran } from '@/lib/bba/rencana';
+import type { DibeliLalu } from '@/lib/bba/penerimaan';
 import { isSafeFileUrl } from '@/lib/shared/url';
 import {
   kelengkapanRef, kelengkapanBukti, referensiSah, rapikanReferensi, referensiSama, slotDariUsulan, tautanAman, MAKS_BUKTI,
   type KelengkapanRef, type KelengkapanBukti, type ReferensiIsian, type JenisBukti,
 } from '@/lib/bba/referensi';
 import {
-  isValidStatusTransition, statusSebelumTerima, referensiBeku, alasanTakBisaHapus, STATUS_BELUM_TEREALISASI, LABEL_STATUS,
+  referensiBeku, alasanTakBisaHapus, alasanTolakProses, STATUS_BELUM_TEREALISASI, LABEL_STATUS,
 } from '@/lib/bba/status';
 import {
   rapikanNamaBarang, kunciNamaBarang, barangBernamaSama, ringkasPerBarang, ringkasKosong, riwayatPerTahun,
   type BahanBarang, type BahanRefBarang, type RingkasBarang, type BarisRiwayat,
 } from '@/lib/bba/barang';
 import type {
-  BbaStatus, BbaCreateInput, BbaUpdateInput, BbaRealisasiInput, BbaQuery, ReferensiInput, BuktiCreateInput,
+  BbaStatus, BbaCreateInput, BbaUpdateInput, BbaProsesInput, BbaQuery, ReferensiInput, BuktiCreateInput,
   BarangCreateInput, BarangUpdateInput, BarangTautkanInput, LokasiUpdateInput, AnggaranInput, SalinTahunLaluInput,
 } from './buku-besar-aset-schemas';
 
 export class BbaVersionConflictError extends Error {
   constructor() { super('Data sudah diubah pengguna lain. Memuat versi terbaru.'); this.name = 'BbaVersionConflictError'; }
-}
-export class BbaTransitionError extends Error {
-  constructor(from: string, to: string) { super(`Transisi status ${from} → ${to} tidak diizinkan.`); this.name = 'BbaTransitionError'; }
 }
 export class BbaNotFoundError extends Error {
   constructor() { super('Data aset tidak ditemukan.'); this.name = 'BbaNotFoundError'; }
@@ -107,6 +105,8 @@ export class BbaReferensiBekuError extends Error {
 function assertStatusConsistent(status: BbaStatus, vol: number, volReal: number, nilaiReal: number): void {
   if (status === 'REALISASI_PENUH' && volReal !== vol)
     throw new BbaStatusMismatchError(`Status REALISASI PENUH mengharuskan unit realisasi (${volReal}) sama dengan volume rencana (${vol}).`);
+  if (status === 'REALISASI_SEBAGIAN' && volReal >= vol)
+    throw new BbaStatusMismatchError(`Sudah diterima ${volReal} unit — volume rencana tidak bisa dibuat sama atau lebih kecil dari itu selama penerimaannya sebagian.`);
   if (status === 'TIDAK_TEREALISASI' && (volReal !== 0 || nilaiReal !== 0))
     throw new BbaStatusMismatchError('Status TIDAK TEREALISASI mengharuskan unit & nilai realisasi 0.');
 }
@@ -163,7 +163,7 @@ export interface BbaRow {
   jumlah_bukti: number;
 }
 
-const SELECT_COLS = sql`
+export const SELECT_COLS = sql`
   b.id, b.canonical_id, b.tahun_anggaran, b.origin, b.usulan_item_id, b.usulan_no,
   b.usulan_keputusan, b.ditolak_oleh, b.sub_bidang, b.kode_rekening, b.uraian, b.kategori_aset,
   b.barang_id, g.nama AS barang_nama,
@@ -184,7 +184,7 @@ const SELECT_COLS = sql`
   ui.url_merk1, ui.url_merk2, ui.url_merk3, ui.file_url AS lampiran_usulan
 `;
 
-const FROM_JOIN = sql`FROM buku_besar_aset b LEFT JOIN usulan_items ui ON ui.id = b.usulan_item_id LEFT JOIN bba_barang g ON g.id = b.barang_id`;
+export const FROM_JOIN = sql`FROM buku_besar_aset b LEFT JOIN usulan_items ui ON ui.id = b.usulan_item_id LEFT JOIN bba_barang g ON g.id = b.barang_id`;
 
 export function mapRow(r: Record<string, unknown>): BbaRow {
   const nilai_rencana   = Number(r.nilai_rencana ?? 0);
@@ -341,11 +341,11 @@ export interface SasaranRencana {
 }
 export interface BbaDetail { item: BbaRow; referensi: ReferensiIsian[]; bukti: BbaBukti[]; sasaran: SasaranRencana[] }
 
-async function listReferensi(asetId: number): Promise<ReferensiIsian[]> {
-  const rows = await queryMany<Record<string, unknown>>(sql`
+export async function listReferensi(asetId: number, q: Penanya = sql): Promise<ReferensiIsian[]> {
+  const rows = await q`
     SELECT sumber, nama_penyedia, merk_tipe, url, harga, DATE_FORMAT(tgl_cek, '%Y-%m-%d') AS tgl_cek, file_id
     FROM bba_referensi_harga WHERE aset_id = ${asetId} ORDER BY urutan ASC, id ASC
-  `);
+  ` as Record<string, unknown>[];
   return rows.map(r => ({
     sumber: r.sumber as ReferensiIsian['sumber'],
     nama_penyedia: r.nama_penyedia as string | null,
@@ -424,7 +424,7 @@ async function gantiReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: nu
   await tulisReferensi(q, conn, asetId, isianReferensi(input));
 }
 
-async function tulisReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: number, daftar: ReferensiIsian[]): Promise<void> {
+export async function tulisReferensi(q: Penanya, conn: mysql.PoolConnection, asetId: number, daftar: ReferensiIsian[]): Promise<void> {
   await pastikanBerkasBba(q, daftar.map(r => r.file_id));
   await q`DELETE FROM bba_referensi_harga WHERE aset_id = ${asetId}`;
   await bulkInsert('bba_referensi_harga', KOLOM_REFERENSI, daftar.map((r, i) => [
@@ -528,7 +528,7 @@ function assertUsulanEditable(cur: BbaRow, input: BbaUpdateInput): void {
     throw new BbaUsulanLockedError('Harga baris asal usulan terkunci (sumber: Usulan Kebutuhan).');
 }
 
-/** Data item + referensi + tautan barang. Status tidak lewat sini — satu pintu `setRealisasi` (§5.2). */
+/** Data item + referensi + tautan barang. Status tidak lewat sini — `ubahStatusProses` & penerimaan (§5.2, Tahap E). */
 export async function updateAset(input: BbaUpdateInput, userId: number): Promise<void> {
   const cur = await getAsetById(input.id);
   if (!cur) throw new BbaNotFoundError();
@@ -578,53 +578,47 @@ export async function updateAset(input: BbaUpdateInput, userId: number): Promise
   });
 }
 
-export async function setRealisasi(input: BbaRealisasiInput, userId: number, bolehKoreksiMundur = false): Promise<{ koreksiMundur: boolean }> {
-  const cur = await getAsetById(input.id);
-  if (!cur) throw new BbaNotFoundError();
-  if (cur.origin === 'USULAN' && cur.usulan_keputusan === 'DITOLAK')
-    throw new BbaUsulanLockedError('Baris usulan DITOLAK: realisasi terkunci (catatan sejarah).');
-  if (input.vol_realisasi > cur.vol)
-    throw new BbaRealisasiRangeError(input.vol_realisasi, cur.vol);
-  if (!isValidStatusTransition(cur.status, input.status, bolehKoreksiMundur)) throw new BbaTransitionError(cur.status, input.status);
-  // §5.2: barang belum diterima (Direncanakan/Dalam Proses) ⇒ realisasi 0
-  if (statusSebelumTerima(input.status) && (input.vol_realisasi !== 0 || input.nilai_realisasi !== 0))
-    throw new BbaStatusMismatchError(`Status ${LABEL_STATUS[input.status]} mengharuskan unit & nilai realisasi 0 — barangnya belum diterima.`);
-  // A3: REALISASI_PENUH ⇒ vol_realisasi = vol; TIDAK_TEREALISASI ⇒ realisasi 0
-  assertStatusConsistent(input.status, cur.vol, input.vol_realisasi, input.nilai_realisasi);
-  // tgl_proses = tanggal pesan/kontrak: diisi saat DIPROSES, dikosongkan bila pesanan batal (kembali
-  // Direncanakan), dibiarkan apa adanya saat barang diterima — jejak "dipesan kapan" tidak hilang.
-  const tglProses = input.status === 'DIPROSES' ? (input.tgl_proses ?? cur.tgl_proses ?? null)
-    : input.status === 'DIRENCANAKAN' ? null : cur.tgl_proses;
-  const tglRealisasi = statusSebelumTerima(input.status) ? null : (input.tgl_realisasi ?? null);
+/**
+ * Modal Proses (§7.4): Direncanakan ⇄ Dalam Proses ⇄ Tidak Terealisasi. Angka realisasi TIDAK lewat sini —
+ * turunan Σ penerimaan (lib/data/bba-penerimaan.ts). Penerimaan dihitung di bawah kunci baris yang sama
+ * dengan `catatPenerimaan`, jadi "belum ada yang diterima" tidak bisa basi di sela pemeriksaan & UPDATE.
+ */
+export async function ubahStatusProses(input: BbaProsesInput, userId: number): Promise<void> {
   await withTransaction(async ({ tx, conn }) => {
-    const res = await tx`
-      UPDATE buku_besar_aset SET
-        nilai_realisasi = ${input.nilai_realisasi},
-        vol_realisasi   = ${input.vol_realisasi},
-        tgl_realisasi   = ${tglRealisasi},
-        tgl_proses      = ${tglProses},
-        status          = ${input.status},
-        version         = version + 1,
-        updated_by      = ${userId}
-      WHERE id = ${input.id} AND version = ${input.expected_version}
+    const ada = await tx`SELECT id FROM buku_besar_aset WHERE id = ${input.id} FOR UPDATE`;
+    if (ada.length === 0) throw new BbaNotFoundError();
+    const cur = mapRow((await tx`SELECT ${SELECT_COLS} ${FROM_JOIN} WHERE b.id = ${input.id}` as Record<string, unknown>[])[0]);
+    if (cur.version !== input.expected_version) throw new BbaVersionConflictError();
+    const n = await tx`SELECT COUNT(*) AS n FROM bba_penerimaan WHERE rencana_id = ${input.id}` as Array<{ n: number }>;
+    const alasan = alasanTolakProses(cur, input.status, Number(n[0]?.n ?? 0));
+    if (alasan) throw new BbaStatusMismatchError(alasan);
+    // tgl_proses = tanggal pesan/kontrak: diisi saat DIPROSES, dikosongkan bila pesanan batal (kembali
+    // Direncanakan), dibiarkan apa adanya saat tidak terealisasi — jejak "dipesan kapan" tidak hilang.
+    const tglProses = input.status === 'DIPROSES' ? (input.tgl_proses ?? cur.tgl_proses ?? null)
+      : input.status === 'DIRENCANAKAN' ? null : cur.tgl_proses;
+    await tx`
+      UPDATE buku_besar_aset SET vol_realisasi = 0, nilai_realisasi = 0, tgl_realisasi = NULL, tgl_proses = ${tglProses},
+        status = ${input.status}, version = version + 1, updated_by = ${userId}
+      WHERE id = ${input.id}
     `;
-    assertCas(res);
     // Tautan usulan selama ini hanya dibaca lewat JOIN (isi awal slot referensi). Begitu
     // referensinya beku, tautan itu ditulis jadi referensi tersimpan — kalau tidak, ia ikut
     // berubah/hilang bersama usulannya, padahal itulah yang dibandingkan saat membeli (§15).
-    if (referensiBeku(input.status) && !referensiBeku(cur.status) && cur.tautan_usulan.length > 0) {
-      const ada = await tx`SELECT COUNT(*) AS n FROM bba_referensi_harga WHERE aset_id = ${input.id}` as Array<{ n: number }>;
-      if (Number(ada[0]?.n ?? 0) === 0) await tulisReferensi(tx, conn, input.id, slotDariUsulan(cur.tautan_usulan));
-    }
+    if (referensiBeku(input.status) && !referensiBeku(cur.status)) await bekukanTautanUsulan(tx, conn, cur);
   });
-  // A4: jejak koreksi mundur dari terminal (caller tulis ke audit log)
-  return { koreksiMundur: cur.status === 'REALISASI_PENUH' && input.status !== 'REALISASI_PENUH' };
+}
+
+/** Dipanggil di transaksi yang memegang kunci rencana, saat ia keluar dari Direncanakan. */
+export async function bekukanTautanUsulan(q: Penanya, conn: mysql.PoolConnection, r: Pick<BbaRow, 'id' | 'tautan_usulan'>): Promise<void> {
+  if (r.tautan_usulan.length === 0) return;
+  const ada = await q`SELECT COUNT(*) AS n FROM bba_referensi_harga WHERE aset_id = ${r.id}` as Array<{ n: number }>;
+  if (Number(ada[0]?.n ?? 0) === 0) await tulisReferensi(q, conn, r.id, slotDariUsulan(r.tautan_usulan));
 }
 
 /** §10 butir 7: hanya rencana yang belum diproses & tanpa bukti. Ditolak = BbaRiwayatTerkunciError. */
 export async function deleteAset(id: number): Promise<boolean> {
   return withTransaction(async ({ tx }) => {
-    // Kunci baris yang sama dengan `tambahBukti` (FOR UPDATE) dan CAS `setRealisasi` — bukti
+    // Kunci baris yang sama dengan `tambahBukti` (FOR UPDATE) dan CAS `ubahStatusProses`/penerimaan — bukti
     // atau status proses yang masuk di sela pemeriksaan & DELETE menunggu, tidak menyalip.
     const r = await tx`SELECT status FROM buku_besar_aset WHERE id = ${id} FOR UPDATE` as Array<{ status: BbaStatus }>;
     if (r.length === 0) return false;
@@ -748,6 +742,8 @@ export interface PembelianLalu {
   id: number; canonical_id: string; tahun: number; uraian: string; satuan: string | null;
   vol_realisasi: number; nilai_realisasi: number; harga_satuan: number | null; tgl_realisasi: string | null;
   referensi: ReferensiIsian[]; bukti: BbaBukti[];
+  /** Tahap E: yang benar-benar dibeli (salinan saat penerimaan). Kosong untuk realisasi sebelum pencatatan penerimaan. */
+  dibeli: DibeliLalu[];
 }
 /** Register Buku Aset barang yang sama per tahun perolehan — termasuk yang dibeli sebelum PRIMA. */
 export interface KibLalu { tahun: number | null; jumlah: number; merk: string[]; baik: number; rusak_ringan: number; rusak_berat: number }
@@ -769,13 +765,17 @@ export async function pembelianSebelumnya(barangId: number, kecualiId?: number):
     `),
   ]);
   const ids = items.map(r => Number(r.id));
-  const [refRows, buktiPer] = ids.length ? await Promise.all([
+  const [refRows, buktiPer, dibeliRows] = ids.length ? await Promise.all([
     queryMany<Record<string, unknown>>(sql`
       SELECT aset_id, sumber, nama_penyedia, merk_tipe, url, harga, DATE_FORMAT(tgl_cek, '%Y-%m-%d') AS tgl_cek, file_id
       FROM bba_referensi_harga WHERE aset_id IN (${ids}) ORDER BY aset_id, urutan, id
     `),
     Promise.all(ids.map(listBukti)),
-  ]) : [[], []];
+    queryMany<Record<string, unknown>>(sql`
+      SELECT rencana_id, DATE_FORMAT(tgl, '%Y-%m-%d') AS tgl, vol, harga_satuan, merk_tipe, penyedia, url
+      FROM bba_penerimaan WHERE rencana_id IN (${ids}) AND pindahan = 0 ORDER BY tgl, id
+    `),
+  ]) : [[], [], []];
   return {
     prima: items.map((r, i) => {
       const vol = Number(r.vol_realisasi ?? 0), nilai = Number(r.nilai_realisasi ?? 0);
@@ -788,6 +788,10 @@ export async function pembelianSebelumnya(barangId: number, kecualiId?: number):
           url: (x.url as string | null) ?? null, harga: x.harga == null ? null : Number(x.harga), tgl_cek: (x.tgl_cek as string | null) ?? null, file_id: (x.file_id as string | null) ?? null,
         })),
         bukti: buktiPer[i] ?? [],
+        dibeli: dibeliRows.filter(x => Number(x.rencana_id) === Number(r.id)).map(x => ({
+          tgl: (x.tgl as string | null) ?? '', vol: Number(x.vol ?? 0), harga_satuan: Number(x.harga_satuan ?? 0), // tgl sudah teks: DATE_FORMAT
+          merk_tipe: (x.merk_tipe as string | null) ?? null, penyedia: (x.penyedia as string | null) ?? null, url: (x.url as string | null) ?? null,
+        })),
       };
     }),
     kib: kib.map(r => ({

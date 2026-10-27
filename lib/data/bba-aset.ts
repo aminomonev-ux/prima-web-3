@@ -80,6 +80,8 @@ export interface SaringanAset {
   tahun?: number;
   kondisi?: SaringanKondisi;
   status?: 'AKTIF' | 'DIHAPUS';
+  /** Tahap E: belum teregister (lahir dari penerimaan, kode provinsi belum diisi) / siap diusulkan dihapus. */
+  tanda?: 'BELUM_TEREGISTER' | 'SIAP_DIHAPUS';
   /** 0 = peralatan (B/E) yang belum punya ruangan. */
   lokasi?: number;
   /** Gedung (aset golongan C): gedung itu sendiri + isi ruangan-ruangan di dalamnya. */
@@ -102,6 +104,8 @@ export interface DaftarAset {
   terpotong: boolean;
   /** Dipakai layar untuk status cek register (sama dengan yang dipakai ringkasan). */
   batas: string;
+  /** Hitungan seluruh buku (tanpa saringan) untuk pilihan saringan Tahap E. */
+  tanda: { belumTeregister: number; siapDihapus: number; dihapus: number };
 }
 
 const MAKS_KELOMPOK = 1500;
@@ -118,6 +122,8 @@ function whereAset(f: SaringanAset, batas: string) {
   else if (f.lokasi) w = sql`${w} AND a.lokasi_id = ${f.lokasi}`;
   if (f.gedung) w = sql`${w} AND (a.id = ${f.gedung} OR a.lokasi_id IN (SELECT id FROM bba_lokasi WHERE gedung_aset_id = ${f.gedung}))`;
   if (f.barang) w = sql`${w} AND a.barang_id = ${f.barang}`;
+  if (f.tanda === 'BELUM_TEREGISTER') w = sql`${w} AND a.kode_barang IS NULL`;
+  else if (f.tanda === 'SIAP_DIHAPUS') w = sql`${w} AND a.siap_dihapus = 1`;
   if (f.q?.trim()) {
     const p = `%${escapeLike(f.q.trim())}%`;
     w = sql`${w} AND (a.nama LIKE ${p} OR a.nama_resmi LIKE ${p} OR a.kode_barang LIKE ${p} OR a.register LIKE ${p} OR a.keterangan LIKE ${p})`;
@@ -127,12 +133,17 @@ function whereAset(f: SaringanAset, batas: string) {
 
 export async function daftarAset(f: SaringanAset): Promise<DaftarAset> {
   const batas = await batasCekSekarang();
-  const [rows, agg, lokasi] = await Promise.all([
+  const [rows, agg, lokasi, tanda] = await Promise.all([
     queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_RINGAN} FROM bba_aset a ${whereAset(f, batas)} ORDER BY a.golongan, a.kode_barang, a.register, a.id`),
     queryMany<{ golongan: Golongan; n: number; nilai: number }>(sql`
       SELECT golongan, COUNT(*) AS n, COALESCE(SUM(harga), 0) AS nilai FROM bba_aset WHERE status = ${f.status ?? 'AKTIF'} GROUP BY golongan
     `),
     queryMany<{ id: number; nama: string }>(sql`SELECT id, nama FROM bba_lokasi`),
+    queryMany<Record<string, unknown>>(sql`
+      SELECT COALESCE(SUM(status = 'AKTIF' AND kode_barang IS NULL), 0) AS belum, COALESCE(SUM(status = 'AKTIF' AND siap_dihapus = 1), 0) AS siap,
+             COALESCE(SUM(status = 'DIHAPUS'), 0) AS dihapus
+      FROM bba_aset
+    `),
   ]);
   const aset = rows.map(petakanRingan);
   const namaLokasi = new Map(lokasi.map(l => [Number(l.id), String(l.nama)]));
@@ -148,6 +159,7 @@ export async function daftarAset(f: SaringanAset): Promise<DaftarAset> {
   }
   return {
     perGolongan, ringkas, batas,
+    tanda: { belumTeregister: Number(tanda[0]?.belum ?? 0), siapDihapus: Number(tanda[0]?.siap ?? 0), dihapus: Number(tanda[0]?.dihapus ?? 0) },
     kelompok: kelompok.slice(0, MAKS_KELOMPOK).map(k => ({ ...k, lokasi_nama: k.lokasi_id ? namaLokasi.get(k.lokasi_id) ?? null : null })),
     terpotong: kelompok.length > MAKS_KELOMPOK,
   };
@@ -345,7 +357,11 @@ export interface AsetTerkait { id: number; golongan: Golongan; nama: string; reg
 /** Rencana yang menjadikan aset ini sasaran (Tahap D) — diganti, diperbaiki, direhab. */
 export interface RencanaTerkait { id: number; canonical_id: string; tahun: number; jenis: JenisRencana | null; status: BbaStatus; anggaran: Anggaran; uraian: string }
 export interface DetailAset {
-  aset: AsetRingan & { version: number; barang_id: number | null; barang_nama: string | null; lokasi_nama: string | null; kondisi_tgl: string | null; kondisi_oleh: string | null };
+  aset: AsetRingan & {
+    version: number; barang_id: number | null; barang_nama: string | null; lokasi_nama: string | null; kondisi_tgl: string | null; kondisi_oleh: string | null;
+    /** Tahap E (§7.5–7.6) */
+    siap_dihapus: boolean; hapus_sk_nomor: string | null; hapus_sk_tgl: string | null; dari_rencana: string | null;
+  };
   riwayat: RiwayatAset[];
   /** Gedung/jalan/KDP → tanah tempatnya berdiri (Nomor Kode Tanah, §4 temuan 4). */
   tanah: AsetTerkait | null;
@@ -361,7 +377,9 @@ const terkait = (r: Record<string, unknown>): AsetTerkait => ({
 
 export async function detailAset(id: number): Promise<DetailAset | null> {
   const r = await queryOne<Record<string, unknown>>(sql`
-    SELECT ${KOLOM_RINGAN}, a.kib, g.nama AS barang_nama, l.nama AS lokasi_nama, u.username AS kondisi_oleh
+    SELECT ${KOLOM_RINGAN}, a.kib, g.nama AS barang_nama, l.nama AS lokasi_nama, u.username AS kondisi_oleh,
+           a.siap_dihapus, a.hapus_sk_nomor, DATE_FORMAT(a.hapus_sk_tgl, '%Y-%m-%d') AS hapus_sk_tgl,
+           (SELECT b.canonical_id FROM bba_penerimaan p JOIN buku_besar_aset b ON b.id = p.rencana_id WHERE p.id = a.penerimaan_id) AS dari_rencana
     FROM bba_aset a
     LEFT JOIN bba_barang g ON g.id = a.barang_id
     LEFT JOIN bba_lokasi l ON l.id = a.lokasi_id
@@ -374,6 +392,8 @@ export async function detailAset(id: number): Promise<DetailAset | null> {
     ...ringan, version: ringan.version ?? 0, barang_id: ringan.barang_id ?? null, kondisi_tgl: ringan.kondisi_tgl ?? null,
     barang_nama: (r.barang_nama as string | null) ?? null, lokasi_nama: (r.lokasi_nama as string | null) ?? null,
     kondisi_oleh: (r.kondisi_oleh as string | null) ?? null,
+    siap_dihapus: Number(r.siap_dihapus) === 1, hapus_sk_nomor: (r.hapus_sk_nomor as string | null) ?? null,
+    hapus_sk_tgl: (r.hapus_sk_tgl as string | null) ?? null, dari_rencana: (r.dari_rencana as string | null) ?? null,
   };
   const kodeTanahIni = aset.golongan === 'A' && aset.kode_barang && aset.register ? kodeTanah(aset.kode_barang, aset.register) : null;
   const rujukanTanah = typeof aset.kib.nomor_kode_tanah === 'string' ? aset.kib.nomor_kode_tanah.trim() : '';
@@ -466,7 +486,9 @@ async function asetLamaUntuk(q: TxSql | null, golongan: Golongan[], kunci: boole
 }
 
 export interface RingkasImpor {
-  perGolongan: { golongan: Golongan; baru: number; berubah: number; sama: number; tidakDiBerkas: number; dihapusDiPrima: number }[];
+  perGolongan: { golongan: Golongan; baru: number; cocok: number; berubah: number; sama: number; tidakDiBerkas: number; dihapusDiPrima: number }[];
+  /** Register baru yang mengisi aset "belum teregister" (dari penerimaan) — bukan baris baru. */
+  contohCocok: { nama: string; register: string | null; tahun: number | null; harga: number }[];
   contohBerubah: { nama: string; register: string | null; kolom: string[] }[];
   contohBaru: { nama: string; register: string | null; tahun: number | null; harga: number }[];
   contohTidakDiBerkas: { nama: string; register: string | null; tahun: number | null }[];
@@ -475,9 +497,10 @@ export interface RingkasImpor {
 function ringkasRencana(r: RencanaImpor, golongan: Golongan[]): RingkasImpor {
   const hitung = <T,>(xs: T[], g: (x: T) => Golongan) => (k: Golongan) => xs.filter(x => g(x) === k).length;
   const baru = hitung(r.baru, x => x.golongan), berubah = hitung(r.berubah, x => x.baru.golongan);
-  const tidak = hitung(r.tidakDiBerkas, x => x.golongan), dihapus = hitung(r.dihapusDiPrima, x => x.golongan);
+  const tidak = hitung(r.tidakDiBerkas, x => x.golongan), dihapus = hitung(r.dihapusDiPrima, x => x.golongan), cocok = hitung(r.cocok, x => x.baru.golongan);
   return {
-    perGolongan: golongan.map(g => ({ golongan: g, baru: baru(g), berubah: berubah(g), sama: 0, tidakDiBerkas: tidak(g), dihapusDiPrima: dihapus(g) })),
+    perGolongan: golongan.map(g => ({ golongan: g, baru: baru(g), cocok: cocok(g), berubah: berubah(g), sama: 0, tidakDiBerkas: tidak(g), dihapusDiPrima: dihapus(g) })),
+    contohCocok: r.cocok.slice(0, 20).map(x => ({ nama: namaTampil(x.lama), register: x.baru.register, tahun: x.baru.tahun_perolehan, harga: x.baru.harga })),
     contohBerubah: r.berubah.slice(0, 50).map(x => ({ nama: namaTampil(x.lama), register: x.lama.register, kolom: x.kolom })),
     contohBaru: r.baru.slice(0, 20).map(x => ({ nama: namaDariKeterangan(x.keterangan) ?? x.nama_resmi, register: x.register, tahun: x.tahun_perolehan, harga: x.harga })),
     contohTidakDiBerkas: r.tidakDiBerkas.slice(0, 20).map(x => ({ nama: namaTampil(x), register: x.register, tahun: x.tahun_perolehan })),
@@ -486,7 +509,7 @@ function ringkasRencana(r: RencanaImpor, golongan: Golongan[]): RingkasImpor {
 
 function isiSama(r: RingkasImpor, rencana: RencanaImpor, baca: readonly AsetBaca[]): RingkasImpor {
   const berubahKunci = new Set(rencana.berubah.map(x => x.baru.kunci));
-  const baruKunci = new Set(rencana.baru.map(x => x.kunci));
+  const baruKunci = new Set([...rencana.baru, ...rencana.cocok.map(x => x.baru)].map(x => x.kunci));
   const dihapusKunci = new Set(rencana.dihapusDiPrima.map(x => x.kunci));
   for (const p of r.perGolongan) {
     p.sama = baca.filter(b => b.golongan === p.golongan && !berubahKunci.has(b.kunci) && !baruKunci.has(b.kunci) && !dihapusKunci.has(b.kunci)).length;
@@ -503,7 +526,7 @@ export async function pratinjauImpor(hasil: HasilBacaKib): Promise<RingkasImpor>
 const POTONG = 500;
 const potong = <T,>(xs: T[]) => Array.from({ length: Math.ceil(xs.length / POTONG) }, (_, i) => xs.slice(i * POTONG, (i + 1) * POTONG));
 
-export interface HasilSimpanImpor { baru: number; berubah: number; sama: number; tidakDiBerkas: number; dihapusDiPrima: number }
+export interface HasilSimpanImpor { baru: number; cocok: number; berubah: number; sama: number; tidakDiBerkas: number; dihapusDiPrima: number }
 
 export async function simpanImpor(hasil: HasilBacaKib, userId: number, namaBerkas: string): Promise<HasilSimpanImpor> {
   const golongan = [...new Set(hasil.aset.map(a => a.golongan))];
@@ -555,8 +578,27 @@ export async function simpanImpor(hasil: HasilBacaKib, userId: number, namaBerka
         return [lama.id, 'IMPOR', JSON.stringify(sebelum), JSON.stringify(sesudah), catatan, userId];
       }), conn);
     }
-    const sama = hasil.aset.length - rencana.baru.length - rencana.berubah.length - rencana.dihapusDiPrima.length;
-    return { baru: rencana.baru.length, berubah: rencana.berubah.length, sama, tidakDiBerkas: rencana.tidakDiBerkas.length, dihapusDiPrima: rencana.dihapusDiPrima.length };
+    for (const bagian of potong(rencana.cocok)) {
+      const baris = bagian.map(({ lama, ubah }) => {
+        const akhir = { ...lama, ...ubah };
+        return [lama.id, lama.golongan, akhir.kode_barang, akhir.register, akhir.kunci_impor, akhir.nama_resmi, akhir.kode_objek, akhir.tahun_perolehan,
+          akhir.asal_usul, akhir.keterangan, JSON.stringify(akhir.kib), akhir.kondisi, akhir.kondisi_sumber ?? (akhir.kondisi ? 'IMPOR' : null), userId];
+      });
+      // Aset "belum teregister" (lahir dari penerimaan) mendapat kode & register dari berkas — barisnya tetap, isian PRIMA tetap.
+      await (conn as mysql.PoolConnection).query(`
+        INSERT INTO bba_aset (id, golongan, kode_barang, register, kunci_impor, nama_resmi, kode_objek, tahun_perolehan, asal_usul, keterangan, kib, kondisi, kondisi_sumber, updated_by)
+        VALUES ? AS baru
+        ON DUPLICATE KEY UPDATE kode_barang = baru.kode_barang, register = baru.register, kunci_impor = baru.kunci_impor, nama_resmi = baru.nama_resmi,
+          kode_objek = baru.kode_objek, tahun_perolehan = baru.tahun_perolehan, asal_usul = baru.asal_usul, keterangan = baru.keterangan, kib = baru.kib,
+          kondisi = baru.kondisi, kondisi_sumber = baru.kondisi_sumber, updated_by = baru.updated_by, version = bba_aset.version + 1
+      `, [baris]);
+      await bulkInsert('bba_aset_riwayat', ['aset_id', 'jenis', 'sebelum', 'sesudah', 'catatan', 'oleh'], bagian.map(({ lama, baru }) => [
+        lama.id, 'REGISTER', JSON.stringify({ kode_barang: null, register: null }), JSON.stringify({ kode_barang: baru.kode_barang, register: baru.register }),
+        `Cocok otomatis — ${catatan}`.slice(0, 500), userId,
+      ]), conn);
+    }
+    const sama = hasil.aset.length - rencana.baru.length - rencana.cocok.length - rencana.berubah.length - rencana.dihapusDiPrima.length;
+    return { baru: rencana.baru.length, cocok: rencana.cocok.length, berubah: rencana.berubah.length, sama, tidakDiBerkas: rencana.tidakDiBerkas.length, dihapusDiPrima: rencana.dihapusDiPrima.length };
   });
 }
 

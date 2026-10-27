@@ -32,7 +32,7 @@ try {
 } catch { /* tanpa .env.local: bagian F dilewati di bawah */ }
 const { fmtTanggalID } = await import('../lib/pk/docgen')
 const { mapRow } = await import('../lib/data/buku-besar-aset')
-const { BbaRealisasiSchema } = await import('../lib/data/buku-besar-aset-schemas')
+const { PenerimaanSchema } = await import('../lib/data/bba-penerimaan-schemas')
 
 let lulus = 0
 const gagal: string[] = []
@@ -80,9 +80,8 @@ sama('B7 Word: tanggal 1 tanpa nol di depan', fmtTanggalID('2026-01-01'), '1 Jan
 // ── C. BBA (B2) ──────────────────────────────────────────────────────────────
 const baris = mapRow({ id: 1, tgl_realisasi: DATE_DARI_MYSQL, nilai_rencana: 0, nilai_realisasi: 0 })
 sama('C1 mapRow: Date mysql2 → YYYY-MM-DD', baris.tgl_realisasi, '2026-07-31')
-cek('C2 nilai itu LOLOS skema simpan realisasi (dulu ditolak regex)',
-  BbaRealisasiSchema.safeParse({ id: 1, expected_version: 0, nilai_realisasi: 0, vol_realisasi: 0,
-    tgl_realisasi: baris.tgl_realisasi, status: 'REALISASI_PENUH' }).success)
+cek('C2 nilai itu LOLOS skema tanggal BBA (penerimaan, Tahap E — dulu skema realisasi menolak regex)',
+  PenerimaanSchema.safeParse({ rencana_id: 1, expected_version: 0, tgl: baris.tgl_realisasi, vol: 1, harga_satuan: 0 }).success)
 sama('C3 mapRow: string DATE_FORMAT dari SQL apa adanya', mapRow({ id: 1, tgl_realisasi: '2026-07-31' }).tgl_realisasi, '2026-07-31')
 sama('C4 mapRow: kosong tetap null', mapRow({ id: 1, tgl_realisasi: null }).tgl_realisasi, null)
 cek('C5 SELECT_COLS memformat tgl_realisasi',

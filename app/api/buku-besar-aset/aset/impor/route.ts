@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   const tersimpan = await simpanImpor(hasil, g.session.userId, nama);
   await writeAuditLog({
     req, eventType: 'BBA_ASET_IMPOR', userId: g.session.userId, username: g.session.username,
-    detail: `BBA impor KIB "${nama}" ${hasil.lembar.map(l => `${l.nama}:${l.jumlah}`).join(' ')} → baru=${tersimpan.baru} berubah=${tersimpan.berubah} sama=${tersimpan.sama} tidak_di_berkas=${tersimpan.tidakDiBerkas}`,
+    detail: `BBA impor KIB "${nama}" ${hasil.lembar.map(l => `${l.nama}:${l.jumlah}`).join(' ')} → baru=${tersimpan.baru} cocok=${tersimpan.cocok} berubah=${tersimpan.berubah} sama=${tersimpan.sama} tidak_di_berkas=${tersimpan.tidakDiBerkas}`,
   });
   return NextResponse.json({ ok: true, ...ringkasBaca, tersimpan });
 }

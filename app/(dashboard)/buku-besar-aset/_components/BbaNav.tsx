@@ -12,6 +12,7 @@ export type PetaIzinLayar = Record<MenuBba, Izin>;
 export const HALAMAN_BBA: Partial<Record<MenuBba, string>> = {
   aset:    '/buku-besar-aset/aset',
   rencana: '/buku-besar-aset',
+  pengadaan: '/buku-besar-aset/pengadaan',
   master:  '/buku-besar-aset/master',
   cetak:   '/buku-besar-aset/cetak',
 };

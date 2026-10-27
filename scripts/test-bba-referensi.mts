@@ -113,7 +113,7 @@ ok('C2 aturan unduh BBA dikunci pada context BERKAS, di dalam cabang non-admin, 
 ok('C3 …app_access dibaca dari DB (bukan JWT) lalu ditimbang isAsetRole',
   unduh.slice(iBba, iTolak).includes('SELECT app_access FROM users WHERE id = ${session.userId}') && unduh.slice(iBba, iTolak).includes('bbaAllowed = isAsetRole(session.role, akses?.app_access ?? null);'))
 const data = tanpaKomentar(sumber('lib/data/buku-besar-aset.ts'))
-const badanUpdate = data.slice(data.indexOf('export async function updateAset('), data.indexOf('export async function setRealisasi('))
+const badanUpdate = data.slice(data.indexOf('export async function updateAset('), data.indexOf('export async function ubahStatusProses('))
 const iCas = badanUpdate.indexOf('assertCas(res);')
 const iGanti = badanUpdate.indexOf('if (input.referensi !== undefined) await gantiReferensi(tx, conn, input.id, input.referensi);')
 ok('C4 updateAset: referensi diganti HANYA bila dikirim, sesudah CAS, di transaksi yang sama', iCas >= 0 && iGanti > iCas && badanUpdate.includes('await withTransaction(async ({ tx, conn }) => {'))
@@ -181,6 +181,7 @@ try {
 if (c) {
   const k = c
   const bersih = async () => {
+    await k.query('DELETE p FROM bba_penerimaan p JOIN buku_besar_aset b ON b.id = p.rencana_id WHERE b.tahun_anggaran = ?', [TAHUN])
     await k.query('DELETE FROM buku_besar_aset WHERE tahun_anggaran = ?', [TAHUN])
     await k.query('DELETE FROM usulan_items WHERE no_usulan = ?', [UJI])
     await k.query('DELETE FROM usulan_headers WHERE no_usulan = ?', [UJI])
@@ -259,7 +260,10 @@ if (c) {
     const tanpaAset = await coba(() => D.tambahBukti({ aset_id: 999_999_999, jenis: 'FOTO', nama: 'x', url: 'https://a.id' }, userId))
     ok('D14 bukti untuk item yang tidak ada → BbaNotFoundError', tanpaAset instanceof D.BbaNotFoundError)
 
-    await D.setRealisasi({ id, expected_version: await versiDb(id), nilai_realisasi: 52_000_000, vol_realisasi: 4, tgl_realisasi: '2089-03-01', status: 'REALISASI_PENUH' }, userId)
+    // Tahap E: diterima = lewat penerimaan, untuk rencana yang didanai (tanggal tidak boleh sesudah hari ini).
+    await D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versiDb(id) }] }, userId)
+    const PEN = await import('../lib/data/bba-penerimaan')
+    await PEN.catatPenerimaan({ rencana_id: id, expected_version: await versiDb(id), tgl: '2025-03-01', vol: 4, harga_satuan: 13_000_000 }, userId)
     const sesudahReal = (await D.listAset({ tahun: TAHUN, page: 1, limit: 200 })).rows.find(r => r.id === id)
     ok('D15 Bukti n/3 terhitung begitu terealisasi (beli + foto = 2/3)', sesudahReal?.bukti?.n === 2 && sesudahReal.jumlah_bukti === 2, JSON.stringify(sesudahReal?.bukti))
 

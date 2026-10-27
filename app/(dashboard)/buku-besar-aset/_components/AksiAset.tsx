@@ -36,7 +36,7 @@ async function muatRegister(ids: number[]): Promise<Register[] | string> {
 
 type BalasanTulis = { ok: boolean; message?: string; code?: string; alasan?: string[] };
 
-function Bingkai({ c, judul, sub, lebar = 760, onTutup, kaki, children }: {
+export function Bingkai({ c, judul, sub, lebar = 760, onTutup, kaki, children }: {
   c: WarnaBba; judul: string; sub?: string; lebar?: number; onTutup: () => void; kaki: React.ReactNode; children: React.ReactNode;
 }) {
   useEffect(() => {
@@ -63,7 +63,7 @@ function Bingkai({ c, judul, sub, lebar = 760, onTutup, kaki, children }: {
   );
 }
 
-function DaftarAlasan({ alasan }: { alasan: string[] }) {
+export function DaftarAlasan({ alasan }: { alasan: string[] }) {
   if (alasan.length === 0) return null;
   return (
     <div role="alert" style={{ border: '1px solid #E24B4A', background: 'rgba(226,75,74,.08)', color: '#E24B4A', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>

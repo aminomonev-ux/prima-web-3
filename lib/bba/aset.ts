@@ -125,6 +125,8 @@ export function bandingAset(lama: AsetRingan, baru: AsetBaca): { kolom: string[]
 
 export interface RencanaImpor {
   baru: AsetBaca[]
+  /** Register baru di berkas yang dipasangkan dengan aset "belum teregister" (lahir dari penerimaan, Tahap E §7.5). */
+  cocok: { lama: AsetRingan; baru: AsetBaca; ubah: Partial<AsetRingan> }[]
   berubah: { lama: AsetRingan; baru: AsetBaca; kolom: string[]; ubah: Partial<AsetRingan> }[]
   sama: number
   /** Aset DIHAPUS di PRIMA yang masih ada di berkas — dilaporkan, tidak dihidupkan lagi. */
@@ -135,7 +137,7 @@ export interface RencanaImpor {
 
 export function rencanakanImpor(lama: readonly AsetRingan[], baca: readonly AsetBaca[]): RencanaImpor {
   const perKunci = new Map(lama.filter(a => a.kunci_impor).map(a => [a.kunci_impor!, a]))
-  const hasil: RencanaImpor = { baru: [], berubah: [], sama: 0, dihapusDiPrima: [], tidakDiBerkas: [] }
+  const hasil: RencanaImpor = { baru: [], cocok: [], berubah: [], sama: 0, dihapusDiPrima: [], tidakDiBerkas: [] }
   const dipakai = new Set<string>()
   for (const b of baca) {
     const l = perKunci.get(b.kunci)
@@ -146,9 +148,46 @@ export function rencanakanImpor(lama: readonly AsetRingan[], baca: readonly Aset
     if (kolom.length) hasil.berubah.push({ lama: l, baru: b, kolom, ubah })
     else hasil.sama++
   }
+  const { cocok, sisa } = cocokkanBelumTeregister(lama, hasil.baru)
+  hasil.cocok = cocok
+  hasil.baru = sisa
   const golBerkas = new Set(baca.map(b => b.golongan))
   hasil.tidakDiBerkas = lama.filter(a => a.status === 'AKTIF' && a.kunci_impor && golBerkas.has(a.golongan) && !dipakai.has(a.kunci_impor))
   return hasil
+}
+
+const kunciPasang = (golongan: string, tahun: number | null, harga: number) => `${golongan}|${tahun ?? ''}|${Math.round(harga * 100)}`
+
+/**
+ * Cocok otomatis (§7.5 butir 3): register BARU di berkas dipasangkan dengan aset "belum teregister" yang
+ * golongan, tahun perolehan, dan harganya sama — satu-satu, urut register berkas × urut id. Yang tak
+ * punya pasangan tetap jadi register baru. Isian PRIMA (nama sehari-hari, ruangan, barang) tetap; kolom
+ * KIB berkas menang, kecuali yang kosong di berkas (merk/tipe dari penerimaan tidak dihapus sel kosong).
+ */
+export function cocokkanBelumTeregister(lama: readonly AsetRingan[], baru: readonly AsetBaca[]): { cocok: RencanaImpor['cocok']; sisa: AsetBaca[] } {
+  const antre = new Map<string, AsetRingan[]>()
+  for (const a of [...lama].filter(a => a.status === 'AKTIF' && !a.kunci_impor && !a.kode_barang).sort((x, y) => x.id - y.id)) {
+    const k = kunciPasang(a.golongan, a.tahun_perolehan, a.harga)
+    antre.set(k, [...(antre.get(k) ?? []), a])
+  }
+  const cocok: RencanaImpor['cocok'] = []
+  const sisa: AsetBaca[] = []
+  const urut = [...baru].sort((x, y) => (x.kode_barang ?? '').localeCompare(y.kode_barang ?? '') || (x.register ?? '').localeCompare(y.register ?? ''))
+  for (const b of urut) {
+    const l = antre.get(kunciPasang(b.golongan, b.tahun_perolehan, b.harga))?.shift()
+    if (!l) { sisa.push(b); continue }
+    const kib = { ...l.kib }
+    for (const [k, v] of Object.entries(b.kib)) if (v != null && v !== '') kib[k] = v
+    const ubah: Partial<AsetRingan> = {
+      kode_barang: b.kode_barang, register: b.register, kunci_impor: b.kunci, kode_objek: b.kode_objek, tahun_perolehan: b.tahun_perolehan,
+      nama_resmi: b.nama_resmi, asal_usul: b.asal_usul ?? l.asal_usul, keterangan: b.keterangan ?? l.keterangan, kib,
+    }
+    if (l.kondisi_sumber !== 'CEK' && b.kondisi) ubah.kondisi = b.kondisi
+    cocok.push({ lama: l, baru: b, ubah })
+  }
+  // Urutan asli berkas untuk yang jadi register baru — pratinjau & riwayat mengikuti urutan berkas.
+  const tetap = new Set(sisa)
+  return { cocok, sisa: baru.filter(b => tetap.has(b)) }
 }
 
 /** Nama sehari-hari awal: dari Keterangan ("Gedung Bangsal I"), tidak lebih dari 255 huruf. */

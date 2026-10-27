@@ -1,8 +1,8 @@
 # WORKFLOW — Buku Besar Aset / BBA (`/buku-besar-aset`)
 
-**Fungsi**: register belanja modal lintas-tahun — catat rencana aset (manual atau tarik dari Usulan final), set realisasi (nilai + unit + tanggal), pantau KPI (Total Rencana/Realisasi/% Terakomodir/backlog/unit). Status 4: DIRENCANAKAN / REALISASI_PENUH / REALISASI_SEBAGIAN / TIDAK_TEREALISASI. `nilai_rencana` = vol × harga otomatis (server).
-**Role**: masuk modul = SUPER_ADMIN/ADMIN/RUMAH TANGGA/PROGRAM (`peranBawaan` registry) atau grant app_access `'buku_besar_aset'`. Di dalam, izin per bagian (Buku Aset · Rencana · Pengadaan · Master · Cetak) dari `lib/bba/peran.ts` + Admin Panel: "Tarik dari Usulan Kebutuhan" & item = izin EDIT Rencana, Proses & Realisasi = EDIT Pengadaan (lihat `docs/CONCEPT-bba-buku-aset.md` §3.1).
-**File sumber**: `app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx`, `app/api/buku-besar-aset/` (`route.ts`, `realisasi/route.ts`, `import-usulan/route.ts`, `_guard.ts`), `lib/data/buku-besar-aset.ts`. Sub-halaman master kategori: `/buku-besar-aset/master`.
+**Fungsi**: register belanja modal lintas-tahun — catat rencana aset (manual atau tarik dari Usulan final), proses pesanan & catat penerimaan barang (realisasi = Σ penerimaan, Tahap E), pantau KPI (Total Rencana/Realisasi/% Terakomodir/backlog/unit). Status 5: DIRENCANAKAN / DIPROSES / REALISASI_PENUH / REALISASI_SEBAGIAN / TIDAK_TEREALISASI. `nilai_rencana` = vol × harga otomatis (server).
+**Role**: masuk modul = SUPER_ADMIN/ADMIN/RUMAH TANGGA/PROGRAM (`peranBawaan` registry) atau grant app_access `'buku_besar_aset'`. Di dalam, izin per bagian (Buku Aset · Rencana · Pengadaan · Master · Cetak) dari `lib/bba/peran.ts` + Admin Panel: "Tarik dari Usulan Kebutuhan" & item = izin EDIT Rencana, Proses & Penerimaan = EDIT Pengadaan (lihat `docs/CONCEPT-bba-buku-aset.md` §3.1).
+**File sumber**: `app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx`, `app/api/buku-besar-aset/` (`route.ts`, `proses/route.ts`, `pengadaan/route.ts`, `import-usulan/route.ts`, `_guard.ts`), `lib/data/buku-besar-aset.ts`. Sub-halaman master kategori: `/buku-besar-aset/master`.
 
 ## Flowchart alur end-to-end
 
@@ -21,8 +21,8 @@ flowchart TD
     G --> L[Baris status DIRENCANAKAN]
     K --> L
     L --> M{Aksi per baris}
-    M -->|Ikon 'Set realisasi'| N["Modal 'Realisasi — BBA-xxx': Nilai + Unit (0–vol) + Tgl + Status (disarankan otomatis)"]
-    N --> O["'Simpan Realisasi' → status REALISASI_PENUH / SEBAGIAN / TIDAK_TEREALISASI"]
+    M -->|Ikon 'Proses & penerimaan'| N["Modal 'Proses & Penerimaan — BBA-xxx': Status pesanan (didanai saja) + daftar penerimaan"]
+    N --> O["'Catat penerimaan' → status REALISASI_SEBAGIAN / PENUH dari Σ penerimaan"]
     M -->|Ikon 'Edit'| P["Modal 'Edit Item' (baris usulan: field inti read-only)"]
     M -->|Ikon 'Hapus'| Q["confirmDialog 'Hapus Item' → 'Hapus'"]
     M -->|Badge no. usulan| R[Modal 'Detail Usulan — UA-xxxx' provenance]
@@ -40,7 +40,7 @@ flowchart TD
 | 5 | filter bar | Input Tahun (`PrimaNumberField`), select **"Semua status"** / **"Semua sumber"** / **"Semua asal"** (Manual/Dari Usulan), input **"Cari uraian/kode/no. usulan…"**, tombol **"Terapkan"** | Set filter | Auto-refresh (debounce 350ms) kecuali pencarian teks (Enter / Terapkan) | isAsetRole |
 | 6 | tab pill | **"Semua"** / **"Disetujui"** / **"Ditolak"** | Klik | Filter `keputusan` usulan | isAsetRole |
 | 7 | tabel, kolom Aksi | Ikon **"Edit"** (`EditButton`, Tip "Edit") → modal **"Edit Item"** | Edit | PATCH dengan `expected_version` (CAS L48); baris origin USULAN: banner "uraian, vol, dan harga terkunci", field tsb read-only | isAsetRole |
-| 8 | tabel, kolom Aksi | Ikon **"Set realisasi"** (`RealisasiButton`; disembunyikan untuk baris DITOLAK) → modal **"Realisasi — <BBA-id>"** | Isi **"Nilai Realisasi"**, **"Unit Realisasi (0 – vol)"**, **"Tgl Realisasi"**, **"Status"** (disarankan otomatis dari `suggestStatus`) → **"Simpan Realisasi"** (`success`) | PATCH `/api/buku-besar-aset/realisasi`; VERSION_CONFLICT → toast + reload | isAsetRole |
+| 8 | tabel, kolom Aksi | Ikon **"Proses & penerimaan"** (`RealisasiButton`; disembunyikan untuk baris DITOLAK) → modal **"Proses & Penerimaan — <BBA-id>"** (sama dengan halaman Pengadaan) | **"Simpan status"** (Direncanakan/Dalam Proses/Tidak Terealisasi) · **"Catat penerimaan"** (tanggal, unit, harga, referensi dibeli) | PATCH `/api/buku-besar-aset/proses`, POST/DELETE `/api/buku-besar-aset/pengadaan`; VERSION_CONFLICT → toast + muat ulang | izin Pengadaan |
 | 9 | tabel, kolom Aksi | Ikon **"Hapus"** (`DeleteButton`) → confirmDialog title **"Hapus Item"**, tombol **"Hapus"** | Konfirmasi | DELETE `/api/buku-besar-aset?id=` | isAsetRole |
 | 10 | tabel, kolom Asal | Badge no. usulan ungu (Tip **"Lihat detail usulan"**) | Klik | Modal **"Detail Usulan — <no>"**: No/Sub Bidang/Pengusul/Vol×Harga/Nilai/Keputusan (+ Catatan Penolakan bila ditolak) → **"Tutup"** | isAsetRole |
 | 11 | FloatingDock bawah | Nav: **"Aset"** (current) / **"Master"** (→ `/buku-besar-aset/master`) / **"Kinerja"** (→ `/kinerja`) / **"Menu"** · Aksi cepat: **"Tambah"**, **"Filter"** (fokus search), **"Muat Ulang"** | Klik | Navigasi/aksi cepat | isAsetRole |
@@ -69,8 +69,8 @@ flowchart TD
 1. `bba.tarik-usulan` — "Tarik semua usulan belanja modal yang sudah final (Disetujui Kabag / Ditolak) ke register."
 2. `bba.tarik-commit` — (Latihan: peringatan mutasi) "Preview dulu — yang pernah ditarik otomatis dilewati."
 3. `bba.tab-keputusan` — "Baris Ditolak tetap dicatat sebagai sejarah — tidak masuk KPI."
-4. `bba.row-realisasi` — "Setelah belanja terjadi, klik ikon realisasi di baris."
-5. `bba.realisasi-simpan` — "Isi nilai + unit; status disarankan otomatis (penuh/sebagian/tidak terealisasi)."
+4. `bba.row-realisasi` — "Saat barang dipesan/datang, klik ikon Proses & penerimaan di baris."
+5. `bba.realisasi-simpan` — "Tandai Dalam Proses; realisasi mengikuti penerimaan yang dicatat."
 
 ### Tur 2 — `bba-entry-manual`
 1. `bba.tambah-item` — "Item di luar modul Usulan dicatat manual di sini."
@@ -78,4 +78,4 @@ flowchart TD
 3. `bba.filter-tahun` — "Register per tahun anggaran; ganti tahun untuk melihat tahun lain."
 4. `bba.dock` — "Dock bawah: pindah ke Master kategori, modul Kinerja, atau Menu."
 
-> TODO screenshot: landing /buku-besar-aset (KPI + tabel), modal Tarik dari Usulan (preview), modal Realisasi.
+> TODO screenshot: landing /buku-besar-aset (KPI + tabel), modal Tarik dari Usulan (preview), modal Proses & Penerimaan.

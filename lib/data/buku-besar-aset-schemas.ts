@@ -6,7 +6,7 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { isSafeHttpUrl } from '@/lib/shared/url';
 import { SUMBER_REFERENSI, JENIS_BUKTI, MAKS_REFERENSI } from '@/lib/bba/referensi';
-import { BBA_STATUSES } from '@/lib/bba/status';
+import { BBA_STATUSES, STATUS_PROSES } from '@/lib/bba/status';
 import { PANJANG_NAMA_BARANG } from '@/lib/bba/barang';
 import { JENIS_RENCANA, ANGGARAN } from '@/lib/bba/rencana';
 
@@ -34,9 +34,8 @@ export async function bbaRateLimit(userId: number, action: string, maxPerMinute:
   return null;
 }
 
-// Status + transisi pindah ke lib/bba/status.ts (murni — layar ikut memakainya); diekspor
-// ulang di sini supaya pemanggil lama tidak disentuh.
-export { BBA_STATUSES, BBA_STATUS_TRANSITIONS, isValidStatusTransition, type BbaStatus } from '@/lib/bba/status';
+// Status pindah ke lib/bba/status.ts (murni — layar ikut memakainya); diekspor ulang di sini.
+export { BBA_STATUSES, type BbaStatus } from '@/lib/bba/status';
 
 const StatusSchema = z.enum(BBA_STATUSES);
 const SumberSchema = z.enum(['BLUD', 'APBD', 'DAK', 'LAINNYA']);
@@ -63,7 +62,7 @@ export const BbaQuerySchema = z.object({
 
 // ─── Referensi harga & bukti dukung (CONCEPT-bba-perencanaan §4) ────────────
 export const TanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD');
-const TautanSchema  = z.string().trim().max(2048).refine(isSafeHttpUrl, 'Tautan harus diawali http:// atau https://');
+export const TautanSchema = z.string().trim().max(2048).refine(isSafeHttpUrl, 'Tautan harus diawali http:// atau https://');
 // Bentuk id berkas Drive — sama dengan `safeId` di /api/upload/download.
 export const FileIdSchema  = z.string().regex(/^[\w-]{20,64}$/, 'Id berkas tidak valid');
 
@@ -125,7 +124,7 @@ export const BbaCreateSchema = z.object({
   aset_sasaran:     AsetSasaranSchema,
 }).refine(satuBarang, PESAN_SATU_BARANG);
 
-// Status TIDAK lagi diubah lewat sini — satu pintu: modal Proses & Realisasi (`setRealisasi`, §5.2).
+// Status TIDAK lagi diubah lewat sini — status proses lewat `ubahStatusProses`, status diterima turunan penerimaan (Tahap E).
 export const BbaUpdateSchema = z.object({
   id:               z.number().int().positive(),
   expected_version: z.number().int().min(0),
@@ -161,15 +160,13 @@ export const SalinTahunLaluSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1, 'Belum ada rencana yang dipilih').max(500),
 });
 
-export const BbaRealisasiSchema = z.object({
+// Tahap E: hanya status proses — angka realisasi turunan Σ penerimaan (lib/data/bba-penerimaan.ts).
+export const BbaProsesSchema = z.object({
   id:               z.number().int().positive(),
   expected_version: z.number().int().min(0),
-  nilai_realisasi:  z.number().min(0),
-  vol_realisasi:    z.number().min(0, 'Unit realisasi minimal 0'), // batas atas (≤ vol) divalidasi server di setRealisasi
-  tgl_realisasi:    TanggalSchema.nullish(),
   // Dipakai hanya bila status DIPROSES (tanggal pesan/kontrak); status lain mengabaikannya.
   tgl_proses:       TanggalSchema.nullish(),
-  status:           StatusSchema,
+  status:           z.enum(STATUS_PROSES),
 });
 
 export const BbaDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -216,7 +213,7 @@ export const BarangTautkanSchema = z.object({
 
 export type BbaCreateInput       = z.infer<typeof BbaCreateSchema>;
 export type BbaUpdateInput       = z.infer<typeof BbaUpdateSchema>;
-export type BbaRealisasiInput    = z.infer<typeof BbaRealisasiSchema>;
+export type BbaProsesInput       = z.infer<typeof BbaProsesSchema>;
 export type BbaQuery             = z.infer<typeof BbaQuerySchema>;
 export type BbaImportUsulanInput = z.infer<typeof BbaImportUsulanSchema>;
 export type ReferensiInput       = z.infer<typeof ReferensiSchema>;

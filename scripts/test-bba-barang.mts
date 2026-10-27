@@ -13,7 +13,7 @@ import {
   ringkasPerBarang, riwayatPerTahun, type BahanBarang,
 } from '../lib/bba/barang'
 import {
-  isValidStatusTransition, pilihanStatusRealisasi, statusSebelumTerima, STATUS_BELUM_TEREALISASI, BBA_STATUSES,
+  pilihanStatusProses, alasanTolakProses, STATUS_BELUM_TEREALISASI, BBA_STATUSES,
 } from '../lib/bba/status'
 
 try {
@@ -83,14 +83,18 @@ ok('A15 riwayat: rata-rata referensi SAH tahun itu (tren harga)', riw[1].ref_rat
 ok('A16 riwayat menghitung status per tahun', riw[2].status.REALISASI_PENUH === 1 && riw[2].status.DIPROSES === 1 && riw[2].status.REALISASI_SEBAGIAN === 1)
 
 ok('A17 DIPROSES di antara Direncanakan & Realisasi', BBA_STATUSES.join() === 'DIRENCANAKAN,DIPROSES,REALISASI_PENUH,REALISASI_SEBAGIAN,TIDAK_TEREALISASI')
-ok('A18 transisi: Direncanakan ⇄ Dalam Proses, Dalam Proses → realisasi', isValidStatusTransition('DIRENCANAKAN', 'DIPROSES') && isValidStatusTransition('DIPROSES', 'DIRENCANAKAN')
-  && isValidStatusTransition('DIPROSES', 'REALISASI_PENUH') && isValidStatusTransition('DIPROSES', 'TIDAK_TEREALISASI'))
-ok('A19 transisi: yang sudah terealisasi tidak bisa mundur ke Dalam Proses', !isValidStatusTransition('REALISASI_SEBAGIAN', 'DIPROSES') && !isValidStatusTransition('TIDAK_TEREALISASI', 'DIPROSES')
-  && !isValidStatusTransition('REALISASI_PENUH', 'DIPROSES') && isValidStatusTransition('REALISASI_PENUH', 'DIPROSES', true))
-ok('A20 pilihan status modal = status sekarang + transisi sah', pilihanStatusRealisasi('DIPROSES').join() === 'DIRENCANAKAN,DIPROSES,REALISASI_PENUH,REALISASI_SEBAGIAN,TIDAK_TEREALISASI'
-  && pilihanStatusRealisasi('REALISASI_SEBAGIAN').join() === 'REALISASI_PENUH,REALISASI_SEBAGIAN,TIDAK_TEREALISASI')
-ok('A21 sebelum diterima = Direncanakan & Dalam Proses; "belum terealisasi" KPI ikut DIPROSES', statusSebelumTerima('DIPROSES') && statusSebelumTerima('DIRENCANAKAN')
-  && !statusSebelumTerima('TIDAK_TEREALISASI') && STATUS_BELUM_TEREALISASI.includes('DIPROSES'))
+ok('A18 pilihan Proses: Direncanakan · Dalam Proses · Tidak Terealisasi; kosong begitu barang diterima (Tahap E)',
+  pilihanStatusProses('DIPROSES').join() === 'DIRENCANAKAN,DIPROSES,TIDAK_TEREALISASI' && pilihanStatusProses('TIDAK_TEREALISASI').length === 3
+  && pilihanStatusProses('REALISASI_SEBAGIAN').length === 0 && pilihanStatusProses('REALISASI_PENUH').length === 0)
+const rb = (status: 'DIRENCANAKAN' | 'DIPROSES' | 'REALISASI_SEBAGIAN', anggaran = 'DIDANAI', usulan_keputusan: string | null = null) => ({ status, anggaran, usulan_keputusan })
+ok('A19 Proses ditolak bila sudah ada penerimaan / sudah diterima — status mengikuti penerimaan',
+  alasanTolakProses(rb('DIPROSES'), 'TIDAK_TEREALISASI', 1) !== null && alasanTolakProses(rb('REALISASI_SEBAGIAN'), 'DIPROSES', 0) !== null
+  && alasanTolakProses(rb('DIRENCANAKAN'), 'DIPROSES', 0) === null)
+ok('A20 Dalam Proses/Tidak Terealisasi hanya untuk rencana didanai; kembali Direncanakan selalu boleh; usulan ditolak terkunci',
+  alasanTolakProses(rb('DIRENCANAKAN', 'BELUM'), 'DIPROSES', 0) !== null && alasanTolakProses(rb('DIRENCANAKAN', 'TIDAK_DIDANAI'), 'TIDAK_TEREALISASI', 0) !== null
+  && alasanTolakProses(rb('DIPROSES', 'BELUM'), 'DIRENCANAKAN', 0) === null && alasanTolakProses(rb('DIRENCANAKAN', 'DIDANAI', 'DITOLAK'), 'DIPROSES', 0) !== null)
+ok('A21 "belum terealisasi" KPI ikut DIPROSES', STATUS_BELUM_TEREALISASI.includes('DIPROSES') && STATUS_BELUM_TEREALISASI.includes('DIRENCANAKAN')
+  && !STATUS_BELUM_TEREALISASI.includes('REALISASI_PENUH'))
 
 console.log('\nB. Skema Zod')
 const S = await import('../lib/data/buku-besar-aset-schemas')
@@ -100,8 +104,9 @@ const u0 = S.BbaUpdateSchema.parse({ id: 1, expected_version: 0 })
 const uLepas = S.BbaUpdateSchema.parse({ id: 1, expected_version: 0, barang_id: null })
 ok('B2 barang_id tidak dikirim = undefined (jangan sentuh); null = lepas', u0.barang_id === undefined && uLepas.barang_id === null)
 ok('B3 status TIDAK lagi lewat PATCH item (satu pintu: Proses & Realisasi)', !('status' in S.BbaUpdateSchema.parse({ id: 1, expected_version: 0, status: 'DIPROSES' })))
-ok('B4 realisasi menerima DIPROSES + tgl_proses berformat tanggal', S.BbaRealisasiSchema.safeParse({ id: 1, expected_version: 0, nilai_realisasi: 0, vol_realisasi: 0, status: 'DIPROSES', tgl_proses: '2089-02-03' }).success
-  && !S.BbaRealisasiSchema.safeParse({ id: 1, expected_version: 0, nilai_realisasi: 0, vol_realisasi: 0, status: 'DIPROSES', tgl_proses: '3/2/2089' }).success)
+ok('B4 Proses menerima DIPROSES + tgl_proses berformat tanggal; status diterima TIDAK lewat sini (Tahap E)', S.BbaProsesSchema.safeParse({ id: 1, expected_version: 0, status: 'DIPROSES', tgl_proses: '2089-02-03' }).success
+  && !S.BbaProsesSchema.safeParse({ id: 1, expected_version: 0, status: 'DIPROSES', tgl_proses: '3/2/2089' }).success
+  && !S.BbaProsesSchema.safeParse({ id: 1, expected_version: 0, status: 'REALISASI_PENUH' }).success)
 ok('B5 tautkan: tiap pasangan tepat satu (barang ada ATAU baru); kosong & >200 ditolak', S.BarangTautkanSchema.safeParse({ pasangan: [{ aset_id: 1, barang_id: 2 }, { aset_id: 2, barang_baru: 'X' }] }).success
   && !S.BarangTautkanSchema.safeParse({ pasangan: [{ aset_id: 1 }] }).success && !S.BarangTautkanSchema.safeParse({ pasangan: [] }).success
   && !S.BarangTautkanSchema.safeParse({ pasangan: Array.from({ length: 201 }, (_, i) => ({ aset_id: i + 1, barang_id: 1 })) }).success)
@@ -120,17 +125,20 @@ const mig = sumber('docs/migrations/migration-bba-barang-proses.sql')
 ok('C3 migrasi: ADD COLUMN tanpa IF NOT EXISTS, FK RESTRICT', mig.includes('ADD COLUMN barang_id  INT UNSIGNED NULL') && !/ADD COLUMN IF NOT EXISTS/i.test(mig) && mig.includes('ON DELETE RESTRICT'))
 const data = tanpaKomentar(sumber('lib/data/buku-besar-aset.ts'))
 ok('C4 KPI "belum terealisasi" memakai daftar bersama (ikut DIPROSES)', data.includes('AND b.status IN (${[...STATUS_BELUM_TEREALISASI]}) THEN 1 ELSE 0 END), 0) AS backlog'))
-const bUpdate = badan(data, 'export async function updateAset(', 'export async function setRealisasi(')
+const bUpdate = badan(data, 'export async function updateAset(', 'export async function ubahStatusProses(')
 const iTentukan = bUpdate.indexOf('const barangId = await tentukanBarang(tx,')
 const iCas = bUpdate.indexOf('assertCas(res);')
 const iVersi = bUpdate.indexOf('if (Number(kini[0]?.version) !== input.expected_version) throw new BbaVersionConflictError();')
 ok('C5 updateAset: versi dicek di bawah kunci DULU, lalu barang ditentukan, di transaksi yang SAMA sebelum CAS', iTentukan > bUpdate.indexOf('await withTransaction(')
   && iVersi > 0 && iVersi < iTentukan && iTentukan < iCas && bUpdate.includes('SELECT version FROM buku_besar_aset WHERE id = ${input.id} FOR UPDATE'))
 ok('C6 updateAset tidak lagi menulis status', !/status = \$\{input\.status\}/.test(bUpdate) && !bUpdate.includes('isValidStatusTransition'))
-const bReal = badan(data, 'export async function setRealisasi(', 'export async function deleteAset(')
-ok('C7 setRealisasi: "sebelum diterima ⇒ realisasi 0" diperiksa SEBELUM UPDATE', bReal.indexOf('if (statusSebelumTerima(input.status) && (input.vol_realisasi !== 0 || input.nilai_realisasi !== 0))') >= 0
-  && bReal.indexOf('if (statusSebelumTerima(input.status) && (input.vol_realisasi !== 0 || input.nilai_realisasi !== 0))') < bReal.indexOf('UPDATE buku_besar_aset SET'))
-ok('C8 setRealisasi: tgl_proses diisi saat DIPROSES, dikosongkan saat kembali Direncanakan, dipertahankan saat diterima',
+const bReal = badan(data, 'export async function ubahStatusProses(', 'export async function bekukanTautanUsulan(')
+const iKunci = bReal.indexOf('SELECT id FROM buku_besar_aset WHERE id = ${input.id} FOR UPDATE')
+const iPagar = bReal.indexOf('const alasan = alasanTolakProses(cur, input.status, Number(n[0]?.n ?? 0));')
+ok('C7 ubahStatusProses: penerimaan dihitung & pagar diperiksa di bawah kunci, SEBELUM UPDATE; angka realisasi dinolkan', iKunci >= 0 && iKunci < iPagar
+  && bReal.indexOf('SELECT COUNT(*) AS n FROM bba_penerimaan WHERE rencana_id = ${input.id}') < iPagar && iPagar < bReal.indexOf('UPDATE buku_besar_aset SET')
+  && bReal.includes('vol_realisasi = 0, nilai_realisasi = 0, tgl_realisasi = NULL'))
+ok('C8 ubahStatusProses: tgl_proses diisi saat DIPROSES, dikosongkan saat kembali Direncanakan, dipertahankan saat diterima',
   bReal.includes("const tglProses = input.status === 'DIPROSES' ? (input.tgl_proses ?? cur.tgl_proses ?? null)") && bReal.includes(": input.status === 'DIRENCANAKAN' ? null : cur.tgl_proses;"))
 const bImpor = badan(data, 'export async function commitImportUsulan(', '// ─── Master Kategori Aset')
 ok('C9 tarik usulan: tautan otomatis nama SAMA, kolom barang_id ikut bulkInsert', bImpor.includes('barangBernamaSama(c.nama_barang, daftarBarang)?.id ?? null') && bImpor.includes("'uraian', 'barang_id', 'sumber_anggaran'"))
@@ -146,8 +154,10 @@ const modal = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/_components/
 ok('C14 modal item: pilihan status hilang, barang dikirim hanya kalau berubah (L87)', !modal.includes('STATUSES.map') && !/status: isian\.status/.test(modal)
   && modal.includes('...(barangBerubah ? bodyBarang(isian.barang) : {}),'))
 const klien = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx'))
-ok('C15 modal Proses & Realisasi: pilihan dari aturan transisi bersama, angka dikunci 0 sebelum diterima', klien.includes('pilihanStatusRealisasi(realForm.row.status, bolehBatalkanFinal(role))')
-  && klien.includes('nilai_realisasi: sebelumTerima ? 0 : realForm.nilai, vol_realisasi: sebelumTerima ? 0 : realForm.vol,'))
+const mPengadaan = tanpaKomentar(sumber('app/(dashboard)/buku-besar-aset/_components/ModalPengadaan.tsx'))
+ok('C15 Proses & Penerimaan: satu komponen untuk Rencana & Pengadaan, pilihan & pagar dari aturan bersama', klien.includes('<ModalPengadaan c={c} rencanaId={prosesId} bolehUbah={bolehPengadaan}')
+  && mPengadaan.includes('const pilihan = pilihanStatusProses(item.status);') && mPengadaan.includes('alasanTolakProses(item, status, penerimaan.length)')
+  && !klien.includes('/api/buku-besar-aset/realisasi'))
 const routes = ['app/api/buku-besar-aset/barang/route.ts', 'app/api/buku-besar-aset/barang/gabung/route.ts', 'app/api/buku-besar-aset/barang/tautkan/route.ts'].map(p => tanpaKomentar(sumber(p)))
 const handler = routes.reduce((n, s) => n + (s.match(/export async function (GET|POST|PATCH|DELETE)\(/g) ?? []).length, 0)
 const dijaga = routes.reduce((n, s) => n + (s.match(/const g = await guard\(\);\s*if \(!g\.ok\) return g\.res;/g) ?? []).length, 0)
@@ -174,6 +184,7 @@ try {
 if (c) {
   const k = c
   const bersih = async () => {
+    await k.query('DELETE p FROM bba_penerimaan p JOIN buku_besar_aset b ON b.id = p.rencana_id WHERE b.tahun_anggaran IN (?)', [TAHUN])
     await k.query('DELETE FROM buku_besar_aset WHERE tahun_anggaran IN (?)', [TAHUN])
     await k.query('DELETE FROM usulan_items WHERE no_usulan = ?', [UJI])
     await k.query('DELETE FROM usulan_headers WHERE no_usulan = ?', [UJI])
@@ -181,11 +192,18 @@ if (c) {
   }
   await bersih()
   const D = await import('../lib/data/buku-besar-aset')
+  const PEN = await import('../lib/data/bba-penerimaan')
   const [u] = await k.query('SELECT id FROM users ORDER BY id LIMIT 1') as [Array<{ id: number }>, unknown]
   const userId = Number(u[0]?.id ?? 0)
   const versi = async (id: number) => Number(((await k.query('SELECT version FROM buku_besar_aset WHERE id = ?', [id])) as [Array<{ version: number }>, unknown])[0][0]?.version)
   const baris = async (id: number) => ((await k.query("SELECT barang_id, status, DATE_FORMAT(tgl_proses, '%Y-%m-%d') AS tgl_proses, DATE_FORMAT(tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi FROM buku_besar_aset WHERE id = ?", [id])) as [Array<{ barang_id: number | null; status: string; tgl_proses: string | null; tgl_realisasi: string | null }>, unknown])[0][0]
   const jumlahBarang = async (pola: string) => Number(((await k.query('SELECT COUNT(*) AS n FROM bba_barang WHERE nama LIKE ?', [pola])) as [Array<{ n: number }>, unknown])[0][0]?.n)
+  // Tahap E: realisasi hanya lewat penerimaan, untuk rencana yang didanai; tanggal penerimaan tidak boleh sesudah hari ini.
+  const danai = async (id: number) => D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versi(id) }] }, userId)
+  const proses = async (id: number, status: 'DIRENCANAKAN' | 'DIPROSES' | 'TIDAK_TEREALISASI', tgl_proses?: string) =>
+    D.ubahStatusProses({ id, expected_version: await versi(id), status, tgl_proses }, userId)
+  const terima = async (id: number, tgl: string, vol: number, harga_satuan: number) =>
+    PEN.catatPenerimaan({ rencana_id: id, expected_version: await versi(id), tgl, vol, harga_satuan }, userId)
   const item = (tahun: number, uraian: string, vol: number, harga: number, ext: Record<string, unknown> = {}) =>
     D.createAset({ tahun_anggaran: tahun, uraian: `${UJI} ${uraian}`, sumber_anggaran: 'BLUD', vol, harga, ...ext }, userId)
   try {
@@ -213,18 +231,17 @@ if (c) {
 
     // Riwayat Laptop lintas tahun + status Dalam Proses
     const l86 = await item(2086, 'Laptop i5', 4, 14_000_000, { barang_id: laptop.id })
-    await D.setRealisasi({ id: l86.id, expected_version: await versi(l86.id), nilai_realisasi: 52_000_000, vol_realisasi: 4, tgl_realisasi: '2086-05-01', status: 'REALISASI_PENUH' }, userId)
+    await danai(l86.id); await terima(l86.id, '2025-05-01', 4, 13_000_000)
     const l87a = await item(2087, 'Laptop i7', 3, 14_000_000, { barang_id: laptop.id })
-    await D.setRealisasi({ id: l87a.id, expected_version: await versi(l87a.id), nilai_realisasi: 27_000_000, vol_realisasi: 2, tgl_realisasi: '2087-02-01', status: 'REALISASI_SEBAGIAN' }, userId)
+    await danai(l87a.id); await terima(l87a.id, '2025-02-01', 2, 13_500_000)
     const l87b = await item(2087, 'Laptop pesanan', 2, 14_000_000, { barang_id: laptop.id })
-    const salahAngka = await coba(() => D.setRealisasi({ id: l87b.id, expected_version: 0, nilai_realisasi: 1, vol_realisasi: 0, tgl_proses: '2087-10-01', status: 'DIPROSES' }, userId))
-    ok('D7 Dalam Proses dengan angka realisasi ≠ 0 ditolak (barang belum diterima)', salahAngka instanceof D.BbaStatusMismatchError)
-    await D.setRealisasi({ id: l87b.id, expected_version: await versi(l87b.id), nilai_realisasi: 0, vol_realisasi: 0, tgl_realisasi: '2087-10-09', tgl_proses: '2087-10-01', status: 'DIPROSES' }, userId)
+    const belumDidanai = await coba(() => proses(l87b.id, 'DIPROSES', '2025-10-01'))
+    ok('D7 Dalam Proses ditolak selama rencana belum didanai (Tahap E §16)', belumDidanai instanceof D.BbaStatusMismatchError && (await baris(l87b.id)).status === 'DIRENCANAKAN')
+    await danai(l87b.id); await proses(l87b.id, 'DIPROSES', '2025-10-01')
     const p1 = await baris(l87b.id)
-    ok('D8 Direncanakan → Dalam Proses: tgl_proses tersimpan, tgl_realisasi kosong', p1.status === 'DIPROSES' && p1.tgl_proses === '2087-10-01' && p1.tgl_realisasi === null, JSON.stringify(p1))
-    const vA = await versi(l87a.id)
-    const mundur = await coba(() => D.setRealisasi({ id: l87a.id, expected_version: vA, nilai_realisasi: 0, vol_realisasi: 0, tgl_proses: '2087-01-01', status: 'DIPROSES' }, userId))
-    ok('D9 Realisasi Sebagian → Dalam Proses ditolak', mundur instanceof D.BbaTransitionError)
+    ok('D8 Direncanakan → Dalam Proses: tgl_proses tersimpan, tgl_realisasi kosong', p1.status === 'DIPROSES' && p1.tgl_proses === '2025-10-01' && p1.tgl_realisasi === null, JSON.stringify(p1))
+    const mundur = await coba(() => proses(l87a.id, 'DIPROSES', '2025-01-01'))
+    ok('D9 sudah diterima sebagian → Dalam Proses ditolak (status mengikuti penerimaan)', mundur instanceof D.BbaStatusMismatchError)
     const l88 = await item(2088, 'Laptop rencana', 5, 14_000_000, { barang_id: laptop.id })
     await D.updateAset({ id: l88.id, expected_version: await versi(l88.id), referensi: [
       { sumber: 'TOKO_DARING', url: 'https://shopee.co.id/a', harga: 13_000_000 }, { sumber: 'EKATALOG', url: 'https://e-katalog.lkpp.go.id/b', harga: 15_000_000 },
@@ -247,12 +264,11 @@ if (c) {
     ok('D14 kartu barang: riwayat 2088/2087/2086, harga satuan per tahun, rata-rata referensi 2088', det?.riwayat.map(r => r.tahun).join() === '2088,2087,2086'
       && det.riwayat[1].harga_satuan === 13_500_000 && det.riwayat[2].harga_satuan === 13_000_000 && det.riwayat[0].ref_rata === 14_000_000, JSON.stringify(det?.riwayat))
 
-    await D.setRealisasi({ id: l87b.id, expected_version: await versi(l87b.id), nilai_realisasi: 28_000_000, vol_realisasi: 2, tgl_realisasi: '2087-12-01', status: 'REALISASI_PENUH' }, userId)
+    await terima(l87b.id, '2025-12-01', 2, 14_000_000)
     const p2 = await baris(l87b.id)
-    ok('D15 Dalam Proses → diterima: tgl_proses (dipesan kapan) tetap, tgl_realisasi terisi', p2.status === 'REALISASI_PENUH' && p2.tgl_proses === '2087-10-01' && p2.tgl_realisasi === '2087-12-01')
+    ok('D15 Dalam Proses → diterima: tgl_proses (dipesan kapan) tetap, tgl_realisasi terisi', p2.status === 'REALISASI_PENUH' && p2.tgl_proses === '2025-10-01' && p2.tgl_realisasi === '2025-12-01')
     const l87c = await item(2087, 'Laptop batal', 1, 14_000_000, { barang_id: laptop.id })
-    await D.setRealisasi({ id: l87c.id, expected_version: await versi(l87c.id), nilai_realisasi: 0, vol_realisasi: 0, tgl_proses: '2087-03-03', status: 'DIPROSES' }, userId)
-    await D.setRealisasi({ id: l87c.id, expected_version: await versi(l87c.id), nilai_realisasi: 0, vol_realisasi: 0, status: 'DIRENCANAKAN' }, userId)
+    await danai(l87c.id); await proses(l87c.id, 'DIPROSES', '2025-03-03'); await proses(l87c.id, 'DIRENCANAKAN')
     const p3 = await baris(l87c.id)
     ok('D16 pesanan batal (Dalam Proses → Direncanakan): tgl_proses dikosongkan', p3.status === 'DIRENCANAKAN' && p3.tgl_proses === null)
 
@@ -294,7 +310,7 @@ if (c) {
       && daftarImp.find(r => r.uraian.startsWith(' ujibba'))?.barang_id === printer.id && daftarImp.find(r => r.uraian.startsWith('UJIBBA Printer Tinta'))?.barang_id === null
       && await jumlahBarang('UJIBBA Printer Tinta') === 0, JSON.stringify(daftarImp.map(r => [r.uraian, r.barang_id])))
     const daftarL = (await D.listAset({ tahun: 2087, page: 1, limit: 200 })).rows.find(r => r.id === l87b.id)
-    ok('D25 daftar membawa nama barang & tgl_proses', daftarL?.barang_nama === 'UJIBBA Laptop' && daftarL.tgl_proses === '2087-10-01')
+    ok('D25 daftar membawa nama barang & tgl_proses', daftarL?.barang_nama === 'UJIBBA Laptop' && daftarL.tgl_proses === '2025-10-01')
   } finally {
     await bersih()
     const [sisa] = await k.query("SELECT (SELECT COUNT(*) FROM buku_besar_aset WHERE tahun_anggaran IN (?)) AS a, (SELECT COUNT(*) FROM usulan_items WHERE no_usulan = ?) AS u, (SELECT COUNT(*) FROM bba_barang WHERE nama LIKE 'UJIBBA%') AS g",

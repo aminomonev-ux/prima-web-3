@@ -37,6 +37,12 @@ export type AuditEventType =
   | 'BBA_ASET_PINDAH'
   | 'BBA_RENCANA_ANGGARAN'
   | 'BBA_RENCANA_SALIN'
+  | 'BBA_PENERIMAAN_CATAT'
+  | 'BBA_PENERIMAAN_HAPUS'
+  | 'BBA_ASET_TEMPATKAN'
+  | 'BBA_ASET_REGISTER'
+  | 'BBA_ASET_HAPUS'
+  | 'BBA_ASET_REHAB'
   | 'BBA_PENGATURAN'
   // ─── LKJIP ─────────────────────────────────────────────────────────
   | 'LKJIP_CREATE'

@@ -13,6 +13,7 @@ import type { DetailBarang, PembelianLalu, KibLalu } from '@/lib/data/buku-besar
 import { petunjukRencana, type JenisRencana } from '@/lib/bba/rencana';
 import { LABEL_SUMBER, LABEL_JENIS_BUKTI, type ReferensiIsian } from '@/lib/bba/referensi';
 import { safeHref } from '@/lib/shared/url';
+import { referensiDariDibeli } from '@/lib/bba/penerimaan';
 import BarKondisi, { WARNA_KONDISI } from './BarKondisi';
 import { unduhBerkas, type Warna } from './ModalItem';
 
@@ -168,6 +169,20 @@ export default function KartuBarang({ barangId, tahun, c, tandaiTahun, ringkas, 
               {p.harga_satuan ? <> · <span style={{ fontFamily: MONO }}>{fmtRp(p.harga_satuan)}</span>/{p.satuan || satuan}</> : null}
               {p.tgl_realisasi ? <span style={{ color: c.sub }}> · diterima {fmtTanggal(p.tgl_realisasi)}</span> : null}
             </div>
+            {p.dibeli.map((d, i) => {
+              const href = safeHref(d.url);
+              return (
+                <div key={`b${i}`} style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <span style={{ minWidth: 0 }}>
+                    <b>Dibeli:</b> {[d.merk_tipe, d.penyedia].filter(Boolean).join(' · ') || '—'}
+                    <span style={{ color: c.sub }}> · {fmtVol(d.vol)} {p.satuan || satuan} · </span><span style={{ fontFamily: MONO }}>{fmtRp(d.harga_satuan)}</span>
+                  </span>
+                  {href && <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#378ADD' }}>tautan</a>}
+                  {onPakaiReferensi && <button type="button" onClick={() => onPakaiReferensi(referensiDariDibeli(d))}
+                    style={{ background: 'none', border: 'none', color: '#7C5CFC', cursor: 'pointer', padding: 0, fontSize: 11.5, textDecoration: 'underline' }}>Pakai sebagai referensi</button>}
+                </div>
+              );
+            })}
             {p.referensi.length > 0 && <div style={{ color: c.sub }}>dibandingkan waktu itu:</div>}
             {p.referensi.map((r, i) => {
               const href = safeHref(r.url);

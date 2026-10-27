@@ -57,12 +57,13 @@ ok('C2 hapus: hanya Direncanakan tanpa bukti', alasanTakBisaHapus('DIRENCANAKAN'
 // Setiap handler tulis di app/api/buku-besar-aset WAJIB memanggil tolakKecualiEdit sesudah guard —
 // dipindai dari folder, jadi route baru yang lupa ikut tertangkap.
 const HARAP: Record<string, string> = {
-  'route.ts': "'rencana'", 'realisasi/route.ts': "'pengadaan'", 'bukti/route.ts': "'rencana', 'pengadaan'",
+  'route.ts': "'rencana'", 'proses/route.ts': "'pengadaan'", 'pengadaan/route.ts': "'pengadaan'", 'bukti/route.ts': "'rencana', 'pengadaan'",
   'barang/route.ts': "'master'", 'barang/tautkan/route.ts': "'rencana'", 'barang/gabung/route.ts': "'master'",
   'lokasi/route.ts': "'master'", 'kategori/route.ts': "'master'",
   'aset/route.ts': "'aset'", 'aset/impor/route.ts': "'aset'", 'pengaturan/route.ts': "'master'",
   'aset/kondisi/route.ts': "'aset'", 'aset/pindah/route.ts': "'aset'", 'aset/barang/route.ts': "'aset'",
   'anggaran/route.ts': "'rencana'", 'salin-tahun-lalu/route.ts': "'rencana'",
+  'aset/antrean/route.ts': "'aset'", 'aset/register/route.ts': "'aset'", 'aset/hapus/route.ts': "'aset'",
 }
 const akarApi = path.join(process.cwd(), 'app/api/buku-besar-aset')
 const semuaRoute: string[] = []
@@ -127,8 +128,12 @@ if (c) {
   const userId = Number(u[0]?.id ?? 0)
   const versi = async (id: number) => Number(((await k.query('SELECT version FROM buku_besar_aset WHERE id = ?', [id])) as [Array<{ version: number }>, unknown])[0][0]?.version)
   const refDb = async (id: number) => ((await k.query('SELECT url, harga FROM bba_referensi_harga WHERE aset_id = ? ORDER BY urutan', [id])) as [Array<{ url: string | null; harga: string | null }>, unknown])[0]
-  const proses = async (id: number, status: 'DIPROSES' | 'DIRENCANAKAN') =>
-    D.setRealisasi({ id, expected_version: await versi(id), nilai_realisasi: 0, vol_realisasi: 0, tgl_realisasi: null, status }, userId)
+  // Tahap E: Dalam Proses hanya untuk rencana yang didanai — ditandai dulu bila belum.
+  const proses = async (id: number, status: 'DIPROSES' | 'DIRENCANAKAN') => {
+    if (status === 'DIPROSES' && (await D.getAsetById(id))?.anggaran !== 'DIDANAI')
+      await D.tandaiAnggaran({ anggaran: 'DIDANAI', item: [{ id, expected_version: await versi(id) }] }, userId)
+    return D.ubahStatusProses({ id, expected_version: await versi(id), status }, userId)
+  }
   try {
     const [h] = await k.query("INSERT INTO usulan_headers (no_usulan, pengusul, sub_bidang, tahun_anggaran) VALUES (?, 'UJI', 'SUB_UJI', ?)", [UJI, String(TAHUN)]) as [{ insertId: number }, unknown]
     await k.query(`INSERT INTO usulan_items (usulan_id, no_usulan, no_item, sub_bidang, pengusul, jenis_belanja, nama_barang, spesifikasi, qty, satuan, harga_est, status, url_merk1, url_merk2, url_merk3)

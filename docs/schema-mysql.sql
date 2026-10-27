@@ -1308,6 +1308,31 @@ CREATE TABLE IF NOT EXISTS bba_eksisting (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='BBA — pendataan kondisi eksisting (riwayat; yang berlaku = terbaru per barang × lokasi)';
 
+-- BBA penerimaan barang per rencana (migration-bba-penerimaan.sql, Tahap E §7.4/§15). Realisasi rencana
+-- = Σ baris ini, ditulis HANYA jalur penerimaan. "Yang dibeli" = salinan (baris referensi berganti id tiap
+-- Simpan item). Didefinisikan sebelum bba_aset karena bba_aset.penerimaan_id merujuknya.
+CREATE TABLE IF NOT EXISTS bba_penerimaan (
+  id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  rencana_id       BIGINT UNSIGNED NOT NULL,
+  tgl              DATE          NOT NULL,
+  vol              DECIMAL(18,2) NOT NULL,
+  harga_satuan     DECIMAL(18,2) NOT NULL,
+  nilai            DECIMAL(18,2) NOT NULL COMMENT 'vol × harga satuan saat dicatat; data lama = nilai realisasi apa adanya',
+  referensi_urutan TINYINT UNSIGNED NULL COMMENT 'Referensi ke-n yang dipilih; NULL = beli di tempat lain',
+  merk_tipe        VARCHAR(160)  NULL,
+  penyedia         VARCHAR(255)  NULL,
+  url              VARCHAR(2048) NULL,
+  catatan          VARCHAR(500)  NULL,
+  pindahan         TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '1 = realisasi lama dipindah migrasi — barangnya sudah di KIB provinsi, tidak masuk antrean',
+  created_by       INT           NULL,
+  created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_bpn_rencana (rencana_id, tgl),
+  CONSTRAINT fk_bpn_rencana FOREIGN KEY (rencana_id) REFERENCES buku_besar_aset(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_bpn_oleh FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  COMMENT='BBA — penerimaan barang per rencana (bertahap); realisasi rencana = Σ baris ini';
+
 -- BBA buku aset per register (migration-bba-aset.sql, docs/CONCEPT-bba-buku-aset.md §5/§15).
 -- Satu baris = satu register KIB provinsi. Kolom yang disaring/dijumlah berdiri sendiri; sisa
 -- kolom KIB per golongan di JSON `kib` (definisinya lib/bba/kib.ts). Tidak pernah dihapus fisik:
@@ -1323,6 +1348,8 @@ CREATE TABLE IF NOT EXISTS bba_aset (
   nama_resmi       VARCHAR(255)  NOT NULL,
   nama             VARCHAR(255)  NULL COMMENT 'Nama sehari-hari (dari Keterangan saat impor pertama, bisa diubah)',
   barang_id        INT UNSIGNED  NULL,
+  -- Tahap E (migration-bba-penerimaan): lahir dari penerimaan ini — antrean "diterima, belum dicatat"
+  penerimaan_id    BIGINT UNSIGNED NULL COMMENT 'Lahir dari penerimaan ini (antrean "diterima, belum dicatat")',
   lokasi_id        INT UNSIGNED  NULL,
   kib              JSON          NOT NULL,
   harga            DECIMAL(18,2) NOT NULL DEFAULT 0,
@@ -1333,6 +1360,9 @@ CREATE TABLE IF NOT EXISTS bba_aset (
   kondisi_oleh     INT           NULL,
   kondisi_sumber   ENUM('IMPOR','CEK') NULL COMMENT 'IMPOR = dari sistem provinsi, belum dicek (§5.3)',
   status           ENUM('AKTIF','DIHAPUS') NOT NULL DEFAULT 'AKTIF',
+  siap_dihapus     TINYINT(1)    NOT NULL DEFAULT 0 COMMENT 'Diganti lewat rencana penggantian yang sudah diterima',
+  hapus_sk_nomor   VARCHAR(80)   NULL,
+  hapus_sk_tgl     DATE          NULL,
   version          INT UNSIGNED  NOT NULL DEFAULT 0,
   created_by       INT           NULL,
   updated_by       INT           NULL,
@@ -1345,6 +1375,8 @@ CREATE TABLE IF NOT EXISTS bba_aset (
   KEY idx_bba_aset_barang (barang_id),
   KEY idx_bba_aset_lokasi (lokasi_id),
   KEY idx_bba_aset_tahun (tahun_perolehan),
+  KEY idx_bba_aset_penerimaan (penerimaan_id),
+  CONSTRAINT fk_bba_aset_penerimaan FOREIGN KEY (penerimaan_id) REFERENCES bba_penerimaan(id) ON DELETE RESTRICT,
   CONSTRAINT fk_bba_aset_barang FOREIGN KEY (barang_id) REFERENCES bba_barang(id) ON DELETE RESTRICT,
   CONSTRAINT fk_bba_aset_lokasi FOREIGN KEY (lokasi_id) REFERENCES bba_lokasi(id) ON DELETE RESTRICT,
   CONSTRAINT fk_bba_aset_kondisi_oleh FOREIGN KEY (kondisi_oleh) REFERENCES users(id) ON DELETE SET NULL

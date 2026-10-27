@@ -16,6 +16,7 @@ import type { PetaIzinLayar } from '../_components/BbaNav';
 import KartuAset from '../_components/KartuAset';
 import ModalImporKib from '../_components/ModalImporKib';
 import { ModalKondisi, ModalPindah, ModalTautkanAset } from '../_components/AksiAset';
+import { PanelAntrean } from '../_components/AksiTerima';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -40,6 +41,9 @@ export default function AsetClient({ username, role, themePreference, beku, izin
   const [lokasi, setLokasi] = useState('');
   const [gedungF, setGedungF] = useState('');
   const [barang, setBarang] = useState(barangAwal);
+  /** Tahap E: belum teregister / siap dihapus / dihapus (status DIHAPUS). */
+  const [tanda, setTanda] = useState<'' | 'BELUM_TEREGISTER' | 'SIAP_DIHAPUS' | 'DIHAPUS'>('');
+  const [kunciAntrean, setKunciAntrean] = useState(0);
   const [memuat, setMemuat] = useState(false);
   const [buka, setBuka] = useState<Record<string, AsetRingan[] | 'memuat'>>({});
   const [kartu, setKartu] = useState<number | null>(null);
@@ -47,8 +51,8 @@ export default function AsetClient({ username, role, themePreference, beku, izin
   const [pilih, setPilih] = useState<Set<number>>(new Set());
   const [aksi, setAksi] = useState<Aksi | null>(null);
   const nomor = useRef(0);
-  const kunci = `${golongan}|${kondisi}|${tahun}|${lokasi}|${gedungF}|${barang?.id ?? ''}`;
-  const kunciTermuat = useRef(`|||||${barangAwal?.id ?? ''}`);
+  const kunci = `${golongan}|${kondisi}|${tahun}|${lokasi}|${gedungF}|${barang?.id ?? ''}|${tanda}`;
+  const kunciTermuat = useRef(`|||||${barangAwal?.id ?? ''}|`);
 
   async function muat() {
     const n = ++nomor.current;
@@ -63,10 +67,13 @@ export default function AsetClient({ username, role, themePreference, beku, izin
       if (lokasi) p.set('lokasi', lokasi);
       if (gedungF) p.set('gedung', gedungF);
       if (barang) p.set('barang', String(barang.id));
+      if (tanda === 'DIHAPUS') p.set('status', 'DIHAPUS');
+      else if (tanda) p.set('tanda', tanda);
       const d = await fetchJson<unknown>(`/api/buku-besar-aset/aset?${p}`);
       if (n !== nomor.current) return; // jawaban saringan lama yang pulang terlambat
       if (!d.ok) { toast.error(d.message || 'Gagal memuat buku aset'); return; }
       setData(d as unknown as DaftarAset);
+      setKunciAntrean(x => x + 1);
       setBuka({});
       setPilih(new Set());
     } finally { if (n === nomor.current) setMemuat(false); }
@@ -129,7 +136,9 @@ export default function AsetClient({ username, role, themePreference, beku, izin
             </div>}
           </div>
 
-          {kosong ? (
+          <PanelAntrean c={c} bolehUbah={bolehUbah} kunciMuat={kunciAntrean} onTersimpan={() => void muat()} />
+
+          {kosong && tanda !== 'DIHAPUS' ? (
             <div style={{ background: c.card, border: `1px dashed ${c.border}`, borderRadius: 10, padding: 28, textAlign: 'center', fontSize: 13, color: c.sub, lineHeight: 1.6 }}>
               Buku aset masih kosong. {bolehUbah
                 ? <>Ekspor KIB dari sistem aset provinsi (lembar KIBA … KIBF), lalu tekan <b style={{ color: c.text }}>Impor KIB</b>.</>
@@ -170,6 +179,12 @@ export default function AsetClient({ username, role, themePreference, beku, izin
                 <option value="">Semua ruangan</option>
                 <option value="0">Peralatan tanpa ruangan</option>
                 {ruangan.map(x => <option key={x.id} value={x.id}>{x.nama}</option>)}
+              </select>
+              <select value={tanda} onChange={e => setTanda(e.target.value as typeof tanda)} style={inp} aria-label="Tanda">
+                <option value="">Aset aktif</option>
+                <option value="BELUM_TEREGISTER">Belum teregister · {data.tanda.belumTeregister}</option>
+                <option value="SIAP_DIHAPUS">Siap diusulkan dihapus · {data.tanda.siapDihapus}</option>
+                <option value="DIHAPUS">Dihapus (dengan SK) · {data.tanda.dihapus}</option>
               </select>
               {gedung.length > 0 && <select value={gedungF} onChange={e => setGedungF(e.target.value)} style={{ ...inp, maxWidth: 220 }} aria-label="Gedung">
                 <option value="">Semua gedung</option>
@@ -233,7 +248,8 @@ export default function AsetClient({ username, role, themePreference, beku, izin
                         <td style={{ ...td, fontFamily: MONO }}>{k.golongan}</td>
                         <td style={{ ...td, fontFamily: MONO, textAlign: 'center' }}>{k.tahun ?? '—'}</td>
                         <td style={td}>{k.lokasi_nama ?? <span style={{ color: c.sub }}>—</span>}</td>
-                        <td style={{ ...td, fontFamily: MONO, fontSize: 11.5, whiteSpace: 'nowrap' }}>{banyak ? `${k.ids.length} unit · ` : ''}{rentangRegister(k.register)}</td>
+                        <td style={{ ...td, fontFamily: MONO, fontSize: 11.5, whiteSpace: 'nowrap' }}>{banyak ? `${k.ids.length} unit · ` : ''}{k.register.length > 0 && rentangRegister(k.register)}
+                          {k.register.length < k.ids.length && <span style={{ color: '#BA7517', fontFamily: 'inherit' }}>{k.register.length > 0 ? ` · ${k.ids.length - k.register.length} ` : ''}belum teregister</span>}</td>
                         <td style={td}><KondisiRingkas k={k} c={c} /></td>
                         <td style={tdNum}>{fmtRp(k.harga)}</td>
                       </tr>,

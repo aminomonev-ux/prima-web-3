@@ -14,10 +14,9 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
-import { InputNominal } from '@/components/ui/input-nominal';
 import { fetchJson } from '@/lib/shared/api';
 import { perluReferensi, buktiBelumLengkap } from '@/lib/bba/referensi';
-import { BBA_STATUSES, LABEL_STATUS, pilihanStatusRealisasi, statusSebelumTerima, alasanTakBisaHapus, type BbaStatus } from '@/lib/bba/status';
+import { BBA_STATUSES, LABEL_STATUS, alasanTakBisaHapus } from '@/lib/bba/status';
 import { bolehBatalkanFinal } from '@/lib/constants';
 import type { BbaRow, BbaListResult, BbaKpi, BbaImportCandidate } from '@/lib/data/buku-besar-aset';
 import SpandukBeku from '@/components/ui/SpandukBeku';
@@ -27,6 +26,7 @@ import ModalItem, { LencanaRef, LencanaBukti, STATUS_COLOR, type TabItem } from 
 import PerBarang from './_components/PerBarang';
 import ModalTautkan from './_components/ModalTautkan';
 import SaranTahunLalu from './_components/SaranTahunLalu';
+import ModalPengadaan from './_components/ModalPengadaan';
 import { JENIS_RENCANA, LABEL_JENIS, ANGGARAN, LABEL_ANGGARAN, bolehDitandai, type Anggaran } from '@/lib/bba/rencana';
 import BbaNav, { navDockBba, type PetaIzinLayar } from './_components/BbaNav';
 
@@ -80,7 +80,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const [segarkanBarang, setSegarkanBarang] = useState(0);
   const [tautkanBuka, setTautkanBuka] = useState(false);
   // tgl = tanggal realisasi; tglProses = tanggal pesan/kontrak (status Dalam Proses, §5.2)
-  const [realForm, setRealForm] = useState<{ row: BbaRow; nilai: number; vol: number; tgl: string; tglProses: string; status: BbaStatus } | null>(null);
+  const [prosesId, setProsesId] = useState<number | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | 'EMPTY' | null>(null);
   const [detailRow, setDetailRow] = useState<BbaRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -160,38 +160,6 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   const bukaBaru = () => setModal({ daftar: null, id: null, tab: 'data', saringan: 'SEMUA' });
   const bukaLengkapi = () => perluRef.length > 0 && setModal({ daftar: perluRef, id: perluRef[0].id, tab: 'ref', saringan: 'BELUM' });
 
-  async function saveRealisasi() {
-    if (!realForm) return;
-    if (realForm.vol < 0 || realForm.vol > realForm.row.vol) { toast.error(`Unit realisasi harus 0 – ${realForm.row.vol}`); return; }
-    // A3: pre-check konsistensi status ↔ angka (server juga menolak)
-    if (realForm.status === 'REALISASI_PENUH' && realForm.vol !== realForm.row.vol) { toast.error(`Status Realisasi Penuh mengharuskan unit realisasi = ${realForm.row.vol}`); return; }
-    if (realForm.status === 'TIDAK_TEREALISASI' && (realForm.vol !== 0 || realForm.nilai !== 0)) { toast.error('Status Tidak Terealisasi mengharuskan unit & nilai realisasi 0'); return; }
-    const sebelumTerima = statusSebelumTerima(realForm.status);
-    setSaving(true);
-    try {
-      const d = await fetchJson<unknown>('/api/buku-besar-aset/realisasi', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          id: realForm.row.id, expected_version: realForm.row.version,
-          nilai_realisasi: sebelumTerima ? 0 : realForm.nilai, vol_realisasi: sebelumTerima ? 0 : realForm.vol,
-          tgl_realisasi: sebelumTerima ? null : realForm.tgl || null,
-          tgl_proses: realForm.status === 'DIPROSES' ? realForm.tglProses || null : null,
-          status: realForm.status,
-        }),
-      });
-      if (d.ok) { toast.success(realForm.status === 'DIPROSES' ? 'Tersimpan — item dalam proses' : 'Realisasi tersimpan'); setRealForm(null); muatUlang(); }
-      else if ((d as { code?: string }).code === 'VERSION_CONFLICT') { toast.error('Data sudah diubah pengguna lain — memuat ulang.'); setRealForm(null); muatUlang(); }
-      else toast.error(d.message || 'Gagal menyimpan');
-    } finally { setSaving(false); }
-  }
-
-  // Status disarankan dari unit + nilai (CONCEPT-import-usulan §6) — tetap bisa override manual.
-  function suggestStatus(vol: number, nilai: number, row: BbaRow): BbaStatus {
-    if (vol === 0) return 'TIDAK_TEREALISASI';
-    if (vol === row.vol && nilai >= row.nilai_rencana) return 'REALISASI_PENUH';
-    return 'REALISASI_SEBAGIAN';
-  }
-
   async function openImportPreview() {
     setSaving(true);
     try {
@@ -222,15 +190,10 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
     if (d.ok) { toast.success('Dihapus'); muatUlang(); } else toast.error(d.message || 'Gagal hapus');
   }
 
-  const bukaRealisasi = (r: BbaRow) => setRealForm({
-    row: r, nilai: r.nilai_realisasi, vol: r.vol_realisasi, tgl: r.tgl_realisasi || '', tglProses: r.tgl_proses || '',
-    status: statusSebelumTerima(r.status) ? 'REALISASI_PENUH' : r.status,
-  });
   // Item tahun ini (yang dimuat) tanpa barang — usulan ditolak tidak dihitung, seperti KPI & Per Barang.
   const belumBarang = rows.filter(r => r.barang_id === null && r.usulan_keputusan !== 'DITOLAK').length;
 
   const inp: React.CSSProperties = { border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 9px', fontSize: 13, color: c.text, background: c.input };
-  const num: React.CSSProperties = { ...inp, fontFamily: MONO, textAlign: 'right' };
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 11, color: c.sub, textAlign: 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '7px 10px', fontSize: 12.5, color: c.text, borderBottom: `1px solid ${c.border}` };
   const tdNum: React.CSSProperties = { ...td, fontFamily: MONO, textAlign: 'right', whiteSpace: 'nowrap' };
@@ -423,7 +386,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
                         {r.jumlah_bukti > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: '#1D9E75', color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 10, padding: '0 4px', fontFamily: MONO }}>{r.jumlah_bukti}</span>}
                       </button>
                     </Tip>
-                    {!isRejected && bolehPengadaan && <span data-rima="bba.row-realisasi"><Tip label="Proses & realisasi"><RealisasiButton onClick={() => bukaRealisasi(r)} /></Tip></span>}
+                    {!isRejected && bolehPengadaan && <span data-rima="bba.row-realisasi"><Tip label="Proses & penerimaan"><RealisasiButton aria-label="Proses & penerimaan" onClick={() => setProsesId(r.id)} /></Tip></span>}
                     {bolehRencana && (() => {
                       const alasan = alasanTakBisaHapus(r.status, r.jumlah_bukti);
                       return alasan
@@ -447,47 +410,12 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
 
       {tautkanBuka && <ModalTautkan tahun={tahun} c={c} onTutup={() => setTautkanBuka(false)} onSelesai={() => { setTautkanBuka(false); muatUlang(); }} />}
 
-      {/* Modal Proses & Realisasi — satu-satunya pintu ubah status (§5.2) */}
-      {realForm && (() => {
-        const sebelumTerima = statusSebelumTerima(realForm.status);
-        return (
-        <Modal title={`Proses & Realisasi — ${realForm.row.canonical_id}`} c={c} onClose={() => setRealForm(null)}>
-          <div style={{ fontSize: 12.5, color: c.sub, marginBottom: 10 }}>{realForm.row.uraian} · Rencana <b style={{ fontFamily: MONO }}>{fmtRp(realForm.row.nilai_rencana)}</b> · Vol <b style={{ fontFamily: MONO }}>{realForm.row.vol} {realForm.row.satuan || ''}</b></div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Status" full><select value={realForm.status} onChange={e => setRealForm({ ...realForm, status: e.target.value as BbaStatus })} style={inp}>
-              {pilihanStatusRealisasi(realForm.row.status, bolehBatalkanFinal(role)).map(s => <option key={s} value={s}>{LABEL_STATUS[s]}{s === realForm.row.status ? ' (sekarang)' : ''}</option>)}
-            </select></Field>
-            {sebelumTerima ? <>
-              <div style={{ gridColumn: '1 / -1', fontSize: 12, color: c.sub }}>
-                {realForm.status === 'DIPROSES'
-                  ? 'Sudah dipesan/dikontrak, barang belum diterima. Unit & nilai realisasi tetap 0 sampai barangnya datang.'
-                  : 'Kembali direncanakan (pesanan batal). Unit & nilai realisasi 0, tanggal proses dikosongkan.'}
-              </div>
-              {realForm.status === 'DIPROSES' && <Field label="Tanggal proses (pesan/kontrak)"><input type="date" value={realForm.tglProses} onChange={e => setRealForm({ ...realForm, tglProses: e.target.value })} style={inp} /></Field>}
-            </> : <>
-              <Field label="Nilai Realisasi"><InputNominal value={realForm.nilai} onChange={v => setRealForm({ ...realForm, nilai: v, status: suggestStatus(realForm.vol, v, realForm.row) })} style={num} /></Field>
-              <Field label={`Unit Realisasi (0 – ${realForm.row.vol})`}><PrimaNumberField value={realForm.vol} onChange={e => { const v = Number(e.target.value); setRealForm({ ...realForm, vol: v, status: suggestStatus(v, realForm.nilai, realForm.row) }); }} /></Field>
-              <Field label="Tgl Realisasi"><input type="date" value={realForm.tgl} onChange={e => setRealForm({ ...realForm, tgl: e.target.value })} style={inp} /></Field>
-              {realForm.row.tgl_proses && <Field label="Diproses sejak"><input type="text" readOnly value={realForm.row.tgl_proses} style={{ ...inp, opacity: .7, fontFamily: MONO }} /></Field>}
-            </>}
-          </div>
-          {/* §4.2: realisasi tanpa bukti = peringatan, tidak memblokir */}
-          {!sebelumTerima && realForm.status !== 'TIDAK_TEREALISASI' && realForm.row.jumlah_bukti === 0 && (
-            <div style={{ fontSize: 12, color: '#BA7517', marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span>Item ini belum punya bukti dukung (bukti beli, BAST, foto).</span>
-              <button type="button" onClick={() => { const r = realForm.row; setRealForm(null); bukaItem(r, 'bukti'); }}
-                style={{ background: 'none', border: 'none', padding: 0, color: '#7C5CFC', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontSize: 12 }}>
-                Buka bukti dukung
-              </button>
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-            <PrimaButton variant="ghost" onClick={() => setRealForm(null)}>Batal</PrimaButton>
-            <PrimaButton variant="success" data-rima="bba.realisasi-simpan" onClick={saveRealisasi} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
-          </div>
-        </Modal>
-        );
-      })()}
+      {/* Proses & Penerimaan — komponen yang sama dengan halaman Pengadaan (satu jalur tulis, §7.4) */}
+      {prosesId !== null && (
+        <ModalPengadaan c={c} rencanaId={prosesId} bolehUbah={bolehPengadaan} bolehKoreksiMundur={bolehBatalkanFinal(role)}
+          onTutup={() => setProsesId(null)} onTersimpan={muatUlang}
+          onBukaBukti={r => { setProsesId(null); bukaItem(r, 'bukti'); }} />
+      )}
 
       {/* Modal Tarik dari Usulan — kosong (notif bertema, bukan alert native — L58) */}
       {importPreview === 'EMPTY' && (
@@ -572,11 +500,6 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
   );
 }
 
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
-  return <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: full ? '1 / -1' : undefined }}>
-    <span style={{ fontSize: 11, opacity: .8 }}>{label}</span>{children}
-  </label>;
-}
 
 function Modal({ title, children, c, onClose }: { title: string; children: React.ReactNode; c: { card: string; text: string; border: string }; onClose: () => void }) {
   return (
