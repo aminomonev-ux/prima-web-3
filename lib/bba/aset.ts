@@ -2,6 +2,7 @@
 // Konsep: docs/CONCEPT-bba-buku-aset.md §5, §7.1.
 import type { Golongan, Kondisi } from './kib'
 import type { AsetBaca, NilaiKib } from './kib-baca'
+import { statusCek } from './kondisi'
 
 export interface AsetRingan {
   id: number
@@ -21,6 +22,10 @@ export interface AsetRingan {
   kondisi_sumber: 'IMPOR' | 'CEK' | null
   kib: Record<string, NilaiKib>
   status: 'AKTIF' | 'DIHAPUS'
+  /** Diisi pembaca DB (Tahap C); objek uji & hasil impor boleh tanpa. */
+  kondisi_tgl?: string | null
+  version?: number
+  barang_id?: number | null
 }
 
 /** Perencana mencari "Bangsal", bukan "Bangunan gudang tertutup permanen" (§4 temuan 3). */
@@ -47,10 +52,15 @@ export interface KelompokAset {
   harga: number
   kondisi: { B: number; RR: number; RB: number; kosong: number }
   belumDicek: number
+  /** Sudah dicek di PRIMA tapi lebih lama dari jarak opname (pengaturan). */
+  lewat: number
 }
 
-/** Sejenis-setahun-seruangan: nama tampil + kode objek + tahun + ruangan. Data tetap per register. */
-export function kelompokkan(rows: readonly AsetRingan[]): KelompokAset[] {
+/**
+ * Sejenis-setahun-seruangan: nama tampil + kode objek + tahun + ruangan. Data tetap per register.
+ * `batas` = `batasCek(hari ini, jarak opname)`; tanpa itu `lewat` selalu 0.
+ */
+export function kelompokkan(rows: readonly AsetRingan[], batas = ''): KelompokAset[] {
   const peta = new Map<string, KelompokAset>()
   for (const a of rows) {
     const nama = namaTampil(a)
@@ -58,7 +68,7 @@ export function kelompokkan(rows: readonly AsetRingan[]): KelompokAset[] {
     let k = peta.get(kunci)
     if (!k) {
       k = { kunci, golongan: a.golongan, nama, nama_resmi: a.nama_resmi, tahun: a.tahun_perolehan, lokasi_id: a.lokasi_id,
-        ids: [], register: [], harga: 0, kondisi: { B: 0, RR: 0, RB: 0, kosong: 0 }, belumDicek: 0 }
+        ids: [], register: [], harga: 0, kondisi: { B: 0, RR: 0, RB: 0, kosong: 0 }, belumDicek: 0, lewat: 0 }
       peta.set(kunci, k)
     }
     k.ids.push(a.id)
@@ -66,7 +76,9 @@ export function kelompokkan(rows: readonly AsetRingan[]): KelompokAset[] {
     k.harga += a.harga
     if (a.kondisi) k.kondisi[a.kondisi]++
     else k.kondisi.kosong++
-    if (belumDicek(a) && a.golongan !== 'A') k.belumDicek++
+    const st = statusCek(a, batas)
+    if (st === 'BELUM') k.belumDicek++
+    else if (st === 'LEWAT') k.lewat++
   }
   return [...peta.values()]
 }

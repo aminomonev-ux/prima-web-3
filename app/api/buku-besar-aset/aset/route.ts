@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
-import { AsetDaftarSchema, AsetIdSchema, AsetIdsSchema, UbahAsetSchema } from '@/lib/data/bba-aset-schemas';
-import { daftarAset, detailAset, asetMenurutId, ubahAset, AsetVersiError, AsetTidakAdaError } from '@/lib/data/bba-aset';
+import { AsetDaftarSchema, AsetIdSchema, AsetIdsSchema, AsetOpnameSchema, UbahAsetSchema } from '@/lib/data/bba-aset-schemas';
+import { daftarAset, detailAset, asetMenurutId, asetOpname, batasCekSekarang, ubahAset, AsetVersiError, AsetTidakAdaError } from '@/lib/data/bba-aset';
 import { BbaBarangTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../_guard';
 
 // Buku Aset (docs/CONCEPT-bba-buku-aset.md §14): GET daftar berkelompok · ?id= kartu aset ·
-// ?ids= register sebuah kelompok. PATCH = tambahan PRIMA di kartu aset (nama sehari-hari, barang).
+// ?ids= register sebuah kelompok · ?ruang= / ?gedung= register untuk opname (beserta angka kuncinya).
+// PATCH = tambahan PRIMA di kartu aset (nama sehari-hari, barang).
 export async function GET(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
@@ -16,14 +17,20 @@ export async function GET(req: NextRequest) {
   if (sp.has('id')) {
     const p = AsetIdSchema.safeParse({ id: sp.get('id') });
     if (!p.success) return NextResponse.json({ ok: false, message: 'ID tidak valid' }, { status: 400 });
-    const d = await detailAset(p.data.id);
+    const [d, batas] = await Promise.all([detailAset(p.data.id), batasCekSekarang()]);
     if (!d) return NextResponse.json({ ok: false, message: 'Aset tidak ditemukan.' }, { status: 404 });
-    return NextResponse.json({ ok: true, ...d });
+    return NextResponse.json({ ok: true, ...d, batas });
   }
   if (sp.has('ids')) {
     const p = AsetIdsSchema.safeParse({ ids: sp.get('ids') });
     if (!p.success) return NextResponse.json({ ok: false, message: 'Daftar register tidak valid' }, { status: 400 });
     return NextResponse.json({ ok: true, rows: await asetMenurutId(p.data.ids) });
+  }
+  if (sp.has('ruang') || sp.has('gedung')) {
+    const p = AsetOpnameSchema.safeParse(sp.has('ruang') ? { ruang: sp.get('ruang') } : { gedung: sp.get('gedung') });
+    if (!p.success) return NextResponse.json({ ok: false, message: 'Ruangan/gedung tidak valid' }, { status: 400 });
+    const [rows, batas] = await Promise.all([asetOpname(p.data), batasCekSekarang()]);
+    return NextResponse.json({ ok: true, rows, batas });
   }
   const p = AsetDaftarSchema.safeParse(Object.fromEntries([...sp].filter(([, v]) => v !== '')));
   if (!p.success) return NextResponse.json({ ok: false, message: 'Saringan tidak valid: ' + p.error.issues[0].message }, { status: 400 });

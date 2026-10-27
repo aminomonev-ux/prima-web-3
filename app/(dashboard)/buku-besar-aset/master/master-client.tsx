@@ -74,7 +74,7 @@ export default function MasterClient({ username, role, themePreference, initialK
         <div style={{ fontSize: 13, color: c.sub }}>
           <span style={{ fontWeight: 800, background: 'linear-gradient(135deg,#EF9F27,#FAC775)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Buku Besar Aset</span>
           <span style={{ margin: '0 6px', color: isLight ? '#D1D5DB' : '#185FA5' }}>/</span>
-          <span style={{ color: isLight ? '#374151' : '#B5D4F4', fontWeight: 600 }}>Master {tab === 'BARANG' ? 'Barang' : tab === 'LOKASI' ? 'Lokasi' : tab === 'PENGATURAN' ? 'Pengaturan' : 'Kategori'}</span>
+          <span style={{ color: isLight ? '#374151' : '#B5D4F4', fontWeight: 600 }}>Master {tab === 'BARANG' ? 'Barang' : tab === 'LOKASI' ? 'Ruangan' : tab === 'PENGATURAN' ? 'Pengaturan' : 'Kategori'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ThemeToggle initialTheme={themePreference} onThemeChange={setTheme} />
@@ -87,7 +87,7 @@ export default function MasterClient({ username, role, themePreference, initialK
         <SpandukBeku {...beku}/>
         {!bolehUbah && <SpandukLihat label="Master" />}
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-          {([['KATEGORI', 'Kategori'], ['BARANG', 'Barang'], ['LOKASI', 'Lokasi'], ['PENGATURAN', 'Pengaturan']] as const).map(([val, label]) => (
+          {([['KATEGORI', 'Kategori'], ['BARANG', 'Barang'], ['LOKASI', 'Ruangan'], ['PENGATURAN', 'Pengaturan']] as const).map(([val, label]) => (
             <button key={val} type="button" onClick={() => setTab(val)}
               style={{ padding: '5px 14px', fontSize: 12.5, fontWeight: 600, borderRadius: 20, cursor: 'pointer',
                 border: `1px solid ${tab === val ? '#EF9F27' : c.border}`, background: tab === val ? 'rgba(239,159,39,.15)' : 'transparent', color: tab === val ? '#EF9F27' : c.sub }}>
@@ -102,7 +102,7 @@ export default function MasterClient({ username, role, themePreference, initialK
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px' }}>⚙️ Pengaturan</h1>
           <PengaturanPanel c={c} bolehUbah={bolehUbah} />
         </> : tab === 'LOKASI' ? <>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📍 Master Lokasi</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>📍 Master Ruangan</h1>
           <LokasiPanel c={c} awal={initialLokasi} bolehUbah={bolehUbah} />
         </> : <>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>🗂️ Master Kategori Aset</h1>

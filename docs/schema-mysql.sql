@@ -1259,11 +1259,18 @@ CREATE TABLE IF NOT EXISTS bba_lokasi (
   id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
   nama       VARCHAR(160) NOT NULL,
   urutan     INT          NOT NULL DEFAULT 0,
+  -- Tahap C (migration-bba-ruang.sql). gedung_aset_id = soft-FK bba_aset golongan C (diperiksa aplikasi,
+  -- L68) — FK sungguhan membuat bba_lokasi & bba_aset saling bergantung dan berkas ini tak bisa dijalankan ulang.
+  gedung_aset_id BIGINT UNSIGNED NULL COMMENT 'Gedung (bba_aset golongan C) tempat ruangan ini — Kode Gedung di kop KIR',
+  luas       DECIMAL(10,2) NULL COMMENT 'Luas ruangan (m²) — kop KIR',
+  pj_nama    VARCHAR(120) NULL COMMENT 'Penanggung Jawab Ruangan — tanda tangan KIR',
+  pj_nip     VARCHAR(40)  NULL,
   created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_bba_lokasi_nama (nama)
+  UNIQUE KEY uq_bba_lokasi_nama (nama),
+  KEY idx_bba_lokasi_gedung (gedung_aset_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='BBA — master lokasi/ruangan pendataan eksisting';
+  COMMENT='BBA — master ruangan (Buku Aset, KIR). bba_eksisting (Tahap 3) dipensiunkan di Tahap C: tidak dipakai aplikasi lagi';
 
 CREATE TABLE IF NOT EXISTS bba_eksisting (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -1349,7 +1356,6 @@ CREATE TABLE IF NOT EXISTS bba_aset_riwayat (
   CONSTRAINT fk_bar_oleh FOREIGN KEY (oleh) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='BBA — riwayat aset (impor, ubah, kondisi, pindah, terima, register, rehab, hapus)';
-
 -- ═══════════════════════════════════════════════════════════════════════════
 -- LKJIP Builder — modul baru (migration-lkjip.sql)
 -- Penyusun dokumen LKJIP/SAKIP tahunan berbasis outline-tree + blok.

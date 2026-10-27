@@ -1,5 +1,5 @@
 'use client';
-// Pengaturan BBA (docs/CONCEPT-bba-buku-aset.md §14): kop & penanda tangan Excel KIB, jarak opname.
+// Pengaturan BBA (docs/CONCEPT-bba-buku-aset.md §14): kop & penanda tangan Excel format provinsi, jarak opname.
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -49,7 +49,7 @@ export default function PengaturanPanel({ c, bolehUbah }: { c: Warna; bolehUbah:
 
   return (
     <fieldset disabled={!bolehUbah} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ fontSize: 12.5, color: c.sub, lineHeight: 1.5 }}>Dipakai Excel KIB format provinsi (kop baris 5–8 dan tanda tangan di bawah tabel).</div>
+      <div style={{ fontSize: 12.5, color: c.sub, lineHeight: 1.5 }}>Dipakai semua Excel format provinsi — KIB, KIR, hasil sensus, Buku Inventaris, Rekap BMD (kop dan tanda tangan di bawah tabel).</div>
       <section style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 14 }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Kop</div>
         <div style={grid}>
@@ -68,7 +68,10 @@ export default function PengaturanPanel({ c, bolehUbah }: { c: Warna; bolehUbah:
           {isian('NIP Kepala SKPD', p.ttd.kepala_nip, ttd('kepala_nip'), 40)}
           {isian('Nama Pengurus Barang', p.ttd.pengurus_nama, ttd('pengurus_nama'), 120)}
           {isian('NIP Pengurus Barang', p.ttd.pengurus_nip, ttd('pengurus_nip'), 40)}
+          {isian('Nama Pembantu Pengurus Barang (KIR)', p.ttd.pembantu_nama, ttd('pembantu_nama'), 120)}
+          {isian('NIP Pembantu Pengurus Barang', p.ttd.pembantu_nip, ttd('pembantu_nip'), 40)}
         </div>
+        <div style={{ fontSize: 11.5, color: c.sub, marginTop: 8 }}>Penanggung jawab ruangan (kiri bawah KIR) diisi per ruangan di tab Ruangan.</div>
       </section>
       <section style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 14 }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Jarak opname</div>

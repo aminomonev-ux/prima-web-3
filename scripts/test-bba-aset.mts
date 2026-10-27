@@ -53,7 +53,7 @@ ok('A6 angka gaya Indonesia & Inggris terbaca benar', angka('1.250.000') === 125
 
 console.log('\nB. Pembaca impor (lib/bba/kib-baca.ts)')
 const P: PengaturanBba = { ...PENGATURAN_BAWAAN, kop: { kode_lokasi: '010206.00000.00000', bidang: 'RS UJI', sub_bidang: 'RS UJI', satuan_kerja: 'RS UJI' },
-  ttd: { kota: 'Semarang', kepala_jabatan: 'KEPALA SKPD', kepala_nama: 'dr. Kepala Uji', kepala_nip: '1970', pengurus_nama: 'Pengurus Uji', pengurus_nip: '1980' } }
+  ttd: { ...PENGATURAN_BAWAAN.ttd, kota: 'Semarang', kepala_jabatan: 'KEPALA SKPD', kepala_nama: 'dr. Kepala Uji', kepala_nip: '1970', pengurus_nama: 'Pengurus Uji', pengurus_nip: '1980' } }
 const isiKib = (g: Golongan, i: number): Record<string, string | number | null> => Object.fromEntries(kunciKib(g).map(k => {
   const def = KOLOM_KIB[g].find(d => d.kunci === k)!
   return [k, def.tipe === 'angka' ? 100 + i : def.tipe === 'tanggal' ? '1984-12-31' : `${k}-${i}`]

@@ -301,7 +301,7 @@ export default function BukuBesarAsetClient({ username, role, themePreference, i
       </div>
 
       {tampilan === 'BARANG' ? (
-        <PerBarang tahun={tahun} c={c} segarkan={segarkanBarang} onTautkan={bolehRencana ? () => setTautkanBuka(true) : undefined} bolehPendataan={izin.aset === 'EDIT'} />
+        <PerBarang tahun={tahun} c={c} segarkan={segarkanBarang} onTautkan={bolehRencana ? () => setTautkanBuka(true) : undefined} />
       ) : (<>
       {/* §5.1: item tanpa barang → riwayat beli tidak bisa dijawab untuknya */}
       {belumBarang > 0 && bolehRencana && (

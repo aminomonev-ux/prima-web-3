@@ -1,8 +1,8 @@
 'use client';
-// Bar kondisi eksisting Baik / Rusak Ringan / Rusak Berat (CONCEPT-bba-perencanaan §4.4/§6.3).
+// Bar kondisi Baik / Rusak Ringan / Rusak Berat dari register Buku Aset (docs/CONCEPT-bba-buku-aset.md §8).
 // Warna = token action-success / action-warning / action-danger, sama dengan warna status BBA.
 
-import type { Kondisi } from '@/lib/bba/eksisting';
+import type { Kondisi } from '@/lib/bba/kondisi';
 
 export const WARNA_KONDISI = { baik: '#1D9E75', rusak_ringan: '#BA7517', rusak_berat: '#E24B4A' } as const;
 const MONO = "'JetBrains Mono', ui-monospace, monospace";

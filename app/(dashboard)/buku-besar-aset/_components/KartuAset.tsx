@@ -2,17 +2,21 @@
 // Kartu aset (docs/CONCEPT-bba-buku-aset.md §5.2, §14): kolom KIB apa adanya + tambahan PRIMA
 // (nama sehari-hari, barang) + kaitan tanah ↔ bangunan + riwayat. Kolom KIB hanya berubah lewat
 // impor; yang disunting di sini hanya tambahan PRIMA (satu Simpan, angka kunci dari muatan segar — L77).
+// Catat kondisi & pindah ruangan memakai modal yang sama dengan aksi borongan Buku Aset.
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { X } from 'lucide-react';
+import { X, Paperclip } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { KOLOM_KIB, NAMA_GOLONGAN, LABEL_KONDISI, KOLOM_POKOK } from '@/lib/bba/kib';
 import { namaTampil } from '@/lib/bba/aset';
+import { statusCek, fmtTanggal, bolehBerRuang, punyaKondisi } from '@/lib/bba/kondisi';
 import type { DetailAset } from '@/lib/data/bba-aset';
 import type { BbaBarang } from '@/lib/data/buku-besar-aset';
 import type { BarangRingan } from '@/lib/bba/barang';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
+import { ModalKondisi, ModalPindah } from './AksiAset';
+import { unduhBerkas } from './ModalItem';
 import type { WarnaBba } from './BbaShell';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -32,7 +36,8 @@ function ringkasPerubahan(sebelum: Record<string, unknown> | null, sesudah: Reco
 }
 
 export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersimpan }: Props) {
-  const [d, setD] = useState<DetailAset | null>(null);
+  const [d, setD] = useState<(DetailAset & { batas: string }) | null>(null);
+  const [aksi, setAksi] = useState<'kondisi' | 'pindah' | null>(null);
   const [galat, setGalat] = useState('');
   const [nama, setNama] = useState('');
   const [barang, setBarang] = useState<PilihanBarang>(null);
@@ -45,7 +50,7 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
     const r = await fetchJson<unknown>(`/api/buku-besar-aset/aset?id=${id}`);
     if (n !== nomor.current) return;
     if (!r.ok) { setGalat(r.message || 'Gagal memuat aset'); return; }
-    const det = r as unknown as DetailAset;
+    const det = r as unknown as DetailAset & { batas: string };
     setGalat(''); setD(det);
     setNama(det.aset.nama ?? '');
     setBarang(det.aset.barang_id ? { id: det.aset.barang_id, nama: det.aset.barang_nama ?? '' } : null);
@@ -130,10 +135,17 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
             <div style={{ fontSize: 11, color: c.sub, margin: '14px 0 4px', fontWeight: 600 }}>DI PRIMA</div>
             {a.golongan !== 'A' && baris('Kondisi', a.kondisi
               ? <span>{LABEL_KONDISI[a.kondisi]}{a.kondisi_sumber === 'CEK'
-                  ? <span style={{ color: c.sub }}> — dicek {a.kondisi_oleh ?? '—'}{a.kondisi_tgl ? `, ${a.kondisi_tgl}` : ''}</span>
-                  : <span style={{ color: '#BA7517' }}> — dari sistem provinsi, belum dicek</span>}</span>
+                  ? <span style={{ color: c.sub }}> — dicek {a.kondisi_oleh ?? '—'}{a.kondisi_tgl ? `, ${fmtTanggal(a.kondisi_tgl)}` : ''}</span>
+                  : <span style={{ color: '#BA7517' }}> — dari sistem provinsi, belum dicek</span>}
+                  {statusCek(a, d!.batas) === 'LEWAT' && <span style={{ color: '#BA7517', fontWeight: 600 }}> · perlu dicek ulang</span>}</span>
               : <span style={{ color: '#BA7517' }}>Belum dicek</span>)}
-            {baris('Ruangan', a.lokasi_nama ?? <span style={{ color: c.sub }}>Belum ditempatkan</span>)}
+            {bolehBerRuang(a.golongan) && baris('Ruangan', a.lokasi_nama ?? <span style={{ color: c.sub }}>Belum ditempatkan</span>)}
+            {bolehUbah && a.status === 'AKTIF' && (punyaKondisi(a.golongan) || bolehBerRuang(a.golongan)) && (
+              <div style={{ display: 'flex', gap: 8, margin: '8px 0 2px', flexWrap: 'wrap' }}>
+                {punyaKondisi(a.golongan) && <PrimaButton variant="success" size="sm" onClick={() => setAksi('kondisi')}>Catat kondisi</PrimaButton>}
+                {bolehBerRuang(a.golongan) && <PrimaButton variant="purple" size="sm" onClick={() => setAksi('pindah')}>Pindah ruangan</PrimaButton>}
+              </div>
+            )}
             <fieldset disabled={!bolehUbah} style={{ border: 0, padding: 0, margin: '8px 0 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 11, color: c.sub }}>Nama sehari-hari <span style={{ opacity: .8 }}>— yang dicari orang (&ldquo;Gedung Bangsal I&rdquo;), nama resmi tetap di atas</span></span>
@@ -155,6 +167,7 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
                 <span style={{ minWidth: 0 }}>
                   <b>{JENIS_RIWAYAT[r.jenis] ?? r.jenis}</b>{r.oleh ? <span style={{ color: c.sub }}> · {r.oleh}</span> : null}
                   {r.catatan && <span style={{ color: c.sub }}> · {r.catatan}</span>}
+                  {r.file_id && <a href={unduhBerkas(r.file_id)} target="_blank" rel="noopener noreferrer" aria-label="Buka foto" style={{ color: '#1D9E75', marginLeft: 6, display: 'inline', verticalAlign: -2 }}><Paperclip size={12} style={{ display: 'inline' }} /></a>}
                   {ringkasPerubahan(r.sebelum, r.sesudah) && <div style={{ color: c.sub, wordBreak: 'break-word' }}>{ringkasPerubahan(r.sebelum, r.sesudah)}</div>}
                 </span>
               </div>
@@ -169,6 +182,8 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
           </div>
         )}
       </div>
+      {aksi === 'kondisi' && <ModalKondisi c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
+      {aksi === 'pindah' && <ModalPindah c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
     </div>
   );
 }

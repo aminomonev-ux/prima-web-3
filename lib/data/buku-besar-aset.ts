@@ -5,10 +5,9 @@
 import type mysql from 'mysql2/promise';
 import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, sqlInt, type Penanya } from '@/lib/data/db';
 import { toDateStr, tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
-import {
-  fmtTanggal, ringkasEksisting, ringkasEksistingPerBarang, riwayatPerLokasi,
-  type BarisEksisting, type BahanBeli, type RingkasEksisting,
-} from '@/lib/bba/eksisting';
+import { fmtTanggal, batasCek, ringkasDimiliki, ringkasDimilikiPerBarang, type Dimiliki } from '@/lib/bba/kondisi';
+import { KUNCI_PENGATURAN, bacaPengaturan, type PengaturanBba } from '@/lib/bba/pengaturan';
+import type { Golongan, Kondisi } from '@/lib/bba/kib';
 import { isSafeFileUrl } from '@/lib/shared/url';
 import {
   kelengkapanRef, kelengkapanBukti, referensiSah, rapikanReferensi, referensiSama, slotDariUsulan, tautanAman, MAKS_BUKTI,
@@ -23,7 +22,7 @@ import {
 } from '@/lib/bba/barang';
 import type {
   BbaStatus, BbaCreateInput, BbaUpdateInput, BbaRealisasiInput, BbaQuery, ReferensiInput, BuktiCreateInput,
-  BarangCreateInput, BarangUpdateInput, BarangTautkanInput, EksistingSimpanInput,
+  BarangCreateInput, BarangUpdateInput, BarangTautkanInput, LokasiUpdateInput,
 } from './buku-besar-aset-schemas';
 
 export class BbaVersionConflictError extends Error {
@@ -58,32 +57,34 @@ export class BbaBarangKembarError extends Error {
 }
 export class BbaBarangDipakaiError extends Error {
   constructor(item: number, pendataan = 0, aset = 0) {
-    const dipakai = [item > 0 ? `${item} item` : '', pendataan > 0 ? `${pendataan} pendataan eksisting` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
+    const dipakai = [item > 0 ? `${item} item` : '', pendataan > 0 ? `${pendataan} pendataan eksisting lama` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
     super(`Barang ini dipakai ${dipakai}. Gabungkan ke barang lain dulu (tombol Gabungkan), baru barangnya hilang dari daftar.`);
     this.name = 'BbaBarangDipakaiError';
   }
 }
 export class BbaGabungBentrokError extends Error {
   constructor(daftar: string[]) {
-    super(`Kedua barang sama-sama didata di ${daftar.join('; ')} pada tanggal yang sama. Hapus salah satu pendataan itu dulu (kartu barang → riwayat pendataan), lalu gabungkan.`);
+    // Pendataan eksisting dipensiunkan di Tahap C (tak ada lagi layar untuk menghapusnya); bentrok hanya
+    // mungkin pada data lama di tabel bba_eksisting.
+    super(`Kedua barang punya pendataan eksisting lama (sebelum Buku Aset) di ${daftar.join('; ')} pada tanggal yang sama. Data lama itu tidak tampil lagi di PRIMA — minta admin basis data membereskan tabel bba_eksisting, lalu gabungkan.`);
     this.name = 'BbaGabungBentrokError';
   }
 }
 export class BbaLokasiTidakDikenalError extends Error {
-  constructor() { super('Lokasi tidak ditemukan — mungkin baru saja dihapus. Pilih ulang lokasinya.'); this.name = 'BbaLokasiTidakDikenalError'; }
+  constructor() { super('Ruangan tidak ditemukan — mungkin baru saja dihapus. Pilih ulang ruangannya.'); this.name = 'BbaLokasiTidakDikenalError'; }
 }
 export class BbaLokasiKembarError extends Error {
-  constructor(nama: string) { super(`Lokasi "${nama}" sudah ada.`); this.name = 'BbaLokasiKembarError'; }
+  constructor(nama: string) { super(`Ruangan "${nama}" sudah ada.`); this.name = 'BbaLokasiKembarError'; }
+}
+export class BbaGedungTidakDikenalError extends Error {
+  constructor() { super('Gedung harus aset KIB C yang masih aktif di Buku Aset. Pilih ulang gedungnya.'); this.name = 'BbaGedungTidakDikenalError'; }
 }
 export class BbaLokasiDipakaiError extends Error {
   constructor(n: number, aset = 0) {
-    const dipakai = [n > 0 ? `${n} pendataan eksisting` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
-    super(`Lokasi ini punya ${dipakai}, jadi tidak bisa dihapus. Ganti namanya kalau yang salah hanya namanya.`);
+    const dipakai = [n > 0 ? `${n} pendataan eksisting lama` : '', aset > 0 ? `${aset} aset di Buku Aset` : ''].filter(Boolean).join(' dan ');
+    super(`Ruangan ini punya ${dipakai}, jadi tidak bisa dihapus. Pindahkan asetnya dulu, atau ganti namanya kalau yang salah hanya namanya.`);
     this.name = 'BbaLokasiDipakaiError';
   }
-}
-export class BbaTanggalCekError extends Error {
-  constructor(hariIni: string) { super(`Tanggal cek tidak boleh sesudah hari ini (${hariIni}).`); this.name = 'BbaTanggalCekError'; }
 }
 export class BbaRiwayatTerkunciError extends Error {
   constructor(alasan: string) { super(alasan); this.name = 'BbaRiwayatTerkunciError'; }
@@ -344,7 +345,7 @@ export async function getAsetDetail(id: number): Promise<BbaDetail | null> {
 }
 
 /** L68: `file_id` yang ditempel harus unggahan BBA sendiri — berkas modul lain tidak bisa "dipinjam" lewat sini. */
-async function pastikanBerkasBba(q: Penanya, fileIds: (string | null | undefined)[]): Promise<void> {
+export async function pastikanBerkasBba(q: Penanya, fileIds: (string | null | undefined)[]): Promise<void> {
   const unik = [...new Set(fileIds.filter((f): f is string => !!f))];
   if (unik.length === 0) return;
   const rows = await q`SELECT file_id FROM uploaded_files WHERE file_id IN (${unik}) AND context = 'buku_besar_aset'`;
@@ -834,42 +835,42 @@ function bahanDari(r: Record<string, unknown>): BahanBarang {
 }
 const KOLOM_BAHAN = sql`barang_id, tahun_anggaran, status, usulan_keputusan, vol, vol_realisasi, nilai_rencana, nilai_realisasi, DATE_FORMAT(tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi`;
 
-// ─── Kondisi eksisting: bahan (§6) ──────────────────────────────────────────
-function eksistingDari(r: Record<string, unknown>): BarisEksisting {
-  return {
-    id: Number(r.id), barang_id: Number(r.barang_id), lokasi_id: Number(r.lokasi_id), lokasi_nama: String(r.lokasi_nama ?? ''),
-    baik: Number(r.baik ?? 0), rusak_ringan: Number(r.rusak_ringan ?? 0), rusak_berat: Number(r.rusak_berat ?? 0),
-    // sudah teks: DATE_FORMAT di SQL
-    tgl_cek: (r.tgl_cek as string | null) ?? '', catatan: r.catatan as string | null, file_id: r.file_id as string | null,
-    created_at: (r.created_at as string | null) ?? '', digabung_dari: r.digabung_dari as string | null, digabung_pada: (r.digabung_pada as string | null) ?? null,
-  };
-}
-const KOLOM_EKSISTING = sql`
-  e.id, e.barang_id, e.lokasi_id, l.nama AS lokasi_nama, e.baik, e.rusak_ringan, e.rusak_berat,
-  DATE_FORMAT(e.tgl_cek, '%Y-%m-%d') AS tgl_cek, e.catatan, e.file_id, e.digabung_dari,
-  DATE_FORMAT(e.created_at, '%Y-%m-%d %H:%i:%s') AS created_at, DATE_FORMAT(e.digabung_pada, '%Y-%m-%d %H:%i:%s') AS digabung_pada`;
+// ─── Barang yang dimiliki: dari Buku Aset per register (Tahap C, §8) ────────
+// Menggantikan pendataan eksisting Tahap 3 (bba_eksisting, dipensiunkan): jumlah & kondisi kini
+// DIHITUNG dari register yang ditautkan ke barang, bukan diketik ulang per lokasi.
 
-async function ambilEksisting(barangId?: number): Promise<BarisEksisting[]> {
-  const where = barangId ? sql`WHERE e.barang_id = ${barangId}` : sql``;
-  const rows = await queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_EKSISTING} FROM bba_eksisting e JOIN bba_lokasi l ON l.id = e.lokasi_id ${where}`);
-  return rows.map(eksistingDari);
+export async function bacaPengaturanBba(): Promise<PengaturanBba> {
+  const r = await queryOne<{ value: string }>(sql`SELECT value FROM app_config WHERE \`key\` = ${KUNCI_PENGATURAN} LIMIT 1`);
+  return bacaPengaturan(r?.value);
 }
 
-/** Pembelian yang ditimbang "perlu didata ulang" — semua tahun, usulan ditolak tidak ikut. */
-async function ambilBeli(barangId?: number): Promise<BahanBeli[]> {
-  const satu = barangId ? sql`AND barang_id = ${barangId}` : sql``;
+/** Batas "masih terkini" dari jarak opname di pengaturan (§13 keputusan 2). */
+export async function batasCekSekarang(): Promise<string> {
+  return batasCek(tanggalHariIniWIB(), (await bacaPengaturanBba()).opname_bulan);
+}
+
+type BahanDimiliki = {
+  barang_id: number | null; lokasi_id: number | null; lokasi_nama: string | null; golongan: Golongan;
+  kondisi: Kondisi | null; kondisi_sumber: 'IMPOR' | 'CEK' | null; kondisi_tgl: string | null;
+};
+
+async function ambilDimiliki(barangId?: number): Promise<BahanDimiliki[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT barang_id, vol_realisasi, DATE_FORMAT(tgl_realisasi, '%Y-%m-%d') AS tgl_realisasi FROM buku_besar_aset
-    WHERE barang_id IS NOT NULL ${satu} AND status IN ('REALISASI_PENUH', 'REALISASI_SEBAGIAN') AND vol_realisasi > 0
-      AND tgl_realisasi IS NOT NULL AND (usulan_keputusan IS NULL OR usulan_keputusan <> 'DITOLAK')
+    SELECT a.barang_id, a.lokasi_id, l.nama AS lokasi_nama, a.golongan, a.kondisi, a.kondisi_sumber, DATE_FORMAT(a.kondisi_tgl, '%Y-%m-%d') AS kondisi_tgl
+    FROM bba_aset a LEFT JOIN bba_lokasi l ON l.id = a.lokasi_id
+    WHERE a.status = 'AKTIF' AND ${barangId ? sql`a.barang_id = ${barangId}` : sql`a.barang_id IS NOT NULL`}
   `);
-  return rows.map(r => ({ barang_id: Number(r.barang_id), vol_realisasi: Number(r.vol_realisasi ?? 0), tgl_realisasi: (r.tgl_realisasi as string | null) ?? null }));
+  return rows.map(r => ({
+    barang_id: r.barang_id == null ? null : Number(r.barang_id), lokasi_id: r.lokasi_id == null ? null : Number(r.lokasi_id),
+    lokasi_nama: (r.lokasi_nama as string | null) ?? null, golongan: r.golongan as Golongan, kondisi: (r.kondisi as Kondisi | null) ?? null,
+    kondisi_sumber: (r.kondisi_sumber as 'IMPOR' | 'CEK' | null) ?? null, kondisi_tgl: (r.kondisi_tgl as string | null) ?? null, // sudah teks: DATE_FORMAT di SQL
+  }));
 }
 
 export type BarisPerBarang = RingkasBarang & {
   id: number; nama: string; kategori_aset: string | null; satuan: string | null;
-  /** null = belum pernah didata. */
-  eksisting: RingkasEksisting | null;
+  /** null = belum ada register Buku Aset yang ditautkan ke barang ini. */
+  dimiliki: Dimiliki | null;
 };
 export interface BelumDitautkan { id: number; canonical_id: string; uraian: string; kategori_aset: string | null; satuan: string | null; nilai_rencana: number }
 export interface PerBarangTahun {
@@ -878,9 +879,9 @@ export interface PerBarangTahun {
   belum: { item: number; direncanakan: number; rencana: number; daftar: BelumDitautkan[] };
 }
 
-/** Tampilan Per Barang tahun T (§5.3/§6.3). Kueri hanya mengambil bahan; hitungannya `ringkasPerBarang` + `ringkasEksisting`. */
+/** Tampilan Per Barang tahun T (§5.3, §8). Kueri hanya mengambil bahan; hitungannya `ringkasPerBarang` + `ringkasDimiliki`. */
 export async function perBarangTahun(tahun: number): Promise<PerBarangTahun> {
-  const [bahanRows, barang, belumRows, eksisting, beli] = await Promise.all([
+  const [bahanRows, barang, belumRows, dimiliki, batas] = await Promise.all([
     queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_BAHAN} FROM buku_besar_aset WHERE tahun_anggaran <= ${tahun} AND (barang_id IS NOT NULL OR tahun_anggaran = ${tahun})`),
     listBarang(),
     queryMany<Record<string, unknown>>(sql`
@@ -888,14 +889,14 @@ export async function perBarangTahun(tahun: number): Promise<PerBarangTahun> {
       WHERE tahun_anggaran = ${tahun} AND barang_id IS NULL AND (usulan_keputusan IS NULL OR usulan_keputusan <> 'DITOLAK')
       ORDER BY canonical_id ASC LIMIT 500
     `),
-    ambilEksisting(),
-    ambilBeli(),
+    ambilDimiliki(),
+    batasCekSekarang(),
   ]);
   const { perBarang, belum } = ringkasPerBarang(bahanRows.map(bahanDari), tahun);
-  const eksPer = ringkasEksistingPerBarang(eksisting, beli);
-  // Barang yang hanya punya pendataan (inventaris lama yang tak pernah dibeli lewat BBA) ikut tampil.
-  const rows = barang.filter(b => perBarang.has(b.id) || eksPer.has(b.id))
-    .map(b => ({ id: b.id, nama: b.nama, kategori_aset: b.kategori_aset, satuan: b.satuan, ...(perBarang.get(b.id) ?? ringkasKosong()), eksisting: eksPer.get(b.id) ?? null }))
+  const milikPer = ringkasDimilikiPerBarang(dimiliki, batas);
+  // Barang yang hanya punya register di Buku Aset (dibeli sebelum PRIMA) ikut tampil.
+  const rows = barang.filter(b => perBarang.has(b.id) || milikPer.has(b.id))
+    .map(b => ({ id: b.id, nama: b.nama, kategori_aset: b.kategori_aset, satuan: b.satuan, ...(perBarang.get(b.id) ?? ringkasKosong()), dimiliki: milikPer.get(b.id) ?? null }))
     .sort((a, b) => b.rencana_tahun - a.rencana_tahun || a.nama.localeCompare(b.nama, 'id'));
   const daftar = belumRows.map(r => ({
     id: Number(r.id), canonical_id: String(r.canonical_id ?? ''), uraian: String(r.uraian ?? ''),
@@ -904,49 +905,66 @@ export async function perBarangTahun(tahun: number): Promise<PerBarangTahun> {
   return { tahun, rows, belum: { ...belum, daftar } };
 }
 
+export interface DimilikiPerRuang { lokasi_id: number | null; lokasi: string | null; ringkas: Dimiliki }
 export interface DetailBarang {
   barang: Omit<BbaBarang, 'jumlah_item' | 'jumlah_pendataan' | 'jumlah_aset'>; ringkas: RingkasBarang; riwayat: BarisRiwayat[];
-  /** Kondisi eksisting (§6) + riwayat pendataan per lokasi; tanpa pendataan → eksisting.lokasi kosong. */
-  eksisting: RingkasEksisting; riwayat_eksisting: { lokasi_id: number; lokasi: string; baris: BarisEksisting[] }[];
+  /** Register Buku Aset yang ditautkan ke barang ini; per ruangan (tanpa ruangan = lokasi_id null). */
+  dimiliki: Dimiliki; dimiliki_per_ruang: DimilikiPerRuang[];
 }
 
-/** Kartu barang: angka tahun T + riwayat per tahun + rata-rata referensi per tahun + kondisi eksisting. */
+/** Kartu barang: angka tahun T + riwayat per tahun + rata-rata referensi per tahun + yang dimiliki. */
 export async function detailBarang(id: number, tahun: number): Promise<DetailBarang | null> {
   const barang = await queryOne<Record<string, unknown>>(sql`SELECT id, nama, kategori_aset, satuan FROM bba_barang WHERE id = ${id} LIMIT 1`);
   if (!barang) return null;
-  const [bahanRows, refRows, eksisting, beli] = await Promise.all([
+  const [bahanRows, refRows, dimiliki, batas] = await Promise.all([
     queryMany<Record<string, unknown>>(sql`SELECT ${KOLOM_BAHAN} FROM buku_besar_aset WHERE barang_id = ${id}`),
     queryMany<Record<string, unknown>>(sql`
       SELECT r.harga, r.url, r.file_id, b.tahun_anggaran FROM bba_referensi_harga r
       JOIN buku_besar_aset b ON b.id = r.aset_id
       WHERE b.barang_id = ${id} AND (b.usulan_keputusan IS NULL OR b.usulan_keputusan <> 'DITOLAK')
     `),
-    ambilEksisting(id),
-    ambilBeli(id),
+    ambilDimiliki(id),
+    batasCekSekarang(),
   ]);
   const bahan = bahanRows.map(bahanDari);
   const refs: BahanRefBarang[] = refRows.map(r => ({
     harga: r.harga == null ? null : Number(r.harga), url: r.url as string | null, file_id: r.file_id as string | null, tahun_anggaran: Number(r.tahun_anggaran),
   }));
   const ringkas = ringkasPerBarang(bahan, tahun).perBarang.get(id) ?? ringkasKosong();
+  const perRuang = new Map<number | null, BahanDimiliki[]>();
+  for (const a of dimiliki) perRuang.set(a.lokasi_id, [...(perRuang.get(a.lokasi_id) ?? []), a]);
   return {
     barang: { id: Number(barang.id), nama: String(barang.nama ?? ''), kategori_aset: barang.kategori_aset as string | null, satuan: barang.satuan as string | null },
     ringkas, riwayat: riwayatPerTahun(bahan, refs),
-    eksisting: ringkasEksisting(eksisting, beli), riwayat_eksisting: riwayatPerLokasi(eksisting),
+    dimiliki: ringkasDimiliki(dimiliki, batas),
+    dimiliki_per_ruang: [...perRuang].map(([lokasi_id, xs]) => ({ lokasi_id, lokasi: xs[0].lokasi_nama, ringkas: ringkasDimiliki(xs, batas) }))
+      .sort((a, b) => (a.lokasi === null ? 1 : b.lokasi === null ? -1 : a.lokasi.localeCompare(b.lokasi, 'id'))),
   };
 }
 
-// ─── Master Lokasi (§6.1) ───────────────────────────────────────────────────
-export interface BbaLokasi { id: number; nama: string; urutan: number; jumlah_pendataan: number; jumlah_barang: number; jumlah_aset: number }
+// ─── Master Ruangan (§15) ───────────────────────────────────────────────────
+export interface BbaLokasi {
+  id: number; nama: string; urutan: number;
+  gedung_aset_id: number | null; gedung_nama: string | null; luas: number | null; pj_nama: string | null; pj_nip: string | null;
+  jumlah_aset: number;
+  /** Pendataan eksisting lama (Tahap 3, dipensiunkan) — hanya untuk menjelaskan kenapa ruangan tak bisa dihapus. */
+  jumlah_pendataan: number;
+}
 
 export async function listLokasi(): Promise<BbaLokasi[]> {
   const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT l.id, l.nama, l.urutan, COUNT(e.id) AS jumlah_pendataan, COUNT(DISTINCT e.barang_id) AS jumlah_barang,
-           (SELECT COUNT(*) FROM bba_aset a WHERE a.lokasi_id = l.id) AS jumlah_aset
-    FROM bba_lokasi l LEFT JOIN bba_eksisting e ON e.lokasi_id = l.id
-    GROUP BY l.id, l.nama, l.urutan ORDER BY l.urutan ASC, l.nama ASC LIMIT 1000
+    SELECT l.id, l.nama, l.urutan, l.gedung_aset_id, COALESCE(g.nama, g.nama_resmi) AS gedung_nama, l.luas, l.pj_nama, l.pj_nip,
+           (SELECT COUNT(*) FROM bba_aset a WHERE a.lokasi_id = l.id AND a.status = 'AKTIF') AS jumlah_aset,
+           (SELECT COUNT(*) FROM bba_eksisting e WHERE e.lokasi_id = l.id) AS jumlah_pendataan
+    FROM bba_lokasi l LEFT JOIN bba_aset g ON g.id = l.gedung_aset_id
+    ORDER BY l.urutan ASC, l.nama ASC LIMIT 1000
   `);
-  return rows.map(r => ({ id: Number(r.id), nama: String(r.nama ?? ''), urutan: Number(r.urutan ?? 0), jumlah_pendataan: Number(r.jumlah_pendataan ?? 0), jumlah_barang: Number(r.jumlah_barang ?? 0), jumlah_aset: Number(r.jumlah_aset ?? 0) }));
+  return rows.map(r => ({
+    id: Number(r.id), nama: String(r.nama ?? ''), urutan: Number(r.urutan ?? 0),
+    gedung_aset_id: r.gedung_aset_id == null ? null : Number(r.gedung_aset_id), gedung_nama: (r.gedung_nama as string | null) ?? null,
+    luas: r.luas == null ? null : Number(r.luas), pj_nama: (r.pj_nama as string | null) ?? null, pj_nip: (r.pj_nip as string | null) ?? null,
+    jumlah_aset: Number(r.jumlah_aset ?? 0), jumlah_pendataan: Number(r.jumlah_pendataan ?? 0),
+  }));
 }
 
 export async function createLokasi(namaMentah: string): Promise<{ id: number; nama: string }> {
@@ -963,13 +981,26 @@ export async function createLokasi(namaMentah: string): Promise<{ id: number; na
   }
 }
 
-export async function updateLokasi(id: number, namaMentah: string): Promise<boolean> {
-  const nama = rapikanNamaBarang(namaMentah);
+/** Kolom yang tidak dikirim tidak disentuh. Gedung = soft-FK: diperiksa KIB C aktif di transaksi yang sama (L68). */
+export async function updateLokasi(input: LokasiUpdateInput): Promise<boolean> {
+  const nama = input.nama === undefined ? undefined : rapikanNamaBarang(input.nama);
   try {
-    const res = await sql`UPDATE bba_lokasi SET nama = ${nama} WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
-    return (res[0]?.affectedRows ?? 0) > 0;
+    return await withTransaction(async ({ tx }) => {
+      if (input.gedung_aset_id) {
+        const g = await tx`SELECT golongan, status FROM bba_aset WHERE id = ${input.gedung_aset_id} FOR SHARE` as Array<{ golongan: string; status: string }>;
+        if (g.length === 0 || g[0].golongan !== 'C' || g[0].status !== 'AKTIF') throw new BbaGedungTidakDikenalError();
+      }
+      let set = sql`id = id`;
+      if (nama !== undefined) set = sql`${set}, nama = ${nama}`;
+      if (input.gedung_aset_id !== undefined) set = sql`${set}, gedung_aset_id = ${input.gedung_aset_id}`;
+      if (input.luas !== undefined) set = sql`${set}, luas = ${input.luas}`;
+      if (input.pj_nama !== undefined) set = sql`${set}, pj_nama = ${input.pj_nama || null}`;
+      if (input.pj_nip !== undefined) set = sql`${set}, pj_nip = ${input.pj_nip || null}`;
+      const res = await tx`UPDATE bba_lokasi SET ${set} WHERE id = ${input.id}` as unknown as Array<{ affectedRows?: number }>;
+      return (res[0]?.affectedRows ?? 0) > 0;
+    });
   } catch (e) {
-    if (kodeGalat(e) === 'ER_DUP_ENTRY') throw new BbaLokasiKembarError(nama);
+    if (kodeGalat(e) === 'ER_DUP_ENTRY') throw new BbaLokasiKembarError(nama ?? '');
     throw e;
   }
 }
@@ -985,68 +1016,4 @@ export async function hapusLokasi(id: number): Promise<{ nama: string } | null> 
     await tx`DELETE FROM bba_lokasi WHERE id = ${id}`;
     return { nama: String(ada[0].nama) };
   });
-}
-
-// ─── Pendataan eksisting (§6.1) ─────────────────────────────────────────────
-type AngkaCek = { tgl_cek: string; baik: number; rusak_ringan: number; rusak_berat: number; catatan: string | null; file_id: string | null };
-export interface BarisFormPendataan {
-  barang_id: number; nama: string; satuan: string | null;
-  /** Pendataan terakhir SEBELUM tanggal form — pembanding, tidak disalin otomatis. */
-  terakhir: AngkaCek | null;
-  /** Pendataan yang sudah ada TEPAT di tanggal form — Simpan akan menimpanya. */
-  tanggal_ini: AngkaCek | null;
-}
-
-/** Form pendataan per lokasi: barang yang pernah tercatat di lokasi itu (§6.1). */
-export async function formPendataan(lokasiId: number, tgl: string): Promise<{ lokasi: { id: number; nama: string }; baris: BarisFormPendataan[] } | null> {
-  const lokasi = await queryOne<{ id: number; nama: string }>(sql`SELECT id, nama FROM bba_lokasi WHERE id = ${lokasiId} LIMIT 1`);
-  if (!lokasi) return null;
-  const rows = await queryMany<Record<string, unknown>>(sql`
-    SELECT ${KOLOM_EKSISTING}, g.nama AS barang_nama, g.satuan AS barang_satuan
-    FROM bba_eksisting e JOIN bba_lokasi l ON l.id = e.lokasi_id JOIN bba_barang g ON g.id = e.barang_id
-    WHERE e.lokasi_id = ${lokasiId} AND e.tgl_cek <= ${tgl}
-  `);
-  const per = new Map<number, BarisFormPendataan>();
-  for (const r of rows) {
-    const e = eksistingDari(r);
-    const b = per.get(e.barang_id) ?? { barang_id: e.barang_id, nama: String(r.barang_nama ?? ''), satuan: r.barang_satuan as string | null, terakhir: null, tanggal_ini: null };
-    const angka: AngkaCek = { tgl_cek: e.tgl_cek, baik: e.baik, rusak_ringan: e.rusak_ringan, rusak_berat: e.rusak_berat, catatan: e.catatan, file_id: e.file_id };
-    if (e.tgl_cek === tgl) b.tanggal_ini = angka;
-    else if (!b.terakhir || e.tgl_cek > b.terakhir.tgl_cek) b.terakhir = angka;
-    per.set(e.barang_id, b);
-  }
-  return { lokasi: { id: Number(lokasi.id), nama: String(lokasi.nama) }, baris: [...per.values()].sort((a, b) => a.nama.localeCompare(b.nama, 'id')) };
-}
-
-/**
- * Satu Simpan = satu lokasi × satu tanggal (§6.1). Baris lokasi itu dikunci lebih dulu supaya dua
- * pendataan berbarengan di lokasi yang sama antre, bukan saling tabrak; barang yang tidak dikirim tidak
- * disentuh. Barang yang sudah didata di tanggal yang SAMA ditimpa (koreksi salah ketik, §6.1).
- */
-export async function simpanPendataan(input: EksistingSimpanInput, userId: number): Promise<{ lokasi: string; disimpan: number; ditimpa: number }> {
-  const hariIni = tanggalHariIniWIB();
-  if (input.tgl_cek > hariIni) throw new BbaTanggalCekError(hariIni);
-  return withTransaction(async ({ tx, conn }) => {
-    const lokasi = await tx`SELECT nama FROM bba_lokasi WHERE id = ${input.lokasi_id} FOR UPDATE` as Array<{ nama: string }>;
-    if (lokasi.length === 0) throw new BbaLokasiTidakDikenalError();
-    const barangIds = input.baris.map(b => b.barang_id);
-    await pastikanBarang(tx, barangIds);
-    await pastikanBerkasBba(tx, input.baris.map(b => b.file_id));
-    const hapus = await tx`DELETE FROM bba_eksisting WHERE lokasi_id = ${input.lokasi_id} AND tgl_cek = ${input.tgl_cek} AND barang_id IN (${barangIds})` as unknown as Array<{ affectedRows?: number }>;
-    await bulkInsert('bba_eksisting', ['barang_id', 'lokasi_id', 'baik', 'rusak_ringan', 'rusak_berat', 'tgl_cek', 'catatan', 'file_id', 'created_by'],
-      input.baris.map(b => [b.barang_id, input.lokasi_id, b.baik, b.rusak_ringan, b.rusak_berat, input.tgl_cek, b.catatan || null, b.file_id || null, userId]), conn);
-    return { lokasi: String(lokasi[0].nama), disimpan: input.baris.length, ditimpa: Number(hapus[0]?.affectedRows ?? 0) };
-  });
-}
-
-/** Koreksi: hapus satu pendataan (riwayat kartu barang). Pendataan sebelumnya kembali berlaku. */
-export async function hapusPendataan(id: number): Promise<{ barang: string; lokasi: string; tgl_cek: string } | null> {
-  const ada = await queryOne<Record<string, unknown>>(sql`
-    SELECT g.nama AS barang, l.nama AS lokasi, DATE_FORMAT(e.tgl_cek, '%Y-%m-%d') AS tgl_cek
-    FROM bba_eksisting e JOIN bba_barang g ON g.id = e.barang_id JOIN bba_lokasi l ON l.id = e.lokasi_id WHERE e.id = ${id} LIMIT 1
-  `);
-  if (!ada) return null;
-  const res = await sql`DELETE FROM bba_eksisting WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
-  if ((res[0]?.affectedRows ?? 0) === 0) return null;
-  return { barang: String(ada.barang ?? ''), lokasi: String(ada.lokasi ?? ''), tgl_cek: (ada.tgl_cek as string | null) ?? '' };
 }

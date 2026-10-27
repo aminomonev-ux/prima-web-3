@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { LokasiCreateSchema, LokasiUpdateSchema, LokasiDeleteSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
-import { listLokasi, createLokasi, updateLokasi, hapusLokasi, BbaLokasiKembarError, BbaLokasiDipakaiError } from '@/lib/data/buku-besar-aset';
+import {
+  listLokasi, createLokasi, updateLokasi, hapusLokasi, BbaLokasiKembarError, BbaLokasiDipakaiError, BbaGedungTidakDikenalError,
+} from '@/lib/data/buku-besar-aset';
+import { listGedung } from '@/lib/data/bba-aset';
 import { guard, tolakKecualiEdit } from '../_guard';
 
 export const dynamic = 'force-dynamic';
 
-// Master Lokasi BBA (CONCEPT-bba-perencanaan §6.1) — ruangan tempat pendataan eksisting.
-// Modul kolaboratif seperti Master Kategori/Barang (AUTHZ-02); jejaknya audit BBA_LOKASI_*.
+// Master Ruangan BBA (docs/CONCEPT-bba-buku-aset.md §15) — ruangan tempat peralatan, berada di gedung
+// mana (kop KIR), luas, dan penanggung jawabnya. Modul kolaboratif seperti Master Barang (AUTHZ-02);
+// jejaknya audit BBA_LOKASI_*. `gedung` = pilihan KIB C aktif untuk isian gedung & opname per gedung.
 export async function GET() {
   const g = await guard();
   if (!g.ok) return g.res;
-  return NextResponse.json({ ok: true, data: await listLokasi() });
+  const [data, gedung] = await Promise.all([listLokasi(), listGedung()]);
+  return NextResponse.json({ ok: true, data, gedung });
 }
 
 export async function POST(req: NextRequest) {
@@ -39,12 +44,15 @@ export async function PATCH(req: NextRequest) {
   const parsed = LokasiUpdateSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
   try {
-    if (!(await updateLokasi(parsed.data.id, parsed.data.nama))) return NextResponse.json({ ok: false, message: 'Lokasi tidak ditemukan.' }, { status: 404 });
+    if (!(await updateLokasi(parsed.data))) return NextResponse.json({ ok: false, message: 'Ruangan tidak ditemukan.' }, { status: 404 });
   } catch (err) {
     if (err instanceof BbaLokasiKembarError) return NextResponse.json({ ok: false, message: err.message }, { status: 409 });
+    if (err instanceof BbaGedungTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     throw err;
   }
-  await writeAuditLog({ req, eventType: 'BBA_LOKASI_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA lokasi update id=${parsed.data.id} nama="${parsed.data.nama}"` });
+  const { id, ...ubah } = parsed.data;
+  const ket = Object.entries(ubah).map(([k, v]) => `${k}=${v === null ? 'kosong' : JSON.stringify(v).slice(0, 60)}`).join(' ');
+  await writeAuditLog({ req, eventType: 'BBA_LOKASI_UPDATE', userId: g.session.userId, username: g.session.username, detail: `BBA ruangan update id=${id} ${ket}` });
   return NextResponse.json({ ok: true });
 }
 
@@ -57,7 +65,7 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'ID tidak valid' }, { status: 400 });
   try {
     const hasil = await hapusLokasi(parsed.data.id);
-    if (!hasil) return NextResponse.json({ ok: false, message: 'Lokasi tidak ditemukan.' }, { status: 404 });
+    if (!hasil) return NextResponse.json({ ok: false, message: 'Ruangan tidak ditemukan.' }, { status: 404 });
     await writeAuditLog({ req, eventType: 'BBA_LOKASI_DELETE', userId: g.session.userId, username: g.session.username, detail: `BBA lokasi delete id=${parsed.data.id} "${hasil.nama}"` });
     return NextResponse.json({ ok: true });
   } catch (err) {

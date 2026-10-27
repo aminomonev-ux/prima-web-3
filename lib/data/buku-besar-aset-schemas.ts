@@ -8,7 +8,6 @@ import { isSafeHttpUrl } from '@/lib/shared/url';
 import { SUMBER_REFERENSI, JENIS_BUKTI, MAKS_REFERENSI } from '@/lib/bba/referensi';
 import { BBA_STATUSES } from '@/lib/bba/status';
 import { PANJANG_NAMA_BARANG } from '@/lib/bba/barang';
-import { MAKS_UNIT, MAKS_BARIS_PENDATAAN } from '@/lib/bba/eksisting';
 
 // K5: akses dasar SUPER_ADMIN + ADMIN (staf). Role lain via users.app_access
 // include 'buku_besar_aset' (diatur Admin Panel → User Management). Pola Rencana Aksi.
@@ -59,10 +58,10 @@ export const BbaQuerySchema = z.object({
 });
 
 // ─── Referensi harga & bukti dukung (CONCEPT-bba-perencanaan §4) ────────────
-const TanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD');
+export const TanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD');
 const TautanSchema  = z.string().trim().max(2048).refine(isSafeHttpUrl, 'Tautan harus diawali http:// atau https://');
 // Bentuk id berkas Drive — sama dengan `safeId` di /api/upload/download.
-const FileIdSchema  = z.string().regex(/^[\w-]{20,64}$/, 'Id berkas tidak valid');
+export const FileIdSchema  = z.string().regex(/^[\w-]{20,64}$/, 'Id berkas tidak valid');
 
 export const ReferensiSchema = z.object({
   sumber:        z.enum(SUMBER_REFERENSI),
@@ -188,32 +187,22 @@ export type BbaRealisasiInput    = z.infer<typeof BbaRealisasiSchema>;
 export type BbaQuery             = z.infer<typeof BbaQuerySchema>;
 export type BbaImportUsulanInput = z.infer<typeof BbaImportUsulanSchema>;
 export type ReferensiInput       = z.infer<typeof ReferensiSchema>;
-// ─── Kondisi eksisting (§6) ─────────────────────────────────────────────────
-const NamaLokasiSchema = z.string().trim().min(1, 'Nama lokasi wajib').max(160);
+// ─── Master Ruangan (Tahap C, docs/CONCEPT-bba-buku-aset.md §15) ─────────────
+const NamaLokasiSchema = z.string().trim().min(1, 'Nama ruangan wajib').max(160);
 export const LokasiCreateSchema = z.object({ nama: NamaLokasiSchema });
-export const LokasiUpdateSchema = z.object({ id: z.number().int().positive(), nama: NamaLokasiSchema });
+/** Kolom yang tidak dikirim = jangan disentuh; null = kosongkan. */
+export const LokasiUpdateSchema = z.object({
+  id: z.number().int().positive(),
+  nama: NamaLokasiSchema.optional(),
+  gedung_aset_id: z.number().int().positive().nullable().optional(),
+  luas: z.number().min(0).max(99_999_999).nullable().optional(),
+  pj_nama: z.string().trim().max(120).nullable().optional(),
+  pj_nip: z.string().trim().max(40).nullable().optional(),
+});
 export const LokasiDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
 
-const UnitSchema = z.number().int('Jumlah unit harus bilangan bulat').min(0).max(MAKS_UNIT);
-// Satu Simpan = satu lokasi × satu tanggal; baris yang tidak dikirim tidak disentuh (bukan replace-all lokasi).
-export const EksistingSimpanSchema = z.object({
-  lokasi_id: z.number().int().positive(),
-  tgl_cek:   TanggalSchema,
-  baris: z.array(z.object({
-    barang_id:    z.number().int().positive(),
-    baik:         UnitSchema,
-    rusak_ringan: UnitSchema,
-    rusak_berat:  UnitSchema,
-    catatan:      z.string().trim().max(500).nullish(),
-    file_id:      FileIdSchema.nullish(),
-  })).min(1, 'Belum ada barang yang didata').max(MAKS_BARIS_PENDATAAN)
-    .refine(b => new Set(b.map(x => x.barang_id)).size === b.length, 'Barang yang sama muncul dua kali'),
-});
-export const EksistingFormSchema = z.object({ lokasi_id: z.coerce.number().int().positive(), tgl: TanggalSchema });
-export const EksistingDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
-
 export type BuktiCreateInput     = z.infer<typeof BuktiCreateSchema>;
-export type EksistingSimpanInput = z.infer<typeof EksistingSimpanSchema>;
+export type LokasiUpdateInput    = z.infer<typeof LokasiUpdateSchema>;
 export type BarangCreateInput    = z.infer<typeof BarangCreateSchema>;
 export type BarangUpdateInput    = z.infer<typeof BarangUpdateSchema>;
 export type BarangTautkanInput   = z.infer<typeof BarangTautkanSchema>;

@@ -59,8 +59,9 @@ ok('C2 hapus: hanya Direncanakan tanpa bukti', alasanTakBisaHapus('DIRENCANAKAN'
 const HARAP: Record<string, string> = {
   'route.ts': "'rencana'", 'realisasi/route.ts': "'pengadaan'", 'bukti/route.ts': "'rencana', 'pengadaan'",
   'barang/route.ts': "'master'", 'barang/tautkan/route.ts': "'rencana'", 'barang/gabung/route.ts': "'master'",
-  'lokasi/route.ts': "'master'", 'kategori/route.ts': "'master'", 'eksisting/route.ts': "'aset'",
+  'lokasi/route.ts': "'master'", 'kategori/route.ts': "'master'",
   'aset/route.ts': "'aset'", 'aset/impor/route.ts': "'aset'", 'pengaturan/route.ts': "'master'",
+  'aset/kondisi/route.ts': "'aset'", 'aset/pindah/route.ts': "'aset'", 'aset/barang/route.ts': "'aset'",
 }
 const akarApi = path.join(process.cwd(), 'app/api/buku-besar-aset')
 const semuaRoute: string[] = []

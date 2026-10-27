@@ -16,7 +16,9 @@ export const PengaturanBbaSchema = z.object({
     kota: teks(60),
     kepala_jabatan: teks(80), kepala_nama: teks(120), kepala_nip: teks(40),
     pengurus_nama: teks(120), pengurus_nip: teks(40),
-  }).default({ kota: '', kepala_jabatan: '', kepala_nama: '', kepala_nip: '', pengurus_nama: '', pengurus_nip: '' }),
+    /** Kanan bawah KIR (Tahap C). Penanggung Jawab Ruangan di kiri diisi per ruangan (Master → Ruangan). */
+    pembantu_nama: teks(120), pembantu_nip: teks(40),
+  }).default({ kota: '', kepala_jabatan: '', kepala_nama: '', kepala_nip: '', pengurus_nama: '', pengurus_nip: '', pembantu_nama: '', pembantu_nip: '' }),
   /** §13 keputusan 2: setahun sekali, bisa diubah ke 6 bulan tanpa memperbarui aplikasi. */
   opname_bulan: z.number().int().min(1).max(60).default(12),
 })
