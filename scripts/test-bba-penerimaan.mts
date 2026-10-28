@@ -12,6 +12,7 @@ import { cocokkanBelumTeregister, rencanakanImpor, type AsetRingan } from '../li
 import { alasanTolakProses, sasaranBeku, type BbaStatus } from '../lib/bba/status'
 import type { AsetBaca, HasilBacaKib } from '../lib/bba/kib-baca'
 import { PenerimaanSchema, AntreanAksiSchema, HapusAsetSchema, RegisterSchema } from '../lib/data/bba-penerimaan-schemas'
+import { TanggalSchema } from '../lib/data/buku-besar-aset-schemas'
 
 let lulus = 0
 const gagal: string[] = []
@@ -102,6 +103,10 @@ ok('B2 antrean: satu POST dua tindakan (TEMPATKAN / REHAB), bentuknya dipisah', 
 ok('B3 hapus aset wajib nomor & tanggal SK; register wajib kode + nomor', !HapusAsetSchema.safeParse({ id: 1, expected_version: 0, sk_nomor: ' ', sk_tgl: '2026-01-01' }).success
   && HapusAsetSchema.safeParse({ id: 1, expected_version: 0, sk_nomor: '028/123', sk_tgl: '2026-01-01' }).success
   && !RegisterSchema.safeParse({ id: 1, expected_version: 0, kode_barang: 'x', register: '' }).success)
+ok('B4 tanggal BBA harus ada di kalender (dulu 2026-02-31 lolos lalu MySQL strict → 500); 29 Feb hanya di tahun kabisat',
+  !TanggalSchema.safeParse('2026-02-31').success && !TanggalSchema.safeParse('2025-02-29').success && !TanggalSchema.safeParse('2026-13-01').success
+  && TanggalSchema.safeParse('2024-02-29').success && TanggalSchema.safeParse('2026-10-28').success
+  && !HapusAsetSchema.safeParse({ id: 1, expected_version: 0, sk_nomor: '028/1', sk_tgl: '2026-04-31' }).success)
 
 console.log('\nC. Satu jalur tulis & pagar (kode)')
 const dataPen = tanpaKomentar(sumber('lib/data/bba-penerimaan.ts'))
@@ -157,6 +162,9 @@ const pengadaanRoute = tanpaKomentar(sumber('app/api/buku-besar-aset/pengadaan/r
 ok('C7 daftar Pengadaan = rencana DIDANAI saja; GET berizin Lihat Pengadaan', dataPen.includes("WHERE b.tahun_anggaran = ${tahun} AND b.anggaran = 'DIDANAI'")
   && pengadaanRoute.includes("tolakKecualiLihat(g.session, 'pengadaan')"))
 const bCocok = tanpaKomentar(sumber('lib/data/bba-aset.ts'))
+ok('C9 Excel KIB (bentuk ekspor provinsi) tanpa register belum teregister — penyaringnya sama dengan BI/Rekap/sensus',
+  tanpaKomentar(sumber('app/api/buku-besar-aset/aset/excel/route.ts')).includes('const isi = (await Promise.all(daftar.map(asetUntukKib))).map(xs => xs.filter(masukBukuResmi));'))
+ok('C10 salin tahun lalu: himpunan rencana BERREFERENSI bernama sesuai isinya', !dataBba.includes('tanpaRef') && badan(dataBba, 'salinTahunLalu').includes('!punyaRef.has(r.id)'))
 ok('C8 impor KIB: cocok otomatis ditulis di transaksi impor yang sama (sesudah kunci impor), riwayat REGISTER',
   bCocok.indexOf("await acquireBludLock(tx, 'bba_aset_impor', 'semua');") < bCocok.indexOf('for (const bagian of potong(rencana.cocok))')
   && bCocok.includes("lama.id, 'REGISTER', JSON.stringify({ kode_barang: null, register: null })"))
@@ -304,6 +312,26 @@ if (c) {
       && sesudahReg.register === '000007' && sesudahReg.kode_objek === '1.3.2.05.02'
       && Number((await satu<{ n: number }>("SELECT COUNT(*) AS n FROM bba_aset_riwayat WHERE aset_id = ? AND jenis = 'REGISTER'", [baru.id]))?.n) === 1)
 
+    // Balapan register kembar: koneksi lain memegang kunci yang sama di transaksi TERBUKA. SELECT pemeriksa di
+    // isiRegister tidak melihatnya (belum commit), UPDATE-nya menunggu indeks UNIK, lalu bentrok begitu commit.
+    const regA = await asetBaru({ golongan: 'B', tahun_perolehan: 2026, nama_resmi: 'UJIE KURSI RODA BALAP A', kib: '{}', harga: 1 })
+    const regB = await asetBaru({ golongan: 'B', tahun_perolehan: 2026, nama_resmi: 'UJIE KURSI RODA BALAP B', kib: '{}', harga: 1 })
+    const vB = await versiAset(regB)
+    await k.query('START TRANSACTION')
+    await k.query("UPDATE bba_aset SET kode_barang = 'UJIE.01.2026-1.3.2.05.02', register = '000099', kunci_impor = 'UJIE.01.2026-1.3.2.05.02|000099' WHERE id = ?", [regA])
+    const balap = coba(() => PEN.isiRegister({ id: regB, expected_version: vB, kode_barang: 'UJIE.01.2026-1.3.2.05.02', register: '99' }, userId))
+    for (let i = 0; i < 60; i++) {
+      const w = await coba(async () => Number(((await k.query('SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits')) as [Array<{ n: number }>, unknown])[0][0]?.n ?? 0))
+      if (w instanceof Error || w > 0) break
+      await new Promise(r => setTimeout(r, 50))
+    }
+    await k.query('COMMIT')
+    const hasilBalap = await balap
+    ok('D12b register kembar yang lolos pemeriksaan karena balapan → ditolak dengan pesan, bukan 500 ER_DUP_ENTRY',
+      hasilBalap instanceof A.AsetDitolakError && /sudah dipakai register lain/.test(hasilBalap.message)
+      && (await satu<{ kunci_impor: string | null }>('SELECT kunci_impor FROM bba_aset WHERE id = ?', [regB]))?.kunci_impor === null,
+      hasilBalap instanceof Error ? `${hasilBalap.name}: ${hasilBalap.message}` : JSON.stringify(hasilBalap))
+
     // Cocok otomatis saat impor KIB: unit kedua ditempatkan, lalu register-nya datang dari berkas provinsi.
     const pen2 = milik.find(x => x.merk_tipe === 'Merk B') ?? (await PEN.antreanBukuAset()).terima.find(x => x.rencana_id === ganti.id)!
     await PEN.tempatkan({ penerimaan_id: pen2.penerimaan_id, jumlah: 1, golongan: 'B', nama_resmi: 'UJIE KURSI RODA', nama: 'Kursi roda IGD 2', lokasi_id: lok.insertId, kondisi: 'B' }, userId)
@@ -333,6 +361,16 @@ if (c) {
     ok('D15 hapus dengan SK: tanggal SK di depan ditolak; status DIHAPUS + nomor/tanggal SK, tanda siap dihapus lepas, riwayat HAPUS; dihapus dua kali ditolak',
       skDepan instanceof A.AsetDitolakError && dh.status === 'DIHAPUS' && dh.hapus_sk_nomor === '028/123/2026' && dh.hapus_sk_tgl === '2026-10-01' && dh.siap_dihapus === 0
       && duaKali instanceof A.AsetDitolakError && det?.aset.hapus_sk_nomor === '028/123/2026' && det.riwayat[0]?.jenis === 'HAPUS')
+
+    const lama3 = await asetBaru({ golongan: 'B', kode_barang: 'UJIE.01.2016-1.3.2.05.02', register: '000003', kunci_impor: 'UJIE.01.2016-1.3.2.05.02|000003', tahun_perolehan: 2016, nama_resmi: 'UJIE KURSI RODA LAMA', kib: '{}', harga: 1_500_000, kondisi: 'RB', kondisi_sumber: 'CEK' })
+    const rencanaLain = await D.createAset({ tahun_anggaran: 2080, uraian: `${UJI} Ganti kursi roda lain`, sumber_anggaran: 'BLUD', vol: 1, harga: 1, jenis_rencana: 'PENGGANTIAN', aset_sasaran: [lama3] }, userId)
+    await PEN.hapusAset({ id: lama3, expected_version: await versiAset(lama3), sk_nomor: '028/124/2026', sk_tgl: '2026-10-02' }, userId)
+    const tetap = await coba(async () => D.updateAset({ id: rencanaLain.id, expected_version: await versi(rencanaLain.id), aset_sasaran: [lama3, lama2] }, userId))
+    const tambahDihapus = await coba(async () => D.updateAset({ id: rencanaLain.id, expected_version: await versi(rencanaLain.id), aset_sasaran: [lama3, lama2, lama1] }, userId))
+    ok('D15b sasaran yang sudah dihapus dengan SK boleh tetap tinggal (rencana masih bisa disimpan); yang BARU ditambahkan tetap harus aktif',
+      !(tetap instanceof Error) && tambahDihapus instanceof D.BbaSasaranTidakDikenalError
+      && Number((await satu<{ n: number }>('SELECT COUNT(*) AS n FROM bba_rencana_aset WHERE rencana_id = ?', [rencanaLain.id]))?.n) === 2,
+      tetap instanceof Error ? tetap.message : '')
 
     // Rehab
     const gedung = await asetBaru({ golongan: 'C', kode_barang: 'UJIE.01.1990-1.3.3.01.01', register: '000001', kunci_impor: 'UJIE.01.1990-1.3.3.01.01|000001', tahun_perolehan: 1990, nama_resmi: 'UJIE GEDUNG BANGSAL', kib: '{}', harga: 500_000_000, kondisi: 'RR', kondisi_sumber: 'CEK' })
@@ -374,6 +412,14 @@ if (c) {
     ok('D18c migrasi: rencana lama tanpa tanggal realisasi → 31 Des tahun anggarannya (kabisat juga), tapi tidak sesudah hari ini',
       TGL_CADANGAN !== '' && await cadangan(2024) === '2024-12-31' && await cadangan(2023) === '2023-12-31' && await cadangan(2099) === hariIniDb,
       `${TGL_CADANGAN} → ${await cadangan(2024)} / ${await cadangan(2099)}`)
+
+    const pesan = await D.createAset({ tahun_anggaran: 2080, uraian: `${UJI} Dipesan`, sumber_anggaran: 'BLUD', vol: 1, harga: 1 }, userId)
+    await danai(pesan.id)
+    const pesanDepan = await coba(async () => D.ubahStatusProses({ id: pesan.id, expected_version: await versi(pesan.id), status: 'DIPROSES', tgl_proses: '2099-01-01' }, userId))
+    const vPesan = await versi(pesan.id)
+    await D.ubahStatusProses({ id: pesan.id, expected_version: vPesan, status: 'DIPROSES', tgl_proses: '2026-10-01' }, userId)
+    ok('D18d tanggal pesan/kontrak sesudah hari ini ditolak server (bukan cuma atribut max di layar); tanggal lampau diterima',
+      pesanDepan instanceof D.BbaStatusMismatchError && await versi(pesan.id) === vPesan + 1 && (await rencana(pesan.id)).tgl_proses === '2026-10-01')
 
     const undanai = await D.createAset({ tahun_anggaran: 2080, uraian: `${UJI} Tak didanai`, sumber_anggaran: 'BLUD', vol: 1, harga: 1 }, userId)
     const daftar = await PEN.pengadaanTahun(2081)

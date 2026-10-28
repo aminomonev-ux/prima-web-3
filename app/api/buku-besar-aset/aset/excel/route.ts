@@ -29,7 +29,8 @@ async function susun(wb: import('exceljs').Workbook, p: AsetExcelInput, tanggal:
   switch (p.jenis) {
     case 'KIB': {
       const daftar: Golongan[] = p.golongan === 'SEMUA' ? [...GOLONGAN] : [p.golongan];
-      const isi = await Promise.all(daftar.map(asetUntukKib));
+      // Bentuk ekspor provinsi: register "belum teregister" (belum punya kode di sistem provinsi) tidak ikut — ada di format kerja.
+      const isi = (await Promise.all(daftar.map(asetUntukKib))).map(xs => xs.filter(masukBukuResmi));
       daftar.forEach((gol, i) => tulisLembarKib(wb, gol, isi[i], pengaturan, tanggal));
       return { nama: NAMA_BERKAS_KIB(p.golongan, tanggal), register: isi.reduce((s, x) => s + x.length, 0) };
     }

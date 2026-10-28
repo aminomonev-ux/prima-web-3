@@ -275,13 +275,19 @@ export async function isiRegister(input: RegisterInput, userId: number): Promise
     const g = golonganDariKodeObjek(kodeObjek);
     if (g && g !== a.golongan) throw new AsetDitolakError([`Kode barang ini golongan ${g}, aset ini golongan ${a.golongan}.`]);
     const kunci = `${kode}|${register}`;
-    if ((await tx`SELECT id FROM bba_aset WHERE kunci_impor = ${kunci} AND id <> ${input.id}`).length)
-      throw new AsetDitolakError([`Kode barang + register ${register} sudah dipakai register lain di Buku Aset.`]);
-    await tx`
-      UPDATE bba_aset SET kode_barang = ${kode}, register = ${register}, kunci_impor = ${kunci}, kode_objek = ${kodeObjek},
-        tahun_perolehan = COALESCE(${tahun}, tahun_perolehan), version = version + 1, updated_by = ${userId}
-      WHERE id = ${input.id}
-    `;
+    // Kembar ditolak indeks UNIK `kunci_impor`, bukan SELECT dulu: SELECT tidak mengunci kunci yang belum ada,
+    // jadi pengisian/impor berbarengan lolos pemeriksaan lalu bentrok di sini juga (L69-a).
+    try {
+      await tx`
+        UPDATE bba_aset SET kode_barang = ${kode}, register = ${register}, kunci_impor = ${kunci}, kode_objek = ${kodeObjek},
+          tahun_perolehan = COALESCE(${tahun}, tahun_perolehan), version = version + 1, updated_by = ${userId}
+        WHERE id = ${input.id}
+      `;
+    } catch (err) {
+      if ((err as { code?: string })?.code === 'ER_DUP_ENTRY')
+        throw new AsetDitolakError([`Kode barang + register ${register} sudah dipakai register lain di Buku Aset.`]);
+      throw err;
+    }
     await tx`
       INSERT INTO bba_aset_riwayat (aset_id, jenis, sebelum, sesudah, oleh)
       VALUES (${input.id}, 'REGISTER', ${JSON.stringify({ kode_barang: a.kode_barang ?? null, register: a.register ?? null })},

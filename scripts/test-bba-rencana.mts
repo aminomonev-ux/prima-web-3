@@ -95,7 +95,7 @@ ok('C4 tandai anggaran: kunci FOR UPDATE dulu, cek versi tiap item, versi dinaik
   && bTandai.includes('throw new BbaVersionConflictError()') && bTandai.includes('version = version + 1') && bTandai.includes("anggaran_vol = ${didanai ? sql`vol` : null}"))
 ok('C5 salin: baris asal dikunci SEBELUM membaca salinan yang sudah ada (L84); referensi & sasaran lewat INSERT…SELECT, bukan perulangan', bSalin.indexOf('FOR UPDATE') < bSalin.indexOf('saranTahunLaluList(input.tahun, tx)')
   && bSalin.includes('INSERT INTO bba_referensi_harga') && bSalin.includes("a.status = 'AKTIF'") && !/for \(const .* of salin\)/.test(bSalin))
-ok('C6 aset sasaran: L68 — ada & AKTIF, dikunci FOR SHARE, di transaksi CAS item (create & update)', dBba.includes("SELECT id FROM bba_aset WHERE id IN (${ids}) AND status = 'AKTIF' FOR SHARE")
+ok('C6 aset sasaran: L68 — yang BARU ditambahkan ada & AKTIF, dikunci FOR SHARE, di transaksi CAS item (create & update)', dBba.includes("SELECT id FROM bba_aset WHERE id IN (${baru}) AND status = 'AKTIF' FOR SHARE")
   && badan(dBba, 'updateAset').includes('await gantiSasaran(tx, conn, input.id, input.aset_sasaran)') && badan(dBba, 'createAset').includes('await gantiSasaran(tx, conn, id, input.aset_sasaran)'))
 const mig = existsSync('docs/migrations/migration-bba-rencana.sql') ? sumber('docs/migrations/migration-bba-rencana.sql') : ''
 const skema = sumber('docs/schema-mysql.sql')

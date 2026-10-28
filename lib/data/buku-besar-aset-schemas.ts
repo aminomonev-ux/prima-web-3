@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { isSafeHttpUrl } from '@/lib/shared/url';
+import { tanggalSah } from '@/lib/admin/berjangka-baris';
 import { SUMBER_REFERENSI, JENIS_BUKTI, MAKS_REFERENSI } from '@/lib/bba/referensi';
 import { BBA_STATUSES, STATUS_PROSES } from '@/lib/bba/status';
 import { PANJANG_NAMA_BARANG } from '@/lib/bba/barang';
@@ -61,7 +62,8 @@ export const BbaQuerySchema = z.object({
 });
 
 // ─── Referensi harga & bukti dukung (CONCEPT-bba-perencanaan §4) ────────────
-export const TanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD');
+// Tanggal yang tidak ada di kalender (2026-02-31) lolos pola, lalu ditolak MySQL strict → 500, bukan 400.
+export const TanggalSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD').refine(tanggalSah, 'Tanggal tidak ada di kalender');
 export const TautanSchema = z.string().trim().max(2048).refine(isSafeHttpUrl, 'Tautan harus diawali http:// atau https://');
 // Bentuk id berkas Drive — sama dengan `safeId` di /api/upload/download.
 export const FileIdSchema  = z.string().regex(/^[\w-]{20,64}$/, 'Id berkas tidak valid');

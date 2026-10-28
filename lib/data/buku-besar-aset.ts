@@ -402,9 +402,13 @@ export async function getAsetDetail(id: number): Promise<BbaDetail | null> {
  * dikunci FOR SHARE supaya penghapusan aset (Tahap E) menunggu, bukan menyalip.
  */
 async function gantiSasaran(q: Penanya, conn: mysql.PoolConnection, rencanaId: number, ids: number[]): Promise<void> {
-  if (ids.length) {
-    const ada = await q`SELECT id FROM bba_aset WHERE id IN (${ids}) AND status = 'AKTIF' FOR SHARE`;
-    if (ada.length !== ids.length) throw new BbaSasaranTidakDikenalError();
+  // Yang sudah jadi sasaran boleh tetap tinggal walau asetnya sudah dihapus dengan SK — kalau tidak, rencana
+  // itu tak bisa disimpan lagi sampai sasaran lamanya dibuang. Hanya yang BARU ditambahkan harus aktif.
+  const lama = new Set((await q`SELECT aset_id FROM bba_rencana_aset WHERE rencana_id = ${rencanaId}` as Array<{ aset_id: number }>).map(x => Number(x.aset_id)));
+  const baru = ids.filter(id => !lama.has(id));
+  if (baru.length) {
+    const ada = await q`SELECT id FROM bba_aset WHERE id IN (${baru}) AND status = 'AKTIF' FOR SHARE`;
+    if (ada.length !== baru.length) throw new BbaSasaranTidakDikenalError();
   }
   await q`DELETE FROM bba_rencana_aset WHERE rencana_id = ${rencanaId}`;
   await bulkInsert('bba_rencana_aset', ['rencana_id', 'aset_id'], ids.map(a => [rencanaId, a]), conn);
@@ -597,6 +601,9 @@ export async function updateAset(input: BbaUpdateInput, userId: number): Promise
  * dengan `catatPenerimaan`, jadi "belum ada yang diterima" tidak bisa basi di sela pemeriksaan & UPDATE.
  */
 export async function ubahStatusProses(input: BbaProsesInput, userId: number): Promise<void> {
+  // L82: batas "tidak sesudah hari ini" di layar hanya atribut `max` isian tanggal.
+  if (input.status === 'DIPROSES' && input.tgl_proses && input.tgl_proses > tanggalHariIniWIB())
+    throw new BbaStatusMismatchError('Tanggal pesan/kontrak tidak boleh sesudah hari ini.');
   await withTransaction(async ({ tx, conn }) => {
     const ada = await tx`SELECT id FROM buku_besar_aset WHERE id = ${input.id} FOR UPDATE`;
     if (ada.length === 0) throw new BbaNotFoundError();
@@ -732,10 +739,10 @@ export async function salinTahunLalu(input: SalinTahunLaluInput, userId: number)
     `;
     // Rencana asal-usulan yang belum pernah menyimpan referensi: tautan usulannya (selama ini dibaca
     // lewat JOIN) ditulis jadi referensi salinan — salinan tidak lagi tertaut ke usulannya.
-    const tanpaRef = new Set((await tx`SELECT DISTINCT aset_id FROM bba_referensi_harga WHERE aset_id IN (${ids})` as Array<{ aset_id: number }>).map(x => Number(x.aset_id)));
+    const punyaRef = new Set((await tx`SELECT DISTINCT aset_id FROM bba_referensi_harga WHERE aset_id IN (${ids})` as Array<{ aset_id: number }>).map(x => Number(x.aset_id)));
     const baru = new Map((await tx`SELECT id, asal_rencana_id FROM buku_besar_aset WHERE tahun_anggaran = ${input.tahun} AND asal_rencana_id IN (${ids})` as Array<{ id: number; asal_rencana_id: number }>)
       .map(x => [Number(x.asal_rencana_id), Number(x.id)]));
-    const dariUsulan = salin.filter(r => !tanpaRef.has(r.id) && r.tautan_usulan.length > 0)
+    const dariUsulan = salin.filter(r => !punyaRef.has(r.id) && r.tautan_usulan.length > 0)
       .flatMap(r => slotDariUsulan(r.tautan_usulan).map((s, i) => [baru.get(r.id), i + 1, s.sumber, null, null, s.url, null, null, null]));
     await bulkInsert('bba_referensi_harga', KOLOM_REFERENSI, dariUsulan, conn);
     await tx`
