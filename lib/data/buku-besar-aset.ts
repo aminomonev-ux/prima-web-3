@@ -16,7 +16,7 @@ import {
   type KelengkapanRef, type KelengkapanBukti, type ReferensiIsian, type JenisBukti,
 } from '@/lib/bba/referensi';
 import {
-  referensiBeku, alasanTakBisaHapus, alasanTolakProses, STATUS_BELUM_TEREALISASI, LABEL_STATUS,
+  referensiBeku, sasaranBeku, alasanTakBisaHapus, alasanTolakProses, STATUS_BELUM_TEREALISASI, LABEL_STATUS,
 } from '@/lib/bba/status';
 import {
   rapikanNamaBarang, kunciNamaBarang, barangBernamaSama, ringkasPerBarang, ringkasKosong, riwayatPerTahun,
@@ -98,6 +98,12 @@ export class BbaReferensiBekuError extends Error {
   constructor(status: BbaStatus) {
     super(`Referensi harga item berstatus ${LABEL_STATUS[status]} tidak bisa diubah — itu catatan harga saat membeli. Muat ulang item untuk membuang perubahan referensinya.`);
     this.name = 'BbaReferensiBekuError';
+  }
+}
+export class BbaSasaranBekuError extends Error {
+  constructor(status: BbaStatus) {
+    super(`Item berstatus ${LABEL_STATUS[status]} — jenis rencana dan aset sasarannya tidak bisa diubah lagi, karena tanda "siap dihapus" dan antrean Buku Aset dihitung dari keduanya. Muat ulang item untuk membuang perubahannya.`);
+    this.name = 'BbaSasaranBekuError';
   }
 }
 
@@ -538,6 +544,13 @@ export async function updateAset(input: BbaUpdateInput, userId: number): Promise
   if (input.referensi !== undefined && referensiBeku(cur.status)
       && !referensiSama(isianReferensi(input.referensi), await listReferensi(input.id))) {
     throw new BbaReferensiBekuError(cur.status);
+  }
+  // Isian yang sama tetap diterima: modal mengirim jenis tiap Simpan.
+  if (sasaranBeku(cur.status)) {
+    const jenisBerubah = input.jenis_rencana !== undefined && (input.jenis_rencana ?? null) !== (cur.jenis_rencana ?? null);
+    const sasaranLama = input.aset_sasaran === undefined ? [] : (await listSasaran(input.id)).map(s => s.id).sort((a, b) => a - b);
+    const sasaranBerubah = input.aset_sasaran !== undefined && [...input.aset_sasaran].sort((a, b) => a - b).join() !== sasaranLama.join();
+    if (jenisBerubah || sasaranBerubah) throw new BbaSasaranBekuError(cur.status);
   }
   // A2: vol rencana tidak boleh turun di bawah realisasi tersimpan ("5/2 unit")
   const volBaru = input.vol ?? cur.vol;

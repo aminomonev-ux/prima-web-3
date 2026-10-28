@@ -23,7 +23,7 @@ import {
   type ReferensiIsian, type JenisBukti, type KelengkapanBukti,
 } from '@/lib/bba/referensi';
 import { saranBarang, type BarangRingan } from '@/lib/bba/barang';
-import { referensiBeku, LABEL_STATUS, type BbaStatus } from '@/lib/bba/status';
+import { referensiBeku, sasaranBeku, LABEL_STATUS, type BbaStatus } from '@/lib/bba/status';
 import type { BbaRow, BbaBukti, BbaDetail, BbaBarang, SasaranRencana } from '@/lib/data/buku-besar-aset';
 import { JENIS_RENCANA, LABEL_JENIS, KAPAN_JENIS, LABEL_ANGGARAN, type JenisRencana } from '@/lib/bba/rencana';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
@@ -155,6 +155,7 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
   const isUsulan = item?.origin === 'USULAN';
   // §10 butir 7 — server menolak perubahan referensi item yang sudah diproses (REFERENSI_BEKU).
   const refBeku = !!item && referensiBeku(item.status);
+  const jenisBeku = !!item && sasaranBeku(item.status);
   // Dihitung dari daftar bukti di layar — bukti ditulis per aksi, jadi ini selalu angka tersimpan terbaru.
   const kBukti = item ? kelengkapanBukti(bukti.map(b => b.jenis), item.status) : null;
 
@@ -426,8 +427,14 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                       <PilihBarang daftar={daftarBarang} nilai={isian.barang} saran={isian.barang ? null : saranBarang(isian.uraian, daftarBarang)}
                         onUbah={barang => setIsian({ ...isian, barang })} c={c} inp={inp} />
                     </div>
+                    {jenisBeku && item && (
+                      <div style={{ gridColumn: '1 / -1', fontSize: 12, color: c.sub, background: 'rgba(124,92,252,.10)', border: '1px solid rgba(124,92,252,.35)', borderRadius: 6, padding: '6px 10px', lineHeight: 1.5 }}>
+                        Jenis rencana dan aset sasaran dikunci sejak item <b style={{ color: c.text }}>{LABEL_STATUS[item.status]}</b> — tanda
+                        &quot;siap dihapus&quot; dan antrean Buku Aset dihitung dari keduanya.
+                      </div>
+                    )}
                     <Field label="Jenis rencana" full>
-                      <select value={isian.jenis_rencana} onChange={e => setIsian({ ...isian, jenis_rencana: e.target.value as JenisRencana | '' })} style={inp}>
+                      <select value={isian.jenis_rencana} disabled={jenisBeku} onChange={e => setIsian({ ...isian, jenis_rencana: e.target.value as JenisRencana | '' })} style={{ ...inp, ...(jenisBeku ? kunci : {}) }}>
                         <option value="">— belum digolongkan —</option>
                         {JENIS_RENCANA.map(j => <option key={j} value={j}>{LABEL_JENIS[j]} — {KAPAN_JENIS[j]}</option>)}
                       </select>
@@ -436,12 +443,12 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                       <textarea value={isian.alasan} maxLength={1000} onChange={e => setIsian({ ...isian, alasan: e.target.value })} style={{ ...inp, minHeight: 48 }}
                         placeholder={isian.jenis_rencana === 'PENGGANTIAN' ? 'mis. ganti 2 unit rusak berat perolehan 2016' : isian.jenis_rencana === 'PENAMBAHAN' ? 'mis. tempat tidur ICU 6 → 8 pada 2027' : 'Kenapa rencana ini perlu'} />
                     </Field>
-                    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <fieldset disabled={jenisBeku} style={{ ...FIELDSET_POLOS, gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, ...(jenisBeku ? kunci : {}) }}>
                       <span style={{ fontSize: 11, opacity: .8 }}>Aset sasaran <span style={{ opacity: .8 }}>— register di Buku Aset yang diganti, diperbaiki, atau direhab</span></span>
                       <PilihSasaran c={c} inp={inp} barangId={isian.barang && 'id' in isian.barang ? isian.barang.id : null}
                         dipilih={isian.sasaran.map(id => infoSasaran.find(x => x.id === id)).filter((x): x is SasaranRencana => !!x)}
                         onUbah={xs => { setInfoSasaran(lama => [...lama.filter(x => !xs.some(y => y.id === x.id)), ...xs]); setIsian({ ...isian, sasaran: urutId(xs) }); }} />
-                    </div>
+                    </fieldset>
                     <Field label="Kode Rekening"><input value={isian.kode_rekening} onChange={e => setIsian({ ...isian, kode_rekening: e.target.value })} style={{ ...inp, fontFamily: MONO }} /></Field>
                     <Field label="Kategori Aset"><SatuanCombobox value={isian.kategori_aset} onChange={v => setIsian({ ...isian, kategori_aset: v })} options={kategori} style={inp} placeholder="Pilih / ketik kategori…" /></Field>
                     <Field label="Vol"><PrimaNumberField value={isian.vol} disabled={isUsulan} onChange={e => setIsian({ ...isian, vol: Number(e.target.value) })} /></Field>

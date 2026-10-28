@@ -6,6 +6,7 @@
 -- Rencana yang sudah terealisasi sebelum tahap ini diberi satu baris penerimaan berisi angka realisasinya,
 -- supaya aturan itu berlaku juga untuk data lama (nilai disimpan apa adanya — tidak dihitung ulang dari harga).
 -- Baris itu bertanda `pindahan`: barangnya sudah di KIB provinsi, jadi tidak masuk antrean "diterima, belum dicatat".
+-- Tanpa tgl_realisasi, tanggalnya akhir tahun anggaran — tapi tidak sesudah hari ini (rencana tahun berjalan).
 -- "Yang dibeli" (merk/tipe, penyedia, tautan) disimpan sebagai SALINAN: baris referensi ditulis ulang tiap
 -- Simpan item sehingga id-nya berganti.
 
@@ -32,7 +33,7 @@ CREATE TABLE bba_penerimaan (
   COMMENT='BBA — penerimaan barang per rencana (bertahap); realisasi rencana = Σ baris ini';
 
 INSERT INTO bba_penerimaan (rencana_id, tgl, vol, harga_satuan, nilai, catatan, pindahan)
-SELECT b.id, COALESCE(b.tgl_realisasi, MAKEDATE(b.tahun_anggaran, 365)), b.vol_realisasi,
+SELECT b.id, COALESCE(b.tgl_realisasi, LEAST(MAKEDATE(b.tahun_anggaran + 1, 1) - INTERVAL 1 DAY, CURDATE())), b.vol_realisasi,
        ROUND(b.nilai_realisasi / b.vol_realisasi, 2), b.nilai_realisasi, 'Realisasi sebelum pencatatan penerimaan (dipindah otomatis)', 1
 FROM buku_besar_aset b
 WHERE b.status IN ('REALISASI_PENUH', 'REALISASI_SEBAGIAN') AND b.vol_realisasi > 0

@@ -91,7 +91,7 @@ async function kunciRencana(tx: TxSql, id: number): Promise<BbaRow> {
 /**
  * Catat penerimaan (bertahap). Kunci rencana + CAS versi (L77), pagar didanai & volume, "yang dibeli"
  * disalin dari referensi terpilih (isian sendiri menimpa per kolom), lalu realisasi ditulis ulang dari Σ.
- * Penggantian: aset sasaran ditandai siap dihapus (§7.5 butir 4).
+ * Penggantian yang Diterima penuh: aset sasaran ditandai siap dihapus (§7.5 butir 4).
  */
 export async function catatPenerimaan(input: PenerimaanInput, userId: number): Promise<{ canonical_id: string; status: BbaStatus; siapDihapus: number }> {
   return withTransaction(async ({ tx, conn }) => {
@@ -112,7 +112,8 @@ export async function catatPenerimaan(input: PenerimaanInput, userId: number): P
               ${input.referensi_urutan ?? null}, ${dibeli.merk_tipe}, ${dibeli.penyedia}, ${dibeli.url}, ${input.catatan || null}, ${userId})
     `;
     const status = await tulisRealisasi(tx, r.id, r.vol, userId);
-    const siapDihapus = r.jenis_rencana === 'PENGGANTIAN' ? await tandaiSiapDihapus(tx, conn, r, true, userId) : 0;
+    // Baru saat Diterima penuh: penerimaan sebagian belum tahu unit lama MANA yang sudah ada penggantinya.
+    const siapDihapus = r.jenis_rencana === 'PENGGANTIAN' && status === 'REALISASI_PENUH' ? await tandaiSiapDihapus(tx, conn, r, true, userId) : 0;
     return { canonical_id: r.canonical_id, status, siapDihapus };
   });
 }
@@ -137,16 +138,28 @@ async function tandaiSiapDihapus(tx: TxSql, conn: mysql.PoolConnection, r: BbaRo
  */
 export async function hapusPenerimaan(id: number, userId: number, bolehKoreksiMundur: boolean): Promise<{ canonical_id: string; dariPenuh: boolean } | null> {
   return withTransaction(async ({ tx, conn }) => {
-    const p = await tx`SELECT rencana_id FROM bba_penerimaan WHERE id = ${id}` as Array<{ rencana_id: number }>;
+    const p = await tx`SELECT rencana_id, pindahan FROM bba_penerimaan WHERE id = ${id}` as Array<{ rencana_id: number; pindahan: number }>;
     if (p.length === 0) return null;
     const r = await kunciRencana(tx, Number(p[0].rencana_id));
     const aset = Number(((await tx`SELECT COUNT(*) AS n FROM bba_aset WHERE penerimaan_id = ${id}`) as Array<{ n: number }>)[0]?.n ?? 0);
     if (aset > 0) throw new PenerimaanDitolakError(`Penerimaan ini sudah ditempatkan jadi ${aset} register di Buku Aset — tidak bisa dihapus.`);
+    // Nilai realisasi lama tidak selalu vol × harga, jadi tidak bisa dicatat ulang persis lewat form.
+    if (Number(p[0].pindahan) === 1 && !bolehKoreksiMundur)
+      throw new PenerimaanDitolakError('Ini realisasi lama yang dipindah otomatis saat pencatatan penerimaan dimulai — nilainya tidak bisa dicatat ulang persis, jadi penghapusannya hanya oleh Admin.');
+    // Rehab tidak melahirkan register, jadi "sudah ditempatkan"-nya = kondisi gedung sudah diperbarui atas namanya.
+    if (r.jenis_rencana === 'REHAB') {
+      const rehab = await tx`
+        SELECT COUNT(*) AS n FROM bba_aset_riwayat
+        WHERE jenis = 'REHAB' AND JSON_UNQUOTE(JSON_EXTRACT(sesudah, '$.rencana')) = ${r.canonical_id}
+          AND aset_id IN (SELECT aset_id FROM bba_rencana_aset WHERE rencana_id = ${r.id})
+      ` as Array<{ n: number }>;
+      if (Number(rehab[0]?.n ?? 0) > 0) throw new PenerimaanDitolakError(`Kondisi gedung sudah diperbarui dari rehab ${r.canonical_id} — penerimaannya tidak bisa dihapus lagi.`);
+    }
     const dariPenuh = r.status === 'REALISASI_PENUH';
     if (dariPenuh && !bolehKoreksiMundur) throw new PenerimaanDitolakError(`${r.canonical_id} sudah Diterima penuh — koreksi mundur hanya oleh Admin.`);
     await tx`DELETE FROM bba_penerimaan WHERE id = ${id}`;
     const status = await tulisRealisasi(tx, r.id, r.vol, userId);
-    if (r.jenis_rencana === 'PENGGANTIAN' && status === 'DIPROSES') await tandaiSiapDihapus(tx, conn, r, false, userId);
+    if (r.jenis_rencana === 'PENGGANTIAN' && status !== 'REALISASI_PENUH') await tandaiSiapDihapus(tx, conn, r, false, userId);
     return { canonical_id: r.canonical_id, dariPenuh };
   });
 }

@@ -48,6 +48,15 @@ export function referensiBeku(status: BbaStatus): boolean {
 }
 
 /**
+ * Sejak ada barang diterima, jenis rencana & aset sasaran ikut beku: tanda "siap dihapus" (penggantian)
+ * dan antrean Buku Aset (tempatkan vs perbarui gedung) dihitung dari keduanya. Mengubahnya sesudah itu
+ * meninggalkan aset lama bertanda selamanya, atau memindah penerimaan ke antrean yang salah.
+ */
+export function sasaranBeku(status: BbaStatus): boolean {
+  return status === 'REALISASI_PENUH' || status === 'REALISASI_SEBAGIAN';
+}
+
+/**
  * Alasan item TIDAK boleh dihapus, atau `null`. Satu kalimat untuk route DAN tombol Hapus.
  * Hapus item ikut membuang referensi & bukti (ON DELETE CASCADE) — padahal itulah bahan
  * "pembelian sebelumnya" saat barang yang sama direncanakan lagi (§7.7).

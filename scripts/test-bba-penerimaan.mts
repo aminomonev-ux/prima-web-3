@@ -9,7 +9,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import mysql from 'mysql2/promise'
 import { ringkasPenerimaan, alasanTolakPenerimaan, sisaDitempatkan, salinanYangDibeli, referensiDariDibeli } from '../lib/bba/penerimaan'
 import { cocokkanBelumTeregister, rencanakanImpor, type AsetRingan } from '../lib/bba/aset'
-import { alasanTolakProses, type BbaStatus } from '../lib/bba/status'
+import { alasanTolakProses, sasaranBeku, type BbaStatus } from '../lib/bba/status'
 import type { AsetBaca, HasilBacaKib } from '../lib/bba/kib-baca'
 import { PenerimaanSchema, AntreanAksiSchema, HapusAsetSchema, RegisterSchema } from '../lib/data/bba-penerimaan-schemas'
 
@@ -86,6 +86,9 @@ ok('A10 Proses (pesan/batal/tidak terealisasi): ditolak begitu ada penerimaan; D
   alasanTolakProses(proses('DIPROSES'), 'TIDAK_TEREALISASI', 0) === null && alasanTolakProses(proses('DIPROSES'), 'TIDAK_TEREALISASI', 1) !== null
   && alasanTolakProses(proses('DIRENCANAKAN', 'BELUM'), 'DIPROSES', 0) !== null && alasanTolakProses(proses('DIRENCANAKAN', 'TIDAK_DIDANAI'), 'TIDAK_TEREALISASI', 0) !== null
   && alasanTolakProses(proses('DIPROSES', 'BELUM'), 'DIRENCANAKAN', 0) === null && alasanTolakProses(proses('REALISASI_PENUH'), 'DIPROSES', 0) !== null)
+ok('A11 jenis rencana & aset sasaran beku begitu ada barang diterima (bukan sejak dipesan — belum ada yang dihitung darinya)',
+  sasaranBeku('REALISASI_SEBAGIAN') && sasaranBeku('REALISASI_PENUH')
+  && !sasaranBeku('DIRENCANAKAN') && !sasaranBeku('DIPROSES') && !sasaranBeku('TIDAK_TEREALISASI'))
 
 console.log('\nB. Skema (lib/data/bba-penerimaan-schemas.ts)')
 const pen = { rencana_id: 1, expected_version: 0, tgl: '2026-05-14', vol: 2, harga_satuan: 3_900_000 }
@@ -122,6 +125,16 @@ ok('C3 hapus penerimaan: ditolak bila sudah ditempatkan; dari Diterima penuh han
   bHapus.indexOf('if (aset > 0) throw new PenerimaanDitolakError(') < bHapus.indexOf('DELETE FROM bba_penerimaan')
   && bHapus.indexOf('if (dariPenuh && !bolehKoreksiMundur)') < bHapus.indexOf('DELETE FROM bba_penerimaan')
   && sumber('app/api/buku-besar-aset/pengadaan/route.ts').includes('hapusPenerimaan(p.data.id, g.session.userId, bolehBatalkanFinal(g.session.role))'))
+ok('C3b hapus penerimaan: realisasi lama (pindahan) hanya Admin & rehab yang sudah memperbarui gedung ditolak — keduanya SEBELUM DELETE; layar mengunci tombolnya',
+  bHapus.indexOf('if (Number(p[0].pindahan) === 1 && !bolehKoreksiMundur)') > 0 && bHapus.indexOf('if (Number(p[0].pindahan) === 1 && !bolehKoreksiMundur)') < bHapus.indexOf('DELETE FROM bba_penerimaan')
+  && bHapus.indexOf("if (r.jenis_rencana === 'REHAB') {") > 0 && bHapus.indexOf("if (r.jenis_rencana === 'REHAB') {") < bHapus.indexOf('DELETE FROM bba_penerimaan')
+  && sumber('app/(dashboard)/buku-besar-aset/_components/ModalPengadaan.tsx').includes("p.pindahan && !bolehKoreksiMundur ? 'Realisasi lama"))
+const bUbah = badan(dataBba, 'updateAset')
+ok('C3c jenis rencana & aset sasaran beku sejak diterima: diperiksa di server (L82), layar ikut mengunci isiannya',
+  bUbah.indexOf('if (sasaranBeku(cur.status)) {') > 0 && bUbah.indexOf('if (sasaranBeku(cur.status)) {') < bUbah.indexOf('await withTransaction(')
+  && sumber('app/api/buku-besar-aset/route.ts').includes("if (err instanceof BbaSasaranBekuError)     return NextResponse.json({ ok: false, code: 'SASARAN_BEKU'")
+  && sumber('app/(dashboard)/buku-besar-aset/_components/ModalItem.tsx').includes('<fieldset disabled={jenisBeku}')
+  && sumber('app/(dashboard)/buku-besar-aset/_components/ModalItem.tsx').includes('<select value={isian.jenis_rencana} disabled={jenisBeku}'))
 const bTempat = badan(dataPen, 'tempatkan')
 ok('C4 tempatkan: penerimaan dikunci FOR UPDATE, sisa dihitung di bawah kunci, register lahir lewat bulkInsert + riwayat TERIMA',
   bTempat.includes('WHERE p.id = ${input.penerimaan_id} FOR UPDATE') && bTempat.indexOf('if (input.jumlah > sisa)') < bTempat.indexOf("await bulkInsert('bba_aset'")
@@ -133,6 +146,7 @@ ok('C5 migrasi: realisasi lama jadi satu penerimaan bertanda pindahan (tidak mas
   && !/ADD COLUMN IF NOT EXISTS/i.test(mig) && (mig.match(/ON DELETE RESTRICT/g) ?? []).length === 2
   && dataPen.includes('WHERE p.pindahan = 0 AND (b.jenis_rencana IS NULL OR b.jenis_rencana <> \'REHAB\')')
   && skema.indexOf('CREATE TABLE IF NOT EXISTS bba_penerimaan') < skema.indexOf('CREATE TABLE IF NOT EXISTS bba_aset ('))
+const TGL_CADANGAN = mig.match(/COALESCE\(b\.tgl_realisasi, (.+?)\), b\.vol_realisasi/)?.[1] ?? ''
 const nav = sumber('app/(dashboard)/buku-besar-aset/_components/BbaNav.tsx')
 const rencanaKlien = sumber('app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx')
 const pengadaanKlien = sumber('app/(dashboard)/buku-besar-aset/pengadaan/pengadaan-client.tsx')
@@ -216,32 +230,51 @@ if (c) {
       h1.status === 'REALISASI_SEBAGIAN' && p1.status === 'REALISASI_SEBAGIAN' && Number(p1.vol_realisasi) === 1 && Number(p1.nilai_realisasi) === 3_917_123
       && p1.tgl_realisasi === '2026-05-14' && p1.tgl_proses === '2026-05-14' && b1.merk_tipe === 'Merk A KR-809' && b1.penyedia === 'PT A' && b1.url === 'https://e-katalog.lkpp.go.id/a',
       JSON.stringify({ p1, b1 }))
-    ok('D4 penggantian diterima → aset sasaran ditandai siap dihapus (+ riwayat)', h1.siapDihapus === 2 && sasaran1.every(x => x.siap_dihapus === 1)
-      && Number((await satu<{ n: number }>("SELECT COUNT(*) AS n FROM bba_aset_riwayat WHERE aset_id = ? AND jenis = 'UBAH' AND catatan LIKE 'Diganti lewat%'", [lama1]))?.n) === 1)
+    ok('D4 penggantian diterima SEBAGIAN → aset lama belum ditandai siap dihapus (belum tahu unit mana yang sudah ada penggantinya)',
+      h1.siapDihapus === 0 && sasaran1.every(x => x.siap_dihapus === 0), JSON.stringify({ h1, sasaran1 }))
     const ubahRef = await coba(async () => D.updateAset({ id: ganti.id, expected_version: await versi(ganti.id), referensi: [] }, userId))
     const prosesLagi = await coba(async () => D.ubahStatusProses({ id: ganti.id, expected_version: await versi(ganti.id), status: 'DIPROSES' }, userId))
     ok('D5 sesudah penerimaan: referensi beku, status tidak bisa diubah lewat Proses (mengikuti penerimaan)', ubahRef instanceof D.BbaReferensiBekuError && prosesLagi instanceof D.BbaStatusMismatchError)
+    const vSebelum = await versi(ganti.id)
+    const ubahJenis = await coba(() => D.updateAset({ id: ganti.id, expected_version: vSebelum, jenis_rencana: 'PENAMBAHAN' }, userId))
+    const ubahSasaran = await coba(() => D.updateAset({ id: ganti.id, expected_version: vSebelum, aset_sasaran: [lama1] }, userId))
+    const kosongkanJenis = await coba(() => D.updateAset({ id: ganti.id, expected_version: vSebelum, jenis_rencana: null }, userId))
+    const sama = await coba(() => D.updateAset({ id: ganti.id, expected_version: vSebelum, jenis_rencana: 'PENGGANTIAN', aset_sasaran: [lama2, lama1], keterangan: 'UJIE sama' }, userId))
+    ok('D5b sesudah diterima: jenis & aset sasaran beku (diubah/dikosongkan → SASARAN_BEKU, tanpa menulis); isian yang sama (urutan lain) tetap tersimpan',
+      ubahJenis instanceof D.BbaSasaranBekuError && ubahSasaran instanceof D.BbaSasaranBekuError && kosongkanJenis instanceof D.BbaSasaranBekuError
+      && !(sama instanceof Error) && await versi(ganti.id) === vSebelum + 1
+      && (await satu<{ jenis_rencana: string }>('SELECT jenis_rencana FROM buku_besar_aset WHERE id = ?', [ganti.id]))?.jenis_rencana === 'PENGGANTIAN'
+      && Number((await satu<{ n: number }>('SELECT COUNT(*) AS n FROM bba_rencana_aset WHERE rencana_id = ?', [ganti.id]))?.n) === 2,
+      String(sama instanceof Error ? sama.message : ''))
 
     const h2 = await terima(ganti.id, { tgl: '2026-05-20', vol: 1, harga_satuan: 3_917_123, merk_tipe: 'Merk A KR-810' })
     const p2 = await rencana(ganti.id)
     ok('D6 penerimaan kedua: Diterima penuh, nilai = Σ dua baris, tanggal = penerimaan terakhir, isian sendiri menimpa merk',
       h2.status === 'REALISASI_PENUH' && Number(p2.nilai_realisasi) === 7_834_246 && p2.tgl_realisasi === '2026-05-20'
       && (await satu<{ merk_tipe: string }>('SELECT merk_tipe FROM bba_penerimaan WHERE rencana_id = ? ORDER BY id DESC LIMIT 1', [ganti.id]))?.merk_tipe === 'Merk A KR-810')
+    const tanda = async () => ((await k.query('SELECT siap_dihapus FROM bba_aset WHERE id IN (?) ORDER BY id', [[lama1, lama2]])) as [Array<{ siap_dihapus: number }>, unknown])[0]
+    ok('D6b penggantian Diterima PENUH → aset sasaran ditandai siap dihapus (+ riwayat)', h2.siapDihapus === 2 && (await tanda()).every(x => x.siap_dihapus === 1)
+      && Number((await satu<{ n: number }>("SELECT COUNT(*) AS n FROM bba_aset_riwayat WHERE aset_id = ? AND jenis = 'UBAH' AND catatan LIKE 'Diganti lewat%'", [lama1]))?.n) === 1)
     const idPen2 = Number((await satu<{ id: number }>('SELECT id FROM bba_penerimaan WHERE rencana_id = ? ORDER BY id DESC LIMIT 1', [ganti.id]))?.id)
     const bukanAdmin = await coba(() => PEN.hapusPenerimaan(idPen2, userId, false))
     const hp = await PEN.hapusPenerimaan(idPen2, userId, true)
     const p3 = await rencana(ganti.id)
-    ok('D7 koreksi mundur dari Diterima penuh: ditolak tanpa kewenangan Admin; dengan kewenangan → dihitung ulang jadi sebagian',
-      bukanAdmin instanceof PEN.PenerimaanDitolakError && hp?.dariPenuh === true && p3.status === 'REALISASI_SEBAGIAN' && Number(p3.nilai_realisasi) === 3_917_123)
+    ok('D7 koreksi mundur dari Diterima penuh: ditolak tanpa kewenangan Admin; dengan kewenangan → dihitung ulang jadi sebagian, tanda siap dihapus dilepas',
+      bukanAdmin instanceof PEN.PenerimaanDitolakError && hp?.dariPenuh === true && p3.status === 'REALISASI_SEBAGIAN' && Number(p3.nilai_realisasi) === 3_917_123
+      && (await tanda()).every(x => x.siap_dihapus === 0))
     await terima(ganti.id, { tgl: '2026-05-20', vol: 1, harga_satuan: 3_917_123, referensi_urutan: 2 })
 
     // Antrean & penempatan
-    await k.query(`INSERT INTO bba_penerimaan (rencana_id, tgl, vol, harga_satuan, nilai, catatan, pindahan) VALUES (?, '2020-01-01', 1, 1, 1, 'pindahan uji', 1)`, [ganti.id])
+    const [pindah] = await k.query(`INSERT INTO bba_penerimaan (rencana_id, tgl, vol, harga_satuan, nilai, catatan, pindahan) VALUES (?, '2020-01-01', 1, 1, 1, 'pindahan uji', 1)`, [ganti.id]) as [{ insertId: number }, unknown]
     const an = await PEN.antreanBukuAset()
     const milik = an.terima.filter(x => x.rencana_id === ganti.id)
     ok('D8 antrean: tiap penerimaan dengan unit yang belum ditempatkan; baris pindahan (realisasi lama) tidak ikut', milik.length === 2 && milik.every(x => x.sisa === 1 && x.harga_satuan === 3_917_123))
-    // Pindahan hanya untuk uji antrean — dibuang supaya realisasi = Σ penerimaan tetap benar di langkah berikutnya.
-    await k.query("DELETE FROM bba_penerimaan WHERE rencana_id = ? AND pindahan = 1", [ganti.id])
+    // Pindahan hanya untuk uji antrean — dibuang (oleh Admin) supaya realisasi = Σ penerimaan tetap benar di langkah berikutnya.
+    const pindahBukanAdmin = await coba(() => PEN.hapusPenerimaan(pindah.insertId, userId, false))
+    const masihAda = await nPen(ganti.id)
+    await PEN.hapusPenerimaan(pindah.insertId, userId, true)
+    ok('D8b realisasi lama (pindahan) hanya bisa dihapus Admin — nilainya tidak bisa dicatat ulang persis',
+      pindahBukanAdmin instanceof PEN.PenerimaanDitolakError && /realisasi lama/.test(pindahBukanAdmin.message) && masihAda === 3 && await nPen(ganti.id) === 2)
     const pen1 = milik.find(x => x.merk_tipe === 'Merk A KR-809')!
     const t1 = await PEN.tempatkan({ penerimaan_id: pen1.penerimaan_id, jumlah: 1, golongan: 'B', nama_resmi: 'UJIE KURSI RODA', nama: 'Kursi roda IGD', lokasi_id: lok.insertId, kondisi: 'B' }, userId)
     const baru = await satu<{ id: number; kode_barang: string | null; harga: string; tahun_perolehan: number; kib: string | Record<string, unknown>; lokasi_id: number; kondisi: string; kondisi_sumber: string; barang_id: number | null }>(
@@ -317,6 +350,11 @@ if (c) {
       bukanSasaran instanceof A.AsetDitolakError && g2.kondisi === 'B' && g2.kondisi_tgl === '2026-10-01'
       && Number((await satu<{ n: number }>("SELECT COUNT(*) AS n FROM bba_aset_riwayat WHERE aset_id = ? AND jenis = 'REHAB' AND JSON_UNQUOTE(JSON_EXTRACT(sesudah, '$.rencana')) = ?", [gedung, rehab.canonical_id]))?.n) === 1
       && !(await PEN.antreanBukuAset()).rehab.some(x => x.rencana_id === rehab.id))
+    const penRehab = Number((await satu<{ id: number }>('SELECT id FROM bba_penerimaan WHERE rencana_id = ?', [rehab.id]))?.id)
+    const hapusRehab = await coba(() => PEN.hapusPenerimaan(penRehab, userId, true))
+    ok('D17b penerimaan rehab yang sudah memperbarui kondisi gedung tidak bisa dihapus — riwayat gedung tidak ditinggal menunjuk rencana Dalam Proses',
+      hapusRehab instanceof PEN.PenerimaanDitolakError && /Kondisi gedung sudah diperbarui/.test(hapusRehab.message) && await nPen(rehab.id) === 1
+      && (await rencana(rehab.id)).status === 'REALISASI_PENUH')
 
     // Pembelian sebelumnya membawa yang benar-benar dibeli
     const barangId = Number((await satu<{ barang_id: number }>('SELECT barang_id FROM buku_besar_aset WHERE id = ?', [ganti.id]))?.barang_id)
@@ -329,6 +367,13 @@ if (c) {
       lalu?.dibeli.length === 2 && lalu.dibeli[0].merk_tipe === 'Merk A KR-809' && lalu.dibeli[1].penyedia === 'Toko B' && lalu.dibeli[0].harga_satuan === 3_917_123
       && lalu.referensi.length === 2, JSON.stringify(lalu?.dibeli))
     ok('D18b realisasi lama yang dipindah migrasi tetap tampil sebagai pembelian, tanpa "yang dibeli" karangan', pb.prima.find(x => x.id === lawas.id)?.dibeli.length === 0)
+
+    const cadangan = async (tahun: number) =>
+      (await satu<{ t: string }>(`SELECT DATE_FORMAT(${TGL_CADANGAN.replaceAll('b.tahun_anggaran', '?')}, '%Y-%m-%d') AS t`, [tahun]))?.t
+    const hariIniDb = (await satu<{ t: string }>("SELECT DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS t"))?.t
+    ok('D18c migrasi: rencana lama tanpa tanggal realisasi → 31 Des tahun anggarannya (kabisat juga), tapi tidak sesudah hari ini',
+      TGL_CADANGAN !== '' && await cadangan(2024) === '2024-12-31' && await cadangan(2023) === '2023-12-31' && await cadangan(2099) === hariIniDb,
+      `${TGL_CADANGAN} → ${await cadangan(2024)} / ${await cadangan(2099)}`)
 
     const undanai = await D.createAset({ tahun_anggaran: 2080, uraian: `${UJI} Tak didanai`, sumber_anggaran: 'BLUD', vol: 1, harga: 1 }, userId)
     const daftar = await PEN.pengadaanTahun(2081)

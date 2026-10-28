@@ -217,7 +217,7 @@ Contoh a–e kecuali bangsal adalah karangan untuk menggambarkan alur.
 1. Penerimaan memunculkan antrean **"barang diterima, belum dicatat"** di layar RT.
 2. RT menempatkannya: ruangan IGD, kondisi baik. Sejak itu ia **catatan aset perolehan 2027**, berstatus **"belum teregister"**.
 3. RT mencatatnya di sistem provinsi seperti biasa. Begitu kode barang dan register keluar, RT mengisinya di PRIMA (atau impor KIB berikutnya mencocokkannya otomatis) → status **teregister**.
-4. Karena rencananya **penggantian**, 2 kursi roda rusak berat perolehan 2016 ditandai **siap diusulkan dihapus**.
+4. Karena rencananya **penggantian**, 2 kursi roda rusak berat perolehan 2016 ditandai **siap diusulkan dihapus** — begitu penggantinya **diterima penuh**. Selama baru sebagian yang datang, belum ada yang ditandai: aplikasi tidak tahu unit lama mana yang sudah ada penggantinya. Sejak ada barang diterima, jenis rencana dan aset sasarannya tidak bisa diubah lagi.
 
 Kenapa tidak otomatis masuk tanpa RT? Aplikasi tidak tahu barangnya ditaruh di ruangan mana, dan nomor register hanya keluar dari sistem provinsi. Mengarang keduanya membuat buku aset salah sejak hari pertama.
 

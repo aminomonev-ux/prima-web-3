@@ -170,6 +170,7 @@ export default function ModalPengadaan({ c, rencanaId, bolehUbah, bolehKoreksiMu
             <tbody>
               {penerimaan.map(p => {
                 const kunciHapus = p.ditempatkan > 0 ? 'Sudah ditempatkan di Buku Aset — tidak bisa dihapus'
+                  : p.pindahan && !bolehKoreksiMundur ? 'Realisasi lama (dipindah otomatis) — penghapusannya hanya oleh Admin'
                   : item.status === 'REALISASI_PENUH' && !bolehKoreksiMundur ? 'Sudah diterima penuh — koreksi mundur hanya oleh Admin' : null;
                 return (
                   <tr key={p.id}>

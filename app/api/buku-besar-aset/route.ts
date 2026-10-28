@@ -7,7 +7,7 @@ import {
   listAset, getAsetKpi, getAsetDetail, createAset, updateAset, deleteAset,
   BbaVersionConflictError, BbaNotFoundError, BbaUsulanLockedError,
   BbaRealisasiRangeError, BbaStatusMismatchError, BbaBerkasTidakDikenalError, BbaBarangTidakDikenalError,
-  BbaRiwayatTerkunciError, BbaReferensiBekuError, BbaSasaranTidakDikenalError,
+  BbaRiwayatTerkunciError, BbaReferensiBekuError, BbaSasaranBekuError, BbaSasaranTidakDikenalError,
 } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from './_guard';
 
@@ -86,6 +86,7 @@ export async function PATCH(req: NextRequest) {
     if (err instanceof BbaNotFoundError)        return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
     if (err instanceof BbaBerkasTidakDikenalError || err instanceof BbaBarangTidakDikenalError || err instanceof BbaSasaranTidakDikenalError) return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
     if (err instanceof BbaReferensiBekuError)   return NextResponse.json({ ok: false, code: 'REFERENSI_BEKU', message: err.message }, { status: 409 });
+    if (err instanceof BbaSasaranBekuError)     return NextResponse.json({ ok: false, code: 'SASARAN_BEKU', message: err.message }, { status: 409 });
     throw err;
   }
   const ref = parsed.data.referensi !== undefined ? ` referensi=${parsed.data.referensi.length}` : '';
