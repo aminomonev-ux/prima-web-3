@@ -421,9 +421,11 @@ export default function ModalItem({ c, daftar: daftarAwal, awalId, tabAwal, sari
                     )}
                     <Field label="Tahun"><PrimaNumberField value={isian.tahun_anggaran} disabled={!modeBaru} onChange={e => setIsian({ ...isian, tahun_anggaran: Number(e.target.value) })} /></Field>
                     <Field label="Sumber"><select value={isian.sumber_anggaran} onChange={e => setIsian({ ...isian, sumber_anggaran: e.target.value })} style={inp}>{SUMBER_ANGGARAN.map(s => <option key={s}>{s}</option>)}</select></Field>
-                    <Field label="Uraian *" full><input value={isian.uraian} readOnly={isUsulan} onChange={e => setIsian({ ...isian, uraian: e.target.value })} style={isUsulan ? { ...inp, ...kunci } : inp} /></Field>
+                    <Field label="Nama kebutuhan & spesifikasi *" full>
+                      <input value={isian.uraian} readOnly={isUsulan} placeholder="mis. Kursi roda pasien dewasa dengan sandaran kaki yang dapat dilepas" onChange={e => setIsian({ ...isian, uraian: e.target.value })} style={isUsulan ? { ...inp, ...kunci } : inp} />
+                    </Field>
                     <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ fontSize: 11, opacity: .8 }}>Barang <span style={{ opacity: .8 }}>— jenis barang untuk riwayat beli (spesifikasi tetap di uraian)</span></span>
+                      <span style={{ fontSize: 11, opacity: .8 }}>Barang <span style={{ opacity: .8 }}>— pilih jenis umum dari Master; rincian kebutuhan ditulis di atas</span></span>
                       <PilihBarang daftar={daftarBarang} nilai={isian.barang} saran={isian.barang ? null : saranBarang(isian.uraian, daftarBarang)}
                         onUbah={barang => setIsian({ ...isian, barang })} c={c} inp={inp} />
                     </div>
