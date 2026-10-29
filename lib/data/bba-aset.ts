@@ -46,7 +46,7 @@ export class AsetDitolakError extends Error {
 const KOLOM_RINGAN = sql`
   a.id, a.golongan, a.kode_barang, a.register, a.kunci_impor, a.kode_objek, a.tahun_perolehan,
   a.nama_resmi, a.nama, a.lokasi_id, a.harga, a.asal_usul, a.keterangan, a.kondisi, a.kondisi_sumber, a.status,
-  a.version, a.barang_id, DATE_FORMAT(a.kondisi_tgl, '%Y-%m-%d') AS kondisi_tgl
+  a.version, a.barang_id, a.penerimaan_id, DATE_FORMAT(a.kondisi_tgl, '%Y-%m-%d') AS kondisi_tgl
 `;
 
 function bacaKib(v: unknown): Record<string, NilaiKib> {
@@ -68,6 +68,7 @@ function petakanRingan(r: Record<string, unknown>): AsetRingan {
     kib: bacaKib(r.kib), status: (r.status as 'AKTIF' | 'DIHAPUS') ?? 'AKTIF',
     kondisi_tgl: (r.kondisi_tgl as string | null) ?? null, // sudah teks: DATE_FORMAT di SQL
     version: Number(r.version ?? 0), barang_id: r.barang_id == null ? null : Number(r.barang_id),
+    penerimaan_id: r.penerimaan_id == null ? null : Number(r.penerimaan_id),
   };
 }
 
@@ -122,7 +123,8 @@ function whereAset(f: SaringanAset, batas: string) {
   else if (f.lokasi) w = sql`${w} AND a.lokasi_id = ${f.lokasi}`;
   if (f.gedung) w = sql`${w} AND (a.id = ${f.gedung} OR a.lokasi_id IN (SELECT id FROM bba_lokasi WHERE gedung_aset_id = ${f.gedung}))`;
   if (f.barang) w = sql`${w} AND a.barang_id = ${f.barang}`;
-  if (f.tanda === 'BELUM_TEREGISTER') w = sql`${w} AND a.kode_barang IS NULL`;
+  // Cermin `belumTeregister` (lib/bba/aset.ts): KIB F dari berkas memang bisa tanpa kode.
+  if (f.tanda === 'BELUM_TEREGISTER') w = sql`${w} AND a.penerimaan_id IS NOT NULL AND a.kode_barang IS NULL`;
   else if (f.tanda === 'SIAP_DIHAPUS') w = sql`${w} AND a.siap_dihapus = 1`;
   if (f.q?.trim()) {
     const p = `%${escapeLike(f.q.trim())}%`;
@@ -140,7 +142,7 @@ export async function daftarAset(f: SaringanAset): Promise<DaftarAset> {
     `),
     queryMany<{ id: number; nama: string }>(sql`SELECT id, nama FROM bba_lokasi`),
     queryMany<Record<string, unknown>>(sql`
-      SELECT COALESCE(SUM(status = 'AKTIF' AND kode_barang IS NULL), 0) AS belum, COALESCE(SUM(status = 'AKTIF' AND siap_dihapus = 1), 0) AS siap,
+      SELECT COALESCE(SUM(status = 'AKTIF' AND penerimaan_id IS NOT NULL AND kode_barang IS NULL), 0) AS belum, COALESCE(SUM(status = 'AKTIF' AND siap_dihapus = 1), 0) AS siap,
              COALESCE(SUM(status = 'DIHAPUS'), 0) AS dihapus
       FROM bba_aset
     `),
@@ -487,23 +489,28 @@ async function asetLamaUntuk(q: TxSql | null, golongan: Golongan[], kunci: boole
 
 export interface RingkasImpor {
   perGolongan: { golongan: Golongan; baru: number; cocok: number; berubah: number; sama: number; tidakDiBerkas: number; dihapusDiPrima: number }[];
-  /** Register baru yang mengisi aset "belum teregister" (dari penerimaan) — bukan baris baru. */
-  contohCocok: { nama: string; register: string | null; tahun: number | null; harga: number }[];
+  /** Register baru yang mengisi aset "belum teregister" (dari penerimaan) — bukan baris baru. Ruangan
+   *  ikut ditampilkan: pencocok hanya golongan + tahun + harga, dua unit sejenis di ruangan lain bisa tertukar. */
+  contohCocok: { nama: string; register: string | null; tahun: number | null; harga: number; ruangan: string | null }[];
   contohBerubah: { nama: string; register: string | null; kolom: string[] }[];
   contohBaru: { nama: string; register: string | null; tahun: number | null; harga: number }[];
   contohTidakDiBerkas: { nama: string; register: string | null; tahun: number | null }[];
+  /** Dugaan salah ketik register isian PRIMA (§20.2): register PRIMA ↔ register baru di berkas. */
+  curiga: { nama: string; register: string | null; ruangan: string | null; berkas: string[] }[];
 }
 
-function ringkasRencana(r: RencanaImpor, golongan: Golongan[]): RingkasImpor {
+function ringkasRencana(r: RencanaImpor, golongan: Golongan[], namaLokasi: Map<number, string>): RingkasImpor {
+  const ruangan = (a: AsetRingan) => (a.lokasi_id ? namaLokasi.get(a.lokasi_id) ?? null : null);
   const hitung = <T,>(xs: T[], g: (x: T) => Golongan) => (k: Golongan) => xs.filter(x => g(x) === k).length;
   const baru = hitung(r.baru, x => x.golongan), berubah = hitung(r.berubah, x => x.baru.golongan);
   const tidak = hitung(r.tidakDiBerkas, x => x.golongan), dihapus = hitung(r.dihapusDiPrima, x => x.golongan), cocok = hitung(r.cocok, x => x.baru.golongan);
   return {
     perGolongan: golongan.map(g => ({ golongan: g, baru: baru(g), cocok: cocok(g), berubah: berubah(g), sama: 0, tidakDiBerkas: tidak(g), dihapusDiPrima: dihapus(g) })),
-    contohCocok: r.cocok.slice(0, 20).map(x => ({ nama: namaTampil(x.lama), register: x.baru.register, tahun: x.baru.tahun_perolehan, harga: x.baru.harga })),
+    contohCocok: r.cocok.slice(0, 20).map(x => ({ nama: namaTampil(x.lama), register: x.baru.register, tahun: x.baru.tahun_perolehan, harga: x.baru.harga, ruangan: ruangan(x.lama) })),
     contohBerubah: r.berubah.slice(0, 50).map(x => ({ nama: namaTampil(x.lama), register: x.lama.register, kolom: x.kolom })),
     contohBaru: r.baru.slice(0, 20).map(x => ({ nama: namaDariKeterangan(x.keterangan) ?? x.nama_resmi, register: x.register, tahun: x.tahun_perolehan, harga: x.harga })),
     contohTidakDiBerkas: r.tidakDiBerkas.slice(0, 20).map(x => ({ nama: namaTampil(x), register: x.register, tahun: x.tahun_perolehan })),
+    curiga: r.curiga.slice(0, 20).map(x => ({ nama: namaTampil(x.lama), register: x.lama.register, ruangan: ruangan(x.lama), berkas: x.baru.map(b => b.register ?? '—') })),
   };
 }
 
@@ -519,8 +526,12 @@ function isiSama(r: RingkasImpor, rencana: RencanaImpor, baca: readonly AsetBaca
 
 export async function pratinjauImpor(hasil: HasilBacaKib): Promise<RingkasImpor> {
   const golongan = [...new Set(hasil.aset.map(a => a.golongan))];
-  const rencana = rencanakanImpor(await asetLamaUntuk(null, golongan, false), hasil.aset);
-  return isiSama(ringkasRencana(rencana, golongan), rencana, hasil.aset);
+  const [lama, lokasi] = await Promise.all([
+    asetLamaUntuk(null, golongan, false),
+    queryMany<{ id: number; nama: string }>(sql`SELECT id, nama FROM bba_lokasi`),
+  ]);
+  const rencana = rencanakanImpor(lama, hasil.aset);
+  return isiSama(ringkasRencana(rencana, golongan, new Map(lokasi.map(l => [Number(l.id), String(l.nama)]))), rencana, hasil.aset);
 }
 
 const POTONG = 500;

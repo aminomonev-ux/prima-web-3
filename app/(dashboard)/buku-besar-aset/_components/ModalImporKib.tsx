@@ -111,10 +111,23 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
                 </tr>
               ))}</tbody>
             </table>
+            {p.curiga.length > 0 && (
+              <div style={{ border: '1px solid rgba(186,117,23,.45)', background: 'rgba(186,117,23,.08)', borderRadius: 10, padding: '8px 12px', lineHeight: 1.5 }}>
+                <b style={{ color: '#BA7517' }}>Kemungkinan salah ketik register ({p.curiga.length}{p.curiga.length === 20 ? '+' : ''})</b>
+                <div style={{ color: c.sub }}>
+                  Register yang diisi di PRIMA tidak ada di berkas, sementara berkas membawa register baru dengan golongan, tahun, dan harga yang sama.
+                  Kalau barangnya memang sama, betulkan registernya di kartu aset dulu, lalu impor ulang — kalau disimpan sekarang, nomor itu masuk sebagai aset baru
+                  atau diisikan ke barang sejenis lain yang belum teregister, dan barang yang sama tercatat dua kali.
+                </div>
+                <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{p.curiga.map((x, i) => (
+                  <li key={i}>{x.nama}{x.ruangan ? <span style={{ color: c.sub }}> · {x.ruangan}</span> : null} <span style={{ fontFamily: MONO, color: c.sub }}>PRIMA {x.register ?? '—'} ↔ berkas {x.berkas.join(', ')}</span></li>
+                ))}</ul>
+              </div>
+            )}
             {p.contohCocok.length > 0 && (
               <details open>
-                <summary style={{ cursor: 'pointer' }}>Barang diterima yang mendapat register dari berkas ({p.contohCocok.length}{p.contohCocok.length === 20 ? '+' : ''}) — dicocokkan lewat golongan, tahun perolehan, dan harga</summary>
-                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{p.contohCocok.map((x, i) => <li key={i}>{x.nama} <span style={{ fontFamily: MONO, color: c.sub }}>→ {x.register ?? ''}{x.tahun ? ` · ${x.tahun}` : ''}</span></li>)}</ul>
+                <summary style={{ cursor: 'pointer' }}>Barang diterima yang mendapat register dari berkas ({p.contohCocok.length}{p.contohCocok.length === 20 ? '+' : ''}) — dicocokkan lewat golongan, tahun perolehan, dan harga; periksa ruangannya</summary>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{p.contohCocok.map((x, i) => <li key={i}>{x.nama}{x.ruangan ? <span style={{ color: c.sub }}> · {x.ruangan}</span> : null} <span style={{ fontFamily: MONO, color: c.sub }}>→ {x.register ?? ''}{x.tahun ? ` · ${x.tahun}` : ''}</span></li>)}</ul>
               </details>
             )}
             {p.contohBerubah.length > 0 && (

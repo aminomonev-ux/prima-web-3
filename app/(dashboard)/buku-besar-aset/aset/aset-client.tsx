@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Upload, RefreshCw, ChevronDown, ChevronRight, ClipboardCheck, X } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
+import DeleteIcon from '@/components/ui/DeleteIcon';
 import { fetchJson } from '@/lib/shared/api';
+import { bolehBatalkanFinal } from '@/lib/constants';
 import { GOLONGAN, NAMA_GOLONGAN, LABEL_KONDISI, type Golongan } from '@/lib/bba/kib';
 import { namaTampil, rentangRegister, type AsetRingan } from '@/lib/bba/aset';
 import type { DaftarAset, SaringanKondisi, GedungPilihan } from '@/lib/data/bba-aset';
@@ -16,7 +18,7 @@ import type { PetaIzinLayar } from '../_components/BbaNav';
 import KartuAset from '../_components/KartuAset';
 import ModalImporKib from '../_components/ModalImporKib';
 import { ModalKondisi, ModalPindah, ModalTautkanAset } from '../_components/AksiAset';
-import { PanelAntrean } from '../_components/AksiTerima';
+import { PanelAntrean, ModalBatalTempatkan } from '../_components/AksiTerima';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -29,7 +31,7 @@ type Props = {
   barangAwal: { id: number; nama: string } | null;
 };
 type Kelompok = DaftarAset['kelompok'][number];
-type Aksi = { jenis: 'opname' } | { jenis: 'kondisi' | 'pindah' | 'barang'; ids: number[] };
+type Aksi = { jenis: 'opname' } | { jenis: 'kondisi' | 'pindah' | 'barang' | 'batal'; ids: number[] };
 
 export default function AsetClient({ username, role, themePreference, beku, izin, awal, ruangan, gedung, barangAwal }: Props) {
   const bolehUbah = izin.aset === 'EDIT';
@@ -209,6 +211,8 @@ export default function AsetClient({ username, role, themePreference, beku, izin
                 <PrimaButton variant="success" size="sm" onClick={() => setAksi({ jenis: 'kondisi', ids: [...pilih] })}>Catat kondisi</PrimaButton>
                 <PrimaButton variant="purple" size="sm" onClick={() => setAksi({ jenis: 'pindah', ids: [...pilih] })}>Pindah ruangan</PrimaButton>
                 <PrimaButton variant="purple" size="sm" onClick={() => setAksi({ jenis: 'barang', ids: [...pilih] })}>Tautkan barang</PrimaButton>
+                <PrimaButton variant="danger" size="sm" iconLeft={<DeleteIcon size={13} />} onClick={() => setAksi({ jenis: 'batal', ids: [...pilih] })}
+                  data-tooltip="Hanya register belum teregister yang salah ditempatkan — unitnya kembali ke antrean">Batalkan penempatan</PrimaButton>
                 <PrimaButton variant="ghost" size="sm" onClick={() => setPilih(new Set())}>Batal pilih</PrimaButton>
               </div>
             )}
@@ -249,7 +253,8 @@ export default function AsetClient({ username, role, themePreference, beku, izin
                         <td style={{ ...td, fontFamily: MONO, textAlign: 'center' }}>{k.tahun ?? '—'}</td>
                         <td style={td}>{k.lokasi_nama ?? <span style={{ color: c.sub }}>—</span>}</td>
                         <td style={{ ...td, fontFamily: MONO, fontSize: 11.5, whiteSpace: 'nowrap' }}>{banyak ? `${k.ids.length} unit · ` : ''}{k.register.length > 0 && rentangRegister(k.register)}
-                          {k.register.length < k.ids.length && <span style={{ color: '#BA7517', fontFamily: 'inherit' }}>{k.register.length > 0 ? ` · ${k.ids.length - k.register.length} ` : ''}belum teregister</span>}</td>
+                          {k.belumTeregister > 0 && <span style={{ color: '#BA7517', fontFamily: 'inherit' }}>{k.register.length > 0 ? ` · ${k.belumTeregister} ` : ''}belum teregister</span>}
+                          {k.register.length === 0 && k.belumTeregister === 0 && <span style={{ color: c.sub, fontFamily: 'inherit' }}>—</span>}</td>
                         <td style={td}><KondisiRingkas k={k} c={c} /></td>
                         <td style={tdNum}>{fmtRp(k.harga)}</td>
                       </tr>,
@@ -284,12 +289,13 @@ export default function AsetClient({ username, role, themePreference, beku, izin
             </div>
           </>)}
 
-          {kartu !== null && <KartuAset id={kartu} c={c} bolehUbah={bolehUbah} onTutup={() => setKartu(null)} onPindah={setKartu} onTersimpan={() => void muat()} />}
+          {kartu !== null && <KartuAset id={kartu} c={c} bolehUbah={bolehUbah} bolehAdmin={bolehBatalkanFinal(role)} onTutup={() => setKartu(null)} onPindah={setKartu} onTersimpan={() => void muat()} />}
           {impor && <ModalImporKib c={c} onTutup={() => setImpor(false)} onTersimpan={() => { setImpor(false); void muat(); }} />}
           {aksi?.jenis === 'opname' && <ModalKondisi c={c} onTutup={() => setAksi(null)} onTersimpan={selesaiAksi} />}
           {aksi?.jenis === 'kondisi' && <ModalKondisi c={c} ids={aksi.ids} onTutup={() => setAksi(null)} onTersimpan={selesaiAksi} />}
           {aksi?.jenis === 'pindah' && <ModalPindah c={c} ids={aksi.ids} onTutup={() => setAksi(null)} onTersimpan={selesaiAksi} />}
           {aksi?.jenis === 'barang' && <ModalTautkanAset c={c} ids={aksi.ids} onTutup={() => setAksi(null)} onTersimpan={selesaiAksi} />}
+          {aksi?.jenis === 'batal' && <ModalBatalTempatkan c={c} ids={aksi.ids} onTutup={() => setAksi(null)} onTersimpan={selesaiAksi} />}
         </>);
       }}
     </BbaShell>

@@ -16,7 +16,10 @@ import {
   BbaNotFoundError, BbaVersionConflictError, BbaLokasiTidakDikenalError, type BbaRow,
 } from '@/lib/data/buku-besar-aset';
 import { AsetVersiError, AsetTidakAdaError, AsetDitolakError } from '@/lib/data/bba-aset';
-import type { PenerimaanInput, TempatkanInput, RegisterInput, HapusAsetInput, RehabInput } from '@/lib/data/bba-penerimaan-schemas';
+import { alasanTakBisaBatalTempatkan, alasanTakBisaUbahRegister } from '@/lib/bba/koreksi';
+import type {
+  PenerimaanInput, TempatkanInput, RegisterInput, HapusAsetInput, RehabInput, KosongkanRegisterInput, BatalTempatkanInput, BatalHapusInput,
+} from '@/lib/data/bba-penerimaan-schemas';
 
 export class PenerimaanDitolakError extends Error {
   constructor(msg: string) { super(msg); this.name = 'PenerimaanDitolakError'; }
@@ -262,25 +265,34 @@ export async function tempatkan(input: TempatkanInput, userId: number): Promise<
 /** Register angka disimpan 6 digit seperti sistem provinsi (pola impor KIB). */
 export const rapikanRegister = (r: string) => (/^\d+$/.test(r.trim()) ? r.trim().padStart(6, '0') : r.trim());
 
-/** Isi kode barang & register dari sistem provinsi (§7.5 butir 3). Kunci impor ikut, jadi impor KIB berikutnya mencocokkannya. */
-export async function isiRegister(input: RegisterInput, userId: number): Promise<{ kunci_impor: string }> {
+/**
+ * Isi — atau betulkan — kode barang & register dari sistem provinsi (§7.5 butir 3, §20.2). Kunci impor ikut,
+ * jadi impor KIB berikutnya mencocokkannya. Hanya catatan yang lahir di PRIMA: kunci aset dari berkas
+ * (termasuk KIB F tanpa kode: nama + letak + tanggal mulai) yang diganti membuat impor berikutnya melahirkan kembarannya.
+ */
+export async function isiRegister(input: RegisterInput, userId: number): Promise<{ kunci_impor: string; sebelum: string | null }> {
   return withTransaction(async ({ tx }) => {
-    const ada = await tx`SELECT golongan, kode_barang, register, version, status FROM bba_aset WHERE id = ${input.id} FOR UPDATE` as Array<Record<string, unknown>>;
+    const ada = await tx`SELECT golongan, kode_barang, register, kunci_impor, version, status, penerimaan_id FROM bba_aset WHERE id = ${input.id} FOR UPDATE` as Array<Record<string, unknown>>;
     if (ada.length === 0) throw new AsetTidakAdaError();
     const a = ada[0];
     if (Number(a.version) !== input.expected_version) throw new AsetVersiError();
-    if (a.status !== 'AKTIF') throw new AsetDitolakError(['Aset sudah dihapus.']);
+    const tolak = alasanTakBisaUbahRegister({ status: a.status as 'AKTIF' | 'DIHAPUS', penerimaan_id: a.penerimaan_id == null ? null : Number(a.penerimaan_id) });
+    if (tolak) throw new AsetDitolakError([tolak]);
     const kode = input.kode_barang.trim(), register = rapikanRegister(input.register);
     const { tahun, kodeObjek } = uraiKodeBarang(kode);
     const g = golonganDariKodeObjek(kodeObjek);
     if (g && g !== a.golongan) throw new AsetDitolakError([`Kode barang ini golongan ${g}, aset ini golongan ${a.golongan}.`]);
     const kunci = `${kode}|${register}`;
+    const sebelum = (a.kunci_impor as string | null) ?? null;
+    if (sebelum === kunci) return { kunci_impor: kunci, sebelum };
     // Kembar ditolak indeks UNIK `kunci_impor`, bukan SELECT dulu: SELECT tidak mengunci kunci yang belum ada,
     // jadi pengisian/impor berbarengan lolos pemeriksaan lalu bentrok di sini juga (L69-a).
+    // Tahun tanpa ruas di kode = tahun diterima, bukan tahun dari register salah ketik yang sedang dibetulkan.
     try {
       await tx`
         UPDATE bba_aset SET kode_barang = ${kode}, register = ${register}, kunci_impor = ${kunci}, kode_objek = ${kodeObjek},
-          tahun_perolehan = COALESCE(${tahun}, tahun_perolehan), version = version + 1, updated_by = ${userId}
+          tahun_perolehan = COALESCE(${tahun}, (SELECT YEAR(p.tgl) FROM bba_penerimaan p WHERE p.id = ${Number(a.penerimaan_id)}), tahun_perolehan),
+          version = version + 1, updated_by = ${userId}
         WHERE id = ${input.id}
       `;
     } catch (err) {
@@ -293,7 +305,141 @@ export async function isiRegister(input: RegisterInput, userId: number): Promise
       VALUES (${input.id}, 'REGISTER', ${JSON.stringify({ kode_barang: a.kode_barang ?? null, register: a.register ?? null })},
               ${JSON.stringify({ kode_barang: kode, register })}, ${userId})
     `;
-    return { kunci_impor: kunci };
+    return { kunci_impor: kunci, sebelum };
+  });
+}
+
+/** Kembali belum teregister (§20.2): nomor yang benar belum dipegang, atau register itu milik unit lain. */
+export async function kosongkanRegister(input: KosongkanRegisterInput, userId: number): Promise<{ sebelum: string | null }> {
+  return withTransaction(async ({ tx }) => {
+    const ada = await tx`SELECT kode_barang, register, kunci_impor, version, status, penerimaan_id FROM bba_aset WHERE id = ${input.id} FOR UPDATE` as Array<Record<string, unknown>>;
+    if (ada.length === 0) throw new AsetTidakAdaError();
+    const a = ada[0];
+    if (Number(a.version) !== input.expected_version) throw new AsetVersiError();
+    const tolak = alasanTakBisaUbahRegister({ status: a.status as 'AKTIF' | 'DIHAPUS', penerimaan_id: a.penerimaan_id == null ? null : Number(a.penerimaan_id) });
+    if (tolak) throw new AsetDitolakError([tolak]);
+    const sebelum = (a.kunci_impor as string | null) ?? null;
+    if (!a.kode_barang && !sebelum) return { sebelum };
+    // Tahun kembali ke tahun diterima — pencocok impor memakai golongan + tahun + harga.
+    await tx`
+      UPDATE bba_aset SET kode_barang = NULL, register = NULL, kunci_impor = NULL, kode_objek = NULL,
+        tahun_perolehan = COALESCE((SELECT YEAR(p.tgl) FROM bba_penerimaan p WHERE p.id = ${Number(a.penerimaan_id)}), tahun_perolehan),
+        version = version + 1, updated_by = ${userId}
+      WHERE id = ${input.id}
+    `;
+    await tx`
+      INSERT INTO bba_aset_riwayat (aset_id, jenis, sebelum, sesudah, catatan, oleh)
+      VALUES (${input.id}, 'REGISTER', ${JSON.stringify({ kode_barang: a.kode_barang ?? null, register: a.register ?? null })},
+              ${JSON.stringify({ kode_barang: null, register: null })}, 'Dikosongkan — kembali belum teregister', ${userId})
+    `;
+    return { sebelum };
+  });
+}
+
+export interface HasilBatalTempatkan { dibatalkan: number; rincian: string }
+
+/**
+ * Batalkan penempatan yang salah (§20.1): register belum teregister yang lahir dari Tempatkan dibuang beserta
+ * riwayatnya, unitnya kembali ke antrean. DIBUANG, bukan diberi status ketiga: catatan itu tak pernah ada di
+ * buku resmi, dan status ketiga harus diingat tiap kueri yang menghitung bba_aset (antrean, impor, Excel) — L69.
+ * Jejaknya di audit log (`rincian`). Penerimaan dikunci dulu — urutan sama dengan Tempatkan.
+ */
+export async function batalTempatkan(input: BatalTempatkanInput): Promise<HasilBatalTempatkan> {
+  return withTransaction(async ({ tx }) => {
+    const ids = input.item.map(x => x.id);
+    const penIds = (await tx`SELECT DISTINCT penerimaan_id FROM bba_aset WHERE id IN (${ids}) AND penerimaan_id IS NOT NULL` as Array<{ penerimaan_id: number }>)
+      .map(x => Number(x.penerimaan_id));
+    const pen = penIds.length
+      ? await tx`SELECT p.id, b.canonical_id FROM bba_penerimaan p JOIN buku_besar_aset b ON b.id = p.rencana_id WHERE p.id IN (${penIds}) FOR UPDATE OF p` as Array<{ id: number; canonical_id: string }>
+      : [];
+    const kodeRencana = new Map(pen.map(p => [Number(p.id), String(p.canonical_id)]));
+    const rows = await tx`
+      SELECT id, golongan, nama, nama_resmi, register, kode_barang, kunci_impor, status, version, penerimaan_id
+      FROM bba_aset WHERE id IN (${ids}) FOR UPDATE
+    ` as Array<Record<string, unknown>>;
+    if (rows.length !== ids.length) throw new AsetTidakAdaError();
+    const versi = new Map(input.item.map(x => [x.id, x.expected_version]));
+    const basi = rows.filter(r => Number(r.version) !== versi.get(Number(r.id))).length;
+    if (basi > 0) throw new AsetVersiError(basi);
+    // Rujukan dibaca SESUDAH kunci: tautan sasaran (gantiSasaran) & gedung ruangan (simpan lokasi) membaca aset `FOR SHARE`.
+    const sasaran = await tx`SELECT ra.aset_id, b.canonical_id FROM bba_rencana_aset ra JOIN buku_besar_aset b ON b.id = ra.rencana_id WHERE ra.aset_id IN (${ids})` as Array<{ aset_id: number; canonical_id: string }>;
+    const gedung = await tx`SELECT gedung_aset_id, nama FROM bba_lokasi WHERE gedung_aset_id IN (${ids})` as Array<{ gedung_aset_id: number; nama: string }>;
+    const sasaranDari = (id: number) => sasaran.filter(x => Number(x.aset_id) === id).map(x => String(x.canonical_id));
+    const gedungDari = (id: number) => gedung.filter(x => Number(x.gedung_aset_id) === id).map(x => String(x.nama));
+    const aset = rows.map(r => ({
+      id: Number(r.id), golongan: String(r.golongan), nama: (r.nama as string | null) ?? null, nama_resmi: String(r.nama_resmi ?? ''),
+      register: (r.register as string | null) ?? null, kode_barang: (r.kode_barang as string | null) ?? null, kunci_impor: (r.kunci_impor as string | null) ?? null,
+      status: r.status as 'AKTIF' | 'DIHAPUS', penerimaan_id: r.penerimaan_id == null ? null : Number(r.penerimaan_id),
+    }));
+    const alasan = aset.map(a => alasanTakBisaBatalTempatkan(a, { sasaran: sasaranDari(a.id), gedung: gedungDari(a.id) })).filter((s): s is string => !!s);
+    if (alasan.length) throw new AsetDitolakError(alasan);
+    await tx`DELETE FROM bba_aset WHERE id IN (${ids})`;
+    const kelompok = new Map<string, number>();
+    for (const a of aset) {
+      const k = `${kodeRencana.get(a.penerimaan_id!) ?? `penerimaan ${a.penerimaan_id}`}: KIB ${a.golongan} ${a.nama_resmi}`;
+      kelompok.set(k, (kelompok.get(k) ?? 0) + 1);
+    }
+    return { dibatalkan: aset.length, rincian: [...kelompok].map(([k, n]) => `${k} ×${n}`).join('; ') };
+  });
+}
+
+/** Nomor/tanggal/berkas SK salah ketik (§20.3) — asetnya tetap dihapus. */
+export async function betulkanSk(input: HapusAsetInput, userId: number): Promise<{ sebelum: string }> {
+  if (input.sk_tgl > tanggalHariIniWIB()) throw new AsetDitolakError(['Tanggal SK tidak boleh sesudah hari ini.']);
+  return withTransaction(async ({ tx }) => {
+    const ada = await tx`
+      SELECT version, status, hapus_sk_nomor, DATE_FORMAT(hapus_sk_tgl, '%Y-%m-%d') AS hapus_sk_tgl FROM bba_aset WHERE id = ${input.id} FOR UPDATE
+    ` as Array<{ version: number; status: string; hapus_sk_nomor: string | null; hapus_sk_tgl: string | null }>;
+    if (ada.length === 0) throw new AsetTidakAdaError();
+    const a = ada[0];
+    if (Number(a.version) !== input.expected_version) throw new AsetVersiError();
+    if (a.status !== 'DIHAPUS') throw new AsetDitolakError(['Aset ini tidak sedang dihapus — tidak ada SK yang bisa dibetulkan.']);
+    const sebelum = `SK ${a.hapus_sk_nomor ?? '—'} tgl ${a.hapus_sk_tgl ?? '—'}`;
+    if (a.hapus_sk_nomor === input.sk_nomor && a.hapus_sk_tgl === input.sk_tgl && !input.file_id && !input.catatan) return { sebelum };
+    await pastikanBerkasBba(tx, [input.file_id]);
+    await tx`
+      UPDATE bba_aset SET hapus_sk_nomor = ${input.sk_nomor}, hapus_sk_tgl = ${input.sk_tgl}, version = version + 1, updated_by = ${userId}
+      WHERE id = ${input.id}
+    `;
+    await tx`
+      INSERT INTO bba_aset_riwayat (aset_id, jenis, sebelum, sesudah, catatan, file_id, oleh)
+      VALUES (${input.id}, 'UBAH', ${JSON.stringify({ sk: a.hapus_sk_nomor, tgl_sk: a.hapus_sk_tgl })},
+              ${JSON.stringify({ sk: input.sk_nomor, tgl_sk: input.sk_tgl })}, ${input.catatan || 'Koreksi SK penghapusan'}, ${input.file_id || null}, ${userId})
+    `;
+    return { sebelum };
+  });
+}
+
+/**
+ * Aset yang salah ditandai dihapus (§20.3) — khusus Admin: membatalkan berarti menyatakan SK itu tidak berlaku
+ * untuk aset ini. `siap_dihapus` DIHITUNG ULANG dari rencana penggantian yang diterima penuh (`hapusAset`
+ * sudah menolkannya, jadi tidak ada yang bisa "dikembalikan"). Impor KIB tetap tidak menghidupkan aset dihapus.
+ */
+export async function batalHapus(input: BatalHapusInput, userId: number, bolehAdmin: boolean): Promise<{ sk: string }> {
+  if (!bolehAdmin) throw new AsetDitolakError(['Membatalkan penghapusan hanya oleh Admin.']);
+  return withTransaction(async ({ tx }) => {
+    const ada = await tx`
+      SELECT version, status, hapus_sk_nomor, DATE_FORMAT(hapus_sk_tgl, '%Y-%m-%d') AS hapus_sk_tgl FROM bba_aset WHERE id = ${input.id} FOR UPDATE
+    ` as Array<{ version: number; status: string; hapus_sk_nomor: string | null; hapus_sk_tgl: string | null }>;
+    if (ada.length === 0) throw new AsetTidakAdaError();
+    const a = ada[0];
+    if (Number(a.version) !== input.expected_version) throw new AsetVersiError();
+    if (a.status !== 'DIHAPUS') throw new AsetDitolakError(['Aset ini tidak sedang dihapus.']);
+    await tx`
+      UPDATE bba_aset SET status = 'AKTIF', hapus_sk_nomor = NULL, hapus_sk_tgl = NULL,
+        siap_dihapus = EXISTS (
+          SELECT 1 FROM bba_rencana_aset ra JOIN buku_besar_aset b ON b.id = ra.rencana_id
+          WHERE ra.aset_id = ${input.id} AND b.jenis_rencana = 'PENGGANTIAN' AND b.status = 'REALISASI_PENUH'
+        ),
+        version = version + 1, updated_by = ${userId}
+      WHERE id = ${input.id}
+    `;
+    await tx`
+      INSERT INTO bba_aset_riwayat (aset_id, jenis, sebelum, sesudah, catatan, oleh)
+      VALUES (${input.id}, 'BATAL_HAPUS', ${JSON.stringify({ status: 'DIHAPUS', sk: a.hapus_sk_nomor, tgl_sk: a.hapus_sk_tgl })},
+              ${JSON.stringify({ status: 'AKTIF' })}, ${input.alasan}, ${userId})
+    `;
+    return { sk: `${a.hapus_sk_nomor ?? '—'} tgl ${a.hapus_sk_tgl ?? '—'}` };
   });
 }
 

@@ -45,6 +45,14 @@ export const RegisterSchema = z.object({
   register: Teks(20).min(1, 'Nomor register wajib'),
 });
 
+/** Betulkan register = kembali belum teregister (§20.2) — kalau nomor yang benar belum dipegang. */
+export const KosongkanRegisterSchema = z.object({
+  id: z.number().int().positive(),
+  expected_version: Versi,
+  kosongkan: z.literal(true),
+});
+export const UbahRegisterSchema = z.union([KosongkanRegisterSchema, RegisterSchema]);
+
 export const HapusAsetSchema = z.object({
   id: z.number().int().positive(),
   expected_version: Versi,
@@ -52,6 +60,25 @@ export const HapusAsetSchema = z.object({
   sk_tgl: TanggalSchema,
   catatan: Teks(500).nullish(),
   file_id: FileIdSchema.nullish(),
+});
+
+// ─── Koreksi salah input (Tahap F, §20) ──────────────────────────────────────
+
+const Alasan = Teks(500).min(5, 'Tulis alasannya (paling sedikit 5 huruf)');
+
+export const BatalTempatkanSchema = z.object({
+  item: z.array(z.object({ id: z.number().int().positive(), expected_version: Versi })).min(1).max(1000)
+    .refine(xs => new Set(xs.map(x => x.id)).size === xs.length, 'Register kembar dalam satu kiriman'),
+  alasan: Alasan,
+});
+
+/** Nomor/tanggal/berkas SK salah ketik — asetnya tetap dihapus. */
+export const BetulkanSkSchema = HapusAsetSchema;
+
+export const BatalHapusSchema = z.object({
+  id: z.number().int().positive(),
+  expected_version: Versi,
+  alasan: Alasan,
 });
 
 export const RehabSchema = z.object({
@@ -75,3 +102,6 @@ export type TempatkanInput = z.infer<typeof TempatkanSchema>;
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type HapusAsetInput = z.infer<typeof HapusAsetSchema>;
 export type RehabInput = z.infer<typeof RehabSchema>;
+export type KosongkanRegisterInput = z.infer<typeof KosongkanRegisterSchema>;
+export type BatalTempatkanInput = z.infer<typeof BatalTempatkanSchema>;
+export type BatalHapusInput = z.infer<typeof BatalHapusSchema>;

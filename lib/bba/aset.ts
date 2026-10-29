@@ -26,12 +26,23 @@ export interface AsetRingan {
   kondisi_tgl?: string | null
   version?: number
   barang_id?: number | null
+  /** Terisi = lahir di PRIMA lewat Tempatkan (Tahap E), bukan dari berkas KIB. */
+  penerimaan_id?: number | null
 }
 
 /** Perencana mencari "Bangsal", bukan "Bangunan gudang tertutup permanen" (§4 temuan 3). */
 export function namaTampil(a: Pick<AsetRingan, 'nama' | 'nama_resmi'>): string {
   return a.nama?.trim() || a.nama_resmi
 }
+
+/**
+ * Asal catatan menentukan jalan koreksinya (§20): yang lahir dari berkas KIB dibetulkan di sistem
+ * provinsi lalu diimpor ulang; yang lahir di PRIMA lewat Tempatkan dibetulkan di PRIMA.
+ */
+export const lahirDiPrima = (a: Pick<AsetRingan, 'penerimaan_id'>): boolean => a.penerimaan_id != null
+
+/** KIB F dari berkas memang bisa tanpa kode — itu bukan "belum teregister". */
+export const belumTeregister = (a: Pick<AsetRingan, 'penerimaan_id' | 'kode_barang'>): boolean => lahirDiPrima(a) && !a.kode_barang
 
 /** Kondisi hasil impor bukan hasil pemeriksaan (§5.3). */
 export function belumDicek(a: Pick<AsetRingan, 'kondisi' | 'kondisi_sumber'>): boolean {
@@ -54,6 +65,7 @@ export interface KelompokAset {
   belumDicek: number
   /** Sudah dicek di PRIMA tapi lebih lama dari jarak opname (pengaturan). */
   lewat: number
+  belumTeregister: number
 }
 
 /**
@@ -68,11 +80,12 @@ export function kelompokkan(rows: readonly AsetRingan[], batas = ''): KelompokAs
     let k = peta.get(kunci)
     if (!k) {
       k = { kunci, golongan: a.golongan, nama, nama_resmi: a.nama_resmi, tahun: a.tahun_perolehan, lokasi_id: a.lokasi_id,
-        ids: [], register: [], harga: 0, kondisi: { B: 0, RR: 0, RB: 0, kosong: 0 }, belumDicek: 0, lewat: 0 }
+        ids: [], register: [], harga: 0, kondisi: { B: 0, RR: 0, RB: 0, kosong: 0 }, belumDicek: 0, lewat: 0, belumTeregister: 0 }
       peta.set(kunci, k)
     }
     k.ids.push(a.id)
     if (a.register) k.register.push(a.register)
+    if (belumTeregister(a)) k.belumTeregister++
     k.harga += a.harga
     if (a.kondisi) k.kondisi[a.kondisi]++
     else k.kondisi.kosong++
@@ -133,11 +146,13 @@ export interface RencanaImpor {
   dihapusDiPrima: AsetBaca[]
   /** Register di PRIMA (golongan yang ada di berkas) yang tidak ada di berkas — dilaporkan, TIDAK dihapus. */
   tidakDiBerkas: AsetRingan[]
+  /** Dugaan salah ketik register isian PRIMA (§20.2) — hanya peringatan, tidak mengubah apa pun. */
+  curiga: { lama: AsetRingan; baru: AsetBaca[] }[]
 }
 
 export function rencanakanImpor(lama: readonly AsetRingan[], baca: readonly AsetBaca[]): RencanaImpor {
   const perKunci = new Map(lama.filter(a => a.kunci_impor).map(a => [a.kunci_impor!, a]))
-  const hasil: RencanaImpor = { baru: [], cocok: [], berubah: [], sama: 0, dihapusDiPrima: [], tidakDiBerkas: [] }
+  const hasil: RencanaImpor = { baru: [], cocok: [], berubah: [], sama: 0, dihapusDiPrima: [], tidakDiBerkas: [], curiga: [] }
   const dipakai = new Set<string>()
   for (const b of baca) {
     const l = perKunci.get(b.kunci)
@@ -148,15 +163,36 @@ export function rencanakanImpor(lama: readonly AsetRingan[], baca: readonly Aset
     if (kolom.length) hasil.berubah.push({ lama: l, baru: b, kolom, ubah })
     else hasil.sama++
   }
-  const { cocok, sisa } = cocokkanBelumTeregister(lama, hasil.baru)
+  const tanpaPasangan = hasil.baru
+  const { cocok, sisa } = cocokkanBelumTeregister(lama, tanpaPasangan)
   hasil.cocok = cocok
   hasil.baru = sisa
   const golBerkas = new Set(baca.map(b => b.golongan))
   hasil.tidakDiBerkas = lama.filter(a => a.status === 'AKTIF' && a.kunci_impor && golBerkas.has(a.golongan) && !dipakai.has(a.kunci_impor))
+  // Termasuk register yang akan mengisi barang belum teregister: nomor itu bisa saja milik unit yang salah ketik.
+  hasil.curiga = curigaSalahKetik(hasil.tidakDiBerkas, tanpaPasangan)
   return hasil
 }
 
 const kunciPasang = (golongan: string, tahun: number | null, harga: number) => `${golongan}|${tahun ?? ''}|${Math.round(harga * 100)}`
+
+/**
+ * Register isian PRIMA (lahir dari Tempatkan) yang tidak ada di berkas, sementara berkas membawa register
+ * BARU dengan golongan + tahun + harga yang sama — kemungkinan salah ketik saat Isi register. Sengaja tidak
+ * dipasangkan otomatis: ekspor provinsi bisa sebagian (satu lokasi), jadi register yang tak ada di berkas
+ * belum tentu salah, dan menimpanya bisa memberi nomor unit lain.
+ */
+export function curigaSalahKetik(tidakDiBerkas: readonly AsetRingan[], baru: readonly AsetBaca[]): RencanaImpor['curiga'] {
+  const perKunci = new Map<string, AsetBaca[]>()
+  for (const b of baru) {
+    const k = kunciPasang(b.golongan, b.tahun_perolehan, b.harga)
+    perKunci.set(k, [...(perKunci.get(k) ?? []), b])
+  }
+  return tidakDiBerkas
+    .filter(a => lahirDiPrima(a) && a.kode_barang)
+    .map(a => ({ lama: a, baru: perKunci.get(kunciPasang(a.golongan, a.tahun_perolehan, a.harga)) ?? [] }))
+    .filter(x => x.baru.length > 0)
+}
 
 /**
  * Cocok otomatis (§7.5 butir 3): register BARU di berkas dipasangkan dengan aset "belum teregister" yang

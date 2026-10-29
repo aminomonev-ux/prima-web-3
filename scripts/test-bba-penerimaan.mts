@@ -314,8 +314,9 @@ if (c) {
 
     // Balapan register kembar: koneksi lain memegang kunci yang sama di transaksi TERBUKA. SELECT pemeriksa di
     // isiRegister tidak melihatnya (belum commit), UPDATE-nya menunggu indeks UNIK, lalu bentrok begitu commit.
-    const regA = await asetBaru({ golongan: 'B', tahun_perolehan: 2026, nama_resmi: 'UJIE KURSI RODA BALAP A', kib: '{}', harga: 1 })
-    const regB = await asetBaru({ golongan: 'B', tahun_perolehan: 2026, nama_resmi: 'UJIE KURSI RODA BALAP B', kib: '{}', harga: 1 })
+    // Lahir dari penerimaan: isi register hanya untuk catatan yang lahir di PRIMA (Tahap F §20.2).
+    const regA = await asetBaru({ golongan: 'B', tahun_perolehan: 2026, nama_resmi: 'UJIE KURSI RODA BALAP A', kib: '{}', harga: 1, penerimaan_id: pen1.penerimaan_id })
+    const regB = await asetBaru({ golongan: 'B', tahun_perolehan: 2026, nama_resmi: 'UJIE KURSI RODA BALAP B', kib: '{}', harga: 1, penerimaan_id: pen1.penerimaan_id })
     const vB = await versiAset(regB)
     await k.query('START TRANSACTION')
     await k.query("UPDATE bba_aset SET kode_barang = 'UJIE.01.2026-1.3.2.05.02', register = '000099', kunci_impor = 'UJIE.01.2026-1.3.2.05.02|000099' WHERE id = ?", [regA])

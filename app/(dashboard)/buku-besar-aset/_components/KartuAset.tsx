@@ -10,7 +10,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import { fetchJson } from '@/lib/shared/api';
 import { KOLOM_KIB, NAMA_GOLONGAN, LABEL_KONDISI, KOLOM_POKOK } from '@/lib/bba/kib';
-import { namaTampil } from '@/lib/bba/aset';
+import { namaTampil, lahirDiPrima, belumTeregister } from '@/lib/bba/aset';
 import { statusCek, fmtTanggal, bolehBerRuang, punyaKondisi } from '@/lib/bba/kondisi';
 import { LABEL_JENIS, LABEL_ANGGARAN } from '@/lib/bba/rencana';
 import { LABEL_STATUS } from '@/lib/bba/status';
@@ -19,7 +19,7 @@ import type { BbaBarang } from '@/lib/data/buku-besar-aset';
 import type { BarangRingan } from '@/lib/bba/barang';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
 import { ModalKondisi, ModalPindah } from './AksiAset';
-import { ModalRegister, ModalHapusAset } from './AksiTerima';
+import { ModalRegister, ModalHapusAset, ModalBatalTempatkan, ModalBetulkanSk, ModalBatalHapus } from './AksiTerima';
 import { unduhBerkas } from './ModalItem';
 import type { WarnaBba } from './BbaShell';
 
@@ -27,10 +27,15 @@ const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const fmtRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID', { maximumFractionDigits: 2 });
 const JENIS_RIWAYAT: Record<string, string> = {
   IMPOR: 'Impor KIB', UBAH: 'Diubah', KONDISI: 'Kondisi', PINDAH: 'Pindah ruangan', TERIMA: 'Diterima',
-  REGISTER: 'Register', REHAB: 'Rehab', HAPUS: 'Dihapus',
+  REGISTER: 'Register', REHAB: 'Rehab', HAPUS: 'Dihapus', BATAL_HAPUS: 'Penghapusan dibatalkan',
 };
 
-type Props = { id: number; c: WarnaBba; bolehUbah: boolean; onTutup: () => void; onPindah: (id: number) => void; onTersimpan: () => void };
+type Props = {
+  id: number; c: WarnaBba; bolehUbah: boolean;
+  /** Batalkan penghapusan khusus Admin (`bolehBatalkanFinal`) — server memeriksanya lagi. */
+  bolehAdmin: boolean;
+  onTutup: () => void; onPindah: (id: number) => void; onTersimpan: () => void;
+};
 
 function ringkasPerubahan(sebelum: Record<string, unknown> | null, sesudah: Record<string, unknown> | null): string {
   const kunci = Object.keys(sesudah ?? {});
@@ -39,9 +44,9 @@ function ringkasPerubahan(sebelum: Record<string, unknown> | null, sesudah: Reco
   return kunci.map(k => `${k}: ${String(sebelum[k] ?? '—')} → ${String(sesudah![k] ?? '—')}`).join(' · ');
 }
 
-export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersimpan }: Props) {
+export default function KartuAset({ id, c, bolehUbah, bolehAdmin, onTutup, onPindah, onTersimpan }: Props) {
   const [d, setD] = useState<(DetailAset & { batas: string }) | null>(null);
-  const [aksi, setAksi] = useState<'kondisi' | 'pindah' | 'register' | 'hapus' | null>(null);
+  const [aksi, setAksi] = useState<'kondisi' | 'pindah' | 'register' | 'hapus' | 'batalTempatkan' | 'betulkanSk' | 'batalHapus' | null>(null);
   const [galat, setGalat] = useState('');
   const [nama, setNama] = useState('');
   const [barang, setBarang] = useState<PilihanBarang>(null);
@@ -118,7 +123,8 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
             <div style={{ fontSize: 11, color: c.sub, marginBottom: 4, fontWeight: 600 }}>DARI KIB PROVINSI</div>
             {baris('Nama resmi', a.nama_resmi)}
             {a.kode_barang ? baris('Kode barang', a.kode_barang, true)
-              : baris('Kode barang & register', <span style={{ color: '#BA7517' }}>Belum teregister — isi sesudah dicatat di sistem provinsi (atau cocok otomatis saat Impor KIB)</span>)}
+              : belumTeregister(a) ? baris('Kode barang & register', <span style={{ color: '#BA7517' }}>Belum teregister — isi sesudah dicatat di sistem provinsi (atau cocok otomatis saat Impor KIB)</span>)
+              : baris('Kode barang', <span style={{ color: c.sub }}>— (tanpa kode di berkas KIB)</span>)}
             {a.register && baris('Register', a.register, true)}
             {baris(a.golongan === 'F' ? 'Nilai kontrak' : 'Harga', fmtRp(a.harga), true)}
             {a.asal_usul && baris('Asal usul', a.asal_usul)}
@@ -152,8 +158,16 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
               <div style={{ display: 'flex', gap: 8, margin: '8px 0 2px', flexWrap: 'wrap' }}>
                 {punyaKondisi(a.golongan) && <PrimaButton variant="success" size="sm" onClick={() => setAksi('kondisi')}>Catat kondisi</PrimaButton>}
                 {bolehBerRuang(a.golongan) && <PrimaButton variant="purple" size="sm" onClick={() => setAksi('pindah')}>Pindah ruangan</PrimaButton>}
-                {!a.kode_barang && <PrimaButton variant="primary" size="sm" onClick={() => setAksi('register')}>Isi register</PrimaButton>}
+                {lahirDiPrima(a) && <PrimaButton variant="primary" size="sm" onClick={() => setAksi('register')}>{a.kode_barang ? 'Betulkan register' : 'Isi register'}</PrimaButton>}
+                {belumTeregister(a) && <PrimaButton variant="danger" size="sm" iconLeft={<DeleteIcon size={13} />} onClick={() => setAksi('batalTempatkan')}
+                  data-tooltip="Salah golongan atau salah penerimaan — registernya dibuang, unitnya kembali ke antrean">Batalkan penempatan</PrimaButton>}
                 <PrimaButton variant="danger" size="sm" iconLeft={<DeleteIcon size={13} />} onClick={() => setAksi('hapus')}>Hapus dengan SK</PrimaButton>
+              </div>
+            )}
+            {bolehUbah && a.status === 'DIHAPUS' && (
+              <div style={{ display: 'flex', gap: 8, margin: '8px 0 2px', flexWrap: 'wrap' }}>
+                <PrimaButton variant="primary" size="sm" onClick={() => setAksi('betulkanSk')}>Betulkan SK</PrimaButton>
+                {bolehAdmin && <PrimaButton variant="warning" size="sm" onClick={() => setAksi('batalHapus')}>Batalkan penghapusan</PrimaButton>}
               </div>
             )}
             <fieldset disabled={!bolehUbah} style={{ border: 0, padding: 0, margin: '8px 0 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -207,8 +221,14 @@ export default function KartuAset({ id, c, bolehUbah, onTutup, onPindah, onTersi
       </div>
       {aksi === 'kondisi' && <ModalKondisi c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
       {aksi === 'pindah' && <ModalPindah c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
-      {aksi === 'register' && a && <ModalRegister c={c} id={id} versi={a.version} golongan={a.golongan} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
+      {aksi === 'register' && a && <ModalRegister c={c} id={id} versi={a.version} golongan={a.golongan}
+        awal={a.kode_barang ? { kode_barang: a.kode_barang, register: a.register } : undefined} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
       {aksi === 'hapus' && a && <ModalHapusAset c={c} id={id} versi={a.version} nama={namaTampil(a)} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
+      {aksi === 'batalTempatkan' && <ModalBatalTempatkan c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); onTutup(); }} />}
+      {aksi === 'betulkanSk' && a && <ModalBetulkanSk c={c} id={id} versi={a.version} nama={namaTampil(a)} sk={{ nomor: a.hapus_sk_nomor, tgl: a.hapus_sk_tgl }}
+        onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
+      {aksi === 'batalHapus' && a && <ModalBatalHapus c={c} id={id} versi={a.version} nama={namaTampil(a)} sk={`${a.hapus_sk_nomor ?? '—'}${a.hapus_sk_tgl ? ` (${fmtTanggal(a.hapus_sk_tgl)})` : ''}`}
+        onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
     </div>
   );
 }

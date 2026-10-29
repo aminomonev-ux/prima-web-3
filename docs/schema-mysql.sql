@@ -1384,11 +1384,11 @@ CREATE TABLE IF NOT EXISTS bba_aset (
   COMMENT='BBA — buku aset per register KIB (golongan A–F)';
 
 -- Riwayat per aset: ditulis di transaksi yang sama dengan perubahannya. `sebelum`/`sesudah`
--- hanya memuat kolom yang berubah.
+-- hanya memuat kolom yang berubah. BATAL_HAPUS = Tahap F (migration-bba-koreksi.sql).
 CREATE TABLE IF NOT EXISTS bba_aset_riwayat (
   id       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   aset_id  BIGINT UNSIGNED NOT NULL,
-  jenis    ENUM('IMPOR','UBAH','KONDISI','PINDAH','TERIMA','REGISTER','REHAB','HAPUS') NOT NULL,
+  jenis    ENUM('IMPOR','UBAH','KONDISI','PINDAH','TERIMA','REGISTER','REHAB','HAPUS','BATAL_HAPUS') NOT NULL,
   sebelum  JSON          NULL,
   sesudah  JSON          NULL,
   catatan  VARCHAR(500)  NULL,

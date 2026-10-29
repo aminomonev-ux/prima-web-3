@@ -24,7 +24,7 @@ const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const WARNA: Record<Kondisi, string> = { B: '#1D9E75', RR: '#BA7517', RB: '#E24B4A' };
 type Register = AsetRingan & { lokasi_nama?: string | null };
 
-async function muatRegister(ids: number[]): Promise<Register[] | string> {
+export async function muatRegister(ids: number[]): Promise<Register[] | string> {
   const hasil: Register[] = [];
   for (let i = 0; i < ids.length; i += 500) {
     const d = await fetchJson<unknown>(`/api/buku-besar-aset/aset?ids=${ids.slice(i, i + 500).join(',')}`);
@@ -63,11 +63,11 @@ export function Bingkai({ c, judul, sub, lebar = 760, onTutup, kaki, children }:
   );
 }
 
-export function DaftarAlasan({ alasan }: { alasan: string[] }) {
+export function DaftarAlasan({ alasan, judul = 'Tidak ada yang disimpan:' }: { alasan: string[]; judul?: string }) {
   if (alasan.length === 0) return null;
   return (
     <div role="alert" style={{ border: '1px solid #E24B4A', background: 'rgba(226,75,74,.08)', color: '#E24B4A', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
-      Tidak ada yang disimpan:
+      {judul}
       <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{alasan.slice(0, 8).map(a => <li key={a}>{a}</li>)}</ul>
       {alasan.length > 8 && <div>… dan {alasan.length - 8} lagi</div>}
     </div>

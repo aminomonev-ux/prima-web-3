@@ -306,7 +306,7 @@ Daftar keluaran:
 1. **Buku aset diubah Umum Aset; rencana ditulis Perencanaan; status beli & penerimaan dicatat Pengadaan.** Semua bisa membaca milik yang lain.
 2. **Barang yang dibeli belum jadi aset sebelum diterima dan ditempatkan** (§7.5).
 3. **Kode barang & register milik sistem provinsi.** PRIMA tidak membuat nomor register sendiri; ia menunggu nomor dari provinsi.
-4. **Riwayat tidak dihapus.** Kondisi lama, perpindahan, rehab, dan penghapusan bisa ditelusuri: kapan, oleh siapa, kenapa.
+4. **Riwayat tidak dihapus.** Kondisi lama, perpindahan, rehab, dan penghapusan bisa ditelusuri: kapan, oleh siapa, kenapa. Satu pengecualian: penempatan yang dibatalkan sebelum teregister (§20.1) — catatan itu tidak pernah jadi aset di buku resmi; jejaknya di audit log.
 5. **Kondisi hasil impor bukan hasil pemeriksaan** sampai RT mengeceknya (§5.3).
 6. **Rencana selalu punya jenis dan alasan.**
 7. **Survei harga dan bukti beli disimpan selamanya.** Tiga referensi (merk, tautan, harga), pilihan yang dibeli, BAST, dan foto tersimpan bersama rencananya. Rencana yang sudah diproses atau punya bukti tidak bisa dihapus. Gunanya untuk pembelian berikutnya (§7.7).
@@ -400,6 +400,7 @@ Tiap tahap bisa dipasang sendiri; migrasi dijalankan di server kantor **sebelum*
 | **C — Kondisi & ruangan** ✅ 27 Okt | Gedung ↔ ruangan; opname per ruangan/gedung (pilih banyak); laporan rusak; pindah ruangan; foto; peringatan "belum dicek"/"lewat jarak opname"; Excel KIR, hasil sensus + rekap, Rekap BMD, Buku Inventaris, format kerja PRIMA; pensiun `bba_eksisting` | 1 | B |
 | **D — Rencana di atas buku aset** ✅ 27 Okt | Jenis rencana + alasan + aset sasaran; ringkasan barang & petunjuk di modal; tanda masuk anggaran / tidak didanai (borongan); saran dari rencana tahun lalu yang tidak didanai; **pembelian sebelumnya** barang yang sama di modal (§7.7); Excel daftar rencana | 1 | B (C dianjurkan) |
 | **E — Pengadaan & penerimaan** ✅ 27 Okt | Halaman Pengadaan; penerimaan bertahap dengan **yang dibeli** (merk/tipe, penyedia, tautan — melengkapi pembelian sebelumnya); antrean di Buku Aset → tempatkan → "belum teregister" → isi register / cocok otomatis saat impor; penggantian menandai aset lama "siap dihapus"; penghapusan dengan SK; rehab memperbarui gedung sasaran | 1 | D |
+| **F — Koreksi salah input** ✅ 29 Okt | Batalkan penempatan; betulkan/kosongkan register; peringatan "kemungkinan salah ketik" di pratinjau impor; betulkan SK; batalkan penghapusan (Admin) — §20 | 1 | E |
 
 **Catatan Tahap C (27 Okt).** Laporan rusak = "Catat kondisi" pada satu/beberapa register (kartu aset atau centang di Buku Aset) — pintu yang sama dengan opname, satu tanggal + satu foto per catatan. Kalibrasi templat menemukan satu beda yang tidak terlihat dari KIB: lembar **KIBEInv** mengelompokkan Kode Barang + Register di bawah "Nomor" (KIB E tidak), kini ditiru. "Tidak Ada" di rekap sensus selalu 0 — PRIMA belum mencatat aset yang tidak ditemukan (§18).
 
@@ -424,3 +425,77 @@ Uji per tahap mengikuti pola Tahap 1–3: `scripts/test-bba-*.mts` (fungsi murni
 | 1 | Pendataan eksisting Tahap 3 (`bba_eksisting`, Modal Pendataan) dipensiunkan di Tahap C? | Ya — digantikan kondisi per register |
 | 2 | Urutan tahap A → E? | Ya |
 | 3 | Lima bagian di navigasi memakai bilah tab di atas halaman (seperti modul lain) + FloatingDock? | Ya |
+
+## 20. Koreksi salah input di Buku Aset (Tahap F, dikerjakan 29 Okt)
+
+Tahap E membangun jalur maju (Tempatkan → Isi register → Hapus dengan SK) tanpa jalan mundur. Isian PRIMA (nama sehari-hari, barang, ruangan, kondisi) sudah bisa dibetulkan, tapi tiga salah input belum:
+
+| Salah input | Yang terjadi sekarang |
+|---|---|
+| **Salah Tempatkan** (golongan keliru, penerimaan yang dipilih keliru) | Golongan tidak bisa diubah; register itu tak pernah cocok otomatis saat impor (pencocoknya golongan + tahun + harga); penerimaannya tidak bisa dihapus lagi karena sudah jadi register. |
+| **Salah ketik Isi register** | Tombol "Isi register" hilang begitu kode terisi. Impor KIB berikutnya tidak menemukan register yang benar di PRIMA → menjadikannya **aset baru**: satu barang, dua catatan. Yang salah ketik cuma dilaporkan "tidak ada di berkas". |
+| **Hapus dengan SK keliru** (aset salah, atau nomor SK salah ketik) | Tidak ada jalan kembali; impor KIB juga sengaja tidak menghidupkan aset yang dihapus. |
+
+Tombol yang tersisa, **Hapus dengan SK**, bukan jalan keluar untuk salah input: catatannya akan mengaku dihapus dengan SK yang tidak pernah ada, dan unitnya **tidak kembali ke antrean** — antrean menghitung register DIHAPUS juga. Hitungan itu BENAR untuk penghapusan sah (kursi roda 2027 yang dihapus 2032 tidak boleh muncul lagi minta ditempatkan), jadi yang perlu ditambah adalah jalan lain, bukan mengubah hitungannya.
+
+**Ketiganya bisa dibetulkan.** Yang tidak boleh berubah hanya satu: aset yang sudah ada di buku resmi provinsi keluar hanya lewat SK (§7.6, §10 butir 3). Garis pemisahnya asal catatan:
+
+| Asal catatan | Dibetulkan lewat |
+|---|---|
+| Lahir dari berkas KIB (`penerimaan_id` kosong) | Sistem provinsi → impor ulang. Kode, register, dan kolom KIB tidak disunting di PRIMA — seperti sekarang. |
+| Lahir di PRIMA lewat Tempatkan (`penerimaan_id` terisi) | Di PRIMA: register bisa dibetulkan atau dikosongkan; selama belum teregister, penempatannya bisa dibatalkan. |
+| Sudah ditandai dihapus dengan SK | Nomor/tanggal/berkas SK bisa dibetulkan; membatalkan penghapusannya khusus Admin. |
+
+### 20.1 Batalkan penempatan
+
+Tombol **Batalkan penempatan** di kartu aset, dan di Buku Aset lewat centang (bisa sebagian unit, mis. 1 dari 3). Syaratnya diperiksa server:
+
+1. lahir dari Tempatkan (`penerimaan_id` terisi);
+2. **belum teregister** — kode, register, dan kunci impor kosong. Begitu nomor provinsi ada, ia sudah di buku resmi → hanya lewat SK;
+3. status AKTIF;
+4. bukan aset sasaran rencana mana pun (FK `RESTRICT` jadi jaring terakhir, pesannya disusun lebih dulu) dan bukan gedung sebuah ruangan (`gedung_aset_id`, soft-FK).
+
+Akibatnya: baris aset dibuang beserta riwayatnya, **unitnya kembali ke antrean**, dan kalau penerimaannya sendiri yang salah, penerimaan itu bisa dihapus lagi di Pengadaan. Alasan wajib diisi. Jejak: audit `BBA_ASET_BATAL_TEMPATKAN` (rencana, penerimaan, golongan, nama, jumlah unit, alasan).
+
+**Dibuang, bukan diberi status BATAL.** (a) Register itu tidak pernah ada di buku resmi — aturan "tidak pernah dihapus fisik" menjaga sejarah aset, dan ini bukan aset. (b) Status ketiga harus diingat di setiap kueri yang menghitung `bba_aset`: antrean, saringan Dihapus, impor ("tidak ada di berkas", "dihapus di PRIMA"), Excel, ringkasan dimiliki. Satu yang lupa = L69. Dibuang = semuanya benar dengan sendirinya. Pengecualiannya sudah ditulis di §10 butir 4.
+
+Kunci: penerimaan `FOR UPDATE` dulu (urutan sama dengan Tempatkan), lalu register `FOR UPDATE` + angka kunci per register — satu basi, seluruhnya 409 (L77). Izin: EDIT Aset, sama dengan Tempatkan; yang menjaga adalah syarat "belum teregister", bukan perannya.
+
+### 20.2 Betulkan register
+
+1. **Betulkan register** di kartu aset untuk aset lahir di PRIMA yang sudah teregister: modal Isi register yang sama, terisi nilai sekarang, ditambah pilihan **Kosongkan** — kembali ke belum teregister, untuk saat nomor yang benar belum dipegang atau ternyata register itu milik unit lain. Riwayat `REGISTER` sebelum → sesudah (jenisnya sudah ada).
+2. **Pagar server `isiRegister`: hanya aset lahir di PRIMA.** Sekaligus menutup temuan sampingan: aset KIB F dari berkas yang memang tanpa kode hari ini menampilkan tombol "Isi register". Mengisinya mengganti kunci impor (nama + letak + tanggal mulai) dengan `kode|register`, sehingga impor KIB F berikutnya tidak menemukannya dan membuat baris kembar. Ikut dibetulkan: aset seperti itu juga terhitung "belum teregister" (saringan, hitungan, label kartu, kolom Register daftar) — kini "belum teregister" = lahir dari penerimaan **dan** tanpa kode (`belumTeregister`, satu aturan untuk SQL dan layar). Betulkan dengan kode tanpa ruas tahun mengembalikan tahun perolehan ke tahun diterima, bukan tahun dari register salah ketik.
+3. **Peringatan di pratinjau impor**: register baru di berkas yang golongan, tahun, dan harganya sama dengan aset lahir-PRIMA yang registernya tidak ada di berkas → "Kemungkinan salah ketik: PRIMA 000123 ↔ berkas 000132 — betulkan register di kartu aset dulu, lalu impor ulang." Hanya peringatan; Simpan tetap bisa. **Dibandingkan dengan SEMUA register baru di berkas, termasuk yang akan mengisi barang belum teregister** — ketahuan saat diuji: kalau masih ada unit sejenis yang belum teregister, nomor dari berkas dipasangkan ke unit itu, dan versi pertama peringatan ini diam. Nomor itu bisa saja milik unit yang salah ketik; dua-duanya kini tampil di pratinjau beserta ruangannya.
+   **Kenapa tidak dipasangkan otomatis** seperti barang belum teregister: berkas ekspor provinsi bisa SEBAGIAN (berkas kalibrasi KIB C Bangsal Jiwa = satu lokasi), jadi register yang tidak ada di berkas belum tentu salah. Memasangkan otomatis bisa menimpa register yang benar dengan nomor unit lain. Barang belum teregister tidak punya nomor untuk ditimpa.
+4. **Kecil, disarankan**: daftar "mengisi belum teregister" di pratinjau ikut menyebut ruangan PRIMA. Cocok otomatis yang sudah ada memasangkan menurut golongan + tahun + harga saja; dua unit sejenis di ruangan berbeda bisa tertukar kalau berkasnya satu lokasi. Dengan ruangan terlihat, tertukarnya ketahuan sebelum Simpan — dan kalau terlanjur, Kosongkan (butir 1) membereskannya.
+
+Izin: EDIT Aset, sama dengan Isi register.
+
+**Belum ditangani**: kembar yang SUDAH terjadi (impor disimpan tanpa membaca peringatannya) — belum ada tombol menggabungkan dua catatan, jadi dibereskan langsung di database. Selama tahap ini terpasang sebelum Tahap E dipakai di kantor, kasus itu tidak ada.
+
+### 20.3 Betulkan SK & batalkan penghapusan
+
+Dua kesalahan yang berbeda, dua jalan:
+
+- **Nomor, tanggal, atau berkas SK salah ketik** (asetnya memang dihapus) → **Betulkan SK** di kartu aset yang dihapus. Izin EDIT Aset. Tanggal ≤ hari ini, berkas lewat pagar context BBA, riwayat `UBAH` sebelum → sesudah, audit `BBA_ASET_HAPUS` berketerangan "koreksi SK".
+- **Aset yang salah ditandai dihapus** → **Batalkan penghapusan**, khusus Admin (`bolehBatalkanFinal`, pola koreksi mundur penerimaan). Alasan wajib. Status kembali AKTIF, kolom SK dikosongkan, `siap_dihapus` **dihitung ulang** dari rencana penggantian yang diterima penuh (bukan dikembalikan dari ingatan — `hapusAset` sudah menolkannya), riwayat jenis baru `BATAL_HAPUS` (sebelum: SK; sesudah: AKTIF; catatan: alasan), audit `BBA_ASET_BATAL_HAPUS`. Impor KIB tetap tidak menghidupkan aset dihapus — satu pintu saja.
+
+Kenapa yang kedua khusus Admin: menandai dihapus mencatat tindakan resmi; membatalkannya menyatakan SK itu tidak berlaku untuk aset ini — keputusan yang patut ditinjau orang kedua, bukan salah ketik. Betulkan SK cukup RT karena asetnya tetap dihapus.
+
+### 20.4 Data & teknis
+
+- Migrasi `migration-bba-koreksi.sql`: `bba_aset_riwayat.jenis` ditambah `BATAL_HAPUS` (MODIFY ENUM, `schema-mysql.sql` ikut). Tanpa kolom baru. **Wajib dijalankan di server kantor sebelum kodenya dipasang.**
+- Route: `POST /aset/batal-tempatkan`; `PATCH /aset/register` diperluas (`{ kosongkan: true }` + pagar asal); `/aset/hapus` — POST hapus (sudah ada), PATCH betulkan SK; `POST /aset/batal-hapus` (bukan DELETE: perlu angka kunci + alasan di badan permintaan) — guard Admin di route DAN di `batalHapus`.
+- Aturan murni: `lib/bba/koreksi.ts` (`alasanTakBisaBatalTempatkan`, `alasanTakBisaUbahRegister`) dan `lib/bba/aset.ts` (`lahirDiPrima`, `belumTeregister`, `curigaSalahKetik` — di sana karena memakai pencocok impor yang sama), dipakai server DAN tombol layar (L82).
+- Audit baru `BBA_ASET_BATAL_TEMPATKAN`, `BBA_ASET_BATAL_HAPUS` digolongkan di `retensi-audit.ts` (perubahan data, 5 tahun).
+- Regresi `scripts/test-bba-koreksi.mts`: fungsi murni + bagian MySQL kotak pasir 2079 (data `UJIF`, bersih otomatis) + uji mutasi; dijalankan dengan `--env-file=.env.local`.
+
+### 20.5 Keputusan terbuka
+
+| # | Pertanyaan | Bawaan |
+|---|---|---|
+| 1 | Batalkan penempatan membuang baris (bukan status BATAL)? | Ya (§20.1) |
+| 2 | Batalkan penempatan boleh oleh RT (EDIT Aset)? | Ya — syarat belum teregister yang menjaga |
+| 3 | Betulkan SK oleh RT, batalkan penghapusan khusus Admin? | Ya |
+| 4 | Dugaan salah ketik di impor hanya peringatan, tidak menahan Simpan? | Ya |
+| 5 | Ruangan PRIMA ikut tampil di daftar cocok otomatis pratinjau? | Ya |

@@ -1,7 +1,7 @@
 'use client';
 // Barang diterima → buku aset (docs/CONCEPT-bba-buku-aset.md §7.5–7.6, §15): antrean "diterima, belum
 // dicatat", tempatkan jadi register "belum teregister", rehab selesai, isi register dari sistem provinsi,
-// hapus dengan SK. Antrean dihitung server tiap dibuka — tidak disimpan.
+// hapus dengan SK, dan koreksi salah input (§20). Antrean dihitung server tiap dibuka — tidak disimpan.
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Inbox, Paperclip } from 'lucide-react';
@@ -11,9 +11,11 @@ import { fetchJson } from '@/lib/shared/api';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import { GOLONGAN, NAMA_GOLONGAN, LABEL_KONDISI, KONDISI, type Golongan, type Kondisi } from '@/lib/bba/kib';
 import { bolehBerRuang, punyaKondisi, fmtTanggal } from '@/lib/bba/kondisi';
+import { namaTampil, type AsetRingan } from '@/lib/bba/aset';
+import { alasanTakBisaBatalTempatkan } from '@/lib/bba/koreksi';
 import type { AntreanTerima, AntreanRehab } from '@/lib/data/bba-penerimaan';
 import type { BbaLokasi } from '@/lib/data/buku-besar-aset';
-import { Bingkai, DaftarAlasan } from './AksiAset';
+import { Bingkai, DaftarAlasan, muatRegister } from './AksiAset';
 import { unggahBerkas, unduhBerkas } from './ModalItem';
 import type { WarnaBba } from './BbaShell';
 
@@ -218,34 +220,188 @@ function BerkasPilih({ c, label, nilai, onUbah }: { c: WarnaBba; label: string; 
   );
 }
 
-/** Kartu aset: kode barang + register dari sistem provinsi untuk aset "belum teregister" (§7.5 butir 3). */
-export function ModalRegister({ c, id, versi, golongan, onTutup, onTersimpan }: { c: WarnaBba; id: number; versi: number; golongan: Golongan; onTutup: () => void; onTersimpan: () => void }) {
-  const [kode, setKode] = useState('');
-  const [reg, setReg] = useState('');
+/**
+ * Kartu aset: kode barang + register dari sistem provinsi untuk aset "belum teregister" (§7.5 butir 3).
+ * Dengan `awal` = betulkan register isian PRIMA yang salah ketik, atau kosongkan (§20.2).
+ */
+export function ModalRegister({ c, id, versi, golongan, awal, onTutup, onTersimpan }: {
+  c: WarnaBba; id: number; versi: number; golongan: Golongan; awal?: { kode_barang: string; register: string | null };
+  onTutup: () => void; onTersimpan: () => void;
+}) {
+  const [kode, setKode] = useState(awal?.kode_barang ?? '');
+  const [reg, setReg] = useState(awal?.register ?? '');
   const [alasan, setAlasan] = useState<string[]>([]);
   const [sibuk, setSibuk] = useState(false);
   const inp = gayaInput(c), label = gayaLabel(c);
-  async function simpan() {
+  async function kirim(isi: Record<string, unknown>, sukses: string) {
     setSibuk(true); setAlasan([]);
     try {
-      const d = await fetchJson<unknown>('/api/buku-besar-aset/aset/register', { method: 'PATCH', body: JSON.stringify({ id, expected_version: versi, kode_barang: kode.trim(), register: reg.trim() }) }) as unknown as Balasan;
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/aset/register', { method: 'PATCH', body: JSON.stringify({ id, expected_version: versi, ...isi }) }) as unknown as Balasan;
       if (!d.ok) { if (d.alasan?.length) setAlasan(d.alasan); else toast.error(d.message || 'Gagal menyimpan'); return; }
-      toast.success('Register tersimpan — impor KIB berikutnya mencocokkannya');
+      toast.success(sukses);
       onTersimpan();
     } finally { setSibuk(false); }
   }
+  const sama = !!awal && kode.trim() === awal.kode_barang && reg.trim() === (awal.register ?? '');
   return (
-    <Bingkai c={c} judul="Isi register dari sistem provinsi" sub={`KIB ${golongan} · ${NAMA_GOLONGAN[golongan]}`} lebar={480} onTutup={onTutup}
+    <Bingkai c={c} judul={awal ? 'Betulkan register' : 'Isi register dari sistem provinsi'} sub={`KIB ${golongan} · ${NAMA_GOLONGAN[golongan]}`} lebar={480} onTutup={onTutup}
       kaki={<>
+        {awal && <PrimaButton menulis variant="warning" disabled={sibuk} onClick={() => void kirim({ kosongkan: true }, 'Register dikosongkan — kembali belum teregister')}
+          data-tooltip="Kembali belum teregister: nomor yang benar belum dipegang, atau register ini milik unit lain">Kosongkan</PrimaButton>}
+        <span style={{ flex: 1 }} />
         <PrimaButton variant="ghost" onClick={onTutup}>Batal</PrimaButton>
-        <PrimaButton menulis variant="primary" disabled={sibuk || !kode.trim() || !reg.trim()} onClick={() => void simpan()}>{sibuk ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
+        <PrimaButton menulis variant="primary" disabled={sibuk || !kode.trim() || !reg.trim() || sama}
+          onClick={() => void kirim({ kode_barang: kode.trim(), register: reg.trim() }, 'Register tersimpan — impor KIB berikutnya mencocokkannya')}>{sibuk ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
       </>}>
       <DaftarAlasan alasan={alasan} />
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
         <label style={label}>Kode barang<input value={kode} maxLength={80} placeholder="1.3.2.05.02.06.002" onChange={e => setKode(e.target.value)} style={{ ...inp, fontFamily: MONO }} /></label>
         <label style={label}>Register<input value={reg} maxLength={20} placeholder="000001" onChange={e => setReg(e.target.value)} style={{ ...inp, fontFamily: MONO }} /></label>
       </div>
-      <div style={{ fontSize: 11.5, color: c.sub, marginTop: 8 }}>Salin persis dari sistem aset provinsi. Register angka disimpan 6 digit (1 → 000001).</div>
+      <div style={{ fontSize: 11.5, color: c.sub, marginTop: 8, lineHeight: 1.5 }}>
+        Salin persis dari sistem aset provinsi. Register angka disimpan 6 digit (1 → 000001).
+        {awal && <> Register yang salah ketik membuat Impor KIB berikutnya tidak menemukannya — barang yang sama akan tercatat dua kali.</>}
+      </div>
+    </Bingkai>
+  );
+}
+
+// ─── Koreksi salah input (Tahap F, §20) ──────────────────────────────────────
+
+/** Register yang salah ditempatkan dibuang, unitnya kembali ke antrean. `ids` dimuat segar (L77). */
+export function ModalBatalTempatkan({ c, ids, onTutup, onTersimpan }: { c: WarnaBba; ids: number[]; onTutup: () => void; onTersimpan: () => void }) {
+  const [rows, setRows] = useState<AsetRingan[] | null>(null);
+  const [teks, setTeks] = useState('');
+  const [alasan, setAlasan] = useState<string[]>([]);
+  const [sibuk, setSibuk] = useState(false);
+  const inp = gayaInput(c), label = gayaLabel(c);
+
+  async function muat() {
+    const h = await muatRegister(ids);
+    if (typeof h === 'string') { toast.error(h); return; }
+    setRows(h);
+  }
+  useEffect(() => {
+    void Promise.resolve().then(muat);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dimuat sekali saat modal dibuka
+  }, []);
+
+  // Cermin pagar server tanpa rujukan rencana/ruangan — yang itu hanya server yang tahu.
+  const tolakLayar = (rows ?? []).map(a => alasanTakBisaBatalTempatkan(a)).filter((s): s is string => !!s);
+  async function simpan() {
+    if (!rows) return;
+    setSibuk(true); setAlasan([]);
+    try {
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/aset/batal-tempatkan', {
+        method: 'POST', body: JSON.stringify({ item: rows.map(a => ({ id: a.id, expected_version: a.version ?? 0 })), alasan: teks.trim() }),
+      }) as unknown as Balasan & { dibatalkan?: number };
+      if (!d.ok) {
+        if (d.alasan?.length) setAlasan(d.alasan); else toast.error(d.message || 'Gagal membatalkan');
+        if (d.code === 'VERSION_CONFLICT') void muat();
+        return;
+      }
+      toast.success(`${d.dibatalkan} register dibatalkan — unitnya kembali ke antrean "Barang diterima, belum dicatat"`);
+      onTersimpan();
+    } finally { setSibuk(false); }
+  }
+
+  return (
+    <Bingkai c={c} judul="Batalkan penempatan" sub={rows ? `${rows.length} register` : 'Memuat register…'} lebar={560} onTutup={onTutup}
+      kaki={<>
+        <PrimaButton variant="ghost" onClick={onTutup}>Batal</PrimaButton>
+        <PrimaButton menulis variant="danger" iconLeft={<DeleteIcon size={13} />} disabled={sibuk || !rows || tolakLayar.length > 0 || teks.trim().length < 5}
+          onClick={() => void simpan()}>{sibuk ? 'Membatalkan…' : 'Batalkan penempatan'}</PrimaButton>
+      </>}>
+      {alasan.length ? <DaftarAlasan alasan={alasan} /> : <DaftarAlasan alasan={tolakLayar} judul="Tidak bisa dibatalkan — keluarkan register ini dari pilihan:" />}
+      <div style={{ fontSize: 12, color: c.sub, marginBottom: 12, lineHeight: 1.5 }}>
+        Untuk penempatan yang <b style={{ color: c.text }}>salah input</b> — golongan atau penerimaan keliru. Registernya dibuang dari Buku Aset beserta riwayatnya,
+        dan unitnya kembali ke antrean &ldquo;Barang diterima, belum dicatat&rdquo; untuk ditempatkan ulang. Kalau penerimaannya sendiri yang salah, sesudah ini
+        penerimaan itu bisa dihapus di Pengadaan. Barang yang memang keluar dari rumah sakit dihapus dengan SK, bukan di sini.
+      </div>
+      {rows && (
+        <ul style={{ margin: '0 0 12px', paddingLeft: 18, fontSize: 12.5, maxHeight: 180, overflow: 'auto' }}>
+          {rows.map(a => <li key={a.id}>{namaTampil(a)} <span style={{ fontFamily: MONO, color: c.sub }}>· KIB {a.golongan}{a.tahun_perolehan ? ` · ${a.tahun_perolehan}` : ''} · {fmtRp(a.harga)}</span></li>)}
+        </ul>
+      )}
+      <label style={label}>Alasan (wajib — tercatat di audit)
+        <input value={teks} maxLength={500} placeholder="mis. salah golongan, seharusnya KIB E" onChange={e => setTeks(e.target.value)} style={inp} />
+      </label>
+    </Bingkai>
+  );
+}
+
+/** Nomor/tanggal/berkas SK salah ketik — asetnya tetap dihapus (§20.3). */
+export function ModalBetulkanSk({ c, id, versi, nama, sk, onTutup, onTersimpan }: {
+  c: WarnaBba; id: number; versi: number; nama: string; sk: { nomor: string | null; tgl: string | null }; onTutup: () => void; onTersimpan: () => void;
+}) {
+  const [nomor, setNomor] = useState(sk.nomor ?? '');
+  const [tgl, setTgl] = useState(sk.tgl ?? '');
+  const [catatan, setCatatan] = useState('');
+  const [berkas, setBerkas] = useState<{ fileId: string; filename: string } | null>(null);
+  const [alasan, setAlasan] = useState<string[]>([]);
+  const [sibuk, setSibuk] = useState(false);
+  const inp = gayaInput(c), label = gayaLabel(c);
+  const sama = nomor.trim() === (sk.nomor ?? '') && tgl === (sk.tgl ?? '') && !berkas && !catatan.trim();
+  async function simpan() {
+    setSibuk(true); setAlasan([]);
+    try {
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/aset/hapus', {
+        method: 'PATCH', body: JSON.stringify({ id, expected_version: versi, sk_nomor: nomor.trim(), sk_tgl: tgl, catatan: catatan.trim() || null, file_id: berkas?.fileId ?? null }),
+      }) as unknown as Balasan;
+      if (!d.ok) { if (d.alasan?.length) setAlasan(d.alasan); else toast.error(d.message || 'Gagal menyimpan'); return; }
+      toast.success('SK penghapusan dibetulkan');
+      onTersimpan();
+    } finally { setSibuk(false); }
+  }
+  return (
+    <Bingkai c={c} judul="Betulkan SK penghapusan" sub={nama} lebar={480} onTutup={onTutup}
+      kaki={<>
+        <PrimaButton variant="ghost" onClick={onTutup}>Batal</PrimaButton>
+        <PrimaButton menulis variant="primary" disabled={sibuk || !nomor.trim() || !tgl || sama} onClick={() => void simpan()}>{sibuk ? 'Menyimpan…' : 'Simpan'}</PrimaButton>
+      </>}>
+      <DaftarAlasan alasan={alasan} />
+      <div style={{ fontSize: 12, color: c.sub, marginBottom: 12 }}>Untuk nomor, tanggal, atau berkas SK yang salah ketik — asetnya tetap dihapus. SK lama tetap terbaca di riwayat.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+        <label style={label}>Nomor SK<input value={nomor} maxLength={80} onChange={e => setNomor(e.target.value)} style={inp} /></label>
+        <label style={label}>Tanggal SK<input type="date" value={tgl} max={tanggalHariIniWIB()} onChange={e => setTgl(e.target.value)} style={inp} /></label>
+        <label style={{ ...label, gridColumn: '1 / -1' }}>Catatan<input value={catatan} maxLength={500} placeholder="mis. salah ketik nomor SK" onChange={e => setCatatan(e.target.value)} style={inp} /></label>
+      </div>
+      <BerkasPilih c={c} label="Berkas SK yang benar (opsional)" nilai={berkas} onUbah={setBerkas} />
+    </Bingkai>
+  );
+}
+
+/** Aset yang salah ditandai dihapus kembali aktif — khusus Admin, alasan wajib (§20.3). */
+export function ModalBatalHapus({ c, id, versi, nama, sk, onTutup, onTersimpan }: {
+  c: WarnaBba; id: number; versi: number; nama: string; sk: string; onTutup: () => void; onTersimpan: () => void;
+}) {
+  const [teks, setTeks] = useState('');
+  const [alasan, setAlasan] = useState<string[]>([]);
+  const [sibuk, setSibuk] = useState(false);
+  const inp = gayaInput(c), label = gayaLabel(c);
+  async function simpan() {
+    setSibuk(true); setAlasan([]);
+    try {
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/aset/batal-hapus', { method: 'POST', body: JSON.stringify({ id, expected_version: versi, alasan: teks.trim() }) }) as unknown as Balasan;
+      if (!d.ok) { if (d.alasan?.length) setAlasan(d.alasan); else toast.error(d.message || 'Gagal membatalkan'); return; }
+      toast.success('Penghapusan dibatalkan — aset kembali aktif');
+      onTersimpan();
+    } finally { setSibuk(false); }
+  }
+  return (
+    <Bingkai c={c} judul="Batalkan penghapusan" sub={nama} lebar={480} onTutup={onTutup}
+      kaki={<>
+        <PrimaButton variant="ghost" onClick={onTutup}>Batal</PrimaButton>
+        <PrimaButton menulis variant="warning" disabled={sibuk || teks.trim().length < 5} onClick={() => void simpan()}>{sibuk ? 'Menyimpan…' : 'Batalkan penghapusan'}</PrimaButton>
+      </>}>
+      <DaftarAlasan alasan={alasan} />
+      <div style={{ fontSize: 12, color: c.sub, marginBottom: 12, lineHeight: 1.5 }}>
+        Hanya bila aset ini <b style={{ color: c.text }}>tidak termasuk</b> SK {sk} — mis. salah memilih aset. Aset kembali aktif di Buku Aset, nomor & tanggal SK
+        dikosongkan; penghapusan dan pembatalannya tetap terbaca di riwayat. Kalau yang salah hanya nomor atau tanggal SK-nya, pakai Betulkan SK.
+      </div>
+      <label style={label}>Alasan (wajib — tercatat di riwayat & audit)
+        <input value={teks} maxLength={500} onChange={e => setTeks(e.target.value)} style={inp} />
+      </label>
     </Bingkai>
   );
 }
