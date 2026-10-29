@@ -14,6 +14,8 @@ import { bolehBerRuang, punyaKondisi, fmtTanggal } from '@/lib/bba/kondisi';
 import { namaTampil, type AsetRingan } from '@/lib/bba/aset';
 import { alasanTakBisaBatalTempatkan } from '@/lib/bba/koreksi';
 import type { AntreanTerima, AntreanRehab } from '@/lib/data/bba-penerimaan';
+import type { CalonKembar } from '@/lib/data/bba-aset';
+import { kunciNamaBarang } from '@/lib/bba/barang';
 import type { BbaLokasi } from '@/lib/data/buku-besar-aset';
 import { Bingkai, DaftarAlasan, muatRegister } from './AksiAset';
 import { unggahBerkas, unduhBerkas } from './ModalItem';
@@ -401,6 +403,103 @@ export function ModalBatalHapus({ c, id, versi, nama, sk, onTutup, onTersimpan }
       </div>
       <label style={label}>Alasan (wajib — tercatat di riwayat & audit)
         <input value={teks} maxLength={500} onChange={e => setTeks(e.target.value)} style={inp} />
+      </label>
+    </Bingkai>
+  );
+}
+
+// ─── Catatan kembar (Tahap G, §23.2) ─────────────────────────────────────────
+
+type DataKembar = { ini: { id: number; version: number; nama_resmi: string; kode_barang: string | null; register: string | null }; calon: CalonKembar[] };
+const nomorTampil = (a: { kode_barang: string | null; register: string | null }) => (a.kode_barang ? `${a.kode_barang}${a.register ? ` reg. ${a.register}` : ''}` : 'belum teregister');
+
+/**
+ * Barang yang sama tercatat dua kali: catatan yang kartunya dibuka dipertahankan dan mengambil nomor & kolom KIB
+ * kembarannya, kembarannya dibuang. Angka kunci keduanya dari muatan modal ini (L77).
+ */
+export function ModalGabungKembar({ c, id, nama, onTutup, onTersimpan }: { c: WarnaBba; id: number; nama: string; onTutup: () => void; onTersimpan: () => void }) {
+  const [data, setData] = useState<DataKembar | null>(null);
+  const [cari, setCari] = useState('');
+  const [pilih, setPilih] = useState<number | null>(null);
+  const [teks, setTeks] = useState('');
+  const [alasan, setAlasan] = useState<string[]>([]);
+  const [sibuk, setSibuk] = useState(false);
+  const inp = gayaInput(c), label = gayaLabel(c);
+
+  async function muat(register = '') {
+    const d = await fetchJson<unknown>(`/api/buku-besar-aset/aset/gabung?id=${id}${register ? `&register=${encodeURIComponent(register)}` : ''}`);
+    if (!d.ok) { toast.error(d.message || 'Gagal memuat calon kembaran'); return; }
+    setData(d as unknown as DataKembar);
+    setPilih(null);
+  }
+  useEffect(() => {
+    void Promise.resolve().then(() => muat());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dimuat sekali saat modal dibuka
+  }, []);
+
+  const kembar = data?.calon.find(x => x.id === pilih) ?? null;
+  const namaBeda = !!kembar && !!data && kunciNamaBarang(kembar.nama_resmi) !== kunciNamaBarang(data.ini.nama_resmi);
+  async function simpan() {
+    if (!data || !kembar) return;
+    setSibuk(true); setAlasan([]);
+    try {
+      const d = await fetchJson<unknown>('/api/buku-besar-aset/aset/gabung', {
+        method: 'POST',
+        body: JSON.stringify({ id, expected_version: data.ini.version, kembar_id: kembar.id, expected_version_kembar: kembar.version, alasan: teks.trim() }),
+      }) as unknown as Balasan & { nomorBaru?: string };
+      if (!d.ok) {
+        if (d.alasan?.length) setAlasan(d.alasan); else toast.error(d.message || 'Gagal menggabungkan');
+        if (d.code === 'VERSION_CONFLICT') void muat(cari.trim());
+        return;
+      }
+      toast.success(`Digabung — catatan ini kini ${d.nomorBaru ?? 'bernomor baru'}, kembarannya dibuang`);
+      onTersimpan();
+    } finally { setSibuk(false); }
+  }
+
+  return (
+    <Bingkai c={c} judul="Gabungkan dengan kembarannya" sub={nama} lebar={640} onTutup={onTutup}
+      kaki={<>
+        <PrimaButton variant="ghost" onClick={onTutup}>Batal</PrimaButton>
+        <PrimaButton menulis variant="warning" disabled={sibuk || !kembar || !!kembar.alasan || teks.trim().length < 5} onClick={() => void simpan()}>
+          {sibuk ? 'Menggabungkan…' : 'Gabungkan'}
+        </PrimaButton>
+      </>}>
+      <DaftarAlasan alasan={alasan} />
+      <div style={{ fontSize: 12, color: c.sub, marginBottom: 10, lineHeight: 1.5 }}>
+        Untuk barang yang sama tercatat dua kali — biasanya provinsi mengganti nomornya, lalu Impor KIB disimpan tanpa memasangkannya.
+        <b style={{ color: c.text }}> Catatan ini dipertahankan</b> (ruangan, kondisi, barang, rencana, riwayatnya tetap) dan mengambil nomor & kolom KIB kembarannya;
+        kembarannya dibuang. Yang bisa dibuang hanya catatan yang isinya murni salinan berkas. Saudara sejenis bisa ikut muncul — pilih nomornya sesuai berkas atau surat koreksi provinsi.
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <input value={cari} maxLength={80} placeholder="Cari nomor register / kode barang (kalau tidak ada di saran)" onChange={e => setCari(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') void muat(cari.trim()); }} style={{ ...inp, flex: '1 1 260px', width: 'auto' }} />
+        <PrimaButton variant="ghost" size="sm" onClick={() => void muat(cari.trim())}>{cari.trim() ? 'Cari' : 'Saran'}</PrimaButton>
+      </div>
+      {!data ? <div style={{ fontSize: 12, color: c.sub }}>Memuat…</div>
+        : data.calon.length === 0 ? <div style={{ fontSize: 12, color: c.sub, marginBottom: 10 }}>{cari.trim() ? 'Tidak ada register aktif segolongan yang cocok.' : 'Tidak ada catatan sejenis (golongan, tahun, harga, nama resmi sama). Cari nomornya kalau nama atau harganya ikut dibetulkan provinsi.'}</div>
+        : (
+          <div role="radiogroup" aria-label="Calon kembaran" style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 260, overflow: 'auto', marginBottom: 10 }}>
+            {data.calon.map(x => (
+              <label key={x.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 8px', border: `1px solid ${pilih === x.id ? '#BA7517' : c.border}`, borderRadius: 6, opacity: x.alasan ? 0.6 : 1, cursor: x.alasan ? 'not-allowed' : 'pointer', fontSize: 12.5 }}>
+                <input type="radio" name="kembar" checked={pilih === x.id} disabled={!!x.alasan} onChange={() => setPilih(x.id)} style={{ marginTop: 3 }} />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ fontFamily: MONO }}>{nomorTampil(x)}</span> · {x.nama}
+                  <span style={{ color: c.sub }}>{x.tahun ? ` · ${x.tahun}` : ''} · {fmtRp(x.harga)}{x.ruangan ? ` · ${x.ruangan}` : ''} · masuk {fmtTanggal(x.masuk)}{x.berkas ? ` · ${x.berkas}` : ''}{x.sejenis ? '' : ' · tidak sejenis'}</span>
+                  {x.alasan && <span style={{ display: 'block', color: '#E24B4A', fontSize: 11.5 }}>{x.alasan}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      {kembar && data && (
+        <div style={{ fontSize: 12, border: `1px solid ${c.border}`, borderRadius: 8, padding: '8px 10px', marginBottom: 10, lineHeight: 1.6 }}>
+          Nomor catatan ini: <span style={{ fontFamily: MONO }}>{nomorTampil(data.ini)}</span> → <b style={{ fontFamily: MONO }}>{nomorTampil(kembar)}</b>. Catatan #{kembar.id} dibuang.
+          {namaBeda && <div style={{ color: '#BA7517' }}>Nama resminya berbeda: &ldquo;{data.ini.nama_resmi}&rdquo; → &ldquo;{kembar.nama_resmi}&rdquo; — pastikan memang barang yang sama.</div>}
+        </div>
+      )}
+      <label style={label}>Alasan (wajib — tercatat di riwayat & audit)
+        <input value={teks} maxLength={500} placeholder="mis. register diganti provinsi, surat no. …" onChange={e => setTeks(e.target.value)} style={inp} />
       </label>
     </Bingkai>
   );

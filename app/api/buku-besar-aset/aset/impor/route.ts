@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas';
 import { bacaWorkbookKib, type HasilBacaKib } from '@/lib/bba/kib-baca';
-import { pratinjauImpor, simpanImpor } from '@/lib/data/bba-aset';
+import { pratinjauImpor, simpanImpor, ImporBasiError } from '@/lib/data/bba-aset';
+import { PasanganImporSchema } from '@/lib/data/bba-aset-schemas';
+import type { PasanganImpor } from '@/lib/bba/aset';
 import { guard, tolakKecualiEdit } from '../../_guard';
 
-// Impor KIB dari ekspor sistem aset provinsi (docs/CONCEPT-bba-buku-aset.md §7.1, §16).
+// Impor KIB dari ekspor sistem aset provinsi (docs/CONCEPT-bba-buku-aset.md §7.1, §16, §23.1).
 //   ?step=pratinjau — membaca & membandingkan dengan buku aset, TIDAK menulis apa pun.
 //   ?step=simpan    — berkas yang SAMA diunggah ulang; server membaca ulang lalu menulis dalam satu
 //                     transaksi. Baris tidak pernah dikirim balik dari layar, jadi yang tersimpan
 //                     selalu isi berkasnya, bukan salinan yang bisa disunting di tengah jalan.
+//                     Yang dikirim layar hanya pilihan pasangan nomor ({aset_id, kunci}).
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -56,10 +59,25 @@ export async function POST(req: NextRequest) {
 
   if (step === 'pratinjau') return NextResponse.json({ ok: true, ...ringkasBaca, rencana: await pratinjauImpor(hasil) });
 
-  const tersimpan = await simpanImpor(hasil, g.session.userId, nama);
+  let pasangan: PasanganImpor[] = [];
+  const mentah = form?.get('pasangan');
+  if (typeof mentah === 'string' && mentah) {
+    let isi: unknown = null;
+    try { isi = JSON.parse(mentah); } catch { /* ditolak Zod di bawah */ }
+    const p = PasanganImporSchema.safeParse(isi);
+    if (!p.success) return tolak('Pilihan pasangan nomor tidak valid: ' + p.error.issues[0].message);
+    pasangan = p.data;
+  }
+  let tersimpan;
+  try {
+    tersimpan = await simpanImpor(hasil, g.session.userId, nama, pasangan);
+  } catch (err) {
+    if (err instanceof ImporBasiError) return NextResponse.json({ ok: false, code: 'PRATINJAU_BASI', message: err.message, masalah: err.alasan.slice(0, 50) }, { status: 409 });
+    throw err;
+  }
   await writeAuditLog({
     req, eventType: 'BBA_ASET_IMPOR', userId: g.session.userId, username: g.session.username,
-    detail: `BBA impor KIB "${nama}" ${hasil.lembar.map(l => `${l.nama}:${l.jumlah}`).join(' ')} → baru=${tersimpan.baru} cocok=${tersimpan.cocok} berubah=${tersimpan.berubah} sama=${tersimpan.sama} tidak_di_berkas=${tersimpan.tidakDiBerkas}`,
+    detail: `BBA impor KIB "${nama}" ${hasil.lembar.map(l => `${l.nama}:${l.jumlah}`).join(' ')} → baru=${tersimpan.baru} cocok=${tersimpan.cocok} dipasangkan=${tersimpan.dipasangkan} berubah=${tersimpan.berubah} sama=${tersimpan.sama} tidak_di_berkas=${tersimpan.tidakDiBerkas}`,
   });
   return NextResponse.json({ ok: true, ...ringkasBaca, tersimpan });
 }

@@ -7,9 +7,10 @@ import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, type
 import { acquireBludLock } from '@/lib/data/locks';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import {
-  kelompokkan, rencanakanImpor, namaDariKeterangan, namaTampil,
-  type AsetRingan, type KelompokAset, type RencanaImpor,
+  kelompokkan, rencanakanImpor, namaDariKeterangan, namaTampil, calonPasti, selisihRiwayat, sejenisCalon, ubahGantiNomor,
+  type AsetRingan, type KelompokAset, type RencanaImpor, type PasanganImpor,
 } from '@/lib/bba/aset';
+import { alasanTakBisaGabung } from '@/lib/bba/koreksi';
 import { alasanTolakCek, bolehBerRuang, fmtTanggal } from '@/lib/bba/kondisi';
 import type { AsetBaca, HasilBacaKib, NilaiKib } from '@/lib/bba/kib-baca';
 import { GOLONGAN, kodeTanah, TEKS_KONDISI_KIB, type Golongan, type Kondisi } from '@/lib/bba/kib';
@@ -20,7 +21,7 @@ import {
 } from '@/lib/data/buku-besar-aset';
 
 export { batasCekSekarang, bacaPengaturanBba };
-import type { CatatKondisiInput, PindahAsetInput, TautkanBarangAsetInput } from '@/lib/data/bba-aset-schemas';
+import type { CatatKondisiInput, PindahAsetInput, TautkanBarangAsetInput, GabungKembarInput } from '@/lib/data/bba-aset-schemas';
 import { LABEL_JENIS, type JenisRencana, type Anggaran } from '@/lib/bba/rencana';
 import type { BbaStatus } from '@/lib/bba/status';
 
@@ -40,6 +41,13 @@ export class AsetDitolakError extends Error {
   constructor(public alasan: string[]) {
     super(alasan.length === 1 ? alasan[0] : `${alasan.length} register tidak bisa diproses: ${alasan.slice(0, 3).join(' ')}${alasan.length > 3 ? ' …' : ''}`);
     this.name = 'AsetDitolakError';
+  }
+}
+/** Pasangan pilihan pratinjau bukan calon lagi menurut isi buku sekarang — seluruh impor batal (§23.1). */
+export class ImporBasiError extends Error {
+  constructor(public alasan: string[]) {
+    super('Isi Buku Aset berubah sejak pratinjau — pasangan nomor tidak lagi sesuai. Pratinjau dimuat ulang; periksa lalu simpan lagi.');
+    this.name = 'ImporBasiError';
   }
 }
 
@@ -495,22 +503,44 @@ export interface RingkasImpor {
   contohBerubah: { nama: string; register: string | null; kolom: string[] }[];
   contohBaru: { nama: string; register: string | null; tahun: number | null; harga: number }[];
   contohTidakDiBerkas: { nama: string; register: string | null; tahun: number | null }[];
-  /** Dugaan salah ketik register isian PRIMA (§20.2): register PRIMA ↔ register baru di berkas. */
-  curiga: { nama: string; register: string | null; ruangan: string | null; berkas: string[] }[];
+  /** "Mungkin aset yang sama, nomornya berubah" (§23.1): DAFTAR LENGKAP, dipilih per catatan di pratinjau. */
+  calon: CalonRingkas[];
+  calonTerpotong: boolean;
 }
+
+export interface CalonRingkas {
+  aset_id: number; nama: string; register: string | null; ruangan: string | null; tahun: number | null; harga: number;
+  /** Dari berkas KIB (calonnya ikut syarat nama resmi) atau isian PRIMA (dugaan salah ketik Tahap F). */
+  dariBerkas: boolean;
+  /** Tepat satu calon yang bukan calon catatan lain — untuk "Pasangkan semua yang pasti". */
+  pasti: boolean;
+  jumlah: number;
+  /** `mengisi` = barang belum teregister yang akan mendapat nomor ini kalau tidak dipasangkan di sini. */
+  pilihan: { kunci: string; register: string | null; nama_resmi: string; mengisi: string | null }[];
+}
+
+const MAKS_CALON = 1000, MAKS_PILIHAN = 50;
 
 function ringkasRencana(r: RencanaImpor, golongan: Golongan[], namaLokasi: Map<number, string>): RingkasImpor {
   const ruangan = (a: AsetRingan) => (a.lokasi_id ? namaLokasi.get(a.lokasi_id) ?? null : null);
   const hitung = <T,>(xs: T[], g: (x: T) => Golongan) => (k: Golongan) => xs.filter(x => g(x) === k).length;
   const baru = hitung(r.baru, x => x.golongan), berubah = hitung(r.berubah, x => x.baru.golongan);
   const tidak = hitung(r.tidakDiBerkas, x => x.golongan), dihapus = hitung(r.dihapusDiPrima, x => x.golongan), cocok = hitung(r.cocok, x => x.baru.golongan);
+  const pasti = calonPasti(r.calon);
+  const mengisi = new Map(r.cocok.map(x => [x.baru.kunci, namaTampil(x.lama)]));
   return {
     perGolongan: golongan.map(g => ({ golongan: g, baru: baru(g), cocok: cocok(g), berubah: berubah(g), sama: 0, tidakDiBerkas: tidak(g), dihapusDiPrima: dihapus(g) })),
     contohCocok: r.cocok.slice(0, 20).map(x => ({ nama: namaTampil(x.lama), register: x.baru.register, tahun: x.baru.tahun_perolehan, harga: x.baru.harga, ruangan: ruangan(x.lama) })),
     contohBerubah: r.berubah.slice(0, 50).map(x => ({ nama: namaTampil(x.lama), register: x.lama.register, kolom: x.kolom })),
     contohBaru: r.baru.slice(0, 20).map(x => ({ nama: namaDariKeterangan(x.keterangan) ?? x.nama_resmi, register: x.register, tahun: x.tahun_perolehan, harga: x.harga })),
     contohTidakDiBerkas: r.tidakDiBerkas.slice(0, 20).map(x => ({ nama: namaTampil(x), register: x.register, tahun: x.tahun_perolehan })),
-    curiga: r.curiga.slice(0, 20).map(x => ({ nama: namaTampil(x.lama), register: x.lama.register, ruangan: ruangan(x.lama), berkas: x.baru.map(b => b.register ?? '—') })),
+    calon: r.calon.slice(0, MAKS_CALON).map(x => ({
+      aset_id: x.lama.id, nama: namaTampil(x.lama), register: x.lama.register, ruangan: ruangan(x.lama), tahun: x.lama.tahun_perolehan, harga: x.lama.harga,
+      dariBerkas: x.lama.penerimaan_id == null, pasti: pasti.has(x.lama.id), jumlah: x.baru.length,
+      pilihan: [...x.baru].sort((p, q) => (p.register ?? '').localeCompare(q.register ?? '')).slice(0, MAKS_PILIHAN)
+        .map(b => ({ kunci: b.kunci, register: b.register, nama_resmi: b.nama_resmi, mengisi: mengisi.get(b.kunci) ?? null })),
+    })),
+    calonTerpotong: r.calon.length > MAKS_CALON || r.calon.some(x => x.baru.length > MAKS_PILIHAN),
   };
 }
 
@@ -537,15 +567,39 @@ export async function pratinjauImpor(hasil: HasilBacaKib): Promise<RingkasImpor>
 const POTONG = 500;
 const potong = <T,>(xs: T[]) => Array.from({ length: Math.ceil(xs.length / POTONG) }, (_, i) => xs.slice(i * POTONG, (i + 1) * POTONG));
 
-export interface HasilSimpanImpor { baru: number; cocok: number; berubah: number; sama: number; tidakDiBerkas: number; dihapusDiPrima: number }
+export interface HasilSimpanImpor { baru: number; cocok: number; dipasangkan: number; berubah: number; sama: number; tidakDiBerkas: number; dihapusDiPrima: number }
 
-export async function simpanImpor(hasil: HasilBacaKib, userId: number, namaBerkas: string): Promise<HasilSimpanImpor> {
+const sumberKondisi = (lama: AsetRingan, kondisi: Kondisi | null) => (lama.kondisi_sumber === 'CEK' ? 'CEK' : kondisi ? 'IMPOR' : null);
+
+export async function simpanImpor(hasil: HasilBacaKib, userId: number, namaBerkas: string, pasangan: readonly PasanganImpor[] = []): Promise<HasilSimpanImpor> {
   const golongan = [...new Set(hasil.aset.map(a => a.golongan))];
   return withTransaction(async ({ tx, conn }) => {
     // Dua impor berbarengan: yang kedua menunggu, lalu menghitung rencananya dari isi sesudah yang pertama.
     await acquireBludLock(tx, 'bba_aset_impor', 'semua');
-    const rencana = rencanakanImpor(await asetLamaUntuk(tx, golongan, true), hasil.aset);
+    const rencana = rencanakanImpor(await asetLamaUntuk(tx, golongan, true), hasil.aset, pasangan);
+    // Pasangan dinilai ulang dari isi buku di bawah kunci — satu saja bukan calon lagi, tidak ada yang ditulis.
+    if (rencana.pasanganDitolak.length) throw new ImporBasiError(rencana.pasanganDitolak);
     const catatan = `Impor KIB — ${namaBerkas}`.slice(0, 500);
+
+    for (const bagian of potong(rencana.dipasangkan)) {
+      const baris = bagian.map(({ lama, ubah }) => {
+        const akhir = { ...lama, ...ubah };
+        return [lama.id, lama.golongan, akhir.kode_barang, akhir.register, akhir.kunci_impor, akhir.nama_resmi, akhir.kode_objek, akhir.tahun_perolehan, akhir.harga,
+          akhir.asal_usul, akhir.keterangan, JSON.stringify(akhir.kib), akhir.kondisi, sumberKondisi(lama, akhir.kondisi), userId];
+      });
+      // Nomor diganti provinsi (§23.1): baris lama mendapat nomor baru — isian PRIMA & riwayatnya tetap, bukan aset baru.
+      await (conn as mysql.PoolConnection).query(`
+        INSERT INTO bba_aset (id, golongan, kode_barang, register, kunci_impor, nama_resmi, kode_objek, tahun_perolehan, harga, asal_usul, keterangan, kib, kondisi, kondisi_sumber, updated_by)
+        VALUES ? AS baru
+        ON DUPLICATE KEY UPDATE kode_barang = baru.kode_barang, register = baru.register, kunci_impor = baru.kunci_impor, nama_resmi = baru.nama_resmi,
+          kode_objek = baru.kode_objek, tahun_perolehan = baru.tahun_perolehan, harga = baru.harga, asal_usul = baru.asal_usul, keterangan = baru.keterangan,
+          kib = baru.kib, kondisi = baru.kondisi, kondisi_sumber = baru.kondisi_sumber, updated_by = baru.updated_by, version = bba_aset.version + 1
+      `, [baris]);
+      await bulkInsert('bba_aset_riwayat', ['aset_id', 'jenis', 'sebelum', 'sesudah', 'catatan', 'oleh'], bagian.map(({ lama, ubah }) => {
+        const { sebelum, sesudah } = selisihRiwayat(lama, ubah);
+        return [lama.id, 'REGISTER', JSON.stringify(sebelum), JSON.stringify(sesudah), `Nomor berubah di provinsi — dipasangkan saat ${catatan}`.slice(0, 500), userId];
+      }), conn);
+    }
 
     for (const bagian of potong(rencana.baru)) {
       await bulkInsert('bba_aset', [
@@ -566,7 +620,7 @@ export async function simpanImpor(hasil: HasilBacaKib, userId: number, namaBerka
       const baris = bagian.map(({ lama, ubah }) => {
         const akhir = { ...lama, ...ubah };
         return [lama.id, lama.golongan, akhir.nama_resmi, akhir.kode_objek, akhir.tahun_perolehan, akhir.harga, akhir.asal_usul, akhir.keterangan,
-          JSON.stringify(akhir.kib), akhir.kondisi, lama.kondisi_sumber === 'CEK' ? 'CEK' : (akhir.kondisi ? 'IMPOR' : null), userId];
+          JSON.stringify(akhir.kib), akhir.kondisi, sumberKondisi(lama, akhir.kondisi), userId];
       });
       // Upsert per PK: satu pernyataan per 500 baris, bukan ribuan UPDATE (PERF-C1).
       await (conn as mysql.PoolConnection).query(`
@@ -577,15 +631,7 @@ export async function simpanImpor(hasil: HasilBacaKib, userId: number, namaBerka
           kondisi_sumber = baru.kondisi_sumber, updated_by = baru.updated_by, version = bba_aset.version + 1
       `, [baris]);
       await bulkInsert('bba_aset_riwayat', ['aset_id', 'jenis', 'sebelum', 'sesudah', 'catatan', 'oleh'], bagian.map(({ lama, ubah }) => {
-        const sebelum: Record<string, unknown> = {}, sesudah: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(ubah)) {
-          if (k === 'kib') {
-            const kib = v as Record<string, NilaiKib>;
-            for (const kk of new Set([...Object.keys(lama.kib), ...Object.keys(kib)])) {
-              if ((lama.kib[kk] ?? null) !== (kib[kk] ?? null)) { sebelum[kk] = lama.kib[kk] ?? null; sesudah[kk] = kib[kk] ?? null; }
-            }
-          } else { sebelum[k] = (lama as unknown as Record<string, unknown>)[k] ?? null; sesudah[k] = v ?? null; }
-        }
+        const { sebelum, sesudah } = selisihRiwayat(lama, ubah);
         return [lama.id, 'IMPOR', JSON.stringify(sebelum), JSON.stringify(sesudah), catatan, userId];
       }), conn);
     }
@@ -608,8 +654,121 @@ export async function simpanImpor(hasil: HasilBacaKib, userId: number, namaBerka
         `Cocok otomatis — ${catatan}`.slice(0, 500), userId,
       ]), conn);
     }
-    const sama = hasil.aset.length - rencana.baru.length - rencana.cocok.length - rencana.berubah.length - rencana.dihapusDiPrima.length;
-    return { baru: rencana.baru.length, cocok: rencana.cocok.length, berubah: rencana.berubah.length, sama, tidakDiBerkas: rencana.tidakDiBerkas.length, dihapusDiPrima: rencana.dihapusDiPrima.length };
+    const sama = hasil.aset.length - rencana.baru.length - rencana.cocok.length - rencana.dipasangkan.length - rencana.berubah.length - rencana.dihapusDiPrima.length;
+    return {
+      baru: rencana.baru.length, cocok: rencana.cocok.length, dipasangkan: rencana.dipasangkan.length, berubah: rencana.berubah.length, sama,
+      tidakDiBerkas: rencana.tidakDiBerkas.length, dihapusDiPrima: rencana.dihapusDiPrima.length,
+    };
+  });
+}
+
+// ─── Catatan kembar (Tahap G, §23.2) ─────────────────────────────────────────
+
+export interface CalonKembar {
+  id: number; version: number; nama: string; nama_resmi: string; kode_barang: string | null; register: string | null;
+  tahun: number | null; harga: number; ruangan: string | null;
+  /** Tanggal catatan lahir di PRIMA + berkas impor asalnya — kembaran hampir selalu lahir belakangan. */
+  masuk: string; berkas: string | null;
+  /** Saran (sejenis) atau hasil cari nomor. */
+  sejenis: boolean;
+  /** Kenapa tidak bisa jadi kembaran yang dibuang — null = bisa. */
+  alasan: string | null;
+}
+
+const MAKS_KEMBAR = 50;
+
+/** Saran kembaran untuk kartu aset (`sejenisCalon`, terbaru dulu) atau cari nomor di golongan yang sama. */
+export async function calonKembar(id: number, register?: string): Promise<{ ini: AsetRingan; calon: CalonKembar[] } | null> {
+  const r = await queryOne<Record<string, unknown>>(sql`SELECT ${KOLOM_RINGAN}, a.kib FROM bba_aset a WHERE a.id = ${id} LIMIT 1`);
+  if (!r) return null;
+  const ini = petakanRingan(r);
+  const syarat = register
+    ? sql`(a.register LIKE ${`%${escapeLike(register)}%`} OR a.kode_barang LIKE ${`%${escapeLike(register)}%`})`
+    : sql`a.tahun_perolehan <=> ${ini.tahun_perolehan} AND a.harga = ${ini.harga}`;
+  const rows = await queryMany<Record<string, unknown>>(sql`
+    SELECT ${KOLOM_RINGAN}, a.kib, l.nama AS lokasi_nama, DATE_FORMAT(a.created_at, '%Y-%m-%d') AS masuk
+    FROM bba_aset a LEFT JOIN bba_lokasi l ON l.id = a.lokasi_id
+    WHERE a.golongan = ${ini.golongan} AND a.status = 'AKTIF' AND a.id <> ${id} AND ${syarat}
+    ORDER BY a.created_at DESC, a.id DESC LIMIT 200
+  `);
+  const calon = rows.map(x => ({ a: petakanRingan(x), x })).filter(({ a }) => !!register || sejenisCalon(ini, a)).slice(0, MAKS_KEMBAR);
+  if (calon.length === 0) return { ini, calon: [] };
+  const ids = calon.map(({ a }) => a.id);
+  const [riw, sasaran, gedung] = await Promise.all([
+    queryMany<{ aset_id: number; jenis: string; berkas: string | null }>(sql`
+      SELECT aset_id, GROUP_CONCAT(DISTINCT jenis) AS jenis, MIN(CASE WHEN jenis = 'IMPOR' THEN catatan END) AS berkas
+      FROM bba_aset_riwayat WHERE aset_id IN (${ids}) GROUP BY aset_id
+    `),
+    queryMany<{ aset_id: number; canonical_id: string }>(sql`SELECT ra.aset_id, b.canonical_id FROM bba_rencana_aset ra JOIN buku_besar_aset b ON b.id = ra.rencana_id WHERE ra.aset_id IN (${ids})`),
+    queryMany<{ gedung_aset_id: number; nama: string }>(sql`SELECT gedung_aset_id, nama FROM bba_lokasi WHERE gedung_aset_id IN (${ids})`),
+  ]);
+  const riwPer = new Map(riw.map(x => [Number(x.aset_id), x]));
+  return {
+    ini,
+    calon: calon.map(({ a, x }) => {
+      const rw = riwPer.get(a.id);
+      const fakta = {
+        jenisRiwayat: rw?.jenis ? String(rw.jenis).split(',') : [],
+        rujukan: {
+          sasaran: sasaran.filter(s => Number(s.aset_id) === a.id).map(s => String(s.canonical_id)),
+          gedung: gedung.filter(g => Number(g.gedung_aset_id) === a.id).map(g => String(g.nama)),
+        },
+      };
+      return {
+        id: a.id, version: a.version ?? 0, nama: namaTampil(a), nama_resmi: a.nama_resmi, kode_barang: a.kode_barang, register: a.register,
+        tahun: a.tahun_perolehan, harga: a.harga, ruangan: (x.lokasi_nama as string | null) ?? null,
+        masuk: String(x.masuk ?? ''), berkas: rw?.berkas ? String(rw.berkas).replace(/^Impor KIB — /, '') : null,
+        sejenis: sejenisCalon(ini, a), alasan: alasanTakBisaGabung(ini, a, fakta),
+      };
+    }),
+  };
+}
+
+export interface HasilGabung { nomorLama: string; nomorBaru: string }
+
+const nomorAset = (a: Pick<AsetRingan, 'kode_barang' | 'register' | 'kunci_impor'>) =>
+  a.kode_barang ? `${a.kode_barang}${a.register ? ` reg. ${a.register}` : ''}` : a.kunci_impor ? a.kunci_impor : 'belum teregister';
+
+/**
+ * Gabungkan dengan kembarannya (§23.2): catatan INI mengambil nomor & kolom KIB kembarannya, kembarannya dibuang beserta
+ * riwayat impornya. Kedua baris dikunci urut id + angka kunci keduanya (L77); riwayat & rujukan kembaran dibaca SESUDAH
+ * kunci (tautan sasaran & gedung ruangan membaca aset `FOR SHARE`). Kembaran dihapus DULU — kunci impornya UNIK.
+ */
+export async function gabungKembar(input: GabungKembarInput, userId: number): Promise<HasilGabung> {
+  return withTransaction(async ({ tx }) => {
+    const ids = [input.id, input.kembar_id].sort((x, y) => x - y);
+    const rows = (await tx`SELECT ${KOLOM_RINGAN}, a.kib FROM bba_aset a WHERE a.id IN (${ids}) ORDER BY a.id FOR UPDATE` as Record<string, unknown>[]).map(petakanRingan);
+    const ini = rows.find(a => a.id === input.id), kembar = rows.find(a => a.id === input.kembar_id);
+    if (!ini || !kembar) throw new AsetTidakAdaError();
+    const basi = Number(ini.version !== input.expected_version) + Number(kembar.version !== input.expected_version_kembar);
+    if (basi > 0) throw new AsetVersiError(basi);
+    const riw = await tx`SELECT DISTINCT jenis FROM bba_aset_riwayat WHERE aset_id = ${kembar.id}` as Array<{ jenis: string }>;
+    const asal = await tx`SELECT catatan FROM bba_aset_riwayat WHERE aset_id = ${kembar.id} AND jenis = 'IMPOR' ORDER BY id LIMIT 1` as Array<{ catatan: string | null }>;
+    const sasaran = await tx`SELECT b.canonical_id FROM bba_rencana_aset ra JOIN buku_besar_aset b ON b.id = ra.rencana_id WHERE ra.aset_id = ${kembar.id}` as Array<{ canonical_id: string }>;
+    const gedung = await tx`SELECT nama FROM bba_lokasi WHERE gedung_aset_id = ${kembar.id}` as Array<{ nama: string }>;
+    const tolak = alasanTakBisaGabung(ini, kembar, {
+      jenisRiwayat: riw.map(x => String(x.jenis)),
+      rujukan: { sasaran: sasaran.map(x => String(x.canonical_id)), gedung: gedung.map(x => String(x.nama)) },
+    });
+    if (tolak) throw new AsetDitolakError([tolak]);
+    const ubah = ubahGantiNomor(ini, { ...kembar, kunci: kembar.kunci_impor! });
+    const akhir = { ...ini, ...ubah };
+    await tx`DELETE FROM bba_aset WHERE id = ${kembar.id}`;
+    await tx`
+      UPDATE bba_aset SET kode_barang = ${akhir.kode_barang}, register = ${akhir.register}, kunci_impor = ${akhir.kunci_impor}, kode_objek = ${akhir.kode_objek},
+        tahun_perolehan = ${akhir.tahun_perolehan}, nama_resmi = ${akhir.nama_resmi}, harga = ${akhir.harga}, asal_usul = ${akhir.asal_usul},
+        keterangan = ${akhir.keterangan}, kib = ${JSON.stringify(akhir.kib)}, kondisi = ${akhir.kondisi}, kondisi_sumber = ${sumberKondisi(ini, akhir.kondisi)},
+        version = version + 1, updated_by = ${userId}
+      WHERE id = ${ini.id}
+    `;
+    const { sebelum, sesudah } = selisihRiwayat(ini, ubah);
+    const dari = asal[0]?.catatan ? ` (${String(asal[0].catatan)})` : '';
+    await tx`
+      INSERT INTO bba_aset_riwayat (aset_id, jenis, sebelum, sesudah, catatan, oleh)
+      VALUES (${ini.id}, 'REGISTER', ${JSON.stringify(sebelum)}, ${JSON.stringify(sesudah)},
+              ${`Digabung dengan catatan kembar #${kembar.id}${dari} — ${input.alasan}`.slice(0, 500)}, ${userId})
+    `;
+    return { nomorLama: nomorAset(ini), nomorBaru: nomorAset(akhir) };
   });
 }
 

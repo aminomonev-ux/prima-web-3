@@ -19,7 +19,7 @@ import type { BbaBarang } from '@/lib/data/buku-besar-aset';
 import type { BarangRingan } from '@/lib/bba/barang';
 import PilihBarang, { type PilihanBarang } from './PilihBarang';
 import { ModalKondisi, ModalPindah } from './AksiAset';
-import { ModalRegister, ModalHapusAset, ModalBatalTempatkan, ModalBetulkanSk, ModalBatalHapus } from './AksiTerima';
+import { ModalRegister, ModalHapusAset, ModalBatalTempatkan, ModalBetulkanSk, ModalBatalHapus, ModalGabungKembar } from './AksiTerima';
 import { unduhBerkas } from './ModalItem';
 import type { WarnaBba } from './BbaShell';
 
@@ -46,7 +46,7 @@ function ringkasPerubahan(sebelum: Record<string, unknown> | null, sesudah: Reco
 
 export default function KartuAset({ id, c, bolehUbah, bolehAdmin, onTutup, onPindah, onTersimpan }: Props) {
   const [d, setD] = useState<(DetailAset & { batas: string }) | null>(null);
-  const [aksi, setAksi] = useState<'kondisi' | 'pindah' | 'register' | 'hapus' | 'batalTempatkan' | 'betulkanSk' | 'batalHapus' | null>(null);
+  const [aksi, setAksi] = useState<'kondisi' | 'pindah' | 'register' | 'hapus' | 'batalTempatkan' | 'betulkanSk' | 'batalHapus' | 'gabung' | null>(null);
   const [galat, setGalat] = useState('');
   const [nama, setNama] = useState('');
   const [barang, setBarang] = useState<PilihanBarang>(null);
@@ -161,6 +161,8 @@ export default function KartuAset({ id, c, bolehUbah, bolehAdmin, onTutup, onPin
                 {lahirDiPrima(a) && <PrimaButton variant="primary" size="sm" onClick={() => setAksi('register')}>{a.kode_barang ? 'Betulkan register' : 'Isi register'}</PrimaButton>}
                 {belumTeregister(a) && <PrimaButton variant="danger" size="sm" iconLeft={<DeleteIcon size={13} />} onClick={() => setAksi('batalTempatkan')}
                   data-tooltip="Salah golongan atau salah penerimaan — registernya dibuang, unitnya kembali ke antrean">Batalkan penempatan</PrimaButton>}
+                <PrimaButton variant="ghost" size="sm" onClick={() => setAksi('gabung')}
+                  data-tooltip="Barang yang sama tercatat dua kali — catatan ini mengambil nomor kembarannya, kembarannya dibuang">Gabungkan dengan kembarannya…</PrimaButton>
                 <PrimaButton variant="danger" size="sm" iconLeft={<DeleteIcon size={13} />} onClick={() => setAksi('hapus')}>Hapus dengan SK</PrimaButton>
               </div>
             )}
@@ -227,6 +229,7 @@ export default function KartuAset({ id, c, bolehUbah, bolehAdmin, onTutup, onPin
       {aksi === 'batalTempatkan' && <ModalBatalTempatkan c={c} ids={[id]} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); onTutup(); }} />}
       {aksi === 'betulkanSk' && a && <ModalBetulkanSk c={c} id={id} versi={a.version} nama={namaTampil(a)} sk={{ nomor: a.hapus_sk_nomor, tgl: a.hapus_sk_tgl }}
         onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
+      {aksi === 'gabung' && a && <ModalGabungKembar c={c} id={id} nama={namaTampil(a)} onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
       {aksi === 'batalHapus' && a && <ModalBatalHapus c={c} id={id} versi={a.version} nama={namaTampil(a)} sk={`${a.hapus_sk_nomor ?? '—'}${a.hapus_sk_tgl ? ` (${fmtTanggal(a.hapus_sk_tgl)})` : ''}`}
         onTutup={() => setAksi(null)} onTersimpan={() => { setAksi(null); onTersimpan(); void muat(); }} />}
     </div>

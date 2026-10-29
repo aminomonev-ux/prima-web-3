@@ -306,7 +306,7 @@ Daftar keluaran:
 1. **Buku aset diubah Umum Aset; rencana ditulis Perencanaan; status beli & penerimaan dicatat Pengadaan.** Semua bisa membaca milik yang lain.
 2. **Barang yang dibeli belum jadi aset sebelum diterima dan ditempatkan** (§7.5).
 3. **Kode barang & register milik sistem provinsi.** PRIMA tidak membuat nomor register sendiri; ia menunggu nomor dari provinsi.
-4. **Riwayat tidak dihapus.** Kondisi lama, perpindahan, rehab, dan penghapusan bisa ditelusuri: kapan, oleh siapa, kenapa. Satu pengecualian: penempatan yang dibatalkan sebelum teregister (§20.1) — catatan itu tidak pernah jadi aset di buku resmi; jejaknya di audit log.
+4. **Riwayat tidak dihapus.** Kondisi lama, perpindahan, rehab, dan penghapusan bisa ditelusuri: kapan, oleh siapa, kenapa. Dua pengecualian: penempatan yang dibatalkan sebelum teregister (§20.1) — catatan itu tidak pernah jadi aset di buku resmi; jejaknya di audit log. Dan catatan kembar yang dibuang saat digabung (§23.2) — riwayatnya hanya impor, isinya salinan berkas; jejak gabungnya di riwayat catatan yang tersisa + audit log.
 5. **Kondisi hasil impor bukan hasil pemeriksaan** sampai RT mengeceknya (§5.3).
 6. **Rencana selalu punya jenis dan alasan.**
 7. **Survei harga dan bukti beli disimpan selamanya.** Tiga referensi (merk, tautan, harga), pilihan yang dibeli, BAST, dan foto tersimpan bersama rencananya. Rencana yang sudah diproses atau punya bukti tidak bisa dihapus. Gunanya untuk pembelian berikutnya (§7.7).
@@ -401,6 +401,7 @@ Tiap tahap bisa dipasang sendiri; migrasi dijalankan di server kantor **sebelum*
 | **D — Rencana di atas buku aset** ✅ 27 Okt | Jenis rencana + alasan + aset sasaran; ringkasan barang & petunjuk di modal; tanda masuk anggaran / tidak didanai (borongan); saran dari rencana tahun lalu yang tidak didanai; **pembelian sebelumnya** barang yang sama di modal (§7.7); Excel daftar rencana | 1 | B (C dianjurkan) |
 | **E — Pengadaan & penerimaan** ✅ 27 Okt | Halaman Pengadaan; penerimaan bertahap dengan **yang dibeli** (merk/tipe, penyedia, tautan — melengkapi pembelian sebelumnya); antrean di Buku Aset → tempatkan → "belum teregister" → isi register / cocok otomatis saat impor; penggantian menandai aset lama "siap dihapus"; penghapusan dengan SK; rehab memperbarui gedung sasaran | 1 | D |
 | **F — Koreksi salah input** ✅ 29 Okt | Batalkan penempatan; betulkan/kosongkan register; peringatan "kemungkinan salah ketik" di pratinjau impor; betulkan SK; batalkan penghapusan (Admin) — §20 | 1 | E |
+| **G — Nomor diganti provinsi & catatan kembar** ✅ 29 Okt | Pasangkan "aset yang sama, nomornya berubah" di pratinjau impor; gabungkan dengan kembarannya di kartu aset — §23 | — | F |
 
 **Catatan Tahap C (27 Okt).** Laporan rusak = "Catat kondisi" pada satu/beberapa register (kartu aset atau centang di Buku Aset) — pintu yang sama dengan opname, satu tanggal + satu foto per catatan. Kalibrasi templat menemukan satu beda yang tidak terlihat dari KIB: lembar **KIBEInv** mengelompokkan Kode Barang + Register di bawah "Nomor" (KIB E tidak), kini ditiru. "Tidak Ada" di rekap sensus selalu 0 — PRIMA belum mencatat aset yang tidak ditemukan (§18).
 
@@ -471,7 +472,7 @@ Kunci: penerimaan `FOR UPDATE` dulu (urutan sama dengan Tempatkan), lalu registe
 
 Izin: EDIT Aset, sama dengan Isi register.
 
-**Belum ditangani**: kembar yang SUDAH terjadi (impor disimpan tanpa membaca peringatannya) — belum ada tombol menggabungkan dua catatan, jadi dibereskan langsung di database. Selama tahap ini terpasang sebelum Tahap E dipakai di kantor, kasus itu tidak ada.
+**Belum ditangani**: kembar yang SUDAH terjadi (impor disimpan tanpa membaca peringatannya) — belum ada tombol menggabungkan dua catatan, jadi dibereskan langsung di database. Selama tahap ini terpasang sebelum Tahap E dipakai di kantor, kasus itu tidak ada. **Ditemukan sesudahnya (29 Okt):** kembar juga lahir tanpa salah input sama sekali — saat provinsi sendiri mengganti nomor aset yang asalnya dari berkas, dan peringatan di atas sengaja diam untuk aset seperti itu. Keduanya ditangani §23.
 
 ### 20.3 Betulkan SK & batalkan penghapusan
 
@@ -499,3 +500,234 @@ Kenapa yang kedua khusus Admin: menandai dihapus mencatat tindakan resmi; membat
 | 3 | Betulkan SK oleh RT, batalkan penghapusan khusus Admin? | Ya |
 | 4 | Dugaan salah ketik di impor hanya peringatan, tidak menahan Simpan? | Ya |
 | 5 | Ruangan PRIMA ikut tampil di daftar cocok otomatis pratinjau? | Ya |
+
+## 21. Panduan alur kerja: menu, contoh, dan hubungannya
+
+Bagian ini menjelaskan cara memakai menu yang sudah tersedia. Contoh nama barang, ruangan, dan angka di bawah hanya ilustrasi; sesuaikan dengan data dan dokumen rumah sakit. PRIMA adalah buku kerja, sedangkan sistem aset provinsi tetap menjadi buku resmi untuk KIB, nomor register, dan SK.
+
+### Peta hubungan singkat
+
+```text
+Master (siapkan kamus barang, ruangan/gedung, dan format cetak)
+   ├──► Buku Aset: impor KIB, rawat kondisi/lokasi, dan lihat barang yang diterima
+   ├──► Rencana: susun kebutuhan, hubungkan ke barang/aset, lalu tetapkan anggaran
+   │       └──► Pengadaan: proses hanya rencana yang ditandai DIDANAI
+   │               └──► Penerimaan: catat barang yang benar-benar datang
+   │                       └──► Buku Aset: tempatkan unit; isi register dari provinsi
+   └──► Cetak & Excel: keluarkan laporan dari data aset/rencana yang sudah dicatat
+```
+
+**Contoh satu siklus:** Buku Aset sudah berisi 10 kursi roda dan hasil pemeriksaan menunjukkan 2 rusak berat. Perencanaan membuat rencana penggantian 2 unit, lalu menandainya DIDANAI. Petugas Pengadaan memproses pesanan dan mencatat penerimaan 2 unit. Unit baru muncul di antrean Buku Aset untuk ditempatkan di ruangan; setelah dicatat di sistem provinsi, register diisi di PRIMA atau dicocokkan saat impor KIB berikutnya. Bila unit lama memang harus keluar dari buku resmi, Umum Aset mencatat penghapusan dengan SK secara terpisah. Data yang sama kemudian dapat dilihat pada ekspor KIB, KIR, atau Buku Inventaris.
+
+### 21.1 Buku Aset — `/buku-besar-aset/aset`
+
+**Untuk apa:** daftar catatan aset per register KIB, bukan daftar rencana belanja. Satu kelompok di layar bisa mewakili banyak register yang sejenis, setahun perolehan, dan seruangan; buka kelompok untuk memilih unit tertentu atau membuka kartu asetnya.
+
+**Alur awal — memasukkan buku provinsi:**
+1. Umum Aset memilih **Impor KIB**, lalu memilih berkas Excel ekspor provinsi `.xlsx` yang memuat lembar KIBA–KIBF.
+2. Periksa pratinjau: jumlah per golongan, aset baru, yang cocok, yang diperbarui, yang sama, dan yang tidak ada di berkas. Jika berkasnya ekspor sebagian, catatan yang tidak ada di berkas **tidak otomatis dihapus**. Bila muncul daftar **Mungkin aset yang sama, nomornya berubah** (provinsi mengganti nomor, atau register isian PRIMA salah ketik), pilih register berkas yang menjadi pasangannya — catatan PRIMA mendapat nomor baru dan ruangan, kondisi, serta riwayatnya tetap. Yang dibiarkan "bukan" akan masuk sebagai aset baru.
+3. Pilih **Simpan impor** setelah hasilnya masuk akal. Impor ulang mencocokkan kode barang + register; nama sehari-hari, ruangan, dan kondisi yang sudah diperiksa di PRIMA tidak ditimpa oleh impor.
+4. Buka kelompok atau kartu register untuk melengkapi nama sehari-hari dan tautan ke jenis **Barang** di Master. Kolom KIB diperbarui melalui impor, bukan disunting langsung di kartu.
+
+**Contoh:** impor KIB C menghasilkan Gedung Bangsal I–VIII. Keterangan berkas menyebut nama gedung, sehingga petugas memastikan nama sehari-harinya terbaca benar. Setelah itu petugas dapat menghubungkan ruangan Bangsal III ke salah satu gedung dari kartu KIB C di Master → Ruangan.
+
+**Merawat aset yang sudah masuk:**
+- Saring berdasarkan golongan, tahun perolehan, kondisi, ruangan, gedung, barang, atau tanda seperti **Belum teregister**, **Siap diusulkan dihapus**, dan **Dihapus**. Pencarian bisa memakai nama, kode, register, atau keterangan.
+- **Opname** tanpa pilihan register berarti memilih ruangan atau gedung; layar memuat aset di sana. Beri kondisi Baik (B), Rusak ringan (RR), atau Rusak berat (RB) pada unit yang diperiksa, tanggal pemeriksaan, dan bila perlu catatan/foto. Hanya unit yang diberi kondisi yang disimpan. **Catat kondisi** pada register terpilih adalah jalur yang sama untuk laporan kerusakan di luar jadwal opname. Tanah tidak memiliki kondisi.
+- Centang beberapa register untuk **Pindah ruangan**, **Catat kondisi**, atau **Tautkan barang** sekaligus. Contoh: pilih dua kursi roda lalu pindahkan dari Bangsal III ke IGD; catatan pindahnya masuk riwayat.
+- Buka kartu aset untuk melihat kolom KIB, tambahan PRIMA, kondisi dan pemeriksanya, hubungan tanah–gedung, rencana terkait, serta riwayat. Di sana juga tersedia aksi per aset: isi/betulkan register, hapus dengan SK, betulkan SK, atau koreksi lain sesuai status dan izin.
+- Barang yang sama terlanjur tercatat dua kali (impor disimpan tanpa memasangkan nomornya): buka kartu catatan yang sudah berisi ruangan/kondisi, pilih **Gabungkan dengan kembarannya…**, pilih nomor kembarannya, isi alasan. Catatan itu mengambil nomornya; kembaran yang isinya murni salinan berkas dibuang.
+- Register hasil Tempatkan yang belum teregister dan salah dibuat bisa **Batalkan penempatan**; unit kembali ke antrean **Barang diterima, belum dicatat** di Buku Aset. Ini bukan penghapusan aset resmi. Aset yang sudah memiliki register provinsi hanya dikeluarkan lewat **Hapus dengan SK**; pembatalan penghapusan khusus Admin.
+
+**Contoh kondisi:** pilih gedung Bangsal III untuk opname, catat RR pada pemeriksaan tanggal 12 Agustus dengan catatan “atap bocor”. Informasi itu terlihat pada kartu aset dan membantu Perencanaan menentukan sasaran rehab. Jika pemeriksaan terakhir lebih lama dari jarak yang diatur di Master → Pengaturan, Buku Aset menandai aset perlu dicek ulang.
+
+**Alur barang baru:** penerimaan non-rehab yang dicatat di Pengadaan muncul di **Barang diterima, belum dicatat**. Umum Aset memilih unit, menempatkannya di ruangan, dan mencatat kondisinya. Unit menjadi aset PRIMA berstatus belum teregister. Setelah kode dan register diterbitkan di sistem provinsi, isi di kartu aset atau impor KIB yang memuat register baru; pratinjau akan memperlihatkan pencocokan sebelum disimpan.
+
+### 21.2 Rencana — `/buku-besar-aset`
+
+**Untuk apa:** tempat Perencanaan mengubah kebutuhan menjadi rencana per tahun. Menu ini bukan daftar seluruh aset; informasi jumlah, kondisi, dan lokasi aset dibaca dari Buku Aset. Daftar bisa dilihat **Per Item** atau diringkas **Per Barang**.
+
+**Alur dari Usulan Kebutuhan:**
+1. Pilih tahun register yang dituju dan **Tarik dari Usulan Kebutuhan**.
+2. Periksa pratinjau usulan berputusan final yang Disetujui maupun Ditolak. Item yang sudah pernah ditarik dilewati; tarik tidak menggantikan pemeriksaan dan penyusunan rencana.
+3. Untuk item yang perlu direncanakan, lengkapi data item: uraian, jenis rencana, alasan, volume/harga, sumber anggaran, serta aset sasaran bila mengganti, memperbaiki, atau merehab aset tertentu. Untuk rencana manual gunakan **Tambah Item**.
+4. Pilih **Barang** dari Master agar riwayat pembelian dan ringkasan aset sejenis dapat dibaca pada tampilan Per Barang. Tautan ini bukan pengganti uraian/spesifikasi item.
+5. Isi sampai tiga referensi harga dan bukti dukung pada item. Gunakan **Lengkapi referensi** atau saringan **Referensi belum lengkap** / **Bukti belum lengkap** untuk menemukan pekerjaan yang masih kurang.
+6. Setelah keputusan anggaran tersedia, centang rencana lalu pilih **Tandai didanai**, **Tidak didanai**, atau **Belum ditandai**. Hanya DIDANAI yang masuk daftar Pengadaan. Rencana yang sudah diproses tidak bebas diubah mundur seperti draf.
+
+**Contoh:** untuk 2 kursi roda yang rusak berat, buat jenis **Penggantian**, isi alasan dan pilih dua register lama sebagai aset sasaran. Tautkan rencana ke Barang “Kursi Roda”, isi referensi harga, lalu tandai DIDANAI setelah masuk anggaran. Pengadaan sekarang dapat menemukan item itu. Untuk ventilator yang belum dimiliki, pilih **Pengadaan baru**; untuk atap Bangsal III yang rusak ringan, pilih **Rehab** dan tautkan gedung sasarannya.
+
+**Per Barang** mengelompokkan rencana lewat kamus Master Barang agar riwayat beli lintas tahun terbaca bersama. Jika item lama belum tertaut atau dua nama barang ternyata sama, gunakan **Tautkan** atau Master → Barang → **Gabungkan** terlebih dahulu. **Saran tahun lalu** membantu menyalin rencana yang tidak didanai sebagai titik awal; periksa dan sesuaikan kembali sebelum menetapkan anggaran tahun baru.
+
+### 21.3 Pengadaan — `/buku-besar-aset/pengadaan`
+
+**Untuk apa:** daftar rencana yang ditandai DIDANAI untuk tahun yang dipilih. Rencana yang belum didanai memang tidak muncul sebagai pekerjaan Pengadaan.
+
+**Alur satu pesanan:**
+1. Pilih tahun, cari kode/uraian/barang, lalu saring status **Belum diproses**, **Dalam proses**, **Diterima sebagian**, **Diterima penuh**, atau **Tidak terealisasi**.
+2. Buka spesifikasi/referensi/bukti untuk memeriksa apa yang direncanakan. Pilih **Proses & penerimaan** untuk menetapkan status pesanan; saat menjadi Dalam Proses, catat tanggal pesan/kontrak dan referensi harga menjadi riwayat yang dibekukan.
+3. Saat barang datang, isi tanggal, jumlah yang datang, harga satuan riil, serta pilihan “yang dibeli”: referensi yang benar-benar dipakai atau **Beli di tempat lain**. Isi merk/tipe, penyedia, tautan, dan catatan bila relevan. Catat setiap tahap penerimaan secara terpisah.
+4. Unggah BAST/foto pada **Bukti dukung** item. Volume dan nilai diterima dihitung dari catatan penerimaan, bukan diketik sebagai angka realisasi terpisah.
+5. Untuk pengadaan barang, penerimaan yang belum ditempatkan terlihat pada antrean Buku Aset. Untuk rencana **Rehab**, penerimaan tidak membuat register baru: petugas memperbarui kondisi gedung sasaran melalui alur rehab.
+
+**Contoh:** rencana 2 kursi roda bernilai anggaran Rp 8.000.000. Pesanan dicatat Dalam Proses; pada 14 Mei diterima 1 unit seharga riil Rp 3.900.000 dan BAST diunggah. Status menjadi Diterima sebagian, realisasi satu unit dihitung dari penerimaan, dan unit yang sudah datang itu langsung muncul di antrean Buku Aset untuk ditempatkan — tidak menunggu diterima penuh. Unit kedua dicatat saat datang dan menyusul ke antrean. Nomor register-nya baru ada setelah unit dicatat di sistem provinsi. Jika rencana penggantian mengaitkan kursi roda lama, aset lama baru ditandai siap diusulkan dihapus saat penerimaan penggantinya penuh; penghapusan resminya tetap perlu SK di Buku Aset.
+
+### 21.4 Master — `/buku-besar-aset/master`
+
+Master adalah data penunjang yang dipakai menu lain. Siapkan dan rapikan sebelum mengandalkannya untuk penyaringan, ringkasan, atau cetakan.
+
+| Tab | Dipakai untuk | Contoh dan kaitannya |
+|---|---|---|
+| **Kategori** | Pilihan kategori pada formulir item rencana. | Tambahkan kategori seperti “Alat Kesehatan” agar pilihan kategori rencana seragam. Kategori ini berbeda dari golongan KIB A–F. |
+| **Barang** | Kamus jenis barang yang menghubungkan rencana lintas tahun dan register aset. | Buat “Kursi Roda”, lalu tautkan item rencana dan kartu register kursi roda ke nama yang sama. Tampilan Per Barang dan riwayat pembelian dapat menggabungkannya. Jika “Kursi Roda” dan “Kursi Roda IGD” ternyata duplikat, gabungkan ke satu barang tujuan; item terkait ikut dipindah. Barang yang masih dipakai tidak dihapus langsung. |
+| **Ruangan** | Daftar tempat aset berada; hubungkan ruangan ke gedung KIB C, luas, dan penanggung jawab. | Buat “IGD”, pilih gedung yang menaunginya dan isi PJ. Buku Aset memakai ruangan untuk penempatan, filter, dan opname; KIR memakai gedung/luas/PJ untuk isi lembar ruangan. Ruangan yang masih dipakai aset harus dirapikan atau asetnya dipindahkan sebelum dapat dihapus. |
+| **Pengaturan** | Kop dan penanda tangan ekspor provinsi serta jarak pemeriksaan ulang kondisi. | Isi kode lokasi, bidang, satuan kerja, kota, nama/jabatan/NIP penanda tangan, dan Pembantu Pengurus Barang KIR. Jarak 12 bulan berarti kondisi perlu dicek ulang setelah setahun; ubah misalnya menjadi 6 bulan bila kebijakan opname semesteran. Pengaturan ini memengaruhi Excel/cetakan dan tanda “perlu dicek ulang” di Buku Aset. |
+
+### 21.5 Cetak & Excel — `/buku-besar-aset/cetak`
+
+**Untuk apa:** keluaran baca-saja dari data yang sudah ada; mengunduh Excel tidak mengimpor atau mengubah data. Ekspor format provinsi memakai kop/tanda tangan dari Master → Pengaturan dan hanya memasukkan aset aktif, bukan yang sudah dihapus.
+
+| Keluaran | Kapan dipakai | Contoh |
+|---|---|---|
+| **KIB A–F** atau **KIB A–F sekaligus** | Laporan per golongan atau seluruh KIB. | Unduh KIB C untuk daftar gedung/bangunan; pilih gabungan untuk satu berkas enam lembar. |
+| **KIR** | Daftar inventaris per ruangan. | Pilih IGD untuk satu lembar. Ruangan kosong juga dapat dipilih untuk mengunduh lembar kosong yang akan diisi. |
+| **Hasil sensus barang** | Rekap kondisi yang diperiksa di PRIMA pada tahun sensus yang dimasukkan. | Masukkan 2026 untuk keluaran KIBAInv–KIBFInv dan rekap sensus 2026. Data impor yang belum pernah diperiksa bukan hasil pemeriksaan tahun itu. |
+| **Rekapitulasi Barang Milik Daerah** | Jumlah dan nilai menurut akun/kode objek. | Unduh rekap seluruh aset aktif sampai bulan ini. |
+| **Buku Inventaris BMD** | Satu daftar lintas golongan untuk format provinsi. | Gunakan untuk melihat inventaris lintas golongan dalam satu lembar/daftar. |
+| **Buku Aset lengkap** | Format kerja PRIMA dengan kolom tambahan untuk pengolahan sendiri. | Saring di Excel berdasarkan nama sehari-hari, ruangan, gedung, kondisi, pemeriksa, barang, atau rencana terkait. |
+| **Daftar rencana per tahun** | Ringkasan rencana dan kondisi aset yang dimiliki untuk satu tahun rencana. | Masukkan tahun 2027 untuk meninjau jenis rencana, volume/nilai, serta kondisi barang terkait. |
+
+### 21.6 Siapa melakukan apa dan titik serah-menunya
+
+- **Umum Aset (RUMAH TANGGA):** menjaga Buku Aset dan Master; mengimpor KIB, mengisi ruangan/kondisi, mengopname, menempatkan penerimaan, dan mencatat SK. Dapat membaca Rencana dan Pengadaan sesuai izin.
+- **Perencanaan (PROGRAM):** membaca Buku Aset, mengelola Rencana, menarik usulan final, menautkan barang/aset sasaran, melengkapi referensi, lalu memutuskan tanda anggaran. Tidak mengubah catatan KIB.
+- **Petugas Pengadaan:** setelah Admin memberi izin EDIT bagian Pengadaan pada akun yang ditunjuk, memproses dan mencatat penerimaan. Rencana dan Buku Aset tetap baca-saja baginya, kecuali bagian lain juga diberikan.
+- **Admin:** dapat mengatur akses. Pembatalan penghapusan aset adalah aksi khusus Admin; hal itu tidak mengubah hak akses normal bagian lain.
+
+**Titik serah yang perlu diingat:** (1) keputusan DIDANAI di Rencana membuka pekerjaan di Pengadaan; (2) penerimaan barang non-rehab membuka antrean di Buku Aset; (3) penempatan dan register menghubungkan barang yang dibeli kembali ke inventaris; (4) perubahan kondisi/lokasi/aset dan rencana menjadi sumber keluaran Cetak & Excel. Jadi bila angka atau laporan belum sesuai, periksa catatan sumber di menu pemiliknya—laporan tidak memperbaiki data secara otomatis.
+
+## 22. Konsep usulan: koreksi satu aset tanpa impor ulang
+
+Bagian ini **usulan pengembangan, bukan kemampuan yang sudah tersedia**. Tujuannya agar petugas tidak perlu menyiapkan dan mengimpor ulang satu berkas KIB hanya untuk membetulkan satu register, tanpa membuat PRIMA seolah-olah menjadi sumber resmi data provinsi.
+
+> **Catatan 29 Okt:** nomor atau identitas yang **diganti provinsi** ditangani §23 — impor tetap sumbernya, dan berkas ekspor sebagian (satu golongan) sudah cukup. Menyunting kode/register langsung di kartu justru melahirkan kembar: impor berikutnya yang masih membawa nomor lama tidak menemukan pasangannya. Bagian ini tetap usulan untuk kolom keterangan dan belum dijadwalkan; saran: kode, register, golongan, tahun, dan harga tidak ikut (§23.4).
+
+### 22.1 Prinsip dan batas data
+
+Bedakan dua kelompok data pada kartu aset:
+
+| Kelompok | Contoh | Cara kerja yang disarankan |
+|---|---|---|
+| **Data operasional PRIMA** | Nama sehari-hari, Barang, lokasi/ruangan, kondisi hasil pemeriksaan, catatan dan foto | Tetap dapat diperbarui langsung sesuai izin. Perubahan kondisi dan lokasi mengikuti riwayat yang sudah ada; impor KIB tidak boleh menimpanya. |
+| **Data KIB dari provinsi** | Golongan, kode barang, register, nama resmi, rincian KIB, harga, asal-usul dan keterangan dari berkas sumber | Impor tetap menjadi cara utama sinkronisasi banyak data. Koreksi satu register boleh dilakukan dari kartu melalui aksi khusus, dengan alasan, validasi, riwayat sebelum/sesudah, dan penanda bahwa nilainya pernah dikoreksi di PRIMA. |
+
+**Batas tanggung jawab:** koreksi langsung mengubah catatan kerja PRIMA, tetapi tidak mengubah sistem aset provinsi. Selama belum dicocokkan dengan data sumber yang berlaku, PRIMA harus menandainya sebagai **koreksi lokal belum diselaraskan**; jangan menyebut nilainya sudah resmi hanya karena sudah disimpan di kartu.
+
+### 22.2 Alur koreksi langsung yang diusulkan
+
+1. Petugas membuka kartu aset yang benar dan memilih **Koreksi data KIB**—berbeda dari mengubah nama sehari-hari, lokasi, atau kondisi PRIMA.
+2. Layar menampilkan nilai saat ini dan sumber terakhirnya. Petugas mengubah hanya kolom yang keliru, mengisi alasan wajib (misalnya “salah ketik saat pencatatan register”), lalu meninjau ringkasan perubahan.
+3. Server memastikan pengguna memiliki izin EDIT Aset, aset masih aktif, format/nilai sah, dan identitas register baru tidak bentrok dengan aset lain. Kode barang dan register diperlakukan sebagai identitas: koreksinya memerlukan konfirmasi khusus dan pemeriksaan keunikan, bukan perubahan bebas.
+4. Simpan satu aset secara atomik dengan pemeriksaan `version`; jika kartu sudah berubah sejak dibuka, minta petugas memuat ulang agar perubahan orang lain tidak tertimpa. Catat pengguna, waktu, alasan, serta nilai sebelum/sesudah dalam riwayat.
+5. Kartu menampilkan penanda **koreksi lokal belum diselaraskan** sampai data itu cocok dengan impor yang diperiksa atau petugas secara eksplisit menyatakan koreksi sudah dikonfirmasi pada sumber provinsi. Penanda tidak boleh hilang hanya karena halaman dimuat ulang.
+
+### 22.3 Perilaku impor berikutnya
+
+Impor tidak seharusnya selalu menang ataupun selalu kalah dari edit kartu. Pada pratinjau, bandingkan berkas dengan nilai PRIMA per aset dan kolom:
+
+- **Sama:** tidak ada konflik; pertahankan nilai dan riwayat yang ada.
+- **Berbeda, tanpa koreksi lokal tertunda:** tawarkan nilai dari berkas sebagai pembaruan impor biasa.
+- **Berbeda, ada koreksi lokal tertunda:** jangan menimpa diam-diam. Tampilkan nilai saat ini, nilai dalam berkas, kolom yang berbeda, serta alasan dan pelaku koreksi. Petugas memilih **Gunakan nilai berkas**, **Pertahankan koreksi PRIMA**, atau **Lewati aset ini**; pilihan dan hasilnya masuk riwayat.
+- **Identitas tidak cocok atau bentrok:** tahan pencocokan otomatis aset tersebut dan minta petugas memastikan register yang benar. Jangan membuat aset baru atau menggabungkan dua aset hanya berdasarkan kemiripan nama.
+
+Jika nilai berkas dipilih, impor menyelaraskan kolom terkait dan menutup penanda koreksi lokal untuk kolom tersebut. Jika koreksi PRIMA dipertahankan, penandanya tetap aktif dan laporan harus tetap memperingatkan bahwa data berbeda dari berkas terakhir. Keputusan dibuat per kolom yang konflik agar perubahan yang tidak terkait tidak ikut tertahan.
+
+### 22.4 Contoh pemakaian
+
+**Salah ketik satu register:** kartu menunjukkan register `000123`, sedangkan dokumen koreksi yang sudah diverifikasi menyebut `000132`. Petugas membuka **Koreksi data KIB**, memasukkan register yang benar dan alasan, lalu menyimpan. PRIMA mencatat perubahan dan mencegah register duplikat. Tidak perlu mengimpor ulang seluruh KIB. Bila impor berikutnya masih membawa `000123`, pratinjau menunjukkan konflik; petugas dapat mempertahankan koreksi sambil menunggu berkas sumber diperbarui.
+
+**Pembaruan banyak aset:** provinsi menerbitkan ekspor KIB baru dengan koreksi pada puluhan aset. Gunakan impor sebagai jalur massal; pratinjau menguraikan perubahan dan hanya meminta keputusan untuk aset/kolom yang berbenturan dengan koreksi lokal. Jadi edit kartu bukan pengganti impor, dan impor bukan syarat untuk setiap koreksi satuan.
+
+**Kondisi rusak atau pindah ruangan:** perubahan kondisi hasil opname dan lokasi operasional tetap dilakukan lewat aksi kondisi/pindah yang sudah ada, bukan lewat **Koreksi data KIB**. Keduanya memiliki konteks, tanggal, pelaku, dan riwayatnya sendiri.
+
+### 22.5 Hak akses, audit, dan keluaran
+
+- Gunakan izin EDIT Aset yang sudah berlaku pada modul; seluruh validasi wajib di API, bukan hanya menyembunyikan tombol. Aksi pembatalan penghapusan khusus Admin tetap terpisah.
+- Riwayat koreksi harus ditulis dalam transaksi yang sama dengan perubahan aset. Pertahankan angka `version` agar dua petugas tidak saling menimpa.
+- Keluaran KIB yang memuat koreksi lokal belum diselaraskan perlu memberi peringatan yang terlihat sebelum diunduh. Jangan menghapus atau menyamarkan penanda hanya karena berkas ekspor berhasil dibuat.
+- Untuk implementasi kelak, tentukan apakah status koreksi dan alasan disimpan per kolom atau per aset. Jika memerlukan kolom/tabel baru, perbarui `docs/schema-mysql.sql` dan sertakan migrasi MySQL; jangan menyimpan seluruh keputusan konflik hanya di state layar.
+
+**Redaksi panduan yang disarankan setelah fitur tersedia:** “Impor KIB digunakan untuk menyelaraskan banyak data dari sistem provinsi. Koreksi satu register dapat dilakukan dari kartu aset dengan alasan dan riwayat; jika impor berikutnya berbeda, periksa konflik sebelum memilih data yang dipakai.” Sebelum fitur tersebut diterapkan, panduan operasional harus tetap menyatakan dengan jelas bahwa koreksi data KIB resmi dilakukan melalui impor.
+
+## 23. Nomor diganti provinsi & catatan kembar (Tahap G, dikerjakan 29 Okt)
+
+**Masalahnya.** Impor mencocokkan aset lewat `kunci_impor` (kode barang + register; KIB F: nama + letak + tanggal mulai). Kalau provinsi membetulkan register, kode barang, atau letak/tanggal mulai KIB F sebuah aset yang **asalnya dari berkas**, impor ulang hari ini:
+
+- melahirkan aset **baru** bernomor baru — tanpa ruangan, kondisi hasil cek, nama sehari-hari yang sudah dibetulkan, barang, maupun kaitan rencana;
+- membiarkan catatan lama tetap AKTIF dengan semua isian PRIMA itu, hanya disebut di "tercatat di PRIMA tapi tidak ada di berkas" — keterangannya "mungkin sudah dihapus atau ekspor sebagian", bukan "mungkin nomornya berubah".
+
+Dugaan salah ketik Tahap F diam di kasus ini karena sengaja dibatasi ke register isian PRIMA. Itu kekeliruan rancangan §20: kembar dianggap hanya lahir dari peringatan yang diabaikan. Tidak ada data yang hilang, tapi satu barang jadi dua catatan dan belum ada cara membereskannya dari layar.
+
+**Prinsip §11 tetap: nomor resmi milik provinsi.** PRIMA tidak menyunting nomor. Yang ditambahkan hanya cara menyatakan "nomor baru di berkas ini milik catatan lama itu" — saat impor (mencegah) dan sesudah terlanjur (membereskan).
+
+**Satu aturan keselamatan untuk keduanya:** identitas selalu dipindahkan **ke** catatan yang memegang isian PRIMA, dan yang dilewati atau dibuang hanya catatan yang seluruh isinya salinan berkas. Akibatnya pilihan yang keliru bisa dipulihkan — impor berikutnya melahirkan lagi nomor yang tertinggal, lalu dipasangkan ulang — dan tidak ada isian PRIMA yang ikut hilang.
+
+### 23.1 Mencegah — pasangkan di pratinjau impor
+
+Calon pasangan: aset AKTIF yang tidak ada di berkas (golongan yang ada di berkas) ↔ register di berkas yang **belum ada** di PRIMA, golongan sama, dan:
+
+| Asal catatan lama | Syarat calon | Kenapa |
+|---|---|---|
+| Dari berkas KIB | tahun perolehan + harga + **nama resmi** sama (besar-kecil huruf & spasi diabaikan — `kunciNamaBarang`) | Nama resminya juga dari provinsi, jadi syarat ini membuang barang beda jenis yang kebetulan setahun dan seharga. Kalau provinsi sekaligus mengganti nama resmi, calonnya tidak muncul — dibereskan lewat §23.2. |
+| Lahir di PRIMA, sudah teregister (dugaan salah ketik Tahap F) | tahun + harga (aturan Tahap F) | Nama resminya diketik petugas saat Tempatkan, bukan dari provinsi — kalau dijadikan syarat, pasangan yang benar tersaring. |
+| Lahir di PRIMA, belum teregister | — | Sudah dikerjakan cocok otomatis (§7.5). |
+
+**Layar.** Blok "Kemungkinan salah ketik" Tahap F diganti **"Mungkin aset yang sama, nomornya berubah"**, daftar lengkap (bukan contoh 20). Per catatan lama: nama, nomor PRIMA, ruangan, tahun, harga, dan pilihan register berkas — bawaannya **"bukan — biarkan"**. Satu register berkas hanya bisa dipilih untuk satu catatan. Tombol **Pasangkan semua yang pasti** mengisi yang calonnya tepat satu dan calon itu bukan calon catatan lain (ganti nomor provinsi biasanya borongan satu lokasi). Calon yang tadinya akan mengisi barang belum teregister diberi keterangan "kalau dipasangkan di sini, [barang X] tetap belum teregister" (pelajaran D9 Tahap F).
+
+**Simpan.** Layar mengirim berkas yang sama + daftar pasangan `{aset_id, kunci}` — bukan baris. Server membaca ulang berkas di bawah kunci impor, menghitung calonnya sendiri, dan menerima pasangan hanya bila ada di daftar itu; satu saja tidak cocok (isi buku berubah sejak pratinjau) → seluruh impor ditolak 409 "pratinjau sudah basi, periksa ulang". Urutan: cocok lewat kunci → **pasangan** → cocok otomatis belum teregister → sisanya aset baru.
+
+Catatan yang dipasangkan mendapat kode, register, kunci impor, dan kolom KIB dari berkas (aturan `bandingAset`: kondisi hasil cek tetap menang). Nama sehari-hari, barang, ruangan, kaitan rencana & gedung, `penerimaan_id`, dan riwayatnya tetap. Riwayat `REGISTER` sebelum → sesudah: "nomor berubah di provinsi — dipasangkan saat Impor KIB *berkas*". Nomor itu tidak jadi aset baru.
+
+Tetap pilihan manusia, bukan otomatis — alasannya sama dengan §20.2: ekspor bisa sebagian, jadi register yang tidak ada di berkas belum tentu ganti nomor. Simpan tanpa memasangkan tetap boleh (§20.5 #4 tidak berubah: tidak menahan Simpan).
+
+### 23.2 Membereskan — gabungkan dengan kembarannya (kartu aset)
+
+Untuk kembar yang sudah terlanjur: impor disimpan tanpa memasangkan, atau terjadi sebelum tahap ini. Tombol **Gabungkan dengan kembarannya…** di kartu aset AKTIF — dibuka dari catatan yang memegang isian PRIMA ("catatan ini"). Modal:
+
+1. **Saran**: aset AKTIF lain yang golongan, tahun, harga, dan nama resminya sama — urut paling baru masuk dulu, dengan nomor, tanggal masuk PRIMA, dan berkas impor asalnya. Kembaran hampir selalu lahir belakangan, tapi saudara sejenis yang masuk bersama catatan ini juga bisa muncul — karena itu yang dipilih **nomornya**, sesuai surat/berkas koreksi provinsi.
+2. **Cari nomor register** (golongan yang sama), untuk kembaran yang tidak masuk saran karena nama resmi atau harganya ikut dibetulkan provinsi. Nama resmi berbeda → peringatan di modal.
+3. Ringkasan: nomor catatan ini sebelum → sesudah; kembarannya **dibuang**. Alasan wajib (≥ 5 huruf).
+
+Syarat — diperiksa server (`alasanTakBisaGabung`) dan dipakai tombol juga (L82):
+
+- keduanya AKTIF, golongan sama, bukan catatan yang sama;
+- kembaran **lahir dari berkas** (`penerimaan_id` kosong — membuang yang lahir dari penerimaan mengembalikan unitnya ke antrean) dan **bersih**: riwayatnya hanya `IMPOR`, bukan aset sasaran rencana, bukan gedung sebuah ruangan. Kembaran yang sudah diisi di PRIMA (dipindah, dicek, ditautkan barang, dibetulkan namanya) ditolak dengan menyebut isiannya — menggabungkan dua catatan berisi berarti memilih isian mana yang menang, itu keputusan lain (§23.4);
+- catatan ini boleh dari berkas atau dari Tempatkan, teregister maupun belum — yang terakhir sekaligus menutup kasus cocok otomatis gagal karena harga riil berbeda dari harga provinsi.
+
+**Akibat, satu transaksi:** kedua baris dikunci `FOR UPDATE` urut id + angka kunci keduanya (L77) → rujukan kembaran dibaca SESUDAH dikunci → kembaran dihapus (riwayat impornya ikut; kunci impornya bebas untuk indeks UNIK) → catatan ini mendapat kode, register, kunci impor, kode objek, tahun, nama resmi, harga, asal-usul, keterangan, dan kolom KIB kembaran; kondisinya hanya bila belum pernah dicek. `penerimaan_id` tetap, jadi antrean tidak berubah. Riwayat `REGISTER` sebelum → sesudah + catatan "digabung dengan catatan kembar #… (Impor KIB …) — *alasan*". Audit `BBA_ASET_GABUNG`.
+
+**Izin: EDIT Aset** (keputusan pemilik). Yang menjaga adalah syarat "kembaran bersih", bukan perannya: yang dibuang tidak memuat isian PRIMA apa pun.
+
+### 23.3 Data & teknis
+
+- **Tanpa migrasi.** Riwayat `REGISTER` sudah ada; jenis audit baru `BBA_ASET_GABUNG` (kolom audit berupa teks) digolongkan di `retensi-audit.ts` (perubahan data, 5 tahun).
+- Aturan murni di `lib/bba/aset.ts`: `sejenisCalon` (SATU aturan untuk pratinjau impor dan saran kembaran), `calonGantiNomor` (menggantikan `curigaSalahKetik`; `RencanaImpor.curiga` → `calon`), `calonPasti`, `ubahGantiNomor` (dipakai pasangan impor DAN gabung), `selisihRiwayat`; `rencanakanImpor(lama, baca, pasangan)` melaporkan pasangan di luar daftar calon di `pasanganDitolak`, data layer membatalkan seluruh impor (`ImporBasiError`, 409 `PRATINJAU_BASI` — layar memuat ulang pratinjaunya). `alasanTakBisaGabung` di `lib/bba/koreksi.ts`.
+- Route: `POST /aset/impor?step=simpan` menerima `pasangan` (Zod: ≤ 20.000, aset & kunci tidak kembar); `GET /aset/gabung?id=` (saran) dan `&register=` (cari) — izin LIHAT; `POST /aset/gabung` — izin EDIT Aset.
+- Pratinjau memulangkan daftar calon **lengkap** (≤ 1.000 catatan × ≤ 50 pilihan, ditandai bila terpotong), bukan contoh 20; tiap pilihan menyebut barang belum teregister yang tadinya akan diisinya.
+- Impor dan gabung saling menunggu lewat kunci baris (`asetLamaUntuk … FOR UPDATE`). Pasangan yang catatannya baru saja digabung orang lain ditolak sebagai pratinjau basi.
+- Uji `scripts/test-bba-ganti-nomor.mts` (30): fungsi murni + MySQL kotak pasir 2078 (data `UJIG`, bersih otomatis) — ganti nomor aset asal berkas dengan & tanpa pasangan, KIB F letak dibetulkan, pasangan basi 409, gabung (isian PRIMA & rujukan tetap; kembaran tidak bersih — termasuk jejak yang hanya ada di riwayat — / jadi sasaran rencana / lahir dari penerimaan ditolak; angka kunci basi; unit Tempatkan berharga riil lain) + 41 uji mutasi tertangkap. Dicoba di peramban (kotak pasir `UJIG`): pratinjau impor menawarkan Kursi roda IGD 000123 ↔ 000132 sementara tensimeter setahun-seharga tidak, "Pasangkan semua yang pasti" → Simpan → nomor pindah dengan ruangan & kondisi tetap; kartu kembaran 000200 ↔ 000201 digabung; 375 px & tema terang. `test-bba-koreksi` (A4, A5, D9, D10) ikut disesuaikan: dugaan kini juga untuk aset asal berkas — perubahan yang disengaja.
+
+### 23.4 Sengaja tidak dikerjakan
+
+- **Golongan berubah** (reklasifikasi, mis. konstruksi KIB F selesai jadi gedung KIB C) — bukan ganti nomor, kolom KIB-nya berbeda. Catatan lama tetap muncul "tidak ada di berkas"; butuh jalur sendiri bila kasusnya terjadi.
+- Menggabungkan dua catatan yang **sama-sama** sudah diisi di PRIMA (memilih isian per kolom).
+- Menyunting kode/register langsung di kartu untuk aset dari berkas (§22) — nomor tetap dari provinsi.
+
+### 23.5 Keputusan
+
+| # | Pertanyaan | Bawaan |
+|---|---|---|
+| 1 | Izin pasangkan (impor) & gabungkan | EDIT Aset — **diputuskan pemilik 29 Okt** |
+| 2 | Calon untuk aset asal berkas wajib nama resmi sama? | Ya — **diputuskan pemilik 29 Okt** |
+| 3 | Tombol Gabungkan tampil di semua kartu aset aktif, bukan hanya bila ada saran? | Ya — kasus yang paling butuh (nama/harga ikut dibetulkan provinsi) justru tidak punya saran |
+| 4 | Ada tombol "Pasangkan semua yang pasti"? | Ya — ganti nomor provinsi biasanya borongan satu lokasi |

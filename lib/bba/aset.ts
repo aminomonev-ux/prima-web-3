@@ -3,6 +3,7 @@
 import type { Golongan, Kondisi } from './kib'
 import type { AsetBaca, NilaiKib } from './kib-baca'
 import { statusCek } from './kondisi'
+import { kunciNamaBarang } from './barang'
 
 export interface AsetRingan {
   id: number
@@ -116,13 +117,16 @@ const LABEL_POKOK: Record<string, string> = {
 
 const samaNilai = (a: unknown, b: unknown) => (a ?? null) === (b ?? null) || (typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 0.005)
 
+/** Isi KIB yang dibandingkan: baris berkas, atau catatan kembaran yang isinya salinan berkas (§23.2). */
+export type IsiBerkas = Pick<AsetBaca, 'kode_barang' | 'register' | 'nama_resmi' | 'kode_objek' | 'tahun_perolehan' | 'harga' | 'asal_usul' | 'keterangan' | 'kondisi' | 'kib'>
+
 /**
  * Yang diperbarui impor ulang = kolom KIB. Tambahan PRIMA (nama sehari-hari, ruangan, barang)
  * tidak pernah disentuh; kondisi hanya diperbarui selama belum dicek di PRIMA (CEK menang).
  * Aset yang sudah DIHAPUS di PRIMA tapi masih ada di berkas: dikembalikan aktif TIDAK —
  * cukup dilaporkan (statusnya keputusan RT, bukan berkas).
  */
-export function bandingAset(lama: AsetRingan, baru: AsetBaca): { kolom: string[]; ubah: Partial<AsetRingan> } {
+export function bandingAset(lama: AsetRingan, baru: IsiBerkas): { kolom: string[]; ubah: Partial<AsetRingan> } {
   const ubah: Partial<AsetRingan> = {}
   const kolom: string[] = []
   const pokok = ['nama_resmi', 'kode_objek', 'tahun_perolehan', 'harga', 'asal_usul', 'keterangan'] as const
@@ -146,13 +150,20 @@ export interface RencanaImpor {
   dihapusDiPrima: AsetBaca[]
   /** Register di PRIMA (golongan yang ada di berkas) yang tidak ada di berkas — dilaporkan, TIDAK dihapus. */
   tidakDiBerkas: AsetRingan[]
-  /** Dugaan salah ketik register isian PRIMA (§20.2) — hanya peringatan, tidak mengubah apa pun. */
-  curiga: { lama: AsetRingan; baru: AsetBaca[] }[]
+  /** "Mungkin aset yang sama, nomornya berubah" (§23.1) — ditawarkan di pratinjau, dipasangkan hanya bila dipilih. */
+  calon: CalonGantiNomor[]
+  /** Pasangan yang dipilih: catatan lama mendapat nomor & kolom KIB baris berkas itu — bukan aset baru. */
+  dipasangkan: { lama: AsetRingan; baru: AsetBaca; ubah: Partial<AsetRingan> }[]
+  /** Pasangan kiriman layar yang bukan calon menurut isi buku sekarang (berubah sejak pratinjau). */
+  pasanganDitolak: string[]
 }
 
-export function rencanakanImpor(lama: readonly AsetRingan[], baca: readonly AsetBaca[]): RencanaImpor {
+export interface CalonGantiNomor { lama: AsetRingan; baru: AsetBaca[] }
+export interface PasanganImpor { aset_id: number; kunci: string }
+
+export function rencanakanImpor(lama: readonly AsetRingan[], baca: readonly AsetBaca[], pasangan: readonly PasanganImpor[] = []): RencanaImpor {
   const perKunci = new Map(lama.filter(a => a.kunci_impor).map(a => [a.kunci_impor!, a]))
-  const hasil: RencanaImpor = { baru: [], cocok: [], berubah: [], sama: 0, dihapusDiPrima: [], tidakDiBerkas: [], curiga: [] }
+  const hasil: RencanaImpor = { baru: [], cocok: [], berubah: [], sama: 0, dihapusDiPrima: [], tidakDiBerkas: [], calon: [], dipasangkan: [], pasanganDitolak: [] }
   const dipakai = new Set<string>()
   for (const b of baca) {
     const l = perKunci.get(b.kunci)
@@ -163,35 +174,105 @@ export function rencanakanImpor(lama: readonly AsetRingan[], baca: readonly Aset
     if (kolom.length) hasil.berubah.push({ lama: l, baru: b, kolom, ubah })
     else hasil.sama++
   }
-  const tanpaPasangan = hasil.baru
-  const { cocok, sisa } = cocokkanBelumTeregister(lama, tanpaPasangan)
+  const golBerkas = new Set(baca.map(b => b.golongan))
+  const hilang = lama.filter(a => a.status === 'AKTIF' && a.kunci_impor && golBerkas.has(a.golongan) && !dipakai.has(a.kunci_impor))
+  // Dari SEMUA register baru, sebelum cocok otomatis: nomor yang akan mengisi barang belum teregister bisa milik catatan lama.
+  hasil.calon = calonGantiNomor(hilang, hasil.baru)
+  const { dipasangkan, ditolak } = terapkanPasangan(hasil.calon, pasangan)
+  hasil.dipasangkan = dipasangkan
+  hasil.pasanganDitolak = ditolak
+  const barisTerpasang = new Set(dipasangkan.map(x => x.baru)), lamaTerpasang = new Set(dipasangkan.map(x => x.lama.id))
+  const { cocok, sisa } = cocokkanBelumTeregister(lama, hasil.baru.filter(b => !barisTerpasang.has(b)))
   hasil.cocok = cocok
   hasil.baru = sisa
-  const golBerkas = new Set(baca.map(b => b.golongan))
-  hasil.tidakDiBerkas = lama.filter(a => a.status === 'AKTIF' && a.kunci_impor && golBerkas.has(a.golongan) && !dipakai.has(a.kunci_impor))
-  // Termasuk register yang akan mengisi barang belum teregister: nomor itu bisa saja milik unit yang salah ketik.
-  hasil.curiga = curigaSalahKetik(hasil.tidakDiBerkas, tanpaPasangan)
+  hasil.tidakDiBerkas = hilang.filter(a => !lamaTerpasang.has(a.id))
   return hasil
 }
 
 const kunciPasang = (golongan: string, tahun: number | null, harga: number) => `${golongan}|${tahun ?? ''}|${Math.round(harga * 100)}`
 
 /**
- * Register isian PRIMA (lahir dari Tempatkan) yang tidak ada di berkas, sementara berkas membawa register
- * BARU dengan golongan + tahun + harga yang sama — kemungkinan salah ketik saat Isi register. Sengaja tidak
- * dipasangkan otomatis: ekspor provinsi bisa sebagian (satu lokasi), jadi register yang tak ada di berkas
- * belum tentu salah, dan menimpanya bisa memberi nomor unit lain.
+ * Satu aturan untuk pratinjau impor DAN saran kembaran di kartu aset (§23): golongan + tahun + harga sama, ditambah
+ * nama resmi sama bila catatannya dari berkas — namanya juga dari provinsi, jadi barang beda jenis yang kebetulan
+ * setahun & seharga tersaring. Nama resmi isian Tempatkan diketik petugas; dijadikan syarat, pasangan benar tersaring.
  */
-export function curigaSalahKetik(tidakDiBerkas: readonly AsetRingan[], baru: readonly AsetBaca[]): RencanaImpor['curiga'] {
+export function sejenisCalon(
+  lama: Pick<AsetRingan, 'golongan' | 'tahun_perolehan' | 'harga' | 'nama_resmi' | 'penerimaan_id'>,
+  isi: Pick<AsetBaca, 'golongan' | 'tahun_perolehan' | 'harga' | 'nama_resmi'>,
+): boolean {
+  return kunciPasang(lama.golongan, lama.tahun_perolehan, lama.harga) === kunciPasang(isi.golongan, isi.tahun_perolehan, isi.harga)
+    && (lahirDiPrima(lama) || kunciNamaBarang(lama.nama_resmi) === kunciNamaBarang(isi.nama_resmi))
+}
+
+/**
+ * Catatan yang tidak ada di berkas ↔ register BARU sejenis (`sejenisCalon`). Tidak dipasangkan otomatis: ekspor
+ * provinsi bisa sebagian (satu lokasi), jadi register yang tak ada di berkas belum tentu berganti nomor.
+ */
+export function calonGantiNomor(hilang: readonly AsetRingan[], baru: readonly AsetBaca[]): CalonGantiNomor[] {
   const perKunci = new Map<string, AsetBaca[]>()
   for (const b of baru) {
     const k = kunciPasang(b.golongan, b.tahun_perolehan, b.harga)
     perKunci.set(k, [...(perKunci.get(k) ?? []), b])
   }
-  return tidakDiBerkas
-    .filter(a => lahirDiPrima(a) && a.kode_barang)
-    .map(a => ({ lama: a, baru: perKunci.get(kunciPasang(a.golongan, a.tahun_perolehan, a.harga)) ?? [] }))
+  return hilang
+    .map(a => ({ lama: a, baru: (perKunci.get(kunciPasang(a.golongan, a.tahun_perolehan, a.harga)) ?? []).filter(b => sejenisCalon(a, b)) }))
     .filter(x => x.baru.length > 0)
+}
+
+/** Tepat satu calon, dan calon itu bukan calon catatan lain — untuk "Pasangkan semua yang pasti". */
+export function calonPasti(calon: readonly CalonGantiNomor[]): Set<number> {
+  const n = new Map<string, number>()
+  for (const x of calon) for (const b of x.baru) n.set(b.kunci, (n.get(b.kunci) ?? 0) + 1)
+  return new Set(calon.filter(x => x.baru.length === 1 && n.get(x.baru[0].kunci) === 1).map(x => x.lama.id))
+}
+
+function terapkanPasangan(calon: readonly CalonGantiNomor[], pasangan: readonly PasanganImpor[]): Pick<RencanaImpor, 'dipasangkan'> & { ditolak: string[] } {
+  const perLama = new Map(calon.map(x => [x.lama.id, x]))
+  const lamaDipakai = new Set<number>(), kunciDipakai = new Set<string>()
+  const dipasangkan: RencanaImpor['dipasangkan'] = [], ditolak: string[] = []
+  for (const p of pasangan) {
+    const x = perLama.get(p.aset_id)
+    const b = x?.baru.find(y => y.kunci === p.kunci)
+    const nama = x ? namaTampil(x.lama) : `Aset #${p.aset_id}`
+    if (!x || !b) { ditolak.push(`${nama} ↔ ${p.kunci.split('|').pop()}: bukan calon pasangan lagi — isi Buku Aset berubah sejak pratinjau.`); continue }
+    if (lamaDipakai.has(p.aset_id) || kunciDipakai.has(p.kunci)) { ditolak.push(`${nama} ↔ ${b.register ?? b.nama_resmi}: dipasangkan dua kali.`); continue }
+    lamaDipakai.add(p.aset_id)
+    kunciDipakai.add(p.kunci)
+    dipasangkan.push({ lama: x.lama, baru: b, ubah: ubahGantiNomor(x.lama, b) })
+  }
+  return { dipasangkan, ditolak }
+}
+
+/**
+ * Catatan lama mengambil nomor & kolom KIB dari berkas — atau dari kembarannya (§23.2). Isian PRIMA (nama sehari-hari,
+ * barang, ruangan, kondisi hasil cek, penerimaan) tetap. Lahir dari Tempatkan: seperti cocok otomatis, sel KIB kosong
+ * di berkas tidak menghapus merk/tipe dari penerimaan.
+ */
+export function ubahGantiNomor(lama: AsetRingan, isi: IsiBerkas & { kunci: string }): Partial<AsetRingan> {
+  const { ubah } = bandingAset(lama, isi)
+  const hasil: Partial<AsetRingan> = { ...ubah, kode_barang: isi.kode_barang, register: isi.register, kunci_impor: isi.kunci }
+  if (lahirDiPrima(lama)) {
+    const kib = { ...lama.kib }
+    for (const [k, v] of Object.entries(isi.kib)) if (v != null && v !== '') kib[k] = v
+    hasil.kib = kib
+  }
+  return hasil
+}
+
+/** Sebelum → sesudah untuk riwayat: hanya yang benar-benar berubah, kolom KIB per kunci (kunci impor turunan kode+register). */
+export function selisihRiwayat(lama: AsetRingan, ubah: Partial<AsetRingan>): { sebelum: Record<string, unknown>; sesudah: Record<string, unknown> } {
+  const sebelum: Record<string, unknown> = {}, sesudah: Record<string, unknown> = {}
+  const asal = lama as unknown as Record<string, unknown>
+  for (const [k, v] of Object.entries(ubah)) {
+    if (k === 'kunci_impor') continue
+    if (k === 'kib') {
+      const kib = v as Record<string, NilaiKib>
+      for (const kk of new Set([...Object.keys(lama.kib), ...Object.keys(kib)])) {
+        if ((lama.kib[kk] ?? null) !== (kib[kk] ?? null)) { sebelum[kk] = lama.kib[kk] ?? null; sesudah[kk] = kib[kk] ?? null }
+      }
+    } else if (!samaNilai(asal[k], v)) { sebelum[k] = asal[k] ?? null; sesudah[k] = v ?? null }
+  }
+  return { sebelum, sesudah }
 }
 
 /**

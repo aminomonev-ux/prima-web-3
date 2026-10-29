@@ -1,8 +1,9 @@
 'use client';
 // Impor KIB (docs/CONCEPT-bba-buku-aset.md §7.1): pilih berkas → pratinjau (server membaca &
 // membandingkan, tanpa menulis) → Simpan mengunggah berkas yang SAMA sekali lagi; server membaca
-// ulang lalu menulis dalam satu transaksi. Baris tidak pernah dikirim dari layar.
-import { useRef, useState } from 'react';
+// ulang lalu menulis dalam satu transaksi. Baris tidak pernah dikirim dari layar — hanya pilihan
+// pasangan "nomornya berubah" (§23.1), yang dinilai ulang server dari daftar calonnya sendiri.
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { X, Upload } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -14,11 +15,13 @@ import type { WarnaBba } from './BbaShell';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
 type Pratinjau = { lembar: LembarBaca[]; peringatan: string[]; kop: KopBaca | null; jumlah: number; rencana: RingkasImpor };
-type Tolak = { message: string; masalah?: string[]; peringatan?: string[] };
+type Tolak = { message: string; code?: string; masalah?: string[]; peringatan?: string[] };
+type Pasangan = { aset_id: number; kunci: string };
 
-async function kirim(berkas: File, step: 'pratinjau' | 'simpan'): Promise<{ ok: true; isi: Record<string, unknown> } | { ok: false; isi: Tolak }> {
+async function kirim(berkas: File, step: 'pratinjau' | 'simpan', pasangan: Pasangan[] = []): Promise<{ ok: true; isi: Record<string, unknown> } | { ok: false; isi: Tolak }> {
   const fd = new FormData();
   fd.append('file', berkas);
+  if (pasangan.length) fd.append('pasangan', JSON.stringify(pasangan));
   try {
     const res = await fetch(`/api/buku-besar-aset/aset/impor?step=${step}`, { method: 'POST', body: fd });
     let isi: Record<string, unknown> = {};
@@ -34,10 +37,12 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
   const [pratinjau, setPratinjau] = useState<Pratinjau | null>(null);
   const [tolak, setTolak] = useState<Tolak | null>(null);
   const [sibuk, setSibuk] = useState<'' | 'baca' | 'simpan'>('');
+  /** aset_id → kunci register berkas yang dipasangkan (§23.1); tidak ada = "bukan, biarkan". */
+  const [pilihan, setPilihan] = useState<Record<number, string>>({});
   const pilih = useRef<HTMLInputElement>(null);
 
   async function baca(f: File) {
-    setBerkas(f); setPratinjau(null); setTolak(null); setSibuk('baca');
+    setBerkas(f); setPratinjau(null); setTolak(null); setPilihan({}); setSibuk('baca');
     try {
       const r = await kirim(f, 'pratinjau');
       if (r.ok) setPratinjau(r.isi as unknown as Pratinjau); else setTolak(r.isi);
@@ -47,19 +52,39 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
   async function simpan() {
     if (!berkas) return;
     setSibuk('simpan');
+    let basi = false;
     try {
-      const r = await kirim(berkas, 'simpan');
-      if (!r.ok) { setTolak(r.isi); setPratinjau(null); toast.error(r.isi.message || 'Gagal menyimpan'); return; }
+      const pasangan = Object.entries(pilihan).filter(([, k]) => k).map(([id, kunci]) => ({ aset_id: Number(id), kunci }));
+      const r = await kirim(berkas, 'simpan', pasangan);
+      if (!r.ok) {
+        toast.error(r.isi.message || 'Gagal menyimpan');
+        if (r.isi.code === 'PRATINJAU_BASI') { basi = true; return; }
+        setTolak(r.isi); setPratinjau(null); return;
+      }
       const t = (r.isi as { tersimpan: HasilSimpanImpor }).tersimpan;
-      toast.success(`Impor selesai — ${t.baru} baru${t.cocok ? `, ${t.cocok} mengisi barang yang belum teregister` : ''}, ${t.berubah} diperbarui, ${t.sama} sama`);
+      toast.success(`Impor selesai — ${t.baru} baru${t.cocok ? `, ${t.cocok} mengisi barang yang belum teregister` : ''}${t.dipasangkan ? `, ${t.dipasangkan} dipasangkan dengan nomor barunya` : ''}, ${t.berubah} diperbarui, ${t.sama} sama`);
       onTersimpan();
-    } finally { setSibuk(''); }
+    } finally {
+      setSibuk('');
+      if (basi) void baca(berkas);
+    }
   }
 
   const th: React.CSSProperties = { padding: '6px 8px', fontSize: 11, color: c.sub, textAlign: 'right', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '6px 8px', fontSize: 12, borderBottom: `1px solid ${c.border}`, fontFamily: MONO, textAlign: 'right' };
   const p = pratinjau?.rencana;
   const adaPerubahan = !!p && p.perGolongan.some(g => g.baru + g.cocok + g.berubah > 0);
+  const dipakai = useMemo(() => new Set(Object.values(pilihan).filter(Boolean)), [pilihan]);
+  const nPasti = p?.calon.filter(x => x.pasti && !pilihan[x.aset_id]).length ?? 0;
+  const pasangkanPasti = () => setPilihan(s => {
+    const baru = { ...s };
+    const terpakai = new Set(Object.values(baru).filter(Boolean));
+    for (const x of p?.calon ?? []) {
+      const k = x.pilihan[0]?.kunci;
+      if (x.pasti && k && !baru[x.aset_id] && !terpakai.has(k)) { baru[x.aset_id] = k; terpakai.add(k); }
+    }
+    return baru;
+  });
 
   return (
     <div onClick={() => sibuk !== 'simpan' && onTutup()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
@@ -111,17 +136,41 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
                 </tr>
               ))}</tbody>
             </table>
-            {p.curiga.length > 0 && (
+            {p.calon.length > 0 && (
               <div style={{ border: '1px solid rgba(186,117,23,.45)', background: 'rgba(186,117,23,.08)', borderRadius: 10, padding: '8px 12px', lineHeight: 1.5 }}>
-                <b style={{ color: '#BA7517' }}>Kemungkinan salah ketik register ({p.curiga.length}{p.curiga.length === 20 ? '+' : ''})</b>
-                <div style={{ color: c.sub }}>
-                  Register yang diisi di PRIMA tidak ada di berkas, sementara berkas membawa register baru dengan golongan, tahun, dan harga yang sama.
-                  Kalau barangnya memang sama, betulkan registernya di kartu aset dulu, lalu impor ulang — kalau disimpan sekarang, nomor itu masuk sebagai aset baru
-                  atau diisikan ke barang sejenis lain yang belum teregister, dan barang yang sama tercatat dua kali.
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <b style={{ color: '#BA7517', flex: '1 1 220px' }}>Mungkin aset yang sama, nomornya berubah ({p.calon.length}{p.calonTerpotong ? '+' : ''})</b>
+                  {nPasti > 0 && <PrimaButton variant="ghost" size="sm" onClick={pasangkanPasti}
+                    data-tooltip="Yang calonnya tepat satu dan register itu bukan calon catatan lain">Pasangkan semua yang pasti ({nPasti})</PrimaButton>}
                 </div>
-                <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{p.curiga.map((x, i) => (
-                  <li key={i}>{x.nama}{x.ruangan ? <span style={{ color: c.sub }}> · {x.ruangan}</span> : null} <span style={{ fontFamily: MONO, color: c.sub }}>PRIMA {x.register ?? '—'} ↔ berkas {x.berkas.join(', ')}</span></li>
-                ))}</ul>
+                <div style={{ color: c.sub }}>
+                  Tercatat di PRIMA tapi tidak ada di berkas, sementara berkas membawa register baru sejenis (golongan, tahun, harga — dan nama resmi untuk aset dari berkas).
+                  Kalau provinsi mengganti nomornya, atau register isian PRIMA salah ketik, <b style={{ color: c.text }}>pasangkan</b>: catatan PRIMA mendapat nomor baru,
+                  ruangan, kondisi, dan riwayatnya tetap. Kalau dibiarkan, nomor itu masuk sebagai aset baru dan barang yang sama tercatat dua kali.
+                  Berkasnya ekspor sebagian? Register yang tidak ada di berkas belum tentu berganti nomor — pasangkan hanya yang memang sama.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {p.calon.map(x => (
+                    <div key={x.aset_id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ flex: '1 1 240px', minWidth: 0 }}>
+                        {x.nama}{x.ruangan ? <span style={{ color: c.sub }}> · {x.ruangan}</span> : null}
+                        <span style={{ fontFamily: MONO, color: c.sub }}> · PRIMA {x.register ?? '—'}{x.tahun ? ` · ${x.tahun}` : ''}{x.dariBerkas ? '' : ' · isian PRIMA'}</span>
+                      </span>
+                      <select aria-label={`Register berkas untuk ${x.nama}`} value={pilihan[x.aset_id] ?? ''}
+                        onChange={e => { const v = e.target.value; setPilihan(s => ({ ...s, [x.aset_id]: v })); }}
+                        style={{ border: `1px solid ${c.border}`, borderRadius: 6, padding: '4px 6px', fontSize: 12, fontFamily: MONO, color: c.text, background: c.input, maxWidth: '100%' }}>
+                        <option value="">— bukan, biarkan —</option>
+                        {x.pilihan.map(b => (
+                          <option key={b.kunci} value={b.kunci} disabled={dipakai.has(b.kunci) && pilihan[x.aset_id] !== b.kunci}>
+                            berkas {b.register ?? b.nama_resmi}{b.mengisi ? ` · tadinya mengisi ${b.mengisi}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+                {dipakai.size > 0 && <div style={{ marginTop: 6, color: '#1D9E75' }}>{dipakai.size} dipasangkan — nomornya pindah ke catatan PRIMA, tidak jadi aset baru.</div>}
+                {p.calonTerpotong && <div style={{ marginTop: 4, color: c.sub }}>Daftarnya dipotong — impor per golongan supaya calonnya lebih sedikit.</div>}
               </div>
             )}
             {p.contohCocok.length > 0 && (
@@ -138,7 +187,7 @@ export default function ModalImporKib({ c, onTutup, onTersimpan }: { c: WarnaBba
             )}
             {p.contohTidakDiBerkas.length > 0 && (
               <details>
-                <summary style={{ cursor: 'pointer', color: '#BA7517' }}>Tercatat di PRIMA tapi tidak ada di berkas — mungkin sudah dihapus di provinsi, atau berkasnya ekspor sebagian</summary>
+                <summary style={{ cursor: 'pointer', color: '#BA7517' }}>Tercatat di PRIMA tapi tidak ada di berkas — mungkin sudah dihapus di provinsi, nomornya berubah, atau berkasnya ekspor sebagian</summary>
                 <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{p.contohTidakDiBerkas.map((x, i) => <li key={i}>{x.nama} <span style={{ fontFamily: MONO, color: c.sub }}>{x.register ?? ''}{x.tahun ? ` · ${x.tahun}` : ''}</span></li>)}</ul>
               </details>
             )}

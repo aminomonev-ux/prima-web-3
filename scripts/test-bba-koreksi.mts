@@ -6,7 +6,7 @@
 // Bagian D memakai MySQL sungguhan (kotak pasir 2079, data berawalan "UJIF"), dibersihkan otomatis.
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
-import { lahirDiPrima, belumTeregister, kelompokkan, rencanakanImpor, curigaSalahKetik, type AsetRingan } from '../lib/bba/aset'
+import { lahirDiPrima, belumTeregister, kelompokkan, rencanakanImpor, calonGantiNomor, type AsetRingan } from '../lib/bba/aset'
 import { alasanTakBisaBatalTempatkan, alasanTakBisaUbahRegister } from '../lib/bba/koreksi'
 import type { AsetBaca, HasilBacaKib } from '../lib/bba/kib-baca'
 import { BatalTempatkanSchema, BatalHapusSchema, UbahRegisterSchema, BetulkanSkSchema } from '../lib/data/bba-penerimaan-schemas'
@@ -56,17 +56,19 @@ const dariBerkasTakAda = aset({ id: 11, penerimaan_id: null, kode_barang: 'K.202
 const lainHarga = aset({ id: 12, harga: 1, kode_barang: 'K.2026-1.3.2.05', register: '000124', kunci_impor: 'K.2026-1.3.2.05|000124' })
 const adaDiBerkas = aset({ id: 13, kode_barang: 'K.2026-1.3.2.05', register: '000140', kunci_impor: 'K.2026-1.3.2.05|000140', kode_objek: '1.3.2.05' })
 const ri = rencanakanImpor([salahKetik, dariBerkasTakAda, lainHarga, adaDiBerkas], [baca('000132'), baca('000140')])
-ok('A4 dugaan salah ketik: register isian PRIMA yang tak ada di berkas ↔ register baru sejenis; TIDAK dipasangkan (tetap baris baru)',
-  ri.curiga.length === 1 && ri.curiga[0].lama.id === 10 && ri.curiga[0].baru.map(b => b.register).join() === '000132'
-  && ri.baru.length === 1 && ri.cocok.length === 0 && ri.sama === 1 && ri.tidakDiBerkas.map(a => a.id).sort().join() === '10,11,12', JSON.stringify(ri.curiga.map(x => x.lama.id)))
-ok('A5 bukan dugaan: aset dari berkas (bukan isian PRIMA), harga lain, belum teregister (itu cocok otomatis), tanpa register baru sejenis',
-  curigaSalahKetik([dariBerkasTakAda, lainHarga], [baca('000132')]).length === 0
-  && curigaSalahKetik([salahKetik], []).length === 0
-  && rencanakanImpor([aset({ id: 20 })], [baca('000132')]).curiga.length === 0
+// Sejak Tahap G (§23) aset dari berkas yang nomornya diganti provinsi ikut jadi calon — perubahan yang disengaja.
+ok('A4 dugaan: register isian PRIMA / aset dari berkas yang tak ada di berkas ↔ register baru sejenis; TIDAK dipasangkan tanpa pilihan (tetap baris baru)',
+  ri.calon.map(x => x.lama.id).join() === '10,11' && ri.calon.every(x => x.baru.map(b => b.register).join() === '000132')
+  && ri.baru.length === 1 && ri.cocok.length === 0 && ri.dipasangkan.length === 0 && ri.sama === 1
+  && ri.tidakDiBerkas.map(a => a.id).sort().join() === '10,11,12', JSON.stringify(ri.calon.map(x => x.lama.id)))
+ok('A5 bukan dugaan: harga lain, aset dari berkas yang nama resminya lain, belum teregister (itu cocok otomatis), tanpa register baru sejenis',
+  calonGantiNomor([lainHarga, { ...dariBerkasTakAda, nama_resmi: 'TENSIMETER' }], [baca('000132')]).length === 0
+  && calonGantiNomor([salahKetik], []).length === 0
+  && rencanakanImpor([aset({ id: 20 })], [baca('000132')]).calon.length === 0
   && rencanakanImpor([aset({ id: 20 })], [baca('000132')]).cocok.length === 1)
 const bersama = rencanakanImpor([salahKetik, aset({ id: 21 })], [baca('000132')])
 ok('A5b register baru yang akan dipasangkan ke unit belum teregister sejenis TETAP disebut sebagai dugaan — nomor itu bisa milik unit yang salah ketik',
-  bersama.cocok.length === 1 && bersama.cocok[0].lama.id === 21 && bersama.curiga.length === 1 && bersama.curiga[0].lama.id === 10, JSON.stringify(bersama.curiga.map(x => x.lama.id)))
+  bersama.cocok.length === 1 && bersama.cocok[0].lama.id === 21 && bersama.calon.length === 1 && bersama.calon[0].lama.id === 10, JSON.stringify(bersama.calon.map(x => x.lama.id)))
 const kel = kelompokkan([aset({ id: 1 }), aset({ id: 2 }), terregister, kibFBerkas])
 ok('A6 hitungan "belum teregister" per kelompok memakai aturan yang sama (KIB F berkas tidak ikut)',
   kel.find(k => k.golongan === 'B')?.belumTeregister === 2 && kel.find(k => k.golongan === 'F')?.belumTeregister === 0)
@@ -257,15 +259,16 @@ if (c) {
       lembar: [], masalah: [], peringatan: [], kop: null } as unknown as HasilBacaKib
     const pra = await A.pratinjauImpor(berkas)
     const gB = pra.perGolongan.find(g => g.golongan === 'B')!
-    const dugaan = pra.curiga.find(x => x.register === '000123')
+    const dugaan = pra.calon.find(x => x.register === '000123')
     // Dua unit sejenis lain masih belum teregister — nomor dari berkas akan dipasangkan ke salah satunya; dugaannya tetap disebut.
     ok('D9 pratinjau impor: dugaan salah ketik disebut (PRIMA 000123 ↔ berkas 000132, beserta ruangannya) walau nomornya akan mengisi unit belum teregister lain',
-      !!dugaan && dugaan.berkas.join() === '000132' && dugaan.ruangan === 'UJIF Ruang Uji' && gB.cocok === 1 && pra.contohCocok.some(x => x.register === '000132'),
-      JSON.stringify({ curiga: pra.curiga, gB }))
+      !!dugaan && dugaan.pilihan.map(b => b.register).join() === '000132' && !!dugaan.pilihan[0].mengisi && dugaan.ruangan === 'UJIF Ruang Uji'
+      && gB.cocok === 1 && pra.contohCocok.some(x => x.register === '000132'),
+      JSON.stringify({ calon: pra.calon, gB }))
     await PEN.isiRegister({ id: unit, expected_version: await versiAset(unit), kode_barang: 'UJIF.01.2026-1.3.2.05.02', register: '132' }, userId)
     const pra2 = await A.pratinjauImpor(berkas)
     ok('D10 sesudah registernya dibetulkan di kartu aset, impor ulang cocok (sama), tidak ada dugaan & tidak ada baris baru',
-      !pra2.curiga.some(x => x.register === '000123') && pra2.perGolongan.find(g => g.golongan === 'B')!.baru === 0, JSON.stringify(pra2.perGolongan))
+      !pra2.calon.some(x => x.register === '000123') && pra2.perGolongan.find(g => g.golongan === 'B')!.baru === 0, JSON.stringify(pra2.perGolongan))
 
     // Hapus dengan SK → betulkan SK → batalkan penghapusan.
     const lamaGanti = await asetBaru({ golongan: 'B', kode_barang: 'UJIF.01.2016-1.3.2.05.02', register: '000002', kunci_impor: 'UJIF.01.2016-1.3.2.05.02|000002', tahun_perolehan: 2016, nama_resmi: 'UJIF KURSI LAMA', kib: '{}', harga: 1, kondisi: 'RB', kondisi_sumber: 'CEK' })
