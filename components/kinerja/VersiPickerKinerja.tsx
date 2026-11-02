@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { History, ChevronDown, Check, Plus, Lock } from 'lucide-react'
+import { pickVersiAktif } from '@/lib/kinerja/versi'
 
 export interface VersiKinerja {
   versi_tipe:   'MURNI' | 'PERUBAHAN'
@@ -54,13 +55,8 @@ export default function VersiPickerKinerja({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  // Versi terbaru = seq tertinggi (atau MURNI kalau cuma 1 versi)
-  const latestItem = items.reduce<VersiKinerja | null>((acc, cur) => {
-    if (!acc) return cur
-    if (cur.versi_seq > acc.versi_seq) return cur
-    if (cur.versi_seq === acc.versi_seq && cur.versi_tipe === 'PERUBAHAN' && acc.versi_tipe === 'MURNI') return cur
-    return acc
-  }, null)
+  // Satu aturan "versi paling belakang" (L88) — sama dengan kop & nama berkas Cetak.
+  const latestItem = pickVersiAktif(items)
 
   const selectedLabel    = labelVersi(value.tipe, value.seq)
   const selectedItem     = items.find(i => sameVersi(value, i))
@@ -87,7 +83,8 @@ export default function VersiPickerKinerja({
               {selectedItem && (
                 <span className="versi-meta"> · {selectedItem.jumlah_baris} baris</span>
               )}
-              {isLocked && <Lock className="w-3 h-3" style={{ marginLeft: 4, opacity: .7 }} />}
+              {/* Sebaris teks: preflight Tailwind menjadikan svg block → gembok turun ke baris kedua. */}
+              {isLocked && <Lock className="w-3 h-3" style={{ marginLeft: 4, opacity: .7, display: 'inline', verticalAlign: '-0.125em' }} />}
               {selectedIsLatest && <span className="versi-badge-latest versi-badge-latest--trigger">LATEST</span>}
             </>
           )}

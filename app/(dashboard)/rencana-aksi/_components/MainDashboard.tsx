@@ -262,9 +262,11 @@ export default function MainDashboard({
         </div>
       </div>
 
-      {/* Main indicator card */}
-      <div className="relative mb-6 overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-        <div className="absolute top-0 left-0 h-1.5 w-full bg-gradient-to-r from-[#EF9F27] via-[#7C5CFC] to-[#378ADD]" />
+      {/* Main indicator card — TANPA overflow-hidden: menu pemilih di baris terbawah
+          keluar dari kartu, dan dulu terpotong di tepinya (butir bawah tak tercapai).
+          Sudut bilah gradien dibulatkan sendiri. */}
+      <div className="relative mb-6 rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+        <div className="absolute top-0 left-0 h-1.5 w-full rounded-t-2xl bg-gradient-to-r from-[#EF9F27] via-[#7C5CFC] to-[#378ADD]" />
 
         <div className="flex flex-col gap-5">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">

@@ -82,6 +82,8 @@ export default function SskTab({
 
   const activeVersiItem = versiItems.find(i => i.versi_tipe === sskVersi.tipe && i.versi_seq === sskVersi.seq);
   const versiLocked     = !!activeVersiItem?.locked_at;
+  /** Belum ada versi berbaris sama sekali (mis. tidak dianggarkan di murni) — cermin syarat server. */
+  const rkoKosong       = !versiLoading && versiItems.length === 0;
   const versiLabel      = sskVersi.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${sskVersi.seq}`;
   // Surface/teks dari lib/theme; aksen ungu/pink Kinerja tetap lokal.
   const t = uiTheme(isLight);
@@ -368,8 +370,12 @@ export default function SskTab({
         }),
       });
       if (d.ok) {
-        const newSeq = (d as unknown as { new_versi_seq: number }).new_versi_seq;
-        toast.success(`PERUBAHAN-${newSeq} dibuat. ${versiLabel} dikunci.`);
+        const { new_versi_seq: newSeq, copied } = d as unknown as { new_versi_seq: number; copied: number };
+        if (copied > 0) toast.success(`PERUBAHAN-${newSeq} dibuat. ${versiLabel} dikunci.`);
+        // Versi baru "ada" begitu punya baris — sebelum Simpan pertama, muat ulang halaman
+        // memulangkan layar ke MURNI. Tanpa kalimat terakhir orang mengira Perubahan-nya hilang.
+        else toast.success(`PERUBAHAN-${newSeq} disiapkan. RKO ${activeSumber} murni kosong, jadi tidak ada yang disalin. `
+          + 'Isi lewat Inject Rekening atau Import, lalu Simpan — versi ini baru tercatat sesudah disimpan.', { duration: 12000 });
         setSskVersi({ tipe: 'PERUBAHAN', seq: newSeq });
         await fetchVersiList();
         refetchSsk();
@@ -432,8 +438,12 @@ export default function SskTab({
                 // tidak ikut tersalin, lalu terbuang saat layar pindah ke versi baru — dan
                 // versi ini sudah terkunci, jadi tidak bisa disimpan lagi ke sana.
                 if (sskBerubah > 0) {
-                  toast.error(`Ada ${sskBerubah} baris RKO ${versiLabel} yang belum disimpan. Buat Perubahan menyalin isi yang `
-                    + 'TERSIMPAN, jadi suntingan itu tidak akan ikut. Simpan dulu, baru buat Perubahan.', { duration: 9000 });
+                  // RKO kosong: menyuruh "Simpan dulu" mendorong anggaran Perubahan masuk ke MURNI.
+                  toast.error(rkoKosong
+                    ? `Ada ${sskBerubah} baris RKO ${versiLabel} yang belum disimpan. Kalau ini anggaran Perubahan, buang dulu `
+                      + 'isiannya (muat ulang halaman), Buat Perubahan, lalu isi di PERUBAHAN-1. Kalau memang anggaran murni, Simpan di sini.'
+                    : `Ada ${sskBerubah} baris RKO ${versiLabel} yang belum disimpan. Buat Perubahan menyalin isi yang `
+                      + 'TERSIMPAN, jadi suntingan itu tidak akan ikut. Simpan dulu, baru buat Perubahan.', { duration: 12000 });
                   return;
                 }
                 setConfirmCreate(true);
@@ -649,9 +659,18 @@ export default function SskTab({
               Buat Perubahan Baru
             </div>
             <div style={{ fontSize:'12px', color:cTextSub, lineHeight:1.7, marginBottom:'18px' }}>
-              Akan dibuat versi <strong style={{ color:cTextPrimary }}>PERUBAHAN baru</strong> dengan menyalin semua data dari <strong style={{ color:cTextPrimary }}>{versiLabel}</strong>.
-              <br /><br />
-              Versi <strong style={{ color:cTextPrimary }}>{versiLabel}</strong> akan <strong style={{ color:'#B45309' }}>otomatis dikunci</strong> (tidak bisa diedit lagi).
+              {rkoKosong ? (
+                <>
+                  RKO <strong style={{ color:cTextPrimary }}>{activeSumber}</strong> belum berisi di versi mana pun — misalnya tidak dianggarkan di murni.
+                  Akan disiapkan <strong style={{ color:cTextPrimary }}>PERUBAHAN-1</strong> yang masih kosong; tidak ada yang disalin.
+                </>
+              ) : (
+                <>
+                  Akan dibuat versi <strong style={{ color:cTextPrimary }}>PERUBAHAN baru</strong> dengan menyalin semua data dari <strong style={{ color:cTextPrimary }}>{versiLabel}</strong>.
+                  <br /><br />
+                  Versi <strong style={{ color:cTextPrimary }}>{versiLabel}</strong> akan <strong style={{ color:'#B45309' }}>otomatis dikunci</strong> (tidak bisa diedit lagi).
+                </>
+              )}
               <br /><br />
               Lanjutkan?
             </div>

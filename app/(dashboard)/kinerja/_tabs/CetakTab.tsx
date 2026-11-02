@@ -13,12 +13,14 @@ import { ChevronDown, Printer, BarChart3, GitBranch } from 'lucide-react';
 import type { SumberSSK, RealRow } from '../_types';
 import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS } from '../_utils';
 import { hitungRekap, bulanTersedia, type ItemSskAktif } from '@/lib/kinerja/rekap';
-import { hitungJumlahBulan, bulanBerdata } from '@/lib/kinerja/cetak-detail';
+import { hitungJumlahBulan, bulanBerdata, tandaYatim, catatanYatimBulan } from '@/lib/kinerja/cetak-detail';
 import { exportRealisasiExcel, exportRealisasiPdf, exportRekapExcel, exportRekapPdf,
   exportBundelExcel, exportBundelPdf, PENANDA_TANGAN, type BagianDetail } from '../_exports';
 import { uiTheme } from '@/lib/theme';
-import { ringkasVersiRekap, sumberTanpaVersi,
+import { ringkasVersiRekap, sumberTanpaVersi, versiCetak, labelVersi,
   type PilihanVersiRekap, type VersiSumberRekap } from '@/lib/kinerja/versi';
+import VersiPickerKinerja, { type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
+import { useDaftarVersiSsk } from '@/components/kinerja/useDaftarVersiSsk';
 
 interface Props {
   realisasiRows: RealRow[];
@@ -36,8 +38,12 @@ interface Props {
   loadingData: boolean;
   onFetchAll: () => void;
   isLight?: boolean;
-  // Refactor Versi (Checkpoint C):
-  sskVersi?: { tipe: 'MURNI'|'PERUBAHAN'; seq: number };
+  /**
+   * Versi SSK acuan view Detail — state YANG SAMA dengan tab Realisasi (satu jawaban
+   * untuk "versi mana", L88). `pilihVersi` = setter shell yang lewat penjaga belum-tersimpan.
+   */
+  sskVersi: VersiValue;
+  pilihVersi: (v: VersiValue) => void;
   /**
    * A9: sumber yang versi SSK acuannya habis dinol-kan. Wajib, bukan opsional
    * bernilai `[]` — bawaan diam-diam menyembunyikan keterangannya di pemanggil
@@ -60,14 +66,15 @@ interface Props {
 export default function CetakTab({
   realisasiRows, realisasiAllRows, realisasiAllItems, realisasiSumber, setRealisasiSumber,
   tahun, loadingData, onFetchAll,
-  isLight = false, sskVersi, sumberDinolkan,
+  isLight = false, sskVersi, pilihVersi, sumberDinolkan,
   pilihanVersi, onGantiPilihanVersi, versiRekap,
 }: Props) {
   const ringkasVersi = ringkasVersiRekap(versiRekap, pilihanVersi);
   const tanpaVersi   = sumberTanpaVersi(versiRekap);
-  const versiLabel = sskVersi
-    ? (sskVersi.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${sskVersi.seq}`)
-    : 'MURNI';
+  const { items: versiItems, loading: versiLoading } = useDaftarVersiSsk(tahun, realisasiSumber);
+  // Satu sumber untuk label layar, kop berkas, dan nama berkas (CONCEPT-kinerja-versi-cetak §1.3).
+  const versiDetail = versiCetak(versiItems, sskVersi.tipe, sskVersi.seq);
+  const versiLabel  = versiDetail.label;
   // Surface/teks dari lib/theme; aksen ungu/pink Kinerja tetap lokal.
   const t = uiTheme(isLight);
   const cSurface     = t.card;
@@ -147,7 +154,10 @@ export default function CetakTab({
     const bulan = bundelBulan === 'semua' ? ada
       : bundelBulan === 'ikut' ? ada.filter(x => x <= bulanRekapPilih)
       : ada.filter(x => x === bundelBulan);
-    return { sumber: sm, rows, bulan };
+    // Versi bagian detail = versi yang dipakai REKAP untuk sumber itu, bukan pemilih view Detail.
+    // Sumber tanpa versi untuk pilihan ini tidak punya baris, jadi labelnya tak pernah tercetak.
+    const v = versiRekap.find(x => x.sumber === sm);
+    return { sumber: sm, rows, bulan, versi: v?.tipe ? labelVersi(v.tipe, v.seq) : '—' };
   });
 
   const paramRekap = () => ({
@@ -204,8 +214,8 @@ export default function CetakTab({
   // berkasnya memuat bulan yang SAMA dengan tabel di layar — Print sudah begitu
   // sejak awal (ia mencetak DOM), jadi tanpa ini tiga tombol di satu bilah
   // berbeda pendapat soal bulan mana yang dimaksud.
-  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: bulanTampil });
-  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: bulanTampil });
+  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: bulanTampil, versi: versiDetail });
+  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: bulanTampil, versi: versiDetail });
 
   return (
     <div id="cetak-area" style={{ padding:'20px' }}>
@@ -358,12 +368,18 @@ export default function CetakTab({
       <div className="no-print" style={{ background:cSurfaceForm, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'12px 16px', marginBottom:'14px', display:'flex', flexDirection:'column', gap:'8px' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px' }}>
           <div>
-            <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary }}>
-              <Printer size="1em" style={{ marginRight:'6px', color:theme.color, display:'inline', verticalAlign:'-0.125em' }} />
-              Cetak Realisasi {realisasiSumber} — {tahun}
-              <span style={{ marginLeft:'10px', fontSize:'10px', fontWeight:700, color:'#7C5CFC', background:'rgba(124,92,252,.12)', padding:'2px 8px', borderRadius:'6px', border:'1px solid rgba(124,92,252,.3)' }}>
-                <GitBranch size="1em" style={{ marginRight:'4px', display:'inline', verticalAlign:'-0.125em' }} /> {versiLabel}
+            <div style={{ fontSize:'13px', fontWeight:700, color:cTextPrimary, display:'flex', flexWrap:'wrap', alignItems:'center', gap:'10px' }}>
+              <span>
+                <Printer size="1em" style={{ marginRight:'6px', color:theme.color, display:'inline', verticalAlign:'-0.125em' }} />
+                Cetak Realisasi {realisasiSumber} — {tahun}
               </span>
+              {/* Pemilih yang sama dengan tab Realisasi, tanpa "Buat Perubahan" — versi baru lahir di RKO. */}
+              <VersiPickerKinerja
+                value={sskVersi}
+                items={versiItems}
+                loading={versiLoading}
+                onChange={v => pilihVersi(v)}
+              />
             </div>
             <div style={{ fontSize:'11px', color:cTextSub, marginTop:'2px' }}>
               {bulanAda.length} bulan memiliki data &nbsp;·&nbsp; Berdasarkan SSK <strong style={{ color:cTextPrimary }}>{versiLabel}</strong>
@@ -413,8 +429,8 @@ export default function CetakTab({
                 /* SSK-nya ADA, cuma versi yang diminta tidak. Kalimat "isi
                    RKO/SSK dulu" di sini menyuruh orang membereskan data yang
                    sudah benar. */
-                ? <>{tanpaVersi.join(', ')} tidak punya versi murni — MURNI-nya sudah dihapus di Pengaturan → Reset,
-                    yang tersisa versi Perubahan. Pilih <strong>Versi Berlaku</strong> di atas untuk memakainya.</>
+                ? <>{tanpaVersi.join(', ')} tidak punya RKO murni — tidak dianggarkan di murni, atau versinya dihapus di
+                    Pengaturan → Reset. Yang ada versi Perubahan; pilih <strong>Versi Berlaku</strong> di atas untuk memakainya.</>
                 : <>Belum ada item SSK untuk tahun {tahun} — isi RKO/SSK dulu, rekap mengambil pagu &amp; targetnya dari sana.</>}
           </div>
         );
@@ -555,7 +571,7 @@ export default function CetakTab({
                     LAPORAN REALISASI KINERJA {realisasiSumber}
                   </div>
                   <div style={{ fontSize:'12px', fontWeight:600, color:cTextSubAlt, marginTop:'2px' }}>
-                    BULAN {CRR_BULAN_LABELS[b-1].toUpperCase()} TAHUN {tahun}
+                    BULAN {CRR_BULAN_LABELS[b-1].toUpperCase()} TAHUN {tahun} · SSK {versiLabel}
                   </div>
                 </div>
 
@@ -577,7 +593,12 @@ export default function CetakTab({
                         return (
                           <tr key={ri} style={{ background: ri%2===0 ? cSurface : (isLight?'#F8F9FC':'rgba(4,44,83,.6)') }}>
                             <td style={{ ...tdP('center'), width:'30px' }}>{ri+1}</td>
-                            <td style={{ ...tdP('left'), minWidth:'200px', fontWeight:500 }}>{r.keterangan||'-'}</td>
+                            <td style={{ ...tdP('left'), minWidth:'200px', fontWeight:500 }}>
+                              {r.keterangan||'-'}
+                              {r.yatim && (
+                                <span style={{ fontSize:'10px', fontWeight:600, color: isLight?'#854F0B':'#FAC775' }}> ({tandaYatim(versiLabel)})</span>
+                              )}
+                            </td>
                             <td style={tdP()}>{fmtNum(r.pagu_awal)}</td>
                             {/* #7: target_fisik satuannya % — format konsisten dgn baris JUMLAH */}
                             <td style={tdP()}>{r.target_fisik.toFixed(2)}%</td>
@@ -616,6 +637,14 @@ export default function CetakTab({
                     </tbody>
                   </table>
                 </div>
+
+                {/* IKUT TERCETAK — kalimat yang sama dengan Excel & PDF (`catatanYatimBulan`). */}
+                {catatanYatimBulan(jml, versiLabel) && (
+                  <div style={{ marginTop:'10px', padding:'8px 12px', borderRadius:'8px', fontSize:'11px', lineHeight:1.5,
+                    background: isLight?'#FEF3C7':'rgba(245,158,11,.14)', border:'1px solid #FAC775', color: isLight?'#854F0B':'#FAC775' }}>
+                    {catatanYatimBulan(jml, versiLabel)}
+                  </div>
+                )}
 
                 {/* ── Blok tanda tangan ── nama jabatan dari PENANDA_TANGAN,
                      satu daftar yang sama dengan berkas PDF & Excel. */}

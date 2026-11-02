@@ -286,12 +286,15 @@ ok('P10 layar Detail memakai lib, tidak menjumlah sendiri lagi',
 ok('P11 baris JUMLAH berkas dari lib yang sama dengan layar',
    /const j = hitungJumlahBulan\(rows\);/.test(exP) &&
    (exP.match(/barisBulanDetail\(/g) || []).length === 3);
+// CONCEPT-kinerja-versi-cetak §1.4: catatan yatim di BAWAH tabel, dua penulis lewat SATU kalimat.
+eq('P11b catatan yatim dipakai PDF dan Excel',
+   (exP.match(/catatanYatimBulan\(hitungJumlahBulan\(barisBulan\), versi\)/g) || []).length, 2);
 // Diperiksa pada PEMANGGILANNYA, bukan keberadaan teksnya: melepas panggilan
 // `tandaTangan(...)` tetap meninggalkan fungsinya lengkap dengan kata-katanya,
 // dan nama rumah sakit juga muncul di kop REKAP — dua-duanya lulus tanpa menguji
 // apa pun (L82c).
 ok('P12 halaman detail PDF memanggil kop DAN tanda tangan',
-   /tulisKopPdf\(doc, kopDetail\(sumber, b, tahun\)\)/.test(exP) &&
+   /tulisKopPdf\(doc, kopDetail\(sumber, b, tahun, versi\)\)/.test(exP) &&
    /tandaTangan\(doc, akhir \+ \d+, b, tahun\)/.test(exP));
 // Teks kopnya hidup di SATU tempat (`kopDetail`) dan dipakai dua penulis —
 // PDF dan Excel. Dulu kop rekap & kop detail dua salinan yang beda perlakuan.
@@ -345,7 +348,7 @@ ok('Q3 kop Excel di-merge selebar jumlah kolom',
    /ws\.mergeCells\(r\.number, 1, r\.number, kolom\)/.test(exQ) &&
    /const kolom = REKAP_HEADER\.length;/.test(exQ));
 ok('Q3b kop Excel detail juga memakai jumlah kolom, bukan angka mati',
-   /tulisKopExcel\(ws, kopDetail\(sumber, b, tahun\), DETAIL_BULAN_HEADER\.length\)/.test(exQ));
+   /tulisKopExcel\(ws, kopDetail\(sumber, b, tahun, versi\), DETAIL_BULAN_HEADER\.length\)/.test(exQ));
 
 ok('Q4 baris tebal di rekap ikut ditebalkan di Excel',
    /if \(!b\.tebal\) return;/.test(exQ) && /c\.font = \{ bold: true \}/.test(exQ));
@@ -380,11 +383,11 @@ ok('Q12 hanya sheet Data yang punya kolom Bulan',
 
 // Angka di Excel tetap ANGKA supaya bisa dijumlah; di PDF baru jadi teks.
 ok('Q13 Excel menyimpan rupiah sebagai angka, bukan teks',
-   typeof barisBulanDetail(barisJan, true)[0][2] === 'number');
+   typeof barisBulanDetail(barisJan, true, 'MURNI')[0][2] === 'number');
 ok('Q14 PDF menyimpan rupiah sebagai teks berformat',
-   typeof barisBulanDetail(barisJan, false)[0][2] === 'string');
+   typeof barisBulanDetail(barisJan, false, 'MURNI')[0][2] === 'string');
 // Baris terakhir SELALU JUMLAH — itu yang ditebalkan pemanggilnya.
-const isiQ = barisBulanDetail(barisJan, true);
+const isiQ = barisBulanDetail(barisJan, true, 'MURNI');
 eq('Q15 baris terakhir adalah JUMLAH', isiQ[isiQ.length - 1][1], 'JUMLAH');
 eq('Q16 jumlah baris = data + 1 baris JUMLAH', isiQ.length, barisJan.length + 1);
 eq('Q17 kolom per baris sama dengan headernya', isiQ[0].length, DETAIL_BULAN_HEADER.length);
@@ -1277,37 +1280,43 @@ console.log('\n-- Z. A6: Buat Perubahan atomik, dan bentroknya dijawab 409 -----
 // tidak dipatok di sini ia bisa bergeser balik tanpa satu tes pun berubah.
 {
   const rt = bersihkanKomentar(readFileSync('app/api/kinerja/ssk/perubahan/route.ts', 'utf8'));
+  const kj = bersihkanKomentar(readFileSync('lib/data/kinerja.ts', 'utf8'));
+  // Logikanya pindah ke lib supaya bisa diuji di MySQL (CONCEPT-kinerja-versi-cetak §2.2);
+  // pemeriksaan urutan kunci memotong BADAN fungsinya, bukan seluruh berkas.
+  const iBuat = kj.indexOf('export async function buatVersiPerubahan(');
+  const badanBuat = kj.slice(iBuat, kj.indexOf('\n}\n', iBuat));
 
-  // Tidak boleh ada `sql` biasa di route ini: satu saja yang tertinggal di luar
+  // Tidak boleh ada `sql` biasa di jalur ini: satu saja yang tertinggal di luar
   // transaksi mengembalikan seluruh temuannya.
-  ok('Z1 tidak ada lagi kueri di luar transaksi', !/\bawait sql`/.test(rt));
+  ok('Z1 tidak ada lagi kueri di luar transaksi', !/\bawait sql`/.test(rt) && !/\bawait sql`/.test(badanBuat) && iBuat > 0);
   ok('Z2 route tidak lagi mengimpor sql', !/import \{[^}]*\bsql\b[^}]*\} from '@\/lib\/data\/db'/.test(rt));
+  ok('Z2b route memakai fungsi lib', /await buatVersiPerubahan\(tahun, sumber, from_versi_tipe, from_versi_seq, session\.userId\)/.test(rt));
 
   // L84: kuncinya perintah PERTAMA. Kalau `MAX(versi_seq)` dibaca lebih dulu,
   // snapshot baca-konsisten sudah lahir dan kuncinya cuma menjaga angka basi.
-  const iTx = rt.indexOf('withTransaction(async ({ tx, conn })');
-  const iKunci = rt.indexOf('kunciVersiSsk(tx', iTx);
-  const iMax = rt.indexOf('MAX(versi_seq)', iTx);
-  const iSumber = rt.indexOf('FROM kinerja_ssk', iMax);
-  ok('Z3 kunci diambil di dalam transaksi', iKunci > iTx);
+  const iTx = badanBuat.indexOf('withTransaction(async ({ tx, conn })');
+  const iKunci = badanBuat.indexOf('kunciVersiSsk(tx', iTx);
+  const iMax = badanBuat.indexOf('MAX(versi_seq)', iTx);
+  const iSumber = badanBuat.indexOf('FROM kinerja_ssk', iMax);
+  ok('Z3 kunci diambil di dalam transaksi', iKunci > iTx && iTx >= 0);
   ok('Z4 kunci mendahului MAX(versi_seq)', iKunci < iMax, `kunci ${iKunci}, max ${iMax}`);
   ok('Z5 baris sumber dibaca sesudah kunci juga', iKunci < iSumber);
 
   // FOR UPDATE pada baris SUMBERNYA: yang mengubah isinya adalah DELETE milik
   // saveSskBatch, dan DELETE itu yang harus menunggu.
-  ok('Z6 baris sumber dibaca FOR UPDATE', /versi_seq = \$\{from_versi_seq\}\s*\n\s*FOR UPDATE/.test(rt));
+  ok('Z6 baris sumber dibaca FOR UPDATE', /versi_seq = \$\{fromSeq\}\s*\n\s*FOR UPDATE/.test(badanBuat));
 
-  // Sumber kosong tetap 404 — sekarang lewat error yang dilempar dari dalam
-  // transaksi, jadi tidak ada lagi jalan keluar dini sebelum kunci diambil.
-  ok('Z7 sumber kosong tetap 404', /KinerjaVersiSumberKosongError/.test(rt) && /status: 404/.test(rt));
+  // Sumber kosong tetap 404 — lewat error yang dilempar dari dalam transaksi.
+  ok('Z7 sumber kosong tetap 404', /throw new KinerjaVersiSumberKosongError\(/.test(badanBuat)
+     && /e instanceof KinerjaVersiSumberKosongError[\s\S]{0,140}?status: 404/.test(rt));
   // ER_DUP_ENTRY = dua permintaan berbarengan, punya penjelasan sendiri.
-  ok('Z8 ER_DUP_ENTRY diterjemahkan 409', /ER_DUP_ENTRY/.test(rt) && /status: 409/.test(rt));
+  ok('Z8 ER_DUP_ENTRY diterjemahkan 409', /ER_DUP_ENTRY'\) throw new KinerjaVersiBentrokError\(newVersiSeq\)/.test(badanBuat)
+     && /e instanceof KinerjaVersiBentrokError[\s\S]{0,160}?status: 409/.test(rt));
   ok('Z9 bentroknya berkode supaya layar bisa menanganinya', rt.includes("code: 'VERSI_BENTROK'"));
   // Yang bukan dua-duanya WAJIB naik apa adanya — menelan galat tak dikenal
   // membuat kegagalan tulis terbaca seperti sukses.
-  ok('Z10 galat lain dilempar ulang', /\n\s*throw e;\n/.test(rt));
+  ok('Z10 galat lain dilempar ulang', /\n\s*throw e;\n/.test(rt) && /\n\s*throw e;\n/.test(badanBuat));
 
-  const kj = bersihkanKomentar(readFileSync('lib/data/kinerja.ts', 'utf8'));
   ok('Z11 entity kunci punya nama sendiri', kj.includes("KINERJA_VERSI_ENTITY = 'kinerja_versi_ssk'"));
   // L69-a: FOR UPDATE pada baris lock yang belum ada tidak mengunci apa pun.
   ok('Z12 kunci lewat acquireBludLock (INSERT IGNORE dulu)',
@@ -2051,9 +2060,12 @@ console.log('\n-- AF. Perbaikan hasil audit: label tidak boleh berbohong --');
   eq('AF17b dan daftar tanpa yang kosong memulangkan larik kosong',
      sumberTanpaVersi([{ sumber: 'GAJI', tipe: 'MURNI', seq: 0 }]).length, 0);
   const ctAF = readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8');
-  ok('AF18 keadaan kosong menyebut "tidak punya versi murni", bukan "isi RKO/SSK dulu"',
-     /tanpaVersi\.length > 0/.test(ctAF) && ctAF.includes('tidak punya versi murni'));
-  ok('AF19 dan menunjukkan jalan keluarnya', ctAF.includes('Pilih <strong>Versi Berlaku</strong>'));
+  // Sebabnya DUA (CONCEPT-kinerja-versi-cetak §2.6): sumber yang tidak dianggarkan di murni
+  // juga tanpa MURNI — kalimat yang cuma menyebut Reset menuduh orang menghapus sesuatu.
+  ok('AF18 keadaan kosong menyebut "tidak punya RKO murni" + kedua sebabnya, bukan "isi RKO/SSK dulu"',
+     /tanpaVersi\.length > 0/.test(ctAF) && ctAF.includes('tidak punya RKO murni')
+     && ctAF.includes('tidak dianggarkan di murni') && ctAF.includes('Pengaturan → Reset'));
+  ok('AF19 dan menunjukkan jalan keluarnya', ctAF.includes('pilih <strong>Versi Berlaku</strong>'));
 
   // Tooltip: kedua sumbu, dan lebar tanpa bilah gulir.
   ok('AF20 letak tooltip membalik ke bawah kalau ruang di atas tidak cukup',

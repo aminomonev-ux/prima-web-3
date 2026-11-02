@@ -513,10 +513,16 @@ export async function kunciVersiSsk(tx: TxSql, tahun: string, sumber: SumberSSK)
   await acquireBludLock(tx, KINERJA_VERSI_ENTITY, kinerjaVersiKey(tahun, sumber));
 }
 
-/** Versi sumber yang diminta tidak ada / kosong — diterjemahkan jadi 404 di route. */
+/**
+ * Versi asal "Buat Perubahan" kosong padahal tidak boleh — diterjemahkan jadi 404 di
+ * route. RKO yang kosong SELURUHNYA bukan kasus ini (lihat `buatVersiPerubahan`).
+ */
 export class KinerjaVersiSumberKosongError extends Error {
-  constructor(public tipe: string, public seq: number) {
-    super(`Versi source (${tipe} seq=${seq}) tidak ditemukan / kosong.`);
+  constructor(public tipe: string, public seq: number, sumber: SumberSSK, adaVersiLain: boolean) {
+    const versi = tipe === 'MURNI' ? 'MURNI' : `${tipe}-${seq}`;
+    super(adaVersiLain
+      ? `RKO ${sumber} ${versi} kosong, padahal ${sumber} sudah punya versi lain. Pilih versi terbarunya dulu, baru Buat Perubahan.`
+      : `RKO ${sumber} ${versi} kosong. Muat ulang daftar versinya, lalu Buat Perubahan dari MURNI.`);
     this.name = 'KinerjaVersiSumberKosongError';
   }
 }
@@ -530,13 +536,121 @@ export class KinerjaVersiBentrokError extends Error {
 }
 
 /**
+ * "Buat Perubahan": salin seluruh baris versi asal jadi PERUBAHAN-n, lalu kunci versi asal.
+ *
+ * `copied` 0 = sumber itu belum punya satu baris RKO pun di tahun itu (mis. OBAT yang
+ * tidak dianggarkan di murni). Versi baru tidak punya catatan sendiri — ia "ada" begitu
+ * punya baris — jadi tidak ada yang disalin maupun dikunci; PERUBAHAN-1 baru tercatat
+ * di Simpan pertama. docs/CONCEPT-kinerja-versi-cetak.md §2.
+ *
+ * A6: SELURUH pembacaan yang menentukan hasil ada DI DALAM transaksi, kunci (tahun,
+ * sumber) perintah pertama. Dulu `MAX(versi_seq)` dan baris sumbernya dibaca SEBELUM
+ * transaksi, jadi simpanan yang mendarat di sela itu ikut terkunci tapi TIDAK ikut
+ * tersalin. Rinciannya: docs/AUDIT-kinerja-2026-09-04.md §A6
+ */
+export async function buatVersiPerubahan(
+  tahun: string, sumber: SumberSSK,
+  fromTipe: 'MURNI' | 'PERUBAHAN', fromSeq: number, userId: number,
+): Promise<{ newVersiSeq: number; copied: number }> {
+  let newVersiSeq = 0;
+  let copied = 0;
+  try {
+    await withTransaction(async ({ tx, conn }) => {
+      // L84: snapshot baca-konsisten lahir di SELECT biasa yang pertama, jadi kunci
+      // yang diambil sesudah `MAX(versi_seq)` cuma menjaga angka yang sudah basi.
+      await kunciVersiSsk(tx, tahun, sumber);
+
+      const maxRows = await tx`
+        SELECT COALESCE(MAX(versi_seq), 0) AS max_seq
+        FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND sumber = ${sumber} AND versi_tipe = 'PERUBAHAN'
+      ` as { max_seq: unknown }[];
+      newVersiSeq = Number(maxRows[0]?.max_seq ?? 0) + 1;
+
+      // FOR UPDATE pada baris SUMBERNYA: yang mengubah isinya adalah DELETE milik
+      // `saveSskBatch`, dan DELETE itu yang harus menunggu.
+      const sourceRows = await tx`
+        SELECT id, canonical_id, uraian_ssk, uraian,
+               COALESCE(program,'') AS program, COALESCE(kegiatan,'') AS kegiatan, COALESCE(subkegiatan,'') AS subkegiatan,
+               pagu, months, months_pct, total, total_pct, urut, is_nullified
+        FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND sumber = ${sumber}
+          AND versi_tipe = ${fromTipe} AND versi_seq = ${fromSeq}
+        FOR UPDATE
+      ` as Record<string, unknown>[];
+
+      if (sourceRows.length === 0) {
+        const [semua] = await tx`
+          SELECT COUNT(*) AS n FROM kinerja_ssk WHERE tahun = ${tahun} AND sumber = ${sumber}
+        ` as { n: unknown }[];
+        const adaVersiLain = Number(semua?.n ?? 0) > 0;
+        // Versi asal kosong padahal versi lain berisi = pilihan di layar basi, atau MURNI
+        // dihapus lewat Reset sementara Perubahan-nya hidup. Dua-duanya salah alamat.
+        if (fromTipe !== 'MURNI' || adaVersiLain) {
+          throw new KinerjaVersiSumberKosongError(fromTipe, fromSeq, sumber, adaVersiLain);
+        }
+        return;
+      }
+      copied = sourceRows.length;
+
+      await tx`
+        UPDATE kinerja_ssk
+        SET locked_at = NOW()
+        WHERE tahun = ${tahun} AND sumber = ${sumber}
+          AND versi_tipe = ${fromTipe} AND versi_seq = ${fromSeq}
+          AND locked_at IS NULL
+      `;
+
+      const values = sourceRows.map(r => [
+        tahun,
+        sumber,
+        'PERUBAHAN',
+        newVersiSeq,
+        String(r.canonical_id ?? ''),
+        Number(r.id),         // parent_versi_id → baris versi asal langsung
+        Number(r.is_nullified ?? 0) ? 1 : 0,
+        String(r.uraian_ssk ?? ''),
+        String(r.uraian ?? ''),
+        String(r.program ?? ''),
+        String(r.kegiatan ?? ''),
+        String(r.subkegiatan ?? ''),
+        Number(r.pagu ?? 0),
+        typeof r.months === 'string' ? r.months : JSON.stringify(r.months ?? {}),
+        typeof r.months_pct === 'string' ? r.months_pct : JSON.stringify(r.months_pct ?? {}),
+        Number(r.total ?? 0),
+        Number(r.total_pct ?? 0),
+        Number(r.urut ?? 0),
+        userId,
+      ]);
+
+      await bulkInsert(
+        'kinerja_ssk',
+        [
+          'tahun','sumber','versi_tipe','versi_seq','canonical_id','parent_versi_id','is_nullified',
+          'uraian_ssk','uraian','program','kegiatan','subkegiatan',
+          'pagu','months','months_pct','total','total_pct','urut','updated_by',
+        ],
+        values,
+        conn,
+      );
+    });
+  } catch (e) {
+    // `uq_ks_canonical_versi` (migration-022) jaminan terakhir bila dua PERUBAHAN
+    // ber-versi_seq sama lahir bersamaan — kuncinya di atas sudah membuat ini nyaris mustahil.
+    if ((e as { code?: string }).code === 'ER_DUP_ENTRY') throw new KinerjaVersiBentrokError(newVersiSeq);
+    throw e;
+  }
+  return { newVersiSeq, copied };
+}
+
+/**
  * Simpan RKO ke versi yang sudah terkunci — biasanya "Buat Perubahan" orang lain
  * terselip saat layar ini diketik. Kelas sendiri supaya layar bisa menjelaskannya
  * dan menyegarkan daftar versi; galat polos cuma terbaca sebagai toast.
  */
 export class KinerjaVersiTerkunciError extends Error {
-  constructor(public tipe: string, public seq: number) {
-    super(`Versi ${tipe}-${seq} sudah dikunci, tidak bisa diubah.`);
+  constructor(public tipe: string, public seq: number, sebab?: string) {
+    super(`Versi ${tipe}-${seq} sudah dikunci, tidak bisa diubah.${sebab ? ` ${sebab}` : ''}`);
     this.name = 'KinerjaVersiTerkunciError';
   }
 }
@@ -699,6 +813,11 @@ export async function saveSskBatch(
   const lockKey = `${tahun}:${sumber}:${versiTipe}:${versiSeq}`;
 
   await withTransaction(async ({ tx, conn }) => {
+    // Kunci (tahun, sumber) PERTAMA — sama dengan "Buat Perubahan" — supaya pagar MURNI
+    // di bawah tidak terselip oleh Simpan pertama PERUBAHAN-1 yang berbarengan (L84).
+    // Urutannya kunciVersiSsk → blud_locks → baris, seragam dengan buatVersiPerubahan.
+    await kunciVersiSsk(tx, tahun, sumber);
+
     // V3-6: optimistic lock — assert expected version (FOR UPDATE) sebelum mutate, bump sesudah.
     if (expectedVersion !== undefined) {
       const vrows = await tx`
@@ -726,6 +845,19 @@ export async function saveSskBatch(
     ` as { n: unknown; locked_at: unknown }[];
     if (ada?.locked_at) {
       throw new KinerjaVersiTerkunciError(versiTipe, versiSeq);
+    }
+    // MURNI yang kosong tidak punya baris untuk dikunci "Buat Perubahan", dan MURNI yang
+    // dihapus lewat Reset lalu dipulihkan lahir lagi tanpa locked_at. Begitu sumber ini
+    // punya Perubahan, MURNI-nya sudah final — pagarnya di sini, bukan di daftar versi (L82).
+    if (versiTipe === 'MURNI') {
+      const [perubahan] = await tx`
+        SELECT COUNT(*) AS n FROM kinerja_ssk
+        WHERE tahun = ${tahun} AND sumber = ${sumber} AND versi_tipe = 'PERUBAHAN'
+      ` as { n: unknown }[];
+      if (Number(perubahan?.n ?? 0) > 0) {
+        throw new KinerjaVersiTerkunciError(versiTipe, versiSeq,
+          `${sumber} sudah punya versi Perubahan — simpan di versi itu.`);
+      }
     }
     pagarReplace(`SSK ${sumber} ${versiTipe}-${versiSeq}`, Number(ada?.n ?? 0), rows.length, force);
 

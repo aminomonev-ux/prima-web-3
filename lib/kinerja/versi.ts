@@ -214,6 +214,30 @@ export function imbuhanBerkasVersi(pilihan: PilihanVersiRekap): string {
  * salah, dan nama berkas yang salah tempat baru terlihat sesudah orang
  * mengunduhnya.
  */
+/** Versi acuan satu cetakan detail per sumber — `label` untuk kop, `terbaru` untuk nama berkas. */
+export interface VersiCetak { label: string; terbaru: boolean }
+
+/**
+ * Versi yang SEDANG dipakai layar Realisasi/Cetak, dibanding daftar versi sumbernya.
+ * Daftar kosong (belum dimuat / RKO kosong) dianggap terbaru — nama berkas tanpa
+ * sisipan memang berarti "versi berlaku", jadi tidak menyesatkan.
+ */
+export function versiCetak(
+  slot: SlotVersiSsk[], tipe: 'MURNI' | 'PERUBAHAN', seq: number,
+): VersiCetak {
+  const akhir = pickVersiAktif(slot);
+  return {
+    label: labelVersi(tipe, seq),
+    terbaru: !akhir || (akhir.versi_tipe === tipe && Number(akhir.versi_seq ?? 0) === seq),
+  };
+}
+
+/** Sisipan nama berkas detail — aturan `imbuhanBerkasVersi`: hanya yang BUKAN versi berlaku ditandai. */
+export function imbuhanBerkasVersiCetak(v: VersiCetak): string {
+  if (v.terbaru) return '';
+  return `${v.label.charAt(0)}${v.label.slice(1).toLowerCase()}-`;
+}
+
 export function namaBerkasRekap(
   pilihan: PilihanVersiRekap,
   namaBulan: string,

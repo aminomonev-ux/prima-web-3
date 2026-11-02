@@ -46,6 +46,8 @@ const SUMBER = 'GAJI'
 const KUNCI_REAL = `${TAHUN}:${SUMBER}`
 const KUNCI_SSK = `${TAHUN}:${SUMBER}:MURNI:0`
 const KUNCI_SSK_P1 = `${TAHUN}:${SUMBER}:PERUBAHAN:1`
+// saveSskBatch ikut mengambil kunci (tahun, sumber) sejak CONCEPT-kinerja-versi-cetak §2.4.
+const KUNCI_VERSI = `${TAHUN}:${SUMBER}`
 const BULAN = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des']
 
 let gagal = 0
@@ -68,6 +70,7 @@ async function bersihkan() {
   await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_realisasi' AND key_id = ${KUNCI_REAL}`
   await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_ssk' AND key_id = ${KUNCI_SSK}`
   await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_ssk' AND key_id = ${KUNCI_SSK_P1}`
+  await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_versi_ssk' AND key_id = ${KUNCI_VERSI}`
 }
 
 function bulanKosong() { return Object.fromEntries(BULAN.map(b => [b, 0])) }
@@ -319,7 +322,8 @@ try {
          + (SELECT COUNT(*) FROM kinerja_riwayat_simpan WHERE tahun = ${TAHUN})
          + (SELECT COUNT(*) FROM kinerja_bulan_tutup WHERE tahun = ${TAHUN})
          + (SELECT COUNT(*) FROM blud_locks WHERE (entity = 'kinerja_realisasi' AND key_id = ${KUNCI_REAL})
-                                               OR (entity = 'kinerja_ssk' AND key_id IN (${KUNCI_SSK}, ${KUNCI_SSK_P1}))) AS n
+                                               OR (entity = 'kinerja_ssk' AND key_id IN (${KUNCI_SSK}, ${KUNCI_SSK_P1}))
+                                              OR (entity = 'kinerja_versi_ssk' AND key_id = ${KUNCI_VERSI})) AS n
   `
   periksa('Kotak pasir 2099 bersih setelah uji', Number(sisa[0]?.n ?? -1) === 0)
 }

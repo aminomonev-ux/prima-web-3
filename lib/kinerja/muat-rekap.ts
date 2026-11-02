@@ -49,8 +49,9 @@ export async function muatBahanRekap(tahun: string, pilihan: PilihanVersiRekap, 
         catatGagal(s, dv);
         const slot = dv.ok ? ((dv as { items?: SlotVersiSsk[] }).items ?? []) : [];
         const diminta = versiUntukPilihan(slot, pilihan);
-        // Sumber punya SSK tapi tidak punya versi murni (MURNI-nya dihapus lewat Reset;
-        // `parent_versi_id` ber-ON DELETE SET NULL sehingga PERUBAHAN-nya tetap hidup). TIDAK
+        // Sumber punya SSK tapi tidak punya versi murni — tidak dianggarkan di murni (Perubahan
+        // lahir dari RKO kosong), atau MURNI-nya dihapus lewat Reset (`parent_versi_id`
+        // ber-ON DELETE SET NULL sehingga PERUBAHAN-nya tetap hidup). TIDAK
         // dimuat — jatuh ke versi berlaku akan membuat layar berbunyi "murni" sambil
         // menampilkan angka perubahan. Disebut apa adanya lewat `tipe: null`.
         if (!diminta) {

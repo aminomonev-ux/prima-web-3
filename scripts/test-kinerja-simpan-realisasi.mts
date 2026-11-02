@@ -283,7 +283,8 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   ok('G34 Shell: pemuat mengisi dasar bersama barisnya', urut(badan(KC, 'const fetchRealisasi = useCallback('), 'setRealisasiRows(h.rows);', 'setRealDasar(h.rows);', 'setRealTertutup(h.tertutup);')
     && urut(badan(KC, 'const fetchSsk = useCallback('), 'setSskRows(h.rows);', 'setSskDasar(h.rows);', 'setSskVersion(h.version);'))
   ok('G35 Shell: pergantian sumber & versi di dalam tab lewat penjaga', KC.includes('setRealisasiSumber={gantiSumberRealisasi}')
-    && KC.includes('setActiveSumber={gantiSumberRko}') && (KC.match(/pilihVersi=\{pilihVersi\}/g) ?? []).length === 2)
+    // Tiga: RKO, Realisasi, dan Cetak (pemilih versi view Detail — CONCEPT-kinerja-versi-cetak §1.2).
+    && KC.includes('setActiveSumber={gantiSumberRko}') && (KC.match(/pilihVersi=\{pilihVersi\}/g) ?? []).length === 3)
   ok('G36 Shell: ganti tahun lewat penjaga', urut(badan(KC, 'const handleTahunChange = useCallback('), 'guardPending(() => {', 'setTahun(t);'))
   ok('G37 Shell: "lanjutkan" membuang isian (bukan cuma menutup dialog)', urut(badan(KC, 'const guardPending = useCallback('), 'buangRef.current(); action();'))
   ok('G38 Shell: belum tersimpan DIHITUNG dari dasar, bukan bendera', KC.includes('bandingRealisasi(realDasar, realisasiRows)') && KC.includes('jumlahSskBerubah(sskDasar, sskRows)'))

@@ -12,6 +12,7 @@ import { InputNominal } from '@/components/ui/input-nominal';
 import type { SumberSSK, RealRow, SskRow, RealInputField } from '../_types';
 import { SUMBER_LIST, SSK_THEME, MONTH_SHORT, MONTH_LABELS, recalcAllRealisasi } from '../_utils';
 import { exportRealisasiExcel, exportRealisasiPdf } from '../_exports';
+import { versiCetak } from '@/lib/kinerja/versi';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
@@ -29,7 +30,8 @@ import {
 import { alasanTolakTutup, alasanTolakBuka, type BulanTertutup } from '@/lib/kinerja/tutup-bulan';
 import ImportRealisasiModal from '@/components/kinerja/ImportRealisasiModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
-import VersiPickerKinerja, { type VersiKinerja, type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
+import VersiPickerKinerja, { type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
+import { useDaftarVersiSsk } from '@/components/kinerja/useDaftarVersiSsk';
 import { useLampir, type LampirRealisasiData } from '@/lib/sentinel/lampir-store';
 import { uiTheme } from '@/lib/theme';
 
@@ -91,9 +93,8 @@ export default function RealisasiTab({
   const alasanBuka = alasanTolakBuka([...tertutupSet], realisasiBulan);
   // Bulan tertutup hanya-baca di layar juga — pagarnya tetap di server (L82).
   const bisaSunting = canEdit && !bulanIniTertutup;
-  // Refactor Versi: list versi yang ada (untuk pill chip)
-  const [versiItems,   setVersiItems]   = useState<VersiKinerja[]>([]);
-  const [versiLoading, setVersiLoading] = useState(false);
+  // Refactor Versi: list versi yang ada (untuk pill chip) — pemuat yang sama dengan Cetak.
+  const { items: versiItems, loading: versiLoading } = useDaftarVersiSsk(tahun, realisasiSumber);
   const [showImport,   setShowImport]   = useState(false);
   const [showRiwayat,  setShowRiwayat]  = useState(false);
   // §23 Lampirkan: hasil parse dari chat Rima (RAM store) → preload modal tanpa unggah ulang.
@@ -165,15 +166,6 @@ export default function RealisasiTab({
     }
     onImportConsumed?.();
   }, [autoOpenImport, canEdit, onImportConsumed, lampir]);
-  useEffect(() => {
-    let alive = true;
-    queueMicrotask(() => { if (alive) setVersiLoading(true); });
-    fetchJson<unknown>(`/api/kinerja/ssk/versi-list?tahun=${tahun}&sumber=${realisasiSumber}`)
-      .then(d => { if (alive && d.ok) setVersiItems(((d as unknown as { items: VersiKinerja[] }).items) ?? []); })
-      .finally(() => alive && setVersiLoading(false));
-    return () => { alive = false; };
-  }, [tahun, realisasiSumber]);
-
   // Versi locked → realisasi yang mengacu ke versi itu jadi read-only (snapshot historis).
   // Input realisasi baru hanya boleh saat acuan = versi aktif terbaru (yg belum locked).
   const activeVersiItem = versiItems.find(i => i.versi_tipe === sskVersi.tipe && i.versi_seq === sskVersi.seq);
@@ -480,8 +472,9 @@ export default function RealisasiTab({
   // Layar ini menyunting SATU bulan, jadi unduhannya bulan itu juga — dulu ia
   // mengekspor setahun sementara tabel di bawahnya cuma memperlihatkan sebulan,
   // dan tidak ada apa pun di berkasnya yang menyebutkan bedanya.
-  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: [realisasiBulan] });
-  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: [realisasiBulan] });
+  const versiUnduh = versiCetak(versiItems, sskVersi.tipe, sskVersi.seq);
+  const doExportRealisasiExcel = () => exportRealisasiExcel({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: [realisasiBulan], versi: versiUnduh });
+  const doExportRealisasiPdf   = () => exportRealisasiPdf  ({ rows: realisasiRows, sumber: realisasiSumber, tahun, bulan: [realisasiBulan], versi: versiUnduh });
 
   // ─── Render ──────────────────────────────────────────────────────────────
   const bulanRowsWithIdx = realisasiRows

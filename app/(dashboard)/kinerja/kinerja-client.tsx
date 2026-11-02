@@ -885,6 +885,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   onFetchAll={muatRekap}
                   isLight={isLight}
                   sskVersi={sskVersi}
+                  pilihVersi={pilihVersi}
                   sumberDinolkan={sumberDinolkan}
                   pilihanVersi={pilihanVersi}
                   onGantiPilihanVersi={gantiPilihanVersi}
