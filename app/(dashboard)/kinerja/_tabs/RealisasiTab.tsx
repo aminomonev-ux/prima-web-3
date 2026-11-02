@@ -17,6 +17,9 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
+import DeleteButton from '@/components/ui/DeleteButton';
+import DeleteIcon from '@/components/ui/DeleteIcon';
+import { alasanTakBisaHapus, itemTakTerpakai, buangItemRealisasi } from '@/lib/kinerja/hapus-realisasi';
 import { Wand2, Save, Upload, Equal, History, BarChart3, Lock, LockOpen, Coins, LineChart } from 'lucide-react';
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
 import { laporanYatim } from '@/lib/kinerja/rekap';
@@ -525,6 +528,37 @@ export default function RealisasiTab({
   const cidAktif = new Set(petaHidrasi(sskRows).keys());
   const yatim = laporanYatim(realisasiRows, cidAktif, 12);
 
+  // Hapus hanya untuk item yang benar-benar tidak dipakai — aturannya di lib/kinerja/hapus-realisasi.ts.
+  // `cidRko` SEMUA baris RKO acuan, termasuk yang dinol-kan (beda dengan `cidAktif` di atas).
+  const konteksHapus = useMemo(() => ({
+    cidRko: new Set(sskRows.map(s => s.canonical_id || '').filter(Boolean)),
+    acuanTerbaru: !versiLocked,
+  }), [sskRows, versiLocked]);
+  const itemHapus = useMemo(() => itemTakTerpakai(realisasiRows, konteksHapus), [realisasiRows, konteksHapus]);
+
+  async function hapusItem(cids: string[]) {
+    const pilih = new Set(cids);
+    const kena = realisasiRows.filter(r => pilih.has(r.ssk_canonical_id || ''));
+    if (kena.length === 0) return;
+    const nama = [...new Set(kena.map(r => r.keterangan || r.uraian_ssk || '(tanpa nama)'))];
+    const ok = await confirmDialog({
+      title: cids.length === 1 ? `Hapus "${nama[0]}"` : `Hapus ${cids.length} item tak terpakai`,
+      message: `${kena.length} baris (semua bulan) dihapus dari Realisasi ${realisasiSumber} ${tahun}: `
+        + `item tidak ada di RKO ${versiLabel} dan realisasinya nol di semua bulan.`
+        + (cids.length > 1
+          ? '\n' + nama.slice(0, 6).map(n => `• ${n}`).join('\n') + (nama.length > 6 ? `\n• … dan ${nama.length - 6} lainnya` : '')
+          : '')
+        + '\n\nBelum tersimpan sampai Anda menekan Simpan Semua.',
+      variant: 'danger',
+      confirmLabel: 'Hapus',
+    });
+    if (!ok) return;
+    // Diperiksa ulang pada isi TERBARU: yang sempat berubah selama dialog terbuka tidak ikut.
+    setRealisasiRows(p => recalcAllRealisasi(buangItemRealisasi(p,
+      new Set(itemTakTerpakai(p, konteksHapus).filter(c => pilih.has(c))))));
+    toast.success(`${cids.length} item (${kena.length} baris) dihapus dari layar — tekan Simpan Semua untuk menyimpan.`);
+  }
+
   const inpBase: React.CSSProperties = {
     border:`1px solid ${cInputBorder}`, borderRadius:'5px', padding:'3px 6px',
     fontSize:'12px', color:cTextPrimary, background:cSurface,
@@ -623,6 +657,14 @@ export default function RealisasiTab({
           <strong>{yatim.jumlahItem} rekening tidak ada di SSK {versiLabel}</strong> ({yatim.jumlahBaris} baris,
           realisasi keuangan {fmtNum(yatim.nominal)}). Pagu &amp; targetnya 0 sehingga persennya tidak bisa dihitung, dan
           baris ini <strong>tidak ikut</strong> dijumlah di rekap Cetak. {yatim.contoh.join(' · ')}
+          {canEdit && itemHapus.length > 0 && (
+            <div style={{ marginTop:'8px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+              <span>{itemHapus.length} di antaranya sudah dihapus dari RKO dan realisasinya nol di semua bulan.</span>
+              <PrimaButton variant="danger" iconLeft={<DeleteIcon size={13} />} onClick={() => hapusItem(itemHapus)}>
+                Hapus {itemHapus.length} item tak terpakai
+              </PrimaButton>
+            </div>
+          )}
         </div>
       )}
 
@@ -810,12 +852,14 @@ export default function RealisasiTab({
                   <td style={{ ...roCell, color: row.deviasi_keuangan>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{row.deviasi_keuangan.toFixed(2)}%</td>
                   {canEdit && (
                     <td style={{ padding:'5px 8px', borderBottom:cBorderHair, textAlign:'center', position:'sticky', right:0, zIndex:1, background: ri%2===0 ? cRowEven : cRowOdd }}>
-                      <Tip label="Hapus realisasi dimatikan untuk menjaga integritas histori. Untuk menonaktifkan item, Nol-kan target di SSK Perubahan."><button
-                        disabled
-                        onClick={() => toast.info('Hapus dimatikan. Nol-kan target SSK Perubahan kalau ingin menonaktifkan item.')}
-                        style={{ padding:'3px 10px', borderRadius:'6px', border:'1.5px solid rgba(226,75,74,.35)', background:'rgba(226,75,74,.06)', cursor:'not-allowed', fontSize:'12px', fontWeight:700, color: isLight?'#B91C1C':'#FCA5A5', opacity:.4 }}>
-                        🗑
-                      </button></Tip>
+                      {(() => {
+                        const alasan = alasanTakBisaHapus(realisasiRows, row.ssk_canonical_id || '', konteksHapus);
+                        return (
+                          <Tip label={alasan ?? `Hapus "${row.keterangan || 'item ini'}" dari Realisasi — semua bulan`}>
+                            <DeleteButton disabled={!!alasan} onClick={() => hapusItem([row.ssk_canonical_id || ''])} />
+                          </Tip>
+                        );
+                      })()}
                     </td>
                   )}
                 </tr>
