@@ -21,7 +21,9 @@ import { SUMBER_LIST, emptyRekForm } from '../_utils';
 import { exportRekeningExcel } from '../_exports';
 import ImportRekeningModal from '@/components/kinerja/ImportRekeningModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
+import OpsiDiLuarMaster from '@/components/kinerja/OpsiDiLuarMaster';
 import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
+import { cocokInduk, namaUnik } from '@/lib/kinerja/master-nama';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -79,6 +81,15 @@ export default function RekeningTab({
     display:'block', fontSize:'11px', fontWeight:700, color:cTextSubAlt,
     textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'5px',
   };
+
+  // Pilihan berantai lewat SATU aturan (`cocokInduk`, sama dengan tab Master). Dulu Kegiatan
+  // memeriksa baris PERTAMA yang bernama sama, jadi kegiatan senama di program lain ikut
+  // lenyap atau ikut tampil.
+  const induk = { program: rekForm.program, kegiatan: rekForm.kegiatan, subkegiatan: rekForm.subkegiatan };
+  const opsiProgram   = [...new Set(masterOpts.program)];
+  const opsiKegiatan  = namaUnik(masterOpts.kegiatanRows.filter(r => cocokInduk(r, { program: induk.program })));
+  const opsiSub       = namaUnik(masterOpts.subkegiatanRows.filter(r => cocokInduk(r, { program: induk.program, kegiatan: induk.kegiatan })));
+  const opsiUraianSsk = namaUnik(masterOpts.sskRows.filter(r => cocokInduk(r, induk)));
 
   function addRekRow() {
     if (!rekForm.uraian.trim()) { toast.error('Uraian wajib diisi'); return; }
@@ -185,7 +196,8 @@ export default function RekeningTab({
               <label style={lblStyle}>Program</label>
               <select value={rekForm.program} onChange={e => setRekForm(p => ({ ...p, program: e.target.value, kegiatan: '', subkegiatan: '', uraian_ssk: '' }))} style={selStyle}>
                 <option value="">-- Pilih Program --</option>
-                {masterOpts.program.map(v => <option key={v} value={v}>{v}</option>)}
+                {opsiProgram.map(v => <option key={v} value={v}>{v}</option>)}
+                <OpsiDiLuarMaster nilai={rekForm.program} opsi={opsiProgram} />
               </select>
             </div>
             <div>
@@ -197,13 +209,8 @@ export default function RekeningTab({
                 style={{ ...selStyle, opacity: rekForm.program ? 1 : 0.5, cursor: rekForm.program ? 'pointer' : 'not-allowed' }}
               >
                 <option value="">{rekForm.program ? '-- Pilih Kegiatan --' : '-- Pilih Program dulu --'}</option>
-                {masterOpts.kegiatan
-                  .filter(v => {
-                    const found = masterOpts.kegiatanRows.find(r => r.nama === v);
-                    if (found && found.program_ref) return found.program_ref === rekForm.program;
-                    return true;
-                  })
-                  .map(v => <option key={v} value={v}>{v}</option>)}
+                {opsiKegiatan.map(v => <option key={v} value={v}>{v}</option>)}
+                <OpsiDiLuarMaster nilai={rekForm.kegiatan} opsi={opsiKegiatan} />
               </select>
             </div>
             <div>
@@ -215,13 +222,8 @@ export default function RekeningTab({
                 style={{ ...selStyle, opacity: rekForm.kegiatan ? 1 : 0.5, cursor: rekForm.kegiatan ? 'pointer' : 'not-allowed' }}
               >
                 <option value="">{rekForm.kegiatan ? '-- Pilih Sub Kegiatan --' : '-- Pilih Kegiatan dulu --'}</option>
-                {masterOpts.subkegiatanRows
-                  .filter(r => {
-                    if (r.kegiatan_ref && r.program_ref) return r.kegiatan_ref === rekForm.kegiatan && r.program_ref === rekForm.program;
-                    if (r.kegiatan_ref) return r.kegiatan_ref === rekForm.kegiatan;
-                    return true;
-                  })
-                  .map(r => <option key={r.nama} value={r.nama}>{r.nama}</option>)}
+                {opsiSub.map(v => <option key={v} value={v}>{v}</option>)}
+                <OpsiDiLuarMaster nilai={rekForm.subkegiatan} opsi={opsiSub} />
               </select>
             </div>
           </div>
@@ -236,14 +238,8 @@ export default function RekeningTab({
               style={{ ...selStyle, opacity: rekForm.subkegiatan ? 1 : 0.5, cursor: rekForm.subkegiatan ? 'pointer' : 'not-allowed' }}
             >
               <option value="">{rekForm.subkegiatan ? '-- Pilih Uraian SSK --' : '-- Pilih Sub Kegiatan dulu --'}</option>
-              {masterOpts.sskRows
-                .filter(r => {
-                  if (r.subkegiatan_ref && r.kegiatan_ref && r.program_ref)
-                    return r.subkegiatan_ref === rekForm.subkegiatan && r.kegiatan_ref === rekForm.kegiatan && r.program_ref === rekForm.program;
-                  if (r.subkegiatan_ref) return r.subkegiatan_ref === rekForm.subkegiatan;
-                  return true;
-                })
-                .map(r => <option key={r.nama} value={r.nama}>{r.nama}</option>)}
+              {opsiUraianSsk.map(v => <option key={v} value={v}>{v}</option>)}
+              <OpsiDiLuarMaster nilai={rekForm.uraian_ssk} opsi={opsiUraianSsk} />
             </select>
           </div>
 

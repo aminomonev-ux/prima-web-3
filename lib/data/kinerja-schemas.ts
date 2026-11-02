@@ -176,10 +176,33 @@ export const MasterCreateBodySchema = z.object({
 });
 
 /**
- * PUT /api/kinerja/master/[id] — Update nama master.
+ * PUT /api/kinerja/master/[id] — ganti nama / pindah induk / gabung, ikut menjalar ke
+ * Rekening, RKO, Realisasi. Kolom induk yang tidak dikirim = induk lama dipertahankan
+ * (form edit dulu menampilkan pilihan induk tapi hanya mengirim `nama`, jadi pilihan
+ * induk dibuang diam-diam). `dry` = pratinjau dialog; `gabung` = menggabungkan ke entri
+ * yang sudah ada di jalur tujuan harus dinyatakan.
  */
+const RefMasterSchema = z.string().trim().max(500).nullable().optional();
 export const MasterUpdateBodySchema = z.object({
-  nama: z.string().trim().min(1, 'Nama wajib diisi').max(500),
+  nama:            z.string().trim().min(1, 'Nama wajib diisi').max(500),
+  program_ref:     RefMasterSchema,
+  kegiatan_ref:    RefMasterSchema,
+  subkegiatan_ref: RefMasterSchema,
+  dry:             z.boolean().optional().default(false),
+  gabung:          z.boolean().optional().default(false),
+});
+
+/**
+ * Menghapus entri Master — termasuk lewat Gabungkan & Rapikan Bintang yang membuang
+ * entri kembar — hanya SUPER_ADMIN/ADMIN (lebih ketat dari akses modul).
+ */
+export const MASTER_HAPUS_ROLES: readonly string[] = ['SUPER_ADMIN', 'ADMIN'];
+export const bolehHapusMaster = (role: string) => MASTER_HAPUS_ROLES.includes(role);
+
+/** POST /api/kinerja/master/rapikan & /lengkapi — `dry` = pratinjau untuk dialog. */
+export const MasterTahunAksiBodySchema = z.object({
+  tahun: TahunSchema,
+  dry:   z.boolean().optional().default(false),
 });
 
 /**

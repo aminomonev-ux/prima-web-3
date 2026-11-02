@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { safeInt } from '@/lib/data/db';
+import { deleteMasterRow, KinerjaMasterTidakAdaError, KinerjaMasterPunyaAnakError } from '@/lib/data/kinerja';
 import {
-  updateMasterRow, deleteMasterRow,
-  KinerjaMasterTidakAdaError, KinerjaMasterPunyaAnakError, KinerjaMasterNamaKembarError,
-} from '@/lib/data/kinerja';
+  ubahMasterMenjalar, KinerjaMasterTolakError, KinerjaMasterPerluGabungError,
+} from '@/lib/data/kinerja-master-ubah';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { isKinerjaRole, kinerjaRateLimit, MasterUpdateBodySchema } from '@/lib/data/kinerja-schemas';
+import { isKinerjaRole, kinerjaRateLimit, MasterUpdateBodySchema, bolehHapusMaster } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../../_guard';
-
-const DELETE_ONLY_ROLES = ['SUPER_ADMIN', 'ADMIN']; // hapus master hanya super/admin (lebih ketat dari KINERJA_ALLOWED_ROLES)
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -29,40 +27,47 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const raw = await req.json().catch(() => null);
   const parsed = MasterUpdateBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { nama } = parsed.data;
+  const { dry, gabung, ...masukan } = parsed.data;
 
   let hasil;
   try {
-    hasil = await updateMasterRow(id, nama);
+    hasil = await ubahMasterMenjalar(id, masukan, {
+      userId: session.userId, dry, gabung, bolehGabung: bolehHapusMaster(session.role),
+    });
   } catch (e) {
     // T12: id yang tidak ada dulu tetap dijawab ok:true — pemanggil tidak pernah
     // tahu perubahannya tidak mendarat di baris mana pun.
     if (e instanceof KinerjaMasterTidakAdaError) {
       return NextResponse.json({ ok: false, message: e.message }, { status: 404 });
     }
-    // A3: kaskadenya akan nyasar ke anak baris lain. Pesannya diteruskan apa
-    // adanya — ia yang menjelaskan apa yang harus dibereskan dulu, bentuk yang
-    // sama dengan KinerjaMasterPunyaAnakError di DELETE.
-    if (e instanceof KinerjaMasterNamaKembarError) {
-      return NextResponse.json({ ok: false, code: 'NAMA_KEMBAR', message: e.message }, { status: 400 });
+    if (e instanceof KinerjaMasterTolakError) {
+      return NextResponse.json({ ok: false, code: 'MASTER_DITOLAK', message: e.message }, { status: 400 });
+    }
+    if (e instanceof KinerjaMasterPerluGabungError) {
+      return NextResponse.json({ ok: false, code: 'PERLU_GABUNG', message: e.message, tujuan: e.tujuan }, { status: 409 });
     }
     throw e;
   }
 
-  await writeAuditLog({
-    req,
-    eventType: 'KINERJA_SAVE_MASTER',
-    userId:    session.userId,
-    username:  session.username,
-    // A3: nama LAMA ikut dicatat, dan berapa anak yang ikut dipindah. Tanpa nama
-    // lamanya, jejaknya tidak bisa dibaca ulang — "id=42 jadi X" tidak memberi
-    // tahu X itu tadinya apa, dan justru itu yang dicari saat ada yang mengeluh
-    // cabangnya hilang.
-    detail:    `Update master ${hasil.tipe} id=${id}: "${hasil.nama_lama}" -> "${nama}"`
-      + (hasil.anak_dipindah > 0 ? ` (${hasil.anak_dipindah} baris di bawahnya ikut dipindah)` : ''),
-  });
+  if (!dry && hasil.berubah) {
+    const induk = (j: (string | null)[]) => (j.length ? ` [${j.map(v => v ?? '-').join(' › ')}]` : '');
+    const d = hasil.data;
+    await writeAuditLog({
+      req,
+      eventType: 'KINERJA_SAVE_MASTER',
+      userId:    session.userId,
+      username:  session.username,
+      // Nama & induk LAMA ikut dicatat — "id=42 jadi X" tidak memberi tahu X tadinya apa.
+      detail:    `${hasil.gabung_ke ? 'Gabung' : 'Ubah'} master ${hasil.tipe} id=${id}: `
+        + `"${hasil.nama_lama}"${induk(hasil.induk_lama)} -> "${hasil.nama_baru}"${induk(hasil.induk_baru)}`
+        + (hasil.anak ? `; ${hasil.anak} entri di bawahnya ikut` : '')
+        + (hasil.dihapus ? `; ${hasil.dihapus} entri kembar dihapus` : '')
+        + `; ikut berganti nama: rekening ${d.rekening}, RKO ${d.rko.reduce((n, v) => n + v.baris, 0)}`
+        + ` (${d.rko.map(v => `${v.sumber} ${v.versi_tipe}-${v.versi_seq}`).join(', ') || '-'}), realisasi ${d.realisasi}`,
+    });
+  }
 
-  return NextResponse.json({ ok: true, anak_dipindah: hasil.anak_dipindah });
+  return NextResponse.json({ ok: true, ...hasil });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -70,7 +75,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
   // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
   const mati = await kinerjaMati(session.role); if (mati) return mati;
-  if (!DELETE_ONLY_ROLES.includes(session.role)) {
+  if (!bolehHapusMaster(session.role)) {
     return NextResponse.json({ ok: false, message: 'Hanya SUPER_ADMIN/ADMIN yang dapat menghapus master' }, { status: 403 });
   }
   const limited = await kinerjaRateLimit(session.userId, 'delete-master', 10); if (limited) return limited;

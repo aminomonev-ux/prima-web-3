@@ -108,6 +108,8 @@ export default function RiwayatSimpanModal({
       title:   'Muat simpanan lama ke layar?',
       message: `Simpanan ${waktuTampil(it.disimpan_pada)} (${it.jumlah_baris} baris) akan menggantikan `
         + `${barisSekarang} baris yang sekarang di layar.\n\n`
+        + 'Nama program/kegiatan/sub kegiatan ikut seperti saat simpanan itu dibuat — kalau Master '
+        + 'sudah diganti namanya sesudahnya, nama lama ikut kembali.\n\n'
         + 'Belum ada yang tersimpan sampai Anda menekan Simpan.',
       confirmLabel: 'Muat ke layar',
       cancelLabel:  'Batal',

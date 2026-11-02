@@ -1,69 +1,54 @@
-// lib/kinerja/master-nama.ts — aturan ganti nama baris Master E-Anggaran.
+// lib/kinerja/master-nama.ts — aturan nama & induk baris Master E-Anggaran.
 //
-// PURE: tidak menyentuh DB — supaya aturannya bisa diuji perilakunya.
+// PURE: tidak menyentuh DB — dipakai server DAN layar (Master, Rekening).
 //
-// MASALAHNYA (A3): hierarki master TIDAK disambung foreign key. Ia disambung
-// TEKS NAMA — `kinerja_master.program_ref` / `.kegiatan_ref` / `.subkegiatan_ref`
-// berisi NAMA induknya, bukan id-nya. Jadi mengganti nama induk membuat setiap
-// anak menunjuk nama yang sudah tidak ada, dan MySQL tidak punya cara
-// menolaknya sendiri. Jalur HAPUS sudah menyadari ini dan berpagar
-// (`KinerjaMasterPunyaAnakError`); jalur ganti nama tidak punya apa pun.
-//
-// Konsep & contoh kasusnya: docs/AUDIT-kinerja-2026-09-04.md §A3
+// Hierarki master TIDAK disambung foreign key, melainkan TEKS NAMA:
+// `kinerja_master.program_ref` / `.kegiatan_ref` / `.subkegiatan_ref` berisi NAMA
+// induknya. Ganti nama / pindah induk beserta jalarannya ke Rekening, RKO, dan
+// Realisasi ada di `master-ubah.ts`.
 
 import type { MasterTipe } from '@/lib/data/kinerja';
 
 /**
- * Tipe yang namanya dipikul anak lewat kolom `*_ref`.
- *
- * `uraian_ssk` dan `sumber_anggaran` daun — tidak ada yang menunjuk namanya di
- * `kinerja_master`, jadi ganti namanya tidak memutus apa pun. (Kolom
- * `kinerja_ssk.uraian_ssk` dan `kinerja_rekening.*` memang memuat teksnya, tapi
- * itu SALINAN hasil Inject Rekening — bukan penunjuk hidup. Keputusan yang sama
- * sudah ditulis di komentar `deleteMasterRow`, dan tidak diubah di sini.)
+ * Tipe yang namanya dipikul anak lewat kolom `*_ref`. `uraian_ssk` dan
+ * `sumber_anggaran` daun — tidak ada baris master yang menunjuk namanya.
  */
 export function punyaAnak(tipe: MasterTipe): boolean {
   return tipe === 'program' || tipe === 'kegiatan' || tipe === 'subkegiatan';
 }
 
 /**
- * Kaskade tidak boleh jalan kalau namanya dipikul lebih dari satu baris.
- *
- * Nama TIDAK unik (tidak ada `UNIQUE` di kolom `nama`). Kalau ada saudara yang
- * memikul nama yang sama, `UPDATE … SET program_ref = 'B' WHERE program_ref = 'A'`
- * akan ikut memindahkan anak milik saudara itu — dan itu kerusakan yang lebih
- * sulit dilacak daripada yang sedang diperbaiki.
- *
- * Pertanyaan yang sama sudah dihitung `deleteMasterRow` lewat kolom `sisa`.
- *
- * @param sisaNamaLama saudara setipe yang masih memikul nama LAMA
- * @param sisaNamaBaru saudara setipe yang sudah memikul nama BARU
+ * Bintang penanda tingkat di ujung nama — format matriks Renaksi resmi (`*` tujuan …
+ * `*****` sub kegiatan) yang ikut tersimpan lewat Init Renaksi. Bukan bagian nama:
+ * "PROGRAM X ***" dan "PROGRAM X" entri yang sama, dan memperlakukannya berbeda
+ * memecah satu program jadi dua kelompok di Cetak Rekap.
  */
-export type AlasanTolakGantiNama = 'lama-kembar' | 'baru-kembar' | null;
-
-export function alasanTolakGantiNama(
-  anak: number, sisaNamaLama: number, sisaNamaBaru: number,
-): AlasanTolakGantiNama {
-  // Tanpa anak tidak ada yang dipindahkan, jadi tidak ada yang bisa nyasar.
-  // Menolaknya di sini cuma menghalangi pembetulan salah ketik yang tidak
-  // merusak apa pun.
-  if (anak === 0) return null;
-  if (sisaNamaLama > 0) return 'lama-kembar';
-  // Sesudah ganti nama, anak baris ini dan anak saudara bernama-baru itu
-  // menunjuk teks yang sama dan tidak bisa dibedakan lagi. Ambiguitas yang
-  // KITA ciptakan, bukan yang sudah ada.
-  if (sisaNamaBaru > 0) return 'baru-kembar';
-  return null;
+export function buangBintang(nama: string): string {
+  return nama.replace(/[\s*]+$/u, '').trim();
 }
 
-export function pesanTolakGantiNama(
-  alasan: Exclude<AlasanTolakGantiNama, null>, namaLama: string, namaBaru: string, anak: number,
-): string {
-  if (alasan === 'lama-kembar') {
-    return `Nama "${namaLama}" dipakai lebih dari satu baris master, sedangkan ${anak} baris `
-      + 'di bawahnya menempel ke NAMA itu — menggantinya akan ikut memindahkan anak milik baris '
-      + 'yang lain. Samakan dulu penamaannya, atau pindahkan anaknya satu per satu.';
-  }
-  return `Sudah ada baris master lain bernama "${namaBaru}". Kalau baris ini ikut memakainya, `
-    + `${anak} baris di bawahnya tidak bisa lagi dibedakan dari anak baris itu. Pakai nama lain.`;
+export interface IndukMaster {
+  program_ref: string | null;
+  kegiatan_ref: string | null;
+  subkegiatan_ref: string | null;
+}
+
+/**
+ * Entri tampil di bawah induk terpilih bila setiap kolom induknya KOSONG atau SAMA.
+ * Satu aturan untuk pilihan berantai di tab Master & Rekening, pagar pindah induk,
+ * dan "Lengkapi Master" (L78). Pilihan Kegiatan di tab Rekening dulu memeriksa baris
+ * PERTAMA yang bernama sama, jadi kegiatan senama di program lain ikut hilang/tampil.
+ */
+export function cocokInduk(
+  e: IndukMaster,
+  induk: { program?: string | null; kegiatan?: string | null; subkegiatan?: string | null },
+): boolean {
+  const pas = (ref: string | null, v: string | null | undefined) => !v || !ref || ref === v;
+  return pas(e.program_ref, induk.program) && pas(e.kegiatan_ref, induk.kegiatan)
+    && pas(e.subkegiatan_ref, induk.subkegiatan);
+}
+
+/** Nama unik dengan urutan kemunculan — dua entri senama di induk berbeda cukup satu pilihan. */
+export function namaUnik(rows: readonly { nama: string }[]): string[] {
+  return [...new Set(rows.map(r => r.nama))];
 }

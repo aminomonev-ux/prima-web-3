@@ -13,16 +13,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { useAbortableEffect } from '@/lib/shared/hooks';
-import { Pencil, Plus, Save, Download, AlertTriangle, X, Upload } from 'lucide-react';
+import { Pencil, Plus, Save, Download, AlertTriangle, X, Upload, Eraser, ListPlus } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import ImportMasterModal from '@/components/kinerja/ImportMasterModal';
+import OpsiDiLuarMaster from '@/components/kinerja/OpsiDiLuarMaster';
 import { exportMasterExcel } from '../_exports';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import type { MasterTipe, MasterRow, MasterOpts } from '../_types';
 import { MASTER_TIPE_LIST } from '../_utils';
 import { uiTheme } from '@/lib/theme';
+import { buangBintang, cocokInduk, namaUnik } from '@/lib/kinerja/master-nama';
+import {
+  kalimatJalaran, adaJalaran, labelTipeMaster, jumlahJalaran,
+  type DampakData, type ContohRapikan, type EntriBaru,
+} from '@/lib/kinerja/master-ubah';
 
 interface Props {
   tahun: string;
@@ -44,6 +51,34 @@ interface InitRenaksiResp {
   subkegiatanInserted: number;
   subkegiatanSkipped: number;
   message?: string;
+}
+
+interface HasilUbahResp {
+  tipe: MasterTipe; nama_lama: string; nama_baru: string; berubah: boolean;
+  gabung_ke: string | null; anak: number; dihapus: number; data: DampakData;
+}
+interface HasilRapikanResp {
+  master_tulis: number; master_hapus: number; induk_saja: number;
+  contoh: ContohRapikan[]; data: DampakData; kembar_rekening: number;
+}
+interface HasilLengkapiResp { baru: EntriBaru[]; berbintang: number }
+
+const daftarTerbatas = (baris: string[], batas: number) =>
+  baris.slice(0, batas).join('\n') + (baris.length > batas ? `\n• … dan ${baris.length - batas} lainnya` : '');
+
+function kalimatUbah(h: HasilUbahResp): string {
+  const label = labelTipeMaster(h.tipe);
+  const kepala = h.gabung_ke
+    ? `${label} "${h.nama_lama}" digabung ke "${h.gabung_ke}" yang sudah ada di induk yang sama — entri "${h.nama_lama}" dihapus dari Master.`
+    : h.nama_lama === h.nama_baru
+      ? `${label} "${h.nama_lama}" dipindah ke induk yang dipilih.`
+      : `${label} "${h.nama_lama}" diganti jadi "${h.nama_baru}".`;
+  const anak = h.anak > 0 ? `\n${h.anak} entri Master di bawahnya ikut pindah (yang jadi kembar digabung).` : '';
+  const jalar = adaJalaran(h.data)
+    ? `\n\nIkut berganti nama — angka tidak berubah:\n${kalimatJalaran(h.data)}\n\n`
+      + 'RKO semua versi ikut, termasuk yang terkunci. Tab lain yang sedang membuka RKO/Realisasi diminta memuat ulang saat menyimpan.'
+    : '';
+  return kepala + anak + jalar;
 }
 
 export default function MasterTab({
@@ -125,30 +160,116 @@ export default function MasterTab({
   }
 
   // ─── CRUD Handlers ───────────────────────────────────────────────────────
+  function selesaiEdit() { setMasterInput(''); setMasterEditId(null); }
+
+  /**
+   * Induk yang dipilih di form IKUT dikirim — dulu hanya `nama`, jadi pindah induk
+   * dibuang diam-diam padahal toast berbunyi berhasil. Pratinjau dulu: perubahan yang
+   * menjalar ke Rekening/RKO/Realisasi atau menggabungkan entri ditanyakan, dengan
+   * jumlah barisnya; ganti nama yang tidak menyentuh apa pun langsung disimpan.
+   */
   async function saveMaster() {
     if (!masterInput.trim() || masterEditId === null) return;
+    const punyaProgram = ['kegiatan', 'subkegiatan', 'uraian_ssk'].includes(masterTipe);
+    const punyaKegiatan = ['subkegiatan', 'uraian_ssk'].includes(masterTipe);
+    const body = {
+      nama: masterInput.trim(),
+      ...(punyaProgram ? { program_ref: masterProgramRef || null } : {}),
+      ...(punyaKegiatan ? { kegiatan_ref: masterKegiatanRef || null } : {}),
+      ...(masterTipe === 'uraian_ssk' ? { subkegiatan_ref: masterSubkegiatanRef || null } : {}),
+    };
+    const url = `/api/kinerja/master/${masterEditId}`;
     setSaving(true);
     try {
-      const d = await fetchJson(`/api/kinerja/master/${masterEditId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ nama: masterInput.trim() }),
+      const cek = await fetchJson<unknown>(url, { method: 'PUT', body: JSON.stringify({ ...body, dry: true }) });
+      if (!cek.ok) { toast.error(cek.message || 'Gagal memeriksa perubahan', { duration: 9000 }); return; }
+      const p = cek as unknown as HasilUbahResp;
+      if (!p.berubah) { toast.info('Tidak ada yang berubah.'); selesaiEdit(); return; }
+
+      const gabung = p.gabung_ke !== null;
+      if (gabung || p.anak > 0 || adaJalaran(p.data)) {
+        const ok = await confirmDialog({
+          title: `${gabung ? 'Gabungkan' : 'Simpan'} ${labelTipeMaster(p.tipe)}`,
+          message: kalimatUbah(p),
+          variant: gabung ? 'warning' : 'primary',
+          confirmLabel: gabung ? 'Gabungkan' : 'Simpan & terapkan',
+        });
+        if (!ok) return;
+      }
+
+      const d = await fetchJson<unknown>(url, { method: 'PUT', body: JSON.stringify({ ...body, gabung }) });
+      if (!d.ok) { toast.error(d.message || 'Gagal menyimpan', { duration: 9000 }); return; }
+      const h = d as unknown as HasilUbahResp;
+      const jalar = jumlahJalaran(h.data);
+      toast.success((h.gabung_ke ? `Digabung ke "${h.gabung_ke}"` : 'Tersimpan')
+        + (h.anak > 0 ? ` — ${h.anak} entri di bawahnya ikut pindah` : '')
+        + (jalar > 0 ? `${h.anak > 0 ? ',' : ' —'} ${jalar} baris Rekening/RKO/Realisasi ikut berganti nama` : ''));
+      selesaiEdit();
+      fetchMaster(masterTipe);
+      onMasterOptsRefresh();
+    } finally { setSaving(false); }
+  }
+
+  // ─── Rapikan Bintang & Lengkapi Master (seluruh tahun) ────────────────────
+  async function rapikanBintang() {
+    const url = '/api/kinerja/master/rapikan';
+    setSaving(true);
+    try {
+      const cek = await fetchJson<unknown>(url, { method: 'POST', body: JSON.stringify({ tahun, dry: true }) });
+      if (!cek.ok) { toast.error(cek.message || 'Gagal memeriksa', { duration: 9000 }); return; }
+      const p = cek as unknown as HasilRapikanResp;
+      if (p.master_tulis + p.master_hapus === 0 && !adaJalaran(p.data)) {
+        toast.info(`Tidak ada nama berbintang di tahun ${tahun}.`);
+        return;
+      }
+      const contoh = daftarTerbatas(p.contoh.map(c => `• ${c.lama} → ${c.baru}${c.gabung ? ' (digabung)' : ''}`), 6);
+      const ok = await confirmDialog({
+        title: `Rapikan bintang ${tahun}`,
+        message: `Bintang penanda di ujung nama dibuang dari Master, Rekening, RKO (semua versi, termasuk yang terkunci), dan Realisasi tahun ${tahun}.`
+          + `\n\nMaster: ${p.contoh.length} nama berganti`
+          + (p.master_hapus ? `, ${p.master_hapus} digabung ke entri tanpa bintang yang sudah ada` : '')
+          + (p.induk_saja ? `; ${p.induk_saja} entri lain ikut dirapikan induknya` : '') + '.'
+          + (contoh ? `\n${contoh}` : '')
+          + (adaJalaran(p.data) ? `\n\nIkut berganti nama — angka tidak berubah:\n${kalimatJalaran(p.data)}` : '')
+          + (p.kembar_rekening ? `\n\nPerhatian: ${p.kembar_rekening} rekening jadi bernama sama di Uraian SSK yang sama — periksa di tab Rekening.` : ''),
+        variant: 'warning',
+        confirmLabel: 'Rapikan',
       });
-      if (d.ok) {
-        // A3: berapa anak yang ikut dipindah DISEBUTKAN. Ganti nama induk
-        // memindahkan cabang di bawahnya, dan perubahan sebesar itu tidak
-        // pantas lewat dengan pesan "Berhasil diperbarui" saja.
-        const ikut = (d as unknown as { anak_dipindah?: number }).anak_dipindah ?? 0;
-        toast.success(ikut > 0
-          ? `Nama diperbarui — ${ikut} baris di bawahnya ikut dipindah`
-          : 'Berhasil diperbarui');
-        setMasterInput(''); setMasterEditId(null);
-        fetchMaster(masterTipe);
-        onMasterOptsRefresh();
-      } else if ((d as unknown as { code?: string }).code === 'NAMA_KEMBAR') {
-        // Pesannya menjelaskan apa yang harus dibereskan dulu, jadi ia butuh
-        // waktu baca lebih lama dari toast biasa.
-        toast.error(d.message || 'Nama itu tidak bisa dipakai', { duration: 9000 });
-      } else toast.error(d.message || 'Gagal menyimpan');
+      if (!ok) return;
+      const d = await fetchJson<unknown>(url, { method: 'POST', body: JSON.stringify({ tahun }) });
+      if (!d.ok) { toast.error(d.message || 'Gagal merapikan', { duration: 9000 }); return; }
+      const h = d as unknown as HasilRapikanResp;
+      toast.success(`Bintang dirapikan: ${h.contoh.length} nama Master (${h.master_hapus} digabung), `
+        + `${jumlahJalaran(h.data)} baris Rekening/RKO/Realisasi.`);
+      selesaiEdit();
+      fetchMaster(masterTipe);
+      onMasterOptsRefresh();
+    } finally { setSaving(false); }
+  }
+
+  async function lengkapiMaster() {
+    const url = '/api/kinerja/master/lengkapi';
+    setSaving(true);
+    try {
+      const cek = await fetchJson<unknown>(url, { method: 'POST', body: JSON.stringify({ tahun, dry: true }) });
+      if (!cek.ok) { toast.error(cek.message || 'Gagal memeriksa', { duration: 9000 }); return; }
+      const p = cek as unknown as HasilLengkapiResp;
+      if (p.baru.length === 0) { toast.info('Semua nama di Rekening & RKO sudah ada di Master.'); return; }
+      const ok = await confirmDialog({
+        title: `Lengkapi Master ${tahun}`,
+        message: `${p.baru.length} entri Master dibuat dari nama yang dipakai di Rekening & RKO tahun ${tahun}:\n`
+          + daftarTerbatas(p.baru.map(e => `• ${labelTipeMaster(e.tipe)}: ${e.nama}`), 8)
+          + '\n\nTidak ada yang dihapus atau diubah.'
+          + (p.berbintang ? `\n\nPerhatian: ${p.berbintang} di antaranya masih berbintang — jalankan Rapikan Bintang dulu supaya tidak ikut dibuat.` : ''),
+        variant: 'primary',
+        confirmLabel: 'Buat entri',
+      });
+      if (!ok) return;
+      const d = await fetchJson<unknown>(url, { method: 'POST', body: JSON.stringify({ tahun }) });
+      if (!d.ok) { toast.error(d.message || 'Gagal melengkapi', { duration: 9000 }); return; }
+      toast.success(`${(d as unknown as HasilLengkapiResp).baru.length} entri Master dibuat.`);
+      fetchMaster(masterTipe);
+      onMasterOptsRefresh();
     } finally { setSaving(false); }
   }
 
@@ -283,6 +404,9 @@ export default function MasterTab({
 
   // ─── Render ──────────────────────────────────────────────────────────────
   const activeTipeInfo = MASTER_TIPE_LIST.find(t => t.tipe === masterTipe)!;
+  const opsiProgram  = [...new Set(masterOpts.program)];
+  const opsiKegiatan = namaUnik(masterOpts.kegiatanRows.filter(r => cocokInduk(r, { program: masterProgramRef })));
+  const opsiSub      = namaUnik(masterOpts.subkegiatanRows.filter(r => cocokInduk(r, { program: masterProgramRef, kegiatan: masterKegiatanRef })));
 
   return (
     <div style={{ padding:'20px' }}>
@@ -306,6 +430,14 @@ export default function MasterTab({
               </PrimaButton>
               <PrimaButton variant="ghost" iconLeft={<Upload size={14} />} onClick={() => setShowImportMaster(true)} disabled={saving}>
                 Import
+              </PrimaButton>
+              <PrimaButton variant="ghost" iconLeft={<Eraser size={14} />} onClick={rapikanBintang} disabled={saving}
+                data-tooltip="Buang bintang penanda dari nama Master, Rekening, RKO, Realisasi — entri kembar digabung">
+                Rapikan Bintang
+              </PrimaButton>
+              <PrimaButton variant="ghost" iconLeft={<ListPlus size={14} />} onClick={lengkapiMaster} disabled={saving}
+                data-tooltip="Buat entri Master yang belum ada dari nama yang dipakai di Rekening & RKO">
+                Lengkapi Master
               </PrimaButton>
             </>
           )}
@@ -355,7 +487,8 @@ export default function MasterTab({
                 style={{ width:'100%', border:`1.5px solid ${masterProgramRef ? '#EF9F27' : '#E24B4A'}`, borderRadius:'9px', padding:'8px 12px', fontSize:'13px', color:cTextPrimary, background:cInputBg, boxSizing:'border-box', cursor:'pointer', WebkitAppearance:'none', marginBottom:'4px' }}
               >
                 <option value="">-- Pilih Program --</option>
-                {masterOpts.program.map(p => <option key={p} value={p}>{p}</option>)}
+                {opsiProgram.map(p => <option key={p} value={p}>{p}</option>)}
+                <OpsiDiLuarMaster nilai={masterProgramRef} opsi={opsiProgram} />
               </select>
               {!masterProgramRef && <div style={{ fontSize:'11px', color:'#FCA5A5', marginTop:'3px' }}>Wajib pilih program</div>}
             </div>
@@ -374,9 +507,8 @@ export default function MasterTab({
                 style={{ width:'100%', border:`1.5px solid ${masterKegiatanRef ? '#7DD3FC' : (masterProgramRef ? '#E24B4A' : '#0C447C')}`, borderRadius:'9px', padding:'8px 12px', fontSize:'13px', color:cTextPrimary, background:cInputBg, boxSizing:'border-box', cursor: masterProgramRef ? 'pointer':'not-allowed', WebkitAppearance:'none', marginBottom:'4px', opacity: masterProgramRef ? 1 : 0.5 }}
               >
                 <option value="">{masterProgramRef ? '-- Pilih Kegiatan --' : '-- Pilih Program dulu --'}</option>
-                {masterOpts.kegiatanRows
-                  .filter(r => r.program_ref === masterProgramRef || !r.program_ref)
-                  .map(r => <option key={r.nama} value={r.nama}>{r.nama}</option>)}
+                {opsiKegiatan.map(n => <option key={n} value={n}>{n}</option>)}
+                <OpsiDiLuarMaster nilai={masterKegiatanRef} opsi={opsiKegiatan} />
               </select>
               {masterProgramRef && !masterKegiatanRef && <div style={{ fontSize:'11px', color:'#FCA5A5', marginTop:'3px' }}>Wajib pilih kegiatan</div>}
             </div>
@@ -395,13 +527,8 @@ export default function MasterTab({
                 style={{ width:'100%', border:`1.5px solid ${masterSubkegiatanRef ? '#86EFAC' : (masterKegiatanRef ? '#E24B4A' : '#0C447C')}`, borderRadius:'9px', padding:'8px 12px', fontSize:'13px', color:cTextPrimary, background:cInputBg, boxSizing:'border-box', cursor: masterKegiatanRef ? 'pointer':'not-allowed', WebkitAppearance:'none', marginBottom:'4px', opacity: masterKegiatanRef ? 1 : 0.5 }}
               >
                 <option value="">{masterKegiatanRef ? '-- Pilih Sub Kegiatan --' : '-- Pilih Kegiatan dulu --'}</option>
-                {masterOpts.subkegiatanRows
-                  .filter(r => {
-                    if (r.kegiatan_ref && r.program_ref) return r.kegiatan_ref === masterKegiatanRef && r.program_ref === masterProgramRef;
-                    if (r.kegiatan_ref) return r.kegiatan_ref === masterKegiatanRef;
-                    return true;
-                  })
-                  .map(r => <option key={r.nama} value={r.nama}>{r.nama}</option>)}
+                {opsiSub.map(n => <option key={n} value={n}>{n}</option>)}
+                <OpsiDiLuarMaster nilai={masterSubkegiatanRef} opsi={opsiSub} />
               </select>
               {masterKegiatanRef && !masterSubkegiatanRef && <div style={{ fontSize:'11px', color:'#FCA5A5', marginTop:'3px' }}>Wajib pilih sub kegiatan</div>}
             </div>
@@ -432,8 +559,14 @@ export default function MasterTab({
 
           {/* Tombol bawah — PrimaButton (Concept 4 Sci-Fi Engraved) */}
           <div style={{ display:'flex', justifyContent:'flex-end', gap:'8px', flexWrap:'wrap' }}>
+            {masterInput.trim() && buangBintang(masterInput) !== masterInput.trim() && (
+              <PrimaButton variant="ghost" iconLeft={<Eraser size={14} />} onClick={() => setMasterInput(buangBintang(masterInput))}
+                data-tooltip="Bintang di ujung nama hanya penanda tingkat dari matriks Renaksi">
+                Buang bintang
+              </PrimaButton>
+            )}
             {masterEditId && (
-              <PrimaButton variant="ghost" onClick={() => { setMasterInput(''); setMasterEditId(null); }}>
+              <PrimaButton variant="ghost" onClick={selesaiEdit}>
                 Batal
               </PrimaButton>
             )}

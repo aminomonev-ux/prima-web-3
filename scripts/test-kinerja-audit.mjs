@@ -27,7 +27,7 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
 // Titik masuk saja — `kompilasiUji` mengikuti seluruh impornya, termasuk alias `@/…`.
 // Daftar tiga berkas yang dulu di sini mati diam-diam begitu `kinerja.ts` mulai
 // mengimpor `@/lib/kinerja/riwayat-simpan`, `yatim`, `master-nama`, `versi` (U1).
-kompilasiUji(repo, outDir, ['lib/data/db.ts', 'lib/data/kinerja.ts'])
+kompilasiUji(repo, outDir, ['lib/data/db.ts', 'lib/data/kinerja.ts', 'lib/data/kinerja-master-ubah.ts'])
 
 const resolveAsli = Module._resolveFilename
 Module._resolveFilename = function (p, ...s) {
@@ -37,6 +37,8 @@ Module._resolveFilename = function (p, ...s) {
 
 const { sql } = require(path.join(outDir, 'lib/data/db.js'))
 const K = require(path.join(outDir, 'lib/data/kinerja.js'))
+const MU = require(path.join(outDir, 'lib/data/kinerja-master-ubah.js'))
+const ubah = (id, nama) => MU.ubahMasterMenjalar(id, { nama }, { userId: 0, dry: false, gabung: false, bolehGabung: false })
 
 const TH = '2099'
 let gagal = 0, jalan = 0
@@ -45,7 +47,16 @@ function periksa(nama, benar, tambahan = '') {
   console.log(`${benar ? '  ok  ' : ' GAGAL'} ${nama.padEnd(56)} ${tambahan}`)
 }
 async function tangkap(fn) { try { const v = await fn(); return { err: null, v } } catch (e) { return { err: e?.name ?? 'Error', v: null } } }
-const bersih = () => sql`DELETE FROM kinerja_master WHERE tahun = ${TH}`
+// Ubah master mengambil gembok Master + versi RKO & Realisasi SEMUA sumber tahun itu —
+// yang dibuang kunci uji persis, bukan seluruh entity (L92).
+const SUMBER = ['GAJI', 'BLUD', 'HARLEP', 'PROMKES', 'SARPRAS', 'OBAT', 'PEMELIHARAAN', 'PEMBANGUNAN']
+const bersih = async () => {
+  await sql`DELETE FROM kinerja_master WHERE tahun = ${TH}`
+  await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_master' AND key_id = ${TH}`
+  for (const s of SUMBER) {
+    await sql`DELETE FROM blud_locks WHERE entity IN ('kinerja_versi_ssk', 'kinerja_realisasi') AND key_id = ${`${TH}:${s}`}`
+  }
+}
 
 async function baru(tipe, nama, refs = {}) {
   const r = await sql`
@@ -76,11 +87,11 @@ async function main() {
   periksa('Hapus id tak dikenal -> KinerjaMasterTidakAdaError', d.err === 'KinerjaMasterTidakAdaError', d.err ?? 'lolos')
 
   console.log('\n── T12: ubah master ──')
-  const e = await tangkap(() => K.updateMasterRow(idProg2, 'PRG-BARU'))
+  const e = await tangkap(() => ubah(idProg2, 'PRG-BARU'))
   periksa('Ubah nama baris yang ada -> sukses', e.err === null, e.err ?? 'lolos')
   const cek = await sql`SELECT nama FROM kinerja_master WHERE id = ${idProg2}`
   periksa('…namanya benar-benar berubah', cek[0]?.nama === 'PRG-BARU', cek[0]?.nama)
-  const f = await tangkap(() => K.updateMasterRow(99999999, 'X'))
+  const f = await tangkap(() => ubah(99999999, 'X'))
   periksa('Ubah id tak dikenal -> 404, bukan sukses palsu', f.err === 'KinerjaMasterTidakAdaError', f.err ?? 'lolos (BUG)')
 
   console.log('\n── T12: kegiatan -> subkegiatan ──')
