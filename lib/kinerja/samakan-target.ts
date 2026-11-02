@@ -24,17 +24,25 @@ export function bisaSamakan(r: RealRow): boolean {
   return (r.pagu_awal || 0) > 0 && (r.target_rp || 0) > 0 && !r.yatim;
 }
 
+const kosong = (r: RealRow) => (r.real_fisik || 0) === 0;
+// Per sen: real_fisik DECIMAL(18,2), target_rp rupiah RKO.
+const samaTarget = (r: RealRow) =>
+  Math.round((r.real_fisik || 0) * 100) === Math.round((r.target_rp || 0) * 100);
+
 export interface RingkasSamakan {
   /** Baris bulan itu yang punya target DAN masih kosong. */
   kosong: number;
-  /** Punya target tapi sudah ada isinya — sengaja tidak disentuh. */
-  berisi: number;
+  /** Sudah berisi angka yang sama dengan targetnya — tidak ada yang perlu diubah. */
+  sama: number;
+  /** Berisi angka LAIN — bisa target yang sudah berubah, bisa realisasi asli yang diketik. */
+  berbeda: RealRow[];
 }
 
 export function ringkasSamakan(rows: RealRow[], bulan: number): RingkasSamakan {
   const kandidat = rows.filter(r => r.bulan === bulan && bisaSamakan(r));
-  const kosong = kandidat.filter(r => (r.real_fisik || 0) === 0).length;
-  return { kosong, berisi: kandidat.length - kosong };
+  const nKosong = kandidat.filter(kosong).length;
+  const berbeda = kandidat.filter(r => !kosong(r) && !samaTarget(r));
+  return { kosong: nKosong, sama: kandidat.length - nKosong - berbeda.length, berbeda };
 }
 
 /** Satu baris: menimpa isi yang ada — satu sel, diklik sengaja. */
@@ -43,15 +51,17 @@ export function samakanSatu(rows: RealRow[], idx: number): RealRow[] {
 }
 
 /**
- * Sebulan penuh: HANYA baris yang masih kosong.
+ * Sebulan penuh: bawaannya HANYA baris yang masih kosong; `timpa` ikut menyamakan
+ * baris yang sudah berisi angka lain.
  *
- * Menimpa ratusan angka ketikan tangan dengan satu klik menghilangkan kerja yang
- * baru ketahuan berhari-hari kemudian. Menimpa adalah keputusan lain, dan pantas
- * jadi pilihan terpisah — bukan efek samping tombol bernama "isi dari target".
+ * Sistem tidak bisa membedakan "dulu diisi dari target lama" dari "realisasi asli
+ * yang diketik" (GAJI 2026: 62 dari 180 baris memang berbeda dari targetnya), jadi
+ * menimpa tidak pernah jadi efek samping — pemanggil yang memutuskan, sesudah
+ * pemakainya melihat baris mana yang akan berubah (`ringkasSamakan().berbeda`).
  */
-export function samakanSebulan(rows: RealRow[], bulan: number): RealRow[] {
+export function samakanSebulan(rows: RealRow[], bulan: number, timpa = false): RealRow[] {
   return rows.map(r =>
-    r.bulan === bulan && bisaSamakan(r) && (r.real_fisik || 0) === 0
+    r.bulan === bulan && bisaSamakan(r) && !samaTarget(r) && (timpa || kosong(r))
       ? { ...r, real_fisik: r.target_rp || 0 }
       : r);
 }

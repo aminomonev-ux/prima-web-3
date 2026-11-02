@@ -222,7 +222,7 @@ ok('I6 bisaSamakan menolak yatim walau pagunya terisi',
    !bisaSamakan({ ...rows[0], yatim: true }));
 ok('I6b bisaSamakan menerima baris normal', bisaSamakan(rows[0]));
 
-// Borongan TIDAK menimpa sel yang sudah berisi.
+// Bawaan borongan TIDAK menimpa sel yang sudah berisi.
 const asalA7 = rows.find(r => r.ssk_canonical_id === 'A' && r.bulan === 7)!;
 ok('I7 pohon uji: isinya memang berbeda dari targetnya',
    asalA7.real_fisik !== 0 && asalA7.real_fisik !== asalA7.target_rp);
@@ -239,7 +239,25 @@ eq('I9 per baris menimpa isi yang ada dengan target rupiah',
    samakanSatu(rows, idxA7)[idxA7].real_fisik, BULAN_A);
 
 eq('I10 ringkasan menghitung baris kosong berpagu', ringkasSamakan(rows, 8).kosong, 2);
-eq('I11 bulan yang sudah terisi dilaporkan sebagai berisi', ringkasSamakan(rows, 7).berisi, 2);
+eq('I11 isi yang berbeda dari target dilaporkan per baris',
+   ringkasSamakan(rows, 7).berbeda.map(r => r.ssk_canonical_id).join(','), 'A,B');
+
+// Target RKO berubah sesudah baris diisi: `timpa` menyamakan yang sudah berisi juga.
+const timpa7 = samakanSebulan(rows, 7, true);
+eq('I12 timpa: isi lama A diganti target', timpa7.find(r => r.ssk_canonical_id === 'A' && r.bulan === 7)!.real_fisik, BULAN_A);
+eq('I13 timpa: isi lama B diganti target', timpa7.find(r => r.ssk_canonical_id === 'B' && r.bulan === 7)!.real_fisik, BULAN_B);
+eq('I14 timpa tidak menyentuh bulan lain', timpa7.find(r => r.ssk_canonical_id === 'A' && r.bulan === 6)!.real_fisik, 400_000_000);
+eq('I15 timpa tetap mengisi yang kosong', samakanSebulan(rows, 8, true).find(r => r.ssk_canonical_id === 'A' && r.bulan === 8)!.real_fisik, BULAN_A);
+eq('I16 timpa tetap melewati pagu 0', timpa7.find(r => r.ssk_canonical_id === 'C' && r.bulan === 7)!.real_fisik, 0);
+
+// Baris yang SUDAH sama dengan target: bukan "berbeda", dan tidak dikloning ulang (L81).
+const samaA7 = rows.map(r => r.ssk_canonical_id === 'A' && r.bulan === 7 ? { ...r, real_fisik: BULAN_A } : r);
+const rSama = ringkasSamakan(samaA7, 7);
+eq('I17 ringkasan: sama vs berbeda', `${rSama.kosong}|${rSama.sama}|${rSama.berbeda.length}`, '0|1|1');
+const iSamaA7 = samaA7.findIndex(r => r.ssk_canonical_id === 'A' && r.bulan === 7);
+ok('I18 baris yang sudah sama tidak dikloning walau timpa', samakanSebulan(samaA7, 7, true)[iSamaA7] === samaA7[iSamaA7]);
+eq('I19 beda satu sen tetap dihitung berbeda',
+   ringkasSamakan(samaA7.map((r, i) => i === iSamaA7 ? { ...r, real_fisik: BULAN_A + 0.01 } : r), 7).berbeda.length, 2);
 
 console.log('\n── P. Baris JUMLAH view Detail & bundel unduhan ────────────────');
 
@@ -538,7 +556,21 @@ const rt = readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8'
 ok('M3 Init memeriksa duplikat lewat canonical_id',
    /const exists = cid\s*\?\s*realisasiRows\.some\(r => r\.bulan === b && r\.ssk_canonical_id === cid\)/.test(rt));
 ok('M4 layar memakai aturan dari lib, bukan menyalinnya',
-   /samakanSatu\(p, idx\)/.test(rt) && /samakanSebulan\(p, realisasiBulan\)/.test(rt));
+   /samakanSatu\(p, idx\)/.test(rt) && /samakanSebulan\(p, realisasiBulan, timpa\)/.test(rt));
+{
+  // Menimpa = pilihan yang DIPILIH, bukan efek samping: tombol utama (juga Enter)
+  // tetap jalan aman, "Samakan semua" tombol kedua, dan barisnya ditunjukkan dulu.
+  const sb = bersihkanKomentar(rt.slice(rt.indexOf('async function samakanBulanIni('), rt.indexOf('function initRealisasiFromSSK')));
+  ok('M8 dialog borongan menawarkan Isi yang kosong saja sebagai tombol utama',
+     /confirmLabel: `Isi yang kosong saja \(\$\{kosong\}\)`/.test(sb) && /altLabel: `Samakan semua/.test(sb));
+  ok('M9 hanya tombol kedua yang menimpa', /timpa = pilih === 'lain';/.test(sb));
+  ok('M9b tanpa baris kosong: konfirmasi "Timpa N baris" lalu menimpa',
+     /confirmLabel: `Timpa \$\{berbeda\.length\} baris`,\s*\}\)\)\) return;\s*timpa = true;/.test(sb));
+  ok('M10 baris yang akan ditimpa disebut di dialog (isi → target)',
+     /berbeda\.slice\(0, 5\)\.map\(/.test(sb) && /fmtNum\(r\.real_fisik\)\} → \$\{fmtNum\(r\.target_rp\)\}/.test(sb));
+  ok('M11 bulan penuh berisi tidak lagi berhenti di toast "sudah ada isinya"',
+     /if \(kosong === 0 && berbeda\.length === 0\)/.test(sb) && !/sudah ada isinya/.test(rt));
+}
 ok('M6 tooltip pakai data-tooltip, bukan title native',
    /data-tooltip=\{`Isi dengan target/.test(rt) && !/title="Isi dengan target/.test(rt));
 ok('M7 Samakan tidak dipasang di Init maupun Import',

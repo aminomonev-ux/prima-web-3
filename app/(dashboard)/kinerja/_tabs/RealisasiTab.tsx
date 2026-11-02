@@ -18,7 +18,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
 import { Wand2, Save, Upload, Equal, History, BarChart3, Lock, LockOpen, Coins, LineChart } from 'lucide-react';
-import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
 import { laporanYatim } from '@/lib/kinerja/rekap';
 import { hidrasiDariSsk, hidrasiUlang, petaHidrasi } from '@/lib/kinerja/hidrasi-ssk';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '@/lib/kinerja/samakan-target';
@@ -205,25 +205,57 @@ export default function RealisasiTab({
 
   async function samakanBulanIni() {
     if (bulanIniTertutup) return;
-    const { kosong, berisi } = ringkasSamakan(realisasiRows, realisasiBulan);
+    const { kosong, sama, berbeda } = ringkasSamakan(realisasiRows, realisasiBulan);
     const namaBulan = MONTH_LABELS[realisasiBulan-1];
-    if (kosong === 0) {
-      toast.info(berisi > 0
-        ? `Semua ${berisi} baris ${namaBulan} yang punya target sudah ada isinya.`
+    const title = `Samakan dengan target ${namaBulan}`;
+    const belumTersimpan = 'Belum tersimpan sampai Anda menekan Simpan Semua.';
+    if (kosong === 0 && berbeda.length === 0) {
+      toast.info(sama > 0
+        ? `Semua ${sama} baris ${namaBulan} yang punya target sudah sama dengan targetnya.`
         : `Tidak ada baris ${namaBulan} yang punya target untuk disalin.`);
       return;
     }
-    const ok = await confirmDialog({
-      title: `Samakan dengan target ${namaBulan}`,
-      message: `${kosong} baris akan diisi realisasi fisiknya sama dengan target bulan ini.`
-        + (berisi > 0 ? ` ${berisi} baris sudah ada isinya dan tidak akan disentuh.` : '')
-        + ' Belum tersimpan sampai Anda menekan Simpan Semua.',
-      variant: 'primary',
-      confirmLabel: 'Isi sekarang',
-    });
-    if (!ok) return;
-    setRealisasiRows(p => recalcAllRealisasi(samakanSebulan(p, realisasiBulan)));
-    toast.success(`${kosong} baris diisi dari target ${namaBulan}.`);
+
+    let timpa = false;
+    if (berbeda.length === 0) {
+      const ok = await confirmDialog({
+        title,
+        message: `${kosong} baris akan diisi realisasi fisiknya sama dengan target bulan ini.`
+          + (sama > 0 ? ` ${sama} baris sudah sama dengan targetnya.` : '') + ` ${belumTersimpan}`,
+        variant: 'primary',
+        confirmLabel: 'Isi sekarang',
+      });
+      if (!ok) return;
+    } else {
+      // Yang berbeda bisa target RKO yang sudah berubah, bisa realisasi asli yang
+      // diketik — sistem tidak bisa membedakannya, jadi barisnya ditunjukkan dulu.
+      const daftar = berbeda.slice(0, 5).map(r => {
+        const nama = r.keterangan || r.uraian_ssk || '(tanpa nama)';
+        return `• ${nama.length > 60 ? `${nama.slice(0, 57)}…` : nama}: ${fmtNum(r.real_fisik)} → ${fmtNum(r.target_rp)}`;
+      }).join('\n') + (berbeda.length > 5 ? `\n• … dan ${berbeda.length - 5} baris lain` : '');
+      const message = `${berbeda.length} baris ${namaBulan} sudah berisi angka yang berbeda dari targetnya `
+        + `(target RKO berubah, atau realisasi asli yang memang diketik):\n${daftar}\n\n`
+        + (kosong > 0 ? `${kosong} baris lain masih kosong. ` : '') + belumTersimpan;
+      if (kosong > 0) {
+        const pilih = await pilihDialog({
+          title, message,
+          variant: 'primary', confirmLabel: `Isi yang kosong saja (${kosong})`,
+          altVariant: 'warning', altLabel: `Samakan semua (${kosong + berbeda.length})`,
+        });
+        if (!pilih) return;
+        timpa = pilih === 'lain';
+      } else {
+        if (!(await confirmDialog({
+          title, message, variant: 'warning', confirmLabel: `Timpa ${berbeda.length} baris`,
+        }))) return;
+        timpa = true;
+      }
+    }
+    setRealisasiRows(p => recalcAllRealisasi(samakanSebulan(p, realisasiBulan, timpa)));
+    toast.success(timpa
+      ? `${kosong + berbeda.length} baris disamakan dengan target ${namaBulan}`
+        + (kosong > 0 ? ` (${berbeda.length} di antaranya menimpa isi lama).` : '.')
+      : `${kosong} baris diisi dari target ${namaBulan}.`);
   }
 
   /** Init 12 bulan dari SSK — bulan Des dibulatkan supaya total 100% tepat. */
@@ -565,7 +597,7 @@ export default function RealisasiTab({
               ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa input baru.`
               : bulanIniTertutup
                 ? `${namaBulanIni} sudah ditutup — angkanya tidak bisa diubah.`
-                : `Isi Real Fisik ${MONTH_LABELS[realisasiBulan-1]} sama dengan targetnya, hanya baris yang masih kosong`}>
+                : `Isi Real Fisik ${MONTH_LABELS[realisasiBulan-1]} sama dengan targetnya — baris yang sudah berisi angka lain ditanyakan dulu`}>
               <PrimaButton variant="warning" iconLeft={<Equal size={14} />}
                 onClick={samakanBulanIni} disabled={versiLocked || bulanIniTertutup}>
                 Samakan Target

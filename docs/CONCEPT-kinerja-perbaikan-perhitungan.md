@@ -528,6 +528,17 @@ tangan dengan satu klik itu menghilangkan kerja yang tidak akan kelihatan sampai
 berhari-hari kemudian. Kalau memang mau menimpa, itu keputusan **lain** dan pantas
 jadi pilihan terpisah — bukan efek samping tombol yang namanya "isi dari target".
 
+**Susulan 2026-11-02 — pilihan terpisah itu kini ada.** Dilaporkan pemakai: target RKO
+berubah sesudah baris diisi, dan begitu sebulan penuh terisi tombol borongan cuma
+berbunyi "sudah ada isinya" — jalan satu-satunya klik `=` baris demi baris. Sistem
+tetap tidak bisa membedakan "dulu diisi dari target lama" dari "realisasi asli yang
+diketik" (tabel realisasi tak menyimpan target saat diisi), jadi menimpa tetap bukan
+bawaan. `ringkasSamakan` memisah **kosong / sama dengan target / berbeda**; bila ada
+yang berbeda, dialog menyebut sampai 5 barisnya (isi → target) dan menawarkan
+**Isi yang kosong saja** (tombol utama, juga Enter) di samping **Samakan semua**;
+tanpa baris kosong tombolnya **Timpa N baris**. Baris yang sudah sama tidak dihitung
+berbeda dan tidak dikloning (`samakanSebulan(rows, bulan, timpa)`).
+
 ### 6.5 Kapan tombolnya tidak ada
 
 - `!canEdit` atau `versiLocked` → hilang. Sama seperti Init/Import/Simpan yang sudah
