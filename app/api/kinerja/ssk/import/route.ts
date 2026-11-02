@@ -10,7 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { hasAppAccess } from '@/lib/security/guard';
-import { isKinerjaRole, kinerjaRateLimit } from '@/lib/data/kinerja-schemas';
+import { isKinerjaRole, kinerjaRateLimit, PetaRkoSchema } from '@/lib/data/kinerja-schemas';
+import type { PetaRko } from '@/lib/kinerja/gabung-rko';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { parseRkoImport } from '@/lib/data/kinerja-import-rko';
 import { kinerjaMati } from '../../_guard';
@@ -56,15 +57,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, message: 'Isi berkas tidak sesuai ekstensinya.' }, { status: 400 });
   }
 
+  // Pemetaan kolom yang dibetulkan pemakai di modal (opsional) — tanpa itu kolom ditebak dari judulnya.
+  const petaMentah = form?.get('peta');
+  let paksa: PetaRko | undefined;
+  if (typeof petaMentah === 'string' && petaMentah) {
+    let json: unknown = null;
+    try { json = JSON.parse(petaMentah); } catch { /* ditolak Zod di bawah */ }
+    const p = PetaRkoSchema.safeParse(json);
+    if (!p.success) return NextResponse.json({ ok: false, message: 'Pemetaan kolom tidak valid: ' + p.error.issues[0].message }, { status: 400 });
+    paksa = p.data;
+  }
+
   try {
-    const hasil = await parseRkoImport(buf);
+    const hasil = await parseRkoImport(buf, paksa);
 
     await writeAuditLog({
       req,
       eventType: 'KINERJA_IMPORT_RKO',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Baca berkas RKO "${file.name}" (${hasil.rows.length} baris, ${hasil.source})`,
+      detail:    `Baca berkas RKO "${file.name}" (${hasil.rows.length} baris, ${hasil.source}${paksa ? ', pemetaan kolom manual' : ''}`
+        + `${hasil.kelompok.length ? `, ${hasil.kelompok.length} baris kelompok dilewati` : ''})`,
     });
 
     return NextResponse.json({ ok: true, ...hasil });

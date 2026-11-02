@@ -103,6 +103,23 @@ export const VersiSeqSchema  = z
   .transform((v) => Number(v))
   .pipe(z.number().int().gte(0).lte(99));
 
+/** Indeks kolom di grid pembaca RKO (`MAX_GRID_COLS` = 40). */
+const KolomRkoSchema = z.number().int().min(0).max(39);
+
+/**
+ * Pemetaan kolom Import RKO yang dibetulkan pemakai (`PetaRko` di lib/kinerja/gabung-rko.ts).
+ * Strict: kunci asing ditolak, bukan dibuang diam-diam.
+ */
+export const PetaRkoSchema = z.object({
+  sheet:  z.string().min(1).max(100),
+  header: z.number().int().min(0).max(19),
+  dua:    z.boolean(),
+  uraian: KolomRkoSchema,
+  kode:   KolomRkoSchema.nullable(),
+  pagu:   KolomRkoSchema.nullable(),
+  bulan:  z.array(KolomRkoSchema.nullable()).length(12),
+}).strict();
+
 /**
  * Master tipe enum — typed dari kinerja.ts.
  */
