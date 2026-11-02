@@ -29,7 +29,6 @@ export class KinerjaMasterPerluGabungError extends Error {
 }
 
 const MASTER_LOCK_ENTITY = 'kinerja_master';
-const PESAN_GABUNG_ADMIN = 'Menggabungkan entri Master (entri kembarnya dihapus) hanya bisa oleh SUPER_ADMIN/ADMIN.';
 
 type BarisRekening = BarisNama & { sumber: SumberSSK; uraian: string; sumber_anggaran: string | null };
 type BarisSsk = BarisNama & { sumber: SumberSSK; versi_tipe: string; versi_seq: number };
@@ -180,13 +179,14 @@ function hasilUbah(r: RencanaUbahMaster, j: ReturnType<typeof jalarkan>): HasilU
 
 /**
  * `dry` = pratinjau untuk dialog (tanpa gembok, tanpa tulis). Penggabungan harus
- * dinyatakan (`gabung`) dan hanya untuk SUPER_ADMIN/ADMIN (`bolehGabung`) — entri
- * kembarnya dihapus, sama beratnya dengan hapus master.
+ * dinyatakan (`gabung`). Terbuka bagi semua pemegang akses E-Anggaran (keputusan
+ * pemilik 2026-11-02): gabung tidak menghilangkan data — anak & salinan namanya
+ * pindah ke entri tujuan, dan jejaknya di audit. Hapus satu entri tetap khusus admin.
  */
 export async function ubahMasterMenjalar(
   id: number,
   masukan: MasukanUbahMaster,
-  opsi: { userId: number; dry: boolean; gabung: boolean; bolehGabung: boolean },
+  opsi: { userId: number; dry: boolean; gabung: boolean },
 ): Promise<HasilUbahMaster> {
   // Tahun entri tidak pernah berubah, jadi aman dibaca di luar transaksi — gemboknya
   // butuh tahun ini sebagai perintah PERTAMA transaksi.
@@ -197,7 +197,6 @@ export async function ubahMasterMenjalar(
   const rencanakan = (b: Bahan) => {
     const r = rencanaUbahMaster(b.master, id, masukan);
     if ('tolak' in r) throw new KinerjaMasterTolakError(r.tolak);
-    if (r.gabungKe && !opsi.bolehGabung) throw new KinerjaMasterTolakError(PESAN_GABUNG_ADMIN);
     return { r, j: jalarkan(b, r) };
   };
 

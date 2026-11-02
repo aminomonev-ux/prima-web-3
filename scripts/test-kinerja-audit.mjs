@@ -38,7 +38,7 @@ Module._resolveFilename = function (p, ...s) {
 const { sql } = require(path.join(outDir, 'lib/data/db.js'))
 const K = require(path.join(outDir, 'lib/data/kinerja.js'))
 const MU = require(path.join(outDir, 'lib/data/kinerja-master-ubah.js'))
-const ubah = (id, nama) => MU.ubahMasterMenjalar(id, { nama }, { userId: 0, dry: false, gabung: false, bolehGabung: false })
+const ubah = (id, nama) => MU.ubahMasterMenjalar(id, { nama }, { userId: 0, dry: false, gabung: false })
 
 const TH = '2099'
 let gagal = 0, jalan = 0

@@ -42,9 +42,13 @@ Rantai sebabnya, semuanya dibuktikan dari kode dan berkas unduhan server:
   angka, `canonical_id`, dan kunci versi tetap. Kalau tidak, Cetak "Murni" dan "Versi Berlaku"
   menampilkan program yang sama dengan dua nama.
 - **Jalur tujuan sudah dihuni entri lain = gabung**: harus dinyatakan (`gabung: true`, 409
-  `PERLU_GABUNG` bila tidak) dan hanya SUPER_ADMIN/ADMIN — entri kembarnya dihapus, sama
-  beratnya dengan hapus master. Keturunan yang jadi kembar ikut digabung; yang dipertahankan
-  selalu entri yang **sudah ada** di tujuan.
+  `PERLU_GABUNG` bila tidak). Keturunan yang jadi kembar ikut digabung; yang dipertahankan
+  selalu entri yang **sudah ada** di tujuan. Gabung (dan Rapikan Bintang) **terbuka bagi semua
+  pemegang akses E-Anggaran** — keputusan pemilik 2 Nov 2026: tidak ada data yang hilang
+  (anak & salinan namanya pindah ke entri tujuan, angka tak tersentuh, jejaknya di audit),
+  sejalan dengan aturan modul kolaboratif (AUTHZ-02). Tombol **Hapus** satu entri — entrinya
+  benar-benar hilang — tetap khusus SUPER_ADMIN/ADMIN. Konsekuensinya pemberian akses
+  E-Anggaran tetap harus konservatif.
 - **Berhenti di pratinjau dulu**: layar memanggil `dry`, menyebut jumlah baris per tempat
   (Rekening, RKO per versi, Realisasi) dan anak yang ikut pindah; ganti nama yang tidak
   menyentuh apa pun langsung disimpan.
@@ -68,7 +72,7 @@ Rantai sebabnya, semuanya dibuktikan dari kode dan berkas unduhan server:
 
 ## 4. Rapikan Bintang, Init Renaksi, Lengkapi
 
-- **Rapikan Bintang** (tombol di Master, SUPER_ADMIN/ADMIN): bintang di ujung nama dibuang per
+- **Rapikan Bintang** (tombol di Master, semua pemegang akses): bintang di ujung nama dibuang per
   kolom di Master (nama + ketiga kolom induk) dan di Rekening, RKO, Realisasi; entri Master yang
   jadi kembar digabung. Rekening yang jadi bernama sama di Uraian SSK yang sama **disebut, tidak
   dihapus**. Bintang di tengah nama tidak disentuh.

@@ -31,9 +31,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   let hasil;
   try {
-    hasil = await ubahMasterMenjalar(id, masukan, {
-      userId: session.userId, dry, gabung, bolehGabung: bolehHapusMaster(session.role),
-    });
+    hasil = await ubahMasterMenjalar(id, masukan, { userId: session.userId, dry, gabung });
   } catch (e) {
     // T12: id yang tidak ada dulu tetap dijawab ok:true — pemanggil tidak pernah
     // tahu perubahannya tidak mendarat di baris mana pun.

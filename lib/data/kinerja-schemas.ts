@@ -193,8 +193,9 @@ export const MasterUpdateBodySchema = z.object({
 });
 
 /**
- * Menghapus entri Master — termasuk lewat Gabungkan & Rapikan Bintang yang membuang
- * entri kembar — hanya SUPER_ADMIN/ADMIN (lebih ketat dari akses modul).
+ * Menghapus entri Master (tombol Hapus — entrinya benar-benar hilang) hanya
+ * SUPER_ADMIN/ADMIN. Gabungkan & Rapikan Bintang terbuka bagi semua pemegang akses:
+ * entri kembar yang dibuang di sana tidak membawa data pergi (2026-11-02).
  */
 export const MASTER_HAPUS_ROLES: readonly string[] = ['SUPER_ADMIN', 'ADMIN'];
 export const bolehHapusMaster = (role: string) => MASTER_HAPUS_ROLES.includes(role);

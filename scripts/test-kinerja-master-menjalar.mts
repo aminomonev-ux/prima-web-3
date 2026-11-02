@@ -211,7 +211,11 @@ const rtUbah = sumber('app/api/kinerja/master/[id]/route.ts')
 const rtRapi = sumber('app/api/kinerja/master/rapikan/route.ts')
 const rtLeng = sumber('app/api/kinerja/master/lengkapi/route.ts')
 ok('F12 ketiga route tunduk sakelar maintenance (L72)', [rtUbah, rtRapi, rtLeng].every(s => s.includes('await kinerjaMati(session.role)')))
-ok('F13 gabung & rapikan hanya SUPER_ADMIN/ADMIN', rtUbah.includes('bolehGabung: bolehHapusMaster(session.role)') && rtRapi.includes('if (!bolehHapusMaster(session.role))'))
+// Keputusan pemilik 2026-11-02: gabung & Rapikan terbuka bagi semua pemegang akses (data
+// tidak hilang); tombol Hapus satu entri — entrinya benar-benar hilang — tetap khusus admin.
+ok('F13 gabung & rapikan terbuka bagi pemegang akses; Hapus tetap admin',
+  !tanpaKomentar(rtRapi).includes('bolehHapusMaster') && !badan(rtUbah, 'export async function PUT(').includes('bolehHapusMaster')
+  && badan(rtUbah, 'export async function DELETE(').includes('if (!bolehHapusMaster(session.role))'))
 ok('F14 PERLU_GABUNG → 409, tolak → 400', rtUbah.includes("code: 'PERLU_GABUNG'") && rtUbah.includes("code: 'MASTER_DITOLAK'"))
 ok('F15 Pulihkan menyebut nama lama ikut kembali', sumber('components/kinerja/RiwayatSimpanModal.tsx').includes('nama lama ikut kembali'))
 
@@ -280,7 +284,7 @@ if (c) {
     const kunciReal = await versiKunci('kinerja_realisasi', `${TAHUN}:BLUD`)
 
     const idPXs = idOf.get(2)!
-    const opsi = (o: Partial<{ dry: boolean; gabung: boolean; bolehGabung: boolean }>) => ({ userId, dry: false, gabung: false, bolehGabung: true, ...o })
+    const opsi = (o: Partial<{ dry: boolean; gabung: boolean }>) => ({ userId, dry: false, gabung: false, ...o })
     const pra = await MU.ubahMasterMenjalar(idPXs, { nama: PX }, opsi({ dry: true }))
     ok('G1 pratinjau gabung program: jumlah salinan per tempat, termasuk MURNI terkunci',
       pra.gabung_ke === PX && pra.data.rekening === 1 && pra.data.realisasi === 2
@@ -290,8 +294,6 @@ if (c) {
     const tanpaPernyataan = await coba(() => MU.ubahMasterMenjalar(idPXs, { nama: PX }, opsi({})))
     ok('G3 gabung tanpa dinyatakan → PERLU_GABUNG, tak ada yang tertulis',
       tanpaPernyataan instanceof MU.KinerjaMasterPerluGabungError && await n('SELECT COUNT(*) AS n FROM kinerja_master WHERE id = ?', [idPXs]) === 1)
-    const bukanAdmin = await coba(() => MU.ubahMasterMenjalar(idPXs, { nama: PX }, opsi({ dry: true, bolehGabung: false })))
-    ok('G4 gabung oleh peran non-admin ditolak (sudah di pratinjau)', bukanAdmin instanceof MU.KinerjaMasterTolakError)
 
     const hasil = await MU.ubahMasterMenjalar(idPXs, { nama: PX }, opsi({ gabung: true }))
     ok('G5 gabung program: entri berbintang hilang, anaknya pindah',

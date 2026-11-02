@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { rapikanBintangMaster } from '@/lib/data/kinerja-master-ubah';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { isKinerjaRole, kinerjaRateLimit, MasterTahunAksiBodySchema, bolehHapusMaster } from '@/lib/data/kinerja-schemas';
+import { isKinerjaRole, kinerjaRateLimit, MasterTahunAksiBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../../_guard';
 
@@ -15,11 +15,9 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
   // T1: sakelar maintenance — 503 kalau modul dimatikan admin (SUPER_ADMIN tembus).
   const mati = await kinerjaMati(session.role); if (mati) return mati;
+  // Terbuka bagi semua pemegang akses (keputusan pemilik 2026-11-02): entri kembar yang
+  // digabung tidak menghilangkan data — anak & salinan namanya pindah, jejaknya di audit.
   if (!(await hasAppAccess(session.userId, session.role, isKinerjaRole))) return NextResponse.json({ ok: false, message: 'Akses ditolak' }, { status: 403 });
-  // Entri kembar dihapus — sama beratnya dengan hapus master.
-  if (!bolehHapusMaster(session.role)) {
-    return NextResponse.json({ ok: false, message: 'Rapikan Bintang menggabungkan entri Master — hanya SUPER_ADMIN/ADMIN.' }, { status: 403 });
-  }
 
   const raw = await req.json().catch(() => null);
   const parsed = MasterTahunAksiBodySchema.safeParse(raw);
