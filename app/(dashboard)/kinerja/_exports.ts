@@ -5,6 +5,7 @@
 // Bundle initial /kinerja TIDAK termasuk library ini.
 
 import { fmtRp, fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
+import { tulisPersen } from '@/lib/shared/desimal';
 import { loadExcelJs, addSheetFromAoa, downloadWorkbook, FMT_RUPIAH, FMT_PERSEN } from '@/lib/shared/excel-export';
 import type {
   SumberSSK, SskRow, RekeningRow, RealRow, CrrRow, PendRow, LaporanSumber,
@@ -304,11 +305,11 @@ export function gambarRekapPdf(
   const yTabel = tulisKopPdf(doc, kopRekap(namaBulan, tahun, ringkasVersiRekap(versiRekap, pilihanVersi)), 13);
 
   const body = baris.map(b => [
-    String(b.no), labelIndent(b), fmtNum(b.pagu), b.targetPct.toFixed(2) + '%',
-    fmtNum(b.realFisik), b.pctFisik.toFixed(2) + '%', b.devFisik.toFixed(2) + '%',
-    b.capaianFisik === null ? '—' : b.capaianFisik.toFixed(2) + '%',
+    String(b.no), labelIndent(b), fmtNum(b.pagu), tulisPersen(b.targetPct),
+    fmtNum(b.realFisik), tulisPersen(b.pctFisik), tulisPersen(b.devFisik),
+    b.capaianFisik === null ? '—' : tulisPersen(b.capaianFisik),
     fmtNum(b.targetRp), fmtNum(b.realKeuBulanIni), fmtNum(b.realKeu),
-    b.pctKeu.toFixed(2) + '%', b.devKeu.toFixed(2) + '%',
+    tulisPersen(b.pctKeu), tulisPersen(b.devKeu),
   ]);
   autoTable(doc, {
     head: [REKAP_HEADER], body, startY: yTabel,
@@ -449,7 +450,7 @@ export const DETAIL_BULAN_HEADER = [
  */
 export function barisBulanDetail(rows: RealRow[], angka: boolean, versi: string): (string | number)[][] {
   const n = (v: number) => angka ? v : fmtNum(v);
-  const p = (v: number) => angka ? v : v.toFixed(2) + '%';
+  const p = (v: number) => angka ? v : tulisPersen(v);
   const isi: (string | number)[][] = rows.map((r, i) => [
     i + 1, `${r.keterangan || '-'}${r.yatim ? ` (${tandaYatim(versi)})` : ''}`, n(r.pagu_awal),
     p(r.target_fisik), n(r.real_fisik), p(r.pct_fisik),

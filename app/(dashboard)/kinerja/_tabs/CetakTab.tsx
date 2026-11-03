@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
+import { tulisPersen } from '@/lib/shared/desimal';
 import SoftSelect from '@/components/ui/SoftSelect';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
@@ -534,19 +535,19 @@ export default function CetakTab({
                       <td style={{ ...tdR('center'), fontWeight: b.tebal?800:400 }}>{b.no}</td>
                       <td style={{ ...tdR('left'), paddingLeft: `${8 + b.indent*16}px`, fontWeight: b.tebal?700:400 }}>{b.label}</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.pagu)}</td>
-                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{b.targetPct.toFixed(2)}%</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{tulisPersen(b.targetPct)}</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realFisik)}</td>
-                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctFisik) }}>{b.pctFisik.toFixed(2)}%</td>
-                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devFisik>=0?'#16a34a':'#dc2626' }}>{b.devFisik.toFixed(2)}%</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctFisik) }}>{tulisPersen(b.pctFisik)}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devFisik>=0?'#16a34a':'#dc2626' }}>{tulisPersen(b.devFisik)}</td>
                       {/* Target 0 -> "—", bukan 0%: "0% dari rencana nol" tidak berarti apa-apa. */}
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.capaianFisik === null ? cTextSub : warna(b.capaianFisik) }}>
-                        {b.capaianFisik === null ? '—' : b.capaianFisik.toFixed(2) + '%'}
+                        {b.capaianFisik === null ? '—' : tulisPersen(b.capaianFisik)}
                       </td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: '#b45309' }}>{fmtNum(b.targetRp)}</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realKeuBulanIni)}</td>
                       <td style={{ ...tdR(), fontWeight: b.tebal?700:400 }}>{fmtNum(b.realKeu)}</td>
-                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctKeu) }}>{b.pctKeu.toFixed(2)}%</td>
-                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devKeu>=0?'#16a34a':'#dc2626' }}>{b.devKeu.toFixed(2)}%</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: warna(b.pctKeu) }}>{tulisPersen(b.pctKeu)}</td>
+                      <td style={{ ...tdR(), fontWeight: b.tebal?700:400, color: b.devKeu>=0?'#16a34a':'#dc2626' }}>{tulisPersen(b.devKeu)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -614,19 +615,19 @@ export default function CetakTab({
                             </td>
                             <td style={tdP()}>{fmtNum(r.pagu_awal)}</td>
                             {/* #7: target_fisik satuannya % — format konsisten dgn baris JUMLAH */}
-                            <td style={tdP()}>{r.target_fisik.toFixed(2)}%</td>
+                            <td style={tdP()}>{tulisPersen(r.target_fisik)}</td>
                             <td style={{ ...tdP(), color:'#16a34a', fontWeight:700 }}>{fmtNum(r.real_fisik)}</td>
-                            <td style={{ ...tdP(), color:pctF, fontWeight:700 }}>{r.pct_fisik.toFixed(2)}%</td>
-                            <td style={tdP()}>{r.akum_target_fisik.toFixed(2)}%</td>
+                            <td style={{ ...tdP(), color:pctF, fontWeight:700 }}>{tulisPersen(r.pct_fisik)}</td>
+                            <td style={tdP()}>{tulisPersen(r.akum_target_fisik)}</td>
                             <td style={tdP()}>{fmtNum(r.akum_real_fisik)}</td>
-                            <td style={{ ...tdP(), color:apctF, fontWeight:700 }}>{r.akum_pct_fisik.toFixed(2)}%</td>
+                            <td style={{ ...tdP(), color:apctF, fontWeight:700 }}>{tulisPersen(r.akum_pct_fisik)}</td>
                             <td style={{ ...tdP(), color:'#16a34a', fontWeight:700 }}>{fmtNum(r.real_keuangan)}</td>
-                            <td style={{ ...tdP(), color: r.pct_keuangan>=100?'#16a34a':r.pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{r.pct_keuangan.toFixed(2)}%</td>
+                            <td style={{ ...tdP(), color: r.pct_keuangan>=100?'#16a34a':r.pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{tulisPersen(r.pct_keuangan)}</td>
                             <td style={tdP()}>{fmtNum(r.akum_keuangan)}</td>
-                            <td style={{ ...tdP(), color:apctK, fontWeight:700 }}>{r.akum_pct_keuangan.toFixed(2)}%</td>
+                            <td style={{ ...tdP(), color:apctK, fontWeight:700 }}>{tulisPersen(r.akum_pct_keuangan)}</td>
                             {/* #12: warna deviasi ikut tanda (positif = melampaui = hijau) */}
-                            <td style={{ ...tdP(), color: r.deviasi_fisik >= 0 ? '#16a34a' : '#dc2626', fontWeight:600 }}>{r.deviasi_fisik.toFixed(2)}%</td>
-                            <td style={{ ...tdP(), color: r.deviasi_keuangan >= 0 ? '#16a34a' : '#dc2626', fontWeight:600 }}>{r.deviasi_keuangan.toFixed(2)}%</td>
+                            <td style={{ ...tdP(), color: r.deviasi_fisik >= 0 ? '#16a34a' : '#dc2626', fontWeight:600 }}>{tulisPersen(r.deviasi_fisik)}</td>
+                            <td style={{ ...tdP(), color: r.deviasi_keuangan >= 0 ? '#16a34a' : '#dc2626', fontWeight:600 }}>{tulisPersen(r.deviasi_keuangan)}</td>
                           </tr>
                         );
                       })}
@@ -634,18 +635,18 @@ export default function CetakTab({
                       <tr style={{ background:'rgba(12,68,124,.4)', fontWeight:800 }}>
                         <td colSpan={2} style={{ ...tdP('center'), fontWeight:800, color:cTextPrimary }}>JUMLAH</td>
                         <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(jml.pagu)}</td>
-                        <td style={{ ...tdP(), fontWeight:800 }}>{jml.targetPct.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800 }}>{tulisPersen(jml.targetPct)}</td>
                         <td style={{ ...tdP(), fontWeight:800, color:'#16a34a' }}>{fmtNum(jml.realFisik)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: jml.pctFisik>=100?'#16a34a':jml.pctFisik>=50?'#f59e0b':'#dc2626' }}>{jml.pctFisik.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800 }}>{jml.akumTgtPct.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.pctFisik>=100?'#16a34a':jml.pctFisik>=50?'#f59e0b':'#dc2626' }}>{tulisPersen(jml.pctFisik)}</td>
+                        <td style={{ ...tdP(), fontWeight:800 }}>{tulisPersen(jml.akumTgtPct)}</td>
                         <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(jml.akumFisik)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: jml.akumPctF>=100?'#16a34a':jml.akumPctF>=50?'#f59e0b':'#dc2626' }}>{jml.akumPctF.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.akumPctF>=100?'#16a34a':jml.akumPctF>=50?'#f59e0b':'#dc2626' }}>{tulisPersen(jml.akumPctF)}</td>
                         <td style={{ ...tdP(), fontWeight:800, color:'#16a34a' }}>{fmtNum(jml.realKeu)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: jml.pctKeu>=100?'#16a34a':jml.pctKeu>=50?'#f59e0b':'#dc2626' }}>{jml.pctKeu.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.pctKeu>=100?'#16a34a':jml.pctKeu>=50?'#f59e0b':'#dc2626' }}>{tulisPersen(jml.pctKeu)}</td>
                         <td style={{ ...tdP(), fontWeight:800 }}>{fmtNum(jml.akumKeu)}</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: jml.akumPctKeu>=100?'#16a34a':jml.akumPctKeu>=50?'#f59e0b':'#dc2626' }}>{jml.akumPctKeu.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: jml.devFisik>=0?'#16a34a':'#dc2626' }}>{jml.devFisik.toFixed(2)}%</td>
-                        <td style={{ ...tdP(), fontWeight:800, color: jml.devKeu>=0?'#16a34a':'#dc2626' }}>{jml.devKeu.toFixed(2)}%</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.akumPctKeu>=100?'#16a34a':jml.akumPctKeu>=50?'#f59e0b':'#dc2626' }}>{tulisPersen(jml.akumPctKeu)}</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.devFisik>=0?'#16a34a':'#dc2626' }}>{tulisPersen(jml.devFisik)}</td>
+                        <td style={{ ...tdP(), fontWeight:800, color: jml.devKeu>=0?'#16a34a':'#dc2626' }}>{tulisPersen(jml.devKeu)}</td>
                       </tr>
                     </tbody>
                   </table>

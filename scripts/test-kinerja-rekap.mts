@@ -14,7 +14,8 @@ import { hitungRekap, kumpulkanItem, hitungAngka, jumlahkan, laporanYatim,
 import { recalcAllRealisasi } from '../app/(dashboard)/kinerja/_utils';
 import { bisaSamakan, ringkasSamakan, samakanSatu, samakanSebulan } from '../lib/kinerja/samakan-target';
 import { rekapAoa, REKAP_JUDUL_BARIS, realisasiAoa, DETAIL_HEADER,
-  DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN } from '../app/(dashboard)/kinerja/_exports';
+  DETAIL_BULAN_HEADER, barisBulanDetail, PENANDA_TANGAN, gambarRekapPdf, loadPdf } from '../app/(dashboard)/kinerja/_exports';
+import { tulisPersen } from '../lib/shared/desimal';
 import { hitungJumlahBulan, bulanBerdata } from '../lib/kinerja/cetak-detail';
 import { buatPenyaringYatim, himpunanCanonical } from '../lib/kinerja/yatim';
 import { pickVersiAktif, pilihVersiAgregat, versiUntukPilihan, labelVersi,
@@ -581,8 +582,41 @@ const ex = readFileSync('app/(dashboard)/kinerja/_exports.ts', 'utf8');
 // Kolom persen lewat penolong `p()`; yang dijaga: `p` memang menambahkan '%'
 // dan target_fisik memakainya, bukan `n()` yang untuk rupiah.
 ok('M8 target fisik diformat sebagai persen, bukan rupiah',
-   /const p = \(v: number\) => angka \? v : v\.toFixed\(2\) \+ '%';/.test(ex) &&
+   /const p = \(v: number\) => angka \? v : tulisPersen\(v\);/.test(ex) &&
    /p\(r\.target_fisik\)/.test(ex) && !/n\(r\.target_fisik\)/.test(ex));
+
+console.log('\n── M2. Persen bergaya Indonesia di layar & PDF, Excel tetap angka ─');
+{
+  // "Salin ke LKJIP" menempel teks sel apa adanya: "8.83%" bertitik tidak sebentuk
+  // dengan rupiah bertitik-ribuan di sel sebelahnya dan dibaca lain oleh LKJIP.
+  const pola = /^-?\d{1,3}(\.\d{3})*,\d{2}%$/;
+  const PERSEN_DETAIL = [3, 5, 6, 8, 10, 12, 13, 14];
+  const pdfJan = barisBulanDetail(barisJan, false, 'MURNI');
+  const selDetail = pdfJan.flatMap(b => PERSEN_DETAIL.map(i => String(b[i])));
+  ok('PS1 PDF detail: semua kolom persen (termasuk JUMLAH) berkoma desimal',
+     selDetail.every(s => pola.test(s)), selDetail.filter(s => !pola.test(s)).join(' | '));
+  eq('PS2 PDF detail: tulisannya dari angka hitungan yang sama', pdfJan[0][3], tulisPersen(barisJan[0].target_fisik));
+  const xlJan = barisBulanDetail(barisJan, true, 'MURNI');
+  ok('PS3 Excel detail: kolom persen tetap ANGKA', xlJan.every(b => PERSEN_DETAIL.every(i => typeof b[i] === 'number')));
+  eq('PS4 Excel detail: nilainya hasil hitungan apa adanya', xlJan[0][3], barisJan[0].target_fisik);
+
+  const { jsPDF } = await loadPdf();
+  let badanRekap: string[][] = [];
+  const tangkap = ((_d: unknown, o: { body: string[][] }) => { badanRekap = o.body; }) as unknown as Parameters<typeof gambarRekapPdf>[1];
+  gambarRekapPdf(new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' }), tangkap, {
+    baris: hasil.baris, yatim: hasil.yatim, tanpaRealisasi: hasil.tanpaRealisasi, sumberDinolkan: [],
+    versiRekap: [{ sumber: 'GAJI', tipe: 'MURNI', seq: 0 }], pilihanVersi: 'berlaku', tahun: '2026', namaBulan: 'Juli' });
+  const selRekap = badanRekap.flatMap(b => [3, 5, 6, 7, 11, 12].map(i => b[i])).filter(s => s !== '—');
+  ok('PS5 PDF rekap: semua kolom persen berkoma desimal',
+     badanRekap.length === hasil.baris.length && selRekap.length > 0 && selRekap.every(s => pola.test(s)),
+     selRekap.filter(s => !pola.test(s)).join(' | '));
+
+  const ctP = bersihkanKomentar(readFileSync('app/(dashboard)/kinerja/_tabs/CetakTab.tsx', 'utf8'));
+  ok('PS6 layar Cetak tidak menulis persen lewat toFixed', !/toFixed\(/.test(ctP));
+  ok('PS7 layar Cetak tidak menempel "%" di belakang angka mentah', !/\}%</.test(ctP) && !/\+ '%'/.test(ctP));
+  ok('PS8 rekap PDF tidak menulis persen lewat toFixed',
+     !/toFixed\(/.test(bersihkanKomentar(ex.slice(ex.indexOf('export function gambarRekapPdf('), ex.indexOf('export function barisBulanDetail(')))));
+}
 
 console.log('\n── N. Unduh rekap: angkanya sama dengan yang di layar ───────────');
 
