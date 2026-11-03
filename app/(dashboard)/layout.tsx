@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { SessionPayload, Role } from '@/types';
 import BfcacheGuard from '@/components/guards/BfcacheGuard';
 import SessionKeepAlive from '@/components/guards/SessionKeepAlive';
+import PenjagaPemeliharaan from '@/components/guards/PenjagaPemeliharaan';
 import SentinelProvider from '@/components/sentinel/SentinelProvider';
 import { LampirProvider } from '@/lib/sentinel/lampir-store';
 import ThemeInit from '@/components/ui/ThemeInit';
@@ -40,6 +41,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <ThemeInit themePreference={themePreference} />
       <BfcacheGuard userId={Number(userId)} />
       <SessionKeepAlive />
+      <PenjagaPemeliharaan />
       {/* RIMA F1: bot pengawas di-mount SEKALI untuk seluruh dashboard (CONCEPT §8).
           role diteruskan untuk navigasi sadar-akses (F5b, G18).
           LampirProvider (§23): RAM store hasil parse lampiran chat — di ATAS Sentinel

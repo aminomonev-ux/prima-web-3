@@ -8,6 +8,7 @@ import { verifyTurnstile } from '@/lib/security/recaptcha';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { addNotif, NOTIF_SUPER_ADMIN } from '@/lib/services/notifications';
+import { alasanLoginDitahan } from '@/lib/security/jadwal-keluar-data';
 import crypto from 'crypto';
 import type { User } from '@/types';
 
@@ -163,7 +164,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    
+    // Pemeliharaan: login ditahan untuk selain SUPER_ADMIN. Diperiksa SESUDAH kata sandi benar —
+    // kalau sebelumnya, beda jawaban "ditahan" vs "salah" membocorkan username mana yang SUPER_ADMIN.
+    if (user.role !== 'SUPER_ADMIN') {
+      const ditahan = await alasanLoginDitahan();
+      if (ditahan) {
+        await writeAuditLog({ req, eventType: 'LOGIN_BLOCKED', userId: user.id, username: user.username, detail: 'Login ditahan: pemeliharaan' });
+        return NextResponse.json({ ok: false, code: 'PEMELIHARAAN', message: ditahan }, { status: 503 });
+      }
+    }
+
     await sql`
       UPDATE users
       SET failed_attempts = 0,

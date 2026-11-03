@@ -1,14 +1,19 @@
 
 import { NextResponse } from 'next/server';
-import { getSession, createToken, setSessionCookie } from '@/lib/security/auth';
+import { cookies } from 'next/headers';
+import { getSession, createToken, setSessionCookie, COOKIE_NAME } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { sql } from '@/lib/data/db';
+import { alasanSesiDitolak } from '@/lib/security/jadwal-keluar-data';
 import type { SessionPayload } from '@/types';
 
 export async function POST() {
+  // Dibaca sebelum getSession: ia menghapus cookie sesi yang ditolaknya.
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ ok: false, message: 'Session expired' }, { status: 401 });
+    // `alasan` membuat halaman login menyebut "dikeluarkan untuk pemeliharaan", bukan "tidak ada aktivitas".
+    return NextResponse.json({ ok: false, message: 'Session expired', alasan: await alasanSesiDitolak(token) }, { status: 401 });
   }
   // SDL-M17: rate-limit heartbeat. Client normal ~1/menit, beri budget 30/menit
   // untuk multi-tab/burst. Tanpa ini, attacker dengan stolen JWT bisa hammer

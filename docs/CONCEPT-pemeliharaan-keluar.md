@@ -1,0 +1,70 @@
+# Pemeliharaan & keluar otomatis
+
+2026-11-03. Nol migrasi — jadwalnya satu baris `app_config` (`pemeliharaan_jadwal`, JSON).
+
+## 1. Masalah
+
+Sebelum build di server kantor, orang yang masih bekerja harus dikeluarkan. Yang ada:
+- **Broadcast** hanya notifikasi lonceng — baru terlihat kalau loncengnya dibuka.
+- **Emergency logout** mematikan semua sesi seketika tanpa peringatan — isian yang belum disimpan hilang.
+- **SessionKeepAlive** baru bertanya ke server tiap 10 menit, terlalu jarang untuk hitung mundur 5 menit,
+  dan pertanyaannya memperpanjang sesi.
+
+## 2. Keputusan pemilik
+
+- Pengirim **SUPER_ADMIN saja** (sama dengan Broadcast & emergency logout).
+- Jeda bisa dipilih **1 / 5 / 10 / 15 menit**, bawaan 5.
+- **Tahan login** sesudahnya: centang bawaan nyala; hanya SUPER_ADMIN yang bisa masuk; dibuka manual
+  lewat "Buka login sekarang", atau **terbuka sendiri 2 jam** sesudah waktu habis supaya tidak terkunci
+  seharian karena lupa.
+
+## 3. Alur
+
+1. Admin Panel → Sistem → **Pemeliharaan**: pesan (isian bawaan), jeda, centang tahan login → Kirim
+   (konfirmasi menyebut jumlah sesi lain yang aktif). Panel menampilkan hitung mundur + Batalkan, lalu
+   "Login ditahan" + Buka login sekarang.
+2. Tiap tab PRIMA (`PenjagaPemeliharaan` di tata letak dashboard) bertanya `GET /api/auth/pemeliharaan`
+   tiap 30 detik dan saat tab kembali terlihat. Ada jadwal → modal pesan + hitung mundur:
+   - **Lanjut simpan dulu** → modal mengecil jadi spanduk merah (sisa waktu) supaya Simpan bisa ditekan;
+   - **Keluar sekarang** → menanyakan isian belum tersimpan (`bolehTinggalkanHalaman`), lalu keluar.
+3. Waktu habis, dua lapis:
+   - **Peramban**: tab keluar sendiri ke `/login?reason=pemeliharaan`. Pengingat "belum tersimpan" dilepas
+     dan `beforeunload` layar lain diputus (pendengar capture + `stopImmediatePropagation`) — kalau tidak,
+     dialog "tinggalkan halaman?" di komputer yang ditinggal menahan tabnya di halaman yang Simpan-nya 401.
+   - **Server (penentu)**: `getSession` menolak sesi yang lahir sebelum batas — jadwalnya menumpang kueri
+     sesi lewat LEFT JOIN, nol kueri tambahan. Komputer yang tidur/putus jaringan sampai di halaman login
+     begitu bangun. `terapkanKeluar` mematikan semuanya sekaligus sebelum jadwal ditimpa / saat login
+     dibuka / saat panel dibuka (sesi yang tak pernah dipakai lagi tidak boleh hidup kembali).
+
+## 4. Aturan (`lib/security/jadwal-keluar.ts`, MURNI)
+
+- Semua waktu = jam MySQL `NOW()` berbentuk teks `YYYY-MM-DD HH:MM:SS` — sama dengan
+  `user_sessions.created_at`, dibandingkan sebagai teks. Hitung mundur di tab memakai **sisa detik menurut
+  server**, jadi jam komputer yang meleset tidak berpengaruh.
+- Kena = `sekarang ≥ batas` dan sesi lahir sebelum batas, **kecuali** sesi pengirim, dan SUPER_ADMIN yang
+  masuk sesudah pesan dikirim (ia sudah tahu, biasanya ikut build). Staf yang masuk sesudah pesan
+  dikirim (login tidak ditahan) tetap ikut keluar.
+- Login ditahan = centang tahan dan `dikirim ≤ sekarang < login_dibuka`. Diperiksa di route login
+  **sesudah** kata sandi benar — sebelum itu, beda jawaban "ditahan" vs "salah" membocorkan username mana
+  yang SUPER_ADMIN. Ditolak 503 `PEMELIHARAAN` + `LOGIN_BLOCKED`.
+- Jadwal yang rusak = tidak ada jadwal (tidak mengeluarkan siapa pun).
+- Kirim baru ditolak selama hitung mundur berjalan; Batalkan hanya sebelum batas; Buka login hanya selama
+  ditahan. Baris dikunci `INSERT IGNORE` + `FOR UPDATE` (L69-a).
+- 401 dari keepalive & status membawa `alasan` (`alasanSesiDitolak`; token dibaca SEBELUM `getSession`,
+  yang menghapus cookie) → halaman login menyebut "dikeluarkan untuk pemeliharaan", bukan "tidak ada
+  aktivitas". Sesi yang keluar sendiri sebelum batas tidak dihitung pemeliharaan.
+- Pertanyaan tab **tidak memperpanjang sesi** — kalau memperpanjang, komputer yang ditinggal tidak pernah
+  kena batas idle 60 menit.
+- Audit `PEMELIHARAAN_KELUAR` (kirim / batalkan / buka login), retensi panjang.
+
+## 5. Batas
+
+- Aplikasi tidak menyimpan isian siapa pun — tiap layar punya Simpan + pengaman bentrok sendiri; modal
+  hanya mengingatkan.
+- Modal muncul paling lambat ±30 detik sesudah dikirim. Komputer yang tidur menerimanya saat bangun:
+  waktu masih ada → modal; sudah lewat → langsung ke halaman login.
+- Halaman yang sudah terbuka dengan sesi yang ditolak tetap tergambar sampai tabnya bertanya ke server
+  (`proxy.ts` hanya memeriksa JWT) — sama seperti emergency logout.
+
+Regresi: `npx tsx --env-file=.env.local scripts/test-pemeliharaan-keluar.mts` (69; bagian C MySQL di
+SATU transaksi yang di-ROLLBACK — sesi sungguhan tidak tersentuh).

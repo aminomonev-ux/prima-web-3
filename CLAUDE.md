@@ -347,6 +347,7 @@ Branch aktif: **mysql** — referensi schema: `docs/schema-mysql.sql` (bukan sch
 - Fungsi kritis — JANGAN ubah: `verifyToken()` `getSession()` `setSessionCookie()`
 - `proxy.ts` — DILARANG import `bcryptjs` atau `next/headers`, gunakan `jose`
 - Login: max 5 attempts → lock 15 menit. Session timeout: 60 menit
+- **Pemeliharaan & keluar otomatis** (2026-11-03, konsep `docs/CONCEPT-pemeliharaan-keluar.md`, nol migrasi): Admin Panel → Sistem → Pemeliharaan (SUPER_ADMIN) mengirim pesan + jeda 1/5/10/15 menit; tiap tab (`components/guards/PenjagaPemeliharaan.tsx`) bertanya `GET /api/auth/pemeliharaan` tiap 30 detik — **tidak memperpanjang sesi** — lalu modal hitung mundur / spanduk merah. Penentunya server: `getSession` menolak sesi yang lahir sebelum batas (jadwal `app_config.pemeliharaan_jadwal` menumpang kueri sesi lewat LEFT JOIN, nol kueri tambahan), kecuali sesi pengirim & SUPER_ADMIN yang masuk sesudah pesan dikirim. Login bisa ditahan (hanya SUPER_ADMIN; diperiksa SESUDAH kata sandi benar; terbuka sendiri 2 jam sesudah batas). Semua waktu = jam MySQL sebagai teks (`lib/security/jadwal-keluar.ts`, MURNI). 401 keepalive/status membawa `alasan` → login `?reason=pemeliharaan`. Regresi: `npx tsx --env-file=.env.local scripts/test-pemeliharaan-keluar.mts` (bagian C MySQL di satu transaksi yang di-ROLLBACK)
 
 ## Role System
 4 level: `SUPER_ADMIN / ADMIN / ADMIN_KASUBAG / ADMIN_KABAG` → `BIDANG_*` (4) → `SUB_BIDANG` (18 roles)

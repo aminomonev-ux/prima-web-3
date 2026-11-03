@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS app_config (
 
 -- Kunci yang boleh ditulis layar + bentuk nilainya: `aturanConfig` (lib/data/admin-schemas.ts).
 -- Pagu BLUD Usulan per tahun anggaran: `pagu_blud_{tahun}` (B5, migration-pagu-blud-per-tahun.sql).
+-- Pemeliharaan & keluar otomatis: `pemeliharaan_jadwal` (JSON, `lib/security/jadwal-keluar.ts`; ditulis
+-- `/api/admin/pemeliharaan`, dibaca `getSession` lewat LEFT JOIN). Baris tak ada / kosong = tidak ada jadwal.
 
 -- Fase F Tahap 17 (T15): daftar ini = `KUNCI_SAKELAR` di lib/registry/apps.ts, diperiksa
 -- scripts/test-tahap-17.mts. Baris yang tidak ada tetap terbaca online, tapi basis data yang

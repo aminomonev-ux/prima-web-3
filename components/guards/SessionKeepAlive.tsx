@@ -32,12 +32,12 @@ export default function SessionKeepAlive() {
   const [secondsLeft, setSecondsLeft] = useState(WARNING_LEAD_MS / 1000);
   const [busy,        setBusy]        = useState(false);
 
-  const redirectExpired = useCallback(() => {
+  const redirectExpired = useCallback((reason: 'expired' | 'pemeliharaan' = 'expired') => {
     if (redirectedRef.current) return;
     redirectedRef.current = true;
     if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
     if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-    router.replace('/login?reason=expired');
+    router.replace(`/login?reason=${reason}`);
   }, [router]);
 
   const ping = useCallback(async () => {
@@ -46,7 +46,10 @@ export default function SessionKeepAlive() {
       const r = await fetch('/api/auth/keepalive', { method: 'POST' });
       if (redirectedRef.current) return false;
       if (r.status === 401) {
-        redirectExpired();
+        // Tab yang bangun sesudah keluar-otomatis pemeliharaan: sebabnya disebut di halaman login.
+        let alasan: unknown = null;
+        try { alasan = ((await r.json()) as { alasan?: unknown }).alasan; } catch { /* sebab lain */ }
+        redirectExpired(alasan === 'PEMELIHARAAN' ? 'pemeliharaan' : 'expired');
         return false;
       }
       return true;

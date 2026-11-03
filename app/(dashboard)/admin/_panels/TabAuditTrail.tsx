@@ -48,7 +48,7 @@ export function TabAuditTrail() {
         <div className="ap-row">
           <select className="ap-select" value={event} onChange={e=>{setEvent(e.target.value);load(1);}}>
             <option value="">Semua Event</option>
-            {['LOGIN_SUCCESS','LOGIN_FAILED','LOGIN_BLOCKED','ACCOUNT_LOCKED','LOGOUT','SIGNUP','PASSWORD_RESET','SESSION_EXPIRED','BROADCAST','BRUTE_FORCE'].map(e=><option key={e} value={e}>{e}</option>)}
+            {['LOGIN_SUCCESS','LOGIN_FAILED','LOGIN_BLOCKED','ACCOUNT_LOCKED','LOGOUT','SIGNUP','PASSWORD_RESET','SESSION_EXPIRED','BROADCAST','PEMELIHARAAN_KELUAR','BRUTE_FORCE'].map(e=><option key={e} value={e}>{e}</option>)}
           </select>
           <input className="ap-input" style={{width:160}} placeholder="Saring username…" value={user} onChange={e=>setUser(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')load(1);}}/>
           <PrimaButton variant="ghost" size="sm" iconLeft={<RefreshCw size={12}/>} onClick={()=>load(1)} disabled={loading} aria-label="Muat ulang jejak audit"/>

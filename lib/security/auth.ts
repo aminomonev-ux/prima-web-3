@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import type { SessionPayload } from '@/types';
 import { SESSION_DURATION_HOURS, SESSION_INACTIVE_MINUTES, SESSION_ABSOLUTE_LIFETIME_HOURS } from '@/lib/constants';
 import { sql } from '@/lib/data/db';
+import { KUNCI_JADWAL_KELUAR, bacaJadwal, sesiKenaKeluar } from '@/lib/security/jadwal-keluar';
 
 // SEC-C1: NO fallback. Refuse to start if JWT_SECRET is missing/weak.
 const _rawSecret = process.env.JWT_SECRET;
@@ -81,20 +82,36 @@ export async function getSession(): Promise<SessionPayload | null> {
   // Pencabutan sesi saat nonaktif (di `api/admin/users`) sudah menutup jalur normalnya;
   // pemeriksaan ini jaring keduanya — untuk status yang berubah lewat jalur lain
   // (SQL manual, impor, perbaikan data) yang tidak ikut mencabut sesi (L69).
+  //
+  // Pemeliharaan & keluar otomatis (CONCEPT-pemeliharaan-keluar): jadwalnya ikut menumpang lewat
+  // LEFT JOIN `app_config` — sama-sama nol kueri tambahan. Sesi yang lahir sebelum batas ditolak
+  // begitu batasnya lewat, walau tabnya tidur atau putus jaringan saat hitung mundur.
   if (payload.sessionId) {
     try {
       const rows = await sql`
-        SELECT u.status
+        SELECT u.status, u.role,
+               DATE_FORMAT(s.created_at, '%Y-%m-%d %H:%i:%s') AS dibuat,
+               DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s')        AS sekarang,
+               m.value                                        AS jadwal
         FROM user_sessions s
         JOIN users u ON u.id = s.user_id
+        LEFT JOIN app_config m ON m.\`key\` = ${KUNCI_JADWAL_KELUAR}
         WHERE s.session_id = ${payload.sessionId} AND s.invalidated_at IS NULL
         LIMIT 1
-      ` as { status: string }[];
+      ` as { status: string; role: string; dibuat: string; sekarang: string; jadwal: string | null }[];
       if (!Array.isArray(rows) || rows.length === 0) {
         cookieStore.delete(COOKIE_NAME);
         return null;
       }
       if (statusMenutupSesi(rows[0]?.status)) {
+        cookieStore.delete(COOKIE_NAME);
+        return null;
+      }
+      const r = rows[0];
+      if (sesiKenaKeluar(bacaJadwal(r.jadwal), { id: payload.sessionId, dibuat: r.dibuat, role: r.role }, r.sekarang)) {
+        try {
+          await sql`UPDATE user_sessions SET invalidated_at = NOW() WHERE session_id = ${payload.sessionId}`;
+        } catch { /* tetap ditolak di bawah; tulisan ini hanya merapikan */ }
         cookieStore.delete(COOKIE_NAME);
         return null;
       }

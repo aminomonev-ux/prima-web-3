@@ -3,10 +3,11 @@
 // jadi datanya diselesaikan di sini dan dioper sebagai prop — nol endpoint publik baru.
 import LoginForm from './login-form';
 import { pemberitahuanPemeliharaan } from '@/lib/security/pemeliharaan';
+import { pemberitahuanLoginDitahan } from '@/lib/security/jadwal-keluar-data';
 
 export const dynamic = 'force-dynamic';
 
 export default async function LoginPage() {
-  const pemeliharaan = await pemberitahuanPemeliharaan();
-  return <LoginForm pemeliharaan={pemeliharaan} />;
+  const [pemeliharaan, loginDitahan] = await Promise.all([pemberitahuanPemeliharaan(), pemberitahuanLoginDitahan()]);
+  return <LoginForm pemeliharaan={pemeliharaan} loginDitahan={loginDitahan} />;
 }

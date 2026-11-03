@@ -6,7 +6,7 @@ import {
   Monitor, Shield, Activity, Users, Server,
   Radio, Search, Mail, LogOut,
   Power, ChevronDown, ShieldCheck, MessageSquareWarning, ListChecks, Menu, Stethoscope,
-  ClipboardCheck,
+  ClipboardCheck, Wrench,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/constants';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -24,6 +24,7 @@ import { TabBroadcast } from './_panels/TabBroadcast';
 import { TabAuditTrail } from './_panels/TabAuditTrail';
 import { TabEmailNotif } from './_panels/TabEmailNotif';
 import { TabPemeriksaan } from './_panels/TabPemeriksaan';
+import { TabPemeliharaan } from './_panels/TabPemeliharaan';
 import { fetchJson } from '@/lib/shared/api';
 import { bolehTinggalkanHalaman, lepaskanPengingat } from '@/lib/shared/belum-tersimpan';
 import type { Temuan } from '@/lib/admin/pemeriksaan';
@@ -34,7 +35,7 @@ import './admin.css';
 
 interface Props { userId: number; username: string; role: Role; sessionId: string; themePreference: 'dark' | 'light'; }
 
-type Tab = 'sessions'|'app-control'|'attack-monitor'|'pusat-akses'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback'|'pemeriksaan'|'tinjauan';
+type Tab = 'sessions'|'app-control'|'attack-monitor'|'pusat-akses'|'menu-access'|'security-status'|'broadcast'|'audit-trail'|'email-notif'|'promotion'|'rima-feedback'|'pemeriksaan'|'tinjauan'|'pemeliharaan';
 
 
 
@@ -185,6 +186,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
     { judul: 'Sistem', items: [
       ...(isSA ? [{ id:'pemeriksaan' as Tab, label:'Pemeriksaan', icon:<Stethoscope size={15}/>, lencana: perluDilihat }] : []),
       { id:'broadcast',      label:'Broadcast',   icon:<Radio size={15}/> },
+      ...(isSA ? [{ id:'pemeliharaan' as Tab, label:'Pemeliharaan', icon:<Wrench size={15}/> }] : []),
       { id:'email-notif',    label:'Email',       icon:<Mail size={15}/> },
       { id:'rima-feedback',  label:'RIMA',        icon:<MessageSquareWarning size={15}/> },
     ]},
@@ -273,6 +275,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'menu-access'     && <MenuAccessRoleTab isSA={isSA}/>}
         {tab === 'security-status' && <TabSecurityStatus/>}
         {tab === 'broadcast'       && <TabBroadcast/>}
+        {tab === 'pemeliharaan'    && isSA && <TabPemeliharaan/>}
         {tab === 'audit-trail'     && <TabAuditTrail/>}
         {tab === 'email-notif'     && <TabEmailNotif   isSA={isSA}/>}
         {tab === 'promotion'       && isSA && <PromotionRequestsPanel/>}

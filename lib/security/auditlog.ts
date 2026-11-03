@@ -77,6 +77,7 @@ export type AuditEventType =
   | 'PASSWORD_RESET'
   | 'SESSION_EXPIRED'
   | 'BROADCAST'
+  | 'PEMELIHARAAN_KELUAR'     // /api/admin/pemeliharaan — kirim / batalkan / buka login
   | 'BRUTE_FORCE'
   // ─── E-Anggaran ─────────────────────────────────────────────────────────────
   | 'KINERJA_SAVE_MASTER'

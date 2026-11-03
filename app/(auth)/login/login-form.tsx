@@ -12,10 +12,15 @@ import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { APP_NAME, APP_INSTANSI_SHORT } from '@/lib/constants';
 import type { Pemberitahuan } from '@/lib/security/pemeliharaan';
 
-export default function LoginForm({ pemeliharaan }: { pemeliharaan: Pemberitahuan[] }) {
+export default function LoginForm({ pemeliharaan, loginDitahan }: {
+  pemeliharaan: Pemberitahuan[];
+  /** Pemeliharaan & keluar otomatis: login ditahan untuk selain SUPER_ADMIN sampai jam `sampai`. */
+  loginDitahan: { sampai: string } | null;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const expiredReason = searchParams.get('reason') === 'expired';
+  const dikeluarkanPemeliharaan = searchParams.get('reason') === 'pemeliharaan';
 
   const [lgU, setLgU] = useState(''); const [lgP, setLgP] = useState('');
   const [lgSh, setLgSh] = useState(false); const [lgLd, setLgLd] = useState(false);
@@ -224,6 +229,25 @@ export default function LoginForm({ pemeliharaan }: { pemeliharaan: Pemberitahua
                 }}>
                   <span style={{fontSize:16, color:'#FFC857'}}>⚠</span>
                   <span>Sesi anda telah berakhir karena tidak ada aktivitas. Silakan login kembali.</span>
+                </div>
+              )}
+
+              {dikeluarkanPemeliharaan && !loginDitahan && !lgErr && (
+                <div className="lp-pemeliharaan" role="status">
+                  <span className="lp-pemeliharaan-ikon">🔧</span>
+                  <div>Anda dikeluarkan karena aplikasi sedang dalam pemeliharaan. Silakan masuk lagi.</div>
+                </div>
+              )}
+
+              {loginDitahan && (
+                <div className="lp-pemeliharaan" role="status">
+                  <span className="lp-pemeliharaan-ikon">🔧</span>
+                  <div>
+                    <div className="lp-pemeliharaan-baris">
+                      <b>PRIMA sedang dalam pemeliharaan.</b>
+                      <div className="lp-pemeliharaan-sampai">Login dibuka lagi paling lambat pukul {loginDitahan.sampai}</div>
+                    </div>
+                  </div>
                 </div>
               )}
 
