@@ -188,6 +188,8 @@ export interface LaporanSumber {
   pct_fisik: number;
   bulan_terakhir: number;
   trend: LaporanTrend[];
+  /** Target RKO Jan–Des (rupiah), versi acuan yang sama dengan `total_pagu`. */
+  target_bulan: number[];
   /** TIDAK ikut `total_real_*`; dilaporkan terpisah. */
   yatim: YatimRingkas;
   /** Versi SSK yang jadi acuan angka baris ini. Null = sumber ini tanpa SSK. */

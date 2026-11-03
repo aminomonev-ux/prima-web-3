@@ -1,6 +1,12 @@
 import { sql, bulkInsert, withTransaction, type TxSql } from './db';
-import { acquireBludLock } from './locks';
+import { acquireBludLock, bumpBludVersion } from './locks';
 import { catatRiwayatSimpan, hitungTotalNilai } from '@/lib/kinerja/riwayat-simpan';
+import {
+  rencanaJalarRekening, ringkasJalarRekening, perluKonfirmasiJalar,
+  type RekeningLama, type BarisRkoRekening, type BarisRealRekening,
+  type RencanaJalarRekening, type RingkasJalarRekening,
+} from '@/lib/kinerja/rekening-menjalar';
+import { kelompokkanNilai } from '@/lib/kinerja/master-ubah';
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { buangBintang } from '@/lib/kinerja/master-nama';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
@@ -293,19 +299,55 @@ export async function getRekeningRows(tahun: string, sumber: SumberSSK) {
   ` as RekeningRow[];
 }
 
+/** Suntingan Rekening ikut mengubah RKO/Realisasi — ditanyakan dulu, tidak ada yang ditulis. */
+export class KinerjaPerluJalarError extends Error {
+  constructor(public jalaran: RingkasJalarRekening) {
+    super('Perubahan rekening ikut mengubah RKO & Realisasi — konfirmasi dulu.');
+    this.name = 'KinerjaPerluJalarError';
+  }
+}
+
+/**
+ * Rekening yang berganti nama/rantai (dipasangkan lewat `id`) ikut mengubah salinannya di
+ * RKO semua versi dan Realisasi sumber ini — aturannya `rencanaJalarRekening`. `jalarkan`
+ * = sudah dikonfirmasi; tanpa itu dan ada yang menjalar → `KinerjaPerluJalarError`.
+ */
 export async function saveRekeningBatch(
   tahun: string,
   sumber: SumberSSK,
-  rows: Pick<RekeningRow, 'uraian' | 'uraian_ssk' | 'sumber_anggaran' | 'program' | 'kegiatan' | 'subkegiatan'>[],
+  rows: (Pick<RekeningRow, 'uraian' | 'uraian_ssk' | 'sumber_anggaran' | 'program' | 'kegiatan' | 'subkegiatan'> & { id?: number })[],
   userId: number,
   force = false,
-) {
+  jalarkan = false,
+): Promise<{ rows: RekeningRow[]; jalaran: RingkasJalarRekening }> {
+  let jalaran = ringkasJalarRekening(rencanaJalarRekening([], [], [], []), sumber);
   // PERF-C1: DELETE + bulk INSERT dalam transaction (atomicity + 1 round-trip)
   await withTransaction(async ({ tx, conn }) => {
-    const [ada] = await tx`
-      SELECT COUNT(*) AS n FROM kinerja_rekening WHERE tahun = ${tahun} AND sumber = ${sumber}
-    ` as { n: unknown }[];
-    pagarReplace(`Rekening ${sumber} ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+    // L84: gembok RKO & Realisasi sumber ini PERTAMA, urutan sama dengan Simpan RKO dan
+    // Master menjalar. Rekening sendiri tetap tanpa angka kunci optimistik.
+    await kunciVersiSsk(tx, tahun, sumber);
+    await acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber));
+    const lama = await tx`
+      SELECT id, uraian, uraian_ssk, program, kegiatan, subkegiatan FROM kinerja_rekening
+      WHERE tahun = ${tahun} AND sumber = ${sumber} ORDER BY urut, id FOR UPDATE
+    ` as RekeningLama[];
+    pagarReplace(`Rekening ${sumber} ${tahun}`, lama.length, rows.length, force);
+
+    const rko = await tx`
+      SELECT id, versi_tipe, versi_seq, canonical_id, uraian, uraian_ssk, program, kegiatan, subkegiatan
+      FROM kinerja_ssk WHERE tahun = ${tahun} AND sumber = ${sumber} ORDER BY id
+    ` as BarisRkoRekening[];
+    const real = await tx`
+      SELECT id, ssk_canonical_id, keterangan, uraian_ssk, program, kegiatan, subkegiatan
+      FROM kinerja_realisasi WHERE tahun = ${tahun} AND sumber = ${sumber} ORDER BY id
+    ` as BarisRealRekening[];
+    const rencana = rencanaJalarRekening(
+      lama.map(r => ({ ...r, id: Number(r.id) })), rows,
+      rko.map(r => ({ ...r, id: Number(r.id), versi_seq: Number(r.versi_seq), canonical_id: String(r.canonical_id ?? '') })),
+      real.map(r => ({ ...r, id: Number(r.id), ssk_canonical_id: String(r.ssk_canonical_id ?? ''), keterangan: String(r.keterangan ?? '') })),
+    );
+    jalaran = ringkasJalarRekening(rencana, sumber);
+    if (perluKonfirmasiJalar(jalaran) && !jalarkan) throw new KinerjaPerluJalarError(jalaran);
 
     await tx`DELETE FROM kinerja_rekening WHERE tahun = ${tahun} AND sumber = ${sumber}`;
     // SEBELUM `return` di bawah (L69). `versiKe` null: fungsi ini memang tidak
@@ -315,6 +357,7 @@ export async function saveRekeningBatch(
       baris: rows, totalNilai: hitungTotalNilai('REKENING', rows),
       versiKe: null, userId,
     });
+    await tulisJalarRekening(tx, tahun, sumber, rencana, userId);
     if (rows.length === 0) return;
     const values = rows.map((r, i) => [
       tahun, sumber, r.uraian, r.uraian_ssk ?? null, r.sumber_anggaran ?? null,
@@ -327,6 +370,27 @@ export async function saveRekeningBatch(
       conn,
     );
   });
+  // DELETE + INSERT melahirkan id baru — layar memakai id ini untuk memasangkan suntingan berikutnya.
+  return { rows: await getRekeningRows(tahun, sumber), jalaran };
+}
+
+/**
+ * Satu UPDATE per kelompok nilai baru; `updated_at = updated_at` — label yang mengikuti
+ * Rekening bukan suntingan isi (pola Master menjalar). Angka kunci RKO per versi &
+ * Realisasi dinaikkan supaya tab yang terbuka kena 409, bukan menulis balik nama lama.
+ */
+async function tulisJalarRekening(tx: TxSql, tahun: string, sumber: SumberSSK, r: RencanaJalarRekening, userId: number) {
+  for (const k of kelompokkanNilai(r.rko.map(x => ({ id: x.baris.id, nilai: x.nilai })))) {
+    const n = k.nilai;
+    await tx`UPDATE kinerja_ssk SET uraian = ${n.uraian}, uraian_ssk = ${n.uraian_ssk}, program = ${n.program}, kegiatan = ${n.kegiatan}, subkegiatan = ${n.subkegiatan}, updated_at = updated_at WHERE id IN (${k.ids})`;
+  }
+  for (const k of kelompokkanNilai(r.realisasi.map(x => ({ id: x.baris.id, nilai: x.nilai })))) {
+    const n = k.nilai;
+    await tx`UPDATE kinerja_realisasi SET keterangan = ${n.uraian}, uraian_ssk = ${n.uraian_ssk}, program = ${n.program}, kegiatan = ${n.kegiatan}, subkegiatan = ${n.subkegiatan}, updated_at = updated_at WHERE id IN (${k.ids})`;
+  }
+  const versi = [...new Set(r.rko.map(x => `${x.baris.versi_tipe}:${x.baris.versi_seq}`))].sort();
+  for (const v of versi) await bumpBludVersion(tx, 'kinerja_ssk', `${tahun}:${sumber}:${v}`, userId);
+  if (r.realisasi.length > 0) await bumpBludVersion(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber), userId);
 }
 
 // ─── SSK ──────────────────────────────────────────────────────────────────────
@@ -1369,6 +1433,8 @@ export interface LaporanSumber {
   pct_fisik: number;
   bulan_terakhir: number;
   trend: LaporanTrend[];
+  /** Target RKO Jan–Des (rupiah) dari versi acuan yang SAMA dengan `total_pagu`; baris dinol-kan tidak ikut. */
+  target_bulan: number[];
   /**
    * Realisasi yang jangkarnya sudah lenyap dari versi SSK acuan. TIDAK ikut
    * dijumlah ke `total_real_*` — lihat lib/kinerja/yatim.ts. Dilaporkan supaya
@@ -1391,6 +1457,31 @@ export interface LaporanSumber {
 // sama; tanpa filter, SUM(pagu) terhitung ganda tiap versi PERUBAHAN dibuat.
 // Versi aktif = PERUBAHAN seq tertinggi bila ada, selain itu MURNI seq
 // tertinggi. Baris is_nullified dikecualikan (konsisten getRealisasiHydrated).
+
+type VersiAcuan = { tipe: 'MURNI' | 'PERUBAHAN'; seq: number } | null;
+
+/**
+ * Target RKO per bulan dari versi ACUAN tiap sumber — versi yang sama dengan pagunya.
+ * Grafik Beranda dulu membaca RKO sendiri tanpa versi (= MURNI-0), jadi sumber yang hanya
+ * punya PERUBAHAN (OBAT yang tak dianggarkan di murni) tampil "belum ada data" (L88).
+ */
+async function targetBulanan(tahun: string, acuan: ReadonlyMap<string, VersiAcuan>, sumber?: SumberSSK): Promise<Map<string, number[]>> {
+  const rows = (sumber
+    ? await sql`SELECT sumber, versi_tipe, versi_seq, months FROM kinerja_ssk WHERE tahun = ${tahun} AND sumber = ${sumber} AND is_nullified = FALSE`
+    : await sql`SELECT sumber, versi_tipe, versi_seq, months FROM kinerja_ssk WHERE tahun = ${tahun} AND is_nullified = FALSE`
+  ) as Record<string, unknown>[];
+  const hasil = new Map<string, number[]>();
+  for (const r of rows) {
+    const v = acuan.get(String(r.sumber));
+    if (!v || r.versi_tipe !== v.tipe || Number(r.versi_seq ?? 0) !== v.seq) continue;
+    const m = parseJson<SskMonths>(r.months, emptyMonths());
+    const arr = hasil.get(String(r.sumber)) ?? new Array<number>(12).fill(0);
+    MONTHS_KEYS.forEach((k, i) => { arr[i] += Number(m[k] ?? 0); });
+    hasil.set(String(r.sumber), arr);
+  }
+  for (const arr of hasil.values()) arr.forEach((x, i) => { arr[i] = Math.round(x * 100) / 100; });
+  return hasil;
+}
 
 export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<LaporanSumber> {
   // Pagu & target dari SSK — agregat per versi, lalu pilih versi aktif (#1)
@@ -1472,6 +1563,7 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
   const pct_fisik = trend.length > 0 ? trend[trend.length - 1].akum_pct_fisik : 0;
 
   const pct_serapan = total_pagu > 0 ? Math.round((total_real_keuangan / total_pagu) * 10000) / 100 : 0;
+  const target = await targetBulanan(tahun, new Map([[sumber, versiAcuan]]), sumber);
 
   return {
     sumber,
@@ -1483,6 +1575,7 @@ export async function getLaporanData(tahun: string, sumber: SumberSSK): Promise<
     pct_fisik,
     bulan_terakhir:     bulanTerakhir,
     trend,
+    target_bulan:       target.get(sumber) ?? new Array<number>(12).fill(0),
     yatim: penyaring.hasil(),
     versi_aktif:    versiAcuan,
     versi_dinolkan: versiDinolkan,
@@ -1612,6 +1705,8 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
     }));
   }
 
+  const target = await targetBulanan(tahun, new Map([...sskBySumber].map(([s, a]) => [s, a.versi_aktif])));
+
   // Assemble per sumber — pastikan urutan sama dengan SUMBER_LIST (deterministic)
   return SUMBER_LIST.map(sumber => {
     const ssk: AgregatSskSumber = sskBySumber.get(sumber)
@@ -1633,6 +1728,7 @@ export async function getLaporanSemua(tahun: string): Promise<LaporanSumber[]> {
       pct_fisik,
       bulan_terakhir:      real.bulan_terakhir,
       trend,
+      target_bulan:        target.get(sumber) ?? new Array<number>(12).fill(0),
       yatim:               yatimBySumber.get(sumber) ?? yatimKosong(),
       versi_aktif:         ssk.versi_aktif,
       versi_dinolkan:      ssk.versi_dinolkan,

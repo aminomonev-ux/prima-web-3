@@ -516,7 +516,7 @@ const lap = (sumber: SumberSSK, pagu: number, real: number, lain: Partial<Lapora
   // Target fisik SENGAJA ≠ pagu: kalau sama, "÷ pagu" dan "÷ target" memberi angka yang sama (M4 buta).
   sumber, total_pagu: pagu, total_target_fisik: pagu * 0.8, total_real_keuangan: real, total_real_fisik: real * 0.9,
   pct_serapan: pagu > 0 ? Math.round((real / pagu) * 10000) / 100 : 0, pct_fisik: pagu > 0 ? Math.round(((real * 0.9) / pagu) * 10000) / 100 : 0,
-  bulan_terakhir: 3, trend: [], yatim: yatimNol, versi_aktif: { tipe: 'MURNI', seq: 0 }, versi_dinolkan: false, ...lain,
+  bulan_terakhir: 3, trend: [], target_bulan: new Array(12).fill(0), yatim: yatimNol, versi_aktif: { tipe: 'MURNI', seq: 0 }, versi_dinolkan: false, ...lain,
 })
 const LAP: LaporanSumber[] = SUMBER_LIST.map(s => (s === 'GAJI'
   ? lap('GAJI', 1_000_000_000, 333_333_333, {

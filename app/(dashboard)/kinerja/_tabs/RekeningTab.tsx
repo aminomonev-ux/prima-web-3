@@ -24,6 +24,9 @@ import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import OpsiDiLuarMaster from '@/components/kinerja/OpsiDiLuarMaster';
 import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
 import { cocokInduk, namaUnik } from '@/lib/kinerja/master-nama';
+import { kalimatJalarRekening, type RingkasJalarRekening } from '@/lib/kinerja/rekening-menjalar';
+import { adaJalaran, jumlahJalaran } from '@/lib/kinerja/master-ubah';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { uiTheme } from '@/lib/theme';
 
 interface Props {
@@ -124,22 +127,35 @@ export default function RekeningTab({
     toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
   }
 
-  async function saveRekening(force = false) {
+  async function saveRekening(force = false, jalarkan = false) {
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/kinerja/rekening', {
         method: 'PUT',
-        body: JSON.stringify({ tahun, sumber: activeSumber, rows: rekeningRows, force,
+        body: JSON.stringify({ tahun, sumber: activeSumber, rows: rekeningRows, force, jalarkan,
           asal_pulihkan: asalPulihkanRef.current ?? undefined }),
       });
+      const isi = d as unknown as { code?: string; saved?: number; rows?: RekeningRow[]; jalaran?: RingkasJalarRekening };
       if (d.ok) {
-        toast.success(`Tersimpan ${(d as unknown as { saved: number }).saved} rekening`);
+        const ikut = isi.jalaran && adaJalaran(isi.jalaran.dampak) ? ` — ${jumlahJalaran(isi.jalaran.dampak)} baris RKO/Realisasi ikut berganti` : '';
+        toast.success(`Tersimpan ${isi.saved} rekening${ikut}`);
+        // id lama sudah tidak ada sesudah Simpan; suntingan berikutnya dipasangkan lewat id baru.
+        if (isi.rows) setRekeningRows(isi.rows);
         // Sudah tercatat di audit simpan ini; simpan berikutnya bukan lagi pulihan.
         asalPulihkanRef.current = null;
       }
-      else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
+      else if (isi.code === 'PENURUNAN_DRASTIS') {
         const ok = await konfirmasiPenurunan(`rekening ${activeSumber}`, d as unknown as JawabanPagar);
-        if (ok) { setSaving(false); await saveRekening(true); return; }
+        if (ok) { setSaving(false); await saveRekening(true, jalarkan); return; }
+      }
+      else if (isi.code === 'PERLU_KONFIRMASI_JALAR' && isi.jalaran) {
+        const ok = await confirmDialog({
+          title: `Simpan rekening ${activeSumber}`,
+          message: kalimatJalarRekening(isi.jalaran),
+          variant: 'primary',
+          confirmLabel: adaJalaran(isi.jalaran.dampak) ? 'Simpan & ikut ubah' : 'Simpan',
+        });
+        if (ok) { setSaving(false); await saveRekening(force, true); return; }
       }
       else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }

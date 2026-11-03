@@ -18,12 +18,10 @@ interface Props {
 
 interface PendRow { keterangan: string; target: number; realisasi: number; capaian_pct: number }
 interface LaporanTrend { bulan: number; real_keuangan: number; akum_keuangan: number }
-interface LaporanSumber { sumber: string; total_pagu: number; total_real_keuangan: number; trend: LaporanTrend[] }
-interface SskRowApi { months?: Record<string, number> | null }
+interface LaporanSumber { sumber: string; total_pagu: number; total_real_keuangan: number; trend: LaporanTrend[]; target_bulan?: number[] }
 
 type Sumber = 'GAJI' | 'BLUD' | 'HARLEP' | 'PROMKES' | 'SARPRAS' | 'OBAT' | 'PEMELIHARAAN' | 'PEMBANGUNAN'
 const SUMBER_LIST: Sumber[] = ['GAJI', 'BLUD', 'HARLEP', 'PROMKES', 'SARPRAS', 'OBAT', 'PEMELIHARAAN', 'PEMBANGUNAN']
-const MONTH_KEYS = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'] as const
 const BULAN_LABEL = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 
 // Target & Realisasi pakai HUE BEDA total (complementary), bukan light/dark shade dari hue sama
@@ -50,36 +48,21 @@ const fmtRpFull = (n: number) => 'Rp ' + new Intl.NumberFormat('id-ID').format(M
 export default function BerandaCharts({ tahun, isLight }: Props) {
   const [pendRows,    setPendRows]    = useState<PendRow[]>([])
   const [laporanData, setLaporanData] = useState<LaporanSumber[]>([])
-  const [sskBySumber, setSskBySumber] = useState<Record<Sumber, number[]>>({
-    GAJI: [], BLUD: [], HARLEP: [], PROMKES: [], SARPRAS: [], OBAT: [], PEMELIHARAAN: [], PEMBANGUNAN: [],
-  })
   const [loading,     setLoading]     = useState(true)
 
+  // Target per bulan ikut balasan Laporan — versi acuan yang SAMA dengan pagu & realisasinya.
+  // Dulu RKO dibaca sendiri tanpa versi (= MURNI-0): sumber yang hanya punya PERUBAHAN
+  // tampil kosong, sumber yang sudah Perubahan menampilkan target murni (L88).
   useEffect(() => {
     let alive = true
     queueMicrotask(() => { if (alive) setLoading(true) })
     Promise.all([
       fetch(`/api/kinerja/pendapatan?type=pendapatan&tahun=${tahun}`).then(r => r.json()).catch(() => ({ rows: [] })),
       fetch(`/api/kinerja/laporan?tahun=${tahun}`).then(r => r.json()).catch(() => ({ data: [] })),
-      ...SUMBER_LIST.map(s =>
-        fetch(`/api/kinerja/ssk?tahun=${tahun}&sumber=${s}`).then(r => r.json()).catch(() => ({ rows: [] }))
-      ),
-    ]).then(results => {
+    ]).then(([pendJson, lapJson]: [{ rows?: PendRow[] }, { data?: LaporanSumber[] }]) => {
       if (!alive) return
-      const [pendJson, lapJson, ...sskJsons] = results as [
-        { rows?: PendRow[] }, { data?: LaporanSumber[] }, ...{ rows?: SskRowApi[] }[]
-      ]
       setPendRows(pendJson?.rows ?? [])
       setLaporanData(lapJson?.data ?? [])
-      const next = { GAJI: [], BLUD: [], HARLEP: [], PROMKES: [], SARPRAS: [], OBAT: [], PEMELIHARAAN: [], PEMBANGUNAN: [] } as Record<Sumber, number[]>
-      SUMBER_LIST.forEach((s, i) => {
-        const rows = sskJsons[i]?.rows ?? []
-        const monthlyTotals = MONTH_KEYS.map(mk =>
-          rows.reduce((sum, r) => sum + Number(r.months?.[mk] ?? 0), 0)
-        )
-        next[s] = monthlyTotals
-      })
-      setSskBySumber(next)
       setLoading(false)
     })
     return () => { alive = false }
@@ -179,7 +162,7 @@ export default function BerandaCharts({ tahun, isLight }: Props) {
       {/* ─── Chart per Sumber — Target SSK vs Realisasi per Bulan ──────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '14px' }}>
         {SUMBER_LIST.map(s => {
-          const targetArr = sskBySumber[s] ?? new Array(12).fill(0)
+          const targetArr = laporanData.find(x => x.sumber === s)?.target_bulan ?? new Array(12).fill(0)
           const realArr   = realBySumber[s]  ?? new Array(12).fill(0)
           const data = BULAN_LABEL.map((bln, i) => ({
             bulan: bln,

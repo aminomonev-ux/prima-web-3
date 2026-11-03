@@ -256,6 +256,8 @@ export const SskBodySchema = z.object({
  * PUT /api/kinerja/rekening — Save rekening batch.
  */
 const RekeningRowSchema = z.object({
+  /** id baris yang dimuat layar — pasangan lama↔baru untuk menjalarkan suntingan ke RKO/Realisasi. 0/kosong = baris baru. */
+  id:               z.number().int().nonnegative().optional(),
   uraian:           z.string(),
   uraian_ssk:       z.string().nullable(),
   sumber_anggaran:  z.string().nullable(),
@@ -269,6 +271,8 @@ export const RekeningBodySchema = z.object({
   tahun:  TahunSchema,
   sumber: SumberSchema,
   force:  z.boolean().optional(),
+  /** Sudah dikonfirmasi: nama/rantai yang berubah ikut ditulis ke RKO & Realisasi. */
+  jalarkan: z.boolean().optional(),
   rows:   z.array(RekeningRowSchema).max(5000, 'Maks 5000 baris per batch'),
 });
 
