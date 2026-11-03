@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Combine, Split, Copy, ClipboardPaste, Scissors,
   Undo2, Redo2, Save, Link2, Unlink, RefreshCw, SlidersHorizontal, RotateCcw, Columns3, Paintbrush, Sigma, Search, X,
-  ChevronUp, ChevronDown, ArrowDownAZ, ArrowDownZA, ClipboardType, Eraser,
+  ChevronUp, ChevronDown, ArrowDownAZ, ArrowDownZA, ClipboardType, Eraser, Plus, EyeOff,
 } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DeleteIcon from '@/components/ui/DeleteIcon';
@@ -30,7 +30,12 @@ import {
   BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, BATAS_BARIS_KEPALA, LEBAR_KOLOM_BAWAAN, GARIS_JUMLAH,
   type TabelCell, type TabelAlign, type TabelNumFmt, type BentukTabel, type AturTabel, type GayaTabel, type PosisiTabel, type TabelBorder, type Kotak,
 } from '@/lib/lkjip/tabel';
-import { kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, ambilIsianTangan, nilaiPerbarui, kalimatIsianYatim, type Tautan, type PayloadTabel } from '@/lib/lkjip/tautan';
+import {
+  kalimatPerbarui, pasangBadan, pesanLewatBatas, jumlahBarisKepala, lepasTautan, tulisWaktuTarik, ambilIsianTangan, nilaiPerbarui, kalimatIsianYatim,
+  kalimatBarisTanganPindah, adalahBarisTangan, sisipBarisTangan, buangBarisTertaut, hapusKolomTertaut, jumlahIsianTangan, hitungRumusTangan,
+  type Tautan, type PayloadTabel, type PayloadTertaut,
+} from '@/lib/lkjip/tautan';
+import { bacaSalinan, type SalinanModul } from '@/lib/lkjip/salinan-modul';
 import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { usePilihanSel } from './usePilihanSel';
@@ -39,7 +44,10 @@ import { RowMenu, type RowMenuItem } from './RowMenu';
 /** Fitur khas blok TABEL LKJIP. Modalnya dioper pemakai (dimuat saat dibuka) — komponen bersama tidak menjangkau berkas layar LKJIP. */
 export type FiturLkjip = {
   tahunDokumen: number;
-  TautanModal: ComponentType<{ payload: PayloadTabel; tahunDokumen: number; onTerapkan: (p: PayloadTabel) => void; onTutup: () => void }>;
+  TautanModal: ComponentType<{ payload: PayloadTabel; tahunDokumen: number; onTerapkan: (p: PayloadTabel) => void; onTutup: () => void; salinan?: SalinanModul }>;
+  /** Blok baru dari "Tempel dari Modul": modal tautan langsung terbuka berisi salinan ini. */
+  salinanAwal?: SalinanModul;
+  onSalinanDipakai?: () => void;
 };
 
 /** Peran kolom (IKI CUSTOM, CONCEPT-iki-custom §11) — daftar dari pemakai; komponen ini tidak mengenal artinya. */
@@ -60,8 +68,16 @@ type TabelP = { judul: string; kolom: string[]; align: TabelAlign[]; colWidths?:
 type Snap = { kolom: string[]; align: TabelAlign[]; colWidths: number[]; headerRows: number; rows: TabelCell[][]; atur: AturTabel; peran: Record<string, number> };
 type Sunting = { r: number; c: number; awal: string; ganti: boolean };
 
-const PESAN_BADAN = 'Badan tabel tertaut mengikuti sumbernya — ubah lewat Atur Bentuk, atau Lepas Tautan untuk menyunting bebas.';
+const PESAN_BADAN = 'Badan tabel tertaut mengikuti sumbernya — klik kanan untuk sisip baris tangan atau sembunyikan baris, ubah lewat Atur Bentuk, atau Lepas Tautan untuk menyunting bebas.';
 const PESAN_KOLOM_TAUT = 'Kolom tabel tertaut diatur lewat Atur Bentuk.';
+
+/** Id baris tangan, unik di tabelnya. Bukan `crypto.randomUUID` — hanya ada di halaman https, server kantor http. */
+function idBarisTanganBaru(t: Tautan): string {
+  const ada = new Set((t.barisTangan ?? []).map(b => b.id));
+  let id = Math.random().toString(36).slice(2, 10);
+  while (ada.has(id)) id = Math.random().toString(36).slice(2, 10);
+  return id;
+}
 const PESAN_NOMOR = 'Kolom No. diisi otomatis 1, 2, 3… — matikan lewat pilihan "No. otomatis" di bawah tabel untuk mengetiknya sendiri.';
 const ARAH: Record<string, { dr: number; dc: number }> = {
   ArrowUp: { dr: -1, dc: 0 }, ArrowDown: { dr: 1, dc: 0 }, ArrowLeft: { dr: 0, dc: -1 }, ArrowRight: { dr: 0, dc: 1 },
@@ -118,7 +134,9 @@ export default function TabelEditor({
   });
   // Tabel tertaut (docs/CONCEPT-lkjip-tabel-tertaut.md): badan diisi dari modul, kepala milik pengguna.
   const [tautan, setTautan] = useState<Tautan | undefined>(awal.p0.tautan);
-  const [modalTaut, setModalTaut] = useState(false);
+  // Blok baru dari "Tempel dari Modul" lahir dengan modal tautan terbuka berisi salinannya.
+  const [modalTaut, setModalTaut] = useState(() => !!lkjip?.salinanAwal);
+  const [salinanModal, setSalinanModal] = useState<SalinanModul | null>(() => lkjip?.salinanAwal ?? null);
   const [menarik, setMenarik] = useState(false);
   const terkait = !!tautan;
   const [judul, setJudul] = useState(awal.p0.judul ?? '');
@@ -189,11 +207,18 @@ export default function TabelEditor({
   const rectBadan = terkait && !!rect && rect.r2 >= headerRows;
   // Kolom isian tangan (Tahap 2) tetap bisa diketik di badan — isinya diingat per kunci baris.
   const kolomTangan = new Set(tautan?.kolom.flatMap((k, i) => (k.isi.jenis === 'tangan' ? [i] : [])) ?? []);
-  const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c);
+  // Baris tangan (klik kanan → Sisip baris tangan): diketik sendiri, kecuali kolom Nomor & rumus yang dihitung.
+  const barisTanganDi = new Set(tautan?.kunciBaris.flatMap((k, i) => (adalahBarisTangan(k) ? [i + headerRows] : [])) ?? []);
+  const selBarisTangan = (r: number, c: number) => {
+    const j = tautan?.kolom[c]?.isi.jenis;
+    return barisTanganDi.has(r) && (j === 'sumber' || j === 'tangan');
+  };
+  const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c) && !selBarisTangan(r, c);
   // Kolom No. otomatis (§12.3): nomornya diturunkan dari bentuk tabel tiap kali digambar, jadi selalu
   // urut sesudah sisip/hapus/tempel; yang disimpan dan dicetak hasil turunan yang sama.
   const kolomNo = terkait || atur.kolomNomor === null || atur.kolomNomor >= ncol ? null : atur.kolomNomor;
-  const rowsTampil = useMemo(() => nomorUlang(rows, headerRows, kolomNo, !!atur.gaya.jumlah), [rows, headerRows, kolomNo, atur.gaya.jumlah]);
+  const rowsTampil = useMemo(() => nomorUlang(tautan ? hitungRumusTangan(rows, jumlahBarisKepala({ headerRows, rows }), tautan) : rows, headerRows, kolomNo, !!atur.gaya.jumlah),
+    [rows, headerRows, kolomNo, atur.gaya.jumlah, tautan]);
   const diNomor = (r: number, c: number) => kolomNo !== null && c === kolomNo && r >= headerRows;
   /** Sel yang digambar: gaya tabel di bawah format sel sendiri — editor & Word memakai fungsi yang sama. */
   const efektif = (r: number, c: number) => selBergaya(rowsTampil[r][c], gayaSel(atur.gaya, rowsTampil.length, headerRows, r));
@@ -432,9 +457,46 @@ export default function TabelEditor({
     pasangBentuk(hapusBaris(bentuk(), r1, r2));
     pil.keSel(Math.min(r1, rows.length - (r2 - r1 + 1) - 1), rect.c1);
   }
+  // ── Tabel tertaut: ubah bentuk lewat klik kanan, tanpa menarik ulang (Perbarui tetap tombolnya) ──
+  async function hapusKolomTertautPilihan() {
+    if (!rect) return;
+    if (rect.c1 !== rect.c2) { toast.info('Di tabel tertaut, hapus kolom satu per satu.'); return; }
+    const p = payloadSekarang() as PayloadTertaut;
+    const hasil = hapusKolomTertaut(p, rect.c1);
+    if (typeof hasil === 'string') { toast.info(hasil); return; }
+    const ketikan = jumlahIsianTangan(p.tautan.kolom[rect.c1]);
+    if (ketikan && !(await confirmDialog({
+      title: 'Hapus kolom isian tangan?',
+      message: `Kolom ${colLabel(rect.c1)} berisi ${ketikan} isian yang diketik sendiri, dan ikut hilang.`,
+      confirmLabel: 'Hapus kolom', variant: 'danger',
+    }))) return;
+    pasangDanSimpan(hasil);
+    toast.success(`Kolom ${colLabel(rect.c1)} dihapus. Tambahkan lagi lewat Atur Bentuk kalau perlu.`);
+  }
+  function sisipBarisTanganPilihan() {
+    if (!rect || readOnly || !tautan) return;
+    const iBadan = Math.max(rect.r2, headerRows - 1) - headerRows;
+    const hasil = sisipBarisTangan(payloadSekarang() as PayloadTertaut, iBadan, idBarisTanganBaru(tautan));
+    if (!hasil) { toast.info(`Satu tabel paling banyak ${BATAS_BARIS_TABEL} baris.`); return; }
+    pasangDanSimpan(hasil);
+    const ketik = hasil.tautan.kolom.findIndex(k => k.isi.jenis === 'sumber' || k.isi.jenis === 'tangan');
+    pil.keSel(headerRows + iBadan + 1, Math.max(0, ketik));
+  }
+  async function buangBarisTertautPilihan() {
+    if (!rect || readOnly || !tautan || rect.r1 !== rect.r2 || rect.r1 < headerRows) return;
+    const iBadan = rect.r1 - headerRows;
+    const p = payloadSekarang() as PayloadTertaut;
+    const tangan = adalahBarisTangan(p.tautan.kunciBaris[iBadan]);
+    if (tangan && p.rows[rect.r1]?.some((s, c) => selBarisTangan(rect.r1, c) && s.v.trim()) && !(await confirmDialog({
+      title: 'Hapus baris tangan?', message: 'Isi baris ini diketik sendiri dan ikut hilang.', confirmLabel: 'Hapus baris', variant: 'danger',
+    }))) return;
+    pasangDanSimpan(buangBarisTertaut(p, iBadan));
+    toast.success(tangan ? 'Baris tangan dihapus.' : 'Baris disembunyikan. Tampilkan lagi lewat Atur Bentuk → Baris yang tampil.');
+  }
+
   function hapusKolomPilihan() {
     if (!rect || readOnly) return;
-    if (terkait) { toast.info(PESAN_KOLOM_TAUT); return; }
+    if (terkait) { void hapusKolomTertautPilihan(); return; }
     const { c1, c2 } = rect;
     if (c2 - c1 + 1 >= ncol) { toast.info('Tabel harus punya minimal 1 kolom.'); return; }
     pushHist();
@@ -586,6 +648,9 @@ export default function TabelEditor({
     const nilaiSaja = tempelNilaiPada.current > 0 && e.timeStamp - tempelNilaiPada.current < 1500;
     tempelNilaiPada.current = 0;
     if (!text && !html) return;
+    // "Salin ke LKJIP" dari layar modul: tawarkan tempel TERTAUT (angkanya ditarik ulang dari modulnya).
+    const salinan = lkjip && html && !nilaiSaja ? bacaSalinan(html) : null;
+    if (salinan) { void tawarkanTempelTertaut(salinan, () => void tempel(htmlKeSel(html, batasKolom) || parseTSV(text))); return; }
     // Tempelan internal yang sama persis → pakai versi kaya-format (rumus, format, gabungan).
     const internal = papanInternal && papanInternal.tsv === text.replace(/\r?\n$/, '') ? papanInternal : null;
     if (internal) { if (nilaiSaja) tempelNilaiDari(internal.nilai); else void tempel(internal.sel); return; }
@@ -596,6 +661,26 @@ export default function TabelEditor({
     if (nilaiSaja) { tempelNilaiDari(dariHtml ? dariHtml.map(r => r.map(c => (c.h ? '' : c.v))) : parseTSV(text).map(r => r.map(c => c.v))); return; }
     void tempel(dariHtml || parseTSV(text));
   };
+  async function tawarkanTempelTertaut(salinan: SalinanModul, tempelBiasa: () => void) {
+    if (terkait) {
+      toast.info('Tabel ini sudah tertaut ke modul. Tempel di tabel lain, atau pakai "Tempel dari Modul" di bawah halaman.');
+      return;
+    }
+    const pilihan = await pilihDialog({
+      title: 'Tempel tabel dari modul',
+      message: `${salinan.judul}\n\nTempel tertaut: angkanya ditarik ulang dari modulnya dan bisa diperbarui kapan saja. `
+        + 'Tempel biasa: jadi tabel biasa yang angkanya tidak ikut berubah.',
+      confirmLabel: 'Tempel tertaut', altLabel: 'Tempel biasa', variant: 'primary', altVariant: 'purple',
+    });
+    if (pilihan === 'lain') { tempelBiasa(); return; }
+    if (pilihan !== 'utama') return;
+    setSalinanModal(salinan);
+    setModalTaut(true);
+  }
+  // Salinan awal sudah dipakai state awal di atas — pemilik blok diberi tahu supaya tidak dibuka lagi.
+  const lepasSalinanAwal = useEffectEvent(() => { if (lkjip?.salinanAwal) lkjip.onSalinanDipakai?.(); });
+  useEffect(() => { lepasSalinanAwal(); }, []);
+
   /** Tombol & menu Tempel hanya bisa memakai papan internal — peramban tidak memberi isi papan klip sistem tanpa Ctrl+V. */
   const tempelInternal = (nilai: boolean) => {
     if (!papanInternal) return;
@@ -826,7 +911,8 @@ export default function TabelEditor({
       const yatim = kalimatIsianYatim(nilai.yatim, { rows: rows.slice(hr), kunciBaris: tautan.kunciBaris });
       const peringatan = (badan.kolomHilang.length
         ? `\n\nKolom ${badan.kolomHilang.map(colLabel).join(', ')} menunjuk kolom sumber yang tidak ada lagi dan akan kosong — atur lewat Atur Bentuk.`
-        : '') + (yatim ? `\n\n${yatim}` : '');
+        : '') + (yatim ? `\n\n${yatim}` : '')
+        + (badan.barisTanganPindah.length ? `\n\n${kalimatBarisTanganPindah(badan.barisTanganPindah.length)}.` : '');
       const ok = await confirmDialog({
         title: `Perbarui dari ${sumber.modul}?`,
         message: `${kalimatPerbarui(ringkas)}\n\nSumber: ${hasil.ringkas}${peringatan}\n\nKepala tabel, pilihan kolom, dan baris yang disembunyikan tetap seperti sekarang.`,
@@ -940,6 +1026,8 @@ export default function TabelEditor({
       case 'kosongkan': kosongkan(); break;
       case 'hapus-baris': hapusBarisPilihan(); break;
       case 'hapus-kolom': hapusKolomPilihan(); break;
+      case 'sisip-tangan': sisipBarisTanganPilihan(); break;
+      case 'buang-tertaut': void buangBarisTertautPilihan(); break;
     }
     fokusGrid();
   };
@@ -1154,7 +1242,7 @@ export default function TabelEditor({
                       <td key={ci} data-rc={`${ri}:${ci}`} colSpan={cell.cs ?? 1} rowSpan={cell.rs ?? 1}
                         className={[
                           diPilih(ri, ci) ? 'lk-cell-sel' : '', sel?.ar === ri && sel?.ac === ci ? 'lk-cell-aktif' : '',
-                          diBadan(ri) && kolomTangan.has(ci) ? 'lk-cell-tangan' : '', !sedang && selGalat(tampil) ? 'lk-cell-galat' : '',
+                          diBadan(ri) && (kolomTangan.has(ci) || selBarisTangan(ri, ci)) ? 'lk-cell-tangan' : '', !sedang && selGalat(tampil) ? 'lk-cell-galat' : '',
                           diNomor(ri, ci) ? 'lk-cell-nomor' : '', diIsi(ri, ci) ? 'lk-cell-isi' : '', pojok?.r === ri && pojok?.c === ci ? 'lk-pojok' : '',
                         ].filter(Boolean).join(' ') || undefined}
                         style={{ verticalAlign: vAlignCss(ef.va), background: ef.bg ? `#${ef.bg}` : undefined, ...garisCss(ef.bd) }}
@@ -1315,7 +1403,7 @@ export default function TabelEditor({
 
       {!readOnly && (
         <div className="lk-tabel-ctl">
-          <button onClick={() => { if (rows.length >= BATAS_BARIS_TABEL) { toast.info(`Satu tabel paling banyak ${BATAS_BARIS_TABEL} baris.`); return; } pushHist(); setRows(sisipBarisBaru(rows, headerRows, ncol, !!atur.gaya.jumlah).rows); }} disabled={terkait} data-tooltip={terkait ? 'Baris tabel tertaut mengikuti sumbernya — atur lewat Atur Bentuk' : undefined} data-tooltip-pos="below">+ Baris</button>
+          <button onClick={() => { if (rows.length >= BATAS_BARIS_TABEL) { toast.info(`Satu tabel paling banyak ${BATAS_BARIS_TABEL} baris.`); return; } pushHist(); setRows(sisipBarisBaru(rows, headerRows, ncol, !!atur.gaya.jumlah).rows); }} disabled={terkait} data-tooltip={terkait ? 'Baris tabel tertaut mengikuti sumbernya — klik kanan sebuah baris → Sisip baris tangan' : undefined} data-tooltip-pos="below">+ Baris</button>
           <button onClick={() => { pushHist(); pasangBentuk(sisipKolom(bentuk(), ncol, 1)); }} disabled={ncol >= batasKolom || terkait} data-tooltip={terkait ? PESAN_KOLOM_TAUT : undefined} data-tooltip-pos="below">+ Kolom</button>
           {!terkait && lkjip && (
             <button onClick={() => setModalTaut(true)} data-tooltip="Isi tabel dari menu Cetak E-Anggaran atau Renaksi — angkanya bisa diperbarui nanti" data-tooltip-pos="below">
@@ -1345,8 +1433,16 @@ export default function TabelEditor({
           { icon: <Split size={14} />, label: 'Pisah sel', kunci: 'pisah', disabled: readOnly || !canUnmerge, alasan: rectBadan ? alasanBadan : 'Sel ini tidak digabung' },
           { icon: <Eraser size={14} />, label: 'Hapus format', kunci: 'format', disabled: readOnly || rectBadan, alasan: readOnly ? 'Dokumen terkunci' : alasanBadan },
           { icon: <span className="lk-menu-teks">⌫</span>, label: 'Kosongkan isi', pintasan: 'Delete', kunci: 'kosongkan', disabled: readOnly, alasan: 'Dokumen terkunci' },
+          ...(terkait ? [
+            { icon: <Plus size={14} />, label: 'Sisip baris tangan di bawah', kunci: 'sisip-tangan', pisah: true,
+              disabled: readOnly || rect.r2 < headerRows - 1, alasan: readOnly ? 'Dokumen terkunci' : 'Pilih baris kepala terakhir atau baris badan' },
+            { icon: <EyeOff size={14} />, label: adalahBarisTangan(tautan?.kunciBaris[rect.r1 - headerRows]) ? 'Hapus baris tangan' : 'Sembunyikan baris', kunci: 'buang-tertaut',
+              disabled: readOnly || rect.r1 !== rect.r2 || rect.r1 < headerRows, alasan: readOnly ? 'Dokumen terkunci' : 'Pilih satu baris badan' },
+          ] : []),
           { icon: <DeleteIcon size={14} />, label: `Hapus ${rect.r2 - rect.r1 + 1} baris`, pintasan: 'Ctrl+−', kunci: 'hapus-baris', danger: true, disabled: readOnly || (terkait && rect.r2 >= headerRows), alasan: readOnly ? 'Dokumen terkunci' : alasanBadan },
-          { icon: <DeleteIcon size={14} />, label: `Hapus ${rect.c2 - rect.c1 + 1} kolom`, kunci: 'hapus-kolom', danger: true, disabled: readOnly || terkait || rect.c2 - rect.c1 + 1 >= ncol, alasan: readOnly ? 'Dokumen terkunci' : terkait ? PESAN_KOLOM_TAUT : 'Tabel harus punya minimal 1 kolom' },
+          { icon: <DeleteIcon size={14} />, label: `Hapus ${rect.c2 - rect.c1 + 1} kolom`, kunci: 'hapus-kolom', danger: true,
+            disabled: readOnly || (terkait ? rect.c1 !== rect.c2 || ncol <= 1 : rect.c2 - rect.c1 + 1 >= ncol),
+            alasan: readOnly ? 'Dokumen terkunci' : terkait ? (ncol <= 1 ? 'Tabel harus punya minimal 1 kolom' : 'Di tabel tertaut, hapus kolom satu per satu') : 'Tabel harus punya minimal 1 kolom' },
         ];
         return <RowMenu x={menu.x} y={menu.y} items={items} onPilih={pilihMenu} onClose={tutupMenu} lebar={248} />;
       })()}
@@ -1355,7 +1451,8 @@ export default function TabelEditor({
         <lkjip.TautanModal
           payload={payloadSekarang()}
           tahunDokumen={lkjip.tahunDokumen}
-          onTutup={() => setModalTaut(false)}
+          salinan={salinanModal ?? undefined}
+          onTutup={() => { setModalTaut(false); setSalinanModal(null); }}
           onTerapkan={async p => {
             if (!tautan && rows.slice(jumlahBarisKepala({ headerRows, rows })).some(r => r.some(c => c.v.trim()))) {
               const ok = await confirmDialog({
@@ -1365,7 +1462,7 @@ export default function TabelEditor({
               });
               if (!ok) return;
             }
-            setModalTaut(false);
+            setModalTaut(false); setSalinanModal(null);
             pasangDanSimpan(p);
           }}
         />

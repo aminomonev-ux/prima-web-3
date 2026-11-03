@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
@@ -8,7 +8,7 @@ import {
   Download, CornerDownRight, Plus, ChevronUp, ChevronDown,
   IndentIncrease, IndentDecrease, Pencil, Save, Table2, Image as ImageIcon, Type, Settings,
   BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
-  GripVertical, Upload, BarChart3, HelpCircle, MoreVertical, Lock, RefreshCw,
+  GripVertical, Upload, BarChart3, HelpCircle, MoreVertical, Lock, RefreshCw, ClipboardPaste,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
@@ -30,8 +30,12 @@ import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
 import { normalizeRows, angkaSel } from '@/lib/lkjip/tabel';
 import { sidikGrafik } from '@/lib/lkjip/tautan';
-import { kumpulkanTabelTertaut, kumpulkanNarasiTertaut, kumpulkanSelGalat, kumpulkanRujukanPutus, periksaSemua, type HasilPeriksa, type ItemPeriksa } from '@/lib/lkjip/kesegaran';
+import {
+  kumpulkanTabelTertaut, kumpulkanNarasiTertaut, kumpulkanSelGalat, kumpulkanRujukanPutus, periksaSemua,
+  perluPeriksaUlang, sidikTertaut, kabarBlok, type HasilPeriksa, type ItemPeriksa, type KabarBlok,
+} from '@/lib/lkjip/kesegaran';
 import type { ResepAngka } from '@/lib/lkjip/angka';
+import { bacaSalinan, type SalinanModul } from '@/lib/lkjip/salinan-modul';
 import { fetchJson } from '@/lib/shared/api';
 import TabelEditor from '@/components/tabel/TabelEditor';
 import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';
@@ -43,6 +47,7 @@ const TiptapNarasi = dynamic(() => import('./TiptapNarasi'), {
 });
 // Dimuat saat dibuka saja: penghubung sumber menyeret kode E-Anggaran & Renaksi.
 const TautanModal = dynamic(() => import('./TautanModal'), { ssr: false });
+const TABEL_BARU = { judul: '', kolom: ['Kolom 1', 'Kolom 2'], align: ['left', 'left'], headerRows: 1, rows: [[{ v: 'Kolom 1' }, { v: 'Kolom 2' }], [{ v: '' }, { v: '' }]] };
 
 interface Props {
   username: string;
@@ -120,6 +125,21 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   const semuaTertaut = useMemo<ItemPeriksa[]>(() => [...tertaut, ...narasiTertaut], [tertaut, narasiTertaut]);
   const [periksa, setPeriksa] = useState<{ daftar: ItemPeriksa[]; hasil: HasilPeriksa[] | null } | null>(null);
   const [sorotBlok, setSorotBlok] = useState<number | null>(null);
+  // Hasil pemeriksaan terakhir (otomatis saat dibuka, atau lewat tombol) + jejak isi blok saat diperiksa.
+  const [kabar, setKabar] = useState<Map<number, { hasil: HasilPeriksa; sidik: string }>>(new Map());
+  const kabarPadaRef = useRef<number | null>(null);
+  const sidikSekarang = useMemo(
+    () => new Map([...tertaut, ...narasiTertaut].map(t => [t.blockId, sidikTertaut(t)])),
+    [tertaut, narasiTertaut],
+  );
+  const kabarAktif = useCallback((blockId: number) => {
+    const k = kabar.get(blockId);
+    return k && k.sidik === sidikSekarang.get(blockId) ? k.hasil : undefined;
+  }, [kabar, sidikSekarang]);
+  const jumlahBerubah = useMemo(
+    () => [...sidikSekarang.keys()].filter(id => kabarAktif(id)?.status === 'berubah').length,
+    [sidikSekarang, kabarAktif],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -183,11 +203,29 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   function pindahKe(f: FlatNode, t: Tujuan | null) { if (t) void move(f.node.id, t.parent, t.index); }
 
   // ── Block ops ──
+  // "Tempel dari Modul": tabel yang disalin lewat "Salin ke LKJIP" di layar modul → blok TABEL baru yang
+  // langsung membuka modal tautan berisi salinannya. Masukkan di modal itu yang menulis isinya (L78).
+  const [tempelModal, setTempelModal] = useState(false);
+  const [salinanBaru, setSalinanBaru] = useState<{ blockId: number; salinan: SalinanModul } | null>(null);
+  async function tempelDariModul(e: React.ClipboardEvent) {
+    e.preventDefault();
+    const salinan = bacaSalinan(e.clipboardData.getData('text/html'));
+    if (!salinan) { toast.error('Yang ditempel bukan tabel dari modul PRIMA. Di layar modul tekan "Salin ke LKJIP" dulu.'); return; }
+    if (!selected) return;
+    setTempelModal(false);
+    setBusy(true);
+    try {
+      const r = await fetchJson<unknown>('/api/lkjip/block', { method: 'POST', body: JSON.stringify({ section_id: selected.id, tipe: 'TABEL', payload: TABEL_BARU }) });
+      if (!r.ok) { toast.error(r.message); return; }
+      setSalinanBaru({ blockId: Number(r.id), salinan });
+      await refresh();
+    } finally { setBusy(false); }
+  }
   async function addBlock(tipe: 'NARASI' | 'TABEL' | 'GAMBAR' | 'GRAFIK') {
     if (!selected) return;
     const payload =
       tipe === 'NARASI' ? { html: '' }
-      : tipe === 'TABEL' ? { judul: '', kolom: ['Kolom 1', 'Kolom 2'], align: ['left', 'left'], headerRows: 1, rows: [[{ v: 'Kolom 1' }, { v: 'Kolom 2' }], [{ v: '' }, { v: '' }]] }
+      : tipe === 'TABEL' ? TABEL_BARU
       : tipe === 'GRAFIK' ? { judul: '', chartType: 'bar', source: 'manual', data: [{ label: 'Kategori 1', value: 10 }, { label: 'Kategori 2', value: 20 }, { label: 'Kategori 3', value: 15 }], tabelBlockId: null, labelCol: 0, valueCol: 1, imageFileId: '', caption: '' }
       : { judul: '', fileId: '', caption: '' };
     const ok = await call('/api/lkjip/block', 'POST', { section_id: selected.id, tipe, payload });
@@ -264,7 +302,12 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   // ── Tabel & angka tertaut: periksa kesegaran (hanya membaca; memperbarui lewat tombol di bloknya) ──
   async function jalankanPeriksa(): Promise<HasilPeriksa[]> {
     const { DAFTAR_SUMBER } = await import('@/lib/lkjip/sumber');
-    return periksaSemua(tertaut, narasiTertaut, (sumber, setelan) => DAFTAR_SUMBER[sumber].tarik(setelan, url => fetchJson<unknown>(url), detail.tahun));
+    // Jejak diambil SEBELUM menarik: yang dibandingkan adalah isi blok saat pemeriksaan dimulai.
+    const sidik = sidikSekarang;
+    const hasil = await periksaSemua(tertaut, narasiTertaut, (sumber, setelan) => DAFTAR_SUMBER[sumber].tarik(setelan, url => fetchJson<unknown>(url), detail.tahun));
+    kabarPadaRef.current = Date.now();
+    setKabar(new Map(hasil.map(h => [h.blockId, { hasil: h, sidik: sidik.get(h.blockId) ?? '' }])));
+    return hasil;
   }
   async function bukaPeriksa() {
     if (!semuaTertaut.length) { toast.info('Dokumen ini belum punya tabel atau angka yang tertaut ke modul.'); return; }
@@ -272,6 +315,20 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     try { setPeriksa({ daftar: semuaTertaut, hasil: await jalankanPeriksa() }); }
     catch { setPeriksa(null); toast.error('Gagal memeriksa data modul. Coba lagi.'); }
   }
+  // Seperti tabel Google Docs yang bersumber dari Sheets: dokumen yang dibuka memeriksa sendiri, di
+  // latar belakang, lalu menandai bloknya. Hanya membaca — Perbarui tetap tombol di bloknya.
+  const periksaOtomatis = useEffectEvent(() => {
+    if (readOnly || !semuaTertaut.length) return;
+    void jalankanPeriksa().catch(() => { /* diam: tombol Periksa Data Modul tetap ada */ });
+  });
+  useEffect(() => {
+    const awal = setTimeout(() => periksaOtomatis(), 1500);
+    const onLihat = () => {
+      if (document.visibilityState === 'visible' && perluPeriksaUlang(kabarPadaRef.current, Date.now())) periksaOtomatis();
+    };
+    document.addEventListener('visibilitychange', onLihat);
+    return () => { clearTimeout(awal); document.removeEventListener('visibilitychange', onLihat); };
+  }, [detail.id]);
   function bukaTabel(t: ItemPeriksa) {
     setPeriksa(null); setSelectedId(t.sectionId); setSorotBlok(t.blockId);
     setTimeout(() => document.getElementById(`lk-blok-${t.blockId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
@@ -341,7 +398,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     : [
         { icon: <Save size={17} />, label: 'Simpan Versi', onClick: () => void saveVersi() },
         { icon: <History size={17} />, label: 'Riwayat', onClick: () => void openHistory() },
-        ...(semuaTertaut.length ? [{ icon: <RefreshCw size={17} />, label: 'Periksa Data Modul', onClick: () => void bukaPeriksa() }] : []),
+        ...(semuaTertaut.length ? [{ icon: <RefreshCw size={17} />, label: jumlahBerubah ? `Periksa Data Modul (${jumlahBerubah})` : 'Periksa Data Modul', onClick: () => void bukaPeriksa() }] : []),
         { icon: <Settings size={17} />, label: 'Pengaturan', onClick: () => { setStyleForm(detail.style_config); setStyleModal(true); } },
         { icon: <Download size={17} />, label: 'Unduh Word', onClick: () => window.open(`/api/lkjip/${detail.id}/generate`, '_blank') },
         { icon: <CheckCircle2 size={17} />, label: 'Finalisasi', onClick: () => void finalize() },
@@ -428,6 +485,8 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     void reorderBlocks(selected.id, ids);
                   }}>
                   <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} warnaKepalaTabel={detail.style_config.tableHeaderFill} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
+                    kabar={kabarBlok(kabarAktif(b.id), b.tipe === 'NARASI')}
+                    salinanAwal={salinanBaru?.blockId === b.id ? salinanBaru.salinan : undefined} onSalinanDipakai={() => setSalinanBaru(null)}
                     nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok} daftarObjek={daftarObjek}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
@@ -443,6 +502,10 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                   <button className="lk-ab tabel" onClick={() => addBlock('TABEL')}><Table2 size={14} /> Tabel</button>
                   <button className="lk-ab gambar" onClick={() => addBlock('GAMBAR')}><ImageIcon size={14} /> Gambar</button>
                   <button className="lk-ab grafik" onClick={() => addBlock('GRAFIK')}><BarChart3 size={14} /> Grafik</button>
+                  <button className="lk-ab tempel" onClick={() => setTempelModal(true)}
+                    data-tooltip="Tabel yang disalin lewat tombol Salin ke LKJIP di layar modul. Tabelnya tetap tersambung dan bisa diperbarui." data-tooltip-pos="above">
+                    <ClipboardPaste size={14} /> Tempel dari Modul
+                  </button>
                 </div>
               )}
             </>
@@ -460,6 +523,21 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
             <div className="lk-modal-actions">
               <PrimaButton variant="ghost" size="sm" onClick={() => setAddModal(null)} disabled={busy}>Batal</PrimaButton>
               <PrimaButton variant="purple" size="sm" onClick={submitAdd} disabled={busy || !addJudul.trim()}>Tambah</PrimaButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tempel dari Modul — peramban di http tidak memberi isi papan klip tanpa Ctrl+V, jadi ditangkap di sini. */}
+      {tempelModal && (
+        <div className="lk-modal-bg" onClick={() => setTempelModal(false)}>
+          <div className="lk-modal" role="dialog" aria-label="Tempel tabel dari modul" onClick={e => e.stopPropagation()}>
+            <h3>Tempel dari Modul</h3>
+            <p className="lk-hint">Di layar modul (Cetak E-Anggaran, Cetak Renaksi, atau Laporan) tekan <b>Salin ke LKJIP</b>, lalu klik kotak di bawah dan tekan <b>Ctrl+V</b>.</p>
+            <textarea className="lk-tempel-tangkap" autoFocus readOnly placeholder="Klik di sini lalu tekan Ctrl+V" aria-label="Tempat menempel tabel dari modul"
+              onPaste={e => void tempelDariModul(e)} />
+            <div className="lk-modal-actions">
+              <PrimaButton variant="ghost" size="sm" onClick={() => setTempelModal(false)}>Batal</PrimaButton>
             </div>
           </div>
         </div>
@@ -485,6 +563,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                         <span className="lk-periksa-status">
                           {h?.status === 'sama' ? 'Sudah sama dengan sumbernya.' : h?.status === 'berubah' ? `Berbeda: ${h.ringkas}.` : h?.pesan}
                         </span>
+                        {h && h.status !== 'gagal' && h.info?.map(i => <span key={i} className="lk-periksa-kabar">{i}</span>)}
                       </div>
                       <button onClick={() => bukaTabel(t)}>Buka</button>
                     </li>
@@ -825,13 +904,16 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
 type NomorBlok = Map<number, NomorObjek>;
-function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[] }) {
+function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, kabar, salinanAwal, onSalinanDipakai }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
       <div className="lk-block-head">
         <span className="lk-block-headl">{dragHandle}<span className="lk-block-tag">{block.tipe}</span>
           {nomor && <span className="lk-block-nomor">{sebutObjek(nomor)}</span>}
+          {kabar?.map(k => (
+            <span key={k.jenis + k.rinci} className={`lk-kabar ${k.jenis}`} data-tooltip={k.rinci} data-tooltip-pos="below">{k.label}</span>
+          ))}
           {block.tipe === 'NARASI' && !readOnly && (
             <label className="lk-block-cont" data-tooltip="Lanjutkan penomoran daftar (a,b,c / 1,2,3) dari blok narasi sebelumnya — untuk daftar yang terpotong tabel/gambar" data-tooltip-pos="below">
               <input type="checkbox" checked={continueList} onChange={e => { const v = e.target.checked; setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); }} />
@@ -845,7 +927,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
           tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
-      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} lkjip={{ tahunDokumen, TautanModal }} />}
+      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai }} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
       {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} />}
     </div>
@@ -1194,12 +1276,24 @@ ${TABEL_CSS}
   .lk-grafik-canvas { background: #ffffff; border-radius: 6px; padding: 8px; }
   .lk-grafik-empty { color: #85B7EB; font-size: 12.5px; padding: 40px; text-align: center; }
   .lk-ab.grafik { color: #14B8A6; border-color: #14B8A6; }
+  .lk-ab.tempel { color: #85B7EB; border-color: #85B7EB; }
+  .lk-tempel-tangkap { width: 100%; min-height: 110px; resize: none; border: 2px dashed #85B7EB; border-radius: 10px; background: transparent;
+    color: #E6F1FB; padding: 14px; font: inherit; font-size: 13px; text-align: center; }
+  .lk-tempel-tangkap:focus { outline: none; border-color: #EF9F27; }
+  [data-theme="light"] .lk-tempel-tangkap { color: #0F0F12; }
   [data-theme="light"] .lk-grafik-tools, [data-theme="light"] .lk-grafik-preview { background: #F9FAFB; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-grafik-tools select, [data-theme="light"] .lk-grafik-row input { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
   [data-theme="light"] .lk-grafik-add { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
   .lk-grafik-basi { padding: 7px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.5; background: rgba(239,159,39,0.12); border: 1px solid #EF9F27; color: #FBBF24; }
   [data-theme="light"] .lk-grafik-basi { color: #B45309; }
   .lk-block-nomor { font-size: 11px; font-weight: 700; color: #E6F1FB; }
+  .lk-kabar { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; cursor: help; white-space: nowrap; }
+  .lk-kabar.berubah { background: rgba(239,159,39,.16); color: #FBBF24; border: 1px solid rgba(239,159,39,.45); }
+  .lk-kabar.info { background: rgba(133,183,235,.14); color: #85B7EB; border: 1px solid rgba(133,183,235,.4); }
+  [data-theme="light"] .lk-kabar.berubah { background: #FFFBEB; color: #B45309; border-color: #F59E0B; }
+  [data-theme="light"] .lk-kabar.info { background: #EFF6FF; color: #185FA5; border-color: #85B7EB; }
+  .lk-periksa-kabar { font-size: 11.5px; color: #85B7EB; }
+  [data-theme="light"] .lk-periksa-kabar { color: #185FA5; }
   .lk-block-wrap.sorot { box-shadow: 0 0 0 2px #7C5CFC; }
   .lk-periksa { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; }
   .lk-periksa li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: #020F1C; border: 1px solid #0C447C; border-left-width: 3px; border-radius: 8px; }

@@ -6,6 +6,7 @@ import { DAFTAR_SUMBER, URUTAN_SUMBER, type IdSumber } from '@/lib/lkjip/sumber'
 import { LABEL_KEDALAMAN } from '@/lib/lkjip/sumber/kinerja-rekap';
 import { LABEL_LEVEL, type PilihanFokus } from '@/lib/lkjip/sumber/renaksi-cetak';
 import { KEDALAMAN_BLUD_MAKS } from '@/lib/lkjip/sumber/blud-realisasi';
+import { labelPilihanVersiDetail } from '@/lib/lkjip/sumber/kinerja-detail';
 import type { HasilTarik } from '@/lib/lkjip/tautan';
 import { CRR_BULAN_LABELS, SUMBER_LIST } from '@/app/(dashboard)/kinerja/_utils';
 import { ALL_LEVELS } from '@/app/(dashboard)/rencana-aksi/_lib/cetak-filter';
@@ -71,6 +72,24 @@ export default function SetelanSumber({ sumberId, setelan, hasil, onSumber, onUb
               </select>
             </label>
           )}
+        </>
+      ) : sumberId === 'kinerja-detail' ? (
+        <>
+          <label>Sumber dana
+            <select value={String(setelan.sumber)} onChange={e => onUbah('sumber', e.target.value)}>
+              {SUMBER_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+          <label>Bulan
+            <select value={Number(setelan.bulan)} onChange={e => onUbah('bulan', Number(e.target.value))}>
+              {CRR_BULAN_LABELS.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
+            </select>
+          </label>
+          <label>Versi SSK
+            <select value={String(setelan.versi)} onChange={e => onUbah('versi', e.target.value)}>
+              {[...new Set(['berlaku', 'murni', String(setelan.versi)])].map(v => <option key={v} value={v}>{labelPilihanVersiDetail(v)}</option>)}
+            </select>
+          </label>
         </>
       ) : sumberId === 'blud-realisasi' ? (
         <>

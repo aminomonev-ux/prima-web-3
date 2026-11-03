@@ -414,7 +414,7 @@ ok('H2 Hubungkan/Perbarui/Lepas: pengaturan dibaca balik; kolom No. lepas begitu
 ok('H3 Urungkan memulihkan pengaturan juga', te.includes('rows, atur, peran });') && te.includes('setAtur(s.atur);'))
 ok('H4 kolom No. turunan dari bentuk tabel; tertaut tidak pernah bernomor otomatis',
   te.includes('const kolomNo = terkait || atur.kolomNomor === null || atur.kolomNomor >= ncol ? null : atur.kolomNomor;')
-  && te.includes('nomorUlang(rows, headerRows, kolomNo, !!atur.gaya.jumlah)')
+  && te.includes('hitungRumusTangan(rows, jumlahBarisKepala({ headerRows, rows }), tautan) : rows, headerRows, kolomNo, !!atur.gaya.jumlah)')
   && badan(te, 'const mulaiSunting =').includes('if (diNomor(r, c)) {'))
 ok('H5 kolom No. ikut sisip/hapus kolom lewat bentuk tabel',
   te.includes('kolomNomor: atur.kolomNomor, ') && badan(te, 'const pasangBentuk = (b: BentukTabel) =>').includes('setAtur(a => ({ ...a, kolomNomor: b.kolomNomor ?? null }))'))

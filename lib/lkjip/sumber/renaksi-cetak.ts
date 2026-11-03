@@ -10,6 +10,7 @@ import {
 } from '@/app/(dashboard)/rencana-aksi/_lib/cetak-filter';
 import { KOSONG, type HasilTarik, type JenisKolomSumber, type KolomSumber } from '../tautan';
 import { GagalTarik, pesanDitolak, angkaDalam, type AmbilJson } from './umum';
+import type { KelompokSalinan, SalinanModul } from '../salinan-modul';
 
 export interface SetelanRenaksiCetak {
   tahun:    number;
@@ -108,5 +109,26 @@ export async function tarikRenaksiCetak(s: SetelanRenaksiCetak, ambil: AmbilJson
     catatan,
     ringkas: `Renaksi · Cetak ${s.tahun} · ${levelTampil}${fokus ? ` · fokus "${fokus}"` : ''}`,
     fokus: { tujuan: nama('tujuan'), sasaran: nama('sasaran'), program: nama('program') },
+  };
+}
+
+const ROMAWI_TW = ['I', 'II', 'III', 'IV'];
+
+/** Resep "Salin ke LKJIP" dari Cetak Renaksi: kolom, judul, dan kepala TW persis seperti filter layarnya. */
+export function salinanRenaksiCetak(tahun: number, f: CetakFilter): SalinanModul {
+  const h = cetakHeader(f);
+  const kelompok: KelompokSalinan[] = [];
+  let i = h.lead.length;
+  for (const q of h.twQuarters) {
+    if (!q.sub.length) continue;
+    kelompok.push({ judul: `TW ${ROMAWI_TW[q.q - 1]}`, dari: i, sampai: i + q.sub.length - 1 });
+    i += q.sub.length;
+  }
+  return {
+    v: 1, sumber: 'renaksi-cetak',
+    setelan: { tahun, mode: f.mode, levels: f.levels, fTujuan: f.fTujuan, fSasaran: f.fSasaran, fProgram: f.fProgram },
+    kolom: h.flat.map(c => c.key), judulKolom: h.flat.map(c => c.header),
+    ...(kelompok.length ? { kelompok } : {}),
+    judul: `Rencana Aksi dan Capaian Kinerja Tahun ${tahun}`,
   };
 }

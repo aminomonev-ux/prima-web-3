@@ -343,7 +343,7 @@ ok('G6 Finalisasi memeriksa tabel DAN angka dulu', fin.includes('semuaTertaut.le
 ok('G7 kedua modal memakai SATU komponen setelan (tidak ada salinan isian per sumber)',
   tm.includes('<SetelanSumber ') && am.includes('<SetelanSumber ') && !tm.includes('LABEL_KEDALAMAN') && !am.includes('LABEL_KEDALAMAN') && !tm.includes("'Versi SSK'") && !tm.includes('>Versi SSK'))
 ok('G8 modal Angka berhenti di form: tidak menyimpan apa pun sendiri', !/saveBlock|method:\s*'(POST|PUT|PATCH)'|\bmenulis\b/.test(am) && badan(am, 'function sisipkan(').includes('onSisipkan(teks,'))
-ok('G9 sumber baru terdaftar & berurutan di pemilih', URUTAN_SUMBER.join() === 'kinerja-rekap,kinerja-laporan,renaksi-cetak,blud-realisasi,pk')
+ok('G9 sumber baru terdaftar & berurutan di pemilih', URUTAN_SUMBER.join() === 'kinerja-rekap,kinerja-laporan,kinerja-detail,renaksi-cetak,blud-realisasi,pk')
 const sisip = badan(tt, 'function sisipkanAngka(')
 ok('G10 modal angka dibuka lagi di sumber & setelan angka terakhir, dan langsung menarik',
   sisip.includes('setSumberTerakhir({ sumber: resep.sumber, setelan: resep.setelan })') && tt.includes('awal={sumberTerakhir}')

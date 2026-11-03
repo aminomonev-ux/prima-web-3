@@ -8,7 +8,7 @@
 //
 // MURNI: aman klien & server, tanpa jaringan/DB.
 
-import { nilaiRumus, colLabel, sanitizeRows, FUNCS, RUJUKAN_HILANG, BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, type TabelCell, type TabelNumFmt } from './tabel';
+import { nilaiRumus, colLabel, sanitizeRows, hapusKolom, FUNCS, RUJUKAN_HILANG, BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, type TabelCell, type TabelNumFmt, type TabelAlign } from './tabel';
 import { bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 
 export const BATAS_KOLOM = BATAS_KOLOM_TABEL;
@@ -34,6 +34,11 @@ export interface HasilTarik {
   ringkas: string;
   /** Pilihan setelan yang baru diketahui sesudah menarik (mis. Pihak Pertama PK). */
   pilihan?: Record<string, string[]>;
+  /**
+   * Kabar yang TIDAK mengubah angka tabel — mis. sumber sudah punya versi lebih baru dari yang
+   * sengaja dipakai (Murni). Tidak ikut dibandingkan Perbarui; hanya ditampilkan sebagai lencana.
+   */
+  info?: string[];
 }
 
 export type IsiKolom =
@@ -53,8 +58,18 @@ export interface KolomTaut {
   bertingkat?: boolean;
 }
 
+/**
+ * Baris yang diketik sendiri di tabel tertaut (klik kanan → Sisip baris tangan). Ditambatkan SESUDAH
+ * baris sumber `setelah` (null = paling atas badan) dan bertahan saat Perbarui; `sel` sejajar `kolom`
+ * (kolom Nomor & rumus dihitung, isinya diabaikan). Kunci barisnya di `kunciBaris` = `tangan:<id>`.
+ */
+export interface BarisTangan { id: string; setelah: string | null; sel: string[] }
+export const AWALAN_BARIS_TANGAN = 'tangan:';
+export const kunciBarisTangan = (id: string) => AWALAN_BARIS_TANGAN + id;
+export const adalahBarisTangan = (kunci: string | undefined): boolean => !!kunci && kunci.startsWith(AWALAN_BARIS_TANGAN);
+
 export interface Tautan {
-  sumber:      'kinerja-rekap' | 'renaksi-cetak' | 'kinerja-laporan' | 'blud-realisasi' | 'pk';
+  sumber:      'kinerja-rekap' | 'renaksi-cetak' | 'kinerja-laporan' | 'blud-realisasi' | 'pk' | 'kinerja-detail';
   setelan:     Record<string, unknown>;
   /** Sejajar dengan `kolom` tabel — pemetaan menempel pada KOLOM, bukan posisi. */
   kolom:       KolomTaut[];
@@ -65,6 +80,7 @@ export interface Tautan {
   ditarikPada: string;
   ringkas:     string;
   catatan:     string[];
+  barisTangan?: BarisTangan[];
 }
 
 export function formatBawaan(jenis: JenisKolomSumber): FormatKolom {
@@ -255,13 +271,55 @@ export interface HasilBadan {
   /** Indeks kolom LKJIP yang menunjuk kolom sumber yang tidak ada lagi (mis. setelan Renaksi berubah). */
   kolomHilang: number[];
   galatRumus:  { kolom: number; pesan: string }[];
+  /** Baris tangan yang baris tambatannya sudah tidak ada di sumber — ditaruh di akhir badan. */
+  barisTanganPindah: string[];
 }
 
-export function bangunBadan(hasil: HasilTarik, resep: Pick<Tautan, 'kolom' | 'sembunyi' | 'tebalInduk'>): HasilBadan {
+type BarisBadan = { jenis: 'sumber'; b: BarisSumber } | { jenis: 'tangan'; t: BarisTangan };
+
+/**
+ * Urutan badan: baris tangan berjangkar `null` paling atas, lalu tiap baris sumber diikuti baris
+ * tangan yang ditambatkan padanya — termasuk baris sumber yang DISEMBUNYIKAN, jadi menyembunyikan
+ * baris tidak memindahkan ketikan orang. Jangkar yang hilang dari sumber → akhir badan.
+ */
+function urutanBadan(hasil: HasilTarik, sembunyi: Set<string>, tangan: readonly BarisTangan[]): { urut: BarisBadan[]; pindah: string[] } {
+  const perJangkar = new Map<string | null, BarisTangan[]>();
+  for (const t of tangan) perJangkar.set(t.setelah, [...(perJangkar.get(t.setelah) ?? []), t]);
+  const ikut = (k: string | null) => (perJangkar.get(k) ?? []).map(t => ({ jenis: 'tangan' as const, t }));
+  const urut: BarisBadan[] = [...ikut(null)];
+  for (const b of hasil.baris) {
+    if (!sembunyi.has(b.kunci)) urut.push({ jenis: 'sumber', b });
+    urut.push(...ikut(b.kunci));
+  }
+  const ada = new Set(hasil.baris.map(b => b.kunci));
+  const yatim = tangan.filter(t => t.setelah !== null && !ada.has(t.setelah));
+  urut.push(...yatim.map(t => ({ jenis: 'tangan' as const, t })));
+  return { urut, pindah: yatim.map(t => t.id) };
+}
+
+/**
+ * Sel baris tangan di kolom sumber memakai format angka kolomnya (dari sel sumber pertama yang
+ * berformat) — tanpa itu ketikan 250000000 tampil mentah di samping 1.800.000.000. Dipakai bangun
+ * ulang DAN aksi lokal: `selSama` membandingkan nf/dec, beda format = lencana "berubah" palsu.
+ */
+function pasangFormatTangan(rows: TabelCell[][], kunciBaris: readonly string[], kolom: readonly KolomTaut[]): void {
+  kolom.forEach((k, c) => {
+    if (k.isi.jenis !== 'sumber') return;
+    const contoh = rows.find((r, i) => !adalahBarisTangan(kunciBaris[i]) && r[c]?.nf && !r[c].h)?.[c];
+    if (!contoh) return;
+    rows.forEach((r, i) => {
+      if (!adalahBarisTangan(kunciBaris[i])) return;
+      r[c] = { ...r[c], nf: contoh.nf };
+      if (contoh.dec === undefined) delete r[c].dec; else r[c].dec = contoh.dec;
+    });
+  });
+}
+
+export function bangunBadan(hasil: HasilTarik, resep: Pick<Tautan, 'kolom' | 'sembunyi' | 'tebalInduk' | 'barisTangan'>): HasilBadan {
   const ncol = resep.kolom.length;
   const sumber = new Map(hasil.kolom.map(k => [k.kunci, k]));
   const sembunyi = new Set(resep.sembunyi);
-  const tampil = hasil.baris.filter(b => !sembunyi.has(b.kunci));
+  const { urut: tampil, pindah } = urutanBadan(hasil, sembunyi, resep.barisTangan ?? []);
   const kolomHilang: number[] = [];
   const galatRumus: HasilBadan['galatRumus'] = [];
   resep.kolom.forEach((k, i) => {
@@ -271,7 +329,13 @@ export function bangunBadan(hasil: HasilTarik, resep: Pick<Tautan, 'kolom' | 'se
       if ('galat' in p) galatRumus.push({ kolom: i, pesan: p.galat });
     }
   });
-  const rows = tampil.map((b, urut) => {
+  const kunciBaris = tampil.map(x => (x.jenis === 'tangan' ? kunciBarisTangan(x.t.id) : x.b.kunci));
+  const rows = tampil.map((x, urut) => {
+    if (x.jenis === 'tangan') {
+      return resep.kolom.map((k, c): TabelCell => (
+        k.isi.jenis === 'nomor' ? { v: String(urut + 1) } : k.isi.jenis === 'rumus' ? { v: '' } : { v: x.t.sel[c] ?? '' }));
+    }
+    const b = x.b;
     const baris: TabelCell[] = resep.kolom.map(k => {
       if (k.isi.jenis === 'nomor') return { v: String(urut + 1) };
       if (k.isi.jenis === 'rumus') return { v: '' };
@@ -286,8 +350,10 @@ export function bangunBadan(hasil: HasilTarik, resep: Pick<Tautan, 'kolom' | 'se
     if (resep.tebalInduk && b.tebal) baris.forEach(s => { s.b = true; });
     return baris;
   });
+  pasangFormatTangan(rows, kunciBaris, resep.kolom);
+  rows.forEach((r, i) => { if (adalahBarisTangan(kunciBaris[i])) hitungRumusBaris(r, resep.kolom); });
   gabungOtomatis(rows, resep.kolom);
-  return { rows, kunciBaris: tampil.map(b => b.kunci), kolomHilang, galatRumus };
+  return { rows, kolomHilang, galatRumus, barisTanganPindah: pindah, kunciBaris };
 }
 
 export interface PayloadTabel {
@@ -397,14 +463,48 @@ export function kalimatPerbarui(r: RingkasPerbarui): string {
  * sejajar `kunciBaris`). Baris yang disembunyikan tidak ada di badan, jadi isiannya dibiarkan
  * apa adanya di peta — menampilkannya lagi memunculkan ketikannya lagi.
  */
+/** Isi sel seperti yang terlihat: sel yang tertutup gabung-sama (`h`, isinya kosong) = isi sel puncaknya. */
+function nilaiTampak(badan: TabelCell[][], r: number, c: number): string {
+  for (let i = r; i >= 0; i--) {
+    const s = badan[i]?.[c];
+    if (!s) return '';
+    if (!s.h) return i === r || (s.rs ?? 1) > r - i ? s.v : '';
+  }
+  return '';
+}
+
+/**
+ * Kolom rumus di baris tangan dihitung dari ketikannya saat itu juga, dengan fungsi yang sama dgn
+ * bangun ulang — menunggu Perbarui membuat Periksa otomatis melapor "berubah" palsu.
+ */
+export function hitungRumusTangan(rows: TabelCell[][], headerRows: number, t: Pick<Tautan, 'kolom' | 'kunciBaris'>): TabelCell[][] {
+  if (!t.kolom.some(k => k.isi.jenis === 'rumus') || !t.kunciBaris.some(adalahBarisTangan)) return rows;
+  return rows.map((r, i) => {
+    if (i < headerRows || !adalahBarisTangan(t.kunciBaris[i - headerRows])) return r;
+    const baris = r.map(s => ({ ...s }));
+    hitungRumusBaris(baris, t.kolom);
+    return baris;
+  });
+}
+
 export function ambilIsianTangan(t: Tautan, badan: TabelCell[][]): Tautan {
-  if (!t.kolom.some(k => k.isi.jenis === 'tangan')) return t;
+  const adaTangan = t.kolom.some(k => k.isi.jenis === 'tangan');
+  if (!adaTangan && !t.barisTangan?.length) return t;
+  // Baris tangan menyimpan ketikannya di `barisTangan[].sel` — termasuk sel di kolom isian tangan.
+  const posTangan = new Map(t.kunciBaris.map((k, i) => [k, i]));
+  const barisTangan = t.barisTangan?.map(bt => {
+    const i = posTangan.get(kunciBarisTangan(bt.id));
+    if (i === undefined) return bt;
+    return { ...bt, sel: t.kolom.map((k, c) => (k.isi.jenis === 'nomor' || k.isi.jenis === 'rumus' ? '' : nilaiTampak(badan, i, c))) };
+  });
   return {
     ...t,
-    kolom: t.kolom.map((k, c) => {
+    ...(barisTangan ? { barisTangan } : {}),
+    kolom: !adaTangan ? t.kolom : t.kolom.map((k, c) => {
       if (k.isi.jenis !== 'tangan') return k;
       const nilai = { ...k.isi.nilai };
       t.kunciBaris.forEach((kunci, i) => {
+        if (adalahBarisTangan(kunci)) return;
         const v = badan[i]?.[c]?.v ?? '';
         if (v.trim()) nilai[kunci] = v; else delete nilai[kunci];
       });
@@ -472,10 +572,18 @@ export function nilaiPerbarui(payload: PayloadTabel & { tautan: Tautan }, hasil:
   const metaSama = hasil.ringkas === t.ringkas && JSON.stringify(hasil.catatan) === JSON.stringify(t.catatan);
   const kunciSumber = new Set(hasil.baris.map(b => b.kunci));
   const yatim = isianYatim(t, kunciSumber);
+  // Baris tangan yang jangkarnya hilang ditambatkan ulang ke baris sumber terakhir — posisinya
+  // (akhir badan) tetap sama, dan Perbarui berikutnya tidak menyebutnya lagi.
+  const pindah = new Set(badan.barisTanganPindah);
+  const jangkarAkhir = hasil.baris.at(-1)?.kunci ?? null;
+  const barisTangan = t.barisTangan?.map(bt => (pindah.has(bt.id) ? { ...bt, setelah: jangkarAkhir } : bt));
   return {
     badan, ringkas, metaSama, yatim,
-    sama: ringkas.sama && metaSama && !badan.kolomHilang.length && !yatim.length,
-    tautanBaru: { ...buangIsianYatim(t, kunciSumber), kunciBaris: badan.kunciBaris, ringkas: hasil.ringkas, catatan: hasil.catatan },
+    sama: ringkas.sama && metaSama && !badan.kolomHilang.length && !yatim.length && !pindah.size,
+    tautanBaru: {
+      ...buangIsianYatim(t, kunciSumber), ...(barisTangan ? { barisTangan } : {}),
+      kunciBaris: badan.kunciBaris, ringkas: hasil.ringkas, catatan: hasil.catatan,
+    },
   };
 }
 
@@ -502,4 +610,105 @@ export function lepasTautan<T extends { tautan?: unknown }>(payload: T): Omit<T,
   const salin = { ...payload };
   delete salin.tautan;
   return salin;
+}
+
+// ── Klik kanan di tabel tertaut: ubah bentuk TANPA menarik ulang (konsep tabel-dari-modul §4) ──
+// Perbarui tetap tombolnya sendiri — operasi di sini hanya memindah/membuang baris & kolom yang
+// sudah ada, lalu merapikan nomor urut dan gabung-sama persis seperti `bangunBadan` menyusunnya.
+
+export type PayloadTertaut = PayloadTabel & { tautan: Tautan };
+
+export const kalimatBarisTanganPindah = (n: number) =>
+  `${n} baris tangan kehilangan baris tambatannya dan dipindah ke akhir tabel`;
+
+/** Kebalikan `gabungOtomatis`: sel tertutup diisi lagi isi puncaknya supaya baris bisa disisip/dibuang. */
+function bukaGabungOtomatis(rows: TabelCell[][], kolom: KolomTaut[]): void {
+  kolom.forEach((k, c) => {
+    if (!k.gabungSama || k.isi.jenis === 'tangan') return;
+    let puncak = '', sisa = 0;
+    for (const r of rows) {
+      const s = r[c];
+      if (s.h && sisa > 0) { r[c] = { v: puncak }; sisa--; continue; }
+      if ((s.rs ?? 1) > 1) { puncak = s.v; sisa = (s.rs ?? 1) - 1; r[c] = { ...s }; delete r[c].rs; continue; }
+      sisa = 0;
+    }
+  });
+}
+
+function rapikanBadan(rows: TabelCell[][], kolom: KolomTaut[]): void {
+  rows.forEach((r, i) => kolom.forEach((k, c) => { if (k.isi.jenis === 'nomor') r[c] = { ...r[c], v: String(i + 1) }; }));
+  gabungOtomatis(rows, kolom);
+}
+
+function ubahBadan(p: PayloadTertaut, ubah: (badan: TabelCell[][], kunci: string[]) => void): { rows: TabelCell[][]; kunciBaris: string[] } {
+  const hr = jumlahBarisKepala(p);
+  const badan = p.rows.slice(hr).map(r => r.map(s => ({ ...s })));
+  const kunci = [...p.tautan.kunciBaris];
+  bukaGabungOtomatis(badan, p.tautan.kolom);
+  ubah(badan, kunci);
+  pasangFormatTangan(badan, kunci, p.tautan.kolom);
+  rapikanBadan(badan, p.tautan.kolom);
+  return { rows: [...p.rows.slice(0, hr), ...badan], kunciBaris: kunci };
+}
+
+/**
+ * Sisip baris tangan tepat di bawah baris badan ke-`iBadan` (-1 = paling atas). Di bawah baris
+ * sumber → ditambatkan padanya, mendahului baris tangan lain yang sudah tertambat di situ; di bawah
+ * baris tangan → ikut jangkarnya, tepat sesudahnya. `null` = melewati batas baris.
+ */
+export function sisipBarisTangan(p: PayloadTertaut, iBadan: number, id: string): PayloadTertaut | null {
+  if (p.rows.length >= BATAS_BARIS) return null;
+  const t = ambilIsianTangan(p.tautan, p.rows.slice(jumlahBarisKepala(p)));
+  const daftar = [...(t.barisTangan ?? [])];
+  const kunci = iBadan >= 0 ? t.kunciBaris[iBadan] : undefined;
+  const asal = adalahBarisTangan(kunci) ? daftar.findIndex(b => kunciBarisTangan(b.id) === kunci) : -1;
+  const setelah = asal >= 0 ? daftar[asal].setelah : (kunci ?? null);
+  const pertama = daftar.findIndex(b => b.setelah === setelah);
+  const di = asal >= 0 ? asal + 1 : pertama >= 0 ? pertama : daftar.length;
+  daftar.splice(di, 0, { id, setelah, sel: t.kolom.map(() => '') });
+  const { rows, kunciBaris } = ubahBadan({ ...p, tautan: t }, (badan, k) => {
+    const baru: TabelCell[] = t.kolom.map(() => ({ v: '' }));
+    hitungRumusBaris(baru, t.kolom);
+    badan.splice(iBadan + 1, 0, baru);
+    k.splice(iBadan + 1, 0, kunciBarisTangan(id));
+  });
+  return { ...p, rows, tautan: { ...t, barisTangan: daftar, kunciBaris } };
+}
+
+/** Baris sumber → disembunyikan (bisa ditampilkan lagi lewat Atur Bentuk); baris tangan → dibuang. */
+export function buangBarisTertaut(p: PayloadTertaut, iBadan: number): PayloadTertaut {
+  const t = ambilIsianTangan(p.tautan, p.rows.slice(jumlahBarisKepala(p)));
+  const kunci = t.kunciBaris[iBadan];
+  if (kunci === undefined) return p;
+  const tangan = adalahBarisTangan(kunci);
+  const { rows, kunciBaris } = ubahBadan({ ...p, tautan: t }, (badan, k) => { badan.splice(iBadan, 1); k.splice(iBadan, 1); });
+  return {
+    ...p, rows,
+    tautan: tangan
+      ? { ...t, kunciBaris, barisTangan: (t.barisTangan ?? []).filter(b => kunciBarisTangan(b.id) !== kunci) }
+      : { ...t, kunciBaris, sembunyi: [...new Set([...t.sembunyi, kunci])] },
+  };
+}
+
+/**
+ * Kolom tabel tertaut dihapus langsung. Ditolak (pesan) kalau tinggal satu kolom atau kolom itu
+ * dirujuk rumus kolom lain — rumusnya akan jadi #REF! tanpa ada yang menulisnya ulang.
+ */
+export function hapusKolomTertaut(p: PayloadTertaut, c: number): PayloadTertaut | string {
+  const t = p.tautan;
+  if (t.kolom.length <= 1) return 'Tabel harus punya minimal 1 kolom.';
+  const perujuk = t.kolom.findIndex((k, i) => i !== c && k.isi.jenis === 'rumus'
+    && petakanRumusKolom(k.isi.ekspresi, t.kolom.map((_, j) => (j === c ? null : j))) !== k.isi.ekspresi);
+  if (perujuk >= 0) return `Kolom ${colLabel(c)} dipakai rumus kolom ${colLabel(perujuk)} — ubah rumusnya lewat Atur Bentuk dulu.`;
+  const isi = ambilIsianTangan(t, p.rows.slice(jumlahBarisKepala(p)));
+  const peta = isi.kolom.map((_, j) => (j < c ? j : j === c ? null : j - 1));
+  const kolom = isi.kolom.filter((_, j) => j !== c).map(k => (k.isi.jenis === 'rumus'
+    ? { ...k, isi: { jenis: 'rumus' as const, ekspresi: petakanRumusKolom(k.isi.ekspresi, peta) } } : k));
+  const bentuk = hapusKolom({
+    rows: p.rows, kolom: p.kolom, align: p.align as TabelAlign[], colWidths: p.colWidths ?? [], headerRows: jumlahBarisKepala(p),
+  }, c, c);
+  return {
+    ...p, rows: bentuk.rows, kolom: bentuk.kolom, align: bentuk.align, colWidths: bentuk.colWidths,
+    tautan: { ...isi, kolom, ...(isi.barisTangan ? { barisTangan: isi.barisTangan.map(b => ({ ...b, sel: b.sel.filter((_, j) => j !== c) })) } : {}) },
+  };
 }

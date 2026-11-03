@@ -13,6 +13,8 @@ import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS, MONTH_SHORT } from '../_utils
 import { exportLaporanExcel, exportLaporanPdf } from '../_exports';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
+import SalinKeLkjip from '@/components/lkjip/SalinKeLkjip';
+import { salinanKinerjaLaporan } from '@/lib/lkjip/sumber/kinerja-laporan';
 import { RefreshCw, LineChart, Loader2, Wallet, Coins, Percent, ListChecks, BarChart3, Layers, Table } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 
@@ -233,9 +235,14 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
 
             {/* Ringkasan semua sumber */}
             <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', padding:'16px 18px', boxShadow:cBoxShadow }}>
-              <div style={{ fontWeight:700, fontSize:'13px', color:cTextPrimary, marginBottom:'12px' }}>
-                <Layers size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />
-                Serapan per Sumber
+              <div style={{ fontWeight:700, fontSize:'13px', color:cTextPrimary, marginBottom:'12px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', flexWrap:'wrap' }}>
+                <span>
+                  <Layers size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />
+                  Serapan per Sumber
+                </span>
+                {/* Di layar berupa bilah; di LKJIP jadi tabel per sumber dana + JUMLAH. */}
+                <SalinKeLkjip salinan={laporanAll.length ? salinanKinerjaLaporan({ tahun: Number(tahun), tampilan: 'sumber', sumber: laporanSumber }) : null}
+                  tabel={() => null} alasanMati="Tunggu datanya termuat." />
               </div>
               {laporanAll.length === 0 ? (
                 <div style={{ fontSize:'12px', color:cTextSub }}>Memuat...</div>
@@ -262,12 +269,16 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
 
           {/* Tabel trend detail */}
           <div style={{ background:cSurface, border:`1px solid ${cBorder}`, borderRadius:'12px', overflow:'hidden', boxShadow:cBoxShadow }}>
-            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${cBorder}`, fontWeight:700, fontSize:'13px', color:cTextPrimary }}>
-              <Table size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />
-              Detail Trend Bulanan — {laporanSumber}
+            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${cBorder}`, fontWeight:700, fontSize:'13px', color:cTextPrimary, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', flexWrap:'wrap' }}>
+              <span>
+                <Table size="1em" style={{ marginRight:'6px', color:cTextSubAlt, display:'inline', verticalAlign:'-0.125em' }} />
+                Detail Trend Bulanan — {laporanSumber}
+              </span>
+              <SalinKeLkjip salinan={salinanKinerjaLaporan({ tahun: Number(tahun), tampilan: 'bulanan', sumber: laporanSumber })}
+                tabel={() => document.querySelector<HTMLTableElement>('table[data-salin-lkjip="kinerja-laporan"]')} />
             </div>
             <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+              <table data-salin-lkjip="kinerja-laporan" style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                 <thead>
                   <tr style={{ background:cTableHeadBg }}>
                     {['No','Bulan','Real Keuangan','Akum Keuangan','Akum % Keuangan','Real Fisik','Akum % Fisik'].map(h => (

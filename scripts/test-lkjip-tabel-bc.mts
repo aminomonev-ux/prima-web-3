@@ -471,15 +471,15 @@ ok('P9 urutkan: tertaut ditolak; satu sel = seluruh badan; baris JUMLAH dikecual
   badan(te, 'function urutkan(turun: boolean)').includes("if (terkait) { toast.info(") && badan(te, 'function urutkan(turun: boolean)').includes('{ r1: headerRows, c1: 0, r2: rows.length - 1, c2: ncol - 1 }')
   && badan(te, 'function urutkan(turun: boolean)').includes('urutkanBlok(rows, blok, kol, turun, headerRows, !!atur.gaya.jumlah)'))
 const menuB = te.slice(te.indexOf('{menu && rect && (() => {'), te.indexOf('{modalTaut && ('))
-ok('P10 menu klik-kanan: 16 aksi; yang tak berlaku MATI dgn alasan (bukan disembunyikan); hapus memakai DeleteIcon',
-  // 16 aksi, 15 bisa mati (Salin selalu boleh) — tiap yang bisa mati membawa alasannya.
-  (menuB.match(/\{ icon: /g) ?? []).length === 16 && (menuB.match(/disabled: /g) ?? []).length === 15 && (menuB.match(/alasan: /g) ?? []).length === 15
+ok('P10 menu klik-kanan: 18 aksi (2 khusus tabel tertaut); yang tak berlaku MATI dgn alasan (bukan disembunyikan); hapus memakai DeleteIcon',
+  // 18 aksi, 17 bisa mati (Salin selalu boleh) — tiap yang bisa mati membawa alasannya.
+  (menuB.match(/\{ icon: /g) ?? []).length === 18 && (menuB.match(/disabled: /g) ?? []).length === 17 && (menuB.match(/alasan: /g) ?? []).length === 17
   && (menuB.match(/<DeleteIcon size=\{14\} \/>/g) ?? []).length === 2
   && !menuB.includes('Trash2') && te.includes("onContextMenu={e => bukaMenu(e, () => pil.keSel(ri, ci), diPilih(ri, ci))}"))
 const kunciMenu = [...menuB.matchAll(/kunci: '([^']+)'/g)].map(m => m[1])
 const kasusMenu = [...badan(te, 'const pilihMenu = (kunci: string) =>').matchAll(/case '([^']+)':/g)].map(m => m[1])
 ok('P10b tiap aksi menu punya jalannya di pilihMenu (dan sebaliknya) — aksi tanpa kasus diam saja saat diklik',
-  kunciMenu.length === 16 && new Set(kunciMenu).size === 16 && kasusMenu.length === 16 && kunciMenu.every(k => kasusMenu.includes(k)), `${kunciMenu.length}/${kasusMenu.length}`)
+  kunciMenu.length === 18 && new Set(kunciMenu).size === 18 && kasusMenu.length === 18 && kunciMenu.every(k => kasusMenu.includes(k)), `${kunciMenu.length}/${kasusMenu.length}`)
 ok('P11 menu klik-kanan baris/kolom memilih TANPA mode seret (contextmenu Windows datang sesudah mouseup)',
   te.includes('onContextMenu={e => bukaMenu(e, () => pil.setSel({ ar: 0, ac: ci, fr: rows.length - 1, fc: ci })') && te.includes('onContextMenu={e => bukaMenu(e, () => pil.setSel({ ar: ri, ac: 0, fr: ri, fc: ncol - 1 })'))
 ok('P12 RowMenu satu komponen untuk pohon dokumen & tabel', ec.includes("import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';") && te.includes("import { RowMenu, type RowMenuItem } from './RowMenu';") && !ec.includes('function RowMenu('))
@@ -494,7 +494,7 @@ ok('P13 kepala & huruf kolom sticky dgn latar PEKAT; wadah bergulir sendiri; jar
 ok('P14 teks panjang terbungkus seperti Word (dulu "…"); teks tegak tetap satu baris',
   css.includes('white-space: pre-wrap; overflow-wrap: break-word;') && !/\.lk-sel-isi \{[^}]*text-overflow: ellipsis/.test(css) && css.includes('.lk-sel-isi.tegak { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap;'))
 ok('P15 bilah status tampil untuk ≥ 2 sel berisi', te.includes('{ringkas && ringkas.banyak >= 2 && (') && te.includes('const ringkas = useMemo(() => (rect ? ringkasBlok(rowsTampil, rect) : null), [rowsTampil, rect]);'))
-ok('P16 templat bertingkat dipasang lewat kepalaBertingkat', badan(tm, 'function pakaiTemplat(t: TemplatTabel)').includes('kepalaBertingkat(t.kolom.map(k => k.judul), t.kelompok)'))
+ok('P16 templat bertingkat dipasang lewat kepalaBertingkat', badan(tm, 'function terapkanTemplat(t: TemplatTabel').includes('kepalaBertingkat(t.kolom.map(k => k.judul), t.kelompok)'))
 ok('P17 narasi: node rujukan terdaftar; penyegaran nomor tidak memunculkan Simpan; sisipan menyimpan id blok',
   /name: 'rujukTaut'[\s\S]*inline: true,[\s\S]*atom: true/.test(tt) && tt.includes("tag: 'span[data-rujuk]'") && tt.includes('AngkaTaut, RujukTaut]')
   && tt.includes('onUpdate: ({ transaction }) => { if (!transaction.getMeta(META_SEGAR)) setDirty(true); },')

@@ -11,6 +11,7 @@ import { catatanDinolkan, catatanYatim } from '@/app/(dashboard)/kinerja/_export
 import type { LaporanSumber, SumberSSK } from '@/app/(dashboard)/kinerja/_types';
 import type { BarisSumber, HasilTarik, JenisKolomSumber, KolomSumber } from '../tautan';
 import { GagalTarik, pesanDitolak, angkaDalam, type AmbilJson } from './umum';
+import type { SalinanModul } from '../salinan-modul';
 
 export type TampilanLaporan = 'sumber' | 'bulanan';
 export interface SetelanKinerjaLaporan {
@@ -143,5 +144,13 @@ export async function tarikKinerjaLaporan(s: SetelanKinerjaLaporan, ambil: Ambil
   return {
     kolom: KOLOM_PER_SUMBER, baris, catatan,
     ringkas: `E-Anggaran · Laporan per Sumber Dana ${tahun} · ${tampil.map(d => `${d.sumber} ${namaVersi(d.versi_aktif)}`).join(', ') || 'tanpa data'}`,
+  };
+}
+
+/** Resep "Salin ke LKJIP" dari tab Laporan (per sumber dana / tren bulanan satu sumber). */
+export function salinanKinerjaLaporan(s: SetelanKinerjaLaporan): SalinanModul {
+  return {
+    v: 1, sumber: 'kinerja-laporan', setelan: { ...s }, kolom: kolomLaporan(s).map(k => k.kunci),
+    judul: s.tampilan === 'bulanan' ? `Realisasi ${s.sumber} per Bulan Tahun ${s.tahun}` : `Realisasi Anggaran per Sumber Dana Tahun ${s.tahun}`,
   };
 }

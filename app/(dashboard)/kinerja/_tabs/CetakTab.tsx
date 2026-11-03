@@ -21,6 +21,9 @@ import { ringkasVersiRekap, sumberTanpaVersi, versiCetak, labelVersi,
   type PilihanVersiRekap, type VersiSumberRekap } from '@/lib/kinerja/versi';
 import VersiPickerKinerja, { type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
 import { useDaftarVersiSsk } from '@/components/kinerja/useDaftarVersiSsk';
+import SalinKeLkjip from '@/components/lkjip/SalinKeLkjip';
+import { salinanKinerjaRekap } from '@/lib/lkjip/sumber/kinerja-rekap';
+import { salinanKinerjaDetail } from '@/lib/lkjip/sumber/kinerja-detail';
 
 interface Props {
   realisasiRows: RealRow[];
@@ -360,6 +363,10 @@ export default function CetakTab({
                 </PrimaButton>
                 <DownloadButton variant="excel" label="Excel" onClick={doExportRekapExcel} disabled={!rekap} />
                 <DownloadButton variant="pdf"   label="PDF"   onClick={doExportRekapPdf}   disabled={!rekap} />
+                <SalinKeLkjip
+                  salinan={rekap ? salinanKinerjaRekap({ tahun: Number(tahun), sdBulan: bulanRekapPilih, versi: pilihanVersi, kedalaman: rekapDepth }) : null}
+                  tabel={() => document.querySelector<HTMLTableElement>('table[data-salin-lkjip="kinerja-rekap"]')}
+                  alasanMati="Muat rekapnya dulu." />
               </div>
             </div>
           </div>
@@ -400,6 +407,12 @@ export default function CetakTab({
             </PrimaButton>
             <DownloadButton variant="excel" label="Excel" onClick={doExportRealisasiExcel} disabled={bulanTampil.length === 0} />
             <DownloadButton variant="pdf" label="PDF" onClick={doExportRealisasiPdf} disabled={bulanTampil.length === 0} />
+            {/* Satu tabel LKJIP = satu bulan; versi terbaru disalin sebagai Versi Berlaku supaya ikut Perubahan berikutnya. */}
+            <SalinKeLkjip
+              salinan={bulanEfektif === 'semua' ? null : salinanKinerjaDetail({ tahun: Number(tahun), sumber: realisasiSumber, bulan: bulanEfektif,
+                versi: versiDetail.terbaru ? 'berlaku' : `${sskVersi.tipe}:${sskVersi.seq}` })}
+              tabel={() => document.querySelector<HTMLTableElement>('table[data-salin-lkjip="kinerja-detail"]')}
+              alasanMati="Pilih satu bulan dulu: satu tabel LKJIP memuat satu bulan." />
           </div>
         </div>
       </div>
@@ -507,7 +520,7 @@ export default function CetakTab({
             )}
 
             <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
+              <table data-salin-lkjip="kinerja-rekap" style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
                 <thead>
                   <tr>
                     {['No','Uraian','Anggaran (Rp)','Target s/d Bln Ini (%)','Realisasi Fisik s/d Bln Ini (Rp)','Realisasi Fisik s/d Bln Ini (%)','Deviasi Fisik (%)','Tingkat Capaian Fisik (%)','Target Keu s/d Bln Ini (Rp)','Bulan Ini (Rp)','Realisasi Keu s/d Bln Ini (Rp)','Realisasi Keu s/d Bln Ini (%)','Deviasi Keu (%)'].map((h,i) => (
@@ -577,7 +590,7 @@ export default function CetakTab({
 
                 {/* ── Tabel ── */}
                 <div style={{ overflowX:'auto' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
+                  <table data-salin-lkjip="kinerja-detail" style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
                     <thead>
                       <tr>
                         {tHead.map((h,hi) => (

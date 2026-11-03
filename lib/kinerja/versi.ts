@@ -161,6 +161,19 @@ export function labelVersi(tipe: 'MURNI' | 'PERUBAHAN', seq: number): string {
   return seq === 0 ? tipe : `${tipe}-${seq}`;
 }
 
+export interface VersiLebihBaru { sumber: string; label: string }
+
+/**
+ * Kabar untuk tabel yang SENGAJA memakai versi lama (mis. Murni sesudah Perubahan dibuat):
+ * angkanya memang tidak berubah, jadi pemeriksa kesegaran berkata "sama" — tanpa kalimat ini tidak
+ * ada yang memberi tahu bahwa versi yang lebih baru sudah ada.
+ */
+export function kalimatVersiLebihBaru(daftar: readonly VersiLebihBaru[], dipakai: string): string | null {
+  if (daftar.length === 0) return null;
+  return `Sudah ada versi lebih baru: ${daftar.map(v => `${v.sumber} ${v.label}`).join(', ')}. `
+    + `Tabel ini tetap memakai ${dipakai}; ganti versinya lewat Atur Bentuk kalau perlu.`;
+}
+
 /**
  * Satu kalimat untuk kop dokumen DAN label layar.
  *

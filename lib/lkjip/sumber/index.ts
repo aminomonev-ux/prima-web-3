@@ -5,6 +5,7 @@ import type { HasilTarik, Tautan } from '../tautan';
 import type { AmbilJson } from './umum';
 import { setelanKinerjaRekap, tarikKinerjaRekap, KOLOM_BAWAAN_KINERJA, KOLOM_KINERJA_REKAP } from './kinerja-rekap';
 import { setelanKinerjaLaporan, tarikKinerjaLaporan, kolomBawaanLaporan, kolomLaporan } from './kinerja-laporan';
+import { setelanKinerjaDetail, tarikKinerjaDetail, KOLOM_KINERJA_DETAIL, KOLOM_BAWAAN_DETAIL } from './kinerja-detail';
 import { setelanRenaksiCetak, tarikRenaksiCetak, KOLOM_BAWAAN_RENAKSI, kolomRenaksi } from './renaksi-cetak';
 import { setelanPk, tarikPk, kolomPk, kolomBawaanPk } from './pk';
 import { setelanBludRealisasi, tarikBludRealisasi, kolomBlud, kolomBawaanBlud } from './blud-realisasi';
@@ -44,6 +45,15 @@ export const DAFTAR_SUMBER: Record<IdSumber, SumberTabel> = {
     kolom: s => kolomLaporan(s),
     kolomBawaan: s => kolomBawaanLaporan(s),
   },
+  'kinerja-detail': {
+    id: 'kinerja-detail',
+    label: 'E-Anggaran · Cetak Detail per Sumber',
+    modul: 'E-Anggaran',
+    setelan: (raw, tahun) => ({ ...setelanKinerjaDetail(raw, tahun) }),
+    tarik: (s, ambil, tahun) => tarikKinerjaDetail(setelanKinerjaDetail(s, tahun), ambil),
+    kolom: () => KOLOM_KINERJA_DETAIL,
+    kolomBawaan: () => KOLOM_BAWAAN_DETAIL,
+  },
   'renaksi-cetak': {
     id: 'renaksi-cetak',
     label: 'Renaksi · Cetak (Target & Realisasi Indikator)',
@@ -73,4 +83,4 @@ export const DAFTAR_SUMBER: Record<IdSumber, SumberTabel> = {
   },
 };
 
-export const URUTAN_SUMBER: IdSumber[] = ['kinerja-rekap', 'kinerja-laporan', 'renaksi-cetak', 'blud-realisasi', 'pk'];
+export const URUTAN_SUMBER: IdSumber[] = ['kinerja-rekap', 'kinerja-laporan', 'kinerja-detail', 'renaksi-cetak', 'blud-realisasi', 'pk'];

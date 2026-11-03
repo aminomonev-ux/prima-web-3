@@ -418,7 +418,7 @@ ok('K2 sunting/format/gabung/tempel dikunci di badan tertaut (kecuali kolom isia
   tabelEd.includes('const rectBadan = terkait && !!rect && rect.r2 >= headerRows;')
   && tabelEd.includes('if (!rect || rectBadan) return;')
   && tabelEd.includes('const canMerge = !!rect && !rectBadan')
-  && tabelEd.includes('const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c);')
+  && tabelEd.includes('const terkunci = (r: number, c: number) => diBadan(r) && !kolomTangan.has(c) && !selBarisTangan(r, c);')
   && badan(tabelEd, 'const mulaiSunting =').includes('if (terkunci(r, c)) {')
   && badan(tabelEd, 'const kosongkan =').includes('const boleh = (r: number, c: number) => !terkunci(r, c) && !diNomor(r, c);')
   && badan(tabelEd, 'async function tempel(').includes('if (rectBadan) {')
@@ -428,11 +428,13 @@ ok('K2 sunting/format/gabung/tempel dikunci di badan tertaut (kecuali kolom isia
 ok('K3 tombol format memakai kunci badan (Salin tetap boleh)',
   tabelEd.includes('const kunciBlok = !rect || rectBadan;') && (tabelEd.match(/disabled=\{kunciBlok\}/g) ?? []).length === 18
   && tabelEd.includes('data-tooltip="Salin (Ctrl+C)" data-tooltip-pos="below" disabled={!rect}'))
-ok('K4 tambah/hapus baris & kolom dimatikan selama tertaut',
+// Sejak tabel-dari-modul (2026-11-03): baris badan & kolom tabel tertaut diubah lewat klik kanan
+// (baris tangan, sembunyikan, hapus kolom — `hapusKolomTertaut`), bukan lewat sisip/hapus biasa.
+ok('K4 sisip/hapus baris & sisip kolom biasa tetap mati selama tertaut; hapus kolom lewat jalur tertaut',
   tabelEd.includes('disabled={terkait} data-tooltip={terkait ?') && tabelEd.includes('disabled={ncol >= batasKolom || terkait}')
   && badan(tabelEd, 'function sisip(').includes('if (terkait && !keKepala) {') && badan(tabelEd, 'function sisip(').includes('if (terkait) { toast.info(PESAN_KOLOM_TAUT); return; }')
   && badan(tabelEd, 'function hapusBarisPilihan(').includes('if (terkait && r2 >= headerRows) {')
-  && badan(tabelEd, 'function hapusKolomPilihan(').includes('if (terkait) { toast.info(PESAN_KOLOM_TAUT); return; }'))
+  && badan(tabelEd, 'function hapusKolomPilihan(').includes('if (terkait) { void hapusKolomTertautPilihan(); return; }'))
 const kepalaFn = badan(tabelEd, 'const gantiBarisKepala =')
 // E3: sejak konsep ala Excel, aturan "sisip di atas badan" berlaku untuk SEMUA tabel (dulu hanya tertaut).
 ok('K5 jumlah baris kepala diubah tanpa memakan baris badan', tabelEd.includes('onChange={e => void gantiBarisKepala(Number(e.target.value))}')
@@ -447,7 +449,7 @@ ok('K8 Perbarui memakai penilaian BERSAMA (nilaiPerbarui) & resep sesudahnya',
   && perb.includes('kalimatIsianYatim(nilai.yatim,') && !perb.includes('bangunBadan('))
 // Editor tabel pindah ke components/tabel (konsep iki-custom §3): modalnya dioper editor LKJIP lewat prop `lkjip`.
 ok('K9 modal dimuat saat dibuka saja', /const TautanModal = dynamic\(\(\) => import\('\.\/TautanModal'\), \{ ssr: false \}\)/.test(ed)
-  && ed.includes('lkjip={{ tahunDokumen, TautanModal }}') && !/import[^;]*TautanModal/.test(tabelEd)
+  && ed.includes('lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai }}') && !/import[^;]*TautanModal/.test(tabelEd)
   && ed.includes("import TabelEditor from '@/components/tabel/TabelEditor';") && !ed.includes('function TabelEditor('))
 ok('K10 keterangan sumber TIDAK masuk Word (docgen tak mengenal tautan)', !/tautan|ringkas|ditarikPada/.test(kode('lib/lkjip/docgen.ts')))
 ok('K11 audit simpan blok menyebut sumbernya', kode('app/api/lkjip/block/route.ts').includes('` · tertaut: ${ringkas.slice(0, 200)}`'))
@@ -580,7 +582,9 @@ ok('N pengukuran-kinerja: sasaran ber-2 indikator digabung, nomor urut per indik
 const tSd = DAFTAR_TEMPLAT.find(t => t.id === 'anggaran-sumber-dana')!
 const bSd = bangunBadan(tL, { kolom: tSd.kolom.map(k => k.taut), sembunyi: [], tebalInduk: true })
 ok('N anggaran-sumber-dana: JUMLAH di akhir, tanpa nomor, tebal', bSd.rows[2][0].v === '' && bSd.rows[2][1].v === 'JUMLAH' && !!bSd.rows[2][1].b && bSd.rows[0][0].v === '1')
-ok('N modal: templat hanya untuk tabel baru & cuma mengisi form', modal.includes('{kosongAwal && (') && badan(modal, 'function pakaiTemplat(').includes('void tarik(t.sumber, s);'))
+ok('N modal: templat hanya untuk tabel baru & cuma mengisi form', modal.includes('{kosongAwal && !salinan && (')
+  && badan(modal, 'function terapkanTemplat(').includes('if (tarikUlang) void tarik(t.sumber, s);')
+  && badan(modal, 'function pakaiTemplat(').includes('`${t.label} Tahun ${tahunDokumen}`, true);'))
 
 // ─── O. Periksa kesegaran & Finalisasi ────────────────────────────────────────
 console.log('\nO. Periksa tabel tertaut')
@@ -609,7 +613,8 @@ ok('O5 Finalisasi memeriksa tabel tertaut DULU & menawarkan memperbaruinya',
   && finalFn.includes("confirmLabel: 'Lihat & perbarui dulu', altLabel: 'Tetap finalisasi'"))
 ok('O6 panel Periksa hanya membaca (tak ada simpan blok di jalurnya)',
   !badan(ed, 'async function bukaPeriksa(').includes('saveBlock') && !badan(ed, 'async function jalankanPeriksa(').includes('saveBlock') && !kode('lib/lkjip/kesegaran.ts').includes('fetch('))
-ok('O7 Periksa & tombol Perbarui memakai penilaian yang SAMA', kode('lib/lkjip/kesegaran.ts').includes('nilaiPerbarui(t.payload, await bersama(t.payload.tautan.sumber, t.payload.tautan.setelan))'))
+ok('O7 Periksa & tombol Perbarui memakai penilaian yang SAMA', kode('lib/lkjip/kesegaran.ts').includes('const tarikan = await bersama(t.payload.tautan.sumber, t.payload.tautan.setelan);')
+  && kode('lib/lkjip/kesegaran.ts').includes('const nilai = nilaiPerbarui(t.payload, tarikan);'))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
 if (gagal.length) { console.log('GAGAL: ' + gagal.join(' | ')); process.exit(1) }

@@ -12,6 +12,8 @@ import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { DAFTAR_SUMBER, type IdSumber } from '@/lib/lkjip/sumber';
 import { GagalTarik } from '@/lib/lkjip/sumber/umum';
 import { DAFTAR_TEMPLAT, type TemplatTabel } from '@/lib/lkjip/sumber/templat';
+import { templatDariSalinan, centangAwalSalinan, LEWAT_BATAS_KOLOM, type SalinanModul } from '@/lib/lkjip/salinan-modul';
+import { BATAS_KOLOM_TABEL } from '@/lib/lkjip/tabel';
 import {
   bangunBadan, pasangBadan, periksaRumusKolom, petakanRumusKolom, formatBawaan, jumlahBarisKepala, pesanLewatBatas, jumlahIsianTangan, judulIkutSetelan, BATAS_KOLOM,
   type KolomTaut, type KolomSumber, type PayloadTabel, type Tautan, type FormatKolom,
@@ -29,6 +31,8 @@ interface Props {
   tahunDokumen: number;
   onTerapkan: (p: PayloadTabel) => void;
   onTutup: () => void;
+  /** Dibuka dari tempelan "Salin ke LKJIP": sumber, setelan, dan kolom diisi seperti tabel modulnya. */
+  salinan?: SalinanModul;
 }
 
 /**
@@ -121,7 +125,7 @@ function bentukAwal(p: PayloadTabel, sumberId: IdSumber, setelan: Record<string,
 const nilaiIsi = (t: KolomTaut | null): string =>
   !t ? '' : t.isi.jenis === 'sumber' ? `s:${t.isi.kunci}` : t.isi.jenis;
 
-export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup }: Props) {
+export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup, salinan }: Props) {
   const awalSumber: IdSumber = payload.tautan?.sumber ?? 'kinerja-rekap';
   const [sumberId, setSumberId] = useState<IdSumber>(awalSumber);
   const [setelan, setSetelan] = useState<Record<string, unknown>>(
@@ -188,8 +192,8 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
       : { ...b, kolom: b.kolom.map(k => (k.taut?.isi.jenis === 'sumber' && !katalogBaru.has(k.taut.isi.kunci) ? { ...k, taut: null } : k)) }));
   }
 
-  function pakaiTemplat(t: TemplatTabel) {
-    const s = DAFTAR_SUMBER[t.sumber].setelan({ ...t.setelan, tahun: tahunDokumen }, tahunDokumen);
+  /** Templat dan tempelan dari modul mengisi form lewat satu jalan — berhenti di form, yang menulis tetap Masukkan (L78). */
+  function terapkanTemplat(t: TemplatTabel, s: Record<string, unknown>, judul: string, tarikUlang: boolean) {
     setSumberId(t.sumber); setSetelan(s); setSembunyi([]); setTebalInduk(true);
     // Templat berkepala bertingkat (Tahap B): judul kelompok di baris 1, judul kolom di baris 2.
     const { kepala: kp, letak: lt } = kepalaBertingkat(t.kolom.map(k => k.judul), t.kelompok);
@@ -197,9 +201,26 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
       kolom: t.kolom.map(k => ({ nama: k.judul, taut: k.taut, align: k.align, asal: null })),
       kepala: kp, letak: lt,
     });
-    setJudulTemplat(`${t.label} Tahun ${tahunDokumen}`);
-    void tarik(t.sumber, s);
+    setJudulTemplat(judul);
+    if (tarikUlang) void tarik(t.sumber, s);
   }
+  function pakaiTemplat(t: TemplatTabel) {
+    terapkanTemplat(t, DAFTAR_SUMBER[t.sumber].setelan({ ...t.setelan, tahun: tahunDokumen }, tahunDokumen), `${t.label} Tahun ${tahunDokumen}`, true);
+  }
+
+  // Tempelan "Salin ke LKJIP": setelan apa adanya dari layar modul (tahunnya juga), kolom dicentang.
+  const [centang, setCentang] = useState<boolean[] | null>(null);
+  function pasangSalinan(s: SalinanModul, aktif: boolean[], tarikUlang: boolean) {
+    const st = DAFTAR_SUMBER[s.sumber].setelan(s.setelan, tahunDokumen);
+    setCentang(aktif);
+    terapkanTemplat(templatDariSalinan(s, DAFTAR_SUMBER[s.sumber].kolom(st), aktif), st, s.judul, tarikUlang);
+  }
+  const sudahSalinan = useRef(false);
+  useEffect(() => {
+    if (salinan && !sudahSalinan.current) { sudahSalinan.current = true; pasangSalinan(salinan, centangAwalSalinan(salinan), true); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali saat modal dibuka dari tempelan
+  }, []);
+  const jumlahCentang = centang?.filter(Boolean).length ?? 0;
 
   const ubahKolom = (i: number, f: (k: KolomForm) => KolomForm) => setBentuk(b => ({ ...b, kolom: b.kolom.map((k, j) => (j === i ? f(k) : k)) }));
   function pilihIsi(i: number, nilai: string) {
@@ -251,10 +272,14 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   });
 
   const lengkap = kolom.every(k => k.taut !== null);
-  const resep = lengkap ? { kolom: kolom.map(k => k.taut!), sembunyi, tebalInduk } : null;
+  // Baris tangan ikut Atur Bentuk: isinya mengikuti kolom asalnya (kolom baru → kosong).
+  const barisTangan = useMemo(() => (payload.tautan?.barisTangan ?? []).map(b => ({
+    ...b, sel: kolom.map(k => (k.asal !== null && k.asal !== undefined ? b.sel[k.asal] ?? '' : '')),
+  })), [payload.tautan?.barisTangan, kolom]);
+  const resep = lengkap ? { kolom: kolom.map(k => k.taut!), sembunyi, tebalInduk, barisTangan } : null;
   const badan = useMemo(() => (hasil && resep ? bangunBadan(hasil, resep) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `resep` lahir baru tiap render; isinya = kolom/sembunyi/tebalInduk
-    [hasil, kolom, sembunyi, tebalInduk]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `resep` lahir baru tiap render; isinya = kolom/sembunyi/tebalInduk/barisTangan
+    [hasil, kolom, sembunyi, tebalInduk, barisTangan]);
 
   const hr = kepala.length;
   // E2: nama kolom = judul di sel miliknya (grafik memilih seri lewat nama kolom).
@@ -270,6 +295,7 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
   const rowsBaru = badan ? pasangBadan(dasar, badan) : null;
 
   const masalah: string[] = [];
+  if (centang && jumlahCentang === 0) masalah.push('Centang minimal satu kolom dari tabel modul.');
   if (!hasil) masalah.push('Tarik datanya dulu.');
   else if (basi) masalah.push('Setelan sumber berubah — tarik ulang dulu.');
   if (!lengkap) masalah.push(`Kolom ${kolom.map((k, i) => (k.taut ? null : colLabel(i))).filter(Boolean).join(', ')} belum diberi isi.`);
@@ -293,6 +319,7 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
     const tautan: Tautan = {
       sumber: sumberId, setelan, kolom: resep.kolom, kunciBaris: badan.kunciBaris,
       sembunyi, tebalInduk, ditarikPada: waktuSekarangWIB().slice(0, 16), ringkas: hasil.ringkas, catatan: hasil.catatan,
+      ...(barisTangan.length ? { barisTangan } : {}),
     };
     onTerapkan({ ...dasar, rows: rowsBaru, tautan });
   }
@@ -323,7 +350,26 @@ export default function TautanModal({ payload, tahunDokumen, onTerapkan, onTutup
         </div>
 
         <div className="lk-taut-body">
-          {kosongAwal && (
+          {salinan && centang && (
+            <section className="lk-taut-sec">
+              <div className="lk-taut-judul">
+                Kolom dari tabel modul ({jumlahCentang} dari {salinan.kolom.length} dipakai, paling banyak {BATAS_KOLOM_TABEL})
+              </div>
+              {salinan.kolom.length > BATAS_KOLOM_TABEL && <p className="lk-hint">{LEWAT_BATAS_KOLOM(salinan.kolom.length)}</p>}
+              <div className="lk-taut-centang">
+                {salinan.kolom.map((k, i) => (
+                  <label key={`${k}-${i}`}>
+                    <input type="checkbox" checked={centang[i]} disabled={memuat || (!centang[i] && jumlahCentang >= BATAS_KOLOM_TABEL)}
+                      onChange={e => pasangSalinan(salinan, centang.map((c, j) => (j === i ? e.target.checked : c)), false)} />
+                    {salinan.judulKolom?.[i] || DAFTAR_SUMBER[salinan.sumber].kolom(setelan).find(x => x.kunci === k)?.label || k}
+                  </label>
+                ))}
+              </div>
+              <p className="lk-hint">Angkanya ditarik ulang dari modulnya dengan akses Anda, bukan diambil dari yang disalin. Kolom & baris masih bisa diubah sesudah dimasukkan.</p>
+            </section>
+          )}
+
+          {kosongAwal && !salinan && (
             <section className="lk-taut-sec">
               <div className="lk-taut-judul"><Sparkles size={12} style={{ display: 'inline', verticalAlign: '-0.125em' }} /> Mulai cepat dari templat</div>
               <div className="lk-taut-templat">

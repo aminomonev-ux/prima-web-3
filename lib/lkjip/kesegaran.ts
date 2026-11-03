@@ -3,7 +3,7 @@
 // bloknya, supaya editor yang sedang terbuka tidak menimpa hasilnya dengan isi lamanya.
 // MURNI (penarikan disuntikkan pemanggil): aman klien & bisa diuji tanpa jaringan.
 
-import { nilaiPerbarui, kalimatPerbarui, type HasilTarik, type PayloadTabel, type Tautan } from './tautan';
+import { nilaiPerbarui, kalimatPerbarui, kalimatBarisTanganPindah, type HasilTarik, type PayloadTabel, type Tautan } from './tautan';
 import { angkaDiHtml, bandingAngka, kalimatAngka, kunciTarikan, type ResepAngka } from './angka';
 import { normalizeRows, daftarSelGalat } from './tabel';
 import { rujukanDiHtml } from './numbering';
@@ -26,9 +26,10 @@ export interface NarasiTertaut extends ItemPeriksa {
   angka:     Record<string, ResepAngka>;
 }
 
+/** `info` = kabar yang tidak mengubah angka (mis. versi lebih baru sudah ada) — lihat `HasilTarik.info`. */
 export type HasilPeriksa =
-  | { blockId: number; status: 'sama' }
-  | { blockId: number; status: 'berubah'; ringkas: string }
+  | { blockId: number; status: 'sama'; info?: string[] }
+  | { blockId: number; status: 'berubah'; ringkas: string; info?: string[] }
   | { blockId: number; status: 'gagal'; pesan: string };
 
 export type Penarik = (sumber: Tautan['sumber'], setelan: Record<string, unknown>) => Promise<HasilTarik>;
@@ -122,6 +123,7 @@ export function kalimatKesegaran(p: ReturnType<typeof nilaiPerbarui>): string {
   if (!p.ringkas.sama) bagian.push(isi);
   if (p.badan.kolomHilang.length) bagian.push(`${p.badan.kolomHilang.length} kolom kehilangan kolom sumbernya`);
   if (p.yatim.length) bagian.push(`${p.yatim.length} isian tangan kehilangan barisnya`);
+  if (p.badan.barisTanganPindah.length) bagian.push(kalimatBarisTanganPindah(p.badan.barisTanganPindah.length));
   if (!p.metaSama && !bagian.length) bagian.push('keterangan/catatan sumber berubah, angkanya sama');
   return bagian.join(' · ');
 }
@@ -131,8 +133,10 @@ export async function periksaKesegaran(daftar: TabelTertaut[], tarik: Penarik): 
   const hasil: HasilPeriksa[] = [];
   for (const t of daftar) {
     try {
-      const nilai = nilaiPerbarui(t.payload, await bersama(t.payload.tautan.sumber, t.payload.tautan.setelan));
-      hasil.push(nilai.sama ? { blockId: t.blockId, status: 'sama' } : { blockId: t.blockId, status: 'berubah', ringkas: kalimatKesegaran(nilai) });
+      const tarikan = await bersama(t.payload.tautan.sumber, t.payload.tautan.setelan);
+      const nilai = nilaiPerbarui(t.payload, tarikan);
+      const info = tarikan.info?.length ? { info: tarikan.info } : {};
+      hasil.push(nilai.sama ? { blockId: t.blockId, status: 'sama', ...info } : { blockId: t.blockId, status: 'berubah', ringkas: kalimatKesegaran(nilai), ...info });
     } catch (e) {
       hasil.push({ blockId: t.blockId, status: 'gagal', pesan: pesanGagal(e) });
     }
@@ -152,9 +156,11 @@ export async function periksaAngka(daftar: NarasiTertaut[], tarik: Penarik): Pro
         if (!hasilPer.has(k)) hasilPer.set(k, await bersama(r.sumber, r.setelan));
       }
       const banding = bandingAngka(n.html, n.angka, hasilPer);
+      const kabar = [...new Set([...hasilPer.values()].flatMap(h => h.info ?? []))];
+      const info = kabar.length ? { info: kabar } : {};
       hasil.push(banding.every(b => b.status === 'sama')
-        ? { blockId: n.blockId, status: 'sama' }
-        : { blockId: n.blockId, status: 'berubah', ringkas: kalimatAngka(banding) });
+        ? { blockId: n.blockId, status: 'sama', ...info }
+        : { blockId: n.blockId, status: 'berubah', ringkas: kalimatAngka(banding), ...info });
     } catch (e) {
       hasil.push({ blockId: n.blockId, status: 'gagal', pesan: pesanGagal(e) });
     }
@@ -166,4 +172,36 @@ export async function periksaAngka(daftar: NarasiTertaut[], tarik: Penarik): Pro
 export async function periksaSemua(tabel: TabelTertaut[], narasi: NarasiTertaut[], tarik: Penarik): Promise<HasilPeriksa[]> {
   const bersama = penarikBersama(tarik);
   return [...await periksaKesegaran(tabel, bersama), ...await periksaAngka(narasi, bersama)];
+}
+
+// ── Pemeriksaan otomatis saat dokumen dibuka (konsep pengingat-data-modul) ────────────────────
+
+/** Diulang saat tab kembali dibuka kalau pemeriksaan terakhir sudah selama ini. */
+export const SELANG_PERIKSA_ULANG_MS = 15 * 60_000;
+
+export const perluPeriksaUlang = (terakhir: number | null, sekarang: number) =>
+  terakhir === null || sekarang - terakhir >= SELANG_PERIKSA_ULANG_MS;
+
+/**
+ * Jejak isi TERSIMPAN blok tertaut. Kabar hasil pemeriksaan hanya berlaku selama jejaknya sama —
+ * sesudah Perbarui (atau suntingan apa pun) bloknya disimpan ulang dan lencananya gugur sendiri.
+ */
+export function sidikTertaut(t: TabelTertaut | NarasiTertaut): string {
+  return 'payload' in t ? JSON.stringify(t.payload) : JSON.stringify([t.html, t.angka]);
+}
+
+export interface KabarBlok { jenis: 'berubah' | 'info'; label: string; rinci: string }
+
+/**
+ * Lencana di kepala blok. Status `gagal` sengaja diam: sebab tersering adalah orangnya tidak punya akses
+ * modul sumber, dan galat yang muncul tiap membuka dokumen hanya melatih orang mengabaikannya.
+ */
+export function kabarBlok(h: HasilPeriksa | undefined, narasi: boolean): KabarBlok[] {
+  if (!h || h.status === 'gagal') return [];
+  const kabar: KabarBlok[] = [];
+  if (h.status === 'berubah') {
+    kabar.push({ jenis: 'berubah', label: narasi ? 'Angka modul berubah: tekan Perbarui angka' : 'Data modul berubah: tekan Perbarui', rinci: h.ringkas });
+  }
+  for (const i of h.info ?? []) kabar.push({ jenis: 'info', label: 'Ada versi lebih baru', rinci: i });
+  return kabar;
 }

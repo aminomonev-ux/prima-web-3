@@ -42,6 +42,10 @@ export const TAUT_CSS = `
   .lk-taut-inline.baris { padding-top: 2px; padding-bottom: 2px; }
   .lk-taut-inline .tebal { font-weight: 700; color: #E6F1FB; }
   .lk-taut-templat { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+  .lk-taut-centang { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 14px; margin: 6px 0; }
+  .lk-taut-centang label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #E6F1FB; cursor: pointer; }
+  .lk-taut-centang label input { width: auto; margin: 0; padding: 0; flex: none; }
+  .lk-taut-centang label:has(input:disabled) { opacity: .55; cursor: not-allowed; }
   .lk-taut-templat button { display: flex; flex-direction: column; gap: 3px; text-align: left; background: #020F1C; border: 1px solid #0C447C; border-radius: 10px; padding: 9px 11px; color: #E6F1FB; cursor: pointer; font-size: 12.5px; }
   .lk-taut-templat button span { font-size: 11px; color: #85B7EB; line-height: 1.4; }
   .lk-taut-templat button:hover:not(:disabled) { border-color: #7C5CFC; }
@@ -76,6 +80,7 @@ export const TAUT_CSS = `
   [data-theme="light"] .lk-taut select, [data-theme="light"] .lk-taut .lk-taut-grid input, [data-theme="light"] .lk-taut input.lk-taut-nama, [data-theme="light"] .lk-taut input.lk-taut-rumus { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
   [data-theme="light"] .lk-taut-ctl button, [data-theme="light"] .lk-taut-tambah { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #374151; }
   [data-theme="light"] .lk-taut-templat button { background: #FFFFFF; border-color: rgba(0,0,0,.15); color: #0F0F12; }
+  [data-theme="light"] .lk-taut-centang label { color: #0F0F12; }
   [data-theme="light"] .lk-taut-templat button span, [data-theme="light"] .lk-taut-ket { color: #6B7280; }
   [data-theme="light"] .lk-taut-templat button:hover:not(:disabled) { border-color: #7C5CFC; }
   [data-theme="light"] .lk-taut-ok { color: #0E7A55; }

@@ -6,11 +6,12 @@
 
 import { muatBahanRekap } from '@/lib/kinerja/muat-rekap';
 import { hitungRekap, type KedalamanRekap, type BarisRekap } from '@/lib/kinerja/rekap';
-import { ringkasVersiRekap, type PilihanVersiRekap } from '@/lib/kinerja/versi';
+import { ringkasVersiRekap, kalimatVersiLebihBaru, type PilihanVersiRekap } from '@/lib/kinerja/versi';
 import { SUMBER_LIST, CRR_BULAN_LABELS } from '@/app/(dashboard)/kinerja/_utils';
 import { REKAP_HEADER, catatanDinolkan, catatanTanpaRealisasi, catatanYatim } from '@/app/(dashboard)/kinerja/_exports';
 import type { HasilTarik, JenisKolomSumber, KolomSumber } from '../tautan';
 import { GagalTarik, pesanDitolak, angkaDalam, type AmbilJson } from './umum';
+import type { SalinanModul } from '../salinan-modul';
 
 export interface SetelanKinerjaRekap {
   tahun:     number;
@@ -81,5 +82,14 @@ export async function tarikKinerjaRekap(s: SetelanKinerjaRekap, ambil: AmbilJson
     })),
     catatan,
     ringkas: `E-Anggaran · Rekap s/d ${namaBulan} ${tahun} · ${LABEL_KEDALAMAN[s.kedalaman]} · ${ringkasVersiRekap(bahan.versiRekap, s.versi)}`,
+    info: [kalimatVersiLebihBaru(bahan.versiLebihBaru, 'versi Murni')].filter((c): c is string => c !== null),
+  };
+}
+
+/** Resep "Salin ke LKJIP" dari layar Cetak → Rekap: semua kolom, setelan persis layarnya. */
+export function salinanKinerjaRekap(s: SetelanKinerjaRekap): SalinanModul {
+  return {
+    v: 1, sumber: 'kinerja-rekap', setelan: { ...s }, kolom: KOLOM_KINERJA_REKAP.map(k => k.kunci),
+    judul: `Rekap Realisasi Anggaran s/d ${CRR_BULAN_LABELS[s.sdBulan - 1]} Tahun ${s.tahun}`,
   };
 }

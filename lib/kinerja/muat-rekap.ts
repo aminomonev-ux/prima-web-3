@@ -9,7 +9,7 @@
 import type { RealRow, SumberSSK } from '@/app/(dashboard)/kinerja/_types';
 import { SUMBER_LIST, recalcAllRealisasi } from '@/app/(dashboard)/kinerja/_utils';
 import type { ItemSskAktif } from './rekap';
-import { versiUntukPilihan, type PilihanVersiRekap, type SlotVersiSsk, type VersiSumberRekap } from './versi';
+import { versiUntukPilihan, labelVersi, type PilihanVersiRekap, type SlotVersiSsk, type VersiSumberRekap, type VersiLebihBaru } from './versi';
 import type { ApiResult } from '@/lib/shared/api';
 
 export type AmbilJson = (url: string) => Promise<ApiResult<unknown>>;
@@ -27,6 +27,8 @@ export interface BahanRekap {
    * "memang kosong".
    */
   gagal:      GagalMuat[];
+  /** Pilihan Murni: sumber yang sudah punya versi lebih baru (kabar untuk tabel LKJIP tertaut). */
+  versiLebihBaru: VersiLebihBaru[];
 }
 
 export async function muatBahanRekap(tahun: string, pilihan: PilihanVersiRekap, ambil: AmbilJson): Promise<BahanRekap> {
@@ -37,7 +39,8 @@ export async function muatBahanRekap(tahun: string, pilihan: PilihanVersiRekap, 
   const results = await Promise.all(
     SUMBER_LIST.map(async s => {
       const kosong = { sumber: s, rows: [] as RealRow[], itemSsk: [] as ItemSskAktif[],
-                       dinolkan: false, versi: null as VersiSumberRekap | null };
+                       dinolkan: false, versi: null as VersiSumberRekap | null, lebihBaru: null as VersiLebihBaru | null };
+      let lebihBaru: VersiLebihBaru | null = null;
       let param = '';
       // Diuji POSITIF (`=== 'murni'`), bukan `!== 'berlaku'`: dengan negasi, pilihan ketiga
       // yang ditambahkan nanti akan diam-diam masuk ke cabang ini dan memuat versi BERLAKU
@@ -59,6 +62,10 @@ export async function muatBahanRekap(tahun: string, pilihan: PilihanVersiRekap, 
             ? { ...kosong, versi: { sumber: s, tipe: null, seq: 0 } }
             : kosong;
         }
+        const terbaru = versiUntukPilihan(slot, 'berlaku');
+        if (terbaru && (terbaru.tipe !== diminta.tipe || terbaru.seq !== diminta.seq)) {
+          lebihBaru = { sumber: s, label: labelVersi(terbaru.tipe, terbaru.seq) };
+        }
         param = `&versi_tipe=${diminta.tipe}&versi_seq=${diminta.seq}`;
       }
       const d = await ambil(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${s}${param}`);
@@ -75,6 +82,7 @@ export async function muatBahanRekap(tahun: string, pilihan: PilihanVersiRekap, 
         // daftar kosong punya dua sebab yang berbeda (belum diisi vs sengaja dinol-kan).
         dinolkan: j.versi?.dinolkan === true,
         versi: { sumber: s, tipe: j.versi?.tipe ?? 'MURNI', seq: Number(j.versi?.seq ?? 0) } as VersiSumberRekap,
+        lebihBaru,
       };
     }),
   );
@@ -94,5 +102,6 @@ export async function muatBahanRekap(tahun: string, pilihan: PilihanVersiRekap, 
         && (x.versi.tipe === null || x.dinolkan || x.itemSsk.length > 0 || x.rows.length > 0))
       .map(x => x.versi as VersiSumberRekap),
     gagal,
+    versiLebihBaru: results.flatMap(x => (x.lebihBaru ? [x.lebihBaru] : [])),
   };
 }

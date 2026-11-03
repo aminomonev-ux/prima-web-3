@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Printer, Eye, X, Loader2, Download, Filter, RotateCcw } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
+import SalinKeLkjip from '@/components/lkjip/SalinKeLkjip';
+import { salinanRenaksiCetak } from '@/lib/lkjip/sumber/renaksi-cetak';
 import SoftSelect from '@/components/ui/SoftSelect';
 import type { RaRow, RaLevel, HierarchyRow } from '../_lib/types';
 import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, tulisRealisasi, outcomeOf, anggaranRollup, capaianTahunan, warnaCapaian } from '../_lib/types';
@@ -108,6 +110,9 @@ export default function CetakPanel({ tahun, notify }: Props) {
               disabled={!hier.length || loading} data-tooltip="Unduh PDF (sesuai filter)" />
             <DownloadButton variant="excel" label="Excel" onClick={handleExcel}
               disabled={!hier.length || loading} data-tooltip="Unduh Excel (sesuai filter)" />
+            <SalinKeLkjip salinan={hier.length && !loading ? salinanRenaksiCetak(tahun, filter) : null}
+              tabel={() => document.querySelector<HTMLTableElement>('table[data-salin-lkjip="renaksi-cetak"]')}
+              alasanMati="Belum ada baris sesuai filter." />
           </div>
         </div>
       </div>
@@ -363,7 +368,7 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
         </div>
       )}
       <div className="overflow-auto max-h-[65vh]">
-        <table className="w-full text-xs">
+        <table data-salin-lkjip="renaksi-cetak" className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-600 sticky top-0 z-10">
             <tr className="bg-slate-50">
               <th rowSpan={2} className="px-3 py-2.5 text-left font-bold uppercase tracking-wider">No</th>

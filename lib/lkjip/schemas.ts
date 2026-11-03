@@ -186,7 +186,7 @@ export const buatCellSchema = (batasKolom: number) => z.union([
 ]).transform(c => (typeof c === 'string' ? { v: c } : c));
 const CellSchema = buatCellSchema(12);
 
-const SUMBER_TAUTAN = ['kinerja-rekap', 'renaksi-cetak', 'kinerja-laporan', 'blud-realisasi', 'pk'] as const;
+const SUMBER_TAUTAN = ['kinerja-rekap', 'renaksi-cetak', 'kinerja-laporan', 'blud-realisasi', 'pk', 'kinerja-detail'] as const;
 const SetelanTautanSchema = z.record(z.string(), z.unknown()).refine(s => JSON.stringify(s).length <= 4000, 'Setelan tautan terlalu besar');
 const FormatKolomSchema = z.enum(['teks', 'angka', 'rp', 'persen']);
 
@@ -247,6 +247,12 @@ export const TautanSchema = z.object({
   ditarikPada: z.string().max(32),
   ringkas:     z.string().max(500),
   catatan:     z.array(z.string().max(1000)).max(20).default([]),
+  // Baris yang diketik sendiri (klik kanan → Sisip baris tangan) — WAJIB terdaftar, alasan sama.
+  barisTangan: z.array(z.object({
+    id:      z.string().regex(/^[a-z0-9]{1,16}$/),
+    setelah: KunciBarisSchema.nullable(),
+    sel:     z.array(z.string().max(2000)).max(12),
+  })).max(200).optional(),
 });
 
 export const TabelPayloadSchema = z.object({
@@ -274,6 +280,15 @@ export const TabelPayloadSchema = z.object({
   const badan = p.rows.length - Math.min(p.headerRows, p.rows.length);
   if (p.tautan.kunciBaris.length !== badan) {
     ctx.addIssue({ code: 'custom', message: 'Tabel tertaut tidak konsisten: jumlah baris berbeda dari hasil tarikannya.' });
+  }
+  // Baris tangan: isinya sejajar kolom, dan tiap `tangan:<id>` di badan punya resepnya (dan sebaliknya).
+  const tangan = p.tautan.barisTangan ?? [];
+  if (tangan.some(b => b.sel.length !== p.kolom.length)) {
+    ctx.addIssue({ code: 'custom', message: 'Tabel tertaut tidak konsisten: isi baris tangan tidak sejajar kolomnya.' });
+  }
+  const diBadan = p.tautan.kunciBaris.filter(k => k.startsWith('tangan:')).map(k => k.slice(7)).sort().join('|');
+  if (diBadan !== tangan.map(b => b.id).sort().join('|')) {
+    ctx.addIssue({ code: 'custom', message: 'Tabel tertaut tidak konsisten: baris tangan di tabel tidak sama dengan resepnya.' });
   }
 });
 
