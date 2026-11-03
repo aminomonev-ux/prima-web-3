@@ -301,12 +301,16 @@ export const RealisasiBodySchema = z.object({
 /**
  * POST /api/kinerja/realisasi/tutup-bulan — Tutup / Buka satu bulan realisasi.
  * Urutannya (berurutan, buka dari belakang) dijaga server di `tutup-bulan.ts`.
+ * Versi WAJIB: tutupan menempel pada versi RKO yang sedang dilihat, dan server menolaknya
+ * kalau itu bukan versi terbaru (versi final sudah tertutup semua).
  */
 export const TutupBulanBodySchema = z.object({
-  tahun:  TahunSchema,
-  sumber: SumberSchema,
-  bulan:  BulanSchema,
-  aksi:   z.enum(['TUTUP', 'BUKA']),
+  tahun:      TahunSchema,
+  sumber:     SumberSchema,
+  versi_tipe: VersiTipeSchema,
+  versi_seq:  VersiSeqSchema,
+  bulan:      BulanSchema,
+  aksi:       z.enum(['TUTUP', 'BUKA']),
 });
 
 /**
@@ -339,6 +343,8 @@ const PendRowSchema = z.object({
   urut:         z.number().int().optional().default(0), // di-overwrite savePendapatanBatch via index (i+1)
   keterangan:   z.string(),
   target:       z.number(),
+  /** null = tanpa/batalkan Target Perubahan; tidak dikirim = jangan sentuh (tab lama, L87). */
+  target_perubahan: z.number().nonnegative().nullable().optional(),
   realisasi:    z.number(),
   capaian_pct:  z.number(),
 });

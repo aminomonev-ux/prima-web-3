@@ -159,7 +159,8 @@ ok('B15 pagar MURNI menghitung PERUBAHAN dan menolak dengan KinerjaVersiTerkunci
   iPagar > 0 && iPagar < save.indexOf('DELETE FROM kinerja_ssk')
   && /versiTipe === 'MURNI'\) \{[\s\S]{0,260}?versi_tipe = 'PERUBAHAN'[\s\S]{0,200}?> 0\) \{\s*throw new KinerjaVersiTerkunciError\(versiTipe, versiSeq,/.test(save))
 const rp = tanpaKomentar(sumber('app/api/kinerja/ssk/perubahan/route.ts'))
-ok('B16 audit membedakan Perubahan tanpa salinan', /copied > 0[\s\S]{0,260}?tanpa salinan: RKO murni kosong/.test(rp))
+// Jendelanya lebar: cabang "ada salinan" kini juga menyebut foto realisasi (tutup-per-versi).
+ok('B16 audit membedakan Perubahan tanpa salinan', /copied > 0[\s\S]{0,520}?tanpa salinan: RKO murni kosong/.test(rp))
 const st = tanpaKomentar(sumber('app/(dashboard)/kinerja/_tabs/SskTab.tsx'))
 ok('B17 layar RKO: copied 0 → pesan "baru tercatat sesudah disimpan", bukan "dikunci"',
   /if \(copied > 0\) toast\.success[\s\S]{0,120}?else toast\.success\([\s\S]{0,260}?baru tercatat sesudah disimpan/.test(st))
@@ -188,11 +189,13 @@ if (c) {
   const SUMBER_UJI = ['OBAT', 'GAJI'] as const
   // L92: kunci uji dihapus PERSIS, bukan `WHERE entity = ?` — entity itu dipakai data asli.
   const bersih = async () => {
+    // Buat Perubahan memotret realisasi & menaikkan gembok realisasi (CONCEPT-kinerja-tutup-per-versi).
+    await k.query('DELETE FROM kinerja_realisasi_foto WHERE tahun = ?', [TAHUN])
     await k.query('UPDATE kinerja_ssk SET parent_versi_id = NULL WHERE tahun = ?', [TAHUN])
     await k.query('DELETE FROM kinerja_ssk WHERE tahun = ?', [TAHUN])
     await k.query('DELETE FROM kinerja_riwayat_simpan WHERE tahun = ?', [TAHUN])
     for (const s of SUMBER_UJI) {
-      await k.query("DELETE FROM blud_locks WHERE entity = 'kinerja_versi_ssk' AND key_id = ?", [`${TAHUN}:${s}`])
+      await k.query("DELETE FROM blud_locks WHERE entity IN ('kinerja_versi_ssk', 'kinerja_realisasi') AND key_id = ?", [`${TAHUN}:${s}`])
       for (const v of ['MURNI:0', 'PERUBAHAN:1', 'PERUBAHAN:2']) {
         await k.query("DELETE FROM blud_locks WHERE entity = 'kinerja_ssk' AND key_id = ?", [`${TAHUN}:${s}:${v}`])
       }

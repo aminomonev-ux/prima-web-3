@@ -19,7 +19,11 @@ import Tip from '@/components/ui/Tip';
 import { Save } from 'lucide-react';
 import { Pencil } from 'lucide-react';
 import { Upload } from 'lucide-react';
-import { Banknote, Loader2, ArrowDown, Percent } from 'lucide-react';
+import { Banknote, Loader2, ArrowDown, Percent, GitBranch, RotateCcw } from 'lucide-react';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import {
+  capaianPendapatan, ringkasTargetPendapatan, buatTargetPerubahan, batalkanTargetPerubahan, sebarkanSelisih,
+} from '@/lib/kinerja/pendapatan-perubahan';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { CrrRow, PendRow, CrrInputField } from '../_types';
 import { CRR_BULAN_LABELS, initCrrRows, initPendapatanRows, recalcCrr } from '../_utils';
@@ -178,10 +182,8 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
       return base.map((r: PendRow, i: number) => {
         if (i !== idx) return r;
         const updated = { ...r, [field]: val };
-        if (field === 'target' || field === 'realisasi') {
-          const t  = field === 'target'    ? (val as number) : r.target;
-          const rv = field === 'realisasi' ? (val as number) : r.realisasi;
-          updated.capaian_pct = t > 0 ? Math.round((rv / t) * 10000) / 100 : 0;
+        if (field === 'target' || field === 'target_perubahan' || field === 'realisasi') {
+          updated.capaian_pct = capaianPendapatan(updated);
         }
         return updated;
       });
@@ -212,8 +214,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
       for (const m of months) {
         const i = m.bulan_ke - 1;
         if (i < 0 || i > 11) continue;
-        const target = base[i].target;
-        const capaian_pct = target > 0 ? Math.round((m.realisasi / target) * 10000) / 100 : 0;
+        const capaian_pct = capaianPendapatan({ ...base[i], realisasi: m.realisasi });
         base[i] = { ...base[i], realisasi: m.realisasi, capaian_pct };
       }
       return base;
@@ -228,13 +229,44 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
     ? pendapatanRows
     : CRR_BULAN_LABELS.map((b, i) => ({
         keterangan: b, target: pendapatanRows[i]?.target ?? 0,
+        target_perubahan: pendapatanRows[i]?.target_perubahan ?? null,
         realisasi: pendapatanRows[i]?.realisasi ?? 0,
         capaian_pct: pendapatanRows[i]?.capaian_pct ?? 0,
       }));
   const crrDisplay = getDisplayCrrRows();
-  const totalTarget  = pendRows.reduce((s, r) => s + r.target, 0);
-  const totalReal    = pendRows.reduce((s, r) => s + r.realisasi, 0);
-  const totalCapaian = totalTarget > 0 ? Math.round((totalReal / totalTarget) * 10000) / 100 : 0;
+  const ringkas = ringkasTargetPendapatan(pendRows);
+  const adaPerubahan = ringkas.perubahan !== null;
+  const totalReal    = ringkas.realisasi;
+  const totalCapaian = ringkas.capaian;
+
+  // Berhenti di FORM: mengisi/membuang kolom Perubahan di layar; yang menulis tetap Simpan.
+  async function mulaiTargetPerubahan() {
+    const ok = await confirmDialog({
+      title: `Buat Target Perubahan ${tahun}?`,
+      message: 'Target murni tiap bulan disalin ke kolom Target Perubahan. Ketik ulang bulan yang berubah, lalu Simpan.'
+        + '\n\nSesudah tersimpan, Target Murni tidak bisa diubah lagi dan capaian dihitung dari Target Perubahan.',
+      confirmLabel: 'Buat Target Perubahan',
+      variant: 'primary',
+    });
+    if (ok) setPendapatanRows(p => buatTargetPerubahan(p.length === 12 ? p : initPendapatanRows()));
+  }
+  async function hapusTargetPerubahan() {
+    const ok = await confirmDialog({
+      title: `Batalkan Target Perubahan ${tahun}?`,
+      message: `Kolom Target Perubahan (${fmtRp(ringkas.perubahan ?? 0)}) dikosongkan dan capaian kembali dihitung dari Target Murni. `
+        + 'Berlaku sesudah Simpan.',
+      confirmLabel: 'Batalkan Target Perubahan',
+      variant: 'warning',
+    });
+    if (ok) setPendapatanRows(p => batalkanTargetPerubahan(p.length === 12 ? p : initPendapatanRows()));
+  }
+  const [totalSebar, setTotalSebar] = useState(0);
+  function sebarkan() {
+    const hasil = sebarkanSelisih(pendRows, totalSebar);
+    if (typeof hasil === 'string') { toast.error(hasil); return; }
+    setPendapatanRows(hasil);
+    toast.success(`Selisih dibagi ke bulan yang belum ada realisasinya — total Perubahan ${fmtRp(totalSebar)}. Periksa, lalu Simpan.`);
+  }
 
   const inpStyle: React.CSSProperties = { border:`1px solid ${cBorder}`, borderRadius:'5px', padding:'3px 6px', fontSize:'11px', color:cTextPrimary, background:cSurface, textAlign:'right' };
   const roStyle:  React.CSSProperties = { padding:'5px 10px', borderBottom:cBorderHair, textAlign:'right', background:cAutoBg, color:cTextSub, fontSize:'11px' };
@@ -253,14 +285,31 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
           </div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center' }}>
             <span style={{ padding:'4px 10px', borderRadius:'20px', background: isLight?'rgba(29,158,117,.16)':'rgba(29,158,117,.15)', color: isLight?'#047857':'#6EE7B7', fontSize:'11px', fontWeight:700 }}>
-              Target: {fmtRp(totalTarget)}
+              {adaPerubahan ? 'Target Murni' : 'Target'}: {fmtRp(ringkas.murni)}
             </span>
+            {ringkas.perubahan !== null && (
+              <span style={{ padding:'4px 10px', borderRadius:'20px', background: isLight?'rgba(124,92,252,.14)':'rgba(124,92,252,.15)', color: isLight?'#5B21B6':'#C4B5FD', fontSize:'11px', fontWeight:700 }}>
+                Target Perubahan: {fmtRp(ringkas.perubahan)} ({ringkas.perubahan >= ringkas.murni ? '+' : '−'}{fmtRp(Math.abs(ringkas.perubahan - ringkas.murni))})
+              </span>
+            )}
             <span style={{ padding:'4px 10px', borderRadius:'20px', background: isLight?'rgba(55,138,221,.16)':'rgba(55,138,221,.15)', color: isLight?'#0369A1':'#7DD3FC', fontSize:'11px', fontWeight:700 }}>
               Realisasi: {fmtRp(totalReal)}
             </span>
             <span style={{ padding:'4px 10px', borderRadius:'20px', background: totalCapaian>=100?(isLight?'rgba(29,158,117,.16)':'rgba(29,158,117,.15)'):totalCapaian>=80?(isLight?'rgba(186,117,23,.16)':'rgba(186,117,23,.15)'):(isLight?'rgba(226,75,74,.16)':'rgba(226,75,74,.15)'), color: totalCapaian>=100?(isLight?'#047857':'#6EE7B7'):totalCapaian>=80?(isLight?'#B45309':'#FAC775'):(isLight?'#B91C1C':'#FCA5A5'), fontSize:'11px', fontWeight:700 }}>
               {totalCapaian.toFixed(1)}%
             </span>
+            {canEdit && !adaPerubahan && (
+              <PrimaButton variant="purple" iconLeft={<GitBranch size={14} />}
+                onClick={() => mulaiTargetPerubahan()} disabled={saving}>
+                Buat Target Perubahan
+              </PrimaButton>
+            )}
+            {canEdit && adaPerubahan && (
+              <PrimaButton variant="warning" iconLeft={<RotateCcw size={14} />}
+                onClick={() => hapusTargetPerubahan()} disabled={saving}>
+                Batalkan Target Perubahan
+              </PrimaButton>
+            )}
             {canEdit && (
               <PrimaButton variant="purple" iconLeft={<Upload size={14} />}
                 onClick={() => setShowImport(true)} disabled={saving}>
@@ -286,7 +335,8 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
                 <tr>
                   <th style={{ ...thBase, color: isLight?'#5B21B6':'#E6F1FB', textAlign:'center', width:'40px' }}>No</th>
                   <th style={{ ...thBase, color: isLight?'#5B21B6':'#E6F1FB', textAlign:'left', width:'140px' }}>Bulan</th>
-                  <th style={{ ...thBase, color: isLight?'#5B21B6':'#E6F1FB', textAlign:'right' }}>Target (Rp)</th>
+                  <th style={{ ...thBase, color: isLight?'#5B21B6':'#E6F1FB', textAlign:'right' }}>{adaPerubahan ? 'Target Murni (Rp)' : 'Target (Rp)'}</th>
+                  {adaPerubahan && <th style={{ ...thBase, color: isLight?'#5B21B6':'#E6F1FB', textAlign:'right' }}>Target Perubahan (Rp)</th>}
                   <th style={{ ...thBase, color: isLight?'#5B21B6':'#E6F1FB', textAlign:'right' }}>Realisasi (Rp)</th>
                   <th style={{ ...thAuto, width:'100px' }}>Capaian %<span style={{ display:'block', fontSize:'8px', fontWeight:500 }}>otomatis</span></th>
                 </tr>
@@ -297,10 +347,18 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
                     <td style={{ padding:'5px 8px', borderBottom:cBorderHair, textAlign:'center', color:cTextSub }}>{idx+1}</td>
                     <td style={{ padding:'5px 8px', borderBottom:cBorderHair, fontWeight:700, color:cTextPrimary }}>{CRR_BULAN_LABELS[idx]}</td>
                     <td style={{ padding:'3px 6px', borderBottom:cBorderHair, textAlign:'right' }}>
-                      {canEdit
+                      {/* Murni final sejak ada Perubahan — server juga menolaknya (TARGET_MURNI_FINAL). */}
+                      {canEdit && !adaPerubahan
                         ? <InputNominal value={row.target} onChange={v => updatePendField(idx,'target', v)} style={{ ...inpStyle, width:'130px' }} />
                         : <span style={{ color: isLight?'#0369A1':'#7DD3FC', fontWeight:600 }}>{fmtRp(row.target)}</span>}
                     </td>
+                    {adaPerubahan && (
+                      <td style={{ padding:'3px 6px', borderBottom:cBorderHair, textAlign:'right' }}>
+                        {canEdit
+                          ? <InputNominal value={row.target_perubahan ?? 0} onChange={v => updatePendField(idx,'target_perubahan', v)} style={{ ...inpStyle, width:'130px' }} />
+                          : <span style={{ color: isLight?'#5B21B6':'#C4B5FD', fontWeight:600 }}>{fmtRp(row.target_perubahan ?? 0)}</span>}
+                      </td>
+                    )}
                     <td style={{ padding:'3px 6px', borderBottom:cBorderHair, textAlign:'right' }}>
                       {canEdit
                         ? <InputNominal value={row.realisasi} onChange={v => updatePendField(idx,'realisasi', v)} style={{ ...inpStyle, width:'130px' }} />
@@ -315,6 +373,17 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {adaPerubahan && canEdit && (
+          <div style={{ marginTop:'10px', padding:'8px 14px', borderRadius:'8px', border:`1px solid ${cBorder}`, background:cSurface, fontSize:'11px', color:cTextSub, display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px' }}>
+            <span>Total Target Perubahan yang diinginkan:</span>
+            <InputNominal value={totalSebar} onChange={setTotalSebar} style={{ ...inpStyle, width:'150px' }} />
+            <PrimaButton variant="ghost" onClick={sebarkan} disabled={saving || totalSebar <= 0}>
+              Sebarkan selisih ke bulan tanpa realisasi
+            </PrimaButton>
+            <span>Bulan yang sudah ada realisasinya tidak diubah.</span>
           </div>
         )}
 

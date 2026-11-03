@@ -477,6 +477,9 @@ CREATE TABLE IF NOT EXISTS kinerja_pendapatan_real (
   urut        INT           NOT NULL DEFAULT 0,
   keterangan  VARCHAR(500)  NOT NULL DEFAULT '',
   target      DECIMAL(18,2) NOT NULL DEFAULT 0,
+  -- migration-kinerja-pendapatan-perubahan.sql — lib/kinerja/pendapatan-perubahan.ts
+  target_perubahan DECIMAL(18,2) NULL DEFAULT NULL
+              COMMENT 'Target Perubahan bulan ini; NULL = belum ada Perubahan (target berlaku = target murni)',
   realisasi   DECIMAL(18,2) NOT NULL DEFAULT 0,
   capaian_pct DECIMAL(7,2)  NOT NULL DEFAULT 0,
   updated_by  INT           DEFAULT NULL,
@@ -529,19 +532,67 @@ CREATE TABLE IF NOT EXISTS kinerja_riwayat_simpan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Riwayat tiap klik Simpan SSK/Realisasi/Rekening — snapshot, tidak dirujuk siapa pun';
 
--- Tutup Bulan Realisasi (migration-kinerja-bulan-tutup.sql). Ada baris = tertutup;
--- urutan & pagarnya di lib/kinerja/tutup-bulan.ts + saveRealisasiBatch.
+-- Tutup Bulan Realisasi (migration-kinerja-bulan-tutup.sql, per versi sejak
+-- migration-kinerja-tutup-per-versi.sql). Ada baris = tertutup; urutan & pagarnya di
+-- lib/kinerja/tutup-bulan.ts + saveRealisasiBatch. Versi final (terkunci) tertutup semua
+-- lewat kinerja_realisasi_foto, tanpa baris di sini.
 CREATE TABLE IF NOT EXISTS kinerja_bulan_tutup (
   tahun         VARCHAR(10)  NOT NULL COMMENT 'Ikut kinerja_* — VARCHAR, bukan SMALLINT',
   sumber        ENUM('GAJI','BLUD','HARLEP','PROMKES','SARPRAS',
                      'OBAT','PEMELIHARAAN','PEMBANGUNAN') NOT NULL,
+  versi_tipe    ENUM('MURNI','PERUBAHAN') NOT NULL DEFAULT 'MURNI' COMMENT 'Versi RKO pemilik tutupan ini',
+  versi_seq     TINYINT      NOT NULL DEFAULT 0,
   bulan         TINYINT      NOT NULL COMMENT '1=Jan, 12=Des',
   ditutup_oleh  INT              NULL,
   ditutup_pada  DATETIME     NOT NULL COMMENT 'WIB, distempel server',
-  PRIMARY KEY (tahun, sumber, bulan),
+  PRIMARY KEY (tahun, sumber, versi_tipe, versi_seq, bulan),
   CONSTRAINT fk_kbt_user FOREIGN KEY (ditutup_oleh) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Bulan realisasi E-Anggaran yang sudah ditutup — angkanya tidak bisa diubah Simpan';
+
+-- Foto realisasi versi RKO yang final (migration-kinerja-tutup-per-versi.sql). Dipotret
+-- "Buat Perubahan" untuk versi yang dikunci; layar Realisasi/Cetak versi itu membacanya.
+-- Aturannya di lib/kinerja/foto-realisasi.ts.
+CREATE TABLE IF NOT EXISTS kinerja_realisasi_foto (
+  tahun         VARCHAR(10)  NOT NULL COMMENT 'Ikut kinerja_* — VARCHAR, bukan SMALLINT',
+  sumber        ENUM('GAJI','BLUD','HARLEP','PROMKES','SARPRAS',
+                     'OBAT','PEMELIHARAAN','PEMBANGUNAN') NOT NULL,
+  versi_tipe    ENUM('MURNI','PERUBAHAN') NOT NULL COMMENT 'Versi RKO yang final',
+  versi_seq     TINYINT      NOT NULL,
+  asal          ENUM('BUAT_PERUBAHAN','RIWAYAT','BERJALAN') NOT NULL
+                COMMENT 'BUAT_PERUBAHAN = dipotret saat tombolnya ditekan; RIWAYAT/BERJALAN = dipotret saat migrasi',
+  keadaan_pada  DATETIME     NOT NULL COMMENT 'WIB — angka foto = realisasi pada jam ini',
+  riwayat_id    BIGINT UNSIGNED NULL COMMENT 'asal RIWAYAT: kinerja_riwayat_simpan.id (soft-FK, riwayat bisa terpangkas)',
+  difoto_oleh   INT              NULL,
+  difoto_pada   DATETIME     NOT NULL,
+  PRIMARY KEY (tahun, sumber, versi_tipe, versi_seq),
+  CONSTRAINT fk_krf_user FOREIGN KEY (difoto_oleh) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Foto realisasi versi RKO yang final (Perubahan berikutnya sudah dibuat) — acuan laporannya';
+
+CREATE TABLE IF NOT EXISTS kinerja_realisasi_foto_baris (
+  id                INT           NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tahun             VARCHAR(10)   NOT NULL,
+  sumber            ENUM('GAJI','BLUD','HARLEP','PROMKES','SARPRAS',
+                         'OBAT','PEMELIHARAAN','PEMBANGUNAN') NOT NULL,
+  versi_tipe        ENUM('MURNI','PERUBAHAN') NOT NULL,
+  versi_seq         TINYINT       NOT NULL,
+  bulan             TINYINT       NOT NULL COMMENT '1=Jan, 12=Des',
+  ssk_canonical_id  VARCHAR(20)   NOT NULL DEFAULT '',
+  ssk_versi_tipe    ENUM('MURNI','PERUBAHAN') NOT NULL DEFAULT 'MURNI',
+  ssk_versi_seq     TINYINT       NOT NULL DEFAULT 0,
+  keterangan        VARCHAR(500)  NOT NULL DEFAULT '',
+  program           VARCHAR(255)  DEFAULT NULL,
+  kegiatan          VARCHAR(255)  DEFAULT NULL,
+  subkegiatan       VARCHAR(255)  DEFAULT NULL,
+  uraian_ssk        VARCHAR(255)  DEFAULT NULL,
+  real_fisik        DECIMAL(18,2) NOT NULL DEFAULT 0,
+  real_keuangan     DECIMAL(18,2) NOT NULL DEFAULT 0,
+  INDEX idx_krfb_versi (tahun, sumber, versi_tipe, versi_seq, bulan),
+  CONSTRAINT fk_krfb_foto FOREIGN KEY (tahun, sumber, versi_tipe, versi_seq)
+    REFERENCES kinerja_realisasi_foto (tahun, sumber, versi_tipe, versi_seq) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Baris foto realisasi — bentuk sama dengan kinerja_realisasi';
 
 -- ─── BLUD — DPA & PERGESERAN ─────────────────────────────────────────────────
 

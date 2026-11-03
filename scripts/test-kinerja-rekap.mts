@@ -683,8 +683,9 @@ console.log('\n── R. Format angka Excel: notasi ilmiah tidak boleh muncul �
   ok('R10 blok per-bulan memformat barisnya sendiri',
      /^\s*DETAIL_BULAN_FMT\.forEach\(\(f, k\) => \{$/m.test(ex));
 
-  // Setiap unduhan yang memuat uang harus kebagian.
-  eq('R11 delapan pemanggil memakai numFmts', (ex.match(/numFmts:/g) || []).length, 8);
+  // Setiap unduhan yang memuat uang harus kebagian. Pendapatan punya dua bentuk (dengan /
+  // tanpa Target Perubahan), jadi sembilan.
+  eq('R11 sembilan pemanggil memakai numFmts', (ex.match(/numFmts:/g) || []).length, 9);
 }
 
 console.log('\n── S. A2: realisasi yatim keluar dari Laporan & KPI juga ───────');
@@ -1955,7 +1956,7 @@ console.log('\n-- AE. Memilih versi SSK saat mencetak Rekap --');
   ok('AE40 cabang versi-eksplisit ikut membawa bendera dinolkan',
      /versi: \{ tipe: versiTipe, seq: versiSeq, dinolkan \}/.test(rtAE));
   ok('AE41 benderanya datang dari kueri yang sama dengan itemnya, bukan kueri kedua',
-     /\[\{ rows, itemSsk, dinolkan \}, version, tertutup\] = await Promise\.all\(\[\s*getRealisasiHydrated\(tahun, sumber, versiTipe, versiSeq\)/.test(rtAE)
+     /\[\{ rows, itemSsk, dinolkan \}, version, tertutup\] = await Promise\.all\(\[\s*getRealisasiHydrated\(tahun, sumber, versiTipe, versiSeq, !!final\?\.foto\)/.test(rtAE)
      && !/versiDinolkanSsk/.test(rtAE));
 
   // Laporan/KPI/Beranda SENGAJA tanpa pemilih: pertanyaannya "sekarang

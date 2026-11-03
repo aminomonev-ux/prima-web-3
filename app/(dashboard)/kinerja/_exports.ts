@@ -15,6 +15,7 @@ import type { BarisRekap, LaporanYatim } from '@/lib/kinerja/rekap';
 import { ringkasVersiRekap, namaBerkasRekap, imbuhanBerkasVersi, imbuhanBerkasVersiCetak,
   type VersiSumberRekap, type PilihanVersiRekap, type VersiCetak } from '@/lib/kinerja/versi';
 import { hitungJumlahBulan, bulanBerdata, tandaYatim, catatanYatimBulan } from '@/lib/kinerja/cetak-detail';
+import { adaTargetPerubahan, targetBerlaku, capaianPendapatan } from '@/lib/kinerja/pendapatan-perubahan';
 
 let _pdfPromise:  Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
 
@@ -668,12 +669,22 @@ export async function exportPendapatanExcel(params: { rows: PendRow[]; tahun: st
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
   const ws = wb.addWorksheet(`Pendapatan ${tahun}`);
-  const header = ['No','Keterangan','Target','Realisasi','Capaian %'];
-  const data = rows.map((r,i) => [i+1, r.keterangan, r.target, r.realisasi, r.capaian_pct]);
-  addSheetFromAoa(ws, [header, ...data], {
-    colWidths: [{ wch:4 },{ wch:40 },{ wch:16 },{ wch:16 },{ wch:12 }],
-    numFmts:   [null, null, FMT_RUPIAH, FMT_RUPIAH, FMT_PERSEN],
-  });
+  // Ada Target Perubahan → kedua kolom ditulis berdampingan; capaian dari target berlaku.
+  if (adaTargetPerubahan(rows)) {
+    const header = ['No','Keterangan','Target Murni','Target Perubahan','Realisasi','Capaian %'];
+    const data = rows.map((r,i) => [i+1, r.keterangan, r.target, targetBerlaku(r), r.realisasi, capaianPendapatan(r)]);
+    addSheetFromAoa(ws, [header, ...data], {
+      colWidths: [{ wch:4 },{ wch:40 },{ wch:16 },{ wch:16 },{ wch:16 },{ wch:12 }],
+      numFmts:   [null, null, FMT_RUPIAH, FMT_RUPIAH, FMT_RUPIAH, FMT_PERSEN],
+    });
+  } else {
+    const header = ['No','Keterangan','Target','Realisasi','Capaian %'];
+    const data = rows.map((r,i) => [i+1, r.keterangan, r.target, r.realisasi, r.capaian_pct]);
+    addSheetFromAoa(ws, [header, ...data], {
+      colWidths: [{ wch:4 },{ wch:40 },{ wch:16 },{ wch:16 },{ wch:12 }],
+      numFmts:   [null, null, FMT_RUPIAH, FMT_RUPIAH, FMT_PERSEN],
+    });
+  }
   await downloadWorkbook(wb, `Pendapatan-${tahun}.xlsx`);
 }
 

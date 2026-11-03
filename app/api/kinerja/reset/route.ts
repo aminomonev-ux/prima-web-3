@@ -18,8 +18,10 @@ import { pickVersiAktif } from '@/lib/kinerja/versi';
 import { kinerjaMati } from '../_guard';
 import { bolehBatalkanFinal } from '@/lib/constants';
 import { acquireBludLock } from '@/lib/data/locks';
-import { REALISASI_LOCK_ENTITY, realisasiLockKey } from '@/lib/kinerja/tutup-bulan';
-import { adaBulanTertutup } from '@/lib/kinerja/tutup-bulan-data';
+import { REALISASI_LOCK_ENTITY, realisasiLockKey, samaVersi } from '@/lib/kinerja/tutup-bulan';
+import { adaBulanTertutup, versiTerbaruSsk, buangTutupVersi } from '@/lib/kinerja/tutup-bulan-data';
+import { buangFotoTakFinal } from '@/lib/kinerja/foto-realisasi-data';
+import { kunciVersiSsk } from '@/lib/data/kinerja';
 
 /** Realisasi sumber ini punya bulan tertutup — Reset ditolak sampai dibuka. */
 class ResetBulanTertutupError extends Error {}
@@ -68,13 +70,22 @@ export async function POST(req: NextRequest) {
 
   try {
   await withTransaction(async ({ tx }) => {
+    // L84: gembok PERTAMA, urutan sama dengan Buat Perubahan (versi → realisasi). Reset RKO
+    // ikut memegang gembok realisasi karena tutupan & foto versi yang dihapus ikut dibuang.
+    if (scope !== 'realisasi') await kunciVersiSsk(tx, tahun, sumber);
+    await acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber));
+    // Bulan tertutup = angka yang sudah dilaporkan. Reset tidak boleh jadi pintu
+    // belakangnya: buka dulu bulannya (tercatat di audit), baru Reset. Yang menjaga
+    // realisasi berjalan adalah tutupan versi TERBARU; tutupan versi final yang sudah
+    // digantikan Perubahan tidak menahan apa pun.
+    const terbaru = await versiTerbaruSsk(tx, tahun, sumber);
+    const hapusVersiTerbaru = scope !== 'realisasi'
+      && (!versiSpecified || samaVersi({ tipe: versi_tipe!, seq: versi_seq! }, terbaru));
+    if ((scope !== 'ssk' || hapusVersiTerbaru) && await adaBulanTertutup(tx, tahun, sumber, terbaru)) {
+      throw new ResetBulanTertutupError();
+    }
     // Realisasi dihapus DULU supaya tidak ada FK orphan
     if (scope === 'realisasi' || scope === 'both') {
-      // Bulan tertutup = angka yang sudah dilaporkan. Reset tidak boleh jadi pintu
-      // belakangnya: buka dulu bulannya (tercatat di audit), baru Reset. Gembok yang
-      // sama dengan Simpan & Tutup Bulan, supaya tidak ada bulan yang ditutup di sela.
-      await acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber));
-      if (await adaBulanTertutup(tx, tahun, sumber)) throw new ResetBulanTertutupError();
       // L53: sql/tx wrapper return non-SELECT hasil sebagai Array<{affectedRows}>,
       // BUKAN object — akses lewat [0]. Cast object langsung diam-diam selalu 0
       // → audit log + UI tampilkan "0 baris dihapus" padahal data benar terhapus.
@@ -142,6 +153,11 @@ export async function POST(req: NextRequest) {
             AND locked_at IS NOT NULL
         `;
       }
+      // Versi yang dihapus membawa tutupannya pergi (kalau tertinggal, Perubahan baru bernomor
+      // sama lahir dengan bulan "tertutup"). Foto versi yang dihapus atau yang kembali berjalan
+      // ikut dibuang; tutupan lama versi yang kembali berjalan berlaku lagi.
+      await buangTutupVersi(tx, tahun, sumber, versiSpecified ? { tipe: versi_tipe!, seq: versi_seq! } : null);
+      await buangFotoTakFinal(tx, tahun, sumber);
     }
   });
   } catch (e) {

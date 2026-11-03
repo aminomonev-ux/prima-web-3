@@ -2,12 +2,28 @@
 //
 // MURNI dan aman-klien: dipakai server (pagar) DAN layar (tombol, alasan tombol mati).
 // Akses DB-nya di `tutup-bulan-data.ts`.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §5
+// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §5, docs/CONCEPT-kinerja-tutup-per-versi.md
 
 import { NAMA_BULAN, sen, type PelanggaranTertutup } from './banding-realisasi'
 import { KUNCI_BULAN_SSK } from './bentrok-ssk'
+import { labelVersi } from './versi'
 // `import type` — terhapus saat kompilasi, jadi layar tidak ikut menarik mysql2.
 import type { SumberSSK } from '@/lib/data/kinerja'
+
+/** Versi RKO pemilik tutupan. Tutupan satu versi tidak menyentuh versi lain. */
+export interface VersiSsk { tipe: 'MURNI' | 'PERUBAHAN'; seq: number }
+
+export const samaVersi = (a: VersiSsk, b: VersiSsk) => a.tipe === b.tipe && a.seq === b.seq
+
+/**
+ * Tutup/Buka hanya di versi TERBARU: realisasi berjalan diukur ke versi itu, dan versi yang
+ * sudah final (terkunci karena Perubahan dibuat) tertutup semua bulannya dengan sendirinya.
+ */
+export function alasanTolakVersi(v: VersiSsk, terbaru: VersiSsk): string | null {
+  if (samaVersi(v, terbaru)) return null
+  return `${labelVersi(v.tipe, v.seq)} sudah final — semua bulannya tertutup. `
+    + `Tutup atau buka bulan di versi terbaru (${labelVersi(terbaru.tipe, terbaru.seq)}).`
+}
 
 /**
  * Gembok realisasi satu (tahun, sumber) — dipegang Simpan Realisasi DAN Tutup/Buka

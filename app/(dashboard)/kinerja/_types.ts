@@ -115,7 +115,10 @@ export interface CrrRow {
 export interface PendRow {
   id?: number;
   keterangan: string;
+  /** Target murni. */
   target: number;
+  /** null = belum ada Target Perubahan (lib/kinerja/pendapatan-perubahan.ts). */
+  target_perubahan?: number | null;
   realisasi: number;
   capaian_pct: number;
 }

@@ -234,6 +234,8 @@ if (c) {
   const k = c
   // L92: kunci uji dihapus PERSIS, bukan `WHERE entity = ?` — entity itu dipakai data asli.
   const bersih = async () => {
+    // Buat Perubahan memotret realisasi (baris foto ikut lewat FK CASCADE).
+    await k.query('DELETE FROM kinerja_realisasi_foto WHERE tahun = ?', [TAHUN])
     await k.query('UPDATE kinerja_ssk SET parent_versi_id = NULL WHERE tahun = ?', [TAHUN])
     for (const t of ['kinerja_ssk', 'kinerja_realisasi', 'kinerja_rekening', 'kinerja_master', 'kinerja_riwayat_simpan']) {
       await k.query(`DELETE FROM ${t} WHERE tahun = ?`, [TAHUN])

@@ -10,13 +10,14 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { BarChart3, Loader2 } from 'lucide-react'
+import { targetBerlaku } from '@/lib/kinerja/pendapatan-perubahan'
 
 interface Props {
   tahun:    string
   isLight:  boolean
 }
 
-interface PendRow { keterangan: string; target: number; realisasi: number; capaian_pct: number }
+interface PendRow { keterangan: string; target: number; target_perubahan?: number | null; realisasi: number; capaian_pct: number }
 interface LaporanTrend { bulan: number; real_keuangan: number; akum_keuangan: number }
 interface LaporanSumber { sumber: string; total_pagu: number; total_real_keuangan: number; trend: LaporanTrend[]; target_bulan?: number[] }
 
@@ -96,12 +97,13 @@ export default function BerandaCharts({ tahun, isLight }: Props) {
   }
 
   // ─── Data Chart 1: Pendapatan per Uraian ────────────────────────────────────
+  // Target BERLAKU (Perubahan bila ada) — angka yang sama dengan capaian di tab Pendapatan.
   const chart1Data = pendRows
-    .filter(r => r.target > 0 || r.realisasi > 0)
+    .filter(r => targetBerlaku(r) > 0 || r.realisasi > 0)
     .slice(0, 12)
     .map(r => ({
       keterangan: r.keterangan.length > 28 ? r.keterangan.slice(0, 25) + '…' : r.keterangan,
-      Target: r.target,
+      Target: targetBerlaku(r),
       Realisasi: r.realisasi,
     }))
 

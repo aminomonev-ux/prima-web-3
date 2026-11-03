@@ -7,6 +7,7 @@ import {
   type RencanaJalarRekening, type RingkasJalarRekening,
 } from '@/lib/kinerja/rekening-menjalar';
 import { kelompokkanNilai } from '@/lib/kinerja/master-ubah';
+import { alasanTolakUbahMurni, jejakTargetPerubahan, capaianPendapatan } from '@/lib/kinerja/pendapatan-perubahan';
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { buangBintang } from '@/lib/kinerja/master-nama';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
@@ -16,7 +17,8 @@ import {
   REALISASI_LOCK_ENTITY, realisasiLockKey, KinerjaBulanTertutupError,
   perubahanTargetTertutup, KinerjaTargetTertutupError,
 } from '@/lib/kinerja/tutup-bulan';
-import { bulanTertutupSet } from '@/lib/kinerja/tutup-bulan-data';
+import { bulanTertutupSet, versiTerbaruSsk } from '@/lib/kinerja/tutup-bulan-data';
+import { potretRealisasi } from '@/lib/kinerja/foto-realisasi-data';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
 import type { LaporanYatim } from '@/lib/kinerja/rekap';
 
@@ -529,14 +531,18 @@ export class KinerjaVersiBentrokError extends Error {
 export async function buatVersiPerubahan(
   tahun: string, sumber: SumberSSK,
   fromTipe: 'MURNI' | 'PERUBAHAN', fromSeq: number, userId: number,
-): Promise<{ newVersiSeq: number; copied: number }> {
+): Promise<{ newVersiSeq: number; copied: number; difoto: number | null }> {
   let newVersiSeq = 0;
   let copied = 0;
+  let difoto: number | null = null;
   try {
     await withTransaction(async ({ tx, conn }) => {
       // L84: snapshot baca-konsisten lahir di SELECT biasa yang pertama, jadi kunci
       // yang diambil sesudah `MAX(versi_seq)` cuma menjaga angka yang sudah basi.
+      // Gembok realisasi ikut (urutan sama dengan Simpan Rekening & Master menjalar):
+      // foto realisasi di bawah tidak boleh berselang-seling dengan Simpan Realisasi.
       await kunciVersiSsk(tx, tahun, sumber);
+      await acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber));
 
       const maxRows = await tx`
         SELECT COALESCE(MAX(versi_seq), 0) AS max_seq
@@ -611,6 +617,12 @@ export async function buatVersiPerubahan(
         values,
         conn,
       );
+
+      // Versi asal kini final: realisasinya dipotret supaya laporannya tidak bergeser lagi
+      // saat realisasi disunting di Perubahan (docs/CONCEPT-kinerja-tutup-per-versi.md).
+      // Angka kunci realisasi naik — tab Realisasi yang terbuka memuat ulang acuannya.
+      difoto = await potretRealisasi(tx, tahun, sumber, { tipe: fromTipe, seq: fromSeq }, userId);
+      await bumpBludVersion(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber), userId);
     });
   } catch (e) {
     // `uq_ks_canonical_versi` (migration-022) jaminan terakhir bila dua PERUBAHAN
@@ -618,7 +630,7 @@ export async function buatVersiPerubahan(
     if ((e as { code?: string }).code === 'ER_DUP_ENTRY') throw new KinerjaVersiBentrokError(newVersiSeq);
     throw e;
   }
-  return { newVersiSeq, copied };
+  return { newVersiSeq, copied, difoto };
 }
 
 /**
@@ -842,7 +854,7 @@ export async function saveSskBatch(
     // Peringatan, bukan pagar: koreksi RKO itu sah, tapi capaian & deviasi bulan yang
     // realisasinya sudah ditutup ikut bergeser — orangnya harus tahu sebelum menulis.
     if (!setujuBulanTertutup) {
-      const tertutup = await bulanTertutupSet(tx, tahun, sumber);
+      const tertutup = await bulanTertutupSet(tx, tahun, sumber, { tipe: versiTipe, seq: versiSeq });
       if (tertutup.size > 0) {
         const lamaRko = await tx`
           SELECT canonical_id, uraian, uraian_ssk, pagu, months, is_nullified
@@ -1111,12 +1123,24 @@ export async function getRealisasiHydrated(
   sumber: SumberSSK,
   versiTipe: 'MURNI' | 'PERUBAHAN' = 'MURNI',
   versiSeq: number = 0,
+  /** Versi final yang punya foto: baris dari foto itu, bukan realisasi berjalan. */
+  dariFoto = false,
 ): Promise<{ rows: import('./kinerja-calc').RealRowHydrated[]; itemSsk: ItemSskAktif[];
   /** Versi yang DIMINTA punya baris tapi semuanya dinol-kan (A9). */
   dinolkan: boolean }> {
   const { recalcAllRealisasiServer } = await import('./kinerja-calc');
   const [realRaw, ssk] = await Promise.all([
-    sql`
+    dariFoto
+      ? sql`
+        SELECT bulan, keterangan, COALESCE(uraian_ssk,'') AS uraian_ssk,
+               COALESCE(program,'') AS program, COALESCE(kegiatan,'') AS kegiatan,
+               COALESCE(subkegiatan,'') AS subkegiatan, ssk_canonical_id, ssk_versi_tipe, ssk_versi_seq,
+               real_fisik, real_keuangan
+        FROM kinerja_realisasi_foto_baris
+        WHERE tahun = ${tahun} AND sumber = ${sumber} AND versi_tipe = ${versiTipe} AND versi_seq = ${versiSeq}
+        ORDER BY bulan, id
+      ` as unknown as Promise<Record<string, unknown>[]>
+      : sql`
       SELECT bulan,
              COALESCE(keterangan,'') AS keterangan,
              COALESCE(uraian_ssk,'') AS uraian_ssk,
@@ -1212,7 +1236,9 @@ export async function saveRealisasiBatch(
     ` as (BarisBanding & { updated_by: number | null; updated_at: string })[];
     pagarReplace(`Realisasi ${sumber} ${tahun}`, lama.length, rows.length, force);
 
-    const tertutup = await bulanTertutupSet(tx, tahun, sumber);
+    // Realisasi berjalan diukur ke versi TERBARU — tutupan versi itu yang menjaganya. Versi
+    // yang sudah final punya fotonya sendiri, jadi Simpan ini tidak menggeser laporannya.
+    const tertutup = await bulanTertutupSet(tx, tahun, sumber, await versiTerbaruSsk(tx, tahun, sumber));
     const langgar = pelanggaranBulanTertutup(lama, rows, tertutup);
     if (langgar.length > 0) throw new KinerjaBulanTertutupError(langgar);
 
@@ -1363,14 +1389,17 @@ export interface PendRow {
   tahun: string;
   urut: number;
   keterangan: string;
+  /** Target murni. */
   target: number;
+  /** NULL = belum ada Target Perubahan (lib/kinerja/pendapatan-perubahan.ts). */
+  target_perubahan: number | null;
   realisasi: number;
   capaian_pct: number;
 }
 
 export async function getPendapatanRows(tahun: string): Promise<PendRow[]> {
   const raw = await sql`
-    SELECT id, tahun, urut, keterangan, target, realisasi, capaian_pct
+    SELECT id, tahun, urut, keterangan, target, target_perubahan, realisasi, capaian_pct
     FROM kinerja_pendapatan_real
     WHERE tahun = ${tahun}
     ORDER BY urut
@@ -1382,33 +1411,56 @@ export async function getPendapatanRows(tahun: string): Promise<PendRow[]> {
     urut:        Number(r.urut ?? 0),
     keterangan:  String(r.keterangan ?? ''),
     target:      Number(r.target ?? 0),
+    target_perubahan: r.target_perubahan === null || r.target_perubahan === undefined ? null : Number(r.target_perubahan),
     realisasi:   Number(r.realisasi ?? 0),
     capaian_pct: Number(r.capaian_pct ?? 0),
   }));
 }
 
+/** Target Murni diubah padahal Target Perubahan sudah tersimpan — 409 di route. */
+export class KinerjaTargetMurniFinalError extends Error {
+  constructor(pesan: string) { super(pesan); this.name = 'KinerjaTargetMurniFinalError'; }
+}
+
+/** Memulangkan ekor audit (Target Perubahan dibuat/diubah/dibatalkan) — kosong bila tidak ada. */
 export async function savePendapatanBatch(
   tahun: string,
-  rows: Omit<PendRow, 'id' | 'tahun'>[],
+  rows: (Omit<PendRow, 'id' | 'tahun' | 'target_perubahan'> & { target_perubahan?: number | null })[],
   userId: number,
   force = false,
-) {
+): Promise<string> {
+  let jejak = '';
   await withTransaction(async ({ tx, conn }) => {
-    const [ada] = await tx`
-      SELECT COUNT(*) AS n FROM kinerja_pendapatan_real WHERE tahun = ${tahun}
-    ` as { n: unknown }[];
-    pagarReplace(`Pendapatan ${tahun}`, Number(ada?.n ?? 0), rows.length, force);
+    const lama = (await tx`
+      SELECT keterangan, target, target_perubahan, realisasi, capaian_pct
+      FROM kinerja_pendapatan_real WHERE tahun = ${tahun} ORDER BY urut
+    ` as Record<string, unknown>[]).map(r => ({
+      keterangan: String(r.keterangan ?? ''), target: Number(r.target ?? 0),
+      target_perubahan: r.target_perubahan === null ? null : Number(r.target_perubahan),
+      realisasi: Number(r.realisasi ?? 0), capaian_pct: Number(r.capaian_pct ?? 0),
+    }));
+    pagarReplace(`Pendapatan ${tahun}`, lama.length, rows.length, force);
+    // L87: kolom yang tidak dikirim (tab yang dibuka sebelum pembaruan ini) = jangan sentuh;
+    // menulisnya NULL diam-diam membuang Target Perubahan yang sudah ada.
+    const baru = rows.map((r, i) => ({
+      ...r, target_perubahan: r.target_perubahan === undefined ? (lama[i]?.target_perubahan ?? null) : r.target_perubahan,
+    }));
+    const alasan = alasanTolakUbahMurni(lama, baru);
+    if (alasan) throw new KinerjaTargetMurniFinalError(alasan);
+    jejak = jejakTargetPerubahan(lama, baru);
 
     await tx`DELETE FROM kinerja_pendapatan_real WHERE tahun = ${tahun}`;
     if (rows.length === 0) return;
-    const values = rows.map((r, i) => [tahun, i + 1, r.keterangan, r.target, r.realisasi, r.capaian_pct, userId]);
+    // Capaian dihitung di sini dari target BERLAKU — satu rumus, tidak dipercayakan ke layar.
+    const values = baru.map((r, i) => [tahun, i + 1, r.keterangan, r.target, r.target_perubahan, r.realisasi, capaianPendapatan(r), userId]);
     await bulkInsert(
       'kinerja_pendapatan_real',
-      ['tahun','urut','keterangan','target','realisasi','capaian_pct','updated_by'],
+      ['tahun','urut','keterangan','target','target_perubahan','realisasi','capaian_pct','updated_by'],
       values,
       conn,
     );
   });
+  return jejak;
 }
 
 // ─── Laporan Konsolidasi ──────────────────────────────────────────────────────

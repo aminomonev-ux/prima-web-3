@@ -102,6 +102,8 @@ menyimpan realisasi** ("biar mudah"); target RKO bulan tertutup yang berubah cuk
   menggeser angka "s/d Agustus" yang sudah dilaporkan.
 - **Menempel pada (tahun, sumber, bulan), bukan versi** — realisasinya memang tidak
   berversi. Buat Perubahan tidak dihalangi dan tidak membuka tutupan.
+  **Diganti 2026-11-03** (`CONCEPT-kinerja-tutup-per-versi.md`): tutupan kini per versi, versi
+  final tertutup semua dengan foto realisasinya, Perubahan mulai terbuka.
 - **Pagar server** di `saveRealisasiBatch`, di bawah gembok yang sama: angka bulan
   tertutup yang berbeda dari DB → 409 `BULAN_TERTUTUP` + daftar rekening·bulan, tidak
   bisa ditembus `force`. Baris BARU bernilai 0 (hasil Init) diterima — tidak mengubah

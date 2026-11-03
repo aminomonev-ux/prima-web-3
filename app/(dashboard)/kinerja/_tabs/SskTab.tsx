@@ -669,6 +669,9 @@ export default function SskTab({
                   Akan dibuat versi <strong style={{ color:cTextPrimary }}>PERUBAHAN baru</strong> dengan menyalin semua data dari <strong style={{ color:cTextPrimary }}>{versiLabel}</strong>.
                   <br /><br />
                   Versi <strong style={{ color:cTextPrimary }}>{versiLabel}</strong> akan <strong style={{ color:'#B45309' }}>otomatis dikunci</strong> (tidak bisa diedit lagi).
+                  <br /><br />
+                  Realisasinya difoto dan <strong style={{ color:cTextPrimary }}>semua bulan {versiLabel} tertutup</strong> — laporan {versiLabel} tidak bergeser lagi.
+                  Di versi Perubahan semua bulan mulai terbuka; tutup lagi di sana bila sudah dilaporkan.
                 </>
               )}
               <br /><br />

@@ -43,6 +43,8 @@ const mysql = require('mysql2/promise')
 
 const TAHUN = '2099'
 const SUMBER = 'GAJI'
+// Tutupan menempel pada versi RKO (CONCEPT-kinerja-tutup-per-versi); RKO uji ini MURNI.
+const V = { tipe: 'MURNI', seq: 0 }
 const KUNCI_REAL = `${TAHUN}:${SUMBER}`
 const KUNCI_SSK = `${TAHUN}:${SUMBER}:MURNI:0`
 const KUNCI_SSK_P1 = `${TAHUN}:${SUMBER}:PERUBAHAN:1`
@@ -163,20 +165,20 @@ try {
 
   console.log('\n[3] Aturan urutan Tutup/Buka')
   {
-    let e = await galat(() => tutupBulanRealisasi(TAHUN, SUMBER, 2, USER))
+    let e = await galat(() => tutupBulanRealisasi(TAHUN, SUMBER, V, 2, USER))
     periksa('Tutup Februari sebelum Januari → ditolak', e?.name === 'KinerjaAturanTutupError', e?.message?.slice(0, 40))
-    const t1 = await tutupBulanRealisasi(TAHUN, SUMBER, 1, USER)
+    const t1 = await tutupBulanRealisasi(TAHUN, SUMBER, V, 1, USER)
     periksa('Tutup Januari → [1]', t1.map(x => x.bulan).join() === '1' && t1[0].ditutup_oleh !== null)
-    e = await galat(() => tutupBulanRealisasi(TAHUN, SUMBER, 1, USER))
+    e = await galat(() => tutupBulanRealisasi(TAHUN, SUMBER, V, 1, USER))
     periksa('Tutup Januari dua kali → ditolak', e?.name === 'KinerjaAturanTutupError')
-    const t2 = await tutupBulanRealisasi(TAHUN, SUMBER, 2, USER)
+    const t2 = await tutupBulanRealisasi(TAHUN, SUMBER, V, 2, USER)
     periksa('Tutup Februari → [1,2]', t2.map(x => x.bulan).join() === '1,2')
-    e = await galat(() => bukaBulanRealisasi(TAHUN, SUMBER, 1))
+    e = await galat(() => bukaBulanRealisasi(TAHUN, SUMBER, V, 1))
     periksa('Buka Januari saat Februari tertutup → ditolak', e?.name === 'KinerjaAturanTutupError')
-    const b2 = await bukaBulanRealisasi(TAHUN, SUMBER, 2)
+    const b2 = await bukaBulanRealisasi(TAHUN, SUMBER, V, 2)
     periksa('Buka Februari → [1]', b2.map(x => x.bulan).join() === '1')
-    await tutupBulanRealisasi(TAHUN, SUMBER, 2, USER)
-    periksa('Daftar akhir [1,2]', (await daftarBulanTertutup(sql, TAHUN, SUMBER)).map(x => x.bulan).join() === '1,2')
+    await tutupBulanRealisasi(TAHUN, SUMBER, V, 2, USER)
+    periksa('Daftar akhir [1,2]', (await daftarBulanTertutup(sql, TAHUN, SUMBER, V)).map(x => x.bulan).join() === '1,2')
     periksa('Tutup/Buka TIDAK menaikkan angka gembok realisasi', (await versiReal()) === 2)
   }
 
@@ -244,7 +246,7 @@ try {
       await c.beginTransaction()
       await c.query('SELECT version FROM blud_locks WHERE entity = ? AND key_id = ? FOR UPDATE', ['kinerja_realisasi', KUNCI_REAL])
       let selesai = false
-      const tutup = tutupBulanRealisasi(TAHUN, SUMBER, 3, USER).then(() => { selesai = true })
+      const tutup = tutupBulanRealisasi(TAHUN, SUMBER, V, 3, USER).then(() => { selesai = true })
       await new Promise(r => setTimeout(r, 700))
       const [tunggu] = await c.query(
         `SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits w
@@ -254,7 +256,7 @@ try {
       await c.commit()
       await tutup
       periksa('…lalu selesai begitu Simpan commit', selesai === true
-        && (await daftarBulanTertutup(sql, TAHUN, SUMBER)).map(x => x.bulan).join() === '1,2,3')
+        && (await daftarBulanTertutup(sql, TAHUN, SUMBER, V)).map(x => x.bulan).join() === '1,2,3')
     } finally {
       await c.end()
     }

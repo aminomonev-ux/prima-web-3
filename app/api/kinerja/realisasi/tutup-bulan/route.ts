@@ -12,6 +12,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, TutupBulanBodySchema } from '@/lib/data/kinerja-schemas';
 import { tutupBulanRealisasi, bukaBulanRealisasi, KinerjaAturanTutupError } from '@/lib/kinerja/tutup-bulan-data';
 import { NAMA_BULAN } from '@/lib/kinerja/banding-realisasi';
+import { labelVersi } from '@/lib/kinerja/versi';
 import { kinerjaMati } from '../../_guard';
 
 export async function POST(req: NextRequest) {
@@ -25,13 +26,14 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = TutupBulanBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, bulan, aksi } = parsed.data;
+  const { tahun, sumber, versi_tipe, versi_seq, bulan, aksi } = parsed.data;
+  const v = { tipe: versi_tipe, seq: versi_seq };
 
   let tertutup;
   try {
     tertutup = aksi === 'TUTUP'
-      ? await tutupBulanRealisasi(tahun, sumber, bulan, session.userId)
-      : await bukaBulanRealisasi(tahun, sumber, bulan);
+      ? await tutupBulanRealisasi(tahun, sumber, v, bulan, session.userId)
+      : await bukaBulanRealisasi(tahun, sumber, v, bulan);
   } catch (err) {
     if (err instanceof KinerjaAturanTutupError) {
       return NextResponse.json({ ok: false, code: 'ATURAN_TUTUP', message: err.message }, { status: 409 });
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
     eventType: aksi === 'TUTUP' ? 'KINERJA_TUTUP_BULAN' : 'KINERJA_BUKA_BULAN',
     userId:    session.userId,
     username:  session.username,
-    detail:    `${aksi === 'TUTUP' ? 'Tutup' : 'Buka'} realisasi ${sumber} ${NAMA_BULAN[bulan - 1]} ${tahun}`,
+    detail:    `${aksi === 'TUTUP' ? 'Tutup' : 'Buka'} realisasi ${sumber} ${labelVersi(v.tipe, v.seq)} ${NAMA_BULAN[bulan - 1]} ${tahun}`,
   });
 
   return NextResponse.json({ ok: true, tertutup });

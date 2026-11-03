@@ -66,7 +66,7 @@ export function initCrrRows(): CrrRow[] {
 }
 
 export function initPendapatanRows(): PendRow[] {
-  return CRR_BULAN_LABELS.map(b => ({ keterangan: b, target: 0, realisasi: 0, capaian_pct: 0 }));
+  return CRR_BULAN_LABELS.map(b => ({ keterangan: b, target: 0, target_perubahan: null, realisasi: 0, capaian_pct: 0 }));
 }
 
 // ─── Math helpers ────────────────────────────────────────────────────────────

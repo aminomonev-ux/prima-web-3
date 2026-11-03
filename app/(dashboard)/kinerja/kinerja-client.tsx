@@ -31,6 +31,7 @@ import { muatBahanRekap } from '@/lib/kinerja/muat-rekap';
 import { bandingRealisasi, kalimatBelumTersimpan } from '@/lib/kinerja/banding-realisasi';
 import { jumlahSskBerubah } from '@/lib/kinerja/sunting-ssk';
 import type { BulanTertutup } from '@/lib/kinerja/tutup-bulan';
+import type { VersiFinal } from '@/lib/kinerja/foto-realisasi';
 import Sidebar from './_components/Sidebar';
 import Topbar from './_components/Topbar';
 import { bolehBatalkanFinal } from '@/lib/constants';
@@ -131,6 +132,8 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   const [realDasar,       setRealDasar]       = useState<RealRow[]>([]);
   /** Bulan realisasi yang sudah ditutup — datang di balasan yang sama dengan barisnya (L88). */
   const [realTertutup,    setRealTertutup]    = useState<BulanTertutup[]>([]);
+  /** Versi acuan sudah final (Perubahan berikutnya dibuat) — angkanya foto saat itu. */
+  const [realFinal,       setRealFinal]       = useState<VersiFinal | null>(null);
   const [realisasiAllRows, setRealisasiAllRows] = useState<RealRow[]>([]);
   // A8: item SSK versi aktif SEMUA sumber — penyebut Rekap. Datang dari balasan
   // yang sama dengan barisnya, jadi "versi mana" cuma punya satu jawaban (L88).
@@ -384,10 +387,11 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     const vs = versiSeq  ?? sskVersi.seq;
     const d = await fetchJson<unknown>(`/api/kinerja/realisasi?tahun=${tahun}&sumber=${sumber}&versi_tipe=${vt}&versi_seq=${vs}`);
     if (!d.ok) return { ok: false as const, message: d.message };
-    const j = d as unknown as { rows: RealRow[]; version?: number; tertutup?: BulanTertutup[] };
+    const j = d as unknown as { rows: RealRow[]; version?: number; tertutup?: BulanTertutup[]; final?: VersiFinal | null };
     // Refactor Versi: GET hydrated path mengembalikan kolom turunan ter-recalc dari server.
     // Tetap panggil recalcAllRealisasi (idempotent) supaya konsisten dgn UI lama saat user edit.
-    return { ok: true as const, rows: recalcAllRealisasi(j.rows), version: Number(j.version ?? 0), tertutup: j.tertutup ?? [] };
+    return { ok: true as const, rows: recalcAllRealisasi(j.rows), version: Number(j.version ?? 0),
+      tertutup: j.tertutup ?? [], final: j.final ?? null };
   }, [tahun, sskVersi.tipe, sskVersi.seq]);
 
   const fetchRealisasi = useCallback(async (sumber: SumberSSK, versiTipe?: 'MURNI'|'PERUBAHAN', versiSeq?: number) => {
@@ -401,6 +405,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
         setRealDasar(h.rows);
         setRealVersion(h.version);
         setRealTertutup(h.tertutup);
+        setRealFinal(h.final);
       }
       else toast.error(h.message || 'Gagal memuat realisasi');
     } finally { if (giliran === giliranRealRef.current) setLoadingData(false); }
@@ -866,6 +871,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   bandingReal={bandingReal}
                   realTertutup={realTertutup}
                   setRealTertutup={setRealTertutup}
+                  versiFinal={realFinal}
                   ambilRealisasi={ambilRealisasi}
                   autoOpenImport={autoImportReal}
                   onImportConsumed={consumeImportReal}

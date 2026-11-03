@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
-import { getCrrRows, saveCrrBatch, getPendapatanRows, savePendapatanBatch, KinerjaReplaceSafetyError } from '@/lib/data/kinerja';
+import { getCrrRows, saveCrrBatch, getPendapatanRows, savePendapatanBatch, KinerjaReplaceSafetyError, KinerjaTargetMurniFinalError } from '@/lib/data/kinerja';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, PendapatanBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
@@ -57,15 +57,23 @@ export async function PUT(req: NextRequest) {
 
   if (parsed.data.type === 'pendapatan') {
     const { tahun, rows, force } = parsed.data;
+    let jejak = '';
     try {
-      await savePendapatanBatch(tahun, rows, session.userId, force ?? false);
-    } catch (err) { const t = terjemahPagar(err); if (t) return t; throw err; }
+      jejak = await savePendapatanBatch(tahun, rows, session.userId, force ?? false);
+    } catch (err) {
+      const t = terjemahPagar(err); if (t) return t;
+      // Pagar, bukan peringatan: Target Murni final sejak Target Perubahan tersimpan.
+      if (err instanceof KinerjaTargetMurniFinalError) {
+        return NextResponse.json({ ok: false, code: 'TARGET_MURNI_FINAL', message: err.message }, { status: 409 });
+      }
+      throw err;
+    }
     await writeAuditLog({
       req,
       eventType: 'KINERJA_SAVE_PENDAPATAN',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Simpan realisasi pendapatan tahun ${tahun}: ${rows.length} item`,
+      detail:    `Simpan realisasi pendapatan tahun ${tahun}: ${rows.length} item` + jejak,
     });
     return NextResponse.json({ ok: true, saved: rows.length });
   }

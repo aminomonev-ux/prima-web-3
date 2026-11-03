@@ -9,6 +9,8 @@ import { kinerjaMati } from '../_guard';
 import { kalimatRingkasan } from '@/lib/kinerja/banding-realisasi';
 import { KinerjaBulanTertutupError } from '@/lib/kinerja/tutup-bulan';
 import { daftarBulanTertutup } from '@/lib/kinerja/tutup-bulan-data';
+import { versiFinal } from '@/lib/kinerja/foto-realisasi-data';
+import { bulanFinal } from '@/lib/kinerja/foto-realisasi';
 import { sql } from '@/lib/data/db';
 
 export async function GET(req: NextRequest) {
@@ -37,21 +39,26 @@ export async function GET(req: NextRequest) {
   if (q.data.versi_tipe !== undefined || q.data.versi_seq !== undefined) {
     const versiTipe = q.data.versi_tipe ?? 'MURNI';
     const versiSeq  = q.data.versi_seq  ?? 0;
+    const v = { tipe: versiTipe, seq: versiSeq };
+    // Versi final (Perubahan berikutnya sudah dibuat): angkanya foto saat itu dan 12 bulannya
+    // tertutup. Cetak, Rekap "Murni", dan tabel LKJIP memuat lewat sini juga, jadi semuanya
+    // membaca angka yang sama (L88).
+    const final = await versiFinal(sql, tahun, sumber, v);
     // A9 + pemilih versi: `dinolkan` WAJIB ikut di cabang ini juga. Kalau tidak,
     // memilih versi yang habis dinol-kan di layar Cetak membuat spanduknya diam
     // — dan pagu Rp 0 tanpa keterangan itu yang A9 ada untuk mencegahnya. Ia
     // datang dari kueri yang SAMA dengan itemnya, bukan kueri COUNT tersendiri.
     const [{ rows, itemSsk, dinolkan }, version, tertutup] = await Promise.all([
-      getRealisasiHydrated(tahun, sumber, versiTipe, versiSeq),
+      getRealisasiHydrated(tahun, sumber, versiTipe, versiSeq, !!final?.foto),
       getKinerjaVersion('kinerja_realisasi', `${tahun}:${sumber}`),
       // Satu balasan dengan barisnya: layar yang menampilkan angka bulan tertutup
       // tidak boleh mendapat jawaban "tertutup atau tidak" dari pemuatan lain (L88).
-      daftarBulanTertutup(sql, tahun, sumber),
+      final ? bulanFinal(final) : daftarBulanTertutup(sql, tahun, sumber, v),
     ]);
     // A8: `itemSsk` ikut di KEDUA cabang. Satu bentuk balasan, bukan dua yang
     // berbeda tergantung ada-tidaknya parameter versi — beda bentuk yang tidak
     // disengaja itu yang membuat `sumber` di RealRow jadi jebakan (bentuk T1).
-    return NextResponse.json({ ok: true, rows, itemSsk, versi: { tipe: versiTipe, seq: versiSeq, dinolkan }, version, tertutup });
+    return NextResponse.json({ ok: true, rows, itemSsk, versi: { tipe: versiTipe, seq: versiSeq, dinolkan }, version, tertutup, final });
   }
 
   // Tanpa parameter versi → versi AKTIF (bukan lagi MURNI-0 paksa). Versinya ikut

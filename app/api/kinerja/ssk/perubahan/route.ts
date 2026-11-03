@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
   const { tahun, sumber, from_versi_tipe, from_versi_seq } = parsed.data;
 
-  let hasil: { newVersiSeq: number; copied: number };
+  let hasil: Awaited<ReturnType<typeof buatVersiPerubahan>>;
   try {
     hasil = await buatVersiPerubahan(tahun, sumber, from_versi_tipe, from_versi_seq, session.userId);
   } catch (e) {
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     }
     throw e;
   }
-  const { newVersiSeq, copied } = hasil;
+  const { newVersiSeq, copied, difoto } = hasil;
 
   await writeAuditLog({
     req,
@@ -67,7 +67,8 @@ export async function POST(req: NextRequest) {
     userId:    session.userId,
     username:  session.username,
     detail:    copied > 0
-      ? `Buat PERUBAHAN-${newVersiSeq} ${sumber} ${tahun} dari ${from_versi_tipe}-${from_versi_seq}: ${copied} baris dicopy, versi source dikunci.`
+      ? `Buat PERUBAHAN-${newVersiSeq} ${sumber} ${tahun} dari ${from_versi_tipe}-${from_versi_seq}: ${copied} baris dicopy, versi source dikunci`
+        + (difoto === null ? ' (foto realisasinya sudah ada sebelumnya).' : `, realisasinya difoto ${difoto} baris (semua bulan tertutup).`)
       : `Buat PERUBAHAN-${newVersiSeq} ${sumber} ${tahun} tanpa salinan: RKO murni kosong (tidak dianggarkan di murni).`,
   });
 

@@ -31,6 +31,7 @@ import {
   type HasilBanding, type RingkasBulan, type PelanggaranTertutup,
 } from '@/lib/kinerja/banding-realisasi';
 import { alasanTolakTutup, alasanTolakBuka, type BulanTertutup } from '@/lib/kinerja/tutup-bulan';
+import { kalimatVersiFinal, type VersiFinal } from '@/lib/kinerja/foto-realisasi';
 import ImportRealisasiModal from '@/components/kinerja/ImportRealisasiModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import VersiPickerKinerja, { type VersiValue } from '@/components/kinerja/VersiPickerKinerja';
@@ -71,6 +72,8 @@ interface Props {
   bandingReal: HasilBanding;
   realTertutup: BulanTertutup[];
   setRealTertutup: React.Dispatch<React.SetStateAction<BulanTertutup[]>>;
+  /** Acuan sudah final: angkanya foto saat Perubahan dibuat, 12 bulannya tertutup. */
+  versiFinal: VersiFinal | null;
   ambilRealisasi: (sumber: SumberSSK) => Promise<
     { ok: true; rows: RealRow[]; version: number; tertutup: BulanTertutup[] } | { ok: false; message?: string }>;
   // IK-4 #5: dipicu Rima lewat /kinerja?import=realisasi → buka modal Import sekali.
@@ -82,7 +85,7 @@ export default function RealisasiTab({
   realisasiSumber, setRealisasiSumber, realisasiBulan, setRealisasiBulan,
   realisasiRows, setRealisasiRows, sskRows, tahun, canEdit, loadingData, saving, setSaving,
   isLight = false, sskVersi, pilihVersi, realVersion, setRealVersion, refetchReal,
-  realDasar, setRealDasar, bandingReal, realTertutup, setRealTertutup, ambilRealisasi,
+  realDasar, setRealDasar, bandingReal, realTertutup, setRealTertutup, versiFinal, ambilRealisasi,
   autoOpenImport = false, onImportConsumed,
 }: Props) {
   // ─── Tutup Bulan & belum tersimpan (docs/CONCEPT-kinerja-simpan-realisasi.md) ──
@@ -461,7 +464,8 @@ export default function RealisasiTab({
     if (!ok) return;
     const d = await fetchJson<unknown>('/api/kinerja/realisasi/tutup-bulan', {
       method: 'POST',
-      body: JSON.stringify({ tahun, sumber: realisasiSumber, bulan: realisasiBulan, aksi }),
+      // Tutupan menempel pada versi yang sedang dilihat; server menolak versi yang sudah final.
+      body: JSON.stringify({ tahun, sumber: realisasiSumber, versi_tipe: sskVersi.tipe, versi_seq: sskVersi.seq, bulan: realisasiBulan, aksi }),
     });
     if (d.ok) {
       setRealTertutup((d as unknown as { tertutup: BulanTertutup[] }).tertutup ?? []);
@@ -637,8 +641,8 @@ export default function RealisasiTab({
                 Samakan Target
               </PrimaButton>
             </Tip>
-            <Tip label="Foto tiap klik Simpan — muat salah satunya kembali ke layar"><PrimaButton variant="ghost" iconLeft={<History size={14} />}
-              onClick={() => setShowRiwayat(true)}>
+            <Tip label={versiLocked ? `Acuan ${versiLabel} sudah final — pindah ke versi terbaru untuk memulihkan simpanan.` : 'Foto tiap klik Simpan — muat salah satunya kembali ke layar'}><PrimaButton variant="ghost" iconLeft={<History size={14} />}
+              onClick={() => setShowRiwayat(true)} disabled={versiLocked}>
               Riwayat Simpan
             </PrimaButton></Tip>
             <Tip label={versiLocked ? `Acuan ${versiLabel} sudah diarsipkan, tidak bisa simpan input baru.` : ''}><PrimaButton menulis variant="success" iconLeft={<Save size={14} />}
@@ -721,8 +725,19 @@ export default function RealisasiTab({
         })}
       </div>
 
-      {/* Tutup Bulan — per sumber, berurutan (lib/kinerja/tutup-bulan.ts) */}
-      {bulanIniTertutup ? (
+      {/* Tutup Bulan — per versi, berurutan (lib/kinerja/tutup-bulan.ts). Versi final tertutup
+          semua dengan sendirinya: tidak ada yang bisa dibuka atau ditutup di sana. */}
+      {versiLocked ? (
+        <div className="kn-tutup kn-tutup-terkunci">
+          <Lock size={14} style={{ flexShrink:0 }} />
+          <span>
+            {versiFinal
+              ? kalimatVersiFinal(versiFinal, versiLabel, fmtStempel)
+              : `${versiLabel} sudah final — semua bulannya tertutup.`}
+            {' '}Tutup &amp; buka bulan di versi terbaru.
+          </span>
+        </div>
+      ) : bulanIniTertutup ? (
         <div className="kn-tutup kn-tutup-terkunci">
           <Lock size={14} style={{ flexShrink:0 }} />
           <span>

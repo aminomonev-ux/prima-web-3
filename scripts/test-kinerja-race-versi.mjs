@@ -67,6 +67,8 @@ function cek(nama, syarat, catatan = '') {
 const tidur = (ms) => new Promise(r => setTimeout(r, ms))
 
 async function bersih(c) {
+  // Buat Perubahan memotret realisasi (baris foto ikut lewat FK CASCADE).
+  await c.query('DELETE FROM kinerja_realisasi_foto WHERE tahun = ?', [TAHUN])
   await c.query('UPDATE kinerja_ssk SET parent_versi_id = NULL WHERE tahun = ?', [TAHUN])
   await c.query('DELETE FROM kinerja_ssk WHERE tahun = ?', [TAHUN])
   await c.query('DELETE FROM blud_locks WHERE entity LIKE ? AND key_id LIKE ?', ['kinerja%', `${TAHUN}:%`])

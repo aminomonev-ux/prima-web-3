@@ -210,7 +210,8 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   // Susulan audit: satu kolom, satu jam — jam MySQL (DEFAULT NOW() selama ini), bukan jam JS WIB.
   ok('G5b …stempel baris berubah dari jam MySQL', simpan.includes("SELECT DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS s")
     && !simpan.includes('waktuSekarangWIB('))
-  ok('G6 …bulan tertutup dibaca lewat tx (di bawah gembok)', simpan.includes('await bulanTertutupSet(tx, tahun, sumber)'))
+  ok('G6 …bulan tertutup versi TERBARU dibaca lewat tx (di bawah gembok)',
+    simpan.includes('await bulanTertutupSet(tx, tahun, sumber, await versiTerbaruSsk(tx, tahun, sumber))'))
   const sskF = badan(K, 'setujuBulanTertutup = false,\n)')
   ok('G7 Simpan RKO: peringatan bulan tertutup SEBELUM DELETE, bisa disetujui', urut(sskF, 'if (!setujuBulanTertutup) {',
     'perubahanTargetTertutup(', 'throw new KinerjaTargetTertutupError(', 'DELETE FROM kinerja_ssk'))
@@ -220,8 +221,8 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   ok('G8 Route Realisasi: 409 BULAN_TERTUTUP', rRoute.includes("code: 'BULAN_TERTUTUP'") && rRoute.includes('err instanceof KinerjaBulanTertutupError'))
   ok('G9 …audit hanya bila ada yang ditulis', urut(rRoute, 'if (!hasil.tidakBerubah) {', "eventType: 'KINERJA_SAVE_REALISASI'"))
   ok('G10 …audit memakai ringkasan, bukan jumlah baris', rRoute.includes('kalimatRingkasan(hasil.perBulan, 12)'))
-  ok('G11 …GET membawa daftar bulan tertutup di balasan yang sama', rRoute.includes('daftarBulanTertutup(sql, tahun, sumber)')
-    && /version, tertutup \}\);/.test(rRoute))
+  ok('G11 …GET membawa daftar bulan tertutup versinya di balasan yang sama', rRoute.includes('daftarBulanTertutup(sql, tahun, sumber, v)')
+    && /version, tertutup, final \}\);/.test(rRoute))
   ok('G12 …409 bentrok menyebut siapa & jam', rRoute.includes("code: 'VERSION_CONFLICT', message: err.message, actual: err.actual, oleh, pada"))
   const sRoute = kode('app/api/kinerja/ssk/route.ts')
   ok('G13 Route RKO: 409 TARGET_BULAN_TERTUTUP + persetujuan diteruskan', sRoute.includes("code: 'TARGET_BULAN_TERTUTUP'")
@@ -232,13 +233,15 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   ok('G15 …tercatat di audit', tRoute.includes("'KINERJA_TUTUP_BULAN' : 'KINERJA_BUKA_BULAN'"))
   const tData = kode('lib/kinerja/tutup-bulan-data.ts')
   ok('G16 Tutup & Buka memegang gembok Simpan sebagai perintah pertama',
-    urut(badan(tData, 'export async function tutupBulanRealisasi('), 'acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber))', 'alasanTolakTutup(')
-    && urut(badan(tData, 'export async function bukaBulanRealisasi('), 'acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber))', 'alasanTolakBuka('))
+    urut(badan(tData, 'export async function tutupBulanRealisasi('), 'await kunciVersiTutup(tx, tahun, sumber, v)', 'alasanTolakTutup(')
+    && urut(badan(tData, 'export async function bukaBulanRealisasi('), 'await kunciVersiTutup(tx, tahun, sumber, v)', 'alasanTolakBuka(')
+    && urut(badan(tData, 'async function kunciVersiTutup('), 'acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber))', 'versiTerbaruSsk(tx, tahun, sumber)'))
   ok('G17 gembok Simpan = gembok Tutup (satu konstanta)', K.includes("from '@/lib/kinerja/tutup-bulan'")
     && simpan.includes('const lockEntity = REALISASI_LOCK_ENTITY;') && !/REALISASI_LOCK_ENTITY = /.test(K))
   const reset = kode('app/api/kinerja/reset/route.ts')
-  ok('G18 Reset realisasi ditolak selama ada bulan tertutup (di bawah gembok)', urut(reset, "if (scope === 'realisasi' || scope === 'both') {",
-    'acquireBludLock(tx, REALISASI_LOCK_ENTITY', 'if (await adaBulanTertutup(tx, tahun, sumber)) throw new ResetBulanTertutupError();', 'DELETE FROM kinerja_realisasi'))
+  ok('G18 Reset realisasi ditolak selama versi terbaru punya bulan tertutup (di bawah gembok)', urut(reset,
+    'acquireBludLock(tx, REALISASI_LOCK_ENTITY', 'const terbaru = await versiTerbaruSsk(tx, tahun, sumber);',
+    'await adaBulanTertutup(tx, tahun, sumber, terbaru)', "if (scope === 'realisasi' || scope === 'both') {", 'DELETE FROM kinerja_realisasi'))
 
   const RT = kode('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx')
   const save = badan(RT, 'async function saveRealisasi(')
@@ -292,8 +295,13 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
   const skema = kode('docs/schema-mysql.sql').replace(/\s+/g, ' ')
   const mig = kode('docs/migrations/migration-kinerja-bulan-tutup.sql').replace(/\s+/g, ' ')
   const tabel = (s: string) => s.slice(s.indexOf('CREATE TABLE IF NOT EXISTS kinerja_bulan_tutup'), s.indexOf('COMMENT=', s.indexOf('CREATE TABLE IF NOT EXISTS kinerja_bulan_tutup')))
-  ok('G39 Skema acuan & migrasi mendefinisikan tabel yang sama persis', tabel(skema).length > 50 && tabel(skema) === tabel(mig))
-  ok('G40 PRIMARY KEY yang menolak tutup ganda', tabel(mig).includes('PRIMARY KEY (tahun, sumber, bulan)'))
+  // Sejak migration-kinerja-tutup-per-versi.sql skema acuan = tabel awal + kolom versi.
+  const migVersi = kode('docs/migrations/migration-kinerja-tutup-per-versi.sql').replace(/\s+/g, ' ')
+  ok('G39 Skema acuan = migrasi awal + kolom versi', tabel(skema).length > 50
+    && tabel(skema).replace(/ versi_tipe ENUM\('MURNI','PERUBAHAN'\) NOT NULL DEFAULT 'MURNI' COMMENT 'Versi RKO pemilik tutupan ini', versi_seq TINYINT NOT NULL DEFAULT 0,/, '')
+      .replace('PRIMARY KEY (tahun, sumber, versi_tipe, versi_seq, bulan)', 'PRIMARY KEY (tahun, sumber, bulan)') === tabel(mig))
+  ok('G40 PRIMARY KEY yang menolak tutup ganda — per versi', tabel(skema).includes('PRIMARY KEY (tahun, sumber, versi_tipe, versi_seq, bulan)')
+    && migVersi.includes('ADD PRIMARY KEY (tahun, sumber, versi_tipe, versi_seq, bulan)'))
   const ret = kode('lib/security/retensi-audit.ts')
   ok('G41 Jenis audit baru digolongkan "perubahan data"', ret.includes('KINERJA_TUTUP_BULAN: P, KINERJA_BUKA_BULAN: P'))
 }
