@@ -7,6 +7,7 @@ import 'server-only';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { petaIzinBba, type PetaIzinBba } from '@/lib/bba/izin-server';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import type { MenuBba } from '@/lib/bba/peran';
 
 export type IzinLayarBba = { peta: PetaIzinBba; bolehUbah: boolean };
@@ -16,6 +17,7 @@ export async function izinLayarBba(menu: MenuBba): Promise<IzinLayarBba> {
   const uid = h.get('x-user-id');
   const role = h.get('x-user-role');
   if (!uid || !role) redirect('/login');
+  await pastikanSesiHalaman();
   const peta = await petaIzinBba(Number(uid), role);
   // Ke Rencana (selalu terbuka), bukan /menu — orangnya berhak masuk modul, cuma tidak ke bagian ini.
   if (peta[menu] === 'TIDAK') redirect('/buku-besar-aset');

@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import KinerjaClient from './kinerja-client';
 import { sql, queryOne } from '@/lib/data/db';
 import { isKinerjaRole } from '@/lib/data/kinerja-schemas';
@@ -18,6 +19,7 @@ export default async function KinerjaPage() {
   const role     = h.get('x-user-role') as Role | null;
   const username = h.get('x-username');
   if (!userId || !role || !username) redirect('/login');
+  await pastikanSesiHalaman();
   if (!(await hasAppAccess(Number(userId), role, isKinerjaRole))) redirect('/menu');
 
   // T1 — sama seperti Renaksi: kartu abu di /menu cuma menutup satu pintu.

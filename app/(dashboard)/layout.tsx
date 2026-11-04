@@ -1,8 +1,7 @@
-import { headers, cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { SessionPayload, Role } from '@/types';
-import { getSession, COOKIE_NAME } from '@/lib/security/auth';
-import { alasanSesiDitolak } from '@/lib/security/jadwal-keluar-data';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import BfcacheGuard from '@/components/guards/BfcacheGuard';
 import SessionKeepAlive from '@/components/guards/SessionKeepAlive';
 import PenjagaPemeliharaan from '@/components/guards/PenjagaPemeliharaan';
@@ -22,15 +21,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!userId || !role || !username) redirect('/login');
 
-  // Proxy hanya menilai token (tanda tangan, umur, diam) — ia tidak bisa bertanya ke DB. Tanpa ini sesi
-  // yang dicabut admin, akun NONAKTIF, dan sesi yang dikeluarkan pemeliharaan tetap membuka layar yang
-  // hanya membaca x-user-* (menu, BLUD, Dashboard, …) sampai tokennya kedaluwarsa. Layout tidak dirender
-  // ulang saat berpindah halaman di tab yang sudah terbuka; sisi itu dijaga API (getSession) dan ping
-  // SessionKeepAlive. Token dibaca dulu: alasannya dinilai dari token yang ditolak.
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!(await getSession())) {
-    redirect((await alasanSesiDitolak(token)) === 'PEMELIHARAAN' ? '/login?reason=pemeliharaan' : '/login');
-  }
+  // Sesi dicabut / NONAKTIF / dikeluarkan pemeliharaan (proxy hanya menilai token). Layout ini tidak
+  // dirender ulang saat berpindah halaman di tab yang sudah terbuka — tiap halaman ikut memanggilnya.
+  await pastikanSesiHalaman();
 
   const session: SessionPayload = {
     userId:   Number(userId),

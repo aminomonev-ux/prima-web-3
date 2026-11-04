@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import MenuClient from './menu-client';
 import { sql, queryOne } from '@/lib/data/db';
 import type { Role } from '@/types';
@@ -13,6 +14,7 @@ export default async function MenuPage() {
   const role     = h.get('x-user-role') as Role | null;
   const username = h.get('x-username');
   if (!userId || !role || !username) redirect('/login');
+  await pastikanSesiHalaman();
 
   const row = await queryOne<{ theme_preference: string }>(
     sql`SELECT theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`

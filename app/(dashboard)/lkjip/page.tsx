@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import { sql, queryOne } from '@/lib/data/db';
 import { isLkjipRole } from '@/lib/lkjip/schemas';
 import { listDokumen } from '@/lib/lkjip/data';
@@ -16,6 +17,7 @@ export default async function LkjipPage() {
   const role     = h.get('x-user-role');
   const username = h.get('x-username');
   if (!userId || !role || !username) redirect('/login');
+  await pastikanSesiHalaman();
 
   const row = await queryOne<{ app_access: string[] | null; theme_preference: string }>(
     sql`SELECT app_access, theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`,

@@ -10,6 +10,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { bolehEdit, type Izin, type MenuPk } from '@/lib/pk/peran'
 import { petaIzinPk, type PetaIzinPk } from '@/lib/pk/izin-server'
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman'
 import type { Role } from '@/types'
 
 export type IzinLayarPk = {
@@ -31,6 +32,7 @@ export async function izinLayarPk(menu: MenuPk): Promise<IzinLayarPk> {
   const role = h.get('x-user-role') as Role | null
 
   if (!uid || !role) redirect('/login')
+  await pastikanSesiHalaman()
 
   // Izin hasil resolusi dua lapis (perkecualian orang > aturan peran > bawaan kode),
   // bukan dihitung dari role saja — kalau tidak, pengaturan per-orang di Admin Panel

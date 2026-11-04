@@ -1,12 +1,11 @@
 
 import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/security/auth';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import AdminClient from './admin-client';
 import { sql, queryOne } from '@/lib/data/db';
 
 export default async function AdminPage() {
-  const session = await getSession();
-  if (!session) redirect('/login');
+  const session = await pastikanSesiHalaman();
   // Admin Panel khusus SUPER_ADMIN (selaras proxy.ts). ADMIN kelola role user
   // via panel Kelola User di /usulan-kebutuhan (API /api/admin/users tetap terbuka utk ADMIN).
   if (session.role !== 'SUPER_ADMIN') redirect('/menu');

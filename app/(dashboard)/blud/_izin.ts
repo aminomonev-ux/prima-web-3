@@ -11,6 +11,7 @@ import { redirect } from 'next/navigation'
 import type { Izin, MenuBlud } from '@/lib/blud/peran'
 import { petaIzinBlud, type PetaIzinBlud } from '@/lib/blud/izin-server'
 import { modulSedangMati } from '@/lib/security/guard'
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman'
 import { kunciSakelarUntuk, urlPemeliharaan } from '@/lib/registry/apps'
 import type { Role } from '@/types'
 
@@ -33,6 +34,7 @@ export async function izinLayar(menu: MenuBlud): Promise<IzinLayar> {
   const role = h.get('x-user-role') as Role | null
 
   if (!uid || !role) redirect('/login')
+  await pastikanSesiHalaman()
 
   // Izin hasil resolusi dua lapis (perkecualian orang > aturan peran > bawaan kode),
   // bukan dihitung dari role saja — kalau tidak, pengaturan per-orang di Admin Panel

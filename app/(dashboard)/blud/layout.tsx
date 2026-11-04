@@ -5,6 +5,7 @@ import BludShell from './blud-shell'
 import { sql, queryOne } from '@/lib/data/db'
 import { isBludRole } from '@/lib/blud/schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman'
 import { infoBeku } from '@/lib/security/beku'
 import { lingkupSakelarModul, urlPemeliharaan } from '@/lib/registry/apps'
 import { petaIzinBlud } from '@/lib/blud/izin-server'
@@ -19,6 +20,7 @@ export default async function BludLayout({ children }: { children: React.ReactNo
   const role     = h.get('x-user-role') as Role | null
 
   if (!userId || !username || !role) redirect('/login')
+  await pastikanSesiHalaman()
   if (!(await hasAppAccess(Number(userId), role, isBludRole))) redirect('/menu')
 
   // S4 — kartu BLUD di /menu memang sudah abu saat maintenance, tapi itu cuma

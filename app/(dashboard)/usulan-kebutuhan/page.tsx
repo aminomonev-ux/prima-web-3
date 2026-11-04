@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import UsulanClient from './usulan-client';
 import { sql, queryOne } from '@/lib/data/db';
 import { modulSedangMati } from '@/lib/security/guard';
@@ -17,6 +18,7 @@ export default async function UsulanKebutuhanPage() {
   const role     = h.get('x-user-role') as Role | null;
   const username = h.get('x-username');
   if (!userId || !role || !username) redirect('/login');
+  await pastikanSesiHalaman();
 
   // T-1: `app_status_usulan_aset` punya tombol di Admin Panel sejak lama, tapi sampai
   // sekarang tidak dibaca siapa pun — mematikan modul Usulan cuma membuat kartunya abu

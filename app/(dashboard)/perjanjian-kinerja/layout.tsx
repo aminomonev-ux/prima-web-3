@@ -10,6 +10,7 @@ import { PkYearProvider } from './_context/PkYearContext'
 import { sql, queryOne } from '@/lib/data/db'
 import { isPkRole } from '@/lib/data/pk-schemas'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman'
 import { kunciSakelarUntuk, urlPemeliharaan } from '@/lib/registry/apps'
 import { petaIzinPk } from '@/lib/pk/izin-server'
 import { infoBeku } from '@/lib/security/beku'
@@ -24,6 +25,7 @@ export default async function PerjanjianKinerjaLayout({ children }: { children: 
   const role     = h.get('x-user-role') as Role | null
 
   if (!userId || !username || !role) redirect('/login')
+  await pastikanSesiHalaman()
   if (!(await hasAppAccess(Number(userId), role, isPkRole))) redirect('/menu')
 
   // T-1: sakelar `app_status_perjanjian_kinerja` sudah lama ada tombolnya, tapi tidak

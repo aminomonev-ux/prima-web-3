@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import { sql, queryOne, queryMany } from '@/lib/data/db';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
@@ -18,6 +19,7 @@ export default async function CetakBbaPage() {
   const role = h.get('x-user-role');
   const username = h.get('x-username');
   if (!userId || !role || !username) redirect('/login');
+  await pastikanSesiHalaman();
 
   const row = await queryOne<{ app_access: string[] | null; theme_preference: string }>(
     sql`SELECT app_access, theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`,

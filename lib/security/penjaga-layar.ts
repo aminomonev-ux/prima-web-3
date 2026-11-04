@@ -15,6 +15,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cekModul, kunciSakelarUntuk, modul, urlPemeliharaan } from '@/lib/registry/apps'
 import { hasAppAccess, modulSedangMati } from '@/lib/security/guard'
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman'
 import { infoBeku, TIDAK_BEKU, type InfoBeku } from '@/lib/security/beku'
 
 /**
@@ -46,6 +47,7 @@ export async function jagaLayarModul(kunci: string): Promise<void> {
   const userId = h.get('x-user-id')
   const role = h.get('x-user-role')
   if (!userId || !role) redirect('/login')
+  await pastikanSesiHalaman()
   if (!(await hasAppAccess(Number(userId), role, cekModul(kunci)))) redirect('/menu')
   // Sakelarnya dibaca dari registry — daftar kesekian yang mengetik `app_status_iki`
   // adalah daftar kesekian yang bisa ketinggalan.

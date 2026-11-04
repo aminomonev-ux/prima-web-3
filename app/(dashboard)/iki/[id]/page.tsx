@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { redirect, notFound } from 'next/navigation';
+import { pastikanSesiHalaman } from '@/lib/security/sesi-halaman';
 import { sql, queryOne, safeInt } from '@/lib/data/db';
 import { isIkiRole } from '@/lib/data/iki-schemas';
 import { getDokumen } from '@/lib/data/iki';
@@ -17,6 +18,7 @@ export default async function IkiEditorPage({ params }: { params: Promise<{ id: 
   const role     = h.get('x-user-role');
   const username = h.get('x-username');
   if (!userId || !role || !username) redirect('/login');
+  await pastikanSesiHalaman();
 
   const row = await queryOne<{ app_access: string[] | null; theme_preference: string }>(
     sql`SELECT app_access, theme_preference FROM users WHERE id = ${Number(userId)} LIMIT 1`,
