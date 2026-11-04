@@ -176,6 +176,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
     ]},
     { judul: 'Aplikasi', items: [
       { id:'app-control',    label:'Sakelar',     icon:<Power size={15}/> },
+      ...(isSA ? [{ id:'pemeliharaan' as Tab, label:'Pemeliharaan', icon:<Wrench size={15}/> }] : []),
     ]},
     { judul: 'Keamanan', items: [
       { id:'sessions',       label:'Sesi Aktif',  icon:<Monitor size={15}/> },
@@ -186,7 +187,6 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
     { judul: 'Sistem', items: [
       ...(isSA ? [{ id:'pemeriksaan' as Tab, label:'Pemeriksaan', icon:<Stethoscope size={15}/>, lencana: perluDilihat }] : []),
       { id:'broadcast',      label:'Broadcast',   icon:<Radio size={15}/> },
-      ...(isSA ? [{ id:'pemeliharaan' as Tab, label:'Pemeliharaan', icon:<Wrench size={15}/> }] : []),
       { id:'email-notif',    label:'Email',       icon:<Mail size={15}/> },
       { id:'rima-feedback',  label:'RIMA',        icon:<MessageSquareWarning size={15}/> },
     ]},

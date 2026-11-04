@@ -21,9 +21,14 @@ Sebelum build di server kantor, orang yang masih bekerja harus dikeluarkan. Yang
   Pagar teknis 30 menit–168 jam (7 hari), diperiksa SERVER — Zod route dan `kirimDalam` (400), bukan
   hanya layar. Disimpan sebagai jam mutlak `login_dibuka`, jadi jadwal lama tetap terbaca.
 
+- **Tidak digabung dengan Sakelar** (keputusan 2026-11-04), hanya diletakkan berdampingan di grup
+  Aplikasi. Sakelar menutup pintu modul/seluruh aplikasi tanpa mengeluarkan siapa pun dan bertahan
+  sampai dimatikan; Pemeliharaan mengeluarkan semua orang dengan peringatan lalu selesai sendiri.
+  Mengirim pemeliharaan TIDAK mengubah sakelar mana pun — untuk build, "Tahan login" sudah cukup.
+
 ## 3. Alur
 
-1. Admin Panel → Sistem → **Pemeliharaan**: pesan (isian bawaan), jeda, centang tahan login + lamanya →
+1. Admin Panel → Aplikasi → **Pemeliharaan** (di bawah Sakelar; sejak 2026-11-04, dulu di grup Sistem): pesan (isian bawaan), jeda, centang tahan login + lamanya →
    Kirim (konfirmasi menyebut jumlah sesi lain yang aktif dan perkiraan jam login terbuka, dihitung dari
    jam MySQL yang dipulangkan GET panel, bukan jam peramban). Panel menampilkan hitung mundur + Batalkan,
    lalu "Login ditahan" + sisa waktu (`j:mm:ss` bila ≥ 1 jam) + Buka login sekarang.
