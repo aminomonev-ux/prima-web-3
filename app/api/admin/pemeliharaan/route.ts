@@ -6,7 +6,9 @@ import { z } from 'zod';
 import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
-import { PILIHAN_JEDA_MENIT, ringkasJadwal, jamDari } from '@/lib/security/jadwal-keluar';
+import {
+  PILIHAN_JEDA_MENIT, TAHAN_LOGIN_BAWAAN_JAM, PESAN_TAHAN_TIDAK_SAH, menitTahan, labelTahan, ringkasJadwal, jamDari, kapanDari,
+} from '@/lib/security/jadwal-keluar';
 import {
   bacaJadwalSekarang, hitungSesiLain, kirimJadwalKeluar, batalkanJadwalKeluar,
   bukaLoginKeluar, JadwalKeluarError,
@@ -20,6 +22,8 @@ const BodySchema = z.discriminatedUnion('aksi', [
     pesan:       z.string().trim().min(1, 'Pesan wajib diisi.').max(500, 'Pesan maksimal 500 karakter.'),
     menit:       z.number().int().refine(n => (PILIHAN_JEDA_MENIT as readonly number[]).includes(n), 'Jeda tidak dikenal.'),
     tahan_login: z.boolean(),
+    // Tab lama tanpa kolom ini = perilaku lama (2 jam).
+    tahan_jam:   z.number().refine(j => menitTahan(j) !== null, PESAN_TAHAN_TIDAK_SAH).default(TAHAN_LOGIN_BAWAAN_JAM),
   }),
   z.object({ aksi: z.literal('batalkan') }),
   z.object({ aksi: z.literal('buka_login') }),
@@ -37,6 +41,8 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     jadwal: ringkasJadwal(jadwal, sekarang),
+    // Jam MySQL — panel memperkirakan jam login dibuka di dialog Kirim dari jam ini, bukan jam peramban.
+    sekarang,
     sesi_lain_aktif: await hitungSesiLain(session.sessionId ?? '', jadwal),
   });
 }
@@ -59,11 +65,11 @@ export async function POST(req: NextRequest) {
     let detail: string;
     if (b.aksi === 'kirim') {
       const j = await kirimJadwalKeluar({
-        pesan: b.pesan, menit: b.menit, tahanLogin: b.tahan_login,
+        pesan: b.pesan, menit: b.menit, tahanLogin: b.tahan_login, tahanJam: b.tahan_jam,
         oleh: session.username, sesiPengirim: session.sessionId ?? '',
       });
       detail = `Kirim: keluar otomatis pukul ${jamDari(j.batas)} (jeda ${b.menit} menit)`
-        + (j.tahan_login ? `, login ditahan sampai ${jamDari(j.login_dibuka)}` : ', login tidak ditahan')
+        + (j.tahan_login ? `, login ditahan sampai ${kapanDari(j.login_dibuka, j.dikirim)} (${labelTahan(b.tahan_jam)} sesudah keluar)` : ', login tidak ditahan')
         + `: "${b.pesan.slice(0, 80)}"`;
     } else if (b.aksi === 'batalkan') {
       const j = await batalkanJadwalKeluar();

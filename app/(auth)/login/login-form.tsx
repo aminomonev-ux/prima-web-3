@@ -14,7 +14,7 @@ import type { Pemberitahuan } from '@/lib/security/pemeliharaan';
 
 export default function LoginForm({ pemeliharaan, loginDitahan }: {
   pemeliharaan: Pemberitahuan[];
-  /** Pemeliharaan & keluar otomatis: login ditahan untuk selain SUPER_ADMIN sampai jam `sampai`. */
+  /** Pemeliharaan & keluar otomatis: login ditahan untuk selain SUPER_ADMIN sampai `sampai` ("pukul 10:30" / "Rabu, 5 Nov pukul 10:30"). */
   loginDitahan: { sampai: string } | null;
 }) {
   const router = useRouter();
@@ -245,7 +245,7 @@ export default function LoginForm({ pemeliharaan, loginDitahan }: {
                   <div>
                     <div className="lp-pemeliharaan-baris">
                       <b>PRIMA sedang dalam pemeliharaan.</b>
-                      <div className="lp-pemeliharaan-sampai">Login dibuka lagi paling lambat pukul {loginDitahan.sampai}</div>
+                      <div className="lp-pemeliharaan-sampai">Login dibuka lagi paling lambat {loginDitahan.sampai}</div>
                     </div>
                   </div>
                 </div>

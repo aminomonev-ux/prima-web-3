@@ -15,14 +15,20 @@ Sebelum build di server kantor, orang yang masih bekerja harus dikeluarkan. Yang
 - Pengirim **SUPER_ADMIN saja** (sama dengan Broadcast & emergency logout).
 - Jeda bisa dipilih **1 / 5 / 10 / 15 menit**, bawaan 5.
 - **Tahan login** sesudahnya: centang bawaan nyala; hanya SUPER_ADMIN yang bisa masuk; dibuka manual
-  lewat "Buka login sekarang", atau **terbuka sendiri 2 jam** sesudah waktu habis supaya tidak terkunci
-  seharian karena lupa.
+  lewat "Buka login sekarang", atau **terbuka sendiri** sesudah waktu habis supaya tidak terkunci
+  seharian karena lupa. Lamanya dipilih **tiap kali mengirim** (susulan 2026-11-04): 30 menit / 1 / 2 /
+  4 / 8 jam, atau "Lainnya…" diketik dalam jam (koma boleh, "1,5" = 1 jam 30 menit); bawaan 2 jam.
+  Pagar teknis 30 menit–168 jam (7 hari), diperiksa SERVER — Zod route dan `kirimDalam` (400), bukan
+  hanya layar. Disimpan sebagai jam mutlak `login_dibuka`, jadi jadwal lama tetap terbaca.
 
 ## 3. Alur
 
-1. Admin Panel → Sistem → **Pemeliharaan**: pesan (isian bawaan), jeda, centang tahan login → Kirim
-   (konfirmasi menyebut jumlah sesi lain yang aktif). Panel menampilkan hitung mundur + Batalkan, lalu
-   "Login ditahan" + Buka login sekarang.
+1. Admin Panel → Sistem → **Pemeliharaan**: pesan (isian bawaan), jeda, centang tahan login + lamanya →
+   Kirim (konfirmasi menyebut jumlah sesi lain yang aktif dan perkiraan jam login terbuka, dihitung dari
+   jam MySQL yang dipulangkan GET panel, bukan jam peramban). Panel menampilkan hitung mundur + Batalkan,
+   lalu "Login ditahan" + sisa waktu (`j:mm:ss` bila ≥ 1 jam) + Buka login sekarang.
+   Jam login terbuka ditulis lewat SATU `kapanDari` di dialog, kartu panel, halaman login, dan audit:
+   hari ini "pukul 10:30", hari lain "Kamis, 5 Nov pukul 10:30", tahun lain ikut tahunnya.
 2. Tiap tab PRIMA (`PenjagaPemeliharaan` di tata letak dashboard) bertanya `GET /api/auth/pemeliharaan`
    tiap 30 detik dan saat tab kembali terlihat. Ada jadwal → modal pesan + hitung mundur:
    - **Lanjut simpan dulu** → modal mengecil jadi spanduk merah (sisa waktu) supaya Simpan bisa ditekan;
@@ -70,6 +76,6 @@ Sebelum build di server kantor, orang yang masih bekerja harus dikeluarkan. Yang
 - Halaman yang sudah terbuka dengan sesi yang ditolak tetap tergambar sampai tabnya bertanya ke server
   (`proxy.ts` hanya memeriksa JWT) — sama seperti emergency logout.
 
-Regresi: `npx tsx --env-file=.env.local scripts/test-pemeliharaan-keluar.mts` (73; bagian C MySQL di
+Regresi: `npx tsx --env-file=.env.local scripts/test-pemeliharaan-keluar.mts` (82; bagian C MySQL di
 SATU transaksi yang di-ROLLBACK — sesi sungguhan tidak tersentuh; `tx` uji memakai penyusun `sql` aplikasi
 supaya potongan SQL bersarang ikut tersusun).

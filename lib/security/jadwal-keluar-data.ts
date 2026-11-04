@@ -3,8 +3,8 @@
 import { sql, withTransaction, type Penanya, type TxSql } from '@/lib/data/db';
 import { verifyToken } from '@/lib/security/auth';
 import {
-  KUNCI_JADWAL_KELUAR, TAHAN_LOGIN_MAKS_JAM, bacaJadwal, sesiKenaKeluar, statusUntukSesi, loginDitahan,
-  alasanTolakKirim, alasanTolakBatal, alasanTolakBukaLogin, kalimatLoginDitahan, jamDari,
+  KUNCI_JADWAL_KELUAR, PESAN_TAHAN_TIDAK_SAH, bacaJadwal, sesiKenaKeluar, statusUntukSesi, loginDitahan, menitTahan,
+  alasanTolakKirim, alasanTolakBatal, alasanTolakBukaLogin, kalimatLoginDitahan, kapanDari,
   type JadwalKeluar, type StatusTab,
 } from './jadwal-keluar';
 
@@ -100,7 +100,7 @@ export async function alasanSesiDitolak(token: string | undefined, q: Penanya = 
 /** Login route: kalimat penolakan kalau login sedang ditahan, `null` kalau boleh. */
 export async function alasanLoginDitahan(): Promise<string | null> {
   const { jadwal, sekarang } = await bacaJadwalSekarang();
-  return jadwal && loginDitahan(jadwal, sekarang) ? kalimatLoginDitahan(jadwal) : null;
+  return jadwal && loginDitahan(jadwal, sekarang) ? kalimatLoginDitahan(jadwal, sekarang) : null;
 }
 
 /**
@@ -110,7 +110,7 @@ export async function alasanLoginDitahan(): Promise<string | null> {
 export async function pemberitahuanLoginDitahan(): Promise<{ sampai: string } | null> {
   try {
     const { jadwal, sekarang } = await bacaJadwalSekarang();
-    return jadwal && loginDitahan(jadwal, sekarang) ? { sampai: jamDari(jadwal.login_dibuka) } : null;
+    return jadwal && loginDitahan(jadwal, sekarang) ? { sampai: kapanDari(jadwal.login_dibuka, sekarang) } : null;
   } catch {
     return null;
   }
@@ -146,18 +146,21 @@ async function kunciJadwal(tx: TxSql): Promise<{ jadwal: JadwalKeluar | null; se
 const tulisJadwal = (tx: TxSql, j: JadwalKeluar | null) =>
   tx`UPDATE app_config SET value = ${j ? JSON.stringify(j) : ''} WHERE \`key\` = ${KUNCI_JADWAL_KELUAR}`;
 
-export interface OpsiKirim { pesan: string; menit: number; tahanLogin: boolean; oleh: string; sesiPengirim: string }
+/** `tahanJam` = login terbuka sendiri sekian jam sesudah batas (hanya dipakai bila `tahanLogin`). */
+export interface OpsiKirim { pesan: string; menit: number; tahanLogin: boolean; tahanJam: number; oleh: string; sesiPengirim: string }
 
 /** Badan transaksi dipisah (`…Dalam`) supaya uji bisa menjalankannya di transaksi yang dibatalkan. */
 export async function kirimDalam(tx: TxSql, opsi: OpsiKirim): Promise<JadwalKeluar> {
   const { jadwal: lama, sekarang } = await kunciJadwal(tx);
   const tolak = alasanTolakKirim(lama, sekarang);
   if (tolak) throw new JadwalKeluarError(tolak);
+  const tahan = menitTahan(opsi.tahanJam);
+  if (opsi.tahanLogin && tahan === null) throw new JadwalKeluarError(PESAN_TAHAN_TIDAK_SAH, 400);
   // Jadwal lama akan ditimpa: sesi yang sudah dikeluarkannya dimatikan permanen dulu.
   if (lama) await terapkanKeluar(tx, lama);
   const [w] = await tx`
     SELECT DATE_FORMAT(CAST(${sekarang} AS DATETIME) + INTERVAL ${opsi.menit} MINUTE, ${F}) AS batas,
-           DATE_FORMAT(CAST(${sekarang} AS DATETIME) + INTERVAL ${opsi.menit} MINUTE + INTERVAL ${TAHAN_LOGIN_MAKS_JAM} HOUR, ${F}) AS dibuka
+           DATE_FORMAT(CAST(${sekarang} AS DATETIME) + INTERVAL ${opsi.menit} MINUTE + INTERVAL ${tahan ?? 0} MINUTE, ${F}) AS dibuka
   ` as { batas: string; dibuka: string }[];
   const baru: JadwalKeluar = {
     pesan: opsi.pesan, dikirim: sekarang, batas: w.batas, oleh: opsi.oleh, sesi_pengirim: opsi.sesiPengirim,

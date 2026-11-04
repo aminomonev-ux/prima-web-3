@@ -8,9 +8,9 @@
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
 import {
-  KUNCI_JADWAL_KELUAR, PILIHAN_JEDA_MENIT, TAHAN_LOGIN_MAKS_JAM, bacaJadwal, detikAntara, sesiKenaKeluar,
+  KUNCI_JADWAL_KELUAR, PILIHAN_JEDA_MENIT, PILIHAN_TAHAN_JAM, TAHAN_LOGIN_BAWAAN_JAM, TAHAN_LOGIN_MAKS_JAM, bacaJadwal, detikAntara, sesiKenaKeluar,
   loginDitahan, statusUntukSesi, ringkasJadwal, alasanTolakKirim, alasanTolakBatal, alasanTolakBukaLogin,
-  kalimatLoginDitahan, formatSisa, type JadwalKeluar,
+  kalimatLoginDitahan, formatSisa, menitTahan, labelTahan, tambahMenit, kapanDari, type JadwalKeluar,
 } from '../lib/security/jadwal-keluar'
 
 let lulus = 0
@@ -58,7 +58,9 @@ ok('A12 login ditahan sejak pesan dikirim sampai dibuka',
   !loginDitahan(J, '2026-11-03 09:59:59') && loginDitahan(J, '2026-11-03 10:00:00') && loginDitahan(J, '2026-11-03 12:04:59')
   && !loginDitahan(J, '2026-11-03 12:05:00'))
 ok('A13 tanpa centang tahan: login tidak pernah ditahan', !loginDitahan({ ...J, tahan_login: false }, '2026-11-03 10:06:00') && !loginDitahan(null, '2026-11-03 10:06:00'))
-ok('A14 kalimat login ditahan menyebut jamnya', kalimatLoginDitahan(J).includes('12:05'), kalimatLoginDitahan(J))
+ok('A14 kalimat login ditahan menyebut jamnya; hari lain → nama hari + tanggal', kalimatLoginDitahan(J, '2026-11-03 10:06:00').includes('paling lambat pukul 12:05')
+  && kalimatLoginDitahan({ ...J, login_dibuka: '2026-11-05 10:30:00' }, '2026-11-03 10:06:00').includes('paling lambat Kamis, 5 Nov pukul 10:30'),
+  kalimatLoginDitahan({ ...J, login_dibuka: '2026-11-05 10:30:00' }, '2026-11-03 10:06:00'))
 
 const st = statusUntukSesi(J, staf('2026-11-03 09:00:00'), '2026-11-03 10:01:30')
 ok('A15 status tab: hitung mundur dari sisa menurut server', st.aktif && st.sisa_detik === 210 && !st.dikecualikan && st.pesan === 'Simpan dulu', JSON.stringify(st))
@@ -80,8 +82,19 @@ ok('A21 batalkan hanya sebelum batas', alasanTolakBatal(J, '2026-11-03 10:04:00'
 ok('A22 buka login hanya selama ditahan', alasanTolakBukaLogin(J, '2026-11-03 10:30:00') === null && !!alasanTolakBukaLogin(J, '2026-11-03 12:05:00')
   && !!alasanTolakBukaLogin({ ...J, tahan_login: false }, '2026-11-03 10:30:00'))
 ok('A23 selisih detik melewati tengah malam & akhir bulan', detikAntara('2026-10-31 23:59:30', '2026-11-01 00:00:10') === 40)
-ok('A24 hitung mundur mm:ss, tak pernah negatif', formatSisa(299) === '04:59' && formatSisa(0) === '00:00' && formatSisa(-5) === '00:00' && formatSisa(900) === '15:00')
-ok('A25 pilihan jeda 1/5/10/15, tahan paling lama 2 jam', PILIHAN_JEDA_MENIT.join() === '1,5,10,15' && TAHAN_LOGIN_MAKS_JAM === 2)
+ok('A24 hitung mundur mm:ss, tak pernah negatif; ≥ 1 jam → j:mm:ss', formatSisa(299) === '04:59' && formatSisa(0) === '00:00' && formatSisa(-5) === '00:00'
+  && formatSisa(900) === '15:00' && formatSisa(3599) === '59:59' && formatSisa(3600) === '1:00:00' && formatSisa(129600) === '36:00:00')
+ok('A25 pilihan jeda 1/5/10/15; tahan bawaan 2 jam, pilihan cepat 30 menit–8 jam', PILIHAN_JEDA_MENIT.join() === '1,5,10,15'
+  && TAHAN_LOGIN_BAWAAN_JAM === 2 && PILIHAN_TAHAN_JAM.join() === '0.5,1,2,4,8')
+ok('A26 lama tahan: 30 menit–168 jam (7 hari) dalam menit; di luar itu / bukan angka ditolak',
+  menitTahan(0.5) === 30 && menitTahan(1.5) === 90 && menitTahan(168) === 10080 && menitTahan(12) === 720
+  && menitTahan(0.25) === null && menitTahan(168.5) === null && menitTahan(Number.NaN) === null && menitTahan(-2) === null && TAHAN_LOGIN_MAKS_JAM === 168)
+ok('A27 label lama tahan', labelTahan(0.5) === '30 menit' && labelTahan(1) === '1 jam' && labelTahan(1.5) === '1,5 jam' && labelTahan(36) === '36 jam' && labelTahan(500) === '')
+ok('A28 tambah menit melewati tengah malam, akhir bulan & akhir tahun',
+  tambahMenit('2026-11-03 23:50:00', 20) === '2026-11-04 00:10:00' && tambahMenit('2026-12-31 22:00:00', 10080) === '2027-01-07 22:00:00')
+ok('A29 jam buka: hari sama → "pukul", hari lain → nama hari, tahun lain → + tahun',
+  kapanDari('2026-11-03 12:05:00', '2026-11-03 10:00:00') === 'pukul 12:05' && kapanDari('2026-11-05 10:30:00', '2026-11-03 10:00:00') === 'Kamis, 5 Nov pukul 10:30'
+  && kapanDari('2027-01-07 22:00:00', '2026-12-31 22:00:00') === 'Kamis, 7 Jan 2027 pukul 22:00')
 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('B. Sambungan kode')
@@ -145,10 +158,23 @@ ok('B23 baris jadwal dibuat dulu (INSERT IGNORE) lalu dikunci FOR UPDATE (L69-a)
 const KIRIM = badan(DATA, 'export async function kirimDalam')
 ok('B24 kirim: tolak dulu, matikan sesi jadwal lama, baru tulis', urut(KIRIM, 'await kunciJadwal(tx)', 'alasanTolakKirim(lama, sekarang)', 'if (lama) await terapkanKeluar(tx, lama);', 'await tulisJadwal(tx, baru)'))
 ok('B25 kirim: batas dihitung jam MySQL, bukan jam Node', KIRIM.includes('CAST(${sekarang} AS DATETIME) + INTERVAL ${opsi.menit} MINUTE') && !/Date\.now|new Date/.test(KIRIM))
+ok('B25b kirim: lama tahan pilihan (menit) dinilai SEBELUM ditulis, tidak lagi angka mati 2 jam',
+  urut(KIRIM, 'const tahan = menitTahan(opsi.tahanJam);', 'if (opsi.tahanLogin && tahan === null) throw new JadwalKeluarError(PESAN_TAHAN_TIDAK_SAH, 400);', 'await tulisJadwal(tx, baru)')
+  && KIRIM.includes('+ INTERVAL ${opsi.menit} MINUTE + INTERVAL ${tahan ?? 0} MINUTE') && !/HOUR/.test(KIRIM))
+ok('B20b route admin: tahan_jam dinilai menitTahan, tab lama tanpa kolom = 2 jam, diteruskan ke kirim',
+  ADM.includes('tahan_jam:   z.number().refine(j => menitTahan(j) !== null, PESAN_TAHAN_TIDAK_SAH).default(TAHAN_LOGIN_BAWAAN_JAM),')
+  && ADM.includes('tahanJam: b.tahan_jam,') && /export async function GET[\s\S]*?\n    sekarang,\n/.test(ADM))
+const TP = tanpaKomentar(sumber('app/(dashboard)/admin/_panels/TabPemeliharaan.tsx'))
+ok('B30 panel: pilihan cepat + "Lainnya" (ketik jam, koma boleh), Kirim mati bila tidak sah, jam buka bertanggal',
+  TP.includes('PILIHAN_TAHAN_JAM.map(h =>') && TP.includes('<option value={LAINNYA}>Lainnya…</option>')
+  && TP.includes("const tahanJam = tahanPilih === LAINNYA ? bacaDesimal(tahanKetik) : Number(tahanPilih);")
+  && TP.includes('disabled={sibuk || !pesan.trim() || k === null || !tahanSah}') && TP.includes('...(tahan ? { tahan_jam: tahanJam } : {})')
+  && (TP.match(/kapanDari\(j\.login_dibuka, j\.sekarang\)/g) ?? []).length === 2 && !TP.includes('TAHAN_LOGIN_MAKS_JAM} jam kemudian'))
 
 const LF = tanpaKomentar(sumber('app/(auth)/login/login-form.tsx'))
 ok('B26 halaman login: keterangan dikeluarkan untuk pemeliharaan + pemberitahuan login ditahan',
-  LF.includes("searchParams.get('reason') === 'pemeliharaan'") && LF.includes('Login dibuka lagi paling lambat pukul {loginDitahan.sampai}')
+  LF.includes("searchParams.get('reason') === 'pemeliharaan'") && LF.includes('Login dibuka lagi paling lambat {loginDitahan.sampai}')
+  && DATA.includes('{ sampai: kapanDari(jadwal.login_dibuka, sekarang) }')
   && tanpaKomentar(sumber('app/(auth)/login/page.tsx')).includes('<LoginForm pemeliharaan={pemeliharaan} loginDitahan={loginDitahan} />'))
 const AC = tanpaKomentar(sumber('app/(dashboard)/admin/admin-client.tsx'))
 ok('B27 tab Admin Panel hanya untuk SUPER_ADMIN', AC.includes("...(isSA ? [{ id:'pemeliharaan' as Tab,") && AC.includes("{tab === 'pemeliharaan'    && isSA && <TabPemeliharaan/>}"))
@@ -183,16 +209,28 @@ if (!process.env.MYSQL_HOST) {
     const [rSt] = await c.query("INSERT INTO users (username, email, password_hash, role, status) VALUES ('uji_pml_staf', 'uji_pml_staf@uji.test', 'x', 'PROGRAM', 'AKTIF')")
     const idSa = (rSa as { insertId: number }).insertId, idSt = (rSt as { insertId: number }).insertId
 
-    const j = await kirimDalam(tx, { pesan: 'uji', menit: 5, tahanLogin: true, oleh: 'uji_pml_sa', sesiPengirim: 'UJI-PML-PENGIRIM' })
+    const j = await kirimDalam(tx, { pesan: 'uji', menit: 5, tahanLogin: true, tahanJam: 2, oleh: 'uji_pml_sa', sesiPengirim: 'UJI-PML-PENGIRIM' })
     ok('C1 kirim: batas = dikirim + 5 menit, login dibuka = batas + 2 jam (jam MySQL)',
       detikAntara(j.dikirim, j.batas) === 300 && detikAntara(j.batas, j.login_dibuka) === 7200, JSON.stringify(j))
     const { jadwal: tersimpan } = await bacaJadwalSekarang(tx)
     ok('C2 jadwal tersimpan di app_config persis seperti yang dipulangkan', JSON.stringify(tersimpan) === JSON.stringify(j))
-    const dua = await coba(() => kirimDalam(tx, { pesan: 'lagi', menit: 1, tahanLogin: false, oleh: 'x', sesiPengirim: '' }))
+    const dua = await coba(() => kirimDalam(tx, { pesan: 'lagi', menit: 1, tahanLogin: false, tahanJam: 2, oleh: 'x', sesiPengirim: '' }))
     ok('C3 kirim kedua selama hitung mundur ditolak', dua instanceof JadwalKeluarError)
-    const tanpaTahan = await coba(async () => { await batalkanDalam(tx); return kirimDalam(tx, { pesan: 'u', menit: 1, tahanLogin: false, oleh: 'x', sesiPengirim: '' }) })
+    // Lama tahan yang tidak sah tidak dipersoalkan bila login memang tidak ditahan.
+    const tanpaTahan = await coba(async () => { await batalkanDalam(tx); return kirimDalam(tx, { pesan: 'u', menit: 1, tahanLogin: false, tahanJam: 999, oleh: 'x', sesiPengirim: '' }) })
     ok('C4 tanpa tahan login: login_dibuka = batas', !(tanpaTahan instanceof Error) && tanpaTahan.login_dibuka === tanpaTahan.batas)
     await batalkanDalam(tx)
+    const jamRagam = await coba(async () => {
+      const satuSetengah = await kirimDalam(tx, { pesan: 'u', menit: 5, tahanLogin: true, tahanJam: 1.5, oleh: 'x', sesiPengirim: '' })
+      await batalkanDalam(tx)
+      const tujuhHari = await kirimDalam(tx, { pesan: 'u', menit: 5, tahanLogin: true, tahanJam: 168, oleh: 'x', sesiPengirim: '' })
+      await batalkanDalam(tx)
+      return [detikAntara(satuSetengah.batas, satuSetengah.login_dibuka), detikAntara(tujuhHari.batas, tujuhHari.login_dibuka)]
+    })
+    ok('C4a lama tahan pilihan: 1,5 jam & 7 hari sesudah batas (jam MySQL)', !(jamRagam instanceof Error) && jamRagam[0] === 5400 && jamRagam[1] === 604800, JSON.stringify(jamRagam))
+    const kelamaan = await coba(() => kirimDalam(tx, { pesan: 'u', menit: 5, tahanLogin: true, tahanJam: 200, oleh: 'x', sesiPengirim: '' }))
+    ok('C4b lama tahan di luar 7 hari ditolak oleh jalur tulis sendiri (bukan hanya Zod), jadwal tidak tertulis',
+      kelamaan instanceof JadwalKeluarError && kelamaan.status === 400 && (await bacaJadwalSekarang(tx)).jadwal === null)
     ok('C5 batalkan mengosongkan jadwal; batalkan lagi ditolak', (await bacaJadwalSekarang(tx)).jadwal === null && (await coba(() => batalkanDalam(tx))) instanceof JadwalKeluarError)
 
     // Jadwal yang batasnya sudah lewat: dikirim 6 menit lalu, keluar 1 menit lalu.
@@ -253,7 +291,7 @@ if (!process.env.MYSQL_HOST) {
     ok('C12 buka login lagi ditolak', (await coba(() => bukaLoginDalam(tx))) instanceof JadwalKeluarError)
 
     await c.query("UPDATE user_sessions SET invalidated_at = NULL WHERE session_id = 'UJI-PML-STAF-LAMA'")
-    const baru = await kirimDalam(tx, { pesan: 'kedua', menit: 10, tahanLogin: false, oleh: 'uji_pml_sa', sesiPengirim: 'UJI-PML-PENGIRIM' })
+    const baru = await kirimDalam(tx, { pesan: 'kedua', menit: 10, tahanLogin: false, tahanJam: 2, oleh: 'uji_pml_sa', sesiPengirim: 'UJI-PML-PENGIRIM' })
     ok('C13 kirim sesudah jadwal lama selesai: jadwal lama ditimpa, sesi yang dikeluarkannya dimatikan permanen dulu',
       baru.pesan === 'kedua' && Number(((await c.query("SELECT invalidated_at IS NOT NULL AS m FROM user_sessions WHERE session_id = 'UJI-PML-STAF-LAMA'"))[0] as { m: number }[])[0].m) === 1)
   } finally {
