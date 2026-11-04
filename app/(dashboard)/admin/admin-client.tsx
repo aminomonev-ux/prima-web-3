@@ -275,7 +275,7 @@ export default function AdminClient({ userId, username, role, sessionId, themePr
         {tab === 'menu-access'     && <MenuAccessRoleTab isSA={isSA}/>}
         {tab === 'security-status' && <TabSecurityStatus/>}
         {tab === 'broadcast'       && <TabBroadcast/>}
-        {tab === 'pemeliharaan'    && isSA && <TabPemeliharaan/>}
+        {tab === 'pemeliharaan'    && isSA && <TabPemeliharaan keSakelar={()=>setTab('app-control')}/>}
         {tab === 'audit-trail'     && <TabAuditTrail/>}
         {tab === 'email-notif'     && <TabEmailNotif   isSA={isSA}/>}
         {tab === 'promotion'       && isSA && <PromotionRequestsPanel/>}

@@ -177,7 +177,15 @@ ok('B26 halaman login: keterangan dikeluarkan untuk pemeliharaan + pemberitahuan
   && DATA.includes('{ sampai: kapanDari(jadwal.login_dibuka, sekarang) }')
   && tanpaKomentar(sumber('app/(auth)/login/page.tsx')).includes('<LoginForm pemeliharaan={pemeliharaan} loginDitahan={loginDitahan} />'))
 const AC = tanpaKomentar(sumber('app/(dashboard)/admin/admin-client.tsx'))
-ok('B27 tab Admin Panel hanya untuk SUPER_ADMIN', AC.includes("...(isSA ? [{ id:'pemeliharaan' as Tab,") && AC.includes("{tab === 'pemeliharaan'    && isSA && <TabPemeliharaan/>}"))
+ok('B27 tab Admin Panel hanya untuk SUPER_ADMIN, di grup Aplikasi tepat di bawah Sakelar',
+  AC.includes("...(isSA ? [{ id:'pemeliharaan' as Tab,") && AC.includes("{tab === 'pemeliharaan'    && isSA && <TabPemeliharaan keSakelar={()=>setTab('app-control')}/>}")
+  && /\{ judul: 'Aplikasi', items: \[\s*\{ id:'app-control',[^\n]*\n\s*\.\.\.\(isSA \? \[\{ id:'pemeliharaan' as Tab,/.test(AC))
+ok('B31 panel MENAMPILKAN sakelar seluruh aplikasi (dibaca dari app-status), tidak pernah mengubahnya',
+  TP.includes("fetchJson('/api/admin/app-status')")
+  && TP.includes('\n    if (s.ok) setSakelarGlobal(bacaKeadaan((s.data as Record<string, string> | undefined)?.[KUNCI_GLOBAL]));')
+  && TP.includes('LABEL_KEADAAN[sakelarGlobal]')
+  && TP.includes('onClick={keSakelar}>Atur di Sakelar</PrimaButton>')
+  && !/app-status['"][^)]*method/.test(TP) && (TP.match(/app-status/g) ?? []).length === 1)
 ok('B28 jenis audit baru digolongkan retensi PANJANG', tanpaKomentar(sumber('lib/security/retensi-audit.ts')).includes('PEMELIHARAAN_KELUAR: P'))
 
 // ─────────────────────────────────────────────────────────────────────────────

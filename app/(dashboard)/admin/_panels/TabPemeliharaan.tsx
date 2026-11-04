@@ -3,12 +3,13 @@
 // Kirim pesan + jeda → semua tab PRIMA menampilkan hitung mundur, lalu sesi lain dikeluarkan server.
 // Konsep: docs/CONCEPT-pemeliharaan-keluar.md
 import { useCallback, useEffect, useState } from 'react';
-import { Wrench, LogIn } from 'lucide-react';
+import { Wrench, LogIn, Power } from 'lucide-react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import { bacaDesimal } from '@/lib/shared/desimal';
+import { bacaKeadaan, KUNCI_GLOBAL, LABEL_KEADAAN, type KeadaanSakelar } from '@/lib/registry/apps';
 import {
   PILIHAN_JEDA_MENIT, JEDA_BAWAAN_MENIT, PILIHAN_TAHAN_JAM, TAHAN_LOGIN_BAWAAN_JAM, PESAN_TAHAN_TIDAK_SAH, PESAN_KELUAR_BAWAAN, SELANG_TANYA_MS,
   formatSisa, jamDari, kapanDari, labelTahan, menitTahan, tambahMenit, type RingkasJadwal,
@@ -22,8 +23,10 @@ const LAINNYA = 'lainnya';
 const SELANG_MUAT_MS = 15_000;
 const detikTanya = SELANG_TANYA_MS / 1000;
 
-export function TabPemeliharaan() {
+/** `keSakelar` = pindah ke tab Sakelar. Sakelar hanya DITAMPILKAN di sini: mengirim pemeliharaan tidak mengubahnya. */
+export function TabPemeliharaan({ keSakelar }: { keSakelar: () => void }) {
   const [k,      setK]      = useState<Keadaan | null>(null);
+  const [sakelarGlobal, setSakelarGlobal] = useState<KeadaanSakelar | null>(null);
   const [tujuan, setTujuan] = useState(0);
   const [sisa,   setSisa]   = useState(0);
   const [pesan,  setPesan]  = useState(PESAN_KELUAR_BAWAAN);
@@ -43,8 +46,9 @@ export function TabPemeliharaan() {
   }, []);
 
   const muat = useCallback(async () => {
-    const r = await fetchJson('/api/admin/pemeliharaan');
+    const [r, s] = await Promise.all([fetchJson('/api/admin/pemeliharaan'), fetchJson('/api/admin/app-status')]);
     if (r.ok) terima((r.jadwal as RingkasJadwal | null) ?? null, Number(r.sesi_lain_aktif ?? 0), String(r.sekarang ?? ''));
+    if (s.ok) setSakelarGlobal(bacaKeadaan((s.data as Record<string, string> | undefined)?.[KUNCI_GLOBAL]));
   }, [terima]);
 
   // Lama tahan: pilihan cepat, atau "Lainnya" = ketik jumlah jam ("1,5" = 1 jam 30 menit).
@@ -115,6 +119,16 @@ export function TabPemeliharaan() {
   return (
     <div>
       <div className="ap-section-title">PEMELIHARAAN &amp; KELUAR OTOMATIS</div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--ap-dim)', marginBottom: 16 }}>
+        <Power size={13} />
+        <span>Sakelar seluruh aplikasi:</span>
+        <span className={`ap-badge ${sakelarGlobal === null || sakelarGlobal === 'online' ? 'badge-green' : sakelarGlobal === 'readonly' ? 'badge-cyan' : 'badge-yellow'}`}>
+          {sakelarGlobal ? LABEL_KEADAAN[sakelarGlobal] : '…'}
+        </span>
+        <span>Tidak ikut berubah saat pemeliharaan dikirim.</span>
+        <PrimaButton variant="ghost" size="sm" onClick={keSakelar}>Atur di Sakelar</PrimaButton>
+      </div>
 
       {j && tahap === 'HITUNG_MUNDUR' && (
         <div className="ap-card" style={{ marginBottom: 20 }}>
