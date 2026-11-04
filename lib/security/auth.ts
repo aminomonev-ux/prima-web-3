@@ -64,6 +64,18 @@ export function statusMenutupSesi(status: string | null | undefined): boolean {
   return status != null && STATUS_TIDAK_BOLEH_MASUK.includes(status);
 }
 
+// Server component tidak boleh mengubah cookie — Next melempar "Cookies can only be modified in a
+// Server Action or Route Handler", dan halaman yang memanggil getSession jadi 500, bukan dialihkan ke
+// /login. Penolakannya tidak ikut longgar: getSession tetap memulangkan null; yang dilewati hanya
+// pembersihan cookie, dan cookie basi itu dihapus proxy atau route handler berikutnya. Di route
+// handler & server action penghapusannya tetap jalan. Sengaja TIDAK dipakai `clearSessionCookie`:
+// Keluar yang diam-diam gagal menghapus cookie itu cacat.
+function buangCookieSesi(cookieStore: Awaited<ReturnType<typeof cookies>>): void {
+  try {
+    cookieStore.delete(COOKIE_NAME);
+  } catch { /* server component: cookie hanya-baca */ }
+}
+
 // ─── Get session dari cookie ──────────────────────────────────────────────────
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
@@ -100,11 +112,11 @@ export async function getSession(): Promise<SessionPayload | null> {
         LIMIT 1
       ` as { status: string; role: string; dibuat: string; sekarang: string; jadwal: string | null }[];
       if (!Array.isArray(rows) || rows.length === 0) {
-        cookieStore.delete(COOKIE_NAME);
+        buangCookieSesi(cookieStore);
         return null;
       }
       if (statusMenutupSesi(rows[0]?.status)) {
-        cookieStore.delete(COOKIE_NAME);
+        buangCookieSesi(cookieStore);
         return null;
       }
       const r = rows[0];
@@ -112,7 +124,7 @@ export async function getSession(): Promise<SessionPayload | null> {
         try {
           await sql`UPDATE user_sessions SET invalidated_at = NOW() WHERE session_id = ${payload.sessionId}`;
         } catch { /* tetap ditolak di bawah; tulisan ini hanya merapikan */ }
-        cookieStore.delete(COOKIE_NAME);
+        buangCookieSesi(cookieStore);
         return null;
       }
     } catch {
@@ -124,7 +136,7 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (payload.lastActive) {
     const idleMs = SESSION_INACTIVE_MINUTES * 60 * 1000;
     if (Date.now() - payload.lastActive > idleMs) {
-      cookieStore.delete(COOKIE_NAME);
+      buangCookieSesi(cookieStore);
       return null;
     }
   }
@@ -137,7 +149,7 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (originalIat && originalIat > 0) {
     const absoluteMs = SESSION_ABSOLUTE_LIFETIME_HOURS * 60 * 60 * 1000;
     if (Date.now() - originalIat * 1000 > absoluteMs) {
-      cookieStore.delete(COOKIE_NAME);
+      buangCookieSesi(cookieStore);
       return null;
     }
     payload.originalIat = originalIat;

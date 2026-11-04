@@ -16,6 +16,9 @@ const SECRET = new TextEncoder().encode(_rawSecret);
 // import dari lib/constants karena edge runtime). Wajib sama dengan
 // SESSION_ABSOLUTE_LIFETIME_HOURS di lib/constants.ts (7 hari).
 const SESSION_ABSOLUTE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+// Batas diam — wajib sama dengan SESSION_INACTIVE_MINUTES di lib/constants.ts (60 menit).
+// Dijaga `scripts/test-sesi-halaman.mts`.
+const SESSION_INACTIVE_MS = 60 * 60 * 1000;
 
 async function verifyToken(token: string): Promise<SessionPayload | null> {
   try {
@@ -148,6 +151,17 @@ export async function proxy(req: NextRequest) {
     const response = isApi
       ? NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 })
       : NextResponse.redirect(new URL('/login', req.url));
+    response.cookies.delete(COOKIE_NAME);
+    return response;
+  }
+
+  // Diam lewat 60 menit (sama dengan getSession). Layout dashboard, /menu, dan layar BLUD hanya membaca x-user-* yang dipasang
+  // di bawah — tanpa penolakan di sini sesi diam tetap membuka layarnya, dan halaman yang memanggil
+  // getSession tidak bisa menghapus cookie-nya sendiri. API sengaja diserahkan ke getSession (semua
+  // route memanggilnya): keepalive & status pemeliharaan menjawab 401 dengan `alasan` PEMELIHARAAN,
+  // yang tidak bisa diketahui dari sini.
+  if (!isApi && session.lastActive && Date.now() - session.lastActive > SESSION_INACTIVE_MS) {
+    const response = NextResponse.redirect(new URL('/login?reason=expired', req.url));
     response.cookies.delete(COOKIE_NAME);
     return response;
   }
