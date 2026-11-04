@@ -121,6 +121,8 @@ ok('B15 penjaga: tab yang bangun sesudah batas langsung pulang tanpa menunggu ja
 ok('B16 penjaga: batas dari sisa menurut server, bukan jam peramban', PJ.includes('batasMs: Date.now() + Number(d.sisa_detik ?? 0) * 1000'))
 ok('B17 penjaga: pengirim (dikecualikan) tidak dapat modal', PJ.includes('d.aktif && !d.dikecualikan ?'))
 ok('B18 penjaga: hitung mundur habis → keluar otomatis', /if \(s <= 0\) void keluar\(true\);/.test(PJ))
+ok('B18b modal ikut tema terang (palet ConfirmDialog), spanduk merah sama di kedua tema',
+  PJ.includes('[data-theme="light"] .pml-kartu { background: #FAFAFA; color: #0F0F12;') && PJ.includes('[data-theme="light"] .pml-sisa-label, [data-theme="light"] .pml-catatan { color: #6B7280; }'))
 
 const ADM = tanpaKomentar(sumber('app/api/admin/pemeliharaan/route.ts'))
 ok('B19 route admin: GET & POST hanya SUPER_ADMIN', ADM.includes("return session?.role === 'SUPER_ADMIN' ? session : null;")
@@ -128,10 +130,16 @@ ok('B19 route admin: GET & POST hanya SUPER_ADMIN', ADM.includes("return session
 ok('B20 route admin: jeda divalidasi ke daftar pilihan, pesan ≤ 500', ADM.includes('(PILIHAN_JEDA_MENIT as readonly number[]).includes(n)') && ADM.includes(".max(500,"))
 ok('B21 route admin: tiap aksi diaudit PEMELIHARAAN_KELUAR, sesi pengirim dari sesi server', ADM.includes("eventType: 'PEMELIHARAAN_KELUAR'") && ADM.includes('sesiPengirim: session.sessionId'))
 const DATA = tanpaKomentar(sumber('lib/security/jadwal-keluar-data.ts'))
+const SYARAT = badan(DATA, 'const sesiKenaKeluarSql')
 const TERAPKAN = badan(DATA, 'export async function terapkanKeluar')
-ok('B22 terapkan massal = cermin sesiKenaKeluar (batas lewat, lahir sebelum batas, bukan pengirim, bukan SA sesudah dikirim)',
-  TERAPKAN.includes('AND NOW() >= ${j.batas}') && TERAPKAN.includes('AND s.created_at < ${j.batas}') && TERAPKAN.includes('AND s.session_id <> ${j.sesi_pengirim}')
-  && TERAPKAN.includes("AND NOT (u.role = 'SUPER_ADMIN' AND s.created_at >= ${j.dikirim})") && TERAPKAN.includes('s.invalidated_at IS NULL'))
+const HITUNG = badan(DATA, 'export async function hitungSesiLain')
+ok('B22 syarat SQL kena-keluar = cermin sesiKenaKeluar (batas lewat, lahir sebelum batas, bukan pengirim, bukan SA sesudah dikirim)',
+  SYARAT.includes('NOW() >= ${j.batas}') && SYARAT.includes('AND s.created_at < ${j.batas}') && SYARAT.includes('AND s.session_id <> ${j.sesi_pengirim}')
+  && SYARAT.includes("AND NOT (u.role = 'SUPER_ADMIN' AND s.created_at >= ${j.dikirim})"))
+ok('B22b satu syarat untuk mematikan DAN menghitung (bukan dua salinan)', TERAPKAN.includes('WHERE s.invalidated_at IS NULL AND ${sesiKenaKeluarSql(j)}')
+  && HITUNG.includes('${j ? sql`AND NOT ${sesiKenaKeluarSql(j)}` : sql``}') && !/NOW\(\) >= \$\{j\.batas\}/.test(TERAPKAN + HITUNG))
+ok('B22c GET panel Admin hanya membaca: tanpa terapkanKeluar, jadwal dioper ke penghitung',
+  !/terapkanKeluar|UPDATE/.test(badan(ADM, 'export async function GET')) && ADM.includes("hitungSesiLain(session.sessionId ?? '', jadwal)"))
 const KUNCI = badan(DATA, 'async function kunciJadwal')
 ok('B23 baris jadwal dibuat dulu (INSERT IGNORE) lalu dikunci FOR UPDATE (L69-a)', urut(KUNCI, 'INSERT IGNORE INTO app_config', 'FOR UPDATE'))
 const KIRIM = badan(DATA, 'export async function kirimDalam')
@@ -151,15 +159,19 @@ console.log('C. MySQL (satu transaksi, di-ROLLBACK)')
 if (!process.env.MYSQL_HOST) {
   console.log('  (dilewati — jalankan dengan --env-file=.env.local)')
 } else {
-  const { kirimDalam, batalkanDalam, bukaLoginDalam, terapkanKeluar, bacaJadwalSekarang, alasanSesiDitolak, JadwalKeluarError } = await import('../lib/security/jadwal-keluar-data')
+  const { kirimDalam, batalkanDalam, bukaLoginDalam, terapkanKeluar, hitungSesiLain, bacaJadwalSekarang, alasanSesiDitolak, JadwalKeluarError } = await import('../lib/security/jadwal-keluar-data')
   const { createToken } = await import('../lib/security/auth')
+  const { sql } = await import('../lib/data/db')
   const c = await mysql.createConnection({
     host: process.env.MYSQL_HOST, port: Number(process.env.MYSQL_PORT || 3306),
     user: process.env.MYSQL_USER, password: process.env.MYSQL_PASSWORD, database: process.env.MYSQL_DATABASE,
     timezone: '+07:00',
   })
-  const tx = async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const [r] = await c.execute(strings.join('?'), values as never)
+  // Penyusun kueri aplikasi (`sql`) dipakai apa adanya — potongan SQL bersarang ikut tersusun — lalu
+  // dijalankan di koneksi transaksi uji ini.
+  const tx = async (strings: TemplateStringsArray, ...values: Parameters<typeof sql>[1][]) => {
+    const f = sql(strings, ...values)
+    const [r] = await c.execute(f.query, f.params as never)
     return Array.isArray(r) ? r as unknown[] : [r]
   }
   const F = '%Y-%m-%d %H:%i:%s'
@@ -199,6 +211,15 @@ if (!process.env.MYSQL_HOST) {
     for (const [sid, uid, role, dibuat] of SESI) {
       await c.query(`INSERT INTO user_sessions (session_id, user_id, username, role, created_at, last_active) VALUES (?, ?, 'uji', ?, ${dibuat}, NOW())`, [sid, uid, role])
     }
+    // Sebelum ditandai: penghitung panel Admin sudah tidak menghitung yang kena — dibandingkan dengan aturan
+    // murni pada SEMUA sesi aktif di basis data ini (sesi pengembang sungguhan ikut dinilai, bukan hanya uji).
+    const aktif = (await c.query(`SELECT s.session_id, u.role, DATE_FORMAT(s.created_at, '${F}') AS dibuat, DATE_FORMAT(NOW(), '${F}') AS sekarang
+      FROM user_sessions s JOIN users u ON u.id = s.user_id WHERE s.invalidated_at IS NULL AND s.session_id <> 'UJI-PML-PENGIRIM'
+      AND s.last_active >= NOW() - INTERVAL 60 MINUTE`))[0] as { session_id: string; role: string; dibuat: string; sekarang: string }[]
+    const kenaAktif = aktif.filter(b => sesiKenaKeluar(lewat, { id: b.session_id, dibuat: b.dibuat, role: b.role }, b.sekarang)).length
+    const tanpaJadwal = await hitungSesiLain('UJI-PML-PENGIRIM', null, tx), denganJadwal = await hitungSesiLain('UJI-PML-PENGIRIM', lewat, tx)
+    ok('C5a hitung sesi lain (panel Admin): yang kena keluar paksa tidak dihitung walau belum ditandai — cermin aturan murni',
+      tanpaJadwal === aktif.length && tanpaJadwal - denganJadwal === kenaAktif && kenaAktif >= 3, JSON.stringify({ tanpaJadwal, denganJadwal, kenaAktif }))
     const n = await terapkanKeluar(tx, lewat)
     const baris = (await c.query(`SELECT s.session_id, u.role, DATE_FORMAT(s.created_at, '${F}') AS dibuat, s.invalidated_at IS NOT NULL AS mati,
       DATE_FORMAT(NOW(), '${F}') AS sekarang FROM user_sessions s JOIN users u ON u.id = s.user_id WHERE s.session_id LIKE 'UJI-PML-%'`))[0] as

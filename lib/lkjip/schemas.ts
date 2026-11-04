@@ -7,6 +7,7 @@ import { MAX_DEPTH } from './numbering';
 import { FONT_CHOICES } from './style-constants';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
+import { BATAS_BARIS_TANGAN } from './tautan';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
 // users.app_access include 'lkjip' (diatur Admin Panel → User Management). Pola BBA/Rencana Aksi.
@@ -252,7 +253,7 @@ export const TautanSchema = z.object({
     id:      z.string().regex(/^[a-z0-9]{1,16}$/),
     setelah: KunciBarisSchema.nullable(),
     sel:     z.array(z.string().max(2000)).max(12),
-  })).max(200).optional(),
+  })).max(BATAS_BARIS_TANGAN).optional(),
 });
 
 export const TabelPayloadSchema = z.object({

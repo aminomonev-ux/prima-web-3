@@ -14,6 +14,7 @@ import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
+import { tulisPersen, tulisTetap } from '@/lib/shared/desimal';
 import type { DashboardSummary } from '@/lib/data/dashboard';
 
 interface Props {
@@ -34,10 +35,10 @@ function fmtNum(n: number): string {
 }
 function fmtRpCompact(n: number): string {
   const abs = Math.abs(n);
-  if (abs >= 1e12) return `Rp ${(n / 1e12).toFixed(2)} T`;
-  if (abs >= 1e9)  return `Rp ${(n / 1e9).toFixed(2)} M`;
-  if (abs >= 1e6)  return `Rp ${(n / 1e6).toFixed(1)} jt`;
-  if (abs >= 1e3)  return `Rp ${(n / 1e3).toFixed(0)} rb`;
+  if (abs >= 1e12) return `Rp ${tulisTetap(n / 1e12, 2)} T`;
+  if (abs >= 1e9)  return `Rp ${tulisTetap(n / 1e9, 2)} M`;
+  if (abs >= 1e6)  return `Rp ${tulisTetap(n / 1e6, 1)} jt`;
+  if (abs >= 1e3)  return `Rp ${tulisTetap(n / 1e3, 0)} rb`;
   return `Rp ${fmtNum(n)}`;
 }
 
@@ -302,7 +303,7 @@ export default function DashboardClient({ username, role, themePreference, initi
                   <div className="serap-meta">
                     <span>Terserap {fmtRpCompact(bl.serapan.terserap)}</span>
                     <span>
-                      {bl.serapan.pagu > 0 ? `${bl.serapan.pct_serapan.toFixed(1)}%` : '—'} dari pagu{' '}
+                      {bl.serapan.pagu > 0 ? tulisPersen(bl.serapan.pct_serapan, 1) : '—'} dari pagu{' '}
                       {bl.serapan.pagu_sumber === 'PERGESERAN' ? 'Pergeseran' : 'DPA'} {bl.serapan.pagu_versi ?? '—'}
                     </span>
                   </div>

@@ -28,7 +28,7 @@ import type { InfoBeku } from '@/lib/security/beku';
 import { FONT_CHOICES } from '@/lib/lkjip/style-constants';
 import type { StyleConfig } from '@/lib/lkjip/schemas';
 import { putusanPindah, putusanHapus, type BagianRingkas, type Putusan } from '@/lib/lkjip/aturan-bab';
-import { normalizeRows, angkaSel } from '@/lib/lkjip/tabel';
+import { normalizeRows, angkaSel, tabelBelumDiisi } from '@/lib/lkjip/tabel';
 import { sidikGrafik } from '@/lib/lkjip/tautan';
 import {
   kumpulkanTabelTertaut, kumpulkanNarasiTertaut, kumpulkanSelGalat, kumpulkanRujukanPutus, periksaSemua,
@@ -220,6 +220,14 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
       setSalinanBaru({ blockId: Number(r.id), salinan });
       await refresh();
     } finally { setBusy(false); }
+  }
+  // Batal (atau tarikan gagal) di modal itu: blok yang dibuat untuknya dibuang — kalau dibiarkan, tabel kosong
+  // itu ikut bernomor "Tabel n" di Word dan menggeser nomor tabel sesudahnya. Blok yang sudah diisi tidak disentuh.
+  async function buangBlokTempelBatal(id: number) {
+    const b = flat.flatMap(f => f.node.blocks).find(x => x.id === id);
+    if (!b || !tabelBelumDiisi(b.payload)) return;
+    const ok = await call(`/api/lkjip/block?id=${id}`, 'DELETE');
+    if (ok) { await refresh(); toast.info('Tempel dibatalkan — tabel kosongnya tidak disimpan.'); }
   }
   async function addBlock(tipe: 'NARASI' | 'TABEL' | 'GAMBAR' | 'GRAFIK') {
     if (!selected) return;
@@ -487,6 +495,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                   <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} warnaKepalaTabel={detail.style_config.tableHeaderFill} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
                     kabar={kabarBlok(kabarAktif(b.id), b.tipe === 'NARASI')}
                     salinanAwal={salinanBaru?.blockId === b.id ? salinanBaru.salinan : undefined} onSalinanDipakai={() => setSalinanBaru(null)}
+                    onSalinanBatal={() => void buangBlokTempelBatal(b.id)}
                     nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok} daftarObjek={daftarObjek}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
@@ -904,7 +913,7 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
 type NomorBlok = Map<number, NomorObjek>;
-function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, kabar, salinanAwal, onSalinanDipakai }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void }) {
+function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
@@ -927,7 +936,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
           tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
-      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai }} />}
+      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
       {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} />}
     </div>

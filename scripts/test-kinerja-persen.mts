@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { buatWorkbookLaporan, barisLaporanPdf, ringkasLaporanPdf, barisSskPdf } from '../app/(dashboard)/kinerja/_exports';
 import { FMT_PERSEN, FMT_RUPIAH } from '../lib/shared/excel-export';
+import { tulisPersen, tulisTetap } from '../lib/shared/desimal';
 import type { LaporanSumber, SskRow, SskMonths } from '../app/(dashboard)/kinerja/_types';
 
 let lulus = 0;
@@ -99,6 +100,19 @@ console.log('\n── C. Laporan & SSK PDF: persen berkoma ───────
   ok('C4 SSK PDF: 12 persen bulan + total berkoma', persenSsk.length === 13 && persenSsk.every(s => POLA.test(s)), persenSsk.join(' | '));
   ok('C5 SSK PDF: total 100 → "100,00%"', b[b.length - 1] === '100,00%', b[b.length - 1]);
   ok('C6 SSK PDF: rupiah tetap bertitik-ribuan', b[3] === '7.000.000.000' && b[4] === '583.333.333');
+}
+
+console.log('\n── D. Angka ringkas rupiah ("1,5 M") — audit 2026-11-04 ──────────────');
+{
+  ok('D1 tulisTetap: desimal tetap gaya Indonesia, kosong untuk bukan-angka',
+    tulisTetap(1.5, 1) === '1,5' && tulisTetap(2, 1) === '2,0' && tulisTetap(1234.567, 2) === '1.234,57' && tulisTetap(Number.NaN, 1) === '' && tulisTetap(null, 1) === '',
+    [tulisTetap(1.5, 1), tulisTetap(2, 1), tulisTetap(1234.567, 2)].join(' | '));
+  ok('D2 tulisPersen tetap = tulisTetap + "%"', tulisPersen(85.5) === '85,50%' && tulisPersen(Number.NaN) === '');
+  const RINGKAS = ['components/kinerja/BerandaCharts.tsx', 'app/(dashboard)/dashboard/dashboard-client.tsx', 'app/(dashboard)/dashboard/[modul]/detail-client.tsx'];
+  for (const f of RINGKAS) {
+    const sisa = tanpaKomentar(readFileSync(f, 'utf8')).match(/toFixed\(\d\)/g) ?? [];
+    ok(`D3 ${f.split('/').pop()}: angka ringkas & persen tanpa toFixed`, sisa.length === 0, sisa.join(' | '));
+  }
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

@@ -72,6 +72,13 @@ function adaDi(n: ts.Node, cari: (x: ts.Node) => boolean): boolean {
 const panggil = (nama: string) => (x: ts.Node) =>
   ts.isCallExpression(x) && ts.isIdentifier(x.expression) && x.expression.text === nama
 
+const berForceTrue = (a: ts.Expression) => ts.isObjectLiteralExpression(a) && a.properties.some(p =>
+  ts.isPropertyAssignment(p) && p.name.getText() === 'force' && p.initializer.kind === ts.SyntaxKind.TrueKeyword)
+
+/** Ulang dengan force: fungsi itu sendiri `fungsi(true, …)`, atau panggilan apa pun yang membawa `{ force: true }`. */
+const ulangDenganForce = (fungsi: string) => (x: ts.Node) => ts.isCallExpression(x)
+  && ((panggil(fungsi)(x) && x.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword) || x.arguments.some(berForceTrue))
+
 /** Cabang `=== 'PENURUNAN_DRASTIS'` yang benar: bertanya, mengulang dgn force, tanpa `message` server. */
 function cabangBenar(badan: ts.Node, fungsi: string): boolean {
   let benar = false
@@ -79,7 +86,7 @@ function cabangBenar(badan: ts.Node, fungsi: string): boolean {
     if (ts.isIfStatement(n) && adaDi(n.expression, x => ts.isStringLiteral(x) && x.text === 'PENURUNAN_DRASTIS')) {
       const isi = n.thenStatement
       const bertanya = adaDi(isi, panggil('konfirmasiPenurunan'))
-      const ulangPaksa = adaDi(isi, x => panggil(fungsi)(x) && (x as ts.CallExpression).arguments[0]?.kind === ts.SyntaxKind.TrueKeyword)
+      const ulangPaksa = adaDi(isi, ulangDenganForce(fungsi))
       const pesanServer = adaDi(isi, x => ts.isPropertyAccessExpression(x) && x.name.text === 'message')
       if (bertanya && ulangPaksa && !pesanServer) benar = true
     }
@@ -94,11 +101,30 @@ export function periksaSumber(teks: string, nama: string, endpoints: string[]): 
   const simpan: Simpan[] = []
   const masalah: string[] = []
   const endpointDari = (url: string) => endpoints.find(e => url === e || url.startsWith(e + '?'))
+  // Alamat lewat konstanta di berkas yang sama: `const URL_SSK = '/api/kinerja/ssk'`.
+  const konstanta = new Map<string, string>()
+  const kumpul = (n: ts.Node) => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && (n.parent.flags & ts.NodeFlags.Const)
+      && (ts.isStringLiteral(n.initializer) || ts.isNoSubstitutionTemplateLiteral(n.initializer))) konstanta.set(n.name.text, n.initializer.text)
+    ts.forEachChild(n, kumpul)
+  }
+  kumpul(sf)
+  const urlDari = (a: ts.Expression | undefined): { teks: string; dinamis: boolean } | null => {
+    if (a && ts.isIdentifier(a)) { const v = konstanta.get(a.text); return v === undefined ? null : { teks: v, dinamis: false } }
+    const teks = awalUrl(a)
+    return teks === null ? null : { teks, dinamis: !!a && ts.isTemplateExpression(a) }
+  }
   const telusur = (n: ts.Node) => {
     if (ts.isCallExpression(n)) {
-      const url = awalUrl(n.arguments[0])
-      const endpoint = url === null ? undefined : endpointDari(url)
-      if (endpoint && metode(n.arguments[1]) !== 'GET') {
+      const url = urlDari(n.arguments[0])
+      const endpoint = url === null ? undefined : endpointDari(url.teks)
+      const tulis = metode(n.arguments[1]) !== 'GET'
+      // `/api/kinerja/${x}` bisa menunjuk route berpagar, tapi tidak bisa dinilai — tolak, bukan lewati diam-diam.
+      if (url && tulis && !endpoint && url.dinamis && url.teks.startsWith('/api/') && endpoints.some(e => e.startsWith(url.teks))) {
+        const baris = sf.getLineAndCharacterOfPosition(n.getStart()).line + 1
+        masalah.push(`${nama}:${baris} menyimpan ke alamat dinamis \`${url.teks}…\` yang bisa menunjuk route berpagar — tulis alamatnya langsung supaya bisa dinilai`)
+      }
+      if (endpoint && tulis) {
         const baris = sf.getLineAndCharacterOfPosition(n.getStart()).line + 1
         let f: ts.Node = n.parent
         while (f && !(ts.isFunctionLike(f) && 'body' in f && f.body)) f = f.parent
@@ -146,6 +172,16 @@ const a10 = periksaSumber(`const simpanCepat = async () => { await fetch('/api/k
 ok('A10 fungsi panah bernama ikut diperiksa', a10.simpan[0]?.fungsi === 'simpanCepat' && a10.masalah.length === 1, JSON.stringify(a10))
 ok('A11 panggilan dari fungsi tanpa nama → ditolak (tidak bisa mengulang)',
   periksaSumber(`onClick(async () => { await fetch('/api/kinerja/realisasi', { method: 'PUT' }) })`, 'c.tsx', EP).masalah.length === 1)
+const a12 = periksaSumber(`const URL_REAL = '/api/kinerja/realisasi'\n${layar('', 'URL_REAL')}`, 'd.tsx', EP)
+ok('A12 alamat lewat konstanta di berkas yang sama ikut dinilai', a12.simpan.length === 1 && a12.masalah.length === 1, JSON.stringify(a12))
+const a13 = periksaSumber(layar(BENAR, '`/api/kinerja/${jalur}`'), 'e.tsx', EP)
+ok('A13 alamat dinamis yang bisa menunjuk route berpagar → ditolak dengan pesan, bukan dilewati', a13.masalah.length === 1 && a13.masalah[0].includes('alamat dinamis'), JSON.stringify(a13))
+ok('A14 alamat dinamis di luar route berpagar tidak dipersoalkan', periksaSumber(layar('', '`/api/blud/${x}`'), 'e.tsx', EP).masalah.length === 0)
+ok('A15 ulang dgn force lewat fungsi lain `simpanPaksa({ force: true })` diterima',
+  periksaSumber(layar("else if (d.code === 'PENURUNAN_DRASTIS') { if (await konfirmasiPenurunan('x', d)) await simpanPaksa({ force: true }); }"), 'a.tsx', EP).masalah.length === 0)
+ok('A16 ulang sebaris `fetchJson(…, { body: JSON.stringify({ …, force: true }) })` diterima; `force: false` tidak',
+  periksaSumber(layar("else if (d.code === 'PENURUNAN_DRASTIS') { if (await konfirmasiPenurunan('x', d)) await fetchJson('/api/kinerja/realisasi', { method: 'PUT', body: JSON.stringify({ rows, force: true }) }); }"), 'a.tsx', EP).masalah.length === 0
+  && periksaSumber(layar("else if (d.code === 'PENURUNAN_DRASTIS') { if (await konfirmasiPenurunan('x', d)) await simpanPaksa({ force: false }); }"), 'a.tsx', EP).masalah.length === 1)
 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('B. Route yang memasang pagar')

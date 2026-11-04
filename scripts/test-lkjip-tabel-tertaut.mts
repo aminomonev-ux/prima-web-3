@@ -449,7 +449,7 @@ ok('K8 Perbarui memakai penilaian BERSAMA (nilaiPerbarui) & resep sesudahnya',
   && perb.includes('kalimatIsianYatim(nilai.yatim,') && !perb.includes('bangunBadan('))
 // Editor tabel pindah ke components/tabel (konsep iki-custom §3): modalnya dioper editor LKJIP lewat prop `lkjip`.
 ok('K9 modal dimuat saat dibuka saja', /const TautanModal = dynamic\(\(\) => import\('\.\/TautanModal'\), \{ ssr: false \}\)/.test(ed)
-  && ed.includes('lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai }}') && !/import[^;]*TautanModal/.test(tabelEd)
+  && ed.includes('lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }}') && !/import[^;]*TautanModal/.test(tabelEd)
   && ed.includes("import TabelEditor from '@/components/tabel/TabelEditor';") && !ed.includes('function TabelEditor('))
 ok('K10 keterangan sumber TIDAK masuk Word (docgen tak mengenal tautan)', !/tautan|ringkas|ditarikPada/.test(kode('lib/lkjip/docgen.ts')))
 ok('K11 audit simpan blok menyebut sumbernya', kode('app/api/lkjip/block/route.ts').includes('` · tertaut: ${ringkas.slice(0, 200)}`'))

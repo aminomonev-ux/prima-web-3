@@ -8,11 +8,13 @@
 //
 // MURNI: aman klien & server, tanpa jaringan/DB.
 
-import { nilaiRumus, colLabel, sanitizeRows, hapusKolom, FUNCS, RUJUKAN_HILANG, BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, type TabelCell, type TabelNumFmt, type TabelAlign } from './tabel';
+import { nilaiRumus, colLabel, sanitizeRows, hapusKolom, angkaKetikanId, FUNCS, RUJUKAN_HILANG, BATAS_KOLOM_TABEL, BATAS_BARIS_TABEL, type TabelCell, type TabelNumFmt, type TabelAlign } from './tabel';
 import { bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 
 export const BATAS_KOLOM = BATAS_KOLOM_TABEL;
 export const BATAS_BARIS = BATAS_BARIS_TABEL;
+/** Batas skema `barisTangan` — layar menolak sisipan ke-201, bukan server sesudah barisnya terlanjur tampil. */
+export const BATAS_BARIS_TANGAN = 200;
 /** Sel yang tidak bisa dihitung: Progres Negatif belum diisi, rumus gagal (bagi nol, kolom kosong). */
 export const KOSONG = '—';
 const INDENT = '    ';
@@ -196,9 +198,14 @@ export function periksaRumusKolom(ekspresi: string, ncol: number, kolomSendiri: 
   return { rujukan: [...rujukan].sort((a, b) => a - b), terjemahan: keluar.join('') };
 }
 
+/**
+ * Sel berformat menyimpan angka MESIN (tarikan modul, sel rumus, ketikan di sel berformat); sel polos
+ * berisi ketikan orang — isian tangan "1.250.000" dulu dibaca `Number()` → NaN → rumusnya "—".
+ */
 function angkaSel(sel: TabelCell | undefined): number | null {
   const v = (sel?.v ?? '').trim();
   if (v === '' || v === KOSONG) return null;
+  if (!sel?.nf) return angkaKetikanId(v);
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -651,13 +658,19 @@ function ubahBadan(p: PayloadTertaut, ubah: (badan: TabelCell[][], kunci: string
   return { rows: [...p.rows.slice(0, hr), ...badan], kunciBaris: kunci };
 }
 
+export function alasanTakBisaSisipTangan(p: { rows: readonly unknown[]; tautan: Pick<Tautan, 'barisTangan'> }): string | null {
+  if (p.rows.length >= BATAS_BARIS) return `Satu tabel paling banyak ${BATAS_BARIS} baris.`;
+  if ((p.tautan.barisTangan?.length ?? 0) >= BATAS_BARIS_TANGAN) return `Satu tabel tertaut paling banyak ${BATAS_BARIS_TANGAN} baris tangan.`;
+  return null;
+}
+
 /**
  * Sisip baris tangan tepat di bawah baris badan ke-`iBadan` (-1 = paling atas). Di bawah baris
  * sumber → ditambatkan padanya, mendahului baris tangan lain yang sudah tertambat di situ; di bawah
- * baris tangan → ikut jangkarnya, tepat sesudahnya. `null` = melewati batas baris.
+ * baris tangan → ikut jangkarnya, tepat sesudahnya. `null` = melewati batas (`alasanTakBisaSisipTangan`).
  */
 export function sisipBarisTangan(p: PayloadTertaut, iBadan: number, id: string): PayloadTertaut | null {
-  if (p.rows.length >= BATAS_BARIS) return null;
+  if (alasanTakBisaSisipTangan(p)) return null;
   const t = ambilIsianTangan(p.tautan, p.rows.slice(jumlahBarisKepala(p)));
   const daftar = [...(t.barisTangan ?? [])];
   const kunci = iBadan >= 0 ? t.kunciBaris[iBadan] : undefined;

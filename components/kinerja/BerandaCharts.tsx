@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { BarChart3, Loader2 } from 'lucide-react'
 import { targetBerlaku } from '@/lib/kinerja/pendapatan-perubahan'
+import { tulisTetap } from '@/lib/shared/desimal'
 
 interface Props {
   tahun:    string
@@ -39,9 +40,9 @@ const SUMBER_COLOR: Record<Sumber, { target: string; real: string }> = {
 }
 
 const fmtRpShort = (n: number): string => {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} M`
-  if (n >= 1_000_000)     return `${(n / 1_000_000).toFixed(1)} jt`
-  if (n >= 1_000)         return `${(n / 1_000).toFixed(0)} rb`
+  if (n >= 1_000_000_000) return `${tulisTetap(n / 1_000_000_000, 1)} M`
+  if (n >= 1_000_000)     return `${tulisTetap(n / 1_000_000, 1)} jt`
+  if (n >= 1_000)         return `${tulisTetap(n / 1_000, 0)} rb`
   return n.toString()
 }
 const fmtRpFull = (n: number) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n))

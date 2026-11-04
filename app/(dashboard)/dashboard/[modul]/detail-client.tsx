@@ -14,6 +14,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { fetchJson } from '@/lib/shared/api';
+import { tulisTetap } from '@/lib/shared/desimal';
 import type { ModuleDetailData, DashModule } from '@/lib/data/dashboard';
 
 interface Props {
@@ -40,10 +41,10 @@ const PIE_COLORS = ['#378ADD', '#EF9F27', '#1D9E75', '#7C5CFC', '#E24B4A', '#EC4
 function fmtNum(n: number): string { return new Intl.NumberFormat('id-ID').format(n); }
 function fmtRpCompact(n: number): string {
   const abs = Math.abs(n);
-  if (abs >= 1e12) return `Rp ${(n / 1e12).toFixed(2)} T`;
-  if (abs >= 1e9)  return `Rp ${(n / 1e9).toFixed(2)} M`;
-  if (abs >= 1e6)  return `Rp ${(n / 1e6).toFixed(1)} jt`;
-  if (abs >= 1e3)  return `Rp ${(n / 1e3).toFixed(0)} rb`;
+  if (abs >= 1e12) return `Rp ${tulisTetap(n / 1e12, 2)} T`;
+  if (abs >= 1e9)  return `Rp ${tulisTetap(n / 1e9, 2)} M`;
+  if (abs >= 1e6)  return `Rp ${tulisTetap(n / 1e6, 1)} jt`;
+  if (abs >= 1e3)  return `Rp ${tulisTetap(n / 1e3, 0)} rb`;
   return `Rp ${fmtNum(n)}`;
 }
 

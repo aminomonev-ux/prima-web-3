@@ -134,7 +134,7 @@ export default function PenjagaPemeliharaan() {
   );
 }
 
-// Di atas modal aplikasi (ConfirmDialog 10000), di bawah tooltip portal (100000).
+// Di atas modal aplikasi (ConfirmDialog 10000), di bawah tooltip portal (100000). Tema terang = palet ConfirmDialog.
 const CSS = `
 .pml-latar { position: fixed; inset: 0; z-index: 10050; background: rgba(2, 15, 28, .78); backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center; padding: 16px; font-family: Inter, sans-serif; }
@@ -159,4 +159,8 @@ const CSS = `
   padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .pml-spanduk-tombol:hover { background: rgba(255, 255, 255, .16); }
 @media (max-width: 560px) { .pml-spanduk { bottom: 92px; } }
+[data-theme="light"] .pml-latar { background: rgba(0, 0, 0, .55); }
+[data-theme="light"] .pml-kartu { background: #FAFAFA; color: #0F0F12; box-shadow: 0 24px 60px rgba(0, 0, 0, .18); }
+[data-theme="light"] .pml-sisa-label, [data-theme="light"] .pml-catatan { color: #6B7280; }
+[data-theme="light"] .pml-sisa-angka { color: #BA7517; }
 `;

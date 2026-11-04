@@ -17,9 +17,11 @@ import { DAFTAR_SUMBER, URUTAN_SUMBER } from '../lib/lkjip/sumber'
 import { DEFAULT_CETAK_FILTER } from '../app/(dashboard)/rencana-aksi/_lib/cetak-filter'
 import {
   bangunBadan, sisipBarisTangan, buangBarisTertaut, hapusKolomTertaut, ambilIsianTangan, nilaiPerbarui, kunciBarisTangan, hitungRumusTangan,
+  alasanTakBisaSisipTangan, BATAS_BARIS_TANGAN,
   type HasilTarik, type Tautan, type PayloadTertaut, type BarisTangan,
 } from '../lib/lkjip/tautan'
 import { TabelPayloadSchema } from '../lib/lkjip/schemas'
+import { tabelBelumDiisi } from '../lib/lkjip/tabel'
 import type { RealRow } from '../app/(dashboard)/kinerja/_types'
 
 let lulus = 0
@@ -219,6 +221,34 @@ const pRumusHitung = { ...pRumus, rows: hitungRumusTangan(pRumus.rows, 1, pRumus
 ok('C22 kolom rumus baris tangan dihitung saat diketik (= susun ulang) — tanpa itu Periksa melapor "berubah" palsu',
   !nilaiPerbarui(pRumus, HASIL).sama && pRumusHitung.rows[2][4].v === '2.25' && nilaiPerbarui(pRumusHitung, HASIL).sama
   && hitungRumusTangan(p0.rows, 1, p0.tautan) === p0.rows, JSON.stringify(pRumusHitung.rows[2]))
+// Audit 2026-11-04: rumus kolom membaca isian tangan dengan Number() — "1.250.000" → NaN → "—".
+const HASIL_RP: HasilTarik = {
+  kolom: [{ kunci: 'label', label: 'Uraian', jenis: 'teks' }, { kunci: 'pagu', label: 'Pagu', jenis: 'rp' }, { kunci: 'pct', label: '%', jenis: 'persen' },
+    { kunci: 'ang', label: 'Indeks', jenis: 'angka' }],
+  baris: [{ kunci: 'a', label: 'A', sel: { label: 'A', pagu: 2_000_000, pct: 50, ang: 1.125 } }], catatan: [], ringkas: 'uji',
+}
+const rumusTangan = (nilai: string) => bangunBadan(HASIL_RP, { kolom: [
+  { isi: { jenis: 'sumber', kunci: 'label' } }, { isi: { jenis: 'sumber', kunci: 'pagu' } },
+  { isi: { jenis: 'tangan', nilai: { a: nilai } } }, { isi: { jenis: 'rumus', ekspresi: '=B-C' } },
+], sembunyi: [], tebalInduk: false }).rows[0][3].v
+ok('C23 rumus kolom membaca isian tangan gaya Indonesia ("1.250.000", "Rp 1.250.000", "1250000,5") dan bentuk mesin ("7.5")',
+  rumusTangan('1.250.000') === '750000' && rumusTangan('Rp 1.250.000') === '750000' && rumusTangan('1250000,5') === '749999.5'
+  && rumusTangan('7.5') === '1999992.5' && rumusTangan('belum ada') === '—' && rumusTangan('') === '—',
+  JSON.stringify(['1.250.000', 'Rp 1.250.000', '1250000,5', '7.5', 'belum ada', ''].map(rumusTangan)))
+const rumusPct = bangunBadan(HASIL_RP, { kolom: [{ isi: { jenis: 'sumber', kunci: 'pct' } }, { isi: { jenis: 'rumus', ekspresi: '=A*2' } },
+  { isi: { jenis: 'sumber', kunci: 'ang' } }, { isi: { jenis: 'rumus', ekspresi: '=C*2' } }], sembunyi: [], tebalInduk: false }).rows[0]
+// "1.125" mesin = 1,125; dibaca gaya Indonesia = 1.125 ribu — hanya angka bertiga-desimal yang membedakan.
+ok('C24 sel BERFORMAT tetap dibaca angka mesin — persen (0.5) tidak jadi ×100, "1.125" tidak jadi 1.125 ribu',
+  rumusPct[0].nf === 'pct' && rumusPct[0].v === '0.5' && rumusPct[1].v === '1' && rumusPct[2].v === '1.125' && rumusPct[3].v === '2.25', JSON.stringify(rumusPct))
+ok('C25 tabel kosong hasil "Tempel dari Modul" dikenali; yang berisi / tertaut / tanpa kepala tidak',
+  tabelBelumDiisi({ headerRows: 1, rows: [[{ v: 'Kolom 1' }, { v: 'Kolom 2' }], [{ v: '' }, { v: ' ' }]] })
+  && !tabelBelumDiisi({ headerRows: 1, rows: [[{ v: 'K' }], [{ v: 'x' }]] })
+  && !tabelBelumDiisi({ headerRows: 1, rows: [[{ v: 'K' }], [{ v: '' }]], tautan: {} })
+  && !tabelBelumDiisi({ headerRows: 0, rows: [[{ v: 'Kolom 1' }]] }) && !tabelBelumDiisi(null))
+const penuhTangan = { ...p1, tautan: { ...p1.tautan, barisTangan: Array.from({ length: BATAS_BARIS_TANGAN }, (_, i) => bt(`z${i}`, 'a', ['', '', '', '', ''])) } }
+ok('C26 batas baris tangan = batas skema: sisipan ke-201 ditolak di layar dengan alasan, bukan oleh server sesudahnya',
+  BATAS_BARIS_TANGAN === 200 && alasanTakBisaSisipTangan(penuhTangan)?.includes('200 baris tangan') === true && sisipBarisTangan(penuhTangan, 0, 'x') === null
+  && alasanTakBisaSisipTangan(p1) === null && kode('lib/lkjip/schemas.ts').includes('})).max(BATAS_BARIS_TANGAN).optional(),'))
 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('D. Skema (Zod)')
@@ -267,6 +297,14 @@ ok('E11 sel baris tangan bisa diketik (kecuali Nomor & rumus); sel sumber tetap 
   && te.includes("return barisTanganDi.has(r) && (j === 'sumber' || j === 'tangan');"))
 ok('E12 isi baris tangan / kolom isian tangan yang akan hilang ditanyakan dulu', te.includes("title: 'Hapus baris tangan?'") && te.includes("title: 'Hapus kolom isian tangan?'"))
 ok('E13 baris yang tampil (= yang disimpan) menghitung kolom rumus baris tangan', te.includes('nomorUlang(tautan ? hitungRumusTangan(rows, jumlahBarisKepala({ headerRows, rows }), tautan) : rows,'))
+ok('E14 Batal di modal salinan awal → pemilik membuang blok kosongnya; Masukkan tidak',
+  te.includes('if (dariSalinanAwalRef.current) { dariSalinanAwalRef.current = false; lkjip.onSalinanBatal?.(); }')
+  && /dariSalinanAwalRef\.current = false;\n\s*pasangDanSimpan\(p\);/.test(te)
+  && ed.includes('onSalinanBatal={() => void buangBlokTempelBatal(b.id)}') && ed.includes('if (!b || !tabelBelumDiisi(b.payload)) return;')
+  && ed.includes('lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }}'))
+ok('E15 batas baris tangan: menu & tombol memakai alasan yang sama', te.includes('const alasanSisipTangan = tautan ? alasanTakBisaSisipTangan({ rows, tautan }) : null;')
+  && te.includes('disabled: readOnly || rect.r2 < headerRows - 1 || !!alasanSisipTangan,')
+  && te.includes('const alasan = alasanTakBisaSisipTangan(p);\n    if (alasan) { toast.info(alasan); return; }'))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal${gagal.length ? ': ' + gagal.join(', ') : ''}`)
 process.exit(gagal.length ? 1 : 0)

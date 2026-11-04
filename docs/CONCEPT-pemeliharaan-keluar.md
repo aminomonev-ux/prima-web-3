@@ -27,6 +27,7 @@ Sebelum build di server kantor, orang yang masih bekerja harus dikeluarkan. Yang
    tiap 30 detik dan saat tab kembali terlihat. Ada jadwal → modal pesan + hitung mundur:
    - **Lanjut simpan dulu** → modal mengecil jadi spanduk merah (sisa waktu) supaya Simpan bisa ditekan;
    - **Keluar sekarang** → menanyakan isian belum tersimpan (`bolehTinggalkanHalaman`), lalu keluar.
+   Modal ikut tema terang (palet `ConfirmDialog`); spanduk merahnya sama di kedua tema.
 3. Waktu habis, dua lapis:
    - **Peramban**: tab keluar sendiri ke `/login?reason=pemeliharaan`. Pengingat "belum tersimpan" dilepas
      dan `beforeunload` layar lain diputus (pendengar capture + `stopImmediatePropagation`) — kalau tidak,
@@ -34,7 +35,10 @@ Sebelum build di server kantor, orang yang masih bekerja harus dikeluarkan. Yang
    - **Server (penentu)**: `getSession` menolak sesi yang lahir sebelum batas — jadwalnya menumpang kueri
      sesi lewat LEFT JOIN, nol kueri tambahan. Komputer yang tidur/putus jaringan sampai di halaman login
      begitu bangun. `terapkanKeluar` mematikan semuanya sekaligus sebelum jadwal ditimpa / saat login
-     dibuka / saat panel dibuka (sesi yang tak pernah dipakai lagi tidak boleh hidup kembali).
+     dibuka (sesi yang tak pernah dipakai lagi tidak boleh hidup kembali). Panel Admin hanya MEMBACA:
+     angka "sesi lain" tidak menghitung sesi yang sudah kena — syarat SQL-nya satu (`sesiKenaKeluarSql`)
+     untuk mematikan dan menghitung (audit 2026-11-04: dulu GET panel menjalankan UPDATE tiap 15 detik,
+     selamanya sesudah pemeliharaan apa pun).
 
 ## 4. Aturan (`lib/security/jadwal-keluar.ts`, MURNI)
 
@@ -66,5 +70,6 @@ Sebelum build di server kantor, orang yang masih bekerja harus dikeluarkan. Yang
 - Halaman yang sudah terbuka dengan sesi yang ditolak tetap tergambar sampai tabnya bertanya ke server
   (`proxy.ts` hanya memeriksa JWT) — sama seperti emergency logout.
 
-Regresi: `npx tsx --env-file=.env.local scripts/test-pemeliharaan-keluar.mts` (69; bagian C MySQL di
-SATU transaksi yang di-ROLLBACK — sesi sungguhan tidak tersentuh).
+Regresi: `npx tsx --env-file=.env.local scripts/test-pemeliharaan-keluar.mts` (73; bagian C MySQL di
+SATU transaksi yang di-ROLLBACK — sesi sungguhan tidak tersentuh; `tx` uji memakai penyusun `sql` aplikasi
+supaya potongan SQL bersarang ikut tersusun).

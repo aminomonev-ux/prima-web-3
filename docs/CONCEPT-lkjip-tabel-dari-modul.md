@@ -66,6 +66,16 @@ otomatis melapor "berubah" untuk tabel yang tidak berubah.
 - kolom rumus di baris tangan baru dihitung saat Perbarui → `hitungRumusTangan` menghitungnya di baris
   yang tampil (= yang disimpan), memakai `hitungRumusBaris` yang sama.
 
+**Audit 2026-11-04**, ikut dibereskan:
+- **Batal** di modal "Tempel dari Modul" (atau penarikan gagal karena tanpa akses) dulu meninggalkan blok
+  tabel kosong yang ikut bernomor "Tabel n" di Word dan menggeser nomor tabel sesudahnya → `onSalinanBatal`
+  membuang blok itu, hanya bila masih kosong (`tabelBelumDiisi`). Masukkan tidak memicunya.
+- Batas baris tangan satu angka (`BATAS_BARIS_TANGAN` = 200) untuk skema, fungsi sisip, dan menu — dulu
+  layar mengizinkan sampai batas tabel (500) lalu server menolak sisipan ke-201 sesudah barisnya tampil.
+- Kolom rumus membaca isian tangan bergaya Indonesia ("1.250.000", "Rp 5.000") lewat `angkaKetikanId` —
+  dulu `Number()` → "—". Sel BERFORMAT tetap dibaca angka mesin: rumus atas kolom persen yang sudah ada
+  tidak bergeser.
+
 Skema: `barisTangan` terdaftar di `TautanSchema` (Zod membuang kunci tak dikenal) + `superRefine`: isi
 sejajar kolom, dan himpunan kunci `tangan:` di `kunciBaris` = id `barisTangan`.
 
@@ -84,9 +94,8 @@ layar). Kunci baris `cid:<ssk_canonical_id>`. Versi bukan-terbaru membawa kabar 
   lewat suite saja.
 - Ctrl+V sungguhan tidak bisa dipicu alat uji (papan klip sistem tak terjangkau); di peramban event
   `paste` dipicu skrip dengan HTML hasil tombol Salin yang direkam dari event `copy`-nya.
-- Layar Cetak → Rekap E-Anggaran menulis persen bertitik ("100.00%", `toFixed(2)`) — cacat lama layar
-  modul. Tempel **tertaut** tidak kena (angkanya ditarik ulang), Tempel **biasa** membawanya apa adanya.
+- Persen bertitik ("100.00%") di layar Cetak E-Anggaran yang dulu ikut terbawa Tempel **biasa** sudah
+  dibereskan di `ced5010`/`5bd5ce9` (`tulisPersen`); Tempel **tertaut** memang tidak pernah kena.
 
-Regresi: `npx tsx scripts/test-lkjip-tabel-dari-modul.mts` (60), 32 uji mutasi tertangkap (satu mutan
-setara dibuang: urutan format ↔ rumus baris tangan tidak berpengaruh karena `angkaSel` tautan selalu
-membaca angka mesin).
+Regresi: `npx tsx scripts/test-lkjip-tabel-dari-modul.mts` (66), 43 uji mutasi tertangkap (satu mutan
+setara dibuang: urutan format ↔ rumus baris tangan tidak berpengaruh).

@@ -434,6 +434,24 @@ function angkaTeksId(v: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Blok TABEL yang belum diisi apa pun (tanpa tautan, badan kosong) — aman dibuang tanpa bertanya. */
+export function tabelBelumDiisi(payload: unknown): boolean {
+  const p = payload as { tautan?: unknown; headerRows?: number; rows?: unknown } | null;
+  if (!p || p.tautan || !Array.isArray(p.rows)) return false;
+  return (p.rows as unknown[]).slice(p.headerRows ?? 0)
+    .every(r => Array.isArray(r) && r.every(c => !String((c as { v?: unknown } | null)?.v ?? '').trim()));
+}
+
+/**
+ * Ketikan sel POLOS → angka: gaya Indonesia dulu ("1.250.000", "7,5", "Rp 5.000"), lalu bentuk mesin
+ * ("7.5"); selain angka → null. Rumus kolom tabel tertaut memakainya untuk isian tangan.
+ */
+export function angkaKetikanId(v: string): number | null {
+  const inti = v.trim().replace(/^Rp\s?/i, '').replace(/%$/, '').trim();
+  if (ANGKA_MURNI_ID.test(inti)) return angkaTeksId(inti);
+  return ANGKA_MESIN.test(inti) ? Number(inti) : null;
+}
+
 /**
  * Angka sel sebagaimana TAMPIL (persen 0,85 berformat % → 85) — bahan grafik dari blok tabel.
  * Dulu grafik mem-parse teks tampilan dengan `parseFloat`: "74.154.779.000" terbaca 74,154 dan

@@ -3,13 +3,12 @@
 // Konsep: docs/CONCEPT-pemeliharaan-keluar.md
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { PILIHAN_JEDA_MENIT, ringkasJadwal, jamDari } from '@/lib/security/jadwal-keluar';
 import {
-  bacaJadwalSekarang, terapkanKeluar, hitungSesiLain, kirimJadwalKeluar, batalkanJadwalKeluar,
+  bacaJadwalSekarang, hitungSesiLain, kirimJadwalKeluar, batalkanJadwalKeluar,
   bukaLoginKeluar, JadwalKeluarError,
 } from '@/lib/security/jadwal-keluar-data';
 
@@ -35,12 +34,10 @@ export async function GET() {
   const session = await sesiSuperAdmin();
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 403 });
   const { jadwal, sekarang } = await bacaJadwalSekarang();
-  // Sesi yang belum sempat dipakai lagi sesudah batas ikut dimatikan, supaya angka di bawah jujur.
-  if (jadwal && sekarang >= jadwal.batas) await terapkanKeluar(sql, jadwal);
   return NextResponse.json({
     ok: true,
     jadwal: ringkasJadwal(jadwal, sekarang),
-    sesi_lain_aktif: await hitungSesiLain(session.sessionId ?? ''),
+    sesi_lain_aktif: await hitungSesiLain(session.sessionId ?? '', jadwal),
   });
 }
 

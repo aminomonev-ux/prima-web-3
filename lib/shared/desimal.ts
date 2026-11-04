@@ -68,10 +68,16 @@ export function tulisDesimal(n: number | null | undefined, desimal: number = DES
  * dari angka berkoma di sel sebelahnya.
  */
 export function tulisPersen(n: number | null | undefined, desimal = 2): string {
+  const t = tulisTetap(n, desimal);
+  return t ? t + '%' : '';
+}
+
+/** Angka berdesimal TETAP gaya Indonesia: (1.5, 1) → "1,5" · (2, 1) → "2,0" — pengganti `toFixed` di layar ("1,5 M"). */
+export function tulisTetap(n: number | null | undefined, desimal: number): string {
   if (n == null || !Number.isFinite(n)) return '';
   return bulatkanDesimal(n, desimal).toLocaleString('id-ID', {
     minimumFractionDigits: desimal, maximumFractionDigits: desimal,
-  }) + '%';
+  });
 }
 
 /** Buang huruf & simbol dari ketikan, sisakan angka + pemisah + tanda minus. */

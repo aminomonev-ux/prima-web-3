@@ -24,21 +24,26 @@ export async function bacaJadwalSekarang(q: Penanya = sql): Promise<{ jadwal: Ja
 }
 
 /**
+ * Syarat SQL "sesi kena keluar paksa" (`s` = user_sessions, `u` = users) — cermin `sesiKenaKeluar`
+ * (dijaga uji), termasuk `NOW() >= batas`. SATU rumus untuk mematikan dan untuk menghitung.
+ */
+const sesiKenaKeluarSql = (j: JadwalKeluar) => sql`(
+      NOW() >= ${j.batas}
+      AND s.created_at < ${j.batas}
+      AND s.session_id <> ${j.sesi_pengirim}
+      AND NOT (u.role = 'SUPER_ADMIN' AND s.created_at >= ${j.dikirim}))`;
+
+/**
  * Mengeluarkan semua sesi yang kena, sekaligus — `getSession` menolaknya satu per satu saat
  * dipakai, tapi sesi yang tak pernah dipakai lagi harus ikut mati SEBELUM barisnya ditimpa jadwal
- * baru. Syaratnya cermin `sesiKenaKeluar` (dijaga uji), termasuk `NOW() >= batas` sehingga aman
- * dipanggil kapan saja dan berulang.
+ * baru. Aman dipanggil kapan saja dan berulang.
  */
 export async function terapkanKeluar(q: Penanya, j: JadwalKeluar): Promise<number> {
   const res = await q`
     UPDATE user_sessions s
     JOIN users u ON u.id = s.user_id
     SET s.invalidated_at = NOW()
-    WHERE s.invalidated_at IS NULL
-      AND NOW() >= ${j.batas}
-      AND s.created_at < ${j.batas}
-      AND s.session_id <> ${j.sesi_pengirim}
-      AND NOT (u.role = 'SUPER_ADMIN' AND s.created_at >= ${j.dikirim})
+    WHERE s.invalidated_at IS NULL AND ${sesiKenaKeluarSql(j)}
   ` as { affectedRows?: number }[];
   return Number(res[0]?.affectedRows ?? 0);
 }
@@ -111,12 +116,18 @@ export async function pemberitahuanLoginDitahan(): Promise<{ sampai: string } | 
   }
 }
 
-/** Sesi lain yang masih hidup (aktif dalam batas idle 60 menit) — angka di Admin Panel. */
-export async function hitungSesiLain(sessionId: string): Promise<number> {
-  const rows = await sql`
-    SELECT COUNT(*) AS n FROM user_sessions
-    WHERE invalidated_at IS NULL AND session_id <> ${sessionId}
-      AND last_active >= NOW() - INTERVAL 60 MINUTE
+/**
+ * Sesi lain yang masih hidup (aktif dalam batas idle 60 menit) — angka di Admin Panel. Sesi yang
+ * sudah kena keluar paksa tapi belum sempat ditandai tidak dihitung; panel cukup MEMBACA (dulu
+ * GET-nya menjalankan `terapkanKeluar` tiap 15 detik, selamanya sesudah pemeliharaan apa pun).
+ */
+export async function hitungSesiLain(sessionId: string, j: JadwalKeluar | null, q: Penanya = sql): Promise<number> {
+  const rows = await q`
+    SELECT COUNT(*) AS n FROM user_sessions s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.invalidated_at IS NULL AND s.session_id <> ${sessionId}
+      AND s.last_active >= NOW() - INTERVAL 60 MINUTE
+      ${j ? sql`AND NOT ${sesiKenaKeluarSql(j)}` : sql``}
   ` as { n: number | string }[];
   return Number(rows[0]?.n ?? 0);
 }
