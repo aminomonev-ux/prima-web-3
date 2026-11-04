@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import { fetchJson } from '@/lib/shared/api';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
+import { tulisPersen } from '@/lib/shared/desimal';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { SumberSSK, SskRow, RekeningRow, MonthKey } from '../_types';
 import { SUMBER_LIST, SSK_THEME, MONTHS_KEYS, MONTH_SHORT, emptyMonths } from '../_utils';
@@ -578,12 +579,12 @@ export default function SskTab({
                         : fmtNum(row.months[m]||0)}
                     </td>,
                     <td key={`${m}-p`} style={{ ...tdRight, color:cTextSub, background:cPctBg, fontSize:'11px' }}>
-                      {(row.months_pct[m]||0).toFixed(2)}%
+                      {tulisPersen(row.months_pct[m]||0)}
                     </td>,
                   ])}
                   <td style={{ ...tdRight, fontWeight:700, color:cTextPrimary }}>{fmtNum(row.total)}</td>
                   <td style={{ ...tdRight, fontWeight:700, color: row.total_pct >= 100 ? '#16a34a' : row.total_pct >= 50 ? '#f59e0b':'#dc3545' }}>
-                    {row.total_pct.toFixed(2)}%
+                    {tulisPersen(row.total_pct)}
                   </td>
                   {canEdit && (
                     <td style={{ ...tdCenter, position:'sticky', right:0, zIndex:1, display:'flex', gap:'4px', justifyContent:'center',
@@ -639,7 +640,7 @@ export default function SskTab({
                     ])}
                     <td style={{ ...tfRight, color:theme.color }}>{fmtNum(totalGrand)}</td>
                     <td style={{ ...tfRight, color: totalGrandPct >= 100 ? '#16a34a' : totalGrandPct >= 50 ? '#f59e0b' : '#dc3545' }}>
-                      {totalGrandPct.toFixed(2)}%
+                      {tulisPersen(totalGrandPct)}
                     </td>
                     {canEdit && <td style={{ ...tfBase, position:'sticky', right:0, background: isLight?'rgba(139,92,246,.12)':'rgba(12,68,124,.6)' }} />}
                   </tr>

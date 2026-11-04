@@ -50,6 +50,14 @@ export async function exportSskExcel(params: { rows: SskRow[]; sumber: SumberSSK
   await downloadWorkbook(wb, `SSK-${sumber}-${tahun}.xlsx`);
 }
 
+export function barisSskPdf(rows: SskRow[]): string[][] {
+  return rows.map((r, i) => [
+    String(i+1), r.uraian_ssk, r.uraian, fmtNum(r.pagu),
+    ...MONTHS_KEYS.flatMap(m => [fmtNum(r.months[m]||0), tulisPersen(r.months_pct[m]||0)]),
+    fmtNum(r.total), tulisPersen(r.total_pct),
+  ]);
+}
+
 export async function exportSskPdf(params: { rows: SskRow[]; sumber: SumberSSK; tahun: string }) {
   const { rows, sumber, tahun } = params;
   const { jsPDF, autoTable } = await loadPdf();
@@ -59,12 +67,7 @@ export async function exportSskPdf(params: { rows: SskRow[]; sumber: SumberSSK; 
   doc.setFontSize(9);
   doc.text('RSJD dr. Amino Gondohutomo', 14, 20);
   const head = [['No','Uraian SSK','Uraian','Pagu (Rp)', ...MONTH_SHORT.flatMap(m => [`${m} Fisik`,`${m} %`]),'Total (Rp)','Total %']];
-  const body = rows.map((r, i) => [
-    String(i+1), r.uraian_ssk, r.uraian, fmtNum(r.pagu),
-    ...MONTHS_KEYS.flatMap(m => [fmtNum(r.months[m]||0), String(r.months_pct[m]||0)]),
-    fmtNum(r.total), String(r.total_pct)+'%',
-  ]);
-  autoTable(doc, { head, body, startY: 24, styles: { fontSize: 7, cellPadding: 1 }, headStyles: { fillColor: [51,65,85] } });
+  autoTable(doc, { head, body: barisSskPdf(rows), startY: 24, styles: { fontSize: 7, cellPadding: 1 }, headStyles: { fillColor: [51,65,85] } });
   doc.save(`SSK-${sumber}-${tahun}.pdf`);
 }
 
@@ -692,7 +695,11 @@ export async function exportPendapatanExcel(params: { rows: PendRow[]; tahun: st
 // ─── Laporan Konsolidasi (2 sheets: Ringkasan + Trend Bulanan) ────────────────
 
 export async function exportLaporanExcel(params: { data: LaporanSumber; tahun: string }) {
-  const { data, tahun } = params;
+  await downloadWorkbook(await buatWorkbookLaporan(params.data), `Laporan-${params.data.sumber}-${params.tahun}.xlsx`);
+}
+
+/** Dipisah dari tombol unduh supaya isi selnya bisa diuji di Node. */
+export async function buatWorkbookLaporan(data: LaporanSumber) {
   const ExcelJSLib = await loadExcelJs();
   const wb = new ExcelJSLib.Workbook();
 
@@ -705,31 +712,42 @@ export async function exportLaporanExcel(params: { data: LaporanSumber; tahun: s
     ['Total Target Fisik', data.total_target_fisik],
     ['Total Realisasi Keuangan', data.total_real_keuangan],
     ['Total Realisasi Fisik', data.total_real_fisik],
-    ['% Serapan Keuangan', data.pct_serapan+'%'],
-    ['% Capaian Fisik', data.pct_fisik+'%'],
+    ['% Serapan Keuangan', data.pct_serapan],
+    ['% Capaian Fisik', data.pct_fisik],
     ['Bulan Terakhir Data', CRR_BULAN_LABELS[data.bulan_terakhir-1] ?? '-'],
   ];
   addSheetFromAoa(wsSum, [sumHeader, ...sumData], {
     colWidths: [{ wch: 24 }, { wch: 30 }],
-    // Kolom Nilai campur angka & teks ('62.01%', nama bulan). Pelewat sel
-    // non-angka di addSheetFromAoa yang membuat ini aman.
+    // Kolom Nilai campur rupiah, persen, dan nama bulan: format per kolom untuk
+    // rupiah, baris persen ditimpa per sel di bawah (tetap ANGKA, bisa dihitung).
     numFmts:   [null, FMT_RUPIAH],
   });
+  sumData.forEach((r, i) => { if (String(r[0]).startsWith('%')) wsSum.getRow(i + 2).getCell(2).numFmt = FMT_PERSEN; });
 
   // Sheet 2: Trend Bulanan
   const wsTrend = wb.addWorksheet('Trend Bulanan');
   const trendHeader = ['Bulan','Real Keuangan','% Real Keu','Akum Keuangan','Akum % Keuangan','Real Fisik','Akum % Fisik'];
   const trendData = data.trend.map(t => [
     CRR_BULAN_LABELS[t.bulan-1] ?? t.bulan,
-    t.real_keuangan, t.pct_keuangan+'%', t.akum_keuangan, t.akum_pct_keuangan+'%', t.real_fisik, t.akum_pct_fisik+'%',
+    t.real_keuangan, t.pct_keuangan, t.akum_keuangan, t.akum_pct_keuangan, t.real_fisik, t.akum_pct_fisik,
   ]);
   addSheetFromAoa(wsTrend, [trendHeader, ...trendData], {
     colWidths: [{ wch:14 },{ wch:16 },{ wch:14 },{ wch:16 },{ wch:16 },{ wch:16 },{ wch:14 }],
-    // Kolom persen di sheet ini dikirim sebagai teks ('62.01%'), jadi tidak diberi format.
-    numFmts:   [null, FMT_RUPIAH, null, FMT_RUPIAH, null, FMT_RUPIAH, null],
+    numFmts:   [null, FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN, FMT_RUPIAH, FMT_PERSEN],
   });
+  return wb;
+}
 
-  await downloadWorkbook(wb, `Laporan-${data.sumber}-${tahun}.xlsx`);
+export function barisLaporanPdf(data: LaporanSumber): string[][] {
+  return data.trend.map(t => [
+    CRR_BULAN_LABELS[t.bulan-1] ?? String(t.bulan),
+    fmtNum(t.real_keuangan), tulisPersen(t.pct_keuangan), fmtNum(t.akum_keuangan), tulisPersen(t.akum_pct_keuangan),
+    fmtNum(t.real_fisik), tulisPersen(t.akum_pct_fisik),
+  ]);
+}
+
+export function ringkasLaporanPdf(data: LaporanSumber): string {
+  return `Pagu: ${fmtRp(data.total_pagu)}   Real Keuangan: ${fmtRp(data.total_real_keuangan)}   Serapan: ${tulisPersen(data.pct_serapan)}   Capaian Fisik: ${tulisPersen(data.pct_fisik)}`;
 }
 
 export async function exportLaporanPdf(params: { data: LaporanSumber; tahun: string }) {
@@ -739,14 +757,9 @@ export async function exportLaporanPdf(params: { data: LaporanSumber; tahun: str
   doc.setFontSize(13); doc.text(`Laporan Konsolidasi ${data.sumber} — Tahun ${tahun}`, 14, 14);
   doc.setFontSize(9);  doc.text('RSJD dr. Amino Gondohutomo', 14, 20);
   doc.setFontSize(10);
-  doc.text(`Pagu: ${fmtRp(data.total_pagu)}   Real Keuangan: ${fmtRp(data.total_real_keuangan)}   Serapan: ${data.pct_serapan}%   Capaian Fisik: ${data.pct_fisik}%`, 14, 27);
+  doc.text(ringkasLaporanPdf(data), 14, 27);
   const head = [['Bulan','Real Keuangan (Rp)','% Real Keu','Akum Keuangan (Rp)','Akum % Keuangan','Real Fisik (Rp)','Akum % Fisik']];
-  const body = data.trend.map(t => [
-    CRR_BULAN_LABELS[t.bulan-1] ?? String(t.bulan),
-    fmtNum(t.real_keuangan), t.pct_keuangan+'%', fmtNum(t.akum_keuangan), t.akum_pct_keuangan+'%',
-    fmtNum(t.real_fisik), t.akum_pct_fisik+'%',
-  ]);
-  autoTable(doc, { head, body, startY:32, styles:{ fontSize:8, cellPadding:2 }, headStyles:{ fillColor:[51,65,85] } });
+  autoTable(doc, { head, body: barisLaporanPdf(data), startY:32, styles:{ fontSize:8, cellPadding:2 }, headStyles:{ fillColor:[51,65,85] } });
   doc.save(`Laporan-${data.sumber}-${tahun}.pdf`);
 }
 

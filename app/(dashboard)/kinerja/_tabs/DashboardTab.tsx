@@ -12,6 +12,7 @@ import { fetchJson } from '@/lib/shared/api';
 import { useAbortableEffect } from '@/lib/shared/hooks';
 import { KpiSkeleton } from '@/components/ui/table-skeleton';
 import { fmtRp } from '@/lib/shared/utils';
+import { tulisPersen } from '@/lib/shared/desimal';
 import type { KpiData } from '../_types';
 import { SUMBER_LIST, SSK_THEME } from '../_utils';
 import BerandaCharts from '@/components/kinerja/BerandaCharts';
@@ -71,7 +72,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
       bg:    isLight ? 'linear-gradient(135deg,#D1FAE5,#A7F3D0)' : 'linear-gradient(135deg,rgba(16,185,129,.22),rgba(5,150,105,.12))',
       color: isLight ? '#065F46' : '#6EE7B7',
       iconBg: isLight ? '#10B981' : 'rgba(16,185,129,.35)' },
-    { label:'Serapan Anggaran',    value: pct.toFixed(2)+'%',                            sub:'Keuangan',     Icon: Percent,
+    { label:'Serapan Anggaran',    value: tulisPersen(pct),                            sub:'Keuangan',     Icon: Percent,
       bg:    pct>=80 ? (isLight?'linear-gradient(135deg,#D1FAE5,#A7F3D0)':'linear-gradient(135deg,rgba(16,185,129,.22),rgba(5,150,105,.12))')
            : pct>=50 ? (isLight?'linear-gradient(135deg,#FEF3C7,#FDE68A)':'linear-gradient(135deg,rgba(245,158,11,.22),rgba(217,119,6,.12))')
                      : (isLight?'linear-gradient(135deg,#FEE2E2,#FECACA)':'linear-gradient(135deg,rgba(239,68,68,.22),rgba(220,38,38,.12))'),
@@ -229,7 +230,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
                       transform={`rotate(-90 ${PIE_SIZE/2} ${PIE_SIZE/2})`}
                       style={{ transition:'stroke-dasharray .6s ease, stroke-dashoffset .6s ease' }}
                     >
-                      <title>{`${seg.label}: ${fmtRp(seg.value)} (${seg.pct.toFixed(1)}%)`}</title>
+                      <title>{`${seg.label}: ${fmtRp(seg.value)} (${tulisPersen(seg.pct, 1)})`}</title>
                     </circle>
                   ))}
                 </svg>
@@ -282,7 +283,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
                   fontSize:'11px', fontWeight:800, color:seg.color,
                   background:`${seg.color}22`, padding:'3px 8px', borderRadius:'6px', minWidth:'48px', textAlign:'center',
                 }}>
-                  {seg.pct.toFixed(1)}%
+                  {tulisPersen(seg.pct, 1)}
                 </div>
               </div>
             ))}
@@ -325,7 +326,7 @@ export default function DashboardTab({ tahun, isLight = false }: Props) {
                   style={{ transition:'stroke-dasharray .6s ease' }} />
               </svg>
               <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
-                <div style={{ fontSize:'28px', fontWeight:800, color:gaugeColor, lineHeight:1 }}>{pct.toFixed(1)}%</div>
+                <div style={{ fontSize:'28px', fontWeight:800, color:gaugeColor, lineHeight:1 }}>{tulisPersen(pct, 1)}</div>
                 <div style={{ fontSize:'9px', fontWeight:700, color:cTextSub, marginTop:'4px', textTransform:'uppercase', letterSpacing:'.06em' }}>
                   Realisasi vs Pagu
                 </div>

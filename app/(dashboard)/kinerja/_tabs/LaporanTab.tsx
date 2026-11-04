@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { useAbortableEffect } from '@/lib/shared/hooks';
 import { fmtRp, fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
+import { tulisPersen } from '@/lib/shared/desimal';
 import type { SumberSSK, LaporanSumber } from '../_types';
 import { SUMBER_LIST, SSK_THEME, CRR_BULAN_LABELS, MONTH_SHORT } from '../_utils';
 import { exportLaporanExcel, exportLaporanPdf } from '../_exports';
@@ -164,14 +165,14 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
               { label:'Real Keuangan',      value: fmtRp(d.total_real_keuangan),      icon:Coins,
                 bg:    isLight ? 'rgba(29,158,117,.14)' : 'rgba(29,158,117,.12)',
                 color: isLight ? '#047857' : '#6EE7B7' },
-              { label:'Serapan Keuangan',   value: d.pct_serapan.toFixed(2)+'%',      icon:Percent,
+              { label:'Serapan Keuangan',   value: tulisPersen(d.pct_serapan),      icon:Percent, pct: d.pct_serapan,
                 bg:    d.pct_serapan>=80 ? (isLight?'rgba(29,158,117,.14)':'rgba(29,158,117,.12)')
                      : d.pct_serapan>=50 ? (isLight?'rgba(186,117,23,.14)':'rgba(186,117,23,.12)')
                                          : (isLight?'rgba(226,75,74,.14)':'rgba(226,75,74,.12)'),
                 color: d.pct_serapan>=80 ? (isLight?'#047857':'#6EE7B7')
                      : d.pct_serapan>=50 ? (isLight?'#B45309':'#FAC775')
                                          : (isLight?'#B91C1C':'#FCA5A5') },
-              { label:'Capaian Fisik',      value: d.pct_fisik.toFixed(2)+'%',        icon:ListChecks,
+              { label:'Capaian Fisik',      value: tulisPersen(d.pct_fisik),        icon:ListChecks, pct: d.pct_fisik,
                 bg:    d.pct_fisik>=80 ? (isLight?'rgba(29,158,117,.14)':'rgba(29,158,117,.12)')
                      : d.pct_fisik>=50 ? (isLight?'rgba(186,117,23,.14)':'rgba(186,117,23,.12)')
                                        : (isLight?'rgba(226,75,74,.14)':'rgba(226,75,74,.12)'),
@@ -195,9 +196,10 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                     <c.icon size={16} />
                   </div>
                 </div>
-                {(c.label==='Serapan Keuangan'||c.label==='Capaian Fisik') && (
+                {/* Lebar dari angkanya, bukan parseFloat(c.value): "1.234,56%" terbaca 1,234. */}
+                {c.pct !== undefined && (
                   <div style={{ marginTop:'8px', height:'5px', background: isLight ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.4)', borderRadius:'99px', overflow:'hidden' }}>
-                    <div style={{ height:'100%', width:`${Math.min(parseFloat(c.value),100)}%`, background:c.color, borderRadius:'99px', transition:'width .6s' }} />
+                    <div style={{ height:'100%', width:`${Math.min(c.pct,100)}%`, background:c.color, borderRadius:'99px', transition:'width .6s' }} />
                   </div>
                 )}
               </div>
@@ -254,7 +256,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                     <div key={s} style={{ marginBottom:'10px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', marginBottom:'3px' }}>
                         <span style={{ fontWeight:700, color:SSK_THEME[s].color }}>{s}</span>
-                        <span style={{ fontWeight:600, color:cTextSub }}>{pct.toFixed(1)}%</span>
+                        <span style={{ fontWeight:600, color:cTextSub }}>{tulisPersen(pct, 1)}</span>
                       </div>
                       <div style={{ height:'7px', background:cTrackBg, borderRadius:'99px', overflow:'hidden' }}>
                         <div style={{ height:'100%', width:`${Math.min(pct,100)}%`, background:SSK_THEME[s].grad, borderRadius:'99px', transition:'width .5s' }} />
@@ -299,7 +301,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                         <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', textAlign:'right' }}>
                           {isEmpty ? '-' : (
                             <span style={{ fontWeight:700, color: t.akum_pct_keuangan>=80?'#16a34a':t.akum_pct_keuangan>=50?'#f59e0b':'#dc2626' }}>
-                              {t.akum_pct_keuangan.toFixed(2)}%
+                              {tulisPersen(t.akum_pct_keuangan)}
                             </span>
                           )}
                         </td>
@@ -307,7 +309,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                         <td style={{ padding:'7px 12px', borderBottom: isLight ? '1px solid rgba(139,92,246,.06)' : '1px solid rgba(51,65,85,.06)', textAlign:'right' }}>
                           {isEmpty ? '-' : (
                             <span style={{ fontWeight:700, color: t.akum_pct_fisik>=80?'#16a34a':t.akum_pct_fisik>=50?'#f59e0b':'#dc2626' }}>
-                              {t.akum_pct_fisik.toFixed(2)}%
+                              {tulisPersen(t.akum_pct_fisik)}
                             </span>
                           )}
                         </td>
@@ -319,9 +321,9 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                     <td colSpan={2} style={{ padding:'8px 12px', borderTop:`2px solid ${cBorder}`, color:cTextPrimary }}>TOTAL</td>
                     <td style={{ padding:'8px 12px', borderTop:`2px solid ${cBorder}`, textAlign:'right', color:cTextPrimary }}>{fmtRp(d.total_real_keuangan)}</td>
                     <td style={{ padding:'8px 12px', borderTop:`2px solid ${cBorder}`, textAlign:'right', color:cTextSub }}>—</td>
-                    <td style={{ padding:'8px 12px', borderTop: isLight ? `2px solid ${cBorder}` : '2px solid #cbd5e1', textAlign:'right', color: d.pct_serapan>=80?'#16a34a':d.pct_serapan>=50?'#f59e0b':'#dc2626' }}>{d.pct_serapan.toFixed(2)}%</td>
+                    <td style={{ padding:'8px 12px', borderTop: isLight ? `2px solid ${cBorder}` : '2px solid #cbd5e1', textAlign:'right', color: d.pct_serapan>=80?'#16a34a':d.pct_serapan>=50?'#f59e0b':'#dc2626' }}>{tulisPersen(d.pct_serapan)}</td>
                     <td style={{ padding:'8px 12px', borderTop:`2px solid ${cBorder}`, textAlign:'right', color:cTextPrimary }}>{fmtRp(d.total_real_fisik)}</td>
-                    <td style={{ padding:'8px 12px', borderTop: isLight ? `2px solid ${cBorder}` : '2px solid #cbd5e1', textAlign:'right', color: d.pct_fisik>=80?'#16a34a':d.pct_fisik>=50?'#f59e0b':'#dc2626' }}>{d.pct_fisik.toFixed(2)}%</td>
+                    <td style={{ padding:'8px 12px', borderTop: isLight ? `2px solid ${cBorder}` : '2px solid #cbd5e1', textAlign:'right', color: d.pct_fisik>=80?'#16a34a':d.pct_fisik>=50?'#f59e0b':'#dc2626' }}>{tulisPersen(d.pct_fisik)}</td>
                   </tr>
                   {/* Perbandingan dengan pagu */}
                   <tr style={{ background:cAccentSoft, fontWeight:700, fontSize:'11px' }}>
@@ -330,7 +332,7 @@ export default function LaporanTab({ tahun, isLight = false }: Props) {
                     <td colSpan={4} style={{ padding:'8px 12px', textAlign:'right', color:cAccent }}>
                       Selisih: {fmtRp(d.total_pagu - d.total_real_keuangan)}
                       <span style={{ marginLeft:'12px', fontSize:'12px', background:d.pct_serapan>=80?'#16a34a':d.pct_serapan>=50?'#f59e0b':'#dc2626', color:'white', padding:'2px 8px', borderRadius:'20px' }}>
-                        {d.pct_serapan.toFixed(2)}% terserap
+                        {tulisPersen(d.pct_serapan)} terserap
                       </span>
                     </td>
                   </tr>

@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { useAbortableEffect } from '@/lib/shared/hooks';
 import { fmtRp } from '@/lib/shared/utils';
+import { tulisPersen } from '@/lib/shared/desimal';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import Tip from '@/components/ui/Tip';
@@ -296,7 +297,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
               Realisasi: {fmtRp(totalReal)}
             </span>
             <span style={{ padding:'4px 10px', borderRadius:'20px', background: totalCapaian>=100?(isLight?'rgba(29,158,117,.16)':'rgba(29,158,117,.15)'):totalCapaian>=80?(isLight?'rgba(186,117,23,.16)':'rgba(186,117,23,.15)'):(isLight?'rgba(226,75,74,.16)':'rgba(226,75,74,.15)'), color: totalCapaian>=100?(isLight?'#047857':'#6EE7B7'):totalCapaian>=80?(isLight?'#B45309':'#FAC775'):(isLight?'#B91C1C':'#FCA5A5'), fontSize:'11px', fontWeight:700 }}>
-              {totalCapaian.toFixed(1)}%
+              {tulisPersen(totalCapaian, 1)}
             </span>
             {canEdit && !adaPerubahan && (
               <PrimaButton variant="purple" iconLeft={<GitBranch size={14} />}
@@ -366,7 +367,7 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
                     </td>
                     <td style={{ ...roStyle }}>
                       <span style={{ fontWeight:800, color: row.capaian_pct>=100?'#16a34a':row.capaian_pct>=80?'#f59e0b':'#dc2626' }}>
-                        {row.capaian_pct.toFixed(2)}%
+                        {tulisPersen(row.capaian_pct)}
                       </span>
                     </td>
                   </tr>
@@ -473,10 +474,10 @@ export default function PendapatanCrrTab({ tahun, canEdit, isLight = false, auto
                       <td style={roStyle}>{hasData ? fmtRp(row.belanja_daerah_sd) : <span style={{ opacity:.4 }}>—</span>}</td>
 
                       <td style={{ ...roStyle, fontWeight:700, color: !hasData ? cTextSub : row.crr_parsial_pct >= 100 ? '#16a34a' : row.crr_parsial_pct >= 80 ? '#f59e0b' : '#dc2626' }}>
-                        {hasData ? row.crr_parsial_pct.toFixed(2) + '%' : '—'}
+                        {hasData ? tulisPersen(row.crr_parsial_pct) : '—'}
                       </td>
                       <td style={{ ...roStyle, fontWeight:700, color: !hasData ? cTextSub : row.crr_total_pct >= 100 ? '#16a34a' : row.crr_total_pct >= 80 ? '#f59e0b' : '#dc2626' }}>
-                        {hasData ? row.crr_total_pct.toFixed(2) + '%' : '—'}
+                        {hasData ? tulisPersen(row.crr_total_pct) : '—'}
                       </td>
                     </tr>
                   );

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { fmtNumDisplay as fmtNum } from '@/lib/shared/utils';
+import { tulisPersen } from '@/lib/shared/desimal';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { SumberSSK, RealRow, SskRow, RealInputField } from '../_types';
 import { SUMBER_LIST, SSK_THEME, MONTH_SHORT, MONTH_LABELS, recalcAllRealisasi } from '../_utils';
@@ -822,7 +823,7 @@ export default function RealisasiTab({
                     <span style={{ color:cTextPrimary, fontSize:'12px' }}>{fmtNum(row.pagu_awal)}</span>
                   </td>
                   <td style={{ padding:'5px 6px', borderBottom:cBorderHair, textAlign:'right' }}>
-                    <span style={{ color:cTextSub, fontSize:'12px' }}>{(row.target_fisik||0).toFixed(2)}%</span>
+                    <span style={{ color:cTextSub, fontSize:'12px' }}>{tulisPersen(row.target_fisik||0)}</span>
                   </td>
                   <td style={{ padding:'3px 6px', borderBottom:cBorderHair }}>
                     {bisaSunting
@@ -856,15 +857,15 @@ export default function RealisasiTab({
                           style={{ ...inpBase, width:'120px', textAlign:'right', borderColor: isLight?'#10b981':'#86efac' }} />
                       : <span style={{ color: isLight?'#15803D':'#16a34a', fontWeight:700 }}>{fmtNum(row.real_keuangan)}</span>}
                   </td>
-                  <td style={{ ...roCell, color: row.pct_fisik>=100?'#16a34a':row.pct_fisik>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.pct_fisik.toFixed(2)}%</td>
-                  <td style={{ ...roCell, fontWeight:700 }}>{row.akum_target_fisik.toFixed(2)}%</td>
+                  <td style={{ ...roCell, color: row.pct_fisik>=100?'#16a34a':row.pct_fisik>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{tulisPersen(row.pct_fisik)}</td>
+                  <td style={{ ...roCell, fontWeight:700 }}>{tulisPersen(row.akum_target_fisik)}</td>
                   <td style={{ ...roCell }}>{fmtNum(row.akum_real_fisik)}</td>
-                  <td style={{ ...roCell, color: row.akum_pct_fisik>=100?'#16a34a':row.akum_pct_fisik>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.akum_pct_fisik.toFixed(2)}%</td>
-                  <td style={{ ...roCell, color: row.pct_keuangan>=100?'#16a34a':row.pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.pct_keuangan.toFixed(2)}%</td>
+                  <td style={{ ...roCell, color: row.akum_pct_fisik>=100?'#16a34a':row.akum_pct_fisik>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{tulisPersen(row.akum_pct_fisik)}</td>
+                  <td style={{ ...roCell, color: row.pct_keuangan>=100?'#16a34a':row.pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{tulisPersen(row.pct_keuangan)}</td>
                   <td style={{ ...roCell }}>{fmtNum(row.akum_keuangan)}</td>
-                  <td style={{ ...roCell, color: row.akum_pct_keuangan>=100?'#16a34a':row.akum_pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{row.akum_pct_keuangan.toFixed(2)}%</td>
-                  <td style={{ ...roCell, color: row.deviasi_fisik>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{row.deviasi_fisik.toFixed(2)}%</td>
-                  <td style={{ ...roCell, color: row.deviasi_keuangan>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{row.deviasi_keuangan.toFixed(2)}%</td>
+                  <td style={{ ...roCell, color: row.akum_pct_keuangan>=100?'#16a34a':row.akum_pct_keuangan>=50?'#f59e0b':'#dc2626', fontWeight:700 }}>{tulisPersen(row.akum_pct_keuangan)}</td>
+                  <td style={{ ...roCell, color: row.deviasi_fisik>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{tulisPersen(row.deviasi_fisik)}</td>
+                  <td style={{ ...roCell, color: row.deviasi_keuangan>=0?'#16a34a':'#dc2626', fontWeight:600 }}>{tulisPersen(row.deviasi_keuangan)}</td>
                   {canEdit && (
                     <td style={{ padding:'5px 8px', borderBottom:cBorderHair, textAlign:'center', position:'sticky', right:0, zIndex:1, background: ri%2===0 ? cRowEven : cRowOdd }}>
                       {(() => {
