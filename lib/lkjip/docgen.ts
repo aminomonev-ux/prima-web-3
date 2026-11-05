@@ -56,12 +56,14 @@ function colorToHex6(c: string): string | null {
   return null;
 }
 
-// Allocator numId: tiap list (ul/ol/ol-alpha) dapat numId UNIK → list independen
-// restart sendiri (a,b,c lalu list berikutnya balik a,b,c — bukan lanjut d,e,f).
+// Allocator numId: tiap list (ul/ol/ol-alpha) dapat numId UNIK.
 // continueLast=true → PAKAI ULANG numId terakhir dgn abs sama → Word lanjut nomor
 // lintas-blok (a,b,c yang terpotong tabel/gambar; flag continueList di blok narasi).
 // abs: 0=bullet, 1=decimal, 2=lowerLetter.
-// start>1 (<ol start="n">, daftar Word yang terpotong) → startOverride pada numId barunya.
+// Daftar bernomor SELALU diberi startOverride (1, atau <ol start="n">): Word menyambung semua num yang
+// berbagi abstractNum kecuali ada startOverride — tanpa itu numId unik tidak memulai ulang apa pun dan
+// seluruh daftar se-dokumen jadi satu hitungan (dibuka di Word 2026-11-05: daftar ketiga tercetak "6.").
+// Editor menampilkan nomor "Lanjut daftar" dengan aturan yang sama (`lanjut-daftar.ts`).
 type NumAlloc = {
   next: number;
   instances: { numId: number; abs: number; start?: number }[];
@@ -75,7 +77,7 @@ function makeNumAlloc(): NumAlloc {
       const abs = kind === 'ul' ? 0 : kind === 'ola' ? 2 : 1;
       if (continueLast && a.lastByAbs[abs]) return a.lastByAbs[abs];
       const numId = a.next++;
-      a.instances.push(start > 1 ? { numId, abs, start } : { numId, abs });
+      a.instances.push(abs === 0 ? { numId, abs } : { numId, abs, start: Math.max(1, start) });
       a.lastByAbs[abs] = numId;
       return numId;
     },

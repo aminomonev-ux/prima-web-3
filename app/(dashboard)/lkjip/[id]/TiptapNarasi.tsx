@@ -6,6 +6,9 @@ import { toast } from 'sonner';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus } from 'lucide-react';
 import type { ObjekRujukan } from '@/lib/lkjip/numbering';
 import PrimaButton from '@/components/ui/PrimaButton';
@@ -14,6 +17,7 @@ import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { angkaDiHtml, bandingAngka, idAngkaBaru, kalimatAngka, kunciTarikan, resepTerpakai, type ResepAngka } from '@/lib/lkjip/angka';
 import type { HasilTarik } from '@/lib/lkjip/tautan';
+import { mulaiTampil, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
 
 const AngkaModal = dynamic(() => import('./AngkaModal'), { ssr: false });
 
@@ -144,6 +148,38 @@ const RujukTaut = Node.create({
 });
 const META_SEGAR = 'lkjipRujukSegar';
 
+// "Lanjut daftar": nomor awal daftar pertama blok dipasang sebagai DEKORASI (atribut start di DOM saja),
+// tidak ditulis ke isi blok — kalau disimpan, angkanya basi begitu daftar di blok sebelumnya bertambah dan
+// tertinggal saat centangnya dilepas. CSS `counter-reset: list-item` tidak dipakai: Chromium mengabaikannya
+// untuk <ol> (dicoba di editor 2026-11-05). Daftar pertama tanpa sambungan tetap didekorasi dengan nomornya
+// sendiri, sebab melepas dekorasi ikut menghapus atribut start bawaannya dari DOM.
+const KUNCI_LANJUT = new PluginKey<LanjutanBlok | undefined>('lkjipLanjutDaftar');
+function dekorLanjut(doc: PMNode, lanjutan: LanjutanBlok | undefined): DecorationSet {
+  let dekor = DecorationSet.empty;
+  let ketemu = false;
+  doc.forEach((node, pos) => {
+    if (ketemu || (node.type.name !== 'orderedList' && node.type.name !== 'bulletList')) return;
+    ketemu = true;
+    const huruf = node.attrs.listType === 'a' || node.attrs.type === 'a';
+    const mulai = mulaiTampil(node.type.name === 'bulletList' ? { jenis: 'ul' } : { jenis: huruf ? 'ola' : 'ol', start: Number(node.attrs.start) || 1 }, lanjutan);
+    if (mulai !== null) dekor = DecorationSet.create(doc, [Decoration.node(pos, pos + node.nodeSize, { start: String(mulai) })]);
+  });
+  return dekor;
+}
+const LanjutDaftar = Extension.create({
+  name: 'lanjutDaftar',
+  addProseMirrorPlugins() {
+    return [new Plugin<LanjutanBlok | undefined>({
+      key: KUNCI_LANJUT,
+      state: {
+        init: () => undefined,
+        apply: (tr, nilai) => { const m = tr.getMeta(KUNCI_LANJUT) as { nilai?: LanjutanBlok } | undefined; return m ? m.nilai : nilai; },
+      },
+      props: { decorations: state => dekorLanjut(state.doc, KUNCI_LANJUT.getState(state)) },
+    })];
+  },
+});
+
 interface Props {
   initialHtml: string;
   initialAngka?: Record<string, ResepAngka>;
@@ -151,10 +187,12 @@ interface Props {
   readOnly: boolean;
   /** Tabel/Gambar/Grafik yang bisa dirujuk — nomornya SEKARANG (`daftarObjekRujukan`). */
   objek?: ObjekRujukan[];
+  /** Blok "Lanjut daftar": nomor sambungan daftar pertamanya (`lanjutanDaftar`). Kosong = tidak dicentang. */
+  lanjutan?: LanjutanBlok;
   onSave: (html: string, angka: Record<string, ResepAngka>) => void;
 }
 
-export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, onSave }: Props) {
+export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, lanjutan, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
   const [pilihRujuk, setPilihRujuk] = useState(false);
   const [angka, setAngka] = useState<Record<string, ResepAngka>>(initialAngka ?? {});
@@ -170,7 +208,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
     // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
     // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
-    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut, RujukTaut],
+    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut, RujukTaut, LanjutDaftar],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
@@ -194,6 +232,15 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     });
     if (ubah) editor.view.dispatch(tr.setMeta(META_SEGAR, true).setMeta('addToHistory', false));
   }, [editor, petaRujuk]);
+
+  // Sambungan berubah (blok lain disimpan, centang diubah) → dekorasinya disegarkan tanpa menyentuh isi.
+  const mulaiOl = lanjutan?.ol;
+  const mulaiOla = lanjutan?.ola;
+  useEffect(() => {
+    if (!editor) return;
+    const nilai = mulaiOl === undefined && mulaiOla === undefined ? undefined : { ol: mulaiOl, ola: mulaiOla };
+    editor.view.dispatch(editor.state.tr.setMeta(KUNCI_LANJUT, { nilai }).setMeta(META_SEGAR, true).setMeta('addToHistory', false));
+  }, [editor, mulaiOl, mulaiOla]);
 
   // Daftar rujukan menutup saat klik di luar / Esc — tombolnya tidak mengambil fokus (kursor narasi tetap).
   const rujukRef = useRef<HTMLSpanElement | null>(null);

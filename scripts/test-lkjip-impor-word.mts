@@ -320,7 +320,7 @@ const blk = new Map<number, BlockNode[]>([[1, [{ id: 11, tipe: 'NARASI', urutan:
 const word = new PizZip((await rakitDocx({ tree: buildNumberedTree(sec, blk), judul: 'Uji', tahun: 2099, canonical_id: 'LKJIP-UJI', style_config: DEFAULT_STYLE })).buffer)
 const numXml = word.file('word/numbering.xml')!.asText()
 ok('D3 Word: <ol start="3"> → startOverride 3, <ol type="a" start="2"> → startOverride 2', numXml.includes('<w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="3"/></w:lvlOverride>') && numXml.includes('<w:abstractNumId w:val="2"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="2"/></w:lvlOverride>'), numXml.slice(-500))
-ok('D4 Word: daftar tanpa start tidak diberi startOverride', /<w:num w:numId="3"><w:abstractNumId w:val="1"\/><\/w:num>/.test(numXml), numXml.slice(-300))
+ok('D4 Word: daftar tanpa start tetap diberi startOverride 1 (tanpa itu Word menyambung daftar sebelumnya)', /<w:num w:numId="3"><w:abstractNumId w:val="1"\/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"\/><\/w:lvlOverride><\/w:num>/.test(numXml), numXml.slice(-300))
 // Ekspor LKJIP → impor balik: struktur, tabel, dan nomor daftar kembali sama.
 const secRt: SectionFlat[] = [
   { id: 1, parent_id: null, depth: 0, urutan: 0, judul: 'PENDAHULUAN', locked: 1 },

@@ -23,6 +23,7 @@ import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDetail } from '@/lib/lkjip/data';
 import { nomorObjek, sebutObjek, daftarObjekRujukan, type SectionNode, type BlockNode, type NomorObjek, type ObjekRujukan } from '@/lib/lkjip/numbering';
 import type { VersiMeta } from '@/lib/lkjip/versi';
+import { lanjutanDaftar, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
 import { FONT_CHOICES } from '@/lib/lkjip/style-constants';
@@ -113,6 +114,8 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   const nomorBlok = useMemo(() => nomorObjek(detail.tree, detail.style_config.nomorPerBab), [detail.tree, detail.style_config.nomorPerBab]);
   // Tujuan rujukan silang di narasi (§12.5) — urut seperti di dokumen, nomornya SEKARANG.
   const daftarObjek = useMemo(() => daftarObjekRujukan(detail.tree, nomorBlok), [detail.tree, nomorBlok]);
+  // Nomor "Lanjut daftar" = hitungan yang sama dengan berkas Word, dari isi TERSIMPAN (yang ikut tercetak).
+  const lanjutanBlok = useMemo(() => lanjutanDaftar(detail.tree, detail.style_config.kataPengantarHtml), [detail.tree, detail.style_config.kataPengantarHtml]);
   // B12: aturan BAB dinilai dengan fungsi yang SAMA dengan pagar di lib/lkjip/data.ts.
   const bagian = useMemo<BagianRingkas[]>(
     () => flat.map(f => ({ id: f.node.id, parent_id: f.parentId, urutan: f.node.urutan, locked: f.node.locked })),
@@ -496,7 +499,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     kabar={kabarBlok(kabarAktif(b.id), b.tipe === 'NARASI')}
                     salinanAwal={salinanBaru?.blockId === b.id ? salinanBaru.salinan : undefined} onSalinanDipakai={() => setSalinanBaru(null)}
                     onSalinanBatal={() => void buangBlokTempelBatal(b.id)}
-                    nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok} daftarObjek={daftarObjek}
+                    nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok} daftarObjek={daftarObjek} lanjutan={lanjutanBlok.get(b.id)}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
                         onDragStart={e => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; }}
@@ -849,8 +852,9 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
         <li>Buat daftar di <b>blok pertama</b> seperti biasa (jangan dicentang).</li>
         <li>Di tiap blok narasi <b>lanjutan</b> (setelah tabel/gambar), buat daftar dengan <b>jenis yang sama</b>.</li>
         <li>Centang <b>“Lanjut daftar”</b> di header blok lanjutan tersebut.</li>
-        <li>Saat <b>Unduh Word</b>, nomor menyambung (1→2→3 / a→b→c) menyeberangi tabel/gambar.</li>
+        <li>Nomornya langsung menyambung di editor <b>dan</b> di <b>Unduh Word</b> (1→2→3 / a→b→c) menyeberangi tabel/gambar — nomor di editor sudah sama dengan hasil Word.</li>
       </ol>
+      <p className="lk-pd-note">Yang disambung: daftar sejenis <b>terakhir</b> sebelum blok itu, di bab mana pun (termasuk Kata Pengantar). Jangan centang daftar yang memang mulai baru.</p>
       <p className="lk-pd-note">Syarat: jenis daftar harus sama (angka dengan angka, huruf dengan huruf). Contoh nyata: §2.5 Instrumen Pendukung — 5 aplikasi bernomor <b>1–5</b> meski diselingi 5 gambar.</p>
     </>
   ) },
@@ -913,7 +917,7 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
 type NomorBlok = Map<number, NomorObjek>;
-function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
+function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, lanjutan, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; lanjutan?: LanjutanBlok; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
@@ -924,7 +928,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
             <span key={k.jenis + k.rinci} className={`lk-kabar ${k.jenis}`} data-tooltip={k.rinci} data-tooltip-pos="below">{k.label}</span>
           ))}
           {block.tipe === 'NARASI' && !readOnly && (
-            <label className="lk-block-cont" data-tooltip="Lanjutkan penomoran daftar (a,b,c / 1,2,3) dari blok narasi sebelumnya — untuk daftar yang terpotong tabel/gambar" data-tooltip-pos="below">
+            <label className="lk-block-cont" data-tooltip="Lanjutkan penomoran daftar (1,2,3 / a,b,c) dari daftar sejenis terakhir sebelum blok ini — untuk daftar yang terpotong tabel/gambar" data-tooltip-pos="below">
               <input type="checkbox" checked={continueList} onChange={e => { const v = e.target.checked; setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); }} />
               Lanjut daftar
             </label>
@@ -934,7 +938,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
       </div>
       {block.tipe === 'NARASI' && (
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
-          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} onSave={(html, angka) => onSave({ html, continueList, angka })} />
+          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} lanjutan={continueList ? lanjutan : undefined} onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
       {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
