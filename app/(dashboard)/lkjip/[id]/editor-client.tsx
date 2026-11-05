@@ -988,7 +988,8 @@ function GambarEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly:
 // ── Grafik (pie/bar/line) — recharts → PNG (html2canvas-pro) → embed Word ──
 const GRAFIK_COLORS = ['#7C5CFC', '#EF9F27', '#1D9E75', '#E24B4A', '#3B82F6', '#EC4899', '#14B8A6', '#BA7517', '#06B6D4', '#8B5CF6'];
 type GrafikDatum = { label: string; value: number };
-type GrafikP = { judul: string; chartType: 'pie' | 'bar' | 'line'; source: 'manual' | 'tabel'; data: GrafikDatum[]; tabelBlockId: number | null; labelCol: number; valueCol: number; imageFileId: string; caption: string; tabelSidik?: string };
+type SumberGrafik = 'manual' | 'tabel' | 'gambar';
+type GrafikP = { judul: string; chartType: 'pie' | 'bar' | 'line'; source: SumberGrafik; data: GrafikDatum[]; tabelBlockId: number | null; labelCol: number; valueCol: number; imageFileId: string; caption: string; tabelSidik?: string };
 
 function GrafikRender({ type, data }: { type: 'pie' | 'bar' | 'line'; data: GrafikDatum[] }) {
   const W = 520, H = 300;
@@ -1035,7 +1036,7 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
   const [chartType, setChartType] = useState<'pie' | 'bar' | 'line'>(p0.chartType ?? 'bar');
-  const [source, setSource] = useState<'manual' | 'tabel'>(p0.source ?? 'manual');
+  const [source, setSource] = useState<SumberGrafik>(p0.source ?? 'manual');
   const [data, setData] = useState<GrafikDatum[]>(p0.data?.length ? p0.data : [{ label: 'Kategori 1', value: 10 }, { label: 'Kategori 2', value: 20 }]);
   const [tabelBlockId, setTabelBlockId] = useState<number | null>(p0.tabelBlockId ?? (tableBlocks[0]?.id ?? null));
   const [labelCol, setLabelCol] = useState(p0.labelCol ?? 0);
@@ -1043,6 +1044,25 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
   const [saving, setSaving] = useState(false);
   const chartRef = useRef<HTMLDivElement | null>(null);
   const fileIdRef = useRef(p0.imageFileId ?? '');
+  // Sumber 'gambar' (grafik berupa gambar, mis. hasil impor Word): gambarnya dipakai apa adanya.
+  const [gambarKini, setGambarKini] = useState(p0.imageFileId ?? '');
+  const [mengunggah, setMengunggah] = useState(false);
+  const unggahGambar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setMengunggah(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('modul', 'lkjip');
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (json.ok && json.fileId) { fileIdRef.current = json.fileId; setGambarKini(json.fileId); toast.success('Gambar terunggah — tekan Simpan Grafik'); }
+      else toast.error(json.message ?? json.msg ?? 'Gagal mengunggah gambar');
+    } catch { toast.error('Gagal terhubung ke server'); }
+    finally { setMengunggah(false); }
+  };
 
   const selTable = tableBlocks.find(b => b.id === tabelBlockId);
   const tableKolom = ((selTable?.payload as { kolom?: string[] })?.kolom) ?? [];
@@ -1067,7 +1087,7 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
     try {
       let imageFileId = fileIdRef.current;
       const el = chartRef.current?.querySelector('.lk-grafik-canvas') as HTMLElement | null;
-      if (el && chartData.length) {
+      if (source !== 'gambar' && el && chartData.length) {
         try {
           const html2canvas = (await import('html2canvas-pro')).default;
           const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
@@ -1103,17 +1123,26 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
       )}
       {!readOnly && (
         <div className="lk-grafik-tools">
-          <label>Jenis
-            <select value={chartType} onChange={e => setChartType(e.target.value as 'pie' | 'bar' | 'line')}>
-              <option value="bar">Bar / Kolom</option><option value="line">Line / Garis</option><option value="pie">Pie / Donat</option>
-            </select>
-          </label>
+          {source !== 'gambar' && (
+            <label>Jenis
+              <select value={chartType} onChange={e => setChartType(e.target.value as 'pie' | 'bar' | 'line')}>
+                <option value="bar">Bar / Kolom</option><option value="line">Line / Garis</option><option value="pie">Pie / Donat</option>
+              </select>
+            </label>
+          )}
           <label>Sumber
-            <select value={source} onChange={e => setSource(e.target.value as 'manual' | 'tabel')}>
+            <select value={source} onChange={e => setSource(e.target.value as SumberGrafik)}>
               <option value="manual">Data manual</option>
               <option value="tabel" disabled={tableBlocks.length === 0}>Dari blok tabel</option>
+              <option value="gambar">Gambar (unggah / dari Word)</option>
             </select>
           </label>
+          {source === 'gambar' && (
+            <label className="lk-upbtn">
+              <Upload size={14} /> {mengunggah ? 'Mengunggah…' : (gambarKini ? 'Ganti gambar' : 'Pilih gambar')}
+              <input type="file" accept="image/png,image/jpeg,image/gif" hidden disabled={mengunggah} onChange={unggahGambar} />
+            </label>
+          )}
           {source === 'tabel' && tableBlocks.length > 0 && (
             <>
               <label>Tabel
@@ -1150,10 +1179,18 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
       )}
 
       <div className="lk-grafik-preview" ref={chartRef}>
-        {chartData.length === 0
-          ? <div className="lk-grafik-empty">Belum ada data untuk grafik.</div>
-          : <div className="lk-grafik-canvas"><GrafikRenderClient type={chartType} data={chartData} /></div>}
+        {source === 'gambar'
+          ? (gambarKini
+            // eslint-disable-next-line @next/next/no-img-element -- berkas Drive lewat /api/upload/download (sesi + izin per berkas), tidak bisa lewat optimasi next/image
+            ? <img className="lk-grafik-img" src={`/api/upload/download?id=${encodeURIComponent(gambarKini)}`} alt={judul || 'Grafik'} />
+            : <div className="lk-grafik-empty">Belum ada gambar — pilih gambar, atau ganti Sumber ke data manual / blok tabel.</div>)
+          : chartData.length === 0
+            ? <div className="lk-grafik-empty">Belum ada data untuk grafik.</div>
+            : <div className="lk-grafik-canvas"><GrafikRenderClient type={chartType} data={chartData} /></div>}
       </div>
+      {source === 'gambar' && !readOnly && (
+        <div className="lk-uphint">Grafik ini berupa gambar. Untuk grafik yang ikut berubah bersama angkanya, ganti Sumber ke Dari blok tabel lalu Simpan Grafik.</div>
+      )}
 
       {!readOnly && (
         <>
@@ -1283,6 +1320,7 @@ ${TABEL_CSS}
   .lk-grafik-add:hover { border-color: #185FA5; color: #E6F1FB; }
   .lk-grafik-preview { display: flex; justify-content: center; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid #0C447C; border-radius: 8px; }
   .lk-grafik-canvas { background: #ffffff; border-radius: 6px; padding: 8px; }
+  .lk-grafik-img { max-width: 100%; max-height: 420px; background: #ffffff; border-radius: 6px; }
   .lk-grafik-empty { color: #85B7EB; font-size: 12.5px; padding: 40px; text-align: center; }
   .lk-ab.grafik { color: #14B8A6; border-color: #14B8A6; }
   .lk-ab.tempel { color: #85B7EB; border-color: #85B7EB; }

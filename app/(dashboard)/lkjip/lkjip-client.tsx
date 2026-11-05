@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { FileText, Plus, BookText, LayoutGrid, RefreshCw } from 'lucide-react';
+import { FileText, Plus, BookText, LayoutGrid, RefreshCw, FileUp } from 'lucide-react';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
@@ -15,6 +15,7 @@ import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDokumen } from '@/lib/lkjip/data';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
+import ImporWordModal from './ImporWordModal';
 
 interface Props {
   username: string;
@@ -31,6 +32,7 @@ export default function LkjipClient({ username, role, themePreference, initialRo
   const isLight = theme === 'light';
   const [rows, setRows] = useState<LkjipDokumen[]>(initialRows);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImpor, setShowImpor] = useState(false);
   const [tahun, setTahun] = useState<number>(new Date().getFullYear());
   const [template, setTemplate] = useState<'standar' | 'kosong'>('standar');
   const [busy, setBusy] = useState(false);
@@ -88,9 +90,12 @@ export default function LkjipClient({ username, role, themePreference, initialRo
             <h1 className="lk-h1"><BookText size={22} /> Dokumen E-LKJIP</h1>
             <p className="lk-sub">Penyusun laporan kinerja tahunan · {rows.length} dokumen</p>
           </div>
-          <span data-rima="lkjip.list-buat" style={{ display: 'inline-flex' }}>
-            <PrimaButton variant="purple" iconLeft={<Plus size={16} />} onClick={() => setShowCreate(true)}>Buat E-LKJIP</PrimaButton>
-          </span>
+          <div className="lk-head-aksi">
+            <PrimaButton variant="ghost" iconLeft={<FileUp size={16} />} onClick={() => setShowImpor(true)}>Impor dari Word</PrimaButton>
+            <span data-rima="lkjip.list-buat" style={{ display: 'inline-flex' }}>
+              <PrimaButton variant="purple" iconLeft={<Plus size={16} />} onClick={() => setShowCreate(true)}>Buat E-LKJIP</PrimaButton>
+            </span>
+          </div>
         </div>
 
         {rows.length === 0 ? (
@@ -124,9 +129,14 @@ export default function LkjipClient({ username, role, themePreference, initialRo
         ]}
         actions={[
           { icon: <Plus size={17} />, label: 'Buat', onClick: () => setShowCreate(true) },
+          { icon: <FileUp size={17} />, label: 'Impor Word', onClick: () => setShowImpor(true) },
           { icon: <RefreshCw size={17} />, label: 'Muat Ulang', onClick: () => void load() },
         ]}
       />
+
+      {showImpor && (
+        <ImporWordModal tahunAwal={tahun} onTutup={() => setShowImpor(false)} onSelesai={id => router.push(`/lkjip/${id}`)} />
+      )}
 
       {showCreate && (
         <div className="lk-modal-bg" onClick={() => !busy && setShowCreate(false)}>
@@ -203,6 +213,7 @@ const LIST_CSS = `
   .lk-tpl-opt.on { border-color: #7C5CFC; background: rgba(124,92,252,0.14); }
   .lk-tpl-opt.on b { color: #C9BCFF; }
   .lk-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .lk-head-aksi { display: flex; gap: 10px; flex-wrap: wrap; }
 
   /* ── LIGHT THEME ── */
   [data-theme="light"] .lk-list-body { background: #F5F5F7; color: #0F0F12; }

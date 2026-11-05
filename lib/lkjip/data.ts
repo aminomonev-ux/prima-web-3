@@ -3,6 +3,7 @@
 // canonical_id derive dari AUTO_INCREMENT id (anti-race, bukan MAX+1).
 // Nomor section TIDAK disimpan — dihitung di buildNumberedTree (numbering.ts).
 // Dokumen FINAL = immutable: semua mutasi struktur/isi ditolak (state-machine).
+import type { PoolConnection } from 'mysql2/promise';
 import { sql, queryMany, queryOne, withTransaction, bulkInsert, escapeLike, sqlInt, type TxSql } from '@/lib/data/db';
 import {
   buildNumberedTree, MAX_DEPTH,
@@ -155,18 +156,55 @@ function safeJson(s: string): unknown {
   try { return JSON.parse(s); } catch { return {}; }
 }
 
-// ── Dokumen create (seed skeleton) ───────────────────────────────
-export async function createDokumen(tahun: number, judul: string | undefined, userId: number, template: 'standar' | 'kosong' = 'standar'): Promise<{ id: number; canonical_id: string }> {
+// ── Dokumen create (seed skeleton / hasil impor Word) ────────────
+/** Struktur hasil impor Word (lib/lkjip/impor-word.ts). Payload blok divalidasi di sini — pagar sungguhan (L82). */
+export interface BagianTulis { judul: string; locked: boolean; blok: { tipe: BlockTipe; payload: unknown }[]; anak: BagianTulis[] }
+export interface IsiImpor { style: StyleConfig; bagian: BagianTulis[] }
+
+/**
+ * Pohon ditulis per tingkat: satu `bulkInsert` per kedalaman, lalu id-nya dibaca balik lewat
+ * (induk, urutan) — unik di dokumen yang baru lahir, dan tidak bergantung pada id AUTO_INCREMENT
+ * yang berurutan (innodb_autoinc_lock_mode 2 tidak menjaminnya).
+ */
+async function tulisPohonImpor(tx: TxSql, conn: PoolConnection, dokumenId: number, bagian: BagianTulis[]): Promise<void> {
+  let tingkat = bagian.map((b, urutan) => ({ b, induk: null as number | null, urutan }));
+  const blokBaris: unknown[][] = [];
+  for (let depth = 0; tingkat.length; depth++) {
+    if (depth > MAX_DEPTH) throw new LkjipStructureError(`Kedalaman maksimal ${MAX_DEPTH + 1} tingkat.`);
+    await bulkInsert('lkjip_section', ['dokumen_id', 'parent_id', 'depth', 'urutan', 'judul', 'locked'],
+      tingkat.map(t => [dokumenId, t.induk, depth, t.urutan, (t.b.judul.trim() || 'Tanpa judul').slice(0, 255), depth === 0 && t.b.locked ? 1 : 0]), conn);
+    const baris = await tx`SELECT id, parent_id, urutan FROM lkjip_section WHERE dokumen_id = ${dokumenId} AND depth = ${depth}` as Array<{ id: number; parent_id: number | null; urutan: number }>;
+    const idDi = new Map(baris.map(r => [`${r.parent_id == null ? '' : Number(r.parent_id)}|${Number(r.urutan)}`, Number(r.id)]));
+    const berikut: typeof tingkat = [];
+    for (const t of tingkat) {
+      const sid = idDi.get(`${t.induk ?? ''}|${t.urutan}`);
+      if (!sid) throw new LkjipStructureError('Bagian hasil impor tidak tertulis lengkap.');
+      t.b.blok.forEach((bl, j) => blokBaris.push([sid, j, bl.tipe, JSON.stringify(parseBlockPayload(bl.tipe, bl.payload))]));
+      t.b.anak.forEach((a, j) => berikut.push({ b: a, induk: sid, urutan: j }));
+    }
+    tingkat = berikut;
+  }
+  for (let i = 0; i < blokBaris.length; i += 200) {
+    await bulkInsert('lkjip_block', ['section_id', 'urutan', 'tipe', 'payload'], blokBaris.slice(i, i + 200), conn);
+  }
+}
+
+export async function createDokumen(tahun: number, judul: string | undefined, userId: number, template: 'standar' | 'kosong' = 'standar', impor?: IsiImpor): Promise<{ id: number; canonical_id: string }> {
   const finalJudul = judul && judul.trim() ? judul.trim() : `Laporan Kinerja Instansi Pemerintah Tahun ${tahun}`;
+  const styleJson = impor ? JSON.stringify(StyleConfigSchema.parse(impor.style)) : null;
   return withTransaction(async ({ tx, conn }) => {
     const res = await tx`
-      INSERT INTO lkjip_dokumen (canonical_id, tahun, judul, jenis, status, created_by, updated_by)
-      VALUES ('', ${tahun}, ${finalJudul}, 'LKJIP', 'DRAFT', ${userId}, ${userId})
+      INSERT INTO lkjip_dokumen (canonical_id, tahun, judul, jenis, status, style_config, created_by, updated_by)
+      VALUES ('', ${tahun}, ${finalJudul}, 'LKJIP', 'DRAFT', ${styleJson}, ${userId}, ${userId})
     ` as unknown as Array<{ insertId: number }>;
     const id = Number(res[0]?.insertId ?? 0);
     const canonical_id = `LKJIP-${String(id).padStart(6, '0')}`;
     await tx`UPDATE lkjip_dokumen SET canonical_id = ${canonical_id} WHERE id = ${id}`;
 
+    if (impor) {
+      await tulisPohonImpor(tx, conn, id, impor.bagian);
+      return { id, canonical_id };
+    }
     // Seed skeleton standar (BAB I–IV) — hanya bila template 'standar'.
     // 'kosong' → dokumen tanpa bab, user susun sendiri. locked=0 (default tak terkunci).
     // B12: keempat BAB berbendera locked=1. Dulu 0 sejak awal, jadi "BAB I–IV terkunci"

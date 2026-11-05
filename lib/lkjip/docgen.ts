@@ -61,33 +61,35 @@ function colorToHex6(c: string): string | null {
 // continueLast=true → PAKAI ULANG numId terakhir dgn abs sama → Word lanjut nomor
 // lintas-blok (a,b,c yang terpotong tabel/gambar; flag continueList di blok narasi).
 // abs: 0=bullet, 1=decimal, 2=lowerLetter.
+// start>1 (<ol start="n">, daftar Word yang terpotong) → startOverride pada numId barunya.
 type NumAlloc = {
   next: number;
-  instances: { numId: number; abs: number }[];
+  instances: { numId: number; abs: number; start?: number }[];
   lastByAbs: Record<number, number>;
-  alloc: (kind: 'ul' | 'ol' | 'ola', continueLast?: boolean) => number;
+  alloc: (kind: 'ul' | 'ol' | 'ola', continueLast?: boolean, start?: number) => number;
 };
 function makeNumAlloc(): NumAlloc {
   const a: NumAlloc = {
     next: 1, instances: [], lastByAbs: {},
-    alloc: (kind, continueLast = false) => {
+    alloc: (kind, continueLast = false, start = 1) => {
       const abs = kind === 'ul' ? 0 : kind === 'ola' ? 2 : 1;
       if (continueLast && a.lastByAbs[abs]) return a.lastByAbs[abs];
       const numId = a.next++;
-      a.instances.push({ numId, abs });
+      a.instances.push(start > 1 ? { numId, abs, start } : { numId, abs });
       a.lastByAbs[abs] = numId;
       return numId;
     },
   };
   return a;
 }
-function buildNumbering(instances: { numId: number; abs: number }[]): string {
+function buildNumbering(instances: { numId: number; abs: number; start?: number }[]): string {
   const ind = `<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>`;
   const abstract =
     `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/>${ind}</w:lvl></w:abstractNum>` +
     `<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/>${ind}</w:lvl></w:abstractNum>` +
     `<w:abstractNum w:abstractNumId="2"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/>${ind}</w:lvl></w:abstractNum>`;
-  const nums = instances.map(i => `<w:num w:numId="${i.numId}"><w:abstractNumId w:val="${i.abs}"/></w:num>`).join('');
+  const nums = instances.map(i => `<w:num w:numId="${i.numId}"><w:abstractNumId w:val="${i.abs}"/>` +
+    `${i.start ? `<w:lvlOverride w:ilvl="0"><w:startOverride w:val="${i.start}"/></w:lvlOverride>` : ''}</w:num>`).join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${abstract}${nums}</w:numbering>`;
 }
 
@@ -209,7 +211,12 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
           break;
         case 'ol':
           if (closing) { listType = null; olAlpha = false; }
-          else { listType = 'ol'; olAlpha = /type\s*=\s*["']?a/i.test(tok); const cont = continueList && firstListOpen; firstListOpen = false; currentNumId = alloc ? alloc.alloc(olAlpha ? 'ola' : 'ol', cont) : (olAlpha ? 3 : 2); }
+          else {
+            listType = 'ol'; olAlpha = /type\s*=\s*["']?a/i.test(tok);
+            const cont = continueList && firstListOpen; firstListOpen = false;
+            const mulai = Number(/(?<![-a-zA-Z])start\s*=\s*["']?(\d{1,4})/.exec(tok)?.[1] ?? 1);
+            currentNumId = alloc ? alloc.alloc(olAlpha ? 'ola' : 'ol', cont, mulai) : (olAlpha ? 3 : 2);
+          }
           break;
         case 'li':
           if (closing) {

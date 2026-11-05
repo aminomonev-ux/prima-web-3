@@ -80,9 +80,12 @@ export function sanitizeNarasiHtml(html: string): string {
     // <span>: hanya color (hex/rgb) + font-size (px, 6-72). Output dibentuk dari nilai
     // tervalidasi (hex/digit), bukan echo atribut user → tak ada vektor XSS.
     // <ol type="a">: izinkan HANYA penanda huruf (a, b, c). Output literal, bukan echo atribut.
+    // `start`: daftar yang terpotong paragraf/tabel melanjutkan nomornya (impor Word) — angka saja.
     if (t === 'ol') {
       const isAlpha = /type\s*=\s*["']?a/i.test(String(attrs || '')) || /list-style-type\s*:\s*lower-alpha/i.test(String(attrs || ''));
-      return isAlpha ? '<ol type="a">' : '<ol>';
+      const mulai = /(?<![-a-zA-Z])start\s*=\s*["']?(\d{1,4})/.exec(String(attrs || ''));
+      const start = mulai && Number(mulai[1]) > 1 ? ` start="${Number(mulai[1])}"` : '';
+      return isAlpha ? `<ol type="a"${start}>` : `<ol${start}>`;
     }
     if (t === 'span') {
       // Angka tertaut (konsep §19.1): id dibentuk ulang dari pola sempit, gaya lain tidak ikut.
@@ -308,7 +311,8 @@ const GrafikDatumSchema = z.object({
 export const GrafikPayloadSchema = z.object({
   judul:       z.string().max(255).default(''),
   chartType:   z.enum(['pie', 'bar', 'line']).default('bar'),
-  source:      z.enum(['manual', 'tabel']).default('manual'),
+  // 'gambar' = grafik berupa gambar (impor Word, konsep impor-word D1): imageFileId dipakai apa adanya.
+  source:      z.enum(['manual', 'tabel', 'gambar']).default('manual'),
   data:        z.array(GrafikDatumSchema).max(50).default([]),
   tabelBlockId: z.coerce.number().int().positive().nullable().default(null),
   labelCol:    z.coerce.number().int().min(0).max(11).default(0),

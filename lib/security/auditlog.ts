@@ -49,6 +49,7 @@ export type AuditEventType =
   | 'BBA_PENGATURAN'
   // ─── LKJIP ─────────────────────────────────────────────────────────
   | 'LKJIP_CREATE'
+  | 'LKJIP_IMPOR_WORD'
   | 'LKJIP_UPDATE'
   | 'LKJIP_DELETE'
   | 'LKJIP_FINALIZE'
