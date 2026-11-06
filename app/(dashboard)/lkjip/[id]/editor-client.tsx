@@ -15,6 +15,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend,
 } from 'recharts';
 import PrimaButton from '@/components/ui/PrimaButton';
+import PrimaNumberField from '@/components/ui/PrimaNumberField';
+import { BATAS_INDENT_CM } from '@/lib/lkjip/halaman';
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
@@ -499,7 +501,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     kabar={kabarBlok(kabarAktif(b.id), b.tipe === 'NARASI')}
                     salinanAwal={salinanBaru?.blockId === b.id ? salinanBaru.salinan : undefined} onSalinanDipakai={() => setSalinanBaru(null)}
                     onSalinanBatal={() => void buangBlokTempelBatal(b.id)}
-                    nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok} daftarObjek={daftarObjek} lanjutan={lanjutanBlok.get(b.id)}
+                    nomor={nomorBlok.get(b.id)} nomorBlok={nomorBlok} daftarObjek={daftarObjek} lanjutan={lanjutanBlok.get(b.id)} gaya={detail.style_config}
                     dragHandle={!readOnly && (
                       <button className="lk-block-grip" draggable data-tooltip="Seret untuk pindah blok" data-tooltip-pos="below"
                         onDragStart={e => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; }}
@@ -638,13 +640,27 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                   {[0, 6, 12].map(s => <option key={s} value={s}>{s} pt</option>)}
                 </select>
               </label>
-              <label>Indent baris pertama
+              {/* Bawaan paragraf isi; paragraf yang diatur lewat penggaris memakai angkanya sendiri.
+                  Nilai di luar daftar (mis. 1,35 cm, atau hasil Impor Word) tetap harus tampil. */}
+              <label>Indent baris pertama (bawaan)
                 <select value={styleForm.firstLineIndentCm} onChange={e => setStyleForm({ ...styleForm, firstLineIndentCm: Number(e.target.value) })}>
                   <option value={0}>Tanpa</option>
                   <option value={1}>1 cm</option>
                   <option value={1.27}>1,27 cm (default)</option>
                   <option value={1.5}>1,5 cm</option>
+                  {![0, 1, 1.27, 1.5].includes(styleForm.firstLineIndentCm) && (
+                    <option value={styleForm.firstLineIndentCm}>{String(styleForm.firstLineIndentCm).replace('.', ',')} cm</option>
+                  )}
                 </select>
+              </label>
+              <label>Indent lain (cm, 0–3)
+                {/* Bukan type="number": mengetik "1,35" di sana mengosongkan isinya tanpa pesan. */}
+                <PrimaNumberField desimal={2} min={0} max={BATAS_INDENT_CM} step={0.05} value={styleForm.firstLineIndentCm}
+                  onChange={e => {
+                    const v = Number(e.target.value);
+                    if (!Number.isFinite(v)) return;
+                    setStyleForm({ ...styleForm, firstLineIndentCm: Math.min(BATAS_INDENT_CM, Math.max(0, v)) });
+                  }} />
               </label>
               <label>Nomor halaman
                 <select value={styleForm.pageNumber ? '1' : '0'} onChange={e => setStyleForm({ ...styleForm, pageNumber: e.target.value === '1' })}>
@@ -845,6 +861,23 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
       <li><b>Enter</b> membuat item berikutnya; <b>Enter 2×</b> untuk keluar dari daftar.</li>
     </ol>
   ) },
+  { t: 'Penggaris — mengatur indent tiap paragraf', b: (
+    <>
+      <p className="lk-pd-note">Seperti di Word: penggaris menampilkan indent <b>paragraf tempat kursor berada</b>. Pilih beberapa paragraf untuk mengubah sekaligus.</p>
+      <ul>
+        <li><b>▽ atas</b> — baris pertama saja.</li>
+        <li><b>△ bawah</b> — gantung: baris berikutnya pindah, baris pertama tetap.</li>
+        <li><b>▭ paling bawah</b> — seluruh paragraf pindah bersama.</li>
+        <li><b>△ kanan</b> — batas kanan paragraf.</li>
+      </ul>
+      <ol>
+        <li>Seret penanda; garis putus-putus menunjukkan posisinya, teks berubah saat dilepas (<b>Ctrl+Z</b> membatalkan).</li>
+        <li>Tombol <b>Angka</b> untuk ukuran persis; <b>Bawaan</b> mengembalikan paragraf ke setelan dokumen.</li>
+        <li>Tekan <b>Simpan</b> di blok seperti suntingan lain. Hasilnya sama dengan di Word.</li>
+      </ol>
+      <p className="lk-pd-note">Pengaturan Dokumen → “Indent baris pertama” adalah <b>bawaan</b>: berlaku untuk paragraf yang belum diatur sendiri.</p>
+    </>
+  ) },
   { t: '"Lanjut daftar" — daftar yang terputus tabel/gambar', b: (
     <>
       <p className="lk-pd-note">Masalah: bila satu daftar terpotong blok Tabel/Gambar, tiap blok mulai ulang dari 1 / a. Cara menyambungkannya:</p>
@@ -917,7 +950,7 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
 type NomorBlok = Map<number, NomorObjek>;
-function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, lanjutan, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; lanjutan?: LanjutanBlok; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
+function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, lanjutan, gaya, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; lanjutan?: LanjutanBlok; gaya?: StyleConfig; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   return (
     <div className="lk-block">
@@ -938,7 +971,9 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
       </div>
       {block.tipe === 'NARASI' && (
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
-          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} lanjutan={continueList ? lanjutan : undefined} onSave={(html, angka) => onSave({ html, continueList, angka })} />
+          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} lanjutan={continueList ? lanjutan : undefined}
+          gaya={gaya}
+          onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
       {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }} />}
       {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}

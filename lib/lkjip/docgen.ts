@@ -12,6 +12,8 @@ import {
   normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord, bacaAtur, lebarTulisDxa, teksSumber, gayaSel, selBergaya, nomorUlang, tinggiBarisTegak,
   LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
 } from './tabel';
+// Geometri halaman SATU sumber dengan penggaris editor (`docs/CONCEPT-lkjip-penggaris-narasi.md` §3).
+import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, xmlInden, indenBerlaku, BUTIR_KIRI_DXA, BUTIR_GANTUNG_DXA, type IndenTersimpan } from './halaman';
 import { getDriveClient } from '@/lib/services/drive';
 
 function escapeXml(s: unknown): string {
@@ -64,40 +66,57 @@ function colorToHex6(c: string): string | null {
 // berbagi abstractNum kecuali ada startOverride — tanpa itu numId unik tidak memulai ulang apa pun dan
 // seluruh daftar se-dokumen jadi satu hitungan (dibuka di Word 2026-11-05: daftar ketiga tercetak "6.").
 // Editor menampilkan nomor "Lanjut daftar" dengan aturan yang sama (`lanjut-daftar.ts`).
+// Daftar bersarang SEJENIS memakai numId induknya + ilvl naik: Word sendiri yang memulai ulang sub-nomor
+// tiap butir induk maju. Bersarang BEDA jenis dapat numId sendiri (`allocBersarang`) yang tidak pernah jadi
+// "terakhir": yang disambung "Lanjut daftar" selalu daftar tingkat atas. Dibuktikan di Word 2026-11-06.
+type InstansiNum = { numId: number; abs: number; start?: number; ilvl?: number };
+type JenisDaftar = 'ul' | 'ol' | 'ola';
 type NumAlloc = {
   next: number;
-  instances: { numId: number; abs: number; start?: number }[];
+  instances: InstansiNum[];
   lastByAbs: Record<number, number>;
-  alloc: (kind: 'ul' | 'ol' | 'ola', continueLast?: boolean, start?: number) => number;
+  alloc: (kind: JenisDaftar, continueLast?: boolean, start?: number) => number;
+  allocBersarang: (kind: JenisDaftar, ilvl: number, start?: number) => number;
 };
+const absDaftar = (kind: JenisDaftar) => (kind === 'ul' ? 0 : kind === 'ola' ? 2 : 1);
 function makeNumAlloc(): NumAlloc {
   const a: NumAlloc = {
     next: 1, instances: [], lastByAbs: {},
     alloc: (kind, continueLast = false, start = 1) => {
-      const abs = kind === 'ul' ? 0 : kind === 'ola' ? 2 : 1;
+      const abs = absDaftar(kind);
       if (continueLast && a.lastByAbs[abs]) return a.lastByAbs[abs];
       const numId = a.next++;
       a.instances.push(abs === 0 ? { numId, abs } : { numId, abs, start: Math.max(1, start) });
       a.lastByAbs[abs] = numId;
       return numId;
     },
+    allocBersarang: (kind, ilvl, start = 1) => {
+      const abs = absDaftar(kind);
+      const numId = a.next++;
+      a.instances.push(abs === 0 ? { numId, abs } : { numId, abs, start: Math.max(1, start), ilvl });
+      return numId;
+    },
   };
   return a;
 }
-function buildNumbering(instances: { numId: number; abs: number; start?: number }[]): string {
-  const ind = `<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>`;
+const TINGKAT_DAFTAR = 9;
+function buildNumbering(instances: InstansiNum[]): string {
+  const tingkat = (fmt: string, teks: (l: number) => string) => Array.from({ length: TINGKAT_DAFTAR }, (_, l) =>
+    `<w:lvl w:ilvl="${l}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${teks(l)}"/><w:lvlJc w:val="left"/>` +
+    `<w:pPr><w:ind w:left="${BUTIR_KIRI_DXA * (l + 1)}" w:hanging="${BUTIR_GANTUNG_DXA}"/></w:pPr></w:lvl>`).join('');
   const abstract =
-    `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/>${ind}</w:lvl></w:abstractNum>` +
-    `<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/>${ind}</w:lvl></w:abstractNum>` +
-    `<w:abstractNum w:abstractNumId="2"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/>${ind}</w:lvl></w:abstractNum>`;
+    `<w:abstractNum w:abstractNumId="0">${tingkat('bullet', () => '•')}</w:abstractNum>` +
+    `<w:abstractNum w:abstractNumId="1">${tingkat('decimal', l => `%${l + 1}.`)}</w:abstractNum>` +
+    `<w:abstractNum w:abstractNumId="2">${tingkat('lowerLetter', l => `%${l + 1}.`)}</w:abstractNum>`;
   const nums = instances.map(i => `<w:num w:numId="${i.numId}"><w:abstractNumId w:val="${i.abs}"/>` +
-    `${i.start ? `<w:lvlOverride w:ilvl="0"><w:startOverride w:val="${i.start}"/></w:lvlOverride>` : ''}</w:num>`).join('');
+    `${i.start ? `<w:lvlOverride w:ilvl="${i.ilvl ?? 0}"><w:startOverride w:val="${i.start}"/></w:lvlOverride>` : ''}</w:num>`).join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${abstract}${nums}</w:numbering>`;
 }
 
 // ── Narasi HTML (Tiptap) → paragraf OOXML ──
-// indentTwips: first-line indent paragraf isi (gambar 2 — tiap paragraf menjorok).
-// Tidak diterapkan ke heading & list item (list pakai hanging indent dari numbering).
+// indentTwips: indent baris pertama BAWAAN paragraf isi (setelan dokumen). Paragraf/judul/butir yang punya
+// `data-ind-*` memakai angkanya sendiri lewat `xmlInden` (`halaman.ts`), sama dengan yang digambar penggaris.
+// Daftar ikut tingkatnya di numbering kecuali butirnya punya isian sendiri.
 // continueList: blok ini melanjutkan penomoran list dari blok sebelumnya (abs sama)
 // → list PERTAMA yang dibuka pakai-ulang numId terakhir (a,b,c lanjut, bukan restart).
 /**
@@ -107,17 +126,23 @@ function buildNumbering(instances: { numId: number; abs: number; start?: number 
  */
 export function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, alloc?: NumAlloc, continueList = false, rujuk?: Map<number, string>): string {
   if (!html || !html.trim()) return '';
-  // CT_PPr: <w:ind> WAJIB sebelum <w:jc>. indXml dipasang di paragraf isi saja.
-  const indXml = indentTwips > 0 ? `<w:ind w:firstLine="${indentTwips}"/>` : '';
+  // CT_PPr: numPr → ind → jc. Urutan lain membuat Word menolak berkasnya.
+  const jcXml = (a: string | null) => (a ? `<w:jc w:val="${a}"/>` : '');
+  const alignDari = (tok: string) => {
+    const am = /text-align\s*:\s*(left|center|right|justify)/i.exec(tok);
+    return am ? (am[1].toLowerCase() === 'justify' ? 'both' : am[1].toLowerCase()) : null;
+  };
   const tokens = html.split(/(<[^>]+>)/).filter(t => t !== '');
   const paras: string[] = [];
   let runs: string[] = [];
-  let listType: 'ul' | 'ol' | null = null;
-  let olAlpha = false; // <ol type="a"> → penomoran huruf (a, b, c)
   let firstListOpen = true; // continueList hanya untuk list pertama di blok
-  let currentNumId = 0; // numId list yang sedang dibuka (dialokasikan saat <ul>/<ol>)
-  let inLi = false;
+  // Tumpukan daftar & butir yang sedang terbuka: sesudah daftar bersarang ditutup, butir berikutnya
+  // kembali ke nomor daftar induknya.
+  const daftar: { kind: JenisDaftar; numId: number; ilvl: number }[] = [];
+  const butir: { inden: IndenTersimpan; align: string | null; bernomor: boolean }[] = [];
+  const dalamButir = () => daftar.length > 0 && butir.length === daftar.length;
   let pAlign: string | null = null;
+  let pInden: IndenTersimpan | null = null;
   let headingLevel = 0;
   let runColor: string | null = null;
   let runSize: number | null = null;
@@ -161,6 +186,38 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
     paras.push(`<w:p>${pPrInner ? `<w:pPr>${pPrInner}</w:pPr>` : ''}${runs.join('')}</w:p>`);
     runs = [];
   };
+  // Paragraf pertama butir yang bertulisan yang memakai nomor; paragraf berikutnya di butir yang sama
+  // (sesudah daftar bersarang, atau <p> kedua) rata dengan teks butirnya, tanpa nomor — seperti Word.
+  const tulisButir = () => {
+    const b = butir[butir.length - 1];
+    const d = daftar[daftar.length - 1];
+    if (!b || !d || runs.length === 0) return;
+    if (b.bernomor) {
+      flush(`<w:ind w:left="${indenBerlaku(b.inden, 'butir', 0, daftar.length).kiri}"/>${jcXml(b.align)}`);
+      return;
+    }
+    flush(`<w:numPr><w:ilvl w:val="${d.ilvl}"/><w:numId w:val="${d.numId}"/></w:numPr>${xmlInden(b.inden, 'butir', 0, daftar.length)}${jcXml(b.align)}`);
+    b.bernomor = true;
+  };
+  const bukaDaftar = (kind: JenisDaftar, tok: string) => {
+    if (dalamButir()) tulisButir(); // butir induk ditulis DULU, kalau tidak ia kehilangan nomornya
+    const induk = daftar[daftar.length - 1];
+    const mulai = Number(/(?<![-a-zA-Z])start\s*=\s*["']?(\d{1,4})/.exec(tok)?.[1] ?? 1);
+    const cadangan = kind === 'ol' ? 2 : kind === 'ola' ? 3 : 1;
+    if (!induk) {
+      const cont = continueList && firstListOpen;
+      firstListOpen = false;
+      daftar.push({ kind, numId: alloc ? alloc.alloc(kind, cont, mulai) : cadangan, ilvl: 0 });
+      return;
+    }
+    const ilvl = Math.min(daftar.length, TINGKAT_DAFTAR - 1);
+    const numId = induk.kind === kind && mulai <= 1 ? induk.numId : alloc ? alloc.allocBersarang(kind, ilvl, mulai) : cadangan;
+    daftar.push({ kind, numId, ilvl });
+  };
+  const tutupDaftar = () => {
+    if (dalamButir()) { tulisButir(); butir.pop(); }
+    daftar.pop();
+  };
 
   for (const tok of tokens) {
     if (tok.startsWith('<')) {
@@ -169,22 +226,26 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
       const closing = tok.startsWith('</');
       switch (tag) {
         case 'p':
-          if (inLi) break; // p di dalam li → biar batas </li> yang flush (numPr)
-          if (closing) { flush(`${indXml}${pAlign ? `<w:jc w:val="${pAlign}"/>` : ''}`); pAlign = null; }
+          if (dalamButir()) {
+            tulisButir();
+            if (!closing) butir[butir.length - 1].align = alignDari(tok);
+            break;
+          }
+          if (closing) { flush(`${xmlInden(pInden, 'paragraf', indentTwips)}${jcXml(pAlign)}`); pAlign = null; pInden = null; }
           else {
             flush();
-            const am = /text-align\s*:\s*(left|center|right|justify)/i.exec(tok);
-            pAlign = am ? (am[1].toLowerCase() === 'justify' ? 'both' : am[1].toLowerCase()) : null;
+            pAlign = alignDari(tok);
+            pInden = bacaInden(tok);
           }
           break;
         case 'h1': case 'h2': case 'h3':
-          if (inLi) break;
-          if (closing) { flush(pAlign ? `<w:jc w:val="${pAlign}"/>` : ''); pAlign = null; headingLevel = 0; }
+          if (dalamButir()) break;
+          if (closing) { flush(`${xmlInden(pInden, 'judul')}${jcXml(pAlign)}`); pAlign = null; pInden = null; headingLevel = 0; }
           else {
             flush();
             headingLevel = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
-            const am = /text-align\s*:\s*(left|center|right|justify)/i.exec(tok);
-            pAlign = am ? (am[1].toLowerCase() === 'justify' ? 'both' : am[1].toLowerCase()) : null;
+            pAlign = alignDari(tok);
+            pInden = bacaInden(tok);
           }
           break;
         case 'br':  runs.push(`<w:r>${curRpr()}<w:br/></w:r>`); break;
@@ -208,24 +269,21 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
           }
           break;
         case 'ul':
-          if (closing) { listType = null; }
-          else { listType = 'ul'; const cont = continueList && firstListOpen; firstListOpen = false; currentNumId = alloc ? alloc.alloc('ul', cont) : 1; }
+          if (closing) tutupDaftar();
+          else bukaDaftar('ul', tok);
           break;
         case 'ol':
-          if (closing) { listType = null; olAlpha = false; }
-          else {
-            listType = 'ol'; olAlpha = /type\s*=\s*["']?a/i.test(tok);
-            const cont = continueList && firstListOpen; firstListOpen = false;
-            const mulai = Number(/(?<![-a-zA-Z])start\s*=\s*["']?(\d{1,4})/.exec(tok)?.[1] ?? 1);
-            currentNumId = alloc ? alloc.alloc(olAlpha ? 'ola' : 'ol', cont, mulai) : (olAlpha ? 3 : 2);
-          }
+          if (closing) tutupDaftar();
+          else bukaDaftar(/type\s*=\s*["']?a/i.test(tok) ? 'ola' : 'ol', tok);
           break;
         case 'li':
           if (closing) {
-            const numId = currentNumId || (listType === 'ol' ? (olAlpha ? 3 : 2) : 1);
-            flush(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr>`);
-            inLi = false;
-          } else { flush(); inLi = true; }
+            if (dalamButir()) { tulisButir(); butir.pop(); } else flush();
+          } else {
+            if (dalamButir()) { tulisButir(); butir.pop(); }
+            flush();
+            if (daftar.length > 0) butir.push({ inden: bacaInden(tok), align: null, bernomor: false });
+          }
           break;
         default: break;
       }
@@ -233,7 +291,7 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
       pushText(tok);
     }
   }
-  flush(indXml);
+  flush(xmlInden(null, 'paragraf', indentTwips));
   return paras.join('');
 }
 
@@ -489,9 +547,7 @@ export function entriDaftar(tree: SectionNode[], nomor: Map<number, NomorObjek>)
 }
 
 // ── Page/section helpers (footer + nomor halaman) ──
-const PGSZ = `<w:pgSz w:w="11907" w:h="16839"/>`;
-const PGSZ_MELINTANG = `<w:pgSz w:w="16839" w:h="11907" w:orient="landscape"/>`;
-const PGMAR = `<w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1701" w:header="708" w:footer="708" w:gutter="0"/>`;
+// `PGSZ`/`PGSZ_MELINTANG`/`PGMAR` kini dari `./halaman` — keluarannya WAJIB identik.
 
 // Halaman melintang memakai footer sendiri (rId5): tab kanan teks footer harus di tepi kanan bidang tulisnya.
 function sectProps(opts: { footer: boolean; numFmt?: 'lowerRoman' | 'decimal'; start?: number; melintang?: boolean }): string {
@@ -561,7 +617,7 @@ function kataPengantarPage(cfg: StyleConfig, font: string, sz: number, alloc?: N
   const hasTtd = !!(cfg.ttdTempatTanggal || cfg.ttdJabatan || cfg.ttdNama || cfg.ttdPangkat || cfg.ttdNip);
   if (!cfg.kataPengantarHtml && !hasTtd) return '';
   const title = para('KATA PENGANTAR', font, Math.max(sz, 28), { bold: true, align: 'center' });
-  const isi = cfg.kataPengantarHtml ? narasiToXml(cfg.kataPengantarHtml, font, sz, Math.round((cfg.firstLineIndentCm ?? 0) * 567), alloc) : '';
+  const isi = cfg.kataPengantarHtml ? narasiToXml(cfg.kataPengantarHtml, font, sz, twipsDariCm(cfg.firstLineIndentCm ?? 0), alloc) : '';
   const sigP = (text: string, opt: { bold?: boolean; underline?: boolean } = {}) => {
     const rpr = `<w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>${opt.bold ? '<w:b/>' : ''}${opt.underline ? '<w:u w:val="single"/>' : ''}<w:sz w:val="${sz}"/></w:rPr>`;
     return `<w:p><w:pPr><w:ind w:left="5040"/><w:spacing w:after="0"/><w:jc w:val="left"/></w:pPr><w:r>${rpr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
@@ -582,7 +638,7 @@ function kataPengantarPage(cfg: StyleConfig, font: string, sz: number, alloc?: N
 export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, tahun: number, imgMap: Map<string, ImageInfo>, alloc: NumAlloc): string {
   const font = cfg.fontFamily;
   const sz = Math.round(cfg.fontSizePt * 2);
-  const indentTwips = Math.round((cfg.firstLineIndentCm ?? 0) * 567); // 1cm ≈ 567 twips
+  const indentTwips = twipsDariCm(cfg.firstLineIndentCm ?? 0); // 1cm ≈ 567 twips, 1,27 cm = 720
 
   const cover =
     para('LAPORAN KINERJA INSTANSI PEMERINTAH', font, 36, { bold: true, align: 'center' }) +

@@ -52,7 +52,8 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8"?><w:styles ${NS}>
   <w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/><w:basedOn w:val="Normal"/></w:style>
   <w:style w:type="paragraph" w:styleId="JudulKu"><w:name w:val="Judul Kustom"/><w:pPr><w:outlineLvl w:val="1"/></w:pPr></w:style>
 </w:styles>`
-const lvl = (i: number, fmt: string, start = 1) => `<w:lvl w:ilvl="${i}"><w:start w:val="${start}"/><w:numFmt w:val="${fmt}"/></w:lvl>`
+// Indent bawaan daftar LKJIP: butir tanpa isian sendiri = `<li>` polos (indent per paragraf diuji di test-lkjip-penggaris).
+const lvl = (i: number, fmt: string, start = 1) => `<w:lvl w:ilvl="${i}"><w:start w:val="${start}"/><w:numFmt w:val="${fmt}"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl>`
 const NUMBERING = `<?xml version="1.0" encoding="UTF-8"?><w:numbering ${NS}>
   <w:abstractNum w:abstractNumId="10">${lvl(0, 'decimal')}</w:abstractNum>
   <w:abstractNum w:abstractNumId="11">${lvl(0, 'lowerLetter')}${lvl(1, 'decimal')}</w:abstractNum>
@@ -408,7 +409,7 @@ if (kalibrasi) {
     const rusak = semuaBlok(hk).flatMap(b => { try { parseBlockPayload(b.tipe as BlockTipe, b.payload); return [] } catch (e) { return [`${b.tipe}: ${(e as Error).message.slice(0, 80)}`] } })
     ok('F8 semua payload lolos skema editor', rusak.length === 0, rusak.slice(0, 3).join(' / '))
     ok('F9 tabel melintang dikenali', tabel.some(t => t.tipe === 'TABEL' && t.payload.melintang))
-    ok('F10 daftar terpotong paragraf melanjutkan nomornya ("Pernyataan Misi" = b.)', semuaBlok(hk).some(b => b.tipe === 'NARASI' && b.payload.html.includes('<ol type="a" start="2"><li><p>Pernyataan Misi Organisasi</p></li></ol>')))
+    ok('F10 daftar terpotong paragraf melanjutkan nomornya ("Pernyataan Misi" = b.)', semuaBlok(hk).some(b => b.tipe === 'NARASI' && /<ol type="a" start="2"><li[^>]*><p>Pernyataan Misi Organisasi<\/p><\/li><\/ol>/.test(b.payload.html)))
     ok(`F11 dibaca < 2 detik (${dt} ms)`, dt < 2000)
   }
 }

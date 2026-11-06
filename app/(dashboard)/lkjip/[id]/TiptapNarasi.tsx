@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -9,7 +10,8 @@ import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus } from 'lucide-react';
+import type { EditorState } from '@tiptap/pm/state';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus, IndentIncrease, IndentDecrease } from 'lucide-react';
 import type { ObjekRujukan } from '@/lib/lkjip/numbering';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -18,6 +20,12 @@ import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { angkaDiHtml, bandingAngka, idAngkaBaru, kalimatAngka, kunciTarikan, resepTerpakai, type ResepAngka } from '@/lib/lkjip/angka';
 import type { HasilTarik } from '@/lib/lkjip/tautan';
 import { mulaiTampil, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
+import {
+  LEBAR_DXA, PX_TULIS, LANGKAH_BESAR_DXA, BUTIR_KIRI_DXA, BUTIR_GANTUNG_DXA,
+  bacaInden, dxaDariCss, indentTwips, indenBawaan, indenBerlaku, keTersimpan, pxHuruf,
+  type Inden, type IndenTersimpan, type JenisInden,
+} from '@/lib/lkjip/halaman';
+import PenggarisNarasi from './PenggarisNarasi';
 
 const AngkaModal = dynamic(() => import('./AngkaModal'), { ssr: false });
 
@@ -180,6 +188,63 @@ const LanjutDaftar = Extension.create({
   },
 });
 
+// Indent per paragraf (konsep penggaris §15): tiga angka dxa di paragraf/judul/butir, seperti `w:ind` Word.
+// `null` = ikut bawaan. Tersimpan sebagai `data-ind-*`; `--i-*` hanya untuk digambar CSS di bawah.
+// Tempelan dari Word membawa margin & text-indent — ikut terbaca di paragraf/judul (butir daftarnya tidak:
+// margin <li> di halaman web lain bukan niat penulisnya).
+function angkaInden(el: HTMLElement, k: keyof Inden): number | null {
+  const tersimpan = bacaInden(` data-ind-${k}="${el.getAttribute(`data-ind-${k}`) ?? ''}"`)[k];
+  if (tersimpan !== undefined) return tersimpan;
+  if (el.tagName === 'LI') return null;
+  const dxa = dxaDariCss(k === 'kiri' ? el.style.marginLeft : k === 'kanan' ? el.style.marginRight : el.style.textIndent);
+  if (dxa === null || (k !== 'pertama' && dxa <= 0)) return null;
+  return Math.max(-LEBAR_DXA, Math.min(LEBAR_DXA, dxa));
+}
+const atributIndenTiptap = (k: keyof Inden, nama: string) => ({
+  default: null,
+  parseHTML: (el: HTMLElement) => angkaInden(el, k),
+  renderHTML: (attrs: Record<string, unknown>) => (attrs[nama] == null ? {} : { [`data-ind-${k}`]: attrs[nama], style: `--i-${k}:${attrs[nama]}` }),
+});
+const IndenParagraf = Extension.create({
+  name: 'indenParagraf',
+  addGlobalAttributes() {
+    return [{
+      types: ['paragraph', 'heading', 'listItem'],
+      attributes: {
+        indKiri: atributIndenTiptap('kiri', 'indKiri'),
+        indKanan: atributIndenTiptap('kanan', 'indKanan'),
+        indPertama: atributIndenTiptap('pertama', 'indPertama'),
+      },
+    }];
+  },
+});
+
+interface SasaranInden { pos: number; node: PMNode; jenis: JenisInden; kedalaman: number }
+const simpananNode = (n: PMNode): IndenTersimpan => ({
+  ...(n.attrs.indKiri != null ? { kiri: n.attrs.indKiri } : {}),
+  ...(n.attrs.indKanan != null ? { kanan: n.attrs.indKanan } : {}),
+  ...(n.attrs.indPertama != null ? { pertama: n.attrs.indPertama } : {}),
+});
+/** Paragraf yang dikenai penggaris: blok teks di pilihan; di daftar, butirnya (bukan paragraf di dalamnya). */
+function sasaranInden(state: EditorState): SasaranInden[] {
+  const hasil = new Map<number, SasaranInden>();
+  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    const $p = state.doc.resolve(pos);
+    let butir: { pos: number; node: PMNode } | null = null;
+    let kedalaman = 0;
+    for (let d = $p.depth; d > 0; d--) {
+      if ($p.node(d).type.name !== 'listItem') continue;
+      kedalaman++;
+      butir ??= { pos: $p.before(d), node: $p.node(d) };
+    }
+    if (butir) hasil.set(butir.pos, { ...butir, jenis: 'butir', kedalaman });
+    else hasil.set(pos, { pos, node, jenis: node.type.name === 'heading' ? 'judul' : 'paragraf', kedalaman: 1 });
+    return false;
+  });
+  return [...hasil.values()];
+}
+
 interface Props {
   initialHtml: string;
   initialAngka?: Record<string, ResepAngka>;
@@ -189,10 +254,12 @@ interface Props {
   objek?: ObjekRujukan[];
   /** Blok "Lanjut daftar": nomor sambungan daftar pertamanya (`lanjutanDaftar`). Kosong = tidak dicentang. */
   lanjutan?: LanjutanBlok;
+  /** Gaya halaman dari Pengaturan Dokumen: huruf, ukuran, spasi, perataan, indent baris pertama bawaan. */
+  gaya?: { fontFamily?: string; fontSizePt?: number; lineSpacing?: number; align?: string; spaceAfterPt?: number; firstLineIndentCm?: number };
   onSave: (html: string, angka: Record<string, ResepAngka>) => void;
 }
 
-export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, lanjutan, onSave }: Props) {
+export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, lanjutan, gaya, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
   const [pilihRujuk, setPilihRujuk] = useState(false);
   const [angka, setAngka] = useState<Record<string, ResepAngka>>(initialAngka ?? {});
@@ -208,7 +275,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
     // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
     // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
-    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut, RujukTaut, LanjutDaftar],
+    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut, RujukTaut, LanjutDaftar, IndenParagraf],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
@@ -333,8 +400,43 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     </button>
   );
 
+  // Satu set variabel untuk teks: huruf, spasi, jarak paragraf, dan indent di layar = di Word.
+  const bawaanDxa = indentTwips(gaya?.firstLineIndentCm ?? 0);
+  const variabel = {
+    '--lk-indent-dxa': String(bawaanDxa),
+    '--lk-font': `${pxHuruf(gaya?.fontSizePt ?? 12)}px`,
+    '--lk-lh': String(gaya?.lineSpacing ?? 1.5),
+    '--lk-after': `${((gaya?.spaceAfterPt ?? 6) * 4) / 3}px`,
+    '--lk-align': gaya?.align === 'left' ? 'left' : 'justify',
+    '--lk-fontfam': gaya?.fontFamily ?? 'Arial',
+  } as CSSProperties;
+
+  // Penggaris membaca paragraf pertama pilihan; mengubah = bidang itu saja di semua paragraf terpilih.
+  const sasaran = sasaranInden(ed.state);
+  const berlakuDi = (s: SasaranInden) => indenBerlaku(simpananNode(s.node), s.jenis, bawaanDxa, s.kedalaman);
+  const indenKini = sasaran[0] ? berlakuDi(sasaran[0]) : indenBawaan('paragraf', bawaanDxa);
+  const campur = sasaran.some(s => { const i = berlakuDi(s); return i.kiri !== indenKini.kiri || i.kanan !== indenKini.kanan || i.pertama !== indenKini.pertama; });
+  const punyaIsian = sasaran.some(s => Object.keys(simpananNode(s.node)).length > 0);
+  const terapkanInden = (ubah: (i: Inden, s: SasaranInden) => Partial<Inden> | null) => {
+    const tr = ed.state.tr;
+    for (const s of sasaranInden(ed.state)) {
+      const i = berlakuDi(s);
+      const bidang = ubah(i, s);
+      const simpan = bidang ? keTersimpan({ ...i, ...bidang }, s.jenis, bawaanDxa, s.kedalaman) : {};
+      const a = { indKiri: simpan.kiri ?? null, indKanan: simpan.kanan ?? null, indPertama: simpan.pertama ?? null };
+      // Nilai sama = jangan menulis: keluar dari isian angka tanpa mengubah apa pun tidak boleh memunculkan Simpan.
+      if (a.indKiri === (s.node.attrs.indKiri ?? null) && a.indKanan === (s.node.attrs.indKanan ?? null) && a.indPertama === (s.node.attrs.indPertama ?? null)) continue;
+      tr.setNodeMarkup(s.pos, undefined, { ...s.node.attrs, ...a });
+    }
+    if (tr.docChanged) ed.view.dispatch(tr);
+  };
+  // Tombol tambah/kurangi: ke kelipatan 0,5 inci berikutnya, seperti Word.
+  const geserKiri = (arah: 1 | -1) => terapkanInden(i => ({
+    kiri: Math.max(0, (arah > 0 ? Math.floor(i.kiri / LANGKAH_BESAR_DXA) + 1 : Math.ceil(i.kiri / LANGKAH_BESAR_DXA) - 1) * LANGKAH_BESAR_DXA),
+  }));
+
   return (
-    <div className="lk-tt">
+    <div className="lk-tt" style={variabel}>
       <style>{TT_CSS}</style>
       {!readOnly && (
         <div className="lk-tt-bar">
@@ -357,6 +459,9 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
           {btn(editor.isActive({ textAlign: 'center' }), () => editor.chain().focus().updateAttributes('paragraph', { textAlign: 'center' }).run(), 'Rata tengah', AlignCenter)}
           {btn(editor.isActive({ textAlign: 'right' }), () => editor.chain().focus().updateAttributes('paragraph', { textAlign: 'right' }).run(), 'Rata kanan', AlignRight)}
           {btn(editor.isActive({ textAlign: 'justify' }), () => editor.chain().focus().updateAttributes('paragraph', { textAlign: 'justify' }).run(), 'Rata kiri-kanan', AlignJustify)}
+          <span className="lk-tt-sep" />
+          {btn(false, () => geserKiri(-1), 'Kurangi indent', IndentDecrease)}
+          {btn(false, () => geserKiri(1), 'Tambah indent', IndentIncrease)}
           <span className="lk-tt-sep" />
           {btn(editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Sub-judul', Heading2)}
           {btn(editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Sub-sub-judul', Heading3)}
@@ -395,6 +500,11 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
           </span>
         </div>
       )}
+      {!readOnly && (
+        <PenggarisNarasi inden={indenKini} jenis={sasaran[0]?.jenis ?? 'paragraf'} campur={campur} punyaIsian={punyaIsian}
+          tinggiTeks={() => ed.view.dom.getBoundingClientRect().height}
+          onUbah={u => terapkanInden(() => u)} onBawaan={() => terapkanInden(() => null)} />
+      )}
       <EditorContent editor={editor} className="lk-tt-content" />
       {!readOnly && (dirty || jumlahAngka > 0) && (
         <div className="lk-tt-save">
@@ -413,6 +523,9 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
 }
 
 const TT_CSS = `
+  /* Bilah alat, penggaris, dan kotak teks selebar bidang tulis — di layar lebar dulu bilahnya melar 1.268 px
+     sementara kotak teks 615 px, dan tombol penggaris terlempar jauh dari kolomnya. */
+  .lk-tt { max-width: calc(${PX_TULIS}px + 30px); }
   .lk-tt-loading { color: #85B7EB; font-size: 12.5px; padding: 10px; }
   .lk-tt-tip { display: inline-flex; }
   .lk-tt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px; background: #020F1C; border: 1px solid #0C447C; border-bottom: none; border-radius: 6px 6px 0 0; }
@@ -427,17 +540,30 @@ const TT_CSS = `
   [data-theme="light"] .lk-tt-size { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #374151; }
   [data-theme="light"] .lk-tt-size option { background: #FFFFFF; color: #374151; }
   [data-theme="light"] .lk-tt-color { border-color: rgba(0,0,0,.12); }
-  .lk-tt-content .ProseMirror { background: #020F1C; border: 1px solid #0C447C; border-radius: 0 0 6px 6px; color: #E6F1FB; padding: 12px 14px; min-height: 120px; font-size: 13.5px; line-height: 1.6; text-align: justify; outline: none; }
+  /* container-type: 1cqw = 1% lebar kolom tulis, sama bagi paragraf & butir bersarang — jadi indent di layar
+     sebanding persis dengan bidang tulis Word (8.788 dxa), berapa pun lebar kartunya. */
+  .lk-tt-content .ProseMirror { background: #020F1C; border: 1px solid #0C447C; border-radius: 0 0 6px 6px; color: #E6F1FB; padding: 12px 14px; min-height: 120px; font-family: var(--lk-fontfam, Arial); font-size: var(--lk-font, 13.5px); line-height: var(--lk-lh, 1.5); text-align: var(--lk-align, justify); width: calc(${PX_TULIS}px + 30px); max-width: 100%; box-sizing: border-box; outline: none; container-type: inline-size; --lk-dxa: calc(100cqw / ${LEBAR_DXA}); }
   .lk-tt-content .ProseMirror:focus { border-color: #185FA5; }
-  .lk-tt-content .ProseMirror p { margin: 0 0 8px; }
-  .lk-tt-content .ProseMirror h1 { font-size: 1.5em; font-weight: 700; margin: 8px 0 6px; }
-  .lk-tt-content .ProseMirror h2 { font-size: 1.3em; font-weight: 700; margin: 8px 0 6px; }
-  .lk-tt-content .ProseMirror h3 { font-size: 1.12em; font-weight: 700; margin: 6px 0 5px; }
-  .lk-tt-content .ProseMirror ul { list-style: disc outside; padding-left: 24px; margin: 0 0 8px; }
-  .lk-tt-content .ProseMirror ol { list-style: decimal outside; padding-left: 24px; margin: 0 0 8px; }
-  .lk-tt-content .ProseMirror ol[type="a"] { list-style-type: lower-alpha; }
-  .lk-tt-content .ProseMirror li { margin: 2px 0; }
-  .lk-tt-content .ProseMirror li > p { margin: 0; }
+  .lk-tt-content .ProseMirror p { margin: 0 0 var(--lk-after, 8px); }
+  /* Indent: --i-* milik paragraf itu (ditulis IndenParagraf), selain itu bawaan — sama dengan docgen. */
+  .lk-tt-content .ProseMirror > p, .lk-tt-content .ProseMirror > h1, .lk-tt-content .ProseMirror > h2, .lk-tt-content .ProseMirror > h3 { margin-left: calc(var(--i-kiri, 0) * var(--lk-dxa)); margin-right: calc(var(--i-kanan, 0) * var(--lk-dxa)); text-indent: calc(var(--i-pertama, 0) * var(--lk-dxa)); }
+  .lk-tt-content .ProseMirror > p { text-indent: calc(var(--i-pertama, var(--lk-indent-dxa, 0)) * var(--lk-dxa)); }
+  .lk-tt-content .ProseMirror h1 { font-size: 1.5em; font-weight: 700; margin-top: 8px; margin-bottom: 6px; }
+  .lk-tt-content .ProseMirror h2 { font-size: 1.3em; font-weight: 700; margin-top: 8px; margin-bottom: 6px; }
+  .lk-tt-content .ProseMirror h3 { font-size: 1.12em; font-weight: 700; margin-top: 6px; margin-bottom: 5px; }
+  /* Daftar digambar sendiri: nomor native selalu menempel di teks, padahal di Word nomor rata kiri di
+     kiri + pertama lalu teks di kiri. --lk-abs = posisi teks dari tepi kolom, supaya butir bersarang
+     (margin-nya relatif terhadap induk) tetap memakai angka mutlak seperti w:ind. */
+  .lk-tt-content .ProseMirror ol, .lk-tt-content .ProseMirror ul { padding: 0; margin: 0; }
+  .lk-tt-content .ProseMirror > ol, .lk-tt-content .ProseMirror > ul { --lk-induk: 0; }
+  .lk-tt-content .ProseMirror li > ol, .lk-tt-content .ProseMirror li > ul { --lk-induk: var(--lk-abs); }
+  .lk-tt-content .ProseMirror li { list-style: none !important; position: relative; --i-kiri: initial; --i-kanan: initial; --i-pertama: initial; --lk-abs: var(--i-kiri, calc(var(--lk-induk, 0) + ${BUTIR_KIRI_DXA})); margin-left: calc((var(--lk-abs) - var(--lk-induk, 0)) * var(--lk-dxa)); margin-right: calc(var(--i-kanan, 0) * var(--lk-dxa)); }
+  /* Float, bukan absolute: nomor yang lebih lebar dari gantungnya mendorong baris pertama seperti tab Word,
+     tidak menimpa teks. Baris berikutnya tetap di kiri. */
+  .lk-tt-content .ProseMirror ol > li::before, .lk-tt-content .ProseMirror ul > li::before { float: left; box-sizing: border-box; margin-left: calc(var(--i-pertama, -${BUTIR_GANTUNG_DXA}) * var(--lk-dxa)); min-width: calc(var(--i-pertama, -${BUTIR_GANTUNG_DXA}) * -1 * var(--lk-dxa)); padding-right: .25em; user-select: none; }
+  .lk-tt-content .ProseMirror ol > li::before { content: counter(list-item) "."; }
+  .lk-tt-content .ProseMirror ol[type="a"] > li::before { content: counter(list-item, lower-alpha) "."; }
+  .lk-tt-content .ProseMirror ul > li::before { content: "•"; }
   .lk-tt-content .ProseMirror p.is-editor-empty:first-child::before { content: 'Tulis narasi…'; color: #5E8BBE; float: left; height: 0; pointer-events: none; }
   .lk-tt-save { margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   .lk-tt-teks { width: auto; gap: 4px; padding: 0 7px; font-size: 11.5px; font-weight: 600; }

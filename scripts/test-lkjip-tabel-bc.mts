@@ -496,7 +496,7 @@ ok('P14 teks panjang terbungkus seperti Word (dulu "…"); teks tegak tetap satu
 ok('P15 bilah status tampil untuk ≥ 2 sel berisi', te.includes('{ringkas && ringkas.banyak >= 2 && (') && te.includes('const ringkas = useMemo(() => (rect ? ringkasBlok(rowsTampil, rect) : null), [rowsTampil, rect]);'))
 ok('P16 templat bertingkat dipasang lewat kepalaBertingkat', badan(tm, 'function terapkanTemplat(t: TemplatTabel').includes('kepalaBertingkat(t.kolom.map(k => k.judul), t.kelompok)'))
 ok('P17 narasi: node rujukan terdaftar; penyegaran nomor tidak memunculkan Simpan; sisipan menyimpan id blok',
-  /name: 'rujukTaut'[\s\S]*inline: true,[\s\S]*atom: true/.test(tt) && tt.includes("tag: 'span[data-rujuk]'") && tt.includes('AngkaTaut, RujukTaut]')
+  /name: 'rujukTaut'[\s\S]*inline: true,[\s\S]*atom: true/.test(tt) && tt.includes("tag: 'span[data-rujuk]'") && tt.includes('AngkaTaut, RujukTaut, ')
   && tt.includes('onUpdate: ({ transaction }) => { if (!transaction.getMeta(META_SEGAR)) setDirty(true); },')
   && tt.includes("insertContent({ type: 'rujukTaut', attrs: { id: String(o.id), teks: o.sebut } })"))
 ok('P18 editor: daftar tujuan & nomor dari setelan dokumen; Finalisasi memeriksa rujukan putus; pilihan di Pengaturan',

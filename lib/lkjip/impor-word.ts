@@ -10,6 +10,7 @@ import {
 } from './tabel';
 import { MAX_DEPTH } from './numbering';
 import { judulBabWajib } from './aturan-bab';
+import { atributInden, indentTwips, keTersimpan, BATAS_INDENT_CM, TWIPS_PER_CM, type Inden, type IndenTersimpan } from './halaman';
 import {
   BATAS_BERKAS_IMPOR, PESAN_TERLALU_BESAR, JENIS_PENANDA,
   type JenisPenanda, type Koreksi, type JenisObjek, type TandaTangan, type BarisPratinjau, type RingkasanImpor,
@@ -45,6 +46,8 @@ export interface HasilImporWord {
   judulBerkas: string;
   tahunTebakan: number | null;
   kataPengantar: { html: string; paragraf: number; ttd: TandaTangan };
+  /** Indent baris pertama paling lazim di berkas (cm) → setelan dokumen; yang lain membawa angkanya sendiri. Null = tak ada paragraf untuk dinilai. */
+  indenBawaanCm: number | null;
   bagian: BagianImpor[];
   gambar: Record<string, GambarImpor>;
   baris: BarisPratinjau[];
@@ -122,14 +125,32 @@ const angkaAtr = (el: El | undefined, nama: string): number | null => {
 };
 
 // ── Gaya & penomoran ────────────────────────────────────────────────────────
-interface GayaPar { nama: string; dasar: string | null; outline: number | null; num: { numId: string; ilvl: number } | null }
-interface InfoGaya { peta: Map<string, GayaPar>; bawaan: string }
+interface GayaPar { nama: string; dasar: string | null; outline: number | null; num: { numId: string; ilvl: number } | null; ind: IndenTersimpan }
+interface InfoGaya { peta: Map<string, GayaPar>; bawaan: string; dokumen: IndenTersimpan }
+
+/** `<w:ind>` sebuah pPr. Hanya atribut yang tertulis: sisanya diwarisi (gaya → daftar → paragraf). */
+function bacaInd(pPr: El | undefined): IndenTersimpan {
+  const ind = anak(pPr, 'w:ind');
+  if (!ind) return {};
+  const h: IndenTersimpan = {};
+  const kiri = angkaAtr(ind, 'w:left') ?? angkaAtr(ind, 'w:start');
+  const kanan = angkaAtr(ind, 'w:right') ?? angkaAtr(ind, 'w:end');
+  const gantung = angkaAtr(ind, 'w:hanging');
+  const pertama = angkaAtr(ind, 'w:firstLine');
+  if (kiri != null) h.kiri = kiri;
+  if (kanan != null) h.kanan = kanan;
+  if (gantung != null) h.pertama = -gantung;
+  else if (pertama != null) h.pertama = pertama;
+  return h;
+}
 
 function bacaGaya(xml: string | null): InfoGaya {
   const peta = new Map<string, GayaPar>();
   let bawaan = 'Normal';
-  if (!xml) return { peta, bawaan };
-  for (const s of anakSemua(anak(uraiXml(xml), 'w:styles'), 'w:style')) {
+  if (!xml) return { peta, bawaan, dokumen: {} };
+  const akarGaya = anak(uraiXml(xml), 'w:styles');
+  const dokumen = bacaInd(anak(anak(anak(akarGaya, 'w:docDefaults'), 'w:pPrDefault'), 'w:pPr'));
+  for (const s of anakSemua(akarGaya, 'w:style')) {
     if (atr(s, 'w:type') !== 'paragraph') continue;
     const id = atr(s, 'w:styleId') ?? '';
     if (!id) continue;
@@ -142,9 +163,10 @@ function bacaGaya(xml: string | null): InfoGaya {
       dasar: atr(anak(s, 'w:basedOn'), 'w:val'),
       outline: angkaAtr(anak(pPr, 'w:outlineLvl'), 'w:val'),
       num: numId ? { numId, ilvl: angkaAtr(anak(numPr, 'w:ilvl'), 'w:val') ?? 0 } : null,
+      ind: bacaInd(pPr),
     });
   }
-  return { peta, bawaan };
+  return { peta, bawaan, dokumen };
 }
 
 /** Tingkat judul gaya (1 = Judul 1) lewat nama "heading n" atau outlineLvl, menurun lewat basedOn. */
@@ -161,23 +183,28 @@ function numGaya(id: string | null, g: InfoGaya, jalan = 0): { numId: string; il
   if (!s || jalan > 10) return null;
   return s.num ?? numGaya(s.dasar, g, jalan + 1);
 }
+function indGaya(id: string | null, g: InfoGaya, jalan = 0): IndenTersimpan {
+  const s = id ? g.peta.get(id) : undefined;
+  if (!s || jalan > 10) return {};
+  return { ...indGaya(s.dasar, g, jalan + 1), ...s.ind };
+}
 const gayaKeterangan = (id: string | null, g: InfoGaya): boolean =>
   !!id && /^caption$/i.test(g.peta.get(id)?.nama.trim() ?? '');
 
 type FormatDaftar = 'angka' | 'huruf' | 'romawi' | 'bullet' | 'tanpa';
-interface LevelNum { fmt: string; start: number | null }
+interface LevelNum { fmt: string; start: number | null; ind: IndenTersimpan }
 interface InfoNum { abs: string; ganti: Record<number, number>; lvl: Record<number, LevelNum> }
-interface Penomoran { abs: Map<string, Record<number, LevelNum>>; num: Map<string, InfoNum>; hitung: Map<string, (number | undefined)[]> }
+interface Penomoran { abs: Map<string, Record<number, LevelNum>>; num: Map<string, InfoNum>; hitung: Map<string, (number | undefined)[]>; dipakai: Set<string> }
 
 function bacaLevel(el: El): Record<number, LevelNum> {
   const out: Record<number, LevelNum> = {};
   for (const l of anakSemua(el, 'w:lvl')) {
-    out[angkaAtr(l, 'w:ilvl') ?? 0] = { fmt: atr(anak(l, 'w:numFmt'), 'w:val') ?? 'decimal', start: angkaAtr(anak(l, 'w:start'), 'w:val') };
+    out[angkaAtr(l, 'w:ilvl') ?? 0] = { fmt: atr(anak(l, 'w:numFmt'), 'w:val') ?? 'decimal', start: angkaAtr(anak(l, 'w:start'), 'w:val'), ind: bacaInd(anak(l, 'w:pPr')) };
   }
   return out;
 }
 function bacaPenomoran(xml: string | null): Penomoran {
-  const p: Penomoran = { abs: new Map(), num: new Map(), hitung: new Map() };
+  const p: Penomoran = { abs: new Map(), num: new Map(), hitung: new Map(), dipakai: new Set() };
   if (!xml) return p;
   const akar = anak(uraiXml(xml), 'w:numbering');
   for (const a of anakSemua(akar, 'w:abstractNum')) p.abs.set(atr(a, 'w:abstractNumId') ?? '', bacaLevel(a));
@@ -199,10 +226,12 @@ const jenisFormat = (fmt: string): FormatDaftar =>
   fmt === 'bullet' ? 'bullet' : fmt === 'none' ? 'tanpa'
     : /letter/i.test(fmt) ? 'huruf' : /roman/i.test(fmt) ? 'romawi' : 'angka';
 
-interface NumPar { numId: string; kunci: string; ilvl: number; fmt: FormatDaftar; nomor: number }
+interface NumPar { numId: string; kunci: string; ilvl: number; fmt: FormatDaftar; nomor: number; ind: IndenTersimpan }
 /**
- * Nomor butir seperti yang Word tampilkan: num sebabstrak berbagi hitungan kecuali punya
- * startOverride; butir tingkat atas mengulang hitungan tingkat di bawahnya.
+ * Nomor butir seperti yang Word tampilkan (dicoba di Word sungguhan 2026-11-06): SEMUA num sebabstrak
+ * berbagi satu hitungan, termasuk yang ber-startOverride. Override hanya menyetel hitungan bersama itu
+ * pada pemakaian PERTAMA num-nya, jadi num lain sesudahnya melanjutkan dari situ (5, 6 lalu num lain = 7).
+ * Butir tingkat atas mengulang hitungan tingkat di bawahnya.
  */
 function majukanNomor(p: Penomoran, numId: string, ilvl: number): NumPar | null {
   const num = p.num.get(numId);
@@ -211,13 +240,16 @@ function majukanNomor(p: Penomoran, numId: string, ilvl: number): NumPar | null 
   const lv = num.lvl[ilvl] ?? dasar ?? { fmt: 'decimal', start: 1 };
   const fmt = jenisFormat(lv.fmt);
   if (fmt === 'tanpa') return null;
-  const kunci = num.ganti[ilvl] !== undefined ? `n${numId}` : `a${num.abs}`;
-  const mulai = num.ganti[ilvl] ?? lv.start ?? dasar?.start ?? 1;
+  const kunci = `a${num.abs}`;
   const arr = p.hitung.get(kunci) ?? [];
-  arr[ilvl] = (arr[ilvl] ?? mulai - 1) + 1;
+  const tandaOverride = `${numId}|${ilvl}`;
+  if (num.ganti[ilvl] !== undefined && !p.dipakai.has(tandaOverride)) {
+    p.dipakai.add(tandaOverride);
+    arr[ilvl] = num.ganti[ilvl];
+  } else arr[ilvl] = (arr[ilvl] ?? (lv.start ?? dasar?.start ?? 1) - 1) + 1;
   for (let l = ilvl + 1; l < arr.length; l++) arr[l] = undefined;
   p.hitung.set(kunci, arr);
-  return { numId, kunci, ilvl, fmt, nomor: arr[ilvl]! };
+  return { numId, kunci, ilvl, fmt, nomor: arr[ilvl]!, ind: { ...(dasar?.ind ?? {}), ...lv.ind } };
 }
 
 // ── Paragraf ────────────────────────────────────────────────────────────────
@@ -225,7 +257,7 @@ interface Seg { t: string; b: boolean; i: boolean; u: boolean; s: boolean; br?: 
 interface Par {
   jenis: 'p'; i: number;
   tingkat: number | null; keterangan: boolean; num: NumPar | null;
-  jc: string | null; teks: string; teksTab: string; seg: Seg[];
+  jc: string | null; ind: Inden; teks: string; teksTab: string; seg: Seg[];
   gambar: string[]; grafikWord: string[];
   sect: { melintang: boolean } | null; pisahHalaman: boolean; toc: boolean;
 }
@@ -257,9 +289,14 @@ function bacaParagraf(p: El, ctx: Konteks, i: number, toc: boolean): Par {
     : numGaya(gaya, ctx.gaya);
   const num = numSumber ? majukanNomor(ctx.nomor, numSumber.numId, numSumber.ilvl) : null;
   const sp = anak(pPr, 'w:sectPr');
+  // Pewarisan Word: gaya → daftar → paragraf. Daftar yang disebut lewat GAYA kalah dari gaya itu sendiri.
+  const dariGaya = { ...ctx.gaya.dokumen, ...indGaya(gaya, ctx.gaya) };
+  const dariDaftar = num?.ind ?? {};
+  const indSumber = { ...(numIdPar != null ? { ...dariGaya, ...dariDaftar } : { ...dariDaftar, ...dariGaya }), ...bacaInd(pPr) };
   const par: Par = {
     jenis: 'p', i, tingkat, keterangan: gayaKeterangan(gaya, ctx.gaya), num,
-    jc: atr(anak(pPr, 'w:jc'), 'w:val'), teks: '', teksTab: '', seg: [], gambar: [], grafikWord: [],
+    jc: atr(anak(pPr, 'w:jc'), 'w:val'), ind: { kiri: indSumber.kiri ?? 0, kanan: indSumber.kanan ?? 0, pertama: indSumber.pertama ?? 0 },
+    teks: '', teksTab: '', seg: [], gambar: [], grafikWord: [],
     sect: sp ? { melintang: melintangSect(sp) } : null,
     pisahHalaman: nyala(anak(pPr, 'w:pageBreakBefore')), toc,
   };
@@ -515,25 +552,28 @@ function htmlBaris(seg: Seg[]): string {
   return out;
 }
 
-const pembukaP = (jc: string | null) => (jc === 'center' ? '<p style="text-align:center">' : jc === 'right' || jc === 'end' ? '<p style="text-align:right">' : '<p>');
+const pembukaP = (jc: string | null, ind = '') => (jc === 'center' ? `<p style="text-align:center"${ind}>` : jc === 'right' || jc === 'end' ? `<p style="text-align:right"${ind}>` : `<p${ind}>`);
 const pembukaDaftar = (n: NumPar): string =>
   n.fmt === 'bullet' ? '<ul>' : `<ol${n.fmt === 'huruf' ? ' type="a"' : ''}${n.nomor > 1 ? ` start="${n.nomor}"` : ''}>`;
 
 /**
  * Paragraf berurutan → potongan HTML narasi. Daftar dibuat RATA (docgen menulis semua butir di
  * ilvl 0), dan tiap `<ol>` membawa `start` = nomor Word butir pertamanya — daftar yang terpotong
- * paragraf/tabel tetap "2. Misi", tidak kembali ke "1.".
+ * paragraf/tabel tetap "2. Misi", tidak kembali ke "1.". Indent tiap paragraf ikut, sebagai `data-ind-*`
+ * hanya bila berbeda dari bawaannya: posisi daftar bertingkat tetap sama walau daftarnya dibuat rata.
  */
-function htmlNarasi(par: Par[], catatRomawi: () => void): string[] {
+function htmlNarasi(par: Par[], catatRomawi: () => void, bawaanDxa: number): string[] {
   const potong: string[] = [];
   let html = '';
-  let buka: { kunci: string; tag: 'ol' | 'ul' } | null = null;
+  let buka: { kunci: string; tag: 'ol' | 'ul'; berikut: number } | null = null;
   const tutup = () => { if (buka) { html += `</${buka.tag}>`; buka = null; } };
   for (const p of par) {
     const isi = htmlBaris(p.seg).slice(0, BATAS_HTML_BLOK - 200);
     if (!isi) continue;
     const n = p.num;
-    const bagian = n ? `<li><p>${isi}</p></li>` : `${pembukaP(p.jc)}${isi}</p>`;
+    const bagian = n
+      ? `<li${atributInden(keTersimpan(p.ind, 'butir'))}><p>${isi}</p></li>`
+      : `${pembukaP(p.jc, atributInden(keTersimpan(p.ind, 'paragraf', bawaanDxa)))}${isi}</p>`;
     if (html && html.length + bagian.length + 10 > BATAS_HTML_BLOK) {
       // Blok dipecah: daftar yang sedang terbuka dilanjutkan di blok berikutnya dari nomor butir ini.
       tutup();
@@ -543,11 +583,13 @@ function htmlNarasi(par: Par[], catatRomawi: () => void): string[] {
     if (n) {
       const kunci = `${n.kunci}|${n.ilvl}|${n.fmt}`;
       if (n.fmt === 'romawi') catatRomawi();
-      if (!buka || buka.kunci !== kunci) {
+      // Hitungan sebabstrak dipakai bersama, jadi "daftar baru" terbaca dari nomornya yang melompat.
+      if (!buka || buka.kunci !== kunci || (n.fmt !== 'bullet' && buka.berikut !== n.nomor)) {
         tutup();
         html += pembukaDaftar(n);
-        buka = { kunci, tag: n.fmt === 'bullet' ? 'ul' : 'ol' };
+        buka = { kunci, tag: n.fmt === 'bullet' ? 'ul' : 'ol', berikut: n.nomor };
       }
+      buka.berikut = n.nomor + 1;
     } else tutup();
     html += bagian;
   }
@@ -733,6 +775,20 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   if (!body) throw new ImporWordError('Isi dokumen Word tidak terbaca.');
   const { unsur, akhirMelintang } = kumpulkanUnsur(body, ctx);
 
+  // Setelan dokumen = indent baris pertama yang paling banyak dipakai isi berkas (ditimbang panjang teks,
+  // supaya label pendek tidak mengalahkan paragraf isi). Sisanya membawa angkanya sendiri lewat `data-ind-*`,
+  // jadi berkas tanpa indent tidak mendadak menjorok 1,27 cm sesudah diimpor.
+  const bobotPertama = new Map<number, number>();
+  for (const u of unsur) {
+    if (u.jenis !== 'p' || u.num || u.tingkat != null || u.keterangan || u.toc || !u.teks || u.ind.pertama < 0 || u.jc === 'center' || u.jc === 'right') continue;
+    bobotPertama.set(u.ind.pertama, (bobotPertama.get(u.ind.pertama) ?? 0) + u.teks.length);
+  }
+  const palingLazim = [...bobotPertama.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0];
+  const indenBawaanCm = palingLazim === undefined ? null
+    : palingLazim > BATAS_INDENT_CM * TWIPS_PER_CM ? BATAS_INDENT_CM
+      : Math.round((palingLazim / TWIPS_PER_CM) * 100) / 100;
+  const bawaanDxa = indentTwips(indenBawaanCm ?? 0);
+
   // Orientasi tiap unsur: sectPr paragraf mengakhiri section-nya, jadi dibaca dari belakang.
   const melintang: boolean[] = new Array(unsur.length);
   let orient = akhirMelintang;
@@ -796,7 +852,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   if (kp.length) {
     const { ttd, mulai } = bacaTandaTangan(kp, peringatan);
     const isi = kp.slice(0, mulai).filter(p => p.teks);
-    let html = htmlNarasi(isi, () => {}).join('');
+    let html = htmlNarasi(isi, () => {}, bawaanDxa).join('');
     if (html.length > BATAS_KATA_PENGANTAR) {
       html = html.slice(0, BATAS_KATA_PENGANTAR);
       html = html.slice(0, html.lastIndexOf('</p>') + 4);
@@ -1026,7 +1082,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const tambahBlok = (b: BlokImpor) => { kini().blok.push(b); };
   const salurkan = () => {
     if (!buf.length) return;
-    const potongan = htmlNarasi(buf, () => { romawi++; });
+    const potongan = htmlNarasi(buf, () => { romawi++; }, bawaanDxa);
     for (const html of potongan) tambahBlok({ tipe: 'NARASI', payload: { html } });
     if (potongan.length) {
       ring.narasi += potongan.length;
@@ -1178,5 +1234,5 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const judulBerkas = rapikan(teksDalam(cariSemua(uraiXml(teksZip(zip, 'docProps/core.xml', 1024 * 1024) ?? ''), 'dc:title')[0] ?? KOSONG)).slice(0, 255);
   const tahunTebakan = tahunDari(baris.flatMap(b => (b.jenis === 'penanda' ? [b.teks] : b.jenis === 'objek' ? [b.judul] : [])));
 
-  return { judulBerkas, tahunTebakan, kataPengantar, bagian, gambar, baris, ringkasan: ring, peringatan };
+  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, bagian, gambar, baris, ringkasan: ring, peringatan };
 }

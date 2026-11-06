@@ -8,6 +8,7 @@ import { FONT_CHOICES } from './style-constants';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 import { BATAS_BARIS_TANGAN } from './tautan';
+import { atributInden, bacaInden } from './halaman';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
 // users.app_access include 'lkjip' (diatur Admin Panel → User Management). Pola BBA/Rencana Aksi.
@@ -71,12 +72,14 @@ export function sanitizeNarasiHtml(html: string): string {
     if (!NARASI_ALLOWED_TAGS.has(t)) return '';
     if (t === 'br') return '<br>';
     if (m.startsWith('</')) return `</${t}>`;
-    // Hanya izinkan text-align (4 nilai enum) pada <p>. Output dibentuk dari literal enum,
-    // bukan echo atribut user → tak ada vektor XSS. Atribut lain tetap dibuang.
+    // Hanya izinkan text-align (4 nilai enum) + indent paragraf (angka dxa) pada <p>/<hN>/<li>. Output
+    // dibentuk dari literal enum & angka, bukan echo atribut user → tak ada vektor XSS. Atribut lain dibuang.
     if (t === 'p' || t === 'h1' || t === 'h2' || t === 'h3') {
       const al = /text-align\s*:\s*(left|center|right|justify)/i.exec(String(attrs || ''));
-      if (al) return `<${t} style="text-align:${al[1].toLowerCase()}">`;
+      const gaya = al ? ` style="text-align:${al[1].toLowerCase()}"` : '';
+      return `<${t}${gaya}${atributInden(bacaInden(String(attrs || '')))}>`;
     }
+    if (t === 'li') return `<li${atributInden(bacaInden(String(attrs || '')))}>`;
     // <span>: hanya color (hex/rgb) + font-size (px, 6-72). Output dibentuk dari nilai
     // tervalidasi (hex/digit), bukan echo atribut user → tak ada vektor XSS.
     // <ol type="a">: izinkan HANYA penanda huruf (a, b, c). Output literal, bukan echo atribut.
