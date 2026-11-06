@@ -202,7 +202,7 @@ cek('confirmDialog TIDAK ikut berubah bentuk balasannya',
 // Kursornya ada di kotak isian; Enter sambil mengetik akan mengirim kalimat setengah jadi.
 cek('Enter tidak menyetujui saat sedang mengetik alasan',
   !/PromptUI[\s\S]{0,900}e\.key === 'Enter'/.test(dialog))
-cek('tombol lanjut mati sampai alasannya cukup', dialog.includes('disabled={!cukup}'))
+cek('tombol lanjut mati sampai alasannya cukup', dialog.includes('disabled={!cukup || belumDicentang}'))
 
 const ku = buangKomentar(baca('app/(dashboard)/usulan-kebutuhan/_panels/KelolaUserPanel.tsx'))
 cek('Usulan meneruskan alasannya, bukan membuangnya',

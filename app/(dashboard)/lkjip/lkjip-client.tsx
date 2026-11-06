@@ -8,11 +8,12 @@ import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import DownloadButton from '@/components/ui/DownloadButton';
-import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { confirmDialog, promptDialog } from '@/components/ui/ConfirmDialog';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import type { LkjipDokumen } from '@/lib/lkjip/data';
+import { BATAS_ALASAN_HAPUS_FINAL, MIN_ALASAN_HAPUS_FINAL } from '@/lib/lkjip/hapus-dokumen';
 import SpandukBeku from '@/components/ui/SpandukBeku';
 import type { InfoBeku } from '@/lib/security/beku';
 import ImporWordModal from './ImporWordModal';
@@ -61,11 +62,44 @@ export default function LkjipClient({ username, role, themePreference, initialRo
   }
 
   async function handleDelete(d: LkjipDokumen) {
-    if (!(await confirmDialog({ title: 'Hapus dokumen', message: `Hapus "${d.judul}"? Semua bab & isi ikut terhapus permanen.`, variant: 'danger' }))) return;
+    // DRAFT cukup sekali konfirmasi. FINAL sudah dianggap laporan resmi: alasannya masuk audit, dan arsip
+    // Word-nya wajib sudah di tangan, sebab sesudah ini tak ada lagi yang bisa mencetaknya.
+    let isian: { alasan: string; arsip_diunduh: boolean } | null = null;
+    if (d.status === 'FINAL') {
+      const hasil = await promptDialog({
+        title: 'Hapus dokumen FINAL',
+        message: `"${d.judul}" (${d.canonical_id}) sudah FINAL dan tidak bisa diubah lagi.\nMenghapusnya PERMANEN: semua bab, isi, dan riwayat versinya ikut hilang.`,
+        label: 'Alasan penghapusan',
+        placeholder: 'mis. dokumen uji, salah tahun, atau diganti dokumen baru',
+        minLength: MIN_ALASAN_HAPUS_FINAL,
+        maxLength: BATAS_ALASAN_HAPUS_FINAL,
+        petunjuk: 'Tersimpan di jejak audit.',
+        confirmLabel: 'Hapus permanen',
+        variant: 'danger',
+        centang: {
+          label: 'Saya sudah mengunduh arsip Word-nya',
+          keterangan: 'Belum? Batalkan dulu, lalu tekan tombol Word di kartu dokumen ini. Arsip di Drive (bila ada) tidak ikut terhapus.',
+          wajib: true,
+        },
+      });
+      if (!hasil) return;
+      isian = { alasan: hasil.alasan, arsip_diunduh: hasil.centang };
+    } else if (!(await confirmDialog({ title: 'Hapus dokumen', message: `Hapus "${d.judul}"? Semua bab & isi ikut terhapus permanen.`, variant: 'danger' }))) {
+      return;
+    }
     try {
-      const res = await fetch(`/api/lkjip?id=${d.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/lkjip?id=${d.id}`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isian ?? {}),
+      });
       const json = await res.json();
-      if (!json.ok) { toast.error(json.msg ?? 'Gagal menghapus'); return; }
+      if (!json.ok) {
+        toast.error(json.msg ?? 'Gagal menghapus');
+        // Daftar basi: dokumennya baru saja difinalkan atau dihapus orang lain. Kartunya harus ikut berubah,
+        // kalau tidak tombol yang sama menjawab penolakan yang sama terus.
+        if (json.code === 'ALASAN_WAJIB' || res.status === 404) void load();
+        return;
+      }
       setRows(prev => prev.filter(r => r.id !== d.id));
       toast.success('Dokumen dihapus');
     } catch { toast.error('Gagal terhubung ke server'); }
@@ -112,9 +146,9 @@ export default function LkjipClient({ username, role, themePreference, initialRo
                 <div className="lk-card-meta">{d.canonical_id}</div>
                 <div className="lk-card-actions" onClick={e => e.stopPropagation()}>
                   <DownloadButton variant="word" label="Word" size="sm" data-tooltip="Unduh Word" data-tooltip-pos="above" onClick={() => window.open(`/api/lkjip/${d.id}/generate`, '_blank')} />
-                  {d.status !== 'FINAL' && (
-                    <button className="lk-act danger" data-tooltip="Hapus dokumen" data-tooltip-pos="above" onClick={() => handleDelete(d)}><DeleteIcon size={15} /></button>
-                  )}
+                  <button className="lk-act danger"
+                    data-tooltip={d.status === 'FINAL' ? 'Hapus dokumen FINAL — wajib menulis alasan' : 'Hapus dokumen'} data-tooltip-pos="above"
+                    onClick={() => handleDelete(d)}><DeleteIcon size={15} /></button>
                 </div>
               </div>
             ))}

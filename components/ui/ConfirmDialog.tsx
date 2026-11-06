@@ -150,8 +150,13 @@ export interface PromptOpts extends ConfirmOpts {
    * dan "mendesak" hanya diketahui orang yang sedang menekan tombolnya — pada detik
    * itu. Kalau ada, bentuk balasannya berubah jadi objek; pemanggil lama yang tidak
    * memakainya tidak tersentuh sama sekali (lihat overload di bawah).
+   *
+   * `wajib` = pernyataan yang harus dicentang dulu sebelum tombolnya hidup. Kotak yang bisa
+   * dilewati tapi berbunyi "saya sudah …" hanya melatih orang mengabaikannya.
    */
-  centang?: { label: string; keterangan?: string };
+  centang?: { label: string; keterangan?: string; wajib?: boolean };
+  /** Kalimat di bawah kotak isian saat alasannya sudah cukup: ke mana kalimat itu disimpan. */
+  petunjuk?: string;
 }
 
 /** `null` = dibatalkan. String = alasan yang diketik (sudah di-trim). */
@@ -167,6 +172,7 @@ function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt 
   const maks = opts.maxLength ?? 140;
   const min = opts.minLength ?? 4;
   const cukup = teks.trim().length >= min;
+  const belumDicentang = opts.centang?.wajib === true && !centang;
 
   useEffect(() => {
     // Enter TIDAK menyetujui di sini — kursornya ada di kotak isian, dan menekan Enter
@@ -204,7 +210,7 @@ function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt 
         />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: 16 }}>
           <span style={{ fontSize: 11, color: c.sub }}>
-            {cukup ? 'Tersimpan di jejak audit dan garis waktu orang ini.' : `Minimal ${min} huruf.`}
+            {cukup ? (opts.petunjuk ?? 'Tersimpan di jejak audit dan garis waktu orang ini.') : `Minimal ${min} huruf.`}
           </span>
           <span style={{ fontSize: 11, color: c.sub, fontFamily: "'JetBrains Mono',monospace" }}>{teks.length}/{maks}</span>
         </div>
@@ -226,7 +232,8 @@ function PromptUI({ opts, onDone }: { opts: PromptOpts; onDone: (v: HasilPrompt 
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <PrimaButton variant="ghost" onClick={() => onDone(null)}>{opts.cancelLabel ?? 'Batal'}</PrimaButton>
-          <PrimaButton variant={opts.variant ?? 'warning'} disabled={!cukup} onClick={selesai}>
+          <PrimaButton variant={opts.variant ?? 'warning'} disabled={!cukup || belumDicentang} onClick={selesai}
+            data-tooltip={!cukup ? `Tulis dulu minimal ${min} huruf.` : belumDicentang ? 'Centang dulu pernyataan di atas.' : undefined}>
             {opts.confirmLabel ?? 'Lanjut'}
           </PrimaButton>
         </div>

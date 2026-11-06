@@ -9,6 +9,7 @@ import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 import { BATAS_BARIS_TANGAN } from './tautan';
 import { atributInden, bacaInden } from './halaman';
+import { BATAS_ALASAN_HAPUS_FINAL } from './hapus-dokumen';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
 // users.app_access include 'lkjip' (diatur Admin Panel → User Management). Pola BBA/Rencana Aksi.
@@ -136,7 +137,13 @@ export const DokumenFinalizeSchema = z.object({
   expected_version: z.coerce.number().int().min(0),
 });
 
-export const DokumenDeleteSchema = z.object({ id: z.coerce.number().int().positive() });
+// Bentuknya saja. Syarat dokumen FINAL (alasan, arsip) dinilai `hapusDokumen` di bawah kunci baris, sebab baru
+// di sana statusnya pasti.
+export const DokumenDeleteSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  alasan: z.string().trim().max(BATAS_ALASAN_HAPUS_FINAL, `Alasan paling panjang ${BATAS_ALASAN_HAPUS_FINAL} huruf.`).optional(),
+  arsip_diunduh: z.boolean().optional(),
+});
 
 // ── Section ──────────────────────────────────────────────────────
 export const SectionCreateSchema = z.object({

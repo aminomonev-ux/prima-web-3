@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { DokumenQuerySchema, DokumenCreateSchema, DokumenDeleteSchema, lkjipRateLimit } from '@/lib/lkjip/schemas';
-import { listDokumen, createDokumen, deleteDokumen } from '@/lib/lkjip/data';
+import { listDokumen, createDokumen, hapusDokumen } from '@/lib/lkjip/data';
 import { guard } from './_guard';
 
 export const dynamic = 'force-dynamic';
@@ -39,10 +39,23 @@ export async function DELETE(req: NextRequest) {
   if (!g.ok) return g.res;
   const limited = await lkjipRateLimit(g.session.userId, 'doc-delete', 20); if (limited) return limited;
   const { searchParams } = new URL(req.url);
-  const parsed = DokumenDeleteSchema.safeParse({ id: searchParams.get('id') ?? undefined });
-  if (!parsed.success) return NextResponse.json({ ok: false, msg: 'ID tidak valid' }, { status: 400 });
-  const ok = await deleteDokumen(parsed.data.id);
-  if (!ok) return NextResponse.json({ ok: false, msg: 'Dokumen tidak ditemukan' }, { status: 404 });
-  await writeAuditLog({ req, eventType: 'LKJIP_DELETE', userId: g.session.userId, username: g.session.username, detail: `LKJIP delete id=${parsed.data.id}` });
+  // Alasan lewat badan permintaan, bukan alamat: alamat ikut tercatat di log Nginx/PM2, dan isinya kalimat bebas.
+  const badan = await req.json().catch(() => null) as { alasan?: unknown; arsip_diunduh?: unknown } | null;
+  const parsed = DokumenDeleteSchema.safeParse({ id: searchParams.get('id') ?? undefined, alasan: badan?.alasan, arsip_diunduh: badan?.arsip_diunduh });
+  if (!parsed.success) {
+    const salah = parsed.error.issues[0];
+    return NextResponse.json({ ok: false, msg: salah.path[0] === 'id' ? 'ID tidak valid' : salah.message }, { status: 400 });
+  }
+  const alasan = parsed.data.alasan ?? '';
+  const hasil = await hapusDokumen(parsed.data.id, { alasan, arsipDiunduh: parsed.data.arsip_diunduh });
+  if (hasil.jenis === 'TIDAK_ADA') return NextResponse.json({ ok: false, msg: 'Dokumen tidak ditemukan' }, { status: 404 });
+  if (hasil.jenis === 'DITOLAK') return NextResponse.json({ ok: false, code: hasil.tolak.code, msg: hasil.tolak.msg }, { status: 400 });
+  const doc = hasil.dokumen;
+  // Jejak harus bisa dibaca SETELAH barisnya tiada: `id=165` saja menjadi angka tanpa arti
+  // begitu dokumennya terhapus, dan judulnya tidak bisa dicari lagi di mana pun. Karena itu
+  // kode dokumen dan judul ikut ditulis untuk semua penghapusan, bukan hanya yang FINAL.
+  const jejakFinal = doc.status === 'FINAL' ? ` · FINAL · arsip Word dinyatakan sudah diunduh · alasan: ${alasan}` : '';
+  const detail = `LKJIP delete id=${doc.id} ${doc.canonical_id} "${doc.judul.slice(0, 80)}"${jejakFinal}`;
+  await writeAuditLog({ req, eventType: 'LKJIP_DELETE', userId: g.session.userId, username: g.session.username, detail });
   return NextResponse.json({ ok: true });
 }

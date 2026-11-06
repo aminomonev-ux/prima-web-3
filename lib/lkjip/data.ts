@@ -11,6 +11,7 @@ import {
 } from './numbering';
 import { parseBlockPayload, DEFAULT_STYLE, StyleConfigSchema, type StyleConfig, type BlockTipe, type DokumenQuery, type SectionCreate, type SectionMove } from './schemas';
 import { JUDUL_BAB_WAJIB, ALASAN_BAB, putusanPindah } from './aturan-bab';
+import { alasanTolakHapus, type IsianHapus, type TolakHapus } from './hapus-dokumen';
 import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 
 export class LkjipVersionConflictError extends Error {
@@ -271,10 +272,26 @@ export async function finalizeDokumen(id: number, expectedVersion: number, userI
   assertCas(res);
 }
 
-export async function deleteDokumen(id: number): Promise<boolean> {
-  // sections (CASCADE) + blocks (CASCADE via section FK) ikut terhapus.
-  const res = await sql`DELETE FROM lkjip_dokumen WHERE id = ${id}` as unknown as Array<{ affectedRows?: number }>;
-  return (res[0]?.affectedRows ?? 0) > 0;
+export type HasilHapusDokumen =
+  | { jenis: 'TIDAK_ADA' }
+  | { jenis: 'DITOLAK'; tolak: TolakHapus }
+  | { jenis: 'TERHAPUS'; dokumen: Pick<LkjipDokumen, 'id' | 'canonical_id' | 'judul' | 'status'> };
+
+export async function hapusDokumen(id: number, isian: IsianHapus): Promise<HasilHapusDokumen> {
+  return withTransaction(async ({ tx }): Promise<HasilHapusDokumen> => {
+    // Status dinilai di bawah kunci baris (L69-a): Finalisasi yang menyelip harus menunggu, jadi dokumen yang
+    // baru saja FINAL tidak bisa hilang tanpa alasan lewat penilaian yang dibaca sebelum Finalisasi itu.
+    const rows = await tx`
+      SELECT id, canonical_id, judul, status FROM lkjip_dokumen WHERE id = ${id} FOR UPDATE
+    ` as Array<Pick<LkjipDokumen, 'id' | 'canonical_id' | 'judul' | 'status'>>;
+    const dokumen = rows[0];
+    if (!dokumen) return { jenis: 'TIDAK_ADA' };
+    const tolak = alasanTolakHapus(dokumen.status, isian);
+    if (tolak) return { jenis: 'DITOLAK', tolak };
+    // Bab, blok, dan riwayat versi ikut lewat FK CASCADE.
+    await tx`DELETE FROM lkjip_dokumen WHERE id = ${id}`;
+    return { jenis: 'TERHAPUS', dokumen };
+  });
 }
 
 // ── Guard DRAFT ──────────────────────────────────────────────────
