@@ -207,11 +207,11 @@ ok('A5 Judul 2 bernomor di daftar lain diperingatkan', h.peringatan.some(x => x.
 ok('A6 judul kosong dihitung', h.peringatan.includes('1 judul kosong dibuang.'), h.peringatan.join(' / '))
 const nLB = narasiDi(h.bagian[0].anak[0])
 ok('A7 tebal & garis bawah dibawa', nLB.includes('<strong>tebal</strong>') && nLB.includes('<u>garis</u>'), nLB.slice(0, 200))
-ok('A8 daftar terpotong paragraf melanjutkan nomornya: Misi = <ol type="a" start="2">', nLB.includes('<ol type="a" start="2"><li><p>Misi Organisasi</p></li></ol>'), nLB)
-ok('A9 butir tingkat 2 = daftar angka tersendiri, lalu Tujuan start=3', nLB.includes('<ol><li><p>Misi satu</p></li><li><p>Misi dua</p></li></ol><ol type="a" start="3"><li><p>Tujuan Organisasi</p></li></ol><ol><li><p>Sasaran satu</p></li></ol>'), nLB)
+ok('A8 daftar terpotong paragraf melanjutkan nomornya: Misi = <ol type="a" start="2">', nLB.includes('<ol type="a" start="2"><li><p>Misi Organisasi</p><ol>'), nLB)
+ok('A9 butir tingkat 2 = daftar bersarang di butir induknya, Tujuan tetap di daftar yang sama', nLB.includes('<ol><li data-ind-kiri="720"><p>Misi satu</p></li><li data-ind-kiri="720"><p>Misi dua</p></li></ol></li><li><p>Tujuan Organisasi</p><ol><li data-ind-kiri="720"><p>Sasaran satu</p></li></ol></li></ol>'), nLB)
 ok('A10 bullet → <ul>, mulai dari abstrak start=2 → <ol start="2">', nLB.includes('<ul><li><p>Butir bulat</p></li></ul>') && nLB.includes('<ol start="2"><li><p>Butir mulai dua</p></li></ol>'), nLB)
 ok('A11 startOverride memulai hitungan sendiri (bukan lanjut dari num sebabstrak)', nLB.includes('<ol type="a"><li><p>Daftar mulai ulang</p></li></ol>'), nLB)
-ok('A12 romawi jadi angka + diperingatkan (D2)', nLB.includes('<ol><li><p>Butir romawi</p></li></ol>') && h.peringatan.some(x => x.startsWith('1 butir daftar bernomor romawi')))
+ok('A12 romawi tetap romawi, tanpa peringatan (D2 tahap b)', nLB.includes('<ol data-gaya="i."><li><p>Butir romawi</p></li></ol>') && !h.peringatan.some(x => x.includes('romawi')))
 
 const tA = h.bagian[0].anak[0].blok.find(x => x.tipe === 'TABEL')
 const pA = tA?.tipe === 'TABEL' ? tA.payload : null
@@ -409,7 +409,7 @@ if (kalibrasi) {
     const rusak = semuaBlok(hk).flatMap(b => { try { parseBlockPayload(b.tipe as BlockTipe, b.payload); return [] } catch (e) { return [`${b.tipe}: ${(e as Error).message.slice(0, 80)}`] } })
     ok('F8 semua payload lolos skema editor', rusak.length === 0, rusak.slice(0, 3).join(' / '))
     ok('F9 tabel melintang dikenali', tabel.some(t => t.tipe === 'TABEL' && t.payload.melintang))
-    ok('F10 daftar terpotong paragraf melanjutkan nomornya ("Pernyataan Misi" = b.)', semuaBlok(hk).some(b => b.tipe === 'NARASI' && /<ol type="a" start="2"><li[^>]*><p>Pernyataan Misi Organisasi<\/p><\/li><\/ol>/.test(b.payload.html)))
+    ok('F10 daftar terpotong paragraf melanjutkan nomornya ("Pernyataan Misi" = b.)', semuaBlok(hk).some(b => b.tipe === 'NARASI' && /<ol type="a" start="2"><li[^>]*><p>Pernyataan Misi Organisasi<\/p>/.test(b.payload.html)))
     ok(`F11 dibaca < 2 detik (${dt} ms)`, dt < 2000)
   }
 }

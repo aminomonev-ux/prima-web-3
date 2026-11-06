@@ -62,7 +62,7 @@ export type Penanda = 'pertama' | 'gantung' | 'kiri' | 'kanan';
 
 /** Lebar teks paling sempit yang masih masuk akal: 1 cm. */
 export const TEKS_MIN_DXA = TWIPS_PER_CM;
-/** Tingkat daftar bawaan (`buildNumbering` di docgen): teks 1,27 cm per tingkat, nomor gantung 0,63 cm. */
+/** Tingkat daftar bawaan (`buildNumbering` di docgen): teks 1,27 cm per tingkat, nomor gantung 0,63 cm (nomor lebar lebih, `gantungDxa`). */
 export const BUTIR_KIRI_DXA = 720;
 export const BUTIR_GANTUNG_DXA = 360;
 /** Langkah penggaris: 0,05 cm. */
@@ -106,18 +106,18 @@ export function jepitInden(i: Inden, jenis: JenisInden): Inden {
 }
 
 /** Yang berlaku kalau paragraf ini tidak punya isian sendiri. */
-export function indenBawaan(jenis: JenisInden, bawaanDxa = 0, kedalaman = 1): Inden {
-  if (jenis === 'butir') return { kiri: BUTIR_KIRI_DXA * Math.max(1, kedalaman), kanan: 0, pertama: -BUTIR_GANTUNG_DXA };
+export function indenBawaan(jenis: JenisInden, bawaanDxa = 0, kedalaman = 1, gantung = BUTIR_GANTUNG_DXA): Inden {
+  if (jenis === 'butir') return { kiri: BUTIR_KIRI_DXA * Math.max(1, kedalaman), kanan: 0, pertama: -gantung };
   return { kiri: 0, kanan: 0, pertama: jenis === 'paragraf' ? bawaanDxa : 0 };
 }
 
-export function indenBerlaku(simpan: IndenTersimpan | null | undefined, jenis: JenisInden, bawaanDxa = 0, kedalaman = 1): Inden {
-  return jepitInden({ ...indenBawaan(jenis, bawaanDxa, kedalaman), ...(simpan ?? {}) }, jenis);
+export function indenBerlaku(simpan: IndenTersimpan | null | undefined, jenis: JenisInden, bawaanDxa = 0, kedalaman = 1, gantung = BUTIR_GANTUNG_DXA): Inden {
+  return jepitInden({ ...indenBawaan(jenis, bawaanDxa, kedalaman, gantung), ...(simpan ?? {}) }, jenis);
 }
 
 /** Hanya simpan yang berbeda dari bawaan — paragraf yang kembali ke bawaan ikut setelan dokumen lagi. */
-export function keTersimpan(i: Inden, jenis: JenisInden, bawaanDxa = 0, kedalaman = 1): IndenTersimpan {
-  const b = indenBawaan(jenis, bawaanDxa, kedalaman);
+export function keTersimpan(i: Inden, jenis: JenisInden, bawaanDxa = 0, kedalaman = 1, gantung = BUTIR_GANTUNG_DXA): IndenTersimpan {
+  const b = indenBawaan(jenis, bawaanDxa, kedalaman, gantung);
   const j = jepitInden(i, jenis);
   const hasil: IndenTersimpan = {};
   for (const k of KUNCI_INDEN) if (j[k] !== b[k]) hasil[k] = j[k];
@@ -125,10 +125,10 @@ export function keTersimpan(i: Inden, jenis: JenisInden, bawaanDxa = 0, kedalama
 }
 
 /** `<w:ind>` sebuah paragraf; '' bila tidak ada yang perlu ditulis. Butir tanpa isian ikut tingkat daftarnya. */
-export function xmlInden(simpan: IndenTersimpan | null | undefined, jenis: JenisInden, bawaanDxa = 0, kedalaman = 1): string {
+export function xmlInden(simpan: IndenTersimpan | null | undefined, jenis: JenisInden, bawaanDxa = 0, kedalaman = 1, gantung = BUTIR_GANTUNG_DXA): string {
   const adaIsian = !!simpan && KUNCI_INDEN.some(k => simpan[k] !== undefined);
   if (jenis === 'butir' && !adaIsian) return '';
-  const i = indenBerlaku(simpan, jenis, bawaanDxa, kedalaman);
+  const i = indenBerlaku(simpan, jenis, bawaanDxa, kedalaman, gantung);
   const a: string[] = [];
   if (jenis === 'butir' || i.kiri !== 0) a.push(`w:left="${i.kiri}"`);
   if (i.kanan !== 0) a.push(`w:right="${i.kanan}"`);

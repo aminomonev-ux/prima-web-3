@@ -157,7 +157,7 @@ const lvl = (l: number, kiri: number, gt: number) => `<w:lvl w:ilvl="${l}"><w:st
 const numG = `<w:abstractNum w:abstractNumId="1">${lvl(0, 720, 360)}${lvl(1, 1080, 360)}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`
 const numPr = (l: number) => `<w:numPr><w:ilvl w:val="${l}"/><w:numId w:val="1"/></w:numPr>`
 const g3 = htmlDari(berkas(judul + par('satu', numPr(0)) + par('dalam', numPr(1)) + par('geser', numPr(0) + ind('w:left="1440"')), numG))
-ok('G4 tingkat daftar di numbering terbaca; tingkat 1 bawaan polos, tingkat 2 membawa kirinya', g3.html.includes('<li><p>satu</p></li>') && g3.html.includes('<li data-ind-kiri="1080"><p>dalam</p></li>'), g3.html)
+ok('G4 tingkat daftar di numbering terbaca; tingkat 1 bawaan polos, tingkat 2 bersarang & membawa kirinya', g3.html.includes('<li><p>satu</p><ol><li data-ind-kiri="1080"><p>dalam</p></li></ol></li>'), g3.html)
 ok('G5 isian paragraf menimpa tingkat per atribut: left 1440, hanging tetap warisan', g3.html.includes('<li data-ind-kiri="1440"><p>geser</p></li>'), g3.html)
 const styleInd = '<w:style w:type="paragraph" w:styleId="Dasar"><w:name w:val="Dasar"/><w:pPr><w:ind w:left="400"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Turunan"><w:name w:val="Turunan"/><w:basedOn w:val="Dasar"/><w:pPr><w:ind w:firstLine="200"/></w:pPr></w:style>'
 const g4 = htmlDari(berkas(judul + par(panjang) + par('warisan', '<w:pStyle w:val="Turunan"/>') + par('timpa', `<w:pStyle w:val="Turunan"/>${ind('w:left="100"')}`), '', styleInd))

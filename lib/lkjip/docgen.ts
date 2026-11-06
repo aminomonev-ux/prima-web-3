@@ -13,7 +13,9 @@ import {
   LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
 } from './tabel';
 // Geometri halaman SATU sumber dengan penggaris editor (`docs/CONCEPT-lkjip-penggaris-narasi.md` §3).
-import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, xmlInden, indenBerlaku, BUTIR_KIRI_DXA, BUTIR_GANTUNG_DXA, type IndenTersimpan } from './halaman';
+import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, xmlInden, indenBerlaku, type IndenTersimpan } from './halaman';
+import { POLA_LANJUT, POLA_MULAI, TINGKAT_DAFTAR, adalahBullet, gantungDxa, gayaDariTagDaftar, susunanPenuh, tagGaya, tulisSusunan, xmlTingkatWord, type KodeGaya } from './gaya-daftar';
+import { POLA_STABILO, STABILO, stabiloSah, szDariGaya } from './format-teks';
 import { getDriveClient } from '@/lib/services/drive';
 
 function escapeXml(s: unknown): string {
@@ -58,58 +60,72 @@ function colorToHex6(c: string): string | null {
   return null;
 }
 
-// Allocator numId: tiap list (ul/ol/ol-alpha) dapat numId UNIK.
-// continueLast=true → PAKAI ULANG numId terakhir dgn abs sama → Word lanjut nomor
-// lintas-blok (a,b,c yang terpotong tabel/gambar; flag continueList di blok narasi).
-// abs: 0=bullet, 1=decimal, 2=lowerLetter.
+// Allocator numId: tiap daftar akar dapat numId UNIK, per GAYA (`gaya-daftar.ts`).
+// continueLast=true → PAKAI ULANG numId terakhir bergaya sama → Word lanjut nomor
+// lintas-blok (a,b,c yang terpotong tabel/gambar; continueList blok narasi / data-lanjut daftar).
 // Daftar bernomor SELALU diberi startOverride (1, atau <ol start="n">): Word menyambung semua num yang
 // berbagi abstractNum kecuali ada startOverride — tanpa itu numId unik tidak memulai ulang apa pun dan
 // seluruh daftar se-dokumen jadi satu hitungan (dibuka di Word 2026-11-05: daftar ketiga tercetak "6.").
 // Editor menampilkan nomor "Lanjut daftar" dengan aturan yang sama (`lanjut-daftar.ts`).
-// Daftar bersarang SEJENIS memakai numId induknya + ilvl naik: Word sendiri yang memulai ulang sub-nomor
-// tiap butir induk maju. Bersarang BEDA jenis dapat numId sendiri (`allocBersarang`) yang tidak pernah jadi
-// "terakhir": yang disambung "Lanjut daftar" selalu daftar tingkat atas. Dibuktikan di Word 2026-11-06.
-type InstansiNum = { numId: number; abs: number; start?: number; ilvl?: number };
-type JenisDaftar = 'ul' | 'ol' | 'ola';
+// Daftar bersarang satu pohon memakai numId induknya + ilvl naik, selama tingkat itu di abstraknya bergaya
+// sama: Word sendiri yang memulai ulang sub-nomor tiap butir induk maju, dan `%1.%2.` membaca nomor induknya.
+// Selain itu (beda gaya dari saudaranya, ber-start, atau daftar KEDUA di butir yang sama) dapat numId sendiri
+// (`allocBersarang`) yang tidak pernah jadi "terakhir": yang disambung selalu daftar tingkat atas.
+type InstansiNum = { numId: number; tingkat: (KodeGaya | null)[]; start?: number; ilvl?: number };
 type NumAlloc = {
   next: number;
   instances: InstansiNum[];
-  lastByAbs: Record<number, number>;
-  alloc: (kind: JenisDaftar, continueLast?: boolean, start?: number) => number;
-  allocBersarang: (kind: JenisDaftar, ilvl: number, start?: number) => number;
+  lastByGaya: Partial<Record<KodeGaya, number>>;
+  alloc: (gaya: KodeGaya, continueLast?: boolean, start?: number) => number;
+  allocBersarang: (gaya: KodeGaya, ilvl: number, start?: number) => number;
+  /** Boleh memakai numId ini di tingkat `ilvl`? Tingkat yang belum terpakai ditetapkan gayanya sekarang. */
+  ikutTingkat: (numId: number, ilvl: number, gaya: KodeGaya) => boolean;
 };
-const absDaftar = (kind: JenisDaftar) => (kind === 'ul' ? 0 : kind === 'ola' ? 2 : 1);
 function makeNumAlloc(): NumAlloc {
+  const baru = (gaya: KodeGaya, ilvl: number, start: number): InstansiNum => {
+    const tingkat: (KodeGaya | null)[] = [];
+    tingkat[ilvl] = gaya;
+    return adalahBullet(gaya) ? { numId: a.next++, tingkat } : { numId: a.next++, tingkat, start: Math.max(1, start), ...(ilvl ? { ilvl } : {}) };
+  };
   const a: NumAlloc = {
-    next: 1, instances: [], lastByAbs: {},
-    alloc: (kind, continueLast = false, start = 1) => {
-      const abs = absDaftar(kind);
-      if (continueLast && a.lastByAbs[abs]) return a.lastByAbs[abs];
-      const numId = a.next++;
-      a.instances.push(abs === 0 ? { numId, abs } : { numId, abs, start: Math.max(1, start) });
-      a.lastByAbs[abs] = numId;
-      return numId;
+    next: 1, instances: [], lastByGaya: {},
+    alloc: (gaya, continueLast = false, start = 1) => {
+      const lalu = a.lastByGaya[gaya];
+      if (continueLast && lalu) return lalu;
+      const inst = baru(gaya, 0, start);
+      a.instances.push(inst);
+      a.lastByGaya[gaya] = inst.numId;
+      return inst.numId;
     },
-    allocBersarang: (kind, ilvl, start = 1) => {
-      const abs = absDaftar(kind);
-      const numId = a.next++;
-      a.instances.push(abs === 0 ? { numId, abs } : { numId, abs, start: Math.max(1, start), ilvl });
-      return numId;
+    allocBersarang: (gaya, ilvl, start = 1) => {
+      const inst = baru(gaya, ilvl, start);
+      a.instances.push(inst);
+      return inst.numId;
+    },
+    ikutTingkat: (numId, ilvl, gaya) => {
+      const inst = a.instances.find(i => i.numId === numId);
+      if (!inst) return false;
+      inst.tingkat[ilvl] ??= gaya;
+      return inst.tingkat[ilvl] === gaya;
     },
   };
   return a;
 }
-const TINGKAT_DAFTAR = 9;
+// Abstrak 0–2 selalu ada, jadi berkas tanpa gaya baru tetap berbentuk sama. Susunan yang sama dipakai bersama:
+// semua daftar bernomor ber-startOverride, jadi berbagi abstrak tidak menyambung hitungannya.
 function buildNumbering(instances: InstansiNum[]): string {
-  const tingkat = (fmt: string, teks: (l: number) => string) => Array.from({ length: TINGKAT_DAFTAR }, (_, l) =>
-    `<w:lvl w:ilvl="${l}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${teks(l)}"/><w:lvlJc w:val="left"/>` +
-    `<w:pPr><w:ind w:left="${BUTIR_KIRI_DXA * (l + 1)}" w:hanging="${BUTIR_GANTUNG_DXA}"/></w:pPr></w:lvl>`).join('');
-  const abstract =
-    `<w:abstractNum w:abstractNumId="0">${tingkat('bullet', () => '•')}</w:abstractNum>` +
-    `<w:abstractNum w:abstractNumId="1">${tingkat('decimal', l => `%${l + 1}.`)}</w:abstractNum>` +
-    `<w:abstractNum w:abstractNumId="2">${tingkat('lowerLetter', l => `%${l + 1}.`)}</w:abstractNum>`;
-  const nums = instances.map(i => `<w:num w:numId="${i.numId}"><w:abstractNumId w:val="${i.abs}"/>` +
+  const dasar = [susunanPenuh(['•']), susunanPenuh(['1.']), susunanPenuh(['a.'])];
+  const indeks = new Map(dasar.map((s, i) => [tulisSusunan(s), i]));
+  const absDari = (t: (KodeGaya | null)[]) => {
+    const penuh = susunanPenuh(t);
+    const kunci = tulisSusunan(penuh);
+    let i = indeks.get(kunci);
+    if (i === undefined) { i = dasar.length; dasar.push(penuh); indeks.set(kunci, i); }
+    return i;
+  };
+  const nums = instances.map(i => `<w:num w:numId="${i.numId}"><w:abstractNumId w:val="${absDari(i.tingkat)}"/>` +
     `${i.start ? `<w:lvlOverride w:ilvl="${i.ilvl ?? 0}"><w:startOverride w:val="${i.start}"/></w:lvlOverride>` : ''}</w:num>`).join('');
+  const abstract = dasar.map((s, i) => `<w:abstractNum w:abstractNumId="${i}">${s.map((g, l) => xmlTingkatWord(g, l)).join('')}</w:abstractNum>`).join('');
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${abstract}${nums}</w:numbering>`;
 }
 
@@ -138,29 +154,33 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
   let firstListOpen = true; // continueList hanya untuk list pertama di blok
   // Tumpukan daftar & butir yang sedang terbuka: sesudah daftar bersarang ditutup, butir berikutnya
   // kembali ke nomor daftar induknya.
-  const daftar: { kind: JenisDaftar; numId: number; ilvl: number }[] = [];
-  const butir: { inden: IndenTersimpan; align: string | null; bernomor: boolean }[] = [];
+  const daftar: { gaya: KodeGaya; numId: number; ilvl: number }[] = [];
+  const butir: { inden: IndenTersimpan; align: string | null; bernomor: boolean; punyaAnak?: boolean }[] = [];
   const dalamButir = () => daftar.length > 0 && butir.length === daftar.length;
   let pAlign: string | null = null;
   let pInden: IndenTersimpan | null = null;
   let headingLevel = 0;
   let runColor: string | null = null;
   let runSize: number | null = null;
+  let runStabilo: string | null = null;
   // Span bisa bersarang (warna yang membungkus angka tertaut): penutup memulihkan gaya induknya.
   const spanInduk: { color: string | null; size: number | null; rujukan: boolean }[] = [];
   // Rujukan silang yang sedang dibuka: teks di dalam span-nya dikumpulkan lalu diganti field REF saat span ditutup.
   let rujukan: { id: number; teks: string } | null = null;
-  const marks = { b: false, i: false, u: false, s: false };
+  const marks = { b: false, i: false, u: false, s: false, sup: false, sub: false };
 
   const curRpr = () => {
     const r = [`<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`];
     if (marks.b || headingLevel) r.push('<w:b/>');
     if (marks.i) r.push('<w:i/>');
-    if (marks.u) r.push('<w:u w:val="single"/>');
     if (marks.s) r.push('<w:strike/>');
     if (runColor) r.push(`<w:color w:val="${runColor}"/>`);
     const hsz = headingLevel === 1 ? sz + 10 : headingLevel === 2 ? sz + 6 : headingLevel === 3 ? sz + 2 : sz;
     r.push(`<w:sz w:val="${runSize ?? hsz}"/>`);
+    if (runStabilo) r.push(`<w:highlight w:val="${runStabilo}"/>`);
+    if (marks.u) r.push('<w:u w:val="single"/>');
+    if (marks.sup) r.push('<w:vertAlign w:val="superscript"/>');
+    else if (marks.sub) r.push('<w:vertAlign w:val="subscript"/>');
     return `<w:rPr>${r.join('')}</w:rPr>`;
   };
   const pushText = (txt: string) => {
@@ -193,26 +213,32 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
     const d = daftar[daftar.length - 1];
     if (!b || !d || runs.length === 0) return;
     if (b.bernomor) {
-      flush(`<w:ind w:left="${indenBerlaku(b.inden, 'butir', 0, daftar.length).kiri}"/>${jcXml(b.align)}`);
+      flush(`<w:ind w:left="${indenBerlaku(b.inden, 'butir', 0, daftar.length, gantungDxa(d.gaya, daftar.length)).kiri}"/>${jcXml(b.align)}`);
       return;
     }
-    flush(`<w:numPr><w:ilvl w:val="${d.ilvl}"/><w:numId w:val="${d.numId}"/></w:numPr>${xmlInden(b.inden, 'butir', 0, daftar.length)}${jcXml(b.align)}`);
+    flush(`<w:numPr><w:ilvl w:val="${d.ilvl}"/><w:numId w:val="${d.numId}"/></w:numPr>${xmlInden(b.inden, 'butir', 0, daftar.length, gantungDxa(d.gaya, daftar.length))}${jcXml(b.align)}`);
     b.bernomor = true;
   };
-  const bukaDaftar = (kind: JenisDaftar, tok: string) => {
-    if (dalamButir()) tulisButir(); // butir induk ditulis DULU, kalau tidak ia kehilangan nomornya
+  const bukaDaftar = (tok: string) => {
+    const gaya = gayaDariTagDaftar(tok);
+    const butirInduk = dalamButir() ? butir[butir.length - 1] : null;
+    if (butirInduk) tulisButir(); // butir induk ditulis DULU, kalau tidak ia kehilangan nomornya
     const induk = daftar[daftar.length - 1];
-    const mulai = Number(/(?<![-a-zA-Z])start\s*=\s*["']?(\d{1,4})/.exec(tok)?.[1] ?? 1);
-    const cadangan = kind === 'ol' ? 2 : kind === 'ola' ? 3 : 1;
+    const mulai = Number(POLA_MULAI.exec(tok)?.[1] ?? 1);
+    const cadangan = gaya === 'a.' ? 3 : tagGaya(gaya) === 'ol' ? 2 : 1;
     if (!induk) {
-      const cont = continueList && firstListOpen;
+      const cont = (continueList && firstListOpen) || POLA_LANJUT.test(tok);
       firstListOpen = false;
-      daftar.push({ kind, numId: alloc ? alloc.alloc(kind, cont, mulai) : cadangan, ilvl: 0 });
+      daftar.push({ gaya, numId: alloc ? alloc.alloc(gaya, cont, mulai) : cadangan, ilvl: 0 });
       return;
     }
     const ilvl = Math.min(daftar.length, TINGKAT_DAFTAR - 1);
-    const numId = induk.kind === kind && mulai <= 1 ? induk.numId : alloc ? alloc.allocBersarang(kind, ilvl, mulai) : cadangan;
-    daftar.push({ kind, numId, ilvl });
+    // Daftar kedua di butir yang sama: tanpa numId sendiri Word melanjutkan hitungan daftar pertama, editor mulai dari 1.
+    const anakKedua = !!butirInduk?.punyaAnak;
+    if (butirInduk) butirInduk.punyaAnak = true;
+    if (!alloc) { daftar.push({ gaya, numId: cadangan, ilvl }); return; }
+    const ikut = mulai <= 1 && !anakKedua && alloc.ikutTingkat(induk.numId, ilvl, gaya);
+    daftar.push({ gaya, numId: ikut ? induk.numId : alloc.allocBersarang(gaya, ilvl, mulai), ilvl });
   };
   const tutupDaftar = () => {
     if (dalamButir()) { tulisButir(); butir.pop(); }
@@ -253,6 +279,13 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
         case 'em':     case 'i': marks.i = !closing; break;
         case 'u': marks.u = !closing; break;
         case 's': case 'strike': case 'del': marks.s = !closing; break;
+        case 'sup': marks.sup = !closing; break;
+        case 'sub': marks.sub = !closing; break;
+        case 'mark': {
+          const k = closing ? null : POLA_STABILO.exec(tok)?.[1];
+          runStabilo = stabiloSah(k) ? STABILO[k].word : null;
+          break;
+        }
         case 'span':
           if (closing) {
             const induk = spanInduk.pop();
@@ -264,17 +297,13 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
             if (rj && !rujukan) rujukan = { id: Number(rj[1]), teks: '' };
             const cm = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{3,6}|rgb\([^)]*\))/i.exec(tok);
             if (cm) runColor = colorToHex6(cm[1]);
-            const sm = /font-size\s*:\s*(\d{1,3})px/i.exec(tok);
-            if (sm) runSize = Math.round(parseInt(sm[1], 10) * 1.5);
+            const sm = szDariGaya(tok);
+            if (sm) runSize = sm;
           }
           break;
-        case 'ul':
+        case 'ul': case 'ol':
           if (closing) tutupDaftar();
-          else bukaDaftar('ul', tok);
-          break;
-        case 'ol':
-          if (closing) tutupDaftar();
-          else bukaDaftar(/type\s*=\s*["']?a/i.test(tok) ? 'ola' : 'ol', tok);
+          else bukaDaftar(tok);
           break;
         case 'li':
           if (closing) {
@@ -396,12 +425,12 @@ export function buildTabelXml(payload: unknown, font: string, sz: number, header
     // W2: baris badan juga `cantSplit` — dulu baris berteks panjang bisa terbelah dua halaman.
     // Baris bertulisan tegak diberi tinggi minimum — Word tidak meninggikannya sendiri (teksnya terbungkus).
     const tinggi = tinggiTegak[r] ? `<w:trHeight w:val="${tinggiTegak[r]}" w:hRule="atLeast"/>` : '';
-    const trPr = isHeader ? `<w:trPr><w:tblHeader/><w:cantSplit/>${tinggi}</w:trPr>` : `<w:trPr><w:cantSplit/>${tinggi}</w:trPr>`;
+    const trPr = isHeader && atur.ulangKepala ? `<w:trPr><w:tblHeader/><w:cantSplit/>${tinggi}</w:trPr>` : `<w:trPr><w:cantSplit/>${tinggi}</w:trPr>`;
     return `<w:tr>${trPr}${cells}</w:tr>`;
   };
   // Header = kolom thead (1 baris, default) ATAU hrCount baris pertama rows (header bertingkat).
   const borderKepalaLama = atur.gaya.mendatar ? borderOf({ l: 0, r: 0 }) : border;
-  const headerRow = hrCount > 0 ? '' : `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>` +
+  const headerRow = hrCount > 0 ? '' : `<w:tr><w:trPr>${atur.ulangKepala ? '<w:tblHeader/>' : ''}<w:cantSplit/></w:trPr>` +
     kolom.map((k, ci) =>
       `<w:tc><w:tcPr><w:tcW w:w="${widths[ci]}" w:type="dxa"/>${borderKepalaLama}<w:shd w:val="clear" w:color="auto" w:fill="${headerFill}"/></w:tcPr>` +
       `<w:p><w:pPr><w:keepNext/>${SPASI_SEL}<w:jc w:val="center"/></w:pPr>` +

@@ -1342,6 +1342,11 @@ export default function TabelEditor({
               <input type="checkbox" checked={atur.utuh} onChange={e => ubahAtur({ utuh: e.target.checked })} /> Jaga utuh
             </label>
           )}
+          {lkjip && (
+            <label className="lk-tabel-atur-cek" data-tooltip="Baris kepala diulang di tiap halaman Word kalau tabel melewati satu halaman" data-tooltip-pos="below">
+              <input type="checkbox" checked={atur.ulangKepala} onChange={e => ubahAtur({ ulangKepala: e.target.checked })} /> Ulangi kepala
+            </label>
+          )}
         </div>
       )}
 

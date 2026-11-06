@@ -228,7 +228,7 @@ console.log('\nG. Sambungan layar & route')
   ok('G13 route simpan memetakan galat varian ke 409 VARIAN_TERKUNCI', sumber('app/api/iki/[id]/route.ts').includes("code: 'VARIAN_TERKUNCI'"))
   const rute = tanpaKomentar(sumber('app/api/iki/templat/route.ts'))
   ok('G14 route templat: tiap handler lewat guard() modul IKI lebih dulu', (rute.match(/const g = await guard\(\);\n\s+if \(!g\.ok\) return g\.res;/g) ?? []).length === 4)
-  ok('G15 LKJIP: editor memberi modal tautan lewat prop, CSS tabel satu sumber', tanpaKomentar(sumber('app/(dashboard)/lkjip/[id]/editor-client.tsx')).includes('lkjip={{ tahunDokumen, TautanModal }}')
+  ok('G15 LKJIP: editor memberi modal tautan lewat prop, CSS tabel satu sumber', tanpaKomentar(sumber('app/(dashboard)/lkjip/[id]/editor-client.tsx')).includes('lkjip={{ tahunDokumen, TautanModal')
     && sumber('app/(dashboard)/lkjip/[id]/editor-client.tsx').includes('${TABEL_CSS}')
     // SATU anak teks di <style>: dua anak dirangkai beda oleh SSR & klien → hydration mismatch (terbukti di layar).
     && ed.includes('<style>{isCustom ? ED_CSS + TABEL_CSS : ED_CSS}</style>'))

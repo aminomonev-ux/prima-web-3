@@ -590,8 +590,8 @@ export function ratakanLebar(colWidths: number[], c1: number, c2: number): numbe
 // ── Pengaturan cetak per tabel (Tahap W, konsep §12.2–12.3) ─────────────────
 export type PosisiTabel = 'tengah' | 'kiri' | 'penuh';
 export interface GayaTabel { selang?: boolean; jumlah?: boolean; mendatar?: boolean }
-export interface AturTabel { melintang: boolean; posisi: PosisiTabel; gaya: GayaTabel; sumber: string; utuh: boolean; kolomNomor: number | null }
-export const ATUR_BAWAAN: AturTabel = { melintang: false, posisi: 'tengah', gaya: {}, sumber: '', utuh: false, kolomNomor: null };
+export interface AturTabel { melintang: boolean; posisi: PosisiTabel; gaya: GayaTabel; sumber: string; utuh: boolean; ulangKepala: boolean; kolomNomor: number | null }
+export const ATUR_BAWAAN: AturTabel = { melintang: false, posisi: 'tengah', gaya: {}, sumber: '', utuh: false, ulangKepala: true, kolomNomor: null };
 
 /** Dari payload apa pun — simpanan lama tanpa kolom ini = bawaan. Kolom No. tidak berlaku di tabel tertaut (punya Nomor urut sendiri). */
 export function bacaAtur(p: unknown): AturTabel {
@@ -609,6 +609,8 @@ export function bacaAtur(p: unknown): AturTabel {
     gaya,
     sumber: typeof o.sumber === 'string' ? o.sumber : '',
     utuh: o.utuh === true,
+    // Tidak ada = menyala: seperti itulah semua tabel lama tercetak.
+    ulangKepala: o.ulangKepala !== false,
     kolomNomor: !o.tautan && typeof kn === 'number' && Number.isInteger(kn) && kn >= 0 && kn < ncol ? kn : null,
   };
 }

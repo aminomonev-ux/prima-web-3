@@ -952,6 +952,7 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 type NomorBlok = Map<number, NomorObjek>;
 function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, lanjutan, gaya, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; lanjutan?: LanjutanBlok; gaya?: StyleConfig; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
+  const ubahLanjut = (v: boolean) => { setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); };
   return (
     <div className="lk-block">
       <div className="lk-block-head">
@@ -962,7 +963,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
           ))}
           {block.tipe === 'NARASI' && !readOnly && (
             <label className="lk-block-cont" data-tooltip="Lanjutkan penomoran daftar (1,2,3 / a,b,c) dari daftar sejenis terakhir sebelum blok ini — untuk daftar yang terpotong tabel/gambar" data-tooltip-pos="below">
-              <input type="checkbox" checked={continueList} onChange={e => { const v = e.target.checked; setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); }} />
+              <input type="checkbox" checked={continueList} onChange={e => ubahLanjut(e.target.checked)} />
               Lanjut daftar
             </label>
           )}
@@ -971,7 +972,7 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
       </div>
       {block.tipe === 'NARASI' && (
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
-          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} lanjutan={continueList ? lanjutan : undefined}
+          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} lanjutan={lanjutan} continueList={continueList} onLanjutDaftar={ubahLanjut}
           gaya={gaya}
           onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}

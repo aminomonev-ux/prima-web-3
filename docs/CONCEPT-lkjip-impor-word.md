@@ -96,7 +96,7 @@ bisa membaca Word.
 | | Pilihan | Rekomendasi |
 |---|---|---|
 | **D1** Grafik yang berupa gambar | (a) blok **Grafik** bersumber baru "gambar": nomor "Grafik n" & Daftar Grafik benar; di editor tampil gambarnya + tombol "Ganti dengan grafik dari tabel". (b) blok Gambar biasa: bernomor "Gambar 10–17" dan Daftar Grafik kosong | **(a)** — (b) membuat nomor & daftar salah |
-| **D2** Daftar romawi kecil (96 butir) | (a) jadi angka biasa + peringatan. (b) tambah dukungan `ol` romawi di editor, penyaring, dan Word | **(a)** dulu; (b) tahap terpisah bila memang sering dipakai |
+| **D2** Daftar romawi kecil (96 butir) | (a) jadi angka biasa + peringatan. (b) tambah dukungan `ol` romawi di editor, penyaring, dan Word | **(a)** dulu; (b) tahap terpisah bila memang sering dipakai. **Tahap (b) selesai 2026-11-07** (`CONCEPT-lkjip-daftar-word.md`): romawi, kurung, dan tingkat terbawa |
 | **D3** Pintu masuk | (a) selalu dokumen BARU. (b) impor ke dokumen yang sudah ada (menimpa / menambah bab) | **(a)** — (b) membuka risiko menimpa isi yang sudah disunting |
 | **D4** BAB I–IV dikunci | (a) ya, seperti template standar. (b) tidak | **(a)** |
 

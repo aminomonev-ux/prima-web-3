@@ -9,6 +9,8 @@ import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 import { BATAS_BARIS_TANGAN } from './tautan';
 import { atributInden, bacaInden } from './halaman';
+import { POLA_LANJUT, POLA_MULAI, gayaDariTagDaftar, susunanDariTag, tagDaftar } from './gaya-daftar';
+import { BATAS_PT, POLA_STABILO, stabiloSah } from './format-teks';
 import { BATAS_ALASAN_HAPUS_FINAL } from './hapus-dokumen';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
@@ -64,7 +66,7 @@ export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12,
 
 // Sanitizer narasi (server-safe, no DOM) — whitelist tag, buang semua atribut.
 // Defense-in-depth: Tiptap re-parse saat load + docgen parse ke OOXML (bukan innerHTML).
-const NARASI_ALLOWED_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'span', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 'ol', 'li']);
+const NARASI_ALLOWED_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'span', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'sup', 'sub', 'mark', 'ul', 'ol', 'li']);
 export function sanitizeNarasiHtml(html: string): string {
   if (!html) return '';
   let s = String(html).replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
@@ -81,15 +83,17 @@ export function sanitizeNarasiHtml(html: string): string {
       return `<${t}${gaya}${atributInden(bacaInden(String(attrs || '')))}>`;
     }
     if (t === 'li') return `<li${atributInden(bacaInden(String(attrs || '')))}>`;
-    // <span>: hanya color (hex/rgb) + font-size (px, 6-72). Output dibentuk dari nilai
+    // <span>: hanya color (hex/rgb) + font-size (pt 4-72, px 6-72 untuk isi lama). Output dibentuk dari nilai
     // tervalidasi (hex/digit), bukan echo atribut user → tak ada vektor XSS.
-    // <ol type="a">: izinkan HANYA penanda huruf (a, b, c). Output literal, bukan echo atribut.
+    // <ol>/<ul>: format hanya dari daftar tertutup `gaya-daftar.ts`; tag dibentuk ulang dari tabelnya, bukan echo atribut.
     // `start`: daftar yang terpotong paragraf/tabel melanjutkan nomornya (impor Word) — angka saja.
-    if (t === 'ol') {
-      const isAlpha = /type\s*=\s*["']?a/i.test(String(attrs || '')) || /list-style-type\s*:\s*lower-alpha/i.test(String(attrs || ''));
-      const mulai = /(?<![-a-zA-Z])start\s*=\s*["']?(\d{1,4})/.exec(String(attrs || ''));
-      const start = mulai && Number(mulai[1]) > 1 ? ` start="${Number(mulai[1])}"` : '';
-      return isAlpha ? `<ol type="a"${start}>` : `<ol${start}>`;
+    if (t === 'ol' || t === 'ul') {
+      const tag = String(m);
+      return tagDaftar(gayaDariTagDaftar(tag), { start: Number(POLA_MULAI.exec(tag)?.[1] ?? 0), lanjut: POLA_LANJUT.test(tag), susunan: susunanDariTag(tag) });
+    }
+    if (t === 'mark') {
+      const k = POLA_STABILO.exec(String(attrs || ''))?.[1];
+      return `<mark data-stabilo="${stabiloSah(k) ? k : 'kuning'}">`;
     }
     if (t === 'span') {
       // Angka tertaut (konsep §19.1): id dibentuk ulang dari pola sempit, gaya lain tidak ikut.
@@ -101,8 +105,10 @@ export function sanitizeNarasiHtml(html: string): string {
       const out: string[] = [];
       const col = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))/i.exec(String(attrs || ''));
       if (col) out.push(`color:${col[1].toLowerCase().replace(/\s+/g, '')}`);
+      const fpt = /font-size\s*:\s*(\d{1,2}(?:\.\d)?)pt/i.exec(String(attrs || ''));
       const fsz = /font-size\s*:\s*(\d{1,3})px/i.exec(String(attrs || ''));
-      if (fsz) out.push(`font-size:${Math.min(72, Math.max(6, parseInt(fsz[1], 10)))}px`);
+      if (fpt) out.push(`font-size:${Math.min(BATAS_PT.max, Math.max(BATAS_PT.min, parseFloat(fpt[1])))}pt`);
+      else if (fsz) out.push(`font-size:${Math.min(72, Math.max(6, parseInt(fsz[1], 10)))}px`);
       return out.length ? `<span style="${out.join(';')}">` : '<span>';
     }
     return `<${t}>`;
@@ -283,6 +289,7 @@ export const TabelPayloadSchema = z.object({
   gaya:       z.object({ selang: z.boolean().optional(), jumlah: z.boolean().optional(), mendatar: z.boolean().optional() }).default({}),
   sumber:     z.string().max(300).default(''),
   utuh:       z.boolean().default(false),
+  ulangKepala: z.boolean().default(true),
   kolomNomor: z.number().int().min(0).max(11).nullable().default(null),
 }).superRefine((p, ctx) => {
   if (!p.tautan) return;

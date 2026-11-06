@@ -4,33 +4,41 @@
 // Kata Pengantar dan bab lain — dan hanya untuk daftar PERTAMA di blok itu.
 // Word menomori PARAGRAF, bukan <li>: butir tanpa teks tidak memakan nomor, dan paragraf kedua sebuah butir
 // tidak bernomor. Daftar bersarang punya hitungan sendiri, jadi tidak ikut hitungan sambungan.
+// "Sejenis" = gaya yang sama (`gaya-daftar.ts`): `1.` tidak menyambung `1)`. `data-lanjut` menyambung di mana pun.
 // Kesamaannya dengan berkas Word diuji di scripts/test-lkjip-lanjut-daftar.mts — kalau narasiToXml berubah,
 // fungsi ini wajib ikut.
 
 import { flattenTree, type SectionNode } from './numbering';
+import { POLA_LANJUT, POLA_MULAI, adalahBullet, gayaDariTagDaftar, type KodeGaya } from './gaya-daftar';
 
-export type JenisNomor = 'ol' | 'ola';
-/** Nomor yang akan dipakai daftar angka / huruf terakhir SEBELUM sebuah blok, bila blok itu menyambungnya. */
-export type LanjutanBlok = Partial<Record<JenisNomor, number>>;
-
-export type JenisDaftar = 'ul' | JenisNomor;
+/** Nomor yang akan dipakai daftar terakhir tiap gaya SEBELUM sebuah blok, bila blok itu menyambungnya. */
+export type LanjutanBlok = Partial<Record<KodeGaya, number>>;
 interface Daftar { berikut: number }
 
+/** Daftar akar sebuah blok, sebagaimana terbaca dari isi editor. `bernomor` = butir yang memakai nomor (bertulisan). */
+export interface AkarBlok { gaya: KodeGaya; start?: number; lanjut?: boolean; bernomor: number }
+
 /**
- * Nomor awal yang DITAMPILKAN daftar pertama sebuah blok: sambungan bila ada (blok dicentang dan daftar
- * sejenis sudah muncul sebelumnya), kalau tidak nomornya sendiri. `null` = daftar pertamanya bullet.
+ * Nomor awal yang DITAMPILKAN tiap daftar akar sebuah blok, urut seperti di blok itu: sambungan bila dicentang
+ * (daftar pertama, centang blok) atau `lanjut` dan daftar sebaya sudah ada, kalau tidak nomornya sendiri.
+ * `null` = bullet. Cermin `alloc` di docgen.ts.
  */
-export function mulaiTampil(pertama: { jenis: JenisDaftar; start?: number } | null, lanjutan?: LanjutanBlok): number | null {
-  if (!pertama || pertama.jenis === 'ul') return null;
-  return lanjutan?.[pertama.jenis] ?? Math.max(1, pertama.start ?? 1);
+export function mulaiDaftarBlok(akar: readonly AkarBlok[], lanjutan: LanjutanBlok | undefined, continueList: boolean): (number | null)[] {
+  const terakhir: LanjutanBlok = { ...(lanjutan ?? {}) };
+  return akar.map((a, i) => {
+    if (adalahBullet(a.gaya)) return null;
+    const sambung = a.lanjut || (continueList && i === 0);
+    const mulai = (sambung ? terakhir[a.gaya] : undefined) ?? Math.max(1, a.start ?? 1);
+    terakhir[a.gaya] = mulai + a.bernomor;
+    return mulai;
+  });
 }
 
-const POLA_MULAI = /(?<![-a-zA-Z])start\s*=\s*["']?(\d{1,4})/;
 const POLA_RUJUK = /(?<![-a-zA-Z])data-rujuk\s*=\s*["']?\d{1,12}/;
 
 /** Per blok NARASI: nomor lanjutan daftar angka & huruf (kunci tak ada = belum ada daftar sejenis sebelumnya). */
 export function lanjutanDaftar(tree: SectionNode[], kataPengantarHtml = ''): Map<number, LanjutanBlok> {
-  const terakhir: Partial<Record<JenisDaftar, Daftar>> = {};
+  const terakhir: Partial<Record<KodeGaya, Daftar>> = {};
   const hasil = new Map<number, LanjutanBlok>();
 
   // `rujuk`: di isi dokumen span rujukan jadi field REF (selalu bertulisan), di Kata Pengantar tidak.
@@ -80,8 +88,8 @@ export function lanjutanDaftar(tree: SectionNode[], kataPengantarHtml = ''): Map
           }
           if (dalamButir()) catatButir();
           if (daftar.length > 0) { daftar.push(null); break; }
-          const jenis: JenisDaftar = tag === 'ul' ? 'ul' : /type\s*=\s*["']?a/i.test(tok) ? 'ola' : 'ol';
-          const sambung = lanjut && pertama;
+          const jenis = gayaDariTagDaftar(tok);
+          const sambung = (lanjut && pertama) || POLA_LANJUT.test(tok);
           pertama = false;
           const lalu = terakhir[jenis];
           if (sambung && lalu) { daftar.push(lalu); break; }
@@ -106,8 +114,7 @@ export function lanjutanDaftar(tree: SectionNode[], kataPengantarHtml = ''): Map
       if (b.tipe !== 'NARASI') continue;
       const p = (b.payload ?? {}) as { html?: string; continueList?: boolean };
       const l: LanjutanBlok = {};
-      if (terakhir.ol) l.ol = terakhir.ol.berikut;
-      if (terakhir.ola) l.ola = terakhir.ola.berikut;
+      for (const [g, d] of Object.entries(terakhir) as [KodeGaya, Daftar][]) if (!adalahBullet(g)) l[g] = d.berikut;
       hasil.set(b.id, l);
       jalani(p.html ?? '', p.continueList === true, true);
     }

@@ -10,7 +10,8 @@
 
 import { readFileSync } from 'node:fs'
 import PizZip from 'pizzip'
-import { lanjutanDaftar, mulaiTampil, type JenisNomor } from '../lib/lkjip/lanjut-daftar'
+import { lanjutanDaftar, mulaiDaftarBlok } from '../lib/lkjip/lanjut-daftar'
+import type { KodeGaya } from '../lib/lkjip/gaya-daftar'
 import { buildNumberedTree, type SectionFlat, type BlockNode, type SectionNode } from '../lib/lkjip/numbering'
 import { DEFAULT_STYLE } from '../lib/lkjip/schemas'
 import { rakitDocx } from '../lib/lkjip/docgen'
@@ -30,6 +31,8 @@ const pohon = (blok: BlockNode[][]): SectionNode[] => {
 }
 const ol = (...li: string[]) => `<ol>${li.map(t => `<li><p>${t}</p></li>`).join('')}</ol>`
 const ola = (...li: string[]) => `<ol type="a">${li.map(t => `<li><p>${t}</p></li>`).join('')}</ol>`
+type JenisNomor = 'ol' | 'ola'
+const KODE: Record<JenisNomor, KodeGaya> = { ol: '1.', ola: 'a.' }
 
 // Nomor tiap paragraf berdaftar di berkas Word: per numId + ilvl, mulai dari startOverride-nya (C menjamin
 // semua punya); butir tingkat atas memulai ulang tingkat di bawahnya. Model ini dicocokkan dgn ListString
@@ -37,15 +40,18 @@ const ola = (...li: string[]) => `<ol type="a">${li.map(t => `<li><p>${t}</p></l
 async function nomorWord(tree: SectionNode[], kp = '') {
   const zip = new PizZip((await rakitDocx({ tree, judul: 'Uji', tahun: 2099, canonical_id: 'LKJIP-UJI', style_config: { ...DEFAULT_STYLE, kataPengantarHtml: kp } })).buffer)
   const num = zip.file('word/numbering.xml')!.asText()
-  const mulai = new Map<string, { abs: string; start: number | null; ilvl: number }>()
+  const fmtTingkat = new Map<string, string>()
+  for (const a of num.matchAll(/<w:abstractNum w:abstractNumId="(\d+)">([\s\S]*?)<\/w:abstractNum>/g))
+    for (const l of a[2].matchAll(/<w:lvl w:ilvl="(\d)"><w:start w:val="1"\/><w:numFmt w:val="(\w+)"\/>/g)) fmtTingkat.set(`${a[1]}|${l[1]}`, l[2])
+  const mulai = new Map<string, { abs: string; start: number | null; ilvl: number; bullet: boolean }>()
   for (const m of num.matchAll(/<w:num w:numId="(\d+)"><w:abstractNumId w:val="(\d+)"\/>(?:<w:lvlOverride w:ilvl="(\d)"><w:startOverride w:val="(\d+)"\/><\/w:lvlOverride>)?<\/w:num>/g))
-    mulai.set(m[1], { abs: m[2], start: m[4] ? Number(m[4]) : null, ilvl: Number(m[3] ?? 0) })
+    mulai.set(m[1], { abs: m[2], start: m[4] ? Number(m[4]) : null, ilvl: Number(m[3] ?? 0), bullet: fmtTingkat.get(`${m[2]}|${m[3] ?? 0}`) === 'bullet' })
   const hitung = new Map<string, number[]>()
-  const par: { teks: string; nomor: number | null; abs: string | null; ilvl: number | null }[] = []
+  const par: { teks: string; nomor: number | null; abs: string | null; ilvl: number | null; bullet: boolean }[] = []
   for (const m of zip.file('word/document.xml')!.asText().matchAll(/<w:p>([\s\S]*?)<\/w:p>/g)) {
     const teks = [...m[1].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map(t => t[1]).join('')
     const id = /<w:numId w:val="(\d+)"\/>/.exec(m[1])?.[1]
-    if (!id) { par.push({ teks, nomor: null, abs: null, ilvl: null }); continue }
+    if (!id) { par.push({ teks, nomor: null, abs: null, ilvl: null, bullet: false }); continue }
     const lv = Number(/<w:ilvl w:val="(\d)"\/>/.exec(m[1])?.[1] ?? 0)
     const inst = mulai.get(id)
     const arr = hitung.get(id) ?? []
@@ -53,7 +59,7 @@ async function nomorWord(tree: SectionNode[], kp = '') {
     arr[lv] = n
     arr.length = lv + 1
     hitung.set(id, arr)
-    par.push({ teks, nomor: n, abs: inst?.abs ?? null, ilvl: lv })
+    par.push({ teks, nomor: n, abs: inst?.abs ?? null, ilvl: lv, bullet: fmtTingkat.get(`${inst?.abs}|${lv}`) === 'bullet' })
   }
   return { par, mulai }
 }
@@ -75,30 +81,32 @@ const lA = lanjutanDaftar(pohonA, ol('KP1', 'KP2'))
 // ListString Word sungguhan (scratchpad daftar-word) sesudah startOverride & perbaikan daftar bersarang.
 const wordA = 'KP1=1 KP2=2 A0=3 A1=1 A2=2 B1=1 C1=2 D1=1 D2=2 E1=1 F1=2 G2=1 H1=5 I1=6 J1=1 J1a=1 J2=2 K2=1 L1=2'
 const { par: parA } = await nomorWord(pohonA, ol('KP1', 'KP2'))
-const tulisA = parA.filter(p => p.nomor !== null && p.abs !== '0').map(p => `${p.teks}=${p.nomor}`).join(' ')
+const tulisA = parA.filter(p => p.nomor !== null && !p.bullet).map(p => `${p.teks}=${p.nomor}`).join(' ')
 ok('A1 nomor rakitDocx (per numId + startOverride) = yang tampil di Word', tulisA === wordA, tulisA)
-ok('A2 menyambung Kata Pengantar: blok pertama → 3', lA.get(1)?.ol === 3, JSON.stringify(lA.get(1)))
-ok('A3 menyambung daftar terakhir, BUKAN daftar pertama: C → 2 (sesudah B1), bukan 3 (sesudah A2)', lA.get(4)?.ol === 2, JSON.stringify(lA.get(4)))
-ok('A4 huruf menyambung huruf: F → b (2); belum ada huruf sebelum D', lA.get(7)?.ola === 2 && lA.get(5)?.ola === undefined, `${JSON.stringify(lA.get(7))} ${JSON.stringify(lA.get(5))}`)
-ok('A5 daftar ber-start (impor) jadi pijakan: I → 6 sesudah H mulai 5', lA.get(10)?.ol === 6, JSON.stringify(lA.get(10)))
-ok('A6 butir kosong tidak memakan nomor (K2 = 1) → L → 2', lA.get(13)?.ol === 2, JSON.stringify(lA.get(13)))
+ok('A2 menyambung Kata Pengantar: blok pertama → 3', lA.get(1)?.['1.'] === 3, JSON.stringify(lA.get(1)))
+ok('A3 menyambung daftar terakhir, BUKAN daftar pertama: C → 2 (sesudah B1), bukan 3 (sesudah A2)', lA.get(4)?.['1.'] === 2, JSON.stringify(lA.get(4)))
+ok('A4 huruf menyambung huruf: F → b (2); belum ada huruf sebelum D', lA.get(7)?.['a.'] === 2 && lA.get(5)?.['a.'] === undefined, `${JSON.stringify(lA.get(7))} ${JSON.stringify(lA.get(5))}`)
+ok('A5 daftar ber-start (impor) jadi pijakan: I → 6 sesudah H mulai 5', lA.get(10)?.['1.'] === 6, JSON.stringify(lA.get(10)))
+ok('A6 butir kosong tidak memakan nomor (K2 = 1) → L → 2', lA.get(13)?.['1.'] === 2, JSON.stringify(lA.get(13)))
 const solo = n(ol('X'), true)
-ok('A7 dicentang tapi belum ada daftar sejenis sebelumnya: tanpa kunci (mulai dari nomornya sendiri)', !('ol' in (lanjutanDaftar(pohon([[solo]])).get(solo.id) ?? {})))
+ok('A7 dicentang tapi belum ada daftar sejenis sebelumnya: tanpa kunci (mulai dari nomornya sendiri)', !('1.' in (lanjutanDaftar(pohon([[solo]])).get(solo.id) ?? {})))
 const tanpaKp = lanjutanDaftar(pohonA)
-ok('A8 tanpa Kata Pengantar: blok pertama tidak punya lanjutan', tanpaKp.get(1)?.ol === undefined && tanpaKp.get(3)?.ol === 3)
+ok('A8 tanpa Kata Pengantar: blok pertama tidak punya lanjutan', tanpaKp.get(1)?.['1.'] === undefined && tanpaKp.get(3)?.['1.'] === 3)
 ok('A9 blok non-NARASI dilewati, urutan pohon (induk dulu, lalu anak)', (() => {
   const t = pohon([[n(ol('P1', 'P2')), { id: 900, tipe: 'TABEL', payload: {}, urutan: 900 }], [n(ol('Q1'), true)]])
-  return lanjutanDaftar(t).get(idA)?.ol === 3 && !lanjutanDaftar(t).has(900)
+  return lanjutanDaftar(t).get(idA)?.['1.'] === 3 && !lanjutanDaftar(t).has(900)
 })())
 ok('A10 rujukan silang sebagai satu-satunya isi butir tetap memakan nomor (di isi jadi field REF)',
-  lanjutanDaftar(pohon([[n('<ol><li><p><span data-rujuk="7">Tabel 1</span></p></li></ol>'), n(ol('R'), true)]])).get(idA)?.ol === 2)
+  lanjutanDaftar(pohon([[n('<ol><li><p><span data-rujuk="7">Tabel 1</span></p></li></ol>'), n(ol('R'), true)]])).get(idA)?.['1.'] === 2)
 ok('A11 butir yang isinya hanya baris baru (Shift+Enter) tetap memakan nomor',
-  lanjutanDaftar(pohon([[n('<ol><li><p><br></p></li><li><p></p></li></ol>'), n(ol('S'), true)]])).get(idA)?.ol === 2)
+  lanjutanDaftar(pohon([[n('<ol><li><p><br></p></li><li><p></p></li></ol>'), n(ol('S'), true)]])).get(idA)?.['1.'] === 2)
 
-ok('A12 mulaiTampil: sambungan menurut JENIS daftar pertama; tanpa sambungan = nomornya sendiri; bullet = tidak ada',
-  mulaiTampil({ jenis: 'ol', start: 7 }, { ol: 3, ola: 5 }) === 3 && mulaiTampil({ jenis: 'ola' }, { ol: 3, ola: 5 }) === 5
-  && mulaiTampil({ jenis: 'ola', start: 2 }, { ol: 3 }) === 2 && mulaiTampil({ jenis: 'ol', start: 4 }) === 4
-  && mulaiTampil({ jenis: 'ol', start: 0 }) === 1 && mulaiTampil({ jenis: 'ul' }, { ol: 3 }) === null && mulaiTampil(null, { ol: 3 }) === null)
+const satuAkar = (a: Parameters<typeof mulaiDaftarBlok>[0][number], l: Parameters<typeof mulaiDaftarBlok>[1], c = true) => mulaiDaftarBlok([a], l, c)[0]
+ok('A12 mulaiDaftarBlok: sambungan menurut GAYA daftar pertama; tanpa sambungan = nomornya sendiri; bullet = tidak ada',
+  satuAkar({ gaya: '1.', start: 7, bernomor: 1 }, { '1.': 3, 'a.': 5 }) === 3 && satuAkar({ gaya: 'a.', bernomor: 1 }, { '1.': 3, 'a.': 5 }) === 5
+  && satuAkar({ gaya: 'a.', start: 2, bernomor: 1 }, { '1.': 3 }) === 2 && satuAkar({ gaya: '1.', start: 4, bernomor: 1 }, undefined) === 4
+  && satuAkar({ gaya: '1.', start: 0, bernomor: 1 }, undefined) === 1 && satuAkar({ gaya: '•', bernomor: 1 }, { '1.': 3 }) === null
+  && satuAkar({ gaya: '1.', start: 7, bernomor: 1 }, { '1.': 3 }, false) === 7)
 
 // ─── B. Dokumen acak ──────────────────────────────────────────────────────────
 console.log('\nB. Dokumen acak — nomor editor vs berkas Word')
@@ -167,7 +175,7 @@ for (let dok = 0; dok < 400; dok++) {
     if (i.pertama === null || i.pertama === 'ul') continue
     const p = par.find(x => x.nomor !== null && x.teks.startsWith(`L${bid}-0-`))
     if (!p) continue
-    const disambung = i.lanjut ? lanjutan.get(bid)?.[i.pertama] : undefined
+    const disambung = i.lanjut ? lanjutan.get(bid)?.[KODE[i.pertama]] : undefined
     const tampil = disambung ?? i.mulai
     banding++
     if (disambung !== undefined) lanjutDiuji++
@@ -179,9 +187,9 @@ ok(`B1 ${banding} daftar pertama blok: nomor editor = nomor Word (${lanjutDiuji}
 // ─── C. numbering.xml ─────────────────────────────────────────────────────────
 console.log('\nC. numbering.xml')
 const { mulai: numC } = await nomorWord(pohon([[n(ol('a') + '<ul><li><p>b</p></li></ul>' + ola('c') + '<ol start="4"><li><p>d</p></li></ol>')], [n(ol('e'), true)]]))
-const tanpaOverride = [...numC.entries()].filter(([, v]) => v.abs !== '0' && v.start === null).map(([k]) => k)
-ok('C1 tiap daftar bernomor (angka & huruf) ber-startOverride — 1, atau start-nya', tanpaOverride.length === 0 && [...numC.values()].filter(v => v.abs !== '0').map(v => v.start).join(',') === '1,1,4', JSON.stringify([...numC]))
-ok('C2 bullet tanpa startOverride', [...numC.values()].filter(v => v.abs === '0').every(v => v.start === null) && [...numC.values()].some(v => v.abs === '0'))
+const tanpaOverride = [...numC.entries()].filter(([, v]) => !v.bullet && v.start === null).map(([k]) => k)
+ok('C1 tiap daftar bernomor (angka & huruf) ber-startOverride — 1, atau start-nya', tanpaOverride.length === 0 && [...numC.values()].filter(v => !v.bullet).map(v => v.start).join(',') === '1,1,4', JSON.stringify([...numC]))
+ok('C2 bullet tanpa startOverride', [...numC.values()].filter(v => v.bullet).every(v => v.start === null) && [...numC.values()].some(v => v.bullet))
 ok('C3 blok "Lanjut daftar" memakai numId yang sama (tidak menambah num)', numC.size === 4, String(numC.size))
 
 // ─── D. Sambungan layar ───────────────────────────────────────────────────────
@@ -194,16 +202,15 @@ ok('D1 editor menghitung dari pohon + Kata Pengantar TERSIMPAN (sama dgn yang di
 const tagJsx = (src: string, buka: string) => { const i = src.indexOf(buka); return i < 0 ? '' : src.slice(i, src.indexOf(' />', i) + 3) }
 ok('D2 tiap blok menerima lanjutannya sendiri', tagJsx(ed.slice(ed.indexOf('selected.blocks.map(')), '<BlockEditor block={b}').includes('lanjutan={lanjutanBlok.get(b.id)}'))
 const be = ed.slice(ed.indexOf('function BlockEditor('), ed.indexOf('function GambarEditor('))
-ok('D3 nomor sambungan hanya dipasang selama blok dicentang (centang dilepas = langsung kembali 1)',
-  tagJsx(be, '<TiptapNarasi ').includes('lanjutan={continueList ? lanjutan : undefined}') && /lanjutan\?: LanjutanBlok/.test(ed))
+ok('D3 centang blok dioper ke editor (centang dilepas = langsung kembali 1)',
+  tagJsx(be, '<TiptapNarasi ').includes('lanjutan={lanjutan} continueList={continueList}') && /lanjutan\?: LanjutanBlok/.test(ed))
 const dk = tt.slice(tt.indexOf('function dekorLanjut('), tt.indexOf('const LanjutDaftar'))
-ok('D4 dekorasi hanya di daftar PERTAMA blok (bullet ikut dihitung sebagai pertama), nomornya dari mulaiTampil',
-  /if \(ketemu \|\| \(node\.type\.name !== 'orderedList' && node\.type\.name !== 'bulletList'\)\) return;\s*ketemu = true;/.test(dk)
-  && dk.includes("mulaiTampil(node.type.name === 'bulletList' ? { jenis: 'ul' } : { jenis: huruf ? 'ola' : 'ol', start: Number(node.attrs.start) || 1 }, lanjutan)")
-  && dk.includes('Decoration.node(pos, pos + node.nodeSize, { start: String(mulai) })'), dk.slice(0, 200))
+ok('D4 dekorasi di tiap daftar akar bernomor, nomornya dari mulaiDaftarBlok',
+  dk.includes('mulaiDaftarBlok(akar, info?.lanjutan, info?.continueList ?? false)')
+  && dk.includes('Decoration.node(pos[i], pos[i] + ukuran[i], { start: String(m) })'), dk.slice(0, 200))
 ok('D5 plugin terpasang & disegarkan tiap sambungannya berubah (tanpa memunculkan Simpan / masuk riwayat Undo)',
   /RujukTaut, LanjutDaftar, IndenParagraf\]/.test(tt) && tt.includes('decorations: state => dekorLanjut(state.doc, KUNCI_LANJUT.getState(state))')
-  && /editor\.view\.dispatch\(editor\.state\.tr\.setMeta\(KUNCI_LANJUT, \{ nilai \}\)\.setMeta\(META_SEGAR, true\)\.setMeta\('addToHistory', false\)\);\s*\}, \[editor, mulaiOl, mulaiOla\]\);/.test(tt))
+  && /editor\.view\.dispatch\(editor\.state\.tr\.setMeta\(KUNCI_LANJUT, nilai\)\.setMeta\(META_SEGAR, true\)\.setMeta\('addToHistory', false\)\);\s*\}, \[editor, kunciLanjutan, continueList\]\);/.test(tt))
 ok('D6 tampilan tidak menulis ke isi blok (tak ada start yang disimpan)', !/setNodeMarkup[^;]*start/.test(tt) && !/updateAttributes\('orderedList', \{[^}]*start/.test(tt))
 
 // ─── E. Daftar PERTAMA blok yang bersarang ────────────────────────────────────
@@ -213,7 +220,7 @@ async function sambungBersarang(htmlA: string, jenis: JenisNomor = 'ol'): Promis
   const A = n(htmlA)
   const B = n(jenis === 'ola' ? ola('B1') : ol('B1'), true)
   const tree = pohon([[A, B]])
-  const editor = lanjutanDaftar(tree).get(B.id)?.[jenis] ?? 1
+  const editor = lanjutanDaftar(tree).get(B.id)?.[KODE[jenis]] ?? 1
   const word = (await nomorWord(tree)).par.find(p => p.teks === 'B1')?.nomor ?? null
   return { editor, word }
 }
@@ -263,13 +270,13 @@ const f1 = await nomorDari('<ol><li><p>X</p><ol><li><p>Xa</p></li><li><p>Xb</p><
 const tulisF = (ps: typeof f1) => ps.map(p => `${p.teks}=${p.nomor}@${p.ilvl}`).join(' ')
 ok('F1 butir induk tetap bernomor, sub-nomor mulai ulang tiap induk, sesudahnya kembali ke nomor induk', tulisF(f1) === 'X=1@0 Xa=1@1 Xb=2@1 Y=2@0 Ya=1@1 Z=3@0', tulisF(f1))
 const f2 = await nomorDari('<ul><li><p>U</p><ol><li><p>Ua</p></li></ol></li><li><p>V</p><ol><li><p>Va</p></li></ol></li></ul>')
-ok('F2 bersarang beda jenis: tiap daftar dalam mulai dari 1', f2.filter(p => p.abs !== '0').map(p => `${p.teks}=${p.nomor}@${p.ilvl}`).join(' ') === 'Ua=1@1 Va=1@1', tulisF(f2))
+ok('F2 bersarang beda jenis: tiap daftar dalam mulai dari 1', f2.filter(p => !p.bullet).map(p => `${p.teks}=${p.nomor}@${p.ilvl}`).join(' ') === 'Ua=1@1 Va=1@1', tulisF(f2))
 const f3 = await nomorDari('<ol><li><p>X</p><p>Tambahan</p></li><li><p>Y</p></li></ol>')
 ok('F3 paragraf kedua butir: tidak menyatu & tidak bernomor, butir berikutnya tetap 2', tulisF(f3) === 'X=1@0 Tambahan=null@null Y=2@0', tulisF(f3))
 const blokInduk = n('<ol><li><p>X</p><ol><li><p>Xa</p></li><li><p>Xb</p></li></ol></li></ol>')
 const blokSambung = n(ol('S1'), true)
 const lanjutBersarang = lanjutanDaftar(pohon([[blokInduk, blokSambung]]))
-ok('F4 "Lanjut daftar" menyambung daftar TINGKAT ATAS, bukan daftar dalamnya', lanjutBersarang.get(blokSambung.id)?.ol === 2, JSON.stringify(lanjutBersarang.get(blokSambung.id)))
+ok('F4 "Lanjut daftar" menyambung daftar TINGKAT ATAS, bukan daftar dalamnya', lanjutBersarang.get(blokSambung.id)?.['1.'] === 2, JSON.stringify(lanjutBersarang.get(blokSambung.id)))
 // Tiptap selalu membungkus <p>, tapi tempelan & berkas lama bisa berisi teks langsung di <li>.
 const f5 = await nomorDari('<ol><li>X<ol><li>Xa</li></ol></li><li>Y</li></ol>')
 ok('F5 butir tanpa <p> yang berisi daftar bersarang tetap bernomor', tulisF(f5) === 'X=1@0 Xa=1@1 Y=2@0', tulisF(f5))
@@ -278,9 +285,9 @@ const f6 = await sambungDi('<ol><li>X<ol><li>Xa</li></ol></li></ol>')
 ok('F6 hitungan editor: butir tanpa <p> berdaftar-anak memakan satu nomor = Word', f6 === '2/2', f6)
 const f7 = await sambungDi('<ol><li><p>X</p><p>Tambahan</p></li></ol>')
 ok('F7 hitungan editor: butir dua paragraf memakan SATU nomor = Word', f7 === '2/2', f7)
-const { mulai: numF } = await nomorWord(pohon([[n('<ul><li><p>U</p><ol><li><p>Ua</p></li></ol></li></ul>')]]))
-ok('F8 bersarang beda jenis: startOverride di tingkatnya sendiri (kalau di tingkat 0, Word melanjutkan hitungan)',
-  [...numF.values()].some(v => v.abs === '1' && v.ilvl === 1 && v.start === 1), JSON.stringify([...numF]))
+const { mulai: numF } = await nomorWord(pohon([[n('<ol><li><p>U</p><ol start="3"><li><p>Ua</p></li></ol></li></ol>')]]))
+ok('F8 bersarang ber-start: startOverride di tingkatnya sendiri (kalau di tingkat 0, Word melanjutkan hitungan)',
+  [...numF.values()].some(v => v.ilvl === 1 && v.start === 3), JSON.stringify([...numF]))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
 if (gagal.length) { console.log('GAGAL: ' + gagal.join('; ')); process.exit(1) }

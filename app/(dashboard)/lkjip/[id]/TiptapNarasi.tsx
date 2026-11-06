@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -11,21 +12,31 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus, IndentIncrease, IndentDecrease } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, ListTree, ListRestart, ListPlus, ListStart, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus, IndentIncrease, IndentDecrease, Undo2, Redo2, Eraser, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Highlighter, CaseSensitive, ChevronDown, Scissors, Copy, ClipboardPaste, Pilcrow } from 'lucide-react';
 import type { ObjekRujukan } from '@/lib/lkjip/numbering';
 import PrimaButton from '@/components/ui/PrimaButton';
-import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { confirmDialog, promptDialog } from '@/components/ui/ConfirmDialog';
+import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';
 import { fetchJson } from '@/lib/shared/api';
 import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { angkaDiHtml, bandingAngka, idAngkaBaru, kalimatAngka, kunciTarikan, resepTerpakai, type ResepAngka } from '@/lib/lkjip/angka';
 import type { HasilTarik } from '@/lib/lkjip/tautan';
-import { mulaiTampil, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
+import { mulaiDaftarBlok, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
+import { adalahBullet, cssGayaDaftar, gantungDxa, gayaBawaan, type KodeBullet, type KodeGaya, type KodeNomor, type KodeSusunan, SUSUNAN } from '@/lib/lkjip/gaya-daftar';
+import { STABILO, UKURAN_PT, ptDariCss, type KodeStabilo, type ModeHuruf } from '@/lib/lkjip/format-teks';
+import { GayaDaftar, Stabilo, Subskrip, Superskrip } from '@/lib/lkjip/ekstensi-narasi';
+import {
+  akarBlokDari, adaPilihanTeks, aturGayaTingkat, aturLanjut, aturNomorAwal, aturSusunan, bungkusDaftar, gayaNode, hapusFormat, indeksAkar, kodeSusunanDari,
+  mulaiUlangDariSatu, naikTingkat, nomorTerkunciDesimal, posisiDaftar, susunanPohon, turunTingkat, ubahHuruf,
+} from '@/lib/lkjip/perintah-narasi';
 import {
   LEBAR_DXA, PX_TULIS, LANGKAH_BESAR_DXA, BUTIR_KIRI_DXA, BUTIR_GANTUNG_DXA,
-  bacaInden, dxaDariCss, indentTwips, indenBawaan, indenBerlaku, keTersimpan, pxHuruf,
+  bacaInden, bidangBerubah, dxaDariCss, indentTwips, indenBawaan, indenBerlaku, keTersimpan, pxHuruf,
   type Inden, type IndenTersimpan, type JenisInden,
 } from '@/lib/lkjip/halaman';
 import PenggarisNarasi from './PenggarisNarasi';
+import { GALERI_CSS, GaleriBullet, GaleriNomor, GaleriTingkat, PilihanHuruf, PilihanStabilo } from './GaleriDaftar';
+import ParagrafModal, { type PerataanNarasi } from './ParagrafModal';
 
 const AngkaModal = dynamic(() => import('./AngkaModal'), { ssr: false });
 
@@ -40,23 +51,6 @@ const TextAlign = Extension.create({
           default: null,
           parseHTML: (el: HTMLElement) => el.style.textAlign || null,
           renderHTML: (attrs: Record<string, unknown>) => (attrs.textAlign ? { style: `text-align:${attrs.textAlign}` } : {}),
-        },
-      },
-    }];
-  },
-});
-
-// Penomoran huruf (a, b, c) pada orderedList → <ol type="a">. Tanpa dependency baru.
-const OrderedListType = Extension.create({
-  name: 'orderedListType',
-  addGlobalAttributes() {
-    return [{
-      types: ['orderedList'],
-      attributes: {
-        listType: {
-          default: null,
-          parseHTML: (el: HTMLElement) => (el.getAttribute('type') === 'a' || el.style.listStyleType === 'lower-alpha') ? 'a' : null,
-          renderHTML: (attrs: Record<string, unknown>) => (attrs.listType === 'a' ? { type: 'a', style: 'list-style-type: lower-alpha' } : {}),
         },
       },
     }];
@@ -156,32 +150,27 @@ const RujukTaut = Node.create({
 });
 const META_SEGAR = 'lkjipRujukSegar';
 
-// "Lanjut daftar": nomor awal daftar pertama blok dipasang sebagai DEKORASI (atribut start di DOM saja),
-// tidak ditulis ke isi blok — kalau disimpan, angkanya basi begitu daftar di blok sebelumnya bertambah dan
-// tertinggal saat centangnya dilepas. CSS `counter-reset: list-item` tidak dipakai: Chromium mengabaikannya
-// untuk <ol> (dicoba di editor 2026-11-05). Daftar pertama tanpa sambungan tetap didekorasi dengan nomornya
-// sendiri, sebab melepas dekorasi ikut menghapus atribut start bawaannya dari DOM.
-const KUNCI_LANJUT = new PluginKey<LanjutanBlok | undefined>('lkjipLanjutDaftar');
-function dekorLanjut(doc: PMNode, lanjutan: LanjutanBlok | undefined): DecorationSet {
-  let dekor = DecorationSet.empty;
-  let ketemu = false;
-  doc.forEach((node, pos) => {
-    if (ketemu || (node.type.name !== 'orderedList' && node.type.name !== 'bulletList')) return;
-    ketemu = true;
-    const huruf = node.attrs.listType === 'a' || node.attrs.type === 'a';
-    const mulai = mulaiTampil(node.type.name === 'bulletList' ? { jenis: 'ul' } : { jenis: huruf ? 'ola' : 'ol', start: Number(node.attrs.start) || 1 }, lanjutan);
-    if (mulai !== null) dekor = DecorationSet.create(doc, [Decoration.node(pos, pos + node.nodeSize, { start: String(mulai) })]);
-  });
-  return dekor;
+// "Lanjut daftar": nomor awal daftar akar dipasang sebagai DEKORASI (atribut start di DOM saja), tidak ditulis ke
+// isi blok — kalau disimpan, angkanya basi begitu daftar sebelumnya bertambah dan tertinggal saat sambungannya
+// dilepas. CSS `counter-reset: list-item` tidak dipakai: Chromium mengabaikannya untuk <ol> (dicoba di editor
+// 2026-11-05). Daftar tanpa sambungan tetap didekorasi dengan nomornya sendiri, sebab melepas dekorasi ikut
+// menghapus atribut start bawaannya dari DOM.
+interface InfoLanjut { lanjutan?: LanjutanBlok; continueList: boolean }
+const KUNCI_LANJUT = new PluginKey<InfoLanjut>('lkjipLanjutDaftar');
+function dekorLanjut(doc: PMNode, info: InfoLanjut | undefined): DecorationSet {
+  const { akar, pos, ukuran } = akarBlokDari(doc);
+  const mulai = mulaiDaftarBlok(akar, info?.lanjutan, info?.continueList ?? false);
+  const dekor = mulai.flatMap((m, i) => (m === null ? [] : [Decoration.node(pos[i], pos[i] + ukuran[i], { start: String(m) })]));
+  return dekor.length ? DecorationSet.create(doc, dekor) : DecorationSet.empty;
 }
 const LanjutDaftar = Extension.create({
   name: 'lanjutDaftar',
   addProseMirrorPlugins() {
-    return [new Plugin<LanjutanBlok | undefined>({
+    return [new Plugin<InfoLanjut>({
       key: KUNCI_LANJUT,
       state: {
-        init: () => undefined,
-        apply: (tr, nilai) => { const m = tr.getMeta(KUNCI_LANJUT) as { nilai?: LanjutanBlok } | undefined; return m ? m.nilai : nilai; },
+        init: () => ({ continueList: false }),
+        apply: (tr, nilai) => (tr.getMeta(KUNCI_LANJUT) as InfoLanjut | undefined) ?? nilai,
       },
       props: { decorations: state => dekorLanjut(state.doc, KUNCI_LANJUT.getState(state)) },
     })];
@@ -219,7 +208,7 @@ const IndenParagraf = Extension.create({
   },
 });
 
-interface SasaranInden { pos: number; node: PMNode; jenis: JenisInden; kedalaman: number }
+interface SasaranInden { pos: number; node: PMNode; jenis: JenisInden; kedalaman: number; gantung?: number }
 const simpananNode = (n: PMNode): IndenTersimpan => ({
   ...(n.attrs.indKiri != null ? { kiri: n.attrs.indKiri } : {}),
   ...(n.attrs.indKanan != null ? { kanan: n.attrs.indKanan } : {}),
@@ -231,14 +220,14 @@ function sasaranInden(state: EditorState): SasaranInden[] {
   state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
     if (!node.isTextblock) return true;
     const $p = state.doc.resolve(pos);
-    let butir: { pos: number; node: PMNode } | null = null;
+    let butir: { pos: number; node: PMNode; gaya: KodeGaya } | null = null;
     let kedalaman = 0;
     for (let d = $p.depth; d > 0; d--) {
       if ($p.node(d).type.name !== 'listItem') continue;
       kedalaman++;
-      butir ??= { pos: $p.before(d), node: $p.node(d) };
+      butir ??= { pos: $p.before(d), node: $p.node(d), gaya: gayaNode($p.node(d - 1)) };
     }
-    if (butir) hasil.set(butir.pos, { ...butir, jenis: 'butir', kedalaman });
+    if (butir) hasil.set(butir.pos, { pos: butir.pos, node: butir.node, jenis: 'butir', kedalaman, gantung: gantungDxa(butir.gaya, kedalaman) });
     else hasil.set(pos, { pos, node, jenis: node.type.name === 'heading' ? 'judul' : 'paragraf', kedalaman: 1 });
     return false;
   });
@@ -252,16 +241,27 @@ interface Props {
   readOnly: boolean;
   /** Tabel/Gambar/Grafik yang bisa dirujuk — nomornya SEKARANG (`daftarObjekRujukan`). */
   objek?: ObjekRujukan[];
-  /** Blok "Lanjut daftar": nomor sambungan daftar pertamanya (`lanjutanDaftar`). Kosong = tidak dicentang. */
+  /** Nomor berikutnya tiap gaya daftar sebelum blok ini (`lanjutanDaftar`). */
   lanjutan?: LanjutanBlok;
+  /** Centang "Lanjut daftar" blok ini: daftar pertamanya menyambung. */
+  continueList?: boolean;
+  onLanjutDaftar?: (lanjut: boolean) => void;
   /** Gaya halaman dari Pengaturan Dokumen: huruf, ukuran, spasi, perataan, indent baris pertama bawaan. */
   gaya?: { fontFamily?: string; fontSizePt?: number; lineSpacing?: number; align?: string; spaceAfterPt?: number; firstLineIndentCm?: number };
   onSave: (html: string, angka: Record<string, ResepAngka>) => void;
 }
 
-export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, lanjutan, gaya, onSave }: Props) {
+type JenisPop = 'bullet' | 'nomor' | 'tingkat' | 'stabilo' | 'huruf';
+
+export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, lanjutan, continueList = false, onLanjutDaftar, gaya, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
   const [pilihRujuk, setPilihRujuk] = useState(false);
+  const [pop, setPop] = useState<{ jenis: JenisPop; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [modalParagraf, setModalParagraf] = useState(false);
+  // Klik bagian kiri tombol memakai format terakhir yang dipilih di galeri, seperti Word.
+  const [bulletTerakhir, setBulletTerakhir] = useState<KodeBullet>('•');
+  const [nomorTerakhir, setNomorTerakhir] = useState<KodeNomor>('1.');
   const [angka, setAngka] = useState<Record<string, ResepAngka>>(initialAngka ?? {});
   const [modalAngka, setModalAngka] = useState(false);
   const [memperbarui, setMemperbarui] = useState(false);
@@ -275,7 +275,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
     // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
     // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
-    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, OrderedListType, AngkaTaut, RujukTaut, LanjutDaftar, IndenParagraf],
+    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo, AngkaTaut, RujukTaut, LanjutDaftar, IndenParagraf],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
@@ -301,13 +301,12 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
   }, [editor, petaRujuk]);
 
   // Sambungan berubah (blok lain disimpan, centang diubah) → dekorasinya disegarkan tanpa menyentuh isi.
-  const mulaiOl = lanjutan?.ol;
-  const mulaiOla = lanjutan?.ola;
+  const kunciLanjutan = JSON.stringify(lanjutan ?? {});
   useEffect(() => {
     if (!editor) return;
-    const nilai = mulaiOl === undefined && mulaiOla === undefined ? undefined : { ol: mulaiOl, ola: mulaiOla };
-    editor.view.dispatch(editor.state.tr.setMeta(KUNCI_LANJUT, { nilai }).setMeta(META_SEGAR, true).setMeta('addToHistory', false));
-  }, [editor, mulaiOl, mulaiOla]);
+    const nilai: InfoLanjut = { lanjutan: JSON.parse(kunciLanjutan) as LanjutanBlok, continueList };
+    editor.view.dispatch(editor.state.tr.setMeta(KUNCI_LANJUT, nilai).setMeta(META_SEGAR, true).setMeta('addToHistory', false));
+  }, [editor, kunciLanjutan, continueList]);
 
   // Daftar rujukan menutup saat klik di luar / Esc — tombolnya tidak mengambil fokus (kursor narasi tetap).
   const rujukRef = useRef<HTMLSpanElement | null>(null);
@@ -319,6 +318,18 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', luar); document.removeEventListener('keydown', esc); };
   }, [pilihRujuk]);
+
+  // Popover galeri ada di portal: yang dianggap "di dalam" tombol pembuka & kotaknya sendiri.
+  useEffect(() => {
+    if (!pop) return;
+    const tutup = () => setPop(null);
+    const luar = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.('.lk-tt-pop, .lk-tt-popbtn')) tutup(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') tutup(); };
+    document.addEventListener('mousedown', luar);
+    document.addEventListener('keydown', esc);
+    window.addEventListener('scroll', tutup, true);
+    return () => { document.removeEventListener('mousedown', luar); document.removeEventListener('keydown', esc); window.removeEventListener('scroll', tutup, true); };
+  }, [pop]);
 
   if (!editor) return <div className="lk-tt-loading">Memuat editor…</div>;
   const ed = editor;
@@ -394,8 +405,8 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     } finally { setMemperbarui(false); }
   }
 
-  const btn = (active: boolean, onClick: () => void, title: string, Icon: typeof Bold) => (
-    <button type="button" className={`lk-tt-btn${active ? ' on' : ''}`} data-tooltip={title} data-tooltip-pos="below" aria-label={title} onMouseDown={e => { e.preventDefault(); onClick(); }}>
+  const btn = (active: boolean, onClick: () => void, title: string, Icon: typeof Bold, mati = false) => (
+    <button type="button" className={`lk-tt-btn${active ? ' on' : ''}`} data-tooltip={title} data-tooltip-pos="below" aria-label={title} aria-disabled={mati || undefined} onMouseDown={e => { e.preventDefault(); if (!mati) onClick(); }}>
       <Icon size={14} />
     </button>
   );
@@ -413,7 +424,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
 
   // Penggaris membaca paragraf pertama pilihan; mengubah = bidang itu saja di semua paragraf terpilih.
   const sasaran = sasaranInden(ed.state);
-  const berlakuDi = (s: SasaranInden) => indenBerlaku(simpananNode(s.node), s.jenis, bawaanDxa, s.kedalaman);
+  const berlakuDi = (s: SasaranInden) => indenBerlaku(simpananNode(s.node), s.jenis, bawaanDxa, s.kedalaman, s.gantung);
   const indenKini = sasaran[0] ? berlakuDi(sasaran[0]) : indenBawaan('paragraf', bawaanDxa);
   const campur = sasaran.some(s => { const i = berlakuDi(s); return i.kiri !== indenKini.kiri || i.kanan !== indenKini.kanan || i.pertama !== indenKini.pertama; });
   const punyaIsian = sasaran.some(s => Object.keys(simpananNode(s.node)).length > 0);
@@ -422,7 +433,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     for (const s of sasaranInden(ed.state)) {
       const i = berlakuDi(s);
       const bidang = ubah(i, s);
-      const simpan = bidang ? keTersimpan({ ...i, ...bidang }, s.jenis, bawaanDxa, s.kedalaman) : {};
+      const simpan = bidang ? keTersimpan({ ...i, ...bidang }, s.jenis, bawaanDxa, s.kedalaman, s.gantung) : {};
       const a = { indKiri: simpan.kiri ?? null, indKanan: simpan.kanan ?? null, indPertama: simpan.pertama ?? null };
       // Nilai sama = jangan menulis: keluar dari isian angka tanpa mengubah apa pun tidak boleh memunculkan Simpan.
       if (a.indKiri === (s.node.attrs.indKiri ?? null) && a.indKanan === (s.node.attrs.indKanan ?? null) && a.indPertama === (s.node.attrs.indPertama ?? null)) continue;
@@ -430,35 +441,183 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     }
     if (tr.docChanged) ed.view.dispatch(tr);
   };
-  // Tombol tambah/kurangi: ke kelipatan 0,5 inci berikutnya, seperti Word.
-  const geserKiri = (arah: 1 | -1) => terapkanInden(i => ({
-    kiri: Math.max(0, (arah > 0 ? Math.floor(i.kiri / LANGKAH_BESAR_DXA) + 1 : Math.ceil(i.kiri / LANGKAH_BESAR_DXA) - 1) * LANGKAH_BESAR_DXA),
-  }));
+  // Tombol tambah/kurangi: ke kelipatan 0,5 inci berikutnya, seperti Word. Di dalam daftar memindah tingkat,
+  // kecuali yang tak bisa pindah (butir pertama; tingkat teratas — mengurangi tidak boleh melepas nomornya).
+  const geserKiri = (arah: 1 | -1) => {
+    const posisi = posisiDaftar(ed.state.selection.$from);
+    if (posisi && (arah > 0 ? turunTingkat(ed.state, ed.view.dispatch) : posisi.kedalaman > 1 && naikTingkat(ed.state, ed.view.dispatch))) return;
+    terapkanInden(i => ({
+      kiri: Math.max(0, (arah > 0 ? Math.floor(i.kiri / LANGKAH_BESAR_DXA) + 1 : Math.ceil(i.kiri / LANGKAH_BESAR_DXA) - 1) * LANGKAH_BESAR_DXA),
+    }));
+  };
+
+  const posDaftar = posisiDaftar(ed.state.selection.$from);
+  const gayaKini = posDaftar ? gayaNode(posDaftar.daftar) : null;
+  const susunanKini = posDaftar ? kodeSusunanDari(susunanPohon(posDaftar.akar)) : null;
+  const jalankan = (perintah: (s: typeof ed.state, d: typeof ed.view.dispatch) => boolean) => { const hasil = perintah(ed.state, ed.view.dispatch); ed.view.focus(); return hasil; };
+  const tutupSemua = () => { setPop(null); setMenu(null); };
+
+  function pilihGaya(k: KodeGaya) {
+    if (adalahBullet(k)) setBulletTerakhir(k);
+    else setNomorTerakhir(k as KodeNomor);
+    jalankan((s, d) => aturGayaTingkat(k)(s, d) || bungkusDaftar(k)(s, d));
+    tutupSemua();
+  }
+  function pilihSusunan(k: KodeSusunan) {
+    jalankan((s, d) => aturSusunan(k)(s, d) || bungkusDaftar(SUSUNAN[k][0], SUSUNAN[k])(s, d));
+    tutupSemua();
+  }
+  // Lepas nomor sepenuhnya, berapa pun tingkatnya. Rantai Tiptap = satu langkah Undo.
+  function lepasDaftar() {
+    const k = posisiDaftar(ed.state.selection.$from)?.kedalaman ?? 0;
+    let c = ed.chain().focus();
+    for (let i = 0; i < k; i++) c = c.liftListItem('listItem');
+    c.run();
+    tutupSemua();
+  }
+  function pilihHuruf(m: ModeHuruf) {
+    jalankan(ubahHuruf(m));
+    tutupSemua();
+  }
+  function pilihStabilo(k: KodeStabilo | null) {
+    const c = ed.chain().focus();
+    (k ? c.setMark('stabilo', { warna: k }) : c.unsetMark('stabilo')).run();
+    tutupSemua();
+  }
+  function aturUkuran(pt: string) {
+    if (pt === 'reset') {
+      const warna = ed.getAttributes('textStyle').color;
+      const c = ed.chain().focus();
+      (warna ? c.setMark('textStyle', { color: warna, fontSize: null }) : c.unsetMark('textStyle')).run();
+    } else if (pt) ed.chain().focus().setMark('textStyle', { fontSize: `${pt}pt` }).run();
+  }
+  const aturRata = (nilai: PerataanNarasi | null) => { ed.chain().focus().updateAttributes('paragraph', { textAlign: nilai }).updateAttributes('heading', { textAlign: nilai }).run(); };
+  const bukaPop = (jenis: JenisPop) => (e: ReactMouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    const r = e.currentTarget.getBoundingClientRect();
+    setPilihRujuk(false);
+    setPop(p => (p?.jenis === jenis ? null : { jenis, x: r.left, y: r.bottom + 4 }));
+  };
+  // Selama popover terbuka tooltip tombolnya dilepas: letaknya tepat di atas butir pertama popover.
+  const tipPop = (jenis: JenisPop, teks: string) => (pop?.jenis === jenis ? undefined : teks);
+  const lebarPop = pop?.jenis === 'huruf' ? 204 : pop?.jenis === 'stabilo' ? 214 : pop?.jenis === 'bullet' ? 216 : 256;
+  const kiriPop = pop ? Math.max(8, Math.min(pop.x, window.innerWidth - lebarPop - 8)) : 0;
+
+  const ukuranTampil = String(ptDariCss(ed.getAttributes('textStyle').fontSize) ?? gaya?.fontSizePt ?? 12);
+  const stabiloKini = ed.isActive('stabilo') ? (ed.getAttributes('stabilo').warna as KodeStabilo) : null;
+  const perataanKini = ((ed.getAttributes('paragraph').textAlign ?? ed.getAttributes('heading').textAlign) as PerataanNarasi | undefined) ?? null;
+
+  // Menu klik kanan. Di luar pilihan kursor pindah ke titik klik dulu, seperti Word; di dalam pilihan, pilihannya tetap.
+  function bukaMenu(e: ReactMouseEvent) {
+    if (e.shiftKey) return; // Shift + klik kanan = menu peramban (saran ejaan)
+    e.preventDefault();
+    const titik = ed.view.posAtCoords({ left: e.clientX, top: e.clientY });
+    const { from, to } = ed.state.selection;
+    if (titik && (titik.pos < from || titik.pos > to)) ed.commands.setTextSelection(titik.pos);
+    setPop(null);
+    setPilihRujuk(false);
+    setMenu({ x: e.clientX, y: e.clientY });
+  }
+  const potongSalin = (perintah: 'cut' | 'copy') => { ed.view.focus(); document.execCommand(perintah); setMenu(null); };
+  async function tempelDariMenu() {
+    setMenu(null);
+    try {
+      const isi = await navigator.clipboard.read();
+      const item = isi[0];
+      if (item?.types.includes('text/html')) ed.view.pasteHTML(await (await item.getType('text/html')).text());
+      else if (item?.types.includes('text/plain')) ed.view.pasteText(await (await item.getType('text/plain')).text());
+      ed.view.focus();
+    } catch {
+      toast.error('Peramban tidak mengizinkan menu ini membaca papan klip. Tekan Ctrl+V.');
+    }
+  }
+  async function mintaNomorAwal() {
+    setMenu(null);
+    const awal = Number(posDaftar?.daftar.attrs.start) || 1;
+    const isian = await promptDialog({ title: 'Atur nomor awal', message: 'Daftar ini mulai dari nomor berapa?', label: 'Nomor awal', petunjuk: 'Angka 1 sampai 9999.', nilaiAwal: String(awal), minLength: 1, maxLength: 4, confirmLabel: 'Terapkan' });
+    if (isian === null) { ed.view.focus(); return; }
+    const n = Number(String(isian).trim());
+    if (!Number.isInteger(n) || n < 1 || n > 9999) { toast.error('Nomor awal harus angka 1 sampai 9999.'); return; }
+    jalankan(aturNomorAwal(n));
+    if (posDaftar && posDaftar.kedalaman === 1 && continueList && indeksAkar(ed.state.doc, posDaftar.akarPos) === 0) onLanjutDaftar?.(false);
+  }
+  const akarPertama = posDaftar ? indeksAkar(ed.state.doc, posDaftar.akarPos) === 0 : false;
+  const sudahLanjut = posDaftar ? (akarPertama && continueList) || !!posDaftar.akar.attrs.lanjut : false;
+  function pilihLanjut() {
+    setMenu(null);
+    if (!posDaftar) return;
+    // Daftar pertama blok memakai centang "Lanjut daftar" yang sudah terlihat di kepala blok, supaya tidak ada dua sakelar.
+    if (akarPertama) { if (posDaftar.akar.attrs.lanjut) jalankan(aturLanjut(false)); onLanjutDaftar?.(!sudahLanjut); }
+    else jalankan(aturLanjut(!sudahLanjut));
+  }
+  function pilihMulaiUlang() {
+    setMenu(null);
+    if (posDaftar && posDaftar.kedalaman === 1 && posDaftar.butirIndeks === 0 && akarPertama && continueList) onLanjutDaftar?.(false);
+    jalankan(mulaiUlangDariSatu);
+  }
+
+  function itemMenu(): RowMenuItem[] {
+    const adaPilihan = adaPilihanTeks(ed.state);
+    const bisaTempel = typeof navigator !== 'undefined' && typeof navigator.clipboard?.read === 'function';
+    const nomor = posDaftar && !adalahBullet(gayaKini ?? gayaBawaan('ul'));
+    const terkunciDesimal = !!posDaftar && nomorTerkunciDesimal(posDaftar);
+    return [
+      { icon: <Scissors size={14} />, label: 'Potong', pintasan: 'Ctrl+X', disabled: !adaPilihan, alasan: 'Pilih teks dulu', onClick: () => potongSalin('cut') },
+      { icon: <Copy size={14} />, label: 'Salin', pintasan: 'Ctrl+C', disabled: !adaPilihan, alasan: 'Pilih teks dulu', onClick: () => potongSalin('copy') },
+      { icon: <ClipboardPaste size={14} />, label: 'Tempel', pintasan: 'Ctrl+V', disabled: !bisaTempel, alasan: 'Alamat http: peramban melarang menu membaca papan klip. Tekan Ctrl+V.', onClick: () => void tempelDariMenu() },
+      { icon: <Eraser size={14} />, label: 'Hapus format', pisah: true, onClick: () => { jalankan(hapusFormat); setMenu(null); } },
+      { icon: <CaseSensitive size={14} />, label: 'Ubah huruf', sub: <PilihanHuruf onPilih={pilihHuruf} /> },
+      { icon: <Pilcrow size={14} />, label: 'Paragraf…', onClick: () => { setMenu(null); setModalParagraf(true); } },
+      { icon: <ListOrdered size={14} />, label: 'Penomoran', pisah: true, sub: <GaleriNomor aktif={gayaKini} onPilih={pilihGaya} onTanpa={posDaftar ? lepasDaftar : undefined} /> },
+      { icon: <List size={14} />, label: 'Bullet', sub: <GaleriBullet aktif={gayaKini} onPilih={pilihGaya} onTanpa={posDaftar ? lepasDaftar : undefined} /> },
+      { icon: <ListTree size={14} />, label: 'Daftar bertingkat', sub: <GaleriTingkat aktif={susunanKini} onPilih={pilihSusunan} /> },
+      ...(posDaftar ? [
+        { icon: <IndentIncrease size={14} />, label: 'Turun satu tingkat', pintasan: 'Tab', onClick: () => { jalankan(turunTingkat); setMenu(null); } },
+        { icon: <IndentDecrease size={14} />, label: 'Naik satu tingkat', pintasan: 'Shift+Tab', onClick: () => { jalankan(naikTingkat); setMenu(null); } },
+      ] : []),
+      ...(nomor ? [
+        { icon: <ListRestart size={14} />, label: 'Mulai ulang dari 1', disabled: terkunciDesimal && posDaftar.butirIndeks > 0, alasan: 'Nomor bertingkat 1.1. mengikuti nomor induknya', onClick: pilihMulaiUlang },
+        { icon: <ListPlus size={14} />, label: sudahLanjut ? 'Jangan lanjutkan penomoran' : 'Lanjutkan penomoran', disabled: posDaftar.kedalaman > 1, alasan: 'Hanya untuk daftar tingkat teratas', onClick: pilihLanjut },
+        { icon: <ListStart size={14} />, label: 'Atur nomor awal…', disabled: terkunciDesimal, alasan: 'Nomor bertingkat 1.1. mengikuti nomor induknya', onClick: () => void mintaNomorAwal() },
+      ] : []),
+      { icon: <BookmarkPlus size={14} />, label: 'Sisipkan rujukan', pisah: true, onClick: () => { setMenu(null); setPilihRujuk(true); } },
+      { icon: <Hash size={14} />, label: 'Sisipkan angka dari modul', onClick: () => { setMenu(null); setModalAngka(true); } },
+    ];
+  }
 
   return (
     <div className="lk-tt" style={variabel}>
       <style>{TT_CSS}</style>
+      <style>{GALERI_CSS}</style>
       {!readOnly && (
         <div className="lk-tt-bar">
+          {btn(false, () => editor.chain().focus().undo().run(), 'Batalkan (Ctrl+Z)', Undo2, !editor.can().undo())}
+          {btn(false, () => editor.chain().focus().redo().run(), 'Ulangi (Ctrl+Y)', Redo2, !editor.can().redo())}
+          <span className="lk-tt-sep" />
           {btn(editor.isActive('bold'), () => editor.chain().focus().toggleBold().run(), 'Tebal', Bold)}
           {btn(editor.isActive('italic'), () => editor.chain().focus().toggleItalic().run(), 'Miring', Italic)}
           {btn(editor.isActive('underline'), () => editor.chain().focus().toggleUnderline().run(), 'Garis bawah', UnderlineIcon)}
           {btn(editor.isActive('strike'), () => editor.chain().focus().toggleStrike().run(), 'Coret', Strikethrough)}
+          {btn(editor.isActive('superscript'), () => editor.chain().focus().toggleMark('superscript').run(), 'Superskrip (Ctrl+Shift+=)', SuperscriptIcon)}
+          {btn(editor.isActive('subscript'), () => editor.chain().focus().toggleMark('subscript').run(), 'Subskrip (Ctrl+=)', SubscriptIcon)}
+          <button type="button" className={`lk-tt-btn lk-tt-popbtn${stabiloKini ? ' on' : ''}`} data-tooltip={tipPop('stabilo', 'Warna stabilo')} data-tooltip-pos="below" aria-label="Warna stabilo" aria-expanded={pop?.jenis === 'stabilo'} onMouseDown={bukaPop('stabilo')}><Highlighter size={14} /></button>
+          <button type="button" className="lk-tt-btn lk-tt-popbtn" data-tooltip={tipPop('huruf', 'Ubah huruf (Shift+F3)')} data-tooltip-pos="below" aria-label="Ubah huruf" aria-expanded={pop?.jenis === 'huruf'} onMouseDown={bukaPop('huruf')}><CaseSensitive size={15} /></button>
+          {btn(false, () => jalankan(hapusFormat), 'Hapus format', Eraser)}
           <span className="lk-tt-sep" />
-          {btn(editor.isActive('bulletList'), () => editor.chain().focus().toggleBulletList().run(), 'Bullet', List)}
-          {btn(editor.isActive('orderedList') && editor.getAttributes('orderedList').listType !== 'a', () => editor.chain().focus().toggleOrderedList().updateAttributes('orderedList', { listType: null }).run(), 'Penomoran 1, 2, 3', ListOrdered)}
-          <button type="button" className={`lk-tt-btn lk-tt-abc${editor.isActive('orderedList') && editor.getAttributes('orderedList').listType === 'a' ? ' on' : ''}`} data-tooltip="Penomoran a, b, c" data-tooltip-pos="below" aria-label="Penomoran a, b, c"
-            onMouseDown={e => { e.preventDefault();
-              if (editor.isActive('orderedList') && editor.getAttributes('orderedList').listType === 'a') { editor.chain().focus().toggleOrderedList().run(); return; }
-              const c = editor.chain().focus();
-              if (!editor.isActive('orderedList')) c.toggleOrderedList();
-              c.updateAttributes('orderedList', { listType: 'a' }).run();
-            }}>a,b</button>
+          <span className="lk-tt-belah">
+            {btn(!!gayaKini && adalahBullet(gayaKini), () => { if (gayaKini && adalahBullet(gayaKini)) lepasDaftar(); else pilihGaya(bulletTerakhir); }, 'Bullet', List)}
+            <button type="button" className="lk-tt-btn lk-tt-panah lk-tt-popbtn" data-tooltip={tipPop('bullet', 'Pilih bullet')} data-tooltip-pos="below" aria-label="Pilih bullet" aria-expanded={pop?.jenis === 'bullet'} onMouseDown={bukaPop('bullet')}><ChevronDown size={11} /></button>
+          </span>
+          <span className="lk-tt-belah">
+            {btn(!!gayaKini && !adalahBullet(gayaKini), () => { if (gayaKini && !adalahBullet(gayaKini)) lepasDaftar(); else pilihGaya(nomorTerakhir); }, 'Penomoran', ListOrdered)}
+            <button type="button" className="lk-tt-btn lk-tt-panah lk-tt-popbtn" data-tooltip={tipPop('nomor', 'Pilih penomoran')} data-tooltip-pos="below" aria-label="Pilih penomoran" aria-expanded={pop?.jenis === 'nomor'} onMouseDown={bukaPop('nomor')}><ChevronDown size={11} /></button>
+          </span>
+          <button type="button" className={`lk-tt-btn lk-tt-teks lk-tt-popbtn${susunanKini && posDaftar?.akar.attrs.susunan ? ' on' : ''}`} data-tooltip={tipPop('tingkat', 'Daftar bertingkat')} data-tooltip-pos="below" aria-label="Daftar bertingkat" aria-expanded={pop?.jenis === 'tingkat'} onMouseDown={bukaPop('tingkat')}><ListTree size={14} /><ChevronDown size={11} /></button>
           <span className="lk-tt-sep" />
-          {btn(editor.isActive({ textAlign: 'left' }), () => editor.chain().focus().updateAttributes('paragraph', { textAlign: 'left' }).run(), 'Rata kiri', AlignLeft)}
-          {btn(editor.isActive({ textAlign: 'center' }), () => editor.chain().focus().updateAttributes('paragraph', { textAlign: 'center' }).run(), 'Rata tengah', AlignCenter)}
-          {btn(editor.isActive({ textAlign: 'right' }), () => editor.chain().focus().updateAttributes('paragraph', { textAlign: 'right' }).run(), 'Rata kanan', AlignRight)}
-          {btn(editor.isActive({ textAlign: 'justify' }), () => editor.chain().focus().updateAttributes('paragraph', { textAlign: 'justify' }).run(), 'Rata kiri-kanan', AlignJustify)}
+          {btn(editor.isActive({ textAlign: 'left' }), () => aturRata('left'), 'Rata kiri', AlignLeft)}
+          {btn(editor.isActive({ textAlign: 'center' }), () => aturRata('center'), 'Rata tengah', AlignCenter)}
+          {btn(editor.isActive({ textAlign: 'right' }), () => aturRata('right'), 'Rata kanan', AlignRight)}
+          {btn(editor.isActive({ textAlign: 'justify' }), () => aturRata('justify'), 'Rata kiri-kanan', AlignJustify)}
           <span className="lk-tt-sep" />
           {btn(false, () => geserKiri(-1), 'Kurangi indent', IndentDecrease)}
           {btn(false, () => geserKiri(1), 'Tambah indent', IndentIncrease)}
@@ -471,11 +630,11 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
             <input type="color" className="lk-tt-color" aria-label="Warna teks" defaultValue="#e6f1fb"
               onInput={(e) => editor.chain().focus().setMark('textStyle', { color: (e.target as HTMLInputElement).value }).run()} />
           </span>
-          <span className="lk-tt-tip" data-tooltip="Ukuran teks" data-tooltip-pos="below"><select className="lk-tt-size" aria-label="Ukuran teks" value=""
-            onChange={(e) => { const v = e.target.value; if (!v) return; if (v === 'reset') editor.chain().focus().unsetMark('textStyle').run(); else editor.chain().focus().setMark('textStyle', { fontSize: v }).run(); e.currentTarget.value = ''; }}>
-            <option value="">A±</option>
-            {['10px', '12px', '14px', '16px', '18px', '24px'].map(s => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
-            <option value="reset">Reset</option>
+          <span className="lk-tt-tip" data-tooltip="Ukuran huruf (pt)" data-tooltip-pos="below"><select className="lk-tt-size" aria-label="Ukuran huruf" value={ukuranTampil}
+            onChange={e => aturUkuran(e.target.value)}>
+            {!UKURAN_PT.map(String).includes(ukuranTampil) && <option value={ukuranTampil}>{ukuranTampil.replace('.', ',')}</option>}
+            {UKURAN_PT.map(s => <option key={s} value={String(s)}>{String(s).replace('.', ',')}</option>)}
+            <option value="reset">Bawaan</option>
           </select></span>
           <span className="lk-tt-sep" />
           <button type="button" className="lk-tt-btn lk-tt-teks" data-tooltip="Sisipkan angka dari E-Anggaran, Renaksi, BLUD, atau PK — bisa diperbarui nanti" data-tooltip-pos="below"
@@ -505,7 +664,10 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
           tinggiTeks={() => ed.view.dom.getBoundingClientRect().height}
           onUbah={u => terapkanInden(() => u)} onBawaan={() => terapkanInden(() => null)} />
       )}
-      <EditorContent editor={editor} className="lk-tt-content" />
+      {/* Hanya menangkap klik kanan pengguna; papan ketik sudah ditangani ProseMirror di dalamnya. */}
+      <div onContextMenu={readOnly ? undefined : bukaMenu}>
+        <EditorContent editor={editor} className="lk-tt-content" />
+      </div>
       {!readOnly && (dirty || jumlahAngka > 0) && (
         <div className="lk-tt-save">
           {jumlahAngka > 0 && (
@@ -518,6 +680,27 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
         </div>
       )}
       {modalAngka && <AngkaModal tahunDokumen={tahunDokumen} awal={sumberTerakhir} onSisipkan={sisipkanAngka} onTutup={() => setModalAngka(false)} />}
+      {pop && createPortal(
+        <div className="lk-tt-pop" role="dialog" aria-label="Pilihan format" style={{ left: kiriPop, top: pop.y }}>
+          {pop.jenis === 'bullet' && <GaleriBullet aktif={gayaKini} onPilih={pilihGaya} onTanpa={posDaftar ? lepasDaftar : undefined} />}
+          {pop.jenis === 'nomor' && <GaleriNomor aktif={gayaKini} onPilih={pilihGaya} onTanpa={posDaftar ? lepasDaftar : undefined} />}
+          {pop.jenis === 'tingkat' && <GaleriTingkat aktif={susunanKini} onPilih={pilihSusunan} />}
+          {pop.jenis === 'huruf' && <PilihanHuruf onPilih={pilihHuruf} />}
+          {pop.jenis === 'stabilo' && <PilihanStabilo aktif={stabiloKini} onPilih={pilihStabilo} onTanpa={() => pilihStabilo(null)} />}
+        </div>,
+        document.body,
+      )}
+      {menu && <RowMenu x={menu.x} y={menu.y} items={itemMenu()} onClose={() => { setMenu(null); ed.view.focus(); }} lebar={252} />}
+      {modalParagraf && sasaran[0] && (
+        <ParagrafModal inden={indenKini} jenis={sasaran[0].jenis} perataan={perataanKini}
+          onTutup={() => { setModalParagraf(false); ed.view.focus(); }}
+          onTerapkan={h => {
+            setModalParagraf(false);
+            const ubah = bidangBerubah(indenKini, h.inden);
+            if (Object.keys(ubah).length) terapkanInden(() => ubah);
+            if (h.perataan !== perataanKini) aturRata(h.perataan);
+          }} />
+      )}
     </div>
   );
 }
@@ -532,7 +715,25 @@ const TT_CSS = `
   .lk-tt-btn { background: none; border: none; color: #B5D4F4; width: 28px; height: 28px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   .lk-tt-btn:hover { background: rgba(255,255,255,0.08); color: #E6F1FB; }
   .lk-tt-btn.on { background: rgba(124,92,252,0.22); color: #C9BCFF; }
-  .lk-tt-abc { font-size: 11.5px; font-weight: 700; font-style: italic; width: auto; padding: 0 6px; }
+  .lk-tt-btn[aria-disabled="true"] { opacity: .35; cursor: default; }
+  .lk-tt-btn[aria-disabled="true"]:hover { background: none; color: #B5D4F4; }
+  .lk-tt-belah { display: inline-flex; }
+  .lk-tt-belah .lk-tt-btn:first-child { border-radius: 5px 0 0 5px; }
+  .lk-tt-panah { width: 16px; border-radius: 0 5px 5px 0; }
+  .lk-tt-pop { position: fixed; z-index: 440; background: #042C53; border: 1px solid #0C447C; border-radius: 10px; padding: 8px; box-shadow: 0 14px 34px rgba(0,0,0,.5); }
+  [data-theme="light"] .lk-tt-pop { background: #FFFFFF; border-color: rgba(0,0,0,.12); }
+  .lk-rowmenu-sub { padding: 8px; }
+  .lk-rowmenu-item.terbuka { background: rgba(124,92,252,0.20); color: #fff; }
+  [data-theme="light"] .lk-rowmenu-item.terbuka { background: rgba(124,92,252,0.12); color: #111827; }
+  .lk-paragraf select { width: 100%; height: 32px; background: #020F1C; color: #E6F1FB; border: 1px solid #0C447C; border-radius: 6px; font-size: 13px; padding: 0 6px; margin-top: 3px; }
+  .lk-paragraf select option { background: #020F1C; color: #E6F1FB; }
+  .lk-paragraf label { font-size: 12px; color: #B5D4F4; display: block; }
+  .lk-paragraf input { margin-bottom: 0; margin-top: 3px; }
+  .lk-paragraf-baris { margin-bottom: 12px; }
+  .lk-paragraf-kisi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  [data-theme="light"] .lk-paragraf select { background: #F9FAFB; color: #374151; border-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .lk-paragraf select option { background: #FFFFFF; color: #374151; }
+  [data-theme="light"] .lk-paragraf label { color: #374151; }
   .lk-tt-sep { width: 1px; height: 18px; background: #0C447C; margin: 0 4px; }
   .lk-tt-color { width: 26px; height: 26px; padding: 1px; border: 1px solid #0C447C; border-radius: 5px; background: none; cursor: pointer; }
   .lk-tt-size { height: 26px; background: #020F1C; color: #B5D4F4; border: 1px solid #0C447C; border-radius: 5px; font-size: 11px; cursor: pointer; }
@@ -555,15 +756,17 @@ const TT_CSS = `
      kiri + pertama lalu teks di kiri. --lk-abs = posisi teks dari tepi kolom, supaya butir bersarang
      (margin-nya relatif terhadap induk) tetap memakai angka mutlak seperti w:ind. */
   .lk-tt-content .ProseMirror ol, .lk-tt-content .ProseMirror ul { padding: 0; margin: 0; }
+  .lk-tt-content .ProseMirror ol > li, .lk-tt-content .ProseMirror ul > li { --lk-gantung: ${BUTIR_GANTUNG_DXA}; }
   .lk-tt-content .ProseMirror > ol, .lk-tt-content .ProseMirror > ul { --lk-induk: 0; }
   .lk-tt-content .ProseMirror li > ol, .lk-tt-content .ProseMirror li > ul { --lk-induk: var(--lk-abs); }
   .lk-tt-content .ProseMirror li { list-style: none !important; position: relative; --i-kiri: initial; --i-kanan: initial; --i-pertama: initial; --lk-abs: var(--i-kiri, calc(var(--lk-induk, 0) + ${BUTIR_KIRI_DXA})); margin-left: calc((var(--lk-abs) - var(--lk-induk, 0)) * var(--lk-dxa)); margin-right: calc(var(--i-kanan, 0) * var(--lk-dxa)); }
   /* Float, bukan absolute: nomor yang lebih lebar dari gantungnya mendorong baris pertama seperti tab Word,
      tidak menimpa teks. Baris berikutnya tetap di kiri. */
-  .lk-tt-content .ProseMirror ol > li::before, .lk-tt-content .ProseMirror ul > li::before { float: left; box-sizing: border-box; margin-left: calc(var(--i-pertama, -${BUTIR_GANTUNG_DXA}) * var(--lk-dxa)); min-width: calc(var(--i-pertama, -${BUTIR_GANTUNG_DXA}) * -1 * var(--lk-dxa)); padding-right: .25em; user-select: none; }
+  .lk-tt-content .ProseMirror ol > li::before, .lk-tt-content .ProseMirror ul > li::before { float: left; box-sizing: border-box; margin-left: calc(var(--i-pertama, calc(var(--lk-gantung) * -1)) * var(--lk-dxa)); min-width: calc(var(--i-pertama, calc(var(--lk-gantung) * -1)) * -1 * var(--lk-dxa)); padding-right: .25em; user-select: none; }
   .lk-tt-content .ProseMirror ol > li::before { content: counter(list-item) "."; }
-  .lk-tt-content .ProseMirror ol[type="a"] > li::before { content: counter(list-item, lower-alpha) "."; }
   .lk-tt-content .ProseMirror ul > li::before { content: "•"; }
+  ${cssGayaDaftar('.lk-tt-content .ProseMirror')}
+  ${(Object.keys(STABILO) as KodeStabilo[]).map(k => `.lk-tt-content .ProseMirror mark[data-stabilo="${k}"] { background: ${STABILO[k].css}; color: #0F0F12; }`).join('\n  ')}
   .lk-tt-content .ProseMirror p.is-editor-empty:first-child::before { content: 'Tulis narasi…'; color: #5E8BBE; float: left; height: 0; pointer-events: none; }
   .lk-tt-save { margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   .lk-tt-teks { width: auto; gap: 4px; padding: 0 7px; font-size: 11.5px; font-weight: 600; }
