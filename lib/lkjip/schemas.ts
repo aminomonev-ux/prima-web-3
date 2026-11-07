@@ -12,6 +12,7 @@ import { atributInden, atributSpasi, bacaInden, bacaSpasi } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, gayaDariTagDaftar, susunanDariTag, tagDaftar } from './gaya-daftar';
 import { BATAS_PT, POLA_STABILO, stabiloSah } from './format-teks';
 import { BATAS_ALASAN_HAPUS_FINAL } from './hapus-dokumen';
+import { LEBAR_MAKS_EMU, TINGGI_MAKS_EMU, potonganSah } from './ukuran-gambar';
 
 // K6: akses dasar SUPER_ADMIN + ADMIN. Role lain (mis. BIDANG_RENBANG) via
 // users.app_access include 'lkjip' (diatur Admin Panel → User Management). Pola BBA/Rencana Aksi.
@@ -317,10 +318,18 @@ export const TabelPayloadSchema = z.object({
   }
 });
 
+// Ukuran per blok (konsep ukuran-gambar §2). Tanpa kunci = otomatis, jadi foto Riwayat lama tetap sah.
+const KUNCI_UKURAN_GAMBAR = {
+  lebarEmu:  z.number().int().min(1).max(LEBAR_MAKS_EMU).nullable().default(null),
+  tinggiEmu: z.number().int().min(1).max(TINGGI_MAKS_EMU).nullable().default(null),
+  potong:    z.object({ kiri: z.number(), atas: z.number(), kanan: z.number(), bawah: z.number() }).refine(potonganSah).nullable().default(null),
+};
+
 export const GambarPayloadSchema = z.object({
   judul:   z.string().max(255).default(''),
   fileId:  z.string().max(200).default(''),
   caption: z.string().max(500).default(''),
+  ...KUNCI_UKURAN_GAMBAR,
 });
 
 // Grafik (pie/bar/line). Render recharts di editor → PNG (html2canvas-pro) → imageFileId.
@@ -343,6 +352,7 @@ export const GrafikPayloadSchema = z.object({
   // Sidik data tabel saat gambarnya dibuat — editor membandingkannya untuk menandai grafik
   // yang gambarnya sudah tidak sesuai tabelnya (mis. sesudah tabel tertaut diperbarui).
   tabelSidik:  z.string().max(64).default(''),
+  ...KUNCI_UKURAN_GAMBAR,
 });
 
 export const BLOCK_TIPES = ['NARASI', 'TABEL', 'GAMBAR', 'GRAFIK'] as const;

@@ -43,6 +43,8 @@ import { bacaSalinan, type SalinanModul } from '@/lib/lkjip/salinan-modul';
 import { fetchJson } from '@/lib/shared/api';
 import { cariDiDokumen, type OpsiCari, type Temuan } from '@/lib/lkjip/cari-ganti';
 import { aturSorotCari } from '@/lib/lkjip/sorot-cari';
+import { bacaUkuran, lepasDariBerkas } from '@/lib/lkjip/ukuran-gambar';
+import GambarBerukuran, { IsianLebar } from './GambarBerukuran';
 import TabelEditor from '@/components/tabel/TabelEditor';
 import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';
 import { TABEL_CSS } from '@/components/tabel/tabel-css';
@@ -971,7 +973,8 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
       <p className="lk-pd-note"><b>Gambar:</b></p>
       <ol>
         <li>Tambah blok <b>Gambar</b>.</li>
-        <li>Unggah file gambar.</li>
+        <li>Unggah file gambar, atau tempel dengan <b>Ctrl+V</b>.</li>
+        <li>Atur <b>Lebar (cm)</b> bila perlu. Tinggi mengikuti, kosong = otomatis. Kotak pratinjau mewakili lebar halaman.</li>
         <li>Isi caption (otomatis bernomor “Gambar N”).</li>
       </ol>
       <p className="lk-pd-note"><b>Grafik:</b></p>
@@ -1064,8 +1067,9 @@ function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; 
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
   const [fileId, setFileId] = useState(p0.fileId ?? '');
+  const [ukuran, setUkuran] = useState(() => bacaUkuran(block.payload));
   const [uploading, setUploading] = useState(false);
-  const sidikIsi = JSON.stringify({ judul, caption, fileId });
+  const sidikIsi = JSON.stringify({ judul, caption, fileId, ukuran });
   const sidikSimpan = useRef(sidikIsi);
   useEffect(() => { onKotor(sidikIsi !== sidikSimpan.current); }, [sidikIsi, onKotor]);
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1079,7 +1083,7 @@ function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; 
       fd.append('modul', 'lkjip');
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const json = await res.json();
-      if (json.ok && json.fileId) { setFileId(json.fileId); toast.success('Gambar terunggah'); }
+      if (json.ok && json.fileId) { setFileId(json.fileId); setUkuran(lepasDariBerkas); toast.success('Gambar terunggah'); }
       else toast.error(json.msg ?? 'Gagal mengunggah gambar');
     } catch { toast.error('Gagal terhubung ke server'); }
     finally { setUploading(false); }
@@ -1094,12 +1098,11 @@ function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; 
             <Upload size={14} /> {uploading ? 'Mengunggah…' : (fileId ? 'Ganti gambar' : 'Pilih gambar')}
             <input type="file" accept="image/png,image/jpeg,image/gif" hidden disabled={uploading} onChange={onPick} />
           </label>
-          {fileId
-            ? <span className="lk-upok">✓ Gambar siap — tampil di Word</span>
-            : <span className="lk-uphint">Belum ada gambar — placeholder di Word</span>}
+          {!fileId && <span className="lk-uphint">Belum ada gambar — placeholder di Word</span>}
         </div>
       )}
-      {!readOnly && <div className="lk-save-row"><PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => { sidikSimpan.current = sidikIsi; onKotor(false); onSave({ judul, caption, fileId }); }}>Simpan</PrimaButton></div>}
+      {fileId && <GambarBerukuran key={fileId} fileId={fileId} ukuran={ukuran} onUbah={setUkuran} readOnly={readOnly} alt={judul || 'Gambar'} />}
+      {!readOnly && <div className="lk-save-row"><PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => { sidikSimpan.current = sidikIsi; onKotor(false); onSave({ judul, caption, fileId, ...ukuran }); }}>Simpan</PrimaButton></div>}
     </div>
   );
 }
@@ -1161,7 +1164,10 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
   const [labelCol, setLabelCol] = useState(p0.labelCol ?? 0);
   const [valueCol, setValueCol] = useState(p0.valueCol ?? 1);
   const [saving, setSaving] = useState(false);
-  const sidikIsi = JSON.stringify({ judul, caption, chartType, source, data, tabelBlockId, labelCol, valueCol });
+  const [ukuranIsian, setUkuran] = useState(() => bacaUkuran(block.payload));
+  // Grafik bersumber data digambar PRIMA: proporsinya sendiri, tinggi & potongan dari Word tidak berlaku.
+  const ukuran = source === 'gambar' ? ukuranIsian : lepasDariBerkas(ukuranIsian);
+  const sidikIsi = JSON.stringify({ judul, caption, chartType, source, data, tabelBlockId, labelCol, valueCol, ukuran });
   const sidikSimpan = useRef(sidikIsi);
   useEffect(() => { onKotor(sidikIsi !== sidikSimpan.current); }, [sidikIsi, onKotor]);
   const chartRef = useRef<HTMLDivElement | null>(null);
@@ -1180,7 +1186,7 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
       fd.append('modul', 'lkjip');
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const json = await res.json();
-      if (json.ok && json.fileId) { fileIdRef.current = json.fileId; setGambarKini(json.fileId); toast.success('Gambar terunggah — tekan Simpan Grafik'); }
+      if (json.ok && json.fileId) { fileIdRef.current = json.fileId; setGambarKini(json.fileId); setUkuran(lepasDariBerkas); toast.success('Gambar terunggah — tekan Simpan Grafik'); }
       else toast.error(json.message ?? json.msg ?? 'Gagal mengunggah gambar');
     } catch { toast.error('Gagal terhubung ke server'); }
     finally { setMengunggah(false); }
@@ -1228,7 +1234,7 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
       sidikSimpan.current = sidikIsi;
       onKotor(false);
       onSave({ judul, chartType, source, data, tabelBlockId, labelCol, valueCol, imageFileId, caption,
-        tabelSidik: source === 'tabel' ? sidikGrafik(chartData) : '' });
+        tabelSidik: source === 'tabel' ? sidikGrafik(chartData) : '', ...ukuran });
     } finally { setSaving(false); }
   };
   // Gambar di Word dibuat saat Simpan — kalau data tabelnya berubah sesudahnya (mis. tabel tertaut
@@ -1302,16 +1308,20 @@ function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok
         </div>
       )}
 
-      <div className="lk-grafik-preview" ref={chartRef}>
-        {source === 'gambar'
-          ? (gambarKini
-            // eslint-disable-next-line @next/next/no-img-element -- berkas Drive lewat /api/upload/download (sesi + izin per berkas), tidak bisa lewat optimasi next/image
-            ? <img className="lk-grafik-img" src={`/api/upload/download?id=${encodeURIComponent(gambarKini)}`} alt={judul || 'Grafik'} />
-            : <div className="lk-grafik-empty">Belum ada gambar — pilih gambar, atau ganti Sumber ke data manual / blok tabel.</div>)
-          : chartData.length === 0
-            ? <div className="lk-grafik-empty">Belum ada data untuk grafik.</div>
-            : <div className="lk-grafik-canvas"><GrafikRenderClient type={chartType} data={chartData} /></div>}
-      </div>
+      {source === 'gambar' && gambarKini
+        ? <GambarBerukuran key={gambarKini} fileId={gambarKini} ukuran={ukuran} onUbah={setUkuran} readOnly={readOnly} alt={judul || 'Grafik'} />
+        : (
+          <>
+            <div className="lk-grafik-preview" ref={chartRef}>
+              {source === 'gambar'
+                ? <div className="lk-grafik-empty">Belum ada gambar — pilih gambar, atau ganti Sumber ke data manual / blok tabel.</div>
+                : chartData.length === 0
+                  ? <div className="lk-grafik-empty">Belum ada data untuk grafik.</div>
+                  : <div className="lk-grafik-canvas"><GrafikRenderClient type={chartType} data={chartData} /></div>}
+            </div>
+            {source !== 'gambar' && !readOnly && <IsianLebar ukuran={ukuran} onUbah={setUkuran} alami={null} readOnly={readOnly} petunjuk="Tinggi mengikuti grafik. Kosong = otomatis." />}
+          </>
+        )}
       {source === 'gambar' && !readOnly && (
         <div className="lk-uphint">Grafik ini berupa gambar. Untuk grafik yang ikut berubah bersama angkanya, ganti Sumber ke Dari blok tabel lalu Simpan Grafik.</div>
       )}
@@ -1444,7 +1454,6 @@ ${TABEL_CSS}
   .lk-grafik-add:hover { border-color: #185FA5; color: #E6F1FB; }
   .lk-grafik-preview { display: flex; justify-content: center; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid #0C447C; border-radius: 8px; }
   .lk-grafik-canvas { background: #ffffff; border-radius: 6px; padding: 8px; }
-  .lk-grafik-img { max-width: 100%; max-height: 420px; background: #ffffff; border-radius: 6px; }
   .lk-grafik-empty { color: #85B7EB; font-size: 12.5px; padding: 40px; text-align: center; }
   .lk-ab.grafik { color: #14B8A6; border-color: #14B8A6; }
   .lk-ab.tempel { color: #85B7EB; border-color: #85B7EB; }
@@ -1492,8 +1501,21 @@ ${TABEL_CSS}
 
 
   .lk-gambar-ed { display: flex; flex-direction: column; gap: 8px; }
-  .lk-gambar-ed input { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; color: #E6F1FB; padding: 8px 10px; font-size: 13px; }
-  .lk-gambar-ed input:focus { outline: none; border-color: #185FA5; }
+  .lk-gambar-ed > input { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; color: #E6F1FB; padding: 8px 10px; font-size: 13px; }
+  .lk-gambar-ed > input:focus { outline: none; border-color: #185FA5; }
+  .lk-gbr { display: flex; flex-direction: column; gap: 8px; }
+  /* Kotak ini mewakili lebar bidang tulis: besar gambar terhadap halaman terbaca sebelum diunduh. */
+  .lk-gbr-lembar { display: flex; justify-content: center; width: min(100%, 420px); margin: 0 auto; background: #FFFFFF; border: 1px dashed #0C447C; border-radius: 6px; }
+  .lk-gbr-bingkai { position: relative; overflow: hidden; }
+  .lk-gbr-bingkai img { position: absolute; max-width: none; }
+  .lk-gbr-pesan { padding: 24px; color: #6B7280; font-size: 12px; text-align: center; }
+  .lk-gbr-isian { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #85B7EB; }
+  .lk-gbr-isian label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+  .lk-gbr-lebar { width: 96px; }
+  .lk-gbr-angka { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  .lk-gbr-gepeng { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  [data-theme="light"] .lk-gbr-lembar { border-color: rgba(0,0,0,.15); }
+  [data-theme="light"] .lk-gbr-isian { color: #374151; }
 
   .lk-addblock { display: flex; align-items: center; gap: 8px; padding: 12px; border: 1px dashed #0C447C; border-radius: 10px; color: #85B7EB; font-size: 12.5px; flex-wrap: wrap; }
   .lk-ab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 700; border: 1.5px solid; transition: filter .12s, transform .08s; }
@@ -1581,7 +1603,7 @@ ${TABEL_CSS}
   [data-theme="light"] .lk-block { background: #FFFFFF; border-color: rgba(0,0,0,.1); box-shadow: 0 1px 3px rgba(15,15,18,.05); }
   [data-theme="light"] .lk-block-tag { color: #6B7280; }
   [data-theme="light"] .lk-block-nomor { color: #0F0F12; }
-  [data-theme="light"] .lk-tabel-judul, [data-theme="light"] .lk-gambar-ed input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .lk-tabel-judul, [data-theme="light"] .lk-gambar-ed > input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
   [data-theme="light"] .lk-collabel { color: #7C5CFC; }
   [data-theme="light"] .lk-addblock { border-color: rgba(0,0,0,.15); color: #6B7280; }
   [data-theme="light"] .lk-ab.narasi { background: #EDE7FE; border-color: #7C5CFC; color: #5B21B6; }

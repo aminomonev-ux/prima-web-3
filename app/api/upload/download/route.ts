@@ -12,6 +12,7 @@ import { ADMIN_ROLES, BIDANG_ROLES, BIDANG_TO_SUBBIDANG } from '@/lib/constants'
 import { modulMati } from '@/lib/security/guard';
 import { kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
+import { isLkjipRole } from '@/lib/lkjip/schemas';
 import { kodeGalatDrive } from '@/lib/services/drive';
 
 export const runtime = 'nodejs';
@@ -85,15 +86,18 @@ export async function GET(req: NextRequest) {
       const subs = (BIDANG_TO_SUBBIDANG as Record<string, string[]>)[session.role] ?? [];
       bidangAllowed = !!owner.uploader_role && subs.includes(owner.uploader_role);
     }
-    // BBA modul kolaboratif (AUTHZ-02): bukti/referensi yang diunggah rekan harus bisa
-    // dibuka semua pemegang akses BBA. Dikunci pada context BERKAS ITU SENDIRI — menempel
-    // file_id modul lain ke item BBA tidak memberi akses apa pun. app_access dari DB, bukan JWT.
-    let bbaAllowed = false;
-    if (owner.context === 'buku_besar_aset') {
+    // BBA & LKJIP modul kolaboratif (AUTHZ-02): berkas yang diunggah rekan harus bisa dibuka
+    // semua pemegang akses modulnya (LKJIP: gambar yang sama sudah ikut di unduhan Word).
+    // Dikunci pada context BERKAS ITU SENDIRI — menempel file_id modul lain ke item modul ini
+    // tidak memberi akses apa pun. app_access dari DB, bukan JWT.
+    let modulAllowed = false;
+    if (owner.context === 'buku_besar_aset' || owner.context === 'lkjip') {
       const akses = await queryOne<{ app_access: string[] | null }>(sql`SELECT app_access FROM users WHERE id = ${session.userId} LIMIT 1`);
-      bbaAllowed = isAsetRole(session.role, akses?.app_access ?? null);
+      modulAllowed = owner.context === 'lkjip'
+        ? isLkjipRole(session.role, akses?.app_access ?? null)
+        : isAsetRole(session.role, akses?.app_access ?? null);
     }
-    if (!isOwner && !bidangAllowed && !bbaAllowed) return await deny();
+    if (!isOwner && !bidangAllowed && !modulAllowed) return await deny();
   }
 
   try {

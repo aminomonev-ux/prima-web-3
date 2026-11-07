@@ -14,6 +14,7 @@ import { indentTwips, spasiBawaan, spasiKeTersimpan, BATAS_INDENT_CM, TWIPS_PER_
 import { gayaDariWord, teksNomor, type KodeGaya } from './gaya-daftar';
 import { susunNarasi } from './susun-daftar';
 import { stabiloDariWord, type KodeStabilo } from './format-teks';
+import { EMU_PER_CM, EMU_PER_PX, TANPA_UKURAN, jepitUkuran, potonganSah, type Potongan, type UkuranGambar } from './ukuran-gambar';
 import {
   BATAS_BERKAS_IMPOR, PESAN_TERLALU_BESAR, JENIS_PENANDA,
   type JenisPenanda, type Koreksi, type JenisObjek, type TandaTangan, type BarisPratinjau, type RingkasanImpor,
@@ -42,7 +43,7 @@ export interface TabelImpor {
 export type BlokImpor =
   | { tipe: 'NARASI'; payload: { html: string } }
   | { tipe: 'TABEL'; payload: TabelImpor }
-  | { tipe: 'GAMBAR'; gambar: string; payload: { judul: string; fileId: string; caption: string } }
+  | { tipe: 'GAMBAR'; gambar: string; payload: { judul: string; fileId: string; caption: string } & UkuranGambar }
   | { tipe: 'GRAFIK'; gambar: string | null; payload: Record<string, unknown> };
 export interface BagianImpor { judul: string; locked: boolean; penanda: number | null; blok: BlokImpor[]; anak: BagianImpor[] }
 export interface GambarImpor { ref: string; ext: 'png' | 'jpg' | 'gif'; mime: string; bytes: Uint8Array }
@@ -295,9 +296,13 @@ interface Par {
   jc: string | null; ind: Inden; teks: string; teksTab: string; seg: Seg[];
   /** Gaya berkas: `w:contextualSpacing` membuang spasi antar-paragraf yang gayanya sama. */
   idGaya: string; spasi: SpasiWord;
-  gambar: string[]; grafikWord: string[];
+  gambar: GambarPar[]; grafikWord: GrafikPar[];
   sect: { melintang: boolean } | null; pisahHalaman: boolean; toc: boolean;
 }
+/** `ukuran` kosong = dibiarkan otomatis, karena angka yang tertulis bukan milik gambar ini. */
+interface UkuranWord { lebarEmu: number; tinggiEmu: number; potong: Potongan | null }
+interface GambarPar { rid: string; ukuran: UkuranWord | null; diputar: boolean }
+interface GrafikPar { rid: string; lebarEmu: number | null }
 type HasilTabel =
   | { muat: true; payload: TabelImpor; ganti: number }
   | { muat: false; alasan: string };
@@ -313,6 +318,58 @@ const melintangSect = (sp: El | undefined): boolean => {
   const w = angkaAtr(sz, 'w:w'), h = angkaAtr(sz, 'w:h');
   return w != null && h != null && w > h;
 };
+
+const emuPositif = (el: El | undefined, nama: string): number | null => {
+  const n = angkaAtr(el, nama);
+  return n != null && n > 0 ? n : null;
+};
+const SISI_POTONG = { kiri: 'l', atas: 't', kanan: 'r', bawah: 'b' } as const;
+
+function potonganDari(srcRect: El | undefined): { potong: Potongan | null; sah: boolean } {
+  if (!srcRect) return { potong: null, sah: true };
+  // Nilai negatif = ruang kosong di luar gambar, bukan potongan.
+  const sisi = (k: keyof typeof SISI_POTONG) => Math.max(0, Math.round(angkaAtr(srcRect, SISI_POTONG[k]) ?? 0));
+  const p: Potongan = { kiri: sisi('kiri'), atas: sisi('atas'), kanan: sisi('kanan'), bawah: sisi('bawah') };
+  if (!potonganSah(p)) return { potong: null, sah: false };
+  return { potong: p.kiri + p.atas + p.kanan + p.bawah > 0 ? p : null, sah: true };
+}
+
+function gambarDariDrawing(x: El): Omit<GambarPar, 'rid'> {
+  const kosong = { ukuran: null, diputar: false };
+  // Grup & bentuk: ukuran yang tertulis milik wadahnya, bukan gambar di dalamnya.
+  const pic = anak(cariSemua(x, 'a:graphicData')[0], 'pic:pic');
+  if (!pic) return kosong;
+  const xfrm = anak(anak(pic, 'pic:spPr'), 'a:xfrm');
+  const rot = (angkaAtr(xfrm, 'rot') ?? 0) % 21600000;
+  const diputar = rot !== 0 || nyalaAtr(xfrm ?? KOSONG, 'flipH') || nyalaAtr(xfrm ?? KOSONG, 'flipV');
+  // `wp:extent` gambar diputar = bingkai sesudah diputar; ukuran gambarnya sendiri ada di `a:ext`.
+  const sumber = diputar ? anak(xfrm, 'a:ext') : anak(anak(x, 'wp:inline') ?? anak(x, 'wp:anchor'), 'wp:extent');
+  const lebarEmu = emuPositif(sumber, 'cx'), tinggiEmu = emuPositif(sumber, 'cy');
+  const { potong, sah } = potonganDari(anak(anak(pic, 'pic:blipFill'), 'a:srcRect'));
+  // Tanpa potongannya, ukuran itu membuat gambar gepeng.
+  if (!lebarEmu || !tinggiEmu || !sah) return { ukuran: null, diputar };
+  return { ukuran: { lebarEmu, tinggiEmu, potong }, diputar };
+}
+
+const EMU_PER_SATUAN_CSS: Record<string, number> = { pt: 12700, in: 914400, cm: EMU_PER_CM, mm: EMU_PER_CM / 10, px: EMU_PER_PX };
+function panjangCssEmu(style: string, nama: string): number | null {
+  const m = new RegExp(`(?:^|;)\\s*${nama}\\s*:\\s*([\\d.]+)(pt|in|cm|mm|px)`, 'i').exec(style);
+  const n = m ? parseFloat(m[1]) * EMU_PER_SATUAN_CSS[m[2].toLowerCase()] : 0;
+  return n > 0 ? Math.round(n) : null;
+}
+
+function gambarDariVml(x: El): Omit<GambarPar, 'rid'> {
+  const kosong = { ukuran: null, diputar: false };
+  const data = cariSemua(x, 'v:imagedata');
+  const bentuk = cariSemua(x, 'v:shape');
+  if (data.length !== 1 || bentuk.length !== 1) return kosong;
+  const style = atr(bentuk[0], 'style') ?? '';
+  const diputar = /(?:^|;)\s*(?:rotation\s*:\s*-?[1-9]|flip\s*:)/i.test(style);
+  const dipotong = ['cropleft', 'croptop', 'cropright', 'cropbottom'].some(k => parseFloat(atr(data[0], k) ?? '0') !== 0);
+  const lebarEmu = panjangCssEmu(style, 'width'), tinggiEmu = panjangCssEmu(style, 'height');
+  if (!lebarEmu || !tinggiEmu || dipotong) return { ukuran: null, diputar };
+  return { ukuran: { lebarEmu, tinggiEmu, potong: null }, diputar };
+}
 
 function bacaParagraf(p: El, ctx: Konteks, i: number, toc: boolean): Par {
   const pPr = anak(p, 'w:pPr');
@@ -361,13 +418,18 @@ function bacaParagraf(p: El, ctx: Konteks, i: number, toc: boolean): Par {
           break;
         case 'w:cr': tambah('', rPr, true); break;
         case 'w:noBreakHyphen': tambah('-', rPr); par.teksTab += '-'; break;
-        case 'w:drawing':
-          for (const b of cariSemua(x, 'a:blip')) { const id = atr(b, 'r:embed') ?? atr(b, 'r:link'); if (id) par.gambar.push(id); }
-          for (const c of cariSemua(x, 'c:chart')) { const id = atr(c, 'r:id'); if (id) par.grafikWord.push(id); }
+        case 'w:drawing': {
+          const dariDrawing = gambarDariDrawing(x);
+          for (const b of cariSemua(x, 'a:blip')) { const id = atr(b, 'r:embed') ?? atr(b, 'r:link'); if (id) par.gambar.push({ rid: id, ...dariDrawing }); }
+          const lebarGrafik = emuPositif(anak(anak(x, 'wp:inline') ?? anak(x, 'wp:anchor'), 'wp:extent'), 'cx');
+          for (const c of cariSemua(x, 'c:chart')) { const id = atr(c, 'r:id'); if (id) par.grafikWord.push({ rid: id, lebarEmu: lebarGrafik }); }
           break;
-        case 'w:pict': case 'w:object':
-          for (const v of cariSemua(x, 'v:imagedata')) { const id = atr(v, 'r:id'); if (id) par.gambar.push(id); }
+        }
+        case 'w:pict': case 'w:object': {
+          const dariVml = gambarDariVml(x);
+          for (const v of cariSemua(x, 'v:imagedata')) { const id = atr(v, 'r:id'); if (id) par.gambar.push({ rid: id, ...dariVml }); }
           break;
+        }
         case 'w:instrText': if (/\b(TOC|PAGEREF)\b/.test(teksDalam(x))) par.toc = true; break;
         case 'mc:AlternateContent': { const ch = anak(x, 'mc:Choice'); if (ch) run({ n: 'w:r', a: '', c: [...(rPr ? [rPr] : []), ...elemen(ch)] }); break; }
         default: break;
@@ -1106,7 +1168,22 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const ring: RingkasanImpor = { bab: 0, sub: 0, subsub: 0, narasi: 0, tabel: 0, gambar: 0, grafik: 0, tabelDitolak: 0, gambarDilewati: 0 };
   const lampiran = new Set<BagianImpor>();
   let gambarLuar = 0, gambarFormat = 0, gambarBesar = 0, tanpaKeterangan = 0, gambarDiTabel = 0, samaDengan = 0, grafikWord = 0;
+  let gambarDiperkecil = 0, gambarDiputar = 0;
   let buf: Par[] = [];
+  const ukuranBlok = (g: GambarPar): UkuranGambar => {
+    if (g.diputar) gambarDiputar++;
+    if (!g.ukuran) return TANPA_UKURAN;
+    const j = jepitUkuran(g.ukuran.lebarEmu, g.ukuran.tinggiEmu);
+    if (j.diperkecil) gambarDiperkecil++;
+    return { lebarEmu: j.wEmu, tinggiEmu: j.hEmu, potong: g.ukuran.potong };
+  };
+  const ukuranGrafikWord = (g: GrafikPar): UkuranGambar => {
+    if (!g.lebarEmu) return TANPA_UKURAN;
+    // Gambarnya digambar PRIMA, proporsinya sendiri: tinggi dari Word membuatnya gepeng.
+    const j = jepitUkuran(g.lebarEmu, 1);
+    if (j.diperkecil) gambarDiperkecil++;
+    return { lebarEmu: j.wEmu, tinggiEmu: null, potong: null };
+  };
 
   const kini = (): BagianImpor => {
     if (!jalur.length) {
@@ -1212,29 +1289,30 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
     const kk = milikTarget.get(k);
     const ket = kk != null ? keterangan.get(kk) : undefined;
     let pertama = true;
-    for (const rid of u.gambar) {
-      const ref = ambilGambar(rid);
+    for (const g of u.gambar) {
+      const ref = ambilGambar(g.rid);
       const ketIni = pertama ? ket : undefined;
       pertama = false;
       if (!ref) { ring.gambarDilewati++; continue; }
       if (!ketIni) tanpaKeterangan++;
       const judul = (ketIni?.judul ?? '').slice(0, 255);
+      const ukuran = ukuranBlok(g);
       if (ketIni?.jenis === 'Grafik') {
-        tambahBlok({ tipe: 'GRAFIK', gambar: ref, payload: { judul, source: 'gambar', chartType: 'bar', data: [], imageFileId: '', caption: '' } });
+        tambahBlok({ tipe: 'GRAFIK', gambar: ref, payload: { judul, source: 'gambar', chartType: 'bar', data: [], imageFileId: '', caption: '', ...ukuran } });
         ring.grafik++;
       } else {
-        tambahBlok({ tipe: 'GAMBAR', gambar: ref, payload: { judul, fileId: '', caption: '' } });
+        tambahBlok({ tipe: 'GAMBAR', gambar: ref, payload: { judul, fileId: '', caption: '', ...ukuran } });
         ring.gambar++;
       }
       baris.push({ jenis: 'objek', objek: ketIni?.jenis === 'Grafik' ? 'Grafik' : 'Gambar', judul: ketIni?.judul ?? '', kedalaman: jalur.length - 1, penanda: ketIni ? kk! : null, catatan: '' });
     }
-    for (const rid of u.grafikWord) {
-      const rel = rels.get(rid);
+    for (const g of u.grafikWord) {
+      const rel = rels.get(g.rid);
       const isi = rel && !rel.luar ? bacaGrafikWord(zip, jalurWord(rel.target)) : null;
       const ketIni = pertama ? ket : undefined;
       pertama = false;
       grafikWord++;
-      tambahBlok({ tipe: 'GRAFIK', gambar: null, payload: { judul: (ketIni?.judul ?? '').slice(0, 255), source: 'manual', chartType: isi?.chartType ?? 'bar', data: isi?.data ?? [], imageFileId: '', caption: '' } });
+      tambahBlok({ tipe: 'GRAFIK', gambar: null, payload: { judul: (ketIni?.judul ?? '').slice(0, 255), source: 'manual', chartType: isi?.chartType ?? 'bar', data: isi?.data ?? [], imageFileId: '', caption: '', ...ukuranGrafikWord(g) } });
       ring.grafik++;
       baris.push({ jenis: 'objek', objek: 'Grafik', judul: ketIni?.judul ?? '', kedalaman: jalur.length - 1, penanda: ketIni ? kk! : null, catatan: isi ? `${isi.data.length} titik data` : 'datanya tidak terbaca' });
     }
@@ -1262,6 +1340,8 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
 
   if (ring.grafik - grafikWord > 0) peringatan.push(`${ring.grafik - grafikWord} grafik berupa gambar — masuk sebagai blok Grafik bergambar, bisa diganti grafik dari tabel di editor.`);
   if (grafikWord) peringatan.push(`${grafikWord} grafik Word dibaca dari datanya — buka lalu tekan Simpan Grafik supaya gambarnya masuk ke Word.`);
+  if (gambarDiperkecil) peringatan.push(`${gambarDiperkecil} gambar lebih besar dari bidang tulis PRIMA (lebar 15,5 cm) — diperkecil sebanding.`);
+  if (gambarDiputar) peringatan.push(`${gambarDiputar} gambar diputar atau dibalik di Word — masuk tanpa putarannya.`);
   if (gambarFormat) peringatan.push(`${gambarFormat} gambar berformat selain PNG/JPG/GIF (mis. EMF, SVG) dilewati.`);
   if (gambarBesar) peringatan.push(`${gambarBesar} gambar lebih dari 10 MB dilewati.`);
   if (gambarLuar) peringatan.push(`${gambarLuar} gambar tertaut ke luar berkas dilewati.`);

@@ -16,6 +16,7 @@ import {
 import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, TINGKAT_DAFTAR, adalahBullet, gantungDxa, gayaDariTagDaftar, susunanPenuh, tagGaya, tulisSusunan, xmlTingkatWord, type KodeGaya } from './gaya-daftar';
 import { POLA_STABILO, STABILO, stabiloSah, szDariGaya } from './format-teks';
+import { EMU_PER_PX, bacaUkuran, ukuranTampilEmu, xmlPotongan, type UkuranGambar } from './ukuran-gambar';
 import { getDriveClient } from '@/lib/services/drive';
 
 function escapeXml(s: unknown): string {
@@ -500,23 +501,22 @@ function imgDimsEmu(buf: Buffer, ext: string): { wEmu: number; hEmu: number } {
     else if (ext === 'jpg') { const d = jpegDims(buf); if (d) { w = d.w; h = d.h; } }
   } catch { /* fallback di bawah */ }
   if (!w || !h) { w = 480; h = 360; }
-  const PX = 9525, MAXW = 5760000;        // 9525 EMU/px @96dpi · lebar maks ≈6 inci
-  let wEmu = w * PX, hEmu = h * PX;
-  if (wEmu > MAXW) { hEmu = Math.round(hEmu * MAXW / wEmu); wEmu = MAXW; }
-  return { wEmu, hEmu };
+  return { wEmu: w * EMU_PER_PX, hEmu: h * EMU_PER_PX };
 }
-function drawingPara(info: ImageInfo): string {
+function drawingPara(info: ImageInfo, ukuran: UkuranGambar): string {
   const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
   const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+  // Per blok, bukan per berkas: satu berkas bisa dipakai dua blok dengan ukuran berbeda.
+  const { wEmu, hEmu } = ukuranTampilEmu(ukuran, info);
   // keepNext: gambar tidak boleh terpisah dari judulnya yang ada di bawahnya (W1).
   return `<w:p><w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr><w:r><w:drawing>` +
     `<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="${WP}">` +
-    `<wp:extent cx="${info.wEmu}" cy="${info.hEmu}"/><wp:docPr id="${info.id}" name="Gambar${info.id}"/>` +
+    `<wp:extent cx="${wEmu}" cy="${hEmu}"/><wp:docPr id="${info.id}" name="Gambar${info.id}"/>` +
     `<a:graphic xmlns:a="${A}"><a:graphicData uri="${PIC}">` +
     `<pic:pic xmlns:pic="${PIC}"><pic:nvPicPr><pic:cNvPr id="${info.id}" name="Gambar${info.id}"/><pic:cNvPicPr/></pic:nvPicPr>` +
-    `<pic:blipFill><a:blip r:embed="${info.relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
-    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${info.wEmu}" cy="${info.hEmu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    `<pic:blipFill><a:blip r:embed="${info.relId}"/>${xmlPotongan(ukuran.potong)}<a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${wEmu}" cy="${hEmu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
     `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
 
@@ -530,7 +530,7 @@ export function buildGambarXml(payload: unknown, font: string, sz: number, imgMa
   const p = (payload ?? {}) as { judul?: string; fileId?: string; caption?: string };
   const text = teksKeterangan('GAMBAR', payload);
   const info = p.fileId ? imgMap.get(p.fileId) : undefined;
-  const body = info ? drawingPara(info) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
+  const body = info ? drawingPara(info, bacaUkuran(payload)) : para('[ Gambar ]', font, sz, { italic: true, align: 'center' });
   return body + caption('Gambar', text, font, sz, false, judulNomor(nomor)) + para('', font, sz);
 }
 
@@ -538,7 +538,7 @@ function buildGrafikXml(payload: unknown, font: string, sz: number, imgMap: Map<
   const p = (payload ?? {}) as { judul?: string; imageFileId?: string; caption?: string };
   const text = teksKeterangan('GRAFIK', payload);
   const info = p.imageFileId ? imgMap.get(p.imageFileId) : undefined;
-  const body = info ? drawingPara(info) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
+  const body = info ? drawingPara(info, bacaUkuran(payload)) : para('[ Grafik ]', font, sz, { italic: true, align: 'center' });
   return body + caption('Grafik', text, font, sz, false, judulNomor(nomor)) + para('', font, sz);
 }
 
