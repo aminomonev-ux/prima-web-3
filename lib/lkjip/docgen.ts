@@ -13,7 +13,7 @@ import {
   LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
 } from './tabel';
 // Geometri halaman SATU sumber dengan penggaris editor (`docs/CONCEPT-lkjip-penggaris-narasi.md` §3).
-import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, xmlInden, indenBerlaku, type IndenTersimpan } from './halaman';
+import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, TINGKAT_DAFTAR, adalahBullet, gantungDxa, gayaDariTagDaftar, susunanPenuh, tagGaya, tulisSusunan, xmlTingkatWord, type KodeGaya } from './gaya-daftar';
 import { POLA_STABILO, STABILO, stabiloSah, szDariGaya } from './format-teks';
 import { getDriveClient } from '@/lib/services/drive';
@@ -142,7 +142,7 @@ function buildNumbering(instances: InstansiNum[]): string {
  */
 export function narasiToXml(html: string, font: string, sz: number, indentTwips = 0, alloc?: NumAlloc, continueList = false, rujuk?: Map<number, string>): string {
   if (!html || !html.trim()) return '';
-  // CT_PPr: numPr → ind → jc. Urutan lain membuat Word menolak berkasnya.
+  // CT_PPr: numPr → spacing → ind → jc. Urutan lain membuat Word menolak berkasnya.
   const jcXml = (a: string | null) => (a ? `<w:jc w:val="${a}"/>` : '');
   const alignDari = (tok: string) => {
     const am = /text-align\s*:\s*(left|center|right|justify)/i.exec(tok);
@@ -155,10 +155,11 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
   // Tumpukan daftar & butir yang sedang terbuka: sesudah daftar bersarang ditutup, butir berikutnya
   // kembali ke nomor daftar induknya.
   const daftar: { gaya: KodeGaya; numId: number; ilvl: number }[] = [];
-  const butir: { inden: IndenTersimpan; align: string | null; bernomor: boolean; punyaAnak?: boolean }[] = [];
+  const butir: { inden: IndenTersimpan; spasi: SpasiTersimpan; align: string | null; bernomor: boolean; punyaAnak?: boolean; indenP: IndenTersimpan | null; spasiP: SpasiTersimpan | null }[] = [];
   const dalamButir = () => daftar.length > 0 && butir.length === daftar.length;
   let pAlign: string | null = null;
   let pInden: IndenTersimpan | null = null;
+  let pSpasi: SpasiTersimpan | null = null;
   let headingLevel = 0;
   let runColor: string | null = null;
   let runSize: number | null = null;
@@ -187,7 +188,11 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
     const t = decodeEntities(txt);
     if (!t) return;
     if (rujukan && rujuk) { rujukan.teks += t; return; }
-    runs.push(`<w:r>${curRpr()}<w:t xml:space="preserve">${escapeXml(t)}</w:t></w:r>`);
+    // Karakter tab di dalam <w:t> dibaca Word sebagai spasi.
+    t.split('\t').forEach((potongan, i) => {
+      if (i) runs.push(`<w:r>${curRpr()}<w:tab/></w:r>`);
+      if (potongan) runs.push(`<w:r>${curRpr()}<w:t xml:space="preserve">${escapeXml(potongan)}</w:t></w:r>`);
+    });
   };
   const tutupRujukan = () => {
     if (!rujukan || !rujuk) return;
@@ -207,16 +212,17 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
     runs = [];
   };
   // Paragraf pertama butir yang bertulisan yang memakai nomor; paragraf berikutnya di butir yang sama
-  // (sesudah daftar bersarang, atau <p> kedua) rata dengan teks butirnya, tanpa nomor — seperti Word.
+  // (sesudah daftar bersarang, atau <p> kedua) tanpa nomor, rata dengan teks butirnya kecuali punya indent sendiri.
   const tulisButir = () => {
     const b = butir[butir.length - 1];
     const d = daftar[daftar.length - 1];
     if (!b || !d || runs.length === 0) return;
     if (b.bernomor) {
-      flush(`<w:ind w:left="${indenBerlaku(b.inden, 'butir', 0, daftar.length, gantungDxa(d.gaya, daftar.length)).kiri}"/>${jcXml(b.align)}`);
+      const kiriButir = indenBerlaku(b.inden, 'butir', 0, daftar.length, gantungDxa(d.gaya, daftar.length)).kiri;
+      flush(`${xmlSpasi(b.spasiP)}${xmlInden(b.indenP, 'lanjutan', kiriButir)}${jcXml(b.align)}`);
       return;
     }
-    flush(`<w:numPr><w:ilvl w:val="${d.ilvl}"/><w:numId w:val="${d.numId}"/></w:numPr>${xmlInden(b.inden, 'butir', 0, daftar.length, gantungDxa(d.gaya, daftar.length))}${jcXml(b.align)}`);
+    flush(`<w:numPr><w:ilvl w:val="${d.ilvl}"/><w:numId w:val="${d.numId}"/></w:numPr>${xmlSpasi({ ...b.spasi, ...b.spasiP })}${xmlInden(b.inden, 'butir', 0, daftar.length, gantungDxa(d.gaya, daftar.length))}${jcXml(b.align)}`);
     b.bernomor = true;
   };
   const bukaDaftar = (tok: string) => {
@@ -254,24 +260,31 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
         case 'p':
           if (dalamButir()) {
             tulisButir();
-            if (!closing) butir[butir.length - 1].align = alignDari(tok);
+            if (!closing) {
+              const b = butir[butir.length - 1];
+              b.align = alignDari(tok);
+              b.indenP = bacaInden(tok);
+              b.spasiP = bacaSpasi(tok);
+            }
             break;
           }
-          if (closing) { flush(`${xmlInden(pInden, 'paragraf', indentTwips)}${jcXml(pAlign)}`); pAlign = null; pInden = null; }
+          if (closing) { flush(`${xmlSpasi(pSpasi)}${xmlInden(pInden, 'paragraf', indentTwips)}${jcXml(pAlign)}`); pAlign = null; pInden = null; pSpasi = null; }
           else {
             flush();
             pAlign = alignDari(tok);
             pInden = bacaInden(tok);
+            pSpasi = bacaSpasi(tok);
           }
           break;
         case 'h1': case 'h2': case 'h3':
           if (dalamButir()) break;
-          if (closing) { flush(`${xmlInden(pInden, 'judul')}${jcXml(pAlign)}`); pAlign = null; pInden = null; headingLevel = 0; }
+          if (closing) { flush(`${xmlSpasi(pSpasi)}${xmlInden(pInden, 'judul')}${jcXml(pAlign)}`); pAlign = null; pInden = null; pSpasi = null; headingLevel = 0; }
           else {
             flush();
             headingLevel = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
             pAlign = alignDari(tok);
             pInden = bacaInden(tok);
+            pSpasi = bacaSpasi(tok);
           }
           break;
         case 'br':  runs.push(`<w:r>${curRpr()}<w:br/></w:r>`); break;
@@ -311,7 +324,7 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
           } else {
             if (dalamButir()) { tulisButir(); butir.pop(); }
             flush();
-            if (daftar.length > 0) butir.push({ inden: bacaInden(tok), align: null, bernomor: false });
+            if (daftar.length > 0) butir.push({ inden: bacaInden(tok), spasi: bacaSpasi(tok), align: null, bernomor: false, indenP: null, spasiP: null });
           }
           break;
         default: break;
@@ -625,8 +638,7 @@ function headingStyle(id: number, font: string, sz: number): string {
 function buildStyles(cfg: StyleConfig): string {
   const font = cfg.fontFamily;
   const sz = Math.round(cfg.fontSizePt * 2);
-  const line = Math.round(cfg.lineSpacing * 240);
-  const after = Math.round(cfg.spaceAfterPt * 20);
+  const { baris: line, sesudah: after } = spasiBawaan(cfg.spaceAfterPt, cfg.lineSpacing);
   const jc = cfg.align === 'left' ? 'left' : 'both';
   const capSz = Math.max(18, sz - 2);
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +

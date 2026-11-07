@@ -209,7 +209,7 @@ ok('D4 dekorasi di tiap daftar akar bernomor, nomornya dari mulaiDaftarBlok',
   dk.includes('mulaiDaftarBlok(akar, info?.lanjutan, info?.continueList ?? false)')
   && dk.includes('Decoration.node(pos[i], pos[i] + ukuran[i], { start: String(m) })'), dk.slice(0, 200))
 ok('D5 plugin terpasang & disegarkan tiap sambungannya berubah (tanpa memunculkan Simpan / masuk riwayat Undo)',
-  /RujukTaut, LanjutDaftar, IndenParagraf\]/.test(tt) && tt.includes('decorations: state => dekorLanjut(state.doc, KUNCI_LANJUT.getState(state))')
+  /RujukTaut, LanjutDaftar, IndenParagraf,/.test(tt) && tt.includes('decorations: state => dekorLanjut(state.doc, KUNCI_LANJUT.getState(state))')
   && /editor\.view\.dispatch\(editor\.state\.tr\.setMeta\(KUNCI_LANJUT, nilai\)\.setMeta\(META_SEGAR, true\)\.setMeta\('addToHistory', false\)\);\s*\}, \[editor, kunciLanjutan, continueList\]\);/.test(tt))
 ok('D6 tampilan tidak menulis ke isi blok (tak ada start yang disimpan)', !/setNodeMarkup[^;]*start/.test(tt) && !/updateAttributes\('orderedList', \{[^}]*start/.test(tt))
 

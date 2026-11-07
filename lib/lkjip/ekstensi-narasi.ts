@@ -1,11 +1,13 @@
 // ═══ PRIMA — LKJIP — Ekstensi Tiptap narasi: format daftar, super/subscript, stabilo ═══
 // Tanpa dependency baru. Skemanya dipakai juga oleh uji di Node.
 
-import { Extension, Mark, mergeAttributes, wrappingInputRule } from '@tiptap/core';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { Extension, Mark, Node, mergeAttributes, wrappingInputRule } from '@tiptap/core';
+import { Fragment, Slice, type Node as PMNode, type Schema } from '@tiptap/pm/model';
+import { Plugin } from '@tiptap/pm/state';
 import { adalahBullet, bacaSusunan, gayaDariTagDaftar, gayaSah, tulisSusunan, type KodeGaya } from './gaya-daftar';
-import { adalahDaftar, gayaNode, naikTingkat, posisiDaftar, turunTingkat, ubahHuruf } from './perintah-narasi';
+import { adalahDaftar, dalamLanjutan, enterLanjutan, gayaNode, naikTingkat, posisiDaftar, tekanTab, ubahHuruf } from './perintah-narasi';
 import { stabiloSah } from './format-teks';
+import { bacaSpasi, type Spasi } from './halaman';
 
 // `1) `, `(1) `, `a. `, `a) `, `(a) `, `i. `, `I. `, `A. ` di awal baris menjadi daftar, seperti AutoFormat Word.
 // Huruf hanya yang memulai deret: "b. " di awal kalimat lebih mungkin singkatan daripada butir kedua.
@@ -62,18 +64,21 @@ export const GayaDaftar = Extension.create({
   },
   addKeyboardShortcuts() {
     return {
-      // Di dalam daftar Tab selalu dimakan: `sinkListItem` menolak butir pertama, dan tanpa ini fokus lompat keluar editor.
       Tab: () => {
         const { state, view } = this.editor;
-        if (!posisiDaftar(state.selection.$from)) return false;
-        turunTingkat(state, view.dispatch);
-        return true;
+        return tekanTab(state, view.dispatch);
       },
+      // Di luar daftar Shift+Tab sengaja dilepas: itu jalan keluar papan ketik dari editor, sebab Tab kini menulis.
       'Shift-Tab': () => {
         const { state, view } = this.editor;
-        if (!posisiDaftar(state.selection.$from)) return false;
-        naikTingkat(state, view.dispatch);
+        const { $from } = state.selection;
+        if (!posisiDaftar($from)) return false;
+        if (!dalamLanjutan($from)) naikTingkat(state, view.dispatch);
         return true;
+      },
+      Enter: () => {
+        const { state, view } = this.editor;
+        return enterLanjutan(state, view.dispatch);
       },
       'Shift-F3': () => {
         const { state, view } = this.editor;
@@ -81,6 +86,59 @@ export const GayaDaftar = Extension.create({
         return true;
       },
     };
+  },
+});
+
+/** Teks tempelan berkarakter tab → simpul tab. Tanpa ini tab-nya hilang jadi spasi begitu blok dibuka lagi. */
+export function pecahTab(f: Fragment, schema: Schema, dalamKode = false): Fragment {
+  const isi: PMNode[] = [];
+  f.forEach(n => {
+    if (n.isText && !dalamKode && n.text!.includes('\t')) {
+      n.text!.split('\t').forEach((t, i) => {
+        if (i) isi.push(schema.nodes.tabNarasi.create(null, null, n.marks));
+        if (t) isi.push(schema.text(t, n.marks));
+      });
+    } else isi.push(n.content.size ? n.copy(pecahTab(n.content, schema, !!n.type.spec.code)) : n);
+  });
+  return Fragment.fromArray(isi);
+}
+
+// Tab sungguhan, bukan karakter di teks: ProseMirror meratakan spasi putih saat membaca HTML, jadi `\t` di teks
+// berubah jadi spasi sesudah blok dibuka lagi. Simpul sendiri = `<w:tab/>` di Word.
+export const TabNarasi = Node.create({
+  name: 'tabNarasi',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: false,
+  parseHTML: () => [{ tag: 'span[data-tab]', priority: 60 }],
+  renderHTML: () => ['span', { 'data-tab': '1' }, '\t'],
+  renderText: () => '\t',
+  addProseMirrorPlugins() {
+    const { schema } = this.editor;
+    return [new Plugin({
+      props: { transformPasted: slice => new Slice(pecahTab(slice.content, schema), slice.openStart, slice.openEnd) },
+    })];
+  },
+});
+
+// Spasi per paragraf: angka Word di `data-sp-*`; `--s-*` hanya untuk digambar CSS editor (`halaman.ts`).
+const atributSpasiTiptap = (k: keyof Spasi, nama: string, css: (v: number) => string) => ({
+  default: null,
+  parseHTML: (el: HTMLElement) => bacaSpasi(` data-sp-${k}="${el.getAttribute(`data-sp-${k}`) ?? ''}"`)[k] ?? null,
+  renderHTML: (attrs: Record<string, unknown>) => (attrs[nama] == null ? {} : { [`data-sp-${k}`]: attrs[nama], style: `--s-${k}:${css(Number(attrs[nama]))}` }),
+});
+export const SpasiParagraf = Extension.create({
+  name: 'spasiParagraf',
+  addGlobalAttributes() {
+    return [{
+      types: ['paragraph', 'heading', 'listItem'],
+      attributes: {
+        spSebelum: atributSpasiTiptap('sebelum', 'spSebelum', v => `${v / 20}pt`),
+        spSesudah: atributSpasiTiptap('sesudah', 'spSesudah', v => `${v / 20}pt`),
+        spBaris: atributSpasiTiptap('baris', 'spBaris', v => `${v / 240}`),
+      },
+    }];
   },
 });
 

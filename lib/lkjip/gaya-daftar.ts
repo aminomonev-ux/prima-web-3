@@ -197,9 +197,10 @@ export function cssGayaDaftar(lingkup: string): string {
   for (const k of GAYA_NOMOR) {
     if (k !== KODE_DESIMAL && gantungDxa(k) !== BUTIR_GANTUNG_DXA) r.push(`${lingkup} ol[data-gaya="${k}"] > li { --lk-gantung: ${gantungDxa(k)}; }`);
   }
-  // Rantai pemilih makin panjang = kekhususan makin tinggi, jadi tingkat terdalam yang menang.
+  // Rantai pemilih makin panjang = kekhususan makin tinggi, jadi tingkat terdalam yang menang. Leluhurnya daftar apa
+  // pun: `1.1.` di bawah `1.` (bentuk berkas Word) juga selebar tingkatnya, sama dengan `numbering.xml`.
   for (let d = 2; d <= TINGKAT_DAFTAR; d++) {
-    r.push(`${lingkup} ${`ol[data-gaya="${KODE_DESIMAL}"] `.repeat(d - 1)}ol[data-gaya="${KODE_DESIMAL}"] > li { --lk-gantung: ${gantungDxa(KODE_DESIMAL, d)}; }`);
+    r.push(`${lingkup} ${':is(ol, ul) '.repeat(d - 1)}ol[data-gaya="${KODE_DESIMAL}"] > li { --lk-gantung: ${gantungDxa(KODE_DESIMAL, d)}; }`);
   }
   return r.join('\n');
 }

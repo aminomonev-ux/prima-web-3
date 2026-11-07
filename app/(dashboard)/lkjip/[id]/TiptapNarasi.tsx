@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
@@ -11,8 +11,7 @@ import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import type { EditorState } from '@tiptap/pm/state';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, ListTree, ListRestart, ListPlus, ListStart, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus, IndentIncrease, IndentDecrease, Undo2, Redo2, Eraser, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Highlighter, CaseSensitive, ChevronDown, Scissors, Copy, ClipboardPaste, Pilcrow } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, ListTree, ListRestart, ListPlus, ListStart, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus, IndentIncrease, IndentDecrease, Undo2, Redo2, Eraser, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Highlighter, CaseSensitive, ChevronDown, Scissors, Copy, ClipboardPaste, Pilcrow, Paintbrush } from 'lucide-react';
 import type { ObjekRujukan } from '@/lib/lkjip/numbering';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog, promptDialog } from '@/components/ui/ConfirmDialog';
@@ -22,17 +21,19 @@ import { waktuSekarangWIB } from '@/lib/shared/waktu-wib';
 import { angkaDiHtml, bandingAngka, idAngkaBaru, kalimatAngka, kunciTarikan, resepTerpakai, type ResepAngka } from '@/lib/lkjip/angka';
 import type { HasilTarik } from '@/lib/lkjip/tautan';
 import { mulaiDaftarBlok, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
-import { adalahBullet, cssGayaDaftar, gantungDxa, gayaBawaan, type KodeBullet, type KodeGaya, type KodeNomor, type KodeSusunan, SUSUNAN } from '@/lib/lkjip/gaya-daftar';
+import { adalahBullet, cssGayaDaftar, gayaBawaan, type KodeBullet, type KodeGaya, type KodeNomor, type KodeSusunan, SUSUNAN } from '@/lib/lkjip/gaya-daftar';
 import { STABILO, UKURAN_PT, ptDariCss, type KodeStabilo, type ModeHuruf } from '@/lib/lkjip/format-teks';
-import { GayaDaftar, Stabilo, Subskrip, Superskrip } from '@/lib/lkjip/ekstensi-narasi';
+import { GayaDaftar, SpasiParagraf, Stabilo, Subskrip, Superskrip, TabNarasi } from '@/lib/lkjip/ekstensi-narasi';
+import { tempelDariWord } from '@/lib/lkjip/tempel-word';
 import {
-  akarBlokDari, adaPilihanTeks, aturGayaTingkat, aturLanjut, aturNomorAwal, aturSusunan, bungkusDaftar, gayaNode, hapusFormat, indeksAkar, kodeSusunanDari,
-  mulaiUlangDariSatu, naikTingkat, nomorTerkunciDesimal, posisiDaftar, susunanPohon, turunTingkat, ubahHuruf,
+  akarBlokDari, adaPilihanTeks, ambilFormat, aturGayaTingkat, aturLanjut, aturNomorAwal, aturSusunan, bungkusDaftar, dalamLanjutan, gayaNode, hapusFormat, indeksAkar, kodeSusunanDari,
+  mulaiUlangDariSatu, naikTingkat, nomorTerkunciDesimal, posisiDaftar, sasaranParagraf, simpananInden, simpananSpasi, susunanPohon, terapkanFormat, turunTingkat, ubahHuruf,
+  type FormatKuas, type SasaranParagraf,
 } from '@/lib/lkjip/perintah-narasi';
 import {
   LEBAR_DXA, PX_TULIS, LANGKAH_BESAR_DXA, BUTIR_KIRI_DXA, BUTIR_GANTUNG_DXA,
-  bacaInden, bidangBerubah, dxaDariCss, indentTwips, indenBawaan, indenBerlaku, keTersimpan, pxHuruf,
-  type Inden, type IndenTersimpan, type JenisInden,
+  bacaInden, bidangBerubah, dxaDariCss, indentTwips, indenBawaan, indenBerlaku, keTersimpan, pxHuruf, spasiBawaan, spasiKeTersimpan,
+  type Inden, type Spasi,
 } from '@/lib/lkjip/halaman';
 import PenggarisNarasi from './PenggarisNarasi';
 import { GALERI_CSS, GaleriBullet, GaleriNomor, GaleriTingkat, PilihanHuruf, PilihanStabilo } from './GaleriDaftar';
@@ -208,31 +209,11 @@ const IndenParagraf = Extension.create({
   },
 });
 
-interface SasaranInden { pos: number; node: PMNode; jenis: JenisInden; kedalaman: number; gantung?: number }
-const simpananNode = (n: PMNode): IndenTersimpan => ({
-  ...(n.attrs.indKiri != null ? { kiri: n.attrs.indKiri } : {}),
-  ...(n.attrs.indKanan != null ? { kanan: n.attrs.indKanan } : {}),
-  ...(n.attrs.indPertama != null ? { pertama: n.attrs.indPertama } : {}),
-});
-/** Paragraf yang dikenai penggaris: blok teks di pilihan; di daftar, butirnya (bukan paragraf di dalamnya). */
-function sasaranInden(state: EditorState): SasaranInden[] {
-  const hasil = new Map<number, SasaranInden>();
-  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
-    if (!node.isTextblock) return true;
-    const $p = state.doc.resolve(pos);
-    let butir: { pos: number; node: PMNode; gaya: KodeGaya } | null = null;
-    let kedalaman = 0;
-    for (let d = $p.depth; d > 0; d--) {
-      if ($p.node(d).type.name !== 'listItem') continue;
-      kedalaman++;
-      butir ??= { pos: $p.before(d), node: $p.node(d), gaya: gayaNode($p.node(d - 1)) };
-    }
-    if (butir) hasil.set(butir.pos, { pos: butir.pos, node: butir.node, jenis: 'butir', kedalaman, gantung: gantungDxa(butir.gaya, kedalaman) });
-    else hasil.set(pos, { pos, node, jenis: node.type.name === 'heading' ? 'judul' : 'paragraf', kedalaman: 1 });
-    return false;
-  });
-  return [...hasil.values()];
-}
+// Kuas format disimpan di luar komponen: sumbernya bisa di blok narasi lain, dan tiap blok punya editor sendiri.
+let kuasKini: { format: FormatKuas; tetap: boolean } | null = null;
+const pendengarKuas = new Set<() => void>();
+const aturKuas = (k: typeof kuasKini) => { kuasKini = k; pendengarKuas.forEach(f => f()); };
+const dengarKuas = (f: () => void) => { pendengarKuas.add(f); return () => { pendengarKuas.delete(f); }; };
 
 interface Props {
   initialHtml: string;
@@ -259,6 +240,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
   const [pop, setPop] = useState<{ jenis: JenisPop; x: number; y: number } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [modalParagraf, setModalParagraf] = useState(false);
+  const kuas = useSyncExternalStore(dengarKuas, () => kuasKini, () => null);
   // Klik bagian kiri tombol memakai format terakhir yang dipilih di galeri, seperti Word.
   const [bulletTerakhir, setBulletTerakhir] = useState<KodeBullet>('•');
   const [nomorTerakhir, setNomorTerakhir] = useState<KodeNomor>('1.');
@@ -275,13 +257,14 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
     // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
     // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
-    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo, AngkaTaut, RujukTaut, LanjutDaftar, IndenParagraf],
+    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo, AngkaTaut, RujukTaut, LanjutDaftar, IndenParagraf, SpasiParagraf, TabNarasi],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
     // v3 berhenti me-render ulang tiap transaksi; tombol bilah alat membaca `isActive` saat
     // render, jadi tanpa ini "Tebal"/"Rata" tidak ikut menyala saat kursor pindah.
     shouldRerenderOnTransaction: true,
+    editorProps: { transformPastedHTML: html => tempelDariWord(html) },
     // Penyegaran nomor rujukan bukan suntingan orangnya — tidak memunculkan tombol Simpan.
     onUpdate: ({ transaction }) => { if (!transaction.getMeta(META_SEGAR)) setDirty(true); },
   });
@@ -318,6 +301,13 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', luar); document.removeEventListener('keydown', esc); };
   }, [pilihRujuk]);
+
+  useEffect(() => {
+    if (!kuas) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') aturKuas(null); };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [kuas]);
 
   // Popover galeri ada di portal: yang dianggap "di dalam" tombol pembuka & kotaknya sendiri.
   useEffect(() => {
@@ -423,28 +413,58 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
   } as CSSProperties;
 
   // Penggaris membaca paragraf pertama pilihan; mengubah = bidang itu saja di semua paragraf terpilih.
-  const sasaran = sasaranInden(ed.state);
-  const berlakuDi = (s: SasaranInden) => indenBerlaku(simpananNode(s.node), s.jenis, bawaanDxa, s.kedalaman, s.gantung);
+  const sasaran = sasaranParagraf(ed.state);
+  const berlakuDi = (s: SasaranParagraf) => indenBerlaku(simpananInden(s.node), s.jenis, s.bawaan ?? bawaanDxa, s.kedalaman, s.gantung);
   const indenKini = sasaran[0] ? berlakuDi(sasaran[0]) : indenBawaan('paragraf', bawaanDxa);
   const campur = sasaran.some(s => { const i = berlakuDi(s); return i.kiri !== indenKini.kiri || i.kanan !== indenKini.kanan || i.pertama !== indenKini.pertama; });
-  const punyaIsian = sasaran.some(s => Object.keys(simpananNode(s.node)).length > 0);
-  const terapkanInden = (ubah: (i: Inden, s: SasaranInden) => Partial<Inden> | null) => {
+  const punyaIsian = sasaran.some(s => Object.keys(simpananInden(s.node)).length > 0);
+  const atributInden = (s: SasaranParagraf, ubah: (i: Inden, s: SasaranParagraf) => Partial<Inden> | null) => {
+    const i = berlakuDi(s);
+    const bidang = ubah(i, s);
+    const simpan = bidang ? keTersimpan({ ...i, ...bidang }, s.jenis, s.bawaan ?? bawaanDxa, s.kedalaman, s.gantung) : {};
+    return { indKiri: simpan.kiri ?? null, indKanan: simpan.kanan ?? null, indPertama: simpan.pertama ?? null };
+  };
+  const terapkanInden = (ubah: (i: Inden, s: SasaranParagraf) => Partial<Inden> | null) => {
     const tr = ed.state.tr;
-    for (const s of sasaranInden(ed.state)) {
-      const i = berlakuDi(s);
-      const bidang = ubah(i, s);
-      const simpan = bidang ? keTersimpan({ ...i, ...bidang }, s.jenis, bawaanDxa, s.kedalaman, s.gantung) : {};
-      const a = { indKiri: simpan.kiri ?? null, indKanan: simpan.kanan ?? null, indPertama: simpan.pertama ?? null };
+    for (const s of sasaranParagraf(ed.state)) {
+      const a = atributInden(s, ubah);
       // Nilai sama = jangan menulis: keluar dari isian angka tanpa mengubah apa pun tidak boleh memunculkan Simpan.
       if (a.indKiri === (s.node.attrs.indKiri ?? null) && a.indKanan === (s.node.attrs.indKanan ?? null) && a.indPertama === (s.node.attrs.indPertama ?? null)) continue;
       tr.setNodeMarkup(s.pos, undefined, { ...s.node.attrs, ...a });
     }
     if (tr.docChanged) ed.view.dispatch(tr);
   };
+  const bawaanSpasi = spasiBawaan(gaya?.spaceAfterPt ?? 6, gaya?.lineSpacing ?? 1.5);
+  const spasiKini: Spasi = { ...bawaanSpasi, ...(sasaran[0] ? simpananSpasi(sasaran[0].node) : {}) };
+  // Satu transaksi = satu langkah Undo. Hanya bidang yang diubah di dialog yang mengenai semua paragraf terpilih.
+  function terapkanParagraf(h: { inden: Inden; perataan: PerataanNarasi | null; spasi: Spasi }) {
+    const ubahInden = bidangBerubah(indenKini, h.inden);
+    const ubahSpasi = bidangBerubah(spasiKini, h.spasi);
+    const adaInden = Object.keys(ubahInden).length > 0;
+    const adaSpasi = Object.keys(ubahSpasi).length > 0;
+    const tr = ed.state.tr;
+    for (const s of sasaranParagraf(ed.state)) {
+      const isian = spasiKeTersimpan({ ...bawaanSpasi, ...simpananSpasi(s.node), ...ubahSpasi }, bawaanSpasi);
+      tr.setNodeMarkup(s.pos, undefined, {
+        ...s.node.attrs,
+        ...(adaInden ? atributInden(s, () => ubahInden) : {}),
+        ...(adaSpasi ? { spSebelum: isian.sebelum ?? null, spSesudah: isian.sesudah ?? null, spBaris: isian.baris ?? null } : {}),
+      });
+    }
+    if (h.perataan !== perataanKini) {
+      ed.state.doc.nodesBetween(ed.state.selection.from, ed.state.selection.to, (n, pos) => {
+        if (!n.isTextblock) return true;
+        tr.setNodeMarkup(pos, undefined, { ...n.attrs, textAlign: h.perataan });
+        return false;
+      });
+    }
+    if (tr.docChanged) ed.view.dispatch(tr);
+    ed.view.focus();
+  }
   // Tombol tambah/kurangi: ke kelipatan 0,5 inci berikutnya, seperti Word. Di dalam daftar memindah tingkat,
   // kecuali yang tak bisa pindah (butir pertama; tingkat teratas — mengurangi tidak boleh melepas nomornya).
   const geserKiri = (arah: 1 | -1) => {
-    const posisi = posisiDaftar(ed.state.selection.$from);
+    const posisi = dalamLanjutan(ed.state.selection.$from) ? null : posisiDaftar(ed.state.selection.$from);
     if (posisi && (arah > 0 ? turunTingkat(ed.state, ed.view.dispatch) : posisi.kedalaman > 1 && naikTingkat(ed.state, ed.view.dispatch))) return;
     terapkanInden(i => ({
       kiri: Math.max(0, (arah > 0 ? Math.floor(i.kiri / LANGKAH_BESAR_DXA) + 1 : Math.ceil(i.kiri / LANGKAH_BESAR_DXA) - 1) * LANGKAH_BESAR_DXA),
@@ -456,6 +476,18 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
   const susunanKini = posDaftar ? kodeSusunanDari(susunanPohon(posDaftar.akar)) : null;
   const jalankan = (perintah: (s: typeof ed.state, d: typeof ed.view.dispatch) => boolean) => { const hasil = perintah(ed.state, ed.view.dispatch); ed.view.focus(); return hasil; };
   const tutupSemua = () => { setPop(null); setMenu(null); };
+  // Klik = sekali pakai, klik dua kali = dipakai berkali-kali sampai Esc, seperti Word.
+  const ambilKuas = (tetap: boolean) => aturKuas({ format: ambilFormat(ed.state), tetap });
+  // Menunggu satu putaran: pilihan hasil menyeret baru sampai ke ProseMirror lewat `selectionchange` sesudah mouseup.
+  const sapuKuas = (e: ReactMouseEvent) => {
+    if (!kuasKini || e.button !== 0) return;
+    setTimeout(() => {
+      const k = kuasKini;
+      if (!k) return;
+      terapkanFormat(k.format)(ed.state, ed.view.dispatch);
+      if (!k.tetap) aturKuas(null);
+    }, 0);
+  };
 
   function pilihGaya(k: KodeGaya) {
     if (adalahBullet(k)) setBulletTerakhir(k);
@@ -566,6 +598,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
       { icon: <Copy size={14} />, label: 'Salin', pintasan: 'Ctrl+C', disabled: !adaPilihan, alasan: 'Pilih teks dulu', onClick: () => potongSalin('copy') },
       { icon: <ClipboardPaste size={14} />, label: 'Tempel', pintasan: 'Ctrl+V', disabled: !bisaTempel, alasan: 'Alamat http: peramban melarang menu membaca papan klip. Tekan Ctrl+V.', onClick: () => void tempelDariMenu() },
       { icon: <Eraser size={14} />, label: 'Hapus format', pisah: true, onClick: () => { jalankan(hapusFormat); setMenu(null); } },
+      { icon: <Paintbrush size={14} />, label: 'Kuas format', onClick: () => { ambilKuas(false); setMenu(null); } },
       { icon: <CaseSensitive size={14} />, label: 'Ubah huruf', sub: <PilihanHuruf onPilih={pilihHuruf} /> },
       { icon: <Pilcrow size={14} />, label: 'Paragraf…', onClick: () => { setMenu(null); setModalParagraf(true); } },
       { icon: <ListOrdered size={14} />, label: 'Penomoran', pisah: true, sub: <GaleriNomor aktif={gayaKini} onPilih={pilihGaya} onTanpa={posDaftar ? lepasDaftar : undefined} /> },
@@ -603,6 +636,11 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
           <button type="button" className={`lk-tt-btn lk-tt-popbtn${stabiloKini ? ' on' : ''}`} data-tooltip={tipPop('stabilo', 'Warna stabilo')} data-tooltip-pos="below" aria-label="Warna stabilo" aria-expanded={pop?.jenis === 'stabilo'} onMouseDown={bukaPop('stabilo')}><Highlighter size={14} /></button>
           <button type="button" className="lk-tt-btn lk-tt-popbtn" data-tooltip={tipPop('huruf', 'Ubah huruf (Shift+F3)')} data-tooltip-pos="below" aria-label="Ubah huruf" aria-expanded={pop?.jenis === 'huruf'} onMouseDown={bukaPop('huruf')}><CaseSensitive size={15} /></button>
           {btn(false, () => jalankan(hapusFormat), 'Hapus format', Eraser)}
+          <button type="button" className={`lk-tt-btn${kuas ? ' on' : ''}`} aria-label="Kuas format" aria-pressed={!!kuas}
+            data-tooltip={kuas ? 'Sapukan pada teks tujuan. Esc untuk batal.' : 'Kuas format: klik untuk sekali pakai, klik dua kali untuk berkali-kali'} data-tooltip-pos="below"
+            onMouseDown={e => e.preventDefault()} onClick={() => { if (kuas) aturKuas(null); else ambilKuas(false); }} onDoubleClick={() => ambilKuas(true)}>
+            <Paintbrush size={14} />
+          </button>
           <span className="lk-tt-sep" />
           <span className="lk-tt-belah">
             {btn(!!gayaKini && adalahBullet(gayaKini), () => { if (gayaKini && adalahBullet(gayaKini)) lepasDaftar(); else pilihGaya(bulletTerakhir); }, 'Bullet', List)}
@@ -665,7 +703,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
           onUbah={u => terapkanInden(() => u)} onBawaan={() => terapkanInden(() => null)} />
       )}
       {/* Hanya menangkap klik kanan pengguna; papan ketik sudah ditangani ProseMirror di dalamnya. */}
-      <div onContextMenu={readOnly ? undefined : bukaMenu}>
+      <div className={kuas && !readOnly ? 'lk-tt-kuas' : undefined} onContextMenu={readOnly ? undefined : bukaMenu} onMouseUp={readOnly ? undefined : sapuKuas}>
         <EditorContent editor={editor} className="lk-tt-content" />
       </div>
       {!readOnly && (dirty || jumlahAngka > 0) && (
@@ -692,14 +730,9 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
       )}
       {menu && <RowMenu x={menu.x} y={menu.y} items={itemMenu()} onClose={() => { setMenu(null); ed.view.focus(); }} lebar={252} />}
       {modalParagraf && sasaran[0] && (
-        <ParagrafModal inden={indenKini} jenis={sasaran[0].jenis} perataan={perataanKini}
+        <ParagrafModal inden={indenKini} jenis={sasaran[0].jenis} perataan={perataanKini} spasi={spasiKini}
           onTutup={() => { setModalParagraf(false); ed.view.focus(); }}
-          onTerapkan={h => {
-            setModalParagraf(false);
-            const ubah = bidangBerubah(indenKini, h.inden);
-            if (Object.keys(ubah).length) terapkanInden(() => ubah);
-            if (h.perataan !== perataanKini) aturRata(h.perataan);
-          }} />
+          onTerapkan={h => { setModalParagraf(false); terapkanParagraf(h); }} />
       )}
     </div>
   );
@@ -730,7 +763,10 @@ const TT_CSS = `
   .lk-paragraf label { font-size: 12px; color: #B5D4F4; display: block; }
   .lk-paragraf input { margin-bottom: 0; margin-top: 3px; }
   .lk-paragraf-baris { margin-bottom: 12px; }
-  .lk-paragraf-kisi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .lk-paragraf-judul { font-size: 11.5px; font-weight: 600; color: #85B7EB; margin-bottom: 6px; }
+  [data-theme="light"] .lk-paragraf-judul { color: #1E5FA5; }
+  .lk-paragraf-kisi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .lk-tt-kuas .ProseMirror { cursor: copy; }
   [data-theme="light"] .lk-paragraf select { background: #F9FAFB; color: #374151; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-paragraf select option { background: #FFFFFF; color: #374151; }
   [data-theme="light"] .lk-paragraf label { color: #374151; }
@@ -745,13 +781,17 @@ const TT_CSS = `
      sebanding persis dengan bidang tulis Word (8.788 dxa), berapa pun lebar kartunya. */
   .lk-tt-content .ProseMirror { background: #020F1C; border: 1px solid #0C447C; border-radius: 0 0 6px 6px; color: #E6F1FB; padding: 12px 14px; min-height: 120px; font-family: var(--lk-fontfam, Arial); font-size: var(--lk-font, 13.5px); line-height: var(--lk-lh, 1.5); text-align: var(--lk-align, justify); width: calc(${PX_TULIS}px + 30px); max-width: 100%; box-sizing: border-box; outline: none; container-type: inline-size; --lk-dxa: calc(100cqw / ${LEBAR_DXA}); }
   .lk-tt-content .ProseMirror:focus { border-color: #185FA5; }
-  .lk-tt-content .ProseMirror p { margin: 0 0 var(--lk-after, 8px); }
+  /* Spasi: --s-* milik paragraf itu (ditulis SpasiParagraf), selain itu Pengaturan Dokumen — sama dengan docgen. */
+  .lk-tt-content .ProseMirror p { margin: var(--s-sebelum, 0) 0 var(--s-sesudah, var(--lk-after, 8px)); line-height: var(--s-baris, var(--lk-lh, 1.5)); }
+  /* Tab: kelipatan 1,27 cm seperti tab bawaan Word. */
+  .lk-tt-content .ProseMirror span[data-tab] { white-space: pre; tab-size: calc(720 * var(--lk-dxa)); }
   /* Indent: --i-* milik paragraf itu (ditulis IndenParagraf), selain itu bawaan — sama dengan docgen. */
   .lk-tt-content .ProseMirror > p, .lk-tt-content .ProseMirror > h1, .lk-tt-content .ProseMirror > h2, .lk-tt-content .ProseMirror > h3 { margin-left: calc(var(--i-kiri, 0) * var(--lk-dxa)); margin-right: calc(var(--i-kanan, 0) * var(--lk-dxa)); text-indent: calc(var(--i-pertama, 0) * var(--lk-dxa)); }
   .lk-tt-content .ProseMirror > p { text-indent: calc(var(--i-pertama, var(--lk-indent-dxa, 0)) * var(--lk-dxa)); }
-  .lk-tt-content .ProseMirror h1 { font-size: 1.5em; font-weight: 700; margin-top: 8px; margin-bottom: 6px; }
-  .lk-tt-content .ProseMirror h2 { font-size: 1.3em; font-weight: 700; margin-top: 8px; margin-bottom: 6px; }
-  .lk-tt-content .ProseMirror h3 { font-size: 1.12em; font-weight: 700; margin-top: 6px; margin-bottom: 5px; }
+  .lk-tt-content .ProseMirror h1 { font-size: 1.5em; }
+  .lk-tt-content .ProseMirror h2 { font-size: 1.3em; }
+  .lk-tt-content .ProseMirror h3 { font-size: 1.12em; }
+  .lk-tt-content .ProseMirror h1, .lk-tt-content .ProseMirror h2, .lk-tt-content .ProseMirror h3 { font-weight: 700; margin-top: var(--s-sebelum, 0); margin-bottom: var(--s-sesudah, var(--lk-after, 8px)); line-height: var(--s-baris, var(--lk-lh, 1.5)); }
   /* Daftar digambar sendiri: nomor native selalu menempel di teks, padahal di Word nomor rata kiri di
      kiri + pertama lalu teks di kiri. --lk-abs = posisi teks dari tepi kolom, supaya butir bersarang
      (margin-nya relatif terhadap induk) tetap memakai angka mutlak seperti w:ind. */
@@ -759,7 +799,9 @@ const TT_CSS = `
   .lk-tt-content .ProseMirror ol > li, .lk-tt-content .ProseMirror ul > li { --lk-gantung: ${BUTIR_GANTUNG_DXA}; }
   .lk-tt-content .ProseMirror > ol, .lk-tt-content .ProseMirror > ul { --lk-induk: 0; }
   .lk-tt-content .ProseMirror li > ol, .lk-tt-content .ProseMirror li > ul { --lk-induk: var(--lk-abs); }
-  .lk-tt-content .ProseMirror li { list-style: none !important; position: relative; --i-kiri: initial; --i-kanan: initial; --i-pertama: initial; --lk-abs: var(--i-kiri, calc(var(--lk-induk, 0) + ${BUTIR_KIRI_DXA})); margin-left: calc((var(--lk-abs) - var(--lk-induk, 0)) * var(--lk-dxa)); margin-right: calc(var(--i-kanan, 0) * var(--lk-dxa)); }
+  .lk-tt-content .ProseMirror li { list-style: none !important; position: relative; --s-sebelum: initial; --s-sesudah: initial; --s-baris: initial; line-height: var(--s-baris, var(--lk-lh, 1.5)); --i-kiri: initial; --i-kanan: initial; --i-pertama: initial; --lk-abs: var(--i-kiri, calc(var(--lk-induk, 0) + ${BUTIR_KIRI_DXA})); margin-left: calc((var(--lk-abs) - var(--lk-induk, 0)) * var(--lk-dxa)); margin-right: calc(var(--i-kanan, 0) * var(--lk-dxa)); }
+  /* Paragraf kedua dst. butir: tanpa nomor, rata dengan teks butir kecuali punya indent & spasi sendiri (angka mutlak dari tepi kolom). */
+  .lk-tt-content .ProseMirror li > p:not(:first-child) { --s-sebelum: initial; --s-sesudah: initial; --s-baris: initial; --i-kiri: initial; --i-kanan: initial; --i-pertama: initial; margin-left: calc((var(--i-kiri, var(--lk-abs)) - var(--lk-abs)) * var(--lk-dxa)); margin-right: calc(var(--i-kanan, 0) * var(--lk-dxa)); text-indent: calc(var(--i-pertama, 0) * var(--lk-dxa)); }
   /* Float, bukan absolute: nomor yang lebih lebar dari gantungnya mendorong baris pertama seperti tab Word,
      tidak menimpa teks. Baris berikutnya tetap di kiri. */
   .lk-tt-content .ProseMirror ol > li::before, .lk-tt-content .ProseMirror ul > li::before { float: left; box-sizing: border-box; margin-left: calc(var(--i-pertama, calc(var(--lk-gantung) * -1)) * var(--lk-dxa)); min-width: calc(var(--i-pertama, calc(var(--lk-gantung) * -1)) * -1 * var(--lk-dxa)); padding-right: .25em; user-select: none; }

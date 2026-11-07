@@ -10,8 +10,9 @@ import {
 } from './tabel';
 import { MAX_DEPTH } from './numbering';
 import { judulBabWajib } from './aturan-bab';
-import { atributInden, indentTwips, keTersimpan, BATAS_INDENT_CM, TWIPS_PER_CM, type Inden, type IndenTersimpan } from './halaman';
-import { KODE_DESIMAL, adalahBullet, gantungDxa, gayaDariWord, tagDaftar, tagGaya, teksNomor, type KodeGaya } from './gaya-daftar';
+import { indentTwips, BATAS_INDENT_CM, TWIPS_PER_CM, type Inden, type IndenTersimpan } from './halaman';
+import { gayaDariWord, teksNomor, type KodeGaya } from './gaya-daftar';
+import { susunNarasi } from './susun-daftar';
 import { stabiloDariWord, type KodeStabilo } from './format-teks';
 import {
   BATAS_BERKAS_IMPOR, PESAN_TERLALU_BESAR, JENIS_PENANDA,
@@ -247,7 +248,7 @@ function majukanNomor(p: Penomoran, numId: string, ilvl: number): NumPar | null 
   } else arr[ilvl] = (arr[ilvl] ?? (lv.start ?? dasar?.start ?? 1) - 1) + 1;
   for (let l = ilvl + 1; l < arr.length; l++) arr[l] = undefined;
   p.hitung.set(kunci, arr);
-  return { numId, kunci, ilvl, gaya, nomor: arr[ilvl]!, induk: arr.slice(0, ilvl).map(x => x ?? 1), ind: { ...(dasar?.ind ?? {}), ...lv.ind } };
+  return { numId, kunci, ilvl, gaya, nomor: arr[ilvl]!, induk: Array.from({ length: ilvl }, (_, l) => arr[l] ?? 1), ind: { ...(dasar?.ind ?? {}), ...lv.ind } };
 }
 
 // ── Paragraf ────────────────────────────────────────────────────────────────
@@ -314,7 +315,7 @@ function bacaParagraf(p: El, ctx: Konteks, i: number, toc: boolean): Par {
     for (const x of elemen(r)) {
       switch (x.n) {
         case 'w:t': { const t = teksDalam(x); tambah(t, rPr); par.teksTab += t; break; }
-        case 'w:tab': case 'w:ptab': tambah(' ', rPr); par.teksTab += '\t'; break;
+        case 'w:tab': case 'w:ptab': tambah('\t', rPr); par.teksTab += '\t'; break;
         case 'w:br':
           if (atr(x, 'w:type') === 'page') par.pisahHalaman = true;
           else { tambah('', rPr, true); par.teksTab += ' '; }
@@ -521,11 +522,13 @@ function kumpulkanUnsur(body: El, ctx: Konteks): { unsur: Unsur[]; akhirMelintan
 // ── Narasi → HTML ───────────────────────────────────────────────────────────
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+const TAG_TAB = '<span data-tab="1">\t</span>';
 function htmlBaris(seg: Seg[]): string {
-  const bersih = seg.map(s => ({ ...s, t: s.t.replace(/[\t\u00a0]/g, ' ') }));
-  while (bersih.length && !bersih[0].br && !bersih[0].t.trim()) bersih.shift();
+  const bersih = seg.map(s => ({ ...s, t: s.t.replace(/\u00a0/g, ' ') }));
+  const kosong = (t: string) => !t.includes('\t') && !t.trim();
+  while (bersih.length && !bersih[0].br && kosong(bersih[0].t)) bersih.shift();
   while (bersih.length && (bersih[bersih.length - 1].br || !bersih[bersih.length - 1].t.trim())) bersih.pop();
-  if (bersih.length) { bersih[0].t = bersih[0].t.replace(/^\s+/, ''); const z = bersih[bersih.length - 1]; z.t = z.t.replace(/\s+$/, ''); }
+  if (bersih.length) { bersih[0].t = bersih[0].t.replace(/^ +/, ''); const z = bersih[bersih.length - 1]; z.t = z.t.replace(/\s+$/, ''); }
   let out = '';
   let i = 0;
   while (i < bersih.length) {
@@ -534,8 +537,8 @@ function htmlBaris(seg: Seg[]): string {
     let t = s.t;
     let j = i + 1;
     while (j < bersih.length && !bersih[j].br && bersih[j].b === s.b && bersih[j].i === s.i && bersih[j].u === s.u && bersih[j].s === s.s && (bersih[j].naik ?? null) === (s.naik ?? null) && (bersih[j].stabilo ?? null) === (s.stabilo ?? null)) { t += bersih[j].t; j++; }
-    let h = esc(t.replace(/ {2,}/g, ' '));
-    if (h.trim()) {
+    let h = esc(t.replace(/ {2,}/g, ' ')).replace(/\t/g, TAG_TAB);
+    if (t.trim()) {
       if (s.naik) h = s.naik === 'superscript' ? `<sup>${h}</sup>` : `<sub>${h}</sub>`;
       if (s.stabilo) h = `<mark data-stabilo="${s.stabilo}">${h}</mark>`;
       if (s.s) h = `<s>${h}</s>`;
@@ -549,60 +552,8 @@ function htmlBaris(seg: Seg[]): string {
   return out;
 }
 
-const pembukaP = (jc: string | null, ind = '') => (jc === 'center' ? `<p style="text-align:center"${ind}>` : jc === 'right' || jc === 'end' ? `<p style="text-align:right"${ind}>` : `<p${ind}>`);
-/**
- * Paragraf berurutan → potongan HTML narasi. Tingkat Word jadi daftar bersarang sungguhan selama satu abstrak,
- * jadi Tab/Shift+Tab bekerja dan Word menomorinya sama. Tingkat yang melompat (0 → 2) dipendekkan: posisinya
- * tetap lewat `data-ind-*`, yang ditulis hanya bila berbeda dari bawaan tingkat barunya. Tiap `<ol>` membawa
- * `start` = nomor Word butir pertamanya — daftar yang terpotong paragraf/tabel tetap "2. Misi", tidak kembali ke "1.".
- */
-function htmlNarasi(par: Par[], bawaanDxa: number): string[] {
-  const potong: string[] = [];
-  let html = '';
-  // Butir terakhir tiap daftar dibiarkan terbuka: daftar anaknya masuk ke dalam butir itu.
-  const buka: { kunci: string; ilvl: number; gaya: KodeGaya; berikut: number }[] = [];
-  const tutupSatu = () => { const d = buka.pop(); if (d) html += `</li></${tagGaya(d.gaya)}>`; };
-  const tutupSemua = () => { while (buka.length) tutupSatu(); };
-  for (const p of par) {
-    const isi = htmlBaris(p.seg).slice(0, BATAS_HTML_BLOK - 200);
-    if (!isi) continue;
-    const n = p.num;
-    // +200 = tag & atribut paragraf ini; tiap tingkat terbuka masih butuh penutup.
-    if (html && html.length + isi.length + 200 + buka.length * 10 > BATAS_HTML_BLOK) {
-      // Blok dipecah: daftar yang sedang terbuka dilanjutkan di blok berikutnya dari nomor butir ini.
-      tutupSemua();
-      potong.push(html);
-      html = '';
-    }
-    if (!n) {
-      tutupSemua();
-      html += `${pembukaP(p.jc, atributInden(keTersimpan(p.ind, 'paragraf', bawaanDxa)))}${isi}</p>`;
-      continue;
-    }
-    if (buka.length && buka[buka.length - 1].kunci !== n.kunci) tutupSemua();
-    while (buka.length && buka[buka.length - 1].ilvl > n.ilvl) tutupSatu();
-    // Hitungan sebabstrak dipakai bersama, jadi "daftar baru" terbaca dari nomornya yang melompat.
-    const sama = buka[buka.length - 1];
-    if (sama && sama.ilvl === n.ilvl && (sama.gaya !== n.gaya || (!adalahBullet(n.gaya) && sama.berikut !== n.nomor))) tutupSatu();
-    const puncak = buka[buka.length - 1];
-    // `1.1.` yang induknya terpotong paragraf/tabel: nomor bertingkat hanya benar kalau induknya satu pohon,
-    // jadi nomornya ditulis sebagai teks — tercetak sama dengan berkas asal, cara yang sama dgn butir di sel tabel.
-    if (!puncak && n.gaya === KODE_DESIMAL && n.ilvl > 0) {
-      html += `${pembukaP(p.jc, atributInden(keTersimpan(p.ind, 'paragraf', bawaanDxa)))}${esc(teksNomor(n.gaya, n.nomor, n.induk))} ${isi}</p>`;
-      continue;
-    }
-    if (puncak && puncak.ilvl === n.ilvl) html += '</li>';
-    else {
-      html += tagDaftar(n.gaya, { start: n.nomor });
-      buka.push({ kunci: n.kunci, ilvl: n.ilvl, gaya: n.gaya, berikut: n.nomor });
-    }
-    buka[buka.length - 1].berikut = n.nomor + 1;
-    html += `<li${atributInden(keTersimpan(p.ind, 'butir', 0, buka.length, gantungDxa(n.gaya, buka.length)))}><p>${isi}</p>`;
-  }
-  tutupSemua();
-  if (html) potong.push(html);
-  return potong;
-}
+const htmlNarasi = (par: Par[], bawaanDxa: number): string[] =>
+  susunNarasi(par.map(p => ({ isi: htmlBaris(p.seg).slice(0, BATAS_HTML_BLOK - 200), jc: p.jc, ind: p.ind, num: p.num })), bawaanDxa, BATAS_HTML_BLOK);
 
 // ── Keterangan objek ────────────────────────────────────────────────────────
 const RE_KETERANGAN = /^(Tabel|Gambar|Grafik)\s+(\d{1,3}(?:\.\d{1,3})*)(?=$|[\s.:)\-–—])\s*[.:)\-–—]?\s*(.*)$/i;

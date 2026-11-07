@@ -6,11 +6,13 @@
 import { TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { liftListItem, sinkListItem, wrapRangeInList } from '@tiptap/pm/schema-list';
+import { canSplit } from '@tiptap/pm/transform';
 import {
-  KODE_DESIMAL, SUSUNAN, adalahBullet, bacaSusunan, gayaBawaan, gayaBerikut, gayaSah, susunanPenuh, tagGaya, tulisSusunan,
+  KODE_DESIMAL, SUSUNAN, adalahBullet, bacaSusunan, gantungDxa, gayaBawaan, gayaBerikut, gayaSah, susunanPenuh, tagGaya, tulisSusunan,
   URUTAN_SUSUNAN, type KodeGaya, type KodeSusunan,
 } from './gaya-daftar';
 import { konteksSebelum, modeBerikut, rentangKata, ubahSegmen, type ModeHuruf } from './format-teks';
+import { indenBerlaku, type IndenTersimpan, type JenisInden, type SpasiTersimpan } from './halaman';
 import type { AkarBlok } from './lanjut-daftar';
 
 export type Perintah = (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean;
@@ -236,7 +238,7 @@ export const hapusFormat: Perintah = (state, dispatch) => {
   const tr = state.tr.removeMark(a, b);
   const { paragraph } = state.schema.nodes;
   state.doc.nodesBetween(a, b, (n, pos) => {
-    const ind = { indKiri: null, indKanan: null, indPertama: null };
+    const ind = { indKiri: null, indKanan: null, indPertama: null, spSebelum: null, spSesudah: null, spBaris: null };
     if (n.type.name === 'heading') tr.setNodeMarkup(pos, paragraph, { textAlign: null, ...ind });
     else if (n.type.name === 'paragraph') tr.setNodeMarkup(pos, undefined, { ...n.attrs, textAlign: null, ...ind });
     else if (n.type.name === 'listItem') tr.setNodeMarkup(pos, undefined, { ...n.attrs, ...ind });
@@ -289,3 +291,170 @@ export const ubahHuruf = (mode: ModeHuruf | 'putar'): Perintah => (state, dispat
 
 /** Teks pilihan untuk putaran & penjagaan menu. */
 export const adaPilihanTeks = (state: EditorState) => !state.selection.empty;
+
+// ─── Paragraf di dalam butir ──────────────────────────────────────────────────
+/** Paragraf kedua dst. sebuah butir: tanpa nomor, indent-nya milik paragraf itu sendiri. */
+export const dalamLanjutan = ($p: ResolvedPos) => $p.depth >= 2 && $p.node(-1).type.name === 'listItem' && $p.index(-1) > 0;
+
+export const simpananInden = (n: PMNode): IndenTersimpan => ({
+  ...(n.attrs.indKiri != null ? { kiri: n.attrs.indKiri } : {}),
+  ...(n.attrs.indKanan != null ? { kanan: n.attrs.indKanan } : {}),
+  ...(n.attrs.indPertama != null ? { pertama: n.attrs.indPertama } : {}),
+});
+export const simpananSpasi = (n: PMNode): SpasiTersimpan => ({
+  ...(n.attrs.spSebelum != null ? { sebelum: n.attrs.spSebelum } : {}),
+  ...(n.attrs.spSesudah != null ? { sesudah: n.attrs.spSesudah } : {}),
+  ...(n.attrs.spBaris != null ? { baris: n.attrs.spBaris } : {}),
+});
+
+export interface SasaranParagraf { pos: number; node: PMNode; jenis: JenisInden; kedalaman: number; gantung?: number; bawaan?: number }
+/**
+ * Paragraf yang dikenai penggaris & dialog Paragraf: blok teks di pilihan. Paragraf pertama butir diwakili butirnya
+ * (indent-nya milik tingkat daftar); paragraf kedua dst. berdiri sendiri, bawaannya rata dengan teks butir.
+ */
+export function sasaranParagraf(state: EditorState): SasaranParagraf[] {
+  const hasil = new Map<number, SasaranParagraf>();
+  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
+    if (!node.isTextblock) return true;
+    const $p = state.doc.resolve(pos);
+    let butir: { pos: number; node: PMNode; gaya: KodeGaya } | null = null;
+    let kedalaman = 0;
+    for (let d = $p.depth; d > 0; d--) {
+      if ($p.node(d).type.name !== 'listItem') continue;
+      kedalaman++;
+      butir ??= { pos: $p.before(d), node: $p.node(d), gaya: gayaNode($p.node(d - 1)) };
+    }
+    if (!butir) hasil.set(pos, { pos, node, jenis: node.type.name === 'heading' ? 'judul' : 'paragraf', kedalaman: 1 });
+    else {
+      const gantung = gantungDxa(butir.gaya, kedalaman);
+      if ($p.parent.type.name === 'listItem' && $p.index() > 0) {
+        hasil.set(pos, { pos, node, jenis: 'lanjutan', kedalaman, bawaan: indenBerlaku(simpananInden(butir.node), 'butir', 0, kedalaman, gantung).kiri });
+      } else hasil.set(butir.pos, { pos: butir.pos, node: butir.node, jenis: 'butir', kedalaman, gantung });
+    }
+    return false;
+  });
+  return [...hasil.values()];
+}
+
+/**
+ * Enter di paragraf kedua butir tetap paragraf tanpa nomor, seperti Word. Paragraf kosong jadi butir bernomor baru:
+ * inilah jalan menambah butir sesudah paragraf penjelas, sebab di paragraf pertama Enter membawa penjelasnya ikut turun.
+ */
+export const enterLanjutan: Perintah = (state, dispatch) => {
+  const { $from, empty } = state.selection;
+  if (!dalamLanjutan($from)) return false;
+  const tr = state.tr;
+  if (empty && $from.parent.content.size === 0) {
+    const pos = $from.before();
+    if (!canSplit(state.doc, pos, 1)) return false;
+    dispatch?.(tr.split(pos, 1).scrollIntoView());
+    return true;
+  }
+  if (!empty) tr.deleteSelection();
+  const pos = tr.mapping.map($from.pos);
+  if (!canSplit(tr.doc, pos)) return false;
+  dispatch?.(tr.split(pos).scrollIntoView());
+  return true;
+};
+
+// ─── Tab ──────────────────────────────────────────────────────────────────────
+export const sisipTab: Perintah = (state, dispatch) => {
+  const tipe = state.schema.nodes.tabNarasi;
+  if (!tipe || state.selection.$from.parent.type.spec.code) return false;
+  dispatch?.(state.tr.replaceSelectionWith(tipe.create(), true).scrollIntoView());
+  return true;
+};
+
+/**
+ * Aturan Word: di awal butir (atau pilihan yang menutup seluruh paragraf/beberapa paragraf) Tab menurunkan tingkat;
+ * di tengah kalimat dan di luar daftar ia menyisipkan tab. Di butir yang tak bisa turun Tab tetap dimakan:
+ * `sinkListItem` menolak butir pertama, dan tanpa ini fokus lompat keluar editor.
+ */
+export const tekanTab: Perintah = (state, dispatch) => {
+  const { $from, $to, empty, from, to } = state.selection;
+  if (posisiDaftar($from) && !dalamLanjutan($from)) {
+    const diAwal = empty && $from.parentOffset === 0;
+    const seluruh = !empty && (!$from.sameParent($to) || (from === $from.start() && to === $from.end()));
+    if (diAwal || seluruh) { turunTingkat(state, dispatch); return true; }
+  }
+  return sisipTab(state, dispatch);
+};
+
+// ─── Kuas format ──────────────────────────────────────────────────────────────
+const MARK_KUAS = ['bold', 'italic', 'underline', 'strike', 'superscript', 'subscript', 'stabilo', 'textStyle'] as const;
+const KUNCI_SPASI_NODE = ['spSebelum', 'spSesudah', 'spBaris'] as const;
+const KUNCI_INDEN_NODE = ['indKiri', 'indKanan', 'indPertama'] as const;
+type NilaiNode = Record<string, unknown>;
+/** JSON, bukan simpul ProseMirror: kuas berpindah antar-blok, dan tiap editor punya objek skema sendiri. */
+export interface FormatKuas {
+  marks: { type: string; attrs?: NilaiNode }[];
+  level: number | null;
+  textAlign: unknown;
+  spasi: NilaiNode;
+  /** `null` = sumbernya paragraf pertama butir: indent-nya milik tingkat daftar, tidak ikut dibawa. */
+  inden: NilaiNode | null;
+}
+const pilihAttr = (n: PMNode, kunci: readonly string[]): NilaiNode => Object.fromEntries(kunci.map(k => [k, n.attrs[k] ?? null]));
+
+export function ambilFormat(state: EditorState): FormatKuas {
+  const { selection: { $from, from, to, empty }, doc } = state;
+  let marks = empty ? (state.storedMarks ?? $from.marks()) : null;
+  if (!marks) {
+    let ketemu: PMNode['marks'] | null = null;
+    doc.nodesBetween(from, to, n => {
+      if (!ketemu && n.isInline) ketemu = n.marks;
+      return !ketemu;
+    });
+    marks = ketemu ?? [];
+  }
+  const blok = $from.parent;
+  const butirPertama = $from.depth >= 2 && $from.node(-1).type.name === 'listItem' && $from.index(-1) === 0;
+  return {
+    marks: marks.filter(m => (MARK_KUAS as readonly string[]).includes(m.type.name)).map(m => ({ type: m.type.name, ...(Object.keys(m.attrs).length ? { attrs: { ...m.attrs } } : {}) })),
+    level: blok.type.name === 'heading' ? Number(blok.attrs.level) : null,
+    textAlign: blok.attrs.textAlign ?? null,
+    spasi: pilihAttr(butirPertama ? $from.node(-1) : blok, KUNCI_SPASI_NODE),
+    inden: butirPertama ? null : pilihAttr(blok, KUNCI_INDEN_NODE),
+  };
+}
+
+/**
+ * Format huruf mengenai teks terpilih; tanpa pilihan, kata di kursor. Format paragraf hanya mengenai paragraf yang
+ * SELURUH teksnya terpilih: menyapu satu kata di tengah paragraf tidak boleh mengubah perataan seluruh paragraf.
+ * Daftar sengaja tidak ikut: format daftar milik pohonnya (`samakanPohon`), bukan milik paragraf.
+ */
+export const terapkanFormat = (f: FormatKuas): Perintah => (state, dispatch) => {
+  const { selection: { from, to, empty, $from }, doc, schema } = state;
+  let a = from, b = to;
+  if (empty) {
+    const [x, y] = rentangKata($from.parent.textBetween(0, $from.parent.content.size, '\n', PENGGANTI_ATOM), $from.parentOffset);
+    a = $from.start() + x;
+    b = $from.start() + y;
+  }
+  const tr = state.tr;
+  const marksBaru = f.marks.flatMap(m => (schema.marks[m.type] ? [schema.marks[m.type].create(m.attrs)] : []));
+  if (a < b) {
+    for (const nama of MARK_KUAS) if (schema.marks[nama]) tr.removeMark(a, b, schema.marks[nama]);
+    for (const m of marksBaru) tr.addMark(a, b, m);
+  }
+  doc.nodesBetween(from, to, (n, pos, induk, indeks) => {
+    if (!n.isTextblock) return true;
+    const awal = pos + 1;
+    if (from > awal || to < awal + n.content.size) return false;
+    const diButir = induk?.type.name === 'listItem';
+    if (diButir && indeks === 0) {
+      tr.setNodeMarkup(pos, undefined, { ...n.attrs, textAlign: f.textAlign });
+      tr.setNodeMarkup(pos - 1, undefined, { ...induk.attrs, ...f.spasi });
+      return false;
+    }
+    const attrs = { ...n.attrs, textAlign: f.textAlign, ...f.spasi, ...(f.inden ?? {}) };
+    if (induk?.type.name !== 'doc') tr.setNodeMarkup(pos, undefined, attrs);
+    else if (f.level !== null) tr.setNodeMarkup(pos, schema.nodes.heading, { ...attrs, level: f.level });
+    else tr.setNodeMarkup(pos, schema.nodes.paragraph, attrs);
+    return false;
+  });
+  // Paragraf kosong: tak ada teks untuk diberi tanda, jadi ketikan berikutnya yang memakainya.
+  if (empty && a === b) tr.setStoredMarks(marksBaru);
+  if (tr.docChanged || (empty && a === b)) dispatch?.(tr);
+  return true;
+};

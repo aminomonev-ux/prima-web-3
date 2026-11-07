@@ -54,7 +54,9 @@ export function cmTeks(dxa: number): string {
 // sumber kembali utuh sesudah impor-ekspor. `pertama` bertanda: positif = baris pertama menjorok,
 // negatif = gantung. Baris pertama mulai di `kiri + pertama`, baris berikutnya di `kiri`.
 
-export type JenisInden = 'paragraf' | 'judul' | 'butir';
+// `lanjutan` = paragraf tanpa nomor di dalam butir: bawaannya rata dengan teks butir, jadi `bawaanDxa` berisi
+// `kiri` butir itu. Isiannya tetap angka mutlak dari tepi kolom, sama seperti `w:ind` paragraf biasa.
+export type JenisInden = 'paragraf' | 'judul' | 'butir' | 'lanjutan';
 export interface Inden { kiri: number; kanan: number; pertama: number }
 /** Yang tersimpan di paragraf. Kunci yang tidak ada = ikut bawaan (setelan dokumen / tingkat daftar). */
 export type IndenTersimpan = Partial<Inden>;
@@ -108,6 +110,7 @@ export function jepitInden(i: Inden, jenis: JenisInden): Inden {
 /** Yang berlaku kalau paragraf ini tidak punya isian sendiri. */
 export function indenBawaan(jenis: JenisInden, bawaanDxa = 0, kedalaman = 1, gantung = BUTIR_GANTUNG_DXA): Inden {
   if (jenis === 'butir') return { kiri: BUTIR_KIRI_DXA * Math.max(1, kedalaman), kanan: 0, pertama: -gantung };
+  if (jenis === 'lanjutan') return { kiri: bawaanDxa, kanan: 0, pertama: 0 };
   return { kiri: 0, kanan: 0, pertama: jenis === 'paragraf' ? bawaanDxa : 0 };
 }
 
@@ -189,10 +192,57 @@ export function posisiPenanda(i: Inden, penanda: Penanda): number {
 }
 
 /** Bidang yang berubah antara dua keadaan — dipakai untuk menerapkannya ke semua paragraf terpilih. */
-export function bidangBerubah(lama: Inden, baru: Inden): Partial<Inden> {
-  const hasil: Partial<Inden> = {};
-  for (const k of KUNCI_INDEN) if (lama[k] !== baru[k]) hasil[k] = baru[k];
+export function bidangBerubah<T extends Inden | Spasi>(lama: T, baru: T): Partial<T> {
+  const hasil: Partial<T> = {};
+  for (const k of Object.keys(baru) as (keyof T)[]) if (lama[k] !== baru[k]) hasil[k] = baru[k];
   return hasil;
+}
+
+// ─── Spasi per paragraf ───────────────────────────────────────────────────────
+// Bahasa Word juga: `sebelum`/`sesudah` dalam twips (20 = 1 pt), `baris` dalam 1/240 baris (`w:line`,
+// `w:lineRule="auto"`: 360 = 1,5). Kunci yang tidak ada = ikut Pengaturan Dokumen. Tinggi baris pasti
+// ("exactly"/"at least") sengaja tidak ada: dokumen ini menulis spasi sebagai kelipatan.
+export interface Spasi { sebelum: number; sesudah: number; baris: number }
+export type SpasiTersimpan = Partial<Spasi>;
+const KUNCI_SPASI = ['sebelum', 'sesudah', 'baris'] as const;
+const BATAS_SPASI: Record<keyof Spasi, [number, number]> = { sebelum: [0, 4000], sesudah: [0, 4000], baris: [120, 1440] };
+const polaSpasi = (k: string) => new RegExp(`(?<![-a-zA-Z])data-sp-${k}\\s*=\\s*["']?(\\d{1,5})(?=["'\\s/>]|$)`);
+const POLA_SPASI = { sebelum: polaSpasi('sebelum'), sesudah: polaSpasi('sesudah'), baris: polaSpasi('baris') };
+export const jepitSpasi = (s: Spasi): Spasi => ({
+  sebelum: jepit(Math.round(s.sebelum), ...BATAS_SPASI.sebelum),
+  sesudah: jepit(Math.round(s.sesudah), ...BATAS_SPASI.sesudah),
+  baris: jepit(Math.round(s.baris), ...BATAS_SPASI.baris),
+});
+export function bacaSpasi(tag: string): SpasiTersimpan {
+  const hasil: SpasiTersimpan = {};
+  for (const k of KUNCI_SPASI) {
+    const m = POLA_SPASI[k].exec(tag);
+    if (m) hasil[k] = jepit(Number(m[1]), ...BATAS_SPASI[k]);
+  }
+  return hasil;
+}
+export function atributSpasi(s: SpasiTersimpan): string {
+  return KUNCI_SPASI.filter(k => s[k] !== undefined).map(k => ` data-sp-${k}="${Math.round(s[k]!)}"`).join('');
+}
+/** Yang ditulis `pPrDefault` di docgen — paragraf tanpa isian sendiri mengikuti ini. */
+export const spasiBawaan = (spaceAfterPt: number, lineSpacing: number): Spasi => ({
+  sebelum: 0, sesudah: Math.round(spaceAfterPt * 20), baris: Math.round(lineSpacing * 240),
+});
+/** Hanya simpan yang berbeda dari bawaan, seperti indent: paragraf yang kembali ke bawaan ikut Pengaturan Dokumen lagi. */
+export function spasiKeTersimpan(s: Spasi, bawaan: Spasi): SpasiTersimpan {
+  const j = jepitSpasi(s);
+  const hasil: SpasiTersimpan = {};
+  for (const k of KUNCI_SPASI) if (j[k] !== bawaan[k]) hasil[k] = j[k];
+  return hasil;
+}
+/** `<w:spacing>`; '' bila tidak ada isian. CT_PPr: numPr → spacing → ind → jc. */
+export function xmlSpasi(s: SpasiTersimpan | null | undefined): string {
+  if (!s) return '';
+  const a: string[] = [];
+  if (s.sebelum !== undefined) a.push(`w:before="${s.sebelum}"`);
+  if (s.sesudah !== undefined) a.push(`w:after="${s.sesudah}"`);
+  if (s.baris !== undefined) a.push(`w:line="${s.baris}"`, 'w:lineRule="auto"');
+  return a.length ? `<w:spacing ${a.join(' ')}/>` : '';
 }
 
 /** "Kiri 0 · Kanan 0 · Baris pertama 1,27 cm" — teks yang sama dengan isian di panel. */

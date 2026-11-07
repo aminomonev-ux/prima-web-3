@@ -8,7 +8,7 @@ import { FONT_CHOICES } from './style-constants';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 import { BATAS_BARIS_TANGAN } from './tautan';
-import { atributInden, bacaInden } from './halaman';
+import { atributInden, atributSpasi, bacaInden, bacaSpasi } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, gayaDariTagDaftar, susunanDariTag, tagDaftar } from './gaya-daftar';
 import { BATAS_PT, POLA_STABILO, stabiloSah } from './format-teks';
 import { BATAS_ALASAN_HAPUS_FINAL } from './hapus-dokumen';
@@ -66,6 +66,7 @@ export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12,
 
 // Sanitizer narasi (server-safe, no DOM) — whitelist tag, buang semua atribut.
 // Defense-in-depth: Tiptap re-parse saat load + docgen parse ke OOXML (bukan innerHTML).
+const POLA_TAB_NARASI = /(?<![-a-zA-Z])data-tab\s*=/;
 const NARASI_ALLOWED_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'span', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'sup', 'sub', 'mark', 'ul', 'ol', 'li']);
 export function sanitizeNarasiHtml(html: string): string {
   if (!html) return '';
@@ -75,14 +76,14 @@ export function sanitizeNarasiHtml(html: string): string {
     if (!NARASI_ALLOWED_TAGS.has(t)) return '';
     if (t === 'br') return '<br>';
     if (m.startsWith('</')) return `</${t}>`;
-    // Hanya izinkan text-align (4 nilai enum) + indent paragraf (angka dxa) pada <p>/<hN>/<li>. Output
+    // Hanya izinkan text-align (4 nilai enum) + indent & spasi paragraf (angka) pada <p>/<hN>/<li>. Output
     // dibentuk dari literal enum & angka, bukan echo atribut user → tak ada vektor XSS. Atribut lain dibuang.
     if (t === 'p' || t === 'h1' || t === 'h2' || t === 'h3') {
       const al = /text-align\s*:\s*(left|center|right|justify)/i.exec(String(attrs || ''));
       const gaya = al ? ` style="text-align:${al[1].toLowerCase()}"` : '';
-      return `<${t}${gaya}${atributInden(bacaInden(String(attrs || '')))}>`;
+      return `<${t}${gaya}${atributInden(bacaInden(String(attrs || '')))}${atributSpasi(bacaSpasi(String(attrs || '')))}>`;
     }
-    if (t === 'li') return `<li${atributInden(bacaInden(String(attrs || '')))}>`;
+    if (t === 'li') return `<li${atributInden(bacaInden(String(attrs || '')))}${atributSpasi(bacaSpasi(String(attrs || '')))}>`;
     // <span>: hanya color (hex/rgb) + font-size (pt 4-72, px 6-72 untuk isi lama). Output dibentuk dari nilai
     // tervalidasi (hex/digit), bukan echo atribut user → tak ada vektor XSS.
     // <ol>/<ul>: format hanya dari daftar tertutup `gaya-daftar.ts`; tag dibentuk ulang dari tabelnya, bukan echo atribut.
@@ -102,6 +103,7 @@ export function sanitizeNarasiHtml(html: string): string {
       // Rujukan silang ke Tabel/Gambar/Grafik (konsep tabel-excel §12.5): id blok, angka saja.
       const rujuk = /(?<![-a-zA-Z])data-rujuk\s*=\s*["'](\d{1,12})["']/.exec(String(attrs || ''));
       if (rujuk) return `<span data-rujuk="${rujuk[1]}">`;
+      if (POLA_TAB_NARASI.test(String(attrs || ''))) return '<span data-tab="1">';
       const out: string[] = [];
       const col = /(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))/i.exec(String(attrs || ''));
       if (col) out.push(`color:${col[1].toLowerCase().replace(/\s+/g, '')}`);

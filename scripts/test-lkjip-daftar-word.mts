@@ -75,7 +75,7 @@ ok('A16 1.1. ber-isLgl sesudah numFmt (urutan CT_Lvl)', /<w:numFmt w:val="decima
 const css = cssGayaDaftar('.X')
 ok('A17 CSS: tiap format punya aturan isi', GAYA_NOMOR.every(k => css.includes(`.X ol[data-gaya="${k}"] > li::before`)) && GAYA_BULLET.every(k => css.includes(`.X ul[data-gaya="${k}"] > li::before { content: "${k}"; }`)))
 ok('A18 CSS: bentuk nomor benar', css.includes('ol[data-gaya="(a)"] > li::before { content: "(" counter(list-item, lower-alpha) ")"; }') && css.includes('ol[data-gaya="1)"] > li::before { content: counter(list-item) ")"; }') && css.includes('ol[data-gaya="I."] > li::before { content: counter(list-item, upper-roman) "."; }') && css.includes('ol[data-gaya="1.1."] > li::before { content: counters(list-item, ".") "."; }'))
-ok('A19 CSS: gantung gaya lebar & tingkat 1.1.', css.includes('ol[data-gaya="I."] > li { --lk-gantung: 540; }') && css.includes('ol[data-gaya="1.1."] ol[data-gaya="1.1."] > li { --lk-gantung: 520; }') && css.includes(`ol[data-gaya="1.1."] ol[data-gaya="1.1."] ol[data-gaya="1.1."] > li { --lk-gantung: 680; }`))
+ok('A19 CSS: gantung gaya lebar & tingkat 1.1.', css.includes('ol[data-gaya="I."] > li { --lk-gantung: 540; }') && css.includes(':is(ol, ul) ol[data-gaya="1.1."] > li { --lk-gantung: 520; }') && css.includes(':is(ol, ul) :is(ol, ul) ol[data-gaya="1.1."] > li { --lk-gantung: 680; }'))
 const dariWord: [string, string | null, KodeGaya | null][] = [
   ['decimal', '%1.', '1.'], ['decimal', '%2.', '1.'], ['decimal', '%1)', '1)'], ['decimal', '(%3)', '(1)'], ['lowerLetter', '%1.', 'a.'], ['lowerLetter', '%1)', 'a)'], ['upperLetter', '%1.', 'A.'],
   ['upperRoman', '%1.', 'I.'], ['lowerRoman', '%2)', 'i)'], ['decimal', '%1.%2.', '1.1.'], ['decimal', '%1.%2', '1.1.'], ['decimal', '1.%1', '1.'], ['decimal', '3.%1.', '1.'], ['decimal', 'Bab %1', '1.'], ['decimal', '%1', '1.'],
@@ -429,7 +429,9 @@ const g5 = narasiDari(berkas(judul + par('A', nP(1)) + par('sisip') + par('B', n
 ok('G5 terpotong paragraf: lanjut dari nomornya, anak tetap bersarang', g5 === '<ol><li><p>A</p></li></ol><p>sisip</p><ol start="2"><li><p>B</p><ol data-gaya="a)"><li><p>b1</p></li></ol></li></ol>', g5)
 const g6 = narasiDari(berkas(judul + par('X', nP(5)) + par('Y', nP(5, 1)) + par('sisip') + par('Z', nP(5, 1)) + par('W', nP(5)), numUji))
 ok('G6 %1.%2. → 1.1. bersarang selama induknya satu pohon', g6.startsWith('<ol><li><p>X</p><ol data-gaya="1.1."><li') && g6.includes('Y'), g6)
-ok('G6b 1.1. yang induknya terpotong paragraf: nomor jadi teks, tercetak sama dgn asal; daftar sesudahnya lanjut', g6.includes('>1.2. Z</p>') && g6.includes('<ol start="2"><li><p>W</p></li></ol>'), g6)
+ok('G6b paragraf tanpa nomor di antara 1.1.: masuk ke butirnya, nomor tetap otomatis, daftar sesudahnya tetap satu pohon', g6.includes('<p>Y</p><p data-ind-kiri="0">sisip</p></li><li data-ind-pertama="-360"><p>Z</p></li></ol></li><li><p>W</p></li></ol>'), g6)
+const g6c = narasiDari(berkas(judul + par('Z', nP(5, 1)) + par('W', nP(5)), numUji))
+ok('G6c 1.1. tanpa induk sama sekali: nomor jadi teks, tercetak sama dgn asal', g6c.startsWith('<p') && g6c.includes('>1.1. Z</p>'), g6c)
 const g7 = narasiDari(berkas(judul + par('m', '', '<w:vertAlign w:val="superscript"/>') + par('n', '', '<w:vertAlign w:val="subscript"/><w:highlight w:val="cyan"/>'), ''))
 ok('G7 super/subscript & stabilo terbawa', g7.includes('<sup>m</sup>') && g7.includes('<mark data-stabilo="biru"><sub>n</sub></mark>'), g7)
 const g8 = narasiDari(berkas(judul + par('A', nP(1)) + par('Z', nP(2)), numUji))
@@ -453,7 +455,7 @@ const iw = kode('lib/lkjip/impor-word.ts')
 const badan = (s: string, awal: string) => { const i = s.indexOf(awal); if (i < 0) return ''; let d = 0, j = s.indexOf('{', i); const m = j; for (; j < s.length; j++) { if (s[j] === '{') d++; else if (s[j] === '}' && --d === 0) break; } return s.slice(m, j + 1) }
 ok('H1 ekstensi terpasang', /StarterKit\.configure\(\{ link: false, trailingNode: false \}\), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo,/.test(tt))
 ok('H2 CSS gaya dari satu sumber + gantung bawaan', tt.includes("cssGayaDaftar('.lk-tt-content .ProseMirror')") && /--lk-gantung: \$\{BUTIR_GANTUNG_DXA\}/.test(tt) && tt.includes('var(--i-pertama, calc(var(--lk-gantung) * -1))'))
-ok('H3 penggaris memakai gantung gaya', tt.includes('indenBerlaku(simpananNode(s.node), s.jenis, bawaanDxa, s.kedalaman, s.gantung)') && tt.includes('keTersimpan({ ...i, ...bidang }, s.jenis, bawaanDxa, s.kedalaman, s.gantung)') && tt.includes('gantungDxa(butir.gaya, kedalaman)'))
+ok('H3 penggaris memakai gantung gaya', tt.includes('indenBerlaku(simpananInden(s.node), s.jenis, s.bawaan ?? bawaanDxa, s.kedalaman, s.gantung)') && tt.includes('keTersimpan({ ...i, ...bidang }, s.jenis, s.bawaan ?? bawaanDxa, s.kedalaman, s.gantung)') && kode('lib/lkjip/perintah-narasi.ts').includes('const gantung = gantungDxa(butir.gaya, kedalaman);'))
 ok('H4 tidak ada lagi jejak a,b lama', !tt.includes('listType') && !tt.includes('lk-tt-abc') && !tt.includes('OrderedListType'))
 ok('H5 menu klik kanan hanya untuk dokumen yang bisa disunting', tt.includes('onContextMenu={readOnly ? undefined : bukaMenu}'))
 const bm = badan(tt, 'function bukaMenu(')
@@ -477,7 +479,7 @@ ok('H20 impor tidak lagi memperingatkan romawi', !iw.includes('romawi jadi') && 
 ok('H21 aturan format lewat satu sumber: tak ada regex type=a di docgen & lanjut-daftar', !/type\\s\*=/.test(kode('lib/lkjip/docgen.ts')) && !/type\\s\*=/.test(kode('lib/lkjip/lanjut-daftar.ts')))
 
 const ex = kode('lib/lkjip/ekstensi-narasi.ts')
-ok('H22 Tab/Shift+Tab di daftar selalu dimakan (butir pertama: fokus tidak lompat keluar editor)', /turunTingkat\(state, view\.dispatch\);\s*return true;/.test(ex) && /naikTingkat\(state, view\.dispatch\);\s*return true;/.test(ex))
+ok('H22 Tab/Shift+Tab di daftar selalu dimakan (butir pertama: fokus tidak lompat keluar editor)', /return tekanTab\(state, view\.dispatch\);/.test(ex) && /if \(diAwal \|\| seluruh\) \{ turunTingkat\(state, dispatch\); return true; \}/.test(kode('lib/lkjip/perintah-narasi.ts')) && /naikTingkat\(state, view\.dispatch\);\s*return true;/.test(ex))
 ok('H23 penggaris & menu memakai format di kursor', tt.includes('const gayaKini = posDaftar ? gayaNode(posDaftar.daftar) : null') && tt.includes('kodeSusunanDari(susunanPohon(posDaftar.akar))'))
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
