@@ -123,6 +123,14 @@ Tiap gambar yang dibuka tetap menulis satu baris audit `FILE_DOWNLOAD`, seperti 
 - **Izin:** cabang `lkjip` dikunci pada context berkas.
 - Uji mutasi untuk semua bagian di atas.
 
-Kalibrasi Microsoft Word, berkas pemilik impor → ekspor: 17 gambar dibanding ukuran asal, selisih ≤ 1 pt kecuali 5 yang diperkecil ke 15,5 cm; gambar no. 14 potongannya sama.
+**Kalibrasi Word 2026-11-07** — berkas pemilik `LKJIP Amino 2025.docx` diimpor lewat §G skrip uji: **17 gambar** semuanya berukuran, **5 diperkecil** ke 15,5 cm dan disebut di peringatan, **1 berpotongan** (`a:srcRect` sama), semua lolos `parseBlockPayload`. Skrip: 115 lulus, 0 gagal (A–G).
 
-Peramban pada kotak pasir 2099 dengan akun dummy: unggah, pratinjau, isi Lebar, Simpan, Ganti gambar, spanduk gepeng, akun non-admin melihat gambar rekannya, tema terang, 375 px. Uji ini mengunggah gambar kecil ke Drive sungguhan; nama berkasnya dilaporkan.
+**Peramban 2026-11-07** — kotak pasir 2099, dokumen uji 436, akun `uji.lkjip.a`/`b`/`c` (sudah dihapus):
+
+- Pratinjau keempat blok termuat lewat `/api/upload/download` (200), angka "Di Word" 9,7 × 7,28 · 9 × 6,75 · 8 × 3 · 6 × 8 cm; blok berpotongan memakai bingkai 8 × 3 cm.
+- Isi Lebar 9,7 → Simpan menulis `lebarEmu` 3492000 + audit `LKJIP_BLOCK_UPDATE`; muat ulang mempertahankan angka, penanda belum tersimpan bersih.
+- Kembalikan proporsi → 9 × 6,75, spanduk gepeng hilang, Simpan menyimpan `tinggiEmu: null`.
+- Grafik bergambar hanya punya Lebar; grafik bersumber data menampilkan petunjuk "Tinggi mengikuti grafik".
+- Tema terang: teks isian #374151 di kotak putih (`rgba(0,0,0,.15)`), 375 px tanpa geser mendatar.
+- Akun rekan `uji.lkjip.b` membuka dokumen yang sama dan **semua gambar termuat** (naturalWidth 800/300) — inti §7. Akun `uji.lkjip.c` (tanpa `lkjip`) dialihkan dari `/lkjip/436` ke `/menu` dan unduhan berkasnya **403**.
+- Unggah berkas baru tidak diulang putaran ini (gambarnya sudah ada di Drive); jalur Ganti gambar ditutup uji E5.
