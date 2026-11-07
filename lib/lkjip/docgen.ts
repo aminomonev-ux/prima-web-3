@@ -288,6 +288,11 @@ export function narasiToXml(html: string, font: string, sz: number, indentTwips 
           }
           break;
         case 'br':  runs.push(`<w:r>${curRpr()}<w:br/></w:r>`); break;
+        case 'hr':
+          if (dalamButir()) tulisButir();
+          else flush();
+          paras.push(pageBreak());
+          break;
         case 'strong': case 'b': marks.b = !closing; break;
         case 'em':     case 'i': marks.i = !closing; break;
         case 'u': marks.u = !closing; break;

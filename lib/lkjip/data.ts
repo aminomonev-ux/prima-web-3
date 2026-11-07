@@ -12,6 +12,7 @@ import {
 import { parseBlockPayload, DEFAULT_STYLE, StyleConfigSchema, type StyleConfig, type BlockTipe, type DokumenQuery, type SectionCreate, type SectionMove } from './schemas';
 import { JUDUL_BAB_WAJIB, ALASAN_BAB, putusanPindah } from './aturan-bab';
 import { alasanTolakHapus, type IsianHapus, type TolakHapus } from './hapus-dokumen';
+import { gantiDiDokumen, type HasilGanti, type OpsiCari, type TempatTemuan } from './cari-ganti';
 import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 
 export class LkjipVersionConflictError extends Error {
@@ -482,6 +483,48 @@ export async function updateBlock(id: number, rawPayload: unknown): Promise<void
   if (row.status === 'FINAL') throw new LkjipFinalError();
   const payload = parseBlockPayload(row.tipe, rawPayload);
   await sql`UPDATE lkjip_block SET payload = ${JSON.stringify(payload)} WHERE id = ${id}`;
+}
+
+/**
+ * Cari & Ganti seluruh dokumen (konsep daftar-word §11). Satu transaksi: dokumen lalu blok dikunci, isi TERBARU dibaca
+ * di bawah kunci itu, dan tiap blok lewat skema simpan yang sama. Satu blok tak lolos = semuanya batal.
+ */
+export async function gantiTeksDokumen(id: number, opsi: OpsiCari, dengan: string, sasaran: { tempat: TempatTemuan; ke: number } | undefined, userId: number): Promise<HasilGanti> {
+  return withTransaction(async ({ tx }) => {
+    await kunciDokumenDraft(tx, id);
+    const dok = await tx`SELECT style_config FROM lkjip_dokumen WHERE id = ${id}` as Array<{ style_config: unknown }>;
+    const cfgMentah = dok[0]?.style_config;
+    const cfg = StyleConfigSchema.parse((typeof cfgMentah === 'string' ? safeJson(cfgMentah) : cfgMentah) ?? {});
+    const sections = await tx`SELECT id, parent_id, depth, urutan, judul, locked FROM lkjip_section WHERE dokumen_id = ${id}` as SectionFlat[];
+    const blokPer = new Map<number, BlockNode[]>();
+    const tipeBlok = new Map<number, BlockTipe>();
+    if (sections.length) {
+      const blocks = await tx`
+        SELECT id, section_id, tipe, payload, urutan FROM lkjip_block
+        WHERE section_id IN (${sections.map(s => Number(s.id))}) FOR UPDATE
+      ` as (BlockNode & { section_id: number })[];
+      for (const b of blocks) {
+        const sid = Number(b.section_id);
+        tipeBlok.set(Number(b.id), b.tipe);
+        blokPer.set(sid, [...(blokPer.get(sid) ?? []), { id: Number(b.id), tipe: b.tipe, payload: typeof b.payload === 'string' ? safeJson(b.payload) : b.payload, urutan: Number(b.urutan ?? 0) }]);
+      }
+    }
+    const tree = buildNumberedTree(sections.map(s => ({
+      id: Number(s.id), parent_id: s.parent_id == null ? null : Number(s.parent_id), depth: Number(s.depth ?? 0),
+      urutan: Number(s.urutan ?? 0), judul: String(s.judul ?? ''), locked: Number(s.locked ?? 0),
+    })), blokPer);
+    const hasil = gantiDiDokumen({ tree, kataPengantarHtml: cfg.kataPengantarHtml ?? '' }, opsi, dengan, sasaran);
+    if (!hasil.jumlah) return hasil;
+    for (const b of hasil.blok) {
+      const payload = parseBlockPayload(tipeBlok.get(b.id)!, b.payload);
+      await tx`UPDATE lkjip_block SET payload = ${JSON.stringify(payload)} WHERE id = ${b.id}`;
+    }
+    for (const j of hasil.judulBab) await tx`UPDATE lkjip_section SET judul = ${j.judul} WHERE id = ${j.id} AND dokumen_id = ${id}`;
+    const gayaBaru = hasil.pengantar === null ? null : JSON.stringify(StyleConfigSchema.parse({ ...cfg, kataPengantarHtml: hasil.pengantar }));
+    // Versi naik: tab lain yang masih memegang Pengaturan lama kena 409, bukan menulis balik Kata Pengantar lama.
+    await tx`UPDATE lkjip_dokumen SET style_config = COALESCE(${gayaBaru}, style_config), version = version + 1, updated_by = ${userId} WHERE id = ${id}`;
+    return hasil;
+  });
 }
 
 export async function reorderBlocks(sectionId: number, order: number[]): Promise<void> {

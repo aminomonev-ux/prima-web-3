@@ -11,7 +11,7 @@ import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, ListTree, ListRestart, ListPlus, ListStart, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus, IndentIncrease, IndentDecrease, Undo2, Redo2, Eraser, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Highlighter, CaseSensitive, ChevronDown, Scissors, Copy, ClipboardPaste, Pilcrow, Paintbrush } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, ListOrdered, ListTree, ListRestart, ListPlus, ListStart, AlignLeft, AlignCenter, AlignRight, AlignJustify, Heading2, Heading3, Save, Hash, RefreshCw, BookmarkPlus, IndentIncrease, IndentDecrease, Undo2, Redo2, Eraser, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Highlighter, CaseSensitive, ChevronDown, Scissors, Copy, ClipboardPaste, Pilcrow, Paintbrush, SeparatorHorizontal } from 'lucide-react';
 import type { ObjekRujukan } from '@/lib/lkjip/numbering';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog, promptDialog } from '@/components/ui/ConfirmDialog';
@@ -23,11 +23,13 @@ import type { HasilTarik } from '@/lib/lkjip/tautan';
 import { mulaiDaftarBlok, type LanjutanBlok } from '@/lib/lkjip/lanjut-daftar';
 import { adalahBullet, cssGayaDaftar, gayaBawaan, type KodeBullet, type KodeGaya, type KodeNomor, type KodeSusunan, SUSUNAN } from '@/lib/lkjip/gaya-daftar';
 import { STABILO, UKURAN_PT, ptDariCss, type KodeStabilo, type ModeHuruf } from '@/lib/lkjip/format-teks';
-import { GayaDaftar, SpasiParagraf, Stabilo, Subskrip, Superskrip, TabNarasi } from '@/lib/lkjip/ekstensi-narasi';
+import { GayaDaftar, PemisahHalaman, SpasiParagraf, Stabilo, Subskrip, Superskrip, TabNarasi } from '@/lib/lkjip/ekstensi-narasi';
+import { polaCariTeks, type OpsiCari } from '@/lib/lkjip/cari-ganti';
+import { dengarSorotCari, sorotCariKini } from '@/lib/lkjip/sorot-cari';
 import { tempelDariWord } from '@/lib/lkjip/tempel-word';
 import {
   akarBlokDari, adaPilihanTeks, ambilFormat, aturGayaTingkat, aturLanjut, aturNomorAwal, aturSusunan, bungkusDaftar, dalamLanjutan, gayaNode, hapusFormat, indeksAkar, kodeSusunanDari,
-  mulaiUlangDariSatu, naikTingkat, nomorTerkunciDesimal, posisiDaftar, sasaranParagraf, simpananInden, simpananSpasi, susunanPohon, terapkanFormat, turunTingkat, ubahHuruf,
+  mulaiUlangDariSatu, naikTingkat, nomorTerkunciDesimal, posisiDaftar, sasaranParagraf, simpananInden, simpananSpasi, sisipPemisahHalaman, susunanPohon, terapkanFormat, turunTingkat, ubahHuruf,
   type FormatKuas, type SasaranParagraf,
 } from '@/lib/lkjip/perintah-narasi';
 import {
@@ -209,6 +211,36 @@ const IndenParagraf = Extension.create({
   },
 });
 
+// Sorotan Cari & Ganti: dekorasi, tidak pernah menyentuh isi blok. Aturannya `polaCariTeks`, sama dengan panelnya.
+const KUNCI_SOROT = new PluginKey<OpsiCari | null>('lkjipSorotCari');
+function dekorSorot(doc: PMNode, o: OpsiCari | null): DecorationSet {
+  const pola = o ? polaCariTeks(o) : null;
+  if (!pola) return DecorationSet.empty;
+  const dekor: Decoration[] = [];
+  doc.descendants((n, pos) => {
+    if (!n.isTextblock) return true;
+    // Tiap simpul atom = satu huruf pengganti, jadi letak di teks sama dengan letak di dokumen.
+    for (const m of n.textBetween(0, n.content.size, undefined, '\uFFFC').matchAll(pola)) {
+      dekor.push(Decoration.inline(pos + 1 + m.index, pos + 1 + m.index + m[0].length, { class: 'lk-cari-sorot' }));
+    }
+    return false;
+  });
+  return dekor.length ? DecorationSet.create(doc, dekor) : DecorationSet.empty;
+}
+const SorotCari = Extension.create({
+  name: 'sorotCari',
+  addProseMirrorPlugins() {
+    return [new Plugin<OpsiCari | null>({
+      key: KUNCI_SOROT,
+      state: {
+        init: () => sorotCariKini(),
+        apply: (tr, nilai) => { const m = tr.getMeta(KUNCI_SOROT) as { o: OpsiCari | null } | undefined; return m ? m.o : nilai; },
+      },
+      props: { decorations: state => dekorSorot(state.doc, KUNCI_SOROT.getState(state) ?? null) },
+    })];
+  },
+});
+
 // Kuas format disimpan di luar komponen: sumbernya bisa di blok narasi lain, dan tiap blok punya editor sendiri.
 let kuasKini: { format: FormatKuas; tetap: boolean } | null = null;
 const pendengarKuas = new Set<() => void>();
@@ -227,6 +259,8 @@ interface Props {
   /** Centang "Lanjut daftar" blok ini: daftar pertamanya menyambung. */
   continueList?: boolean;
   onLanjutDaftar?: (lanjut: boolean) => void;
+  /** Ada ketikan belum tersimpan: penggantian dari luar tidak boleh menimpanya. */
+  onKotor?: (kotor: boolean) => void;
   /** Gaya halaman dari Pengaturan Dokumen: huruf, ukuran, spasi, perataan, indent baris pertama bawaan. */
   gaya?: { fontFamily?: string; fontSizePt?: number; lineSpacing?: number; align?: string; spaceAfterPt?: number; firstLineIndentCm?: number };
   onSave: (html: string, angka: Record<string, ResepAngka>) => void;
@@ -234,13 +268,15 @@ interface Props {
 
 type JenisPop = 'bullet' | 'nomor' | 'tingkat' | 'stabilo' | 'huruf';
 
-export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, lanjutan, continueList = false, onLanjutDaftar, gaya, onSave }: Props) {
+export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, readOnly, objek, lanjutan, continueList = false, onLanjutDaftar, onKotor, gaya, onSave }: Props) {
   const [dirty, setDirty] = useState(false);
   const [pilihRujuk, setPilihRujuk] = useState(false);
   const [pop, setPop] = useState<{ jenis: JenisPop; x: number; y: number } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [modalParagraf, setModalParagraf] = useState(false);
   const kuas = useSyncExternalStore(dengarKuas, () => kuasKini, () => null);
+  const sorot = useSyncExternalStore(dengarSorotCari, sorotCariKini, () => null);
+  useEffect(() => { onKotor?.(dirty); }, [dirty, onKotor]);
   // Klik bagian kiri tombol memakai format terakhir yang dipilih di galeri, seperti Word.
   const [bulletTerakhir, setBulletTerakhir] = useState<KodeBullet>('•');
   const [nomorTerakhir, setNomorTerakhir] = useState<KodeNomor>('1.');
@@ -257,7 +293,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     // TrailingNode. Link dimatikan — <a> dibuang penyaring server saat Simpan, jadi tautan
     // yang tampil di editor akan lenyap diam-diam. TrailingNode dimatikan — ia menambah
     // paragraf kosong di ujung narasi, yang ikut tercetak ke Word.
-    extensions: [StarterKit.configure({ link: false, trailingNode: false }), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo, AngkaTaut, RujukTaut, LanjutDaftar, IndenParagraf, SpasiParagraf, TabNarasi],
+    extensions: [StarterKit.configure({ link: false, trailingNode: false, horizontalRule: false }), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo, AngkaTaut, RujukTaut, LanjutDaftar, IndenParagraf, SpasiParagraf, TabNarasi, PemisahHalaman, SorotCari],
     content: initialHtml || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,
@@ -290,6 +326,11 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
     const nilai: InfoLanjut = { lanjutan: JSON.parse(kunciLanjutan) as LanjutanBlok, continueList };
     editor.view.dispatch(editor.state.tr.setMeta(KUNCI_LANJUT, nilai).setMeta(META_SEGAR, true).setMeta('addToHistory', false));
   }, [editor, kunciLanjutan, continueList]);
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.view.dispatch(editor.state.tr.setMeta(KUNCI_SOROT, { o: sorot }).setMeta(META_SEGAR, true).setMeta('addToHistory', false));
+  }, [editor, sorot]);
 
   // Daftar rujukan menutup saat klik di luar / Esc — tombolnya tidak mengambil fokus (kursor narasi tetap).
   const rujukRef = useRef<HTMLSpanElement | null>(null);
@@ -476,6 +517,10 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
   const susunanKini = posDaftar ? kodeSusunanDari(susunanPohon(posDaftar.akar)) : null;
   const jalankan = (perintah: (s: typeof ed.state, d: typeof ed.view.dispatch) => boolean) => { const hasil = perintah(ed.state, ed.view.dispatch); ed.view.focus(); return hasil; };
   const tutupSemua = () => { setPop(null); setMenu(null); };
+  function pilihPemisah() {
+    setMenu(null);
+    if (!jalankan(sisipPemisahHalaman)) toast.info('Letakkan kursor di akhir butir sebelumnya: butir daftar harus diawali teks.');
+  }
   // Klik = sekali pakai, klik dua kali = dipakai berkali-kali sampai Esc, seperti Word.
   const ambilKuas = (tetap: boolean) => aturKuas({ format: ambilFormat(ed.state), tetap });
   // Menunggu satu putaran: pilihan hasil menyeret baru sampai ke ProseMirror lewat `selectionchange` sesudah mouseup.
@@ -601,6 +646,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
       { icon: <Paintbrush size={14} />, label: 'Kuas format', onClick: () => { ambilKuas(false); setMenu(null); } },
       { icon: <CaseSensitive size={14} />, label: 'Ubah huruf', sub: <PilihanHuruf onPilih={pilihHuruf} /> },
       { icon: <Pilcrow size={14} />, label: 'Paragraf…', onClick: () => { setMenu(null); setModalParagraf(true); } },
+      { icon: <SeparatorHorizontal size={14} />, label: 'Pemisah halaman', pintasan: 'Ctrl+Enter', onClick: pilihPemisah },
       { icon: <ListOrdered size={14} />, label: 'Penomoran', pisah: true, sub: <GaleriNomor aktif={gayaKini} onPilih={pilihGaya} onTanpa={posDaftar ? lepasDaftar : undefined} /> },
       { icon: <List size={14} />, label: 'Bullet', sub: <GaleriBullet aktif={gayaKini} onPilih={pilihGaya} onTanpa={posDaftar ? lepasDaftar : undefined} /> },
       { icon: <ListTree size={14} />, label: 'Daftar bertingkat', sub: <GaleriTingkat aktif={susunanKini} onPilih={pilihSusunan} /> },
@@ -662,6 +708,7 @@ export default function TiptapNarasi({ initialHtml, initialAngka, tahunDokumen, 
           <span className="lk-tt-sep" />
           {btn(editor.isActive('heading', { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), 'Sub-judul', Heading2)}
           {btn(editor.isActive('heading', { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), 'Sub-sub-judul', Heading3)}
+          {btn(false, pilihPemisah, 'Pemisah halaman (Ctrl+Enter)', SeparatorHorizontal)}
           <span className="lk-tt-sep" />
           {/* K1: input & select tak bisa menggambar ::after — tooltip dipasang di pembungkus. */}
           <span className="lk-tt-tip" data-tooltip="Warna teks" data-tooltip-pos="below">
@@ -767,6 +814,11 @@ const TT_CSS = `
   [data-theme="light"] .lk-paragraf-judul { color: #1E5FA5; }
   .lk-paragraf-kisi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
   .lk-tt-kuas .ProseMirror { cursor: copy; }
+  .lk-tt-content .ProseMirror .lk-cari-sorot { background: rgba(250,199,117,.45); border-radius: 2px; }
+  .lk-tt-content .ProseMirror hr[data-halaman] { border: 0; border-top: 1px dashed #378ADD; margin: 16px 0; height: 0; overflow: visible; position: relative; cursor: default; }
+  .lk-tt-content .ProseMirror hr[data-halaman]::after { content: 'Pemisah halaman'; position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); background: #020F1C; color: #85B7EB; font-size: 10.5px; padding: 0 8px; white-space: nowrap; }
+  .lk-tt-content .ProseMirror hr[data-halaman].ProseMirror-selectednode { outline: 2px solid #378ADD; outline-offset: 4px; }
+  [data-theme="light"] .lk-tt-content .ProseMirror hr[data-halaman]::after { background: #FFFFFF; color: #1E5FA5; }
   [data-theme="light"] .lk-paragraf select { background: #F9FAFB; color: #374151; border-color: rgba(0,0,0,.12); }
   [data-theme="light"] .lk-paragraf select option { background: #FFFFFF; color: #374151; }
   [data-theme="light"] .lk-paragraf label { color: #374151; }

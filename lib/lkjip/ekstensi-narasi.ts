@@ -5,7 +5,7 @@ import { Extension, Mark, Node, mergeAttributes, wrappingInputRule } from '@tipt
 import { Fragment, Slice, type Node as PMNode, type Schema } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { adalahBullet, bacaSusunan, gayaDariTagDaftar, gayaSah, tulisSusunan, type KodeGaya } from './gaya-daftar';
-import { adalahDaftar, dalamLanjutan, enterLanjutan, gayaNode, naikTingkat, posisiDaftar, tekanTab, ubahHuruf } from './perintah-narasi';
+import { adalahDaftar, dalamLanjutan, enterLanjutan, gayaNode, naikTingkat, posisiDaftar, sisipPemisahHalaman, tekanTab, ubahHuruf } from './perintah-narasi';
 import { stabiloSah } from './format-teks';
 import { bacaSpasi, type Spasi } from './halaman';
 
@@ -80,6 +80,10 @@ export const GayaDaftar = Extension.create({
         const { state, view } = this.editor;
         return enterLanjutan(state, view.dispatch);
       },
+      'Mod-Enter': () => {
+        const { state, view } = this.editor;
+        return sisipPemisahHalaman(state, view.dispatch);
+      },
       'Shift-F3': () => {
         const { state, view } = this.editor;
         ubahHuruf('putar')(state, view.dispatch);
@@ -120,6 +124,17 @@ export const TabNarasi = Node.create({
       props: { transformPasted: slice => new Slice(pecahTab(slice.content, schema), slice.openStart, slice.openEnd) },
     })];
   },
+});
+
+// Pemisah halaman: blok atom, di Word `<w:br w:type="page"/>`. Garis bawaan StarterKit dimatikan: `---` dulu melahirkan
+// garis yang hilang saat Simpan, karena penyaring membuangnya.
+export const PemisahHalaman = Node.create({
+  name: 'pemisahHalaman',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  parseHTML: () => [{ tag: 'hr[data-halaman]', priority: 60 }],
+  renderHTML: () => ['hr', { 'data-halaman': '1' }],
 });
 
 // Spasi per paragraf: angka Word di `data-sp-*`; `--s-*` hanya untuk digambar CSS editor (`halaman.ts`).

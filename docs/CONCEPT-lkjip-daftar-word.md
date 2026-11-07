@@ -17,7 +17,7 @@ Status: disetujui pemilik 2026-11-07. Kelanjutan `CONCEPT-lkjip-penggaris-narasi
 - Dikerjakan sekarang: daftar, klik kanan, paket kecil (ukuran pt, rata sub-judul, Undo/Redo, Hapus format, super/subscript, stabilo, daftar otomatis saat mengetik, ubah huruf).
 - Tabel: centang "Ulangi kepala" di pengaturan cetak (bawaan menyala).
 - Dikerjakan menyusul (§10): dialog Paragraf dengan spasi per paragraf, tempel daftar dari Word, kuas format, Tab di dalam paragraf, nomor `1.1.` tetap otomatis saat impor.
-- Belum dikerjakan: pemisah halaman, Cari & Ganti lintas blok.
+- Pemisah halaman dan Cari & Ganti seluruh dokumen dikerjakan sesudahnya (§11).
 
 ## 3. Model data
 
@@ -116,3 +116,36 @@ Sengaja tidak: spasi dari tempelan. Word selalu membawa `margin-bottom:8pt; line
 - Peramban pada kotak pasir 2099 dengan akun dummy: Tab di tiga posisi, Enter di paragraf kedua & paragraf kosong, kuas sebagian/paragraf utuh/lintas blok/berkali-kali/Esc, dialog Paragraf + Undo & Redo satu langkah, tempelan HTML papan klip Word lewat peristiwa `paste`, simpan & muat ulang tanpa memunculkan Simpan, tema terang, 375 px, Shift+Tab keluar editor. Data uji & akun dummy sudah dihapus.
 - Belum dibuktikan: Ctrl+V sungguhan dari jendela Word ke peramban (yang teruji peristiwa `paste` dengan HTML dari papan klip Word).
 - Temuan saat diuji: nomor induk kosong (`.1. Z`) saat `1.1.` mulai tanpa induk, karena larik berlubang; pengisi spasi Word salah dikenali karena `mso-bidi-theme-font:` juga berakhiran `font:`; paragraf berpenanda tak terbaca menjadi teks "undefined"; gantung `1.1.` di bawah `1.` di editor tidak sama dengan `numbering.xml`.
+
+## 11. Pemisah halaman dan Cari & Ganti (disetujui pemilik 2026-11-07)
+
+### 11.1 Pemisah halaman
+
+Ctrl+Enter, tombol bilah alat, atau klik kanan. Simpul atom `<hr data-halaman="1">`, di Word `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`. Garis bawaan Tiptap dimatikan: `---` dulu melahirkan garis yang hilang saat Simpan, karena penyaring membuangnya. Penyaring hanya menerima `hr` bertanda.
+
+Tengah kalimat membelah paragraf, sisanya di halaman baru. Di dalam butir, sisa kalimat menjadi paragraf kedua butir. Di awal butir ditolak dengan pesan, sebab butir wajib diawali paragraf; penggantinya kursor di akhir butir sebelumnya. Tempelan dari Word (`<br clear=all style='page-break-before:always'>` + paragraf kosong sisanya) ikut jadi pemisah.
+
+Sengaja tidak: pemisah dari berkas saat Impor Word. Spasi per paragraf berkas belum ikut terimpor, jadi aliran halaman berbeda, dan pemisah yang dibuat untuk aliran lama bisa melahirkan halaman setengah kosong.
+
+### 11.2 Cari & Ganti seluruh dokumen
+
+Dock "Cari & Ganti" atau Ctrl+H; Ctrl+F dari dalam narasi. Ctrl+F dari tempat lain tetap pencarian peramban, dari dalam tabel tetap pencarian tabel itu. Panel, bukan modal, supaya naskahnya tetap terbaca. Kata yang dicari disorot di narasi yang terbuka.
+
+Yang dicari: Kata Pengantar, judul bab, narasi, judul & keterangan tabel/gambar/grafik, sel tabel. Aturannya satu berkas murni, `lib/lkjip/cari-ganti.ts`: layar mencari di sana, server mengganti di sana, jadi angka di tombol "Ganti semua (n)" sama dengan yang tertulis (diuji).
+
+Kecocokan boleh melintasi tebal/miring (hasilnya mengikuti format awal), tidak melintasi paragraf, baris baru, tab, angka tertaut, atau rujukan. Pengganti disandikan sebagai teks, bukan HTML.
+
+Terbaca tapi ditahan, dengan alasan di daftarnya: judul BAB wajib, sel tabel tertaut (resepnya memegang isian tangan per kunci), kolom No., hasil rumus, angka yang hanya cocok di tampilan berformatnya. Teks rumus tidak dicari.
+
+**Menulis lewat satu route**, `POST /api/lkjip/[id]/ganti`, bukan tiap blok dari layar: kunci baris dokumen lalu baris blok `FOR UPDATE`, membaca isi terbaru, semua lewat `parseBlockPayload`, satu transaksi. Satu blok tak lolos skema = semuanya batal. Hasil melewati 50.000 huruf narasi ditolak, sebab penyaring memotongnya diam-diam. Audit `LKJIP_GANTI_TEKS`.
+
+**Ganti semua memotret dokumen dulu** ke Riwayat (`saveVersi`), karena tak ada Undo lintas blok; dialog menyebutnya. Foto ini ikut retensi 20 versi.
+
+**Mencari isi tersimpan.** Editor blok memegang ketikan di state lokal, jadi menulis di belakangnya akan ditimpa balik atau menghapus ketikan. Karena itu Ganti ditolak selama ada blok yang belum disimpan, dan sesudah Ganti editor di layar dimuat ulang lewat `key`.
+
+### 11.3 Verifikasi
+
+- `npx tsx --env-file=.env.local scripts/test-lkjip-cari-ganti.mts` (127), 81 uji mutasi: 80 tertangkap, 1 setara (penjaga skema: canReplaceWith sudah menolak).
+- Microsoft Word: teks sesudah pemisah mulai di tepi atas halaman baru, tanpa baris kosong; nomor daftar lanjut melewati pemisah di dalam butir.
+- Peramban pada kotak pasir 2099 dengan akun dummy: panel lewat dock, Ctrl+H, dan Ctrl+F dari narasi; Ctrl+F dari tabel tetap pencarian tabel; sorotan; angka tertaut tidak tersentuh; Ganti ditolak saat ada ketikan belum tersimpan; Ganti satu; Ganti semua + foto Riwayat + pulihkan; pengganti berisi `<b>` tampil sebagai teks; Esc; Ctrl+Enter, tampilannya, simpan, unduh Word; pemisah di awal butir ditolak dengan pesan; tema terang; 375 px. Data uji & akun dummy sudah dihapus.
+- Belum dibuktikan: Word Online dan LibreOffice membuka `w:br type=page` sama (hanya Microsoft Word yang dicoba).

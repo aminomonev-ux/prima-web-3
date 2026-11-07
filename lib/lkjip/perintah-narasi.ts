@@ -357,6 +357,34 @@ export const enterLanjutan: Perintah = (state, dispatch) => {
   return true;
 };
 
+// ─── Pemisah halaman ──────────────────────────────────────────────────────────
+/**
+ * Ctrl+Enter. Tengah kalimat membelah paragraf, sisanya di halaman baru; di akhir paragraf kursor pindah ke paragraf
+ * berikutnya. Di awal butir ditolak: butir wajib diawali paragraf, dan memecah daftar di situ mengubah nomornya.
+ */
+export const sisipPemisahHalaman: Perintah = (state, dispatch) => {
+  const { schema } = state;
+  const tipe = schema.nodes.pemisahHalaman;
+  if (!tipe) return false;
+  const tr = state.tr;
+  if (!state.selection.empty) tr.deleteSelection();
+  let $p = tr.selection.$from;
+  if ($p.parentOffset > 0 && $p.parentOffset < $p.parent.content.size) {
+    if (!canSplit(tr.doc, $p.pos)) return false;
+    tr.split($p.pos);
+    $p = tr.selection.$from;
+  }
+  const pos = $p.parentOffset > 0 ? $p.after() : $p.before();
+  const $sisip = tr.doc.resolve(pos);
+  if (!$sisip.parent.canReplaceWith($sisip.index(), $sisip.index(), tipe)) return false;
+  tr.insert(pos, tipe.create());
+  const sesudah = pos + 1;
+  if (!tr.doc.resolve(sesudah).nodeAfter?.isTextblock) tr.insert(sesudah, schema.nodes.paragraph.create());
+  tr.setSelection(TextSelection.create(tr.doc, sesudah + 1));
+  dispatch?.(tr.scrollIntoView());
+  return true;
+};
+
 // ─── Tab ──────────────────────────────────────────────────────────────────────
 export const sisipTab: Perintah = (state, dispatch) => {
   const tipe = state.schema.nodes.tabNarasi;

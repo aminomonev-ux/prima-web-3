@@ -67,7 +67,8 @@ export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12,
 // Sanitizer narasi (server-safe, no DOM) — whitelist tag, buang semua atribut.
 // Defense-in-depth: Tiptap re-parse saat load + docgen parse ke OOXML (bukan innerHTML).
 const POLA_TAB_NARASI = /(?<![-a-zA-Z])data-tab\s*=/;
-const NARASI_ALLOWED_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'span', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'sup', 'sub', 'mark', 'ul', 'ol', 'li']);
+const POLA_PEMISAH = /(?<![-a-zA-Z])data-halaman\s*=/;
+const NARASI_ALLOWED_TAGS = new Set(['p', 'h1', 'h2', 'h3', 'span', 'br', 'hr', 'strong', 'b', 'em', 'i', 'u', 's', 'sup', 'sub', 'mark', 'ul', 'ol', 'li']);
 export function sanitizeNarasiHtml(html: string): string {
   if (!html) return '';
   let s = String(html).replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
@@ -75,6 +76,7 @@ export function sanitizeNarasiHtml(html: string): string {
     const t = String(tag).toLowerCase();
     if (!NARASI_ALLOWED_TAGS.has(t)) return '';
     if (t === 'br') return '<br>';
+    if (t === 'hr') return POLA_PEMISAH.test(String(attrs || '')) ? '<hr data-halaman="1">' : '';
     if (m.startsWith('</')) return `</${t}>`;
     // Hanya izinkan text-align (4 nilai enum) + indent & spasi paragraf (angka) pada <p>/<hN>/<li>. Output
     // dibentuk dari literal enum & angka, bukan echo atribut user → tak ada vektor XSS. Atribut lain dibuang.
@@ -355,6 +357,24 @@ export function parseBlockPayload(tipe: BlockTipe, raw: unknown): unknown {
     case 'GRAFIK': return GrafikPayloadSchema.parse(raw);
   }
 }
+
+// Cari & Ganti seluruh dokumen (konsep daftar-word §11). Tempat sasaran hanya angka & enum, bukan teks bebas.
+export const GantiTeksSchema = z.object({
+  kata: z.string().min(1).max(200),
+  dengan: z.string().max(500),
+  hurufBesar: z.boolean().default(false),
+  seluruhKata: z.boolean().default(false),
+  sasaran: z.object({
+    tempat: z.discriminatedUnion('jenis', [
+      z.object({ jenis: z.literal('judul-bab'), sectionId: z.number().int().positive() }),
+      z.object({ jenis: z.literal('pengantar') }),
+      z.object({ jenis: z.literal('narasi'), blockId: z.number().int().positive() }),
+      z.object({ jenis: z.literal('bidang'), blockId: z.number().int().positive(), bidang: z.enum(['judul', 'caption']) }),
+      z.object({ jenis: z.literal('sel'), blockId: z.number().int().positive(), r: z.number().int().min(0), c: z.number().int().min(0) }),
+    ]),
+    ke: z.number().int().min(0),
+  }).optional(),
+});
 
 export const BlockCreateSchema = z.object({
   section_id: z.number().int().positive(),

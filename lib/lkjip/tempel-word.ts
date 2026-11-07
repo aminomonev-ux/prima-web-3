@@ -78,6 +78,9 @@ function bacaPenanda(penanda: string, tingkat: { fmt: string | null; teks: strin
 
 const bersihkanIsi = (html: string) => html.replace(/<o:p>[\s\S]*?<\/o:p>/gi, '').trim();
 
+// Word: `<br clear=all style='page-break-before:always'>` lalu paragraf kosong sisa pemisahnya.
+const POLA_PEMISAH_WORD = /<br\b[^>]*page-break-before\s*:\s*always[^>]*>(?:\s*<p\b[^>]*>\s*(?:<o:p>(?:&nbsp;|\s|\u00a0)*<\/o:p>)?\s*<\/p>)?/gi;
+
 const ubahTab = (html: string) => html.replace(POLA_TAB_WORD, (_, n: string) => '<span data-tab="1">\t</span>'.repeat(Math.max(1, Math.min(20, Number(n)))));
 
 /**
@@ -85,10 +88,10 @@ const ubahTab = (html: string) => html.replace(POLA_TAB_WORD, (_, n: string) => 
  * judul, dan tabelnya sudah ditangani pembaca editor.
  */
 export function tempelDariWord(html: string): string {
-  if (!/mso-list\s*:|mso-tab-count/i.test(html)) return html;
+  if (!/mso-list\s*:|mso-tab-count|page-break-before\s*:\s*always/i.test(html)) return html;
   const tingkat = bacaTingkatDaftar(html);
   const kiriKelas = bacaKiriKelas(html);
-  const fragmen = /<!--StartFragment-->([\s\S]*?)<!--EndFragment-->/.exec(html)?.[1] ?? /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html;
+  const fragmen = (/<!--StartFragment-->([\s\S]*?)<!--EndFragment-->/.exec(html)?.[1] ?? /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html).replace(POLA_PEMISAH_WORD, '<hr data-halaman="1">');
 
   let hasil = '';
   let run: ParagrafSusun[] = [];

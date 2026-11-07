@@ -9,6 +9,7 @@ import {
   IndentIncrease, IndentDecrease, Pencil, Save, Table2, Image as ImageIcon, Type, Settings,
   BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
   GripVertical, Upload, BarChart3, HelpCircle, MoreVertical, Lock, RefreshCw, ClipboardPaste,
+  Search,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
@@ -40,10 +41,13 @@ import {
 import type { ResepAngka } from '@/lib/lkjip/angka';
 import { bacaSalinan, type SalinanModul } from '@/lib/lkjip/salinan-modul';
 import { fetchJson } from '@/lib/shared/api';
+import { cariDiDokumen, type OpsiCari, type Temuan } from '@/lib/lkjip/cari-ganti';
+import { aturSorotCari } from '@/lib/lkjip/sorot-cari';
 import TabelEditor from '@/components/tabel/TabelEditor';
 import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';
 import { TABEL_CSS } from '@/components/tabel/tabel-css';
 
+const CariGantiPanel = dynamic(() => import('./CariGantiPanel'), { ssr: false });
 const TiptapNarasi = dynamic(() => import('./TiptapNarasi'), {
   ssr: false,
   loading: () => <div style={{ color: '#85B7EB', fontSize: 12.5, padding: 10 }}>Memuat editor…</div>,
@@ -266,7 +270,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
   }
   async function saveBlock(id: number, payload: unknown) {
     const ok = await call('/api/lkjip/block', 'PATCH', { id, payload });
-    if (ok) { await refresh(); toast.success('Blok disimpan'); }
+    if (ok) { kotorRef.current.delete(id); await refresh(); toast.success('Blok disimpan'); }
   }
   async function delBlock(id: number) {
     if (!(await confirmDialog({ title: 'Hapus blok', message: 'Hapus blok ini?', variant: 'danger' }))) return;
@@ -274,6 +278,53 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     if (ok) await refresh();
   }
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  // ── Cari & Ganti seluruh dokumen ──
+  const [cariBuka, setCariBuka] = useState(false);
+  // Editor blok memegang ketikan di state lokal: sesudah server mengganti isi, editor di layar wajib dimuat ulang.
+  const [generasi, setGenerasi] = useState(0);
+  const kotorRef = useRef(new Set<number>());
+  const tandaiKotor = useCallback((id: number, kotor: boolean) => {
+    if (kotor) kotorRef.current.add(id);
+    else kotorRef.current.delete(id);
+  }, []);
+  const dataCari = useMemo(() => ({ tree: detail.tree, kataPengantarHtml: detail.style_config.kataPengantarHtml ?? '' }), [detail.tree, detail.style_config.kataPengantarHtml]);
+  const tutupCari = useCallback(() => { setCariBuka(false); aturSorotCari(null); }, []);
+  // Sorotan disimpan di luar komponen: keluar dari dokumen tidak boleh membawanya ke dokumen berikutnya.
+  useEffect(() => () => aturSorotCari(null), []);
+  useEffect(() => {
+    // Tabel menangani Ctrl+F/H-nya sendiri dan menandai peristiwanya; Ctrl+F di luar narasi tetap pencarian peramban.
+    const tekan = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.defaultPrevented) return;
+      const kunci = e.key.toLowerCase();
+      if (kunci === 'h' || (kunci === 'f' && (e.target as Element | null)?.closest?.('.ProseMirror'))) {
+        e.preventDefault();
+        setCariBuka(true);
+      }
+    };
+    document.addEventListener('keydown', tekan);
+    return () => document.removeEventListener('keydown', tekan);
+  }, []);
+  async function gantiTeks(o: OpsiCari, dengan: string, sasaran?: Temuan) {
+    if (kotorRef.current.size) { toast.error('Simpan dulu blok yang sedang disunting. Penggantian bekerja pada isi tersimpan, dan ketikan yang belum disimpan akan hilang.'); return; }
+    if (!sasaran) {
+      const jumlah = cariDiDokumen(dataCari, o).filter(t => !t.alasan).length;
+      const akibat = dengan ? `diganti menjadi "${dengan}"` : 'dihapus';
+      if (!(await confirmDialog({ title: 'Ganti semua', message: `${jumlah} kecocokan "${o.kata}" di seluruh dokumen akan ${akibat}.\n\nTidak bisa dibatalkan dengan Undo. Keadaan sekarang disimpan dulu ke Riwayat, jadi bisa dipulihkan dari sana.`, confirmLabel: 'Ganti semua', variant: 'warning' }))) return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetchJson<unknown>(`/api/lkjip/${detail.id}/ganti`, {
+        method: 'POST',
+        body: JSON.stringify({ ...o, dengan, ...(sasaran ? { sasaran: { tempat: sasaran.tempat, ke: sasaran.ke } } : {}) }),
+      });
+      if (!r.ok) { toast.error(r.message); return; }
+      await refresh();
+      setGenerasi(g => g + 1);
+      const ditahan = Number(r.ditahan) || 0;
+      toast.success(`${Number(r.jumlah) || 0} diganti${ditahan ? `, ${ditahan} tidak bisa diganti` : ''}${r.versi_no ? `. Keadaan sebelumnya ada di Riwayat, versi ${String(r.versi_no)}.` : '.'}`);
+    } finally { setBusy(false); }
+  }
   async function reorderBlocks(sectionId: number, order: number[]) {
     const ok = await call('/api/lkjip/block', 'PATCH', { action: 'reorder', section_id: sectionId, order });
     if (ok) await refresh();
@@ -342,10 +393,20 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     document.addEventListener('visibilitychange', onLihat);
     return () => { clearTimeout(awal); document.removeEventListener('visibilitychange', onLihat); };
   }, [detail.id]);
+  function lompatKeBlok(sectionId: number, blockId: number | null) {
+    setSelectedId(sectionId);
+    if (blockId === null) return;
+    setSorotBlok(blockId);
+    setTimeout(() => document.getElementById(`lk-blok-${blockId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+    setTimeout(() => setSorotBlok(b => (b === blockId ? null : b)), 2600);
+  }
   function bukaTabel(t: ItemPeriksa) {
-    setPeriksa(null); setSelectedId(t.sectionId); setSorotBlok(t.blockId);
-    setTimeout(() => document.getElementById(`lk-blok-${t.blockId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
-    setTimeout(() => setSorotBlok(b => (b === t.blockId ? null : b)), 2600);
+    setPeriksa(null);
+    lompatKeBlok(t.sectionId, t.blockId);
+  }
+  function bukaTemuan(t: Temuan) {
+    if (t.sectionId === null) { toast.info('Kecocokan ini ada di Kata Pengantar. Buka lewat Pengaturan.'); return; }
+    lompatKeBlok(t.sectionId, t.blockId);
   }
 
   async function kirimFinal() {
@@ -406,12 +467,14 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     ? [
         { icon: <Download size={17} />, label: 'Unduh Word', onClick: () => window.open(`/api/lkjip/${detail.id}/generate`, '_blank') },
         { icon: <History size={17} />, label: 'Riwayat', onClick: () => void openHistory() },
+        { icon: <Search size={17} />, label: 'Cari', onClick: () => setCariBuka(true) },
         { icon: <HelpCircle size={17} />, label: 'Panduan', onClick: () => setPanduanOpen(true) },
       ]
     : [
         { icon: <Save size={17} />, label: 'Simpan Versi', onClick: () => void saveVersi() },
         { icon: <History size={17} />, label: 'Riwayat', onClick: () => void openHistory() },
         ...(semuaTertaut.length ? [{ icon: <RefreshCw size={17} />, label: jumlahBerubah ? `Periksa Data Modul (${jumlahBerubah})` : 'Periksa Data Modul', onClick: () => void bukaPeriksa() }] : []),
+        { icon: <Search size={17} />, label: 'Cari & Ganti', onClick: () => setCariBuka(true) },
         { icon: <Settings size={17} />, label: 'Pengaturan', onClick: () => { setStyleForm(detail.style_config); setStyleModal(true); } },
         { icon: <Download size={17} />, label: 'Unduh Word', onClick: () => window.open(`/api/lkjip/${detail.id}/generate`, '_blank') },
         { icon: <CheckCircle2 size={17} />, label: 'Finalisasi', onClick: () => void finalize() },
@@ -497,7 +560,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                     setDragIdx(null);
                     void reorderBlocks(selected.id, ids);
                   }}>
-                  <BlockEditor block={b} readOnly={readOnly} tahunDokumen={detail.tahun} warnaKepalaTabel={detail.style_config.tableHeaderFill} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
+                  <BlockEditor block={b} key={`${b.id}:${generasi}`} onKotor={tandaiKotor} readOnly={readOnly} tahunDokumen={detail.tahun} warnaKepalaTabel={detail.style_config.tableHeaderFill} onSave={p => saveBlock(b.id, p)} onDelete={() => delBlock(b.id)} tableBlocks={selected.blocks.filter(x => x.tipe === 'TABEL')}
                     kabar={kabarBlok(kabarAktif(b.id), b.tipe === 'NARASI')}
                     salinanAwal={salinanBaru?.blockId === b.id ? salinanBaru.salinan : undefined} onSalinanDipakai={() => setSalinanBaru(null)}
                     onSalinanBatal={() => void buangBlokTempelBatal(b.id)}
@@ -788,6 +851,8 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
         return <RowMenu x={rowMenu.x} y={rowMenu.y} items={items} onClose={close} />;
       })()}
 
+      {cariBuka && <CariGantiPanel data={dataCari} readOnly={readOnly} busy={busy} onOpsi={aturSorotCari} onBuka={bukaTemuan} onGanti={(o, d, s) => void gantiTeks(o, d, s)} onTutup={tutupCari} />}
+
       {/* Panduan penggunaan */}
       {panduanOpen && (
         <div className="lk-modal-bg" onClick={() => setPanduanOpen(false)}>
@@ -930,6 +995,14 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
       </ul>
     </>
   ) },
+  { t: 'Cari & Ganti, Pemisah Halaman', b: (
+    <ol>
+      <li><b>Cari &amp; Ganti</b> (dock, atau <b>Ctrl+H</b>) mencari di seluruh dokumen: Kata Pengantar, judul bab, narasi, judul &amp; keterangan, serta isi tabel. Klik hasilnya untuk melompat ke sana.</li>
+      <li>Yang dicari isi yang <b>sudah disimpan</b>. Simpan dulu blok yang sedang disunting sebelum mengganti.</li>
+      <li><b>Ganti semua</b> menyimpan keadaan sekarang ke <b>Riwayat</b> dulu, jadi bisa dipulihkan dari sana. Sel tabel tertaut, kolom No., dan hasil rumus terbaca tapi tidak diganti.</li>
+      <li><b>Ctrl+Enter</b> di narasi menyisipkan <b>pemisah halaman</b>: teks sesudahnya pindah ke halaman baru di Word.</li>
+    </ol>
+  ) },
   { t: 'Simpan Versi & Riwayat', b: (
     <ol>
       <li><b>Simpan Versi</b> (dock) = membuat checkpoint seluruh dokumen (disimpan maks 20 terakhir + arsip Drive bila tersedia).</li>
@@ -950,9 +1023,12 @@ const PANDUAN: { t: string; b: React.ReactNode }[] = [
 // Block editor — switch per tipe
 // ════════════════════════════════════════════════════════════════
 type NomorBlok = Map<number, NomorObjek>;
-function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, lanjutan, gaya, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; lanjutan?: LanjutanBlok; gaya?: StyleConfig; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
+function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, onKotor, onDelete, dragHandle, tableBlocks, nomor, nomorBlok, daftarObjek, lanjutan, gaya, kabar, salinanAwal, onSalinanDipakai, onSalinanBatal }: { block: BlockNode; onKotor?: (id: number, kotor: boolean) => void; readOnly: boolean; tahunDokumen: number; warnaKepalaTabel?: string; onSave: (p: unknown) => void; onDelete: () => void; dragHandle?: React.ReactNode; tableBlocks?: BlockNode[]; nomor?: NomorObjek; nomorBlok?: NomorBlok; daftarObjek?: ObjekRujukan[]; lanjutan?: LanjutanBlok; gaya?: StyleConfig; kabar?: KabarBlok[]; salinanAwal?: SalinanModul; onSalinanDipakai?: () => void; onSalinanBatal?: () => void }) {
   const [continueList, setContinueList] = useState<boolean>(block.tipe === 'NARASI' && (block.payload as { continueList?: boolean })?.continueList === true);
   const ubahLanjut = (v: boolean) => { setContinueList(v); onSave({ ...(block.payload as object), continueList: v }); };
+  const laporKotor = useCallback((kotor: boolean) => onKotor?.(block.id, kotor), [block.id, onKotor]);
+  // Pindah bab melepas editornya, jadi ketikannya memang sudah tak ada lagi di layar.
+  useEffect(() => () => onKotor?.(block.id, false), [block.id, onKotor]);
   return (
     <div className="lk-block">
       <div className="lk-block-head">
@@ -972,23 +1048,26 @@ function BlockEditor({ block, readOnly, tahunDokumen, warnaKepalaTabel, onSave, 
       </div>
       {block.tipe === 'NARASI' && (
         <TiptapNarasi initialHtml={(block.payload as { html?: string })?.html ?? ''} initialAngka={(block.payload as { angka?: Record<string, ResepAngka> })?.angka}
-          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} lanjutan={lanjutan} continueList={continueList} onLanjutDaftar={ubahLanjut}
+          tahunDokumen={tahunDokumen} readOnly={readOnly} objek={daftarObjek} lanjutan={lanjutan} continueList={continueList} onLanjutDaftar={ubahLanjut} onKotor={laporKotor}
           gaya={gaya}
           onSave={(html, angka) => onSave({ html, continueList, angka })} />
       )}
-      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }} />}
-      {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} />}
-      {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} />}
+      {block.tipe === 'TABEL'  && <TabelEditor payload={block.payload} readOnly={readOnly} warnaKepala={warnaKepalaTabel} onSave={onSave} onUbah={() => laporKotor(true)} lkjip={{ tahunDokumen, TautanModal, salinanAwal, onSalinanDipakai, onSalinanBatal }} />}
+      {block.tipe === 'GAMBAR' && <GambarEditor block={block} readOnly={readOnly} onSave={onSave} onKotor={laporKotor} />}
+      {block.tipe === 'GRAFIK' && <GrafikEditor block={block} readOnly={readOnly} onSave={onSave} onKotor={laporKotor} tableBlocks={tableBlocks ?? []} nomorBlok={nomorBlok} />}
     </div>
   );
 }
 
-function GambarEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void }) {
+function GambarEditor({ block, readOnly, onSave, onKotor }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onKotor: (kotor: boolean) => void }) {
   const p0 = block.payload as { judul?: string; fileId?: string; caption?: string };
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
   const [fileId, setFileId] = useState(p0.fileId ?? '');
   const [uploading, setUploading] = useState(false);
+  const sidikIsi = JSON.stringify({ judul, caption, fileId });
+  const sidikSimpan = useRef(sidikIsi);
+  useEffect(() => { onKotor(sidikIsi !== sidikSimpan.current); }, [sidikIsi, onKotor]);
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -1020,7 +1099,7 @@ function GambarEditor({ block, readOnly, onSave }: { block: BlockNode; readOnly:
             : <span className="lk-uphint">Belum ada gambar — placeholder di Word</span>}
         </div>
       )}
-      {!readOnly && <div className="lk-save-row"><PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => onSave({ judul, caption, fileId })}>Simpan</PrimaButton></div>}
+      {!readOnly && <div className="lk-save-row"><PrimaButton menulis variant="primary" size="sm" iconLeft={<Save size={14} />} onClick={() => { sidikSimpan.current = sidikIsi; onKotor(false); onSave({ judul, caption, fileId }); }}>Simpan</PrimaButton></div>}
     </div>
   );
 }
@@ -1071,7 +1150,7 @@ function GrafikRender({ type, data }: { type: 'pie' | 'bar' | 'line'; data: Graf
 // recharts butuh DOM → render client-only (cegah SSR; section pertama auto-terpilih saat load).
 const GrafikRenderClient = dynamic(() => Promise.resolve({ default: GrafikRender }), { ssr: false });
 
-function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; tableBlocks: BlockNode[]; nomorBlok?: NomorBlok }) {
+function GrafikEditor({ block, readOnly, onSave, onKotor, tableBlocks, nomorBlok }: { block: BlockNode; readOnly: boolean; onSave: (p: unknown) => void; onKotor: (kotor: boolean) => void; tableBlocks: BlockNode[]; nomorBlok?: NomorBlok }) {
   const p0 = block.payload as Partial<GrafikP>;
   const [judul, setJudul] = useState(p0.judul ?? '');
   const [caption, setCaption] = useState(p0.caption ?? '');
@@ -1082,6 +1161,9 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
   const [labelCol, setLabelCol] = useState(p0.labelCol ?? 0);
   const [valueCol, setValueCol] = useState(p0.valueCol ?? 1);
   const [saving, setSaving] = useState(false);
+  const sidikIsi = JSON.stringify({ judul, caption, chartType, source, data, tabelBlockId, labelCol, valueCol });
+  const sidikSimpan = useRef(sidikIsi);
+  useEffect(() => { onKotor(sidikIsi !== sidikSimpan.current); }, [sidikIsi, onKotor]);
   const chartRef = useRef<HTMLDivElement | null>(null);
   const fileIdRef = useRef(p0.imageFileId ?? '');
   // Sumber 'gambar' (grafik berupa gambar, mis. hasil impor Word): gambarnya dipakai apa adanya.
@@ -1143,6 +1225,8 @@ function GrafikEditor({ block, readOnly, onSave, tableBlocks, nomorBlok }: { blo
           }
         } catch { toast.error('Gagal membuat gambar grafik'); }
       }
+      sidikSimpan.current = sidikIsi;
+      onKotor(false);
       onSave({ judul, chartType, source, data, tabelBlockId, labelCol, valueCol, imageFileId, caption,
         tabelSidik: source === 'tabel' ? sidikGrafik(chartData) : '' });
     } finally { setSaving(false); }
@@ -1418,6 +1502,39 @@ ${TABEL_CSS}
   .lk-ab.tabel  { background: rgba(55,138,221,0.22); border-color: #378ADD; color: #BFE0FF; }
   .lk-ab.gambar { background: rgba(29,158,117,0.22); border-color: #1D9E75; color: #A7ECCF; }
 
+  /* Cari & Ganti: panel, bukan modal. 420: di atas FloatingDock, di bawah modal & konfirmasi yang dibukanya. */
+  .lk-cg { position: fixed; top: 64px; right: 14px; bottom: 14px; width: 360px; max-width: calc(100vw - 16px); z-index: 420; display: flex; flex-direction: column; gap: 8px; background: #042C53; border: 1px solid #0C447C; border-radius: 10px; padding: 12px; box-shadow: 0 14px 34px rgba(0,0,0,.5); color: #E6F1FB; }
+  .lk-cg-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; }
+  .lk-cg-head span { display: inline-flex; align-items: center; gap: 6px; }
+  .lk-cg-x, .lk-cg-nav { background: none; border: 1px solid #0C447C; color: #B5D4F4; border-radius: 6px; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .lk-cg-x { border: none; }
+  .lk-cg-nav:disabled { opacity: .4; cursor: default; }
+  .lk-cg-label { display: block; font-size: 11.5px; color: #85B7EB; }
+  .lk-cg-label input { display: block; width: 100%; margin-top: 3px; background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 7px 9px; color: #E6F1FB; font-size: 13px; }
+  .lk-cg-label input:focus { outline: none; border-color: #185FA5; }
+  .lk-cg-opsi { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: #B5D4F4; }
+  .lk-cg-opsi label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .lk-cg-aksi { display: flex; align-items: center; gap: 4px; }
+  .lk-cg-jumlah { flex: 1; font-size: 11.5px; color: #85B7EB; }
+  .lk-cg-tombol { display: flex; gap: 6px; flex-wrap: wrap; }
+  .lk-cg-daftar { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 60px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .lk-cg-daftar button { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; color: #D6E6F7; cursor: pointer; }
+  .lk-cg-daftar button:hover { background: rgba(124,92,252,0.14); }
+  .lk-cg-daftar button.aktif { background: rgba(124,92,252,0.22); border-color: rgba(124,92,252,0.45); }
+  .lk-cg-letak { display: block; font-size: 10.5px; color: #85B7EB; margin-bottom: 1px; }
+  .lk-cg-teks { display: block; font-size: 12px; overflow-wrap: anywhere; }
+  .lk-cg-teks mark { background: #FAC775; color: #0F0F12; border-radius: 2px; padding: 0 1px; }
+  .lk-cg-alasan { display: block; font-size: 10.5px; color: #FAC775; margin-top: 2px; }
+  .lk-cg-catatan { font-size: 10.5px; color: #85B7EB; }
+  [data-theme="light"] .lk-cg { background: #FFFFFF; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .lk-cg-x, [data-theme="light"] .lk-cg-nav { color: #4B5563; border-color: rgba(0,0,0,.12); }
+  [data-theme="light"] .lk-cg-x { border: none; }
+  [data-theme="light"] .lk-cg-label, [data-theme="light"] .lk-cg-jumlah, [data-theme="light"] .lk-cg-letak, [data-theme="light"] .lk-cg-catatan { color: #1E5FA5; }
+  [data-theme="light"] .lk-cg-label input { background: #F9FAFB; border-color: rgba(0,0,0,.12); color: #0F0F12; }
+  [data-theme="light"] .lk-cg-opsi { color: #374151; }
+  [data-theme="light"] .lk-cg-daftar button { color: #374151; }
+  [data-theme="light"] .lk-cg-alasan { color: #854F0B; }
+  @media (max-width: 560px) { .lk-cg { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 72vh; } }
   /* 450: di atas FloatingDock (400) — dulu 100, jadi di ponsel kaki modal yang tinggi (Simpan/Batal) tertutup dock; di bawah confirmDialog (4000). */
   .lk-modal-bg { position: fixed; inset: 0; background: rgba(2,15,28,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 450; }
   /* Dibatasi tinggi layar & bisa digulir: modal Pengaturan Dokumen setinggi ± 1.180 px, dulu di layar laptop

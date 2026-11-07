@@ -453,7 +453,7 @@ const rm = kode('components/tabel/RowMenu.tsx')
 const te = kode('components/tabel/TabelEditor.tsx')
 const iw = kode('lib/lkjip/impor-word.ts')
 const badan = (s: string, awal: string) => { const i = s.indexOf(awal); if (i < 0) return ''; let d = 0, j = s.indexOf('{', i); const m = j; for (; j < s.length; j++) { if (s[j] === '{') d++; else if (s[j] === '}' && --d === 0) break; } return s.slice(m, j + 1) }
-ok('H1 ekstensi terpasang', /StarterKit\.configure\(\{ link: false, trailingNode: false \}\), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo,/.test(tt))
+ok('H1 ekstensi terpasang', /StarterKit\.configure\(\{ link: false, trailingNode: false, horizontalRule: false \}\), TextAlign, TextStyle, GayaDaftar, Superskrip, Subskrip, Stabilo,/.test(tt))
 ok('H2 CSS gaya dari satu sumber + gantung bawaan', tt.includes("cssGayaDaftar('.lk-tt-content .ProseMirror')") && /--lk-gantung: \$\{BUTIR_GANTUNG_DXA\}/.test(tt) && tt.includes('var(--i-pertama, calc(var(--lk-gantung) * -1))'))
 ok('H3 penggaris memakai gantung gaya', tt.includes('indenBerlaku(simpananInden(s.node), s.jenis, s.bawaan ?? bawaanDxa, s.kedalaman, s.gantung)') && tt.includes('keTersimpan({ ...i, ...bidang }, s.jenis, s.bawaan ?? bawaanDxa, s.kedalaman, s.gantung)') && kode('lib/lkjip/perintah-narasi.ts').includes('const gantung = gantungDxa(butir.gaya, kedalaman);'))
 ok('H4 tidak ada lagi jejak a,b lama', !tt.includes('listType') && !tt.includes('lk-tt-abc') && !tt.includes('OrderedListType'))

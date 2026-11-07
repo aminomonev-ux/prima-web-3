@@ -64,6 +64,7 @@ export type AuditEventType =
   | 'LKJIP_BLOCK_ADD'
   | 'LKJIP_BLOCK_UPDATE'
   | 'LKJIP_BLOCK_DELETE'
+  | 'LKJIP_GANTI_TEKS'
   // ─── IKI (Indikator Kinerja Individu) ──────────────────────────────
   | 'IKI_CREATE'
   | 'IKI_UPDATE'
