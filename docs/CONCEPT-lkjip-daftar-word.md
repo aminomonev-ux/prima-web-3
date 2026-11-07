@@ -125,7 +125,7 @@ Ctrl+Enter, tombol bilah alat, atau klik kanan. Simpul atom `<hr data-halaman="1
 
 Tengah kalimat membelah paragraf, sisanya di halaman baru. Di dalam butir, sisa kalimat menjadi paragraf kedua butir. Di awal butir ditolak dengan pesan, sebab butir wajib diawali paragraf; penggantinya kursor di akhir butir sebelumnya. Tempelan dari Word (`<br clear=all style='page-break-before:always'>` + paragraf kosong sisanya) ikut jadi pemisah.
 
-Sengaja tidak: pemisah dari berkas saat Impor Word. Spasi per paragraf berkas belum ikut terimpor, jadi aliran halaman berbeda, dan pemisah yang dibuat untuk aliran lama bisa melahirkan halaman setengah kosong.
+Belum: pemisah dari berkas saat Impor Word (berkas pemilik punya 7). Pemisah dibuat untuk aliran halaman berkas lama; kalau aliran di PRIMA berbeda, ia bisa melahirkan halaman setengah kosong.
 
 ### 11.2 Cari & Ganti seluruh dokumen
 
@@ -149,3 +149,24 @@ Terbaca tapi ditahan, dengan alasan di daftarnya: judul BAB wajib, sel tabel ter
 - Microsoft Word: teks sesudah pemisah mulai di tepi atas halaman baru, tanpa baris kosong; nomor daftar lanjut melewati pemisah di dalam butir.
 - Peramban pada kotak pasir 2099 dengan akun dummy: panel lewat dock, Ctrl+H, dan Ctrl+F dari narasi; Ctrl+F dari tabel tetap pencarian tabel; sorotan; angka tertaut tidak tersentuh; Ganti ditolak saat ada ketikan belum tersimpan; Ganti satu; Ganti semua + foto Riwayat + pulihkan; pengganti berisi `<b>` tampil sebagai teks; Esc; Ctrl+Enter, tampilannya, simpan, unduh Word; pemisah di awal butir ditolak dengan pesan; tema terang; 375 px. Data uji & akun dummy sudah dihapus.
 - Belum dibuktikan: Word Online dan LibreOffice membuka `w:br type=page` sama (hanya Microsoft Word yang dicoba).
+
+## 12. Spasi berkas Word saat impor (disetujui pemilik 2026-11-07)
+
+Dulu impor mengabaikan `<w:spacing>`: semua paragraf ikut 1,5 baris dan 6 pt sesudah, apa pun isi berkasnya.
+
+Kini spasi tiap paragraf dibaca dengan pewarisan Word, tiap atribut sendiri-sendiri: `docDefaults` → gaya (`basedOn`) → paragraf. Tanpa isian apa pun Word memakai rapat & tunggal, dan itu yang dibawa.
+
+**Pengaturan Dokumen = yang paling lazim** di isi berkas, ditimbang panjang teks seperti indent. Sampul dan halaman depan tidak ikut menimbang. Paragraf lain membawa `data-sp-*` hanya untuk yang berbeda, jadi mengubah Pengaturan Dokumen sesudah impor tetap berlaku untuk mayoritas paragraf. Pilihan baris Pengaturan hanya 1, 1,15, 1,5, 2 dan sesudah paling besar 24 pt; di luar itu Pengaturan memakai bawaan dan paragrafnya membawa angkanya sendiri.
+
+**`w:contextualSpacing`** ("jangan tambah spasi antar-paragraf bergaya sama", bawaan gaya List Paragraph) diterapkan saat impor: spasi di sisi paragraf bergaya sama menjadi 0. Spasi otomatis HTML (`beforeAutospacing`) dibaca 14 pt.
+
+Sengaja tidak:
+- Tinggi baris pasti (`exact`, `atLeast`): bukan kelipatan, ikut Pengaturan Dokumen dan disebut di peringatan pratinjau.
+- Spasi dari tempelan: Word selalu membawa `margin-bottom:8pt; line-height:107%`, jadi tiap tempelan akan menimpa Pengaturan Dokumen.
+- Baris kosong di berkas: `narasiToXml` tidak mencetak paragraf kosong, jadi jarak yang dibuat dengan menekan Enter dua kali tidak ikut.
+
+Verifikasi:
+- `npx tsx scripts/test-lkjip-impor-spasi.mts` (42), 33 uji mutasi tertangkap.
+- Microsoft Word, berkas pemilik impor → ekspor: dari 224 paragraf berpasangan, 0 beda spasi sebelum/sesudah/baris, 0 beda indent, 0 beda nomor.
+- Jalur HTTP sungguhan (pratinjau → buat) dengan berkas kecil tanpa gambar di tahun 2099: Pengaturan Dokumen terisi dari berkas, paragraf lain membawa selisihnya. Data uji & akun dummy sudah dihapus.
+- Belum dibuktikan: jumlah halaman dokumen utuh dibanding berkas asal, sebab kalibrasi tidak mengunggah gambar ke Drive.

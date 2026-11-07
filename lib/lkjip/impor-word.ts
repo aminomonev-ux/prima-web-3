@@ -10,7 +10,7 @@ import {
 } from './tabel';
 import { MAX_DEPTH } from './numbering';
 import { judulBabWajib } from './aturan-bab';
-import { indentTwips, BATAS_INDENT_CM, TWIPS_PER_CM, type Inden, type IndenTersimpan } from './halaman';
+import { indentTwips, spasiBawaan, spasiKeTersimpan, BATAS_INDENT_CM, TWIPS_PER_CM, type Inden, type IndenTersimpan, type Spasi } from './halaman';
 import { gayaDariWord, teksNomor, type KodeGaya } from './gaya-daftar';
 import { susunNarasi } from './susun-daftar';
 import { stabiloDariWord, type KodeStabilo } from './format-teks';
@@ -25,6 +25,8 @@ export class ImporWordError extends Error {
   constructor(msg: string) { super(msg); this.name = 'ImporWordError'; }
 }
 
+// Cermin `DEFAULT_STYLE` schemas.ts: pembaca ini murni dan tidak menarik Zod + rate-limit server ke berkas ini.
+const DEFAULT_STYLE_IMPOR = { lineSpacing: 1.5, spaceAfterPt: 6 };
 export const BATAS_BLOK_IMPOR = 2000;
 const BATAS_XML = 30 * 1024 * 1024;
 const BATAS_MEDIA = 200;
@@ -51,6 +53,8 @@ export interface HasilImporWord {
   kataPengantar: { html: string; paragraf: number; ttd: TandaTangan };
   /** Indent baris pertama paling lazim di berkas (cm) → setelan dokumen; yang lain membawa angkanya sendiri. Null = tak ada paragraf untuk dinilai. */
   indenBawaanCm: number | null;
+  /** Spasi paling lazim di berkas → Pengaturan Dokumen; yang lain membawa angkanya sendiri. Null = tak ada paragraf untuk dinilai. */
+  spasiBawaan: { lineSpacing: number; spaceAfterPt: number } | null;
   bagian: BagianImpor[];
   gambar: Record<string, GambarImpor>;
   baris: BarisPratinjau[];
@@ -121,6 +125,7 @@ function cariSemua(el: El, n: string, out: El[] = []): El[] {
 const teksDalam = (el: El): string => el.c.map(x => (typeof x === 'string' ? x : teksDalam(x))).join('');
 /** `<w:b/>` = nyala; `w:val="0|false|off"` = mati. */
 const nyala = (el?: El): boolean => !!el && !['0', 'false', 'off', 'none'].includes((atr(el, 'w:val') ?? '').toLowerCase());
+const nyalaAtr = (el: El, nama: string): boolean => ['1', 'true', 'on'].includes((atr(el, nama) ?? '').toLowerCase());
 const angkaAtr = (el: El | undefined, nama: string): number | null => {
   const v = atr(el, nama);
   const n = v == null ? NaN : parseFloat(v);
@@ -128,8 +133,10 @@ const angkaAtr = (el: El | undefined, nama: string): number | null => {
 };
 
 // ── Gaya & penomoran ────────────────────────────────────────────────────────
-interface GayaPar { nama: string; dasar: string | null; outline: number | null; num: { numId: string; ilvl: number } | null; ind: IndenTersimpan }
-interface InfoGaya { peta: Map<string, GayaPar>; bawaan: string; dokumen: IndenTersimpan }
+interface GayaPar { nama: string; dasar: string | null; outline: number | null; num: { numId: string; ilvl: number } | null; ind: IndenTersimpan; spasi: SpasiWord }
+interface InfoGaya { peta: Map<string, GayaPar>; bawaan: string; dokumen: IndenTersimpan; spasiDokumen: SpasiWord }
+/** `<w:spacing>` + `<w:contextualSpacing>`. Hanya yang tertulis: tiap atribut diwarisi sendiri-sendiri. */
+interface SpasiWord { sebelum?: number; sesudah?: number; baris?: number; aturan?: string; kontekstual?: boolean }
 
 /** `<w:ind>` sebuah pPr. Hanya atribut yang tertulis: sisanya diwarisi (gaya → daftar → paragraf). */
 function bacaInd(pPr: El | undefined): IndenTersimpan {
@@ -147,12 +154,35 @@ function bacaInd(pPr: El | undefined): IndenTersimpan {
   return h;
 }
 
+// "auto" pada `beforeAutospacing` = spasi gaya HTML; Word memakai 14 pt.
+const SPASI_OTOMATIS = 280;
+function bacaSpasiWord(pPr: El | undefined): SpasiWord {
+  const h: SpasiWord = {};
+  const s = anak(pPr, 'w:spacing');
+  if (s) {
+    const sebelum = angkaAtr(s, 'w:before');
+    const sesudah = angkaAtr(s, 'w:after');
+    const baris = angkaAtr(s, 'w:line');
+    const aturan = atr(s, 'w:lineRule');
+    if (sebelum != null) h.sebelum = sebelum;
+    if (sesudah != null) h.sesudah = sesudah;
+    if (baris != null) h.baris = baris;
+    if (aturan) h.aturan = aturan;
+    if (nyalaAtr(s, 'w:beforeAutospacing')) h.sebelum = SPASI_OTOMATIS;
+    if (nyalaAtr(s, 'w:afterAutospacing')) h.sesudah = SPASI_OTOMATIS;
+  }
+  const k = anak(pPr, 'w:contextualSpacing');
+  if (k) h.kontekstual = nyala(k);
+  return h;
+}
+
 function bacaGaya(xml: string | null): InfoGaya {
   const peta = new Map<string, GayaPar>();
   let bawaan = 'Normal';
-  if (!xml) return { peta, bawaan, dokumen: {} };
+  if (!xml) return { peta, bawaan, dokumen: {}, spasiDokumen: {} };
   const akarGaya = anak(uraiXml(xml), 'w:styles');
-  const dokumen = bacaInd(anak(anak(anak(akarGaya, 'w:docDefaults'), 'w:pPrDefault'), 'w:pPr'));
+  const pPrDokumen = anak(anak(anak(akarGaya, 'w:docDefaults'), 'w:pPrDefault'), 'w:pPr');
+  const dokumen = bacaInd(pPrDokumen);
   for (const s of anakSemua(akarGaya, 'w:style')) {
     if (atr(s, 'w:type') !== 'paragraph') continue;
     const id = atr(s, 'w:styleId') ?? '';
@@ -167,9 +197,10 @@ function bacaGaya(xml: string | null): InfoGaya {
       outline: angkaAtr(anak(pPr, 'w:outlineLvl'), 'w:val'),
       num: numId ? { numId, ilvl: angkaAtr(anak(numPr, 'w:ilvl'), 'w:val') ?? 0 } : null,
       ind: bacaInd(pPr),
+      spasi: bacaSpasiWord(pPr),
     });
   }
-  return { peta, bawaan, dokumen };
+  return { peta, bawaan, dokumen, spasiDokumen: bacaSpasiWord(pPrDokumen) };
 }
 
 /** Tingkat judul gaya (1 = Judul 1) lewat nama "heading n" atau outlineLvl, menurun lewat basedOn. */
@@ -190,6 +221,11 @@ function indGaya(id: string | null, g: InfoGaya, jalan = 0): IndenTersimpan {
   const s = id ? g.peta.get(id) : undefined;
   if (!s || jalan > 10) return {};
   return { ...indGaya(s.dasar, g, jalan + 1), ...s.ind };
+}
+function spasiGaya(id: string | null, g: InfoGaya, jalan = 0): SpasiWord {
+  const s = id ? g.peta.get(id) : undefined;
+  if (!s || jalan > 10) return {};
+  return { ...spasiGaya(s.dasar, g, jalan + 1), ...s.spasi };
 }
 const gayaKeterangan = (id: string | null, g: InfoGaya): boolean =>
   !!id && /^caption$/i.test(g.peta.get(id)?.nama.trim() ?? '');
@@ -257,6 +293,8 @@ interface Par {
   jenis: 'p'; i: number;
   tingkat: number | null; keterangan: boolean; num: NumPar | null;
   jc: string | null; ind: Inden; teks: string; teksTab: string; seg: Seg[];
+  /** Gaya berkas: `w:contextualSpacing` membuang spasi antar-paragraf yang gayanya sama. */
+  idGaya: string; spasi: SpasiWord;
   gambar: string[]; grafikWord: string[];
   sect: { melintang: boolean } | null; pisahHalaman: boolean; toc: boolean;
 }
@@ -295,6 +333,7 @@ function bacaParagraf(p: El, ctx: Konteks, i: number, toc: boolean): Par {
   const par: Par = {
     jenis: 'p', i, tingkat, keterangan: gayaKeterangan(gaya, ctx.gaya), num,
     jc: atr(anak(pPr, 'w:jc'), 'w:val'), ind: { kiri: indSumber.kiri ?? 0, kanan: indSumber.kanan ?? 0, pertama: indSumber.pertama ?? 0 },
+    idGaya: gaya, spasi: { ...ctx.gaya.spasiDokumen, ...spasiGaya(gaya, ctx.gaya), ...bacaSpasiWord(pPr) },
     teks: '', teksTab: '', seg: [], gambar: [], grafikWord: [],
     sect: sp ? { melintang: melintangSect(sp) } : null,
     pisahHalaman: nyala(anak(pPr, 'w:pageBreakBefore')), toc,
@@ -552,8 +591,27 @@ function htmlBaris(seg: Seg[]): string {
   return out;
 }
 
-const htmlNarasi = (par: Par[], bawaanDxa: number): string[] =>
-  susunNarasi(par.map(p => ({ isi: htmlBaris(p.seg).slice(0, BATAS_HTML_BLOK - 200), jc: p.jc, ind: p.ind, num: p.num })), bawaanDxa, BATAS_HTML_BLOK);
+// Word tanpa isian apa pun: rapat, tunggal.
+const SPASI_WORD_KOSONG: Spasi = { sebelum: 0, sesudah: 0, baris: 240 };
+/** Tinggi baris pasti ("exactly", "at least") bukan kelipatan: tak bisa dibawa, ikut Pengaturan Dokumen. */
+const barisKelipatan = (s: SpasiWord) => !s.aturan || s.aturan === 'auto';
+/** Spasi yang Word pakai untuk paragraf ini. `w:contextualSpacing` membuang spasi di sisi paragraf bergaya sama. */
+function spasiBerlakuWord(par: Par[], i: number, dokumen: Spasi): Spasi {
+  const p = par[i];
+  const s = p.spasi;
+  return {
+    sebelum: s.kontekstual && par[i - 1]?.idGaya === p.idGaya ? 0 : s.sebelum ?? SPASI_WORD_KOSONG.sebelum,
+    sesudah: s.kontekstual && par[i + 1]?.idGaya === p.idGaya ? 0 : s.sesudah ?? SPASI_WORD_KOSONG.sesudah,
+    baris: barisKelipatan(s) ? s.baris ?? SPASI_WORD_KOSONG.baris : dokumen.baris,
+  };
+}
+const htmlNarasi = (par: Par[], bawaanDxa: number, dokumen: Spasi): string[] =>
+  susunNarasi(par.map((p, i) => ({ isi: htmlBaris(p.seg).slice(0, BATAS_HTML_BLOK - 200), jc: p.jc, ind: p.ind, num: p.num, spasi: spasiKeTersimpan(spasiBerlakuWord(par, i, dokumen), dokumen) })), bawaanDxa, BATAS_HTML_BLOK);
+
+// Pengaturan Dokumen hanya menerima empat spasi baris ini.
+const BARIS_PENGATURAN = new Map<number, number>([[240, 1], [276, 1.15], [360, 1.5], [480, 2]]);
+const BATAS_SESUDAH_PENGATURAN_PT = 24;
+const palingBerat = (bobot: Map<number, number>) => [...bobot.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0];
 
 // ── Keterangan objek ────────────────────────────────────────────────────────
 const RE_KETERANGAN = /^(Tabel|Gambar|Grafik)\s+(\d{1,3}(?:\.\d{1,3})*)(?=$|[\s.:)\-–—])\s*[.:)\-–—]?\s*(.*)$/i;
@@ -772,6 +830,30 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
 
   // ── Bagian depan: daftar (cadangan judul objek) + Kata Pengantar ──
   const depan: Par[] = [];
+  // Sama seperti indent: yang paling banyak dipakai isi berkas jadi Pengaturan Dokumen, sisanya membawa angkanya
+  // sendiri lewat `data-sp-*`. Kalau tidak, nyaris tiap paragraf berkas biasa membawa atribut yang sama.
+  const bobotBaris = new Map<number, number>();
+  const bobotSesudah = new Map<number, number>();
+  let barisPasti = 0;
+  // Sampul & halaman depan tidak ikut: gayanya bukan gaya isi laporan.
+  const isiBerkas = unsur.slice(awalIsi).filter((u): u is Par => u.jenis === 'p' && u.tingkat == null && !u.keterangan && !u.toc);
+  isiBerkas.forEach((u, i) => {
+    if (!u.teks) return;
+    if (!barisKelipatan(u.spasi)) barisPasti++;
+    const s = spasiBerlakuWord(isiBerkas, i, SPASI_WORD_KOSONG);
+    if (BARIS_PENGATURAN.has(s.baris) && barisKelipatan(u.spasi)) bobotBaris.set(s.baris, (bobotBaris.get(s.baris) ?? 0) + u.teks.length);
+    if (s.sesudah <= BATAS_SESUDAH_PENGATURAN_PT * 20) bobotSesudah.set(s.sesudah, (bobotSesudah.get(s.sesudah) ?? 0) + u.teks.length);
+  });
+  const barisLazim = palingBerat(bobotBaris);
+  const sesudahLazim = palingBerat(bobotSesudah);
+  const adaSpasiBawaan = barisLazim !== undefined || sesudahLazim !== undefined;
+  const spasiBawaanDok = adaSpasiBawaan ? {
+    lineSpacing: barisLazim !== undefined ? BARIS_PENGATURAN.get(barisLazim)! : DEFAULT_STYLE_IMPOR.lineSpacing,
+    spaceAfterPt: sesudahLazim !== undefined ? sesudahLazim / 20 : DEFAULT_STYLE_IMPOR.spaceAfterPt,
+  } : null;
+  const spasiDok = spasiBawaan(spasiBawaanDok?.spaceAfterPt ?? DEFAULT_STYLE_IMPOR.spaceAfterPt, spasiBawaanDok?.lineSpacing ?? DEFAULT_STYLE_IMPOR.lineSpacing);
+  if (barisPasti) peringatan.push(`${barisPasti} paragraf memakai tinggi baris pasti (bukan kelipatan) — spasi barisnya ikut Pengaturan Dokumen.`);
+
   for (let k = 0; k < awalIsi; k++) {
     const u = unsur[k];
     if (u.jenis === 'p') depan.push(u);
@@ -809,7 +891,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   if (kp.length) {
     const { ttd, mulai } = bacaTandaTangan(kp, peringatan);
     const isi = kp.slice(0, mulai).filter(p => p.teks);
-    let html = htmlNarasi(isi, bawaanDxa).join('');
+    let html = htmlNarasi(isi, bawaanDxa, spasiDok).join('');
     if (html.length > BATAS_KATA_PENGANTAR) {
       html = html.slice(0, BATAS_KATA_PENGANTAR);
       html = html.slice(0, html.lastIndexOf('</p>') + 4);
@@ -1039,7 +1121,7 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const tambahBlok = (b: BlokImpor) => { kini().blok.push(b); };
   const salurkan = () => {
     if (!buf.length) return;
-    const potongan = htmlNarasi(buf, bawaanDxa);
+    const potongan = htmlNarasi(buf, bawaanDxa, spasiDok);
     for (const html of potongan) tambahBlok({ tipe: 'NARASI', payload: { html } });
     if (potongan.length) {
       ring.narasi += potongan.length;
@@ -1190,5 +1272,5 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const judulBerkas = rapikan(teksDalam(cariSemua(uraiXml(teksZip(zip, 'docProps/core.xml', 1024 * 1024) ?? ''), 'dc:title')[0] ?? KOSONG)).slice(0, 255);
   const tahunTebakan = tahunDari(baris.flatMap(b => (b.jenis === 'penanda' ? [b.teks] : b.jenis === 'objek' ? [b.judul] : [])));
 
-  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, bagian, gambar, baris, ringkasan: ring, peringatan };
+  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, spasiBawaan: spasiBawaanDok, bagian, gambar, baris, ringkasan: ring, peringatan };
 }

@@ -1,7 +1,7 @@
 // ═══ PRIMA — LKJIP — Paragraf bernomor → HTML narasi (pure, aman-klien) ═══
 // Dipakai Impor Word dan Tempel dari Word, supaya dua pintu masuk menyusun daftar dengan aturan yang sama.
 import { KODE_DESIMAL, adalahBullet, gantungDxa, tagDaftar, tagGaya, teksNomor, type KodeGaya } from './gaya-daftar';
-import { atributInden, indenBawaan, indenBerlaku, keTersimpan, type IndenTersimpan } from './halaman';
+import { atributInden, atributSpasi, indenBawaan, indenBerlaku, keTersimpan, type IndenTersimpan, type SpasiTersimpan } from './halaman';
 
 export interface NomorSusun { kunci: string; ilvl: number; gaya: KodeGaya; nomor: number; induk: number[] }
 export interface ParagrafSusun {
@@ -9,6 +9,8 @@ export interface ParagrafSusun {
   jc: string | null;
   ind: IndenTersimpan;
   num: NomorSusun | null;
+  /** Sudah dibandingkan dengan Pengaturan Dokumen: hanya yang berbeda. Tempel tidak mengisinya. */
+  spasi?: SpasiTersimpan;
   /** HTML asli paragraf tanpa nomor (Tempel): dipakai apa adanya selama ia berdiri di luar daftar. */
   mentah?: string;
 }
@@ -46,6 +48,7 @@ export function susunNarasi(par: readonly ParagrafSusun[], bawaanDxa: number, ba
     const isi = p.isi;
     if (!isi && p.mentah === undefined) return;
     const n = p.num;
+    const sp = atributSpasi(p.spasi ?? {});
     // +200 = tag & atribut paragraf ini; tiap tingkat terbuka masih butuh penutup.
     if (html && html.length + isi.length + 200 + buka.length * 10 > batasHtml) {
       // Blok dipecah: daftar yang sedang terbuka dilanjutkan di blok berikutnya dari nomor butir ini.
@@ -56,11 +59,11 @@ export function susunNarasi(par: readonly ParagrafSusun[], bawaanDxa: number, ba
     if (!n) {
       if (anakPohonIni(bernomorBerikut(k))) {
         const bawaanKiri = buka[buka.length - 1].kiri;
-        if (isi) html += `${pembukaP(p.jc, atributInden(keTersimpan({ ...indenBawaan('lanjutan', bawaanKiri), ...p.ind }, 'lanjutan', bawaanKiri)))}${isi}</p>`;
+        if (isi) html += `${pembukaP(p.jc, atributInden(keTersimpan({ ...indenBawaan('lanjutan', bawaanKiri), ...p.ind }, 'lanjutan', bawaanKiri)) + sp)}${isi}</p>`;
         return;
       }
       tutupSemua();
-      html += p.mentah ?? `${pembukaP(p.jc, atributInden(keTersimpan({ ...indenBawaan('paragraf', bawaanDxa), ...p.ind }, 'paragraf', bawaanDxa)))}${isi}</p>`;
+      html += p.mentah ?? `${pembukaP(p.jc, atributInden(keTersimpan({ ...indenBawaan('paragraf', bawaanDxa), ...p.ind }, 'paragraf', bawaanDxa)) + sp)}${isi}</p>`;
       return;
     }
     if (buka.length && buka[buka.length - 1].kunci !== n.kunci) tutupSemua();
@@ -70,7 +73,7 @@ export function susunNarasi(par: readonly ParagrafSusun[], bawaanDxa: number, ba
     if (sama && sama.ilvl === n.ilvl && (sama.gaya !== n.gaya || (!adalahBullet(n.gaya) && sama.berikut !== n.nomor))) tutupSatu();
     const puncak = buka[buka.length - 1];
     if (!puncak && n.gaya === KODE_DESIMAL && n.ilvl > 0) {
-      html += `${pembukaP(p.jc, atributInden(keTersimpan({ ...indenBawaan('paragraf', bawaanDxa), ...p.ind }, 'paragraf', bawaanDxa)))}${teksNomor(n.gaya, n.nomor, n.induk)} ${isi}</p>`;
+      html += `${pembukaP(p.jc, atributInden(keTersimpan({ ...indenBawaan('paragraf', bawaanDxa), ...p.ind }, 'paragraf', bawaanDxa)) + sp)}${teksNomor(n.gaya, n.nomor, n.induk)} ${isi}</p>`;
       return;
     }
     if (puncak && puncak.ilvl === n.ilvl) html += '</li>';
@@ -83,7 +86,7 @@ export function susunNarasi(par: readonly ParagrafSusun[], bawaanDxa: number, ba
     const gantung = gantungDxa(n.gaya, buka.length);
     const simpan = keTersimpan({ ...indenBawaan('butir', 0, buka.length, gantung), ...p.ind }, 'butir', 0, buka.length, gantung);
     atas.kiri = indenBerlaku(simpan, 'butir', 0, buka.length, gantung).kiri;
-    html += `<li${atributInden(simpan)}><p>${isi}</p>`;
+    html += `<li${atributInden(simpan)}${sp}><p>${isi}</p>`;
   });
   tutupSemua();
   if (html) potong.push(html);

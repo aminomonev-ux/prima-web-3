@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
   if (dibuang) peringatan.push(`${dibuang} blok tidak lolos pemeriksaan isi dan dilewati.`);
   const ttd = hasil.kataPengantar.ttd;
   const style = StyleConfigSchema.parse({
-    ...DEFAULT_STYLE, firstLineIndentCm: hasil.indenBawaanCm ?? DEFAULT_STYLE.firstLineIndentCm, kataPengantarHtml: hasil.kataPengantar.html,
+    ...DEFAULT_STYLE, ...(hasil.spasiBawaan ?? {}), firstLineIndentCm: hasil.indenBawaanCm ?? DEFAULT_STYLE.firstLineIndentCm, kataPengantarHtml: hasil.kataPengantar.html,
     ttdTempatTanggal: ttd.tempatTanggal, ttdJabatan: ttd.jabatan, ttdNama: ttd.nama, ttdPangkat: ttd.pangkat, ttdNip: ttd.nip,
   });
 
