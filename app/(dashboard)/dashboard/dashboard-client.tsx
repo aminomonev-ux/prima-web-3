@@ -257,7 +257,7 @@ export default function DashboardClient({ username, role, themePreference, initi
             <div className="widget fade-up" style={{ '--wc': '#378ADD' } as React.CSSProperties}>
               <div className="widget-head">
                 <div className="widget-ico"><BarChart3 size={20} /></div>
-                <div><div className="widget-title">E-Anggaran</div><div className="widget-tag">E-Controlling anggaran</div></div>
+                <div><div className="widget-title">E-Anggaran</div><div className="widget-tag">E-Controlling anggaran · {ea.versi_label}</div></div>
               </div>
               <div className="kpi-row">
                 <div className="kpi"><div className="kpi-val sm">{fmtRpCompact(ea.total_pagu)}</div><div className="kpi-lbl">Total Pagu</div></div>
@@ -267,6 +267,11 @@ export default function DashboardClient({ username, role, themePreference, initi
               <div className="serap-wrap">
                 <div className="serap-track"><div className="serap-fill" style={{ width: `${Math.min(ea.pct_serapan, 100)}%` }} /></div>
                 <div className="serap-meta"><span>{fmtNum(ea.total_ssk_rows)} baris SSK</span><span>{fmtNum(ea.total_rekening)} rekening</span></div>
+                {ea.sumber_dinolkan.length > 0 && (
+                  <div className="serap-meta" style={{ color: '#BA7517' }}>
+                    <span>{ea.sumber_dinolkan.join(', ')} Rp 0 — seluruh baris versi acuannya dinol-kan</span>
+                  </div>
+                )}
               </div>
               <div className="widget-chart">
                 <ResponsiveContainer width="100%" height="100%">

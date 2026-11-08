@@ -15,6 +15,7 @@ import UserBadge from '@/components/ui/UserBadge';
 import FloatingDock from '@/components/ui/FloatingDock';
 import { fetchJson } from '@/lib/shared/api';
 import { tulisTetap } from '@/lib/shared/desimal';
+import { labelVersi } from '@/lib/kinerja/versi';
 import type { ModuleDetailData, DashModule } from '@/lib/data/dashboard';
 
 interface Props {
@@ -61,6 +62,8 @@ export default function DashboardDetailClient({ username, role, themePreference,
   const modul = pd.modul;
   const meta = META[modul];
   const Icon = meta.icon;
+  // Versi SSK yang jadi acuan angka E-Anggaran — sama dengan yang dipakai modulnya.
+  const versiTag = pd.modul === 'eanggaran' ? pd.data.versi_label : null;
 
   useEffect(() => {
     if (themePreference === 'light') document.documentElement.setAttribute('data-theme', 'light');
@@ -182,7 +185,7 @@ export default function DashboardDetailClient({ username, role, themePreference,
               <button className="dd-back" onClick={() => open('/dashboard')}><ArrowLeft size={15} /> Overview</button>
               <div>
                 <div className="dd-title">{meta.title}</div>
-                <div className="dd-tag">{meta.tag} · TA {tahun}</div>
+                <div className="dd-tag">{meta.tag} · TA {tahun}{versiTag ? ` · ${versiTag}` : ''}</div>
               </div>
             </div>
             <div className="yb">
@@ -295,15 +298,29 @@ export default function DashboardDetailClient({ username, role, themePreference,
                   <div className="panel-h">Rekap per Sumber Anggaran</div>
                   <div style={{ overflowX: 'auto' }}>
                     <table className="dd-tbl">
-                      <thead><tr><th>Sumber</th><th className="num">Pagu</th><th className="num">Realisasi</th><th className="num">Serapan</th></tr></thead>
+                      <thead><tr><th>Sumber</th><th>Versi SSK</th><th className="num">Pagu</th><th className="num">Realisasi</th><th className="num">Serapan</th></tr></thead>
                       <tbody>
                         {d.table.map((r, i) => (
-                          <tr key={i}><td>{r.sumber}</td><td className="num">{fmtRpCompact(r.pagu)}</td><td className="num">{fmtRpCompact(r.realisasi)}</td><td className="num">{r.pct}%</td></tr>
+                          <tr key={i}>
+                            <td>{r.sumber}</td>
+                            <td style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                              {r.versi ? labelVersi(r.versi.tipe, r.versi.seq) : '—'}
+                              {r.dinolkan && <span style={{ color: '#BA7517' }}> · dinol-kan</span>}
+                            </td>
+                            <td className="num">{fmtRpCompact(r.pagu)}</td>
+                            <td className="num">{fmtRpCompact(r.realisasi)}</td>
+                            <td className="num">{r.pct}%</td>
+                          </tr>
                         ))}
-                        {d.table.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#85B7EB' }}>Tidak ada data</td></tr>}
+                        {d.table.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: '#85B7EB' }}>Tidak ada data</td></tr>}
                       </tbody>
                     </table>
                   </div>
+                  {d.yatim_nominal > 0 && (
+                    <div style={{ fontSize: 11.5, color: '#BA7517', marginTop: 8 }}>
+                      {fmtRpCompact(d.yatim_nominal)} realisasi tidak dijumlah karena item SSK-nya sudah tidak ada di versi acuan.
+                    </div>
+                  )}
                 </div>
               </>
             );

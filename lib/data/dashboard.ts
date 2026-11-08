@@ -4,7 +4,8 @@
 // fungsinya). Audiens = role verif/admin → angka agregat penuh (lihat CONCEPT).
 
 import { sql } from '@/lib/data/db';
-import { getKinerjaKpi, SUMBER_LIST } from './kinerja';
+import { getKinerjaKpi, getLaporanSemua, versiAktifKinerja } from './kinerja';
+import { labelVersi } from '@/lib/kinerja/versi';
 import { listRencanaAksi } from './rencana-aksi';
 import type { RaLevel } from './rencana-aksi-schemas';
 import { getDpaLatestDate, getDpaByDate } from '@/lib/blud/data';
@@ -22,13 +23,22 @@ export interface UsulanSummary {
   chartBidang: { sub_bidang: string; cnt: number; nominal: number }[];
 }
 
+export interface EanggaranVersi {
+  tipe: 'MURNI' | 'PERUBAHAN';
+  seq: number;
+}
+
 export interface EanggaranSummary {
   total_pagu: number;
   total_real_keuangan: number;
   pct_serapan: number;
   total_ssk_rows: number;
   total_rekening: number;
-  pagu_per_sumber: { sumber: string; pagu: number }[];
+  pagu_per_sumber: { sumber: string; pagu: number; versi: EanggaranVersi | null; dinolkan: boolean }[];
+  /** Versi SSK yang jadi acuan pagu — sumber boleh berbeda versi, jadi disebut apa adanya. */
+  versi_label: string;
+  /** Sumber yang versi acuannya habis dinol-kan: pagu 0 itu disengaja, bukan data hilang. */
+  sumber_dinolkan: string[];
 }
 
 export interface BludSummary {
@@ -115,17 +125,40 @@ async function getUsulanSummary(tahun: string): Promise<UsulanSummary> {
   };
 }
 
+/**
+ * Label versi satu set sumber. Aturan versinya tetap milik `versiAktifKinerja` (L88);
+ * yang dikerjakan di sini cuma menerjemahkan hasilnya jadi kalimat, supaya kartu
+ * dan tabel menyebut versi yang sedang diukur — bukan cuma angkanya.
+ */
+function ringkasVersiEanggaran(versi: readonly (EanggaranVersi | null)[]): string {
+  const label = [...new Set(
+    versi.filter((v): v is EanggaranVersi => v !== null).map(v => labelVersi(v.tipe, v.seq)),
+  )].sort();
+  if (label.length === 0) return 'Belum ada SSK';
+  if (label.length === 1) return label[0];
+  return `Campuran ${label.join(' / ')}`;
+}
+
 async function getEanggaranSummary(tahun: string): Promise<EanggaranSummary> {
-  const kpi = await getKinerjaKpi(tahun);
+  const [kpi, versi] = await Promise.all([getKinerjaKpi(tahun), versiAktifKinerja(tahun)]);
+  const pagu_per_sumber = Object.entries(kpi.pagu_per_sumber).map(([sumber, pagu]) => {
+    const v = versi.get(sumber);
+    return {
+      sumber,
+      pagu: Number(pagu ?? 0),
+      versi: v ? { tipe: v.tipe, seq: v.seq } : null,
+      dinolkan: v?.dinolkan ?? false,
+    };
+  });
   return {
     total_pagu:          kpi.total_pagu,
     total_real_keuangan: kpi.total_real_keuangan,
     pct_serapan:         kpi.pct_serapan,
     total_ssk_rows:      kpi.total_ssk_rows,
     total_rekening:      kpi.total_rekening,
-    pagu_per_sumber: Object.entries(kpi.pagu_per_sumber).map(([sumber, pagu]) => ({
-      sumber, pagu: Number(pagu ?? 0),
-    })),
+    pagu_per_sumber,
+    versi_label:      ringkasVersiEanggaran(pagu_per_sumber.map(p => p.versi)),
+    sumber_dinolkan:  kpi.sumber_dinolkan,
   };
 }
 
@@ -253,7 +286,10 @@ export interface UsulanDetail {
 export interface EanggaranDetail {
   kpi: { total_pagu: number; total_real_keuangan: number; pct_serapan: number; total_ssk_rows: number; total_rekening: number };
   sumberPie: PieDatum[];
-  table: { sumber: string; pagu: number; realisasi: number; pct: number }[];
+  table: { sumber: string; pagu: number; realisasi: number; pct: number; versi: EanggaranVersi | null; dinolkan: boolean; yatim: number }[];
+  versi_label: string;
+  /** Realisasi yang tidak dijumlah karena item SSK-nya sudah lenyap dari versi acuan. */
+  yatim_nominal: number;
 }
 export interface BludDetail {
   kpi: { versi_tanggal: string | null; total_pagu: number; leaf_baris: number; total_baris: number };
@@ -318,21 +354,30 @@ async function getUsulanDetail(tahun: string): Promise<UsulanDetail> {
 }
 
 async function getEanggaranDetail(tahun: string): Promise<EanggaranDetail> {
-  const [kpi, realRows] = await Promise.all([
-    getKinerjaKpi(tahun),
-    sql`SELECT sumber, COALESCE(SUM(real_keuangan),0) AS realisasi FROM kinerja_realisasi WHERE tahun = ${tahun} GROUP BY sumber`,
-  ]);
-  const realBySumber = new Map((realRows as Record<string, unknown>[]).map(r => [String(r.sumber), Number(r.realisasi ?? 0)]));
-  // Tampilkan SEMUA sumber SSK (SUMBER_LIST 8 sumber), termasuk pagu 0 — agar lengkap,
-  // bukan cuma sumber yang sudah ada barisnya. Pie pakai hanya pagu>0 (slice 0 tak berarti).
-  const table = SUMBER_LIST.map(sumber => {
-    const p = Number(kpi.pagu_per_sumber[sumber] ?? 0); const realisasi = realBySumber.get(sumber) ?? 0;
-    return { sumber, pagu: p, realisasi, pct: p > 0 ? Math.round((realisasi / p) * 10000) / 100 : 0 };
-  }).sort((a, b) => b.pagu - a.pagu);
+  // Realisasi WAJIB lewat `getLaporanSemua`, bukan SUM mentah: pagu di sini sudah
+  // versi aktif, sedangkan `kinerja_realisasi` tidak berversi — baris yang itemnya
+  // sudah lenyap dari versi acuan harus dilewati (yatim), sama seperti kartu KPI.
+  // Dulu tabel ini menjumlah realisasi mentah, jadi angka per sumber bisa melebihi
+  // kartu Total Realisasi dan `pct`-nya bisa menembus 100% (L69).
+  const [kpi, laporan] = await Promise.all([getKinerjaKpi(tahun), getLaporanSemua(tahun)]);
+  // Tampilkan SEMUA sumber SSK (8 sumber), termasuk pagu 0 — agar lengkap, bukan cuma
+  // sumber yang sudah ada barisnya; `getLaporanSemua` sudah memulangkan kedelapannya.
+  // Pie pakai hanya pagu>0 (slice 0 tak berarti).
+  const table = laporan.map(l => ({
+    sumber:    l.sumber,
+    pagu:      l.total_pagu,
+    realisasi: l.total_real_keuangan,
+    pct:       l.pct_serapan,
+    versi:     l.versi_aktif,
+    dinolkan:  l.versi_dinolkan,
+    yatim:     l.yatim.nominal,
+  })).sort((a, b) => b.pagu - a.pagu);
   return {
     kpi: { total_pagu: kpi.total_pagu, total_real_keuangan: kpi.total_real_keuangan, pct_serapan: kpi.pct_serapan, total_ssk_rows: kpi.total_ssk_rows, total_rekening: kpi.total_rekening },
     sumberPie: table.filter(t => t.pagu > 0).map(t => ({ name: t.sumber, value: t.pagu })),
     table,
+    versi_label:   ringkasVersiEanggaran(table.map(t => t.versi)),
+    yatim_nominal: table.reduce((s, t) => s + t.yatim, 0),
   };
 }
 
