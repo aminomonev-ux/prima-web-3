@@ -16,6 +16,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import { fetchJson } from '@/lib/shared/api';
 import { tulisPersen, tulisTetap } from '@/lib/shared/desimal';
 import type { DashboardSummary } from '@/lib/data/dashboard';
+import { AMBANG_CAPAIAN } from '@/app/(dashboard)/rencana-aksi/_lib/types';
 
 interface Props {
   username: string;
@@ -375,7 +376,7 @@ export default function DashboardClient({ username, role, themePreference, initi
                     <Tooltip cursor={{ fill: 'rgba(29,158,117,.1)' }} formatter={(v) => `${Number(v)}%`} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                     <Bar dataKey="value" radius={[5, 5, 0, 0]}>
                       {realChart.map((d, i) => (
-                        <Cell key={i} fill={d.value >= 90 ? '#1D9E75' : d.value >= 60 ? '#EF9F27' : '#E24B4A'} />
+                        <Cell key={i} fill={d.value >= AMBANG_CAPAIAN.tercapai ? '#1D9E75' : d.value >= AMBANG_CAPAIAN.waspada ? '#EF9F27' : '#E24B4A'} />
                       ))}
                     </Bar>
                   </BarChart>
