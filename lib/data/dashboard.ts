@@ -7,10 +7,16 @@ import { sql } from '@/lib/data/db';
 import { getKinerjaKpi, getLaporanSemua, versiAktifKinerja } from './kinerja';
 import { labelVersi } from '@/lib/kinerja/versi';
 import { listRencanaAksi } from './rencana-aksi';
+import type { RaRow } from './rencana-aksi';
 import type { RaLevel } from './rencana-aksi-schemas';
 import { getDpaLatestDate, getDpaByDate } from '@/lib/blud/data';
+import { totalDpaBlud } from '@/lib/blud/audit-pj';
 import { ringkasSerapan } from '@/lib/blud/serapan-ringkas';
 import { itemUsulanTahun } from './usulan';
+// Rumus capaian Renaksi dipinjam dari modulnya, BUKAN disalin: `capaianTahunan`
+// membalik Progres Negatif dan membaca realisasi bulanan — dua hal yang dulu
+// diabaikan /dashboard sehingga angkanya berbeda dari layar modul (L88).
+import { AMBANG_CAPAIAN, capaianTahunan } from '@/app/(dashboard)/rencana-aksi/_lib/types';
 
 export interface UsulanSummary {
   total: number;
@@ -86,7 +92,44 @@ export interface DashboardSummary {
 }
 
 const RA_LEVELS: RaLevel[] = ['tujuan', 'sasaran', 'program', 'kegiatan', 'sub-kegiatan'];
-const ON_TRACK_THRESHOLD = 90; // % capaian ≥ ini = on-track
+
+/** Baris DPA tanpa anak — definisi "rincian" yang dipakai pohonnya, bukan heuristik vol/harga. */
+function daunDpa<T extends { row_id: string; parent_id: string | null }>(rows: readonly T[]): T[] {
+  const induk = new Set(rows.map(r => r.parent_id).filter((p): p is string => Boolean(p)));
+  return rows.filter(r => !induk.has(r.row_id));
+}
+
+/**
+ * Capaian per indikator. Tanpa target tidak ada pembagi, jadi TIDAK dihitung —
+ * dulu baris begini masuk sebagai 0% dan menenggelamkan capaian sebenarnya.
+ */
+function capaianIndikator(r: RaRow): number | null {
+  if (r.target_tahunan <= 0) return null;
+  return capaianTahunan(r);
+}
+
+/**
+ * Rata-rata persen indikator, BUKAN Σrealisasi/Σtarget: target antar-level dan
+ * antar-satuan tidak sebangun (satu indikator rupiah, sebelahnya persen), jadi
+ * menjumlahkannya menghasilkan persen yang tidak mengukur apa pun. Ambang
+ * "tercapai" ikut modul Renaksi (100), bukan 90 yang cuma hidup di sini.
+ */
+function ringkasCapaian(rows: readonly RaRow[]): { dinilai: number; pct: number; tercapai: number; belum: number } {
+  let jumlah = 0, dinilai = 0, tercapai = 0;
+  for (const r of rows) {
+    const c = capaianIndikator(r);
+    if (c == null) continue;
+    jumlah += c;
+    dinilai++;
+    if (c >= AMBANG_CAPAIAN.tercapai) tercapai++;
+  }
+  return {
+    dinilai,
+    pct: dinilai > 0 ? Math.round((jumlah / dinilai) * 100) / 100 : 0,
+    tercapai,
+    belum: dinilai - tercapai,
+  };
+}
 
 // B5: widget & detail Usulan ikut pemilih tahun, seperti keempat modul lainnya.
 async function getUsulanSummary(tahun: string): Promise<UsulanSummary> {
@@ -171,8 +214,9 @@ async function getEanggaranSummary(tahun: string): Promise<EanggaranSummary> {
  * pada widget BLUD. Serapan selalu milik satu tahun tertentu, jadi tahunnya harus
  * diputuskan, bukan disimpulkan dari versi DPA yang kebetulan paling baru.
  *
- * `total_pagu` di sini tetap pagu DPA (baris 'BELANJA DAERAH') — kartu itu memang
- * bicara soal dokumen DPA. Pagu ACUAN realisasi ikut di `serapan.pagu`, lengkap
+ * `total_pagu` di sini tetap pagu DPA — sekarang lewat `totalDpaBlud`, definisi yang
+ * sama dengan Beranda BLUD. Kartu itu memang bicara soal dokumen DPA. Pagu ACUAN
+ * realisasi ikut di `serapan.pagu`, lengkap
  * dengan versinya, karena keduanya menjawab pertanyaan yang berbeda dan
  * mencampurnya persis cara dua kartu bersebelahan saling membantah (§2).
  */
@@ -192,9 +236,11 @@ async function getBludSummary(tahun: number, bolehSerapan: boolean): Promise<Blu
     return { versi_tanggal: null, total_pagu: 0, total_baris: 0, leaf_baris: 0, serapan: sisiSerapan };
   }
   const rows = await getDpaByDate(tahun, versi_tanggal);
-  // Total pagu = baris induk 'BELANJA DAERAH' (konvensi cetak-data.ts).
-  const total_pagu = rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0;
-  const leaf_baris = rows.filter(r => (r.vol ?? 0) > 0 || (r.harga ?? 0) > 0).length;
+  // Total pagu lewat definisi bersama BLUD (`totalDpaBlud`): GRANDMASTER → root →
+  // 'BELANJA DAERAH'. Dulu di sini hanya lookup 'BELANJA DAERAH', jadi DPA dengan
+  // root bernama lain terbaca Rp 0 padahal Beranda BLUD menampilkan angkanya (L69).
+  const total_pagu = totalDpaBlud(rows);
+  const leaf_baris = daunDpa(rows).length;
   return {
     versi_tanggal,
     total_pagu: Number(total_pagu) || 0,
@@ -204,19 +250,12 @@ async function getBludSummary(tahun: number, bolehSerapan: boolean): Promise<Blu
   };
 }
 
-function sumQuarters(r: { q1_target: number; q2_target: number; q3_target: number; q4_target: number; q1_realisasi: number | null; q2_realisasi: number | null; q3_realisasi: number | null; q4_realisasi: number | null }) {
-  const target = r.q1_target + r.q2_target + r.q3_target + r.q4_target;
-  const real   = (r.q1_realisasi ?? 0) + (r.q2_realisasi ?? 0) + (r.q3_realisasi ?? 0) + (r.q4_realisasi ?? 0);
-  return { target, real };
-}
-
 async function getRenaksiAndRealisasi(tahun: number): Promise<{ renaksi: RenaksiSummary; realisasiKinerja: RealisasiKinerjaSummary }> {
   const perLevelRows = await Promise.all(RA_LEVELS.map(lvl => listRencanaAksi(tahun, lvl)));
 
   const renaksiPerLevel: RenaksiLevelStat[] = [];
   const realisasiPerLevel: RealisasiLevelStat[] = [];
   let totalIndikator = 0;
-  let grandTarget = 0, grandReal = 0, onTrack = 0, lagging = 0;
 
   RA_LEVELS.forEach((level, i) => {
     const rows = perLevelRows[i];
@@ -226,29 +265,16 @@ async function getRenaksiAndRealisasi(tahun: number): Promise<{ renaksi: Renaksi
       count: rows.length,
       target_terisi: rows.filter(r => r.target_tahunan > 0).length,
     });
-
-    let lvlTarget = 0, lvlReal = 0;
-    for (const r of rows) {
-      const { target, real } = sumQuarters(r);
-      lvlTarget += target; lvlReal += real;
-      if (target > 0) {
-        const pct = (real / target) * 100;
-        if (pct >= ON_TRACK_THRESHOLD) onTrack++; else lagging++;
-      }
-    }
-    grandTarget += lvlTarget; grandReal += lvlReal;
-    realisasiPerLevel.push({
-      level,
-      pct: lvlTarget > 0 ? Math.round((lvlReal / lvlTarget) * 10000) / 100 : 0,
-    });
+    realisasiPerLevel.push({ level, pct: ringkasCapaian(rows).pct });
   });
 
+  const semua = ringkasCapaian(perLevelRows.flat());
   return {
     renaksi: { total_indikator: totalIndikator, per_level: renaksiPerLevel },
     realisasiKinerja: {
-      pct_capaian_total: grandTarget > 0 ? Math.round((grandReal / grandTarget) * 10000) / 100 : 0,
-      on_track: onTrack,
-      lagging,
+      pct_capaian_total: semua.pct,
+      on_track: semua.tercapai,
+      lagging: semua.belum,
       per_level: realisasiPerLevel,
     },
   };
@@ -303,7 +329,7 @@ export interface RenaksiDetail {
 export interface RealisasiKinerjaDetail {
   kpi: { pct_capaian_total: number; on_track: number; lagging: number };
   pie: PieDatum[];
-  table: { level: RaLevel; total: number; sum_target: number; sum_real: number; pct: number }[];
+  table: { level: RaLevel; total: number; dinilai: number; pct: number }[];
 }
 
 export type ModuleDetailData =
@@ -388,9 +414,9 @@ async function getBludDetail(tahun: number): Promise<BludDetail> {
   const versi_tanggal = await getDpaLatestDate(tahun);
   if (!versi_tanggal) return { kpi: { versi_tanggal: null, total_pagu: 0, leaf_baris: 0, total_baris: 0 }, kelompokPie: [], table: [] };
   const rows = await getDpaByDate(tahun, versi_tanggal);
-  const total_pagu = rows.find(r => (r.uraian ?? '').trim().toUpperCase() === 'BELANJA DAERAH')?.jumlah ?? 0;
+  const total_pagu = totalDpaBlud(rows);
   const uraianByKode = new Map(rows.map(r => [r.kode_rekening, r.uraian]));
-  const leaf = rows.filter(r => (r.vol ?? 0) > 0 || (r.harga ?? 0) > 0);
+  const leaf = daunDpa(rows);
   const map = new Map<string, { jumlah: number; count: number }>();
   for (const r of leaf) {
     const key = (r.kode_rekening || '').split('.').slice(0, 2).join('.') || r.kode_rekening || '—';
@@ -421,20 +447,15 @@ async function getRenaksiDetail(tahun: number): Promise<RenaksiDetail> {
 
 async function getRealisasiKinerjaDetail(tahun: number): Promise<RealisasiKinerjaDetail> {
   const perLevelRows = await Promise.all(RA_LEVELS.map(l => listRencanaAksi(tahun, l)));
-  let onTrack = 0, lagging = 0, grandT = 0, grandR = 0;
+  const semua = ringkasCapaian(perLevelRows.flat());
   const table = RA_LEVELS.map((level, i) => {
-    let t = 0, r = 0;
-    for (const row of perLevelRows[i]) {
-      const { target, real } = sumQuarters(row);
-      t += target; r += real;
-      if (target > 0) { const pct = (real / target) * 100; if (pct >= ON_TRACK_THRESHOLD) onTrack++; else lagging++; }
-    }
-    grandT += t; grandR += r;
-    return { level, total: perLevelRows[i].length, sum_target: t, sum_real: r, pct: t > 0 ? Math.round((r / t) * 10000) / 100 : 0 };
+    const rows = perLevelRows[i];
+    const s = ringkasCapaian(rows);
+    return { level, total: rows.length, dinilai: s.dinilai, pct: s.pct };
   });
   return {
-    kpi: { pct_capaian_total: grandT > 0 ? Math.round((grandR / grandT) * 10000) / 100 : 0, on_track: onTrack, lagging },
-    pie: [{ name: 'Tercapai', value: onTrack }, { name: 'Belum Tercapai', value: lagging }].filter(d => d.value > 0),
+    kpi: { pct_capaian_total: semua.pct, on_track: semua.tercapai, lagging: semua.belum },
+    pie: [{ name: 'Tercapai', value: semua.tercapai }, { name: 'Belum Tercapai', value: semua.belum }].filter(d => d.value > 0),
     table,
   };
 }

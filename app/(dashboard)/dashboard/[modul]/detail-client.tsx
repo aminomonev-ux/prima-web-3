@@ -458,13 +458,12 @@ export default function DashboardDetailClient({ username, role, themePreference,
                 </div>
                 <div className="panel fade-up">
                   <div className="panel-h">Rekap Capaian per Level</div>
-                  <table className="dd-tbl">
-                    <thead><tr><th>Level</th><th className="num">Indikator</th><th className="num">Σ Target</th><th className="num">Σ Realisasi</th><th className="num">Capaian</th></tr></thead>
-                    <tbody>
-                      {d.table.map((r, i) => (
-                        <tr key={i}><td>{RA_LEVEL_LABEL[r.level] ?? r.level}</td><td className="num">{fmtNum(r.total)}</td><td className="num">{fmtNum(r.sum_target)}</td><td className="num">{fmtNum(r.sum_real)}</td><td className="num">{r.pct}%</td></tr>
-                      ))}
-                    </tbody>
+                  <table className="dd-tbl">                      <thead><tr><th>Level</th><th className="num">Indikator</th><th className="num">Dinilai</th><th className="num">Capaian</th></tr></thead>
+                      <tbody>
+                        {d.table.map((r, i) => (
+                          <tr key={i}><td>{RA_LEVEL_LABEL[r.level] ?? r.level}</td><td className="num">{fmtNum(r.total)}</td><td className="num">{fmtNum(r.dinilai)}</td><td className="num">{r.pct}%</td></tr>
+                        ))}
+                      </tbody>
                   </table>
                 </div>
               </>
