@@ -52,6 +52,10 @@ export type AuditEventType =
   | 'LKJIP_IMPOR_WORD'
   | 'LKJIP_UPDATE'
   | 'LKJIP_DELETE'
+  // Penolakan hapus dokumen FINAL dulu lenyap tanpa baris: route langsung 400 sebelum
+  // writeAuditLog. Padahal justru itu pertanyaan auditor — siapa mencoba menghapus
+  // dokumen terkunci, kapan, dan syarat mana yang gagal.
+  | 'LKJIP_DELETE_DITOLAK'
   | 'LKJIP_FINALIZE'
   | 'LKJIP_GENERATE'
   | 'LKJIP_DRIVE_ARCHIVE'

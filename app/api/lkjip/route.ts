@@ -49,7 +49,16 @@ export async function DELETE(req: NextRequest) {
   const alasan = parsed.data.alasan ?? '';
   const hasil = await hapusDokumen(parsed.data.id, { alasan, arsipDiunduh: parsed.data.arsip_diunduh });
   if (hasil.jenis === 'TIDAK_ADA') return NextResponse.json({ ok: false, msg: 'Dokumen tidak ditemukan' }, { status: 404 });
-  if (hasil.jenis === 'DITOLAK') return NextResponse.json({ ok: false, code: hasil.tolak.code, msg: hasil.tolak.msg }, { status: 400 });
+  if (hasil.jenis === 'DITOLAK') {
+    const doc = hasil.dokumen;
+    // Alasan yang GAGAL syarat tetap dicatat (bisa kosong/terlalu pendek): tanpa baris ini
+    // percobaan menghapus dokumen FINAL lenyap, dan hanya penghapusan yang BERHASIL berjejak.
+    await writeAuditLog({
+      req, eventType: 'LKJIP_DELETE_DITOLAK', userId: g.session.userId, username: g.session.username,
+      detail: `LKJIP delete DITOLAK id=${doc.id} ${doc.canonical_id} "${doc.judul.slice(0, 80)}" · status=${doc.status} · code=${hasil.tolak.code} · arsip_diunduh=${parsed.data.arsip_diunduh === true} · alasan: ${alasan || '(kosong)'}`,
+    });
+    return NextResponse.json({ ok: false, code: hasil.tolak.code, msg: hasil.tolak.msg }, { status: 400 });
+  }
   const doc = hasil.dokumen;
   // Jejak harus bisa dibaca SETELAH barisnya tiada: `id=165` saja menjadi angka tanpa arti
   // begitu dokumennya terhapus, dan judulnya tidak bisa dicari lagi di mana pun. Karena itu

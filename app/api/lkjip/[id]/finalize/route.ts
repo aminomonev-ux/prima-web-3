@@ -19,14 +19,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const raw = await req.json().catch(() => null);
   const parsed = DokumenFinalizeSchema.safeParse({ ...(raw ?? {}), id });
   if (!parsed.success) return NextResponse.json({ ok: false, msg: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
+  let hasil: { id: number; canonical_id: string; judul: string; version: number };
   try {
-    await finalizeDokumen(id, parsed.data.expected_version, g.session.userId);
+    hasil = await finalizeDokumen(id, parsed.data.expected_version, g.session.userId);
   } catch (err) {
     if (err instanceof LkjipVersionConflictError) return NextResponse.json({ ok: false, code: 'VERSION_CONFLICT', msg: err.message }, { status: 409 });
     if (err instanceof LkjipFinalError)           return NextResponse.json({ ok: false, msg: err.message }, { status: 409 });
     if (err instanceof LkjipNotFoundError)        return NextResponse.json({ ok: false, msg: err.message }, { status: 404 });
     throw err;
   }
-  await writeAuditLog({ req, eventType: 'LKJIP_FINALIZE', userId: g.session.userId, username: g.session.username, detail: `LKJIP finalize id=${id}` });
+  // Versi & identitas ikut ditulis: sesudah dokumen dihapus, baris ini satu-satunya yang
+  // bisa menjawab "versi berapa yang dikunci", karena baris dokumennya sudah tiada.
+  await writeAuditLog({ req, eventType: 'LKJIP_FINALIZE', userId: g.session.userId, username: g.session.username, detail: `LKJIP finalize id=${hasil.id} ${hasil.canonical_id} "${hasil.judul.slice(0, 80)}" · versi ${hasil.version}` });
   return NextResponse.json({ ok: true });
 }

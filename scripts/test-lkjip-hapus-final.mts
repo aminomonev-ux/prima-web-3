@@ -72,6 +72,16 @@ ok('C5 jejak audit menyimpan alasan UTUH', route.includes('alasan: ${alasan}`') 
 ok('C6 jejak audit menyebut pernyataan arsip', route.includes('arsip Word dinyatakan sudah diunduh'))
 ok('C7 jejak menyebut kode & judul (dokumennya sudah tiada saat dibaca)',
   route.includes('${doc.canonical_id}') && route.includes('${doc.judul.slice(0, 80)}'))
+const finalizeRoute = kode('app/api/lkjip/[id]/finalize/route.ts')
+const iTolak = route.indexOf("hasil.jenis === 'DITOLAK'")
+const iAuditTolak = route.indexOf("eventType: 'LKJIP_DELETE_DITOLAK'")
+const i400 = route.indexOf('status: 400', iTolak)
+ok('C18 penolakan hapus berjejak SEBELUM 400', iTolak >= 0 && iAuditTolak > iTolak && iAuditTolak < i400)
+ok('C18b jejak penolakan menyebut kode & nilai centang',
+  route.includes('code=${hasil.tolak.code}') && route.includes('arsip_diunduh=${parsed.data.arsip_diunduh === true}'))
+ok('C19 jejak finalisasi menyebut kode, judul & versi',
+  finalizeRoute.includes('${hasil.canonical_id}') && finalizeRoute.includes('${hasil.judul.slice(0, 80)}')
+  && finalizeRoute.includes('versi ${hasil.version}'))
 
 ok('C8 layar mengirim lewat badan, alamat hanya id', klien.includes('fetch(`/api/lkjip?id=${d.id}`, {') && klien.includes('body: JSON.stringify(isian ?? {})') && !klien.includes('encodeURIComponent'))
 ok('C9 centang arsip WAJIB', /centang: \{[\s\S]{0,260}wajib: true/.test(klien))
@@ -120,16 +130,22 @@ if (koneksi) {
     ok('D2 baris DRAFT benar-benar hilang', (await getDokumen(draft.id)) === null)
 
     // ── FINAL: dua penolakan, dokumen utuh
-    const { id: idFinal } = await createDokumen(TAHUN_UJI, `${AWALAN} final`, userId, 'standar')
-    await finalizeDokumen(idFinal, (await getDokumen(idFinal))!.version, userId)
+    const { id: idFinal, canonical_id: cidFinal } = await createDokumen(TAHUN_UJI, `${AWALAN} final`, userId, 'standar')
+    const vSebelum = (await getDokumen(idFinal))!.version
+    const fHasil = await finalizeDokumen(idFinal, vSebelum, userId)
     const bab = await hitung('lkjip_section', idFinal)
     ok('D3 dokumen uji punya bab', bab > 0, `bab=${bab}`)
+    ok('D3b finalisasi memulangkan identitas & versi sesudah kenaikan',
+      fHasil.id === idFinal && fHasil.canonical_id === cidFinal && fHasil.version === vSebelum + 1,
+      JSON.stringify(fHasil))
     await koneksi.query(
       'INSERT INTO lkjip_versi (dokumen_id, versi_no, label, snapshot, created_by) VALUES (?, 1, ?, ?, ?)',
       [idFinal, 'uji', '{}', userId],
     )
     const t1 = await hapusDokumen(idFinal, { arsipDiunduh: true })
-    ok('D4 FINAL tanpa alasan ditolak', t1.jenis === 'DITOLAK' && t1.tolak.code === 'ALASAN_WAJIB')
+    ok('D4 FINAL tanpa alasan ditolak & identitas dipulangkan untuk audit',
+      t1.jenis === 'DITOLAK' && t1.tolak.code === 'ALASAN_WAJIB'
+      && t1.dokumen.status === 'FINAL' && t1.dokumen.canonical_id === cidFinal)
     const t2 = await hapusDokumen(idFinal, { alasan: ALASAN_SAH })
     ok('D5 FINAL tanpa pernyataan arsip ditolak', t2.jenis === 'DITOLAK' && t2.tolak.code === 'ARSIP_BELUM')
     const utuh = await getDokumen(idFinal)

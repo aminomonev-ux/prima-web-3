@@ -258,7 +258,9 @@ export async function updateDokumenHeader(
   assertCas(res);
 }
 
-export async function finalizeDokumen(id: number, expectedVersion: number, userId: number): Promise<void> {
+export async function finalizeDokumen(id: number, expectedVersion: number, userId: number): Promise<{
+  id: number; canonical_id: string; judul: string; version: number;
+}> {
   const doc = await getDokumen(id);
   if (!doc) throw new LkjipNotFoundError();
   if (doc.status === 'FINAL') throw new LkjipFinalError();
@@ -271,11 +273,16 @@ export async function finalizeDokumen(id: number, expectedVersion: number, userI
     WHERE id = ${id} AND version = ${expectedVersion} AND status = 'DRAFT'
   `;
   assertCas(res);
+  // Versi SESUDAH kenaikan, bukan `doc.version` yang dibaca sebelum UPDATE: jejak audit
+  // harus menyebut versi yang benar-benar dikunci, dan baris dokumennya bisa hilang nanti.
+  return { id: doc.id, canonical_id: doc.canonical_id, judul: doc.judul, version: doc.version + 1 };
 }
 
 export type HasilHapusDokumen =
   | { jenis: 'TIDAK_ADA' }
-  | { jenis: 'DITOLAK'; tolak: TolakHapus }
+  // Identitas ikut dipulangkan: dokumen yang ditolak masih ada, tapi audit penolakan butuh
+  // kode & judul — `id=166` saja tidak bisa dibaca setelah dokumennya kelak dihapus.
+  | { jenis: 'DITOLAK'; tolak: TolakHapus; dokumen: Pick<LkjipDokumen, 'id' | 'canonical_id' | 'judul' | 'status'> }
   | { jenis: 'TERHAPUS'; dokumen: Pick<LkjipDokumen, 'id' | 'canonical_id' | 'judul' | 'status'> };
 
 export async function hapusDokumen(id: number, isian: IsianHapus): Promise<HasilHapusDokumen> {
@@ -288,7 +295,7 @@ export async function hapusDokumen(id: number, isian: IsianHapus): Promise<Hasil
     const dokumen = rows[0];
     if (!dokumen) return { jenis: 'TIDAK_ADA' };
     const tolak = alasanTolakHapus(dokumen.status, isian);
-    if (tolak) return { jenis: 'DITOLAK', tolak };
+    if (tolak) return { jenis: 'DITOLAK', tolak, dokumen };
     // Bab, blok, dan riwayat versi ikut lewat FK CASCADE.
     await tx`DELETE FROM lkjip_dokumen WHERE id = ${id}`;
     return { jenis: 'TERHAPUS', dokumen };
