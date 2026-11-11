@@ -265,6 +265,39 @@ async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promis
 }
 
 /**
+ * Jejak ganti nama untuk modul yang MENYALIN nama Renaksi (E-Anggaran, PK, IKI) —
+ * docs/CONCEPT-renaksi-terhubung.md §4. Entitas Renaksi tidak punya id, jadi tanpa
+ * catatan ini ganti nama hanya terbaca "satu hilang + satu baru". Ditulis di transaksi
+ * yang sama dengan penjalarannya: ganti nama yang batal tidak boleh meninggalkan catatan.
+ * Tanpa status "sudah diterapkan" — pembacanya menilai sendiri apakah masih berlaku.
+ */
+async function catatGantiNama(tx: TxSql, tahun: number, g: GantiNama, userId: number): Promise<void> {
+  await tx`
+    INSERT INTO renaksi_ganti_nama (tahun, level, dari, ke, induk, induk_program, oleh)
+    VALUES (${tahun}, ${g.level}, ${g.dari}, ${g.ke}, ${g.induk}, ${g.indukProgram}, ${userId})
+  `;
+}
+
+export interface CatatanGantiNama {
+  id: number;
+  level: RaLevel;
+  dari: string;
+  ke: string;
+  induk: string | null;
+  induk_program: string | null;
+}
+
+/** Urut kejadian (id naik) — pembaca merangkai A → B → C. */
+export async function listGantiNama(tahun: number): Promise<CatatanGantiNama[]> {
+  return queryMany<CatatanGantiNama>(sql`
+    SELECT CAST(id AS UNSIGNED) AS id, level, dari, ke, induk, induk_program
+    FROM renaksi_ganti_nama
+    WHERE tahun = ${tahun}
+    ORDER BY id
+  `);
+}
+
+/**
  * Upsert by (tahun, level, indikator). Realisasi tidak di-update (preserve).
  * Kalau `id` diberikan dan exists → update by id (allow rename indikator).
  */
@@ -358,7 +391,10 @@ export async function upsertRencanaAksi(
           AND (${expectedVersion === null ? 1 : 0} = 1 OR version = ${expectedVersion ?? 0})
       `;
       assertUpdated(res);
-      if (gantiNama) await jalarkanGantiNama(tx, Number(lama.tahun), gantiNama);
+      if (gantiNama) {
+        await jalarkanGantiNama(tx, Number(lama.tahun), gantiNama);
+        await catatGantiNama(tx, Number(lama.tahun), gantiNama, userId);
+      }
     });
     return id;
   };

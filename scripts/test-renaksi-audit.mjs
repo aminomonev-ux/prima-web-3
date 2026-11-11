@@ -69,6 +69,7 @@ const bulan = (...v) => { const a = Array(12).fill(null); v.forEach((x, i) => { 
 async function bersih() {
   for (const t of [TH, TH_SUMBER, TH_TUJUAN]) {
     await sql`DELETE FROM rencana_aksi WHERE tahun = ${t}`
+    await sql`DELETE FROM renaksi_ganti_nama WHERE tahun = ${t}`
     await sql`DELETE FROM system_settings WHERE \`key\` = ${`ra_lock_${t}`}`
   }
   await sql`DELETE FROM blud_locks WHERE entity = 'RA_DUPLIKASI' AND key_id IN (${[String(TH_TUJUAN), String(TH_SUMBER), String(TH)]})`
@@ -195,6 +196,34 @@ async function main() {
 
   const tahunLain = await RA.listRencanaAksi(TH_SUMBER, 'sasaran')
   periksa('Tahun lain tidak tersentuh ganti nama', tahunLain.every((x) => x.tujuan !== 'TUJ BARU'), `n=${tahunLain.length}`)
+
+  console.log('\n── Catatan ganti nama (renaksi_ganti_nama) — konsep renaksi-terhubung §4 ──')
+  // Modul penyalin (E-Anggaran, PK, IKI) mengenali "berganti nama" dari catatan ini;
+  // tanpanya ganti nama terbaca "satu hilang + satu baru".
+  const catatan = await RA.listGantiNama(TH)
+  const ringkas = catatan.map((c) => `${c.level}:${c.dari}>${c.ke}`)
+  periksa('Lima ganti nama = lima catatan, urut kejadian', JSON.stringify(ringkas) === JSON.stringify([
+    'tujuan:TUJ-JALAR>TUJ BARU', 'sasaran:SAS-JALAR>SAS BARU', 'program:PRG-JALAR>PRG BARU',
+    'kegiatan:KEG-JALAR>KEG BARU', 'sub-kegiatan:SUB-JALAR>SUB BARU',
+  ]), ringkas.join(' | '))
+  const cProg = catatan.find((c) => c.level === 'program')
+  periksa('…catatan program membawa induk lama (sasaran)', cProg?.induk === 'SAS BARU' && cProg?.induk_program === null, `${cProg?.induk}/${cProg?.induk_program}`)
+  const cSub = catatan.find((c) => c.level === 'sub-kegiatan')
+  periksa('…catatan sub-kegiatan membawa kegiatan + program lama', cSub?.induk === 'KEG BARU' && cSub?.induk_program === 'PRG BARU', `${cSub?.induk}/${cSub?.induk_program}`)
+  const [oleh] = await sql`SELECT oleh FROM renaksi_ganti_nama WHERE tahun = ${TH} ORDER BY id LIMIT 1`
+  periksa('…mencatat pengubahnya', Number(oleh?.oleh) === UID, `oleh=${oleh?.oleh}`)
+
+  // Simpan tanpa mengubah nama entitas (satuan saja) tidak boleh menulis catatan.
+  sub = await cari('sub-kegiatan', 'IND-JALAR-SUB')
+  await RA.upsertRencanaAksi(dasar({ id: sub.id, indikator: 'IND-JALAR-SUB', program: 'PRG BARU', kegiatan: 'KEG BARU', sub_kegiatan: 'SUB BARU', satuan: 'Unit', expected_version: sub.version }), UID)
+  periksa('Simpan tanpa ganti nama tidak menulis catatan', (await RA.listGantiNama(TH)).length === 5, `n=${(await RA.listGantiNama(TH)).length}`)
+
+  // Ganti nama yang DITOLAK (versi basi) tidak boleh meninggalkan catatan.
+  sub = await cari('sub-kegiatan', 'IND-JALAR-SUB')
+  const eBasi = await tangkap(() => RA.upsertRencanaAksi(dasar({ id: sub.id, indikator: 'IND-JALAR-SUB', program: 'PRG BARU', kegiatan: 'KEG BARU', sub_kegiatan: 'SUB GAGAL', expected_version: sub.version + 99 }), UID))
+  const sesudahGagal = await RA.listGantiNama(TH)
+  periksa('Ganti nama ditolak 409 → tanpa catatan', eBasi === 'RaVersionConflictError' && sesudahGagal.length === 5 && !sesudahGagal.some((c) => c.ke === 'SUB GAGAL'), `${eBasi} n=${sesudahGagal.length}`)
+  periksa('Catatan tidak bocor ke tahun lain', (await RA.listGantiNama(TH_SUMBER)).length === 0)
 
   console.log('\n── T8: simpan massal matriks bulanan ──')
   const idA = await RA.upsertRencanaAksi(dasar({ indikator: 'IND-bulk-A' }), UID)
