@@ -209,7 +209,13 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         anggaran_nominal: level === 'sub-kegiatan' ? (anggaranNominal || null) : null,
         bulan_target: isSub ? bulanTarget : null,
       });
-      notify(editingId ? `Berhasil memperbarui data entry: ${nm}` : `Berhasil menambah data entry baru: ${nm}`, 'success');
+      notify(
+        (editingId ? `Berhasil memperbarui data entry: ${nm}` : `Berhasil menambah data entry baru: ${nm}`)
+        + (namaEntitasBerubah
+          ? ` — nama ${level.replace('-', ' ')} ikut diperbarui di seluruh baris turunannya.`
+          : ''),
+        'success',
+      );
       resetForm();
       await onReload();
     } catch (err) {
@@ -250,6 +256,19 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const barisAsli = editingId != null ? (rows.find(r => r.id === editingId) ?? null) : null;
   const targetBerubah = barisAsli != null
     && (targetTahunan !== barisAsli.target_tahunan || targetRpjmd !== barisAsli.target_rpjmd);
+
+  // Nama entitas level ini bisa berubah di form; server menjalarkannya ke seluruh
+  // baris turunan (hierarki Renaksi disambung teks nama). Perubahan yang tidak
+  // diketik langsung itu dinyatakan di toast, jangan tampil seperti sulap.
+  const namaBaruLevel = (level === 'tujuan' || level === 'sasaran' || level === 'program'
+    ? program
+    : level === 'kegiatan' ? kegiatan : subKegiatan).trim();
+  const namaLamaLevel = barisAsli
+    ? (level === 'tujuan' || level === 'sasaran' || level === 'program'
+        ? barisAsli.program
+        : level === 'kegiatan' ? (barisAsli.kegiatan ?? '') : (barisAsli.sub_kegiatan ?? '')).trim()
+    : null;
+  const namaEntitasBerubah = namaLamaLevel !== null && namaLamaLevel !== namaBaruLevel;
 
   // Mendarat dari Realisasi Kinerja: buka baris yang dimaksud, jangan tinggalkan
   // orang di puncak tabel. Ref penanda supaya hanya jalan sekali per kiriman —

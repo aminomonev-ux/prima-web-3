@@ -31,7 +31,7 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
 }
 
 fs.mkdirSync(outDir, { recursive: true })
-const sumber = ['lib/shared/uuid.ts', 'lib/shared/desimal.ts', 'lib/data/db.ts', 'lib/data/locks.ts', 'lib/data/rencana-aksi.ts']
+const sumber = ['lib/shared/uuid.ts', 'lib/shared/desimal.ts', 'lib/data/db.ts', 'lib/data/locks.ts', 'lib/renaksi/ganti-nama.ts', 'lib/data/rencana-aksi.ts']
 try {
   execSync(
     `npx tsc ${sumber.map((f) => `"${path.join(repo, f)}"`).join(' ')}`
@@ -138,6 +138,63 @@ async function main() {
   await RA.upsertRencanaAksi({ ...dasar({ indikator: 'IND-prog-B' }), level: 'program', program: 'PRG-INDUK', sasaran: 'SAS-X', kegiatan: null, sub_kegiatan: null }, UID)
   const e9 = await tangkap(() => RA.deleteRencanaAksi(prog))
   periksa('Masih ada saudara senama -> hapus BOLEH', e9 === null, e9 ?? 'lolos')
+
+  console.log('\n── T16: ganti nama entitas menjalar ke baris turunan ──')
+  // Ganti nama dulu hanya mengubah baris yang diedit. Karena hierarki Renaksi
+  // disambung TEKS NAMA, seluruh baris turunan tetap menunjuk nama lama dan hanya
+  // bisa dibetulkan satu per satu lewat form.
+  const tuj = (x) => ({ ...dasar(x), level: 'tujuan', sasaran: null, kegiatan: null, sub_kegiatan: null })
+  const sas = (x) => ({ ...dasar(x), level: 'sasaran', kegiatan: null, sub_kegiatan: null })
+  const prg = (x) => ({ ...dasar(x), level: 'program', kegiatan: null, sub_kegiatan: null })
+  const keg = (x) => ({ ...dasar(x), level: 'kegiatan', sub_kegiatan: null })
+  const cari = async (lv, ind) => (await RA.listRencanaAksi(TH, lv)).find((x) => x.indikator === ind)
+
+  await RA.upsertRencanaAksi(tuj({ indikator: 'IND-JALAR-T', program: 'TUJ-JALAR' }), UID)
+  await RA.upsertRencanaAksi(sas({ indikator: 'IND-JALAR-S1', program: 'SAS-JALAR', tujuan: 'TUJ-JALAR' }), UID)
+  await RA.upsertRencanaAksi(sas({ indikator: 'IND-JALAR-S2', program: 'SAS-JALAR', tujuan: 'TUJ-JALAR' }), UID)
+  await RA.upsertRencanaAksi(prg({ indikator: 'IND-JALAR-P', program: 'PRG-JALAR', sasaran: 'SAS-JALAR' }), UID)
+  await RA.upsertRencanaAksi(keg({ indikator: 'IND-JALAR-K', program: 'PRG-JALAR', kegiatan: 'KEG-JALAR' }), UID)
+  await RA.upsertRencanaAksi(dasar({ indikator: 'IND-JALAR-SUB', program: 'PRG-JALAR', kegiatan: 'KEG-JALAR', sub_kegiatan: 'SUB-JALAR' }), UID)
+  // Kegiatan senama di program LAIN — tidak boleh ikut terbawa.
+  await RA.upsertRencanaAksi(keg({ indikator: 'IND-JALAR-K2', program: 'PRG-LAIN', kegiatan: 'KEG-JALAR' }), UID)
+  await RA.upsertRencanaAksi(dasar({ indikator: 'IND-JALAR-SUB2', program: 'PRG-LAIN', kegiatan: 'KEG-JALAR', sub_kegiatan: 'SUB-LAIN' }), UID)
+
+  let t = await cari('tujuan', 'IND-JALAR-T')
+  await RA.upsertRencanaAksi(tuj({ id: t.id, indikator: 'IND-JALAR-T', program: 'TUJ BARU', expected_version: t.version }), UID)
+  let s1 = await cari('sasaran', 'IND-JALAR-S1')
+  let s2 = await cari('sasaran', 'IND-JALAR-S2')
+  periksa('Ganti nama tujuan menjalar ke sasaran', s1.tujuan === 'TUJ BARU' && s2.tujuan === 'TUJ BARU', `${s1.tujuan}/${s2.tujuan}`)
+
+  // Satu entitas = banyak baris indikator: baris SENAMA (S2) ikut, kalau tidak
+  // sasaran yang sama tampil dua kali dengan nama berbeda.
+  const versiS2 = s2.version
+  await RA.upsertRencanaAksi(sas({ id: s1.id, indikator: 'IND-JALAR-S1', program: 'SAS BARU', tujuan: 'TUJ BARU', expected_version: s1.version }), UID)
+  s1 = await cari('sasaran', 'IND-JALAR-S1')
+  s2 = await cari('sasaran', 'IND-JALAR-S2')
+  let p = await cari('program', 'IND-JALAR-P')
+  periksa('Ganti nama sasaran: baris senama ikut', s1.program === 'SAS BARU' && s2.program === 'SAS BARU', `${s1.program}/${s2.program}`)
+  periksa('…versi baris senama ikut naik (tab basi kena 409)', s2.version > versiS2, `v=${versiS2}->${s2.version}`)
+  periksa('…program di bawahnya ikut nama baru', p.sasaran === 'SAS BARU', `sasaran=${p.sasaran}`)
+
+  await RA.upsertRencanaAksi(prg({ id: p.id, indikator: 'IND-JALAR-P', program: 'PRG BARU', sasaran: p.sasaran, expected_version: p.version }), UID)
+  let k = await cari('kegiatan', 'IND-JALAR-K')
+  let sub = await cari('sub-kegiatan', 'IND-JALAR-SUB')
+  periksa('Ganti nama program menjalar ke kegiatan & sub', k.program === 'PRG BARU' && sub.program === 'PRG BARU', `${k.program}/${sub.program}`)
+
+  await RA.upsertRencanaAksi(keg({ id: k.id, indikator: 'IND-JALAR-K', program: 'PRG BARU', kegiatan: 'KEG BARU', expected_version: k.version }), UID)
+  k = await cari('kegiatan', 'IND-JALAR-K')
+  sub = await cari('sub-kegiatan', 'IND-JALAR-SUB')
+  const k2 = await cari('kegiatan', 'IND-JALAR-K2')
+  const sub2 = await cari('sub-kegiatan', 'IND-JALAR-SUB2')
+  periksa('Ganti nama kegiatan menjalar ke sub-kegiatan', sub.kegiatan === 'KEG BARU', `kegiatan=${sub.kegiatan}`)
+  periksa('…kegiatan senama di program lain tidak ikut', k2.kegiatan === 'KEG-JALAR' && sub2.kegiatan === 'KEG-JALAR', `${k2.kegiatan}/${sub2.kegiatan}`)
+
+  await RA.upsertRencanaAksi(dasar({ id: sub.id, indikator: 'IND-JALAR-SUB', program: 'PRG BARU', kegiatan: 'KEG BARU', sub_kegiatan: 'SUB BARU', expected_version: sub.version }), UID)
+  sub = await cari('sub-kegiatan', 'IND-JALAR-SUB')
+  periksa('Ganti nama sub-kegiatan tidak menyentuh sub lain', sub.sub_kegiatan === 'SUB BARU' && (await cari('sub-kegiatan', 'IND-JALAR-SUB2')).sub_kegiatan === 'SUB-LAIN')
+
+  const tahunLain = await RA.listRencanaAksi(TH_SUMBER, 'sasaran')
+  periksa('Tahun lain tidak tersentuh ganti nama', tahunLain.every((x) => x.tujuan !== 'TUJ BARU'), `n=${tahunLain.length}`)
 
   console.log('\n── T8: simpan massal matriks bulanan ──')
   const idA = await RA.upsertRencanaAksi(dasar({ indikator: 'IND-bulk-A' }), UID)

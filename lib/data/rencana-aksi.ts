@@ -2,9 +2,10 @@
 // CRUD untuk tabel `rencana_aksi`. Single-table flat (lihat migration 032).
 // Optimistic locking via kolom `version` (migration 034): cegah lost-update concurrent edit.
 
-import { sql, queryMany, queryOne, withTransaction } from '@/lib/data/db';
+import { sql, queryMany, queryOne, withTransaction, type TxSql } from '@/lib/data/db';
 import { bulatkanDesimal } from '@/lib/shared/desimal';
 import { acquireBludLock } from '@/lib/data/locks';
+import { rencanaGantiNama, type GantiNama } from '@/lib/renaksi/ganti-nama';
 import type { RaLevel, UpsertRencanaAksiInput } from './rencana-aksi-schemas';
 
 export class RaVersionConflictError extends Error {
@@ -183,6 +184,87 @@ export async function getRencanaAksiById(id: number): Promise<RaRow | null> {
 }
 
 /**
+ * T16 — ganti nama entitas Renaksi menjalar ke baris senama dan seluruh turunannya.
+ *
+ * Dua jenis baris yang harus ikut, dan yang pertama paling mudah terlewat:
+ *   1. baris SENAMA di level yang sama (satu entitas = banyak baris indikator), dan
+ *   2. baris TURUNAN yang memikul nama itu di kolom penyambungnya.
+ *
+ * `version` ikut naik di setiap baris yang tersentuh: tab yang sudah terbuka di baris
+ * turunan harus kena 409 dan memuat nama baru, bukan menulis balik nama lama lewat
+ * simpan berikutnya. `updated_at` sengaja TIDAK bergeser — merapikan label bukan
+ * suntingan isi, jadi stempel "terakhir diubah" milik orang yang mengetik angkanya tetap.
+ *
+ * Nama kolom di-dispatch statis per level, tidak pernah dirangkai jadi string SQL.
+ * `<=>` untuk kolom induk yang boleh NULL (L90: `= NULL` tak pernah benar); `program`
+ * NOT NULL, jadi `=` cukup.
+ */
+async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promise<void> {
+  if (g.level === 'tujuan') {
+    await tx`
+      UPDATE rencana_aksi SET program = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'tujuan' AND program = ${g.dari}
+    `;
+    await tx`
+      UPDATE rencana_aksi SET tujuan = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'sasaran' AND tujuan = ${g.dari}
+    `;
+    return;
+  }
+
+  if (g.level === 'sasaran') {
+    await tx`
+      UPDATE rencana_aksi SET program = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'sasaran' AND program = ${g.dari} AND tujuan <=> ${g.induk}
+    `;
+    // Baris program hanya menyimpan nama sasaran — tidak ada tujuan yang bisa dipakai
+    // mempersempit, jadi sasaran senama di tujuan lain ikut terbawa.
+    await tx`
+      UPDATE rencana_aksi SET sasaran = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'program' AND sasaran = ${g.dari}
+    `;
+    return;
+  }
+
+  if (g.level === 'program') {
+    await tx`
+      UPDATE rencana_aksi SET program = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'program' AND program = ${g.dari} AND sasaran <=> ${g.induk}
+    `;
+    await tx`
+      UPDATE rencana_aksi SET program = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'kegiatan' AND program = ${g.dari}
+    `;
+    await tx`
+      UPDATE rencana_aksi SET program = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'sub-kegiatan' AND program = ${g.dari}
+    `;
+    return;
+  }
+
+  if (g.level === 'kegiatan') {
+    await tx`
+      UPDATE rencana_aksi SET kegiatan = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'kegiatan' AND kegiatan = ${g.dari} AND program = ${g.induk}
+    `;
+    // Kegiatan senama di program lain TIDAK ikut — sub-kegiatan menyimpan program induknya.
+    await tx`
+      UPDATE rencana_aksi SET kegiatan = ${g.ke}, version = version + 1, updated_at = updated_at
+      WHERE tahun = ${tahun} AND level = 'sub-kegiatan' AND kegiatan = ${g.dari} AND program = ${g.induk}
+    `;
+    return;
+  }
+
+  // Sub-kegiatan daun: yang ikut hanya baris senamanya sendiri (satu entitas = banyak
+  // indikator), dan lingkupnya butuh program + kegiatan — nama kegiatan saja tidak unik.
+  await tx`
+    UPDATE rencana_aksi SET sub_kegiatan = ${g.ke}, version = version + 1, updated_at = updated_at
+    WHERE tahun = ${tahun} AND level = 'sub-kegiatan' AND sub_kegiatan = ${g.dari}
+      AND kegiatan <=> ${g.induk} AND program = ${g.indukProgram}
+  `;
+}
+
+/**
  * Upsert by (tahun, level, indikator). Realisasi tidak di-update (preserve).
  * Kalau `id` diberikan dan exists → update by id (allow rename indikator).
  */
@@ -228,41 +310,56 @@ export async function upsertRencanaAksi(
       ? deriveQuartersFromMonthly(lama.bulan_realisasi, data.jenis)
       : null;
 
+    // T16: ganti nama entitas menjalar. Hierarki disambung TEKS NAMA, jadi membuang
+    // satu tanda di ujung nama induk meninggalkan seluruh baris turunan menunjuk
+    // nama yang sudah tidak ada — dulu satu-satunya jalan membereskannya adalah
+    // mengedit tiap baris satu per satu.
+    const gantiNama = rencanaGantiNama(lama, {
+      program: data.program,
+      kegiatan: data.kegiatan,
+      sub_kegiatan: data.sub_kegiatan,
+    });
+
     // COALESCE, bukan tulis-balik nilai hasil baca: kolom realisasi hanya berubah
     // kalau memang ada hasil hitung ulang. Menulis balik nilai yang baru saja
     // dibaca akan menimpa realisasi yang diubah orang lain di sela baca-dan-tulis.
-    const res = await sql`
-      UPDATE rencana_aksi SET
-        kode                 = ${data.kode ?? null},
-        sasaran              = ${data.sasaran ?? null},
-        tujuan               = ${data.tujuan ?? null},
-        outcome_program      = ${data.outcome_program ?? null},
-        outcome_kegiatan     = ${data.outcome_kegiatan ?? null},
-        outcome_sub_kegiatan = ${data.outcome_sub_kegiatan ?? null},
-        program              = ${data.program},
-        kegiatan             = ${data.kegiatan ?? null},
-        sub_kegiatan         = ${data.sub_kegiatan ?? null},
-        indikator            = ${data.indikator},
-        jenis                = ${data.jenis},
-        satuan               = ${data.satuan},
-        target_rpjmd         = ${data.target_rpjmd},
-        target_tahunan       = ${data.target_tahunan},
-        q1_target            = ${dq1},
-        q2_target            = ${dq2},
-        q3_target            = ${dq3},
-        q4_target            = ${dq4},
-        q1_realisasi         = COALESCE(${rr?.[0] ?? null}, q1_realisasi),
-        q2_realisasi         = COALESCE(${rr?.[1] ?? null}, q2_realisasi),
-        q3_realisasi         = COALESCE(${rr?.[2] ?? null}, q3_realisasi),
-        q4_realisasi         = COALESCE(${rr?.[3] ?? null}, q4_realisasi),
-        anggaran_nominal     = ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null},
-        bulan_target         = ${bulanTargetJson},
-        version              = version + 1,
-        updated_by           = ${userId}
-      WHERE id = ${id}
-        AND (${expectedVersion === null ? 1 : 0} = 1 OR version = ${expectedVersion ?? 0})
-    `;
-    assertUpdated(res);
+    // Baris yang diedit + seluruh turunannya ada di SATU transaksi: ganti nama yang
+    // berhenti di tengah meninggalkan keadaan persis yang fitur ini mau cegah.
+    await withTransaction(async ({ tx }) => {
+      const res = await tx`
+        UPDATE rencana_aksi SET
+          kode                 = ${data.kode ?? null},
+          sasaran              = ${data.sasaran ?? null},
+          tujuan               = ${data.tujuan ?? null},
+          outcome_program      = ${data.outcome_program ?? null},
+          outcome_kegiatan     = ${data.outcome_kegiatan ?? null},
+          outcome_sub_kegiatan = ${data.outcome_sub_kegiatan ?? null},
+          program              = ${data.program},
+          kegiatan             = ${data.kegiatan ?? null},
+          sub_kegiatan         = ${data.sub_kegiatan ?? null},
+          indikator            = ${data.indikator},
+          jenis                = ${data.jenis},
+          satuan               = ${data.satuan},
+          target_rpjmd         = ${data.target_rpjmd},
+          target_tahunan       = ${data.target_tahunan},
+          q1_target            = ${dq1},
+          q2_target            = ${dq2},
+          q3_target            = ${dq3},
+          q4_target            = ${dq4},
+          q1_realisasi         = COALESCE(${rr?.[0] ?? null}, q1_realisasi),
+          q2_realisasi         = COALESCE(${rr?.[1] ?? null}, q2_realisasi),
+          q3_realisasi         = COALESCE(${rr?.[2] ?? null}, q3_realisasi),
+          q4_realisasi         = COALESCE(${rr?.[3] ?? null}, q4_realisasi),
+          anggaran_nominal     = ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null},
+          bulan_target         = ${bulanTargetJson},
+          version              = version + 1,
+          updated_by           = ${userId}
+        WHERE id = ${id}
+          AND (${expectedVersion === null ? 1 : 0} = 1 OR version = ${expectedVersion ?? 0})
+      `;
+      assertUpdated(res);
+      if (gantiNama) await jalarkanGantiNama(tx, Number(lama.tahun), gantiNama);
+    });
     return id;
   };
 
