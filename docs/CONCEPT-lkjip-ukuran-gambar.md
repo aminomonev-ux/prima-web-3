@@ -134,3 +134,4 @@ Tiap gambar yang dibuka tetap menulis satu baris audit `FILE_DOWNLOAD`, seperti 
 - Tema terang: teks isian #374151 di kotak putih (`rgba(0,0,0,.15)`), 375 px tanpa geser mendatar.
 - Akun rekan `uji.lkjip.b` membuka dokumen yang sama dan **semua gambar termuat** (naturalWidth 800/300) — inti §7. Akun `uji.lkjip.c` (tanpa `lkjip`) dialihkan dari `/lkjip/436` ke `/menu` dan unduhan berkasnya **403**.
 - Unggah berkas baru tidak diulang putaran ini (gambarnya sudah ada di Drive); jalur Ganti gambar ditutup uji E5.
+- **Ditemukan di peramban:** gambar dari cache selesai dimuat sebelum hidrasi, `onLoad` tak pernah datang, pratinjau macet di "Memuat gambar…". Diperbaiki lewat `ref` yang membaca `el.complete`. Dijaga E22–E24 (2026-11-11), 5 uji mutasi tertangkap.

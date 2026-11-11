@@ -237,6 +237,10 @@ ok('E18 spanduk & tombolnya', kp.includes('proporsiMenyimpang(ukuran, alami)') &
 ok('E19 gambar gagal dimuat disebut', kp.includes('onError={() => setGagal(true)}') && kp.includes('Gambar tidak bisa dimuat'))
 ok('E20 hanya baca: tanpa isian', /\{!readOnly && \(\s*<label>Lebar \(cm\)/.test(kp))
 ok('E21 pemuatan malas', kp.includes('loading="lazy"'))
+// Ditemukan di peramban: gambar dari cache selesai sebelum hidrasi, onLoad tak pernah datang, pratinjau macet di "Memuat gambar…".
+ok('E22 gambar yang sudah termuat sebelum hidrasi tetap dibaca', /ref=\{el => \{ if \(el\?\.complete && !alami\) selesai\(el\); \}\}/.test(kp))
+ok('E23 onLoad memakai pembaca yang sama', kp.includes('onLoad={e => selesai(e.currentTarget)}'))
+ok('E24 gambar rusak yang sudah "selesai" disebut gagal, bukan dibaca 0 × 0', /if \(el\.naturalWidth\) onAlami\(\{[^}]*\}\);\s*else setGagal\(true\);/.test(kp))
 
 // ─── F. Izin pratinjau ────────────────────────────────────────────────────────
 console.log('\nF. Izin pratinjau')
