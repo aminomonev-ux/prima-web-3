@@ -14,6 +14,9 @@ import {
 import { buildCetakRows, cetakHeader, DEFAULT_CETAK_FILTER } from '../app/(dashboard)/rencana-aksi/_lib/cetak-filter'
 import type { RaRow } from '../app/(dashboard)/rencana-aksi/_lib/types'
 import { buildIkiGrid } from '../lib/iki/layout'
+import { susunKisiCetak, tabelSeperti } from '../lib/iki/custom'
+import { cocokkanInduk, selaraskanImpor, type BarisTersimpan } from '../lib/renaksi/induk-impor'
+import type { CommitRow } from '../lib/renaksi/import-data'
 
 let lulus = 0
 const gagal: string[] = []
@@ -137,6 +140,73 @@ try { teksGrid = JSON.stringify(buildIkiGrid(dok as never)) } catch (e) { gagal.
 cek('E3 cetak IKI: dokumen lama dibersihkan', teksGrid.includes('Meningkatnya mutu') && teksGrid.includes('Jumlah dokumen') && teksGrid.includes('Sasaran atasan'))
 cek('E4 cetak IKI: tidak ada bintang atau nomor tersisa', teksGrid !== '' && !/\*\*|\(1\) Jumlah/.test(teksGrid))
 cek('E5 data dokumen IKI tidak diubah', dok.rhk[0].indikator === '(1) Jumlah dokumen ***')
+
+const tc = tabelSeperti('STANDAR')
+const bd = tc.headerRows
+const isi = (kol: number | undefined, v: string) => { tc.rows[bd][kol!] = { ...tc.rows[bd][kol!], v } }
+isi(tc.peran.rhk_intervensi, 'Sasaran atasan **'); isi(tc.peran.rhk, 'Meningkatnya mutu ***'); isi(tc.peran.indikator, '(1) Jumlah dokumen ***')
+isi(tc.peran.target_tahunan, '(1) 4 Dokumen ***')
+tc.rows[0][tc.peran.rhk!] = { ...tc.rows[0][tc.peran.rhk!], v: 'Kepala ***' }
+const kisi = susunKisiCetak(tc)
+const selC = (r: number, k: number | undefined) => kisi.baris[r][k!]?.teks
+sama('E6 cetak IKI CUSTOM: kolom berperan RHK/indikator dibersihkan',
+  [selC(bd, tc.peran.rhk_intervensi), selC(bd, tc.peran.rhk), selC(bd, tc.peran.indikator)], ['Sasaran atasan', 'Meningkatnya mutu', 'Jumlah dokumen'])
+sama('E7 …kolom lain dan baris kepala apa adanya', [selC(bd, tc.peran.target_tahunan), selC(0, tc.peran.rhk)], ['(1) 4 Dokumen ***', 'Kepala ***'])
+cek('E8 …isi tabel tersimpan tidak diubah', tc.rows[bd][tc.peran.indikator!].v === '(1) Jumlah dokumen ***')
+const polos = { ...tc, peran: {} }
+cek('E9 tabel tanpa peran kolom: sel bebas tidak disentuh', susunKisiCetak(polos).baris[bd][tc.peran.indikator!]?.teks === '(1) Jumlah dokumen ***')
+
+// ── F. Impor ke tahun yang datanya berpenanda (konsep §11.2) ───────────────────
+const db = (level: BarisTersimpan['level'], program: string, kegiatan: string | null, sub: string | null, indikator: string): BarisTersimpan =>
+  ({ level, program, kegiatan, sub_kegiatan: sub, indikator })
+const TERSIMPAN: BarisTersimpan[] = [
+  db('tujuan', 'Tujuan T *', null, null, 'Ind T *'),
+  db('sasaran', 'Sasaran S **', null, null, 'Ind S **'),
+  db('program', 'Program P ***', null, null, '(1) Ind P1 ***'),
+  db('program', 'Program P ***', null, null, '(2) Ind P2 ***'),
+  db('kegiatan', 'Program P ***', 'Kegiatan K ****', null, 'Ind K ****'),
+]
+const br = (level: CommitRow['level'], nama: string, indikator: string, induk: Partial<CommitRow> = {}): CommitRow => ({
+  level, kode: null, nama, indikator, satuan: 'Dok', jenis: 'Akumulatif', target_tahunan: 1, q: [0, 0, 0, 1], bulan: null, anggaran: null,
+  outcome: null, induk_tujuan: null, induk_sasaran: null, induk_program: null, induk_kegiatan: null, ...induk,
+})
+sama('F1 induk sama persis: apa adanya', cocokkanInduk('program p ***', [], ['Program P ***'], false), { nama: 'program p ***' })
+sama('F2 induk beda penanda: ejaan tersimpan', cocokkanInduk('Program P', ['Program P *'], ['Program P ***'], false), { nama: 'Program P ***' })
+sama('F3 …level sedang diganti: ejaan berkas', cocokkanInduk('Program P', ['Program P *'], ['Program P ***'], true), { nama: 'Program P *' })
+sama('F4 dua nama tersimpan hanya beda penanda: ganda', cocokkanInduk('Program P', [], ['Program P ***', 'Program P *'], false), { nama: null, ganda: ['Program P ***', 'Program P *'] })
+sama('F5 tidak ada', cocokkanInduk('Program Q', ['Program P'], ['Program P ***'], false), { nama: null, ganda: [] })
+
+const bersihF = [
+  br('program', 'Program P', 'Ind P1', { induk_sasaran: 'Sasaran S' }),
+  br('kegiatan', 'Kegiatan K', 'Ind K', { induk_program: 'Program P' }),
+  br('kegiatan', 'Kegiatan Baru', 'Ind KB', { induk_program: 'Program P' }),
+  br('sub-kegiatan', 'Sub Baru', 'Ind Sub', { induk_program: 'Program P', induk_kegiatan: 'Kegiatan K' }),
+]
+const hF = selaraskanImpor(bersihF, TERSIMPAN, 2099, false)
+cek('F6 berkas bersih ke tahun berbintang: tidak ada yang ditahan', hF.ditahan.length === 0 && hF.layak.length === 4)
+sama('F7 nama entitas yang sudah ada mengikuti ejaan tersimpan', hF.layak.map(r => r.nama), ['Program P ***', 'Kegiatan K ****', 'Kegiatan Baru', 'Sub Baru'])
+sama('F8 induk disambung ke ejaan tersimpan', [hF.layak[0].induk_sasaran, hF.layak[1].induk_program, hF.layak[2].induk_program, hF.layak[3].induk_program, hF.layak[3].induk_kegiatan],
+  ['Sasaran S **', 'Program P ***', 'Program P ***', 'Program P ***', 'Kegiatan K ****'])
+sama('F9 indikator mengenai baris lamanya (calon tunggal)', [hF.layak[0].indikator, hF.layak[1].indikator, hF.layak[2].indikator], ['(1) Ind P1 ***', 'Ind K ****', 'Ind KB'])
+cek('F10 jumlah yang disesuaikan dilaporkan; masukan tidak diubah', hF.disesuaikan === 4 && bersihF[0].nama === 'Program P')
+const kembar = selaraskanImpor([br('program', 'Program P', '(2) Ind P1', { induk_sasaran: 'Sasaran S' })], TERSIMPAN, 2099, false)
+cek('F11 nomor bertentangan: indikator tidak ditempelkan ke kembarannya', kembar.layak[0].indikator === '(2) Ind P1')
+const rebut = selaraskanImpor([br('program', 'Program P', 'Ind P1', { induk_sasaran: 'Sasaran S' }), br('program', 'Program P', 'Ind P1 *', { induk_sasaran: 'Sasaran S' })], TERSIMPAN, 2099, false)
+sama('F12 dua baris berkas memperebutkan satu indikator: keduanya apa adanya', rebut.layak.map(r => r.indikator), ['Ind P1', 'Ind P1 *'])
+const lain = selaraskanImpor([br('program', 'Program Lain', 'Ind P1', { induk_sasaran: 'Sasaran S' })], TERSIMPAN, 2099, false)
+cek('F13 indikator senama milik entitas lain tidak disentuh', lain.layak[0].indikator === 'Ind P1' && lain.layak[0].nama === 'Program Lain')
+const gF = selaraskanImpor(bersihF, TERSIMPAN, 2099, true)
+sama('F14 mode ganti: level di berkas memakai ejaan berkas', [gF.layak[0].nama, gF.layak[0].indikator, gF.layak[1].induk_program, gF.layak[0].induk_sasaran], ['Program P', 'Ind P1', 'Program P', 'Sasaran S **'])
+sama('F14b berkas berbintang ke data bersih: tetap tersambung', cocokkanInduk('Program P ***', [], ['Program P'], false), { nama: 'Program P' })
+const gF2 = selaraskanImpor([br('program', 'Program P *', 'Ind P1', { induk_sasaran: 'Sasaran S' }), br('kegiatan', 'Kegiatan K', 'Ind K', { induk_program: 'Program P' })], TERSIMPAN, 2099, true)
+cek('F14c mode ganti: anak disambung ke induk yang ditulis berkas, bukan yang dihapus', gF2.layak[1].induk_program === 'Program P *')
+const tahan = selaraskanImpor([br('kegiatan', 'K', 'I', { induk_program: 'Program Q' }), br('kegiatan', 'K2', 'I2'), br('sub-kegiatan', 'S', 'I3', { induk_kegiatan: 'Kegiatan K' })], TERSIMPAN, 2099, false)
+cek('F15 induk tak dikenal, kosong, dan sub tanpa program tetap ditahan', tahan.layak.length === 0 && tahan.ditahan.length === 3
+  && tahan.ditahan[0].alasan.includes('belum ada di tahun 2099') && tahan.ditahan[2].alasan === 'Program induk belum ditentukan.')
+const gandaF = selaraskanImpor([br('kegiatan', 'K', 'I', { induk_program: 'Program P' })], [...TERSIMPAN, db('program', 'Program P *', null, null, 'Ind lain')], 2099, false)
+cek('F16 induk ganda ditahan dengan sebabnya', gandaF.layak.length === 0 && gandaF.ditahan[0].alasan.includes('hanya berbeda penanda'))
+const impor = tanpaKomentar(baca('lib/renaksi/import-data.ts'))
+cek('F17 commit impor lewat penyelaras, tanpa pencocok kedua', impor.includes("selaraskanImpor(rows, tersimpan, tahun, mode === 'ganti')") && !impor.includes('PARENT_OF') && !/\bnorm\(/.test(impor))
 
 console.log(`\n${lulus + gagal.length} pemeriksaan · ${lulus} lulus · ${gagal.length} gagal`)
 if (gagal.length) { console.log('\nGAGAL:'); for (const g of gagal) console.log('  ✗ ' + g); process.exit(1) }

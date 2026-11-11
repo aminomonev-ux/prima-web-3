@@ -10,11 +10,14 @@
 //    boleh menyentuh level lain.
 //  • Induk wajib ada (di file yang sama atau di DB tahun itu); baris tanpa induk
 //    ditahan dan dilaporkan, tidak disimpan diam-diam.
+//  • Nama, indikator, dan induk yang hanya berbeda penanda matriks (bintang, "(1)")
+//    mengikuti ejaan TERSIMPAN — aturannya di ./induk-impor.ts.
 
 import type { PoolConnection } from 'mysql2/promise';
 import { queryMany, sql, withTransaction } from '@/lib/data/db';
 import { assertPeriodeTerbuka } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
+import { kunciPersis, selaraskanImpor, type BarisTersimpan } from './induk-impor';
 
 export interface CommitRow {
   level: RaLevel;
@@ -44,38 +47,9 @@ export interface CommitResult {
   diperbarui: number;
   dilewati: number;
   ditahan: Array<{ indikator: string; level: RaLevel; alasan: string }>;
+  /** Baris yang nama/indikator/induknya disesuaikan ke ejaan tersimpan. */
+  disesuaikan: number;
   perLevel: Partial<Record<RaLevel, number>>;
-}
-
-/** Induk yang wajib ada per level (null = tidak punya induk). */
-const PARENT_OF: Record<RaLevel, { level: RaLevel; field: keyof CommitRow } | null> = {
-  'tujuan': null,
-  'sasaran': { level: 'tujuan', field: 'induk_tujuan' },
-  'program': { level: 'sasaran', field: 'induk_sasaran' },
-  'kegiatan': { level: 'program', field: 'induk_program' },
-  'sub-kegiatan': { level: 'kegiatan', field: 'induk_kegiatan' },
-};
-
-const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-
-/** Nama entitas per level yang sudah ada di DB untuk tahun tsb. */
-async function existingNames(tahun: number): Promise<Map<RaLevel, Set<string>>> {
-  const rows = await queryMany<{ level: RaLevel; program: string; kegiatan: string | null; sub_kegiatan: string | null }>(
-    sql`SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi WHERE tahun = ${tahun}`,
-  );
-  const out = new Map<RaLevel, Set<string>>();
-  const add = (lv: RaLevel, v: string | null) => {
-    if (!v) return;
-    const s = out.get(lv) ?? new Set<string>();
-    s.add(norm(v));
-    out.set(lv, s);
-  };
-  for (const r of rows) {
-    if (r.level === 'tujuan' || r.level === 'sasaran' || r.level === 'program') add(r.level, r.program);
-    if (r.level === 'kegiatan') add('kegiatan', r.kegiatan);
-    if (r.level === 'sub-kegiatan') { add('program', r.program); add('kegiatan', r.kegiatan); }
-  }
-  return out;
 }
 
 /** Baris import → tuple kolom DB sesuai konvensi Data Entry per level. */
@@ -146,56 +120,20 @@ async function bulkWrite(conn: PoolConnection, rows: unknown[][], upsert: boolea
 export async function commitImportRenaksi(
   tahun: number, mode: ImportMode, rows: CommitRow[], userId: number,
 ): Promise<CommitResult> {
-  const ditahan: CommitResult['ditahan'] = [];
-
-  // Nama entitas yang tersedia = dari file ini + yang sudah ada di DB tahun itu
-  const dbNames = await existingNames(tahun);
-  const tersedia = new Map<RaLevel, Set<string>>();
-  for (const [lv, set] of dbNames) tersedia.set(lv, new Set(set));
-  for (const r of rows) {
-    const s = tersedia.get(r.level) ?? new Set<string>();
-    s.add(norm(r.nama));
-    tersedia.set(r.level, s);
-  }
-
-  const layak: CommitRow[] = [];
-  for (const r of rows) {
-    const parent = PARENT_OF[r.level];
-    if (parent) {
-      const nama = r[parent.field] as string | null;
-      if (!nama || !nama.trim()) {
-        ditahan.push({ indikator: r.indikator, level: r.level, alasan: `Induk ${parent.level} belum ditentukan.` });
-        continue;
-      }
-      if (!tersedia.get(parent.level)?.has(norm(nama))) {
-        ditahan.push({
-          indikator: r.indikator, level: r.level,
-          alasan: `${parent.level} "${nama.slice(0, 60)}" belum ada di tahun ${tahun} — buat dulu atau pilih induk lain.`,
-        });
-        continue;
-      }
-    }
-    // Sub-kegiatan butuh rantai lengkap sampai Program
-    if (r.level === 'sub-kegiatan' && !r.induk_program?.trim()) {
-      ditahan.push({ indikator: r.indikator, level: r.level, alasan: 'Program induk belum ditentukan.' });
-      continue;
-    }
-    layak.push(r);
-  }
+  const tersimpan = await queryMany<BarisTersimpan>(
+    sql`SELECT level, program, kegiatan, sub_kegiatan, indikator FROM rencana_aksi WHERE tahun = ${tahun}`,
+  );
+  const { layak, ditahan, disesuaikan } = selaraskanImpor(rows, tersimpan, tahun, mode === 'ganti');
 
   if (layak.length === 0) {
-    return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, perLevel: {} };
+    return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {} };
   }
 
   const levelsDiFile = [...new Set(layak.map(r => r.level))];
 
   // Kunci unik (tahun, level, indikator) — hitung mana yang sudah ada supaya
   // laporan "ditambah vs diperbarui" akurat.
-  const existingKeys = new Set<string>();
-  const existRows = await queryMany<{ level: RaLevel; indikator: string }>(
-    sql`SELECT level, indikator FROM rencana_aksi WHERE tahun = ${tahun}`,
-  );
-  for (const e of existRows) existingKeys.add(`${e.level}|${norm(e.indikator)}`);
+  const existingKeys = new Set(tersimpan.map(e => `${e.level}|${kunciPersis(e.indikator)}`));
 
   let ditambah = 0;
   let diperbarui = 0;
@@ -203,7 +141,7 @@ export async function commitImportRenaksi(
   const perLevel: Partial<Record<RaLevel, number>> = {};
   const akanTulis: CommitRow[] = [];
   for (const r of layak) {
-    const sudahAda = existingKeys.has(`${r.level}|${norm(r.indikator)}`);
+    const sudahAda = existingKeys.has(`${r.level}|${kunciPersis(r.indikator)}`);
     if (mode === 'tambah' && sudahAda) { dilewati++; continue; }
     if (mode === 'upsert' && sudahAda) diperbarui++; else ditambah++;
     perLevel[r.level] = (perLevel[r.level] ?? 0) + 1;
@@ -229,5 +167,5 @@ export async function commitImportRenaksi(
 
   if (mode === 'ganti') { ditambah = akanTulis.length; diperbarui = 0; }
 
-  return { disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, perLevel };
+  return { disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel };
 }

@@ -260,13 +260,13 @@ Cetak membersihkan paling akhir (`pasangTampilan` di `cetak-filter.ts`): fokus d
 **Yang gugur dari rancangan awal**
 
 - Pembersihan saat impor dan saat simpan (pintu 1–3), tombol Rapikan Renaksi (pintu 9), dan ketergantungan pada T16 (§11.1): tidak diperlukan karena data tidak ditulis ulang.
-- §11.2 (impor berkas bersih ke tahun berbintang menahan anak-anaknya) **masih berlaku dan belum dibereskan**: pencocokan induk di `commitImportRenaksi` tetap membandingkan nama mentah.
+- §11.2 (impor berkas bersih ke tahun berbintang menahan anak-anaknya) **dibereskan 11 Nov 2026**, lihat §13.
 
 **Batas**
 
 - Indikator kembar terbaca sama persis di cetakan bersih. Diterima pemilik.
 - Tabel LKJIP yang sudah tertaut ke Cetak Renaksi akan melapor "data berubah" sekali saat Perbarui.
-- Cetak IKI membuang awalan `(1)` dan bintang di ujung dari RHK/indikator apa pun, termasuk yang diketik sendiri. IKI varian CUSTOM tidak dibersihkan saat dicetak (isinya sel bebas); yang bersih hasil tariknya.
+- Cetak IKI membuang awalan `(1)` dan bintang di ujung dari RHK/indikator apa pun, termasuk yang diketik sendiri. IKI varian CUSTOM (susulan 11 Nov): kolom yang perannya RHK atasan, RHK, atau Indikator dibersihkan saat dicetak lewat `susunKisiCetak`; kolom tanpa peran itu dan baris kepala tetap sel bebas, jadi tabel yang perannya belum ditandai tidak dibersihkan.
 - Isian form Data Entry tetap teks tersimpan. Penanda hanya tampil di daftar.
 
 **Bukti**
@@ -274,3 +274,23 @@ Cetak membersihkan paling akhir (`pasangTampilan` di `cetak-filter.ts`): fokus d
 - `npx tsx scripts/test-renaksi-penanda.mts`: 48 pemeriksaan; uji mutasi 18 dari 18 tertangkap.
 - Layar (akun dummy, 2026 hanya dibaca): Cetak 47 baris bersih 0 bintang; sakelar menyala 94 bintang dan 21 nomor; Data Entry Program menampilkan `(1)`–`(4)` dan bintang.
 - Belum diuji di layar: berkas PDF/Excel hasil unduhan, Matriks Bulanan, modal detail, layar IKI.
+
+## 13. Impor mengikuti ejaan tersimpan (11 Nov 2026) — menutup §11.2
+
+Karena data tidak ditulis ulang, berkas imporlah yang menyesuaikan. Aturannya murni di `lib/renaksi/induk-impor.ts` (`selaraskanImpor`), dipanggil `commitImportRenaksi` sebagai satu-satunya pencocok.
+
+| Yang dicocokkan | Aturan |
+|---|---|
+| Induk | sama persis → apa adanya; hanya berbeda penanda → ejaan **tersimpan**; dua nama tersimpan yang hanya berbeda penanda → baris ditahan dengan sebabnya |
+| Nama entitas sendiri | yang sudah ada (berbeda penanda saja) memakai ejaan tersimpan, supaya entitasnya tidak terpecah dua |
+| Indikator | menempel ke baris lamanya bila calonnya tunggal, milik entitas yang sama, nomornya tidak bertentangan, dan tidak diperebutkan baris berkas lain; selain itu apa adanya |
+| Mode `ganti` | level yang ada di berkas ditulis ulang, jadi untuk level itu ejaan **berkas** yang berlaku |
+
+Jumlah baris yang disesuaikan disebut di toast impor dan di audit `RA_IMPORT_COMMIT`.
+
+**Batas**
+
+- Indikator kembar tanpa nomor di berkas (dua baris sama persis) tetap satu baris: kunci unik `(tahun, level, indikator)` tidak berubah.
+- Mode `ganti` yang hanya memuat sebagian level tetap bisa memutus baris level lain yang tidak ada di berkas (sifat lama mode itu).
+
+**Bukti**: `test-renaksi-penanda.mts` bagian E6–E9 dan F (71 pemeriksaan), 22 uji mutasi tertangkap (2 sempat lolos: arah berkas berbintang → data bersih, dan induk di mode ganti). Dijalankan ke MySQL tahun 2090: berkas bersih di atas data berbintang → 0 ditahan, 2 baris lama diperbarui (bukan kembar), sub-kegiatan baru tersambung ke `Program P ***`; data uji dibersihkan.

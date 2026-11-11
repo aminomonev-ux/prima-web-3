@@ -175,7 +175,8 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
       if (!json.ok) { notify(json.error ?? 'Gagal menyimpan', 'error'); return; }
 
       const pesan = `${json.disimpan} indikator tersimpan (${json.ditambah} baru, ${json.diperbarui} diperbarui`
-        + `${json.dilewati ? `, ${json.dilewati} dilewati` : ''})`;
+        + `${json.dilewati ? `, ${json.dilewati} dilewati` : ''})`
+        + `${json.disesuaikan ? ` · ${json.disesuaikan} baris mengikuti nama yang sudah tersimpan` : ''}`;
       if (json.ditahan?.length) {
         notify(`${pesan} · ${json.ditahan.length} ditahan: ${json.ditahan[0].alasan}`, 'warning');
       } else {

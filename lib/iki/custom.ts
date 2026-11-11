@@ -9,6 +9,7 @@ import {
   type TabelCell, type TabelAlign, type GayaTabel,
 } from '@/lib/lkjip/tabel';
 import { bacaPeran, tataLetak, type PetaPeran } from './peran';
+import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 
 /** Keputusan pemilik 2026-10-21 (§9 #4) — LKJIP tetap 12 karena halaman Word tegak. */
 export const BATAS_KOLOM_IKI = 24;
@@ -234,12 +235,16 @@ const garis = (w: number | undefined): GarisCetak => (w === undefined ? 1 : w <=
 export function susunKisiCetak(t: TabelCustom): KisiCetak {
   const ncol = t.kolom.length;
   const rows = nomorUlang(t.rows, t.headerRows, t.kolomNomor, !!t.gaya.jumlah);
+  // Penanda matriks Renaksi (bintang, "(1)") tidak ikut tercetak — sama dengan STANDAR/DIREKTUR
+  // (`buildIkiGrid`). Hanya kolom yang perannya menyatakan isinya RHK/indikator; kolom lain sel bebas.
+  const kolomNama = new Set([t.peran.rhk, t.peran.rhk_intervensi].filter((k): k is number => k !== undefined));
   const baris = rows.map((row, r) => row.map((mentah, c): SelCetak | null => {
     if (mentah.h) return null;
     const kepala = r < t.headerRows;
     const cell = selBergaya(mentah, gayaSel(t.gaya, rows.length, t.headerRows, r));
+    const teks = teksSelWord(rows, r, c);
     return {
-      teks: teksSelWord(rows, r, c),
+      teks: kepala ? teks : c === t.peran.indikator ? rapikanIndikator(teks) : kolomNama.has(c) ? rapikanNamaEntitas(teks) : teks,
       cs: Math.max(1, Math.min(cell.cs ?? 1, ncol - c)),
       rs: Math.max(1, Math.min(cell.rs ?? 1, rows.length - r)),
       al: cell.al ?? (kepala ? 'center' : t.align[c] ?? 'left'),

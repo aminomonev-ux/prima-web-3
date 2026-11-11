@@ -119,7 +119,7 @@ async function handleCommit(req: NextRequest, session: { userId: number; usernam
       userId: session.userId,
       username: session.username,
       detail: `Import ${tahun} mode=${mode}: ${result.disimpan} tersimpan `
-        + `(${result.ditambah} baru, ${result.diperbarui} diperbarui, ${result.dilewati} dilewati, ${result.ditahan.length} ditahan) — `
+        + `(${result.ditambah} baru, ${result.diperbarui} diperbarui, ${result.dilewati} dilewati, ${result.ditahan.length} ditahan, ${result.disesuaikan} disesuaikan ke nama tersimpan) — `
         + Object.entries(result.perLevel).map(([lv, n]) => `${lv}:${n}`).join(' '),
     });
     return NextResponse.json({ ok: true, ...result });
