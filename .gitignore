@@ -97,3 +97,5 @@ scripts/backup-db.log
 /.cloud-attachments/
 /docs/Nota Dinas*.docx
 /scripts/ss-konsep/field.log
+/docs/konsep-sistem/
+/docs/panduan-alur-modul-bba.pdf
