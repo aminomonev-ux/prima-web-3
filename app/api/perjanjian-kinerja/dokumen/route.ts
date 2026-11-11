@@ -3,7 +3,8 @@
 // Pattern: withTransaction L7 + bulkInsert L13 + ownership filter L2.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, withTransaction, bulkInsert, sqlInt, safeInt } from '@/lib/data/db';
+import { sql, withTransaction, sqlInt, safeInt } from '@/lib/data/db';
+import { tulisIsiDokumen } from '@/lib/data/pk';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import {
@@ -142,34 +143,7 @@ export async function POST(req: NextRequest) {
     const id = Number(result[0]?.insertId);
     if (!id) throw new Error('Gagal create dokumen — insertId kosong');
 
-    if (d.lampiran.length > 0) {
-      await bulkInsert(
-        'pk_dokumen_lampiran',
-        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','indikator','target','urutan'],
-        d.lampiran.map((l, i) => [
-          id, l.unit_kerja, l.level,
-          l.program ?? null, l.kegiatan ?? null, l.subkegiatan ?? null,
-          l.uraian, l.indikator ?? null, l.target ?? null,
-          l.urutan ?? i,
-        ]),
-        conn,
-      );
-    }
-
-    if (d.anggaran.length > 0) {
-      await bulkInsert(
-        'pk_dokumen_anggaran',
-        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','keterangan_sumber','nominal','urutan','auto_filled_from_blud'],
-        d.anggaran.map((a, i) => [
-          id, a.unit_kerja, a.level,
-          a.program ?? null, a.kegiatan ?? null, a.subkegiatan ?? null,
-          a.uraian, a.keterangan_sumber, a.nominal ?? 0,
-          a.urutan ?? i,
-          a.auto_filled_from_blud ?? false,
-        ]),
-        conn,
-      );
-    }
+    await tulisIsiDokumen(conn, id, d);
 
     return id;
   });

@@ -1,7 +1,7 @@
 'use client'
 // Lampiran (kiri) + Anggaran (kanan) split panel — GAS-style A.
 // LAMPIRAN: level dikunci dari unit Pihak Pertama, 1 picker aktif per level,
-//           indikator+target auto-fill readonly dari Master Sasaran,
+//           SEMUA indikator sasaran terpilih (+satuan, target) ikut dari Master Sasaran,
 //           auto-detect parent (sub → program+kegiatan otomatis).
 // ANGGARAN: cascading 3 dropdown dengan visibility toggle per level, keterangan
 //           dropdown SUMBER_DANA, tombol 🖉 router (A2 mode):
@@ -19,6 +19,8 @@ import type { PkProgramHierarchy, PkSasaranRow, PkLevel, PkUnitKerja } from '../
 import { fmtRp } from '../../_utils/pk-format'
 import type { PkFormState, LampiranRow, AnggaranRow } from '../_types'
 import { genRowId, SUMBER_DANA } from '../_types'
+import { pilihanSasaran, sidikLampiran, sisipLampiran } from '@/lib/pk/pilihan-sasaran'
+import { gabungTargetSatuan } from '@/lib/shared/target-renaksi'
 
 interface Props {
   form: PkFormState
@@ -119,61 +121,40 @@ interface LampiranPanelProps {
 function LampiranPanel({
   form, setForm, unitLevel, sasaranRows, disabled,
 }: LampiranPanelProps) {
-  // Picker tunggal — value = index opsi unik dari sasaranRows (string)
   const [pickKey, setPickKey] = useState('')
 
-  // Build opsi dari Master Sasaran sesuai level — dedupe by composite key, keep 1st row utk indikator/target
-  const options = useMemo(() => {
-    const seen = new Set<string>()
-    const out: { key: string; label: string; row: PkSasaranRow }[] = []
-    sasaranRows.forEach((r, i) => {
-      if (r._deleted) return
-      const label = unitLevel === 'program' ? r.program
-        : unitLevel === 'kegiatan' ? (r.kegiatan ?? '')
-        : (r.subkegiatan ?? '')
-      if (!label || !label.trim()) return
-      const dedupe = unitLevel === 'program'
-        ? label
-        : unitLevel === 'kegiatan'
-          ? `${r.program}||${label}`
-          : `${r.program}||${r.kegiatan ?? ''}||${label}`
-      if (seen.has(dedupe)) return
-      seen.add(dedupe)
-      out.push({ key: `${i}`, label, row: r })
-    })
-    return out.sort((a, b) => a.label.localeCompare(b.label, 'id'))
-  }, [sasaranRows, unitLevel])
+  // Satu pilihan = satu sasaran beserta SEMUA indikatornya. Dulu hanya indikator baris pertama
+  // yang ikut, jadi sasaran berindikator tiga masuk dokumen dengan satu indikator saja.
+  const options = useMemo(() => pilihanSasaran(sasaranRows, unitLevel), [sasaranRows, unitLevel])
+  const resolved = useMemo(() => options.find(o => o.kunci === pickKey) ?? null, [options, pickKey])
 
-  // Resolve dari opsi terpilih — semua field (parent + indikator + target) datang dari 1 row Master Sasaran
-  const resolved = useMemo(() => {
-    if (!pickKey) return null
-    const opt = options.find(o => o.key === pickKey)
-    if (!opt) return null
-    const r = opt.row
-    if (unitLevel === 'program') {
-      return { program: r.program, kegiatan: null, subkegiatan: null, indikator: r.indikator_program, target: r.target_program, uraian: r.program }
-    }
-    if (unitLevel === 'kegiatan') {
-      return { program: r.program, kegiatan: r.kegiatan, subkegiatan: null, indikator: r.indikator_kegiatan, target: r.target_kegiatan, uraian: r.kegiatan ?? '' }
-    }
-    return { program: r.program, kegiatan: r.kegiatan, subkegiatan: r.subkegiatan, indikator: r.indikator_subkegiatan, target: r.target_subkegiatan, uraian: r.subkegiatan ?? '' }
-  }, [pickKey, options, unitLevel])
+  const sudahAda = useMemo(
+    () => new Set(form.lampiran.filter(r => !r._deleted).map(r => sidikLampiran(r.uraian, r.indikator))),
+    [form.lampiran],
+  )
+  // Sasaran tanpa indikator di master tetap bisa ditambahkan (satu baris berindikator kosong).
+  const calon = useMemo(() => {
+    if (!resolved) return []
+    const semua = resolved.indikator.length > 0 ? resolved.indikator : [{ indikator: null, target: null, satuan: null }]
+    return semua.filter(i => !sudahAda.has(sidikLampiran(resolved.label, i.indikator)))
+  }, [resolved, sudahAda])
 
   function handleAdd() {
-    if (!resolved || !resolved.uraian) return
-    const newRow: LampiranRow = {
+    if (!resolved || calon.length === 0) return
+    const baru: LampiranRow[] = calon.map(i => ({
       _id: genRowId(),
       unit_kerja: form.unit_pertama,
       level: unitLevel,
       program: resolved.program,
       kegiatan: resolved.kegiatan,
       subkegiatan: resolved.subkegiatan,
-      uraian: resolved.uraian,
-      indikator: resolved.indikator,
-      target: resolved.target,
-      urutan: form.lampiran.length,
-    }
-    setForm(f => ({ ...f, lampiran: [...f.lampiran, newRow] }))
+      uraian: resolved.label,
+      indikator: i.indikator,
+      target: i.target,
+      satuan: i.satuan,
+      urutan: 0,
+    }))
+    setForm(f => ({ ...f, lampiran: sisipLampiran(f.lampiran, baru) }))
     setPickKey('')
   }
 
@@ -203,7 +184,7 @@ function LampiranPanel({
             onChange={e => setPickKey(e.target.value)}
             style={inputStyle}>
             <option value="">— pilih {SASARAN_LABEL[unitLevel]} —</option>
-            {options.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            {options.map(o => <option key={o.kunci} value={o.kunci}>{o.label}</option>)}
           </select>
           {options.length === 0 && (
             <span style={{ fontSize: 10, color: '#FCA5A5', marginTop: 2 }}>
@@ -226,19 +207,29 @@ function LampiranPanel({
           </div>
         )}
 
-        <Field label="Indikator (auto-fill dari Master Sasaran)">
-          <input type="text" readOnly value={resolved?.indikator ?? ''}
-            placeholder={pickKey ? '— tidak ada di Master Sasaran —' : '— pilih item dulu —'}
-            style={{ ...inputStyle, background: 'rgba(2,15,28,.7)', color: resolved?.indikator ? '#E6F1FB' : '#85B7EB', cursor: 'default' }} />
-        </Field>
-        <Field label="Target (auto-fill dari Master Sasaran)">
-          <input type="text" readOnly value={resolved?.target ?? ''}
-            placeholder={pickKey ? '— tidak ada di Master Sasaran —' : '— pilih item dulu —'}
-            style={{ ...inputStyle, background: 'rgba(2,15,28,.7)', color: resolved?.target ? '#E6F1FB' : '#85B7EB', cursor: 'default' }} />
-        </Field>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#FAC775', letterSpacing: '.4px', textTransform: 'uppercase' }}>
+            Indikator · Target (dari Master Sasaran)
+          </span>
+          <div style={{ ...inputStyle, background: 'rgba(2,15,28,.7)', cursor: 'default', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {!resolved && <span style={{ color: '#85B7EB' }}>— pilih sasaran dulu —</span>}
+            {resolved && resolved.indikator.length === 0 && <span style={{ color: '#85B7EB' }}>— tidak ada indikator di Master Sasaran —</span>}
+            {resolved?.indikator.map((i, n) => {
+              const ada = sudahAda.has(sidikLampiran(resolved.label, i.indikator))
+              return (
+                <div key={n} style={{ display: 'flex', gap: 8, alignItems: 'baseline', opacity: ada ? 0.55 : 1 }}>
+                  <span style={{ flex: 1, minWidth: 0, color: '#E6F1FB' }}>{i.indikator || <em style={{ color: '#FCA5A5' }}>indikator kosong</em>}</span>
+                  <span style={{ ...mono, color: '#FAC775', flexShrink: 0 }}>{gabungTargetSatuan(i.target, i.satuan) || '—'}</span>
+                  {ada && <span style={{ fontSize: 10, color: '#85B7EB', flexShrink: 0 }}>sudah ada</span>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
 
-        <PrimaButton variant="success" onClick={handleAdd} disabled={disabled || !pickKey} iconLeft={<Plus size={13} />}>
-          Tambah Lampiran
+        <PrimaButton variant="success" onClick={handleAdd} disabled={disabled || calon.length === 0} iconLeft={<Plus size={13} />}
+          data-tooltip={resolved && calon.length === 0 ? 'Semua indikator sasaran ini sudah ada di lampiran' : undefined}>
+          {calon.length > 1 ? `Tambah ${calon.length} Indikator` : 'Tambah Lampiran'}
         </PrimaButton>
       </div>
 
@@ -265,6 +256,8 @@ function LampiranPanel({
                   <div style={{ fontSize: 11, color: '#B5D4F4', lineHeight: 1.4 }}>
                     <span style={{ color: '#85B7EB' }}>Target: </span>
                     {r.target || <em style={{ color: '#FCA5A5' }}>kosong</em>}
+                    <span style={{ color: '#85B7EB' }}> · Satuan: </span>
+                    {r.satuan || <em style={{ color: '#FCA5A5' }}>kosong</em>}
                   </div>
                 </div>
                 <button onClick={() => handleDelete(idx)} disabled={disabled}

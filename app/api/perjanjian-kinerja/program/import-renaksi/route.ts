@@ -10,6 +10,7 @@ import { sql } from '@/lib/data/db'
 import { getSession } from '@/lib/security/auth'
 import { writeAuditLog } from '@/lib/security/auditlog'
 import { pkRateLimit, TahunSchema } from '@/lib/data/pk-schemas'
+import { rapikanNamaEntitas } from '@/lib/shared/nama-resmi'
 import { bolehEditMenu, tolakEdit, pkMati } from '../../_guard'
 
 export const dynamic = 'force-dynamic'
@@ -66,24 +67,26 @@ export async function GET(req: NextRequest) {
   // Expand jadi row per level + dedup pakai Set key. Tiap baris memunculkan
   // ancestor-nya (program → +kegiatan → +sub-kegiatan) sekali saja, supaya
   // hierarki lengkap tanpa duplikat meski beberapa sub-kegiatan berbagi program.
+  // Bintang penanda tingkat matriks Renaksi dibuang DULU, baru kuncinya dibentuk:
+  // "PROGRAM X ***" dan "PROGRAM X" entri yang sama.
   const seen = new Set<string>()
   const rows: ImportRow[] = []
   for (const r of raRows) {
-    const p  = (r.program ?? '').trim()
+    const p  = rapikanNamaEntitas(r.program ?? '')
     if (!p) continue
     const keyP = `P||${p}`
     if (!seen.has(keyP)) {
       seen.add(keyP)
       rows.push({ program: p, kegiatan: null, subkegiatan: null, level: 'program' })
     }
-    const k = (r.kegiatan ?? '').trim()
+    const k = rapikanNamaEntitas(r.kegiatan ?? '')
     if (!k) continue
     const keyK = `K||${p}||${k}`
     if (!seen.has(keyK)) {
       seen.add(keyK)
       rows.push({ program: p, kegiatan: k, subkegiatan: null, level: 'kegiatan' })
     }
-    const sk = (r.sub_kegiatan ?? '').trim()
+    const sk = rapikanNamaEntitas(r.sub_kegiatan ?? '')
     if (!sk) continue
     const keyS = `S||${p}||${k}||${sk}`
     if (!seen.has(keyS)) {

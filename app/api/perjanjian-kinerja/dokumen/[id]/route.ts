@@ -73,7 +73,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const [lampiran, anggaran] = await Promise.all([
-    sql`SELECT id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, urutan
+    sql`SELECT id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, satuan, urutan
         FROM pk_dokumen_lampiran WHERE dokumen_id = ${id} ORDER BY urutan, id`,
     sql`SELECT id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, keterangan_sumber, nominal, urutan, auto_filled_from_blud
         FROM pk_dokumen_anggaran WHERE dokumen_id = ${id} ORDER BY urutan, id`,

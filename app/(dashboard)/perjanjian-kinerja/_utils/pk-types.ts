@@ -10,12 +10,15 @@ export interface PkSasaranRow {
   program: string;
   indikator_program: string | null;
   target_program: string | null;
+  satuan_program?: string | null;
   kegiatan: string | null;
   indikator_kegiatan: string | null;
   target_kegiatan: string | null;
+  satuan_kegiatan?: string | null;
   subkegiatan: string | null;
   indikator_subkegiatan: string | null;
   target_subkegiatan: string | null;
+  satuan_subkegiatan?: string | null;
   tahun?: string;
   _deleted?: boolean;
   _dirty?: boolean;

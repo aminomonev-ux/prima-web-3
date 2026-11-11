@@ -4,8 +4,8 @@
 // Pattern: useAbortableEffect (L30) + fetchJson (L11f) + TableSkeleton (L31).
 // Backend POST = replace-all per tahun (withTransaction DELETE + bulkInsert).
 
-import { useState, useCallback } from 'react'
-import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react'
+import { useState, useCallback, useMemo } from 'react'
+import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, Sparkles, Eraser } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import { fetchJson } from '@/lib/shared/api'
 import { useAbortableEffect } from '@/lib/shared/hooks'
@@ -15,27 +15,32 @@ import SpandukLihat from '@/components/pk/SpandukLihat'
 import { pkInputTable as inputStyle } from '@/lib/shared/pk-styles'
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkSasaranRow } from '../_utils/pk-types'
+import { rapikanBarisSasaran } from '@/lib/pk/rapikan-nama'
+import { PANJANG_SATUAN } from '@/lib/shared/target-renaksi'
 
 type ApiListResp = { ok: boolean; tahun: string; rows: PkSasaranRow[]; message?: string }
 
 const COLS: { key: keyof PkSasaranRow; label: string; placeholder: string; minWidth: number }[] = [
   { key: 'program',                label: 'Sasaran Program',        placeholder: 'Nama program',                minWidth: 200 },
   { key: 'indikator_program',      label: 'Indikator Program',      placeholder: 'Indikator',                   minWidth: 180 },
-  { key: 'target_program',         label: 'Target',                 placeholder: 'Target',                      minWidth: 120 },
+  { key: 'target_program',         label: 'Target',                 placeholder: 'Angka',                       minWidth: 90 },
+  { key: 'satuan_program',         label: 'Satuan',                 placeholder: 'Orang, %, …',                 minWidth: 110 },
   { key: 'kegiatan',               label: 'Sasaran Kegiatan',       placeholder: 'Nama kegiatan',               minWidth: 180 },
   { key: 'indikator_kegiatan',     label: 'Indikator Kegiatan',     placeholder: 'Indikator',                   minWidth: 180 },
-  { key: 'target_kegiatan',        label: 'Target',                 placeholder: 'Target',                      minWidth: 120 },
+  { key: 'target_kegiatan',        label: 'Target',                 placeholder: 'Angka',                       minWidth: 90 },
+  { key: 'satuan_kegiatan',        label: 'Satuan',                 placeholder: 'Orang, %, …',                 minWidth: 110 },
   { key: 'subkegiatan',            label: 'Sasaran Sub Kegiatan',   placeholder: 'Nama sub-kegiatan',           minWidth: 180 },
   { key: 'indikator_subkegiatan',  label: 'Indikator Sub-Kegiatan', placeholder: 'Indikator',                   minWidth: 180 },
-  { key: 'target_subkegiatan',     label: 'Target',                 placeholder: 'Target',                      minWidth: 120 },
+  { key: 'target_subkegiatan',     label: 'Target',                 placeholder: 'Angka',                       minWidth: 90 },
+  { key: 'satuan_subkegiatan',     label: 'Satuan',                 placeholder: 'Orang, %, …',                 minWidth: 110 },
 ]
 
 function emptyRow(): PkSasaranRow {
   return {
     program: '',
-    indikator_program: null, target_program: null,
-    kegiatan: null, indikator_kegiatan: null, target_kegiatan: null,
-    subkegiatan: null, indikator_subkegiatan: null, target_subkegiatan: null,
+    indikator_program: null, target_program: null, satuan_program: null,
+    kegiatan: null, indikator_kegiatan: null, target_kegiatan: null, satuan_kegiatan: null,
+    subkegiatan: null, indikator_subkegiatan: null, target_subkegiatan: null, satuan_subkegiatan: null,
     _dirty: true,
   }
 }
@@ -104,12 +109,15 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
         program: r.program,
         indikator_program: r.indikator_program,
         target_program: r.target_program,
+        satuan_program: r.satuan_program ?? null,
         kegiatan: r.kegiatan,
         indikator_kegiatan: r.indikator_kegiatan,
         target_kegiatan: r.target_kegiatan,
+        satuan_kegiatan: r.satuan_kegiatan ?? null,
         subkegiatan: r.subkegiatan,
         indikator_subkegiatan: r.indikator_subkegiatan,
         target_subkegiatan: r.target_subkegiatan,
+        satuan_subkegiatan: r.satuan_subkegiatan ?? null,
         _dirty: true,
       }))
       const hasExistingRows = rows.some(r => !r._deleted)
@@ -121,6 +129,17 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
     } finally {
       setImporting(false)
     }
+  }
+
+  // Data lama: bintang penanda & nomor "(1)" matriks Renaksi di nama, satuan menempel di target.
+  // Dihitung dari isi layar, jadi tombolnya hanya muncul selama memang ada yang perlu dirapikan.
+  const perluRapi = useMemo(() => rapikanBarisSasaran(rows.filter(r => !r._deleted)).berubah, [rows])
+
+  function rapikanNama() {
+    const hasil = rapikanBarisSasaran(rows)
+    if (hasil.berubah === 0) return
+    setRows(hasil.rows.map((r, i) => r === rows[i] ? r : { ...r, _dirty: true }))
+    showToast('ok', `${hasil.berubah} baris dirapikan. Periksa hasilnya, lalu klik Simpan.`)
   }
 
   const toggleDel = useCallback((idx: number) => {
@@ -157,12 +176,15 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
         program:               r.program.trim(),
         indikator_program:     r.indikator_program ?? null,
         target_program:        r.target_program ?? null,
+        satuan_program:        r.satuan_program ?? null,
         kegiatan:              r.kegiatan ?? null,
         indikator_kegiatan:    r.indikator_kegiatan ?? null,
         target_kegiatan:       r.target_kegiatan ?? null,
+        satuan_kegiatan:       r.satuan_kegiatan ?? null,
         subkegiatan:           r.subkegiatan ?? null,
         indikator_subkegiatan: r.indikator_subkegiatan ?? null,
         target_subkegiatan:    r.target_subkegiatan ?? null,
+        satuan_subkegiatan:    r.satuan_subkegiatan ?? null,
       })),
     }
     const d = await fetchJson<unknown>('/api/perjanjian-kinerja/sasaran', {
@@ -202,6 +224,17 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
           </PrimaButton>
           {bolehUbah && (
             <>
+              {perluRapi > 0 && (
+                <PrimaButton
+                  variant="warning"
+                  iconLeft={<Eraser size={14} />}
+                  onClick={rapikanNama}
+                  disabled={loading || saving}
+                  data-tooltip={'Buang bintang penanda dan nomor "(1)" dari nama, pisahkan satuan dari target. Baru tersimpan setelah Anda klik Simpan.'}
+                  data-tooltip-pos="below">
+                  Rapikan Nama ({perluRapi})
+                </PrimaButton>
+              )}
               <PrimaButton
                 variant="purple"
                 iconLeft={<Sparkles size={14} />}
@@ -256,10 +289,10 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
         overflow: 'hidden',
       }}>
         {loading ? (
-          <TableSkeleton rows={6} cols={10} />
+          <TableSkeleton rows={6} cols={13} />
         ) : (
           <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1600, fontSize: 12.5 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1840, fontSize: 12.5 }}>
               <thead>
                 <tr style={{ background: 'rgba(12,68,124,.5)' }}>
                   <th style={th(40)}>#</th>
@@ -294,6 +327,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
                           disabled={r._deleted}
                           value={(r[c.key] as string | null) ?? ''}
                           onChange={(e) => updateCell(idx, c.key, e.target.value)}
+                          maxLength={String(c.key).startsWith('satuan_') ? PANJANG_SATUAN : undefined}
                           placeholder={c.placeholder}
                           style={inputStyle}
                         />

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
+import { PANJANG_SATUAN } from '@/lib/shared/target-renaksi';
 
 // ─── Rate Limit ─────────────────────────────────────────────────────────────
 
@@ -89,6 +90,9 @@ export const LevelEnum    = z.enum(['program','kegiatan','subkegiatan']);
 export const JenisPkEnum  = z.enum(['MURNI','PERUBAHAN']);
 export const StatusPkEnum = z.enum(['DRAFT','FINAL']);
 
+/** Satuan target ("Orang", "%") — lebar kolom satuan di pk_sasaran & pk_dokumen_lampiran. */
+const SatuanSchema = z.string().trim().max(PANJANG_SATUAN).optional().nullable();
+
 // ─── Body schemas ───────────────────────────────────────────────────────────
 
 /**
@@ -100,17 +104,21 @@ export const SasaranBodySchema = z.object({
   // Angkanya CERMIN `docs/schema-mysql.sql`, bukan pilihan sendiri — kalau kolomnya
   // dilebarkan lagi, daftar ini wajib ikut. Tiga kolom sasaran naik ke 500 mengikuti
   // `rencana_aksi.outcome_*` yang jadi sumber tombol Import Renaksi
-  // (migration-pk-sasaran-lebar.sql); kolom target tetap 255, isinya "765 Orang".
+  // (migration-pk-sasaran-lebar.sql); kolom target tetap 255 dan berisi angkanya saja,
+  // satuannya kolom sendiri (migration-pk-satuan.sql).
   rows: z.array(z.object({
     program:                z.string().trim().min(1, 'Program wajib').max(500),
     indikator_program:      z.string().trim().max(500).optional().nullable(),
     target_program:         z.string().trim().max(255).optional().nullable(),
+    satuan_program:         SatuanSchema,
     kegiatan:               z.string().trim().max(500).optional().nullable(),
     indikator_kegiatan:     z.string().trim().max(500).optional().nullable(),
     target_kegiatan:        z.string().trim().max(255).optional().nullable(),
+    satuan_kegiatan:        SatuanSchema,
     subkegiatan:            z.string().trim().max(500).optional().nullable(),
     indikator_subkegiatan:  z.string().trim().max(500).optional().nullable(),
     target_subkegiatan:     z.string().trim().max(255).optional().nullable(),
+    satuan_subkegiatan:     SatuanSchema,
   })).min(1, 'Minimal 1 baris').max(200, 'Maks 200 baris per batch'),
 });
 
@@ -161,16 +169,17 @@ export const DokumenCreateBodySchema = z.object({
   jabatan_kedua:    z.string().trim().min(1).max(255),
   pangkat_kedua:    z.string().trim().max(100).optional().nullable(),
   nip_kedua:        z.string().trim().max(50).optional().nullable(),
-  // Lampiran (sasaran)
+  // Lampiran (sasaran) — empat kolom sasaran 500, cermin pk_sasaran yang jadi sumbernya
   lampiran: z.array(z.object({
     unit_kerja:  z.string().trim().min(1).max(255),
     level:       LevelEnum,
-    program:     z.string().trim().max(255).optional().nullable(),
-    kegiatan:    z.string().trim().max(255).optional().nullable(),
-    subkegiatan: z.string().trim().max(255).optional().nullable(),
-    uraian:      z.string().trim().min(1).max(255),
+    program:     z.string().trim().max(500).optional().nullable(),
+    kegiatan:    z.string().trim().max(500).optional().nullable(),
+    subkegiatan: z.string().trim().max(500).optional().nullable(),
+    uraian:      z.string().trim().min(1).max(500),
     indikator:   z.string().trim().max(500).optional().nullable(),
     target:      z.string().trim().max(255).optional().nullable(),
+    satuan:      SatuanSchema,
     urutan:      z.number().int().nonnegative().default(0),
   })).max(100, 'Maks 100 lampiran per dokumen'),
   // Anggaran

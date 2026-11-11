@@ -142,6 +142,7 @@ export default function FormClient({ editId, bolehUbah }: Props) {
           uraian: String(l.uraian ?? ''),
           indikator: (l.indikator as string) ?? null,
           target: (l.target as string) ?? null,
+          satuan: (l.satuan as string) ?? null,
           urutan: Number(l.urutan ?? 0),
           _id: genRowId(),
         })),
@@ -265,7 +266,7 @@ export default function FormClient({ editId, bolehUbah }: Props) {
       lampiran: form.lampiran.filter(l => !l._deleted).map((l, i) => ({
         unit_kerja: l.unit_kerja, level: l.level,
         program: l.program, kegiatan: l.kegiatan, subkegiatan: l.subkegiatan,
-        uraian: l.uraian, indikator: l.indikator, target: l.target,
+        uraian: l.uraian, indikator: l.indikator, target: l.target, satuan: l.satuan,
         urutan: i,
       })),
       anggaran: form.anggaran.filter(a => !a._deleted).map((a, i) => ({

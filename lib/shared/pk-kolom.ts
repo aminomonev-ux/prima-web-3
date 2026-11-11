@@ -17,12 +17,15 @@ export const LABEL_KOLOM_SASARAN: Record<string, string> = {
   program:               'Sasaran Program',
   indikator_program:     'Indikator Program',
   target_program:        'Target Program',
+  satuan_program:        'Satuan Program',
   kegiatan:              'Sasaran Kegiatan',
   indikator_kegiatan:    'Indikator Kegiatan',
   target_kegiatan:       'Target Kegiatan',
+  satuan_kegiatan:       'Satuan Kegiatan',
   subkegiatan:           'Sasaran Sub Kegiatan',
   indikator_subkegiatan: 'Indikator Sub-Kegiatan',
   target_subkegiatan:    'Target Sub-Kegiatan',
+  satuan_subkegiatan:    'Satuan Sub-Kegiatan',
 }
 
 /**

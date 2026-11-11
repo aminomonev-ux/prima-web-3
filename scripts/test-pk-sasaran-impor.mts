@@ -63,16 +63,19 @@ sama('A13 satuan kosong tidak menyisakan spasi ekor', fmtTarget('9.00', ''), '9'
 // ── B. SATU salinan saja (L78) ───────────────────────────────────────────────
 // Cacat #1 lahir justru karena ada dua salinan `fmtTarget` dan hanya satu
 // pemanggilnya yang ingat membungkus `Number(...)`.
-for (const [nama, p] of [['PK', RUTE_PK], ['IKI', RUTE_IKI]] as const) {
+// PK mencetak Satuan & Target di dua kolom (format 2026), jadi route-nya memanggil pasangan
+// `angkaTarget` + `satuanTarget`; IKI tetap satu kolom lewat `fmtTarget`. Semuanya dari lib yang sama.
+for (const [nama, p, fungsi] of [['PK', RUTE_PK, 'angkaTarget'], ['IKI', RUTE_IKI, 'fmtTarget']] as const) {
   const src = baca(p)
-  cek(`B1 ${nama}: tidak mendefinisikan fmtTarget sendiri`, !/function\s+fmtTarget/.test(src))
+  cek(`B1 ${nama}: tidak mendefinisikan ${fungsi} sendiri`, !new RegExp(`function\\s+${fungsi}`).test(src))
   cek(`B2 ${nama}: mengimpor dari lib bersama`,
-    /import\s*\{[^}]*\bfmtTarget\b[^}]*\}\s*from\s*'@\/lib\/shared\/target-renaksi'/.test(src))
+    new RegExp(`import\\s*\\{[^}]*\\b${fungsi}\\b[^}]*\\}\\s*from\\s*'@/lib/shared/target-renaksi'`).test(src))
   // `Number(` di sini artinya pemanggil masih merasa ikut bertanggung jawab atas
   // tipenya — persis pembagian tugas yang sudah gagal sekali.
-  cek(`B3 ${nama}: tidak ada lagi fmtTarget(Number(`, !src.includes('fmtTarget(Number('))
-  cek(`B4 ${nama}: benar-benar memanggilnya`, /fmtTarget\(/.test(src))
+  cek(`B3 ${nama}: tidak ada lagi ${fungsi}(Number(`, !src.includes(`${fungsi}(Number(`))
+  cek(`B4 ${nama}: benar-benar memanggilnya`, src.includes(`${fungsi}(`))
 }
+cek('B4b PK: target tidak lagi dirangkai dengan satuannya', !baca(RUTE_PK).includes('fmtTarget('))
 
 // Tipe di route PK sempat berbohong (`target_tahunan: number` untuk kolom DECIMAL).
 cek('B5 PK: target_tahunan diketik string, sesuai yang dipulangkan mysql2',
@@ -139,7 +142,7 @@ sama('D4 galat di luar rows tetap terbaca',
 sama('D5 kolom tak dikenal dipakai apa adanya, tidak jadi "undefined"',
   pesanTolakan({ path: ['rows', 2, 'kolom_baru'], message: 'X' }),
   'Baris 3, kolom "kolom_baru": X')
-cek('D6 semua kunci Zod punya label', Object.keys(LABEL_KOLOM_SASARAN).length === 9)
+cek('D6 semua kunci Zod punya label', Object.keys(LABEL_KOLOM_SASARAN).length === 12)
 
 // Route benar-benar MEMAKAINYA — tanpa ini seluruh blok D cuma menguji fungsi yatim.
 const rute = baca('app/api/perjanjian-kinerja/sasaran/route.ts')

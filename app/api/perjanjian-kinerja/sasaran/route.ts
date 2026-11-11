@@ -22,12 +22,15 @@ type SasaranRow = {
   program: string;
   indikator_program: string | null;
   target_program: string | null;
+  satuan_program: string | null;
   kegiatan: string | null;
   indikator_kegiatan: string | null;
   target_kegiatan: string | null;
+  satuan_kegiatan: string | null;
   subkegiatan: string | null;
   indikator_subkegiatan: string | null;
   target_subkegiatan: string | null;
+  satuan_subkegiatan: string | null;
   tahun: string;
 };
 
@@ -49,9 +52,9 @@ export async function GET(req: NextRequest) {
   const tahun = q.data.tahun ?? new Date().getFullYear().toString();
 
   const rows = await sql`
-    SELECT id, program, indikator_program, target_program,
-           kegiatan, indikator_kegiatan, target_kegiatan,
-           subkegiatan, indikator_subkegiatan, target_subkegiatan, tahun
+    SELECT id, program, indikator_program, target_program, satuan_program,
+           kegiatan, indikator_kegiatan, target_kegiatan, satuan_kegiatan,
+           subkegiatan, indikator_subkegiatan, target_subkegiatan, satuan_subkegiatan, tahun
     FROM pk_sasaran
     WHERE tahun = ${tahun}
     ORDER BY program, kegiatan, subkegiatan, id
@@ -86,21 +89,24 @@ export async function POST(req: NextRequest) {
       r.program,
       r.indikator_program ?? null,
       r.target_program ?? null,
+      r.satuan_program || null,
       r.kegiatan ?? null,
       r.indikator_kegiatan ?? null,
       r.target_kegiatan ?? null,
+      r.satuan_kegiatan || null,
       r.subkegiatan ?? null,
       r.indikator_subkegiatan ?? null,
       r.target_subkegiatan ?? null,
+      r.satuan_subkegiatan || null,
       tahun,
       session.userId,
     ]);
     await bulkInsert(
       'pk_sasaran',
       [
-        'program','indikator_program','target_program',
-        'kegiatan','indikator_kegiatan','target_kegiatan',
-        'subkegiatan','indikator_subkegiatan','target_subkegiatan',
+        'program','indikator_program','target_program','satuan_program',
+        'kegiatan','indikator_kegiatan','target_kegiatan','satuan_kegiatan',
+        'subkegiatan','indikator_subkegiatan','target_subkegiatan','satuan_subkegiatan',
         'tahun','created_by',
       ],
       values,

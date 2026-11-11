@@ -14,7 +14,8 @@ import { sql } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit, TahunSchema } from '@/lib/data/pk-schemas';
-import { fmtTarget } from '@/lib/shared/target-renaksi';
+import { angkaTarget, satuanTarget } from '@/lib/shared/target-renaksi';
+import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 import { bolehEditMenu, tolakEdit, pkMati } from '../../_guard';
 
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ type RaSrc = {
   satuan: string;
   // DECIMAL(14,2) sejak migration-043 — mysql2 memulangkannya sebagai STRING demi
   // menjaga presisi. Ditulis apa adanya di sini supaya tidak ada lagi yang mengira
-  // nilainya sudah berupa angka; `fmtTarget` yang mengubahnya.
+  // nilainya sudah berupa angka; `angkaTarget` yang mengubahnya.
   target_tahunan: string;
 };
 
@@ -40,13 +41,48 @@ type PkSasaranImportRow = {
   program: string;
   indikator_program: string | null;
   target_program: string | null;
+  satuan_program: string | null;
   kegiatan: string | null;
   indikator_kegiatan: string | null;
   target_kegiatan: string | null;
+  satuan_kegiatan: string | null;
   subkegiatan: string | null;
   indikator_subkegiatan: string | null;
   target_subkegiatan: string | null;
+  satuan_subkegiatan: string | null;
 };
+
+// Format PK mencetak Satuan dan Target di dua kolom, tanpa bintang penanda tingkat dan tanpa
+// nomor "(1)" indikator matriks Renaksi — jadi ketiganya dipisah/dibuang di pintu tarik ini.
+const KOSONG_KEGIATAN = { kegiatan: null, indikator_kegiatan: null, target_kegiatan: null, satuan_kegiatan: null };
+const KOSONG_SUB = { subkegiatan: null, indikator_subkegiatan: null, target_subkegiatan: null, satuan_subkegiatan: null };
+
+function bagianProgram(r: RaSrc) {
+  return {
+    program: rapikanNamaEntitas(r.outcome_program ?? r.program),
+    indikator_program: rapikanIndikator(r.indikator),
+    target_program: angkaTarget(r.target_tahunan),
+    satuan_program: satuanTarget(r.satuan) || null,
+  };
+}
+function bagianKegiatan(r: RaSrc) {
+  const nama = r.outcome_kegiatan ?? r.kegiatan;
+  return {
+    kegiatan: nama == null ? null : rapikanNamaEntitas(nama),
+    indikator_kegiatan: rapikanIndikator(r.indikator),
+    target_kegiatan: angkaTarget(r.target_tahunan),
+    satuan_kegiatan: satuanTarget(r.satuan) || null,
+  };
+}
+function bagianSub(r: RaSrc) {
+  const nama = r.outcome_sub_kegiatan ?? r.sub_kegiatan;
+  return {
+    subkegiatan: nama == null ? null : rapikanNamaEntitas(nama),
+    indikator_subkegiatan: rapikanIndikator(r.indikator),
+    target_subkegiatan: angkaTarget(r.target_tahunan),
+    satuan_subkegiatan: satuanTarget(r.satuan) || null,
+  };
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -101,41 +137,17 @@ export async function GET(req: NextRequest) {
   for (const prog of programs) {
     const childKegs = kegiatans.filter(k => k.program === prog.program);
     if (childKegs.length === 0) {
-      out.push({
-        program: prog.outcome_program ?? prog.program,
-        indikator_program: prog.indikator,
-        target_program: fmtTarget(prog.target_tahunan, prog.satuan),
-        kegiatan: null, indikator_kegiatan: null, target_kegiatan: null,
-        subkegiatan: null, indikator_subkegiatan: null, target_subkegiatan: null,
-      });
+      out.push({ ...bagianProgram(prog), ...KOSONG_KEGIATAN, ...KOSONG_SUB });
       continue;
     }
     for (const keg of childKegs) {
       const childSubs = subKegs.filter(s => s.program === prog.program && s.kegiatan === keg.kegiatan);
       if (childSubs.length === 0) {
-        out.push({
-          program: prog.outcome_program ?? prog.program,
-          indikator_program: prog.indikator,
-          target_program: fmtTarget(prog.target_tahunan, prog.satuan),
-          kegiatan: keg.outcome_kegiatan ?? keg.kegiatan,
-          indikator_kegiatan: keg.indikator,
-          target_kegiatan: fmtTarget(keg.target_tahunan, keg.satuan),
-          subkegiatan: null, indikator_subkegiatan: null, target_subkegiatan: null,
-        });
+        out.push({ ...bagianProgram(prog), ...bagianKegiatan(keg), ...KOSONG_SUB });
         continue;
       }
       for (const sub of childSubs) {
-        out.push({
-          program: prog.outcome_program ?? prog.program,
-          indikator_program: prog.indikator,
-          target_program: fmtTarget(prog.target_tahunan, prog.satuan),
-          kegiatan: keg.outcome_kegiatan ?? keg.kegiatan,
-          indikator_kegiatan: keg.indikator,
-          target_kegiatan: fmtTarget(keg.target_tahunan, keg.satuan),
-          subkegiatan: sub.outcome_sub_kegiatan ?? sub.sub_kegiatan,
-          indikator_subkegiatan: sub.indikator,
-          target_subkegiatan: fmtTarget(sub.target_tahunan, sub.satuan),
-        });
+        out.push({ ...bagianProgram(prog), ...bagianKegiatan(keg), ...bagianSub(sub) });
       }
     }
   }

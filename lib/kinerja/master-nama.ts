@@ -8,6 +8,7 @@
 // Realisasi ada di `master-ubah.ts`.
 
 import type { MasterTipe } from '@/lib/data/kinerja';
+import { buangBintangUjung } from '@/lib/shared/nama-resmi';
 
 /**
  * Tipe yang namanya dipikul anak lewat kolom `*_ref`. `uraian_ssk` dan
@@ -24,7 +25,7 @@ export function punyaAnak(tipe: MasterTipe): boolean {
  * memecah satu program jadi dua kelompok di Cetak Rekap.
  */
 export function buangBintang(nama: string): string {
-  return nama.replace(/[\s*]+$/u, '').trim();
+  return buangBintangUjung(nama);
 }
 
 export interface IndukMaster {

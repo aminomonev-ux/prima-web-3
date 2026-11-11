@@ -7,6 +7,7 @@
 
 import type { BarisSumber, HasilTarik, JenisKolomSumber, KolomSumber } from '../tautan';
 import { GagalTarik, pesanDitolak, angkaDalam, type AmbilJson } from './umum';
+import { gabungTargetSatuan } from '@/lib/shared/target-renaksi';
 
 export type TampilanPk = 'kinerja' | 'anggaran';
 export interface SetelanPk {
@@ -50,7 +51,7 @@ export function setelanPk(raw: unknown, tahunDokumen: number): SetelanPk {
 interface DokumenPk { id: number; tanggal_dokumen: string; jenis_pk: 'MURNI' | 'PERUBAHAN'; unit_pertama: string; nama_pertama: string; status: string }
 interface BarisPkMentah {
   unit_kerja: string; level: string; program: string | null; kegiatan: string | null; subkegiatan: string | null;
-  uraian: string; indikator?: string | null; target?: string | null; keterangan_sumber?: string; nominal?: number | string | null;
+  uraian: string; indikator?: string | null; target?: string | null; satuan?: string | null; keterangan_sumber?: string; nominal?: number | string | null;
 }
 
 const LABEL_TINGKAT: Record<string, string> = { program: 'Program', kegiatan: 'Kegiatan', subkegiatan: 'Sub Kegiatan' };
@@ -122,7 +123,8 @@ export async function tarikPk(s: SetelanPk, ambil: AmbilJson): Promise<HasilTari
       jalur.push(r.keterangan_sumber ?? '');
     } else {
       sel.indikator = r.indikator ?? '';
-      sel.target = r.target ?? '';
+      // PK menyimpan satuan di kolom sendiri sejak format 2026; kolom Target di sini tetap "765 Orang".
+      sel.target = gabungTargetSatuan(r.target, r.satuan);
       jalur.push(r.indikator ?? '');
     }
     return { kunci: kunciUnik(dipakai, `pk:${JSON.stringify(jalur)}`), label: r.uraian, indent: URUT_TINGKAT[r.level] ?? 0, sel };

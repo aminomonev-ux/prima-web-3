@@ -5,7 +5,9 @@
 // Reference: docs/session/PK_REFACTOR_CONCEPT.md §3 + §9
 
 import { sql, queryMany, queryOne, withTransaction, bulkInsert } from '@/lib/data/db';
-import { PESAN_VERSI_PK, type DokumenUpdateBody } from './pk-schemas';
+import type { PoolConnection } from 'mysql2/promise';
+import { rapikanIndikatorAtauNull, rapikanNamaAtauNull, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
+import { PESAN_VERSI_PK, type DokumenCreateBody, type DokumenUpdateBody } from './pk-schemas';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -173,6 +175,50 @@ export async function getBludNominalByUnit(unitKerja: string, tahun: number): Pr
   };
 }
 
+// ─── Isi dokumen: lampiran + anggaran ───────────────────────────────────────
+
+/**
+ * Satu-satunya penulis baris lampiran & anggaran — dipakai pembuatan (POST) DAN penggantian
+ * isi (PATCH). Dua daftar kolom yang ditulis terpisah pasti menyimpang: kolom yang ditambah
+ * di satu pintu hilang diam-diam lewat pintu sebelahnya (L69).
+ *
+ * Nama disimpan tanpa penanda matriks Renaksi (bintang di ujung, awalan "(1)" indikator):
+ * isi dokumen = teks resmi yang tercetak, dan modul lain (tabel LKJIP tertaut) membacanya dari sini.
+ */
+export async function tulisIsiDokumen(
+  conn: PoolConnection,
+  id: number,
+  d: Pick<DokumenCreateBody, 'lampiran' | 'anggaran'>,
+): Promise<void> {
+  if (d.lampiran.length > 0) {
+    await bulkInsert(
+      'pk_dokumen_lampiran',
+      ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','indikator','target','satuan','urutan'],
+      d.lampiran.map((l, i) => [
+        id, l.unit_kerja, l.level,
+        rapikanNamaAtauNull(l.program), rapikanNamaAtauNull(l.kegiatan), rapikanNamaAtauNull(l.subkegiatan),
+        rapikanNamaEntitas(l.uraian), rapikanIndikatorAtauNull(l.indikator), l.target ?? null, l.satuan || null,
+        l.urutan ?? i,
+      ]),
+      conn,
+    );
+  }
+  if (d.anggaran.length > 0) {
+    await bulkInsert(
+      'pk_dokumen_anggaran',
+      ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','keterangan_sumber','nominal','urutan','auto_filled_from_blud'],
+      d.anggaran.map((a, i) => [
+        id, a.unit_kerja, a.level,
+        rapikanNamaAtauNull(a.program), rapikanNamaAtauNull(a.kegiatan), rapikanNamaAtauNull(a.subkegiatan),
+        rapikanNamaEntitas(a.uraian), a.keterangan_sumber, a.nominal ?? 0,
+        a.urutan ?? i,
+        a.auto_filled_from_blud ?? false,
+      ]),
+      conn,
+    );
+  }
+}
+
 // ─── Simpan & kunci dokumen (I4, audit 2026-09-29) ──────────────────────────
 // Kunci versi (L48): dulu PATCH menulis ulang header + seluruh lampiran/anggaran tanpa
 // bertanya apakah dokumennya sudah diubah orang lain sejak dibuka — yang terakhir menang.
@@ -202,33 +248,7 @@ export async function gantiIsiDokumen(id: number, d: DokumenUpdateBody): Promise
     await tx`DELETE FROM pk_dokumen_lampiran WHERE dokumen_id = ${id}`;
     await tx`DELETE FROM pk_dokumen_anggaran WHERE dokumen_id = ${id}`;
 
-    if (d.lampiran.length > 0) {
-      await bulkInsert(
-        'pk_dokumen_lampiran',
-        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','indikator','target','urutan'],
-        d.lampiran.map((l, i) => [
-          id, l.unit_kerja, l.level,
-          l.program ?? null, l.kegiatan ?? null, l.subkegiatan ?? null,
-          l.uraian, l.indikator ?? null, l.target ?? null,
-          l.urutan ?? i,
-        ]),
-        conn,
-      );
-    }
-    if (d.anggaran.length > 0) {
-      await bulkInsert(
-        'pk_dokumen_anggaran',
-        ['dokumen_id','unit_kerja','level','program','kegiatan','subkegiatan','uraian','keterangan_sumber','nominal','urutan','auto_filled_from_blud'],
-        d.anggaran.map((a, i) => [
-          id, a.unit_kerja, a.level,
-          a.program ?? null, a.kegiatan ?? null, a.subkegiatan ?? null,
-          a.uraian, a.keterangan_sumber, a.nominal ?? 0,
-          a.urutan ?? i,
-          a.auto_filled_from_blud ?? false,
-        ]),
-        conn,
-      );
-    }
+    await tulisIsiDokumen(conn, id, d);
   });
   return d.expected_version + 1;
 }

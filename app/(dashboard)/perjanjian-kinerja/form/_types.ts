@@ -10,6 +10,7 @@ export interface LampiranRow {
   uraian: string
   indikator: string | null
   target: string | null
+  satuan: string | null
   urutan: number
   _id?: string
   _deleted?: boolean

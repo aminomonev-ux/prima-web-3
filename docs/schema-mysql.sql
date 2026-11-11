@@ -1575,15 +1575,19 @@ CREATE TABLE IF NOT EXISTS pk_sasaran (
   id                       INT AUTO_INCREMENT PRIMARY KEY,
   -- Tiga kolom sasaran 500, mengikuti `rencana_aksi.outcome_*` yang disalin tombol
   -- Import Renaksi ke sini (migration-pk-sasaran-lebar.sql). Kolom target tetap 255.
+  -- Target berisi ANGKA saja; satuannya kolom sendiri (migration-pk-satuan.sql).
   program                  VARCHAR(500) NOT NULL,
   indikator_program        VARCHAR(500),
   target_program           VARCHAR(255),
+  satuan_program           VARCHAR(50),
   kegiatan                 VARCHAR(500),
   indikator_kegiatan       VARCHAR(500),
   target_kegiatan          VARCHAR(255),
+  satuan_kegiatan          VARCHAR(50),
   subkegiatan              VARCHAR(500),
   indikator_subkegiatan    VARCHAR(500),
   target_subkegiatan       VARCHAR(255),
+  satuan_subkegiatan       VARCHAR(50),
   tahun                    VARCHAR(4) NOT NULL,
   created_at               DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_by               INT,
@@ -1724,12 +1728,14 @@ CREATE TABLE IF NOT EXISTS pk_dokumen_lampiran (
   dokumen_id   INT NOT NULL,
   unit_kerja   VARCHAR(255) NOT NULL,
   level        ENUM('program','kegiatan','subkegiatan') NOT NULL,
-  program      VARCHAR(255),
-  kegiatan     VARCHAR(255),
-  subkegiatan  VARCHAR(255),
-  uraian       VARCHAR(255) NOT NULL,
+  -- Empat kolom sasaran 500, sama dengan pk_sasaran yang jadi sumbernya (migration-pk-satuan.sql)
+  program      VARCHAR(500),
+  kegiatan     VARCHAR(500),
+  subkegiatan  VARCHAR(500),
+  uraian       VARCHAR(500) NOT NULL,
   indikator    VARCHAR(500),
   target       VARCHAR(255),
+  satuan       VARCHAR(50),
   urutan       INT DEFAULT 0,
   FOREIGN KEY (dokumen_id) REFERENCES pk_dokumen(id) ON DELETE CASCADE,
   INDEX idx_pk_lampiran_dokumen (dokumen_id, urutan)

@@ -11,6 +11,7 @@ import {
   PkQuerySchema,
   ProgramBodySchema,
 } from '@/lib/data/pk-schemas';
+import { buangProgramKembar } from '@/lib/pk/program-kembar';
 import { bolehBukaMenu, bolehEditMenu, forbidden, tolakEdit, pkMati } from '../_guard';
 
 export const dynamic = 'force-dynamic';
@@ -98,34 +99,49 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
   }
-  const { tahun, rows } = parsed.data;
+  const { tahun } = parsed.data;
 
-  await withTransaction(async ({ tx, conn }) => {
-    await tx`DELETE FROM pk_program WHERE tahun = ${tahun}`;
-    if (rows.length === 0) return;
-    const values = rows.map(r => [
-      r.program,
-      r.kegiatan ?? null,
-      r.subkegiatan ?? null,
-      tahun,
-      r.level,
-      session.userId,
-    ]);
-    await bulkInsert(
-      'pk_program',
-      ['program','kegiatan','subkegiatan','tahun','level','created_by'],
-      values,
-      conn,
-    );
-  });
+  // Baris kembar digabung (yang pertama dipakai). Dulu dikirim apa adanya: sub kegiatan kembar
+  // menabrak kunci unik pk_program dan seluruh simpanan gagal 500 tanpa menyebut barisnya.
+  const { unik: rows, kembar } = buangProgramKembar(parsed.data.rows);
+
+  try {
+    await withTransaction(async ({ tx, conn }) => {
+      await tx`DELETE FROM pk_program WHERE tahun = ${tahun}`;
+      if (rows.length === 0) return;
+      const values = rows.map(r => [
+        r.program,
+        r.kegiatan || null,
+        r.subkegiatan || null,
+        tahun,
+        r.level,
+        session.userId,
+      ]);
+      await bulkInsert(
+        'pk_program',
+        ['program','kegiatan','subkegiatan','tahun','level','created_by'],
+        values,
+        conn,
+      );
+    });
+  } catch (e) {
+    // Kolasi kunci uniknya juga mengabaikan aksen; yang lolos dari penggabungan di atas berhenti di sini.
+    if ((e as { code?: string }).code === 'ER_DUP_ENTRY') {
+      return NextResponse.json(
+        { ok: false, message: 'Ada dua baris dengan program, kegiatan, dan sub kegiatan yang sama. Hapus salah satunya lalu simpan lagi.' },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
 
   await writeAuditLog({
     req,
     eventType: 'PK_SAVE_PROGRAM',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Simpan Master Program tahun ${tahun}: ${rows.length} baris`,
+    detail:    `Simpan Master Program tahun ${tahun}: ${rows.length} baris${kembar > 0 ? ` (${kembar} baris kembar digabung)` : ''}`,
   });
 
-  return NextResponse.json({ ok: true, tahun, saved: rows.length });
+  return NextResponse.json({ ok: true, tahun, saved: rows.length, kembar });
 }

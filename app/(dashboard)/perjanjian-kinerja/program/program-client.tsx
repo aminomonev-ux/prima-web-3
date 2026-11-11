@@ -3,8 +3,8 @@
 // Master Program — hierarki Program → Kegiatan → Sub-kegiatan dengan auto level derive.
 // Bulk save pattern sama dengan sasaran-client (replace-all per tahun).
 
-import { useState, useCallback } from 'react'
-import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, Download, X } from 'lucide-react'
+import { useState, useCallback, useMemo } from 'react'
+import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, Download, X, Eraser } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import { fetchJson } from '@/lib/shared/api'
 import { useAbortableEffect } from '@/lib/shared/hooks'
@@ -14,6 +14,7 @@ import SpandukLihat from '@/components/pk/SpandukLihat'
 import { pkInputTable as inputStyle, pkCheckbox as checkboxStyle, pkModalBackdrop as modalBackdrop, pkMono as mono } from '@/lib/shared/pk-styles'
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkProgramRow, PkLevel } from '../_utils/pk-types'
+import { rapikanBarisProgram } from '@/lib/pk/rapikan-nama'
 
 type ApiListResp = { ok: boolean; tahun: string; rows: PkProgramRow[]; message?: string }
 
@@ -141,6 +142,18 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
     setConfirmDel(null)
   }, [confirmDel])
 
+  const perluRapi = useMemo(() => {
+    const h = rapikanBarisProgram(rows)
+    return h.berubah + h.kembar
+  }, [rows])
+
+  function rapikanNama() {
+    const hasil = rapikanBarisProgram(rows)
+    if (hasil.berubah + hasil.kembar === 0) return
+    setRows(hasil.rows.map(r => rows.includes(r) ? r : { ...r, _dirty: true }))
+    showToast('ok', `${hasil.berubah} nama dirapikan${hasil.kembar > 0 ? `, ${hasil.kembar} baris kembar digabung` : ''}. Periksa hasilnya, lalu klik Simpan.`)
+  }
+
   const dirtyCount    = rows.filter(r => r._dirty).length
   const selectedCount = rows.filter(r => r._selected).length
   const allSelected   = rows.length > 0 && rows.every(r => r._selected)
@@ -197,9 +210,10 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
     })
     setSaving(false)
     if (d.ok) {
+      const r = d as unknown as { saved?: number; kembar?: number }
       showToast('ok', survivors.length === 0
         ? `Master Program tahun ${tahun} dikosongkan.`
-        : `Tersimpan: ${survivors.length} baris untuk tahun ${tahun}`)
+        : `Tersimpan: ${r.saved ?? survivors.length} baris untuk tahun ${tahun}${r.kembar ? ` (${r.kembar} baris kembar digabung)` : ''}`)
       setReloadKey(k => k + 1)
     } else {
       showToast('err', d.message)
@@ -262,6 +276,14 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
           </PrimaButton>
           {bolehUbah && (
             <>
+              {perluRapi > 0 && (
+                <PrimaButton variant="warning" iconLeft={<Eraser size={14} />}
+                  onClick={rapikanNama} disabled={loading || saving}
+                  data-tooltip="Buang bintang penanda di ujung nama dan gabungkan baris yang jadi kembar. Baru tersimpan setelah Anda klik Simpan."
+                  data-tooltip-pos="bottom">
+                  Rapikan Nama ({perluRapi})
+                </PrimaButton>
+              )}
               <PrimaButton variant="success" iconLeft={<Download size={14} />}
                 onClick={handleImportFetch} disabled={loading || saving || importBusy}
                 data-tooltip="Tarik hierarki Program → Kegiatan → Sub-Kegiatan dari aplikasi Renaksi & Kinerja"
