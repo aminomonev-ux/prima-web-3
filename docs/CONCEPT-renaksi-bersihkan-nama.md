@@ -1,8 +1,8 @@
 # Bersihkan nama Renaksi — bintang penanda & nomor `(n)` otomatis saat impor dan saat ditarik PK/IKI
 
-Status: **sebagian dikerjakan (11 Nov 2026)**: helper murni `lib/shared/nama-resmi.ts` dan pintu PK
-(4, 5, serta Rapikan Nama di Master Sasaran dan Master Program) — lihat
-`docs/CONCEPT-pk-halaman-2-sesuai-pdf.md` §12. Pintu 1–3, 6, 9 (Renaksi dan IKI) belum; menunggu §10 dan §11.1.
+Status: **dikerjakan 11 Nov 2026 dengan arah yang berbeda dari §2–§9**. Keputusan pemilik: data
+Renaksi TIDAK ditulis ulang; penanda dihitung saat ditampilkan. Yang berlaku ada di §12; §2–§10
+dipertahankan sebagai catatan rancangan awal.
 Berkas ini menjawab dua permintaan pemilik:
 
 1. Saat **upload** matriks Renaksi, bintang penanda (`*`…`*****`) dan nomor `(1)`, `(2)` bisa
@@ -231,3 +231,46 @@ Membuang nomor dari 15 indikator bernomor di 2026 menghasilkan **0** tabrakan di
 ### 11.4 Hubungan dengan PK
 
 `docs/CONCEPT-pk-halaman-2-sesuai-pdf.md` §8: dokumen PK baru tanpa bintang bila pintu 4–5 (PK menarik dari Renaksi) dan Rapikan data PK lama sudah jalan. Urutan yang disarankan: helper + pintu 4–5 lebih dulu, lalu PK.
+
+---
+
+## 12. Yang dikerjakan (11 Nov 2026) — penanda dihitung, bukan disimpan
+
+Keputusan pemilik: hasil cetak dan unduhan bersih seperti PK; penanda tetap ada di sistem supaya indikator kembar tidak bentrok; baris ketikan tangan mendapat penanda otomatis.
+
+**Aturan** (`lib/shared/nama-resmi.ts`, murni)
+
+- Teks tersimpan tidak diubah. Setiap tampilan membuang penanda yang tersimpan, lalu menempelkan penanda yang **dihitung** bila layarnya memang menampilkannya. Karena selalu dibuang dulu, penanda tidak pernah menumpuk.
+- Bintang dihitung dari tingkat (`bintangLevel`).
+- Nomor (`nomorIndikator`): nomor yang tersimpan dipertahankan, jadi hasil impor tetap bernomor seperti berkasnya. Indikator tanpa nomor mendapat nomor kosong berikutnya menurut abjad. Entitas berindikator tunggal tanpa nomor tersimpan tidak dinomori. Renaksi tidak punya kolom urutan, jadi inilah satu-satunya urutan yang tersedia.
+
+**Di mana berlaku**
+
+| Tempat | Tampilan |
+|---|---|
+| Cetak Renaksi: layar, PDF, Excel | bersih; sakelar **Penanda matriks** menempelkan penanda hasil hitungan |
+| Unduhan lain: daftar per level, per indikator, lembar Matriks Bulanan | bersih |
+| Layar kerja: Data Entry, pemilih & kartu indikator, Matriks Bulanan, modal detail/reset | selalu berpenanda (hasil hitungan) |
+| Tabel LKJIP tertaut ke Cetak Renaksi | bersih (memakai penyusun Cetak yang sama) |
+| IKI | bersih saat ditarik dari Renaksi dan saat dicetak (STANDAR/DIREKTUR) |
+| PK | sudah bersih (konsep PK §12) |
+
+Cetak membersihkan paling akhir (`pasangTampilan` di `cetak-filter.ts`): fokus dan penyusunan pohon tetap mencocokkan nama mentah.
+
+**Yang gugur dari rancangan awal**
+
+- Pembersihan saat impor dan saat simpan (pintu 1–3), tombol Rapikan Renaksi (pintu 9), dan ketergantungan pada T16 (§11.1): tidak diperlukan karena data tidak ditulis ulang.
+- §11.2 (impor berkas bersih ke tahun berbintang menahan anak-anaknya) **masih berlaku dan belum dibereskan**: pencocokan induk di `commitImportRenaksi` tetap membandingkan nama mentah.
+
+**Batas**
+
+- Indikator kembar terbaca sama persis di cetakan bersih. Diterima pemilik.
+- Tabel LKJIP yang sudah tertaut ke Cetak Renaksi akan melapor "data berubah" sekali saat Perbarui.
+- Cetak IKI membuang awalan `(1)` dan bintang di ujung dari RHK/indikator apa pun, termasuk yang diketik sendiri. IKI varian CUSTOM tidak dibersihkan saat dicetak (isinya sel bebas); yang bersih hasil tariknya.
+- Isian form Data Entry tetap teks tersimpan. Penanda hanya tampil di daftar.
+
+**Bukti**
+
+- `npx tsx scripts/test-renaksi-penanda.mts`: 48 pemeriksaan; uji mutasi 18 dari 18 tertangkap.
+- Layar (akun dummy, 2026 hanya dibaca): Cetak 47 baris bersih 0 bintang; sakelar menyala 94 bintang dan 21 nomor; Data Entry Program menampilkan `(1)`–`(4)` dan bintang.
+- Belum diuji di layar: berkas PDF/Excel hasil unduhan, Matriks Bulanan, modal detail, layar IKI.

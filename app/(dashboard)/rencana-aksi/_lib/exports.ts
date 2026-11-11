@@ -7,6 +7,18 @@ import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, tul
 import { sanitizeCell, loadExcelJs } from '@/lib/shared/excel-export';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import { polosSelExcel } from '@/lib/shared/excel-sel';
+import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
+
+/** Unduhan tidak memuat penanda matriks (bintang, "(1)") yang ikut tersimpan lewat impor. */
+function barisBersih(r: RaRow): RaRow {
+  return {
+    ...r,
+    program: rapikanNamaEntitas(r.program),
+    kegiatan: r.kegiatan == null ? r.kegiatan : rapikanNamaEntitas(r.kegiatan),
+    sub_kegiatan: r.sub_kegiatan == null ? r.sub_kegiatan : rapikanNamaEntitas(r.sub_kegiatan),
+    indikator: rapikanIndikator(r.indikator),
+  };
+}
 
 let _pdf: Promise<{ jsPDF: typeof import('jspdf').jsPDF; autoTable: typeof import('jspdf-autotable').default }> | null = null;
 function loadPdf() {
@@ -27,7 +39,8 @@ function saveBlob(blob: Blob, name: string) {
 
 // ─── Export tabel list (Data Entry) ─────────────────────────────────────────
 
-export async function exportListPdf(rows: RaRow[], tahun: number, level: RaRow['level']) {
+export async function exportListPdf(mentah: RaRow[], tahun: number, level: RaRow['level']) {
+  const rows = mentah.map(barisBersih);
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   doc.setFontSize(13);
@@ -62,7 +75,8 @@ export async function exportListPdf(rows: RaRow[], tahun: number, level: RaRow['
   doc.save(`rencana-aksi-${level}-${tahun}.pdf`);
 }
 
-export async function exportListXlsx(rows: RaRow[], tahun: number, level: RaRow['level']) {
+export async function exportListXlsx(mentah: RaRow[], tahun: number, level: RaRow['level']) {
+  const rows = mentah.map(barisBersih);
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(LEVEL_LABELS[level]);
@@ -245,7 +259,8 @@ export async function buatWorkbookGabungan(allRows: RaRow[], filter: CetakFilter
 
 // ─── Export 1 indikator (Dashboard Kinerja) ────────────────────────────────
 
-export async function exportIndikatorPdf(row: RaRow) {
+export async function exportIndikatorPdf(mentah: RaRow) {
+  const row = barisBersih(mentah);
   const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const realAkhir = realisasiAkhirTahun(row);
@@ -292,7 +307,8 @@ export async function exportIndikatorPdf(row: RaRow) {
   doc.save(`rencana-aksi-${row.level}-${row.tahun}-detail.pdf`);
 }
 
-export async function exportIndikatorXlsx(row: RaRow) {
+export async function exportIndikatorXlsx(mentah: RaRow) {
+  const row = barisBersih(mentah);
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Detail Indikator');
@@ -340,7 +356,9 @@ export async function exportIndikatorXlsx(row: RaRow) {
 const MATRIX_HEAD = ['ID', 'Program', 'Kegiatan', 'Sub Kegiatan', 'Indikator', 'Satuan',
   'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
-export async function exportMatrixBulananXlsx(rows: RaRow[], tahun: number) {
+export async function exportMatrixBulananXlsx(mentah: RaRow[], tahun: number) {
+  // Diimpor balik lewat kolom ID, jadi nama boleh ditulis bersih.
+  const rows = mentah.map(barisBersih);
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(`Realisasi Bulanan ${tahun}`);

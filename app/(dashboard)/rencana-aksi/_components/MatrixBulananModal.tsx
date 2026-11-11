@@ -13,6 +13,7 @@ import type { RaRow, MonthVal } from '../_lib/types';
 import { BULAN_LABELS, hitungCapaianPct, nadaCapaian } from '../_lib/types';
 import { apiUpdateBulanBulk, VersionConflictError, apiGetLock } from '../_lib/api';
 import { exportMatrixBulananXlsx, parseMatrixBulananXlsx } from '../_lib/exports';
+import { usePenanda } from '../_lib/penanda';
 import { bacaDesimal, bersihkanKetikan, bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 
 const MONO = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
@@ -54,6 +55,7 @@ const heatCell = (pct: number | null, filled: boolean): { bg: string; fg: string
 };
 
 export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSaved, notify, variant = 'modal' }: Props) {
+  const penanda = usePenanda();
   const asHalaman = variant === 'halaman';
   const [grid, setGrid] = useState<Map<number, MonthVal[]>>(new Map());
   const [lockBulan, setLockBulan] = useState(0);
@@ -250,7 +252,7 @@ export default function MatrixBulananModal({ isOpen, tahun, rows, onClose, onSav
                 return (
                   <tr key={r.id} className={dirty ? 'bg-[#EF9F27]/5' : ''}>
                     <td className="px-3 py-1.5 sticky left-0 bg-white border-r border-slate-100">
-                      <div className="font-semibold text-slate-700 leading-snug line-clamp-2">{r.indikator}</div>
+                      <div className="font-semibold text-slate-700 leading-snug line-clamp-2">{penanda.indikator(r)}</div>
                       <div className="text-[10px] text-slate-400 line-clamp-1">{r.sub_kegiatan ?? r.program} · {r.satuan}{dirty ? ' · belum disimpan' : ''}</div>
                     </td>
                     {g.map((v, m) => {

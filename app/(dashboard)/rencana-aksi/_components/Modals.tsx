@@ -7,6 +7,7 @@ import PrimaNumberField from '@/components/ui/PrimaNumberField';
 import type { RaRow } from '../_lib/types';
 import { quartersOf, realisasiAkhirTahun, tulisRealisasi, LEVEL_LABELS, outcomeOf } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
+import { usePenanda, levelKolomProgram } from '../_lib/penanda';
 import { apiUpdateQuarter, apiResetRealisasi, VersionConflictError } from '../_lib/api';
 
 const moneyFont = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' as const };
@@ -135,6 +136,7 @@ interface DetailModalProps {
 }
 
 export function DetailModal({ row, isOpen, onClose, anggaran }: DetailModalProps) {
+  const penanda = usePenanda();
   if (!isOpen || !row) return null;
   const menuName = LEVEL_LABELS[row.level];
   const realAkhir = realisasiAkhirTahun(row);
@@ -168,27 +170,27 @@ export function DetailModal({ row, isOpen, onClose, anggaran }: DetailModalProps
 
             <div className="grid grid-cols-3 gap-2 text-xs">
               <span className="text-slate-400 font-medium">Nama Indikator:</span>
-              <span className="col-span-2 font-semibold text-slate-800">{row.indikator}</span>
+              <span className="col-span-2 font-semibold text-slate-800">{penanda.indikator(row)}</span>
             </div>
 
             <div className="grid grid-cols-3 gap-2 text-xs">
               <span className="text-slate-400 font-medium">
                 {row.level === 'sasaran' ? 'Sasaran:' : 'Program:'}
               </span>
-              <span className="col-span-2 text-slate-700 leading-normal">{row.program}</span>
+              <span className="col-span-2 text-slate-700 leading-normal">{penanda.nama(row.program, levelKolomProgram(row.level))}</span>
             </div>
 
             {row.kegiatan && (
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <span className="text-slate-400 font-medium">Kegiatan:</span>
-                <span className="col-span-2 text-slate-700">{row.kegiatan}</span>
+                <span className="col-span-2 text-slate-700">{penanda.nama(row.kegiatan, 'kegiatan')}</span>
               </div>
             )}
 
             {row.sub_kegiatan && (
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <span className="text-slate-400 font-medium">Sub Kegiatan:</span>
-                <span className="col-span-2 text-slate-700">{row.sub_kegiatan}</span>
+                <span className="col-span-2 text-slate-700">{penanda.nama(row.sub_kegiatan, 'sub-kegiatan')}</span>
               </div>
             )}
 
@@ -266,6 +268,7 @@ interface ResetModalProps {
 }
 
 export function ResetRealisasiModal({ row, isOpen, onClose, onConfirmed, notify }: ResetModalProps) {
+  const penanda = usePenanda();
   const [expectedCode, setExpectedCode] = useState('');
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -329,7 +332,7 @@ export function ResetRealisasiModal({ row, isOpen, onClose, onConfirmed, notify 
               </div>
               <div>
                 <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Indikator Aktif:</span>
-                <span className="font-semibold text-slate-700 line-clamp-2">{row.indikator}</span>
+                <span className="font-semibold text-slate-700 line-clamp-2">{penanda.indikator(row)}</span>
               </div>
             </div>
             <p className="text-[#E24B4A] font-medium">

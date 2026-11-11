@@ -5,6 +5,7 @@ import { Printer, Eye, X, Loader2, Download, Filter, RotateCcw } from 'lucide-re
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
 import SalinKeLkjip from '@/components/lkjip/SalinKeLkjip';
+import { rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 import { salinanRenaksiCetak } from '@/lib/lkjip/sumber/renaksi-cetak';
 import SoftSelect from '@/components/ui/SoftSelect';
 import type { RaRow, RaLevel, HierarchyRow } from '../_lib/types';
@@ -227,7 +228,7 @@ function FilterBar({ allRows, filter, setFilter }: {
   const focusActive = !!(filter.fTujuan || filter.fSasaran || filter.fProgram);
   const isDefault =
     filter.mode === 'hirarki' && filter.colMode === 'both' &&
-    filter.showAnggaran && filter.showOutcome && filter.showTw &&
+    filter.showAnggaran && filter.showOutcome && filter.showTw && !filter.penanda &&
     ALL_LEVELS.every(l => filter.levels[l]) && !focusActive;
 
   return (
@@ -273,6 +274,7 @@ function FilterBar({ allRows, filter, setFilter }: {
           <Chip active={filter.showTw} onClick={() => setF({ showTw: !filter.showTw })}>Triwulan</Chip>
           <Chip active={filter.showAnggaran} onClick={() => setF({ showAnggaran: !filter.showAnggaran })}>Anggaran</Chip>
           <Chip active={filter.showOutcome} onClick={() => setF({ showOutcome: !filter.showOutcome })}>Outcome</Chip>
+          <Chip active={!!filter.penanda} onClick={() => setF({ penanda: !filter.penanda })}>Penanda matriks</Chip>
         </div>
       </div>
 
@@ -303,7 +305,7 @@ function FilterBar({ allRows, filter, setFilter }: {
           <FieldLabel>Fokus Tujuan</FieldLabel>
           <SoftSelect
             value={filter.fTujuan}
-            options={[{ value: '', label: '— Semua —' }, ...tujuanOpts.map(t => ({ value: t, label: t }))]}
+            options={[{ value: '', label: '— Semua —' }, ...tujuanOpts.map(t => ({ value: t, label: rapikanNamaEntitas(t) }))]}
             onChange={(v) => setF({ fTujuan: v, fSasaran: '', fProgram: '' })}
             placeholder="— Semua —"
           />
@@ -312,7 +314,7 @@ function FilterBar({ allRows, filter, setFilter }: {
           <FieldLabel>Fokus Sasaran</FieldLabel>
           <SoftSelect
             value={filter.fSasaran}
-            options={[{ value: '', label: '— Semua —' }, ...sasaranOpts.map(s => ({ value: s, label: s }))]}
+            options={[{ value: '', label: '— Semua —' }, ...sasaranOpts.map(s => ({ value: s, label: rapikanNamaEntitas(s) }))]}
             onChange={(v) => setF({ fSasaran: v, fProgram: '' })}
             placeholder="— Semua —"
           />
@@ -321,7 +323,7 @@ function FilterBar({ allRows, filter, setFilter }: {
           <FieldLabel>Fokus Program</FieldLabel>
           <SoftSelect
             value={filter.fProgram}
-            options={[{ value: '', label: '— Semua —' }, ...programOpts.map(p => ({ value: p, label: p }))]}
+            options={[{ value: '', label: '— Semua —' }, ...programOpts.map(p => ({ value: p, label: rapikanNamaEntitas(p) }))]}
             onChange={(v) => setF({ fProgram: v })}
             placeholder="— Semua —"
           />
@@ -438,7 +440,7 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
                     <td className="px-3 py-2 leading-snug italic text-slate-600">{outcome || ''}</td>
                   )}
                   <td className="px-3 py-2 text-slate-700 leading-snug">
-                    {r.indikator}
+                    {h.indikator ?? r.indikator}
                     {h.isOrphan && <span className="ml-1.5 text-[10px] text-[#E24B4A] font-semibold">(orphan)</span>}
                   </td>
                   <td className="px-3 py-2 text-center text-slate-600">{r.jenis}</td>

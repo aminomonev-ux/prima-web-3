@@ -13,6 +13,7 @@ import { QuarterModal, DetailModal, ResetRealisasiModal } from './_components/Mo
 import MatrixBulananModal from './_components/MatrixBulananModal';
 import PilihTampilanSub from './_components/PilihTampilanSub';
 import type { RaRow, RaLevel } from './_lib/types';
+import { PenandaProvider } from './_lib/penanda';
 import { LEVEL_LABELS, anggaranRollup } from './_lib/types';
 import { apiList, apiUpdateBulanRealisasi, VersionConflictError } from './_lib/api';
 import { exportIndikatorPdf, exportIndikatorXlsx } from './_lib/exports';
@@ -260,6 +261,7 @@ export default function RaClient({
   };
 
   return (
+    <PenandaProvider rows={rows}>
     <div className="ra-scope flex h-screen w-full overflow-hidden bg-[#EEF2F6] antialiased text-slate-800"
          style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}>
       {/* Dark/Light theme overrides — default = dark; data-theme="light" disables overrides */}
@@ -690,5 +692,6 @@ export default function RaClient({
       {/* Matriks tidak lagi dipasang sebagai modal di sini — ia dirender sebagai
           tampilan halaman di percabangan konten (variant="halaman"). */}
     </div>
+    </PenandaProvider>
   );
 }

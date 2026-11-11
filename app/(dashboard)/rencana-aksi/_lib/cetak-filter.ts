@@ -5,6 +5,7 @@
 import type { RaRow, RaLevel, HierarchyRow } from './types';
 import { buildHierarchyRows, outcomeOf, realisasiAkhirTahun, anggaranRollup, capaianTahunan } from './types';
 import { tulisDesimal, tulisPersen } from '@/lib/shared/desimal';
+import { nomorIndikator, tampilIndikator, tampilNama } from '@/lib/shared/nama-resmi';
 
 export type ColMode = 'both' | 'target' | 'realisasi';
 
@@ -15,6 +16,8 @@ export interface CetakFilter {
   showAnggaran: boolean;
   showOutcome: boolean;
   showTw: boolean;                  // detail triwulan TW1-4
+  /** Bintang tingkat & nomor "(1)" matriks resmi. Bawaan mati: hasil cetak bersih. */
+  penanda?: boolean;
   fTujuan: string;                  // fokus nilai spesifik (opsional)
   fSasaran: string;
   fProgram: string;
@@ -95,8 +98,29 @@ function flatRow(no: number, r: RaRow): HierarchyRow {
   };
 }
 
+/**
+ * Nama & indikator siap tampil. Dikerjakan PALING AKHIR: fokus dan penyusunan pohon mencocokkan
+ * nama mentah yang tersimpan. Penanda dihitung dari tingkat & urutan, tidak dibaca dari teksnya.
+ */
+function pasangTampilan(hier: HierarchyRow[], allRows: RaRow[], penanda: boolean): HierarchyRow[] {
+  const nomor = nomorIndikator(allRows);
+  return hier.map(h => ({
+    ...h,
+    tujuan: h.tujuan && tampilNama(h.tujuan, 'tujuan', penanda),
+    sasaran: h.sasaran && tampilNama(h.sasaran, 'sasaran', penanda),
+    program: h.program && tampilNama(h.program, 'program', penanda),
+    kegiatan: h.kegiatan && tampilNama(h.kegiatan, 'kegiatan', penanda),
+    sub_kegiatan: h.sub_kegiatan && tampilNama(h.sub_kegiatan, 'sub-kegiatan', penanda),
+    indikator: tampilIndikator(h.source.indikator, h.source.level, nomor.get(h.source.id), penanda),
+  }));
+}
+
 /** Baris akhir utk render & export, sesuai mode + level + fokus. */
 export function buildCetakRows(allRows: RaRow[], f: CetakFilter): HierarchyRow[] {
+  return pasangTampilan(susunCetakRows(allRows, f), allRows, !!f.penanda);
+}
+
+function susunCetakRows(allRows: RaRow[], f: CetakFilter): HierarchyRow[] {
   const focused = applyFocus(allRows, f);
   if (f.mode === 'flat') {
     const rows = focused
@@ -174,7 +198,7 @@ export function cetakHeader(f: CetakFilter): CetakHeader {
     lead.push({ key: 'outcome', header: 'Sasaran (Outcome)', align: 'left', value: h => outcomeOf(h.source) });
   }
   lead.push(
-    { key: 'indikator', header: 'Indikator', align: 'left', value: h => h.source.indikator + (h.isOrphan ? ' (orphan)' : '') },
+    { key: 'indikator', header: 'Indikator', align: 'left', value: h => (h.indikator ?? h.source.indikator) + (h.isOrphan ? ' (orphan)' : '') },
     { key: 'jenis', header: 'Jenis', align: 'center', value: h => h.source.jenis },
     { key: 'satuan', header: 'Satuan', align: 'center', value: h => h.source.satuan },
     { key: 'rpjmd', header: 'RPJMD', align: 'right', value: h => h.source.target_rpjmd },

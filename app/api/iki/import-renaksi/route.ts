@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/data/db';
 import { fmtTarget } from '@/lib/shared/target-renaksi';
+import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { ImportRenaksiQuerySchema, ikiRateLimit } from '@/lib/data/iki-schemas';
 import { guard } from '../_guard';
@@ -91,11 +92,11 @@ export async function GET(req: NextRequest) {
     return {
       renaksi_id: r.id,
       level: r.level,
-      sasaran_induk: r.level === 'program' ? (r.sasaran ?? '') : '',
-      rhk: outcome ?? nama,
-      nama,
-      parent,
-      indikator: r.indikator,
+      sasaran_induk: rapikanNamaEntitas(r.level === 'program' ? (r.sasaran ?? '') : ''),
+      rhk: rapikanNamaEntitas(outcome ?? nama),
+      nama: rapikanNamaEntitas(nama),
+      parent: rapikanNamaEntitas(parent),
+      indikator: rapikanIndikator(r.indikator),
       jenis: r.jenis,
       target_tahunan: fmtTarget((r.target_tahunan), r.satuan),
       target_tw: [

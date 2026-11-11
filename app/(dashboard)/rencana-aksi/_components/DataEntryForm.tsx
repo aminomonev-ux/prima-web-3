@@ -15,6 +15,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Tip from '@/components/ui/Tip';
 import { InputNominal } from '@/components/ui/input-nominal';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
+import { usePenanda } from '../_lib/penanda';
 import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
 import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export default function DataEntryForm({ level, rows, selectedYear, onReload, notify, fokusEditId }: Props) {
+  const penanda = usePenanda();
   const [importOpen, setImportOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -839,7 +841,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                         {level === 'tujuan' && (
                           <td className="px-5 py-4 max-w-[200px] leading-relaxed">
                             <span className="font-bold text-[#7C5CFC] text-[11px] block">
-                              {row.program}
+                              {penanda.nama(row.program, 'tujuan')}
                             </span>
                           </td>
                         )}
@@ -847,12 +849,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           <>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
                               <span className="font-semibold text-[#7C5CFC] text-[11px] block">
-                                {row.tujuan || <span className="text-slate-300 font-normal">—</span>}
+                                {penanda.nama(row.tujuan, 'tujuan') || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
                               <span className="font-bold text-[#10B981] text-[11px] block">
-                                {row.program}
+                                {penanda.nama(row.program, 'sasaran')}
                               </span>
                             </td>
                           </>
@@ -861,12 +863,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           <>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
                               <span className="font-semibold text-[#10B981] text-[11px] block">
-                                {row.sasaran || <span className="text-slate-300 font-normal">—</span>}
+                                {penanda.nama(row.sasaran, 'sasaran') || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
                               <span className="font-bold text-[#378ADD] text-[11px] block">
-                                {row.program}
+                                {penanda.nama(row.program, 'program')}
                               </span>
                             </td>
                           </>
@@ -875,12 +877,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           <>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
                               <span className="font-semibold text-[#378ADD] text-[11px] block">
-                                {row.program}
+                                {penanda.nama(row.program, 'program')}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[180px] leading-relaxed">
                               <span className="font-bold text-[#EC4899] text-[11px] block">
-                                {row.kegiatan || <span className="text-slate-300 font-normal">—</span>}
+                                {penanda.nama(row.kegiatan, 'kegiatan') || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                           </>
@@ -889,17 +891,17 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           <>
                             <td className="px-5 py-4 max-w-[160px] leading-relaxed">
                               <span className="font-semibold text-[#378ADD] text-[11px] block">
-                                {row.program}
+                                {penanda.nama(row.program, 'program')}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[160px] leading-relaxed">
                               <span className="font-semibold text-[#EC4899] text-[11px] block">
-                                {row.kegiatan || <span className="text-slate-300 font-normal">—</span>}
+                                {penanda.nama(row.kegiatan, 'kegiatan') || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                             <td className="px-5 py-4 max-w-[160px] leading-relaxed">
                               <span className="font-bold text-[#F59E0B] text-[11px] block">
-                                {row.sub_kegiatan || <span className="text-slate-300 font-normal">—</span>}
+                                {penanda.nama(row.sub_kegiatan, 'sub-kegiatan') || <span className="text-slate-300 font-normal">—</span>}
                               </span>
                             </td>
                             <td className="px-5 py-4 text-right font-bold text-slate-700 whitespace-nowrap max-w-[140px]"
@@ -911,7 +913,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                           </>
                         )}
                         <td className="px-5 py-4 font-bold text-slate-700 leading-normal max-w-[220px]">
-                          {row.indikator}
+                          {penanda.indikator(row)}
                         </td>
                         {level !== 'sasaran' && level !== 'tujuan' && (
                           <td className="px-5 py-4 italic text-slate-600 leading-normal max-w-[220px] text-[11px]">

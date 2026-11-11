@@ -170,6 +170,8 @@ export interface HierarchyRow {
   kegiatan: string;
   sub_kegiatan: string;
   source: RaRow;        // pointer ke original row utk akses indikator, jenis, target, dll
+  /** Teks indikator siap tampil (bersih, atau berpenanda) — diisi `buildCetakRows`. */
+  indikator?: string;
   isOrphan?: boolean;
 }
 

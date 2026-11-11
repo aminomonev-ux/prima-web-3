@@ -9,6 +9,7 @@ import SoftSelect from '@/components/ui/SoftSelect';
 import Sparkline12 from './Sparkline12';
 import Tip from '@/components/ui/Tip';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
+import { usePenanda } from '../_lib/penanda';
 import { LEVEL_LABELS, quartersOf, realisasiAkhirTahun, tulisRealisasi, outcomeOf, deriveQuartersFromMonthly, hitungCapaianPct, capaianTahunan, capaianRpjmd, capaianTriwulan, nadaCapaian, BULAN_LABELS } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
 
@@ -100,6 +101,9 @@ export default function MainDashboard({
     const list = Array.from(new Set(f.map(r => r.sub_kegiatan).filter(Boolean))) as string[];
     return list.length ? list : (Array.from(new Set(levelRows.map(r => r.sub_kegiatan).filter(Boolean))) as string[]);
   }, [levelRows, selectedProgram, selectedKegiatan]);
+  const penanda = usePenanda();
+  const labelInd = (teks: string) => penanda.labelIndikator(level, teks);
+
   const displayIndicators = useMemo(() => {
     const f = levelRows.filter(r => {
       const okSas = level !== 'program' || !selectedSasaran || r.sasaran === selectedSasaran;
@@ -312,7 +316,7 @@ export default function MainDashboard({
                     <div className="flex items-baseline gap-2 text-sm md:text-base">
                       <span className="font-bold text-slate-700 w-32 shrink-0 whitespace-nowrap">{primaryLabel}</span>
                       <span className="text-slate-400">:</span>
-                      <span className="font-semibold text-slate-800 leading-snug">{primaryValue || '-'}</span>
+                      <span className="font-semibold text-slate-800 leading-snug">{primaryValue ? penanda.nama(primaryValue, level) : '-'}</span>
                     </div>
                     {outcome && outcomeLabel && (
                       <div className="flex items-baseline gap-2 text-sm md:text-base">
@@ -324,7 +328,7 @@ export default function MainDashboard({
                     <div className="flex items-baseline gap-2 text-sm md:text-base">
                       <span className="font-bold text-slate-700 w-32 shrink-0 whitespace-nowrap">Indikator</span>
                       <span className="text-slate-400">:</span>
-                      <span className="font-semibold text-slate-800 leading-snug">{selectedIndicator || '-'}</span>
+                      <span className="font-semibold text-slate-800 leading-snug">{selectedIndicator ? labelInd(selectedIndicator) : '-'}</span>
                     </div>
                   </>
                 );
@@ -358,36 +362,36 @@ export default function MainDashboard({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 border border-slate-100 w-full">
             {level === 'tujuan' ? (
               <>
-                <Selector label="Tujuan" value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
-                <Selector label="Indikator Tujuan" value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedProgram} />
+                <Selector label="Tujuan" labelOf={v => penanda.nama(v, 'tujuan')} value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
+                <Selector label="Indikator Tujuan" labelOf={labelInd} value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedProgram} />
               </>
             ) : level === 'sasaran' ? (
               <>
-                <Selector label="Sasaran" value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
-                <Selector label="Indikator Sasaran" value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedProgram} />
+                <Selector label="Sasaran" labelOf={v => penanda.nama(v, 'sasaran')} value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
+                <Selector label="Indikator Sasaran" labelOf={labelInd} value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedProgram} />
               </>
             ) : level === 'program' ? (
               <>
-                <Selector label="Sasaran" value={selectedSasaran} options={displaySasarans} onChange={setSelectedSasaran} />
-                <Selector label="Program" value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} disabled={!selectedSasaran} />
+                <Selector label="Sasaran" labelOf={v => penanda.nama(v, 'sasaran')} value={selectedSasaran} options={displaySasarans} onChange={setSelectedSasaran} />
+                <Selector label="Program" labelOf={v => penanda.nama(v, 'program')} value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} disabled={!selectedSasaran} />
                 <div className="md:col-span-2">
-                  <Selector label="Indikator Program" value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedProgram} />
+                  <Selector label="Indikator Program" labelOf={labelInd} value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedProgram} />
                 </div>
               </>
             ) : level === 'kegiatan' ? (
               <>
-                <Selector label="Program" value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
-                <Selector label="Kegiatan" value={selectedKegiatan} options={displayKegiatans} onChange={setSelectedKegiatan} disabled={!selectedProgram} />
+                <Selector label="Program" labelOf={v => penanda.nama(v, 'program')} value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
+                <Selector label="Kegiatan" labelOf={v => penanda.nama(v, 'kegiatan')} value={selectedKegiatan} options={displayKegiatans} onChange={setSelectedKegiatan} disabled={!selectedProgram} />
                 <div className="md:col-span-2">
-                  <Selector label="Indikator Kegiatan" value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedKegiatan} />
+                  <Selector label="Indikator Kegiatan" labelOf={labelInd} value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedKegiatan} />
                 </div>
               </>
             ) : (
               <>
-                <Selector label="Program" value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
-                <Selector label="Kegiatan" value={selectedKegiatan} options={displayKegiatans} onChange={setSelectedKegiatan} disabled={!selectedProgram} />
-                <Selector label="Sub Kegiatan" value={selectedSubKegiatan} options={displaySubKegiatans} onChange={setSelectedSubKegiatan} disabled={!selectedKegiatan} />
-                <Selector label="Indikator Sub Kegiatan" value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedSubKegiatan} />
+                <Selector label="Program" labelOf={v => penanda.nama(v, 'program')} value={selectedProgram} options={displayPrograms} onChange={setSelectedProgram} />
+                <Selector label="Kegiatan" labelOf={v => penanda.nama(v, 'kegiatan')} value={selectedKegiatan} options={displayKegiatans} onChange={setSelectedKegiatan} disabled={!selectedProgram} />
+                <Selector label="Sub Kegiatan" labelOf={v => penanda.nama(v, 'sub-kegiatan')} value={selectedSubKegiatan} options={displaySubKegiatans} onChange={setSelectedSubKegiatan} disabled={!selectedKegiatan} />
+                <Selector label="Indikator Sub Kegiatan" labelOf={labelInd} value={selectedIndicator} options={displayIndicators} onChange={setSelectedIndicator} disabled={!selectedSubKegiatan} />
               </>
             )}
           </div>
@@ -663,12 +667,14 @@ export default function MainDashboard({
   );
 }
 
-function Selector({ label, value, options, onChange, disabled = false }: {
+function Selector({ label, value, options, onChange, disabled = false, labelOf }: {
   label: string; value: string; options: string[]; onChange: (v: string) => void; disabled?: boolean;
+  /** Nilai pilihan tetap teks tersimpan; yang berpenanda hanya labelnya. */
+  labelOf?: (v: string) => string;
 }) {
   // DESIGN-SYSTEM rule (baris 455): native <select> di dark theme WAJIB migrate ke <SoftSelect>.
   // Adapter: string[] options jadi {value,label}[], prepend opsi kosong sbg "— Pilih —" eksplisit.
-  const softOptions = [{ value: '', label: '— Pilih —' }, ...options.map(o => ({ value: o, label: o }))];
+  const softOptions = [{ value: '', label: '— Pilih —' }, ...options.map(o => ({ value: o, label: labelOf ? labelOf(o) : o }))];
   return (
     <div className="flex flex-col gap-1 flex-1 min-w-0 ra-cascade-cell">
       <label className={`text-[9px] font-bold uppercase tracking-wider ${disabled ? 'text-slate-300' : 'text-slate-400'}`}>{label}</label>

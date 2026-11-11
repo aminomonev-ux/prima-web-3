@@ -9,6 +9,7 @@
 // judul, Data Pribadi, dan tanda tangan tetap dari sini (docs/CONCEPT-iki-custom.md §2).
 
 import { adaIsiBadan, bacaTabelCustom } from './custom';
+import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 
 export type IkiVarian = 'STANDAR' | 'DIREKTUR' | 'CUSTOM';
 export type IkiJenisDokumen = 'MURNI' | 'PERUBAHAN';
@@ -131,8 +132,15 @@ export function buildIkiGrid(doc: IkiGridDokumen): IkiGrid {
   // ── Body ──
   // Grup by no_urut → kolom No + RHK-diintervensi span seluruh baris grup.
   // Per RHK: kolom RHK/aspek/indikator/target/formulasi(/cara-hitung) span 4 baris TW.
+  // Dokumen lama menyalin bintang & nomor "(1)" matriks Renaksi; cetakan tidak memuatnya.
+  const rhkCetak = doc.rhk.map(r => ({
+    ...r,
+    rhk: rapikanNamaEntitas(r.rhk),
+    rhk_intervensi: r.rhk_intervensi == null ? r.rhk_intervensi : rapikanNamaEntitas(r.rhk_intervensi),
+    indikator: rapikanIndikator(r.indikator),
+  }));
   const groups = new Map<number, IkiGridDokumen['rhk']>();
-  for (const r of doc.rhk) {
+  for (const r of rhkCetak) {
     const list = groups.get(r.no_urut) ?? [];
     list.push(r);
     groups.set(r.no_urut, list);
