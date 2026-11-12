@@ -70,12 +70,15 @@ export default function SoftSelect<T extends string | number>({
         <div className="soft-select-menu" role="listbox">
           {options.map(opt => {
             const active = opt.value === value
+            // Trigger memotong nama panjang dengan elipsis, jadi teks utuhnya disediakan
+            // sebagai tooltip bawaan di tiap pilihan.
             return (
               <button
                 type="button"
                 key={String(opt.value)}
                 role="option"
                 aria-selected={active}
+                title={opt.label}
                 className={`soft-select-item${active ? ' active' : ''}`}
                 onClick={() => { onChange(opt.value); setOpen(false) }}
               >

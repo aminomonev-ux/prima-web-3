@@ -1017,13 +1017,16 @@ input, textarea { caret-color: #FBBF24; }
 [data-theme="light"] .btn-prima[data-variant="warning"] { color: #8B5710; }
 
 /* SoftSelect custom dropdown (replaces native <option> popup) */
-.soft-select { position: relative; display: inline-block; }
+/* max-width:100% + min-width:0 di label: tanpa itu label `nowrap` ikut menentukan
+   lebar min-content, sehingga trigger melebar melewati kolomnya saat nilai tersimpan panjang
+   (mis. nama indikator Renaksi). Teks panjang dipotong dengan elipsis, bukan melebarkan kotak. */
+.soft-select { position: relative; display: inline-block; max-width: 100%; }
 .soft-select-trigger {
   display: inline-flex; align-items: center; justify-content: space-between;
-  gap: 8px; width: 100%; text-align: left;
+  gap: 8px; width: 100%; min-width: 0; max-width: 100%; text-align: left;
 }
 .soft-select-label {
-  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .soft-select-chevron {
   color: #B8A7FE; flex-shrink: 0; transition: transform .18s;
