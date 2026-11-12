@@ -24,6 +24,8 @@ export interface HasilSimpanMaster {
   dibuat: number | null;
   dariRenaksi: number;
   gagal: { nama: string; pesan: string }[];
+  /** Entri yang benar-benar tersimpan, dengan nama AKHIR-nya (ejaan Renaksi bila dipilih). */
+  tersimpan: EntriMasterBaru[];
 }
 
 /**
@@ -45,27 +47,28 @@ export async function simpanMasterBaru(tahun: string, entri: readonly EntriMaste
       variant: 'primary',
       altLabel: 'Tetap manual',
     });
-    if (pilihan === null) return { dibuat: null, dariRenaksi: 0, gagal: [] };
+    if (pilihan === null) return { dibuat: null, dariRenaksi: 0, gagal: [], tersimpan: [] };
     pakai = pilihan === 'utama';
   }
 
   let dibuat = 0;
   const gagal: HasilSimpanMaster['gagal'] = [];
+  const tersimpan: EntriMasterBaru[] = [];
   for (const [i, e] of entri.entries()) {
     const ra = pakai ? cocok.get(i) : undefined;
+    const isi: EntriMasterBaru = {
+      tipe: e.tipe, nama: ra ? ra.nama : e.nama,
+      // Ejaan induk ikut Renaksi juga: induk dari berkas bisa masih berbintang.
+      program_ref: ra ? (ra.program_ref ?? e.program_ref) : e.program_ref,
+      kegiatan_ref: ra ? (ra.kegiatan_ref ?? e.kegiatan_ref) : e.kegiatan_ref,
+      subkegiatan_ref: e.subkegiatan_ref,
+    };
     const d = await fetchJson<unknown>('/api/kinerja/master', {
       method: 'POST',
-      body: JSON.stringify({
-        tahun, tipe: e.tipe, nama: ra ? ra.nama : e.nama, sumber: null,
-        // Ejaan induk ikut Renaksi juga: induk dari berkas bisa masih berbintang.
-        program_ref: ra ? (ra.program_ref ?? e.program_ref) : e.program_ref,
-        kegiatan_ref: ra ? (ra.kegiatan_ref ?? e.kegiatan_ref) : e.kegiatan_ref,
-        subkegiatan_ref: e.subkegiatan_ref,
-        ...(ra ? { asal: 'RENAKSI' } : {}),
-      }),
+      body: JSON.stringify({ tahun, ...isi, sumber: null, ...(ra ? { asal: 'RENAKSI' } : {}) }),
     });
-    if (d.ok) dibuat++;
+    if (d.ok) { dibuat++; tersimpan.push(isi); }
     else gagal.push({ nama: e.nama, pesan: d.message || 'galat' });
   }
-  return { dibuat, dariRenaksi: pakai ? cocok.size : 0, gagal };
+  return { dibuat, dariRenaksi: pakai ? cocok.size : 0, gagal, tersimpan };
 }

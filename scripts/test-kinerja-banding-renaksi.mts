@@ -167,7 +167,7 @@ const MT = sumber('app/(dashboard)/kinerja/_tabs/MasterTab.tsx')
 const SMB = sumber('components/kinerja/simpan-master-baru.ts')
 ok('B9 Simpan Master bertanya lewat ketikanAdaDiRenaksi; "Pakai" mengirim nama Renaksi + asal',
   MT.includes('simpanMasterBaru(tahun,') && SMB.includes('cocok = ketikanAdaDiRenaksi(entri, (banding as unknown as HasilBanding).baru)')
-  && SMB.includes('nama: ra ? ra.nama : e.nama') && SMB.includes("...(ra ? { asal: 'RENAKSI' } : {})"))
+  && SMB.includes('nama: ra ? ra.nama : e.nama') && SMB.includes("...(ra ? { asal: 'RENAKSI' } : {})") && SMB.includes('body: JSON.stringify({ tahun, ...isi,'))
 const RM = sumber('app/api/kinerja/master/route.ts')
 ok('B10 server memeriksa jalur sebelum menerima tanda RENAKSI', RM.indexOf("asal === 'RENAKSI' && !(await jalurAdaDiRenaksiTahun(") > 0
   && RM.indexOf("asal === 'RENAKSI' && !(await jalurAdaDiRenaksiTahun(") < RM.indexOf('await createMasterRow('))

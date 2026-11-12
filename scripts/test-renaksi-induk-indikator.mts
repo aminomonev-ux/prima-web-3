@@ -14,6 +14,8 @@ import {
   RaIndukIndikatorError, RaTautanAnakError,
 } from '../lib/data/rencana-aksi';
 import { commitImportRenaksi, type CommitRow } from '../lib/renaksi/import-data';
+import { rencanaGantiNamaImpor, type BarisBerindikator } from '../lib/renaksi/ganti-nama';
+import type { RaLevel } from '../lib/data/rencana-aksi-schemas';
 
 const T1 = 2099, T2 = 2098;
 
@@ -205,6 +207,36 @@ const klRow = await getRencanaAksiById(kl);
 ok('G2 impor memindah kegiatan ke program lain: tautan ke indikator program lama dilepas',
   g2.diperbarui === 1 && klRow?.program === 'PROG BARU' && klRow?.induk_indikator_id === null,
   `${klRow?.program} ${klRow?.induk_indikator_id} ${JSON.stringify(g2.ditahan)}`);
+ok('G3 impor ulang tanpa perubahan tidak mencatat apa pun', g1.gantiNama.length === 0, JSON.stringify(g1.gantiNama));
+const catatan = await queryOne<{ n: number; dari: string; induk: string; induk_baru: string }>(sql`
+  SELECT COUNT(*) AS n, MAX(dari) AS dari, MAX(induk) AS induk, MAX(induk_baru) AS induk_baru
+  FROM renaksi_ganti_nama WHERE tahun = ${T1} AND level = 'kegiatan' AND dari = 'KEG TUJUAN'`);
+ok('G4 pindah induk lewat impor DICATAT untuk E-Anggaran & PK (sama seperti Data Entry)',
+  g2.gantiNama.length === 1 && Number(catatan?.n) === 1 && catatan?.induk === 'PROG UJI' && catatan?.induk_baru === 'PROG BARU',
+  JSON.stringify({ g: g2.gantiNama, catatan }));
+
+console.log('\nH. Aturan pencatat impor (murni)');
+{
+  const b = (level: RaLevel, program: string, kegiatan: string | null, indikator: string): BarisBerindikator =>
+    ({ level, program, kegiatan, sub_kegiatan: null, tujuan: null, sasaran: null, indikator });
+  const lama = [b('kegiatan', 'P1', 'K', 'i1'), b('kegiatan', 'P1', 'K', 'i2')];
+  const h1 = rencanaGantiNamaImpor(lama, [b('kegiatan', 'P2', 'K', 'i1'), b('kegiatan', 'P2', 'K', 'I2 ')], false);
+  ok('H1 semua indikator entitas pindah ke lokasi yang sama → satu catatan pindah (indikator dibandingkan tanpa huruf besar/spasi)',
+    h1.length === 1 && h1[0].indukBaru === 'P2' && h1[0].induk === 'P1', JSON.stringify(h1));
+  ok('H2 mode perbarui, satu indikator tertinggal di lokasi lama → entitas terbelah, tidak dicatat',
+    rencanaGantiNamaImpor(lama, [b('kegiatan', 'P2', 'K', 'i1')], false).length === 0);
+  ok('H3 mode ganti (baris yang tak ada di berkas dihapus) → dicatat',
+    rencanaGantiNamaImpor(lama, [b('kegiatan', 'P2', 'K', 'i1')], true).length === 1);
+  ok('H4 indikator entitas yang sama menuju dua program berbeda → tidak dicatat (menebak)',
+    rencanaGantiNamaImpor(lama, [b('kegiatan', 'P2', 'K', 'i1'), b('kegiatan', 'P3', 'K', 'i2')], false).length === 0);
+  const h5 = rencanaGantiNamaImpor(lama, [b('kegiatan', 'P1', 'K BARU', 'i1'), b('kegiatan', 'P1', 'K BARU', 'i2')], false);
+  ok('H5 ganti nama lewat impor dicatat sebagai ganti nama (bukan pindah)',
+    h5.length === 1 && h5[0].dari === 'K' && h5[0].ke === 'K BARU' && h5[0].indukBaru === null, JSON.stringify(h5));
+  ok('H6 satu indikator berubah, satu tetap → tidak dicatat',
+    rencanaGantiNamaImpor(lama, [b('kegiatan', 'P2', 'K', 'i1'), b('kegiatan', 'P1', 'K', 'i2')], false).length === 0);
+  ok('H7 indikator baru (belum tersimpan) tidak menghasilkan catatan',
+    rencanaGantiNamaImpor(lama, [b('kegiatan', 'P9', 'K9', 'baru')], false).length === 0);
+}
 
 await bersih();
 const bersihLagi = await queryOne<{ n: number }>(sql`SELECT COUNT(*) AS n FROM rencana_aksi WHERE tahun IN (${T1}, ${T2})`);

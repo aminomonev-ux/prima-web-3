@@ -15,9 +15,10 @@
 
 import type { PoolConnection } from 'mysql2/promise';
 import { queryMany, sql, withTransaction } from '@/lib/data/db';
-import { assertPeriodeTerbuka } from '@/lib/data/rencana-aksi';
+import { assertPeriodeTerbuka, catatGantiNama } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import { kunciPersis, selaraskanImpor, type BarisTersimpan } from './induk-impor';
+import { rencanaGantiNamaImpor, type BarisBerindikator, type GantiNama } from './ganti-nama';
 
 export interface CommitRow {
   level: RaLevel;
@@ -50,21 +51,36 @@ export interface CommitResult {
   /** Baris yang nama/indikator/induknya disesuaikan ke ejaan tersimpan. */
   disesuaikan: number;
   perLevel: Partial<Record<RaLevel, number>>;
+  /** Ganti nama / pindah induk yang dicatat untuk modul penyalin (renaksi_ganti_nama). */
+  gantiNama: GantiNama[];
+}
+
+/**
+ * Kolom hierarki baris impor dalam konvensi tabel: `program` menampung nama entitas sendiri untuk
+ * tujuan/sasaran/program, dan nama Program induk untuk kegiatan/sub-kegiatan (konvensi DataEntryForm).
+ * Satu aturan untuk penulis DAN pencatat ganti nama.
+ */
+function hierarkiBaris(row: CommitRow): BarisBerindikator {
+  const atas = row.level === 'tujuan' || row.level === 'sasaran' || row.level === 'program';
+  return {
+    level: row.level,
+    program: atas ? row.nama : (row.induk_program ?? ''),
+    kegiatan: row.level === 'kegiatan' ? row.nama : row.level === 'sub-kegiatan' ? (row.induk_kegiatan ?? null) : null,
+    sub_kegiatan: row.level === 'sub-kegiatan' ? row.nama : null,
+    tujuan: row.level === 'sasaran' ? row.induk_tujuan : null,
+    sasaran: row.level === 'program' ? row.induk_sasaran : null,
+    indikator: row.indikator,
+  };
 }
 
 /** Baris import → tuple kolom DB sesuai konvensi Data Entry per level. */
 function toDbTuple(row: CommitRow, tahun: number, userId: number): unknown[] {
-  const isTujuan = row.level === 'tujuan';
   const isSasaran = row.level === 'sasaran';
   const isProgram = row.level === 'program';
   const isKegiatan = row.level === 'kegiatan';
   const isSub = row.level === 'sub-kegiatan';
 
-  // Kolom `program` menampung nama entitas sendiri untuk tujuan/sasaran/program,
-  // dan nama Program induk untuk kegiatan/sub-kegiatan (konvensi DataEntryForm).
-  const program = isTujuan || isSasaran || isProgram ? row.nama : (row.induk_program ?? '');
-  const kegiatan = isKegiatan ? row.nama : isSub ? (row.induk_kegiatan ?? null) : null;
-  const subKegiatan = isSub ? row.nama : null;
+  const { program, kegiatan, sub_kegiatan: subKegiatan } = hierarkiBaris(row);
 
   const bulanJson = row.bulan && row.bulan.length === 12
     ? JSON.stringify({ v: 2, m: row.bulan })
@@ -133,13 +149,13 @@ async function bulkWrite(conn: PoolConnection, rows: unknown[][], upsert: boolea
 export async function commitImportRenaksi(
   tahun: number, mode: ImportMode, rows: CommitRow[], userId: number,
 ): Promise<CommitResult> {
-  const tersimpan = await queryMany<BarisTersimpan>(
-    sql`SELECT level, program, kegiatan, sub_kegiatan, indikator FROM rencana_aksi WHERE tahun = ${tahun}`,
+  const tersimpan = await queryMany<BarisTersimpan & BarisBerindikator>(
+    sql`SELECT level, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator FROM rencana_aksi WHERE tahun = ${tahun}`,
   );
   const { layak, ditahan, disesuaikan } = selaraskanImpor(rows, tersimpan, tahun, mode === 'ganti');
 
   if (layak.length === 0) {
-    return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {} };
+    return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [] };
   }
 
   const levelsDiFile = [...new Set(layak.map(r => r.level))];
@@ -168,6 +184,10 @@ export async function commitImportRenaksi(
   // tidak diperiksa: keduanya memang tidak menyentuh kolom realisasi.
   if (mode === 'ganti') await assertPeriodeTerbuka(tahun);
 
+  // Mode 'tambah' tidak pernah menulis baris yang sudah ada, jadi tidak ada yang berganti nama.
+  const gantiNama = mode === 'tambah' ? []
+    : rencanaGantiNamaImpor(tersimpan, akanTulis.map(hierarkiBaris), mode === 'ganti');
+
   await withTransaction(async ({ tx, conn }) => {
     if (mode === 'ganti') {
       for (const lv of levelsDiFile) {
@@ -189,9 +209,11 @@ export async function commitImportRenaksi(
     }
     const tuples = akanTulis.map(r => toDbTuple(r, tahun, userId));
     await bulkWrite(conn, tuples, mode !== 'tambah');
+    // Transaksi yang sama: impor yang batal tidak boleh meninggalkan catatan.
+    for (const g of gantiNama) await catatGantiNama(tx, tahun, g, userId);
   });
 
   if (mode === 'ganti') { ditambah = akanTulis.length; diperbarui = 0; }
 
-  return { disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel };
+  return { disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel, gantiNama };
 }

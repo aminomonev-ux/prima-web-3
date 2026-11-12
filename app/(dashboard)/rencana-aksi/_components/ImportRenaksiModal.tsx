@@ -176,7 +176,9 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
 
       const pesan = `${json.disimpan} indikator tersimpan (${json.ditambah} baru, ${json.diperbarui} diperbarui`
         + `${json.dilewati ? `, ${json.dilewati} dilewati` : ''})`
-        + `${json.disesuaikan ? ` · ${json.disesuaikan} baris mengikuti nama yang sudah tersimpan` : ''}`;
+        + `${json.disesuaikan ? ` · ${json.disesuaikan} baris mengikuti nama yang sudah tersimpan` : ''}`
+        // Dicatat supaya E-Anggaran & PK menawarkannya sebagai ganti nama/pindah induk.
+        + `${json.gantiNama?.length ? ` · ${json.gantiNama.length} ganti nama/pindah induk diteruskan ke E-Anggaran & PK` : ''}`;
       if (json.ditahan?.length) {
         notify(`${pesan} · ${json.ditahan.length} ditahan: ${json.ditahan[0].alasan}`, 'warning');
       } else {

@@ -186,6 +186,36 @@ export function masterKurang(berkas: BarisRekening[], tersedia: MasterTersedia):
   return out;
 }
 
+/**
+ * Nama di baris berkas yang sama dengan entri Master KECUALI bintang penanda / huruf besar /
+ * spasi diganti ejaan Master. Tanpa ini "PROGRAM X ***" dari berkas lama masuk tabel Rekening
+ * di samping Master "PROGRAM X": dropdown menandainya "di luar Master" dan Inject RKO mencari
+ * pasangannya dengan nama yang berbeda. Baris yang tidak berubah dipulangkan apa adanya.
+ */
+export function ikutiEjaanMaster(rows: readonly BarisRekening[], ejaan: MasterTersedia): BarisRekening[] {
+  const peta = (Object.keys(DAFTAR_KOLOM) as (keyof MasterTersedia)[]).reduce((acc, t) => {
+    const m = new Map<string, string>();
+    for (const n of ejaan[t]) { const k = kunciNamaMaster(n); if (k && !m.has(k)) m.set(k, n); }
+    acc[t] = m;
+    return acc;
+  }, {} as Record<keyof MasterTersedia, Map<string, string>>);
+  return rows.map(r => {
+    let out = r;
+    for (const t of Object.keys(DAFTAR_KOLOM) as (keyof MasterTersedia)[]) {
+      const kolom = DAFTAR_KOLOM[t];
+      const v = r[kolom];
+      if (!v) continue;
+      const baku = peta[t].get(kunciNamaMaster(v));
+      if (baku && baku !== v) out = { ...out, [kolom]: baku };
+    }
+    return out;
+  });
+}
+
+const DAFTAR_KOLOM: Record<keyof MasterTersedia, keyof BarisRekening & ('program' | 'kegiatan' | 'subkegiatan' | 'uraian_ssk' | 'sumber_anggaran')> = {
+  program: 'program', kegiatan: 'kegiatan', subkegiatan: 'subkegiatan', uraian_ssk: 'uraian_ssk', sumber_anggaran: 'sumber_anggaran',
+};
+
 // ─── Impor Master (berkas Master → entri) ───────────────────────────────────
 
 export interface EntriMasterImpor {

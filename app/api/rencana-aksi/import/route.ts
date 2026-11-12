@@ -120,7 +120,8 @@ async function handleCommit(req: NextRequest, session: { userId: number; usernam
       username: session.username,
       detail: `Import ${tahun} mode=${mode}: ${result.disimpan} tersimpan `
         + `(${result.ditambah} baru, ${result.diperbarui} diperbarui, ${result.dilewati} dilewati, ${result.ditahan.length} ditahan, ${result.disesuaikan} disesuaikan ke nama tersimpan) — `
-        + Object.entries(result.perLevel).map(([lv, n]) => `${lv}:${n}`).join(' '),
+        + Object.entries(result.perLevel).map(([lv, n]) => `${lv}:${n}`).join(' ')
+        + (result.gantiNama.length ? ` — dicatat ${result.gantiNama.length} ganti nama/pindah induk untuk modul penyalin` : ''),
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {

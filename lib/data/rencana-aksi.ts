@@ -349,7 +349,7 @@ async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promis
  * yang sama dengan penjalarannya: ganti nama yang batal tidak boleh meninggalkan catatan.
  * Tanpa status "sudah diterapkan" — pembacanya menilai sendiri apakah masih berlaku.
  */
-async function catatGantiNama(tx: TxSql, tahun: number, g: GantiNama, userId: number): Promise<void> {
+export async function catatGantiNama(tx: TxSql, tahun: number, g: GantiNama, userId: number): Promise<void> {
   await tx`
     INSERT INTO renaksi_ganti_nama (tahun, level, dari, ke, induk, induk_program, induk_baru, induk_program_baru, oleh)
     VALUES (${tahun}, ${g.level}, ${g.dari}, ${g.ke}, ${g.induk}, ${g.indukProgram}, ${g.indukBaru}, ${g.indukProgramBaru}, ${userId})

@@ -21,7 +21,7 @@ import { parseRekeningImport, sumberDariNama } from '../lib/data/kinerja-import-
 import { parseMasterImport, tipeDariSheet } from '../lib/data/kinerja-import-master';
 import {
   bandingkanRekening, ringkasImpor, terapkanTambah, terapkanTimpa,
-  masterKurang, bandingkanMaster,
+  masterKurang, bandingkanMaster, ikutiEjaanMaster,
   type BarisRekening, type MasterTersedia,
 } from '../lib/kinerja/gabung-rekening';
 
@@ -226,6 +226,16 @@ bab('F. Unduh Master lalu impor balik');
     bandingkanMaster([h.rows[0], berbintang], kosong).map(b => b.status));
   cek('Import Rekening: program berbintang tidak dibuat ulang di Master', 0,
     masterKurang([{ program: `${P} ***`, kegiatan: '', subkegiatan: '', uraian_ssk: '', uraian: 'x', sumber_anggaran: '' }], sesudah).length);
+  // Baris berkas ikut ejaan Master: beda bintang/huruf/spasi saja → nama Master; nama lain tetap.
+  const asli = { program: `${P.toLowerCase()}  ***`, kegiatan: `${K} ****`, subkegiatan: 'SUB LAIN', uraian_ssk: 'ssk-1', uraian: 'Belanja', sumber_anggaran: 'blud' };
+  const [ej] = ikutiEjaanMaster([asli], sesudah);
+  cek('ikutiEjaanMaster: program/kegiatan/uraian SSK/sumber ikut ejaan Master, nama lain tidak',
+    [P, K, 'SUB LAIN', 'SSK-1', 'BLUD', 'Belanja'], [ej.program, ej.kegiatan, ej.subkegiatan, ej.uraian_ssk, ej.sumber_anggaran, ej.uraian]);
+  const tetap = { program: P, kegiatan: K, subkegiatan: S, uraian_ssk: 'SSK-1', uraian: 'Belanja', sumber_anggaran: 'BLUD' };
+  cek('baris yang sudah sesuai dipulangkan objek yang sama (tak menandai berubah)', true, ikutiEjaanMaster([tetap], sesudah)[0] === tetap);
+  // Sesudah dibandingkan dengan ejaan Master, baris berkas berbintang = baris tabel yang sama.
+  cek('bandingkan sesudah ejaan Master: berkas berbintang terbaca "sudah ada", bukan baris baru', ['sama'],
+    bandingkanRekening([tetap], ikutiEjaanMaster([{ ...tetap, program: `${P} ***` }], sesudah)).map(h => h.status));
 }
 {
   // Tiga pintu pembuat entri Master (Simpan tab Master, Import Master, lengkapi Master di Import
@@ -234,6 +244,10 @@ bab('F. Unduh Master lalu impor balik');
   const pintu = ['app/(dashboard)/kinerja/_tabs/MasterTab.tsx', 'components/kinerja/ImportMasterModal.tsx', 'components/kinerja/ImportRekeningModal.tsx'];
   cek('ketiga pintu memanggil simpanMasterBaru, tidak menembak POST master sendiri', [true, true, true],
     pintu.map(p => { const s = baca(p); return s.includes('simpanMasterBaru(') && !s.includes("'/api/kinerja/master'"); }));
+  const irm = baca('components/kinerja/ImportRekeningModal.tsx');
+  cek('Import Rekening membandingkan & melengkapi Master dari baris berejaan Master, lalu menerapkan ejaan yang tersimpan', true,
+    irm.includes('bandingkanRekening(rowsSekarang, barisBerkas)') && irm.includes('masterKurang(barisBerkas, tersedia)')
+    && irm.includes('terapkanTimpa(akhir)') && irm.includes('terapkanTambah(rowsSekarang, akhir)') && irm.includes('r.tersimpan'));
   const pen = baca('components/kinerja/simpan-master-baru.ts');
   cek('penolong menanyakan Renaksi sebelum menulis', true,
     pen.indexOf('ketikanAdaDiRenaksi(') > 0 && pen.indexOf('ketikanAdaDiRenaksi(') < pen.indexOf("'/api/kinerja/master'"));

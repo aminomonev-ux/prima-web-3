@@ -15,7 +15,7 @@ import { FileSpreadsheet, X, AlertTriangle, Upload } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { uiTheme } from '@/lib/theme';
 import {
-  bandingkanRekening, ringkasImpor, terapkanTambah, terapkanTimpa, masterKurang,
+  bandingkanRekening, ringkasImpor, terapkanTambah, terapkanTimpa, masterKurang, ikutiEjaanMaster,
   type BarisRekening, type BarisImpor, type EntriMaster, type MasterTersedia, type StatusImpor,
 } from '@/lib/kinerja/gabung-rekening';
 import { simpanMasterBaru } from './simpan-master-baru';
@@ -67,17 +67,23 @@ export default function ImportRekeningModal({
 
   const kosong = rowsSekarang.length === 0;
 
+  // Ejaan Master DULU, baru dibandingkan: "PROGRAM X ***" berkas = "PROGRAM X" Master/tabel.
+  const barisBerkas: BarisRekening[] = useMemo(
+    () => (baca ? ikutiEjaanMaster(baca.rows, tersedia) : []),
+    [baca, tersedia],
+  );
+
   const hasil: BarisImpor[] = useMemo(() => {
     if (!baca) return [];
-    const dasar = bandingkanRekening(rowsSekarang, baca.rows);
+    const dasar = bandingkanRekening(rowsSekarang, barisBerkas);
     return dasar.map((h, i) => (lepas.has(i) ? { ...h, ikut: false } : h));
-  }, [baca, rowsSekarang, lepas]);
+  }, [baca, barisBerkas, rowsSekarang, lepas]);
 
   const ringkas = useMemo(() => ringkasImpor(hasil), [hasil]);
 
   const kurang: EntriMaster[] = useMemo(
-    () => (baca ? masterKurang(baca.rows, tersedia) : []),
-    [baca, tersedia],
+    () => (baca ? masterKurang(barisBerkas, tersedia) : []),
+    [baca, barisBerkas, tersedia],
   );
 
   async function pilihBerkas(file: File) {
@@ -99,14 +105,24 @@ export default function ImportRekeningModal({
     setBusy(true);
     try {
       let dibuat = 0;
+      let akhir = hasil;
       if (buatMaster && kurang.length > 0) {
         // Pertanyaan "pakai dari Rencana Aksi" sama dengan tombol Simpan tab Master.
         const r = await simpanMasterBaru(tahun, kurang);
         if (r.dibuat === null) return;
         dibuat = r.dibuat;
         for (const g of r.gagal) toast.error(`Gagal membuat master: ${g.nama.slice(0, 40)} — ${g.pesan}`);
+        // Entri yang tersimpan dengan ejaan Renaksi: baris dari berkas ikut nama itu, kalau tidak
+        // tabel Rekening memegang "X ***" sementara Master "X". Hanya baris BERKAS — baris lama
+        // di tabel tidak disentuh (mengubahnya = ganti nama yang menjalar ke RKO & Realisasi).
+        const baru: MasterTersedia = { program: [], kegiatan: [], subkegiatan: [], uraian_ssk: [], sumber_anggaran: [] };
+        for (const e of r.tersimpan) baru[e.tipe as keyof MasterTersedia]?.push(e.nama);
+        akhir = hasil.map(h => {
+          const [b] = ikutiEjaanMaster([h.baris], baru);
+          return b === h.baris ? h : { ...h, baris: b };
+        });
       }
-      const rows = mode === 'timpa' ? terapkanTimpa(hasil) : terapkanTambah(rowsSekarang, hasil);
+      const rows = mode === 'timpa' ? terapkanTimpa(akhir) : terapkanTambah(rowsSekarang, akhir);
       onApply(rows, dibuat);
       onClose();
     } finally { setBusy(false); }
