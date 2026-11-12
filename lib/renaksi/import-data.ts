@@ -15,10 +15,11 @@
 
 import type { PoolConnection } from 'mysql2/promise';
 import { queryMany, sql, withTransaction } from '@/lib/data/db';
-import { assertPeriodeTerbuka, catatGantiNama } from '@/lib/data/rencana-aksi';
+import { assertPeriodeTerbuka, catatGantiNama, jalarkanGantiNama } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import { kunciPersis, selaraskanImpor, type BarisTersimpan } from './induk-impor';
-import { rencanaGantiNamaImpor, type BarisBerindikator, type GantiNama } from './ganti-nama';
+import { rencanaGantiNamaImpor, turunanTertinggal, type BarisBerindikator, type GantiNama } from './ganti-nama';
+import { cocokkanIndukImpor, type BarisRantai } from './rantai';
 
 export interface CommitRow {
   level: RaLevel;
@@ -32,6 +33,8 @@ export interface CommitRow {
   induk_kegiatan: string | null;
   outcome: string | null;
   indikator: string;
+  /** Teks indikator INDUK (kolom "Indikator Induk"). Kosong/null = tautan tidak disentuh. */
+  indikator_induk?: string | null;
   satuan: string;
   jenis: 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
   target_tahunan: number;
@@ -53,6 +56,11 @@ export interface CommitResult {
   perLevel: Partial<Record<RaLevel, number>>;
   /** Ganti nama / pindah induk yang dicatat untuk modul penyalin (renaksi_ganti_nama). */
   gantiNama: GantiNama[];
+  /** Kolom "Indikator Induk": jumlah tautan yang diisi, dan indikator yang teks induknya tidak dikenali. */
+  tautanDiisi: number;
+  tautanTakDikenal: string[];
+  /** Baris turunan (tidak ada di berkas) yang ikut dijalarkan ke nama/lokasi baru. */
+  turunanDijalarkan: number;
 }
 
 /**
@@ -146,19 +154,49 @@ async function bulkWrite(conn: PoolConnection, rows: unknown[][], upsert: boolea
   await conn.query(q, [rows]);
 }
 
-export async function commitImportRenaksi(
-  tahun: number, mode: ImportMode, rows: CommitRow[], userId: number,
-): Promise<CommitResult> {
+/** Ganti nama / pindah lewat impor yang meninggalkan baris turunan (tidak ada di berkas). */
+export interface DampakTurunan { gantiNama: GantiNama; turunan: number }
+
+/**
+ * Satu persiapan untuk commit DAN pratinjau dampak (`step=dampak`): baris yang akan ditulis, ganti
+ * nama yang tegas, dan berapa turunan tiap entitas yang tertinggal. Dua salinan perhitungan ini =
+ * pertanyaan di layar dan yang dikerjakan server berbeda pendapat (L78).
+ */
+async function siapkanImpor(tahun: number, mode: ImportMode, rows: CommitRow[]) {
   const tersimpan = await queryMany<BarisTersimpan & BarisBerindikator>(
     sql`SELECT level, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator FROM rencana_aksi WHERE tahun = ${tahun}`,
   );
   const { layak, ditahan, disesuaikan } = selaraskanImpor(rows, tersimpan, tahun, mode === 'ganti');
+  const levelsDiFile = [...new Set(layak.map(r => r.level))];
+  const akanTulis = layak.filter(r => mode !== 'tambah'
+    || !tersimpan.some(e => e.level === r.level && kunciPersis(e.indikator) === kunciPersis(r.indikator)));
+  // Mode 'tambah' tidak pernah menulis baris yang sudah ada, jadi tidak ada yang berganti nama.
+  const tulis = akanTulis.map(hierarkiBaris);
+  const gantiNama = mode === 'tambah' ? [] : rencanaGantiNamaImpor(tersimpan, tulis, mode === 'ganti');
+  // Mode ganti menghapus SELURUH tingkat yang ada di berkas — turunan di tingkat itu tidak
+  // tertinggal, mereka hilang/diganti berkas. Yang tertinggal hanya tingkat di luar berkas.
+  const tetap = mode === 'ganti' ? tersimpan.filter(r => !levelsDiFile.includes(r.level)) : tersimpan;
+  const dampak: DampakTurunan[] = gantiNama
+    .map(g => ({ gantiNama: g, turunan: turunanTertinggal(g, tetap, tulis) }))
+    .filter(d => d.turunan > 0);
+  return { tersimpan, layak, ditahan, disesuaikan, levelsDiFile, gantiNama, dampak };
+}
+
+/** `step=dampak`: HANYA membaca — dipakai layar untuk bertanya "ikut pindahkan turunannya?". */
+export async function dampakTurunanImpor(tahun: number, mode: ImportMode, rows: CommitRow[]): Promise<DampakTurunan[]> {
+  return (await siapkanImpor(tahun, mode, rows)).dampak;
+}
+
+export async function commitImportRenaksi(
+  tahun: number, mode: ImportMode, rows: CommitRow[], userId: number,
+  /** Ikut menjalarkan ganti nama/pindah ke turunan yang tidak ada di berkas (bawaan: ya, seperti Data Entry). */
+  bawaTurunan = true,
+): Promise<CommitResult> {
+  const { tersimpan, layak, ditahan, disesuaikan, levelsDiFile, gantiNama, dampak } = await siapkanImpor(tahun, mode, rows);
 
   if (layak.length === 0) {
-    return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [] };
+    return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [], tautanDiisi: 0, tautanTakDikenal: [], turunanDijalarkan: 0 };
   }
-
-  const levelsDiFile = [...new Set(layak.map(r => r.level))];
 
   // Kunci unik (tahun, level, indikator) — hitung mana yang sudah ada supaya
   // laporan "ditambah vs diperbarui" akurat.
@@ -184,9 +222,9 @@ export async function commitImportRenaksi(
   // tidak diperiksa: keduanya memang tidak menyentuh kolom realisasi.
   if (mode === 'ganti') await assertPeriodeTerbuka(tahun);
 
-  // Mode 'tambah' tidak pernah menulis baris yang sudah ada, jadi tidak ada yang berganti nama.
-  const gantiNama = mode === 'tambah' ? []
-    : rencanaGantiNamaImpor(tersimpan, akanTulis.map(hierarkiBaris), mode === 'ganti');
+  const dijalarkan = bawaTurunan ? dampak : [];
+  let tautanDiisi = 0;
+  const tautanTakDikenal: string[] = [];
 
   await withTransaction(async ({ tx, conn }) => {
     if (mode === 'ganti') {
@@ -207,13 +245,46 @@ export async function commitImportRenaksi(
         await tx`DELETE FROM rencana_aksi WHERE tahun = ${tahun} AND level = ${lv}`;
       }
     }
+    // Turunan yang TIDAK ada di berkas ikut nama/lokasi baru — penjalar yang sama dengan Data Entry.
+    // SEBELUM baris berkas ditulis: penjalar mencocokkan nama LAMA dan ikut menyentuh baris entitas
+    // itu sendiri; baris yang ada di berkas lalu ditimpa isi berkas oleh tulisan sesudahnya.
+    for (const d of dijalarkan) await jalarkanGantiNama(tx, tahun, d.gantiNama);
     const tuples = akanTulis.map(r => toDbTuple(r, tahun, userId));
     await bulkWrite(conn, tuples, mode !== 'tambah');
     // Transaksi yang sama: impor yang batal tidak boleh meninggalkan catatan.
     for (const g of gantiNama) await catatGantiNama(tx, tahun, g, userId);
+
+    // Kolom "Indikator Induk": teks → id SESUDAH semua baris ditulis — di mode ganti induknya baru
+    // lahir dengan id baru. Satu UPDATE borongan (PERF-C1). Kosong = tautan tidak disentuh.
+    const berTeks = akanTulis.filter(r => (r.indikator_induk ?? '').trim() && r.level !== 'tujuan');
+    if (berTeks.length > 0) {
+      const kandidat = await tx`
+        SELECT id, level, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator, induk_indikator_id
+        FROM rencana_aksi WHERE tahun = ${tahun}
+      ` as BarisRantai[];
+      const idBaris = new Map(kandidat.map(k => [`${k.level}|${kunciPersis(k.indikator)}`, Number(k.id)]));
+      const pasang: [number, number][] = [];
+      for (const r of berTeks) {
+        const h = hierarkiBaris(r);
+        const id = idBaris.get(`${r.level}|${kunciPersis(r.indikator)}`);
+        const induk = id ? cocokkanIndukImpor({ ...h, id, induk_indikator_id: null }, r.indikator_induk ?? '', kandidat) : null;
+        if (id && induk) pasang.push([id, induk]); else tautanTakDikenal.push(r.indikator);
+      }
+      if (pasang.length > 0) {
+        await conn.query(
+          `UPDATE rencana_aksi SET induk_indikator_id = CASE id ${pasang.map(() => 'WHEN ? THEN ?').join(' ')} END
+           WHERE tahun = ? AND id IN (?)`,
+          [...pasang.flat(), tahun, pasang.map(p => p[0])],
+        );
+      }
+      tautanDiisi = pasang.length;
+    }
   });
 
   if (mode === 'ganti') { ditambah = akanTulis.length; diperbarui = 0; }
 
-  return { disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel, gantiNama };
+  return {
+    disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel, gantiNama, tautanDiisi, tautanTakDikenal,
+    turunanDijalarkan: dijalarkan.reduce((s, d) => s + d.turunan, 0),
+  };
 }

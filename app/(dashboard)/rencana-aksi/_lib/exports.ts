@@ -75,19 +75,43 @@ export async function exportListPdf(mentah: RaRow[], tahun: number, level: RaRow
   doc.save(`rencana-aksi-${level}-${tahun}.pdf`);
 }
 
-export async function exportListXlsx(mentah: RaRow[], tahun: number, level: RaRow['level']) {
+/**
+ * `induk` = baris tingkat di atasnya (untuk kolom "Indikator Induk" — teks indikator yang
+ * dijabarkan, dibaca balik oleh Import Renaksi). Tanpa `induk` / tingkat tujuan: kolomnya tidak ada.
+ */
+export async function exportListXlsx(mentah: RaRow[], tahun: number, level: RaRow['level'], induk: RaRow[] = []) {
+  const wb = await buatWorkbookList(mentah, level, induk);
+  const buf = await wb.xlsx.writeBuffer();
+  saveBlob(new Blob([buf]), `rencana-aksi-${level}-${tahun}.xlsx`);
+}
+
+const KOLOM_ENTITAS: Record<RaRow['level'], [string, string][]> = {
+  tujuan: [['Tujuan', 'e_tujuan']],
+  sasaran: [['Tujuan', 'e_tujuan'], ['Sasaran', 'e_sasaran']],
+  program: [['Sasaran', 'e_sasaran'], ['Program', 'e_program']],
+  kegiatan: [['Program', 'e_program'], ['Kegiatan', 'e_kegiatan']],
+  'sub-kegiatan': [['Program', 'e_program'], ['Kegiatan', 'e_kegiatan'], ['Sub Kegiatan', 'e_sub']],
+};
+
+/** Dipisah dari tombolnya supaya isi berkas bisa diuji di Node (bolak-balik dengan Import Renaksi). */
+export async function buatWorkbookList(mentah: RaRow[], level: RaRow['level'], induk: RaRow[] = []) {
   const rows = mentah.map(barisBersih);
   const ExcelJS = await loadXlsx();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(LEVEL_LABELS[level]);
+  const pakaiInduk = level !== 'tujuan' && induk.length > 0;
+  const teksInduk = new Map(induk.map(r => [r.id, rapikanIndikator(r.indikator)]));
 
+  // Kolom entitas per tingkat: tingkat itu + induknya, dengan judul yang dikenali Import Renaksi
+  // (dulu satu kolom "Program/Sasaran" ambigu → unduhan tidak bisa diimpor balik).
+  const entitas = KOLOM_ENTITAS[level];
   ws.columns = [
     { header: 'No', key: 'no', width: 5 },
-    { header: 'Program/Sasaran', key: 'program', width: 35 },
-    { header: 'Kegiatan', key: 'kegiatan', width: 30 },
-    { header: 'Sub Kegiatan', key: 'sub', width: 30 },
+    ...entitas.map(([header, key]) => ({ header, key, width: 32 })),
+    { header: 'Kode', key: 'kode', width: 16 },
     { header: 'Sasaran (Outcome)', key: 'outcome', width: 38 },
     { header: 'Indikator', key: 'indikator', width: 40 },
+    ...(pakaiInduk ? [{ header: 'Indikator Induk', key: 'induk', width: 40 }] : []),
     { header: 'Jenis', key: 'jenis', width: 14 },
     { header: 'Satuan', key: 'satuan', width: 10 },
     { header: 'Target RPJMD', key: 'rpjmd', width: 13 },
@@ -107,9 +131,15 @@ export async function exportListXlsx(mentah: RaRow[], tahun: number, level: RaRo
 
   rows.forEach((r, i) => {
     ws.addRow({
-      no: i + 1, program: sanitizeCell(r.program), kegiatan: sanitizeCell(r.kegiatan ?? ''), sub: sanitizeCell(r.sub_kegiatan ?? ''),
+      no: i + 1,
+      e_tujuan: sanitizeCell(rapikanNamaEntitas((level === 'tujuan' ? r.program : r.tujuan) ?? '')),
+      e_sasaran: sanitizeCell(rapikanNamaEntitas((level === 'sasaran' ? r.program : r.sasaran) ?? '')),
+      e_program: sanitizeCell(r.program), e_kegiatan: sanitizeCell(r.kegiatan ?? ''), e_sub: sanitizeCell(r.sub_kegiatan ?? ''),
+      kode: sanitizeCell(r.kode ?? ''),
       outcome: sanitizeCell(outcomeOf(r)),
-      indikator: sanitizeCell(r.indikator), jenis: sanitizeCell(r.jenis), satuan: sanitizeCell(r.satuan),
+      indikator: sanitizeCell(r.indikator),
+      ...(pakaiInduk ? { induk: sanitizeCell(r.induk_indikator_id != null ? (teksInduk.get(r.induk_indikator_id) ?? '') : '') } : {}),
+      jenis: sanitizeCell(r.jenis), satuan: sanitizeCell(r.satuan),
       rpjmd: r.target_rpjmd, tahunan: r.target_tahunan,
       q1t: r.q1_target, q1r: r.q1_realisasi ?? '—',
       q2t: r.q2_target, q2r: r.q2_realisasi ?? '—',
@@ -119,8 +149,7 @@ export async function exportListXlsx(mentah: RaRow[], tahun: number, level: RaRo
     });
   });
 
-  const buf = await wb.xlsx.writeBuffer();
-  saveBlob(new Blob([buf]), `rencana-aksi-${level}-${tahun}.xlsx`);
+  return wb;
 }
 
 // ─── Export gabungan hierarki (Menu Cetak) ─────────────────────────────────

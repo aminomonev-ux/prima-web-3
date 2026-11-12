@@ -975,7 +975,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                   label="Excel"
                   disabled={!levelRows.length}
                   onClick={async () => {
-                    try { await exportListXlsx(levelRows, selectedYear, level); notify('Excel diunduh', 'success'); }
+                    try { await exportListXlsx(levelRows, selectedYear, level, indukRows); notify('Excel diunduh', 'success'); }
                     catch (e) { notify((e as Error).message, 'error'); }
                   }}
                 />

@@ -152,6 +152,29 @@ export function rencanaGantiNamaImpor(
   return out;
 }
 
+/**
+ * Baris TURUNAN entitas lama `g` yang tidak ada di berkas impor — merekalah yang tertinggal di nama/
+ * lokasi lama kalau impor tidak menjalarkan. Lingkupnya cermin `jalarkanGantiNama` di
+ * lib/data/rencana-aksi.ts (berubah satu = ubah keduanya): tujuan → sasaran; sasaran → program;
+ * program → kegiatan + sub; kegiatan → sub (program lama yang sama); sub = daun.
+ */
+export function turunanTertinggal(
+  g: GantiNama, tersimpan: readonly BarisBerindikator[], tulis: readonly Pick<BarisBerindikator, 'level' | 'indikator'>[],
+): number {
+  const diBerkas = new Set(tulis.map(r => kunciIndikator(r.level, r.indikator)));
+  const sama = (a: string | null | undefined, b: string | null | undefined) => bersih(a) === bersih(b);
+  const turunan = (r: BarisBerindikator): boolean => {
+    switch (g.level) {
+      case 'tujuan': return r.level === 'sasaran' && sama(r.tujuan, g.dari);
+      case 'sasaran': return r.level === 'program' && sama(r.sasaran, g.dari);
+      case 'program': return (r.level === 'kegiatan' || r.level === 'sub-kegiatan') && sama(r.program, g.dari);
+      case 'kegiatan': return r.level === 'sub-kegiatan' && sama(r.kegiatan, g.dari) && sama(r.program, g.induk);
+      default: return false;
+    }
+  };
+  return tersimpan.filter(r => turunan(r) && !diBerkas.has(kunciIndikator(r.level, r.indikator))).length;
+}
+
 /** Tahap H: catatan ini memindah induk (bukan sekadar ganti nama)? */
 export const pindahInduk = (g: Pick<GantiNama, 'indukBaru' | 'indukProgramBaru'>): boolean =>
   !!(g.indukBaru || g.indukProgramBaru);

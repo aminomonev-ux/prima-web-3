@@ -265,7 +265,7 @@ export async function getRencanaAksiById(id: number): Promise<RaRow | null> {
  * `<=>` untuk kolom induk yang boleh NULL (L90: `= NULL` tak pernah benar); `program`
  * NOT NULL, jadi `=` cukup.
  */
-async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promise<void> {
+export async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promise<void> {
   if (g.level === 'tujuan') {
     await tx`
       UPDATE rencana_aksi SET program = ${g.ke}, version = version + 1, updated_at = updated_at

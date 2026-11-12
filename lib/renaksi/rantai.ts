@@ -12,6 +12,7 @@
 // begitu fitur dipasang, dan tidak ada yang bisa disunting tanpa memetakan setahun penuh.
 
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
+import { rapikanIndikator } from '@/lib/shared/nama-resmi';
 
 export interface BarisRantai {
   id: number;
@@ -154,6 +155,28 @@ export function denganNilaiTersimpan(
   if (!n) return [...opsi];
   const kunci = new Set(opsi.map(o => o.trim()));
   return kunci.has(n) ? [...opsi] : [n, ...opsi];
+}
+
+// Penanda matriks dibuang lewat aturan yang SAMA dengan seluruh modul (lib/shared/nama-resmi.ts).
+const kunciLonggar = (s: string | null | undefined) =>
+  rapikanIndikator(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Teks "Indikator Induk" dari berkas impor → id baris indikator induk. Dibatasi ENTITAS induk baris
+ * itu (aturan yang sama dengan `assertIndukIndikator`: satu tingkat di atas, nama entitas = kolom
+ * induk baris; kegiatan induk sub juga harus satu program). Penanda matriks (bintang, "(1)") dan
+ * huruf besar tidak membedakan. Tidak ketemu / lebih dari satu = null (tidak ditebak).
+ */
+export function cocokkanIndukImpor(baris: BarisRantai, teksInduk: string, kandidat: readonly BarisRantai[]): number | null {
+  const levelInduk = INDUK_LEVEL[baris.level];
+  const nama = kunciLonggar(namaIndukLangsung(baris));
+  const kunci = kunciLonggar(teksInduk);
+  if (!levelInduk || !nama || !kunci) return null;
+  const cocok = kandidat.filter(r => r.level === levelInduk
+    && kunciLonggar(namaEntitas(r)) === nama
+    && (levelInduk !== 'kegiatan' || kunciLonggar(r.program) === kunciLonggar(baris.program))
+    && kunciLonggar(r.indikator) === kunci);
+  return cocok.length === 1 ? Number(cocok[0].id) : null;
 }
 
 /**

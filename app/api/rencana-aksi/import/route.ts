@@ -15,7 +15,7 @@ import {
   rencanaAksiRateLimit,
 } from '@/lib/data/rencana-aksi-schemas';
 import { parseRenaksiFile, type ColOverrides } from '@/lib/renaksi/import-renaksi';
-import { commitImportRenaksi } from '@/lib/renaksi/import-data';
+import { commitImportRenaksi, dampakTurunanImpor } from '@/lib/renaksi/import-data';
 import { RaPeriodLockedError } from '@/lib/data/rencana-aksi';
 import { guard } from '../_guard';
 
@@ -41,15 +41,26 @@ export async function POST(req: NextRequest) {
   if (!g.ok) return g.res;
 
   const step = new URL(req.url).searchParams.get('step') ?? 'preview';
-  if (step !== 'preview' && step !== 'commit') {
-    return NextResponse.json({ ok: false, error: 'step harus preview atau commit' }, { status: 400 });
+  if (step !== 'preview' && step !== 'commit' && step !== 'dampak') {
+    return NextResponse.json({ ok: false, error: 'step harus preview, dampak, atau commit' }, { status: 400 });
   }
 
   const limited = await rencanaAksiRateLimit(g.session.userId, `import-${step}`, step === 'commit' ? 6 : 12);
   if (limited) return limited;
 
   if (step === 'commit') return handleCommit(req, g.session);
+  if (step === 'dampak') return handleDampak(req);
   return handlePreview(req, g.session);
+}
+
+/** HANYA membaca: ganti nama/pindah lewat berkas yang meninggalkan turunan (bahan pertanyaan layar). */
+async function handleDampak(req: NextRequest) {
+  const parsed = ImportCommitSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ ok: false, error: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
+  }
+  const { tahun, mode, rows } = parsed.data;
+  return NextResponse.json({ ok: true, dampak: await dampakTurunanImpor(tahun, mode, rows) });
 }
 
 async function handlePreview(req: NextRequest, session: { userId: number; username: string }) {
@@ -111,8 +122,8 @@ async function handleCommit(req: NextRequest, session: { userId: number; usernam
   }
 
   try {
-    const { tahun, mode, rows } = parsed.data;
-    const result = await commitImportRenaksi(tahun, mode, rows, session.userId);
+    const { tahun, mode, rows, bawa_turunan } = parsed.data;
+    const result = await commitImportRenaksi(tahun, mode, rows, session.userId, bawa_turunan);
     await writeAuditLog({
       req,
       eventType: 'RA_IMPORT_COMMIT',
@@ -121,7 +132,10 @@ async function handleCommit(req: NextRequest, session: { userId: number; usernam
       detail: `Import ${tahun} mode=${mode}: ${result.disimpan} tersimpan `
         + `(${result.ditambah} baru, ${result.diperbarui} diperbarui, ${result.dilewati} dilewati, ${result.ditahan.length} ditahan, ${result.disesuaikan} disesuaikan ke nama tersimpan) — `
         + Object.entries(result.perLevel).map(([lv, n]) => `${lv}:${n}`).join(' ')
-        + (result.gantiNama.length ? ` — dicatat ${result.gantiNama.length} ganti nama/pindah induk untuk modul penyalin` : ''),
+        + (result.gantiNama.length ? ` — dicatat ${result.gantiNama.length} ganti nama/pindah induk untuk modul penyalin` : '')
+        + (result.tautanDiisi || result.tautanTakDikenal.length
+          ? ` — tautan indikator induk: ${result.tautanDiisi} diisi, ${result.tautanTakDikenal.length} tidak dikenali` : '')
+        + (result.turunanDijalarkan ? ` — ${result.turunanDijalarkan} baris turunan ikut dipindah/diganti nama` : ''),
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {

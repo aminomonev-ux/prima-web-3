@@ -19,7 +19,7 @@ export const LEVEL_ORDER: RaLevel[] = ['tujuan', 'sasaran', 'program', 'kegiatan
 
 export type ColField =
   | 'tujuan' | 'sasaran' | 'kode' | 'program' | 'kegiatan' | 'sub_kegiatan'
-  | 'outcome' | 'indikator' | 'satuan' | 'target_tahunan' | 'anggaran' | 'jenis';
+  | 'outcome' | 'indikator' | 'indikator_induk' | 'satuan' | 'target_tahunan' | 'anggaran' | 'jenis';
 export type ColSource = 'header' | 'isi' | 'manual' | 'tidak-ada';
 export interface ColReport { field: ColField; col: number | null; header: string; sample: string; source: ColSource }
 export interface ColOption { col: number; header: string; sample: string }
@@ -40,6 +40,8 @@ export interface ImportRaRow {
   induk_kegiatan: string | null;
   outcome: string | null;
   indikator: string;
+  /** Teks indikator INDUK (kolom "Indikator Induk" unduhan Data Entry). null = kolom tak ada / kosong. */
+  indikator_induk: string | null;
   satuan: string;
   jenis: RaJenis;
   target_tahunan: number;
@@ -130,7 +132,7 @@ function levelFromKode(kode: string): RaLevel | null {
 
 interface ColMap {
   tujuan: number; sasaran: number; kode: number; program: number; kegiatan: number;
-  sub_kegiatan: number; outcome: number; indikator: number; satuan: number;
+  sub_kegiatan: number; outcome: number; indikator: number; indikator_induk: number; satuan: number;
   target_tahunan: number; anggaran: number; jenis: number;
   bulan: number[];  // 12 kolom (-1 kalau tak ada)
   tw: number[];     // 4 kolom (-1 kalau tak ada)
@@ -140,11 +142,15 @@ const HEADER_ALIAS: Array<{ field: ColField; re: RegExp; not?: RegExp }> = [
   { field: 'sub_kegiatan',   re: /sub\s*-?\s*keg/i },
   { field: 'kegiatan',       re: /\bkegiatan\b/i, not: /sub\s*-?\s*keg/i },
   { field: 'program',        re: /\bprogram\b/i },
-  { field: 'sasaran',        re: /\bsasaran\b/i, not: /program|kegiatan/i },
+  // "Sasaran (Outcome)" = kolom outcome, bukan nama sasaran (unduhan Data Entry).
+  { field: 'sasaran',        re: /\bsasaran\b/i, not: /program|kegiatan|outcome|output/i },
   { field: 'tujuan',         re: /\btujuan\b/i },
   { field: 'kode',           re: /\bkode\b/i },
   { field: 'outcome',        re: /out\s*(put|come)/i },
-  { field: 'indikator',      re: /indikator/i },
+  // 'Indikator Induk' (unduhan Data Entry) dikecualikan dari 'indikator': tanpa `not`, kolom itu
+  // direbut sebagai kolom indikator kalau letaknya lebih kiri — teks induk tersimpan jadi indikator.
+  { field: 'indikator',      re: /indikator/i, not: /induk/i },
+  { field: 'indikator_induk', re: /indikator\s*induk/i },
   { field: 'satuan',         re: /satuan/i },
   { field: 'jenis',          re: /jenis/i },
   { field: 'anggaran',       re: /^rp$|anggaran|pagu/i },
@@ -240,7 +246,7 @@ function resolveColumns(
   cocokkanLewatIsi('kode', RE_KODE);
   if (pick.target_tahunan === undefined || score(pick.target_tahunan, RE_ANGKA) === 0) {
     const teks = new Set([pick.tujuan, pick.sasaran, pick.program, pick.kegiatan,
-      pick.sub_kegiatan, pick.outcome, pick.indikator, pick.satuan, pick.jenis, pick.kode]);
+      pick.sub_kegiatan, pick.outcome, pick.indikator, pick.indikator_induk, pick.satuan, pick.jenis, pick.kode]);
     const kandidat = [...heads.keys()]
       .filter(c => !dipakaiPeriode.has(c) && !teks.has(c))
       .sort((a, b) => score(b, RE_ANGKA) - score(a, RE_ANGKA))[0];
@@ -271,12 +277,12 @@ function resolveColumns(
   const cols: ColMap = {
     tujuan: g('tujuan'), sasaran: g('sasaran'), kode: g('kode'), program: g('program'),
     kegiatan: g('kegiatan'), sub_kegiatan: g('sub_kegiatan'), outcome: g('outcome'),
-    indikator: g('indikator'), satuan: g('satuan'), target_tahunan: g('target_tahunan'),
+    indikator: g('indikator'), indikator_induk: g('indikator_induk'), satuan: g('satuan'), target_tahunan: g('target_tahunan'),
     anggaran: g('anggaran'), jenis: g('jenis'), bulan, tw,
   };
 
   const fields: ColField[] = ['tujuan', 'sasaran', 'kode', 'program', 'kegiatan', 'sub_kegiatan',
-    'outcome', 'indikator', 'satuan', 'target_tahunan', 'anggaran', 'jenis'];
+    'outcome', 'indikator', 'indikator_induk', 'satuan', 'target_tahunan', 'anggaran', 'jenis'];
   const report: ColReport[] = fields.map(f => {
     const c = pick[f];
     return {
@@ -310,13 +316,20 @@ function findHeader(grid: Grid): { rHead: number; headSpan: number; dataStart: n
     // baris data pertama menutup blok header.
     let span = 1;
     for (let k = 1; k <= 2 && r + k < grid.length; k++) {
-      const nxt = (grid[r + k] ?? []).join(' | ').toLowerCase();
+      const sel = grid[r + k] ?? [];
+      // Baris ber-angka (≥ 2 sel angka murni) itu data/penomoran, bukan lanjutan judul — kalau
+      // tidak, baris data pertama yang nama programnya "PROGRAM …" tertelan jadi judul.
+      if (sel.filter(x => /^-?[\d.,]+\s*%?$/.test(x)).length >= 2) break;
+      const nxt = sel.join(' | ').toLowerCase();
       if (/indikator|program|kegiatan|target|tw|jan|satuan/.test(nxt)) span = k + 1;
       else break;
     }
     let dataStart = r + span;
-    const numRow = grid[dataStart] ?? [];
-    if (numRow.filter(x => /^\d+$/.test(x)).length >= 5) dataStart++;
+    // Baris penomoran kolom matriks ("1 2 3 …"): angka BERURUTAN naik satu. Dulu cukup "≥ 5 sel
+    // angka" — baris data unduhan Data Entry (No, target, TW 1–4) memenuhinya dan baris data
+    // PERTAMA ikut terbuang.
+    const angka = (grid[dataStart] ?? []).filter(x => /^\d+$/.test(x)).map(Number);
+    if (angka.length >= 5 && angka.every((n, i) => n === angka[0] + i)) dataStart++;
     return { rHead: r, headSpan: span, dataStart };
   }
   return null;
@@ -431,6 +444,7 @@ export async function parseRenaksiFile(
       induk_kegiatan: induk.kegiatan,
       outcome: sanitize(get(row, cols.outcome), LEN.outcome) || null,
       indikator,
+      indikator_induk: sanitize(get(row, cols.indikator_induk), LEN.indikator) || null,
       satuan: sanitize(get(row, cols.satuan), LEN.satuan) || 'Persen',
       jenis: jenis ?? 'Akumulatif',
       target_tahunan: tahunan ?? 0,
@@ -455,7 +469,11 @@ export async function parseRenaksiFile(
       const v = sanitize(get(row, c), LEN.nama);
       if (v) isiKolom.push({ level: lv, nama: v });
     }
-    const s1 = isiKolom.length === 1 ? isiKolom[0].level : null;
+    // Matriks: satu kolom entitas terisi per baris. Daftar DATAR (unduhan Excel Data Entry): baris
+    // juga memuat kolom induknya — tingkatnya = kolom entitas TERDALAM yang terisi. Dulu baris datar
+    // tidak punya sinyal kolom: tanpa kode ia dilewati, dan nama induk "PROGRAM …" memicu kata kunci
+    // sehingga baris kegiatan terbaca program — unduhan Data Entry tidak pernah bisa diimpor balik.
+    const s1 = isiKolom.length >= 1 ? isiKolom[isiKolom.length - 1].level : null;
 
     // ── Sinyal 2: struktur kode ──
     const s2 = kode ? levelFromKode(kode) : null;
@@ -514,6 +532,18 @@ export async function parseRenaksiFile(
     if (!nama) {
       warnings.push(`Baris ${r + 1}: nama ${level} kosong — dilewati.`);
       continue;
+    }
+
+    // Baris datar membawa induknya sendiri: kolom entitas di ATAS tingkat baris ini menimpa stack
+    // (urutan baris daftar datar bukan urutan pohon, jadi stack dari baris sebelumnya tidak berlaku).
+    if (isiKolom.length > 1) {
+      for (const x of isiKolom) {
+        if (x.level === level) break;
+        if (x.level === 'tujuan') stack.tujuan = x.nama;
+        else if (x.level === 'sasaran') stack.sasaran = x.nama;
+        else if (x.level === 'program') stack.program = x.nama;
+        else if (x.level === 'kegiatan') stack.kegiatan = x.nama;
+      }
     }
 
     // ── Perbarui stack hierarki ──

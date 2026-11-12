@@ -31,7 +31,7 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
 }
 
 fs.mkdirSync(outDir, { recursive: true })
-  const sumber = ['lib/shared/uuid.ts', 'lib/shared/desimal.ts', 'lib/data/db.ts', 'lib/data/locks.ts', 'lib/renaksi/ganti-nama.ts', 'lib/renaksi/rantai.ts', 'lib/data/rencana-aksi.ts', 'app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx']
+  const sumber = ['lib/shared/uuid.ts', 'lib/shared/desimal.ts', 'lib/shared/nama-resmi.ts', 'lib/data/db.ts', 'lib/data/locks.ts', 'lib/renaksi/ganti-nama.ts', 'lib/renaksi/rantai.ts', 'lib/data/rencana-aksi.ts', 'app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx']
 try {
   execSync(
     `npx tsc ${sumber.map((f) => `"${path.join(repo, f)}"`).join(' ')}`

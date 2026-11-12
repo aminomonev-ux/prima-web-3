@@ -8,6 +8,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, FileUp, Upload, X } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
+import { pilihDialog } from '@/components/ui/ConfirmDialog';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import { LEVEL_LABELS, type RaLevel } from '../_lib/types';
 
@@ -28,6 +29,7 @@ interface ImpRow {
   induk_kegiatan: string | null;
   outcome: string | null;
   indikator: string;
+  indikator_induk: string | null;
   satuan: string;
   jenis: 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
   target_tahunan: number;
@@ -50,10 +52,29 @@ interface Parsed {
 
 type Mode = 'tambah' | 'upsert' | 'ganti';
 
+interface DampakImpor {
+  gantiNama: { level: RaLevel; dari: string; ke: string; induk: string | null; indukBaru: string | null; indukProgramBaru: string | null };
+  turunan: number;
+}
+const LABEL_TURUNAN: Partial<Record<RaLevel, string>> = {
+  tujuan: 'sasaran', sasaran: 'program', program: 'kegiatan/sub kegiatan', kegiatan: 'sub kegiatan',
+};
+function kalimatDampak(d: readonly DampakImpor[]): string {
+  const baris = d.slice(0, 6).map(({ gantiNama: g, turunan }) => {
+    const apa = g.indukBaru
+      ? `${LEVEL_LABELS[g.level]} "${g.ke}" pindah ke "${g.indukBaru}"`
+      : `${LEVEL_LABELS[g.level]} "${g.dari}" berganti nama jadi "${g.ke}"`;
+    return `• ${apa} — ${turunan} ${LABEL_TURUNAN[g.level] ?? 'baris'} di bawahnya tidak ada di berkas.`;
+  });
+  return `${baris.join('\n')}${d.length > 6 ? `\n• … dan ${d.length - 6} lagi` : ''}\n\n`
+    + '"Ikut pindahkan" membawa turunan itu ke nama/lokasi baru (seperti Data Entry). '
+    + '"Biarkan di tempat lama" membuat turunan tetap menunjuk nama lama — hierarkinya terbelah.';
+}
+
 const COL_LABEL: Record<string, string> = {
   tujuan: 'Tujuan', sasaran: 'Sasaran', kode: 'Kode', program: 'Program',
   kegiatan: 'Kegiatan', sub_kegiatan: 'Sub Kegiatan', outcome: 'Output/Outcome',
-  indikator: 'Indikator Kinerja', satuan: 'Satuan', target_tahunan: 'Target Tahunan',
+  indikator: 'Indikator Kinerja', indikator_induk: 'Indikator Induk', satuan: 'Satuan', target_tahunan: 'Target Tahunan',
   anggaran: 'Anggaran (Rp)', jenis: 'Jenis Indikator',
 };
 const SRC_BADGE: Record<ColSource, { label: string; warn: boolean }> = {
@@ -160,6 +181,7 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
         induk_kegiatan: r.induk_kegiatan,
         outcome: r.outcome,
         indikator: r.indikator,
+        indikator_induk: r.indikator_induk,
         satuan: r.satuan,
         jenis: r.jenis,
         target_tahunan: r.target_tahunan,
@@ -167,9 +189,31 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
         bulan: r.bulan,
         anggaran: r.anggaran,
       }));
+      // Ganti nama / pindah lewat berkas yang meninggalkan turunan (tidak ada di berkas): tanya dulu.
+      // Server menghitung ulang saat commit; layar hanya mengirim jawabannya.
+      let bawaTurunan = true;
+      try {
+        const rd = await fetch('/api/rencana-aksi/import?step=dampak', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tahun, mode, rows }),
+        });
+        const jd = await rd.json().catch(() => null) as { ok?: boolean; dampak?: DampakImpor[] } | null;
+        if (jd?.ok && jd.dampak?.length) {
+          const pilihan = await pilihDialog({
+            title: 'Turunannya tidak ada di berkas',
+            message: kalimatDampak(jd.dampak),
+            confirmLabel: 'Ikut pindahkan',
+            altLabel: 'Biarkan di tempat lama',
+            variant: 'primary',
+          });
+          if (pilihan === null) return;
+          bawaTurunan = pilihan === 'utama';
+        }
+      } catch { /* pemeriksaan gagal = bawaan (ikut dijalarkan), sama seperti Data Entry */ }
+
       const res = await fetch('/api/rencana-aksi/import?step=commit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tahun, mode, rows }),
+        body: JSON.stringify({ tahun, mode, rows, bawa_turunan: bawaTurunan }),
       });
       const json = await res.json();
       if (!json.ok) { notify(json.error ?? 'Gagal menyimpan', 'error'); return; }
@@ -178,7 +222,10 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
         + `${json.dilewati ? `, ${json.dilewati} dilewati` : ''})`
         + `${json.disesuaikan ? ` · ${json.disesuaikan} baris mengikuti nama yang sudah tersimpan` : ''}`
         // Dicatat supaya E-Anggaran & PK menawarkannya sebagai ganti nama/pindah induk.
-        + `${json.gantiNama?.length ? ` · ${json.gantiNama.length} ganti nama/pindah induk diteruskan ke E-Anggaran & PK` : ''}`;
+        + `${json.gantiNama?.length ? ` · ${json.gantiNama.length} ganti nama/pindah induk diteruskan ke E-Anggaran & PK` : ''}`
+        + `${json.tautanDiisi ? ` · ${json.tautanDiisi} tautan indikator induk diisi` : ''}`
+        + `${json.tautanTakDikenal?.length ? ` · ${json.tautanTakDikenal.length} indikator induk tidak dikenali (tautannya tidak diisi)` : ''}`
+        + `${json.turunanDijalarkan ? ` · ${json.turunanDijalarkan} baris turunan ikut dipindah` : ''}`;
       if (json.ditahan?.length) {
         notify(`${pesan} · ${json.ditahan.length} ditahan: ${json.ditahan[0].alasan}`, 'warning');
       } else {

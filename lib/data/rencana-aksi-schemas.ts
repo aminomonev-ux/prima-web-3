@@ -239,6 +239,8 @@ export const ImportCommitRowSchema = z.object({
   induk_kegiatan: z.string().trim().max(255).nullable().default(null),
   outcome: z.string().trim().max(500).nullable().default(null),
   indikator: z.string().trim().min(1, 'Indikator wajib').max(500),
+  // Teks indikator INDUK dari kolom "Indikator Induk" unduhan Data Entry; null = jangan sentuh tautan.
+  indikator_induk: z.string().trim().max(500).nullable().default(null),
   satuan: z.string().trim().min(1).max(50).default('Persen'),
   jenis: JenisSchema.default('Akumulatif'),
   target_tahunan: AngkaDesimal.default(0),
@@ -251,6 +253,9 @@ export const ImportCommitSchema = z.object({
   tahun: TahunSchema,
   mode: ImportModeSchema,
   rows: z.array(ImportCommitRowSchema).min(1, 'Tidak ada baris untuk disimpan').max(500, 'Maksimal 500 baris sekali impor'),
+  // Ganti nama/pindah lewat berkas ikut dijalarkan ke turunan yang TIDAK ada di berkas (seperti Data
+  // Entry). Bawaan ya; layar menanyakannya lebih dulu lewat `step=dampak`.
+  bawa_turunan: z.boolean().default(true),
 });
 
 export const ExportQuerySchema = z.object({
