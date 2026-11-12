@@ -53,7 +53,10 @@ export type IkiRenaksiImportRow = {
 export async function GET(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
-  const limited = await ikiRateLimit(g.session.userId, 'import-renaksi', 10);
+  // `pantau=1` = editor DRAFT memeriksa "Rencana Aksi berubah" tiap dibuka
+  // (docs/CONCEPT-renaksi-terhubung.md §6): bacaan yang sama, tanpa jejak audit per buka.
+  const pantau = new URL(req.url).searchParams.get('pantau') === '1';
+  const limited = await ikiRateLimit(g.session.userId, pantau ? 'pantau-renaksi' : 'import-renaksi', pantau ? 60 : 10);
   if (limited) return limited;
 
   const tahunRaw = new URL(req.url).searchParams.get('tahun') ?? '';
@@ -108,6 +111,7 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  if (pantau) return NextResponse.json({ ok: true, tahun, rows });
   await writeAuditLog({
     req, eventType: 'IKI_IMPORT_RENAKSI', userId: g.session.userId, username: g.session.username,
     detail: `Fetch import Renaksi IKI tahun ${tahun}: ${rows.length} baris`,

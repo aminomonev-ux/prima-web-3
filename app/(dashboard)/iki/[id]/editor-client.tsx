@@ -39,6 +39,10 @@ import {
   pejabatOptionValue, resolvePejabat,
 } from '../_lib/types';
 import { isianRenaksi, isiGrupDariRenaksi, renaksiDipakai } from '../_lib/isi-renaksi';
+import { bandingKartuRenaksi, terapkanBandingKartu, kunciKartu, kalimatSpandukKartu } from '../_lib/banding-renaksi';
+import LencanaRenaksi from '@/components/renaksi/LencanaRenaksi';
+import { SpandukSelaras, DialogSelaras, type BagianSelaras } from '@/components/renaksi/SelarasRenaksi';
+import { fetchJson } from '@/lib/shared/api';
 
 interface Props {
   username: string;
@@ -92,6 +96,43 @@ export default function EditorClient({ username, role, themePreference, initialD
   /** Impor butuh minimal satu kolom isian bertanda — Kolom TW (I–IV) saja tidak mengisi apa pun. */
   const adaPeranIsi = !!tabel && Object.keys(tabel.peran).some(k => k !== 'triwulan');
   const [modalTemplat, setModalTemplat] = useState<{ nama: string; bawaIsi: boolean; menyimpan: boolean } | null>(null);
+
+  // Rencana Aksi berubah? Hanya DRAFT non-CUSTOM (dokumen FINAL diam — keputusan pemilik;
+  // CUSTOM tidak punya tautan per baris). Dibandingkan dengan ISI LAYAR lewat renaksi_id.
+  const [renaksiKini, setRenaksiKini] = useState<{ tahun: string; rows: RenaksiImportRow[] } | null>(null);
+  const [perbaruiBuka, setPerbaruiBuka] = useState(false);
+  const pantauRenaksi = !readOnly && !isCustom;
+  useEffect(() => {
+    if (!pantauRenaksi) return;
+    let alive = true;
+    (async () => {
+      const d = await fetchJson<unknown>(`/api/iki/import-renaksi?tahun=${doc.tahun}&pantau=1`);
+      if (alive && d.ok) setRenaksiKini({ tahun: doc.tahun, rows: (d as unknown as { rows: RenaksiImportRow[] }).rows });
+    })();
+    return () => { alive = false; };
+  }, [pantauRenaksi, doc.tahun]);
+  const bandingRa = useMemo(
+    () => (pantauRenaksi && renaksiKini?.tahun === doc.tahun ? bandingKartuRenaksi(doc.rhk, renaksiKini.rows) : null),
+    [pantauRenaksi, renaksiKini, doc.tahun, doc.rhk],
+  );
+  const kalimatRa = bandingRa ? kalimatSpandukKartu(bandingRa, doc.tahun) : null;
+  function terapkanPerbarui(pilih: Set<string>) {
+    if (!bandingRa) return;
+    setDoc(d => ({ ...d, rhk: terapkanBandingKartu(d.rhk, bandingRa, pilih) }));
+    setDirty(true);
+    setPerbaruiBuka(false);
+    toast.success(`${pilih.size} perubahan dari Rencana Aksi diterapkan ke form. Periksa, lalu Simpan.`);
+  }
+  const judulKartu = (i: number) => `Grup ${doc.rhk[i]?.no_urut} · ${doc.rhk[i]?.rhk || doc.rhk[i]?.indikator || 'kartu'}`;
+  const bagianPerbarui: BagianSelaras[] = bandingRa ? [
+    { judul: 'Isinya berbeda dari Rencana Aksi', ket: 'Kartu disamakan dengan Rencana Aksi. Uraian & target aksi kartu tidak disentuh.',
+      items: bandingRa.berubah.map(b => ({ kunci: kunciKartu.samakan(b.index), bawaan: true, isi: judulKartu(b.index),
+        ket: b.kolom.map(([l, a, c]) => `${l}: ${a || '—'} → ${c || '—'}`).join('\n') })) },
+    { judul: 'Tidak ada lagi di Rencana Aksi', ket: 'Baris Renaksi-nya sudah dihapus. Kartu tidak dihapus; centang untuk melepas tautannya.',
+      items: bandingRa.hilang.map(i => ({ kunci: kunciKartu.lepas(i), bawaan: false, isi: judulKartu(i) })) },
+    { judul: 'Tidak ingin mengikuti Rencana Aksi?', ket: 'Lepas tautan kartu yang memang sengaja dibuat berbeda — pengingat berhenti untuk kartu itu.',
+      items: bandingRa.berubah.map(b => ({ kunci: kunciKartu.lepas(b.index), bawaan: false, isi: judulKartu(b.index) })) },
+  ] : [];
 
   useEffect(() => {
     let alive = true;
@@ -473,6 +514,14 @@ export default function EditorClient({ username, role, themePreference, initialD
           </div>
         )}
 
+        {pantauRenaksi && <SpandukSelaras kalimat={kalimatRa} onBuka={() => setPerbaruiBuka(true)} />}
+        {perbaruiBuka && bandingRa && (
+          <DialogSelaras judul={`Perbarui dari Rencana Aksi ${doc.tahun}`}
+            pengantar="Mengubah isi form ini saja — baru tersimpan setelah Anda klik Simpan. Tidak ada kartu yang dihapus."
+            bagian={bagianPerbarui} isLight={isLight} canEdit={!readOnly} labelTerapkan="Terapkan ke form"
+            onTutup={() => setPerbaruiBuka(false)} onTerapkan={terapkanPerbarui} />
+        )}
+
         {/* ── I. DATA PRIBADI ── */}
         <section className="iki-sec">
           <h2 className="iki-sec-title">I · Data Pribadi</h2>
@@ -701,7 +750,7 @@ export default function EditorClient({ username, role, themePreference, initialD
               {items.map(({ rhk: r, index }, ri) => (
                 <div key={index} className="iki-rhk">
                   <div className="iki-rhk-grid">
-                    <label className="iki-f wide"><span>Rencana Hasil Kerja</span>
+                    <label className="iki-f wide"><span>Rencana Hasil Kerja{r.renaksi_id != null && <LencanaRenaksi tahun={String(doc.tahun)} />}</span>
                       <textarea rows={2} value={r.rhk} disabled={readOnly} onChange={e => patchRhk(index, { rhk: e.target.value })} />
                     </label>
                     <label className="iki-f wide"><span>Indikator Kinerja Individu</span>
