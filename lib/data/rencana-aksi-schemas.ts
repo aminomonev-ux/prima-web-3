@@ -87,6 +87,9 @@ export const UpsertRencanaAksiSchema = z.object({
   anggaran_nominal: z.coerce.number().int().min(0).nullable().optional(),
   // Opsi A: 12 target bulanan (sub-kegiatan) → sumber derive q1-q4 target server-side.
   bulan_target: BulanArray.nullable().optional(),
+  // Tautan ke baris indikator INDUK (migration-renaksi-induk-indikator). NULL = belum diisi —
+  // data lama & impor memang tidak membawanya, dan layarlah yang mewajibkannya untuk baris baru.
+  induk_indikator_id: z.coerce.number().int().positive().nullable().optional(),
   // L51: optimistic lock untuk edit by id (form Data Entry). null/absent = create/legacy.
   expected_version: z.coerce.number().int().min(0).nullable().optional(),
 }).superRefine((v, ctx) => {

@@ -7,6 +7,47 @@ import { bulatkanDesimal } from '@/lib/shared/desimal';
 import { acquireBludLock } from '@/lib/data/locks';
 import { rencanaGantiNama, type GantiNama } from '@/lib/renaksi/ganti-nama';
 import type { RaLevel, UpsertRencanaAksiInput } from './rencana-aksi-schemas';
+import { INDUK_LEVEL, namaEntitas, namaIndukLangsung, type BarisRantai } from '@/lib/renaksi/rantai';
+
+/** Tautan indikator induk yang tidak sah — 400, bukan 500: yang salah pilihannya, bukan servernya. */
+export class RaIndukIndikatorError extends Error {
+  constructor(pesan: string) { super(pesan); this.name = 'RaIndukIndikatorError'; }
+}
+
+/**
+ * Tautan indikator induk harus benar-benar INDUK baris ini: satu tahun, satu tingkat di atas,
+ * dan nama entitasnya cocok dengan kolom induk baris. Tanpa cek ini id sembarang dari klien
+ * lolos begitu saja — soft-FK tidak menolak apa pun (L68).
+ */
+async function assertIndukIndikator(data: UpsertRencanaAksiInput): Promise<void> {
+  if (data.induk_indikator_id == null) return;
+  const levelInduk = INDUK_LEVEL[data.level];
+  if (!levelInduk) throw new RaIndukIndikatorError('Tujuan tidak punya indikator induk.');
+  const induk = await queryOne<BarisRantai & { tahun: number }>(sql`
+    SELECT id, level, tahun, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator, induk_indikator_id
+    FROM rencana_aksi WHERE id = ${data.induk_indikator_id}
+  `);
+  if (!induk) {
+    throw new RaIndukIndikatorError('Indikator induk yang dipilih tidak ada — mungkin baru dihapus. Muat ulang daftar.');
+  }
+  if (Number(induk.tahun) !== Number(data.tahun)) {
+    throw new RaIndukIndikatorError('Indikator induk berasal dari tahun lain.');
+  }
+  if (induk.level !== levelInduk) {
+    throw new RaIndukIndikatorError(`Indikator induk harus dari tingkat ${levelInduk}.`);
+  }
+  const anak: BarisRantai = {
+    id: 0, level: data.level, program: data.program,
+    kegiatan: data.kegiatan ?? null, sub_kegiatan: data.sub_kegiatan ?? null,
+    tujuan: data.tujuan ?? null, sasaran: data.sasaran ?? null,
+    indikator: data.indikator, induk_indikator_id: null,
+  };
+  const namaDiharapkan = (namaIndukLangsung(anak) ?? '').trim();
+  if (namaDiharapkan !== namaEntitas(induk).trim()
+      || (induk.level === 'kegiatan' && (induk.program ?? '').trim() !== data.program.trim())) {
+    throw new RaIndukIndikatorError('Indikator induk yang dipilih bukan milik induk baris ini.');
+  }
+}
 
 export class RaVersionConflictError extends Error {
   constructor() {
@@ -396,6 +437,7 @@ export async function upsertRencanaAksi(
           q4_realisasi         = COALESCE(${rr?.[3] ?? null}, q4_realisasi),
           anggaran_nominal     = ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null},
           bulan_target         = ${bulanTargetJson},
+          induk_indikator_id   = COALESCE(${data.induk_indikator_id ?? null}, induk_indikator_id),
           version              = version + 1,
           updated_by           = ${userId}
         WHERE id = ${id}
@@ -410,6 +452,8 @@ export async function upsertRencanaAksi(
     if (hasil) hasil.gantiNama = gantiNama;
     return id;
   };
+
+  await assertIndukIndikator(data);
 
   if (data.id) {
     // L51: CAS via version (bila klien kirim expected_version) + selalu bump version
@@ -438,7 +482,7 @@ export async function upsertRencanaAksi(
        program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
        target_rpjmd, target_tahunan,
        q1_target, q2_target, q3_target, q4_target, anggaran_nominal, bulan_target,
-       created_by, updated_by)
+       induk_indikator_id, created_by, updated_by)
     VALUES (
       ${data.tahun}, ${data.level}, ${data.kode ?? null}, ${data.sasaran ?? null}, ${data.tujuan ?? null},
       ${data.outcome_program ?? null}, ${data.outcome_kegiatan ?? null}, ${data.outcome_sub_kegiatan ?? null},
@@ -447,6 +491,7 @@ export async function upsertRencanaAksi(
       ${data.target_rpjmd}, ${data.target_tahunan},
       ${dq1}, ${dq2}, ${dq3}, ${dq4},
       ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null}, ${bulanTargetJson},
+      ${data.induk_indikator_id ?? null},
       ${userId}, ${userId}
     ) AS new
     ON DUPLICATE KEY UPDATE
@@ -470,6 +515,7 @@ export async function upsertRencanaAksi(
       q4_target            = new.q4_target,
       anggaran_nominal     = new.anggaran_nominal,
       bulan_target         = new.bulan_target,
+      induk_indikator_id   = COALESCE(new.induk_indikator_id, rencana_aksi.induk_indikator_id),
       version              = rencana_aksi.version + 1,
       updated_by           = new.updated_by
   ` as unknown as Array<{ insertId: number }>;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Database, Plus, Edit, Sliders, Tag, AlertCircle, FolderOpen, FileUp, AlertTriangle,
 } from 'lucide-react';
@@ -19,6 +19,7 @@ import { usePenanda } from '../_lib/penanda';
 import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
 import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
 import { kalimatPemakai } from '@/lib/renaksi/pemakai';
+import { INDUK_LEVEL, namaEntitas, indikatorInduk, entitasAnak, indikatorEntitas, denganNilaiTersimpan } from '@/lib/renaksi/rantai';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
 import ImportRenaksiModal from './ImportRenaksiModal';
 
@@ -63,11 +64,16 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<RaRow | null>(null);
 
-  // Parent rows utk dropdown (fetch sesuai kebutuhan level)
-  const [parentTujuans, setParentTujuans] = useState<string[]>([]);
-  const [parentSasarans, setParentSasarans] = useState<string[]>([]);
-  const [parentPrograms, setParentPrograms] = useState<string[]>([]);
-  const [parentKegiatans, setParentKegiatans] = useState<RaRow[]>([]);
+  // Baris INDUK level ini — bukan cuma namanya. Rantai pilihan mengambil indikator induk dari
+  // baris yang sama, jadi daftar induk dan daftar indikatornya tidak boleh terpisah.
+  const [indukRows, setIndukRows] = useState<RaRow[]>([]);
+  // Khusus sub-kegiatan: baris program dipakai menyaring kegiatan lewat indikator program.
+  const [programRows, setProgramRows] = useState<RaRow[]>([]);
+  // Tautan yang DISIMPAN: id baris indikator induk langsung.
+  const [indukIndikatorId, setIndukIndikatorId] = useState<number | null>(null);
+  // Khusus sub-kegiatan: indikator program hanya menyaring daftar kegiatan, tidak disimpan.
+  const [programIndikatorId, setProgramIndikatorId] = useState<number | null>(null);
+  const [indikatorBaru, setIndikatorBaru] = useState(false);
 
   const levelRows = rows.filter(r => r.level === level);
   const isSub = level === 'sub-kegiatan';
@@ -85,30 +91,17 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     resetForm();
   }, [level, fokusEditId]);
 
-  // Fetch parent dropdown options sesuai level
+  // Fetch baris induk sesuai level: nama untuk dropdown, indikator untuk rantai pilihan.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        if (level === 'sasaran') {
-          const tujuans = await apiList(selectedYear, 'tujuan');
-          if (!cancelled) setParentTujuans(Array.from(new Set(tujuans.map(r => r.program).filter(Boolean))));
-        } else if (level === 'program') {
-          const sasarans = await apiList(selectedYear, 'sasaran');
-          if (!cancelled) setParentSasarans(Array.from(new Set(sasarans.map(r => r.program).filter(Boolean))));
-        } else if (level === 'kegiatan') {
-          const programs = await apiList(selectedYear, 'program');
-          if (!cancelled) setParentPrograms(Array.from(new Set(programs.map(r => r.program).filter(Boolean))));
-        } else if (level === 'sub-kegiatan') {
-          const [programs, kegiatans] = await Promise.all([
-            apiList(selectedYear, 'program'),
-            apiList(selectedYear, 'kegiatan'),
-          ]);
-          if (!cancelled) {
-            setParentPrograms(Array.from(new Set(programs.map(r => r.program).filter(Boolean))));
-            setParentKegiatans(kegiatans);
-          }
-        }
+        const levelInduk = INDUK_LEVEL[level];
+        const [induk, programs] = await Promise.all([
+          levelInduk ? apiList(selectedYear, levelInduk) : Promise.resolve([] as RaRow[]),
+          level === 'sub-kegiatan' ? apiList(selectedYear, 'program') : Promise.resolve([] as RaRow[]),
+        ]);
+        if (!cancelled) { setIndukRows(induk); setProgramRows(programs); }
       } catch (err) {
         if (!cancelled) notify((err as Error).message || 'Gagal muat opsi parent', 'error');
       }
@@ -116,10 +109,47 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     return () => { cancelled = true; };
   }, [level, selectedYear, notify]);
 
-  // Untuk sub-kegiatan: kegiatans difilter berdasarkan program yg dipilih
-  const filteredKegiatans = level === 'sub-kegiatan' && program
-    ? Array.from(new Set(parentKegiatans.filter(r => r.program === program).map(r => r.kegiatan).filter((k): k is string => !!k)))
-    : Array.from(new Set(parentKegiatans.map(r => r.kegiatan).filter((k): k is string => !!k)));
+  const namaOpsiInduk = Array.from(new Set(indukRows.map(namaEntitas).filter(Boolean)));
+  const namaOpsiProgram = Array.from(new Set(programRows.map(namaEntitas).filter(Boolean)));
+  const opsiProgramSelect = level === 'sub-kegiatan' ? namaOpsiProgram : namaOpsiInduk;
+
+  // ── Rantai pilihan (lib/renaksi/rantai.ts, konsep §4–§5) ─────────────────
+  const konteksInduk = level === 'sasaran' ? { nama: tujuan }
+    : level === 'program' ? { nama: sasaran }
+    : level === 'kegiatan' ? { nama: program }
+    : level === 'sub-kegiatan' ? { nama: kegiatan, program }
+    : { nama: '' };
+  const indukIndikatorLabel = level === 'sasaran' ? 'Indikator Tujuan'
+    : level === 'program' ? 'Indikator Sasaran'
+    : level === 'kegiatan' ? 'Indikator Program'
+    : 'Indikator Kegiatan';
+
+  // Indikator induk yang boleh dipilih untuk entitas yang sedang diisi.
+  const opsiIndukIndikator = level === 'tujuan' ? [] : indikatorInduk(indukRows, level, konteksInduk);
+  // Sub-kegiatan: indikator PROGRAM menyaring kegiatan; indikator KEGIATAN yang disimpan.
+  const opsiProgramIndikator = level === 'sub-kegiatan'
+    ? indikatorInduk(programRows, 'kegiatan', { nama: program }) : [];
+  const opsiProgramUntukLevel = level === 'sub-kegiatan' ? opsiProgramIndikator : opsiIndukIndikator;
+  const opsiKegiatan = level === 'sub-kegiatan' && programIndikatorId != null
+    ? entitasAnak(indukRows, 'kegiatan', programIndikatorId, program)
+    : [];
+
+  // Indikator milik entitas ini (opsi "indikator sendiri").
+  const namaEntitasSendiri = (level === 'kegiatan' ? kegiatan
+    : level === 'sub-kegiatan' ? subKegiatan : program).trim();
+  const opsiIndikatorSendiri = level === 'tujuan'
+    ? [] : indikatorEntitas(rows, level, { nama: namaEntitasSendiri, program });
+  const opsiIndikatorTampil = denganNilaiTersimpan(opsiIndikatorSendiri, indikator);
+
+  /** Opsi select indikator induk; nilai tersimpan yang tak ada di daftar tetap ditampilkan. */
+  function opsiSelect(o: { id: number; indikator: string }[], terpilih: number | null) {
+    const daftar = [{ value: '', label: '— Pilih Indikator —' },
+      ...o.map(x => ({ value: String(x.id), label: x.indikator }))];
+    if (terpilih != null && !o.some(x => x.id === terpilih)) {
+      daftar.splice(1, 0, { value: String(terpilih), label: '(tersimpan) indikator induk ini tidak ada di daftar' });
+    }
+    return daftar;
+  }
 
   function resetForm() {
     setSasaran(''); setTujuan(''); setProgram(''); setKegiatan(''); setSubKeg(''); setIndikator('');
@@ -130,6 +160,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setQ1(25); setQ2(25); setQ3(25); setQ4(25);
     setAnggaranNominal(0);
     setBulanTarget(Array(12).fill(0));
+    setIndukIndikatorId(null);
+    setProgramIndikatorId(null);
+    setIndikatorBaru(false);
     setEditingId(null);
     setEditingVersion(null);
   }
@@ -153,6 +186,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     }
     if (level === 'sub-kegiatan' && !subKegiatan.trim()) {
       toast.error('Nama sub kegiatan tidak boleh kosong!'); return;
+    }
+    // Konsep §6.1: baris BARU wajib tertaut. Baris lama yang tautannya kosong tidak dipaksa —
+    // "perbaiki satu angka" tidak boleh berubah jadi "petakan setahun".
+    if (level !== 'tujuan' && editingId == null && indukIndikatorId == null) {
+      toast.error(`Pilih ${indukIndikatorLabel} dulu — itu yang menentukan baris ini menjabarkan indikator induk yang mana.`);
+      return;
     }
 
     // Jenis mengubah CARA realisasi dihitung, bukan sekadar angkanya: Akumulatif
@@ -209,6 +248,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         q1_target: q1, q2_target: q2, q3_target: q3, q4_target: q4,
         anggaran_nominal: level === 'sub-kegiatan' ? (anggaranNominal || null) : null,
         bulan_target: isSub ? bulanTarget : null,
+        // Hanya tautan INDUK LANGSUNG yang disimpan; indikator program di level sub hanya
+        // menyaring daftar kegiatan, tidak pernah jadi isi kolom.
+        induk_indikator_id: level === 'tujuan' ? null : indukIndikatorId,
       });
       notify(
         (editingId ? `Berhasil memperbarui data entry: ${nm}` : `Berhasil menambah data entry baru: ${nm}`)
@@ -234,7 +276,10 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     }
   };
 
-  const handleEdit = (row: RaRow) => {
+  // useCallback, bukan fungsi biasa: efek "mendarat dari Realisasi Kinerja" memanggilnya, dan
+  // sejak baris induk ikut dibaca (untuk menurunkan Indikator Program di level sub-kegiatan)
+  // identitasnya berubah setiap render — tanpa ini daftar dependensi efek itu tidak bisa jujur.
+  const handleEdit = useCallback((row: RaRow) => {
     setEditingId(row.id);
     setEditingVersion(row.version);
     setSasaran(row.sasaran ?? '');
@@ -246,6 +291,12 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setKegiatan(row.kegiatan ?? '');
     setSubKeg(row.sub_kegiatan ?? '');
     setIndikator(row.indikator);
+    setIndukIndikatorId(row.induk_indikator_id ?? null);
+    // Sub-kegiatan: indikator program hanya bisa ditebak lewat induk dari baris kegiatan.
+    setProgramIndikatorId(level === 'sub-kegiatan'
+      ? (indukRows.find(r => r.id === row.induk_indikator_id)?.induk_indikator_id ?? null)
+      : null);
+    setIndikatorBaru(false);
     setKode(row.kode ?? '');
     setSatuan(row.satuan); setJenis(row.jenis);
     setTargetRpjmd(row.target_rpjmd); setTargetTahunan(row.target_tahunan);
@@ -255,7 +306,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setBulanTarget(Array.isArray(row.bulan_target) && row.bulan_target.length === 12
       ? row.bulan_target.slice() : Array(12).fill(null));
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-  };
+  }, [level, indukRows]);
 
   // Baris asli yang sedang diedit — pembanding untuk memberi tahu akibat perubahan
   // Target/Jenis. null saat menambah data baru (tidak ada "sebelum"-nya).
@@ -292,7 +343,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     // fokusEditId TIDAK dibersihkan dari sini — pembersihannya milik induk saat
     // pengguna berpindah menu. Kalau dibersihkan sekarang, efek reset di atas
     // langsung berjalan dan mengosongkan form yang baru saja dibuka.
-  }, [fokusEditId, rows]);
+  }, [fokusEditId, rows, handleEdit]);
 
   const handleDelete = async (row: RaRow) => {
     setBusy(true);
@@ -357,11 +408,11 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 </label>
                 <SoftSelect
                   value={sasaran}
-                  options={[{ value: '', label: '— Pilih Sasaran —' }, ...parentSasarans.map(s => ({ value: s, label: s }))]}
-                  onChange={(v) => { setSasaran(v); }}
+                  options={[{ value: '', label: '— Pilih Sasaran —' }, ...namaOpsiInduk.map(s => ({ value: s, label: s }))]}
+                  onChange={(v) => { setSasaran(v); setIndukIndikatorId(null); }}
                   placeholder="— Pilih Sasaran —"
                 />
-                {!parentSasarans.length && (
+                {!namaOpsiInduk.length && (
                   <p className="text-[10px] text-[#E24B4A] font-medium">Belum ada data Sasaran. Isi menu Data Entry Sasaran dulu.</p>
                 )}
               </div>
@@ -392,12 +443,31 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 </label>
                 <SoftSelect
                   value={tujuan}
-                  options={[{ value: '', label: '— Pilih Tujuan —' }, ...parentTujuans.map(t => ({ value: t, label: t }))]}
-                  onChange={(v) => { setTujuan(v); }}
+                  options={[{ value: '', label: '— Pilih Tujuan —' }, ...namaOpsiInduk.map(t => ({ value: t, label: t }))]}
+                  onChange={(v) => { setTujuan(v); setIndukIndikatorId(null); }}
                   placeholder="— Pilih Tujuan —"
                 />
-                {!parentTujuans.length && (
+                {!namaOpsiInduk.length && (
                   <p className="text-[10px] text-[#E24B4A] font-medium">Belum ada data Tujuan. Isi menu Data Entry Tujuan dulu.</p>
+                )}
+              </div>
+            )}
+
+            {/* Indikator Tujuan — induk yang dijabarkan sasaran ini (konsep §4) */}
+            {level === 'sasaran' && (
+              <div className="space-y-1 ra-cascade-cell">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Indikator Tujuan (Pilih)
+                </label>
+                <SoftSelect
+                  value={String(indukIndikatorId ?? '')}
+                  options={opsiSelect(opsiIndukIndikator, indukIndikatorId)}
+                  onChange={(v) => setIndukIndikatorId(v ? Number(v) : null)}
+                  placeholder="— Pilih Indikator Tujuan —"
+                  disabled={!tujuan}
+                />
+                {!tujuan && (
+                  <p className="text-[10px] text-slate-400 font-medium">Pilih Tujuan dulu — daftar indikatornya mengikuti tujuan itu.</p>
                 )}
               </div>
             )}
@@ -416,6 +486,25 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                   className="w-full rounded border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 focus:border-[#EF9F27] focus:outline-none"
                   placeholder="Ketik nama sasaran..."
                 />
+              </div>
+            )}
+
+            {/* Indikator Sasaran — induk yang dijabarkan program ini */}
+            {level === 'program' && (
+              <div className="space-y-1 ra-cascade-cell">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Indikator Sasaran (Pilih)
+                </label>
+                <SoftSelect
+                  value={String(indukIndikatorId ?? '')}
+                  options={opsiSelect(opsiIndukIndikator, indukIndikatorId)}
+                  onChange={(v) => setIndukIndikatorId(v ? Number(v) : null)}
+                  placeholder="— Pilih Indikator Sasaran —"
+                  disabled={!sasaran}
+                />
+                {!sasaran && (
+                  <p className="text-[10px] text-slate-400 font-medium">Pilih Sasaran dulu — daftar indikatornya mengikuti sasaran itu.</p>
+                )}
               </div>
             )}
 
@@ -459,12 +548,45 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 </label>
                 <SoftSelect
                   value={program}
-                  options={[{ value: '', label: '— Pilih Program —' }, ...parentPrograms.map(p => ({ value: p, label: p }))]}
-                  onChange={(v) => { setProgram(v); if (level === 'sub-kegiatan') setKegiatan(''); }}
+                  options={[{ value: '', label: '— Pilih Program —' }, ...opsiProgramSelect.map(p => ({ value: p, label: p }))]}
+                  onChange={(v) => {
+                    setProgram(v);
+                    setIndukIndikatorId(null);
+                    setProgramIndikatorId(null);
+                    if (level === 'sub-kegiatan') setKegiatan('');
+                  }}
                   placeholder="— Pilih Program —"
                 />
-                {!parentPrograms.length && (
+                {!opsiProgramSelect.length && (
                   <p className="text-[10px] text-[#E24B4A] font-medium">Belum ada data Program. Isi menu Data Entry Program dulu.</p>
+                )}
+              </div>
+            )}
+
+            {/* Indikator Program — kegiatan: jadi tautan tersimpan; sub: hanya menyaring kegiatan */}
+            {(level === 'kegiatan' || level === 'sub-kegiatan') && (
+              <div className="space-y-1 ra-cascade-cell">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Indikator Program (Pilih)
+                </label>
+                <SoftSelect
+                  value={String((level === 'sub-kegiatan' ? programIndikatorId : indukIndikatorId) ?? '')}
+                  options={opsiSelect(opsiProgramUntukLevel,
+                    level === 'sub-kegiatan' ? programIndikatorId : indukIndikatorId)}
+                  onChange={(v) => {
+                    const id = v ? Number(v) : null;
+                    if (level === 'sub-kegiatan') {
+                      // Kegiatan & indikator kegiatannya mengikuti indikator program yang baru.
+                      setProgramIndikatorId(id); setKegiatan(''); setIndukIndikatorId(null);
+                    } else {
+                      setIndukIndikatorId(id);
+                    }
+                  }}
+                  placeholder="— Pilih Indikator Program —"
+                  disabled={!program}
+                />
+                {!program && (
+                  <p className="text-[10px] text-slate-400 font-medium">Pilih Program dulu — daftar indikatornya mengikuti program itu.</p>
                 )}
               </div>
             )}
@@ -509,13 +631,35 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 </label>
                 <SoftSelect
                   value={kegiatan}
-                  options={[{ value: '', label: '— Pilih Kegiatan —' }, ...filteredKegiatans.map(k => ({ value: k, label: k }))]}
-                  onChange={setKegiatan}
+                  options={[{ value: '', label: '— Pilih Kegiatan —' }, ...opsiKegiatan.map(k => ({ value: k, label: k }))]}
+                  onChange={(v) => { setKegiatan(v); setIndukIndikatorId(null); }}
                   placeholder="— Pilih Kegiatan —"
-                  disabled={!program}
+                  disabled={!program || programIndikatorId == null}
                 />
-                {program && !filteredKegiatans.length && (
-                  <p className="text-[10px] text-[#E24B4A] font-medium">Belum ada Kegiatan untuk Program ini.</p>
+                {program && programIndikatorId == null && (
+                  <p className="text-[10px] text-slate-400 font-medium">Pilih Indikator Program dulu — daftar kegiatan mengikuti indikator itu.</p>
+                )}
+                {program && programIndikatorId != null && !opsiKegiatan.length && (
+                  <p className="text-[10px] text-[#E24B4A] font-medium">Belum ada Kegiatan di bawah indikator program ini.</p>
+                )}
+              </div>
+            )}
+
+            {/* Indikator Kegiatan — tautan yang DISIMPAN untuk sub kegiatan ini */}
+            {level === 'sub-kegiatan' && (
+              <div className="space-y-1 ra-cascade-cell">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Indikator Kegiatan (Pilih)
+                </label>
+                <SoftSelect
+                  value={String(indukIndikatorId ?? '')}
+                  options={opsiSelect(opsiIndukIndikator, indukIndikatorId)}
+                  onChange={(v) => setIndukIndikatorId(v ? Number(v) : null)}
+                  placeholder="— Pilih Indikator Kegiatan —"
+                  disabled={!kegiatan}
+                />
+                {!kegiatan && (
+                  <p className="text-[10px] text-slate-400 font-medium">Pilih Kegiatan dulu — daftar indikatornya mengikuti kegiatan itu.</p>
                 )}
               </div>
             )}
@@ -571,18 +715,56 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
               </div>
             )}
 
+            {/* Tujuan tetap manual — dialah sumber kosakata. Mulai sasaran, indikator DIPILIH dari
+                milik entitas itu sendiri; "tulis baru" tetap tersedia (konsep §4). */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Nama Indikator Kinerja (Input Manual)
+                {level === 'tujuan' ? 'Nama Indikator Kinerja (Input Manual)' : 'Nama Indikator Kinerja'}
               </label>
-              <input
-                type="text"
-                required
-                value={indikator}
-                onChange={(e) => setIndikator(e.target.value)}
-                className="w-full rounded border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 focus:border-[#EF9F27] focus:outline-none"
-                placeholder="Ketik nama indikator..."
-              />
+              {level === 'tujuan' ? (
+                <input
+                  type="text"
+                  required
+                  value={indikator}
+                  onChange={(e) => setIndikator(e.target.value)}
+                  className="w-full rounded border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 focus:border-[#EF9F27] focus:outline-none"
+                  placeholder="Ketik nama indikator..."
+                />
+              ) : (
+                <>
+                  <SoftSelect
+                    value={indikatorBaru ? '__baru__' : indikator}
+                    options={[
+                      { value: '', label: '— Pilih Indikator —' },
+                      ...opsiIndikatorTampil.map(o => ({ value: o, label: o })),
+                      { value: '__baru__', label: '＋ Tulis indikator baru' },
+                    ]}
+                    onChange={(v) => {
+                      if (v === '__baru__') { setIndikatorBaru(true); setIndikator(''); return; }
+                      setIndikatorBaru(false);
+                      setIndikator(v);
+                    }}
+                    placeholder="— Pilih Indikator —"
+                    disabled={!namaEntitasSendiri}
+                  />
+                  {(indikatorBaru || !opsiIndikatorTampil.length) && (
+                    <input
+                      type="text"
+                      required
+                      value={indikator}
+                      onChange={(e) => setIndikator(e.target.value)}
+                      className="mt-2 w-full rounded border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 focus:border-[#EF9F27] focus:outline-none"
+                      placeholder="Ketik indikator baru..."
+                    />
+                  )}
+                  {!namaEntitasSendiri && (
+                    <p className="text-[10px] text-slate-400 font-medium">Isi nama {level.replace('-', ' ')} dulu — daftar indikatornya mengikuti nama itu.</p>
+                  )}
+                  {namaEntitasSendiri && !opsiIndikatorTampil.length && (
+                    <p className="text-[10px] text-slate-400 font-medium">Belum ada indikator untuk entitas ini — tulis yang baru.</p>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3.5">

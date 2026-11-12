@@ -30,6 +30,7 @@ import {
   RaMonthlyManagedError,
   RaPeriodLockedError,
   RaPunyaAnakError,
+  RaIndukIndikatorError,
 } from '@/lib/data/rencana-aksi';
 import { guard } from './_guard';
 
@@ -99,6 +100,11 @@ export async function POST(req: NextRequest) {
     // pesannya jatuh jadi "Server error" 500 dan pengguna tak tahu harus apa.
     if (e instanceof RaPeriodLockedError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'PERIOD_LOCKED' }, { status: 400 });
+    }
+    // Tautan indikator induk yang tidak sah ditolak dengan pesan yang menyebut sebabnya —
+    // 500 akan membuat orang mengira fiturnya rusak, padahal pilihannya yang salah.
+    if (e instanceof RaIndukIndikatorError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'INDUK_INDIKATOR_TIDAK_SAH' }, { status: 400 });
     }
     console.error('[RA POST]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });

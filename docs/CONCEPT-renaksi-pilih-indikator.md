@@ -286,7 +286,7 @@ sekali, supaya migrasi bisa dipasang lebih dulu di server kantor tanpa menunggu 
 | **1** | Migrasi kolom `induk_indikator_id` + index; daftar kolom di `docs/schema-mysql.sql`; kolom di `RaRow` server & klien + `SELECT`-nya | `node scripts/check-schema.mjs` sinkron, `tsc` hijau, 52 baris tetap `NULL`, tidak ada perilaku berubah |
 | **2** | Aturan MURNI rantai (`lib/renaksi/rantai.ts`): daftar indikator induk untuk induk terpilih, daftar anak yang cocok (termasuk aturan "`NULL` ikut tampil"), pemisahan "milik entitas ini" vs "milik entitas lain" | uji PURE tanpa DB: induk kosong, anak `NULL`, dua induk berbeda, entitas tanpa indikator |
 | **3** | Layar Data Entry: urutan isian per tingkat, pemilih indikator induk & indikator sendiri, wajib untuk baris baru (§6.1), mode Edit menampilkan nilai tersimpan di luar daftar | coba di peramban tahun kotak pasir: alur program → indikator → kegiatan menyusut; baris lama tetap bisa disunting |
-| **4** | Server tulis: validasi tautan (ada, satu tahun, satu tingkat di atas, cocok nama induk), tautan tidak terhapus oleh pemanggil yang tidak mengirimnya, pagar hapus by id | uji DB: tautan silang ditolak, hapus induk tertaut ditolak, edit tanpa kolom tidak mengosongkan |
+| **4** | Pagar sisa: hapus induk yang masih ditunjuk (by id), impor mode `ganti` me-`NULL`-kan tautan anak | uji DB: hapus induk tertaut ditolak, `ganti` tidak meninggalkan tautan hantu |
 | **5** | Impor mode `ganti` me-`NULL`-kan tautan anak; duplikasi tahun menautkan ulang (§9) | uji DB 2098 → 2099: salinan tertaut ke baris 2099; `ganti` tidak meninggalkan tautan hantu |
 | **6** | Regresi + uji mutasi (§14) + coba layar penuh (tema terang, 375 px, Esc) | seluruh uji §14 hijau |
 
@@ -301,6 +301,22 @@ backfill), terdaftar di `docs/schema-mysql.sql`, kolom ikut di `RaRow` server & 
 `npx tsx scripts/test-renaksi-rantai.mts` (33). Catatan jujur: tiga ekspektasi uji pertama salah
 saya tulis sendiri — di level program, indikator induknya milik **sasaran**, bukan program;
 modulnya benar, ujinya yang dibetulkan.
+
+**Tahap 3 selesai** (12 Nov): rantai pilihan terpasang di `DataEntryForm.tsx` — urutan isian per
+tingkat, pemilih indikator induk (mati sampai induknya dipilih), indikator sendiri sebagai dropdown
+milik entitas itu + “tulis baru”, kegiatan di level sub disaring oleh indikator program, dan baris
+lama yang tautannya kosong tetap bisa disunting. Tautannya kini **disimpan**: kolom masuk
+`UpsertRencanaAksiSchema`, `INSERT`/`UPDATE` menulisnya, `ON DUPLICATE KEY` memakai `COALESCE`
+supaya pemanggil yang tidak mengirim kolom tidak mengosongkannya, dan `assertIndukIndikator`
+menolak tautan beda tahun / beda tingkat / bukan induk baris itu (400 `INDUK_INDIKATOR_TIDAK_SAH`).
+Karena itu simpan + validasi naik ke tahap ini; **tahap 4 tinggal pagar hapus dan impor `ganti`**.
+Uji mutasi baru: `scripts/test-renaksi-rantai-mutasi.mts` (6) membuang penjaga `NULL` dari salinan
+modul dan membuktikan baris lama memang lenyap — jadi uji biasa tidak bisa lolos tanpa penjaga itu.
+Bukti lain: uji DB kotak pasir 2099/2098 (8 — simpan, edit tanpa kolom, tiga penolakan), regresi
+`test-renaksi-audit` (55), `test-renaksi-pindah-induk` (39), `test-renaksi-pemakai` (11), `tsc` &
+`eslint` bersih. Catatan: perubahan ini sempat memunculkan satu peringatan
+`react-hooks/exhaustive-deps` (karena `handleEdit` kini membaca baris induk); diperbaiki dengan
+`useCallback` + dependensi yang jujur, bukan dengan `eslint-disable`.
 
 ---
 
