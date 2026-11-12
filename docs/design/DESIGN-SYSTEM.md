@@ -1727,7 +1727,7 @@ seperti `.bk-kode` tetap menang (deklarasi langsung selalu mengalahkan warisan).
 │  Tabel hasil render (atau empty state "Klik Cetak dulu")            │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
-*Tombol "Simpan Rekap PK" hanya muncul untuk view Penanggung Jawab.
+*Tombol "Simpan Rekap PK" DIBUANG 2026-11-12 — Form PK menghitung nominal BLUD langsung (docs/CONCEPT-pk-nominal-blud-langsung.md).
 ```
 
 **View matrix:**
@@ -1775,7 +1775,7 @@ async function onPdf() {
 | `saved_at` | DATETIME | Auto via CURRENT_TIMESTAMP |
 | `saved_by` | INT UNSIGNED | FK users.id, ON DELETE SET NULL |
 
-Pattern save: `withTransaction({tx,conn} => { DELETE old + bulkInsert new })` — replace-latest per versi. Audit log event `BLUD_SAVE_REKAP_PK`.
+Pattern save (sejarah — tabel tidak ditulis lagi sejak 2026-11-12): `withTransaction({tx,conn} => { DELETE old + bulkInsert new })` — replace-latest per versi. Audit log event `BLUD_SAVE_REKAP_PK`.
 
 ---
 

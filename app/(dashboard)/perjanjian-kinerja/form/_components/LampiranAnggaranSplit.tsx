@@ -4,15 +4,13 @@
 //           SEMUA indikator sasaran terpilih (+satuan, target) ikut dari Master Sasaran,
 //           auto-detect parent (sub → program+kegiatan otomatis).
 // ANGGARAN: cascading 3 dropdown dengan visibility toggle per level, keterangan
-//           dropdown SUMBER_DANA, tombol 🖉 router (A2 mode):
-//           - keterangan=BLUD → auto-fill nominal langsung
-//           - keterangan lain → prompt "Tambah BLUD ke nominal?" → fetch+jumlahkan
+//           dropdown SUMBER_DANA, tombol 🖉 → dialog AmbilNominalBlud (pilih DPA/Pergeseran
+//           + versi): keterangan=BLUD mengisi nominal, keterangan lain menambahkan BLUD.
 
 import { useState, useMemo, type Dispatch, type SetStateAction } from 'react'
-import { Plus, Sparkles, Pencil, Loader2, Info } from 'lucide-react'
+import { Plus, Sparkles, Pencil, Info } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
-import { confirmDialog } from '@/components/ui/ConfirmDialog'
-import { fetchJson } from '@/lib/shared/api'
+import AmbilNominalBlud from './AmbilNominalBlud'
 import PrimaButton from '@/components/ui/PrimaButton'
 import { pkMono as mono } from '@/lib/shared/pk-styles'
 import type { PkProgramHierarchy, PkSasaranRow, PkLevel, PkUnitKerja } from '../../_utils/pk-types'
@@ -294,7 +292,6 @@ function AnggaranPanel({
   const [subkegPick, setSubkegPick] = useState('')
   const [keterangan, setKeterangan] = useState<string>('BLUD')
   const [nominal, setNominal] = useState<number>(0)
-  const [bludLoading, setBludLoading] = useState(false)
   const [autoFilledFromBlud, setAutoFilledFromBlud] = useState(false)
   const [hint, setHint] = useState<string>('')
 
@@ -361,44 +358,16 @@ function AnggaranPanel({
     setForm(f => ({ ...f, anggaran: f.anggaran.filter((_, i) => i !== idx) }))
   }
 
-  // B6: rekap BLUD milik TAHUN DOKUMEN ini, dan versinya disebut di petunjuk. Tahun yang
-  // belum punya rekap dikatakan apa adanya — dulu terisi Rp 0 (atau angka tahun lain).
-  async function ambilNominalBlud(): Promise<{ nominal: number; sumber: string } | null> {
-    setBludLoading(true)
-    const d = await fetchJson<unknown>(`/api/perjanjian-kinerja/blud-nominal?unit=${encodeURIComponent(form.unit_pertama)}&tahun=${encodeURIComponent(form.tahun)}`)
-    setBludLoading(false)
-    if (!d.ok) { setHint(d.message); return null }
-    const r = d as unknown as { nominal: number; versi_dpa: string | null }
-    if (!r.versi_dpa) {
-      setHint(`Belum ada Rekap PK BLUD untuk TA ${form.tahun}. Simpan dulu lewat BLUD → Cetak → DPA · Penanggung Jawab → Simpan Rekap PK.`)
-      return null
-    }
-    return { nominal: r.nominal ?? 0, sumber: `Rekap PK TA ${form.tahun}, versi DPA ${r.versi_dpa.split('-').reverse().join('-')}` }
-  }
-
-  // Pencil router (A2):
-  // - keterangan=BLUD → auto-fill langsung
-  // - keterangan lain → prompt "Tambah BLUD ke nominal saat ini?"
-  async function handlePencilClick() {
-    if (!form.unit_pertama) return
-    setHint('')
-    if (keterangan === 'BLUD') {
-      const blud = await ambilNominalBlud()
-      if (!blud) return
-      setNominal(blud.nominal)
-      setAutoFilledFromBlud(true)
-      setHint(`BLUD auto-fill: ${fmtRp(blud.nominal)} (${blud.sumber})`)
-    } else {
-      // Prompt user
-      const ok = await confirmDialog({ title: 'Tambah Nominal BLUD', message: `Tambahkan nominal BLUD aggregate ke nominal saat ini (${fmtRp(nominal)})?\n\nKeterangan akan tetap "${keterangan}".`, confirmLabel: 'Tambah', variant: 'success' })
-      if (!ok) return
-      const blud = await ambilNominalBlud()
-      if (!blud) return
-      const total = (Number(nominal) || 0) + blud.nominal
-      setNominal(total)
-      setAutoFilledFromBlud(true)
-      setHint(`BLUD terambil: ${fmtRp(blud.nominal)} → Total: ${fmtRp(total)} (${blud.sumber})`)
-    }
+  // Tombol pensil membuka dialog pilih DPA/Pergeseran + versi (dihitung langsung, bukan foto
+  // Rekap PK). Keterangan BLUD = mengisi; keterangan lain = MENAMBAHKAN BLUD ke isian saat ini.
+  const [dialogBlud, setDialogBlud] = useState(false)
+  function pakaiNominalBlud(total: number, sumber: string) {
+    setDialogBlud(false)
+    setNominal(total)
+    setAutoFilledFromBlud(true)
+    setHint(keterangan === 'BLUD'
+      ? `BLUD: ${fmtRp(total)} (${sumber})`
+      : `BLUD ditambahkan → Total: ${fmtRp(total)} (${sumber})`)
   }
 
   const activeRows = form.anggaran.filter(r => !r._deleted)
@@ -461,14 +430,19 @@ function AnggaranPanel({
               }}
               placeholder="0"
               style={{ ...inputStyle, flex: 1, fontFamily: 'JetBrains Mono, ui-monospace, monospace', textAlign: 'right' }} />
-            <button onClick={handlePencilClick} disabled={disabled || bludLoading || !form.unit_pertama}
-              data-tooltip={keterangan === 'BLUD' ? 'Auto-fill nominal dari rekap BLUD' : `Tambah BLUD ke nominal "${keterangan}" saat ini`}
+            <button onClick={() => { setHint(''); setDialogBlud(true) }} disabled={disabled || !form.unit_pertama}
+              data-tooltip={keterangan === 'BLUD' ? 'Ambil nominal dari DPA / Pergeseran BLUD' : `Tambah BLUD ke nominal "${keterangan}" saat ini`}
               data-tooltip-pos="left"
-              style={btnIconAccent(disabled || bludLoading, '#EF9F27')}>
-              {bludLoading ? <Loader2 size={13} style={{ animation: 'pk-spin 1s linear infinite' }} /> : <Pencil size={13} />}
+              style={btnIconAccent(disabled, '#EF9F27')}>
+              <Pencil size={13} />
             </button>
           </div>
         </Field>
+        {dialogBlud && (
+          <AmbilNominalBlud unit={form.unit_pertama} tahun={form.tahun}
+            tambahKe={keterangan === 'BLUD' ? null : { nominal: Number(nominal) || 0, keterangan }}
+            onPakai={pakaiNominalBlud} onTutup={() => setDialogBlud(false)} />
+        )}
 
         {hint && (
           <div style={{

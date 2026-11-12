@@ -226,11 +226,22 @@ export const PkQuerySchema = z.object({
   jenis_pk:   JenisPkEnum.optional(),
 });
 
+// B6: tahun WAJIB, bukan opsional-dengan-cadangan — cadangan itu persis perilaku lamanya
+// (rekap tahun apa pun yang kebetulan paling baru).
+const TahunDokumen = z.string().regex(/^\d{4}$/, 'Tahun dokumen wajib (YYYY)').transform(Number);
+
+/** GET blud-nominal?mode=versi — daftar versi DPA & Pergeseran tahun itu. */
+export const BludVersiQuerySchema = z.object({ tahun: TahunDokumen });
+
+/**
+ * GET blud-nominal — nominal satu unit dari versi yang DIPILIH. Sumber & versi wajib: memilih
+ * "yang terbaru" diam-diam di server = foto basi lewat pintu lain (layar menawarkan yang berlaku).
+ */
 export const BludNominalQuerySchema = z.object({
   unit: z.string().trim().min(1, 'Unit kerja wajib').max(255),
-  // B6: WAJIB, bukan opsional-dengan-cadangan — cadangan itu persis perilaku lamanya
-  // (rekap tahun apa pun yang kebetulan paling baru).
-  tahun: z.string().regex(/^\d{4}$/, 'Tahun dokumen wajib (YYYY)').transform(Number),
+  tahun: TahunDokumen,
+  sumber: z.enum(['dpa', 'pergeseran'], { message: 'Sumber wajib: dpa atau pergeseran' }),
+  versi: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Versi wajib (YYYY-MM-DD)'),
 });
 
 /**

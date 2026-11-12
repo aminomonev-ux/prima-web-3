@@ -11,7 +11,7 @@
 // Theme-aware via CSS [data-theme="light"] di blud-shell <style> + token inline.
 
 import { useState, useEffect, useCallback } from 'react'
-import { Printer, Calendar, Save, History } from 'lucide-react'
+import { Printer, Calendar, History } from 'lucide-react'
 import { toast } from 'sonner'
 import PrimaButton from '@/components/ui/PrimaButton'
 import DownloadButton from '@/components/ui/DownloadButton'
@@ -74,7 +74,7 @@ const VIEW_OPTIONS: Record<Menu, Array<{ value: View; label: string }>> = {
   ],
 }
 
-export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: boolean }) {
+export default function CetakClient() {
   // ── State ──
   const [menu, setMenu] = useState<Menu>('dpa')
   const [view, setView] = useState<View>('dpa')
@@ -378,28 +378,6 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
     }
   }, [renderedData, renderedMeta, rawRows, rawVersi, rawMutasi, rawBabakKe, rawSimpanan, tahun, menu, view, tanggal, historyVersi, hanyaBergeser, catatanCakupan, logExport, ambilDirektur])
 
-  // ── Action: Simpan Rekap PK (hanya view penanggungJawab) ──
-  const onSimpanRekapPK = useCallback(async () => {
-    if (!renderedData) { toast.warning('Tekan Cetak dulu supaya rekapnya muncul.'); return }
-    if (menu !== 'dpa' || view !== 'penanggungJawab') return
-    try {
-      const r = await fetch('/api/blud/rekap-pk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tahun_anggaran: tahun, versi: historyVersi || null, rows: renderedData }),
-      })
-      const data = await r.json() as { ok?: boolean; message?: string }
-      if (!r.ok || !data.ok) {
-        toast.error(data.message ?? 'Rekap penanggung jawab belum tersimpan. Coba lagi.')
-        return
-      }
-      toast.success(data.message ?? 'Rekap penanggung jawab tersimpan.')
-    } catch (e) {
-      toast.error('Rekap gagal disimpan: ' + (e instanceof Error ? e.message : String(e)))
-    }
-  }, [renderedData, menu, view, historyVersi, tahun])
-
-  const showSimpanPK = bolehSimpanRekap && menu === 'dpa' && view === 'penanggungJawab'
   const adaBaris = Array.isArray(renderedData) && renderedData.length > 0
 
   // ── Toolbar ──
@@ -552,12 +530,6 @@ export default function CetakClient({ bolehSimpanRekap }: { bolehSimpanRekap: bo
                 apa pun untuk diunduh — tombol yang ujungnya "Data kosong" dimatikan sejak awal. */}
             <DownloadButton variant="pdf" label="PDF" onClick={onPdf} disabled={!adaBaris} />
             <DownloadButton variant="excel" label="Excel" onClick={onExcel} disabled={!adaBaris} />
-            {showSimpanPK && (
-              <PrimaButton menulis variant="purple" iconLeft={<Save size={14} />}
-                onClick={onSimpanRekapPK} disabled={!renderedData}>
-                Simpan Rekap PK
-              </PrimaButton>
-            )}
           </div>
         </div>
       </div>

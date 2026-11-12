@@ -18,6 +18,7 @@ import { auditRekapPJ } from './audit-pj'
 import { berSebelum, selisihSebelum, formatSelisih, totalSebelumSesudah } from './perubahan'
 import { KOLOM_SELISIH_PERUBAHAN } from './export/warna-delta'
 import type { AuditResult, AuditPjRow } from './audit-pj'
+import { kelompokPerPj, barisRekapPergeseran } from './rekap-pj'
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types
@@ -206,10 +207,8 @@ export function renderCetakHtml(args: RenderArgs): RenderResult {
     // Delta WAJIB dihitung sebelum penukaran di bawah: sesudah `jumlah` diisi
     // `pergeseran`, selisih keduanya selalu 0 dan spanduk DRAFT tak pernah muncul.
     const deltaRoot = hitungDeltaPergeseranRoot(asli)
-    // Pagu PASCA-geser — itu seluruh alasan rekap ini ada. `jumlah` di baris
-    // pergeseran masih angka DPA; yang berlaku setelah digeser ada di `pergeseran`.
-    const pascaGeser = asli.map(r => ({ ...r, jumlah: r.pergeseran }))
-    return renderPjView(pascaGeser, versi ?? tanggal, 'pergeseran', deltaRoot)
+    // Pagu PASCA-geser — itu seluruh alasan rekap ini ada (penukarannya dipakai juga Form PK).
+    return renderPjView(barisRekapPergeseran(asli), versi ?? tanggal, 'pergeseran', deltaRoot)
   }
   if (menu === 'pergeseran' && view === 'rekapPergeseran') {
     const asli = rows as PergeseranBaris[]
@@ -403,27 +402,8 @@ function renderPjView(
     + (versi ? ` (${versi})` : ` (${labelSumber} Terbaru)`)
     + (deltaRoot !== 0 ? ' (DRAFT)' : '')
 
-  // Filter rows yang punya PJ (skip '-' dan kosong)
-  const pjRows = rows
-    .filter(r => {
-      const pj = (r.penanggung_jawab ?? '').trim()
-      return pj && pj !== '-'
-    })
-    .map(r => ({
-      pj: (r.penanggung_jawab ?? '').trim(),
-      uraian: r.uraian,
-      jumlah: Number(r.jumlah) || 0,
-      tipe: r.tipe_baris,
-      rowId: r.row_id,
-      parentId: r.parent_id ?? '',
-    }))
-
-  // Group per PJ
-  const grouped = new Map<string, typeof pjRows>()
-  for (const r of pjRows) {
-    if (!grouped.has(r.pj)) grouped.set(r.pj, [])
-    grouped.get(r.pj)!.push(r)
-  }
+  // Satu aturan dgn auto-fill nominal BLUD di Form PK — angka PK harus sama dgn tabel ini.
+  const grouped = kelompokPerPj(rows)
 
   // B3+B4: total DPA struktural + grand total bersih dobel-hitung — satu sumber
   // dari auditRekapPJ (subtotal per-PJ tetap mentah; selisihnya dijelaskan panel audit)
@@ -434,8 +414,7 @@ function renderPjView(
   // Build table data + export rows
   const exportRows: ExportRow[] = []
   exportRows.push(['TOTAL BELANJA BLUD', '', grandTotal])
-  for (const [pj, items] of grouped.entries()) {
-    const subtotal = items.reduce((s, it) => s + it.jumlah, 0)
+  for (const { pj, items, subtotal } of grouped) {
     exportRows.push([pj, '', subtotal])
     for (const it of items) exportRows.push(['', it.uraian, it.jumlah])
     exportRows.push([`${pj} Total`, '', subtotal])
@@ -460,8 +439,7 @@ function renderPjView(
   html += `</tr></thead><tbody>`
 
   html += `<tr style="background:rgba(239,159,39,.22);font-weight:800;color:#FFE6BF;"><td>TOTAL BELANJA BLUD</td><td></td><td style="text-align:right;font-family:monospace;">${formatRupiah(grandTotal)}</td></tr>`
-  for (const [pj, items] of grouped.entries()) {
-    const subtotal = items.reduce((s, it) => s + it.jumlah, 0)
+  for (const { pj, items, subtotal } of grouped) {
     html += `<tr style="background:rgba(124,92,252,.22);font-weight:700;color:#DCD0FF;"><td>${esc(pj)}</td><td></td><td style="text-align:right;font-family:monospace;">${formatRupiah(subtotal)}</td></tr>`
     for (const it of items) {
       html += `<tr><td></td><td>${esc(it.uraian)}</td><td style="text-align:right;font-family:monospace;">${formatRupiah(it.jumlah)}</td></tr>`

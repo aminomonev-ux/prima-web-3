@@ -167,18 +167,15 @@ cek('F14 Sentinel menawarkan Set Pagu BLUD ke PROGRAM', moduleMenusFor('usulan_a
 cek('F15 Sentinel tidak menawarkannya ke sub-bidang lain', !moduleMenusFor('usulan_aset', 'MDSI' as Role).includes('Set Pagu BLUD'))
 
 // ── G. PK (B6) ───────────────────────────────────────────────────────────────
-const PK = badan(kode('lib/data/pk.ts'), 'export async function getBludNominalByUnit(')
-cek('G1 fungsi menerima tahun', PK.includes('export async function getBludNominalByUnit(unitKerja: string, tahun: number)'))
-cek('G2 versi terbaru TAHUN itu, sebagai teks',
-  PK.includes("sql`SELECT DATE_FORMAT(MAX(versi_dpa), '%Y-%m-%d') AS versi FROM rekap_pk WHERE tahun_anggaran = ${tahun}`"))
-sama('G3 kedua kueri nominal disaring tahun', hitung(PK, 'WHERE rp.tahun_anggaran = ${tahun}'), 2)
-cek('G4 tahun WAJIB di query', !BludNominalQuerySchema.safeParse({ unit: 'X' }).success)
-sama('G5 tahun dibaca sebagai angka', BludNominalQuerySchema.safeParse({ unit: 'X', tahun: '2026' }).data?.tahun, 2026)
-cek('G6 route meneruskan tahun', kode('app/api/perjanjian-kinerja/blud-nominal/route.ts').includes('getBludNominalByUnit(q.data.unit, q.data.tahun)'))
-const LAMPIRAN = kode('app/(dashboard)/perjanjian-kinerja/form/_components/LampiranAnggaranSplit.tsx')
-sama('G7 layar PK mengirim tahun dokumen di satu pintu', hitung(LAMPIRAN, '/api/perjanjian-kinerja/blud-nominal?'), 1)
-cek('G8 layar PK mengirim tahun dokumen', LAMPIRAN.includes('&tahun=${encodeURIComponent(form.tahun)}'))
-cek('G9 tahun tanpa rekap dikatakan, tidak diisi Rp 0', LAMPIRAN.includes('if (!r.versi_dpa) {'))
+// Sejak 2026-11-12 nominal BLUD dihitung langsung dari DPA/Pergeseran versi yang DIPILIH
+// (scripts/test-pk-nominal-blud.mts). Yang tersisa di sini: tahun tetap wajib & ikut terkirim.
+const sahNominal = { unit: 'X', tahun: '2026', sumber: 'dpa', versi: '2026-10-13' }
+cek('G4 tahun WAJIB di query', !BludNominalQuerySchema.safeParse({ ...sahNominal, tahun: undefined }).success)
+sama('G5 tahun dibaca sebagai angka', BludNominalQuerySchema.safeParse(sahNominal).data?.tahun, 2026)
+cek('G6 route meneruskan tahun', kode('app/api/perjanjian-kinerja/blud-nominal/route.ts').includes('nominalBludUnit(q.data.unit, q.data.tahun, q.data.sumber, q.data.versi)'))
+const DIALOG = kode('app/(dashboard)/perjanjian-kinerja/form/_components/AmbilNominalBlud.tsx')
+cek('G8 layar PK mengirim tahun dokumen', DIALOG.includes('mode=versi&tahun=${encodeURIComponent(tahun)}')
+  && kode('app/(dashboard)/perjanjian-kinerja/form/_components/LampiranAnggaranSplit.tsx').includes('tahun={form.tahun}'))
 
 // ── H. Basis data sungguhan ─────────────────────────────────────────────────
 let c: mysql.Connection | null = null
@@ -205,7 +202,6 @@ if (c) {
   const k = c
   const { paguBludTahun } = await import('../lib/data/usulan')
   const { getModuleDetail } = await import('../lib/data/dashboard')
-  const { getBludNominalByUnit } = await import('../lib/data/pk')
   await bersih(k)
   try {
     await k.query("INSERT INTO app_config (`key`, value) VALUES ('pagu_blud_2099', '7000000000')")
@@ -235,23 +231,6 @@ if (c) {
     const b97 = await getModuleDetail('blud', '2097')
     sama('H8 detail BLUD tahun tanpa DPA: versi kosong, bukan DPA tahun lain',
       b97.modul === 'blud' ? b97.data.kpi.versi_tanggal : 'bukan blud', null)
-
-    await k.query("INSERT INTO penanggung_jawab (label, urutan) VALUES ('UJI B6 Kasubbag', 999)")
-    await k.query("INSERT INTO pk_unit_kerja (nama_unit, level) VALUES ('UJI B6 Kasubbag', 'subkegiatan'), ('UJI B6 Wadir', 'program')")
-    await k.query("INSERT INTO pk_unit_kerja_blud_pj (unit_pk, blud_pj_label) VALUES ('UJI B6 Wadir', 'UJI B6 Kasubbag')")
-    await k.query(`INSERT INTO rekap_pk (tahun_anggaran, versi_dpa, label, nominal) VALUES
-      (2098, '2098-12-31', 'UJI B6 Kasubbag', 100),
-      (2099, '2099-01-15', 'UJI B6 Kasubbag', 555),
-      (2099, '2099-01-31', 'UJI B6 Kasubbag', 999)`)
-    const n99 = await getBludNominalByUnit('UJI B6 Kasubbag', 2099)
-    sama('H9 PK 2099: versi terbaru 2099', n99.versi_dpa, '2099-01-31')
-    sama('H10 PK 2099: nominal versi itu', n99.nominal, 999)
-    const n98 = await getBludNominalByUnit('UJI B6 Kasubbag', 2098)
-    sama('H11 PK 2098 tidak terisi angka 2099 yang lebih baru', n98.nominal, 100)
-    sama('H12 PK 2098: versinya sendiri', n98.versi_dpa, '2098-12-31')
-    const n97 = await getBludNominalByUnit('UJI B6 Kasubbag', 2097)
-    sama('H13 tahun tanpa rekap: versi kosong', n97.versi_dpa, null)
-    sama('H14 unit program lewat pemetaan ikut tahunnya', (await getBludNominalByUnit('UJI B6 Wadir', 2098)).nominal, 100)
   } finally {
     await bersih(k)
   }

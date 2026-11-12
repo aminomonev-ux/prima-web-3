@@ -832,9 +832,10 @@ CREATE TABLE IF NOT EXISTS menu_user_access (
   COMMENT='Perkecualian izin menu per ORANG — menang atas menu_role_access';
 
 -- ─── BLUD — REKAP PENANGGUNG JAWAB ───────────────────────────────────────────
--- Snapshot rekap PJ — output dari menu Cetak BLUD. Pattern replace-latest:
--- DELETE old snapshot per versi_dpa + bulkInsert new rows, dibungkus
--- withTransaction supaya atomic. Migration 024.
+-- Snapshot rekap PJ — dulu ditulis tombol "Simpan Rekap PK" di Cetak BLUD (Migration 024).
+-- SEJAK 2026-11-12 TIDAK DITULIS & TIDAK DIBACA lagi: nominal BLUD Form PK dihitung langsung
+-- dari DPA/Pergeseran (docs/CONCEPT-pk-nominal-blud-langsung.md). Sengaja tidak di-DROP —
+-- isinya riwayat; yang masih menyentuhnya hanya deleteDpaVersi (membuang foto versi terhapus).
 
 CREATE TABLE IF NOT EXISTS rekap_pk (
   id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

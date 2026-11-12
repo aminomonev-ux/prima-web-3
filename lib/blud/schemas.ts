@@ -541,18 +541,5 @@ export const InjectBodySchema = z.object({
   pergeseran_rows: z.array(PergeseranBarisInputSchema).min(1, 'Data pergeseran kosong').max(MAKS_BARIS_SIMPAN, `Maksimal ${MAKS_BARIS_SIMPAN} baris`),
 });
 
-/** POST /api/blud/rekap-pk — snapshot rekap Penanggung Jawab dari menu Cetak */
-// NOTE: Label boleh empty string (renderPjView push row uraian-only sebagai
-// [label='', uraian, jumlah] untuk display). Handler filter row label='' di app
-// logic (route.ts:46-48). Schema cuma cap max length supaya tidak abuse-able.
-export const RekapPKItemSchema = z.tuple([
-  z.string().max(255, 'Label terlalu panjang'),
-  z.string().optional().or(z.literal('')), // kolom uraian (kosong untuk total/subtotal row)
-  z.number().nonnegative('Nominal harus >= 0').max(1e15, 'Nominal terlalu besar'),
-]);
-
-export const RekapPKBodySchema = z.object({
-  tahun_anggaran: TahunSchema,
-  versi: TanggalSchema.nullable().optional(),    // null/undefined → pakai latest DPA date dalam tahun
-  rows:  z.array(RekapPKItemSchema).min(1, 'Minimal 1 baris').max(500, 'Maksimal 500 baris'),
-});
+// Rekap PK (dulu POST /api/blud/rekap-pk) dibuang: Form PK menghitung nominal BLUD langsung
+// dari DPA/Pergeseran (lib/data/pk-blud-nominal.ts). Tabel `rekap_pk` tidak lagi ditulis.

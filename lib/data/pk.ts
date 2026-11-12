@@ -106,74 +106,7 @@ export async function getPejabatByUnit(
   `);
 }
 
-// ─── BLUD Lookup (untuk auto-fill nominal Anggaran BLUD — Q1) ───────────────
-
-/**
- * Aggregate nominal BLUD per unit kerja PK.
- *
- * Strategy:
- *  - Sub-keg level: exact match `nama_unit = penanggung_jawab.label` (via JOIN validate)
- *  - Keg/program level: aggregate via `pk_unit_kerja_blud_pj` mapping
- *  - Filter out baris agregat (`label = 'TOTAL BELANJA BLUD'`) via JOIN penanggung_jawab
- *  - Versi: rekap terbaru TAHUN DOKUMEN PK (B6, audit 2026-09-29). Dulu `MAX(versi_dpa)`
- *    tahun apa pun — PK 2026 yang disusun sesudah rekap 2027 ada terisi angka 2027.
- *    Versinya dipulangkan sebagai teks `YYYY-MM-DD` supaya layar bisa menyebutnya.
- */
-export async function getBludNominalByUnit(unitKerja: string, tahun: number): Promise<{
-  nominal: number;
-  versi_dpa: string | null;
-  matched_labels: string[];
-}> {
-  // PK-PERF-1: lookup level + latest versi parallel (2 RTT → 1 RTT)
-  const [unit, versi] = await Promise.all([
-    queryOne<{ level: PkLevel }>(
-      sql`SELECT level FROM pk_unit_kerja WHERE nama_unit = ${unitKerja} LIMIT 1`,
-    ),
-    queryOne<{ versi: string | null }>(
-      sql`SELECT DATE_FORMAT(MAX(versi_dpa), '%Y-%m-%d') AS versi FROM rekap_pk WHERE tahun_anggaran = ${tahun}`,
-    ),
-  ]);
-  if (!unit) return { nominal: 0, versi_dpa: null, matched_labels: [] };
-  const versiDpa = versi?.versi ?? null;
-  if (!versiDpa) return { nominal: 0, versi_dpa: null, matched_labels: [] };
-
-  if (unit.level === 'subkegiatan') {
-    // Direct exact match — guard via JOIN penanggung_jawab (filter agregat baris).
-    const rows = await queryMany<{ label: string; total: number }>(sql`
-      SELECT rp.label AS label, COALESCE(SUM(rp.nominal), 0) AS total
-      FROM rekap_pk rp
-      INNER JOIN penanggung_jawab pj ON pj.label = rp.label
-      WHERE rp.tahun_anggaran = ${tahun}
-        AND rp.versi_dpa = ${versiDpa}
-        AND rp.label = ${unitKerja}
-      GROUP BY rp.label
-    `);
-    const total = rows.reduce((s, r) => s + Number(r.total), 0);
-    return {
-      nominal: total,
-      versi_dpa: versiDpa,
-      matched_labels: rows.map(r => r.label),
-    };
-  }
-
-  // Kegiatan/Program level — aggregate via mapping
-  const rows = await queryMany<{ label: string; total: number }>(sql`
-    SELECT rp.label AS label, COALESCE(SUM(rp.nominal), 0) AS total
-    FROM rekap_pk rp
-    INNER JOIN pk_unit_kerja_blud_pj m ON m.blud_pj_label = rp.label
-    INNER JOIN penanggung_jawab pj      ON pj.label = rp.label
-    WHERE rp.tahun_anggaran = ${tahun}
-      AND rp.versi_dpa = ${versiDpa}
-      AND m.unit_pk = ${unitKerja}
-    GROUP BY rp.label
-  `);
-  const total = rows.reduce((s, r) => s + Number(r.total), 0);
-  return {
-    nominal: total,
-    versi_dpa: versiDpa,
-    matched_labels: rows.map(r => r.label),
-  };
-}
+// Nominal BLUD untuk lampiran anggaran: lib/data/pk-blud-nominal.ts (dihitung langsung dari DPA/Pergeseran).
 
 // ─── Isi dokumen: lampiran + anggaran ───────────────────────────────────────
 
