@@ -20,7 +20,7 @@ import DownloadButton from '@/components/ui/DownloadButton';
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
 import ImportMasterModal from '@/components/kinerja/ImportMasterModal';
 import OpsiDiLuarMaster from '@/components/kinerja/OpsiDiLuarMaster';
-import LencanaRenaksi from '@/components/kinerja/LencanaRenaksi';
+import LencanaRenaksi from '@/components/renaksi/LencanaRenaksi';
 import { dariRenaksi } from '@/lib/kinerja/asal-renaksi';
 import { ketikanAdaDiRenaksi, kalimatKetikanRenaksi, type HasilBanding, type ItemBaru } from '@/lib/kinerja/banding-renaksi';
 import { exportMasterExcel } from '../_exports';
@@ -701,7 +701,7 @@ export default function MasterTab({
                     )}
                     <td style={{ padding:'10px 14px', borderBottom:cBorderHair, color:cTextPrimary, fontWeight:500, fontSize:'14px' }}>
                       {r.nama}
-                      {dariRenaksi(r) && <LencanaRenaksi tahun={tahun} isLight={isLight} />}
+                      {dariRenaksi(r) && <LencanaRenaksi tahun={tahun} />}
                       {isNew && <span style={{ marginLeft:'8px', fontSize:'10px', fontWeight:700, background: isLight?'#B45309':'rgba(239,159,39,.8)', color: isLight?'#FFFFFF':'#020F1C', padding:'2px 7px', borderRadius:'50px', verticalAlign:'middle' }}>BARU</span>}
                     </td>
                     {canEdit && (

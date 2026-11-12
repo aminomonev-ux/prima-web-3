@@ -20,6 +20,8 @@ export interface PkSasaranRow {
   target_subkegiatan: string | null;
   satuan_subkegiatan?: string | null;
   tahun?: string;
+  /** RENAKSI = dari Import Renaksi / dialog Perbarui (docs/CONCEPT-renaksi-terhubung.md §6). */
+  asal?: 'MANUAL' | 'RENAKSI';
   _deleted?: boolean;
   _dirty?: boolean;
 }
@@ -31,6 +33,7 @@ export interface PkProgramRow {
   subkegiatan: string | null;
   level: PkLevel;
   tahun?: string;
+  asal?: 'MANUAL' | 'RENAKSI';
   _dirty?: boolean;
   /** Checkbox selection state untuk bulk delete. */
   _selected?: boolean;

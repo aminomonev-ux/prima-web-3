@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { PANJANG_SATUAN } from '@/lib/shared/target-renaksi';
+import { ASAL_MASTER } from '@/lib/kinerja/asal-renaksi';
 
 // ─── Rate Limit ─────────────────────────────────────────────────────────────
 
@@ -119,6 +120,8 @@ export const SasaranBodySchema = z.object({
     indikator_subkegiatan:  z.string().trim().max(500).optional().nullable(),
     target_subkegiatan:     z.string().trim().max(255).optional().nullable(),
     satuan_subkegiatan:     SatuanSchema,
+    /** Tanpa = MANUAL (tab lama). RENAKSI = dari Import Renaksi / dialog Perbarui. */
+    asal:                   z.enum(ASAL_MASTER).optional(),
   })).min(1, 'Minimal 1 baris').max(200, 'Maks 200 baris per batch'),
 });
 
@@ -132,6 +135,7 @@ export const ProgramBodySchema = z.object({
     kegiatan:    z.string().trim().max(255).optional().nullable(),
     subkegiatan: z.string().trim().max(255).optional().nullable(),
     level:       LevelEnum,
+    asal:        z.enum(ASAL_MASTER).optional(),
   })).min(0).max(500, 'Maks 500 baris per batch'),
 });
 

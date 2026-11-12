@@ -15,6 +15,13 @@ import { pkInputTable as inputStyle, pkCheckbox as checkboxStyle, pkModalBackdro
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkProgramRow, PkLevel } from '../_utils/pk-types'
 import { rapikanBarisProgram } from '@/lib/pk/rapikan-nama'
+import LencanaRenaksi from '@/components/renaksi/LencanaRenaksi'
+import { SpandukSelaras, DialogSelaras, type BagianSelaras } from '@/components/renaksi/SelarasRenaksi'
+import { useBahanRenaksi } from '@/components/pk/useBahanRenaksi'
+import { bandingProgramPk, terapkanSelarasProgram, kunciPilih, kalimatSpandukPk } from '@/lib/pk/selaras-renaksi'
+import type { CatatanGanti, ItemEntri } from '@/lib/kinerja/banding-renaksi'
+import type { BarisRenaksi } from '@/lib/kinerja/asal-renaksi'
+import { labelTipeMaster } from '@/lib/kinerja/master-ubah'
 
 type ApiListResp = { ok: boolean; tahun: string; rows: PkProgramRow[]; message?: string }
 
@@ -64,6 +71,12 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [levelPickerOpen, setLevelPickerOpen] = useState(false)
   /** Modal konfirmasi delete — 3 mode: single (1 row idx), bulk (semua _selected), wipe (rows habis saat Save). */
   const [confirmDel, setConfirmDel] = useState<{ mode: 'single'; idx: number; preview: string } | { mode: 'bulk'; count: number } | { mode: 'wipe'; count: number } | null>(null)
+  const [perbaruiBuka, setPerbaruiBuka] = useState(false)
+
+  // Rencana Aksi berubah? Dibandingkan dengan ISI LAYAR — suntingan belum tersimpan ikut dihitung.
+  const { bahan } = useBahanRenaksi<{ renaksi: BarisRenaksi[]; catatan: CatatanGanti[] }>('program', tahun, bolehUbah)
+  const banding = useMemo(() => (bahan && !loading ? bandingProgramPk(rows, bahan.renaksi, bahan.catatan) : null), [bahan, rows, loading])
+  const kalimatRa = banding ? kalimatSpandukPk({ berganti: banding.gantiNama.length, baru: banding.baru.length, hilang: banding.hilang.length }, tahun) : null
 
   function showToast(kind: 'ok' | 'err', msg: string) {
     setToast({ kind, msg })
@@ -178,6 +191,7 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
       kegiatan:    r.kegiatan,
       subkegiatan: r.subkegiatan,
       level:       r.level,
+      asal:        'RENAKSI',
       _dirty:      true,
       _intent:     r.level,
     }))
@@ -202,6 +216,7 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
         kegiatan:    r.kegiatan ?? null,
         subkegiatan: r.subkegiatan ?? null,
         level:       deriveLevel(r),
+        asal:        r.asal ?? 'MANUAL',
       })),
     }
     const d = await fetchJson<unknown>('/api/perjanjian-kinerja/program', {
@@ -233,6 +248,26 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
     }
     await commitSave(rows)
   }
+
+  /** Berhenti di form (L78): isi layar diubah, yang menulis tetap Simpan. */
+  function terapkanPerbarui(pilih: Set<string>) {
+    if (!banding) return
+    const hasil = terapkanSelarasProgram(rows, banding, pilih, b => ({ ...b, _dirty: true, _intent: b.level }))
+    setRows(hasil.map((r, i) => r === rows[i] ? r : { ...r, _dirty: true }))
+    setPerbaruiBuka(false)
+    showToast('ok', `${pilih.size} perubahan dari Rencana Aksi diterapkan ke layar. Periksa, lalu klik Simpan.`)
+  }
+
+  const bagianPerbarui: BagianSelaras[] = banding ? (() => {
+    const jalur = (e: { program_ref: string | null; kegiatan_ref: string | null }) => [e.program_ref, e.kegiatan_ref].filter(Boolean).join(' › ')
+    const entri = (e: ItemEntri) => <><b>{labelTipeMaster(e.tipe)}</b> {e.nama}{jalur(e) && <span style={{ opacity: .7 }}> — {jalur(e)}</span>}</>
+    return [
+      { judul: 'Berganti nama', ket: 'Baris di bawahnya ikut berganti nama.', items: banding.gantiNama.map(g => ({ kunci: kunciPilih.ganti(g.id), bawaan: true, isi: <><b>{labelTipeMaster(g.tipe)}</b> {g.nama} → <b>{g.ke}</b></> })) },
+      { judul: 'Baru di Rencana Aksi', ket: 'Ditambahkan sebagai baris baru bertanda Renaksi. Induk yang juga baru ikut ditambahkan.', items: banding.baru.map(b => ({ kunci: kunciPilih.baru(b.kunci), bawaan: true, isi: <><b>{labelTipeMaster(b.tipe)}</b> {b.nama}{jalur(b) && <span style={{ opacity: .7 }}> — {jalur(b)}</span>}</> })) },
+      { judul: 'Tidak ada lagi di Rencana Aksi', ket: 'Tidak dihapus. Centang untuk melepas tanda Renaksi (jadikan manual).', items: banding.hilang.map(e => ({ kunci: kunciPilih.hilang(e.id), bawaan: false, isi: entri(e) })) },
+      { judul: 'Sudah ada, belum bertanda', ket: 'Diketik tangan, jalurnya ada di Rencana Aksi. Centang untuk menandainya.', items: banding.belumBertanda.map(e => ({ kunci: kunciPilih.tanda(e.id), bawaan: false, isi: entri(e) })) },
+    ]
+  })() : []
 
   async function execWipe() {
     setConfirmDel(null)
@@ -310,6 +345,13 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
       </div>
 
       {!bolehUbah && <SpandukLihat menu="program" />}
+      {bolehUbah && <SpandukSelaras kalimat={kalimatRa} onBuka={() => setPerbaruiBuka(true)} />}
+      {perbaruiBuka && banding && (
+        <DialogSelaras judul={`Perbarui dari Rencana Aksi ${tahun}`}
+          pengantar="Mengubah isi tabel di layar ini saja — baru tersimpan setelah Anda klik Simpan. Dokumen PK yang sudah dibuat tidak ikut berubah. Tidak ada baris yang dihapus."
+          bagian={bagianPerbarui} canEdit={bolehUbah} labelTerapkan="Terapkan ke layar"
+          onTutup={() => setPerbaruiBuka(false)} onTerapkan={terapkanPerbarui} />
+      )}
 
       {toast && (
         <div style={{
@@ -395,6 +437,7 @@ export default function ProgramClient({ bolehUbah }: { bolehUbah: boolean }) {
                           border: `1px solid ${meta.color}55`,
                           fontFamily: 'JetBrains Mono, ui-monospace, monospace',
                         }}>{meta.txt}</span>
+                        {r.asal === 'RENAKSI' && <LencanaRenaksi tahun={tahun} />}
                       </td>
                       <td style={tdAction}>
                         <button onClick={() => requestDeleteSingle(idx)}

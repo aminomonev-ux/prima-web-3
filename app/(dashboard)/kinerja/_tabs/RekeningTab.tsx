@@ -22,7 +22,7 @@ import { exportRekeningExcel } from '../_exports';
 import ImportRekeningModal from '@/components/kinerja/ImportRekeningModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import OpsiDiLuarMaster from '@/components/kinerja/OpsiDiLuarMaster';
-import LencanaRenaksi from '@/components/kinerja/LencanaRenaksi';
+import LencanaRenaksi from '@/components/renaksi/LencanaRenaksi';
 import { namaBertanda, tandaRantai } from '@/lib/kinerja/asal-renaksi';
 import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
 import { cocokInduk, namaUnik } from '@/lib/kinerja/master-nama';
@@ -362,9 +362,9 @@ export default function RekeningTab({
               {rekeningRows.map((r, i) => { const tanda = tandaRantai(r, masterBerasal); return (
                 <tr key={i} style={{ background: i%2===0 ? cRowEven : cRowOdd }}>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, textAlign:'center', fontWeight:600 }}>{i+1}</td>
-                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'200px' }}>{r.program||'-'}{tanda.program && <LencanaRenaksi tahun={tahun} isLight={isLight} />}</td>
-                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.kegiatan||'-'}{tanda.kegiatan && <LencanaRenaksi tahun={tahun} isLight={isLight} />}</td>
-                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.subkegiatan||'-'}{tanda.subkegiatan && <LencanaRenaksi tahun={tahun} isLight={isLight} />}</td>
+                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'200px' }}>{r.program||'-'}{tanda.program && <LencanaRenaksi tahun={tahun} />}</td>
+                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.kegiatan||'-'}{tanda.kegiatan && <LencanaRenaksi tahun={tahun} />}</td>
+                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.subkegiatan||'-'}{tanda.subkegiatan && <LencanaRenaksi tahun={tahun} />}</td>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub }}>{r.uraian_ssk||'-'}</td>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextPrimary, fontWeight:500, maxWidth:'240px' }}>{r.uraian}</td>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub }}>{r.sumber_anggaran||'-'}</td>

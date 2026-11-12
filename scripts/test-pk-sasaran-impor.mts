@@ -33,7 +33,9 @@ function sama(nama: string, dapat: unknown, harap: unknown) {
 }
 
 const baca = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
-const RUTE_PK = 'app/api/perjanjian-kinerja/sasaran/import-renaksi/route.ts'
+// Penyusun baris Import Renaksi Master Sasaran pindah ke lib (dipakai juga pembanding Tahap D
+// renaksi-terhubung); route-nya memanggil `susunSasaranRenaksi`.
+const RUTE_PK = 'lib/pk/selaras-renaksi.ts'
 const RUTE_IKI = 'app/api/iki/import-renaksi/route.ts'
 
 // ── A. Bentuk teks target ────────────────────────────────────────────────────
@@ -78,8 +80,10 @@ for (const [nama, p, fungsi] of [['PK', RUTE_PK, 'angkaTarget'], ['IKI', RUTE_IK
 cek('B4b PK: target tidak lagi dirangkai dengan satuannya', !baca(RUTE_PK).includes('fmtTarget('))
 
 // Tipe di route PK sempat berbohong (`target_tahunan: number` untuk kolom DECIMAL).
-cek('B5 PK: target_tahunan diketik string, sesuai yang dipulangkan mysql2',
-  /target_tahunan:\s*string;/.test(baca(RUTE_PK)))
+cek('B5 PK: target_tahunan diketik string (mysql2), diubah lewat String() — bukan Number()',
+  /target_tahunan:\s*string \| number;/.test(baca(RUTE_PK)) && (baca(RUTE_PK).match(/angkaTarget\(String\(r\.target_tahunan\)\)/g) ?? []).length === 3)
+cek('B6 PK: route Import Renaksi memakai penyusun bersama',
+  baca('app/api/perjanjian-kinerja/sasaran/import-renaksi/route.ts').includes('const out = susunSasaranRenaksi(raRows);'))
 
 // ── C. Lebar kolom berpasangan dengan SUMBERNYA ──────────────────────────────
 // Dijaga dari KEDUA sisi: kalau suatu saat `outcome_*` dilebarkan lagi, C3 yang

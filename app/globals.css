@@ -3736,3 +3736,22 @@ table tbody td.sd-selisih.minus { color: #E24B4A !important; }
   .prima-dock-isi::-webkit-scrollbar { display: none; }
   .prima-dock-isi > * { flex-shrink: 0; }
 }
+
+/* ── Rencana Aksi terhubung (docs/CONCEPT-renaksi-terhubung.md) ─────────────────
+   Lencana "Renaksi" & spanduk "Rencana Aksi berubah" dipakai E-Anggaran, PK, IKI.
+   Warna lewat [data-theme], bukan dibaca saat render: layar PK tidak merender ulang
+   barisnya saat tema diganti, jadi warna hasil JS tertinggal di tema lama. */
+.lencana-renaksi {
+  display: inline-block; vertical-align: middle; margin-left: 6px;
+  padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 700;
+  letter-spacing: .03em; white-space: nowrap; line-height: 1.5;
+  color: #C4B5FD; background: rgba(124,92,252,.18); border: 1px solid rgba(124,92,252,.45);
+}
+[data-theme="light"] .lencana-renaksi { color: #5B21B6; background: rgba(124,92,252,.10); border-color: rgba(124,92,252,.35); }
+.spanduk-selaras {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 14px; border-radius: 10px;
+  background: rgba(186,117,23,.14); border: 1px solid rgba(186,117,23,.55); border-left: 3px solid #BA7517;
+  color: #FAC775; font-size: 13px; font-weight: 600;
+}
+[data-theme="light"] .spanduk-selaras { background: rgba(186,117,23,.10); color: #854F0B; }

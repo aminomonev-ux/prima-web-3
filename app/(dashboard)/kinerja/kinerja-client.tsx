@@ -803,7 +803,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
           )}
             {(activeTab === 'master' || activeTab === 'rekening') && banding.jumlah > 0 && (
               <div style={{ padding: '20px 20px 0' }}>
-                <SpandukRenaksi hasil={banding.hasil} tahun={tahun} isLight={isLight} onBuka={() => guardPending(() => setPerbaruiBuka(true))} />
+                <SpandukRenaksi hasil={banding.hasil} tahun={tahun} onBuka={() => guardPending(() => setPerbaruiBuka(true))} />
               </div>
             )}
             {perbaruiBuka && banding.hasil && (

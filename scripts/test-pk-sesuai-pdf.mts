@@ -231,8 +231,9 @@ for (const t of ['program', 'kegiatan', 'subkegiatan']) {
   cek(`H7 Master Sasaran membaca satuan_${t}`, new RegExp(`target_${t}, satuan_${t}`).test(ruteSasaran))
   cek(`H8 Master Sasaran menulis satuan_${t}`, ruteSasaran.includes(`'target_${t}','satuan_${t}'`) && ruteSasaran.includes(`r.satuan_${t} || null`))
 }
-const ruteTarik = tanpaKomentar(baca('app/api/perjanjian-kinerja/sasaran/import-renaksi/route.ts'))
-cek('H9 tarik Renaksi: target angka saja + satuan sendiri', (ruteTarik.match(/angkaTarget\(r\.target_tahunan\)/g) ?? []).length === 3 && (ruteTarik.match(/satuanTarget\(r\.satuan\) \|\| null/g) ?? []).length === 3)
+// Penyusun baris tarik Renaksi tinggal di lib (dipakai juga pembanding "Rencana Aksi berubah").
+const ruteTarik = tanpaKomentar(baca('lib/pk/selaras-renaksi.ts'))
+cek('H9 tarik Renaksi: target angka saja + satuan sendiri', (ruteTarik.match(/angkaTarget\(String\(r\.target_tahunan\)\)/g) ?? []).length === 3 && (ruteTarik.match(/satuanTarget\(r\.satuan\) \|\| null/g) ?? []).length === 3)
 cek('H10 tarik Renaksi: nama & indikator dibersihkan', (ruteTarik.match(/rapikanIndikator\(r\.indikator\)/g) ?? []).length === 3 && (ruteTarik.match(/rapikanNamaEntitas\(/g) ?? []).length === 3)
 cek('H11 tarik Master Program dibersihkan', (tanpaKomentar(baca('app/api/perjanjian-kinerja/program/import-renaksi/route.ts')).match(/rapikanNamaEntitas\(r\.(program|kegiatan|sub_kegiatan) \?\? ''\)/g) ?? []).length === 3)
 const ruteProgram = tanpaKomentar(baca('app/api/perjanjian-kinerja/program/route.ts'))

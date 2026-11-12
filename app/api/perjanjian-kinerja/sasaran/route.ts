@@ -32,6 +32,7 @@ type SasaranRow = {
   target_subkegiatan: string | null;
   satuan_subkegiatan: string | null;
   tahun: string;
+  asal: 'MANUAL' | 'RENAKSI';
 };
 
 export async function GET(req: NextRequest) {
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
   const rows = await sql`
     SELECT id, program, indikator_program, target_program, satuan_program,
            kegiatan, indikator_kegiatan, target_kegiatan, satuan_kegiatan,
-           subkegiatan, indikator_subkegiatan, target_subkegiatan, satuan_subkegiatan, tahun
+           subkegiatan, indikator_subkegiatan, target_subkegiatan, satuan_subkegiatan, tahun, asal
     FROM pk_sasaran
     WHERE tahun = ${tahun}
     ORDER BY program, kegiatan, subkegiatan, id
@@ -98,6 +99,7 @@ export async function POST(req: NextRequest) {
       r.indikator_subkegiatan ?? null,
       r.target_subkegiatan ?? null,
       r.satuan_subkegiatan || null,
+      r.asal ?? 'MANUAL',
       tahun,
       session.userId,
     ]);
@@ -107,7 +109,7 @@ export async function POST(req: NextRequest) {
         'program','indikator_program','target_program','satuan_program',
         'kegiatan','indikator_kegiatan','target_kegiatan','satuan_kegiatan',
         'subkegiatan','indikator_subkegiatan','target_subkegiatan','satuan_subkegiatan',
-        'tahun','created_by',
+        'asal','tahun','created_by',
       ],
       values,
       conn,

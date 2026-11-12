@@ -17,6 +17,13 @@ import { usePkYear } from '../_context/PkYearContext'
 import type { PkSasaranRow } from '../_utils/pk-types'
 import { rapikanBarisSasaran } from '@/lib/pk/rapikan-nama'
 import { PANJANG_SATUAN } from '@/lib/shared/target-renaksi'
+import LencanaRenaksi from '@/components/renaksi/LencanaRenaksi'
+import { SpandukSelaras, DialogSelaras, type BagianSelaras } from '@/components/renaksi/SelarasRenaksi'
+import { useBahanRenaksi } from '@/components/pk/useBahanRenaksi'
+import {
+  bandingSasaranPk, terapkanSelarasSasaran, kunciPilih, kalimatSpandukPk, KOLOM_SASARAN,
+  type BarisSasaranPk, type ItemSasaranBerubah,
+} from '@/lib/pk/selaras-renaksi'
 
 type ApiListResp = { ok: boolean; tahun: string; rows: PkSasaranRow[]; message?: string }
 
@@ -56,6 +63,12 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
   const [importConfirm, setImportConfirm] = useState<{ count: number; payload: PkSasaranRow[] } | null>(null)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [perbaruiBuka, setPerbaruiBuka] = useState(false)
+
+  // Rencana Aksi berubah? Dibandingkan dengan ISI LAYAR (baris bertanda hapus tidak dihitung).
+  const { bahan } = useBahanRenaksi<{ sasaran: BarisSasaranPk[] }>('sasaran', tahun, bolehUbah)
+  const banding = useMemo(() => (bahan && !loading ? bandingSasaranPk(rows, bahan.sasaran, i => !rows[i]._deleted) : null), [bahan, rows, loading])
+  const kalimatRa = banding ? kalimatSpandukPk({ berubah: banding.berubah.length, baru: banding.baru.length, hilang: banding.hilang.length }, tahun) : null
 
   function showToast(kind: 'ok' | 'err', msg: string) {
     setToast({ kind, msg })
@@ -118,6 +131,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
         indikator_subkegiatan: r.indikator_subkegiatan,
         target_subkegiatan: r.target_subkegiatan,
         satuan_subkegiatan: r.satuan_subkegiatan ?? null,
+        asal: 'RENAKSI',
         _dirty: true,
       }))
       const hasExistingRows = rows.some(r => !r._deleted)
@@ -141,6 +155,31 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
     setRows(hasil.rows.map((r, i) => r === rows[i] ? r : { ...r, _dirty: true }))
     showToast('ok', `${hasil.berubah} baris dirapikan. Periksa hasilnya, lalu klik Simpan.`)
   }
+
+  /** Berhenti di form (L78): isi layar diubah, yang menulis tetap Simpan. */
+  function terapkanPerbarui(pilih: Set<string>) {
+    if (!banding) return
+    const hasil = terapkanSelarasSasaran(rows, banding, pilih, b => ({ ...b, _dirty: true }))
+    setRows(hasil.map((r, i) => r === rows[i] ? r : { ...r, _dirty: true }))
+    setPerbaruiBuka(false)
+    showToast('ok', `${pilih.size} perubahan dari Rencana Aksi diterapkan ke layar. Periksa, lalu klik Simpan.`)
+  }
+
+  const namaBaris = (r: BarisSasaranPk) => {
+    const [nama, ind] = r.subkegiatan?.trim() ? [r.subkegiatan, r.indikator_subkegiatan]
+      : r.kegiatan?.trim() ? [r.kegiatan, r.indikator_kegiatan] : [r.program, r.indikator_program]
+    return <><b>{nama}</b>{ind && <span style={{ opacity: .75 }}> — {ind}</span>}</>
+  }
+  const rincianBeda = (x: ItemSasaranBerubah) => x.kolom.map(label => {
+    const kunci = KOLOM_SASARAN.find(([, l]) => l === label)?.[0]
+    return kunci ? `${label}: ${rows[x.idx][kunci] ?? '—'} → ${x.ke[kunci] ?? '—'}` : label
+  }).join('\n')
+  const bagianPerbarui: BagianSelaras[] = banding ? [
+    { judul: 'Isinya berubah di Rencana Aksi', ket: 'Baris disamakan dengan Rencana Aksi.', items: banding.berubah.map(x => ({ kunci: kunciPilih.berubah(x.idx), bawaan: true, isi: <>Baris {x.idx + 1}: {namaBaris(rows[x.idx])}</>, ket: rincianBeda(x) })) },
+    { judul: 'Baru di Rencana Aksi', ket: 'Ditambahkan di bawah tabel dengan tanda Renaksi.', items: banding.baru.map(b => ({ kunci: kunciPilih.baru(b.kunci), bawaan: true, isi: namaBaris(b.baris) })) },
+    { judul: 'Tidak ada lagi di Rencana Aksi', ket: 'Tidak dihapus. Centang untuk melepas tanda Renaksi (jadikan manual).', items: banding.hilang.map(i => ({ kunci: kunciPilih.hilang(i), bawaan: false, isi: <>Baris {i + 1}: {namaBaris(rows[i])}</> })) },
+    { judul: 'Sudah ada, belum bertanda', ket: 'Diketik tangan, ada di Rencana Aksi. Centang untuk menandainya (isi disamakan dengan Rencana Aksi).', items: banding.belumBertanda.map(x => ({ kunci: kunciPilih.tanda(x.idx), bawaan: false, isi: <>Baris {x.idx + 1}: {namaBaris(rows[x.idx])}</>, ket: x.kolom.length ? rincianBeda(x) : undefined })) },
+  ] : []
 
   const toggleDel = useCallback((idx: number) => {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, _deleted: !r._deleted, _dirty: true } : r))
@@ -185,6 +224,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
         indikator_subkegiatan: r.indikator_subkegiatan ?? null,
         target_subkegiatan:    r.target_subkegiatan ?? null,
         satuan_subkegiatan:    r.satuan_subkegiatan ?? null,
+        asal:                  r.asal ?? 'MANUAL',
       })),
     }
     const d = await fetchJson<unknown>('/api/perjanjian-kinerja/sasaran', {
@@ -268,6 +308,13 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
       </div>
 
       {!bolehUbah && <SpandukLihat menu="sasaran" />}
+      {bolehUbah && <SpandukSelaras kalimat={kalimatRa} onBuka={() => setPerbaruiBuka(true)} />}
+      {perbaruiBuka && banding && (
+        <DialogSelaras judul={`Perbarui dari Rencana Aksi ${tahun}`}
+          pengantar="Mengubah isi tabel di layar ini saja — baru tersimpan setelah Anda klik Simpan. Dokumen PK yang sudah dibuat tidak ikut berubah. Tidak ada baris yang dihapus."
+          bagian={bagianPerbarui} canEdit={bolehUbah} labelTerapkan="Terapkan ke layar"
+          onTutup={() => setPerbaruiBuka(false)} onTerapkan={terapkanPerbarui} />
+      )}
 
       {/* Toast */}
       {toast && (
@@ -319,7 +366,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
                     opacity: r._deleted ? 0.5 : 1,
                     transition: 'all .15s',
                   }}>
-                    <td style={tdNum}>{idx + 1}</td>
+                    <td style={tdNum}>{idx + 1}{r.asal === 'RENAKSI' && <><br /><LencanaRenaksi tahun={tahun} /></>}</td>
                     {COLS.map(c => (
                       <td key={c.key as string} style={td}>
                         <input

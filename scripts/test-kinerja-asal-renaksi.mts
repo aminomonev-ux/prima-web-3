@@ -82,7 +82,7 @@ ok('B1 Init Renaksi menulis kolom asal = RENAKSI di ketiga tingkat',
 ok('B2 getMasterRows membaca asal', /SELECT id, tahun, tipe, sumber, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut, asal\s/.test(KIN))
 ok('B3 skema acuan memuat kolom asal', /asal\s+ENUM\('MANUAL','RENAKSI'\) NOT NULL DEFAULT 'MANUAL'/.test(sumber('docs/schema-mysql.sql')))
 const MT = sumber('app/(dashboard)/kinerja/_tabs/MasterTab.tsx')
-ok('B4 tab Master memasang lencana lewat dariRenaksi', MT.includes('{dariRenaksi(r) && <LencanaRenaksi tahun={tahun} isLight={isLight} />}'))
+ok('B4 tab Master memasang lencana lewat dariRenaksi', MT.includes('{dariRenaksi(r) && <LencanaRenaksi tahun={tahun} />}'))
 const RT = sumber('app/(dashboard)/kinerja/_tabs/RekeningTab.tsx')
 ok('B5 tab Rekening: tanda baris diturunkan dari Master (tandaRantai), 3 kolom',
   RT.includes('const tanda = tandaRantai(r, masterBerasal)') && (RT.match(/tanda\.(program|kegiatan|subkegiatan) && <LencanaRenaksi/g) ?? []).length === 3)

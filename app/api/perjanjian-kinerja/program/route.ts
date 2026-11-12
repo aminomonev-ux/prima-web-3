@@ -23,6 +23,7 @@ type ProgramRow = {
   subkegiatan: string | null;
   tahun: string;
   level: 'program' | 'kegiatan' | 'subkegiatan';
+  asal: 'MANUAL' | 'RENAKSI';
 };
 
 export async function GET(req: NextRequest) {
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
   const tahun = q.data.tahun ?? new Date().getFullYear().toString();
 
   const rows = await sql`
-    SELECT id, program, kegiatan, subkegiatan, tahun, level
+    SELECT id, program, kegiatan, subkegiatan, tahun, level, asal
     FROM pk_program
     WHERE tahun = ${tahun}
     ORDER BY program, kegiatan, subkegiatan
@@ -115,11 +116,12 @@ export async function POST(req: NextRequest) {
         r.subkegiatan || null,
         tahun,
         r.level,
+        r.asal ?? 'MANUAL',
         session.userId,
       ]);
       await bulkInsert(
         'pk_program',
-        ['program','kegiatan','subkegiatan','tahun','level','created_by'],
+        ['program','kegiatan','subkegiatan','tahun','level','asal','created_by'],
         values,
         conn,
       );

@@ -148,7 +148,12 @@ ok('B2 dialog menulis lewat jalur lama: Edit Master (PUT), Init Renaksi, route a
   && DLG.includes("'/api/kinerja/master/asal'"))
 ok('B3 ganti nama dicoba "dry" dulu untuk menampilkan dampaknya', DLG.includes('JSON.stringify({ nama: g.ke, dry: true })'))
 ok('B4 ganti nama diterapkan program → kegiatan → sub', DLG.includes('.sort((a, b) => urut[a.tipe] - urut[b.tipe])'))
-ok('B5 bawaan centang: ganti nama & baru saja', /new Set\(\[\s*\.\.\.hasil\.gantiNama\.map\(g => kunciGanti\(g\.id\)\),\s*\.\.\.hasil\.baru\.map\(b => kunciBaru\(b\.kunci\)\),\s*\]\)/.test(DLG))
+ok('B5 bawaan centang: ganti nama & baru saja',
+  DLG.includes('kunci: kunciGanti(g.id), bawaan: true') && DLG.includes('kunci: kunciBaru(b.kunci), bawaan: true')
+  && DLG.includes('kunci: kunciHilang(e.id), bawaan: false') && DLG.includes('kunci: kunciTanda(e.id), bawaan: false'))
+const SEL = sumber('components/renaksi/SelarasRenaksi.tsx')
+ok('B5b dialog bersama: centang awal = butir `bawaan` yang tidak mati; yang mati tidak ikut diterapkan',
+  SEL.includes('b.items.filter(i => i.bawaan && !i.mati)') && SEL.includes('bagian.some(b => b.items.some(i => i.kunci === k && !i.mati))'))
 const KC = sumber('app/(dashboard)/kinerja/kinerja-client.tsx')
 ok('B6 spanduk hanya di tab Master & Rekening; dialog lewat guardPending',
   KC.includes("(activeTab === 'master' || activeTab === 'rekening') && banding.jumlah > 0") && KC.includes('onBuka={() => guardPending(() => setPerbaruiBuka(true))}'))
