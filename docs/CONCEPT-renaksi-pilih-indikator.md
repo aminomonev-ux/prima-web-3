@@ -184,26 +184,31 @@ disentuh.
 
 ## 9. Duplikasi tahun ikut menautkan (keputusan #4)
 
-`duplicateYear` (`lib/data/rencana-aksi.ts:809`) sekarang satu `INSERT … SELECT`. Id tidak ikut
+`duplicateYear` (`lib/data/rencana-aksi.ts:881`) sekarang satu `INSERT … SELECT`. Id tidak ikut
 disalin, jadi tautan **tidak boleh** disalin mentah (akan menunjuk baris tahun asal). Pemetaan
-id lama → id baru tidak bisa dilakukan baris-per-baris di dalam satu statement.
+id lama → id baru tidak bisa dilakukan baris-per-barish di dalam satu statement.
 
-Solusinya dua langkah, keduanya di **transaksi & kunci `RA_DUPLIKASI` yang sama**:
+Solusinya tiga langkah, semuanya di **transaksi & kunci `RA_DUPLIKASI` yang sama**:
 
 ```sql
--- 1. salin semua baris; kolom tautan sengaja TIDAK ikut (default NULL)
-INSERT INTO rencana_aksi (tahun, level, kode, …, bulan_target, created_by, updated_by)
-SELECT ${ke}, level, kode, …, bulan_target, ${userId}, ${userId}
+-- 1. salin semua baris; kolom tautan IKUT tersalin (id lama, sementara)
+INSERT INTO rencana_aksi (tahun, level, kode, …, bulan_target, induk_indikator_id, created_by, updated_by)
+SELECT ${ke}, level, kode, …, bulan_target, induk_indikator_id, ${userId}, ${userId}
 FROM rencana_aksi WHERE tahun = ${dari};
 
--- 2. sambungkan tautan memakai pasangan (level, indikator) yang unik per tahun
-UPDATE rencana_aksi t
-JOIN rencana_aksi asal      ON asal.tahun = ${dari} AND asal.level = t.level AND asal.indikator = t.indikator
-JOIN rencana_aksi indukAsal ON indukAsal.tahun = ${dari} AND indukAsal.id = asal.induk_indikator_id
-JOIN rencana_aksi indukBaru ON indukBaru.tahun = ${ke} AND indukBaru.level = indukAsal.level
-                            AND indukBaru.indikator = indukAsal.indikator
-SET t.induk_indikator_id = indukBaru.id
-WHERE t.tahun = ${ke};
+-- 2. pindahkan tautan ke salinan induknya di tahun baru, lewat pasangan (level, indikator)
+UPDATE rencana_aksi AS anak
+JOIN rencana_aksi AS induk_asal ON induk_asal.id = anak.induk_indikator_id
+JOIN rencana_aksi AS induk_baru ON induk_baru.tahun = ${ke}
+                              AND induk_baru.level = induk_asal.level
+                              AND induk_baru.indikator = induk_asal.indikator
+SET anak.induk_indikator_id = induk_baru.id
+WHERE anak.tahun = ${ke} AND anak.induk_indikator_id IS NOT NULL;
+
+-- 3. sisa tautan yang induknya tidak punya salinan (data lama yatim) dilepas
+UPDATE rencana_aksi SET induk_indikator_id = NULL
+WHERE tahun = ${ke} AND induk_indikator_id IS NOT NULL
+  AND induk_indikator_id NOT IN (SELECT id FROM (SELECT id FROM rencana_aksi WHERE tahun = ${ke}) AS s);
 ```
 
 Kenapa pasangan `(level, indikator)` sah sebagai penghubung: `uk_tahun_level_ind` menjamin satu
@@ -211,11 +216,17 @@ baris per pasangan itu di satu tahun. **Kalau kunci itu kelak diubah, UPDATE ini
 dicatat di komentar fungsi.
 
 Sifat yang menguntungkan: baris yang di tahun asal tautannya kosong tidak ikut ter-UPDATE
-(JOIN gugur) → tetap `NULL`; tautan usang di tahun asal pun tidak menular ke tahun baru, malah
-"menyembuhkan diri" jadi `NULL`. Tahun tujuan tetap harus kosong seperti sekarang, jadi tidak ada
-risiko menimpa.
+(JOIN gugur) → tetap `NULL`; tautan yang induknya tidak punya salinan di tahun baru ikut dilepas
+langkah 3, jadi tidak ada id mati yang menyeberang. Tahun tujuan tetap harus kosong seperti
+sekarang, jadi tidak ada risiko menimpa.
 
-Biaya: satu statement tambahan, join ber-index pada tabel yang sudah dibatasi satu tahun.
+Biaya: dua statement tambahan, join ber-index pada tabel yang sudah dibatasi satu tahun.
+
+**Koreksi saat mengerjakan (jujur):** rancangan awal di atas menulis "kolom tautan sengaja TIDAK
+ikut" di langkah 1, dan itu justru mustahil ditindaklanjuti — `UPDATE` langkah 2 tidak punya bahan
+apa pun untuk di-join karena semua salinan `NULL`. Uji tahap 5 menangkapnya (7 dari 12 gagal
+dengan tautan kosong semua). Perbaikannya: kolom **ikut** tersalin di langkah 1 lalu dipindahkan
+di langkah 2, dan langkah 3 ditambahkan untuk membuang tautan yatim.
 
 ---
 
@@ -270,7 +281,7 @@ Kesimpulan: PK, IKI, E-Anggaran, LKJIP, dan Rima aman tanpa satu baris pun diuba
 | 2 | Mode Edit | sama | pilihan tersimpan di luar daftar tetap ditampilkan |
 | 3 | Impor commit | `lib/renaksi/import-data.ts` | `NULL`-kan tautan saat mode `ganti`; kolom tidak ditulis di mode lain |
 | 4 | Duplikasi tahun | `duplicateYear` | langkah 2 (§9) |
-| 5 | Hapus baris | `assertTidakPunyaAnak` | pagar tautan by id |
+| 5 | Hapus baris | `assertTidakDitunjuk` | pagar tautan by id |
 | 6 | Skema & migrasi | `docs/schema-mysql.sql`, `docs/migrations/` | kolom + index |
 | 7 | Tipe baris | `lib/data/rencana-aksi.ts` **dan** `app/(dashboard)/rencana-aksi/_lib/types.ts` | dua salinan `RaRow`; keduanya wajib, kalau tidak `tsc` lolos tapi layar buta |
 
@@ -287,7 +298,7 @@ sekali, supaya migrasi bisa dipasang lebih dulu di server kantor tanpa menunggu 
 | **2** | Aturan MURNI rantai (`lib/renaksi/rantai.ts`): daftar indikator induk untuk induk terpilih, daftar anak yang cocok (termasuk aturan "`NULL` ikut tampil"), pemisahan "milik entitas ini" vs "milik entitas lain" | uji PURE tanpa DB: induk kosong, anak `NULL`, dua induk berbeda, entitas tanpa indikator |
 | **3** | Layar Data Entry: urutan isian per tingkat, pemilih indikator induk & indikator sendiri, wajib untuk baris baru (§6.1), mode Edit menampilkan nilai tersimpan di luar daftar | coba di peramban tahun kotak pasir: alur program → indikator → kegiatan menyusut; baris lama tetap bisa disunting |
 | **4** | Pagar sisa: hapus induk yang masih ditunjuk (by id), impor mode `ganti` me-`NULL`-kan tautan anak | uji DB: hapus induk tertaut ditolak, `ganti` tidak meninggalkan tautan hantu |
-| **5** | Impor mode `ganti` me-`NULL`-kan tautan anak; duplikasi tahun menautkan ulang (§9) | uji DB 2098 → 2099: salinan tertaut ke baris 2099; `ganti` tidak meninggalkan tautan hantu |
+| **5** | Duplikasi tahun menautkan ulang (§9) — bagian impor `ganti` sudah dikerjakan di tahap 4 | uji DB 2098 → 2099: salinan tertaut ke baris 2099; `ganti` tidak meninggalkan tautan hantu |
 | **6** | Regresi + uji mutasi (§14) + coba layar penuh (tema terang, 375 px, Esc) | seluruh uji §14 hijau |
 
 **Tahap 1 selesai** (12 Nov): `migration-renaksi-induk-indikator.sql` (kolom + index, tanpa
@@ -327,6 +338,17 @@ regresi `test-renaksi-audit` (55) / `pindah-induk` (39) / `pemakai` (11), `tsc` 
 Catatan jujur: satu ekspektasi uji saya salah tulis (B3) — menganggap indikator program LAIN selalu
 salah, padahal dua indikator di program yang SAMA sama-sama sah jadi induk; ujinya saya betulkan
 menjadi "program lain ditolak" + kontrol positif untuk yang sah.
+
+**Tahap 5 selesai** (12 Nov): `duplicateYear` menyalin `induk_indikator_id` lalu memindahkannya ke
+salinan induk di tahun baru (join lewat `(tahun, level, indikator)`), dan melepas tautan yang
+induknya tidak ikut tersalin. Uji baru `scripts/test-renaksi-duplikasi-tautan.mts` (12): rantai penuh
+2099 → 2098 tertaut ke id 2098 (bukan id 2099), tidak ada satu pun tautan menyeberang tahun, baris
+lama tanpa tautan tetap `NULL`, tautan ke induk yang tidak ada dilepas jadi `NULL`. **Dua kesalahan
+saya yang ditangkap uji ini**: (a) rancangan §9 menulis kolom tautan tidak ikut tersalin, padahal
+tanpa kolom itu langkah relink tidak punya bahan — 7 dari 12 uji gagal sampai kolomnya diikutkan;
+(b) uji "tautan yatim" pertama saya salah susun (induknya ternyata punya padanan `level+indikator`
+di tahun baru, jadi ditautkan ulang — itu perilaku yang benar), lalu diganti dengan induk yang
+benar-benar tidak ada. Jalur impor `ganti` sudah dikerjakan di tahap 4.
 
 **Uji layar nyata** (12 Nov, peramban, tahun kotak pasir 2045): tujuan → sasaran → program (2
 indikator) → kegiatan (satu per indikator) → sub kegiatan, semuanya lewat form. Yang terlihat:

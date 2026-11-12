@@ -903,15 +903,42 @@ export async function duplicateYear(
         (tahun, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
          program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
          target_rpjmd, target_tahunan, q1_target, q2_target, q3_target, q4_target,
-         anggaran_nominal, bulan_target, created_by, updated_by)
+         anggaran_nominal, bulan_target, induk_indikator_id, created_by, updated_by)
       SELECT ${toTahun}, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
          program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
          target_rpjmd, target_tahunan, q1_target, q2_target, q3_target, q4_target,
-         anggaran_nominal, bulan_target, ${userId}, ${userId}
+         anggaran_nominal, bulan_target, induk_indikator_id, ${userId}, ${userId}
       FROM rencana_aksi
       WHERE tahun = ${fromTahun}
     ` as unknown as Array<{ affectedRows?: number }>;
     inserted = res[0]?.affectedRows ?? 0;
+
+    // Konsep §9: `induk_indikator_id` ikut tersalin apa adanya, jadi salinannya masih menunjuk
+    // baris TAHUN ASAL. Tautan itu harus dipindahkan ke salinan induknya di tahun baru, kalau
+    // tidak seluruh rantai di tahun baru menyeberang tahun (dan ditolak `assertIndukIndikator`
+    // begitu baris itu disunting). Pasangan id lama→baru tidak bisa dibaca dari hasil INSERT
+    // (MySQL tanpa RETURNING), jadi dicari lewat kunci unik yang sudah ada:
+    // (tahun, level, indikator).
+    await tx`
+      UPDATE rencana_aksi AS anak
+      JOIN rencana_aksi AS induk_asal ON induk_asal.id = anak.induk_indikator_id
+      JOIN rencana_aksi AS induk_baru
+        ON induk_baru.tahun = ${toTahun}
+       AND induk_baru.level = induk_asal.level
+       AND induk_baru.indikator = induk_asal.indikator
+      SET anak.induk_indikator_id = induk_baru.id
+      WHERE anak.tahun = ${toTahun} AND anak.induk_indikator_id IS NOT NULL
+    `;
+
+    // Sisa tautan yang induknya tidak ikut tersalin (data lama yatim / tautan lintas tahun) tidak
+    // boleh dibawa ke tahun baru: dilepas jadi NULL, sama seperti baris lama yang belum tertaut.
+    await tx`
+      UPDATE rencana_aksi SET induk_indikator_id = NULL
+      WHERE tahun = ${toTahun} AND induk_indikator_id IS NOT NULL
+        AND induk_indikator_id NOT IN (
+          SELECT id FROM (SELECT id FROM rencana_aksi WHERE tahun = ${toTahun}) AS s
+        )
+    `;
   });
   return { inserted };
 }
