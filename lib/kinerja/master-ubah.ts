@@ -106,11 +106,14 @@ function pasangDanBuangKembar(rows: readonly EntriMaster[], baru: Map<number, Ni
     grup.set(k, [...(grup.get(k) ?? []), r]);
   }
   const hapus = new Set<number>();
+  const lebur: Lebur[] = [];
   for (const anggota of grup.values()) {
     const diubah = anggota.filter(r => baru.has(r.id));
     if (anggota.length < 2 || diubah.length === 0) continue;
     const tetap = anggota.some(r => !baru.has(r.id)) ? null : Math.min(...diubah.map(r => r.id));
-    for (const r of diubah) if (r.id !== tetap) hapus.add(r.id);
+    // Penerima = entri yang dipertahankan; kalau ada beberapa yang tak tersentuh (kembar lama), yang ber-id terkecil.
+    const ke = tetap ?? Math.min(...anggota.filter(r => !baru.has(r.id)).map(r => r.id));
+    for (const r of diubah) if (r.id !== tetap) { hapus.add(r.id); lebur.push({ dari: r.id, ke }); }
   }
   const asal = new Map(rows.map(r => [r.id, r]));
   const tulis = akhir.filter(r => {
@@ -119,8 +122,11 @@ function pasangDanBuangKembar(rows: readonly EntriMaster[], baru: Map<number, Ni
     return a.nama !== r.nama || a.program_ref !== r.program_ref
       || a.kegiatan_ref !== r.kegiatan_ref || a.subkegiatan_ref !== r.subkegiatan_ref;
   });
-  return { tulis, hapus: [...hapus].sort((a, b) => a - b) };
+  return { tulis, hapus: [...hapus].sort((a, b) => a - b), lebur, akhir };
 }
+
+/** Entri `dari` dibuang karena jadi kembar `ke` — dipakai mewariskan tanda asal (Tahap G). */
+export interface Lebur { dari: number; ke: number }
 
 export interface RencanaUbahMaster {
   diri: EntriMaster;
@@ -130,6 +136,9 @@ export interface RencanaUbahMaster {
   gabungKe: EntriMaster | null;
   tulis: EntriMaster[];
   hapus: number[];
+  lebur: Lebur[];
+  /** Seluruh entri sesudah perubahan (sebelum yang kembar dibuang). */
+  akhir: EntriMaster[];
   anak: number;
   jalurLama: Jalur;
   jalurBaru: Jalur;
@@ -168,7 +177,7 @@ export function rencanaUbahMaster(
   const dasar = {
     diri, baru: nilaiDariJalur(diri.tipe, B), jalurLama: P, jalurBaru: B, unik,
   };
-  if (samaJalur(P, B)) return { ...dasar, berubah: false, gabungKe: null, tulis: [], hapus: [], anak: 0 };
+  if (samaJalur(P, B)) return { ...dasar, berubah: false, gabungKe: null, tulis: [], hapus: [], lebur: [], akhir: [...rows], anak: 0 };
 
   // Induk baru harus ada di Master (L68). Diperiksa dari tingkat pertama yang berubah ke
   // bawah: pindah Program dengan Kegiatan yang sama berarti Kegiatan itu harus ada juga
@@ -191,10 +200,10 @@ export function rencanaUbahMaster(
   const turun = keturunan(rows, diri, unik);
   const baru = new Map<number, NilaiEntri>([[diri.id, dasar.baru]]);
   for (const r of turun) baru.set(r.id, nilaiDariJalur(r.tipe, geserJalur(jalurEntri(r), d, B)));
-  const { tulis, hapus } = pasangDanBuangKembar(rows, baru);
+  const { tulis, hapus, lebur, akhir } = pasangDanBuangKembar(rows, baru);
   const gabungKe = rows.find(e => e.id !== diri.id && e.tipe === diri.tipe && samaJalur(jalurEntri(e), B)) ?? null;
 
-  return { ...dasar, berubah: true, gabungKe, tulis, hapus, anak: turun.length };
+  return { ...dasar, berubah: true, gabungKe, tulis, hapus, lebur, akhir, anak: turun.length };
 }
 
 /**
@@ -236,6 +245,8 @@ export interface ContohRapikan { tipe: MasterTipe; lama: string; baru: string; g
 export interface RencanaRapikan {
   tulis: EntriMaster[];
   hapus: number[];
+  lebur: Lebur[];
+  akhir: EntriMaster[];
   /** Entri yang NAMANYA berubah (yang lain hanya ikut dirapikan kolom induknya). */
   contoh: ContohRapikan[];
   indukSaja: number;
@@ -252,13 +263,13 @@ export function rencanaRapikanBintang(rows: readonly EntriMaster[]): RencanaRapi
     if (n.nama !== r.nama || n.program_ref !== r.program_ref || n.kegiatan_ref !== r.kegiatan_ref
       || n.subkegiatan_ref !== r.subkegiatan_ref) baru.set(r.id, n);
   }
-  const { tulis, hapus } = pasangDanBuangKembar(rows, baru);
+  const { tulis, hapus, lebur, akhir } = pasangDanBuangKembar(rows, baru);
   const dihapus = new Set(hapus);
   const contoh = rows
     .filter(r => baru.has(r.id) && baru.get(r.id)!.nama !== r.nama)
     .sort((a, b) => kedalaman(a.tipe) - kedalaman(b.tipe) || a.id - b.id)
     .map(r => ({ tipe: r.tipe, lama: r.nama, baru: baru.get(r.id)!.nama, gabung: dihapus.has(r.id) }));
-  return { tulis, hapus, contoh, indukSaja: baru.size - contoh.length };
+  return { tulis, hapus, lebur, akhir, contoh, indukSaja: baru.size - contoh.length };
 }
 
 export function rapikanBarisNama<T extends BarisNama>(baris: readonly T[]): { baris: T; nilai: NilaiBaris }[] {

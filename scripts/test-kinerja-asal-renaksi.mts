@@ -9,9 +9,10 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import mysql from 'mysql2/promise'
 import {
-  bisaDariRenaksi, dariRenaksi, tandaRantai, namaBertanda, jalurAdaDiRenaksi, kunciNamaRenaksi,
+  bisaDariRenaksi, dariRenaksi, tandaRantai, namaBertanda, jalurAdaDiRenaksi, kunciNamaRenaksi, tandaWarisan,
   type EntriBerasal, type BarisRenaksi,
 } from '../lib/kinerja/asal-renaksi'
+import { rencanaRapikanBintang, rencanaUbahMaster, type EntriMaster } from '../lib/kinerja/master-ubah'
 
 let lulus = 0
 const gagal: string[] = []
@@ -72,6 +73,24 @@ ok('A12 sub kegiatan: dicocokkan dengan program DAN kegiatan',
   && !jalurAdaDiRenaksi(m('subkegiatan', 'Sub Beli Obat', 'MANUAL', 'Program Lain', 'Kegiatan Obat'), ra)
   && !jalurAdaDiRenaksi(m('subkegiatan', 'Sub Beli Obat', 'MANUAL', 'Program Pelayanan', 'Kegiatan Lain'), ra))
 ok('A13 uraian SSK tidak pernah dianggap dari Renaksi', !jalurAdaDiRenaksi(m('uraian_ssk', 'Sub Beli Obat', 'MANUAL'), ra))
+
+// Tahap G — penerima gabungan mewarisi tanda.
+const em = (id: number, tipe: EntriMaster['tipe'], nama: string, p: string | null = null): EntriMaster =>
+  ({ id, tipe, nama, program_ref: p, kegiatan_ref: null, subkegiatan_ref: null })
+const rapi = rencanaRapikanBintang([em(1, 'program', 'Program Pelayanan'), em(2, 'program', 'Program Pelayanan ***'), em(3, 'program', 'Program Sendiri ***')])
+ok('A14 Rapikan Bintang mencatat ke mana entri melebur (yang tak tersentuh = penerima)',
+  JSON.stringify(rapi.lebur) === '[{"dari":2,"ke":1}]' && rapi.hapus.join() === '2', JSON.stringify(rapi.lebur))
+const ubah = rencanaUbahMaster([em(1, 'kegiatan', 'Keg A', 'P'), em(2, 'kegiatan', 'Keg B', 'P')], 2, { nama: 'Keg A' })
+ok('A15 Edit Master gabung: diri melebur ke entri yang sudah ada', !('tolak' in ubah) && JSON.stringify(ubah.lebur) === '[{"dari":2,"ke":1}]')
+const asalPeta = (x: Array<[number, 'MANUAL' | 'RENAKSI']>) => new Map(x)
+const akhirRapi = rapi.akhir
+ok('A16 penerima MANUAL mewarisi RENAKSI bila jalurnya ada di Renaksi',
+  tandaWarisan(rapi.lebur, asalPeta([[1, 'MANUAL'], [2, 'RENAKSI']]), akhirRapi, ra).join() === '1')
+ok('A17 jalur penerima TIDAK ada di Renaksi → tetap MANUAL (pagar L68)',
+  tandaWarisan(rapi.lebur, asalPeta([[1, 'MANUAL'], [2, 'RENAKSI']]), akhirRapi, ra.filter(r => r.level !== 'program')).length === 0)
+ok('A18 yang melebur MANUAL → tidak ada warisan (penerima RENAKSI pun tidak disentuh)',
+  tandaWarisan(rapi.lebur, asalPeta([[1, 'MANUAL'], [2, 'MANUAL']]), akhirRapi, ra).length === 0
+  && tandaWarisan(rapi.lebur, asalPeta([[1, 'RENAKSI'], [2, 'MANUAL']]), akhirRapi, ra).length === 0)
 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('B. Sambungan kode')
@@ -192,6 +211,22 @@ try {
   await M.ubahMasterMenjalar(Number(idKeg), { nama: 'Kegiatan Obat Ganti', program_ref: 'Program Pelayanan' }, { userId, dry: false, gabung: false })
   const sesudahUbah = await q<{ asal: string }>("SELECT asal FROM kinerja_master WHERE tahun = ? AND nama = 'Kegiatan Obat Ganti'", [TAHUN])
   ok('C9 ganti nama lewat Edit Master mempertahankan tanda (§5.1)', sebelumUbah[0]?.asal === 'RENAKSI' && sesudahUbah[0]?.asal === 'RENAKSI')
+
+  // Tahap G — gabung mewarisi tanda (Edit Master gabung & Rapikan Bintang).
+  await c.query(`INSERT INTO rencana_aksi (tahun, level, program, kegiatan, sub_kegiatan, indikator) VALUES
+    (?, 'program', 'Program Rapi ***', NULL, NULL, 'G-P1'), (?, 'kegiatan', 'Program Pelayanan', 'Kegiatan Gabung', NULL, 'G-K1')`, [Number(TAHUN), Number(TAHUN)])
+  await c.query(`INSERT INTO kinerja_master (tahun, tipe, nama, program_ref, urut, asal) VALUES
+    (?, 'program', 'Program Rapi', NULL, 50, 'MANUAL'), (?, 'program', 'Program Rapi ***', NULL, 51, 'RENAKSI'),
+    (?, 'program', 'Program Liar', NULL, 52, 'MANUAL'), (?, 'program', 'Program Liar ***', NULL, 53, 'RENAKSI'),
+    (?, 'kegiatan', 'Kegiatan Gabung', 'Program Pelayanan', 54, 'MANUAL'), (?, 'kegiatan', 'Kegiatan Gabung Lama', 'Program Pelayanan', 55, 'RENAKSI')`,
+    [TAHUN, TAHUN, TAHUN, TAHUN, TAHUN, TAHUN])
+  const asalNama = async (nama: string) => (await q<{ asal: string }>('SELECT asal FROM kinerja_master WHERE tahun = ? AND nama = ?', [TAHUN, nama])).map(x => x.asal).join()
+  await M.rapikanBintangMaster(TAHUN, { userId, dry: false })
+  ok('C11 Rapikan Bintang: entri MANUAL penerima mewarisi RENAKSI', await asalNama('Program Rapi') === 'RENAKSI' && await asalNama('Program Rapi ***') === '')
+  ok('C12 …tapi tidak kalau jalurnya tidak ada di Renaksi', await asalNama('Program Liar') === 'MANUAL')
+  const idLama = (await q<{ id: number }>("SELECT id FROM kinerja_master WHERE tahun = ? AND nama = 'Kegiatan Gabung Lama'", [TAHUN]))[0].id
+  await M.ubahMasterMenjalar(Number(idLama), { nama: 'Kegiatan Gabung' }, { userId, dry: false, gabung: true })
+  ok('C13 Edit Master gabung: entri MANUAL tujuan mewarisi RENAKSI', await asalNama('Kegiatan Gabung') === 'RENAKSI' && await asalNama('Kegiatan Gabung Lama') === '')
 } finally {
   await bersih()
   const sisa = await q<{ n: number }>('SELECT (SELECT COUNT(*) FROM kinerja_master WHERE tahun = ?) + (SELECT COUNT(*) FROM rencana_aksi WHERE tahun = ?) AS n', [TAHUN, Number(TAHUN)])

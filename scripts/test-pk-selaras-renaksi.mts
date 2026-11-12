@@ -14,6 +14,8 @@ import {
 import { jumlahPerubahan, type CatatanGanti } from '../lib/kinerja/banding-renaksi'
 import { jalurAdaDiRenaksi, type BarisRenaksi } from '../lib/kinerja/asal-renaksi'
 import { entriProgramPk } from '../lib/pk/selaras-renaksi'
+import { buangProgramKembar } from '../lib/pk/program-kembar'
+import { rapikanBarisProgram } from '../lib/pk/rapikan-nama'
 
 let lulus = 0
 const gagal: string[] = []
@@ -142,6 +144,20 @@ ok('C3 Perbarui berhenti di form: tidak ada fetch tulis di penerapnya',
   [kP, kS].every(s => { const i = s.indexOf('function terapkanPerbarui'); const b = s.slice(i, s.indexOf('\n  }\n', i)); return i > 0 && !b.includes('fetch') && b.includes('setRows(') }))
 const rB = sumber('app/api/perjanjian-kinerja/banding-renaksi/route.ts')
 ok('C4 route bahan: sakelar dulu, lalu hak MENGUBAH menu', rB.indexOf('await pkMati(') < rB.indexOf('await bolehEditMenu(') && rB.includes('susunSasaranRenaksi(raRows)'))
+{
+  // Tahap G: baris kembar yang digabung (Simpan & Rapikan Nama) mewariskan tanda RENAKSI.
+  const g = buangProgramKembar([
+    { program: 'PROGRAM X', kegiatan: null, asal: 'MANUAL' as const },
+    { program: 'program x ', kegiatan: null, asal: 'RENAKSI' as const },
+    { program: 'PROGRAM Y', kegiatan: null, asal: 'MANUAL' as const },
+  ])
+  ok('C6 kembar digabung: yang dipertahankan mewarisi RENAKSI, baris lain tidak tersentuh',
+    g.kembar === 1 && g.unik[0].asal === 'RENAKSI' && g.unik[0].program === 'PROGRAM X' && g.unik[1].asal === 'MANUAL')
+  const r = rapikanBarisProgram([{ program: 'Program Z', asal: 'MANUAL' as const }, { program: 'Program Z ***', asal: 'RENAKSI' as const }])
+  ok('C7 Rapikan Nama memakai aturan yang sama', r.rows.length === 1 && r.rows[0].asal === 'RENAKSI')
+  ok('C8 baris tanpa kolom asal (tab lama) tidak dikarang tandanya',
+    !('asal' in buangProgramKembar([{ program: 'A' }, { program: 'a', asal: 'RENAKSI' as const }]).unik[0]))
+}
 ok('C5 skema acuan memuat asal di kedua tabel', (sumber('docs/schema-mysql.sql').match(/asal\s+ENUM\('MANUAL','RENAKSI'\) NOT NULL DEFAULT 'MANUAL' COMMENT 'RENAKSI = diambil lewat Import Renaksi \(migration-pk-asal\)'/g) ?? []).length === 2)
 
 // ─────────────────────────────────────────────────────────────────────────────

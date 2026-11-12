@@ -85,4 +85,25 @@ export function jalurAdaDiRenaksi(e: EntriBerasal, renaksi: readonly BarisRenaks
   });
 }
 
-export const labelLencanaRenaksi = (tahun: string | number) => `Diambil dari Rencana Aksi ${tahun}`;
+/**
+ * Tahap G: entri yang DIGABUNG (Edit Master gabung, Rapikan Bintang) dibuang, dan tandanya dulu
+ * ikut hilang — entri penerima yang MANUAL tetap MANUAL walau isinya kini milik Renaksi. Penerima
+ * mewarisi RENAKSI bila salah satu yang melebur kepadanya RENAKSI DAN jalur akhirnya memang ada di
+ * Renaksi (pagar yang sama dengan tanda dari form, L68). Arah sebaliknya tidak: RENAKSI tidak
+ * pernah diturunkan jadi MANUAL karena digabungi entri manual. Penerima yang sudah RENAKSI boleh
+ * ikut dikembalikan — menuliskannya lagi tidak mengubah apa pun.
+ */
+export function tandaWarisan(
+  lebur: readonly { dari: number; ke: number }[],
+  asal: ReadonlyMap<number, AsalMaster | null | undefined>,
+  akhir: readonly (EntriBerasal & { id: number })[],
+  renaksi: readonly BarisRenaksi[],
+): number[] {
+  const perId = new Map(akhir.map(e => [e.id, e]));
+  const calon = new Set(lebur.filter(l => asal.get(l.dari) === 'RENAKSI').map(l => l.ke));
+  return [...calon]
+    .filter(id => { const e = perId.get(id); return !!e && jalurAdaDiRenaksi(e, renaksi); })
+    .sort((a, b) => a - b);
+}
+
+export const labelLencanaRenaksi =(tahun: string | number) => `Diambil dari Rencana Aksi ${tahun}`;

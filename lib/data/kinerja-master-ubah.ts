@@ -8,7 +8,7 @@
 import { sql, bulkInsert, execWrite, withTransaction, type TxSql, type Penanya } from './db';
 import { listGantiNama } from './rencana-aksi';
 import { bandingRenaksi, type EntriBanding, type HasilBanding } from '@/lib/kinerja/banding-renaksi';
-import { jalurAdaDiRenaksi, type AsalMaster, type BarisRenaksi, type EntriBerasal } from '@/lib/kinerja/asal-renaksi';
+import { jalurAdaDiRenaksi, tandaWarisan, type AsalMaster, type BarisRenaksi, type EntriBerasal } from '@/lib/kinerja/asal-renaksi';
 import { acquireBludLock, bumpBludVersion } from './locks';
 import { SUMBER_LIST, kunciVersiSsk, KinerjaMasterTidakAdaError, type MasterTipe, type SumberSSK } from './kinerja';
 import { REALISASI_LOCK_ENTITY, realisasiLockKey } from '@/lib/kinerja/tutup-bulan';
@@ -16,7 +16,7 @@ import {
   rencanaUbahMaster, jalarkanKeBaris, kelompokkanNilai, rencanaRapikanBintang, rapikanBarisNama,
   rencanaLengkapiMaster, hitungKembar,
   type EntriMaster, type BarisNama, type NilaiBaris, type MasukanUbahMaster, type RencanaUbahMaster,
-  type DampakData, type DampakVersiRko, type ContohRapikan, type EntriBaru, type Jalur,
+  type DampakData, type DampakVersiRko, type ContohRapikan, type EntriBaru, type Jalur, type Lebur,
 } from '@/lib/kinerja/master-ubah';
 
 export class KinerjaMasterTolakError extends Error {
@@ -37,7 +37,11 @@ type BarisRekening = BarisNama & { sumber: SumberSSK; uraian: string; sumber_ang
 type BarisSsk = BarisNama & { sumber: SumberSSK; versi_tipe: string; versi_seq: number };
 type BarisRealisasi = BarisNama & { sumber: SumberSSK };
 
-interface Bahan { master: EntriMaster[]; rekening: BarisRekening[]; ssk: BarisSsk[]; realisasi: BarisRealisasi[] }
+interface Bahan {
+  master: EntriMaster[]; rekening: BarisRekening[]; ssk: BarisSsk[]; realisasi: BarisRealisasi[];
+  /** Tanda asal per id Master — bahan pewarisan tanda saat entri digabung (Tahap G). */
+  asal: Map<number, AsalMaster>;
+}
 interface Tulisan<B> { baris: B; nilai: NilaiBaris }
 interface TulisanData { rekening: Tulisan<BarisRekening>[]; ssk: Tulisan<BarisSsk>[]; realisasi: Tulisan<BarisRealisasi>[] }
 
@@ -48,9 +52,9 @@ interface TulisanData { rekening: Tulisan<BarisRekening>[]; ssk: Tulisan<BarisSs
  */
 async function muatBahan(q: Penanya, tahun: string, kunci: boolean): Promise<Bahan> {
   const master = (kunci
-    ? await q`SELECT id, tipe, nama, program_ref, kegiatan_ref, subkegiatan_ref FROM kinerja_master WHERE tahun = ${tahun} ORDER BY id FOR UPDATE`
-    : await q`SELECT id, tipe, nama, program_ref, kegiatan_ref, subkegiatan_ref FROM kinerja_master WHERE tahun = ${tahun} ORDER BY id`
-  ) as EntriMaster[];
+    ? await q`SELECT id, tipe, nama, program_ref, kegiatan_ref, subkegiatan_ref, asal FROM kinerja_master WHERE tahun = ${tahun} ORDER BY id FOR UPDATE`
+    : await q`SELECT id, tipe, nama, program_ref, kegiatan_ref, subkegiatan_ref, asal FROM kinerja_master WHERE tahun = ${tahun} ORDER BY id`
+  ) as (EntriMaster & { asal: AsalMaster })[];
   const rekening = (kunci
     ? await q`SELECT id, sumber, program, kegiatan, subkegiatan, uraian_ssk, uraian, sumber_anggaran FROM kinerja_rekening WHERE tahun = ${tahun} ORDER BY id FOR UPDATE`
     : await q`SELECT id, sumber, program, kegiatan, subkegiatan, uraian_ssk, uraian, sumber_anggaran FROM kinerja_rekening WHERE tahun = ${tahun} ORDER BY id`
@@ -64,9 +68,28 @@ async function muatBahan(q: Penanya, tahun: string, kunci: boolean): Promise<Bah
     FROM kinerja_realisasi WHERE tahun = ${tahun} ORDER BY id
   ` as BarisRealisasi[];
   return {
-    master: master.map(m => ({ ...m, id: Number(m.id) })),
+    master: master.map(({ asal: _asal, ...m }) => ({ ...m, id: Number(m.id) })),
     rekening, ssk: ssk.map(s => ({ ...s, versi_seq: Number(s.versi_seq) })), realisasi,
+    asal: new Map(master.map(m => [Number(m.id), m.asal])),
   };
+}
+
+/**
+ * Tahap G (docs/CONCEPT-renaksi-terhubung.md): penerima gabungan mewarisi RENAKSI dari entri yang
+ * melebur kepadanya — aturannya `tandaWarisan`. Renaksi hanya dibaca kalau memang ada entri RENAKSI
+ * yang dibuang. `updated_at` tetap: tanda asal bukan suntingan isi.
+ */
+async function wariskanTanda(
+  tx: TxSql, tahun: string, r: { lebur: readonly Lebur[]; akhir: readonly EntriMaster[] }, asal: ReadonlyMap<number, AsalMaster>,
+): Promise<number> {
+  if (!r.lebur.some(l => asal.get(l.dari) === 'RENAKSI')) return 0;
+  const renaksi = await tx`
+    SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi
+    WHERE tahun = ${Number(tahun)} AND level IN ('program','kegiatan','sub-kegiatan')
+  ` as BarisRenaksi[];
+  const ids = tandaWarisan(r.lebur, asal, r.akhir, renaksi);
+  if (ids.length > 0) await tx`UPDATE kinerja_master SET asal = 'RENAKSI', updated_at = updated_at WHERE id IN (${ids})`;
+  return ids.length;
 }
 
 /**
@@ -210,10 +233,12 @@ export async function ubahMasterMenjalar(
 
   return await withTransaction(async ({ tx }) => {
     await kunciTahun(tx, tahun);
-    const { r, j } = rencanakan(await muatBahan(tx, tahun, true));
+    const b = await muatBahan(tx, tahun, true);
+    const { r, j } = rencanakan(b);
     if (r.gabungKe && !opsi.gabung) throw new KinerjaMasterPerluGabungError(r.gabungKe.nama);
     if (r.berubah) {
       await tulisMaster(tx, r.tulis, r.hapus);
+      await wariskanTanda(tx, tahun, r, b.asal);
       await tulisData(tx, tahun, j.data, opsi.userId);
       if (j.sumberAnggaran.length > 0) {
         await tx`UPDATE kinerja_rekening SET sumber_anggaran = ${r.baru.nama}, updated_at = updated_at WHERE id IN (${j.sumberAnggaran})`;
@@ -259,8 +284,10 @@ export async function rapikanBintangMaster(tahun: string, opsi: { userId: number
   if (opsi.dry) return hasilRapikan(rencanakanRapikan(await muatBahan(sql, tahun, false)));
   return await withTransaction(async ({ tx }) => {
     await kunciTahun(tx, tahun);
-    const x = rencanakanRapikan(await muatBahan(tx, tahun, true));
+    const b = await muatBahan(tx, tahun, true);
+    const x = rencanakanRapikan(b);
     await tulisMaster(tx, x.master.tulis, x.master.hapus);
+    await wariskanTanda(tx, tahun, x.master, b.asal);
     await tulisData(tx, tahun, x.data, opsi.userId);
     return hasilRapikan(x);
   });
