@@ -5,7 +5,10 @@
 // pemilik 2026-11-02: hanya label, angka & kunci tetap), dan Realisasi. Mengubah Master
 // tanpa ikut mengubah salinannya memecah satu program jadi dua kelompok di Cetak Rekap.
 
-import { sql, bulkInsert, withTransaction, type TxSql, type Penanya } from './db';
+import { sql, bulkInsert, execWrite, withTransaction, type TxSql, type Penanya } from './db';
+import { listGantiNama } from './rencana-aksi';
+import { bandingRenaksi, type EntriBanding, type HasilBanding } from '@/lib/kinerja/banding-renaksi';
+import type { AsalMaster, BarisRenaksi } from '@/lib/kinerja/asal-renaksi';
 import { acquireBludLock, bumpBludVersion } from './locks';
 import { SUMBER_LIST, kunciVersiSsk, KinerjaMasterTidakAdaError, type MasterTipe, type SumberSSK } from './kinerja';
 import { REALISASI_LOCK_ENTITY, realisasiLockKey } from '@/lib/kinerja/tutup-bulan';
@@ -299,4 +302,32 @@ export async function lengkapiMasterDariData(tahun: string, opsi: { userId: numb
       rows, conn);
     return rencana;
   });
+}
+
+// ─── Selaras dengan Rencana Aksi (docs/CONCEPT-renaksi-terhubung.md §5.3–5.5) ─────
+
+/** Bahan pembanding Master ↔ Renaksi tahun itu. Hanya membaca. */
+export async function bandingMasterRenaksi(tahun: string): Promise<HasilBanding> {
+  const master = await sql`
+    SELECT id, tipe, nama, program_ref, kegiatan_ref, subkegiatan_ref, asal
+    FROM kinerja_master WHERE tahun = ${tahun} AND tipe IN ('program','kegiatan','subkegiatan') ORDER BY urut, id
+  ` as EntriBanding[];
+  const renaksi = await sql`
+    SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi
+    WHERE tahun = ${Number(tahun)} AND level IN ('program','kegiatan','sub-kegiatan')
+  ` as BarisRenaksi[];
+  const catatan = await listGantiNama(Number(tahun));
+  return bandingRenaksi(master.map(m => ({ ...m, id: Number(m.id) })), renaksi, catatan);
+}
+
+/**
+ * "Jadikan manual" / "Tandai dari Renaksi". Hanya tingkat yang bisa berasal Renaksi; id dari
+ * tahun lain tidak tersentuh. `updated_at` tetap: tanda asal bukan suntingan isi.
+ */
+export async function ubahAsalMaster(tahun: string, ids: readonly number[], asal: AsalMaster): Promise<number> {
+  const r = await execWrite(sql`
+    UPDATE kinerja_master SET asal = ${asal}, updated_at = updated_at
+    WHERE tahun = ${tahun} AND id IN (${[...ids]}) AND tipe IN ('program','kegiatan','subkegiatan') AND asal <> ${asal}
+  `);
+  return r.affectedRows;
 }

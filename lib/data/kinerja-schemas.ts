@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import type { SumberSSK, MasterTipe } from './kinerja';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
+import { ASAL_MASTER } from '@/lib/kinerja/asal-renaksi';
 
 // ─── Rate Limit ─────────────────────────────────────────────────────────────
 
@@ -213,6 +214,15 @@ export const MasterTahunAksiBodySchema = z.object({
 export const InitRenaksiBodySchema = z.object({
   tahun: TahunSchema,
   dry:   z.boolean().optional().default(false),
+  /** Dialog "Perbarui dari Rencana Aksi": kunci jalur terpilih (`kunciJalur`). Tanpa = semua. */
+  pilih: z.array(z.string().max(2100)).max(2000).optional(),
+});
+
+/** POST /api/kinerja/master/asal — Jadikan manual / Tandai dari Renaksi (docs/CONCEPT-renaksi-terhubung.md §5.5). */
+export const MasterAsalBodySchema = z.object({
+  tahun: TahunSchema,
+  ids:   z.array(z.number().int().positive()).min(1).max(2000),
+  asal:  z.enum(ASAL_MASTER),
 });
 
 /**

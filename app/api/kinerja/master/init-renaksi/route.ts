@@ -18,14 +18,14 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
   }
-  const { tahun, dry } = parsed.data;
+  const { tahun, dry, pilih } = parsed.data;
 
   if (!dry) {
     const limited = await kinerjaRateLimit(session.userId, 'init-renaksi', 5);
     if (limited) return limited;
   }
 
-  const result = await initMasterFromRenaksi(tahun, session.userId, dry);
+  const result = await initMasterFromRenaksi(tahun, session.userId, dry, pilih);
 
   if (!dry) {
     await writeAuditLog({
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       eventType: 'KINERJA_MASTER_INIT_RENAKSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `Init Renaksi tahun ${tahun}: +${result.programInserted}P/+${result.kegiatanInserted}K/+${result.subkegiatanInserted}S (skip ${result.programSkipped}/${result.kegiatanSkipped}/${result.subkegiatanSkipped}, total RA=${result.raTotal})`,
+      detail:    `${pilih ? 'Perbarui dari Rencana Aksi (terpilih) ' : 'Init Renaksi '}tahun ${tahun}: +${result.programInserted}P/+${result.kegiatanInserted}K/+${result.subkegiatanInserted}S (skip ${result.programSkipped}/${result.kegiatanSkipped}/${result.subkegiatanSkipped}, total RA=${result.raTotal})`,
     });
   }
 

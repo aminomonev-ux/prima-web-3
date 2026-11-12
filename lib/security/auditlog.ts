@@ -89,6 +89,7 @@ export type AuditEventType =
   | 'KINERJA_SAVE_MASTER'
   | 'KINERJA_DELETE_MASTER'
   | 'KINERJA_MASTER_INIT_RENAKSI'
+  | 'KINERJA_MASTER_SELARAS_RENAKSI'  // dialog Perbarui dari Rencana Aksi: tanda asal entri Master
   | 'KINERJA_SAVE_REKENING'
   | 'KINERJA_IMPORT_REKENING'    // POST /api/kinerja/rekening/import (baca berkas, tidak menulis)
   | 'KINERJA_IMPORT_MASTER'      // POST /api/kinerja/master/import (baca berkas, tidak menulis)

@@ -40,6 +40,8 @@ interface Props {
   showConfirm: (msg: string, action: () => void) => void;
   onPendingChange: (hasPending: boolean) => void;
   onMasterOptsRefresh: () => void;
+  /** Naik sesudah dialog Perbarui dari Rencana Aksi: muat ulang, baris baru yang belum disimpan tetap. */
+  segarkanKe?: number;
   isLight?: boolean;
 }
 
@@ -85,7 +87,7 @@ function kalimatUbah(h: HasilUbahResp): string {
 
 export default function MasterTab({
   tahun, canEdit, masterOpts, showConfirm, onPendingChange, onMasterOptsRefresh,
-  isLight = false,
+  segarkanKe = 0, isLight = false,
 }: Props) {
   // Token surface per tema
   // Surface & teks dari token terpusat (lib/theme); aksen ungu/pink Kinerja tetap lokal.
@@ -148,6 +150,15 @@ export default function MasterTab({
       else toast.error(d.message || 'Gagal memuat master');
     } finally { if (!signal.aborted) setLoading(false); }
   }, [masterTipe, tahun]);
+
+  useAbortableEffect(async (signal) => {
+    if (segarkanKe === 0) return;
+    const q = new URLSearchParams({ tahun, tipe: masterTipe });
+    const d = await fetchJson<unknown>(`/api/kinerja/master?${q}`, { signal });
+    if (signal.aborted || !d.ok) return;
+    const rows = (d as unknown as { rows: MasterRow[] }).rows;
+    setMasterRows(p => [...rows, ...p.filter(r => r.id === 0)]);
+  }, [segarkanKe]);
 
   // ─── Notify shell saat pending changes berubah ───────────────────────────
   useEffect(() => {

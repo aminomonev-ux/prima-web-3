@@ -45,8 +45,11 @@ interface SidebarItemProps {
   color?: string;
   isLight: boolean;
   dataRima?: string;
+  /** Angka kecil di ujung butir (mis. perubahan Rencana Aksi di Master). 0 = tidak tampil. */
+  angka?: number;
+  angkaLabel?: string;
 }
-function SidebarItem({ icon, label, onClick, active, color = '#EF9F27', isLight, dataRima }: SidebarItemProps) {
+function SidebarItem({ icon, label, onClick, active, color = '#EF9F27', isLight, dataRima, angka = 0, angkaLabel }: SidebarItemProps) {
   return (
     <button onClick={onClick} className={`kinerja-nav-item${active?' active':''}`} data-label={label} data-rima={dataRima} style={{
       display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px',
@@ -59,6 +62,12 @@ function SidebarItem({ icon, label, onClick, active, color = '#EF9F27', isLight,
     }}>
       <IconBox icon={icon} color={color} active={active} />
       <span className="kinerja-nav-label">{label}</span>
+      {angka > 0 && (
+        <span className="kinerja-nav-label" aria-label={angkaLabel} style={{
+          marginLeft: 'auto', minWidth: '20px', padding: '1px 6px', borderRadius: '10px', textAlign: 'center',
+          fontSize: '11px', fontWeight: 800, background: '#BA7517', color: '#FFFFFF',
+        }}>{angka}</span>
+      )}
     </button>
   );
 }
@@ -112,12 +121,14 @@ interface Props {
   onToggleSidebar: () => void;
   onSetRkoOpen: (v: boolean | ((p: boolean) => boolean)) => void;
   onSetRealOpen: (v: boolean | ((p: boolean) => boolean)) => void;
+  /** Jumlah perubahan Rencana Aksi yang belum diterapkan ke Master. */
+  angkaMaster?: number;
 }
 
 export default function Sidebar({
   role, isLight, tahun, activeTab, activeSumber, realisasiSumber,
   sidebarOpen, sidebarHidden, rkoOpen, realOpen,
-  onTahunChange, onNav, onSetSidebarOpen, onToggleSidebar, onSetRkoOpen, onSetRealOpen,
+  onTahunChange, onNav, onSetSidebarOpen, onToggleSidebar, onSetRkoOpen, onSetRealOpen, angkaMaster = 0,
 }: Props) {
   return (
     <aside style={{
@@ -169,7 +180,8 @@ export default function Sidebar({
         <SidebarItem icon={BarChart3} label="Laporan Konsolidasi" onClick={() => onNav('laporan')} active={activeTab==='laporan'} color="#6366f1" isLight={isLight} />
 
         <SectionLabel>Rekening</SectionLabel>
-        <SidebarItem icon={Database}      label="Master Rekening" onClick={() => onNav('master')}   active={activeTab==='master'}   color="#06b6d4" isLight={isLight} dataRima="kinerja.sidebar-master" />
+        <SidebarItem icon={Database}      label="Master Rekening" onClick={() => onNav('master')}   active={activeTab==='master'}   color="#06b6d4" isLight={isLight} dataRima="kinerja.sidebar-master"
+          angka={angkaMaster} angkaLabel={`${angkaMaster} perubahan Rencana Aksi belum diterapkan`} />
         <SidebarItem icon={ClipboardList} label="Rekening"        onClick={() => onNav('rekening')} active={activeTab==='rekening'} color="#8b5cf6" isLight={isLight} />
 
         <SectionLabel>RKO</SectionLabel>

@@ -201,7 +201,9 @@ for (const [nama, awal] of [['ubah', 'export async function ubahMasterMenjalar('
   const iTx = f.indexOf('withTransaction(async')
   ok(`F8 ${nama}: gembok tahun = perintah PERTAMA transaksi (L84)`, iTx > 0 && /^\(async \(\{ tx \}\) => \{\s*await kunciTahun\(tx, tahun\);/.test(f.slice(iTx + 'withTransaction'.length)))
 }
-ok('F9 stempel "terakhir diubah" tidak ikut berganti (3 tabel)', (mu.match(/updated_at = updated_at/g) ?? []).length === 4)
+// Dihitung di penulis nama saja: `ubahAsalMaster` (renaksi-terhubung) punya miliknya sendiri.
+const penulisNama = mu.slice(0, mu.indexOf('export async function bandingMasterRenaksi'))
+ok('F9 stempel "terakhir diubah" tidak ikut berganti (3 tabel)', (penulisNama.match(/updated_at = updated_at/g) ?? []).length === 4)
 const gembok = badan(mu, 'async function naikkanGembok(')
 ok('F10 angka kunci RKO per versi & Realisasi per sumber dinaikkan', /bumpBludVersion\(tx, 'kinerja_ssk'/.test(gembok) && /bumpBludVersion\(tx, REALISASI_LOCK_ENTITY/.test(gembok))
 const kunci = badan(mu, 'async function kunciTahun(')

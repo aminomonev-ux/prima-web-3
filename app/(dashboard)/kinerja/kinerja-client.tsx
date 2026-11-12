@@ -33,6 +33,7 @@ import { jumlahSskBerubah } from '@/lib/kinerja/sunting-ssk';
 import type { BulanTertutup } from '@/lib/kinerja/tutup-bulan';
 import type { VersiFinal } from '@/lib/kinerja/foto-realisasi';
 import Sidebar from './_components/Sidebar';
+import { useBandingRenaksi, SpandukRenaksi, PerbaruiRenaksiModal } from '@/components/kinerja/PerbaruiRenaksi';
 import Topbar from './_components/Topbar';
 import { bolehBatalkanFinal } from '@/lib/constants';
 
@@ -277,6 +278,13 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   }, []);
 
   const canEdit = ['SUPER_ADMIN','ADMIN','ADMIN_KASUBAG','ADMIN_KABAG','RENBANG','PROGRAM','KEUANGAN'].includes(role);
+
+  // Rencana Aksi berubah? (docs/CONCEPT-renaksi-terhubung.md §5.4) — spanduk di Master &
+  // Rekening, angka di sidebar. Dialog dibuka lewat guardPending: sesudah diterapkan, layar
+  // Master & Rekening dimuat ulang dari server.
+  const banding = useBandingRenaksi(tahun);
+  const [perbaruiBuka, setPerbaruiBuka] = useState(false);
+  const [segarkanMaster, setSegarkanMaster] = useState(0);
 
   // ─── Data Fetchers ──────────────────────────────────────────────────────────
 
@@ -761,6 +769,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
           onToggleSidebar={toggleSidebar}
           onSetRkoOpen={setRkoOpen}
           onSetRealOpen={setRealOpen}
+          angkaMaster={banding.jumlah}
         />
 
         <main className={`kinerja-main-wrap${sidebarHidden?' full':''}`} style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
@@ -788,6 +797,27 @@ export default function KinerjaClient({ userId, role, username, themePreference,
               <DashboardTab tahun={tahun} isLight={isLight} />
             </Suspense>
           )}
+            {(activeTab === 'master' || activeTab === 'rekening') && banding.jumlah > 0 && (
+              <div style={{ padding: '20px 20px 0' }}>
+                <SpandukRenaksi hasil={banding.hasil} tahun={tahun} isLight={isLight} onBuka={() => guardPending(() => setPerbaruiBuka(true))} />
+              </div>
+            )}
+            {perbaruiBuka && banding.hasil && (
+              <PerbaruiRenaksiModal
+                tahun={tahun}
+                hasil={banding.hasil}
+                isLight={isLight}
+                canEdit={canEdit}
+                onTutup={() => setPerbaruiBuka(false)}
+                onSelesai={() => {
+                  setPerbaruiBuka(false);
+                  void banding.muat();
+                  fetchMasterOpts();
+                  setSegarkanMaster(n => n + 1);
+                  if (activeTab === 'rekening') fetchRekening(activeSumber);
+                }}
+              />
+            )}
             {activeTab === 'master'     && (
               <Suspense fallback={<div style={{ padding:'40px', textAlign:'center', color:'#85B7EB' }}>Memuat...</div>}>
                 <MasterTab
@@ -797,6 +827,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   showConfirm={showConfirm}
                   onPendingChange={handleMasterPendingChange}
                   onMasterOptsRefresh={fetchMasterOpts}
+                  segarkanKe={segarkanMaster}
                   isLight={isLight}
                 />
               </Suspense>

@@ -11,6 +11,7 @@ import { alasanTolakUbahMurni, jejakTargetPerubahan, capaianPendapatan } from '@
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { buangBintang } from '@/lib/kinerja/master-nama';
 import type { AsalMaster } from '@/lib/kinerja/asal-renaksi';
+import { kunciJalur, lengkapiIndukPilihan } from '@/lib/kinerja/banding-renaksi';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
 import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 import { bandingRealisasi, pelanggaranBulanTertutup, type BarisBanding, type RingkasBulan } from '@/lib/kinerja/banding-realisasi';
@@ -205,10 +206,15 @@ export interface InitRenaksiResult {
   subkegiatanSkipped: number;
 }
 
+/**
+ * `pilih` = kunci jalur (`kunciJalur`) dari dialog "Perbarui dari Rencana Aksi"; induk yang
+ * juga baru ikut dibuat. Tanpa `pilih` = semua yang belum ada (tombol Init Renaksi).
+ */
 export async function initMasterFromRenaksi(
   tahun: string,
   userId: number,
   dry: boolean = false,
+  pilih?: readonly string[],
 ): Promise<InitRenaksiResult> {
   const tahunNum = Number(tahun);
   const raRows = await sql`
@@ -249,9 +255,20 @@ export async function initMasterFromRenaksi(
     }
   }
 
-  const programsToInsert = [...programSet].filter(p => !existSet.has(keyOf('program', p, null, null)));
-  const kegiatansToInsert = [...kegiatanMap.values()].filter(k => !existSet.has(keyOf('kegiatan', k.nama, k.program_ref, null)));
-  const subkegsToInsert = [...subkegMap.values()].filter(s => !existSet.has(keyOf('subkegiatan', s.nama, s.program_ref, s.kegiatan_ref)));
+  let programsToInsert = [...programSet].filter(p => !existSet.has(keyOf('program', p, null, null)));
+  let kegiatansToInsert = [...kegiatanMap.values()].filter(k => !existSet.has(keyOf('kegiatan', k.nama, k.program_ref, null)));
+  let subkegsToInsert = [...subkegMap.values()].filter(s => !existSet.has(keyOf('subkegiatan', s.nama, s.program_ref, s.kegiatan_ref)));
+  if (pilih) {
+    const kandidat = [
+      ...programsToInsert.map(n => ({ tipe: 'program' as const, nama: n, program_ref: null, kegiatan_ref: null })),
+      ...kegiatansToInsert.map(x => ({ tipe: 'kegiatan' as const, nama: x.nama, program_ref: x.program_ref, kegiatan_ref: null })),
+      ...subkegsToInsert.map(x => ({ tipe: 'subkegiatan' as const, nama: x.nama, program_ref: x.program_ref, kegiatan_ref: x.kegiatan_ref })),
+    ].map(x => ({ ...x, kunci: kunciJalur(x.tipe, x.nama, x.program_ref, x.kegiatan_ref) }));
+    const terpilih = lengkapiIndukPilihan(pilih, kandidat);
+    programsToInsert = programsToInsert.filter(n => terpilih.has(kunciJalur('program', n, null, null)));
+    kegiatansToInsert = kegiatansToInsert.filter(x => terpilih.has(kunciJalur('kegiatan', x.nama, x.program_ref, null)));
+    subkegsToInsert = subkegsToInsert.filter(x => terpilih.has(kunciJalur('subkegiatan', x.nama, x.program_ref, x.kegiatan_ref)));
+  }
 
   const result: InitRenaksiResult = {
     raTotal: raRows.length,
