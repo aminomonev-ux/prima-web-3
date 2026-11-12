@@ -18,6 +18,7 @@ import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { usePenanda } from '../_lib/penanda';
 import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
 import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
+import { kalimatPemakai } from '@/lib/renaksi/pemakai';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
 import ImportRenaksiModal from './ImportRenaksiModal';
 
@@ -186,7 +187,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
 
     setBusy(true);
     try {
-      await apiUpsert({
+      const { dipakai } = await apiUpsert({
         id: editingId,
         expected_version: editingVersion,
         tahun: selectedYear,
@@ -216,6 +217,8 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
           : ''),
         'success',
       );
+      const kalimatDipakai = kalimatPemakai(dipakai);
+      if (kalimatDipakai) notify(kalimatDipakai, 'info');
       resetForm();
       await onReload();
     } catch (err) {

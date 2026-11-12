@@ -1,4 +1,5 @@
 import type { RaLevel, RaRow, RaJenis } from './types';
+import type { PemakaiNama } from '@/lib/renaksi/pemakai';
 
 export class VersionConflictError extends Error {
   constructor(message: string) { super(message); this.name = 'VersionConflictError'; }
@@ -54,14 +55,15 @@ export interface UpsertPayload {
   expected_version?: number | null;
 }
 
-export async function apiUpsert(p: UpsertPayload): Promise<number> {
+/** `dipakai` terisi bila simpanan ini mengganti nama entitas (renaksi-terhubung Tahap F). */
+export async function apiUpsert(p: UpsertPayload): Promise<{ id: number; dipakai: PemakaiNama[] }> {
   const r = await fetch('/api/rencana-aksi', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(p),
   });
-  const body = await jsonOrThrow<{ ok: true; id: number }>(r);
-  return body.id;
+  const body = await jsonOrThrow<{ ok: true; id: number; dipakai?: PemakaiNama[] }>(r);
+  return { id: body.id, dipakai: body.dipakai ?? [] };
 }
 
 export async function apiDelete(id: number): Promise<void> {

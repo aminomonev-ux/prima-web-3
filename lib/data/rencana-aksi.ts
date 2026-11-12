@@ -304,6 +304,8 @@ export async function listGantiNama(tahun: number): Promise<CatatanGantiNama[]> 
 export async function upsertRencanaAksi(
   data: UpsertRencanaAksiInput,
   userId: number,
+  /** Diisi bila simpanan ini mengganti nama entitas — route memakainya untuk menyebut pemakai nama lama. */
+  hasil?: { gantiNama: GantiNama | null },
 ): Promise<number> {
   // Opsi A: untuk sub-kegiatan dengan bulanan terisi, q1-q4 target di-derive
   // server-side (otoritatif) dari `bulan_target` per jenis. Level lain / tanpa
@@ -396,6 +398,7 @@ export async function upsertRencanaAksi(
         await catatGantiNama(tx, Number(lama.tahun), gantiNama, userId);
       }
     });
+    if (hasil) hasil.gantiNama = gantiNama;
     return id;
   };
 

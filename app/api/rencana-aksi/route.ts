@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { writeAuditLog } from '@/lib/security/auditlog';
+import { pemakaiNamaRenaksi } from '@/lib/data/renaksi-pemakai';
+import type { GantiNama } from '@/lib/renaksi/ganti-nama';
 import {
   ListQuerySchema,
   UpsertRencanaAksiSchema,
@@ -71,7 +73,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const id = await upsertRencanaAksi(parsed.data, g.session.userId);
+    const info: { gantiNama: GantiNama | null } = { gantiNama: null };
+    const id = await upsertRencanaAksi(parsed.data, g.session.userId, info);
     await writeAuditLog({
       req,
       eventType: 'RA_UPSERT',
@@ -79,7 +82,12 @@ export async function POST(req: NextRequest) {
       username: g.session.username,
       detail: `Rencana Aksi ${parsed.data.tahun}/${parsed.data.level}: ${parsed.data.indikator}`,
     });
-    return NextResponse.json({ ok: true, id });
+    // Tahap F renaksi-terhubung: sesudah ganti nama, sebut modul yang masih memegang nama lama.
+    // Hanya keterangan — gagal membacanya tidak menggagalkan simpanan yang sudah ter-commit.
+    const dipakai = info.gantiNama
+      ? await pemakaiNamaRenaksi(parsed.data.tahun, info.gantiNama).catch(() => [])
+      : [];
+    return NextResponse.json({ ok: true, id, dipakai });
   } catch (e) {
     if (e instanceof RaVersionConflictError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'VERSION_CONFLICT' }, { status: 409 });
