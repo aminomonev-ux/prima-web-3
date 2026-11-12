@@ -802,7 +802,10 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                   size="sm"
                   min={0}
                   desimal={2}
-                  required
+                  /* Tanpa `required`: nilai 0 sengaja ditampilkan kosong (placeholder "0"),
+                     dan field `required` yang kosong membuat browser menolak submit — form
+                     seolah tidak melakukan apa pun saat Simpan ditekan. 0 tetap terkirim
+                     karena state-nya memang 0. */
                   value={targetRpjmd === 0 ? '' : targetRpjmd}
                   placeholder="0"
                   onChange={(e) => setTargetRpjmd(e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))}
@@ -814,7 +817,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                   size="sm"
                   min={0}
                   desimal={2}
-                  required
+                  /* Lihat catatan di Target RPJMD — alasan yang sama. */
                   value={targetTahunan === 0 ? '' : targetTahunan}
                   placeholder="0"
                   onChange={(e) => setTargetTahunan(e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0))}

@@ -31,7 +31,7 @@ for (const line of fs.readFileSync(path.join(repo, '.env.local'), 'utf8').split(
 }
 
 fs.mkdirSync(outDir, { recursive: true })
-const sumber = ['lib/shared/uuid.ts', 'lib/shared/desimal.ts', 'lib/data/db.ts', 'lib/data/locks.ts', 'lib/renaksi/ganti-nama.ts', 'lib/renaksi/rantai.ts', 'lib/data/rencana-aksi.ts']
+  const sumber = ['lib/shared/uuid.ts', 'lib/shared/desimal.ts', 'lib/data/db.ts', 'lib/data/locks.ts', 'lib/renaksi/ganti-nama.ts', 'lib/renaksi/rantai.ts', 'lib/data/rencana-aksi.ts', 'app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx']
 try {
   execSync(
     `npx tsc ${sumber.map((f) => `"${path.join(repo, f)}"`).join(' ')}`
@@ -350,6 +350,23 @@ async function main() {
   const [salinanNol] = await sql`SELECT q1_realisasi, q2_realisasi, q3_realisasi, q4_realisasi FROM rencana_aksi WHERE tahun = ${TH_TUJUAN} AND indikator = 'IND-nol'`
   periksa('Salin ke tahun lain: realisasi ikut KOSONG (NULL), bukan 0', salinanNol && JSON.stringify(triwulan(salinanNol)) === '[null,null,null,null]',
     JSON.stringify(salinanNol && triwulan(salinanNol)))
+
+  // Form Data Entry: field target menampilkan 0 sebagai KOSONG (placeholder "0"). Selama
+  // field itu `required`, browser menolak submit karena nilainya kosong — Simpan seolah
+  // tidak melakukan apa pun, tanpa pesan, dan seluruh isian (termasuk 12 target bulanan)
+  // tidak pernah tersimpan. Dijaga di sini karena tidak ada uji DB yang bisa melihatnya.
+  console.log('\n── Form Data Entry: Simpan tidak diblokir validasi bawaan browser ──')
+  const formSrc = fs.readFileSync(
+    path.join(repo, 'app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx'), 'utf8',
+  )
+  const awalTarget = formSrc.indexOf('Target RPJMD')
+  const blokTarget = formSrc.slice(awalTarget, formSrc.indexOf('Kedua angka di atas adalah pembagi'))
+  const tanpaKomentar = blokTarget.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+  periksa('Blok Target RPJMD–Tahunan ditemukan di form', awalTarget > 0 && blokTarget.length > 100, String(blokTarget.length))
+  periksa('Field target 0-tampil-kosong TIDAK `required` (submit tidak diblokir browser)',
+    !/\brequired\b/.test(tanpaKomentar))
+  periksa('Keduanya masih menampilkan 0 sebagai kosong (placeholder "0" tetap ada)',
+    (tanpaKomentar.match(/=== 0 \? ''/g) ?? []).length === 2, String((tanpaKomentar.match(/=== 0 \? ''/g) ?? []).length))
 }
 
 try {
