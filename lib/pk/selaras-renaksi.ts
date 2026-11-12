@@ -10,6 +10,7 @@ import {
 import { kunciNamaRenaksi, type AsalMaster, type BarisRenaksi } from '@/lib/kinerja/asal-renaksi';
 import { angkaTarget, satuanTarget } from '@/lib/shared/target-renaksi';
 import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
+import { anakMilikIndikator } from '@/lib/renaksi/rantai';
 
 /** Kunci centang dialog — dipakai penyusun dialog DAN penerap, supaya tidak berbeda bunyi. */
 export const kunciPilih = {
@@ -18,6 +19,7 @@ export const kunciPilih = {
   hilang: (id: number) => `h${id}`,
   tanda: (id: number) => `t${id}`,
   berubah: (idx: number) => `u${idx}`,
+  pasangan: (idx: number) => `p${idx}`,
 };
 
 // ─── Master Program ──────────────────────────────────────────────────────────
@@ -141,6 +143,9 @@ export interface RaSasaranSrc {
   satuan: string;
   /** DECIMAL — mysql2 memulangkannya sebagai string. */
   target_tahunan: string | number;
+  /** Tautan indikator induk (docs/CONCEPT-renaksi-pilih-indikator.md). Tanpa keduanya = belum tertaut. */
+  id?: number;
+  induk_indikator_id?: number | null;
 }
 
 const KOSONG_KEGIATAN = { kegiatan: null, indikator_kegiatan: null, target_kegiatan: null, satuan_kegiatan: null };
@@ -176,17 +181,29 @@ function bagianSub(r: RaSasaranSrc) {
 /**
  * Baris Master Sasaran dari Renaksi — SATU penyusun untuk tombol Import Renaksi DAN pembanding.
  * Satu baris per daun terdalam: program → kegiatan (program sama) → sub (program + kegiatan sama).
+ *
+ * Tiap baris = satu PASANGAN indikator. Kegiatan/sub yang sudah tertaut ke indikator induknya
+ * hanya dipasangkan dengan indikator itu; yang belum tertaut dipasangkan dengan SEMUA indikator
+ * induknya (cara lama — tanpa tautan, pasangan yang benar memang tidak diketahui). Cara lama
+ * itulah yang membuat 42 indikator Renaksi 2026 jadi 117 baris (program 4 indikator × 6
+ * indikator kegiatan = 24 pasangan, dst.).
  */
 export function susunSasaranRenaksi(raRows: readonly RaSasaranSrc[]): BarisSasaranPk[] {
   const programs = raRows.filter(r => r.level === 'program');
   const kegiatans = raRows.filter(r => r.level === 'kegiatan');
   const subKegs = raRows.filter(r => r.level === 'sub-kegiatan');
+  const idSaudara = (rows: readonly RaSasaranSrc[], sama: (r: RaSasaranSrc) => boolean) =>
+    new Set(rows.filter(sama).map(r => Number(r.id)).filter(Number.isFinite));
+  const milik = (anak: RaSasaranSrc, induk: RaSasaranSrc, saudara: ReadonlySet<number>) =>
+    induk.id == null || anakMilikIndikator(anak.induk_indikator_id, induk.id, saudara);
   const out: BarisSasaranPk[] = [];
   for (const prog of programs) {
-    const childKegs = kegiatans.filter(k => k.program === prog.program);
+    const saudaraP = idSaudara(programs, p => p.program === prog.program);
+    const childKegs = kegiatans.filter(k => k.program === prog.program && milik(k, prog, saudaraP));
     if (childKegs.length === 0) { out.push({ ...bagianProgram(prog), ...KOSONG_KEGIATAN, ...KOSONG_SUB }); continue; }
     for (const keg of childKegs) {
-      const childSubs = subKegs.filter(s => s.program === prog.program && s.kegiatan === keg.kegiatan);
+      const saudaraK = idSaudara(kegiatans, k => k.program === keg.program && k.kegiatan === keg.kegiatan);
+      const childSubs = subKegs.filter(s => s.program === prog.program && s.kegiatan === keg.kegiatan && milik(s, keg, saudaraK));
       if (childSubs.length === 0) { out.push({ ...bagianProgram(prog), ...bagianKegiatan(keg), ...KOSONG_SUB }); continue; }
       for (const sub of childSubs) out.push({ ...bagianProgram(prog), ...bagianKegiatan(keg), ...bagianSub(sub) });
     }
@@ -240,11 +257,14 @@ export interface HasilSasaran {
   berubah: ItemSasaranBerubah[];
   baru: { kunci: string; baris: BarisSasaranPk }[];
   hilang: number[];
+  /** Ber-asal Renaksi, pasangan indikatornya tidak dibentuk lagi (tautan indikator induk). */
+  pasanganLepas: number[];
   /** Baris manual yang ada di Renaksi; `kolom` kosong = isinya sama persis. */
   belumBertanda: ItemSasaranBerubah[];
 }
 
-export const jumlahPerubahanSasaran = (h: HasilSasaran) => h.berubah.length + h.baru.length + h.hilang.length;
+export const jumlahPerubahanSasaran = (h: HasilSasaran) =>
+  h.berubah.length + h.baru.length + h.hilang.length + h.pasanganLepas.length;
 
 /**
  * Pasangan dicari bertahap: isi sama persis → nama + indikator terdalam sama → nama sama dan
@@ -281,18 +301,34 @@ export function bandingSasaranPk(
       (r.asal === 'RENAKSI' ? berubah : belumBertanda).push({ idx: i, ke: b, kolom: kolomBeda(r, b) });
     }
   }
-  for (const i of tunggu) if (rows[i].asal === 'RENAKSI') lepas.push(i);
+  // Ber-asal Renaksi, tak berpasangan, tapi nama + indikator terdalamnya MASIH ada di Renaksi:
+  // pasangan indikator yang sudah tidak dibentuk lagi (Renaksi kini menautkan anak ke indikator
+  // induk lain). Itu kelebihan baris, bukan entitas yang hilang — dipisah supaya bisa dihapus.
+  const pasanganLepas: number[] = [];
+  const masihAda = new Set(renaksi.map(b => `${kunciNamaSasaran(b)}\u0001${indTerdalam(b)}`));
+  for (const i of tunggu) {
+    if (rows[i].asal !== 'RENAKSI') continue;
+    (masihAda.has(`${kunciNamaSasaran(rows[i])}\u0001${indTerdalam(rows[i])}`) ? pasanganLepas : lepas).push(i);
+  }
   return {
     berubah, belumBertanda: belumBertanda.sort((a, b) => a.idx - b.idx),
-    hilang: lepas,
+    hilang: lepas, pasanganLepas,
     baru: sisaRa.map(x => ({ kunci: `r${x.i}`, baris: x.b })),
   };
 }
 
+/**
+ * `hapus` = cara layar menandai baris untuk dihapus (berhenti di form — yang menghapus tetap
+ * Simpan). Tanpa `hapus`, pasangan lepas yang dicentang hanya dilepas tandanya (jadi manual).
+ */
 export function terapkanSelarasSasaran<T extends BarisSasaranPk>(
   rows: readonly T[], h: HasilSasaran, pilih: ReadonlySet<string>, buatBaris: (b: BarisSasaranPk) => T,
+  hapus?: (r: T) => T,
 ): T[] {
   const out = [...rows];
+  for (const i of h.pasanganLepas) {
+    if (pilih.has(kunciPilih.pasangan(i))) out[i] = hapus ? hapus(out[i]) : { ...out[i], asal: 'MANUAL' };
+  }
   for (const x of h.berubah) if (pilih.has(kunciPilih.berubah(x.idx))) out[x.idx] = { ...out[x.idx], ...x.ke, asal: 'RENAKSI' };
   for (const x of h.belumBertanda) if (pilih.has(kunciPilih.tanda(x.idx))) out[x.idx] = { ...out[x.idx], ...x.ke, asal: 'RENAKSI' };
   for (const i of h.hilang) if (pilih.has(kunciPilih.hilang(i))) out[i] = { ...out[i], asal: 'MANUAL' };
@@ -300,13 +336,14 @@ export function terapkanSelarasSasaran<T extends BarisSasaranPk>(
   return out;
 }
 
-export function kalimatSpandukPk(bagian: { berganti?: number; pindah?: number; berubah?: number; baru: number; hilang: number }, tahun: string | number): string | null {
+export function kalimatSpandukPk(bagian: { berganti?: number; pindah?: number; berubah?: number; baru: number; hilang: number; pasangan?: number }, tahun: string | number): string | null {
   const isi = [
     bagian.berganti ? `${bagian.berganti} berganti nama` : '',
     bagian.pindah ? `${bagian.pindah} pindah induk` : '',
     bagian.berubah ? `${bagian.berubah} isinya berubah` : '',
     bagian.baru ? `${bagian.baru} baru` : '',
     bagian.hilang ? `${bagian.hilang} tidak ada lagi` : '',
+    bagian.pasangan ? `${bagian.pasangan} pasangan indikator tidak tertaut lagi` : '',
   ].filter(Boolean);
   return isi.length ? `Rencana Aksi ${tahun} berbeda dari isi layar ini: ${isi.join(', ')}.` : null;
 }

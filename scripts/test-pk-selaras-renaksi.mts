@@ -16,6 +16,9 @@ import { jalurAdaDiRenaksi, type BarisRenaksi } from '../lib/kinerja/asal-renaks
 import { entriProgramPk } from '../lib/pk/selaras-renaksi'
 import { buangProgramKembar } from '../lib/pk/program-kembar'
 import { rapikanBarisProgram } from '../lib/pk/rapikan-nama'
+import { kalimatSpandukPk } from '../lib/pk/selaras-renaksi'
+import { anakMilikIndikator } from '../lib/renaksi/rantai'
+import { buildHierarchyRows, type RaRow } from '../app/(dashboard)/rencana-aksi/_lib/types'
 
 let lulus = 0
 const gagal: string[] = []
@@ -127,6 +130,72 @@ const RA: RaSasaranSrc[] = [
   ok('B9 sasaranAdaDiRenaksi: tingkat terdalam (outcome/nama + indikator, penanda dibuang)',
     sasaranAdaDiRenaksi({ ...susun[0], indikator_subkegiatan: '(2) ik sub a ***' }, RA) && !sasaranAdaDiRenaksi({ ...susun[0], indikator_subkegiatan: 'lain' }, RA)
     && sasaranAdaDiRenaksi({ ...susun[0], kegiatan: null, subkegiatan: null }, RA))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('E. Pasangan indikator mengikuti tautan Renaksi')
+{
+  // Program 2 indikator × kegiatan 3 indikator. Tanpa tautan = 6 pasangan (cara lama).
+  const t = (id: number, r: RaSasaranSrc, induk: number | null = null): RaSasaranSrc => ({ ...r, id, induk_indikator_id: induk })
+  const P1 = t(1, raw('program', 'PRG', null, null, 'IP1', '1'))
+  const P2 = t(2, raw('program', 'PRG', null, null, 'IP2', '1'))
+  const k = (id: number, ind: string, induk: number | null) => t(id, raw('kegiatan', 'PRG', 'KEG', null, ind, '1'), induk)
+  const lepas = [P1, P2, k(3, 'IK1', null), k(4, 'IK2', null), k(5, 'IK3', null)]
+  ok('E1 tanpa tautan: tetap dipasangkan semua (cara lama, 2 × 3 = 6)', susunSasaranRenaksi(lepas).length === 6)
+  const taut = [P1, P2, k(3, 'IK1', 1), k(4, 'IK2', 1), k(5, 'IK3', 2)]
+  const s = susunSasaranRenaksi(taut)
+  ok('E2 bertautan: tiap kegiatan hanya dengan indikator program yang dijabarkannya (3 baris)',
+    s.length === 3 && s.filter(r => r.indikator_program === 'IP1').map(r => r.indikator_kegiatan).join() === 'IK1,IK2'
+    && s.filter(r => r.indikator_program === 'IP2').map(r => r.indikator_kegiatan).join() === 'IK3', JSON.stringify(s.map(r => [r.indikator_program, r.indikator_kegiatan])))
+  const campur = [P1, P2, k(3, 'IK1', 1), k(4, 'IK2', null), k(5, 'IK3', 99)]
+  ok('E3 campuran: belum tertaut / tautan usang (id di luar program itu) tetap ke semua indikator',
+    susunSasaranRenaksi(campur).length === 1 + 2 + 2, String(susunSasaranRenaksi(campur).length))
+  const P3 = t(6, raw('program', 'PRG', null, null, 'IP3', '1'))
+  const s4 = susunSasaranRenaksi([...taut, P3])
+  ok('E4 indikator program tanpa kegiatan tertaut tetap muncul sebagai baris program saja',
+    s4.some(r => r.indikator_program === 'IP3' && r.kegiatan === null) && s4.length === 4)
+  const sub = (id: number, ind: string, induk: number | null) => t(id, raw('sub-kegiatan', 'PRG', 'KEG', 'SUB', ind, '1'), induk)
+  const s5 = susunSasaranRenaksi([P1, k(3, 'IK1', 1), k(4, 'IK2', 1), sub(7, 'IS1', 4)])
+  ok('E5 sub kegiatan juga mengikuti tautannya ke indikator kegiatan',
+    s5.length === 2 && s5.find(r => r.indikator_kegiatan === 'IK1')?.subkegiatan === null
+    && s5.find(r => r.indikator_kegiatan === 'IK2')?.indikator_subkegiatan === 'IS1', JSON.stringify(s5.map(r => [r.indikator_kegiatan, r.indikator_subkegiatan])))
+
+  // Master PK berisi 6 pasangan lama; Renaksi kini tertaut → 3 pasangan kelebihan.
+  const layar = susunSasaranRenaksi(lepas).map(r => ({ ...r, asal: 'RENAKSI' as const }))
+  const h = bandingSasaranPk(layar, s)
+  ok('E6 pasangan lama dibaca "pasangan lepas", bukan "tidak ada lagi" atau "isinya berubah"',
+    h.pasanganLepas.length === 3 && h.hilang.length === 0 && h.berubah.length === 0 && h.baru.length === 0, JSON.stringify(h))
+  ok('E7 spanduk menyebutnya', kalimatSpandukPk({ baru: 0, hilang: 0, pasangan: h.pasanganLepas.length }, 2026) === 'Rencana Aksi 2026 berbeda dari isi layar ini: 3 pasangan indikator tidak tertaut lagi.')
+  const pilih = new Set(h.pasanganLepas.map(kunciPilih.pasangan))
+  const r = terapkanSelarasSasaran(layar, h, pilih, b => ({ ...b }), x => ({ ...x, _deleted: true }))
+  ok('E8 terapkan: yang dicentang ditandai hapus di layar (berhenti di form)', r.filter(x => (x as { _deleted?: boolean })._deleted).length === 3 && r.length === 6)
+  ok('E9 sesudahnya tidak ada perubahan tersisa',
+    jumlahPerubahanSasaran(bandingSasaranPk(r, s, i => !(r[i] as { _deleted?: boolean })._deleted)) === 0)
+  const tanpaHapus = terapkanSelarasSasaran(layar, h, pilih, b => ({ ...b }))
+  ok('E10 tanpa penanda hapus: hanya dilepas tandanya, tidak pernah dibuang diam-diam',
+    tanpaHapus.length === 6 && tanpaHapus.filter(x => x.asal === 'MANUAL').length === 3)
+  // Entitas yang benar-benar dihapus di Renaksi tetap "tidak ada lagi", bukan pasangan lepas.
+  const h2 = bandingSasaranPk(layar, susunSasaranRenaksi([P1, P2, k(3, 'IK1', 1), k(4, 'IK2', 1)]))
+  ok('E11 indikator yang hilang dari Renaksi tetap "tidak ada lagi"',
+    h2.hilang.length === 2 && h2.pasanganLepas.length === 2, JSON.stringify({ hilang: h2.hilang, lepas: h2.pasanganLepas }))
+  ok('E12 aturan bersama: belum tertaut & usang = milik semua; tertaut = milik indikatornya saja',
+    anakMilikIndikator(null, 1, new Set([1, 2])) && anakMilikIndikator(99, 1, new Set([1, 2]))
+    && anakMilikIndikator(1, 1, new Set([1, 2])) && !anakMilikIndikator(2, 1, new Set([1, 2])))
+  const rS = sumber('app/api/perjanjian-kinerja/sasaran/import-renaksi/route.ts')
+  const rB = sumber('app/api/perjanjian-kinerja/banding-renaksi/route.ts')
+  ok('E13 kedua route penyusun membaca id + induk_indikator_id (tanpanya semua kembali cara lama)',
+    [rS, rB].every(x => /SELECT id, level[\s\S]*?induk_indikator_id\s+FROM rencana_aksi/.test(x)))
+
+  // Cetak Renaksi: aturan yang sama di pohon cetak (layar, PDF, Excel, tabel LKJIP).
+  const rr = (id: number, level: RaRow['level'], program: string, kegiatan: string | null, indikator: string, induk: number | null, sasaran: string | null = null): RaRow =>
+    ({ id, level, program, kegiatan, sub_kegiatan: null, sasaran, tujuan: null, indikator, induk_indikator_id: induk } as RaRow)
+  const pohon = buildHierarchyRows([
+    rr(10, 'sasaran', 'SAS', null, 'IS', null),
+    rr(1, 'program', 'PRG', null, 'IP1', null, 'SAS'), rr(2, 'program', 'PRG', null, 'IP2', null, 'SAS'),
+    rr(3, 'kegiatan', 'PRG', 'KEG A', 'IKA', 2), rr(4, 'kegiatan', 'PRG', 'KEG B', 'IKB', null),
+  ]).map(h => h.source.indikator)
+  ok('E14 Cetak: kegiatan tertaut tampil di bawah indikator program yang dijabarkannya; yang belum tertaut di bawah indikator pertama',
+    pohon.join() === 'IS,IP1,IKB,IP2,IKA', pohon.join())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

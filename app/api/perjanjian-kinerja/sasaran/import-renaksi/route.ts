@@ -46,9 +46,9 @@ export async function GET(req: NextRequest) {
 
   // Renaksi numeric tahun (SMALLINT) — query langsung.
   const raRows = await sql`
-    SELECT level, sasaran,
+    SELECT id, level, sasaran,
            outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
-           program, kegiatan, sub_kegiatan, indikator, satuan, target_tahunan
+           program, kegiatan, sub_kegiatan, indikator, satuan, target_tahunan, induk_indikator_id
     FROM rencana_aksi
     WHERE tahun = ${tahunNum}
       AND level IN ('program','kegiatan','sub-kegiatan')

@@ -155,3 +155,21 @@ export function denganNilaiTersimpan(
   const kunci = new Set(opsi.map(o => o.trim()));
   return kunci.has(n) ? [...opsi] : [n, ...opsi];
 }
+
+/**
+ * Apakah baris anak (dicocokkan lewat NAMA induk) menjabarkan baris indikator induk `indukId`?
+ * `idSaudara` = id semua baris indikator entitas induk yang sama (termasuk `indukId`).
+ *
+ * Tertaut ke salah satu saudara → hanya milik saudara itu. Belum tertaut (NULL), atau tautannya
+ * menunjuk baris di luar entitas itu (usang), → milik SEMUA saudara: perilaku sebelum ada tautan
+ * (§5) — data lama tidak boleh lenyap dari penyusun mana pun.
+ * Satu aturan untuk Master Sasaran PK (`susunSasaranRenaksi`) DAN pohon Cetak Renaksi
+ * (`buildHierarchyRows`) — dua aturan akan membuat cetak & master berbeda pendapat.
+ */
+export function anakMilikIndikator(
+  indukAnak: number | null | undefined, indukId: number, idSaudara: ReadonlySet<number>,
+): boolean {
+  if (indukAnak == null) return true;
+  const t = Number(indukAnak);
+  return t === Number(indukId) || !idSaudara.has(t);
+}

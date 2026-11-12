@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
   if (limited) return limited;
 
   const raRows = await sql`
-    SELECT level, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
-           program, kegiatan, sub_kegiatan, indikator, satuan, target_tahunan
+    SELECT id, level, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
+           program, kegiatan, sub_kegiatan, indikator, satuan, target_tahunan, induk_indikator_id
     FROM rencana_aksi
     WHERE tahun = ${Number(tahun)} AND level IN ('program','kegiatan','sub-kegiatan')
   ` as RaSasaranSrc[];

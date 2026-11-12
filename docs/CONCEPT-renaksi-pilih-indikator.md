@@ -271,6 +271,25 @@ Catatan yang perlu disadari, semuanya **bukan** akibat fitur ini:
 
 Kesimpulan: PK, IKI, E-Anggaran, LKJIP, dan Rima aman tanpa satu baris pun diubah di sisinya.
 
+### 10.1 Susulan 2026-11-12 — dua penyusun yang SEHARUSNYA memakai tautan
+
+"Aman" di atas benar (tidak ada yang rusak), tetapi dua penyusun memasangkan indikator lintas
+tingkat lewat nama saja, padahal tautan inilah jawaban yang benar:
+
+- **PK Master Sasaran** (`susunSasaranRenaksi`): satu baris per PASANGAN indikator, dulu semua
+  indikator program × semua indikator kegiatan × semua indikator sub. Renaksi 2026: 42 indikator
+  → 117 baris (program 4 indikator × kegiatan 6 indikator = 24 pasangan saja). Catatan baris 268
+  di atas keliru untuk Master Sasaran — jumlah indikator justru menentukan jumlah barisnya.
+- **Cetak Renaksi** (`buildHierarchyRows` → layar, PDF, Excel, tabel LKJIP "Renaksi · Cetak"):
+  semua kegiatan selalu tampil di bawah indikator program PERTAMA.
+
+Keduanya kini memakai satu aturan `anakMilikIndikator` (`lib/renaksi/rantai.ts`): tertaut →
+hanya di bawah/dipasangkan dengan indikator induknya; belum tertaut atau tautan usang → cara lama.
+Data tanpa tautan menghasilkan keluaran yang persis sama (2026: tetap 117 = 117, 0 beda).
+Baris Master Sasaran ber-asal Renaksi yang pasangannya tidak dibentuk lagi dipisah dari "tidak
+ada lagi" sebagai `pasanganLepas` dan ditawarkan **tandai hapus** (berhenti di form, L78).
+Regresi: `scripts/test-pk-selaras-renaksi.mts` bagian E.
+
 ---
 
 ## 11. Pintu yang wajib ikut (L69)

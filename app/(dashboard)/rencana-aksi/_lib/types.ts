@@ -1,4 +1,5 @@
 import { bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
+import { anakMilikIndikator } from '@/lib/renaksi/rantai';
 
 export type RaLevel = 'tujuan' | 'sasaran' | 'program' | 'kegiatan' | 'sub-kegiatan';
 export type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
@@ -163,6 +164,7 @@ export const YEAR_RANGE: number[] = (() => {
  *           emit row (sub_kegiatan=sub.sub_kegiatan)
  *
  * Orphans (rows tanpa parent valid) di-append di akhir dgn flag isOrphan.
+ * Tiap "for … where nama cocok" juga disaring `induk_indikator_id` (`anakMilikIndikator`).
  */
 export interface HierarchyRow {
   no: number;
@@ -190,6 +192,13 @@ export function buildHierarchyRows(allRows: RaRow[]): HierarchyRow[] {
   const kegiatans = allRows.filter(r => r.level === 'kegiatan');
   const subKegs  = allRows.filter(r => r.level === 'sub-kegiatan');
 
+  // Anak dicocokkan lewat NAMA induk, lalu disaring tautan indikator induknya: anak yang tertaut
+  // muncul di bawah indikator induk yang dijabarkannya, bukan selalu di bawah indikator pertama.
+  // Yang belum tertaut tetap ikut indikator induk pertama (perilaku lama, dijaga `used`).
+  const idSaudara = (rows: RaRow[], sama: (r: RaRow) => boolean) => new Set(rows.filter(sama).map(r => r.id));
+  const milik = (anak: RaRow, induk: RaRow, saudara: ReadonlySet<number>) =>
+    anakMilikIndikator(anak.induk_indikator_id, induk.id, saudara);
+
   // Emit 1 subtree Sasaran (Sasaran → Program → Kegiatan → Sub Kegiatan).
   // Guard `used.has` di tiap tingkat: nama parent kembar bisa match 2x → emit 2x
   // dgn source.id sama → React "duplicate key" + double row.
@@ -199,7 +208,8 @@ export function buildHierarchyRows(allRows: RaRow[]): HierarchyRow[] {
     out.push({ no, tujuan: '', sasaran: sas.program, program: '', kegiatan: '', sub_kegiatan: '', source: sas });
     used.add(sas.id);
 
-    const childPrograms = programs.filter(p => p.sasaran === sas.program)
+    const saudaraS = idSaudara(sasarans, s => s.program === sas.program);
+    const childPrograms = programs.filter(p => p.sasaran === sas.program && milik(p, sas, saudaraS))
       .sort((a, b) => a.program.localeCompare(b.program));
     for (const prog of childPrograms) {
       if (used.has(prog.id)) continue;
@@ -207,7 +217,8 @@ export function buildHierarchyRows(allRows: RaRow[]): HierarchyRow[] {
       out.push({ no, tujuan: '', sasaran: '', program: prog.program, kegiatan: '', sub_kegiatan: '', source: prog });
       used.add(prog.id);
 
-      const childKegs = kegiatans.filter(k => k.program === prog.program)
+      const saudaraP = idSaudara(programs, p => p.program === prog.program);
+      const childKegs = kegiatans.filter(k => k.program === prog.program && milik(k, prog, saudaraP))
         .sort((a, b) => (a.kegiatan ?? '').localeCompare(b.kegiatan ?? ''));
       for (const keg of childKegs) {
         if (used.has(keg.id)) continue;
@@ -215,7 +226,8 @@ export function buildHierarchyRows(allRows: RaRow[]): HierarchyRow[] {
         out.push({ no, tujuan: '', sasaran: '', program: '', kegiatan: keg.kegiatan ?? '', sub_kegiatan: '', source: keg });
         used.add(keg.id);
 
-        const childSubs = subKegs.filter(s => s.program === prog.program && s.kegiatan === keg.kegiatan)
+        const saudaraK = idSaudara(kegiatans, k => k.program === keg.program && k.kegiatan === keg.kegiatan);
+        const childSubs = subKegs.filter(s => s.program === prog.program && s.kegiatan === keg.kegiatan && milik(s, keg, saudaraK))
           .sort((a, b) => (a.sub_kegiatan ?? '').localeCompare(b.sub_kegiatan ?? ''));
         for (const sub of childSubs) {
           if (used.has(sub.id)) continue;
@@ -234,7 +246,8 @@ export function buildHierarchyRows(allRows: RaRow[]): HierarchyRow[] {
     out.push({ no, tujuan: tuj.program, sasaran: '', program: '', kegiatan: '', sub_kegiatan: '', source: tuj });
     used.add(tuj.id);
 
-    const childSasarans = sasarans.filter(s => s.tujuan === tuj.program)
+    const saudaraT = idSaudara(tujuans, t => t.program === tuj.program);
+    const childSasarans = sasarans.filter(s => s.tujuan === tuj.program && milik(s, tuj, saudaraT))
       .sort((a, b) => a.program.localeCompare(b.program));
     for (const sas of childSasarans) emitSasaran(sas);
   }

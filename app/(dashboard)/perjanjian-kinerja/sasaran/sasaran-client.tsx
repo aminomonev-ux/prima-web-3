@@ -68,7 +68,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
   // Rencana Aksi berubah? Dibandingkan dengan ISI LAYAR (baris bertanda hapus tidak dihitung).
   const { bahan } = useBahanRenaksi<{ sasaran: BarisSasaranPk[] }>('sasaran', tahun, bolehUbah)
   const banding = useMemo(() => (bahan && !loading ? bandingSasaranPk(rows, bahan.sasaran, i => !rows[i]._deleted) : null), [bahan, rows, loading])
-  const kalimatRa = banding ? kalimatSpandukPk({ berubah: banding.berubah.length, baru: banding.baru.length, hilang: banding.hilang.length }, tahun) : null
+  const kalimatRa = banding ? kalimatSpandukPk({ berubah: banding.berubah.length, baru: banding.baru.length, hilang: banding.hilang.length, pasangan: banding.pasanganLepas.length }, tahun) : null
 
   function showToast(kind: 'ok' | 'err', msg: string) {
     setToast({ kind, msg })
@@ -159,7 +159,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
   /** Berhenti di form (L78): isi layar diubah, yang menulis tetap Simpan. */
   function terapkanPerbarui(pilih: Set<string>) {
     if (!banding) return
-    const hasil = terapkanSelarasSasaran(rows, banding, pilih, b => ({ ...b, _dirty: true }))
+    const hasil = terapkanSelarasSasaran(rows, banding, pilih, b => ({ ...b, _dirty: true }), r => ({ ...r, _deleted: true }))
     setRows(hasil.map((r, i) => r === rows[i] ? r : { ...r, _dirty: true }))
     setPerbaruiBuka(false)
     showToast('ok', `${pilih.size} perubahan dari Rencana Aksi diterapkan ke layar. Periksa, lalu klik Simpan.`)
@@ -170,6 +170,10 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
       : r.kegiatan?.trim() ? [r.kegiatan, r.indikator_kegiatan] : [r.program, r.indikator_program]
     return <><b>{nama}</b>{ind && <span style={{ opacity: .75 }}> — {ind}</span>}</>
   }
+  // Pasangan lepas dibedakan oleh indikator INDUK-nya, bukan nama terdalam — tampilkan keduanya.
+  const namaPasangan = (r: BarisSasaranPk) => (
+    <>{namaBaris(r)}<span style={{ opacity: .75 }}> · dipasangkan dengan {r.subkegiatan?.trim() ? r.indikator_kegiatan : r.indikator_program}</span></>
+  )
   const rincianBeda = (x: ItemSasaranBerubah) => x.kolom.map(label => {
     const kunci = KOLOM_SASARAN.find(([, l]) => l === label)?.[0]
     return kunci ? `${label}: ${rows[x.idx][kunci] ?? '—'} → ${x.ke[kunci] ?? '—'}` : label
@@ -177,6 +181,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
   const bagianPerbarui: BagianSelaras[] = banding ? [
     { judul: 'Isinya berubah di Rencana Aksi', ket: 'Baris disamakan dengan Rencana Aksi.', items: banding.berubah.map(x => ({ kunci: kunciPilih.berubah(x.idx), bawaan: true, isi: <>Baris {x.idx + 1}: {namaBaris(rows[x.idx])}</>, ket: rincianBeda(x) })) },
     { judul: 'Baru di Rencana Aksi', ket: 'Ditambahkan di bawah tabel dengan tanda Renaksi.', items: banding.baru.map(b => ({ kunci: kunciPilih.baru(b.kunci), bawaan: true, isi: namaBaris(b.baris) })) },
+    { judul: 'Pasangan indikator yang tidak tertaut lagi', ket: 'Indikatornya masih ada di Rencana Aksi, tapi kini dijabarkan dari indikator induk lain — baris ini kelebihan. Yang dicentang ditandai hapus; terhapus saat Simpan, bisa dibatalkan sebelumnya.', items: banding.pasanganLepas.map(i => ({ kunci: kunciPilih.pasangan(i), bawaan: true, isi: <>Baris {i + 1}: {namaPasangan(rows[i])}</> })) },
     { judul: 'Tidak ada lagi di Rencana Aksi', ket: 'Tidak dihapus. Centang untuk melepas tanda Renaksi (jadikan manual).', items: banding.hilang.map(i => ({ kunci: kunciPilih.hilang(i), bawaan: false, isi: <>Baris {i + 1}: {namaBaris(rows[i])}</> })) },
     { judul: 'Sudah ada, belum bertanda', ket: 'Diketik tangan, ada di Rencana Aksi. Centang untuk menandainya (isi disamakan dengan Rencana Aksi).', items: banding.belumBertanda.map(x => ({ kunci: kunciPilih.tanda(x.idx), bawaan: false, isi: <>Baris {x.idx + 1}: {namaBaris(rows[x.idx])}</>, ket: x.kolom.length ? rincianBeda(x) : undefined })) },
   ] : []
@@ -311,7 +316,9 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
       {bolehUbah && <SpandukSelaras kalimat={kalimatRa} onBuka={() => setPerbaruiBuka(true)} />}
       {perbaruiBuka && banding && (
         <DialogSelaras judul={`Perbarui dari Rencana Aksi ${tahun}`}
-          pengantar="Mengubah isi tabel di layar ini saja — baru tersimpan setelah Anda klik Simpan. Dokumen PK yang sudah dibuat tidak ikut berubah. Tidak ada baris yang dihapus."
+          pengantar={`Mengubah isi tabel di layar ini saja — baru tersimpan setelah Anda klik Simpan. Dokumen PK yang sudah dibuat tidak ikut berubah. ${banding.pasanganLepas.length
+            ? 'Hanya pasangan indikator yang tidak tertaut lagi yang ditandai hapus; baris lain tidak dihapus.'
+            : 'Tidak ada baris yang dihapus.'}`}
           bagian={bagianPerbarui} canEdit={bolehUbah} labelTerapkan="Terapkan ke layar"
           onTutup={() => setPerbaruiBuka(false)} onTerapkan={terapkanPerbarui} />
       )}
