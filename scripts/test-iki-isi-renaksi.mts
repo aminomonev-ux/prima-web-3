@@ -4,11 +4,12 @@
 //
 // Grup yang RHK atasannya diambil dari IKI Atasan diisi RHK, indikator, cara hitung, target tahunan & TW dari
 // Renaksi. A isian satu baris Renaksi. B kartu kosong. C penempatan di grup (kartu kosong dulu, sisanya kartu
-// baru di grup yang sama, kartu berisi tidak disentuh). D tanda "sudah dipakai". E sambungan layar.
+// baru di grup yang sama, kartu berisi tidak disentuh). D tanda "sudah dipakai". E sambungan layar. F saringan
+// lewat tautan indikator Renaksi (induk_indikator_id).
 
 import { readFileSync } from 'node:fs'
-import { isianRenaksi, kartuKosong, isiGrupDariRenaksi, renaksiDipakai } from '../app/(dashboard)/iki/_lib/isi-renaksi'
-import { emptyRhk, emptyTriwulan, type IkiRhk, type RenaksiImportRow } from '../app/(dashboard)/iki/_lib/types'
+import { indukRenaksiGrup, isianRenaksi, kartuKosong, isiGrupDariRenaksi, renaksiDipakai, saringRenaksiGrup } from '../app/(dashboard)/iki/_lib/isi-renaksi'
+import { emptyRhk, emptyTriwulan, type AtasanRhkRow, type IkiRhk, type RenaksiImportRow } from '../app/(dashboard)/iki/_lib/types'
 
 let lulus = 0
 const gagal: string[] = []
@@ -20,7 +21,7 @@ const sama = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const tanpaKomentar = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 const ra = (id: number, o: Partial<RenaksiImportRow> = {}): RenaksiImportRow => ({
-  renaksi_id: id, level: 'kegiatan', sasaran_induk: '', rhk: `RHK Renaksi ${id}`, nama: `Kegiatan ${id}`, parent: 'Program',
+  renaksi_id: id, induk_indikator_id: null, level: 'kegiatan', sasaran_induk: '', rhk: `RHK Renaksi ${id}`, nama: `Kegiatan ${id}`, parent: 'Program',
   indikator: `Indikator ${id}`, jenis: 'Progres Positif', target_tahunan: `${id} Dokumen`,
   target_tw: [`${id}a`, `${id}b`, `${id}c`, `${id}d`], ...o,
 })
@@ -127,6 +128,44 @@ console.log('\nE. Sambungan layar')
   ok('E11 kedua jendela menerima peta dipakai dari dokumen', (ed.match(/dipakai=\{renaksiDipakai\(doc\.rhk\)\}/g) ?? []).length === 2)
 }
 
+
+// ── F saringan lewat tautan indikator (konsep tautan-lanjutan §4) ──────────────
+console.log('\nF. Saringan Renaksi lewat tautan indikator')
+{
+  const at = (id: number | null, renaksi: number | null, rhk = `RHK atasan ${id}`): AtasanRhkRow =>
+    ({ atasan_rhk_id: id, renaksi_id: renaksi, no_urut: 1, rhk, indikator: '', target_tahunan: '', aspek_b: 'Progres Positif' })
+  const atasan = [at(101, 10), at(102, 11), at(103, null)]
+  const grup = [kartu(1, { atasan_rhk_id: 101, rhk_intervensi: 'RHK atasan 101' }), kartu(2, { atasan_rhk_id: 102 })]
+  ok('F1 induk grup lewat atasan_rhk_id', sama([...indukRenaksiGrup(grup, 1, atasan)], [10]))
+  ok('F2 grup lain tidak ikut', sama([...indukRenaksiGrup(grup, 2, atasan)], [11]))
+  const basi = [kartu(1, { atasan_rhk_id: 999, rhk_intervensi: 'RHK atasan 102' })]
+  ok('F3 id RHK atasan basi → cadangan teks RHK', sama([...indukRenaksiGrup(basi, 1, atasan)], [11]))
+  ok('F4 RHK atasan tanpa renaksi_id → induk kosong', indukRenaksiGrup([kartu(1, { atasan_rhk_id: 103 })], 1, atasan).size === 0)
+  ok('F5 grup tanpa RHK atasan → induk kosong', indukRenaksiGrup([kartu(1)], 1, atasan).size === 0)
+
+  const rows = [ra(10), ra(11), ra(20, { induk_indikator_id: 10 }), ra(21, { induk_indikator_id: 11 }),
+    ra(22, { induk_indikator_id: null }), ra(23, { induk_indikator_id: 777 })]
+  const id = (xs: RenaksiImportRow[]) => xs.map(r => r.renaksi_id)
+  const s = saringRenaksiGrup(rows, new Set([10]))
+  ok('F6 tertaut ke induk grup tampil', id(s).includes(20))
+  ok('F7 tertaut ke indikator LAIN disembunyikan', !id(s).includes(21))
+  ok('F8 belum tertaut tetap tampil (data lama tak lenyap)', id(s).includes(22) && id(s).includes(10) && id(s).includes(11))
+  ok('F9 tautan usang (id tak dikenal) tetap tampil', id(s).includes(23))
+  ok('F10 induk kosong = tanpa saringan', sama(id(saringRenaksiGrup(rows, new Set())), id(rows)))
+  ok('F11 dua induk = gabungan', sama(id(saringRenaksiGrup(rows, new Set([10, 11]))), id(rows)))
+
+  const ed = tanpaKomentar(readFileSync(new URL('../app/(dashboard)/iki/[id]/editor-client.tsx', import.meta.url), 'utf8'))
+  ok('F12 modal menyaring hanya bila induk diketahui & sakelar tidak "semua"', ed.includes('const disaring = indukGrup.size > 0 && !semuaRenaksi;')
+    && ed.includes('const pilihanRenaksi = disaring ? saringRenaksiGrup(renaksiRows ?? [], indukGrup) : (renaksiRows ?? []);')
+    && ed.includes('const shownRenaksi = pilihanRenaksi.filter('))
+  ok('F13 tombol "Tampilkan semua" membalik sakelar', ed.includes("onClick={() => setSemuaRenaksi(v => !v)}") && ed.includes("'Tampilkan semua'"))
+  ok('F14 RHK atasan dimuat dari dokumen atasan saat mode isi grup', /if \(!adaIsiGrup \|\| !atasanDokumenId\) return;[\s\S]*?import-atasan\?dokumen_id=\$\{atasanDokumenId\}/.test(ed))
+  ok('F15 caller meneruskan seluruh RHK dokumen', ed.includes('semua: doc.rhk,'))
+  const rute = readFileSync(new URL('../app/api/iki/import-renaksi/route.ts', import.meta.url), 'utf8')
+  ok('F16 route import-renaksi memulangkan induk_indikator_id', (rute.match(/induk_indikator_id/g) ?? []).length >= 2)
+  const data = readFileSync(new URL('../lib/data/iki.ts', import.meta.url), 'utf8')
+  ok('F17 RHK atasan membawa renaksi_id', data.includes('SELECT id AS atasan_rhk_id, renaksi_id, no_urut'))
+}
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
 if (gagal.length) { console.log(gagal.map(g => `  - ${g}`).join('\n')); process.exit(1) }
 process.exit(0)

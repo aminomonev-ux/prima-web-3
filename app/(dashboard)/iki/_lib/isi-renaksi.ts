@@ -1,7 +1,8 @@
 // Isian RHK dari Rencana Aksi — dipakai tab "Dari Rencana Aksi" (grup baru) DAN tombol "Isi dari Renaksi"
 // di kepala grup (mengisi grup yang RHK atasannya sudah diambil dari IKI Atasan). MURNI, aman-klien;
 // regresi: scripts/test-iki-isi-renaksi.mts.
-import { emptyRhk, type IkiRhk, type IkiTriwulan, type RenaksiImportRow } from './types';
+import { anakMilikIndikator } from '@/lib/renaksi/rantai';
+import { emptyRhk, type AtasanRhkRow, type IkiRhk, type IkiTriwulan, type RenaksiImportRow } from './types';
 
 type IsianRenaksi = Pick<IkiRhk, 'rhk' | 'indikator' | 'aspek_b' | 'target_tahunan' | 'renaksi_id' | 'triwulan'>;
 
@@ -70,4 +71,28 @@ export function renaksiDipakai(semua: IkiRhk[]): Map<number, number> {
   const peta = new Map<number, number>();
   for (const r of semua) if (r.renaksi_id != null && !peta.has(r.renaksi_id)) peta.set(r.renaksi_id, r.no_urut);
   return peta;
+}
+
+/**
+ * Baris Renaksi sumber RHK atasan grup `noUrut`. Dicocokkan lewat `atasan_rhk_id`; cadangannya teks RHK,
+ * sebab id RHK atasan berganti tiap atasan menyimpan (simpan = hapus-tulis-ulang).
+ */
+export function indukRenaksiGrup(semua: IkiRhk[], noUrut: number, atasan: AtasanRhkRow[]): Set<number> {
+  const grup = semua.filter(r => r.no_urut === noUrut);
+  const idAtasan = new Set(grup.map(r => r.atasan_rhk_id).filter((v): v is number => v != null));
+  const teksAtasan = new Set(grup.map(r => (r.rhk_intervensi ?? '').trim()).filter(Boolean));
+  const lewatId = atasan.filter(a => a.atasan_rhk_id != null && idAtasan.has(a.atasan_rhk_id));
+  const cocok = lewatId.length ? lewatId : atasan.filter(a => teksAtasan.has(a.rhk.trim()));
+  return new Set(cocok.map(a => a.renaksi_id).filter((v): v is number => v != null));
+}
+
+/**
+ * Pilihan Renaksi grup yang RHK atasannya bersumber `induk`: baris yang tertaut ke indikator itu, ditambah yang
+ * belum tertaut atau tautannya usang (`anakMilikIndikator` — data lama tidak boleh lenyap). Induk tak diketahui =
+ * tanpa saringan.
+ */
+export function saringRenaksiGrup(rows: RenaksiImportRow[], induk: ReadonlySet<number>): RenaksiImportRow[] {
+  if (induk.size === 0) return rows;
+  const semuaId = new Set(rows.map(r => r.renaksi_id));
+  return rows.filter(r => [...induk].some(id => anakMilikIndikator(r.induk_indikator_id, id, semuaId)));
 }

@@ -38,7 +38,7 @@ import {
   ASPEK_B_OPTIONS, ASPEK_C_OPTIONS, emptyRhk, emptyTriwulan,
   pejabatOptionValue, resolvePejabat,
 } from '../_lib/types';
-import { isianRenaksi, isiGrupDariRenaksi, renaksiDipakai } from '../_lib/isi-renaksi';
+import { indukRenaksiGrup, isianRenaksi, isiGrupDariRenaksi, renaksiDipakai, saringRenaksiGrup } from '../_lib/isi-renaksi';
 import { bandingKartuRenaksi, terapkanBandingKartu, kunciKartu, kalimatSpandukKartu } from '../_lib/banding-renaksi';
 import LencanaRenaksi from '@/components/renaksi/LencanaRenaksi';
 import { SpandukSelaras, DialogSelaras, type BagianSelaras } from '@/components/renaksi/SelarasRenaksi';
@@ -874,6 +874,7 @@ export default function EditorClient({ username, role, themePreference, initialD
           isiGrup={{
             noUrut: isiGrupNo,
             rhkAtasan: doc.rhk.find(r => r.no_urut === isiGrupNo)?.rhk_intervensi ?? null,
+            semua: doc.rhk,
             onIsi: rows => isiGrupRenaksi(isiGrupNo, rows),
           }}
           onClose={() => setIsiGrupNo(null)}
@@ -957,7 +958,7 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, dipakai
   /** renaksi_id → grup yang sudah memakainya (tanda saja, tetap bisa dipilih). */
   dipakai: Map<number, number>;
   /** Mode "Isi dari Renaksi": hanya tab Renaksi, hasilnya mengisi grup itu (`isiGrupDariRenaksi`), bukan grup baru. */
-  isiGrup?: { noUrut: number; rhkAtasan: string | null; onIsi: (rows: RenaksiImportRow[]) => void };
+  isiGrup?: { noUrut: number; rhkAtasan: string | null; semua: IkiRhk[]; onIsi: (rows: RenaksiImportRow[]) => void };
   onClose: () => void;
   onImport?: (groups: Partial<IkiRhk>[][]) => void;
 }) {
@@ -969,6 +970,9 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, dipakai
   const [atasanId, setAtasanId] = useState<number | ''>(atasanDokumenId ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
+  /** Isi dari Renaksi: RHK atasan dokumen atasan (sumber `renaksi_id` induk grup) + sakelar saringan. */
+  const [atasanGrup, setAtasanGrup] = useState<AtasanRhkRow[] | null>(null);
+  const [semuaRenaksi, setSemuaRenaksi] = useState(false);
 
   const loadRenaksi = useCallback(async () => {
     setLoading(true);
@@ -1005,6 +1009,20 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, dipakai
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tab === 'atasan' && atasanId) void loadAtasan(atasanId);
   }, [tab, atasanId, loadAtasan]);
+
+  const adaIsiGrup = !!isiGrup;
+  useEffect(() => {
+    if (!adaIsiGrup || !atasanDokumenId) return;
+    let batal = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/iki/import-atasan?dokumen_id=${atasanDokumenId}`);
+        const json = await res.json();
+        if (!batal && json.ok) setAtasanGrup(json.rows);
+      } catch { /* saringan hanya bantuan — gagal = tampil semua */ }
+    })();
+    return () => { batal = true; };
+  }, [adaIsiGrup, atasanDokumenId]);
 
   function toggle(key: string) {
     setSelected(prev => {
@@ -1050,7 +1068,10 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, dipakai
   }
 
   const q = search.trim().toLowerCase();
-  const shownRenaksi = (renaksiRows ?? []).filter(r =>
+  const indukGrup = isiGrup && atasanGrup ? indukRenaksiGrup(isiGrup.semua, isiGrup.noUrut, atasanGrup) : new Set<number>();
+  const disaring = indukGrup.size > 0 && !semuaRenaksi;
+  const pilihanRenaksi = disaring ? saringRenaksiGrup(renaksiRows ?? [], indukGrup) : (renaksiRows ?? []);
+  const shownRenaksi = pilihanRenaksi.filter(r =>
     r.level !== 'tujuan' &&
     (!q || r.rhk.toLowerCase().includes(q) || r.indikator.toLowerCase().includes(q) || r.nama.toLowerCase().includes(q)));
   const shownAtasan = (atasanRows ?? []).map((a, i) => ({ a, k: kunciAtasan(a, i) })).filter(({ a }) =>
@@ -1077,6 +1098,17 @@ function ImportModal({ tahun, atasanDokumenId, atasanCandidates, custom, dipakai
             <option value="">— pilih dokumen IKI atasan —</option>
             {atasanCandidates.map(a => <option key={a.id} value={a.id}>{a.jabatan} · {a.nama} ({a.tahun})</option>)}
           </select>
+        )}
+
+        {indukGrup.size > 0 && (
+          <p className="iki-modal-saring">
+            {disaring
+              ? 'Hanya indikator yang tertaut ke indikator RHK atasan grup ini (ditambah yang belum tertaut).'
+              : 'Menampilkan semua indikator Renaksi.'}
+            <button type="button" className="iki-link" onClick={() => setSemuaRenaksi(v => !v)}>
+              {disaring ? 'Tampilkan semua' : 'Saring lagi'}
+            </button>
+          </p>
         )}
 
         <input className="iki-modal-search" placeholder="Cari…" value={search} onChange={e => setSearch(e.target.value)} />
@@ -1212,6 +1244,8 @@ const ED_CSS = `
   .iki-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
   .iki-modal-ctx { margin: 0 0 12px; padding: 8px 10px; border: 1px solid rgba(124,92,252,0.4); border-radius: 8px; background: rgba(124,92,252,0.1); font-size: 12px; line-height: 1.5; }
   .iki-modal-ctx span { display: block; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #B9A6FF; margin-bottom: 2px; }
+  .iki-modal-saring { margin: 0 0 10px; font-size: 11.5px; line-height: 1.5; color: #85B7EB; }
+  .iki-link { background: none; border: 0; padding: 0; margin-left: 8px; color: #EF9F27; font-weight: 700; font-size: 11.5px; cursor: pointer; text-decoration: underline; }
   .iki-tab { flex: 1; background: #020F1C; border: 1px solid #0C447C; color: #B5D4F4; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .iki-tab.on { border-color: #1D9E75; color: #7BE0BD; background: rgba(29,158,117,0.1); }
   .iki-modal-select, .iki-modal-search { background: #020F1C; border: 1px solid #0C447C; border-radius: 6px; padding: 8px 10px; color: #E6F1FB; font-size: 12.5px; margin-bottom: 10px; width: 100%; }
@@ -1267,6 +1301,8 @@ const ED_CSS = `
   [data-theme="light"] .iki-src { color: #067154; }
   [data-theme="light"] .iki-modal-ctx { background: rgba(124,92,252,0.06); }
   [data-theme="light"] .iki-modal-ctx span { color: #5B21B6; }
+  [data-theme="light"] .iki-modal-saring { color: #475569; }
+  [data-theme="light"] .iki-link { color: #BA7517; }
   [data-theme="light"] .iki-stale-banner { background: #FEF6E7; border-color: rgba(186,117,23,0.4); color: #92610A; }
   [data-theme="light"] .iki-warn-box { background: #FEF6E7; border-color: rgba(186,117,23,0.4); color: #92610A; }
   [data-theme="light"] .iki-warn-item { color: #A16207; }

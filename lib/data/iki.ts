@@ -163,7 +163,7 @@ export async function createDokumen(input: {
 }
 
 /** Baris RHK atasan untuk kaskade (Ambil dari IKI Atasan & penaut Impor Excel). */
-export type RhkAtasanRow = { atasan_rhk_id: number | null; no_urut: number; rhk: string; indikator: string; target_tahunan: string; aspek_b: string };
+export type RhkAtasanRow = { atasan_rhk_id: number | null; /** Baris Renaksi sumber RHK atasan — saringan Isi dari Renaksi bawahan. */ renaksi_id: number | null; no_urut: number; rhk: string; indikator: string; target_tahunan: string; aspek_b: string };
 export type RhkAtasanHasil = { atasan: { id: number; nama: string; jabatan: string; tahun: string; varian: IkiVarian }; rows: RhkAtasanRow[]; catatan: string | null };
 
 /**
@@ -178,14 +178,14 @@ export async function getRhkAtasan(dokumenId: number): Promise<RhkAtasanHasil | 
   const { tabel_custom: tabel, ...kepala } = atasan;
   if (kepala.varian === 'CUSTOM') {
     const t = bacaTabelCustom(typeof tabel === 'string' ? JSON.parse(tabel) : tabel);
-    const rows = rhkAtasanDariTabel(t).map(r => ({ atasan_rhk_id: null, ...r }));
+    const rows = rhkAtasanDariTabel(t).map(r => ({ atasan_rhk_id: null, renaksi_id: null, ...r }));
     const catatan = t.peran.rhk === undefined
       ? 'Dokumen atasan berbentuk tabel CUSTOM dan belum menandai kolom Rencana Hasil Kerja — minta penyusunnya menandai lewat panel Peran kolom.'
       : null;
     return { atasan: kepala, rows, catatan };
   }
   const rows = await queryMany<RhkAtasanRow>(sql`
-    SELECT id AS atasan_rhk_id, no_urut, rhk, indikator, target_tahunan, aspek_b
+    SELECT id AS atasan_rhk_id, renaksi_id, no_urut, rhk, indikator, target_tahunan, aspek_b
     FROM iki_rhk WHERE dokumen_id = ${kepala.id}
     ORDER BY no_urut ASC, urutan ASC`);
   return { atasan: kepala, rows, catatan: null };

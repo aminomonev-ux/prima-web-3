@@ -31,10 +31,13 @@ type RaSrc = {
   satuan: string;
   target_tahunan: number;
   q1_target: number; q2_target: number; q3_target: number; q4_target: number;
+  induk_indikator_id: number | null;
 };
 
 export type IkiRenaksiImportRow = {
   renaksi_id: number;
+  /** Tautan indikator induk Renaksi — saringan "Isi dari Renaksi" per grup (CONCEPT-renaksi-tautan-lanjutan §4). */
+  induk_indikator_id: number | null;
   level: RaSrc['level'];
   /** Nama sasaran induk (kandidat RHK diintervensi) — '' untuk level sasaran/tujuan */
   sasaran_induk: string;
@@ -70,7 +73,7 @@ export async function GET(req: NextRequest) {
     SELECT id, level, sasaran, tujuan,
            outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
            program, kegiatan, sub_kegiatan, indikator, jenis, satuan, target_tahunan,
-           q1_target, q2_target, q3_target, q4_target
+           q1_target, q2_target, q3_target, q4_target, induk_indikator_id
     FROM rencana_aksi
     WHERE tahun = ${tahun}
     ORDER BY level, program, kegiatan, sub_kegiatan
@@ -94,6 +97,7 @@ export async function GET(req: NextRequest) {
       : '';
     return {
       renaksi_id: r.id,
+      induk_indikator_id: r.induk_indikator_id == null ? null : Number(r.induk_indikator_id),
       level: r.level,
       sasaran_induk: rapikanNamaEntitas(r.level === 'program' ? (r.sasaran ?? '') : ''),
       rhk: rapikanNamaEntitas(outcome ?? nama),

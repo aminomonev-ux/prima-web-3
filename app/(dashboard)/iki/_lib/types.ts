@@ -94,6 +94,8 @@ export type PejabatSuggest = {
 
 export type RenaksiImportRow = {
   renaksi_id: number;
+  /** Tautan indikator induk di Renaksi (null = belum tertaut). */
+  induk_indikator_id: number | null;
   level: 'tujuan' | 'sasaran' | 'program' | 'kegiatan' | 'sub-kegiatan';
   sasaran_induk: string;
   rhk: string;
@@ -108,6 +110,8 @@ export type RenaksiImportRow = {
 export type AtasanRhkRow = {
   /** Kosong bila atasannya CUSTOM — tabel tidak punya id baris (docs/CONCEPT-iki-custom.md §11.3). */
   atasan_rhk_id: number | null;
+  /** Baris Renaksi sumber RHK atasan (null = diketik / atasan CUSTOM). */
+  renaksi_id: number | null;
   no_urut: number;
   rhk: string;
   indikator: string;

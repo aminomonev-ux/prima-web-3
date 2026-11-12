@@ -16,7 +16,7 @@ function ok(nama: string, syarat: unknown, ket = '') {
 const sumber = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 const ra = (id: number, isi: Partial<RenaksiImportRow> = {}): RenaksiImportRow => ({
-  renaksi_id: id, level: 'sub-kegiatan', sasaran_induk: '', rhk: `RHK ${id}`, nama: `Sub ${id}`, parent: 'Keg',
+  renaksi_id: id, induk_indikator_id: null, level: 'sub-kegiatan', sasaran_induk: '', rhk: `RHK ${id}`, nama: `Sub ${id}`, parent: 'Keg',
   indikator: `Indikator ${id}`, jenis: 'Akumulatif', target_tahunan: '12 Dokumen', target_tw: ['3 Dokumen', '3 Dokumen', '3 Dokumen', '3 Dokumen'], ...isi,
 })
 const kartu = (src: RenaksiImportRow | null, isi: Partial<IkiRhk> = {}): IkiRhk => {
