@@ -326,6 +326,7 @@ CREATE TABLE IF NOT EXISTS kinerja_master (
   program_ref      VARCHAR(255) DEFAULT NULL COMMENT 'Referensi nama program (kegiatan/subkegiatan/uraian_ssk)',
   kegiatan_ref     VARCHAR(255) DEFAULT NULL COMMENT 'Referensi nama kegiatan (subkegiatan/uraian_ssk)',
   subkegiatan_ref  VARCHAR(255) DEFAULT NULL COMMENT 'Referensi nama sub kegiatan (uraian_ssk)',
+  asal             ENUM('MANUAL','RENAKSI') NOT NULL DEFAULT 'MANUAL' COMMENT 'RENAKSI = diambil lewat Init Renaksi (program/kegiatan/subkegiatan) — migration-kinerja-master-asal',
   urut             INT          NOT NULL DEFAULT 0,
   created_by       INT          DEFAULT NULL,
   created_at       DATETIME     NOT NULL DEFAULT NOW(),

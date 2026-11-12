@@ -4,6 +4,8 @@
 // Realisasi, CRR, Pendapatan, Cetak, Laporan) di-pindah ke sini supaya tab
 // files tidak duplicate definition.
 
+import type { AsalMaster } from '@/lib/kinerja/asal-renaksi';
+
 // ─── Enum-like literals ─────────────────────────────────────────────────────
 
 export type SumberSSK   = 'GAJI' | 'BLUD' | 'HARLEP' | 'PROMKES' | 'SARPRAS' | 'OBAT' | 'PEMELIHARAAN' | 'PEMBANGUNAN';
@@ -23,6 +25,8 @@ export interface MasterRow {
   kegiatan_ref: string | null;
   subkegiatan_ref: string | null;
   urut: number;
+  /** Tidak ada pada baris baru yang belum disimpan (= MANUAL). */
+  asal?: AsalMaster;
 }
 
 export interface RekeningRow {
@@ -128,6 +132,7 @@ export interface PendRow {
 // kegiatanRows/subkegiatanRows/sskRows = full row data untuk filter by ref hierarki.
 export interface MasterOpts {
   program: string[];
+  programRows: MasterRow[];
   kegiatan: string[];
   kegiatanRows: MasterRow[];
   subkegiatan: string[];

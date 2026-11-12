@@ -3,6 +3,7 @@
 Status: keputusan pemilik di §9 (12 Nov 2026). Dikerjakan A → B → C, tiap tahap diuji lalu di-commit.
 
 - **Tahap A selesai** (12 Nov): `renaksi_ganti_nama` + `catatGantiNama` / `listGantiNama` di `lib/data/rencana-aksi.ts`. Uji: `node scripts/test-renaksi-audit.mjs` bagian "Catatan ganti nama".
+- **Tahap B selesai** (12 Nov): `kinerja_master.asal` (mig `migration-kinerja-master-asal.sql`); aturan MURNI `lib/kinerja/asal-renaksi.ts` (`dariRenaksi`, `tandaRantai`, `namaBertanda`, `jalurAdaDiRenaksi` = cermin isi awal migrasi); Init menulis RENAKSI; lencana `components/kinerja/LencanaRenaksi.tsx` di tab Master (nama entri) dan Rekening (kolom Program/Kegiatan/Sub + pilihan berantai " · Renaksi"). Ganti nama lewat Edit Master mempertahankan tanda. Batas: entri yang **digabung** (Edit Master gabung, Rapikan Bintang) tidak mewariskan tanda ke entri tujuannya; bila jalurnya ada di Renaksi, ia muncul di dialog Tahap C sebagai "sudah ada, belum bertanda". Uji: `npx tsx --env-file=.env.local scripts/test-kinerja-asal-renaksi.mts` (31; bagian C MySQL 2094), 6 uji mutasi tertangkap.
 
 Permintaan pemilik:
 

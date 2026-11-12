@@ -22,7 +22,7 @@ import type { InfoBeku } from '@/lib/security/beku';
 // ─── Types & Helpers — semua dipindah ke ./_types.ts + ./_utils.ts ──────────
 // Shell hanya import yang masih dipakai untuk fetcher + state container.
 import type {
-  SumberSSK, KTab, MasterRow, RekeningRow, SskRow, RealRow,
+  SumberSSK, KTab, MasterRow, MasterOpts, RekeningRow, SskRow, RealRow,
 } from './_types';
 import { recalcAllRealisasi } from './_utils';
 import type { ItemSskAktif } from '@/lib/kinerja/rekap';
@@ -115,9 +115,9 @@ export default function KinerjaClient({ userId, role, username, themePreference,
   // Form states
   // O2: masterInput, masterEditId, 3 ref state dipindah ke _tabs/MasterTab.
   // O2: rekForm + rekEditIdx state dipindah ke _tabs/RekeningTab.
-  const [masterOpts, setMasterOpts] = useState<{
-    program: string[]; kegiatan: string[]; kegiatanRows: MasterRow[]; subkegiatan: string[]; subkegiatanRows: MasterRow[]; sumber_anggaran: string[]; uraian_ssk: string[]; sskRows: MasterRow[];
-  }>({ program: [], kegiatan: [], kegiatanRows: [], subkegiatan: [], subkegiatanRows: [], sumber_anggaran: [], uraian_ssk: [], sskRows: [] });
+  const [masterOpts, setMasterOpts] = useState<MasterOpts>({
+    program: [], programRows: [], kegiatan: [], kegiatanRows: [], subkegiatan: [], subkegiatanRows: [], sumber_anggaran: [], uraian_ssk: [], sskRows: [],
+  });
   const [, setMasterOptsLoaded] = useState(false); // masterOptsLoaded not used in render
 
   // Loading
@@ -317,6 +317,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     const sskDataRows = pickRows(sskData);
     setMasterOpts({
       program:          progRows.map(r => r.nama),
+      programRows:      progRows,
       kegiatan:         kegRows.map(r => r.nama),
       kegiatanRows:     kegRows,
       subkegiatan:      subRows.map(r => r.nama),

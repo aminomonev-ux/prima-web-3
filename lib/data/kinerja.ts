@@ -10,6 +10,7 @@ import { kelompokkanNilai } from '@/lib/kinerja/master-ubah';
 import { alasanTolakUbahMurni, jejakTargetPerubahan, capaianPendapatan } from '@/lib/kinerja/pendapatan-perubahan';
 import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerja/yatim';
 import { buangBintang } from '@/lib/kinerja/master-nama';
+import type { AsalMaster } from '@/lib/kinerja/asal-renaksi';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
 import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 import { bandingRealisasi, pelanggaranBulanTertutup, type BarisBanding, type RingkasBulan } from '@/lib/kinerja/banding-realisasi';
@@ -41,6 +42,8 @@ export interface MasterRow {
   kegiatan_ref: string | null;     // subkegiatan, uraian_ssk
   subkegiatan_ref: string | null;  // uraian_ssk
   urut: number;
+  /** RENAKSI = diambil lewat Init Renaksi (lib/kinerja/asal-renaksi.ts). */
+  asal: AsalMaster;
 }
 
 export interface RekeningRow {
@@ -88,7 +91,7 @@ function parseJson<T>(v: unknown, fallback: T): T {
 // _sumber param sengaja unused: API signature kompat, dipakai di sibling getMasterByTipe.
 export async function getMasterRows(tahun: string, tipe: MasterTipe, _sumber?: SumberSSK | null) {
   return await sql`
-    SELECT id, tahun, tipe, sumber, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut
+    SELECT id, tahun, tipe, sumber, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut, asal
     FROM kinerja_master
     WHERE tahun = ${tahun} AND tipe = ${tipe}
     ORDER BY urut, nama
@@ -262,7 +265,9 @@ export async function initMasterFromRenaksi(
 
   if (dry) return result;
 
-  const cols = ['tahun','tipe','sumber','nama','program_ref','kegiatan_ref','subkegiatan_ref','urut','created_by'];
+  // `asal` RENAKSI: lencana di Master/Rekening + pembanding "Rencana Aksi berubah"
+  // (docs/CONCEPT-renaksi-terhubung.md §5). Entri lama yang dilewati tidak ditandai di sini.
+  const cols = ['tahun','tipe','sumber','nama','program_ref','kegiatan_ref','subkegiatan_ref','urut','created_by','asal'];
 
   await withTransaction(async ({ tx, conn }) => {
     const [pUrut] = await tx`SELECT COALESCE(MAX(urut),0) AS m FROM kinerja_master WHERE tahun = ${tahun} AND tipe = 'program'` as { m: number }[];
@@ -273,15 +278,15 @@ export async function initMasterFromRenaksi(
     let sStart = Number(sUrut?.m ?? 0);
 
     if (programsToInsert.length > 0) {
-      const rows = programsToInsert.map(p => [tahun, 'program', null, p, null, null, null, ++pStart, userId]);
+      const rows = programsToInsert.map(p => [tahun, 'program', null, p, null, null, null, ++pStart, userId, 'RENAKSI']);
       await bulkInsert('kinerja_master', cols, rows, conn);
     }
     if (kegiatansToInsert.length > 0) {
-      const rows = kegiatansToInsert.map(k => [tahun, 'kegiatan', null, k.nama, k.program_ref, null, null, ++kStart, userId]);
+      const rows = kegiatansToInsert.map(k => [tahun, 'kegiatan', null, k.nama, k.program_ref, null, null, ++kStart, userId, 'RENAKSI']);
       await bulkInsert('kinerja_master', cols, rows, conn);
     }
     if (subkegsToInsert.length > 0) {
-      const rows = subkegsToInsert.map(s => [tahun, 'subkegiatan', null, s.nama, s.program_ref, s.kegiatan_ref, null, ++sStart, userId]);
+      const rows = subkegsToInsert.map(s => [tahun, 'subkegiatan', null, s.nama, s.program_ref, s.kegiatan_ref, null, ++sStart, userId, 'RENAKSI']);
       await bulkInsert('kinerja_master', cols, rows, conn);
     }
   });

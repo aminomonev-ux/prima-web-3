@@ -7,7 +7,7 @@
 // rekeningRows TIDAK di-lokalisasi karena di-share dengan SSK tab (Inject
 // dari Rekening) — tetap di shell, di-pass via props.
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
 import { fetchJson } from '@/lib/shared/api';
@@ -22,6 +22,8 @@ import { exportRekeningExcel } from '../_exports';
 import ImportRekeningModal from '@/components/kinerja/ImportRekeningModal';
 import RiwayatSimpanModal from '@/components/kinerja/RiwayatSimpanModal';
 import OpsiDiLuarMaster from '@/components/kinerja/OpsiDiLuarMaster';
+import LencanaRenaksi from '@/components/kinerja/LencanaRenaksi';
+import { namaBertanda, tandaRantai } from '@/lib/kinerja/asal-renaksi';
 import type { BarisRekening } from '@/lib/kinerja/gabung-rekening';
 import { cocokInduk, namaUnik } from '@/lib/kinerja/master-nama';
 import { kalimatJalarRekening, type RingkasJalarRekening } from '@/lib/kinerja/rekening-menjalar';
@@ -90,9 +92,20 @@ export default function RekeningTab({
   // lenyap atau ikut tampil.
   const induk = { program: rekForm.program, kegiatan: rekForm.kegiatan, subkegiatan: rekForm.subkegiatan };
   const opsiProgram   = [...new Set(masterOpts.program)];
-  const opsiKegiatan  = namaUnik(masterOpts.kegiatanRows.filter(r => cocokInduk(r, { program: induk.program })));
-  const opsiSub       = namaUnik(masterOpts.subkegiatanRows.filter(r => cocokInduk(r, { program: induk.program, kegiatan: induk.kegiatan })));
+  const barisKegiatan = masterOpts.kegiatanRows.filter(r => cocokInduk(r, { program: induk.program }));
+  const barisSub      = masterOpts.subkegiatanRows.filter(r => cocokInduk(r, { program: induk.program, kegiatan: induk.kegiatan }));
+  const opsiKegiatan  = namaUnik(barisKegiatan);
+  const opsiSub       = namaUnik(barisSub);
   const opsiUraianSsk = namaUnik(masterOpts.sskRows.filter(r => cocokInduk(r, induk)));
+  // Tanda "Renaksi" diturunkan dari Master, tidak disimpan di rekening (konsep renaksi-terhubung §5.2).
+  const bertandaProgram  = namaBertanda(masterOpts.programRows);
+  const bertandaKegiatan = namaBertanda(barisKegiatan);
+  const bertandaSub      = namaBertanda(barisSub);
+  const masterBerasal = useMemo(
+    () => [...masterOpts.programRows, ...masterOpts.kegiatanRows, ...masterOpts.subkegiatanRows],
+    [masterOpts.programRows, masterOpts.kegiatanRows, masterOpts.subkegiatanRows],
+  );
+  const labelOpsi = (v: string, bertanda: Set<string>) => bertanda.has(v) ? `${v}  · Renaksi` : v;
 
   function addRekRow() {
     if (!rekForm.uraian.trim()) { toast.error('Uraian wajib diisi'); return; }
@@ -212,7 +225,7 @@ export default function RekeningTab({
               <label style={lblStyle}>Program</label>
               <select value={rekForm.program} onChange={e => setRekForm(p => ({ ...p, program: e.target.value, kegiatan: '', subkegiatan: '', uraian_ssk: '' }))} style={selStyle}>
                 <option value="">-- Pilih Program --</option>
-                {opsiProgram.map(v => <option key={v} value={v}>{v}</option>)}
+                {opsiProgram.map(v => <option key={v} value={v}>{labelOpsi(v, bertandaProgram)}</option>)}
                 <OpsiDiLuarMaster nilai={rekForm.program} opsi={opsiProgram} />
               </select>
             </div>
@@ -225,7 +238,7 @@ export default function RekeningTab({
                 style={{ ...selStyle, opacity: rekForm.program ? 1 : 0.5, cursor: rekForm.program ? 'pointer' : 'not-allowed' }}
               >
                 <option value="">{rekForm.program ? '-- Pilih Kegiatan --' : '-- Pilih Program dulu --'}</option>
-                {opsiKegiatan.map(v => <option key={v} value={v}>{v}</option>)}
+                {opsiKegiatan.map(v => <option key={v} value={v}>{labelOpsi(v, bertandaKegiatan)}</option>)}
                 <OpsiDiLuarMaster nilai={rekForm.kegiatan} opsi={opsiKegiatan} />
               </select>
             </div>
@@ -238,7 +251,7 @@ export default function RekeningTab({
                 style={{ ...selStyle, opacity: rekForm.kegiatan ? 1 : 0.5, cursor: rekForm.kegiatan ? 'pointer' : 'not-allowed' }}
               >
                 <option value="">{rekForm.kegiatan ? '-- Pilih Sub Kegiatan --' : '-- Pilih Kegiatan dulu --'}</option>
-                {opsiSub.map(v => <option key={v} value={v}>{v}</option>)}
+                {opsiSub.map(v => <option key={v} value={v}>{labelOpsi(v, bertandaSub)}</option>)}
                 <OpsiDiLuarMaster nilai={rekForm.subkegiatan} opsi={opsiSub} />
               </select>
             </div>
@@ -346,12 +359,12 @@ export default function RekeningTab({
               {rekeningRows.length === 0 && (
                 <tr><td colSpan={canEdit?8:7} style={{ padding:'36px', textAlign:'center', color:cTextSub, fontSize:'13px' }}>Belum ada rekening.</td></tr>
               )}
-              {rekeningRows.map((r, i) => (
+              {rekeningRows.map((r, i) => { const tanda = tandaRantai(r, masterBerasal); return (
                 <tr key={i} style={{ background: i%2===0 ? cRowEven : cRowOdd }}>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, textAlign:'center', fontWeight:600 }}>{i+1}</td>
-                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'200px' }}>{r.program||'-'}</td>
-                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.kegiatan||'-'}</td>
-                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.subkegiatan||'-'}</td>
+                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'200px' }}>{r.program||'-'}{tanda.program && <LencanaRenaksi tahun={tahun} isLight={isLight} />}</td>
+                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.kegiatan||'-'}{tanda.kegiatan && <LencanaRenaksi tahun={tahun} isLight={isLight} />}</td>
+                  <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub, maxWidth:'180px' }}>{r.subkegiatan||'-'}{tanda.subkegiatan && <LencanaRenaksi tahun={tahun} isLight={isLight} />}</td>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub }}>{r.uraian_ssk||'-'}</td>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextPrimary, fontWeight:500, maxWidth:'240px' }}>{r.uraian}</td>
                   <td style={{ padding:'8px 12px', borderBottom:cBorderHair, color:cTextSub }}>{r.sumber_anggaran||'-'}</td>
@@ -365,7 +378,7 @@ export default function RekeningTab({
                     </td>
                   )}
                 </tr>
-              ))}
+              ); })}
             </tbody>
           </table>
         )}
