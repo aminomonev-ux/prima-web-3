@@ -23,6 +23,10 @@ export interface CatatanGanti {
   ke: string;
   induk: string | null;
   induk_program: string | null;
+  /** Tahap H — induk BARU bila entitas dipindah (kegiatan: program; sub: kegiatan). Kosong = tetap. */
+  induk_baru?: string | null;
+  /** Tahap H — program BARU sub kegiatan. Kosong = tetap. */
+  induk_program_baru?: string | null;
 }
 
 type TipeBerasal = Extract<MasterTipe, 'program' | 'kegiatan' | 'subkegiatan'>;
@@ -35,8 +39,40 @@ export interface ItemEntri {
   kegiatan_ref: string | null;
 }
 
-/** `ke` = nama Renaksi tanpa penanda — nama yang akan ditulis ke Master. */
-export interface ItemGanti extends ItemEntri { ke: string }
+/**
+ * `ke` = nama Renaksi tanpa penanda — nama yang akan ditulis ke Master. Tahap H: bila entitas
+ * itu sendiri DIPINDAH di Renaksi, `program_ke` (kegiatan & sub) dan `kegiatan_ke` (sub) berisi
+ * induk tujuannya; tanpa itu (`undefined`) induknya tetap.
+ */
+export interface ItemGanti extends ItemEntri {
+  ke: string;
+  program_ke?: string;
+  kegiatan_ke?: string;
+}
+
+/** Item ini memindah induk (bukan sekadar ganti nama)? */
+export const itemPindah = (g: ItemGanti): boolean => g.program_ke !== undefined || g.kegiatan_ke !== undefined;
+
+/** Isian Edit Master (yang menjalar) untuk satu item — induk hanya dikirim bila memang dipindah. */
+export function badanUbahMaster(g: ItemGanti): { nama: string; program_ref?: string; kegiatan_ref?: string } {
+  return {
+    nama: g.ke,
+    ...(g.program_ke !== undefined ? { program_ref: g.program_ke } : {}),
+    ...(g.kegiatan_ke !== undefined ? { kegiatan_ref: g.kegiatan_ke } : {}),
+  };
+}
+
+/**
+ * Induk tujuan pindah belum ada di Master tapi ada di daftar "Baru" — Edit Master menolak induk
+ * yang tidak ada (L68), jadi item ini menunggu entri baru dibuat lebih dulu.
+ */
+export function indukTujuanDiBaru(g: ItemGanti, baru: readonly ItemBaru[]): boolean {
+  if (!itemPindah(g)) return false;
+  const adaProgram = baru.some(b => b.tipe === 'program' && k(b.nama) === k(g.program_ke));
+  const adaKegiatan = g.tipe === 'subkegiatan'
+    && baru.some(b => b.tipe === 'kegiatan' && k(b.nama) === k(g.kegiatan_ke) && k(b.program_ref) === k(g.program_ke));
+  return adaProgram || adaKegiatan;
+}
 
 export interface ItemBaru {
   tipe: TipeBerasal;
@@ -66,8 +102,11 @@ export function jumlahPerubahan(h: HasilBanding): number {
 }
 
 export function kalimatSpanduk(h: HasilBanding, tahun: string | number): string {
+  const pindah = h.gantiNama.filter(itemPindah).length;
+  const ganti = h.gantiNama.length - pindah;
   const bagian = [
-    h.gantiNama.length ? `${h.gantiNama.length} berganti nama` : '',
+    ganti ? `${ganti} berganti nama` : '',
+    pindah ? `${pindah} pindah induk` : '',
     h.baru.length ? `${h.baru.length} baru` : '',
     h.hilang.length ? `${h.hilang.length} tidak ada lagi` : '',
   ].filter(Boolean);
@@ -77,43 +116,59 @@ export function kalimatSpanduk(h: HasilBanding, tahun: string | number): string 
 const k = kunciNamaRenaksi;
 const bersih = (s: string) => rapikanNamaEntitas(s);
 
+/** Tempat akhir sebuah entitas: induknya (teks tampil) dan namanya. */
+interface Lokasi { induk: string[]; nama: string }
+
 /**
- * Peta ganti nama satu tingkat, rantai dirangkai: A → B → C terbaca A → C (B → C juga),
- * A → B → A saling meniadakan. `awalan` = kunci induk AKHIR, supaya catatan yang ditulis
+ * Peta ganti nama / pindah induk satu tingkat, rantai dirangkai: A → B → C terbaca A → C
+ * (B → C juga), A → B → A saling meniadakan. Yang disimpan LOKASI akhir (induk + nama),
+ * bukan nama saja (Tahap H): catatan "K dipindah P1 → P2" lalu "K di P2 diganti K2" harus
+ * terbaca (P1, K) → (P2, K2). `awalan` = kunci induk AKHIR, supaya catatan yang ditulis
  * sebelum dan sesudah induknya berganti nama jatuh di kelompok yang sama.
  */
 class PetaGanti {
-  private peta = new Map<string, string>();
-  tambah(awalan: string, dari: string, ke: string) {
+  private peta = new Map<string, Lokasi & { awalan: string }>();
+  tambah(awalan: string, dari: string, awalanBaru: string, induk: string[], ke: string) {
+    const tujuan = { awalan: awalanBaru, induk, nama: ke };
     for (const [kunci, nilai] of this.peta) {
-      if (kunci.startsWith(awalan + '\u0001') && k(nilai) === k(dari)) this.peta.set(kunci, ke);
+      if (nilai.awalan === awalan && k(nilai.nama) === k(dari)) this.peta.set(kunci, tujuan);
     }
     const kd = `${awalan}\u0001${k(dari)}`;
-    if (!this.peta.has(kd)) this.peta.set(kd, ke);
+    if (!this.peta.has(kd)) this.peta.set(kd, tujuan);
   }
-  akhir(awalan: string, nama: string): string {
+  akhir(awalan: string, nama: string): Lokasi | null {
     const v = this.peta.get(`${awalan}\u0001${k(nama)}`);
-    return v ?? nama;
+    return v ? { induk: v.induk, nama: v.nama } : null;
   }
 }
 
 function petaDariCatatan(catatan: readonly CatatanGanti[]) {
   const program = new PetaGanti();
-  for (const c of catatan) if (c.level === 'program') program.tambah('', c.dari, c.ke);
-  const progAkhir = (p: string | null) => (p ? program.akhir('', p) : '');
+  for (const c of catatan) if (c.level === 'program') program.tambah('', c.dari, '', [], c.ke);
+  const progAkhir = (p: string | null) => (p ? (program.akhir('', p)?.nama ?? p) : '');
 
   const kegiatan = new PetaGanti();
-  for (const c of catatan) if (c.level === 'kegiatan') kegiatan.tambah(k(progAkhir(c.induk)), c.dari, c.ke);
-  const kegAkhir = (p: string, kg: string | null) => (kg ? kegiatan.akhir(k(p), kg) : '');
+  for (const c of catatan) {
+    if (c.level !== 'kegiatan') continue;
+    const pBaru = progAkhir(c.induk_baru || c.induk);
+    kegiatan.tambah(k(progAkhir(c.induk)), c.dari, k(pBaru), [pBaru], c.ke);
+  }
+  // Lokasi akhir kegiatan (program, nama) — kegiatan yang dipindah membawa sub-nya.
+  const kegLok = (p: string, kg: string | null): [string, string] => {
+    if (!kg) return [p, ''];
+    const l = kegiatan.akhir(k(p), kg);
+    return l ? [l.induk[0], l.nama] : [p, kg];
+  };
 
   const sub = new PetaGanti();
   for (const c of catatan) {
     if (c.level !== 'sub-kegiatan') continue;
-    const p = progAkhir(c.induk_program);
-    sub.tambah(`${k(p)}|${k(kegAkhir(p, c.induk))}`, c.dari, c.ke);
+    const [p, kg] = kegLok(progAkhir(c.induk_program), c.induk);
+    const [pBaru, kgBaru] = kegLok(progAkhir(c.induk_program_baru || c.induk_program), c.induk_baru || c.induk);
+    sub.tambah(`${k(p)}|${k(kg)}`, c.dari, `${k(pBaru)}|${k(kgBaru)}`, [pBaru, kgBaru], c.ke);
   }
   return {
-    program: (nama: string) => program.akhir('', nama),
+    program: (nama: string) => program.akhir('', nama)?.nama ?? nama,
     kegiatan: (p: string, nama: string) => kegiatan.akhir(k(p), nama),
     sub: (p: string, kg: string, nama: string) => sub.akhir(`${k(p)}|${k(kg)}`, nama),
   };
@@ -132,28 +187,44 @@ export function bandingRenaksi(
   const kegiatanDi = (nama: string | null, program: string | null) =>
     (nama ? master.find(e => e.tipe === 'kegiatan' && e.nama === nama && (!e.program_ref || !program || e.program_ref === program)) : undefined);
 
-  // Jalur tiap entri SESUDAH ganti nama diterapkan. Hanya entri ber-asal Renaksi yang
-  // diganti namanya; keturunannya ikut induk (itu kerja Edit Master yang menjalar).
-  const proyeksi = new Map<number, EntriBanding>();
-  const proyek = (e: EntriBanding): EntriBanding => {
+  // Jalur tiap entri SESUDAH ganti nama / pindah induk diterapkan. Hanya entri ber-asal
+  // Renaksi yang diubah; keturunannya ikut induk (itu kerja Edit Master yang menjalar).
+  // `pindah` = entri itu SENDIRI yang dipindah (bukan ikut induknya yang dipindah/diganti).
+  type Proyeksi = EntriBanding & { pindah: boolean };
+  const proyeksi = new Map<number, Proyeksi>();
+  const proyek = (e: EntriBanding): Proyeksi => {
     const ada = proyeksi.get(e.id);
     if (ada) return ada;
-    let hasil: EntriBanding;
+    let hasil: Proyeksi;
     if (e.tipe === 'program') {
-      hasil = { ...e, nama: dariRenaksi(e) && !jalurAdaDiRenaksi(e, renaksi) ? peta.program(e.nama) : e.nama };
+      hasil = { ...e, nama: dariRenaksi(e) && !jalurAdaDiRenaksi(e, renaksi) ? peta.program(e.nama) : e.nama, pindah: false };
     } else {
       const ip = programDi(e.program_ref);
-      const p = ip ? proyek(ip).nama : e.program_ref;
+      let p = ip ? proyek(ip).nama : e.program_ref;
       let kg = e.kegiatan_ref;
       if (e.tipe === 'subkegiatan') {
         const ik = kegiatanDi(e.kegiatan_ref, e.program_ref);
-        kg = ik ? proyek(ik).nama : e.kegiatan_ref;
+        if (ik) {
+          const pk = proyek(ik);
+          kg = pk.nama;
+          // Kegiatan induk dipindah → sub ikut programnya (keturunan, bukan pindah sendiri).
+          p = pk.program_ref ?? p;
+        }
       }
       const ganti = dariRenaksi(e) && !jalurAdaDiRenaksi(e, renaksi) && p;
-      const nama = !ganti ? e.nama
-        : e.tipe === 'kegiatan' ? peta.kegiatan(p, e.nama)
-        : peta.sub(p, kg ?? '', e.nama);
-      hasil = { ...e, nama, program_ref: p, kegiatan_ref: kg };
+      let nama = e.nama;
+      let pindah = false;
+      if (ganti) {
+        const lok = e.tipe === 'kegiatan' ? peta.kegiatan(p!, e.nama) : peta.sub(p!, kg ?? '', e.nama);
+        if (lok) {
+          nama = lok.nama;
+          const [pBaru, kgBaru] = lok.induk;
+          pindah = k(pBaru) !== k(p) || (e.tipe === 'subkegiatan' && k(kgBaru) !== k(kg));
+          p = pBaru;
+          if (e.tipe === 'subkegiatan') kg = kgBaru;
+        }
+      }
+      hasil = { ...e, nama, program_ref: p, kegiatan_ref: kg, pindah };
     }
     proyeksi.set(e.id, hasil);
     return hasil;
@@ -168,7 +239,12 @@ export function bandingRenaksi(
       // Jalur yang masih ada di Renaksi diproyeksikan ke dirinya sendiri (lihat `proyek`).
       const p = proyek(e);
       if (jalurAdaDiRenaksi(p, renaksi)) {
-        if (k(p.nama) !== k(e.nama)) gantiNama.push({ ...keItem(e), ke: bersih(p.nama) });
+        if (p.pindah) {
+          gantiNama.push({
+            ...keItem(e), ke: bersih(p.nama), program_ke: bersih(p.program_ref ?? ''),
+            ...(e.tipe === 'subkegiatan' ? { kegiatan_ke: bersih(p.kegiatan_ref ?? '') } : {}),
+          });
+        } else if (k(p.nama) !== k(e.nama)) gantiNama.push({ ...keItem(e), ke: bersih(p.nama) });
         continue;
       }
       // Induk yang sudah disebut "tidak ada lagi" mewakili keturunannya.
@@ -180,6 +256,22 @@ export function bandingRenaksi(
   }
 
   const terproyeksi = master.map(proyek);
+
+  // Induk tujuan pindah ditulis dengan ejaan MASTER (sesudah ganti nama yang ikut diterapkan):
+  // Edit Master mencocokkan induk persis (L68), dan Renaksi bisa beda huruf besar / berbintang.
+  // Yang belum ada di Master (masih di daftar Baru) memakai ejaan Renaksi tanpa penanda = ejaan Init.
+  const ejaanMaster = (tipe: TipeBerasal, nama: string, program: string | null): string => {
+    const i = terproyeksi.findIndex(p => p.tipe === tipe && k(p.nama) === k(nama)
+      && (tipe === 'program' || !p.program_ref || k(p.program_ref) === k(program)));
+    if (i < 0) return nama;
+    const asli = master[i].nama;
+    return k(asli) === k(terproyeksi[i].nama) ? asli : bersih(terproyeksi[i].nama);
+  };
+  for (const g of gantiNama) {
+    if (g.program_ke === undefined) continue;
+    g.program_ke = ejaanMaster('program', g.program_ke, null);
+    if (g.kegiatan_ke !== undefined) g.kegiatan_ke = ejaanMaster('kegiatan', g.kegiatan_ke, g.program_ke);
+  }
   const adaDiMaster = (tipe: TipeBerasal, nama: string, p: string | null, kg: string | null) =>
     terproyeksi.some(e => e.tipe === tipe && k(e.nama) === k(nama)
       && (!e.program_ref?.trim() || !p || k(e.program_ref) === k(p))

@@ -143,10 +143,10 @@ ok('B1 Init memakai kunci jalur & pelengkap induk yang SAMA dengan pembanding',
   KIN.includes("import { kunciJalur, lengkapiIndukPilihan } from '@/lib/kinerja/banding-renaksi';") && KIN.includes('const terpilih = lengkapiIndukPilihan(pilih, kandidat);'))
 const DLG = sumber('components/kinerja/PerbaruiRenaksi.tsx')
 ok('B2 dialog menulis lewat jalur lama: Edit Master (PUT), Init Renaksi, route asal',
-  DLG.includes("fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ nama: g.ke, gabung }) })")
+  DLG.includes("fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ ...badanUbahMaster(g), gabung }) })")
   && DLG.includes("'/api/kinerja/master/init-renaksi', { method: 'POST', body: JSON.stringify({ tahun, pilih: pilihBaru }) }")
   && DLG.includes("'/api/kinerja/master/asal'"))
-ok('B3 ganti nama dicoba "dry" dulu untuk menampilkan dampaknya', DLG.includes('JSON.stringify({ nama: g.ke, dry: true })'))
+ok('B3 ganti nama / pindah dicoba "dry" dulu untuk menampilkan dampaknya', (DLG.match(/JSON\.stringify\(\{ \.\.\.badanUbahMaster\(g\), dry: true \}\)/g) ?? []).length === 2)
 ok('B4 ganti nama diterapkan program → kegiatan → sub', DLG.includes('.sort((a, b) => urut[a.tipe] - urut[b.tipe])'))
 ok('B5 bawaan centang: ganti nama & baru saja',
   DLG.includes('kunci: kunciGanti(g.id), bawaan: true') && DLG.includes('kunci: kunciBaru(b.kunci), bawaan: true')

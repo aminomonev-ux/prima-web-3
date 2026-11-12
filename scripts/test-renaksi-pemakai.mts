@@ -24,7 +24,7 @@ ok('A2 hanya modul berisi yang disebut',
 console.log('B. Sambungan kode')
 const R = sumber('app/api/rencana-aksi/route.ts')
 ok('B1 route menyebut pemakai hanya bila ada ganti nama, dan gagal membacanya tidak menggagalkan simpanan',
-  R.includes('const dipakai = info.gantiNama') && R.includes('.catch(() => [])') && R.includes('return NextResponse.json({ ok: true, id, dipakai });'))
+  R.includes('const dipakai = info.gantiNama') && R.includes('.catch(() => [])') && R.includes('return NextResponse.json({ ok: true, id, dipakai, perubahan });'))
 const L = sumber('lib/data/rencana-aksi.ts')
 ok('B2 jejak ganti nama diisi SESUDAH transaksi ter-commit', L.indexOf('if (hasil) hasil.gantiNama = gantiNama;') > L.indexOf('await catatGantiNama(tx'))
 ok('B3 layar Data Entry menampilkannya sebagai keterangan', sumber('app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx').includes("if (kalimatDipakai) notify(kalimatDipakai, 'info');"))

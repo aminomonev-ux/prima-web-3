@@ -1108,6 +1108,9 @@ CREATE TABLE IF NOT EXISTS renaksi_ganti_nama (
   ke            VARCHAR(255) NOT NULL,
   induk         VARCHAR(255) NULL COMMENT 'Induk langsung LAMA — membedakan entitas senama',
   induk_program VARCHAR(255) NULL COMMENT 'Program lama; hanya level sub-kegiatan',
+  -- migration-renaksi-pindah-induk.sql (Tahap H). NULL = induk tidak berubah.
+  induk_baru         VARCHAR(255) NULL COMMENT 'Induk langsung BARU bila pindah induk (kegiatan: program; sub: kegiatan)',
+  induk_program_baru VARCHAR(255) NULL COMMENT 'Program BARU bila sub kegiatan pindah program',
   dicatat_pada  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   oleh          INT          NULL,
   INDEX idx_rgn_tahun (tahun, id),

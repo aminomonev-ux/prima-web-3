@@ -10,7 +10,8 @@ import { toast } from 'sonner';
 import { fetchJson } from '@/lib/shared/api';
 import { SpandukSelaras, DialogSelaras, type BagianSelaras } from '@/components/renaksi/SelarasRenaksi';
 import {
-  jumlahPerubahan, kalimatSpanduk, type HasilBanding, type ItemEntri,
+  jumlahPerubahan, kalimatSpanduk, itemPindah, badanUbahMaster, indukTujuanDiBaru,
+  type HasilBanding, type ItemEntri, type ItemGanti,
 } from '@/lib/kinerja/banding-renaksi';
 import { jumlahJalaran, kalimatJalaran, labelTipeMaster, type DampakData } from '@/lib/kinerja/master-ubah';
 
@@ -69,7 +70,8 @@ function jalurTeks(e: { program_ref: string | null; kegiatan_ref: string | null 
 /**
  * Bawaan: ganti nama & baru tercentang (memang perubahan Renaksi), "jadikan manual" & "tandai"
  * tidak (pilihan, bukan perubahan). Diterapkan berurutan: ganti nama (program → kegiatan →
- * sub), lalu baru, lalu tanda. Yang gagal disebut, yang berhasil tetap.
+ * sub), lalu baru, lalu pindah induk (tujuannya bisa entri baru), lalu tanda. Yang gagal
+ * disebut, yang berhasil tetap.
  */
 export function PerbaruiRenaksiModal({ tahun, hasil, isLight, canEdit, onTutup, onSelesai }: {
   tahun: string; hasil: HasilBanding; isLight?: boolean; canEdit: boolean;
@@ -81,24 +83,30 @@ export function PerbaruiRenaksiModal({ tahun, hasil, isLight, canEdit, onTutup, 
     let batal = false;
     (async () => {
       for (const g of hasil.gantiNama) {
-        const d = await fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ nama: g.ke, dry: true }) });
+        // Induk tujuan yang masih di daftar Baru belum ada di Master — pratinjaunya pasti ditolak.
+        if (indukTujuanDiBaru(g, hasil.baru)) continue;
+        const d = await fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ ...badanUbahMaster(g), dry: true }) });
         if (batal) return;
         setPratinjau(p => ({ ...p, [g.id]: d.ok ? { ok: true, hasil: d as unknown as HasilUbah } : { ok: false, pesan: d.message || 'Tidak bisa diperiksa' } }));
       }
     })();
     return () => { batal = true; };
-  }, [hasil.gantiNama]);
+  }, [hasil.gantiNama, hasil.baru]);
 
   async function terapkan(pilih: Set<string>) {
     const gagal: string[] = [];
-    let ganti = 0, baru = 0, manual = 0, tanda = 0;
+    let ganti = 0, pindah = 0, baru = 0, manual = 0, tanda = 0;
     const urut = { program: 0, kegiatan: 1, subkegiatan: 2 } as const;
     const daftar = hasil.gantiNama.filter(g => pilih.has(kunciGanti(g.id))).sort((a, b) => urut[a.tipe] - urut[b.tipe]);
-    for (const g of daftar) {
+    const ubah = async (g: ItemGanti, gabung: boolean) => {
+      const d = await fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ ...badanUbahMaster(g), gabung }) });
+      if (!d.ok) { gagal.push(`${labelTipeMaster(g.tipe)} "${g.nama}": ${d.message || 'gagal'}`); return; }
+      if (itemPindah(g)) pindah++; else ganti++;
+    };
+    // Pindah induk diterapkan SESUDAH entri baru dibuat: induk tujuannya bisa saja baru di Renaksi.
+    for (const g of daftar.filter(x => !itemPindah(x))) {
       const p = pratinjau[g.id];
-      const gabung = !!(p && p.ok && p.hasil.gabung_ke);
-      const d = await fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ nama: g.ke, gabung }) });
-      if (d.ok) ganti++; else gagal.push(`${labelTipeMaster(g.tipe)} "${g.nama}": ${d.message || 'gagal'}`);
+      await ubah(g, !!(p && p.ok && p.hasil.gabung_ke));
     }
     const pilihBaru = hasil.baru.filter(b => pilih.has(kunciBaru(b.kunci))).map(b => b.kunci);
     if (pilihBaru.length > 0) {
@@ -107,6 +115,12 @@ export function PerbaruiRenaksiModal({ tahun, hasil, isLight, canEdit, onTutup, 
         const r = d as unknown as { programInserted: number; kegiatanInserted: number; subkegiatanInserted: number };
         baru = r.programInserted + r.kegiatanInserted + r.subkegiatanInserted;
       } else gagal.push(`Entri baru: ${d.message || 'gagal'}`);
+    }
+    for (const g of daftar.filter(itemPindah)) {
+      // Diperiksa ulang sekarang (pratinjau awal bisa belum ada karena induknya baru dibuat).
+      const cek = await fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ ...badanUbahMaster(g), dry: true }) });
+      if (!cek.ok) { gagal.push(`${labelTipeMaster(g.tipe)} "${g.nama}": ${cek.message || 'gagal'}`); continue; }
+      await ubah(g, !!(cek as unknown as HasilUbah).gabung_ke);
     }
     const kirimAsal = async (ids: number[], asal: 'MANUAL' | 'RENAKSI') => {
       if (ids.length === 0) return 0;
@@ -118,7 +132,7 @@ export function PerbaruiRenaksiModal({ tahun, hasil, isLight, canEdit, onTutup, 
     tanda = await kirimAsal(hasil.belumBertanda.filter(e => pilih.has(kunciTanda(e.id))).map(e => e.id), 'RENAKSI');
 
     const ringkas = [
-      ganti ? `${ganti} berganti nama` : '', baru ? `${baru} entri baru` : '',
+      ganti ? `${ganti} berganti nama` : '', pindah ? `${pindah} pindah induk` : '', baru ? `${baru} entri baru` : '',
       manual ? `${manual} dijadikan manual` : '', tanda ? `${tanda} ditandai dari Renaksi` : '',
     ].filter(Boolean).join(', ');
     if (gagal.length) toast.error(`${ringkas ? `Sebagian diterapkan (${ringkas}). ` : ''}Gagal:\n${gagal.join('\n')}`, { duration: 12000 });
@@ -132,19 +146,24 @@ export function PerbaruiRenaksiModal({ tahun, hasil, isLight, canEdit, onTutup, 
   );
   const bagian: BagianSelaras[] = [
     {
-      judul: 'Berganti nama', ket: 'Diganti lewat Edit Master yang menjalar.',
+      judul: 'Berganti nama / pindah induk', ket: 'Diubah lewat Edit Master yang menjalar.',
       items: hasil.gantiNama.map(g => {
         const p = pratinjau[g.id];
-        const ket = !p ? 'Memeriksa dampak…'
+        const menunggu = indukTujuanDiBaru(g, hasil.baru);
+        const ket = menunggu ? 'Induk tujuannya baru di Rencana Aksi — dibuat dulu (daftar "Baru" di bawah), lalu entri ini dipindah.'
+          : !p ? 'Memeriksa dampak…'
           : !p.ok ? `Tidak bisa diterapkan: ${p.pesan}`
           : [
             p.hasil.gabung_ke ? `"${p.hasil.gabung_ke}" sudah ada di Master — entri ini akan digabung ke sana.` : '',
             p.hasil.anak ? `${p.hasil.anak} entri di bawahnya ikut pindah.` : '',
-            jumlahJalaran(p.hasil.data) ? `Ikut berganti nama:\n${kalimatJalaran(p.hasil.data)}` : '',
+            jumlahJalaran(p.hasil.data) ? `Ikut ${itemPindah(g) ? 'pindah' : 'berganti nama'}:\n${kalimatJalaran(p.hasil.data)}` : '',
           ].filter(Boolean).join('\n');
+        const tujuan = jalurTeks({ program_ref: g.program_ke ?? null, kegiatan_ref: g.kegiatan_ke ?? null });
         return {
-          kunci: kunciGanti(g.id), bawaan: true, mati: !!p && !p.ok, ket: ket || undefined,
-          isi: <><b>{labelTipeMaster(g.tipe)}</b> {g.nama} → <b>{g.ke}</b></>,
+          kunci: kunciGanti(g.id), bawaan: true, mati: !menunggu && !!p && !p.ok, ket: ket || undefined,
+          isi: itemPindah(g)
+            ? <><b>{labelTipeMaster(g.tipe)}</b> {g.nama}{g.ke !== g.nama && <> → <b>{g.ke}</b></>}: pindah dari <span style={{ color: sub }}>{jalurTeks(g) || '—'}</span> ke <b>{tujuan}</b></>
+            : <><b>{labelTipeMaster(g.tipe)}</b> {g.nama} → <b>{g.ke}</b></>,
         };
       }),
     },

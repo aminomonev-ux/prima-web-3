@@ -243,13 +243,15 @@ async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promis
   }
 
   if (g.level === 'kegiatan') {
+    // Tahap H: pindah program ikut dijalarkan — tanpa `indukBaru` programnya tetap.
+    const program = g.indukBaru ?? g.induk;
     await tx`
-      UPDATE rencana_aksi SET kegiatan = ${g.ke}, version = version + 1, updated_at = updated_at
+      UPDATE rencana_aksi SET kegiatan = ${g.ke}, program = ${program}, version = version + 1, updated_at = updated_at
       WHERE tahun = ${tahun} AND level = 'kegiatan' AND kegiatan = ${g.dari} AND program = ${g.induk}
     `;
     // Kegiatan senama di program lain TIDAK ikut — sub-kegiatan menyimpan program induknya.
     await tx`
-      UPDATE rencana_aksi SET kegiatan = ${g.ke}, version = version + 1, updated_at = updated_at
+      UPDATE rencana_aksi SET kegiatan = ${g.ke}, program = ${program}, version = version + 1, updated_at = updated_at
       WHERE tahun = ${tahun} AND level = 'sub-kegiatan' AND kegiatan = ${g.dari} AND program = ${g.induk}
     `;
     return;
@@ -258,7 +260,9 @@ async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promis
   // Sub-kegiatan daun: yang ikut hanya baris senamanya sendiri (satu entitas = banyak
   // indikator), dan lingkupnya butuh program + kegiatan — nama kegiatan saja tidak unik.
   await tx`
-    UPDATE rencana_aksi SET sub_kegiatan = ${g.ke}, version = version + 1, updated_at = updated_at
+    UPDATE rencana_aksi SET sub_kegiatan = ${g.ke},
+      kegiatan = ${g.indukBaru ?? g.induk}, program = ${g.indukProgramBaru ?? g.indukProgram},
+      version = version + 1, updated_at = updated_at
     WHERE tahun = ${tahun} AND level = 'sub-kegiatan' AND sub_kegiatan = ${g.dari}
       AND kegiatan <=> ${g.induk} AND program = ${g.indukProgram}
   `;
@@ -273,8 +277,8 @@ async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promis
  */
 async function catatGantiNama(tx: TxSql, tahun: number, g: GantiNama, userId: number): Promise<void> {
   await tx`
-    INSERT INTO renaksi_ganti_nama (tahun, level, dari, ke, induk, induk_program, oleh)
-    VALUES (${tahun}, ${g.level}, ${g.dari}, ${g.ke}, ${g.induk}, ${g.indukProgram}, ${userId})
+    INSERT INTO renaksi_ganti_nama (tahun, level, dari, ke, induk, induk_program, induk_baru, induk_program_baru, oleh)
+    VALUES (${tahun}, ${g.level}, ${g.dari}, ${g.ke}, ${g.induk}, ${g.indukProgram}, ${g.indukBaru}, ${g.indukProgramBaru}, ${userId})
   `;
 }
 
@@ -285,12 +289,15 @@ export interface CatatanGantiNama {
   ke: string;
   induk: string | null;
   induk_program: string | null;
+  /** Tahap H: induk BARU bila entitas dipindah (NULL = tetap). */
+  induk_baru: string | null;
+  induk_program_baru: string | null;
 }
 
 /** Urut kejadian (id naik) — pembaca merangkai A → B → C. */
 export async function listGantiNama(tahun: number): Promise<CatatanGantiNama[]> {
   return queryMany<CatatanGantiNama>(sql`
-    SELECT CAST(id AS UNSIGNED) AS id, level, dari, ke, induk, induk_program
+    SELECT CAST(id AS UNSIGNED) AS id, level, dari, ke, induk, induk_program, induk_baru, induk_program_baru
     FROM renaksi_ganti_nama
     WHERE tahun = ${tahun}
     ORDER BY id

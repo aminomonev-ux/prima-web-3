@@ -187,7 +187,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
 
     setBusy(true);
     try {
-      const { dipakai } = await apiUpsert({
+      const { dipakai, perubahan } = await apiUpsert({
         id: editingId,
         expected_version: editingVersion,
         tahun: selectedYear,
@@ -214,10 +214,13 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         (editingId ? `Berhasil memperbarui data entry: ${nm}` : `Berhasil menambah data entry baru: ${nm}`)
         + (namaEntitasBerubah
           ? ` — nama ${level.replace('-', ' ')} ikut diperbarui di seluruh baris turunannya.`
+          : '')
+        + (perubahan === 'induk' || perubahan === 'nama-induk'
+          ? ` — ${level.replace('-', ' ')} ini beserta baris indikator lain & turunannya ikut pindah ke induk baru.`
           : ''),
         'success',
       );
-      const kalimatDipakai = kalimatPemakai(dipakai);
+      const kalimatDipakai = kalimatPemakai(dipakai, perubahan ?? 'nama');
       if (kalimatDipakai) notify(kalimatDipakai, 'info');
       resetForm();
       await onReload();

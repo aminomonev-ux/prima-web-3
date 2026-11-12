@@ -67,19 +67,26 @@ export function terapkanSelarasProgram<T extends BarisProgramPk>(
   const ubah = (i: number, isi: Partial<BarisProgramPk>) => { out[i] = { ...out[i], ...isi }; };
   const urut = { program: 0, kegiatan: 1, subkegiatan: 2 } as const;
   const gantiP = new Map<string, string>();
-  const gantiK = new Map<string, string>();
+  // Kegiatan yang diganti nama / dipindah: lokasi akhirnya (program, nama) — sub-nya mengikuti.
+  const gantiK = new Map<string, [string, string]>();
   for (const g of [...h.gantiNama].filter(x => pilih.has(kunciPilih.ganti(x.id))).sort((a, b) => urut[a.tipe] - urut[b.tipe])) {
     if (g.tipe === 'program') {
       out.forEach((r, i) => { if (r.program === g.nama) ubah(i, { program: g.ke }); });
       gantiP.set(g.nama, g.ke);
     } else if (g.tipe === 'kegiatan') {
       const p = gantiP.get(g.program_ref ?? '') ?? g.program_ref;
-      out.forEach((r, i) => { if (r.program === p && r.kegiatan === g.nama) ubah(i, { kegiatan: g.ke }); });
-      gantiK.set(`${p}\u0001${g.nama}`, g.ke);
+      // Tahap H: pindah induk membawa semua baris kegiatan itu (termasuk sub-nya) ke program tujuan.
+      const pBaru = g.program_ke ?? p ?? '';
+      out.forEach((r, i) => { if (r.program === p && r.kegiatan === g.nama) ubah(i, { kegiatan: g.ke, program: pBaru }); });
+      gantiK.set(`${p}\u0001${g.nama}`, [pBaru, g.ke]);
     } else {
-      const p = gantiP.get(g.program_ref ?? '') ?? g.program_ref;
-      const kg = gantiK.get(`${p}\u0001${g.kegiatan_ref}`) ?? g.kegiatan_ref;
-      out.forEach((r, i) => { if (r.program === p && r.kegiatan === kg && r.subkegiatan === g.nama) ubah(i, { subkegiatan: g.ke }); });
+      const pAsal = gantiP.get(g.program_ref ?? '') ?? g.program_ref ?? '';
+      const [p, kg] = gantiK.get(`${pAsal}\u0001${g.kegiatan_ref}`) ?? [pAsal, g.kegiatan_ref ?? ''];
+      out.forEach((r, i) => {
+        if (r.program === p && r.kegiatan === kg && r.subkegiatan === g.nama) {
+          ubah(i, { subkegiatan: g.ke, program: g.program_ke ?? p, kegiatan: g.kegiatan_ke ?? kg });
+        }
+      });
     }
   }
   for (const e of h.hilang) if (pilih.has(kunciPilih.hilang(e.id))) ubah(e.id - 1, { asal: 'MANUAL' });
@@ -293,9 +300,10 @@ export function terapkanSelarasSasaran<T extends BarisSasaranPk>(
   return out;
 }
 
-export function kalimatSpandukPk(bagian: { berganti?: number; berubah?: number; baru: number; hilang: number }, tahun: string | number): string | null {
+export function kalimatSpandukPk(bagian: { berganti?: number; pindah?: number; berubah?: number; baru: number; hilang: number }, tahun: string | number): string | null {
   const isi = [
     bagian.berganti ? `${bagian.berganti} berganti nama` : '',
+    bagian.pindah ? `${bagian.pindah} pindah induk` : '',
     bagian.berubah ? `${bagian.berubah} isinya berubah` : '',
     bagian.baru ? `${bagian.baru} baru` : '',
     bagian.hilang ? `${bagian.hilang} tidak ada lagi` : '',

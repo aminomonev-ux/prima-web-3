@@ -22,8 +22,14 @@ export async function pemakaiNamaRenaksi(tahun: number, g: GantiNama): Promise<P
   const prog = rapikanNamaEntitas((g.level === 'kegiatan' ? g.induk : g.indukProgram) ?? '');
   const keg = rapikanNamaEntitas((g.level === 'sub-kegiatan' ? g.induk : '') ?? '');
 
+  // Tahap H: baris Renaksi sudah berada di induk BARU sesudah simpanan ini; entri E-Anggaran/PK
+  // yang masih di jalur lama tetap dicari dengan induk LAMA (`prog`/`keg` di atas).
+  const progKini = g.level === 'kegiatan' ? (g.indukBaru ?? g.induk) : (g.indukProgramBaru ?? g.indukProgram);
+  const kegKini = g.indukBaru ?? g.induk;
+  // Kartu IKI membandingkan nama & isi, bukan induk — pindah induk saja tidak mengubah kartu.
+  const ikiTerkena = g.dari !== g.ke;
   let ea: number, pk: number;
-  let iki: Array<{ n: unknown; dok: unknown }>;
+  let iki: Array<{ n: unknown; dok: unknown }> = [];
   if (g.level === 'program') {
     ea = angka(await sql`SELECT COUNT(*) AS n FROM kinerja_master WHERE tahun = ${th} AND tipe = 'program' AND asal = 'RENAKSI'
       AND TRIM(REGEXP_REPLACE(nama, '[[:space:]*]+$', '')) = ${dari}`);
@@ -38,9 +44,9 @@ export async function pemakaiNamaRenaksi(tahun: number, g: GantiNama): Promise<P
       AND (COALESCE(program_ref, '') = '' OR TRIM(REGEXP_REPLACE(program_ref, '[[:space:]*]+$', '')) = ${prog})`);
     pk = angka(await sql`SELECT COUNT(*) AS n FROM pk_program WHERE tahun = ${th} AND level = 'kegiatan' AND asal = 'RENAKSI'
       AND TRIM(REGEXP_REPLACE(kegiatan, '[[:space:]*]+$', '')) = ${dari} AND TRIM(REGEXP_REPLACE(program, '[[:space:]*]+$', '')) = ${prog}`);
-    iki = await sql`SELECT COUNT(*) AS n, COUNT(DISTINCT d.id) AS dok FROM iki_rhk r JOIN iki_dokumen d ON d.id = r.dokumen_id
+    if (ikiTerkena) iki = await sql`SELECT COUNT(*) AS n, COUNT(DISTINCT d.id) AS dok FROM iki_rhk r JOIN iki_dokumen d ON d.id = r.dokumen_id
       WHERE d.tahun = ${th} AND d.status = 'DRAFT' AND r.renaksi_id IN (
-        SELECT id FROM rencana_aksi WHERE tahun = ${tahun} AND level = 'kegiatan' AND kegiatan = ${g.ke} AND program <=> ${g.induk}
+        SELECT id FROM rencana_aksi WHERE tahun = ${tahun} AND level = 'kegiatan' AND kegiatan = ${g.ke} AND program <=> ${progKini}
           AND outcome_kegiatan IS NULL)` as typeof iki;
   } else {
     ea = angka(await sql`SELECT COUNT(*) AS n FROM kinerja_master WHERE tahun = ${th} AND tipe = 'subkegiatan' AND asal = 'RENAKSI'
@@ -50,10 +56,10 @@ export async function pemakaiNamaRenaksi(tahun: number, g: GantiNama): Promise<P
     pk = angka(await sql`SELECT COUNT(*) AS n FROM pk_program WHERE tahun = ${th} AND level = 'subkegiatan' AND asal = 'RENAKSI'
       AND TRIM(REGEXP_REPLACE(subkegiatan, '[[:space:]*]+$', '')) = ${dari}
       AND TRIM(REGEXP_REPLACE(program, '[[:space:]*]+$', '')) = ${prog} AND TRIM(REGEXP_REPLACE(kegiatan, '[[:space:]*]+$', '')) = ${keg}`);
-    iki = await sql`SELECT COUNT(*) AS n, COUNT(DISTINCT d.id) AS dok FROM iki_rhk r JOIN iki_dokumen d ON d.id = r.dokumen_id
+    if (ikiTerkena) iki = await sql`SELECT COUNT(*) AS n, COUNT(DISTINCT d.id) AS dok FROM iki_rhk r JOIN iki_dokumen d ON d.id = r.dokumen_id
       WHERE d.tahun = ${th} AND d.status = 'DRAFT' AND r.renaksi_id IN (
         SELECT id FROM rencana_aksi WHERE tahun = ${tahun} AND level = 'sub-kegiatan' AND sub_kegiatan = ${g.ke}
-          AND kegiatan <=> ${g.induk} AND program <=> ${g.indukProgram} AND outcome_sub_kegiatan IS NULL)` as typeof iki;
+          AND kegiatan <=> ${kegKini} AND program <=> ${progKini} AND outcome_sub_kegiatan IS NULL)` as typeof iki;
   }
 
   return [
