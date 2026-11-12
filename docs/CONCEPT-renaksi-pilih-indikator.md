@@ -290,6 +290,18 @@ sekali, supaya migrasi bisa dipasang lebih dulu di server kantor tanpa menunggu 
 | **5** | Impor mode `ganti` me-`NULL`-kan tautan anak; duplikasi tahun menautkan ulang (§9) | uji DB 2098 → 2099: salinan tertaut ke baris 2099; `ganti` tidak meninggalkan tautan hantu |
 | **6** | Regresi + uji mutasi (§14) + coba layar penuh (tema terang, 375 px, Esc) | seluruh uji §14 hijau |
 
+**Tahap 1 selesai** (12 Nov): `migration-renaksi-induk-indikator.sql` (kolom + index, tanpa
+backfill), terdaftar di `docs/schema-mysql.sql`, kolom ikut di `RaRow` server & klien beserta kedua
+`SELECT`-nya. Terpasang di DB `prima_db_3`: 52 baris tetap, 0 tertaut; `check-schema` SINKRON,
+`tsc` hijau.
+
+**Tahap 2 selesai** (12 Nov): `lib/renaksi/rantai.ts` (MURNI) — `INDUK_LEVEL`, `namaEntitas`,
+`namaIndukLangsung`, `indikatorInduk`, `entitasAnak` (baris bertaut `NULL` ikut tampil),
+`indikatorEntitas`, `pemakaiIndikator`, `denganNilaiTersimpan`. Uji
+`npx tsx scripts/test-renaksi-rantai.mts` (33). Catatan jujur: tiga ekspektasi uji pertama salah
+saya tulis sendiri — di level program, indikator induknya milik **sasaran**, bukan program;
+modulnya benar, ujinya yang dibetulkan.
+
 ---
 
 ## 13. Yang sengaja tidak dikerjakan
