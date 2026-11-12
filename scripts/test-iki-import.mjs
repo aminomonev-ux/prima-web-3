@@ -12,7 +12,7 @@ import { kompilasiUji } from './_kompilasi-uji.mjs';
 
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const root = process.argv[2] ?? 'D:/KANTOR/IKI 26/PERUBAHAN IKI 26/IKI STRUKTURAL FINAL';
+const root = process.argv[2] ?? 'E:/KANTOR/KANTOR/IKI 26/PERUBAHAN IKI 26/IKI STRUKTURAL FINAL';
 
 if (!fs.existsSync(root)) {
   console.error(`Folder uji tidak ditemukan: ${root}`);

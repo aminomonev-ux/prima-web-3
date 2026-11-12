@@ -18,7 +18,7 @@ import { kompilasiUji } from './_kompilasi-uji.mjs';
 
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const target = process.argv[2] ?? 'D:/KANTOR/IKI 26/PERUBAHAN IKI 26/RENCANA AKSI 2026.xlsx';
+const target = process.argv[2] ?? 'E:/KANTOR/KANTOR/IKI 26/PERUBAHAN IKI 26/RENCANA AKSI 2026.xlsx';
 
 if (!fs.existsSync(target)) {
   console.error(`File/folder uji tidak ditemukan: ${target}`);
