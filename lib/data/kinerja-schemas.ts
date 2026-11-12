@@ -174,6 +174,8 @@ export const MasterCreateBodySchema = z.object({
   program_ref:     z.string().nullable().optional(),
   kegiatan_ref:    z.string().nullable().optional(),
   subkegiatan_ref: z.string().nullable().optional(),
+  /** RENAKSI = "Pakai dari Rencana Aksi" saat Simpan; server memeriksa jalurnya memang ada. */
+  asal:            z.enum(ASAL_MASTER).optional(),
 });
 
 /**

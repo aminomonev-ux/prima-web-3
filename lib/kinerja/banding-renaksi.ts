@@ -225,3 +225,34 @@ export function lengkapiIndukPilihan(pilih: readonly string[], kandidat: readonl
   }
   return hasil;
 }
+
+export interface EntriKetikan {
+  tipe: MasterTipe;
+  nama: string;
+  program_ref: string | null;
+  kegiatan_ref: string | null;
+}
+
+/**
+ * Entri yang baru diketik di Master tapi jalurnya sudah ada di Renaksi (= masuk daftar
+ * "baru" pembanding). Dipakai saat Simpan untuk bertanya "pakai dari Rencana Aksi?".
+ * Hanya kecocokan setelah penanda & huruf besar-kecil dirapikan; salah ketik tidak ditebak.
+ */
+export function ketikanAdaDiRenaksi(rows: readonly EntriKetikan[], baru: readonly ItemBaru[]): Map<number, ItemBaru> {
+  const peta = new Map(baru.map(b => [b.kunci, b]));
+  const hasil = new Map<number, ItemBaru>();
+  // Tipe ikut di kunci jalur: uraian SSK / sumber anggaran tidak pernah cocok.
+  rows.forEach((r, i) => {
+    const b = peta.get(kunciJalur(r.tipe, r.nama, r.program_ref, r.tipe === 'subkegiatan' ? r.kegiatan_ref : null));
+    if (b) hasil.set(i, b);
+  });
+  return hasil;
+}
+
+export function kalimatKetikanRenaksi(cocok: readonly { ketikan: string; renaksi: ItemBaru }[], tahun: string | number): string {
+  const daftar = cocok.slice(0, 8).map(c => `• ${c.ketikan}${c.ketikan !== c.renaksi.nama ? ` (di Rencana Aksi: ${c.renaksi.nama})` : ''}`);
+  return `${cocok.length === 1 ? 'Entri ini sudah ada' : `${cocok.length} entri ini sudah ada`} di Rencana Aksi ${tahun}:\n`
+    + daftar.join('\n') + (cocok.length > 8 ? `\n• … dan ${cocok.length - 8} lagi` : '')
+    + '\n\n"Pakai dari Rencana Aksi" menyimpannya dengan nama persis seperti di Rencana Aksi dan memberi tanda Renaksi, '
+    + 'sehingga perubahannya nanti diberitahukan. "Tetap manual" menyimpannya apa adanya tanpa tanda.';
+}

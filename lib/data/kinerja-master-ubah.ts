@@ -8,7 +8,7 @@
 import { sql, bulkInsert, execWrite, withTransaction, type TxSql, type Penanya } from './db';
 import { listGantiNama } from './rencana-aksi';
 import { bandingRenaksi, type EntriBanding, type HasilBanding } from '@/lib/kinerja/banding-renaksi';
-import type { AsalMaster, BarisRenaksi } from '@/lib/kinerja/asal-renaksi';
+import { jalurAdaDiRenaksi, type AsalMaster, type BarisRenaksi, type EntriBerasal } from '@/lib/kinerja/asal-renaksi';
 import { acquireBludLock, bumpBludVersion } from './locks';
 import { SUMBER_LIST, kunciVersiSsk, KinerjaMasterTidakAdaError, type MasterTipe, type SumberSSK } from './kinerja';
 import { REALISASI_LOCK_ENTITY, realisasiLockKey } from '@/lib/kinerja/tutup-bulan';
@@ -318,6 +318,15 @@ export async function bandingMasterRenaksi(tahun: string): Promise<HasilBanding>
   ` as BarisRenaksi[];
   const catatan = await listGantiNama(Number(tahun));
   return bandingRenaksi(master.map(m => ({ ...m, id: Number(m.id) })), renaksi, catatan);
+}
+
+/** Jalur entri ada di Renaksi tahun itu? Pagar server untuk tanda RENAKSI dari form (L68). */
+export async function jalurAdaDiRenaksiTahun(tahun: string, entri: EntriBerasal): Promise<boolean> {
+  const renaksi = await sql`
+    SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi
+    WHERE tahun = ${Number(tahun)} AND level IN ('program','kegiatan','sub-kegiatan')
+  ` as BarisRenaksi[];
+  return jalurAdaDiRenaksi(entri, renaksi);
 }
 
 /**

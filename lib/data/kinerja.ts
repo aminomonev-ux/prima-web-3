@@ -101,7 +101,8 @@ export async function getMasterRows(tahun: string, tipe: MasterTipe, _sumber?: S
 
 export async function createMasterRow(
   tahun: string, tipe: MasterTipe, nama: string, sumber: SumberSSK | null, userId: number,
-  programRef?: string | null, kegiatanRef?: string | null, subkegiatanRef?: string | null
+  programRef?: string | null, kegiatanRef?: string | null, subkegiatanRef?: string | null,
+  asal: AsalMaster = 'MANUAL',
 ) {
   const [mx] = await sql`
     SELECT COALESCE(MAX(urut), 0) + 1 AS next
@@ -112,8 +113,8 @@ export async function createMasterRow(
   const kRef = (['subkegiatan','uraian_ssk'].includes(tipe) && kegiatanRef) ? kegiatanRef : null;
   const sRef = (tipe === 'uraian_ssk' && subkegiatanRef) ? subkegiatanRef : null;
   const [r] = await sql`
-    INSERT INTO kinerja_master (tahun, tipe, sumber, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut, created_by)
-    VALUES (${tahun}, ${tipe}, ${sumber}, ${nama}, ${pRef}, ${kRef}, ${sRef}, ${urut}, ${userId})
+    INSERT INTO kinerja_master (tahun, tipe, sumber, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut, created_by, asal)
+    VALUES (${tahun}, ${tipe}, ${sumber}, ${nama}, ${pRef}, ${kRef}, ${sRef}, ${urut}, ${userId}, ${asal})
   ` as { insertId: number }[];
   return r?.insertId;
 }

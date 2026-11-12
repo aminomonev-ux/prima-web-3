@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { getMasterRows, createMasterRow } from '@/lib/data/kinerja';
+import { jalurAdaDiRenaksiTahun } from '@/lib/data/kinerja-master-ubah';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, MasterCreateBodySchema } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
@@ -42,16 +43,23 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = MasterCreateBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, tipe, nama, sumber, program_ref, kegiatan_ref, subkegiatan_ref } = parsed.data;
+  const { tahun, tipe, nama, sumber, program_ref, kegiatan_ref, subkegiatan_ref, asal } = parsed.data;
 
-  const id = await createMasterRow(tahun, tipe, nama, sumber ?? null, session.userId, program_ref ?? null, kegiatan_ref ?? null, subkegiatan_ref ?? null);
+  // Tanda Renaksi hanya untuk jalur yang memang ada di Renaksi tahun itu — klien tidak dipercaya (L68).
+  if (asal === 'RENAKSI' && !(await jalurAdaDiRenaksiTahun(tahun, {
+    tipe, nama, program_ref: program_ref ?? null, kegiatan_ref: kegiatan_ref ?? null, subkegiatan_ref: null,
+  }))) {
+    return NextResponse.json({ ok: false, code: 'BUKAN_DARI_RENAKSI', message: `"${nama}" tidak ada di Rencana Aksi ${tahun} — simpan sebagai entri manual.` }, { status: 400 });
+  }
+
+  const id = await createMasterRow(tahun, tipe, nama, sumber ?? null, session.userId, program_ref ?? null, kegiatan_ref ?? null, subkegiatan_ref ?? null, asal ?? 'MANUAL');
 
   await writeAuditLog({
     req,
     eventType: 'KINERJA_SAVE_MASTER',
     userId:    session.userId,
     username:  session.username,
-    detail:    `Tambah master ${tipe}${sumber ? ` [${sumber}]` : ''}: "${nama}" (tahun ${tahun})`,
+    detail:    `Tambah master ${tipe}${sumber ? ` [${sumber}]` : ''}: "${nama}" (tahun ${tahun})${asal === 'RENAKSI' ? ' — dari Rencana Aksi' : ''}`,
   });
 
   return NextResponse.json({ ok: true, id });

@@ -337,6 +337,10 @@ export default function KinerjaClient({ userId, role, username, themePreference,
     setMasterOptsLoaded(true);
   }, [tahun]);
 
+  const { muat: muatBanding } = banding;
+  // Master berubah dari tab mana pun → pilihan berantai DAN spanduk Rencana Aksi ikut segar.
+  const segarkanMasterOpts = useCallback(() => { fetchMasterOpts(); void muatBanding(); }, [fetchMasterOpts, muatBanding]);
+
   // Refactor Versi: auto-set sskVersi ke LATEST (seq tertinggi) saat ganti sumber/tahun.
   // Default UX: user lihat versi terbaru, bukan MURNI (yang biasanya sudah locked).
   // Nomor giliran tiap pemuat: pergantian sumber/versi/tab memicu beberapa pemuatan
@@ -826,7 +830,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   masterOpts={masterOpts}
                   showConfirm={showConfirm}
                   onPendingChange={handleMasterPendingChange}
-                  onMasterOptsRefresh={fetchMasterOpts}
+                  onMasterOptsRefresh={segarkanMasterOpts}
                   segarkanKe={segarkanMaster}
                   isLight={isLight}
                 />
@@ -845,7 +849,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
                   loadingData={loadingData}
                   saving={saving}
                   setSaving={setSaving}
-                  onMasterOptsRefresh={fetchMasterOpts}
+                  onMasterOptsRefresh={segarkanMasterOpts}
                   isLight={isLight}
                 />
               </Suspense>

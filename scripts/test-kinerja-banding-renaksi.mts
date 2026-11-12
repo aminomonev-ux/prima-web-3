@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
 import {
-  bandingRenaksi, jumlahPerubahan, kalimatSpanduk, kunciJalur, lengkapiIndukPilihan,
+  bandingRenaksi, jumlahPerubahan, kalimatSpanduk, kunciJalur, lengkapiIndukPilihan, ketikanAdaDiRenaksi, kalimatKetikanRenaksi,
   type EntriBanding, type CatatanGanti,
 } from '../lib/kinerja/banding-renaksi'
 import type { BarisRenaksi } from '../lib/kinerja/asal-renaksi'
@@ -118,6 +118,24 @@ console.log('A. Pembanding')
   ok('A19 kunci jalur mengabaikan penanda & huruf besar-kecil', kunciJalur('kegiatan', 'Keg ****', 'PROG ***', null) === kunciJalur('kegiatan', 'keg', 'prog', null))
 }
 
+// Saat Simpan di Master: entri ketikan yang jalurnya sudah ada di Renaksi ditanyakan.
+{
+  const baru = bandingRenaksi([m('program', 'P', 'RENAKSI')],
+    [ra('program', 'P'), ra('program', 'Program Gizi ***'), ra('kegiatan', 'P', 'Kegiatan Dapur ****'), ra('kegiatan', 'Program Gizi', 'Kegiatan Dapur')], []).baru
+  const ketik = [
+    { tipe: 'program' as const, nama: 'PROGRAM GIZI', program_ref: null, kegiatan_ref: null },
+    { tipe: 'kegiatan' as const, nama: 'kegiatan dapur', program_ref: 'P', kegiatan_ref: null },
+    { tipe: 'kegiatan' as const, nama: 'Kegiatan Dapur', program_ref: 'Program Lain', kegiatan_ref: null },
+    { tipe: 'program' as const, nama: 'Program Giz', program_ref: null, kegiatan_ref: null },
+    { tipe: 'uraian_ssk' as const, nama: 'Program Gizi', program_ref: null, kegiatan_ref: null },
+  ]
+  const cocok = ketikanAdaDiRenaksi(ketik, baru)
+  ok('A22 ketikan cocok Renaksi: beda kapital/penanda dikenali, induk lain/salah ketik/uraian SSK tidak',
+    [...cocok.keys()].join() === '0,1' && cocok.get(0)?.nama === 'Program Gizi' && cocok.get(1)?.nama === 'Kegiatan Dapur', [...cocok.keys()].join())
+  const kal = kalimatKetikanRenaksi([{ ketikan: 'PROGRAM GIZI', renaksi: cocok.get(0)! }], 2026)
+  ok('A23 kalimat menyebut ejaan Renaksi bila berbeda', kal.startsWith('Entri ini sudah ada di Rencana Aksi 2026:') && kal.includes('PROGRAM GIZI (di Rencana Aksi: Program Gizi)'), kal)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('B. Sambungan kode')
 const KIN = sumber('lib/data/kinerja.ts')
@@ -138,6 +156,12 @@ for (const r of ['app/api/kinerja/master/banding-renaksi/route.ts', 'app/api/kin
   const s = sumber(r)
   ok(`B7 ${r.split('/').slice(-2, -1)[0]}: sesi → sakelar → akses modul`, s.indexOf('await getSession()') < s.indexOf('await kinerjaMati(') && s.indexOf('await kinerjaMati(') < s.indexOf('hasAppAccess(session.userId, session.role, isKinerjaRole)'))
 }
+const MT = sumber('app/(dashboard)/kinerja/_tabs/MasterTab.tsx')
+ok('B9 Simpan Master bertanya lewat ketikanAdaDiRenaksi; "Pakai" mengirim nama Renaksi + asal',
+  MT.includes('dariRa = ketikanAdaDiRenaksi(newRows, (banding as unknown as HasilBanding).baru)') && MT.includes("nama: ra ? ra.nama : row.nama") && MT.includes("...(ra ? { asal: 'RENAKSI' } : {})"))
+const RM = sumber('app/api/kinerja/master/route.ts')
+ok('B10 server memeriksa jalur sebelum menerima tanda RENAKSI', RM.indexOf("asal === 'RENAKSI' && !(await jalurAdaDiRenaksiTahun(") > 0
+  && RM.indexOf("asal === 'RENAKSI' && !(await jalurAdaDiRenaksiTahun(") < RM.indexOf('await createMasterRow('))
 ok('B8 jenis audit baru tergolong di retensi', sumber('lib/security/retensi-audit.ts').includes('KINERJA_MASTER_SELARAS_RENAKSI: P'))
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -231,6 +255,13 @@ try {
   await c.query("INSERT INTO kinerja_master (tahun, tipe, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut) VALUES (?, 'uraian_ssk', 'US', 'Program Pelayanan Kesehatan', 'Kegiatan Obat & BMHP', 'Sub Beli', 1)", [TAHUN])
   const idUs = (await q<{ id: number }>("SELECT id FROM kinerja_master WHERE tahun = ? AND tipe = 'uraian_ssk'", [TAHUN]))[0].id
   const idSub = asal.length ? (await q<{ id: number }>("SELECT id FROM kinerja_master WHERE tahun = ? AND nama = 'Sub Beli'", [TAHUN]))[0].id : 0
+  ok('C11b pagar tanda dari form: jalur ada → boleh; kegiatan di program lain → ditolak',
+    await M.jalurAdaDiRenaksiTahun(TAHUN, { tipe: 'program', nama: 'PROGRAM TIDAK DIPILIH', program_ref: null, kegiatan_ref: null, subkegiatan_ref: null })
+    && !(await M.jalurAdaDiRenaksiTahun(TAHUN, { tipe: 'kegiatan', nama: 'Kegiatan Lain', program_ref: 'Program Baru', kegiatan_ref: null, subkegiatan_ref: null })))
+  const idBaru = await K.createMasterRow(TAHUN, 'program', 'Program Tidak Dipilih', null, userId, null, null, null, 'RENAKSI')
+  ok('C11c createMasterRow menyimpan asal RENAKSI → "baru" itu hilang dari pembanding',
+    (await q<{ asal: string }>('SELECT asal FROM kinerja_master WHERE id = ?', [idBaru]))[0]?.asal === 'RENAKSI'
+    && (await M.bandingMasterRenaksi(TAHUN)).baru.length === 0)
   ok('C12 ubahAsalMaster tidak menyentuh uraian SSK maupun tahun lain',
     await M.ubahAsalMaster(TAHUN, [Number(idUs)], 'RENAKSI') === 0 && await M.ubahAsalMaster('2093', [Number(idSub)], 'MANUAL') === 0
     && await M.ubahAsalMaster(TAHUN, [Number(idSub)], 'MANUAL') === 1)

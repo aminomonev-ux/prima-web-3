@@ -17,11 +17,12 @@ import { Pencil, Plus, Save, Download, AlertTriangle, X, Upload, Eraser, ListPlu
 import DeleteIcon from '@/components/ui/DeleteIcon';
 import PrimaButton from '@/components/ui/PrimaButton';
 import DownloadButton from '@/components/ui/DownloadButton';
-import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog';
 import ImportMasterModal from '@/components/kinerja/ImportMasterModal';
 import OpsiDiLuarMaster from '@/components/kinerja/OpsiDiLuarMaster';
 import LencanaRenaksi from '@/components/kinerja/LencanaRenaksi';
 import { dariRenaksi } from '@/lib/kinerja/asal-renaksi';
+import { ketikanAdaDiRenaksi, kalimatKetikanRenaksi, type HasilBanding, type ItemBaru } from '@/lib/kinerja/banding-renaksi';
 import { exportMasterExcel } from '../_exports';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import type { MasterTipe, MasterRow, MasterOpts } from '../_types';
@@ -309,28 +310,55 @@ export default function MasterTab({
     setMasterInput('');
   }
 
+  /**
+   * Entri ketikan yang jalurnya sudah ada di Rencana Aksi ditanyakan dulu: pakai versi
+   * Renaksi (nama persis + tanda) atau tetap manual (docs/CONCEPT-renaksi-terhubung.md §5.1).
+   * Pemeriksaan gagal dimuat = disimpan seperti biasa, tanpa pertanyaan.
+   */
   async function saveAllMaster() {
     const newRows = masterRows.filter(r => r.id === 0);
     if (newRows.length === 0) { toast.error('Tidak ada data baru untuk disimpan'); return; }
     setSaving(true);
     try {
-      await Promise.all(newRows.map(row =>
-        fetch('/api/kinerja/master', {
-          method: 'POST', headers: { 'Content-Type':'application/json' },
+      let dariRa = new Map<number, ItemBaru>();
+      const banding = await fetchJson<unknown>(`/api/kinerja/master/banding-renaksi?tahun=${encodeURIComponent(tahun)}`);
+      if (banding.ok) dariRa = ketikanAdaDiRenaksi(newRows, (banding as unknown as HasilBanding).baru);
+      let pakaiRenaksi = false;
+      if (dariRa.size > 0) {
+        const pilihan = await pilihDialog({
+          title: 'Sudah ada di Rencana Aksi',
+          message: kalimatKetikanRenaksi([...dariRa].map(([i, b]) => ({ ketikan: newRows[i].nama, renaksi: b })), tahun),
+          confirmLabel: 'Pakai dari Rencana Aksi',
+          variant: 'primary',
+          altLabel: 'Tetap manual',
+        });
+        if (pilihan === null) return;
+        pakaiRenaksi = pilihan === 'utama';
+      }
+      const hasil = await Promise.all(newRows.map((row, i) => {
+        const ra = pakaiRenaksi ? dariRa.get(i) : undefined;
+        return fetchJson<unknown>('/api/kinerja/master', {
+          method: 'POST',
           body: JSON.stringify({
-            tahun, tipe: masterTipe, nama: row.nama,
+            tahun, tipe: masterTipe, nama: ra ? ra.nama : row.nama,
             sumber: null,
             program_ref:     row.program_ref     ?? null,
             kegiatan_ref:    row.kegiatan_ref    ?? null,
             subkegiatan_ref: row.subkegiatan_ref ?? null,
+            ...(ra ? { asal: 'RENAKSI' } : {}),
           }),
-        })
-      ));
-      toast.success(`${newRows.length} data berhasil disimpan`);
+        });
+      }));
+      const gagal = hasil.filter(d => !d.ok);
+      const tertanda = pakaiRenaksi ? dariRa.size : 0;
+      if (gagal.length === 0) {
+        toast.success(`${newRows.length} data berhasil disimpan${tertanda ? `, ${tertanda} dari Rencana Aksi` : ''}`);
+      } else {
+        toast.error(`${newRows.length - gagal.length} tersimpan, ${gagal.length} gagal: ${gagal[0].message || 'galat'}`, { duration: 9000 });
+      }
       fetchMaster(masterTipe);
       onMasterOptsRefresh();
-    } catch { toast.error('Gagal menyimpan'); }
-    finally { setSaving(false); }
+    } finally { setSaving(false); }
   }
 
   async function deleteMaster(id: number) {
