@@ -1,6 +1,6 @@
 # Konsep — Form PK: lampiran menyebut asal sasaran & indikator (tampil saja, tidak ikut tersimpan)
 
-Status: **KONSEP** (2026-11-12). Belum ada kode. Menunggu jawaban §6.
+Status: **DIKERJAKAN** (2026-11-12) — jawaban §6: (c) keduanya, DRAFT + FINAL berlabel status, tampil di form atas DAN kartu lampiran. Kode: `lib/pk/asal-sasaran.ts`, `GET /api/perjanjian-kinerja/asal-sasaran`, `LampiranAnggaranSplit.tsx`; uji `scripts/test-pk-asal-sasaran.mts`.
 
 ## 1. Permintaan
 

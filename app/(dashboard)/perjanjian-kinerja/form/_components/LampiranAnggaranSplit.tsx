@@ -19,6 +19,12 @@ import type { PkFormState, LampiranRow, AnggaranRow } from '../_types'
 import { genRowId, SUMBER_DANA } from '../_types'
 import { pilihanSasaran, sidikLampiran, sisipLampiran } from '@/lib/pk/pilihan-sasaran'
 import { gabungTargetSatuan } from '@/lib/shared/target-renaksi'
+import {
+  asalSasaran, dipakaiDi, tulisEntitas, tulisPemakai,
+  type AsalSasaran, type BarisLampiranLain, type BarisRenaksiAsal, type PemakaiPk,
+} from '@/lib/pk/asal-sasaran'
+import { fetchJson } from '@/lib/shared/api'
+import { useAbortableEffect } from '@/lib/shared/hooks'
 
 interface Props {
   form: PkFormState
@@ -128,6 +134,19 @@ function LampiranPanel({
     setDilepas(new Set())
   }
 
+  // "Milik siapa" — HANYA tampilan (docs/CONCEPT-pk-lampiran-asal-sasaran.md): tidak pernah
+  // masuk baris lampiran. Gagal dimuat = keterangannya tidak tampil, form tetap jalan.
+  const [asal, setAsal] = useState<{ tahun: string; renaksi: BarisRenaksiAsal[]; lampiran: BarisLampiranLain[] } | null>(null)
+  useAbortableEffect(async (signal) => {
+    const d = await fetchJson<unknown>(`/api/perjanjian-kinerja/asal-sasaran?tahun=${encodeURIComponent(form.tahun)}`, { signal })
+    if (signal.aborted) return
+    setAsal(d.ok ? (d as unknown as { tahun: string; renaksi: BarisRenaksiAsal[]; lampiran: BarisLampiranLain[] }) : null)
+  }, [form.tahun])
+  const asalDari = (sasaran: string, indikator?: string | null, level: PkLevel = unitLevel) =>
+    asal && asal.tahun === form.tahun ? asalSasaran(asal.renaksi, level, sasaran, indikator) : []
+  const pemakai = (sasaran: string, indikator?: string | null) =>
+    asal && asal.tahun === form.tahun ? dipakaiDi(asal.lampiran, sasaran, indikator, form.id) : []
+
   // Satu pilihan = satu sasaran beserta SEMUA indikatornya. Dulu hanya indikator baris pertama
   // yang ikut, jadi sasaran berindikator tiga masuk dokumen dengan satu indikator saja.
   const options = useMemo(() => pilihanSasaran(sasaranRows, unitLevel), [sasaranRows, unitLevel])
@@ -218,6 +237,10 @@ function LampiranPanel({
           </div>
         )}
 
+        {resolved && asal && (
+          <KotakAsal tahun={form.tahun} asal={asalDari(resolved.label)} pemakai={pemakai(resolved.label)} />
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: '#FAC775', letterSpacing: '.4px', textTransform: 'uppercase' }}>
             Indikator · Target (dari Master Sasaran)
@@ -233,7 +256,10 @@ function LampiranPanel({
                   <input type="checkbox" disabled={ada || disabled} checked={!ada && !dilepas.has(n)}
                     onChange={() => setDilepas(p => { const s = new Set(p); if (s.has(n)) s.delete(n); else s.add(n); return s })}
                     style={{ flexShrink: 0, alignSelf: 'center' }} />
-                  <span style={{ flex: 1, minWidth: 0, color: '#E6F1FB' }}>{i.indikator || <em style={{ color: '#FCA5A5' }}>indikator kosong</em>}</span>
+                  <span style={{ flex: 1, minWidth: 0, color: '#E6F1FB' }}>
+                    {i.indikator || <em style={{ color: '#FCA5A5' }}>indikator kosong</em>}
+                    {i.indikator && <KeteranganIndikator asal={asalDari(resolved.label, i.indikator)} pemakai={pemakai(resolved.label, i.indikator)} />}
+                  </span>
                   <span style={{ ...mono, color: '#FAC775', flexShrink: 0 }}>{gabungTargetSatuan(i.target, i.satuan) || '—'}</span>
                   {ada && <span style={{ fontSize: 10, color: '#85B7EB', flexShrink: 0 }}>sudah ada</span>}
                 </label>
@@ -276,6 +302,7 @@ function LampiranPanel({
                     <span style={{ color: '#85B7EB' }}> · Satuan: </span>
                     {r.satuan || <em style={{ color: '#FCA5A5' }}>kosong</em>}
                   </div>
+                  {asal && <RingkasAsal asal={asalDari(r.uraian, r.indikator, r.level)} pemakai={pemakai(r.uraian, r.indikator)} />}
                 </div>
                 <button onClick={() => handleDelete(idx)} disabled={disabled}
                   data-tooltip="Hapus" data-tooltip-pos="left"
@@ -533,6 +560,55 @@ function AnggaranPanel({
       )}
 
       <style>{`@keyframes pk-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
+// ═══ "Milik siapa" — tampilan saja, tidak pernah tersimpan ═════════════════
+function KotakAsal({ tahun, asal, pemakai }: { tahun: string; asal: AsalSasaran[]; pemakai: PemakaiPk[] }) {
+  return (
+    <div style={{ fontSize: 10.5, lineHeight: 1.55, padding: '7px 10px', borderRadius: 6, background: 'rgba(12,68,124,.25)', border: '1px solid rgba(24,95,165,.4)' }}>
+      <div style={{ fontWeight: 700, color: '#85B7EB', marginBottom: 2 }}>
+        Asal di Rencana Aksi {tahun} <span style={{ fontWeight: 500 }}>· keterangan saja, tidak ikut tersimpan</span>
+      </div>
+      {asal.length === 0 && <div style={{ color: '#85B7EB' }}>Tidak ditemukan di Rencana Aksi {tahun} (sasaran diketik di Master Sasaran).</div>}
+      {asal.map((a, i) => (
+        <div key={i} style={{ color: '#B5D4F4' }}>
+          <span style={{ color: '#85B7EB' }}>Program: </span>{tulisEntitas(a.program)}
+          {a.kegiatan && <><br /><span style={{ color: '#85B7EB' }}>Kegiatan: </span>{tulisEntitas(a.kegiatan)}</>}
+          {a.sub && <><br /><span style={{ color: '#85B7EB' }}>Sub kegiatan: </span>{tulisEntitas(a.sub)}</>}
+        </div>
+      ))}
+      {pemakai.length > 0 && (
+        <div style={{ color: '#B5D4F4', marginTop: 3 }}>
+          <span style={{ color: '#85B7EB' }}>Dipakai juga di PK: </span>{tulisPemakai(pemakai)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KeteranganIndikator({ asal, pemakai }: { asal: AsalSasaran[]; pemakai: PemakaiPk[] }) {
+  const induk = asal.find(a => a.indikatorInduk)?.indikatorInduk
+  if (!induk && pemakai.length === 0) return null
+  return (
+    <span style={{ display: 'block', fontSize: 10, color: '#85B7EB', lineHeight: 1.45, marginTop: 1 }}>
+      {induk && <>↳ menjabarkan: {induk}</>}
+      {induk && pemakai.length > 0 && <br />}
+      {pemakai.length > 0 && <>juga di: {tulisPemakai(pemakai)}</>}
+    </span>
+  )
+}
+
+function RingkasAsal({ asal, pemakai }: { asal: AsalSasaran[]; pemakai: PemakaiPk[] }) {
+  if (asal.length === 0 && pemakai.length === 0) return null
+  const a = asal[0]
+  const jalur = a ? [a.program, a.kegiatan, a.sub].filter((e): e is NonNullable<typeof e> => !!e).map(tulisEntitas).join(' › ') : null
+  return (
+    <div style={{ fontSize: 10, color: '#85B7EB', lineHeight: 1.45, marginTop: 4, paddingTop: 4, borderTop: '1px dashed rgba(24,95,165,.4)' }}>
+      {jalur && <div><span style={{ fontWeight: 700 }}>Asal: </span>{jalur}{asal.length > 1 ? ` (+${asal.length - 1} lain)` : ''}</div>}
+      {a?.indikatorInduk && <div>↳ menjabarkan: {a.indikatorInduk}</div>}
+      {pemakai.length > 0 && <div>Juga di PK: {tulisPemakai(pemakai)}</div>}
     </div>
   )
 }
