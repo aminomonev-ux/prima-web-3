@@ -35,8 +35,19 @@ export default function SoftSelect<T extends string | number>({
     const handler = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
     }
+    // Esc menutup daftar: fokus tetap di trigger, jadi didengar di dokumen seperti klik-luar.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      // Seperti <select> bawaan: Esc menutup dan fokus balik ke trigger.
+      wrapRef.current?.querySelector<HTMLButtonElement>('.soft-select-trigger')?.focus()
+    }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open])
 
   const selected = options.find(o => o.value === value)

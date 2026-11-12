@@ -350,6 +350,23 @@ tanpa kolom itu langkah relink tidak punya bahan — 7 dari 12 uji gagal sampai 
 di tahun baru, jadi ditautkan ulang — itu perilaku yang benar), lalu diganti dengan induk yang
 benar-benar tidak ada. Jalur impor `ganti` sudah dikerjakan di tahap 4.
 
+**Tahap 6 selesai** (12 Nov): regresi hijau — `test-renaksi-rantai` (33), `-rantai-mutasi` (6),
+`-induk-indikator` (16), `-duplikasi-tautan` (12), `-duplikasi-mutasi` (7), `-pindah-induk` (39),
+`-pemakai` (11), `-audit` (55), `-penanda` (71), `tsc` & `eslint` bersih. Butir §14 8b diuji
+terpisah: `scripts/test-renaksi-duplikasi-mutasi.mts` menjadikan langkah relink no-op di salinan
+modul lalu membuktikan pemeriksaan yang sama GAGAL pada mutan.
+
+Uji layar penuh (tema terang, 375 px) **menemukan cacat nyata di luar modul ini**: dropdown
+`SoftSelect` hanya bisa ditutup dengan klik di luar — Escape tidak melakukan apa pun, karena
+efeknya cuma memasang `mousedown`. Diperbaiki di `components/ui/SoftSelect.tsx`: Escape menutup
+da depan dan fokus kembali ke trigger (seperti `<select>` bawaan); sudah dicoba ulang di layar,
+`aria-expanded` jadi `false` dan fokus kembali ke tombol. Tidak ada luapan horizontal di 375 px
+(`scrollWidth` = `innerWidth` = 375) dan konsol halaman bersih dari error.
+
+Yang tidak bisa dijalankan di sini: `scripts/test-renaksi-import.mjs` butuh berkas Excel kantor
+(`D:/KANTOR/IKI 26/…xlsx`), jadi butir §14 7 untuk skrip itu belum dijalankan — jalur impor tetap
+teruji lewat `test-renaksi-induk-indikator` D1–D3.
+
 **Uji layar nyata** (12 Nov, peramban, tahun kotak pasir 2045): tujuan → sasaran → program (2
 indikator) → kegiatan (satu per indikator) → sub kegiatan, semuanya lewat form. Yang terlihat:
 pemilih indikator induk mati sebelum induknya dipilih; daftar kegiatan **menyusut** (hanya
