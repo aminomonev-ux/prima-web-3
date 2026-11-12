@@ -37,7 +37,7 @@ const dasar: Omit<RaRow, 'id' | 'level' | 'program' | 'indikator'> = {
   // null = belum diisi (migration-renaksi-realisasi-null); 0 = nol SUNGGUHAN.
   q1_target: 0, q1_realisasi: null, q2_target: 0, q2_realisasi: null,
   q3_target: 0, q3_realisasi: null, q4_target: 0, q4_realisasi: null,
-  anggaran_nominal: null, bulan_target: null, bulan_realisasi: null, version: 1,
+  anggaran_nominal: null, bulan_target: null, bulan_realisasi: null, induk_indikator_id: null, version: 1,
 }
 const tujuan: RaRow   = { ...dasar, id: 1, level: 'tujuan', program: 'Tujuan Uji', indikator: 'Indeks Tujuan' }
 // Akumulatif: 20+30+10+25 = 85 dari target 100 → 85%.

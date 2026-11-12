@@ -1084,6 +1084,7 @@ CREATE TABLE IF NOT EXISTS rencana_aksi (
   anggaran_nominal BIGINT      NULL DEFAULT NULL COMMENT 'Pagu anggaran (Rp) — hanya untuk level sub-kegiatan (Migration 040)',
   bulan_target    JSON         NULL DEFAULT NULL COMMENT '12 target bulanan (sub-kegiatan) — sumber derive q1-q4 target (Migration 041)',
   bulan_realisasi JSON         NULL DEFAULT NULL COMMENT '12 realisasi bulanan (sub-kegiatan) — reserved Realisasi menu (Migration 041)',
+  induk_indikator_id INT UNSIGNED NULL DEFAULT NULL COMMENT 'Soft-FK rencana_aksi.id — baris indikator induk yang dijabarkan (NULL = belum diisi, data lama) — migration-renaksi-induk-indikator',
   created_by      INT          NULL,
   updated_by      INT          NULL,
   created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1092,6 +1093,7 @@ CREATE TABLE IF NOT EXISTS rencana_aksi (
   INDEX idx_tahun_level (tahun, level),
   INDEX idx_tahun_level_prog (tahun, level, program),
   INDEX idx_tahun_level_kode (tahun, level, kode),
+  INDEX idx_ra_induk_indikator (tahun, induk_indikator_id),
   CONSTRAINT fk_ra_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_ra_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

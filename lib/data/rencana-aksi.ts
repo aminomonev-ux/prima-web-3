@@ -67,6 +67,8 @@ export interface RaRow {
   kegiatan: string | null;
   sub_kegiatan: string | null;
   indikator: string;
+  /** Soft-FK `rencana_aksi.id` — baris indikator induk yang dijabarkan. NULL = belum diisi (data lama & impor). */
+  induk_indikator_id: number | null;
   jenis: 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
   satuan: string;
   target_rpjmd: number;
@@ -152,7 +154,7 @@ export async function listRencanaAksi(tahun: number, level: RaLevel): Promise<Ra
            jenis, satuan, target_rpjmd, target_tahunan,
            q1_target, q1_realisasi, q2_target, q2_realisasi,
            q3_target, q3_realisasi, q4_target, q4_realisasi, anggaran_nominal,
-           bulan_target, bulan_realisasi, version, kode
+           bulan_target, bulan_realisasi, induk_indikator_id, version, kode
     FROM rencana_aksi
     WHERE tahun = ${tahun} AND level = ${level}
     ORDER BY program, kegiatan, sub_kegiatan, indikator
@@ -172,7 +174,7 @@ export async function getRencanaAksiById(id: number): Promise<RaRow | null> {
            jenis, satuan, target_rpjmd, target_tahunan,
            q1_target, q1_realisasi, q2_target, q2_realisasi,
            q3_target, q3_realisasi, q4_target, q4_realisasi, anggaran_nominal,
-           bulan_target, bulan_realisasi, version, kode
+           bulan_target, bulan_realisasi, induk_indikator_id, version, kode
     FROM rencana_aksi WHERE id = ${id}
   `);
   if (row) {

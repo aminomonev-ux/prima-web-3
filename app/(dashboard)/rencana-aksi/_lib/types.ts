@@ -17,6 +17,8 @@ export interface RaRow {
   kegiatan: string | null;
   sub_kegiatan: string | null;
   indikator: string;
+  /** Soft-FK `rencana_aksi.id` — baris indikator induk yang dijabarkan. NULL = belum diisi (data lama & impor). */
+  induk_indikator_id: number | null;
   jenis: RaJenis;
   satuan: string;
   target_rpjmd: number;
