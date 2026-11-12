@@ -13,6 +13,7 @@
 // rekening yang sama. Justru perpindahan itulah yang mau ditandai 'berubah'.
 
 import type { MasterTipe } from '@/app/(dashboard)/kinerja/_types';
+import { rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 
 export interface BarisRekening {
   program:         string | null;
@@ -46,6 +47,14 @@ const rapikan = (v: string | null | undefined): string =>
   (v ?? '').replace(/\s+/g, ' ').trim();
 
 const kunciBagian = (v: string | null | undefined): string => rapikan(v).toLowerCase();
+
+/**
+ * Kunci NAMA entri Master: seperti `kunciBagian`, plus bintang penanda tingkat matriks Renaksi
+ * dibuang. Init Renaksi & Rapikan Bintang menyimpan nama tanpa bintang, sedangkan berkas lama
+ * masih membawanya — tanpa ini "PROGRAM X ***" di berkas terbaca BARU di samping "PROGRAM X"
+ * lalu lahir entri kembar (bentuk persis yang Rapikan Bintang bereskan).
+ */
+const kunciNamaMaster = (v: string | null | undefined): string => rapikan(rapikanNamaEntitas(v ?? '')).toLowerCase();
 
 /**
  * Identitas satu baris rekening: lima kolom, dirapikan spasinya dan tanpa
@@ -146,14 +155,14 @@ export interface MasterTersedia {
  */
 export function masterKurang(berkas: BarisRekening[], tersedia: MasterTersedia): EntriMaster[] {
   const punya = (daftar: string[], nama: string) =>
-    daftar.some(d => kunciBagian(d) === kunciBagian(nama));
+    daftar.some(d => kunciNamaMaster(d) === kunciNamaMaster(nama));
 
   const out: EntriMaster[] = [];
   const dipakai = new Set<string>();
   const tambah = (tipe: MasterTipe, nama: string, p: string | null, k: string | null, s: string | null) => {
     const nm = rapikan(nama);
     if (!nm) return;
-    const tanda = `${tipe}${PISAH}${kunciBagian(nm)}`;
+    const tanda = `${tipe}${PISAH}${kunciNamaMaster(nm)}`;
     if (dipakai.has(tanda)) return;
     dipakai.add(tanda);
     out.push({ tipe, nama: nm, program_ref: p, kegiatan_ref: k, subkegiatan_ref: s });
@@ -199,10 +208,10 @@ const DAFTAR_TIPE: Record<MasterTipe, keyof MasterTersedia> = {
 export function bandingkanMaster(berkas: EntriMaster[], tersedia: MasterTersedia): EntriMasterImpor[] {
   const terlihat = new Set<string>();
   return berkas.map(e => {
-    const tanda = `${e.tipe}${PISAH}${kunciBagian(e.nama)}`;
+    const tanda = `${e.tipe}${PISAH}${kunciNamaMaster(e.nama)}`;
     if (terlihat.has(tanda)) return { entri: e, status: 'kembar' as const, ikut: false };
     terlihat.add(tanda);
-    const ada = tersedia[DAFTAR_TIPE[e.tipe]].some(d => kunciBagian(d) === kunciBagian(e.nama));
+    const ada = tersedia[DAFTAR_TIPE[e.tipe]].some(d => kunciNamaMaster(d) === kunciNamaMaster(e.nama));
     return ada
       ? { entri: e, status: 'sama' as const, ikut: false }
       : { entri: e, status: 'baru' as const, ikut: true };

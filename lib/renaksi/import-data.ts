@@ -95,8 +95,21 @@ const COLUMNS = [
   'anggaran_nominal', 'bulan_target', 'created_by', 'updated_by',
 ];
 
+// Baris yang induknya berganti lewat berkas (pindah program/kegiatan/sasaran/tujuan): tautan
+// indikator induknya menunjuk indikator milik induk LAMA → dilepas (NULL), aturan yang sama
+// dengan Data Entry (`indukBarisBerubah` di lib/data/rencana-aksi.ts). WAJIB jadi penugasan
+// PERTAMA: MySQL menilai SET ON DUPLICATE KEY dari kiri ke kanan, jadi sesudah `program =
+// VALUES(program)` kolom `program` sudah bernilai baru dan perbandingannya selalu sama.
+const LEPAS_TAUTAN_BASI = "`induk_indikator_id` = IF("
+  + "(`level` = 'sasaran' AND NOT (TRIM(`tujuan`) <=> TRIM(VALUES(`tujuan`))))"
+  + " OR (`level` = 'program' AND NOT (TRIM(`sasaran`) <=> TRIM(VALUES(`sasaran`))))"
+  + " OR (`level` = 'kegiatan' AND NOT (TRIM(`program`) <=> TRIM(VALUES(`program`))))"
+  + " OR (`level` = 'sub-kegiatan' AND (NOT (TRIM(`kegiatan`) <=> TRIM(VALUES(`kegiatan`)))"
+  + " OR NOT (TRIM(`program`) <=> TRIM(VALUES(`program`)))))"
+  + ", NULL, `induk_indikator_id`)";
+
 // Kolom realisasi sengaja absen: impor tidak boleh menghapus capaian.
-const UPDATE_SET = [
+const UPDATE_SET = LEPAS_TAUTAN_BASI + ', ' + [
   'program', 'kegiatan', 'sub_kegiatan', 'tujuan', 'sasaran',
   'outcome_program', 'outcome_kegiatan', 'outcome_sub_kegiatan',
   'jenis', 'satuan', 'target_tahunan',

@@ -190,6 +190,22 @@ ok('F7 sub yang dipindah menyimpan indikator kegiatan barunya', (await getRencan
 ok('F8 saudara sub ikut pindah & tautannya dilepas', sp2Row?.kegiatan === 'KEG TUJUAN' && sp2Row?.induk_indikator_id === null,
   `${sp2Row?.kegiatan} ${sp2Row?.induk_indikator_id}`);
 
+console.log('\nG. Impor mode perbarui: induk berganti lewat berkas → tautan basi dilepas');
+const barisKegiatan = (program: string): CommitRow => ({
+  level: 'kegiatan', kode: null, nama: 'KEG TUJUAN',
+  induk_tujuan: null, induk_sasaran: null, induk_program: program, induk_kegiatan: null,
+  outcome: null, indikator: 'IND KT', satuan: '%', jenis: 'Akumulatif',
+  target_tahunan: 10, q: [1, 1, 1, 1], bulan: null, anggaran: null,
+});
+const g1 = await commitImportRenaksi(T1, 'upsert', [barisKegiatan('PROG UJI')], uid);
+ok('G1 impor ulang tanpa pindah: tautan dipertahankan',
+  g1.diperbarui === 1 && (await getRencanaAksiById(kl))?.induk_indikator_id === q1, JSON.stringify(g1.ditahan));
+const g2 = await commitImportRenaksi(T1, 'upsert', [barisKegiatan('PROG BARU')], uid);
+const klRow = await getRencanaAksiById(kl);
+ok('G2 impor memindah kegiatan ke program lain: tautan ke indikator program lama dilepas',
+  g2.diperbarui === 1 && klRow?.program === 'PROG BARU' && klRow?.induk_indikator_id === null,
+  `${klRow?.program} ${klRow?.induk_indikator_id} ${JSON.stringify(g2.ditahan)}`);
+
 await bersih();
 const bersihLagi = await queryOne<{ n: number }>(sql`SELECT COUNT(*) AS n FROM rencana_aksi WHERE tahun IN (${T1}, ${T2})`);
 ok('E1 tahun kotak pasir bersih kembali', bersihLagi?.n === 0, String(bersihLagi?.n));

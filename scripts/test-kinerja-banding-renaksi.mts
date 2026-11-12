@@ -162,8 +162,12 @@ for (const r of ['app/api/kinerja/master/banding-renaksi/route.ts', 'app/api/kin
   ok(`B7 ${r.split('/').slice(-2, -1)[0]}: sesi → sakelar → akses modul`, s.indexOf('await getSession()') < s.indexOf('await kinerjaMati(') && s.indexOf('await kinerjaMati(') < s.indexOf('hasAppAccess(session.userId, session.role, isKinerjaRole)'))
 }
 const MT = sumber('app/(dashboard)/kinerja/_tabs/MasterTab.tsx')
+// Sejak 2026-11-12 pertanyaannya tinggal di SATU penolong yang juga dipakai Import Master &
+// Import Rekening (components/kinerja/simpan-master-baru.ts).
+const SMB = sumber('components/kinerja/simpan-master-baru.ts')
 ok('B9 Simpan Master bertanya lewat ketikanAdaDiRenaksi; "Pakai" mengirim nama Renaksi + asal',
-  MT.includes('dariRa = ketikanAdaDiRenaksi(newRows, (banding as unknown as HasilBanding).baru)') && MT.includes("nama: ra ? ra.nama : row.nama") && MT.includes("...(ra ? { asal: 'RENAKSI' } : {})"))
+  MT.includes('simpanMasterBaru(tahun,') && SMB.includes('cocok = ketikanAdaDiRenaksi(entri, (banding as unknown as HasilBanding).baru)')
+  && SMB.includes('nama: ra ? ra.nama : e.nama') && SMB.includes("...(ra ? { asal: 'RENAKSI' } : {})"))
 const RM = sumber('app/api/kinerja/master/route.ts')
 ok('B10 server memeriksa jalur sebelum menerima tanda RENAKSI', RM.indexOf("asal === 'RENAKSI' && !(await jalurAdaDiRenaksiTahun(") > 0
   && RM.indexOf("asal === 'RENAKSI' && !(await jalurAdaDiRenaksiTahun(") < RM.indexOf('await createMasterRow('))

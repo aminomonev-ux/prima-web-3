@@ -18,6 +18,7 @@ import {
   bandingkanRekening, ringkasImpor, terapkanTambah, terapkanTimpa, masterKurang,
   type BarisRekening, type BarisImpor, type EntriMaster, type MasterTersedia, type StatusImpor,
 } from '@/lib/kinerja/gabung-rekening';
+import { simpanMasterBaru } from './simpan-master-baru';
 
 interface HasilBaca {
   rows: BarisRekening[];
@@ -99,20 +100,11 @@ export default function ImportRekeningModal({
     try {
       let dibuat = 0;
       if (buatMaster && kurang.length > 0) {
-        // Berurutan, bukan Promise.all: `urut` entri Master dihitung MAX(urut)+1,
-        // jadi penulisan serentak melahirkan beberapa baris ber-urut sama.
-        for (const m of kurang) {
-          const res = await fetch('/api/kinerja/master', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tahun, tipe: m.tipe, nama: m.nama, sumber: null,
-              program_ref: m.program_ref, kegiatan_ref: m.kegiatan_ref, subkegiatan_ref: m.subkegiatan_ref,
-            }),
-          });
-          const j = await res.json().catch(() => null);
-          if (res.ok && j?.ok) dibuat++;
-          else toast.error(`Gagal membuat master ${m.tipe}: ${m.nama.slice(0, 40)}`);
-        }
+        // Pertanyaan "pakai dari Rencana Aksi" sama dengan tombol Simpan tab Master.
+        const r = await simpanMasterBaru(tahun, kurang);
+        if (r.dibuat === null) return;
+        dibuat = r.dibuat;
+        for (const g of r.gagal) toast.error(`Gagal membuat master: ${g.nama.slice(0, 40)} — ${g.pesan}`);
       }
       const rows = mode === 'timpa' ? terapkanTimpa(hasil) : terapkanTambah(rowsSekarang, hasil);
       onApply(rows, dibuat);

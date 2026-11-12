@@ -16,6 +16,7 @@ import { FileSpreadsheet, X, Upload } from 'lucide-react';
 import PrimaButton from '@/components/ui/PrimaButton';
 import { uiTheme } from '@/lib/theme';
 import { bandingkanMaster, type EntriMaster, type EntriMasterImpor, type MasterTersedia } from '@/lib/kinerja/gabung-rekening';
+import { simpanMasterBaru } from './simpan-master-baru';
 
 interface HasilBaca { rows: EntriMaster[]; warnings: string[]; source: string }
 
@@ -73,23 +74,13 @@ export default function ImportMasterModal({ tahun, tersedia, isLight = false, on
     const ikut = hasil.filter(h => h.ikut);
     if (ikut.length === 0) { toast.error('Tidak ada entri baru untuk dibuat'); return; }
     setBusy(true);
-    let dibuat = 0;
     try {
-      // Berurutan: `urut` dihitung MAX(urut)+1, penulisan serentak melahirkan
-      // beberapa baris ber-urut sama.
-      for (const h of ikut) {
-        const res = await fetch('/api/kinerja/master', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tahun, tipe: h.entri.tipe, nama: h.entri.nama, sumber: null,
-            program_ref: h.entri.program_ref, kegiatan_ref: h.entri.kegiatan_ref, subkegiatan_ref: h.entri.subkegiatan_ref,
-          }),
-        });
-        const j = await res.json().catch(() => null);
-        if (res.ok && j?.ok) dibuat++;
-        else toast.error(`Gagal: ${LABEL_TIPE[h.entri.tipe]} "${h.entri.nama.slice(0, 40)}"`);
-      }
-      onSelesai(dibuat);
+      // Pertanyaan "pakai dari Rencana Aksi" sama dengan tombol Simpan tab Master.
+      const r = await simpanMasterBaru(tahun, ikut.map(h => h.entri));
+      if (r.dibuat === null) return;
+      for (const g of r.gagal) toast.error(`Gagal: "${g.nama.slice(0, 40)}" — ${g.pesan}`);
+      if (r.dariRenaksi) toast.success(`${r.dariRenaksi} entri disimpan dengan tanda Rencana Aksi.`);
+      onSelesai(r.dibuat);
       onClose();
     } finally { setBusy(false); }
   }

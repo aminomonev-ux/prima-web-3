@@ -218,6 +218,25 @@ bab('F. Unduh Master lalu impor balik');
   cek('impor kedua kalinya: nol yang dibuat', 0, bandingkanMaster(h.rows, sesudah).filter(b => b.ikut).length);
   cek('kembar di berkas ditandai', ['baru', 'kembar'],
     bandingkanMaster([h.rows[0], { ...h.rows[0] }], kosong).map(b => b.status));
+  // Master hasil Init Renaksi / Rapikan Bintang tanpa bintang; berkas lama masih membawanya.
+  const berbintang = { ...h.rows[0], nama: `${P} ***` };
+  cek('nama berbintang penanda Renaksi = entri yang sudah ada (bukan baru)', ['sama'],
+    bandingkanMaster([berbintang], sesudah).map(b => b.status));
+  cek('berkas memuat nama dengan & tanpa bintang = kembar di berkas', ['baru', 'kembar'],
+    bandingkanMaster([h.rows[0], berbintang], kosong).map(b => b.status));
+  cek('Import Rekening: program berbintang tidak dibuat ulang di Master', 0,
+    masterKurang([{ program: `${P} ***`, kegiatan: '', subkegiatan: '', uraian_ssk: '', uraian: 'x', sumber_anggaran: '' }], sesudah).length);
+}
+{
+  // Tiga pintu pembuat entri Master (Simpan tab Master, Import Master, lengkapi Master di Import
+  // Rekening) wajib lewat SATU penolong yang menanyakan "pakai dari Rencana Aksi".
+  const baca = (p: string) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
+  const pintu = ['app/(dashboard)/kinerja/_tabs/MasterTab.tsx', 'components/kinerja/ImportMasterModal.tsx', 'components/kinerja/ImportRekeningModal.tsx'];
+  cek('ketiga pintu memanggil simpanMasterBaru, tidak menembak POST master sendiri', [true, true, true],
+    pintu.map(p => { const s = baca(p); return s.includes('simpanMasterBaru(') && !s.includes("'/api/kinerja/master'"); }));
+  const pen = baca('components/kinerja/simpan-master-baru.ts');
+  cek('penolong menanyakan Renaksi sebelum menulis', true,
+    pen.indexOf('ketikanAdaDiRenaksi(') > 0 && pen.indexOf('ketikanAdaDiRenaksi(') < pen.indexOf("'/api/kinerja/master'"));
 }
 cek('judul sheet "Sub Kegiatan" tidak terbaca "kegiatan"', 'subkegiatan', tipeDariSheet('Sub Kegiatan'));
 cek('judul sheet tak dikenal ditolak', null, tipeDariSheet('Sheet1'));
