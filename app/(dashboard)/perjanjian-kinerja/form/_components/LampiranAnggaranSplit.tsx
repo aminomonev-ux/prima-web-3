@@ -120,6 +120,13 @@ function LampiranPanel({
   form, setForm, unitLevel, sasaranRows, disabled,
 }: LampiranPanelProps) {
   const [pickKey, setPickKey] = useState('')
+  // Nomor indikator (urutan di `resolved.indikator`) yang DILEPAS dari Tambah. Bawaan semua ikut;
+  // dulu tidak bisa memilih, jadi indikator yang tidak dipakai harus dihapus satu per satu sesudahnya.
+  const [dilepas, setDilepas] = useState<ReadonlySet<number>>(new Set())
+  function pilihSasaran(kunci: string) {
+    setPickKey(kunci)
+    setDilepas(new Set())
+  }
 
   // Satu pilihan = satu sasaran beserta SEMUA indikatornya. Dulu hanya indikator baris pertama
   // yang ikut, jadi sasaran berindikator tiga masuk dokumen dengan satu indikator saja.
@@ -133,9 +140,15 @@ function LampiranPanel({
   // Sasaran tanpa indikator di master tetap bisa ditambahkan (satu baris berindikator kosong).
   const calon = useMemo(() => {
     if (!resolved) return []
-    const semua = resolved.indikator.length > 0 ? resolved.indikator : [{ indikator: null, target: null, satuan: null }]
-    return semua.filter(i => !sudahAda.has(sidikLampiran(resolved.label, i.indikator)))
-  }, [resolved, sudahAda])
+    if (resolved.indikator.length === 0) {
+      const kosong = { indikator: null, target: null, satuan: null }
+      return sudahAda.has(sidikLampiran(resolved.label, null)) ? [] : [kosong]
+    }
+    return resolved.indikator.filter((i, n) => !dilepas.has(n) && !sudahAda.has(sidikLampiran(resolved.label, i.indikator)))
+  }, [resolved, sudahAda, dilepas])
+  const bisaDipilih = resolved
+    ? resolved.indikator.filter(i => !sudahAda.has(sidikLampiran(resolved.label, i.indikator))).length
+    : 0
 
   function handleAdd() {
     if (!resolved || calon.length === 0) return
@@ -153,7 +166,7 @@ function LampiranPanel({
       urutan: 0,
     }))
     setForm(f => ({ ...f, lampiran: sisipLampiran(f.lampiran, baru) }))
-    setPickKey('')
+    pilihSasaran('')
   }
 
   function handleDelete(idx: number) {
@@ -179,7 +192,7 @@ function LampiranPanel({
         <Field label={SASARAN_LABEL[unitLevel].toUpperCase()}>
           <select disabled={disabled}
             value={pickKey}
-            onChange={e => setPickKey(e.target.value)}
+            onChange={e => pilihSasaran(e.target.value)}
             style={inputStyle}>
             <option value="">— pilih {SASARAN_LABEL[unitLevel]} —</option>
             {options.map(o => <option key={o.kunci} value={o.kunci}>{o.label}</option>)}
@@ -208,25 +221,31 @@ function LampiranPanel({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: '#FAC775', letterSpacing: '.4px', textTransform: 'uppercase' }}>
             Indikator · Target (dari Master Sasaran)
+            {bisaDipilih > 1 && <span style={{ textTransform: 'none', fontWeight: 600, color: '#85B7EB' }}> — centang yang ditambahkan</span>}
           </span>
-          <div style={{ ...inputStyle, background: 'rgba(2,15,28,.7)', cursor: 'default', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ ...inputStyle, cursor: 'default', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {!resolved && <span style={{ color: '#85B7EB' }}>— pilih sasaran dulu —</span>}
             {resolved && resolved.indikator.length === 0 && <span style={{ color: '#85B7EB' }}>— tidak ada indikator di Master Sasaran —</span>}
             {resolved?.indikator.map((i, n) => {
               const ada = sudahAda.has(sidikLampiran(resolved.label, i.indikator))
               return (
-                <div key={n} style={{ display: 'flex', gap: 8, alignItems: 'baseline', opacity: ada ? 0.55 : 1 }}>
+                <label key={n} style={{ display: 'flex', gap: 8, alignItems: 'baseline', opacity: ada ? 0.55 : 1, cursor: ada || disabled ? 'default' : 'pointer' }}>
+                  <input type="checkbox" disabled={ada || disabled} checked={!ada && !dilepas.has(n)}
+                    onChange={() => setDilepas(p => { const s = new Set(p); if (s.has(n)) s.delete(n); else s.add(n); return s })}
+                    style={{ flexShrink: 0, alignSelf: 'center' }} />
                   <span style={{ flex: 1, minWidth: 0, color: '#E6F1FB' }}>{i.indikator || <em style={{ color: '#FCA5A5' }}>indikator kosong</em>}</span>
                   <span style={{ ...mono, color: '#FAC775', flexShrink: 0 }}>{gabungTargetSatuan(i.target, i.satuan) || '—'}</span>
                   {ada && <span style={{ fontSize: 10, color: '#85B7EB', flexShrink: 0 }}>sudah ada</span>}
-                </div>
+                </label>
               )
             })}
           </div>
         </div>
 
         <PrimaButton variant="success" onClick={handleAdd} disabled={disabled || calon.length === 0} iconLeft={<Plus size={13} />}
-          data-tooltip={resolved && calon.length === 0 ? 'Semua indikator sasaran ini sudah ada di lampiran' : undefined}>
+          data-tooltip={resolved && calon.length === 0
+            ? (bisaDipilih > 0 ? 'Centang minimal satu indikator' : 'Semua indikator sasaran ini sudah ada di lampiran')
+            : undefined}>
           {calon.length > 1 ? `Tambah ${calon.length} Indikator` : 'Tambah Lampiran'}
         </PrimaButton>
       </div>

@@ -492,6 +492,12 @@ export default function PkShell({ username, role, izin, themePreference, beku, c
         /* ── PK inline dark hex → light overrides (mirror BLUD shell) ── */
         [data-theme="light"] [style*="042C53" i],
         [data-theme="light"] [style*="rgb(4, 44, 83)"]{background:#FAFAFA!important;}
+        /* Panel/kartu/kotak isian berlatar navy transparan (alfa .3/.4/.45) dulu tetap gelap di tema
+           terang — kotak Indikator lampiran PK terbaca hitam. Alfa ditulis lengkap + ")" supaya
+           lapisan penutup modal (.7/.72/.78) TIDAK ikut memutih. */
+        [data-theme="light"] [style*="rgba(2, 15, 28, 0.3)"],
+        [data-theme="light"] [style*="rgba(2, 15, 28, 0.4)"],
+        [data-theme="light"] [style*="rgba(2, 15, 28, 0.45)"]{background:#FFFFFF!important;}
         [data-theme="light"] [style*="rgba(12,68,124" i],
         [data-theme="light"] [style*="rgba(12, 68, 124" i]{background:rgba(139,92,246,0.04)!important;}
         [data-theme="light"] [style*="0C447C" i],
