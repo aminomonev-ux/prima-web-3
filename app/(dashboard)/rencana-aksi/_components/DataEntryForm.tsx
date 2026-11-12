@@ -130,15 +130,24 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const opsiProgramIndikator = level === 'sub-kegiatan'
     ? indikatorInduk(programRows, 'kegiatan', { nama: program }) : [];
   const opsiProgramUntukLevel = level === 'sub-kegiatan' ? opsiProgramIndikator : opsiIndukIndikator;
-  const opsiKegiatan = level === 'sub-kegiatan' && programIndikatorId != null
-    ? entitasAnak(indukRows, 'kegiatan', programIndikatorId, program)
-    : [];
+  // Kegiatan tersimpan tetap tampil walau di luar daftar tersaring (baris lama bertautan kosong
+  // membuka Edit tanpa Indikator Program) — kalau tidak, pemilihnya terbaca kosong padahal terisi.
+  const opsiKegiatan = denganNilaiTersimpan(
+    level === 'sub-kegiatan' && programIndikatorId != null
+      ? entitasAnak(indukRows, 'kegiatan', programIndikatorId, program)
+      : [],
+    level === 'sub-kegiatan' ? kegiatan : '');
 
-  // Indikator milik entitas ini (opsi "indikator sendiri").
+  // Indikator milik entitas ini (opsi "indikator sendiri"). `uk_tahun_level_ind` membuat tiap
+  // teks di daftar ini = SATU baris yang sudah ada. Saat Edit, memilih indikator baris lain
+  // menabrak kunci unik, jadi hanya indikator baris ini sendiri yang ditawarkan; saat Tambah,
+  // memilihnya membuka baris itu untuk disunting (onChange pemilih indikator di bawah).
   const namaEntitasSendiri = (level === 'kegiatan' ? kegiatan
     : level === 'sub-kegiatan' ? subKegiatan : program).trim();
-  const opsiIndikatorSendiri = level === 'tujuan'
-    ? [] : indikatorEntitas(rows, level, { nama: namaEntitasSendiri, program });
+  const indikatorBarisDiedit = editingId != null ? rows.find(r => r.id === editingId)?.indikator ?? '' : null;
+  const opsiIndikatorSendiri = level === 'tujuan' ? []
+    : indikatorBarisDiedit != null ? (indikatorBarisDiedit ? [indikatorBarisDiedit] : [])
+    : indikatorEntitas(rows, level, { nama: namaEntitasSendiri, program });
   const opsiIndikatorTampil = denganNilaiTersimpan(opsiIndikatorSendiri, indikator);
 
   /** Opsi select indikator induk; nilai tersimpan yang tak ada di daftar tetap ditampilkan. */
@@ -741,6 +750,16 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                     ]}
                     onChange={(v) => {
                       if (v === '__baru__') { setIndikatorBaru(true); setIndikator(''); return; }
+                      // Tambah + indikator yang sudah ada = server menimpa baris itu (ON DUPLICATE
+                      // KEY) dengan target bawaan form. Barisnya dibuka untuk disunting saja.
+                      const ada = editingId == null && v
+                        ? rows.find(r => r.level === level && r.indikator.trim() === v.trim())
+                        : undefined;
+                      if (ada) {
+                        handleEdit(ada);
+                        toast.info('Indikator ini sudah ada — barisnya dibuka untuk disunting, bukan ditambah lagi.');
+                        return;
+                      }
                       setIndikatorBaru(false);
                       setIndikator(v);
                     }}

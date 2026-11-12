@@ -36,17 +36,20 @@ export default function SoftSelect<T extends string | number>({
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
     }
     // Esc menutup daftar: fokus tetap di trigger, jadi didengar di dokumen seperti klik-luar.
+    // Fase capture + stopPropagation: Esc yang menutup daftar tidak boleh ikut menutup modal
+    // di belakangnya (pendengar Esc modal memakai fase bubble) — isian modal bisa hilang.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      e.stopPropagation()
       setOpen(false)
       // Seperti <select> bawaan: Esc menutup dan fokus balik ke trigger.
       wrapRef.current?.querySelector<HTMLButtonElement>('.soft-select-trigger')?.focus()
     }
     document.addEventListener('mousedown', handler)
-    document.addEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
     return () => {
       document.removeEventListener('mousedown', handler)
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
     }
   }, [open])
 
@@ -70,15 +73,14 @@ export default function SoftSelect<T extends string | number>({
         <div className="soft-select-menu" role="listbox">
           {options.map(opt => {
             const active = opt.value === value
-            // Trigger memotong nama panjang dengan elipsis, jadi teks utuhnya disediakan
-            // sebagai tooltip bawaan di tiap pilihan.
+            // Trigger memotong nama panjang dengan elipsis; di daftar teksnya dibungkus utuh
+            // (.soft-select-item-label) — `title=` bawaan browser dilarang (Gate J).
             return (
               <button
                 type="button"
                 key={String(opt.value)}
                 role="option"
                 aria-selected={active}
-                title={opt.label}
                 className={`soft-select-item${active ? ' active' : ''}`}
                 onClick={() => { onChange(opt.value); setOpen(false) }}
               >

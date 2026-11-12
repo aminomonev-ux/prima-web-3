@@ -140,6 +140,56 @@ const indukBaru = await queryOne<{ id: number }>(sql`
 `);
 ok('D3 kontrol: tidak ada baris yatim yang tersisa', indukBaru === null);
 
+console.log('\nF. Pindah induk melepas tautan yang basi');
+const idProgram = async (indikator: string) => Number((await queryOne<{ id: number }>(sql`
+  SELECT id FROM rencana_aksi WHERE tahun = ${T1} AND level = 'program' AND indikator = ${indikator}`))?.id);
+const q1 = await idProgram('IND P1');
+const q2 = await idProgram('IND P2');
+const pb = await upsertRencanaAksi({ ...dasar, level: 'program', program: 'PROG BARU', sasaran: 'SAS UJI', indikator: 'IND PB1' }, uid);
+const kp1 = await upsertRencanaAksi({ ...dasar, level: 'kegiatan', program: 'PROG UJI', kegiatan: 'KEG PINDAH', indikator: 'IND KP1', induk_indikator_id: q1 }, uid);
+const kp2 = await upsertRencanaAksi({ ...dasar, level: 'kegiatan', program: 'PROG UJI', kegiatan: 'KEG PINDAH', indikator: 'IND KP2', induk_indikator_id: q2 }, uid);
+const sp1 = await upsertRencanaAksi({ ...dasar, level: 'sub-kegiatan', program: 'PROG UJI', kegiatan: 'KEG PINDAH', sub_kegiatan: 'SUB IKUT', indikator: 'IND SP1', induk_indikator_id: kp1 }, uid);
+
+// Pindah program TANPA memilih indikator program baru (Edit baris lama tidak dipaksa).
+await upsertRencanaAksi({
+  ...dasar, id: kp1, expected_version: (await getRencanaAksiById(kp1))!.version,
+  level: 'kegiatan', program: 'PROG BARU', kegiatan: 'KEG PINDAH', indikator: 'IND KP1',
+}, uid);
+ok('F1 baris yang dipindah tanpa pilihan baru: tautan lama dilepas',
+  (await getRencanaAksiById(kp1))?.induk_indikator_id === null, String((await getRencanaAksiById(kp1))?.induk_indikator_id));
+const kp2Row = await getRencanaAksiById(kp2);
+ok('F2 saudara ikut pindah & tautan ke indikator program lama dilepas',
+  kp2Row?.program === 'PROG BARU' && kp2Row?.induk_indikator_id === null, `${kp2Row?.program} ${kp2Row?.induk_indikator_id}`);
+const sp1Row = await getRencanaAksiById(sp1);
+ok('F3 sub-kegiatan tetap tertaut ke baris kegiatannya (id tidak berubah)',
+  sp1Row?.induk_indikator_id === kp1 && sp1Row?.program === 'PROG BARU', `${sp1Row?.program} ${sp1Row?.induk_indikator_id}`);
+// Kontrol mutasi: Simpan berikutnya dengan indikator program baru diterima.
+const errF4 = await tangkap(() => upsertRencanaAksi({
+  ...dasar, id: kp2, expected_version: kp2Row!.version,
+  level: 'kegiatan', program: 'PROG BARU', kegiatan: 'KEG PINDAH', indikator: 'IND KP2', induk_indikator_id: pb,
+}, uid));
+ok('F4 tautan ke indikator program baru diterima', errF4 === null && (await getRencanaAksiById(kp2))?.induk_indikator_id === pb, (errF4 as Error)?.message);
+
+// Pindah DENGAN pilihan baru: tautan baru yang menang, bukan NULL.
+await upsertRencanaAksi({
+  ...dasar, id: kp1, expected_version: (await getRencanaAksiById(kp1))!.version,
+  level: 'kegiatan', program: 'PROG UJI', kegiatan: 'KEG PINDAH', indikator: 'IND KP1', induk_indikator_id: q1,
+}, uid);
+ok('F5 pindah dengan pilihan baru menyimpan pilihan itu', (await getRencanaAksiById(kp1))?.induk_indikator_id === q1);
+ok('F6 saudara yang ikut pindah balik dilepas tautannya', (await getRencanaAksiById(kp2))?.induk_indikator_id === null);
+
+// Sub-kegiatan pindah kegiatan: saudaranya melepas tautan ke indikator kegiatan lama.
+const kl = await upsertRencanaAksi({ ...dasar, level: 'kegiatan', program: 'PROG UJI', kegiatan: 'KEG TUJUAN', indikator: 'IND KT', induk_indikator_id: q1 }, uid);
+const sp2 = await upsertRencanaAksi({ ...dasar, level: 'sub-kegiatan', program: 'PROG UJI', kegiatan: 'KEG PINDAH', sub_kegiatan: 'SUB IKUT', indikator: 'IND SP2', induk_indikator_id: kp1 }, uid);
+await upsertRencanaAksi({
+  ...dasar, id: sp1, expected_version: (await getRencanaAksiById(sp1))!.version,
+  level: 'sub-kegiatan', program: 'PROG UJI', kegiatan: 'KEG TUJUAN', sub_kegiatan: 'SUB IKUT', indikator: 'IND SP1', induk_indikator_id: kl,
+}, uid);
+const sp2Row = await getRencanaAksiById(sp2);
+ok('F7 sub yang dipindah menyimpan indikator kegiatan barunya', (await getRencanaAksiById(sp1))?.induk_indikator_id === kl);
+ok('F8 saudara sub ikut pindah & tautannya dilepas', sp2Row?.kegiatan === 'KEG TUJUAN' && sp2Row?.induk_indikator_id === null,
+  `${sp2Row?.kegiatan} ${sp2Row?.induk_indikator_id}`);
+
 await bersih();
 const bersihLagi = await queryOne<{ n: number }>(sql`SELECT COUNT(*) AS n FROM rencana_aksi WHERE tahun IN (${T1}, ${T2})`);
 ok('E1 tahun kotak pasir bersih kembali', bersihLagi?.n === 0, String(bersihLagi?.n));

@@ -1057,8 +1057,11 @@ input, textarea { caret-color: #FBBF24; }
   color: #FBBF24;
   font-weight: 700;
 }
+/* Dibungkus, bukan dipotong: nama indikator Renaksi bisa sangat panjang dan dua pilihan
+   yang awalnya sama tidak bisa dibedakan kalau ujungnya terpotong elipsis. */
 .soft-select-item-label {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+  flex: 1; min-width: 0; text-align: left;
+  white-space: normal; overflow-wrap: anywhere;
 }
 .soft-select-item-check { color: #EF9F27; flex-shrink: 0; }
 

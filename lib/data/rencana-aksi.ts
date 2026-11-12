@@ -57,6 +57,21 @@ async function assertIndukIndikator(data: UpsertRencanaAksiInput): Promise<void>
   }
 }
 
+/** Nama induk langsung (dan program untuk sub-kegiatan) berbeda antara baris tersimpan & kiriman. */
+function indukBarisBerubah(
+  lama: Pick<RaRow, 'level' | 'program' | 'kegiatan' | 'tujuan' | 'sasaran'>,
+  data: UpsertRencanaAksiInput,
+): boolean {
+  const t = (s: string | null | undefined) => (s ?? '').trim();
+  switch (lama.level) {
+    case 'sasaran': return t(lama.tujuan) !== t(data.tujuan);
+    case 'program': return t(lama.sasaran) !== t(data.sasaran);
+    case 'kegiatan': return t(lama.program) !== t(data.program);
+    case 'sub-kegiatan': return t(lama.kegiatan) !== t(data.kegiatan) || t(lama.program) !== t(data.program);
+    default: return false;
+  }
+}
+
 export class RaVersionConflictError extends Error {
   constructor() {
     super('Data sudah diubah pengguna lain. Memuat versi terbaru.');
@@ -296,8 +311,13 @@ async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promis
   if (g.level === 'kegiatan') {
     // Tahap H: pindah program ikut dijalarkan — tanpa `indukBaru` programnya tetap.
     const program = g.indukBaru ?? g.induk;
+    // Saudara yang ikut pindah program: tautan indikator induknya menunjuk indikator program
+    // LAMA, jadi dilepas (NULL) — menebak indikator program baru per baris itu menebak.
+    const lepasTautan = g.indukBaru != null ? 1 : 0;
     await tx`
-      UPDATE rencana_aksi SET kegiatan = ${g.ke}, program = ${program}, version = version + 1, updated_at = updated_at
+      UPDATE rencana_aksi SET kegiatan = ${g.ke}, program = ${program},
+        induk_indikator_id = IF(${lepasTautan} = 1, NULL, induk_indikator_id),
+        version = version + 1, updated_at = updated_at
       WHERE tahun = ${tahun} AND level = 'kegiatan' AND kegiatan = ${g.dari} AND program = ${g.induk}
     `;
     // Kegiatan senama di program lain TIDAK ikut — sub-kegiatan menyimpan program induknya.
@@ -310,9 +330,12 @@ async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama): Promis
 
   // Sub-kegiatan daun: yang ikut hanya baris senamanya sendiri (satu entitas = banyak
   // indikator), dan lingkupnya butuh program + kegiatan — nama kegiatan saja tidak unik.
+  // Pindah kegiatan (atau program kegiatannya): tautan ke indikator kegiatan lama dilepas.
+  const lepasTautanSub = g.indukBaru != null || g.indukProgramBaru != null ? 1 : 0;
   await tx`
     UPDATE rencana_aksi SET sub_kegiatan = ${g.ke},
       kegiatan = ${g.indukBaru ?? g.induk}, program = ${g.indukProgramBaru ?? g.indukProgram},
+      induk_indikator_id = IF(${lepasTautanSub} = 1, NULL, induk_indikator_id),
       version = version + 1, updated_at = updated_at
     WHERE tahun = ${tahun} AND level = 'sub-kegiatan' AND sub_kegiatan = ${g.dari}
       AND kegiatan <=> ${g.induk} AND program = ${g.indukProgram}
@@ -413,6 +436,12 @@ export async function upsertRencanaAksi(
       sub_kegiatan: data.sub_kegiatan,
     });
 
+    // Induk baris ini berganti (pindah program/kegiatan/sasaran/tujuan): tautan lama menunjuk
+    // indikator milik induk LAMA. COALESCE akan mempertahankannya — barisnya lalu hilang dari
+    // daftar anak induk baru, dan Simpan berikutnya ditolak `assertIndukIndikator`. Tanpa
+    // pilihan baru, tautannya dilepas jadi NULL (bentuk data lama yang sah).
+    const indukBerubah = indukBarisBerubah(lama, data);
+
     // COALESCE, bukan tulis-balik nilai hasil baca: kolom realisasi hanya berubah
     // kalau memang ada hasil hitung ulang. Menulis balik nilai yang baru saja
     // dibaca akan menimpa realisasi yang diubah orang lain di sela baca-dan-tulis.
@@ -445,7 +474,8 @@ export async function upsertRencanaAksi(
           q4_realisasi         = COALESCE(${rr?.[3] ?? null}, q4_realisasi),
           anggaran_nominal     = ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null},
           bulan_target         = ${bulanTargetJson},
-          induk_indikator_id   = COALESCE(${data.induk_indikator_id ?? null}, induk_indikator_id),
+          induk_indikator_id   = IF(${indukBerubah ? 1 : 0} = 1, ${data.induk_indikator_id ?? null},
+                                    COALESCE(${data.induk_indikator_id ?? null}, induk_indikator_id)),
           version              = version + 1,
           updated_by           = ${userId}
         WHERE id = ${id}
