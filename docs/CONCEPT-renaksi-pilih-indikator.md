@@ -309,7 +309,7 @@ lama yang tautannya kosong tetap bisa disunting. Tautannya kini **disimpan**: ko
 `UpsertRencanaAksiSchema`, `INSERT`/`UPDATE` menulisnya, `ON DUPLICATE KEY` memakai `COALESCE`
 supaya pemanggil yang tidak mengirim kolom tidak mengosongkannya, dan `assertIndukIndikator`
 menolak tautan beda tahun / beda tingkat / bukan induk baris itu (400 `INDUK_INDIKATOR_TIDAK_SAH`).
-Karena itu simpan + validasi naik ke tahap ini; **tahap 4 tinggal pagar hapus dan impor `ganti`**.
+Karena itu simpan + validasi naik ke tahap ini; tahap 4 tinggal pagar hapus dan impor `ganti`.
 Uji mutasi baru: `scripts/test-renaksi-rantai-mutasi.mts` (6) membuang penjaga `NULL` dari salinan
 modul dan membuktikan baris lama memang lenyap — jadi uji biasa tidak bisa lolos tanpa penjaga itu.
 Bukti lain: uji DB kotak pasir 2099/2098 (8 — simpan, edit tanpa kolom, tiga penolakan), regresi
@@ -317,6 +317,24 @@ Bukti lain: uji DB kotak pasir 2099/2098 (8 — simpan, edit tanpa kolom, tiga p
 `eslint` bersih. Catatan: perubahan ini sempat memunculkan satu peringatan
 `react-hooks/exhaustive-deps` (karena `handleEdit` kini membaca baris induk); diperbaiki dengan
 `useCallback` + dependensi yang jujur, bukan dengan `eslint-disable`.
+
+**Tahap 4 selesai** (12 Nov): `assertTidakDitunjuk` memblokir hapus baris yang masih ditunjuk
+`induk_indikator_id` (error `RaTautanAnakError` → 400 `MASIH_DITUNJUK`, pesannya menyebut jumlah
+barisnya) — penjaga lama berbasis nama meloloskannya selama nama entitas itu masih dipikul baris
+lain. Impor mode `ganti` melepas tautan anak di transaksi yang sama dengan penghapusannya, jadi
+tidak tersisa id yang sudah tidak ada. Uji tetap: `scripts/test-renaksi-induk-indikator.mts` (16),
+regresi `test-renaksi-audit` (55) / `pindah-induk` (39) / `pemakai` (11), `tsc` & `eslint` bersih.
+Catatan jujur: satu ekspektasi uji saya salah tulis (B3) — menganggap indikator program LAIN selalu
+salah, padahal dua indikator di program yang SAMA sama-sama sah jadi induk; ujinya saya betulkan
+menjadi "program lain ditolak" + kontrol positif untuk yang sah.
+
+**Uji layar nyata** (12 Nov, peramban, tahun kotak pasir 2045): tujuan → sasaran → program (2
+indikator) → kegiatan (satu per indikator) → sub kegiatan, semuanya lewat form. Yang terlihat:
+pemilih indikator induk mati sebelum induknya dipilih; daftar kegiatan **menyusut** (hanya
+"UJI KEGIATAN A" saat indikator program A dipilih, "…B" tidak muncul); kolom `induk_indikator_id`
+terisi benar di DB (sasaran→tujuan, program→sasaran, kegiatan→program, sub→kegiatan); hapus
+indikator program yang masih ditunjuk **ditolak** dengan pesan "masih ada 1 baris…" dan barisnya
+utuh; hapus sub kegiatan (daun) tetap berhasil. Data 2045 dan akun uji dihapus lagi sesudahnya.
 
 ---
 

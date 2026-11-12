@@ -14,6 +14,14 @@ export class RaIndukIndikatorError extends Error {
   constructor(pesan: string) { super(pesan); this.name = 'RaIndukIndikatorError'; }
 }
 
+/** Baris masih dipakai sebagai indikator induk baris lain — menghapusnya meninggalkan tautan hantu. */
+export class RaTautanAnakError extends Error {
+  constructor(jumlah: number) {
+    super(`Tidak bisa dihapus — masih ada ${jumlah} baris yang menjadikan indikator ini induknya. Pilih ulang indikator induk baris itu dulu di Data Entry.`);
+    this.name = 'RaTautanAnakError';
+  }
+}
+
 /**
  * Tautan indikator induk harus benar-benar INDUK baris ini: satu tahun, satu tingkat di atas,
  * dan nama entitasnya cocok dengan kolom induk baris. Tanpa cek ini id sembarang dari klien
@@ -579,6 +587,21 @@ async function assertTidakPunyaAnak(row: RaRow): Promise<void> {
   if (sisa === 0 && anak > 0) throw new RaPunyaAnakError(labelAnak, anak);
 }
 
+/**
+ * Tautan indikator induk menunjuk ID baris. Penjaga nama di atas hanya menolak hapus kalau
+ * barisnya yang TERAKHIR memikul nama entitas itu; program ber-4 indikator lolos (`sisa = 3`)
+ * padahal kegiatan di bawahnya menunjuk baris yang sedang dihapus. Soft-FK tidak menolak apa pun,
+ * jadi tautannya akan menunjuk id yang tak ada — dan layar menampilkan pilihan yang sudah mati.
+ */
+async function assertTidakDitunjuk(row: RaRow): Promise<void> {
+  const hasil = await queryOne<{ n: unknown }>(sql`
+    SELECT COUNT(*) AS n FROM rencana_aksi
+    WHERE tahun = ${row.tahun} AND induk_indikator_id = ${row.id}
+  `);
+  const jumlah = Number(hasil?.n ?? 0);
+  if (jumlah > 0) throw new RaTautanAnakError(jumlah);
+}
+
 /** Menerima baris utuh, bukan id: route sudah membacanya untuk audit log, dan
  *  kedua penjaga di bawah butuh level + nama entitasnya — bukan cuma id. */
 export async function deleteRencanaAksi(row: RaRow): Promise<void> {
@@ -587,6 +610,7 @@ export async function deleteRencanaAksi(row: RaRow): Promise<void> {
   // angkanya tidak berubah melainkan hilang.
   await assertPeriodeTerbuka(Number(row.tahun));
   await assertTidakPunyaAnak(row);
+  await assertTidakDitunjuk(row);
   await sql`DELETE FROM rencana_aksi WHERE id = ${row.id}`;
 }
 

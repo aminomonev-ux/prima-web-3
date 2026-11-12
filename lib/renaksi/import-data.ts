@@ -158,6 +158,19 @@ export async function commitImportRenaksi(
   await withTransaction(async ({ tx, conn }) => {
     if (mode === 'ganti') {
       for (const lv of levelsDiFile) {
+        // Tautan indikator induk menunjuk ID baris. Menghapus satu tingkat meninggalkan id
+        // yang tidak ada lagi (soft-FK diam saja), dan layar lalu menawarkan pilihan hantu —
+        // jadi tautannya dilepas dulu, di transaksi yang sama dengan penghapusannya.
+        // Subquery dibungkus tabel turunan: MySQL menolak UPDATE yang membaca tabelnya sendiri.
+        await tx`
+          UPDATE rencana_aksi SET induk_indikator_id = NULL
+          WHERE tahun = ${tahun}
+            AND induk_indikator_id IN (
+              SELECT id FROM (
+                SELECT id FROM rencana_aksi WHERE tahun = ${tahun} AND level = ${lv}
+              ) AS akan_dihapus
+            )
+        `;
         await tx`DELETE FROM rencana_aksi WHERE tahun = ${tahun} AND level = ${lv}`;
       }
     }

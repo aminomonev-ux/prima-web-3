@@ -31,6 +31,7 @@ import {
   RaPeriodLockedError,
   RaPunyaAnakError,
   RaIndukIndikatorError,
+  RaTautanAnakError,
 } from '@/lib/data/rencana-aksi';
 import { guard } from './_guard';
 
@@ -144,6 +145,11 @@ export async function DELETE(req: NextRequest) {
     // diteruskan apa adanya, bukan diringkas jadi "Server error".
     if (e instanceof RaPunyaAnakError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'MASIH_PUNYA_ANAK' }, { status: 400 });
+    }
+    // Induk indikator yang masih ditunjuk baris lain: pesannya menyebut jumlahnya supaya
+    // orang tahu ada berapa baris yang harus dipilih ulang, bukan sekadar "gagal"..
+    if (e instanceof RaTautanAnakError) {
+      return NextResponse.json({ ok: false, error: e.message, code: 'MASIH_DITUNJUK' }, { status: 400 });
     }
     console.error('[RA DELETE]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });
