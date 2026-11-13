@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   User, Crown, ClipboardList, Save, FileCheck2,
-  CheckCircle2, AlertCircle, Loader2, ArrowLeft, Plus,
+  CheckCircle2, AlertCircle, Loader2, ArrowLeft, Plus, CopyPlus,
 } from 'lucide-react'
 import { fetchJson } from '@/lib/shared/api'
 import DeleteIcon from '@/components/ui/DeleteIcon'
@@ -41,6 +41,7 @@ export default function FormClient({ editId, bolehUbah }: Props) {
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [menyalin, setMenyalin] = useState(false)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
   // Modal konfirmasi (replace native window.confirm — ikut design system PRIMA)
   const [confirm, setConfirm] = useState<{
@@ -352,6 +353,37 @@ export default function FormClient({ editId, bolehUbah }: Props) {
     })
   }
 
+  /**
+   * Dokumen FINAL terkunci, jadi yang dibuat adalah SALINAN DRAFT-nya. Dokumen lama tidak
+   * disentuh sama sekali — tetap FINAL beserta Word-nya, sebagai arsip.
+   */
+  async function doSalinDraft() {
+    if (!form.id) return
+    setMenyalin(true)
+    const d = await fetchJson<{ ok: boolean; id?: number; message?: string }>(
+      `/api/perjanjian-kinerja/dokumen/${form.id}/salin-draft`, { method: 'POST' },
+    )
+    setMenyalin(false)
+    if (d.ok && d.id) {
+      showToast('ok', `DRAFT baru #${d.id} dibuat dari dokumen FINAL #${form.id}`)
+      dasarRef.current = null
+      router.push(`/perjanjian-kinerja/form?id=${d.id}`)
+    } else {
+      showToast('err', d.message ?? 'Gagal menyalin dokumen')
+    }
+  }
+
+  async function handleSalinDraft() {
+    if (!form.id) return
+    if (!(await confirmDialog({
+      title: 'Salin jadi DRAFT baru?',
+      message: `Semua isi dokumen FINAL #${form.id} — pihak, lampiran, dan anggaran — disalin ke dokumen DRAFT baru yang bisa disunting. `
+        + 'Dokumen FINAL lama tetap utuh sebagai arsip.',
+      confirmLabel: 'Salin jadi DRAFT', variant: 'purple',
+    }))) return
+    await doSalinDraft()
+  }
+
   async function doDelete() {
     if (!form.id) return
     setDeleting(true)
@@ -416,6 +448,13 @@ export default function FormClient({ editId, bolehUbah }: Props) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {form.id && isFinal && bolehUbah && (
+            <PrimaButton menulis variant="purple" iconLeft={<CopyPlus size={14} />}
+              onClick={handleSalinDraft} disabled={menyalin || loadingEdit}
+              data-tooltip="Salin seluruh isi dokumen FINAL ke DRAFT baru — dokumen lama tetap arsip" data-tooltip-pos="below">
+              {menyalin ? 'Menyalin…' : 'Salin jadi DRAFT'}
+            </PrimaButton>
+          )}
           {form.id && isFinal && (
             <DownloadButton variant="word" label="Unduh Word" onClick={handleDownload}
               data-tooltip="Unduh dokumen Word" data-tooltip-pos="below" />

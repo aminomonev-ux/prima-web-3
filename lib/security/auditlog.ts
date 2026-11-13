@@ -222,6 +222,7 @@ export type AuditEventType =
   | 'PK_DOKUMEN_DELETE'       // DELETE /api/perjanjian-kinerja/dokumen/[id]
   | 'PK_DOKUMEN_FINALIZE'     // POST /api/perjanjian-kinerja/dokumen/[id]/finalize
   | 'PK_DOKUMEN_GENERATE'     // sub-event finalize — generate Word docx
+  | 'PK_DOKUMEN_SALIN_DRAFT'  // POST /api/perjanjian-kinerja/dokumen/[id]/salin-draft
   | 'PK_DOKUMEN_DOWNLOAD'     // GET /api/perjanjian-kinerja/dokumen/[id]/download
   | 'PK_VIEW_LIST'            // GET /api/perjanjian-kinerja/dokumen (bulk PII — UU PDP Pasal 39)
   | 'PK_IMPORT_PEJABAT'       // POST /api/perjanjian-kinerja/pejabat/import (preview parse file — bulk PII)

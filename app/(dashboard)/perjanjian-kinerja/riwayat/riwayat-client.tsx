@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Edit2, Download, FileText, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Eye, X, Loader2 } from 'lucide-react'
+import { Edit2, Download, FileText, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Eye, X, Loader2, CopyPlus } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import { fetchJson } from '@/lib/shared/api'
 import { usePaginatedList } from '@/lib/shared/hooks'
@@ -83,6 +83,33 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
           window.setTimeout(() => void list.refetch(), 200)
         } else {
           showToast('err', d.message)
+        }
+      },
+    })
+  }
+
+  /**
+   * Dokumen FINAL tidak bisa disunting, jadi yang dibuat adalah SALINAN DRAFT-nya.
+   * Dokumen lama tetap FINAL utuh (arsip) — termasuk berkas Word yang sudah di-generate.
+   */
+  function handleSalinDraft(row: RiwayatRow) {
+    setConfirm({
+      title: 'Salin jadi DRAFT baru?',
+      message: `Semua isi dokumen FINAL #${row.id} (${row.unit_pertama}) — pihak, lampiran, dan anggaran — disalin ke dokumen DRAFT baru yang bisa disunting. `
+        + 'Dokumen FINAL lama tetap utuh sebagai arsip.',
+      confirmLabel: 'Salin jadi DRAFT',
+      confirmKind: 'purple',
+      onConfirm: async () => {
+        setConfirm(null)
+        const d = await fetchJson<{ ok: boolean; id?: number; message?: string }>(
+          `/api/perjanjian-kinerja/dokumen/${row.id}/salin-draft`, { method: 'POST' },
+        )
+        if (d.ok && d.id) {
+          showToast('ok', `DRAFT baru #${d.id} dibuat dari dokumen FINAL #${row.id}`)
+          window.setTimeout(() => void list.refetch(), 300)
+          router.push(`/perjanjian-kinerja/form?id=${d.id}`)
+        } else {
+          showToast('err', d.message ?? 'Gagal menyalin dokumen')
         }
       },
     })
@@ -226,6 +253,14 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
                               <Download size={12} />
                             </button>
                           </>
+                        )}
+                        {bolehUbah && r.status === 'FINAL' && (
+                          <button onClick={() => handleSalinDraft(r)}
+                            data-tooltip="Salin jadi DRAFT baru (dokumen FINAL tetap utuh)"
+                            data-tooltip-pos="left"
+                            style={btnIcon('#FAC775')}>
+                            <CopyPlus size={12} />
+                          </button>
                         )}
                         {bolehUbah && (
                           <button onClick={() => handleDelete(r)}

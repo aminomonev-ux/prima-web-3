@@ -160,6 +160,73 @@ export class PkVersiKonflikError extends Error {
   constructor() { super(PESAN_VERSI_PK); this.name = 'PkVersiKonflikError'; }
 }
 
+// ─── Salin dokumen FINAL jadi DRAFT baru ──────────────────────────────────────
+// Dokumen FINAL memang tidak bisa disunting (itu artinya dikunci). Yang dibutuhkan
+// untuk memperbaiki isinya adalah salinan yang bisa disunting, tanpa menyentuh arsip:
+// dokumen lama tetap FINAL utuh beserta berkas Word-nya.
+
+export class PkDokumenTidakAdaError extends Error {
+  constructor() { super('Dokumen PK tidak ditemukan'); this.name = 'PkDokumenTidakAdaError'; }
+}
+
+export class PkHanyaFinalDisalinError extends Error {
+  constructor() { super('Hanya dokumen FINAL yang bisa disalin jadi DRAFT — dokumen DRAFT memang sudah bisa disunting.'); this.name = 'PkHanyaFinalDisalinError'; }
+}
+
+/**
+ * Salin SATU dokumen FINAL (header + seluruh lampiran + anggaran) menjadi dokumen DRAFT
+ * baru milik `userId`. Sumbernya tidak disentuh sama sekali — tidak ada kolom yang
+ * ditulis pada baris lama.
+ *
+ * Sengaja memakai `INSERT … SELECT` di dalam satu transaksi, bukan membaca baris ke
+ * aplikasi lalu menulisnya kembali: daftar kolom yang disalin jadi SATU tempat, dan
+ * tidak ada jendela di mana isinya sudah berubah di antara baca dan tulis.
+ *
+ * `status`, `version`, `created_by`, dan berkas Word sengaja TIDAK ikut: salinan lahir
+ * sebagai DRAFT versi 0 tanpa berkas (Word dibuat ulang saat difinalisasi).
+ */
+export async function salinJadiDraft(id: number, userId: number): Promise<number> {
+  return await withTransaction(async ({ tx }) => {
+    const baris = await tx`
+      SELECT status FROM pk_dokumen WHERE id = ${id} FOR UPDATE
+    ` as Array<{ status: 'DRAFT' | 'FINAL' }>;
+    if (!baris.length) throw new PkDokumenTidakAdaError();
+    if (baris[0].status !== 'FINAL') throw new PkHanyaFinalDisalinError();
+
+    const ins = await tx`
+      INSERT INTO pk_dokumen (
+        tahun, tanggal_dokumen, jenis_pk,
+        unit_pertama, nama_pertama, jabatan_pertama, pangkat_pertama, nip_pertama,
+        unit_kedua,   nama_kedua,   jabatan_kedua,   pangkat_kedua,   nip_kedua,
+        status, version, created_by
+      )
+      SELECT
+        tahun, tanggal_dokumen, jenis_pk,
+        unit_pertama, nama_pertama, jabatan_pertama, pangkat_pertama, nip_pertama,
+        unit_kedua,   nama_kedua,   jabatan_kedua,   pangkat_kedua,   nip_kedua,
+        'DRAFT', 0, ${userId}
+      FROM pk_dokumen WHERE id = ${id}
+    ` as unknown as Array<{ insertId?: number }>;
+    const baru = Number(ins[0]?.insertId);
+    if (!baru) throw new Error('Gagal menyalin dokumen PK — insertId kosong');
+
+    await tx`
+      INSERT INTO pk_dokumen_lampiran
+        (dokumen_id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, satuan, urutan)
+      SELECT ${baru}, unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, satuan, urutan
+      FROM pk_dokumen_lampiran WHERE dokumen_id = ${id}
+    `;
+    await tx`
+      INSERT INTO pk_dokumen_anggaran
+        (dokumen_id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, keterangan_sumber, nominal, urutan, auto_filled_from_blud)
+      SELECT ${baru}, unit_kerja, level, program, kegiatan, subkegiatan, uraian, keterangan_sumber, nominal, urutan, auto_filled_from_blud
+      FROM pk_dokumen_anggaran WHERE dokumen_id = ${id}
+    `;
+
+    return baru;
+  });
+}
+
 /**
  * Ganti isi dokumen DRAFT (header + seluruh lampiran/anggaran). Kuncinya ditegakkan oleh
  * UPDATE header, SEBELUM baris lama dihapus — konflik membatalkan seluruh transaksi.

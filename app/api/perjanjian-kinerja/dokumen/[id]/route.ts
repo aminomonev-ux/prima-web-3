@@ -110,11 +110,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (own.status === 'FINAL') {
     // Kalimatnya dulu menyuruh "Hubungi SUPER_ADMIN untuk unlock" — padahal PK
-    // tidak punya endpoint unlock sama sekali. Yang ada cuma hapus dokumen FINAL,
-    // dan itu sudah boleh SUPER_ADMIN maupun ADMIN (lihat DELETE di bawah).
-    // Menjanjikan pintu yang tidak ada membuat orang menunggu bantuan yang tidak
-    // akan pernah datang.
-    return NextResponse.json({ ok: false, message: 'Dokumen sudah FINAL — tidak bisa diedit lagi. Kalau memang perlu disusun ulang, Admin dapat menghapusnya lalu membuat dokumen baru.' }, { status: 409 });
+    // tidak punya endpoint unlock sama sekali. Kini jalan keluarnya nyata: salin
+    // dokumen FINAL jadi DRAFT baru (POST .../salin-draft) dan sunting salinannya;
+    // dokumen FINAL tetap utuh sebagai arsip.
+    return NextResponse.json({ ok: false, code: 'DOKUMEN_FINAL', message: 'Dokumen sudah FINAL — tidak bisa diedit lagi. Gunakan "Salin jadi DRAFT baru" untuk menyunting salinannya; dokumen FINAL tetap utuh sebagai arsip.' }, { status: 409 });
   }
 
   const raw = await req.json().catch(() => null);
