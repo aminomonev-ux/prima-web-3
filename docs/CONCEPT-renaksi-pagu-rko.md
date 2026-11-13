@@ -120,16 +120,30 @@ Untuk tiap **sub kegiatan × sumber dana**, tahun yang sama:
   `test-renaksi-balapan.mts`.
 - **Tahap D** — arah sebaliknya di Renaksi.
 
-## 6. Keputusan yang masih ditunggu
+## 6. Keputusan (putaran 3, 2026-11-14)
 
-1. **Daftar sumber dana Renaksi** diambil dari Master "Sumber Anggaran" E-Anggaran tahun itu (saran §3b),
-   atau daftar tetap seperti PK?
-2. **Pagu Perubahan** dibuka per baris, atau per tahun lewat satu tombol "Mulai Perubahan"? (Saran: **per
-   tahun** — sama seperti Pendapatan, dan Cetak tahu pasti apakah tahun itu sudah berbabak Perubahan.)
-3. **Data lama tanpa sumber**: bila Master tahun itu hanya punya **satu** sumber dana, boleh otomatis
-   ditandai sumber itu? (Saran: ya, lewat tombol yang ditekan manusia sekali — bukan diam-diam saat
-   migrasi.)
-4. **Pembanding**: per sumber dana **dan** total (saran §5), atau total saja dulu?
+1. **Sumber anggaran di Data Entry sub kegiatan Renaksi**, naik ke atas di Cetak, dan **bertaut ke
+   E-Anggaran menu Master Rekening** (daftar "Sumber Anggaran" yang dipilih tiap rekening di menu
+   Rekening). Satu daftar untuk dua modul (§3b). Arah tautannya ditegaskan di §6a.
+2. **Pagu Perubahan dibuka per tahun** — satu tombol "Mulai Perubahan" (saran).
+3. **Data lama tanpa sumber: dibetulkan sendiri** lewat tombol pensil tiap baris di Data Entry. Tidak ada
+   tombol "tandai semua". Sampai dibetulkan, tampil "tanpa sumber" dan tetap ikut total.
+4. **Pembanding** per sumber dana **dan** total, atau total saja — menunggu jawaban sesudah penjelasan
+   (contohnya di §6b).
+
+### 6a. Arah tautan sumber anggaran (menunggu konfirmasi)
+
+Usulan: daftarnya **milik Master Rekening E-Anggaran** (sudah ada, per tahun). Data Entry Renaksi memilih
+dari situ; sumber yang belum ada ditambah di Master Rekening dulu. Alternatifnya kebalikan: diketik di
+Renaksi lalu dibawa ke Master Rekening lewat "Init/Perbarui dari Renaksi" (pola nama program, lencana
+"Renaksi"). Usulan dipilih karena tidak menambah jalur penjalar baru dan ejaan tidak bisa bercabang.
+
+### 6b. Contoh pembanding
+
+Sub kegiatan A di Renaksi: APBD Rp 10 jt + BLUD Rp 5 jt = Rp 15 jt. RKO A: rekening APBD Rp 12 jt +
+rekening BLUD Rp 2 jt = Rp 14 jt.
+- **Total saja:** Rp 14 jt ≤ Rp 15 jt → lolos. APBD yang kelebihan Rp 2 jt tidak ketahuan.
+- **Per sumber + total:** APBD Rp 12 jt > Rp 10 jt → ditahan, "APBD lebih Rp 2 jt"; BLUD lolos.
 
 ## 7. Yang sengaja tidak
 
