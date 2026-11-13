@@ -417,7 +417,7 @@ function AnggaranPanel({
   // Rekap PK). Keterangan BLUD = mengisi; keterangan lain = MENAMBAHKAN BLUD ke isian saat ini.
   const [dialogBlud, setDialogBlud] = useState(false)
   const utama = sumberUtama(keterangan, lainnya)
-  /** BLUD Rp 0 tidak ikut disebut di label — "APBD + BLUD" dengan BLUD nol menyesatkan. */
+  /** BLUD Rp 0 tidak ikut disebut di label — "APBD & BLUD" dengan BLUD nol menyesatkan. */
   const adaBagianBlud = (bagianBlud ?? 0) > 0
   function pakaiNominalBlud(total: number, sumber: string) {
     setDialogBlud(false)
@@ -480,7 +480,7 @@ function AnggaranPanel({
         <Field label="KETERANGAN (Sumber Dana)"
           hint={keterangan === 'BLUD'
             ? 'Klik ✎ di sebelah nominal untuk mengambil dari DPA / Pergeseran BLUD.'
-            : 'Ada bagian BLUD juga? Isi nominal lalu klik ✎ — keterangannya jadi "… + BLUD".'}>
+            : 'Ada bagian BLUD juga? Isi nominal lalu klik ✎ — keterangannya jadi "… & BLUD".'}>
           <select disabled={disabled} value={keterangan}
             onChange={e => { setKeterangan(e.target.value); setAutoFilledFromBlud(false); setBagianBlud(null); setHint('') }} style={inputStyle}>
             {SUMBER_DANA.map(s => <option key={s} value={s}>{s === 'LAINNYA' ? 'LAINNYA (ketik sendiri)' : s}</option>)}
@@ -514,7 +514,7 @@ function AnggaranPanel({
             </button>
           </div>
         </Field>
-        {keterangan !== 'BLUD' && (bagianBlud !== null || keterangan === 'APBD + BLUD') && (
+        {keterangan !== 'BLUD' && (bagianBlud !== null || keterangan === 'APBD & BLUD') && (
           <div style={{ fontSize: 11.5, color: '#B5D4F4', lineHeight: 1.6, padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(24,95,165,.4)' }}>
             {bagianBlud === null ? (
               <>Bagian BLUD: <b>belum diisi</b> — klik ✎ di sebelah nominal.</>

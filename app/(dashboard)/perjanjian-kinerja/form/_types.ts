@@ -56,27 +56,27 @@ export interface PkFormState {
 
 export type TabKey = 'pihak1' | 'pihak2' | 'lampiran'
 
-/** Pilihan Keterangan (Sumber Dana) Anggaran. 'APBD + BLUD' = nominal APBD diketik + bagian BLUD lewat ✎. */
-export const SUMBER_DANA = ['APBD', 'BLUD', 'APBD + BLUD', 'APBN', 'HIBAH', 'LAINNYA'] as const
+/** Pilihan Keterangan (Sumber Dana) Anggaran. 'APBD & BLUD' = nominal APBD diketik + bagian BLUD lewat ✎. */
+export const SUMBER_DANA = ['APBD', 'BLUD', 'APBD & BLUD', 'APBN', 'HIBAH', 'LAINNYA'] as const
 
-/** Panjang teks "Lainnya" — sisa ruang untuk " + BLUD" di kolom keterangan_sumber (50, Zod & DB). */
+/** Panjang teks "Lainnya" — sisa ruang untuk " & BLUD" di kolom keterangan_sumber (50, Zod & DB). */
 export const PANJANG_SUMBER_LAIN = 40
 
 /** Sumber yang nominalnya diketik, dari pilihan dropdown (Lainnya = teks yang diketik). */
 export function sumberUtama(pilihan: string, lainnya: string): string {
-  if (pilihan === 'APBD + BLUD') return 'APBD'
+  if (pilihan === 'APBD & BLUD') return 'APBD'
   if (pilihan === 'LAINNYA') return lainnya.trim()
   return pilihan
 }
 
 /**
  * Keterangan yang tersimpan dan tercetak di Word. Bagian BLUD dari ✎ yang ditambahkan ke sumber lain
- * WAJIB ikut tertulis ("APBD + BLUD"): dulu nominal gabungan tersimpan berlabel "APBD" saja.
+ * WAJIB ikut tertulis ("APBD & BLUD"): dulu nominal gabungan tersimpan berlabel "APBD" saja.
  */
 export function keteranganAnggaran(pilihan: string, lainnya: string, adaBlud: boolean): string {
   if (pilihan === 'BLUD') return 'BLUD'
   const utama = sumberUtama(pilihan, lainnya)
-  return adaBlud ? `${utama} + BLUD` : utama
+  return adaBlud ? `${utama} & BLUD` : utama
 }
 
 /** Nominal yang tersimpan: sumber utama + bagian BLUD (pilihan BLUD = nominalnya sendiri). */
@@ -87,7 +87,7 @@ export function totalAnggaran(pilihan: string, nominal: number, bagianBlud: numb
 /** Alasan Tambah Anggaran ditolak karena keterangan belum lengkap, atau null. */
 export function alasanTolakSumber(pilihan: string, lainnya: string, bagianBlud: number | null): string | null {
   if (pilihan === 'LAINNYA' && !lainnya.trim()) return 'Tulis sumber dananya di kolom "Lainnya".'
-  if (pilihan === 'APBD + BLUD' && bagianBlud === null) return 'Isi bagian BLUD lewat tombol ✎ di sebelah nominal.'
+  if (pilihan === 'APBD & BLUD' && bagianBlud === null) return 'Isi bagian BLUD lewat tombol ✎ di sebelah nominal.'
   return null
 }
 export type SumberDana = typeof SUMBER_DANA[number]
