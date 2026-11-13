@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs'
 import mysql from 'mysql2/promise'
 import { sql, queryOne } from '../lib/data/db'
 import {
-  upsertRencanaAksi, deleteRencanaAksi, getRencanaAksiById, duplicateYear,
+  upsertRencanaAksi, deleteRencanaAksi, getRencanaAksiById, duplicateYear, updateBulanRealisasiBulk,
   RaTahunTujuanBerisiError, RA_TAHUN_ENTITY,
 } from '../lib/data/rencana-aksi'
 import { commitImportRenaksi, type CommitRow } from '../lib/renaksi/import-data'
@@ -143,6 +143,31 @@ try {
   ok('F1 ganti nama kedua dari tab basi ditolak versi (409), bukan membelah entitas',
     ganti2 instanceof Error && ganti2.name === 'RaVersionConflictError', String(ganti2))
   ok('F2 kedua indikator tetap satu nama', namaF.length === 1 && namaF[0].kegiatan === 'KEG F1', JSON.stringify(namaF))
+
+  // ── G. Matriks Bulanan × impor: tidak saling kunci ──────────────────────────────
+  // Simpan massal Matriks Bulanan sengaja PER BARIS (autocommit), bukan satu transaksi: selama menunggu
+  // ia tidak memegang kunci apa pun, jadi tidak bisa saling kunci dengan impor yang memegang banyak baris.
+  // Kalau suatu hari dibungkus satu transaksi, urutan di bawah ini jadi deadlock dan uji ini gagal.
+  console.log('\nG. Matriks Bulanan berbarengan dengan impor')
+  const subBaru = (n: string) => upsertRencanaAksi({ ...dasar, level: 'sub-kegiatan', program: 'PROG R', kegiatan: 'KEG F1', sub_kegiatan: `SUB ${n}`, indikator: `IS ${n}` }, uid)
+  const ga = await subBaru('GA'), gb = await subBaru('GB')
+  const [va, vb] = [Number((await getRencanaAksiById(ga))!.version), Number((await getRencanaAksiById(gb))!.version)]
+  const bulan = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  await k.query('START TRANSACTION')
+  await k.query('UPDATE rencana_aksi SET updated_at = updated_at WHERE id = ?', [gb])
+  const massal = tangkap(() => updateBulanRealisasiBulk([
+    { id: ga, bulan_realisasi: bulan, expected_version: va },
+    { id: gb, bulan_realisasi: bulan, expected_version: vb },
+  ], uid))
+  const tunggu7 = await tungguMenunggu()
+  const lawan = await tangkap(() => k.query('UPDATE rencana_aksi SET updated_at = updated_at WHERE id = ?', [ga]))
+  await k.query('COMMIT')
+  const hm = await massal
+  ok('G1 simpan massal menunggu baris yang dipegang impor', tunggu7)
+  ok('G2 pemegang kunci lain tetap bisa menulis baris yang sudah disimpan massal (tidak saling kunci)',
+    !(lawan instanceof Error), lawan instanceof Error ? lawan.message : '')
+  ok('G3 simpan massal selesai untuk kedua baris', !(hm instanceof Error) && hm.saved === 2,
+    hm instanceof Error ? hm.message : JSON.stringify(hm))
 
   // ── E. sambungan ──────────────────────────────────────────────────────────────
   console.log('\nE. Kunci tahun = perintah pertama tiap jalur')
