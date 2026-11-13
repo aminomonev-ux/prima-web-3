@@ -460,12 +460,12 @@ export default function FormClient({ editId, bolehUbah }: Props) {
               )}
               <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
                 onClick={handleDelete} disabled={deleting || isFinal}
-                data-tooltip={isFinal ? 'Dokumen FINAL — hubungi SUPER_ADMIN' : 'Hapus dokumen / reset form'} data-tooltip-pos="below">
+                data-tooltip={isFinal ? 'Dokumen FINAL dihapus lewat Riwayat (khusus SUPER_ADMIN/ADMIN)' : 'Hapus dokumen / reset form'} data-tooltip-pos="below">
                 {deleting ? 'Menghapus…' : (form.id ? 'Hapus' : 'Reset')}
               </PrimaButton>
               <PrimaButton menulis variant="primary" iconLeft={<Save size={14} />}
                 onClick={handleSave} disabled={saving || isFinal || isLoading}
-                data-tooltip={isFinal ? 'Dokumen sudah FINAL — tidak dapat diedit' : 'Simpan ke server'} data-tooltip-pos="below">
+                data-tooltip={isFinal ? 'Dokumen sudah FINAL — pakai "Salin jadi DRAFT" untuk menyunting salinannya' : 'Simpan ke server'} data-tooltip-pos="below">
                 {saving ? 'Menyimpan…' : 'Simpan'}
               </PrimaButton>
               {form.id && !isFinal && (
