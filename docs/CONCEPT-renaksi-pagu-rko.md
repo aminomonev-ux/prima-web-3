@@ -131,12 +131,47 @@ Untuk tiap **sub kegiatan × sumber dana**, tahun yang sama:
 4. **Pembanding** per sumber dana **dan** total, atau total saja — menunggu jawaban sesudah penjelasan
    (contohnya di §6b).
 
-### 6a. Arah tautan sumber anggaran (menunggu konfirmasi)
+### 6a. Arah tautan sumber anggaran — DIPUTUSKAN (putaran 4)
 
-Usulan: daftarnya **milik Master Rekening E-Anggaran** (sudah ada, per tahun). Data Entry Renaksi memilih
-dari situ; sumber yang belum ada ditambah di Master Rekening dulu. Alternatifnya kebalikan: diketik di
-Renaksi lalu dibawa ke Master Rekening lewat "Init/Perbarui dari Renaksi" (pola nama program, lencana
-"Renaksi"). Usulan dipilih karena tidak menambah jalur penjalar baru dan ejaan tidak bisa bercabang.
+**Renaksi = sumber besar.** Sumber anggaran diisi di Renaksi lalu dibawa ke Master Rekening E-Anggaran
+lewat jalur yang sudah ada untuk nama program/kegiatan/sub ("Init/Perbarui dari Renaksi", lencana
+"Renaksi", `kinerja_master.asal` = RENAKSI, `bandingRenaksi` + `PerbaruiRenaksiModal`). **Isian manual di
+modul lain tetap ada**: sumber anggaran yang diketik sendiri di Master Rekening tetap sah (asal MANUAL),
+sama seperti nama program manual sekarang. Jangan menambah jalur tulis kedua — tipe `sumber_anggaran`
+masuk ke pembanding dan dialog yang sudah ada.
+
+Pilihan sumber di Data Entry Renaksi: daftar sumber yang sudah dipakai Renaksi tahun itu + yang ada di
+Master Rekening, dan boleh mengetik baru (yang baru inilah yang kemudian ditawarkan ke Master Rekening).
+
+### 6c. Naik ke atas mengikuti tautan indikator (putaran 4)
+
+Keadaan sekarang: Cetak memanggil `anggaranRollup` per baris (`CetakPanel.tsx:423`, `cetak-filter.ts:228`)
+dan menjumlah lewat NAMA — kegiatan berindikator dua menampilkan total yang **sama di kedua baris
+indikatornya**. Dengan pagu milik indikator, penjumlahan ikut tautan `induk_indikator_id` (aturan yang
+sama dengan pohon Cetak, `anakMilikIndikator` di `lib/renaksi/rantai.ts`):
+
+- baris anak **tertaut** → pagunya naik ke indikator induknya saja;
+- anak **belum tertaut / tautan usang** dan entitas induknya hanya punya **satu** indikator → ke indikator
+  itu (tidak ambigu);
+- anak belum tertaut dan induknya punya **lebih dari satu** indikator → **tidak dibagi**. Pagunya tetap ikut
+  total entitas, tapi disebut "Rp X belum tertaut ke indikator" — kalau ikut aturan pohon lama (milik semua
+  indikator induk), uangnya terhitung dua kali.
+- Total entitas (Σ semua sub kegiatan di bawahnya) tidak berubah dari sekarang; per sumber juga.
+
+### 6d. Rekening E-Anggaran tanpa indikator (putaran 4, menunggu konfirmasi)
+
+Usulan: **tidak menambah indikator ke menu Rekening.** Pembanding cukup di tingkat **sub kegiatan × sumber
+dana**: Σ pagu indikator Renaksi sub kegiatan itu per sumber ↔ Σ pagu RKO rekening sub kegiatan itu per
+sumber. Alasannya:
+- satu rekening (mis. Belanja Gaji Pokok PNS) melayani semua indikator sub kegiatannya; memaksa memilih
+  satu indikator per rekening = pembagian karangan;
+- GAJI 2026 sudah 15 rekening, semuanya di satu sub kegiatan — menambah kolom indikator ke ratusan rekening
+  adalah pekerjaan isian baru tanpa pembanding yang lebih tajam;
+- "Grand total" RKO per tab adalah jumlah SEMUA sub kegiatan di tab itu. Pembanding per sub kegiatan
+  otomatis juga menjaga grand total; kebalikannya tidak (dua sub kegiatan bisa saling menutupi).
+
+Indikator di Rekening baru berguna kalau kelak dibutuhkan **realisasi anggaran per indikator** — itu
+dibicarakan terpisah.
 
 ### 6b. Contoh pembanding
 
