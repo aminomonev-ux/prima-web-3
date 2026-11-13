@@ -128,15 +128,18 @@ export async function DELETE(req: NextRequest) {
   try {
     const row = await getRencanaAksiById(id);
     if (!row) return NextResponse.json({ ok: false, error: 'Tidak ditemukan' }, { status: 404 });
-    await deleteRencanaAksi(row);
+    // "Lepas tautan & hapus" (§5 tautan-lanjutan): penanda saja, bukan isian — tanpa badan DELETE.
+    const lepasTautan = u.searchParams.get('lepas_tautan') === '1';
+    const { lepas } = await deleteRencanaAksi(row, { lepasTautan });
     await writeAuditLog({
       req,
       eventType: 'RA_DELETE',
       userId: g.session.userId,
       username: g.session.username,
-      detail: `Hapus indikator ${row.tahun}/${row.level}: ${row.indikator}`,
+      detail: `Hapus indikator ${row.tahun}/${row.level}: ${row.indikator}`
+        + (lepas ? ` — melepas tautan indikator induk ${lepas} baris` : ''),
     });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, lepas });
   } catch (e) {
     if (e instanceof RaPeriodLockedError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'PERIOD_LOCKED' }, { status: 400 });
@@ -146,10 +149,13 @@ export async function DELETE(req: NextRequest) {
     if (e instanceof RaPunyaAnakError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'MASIH_PUNYA_ANAK' }, { status: 400 });
     }
-    // Induk indikator yang masih ditunjuk baris lain: pesannya menyebut jumlahnya supaya
-    // orang tahu ada berapa baris yang harus dipilih ulang, bukan sekadar "gagal"..
+    // Induk indikator yang masih ditunjuk baris lain: jumlah + daftar penunjuknya ikut, supaya
+    // layar bisa menyebutnya dan menawarkan "Lepas tautan & hapus".
     if (e instanceof RaTautanAnakError) {
-      return NextResponse.json({ ok: false, error: e.message, code: 'MASIH_DITUNJUK' }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: e.message, code: 'MASIH_DITUNJUK', jumlah: e.jumlah, penunjuk: e.penunjuk },
+        { status: 400 },
+      );
     }
     console.error('[RA DELETE]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });

@@ -922,7 +922,7 @@ export default function TabelEditor({
         + (badan.barisTanganPindah.length ? `\n\n${kalimatBarisTanganPindah(badan.barisTanganPindah.length)}.` : '');
       const ok = await confirmDialog({
         title: `Perbarui dari ${sumber.modul}?`,
-        message: `${kalimatPerbarui(ringkas)}\n\nSumber: ${hasil.ringkas}${peringatan}\n\nKepala tabel, pilihan kolom, dan baris yang disembunyikan tetap seperti sekarang.`,
+        message: `${kalimatPerbarui(ringkas, tautan.sumber)}\n\nSumber: ${hasil.ringkas}${peringatan}\n\nKepala tabel, pilihan kolom, dan baris yang disembunyikan tetap seperti sekarang.`,
         confirmLabel: 'Terapkan',
         variant: 'warning',
       });

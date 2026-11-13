@@ -117,9 +117,9 @@ export function kumpulkanNarasiTertaut(bagian: BagianDok[]): NarasiTertaut[] {
 }
 
 /** Satu kalimat "apa yang berubah" — gabungan semua alasan yang membuat Perbarui akan menulis. */
-export function kalimatKesegaran(p: ReturnType<typeof nilaiPerbarui>): string {
+export function kalimatKesegaran(p: ReturnType<typeof nilaiPerbarui>, sumber?: Tautan['sumber']): string {
   const bagian: string[] = [];
-  const isi = kalimatPerbarui(p.ringkas);
+  const isi = kalimatPerbarui(p.ringkas, sumber);
   if (!p.ringkas.sama) bagian.push(isi);
   if (p.badan.kolomHilang.length) bagian.push(`${p.badan.kolomHilang.length} kolom kehilangan kolom sumbernya`);
   if (p.yatim.length) bagian.push(`${p.yatim.length} isian tangan kehilangan barisnya`);
@@ -136,7 +136,7 @@ export async function periksaKesegaran(daftar: TabelTertaut[], tarik: Penarik): 
       const tarikan = await bersama(t.payload.tautan.sumber, t.payload.tautan.setelan);
       const nilai = nilaiPerbarui(t.payload, tarikan);
       const info = tarikan.info?.length ? { info: tarikan.info } : {};
-      hasil.push(nilai.sama ? { blockId: t.blockId, status: 'sama', ...info } : { blockId: t.blockId, status: 'berubah', ringkas: kalimatKesegaran(nilai), ...info });
+      hasil.push(nilai.sama ? { blockId: t.blockId, status: 'sama', ...info } : { blockId: t.blockId, status: 'berubah', ringkas: kalimatKesegaran(nilai, t.payload.tautan.sumber), ...info });
     } catch (e) {
       hasil.push({ blockId: t.blockId, status: 'gagal', pesan: pesanGagal(e) });
     }

@@ -455,8 +455,21 @@ export function bandingPerbarui(
   return { angkaBerubah, barisBaru, barisHilang, urutanBerubah, sama: urutanSama && angkaBerubah === 0 };
 }
 
-/** Kalimat ringkasan Perbarui — satu fungsi untuk dialog & uji. */
-export function kalimatPerbarui(r: RingkasPerbarui): string {
+/**
+ * Sebab urutan Renaksi Cetak bergeser tanpa angka berubah: tautan indikator induk menaruh kegiatan
+ * di bawah indikator program yang dijabarkannya (konsep tautan-lanjutan §8).
+ */
+export const KALIMAT_URUTAN_RENAKSI =
+  'Urutan baris mengikuti Rencana Aksi (kegiatan kini di bawah indikator program yang dijabarkannya). Angka tidak berubah.';
+
+/** Hanya urutan yang bergeser: tak ada sel berubah, baris baru, maupun baris hilang. */
+export function hanyaUrutan(r: RingkasPerbarui): boolean {
+  return r.urutanBerubah && !r.angkaBerubah && !r.barisBaru.length && !r.barisHilang.length;
+}
+
+/** Kalimat ringkasan Perbarui — satu fungsi untuk dialog, pengingat, & uji. */
+export function kalimatPerbarui(r: RingkasPerbarui, sumber?: Tautan['sumber']): string {
+  if (sumber === 'renaksi-cetak' && hanyaUrutan(r)) return KALIMAT_URUTAN_RENAKSI;
   const bagian: string[] = [];
   if (r.angkaBerubah) bagian.push(`${r.angkaBerubah} sel berubah`);
   if (r.barisBaru.length) bagian.push(`${r.barisBaru.length} baris baru (${r.barisBaru.slice(0, 3).join('; ')}${r.barisBaru.length > 3 ? '; …' : ''})`);

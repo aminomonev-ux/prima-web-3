@@ -5,12 +5,25 @@ export class VersionConflictError extends Error {
   constructor(message: string) { super(message); this.name = 'VersionConflictError'; }
 }
 
+export type PenunjukTautan = { level: RaLevel; nama: string; indikator: string };
+
+/** Hapus ditolak karena baris lain menjadikan indikator ini induknya — layar menawarkan "Lepas tautan & hapus". */
+export class TautanAnakError extends Error {
+  constructor(message: string, public readonly jumlah: number, public readonly penunjuk: PenunjukTautan[]) {
+    super(message); this.name = 'TautanAnakError';
+  }
+}
+
 async function jsonOrThrow<T>(r: Response): Promise<T> {
   let body: { ok?: boolean; error?: string; code?: string; [k: string]: unknown } = {};
   try { body = await r.json(); } catch {/* ignore */}
   if (!r.ok || body.ok === false) {
     if (r.status === 409 && body.code === 'VERSION_CONFLICT') {
       throw new VersionConflictError(body.error || 'Data sudah diubah pengguna lain.');
+    }
+    if (body.code === 'MASIH_DITUNJUK') {
+      throw new TautanAnakError(body.error || 'Indikator masih ditunjuk baris lain.',
+        Number(body.jumlah ?? 0), Array.isArray(body.penunjuk) ? body.penunjuk as PenunjukTautan[] : []);
     }
     throw new Error(body.error || `HTTP ${r.status}`);
   }
@@ -68,9 +81,11 @@ export async function apiUpsert(p: UpsertPayload): Promise<{ id: number; dipakai
   return { id: body.id, dipakai: body.dipakai ?? [], perubahan: body.perubahan ?? null };
 }
 
-export async function apiDelete(id: number): Promise<void> {
-  const r = await fetch(`/api/rencana-aksi?id=${id}`, { method: 'DELETE' });
-  await jsonOrThrow(r);
+/** `lepasTautan`: baris yang menjadikan indikator ini induknya dilepas tautannya di transaksi yang sama. */
+export async function apiDelete(id: number, lepasTautan = false): Promise<{ lepas: number }> {
+  const r = await fetch(`/api/rencana-aksi?id=${id}${lepasTautan ? '&lepas_tautan=1' : ''}`, { method: 'DELETE' });
+  const body = await jsonOrThrow<{ ok: true; lepas?: number }>(r);
+  return { lepas: body.lepas ?? 0 };
 }
 
 export async function apiUpdateQuarter(id: number, quarter: 1 | 2 | 3 | 4, target: number, realisasi: number | null, expected_version: number): Promise<void> {

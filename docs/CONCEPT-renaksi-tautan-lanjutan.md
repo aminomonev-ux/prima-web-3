@@ -1,6 +1,6 @@
 # Konsep — Tautan indikator Renaksi: lanjutan (impor, turunan, IKI, hapus, kunci, LKJIP)
 
-Status: **§2, §3, §4 DIKERJAKAN** (2026-11-13); §5, §6, §8 masih konsep. Keempat pertanyaan dijawab "ya" (2026-11-12).
+Status: **SELESAI** — §2, §3, §4, §5, §6, §8 dikerjakan (2026-11-13). Keempat pertanyaan dijawab "ya" (2026-11-12).
 Dasar: `docs/CONCEPT-renaksi-pilih-indikator.md` (kolom `rencana_aksi.induk_indikator_id`).
 Nomor mengikuti daftar saran 2026-11-12 (nomor 1 & 7 tidak dikerjakan — keputusan pemilik).
 
@@ -147,3 +147,21 @@ Tiap tahap: uji otomatis + uji mutasi + dicoba di peramban tahun kotak pasir, la
   — grup baru belum punya RHK atasan.
 - Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-impor-tautan.mts` (25, kotak pasir 2074) +
   `npx tsx scripts/test-iki-isi-renaksi.mts` bagian F (17); uji mutasi §2/§3 7 tertangkap, §4 6 tertangkap.
+- **§6** — `assertIndukIndikator` kini di dalam transaksi tulis (edit DAN baris baru) dan membaca induk
+  `FOR SHARE`; `deleteRencanaAksi` = satu transaksi yang mengunci barisnya `FOR UPDATE` sebagai perintah
+  pertama, lalu penjaga nama (`assertTidakPunyaAnak` menerima `tx`) dan hitung penunjuk. Uji balapan
+  deterministik B1–B3 (`performance_schema.data_lock_waits`). B3 ditambah sesudah uji mutasi: membaca induk
+  `FOR SHARE` lewat pool (di luar transaksi) tetap lolos B1/B2 — kuncinya lepas seketika, dan hapus yang
+  menyelip di antara baca dan tulis Simpan meninggalkan tautan ke id yang tiada.
+  **Tidak dikerjakan**: dua hapus berbarengan atas dua baris terakhir yang memikul nama entitas yang sama
+  (penjaga nama membaca saudara tanpa kunci) — cacat lama, di luar tautan.
+- **§5** — 400 `MASIH_DITUNJUK` membawa `jumlah` + `penunjuk` (≤ 10: level, nama entitas, indikator).
+  Data Entry menyebut daftarnya di `confirmDialog` danger "Lepas tautan N baris & hapus" →
+  `DELETE ?id=&lepas_tautan=1`: tautan penunjuk jadi NULL (versi naik) lalu baris dihapus, satu transaksi.
+  Kunci Periode & induk terakhir tetap menolak. Audit `RA_DELETE` "… — melepas tautan indikator induk N baris".
+- **§8** — `kalimatPerbarui(r, sumber)`: bila sumbernya Renaksi · Cetak dan yang berubah HANYA urutan
+  (`hanyaUrutan`), dialog Perbarui & pengingat otomatis berbunyi `KALIMAT_URUTAN_RENAKSI`. Hanya kalimat.
+- Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-hapus-tautan.mts` (41, kotak pasir 2072),
+  12 uji mutasi tertangkap. Dicoba di peramban (2045, dihapus sesudahnya): dialog menyebut 2 baris, sesudah
+  "Lepas tautan" indikator terhapus, kedua sub-kegiatan tanpa induk, audit tercatat. Saringan IKI §4 dicoba
+  di 2073: 4 dari 5 pilihan tampil, "Tampilkan semua" → 5.

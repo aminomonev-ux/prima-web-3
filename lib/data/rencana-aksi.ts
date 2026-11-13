@@ -2,7 +2,7 @@
 // CRUD untuk tabel `rencana_aksi`. Single-table flat (lihat migration 032).
 // Optimistic locking via kolom `version` (migration 034): cegah lost-update concurrent edit.
 
-import { sql, queryMany, queryOne, withTransaction, type TxSql } from '@/lib/data/db';
+import { sql, queryMany, queryOne, withTransaction, type Penanya, type TxSql } from '@/lib/data/db';
 import { bulatkanDesimal } from '@/lib/shared/desimal';
 import { acquireBludLock } from '@/lib/data/locks';
 import { rencanaGantiNama, type GantiNama } from '@/lib/renaksi/ganti-nama';
@@ -14,10 +14,16 @@ export class RaIndukIndikatorError extends Error {
   constructor(pesan: string) { super(pesan); this.name = 'RaIndukIndikatorError'; }
 }
 
+/** Baris yang menjadikan indikator yang akan dihapus sebagai induknya (dialog "Lepas tautan & hapus"). */
+export type PenunjukTautan = { level: RaLevel; nama: string; indikator: string };
+
+/** Penunjuk yang disebut di dialog — sisanya cukup jumlahnya. */
+export const BATAS_PENUNJUK = 10;
+
 /** Baris masih dipakai sebagai indikator induk baris lain — menghapusnya meninggalkan tautan hantu. */
 export class RaTautanAnakError extends Error {
-  constructor(jumlah: number) {
-    super(`Tidak bisa dihapus — masih ada ${jumlah} baris yang menjadikan indikator ini induknya. Pilih ulang indikator induk baris itu dulu di Data Entry.`);
+  constructor(public readonly jumlah: number, public readonly penunjuk: PenunjukTautan[] = []) {
+    super(`Tidak bisa dihapus — masih ada ${jumlah} baris yang menjadikan indikator ini induknya. Lepas tautannya lewat "Lepas tautan & hapus", atau pilih ulang indikator induk baris itu di Data Entry.`);
     this.name = 'RaTautanAnakError';
   }
 }
@@ -27,14 +33,17 @@ export class RaTautanAnakError extends Error {
  * dan nama entitasnya cocok dengan kolom induk baris. Tanpa cek ini id sembarang dari klien
  * lolos begitu saja — soft-FK tidak menolak apa pun (L68).
  */
-async function assertIndukIndikator(data: UpsertRencanaAksiInput): Promise<void> {
+async function assertIndukIndikator(tx: TxSql, data: UpsertRencanaAksiInput): Promise<void> {
   if (data.induk_indikator_id == null) return;
   const levelInduk = INDUK_LEVEL[data.level];
   if (!levelInduk) throw new RaIndukIndikatorError('Tujuan tidak punya indikator induk.');
-  const induk = await queryOne<BarisRantai & { tahun: number }>(sql`
+  // FOR SHARE di transaksi tulis yang sama (§6 tautan-lanjutan): hapus induk yang berbarengan
+  // menunggu Simpan ini selesai, atau Simpan ini menunggu hapusnya lalu mendapati induk sudah tiada.
+  const [induk] = await tx`
     SELECT id, level, tahun, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator, induk_indikator_id
     FROM rencana_aksi WHERE id = ${data.induk_indikator_id}
-  `);
+    FOR SHARE
+  ` as Array<BarisRantai & { tahun: number }>;
   if (!induk) {
     throw new RaIndukIndikatorError('Indikator induk yang dipilih tidak ada — mungkin baru dihapus. Muat ulang daftar.');
   }
@@ -448,6 +457,7 @@ export async function upsertRencanaAksi(
     // Baris yang diedit + seluruh turunannya ada di SATU transaksi: ganti nama yang
     // berhenti di tengah meninggalkan keadaan persis yang fitur ini mau cegah.
     await withTransaction(async ({ tx }) => {
+      await assertIndukIndikator(tx, data);
       const res = await tx`
         UPDATE rencana_aksi SET
           kode                 = ${data.kode ?? null},
@@ -491,8 +501,6 @@ export async function upsertRencanaAksi(
     return id;
   };
 
-  await assertIndukIndikator(data);
-
   if (data.id) {
     // L51: CAS via version (bila klien kirim expected_version) + selalu bump version
     // supaya editor kuartal/target yang pegang versi lama ikut terdeteksi konflik.
@@ -514,7 +522,9 @@ export async function upsertRencanaAksi(
 
   // Race SELECT-lalu-INSERT ditutup uk_tahun_level_ind: submit kembar jatuh ke
   // ODKU (update, bukan ER_DUP_ENTRY 500). LAST_INSERT_ID(id) → insertId = id existing.
-  const res = await sql`
+  const res = await withTransaction(async ({ tx }) => {
+    await assertIndukIndikator(tx, data);
+    return tx`
     INSERT INTO rencana_aksi
       (tahun, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
        program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
@@ -556,7 +566,8 @@ export async function upsertRencanaAksi(
       induk_indikator_id   = COALESCE(new.induk_indikator_id, rencana_aksi.induk_indikator_id),
       version              = rencana_aksi.version + 1,
       updated_by           = new.updated_by
-  ` as unknown as Array<{ insertId: number }>;
+  `;
+  }) as Array<{ insertId: number }>;
   return res[0]?.insertId ?? 0;
 }
 
@@ -575,39 +586,39 @@ export async function upsertRencanaAksi(
  * menampung nama entitas SENDIRI untuk tujuan/sasaran/program, dan nama induk
  * untuk kegiatan/sub-kegiatan.
  */
-async function assertTidakPunyaAnak(row: RaRow): Promise<void> {
+async function assertTidakPunyaAnak(q: Penanya, row: RaRow): Promise<void> {
   type Hitung = { sisa: number; anak: number };
-  let hasil: Hitung | null = null;
+  let hasil: Hitung | undefined;
   let labelAnak = '';
 
   if (row.level === 'tujuan' && row.program) {
     labelAnak = 'sasaran';
-    hasil = await queryOne<Hitung>(sql`
+    [hasil] = await q`
       SELECT
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='tujuan'  AND program=${row.program} AND id<>${row.id}) AS sisa,
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='sasaran' AND tujuan=${row.program})                    AS anak
-    `);
+    ` as Hitung[];
   } else if (row.level === 'sasaran' && row.program) {
     labelAnak = 'program';
-    hasil = await queryOne<Hitung>(sql`
+    [hasil] = await q`
       SELECT
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='sasaran' AND program=${row.program} AND id<>${row.id}) AS sisa,
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='program' AND sasaran=${row.program})                   AS anak
-    `);
+    ` as Hitung[];
   } else if (row.level === 'program' && row.program) {
     labelAnak = 'kegiatan';
-    hasil = await queryOne<Hitung>(sql`
+    [hasil] = await q`
       SELECT
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='program'  AND program=${row.program} AND id<>${row.id}) AS sisa,
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='kegiatan' AND program=${row.program})                   AS anak
-    `);
+    ` as Hitung[];
   } else if (row.level === 'kegiatan' && row.kegiatan) {
     labelAnak = 'sub kegiatan';
-    hasil = await queryOne<Hitung>(sql`
+    [hasil] = await q`
       SELECT
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='kegiatan'     AND kegiatan=${row.kegiatan} AND id<>${row.id}) AS sisa,
         (SELECT COUNT(*) FROM rencana_aksi WHERE tahun=${row.tahun} AND level='sub-kegiatan' AND kegiatan=${row.kegiatan})                    AS anak
-    `);
+    ` as Hitung[];
   } else {
     return; // sub-kegiatan = daun, tidak punya anak
   }
@@ -618,30 +629,44 @@ async function assertTidakPunyaAnak(row: RaRow): Promise<void> {
 }
 
 /**
- * Tautan indikator induk menunjuk ID baris. Penjaga nama di atas hanya menolak hapus kalau
- * barisnya yang TERAKHIR memikul nama entitas itu; program ber-4 indikator lolos (`sisa = 3`)
- * padahal kegiatan di bawahnya menunjuk baris yang sedang dihapus. Soft-FK tidak menolak apa pun,
- * jadi tautannya akan menunjuk id yang tak ada — dan layar menampilkan pilihan yang sudah mati.
+ * Menerima baris utuh, bukan id: route sudah membacanya untuk audit log, dan penjaga nama butuh
+ * level + nama entitasnya. Satu transaksi, baris dikunci DULU (§6 tautan-lanjutan, L84): Simpan
+ * yang menautkan ke baris ini (`FOR SHARE`) menunggu, lalu mendapati induknya sudah tiada.
+ *
+ * Tautan indikator induk menunjuk ID baris. Penjaga nama hanya menolak bila barisnya yang TERAKHIR
+ * memikul nama entitas itu; program ber-4 indikator lolos padahal kegiatan di bawahnya menunjuk
+ * baris ini — soft-FK tidak menolak apa pun. Penunjuk itu ditolak (`RaTautanAnakError` membawa
+ * daftarnya), atau dengan `lepasTautan` tautannya dilepas jadi NULL di transaksi yang sama (§5).
+ * Pagar Kunci Periode & induk terakhir tidak bisa ditembus `lepasTautan`.
  */
-async function assertTidakDitunjuk(row: RaRow): Promise<void> {
-  const hasil = await queryOne<{ n: unknown }>(sql`
-    SELECT COUNT(*) AS n FROM rencana_aksi
-    WHERE tahun = ${row.tahun} AND induk_indikator_id = ${row.id}
-  `);
-  const jumlah = Number(hasil?.n ?? 0);
-  if (jumlah > 0) throw new RaTautanAnakError(jumlah);
-}
-
-/** Menerima baris utuh, bukan id: route sudah membacanya untuk audit log, dan
- *  kedua penjaga di bawah butuh level + nama entitasnya — bukan cuma id. */
-export async function deleteRencanaAksi(row: RaRow): Promise<void> {
+export async function deleteRencanaAksi(row: RaRow, opsi: { lepasTautan?: boolean } = {}): Promise<{ lepas: number }> {
   // T2: menghapus baris = menghapus realisasinya. Ini pintu paling telak untuk
   // menembus Kunci Periode — lebih telak dari sekadar mengubah nilai, karena
   // angkanya tidak berubah melainkan hilang.
   await assertPeriodeTerbuka(Number(row.tahun));
-  await assertTidakPunyaAnak(row);
-  await assertTidakDitunjuk(row);
-  await sql`DELETE FROM rencana_aksi WHERE id = ${row.id}`;
+  return withTransaction(async ({ tx }) => {
+    const [ada] = await tx`SELECT id FROM rencana_aksi WHERE id = ${row.id} FOR UPDATE`;
+    if (!ada) return { lepas: 0 };
+    await assertTidakPunyaAnak(tx, row);
+    const penunjuk = await tx`
+      SELECT id, level, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator, induk_indikator_id
+      FROM rencana_aksi WHERE tahun = ${row.tahun} AND induk_indikator_id = ${row.id}
+      ORDER BY FIELD(level, 'tujuan', 'sasaran', 'program', 'kegiatan', 'sub-kegiatan'), indikator
+    ` as BarisRantai[];
+    if (penunjuk.length && !opsi.lepasTautan) {
+      throw new RaTautanAnakError(penunjuk.length, penunjuk.slice(0, BATAS_PENUNJUK).map(p => ({
+        level: p.level, nama: namaEntitas(p), indikator: p.indikator,
+      })));
+    }
+    if (penunjuk.length) {
+      await tx`
+        UPDATE rencana_aksi SET induk_indikator_id = NULL, version = version + 1
+        WHERE tahun = ${row.tahun} AND induk_indikator_id = ${row.id}
+      `;
+    }
+    await tx`DELETE FROM rencana_aksi WHERE id = ${row.id}`;
+    return { lepas: penunjuk.length };
+  });
 }
 
 type SqlResult = { affectedRows?: number };

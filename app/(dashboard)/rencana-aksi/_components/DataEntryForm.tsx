@@ -17,7 +17,7 @@ import { InputNominal } from '@/components/ui/input-nominal';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { usePenanda } from '../_lib/penanda';
 import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
-import { apiUpsert, apiDelete, apiList, VersionConflictError } from '../_lib/api';
+import { apiUpsert, apiDelete, apiList, TautanAnakError, VersionConflictError } from '../_lib/api';
 import { kalimatPemakai } from '@/lib/renaksi/pemakai';
 import { INDUK_LEVEL, namaEntitas, indikatorInduk, entitasAnak, indikatorEntitas, denganNilaiTersimpan } from '@/lib/renaksi/rantai';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
@@ -357,8 +357,31 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const handleDelete = async (row: RaRow) => {
     setBusy(true);
     try {
-      await apiDelete(row.id);
-      notify('Berhasil menghapus entri.', 'warning');
+      let lepas = 0;
+      try {
+        ({ lepas } = await apiDelete(row.id));
+      } catch (err) {
+        if (!(err instanceof TautanAnakError)) throw err;
+        setConfirmDelete(null);
+        // §5 tautan-lanjutan: sebut barisnya, lalu lepas tautan + hapus dalam satu langkah server.
+        const daftar = err.penunjuk.map(p =>
+          `• ${p.level.replace('-', ' ')} ${penanda.nama(p.nama, p.level)} — ${penanda.labelIndikator(p.level, p.indikator)}`).join('\n');
+        const sisa = err.jumlah - err.penunjuk.length;
+        const ok = await confirmDialog({
+          title: 'Indikator ini masih jadi induk',
+          message:
+            `${err.jumlah} baris menjadikan indikator ini indikator induknya:\n\n${daftar}` +
+            (sisa > 0 ? `\n• … dan ${sisa} baris lain` : '') +
+            `\n\nTautan baris itu akan dilepas (indikator induknya jadi kosong, isinya tidak berubah), ` +
+            `lalu indikator ini dihapus. Tautannya bisa dipilih ulang di Data Entry.`,
+          confirmLabel: `Lepas tautan ${err.jumlah} baris & hapus`,
+          cancelLabel: 'Batal',
+          variant: 'danger',
+        });
+        if (!ok) return;
+        ({ lepas } = await apiDelete(row.id, true));
+      }
+      notify(lepas ? `Berhasil menghapus entri — tautan ${lepas} baris dilepas.` : 'Berhasil menghapus entri.', 'warning');
       if (editingId === row.id) resetForm();
       await onReload();
     } catch (err) {
