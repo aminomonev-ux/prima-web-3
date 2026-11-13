@@ -48,7 +48,7 @@ unduh ber-otorisasi, dan `uploaded_files` sebagai dasar otorisasi unduhan.
 | A5 | Hasil unggahan backup tidak tercatat di database | skrip hanya `log('UPLOAD-OK', …)` | tidak ada manifest; restore bergantung "cari-cari di Drive" |
 | A6 | Rotasi berbasis nama berkas | `name contains 'prima-db-'` lalu hapus `slice(retention)` | salinan arsip manual dengan awalan sama bisa ikut terhapus; dua proses bersamaan bisa saling menghapus |
 | A7 | `uploaded_files` tidak menyimpan nama/ukuran | schema: `file_id, uploaded_by, context, sniff_ok, created_at` | daftar berkas tidak bisa ditampilkan tanpa memanggil Drive per baris |
-| A8 | UI usulan menampilkan tautan Drive bila `file_url` mengandung `drive.google.com` | `BuatPanel.tsx:419`, `DetailModal.tsx:231` | berkas baru menyimpan URL proxy (aman); baris lama bisa memuat tautan Drive yang menuntut izin akses. Label "Lihat di Google Drive" menyesatkan — perlu dicek per baris, bukan bug fatal |
+| A8 | UI usulan menampilkan tautan Drive bila `file_url` mengandung `drive.google.com` | `BuatPanel.tsx:419`, `DetailModal.tsx:231` | berkas baru menyimpan URL proxy (aman); baris lama bisa memuat tautan Drive yang menuntut izin akses. Diperiksa 13 Nov 2026 pada `prima_db_3`: **0** baris memuat tautan Drive (§16.1), jadi tidak ada data yang perlu dibersihkan — sisanya soal label |
 | A9 | Kuota akun tidak pernah dibaca | `about.get` tidak dipakai di mana pun | kuota penuh baru ketahuan saat unggahan gagal |
 | A10 | Konfigurasi Drive tidak bisa diaudit | semuanya env | tidak ada jejak siapa mengganti folder & kapan |
 | A11 | Backup hanya MySQL | `mysqldump --databases` | lampiran usulan, bukti BBA, dan docx LKJIP tidak punya salinan kedua |
@@ -425,6 +425,38 @@ Dijalankan SUPER_ADMIN + orang yang memegang konsol Google Cloud.
 Rollback: kembalikan tiga env + folder ID lama. Karena berkas lama tidak disentuh,
 rollback tidak kehilangan data.
 
+### 11.1 Selama akun masih dipegang satu orang (kondisi hari ini)
+
+Yang dipegang perorangan bukan folder-nya, melainkan **refresh token**-nya: token itu
+melekat pada akun Google orang yang membuatnya. Selama orang itu masih di kantor,
+semuanya jalan tanpa keluhan — dan justru karena itu risikonya tidak terasa sampai hari
+serah terima.
+
+Yang **tidak** ikut berubah saat pindah server atau pindah akun:
+
+- Folder dan berkasnya. Alamatnya ditentukan folder ID, dan folder ID tidak berubah
+  karena servernya diganti. Tautan yang dibagikan ke orang lain tetap menunjuk berkas
+  yang sama.
+- Isi arsip lama. Tidak ada yang dipindahkan otomatis; yang baru naik ke folder baru.
+
+Yang **ikut mati** kalau akunnya hilang: unggahan berikutnya (bukan yang sudah ada).
+Gejalanya `invalid_grant`, dan semua modul yang menulis ke Drive berhenti bersamaan.
+
+Karena itu tiga hal ini lebih penting daripada kerapian konfigurasi:
+
+1. **Akun milik institusi, bukan milik orang.** Alamatnya berpola jabatan (mis.
+   `prima.backup@…`), pemulihan (email sekunder + nomor telepon) di bawah kendali IT,
+   dan kata sandinya di tempat yang bisa dibuka atasan langsung — bukan hanya di ponsel
+   satu orang.
+2. **Serah terima = 3 nilai + 1 klik.** Cukup `GOOGLE_OAUTH_CLIENT_ID`,
+   `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN` diganti, folder ID di
+   `app_config` tetap, lalu **Uji** harus hijau. Ini alasan §5.2 memisahkan rahasia (env)
+   dari alamat (database): yang berpindah tangan hanya rahasianya.
+3. **Catat siapa pemegangnya.** Satu baris di `docs/BACKUP-RESTORE.md` (nama, tanggal,
+   di mana kredensial disimpan) sudah cukup untuk membuat serah terima tidak bergantung
+   pada ingatan orang. Kalau pemegangnya pensiun tanpa catatan itu, yang tersisa hanya
+   arsip yang tidak bisa ditambah.
+
 ## 12. Yang diputuskan TIDAK dikerjakan
 
 1. **Tidak menyimpan tautan Drive** di file konfigurasi, database, atau repo. Yang
@@ -535,8 +567,43 @@ Yang belum terverifikasi dan perlu dicek pemilik sebelum Tahap 1 dieksekusi:
 
 1. **Scope token yang sekarang beredar** — tidak bisa dibaca dari repo (melekat pada
    token, bukan pada kode). Menentukan apakah §7.2 langkah 3 bisa diandalkan.
-2. **Apakah ada baris `file_url` lama yang benar-benar berisi tautan
-   `drive.google.com`** — menentukan apakah A8 perlu pembersihan data atau hanya
-   penyesuaian label.
+2. **Apakah ada baris `file_url` lama yang berisi tautan `drive.google.com`** —
+   **sudah diperiksa 13 Nov 2026** pada DB pengembangan `prima_db_3`: 0. Rinciannya di
+   §16.1. DB **produksi belum diperiksa** (tidak terjangkau dari mesin pengembangan);
+   jalankan kueri yang sama di sana sebelum menyimpulkan.
 3. **Apakah `GOOGLE_DRIVE_FOLDER_ID_BACKUP` dan `_BLUD_JSON` sudah terisi di server
    produksi** — menentukan apakah Tahap 2 langsung berguna atau perlu setup akun dulu.
+
+### 16.1 Pemeriksaan tautan Drive di data (13 November 2026)
+
+Dijalankan read-only pada `prima_db_3` (MySQL 8.4.3). Tidak ada baris yang diubah.
+
+| Tabel | Baris | Memuat `drive.google.com` |
+|---|---|---|
+| `usulan_items.file_url` | 6 (6 usulan, 4 header) | 0 — juga 0 URL proxy `/api/upload/download` |
+| `usulan_items.url_merk1..3` | 6 | 0 |
+| `bba_lampiran.url` / `bba_referensi_harga.url` / `bba_penerimaan.url` | 0 / 0 / 0 | 0 |
+| `lkjip_versi.drive_file_id` | 0 | 0 (belum ada arsip Drive) |
+| `blud_riwayat_simpan.drive_file_id` | 44 | 0 (semua belum naik) |
+| `uploaded_files` | 2 | — (menyimpan `file_id`, bukan URL) |
+
+Kueri untuk dijalankan di produksi (ganti `prima_db_3` bila namanya beda):
+
+```sql
+SELECT 'usulan_items.file_url' AS tempat,
+       COUNT(*) AS baris,
+       SUM(file_url LIKE '%drive.google.com%') AS tautan_drive
+  FROM usulan_items
+UNION ALL SELECT 'usulan_items.merk', COUNT(*),
+       SUM(CONCAT_WS(' ', url_merk1, url_merk2, url_merk3) LIKE '%drive.google.com%')
+  FROM usulan_items
+UNION ALL SELECT 'bba_lampiran', COUNT(*), SUM(url LIKE '%drive.google.com%') FROM bba_lampiran
+UNION ALL SELECT 'bba_referensi_harga', COUNT(*), SUM(url LIKE '%drive.google.com%') FROM bba_referensi_harga
+UNION ALL SELECT 'bba_penerimaan', COUNT(*), SUM(url LIKE '%drive.google.com%') FROM bba_penerimaan;
+```
+
+Arti hasilnya: **0** berarti A8 cukup penyesuaian label (tautan lama tidak ada, jadi
+tidak ada yang menuntut izin akses). **>0** berarti ada lampiran yang hanya bisa dibuka
+pemiliknya — perlu diputuskan: dibiarkan (berkasnya toh ada di Drive akun itu) atau
+diunggah ulang lewat `/api/upload` agar pindah ke proxy. Itu keputusan data, bukan
+pekerjaan Tahap 1.
