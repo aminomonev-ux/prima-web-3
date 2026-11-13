@@ -36,6 +36,42 @@ mysqldump prima_db
 4. Tes manual: `node scripts/backup-db.js` → cek file muncul di folder Drive
    dan `scripts/backup-db.log` berisi `UPLOAD-OK`.
 
+## Pemegang akun Drive & tempat kredensial
+
+Backup ini memakai **OAuth2 refresh token** milik satu akun Google (bukan service
+account). Token melekat pada akun pembuatnya, jadi yang menentukan backup tetap jalan
+bukan folder-nya, melainkan akun itu: kalau akunnya hilang atau aksesnya dicabut,
+unggahan **berikutnya** berhenti (di log muncul `RETRY-FAIL`, galatnya `invalid_grant`),
+sementara arsip yang sudah naik tetap utuh dan tautannya tidak berubah.
+
+Isi tabel ini saat setup dan tinjau setiap pergantian pejabat. **Catat lokasinya, jangan
+nilainya** — password, client secret, dan refresh token tidak boleh ditulis di berkas
+ini, di repo, atau di tiket.
+
+| Hal | Isi |
+|---|---|
+| Akun Google pemilik backup | … (pola jabatan, mis. `prima.backup@…` — bukan akun pribadi staf) |
+| Pemegang akun (nama & jabatan) | … |
+| Pemulihan akun (email sekunder, no. HP) | … — di bawah kendali IT, bukan ponsel satu orang |
+| Letak `GOOGLE_OAUTH_*` | … (mis. `.env.local` server + salinan di password manager) |
+| Letak `BACKUP_ENC_PASSWORD` | … (wajib di luar server, lihat Setup poin 2) |
+| Verifikasi terakhir | … (tanggal + hasil `UPLOAD-OK`) |
+
+Aturan serah terima:
+
+1. Kalau **akunnya berganti**: buat folder backup di akun baru, ganti
+   `GOOGLE_DRIVE_FOLDER_ID_BACKUP` + tiga nilai `GOOGLE_OAUTH_*`, jalankan
+   `node scripts/backup-db.js`, pastikan `UPLOAD-OK`, lalu unduh & dekripsi satu berkas.
+   Arsip lama dibiarkan di akun lama sampai retensi habis.
+2. Kalau **akunnya sama, servernya berganti**: cukup tiga nilai `GOOGLE_OAUTH_*` di
+   server baru. Folder ID tidak berubah, jadi tautan dan arsip lama tetap berlaku.
+3. Kalau **pemegangnya pensiun/pindah**: pastikan poin 1 atau 2 sudah dikerjakan
+   **sebelum** akunnya dinonaktifkan. Sesudah akun mati, arsip lama masih bisa dibuka
+   pemilik baru hanya jika aksesnya dibagikan lebih dulu — bukan otomatis.
+
+Rincian konsep dan tombol Uji yang diusulkan: `docs/CONCEPT-drive-terpusat.md` §11
+(prosedur pindah akun) dan §11.1 (akun yang masih dipegang perorangan).
+
 ## Penjadwalan (Windows Task Scheduler, tiap malam)
 
 Buat Basic Task (jalankan sebagai user yang sama dengan PM2, "Run whether user
@@ -95,5 +131,5 @@ mysqlbinlog --stop-datetime="2026-07-02 10:22:00" mysql-bin.000123 | mysql -u ro
 |---|---|---|
 | `FATAL mysqldump exit 1` | path/kredensial salah | cek `MYSQLDUMP_PATH` + `MYSQL_*` |
 | `UPLOAD-FAIL` | internet mati / token OAuth kadaluarsa | file aman di `backups-pending/`, auto-retry run berikutnya |
-| `RETRY-FAIL` berulang | refresh token dicabut | generate ulang `GOOGLE_OAUTH_REFRESH_TOKEN` (OAuth Playground) |
+| `RETRY-FAIL` berulang / `invalid_grant` | refresh token dicabut, akun dinonaktifkan, atau sandinya diganti | generate ulang `GOOGLE_OAUTH_REFRESH_TOKEN` (OAuth Playground) — lihat §"Pemegang akun Drive & tempat kredensial" |
 | Dekripsi gagal saat restore | password salah / file korup | pakai salinan `BACKUP_ENC_PASSWORD` yang benar; coba file backup lain |

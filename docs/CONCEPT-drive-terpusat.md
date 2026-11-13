@@ -48,7 +48,7 @@ unduh ber-otorisasi, dan `uploaded_files` sebagai dasar otorisasi unduhan.
 | A5 | Hasil unggahan backup tidak tercatat di database | skrip hanya `log('UPLOAD-OK', …)` | tidak ada manifest; restore bergantung "cari-cari di Drive" |
 | A6 | Rotasi berbasis nama berkas | `name contains 'prima-db-'` lalu hapus `slice(retention)` | salinan arsip manual dengan awalan sama bisa ikut terhapus; dua proses bersamaan bisa saling menghapus |
 | A7 | `uploaded_files` tidak menyimpan nama/ukuran | schema: `file_id, uploaded_by, context, sniff_ok, created_at` | daftar berkas tidak bisa ditampilkan tanpa memanggil Drive per baris |
-| A8 | UI usulan menampilkan tautan Drive bila `file_url` mengandung `drive.google.com` | `BuatPanel.tsx:419`, `DetailModal.tsx:231` | berkas baru menyimpan URL proxy (aman); baris lama bisa memuat tautan Drive yang menuntut izin akses. Diperiksa 13 Nov 2026 pada `prima_db_3`: **0** baris memuat tautan Drive (§16.1), jadi tidak ada data yang perlu dibersihkan — sisanya soal label |
+| A8 | UI usulan memilih teks label dari isi URL (`file_url.includes('drive.google.com')` → "Lihat di Google Drive") | `BuatPanel.tsx:419`, `DetailModal.tsx:231` | **Dampak hari ini nol**: berkas baru menyimpan URL proxy `/api/upload/download`, dan pemeriksaan 13 Nov 2026 menemukan **0** baris bertautan Drive di `prima_db_3` (§16.1). Jadi ini bukan temuan berisiko, hanya label yang memilih teks dari isi URL. Produksi belum diperiksa |
 | A9 | Kuota akun tidak pernah dibaca | `about.get` tidak dipakai di mana pun | kuota penuh baru ketahuan saat unggahan gagal |
 | A10 | Konfigurasi Drive tidak bisa diaudit | semuanya env | tidak ada jejak siapa mengganti folder & kapan |
 | A11 | Backup hanya MySQL | `mysqldump --databases` | lampiran usulan, bukti BBA, dan docx LKJIP tidak punya salinan kedua |
@@ -452,10 +452,11 @@ Karena itu tiga hal ini lebih penting daripada kerapian konfigurasi:
    `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN` diganti, folder ID di
    `app_config` tetap, lalu **Uji** harus hijau. Ini alasan §5.2 memisahkan rahasia (env)
    dari alamat (database): yang berpindah tangan hanya rahasianya.
-3. **Catat siapa pemegangnya.** Satu baris di `docs/BACKUP-RESTORE.md` (nama, tanggal,
-   di mana kredensial disimpan) sudah cukup untuk membuat serah terima tidak bergantung
-   pada ingatan orang. Kalau pemegangnya pensiun tanpa catatan itu, yang tersisa hanya
-   arsip yang tidak bisa ditambah.
+3. **Catat siapa pemegangnya.** Tabel "Pemegang akun Drive & tempat kredensial" di
+   `docs/BACKUP-RESTORE.md` (akun, pemegang, pemulihan, letak kredensial, tanggal
+   verifikasi terakhir) sudah cukup untuk membuat serah terima tidak bergantung pada
+   ingatan orang. Kalau pemegangnya pensiun tanpa catatan itu, yang tersisa hanya arsip
+   yang tidak bisa ditambah.
 
 ## 12. Yang diputuskan TIDAK dikerjakan
 
@@ -563,16 +564,14 @@ Dari `.env.example` L38–53 (semua dipertahankan; tidak ada yang dihapus):
 | `BACKUP_RETENTION` | `scripts/backup-db.js` | tidak (default 30) |
 | `MYSQLDUMP_PATH` | `scripts/backup-db.js` | tidak (default `mysqldump` di PATH) |
 
-Yang belum terverifikasi dan perlu dicek pemilik sebelum Tahap 1 dieksekusi:
+Status pemeriksaan sebelum Tahap 1:
 
-1. **Scope token yang sekarang beredar** — tidak bisa dibaca dari repo (melekat pada
-   token, bukan pada kode). Menentukan apakah §7.2 langkah 3 bisa diandalkan.
-2. **Apakah ada baris `file_url` lama yang berisi tautan `drive.google.com`** —
-   **sudah diperiksa 13 Nov 2026** pada DB pengembangan `prima_db_3`: 0. Rinciannya di
-   §16.1. DB **produksi belum diperiksa** (tidak terjangkau dari mesin pengembangan);
-   jalankan kueri yang sama di sana sebelum menyimpulkan.
-3. **Apakah `GOOGLE_DRIVE_FOLDER_ID_BACKUP` dan `_BLUD_JSON` sudah terisi di server
-   produksi** — menentukan apakah Tahap 2 langsung berguna atau perlu setup akun dulu.
+| # | Hal | Status | Pengaruhnya |
+|---|---|---|---|
+| 1 | Scope token yang beredar sekarang | **belum** — melekat pada token, tak terbaca dari repo | menentukan apakah §7.2 langkah 3 (cari-atau-buat subfolder) bisa diandalkan |
+| 2 | Baris `file_url` lama bertautan `drive.google.com` | **selesai di dev**, produksi belum — 0 dari 6 baris (§16.1) | A8 tidak berdampak di data yang diperiksa; kueri §16.1 tinggal dijalankan di produksi |
+| 3 | `GOOGLE_DRIVE_FOLDER_ID_BACKUP` & `_BLUD_JSON` terisi di produksi | **belum** | menentukan apakah Tahap 2 langsung berguna atau perlu setup akun dulu |
+| 4 | Pemegang akun Drive & letak kredensial tercatat | **belum** — formulirnya sudah disediakan di `docs/BACKUP-RESTORE.md` §"Pemegang akun Drive & tempat kredensial" | tanpa catatan ini, serah terima bergantung pada ingatan satu orang (§11.1) |
 
 ### 16.1 Pemeriksaan tautan Drive di data (13 November 2026)
 
@@ -602,8 +601,16 @@ UNION ALL SELECT 'bba_referensi_harga', COUNT(*), SUM(url LIKE '%drive.google.co
 UNION ALL SELECT 'bba_penerimaan', COUNT(*), SUM(url LIKE '%drive.google.com%') FROM bba_penerimaan;
 ```
 
-Arti hasilnya: **0** berarti A8 cukup penyesuaian label (tautan lama tidak ada, jadi
-tidak ada yang menuntut izin akses). **>0** berarti ada lampiran yang hanya bisa dibuka
-pemiliknya — perlu diputuskan: dibiarkan (berkasnya toh ada di Drive akun itu) atau
-diunggah ulang lewat `/api/upload` agar pindah ke proxy. Itu keputusan data, bukan
-pekerjaan Tahap 1.
+Arti hasilnya, dipakai apa adanya — jangan dua bahasa untuk satu angka:
+
+- **0** → A8 **tidak berdampak sama sekali**. Tidak ada lampiran yang menuntut izin
+  akses, tidak ada data yang perlu dibersihkan, dan label "Lihat di Google Drive" tidak
+  pernah muncul. Merapikan labelnya boleh, tapi itu kosmetik, bukan perbaikan temuan.
+- **>0** → ada lampiran yang hanya bisa dibuka pemilik akun Drive. Dua pilihan, dan
+  keduanya keputusan data (bukan pekerjaan Tahap 1): dibiarkan karena berkasnya memang
+  ada di akun itu, atau diunggah ulang lewat `/api/upload` supaya pindah ke proxy.
+
+Angka 0 pada tabel di atas berlaku untuk `prima_db_3`. Kalau produksi memberi angka lain,
+yang berubah adalah **kesimpulan A8**, bukan isi §16.1 — perbarui baris A8 di §2.1 dan
+baris 2 pada tabel status di atas pada saat yang sama, supaya dokumen ini tidak memuat
+dua versi kenyataan.
