@@ -130,6 +130,23 @@ cek('C8 subkegiatan 501 karakter tetap DITOLAK (pagarnya tidak dilepas)',
 cek('C9 target 256 karakter tetap ditolak',
   !SasaranBodySchema.safeParse(baris({ target_program: 'x'.repeat(256) })).success)
 
+// ── C2. Mengosongkan setahun hanya bila dinyatakan (L87) ─────────────────────
+cek('C10 larik kosong TANPA kosongkan ditolak (tab lama / galat klien tidak menghapus setahun)',
+  !SasaranBodySchema.safeParse({ tahun: '2026', rows: [] }).success)
+cek('C11 larik kosong + kosongkan:true diterima', SasaranBodySchema.safeParse({ tahun: '2026', rows: [], kosongkan: true }).success)
+cek('C12 kosongkan:false tidak diterima', !SasaranBodySchema.safeParse({ tahun: '2026', rows: [], kosongkan: false }).success)
+{
+  const layar = readFileSync('app/(dashboard)/perjanjian-kinerja/sasaran/sasaran-client.tsx', 'utf8')
+  cek('C13 Simpan bertanya dulu sebelum mengosongkan, lalu mengirim kosongkan',
+    /const kosongkan = survivors\.length === 0\s*if \(kosongkan && !\(await confirmDialog\(/.test(layar)
+    && layar.includes('...(kosongkan ? { kosongkan: true as const } : {}),'))
+  cek('C14 Hapus Terpilih menandai (bisa dibatalkan), tidak membuang baris',
+    layar.includes('r._selected && !!r._deleted !== hapus ? { ...r, _deleted: hapus, _dirty: true, _selected: false } : r')
+    && !/filter\(r => !r\._selected\)/.test(layar))
+  cek('C15 centang hanya untuk pemegang ubah', /\{bolehUbah && \(\s*<th[^>]*>\s*<input type="checkbox" checked=\{allSelected\}/.test(layar))
+  cek('C16 _selected tidak ikut dikirim', !/_selected/.test(layar.slice(layar.indexOf('rows: survivors.map('), layar.indexOf("fetchJson<unknown>('/api/perjanjian-kinerja/sasaran'"))))
+}
+
 // ── D. Kalimat penolakan menyebut tempatnya ──────────────────────────────────
 const tolak = SasaranBodySchema.safeParse(baris({ subkegiatan: 'x'.repeat(501) }))
 cek('D1 issue.path membawa indeks baris + nama kolom',

@@ -122,7 +122,13 @@ export const SasaranBodySchema = z.object({
     satuan_subkegiatan:     SatuanSchema,
     /** Tanpa = MANUAL (tab lama). RENAKSI = dari Import Renaksi / dialog Perbarui. */
     asal:                   z.enum(ASAL_MASTER).optional(),
-  })).min(1, 'Minimal 1 baris').max(200, 'Maks 200 baris per batch'),
+  })).max(200, 'Maks 200 baris per batch'),
+  /** Tabel kosong = MENGHAPUS Master Sasaran setahun. Hanya diterima bila dinyatakan sengaja (L87) —
+   *  larik kosong saja (tab lama, galat klien) tetap ditolak. */
+  kosongkan: z.literal(true).optional(),
+}).refine(b => b.rows.length > 0 || b.kosongkan === true, {
+  message: 'Minimal 1 baris — untuk mengosongkan Master Sasaran setahun, nyatakan lewat tombol Simpan (kosongkan)',
+  path: ['rows'],
 });
 
 /**

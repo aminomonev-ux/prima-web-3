@@ -24,6 +24,8 @@ export interface PkSasaranRow {
   asal?: 'MANUAL' | 'RENAKSI';
   _deleted?: boolean;
   _dirty?: boolean;
+  /** Centang untuk Hapus / Batal Hapus Terpilih — hanya di layar, tidak dikirim. */
+  _selected?: boolean;
 }
 
 export interface PkProgramRow {

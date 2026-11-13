@@ -5,14 +5,15 @@
 // Backend POST = replace-all per tahun (withTransaction DELETE + bulkInsert).
 
 import { useState, useCallback, useMemo } from 'react'
-import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, Sparkles, Eraser } from 'lucide-react'
+import { Plus, Save, RefreshCw, AlertCircle, CheckCircle2, Sparkles, Eraser, Undo2 } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
+import { confirmDialog } from '@/components/ui/ConfirmDialog'
 import { fetchJson } from '@/lib/shared/api'
 import { useAbortableEffect } from '@/lib/shared/hooks'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
 import PrimaButton from '@/components/ui/PrimaButton'
 import SpandukLihat from '@/components/pk/SpandukLihat'
-import { pkInputTable as inputStyle } from '@/lib/shared/pk-styles'
+import { pkInputTable as inputStyle, pkCheckbox as checkboxStyle } from '@/lib/shared/pk-styles'
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkSasaranRow } from '../_utils/pk-types'
 import { rapikanBarisSasaran } from '@/lib/pk/rapikan-nama'
@@ -190,9 +191,35 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, _deleted: !r._deleted, _dirty: true } : r))
   }, [])
 
-  const dirtyCount   = rows.filter(r => r._dirty).length
-  const activeCount  = rows.filter(r => !r._deleted).length
-  const deletedCount = rows.filter(r => r._deleted).length
+  const toggleSelect = useCallback((idx: number) => {
+    setRows(prev => prev.map((r, i) => i === idx ? { ...r, _selected: !r._selected } : r))
+  }, [])
+  const toggleSelectAll = useCallback(() => {
+    setRows(prev => {
+      const semua = prev.length > 0 && prev.every(r => r._selected)
+      return prev.map(r => ({ ...r, _selected: !semua }))
+    })
+  }, [])
+
+  const dirtyCount    = rows.filter(r => r._dirty).length
+  const activeCount   = rows.filter(r => !r._deleted).length
+  const deletedCount  = rows.filter(r => r._deleted).length
+  const pilihHapus    = rows.filter(r => r._selected && !r._deleted).length
+  const pilihBatal    = rows.filter(r => r._selected && r._deleted).length
+  const allSelected   = rows.length > 0 && rows.every(r => r._selected)
+
+  /** Sama dengan ikon hapus per baris: ditandai, terhapus saat Simpan, bisa dibatalkan sebelumnya. */
+  async function tandaiTerpilih(hapus: boolean) {
+    const n = hapus ? pilihHapus : pilihBatal
+    if (n === 0) return
+    if (hapus && !(await confirmDialog({
+      title: `Hapus ${n} baris terpilih?`,
+      message: `${n} baris ditandai hapus dan baru terhapus setelah Anda klik Simpan. Sebelum itu masih bisa dibatalkan.`,
+      confirmLabel: `Tandai hapus ${n} baris`, variant: 'danger',
+    }))) return
+    setRows(prev => prev.map(r => r._selected && !!r._deleted !== hapus ? { ...r, _deleted: hapus, _dirty: true, _selected: false } : r))
+    showToast('ok', hapus ? `${n} baris ditandai hapus. Klik Simpan untuk menghapusnya dari database.` : `${n} baris batal dihapus.`)
+  }
 
   async function handleSave() {
     // Validate: program wajib untuk semua row non-deleted
@@ -206,16 +233,18 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
       showToast('err', 'Tidak ada data untuk disimpan. Tambah baris dulu.')
       return
     }
+    // Semua baris ditandai hapus = mengosongkan Master Sasaran setahun. Server hanya menerimanya
+    // bila dinyatakan (`kosongkan`, L87), jadi ditanyakan dulu di sini.
+    const kosongkan = survivors.length === 0
+    if (kosongkan && !(await confirmDialog({
+      title: `Kosongkan Master Sasaran ${tahun}?`,
+      message: `Semua ${rows.length} baris Master Sasaran tahun ${tahun} akan dihapus dari database. Dokumen PK yang sudah dibuat tidak ikut berubah.`,
+      confirmLabel: 'Ya, kosongkan', variant: 'danger',
+    }))) return
     setSaving(true)
-    // Backend Zod min 1 row — kalau survivors kosong (semua row di-delete), kirim 1 dummy yg invalid? No.
-    // Untuk MVP: kalau survivors kosong, tampilkan err (user harus hapus manual atau backend perlu support "clear all").
-    if (survivors.length === 0) {
-      showToast('err', 'Minimal 1 baris harus tersisa. Untuk hapus semua, hubungi admin.')
-      setSaving(false)
-      return
-    }
     const payload = {
       tahun,
+      ...(kosongkan ? { kosongkan: true as const } : {}),
       rows: survivors.map(r => ({
         program:               r.program.trim(),
         indikator_program:     r.indikator_program ?? null,
@@ -238,7 +267,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
     })
     setSaving(false)
     if (d.ok) {
-      showToast('ok', `Tersimpan: ${survivors.length} baris untuk tahun ${tahun}`)
+      showToast('ok', kosongkan ? `Master Sasaran tahun ${tahun} dikosongkan.` : `Tersimpan: ${survivors.length} baris untuk tahun ${tahun}`)
       setReloadKey(k => k + 1)
     } else {
       showToast('err', d.message)
@@ -298,6 +327,18 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
                 data-tooltip-pos="below">
                 Tambah Baris
               </PrimaButton>
+              {pilihHapus > 0 && (
+                <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
+                  onClick={() => tandaiTerpilih(true)} disabled={loading || saving}>
+                  Hapus Terpilih ({pilihHapus})
+                </PrimaButton>
+              )}
+              {pilihBatal > 0 && (
+                <PrimaButton variant="ghost" iconLeft={<Undo2 size={14} />}
+                  onClick={() => tandaiTerpilih(false)} disabled={loading || saving}>
+                  Batal Hapus ({pilihBatal})
+                </PrimaButton>
+              )}
               <PrimaButton menulis
                 variant="primary"
                 iconLeft={<Save size={14} />}
@@ -349,6 +390,12 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1840, fontSize: 12.5 }}>
               <thead>
                 <tr style={{ background: 'rgba(12,68,124,.5)' }}>
+                  {bolehUbah && (
+                    <th style={{ ...th(36), textAlign: 'center' }}>
+                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAll}
+                        aria-label="Pilih semua baris" style={checkboxStyle} />
+                    </th>
+                  )}
                   <th style={th(40)}>#</th>
                   {COLS.map(c => (
                     <th key={c.key as string} style={th(c.minWidth)}>{c.label}</th>
@@ -359,7 +406,7 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
               <tbody>
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={COLS.length + 2} style={{
+                    <td colSpan={COLS.length + (bolehUbah ? 3 : 2)} style={{
                       padding: '40px 16px', textAlign: 'center',
                       color: '#85B7EB', fontSize: 13,
                     }}>
@@ -369,10 +416,16 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
                 )}
                 {rows.map((r, idx) => (
                   <tr key={idx} style={{
-                    background: r._deleted ? 'rgba(226,75,74,.08)' : (idx % 2 === 0 ? 'transparent' : 'rgba(12,68,124,.15)'),
+                    background: r._selected ? 'rgba(239,159,39,.10)' : r._deleted ? 'rgba(226,75,74,.08)' : (idx % 2 === 0 ? 'transparent' : 'rgba(12,68,124,.15)'),
                     opacity: r._deleted ? 0.5 : 1,
                     transition: 'all .15s',
                   }}>
+                    {bolehUbah && (
+                      <td style={tdAction}>
+                        <input type="checkbox" checked={!!r._selected} onChange={() => toggleSelect(idx)}
+                          aria-label={`Pilih baris ${idx + 1}`} style={checkboxStyle} />
+                      </td>
+                    )}
                     <td style={tdNum}>{idx + 1}{r.asal === 'RENAKSI' && <><br /><LencanaRenaksi tahun={tahun} /></>}</td>
                     {COLS.map(c => (
                       <td key={c.key as string} style={td}>
@@ -409,7 +462,8 @@ export default function SasaranClient({ bolehUbah }: { bolehUbah: boolean }) {
       {bolehUbah && (
         <p style={{ fontSize: 11, color: '#85B7EB', marginTop: 10, lineHeight: 1.6 }}>
           💡 Pola simpan: <strong>replace-all per tahun</strong> — semua baris untuk tahun {tahun} akan ditimpa dengan
-          data yang Anda lihat sekarang. Tandai baris untuk dihapus (ikon merah) lalu klik Simpan.
+          data yang Anda lihat sekarang. Tandai baris untuk dihapus (ikon merah, atau centang beberapa lalu
+          Hapus Terpilih) lalu klik Simpan. Bila semua baris ditandai hapus, Simpan menanyakan dulu sebelum mengosongkan tahun ini.
         </p>
       )}
 
