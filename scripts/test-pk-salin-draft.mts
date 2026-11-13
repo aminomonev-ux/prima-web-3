@@ -43,10 +43,15 @@ const FORM = kode('app/(dashboard)/perjanjian-kinerja/form/form-client.tsx')
 const RIWAYAT = kode('app/(dashboard)/perjanjian-kinerja/riwayat/riwayat-client.tsx')
 const SALIN = kode('app/(dashboard)/perjanjian-kinerja/_utils/salin-draft.ts')
 
-cek('A1 salinan memakai INSERT…SELECT (satu tempat daftar kolom, tanpa jendela baca-tulis)',
-  ['INSERT INTO pk_dokumen_lampiran', 'FROM pk_dokumen_lampiran WHERE dokumen_id = ${id}',
-    'INSERT INTO pk_dokumen_anggaran', 'FROM pk_dokumen_anggaran WHERE dokumen_id = ${id}']
-    .every(s => PK.includes(s)))
+{
+  const badan = PK.slice(PK.indexOf('export async function salinJadiDraft'), PK.indexOf('export async function gantiIsiDokumen'))
+  cek('A1 isi salinan ditulis lewat tulisIsiDokumen (L69 — satu penulis lampiran/anggaran)',
+    badan.includes('await tulisIsiDokumen(conn, baru, {'))
+  cek('A1b tidak ada penulis lampiran/anggaran kedua berdaftar kolom sendiri',
+    !/INSERT INTO pk_dokumen_(lampiran|anggaran)/.test(PK))
+  cek('A1c target lama "765 Orang" dipisah hanya bila satuannya kosong',
+    badan.includes('const pisah = l.satuan ? null : pisahTargetSatuan(l.target);'))
+}
 cek('A2 salinan ditulis sebagai DRAFT versi 0 milik penyunting', PK.includes("'DRAFT', 0, ${userId}"))
 cek('A3 berkas Word TIDAK ikut disalin', !/INSERT INTO pk_dokumen \([\s\S]*generated_file[\s\S]*?SELECT/.test(PK.slice(PK.indexOf('salinJadiDraft'))))
 cek('A4 hanya FINAL yang boleh disalin', PK.includes("if (baris[0].status !== 'FINAL') throw new PkHanyaFinalDisalinError();"))
@@ -96,8 +101,9 @@ if (c) {
       await k.query(`INSERT INTO pk_dokumen_lampiran
         (dokumen_id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, satuan, urutan)
         VALUES (?, 'UJI SALIN Unit', 'program', 'Program A', NULL, NULL, 'Sasaran A', 'Indikator A', '100', '%', 0),
-               (?, 'UJI SALIN Unit', 'subkegiatan', 'Program A', 'Kegiatan A', 'Sub A', 'Sasaran B', 'Indikator B', '20', 'Orang', 1)`,
-        [sumber, sumber])
+               (?, 'UJI SALIN Unit', 'subkegiatan', 'Program A', 'Kegiatan A', 'Sub A', 'Sasaran B', 'Indikator B', '20', 'Orang', 1),
+               (?, 'UJI SALIN Unit', 'program', 'Program A ***', NULL, NULL, 'Sasaran C', 'Indikator C', '765 Orang', NULL, 2)`,
+        [sumber, sumber, sumber])
       await k.query(`INSERT INTO pk_dokumen_anggaran
         (dokumen_id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, keterangan_sumber, nominal, urutan, auto_filled_from_blud)
         VALUES (?, 'UJI SALIN Unit', 'program', 'Program A', NULL, NULL, 'Program A', 'BLUD', 1500000, 0, 0)`,
@@ -127,8 +133,12 @@ if (c) {
       ].join('|'))
       sama('B7 jumlah lampiran sama', salinan.lampiran, asal.lampiran)
       sama('B8 jumlah anggaran sama', salinan.anggaran, asal.anggaran)
-      const [isisalin] = await k.query('SELECT uraian, target FROM pk_dokumen_lampiran WHERE dokumen_id = ? ORDER BY urutan', [baru]) as [Array<{ uraian: string; target: string }>, unknown]
-      sama('B9 isi lampiran benar-benar tersalin', isisalin.map(x => `${x.uraian}:${x.target}`).join('|'), 'Sasaran A:100|Sasaran B:20')
+      const [isisalin] = await k.query('SELECT uraian, program, target, satuan FROM pk_dokumen_lampiran WHERE dokumen_id = ? ORDER BY urutan', [baru]) as [Array<{ uraian: string; program: string; target: string; satuan: string | null }>, unknown]
+      sama('B9 isi lampiran tersalin; target lama "765 Orang" dipisah, satuan yang sudah ada tidak disentuh',
+        isisalin.map(x => `${x.uraian}:${x.target}:${x.satuan}`).join('|'), 'Sasaran A:100:%|Sasaran B:20:Orang|Sasaran C:765:Orang')
+      sama('B9b penanda matriks dibuang seperti simpanan biasa (tulisIsiDokumen)', isisalin[2]?.program, 'Program A')
+      const [[ang]] = await k.query('SELECT keterangan_sumber, nominal, auto_filled_from_blud FROM pk_dokumen_anggaran WHERE dokumen_id = ?', [baru]) as [Array<Record<string, unknown>>, unknown]
+      sama('B9c anggaran tersalin utuh', `${ang.keterangan_sumber}:${Number(ang.nominal)}:${Number(ang.auto_filled_from_blud)}`, 'BLUD:1500000:0')
 
       const sesudah = await isiSumber(sumber)
       sama('B10 dokumen FINAL sumber tetap FINAL', sesudah.h.status, 'FINAL')

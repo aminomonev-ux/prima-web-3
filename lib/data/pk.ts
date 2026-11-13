@@ -7,6 +7,7 @@
 import { sql, queryMany, queryOne, withTransaction, bulkInsert } from '@/lib/data/db';
 import type { PoolConnection } from 'mysql2/promise';
 import { rapikanIndikatorAtauNull, rapikanNamaAtauNull, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
+import { pisahTargetSatuan } from '@/lib/shared/target-renaksi';
 import { PESAN_VERSI_PK, type DokumenCreateBody, type DokumenUpdateBody } from './pk-schemas';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -176,13 +177,13 @@ export class PkHanyaFinalDisalinError extends Error {
 /**
  * Salin satu dokumen FINAL (header + lampiran + anggaran) jadi DRAFT baru milik `userId`.
  *
- * `INSERT … SELECT` di dalam transaksi: daftar kolom yang disalin hanya ada di satu tempat,
- * dan tidak ada jendela antara baca dan tulis. Sumber tidak pernah ditulis.
+ * Header lewat `INSERT … SELECT`, isi lewat `tulisIsiDokumen`, semuanya sesudah sumber dikunci
+ * `FOR UPDATE` di transaksi yang sama. Sumber tidak pernah ditulis.
  * `status`/`version`/`created_by`/berkas Word sengaja tidak ikut — salinan lahir sebagai
  * DRAFT versi 0 tanpa Word (dibuat ulang saat difinalisasi).
  */
 export async function salinJadiDraft(id: number, userId: number): Promise<number> {
-  return await withTransaction(async ({ tx }) => {
+  return await withTransaction(async ({ tx, conn }) => {
     const baris = await tx`
       SELECT status FROM pk_dokumen WHERE id = ${id} FOR UPDATE
     ` as Array<{ status: 'DRAFT' | 'FINAL' }>;
@@ -206,18 +207,24 @@ export async function salinJadiDraft(id: number, userId: number): Promise<number
     const baru = Number(ins[0]?.insertId);
     if (!baru) throw new Error('Gagal menyalin dokumen PK — insertId kosong');
 
-    await tx`
-      INSERT INTO pk_dokumen_lampiran
-        (dokumen_id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, satuan, urutan)
-      SELECT ${baru}, unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, satuan, urutan
-      FROM pk_dokumen_lampiran WHERE dokumen_id = ${id}
-    `;
-    await tx`
-      INSERT INTO pk_dokumen_anggaran
-        (dokumen_id, unit_kerja, level, program, kegiatan, subkegiatan, uraian, keterangan_sumber, nominal, urutan, auto_filled_from_blud)
-      SELECT ${baru}, unit_kerja, level, program, kegiatan, subkegiatan, uraian, keterangan_sumber, nominal, urutan, auto_filled_from_blud
-      FROM pk_dokumen_anggaran WHERE dokumen_id = ${id}
-    `;
+    // Isi lewat `tulisIsiDokumen` (L69 — satu penulis lampiran/anggaran), bukan INSERT…SELECT
+    // berdaftar kolom sendiri. Salinan = DRAFT, jadi bentuknya bentuk DRAFT sesudah
+    // migration-pk-satuan langkah 4: target "765 Orang" dokumen FINAL lama dipisah.
+    const lampiran = await tx`
+      SELECT unit_kerja, level, program, kegiatan, subkegiatan, uraian, indikator, target, satuan, urutan
+      FROM pk_dokumen_lampiran WHERE dokumen_id = ${id} ORDER BY urutan, id
+    ` as DokumenCreateBody['lampiran'];
+    const anggaran = await tx`
+      SELECT unit_kerja, level, program, kegiatan, subkegiatan, uraian, keterangan_sumber, nominal, urutan, auto_filled_from_blud
+      FROM pk_dokumen_anggaran WHERE dokumen_id = ${id} ORDER BY urutan, id
+    ` as DokumenCreateBody['anggaran'];
+    await tulisIsiDokumen(conn, baru, {
+      lampiran: lampiran.map(l => {
+        const pisah = l.satuan ? null : pisahTargetSatuan(l.target);
+        return pisah ? { ...l, ...pisah } : l;
+      }),
+      anggaran,
+    });
 
     return baru;
   });

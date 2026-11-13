@@ -29,7 +29,8 @@ Alasan:
 
 **Data (`lib/data/pk.ts` → `salinJadiDraft(id, userId)`)**
 
-Satu transaksi, tiga `INSERT … SELECT`:
+Satu transaksi: header lewat `INSERT … SELECT`, lampiran & anggaran dibaca lalu ditulis lewat
+`tulisIsiDokumen` — penulis yang sama dengan Simpan (POST/PATCH):
 
 | Tabel | Yang disalin | Yang TIDAK disalin |
 |---|---|---|
@@ -37,8 +38,13 @@ Satu transaksi, tiga `INSERT … SELECT`:
 | `pk_dokumen_lampiran` | semua kolom isi + `urutan` | — |
 | `pk_dokumen_anggaran` | semua kolom isi + `urutan` + `auto_filled_from_blud` | — |
 
-`INSERT … SELECT` (bukan baca-ke-aplikasi-lalu-tulis) dipilih supaya daftar kolom yang disalin
-tinggal di satu tempat dan tidak ada jendela antara baca dan tulis.
+**Susulan audit 2026-11-14.** Rancangan awal memakai `INSERT … SELECT` juga untuk lampiran &
+anggaran, dengan daftar kolom sendiri. Itu penulis kedua di samping `tulisIsiDokumen` (L69): kolom
+yang kelak ditambah di sana hilang diam-diam dari salinan. Lewat `tulisIsiDokumen` salinan juga
+mendapat bentuk DRAFT yang berlaku: penanda matriks dibuang, dan target dokumen FINAL lama yang
+satuannya masih menempel ("765 Orang", satuan kosong — `migration-pk-satuan.sql` langkah 4 sengaja
+tidak menyentuh FINAL) dipisah lewat `pisahTargetSatuan`. Satuan yang sudah terisi tidak disentuh.
+Tidak ada jendela baca-tulis: sumber sudah dikunci `FOR UPDATE` sebelum isinya dibaca.
 
 Baris sumber dibaca `FOR UPDATE` dan diperiksa statusnya: hanya `FINAL` yang bisa disalin
 (`PkHanyaFinalDisalinError`); id yang tidak ada → `PkDokumenTidakAdaError`. Dokumen sumber tidak
