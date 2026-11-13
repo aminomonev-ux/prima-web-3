@@ -16,7 +16,9 @@ import { pkMono as mono } from '@/lib/shared/pk-styles'
 import type { PkProgramHierarchy, PkSasaranRow, PkLevel, PkUnitKerja } from '../../_utils/pk-types'
 import { fmtRp } from '../../_utils/pk-format'
 import type { PkFormState, LampiranRow, AnggaranRow } from '../_types'
-import { genRowId, SUMBER_DANA } from '../_types'
+import {
+  genRowId, SUMBER_DANA, PANJANG_SUMBER_LAIN, sumberUtama, keteranganAnggaran, totalAnggaran, alasanTolakSumber,
+} from '../_types'
 import { pilihanSasaran, sidikLampiran, sisipLampiran } from '@/lib/pk/pilihan-sasaran'
 import { gabungTargetSatuan } from '@/lib/shared/target-renaksi'
 import {
@@ -337,7 +339,11 @@ function AnggaranPanel({
   const [kegiatanPick, setKegiatanPick] = useState('')
   const [subkegPick, setSubkegPick] = useState('')
   const [keterangan, setKeterangan] = useState<string>('BLUD')
+  /** Teks sumber dana saat Keterangan = LAINNYA. */
+  const [lainnya, setLainnya] = useState('')
   const [nominal, setNominal] = useState<number>(0)
+  /** Bagian BLUD dari ✎ untuk sumber selain BLUD — disimpan terpisah supaya rinciannya terlihat & nominal sumber utama tetap bisa diubah. */
+  const [bagianBlud, setBagianBlud] = useState<number | null>(null)
   const [autoFilledFromBlud, setAutoFilledFromBlud] = useState(false)
   const [hint, setHint] = useState<string>('')
 
@@ -358,7 +364,9 @@ function AnggaranPanel({
     setKegiatanPick('')
     setSubkegPick('')
     setKeterangan('BLUD')
+    setLainnya('')
     setNominal(0)
+    setBagianBlud(null)
     setAutoFilledFromBlud(false)
     setHint('')
   }
@@ -376,7 +384,7 @@ function AnggaranPanel({
     if (showKegiatan && !kegiatanPick) return 'Pilih Kegiatan dulu.'
     if (showSubkeg && !subkegPick) return 'Pilih Sub Kegiatan dulu.'
     if (!keterangan) return 'Pilih Keterangan dulu.'
-    return null
+    return alasanTolakSumber(keterangan, lainnya, bagianBlud)
   }
 
   function handleAdd() {
@@ -391,10 +399,11 @@ function AnggaranPanel({
       kegiatan: kegiatanPick || null,
       subkegiatan: subkegPick || null,
       uraian,
-      keterangan_sumber: keterangan,
-      nominal: Math.max(0, Number(nominal) || 0),
+      keterangan_sumber: keteranganAnggaran(keterangan, lainnya, adaBagianBlud),
+      nominal: Math.max(0, totalAnggaran(keterangan, Number(nominal) || 0, bagianBlud)),
       urutan: form.anggaran.length,
-      auto_filled_from_blud: autoFilledFromBlud,
+      // Tanda BLUD-auto = labelnya menyebut BLUD (lib/pk/sumber-dana.ts membaca pasangan ini untuk baris lama).
+      auto_filled_from_blud: keterangan === 'BLUD' ? autoFilledFromBlud : adaBagianBlud,
     }
     setForm(f => ({ ...f, anggaran: [...f.anggaran, newRow] }))
     resetForm()
@@ -407,13 +416,23 @@ function AnggaranPanel({
   // Tombol pensil membuka dialog pilih DPA/Pergeseran + versi (dihitung langsung, bukan foto
   // Rekap PK). Keterangan BLUD = mengisi; keterangan lain = MENAMBAHKAN BLUD ke isian saat ini.
   const [dialogBlud, setDialogBlud] = useState(false)
+  const utama = sumberUtama(keterangan, lainnya)
+  /** BLUD Rp 0 tidak ikut disebut di label — "APBD + BLUD" dengan BLUD nol menyesatkan. */
+  const adaBagianBlud = (bagianBlud ?? 0) > 0
   function pakaiNominalBlud(total: number, sumber: string) {
     setDialogBlud(false)
-    setNominal(total)
     setAutoFilledFromBlud(true)
-    setHint(keterangan === 'BLUD'
-      ? `BLUD: ${fmtRp(total)} (${sumber})`
-      : `BLUD ditambahkan → Total: ${fmtRp(total)} (${sumber})`)
+    if (keterangan === 'BLUD') {
+      setNominal(total)
+      setHint(`BLUD: ${fmtRp(total)} (${sumber})`)
+      return
+    }
+    // Dialog menjumlah nominal sumber utama + BLUD; yang disimpan terpisah hanya bagian BLUD-nya.
+    const bagian = total - (Number(nominal) || 0)
+    setBagianBlud(bagian)
+    setHint(bagian > 0
+      ? `BLUD ${fmtRp(bagian)} ditambahkan (${sumber}) — keterangan jadi "${keteranganAnggaran(keterangan, lainnya, true)}".`
+      : `BLUD unit ini di ${sumber} Rp 0 — keterangan tetap "${keteranganAnggaran(keterangan, lainnya, false) || 'Lainnya'}".`)
   }
 
   const activeRows = form.anggaran.filter(r => !r._deleted)
@@ -458,13 +477,23 @@ function AnggaranPanel({
           </Field>
         )}
 
-        <Field label="KETERANGAN (Sumber Dana)">
-          <select disabled={disabled} value={keterangan} onChange={e => { setKeterangan(e.target.value); setAutoFilledFromBlud(false) }} style={inputStyle}>
-            {SUMBER_DANA.map(s => <option key={s} value={s}>{s}</option>)}
+        <Field label="KETERANGAN (Sumber Dana)"
+          hint={keterangan === 'BLUD'
+            ? 'Klik ✎ di sebelah nominal untuk mengambil dari DPA / Pergeseran BLUD.'
+            : 'Ada bagian BLUD juga? Isi nominal lalu klik ✎ — keterangannya jadi "… + BLUD".'}>
+          <select disabled={disabled} value={keterangan}
+            onChange={e => { setKeterangan(e.target.value); setAutoFilledFromBlud(false); setBagianBlud(null); setHint('') }} style={inputStyle}>
+            {SUMBER_DANA.map(s => <option key={s} value={s}>{s === 'LAINNYA' ? 'LAINNYA (ketik sendiri)' : s}</option>)}
           </select>
         </Field>
+        {keterangan === 'LAINNYA' && (
+          <Field label="SUMBER DANA LAINNYA">
+            <input type="text" disabled={disabled} value={lainnya} maxLength={PANJANG_SUMBER_LAIN}
+              onChange={e => setLainnya(e.target.value)} placeholder="mis. DAK, CSR, Swadaya" style={inputStyle} />
+          </Field>
+        )}
 
-        <Field label="NOMINAL (Rp)">
+        <Field label={keterangan === 'BLUD' ? 'NOMINAL (Rp)' : `NOMINAL ${utama || 'LAINNYA'} (Rp)`}>
           <div style={{ display: 'flex', gap: 6 }}>
             <input type="text" inputMode="numeric" disabled={disabled}
               value={nominal > 0 ? nominal.toLocaleString('id-ID') : ''}
@@ -472,21 +501,38 @@ function AnggaranPanel({
                 // Strip semua non-digit → parse → format id-ID di-handle via value above
                 const digits = e.target.value.replace(/\D/g, '')
                 setNominal(digits ? Number(digits) : 0)
-                setAutoFilledFromBlud(false)
+                // Bagian BLUD sumber lain disimpan terpisah — mengetik nominal sumber utama tidak membuangnya.
+                if (keterangan === 'BLUD') setAutoFilledFromBlud(false)
               }}
               placeholder="0"
               style={{ ...inputStyle, flex: 1, fontFamily: 'JetBrains Mono, ui-monospace, monospace', textAlign: 'right' }} />
             <button onClick={() => { setHint(''); setDialogBlud(true) }} disabled={disabled || !form.unit_pertama}
-              data-tooltip={keterangan === 'BLUD' ? 'Ambil nominal dari DPA / Pergeseran BLUD' : `Tambah BLUD ke nominal "${keterangan}" saat ini`}
+              data-tooltip={keterangan === 'BLUD' ? 'Ambil nominal dari DPA / Pergeseran BLUD' : `Tambah bagian BLUD ke nominal ${utama || 'sumber ini'}`}
               data-tooltip-pos="left"
               style={btnIconAccent(disabled, '#EF9F27')}>
               <Pencil size={13} />
             </button>
           </div>
         </Field>
+        {keterangan !== 'BLUD' && (bagianBlud !== null || keterangan === 'APBD + BLUD') && (
+          <div style={{ fontSize: 11.5, color: '#B5D4F4', lineHeight: 1.6, padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(24,95,165,.4)' }}>
+            {bagianBlud === null ? (
+              <>Bagian BLUD: <b>belum diisi</b> — klik ✎ di sebelah nominal.</>
+            ) : (
+              <>
+                {utama || 'Lainnya'} <span style={mono}>{fmtRp(Number(nominal) || 0)}</span> + BLUD <span style={mono}>{fmtRp(bagianBlud)}</span>
+                {' = '}<b style={{ ...mono, color: '#FAC775' }}>{fmtRp(totalAnggaran(keterangan, Number(nominal) || 0, bagianBlud))}</b>
+                <button type="button" disabled={disabled} onClick={() => { setBagianBlud(null); setAutoFilledFromBlud(false); setHint('') }}
+                  style={{ marginLeft: 8, background: 'none', border: 0, color: '#FCA5A5', cursor: 'pointer', fontSize: 11, textDecoration: 'underline' }}>
+                  lepas BLUD
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {dialogBlud && (
           <AmbilNominalBlud unit={form.unit_pertama} tahun={form.tahun}
-            tambahKe={keterangan === 'BLUD' ? null : { nominal: Number(nominal) || 0, keterangan }}
+            tambahKe={keterangan === 'BLUD' ? null : { nominal: Number(nominal) || 0, keterangan: utama || 'Lainnya' }}
             onPakai={pakaiNominalBlud} onTutup={() => setDialogBlud(false)} />
         )}
 

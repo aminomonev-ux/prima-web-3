@@ -23,6 +23,7 @@ import SpandukLihat from '@/components/pk/SpandukLihat'
 import DownloadButton from '@/components/ui/DownloadButton'
 import { toDateStr } from '@/lib/shared/waktu-wib'
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
+import { keteranganTercetak } from '@/lib/pk/sumber-dana'
 
 interface Props { editId: number | null; bolehUbah: boolean }
 
@@ -144,7 +145,8 @@ export default function FormClient({ editId, bolehUbah }: Props) {
           kegiatan: (a.kegiatan as string) ?? null,
           subkegiatan: (a.subkegiatan as string) ?? null,
           uraian: String(a.uraian ?? ''),
-          keterangan_sumber: String(a.keterangan_sumber ?? 'BLUD'),
+          // Baris lama: BLUD yang dijumlahkan lewat ✎ ke sumber lain belum tertulis di labelnya.
+          keterangan_sumber: keteranganTercetak(String(a.keterangan_sumber ?? 'BLUD'), !!a.auto_filled_from_blud),
           nominal: Number(a.nominal ?? 0),
           urutan: Number(a.urutan ?? 0),
           auto_filled_from_blud: !!a.auto_filled_from_blud,

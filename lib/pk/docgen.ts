@@ -45,7 +45,7 @@ async function loadPkDokumenForGenerate(dokumenId: number): Promise<PkDokumenFor
   const [lampiranRaw, anggaranRaw] = await Promise.all([
     sql`SELECT uraian, indikator, target, satuan, level, program, kegiatan, subkegiatan
         FROM pk_dokumen_lampiran WHERE dokumen_id = ${dokumenId} ORDER BY urutan, id`,
-    sql`SELECT uraian, keterangan_sumber, nominal, level, program, kegiatan, subkegiatan
+    sql`SELECT uraian, keterangan_sumber, auto_filled_from_blud, nominal, level, program, kegiatan, subkegiatan
         FROM pk_dokumen_anggaran WHERE dokumen_id = ${dokumenId} ORDER BY urutan, id`,
   ]);
 

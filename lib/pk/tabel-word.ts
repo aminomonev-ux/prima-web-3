@@ -6,6 +6,7 @@
 
 import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 import { pisahTargetSatuan, satuanTarget } from '@/lib/shared/target-renaksi';
+import { keteranganTercetak } from './sumber-dana';
 
 export type LevelPk = 'program' | 'kegiatan' | 'subkegiatan';
 
@@ -23,6 +24,8 @@ export interface BarisLampiranPk {
 export interface BarisAnggaranPk {
   uraian: string;
   keterangan_sumber: string;
+  /** Baris lama: ✎ di sumber selain BLUD menjumlahkan BLUD tanpa menyebutnya — lihat lib/pk/sumber-dana.ts. */
+  auto_filled_from_blud?: boolean | number | null;
   nominal: number | string;
   level: LevelPk;
   program: string | null;
@@ -198,7 +201,7 @@ export function buildAnggaranTableXml(rows: readonly BarisAnggaranPk[]): string 
     { teks: String(i + 1), lebar: k[0], rata: 'center' },
     { teks: rapikanNamaEntitas(r.subkegiatan || r.kegiatan || r.program || r.uraian || ''), lebar: k[1], rata: 'left' },
     { teks: nominalAnggaran(r.nominal), lebar: k[2], rata: 'right' },
-    { teks: r.keterangan_sumber ?? '', lebar: k[3], rata: 'center' },
+    { teks: keteranganTercetak(r.keterangan_sumber ?? '', r.auto_filled_from_blud), lebar: k[3], rata: 'center' },
   ], TANPA_GARIS)).join('');
 
   const kosong = baris([{ teks: '— Tidak ada anggaran —', lebar: jumlah(k), rata: 'center', bentang: k.length }], TANPA_GARIS);
