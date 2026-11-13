@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   User, Crown, ClipboardList, Save, FileCheck2,
-  CheckCircle2, AlertCircle, Loader2, ArrowLeft,
+  CheckCircle2, AlertCircle, Loader2, ArrowLeft, Plus,
 } from 'lucide-react'
 import { fetchJson } from '@/lib/shared/api'
 import DeleteIcon from '@/components/ui/DeleteIcon'
@@ -14,28 +14,17 @@ import { useAbortableEffect } from '@/lib/shared/hooks'
 import { usePkYear } from '../_context/PkYearContext'
 import type { PkUnitKerja, PkPejabat, PkProgramHierarchy, PkSasaranRow } from '../_utils/pk-types'
 import type { PkFormState, TabKey } from './_types'
-import { genRowId } from './_types'
+import { genRowId, emptyForm, formBerikutnya, sidikForm } from './_types'
 import PihakPertamaForm from './_components/PihakPertamaForm'
 import PihakKeduaForm from './_components/PihakKeduaForm'
 import LampiranAnggaranSplit from './_components/LampiranAnggaranSplit'
 import PrimaButton from '@/components/ui/PrimaButton'
 import SpandukLihat from '@/components/pk/SpandukLihat'
 import DownloadButton from '@/components/ui/DownloadButton'
-import { tanggalHariIniWIB, toDateStr } from '@/lib/shared/waktu-wib'
+import { toDateStr } from '@/lib/shared/waktu-wib'
+import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
 
 interface Props { editId: number | null; bolehUbah: boolean }
-
-function emptyForm(tahun: string): PkFormState {
-  // B1: tanggal WIB — `toISOString()` memberi tanggal kemarin antara 00:00–06:59.
-  const today = tanggalHariIniWIB()
-  return {
-    id: null, status: 'DRAFT', version: 0, tahun,
-    tanggal_dokumen: today, jenis_pk: 'MURNI',
-    unit_pertama: '', nama_pertama: '', jabatan_pertama: '', pangkat_pertama: '', nip_pertama: '',
-    unit_kedua: '',   nama_kedua: '',   jabatan_kedua: '',   pangkat_kedua: '',   nip_kedua: '',
-    lampiran: [], anggaran: [],
-  }
-}
 
 export default function FormClient({ editId, bolehUbah }: Props) {
   const { tahun } = usePkYear()
@@ -67,6 +56,8 @@ export default function FormClient({ editId, bolehUbah }: Props) {
   // Ref ke form terbaru — dibutuhkan karena setForm updater di React 18 dijalankan lazy
   // (state read di dalam updater tidak ke-flush sebelum baris berikutnya jalan).
   const formRef = useRef<PkFormState>(form)
+  /** Sidik isi dokumen yang terakhir dimuat/tersimpan — "+ PK Baru" bertanya bila isi layar sudah bergeser. */
+  const dasarRef = useRef<string | null>(null)
 
   function showToast(kind: 'ok' | 'err', msg: string) {
     setToast({ kind, msg })
@@ -116,7 +107,7 @@ export default function FormClient({ editId, bolehUbah }: Props) {
         anggaran: Array<Record<string, unknown>>
       }
       const h = r.header
-      setForm({
+      const dimuat: PkFormState = {
         id: editId,
         status: (h.status as 'DRAFT' | 'FINAL') ?? 'DRAFT',
         version: Number(h.version ?? 0),
@@ -159,7 +150,9 @@ export default function FormClient({ editId, bolehUbah }: Props) {
           auto_filled_from_blud: !!a.auto_filled_from_blud,
           _id: genRowId(),
         })),
-      })
+      }
+      dasarRef.current = sidikForm(dimuat)
+      setForm(dimuat)
     } else {
       showToast('err', d.message)
     }
@@ -285,16 +278,52 @@ export default function FormClient({ editId, bolehUbah }: Props) {
     setSaving(false)
     if (d.ok) {
       const r = d as unknown as { id: number; version?: number }
+      dasarRef.current = sidikForm(form)
       if (typeof r.version === 'number') setForm(f => ({ ...f, version: r.version as number }))
       if (!form.id) {
-        router.replace(`/perjanjian-kinerja/form?id=${r.id}`)
-        showToast('ok', `Dokumen tersimpan (id #${r.id}). Anda sekarang di mode edit.`)
+        // Dokumen baru: lanjut mengisi PK berikutnya (bawaan, Enter) atau tetap di dokumen ini untuk
+        // Finalisasi/koreksi — tombol Finalisasi baru ada sesudah dokumen punya id.
+        const pilih = await pilihDialog({
+          title: `Dokumen #${r.id} tersimpan`,
+          message: 'Isi PK berikutnya? Form dikosongkan; tahun, tanggal dokumen, dan jenis tetap.\n\nPilih "Tetap di dokumen ini" untuk Finalisasi atau koreksi.',
+          confirmLabel: 'Isi PK berikutnya', altLabel: 'Tetap di dokumen ini', variant: 'success',
+        })
+        if (pilih === 'utama') {
+          mulaiPkBaru(form)
+          showToast('ok', `Dokumen #${r.id} tersimpan sebagai DRAFT. Form siap untuk PK berikutnya.`)
+        } else {
+          router.replace(`/perjanjian-kinerja/form?id=${r.id}`)
+          showToast('ok', `Dokumen tersimpan (id #${r.id}). Anda sekarang di mode edit.`)
+        }
       } else {
         showToast('ok', 'Perubahan tersimpan')
       }
     } else {
       showToast('err', d.message)
     }
+  }
+
+  /** Form kosong untuk PK berikutnya — sumber tetap (tahun/tanggal/jenis) dari `dari`, keadaan bantu ikut diulang. */
+  function mulaiPkBaru(dari: PkFormState) {
+    const baru = formBerikutnya(dari)
+    dasarRef.current = null
+    lastAutoSuggestRef.current = ''
+    setPejabatStatusPertama('idle')
+    setPejabatStatusKedua('idle')
+    setTab('pihak1')
+    setForm(baru)
+  }
+
+  /** "+ PK Baru" dari dokumen yang sedang dibuka. Ditanya dulu bila isinya belum tersimpan. */
+  async function handlePkBaru() {
+    const belumTersimpan = dasarRef.current !== null && sidikForm(form) !== dasarRef.current
+    if (belumTersimpan && !(await confirmDialog({
+      title: 'Buang perubahan yang belum disimpan?',
+      message: `Isian dokumen #${form.id} ada yang belum disimpan. Form akan dikosongkan untuk PK baru.`,
+      confirmLabel: 'Buang & buat PK baru', variant: 'danger',
+    }))) return
+    mulaiPkBaru(form)
+    router.push('/perjanjian-kinerja/form')
   }
 
   async function doFinalize() {
@@ -391,6 +420,13 @@ export default function FormClient({ editId, bolehUbah }: Props) {
           )}
           {bolehUbah && (
             <>
+              {form.id && (
+                <PrimaButton variant="purple" iconLeft={<Plus size={14} />}
+                  onClick={handlePkBaru} disabled={saving || finalizing || deleting}
+                  data-tooltip="Kosongkan form untuk PK baru (tahun, tanggal, jenis tetap)" data-tooltip-pos="below">
+                  PK Baru
+                </PrimaButton>
+              )}
               <PrimaButton variant="danger" iconLeft={<DeleteIcon size={14} />}
                 onClick={handleDelete} disabled={deleting || isFinal}
                 data-tooltip={isFinal ? 'Dokumen FINAL — hubungi SUPER_ADMIN' : 'Hapus dokumen / reset form'} data-tooltip-pos="below">
