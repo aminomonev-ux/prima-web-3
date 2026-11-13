@@ -16,7 +16,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle'
 import { bolehBuka, type Izin, type MenuPk } from '@/lib/pk/peran'
 import type { Role } from '@/types'
 import { usePkYear } from './_context/PkYearContext'
-import { tahunRange } from './_utils/pk-format'
+import { tahunRange, bacaTahunKetik, TAHUN_PK_MIN, TAHUN_PK_MAX } from './_utils/pk-format'
 
 type Tile = { href: string; label: string; icon: React.ElementType; color: string; group: string; menu: MenuPk }
 const SEMUA_TILE: Tile[] = [
@@ -54,6 +54,8 @@ export default function PkShell({ username, role, izin, themePreference, beku, c
   const { tahun, setTahun } = usePkYear()
   const [dropOpen, setDropOpen] = useState(false)
   const [yearOpen, setYearOpen] = useState(false)
+  const [tahunKetik, setTahunKetik] = useState('')
+  const [tahunSalah, setTahunSalah] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>(themePreference)
@@ -108,7 +110,16 @@ export default function PkShell({ username, role, izin, themePreference, beku, c
     return pathname === href || pathname.startsWith(href + '/')
   }
 
-  const years = tahunRange()
+  const years = tahunRange(tahun)
+
+  function pakaiTahunKetik() {
+    const t = bacaTahunKetik(tahunKetik)
+    if (!t) { setTahunSalah(true); return }
+    setTahun(t)
+    setTahunKetik('')
+    setTahunSalah(false)
+    setYearOpen(false)
+  }
 
   return (
     <div style={{
@@ -203,8 +214,9 @@ export default function PkShell({ username, role, izin, themePreference, beku, c
                 border: `1px solid ${isLight ? 'rgba(139,92,246,0.2)' : '#0C447C'}`,
                 borderRadius: 10,
                 boxShadow: isLight ? '0 12px 36px rgba(0,0,0,.12)' : '0 12px 36px rgba(0,0,0,.5)',
-                padding: '4px', zIndex: 300, maxHeight: 260, overflowY: 'auto',
+                padding: '4px', zIndex: 300,
               }}>
+                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
                 {years.map(y => {
                   const active = y === tahun
                   return (
@@ -227,6 +239,34 @@ export default function PkShell({ username, role, izin, themePreference, beku, c
                     </button>
                   )
                 })}
+                </div>
+                {/* Tahun di luar daftar (mis. 2035) diketik di sini; batasnya sama dengan server. */}
+                <div style={{ borderTop: `1px solid ${isLight ? 'rgba(0,0,0,0.08)' : '#0C447C'}`, marginTop: 4, padding: '6px 4px 2px' }}>
+                  <input
+                    type="text" inputMode="numeric" maxLength={4}
+                    value={tahunKetik}
+                    onChange={e => { setTahunKetik(e.target.value.replace(/\D/g, '')); setTahunSalah(false) }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); pakaiTahunKetik() }
+                      if (e.key === 'Escape') setYearOpen(false)
+                    }}
+                    placeholder="Tahun lain…"
+                    aria-label="Ketik tahun lain lalu tekan Enter"
+                    aria-invalid={tahunSalah}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 6,
+                      border: `1px solid ${tahunSalah ? '#E24B4A' : (isLight ? 'rgba(139,92,246,0.3)' : '#185FA5')}`,
+                      background: isLight ? '#FFFFFF' : 'rgba(2,15,28,.6)',
+                      color: isLight ? '#374151' : '#E6F1FB',
+                      fontFamily: 'JetBrains Mono, ui-monospace, monospace', fontSize: 12, outline: 'none',
+                    }}
+                  />
+                  {tahunSalah && (
+                    <div style={{ fontSize: 10.5, color: '#E24B4A', marginTop: 4, lineHeight: 1.3 }}>
+                      {TAHUN_PK_MIN}–{TAHUN_PK_MAX}, lalu Enter
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
