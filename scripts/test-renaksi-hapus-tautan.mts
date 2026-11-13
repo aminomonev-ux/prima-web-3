@@ -156,6 +156,30 @@ try {
     ok('B2a hapus menunggu kunci baris (FOR UPDATE lebih dulu)', menunggu2)
     ok('B2b sesudah Simpan selesai, hapus melihat tautannya dan menolak', h2 instanceof RaTautanAnakError, String(h2))
     ok('B2c induk & tautan tetap utuh', await ada(kC) && (await induk(sC)) === kC)
+
+    // B4: dua indikator terakhir satu kegiatan dihapus berbarengan. Lawan (koneksi uji) sudah lolos
+    // penjaganya dan memegang barisnya; hapus kedua harus MENUNGGU lalu melihat dirinya yang terakhir.
+    const x = await upsertRencanaAksi({ ...dasar, level: 'kegiatan', program: 'PROG H', kegiatan: 'KEG DUA', indikator: 'IND DUA X' }, uid)
+    const y = await upsertRencanaAksi({ ...dasar, level: 'kegiatan', program: 'PROG H', kegiatan: 'KEG DUA', indikator: 'IND DUA Y' }, uid)
+    const anakDua = await upsertRencanaAksi({ ...dasar, level: 'sub-kegiatan', program: 'PROG H', kegiatan: 'KEG DUA', sub_kegiatan: 'SUB DUA', indikator: 'IND SUB DUA' }, uid)
+    // Lawan memegang HANYA barisnya sendiri (hapus belum ter-commit) — cukup untuk membuktikan hapus
+    // kedua ikut mengunci baris se-nama, bukan cuma barisnya.
+    const duaTerakhir = async (level: 'kegiatan' | 'program', a: number, b: number, anakId: number, kode: string) => {
+      await k.query('START TRANSACTION')
+      await k.query('DELETE FROM rencana_aksi WHERE id = ?', [a])
+      const hapusB = tangkap(async () => deleteRencanaAksi((await getRencanaAksiById(b))!))
+      const menunggu = await tungguMenunggu()
+      await k.query('COMMIT')
+      const h = await hapusB
+      ok(`${kode}a ${level}: hapus kedua menunggu baris se-nama yang sedang dihapus`, menunggu)
+      ok(`${kode}b ${level}: sesudahnya hapus kedua ditolak (induk terakhir)`, h instanceof RaPunyaAnakError, String(h))
+      ok(`${kode}c ${level}: indikator terakhir & anaknya tetap ada`, await ada(b) && await ada(anakId))
+    }
+    await duaTerakhir('kegiatan', x, y, anakDua, 'B4')
+    const px = await upsertRencanaAksi({ ...dasar, level: 'program', program: 'PROG DUA', indikator: 'IND PROG DUA X' }, uid)
+    const py = await upsertRencanaAksi({ ...dasar, level: 'program', program: 'PROG DUA', indikator: 'IND PROG DUA Y' }, uid)
+    const kProg = await upsertRencanaAksi({ ...dasar, level: 'kegiatan', program: 'PROG DUA', kegiatan: 'KEG PROG DUA', indikator: 'IND KEG PROG DUA' }, uid)
+    await duaTerakhir('program', px, py, kProg, 'B5')
   } finally {
     await k.query('ROLLBACK').catch(() => {})
     await k.end()
@@ -166,7 +190,7 @@ try {
   const data = tanpaKomentar(readFileSync(new URL('../lib/data/rencana-aksi.ts', import.meta.url), 'utf8'))
   const hapusFn = data.slice(data.indexOf('export async function deleteRencanaAksi('), data.indexOf('type SqlResult'))
   ok('C1 hapus: kunci baris PERTAMA di transaksi (L84)',
-    /return withTransaction\(async \(\{ tx \}\) => \{\s*const \[ada\] = await tx`SELECT id FROM rencana_aksi WHERE id = \$\{row\.id\} FOR UPDATE`/.test(hapusFn))
+    /return withTransaction\(async \(\{ tx \}\) => \{\s*await kunciSeNama\(tx, row\);\s*const \[ada\] = await tx`SELECT id FROM rencana_aksi WHERE id = \$\{row\.id\} FOR UPDATE`/.test(hapusFn))
   ok('C2 penjaga nama memakai tx yang sama', hapusFn.includes('await assertTidakPunyaAnak(tx, row);'))
   ok('C3 Kunci Periode diperiksa sebelum transaksi', hapusFn.indexOf('assertPeriodeTerbuka') < hapusFn.indexOf('withTransaction'))
   ok('C4 simpan: induk dibaca FOR SHARE lewat tx', /FROM rencana_aksi WHERE id = \$\{data\.induk_indikator_id\}\s*FOR SHARE/.test(data)

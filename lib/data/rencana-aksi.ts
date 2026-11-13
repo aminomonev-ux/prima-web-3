@@ -629,6 +629,20 @@ async function assertTidakPunyaAnak(q: Penanya, row: RaRow): Promise<void> {
 }
 
 /**
+ * Kunci SEMUA baris yang memikul nama entitas baris ini (urut id → dua hapus selalu mengantre di baris
+ * yang sama, tanpa buntu). Tanpa ini dua orang yang menghapus dua indikator terakhir satu entitas
+ * berbarengan sama-sama melihat "masih ada saudara", dua-duanya lolos, dan anaknya yatim.
+ * Daun (sub-kegiatan) tidak punya penjaga nama — cukup barisnya sendiri.
+ */
+async function kunciSeNama(tx: TxSql, row: RaRow): Promise<void> {
+  if ((row.level === 'tujuan' || row.level === 'sasaran' || row.level === 'program') && row.program) {
+    await tx`SELECT id FROM rencana_aksi WHERE tahun = ${row.tahun} AND level = ${row.level} AND program = ${row.program} ORDER BY id FOR UPDATE`;
+  } else if (row.level === 'kegiatan' && row.kegiatan) {
+    await tx`SELECT id FROM rencana_aksi WHERE tahun = ${row.tahun} AND level = 'kegiatan' AND kegiatan = ${row.kegiatan} ORDER BY id FOR UPDATE`;
+  }
+}
+
+/**
  * Menerima baris utuh, bukan id: route sudah membacanya untuk audit log, dan penjaga nama butuh
  * level + nama entitasnya. Satu transaksi, baris dikunci DULU (§6 tautan-lanjutan, L84): Simpan
  * yang menautkan ke baris ini (`FOR SHARE`) menunggu, lalu mendapati induknya sudah tiada.
@@ -645,6 +659,7 @@ export async function deleteRencanaAksi(row: RaRow, opsi: { lepasTautan?: boolea
   // angkanya tidak berubah melainkan hilang.
   await assertPeriodeTerbuka(Number(row.tahun));
   return withTransaction(async ({ tx }) => {
+    await kunciSeNama(tx, row);
     const [ada] = await tx`SELECT id FROM rencana_aksi WHERE id = ${row.id} FOR UPDATE`;
     if (!ada) return { lepas: 0 };
     await assertTidakPunyaAnak(tx, row);

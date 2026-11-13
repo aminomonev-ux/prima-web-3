@@ -153,15 +153,18 @@ Tiap tahap: uji otomatis + uji mutasi + dicoba di peramban tahun kotak pasir, la
   deterministik B1–B3 (`performance_schema.data_lock_waits`). B3 ditambah sesudah uji mutasi: membaca induk
   `FOR SHARE` lewat pool (di luar transaksi) tetap lolos B1/B2 — kuncinya lepas seketika, dan hapus yang
   menyelip di antara baca dan tulis Simpan meninggalkan tautan ke id yang tiada.
-  **Tidak dikerjakan**: dua hapus berbarengan atas dua baris terakhir yang memikul nama entitas yang sama
-  (penjaga nama membaca saudara tanpa kunci) — cacat lama, di luar tautan.
+  **Susulan (hari yang sama)**: cacat lama di luar tautan ikut ditutup — dua hapus berbarengan atas dua
+  indikator terakhir satu entitas dulu sama-sama melihat "masih ada saudara" lalu dua-duanya lolos, anaknya
+  yatim. Hapus kini mengunci SEMUA baris se-nama (`kunciSeNama`, urut id → tanpa buntu) sebagai perintah
+  pertama. Uji B4 (kegiatan) & B5 (program).
 - **§5** — 400 `MASIH_DITUNJUK` membawa `jumlah` + `penunjuk` (≤ 10: level, nama entitas, indikator).
   Data Entry menyebut daftarnya di `confirmDialog` danger "Lepas tautan N baris & hapus" →
   `DELETE ?id=&lepas_tautan=1`: tautan penunjuk jadi NULL (versi naik) lalu baris dihapus, satu transaksi.
   Kunci Periode & induk terakhir tetap menolak. Audit `RA_DELETE` "… — melepas tautan indikator induk N baris".
 - **§8** — `kalimatPerbarui(r, sumber)`: bila sumbernya Renaksi · Cetak dan yang berubah HANYA urutan
   (`hanyaUrutan`), dialog Perbarui & pengingat otomatis berbunyi `KALIMAT_URUTAN_RENAKSI`. Hanya kalimat.
-- Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-hapus-tautan.mts` (41, kotak pasir 2072),
-  12 uji mutasi tertangkap. Dicoba di peramban (2045, dihapus sesudahnya): dialog menyebut 2 baris, sesudah
+- Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-hapus-tautan.mts` (47, kotak pasir 2072),
+  15 uji mutasi tertangkap. §8 dicoba di peramban (2045, dihapus sesudahnya): tabel LKJIP tertaut Renaksi ·
+  Cetak, tautan dua kegiatan ditukar → lencana pengingat & dialog Perbarui berbunyi kalimat urutan. Dicoba di peramban (2045, dihapus sesudahnya): dialog menyebut 2 baris, sesudah
   "Lepas tautan" indikator terhapus, kedua sub-kegiatan tanpa induk, audit tercatat. Saringan IKI §4 dicoba
   di 2073: 4 dari 5 pilihan tampil, "Tampilkan semua" → 5.
