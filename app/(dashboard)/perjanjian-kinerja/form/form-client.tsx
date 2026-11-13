@@ -24,6 +24,7 @@ import DownloadButton from '@/components/ui/DownloadButton'
 import { toDateStr } from '@/lib/shared/waktu-wib'
 import { confirmDialog, pilihDialog } from '@/components/ui/ConfirmDialog'
 import { keteranganTercetak } from '@/lib/pk/sumber-dana'
+import { JUDUL_SALIN_DRAFT, pesanSalinDraft, salinDraftBaru } from '../_utils/salin-draft'
 
 interface Props { editId: number | null; bolehUbah: boolean }
 
@@ -353,35 +354,24 @@ export default function FormClient({ editId, bolehUbah }: Props) {
     })
   }
 
-  /**
-   * Dokumen FINAL terkunci, jadi yang dibuat adalah SALINAN DRAFT-nya. Dokumen lama tidak
-   * disentuh sama sekali — tetap FINAL beserta Word-nya, sebagai arsip.
-   */
-  async function doSalinDraft() {
+  /** Dokumen FINAL terkunci; salinannya yang disunting, dokumen lama tetap arsip. */
+  async function handleSalinDraft() {
     if (!form.id) return
+    if (!(await confirmDialog({
+      title: JUDUL_SALIN_DRAFT,
+      message: pesanSalinDraft(form.id, form.unit_pertama),
+      confirmLabel: 'Salin jadi DRAFT', variant: 'purple',
+    }))) return
+
     setMenyalin(true)
-    const d = await fetchJson<{ ok: boolean; id?: number; message?: string }>(
-      `/api/perjanjian-kinerja/dokumen/${form.id}/salin-draft`, { method: 'POST' },
-    )
+    const d = await salinDraftBaru(form.id)
     setMenyalin(false)
     if (d.ok && d.id) {
       showToast('ok', `DRAFT baru #${d.id} dibuat dari dokumen FINAL #${form.id}`)
-      dasarRef.current = null
       router.push(`/perjanjian-kinerja/form?id=${d.id}`)
     } else {
       showToast('err', d.message ?? 'Gagal menyalin dokumen')
     }
-  }
-
-  async function handleSalinDraft() {
-    if (!form.id) return
-    if (!(await confirmDialog({
-      title: 'Salin jadi DRAFT baru?',
-      message: `Semua isi dokumen FINAL #${form.id} — pihak, lampiran, dan anggaran — disalin ke dokumen DRAFT baru yang bisa disunting. `
-        + 'Dokumen FINAL lama tetap utuh sebagai arsip.',
-      confirmLabel: 'Salin jadi DRAFT', variant: 'purple',
-    }))) return
-    await doSalinDraft()
   }
 
   async function doDelete() {

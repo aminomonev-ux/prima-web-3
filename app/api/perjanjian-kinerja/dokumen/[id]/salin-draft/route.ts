@@ -1,20 +1,14 @@
 // app/api/perjanjian-kinerja/dokumen/[id]/salin-draft/route.ts
-// POST — salin dokumen FINAL menjadi dokumen DRAFT baru yang bisa disunting.
-// Dokumen lama TIDAK disentuh: tetap FINAL beserta berkas Word-nya, sebagai arsip.
-//
-// Kenapa endpoint terpisah, bukan "unlock" dokumen FINAL: membuka kunci akan mengubah
-// arsip yang sudah ditandatangani. Yang dibutuhkan hanyalah tempat menyunting salinan.
-//
-// Pattern: pkMati → izin menu (tulis) → rate limit → ownership → lib/data/pk.ts → audit.
+// POST — salin dokumen FINAL jadi DRAFT baru. Dokumen lama tidak disentuh (arsip).
+// Pola guard/audit sama dengan PATCH /dokumen/[id]: sesi → sakelar → izin menu → rate limit
+// → kepemilikan → logika di lib/data/pk.ts → audit.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@/lib/data/db';
+import { sql, safeInt } from '@/lib/data/db';
 import { getSession } from '@/lib/security/auth';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { pkRateLimit } from '@/lib/data/pk-schemas';
-import {
-  salinJadiDraft, PkDokumenTidakAdaError, PkHanyaFinalDisalinError,
-} from '@/lib/data/pk';
+import { salinJadiDraft, PkDokumenTidakAdaError, PkHanyaFinalDisalinError } from '@/lib/data/pk';
 import { bolehEditMenu, tolakEdit, pkMati } from '../../../_guard';
 import { ADMIN_ROLES } from '@/lib/constants';
 
@@ -25,26 +19,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!session) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
   const mati = await pkMati(session.role);
   if (mati) return mati;
-  // Salinan lahir sebagai dokumen yang disunting di menu Form — izin tulis Form yang dipakai.
   if (!(await bolehEditMenu(session.userId, session.role, 'form'))) return tolakEdit('form');
 
   const limited = await pkRateLimit(session.userId, 'salin-draft', 10);
   if (limited) return limited;
 
-  const id = Number.parseInt((await params).id, 10);
-  if (!Number.isInteger(id) || id <= 0) {
-    return NextResponse.json({ ok: false, message: 'ID dokumen tidak valid' }, { status: 400 });
-  }
+  const id = safeInt((await params).id, 0);
+  if (id <= 0) return NextResponse.json({ ok: false, message: 'ID dokumen tidak valid' }, { status: 400 });
 
-  const rows = await sql`
-    SELECT created_by, status FROM pk_dokumen WHERE id = ${id} LIMIT 1
-  ` as Array<{ created_by: number | null; status: 'DRAFT' | 'FINAL' }>;
-  const sumber = rows[0];
-  if (!sumber) return NextResponse.json({ ok: false, message: 'Dokumen tidak ditemukan' }, { status: 404 });
-
-  // Ownership L2 SEC-C4 — non-admin hanya menyalin dokumennya sendiri.
+  // Ownership L2 SEC-C4. Status (FINAL saja) diperiksa di lib, di dalam transaksi.
+  const rows = await sql`SELECT created_by FROM pk_dokumen WHERE id = ${id} LIMIT 1` as { created_by: number | null }[];
+  if (!rows.length) return NextResponse.json({ ok: false, message: 'Dokumen tidak ditemukan' }, { status: 404 });
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(session.role);
-  if (!isAdmin && sumber.created_by !== session.userId) {
+  if (!isAdmin && rows[0].created_by !== session.userId) {
     return NextResponse.json({ ok: false, message: 'Bukan dokumen Anda' }, { status: 403 });
   }
 
@@ -52,12 +39,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     baru = await salinJadiDraft(id, session.userId);
   } catch (err) {
-    if (err instanceof PkDokumenTidakAdaError) {
-      return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
-    }
-    if (err instanceof PkHanyaFinalDisalinError) {
-      return NextResponse.json({ ok: false, code: 'BUKAN_FINAL', message: err.message }, { status: 409 });
-    }
+    if (err instanceof PkDokumenTidakAdaError) return NextResponse.json({ ok: false, message: err.message }, { status: 404 });
+    if (err instanceof PkHanyaFinalDisalinError) return NextResponse.json({ ok: false, code: 'BUKAN_FINAL', message: err.message }, { status: 409 });
     throw err;
   }
 

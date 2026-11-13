@@ -14,6 +14,7 @@ import PrimaButton from '@/components/ui/PrimaButton'
 import DownloadButton from '@/components/ui/DownloadButton'
 import { usePkYear } from '../_context/PkYearContext'
 import { fmtDateID } from '../_utils/pk-format'
+import { JUDUL_SALIN_DRAFT, pesanSalinDraft, salinDraftBaru } from '../_utils/salin-draft'
 import type { Role } from '@/types'
 
 type RiwayatRow = {
@@ -88,25 +89,18 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
     })
   }
 
-  /**
-   * Dokumen FINAL tidak bisa disunting, jadi yang dibuat adalah SALINAN DRAFT-nya.
-   * Dokumen lama tetap FINAL utuh (arsip) — termasuk berkas Word yang sudah di-generate.
-   */
+  /** Dokumen FINAL terkunci; yang dibuat adalah salinannya, arsip tetap FINAL utuh. */
   function handleSalinDraft(row: RiwayatRow) {
     setConfirm({
-      title: 'Salin jadi DRAFT baru?',
-      message: `Semua isi dokumen FINAL #${row.id} (${row.unit_pertama}) — pihak, lampiran, dan anggaran — disalin ke dokumen DRAFT baru yang bisa disunting. `
-        + 'Dokumen FINAL lama tetap utuh sebagai arsip.',
+      title: JUDUL_SALIN_DRAFT,
+      message: pesanSalinDraft(row.id, row.unit_pertama),
       confirmLabel: 'Salin jadi DRAFT',
       confirmKind: 'purple',
       onConfirm: async () => {
         setConfirm(null)
-        const d = await fetchJson<{ ok: boolean; id?: number; message?: string }>(
-          `/api/perjanjian-kinerja/dokumen/${row.id}/salin-draft`, { method: 'POST' },
-        )
+        const d = await salinDraftBaru(row.id)
         if (d.ok && d.id) {
           showToast('ok', `DRAFT baru #${d.id} dibuat dari dokumen FINAL #${row.id}`)
-          window.setTimeout(() => void list.refetch(), 300)
           router.push(`/perjanjian-kinerja/form?id=${d.id}`)
         } else {
           showToast('err', d.message ?? 'Gagal menyalin dokumen')

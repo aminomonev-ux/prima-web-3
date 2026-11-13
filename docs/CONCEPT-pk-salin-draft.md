@@ -51,6 +51,10 @@ tulis menu **Form** (`bolehEditMenu`, karena salinan lahir sebagai dokumen Form)
 `pk-salin-draft:<user>` 10/menit → kepemilikan (non-admin hanya dokumennya sendiri) → salin →
 audit `PK_DOKUMEN_SALIN_DRAFT`.
 
+Pembagian tugasnya sengaja tidak diulang: rute hanya membaca `created_by` (untuk kepemilikan),
+sedangkan syarat **FINAL** diperiksa di `lib/data/pk.ts` di dalam transaksi — satu tempat, dan
+tidak ada dua pemeriksaan status yang bisa berbeda jawaban.
+
 **Layar**
 
 - `perjanjian-kinerja/riwayat`: tombol ikon **Salin** (amber) hanya pada baris `FINAL`, dengan
@@ -58,6 +62,10 @@ audit `PK_DOKUMEN_SALIN_DRAFT`.
   dibawa ke Form dokumen DRAFT baru.
 - `perjanjian-kinerja/form`: saat dokumen yang dibuka berstatus FINAL, tombol
   **"Salin jadi DRAFT"** muncul di samping "Unduh Word".
+
+Kalimat konfirmasi dan panggilan endpoint-nya tinggal di satu berkas,
+`_utils/salin-draft.ts`, dipakai kedua layar — dua salinan kalimat yang sama cepat atau lambat
+berbeda bunyi, dan pengguna melihat keduanya di modul yang sama.
 
 ## Batas
 

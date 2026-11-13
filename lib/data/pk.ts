@@ -174,16 +174,12 @@ export class PkHanyaFinalDisalinError extends Error {
 }
 
 /**
- * Salin SATU dokumen FINAL (header + seluruh lampiran + anggaran) menjadi dokumen DRAFT
- * baru milik `userId`. Sumbernya tidak disentuh sama sekali — tidak ada kolom yang
- * ditulis pada baris lama.
+ * Salin satu dokumen FINAL (header + lampiran + anggaran) jadi DRAFT baru milik `userId`.
  *
- * Sengaja memakai `INSERT … SELECT` di dalam satu transaksi, bukan membaca baris ke
- * aplikasi lalu menulisnya kembali: daftar kolom yang disalin jadi SATU tempat, dan
- * tidak ada jendela di mana isinya sudah berubah di antara baca dan tulis.
- *
- * `status`, `version`, `created_by`, dan berkas Word sengaja TIDAK ikut: salinan lahir
- * sebagai DRAFT versi 0 tanpa berkas (Word dibuat ulang saat difinalisasi).
+ * `INSERT … SELECT` di dalam transaksi: daftar kolom yang disalin hanya ada di satu tempat,
+ * dan tidak ada jendela antara baca dan tulis. Sumber tidak pernah ditulis.
+ * `status`/`version`/`created_by`/berkas Word sengaja tidak ikut — salinan lahir sebagai
+ * DRAFT versi 0 tanpa Word (dibuat ulang saat difinalisasi).
  */
 export async function salinJadiDraft(id: number, userId: number): Promise<number> {
   return await withTransaction(async ({ tx }) => {

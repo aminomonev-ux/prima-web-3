@@ -41,6 +41,7 @@ const PK = kode('lib/data/pk.ts')
 const RUTE = kode('app/api/perjanjian-kinerja/dokumen/[id]/salin-draft/route.ts')
 const FORM = kode('app/(dashboard)/perjanjian-kinerja/form/form-client.tsx')
 const RIWAYAT = kode('app/(dashboard)/perjanjian-kinerja/riwayat/riwayat-client.tsx')
+const SALIN = kode('app/(dashboard)/perjanjian-kinerja/_utils/salin-draft.ts')
 
 cek('A1 salinan memakai INSERT…SELECT (satu tempat daftar kolom, tanpa jendela baca-tulis)',
   ['INSERT INTO pk_dokumen_lampiran', 'FROM pk_dokumen_lampiran WHERE dokumen_id = ${id}',
@@ -53,11 +54,14 @@ cek('A5 dokumen sumber tidak di-UPDATE/DELETE', !/UPDATE pk_dokumen SET[\s\S]{0,
 cek('A6 urutan penjaga rute: sesi → sakelar → izin tulis Form → rate limit',
   ['getSession()', 'pkMati(session.role)', "bolehEditMenu(session.userId, session.role, 'form')", "'salin-draft'"]
     .map(k => RUTE.indexOf(k)).every((v, i, a) => v > 0 && (i === 0 || v > a[i - 1])))
-cek('A7 rute menolak dokumen milik orang lain (non-admin)', RUTE.includes('if (!isAdmin && sumber.created_by !== session.userId)'))
+cek('A7 rute menolak dokumen milik orang lain (non-admin)', RUTE.includes('if (!isAdmin && rows[0].created_by !== session.userId)'))
 cek('A8 rute mencatat audit PK_DOKUMEN_SALIN_DRAFT', RUTE.includes("eventType: 'PK_DOKUMEN_SALIN_DRAFT'"))
-cek('A9 layar Riwayat memanggil endpoint salin-draft', RIWAYAT.includes('/salin-draft`'))
-cek('A10 tombol Riwayat hanya untuk baris FINAL', RIWAYAT.includes("bolehUbah && r.status === 'FINAL' && ("))
-cek('A11 layar Form menyediakan salin saat dokumen FINAL', FORM.includes('{form.id && isFinal && bolehUbah && ('))
+cek('A9 endpoint salin-draft dipanggil dari satu tempat (helper bersama)',
+  SALIN.includes('/salin-draft`') && RIWAYAT.includes('salinDraftBaru(row.id)') && FORM.includes('salinDraftBaru(form.id)'))
+cek('A10 kedua layar memakai kalimat konfirmasi yang sama',
+  RIWAYAT.includes('pesanSalinDraft(row.id, row.unit_pertama)') && FORM.includes('pesanSalinDraft(form.id, form.unit_pertama)'))
+cek('A11 tombol Riwayat hanya untuk baris FINAL', RIWAYAT.includes("bolehUbah && r.status === 'FINAL' && ("))
+cek('A12 layar Form menyediakan salin saat dokumen FINAL', FORM.includes('{form.id && isFinal && bolehUbah && ('))
 
 // ── B. Basis data sungguhan ─────────────────────────────────────────────────
 let c: mysql.Connection | null = null
