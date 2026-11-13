@@ -14,8 +14,8 @@
 //    mengikuti ejaan TERSIMPAN — aturannya di ./induk-impor.ts.
 
 import type { PoolConnection } from 'mysql2/promise';
-import { queryMany, sql, withTransaction } from '@/lib/data/db';
-import { assertPeriodeTerbuka, catatGantiNama, jalarkanGantiNama } from '@/lib/data/rencana-aksi';
+import { sql, withTransaction, type Penanya } from '@/lib/data/db';
+import { assertPeriodeTerbuka, catatGantiNama, jalarkanGantiNama, kunciTahunRenaksi } from '@/lib/data/rencana-aksi';
 import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import { kunciPersis, selaraskanImpor, type BarisTersimpan } from './induk-impor';
 import { rencanaGantiNamaImpor, turunanTertinggal, type BarisBerindikator, type GantiNama } from './ganti-nama';
@@ -162,10 +162,10 @@ export interface DampakTurunan { gantiNama: GantiNama; turunan: number }
  * nama yang tegas, dan berapa turunan tiap entitas yang tertinggal. Dua salinan perhitungan ini =
  * pertanyaan di layar dan yang dikerjakan server berbeda pendapat (L78).
  */
-async function siapkanImpor(tahun: number, mode: ImportMode, rows: CommitRow[]) {
-  const tersimpan = await queryMany<BarisTersimpan & BarisBerindikator>(
-    sql`SELECT level, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator FROM rencana_aksi WHERE tahun = ${tahun}`,
-  );
+async function siapkanImpor(tahun: number, mode: ImportMode, rows: CommitRow[], q: Penanya = sql) {
+  const tersimpan = await q`
+    SELECT level, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator FROM rencana_aksi WHERE tahun = ${tahun}
+  ` as Array<BarisTersimpan & BarisBerindikator>;
   const { layak, ditahan, disesuaikan } = selaraskanImpor(rows, tersimpan, tahun, mode === 'ganti');
   const levelsDiFile = [...new Set(layak.map(r => r.level))];
   const akanTulis = layak.filter(r => mode !== 'tambah'
@@ -192,41 +192,44 @@ export async function commitImportRenaksi(
   /** Ikut menjalarkan ganti nama/pindah ke turunan yang tidak ada di berkas (bawaan: ya, seperti Data Entry). */
   bawaTurunan = true,
 ): Promise<CommitResult> {
-  const { tersimpan, layak, ditahan, disesuaikan, levelsDiFile, gantiNama, dampak } = await siapkanImpor(tahun, mode, rows);
+  // Rencana impor (baris tersimpan, ganti nama, turunan, induk) dibaca DI DALAM transaksi sesudah kunci
+  // tahun: dibaca di luar, ia bisa basi oleh Simpan/Hapus/impor lain yang selesai di selanya.
+  return withTransaction(async ({ tx, conn }) => {
+    await kunciTahunRenaksi(tx, tahun);
+    const siap = await siapkanImpor(tahun, mode, rows, tx);
+    const { tersimpan, layak, ditahan, disesuaikan, levelsDiFile, gantiNama, dampak } = siap;
 
-  if (layak.length === 0) {
-    return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [], tautanDiisi: 0, tautanTakDikenal: [], turunanDijalarkan: 0 };
-  }
+    if (layak.length === 0) {
+      return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [], tautanDiisi: 0, tautanTakDikenal: [], turunanDijalarkan: 0 };
+    }
 
-  // Kunci unik (tahun, level, indikator) — hitung mana yang sudah ada supaya
-  // laporan "ditambah vs diperbarui" akurat.
-  const existingKeys = new Set(tersimpan.map(e => `${e.level}|${kunciPersis(e.indikator)}`));
+    // Kunci unik (tahun, level, indikator) — hitung mana yang sudah ada supaya
+    // laporan "ditambah vs diperbarui" akurat.
+    const existingKeys = new Set(tersimpan.map(e => `${e.level}|${kunciPersis(e.indikator)}`));
 
-  let ditambah = 0;
-  let diperbarui = 0;
-  let dilewati = 0;
-  const perLevel: Partial<Record<RaLevel, number>> = {};
-  const akanTulis: CommitRow[] = [];
-  for (const r of layak) {
-    const sudahAda = existingKeys.has(`${r.level}|${kunciPersis(r.indikator)}`);
-    if (mode === 'tambah' && sudahAda) { dilewati++; continue; }
-    if (mode === 'upsert' && sudahAda) diperbarui++; else ditambah++;
-    perLevel[r.level] = (perLevel[r.level] ?? 0) + 1;
-    akanTulis.push(r);
-  }
+    let ditambah = 0;
+    let diperbarui = 0;
+    let dilewati = 0;
+    const perLevel: Partial<Record<RaLevel, number>> = {};
+    const akanTulis: CommitRow[] = [];
+    for (const r of layak) {
+      const sudahAda = existingKeys.has(`${r.level}|${kunciPersis(r.indikator)}`);
+      if (mode === 'tambah' && sudahAda) { dilewati++; continue; }
+      if (mode === 'upsert' && sudahAda) diperbarui++; else ditambah++;
+      perLevel[r.level] = (perLevel[r.level] ?? 0) + 1;
+      akanTulis.push(r);
+    }
 
-  // T2: mode 'ganti' MENGHAPUS baris, dan baris yang terhapus membawa serta
-  // realisasinya. Itu menembus Kunci Periode lebih telak daripada mengubah nilai.
-  // Diperiksa SEBELUM transaksi dibuka — menolak lebih awal lebih murah daripada
-  // membuka transaksi lalu memutarnya kembali. Mode 'tambah'/'upsert' sengaja
-  // tidak diperiksa: keduanya memang tidak menyentuh kolom realisasi.
-  if (mode === 'ganti') await assertPeriodeTerbuka(tahun);
+    // T2: mode 'ganti' MENGHAPUS baris, dan baris yang terhapus membawa serta
+    // realisasinya. Itu menembus Kunci Periode lebih telak daripada mengubah nilai.
+    // Diperiksa sebelum tulisan pertama. Mode 'tambah'/'upsert' sengaja tidak
+    // diperiksa: keduanya memang tidak menyentuh kolom realisasi.
+    if (mode === 'ganti') await assertPeriodeTerbuka(tahun);
 
-  const dijalarkan = bawaTurunan ? dampak : [];
-  let tautanDiisi = 0;
-  const tautanTakDikenal: string[] = [];
+    const dijalarkan = bawaTurunan ? dampak : [];
+    let tautanDiisi = 0;
+    const tautanTakDikenal: string[] = [];
 
-  await withTransaction(async ({ tx, conn }) => {
     if (mode === 'ganti') {
       for (const lv of levelsDiFile) {
         // Tautan indikator induk menunjuk ID baris. Menghapus satu tingkat meninggalkan id
@@ -279,12 +282,12 @@ export async function commitImportRenaksi(
       }
       tautanDiisi = pasang.length;
     }
+
+    if (mode === 'ganti') { ditambah = akanTulis.length; diperbarui = 0; }
+
+    return {
+      disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel, gantiNama, tautanDiisi, tautanTakDikenal,
+      turunanDijalarkan: dijalarkan.reduce((s, d) => s + d.turunan, 0),
+    };
   });
-
-  if (mode === 'ganti') { ditambah = akanTulis.length; diperbarui = 0; }
-
-  return {
-    disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel, gantiNama, tautanDiisi, tautanTakDikenal,
-    turunanDijalarkan: dijalarkan.reduce((s, d) => s + d.turunan, 0),
-  };
 }

@@ -14,6 +14,19 @@ export class RaIndukIndikatorError extends Error {
   constructor(pesan: string) { super(pesan); this.name = 'RaIndukIndikatorError'; }
 }
 
+/**
+ * Satu antrean per tahun untuk jalur tulis yang membaca BANYAK baris lalu menulis berdasarkan bacaan itu:
+ * Simpan & Hapus Data Entry, Impor, Duplikasi Tahun (ke tahun tujuan). Tanpa ini impor bisa menautkan ke
+ * indikator yang sedang dihapus, menulis kegiatan di bawah program yang sedang diganti namanya, dan
+ * duplikasi bercampur dengan impor ke tahun yang sama (dibuktikan scripts/test-renaksi-balapan.mts).
+ * WAJIB perintah PERTAMA transaksinya (L84); `INSERT IGNORE` dulu karena tahun baru belum punya baris
+ * penanda (L69-a, `acquireBludLock`). Jalur satu baris ber-CAS (PATCH triwulan/target/jenis) tidak ikut.
+ */
+export const RA_TAHUN_ENTITY = 'RA_TAHUN';
+export async function kunciTahunRenaksi(tx: TxSql, tahun: number): Promise<void> {
+  await acquireBludLock(tx, RA_TAHUN_ENTITY, String(tahun));
+}
+
 /** Baris yang menjadikan indikator yang akan dihapus sebagai induknya (dialog "Lepas tautan & hapus"). */
 export type PenunjukTautan = { level: RaLevel; nama: string; indikator: string };
 
@@ -457,6 +470,7 @@ export async function upsertRencanaAksi(
     // Baris yang diedit + seluruh turunannya ada di SATU transaksi: ganti nama yang
     // berhenti di tengah meninggalkan keadaan persis yang fitur ini mau cegah.
     await withTransaction(async ({ tx }) => {
+      await kunciTahunRenaksi(tx, Number(lama.tahun));
       await assertIndukIndikator(tx, data);
       const res = await tx`
         UPDATE rencana_aksi SET
@@ -523,6 +537,7 @@ export async function upsertRencanaAksi(
   // Race SELECT-lalu-INSERT ditutup uk_tahun_level_ind: submit kembar jatuh ke
   // ODKU (update, bukan ER_DUP_ENTRY 500). LAST_INSERT_ID(id) → insertId = id existing.
   const res = await withTransaction(async ({ tx }) => {
+    await kunciTahunRenaksi(tx, data.tahun);
     await assertIndukIndikator(tx, data);
     return tx`
     INSERT INTO rencana_aksi
@@ -659,6 +674,7 @@ export async function deleteRencanaAksi(row: RaRow, opsi: { lepasTautan?: boolea
   // angkanya tidak berubah melainkan hilang.
   await assertPeriodeTerbuka(Number(row.tahun));
   return withTransaction(async ({ tx }) => {
+    await kunciTahunRenaksi(tx, Number(row.tahun));
     await kunciSeNama(tx, row);
     const [ada] = await tx`SELECT id FROM rencana_aksi WHERE id = ${row.id} FOR UPDATE`;
     if (!ada) return { lepas: 0 };
@@ -960,6 +976,7 @@ export async function duplicateYear(
     // `acquireBludLock` (INSERT IGNORE lalu FOR UPDATE) mengunci baris penanda
     // yang PASTI ada — namanya menyebut BLUD, isinya generik.
     await acquireBludLock(tx, 'RA_DUPLIKASI', String(toTahun));
+    await kunciTahunRenaksi(tx, toTahun);
 
     // COUNT diulang DI DALAM kunci. Yang dihitung sebelum mengunci tidak menjamin
     // apa pun: itu justru bagian yang dulu bocor.

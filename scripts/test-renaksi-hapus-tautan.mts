@@ -190,7 +190,7 @@ try {
   const data = tanpaKomentar(readFileSync(new URL('../lib/data/rencana-aksi.ts', import.meta.url), 'utf8'))
   const hapusFn = data.slice(data.indexOf('export async function deleteRencanaAksi('), data.indexOf('type SqlResult'))
   ok('C1 hapus: kunci baris PERTAMA di transaksi (L84)',
-    /return withTransaction\(async \(\{ tx \}\) => \{\s*await kunciSeNama\(tx, row\);\s*const \[ada\] = await tx`SELECT id FROM rencana_aksi WHERE id = \$\{row\.id\} FOR UPDATE`/.test(hapusFn))
+    /return withTransaction\(async \(\{ tx \}\) => \{\s*await kunciTahunRenaksi\(tx, Number\(row\.tahun\)\);\s*await kunciSeNama\(tx, row\);\s*const \[ada\] = await tx`SELECT id FROM rencana_aksi WHERE id = \$\{row\.id\} FOR UPDATE`/.test(hapusFn))
   ok('C2 penjaga nama memakai tx yang sama', hapusFn.includes('await assertTidakPunyaAnak(tx, row);'))
   ok('C3 Kunci Periode diperiksa sebelum transaksi', hapusFn.indexOf('assertPeriodeTerbuka') < hapusFn.indexOf('withTransaction'))
   ok('C4 simpan: induk dibaca FOR SHARE lewat tx', /FROM rencana_aksi WHERE id = \$\{data\.induk_indikator_id\}\s*FOR SHARE/.test(data)
