@@ -332,6 +332,14 @@ function ConfirmDialog({
   )
 }
 
+/**
+ * Prefiks kelas docx-preview. Halaman = `section.${KELAS}`, pembungkus abu-abu = `.${KELAS}-wrapper` —
+ * BUKAN `section.docx`: dulu kodenya mencari nama bawaan, tak satu halaman pun ketemu, dan cadangannya
+ * memotret seluruh pembungkus jadi SATU halaman PDF (semua halaman terjepit, berlatar abu-abu).
+ */
+const KELAS_PRATINJAU = 'pk-docx-preview'
+
+
 // Preview pattern align dgn RA Cetak PdfPreviewModal:
 // 1. Fetch DOCX dari endpoint
 // 2. Render docx-preview ke DOM offscreen (utk capture html2canvas)
@@ -367,7 +375,7 @@ function DocxPreviewModal({
         if (cancelled || !offscreenRef.current) return
         offscreenRef.current.innerHTML = ''
         await mod.renderAsync(blob, offscreenRef.current, undefined, {
-          className: 'pk-docx-preview',
+          className: KELAS_PRATINJAU,
           inWrapper: true,
           ignoreWidth: false,
           ignoreHeight: false,
@@ -395,11 +403,11 @@ function DocxPreviewModal({
           import('jspdf'),
         ])
         if (cancelled) return
-        // docx-preview output: <div.docx-wrapper><section.docx>...</section>...</div>
-        let sections: ArrayLike<Element> = offscreenRef.current.querySelectorAll('section.docx')
+        // docx-preview output: <div.{KELAS}-wrapper><section.{KELAS}>...</section>...</div>
+        let sections: ArrayLike<Element> = offscreenRef.current.querySelectorAll(`section.${KELAS_PRATINJAU}`)
         // Fallback kalau struktur berubah / fonts blocked: capture wrapper as 1 page
         if (!sections.length) {
-          const wrapper = offscreenRef.current.querySelector('.docx-wrapper')
+          const wrapper = offscreenRef.current.querySelector(`.${KELAS_PRATINJAU}-wrapper`)
           if (wrapper) sections = wrapper.querySelectorAll(':scope > *')
         }
         if (!sections.length && offscreenRef.current.children.length > 0) {

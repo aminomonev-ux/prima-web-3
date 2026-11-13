@@ -3761,3 +3761,12 @@ table tbody td.sd-selisih.minus { color: #E24B4A !important; }
   color: #FAC775; font-size: 13px; font-weight: 600;
 }
 [data-theme="light"] .spanduk-selaras { background: rgba(186,117,23,.10); color: #854F0B; }
+
+/* html2canvas(-pro) mengukur garis dasar huruf dengan <img> 1×1 bersumber gif ini yang ditempel di
+   document.body ASLI (FontMetrics.parseMetrics). Preflight Tailwind `img { display: block }` membuatnya
+   turun ke baris sendiri, garis dasar terhitung salah, dan SEMUA teks hasil potretan tergeser ke bawah —
+   garis bawah nama penanda tangan & garis tabel di pratinjau PDF PK tampak mencoret huruf. Selektor
+   sengaja persis sumber gif itu supaya gambar lain tidak tersentuh. */
+img[src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"] {
+  display: inline !important;
+}
