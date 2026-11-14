@@ -84,6 +84,8 @@ export type AuditEventType =
   | 'SESSION_EXPIRED'
   | 'BROADCAST'
   | 'PEMELIHARAAN_KELUAR'     // /api/admin/pemeliharaan — kirim / batalkan / buka login
+  | 'DRIVE_UJI'               // /api/admin/drive aksi=uji — tulis/baca/hapus probe per tujuan + baca berkas lama
+  | 'DRIVE_FOLDER_UBAH'       // /api/admin/drive aksi=atur_induk — folder induk Drive diisi/dikosongkan
   | 'BRUTE_FORCE'
   // ─── E-Anggaran ─────────────────────────────────────────────────────────────
   | 'KINERJA_SAVE_MASTER'

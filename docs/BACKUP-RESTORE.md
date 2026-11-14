@@ -13,11 +13,17 @@ mysqldump prima_db
    → upload Drive: subfolder "01 Backup Database" di GOOGLE_DRIVE_FOLDER_ID_ROOT
      (dibuat sendiri bila belum ada), atau GOOGLE_DRIVE_FOLDER_ID_BACKUP bila tanpa folder induk
    → hapus lokal (sukses) / simpan backups-pending/ (gagal, retry run berikutnya)
-   → rotasi: hapus file tertua di Drive melebihi BACKUP_RETENTION (default 30)
+   → catat: drive_arsip (nama, ukuran, sha256) + drive_health (terakhir berhasil/gagal)
+   → rotasi: hapus backup TERCATAT tertua melebihi BACKUP_RETENTION (default 30);
+     barisnya tidak dihapus, dihapus_pada diisi. Tabel belum ada → cara lama (per nama)
    → log: scripts/backup-db.log
 ```
 
-- Nama file: `prima-db-YYYY-MM-DD-HH-mm.sql.gz.enc`
+- Nama file: `prima-db-YYYY-MM-DD-HH-mm.sql.gz.enc`, jam **WIB** sejak 14 Nov 2026
+  (sebelumnya UTC: backup 01.00 WIB bernama `…-18-00` tanggal kemarin).
+- Pemantauan: **Admin Panel → Drive & Backup** (Super Admin) — 10 backup terakhir,
+  kesehatan per tujuan, tombol Uji. Backup manual & terjadwal yang berbarengan tidak
+  saling ganggu: yang kedua dilewati (`backups-pending/.lock`).
 - Password mysqldump lewat env `MYSQL_PWD` (tidak tampil di process list).
 - **Fail-closed**: tanpa `BACKUP_ENC_PASSWORD` (min 16 char) backup tidak dibuat —
   dump polos tidak boleh naik ke cloud.
@@ -91,7 +97,8 @@ Linux/crontab (server yang menyala 24 jam): `0 1 * * * cd /opt/prima-web && node
 
 ## Restore
 
-1. Unduh file `.sql.gz.enc` dari folder Drive backup.
+1. Unduh file `.sql.gz.enc` dari folder Drive backup. Sidik SHA-256 di panel Admin
+   (8 karakter pertama) bisa dicocokkan: `(Get-FileHash <berkas>).Hash.Substring(0,8).ToLower()`.
 2. Dekripsi (butuh `BACKUP_ENC_PASSWORD` — dari `.env.local` atau env var):
    ```
    node scripts/backup-decrypt.js prima-db-2026-07-02-01-00.sql.gz.enc

@@ -78,6 +78,13 @@ export async function uploadBufferToDrive(opts: {
   return { fileId: res.data.id ?? '', name: res.data.name ?? opts.name, size: Number.isFinite(size) ? size : null };
 }
 
+/** Akun & kuota token yang terpasang. `batas` null = tanpa batas (Workspace). */
+export async function infoKuota(): Promise<{ email: string | null; terpakai: number | null; batas: number | null }> {
+  const r = await getDriveClient().about.get({ fields: 'user(emailAddress),storageQuota(limit,usage)' }, { timeout: BATAS_WAKTU_DRIVE_MS });
+  const angka = (v: unknown) => (v == null || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
+  return { email: r.data.user?.emailAddress ?? null, terpakai: angka(r.data.storageQuota?.usage), batas: angka(r.data.storageQuota?.limit) };
+}
+
 const MIME_FOLDER = 'application/vnd.google-apps.folder';
 
 /** Nama di dalam kueri Drive: kutip tunggal & garis miring terbalik wajib di-escape. */

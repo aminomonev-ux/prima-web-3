@@ -147,7 +147,7 @@ ok('C16 unggahan BBA ke folder BBA; modul lain & modul tak dikenal tetap ke fold
   && folderUnggahan('lkjip', envUji) === 'umum' && folderUnggahan('usulan_aset', envUji) === 'umum' && folderUnggahan(null, envUji) === 'umum')
 ok('C17 folder BBA belum disetel/kosong → jatuh ke folder umum (server lama tetap bisa unggah)', folderUnggahan('buku_besar_aset', { GOOGLE_DRIVE_FOLDER_ID: 'umum' }) === 'umum'
   && folderUnggahan('buku_besar_aset', { GOOGLE_DRIVE_FOLDER_ID: 'umum', GOOGLE_DRIVE_FOLDER_ID_BBA: '  ' }) === 'umum')
-ok('C18 route unggah memakai folderUntuk(tujuanUnggahan(modulAsal)), bukan env umum langsung', tanpaKomentar(sumber('app/api/upload/route.ts')).includes('const folderId = await folderUntuk(tujuanUnggahan(modulAsal));')
+ok('C18 route unggah memakai unggahKeTujuan(tujuanUnggahan(modulAsal)), bukan env umum langsung', tanpaKomentar(sumber('app/api/upload/route.ts')).includes('await unggahKeTujuan(tujuanUnggahan(modulAsal),')
   && !tanpaKomentar(sumber('app/api/upload/route.ts')).includes('process.env.GOOGLE_DRIVE_FOLDER_ID'))
 
 const { kodeGalatDrive } = await import('../lib/services/drive')

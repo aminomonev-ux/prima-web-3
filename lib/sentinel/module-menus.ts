@@ -53,7 +53,7 @@ export function moduleMenusFor(moduleId: string, role: Role | null): string[] {
       // Fase F Tahap 16b (T11) — dulu nama tab lama (App Control, User Management, …):
       // RIMA menyuruh orang mencari tab yang tidak ada. `test-tahap-16.mts` mencocokkannya
       // ke label rel `admin-client.tsx` apa adanya.
-      return ['Pusat Akses', 'Peran', 'Permintaan', 'Tinjauan', 'Sakelar', 'Sesi Aktif', 'Monitor', 'Status', 'Jejak Audit', 'Pemeriksaan', 'Broadcast', 'Email', 'RIMA']
+      return ['Pusat Akses', 'Peran', 'Permintaan', 'Tinjauan', 'Sakelar', 'Pemeliharaan', 'Sesi Aktif', 'Monitor', 'Status', 'Jejak Audit', 'Pemeriksaan', 'Drive & Backup', 'Broadcast', 'Email', 'RIMA']
     default:
       return []
   }

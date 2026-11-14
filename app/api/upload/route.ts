@@ -9,8 +9,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { sql } from '@/lib/data/db';
 import { modulMati } from '@/lib/security/guard';
 import { kunciSakelarBerkas, modulPengunggah, tujuanUnggahan } from '@/lib/security/unggahan-modul';
-import { uploadBufferToDrive } from '@/lib/services/drive';
-import { folderUntuk } from '@/lib/services/drive-tujuan';
+import { unggahKeTujuan } from '@/lib/services/drive-catatan';
 
 export const runtime = 'nodejs';
 
@@ -106,10 +105,7 @@ export async function POST(req: NextRequest) {
     // tapi ditandai sniff_ok=0 → /api/upload/download serve attachment, bukan inline.
     const sniffOk = sniffed !== null;
 
-    const folderId = await folderUntuk(tujuanUnggahan(modulAsal));
-    if (!folderId) throw new Error('Folder Drive belum dikonfigurasi di .env (GOOGLE_DRIVE_FOLDER_ID_ROOT atau GOOGLE_DRIVE_FOLDER_ID).');
-    const { fileId } = await uploadBufferToDrive({ buffer: buf, name: sanitizeFilename(file.name), mimeType: file.type, folderId });
-    if (!fileId) throw new Error('Drive tidak mengembalikan id berkas.');
+    const { fileId } = await unggahKeTujuan(tujuanUnggahan(modulAsal), { buffer: buf, name: sanitizeFilename(file.name), mimeType: file.type });
     // L61: catat pemilik file → /api/upload/download bisa authorize per-file
     // (uploader atau role elevated), bukan sekadar "sudah login". Silent-fail
     // (jangan gagalkan upload kalau insert tracking error).

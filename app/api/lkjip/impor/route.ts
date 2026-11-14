@@ -13,8 +13,8 @@ import {
   bacaDocxLkjip, ImporWordError, BATAS_BERKAS_IMPOR, PESAN_TERLALU_BESAR,
   type BagianImpor, type HasilImporWord, type Koreksi,
 } from '@/lib/lkjip/impor-word';
-import { uploadBufferToDrive } from '@/lib/services/drive';
-import { folderUntuk } from '@/lib/services/drive-tujuan';
+import { tujuanTerkonfigurasi } from '@/lib/services/drive-tujuan';
+import { unggahKeTujuan } from '@/lib/services/drive-catatan';
 import { bulkInsert } from '@/lib/data/db';
 import { guard } from '../_guard';
 
@@ -63,14 +63,13 @@ async function unggahGambar(hasil: HasilImporWord, sidik: string, userId: number
   const peta = new Map<string, string>();
   const daftar = Object.values(hasil.gambar);
   if (!daftar.length) return { peta, gagal: 0 };
-  const folderId = await folderUntuk('lkjip').catch((e) => { console.error('[LKJIP impor] folder Drive', e); return ''; });
-  if (!folderId) return { peta, gagal: daftar.length };
+  if (!(await tujuanTerkonfigurasi('lkjip'))) return { peta, gagal: daftar.length };
   let gagal = 0;
   for (let i = 0; i < daftar.length; i += 3) {
     await Promise.all(daftar.slice(i, i + 3).map(async (g, j) => {
       try {
-        const up = await uploadBufferToDrive({
-          buffer: Buffer.from(g.bytes), name: `impor-word-${sidik.slice(0, 8)}-${i + j + 1}.${g.ext}`, mimeType: g.mime, folderId,
+        const up = await unggahKeTujuan('lkjip', {
+          buffer: Buffer.from(g.bytes), name: `impor-word-${sidik.slice(0, 8)}-${i + j + 1}.${g.ext}`, mimeType: g.mime,
         });
         if (up.fileId) peta.set(g.ref, up.fileId); else gagal++;
       } catch (e) { gagal++; console.error('[LKJIP impor] unggah gambar gagal', e); }

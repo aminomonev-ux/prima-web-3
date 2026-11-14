@@ -1,7 +1,8 @@
 # Konsep — Drive Terpusat PRIMA (satu pintu kredensial & tujuan)
 
-> Status: **Tahap 1 + folder induk otomatis DIKERJAKAN 14 November 2026** (§18). Tahap 2
-> (Uji & manifest) dan sisa Tahap 3 (layar) masih menunggu §15. Direvisi 14 November 2026
+> Status: **Tahap 1–3 DIKERJAKAN 14 November 2026** (§18 folder induk, §19 manifest, Uji,
+> panel). Keputusan §15 yang belum dijawab pemilik diisi pilihan yang tidak mengubah
+> perilaku (§19.1). Direvisi 14 November 2026
 > sesudah dicocokkan ulang dengan kode — daftar koreksi & pengembangan di **§17**; yang
 > terpenting: pindah akun Google ternyata MEMUTUS berkas lama (§2.1 A15, §11).
 > Dokumen ini mencatat hasil
@@ -807,3 +808,54 @@ MySQL + Drive tiruan; bagian E Drive sungguhan bila `UJI_DRIVE_INDUK` diisi, +4,
 `UJI_DRIVE_HAPUS=1` membuang subfolder buatan uji). 10 uji mutasi: 9 tertangkap, 1 setara
 (antrean dalam proses dibuang — kunci basis data sudah menjamin satu folder; antrean hanya
 menghemat koneksi).
+
+## 19. Pelaksanaan Tahap 2–3 (14 November 2026)
+
+Migrasi: `docs/migrations/migration-drive-arsip.sql` (`drive_arsip` + `drive_health`,
+§5.2–§5.3 apa adanya). **Aman dijalankan sebelum atau sesudah kodenya dipasang**: tanpa
+tabel, pencatatan gagal diam-diam, panel menampilkan spanduk "migrasi belum dijalankan",
+dan rotasi backup jatuh ke cara lama.
+
+### 19.1 Keputusan §15 yang diisi tanpa mengubah perilaku
+
+| § 15 | Dipakai | Alasan |
+|---|---|---|
+| 1 Akun | akun pribadi ber-refresh-token (seperti sekarang) | Shared Drive butuh Workspace; tidak ada kode yang terkunci pada pilihan ini |
+| 2 Scope | tidak diubah (melekat pada token, bukan kode) | mengganti scope = membuat token baru — tindakan pemilik akun. Uji "baca berkas lama" yang memberi tahu kapan ini jadi masalah |
+| 3 Mode folder | folder induk (dipilih pemilik, §18) | — |
+| 4 Retensi | tetap 30 **berkas** terbaru | perilaku hari ini; jadwal sekali sehari = 30 hari |
+| 5 Salinan kedua lampiran | belum dikerjakan — risiko diterima sementara | butuh tempat kedua yang belum ditentukan |
+| 6 Panel | satu tab "Drive & Backup" (grup Sistem, Super Admin) | — |
+
+### 19.2 Yang dipasang
+
+| Bagian | Berkas | Catatan |
+|---|---|---|
+| Satu pintu unggah | `lib/services/drive-catatan.ts` `unggahKeTujuan()` | folder → unggah → `drive_arsip` (sha256 isi yang diunggah) → `drive_health`. Dipakai `/api/upload`, impor & arsip versi LKJIP, cadangan BLUD. `uploadBufferToDrive` langsung hanya boleh di `drive*.ts` (uji B7b). Folder belum diatur ≠ gagal sambungan: tidak dicatat |
+| Uji | `lib/services/drive-uji.ts` `ujiDrive()` | per tujuan: tulis → baca → hapus berkas 16 byte (sekali per FOLDER), lalu **baca berkas lama** tertua & terbaru (§16.2) → `lama_tak_terbaca`. Kuota lewat `about.get`. Hasil ke `drive_health` + `app_config.drive_uji_terakhir` (JSON, menggantikan `drive_last_test_at`) |
+| Status | `bacaStatusDrive()` | HANYA membaca DB — membuka panel tidak memanggil Google dan tidak membuat folder (uji B20) |
+| Peringatan backup | `lib/services/drive-status.ts` `backupBasi()` (murni) | §10 disesuaikan dengan jadwal 12.00 (`docs/PANDUAN-jadwal-backup.md`): **kuning** = belum ada backup hari ini padahal sudah lewat 14.00 dan aplikasi hidup ≥ 2 jam; **merah** = terakhir berhasil > 4 hari; **belum** = belum pernah tercatat. Dua tingkat, bukan satu: "hari ini telat" dan "sudah berhari-hari mati" butuh tanggapan berbeda |
+| Route | `app/api/admin/drive/route.ts` | SUPER_ADMIN; GET status; POST `uji` (1/30 detik, audit `DRIVE_UJI` S) & `atur_induk` (audit `DRIVE_FOLDER_UBAH` P, nilai lama → baru) |
+| Folder induk dari panel | `app_config.drive_root` | mengalahkan env `GOOGLE_DRIVE_FOLDER_ID_ROOT` (aplikasi DAN skrip backup); kosongkan = kembali ke env. Panel menerima URL folder yang ditempel apa adanya (`bacaIdFolder`), yang disimpan tetap ID |
+| Panel | `app/(dashboard)/admin/_panels/TabDriveBackup.tsx` | folder induk, Uji + kuota, kesehatan per tujuan (tautan ke folder), 10 backup terakhir + sha256 |
+| Skrip backup | `scripts/backup-db.js` | nama berkas jam WIB (A16) · `drive_arsip` + `drive_health` · rotasi dari manifest, baris diberi `dihapus_pada` (A6) · kunci `backups-pending/.lock` (basi sesudah 2 jam) · galat fatal dilempar supaya sempat dicatat · spawn mysqldump gagal tidak lagi `process.exit` di dalam event |
+
+Per-tujuan `drive_folder_*` di panel (§10 baris "Isian folder") **tidak** dibuat: mode
+folder induk sudah dipilih, dan lima isian yang tak pernah dipakai hanya menambah cara
+salah mengisi. Kalau suatu hari dibutuhkan, `folderUntuk` tempatnya.
+
+### 19.3 Dibuktikan
+
+- Drive sungguhan: Uji keenam tujuan hijau, kuota terbaca; ID karangan di manifest
+  backup → `lama_tak_terbaca` (tujuan lain tetap hijau).
+- Skrip backup dijalankan 4× dengan retensi 3: nama `…-15-50` (WIB), berkas ke-4 memicu
+  rotasi tepat satu berkas, barisnya `dihapus_pada` terisi; jalan kelima dengan `.lock`
+  terpasang → `[LEWAT]`, exit 0. mysqldump salah path → `[FATAL]` + tercatat, tidak menggantung.
+- Panel di peramban (akun dummy, sementara Super Admin): status, UJI SEKARANG, tempel URL
+  folder → tersimpan sebagai ID "DARI PANEL", kosongkan → kembali ke env, 375 px tanpa
+  meluap, tema terang; peran ADMIN → 403.
+- Regresi: `scripts/test-drive-terpusat.mts` (85 tanpa internet; +6 bagian E Drive
+  sungguhan), 17 uji mutasi tertangkap. Dua awalnya LOLOS: batas "hidup sejak 00.00"
+  ternyata mubazir (syarat lewat jadwal + 2 jam sudah menjaminnya — kodenya disederhanakan),
+  dan pemeriksaan berkas lama hanya tertangkap uji Drive sungguhan (kini juga D16 dengan
+  Drive tiruan).

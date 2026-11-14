@@ -1613,6 +1613,36 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
   COMMENT='Ownership file Drive untuk authorize /api/upload/download (L61)';
 CREATE INDEX idx_uploaded_files_user ON uploaded_files (uploaded_by);
 
+-- Drive: catatan unggahan (manifest) + kesehatan per tujuan — migration-drive-arsip.sql,
+-- docs/CONCEPT-drive-terpusat.md §5.2–§5.3. Ditulis lib/services/drive-catatan.ts & scripts/backup-db.js.
+CREATE TABLE IF NOT EXISTS drive_arsip (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tujuan        VARCHAR(40)  NOT NULL,           -- 'backup_db' | 'lkjip' | 'lkjip_arsip' | 'blud_json' | 'bba' | 'usulan'
+  file_id       VARCHAR(64)  NOT NULL,
+  nama          VARCHAR(255) NOT NULL,
+  ukuran        BIGINT UNSIGNED NULL,            -- byte, dari Drive
+  sha256        CHAR(64)     NULL,               -- hash berkas YANG DIUNGGAH (backup: .sql.gz.enc, bukan dump polos)
+  folder_id     VARCHAR(64)  NULL,               -- folder tempat ia ditaruh
+  sumber        VARCHAR(20)  NOT NULL DEFAULT 'aplikasi', -- 'aplikasi' | 'backup_db'
+  dibuat_pada   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  dihapus_pada  DATETIME     NULL,               -- diisi rotasi; baris TIDAK dihapus
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_drive_arsip_file (file_id),
+  KEY idx_drive_arsip_tujuan (tujuan, dibuat_pada),
+  KEY idx_drive_arsip_hapus (dihapus_pada)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS drive_health (
+  tujuan            VARCHAR(40)  NOT NULL,
+  terakhir_ok_at    DATETIME     NULL,
+  terakhir_gagal_at DATETIME     NULL,
+  pesan             VARCHAR(255) NULL,           -- pesan kegagalan terakhir
+  kode              VARCHAR(40)  NULL,           -- 'quota' | 'permission' | 'notfound' | 'token' | 'jaringan' | 'lain'
+  jumlah_ok         INT UNSIGNED NOT NULL DEFAULT 0,
+  jumlah_gagal      INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (tujuan)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Perjanjian Kinerja (PK) — modul (migration-029-pk-tables.sql)
 -- 8 tabel: pk_sasaran, pk_program, pk_unit_kerja, pk_unit_kerja_blud_pj,

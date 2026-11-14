@@ -115,10 +115,10 @@ bab('C. Satu logika, dua pemicu')
   cek('Route cron memanggil fungsi lib yang SAMA', /cadangkanJsonBlud\(\{ batas: \d+ \}\)/.test(kCron),
     'dua salinan logika yang sama adalah cara L78 lahir')
   cek('Tidak ada route yang mengunggah sendiri',
-    !/uploadBufferToDrive/.test(kBlud) && !/uploadBufferToDrive/.test(kCron))
+    !/uploadBufferToDrive|unggahKeTujuan/.test(kBlud) && !/uploadBufferToDrive|unggahKeTujuan/.test(kCron))
 
   cek('Penanda ditulis SESUDAH unggahan berhasil',
-    /uploadBufferToDrive\(\{[\s\S]*?\}\)[\s\S]{0,200}UPDATE blud_riwayat_simpan SET drive_file_id/.test(kLib),
+    /unggahKeTujuan\('blud_json', \{[\s\S]*?\}\)[\s\S]{0,200}UPDATE blud_riwayat_simpan SET drive_file_id/.test(kLib),
     'terbalik = foto mengaku tercadang padahal Drive kosong')
   cek('Kegagalan per berkas dicatat, tidak dilempar',
     /catch \(e\) \{[\s\S]{0,220}gagal\+\+/.test(kLib),

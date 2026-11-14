@@ -11,8 +11,8 @@
 // L84) dan semua orang lain ikut antre.
 
 import { sql, sqlInt } from '@/lib/data/db'
-import { uploadBufferToDrive } from '@/lib/services/drive'
 import { folderUntuk, tujuanTerkonfigurasi } from '@/lib/services/drive-tujuan'
+import { catatKesehatan, unggahKeTujuan } from '@/lib/services/drive-catatan'
 import { toDateStr, waktuSekarangWIB } from './tanggal'
 import {
   CADANGAN_FORMAT, namaBerkasCadangan,
@@ -64,7 +64,7 @@ export async function statusCadanganJson(): Promise<StatusCadangan> {
   const total = Number(r.total ?? 0)
   const belum = Number(r.belum ?? 0)
   return {
-    aktif:    tujuanTerkonfigurasi('blud_json'),
+    aktif:    await tujuanTerkonfigurasi('blud_json'),
     sudah:    total - belum,
     belum,
     terakhir: r.terakhir ? normWaktu(r.terakhir) : null,
@@ -124,14 +124,14 @@ export async function cadangkanJsonBlud(
   let folder = ''
   let galatFolder: string | null = null
   try { folder = await folderUntuk('blud_json') }
-  catch (e) { galatFolder = e instanceof Error ? e.message : String(e) }
+  catch (e) { galatFolder = e instanceof Error ? e.message : String(e); await catatKesehatan('blud_json', e) }
   if (!folder) {
     const status = await statusCadanganJson()
     return {
       ...status, diunggah: 0, gagal: 0,
       pesan: galatFolder
         ? `Folder Drive untuk cadangan JSON tidak bisa disiapkan: ${galatFolder}`
-        : 'Folder Drive untuk cadangan JSON belum dikonfigurasi (GOOGLE_DRIVE_FOLDER_ID_ROOT atau GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON).',
+        : 'Folder Drive untuk cadangan JSON belum diatur (folder induk di Admin Panel → Drive & Backup, atau GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON).',
     }
   }
 
@@ -146,13 +146,11 @@ export async function cadangkanJsonBlud(
     const id = Number(r.id)
     try {
       const berkas = berkasDari(r)
-      const { fileId } = await uploadBufferToDrive({
+      const { fileId } = await unggahKeTujuan('blud_json', {
         buffer:   Buffer.from(JSON.stringify(berkas), 'utf8'),
         name:     namaBerkasCadangan(berkas),
         mimeType: 'application/json',
-        folderId: folder,
       })
-      if (!fileId) throw new Error('Drive tidak mengembalikan id berkas.')
       await sql`UPDATE blud_riwayat_simpan SET drive_file_id = ${fileId} WHERE id = ${id}`
       diunggah++
     } catch (e) {

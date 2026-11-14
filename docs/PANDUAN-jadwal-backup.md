@@ -119,14 +119,15 @@ Hasil yang benar (tanggal/jam/ukuran berbeda):
 
 ```
 2026-11-17T05:00:03.120Z [FOLDER] subfolder "01 Backup Database" dibuat di folder induk (1AbC…)
-2026-11-17T05:00:09.842Z [DUMP-OK] prima-db-2026-11-17-05-00.sql.gz.enc (4685 KB)
-2026-11-17T05:00:12.016Z [UPLOAD-OK] prima-db-2026-11-17-05-00.sql.gz.enc → Drive folder backup
+2026-11-17T05:00:09.842Z [DUMP-OK] prima-db-2026-11-17-12-00.sql.gz.enc (4685 KB)
+2026-11-17T05:00:12.016Z [UPLOAD-OK] prima-db-2026-11-17-12-00.sql.gz.enc → Drive folder backup
 2026-11-17T05:00:12.390Z [DONE] selesai 9.3s · retensi 30 · rotasi hapus 0
 ```
 
 - Baris `[FOLDER]` hanya muncul sekali seumur hidup (saat subfolder pertama kali dibuat).
-- **Jam di log & nama berkas memakai UTC** — backup jam 12:00 WIB tertulis `05-00`.
-  Itu bukan salah jam; ingat saat memilih berkas untuk restore.
+- **Nama berkas memakai jam WIB** (`…-12-00` = pukul 12.00), **jam di awal baris log
+  memakai UTC** (berakhiran `Z`, jadi 12.00 WIB tertulis `05:00`). Backup yang dibuat
+  sebelum 14 November 2026 masih bernama jam UTC.
 - Buka Google Drive → folder induk → **01 Backup Database**: satu berkas
   `prima-db-….sql.gz.enc` harus ada.
 
@@ -289,8 +290,15 @@ wajar padahal tugasnya tidak pernah dimulai — yang membongkarnya log.)
 
 ### 6.3 Berkasnya ada di Drive
 
-Buka folder induk → **01 Backup Database** → berkas terbaru bertanggal hari ini (ingat:
-jam di nama berkas UTC, jadi jam 12:00 WIB tertulis `05-00`).
+Buka folder induk → **01 Backup Database** → berkas terbaru bertanggal hari ini, jamnya
+sesuai jam backup (WIB).
+
+### 6.3b Panel Admin
+
+Kalau migrasi `migration-drive-arsip.sql` sudah dijalankan: **Admin Panel → Drive & Backup**
+(khusus Super Admin) menampilkan backup tadi di "Backup database terbaru", lengkap dengan
+ukuran dan sidik SHA-256-nya, dan baris "Backup database" di "Kesehatan per tujuan" berisi
+jam barusan.
 
 ### 6.4 Uji "terlewat" (sekali saja, disarankan)
 
@@ -307,7 +315,12 @@ Ini yang membuktikan setelan *jalankan yang terlewat* benar-benar terpasang:
 
 ## 7. Pemeriksaan rutin (cukup sebulan sekali)
 
-Satu perintah, tiga jawaban:
+Cara termudah: **Admin Panel → Drive & Backup**. Kalau backup hari ini belum naik
+padahal sudah lewat pukul 14.00 dan aplikasi menyala sejak pagi, muncul spanduk kuning;
+kalau backup terakhir lebih dari 4 hari lalu, spanduk merah. Tekan **UJI SEKARANG** untuk
+memastikan sambungan ke Drive & berkas lama masih terbaca.
+
+Lewat PowerShell — satu perintah, tiga jawaban:
 
 ```powershell
 $i = Get-ScheduledTaskInfo -TaskName 'PRIMA - backup database'
@@ -368,6 +381,8 @@ tunggu `UPLOAD-OK` di log, baru perbarui.
 | `[UPLOAD-FAIL]` / `[RETRY-FAIL]` dengan `invalid_grant` | refresh token dicabut, kedaluwarsa, atau sandi akun Google diganti | buat ulang `GOOGLE_OAUTH_REFRESH_TOKEN` (`docs/BACKUP-RESTORE.md` §Pemegang akun) |
 | `[UPLOAD-FAIL] … storageQuotaExceeded` | Drive penuh | kosongkan Drive atau turunkan `BACKUP_RETENTION` |
 | `[ROTATE-FAIL]` | gagal menghapus backup lama (jarang) | backup hari itu tetap aman; periksa lagi besok |
+| `[LEWAT] backup lain sedang berjalan` | backup manual & terjadwal berbarengan | tidak perlu apa-apa. Kalau muncul terus padahal tidak ada backup lain, hapus `backups-pending\.lock` (kunci dianggap basi sendiri sesudah 2 jam) |
+| `[CATAT-FAIL] … drive_health/drive_arsip doesn't exist` | migrasi `migration-drive-arsip.sql` belum dijalankan | backup tetap jalan; jalankan migrasinya supaya panel Admin terisi dan rotasi memakai catatan |
 | log **tidak bertambah sama sekali** | tugas tidak pernah dimulai | bagian 9.2 + periksa setelan baterai (bagian 10) |
 
 ### 9.2 Kode hasil Task Scheduler
