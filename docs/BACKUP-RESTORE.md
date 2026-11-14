@@ -95,6 +95,20 @@ jalan saat memakai baterai**.
 
 Linux/crontab (server yang menyala 24 jam): `0 1 * * * cd /opt/prima-web && node scripts/backup-db.js`
 
+## Lampiran (salinan kedua)
+
+Backup database hanya menyimpan **ID** lampiran; berkasnya di Drive. `backup-db.js` karena
+itu juga menyalin lampiran semua modul (`uploaded_files` + arsip Word LKJIP) ke:
+
+- **laptop server** — `BACKUP_LAMPIRAN_DIR` (bawaan `<folder aplikasi>\backups-lampiran`),
+  `<modul>\<fileId>__<nama>`, TIDAK terenkripsi;
+- **Drive** — subfolder "06 Salinan Lampiran" (atau `GOOGLE_DRIVE_FOLDER_ID_SALINAN`),
+  nama `[modul] <nama>`; asalnya tercatat di `drive_arsip.asal_file_id`.
+
+Memulihkan lampiran yang hilang dari Drive: unggah ulang berkas dari salinan lewat layar
+modulnya. ID berkas lama tidak bisa dihidupkan kembali — rujukan di modul perlu dipasang ke
+unggahan baru. Rincian: `docs/CONCEPT-drive-terpusat.md` §20.
+
 ## Restore
 
 1. Unduh file `.sql.gz.enc` dari folder Drive backup. Sidik SHA-256 di panel Admin

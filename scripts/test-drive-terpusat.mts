@@ -37,7 +37,7 @@ const envLengkap = {
 }
 const envUmum = { GOOGLE_DRIVE_FOLDER_ID: 'umum' }
 ok('A1 env khusus dipakai per tujuan', T.DRIVE_TUJUAN.every((t) => T.folderDariEnv(t, envLengkap) === ({
-  backup_db: 'backup', lkjip: 'lkjip', lkjip_arsip: 'lkjip', blud_json: 'blud', bba: 'bba', usulan: 'umum',
+  backup_db: 'backup', lkjip: 'lkjip', lkjip_arsip: 'lkjip', blud_json: 'blud', bba: 'bba', usulan: 'umum', salinan_lampiran: '',
 } as const)[t]))
 ok('A2 hanya folder umum: unggahan LKJIP/BBA/usulan ikut umum, arsip LKJIP/cadangan BLUD/backup TIDAK',
   T.folderDariEnv('lkjip', envUmum) === 'umum' && T.folderDariEnv('bba', envUmum) === 'umum' && T.folderDariEnv('usulan', envUmum) === 'umum'
@@ -48,7 +48,7 @@ ok('A4 folder induk membuat SEMUA tujuan terkonfigurasi (termasuk yang env-nya k
 ok('A5 tanpa induk & env: arsip LKJIP / cadangan BLUD belum terkonfigurasi', !T.terkonfigurasiDengan('', 'lkjip_arsip', envUmum) && !T.terkonfigurasiDengan('', 'blud_json', {}))
 ok('A6 lkjip & lkjip_arsip berbagi SATU subfolder', T.FOLDER_TUJUAN.lkjip === T.FOLDER_TUJUAN.lkjip_arsip)
 const namaFolder = Object.values(T.NAMA_SUBFOLDER)
-ok('A7 lima subfolder, nama unik & tiap tujuan punya nama', namaFolder.length === 5 && new Set(namaFolder).size === 5
+ok('A7 enam subfolder, nama unik & tiap tujuan punya nama', namaFolder.length === 6 && new Set(namaFolder).size === 6
   && T.DRIVE_TUJUAN.every((t) => !!T.NAMA_SUBFOLDER[T.FOLDER_TUJUAN[t]]))
 ok('A8 tujuan unggahan per modul', U.tujuanUnggahan('buku_besar_aset') === 'bba' && U.tujuanUnggahan('lkjip') === 'lkjip'
   && U.tujuanUnggahan('usulan_aset') === 'usulan' && U.tujuanUnggahan(null) === 'usulan')
@@ -159,8 +159,12 @@ ok('B11 kunci app_config sama', konst('KUNCI_PETA_SUBFOLDER') === T.KUNCI_PETA_S
 ok('B12 kunci blud_locks sama (drive_folder:otomatis) & dipegang SEBELUM membaca peta',
   tujuanSrc.includes("const ENTITAS_KUNCI = 'drive_folder'") && tujuanSrc.includes("acquireBludLock(tx, ENTITAS_KUNCI, 'otomatis')")
   && skrip.indexOf("key_id = 'otomatis' FOR UPDATE") >= 0 && skrip.indexOf("key_id = 'otomatis' FOR UPDATE") < skrip.indexOf('[KUNCI_PETA_SUBFOLDER]);'))
-ok('B13 skrip memakai kunci peta "backup_db" yang sama dengan FOLDER_TUJUAN', T.FOLDER_TUJUAN.backup_db === 'backup_db' && skrip.includes('peta.folder.backup_db') && skrip.includes('backup_db: id'))
-ok('B14 folder induk mengalahkan _BACKUP di skrip', /if \(!induk\) return requireEnv\('GOOGLE_DRIVE_FOLDER_ID_BACKUP'\);/.test(skrip))
+ok('B13 skrip memakai kunci peta yang sama dengan FOLDER_TUJUAN (backup & salinan)',
+  skrip.includes(`folderOtomatis(drive, '${T.FOLDER_TUJUAN.backup_db}', NAMA_SUBFOLDER_BACKUP, 'GOOGLE_DRIVE_FOLDER_ID_BACKUP', true)`)
+  && skrip.includes(`folderOtomatis(drive, '${T.FOLDER_TUJUAN.salinan_lampiran}', NAMA_SUBFOLDER_SALINAN, 'GOOGLE_DRIVE_FOLDER_ID_SALINAN', false)`)
+  && skrip.includes('peta.folder[kunci]') && skrip.includes('[kunci]: id'))
+ok('B14 folder induk mengalahkan env khusus di skrip; backup tanpa folder = fatal, salinan = dilewati',
+  skrip.includes("if (!induk) return wajib ? requireEnv(envNama) : (process.env[envNama] ?? '').trim();"))
 ok('B15 folder gagal disiapkan: dump tetap dibuat & diantrekan', skrip.includes("log('FOLDER-FAIL'") && skrip.includes("if (!folderId) throw new Error('folder backup belum siap');"))
 ok('B25 nama berkas backup ber-jam WIB (A16)', skrip.includes('new Date(sekarang + JAKARTA_OFFSET_MS).toISOString()') && skrip.includes('const fileName = namaBerkasBackup();')
   && !skrip.includes("new Date().toISOString().replace(/[:T]/g, '-')"))
@@ -169,6 +173,33 @@ ok('B27 rotasi berdasarkan manifest, baris tidak dihapus (dihapus_pada)', skrip.
   && skrip.includes('UPDATE drive_arsip SET dihapus_pada = NOW() WHERE id = ?') && !/DELETE FROM drive_arsip/.test(skrip))
 ok('B28 manifest ditulis SESUDAH unggah berhasil', skrip.indexOf('await catatArsip({ fileId: res.data.id') > skrip.indexOf('const res = await drive.files.create({\n    requestBody: { name: path.basename(filePath)'))
 ok('B29 kunci anti-tumpang-tindih: diambil sebelum kerja, dilepas di finally', skrip.includes('if (!ambilKunci()) {') && /\} finally \{\s*lepasKunci\(\);\s*\}/.test(skrip) && skrip.includes("flag: 'wx'"))
+console.log('\nB · salinan kedua lampiran (skrip backup)')
+ok('B31 nama subfolder salinan sama dengan aplikasi', konst('NAMA_SUBFOLDER_SALINAN') === T.NAMA_SUBFOLDER.salinan, String(konst('NAMA_SUBFOLDER_SALINAN')))
+const U0 = await import('../lib/services/drive-uji')
+ok('B32 kunci ringkasan salinan sama dengan yang dibaca panel', konst('KUNCI_RINGKAS_SALINAN') === U0.KUNCI_RINGKAS_SALINAN)
+const badanSalin = skrip.slice(skrip.indexOf('async function salinLampiran('), skrip.indexOf('// ─── Main'))
+ok('B33 daftar = semua unggahan + arsip Word LKJIP; cadangan BLUD tidak (sudah di backup DB)',
+  skrip.includes('FROM uploaded_files ORDER BY created_at ASC') && skrip.includes('FROM lkjip_versi WHERE drive_file_id IS NOT NULL')
+  && !/FROM blud_riwayat_simpan/.test(skrip))
+ok('B34 bertahap: yang sudah punya salinan dilewati (lokal & Drive)', badanSalin.includes('if (adaLokal.has(f.id)) { r.lokal.ada++; continue; }')
+  && badanSalin.includes('if (sudahDisalin.has(f.id)) { r.drive.ada++; continue; }'))
+ok('B35 salinan Drive HANYA bila manifest terbaca (tanpa catatan = menyalin ulang semuanya tiap jalan)',
+  badanSalin.includes('if (sudahDisalin && folderId) {') && badanSalin.includes("'salinan_lampiran', ?, ?, ?, NULL, ?, 'salinan', ?, NOW()"))
+ok('B36 unduhan ditulis ke .part lalu diganti nama (berkas setengah jadi tidak dianggap salinan)',
+  skrip.includes("const sementara = tujuan + '.part';") && skrip.includes('fs.renameSync(sementara, tujuan);') && skrip.includes("!f.endsWith('.part')"))
+ok('B37 dibatasi waktu (tugas terjadwal 1 jam) & sisanya dilanjutkan', skrip.includes('const BATAS_WAKTU_SALINAN_MS = 40 * 60 * 1000;')
+  && badanSalin.includes('if (habisWaktu()) { r.lokal.tertunda++; continue; }') && badanSalin.includes('if (habisWaktu()) { r.drive.tertunda++; continue; }'))
+const iSalin = skrip.indexOf('try { await salinLampiran(drive); }')
+ok('B38 salinan SESUDAH backup database & tidak mengubah kode keluar', iSalin > skrip.indexOf('await rotateOldBackups(drive, folderId, retention)')
+  && iSalin > skrip.indexOf("log('UPLOAD-OK'") && !badanSalin.includes('process.exitCode'))
+ok('B39 folder salinan lokal tidak pernah ikut repo', baca('.gitignore').split(/\r?\n/).includes('backups-lampiran/'))
+const kunciRingkas = ['folder', 'ada', 'baru', 'gagal', 'hilang', 'byte', 'tertunda', 'aktif']
+const antarmuka = tanpaKomentar(baca('lib/services/drive-uji.ts'))
+ok('B40 bentuk ringkasan skrip = antarmuka RingkasSalinan', kunciRingkas.every((k) => badanSalin.includes(`${k}: `) && antarmuka.includes(`${k}: `))
+  && badanSalin.includes('lokal: { folder: dir, ada: 0, baru: 0, gagal: 0, hilang: 0, byte: 0, tertunda: 0 }')
+  && antarmuka.includes('lokal: { folder: string; ada: number; baru: number; gagal: number; hilang: number; byte: number; tertunda: number };')
+  && badanSalin.includes('drive: { aktif: false, ada: 0, baru: 0, gagal: 0, hilang: 0, tertunda: 0 }')
+  && antarmuka.includes('drive: { aktif: boolean; ada: number; baru: number; gagal: number; hilang: number; tertunda: number };'))
 ok('B30 skrip membaca folder induk panel (drive_root) sebelum env', skrip.includes("const KUNCI_FOLDER_INDUK = 'drive_root';") && T.KUNCI_FOLDER_INDUK === 'drive_root'
   && skrip.indexOf('[KUNCI_FOLDER_INDUK]') > 0 && skrip.indexOf('[KUNCI_FOLDER_INDUK]') < skrip.indexOf("return (process.env.GOOGLE_DRIVE_FOLDER_ID_ROOT ?? '').trim();"))
 
@@ -286,7 +317,7 @@ else {
     })
     const hasilTiruan = await U.ujiDrive()
     const bTiruan = hasilTiruan.tujuan.find((t) => t.tujuan === 'backup_db')
-    ok('D16 Uji: berkas lama tak terbaca → lama_tak_terbaca, bukan hijau', bTiruan?.kode === 'lama_tak_terbaca' && !bTiruan.ok && bTiruan.lama.diperiksa === 1 && bTiruan.lama.terbaca === 0, JSON.stringify(bTiruan))
+    ok('D16 Uji: berkas lama tak terbaca → lama_tak_terbaca, bukan hijau', bTiruan?.kode === 'lama_tak_terbaca' && !bTiruan.ok && bTiruan.lama.diperiksa >= 1 && bTiruan.lama.terbaca === bTiruan.lama.diperiksa - 1, JSON.stringify(bTiruan))
     const terdiatur = hasilTiruan.tujuan.filter((t) => t.kode !== 'kosong')
     ok('D17 Uji: tujuan lain hijau, berkas uji dihapus sekali per FOLDER (lkjip & arsip berbagi bila sama)',
       terdiatur.filter((t) => t.tujuan !== 'backup_db').every((t) => t.ok) && probeTerhapus === new Set(terdiatur.map((t) => t.folderId)).size, String(probeTerhapus))
@@ -339,7 +370,7 @@ else {
     for (const [k, id] of Object.entries(T.bacaPetaSubfolder((await sql`SELECT value FROM app_config WHERE \`key\` = ${T.KUNCI_PETA_SUBFOLDER}` as { value: string }[])[0]?.value)?.folder ?? {})) {
       if (!(sebelum.get(T.NAMA_SUBFOLDER[k as keyof typeof T.NAMA_SUBFOLDER]) ?? []).includes(id as string)) dibuatUji.push(id as string)
     }
-    ok('E1 lima subfolder di induk sungguhan', new Set(Object.values(pertama)).size === 5, JSON.stringify(pertama))
+    ok('E1 enam subfolder di induk sungguhan (lkjip & arsipnya berbagi)', new Set(Object.values(pertama)).size === 6, JSON.stringify(pertama))
     // Tanpa catatan app_config (mis. server lain): pencarian nama harus MENEMUKAN folder yang sama.
     const kedua = await D.cariAtauBuatFolder(indukNyata, T.NAMA_SUBFOLDER.bba)
     ok('E2 pencarian menemukan subfolder buatan aplikasi di induk buatan tangan (drive.file)', !kedua.dibuat && kedua.id === pertama.bba, JSON.stringify(kedua))

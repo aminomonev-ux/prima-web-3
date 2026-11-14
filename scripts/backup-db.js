@@ -131,19 +131,20 @@ function jenisGalat(e) {
   return 'lain';
 }
 
-/** drive_health 'backup_db' — catatan, bukan pagar: gagal menulis tidak menggagalkan backup. */
-async function catatKesehatan(galat, kodeTimpa) {
+/** drive_health — catatan, bukan pagar: gagal menulis tidak menggagalkan backup. `galat` null = berhasil. */
+async function catatKesehatanTujuan(tujuan, galat, kodeTimpa) {
   try {
     const c = await db();
     if (!galat) {
-      await c.execute("INSERT INTO drive_health (tujuan, terakhir_ok_at, jumlah_ok) VALUES ('backup_db', NOW(), 1) ON DUPLICATE KEY UPDATE terakhir_ok_at = NOW(), jumlah_ok = jumlah_ok + 1");
+      await c.execute('INSERT INTO drive_health (tujuan, terakhir_ok_at, jumlah_ok) VALUES (?, NOW(), 1) ON DUPLICATE KEY UPDATE terakhir_ok_at = NOW(), jumlah_ok = jumlah_ok + 1', [tujuan]);
     } else {
       const pesan = String(galat.message ?? galat).replace(/\s+/g, ' ').trim().slice(0, 250);
-      await c.execute("INSERT INTO drive_health (tujuan, terakhir_gagal_at, pesan, kode, jumlah_gagal) VALUES ('backup_db', NOW(), ?, ?, 1) ON DUPLICATE KEY UPDATE terakhir_gagal_at = NOW(), pesan = VALUES(pesan), kode = VALUES(kode), jumlah_gagal = jumlah_gagal + 1",
-        [pesan, kodeTimpa ?? jenisGalat(galat)]);
+      await c.execute('INSERT INTO drive_health (tujuan, terakhir_gagal_at, pesan, kode, jumlah_gagal) VALUES (?, NOW(), ?, ?, 1) ON DUPLICATE KEY UPDATE terakhir_gagal_at = NOW(), pesan = VALUES(pesan), kode = VALUES(kode), jumlah_gagal = jumlah_gagal + 1',
+        [tujuan, pesan, kodeTimpa ?? jenisGalat(galat)]);
     }
   } catch (e) { log('CATAT-FAIL', `drive_health: ${e.message}`); }
 }
+const catatKesehatan = (galat, kodeTimpa) => catatKesehatanTujuan('backup_db', galat, kodeTimpa);
 
 /** drive_arsip — manifest mencatat kenyataan Drive, jadi ditulis SESUDAH unggahan berhasil. */
 async function catatArsip(r) {
@@ -209,6 +210,7 @@ async function createEncryptedDump(outFile) {
 // Nama subfolder, kunci app_config, dan kunci `blud_locks` WAJIB sama dengan di sana
 // (dijaga scripts/test-drive-terpusat.mts) — kalau beda, lahir folder kembar.
 const NAMA_SUBFOLDER_BACKUP = '01 Backup Database';
+const NAMA_SUBFOLDER_SALINAN = '06 Salinan Lampiran';
 const KUNCI_PETA_SUBFOLDER = 'drive_subfolder_otomatis';
 const KUNCI_FOLDER_INDUK = 'drive_root';
 const POLA_ID_DRIVE = /^[\w-]{10,128}$/;
@@ -245,12 +247,13 @@ async function folderInduk() {
   return (process.env.GOOGLE_DRIVE_FOLDER_ID_ROOT ?? '').trim();
 }
 
-// Folder induk terisi → subfolder backup dari app_config (dicatat aplikasi atau skrip ini),
-// kalau belum ada dicari/dibuat di bawah kunci yang SAMA dengan aplikasi (blud_locks
-// drive_folder:otomatis) lalu dicatat. Tanpa folder induk → env _BACKUP seperti dulu.
-async function folderBackup(drive) {
+// Folder induk terisi → subfolder dari app_config (dicatat aplikasi atau skrip ini), kalau
+// belum ada dicari/dibuat di bawah kunci yang SAMA dengan aplikasi (blud_locks
+// drive_folder:otomatis) lalu dicatat. Tanpa folder induk → env khusus seperti dulu
+// (`wajib`: backup tanpa folder = fatal; salinan lampiran tanpa folder = dilewati).
+async function folderOtomatis(drive, kunci, nama, envNama, wajib) {
   const induk = await folderInduk();
-  if (!induk) return requireEnv('GOOGLE_DRIVE_FOLDER_ID_BACKUP');
+  if (!induk) return wajib ? requireEnv(envNama) : (process.env[envNama] ?? '').trim();
   const conn = await db();
   try {
     await conn.beginTransaction();
@@ -258,10 +261,10 @@ async function folderBackup(drive) {
     await conn.execute("SELECT version FROM blud_locks WHERE entity = 'drive_folder' AND key_id = 'otomatis' FOR UPDATE");
     const [rows] = await conn.execute('SELECT value FROM app_config WHERE `key` = ? LIMIT 1', [KUNCI_PETA_SUBFOLDER]);
     const peta = rows[0] ? bacaPeta(rows[0].value) : null;
-    const tercatat = peta && peta.induk === induk ? peta.folder.backup_db : '';
+    const tercatat = peta && peta.induk === induk ? peta.folder[kunci] : '';
     if (tercatat) { await conn.commit(); return tercatat; }
-    const id = await cariAtauBuatFolder(drive, induk, NAMA_SUBFOLDER_BACKUP);
-    const baru = { induk, folder: { ...(peta && peta.induk === induk ? peta.folder : {}), backup_db: id } };
+    const id = await cariAtauBuatFolder(drive, induk, nama);
+    const baru = { induk, folder: { ...(peta && peta.induk === induk ? peta.folder : {}), [kunci]: id } };
     await conn.execute('INSERT INTO app_config (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)', [KUNCI_PETA_SUBFOLDER, JSON.stringify(baru)]);
     await conn.commit();
     return id;
@@ -270,6 +273,9 @@ async function folderBackup(drive) {
     throw e;
   }
 }
+
+const folderBackup = (drive) => folderOtomatis(drive, 'backup_db', NAMA_SUBFOLDER_BACKUP, 'GOOGLE_DRIVE_FOLDER_ID_BACKUP', true);
+const folderSalinan = (drive) => folderOtomatis(drive, 'salinan', NAMA_SUBFOLDER_SALINAN, 'GOOGLE_DRIVE_FOLDER_ID_SALINAN', false);
 
 function getDriveClient() {
   const { google } = require('googleapis');
@@ -338,6 +344,134 @@ async function rotateOldBackups(drive, folderId, retention) {
   return toDelete.length;
 }
 
+// ─── Salinan kedua lampiran (konsep drive-terpusat §20) ─────────────────────
+// Lampiran semua modul hanya tinggal di Drive; database cuma menyimpan ID-nya, jadi
+// backup database tidak bisa memulihkannya. Dua salinan, keduanya bertahap (hanya yang
+// belum punya salinan):
+//   - LOKAL di laptop server (BACKUP_LAMPIRAN_DIR) — selamat kalau akun Google bermasalah;
+//   - DRIVE "06 Salinan Lampiran" (files.copy, tanpa unduh) — selamat kalau berkas aslinya
+//     terhapus/folder aslinya dibereskan orang. Hanya jalan bila manifest drive_arsip ada:
+//     tanpa catatan, tiap jalan akan menyalin ulang semuanya.
+// Cadangan JSON BLUD tidak ikut: isinya salinan baris DB, sudah ada di backup database.
+const KUNCI_RINGKAS_SALINAN = 'salinan_lampiran_ringkas';
+/** Salinan berhenti sesudah ini & melanjutkan di jalan berikutnya — tugas terjadwal dibatasi 1 jam. */
+const BATAS_WAKTU_SALINAN_MS = 40 * 60 * 1000;
+
+function folderLampiranLokal() {
+  return path.resolve((process.env.BACKUP_LAMPIRAN_DIR ?? '').trim() || path.join(ROOT, 'backups-lampiran'));
+}
+
+function namaAman(s) {
+  return String(s ?? 'berkas').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 150) || 'berkas';
+}
+
+/** Berkas yang harus punya salinan: semua unggahan (uploaded_files — usulan, BBA, LKJIP) + arsip Word LKJIP. Tertua dulu. */
+async function daftarLampiran() {
+  const c = await db();
+  const [a] = await c.query("SELECT file_id AS id, COALESCE(NULLIF(context, ''), 'tanpa-modul') AS modul FROM uploaded_files ORDER BY created_at ASC");
+  let b = [];
+  try { [b] = await c.query("SELECT drive_file_id AS id, 'lkjip-arsip-versi' AS modul FROM lkjip_versi WHERE drive_file_id IS NOT NULL ORDER BY id ASC"); }
+  catch { /* modul LKJIP belum dimigrasi di server ini */ }
+  const lihat = new Set();
+  return [...a, ...b].filter((r) => r.id && !lihat.has(r.id) && lihat.add(r.id));
+}
+
+/** ID yang sudah punya salinan lokal: nama berkas `<id>__<nama>` di `<folder>/<modul>/`. */
+function idSalinanLokal(dir) {
+  const ada = new Set();
+  if (!fs.existsSync(dir)) return ada;
+  for (const modul of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!modul.isDirectory()) continue;
+    for (const f of fs.readdirSync(path.join(dir, modul.name))) {
+      const i = f.indexOf('__');
+      if (i > 0 && !f.endsWith('.part')) ada.add(f.slice(0, i));
+    }
+  }
+  return ada;
+}
+
+async function unduhKe(drive, id, tujuan) {
+  const sementara = tujuan + '.part';
+  const res = await drive.files.get({ fileId: id, alt: 'media' }, { responseType: 'stream', timeout: 120000 });
+  await pipeline(res.data, fs.createWriteStream(sementara));
+  fs.renameSync(sementara, tujuan);
+}
+
+async function salinLampiran(drive) {
+  const mulai = Date.now();
+  const habisWaktu = () => Date.now() - mulai > BATAS_WAKTU_SALINAN_MS;
+  const daftar = await daftarLampiran();
+  const dir = folderLampiranLokal();
+  const r = {
+    waktu: new Date(Date.now() + JAKARTA_OFFSET_MS).toISOString().slice(0, 19).replace('T', ' '),
+    total: daftar.length,
+    lokal: { folder: dir, ada: 0, baru: 0, gagal: 0, hilang: 0, byte: 0, tertunda: 0 },
+    drive: { aktif: false, ada: 0, baru: 0, gagal: 0, hilang: 0, tertunda: 0 },
+    pesan: null,
+  };
+  const catatPesan = (m) => { if (!r.pesan) r.pesan = String(m).replace(/\s+/g, ' ').slice(0, 250); };
+
+  // 1. Lokal
+  fs.mkdirSync(dir, { recursive: true });
+  const adaLokal = idSalinanLokal(dir);
+  for (const f of daftar) {
+    if (adaLokal.has(f.id)) { r.lokal.ada++; continue; }
+    if (habisWaktu()) { r.lokal.tertunda++; continue; }
+    try {
+      const meta = await drive.files.get({ fileId: f.id, fields: 'name,size' }, { timeout: 30000 });
+      const sub = path.join(dir, namaAman(f.modul));
+      fs.mkdirSync(sub, { recursive: true });
+      await unduhKe(drive, f.id, path.join(sub, `${f.id}__${namaAman(meta.data.name)}`));
+      r.lokal.baru++; r.lokal.ada++;
+    } catch (e) {
+      if (jenisGalat(e) === 'notfound') r.lokal.hilang++; else { r.lokal.gagal++; catatPesan(`lokal: ${e.message}`); }
+    }
+  }
+  for (const modul of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!modul.isDirectory()) continue;
+    for (const f of fs.readdirSync(path.join(dir, modul.name))) r.lokal.byte += fs.statSync(path.join(dir, modul.name, f)).size;
+  }
+
+  // 2. Drive "06 Salinan Lampiran"
+  let sudahDisalin = null;
+  try {
+    const [rows] = await (await db()).query("SELECT asal_file_id AS id FROM drive_arsip WHERE tujuan = 'salinan_lampiran' AND dihapus_pada IS NULL AND asal_file_id IS NOT NULL");
+    sudahDisalin = new Set(rows.map((x) => x.id));
+  } catch (e) { catatPesan(`salinan Drive dilewati — manifest drive_arsip belum siap (${e.message})`); }
+  let folderId = '';
+  if (sudahDisalin) {
+    try { folderId = await folderSalinan(drive); }
+    catch (e) { catatPesan(`folder salinan: ${e.message}`); await catatKesehatanTujuan('salinan_lampiran', e); }
+  }
+  if (sudahDisalin && folderId) {
+    r.drive.aktif = true;
+    for (const f of daftar) {
+      if (sudahDisalin.has(f.id)) { r.drive.ada++; continue; }
+      if (habisWaktu()) { r.drive.tertunda++; continue; }
+      try {
+        const meta = await drive.files.get({ fileId: f.id, fields: 'name' }, { timeout: 30000 });
+        const nama = `[${f.modul}] ${meta.data.name ?? f.id}`;
+        const salin = await drive.files.copy({ fileId: f.id, requestBody: { name: nama, parents: [folderId] }, fields: 'id,name,size' }, { timeout: 60000 });
+        await (await db()).execute(
+          "INSERT IGNORE INTO drive_arsip (tujuan, file_id, nama, ukuran, sha256, folder_id, sumber, asal_file_id, dibuat_pada) VALUES ('salinan_lampiran', ?, ?, ?, NULL, ?, 'salinan', ?, NOW())",
+          [salin.data.id, String(salin.data.name ?? nama).slice(0, 255), salin.data.size == null ? null : Number(salin.data.size), folderId, f.id]);
+        r.drive.baru++; r.drive.ada++;
+      } catch (e) {
+        if (jenisGalat(e) === 'notfound') r.drive.hilang++;
+        else { r.drive.gagal++; catatPesan(`drive: ${e.message}`); await catatKesehatanTujuan('salinan_lampiran', e); }
+      }
+    }
+    if (!r.drive.gagal) await catatKesehatanTujuan('salinan_lampiran', null);
+  }
+
+  try {
+    await (await db()).execute('INSERT INTO app_config (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)', [KUNCI_RINGKAS_SALINAN, JSON.stringify(r)]);
+  } catch (e) { log('CATAT-FAIL', `ringkas salinan: ${e.message}`); }
+  log('SALINAN', `lampiran ${r.total} · lokal ${r.lokal.ada} (+${r.lokal.baru}, gagal ${r.lokal.gagal}, hilang ${r.lokal.hilang}, tertunda ${r.lokal.tertunda}, ${(r.lokal.byte / 1048576).toFixed(1)} MB di ${dir})`
+    + (r.drive.aktif ? ` · Drive ${r.drive.ada} (+${r.drive.baru}, gagal ${r.drive.gagal}, hilang ${r.drive.hilang}, tertunda ${r.drive.tertunda})` : ' · Drive dilewati'));
+  return r;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 async function main() {
   const startedAt = Date.now();
@@ -398,13 +532,21 @@ async function main() {
 
     // 4. Rotasi retensi di Drive (best-effort). Manifest mencakup backup di folder mana pun yang
     //    TERCATAT; backup lama sebelum pencatatan dipasang tidak ikut dirotasi — hapus manual.
-    if (!folderId) return;
-    try {
-      const deleted = await rotateOldBackups(drive, folderId, retention);
-      log('DONE', `selesai ${((Date.now() - startedAt) / 1000).toFixed(1)}s · retensi ${retention} · rotasi hapus ${deleted}`);
-    } catch (e) {
-      log('ROTATE-FAIL', e.message);
+    if (folderId) {
+      try {
+        const deleted = await rotateOldBackups(drive, folderId, retention);
+        log('DONE', `selesai ${((Date.now() - startedAt) / 1000).toFixed(1)}s · retensi ${retention} · rotasi hapus ${deleted}`);
+      } catch (e) {
+        log('ROTATE-FAIL', e.message);
+      }
     }
+
+    // 5. Salinan kedua lampiran — SESUDAH backup database (yang terpenting selesai dulu).
+    //    Kegagalannya dicatat (log, drive_health, ringkasan panel), tidak mengubah kode keluar:
+    //    berkas yang memang sudah dihapus pemiliknya akan "gagal" selamanya dan membuat
+    //    tugas terjadwal tampak rusak padahal backup database-nya sehat.
+    try { await salinLampiran(drive); }
+    catch (e) { log('SALINAN-FAIL', e.message); }
   } finally {
     lepasKunci();
   }

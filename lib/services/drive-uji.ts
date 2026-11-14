@@ -53,9 +53,22 @@ async function berkasLama(tujuan: DriveTujuan): Promise<string[]> {
   if (tujuan === 'blud_json') return ujung(
     () => sql`SELECT drive_file_id AS id FROM blud_riwayat_simpan WHERE drive_file_id IS NOT NULL ORDER BY id ASC LIMIT 1`,
     () => sql`SELECT drive_file_id AS id FROM blud_riwayat_simpan WHERE drive_file_id IS NOT NULL ORDER BY id DESC LIMIT 1`);
+  // backup_db & salinan_lampiran: hanya tercatat di manifest.
   return ujung(
-    () => sql`SELECT file_id AS id FROM drive_arsip WHERE tujuan = 'backup_db' AND dihapus_pada IS NULL ORDER BY id ASC LIMIT 1`,
-    () => sql`SELECT file_id AS id FROM drive_arsip WHERE tujuan = 'backup_db' AND dihapus_pada IS NULL ORDER BY id DESC LIMIT 1`);
+    () => sql`SELECT file_id AS id FROM drive_arsip WHERE tujuan = ${tujuan} AND dihapus_pada IS NULL ORDER BY id ASC LIMIT 1`,
+    () => sql`SELECT file_id AS id FROM drive_arsip WHERE tujuan = ${tujuan} AND dihapus_pada IS NULL ORDER BY id DESC LIMIT 1`);
+}
+
+export const KUNCI_RINGKAS_SALINAN = 'salinan_lampiran_ringkas';
+
+/** Ditulis `scripts/backup-db.js` tiap jalan (konsep §20). Bentuknya WAJIB sama dengan di sana. */
+export interface RingkasSalinan {
+  waktu: string;
+  /** Berkas yang seharusnya punya salinan (uploaded_files + arsip Word LKJIP). */
+  total: number;
+  lokal: { folder: string; ada: number; baru: number; gagal: number; hilang: number; byte: number; tertunda: number };
+  drive: { aktif: boolean; ada: number; baru: number; gagal: number; hilang: number; tertunda: number };
+  pesan: string | null;
 }
 
 /** Tulis → baca → hapus satu berkas 16 byte. Melempar galat Drive apa adanya. */
@@ -134,6 +147,7 @@ export interface StatusDrive {
   arsip: { nama: string; ukuran: number | null; sha256: string | null; dibuat: string | null; file_id: string }[];
   backup: ReturnType<typeof backupBasi>;
   ujiTerakhir: HasilUji | null;
+  salinan: RingkasSalinan | null;
   /** false = migrasi drive_arsip/drive_health belum dijalankan. */
   tabelAda: boolean;
 }
@@ -173,8 +187,14 @@ export async function bacaStatusDrive(): Promise<StatusDrive> {
     if (r[0]?.value) ujiTerakhir = JSON.parse(String(r[0].value)) as HasilUji;
   } catch { ujiTerakhir = null; }
 
+  let salinan: RingkasSalinan | null = null;
+  try {
+    const r = await sql`SELECT value FROM app_config WHERE \`key\` = ${KUNCI_RINGKAS_SALINAN} LIMIT 1` as { value?: unknown }[];
+    if (r[0]?.value) salinan = JSON.parse(String(r[0].value)) as RingkasSalinan;
+  } catch { salinan = null; }
+
   return {
-    induk, tujuan, arsip, tabelAda, ujiTerakhir,
+    induk, tujuan, arsip, tabelAda, ujiTerakhir, salinan,
     backup: backupBasi(kesehatan.get('backup_db')?.terakhir_ok ?? null, PROSES_MULAI, waktuSekarangWIB()),
   };
 }

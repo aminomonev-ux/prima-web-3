@@ -91,6 +91,8 @@ graphify-out/.needs_update
 
 # backup DB (scripts/backup-db.js) - jangan commit dump/log
 backups-pending/
+# Salinan lokal lampiran (scripts/backup-db.js) — berkas polos, jangan pernah ikut repo
+backups-lampiran/
 scripts/backup-db.log
 
 # Berkas lokal: sisa alat dan surat kepegawaian (repo publik)

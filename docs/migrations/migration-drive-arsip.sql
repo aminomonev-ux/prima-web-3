@@ -6,19 +6,21 @@
 
 CREATE TABLE IF NOT EXISTS drive_arsip (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  tujuan        VARCHAR(40)  NOT NULL,           -- 'backup_db' | 'lkjip' | 'lkjip_arsip' | 'blud_json' | 'bba' | 'usulan'
+  tujuan        VARCHAR(40)  NOT NULL,           -- 'backup_db' | 'lkjip' | 'lkjip_arsip' | 'blud_json' | 'bba' | 'usulan' | 'salinan_lampiran'
   file_id       VARCHAR(64)  NOT NULL,
   nama          VARCHAR(255) NOT NULL,
   ukuran        BIGINT UNSIGNED NULL,            -- byte, dari Drive
   sha256        CHAR(64)     NULL,               -- hash berkas YANG DIUNGGAH (backup: .sql.gz.enc, bukan dump polos)
   folder_id     VARCHAR(64)  NULL,               -- folder tempat ia ditaruh
-  sumber        VARCHAR(20)  NOT NULL DEFAULT 'aplikasi', -- 'aplikasi' | 'backup_db'
+  sumber        VARCHAR(20)  NOT NULL DEFAULT 'aplikasi', -- 'aplikasi' | 'backup_db' | 'salinan'
+  asal_file_id  VARCHAR(64)  NULL,               -- salinan lampiran: ID berkas ASLI yang disalin (penanda 'sudah disalin')
   dibuat_pada   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   dihapus_pada  DATETIME     NULL,               -- diisi rotasi; baris TIDAK dihapus
   PRIMARY KEY (id),
   UNIQUE KEY uq_drive_arsip_file (file_id),
   KEY idx_drive_arsip_tujuan (tujuan, dibuat_pada),
-  KEY idx_drive_arsip_hapus (dihapus_pada)
+  KEY idx_drive_arsip_hapus (dihapus_pada),
+  KEY idx_drive_arsip_asal (asal_file_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS drive_health (

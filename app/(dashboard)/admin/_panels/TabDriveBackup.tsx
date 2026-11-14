@@ -9,7 +9,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { fetchJson } from '@/lib/shared/api';
 import { LABEL_TUJUAN, SARAN_KODE, bacaIdFolder, ukuranBerkas, type KodeUji } from '@/lib/services/drive-status';
-import type { HasilUji, StatusDrive } from '@/lib/services/drive-uji';
+import type { HasilUji, RingkasSalinan, StatusDrive } from '@/lib/services/drive-uji';
 
 const potongId = (id: string) => (id.length > 14 ? `${id.slice(0, 6)}…${id.slice(-5)}` : id);
 const tautanFolder = (id: string) => `https://drive.google.com/drive/folders/${encodeURIComponent(id)}`;
@@ -48,6 +48,52 @@ function HasilUjiTabel({ hasil }: { hasil: HasilUji }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Ringkasan yang ditulis `scripts/backup-db.js` tiap jalan (konsep §20). */
+function SalinanLampiran({ r }: { r: RingkasSalinan | null }) {
+  const teks = { fontSize: 12.5, color: 'var(--ap-fg2)', lineHeight: 1.7 } as const;
+  if (!r) {
+    return (
+      <div style={teks}>
+        Belum ada. Salinan dibuat skrip backup harian (<code>scripts/backup-db.js</code>) sesudah backup database —
+        jalankan sekali di server untuk memulai.
+      </div>
+    );
+  }
+  const perlu = r.total - r.lokal.hilang;
+  const lokalLengkap = r.lokal.ada >= perlu;
+  const driveLengkap = r.drive.aktif && r.drive.ada >= r.total - r.drive.hilang;
+  const lencana = (lengkap: boolean, tertunda: number) => lengkap
+    ? <span className="ap-badge badge-green">LENGKAP</span>
+    : <span className="ap-badge badge-yellow">{tertunda ? 'BERLANJUT BESOK' : 'BELUM LENGKAP'}</span>;
+  return (
+    <div style={teks}>
+      <div>Terakhir jalan {r.waktu} · {r.total} lampiran tercatat (usulan, BBA, LKJIP, arsip Word LKJIP).</div>
+      <div style={{ marginTop: 6 }}>
+        <b>Di laptop server</b> {lencana(lokalLengkap, r.lokal.tertunda)} — {r.lokal.ada} berkas, {ukuranBerkas(r.lokal.byte)}
+        {r.lokal.baru ? `, ${r.lokal.baru} baru` : ''}{r.lokal.gagal ? `, ${r.lokal.gagal} gagal` : ''}
+        {r.lokal.tertunda ? `, ${r.lokal.tertunda} menunggu jalan berikutnya` : ''}
+        <div style={{ fontSize: 11.5, color: 'var(--ap-dim)', fontFamily: "'JetBrains Mono', monospace" }}>{r.lokal.folder}</div>
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <b>Di Drive</b> {r.drive.aktif ? <>{lencana(driveLengkap, r.drive.tertunda)} — {r.drive.ada} salinan di folder &quot;06 Salinan Lampiran&quot;
+          {r.drive.baru ? `, ${r.drive.baru} baru` : ''}{r.drive.gagal ? `, ${r.drive.gagal} gagal` : ''}
+          {r.drive.tertunda ? `, ${r.drive.tertunda} menunggu jalan berikutnya` : ''}</>
+          : <span className="ap-badge badge-gray">TIDAK JALAN</span>}
+      </div>
+      {(r.lokal.hilang > 0 || r.drive.hilang > 0) && (
+        <div style={{ marginTop: 6, color: 'var(--ap-warn-fg)' }}>
+          {Math.max(r.lokal.hilang, r.drive.hilang)} lampiran sudah tidak ada di Drive (dihapus sebelum sempat disalin) — tidak bisa disalin lagi.
+        </div>
+      )}
+      {r.pesan ? <div style={{ marginTop: 6, color: 'var(--ap-dim)' }}>{r.pesan}</div> : null}
+      <div style={{ fontSize: 11.5, color: 'var(--ap-dim)', marginTop: 8 }}>
+        Salinan di laptop selamat kalau akun Google bermasalah; salinan di Drive selamat kalau berkas aslinya terhapus.
+        Berkas di laptop tidak terenkripsi — folder itu jangan dibagikan. Cadangan JSON BLUD tidak ikut karena isinya sudah ada di backup database.
+      </div>
     </div>
   );
 }
@@ -197,6 +243,11 @@ export function TabDriveBackup() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="ap-card" style={{ marginBottom: 16 }}>
+        <div className="ap-card-title">Salinan kedua lampiran</div>
+        <SalinanLampiran r={s.salinan} />
       </div>
 
       <div className="ap-card">

@@ -2,7 +2,9 @@
 
 Panduan ini memasang **satu tugas terjadwal** yang menjalankan `scripts/backup-db.js`
 setiap hari: database MySQL dibuang (mysqldump), dikompres, dienkripsi, lalu diunggah ke
-Google Drive. Ditulis untuk server PRIMA yang berupa **laptop yang dimatikan tiap malam**
+Google Drive. Sesudahnya skrip yang sama membuat **salinan kedua lampiran** semua modul
+(usulan, BBA, LKJIP) — di laptop ini dan di folder Drive "06 Salinan Lampiran" — karena
+lampiran tidak ada di dalam backup database (yang tersimpan di database hanya ID-nya). Ditulis untuk server PRIMA yang berupa **laptop yang dimatikan tiap malam**
 — kalau server Anda menyala 24 jam, semua langkah tetap berlaku, hanya jamnya yang boleh
 digeser.
 
@@ -75,6 +77,8 @@ Buka `C:\apps\prima\.env.local`, pastikan baris-baris ini ada dan **berisi**:
 | `BACKUP_ENC_PASSWORD` | ya, min 16 karakter | tanpa ini backup **tidak dibuat sama sekali** (dump polos tidak boleh naik ke cloud) |
 | `MYSQLDUMP_PATH` | sangat disarankan | lihat 1.2 |
 | `BACKUP_RETENTION` | tidak | jumlah berkas yang disimpan di Drive, bawaan `30` |
+| `BACKUP_LAMPIRAN_DIR` | disarankan | folder salinan lampiran di laptop, mis. `D:/backup-prima/lampiran`. Kosong = `<folder aplikasi>\backups-lampiran`. Butuh ruang disk sebesar seluruh lampiran (lihat panel Drive & Backup sesudah jalan pertama) |
+| `GOOGLE_DRIVE_FOLDER_ID_SALINAN` | tidak | hanya bila TANPA folder induk; dengan folder induk subfolder "06 Salinan Lampiran" dibuat sendiri |
 
 ⚠️ **Salin `BACKUP_ENC_PASSWORD` ke tempat aman di luar laptop ini** (pengelola sandi,
 atau amplop tertutup di lemari terkunci). Kalau laptopnya rusak total dan sandi ini ikut
@@ -130,6 +134,10 @@ Hasil yang benar (tanggal/jam/ukuran berbeda):
   sebelum 14 November 2026 masih bernama jam UTC.
 - Buka Google Drive → folder induk → **01 Backup Database**: satu berkas
   `prima-db-….sql.gz.enc` harus ada.
+- Baris terakhir `[SALINAN] lampiran N · lokal … · Drive …` = salinan kedua lampiran.
+  **Jalan pertama** menyalin semua lampiran lama; kalau banyak, berhenti sesudah 40 menit
+  ("tertunda N") dan dilanjutkan di jalan berikutnya — itu normal. Jalan sesudahnya hanya
+  menyalin lampiran baru.
 
 Kalau ada `[FATAL]`, `[UPLOAD-FAIL]`, atau `[FOLDER-FAIL]`, berhenti di sini dan lihat
 [bagian 9](#9-membaca-kegagalan). Memasang tugas tidak akan memperbaiki apa pun.
@@ -381,6 +389,9 @@ tunggu `UPLOAD-OK` di log, baru perbarui.
 | `[UPLOAD-FAIL]` / `[RETRY-FAIL]` dengan `invalid_grant` | refresh token dicabut, kedaluwarsa, atau sandi akun Google diganti | buat ulang `GOOGLE_OAUTH_REFRESH_TOKEN` (`docs/BACKUP-RESTORE.md` §Pemegang akun) |
 | `[UPLOAD-FAIL] … storageQuotaExceeded` | Drive penuh | kosongkan Drive atau turunkan `BACKUP_RETENTION` |
 | `[ROTATE-FAIL]` | gagal menghapus backup lama (jarang) | backup hari itu tetap aman; periksa lagi besok |
+| `[SALINAN] … gagal N` | sebagian lampiran tidak tersalin (internet putus di tengah) | tidak perlu apa-apa — dicoba lagi besok. Ringkasannya di panel Drive & Backup |
+| `[SALINAN] … hilang N` | lampiran sudah dihapus dari Drive sebelum sempat disalin | tidak bisa dipulihkan; tidak akan dicoba lagi secara berarti |
+| `[SALINAN-FAIL]` | salinan berhenti total (mis. database tak terbaca) | backup database tetap sah; periksa pesannya |
 | `[LEWAT] backup lain sedang berjalan` | backup manual & terjadwal berbarengan | tidak perlu apa-apa. Kalau muncul terus padahal tidak ada backup lain, hapus `backups-pending\.lock` (kunci dianggap basi sendiri sesudah 2 jam) |
 | `[CATAT-FAIL] … drive_health/drive_arsip doesn't exist` | migrasi `migration-drive-arsip.sql` belum dijalankan | backup tetap jalan; jalankan migrasinya supaya panel Admin terisi dan rotasi memakai catatan |
 | log **tidak bertambah sama sekali** | tugas tidak pernah dimulai | bagian 9.2 + periksa setelan baterai (bagian 10) |
@@ -410,7 +421,7 @@ tunggu `UPLOAD-OK` di log, baru perbarui.
 | **`SYSTEM` + *highest privileges*** | jalan walau tidak ada yang login, tidak menyimpan sandi Windows siapa pun, tidak ikut mati saat orangnya logout atau sandinya diganti, dan tidak memunculkan jendela hitam di layar. Sama dengan tugas cron PRIMA lain (`PANDUAN-pemasangan-windows.md` §5) |
 | **Path lengkap Node + `MYSQLDUMP_PATH`** | `SYSTEM` membaca PATH mesin, bukan PATH akun Anda. Node yang dipasang per-akun (nvm) atau `mysqldump` Laragon tidak terlihat olehnya |
 | **`WorkingDirectory` = folder aplikasi** | argumennya relatif (`scripts\backup-db.js`), jadi harus dijalankan dari folder aplikasi. `.env.local`, `backups-pending\`, dan log sendiri dicari dari letak skrip, bukan dari folder ini |
-| **Batas 1 jam** | backup normal selesai dalam hitungan detik–menit. Tugas yang menggantung (jaringan setengah putus) dihentikan supaya hari berikutnya tidak tertahan |
+| **Batas 1 jam** | backup normal selesai dalam hitungan detik–menit; salinan lampiran sendiri berhenti di 40 menit dan melanjutkan besok, jadi batas ini tidak memotongnya di tengah. Tugas yang menggantung (jaringan setengah putus) dihentikan supaya hari berikutnya tidak tertahan |
 | **`IgnoreNew`** (*do not start a new instance*) | dua backup bersamaan saling menghapus saat rotasi. Kalau tugas sebelumnya belum selesai, yang baru dilewati |
 | **Tidak mensyaratkan jaringan** | tanpa internet, dump tetap dibuat dan menunggu di `backups-pending\`; backup terlambat naik lebih baik daripada tidak ada |
 | **Sekali sehari** | `BACKUP_RETENTION` menghitung **berkas**, bukan hari: 30 berkas = 30 hari kalau sehari sekali, 15 hari kalau dua kali. Menambah jadwal kedua memendekkan jangkauan mundur |

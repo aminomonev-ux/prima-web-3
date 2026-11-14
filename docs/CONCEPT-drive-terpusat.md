@@ -1,7 +1,7 @@
 # Konsep — Drive Terpusat PRIMA (satu pintu kredensial & tujuan)
 
 > Status: **Tahap 1–3 DIKERJAKAN 14 November 2026** (§18 folder induk, §19 manifest, Uji,
-> panel). Keputusan §15 yang belum dijawab pemilik diisi pilihan yang tidak mengubah
+> panel, §20 salinan kedua lampiran). Keputusan §15 yang belum dijawab pemilik diisi pilihan yang tidak mengubah
 > perilaku (§19.1). Direvisi 14 November 2026
 > sesudah dicocokkan ulang dengan kode — daftar koreksi & pengembangan di **§17**; yang
 > terpenting: pindah akun Google ternyata MEMUTUS berkas lama (§2.1 A15, §11).
@@ -824,7 +824,7 @@ dan rotasi backup jatuh ke cara lama.
 | 2 Scope | tidak diubah (melekat pada token, bukan kode) | mengganti scope = membuat token baru — tindakan pemilik akun. Uji "baca berkas lama" yang memberi tahu kapan ini jadi masalah |
 | 3 Mode folder | folder induk (dipilih pemilik, §18) | — |
 | 4 Retensi | tetap 30 **berkas** terbaru | perilaku hari ini; jadwal sekali sehari = 30 hari |
-| 5 Salinan kedua lampiran | belum dikerjakan — risiko diterima sementara | butuh tempat kedua yang belum ditentukan |
+| 5 Salinan kedua lampiran | **dikerjakan** — laptop server + Drive yang sama (§20); akun Google kedua menyusul | keputusan pemilik |
 | 6 Panel | satu tab "Drive & Backup" (grup Sistem, Super Admin) | — |
 
 ### 19.2 Yang dipasang
@@ -859,3 +859,46 @@ salah mengisi. Kalau suatu hari dibutuhkan, `folderUntuk` tempatnya.
   ternyata mubazir (syarat lewat jadwal + 2 jam sudah menjaminnya — kodenya disederhanakan),
   dan pemeriksaan berkas lama hanya tertangkap uji Drive sungguhan (kini juga D16 dengan
   Drive tiruan).
+
+## 20. Salinan kedua lampiran (14 November 2026)
+
+Menjawab §15 no. 5 / A11. Backup database hanya memuat **ID** berkas; lampiran usulan,
+bukti & referensi BBA, gambar & impor Word LKJIP, dan arsip Word LKJIP hanya tinggal di
+Drive. Keputusan pemilik: **dua salinan sekarang** — di laptop server DAN di Drive yang
+sama; akun Google kedua nanti.
+
+| Salinan | Di mana | Menolong saat | Tidak menolong saat |
+|---|---|---|---|
+| Lokal | `BACKUP_LAMPIRAN_DIR` (bawaan `<folder aplikasi>\backups-lampiran`, di-gitignore), `<modul>\<fileId>__<nama>` | akun Google hilang/diretas/dicabut | laptop rusak/dicuri |
+| Drive | subfolder **06 Salinan Lampiran** (`files.copy`, tanpa unduh) atau `GOOGLE_DRIVE_FOLDER_ID_SALINAN` | berkas/folder asli terhapus atau dibereskan orang (melampaui 30 hari Sampah) | akun Google hilang |
+
+Bersama keduanya, lampiran hanya hilang bila akun Google **dan** laptop hilang bersamaan.
+
+**Dijalankan `scripts/backup-db.js`, SESUDAH backup database** — satu tugas terjadwal,
+satu kunci `.lock`. Aturannya:
+
+- Daftar = `uploaded_files` (semua modul pengunggah) + `lkjip_versi.drive_file_id`, tertua
+  dulu. **Cadangan JSON BLUD tidak ikut**: isinya salinan baris `blud_riwayat_simpan.isi`,
+  sudah ada di backup database.
+- **Bertahap**: lokal — berkas yang namanya sudah berawalan `<fileId>__` dilewati (sumber
+  kebenarannya isi folder, jadi salinan yang terhapus diunduh ulang); Drive — yang sudah
+  tercatat di `drive_arsip` (`tujuan='salinan_lampiran'`, kolom baru **`asal_file_id`**).
+  Tanpa manifest (migrasi belum dijalankan) salinan Drive **dilewati**, sebab tanpa catatan
+  tiap jalan akan menyalin ulang semuanya.
+- Unduhan ditulis ke `.part` lalu diganti nama — berkas setengah jadi tidak dianggap salinan.
+- Dibatasi 40 menit per jalan (tugas terjadwal dibatasi 1 jam); sisanya "tertunda" dan
+  dilanjutkan besok. Jalan pertama di server bisa makan beberapa hari bila lampirannya banyak.
+- Berkas yang sudah tidak ada di Drive (404) dihitung **hilang**, bukan gagal.
+- Kegagalan salinan **tidak** mengubah kode keluar skrip: berkas yang memang sudah dihapus
+  pemiliknya akan "gagal" selamanya dan membuat tugas tampak rusak padahal backup
+  database-nya sehat. Jejaknya di log (`[SALINAN]`), `drive_health` (`salinan_lampiran`),
+  dan ringkasan `app_config.salinan_lampiran_ringkas` → panel Drive & Backup.
+- Berkas lokal **tidak terenkripsi** (beda dengan dump database): foldernya jangan dibagikan.
+
+Tujuan baru `salinan_lampiran` ikut tombol Uji (probe + baca salinan lama) dan tabel
+kesehatan. Migrasi `migration-drive-arsip.sql` diperluas (`asal_file_id` + indeks) — belum
+pernah dijalankan di server, jadi tetap satu berkas.
+
+Dibuktikan di dev (folder induk sungguhan): jalan pertama +2 lokal & +2 Drive, jalan kedua
++0/+0, salinan lokal yang dihapus diunduh ulang (+1), isi 745 byte = asli; panel menampilkan
+"LENGKAP" keduanya. Regresi `test-drive-terpusat.mts` 95, 8 uji mutasi tertangkap.
