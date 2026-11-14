@@ -480,7 +480,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
       } catch (e) {
         if (!(e instanceof PaguRenaksiError)) throw e;
         setConfirmDelete(null);
-        const alasan = await tanyaAlasanPagu(e.jawaban, 'renaksi');
+        const alasan = await tanyaAlasanPagu(e.jawaban, 'renaksi', 'hapus');
         return alasan ? apiDelete(row.id, lepasTautan, alasan) : null;
       }
     };

@@ -305,4 +305,8 @@ hapus-tautan` (C5, C9, C10), `-balapan` (E3, E6), `test-renaksi-audit` (daftar k
 perubahan` (hitungan penunggu). Diverifikasi di peramban pada 2039 (dibersihkan): RKO GAJI 9 → 12 jt
 memunculkan dialog "APBD lebih Rp 2.000.000", diteruskan dengan alasan; Data Entry menurunkan pagu 10 → 9 jt
 memunculkan dialog versi Renaksi, Batal mempertahankan isian, diteruskan tersimpan; dua baris audit
-`PAGU_RENAKSI_DITEMBUS` lengkap. Dialog Hapus & Impor diuji lewat suite MySQL, belum lewat peramban.
+`PAGU_RENAKSI_DITEMBUS` lengkap. Susulan hari yang sama: Hapus (sesudah dialog "Hapus Indikator?") dan
+Impor (CSV disisipkan lewat skrip halaman) juga dicoba — Batal mempertahankan baris/modal, Teruskan menulis +
+audit. Ketahuan dari situ: dialog hapus berbunyi "Sesudah disimpan" + "Teruskan & simpan" → `tanyaAlasanPagu`
+dapat `aksi: 'hapus'`; dan panel "Pemetaan kolom" modal Impor (cacat lama) berlatar `bg-slate-50/60` yang tidak
+dipetakan tema gelap Renaksi (hanya `/50` & `/70`) sehingga labelnya tak terbaca → `/50`.

@@ -16,22 +16,25 @@ export const paguTerlampaui = (d: unknown): boolean =>
   !!d && typeof d === 'object' && (d as { code?: unknown }).code === KODE_PAGU_TERLAMPAUI;
 
 /** `null` = batal. String = alasan (sudah dirapikan) untuk dikirim ulang sebagai `alasan_pagu_renaksi`. */
-export function tanyaAlasanPagu(jawaban: unknown, arah: 'rko' | 'renaksi'): Promise<string | null> {
+/** `aksi: 'hapus'` — dari tombol Hapus Data Entry: kalimat & tombolnya menyebut hapus, bukan simpan. */
+export function tanyaAlasanPagu(jawaban: unknown, arah: 'rko' | 'renaksi', aksi: 'simpan' | 'hapus' = 'simpan'): Promise<string | null> {
   const d = (jawaban ?? {}) as JawabanPaguTerlampaui;
   const daftar = (d.pelanggaran ?? []).slice(0, 8)
     .map(p => `• ${rapikanNamaEntitas(p.sub_kegiatan)} — ${p.kalimat}`).join('\n');
   const lebih = (d.pelanggaran?.length ?? 0) > 8 ? `\n…dan ${(d.pelanggaran?.length ?? 0) - 8} sub kegiatan lain` : '';
   const jalan = arah === 'rko'
     ? 'Turunkan RKO-nya, naikkan pagu sub kegiatan di Data Entry Rencana Aksi, atau teruskan dengan alasan.'
-    : 'Naikkan lagi pagunya, turunkan RKO di E-Anggaran, atau teruskan dengan alasan.';
+    : aksi === 'hapus'
+      ? 'Batalkan penghapusan, turunkan RKO di E-Anggaran, atau teruskan dengan alasan.'
+      : 'Naikkan lagi pagunya, turunkan RKO di E-Anggaran, atau teruskan dengan alasan.';
   return promptDialog({
     title: `Melampaui pagu Rencana Aksi ${d.tahun ?? ''}`.trim(),
-    message: `Sesudah disimpan, pagu RKO E-Anggaran (versi terbaru semua tab) melebihi pagu sub kegiatan:\n${daftar}${lebih}\n\n${jalan}`,
+    message: `Sesudah ${aksi === 'hapus' ? 'dihapus' : 'disimpan'}, pagu RKO E-Anggaran (versi terbaru semua tab) melebihi pagu sub kegiatan:\n${daftar}${lebih}\n\n${jalan}`,
     label: 'Alasan meneruskan',
     placeholder: 'mis. pagu Renaksi belum diperbarui sesudah anggaran perubahan',
     minLength: ALASAN_PAGU_MIN,
     maxLength: PANJANG_ALASAN_PAGU,
-    confirmLabel: 'Teruskan & simpan',
+    confirmLabel: aksi === 'hapus' ? 'Teruskan & hapus' : 'Teruskan & simpan',
     variant: 'warning',
     petunjuk: 'Tersimpan di jejak audit bersama kelebihannya.',
   });

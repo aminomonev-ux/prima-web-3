@@ -315,7 +315,7 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
                 </label>
               )}
 
-              <details className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2"
+              <details className="rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2"
                 open={parsed.columns.some(c => c.source === 'tidak-ada')}>
                 <summary className="cursor-pointer select-none text-[11.5px] font-bold text-slate-600">
                   Pemetaan kolom
