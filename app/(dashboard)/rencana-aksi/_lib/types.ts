@@ -1,5 +1,6 @@
 import { bulatkanDesimal, tulisDesimal } from '@/lib/shared/desimal';
 import { anakMilikIndikator } from '@/lib/renaksi/rantai';
+import { paguBaris, type RincianPagu } from '@/lib/renaksi/pagu';
 
 export type RaLevel = 'tujuan' | 'sasaran' | 'program' | 'kegiatan' | 'sub-kegiatan';
 export type RaJenis = 'Akumulatif' | 'Progres Positif' | 'Progres Negatif' | 'Pengulangan';
@@ -29,7 +30,10 @@ export interface RaRow {
   q2_target: number;  q2_realisasi: number | null;
   q3_target: number;  q3_realisasi: number | null;
   q4_target: number;  q4_realisasi: number | null;
+  /** Total pagu berlaku — ditulis server dari `pagu_rincian`. */
   anggaran_nominal: number | null;
+  /** Rincian pagu per sumber dana (hanya sub kegiatan). */
+  pagu_rincian?: RincianPagu[];
   bulan_target: (number | null)[] | null;
   bulan_realisasi: (number | null)[] | null;
   version: number;
@@ -340,39 +344,11 @@ export function capaianTriwulan(row: RaRow, triwulan: 1 | 2 | 3 | 4): number | n
 }
 
 /**
- * Anggaran (Rp) untuk row di menu Realisasi. Anggaran tersimpan di level
- * sub-kegiatan; level di atasnya = SUM seluruh sub-kegiatan keturunan (match
- * by nama program/kegiatan). Sasaran di luar scope → null.
+ * Pagu (Rp) baris INDIKATOR ini. Sub kegiatan = pagu berlaku miliknya; di atasnya = jumlah anak yang
+ * tertaut ke indikator ini (lib/renaksi/pagu.ts — konsep renaksi-pagu-rko §6c). Dulu dijumlah lewat
+ * nama entitas, jadi kegiatan berindikator dua menampilkan total yang sama di kedua barisnya.
  */
-export function anggaranRollup(level: RaLevel, row: RaRow, rows: RaRow[]): number | null {
-  const subKegs = rows.filter(r => r.level === 'sub-kegiatan');
-  const sumSub = (pred: (s: RaRow) => boolean): number | null => {
-    const subs = subKegs.filter(pred);
-    return subs.length ? subs.reduce((a, s) => a + (s.anggaran_nominal ?? 0), 0) : null;
-  };
-  if (level === 'sub-kegiatan') return row.anggaran_nominal ?? null;
-  if (level === 'program') return sumSub(s => s.program === row.program);
-  if (level === 'kegiatan') return sumSub(s => s.program === row.program && s.kegiatan === row.kegiatan);
-  if (level === 'sasaran') {
-    // Row level sasaran: kolom `program` = nama sasaran. Cari program yang sasaran-nya
-    // cocok, lalu sum seluruh sub-kegiatan di program-program tersebut.
-    const progNames = new Set(
-      rows.filter(r => r.level === 'program' && r.sasaran === row.program).map(r => r.program),
-    );
-    return progNames.size ? sumSub(s => progNames.has(s.program)) : null;
-  }
-  if (level === 'tujuan') {
-    // Row level tujuan: kolom `program` = nama tujuan. Turun 2 tingkat: tujuan→sasaran→program,
-    // lalu sum seluruh sub-kegiatan di program-program keturunan.
-    const sasNames = new Set(
-      rows.filter(r => r.level === 'sasaran' && r.tujuan === row.program).map(r => r.program),
-    );
-    if (!sasNames.size) return null;
-    const progNames = new Set(
-      rows.filter(r => r.level === 'program' && r.sasaran != null && sasNames.has(r.sasaran)).map(r => r.program),
-    );
-    return progNames.size ? sumSub(s => progNames.has(s.program)) : null;
-  }
-  return null;
+export function anggaranRollup(_level: RaLevel, row: RaRow, rows: RaRow[]): number | null {
+  return paguBaris(row, rows)?.total ?? null;
 }
 

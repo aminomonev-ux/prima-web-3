@@ -1120,6 +1120,28 @@ CREATE TABLE IF NOT EXISTS renaksi_ganti_nama (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Jejak ganti nama entitas Rencana Aksi untuk modul yang menyalin namanya';
 
+-- Rincian pagu per sumber dana (migration-renaksi-pagu-sumber.sql) — docs/CONCEPT-renaksi-pagu-rko.md.
+-- `rencana_aksi.anggaran_nominal` = Σ pagu berlaku rincian, ditulis hanya oleh server.
+CREATE TABLE IF NOT EXISTS rencana_aksi_pagu (
+  id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  rencana_aksi_id  INT UNSIGNED NOT NULL,
+  sumber           VARCHAR(100) NOT NULL DEFAULT '' COMMENT 'Sumber dana; kosong = tanpa sumber (data lama)',
+  pagu             BIGINT NULL COMMENT 'Pagu Murni (Rp)',
+  pagu_perubahan   BIGINT NULL COMMENT 'Pagu Perubahan (Rp); NULL = belum diubah, berlaku Murni',
+  urutan           SMALLINT NOT NULL DEFAULT 0,
+  UNIQUE KEY uq_rap_baris_sumber (rencana_aksi_id, sumber),
+  CONSTRAINT fk_rap_baris FOREIGN KEY (rencana_aksi_id) REFERENCES rencana_aksi(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Rincian pagu baris indikator sub kegiatan Rencana Aksi per sumber dana';
+
+CREATE TABLE IF NOT EXISTS renaksi_pagu_perubahan (
+  tahun         SMALLINT UNSIGNED NOT NULL PRIMARY KEY,
+  dimulai_pada  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  dimulai_oleh  INT NULL,
+  CONSTRAINT fk_rpp_oleh FOREIGN KEY (dimulai_oleh) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Tahun Rencana Aksi yang sudah memasuki babak Pagu Perubahan (Murni dibekukan)';
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Role Promotion Ladder (modul baru — Migration 037)
 -- Konsep: docs/session/ROLE_PROMOTION_CONCEPT.md

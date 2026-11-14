@@ -12,7 +12,8 @@ import type { RaRow, RaLevel, HierarchyRow } from '../_lib/types';
 import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_TEXT, realisasiAkhirTahun, tulisRealisasi, outcomeOf, anggaranRollup, capaianTahunan, warnaCapaian } from '../_lib/types';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import type { CetakFilter, ColMode } from '../_lib/cetak-filter';
-import { DEFAULT_CETAK_FILTER, ALL_LEVELS, buildCetakRows, cetakRollupBase, tulisCapaian } from '../_lib/cetak-filter';
+import { DEFAULT_CETAK_FILTER, ALL_LEVELS, buildCetakRows, catatanPaguCetak, cetakRollupBase, tulisCapaian } from '../_lib/cetak-filter';
+import { paguBaris, tulisPerSumber } from '@/lib/renaksi/pagu';
 import { apiListAll } from '../_lib/api';
 import { buildCombinedPdf, exportCombinedPdf, exportCombinedXlsx } from '../_lib/exports';
 
@@ -273,6 +274,9 @@ function FilterBar({ allRows, filter, setFilter }: {
           <FieldLabel>Tampil</FieldLabel>
           <Chip active={filter.showTw} onClick={() => setF({ showTw: !filter.showTw })}>Triwulan</Chip>
           <Chip active={filter.showAnggaran} onClick={() => setF({ showAnggaran: !filter.showAnggaran })}>Anggaran</Chip>
+          {filter.showAnggaran && (
+            <Chip active={!!filter.showSumberAnggaran} onClick={() => setF({ showSumberAnggaran: !filter.showSumberAnggaran })}>Sumber Dana</Chip>
+          )}
           <Chip active={filter.showOutcome} onClick={() => setF({ showOutcome: !filter.showOutcome })}>Outcome</Chip>
           <Chip active={!!filter.penanda} onClick={() => setF({ penanda: !filter.penanda })}>Penanda matriks</Chip>
         </div>
@@ -354,6 +358,7 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
   // R7: hierarki match by nama — rename induk memutus rantai → baris jatuh
   // sebagai orphan. Tampilkan banner supaya rollup yang tak lengkap ketahuan.
   const orphanCount = rows.filter(h => h.isOrphan).length;
+  const catatanPagu = catatanPaguCetak(rollupRows, filter);
 
   return (
     <div className="rounded-2xl bg-white border border-slate-100 shadow-xs overflow-hidden">
@@ -367,6 +372,11 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
       {orphanCount > 0 && (
         <div className="border-b border-[#E24B4A]/20 bg-[#E24B4A]/5 px-5 py-2.5 text-[11px] text-[#E24B4A] font-medium">
           ⚠️ {orphanCount} baris tidak terhubung ke induknya (ditandai &quot;orphan&quot;) — biasanya karena nama Tujuan/Sasaran/Program/Kegiatan induk diubah tanpa memperbarui baris turunannya. Baris ini tidak ikut rollup hierarki &amp; anggaran; perbaiki lewat menu Data Entry (samakan nama induknya).
+        </div>
+      )}
+      {catatanPagu.length > 0 && (
+        <div className="border-b border-[#BA7517]/20 bg-[#BA7517]/5 px-5 py-2.5 text-[11px] text-[#BA7517] font-medium space-y-1">
+          {catatanPagu.map(c => <div key={c}>⚠️ {c}</div>)}
         </div>
       )}
       <div className="overflow-auto max-h-[65vh]">
@@ -400,6 +410,9 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
               )}
               {filter.showAnggaran && (
                 <th rowSpan={2} className="px-3 py-2.5 text-right font-bold uppercase tracking-wider whitespace-nowrap">Anggaran (Rp)</th>
+              )}
+              {filter.showAnggaran && filter.showSumberAnggaran && (
+                <th rowSpan={2} className="px-3 py-2.5 text-left font-bold uppercase tracking-wider min-w-[180px]">Sumber Dana</th>
               )}
             </tr>
             <tr className="bg-slate-50">
@@ -474,6 +487,9 @@ function HierarchyTable({ rows, rollupRows, filter, tahun }: {
                   )}
                   {filter.showAnggaran && (
                     <td className="px-3 py-2 text-right font-bold text-[#1D9E75]" style={moneyFont}>{ang != null ? ang.toLocaleString('id-ID') : ''}</td>
+                  )}
+                  {filter.showAnggaran && filter.showSumberAnggaran && (
+                    <td className="px-3 py-2 text-slate-600 leading-snug">{tulisPerSumber(paguBaris(r, rollupRows))}</td>
                   )}
                 </tr>
               );

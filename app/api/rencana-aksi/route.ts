@@ -33,6 +33,7 @@ import {
   RaIndukIndikatorError,
   RaTautanAnakError,
 } from '@/lib/data/rencana-aksi';
+import { RaPaguError } from '@/lib/data/renaksi-pagu';
 import { guard } from './_guard';
 
 export const dynamic = 'force-dynamic';
@@ -106,6 +107,10 @@ export async function POST(req: NextRequest) {
     // 500 akan membuat orang mengira fiturnya rusak, padahal pilihannya yang salah.
     if (e instanceof RaIndukIndikatorError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'INDUK_INDIKATOR_TIDAK_SAH' }, { status: 400 });
+    }
+    // Pagu Murni yang dibekukan babak Perubahan = 409 (keadaan tahunnya), sisanya isian yang salah.
+    if (e instanceof RaPaguError) {
+      return NextResponse.json({ ok: false, error: e.message, code: e.kode }, { status: e.kode === 'PAGU_TIDAK_SAH' ? 400 : 409 });
     }
     console.error('[RA POST]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });

@@ -1,5 +1,6 @@
 import type { RaLevel, RaRow, RaJenis } from './types';
 import type { JenisPerubahan, PemakaiNama } from '@/lib/renaksi/pemakai';
+import type { RincianPagu } from '@/lib/renaksi/pagu';
 
 export class VersionConflictError extends Error {
   constructor(message: string) { super(message); this.name = 'VersionConflictError'; }
@@ -62,7 +63,8 @@ export interface UpsertPayload {
   target_rpjmd: number;
   target_tahunan: number;
   q1_target: number; q2_target: number; q3_target: number; q4_target: number;
-  anggaran_nominal?: number | null;
+  /** Rincian pagu per sumber dana (sub kegiatan). Tidak dikirim = pagu tidak disentuh. */
+  pagu_rincian?: RincianPagu[];
   bulan_target?: (number | null)[] | null;
   /** Tautan ke baris indikator induk. null/kosong = belum diisi (data lama & impor). */
   induk_indikator_id?: number | null;
@@ -79,6 +81,22 @@ export async function apiUpsert(p: UpsertPayload): Promise<{ id: number; dipakai
   });
   const body = await jsonOrThrow<{ ok: true; id: number; dipakai?: PemakaiNama[]; perubahan?: JenisPerubahan | null }>(r);
   return { id: body.id, dipakai: body.dipakai ?? [], perubahan: body.perubahan ?? null };
+}
+
+export interface StatusPaguPerubahan { aktif: boolean; dimulai_pada: string | null }
+
+export async function apiPaguPerubahan(tahun: number, signal?: AbortSignal): Promise<StatusPaguPerubahan> {
+  const r = await fetch(`/api/rencana-aksi/pagu-perubahan?tahun=${tahun}`, { cache: 'no-store', signal });
+  const b = await jsonOrThrow<{ ok: true } & StatusPaguPerubahan>(r);
+  return { aktif: b.aktif, dimulai_pada: b.dimulai_pada };
+}
+
+export async function apiUbahPaguPerubahan(tahun: number, aksi: 'mulai' | 'batal'): Promise<StatusPaguPerubahan> {
+  const r = await fetch('/api/rencana-aksi/pagu-perubahan', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tahun, aksi }),
+  });
+  const b = await jsonOrThrow<{ ok: true } & StatusPaguPerubahan>(r);
+  return { aktif: b.aktif, dimulai_pada: b.dimulai_pada };
 }
 
 /** `lepasTautan`: baris yang menjadikan indikator ini induknya dilepas tautannya di transaksi yang sama. */

@@ -177,7 +177,8 @@ console.log('\nG. Layar tidak menjauh dari spesifikasi')
 const panel = kode('app/(dashboard)/rencana-aksi/_components/CetakPanel.tsx')
 const tabel = badanFungsi(panel, 'function HierarchyTable', 'function PdfPreviewModal')
 const judulLayar = [...tabel.matchAll(/<th\b[^>]*>([^<{]+)<\/th>/g)].map(m => m[1].trim()).filter(t => t !== 'T' && t !== 'R')
-const hdr = cetakHeader(DEFAULT_CETAK_FILTER)
+// Kode layar memuat SEMUA <th> bersyarat, jadi pembandingnya spesifikasi dengan semua kolom pilihan menyala.
+const hdr = cetakHeader({ ...DEFAULT_CETAK_FILTER, showSumberAnggaran: true })
 const judulSpek = [...hdr.lead, ...hdr.tail].map(c => c.header)
 ok('G1 judul kolom layar = spesifikasi PDF/Excel (urutan sama)',
   JSON.stringify(judulLayar) === JSON.stringify(judulSpek), `layar: ${judulLayar.join(' | ')}  ·  spek: ${judulSpek.join(' | ')}`)

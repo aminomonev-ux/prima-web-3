@@ -8,6 +8,8 @@ import { acquireBludLock } from '@/lib/data/locks';
 import { rencanaGantiNama, type GantiNama } from '@/lib/renaksi/ganti-nama';
 import type { RaLevel, UpsertRencanaAksiInput } from './rencana-aksi-schemas';
 import { INDUK_LEVEL, namaEntitas, namaIndukLangsung, type BarisRantai } from '@/lib/renaksi/rantai';
+import type { RincianPagu } from '@/lib/renaksi/pagu';
+import { muatRincianPagu, statusPaguPerubahan, tulisRincianPagu, RaPaguError } from './renaksi-pagu';
 
 /** Tautan indikator induk yang tidak sah — 400, bukan 500: yang salah pilihannya, bukan servernya. */
 export class RaIndukIndikatorError extends Error {
@@ -164,7 +166,10 @@ export interface RaRow {
   q2_target: number;  q2_realisasi: number | null;
   q3_target: number;  q3_realisasi: number | null;
   q4_target: number;  q4_realisasi: number | null;
+  /** Total pagu berlaku — ditulis server dari `pagu_rincian` (lib/data/renaksi-pagu.ts). */
   anggaran_nominal: number | null;
+  /** Rincian pagu per sumber dana, hanya baris sub kegiatan. */
+  pagu_rincian?: RincianPagu[];
   bulan_target: MonthVal[] | null;
   bulan_realisasi: MonthVal[] | null;
   version: number;
@@ -250,6 +255,10 @@ export async function listRencanaAksi(tahun: number, level: RaLevel): Promise<Ra
     r.bulan_realisasi = parseMonths(r.bulan_realisasi);
     normNumerics(r);
   }
+  if (level === 'sub-kegiatan') {
+    const rincian = await muatRincianPagu(sql, rows.map(r => Number(r.id)));
+    for (const r of rows) r.pagu_rincian = rincian.get(Number(r.id)) ?? [];
+  }
   return rows;
 }
 
@@ -267,6 +276,7 @@ export async function getRencanaAksiById(id: number): Promise<RaRow | null> {
     row.bulan_target = parseMonths(row.bulan_target);
     row.bulan_realisasi = parseMonths(row.bulan_realisasi);
     normNumerics(row);
+    if (row.level === 'sub-kegiatan') row.pagu_rincian = (await muatRincianPagu(sql, [Number(row.id)])).get(Number(row.id)) ?? [];
   }
   return row;
 }
@@ -469,7 +479,7 @@ export async function upsertRencanaAksi(
     // dibaca akan menimpa realisasi yang diubah orang lain di sela baca-dan-tulis.
     // Baris yang diedit + seluruh turunannya ada di SATU transaksi: ganti nama yang
     // berhenti di tengah meninggalkan keadaan persis yang fitur ini mau cegah.
-    await withTransaction(async ({ tx }) => {
+    await withTransaction(async ({ tx, conn }) => {
       await kunciTahunRenaksi(tx, Number(lama.tahun));
       await assertIndukIndikator(tx, data);
       const res = await tx`
@@ -496,7 +506,6 @@ export async function upsertRencanaAksi(
           q2_realisasi         = COALESCE(${rr?.[1] ?? null}, q2_realisasi),
           q3_realisasi         = COALESCE(${rr?.[2] ?? null}, q3_realisasi),
           q4_realisasi         = COALESCE(${rr?.[3] ?? null}, q4_realisasi),
-          anggaran_nominal     = ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null},
           bulan_target         = ${bulanTargetJson},
           induk_indikator_id   = IF(${indukBerubah ? 1 : 0} = 1, ${data.induk_indikator_id ?? null},
                                     COALESCE(${data.induk_indikator_id ?? null}, induk_indikator_id)),
@@ -506,6 +515,11 @@ export async function upsertRencanaAksi(
           AND (${expectedVersion === null ? 1 : 0} = 1 OR version = ${expectedVersion ?? 0})
       `;
       assertUpdated(res);
+      // Pagu: hanya lewat rincian (lib/data/renaksi-pagu.ts), dan hanya bila dikirim — kolom
+      // `anggaran_nominal` tidak lagi ditulis dari isian klien.
+      if (lama.level === 'sub-kegiatan' && data.pagu_rincian !== undefined) {
+        await tulisRincianPagu(tx, conn, id, Number(lama.tahun), data.pagu_rincian);
+      }
       if (gantiNama) {
         await jalarkanGantiNama(tx, Number(lama.tahun), gantiNama);
         await catatGantiNama(tx, Number(lama.tahun), gantiNama, userId);
@@ -536,15 +550,15 @@ export async function upsertRencanaAksi(
 
   // Race SELECT-lalu-INSERT ditutup uk_tahun_level_ind: submit kembar jatuh ke
   // ODKU (update, bukan ER_DUP_ENTRY 500). LAST_INSERT_ID(id) → insertId = id existing.
-  const res = await withTransaction(async ({ tx }) => {
+  return await withTransaction(async ({ tx, conn }) => {
     await kunciTahunRenaksi(tx, data.tahun);
     await assertIndukIndikator(tx, data);
-    return tx`
+    const res = await tx`
     INSERT INTO rencana_aksi
       (tahun, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
        program, kegiatan, sub_kegiatan, indikator, jenis, satuan,
        target_rpjmd, target_tahunan,
-       q1_target, q2_target, q3_target, q4_target, anggaran_nominal, bulan_target,
+       q1_target, q2_target, q3_target, q4_target, bulan_target,
        induk_indikator_id, created_by, updated_by)
     VALUES (
       ${data.tahun}, ${data.level}, ${data.kode ?? null}, ${data.sasaran ?? null}, ${data.tujuan ?? null},
@@ -552,8 +566,7 @@ export async function upsertRencanaAksi(
       ${data.program}, ${data.kegiatan ?? null}, ${data.sub_kegiatan ?? null},
       ${data.indikator}, ${data.jenis}, ${data.satuan},
       ${data.target_rpjmd}, ${data.target_tahunan},
-      ${dq1}, ${dq2}, ${dq3}, ${dq4},
-      ${data.level === 'sub-kegiatan' ? (data.anggaran_nominal ?? null) : null}, ${bulanTargetJson},
+      ${dq1}, ${dq2}, ${dq3}, ${dq4}, ${bulanTargetJson},
       ${data.induk_indikator_id ?? null},
       ${userId}, ${userId}
     ) AS new
@@ -576,14 +589,17 @@ export async function upsertRencanaAksi(
       q2_target            = new.q2_target,
       q3_target            = new.q3_target,
       q4_target            = new.q4_target,
-      anggaran_nominal     = new.anggaran_nominal,
       bulan_target         = new.bulan_target,
       induk_indikator_id   = COALESCE(new.induk_indikator_id, rencana_aksi.induk_indikator_id),
       version              = rencana_aksi.version + 1,
       updated_by           = new.updated_by
-  `;
-  }) as Array<{ insertId: number }>;
-  return res[0]?.insertId ?? 0;
+  ` as Array<{ insertId: number }>;
+    const id = Number(res[0]?.insertId ?? 0);
+    if (id && data.level === 'sub-kegiatan' && data.pagu_rincian !== undefined) {
+      await tulisRincianPagu(tx, conn, id, data.tahun, data.pagu_rincian);
+    }
+    return id;
+  });
 }
 
 /**
@@ -962,6 +978,42 @@ export async function setRaLock(tahun: number, bulan: number): Promise<void> {
   `;
 }
 
+// ─── Babak Pagu Perubahan per tahun (docs/CONCEPT-renaksi-pagu-rko.md §4) ────
+
+/**
+ * Mulai / batalkan babak Pagu Perubahan setahun. Di bawah kunci tahun yang SAMA dengan simpan
+ * rincian, jadi tidak ada simpanan yang menilai pembekuan Murni dengan status yang sudah basi.
+ * Batal hanya selama belum ada satu pun pagu Perubahan terisi — membatalkan sesudahnya akan
+ * menghapus angka yang sedang berlaku tanpa jejak.
+ */
+export async function ubahPaguPerubahan(
+  tahun: number, aksi: 'mulai' | 'batal', userId: number,
+): Promise<{ aktif: boolean; dimulai_pada: string | null; berubah: boolean }> {
+  return withTransaction(async ({ tx }) => {
+    await kunciTahunRenaksi(tx, tahun);
+    const s = await statusPaguPerubahan(tx, tahun);
+    if ((aksi === 'mulai') === s.aktif) return { ...s, berubah: false };
+    if (aksi === 'mulai') {
+      await tx`INSERT INTO renaksi_pagu_perubahan (tahun, dimulai_oleh) VALUES (${tahun}, ${userId})`;
+    } else {
+      const [n] = await tx`
+        SELECT COUNT(*) AS n FROM rencana_aksi_pagu AS p
+        JOIN rencana_aksi AS r ON r.id = p.rencana_aksi_id
+        WHERE r.tahun = ${tahun} AND p.pagu_perubahan IS NOT NULL
+      ` as Array<{ n: unknown }>;
+      const terisi = Number(n?.n ?? 0);
+      if (terisi > 0) {
+        throw new RaPaguError(
+          `Babak Perubahan ${tahun} tidak bisa dibatalkan — ${terisi} rincian sudah berisi pagu Perubahan. Kosongkan dulu kolom Perubahannya.`,
+          'PAGU_PERUBAHAN_TERISI',
+        );
+      }
+      await tx`DELETE FROM renaksi_pagu_perubahan WHERE tahun = ${tahun}`;
+    }
+    return { ...(await statusPaguPerubahan(tx, tahun)), berubah: true };
+  });
+}
+
 // ─── Duplikasi struktur + target ke tahun baru (realisasi kosong) ────────────
 
 export async function duplicateYear(
@@ -999,6 +1051,17 @@ export async function duplicateYear(
       WHERE tahun = ${fromTahun}
     ` as unknown as Array<{ affectedRows?: number }>;
     inserted = res[0]?.affectedRows ?? 0;
+
+    // Rincian pagu ikut (L69 — `anggaran_nominal` di atas sudah membawa totalnya). Yang berlaku di
+    // tahun asal jadi Murni tahun baru; babak Perubahan tidak ikut, tahun baru mulai dari Murni.
+    await tx`
+      INSERT INTO rencana_aksi_pagu (rencana_aksi_id, sumber, pagu, pagu_perubahan, urutan)
+      SELECT baru.id, p.sumber, COALESCE(p.pagu_perubahan, p.pagu), NULL, p.urutan
+      FROM rencana_aksi_pagu AS p
+      JOIN rencana_aksi AS asal ON asal.id = p.rencana_aksi_id AND asal.tahun = ${fromTahun}
+      JOIN rencana_aksi AS baru
+        ON baru.tahun = ${toTahun} AND baru.level = asal.level AND baru.indikator = asal.indikator
+    `;
 
     // Konsep §9: `induk_indikator_id` ikut tersalin apa adanya, jadi salinannya masih menunjuk
     // baris TAHUN ASAL. Tautan itu harus dipindahkan ke salinan induknya di tahun baru, kalau

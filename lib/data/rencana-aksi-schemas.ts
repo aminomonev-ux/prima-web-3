@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { bulatkanDesimal } from '@/lib/shared/desimal';
+import { BATAS_RINCIAN, PANJANG_SUMBER, rapikanSumber } from '@/lib/renaksi/pagu';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
@@ -58,6 +59,21 @@ const AngkaDesimal = z.coerce.number().min(0).transform((v) => bulatkanDesimal(v
 const AngkaAtauKosong = z.number().min(0).nullable().transform((v) => (v == null ? null : bulatkanDesimal(v)));
 const BulanArray = z.array(AngkaAtauKosong).length(12);
 
+// ─── Rincian pagu per sumber dana (docs/CONCEPT-renaksi-pagu-rko.md) ───────
+
+const RupiahAtauKosong = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable();
+export const RincianPaguSchema = z.object({
+  sumber: z.string().max(PANJANG_SUMBER * 2).transform(rapikanSumber)
+    .refine(s => s.length <= PANJANG_SUMBER, `Nama sumber paling panjang ${PANJANG_SUMBER} huruf`),
+  pagu: RupiahAtauKosong,
+  pagu_perubahan: RupiahAtauKosong,
+});
+
+export const PaguPerubahanSchema = z.object({
+  tahun: TahunSchema,
+  aksi: z.enum(['mulai', 'batal']),
+});
+
 // ─── Upsert body (Data Entry → Save) ───────────────────────────────────────
 
 export const UpsertRencanaAksiSchema = z.object({
@@ -83,8 +99,12 @@ export const UpsertRencanaAksiSchema = z.object({
   q2_target: AngkaDesimal.default(0),
   q3_target: AngkaDesimal.default(0),
   q4_target: AngkaDesimal.default(0),
-  // Info pagu — hanya relevan untuk level sub-kegiatan (null untuk level lain).
+  // Diabaikan server sejak pagu dirinci per sumber (migration-renaksi-pagu-sumber): totalnya ditulis
+  // server dari `pagu_rincian`. Tetap diterima supaya tab lama tidak ditolak 400.
   anggaran_nominal: z.coerce.number().int().min(0).nullable().optional(),
+  // Rincian pagu per sumber dana — hanya level sub-kegiatan. Tidak dikirim (undefined) = jangan
+  // sentuh (L87); larik kosong = kosongkan pagu baris ini.
+  pagu_rincian: z.array(RincianPaguSchema).max(BATAS_RINCIAN).optional(),
   // Opsi A: 12 target bulanan (sub-kegiatan) → sumber derive q1-q4 target server-side.
   bulan_target: BulanArray.nullable().optional(),
   // Tautan ke baris indikator INDUK (migration-renaksi-induk-indikator). NULL = belum diisi —

@@ -5,7 +5,8 @@
 import type { RaRow, RaLevel, HierarchyRow } from './types';
 import { buildHierarchyRows, outcomeOf, realisasiAkhirTahun, anggaranRollup, capaianTahunan } from './types';
 import { tulisDesimal, tulisPersen } from '@/lib/shared/desimal';
-import { nomorIndikator, tampilIndikator, tampilNama } from '@/lib/shared/nama-resmi';
+import { nomorIndikator, rapikanNamaEntitas, tampilIndikator, tampilNama } from '@/lib/shared/nama-resmi';
+import { daftarBelumTertaut, paguBaris, tulisPerSumber } from '@/lib/renaksi/pagu';
 
 export type ColMode = 'both' | 'target' | 'realisasi';
 
@@ -14,6 +15,8 @@ export interface CetakFilter {
   levels: Record<RaLevel, boolean>; // level mana yang tampil sbg baris
   colMode: ColMode;                 // kolom Target / Realisasi / keduanya
   showAnggaran: boolean;
+  /** Kolom rincian pagu per sumber dana di samping Anggaran. Bawaan mati: bentuk unduhan lama tetap. */
+  showSumberAnggaran?: boolean;
   showOutcome: boolean;
   showTw: boolean;                  // detail triwulan TW1-4
   /** Bintang tingkat & nomor "(1)" matriks resmi. Bawaan mati: hasil cetak bersih. */
@@ -226,6 +229,10 @@ export function cetakHeader(f: CetakFilter): CetakHeader {
   if (f.showAnggaran) {
     tail.push({ key: 'anggaran', header: 'Anggaran (Rp)', align: 'right', money: true,
       value: (h, rollup) => anggaranRollup(h.source.level, h.source, rollup) });
+    if (f.showSumberAnggaran) {
+      tail.push({ key: 'sumber_anggaran', header: 'Sumber Dana', align: 'left',
+        value: (h, rollup) => tulisPerSumber(paguBaris(h.source, rollup)) });
+    }
   }
 
   const flat = [...lead, ...twQuarters.flatMap(t => t.sub), ...tail];
@@ -234,4 +241,19 @@ export function cetakHeader(f: CetakFilter): CetakHeader {
 
 export function cetakColumns(f: CetakFilter): CetakColumn[] {
   return cetakHeader(f).flat;
+}
+
+/**
+ * Pagu yang tidak masuk angka indikator mana pun (anak belum tertaut di entitas berindikator banyak)
+ * — kalimat yang SAMA untuk spanduk layar, PDF, dan Excel. Tanpa ini jumlah kolom Anggaran lebih kecil
+ * dari pagu yang diisi, dan pemegang berkas tidak bisa tahu kenapa.
+ */
+export function catatanPaguCetak(rollup: RaRow[], f: CetakFilter): string[] {
+  if (!f.showAnggaran) return [];
+  const label: Record<string, string> = { tujuan: 'Tujuan', sasaran: 'Sasaran', program: 'Program', kegiatan: 'Kegiatan' };
+  return daftarBelumTertaut(rollup).map(b =>
+    `Pagu Rp ${b.pagu.total.toLocaleString('id-ID')} di bawah ${label[b.level]} "${rapikanNamaEntitas(b.nama)}"`
+    + (b.induk ? ` (Program "${rapikanNamaEntitas(b.induk)}")` : '')
+    + ' belum tertaut ke salah satu indikatornya, jadi tidak masuk angka indikator mana pun.'
+    + ' Tautkan lewat Data Entry (pilih indikator induk).');
 }

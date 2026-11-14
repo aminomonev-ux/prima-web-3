@@ -3,7 +3,7 @@
 import type { RaRow } from './types';
 import { realisasiAkhirTahun, tulisRealisasi, quartersOf, LEVEL_LABELS, outcomeOf, capaianTahunan, capaianRpjmd, capaianTriwulan } from './types';
 import type { CetakFilter } from './cetak-filter';
-import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, tulisSelCetak } from './cetak-filter';
+import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, catatanPaguCetak, tulisSelCetak } from './cetak-filter';
 import { sanitizeCell, loadExcelJs } from '@/lib/shared/excel-export';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import { polosSelExcel } from '@/lib/shared/excel-sel';
@@ -162,6 +162,7 @@ function xlsxColWidth(key: string): number {
   if (key === 'indikator' || key === 'outcome') return 38;
   if (key === 'tujuan' || key === 'sasaran' || key === 'program' || key === 'kegiatan' || key === 'sub_kegiatan') return 28;
   if (key === 'anggaran') return 16;
+  if (key === 'sumber_anggaran') return 30;
   if (key === 'jenis') return 14;
   return 10;
 }
@@ -208,6 +209,19 @@ export async function buildCombinedPdf(allRows: RaRow[], tahun: number, filter: 
     headStyles: { fillColor: [124, 92, 252], textColor: 255, fontSize: 7, halign: 'center' },
     columnStyles: { 0: { cellWidth: 8 } },
   });
+
+  const catatan = catatanPaguCetak(rollup, filter);
+  if (catatan.length) {
+    let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+    doc.setFontSize(7.5);
+    doc.setTextColor(133, 79, 11);
+    for (const c of catatan) {
+      const baris = doc.splitTextToSize(`Catatan: ${c}`, doc.internal.pageSize.getWidth() - 28) as string[];
+      if (y + baris.length * 3.5 > doc.internal.pageSize.getHeight() - 10) { doc.addPage(); y = 14; }
+      doc.text(baris, 14, y);
+      y += baris.length * 3.5 + 1.5;
+    }
+  }
 
   return doc;
 }
@@ -280,6 +294,20 @@ export async function buatWorkbookGabungan(allRows: RaRow[], filter: CetakFilter
       } else {
         cell.value = typeof v === 'string' ? sanitizeCell(v) : v;
       }
+    }
+  }
+
+  const catatan = catatanPaguCetak(rollup, filter);
+  if (catatan.length) {
+    dataIdx++;
+    for (const c of catatan) {
+      const cell = ws.getRow(dataIdx).getCell(1);
+      cell.value = sanitizeCell(`Catatan: ${c}`);
+      cell.font = { italic: true, color: { argb: 'FF854F0B' } };
+      ws.mergeCells(dataIdx, 1, dataIdx, Math.max(1, flat.length));
+      cell.alignment = { wrapText: true, vertical: 'top' };
+      ws.getRow(dataIdx).height = 30;
+      dataIdx++;
     }
   }
 

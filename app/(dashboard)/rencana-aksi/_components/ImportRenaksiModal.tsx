@@ -225,7 +225,9 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
         + `${json.gantiNama?.length ? ` · ${json.gantiNama.length} ganti nama/pindah induk diteruskan ke E-Anggaran & PK` : ''}`
         + `${json.tautanDiisi ? ` · ${json.tautanDiisi} tautan indikator induk diisi` : ''}`
         + `${json.tautanTakDikenal?.length ? ` · ${json.tautanTakDikenal.length} indikator induk tidak dikenali (tautannya tidak diisi)` : ''}`
-        + `${json.turunanDijalarkan ? ` · ${json.turunanDijalarkan} baris turunan ikut dipindah` : ''}`;
+        + `${json.turunanDijalarkan ? ` · ${json.turunanDijalarkan} baris turunan ikut dipindah` : ''}`
+        // Berkas tidak membawa sumber dana: pagu yang sudah dirinci per sumber tidak ditimpa.
+        + `${json.paguBersumberDilewati?.length ? ` · anggaran ${json.paguBersumberDilewati.length} indikator tidak ditulis karena pagunya sudah dirinci per sumber dana (ubah lewat Data Entry)` : ''}`;
       if (json.ditahan?.length) {
         notify(`${pesan} · ${json.ditahan.length} ditahan: ${json.ditahan[0].alasan}`, 'warning');
       } else {

@@ -1,8 +1,7 @@
 # Konsep — Pagu sub kegiatan Renaksi sebagai batas pagu RKO E-Anggaran
 
-Status: **KONSEP, putaran 2** (2026-11-14). Belum ada kode. Empat jawaban pemilik sudah masuk (§5); yang
-tersisa keputusan di §6. Putaran 1 (2026-11-13) mengira pagu milik sub kegiatan dan mengusulkan
-"Tahap A" untuk menutup penjumlahan dobel — **itu dibatalkan**, lihat §2.
+Status: **Tahap A' SELESAI** (2026-11-14, §9). Tahap B–D menyusul. Putaran 1 (2026-11-13) mengira pagu
+milik sub kegiatan dan mengusulkan "Tahap A" untuk menutup penjumlahan dobel — **itu dibatalkan**, lihat §2.
 
 ---
 
@@ -207,3 +206,34 @@ FROM kinerja_rekening
 GROUP BY tahun, sumber
 ORDER BY tahun, sumber;
 ```
+
+## 9. Tahap A' — yang dikerjakan (2026-11-14)
+
+- **Data:** `rencana_aksi_pagu` (rincian per baris indikator × sumber; `''` = tanpa sumber) +
+  `renaksi_pagu_perubahan` (tahun yang berbabak Perubahan) — `migration-renaksi-pagu-sumber.sql`, WAJIB
+  sebelum kodenya dipasang. Pagu lama dipindah migrasi jadi rincian "tanpa sumber".
+- **Satu penulis** `tulisRincianPaguBorongan` (`lib/data/renaksi-pagu.ts`) untuk Data Entry DAN Impor; ia
+  juga satu-satunya penulis `rencana_aksi.anggaran_nominal` (= Σ pagu berlaku). Selalu di bawah
+  `kunciTahunRenaksi`, sama dengan mulai/batal Perubahan. Aturannya murni di `lib/renaksi/pagu.ts`
+  (`alasanTolakRincian`) — form memakai fungsi yang sama.
+- **Babak Perubahan per tahun** (`POST /api/rencana-aksi/pagu-perubahan`, audit `RA_PAGU_PERUBAHAN`):
+  Murni per sumber dibekukan; Murni "tanpa sumber" boleh diberi sumber selama jumlah Murni tetap; batal
+  hanya selama belum ada pagu Perubahan terisi.
+- **Naik ke atas** (`susunPaguRenaksi`): ikut `induk_indikator_id`; anak belum tertaut di entitas
+  berindikator banyak tidak dibagi dan disebut di spanduk Cetak + catatan PDF/Excel. Pilihan kolom
+  "Sumber Dana" di Cetak (bawaan mati, bentuk unduhan lama & tabel LKJIP tertaut tetap).
+- **Duplikasi Tahun** menyalin rincian: yang berlaku jadi Murni tahun baru.
+
+**Perubahan perilaku** (disengaja):
+1. Kolom Anggaran Cetak per baris indikator kini angka indikator itu, bukan total entitas yang
+   diulang di setiap indikatornya. Sub kegiatan yatim (kegiatannya tidak ada) tidak lagi ikut total
+   program — sesuai spanduk "orphan" yang sudah lama berbunyi begitu.
+2. Impor: sel Anggaran kosong tidak lagi menghapus pagu; angka berkas tidak menimpa pagu yang sudah
+   dirinci per sumber (disebut di hasil impor); di babak Perubahan angka berkas masuk kolom Perubahan.
+3. `anggaran_nominal` kiriman tab lama diabaikan server.
+
+Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-pagu-sumber.mts` (52; bagian C MySQL
+kotak pasir 2075/2076), 14 uji mutasi tertangkap. Tiga temuan dari uji mutasi dibereskan: celah data uji (Murni digeser antar sumber dengan jumlah tetap — kini A6b), satu syarat
+pembekuan Murni yang mubazir (sudah tercakup syarat jumlah) dan satu baris kode mati di
+`daftarBelumTertaut`. Diverifikasi di peramban pada 2045 (dibersihkan sesudahnya): Data Entry (editor,
+Mulai Perubahan, Simpan), Cetak (angka per indikator, spanduk, kolom Sumber Dana), tema terang.

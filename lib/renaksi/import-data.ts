@@ -20,6 +20,8 @@ import type { RaLevel } from '@/lib/data/rencana-aksi-schemas';
 import { kunciPersis, selaraskanImpor, type BarisTersimpan } from './induk-impor';
 import { rencanaGantiNamaImpor, turunanTertinggal, type BarisBerindikator, type GantiNama } from './ganti-nama';
 import { cocokkanIndukImpor, type BarisRantai } from './rantai';
+import { totalBerlaku, type RincianPagu } from './pagu';
+import { muatRincianPagu, statusPaguPerubahan, tulisRincianPaguBorongan } from '@/lib/data/renaksi-pagu';
 
 export interface CommitRow {
   level: RaLevel;
@@ -61,6 +63,42 @@ export interface CommitResult {
   tautanTakDikenal: string[];
   /** Baris turunan (tidak ada di berkas) yang ikut dijalarkan ke nama/lokasi baru. */
   turunanDijalarkan: number;
+  /** Indikator yang pagunya sudah dirinci per sumber dana — angka Anggaran berkas tidak ditulis. */
+  paguBersumberDilewati: string[];
+}
+
+/**
+ * Kolom Anggaran berkas → rincian pagu. Berkas tidak membawa sumber dana, jadi angkanya hanya mengisi
+ * baris yang pagunya belum bersumber (rincian "tanpa sumber"); pagu yang sudah dirinci per sumber
+ * dilewati dan disebut, bukan ditimpa. Di babak Perubahan angkanya masuk kolom Perubahan (Murni beku).
+ * Sel kosong tidak menghapus pagu (dulu ya — sama seperti kolom `kode`).
+ */
+async function sinkronPaguImpor(
+  tx: Penanya, conn: PoolConnection, tahun: number, rows: readonly CommitRow[],
+): Promise<string[]> {
+  const berPagu = rows.filter(r => r.level === 'sub-kegiatan' && r.anggaran != null);
+  if (!berPagu.length) return [];
+  const ada = await tx`
+    SELECT id, indikator FROM rencana_aksi WHERE tahun = ${tahun} AND level = 'sub-kegiatan'
+  ` as Array<{ id: number; indikator: string }>;
+  const idPer = new Map(ada.map(a => [kunciPersis(a.indikator), Number(a.id)]));
+  const lama = await muatRincianPagu(tx, [...idPer.values()]);
+  const { aktif } = await statusPaguPerubahan(tx, tahun);
+  const isian = new Map<number, RincianPagu[]>();
+  const dilewati: string[] = [];
+  for (const r of berPagu) {
+    const id = idPer.get(kunciPersis(r.indikator));
+    if (!id) continue;
+    const rl = lama.get(id) ?? [];
+    if (totalBerlaku(rl) === r.anggaran) continue;
+    if (rl.some(x => x.sumber !== '')) { dilewati.push(r.indikator); continue; }
+    const murni = rl.find(x => x.sumber === '')?.pagu ?? null;
+    isian.set(id, [aktif
+      ? { sumber: '', pagu: murni, pagu_perubahan: r.anggaran }
+      : { sumber: '', pagu: r.anggaran, pagu_perubahan: null }]);
+  }
+  await tulisRincianPaguBorongan(tx, conn, tahun, isian);
+  return dilewati;
 }
 
 /**
@@ -105,7 +143,6 @@ function toDbTuple(row: CommitRow, tahun: number, userId: number): unknown[] {
     row.indikator, row.jenis, row.satuan,
     row.target_tahunan,
     row.q[0], row.q[1], row.q[2], row.q[3],
-    isSub ? row.anggaran : null,
     bulanJson,
     userId, userId,
   ];
@@ -116,7 +153,7 @@ const COLUMNS = [
   'outcome_program', 'outcome_kegiatan', 'outcome_sub_kegiatan',
   'indikator', 'jenis', 'satuan', 'target_tahunan',
   'q1_target', 'q2_target', 'q3_target', 'q4_target',
-  'anggaran_nominal', 'bulan_target', 'created_by', 'updated_by',
+  'bulan_target', 'created_by', 'updated_by',
 ];
 
 // Baris yang induknya berganti lewat berkas (pindah program/kegiatan/sasaran/tujuan): tautan
@@ -132,13 +169,14 @@ const LEPAS_TAUTAN_BASI = "`induk_indikator_id` = IF("
   + " OR NOT (TRIM(`program`) <=> TRIM(VALUES(`program`)))))"
   + ", NULL, `induk_indikator_id`)";
 
-// Kolom realisasi sengaja absen: impor tidak boleh menghapus capaian.
+// Kolom realisasi sengaja absen: impor tidak boleh menghapus capaian. `anggaran_nominal` juga absen:
+// pagu ditulis lewat rincian (`sinkronPaguImpor`), satu penulis dengan Data Entry.
 const UPDATE_SET = LEPAS_TAUTAN_BASI + ', ' + [
   'program', 'kegiatan', 'sub_kegiatan', 'tujuan', 'sasaran',
   'outcome_program', 'outcome_kegiatan', 'outcome_sub_kegiatan',
   'jenis', 'satuan', 'target_tahunan',
   'q1_target', 'q2_target', 'q3_target', 'q4_target',
-  'anggaran_nominal', 'bulan_target', 'updated_by',
+  'bulan_target', 'updated_by',
 ].map(c => `\`${c}\` = VALUES(\`${c}\`)`).join(', ')
   // `kode` pakai COALESCE, bukan VALUES() polos: file tanpa kolom kode mengirim NULL,
   // dan itu tidak boleh MENGHAPUS kode yang sudah tersimpan dari impor sebelumnya.
@@ -200,7 +238,7 @@ export async function commitImportRenaksi(
     const { tersimpan, layak, ditahan, disesuaikan, levelsDiFile, gantiNama, dampak } = siap;
 
     if (layak.length === 0) {
-      return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [], tautanDiisi: 0, tautanTakDikenal: [], turunanDijalarkan: 0 };
+      return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [], tautanDiisi: 0, tautanTakDikenal: [], turunanDijalarkan: 0, paguBersumberDilewati: [] };
     }
 
     // Kunci unik (tahun, level, indikator) — hitung mana yang sudah ada supaya
@@ -254,6 +292,7 @@ export async function commitImportRenaksi(
     for (const d of dijalarkan) await jalarkanGantiNama(tx, tahun, d.gantiNama);
     const tuples = akanTulis.map(r => toDbTuple(r, tahun, userId));
     await bulkWrite(conn, tuples, mode !== 'tambah');
+    const paguBersumberDilewati = await sinkronPaguImpor(tx, conn, tahun, akanTulis);
     // Transaksi yang sama: impor yang batal tidak boleh meninggalkan catatan.
     for (const g of gantiNama) await catatGantiNama(tx, tahun, g, userId);
 
@@ -288,6 +327,7 @@ export async function commitImportRenaksi(
     return {
       disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel, gantiNama, tautanDiisi, tautanTakDikenal,
       turunanDijalarkan: dijalarkan.reduce((s, d) => s + d.turunan, 0),
+      paguBersumberDilewati,
     };
   });
 }

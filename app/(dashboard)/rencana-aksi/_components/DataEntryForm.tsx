@@ -13,11 +13,16 @@ import DownloadButton from '@/components/ui/DownloadButton';
 import { toast } from 'sonner';
 import SoftSelect from '@/components/ui/SoftSelect';
 import Tip from '@/components/ui/Tip';
-import { InputNominal } from '@/components/ui/input-nominal';
 import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { usePenanda } from '../_lib/penanda';
 import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
-import { apiUpsert, apiDelete, apiList, TautanAnakError, VersionConflictError } from '../_lib/api';
+import {
+  apiUpsert, apiDelete, apiList, apiPaguPerubahan, apiUbahPaguPerubahan, TautanAnakError, VersionConflictError,
+} from '../_lib/api';
+import {
+  alasanTolakRincian, kunciSumber, paguSendiri, rapikanSumber, totalBerlaku, tulisPerSumber, type RincianPagu,
+} from '@/lib/renaksi/pagu';
+import PaguSumberEditor from './PaguSumberEditor';
 import { kalimatPemakai } from '@/lib/renaksi/pemakai';
 import { INDUK_LEVEL, namaEntitas, indikatorInduk, entitasAnak, indikatorEntitas, denganNilaiTersimpan } from '@/lib/renaksi/rantai';
 import { exportListPdf, exportListXlsx } from '../_lib/exports';
@@ -33,6 +38,12 @@ interface Props {
    *  datang dari Realisasi Kinerja untuk mengubah Target/Jenis. Dibersihkan oleh
    *  induk saat pengguna berpindah menu, bukan oleh komponen ini. */
   fokusEditId?: number | null;
+}
+
+/** Rincian tersimpan baris; data yang belum termigrasi (angka tanpa rincian) dibaca sebagai "tanpa sumber". */
+function rincianTersimpan(row: RaRow): RincianPagu[] {
+  if (row.pagu_rincian?.length) return row.pagu_rincian.map(r => ({ ...r }));
+  return row.anggaran_nominal != null ? [{ sumber: '', pagu: row.anggaran_nominal, pagu_perubahan: null }] : [];
 }
 
 export default function DataEntryForm({ level, rows, selectedYear, onReload, notify, fokusEditId }: Props) {
@@ -56,7 +67,10 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const [targetTahunan, setTargetTahunan] = useState(100);
   const [q1, setQ1] = useState(25); const [q2, setQ2] = useState(25);
   const [q3, setQ3] = useState(25); const [q4, setQ4] = useState(25);
-  const [anggaranNominal, setAnggaranNominal] = useState(0);
+  const [paguRincian, setPaguRincian] = useState<RincianPagu[]>([]);
+  const [paguStatus, setPaguStatus] = useState<{ aktif: boolean; dimulai_pada: string | null }>({ aktif: false, dimulai_pada: null });
+  const [sibukPerubahan, setSibukPerubahan] = useState(false);
+  const [sumberMaster, setSumberMaster] = useState<string[]>([]);
   // R3: null = belum diisi, 0 = nol nyata
   const [bulanTarget, setBulanTarget] = useState<(number | null)[]>(() => Array(12).fill(null));
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -108,6 +122,58 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     })();
     return () => { cancelled = true; };
   }, [level, selectedYear, notify]);
+
+  // Babak Pagu Perubahan tahun ini + daftar sumber dana Master Rekening E-Anggaran (konsep
+  // renaksi-pagu-rko §6a). Master hanya bahan pilihan: tanpa akses E-Anggaran daftarnya kosong dan
+  // sumber tetap bisa diketik — Renaksi yang jadi sumber besarnya.
+  useEffect(() => {
+    if (!isSub) return;
+    const ac = new AbortController();
+    void (async () => {
+      try { setPaguStatus(await apiPaguPerubahan(selectedYear, ac.signal)); }
+      catch (err) { if (!ac.signal.aborted) notify((err as Error).message || 'Gagal memuat status Pagu Perubahan', 'error'); }
+      try {
+        const r = await fetch(`/api/kinerja/master?tahun=${selectedYear}&tipe=sumber_anggaran`, { cache: 'no-store', signal: ac.signal });
+        const b = r.ok ? await r.json() as { rows?: Array<{ nama?: string }> } : null;
+        if (!ac.signal.aborted) setSumberMaster((b?.rows ?? []).map(x => rapikanSumber(x.nama)).filter(Boolean));
+      } catch { if (!ac.signal.aborted) setSumberMaster([]); }
+    })();
+    return () => ac.abort();
+  }, [isSub, selectedYear, notify]);
+
+  const opsiSumber = (() => {
+    const peta = new Map<string, string>();
+    for (const s of [...sumberMaster, ...rows.flatMap(r => (r.pagu_rincian ?? []).map(x => x.sumber))]) {
+      const k = kunciSumber(s);
+      if (k && !peta.has(k)) peta.set(k, rapikanSumber(s));
+    }
+    return [...peta.values()].sort((a, b) => a.localeCompare(b, 'id'));
+  })();
+
+  async function ubahBabakPerubahan(aksi: 'mulai' | 'batal') {
+    const ok = await confirmDialog(aksi === 'mulai'
+      ? {
+          title: `Mulai Pagu Perubahan ${selectedYear}?`,
+          message: `Pagu Murni seluruh sub kegiatan ${selectedYear} dibekukan. Perubahan anggaran diisi di kolom Perubahan; `
+            + 'baris yang kolom Perubahannya kosong tetap memakai angka Murni.\n\nBisa dibatalkan selama belum ada pagu Perubahan yang diisi.',
+          confirmLabel: 'Mulai Perubahan', variant: 'warning',
+        }
+      : {
+          title: `Batalkan Pagu Perubahan ${selectedYear}?`,
+          message: 'Kolom Perubahan hilang dan pagu Murni bisa disunting lagi.',
+          confirmLabel: 'Batalkan Perubahan', variant: 'warning',
+        });
+    if (!ok) return;
+    setSibukPerubahan(true);
+    try {
+      setPaguStatus(await apiUbahPaguPerubahan(selectedYear, aksi));
+      notify(aksi === 'mulai' ? `Babak Pagu Perubahan ${selectedYear} dimulai — Murni dibekukan.` : `Babak Pagu Perubahan ${selectedYear} dibatalkan.`, 'success');
+    } catch (err) {
+      notify((err as Error).message || 'Gagal mengubah babak Pagu Perubahan', 'error');
+    } finally {
+      setSibukPerubahan(false);
+    }
+  }
 
   const namaOpsiInduk = Array.from(new Set(indukRows.map(namaEntitas).filter(Boolean)));
   const namaOpsiProgram = Array.from(new Set(programRows.map(namaEntitas).filter(Boolean)));
@@ -167,7 +233,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setSatuan('Persen'); setJenis('Akumulatif');
     setTargetRpjmd(100); setTargetTahunan(100);
     setQ1(25); setQ2(25); setQ3(25); setQ4(25);
-    setAnggaranNominal(0);
+    setPaguRincian([]);
     setBulanTarget(Array(12).fill(0));
     setIndukIndikatorId(null);
     setProgramIndikatorId(null);
@@ -201,6 +267,10 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     if (level !== 'tujuan' && editingId == null && indukIndikatorId == null) {
       toast.error(`Pilih ${indukIndikatorLabel} dulu — itu yang menentukan baris ini menjabarkan indikator induk yang mana.`);
       return;
+    }
+    if (isSub) {
+      const alasanPagu = alasanTolakRincian(paguRincian, paguLama, paguStatus.aktif);
+      if (alasanPagu) { toast.error(alasanPagu); return; }
     }
 
     // Jenis mengubah CARA realisasi dihitung, bukan sekadar angkanya: Akumulatif
@@ -255,7 +325,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         jenis, satuan: satuan.trim(),
         target_rpjmd: targetRpjmd, target_tahunan: targetTahunan,
         q1_target: q1, q2_target: q2, q3_target: q3, q4_target: q4,
-        anggaran_nominal: level === 'sub-kegiatan' ? (anggaranNominal || null) : null,
+        pagu_rincian: isSub ? paguRincian : undefined,
         bulan_target: isSub ? bulanTarget : null,
         // Hanya tautan INDUK LANGSUNG yang disimpan; indikator program di level sub hanya
         // menyaring daftar kegiatan, tidak pernah jadi isi kolom.
@@ -311,7 +381,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     setTargetRpjmd(row.target_rpjmd); setTargetTahunan(row.target_tahunan);
     setQ1(row.q1_target); setQ2(row.q2_target);
     setQ3(row.q3_target); setQ4(row.q4_target);
-    setAnggaranNominal(row.anggaran_nominal ?? 0);
+    setPaguRincian(rincianTersimpan(row));
     setBulanTarget(Array.isArray(row.bulan_target) && row.bulan_target.length === 12
       ? row.bulan_target.slice() : Array(12).fill(null));
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
@@ -320,6 +390,19 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   // Baris asli yang sedang diedit — pembanding untuk memberi tahu akibat perubahan
   // Target/Jenis. null saat menambah data baru (tidak ada "sebelum"-nya).
   const barisAsli = editingId != null ? (rows.find(r => r.id === editingId) ?? null) : null;
+  const paguLama = barisAsli ? rincianTersimpan(barisAsli) : [];
+  // Pagu milik indikator (konsep §2 no. 5): sub kegiatan = Σ indikatornya, isian layar menggantikan baris ini.
+  const saudaraSub = isSub && subKegiatan.trim()
+    ? rows.filter(r => r.level === 'sub-kegiatan' && r.id !== editingId
+        && r.program === program.trim() && (r.kegiatan ?? '') === kegiatan.trim() && (r.sub_kegiatan ?? '') === subKegiatan.trim())
+    : [];
+  const totalSubKegiatan = isSub ? (() => {
+    const nilai = [totalBerlaku(paguRincian), ...saudaraSub.map(r => paguSendiri(r)?.total ?? null)];
+    return {
+      total: nilai.some(v => v != null) ? nilai.reduce<number>((a, v) => a + (v ?? 0), 0) : null,
+      indikator: saudaraSub.length + 1,
+    };
+  })() : null;
   const targetBerubah = barisAsli != null
     && (targetTahunan !== barisAsli.target_tahunan || targetRpjmd !== barisAsli.target_rpjmd);
 
@@ -939,20 +1022,19 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
             </div>
 
             {level === 'sub-kegiatan' && (
-              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 space-y-2">
-                <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-widest block border-b border-slate-100 pb-1">
-                  💰 ANGGARAN (INFO PAGU)
-                </span>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Anggaran Nominal (Rp)</label>
-                  <InputNominal
-                    value={anggaranNominal}
-                    onChange={(v) => setAnggaranNominal(v)}
-                    className="w-full rounded border border-slate-200 px-3 py-1.5 text-xs text-slate-700 bg-white text-right focus:ring-1 focus:ring-[#EF9F27] focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-400">Pagu anggaran sub-kegiatan ini (informasi). Kosongkan jika belum ada.</p>
-                </div>
-              </div>
+              <PaguSumberEditor
+                tahun={selectedYear}
+                rincian={paguRincian}
+                onChange={setPaguRincian}
+                lama={paguLama}
+                perubahanAktif={paguStatus.aktif}
+                dimulaiPada={paguStatus.dimulai_pada}
+                opsiSumber={opsiSumber}
+                totalSubKegiatan={totalSubKegiatan}
+                onMulaiPerubahan={() => void ubahBabakPerubahan('mulai')}
+                onBatalPerubahan={() => void ubahBabakPerubahan('batal')}
+                sibukPerubahan={sibukPerubahan}
+              />
             )}
 
             <div className="flex justify-end pt-3">
@@ -1161,6 +1243,14 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                               {row.anggaran_nominal != null
                                 ? `Rp ${row.anggaran_nominal.toLocaleString('id-ID')}`
                                 : <span className="text-slate-300 font-normal">—</span>}
+                              {(() => {
+                                const p = paguSendiri(row);
+                                const rinci = tulisPerSumber(p);
+                                const tanpa = p?.perSumber.some(s => s.sumber === '') && p.perSumber.length > 0;
+                                return rinci
+                                  ? <span className="block text-[10px] font-normal text-slate-500 whitespace-normal">{rinci}</span>
+                                  : tanpa ? <span className="block text-[10px] font-normal text-[#BA7517]">tanpa sumber — atur lewat ✎</span> : null;
+                              })()}
                             </td>
                           </>
                         )}
