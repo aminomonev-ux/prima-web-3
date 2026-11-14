@@ -17,9 +17,10 @@ import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { usePenanda } from '../_lib/penanda';
 import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
 import {
-  apiUpsert, apiDelete, apiList, apiPaguPerubahan, apiPaguRko, apiUbahPaguPerubahan, TautanAnakError, VersionConflictError,
-  type AgregatSubRko,
+  apiUpsert, apiDelete, apiList, apiPaguPerubahan, apiPaguRko, apiUbahPaguPerubahan, PaguRenaksiError, TautanAnakError,
+  VersionConflictError, type AgregatSubRko, type UpsertPayload,
 } from '../_lib/api';
+import { tanyaAlasanPagu } from '@/components/renaksi/alasan-pagu';
 import {
   alasanTolakRincian, jumlahPerSumber, kunciSumber, paguSendiri, rapikanSumber, totalBerlaku, tulisPerSumber, type RincianPagu,
 } from '@/lib/renaksi/pagu';
@@ -310,7 +311,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
 
     setBusy(true);
     try {
-      const { dipakai, perubahan } = await apiUpsert({
+      const muatan: UpsertPayload = {
         id: editingId,
         expected_version: editingVersion,
         tahun: selectedYear,
@@ -335,7 +336,19 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
         // Hanya tautan INDUK LANGSUNG yang disimpan; indikator program di level sub hanya
         // menyaring daftar kegiatan, tidak pernah jadi isi kolom.
         induk_indikator_id: level === 'tujuan' ? null : indukIndikatorId,
-      });
+      };
+      // Pagu yang diturunkan sampai di bawah RKO E-Anggaran ditahan server; bisa diteruskan dengan
+      // alasan (konsep renaksi-pagu-rko Tahap D). Batal = isian tetap di form.
+      let jawab: Awaited<ReturnType<typeof apiUpsert>>;
+      try {
+        jawab = await apiUpsert(muatan);
+      } catch (e) {
+        if (!(e instanceof PaguRenaksiError)) throw e;
+        const alasan = await tanyaAlasanPagu(e.jawaban, 'renaksi');
+        if (!alasan) return;
+        jawab = await apiUpsert({ ...muatan, alasan_pagu_renaksi: alasan });
+      }
+      const { dipakai, perubahan } = jawab;
       notify(
         (editingId ? `Berhasil memperbarui data entry: ${nm}` : `Berhasil menambah data entry baru: ${nm}`)
         + (namaEntitasBerubah
@@ -459,10 +472,24 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
 
   const handleDelete = async (row: RaRow) => {
     setBusy(true);
+    // Menghapus indikator sub kegiatan ikut membuang pagunya — kalau RKO jadi melampaui, server
+    // menahan dan layar menanyakan alasan (konsep renaksi-pagu-rko Tahap D). `null` = batal.
+    const hapus = async (lepasTautan: boolean): Promise<{ lepas: number } | null> => {
+      try {
+        return await apiDelete(row.id, lepasTautan);
+      } catch (e) {
+        if (!(e instanceof PaguRenaksiError)) throw e;
+        setConfirmDelete(null);
+        const alasan = await tanyaAlasanPagu(e.jawaban, 'renaksi');
+        return alasan ? apiDelete(row.id, lepasTautan, alasan) : null;
+      }
+    };
     try {
       let lepas = 0;
       try {
-        ({ lepas } = await apiDelete(row.id));
+        const h = await hapus(false);
+        if (!h) return;
+        ({ lepas } = h);
       } catch (err) {
         if (!(err instanceof TautanAnakError)) throw err;
         setConfirmDelete(null);
@@ -482,7 +509,9 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
           variant: 'danger',
         });
         if (!ok) return;
-        ({ lepas } = await apiDelete(row.id, true));
+        const h = await hapus(true);
+        if (!h) return;
+        ({ lepas } = h);
       }
       notify(lepas ? `Berhasil menghapus entri — tautan ${lepas} baris dilepas.` : 'Berhasil menghapus entri.', 'warning');
       if (editingId === row.id) resetForm();

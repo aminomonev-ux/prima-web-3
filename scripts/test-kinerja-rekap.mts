@@ -550,7 +550,7 @@ for (const f of [
      s.includes("'PENURUNAN_DRASTIS'") && s.includes('konfirmasiPenurunan('));
   // Argumen kedua boleh ikut (SskTab meneruskan persetujuan bulan tertutup) — yang
   // dijaga cuma: ulangannya MEMBAWA force=true.
-  ok(`M2 ${nama} mengulang dengan force`, /\(true(, \w+)?\); return; \}/.test(s));
+  ok(`M2 ${nama} mengulang dengan force`, /\(true(, \w+)*\); return; \}/.test(s));
 }
 
 const rt = readFileSync('app/(dashboard)/kinerja/_tabs/RealisasiTab.tsx', 'utf8');

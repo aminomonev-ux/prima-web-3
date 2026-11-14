@@ -7,6 +7,8 @@ import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
 import { hitungDinolkan } from '@/lib/kinerja/nol-kan';
 import { KinerjaTargetTertutupError } from '@/lib/kinerja/tutup-bulan';
+import { PaguRenaksiTerlampauiError, detailPaguDitembus, jawabPaguTerlampaui } from '@/lib/data/pagu-renaksi-rko';
+import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -47,14 +49,16 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = SskBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version, force, asal_pulihkan, setuju_bulan_tertutup } = parsed.data;
+  const { tahun, sumber, rows, versi_tipe, versi_seq, expected_version, force, asal_pulihkan, setuju_bulan_tertutup, alasan_pagu_renaksi } = parsed.data;
   const versiTipe = versi_tipe ?? 'MURNI';
   const versiSeq  = versi_seq  ?? 0;
 
+  let paguDitembus: BandingPaguSub[] = [];
   try {
-    await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version, force ?? false,
-      setuju_bulan_tertutup ?? false);
+    paguDitembus = await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version, force ?? false,
+      setuju_bulan_tertutup ?? false, alasan_pagu_renaksi ?? null);
   } catch (err) {
+    if (err instanceof PaguRenaksiTerlampauiError) return jawabPaguTerlampaui(err, 'message');
     // V3-6: layar memasang ketikan di atas isi terbaru (bentrok-ssk.ts) dan menyebut
     // siapa & jam berapa — cermin route Realisasi.
     if (err instanceof KinerjaVersionConflictError) {
@@ -98,6 +102,12 @@ export async function PUT(req: NextRequest) {
       + (setuju_bulan_tertutup ? ' — mengubah target/pagu bulan yang realisasinya sudah ditutup (sudah diperingatkan)' : '')
       + jejakPulihkan(asal_pulihkan),
   });
+  if (paguDitembus.length > 0) {
+    await writeAuditLog({
+      req, eventType: 'PAGU_RENAKSI_DITEMBUS', userId: session.userId, username: session.username,
+      detail: `Simpan RKO ${sumber} ${tahun} ${versiTipe}-${versiSeq}: ${detailPaguDitembus(paguDitembus, alasan_pagu_renaksi)}`,
+    });
+  }
 
   return NextResponse.json({ ok: true, saved: rows.length, versi: { tipe: versiTipe, seq: versiSeq }, version });
 }

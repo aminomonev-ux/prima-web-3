@@ -136,8 +136,10 @@ if (process.argv[2] === '--anak') {
   // (terjadi 2026-10-08: uji menunggu 15 detik lalu jalan terus, urutannya jadi
   // kebetulan waktu). Koneksinya sendiri supaya tidak antre di pool yang sedang dipakai.
   const pengamat = await koneksi()
+  // Hitung TRANSAKSI yang menunggu, bukan baris: satu penunggu yang meminta X atas baris yang
+  // dipegang S+X oleh penahan tercatat dua baris (acquireBludLock sejak ODKU).
   const menunggu = async () => Number((await pengamat.query(
-    'SELECT COUNT(*) AS n FROM performance_schema.data_lock_waits'))[0][0]?.n ?? 0)
+    'SELECT COUNT(DISTINCT REQUESTING_ENGINE_TRANSACTION_ID) AS n FROM performance_schema.data_lock_waits'))[0][0]?.n ?? 0)
   async function tungguSampai(syarat, ms = 15000) {
     const batas = Date.now() + ms
     while (Date.now() < batas) { if (await syarat()) return true; await new Promise(r => setTimeout(r, 40)) }

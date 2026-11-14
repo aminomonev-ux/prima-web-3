@@ -5,9 +5,11 @@ import type { Penanya } from '@/lib/data/db';
 import { muatRincianPagu } from './renaksi-pagu';
 import { paguSubKegiatan, type BarisPagu, type PaguSubRenaksi } from '@/lib/renaksi/pagu';
 import {
-  agregatRko, bandingPaguRenaksi, versiTerbaruPerTab,
-  type AgregatRko, type BarisRkoPagu, type HasilBandingPagu, type RekeningSumberDana,
+  agregatRko, alasanPaguSah, bandingPaguRenaksi, kalimatLebih, pelanggaranBaru, ringkasPelanggaran, versiTerbaruPerTab,
+  type AgregatRko, type BandingPaguSub, type BarisRkoPagu, type HasilBandingPagu, type RekeningSumberDana,
 } from '@/lib/kinerja/pagu-renaksi';
+import { rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
+import { NextResponse } from 'next/server';
 
 export interface BahanPaguRenaksi {
   renaksi: PaguSubRenaksi[];
@@ -42,3 +44,43 @@ export async function bandingPaguTahun(q: Penanya, tahun: number): Promise<Hasil
   const b = await muatBahanPaguRenaksi(q, tahun);
   return bandingPaguRenaksi(b.renaksi, b.rko);
 }
+
+// ─── Pagar Simpan (Tahap C: jalur RKO & Rekening; Tahap D: jalur Renaksi) ─────
+
+export class PaguRenaksiTerlampauiError extends Error {
+  constructor(public readonly tahun: number, public readonly pelanggaran: BandingPaguSub[]) {
+    super(`Pagu RKO melampaui pagu sub kegiatan Rencana Aksi ${tahun}: `
+      + pelanggaran.map(p => `${rapikanNamaEntitas(p.sub_kegiatan)} (${kalimatLebih(p)})`).join('; ')
+      + '. Sesuaikan angkanya, atau teruskan dengan alasan (tercatat di audit).');
+    this.name = 'PaguRenaksiTerlampauiError';
+  }
+}
+
+/**
+ * Pagar dua langkah di DALAM transaksi tulis: `potretPaguRenaksi` sebelum menulis, `pagarPaguRenaksi`
+ * sesudahnya (membaca tulisan sendiri). WAJIB: transaksinya sudah memegang `kunciTahunRenaksi(tahun)`
+ * sebagai perintah PERTAMA (L84) — kunci yang sama untuk SEMUA jalur yang menggeser pagu Renaksi atau
+ * RKO tahun itu, jadi dua simpanan (mis. tab GAJI & BLUD) yang masing-masing lolos tidak bisa
+ * bersama-sama melampaui. Menolak = melempar galat → seluruh transaksi batal.
+ */
+export const potretPaguRenaksi = bandingPaguTahun;
+
+export async function pagarPaguRenaksi(
+  tx: Penanya, tahun: number, sebelum: HasilBandingPagu, alasan: string | null | undefined,
+): Promise<BandingPaguSub[]> {
+  const baru = pelanggaranBaru(sebelum, await bandingPaguTahun(tx, tahun));
+  if (baru.length > 0 && !alasanPaguSah(alasan)) throw new PaguRenaksiTerlampauiError(tahun, baru);
+  return baru;
+}
+
+/** 409 yang sama untuk semua rute (E-Anggaran memakai kunci `message`, Renaksi `error`). */
+export function jawabPaguTerlampaui(err: PaguRenaksiTerlampauiError, kunciPesan: 'message' | 'error'): NextResponse {
+  return NextResponse.json({
+    ok: false, code: 'PAGU_RENAKSI_TERLAMPAUI', [kunciPesan]: err.message,
+    tahun: err.tahun, pelanggaran: ringkasPelanggaran(err.pelanggaran),
+  }, { status: 409 });
+}
+
+/** Kalimat audit untuk simpanan yang diteruskan dengan alasan. */
+export const detailPaguDitembus = (p: readonly BandingPaguSub[], alasan: string | null | undefined): string =>
+  `Melampaui pagu Rencana Aksi diteruskan — ${p.map(b => `${rapikanNamaEntitas(b.sub_kegiatan)}: ${kalimatLebih(b)}`).join('; ')}. Alasan: ${(alasan ?? '').trim()}`;

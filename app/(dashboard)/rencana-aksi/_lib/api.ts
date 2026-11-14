@@ -18,10 +18,16 @@ export class TautanAnakError extends Error {
   }
 }
 
+/** RKO E-Anggaran melampaui pagu sesudah simpanan ini — layar menawarkan "teruskan dengan alasan". */
+export class PaguRenaksiError extends Error {
+  constructor(message: string, public readonly jawaban: unknown) { super(message); this.name = 'PaguRenaksiError'; }
+}
+
 async function jsonOrThrow<T>(r: Response): Promise<T> {
   let body: { ok?: boolean; error?: string; code?: string; [k: string]: unknown } = {};
   try { body = await r.json(); } catch {/* ignore */}
   if (!r.ok || body.ok === false) {
+    if (body.code === 'PAGU_RENAKSI_TERLAMPAUI') throw new PaguRenaksiError(body.error || 'Melampaui pagu Rencana Aksi.', body);
     if (r.status === 409 && body.code === 'VERSION_CONFLICT') {
       throw new VersionConflictError(body.error || 'Data sudah diubah pengguna lain.');
     }
@@ -68,6 +74,8 @@ export interface UpsertPayload {
   q1_target: number; q2_target: number; q3_target: number; q4_target: number;
   /** Rincian pagu per sumber dana (sub kegiatan). Tidak dikirim = pagu tidak disentuh. */
   pagu_rincian?: RincianPagu[];
+  /** Meneruskan simpanan yang membuat RKO melampaui pagu (sesudah dialog alasan). */
+  alasan_pagu_renaksi?: string | null;
   bulan_target?: (number | null)[] | null;
   /** Tautan ke baris indikator induk. null/kosong = belum diisi (data lama & impor). */
   induk_indikator_id?: number | null;
@@ -110,8 +118,12 @@ export async function apiUbahPaguPerubahan(tahun: number, aksi: 'mulai' | 'batal
 }
 
 /** `lepasTautan`: baris yang menjadikan indikator ini induknya dilepas tautannya di transaksi yang sama. */
-export async function apiDelete(id: number, lepasTautan = false): Promise<{ lepas: number }> {
-  const r = await fetch(`/api/rencana-aksi?id=${id}${lepasTautan ? '&lepas_tautan=1' : ''}`, { method: 'DELETE' });
+export async function apiDelete(id: number, lepasTautan = false, alasanPagu: string | null = null): Promise<{ lepas: number }> {
+  // Alasan lewat badan, bukan alamat (alamat masuk log server).
+  const r = await fetch(`/api/rencana-aksi?id=${id}${lepasTautan ? '&lepas_tautan=1' : ''}`, {
+    method: 'DELETE',
+    ...(alasanPagu ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alasan_pagu_renaksi: alasanPagu }) } : {}),
+  });
   const body = await jsonOrThrow<{ ok: true; lepas?: number }>(r);
   return { lepas: body.lepas ?? 0 };
 }

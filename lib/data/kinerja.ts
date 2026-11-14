@@ -13,6 +13,9 @@ import { buangBintang } from '@/lib/kinerja/master-nama';
 import type { AsalMaster } from '@/lib/kinerja/asal-renaksi';
 import { kunciJalur, lengkapiIndukPilihan } from '@/lib/kinerja/banding-renaksi';
 import { barisRenaksiPembanding } from './renaksi-pagu';
+import { kunciTahunRenaksi } from './rencana-aksi';
+import { pagarPaguRenaksi, potretPaguRenaksi } from './pagu-renaksi-rko';
+import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
 import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 import { bandingRealisasi, pelanggaranBulanTertutup, type BarisBanding, type RingkasBulan } from '@/lib/kinerja/banding-realisasi';
@@ -358,14 +361,19 @@ export async function saveRekeningBatch(
   userId: number,
   force = false,
   jalarkan = false,
-): Promise<{ rows: RekeningRow[]; jalaran: RingkasJalarRekening }> {
+  alasanPaguRenaksi: string | null = null,
+): Promise<{ rows: RekeningRow[]; jalaran: RingkasJalarRekening; paguDitembus: BandingPaguSub[] }> {
   let jalaran = ringkasJalarRekening(rencanaJalarRekening([], [], [], []), sumber);
+  let paguDitembus: BandingPaguSub[] = [];
   // PERF-C1: DELETE + bulk INSERT dalam transaction (atomicity + 1 round-trip)
   await withTransaction(async ({ tx, conn }) => {
-    // L84: gembok RKO & Realisasi sumber ini PERTAMA, urutan sama dengan Simpan RKO dan
-    // Master menjalar. Rekening sendiri tetap tanpa angka kunci optimistik.
+    // L84: kunci tahun Renaksi (pagar pagu Rencana Aksi, urutan sama dengan Simpan RKO), lalu
+    // gembok RKO & Realisasi sumber ini, urutan sama dengan Simpan RKO dan Master menjalar.
+    // Rekening sendiri tetap tanpa angka kunci optimistik.
+    await kunciTahunRenaksi(tx, Number(tahun));
     await kunciVersiSsk(tx, tahun, sumber);
     await acquireBludLock(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber));
+    const paguSebelum = await potretPaguRenaksi(tx, Number(tahun));
     const lama = await tx`
       SELECT id, uraian, uraian_ssk, program, kegiatan, subkegiatan FROM kinerja_rekening
       WHERE tahun = ${tahun} AND sumber = ${sumber} ORDER BY urut, id FOR UPDATE
@@ -397,20 +405,24 @@ export async function saveRekeningBatch(
       versiKe: null, userId,
     });
     await tulisJalarRekening(tx, tahun, sumber, rencana, userId);
-    if (rows.length === 0) return;
-    const values = rows.map((r, i) => [
-      tahun, sumber, r.uraian, r.uraian_ssk ?? null, r.sumber_anggaran ?? null,
-      r.program ?? null, r.kegiatan ?? null, r.subkegiatan ?? null, i + 1, userId, userId,
-    ]);
-    await bulkInsert(
-      'kinerja_rekening',
-      ['tahun','sumber','uraian','uraian_ssk','sumber_anggaran','program','kegiatan','subkegiatan','urut','created_by','updated_by'],
-      values,
-      conn,
-    );
+    // Bukan `return` dini: pagar pagu Rencana Aksi di bawah wajib jalan juga untuk simpanan kosong.
+    if (rows.length > 0) {
+      const values = rows.map((r, i) => [
+        tahun, sumber, r.uraian, r.uraian_ssk ?? null, r.sumber_anggaran ?? null,
+        r.program ?? null, r.kegiatan ?? null, r.subkegiatan ?? null, i + 1, userId, userId,
+      ]);
+      await bulkInsert(
+        'kinerja_rekening',
+        ['tahun','sumber','uraian','uraian_ssk','sumber_anggaran','program','kegiatan','subkegiatan','urut','created_by','updated_by'],
+        values,
+        conn,
+      );
+    }
+    // Sumber dana & sub kegiatan rekening menentukan ke mana pagu RKO-nya dihitung (pagu-renaksi.ts).
+    paguDitembus = await pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi);
   });
   // DELETE + INSERT melahirkan id baru — layar memakai id ini untuk memasangkan suntingan berikutnya.
-  return { rows: await getRekeningRows(tahun, sumber), jalaran };
+  return { rows: await getRekeningRows(tahun, sumber), jalaran, paguDitembus };
 }
 
 /**
@@ -830,7 +842,9 @@ export async function saveSskBatch(
   expectedVersion?: number,
   force = false,
   setujuBulanTertutup = false,
-) {
+  /** Meneruskan simpanan yang melampaui pagu Rencana Aksi (docs/CONCEPT-renaksi-pagu-rko.md Tahap C). */
+  alasanPaguRenaksi: string | null = null,
+): Promise<BandingPaguSub[]> {
   // PERF-C1: DELETE + bulk INSERT atomic (1 round-trip).
   // Refactor Versi (Checkpoint C): scope DELETE & INSERT per (versi_tipe, versi_seq) — versi
   // lain TIDAK ke-touch. Generate canonical_id baru kalau row tidak punya.
@@ -839,11 +853,16 @@ export async function saveSskBatch(
   const lockEntity = 'kinerja_ssk';
   const lockKey = `${tahun}:${sumber}:${versiTipe}:${versiSeq}`;
 
-  await withTransaction(async ({ tx, conn }) => {
-    // Kunci (tahun, sumber) PERTAMA — sama dengan "Buat Perubahan" — supaya pagar MURNI
-    // di bawah tidak terselip oleh Simpan pertama PERUBAHAN-1 yang berbarengan (L84).
-    // Urutannya kunciVersiSsk → blud_locks → baris, seragam dengan buatVersiPerubahan.
+  return await withTransaction(async ({ tx, conn }) => {
+    // Kunci tahun Renaksi PERTAMA: pagar pagu Rencana Aksi menilai SEMUA tab RKO setahun + pagu
+    // Renaksi, jadi simpanan tab lain & Simpan pagu Renaksi harus antre di belakangnya (pagu-renaksi-rko.ts).
+    // Lalu kunci (tahun, sumber) — sama dengan "Buat Perubahan" — supaya pagar MURNI di bawah
+    // tidak terselip oleh Simpan pertama PERUBAHAN-1 yang berbarengan (L84). Urutannya
+    // kunciTahunRenaksi → kunciVersiSsk → blud_locks → baris; tidak ada jalur yang memegang
+    // kunciVersiSsk lalu meminta kunci tahun Renaksi, jadi tidak ada lingkaran tunggu.
+    await kunciTahunRenaksi(tx, Number(tahun));
     await kunciVersiSsk(tx, tahun, sumber);
+    const paguSebelum = await potretPaguRenaksi(tx, Number(tahun));
 
     // V3-6: optimistic lock — assert expected version (FOR UPDATE) sebelum mutate, bump sesudah.
     if (expectedVersion !== undefined) {
@@ -966,6 +985,7 @@ export async function saveSskBatch(
       versiKe: expectedVersion === undefined ? null : expectedVersion + 1,
       userId,
     });
+    return await pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi);
   });
 }
 

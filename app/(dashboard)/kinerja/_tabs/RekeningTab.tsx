@@ -10,6 +10,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { konfirmasiPenurunan, type JawabanPagar } from '@/lib/kinerja/konfirmasi-simpan';
+import { paguTerlampaui, tanyaAlasanPagu } from '@/components/renaksi/alasan-pagu';
 import { fetchJson } from '@/lib/shared/api';
 import { Pencil, Plus, Save, Upload, History } from 'lucide-react';
 import DeleteButton from '@/components/ui/DeleteButton';
@@ -140,12 +141,13 @@ export default function RekeningTab({
     toast.success(`${isi.length} baris dimuat ke layar — belum tersimpan, periksa lalu tekan Simpan.`);
   }
 
-  async function saveRekening(force = false, jalarkan = false) {
+  async function saveRekening(force = false, jalarkan = false, alasanPagu: string | null = null) {
     setSaving(true);
     try {
       const d = await fetchJson<unknown>('/api/kinerja/rekening', {
         method: 'PUT',
         body: JSON.stringify({ tahun, sumber: activeSumber, rows: rekeningRows, force, jalarkan,
+          alasan_pagu_renaksi: alasanPagu ?? undefined,
           asal_pulihkan: asalPulihkanRef.current ?? undefined }),
       });
       const isi = d as unknown as { code?: string; saved?: number; rows?: RekeningRow[]; jalaran?: RingkasJalarRekening };
@@ -159,7 +161,12 @@ export default function RekeningTab({
       }
       else if (isi.code === 'PENURUNAN_DRASTIS') {
         const ok = await konfirmasiPenurunan(`rekening ${activeSumber}`, d as unknown as JawabanPagar);
-        if (ok) { setSaving(false); await saveRekening(true, jalarkan); return; }
+        if (ok) { setSaving(false); await saveRekening(true, jalarkan, alasanPagu); return; }
+      }
+      else if (paguTerlampaui(d)) {
+        // Sumber dana & sub kegiatan rekening menentukan ke mana pagu RKO-nya dihitung.
+        const alasan = await tanyaAlasanPagu(d, 'rko');
+        if (alasan) { setSaving(false); await saveRekening(force, jalarkan, alasan); return; }
       }
       else if (isi.code === 'PERLU_KONFIRMASI_JALAR' && isi.jalaran) {
         const ok = await confirmDialog({
@@ -168,7 +175,7 @@ export default function RekeningTab({
           variant: 'primary',
           confirmLabel: adaJalaran(isi.jalaran.dampak) ? 'Simpan & ikut ubah' : 'Simpan',
         });
-        if (ok) { setSaving(false); await saveRekening(force, true); return; }
+        if (ok) { setSaving(false); await saveRekening(force, true, alasanPagu); return; }
       }
       else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }

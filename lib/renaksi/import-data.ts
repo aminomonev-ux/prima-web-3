@@ -22,6 +22,8 @@ import { rencanaGantiNamaImpor, turunanTertinggal, type BarisBerindikator, type 
 import { cocokkanIndukImpor, type BarisRantai } from './rantai';
 import { totalBerlaku, type RincianPagu } from './pagu';
 import { muatRincianPagu, statusPaguPerubahan, tulisRincianPaguBorongan } from '@/lib/data/renaksi-pagu';
+import { pagarPaguRenaksi, potretPaguRenaksi } from '@/lib/data/pagu-renaksi-rko';
+import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
 
 export interface CommitRow {
   level: RaLevel;
@@ -65,6 +67,8 @@ export interface CommitResult {
   turunanDijalarkan: number;
   /** Indikator yang pagunya sudah dirinci per sumber dana — angka Anggaran berkas tidak ditulis. */
   paguBersumberDilewati: string[];
+  /** Sub kegiatan yang RKO-nya melampaui pagu sesudah impor, diteruskan dengan alasan (audit). */
+  paguDitembus: BandingPaguSub[];
 }
 
 /**
@@ -229,16 +233,19 @@ export async function commitImportRenaksi(
   tahun: number, mode: ImportMode, rows: CommitRow[], userId: number,
   /** Ikut menjalarkan ganti nama/pindah ke turunan yang tidak ada di berkas (bawaan: ya, seperti Data Entry). */
   bawaTurunan = true,
+  /** Meneruskan impor yang membuat RKO E-Anggaran melampaui pagu sub kegiatan (Tahap D). */
+  alasanPagu: string | null = null,
 ): Promise<CommitResult> {
   // Rencana impor (baris tersimpan, ganti nama, turunan, induk) dibaca DI DALAM transaksi sesudah kunci
   // tahun: dibaca di luar, ia bisa basi oleh Simpan/Hapus/impor lain yang selesai di selanya.
   return withTransaction(async ({ tx, conn }) => {
     await kunciTahunRenaksi(tx, tahun);
+    const paguSebelum = await potretPaguRenaksi(tx, tahun);
     const siap = await siapkanImpor(tahun, mode, rows, tx);
     const { tersimpan, layak, ditahan, disesuaikan, levelsDiFile, gantiNama, dampak } = siap;
 
     if (layak.length === 0) {
-      return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [], tautanDiisi: 0, tautanTakDikenal: [], turunanDijalarkan: 0, paguBersumberDilewati: [] };
+      return { disimpan: 0, ditambah: 0, diperbarui: 0, dilewati: 0, ditahan, disesuaikan: 0, perLevel: {}, gantiNama: [], tautanDiisi: 0, tautanTakDikenal: [], turunanDijalarkan: 0, paguBersumberDilewati: [], paguDitembus: [] };
     }
 
     // Kunci unik (tahun, level, indikator) — hitung mana yang sudah ada supaya
@@ -323,8 +330,12 @@ export async function commitImportRenaksi(
     }
 
     if (mode === 'ganti') { ditambah = akanTulis.length; diperbarui = 0; }
+    // Tahap D: impor (terutama mode ganti, atau angka Anggaran berkas yang lebih kecil) bisa
+    // menurunkan pagu di bawah RKO — aturan & kunci yang sama dengan Data Entry dan Simpan RKO.
+    const paguDitembus = await pagarPaguRenaksi(tx, tahun, paguSebelum, alasanPagu);
 
     return {
+      paguDitembus,
       disimpan: akanTulis.length, ditambah, diperbarui, dilewati, ditahan, disesuaikan, perLevel, gantiNama, tautanDiisi, tautanTakDikenal,
       turunanDijalarkan: dijalarkan.reduce((s, d) => s + d.turunan, 0),
       paguBersumberDilewati,

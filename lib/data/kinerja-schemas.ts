@@ -9,6 +9,7 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import type { SumberSSK, MasterTipe } from './kinerja';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { ASAL_MASTER } from '@/lib/kinerja/asal-renaksi';
+import { PANJANG_ALASAN_PAGU } from '@/lib/kinerja/pagu-renaksi';
 
 // ─── Rate Limit ─────────────────────────────────────────────────────────────
 
@@ -69,6 +70,9 @@ export function isKinerjaRole(role: string, appAccess: string[] | null | undefin
  * Tahun anggaran — string of 4 digit numeric, range 2020-2100.
  * Sesuai konvensi DB (`tahun VARCHAR(4)`).
  */
+/** Alasan meneruskan simpanan yang melampaui pagu Rencana Aksi — dipakai juga skema Renaksi. */
+export const AlasanPaguRenaksiSchema = z.string().trim().max(PANJANG_ALASAN_PAGU).nullable().optional();
+
 export const TahunSchema = z
   .string()
   .regex(/^\d{4}$/, 'Tahun harus 4 digit')
@@ -261,6 +265,8 @@ export const SskBodySchema = z.object({
   // Peringatan, bukan pagar — sengaja terpisah dari `force` supaya menjawab satu
   // pertanyaan tidak diam-diam menjawab pertanyaan lain.
   setuju_bulan_tertutup: z.boolean().optional(),
+  // Meneruskan simpanan yang melampaui pagu sub kegiatan Rencana Aksi (docs/CONCEPT-renaksi-pagu-rko.md).
+  alasan_pagu_renaksi: AlasanPaguRenaksiSchema,
   rows:       z.array(SskRowSchema).max(5000, 'Maks 5000 baris per batch'),
 });
 
@@ -285,6 +291,7 @@ export const RekeningBodySchema = z.object({
   force:  z.boolean().optional(),
   /** Sudah dikonfirmasi: nama/rantai yang berubah ikut ditulis ke RKO & Realisasi. */
   jalarkan: z.boolean().optional(),
+  alasan_pagu_renaksi: AlasanPaguRenaksiSchema,
   rows:   z.array(RekeningRowSchema).max(5000, 'Maks 5000 baris per batch'),
 });
 

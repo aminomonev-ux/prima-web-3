@@ -30,6 +30,7 @@ import { Download, Save, Check, Upload, History, Ban, Undo2, Table, Lock, Calcul
 import { uiTheme } from '@/lib/theme';
 import { pickVersiAktif } from '@/lib/kinerja/versi';
 import PaguRenaksiPita from '@/components/kinerja/PaguRenaksiPita';
+import { paguTerlampaui, tanyaAlasanPagu } from '@/components/renaksi/alasan-pagu';
 
 interface Props {
   sskRows: SskRow[];
@@ -313,7 +314,7 @@ export default function SskTab({
     fetchVersiList();
   }
 
-  async function saveSsk(force = false, setujuBulanTertutup = false) {
+  async function saveSsk(force = false, setujuBulanTertutup = false, alasanPagu: string | null = null) {
     if (versiLocked) { toast.error(`Versi ${versiLabel} sudah dikunci, tidak bisa diubah.`); return; }
     setSaving(true);
     try {
@@ -325,6 +326,7 @@ export default function SskTab({
           expected_version: sskVersion, // V3-6 optimistic lock
           force,
           setuju_bulan_tertutup: setujuBulanTertutup,
+          alasan_pagu_renaksi: alasanPagu ?? undefined,
           asal_pulihkan: asalPulihkanRef.current ?? undefined,
         }),
       });
@@ -347,7 +349,11 @@ export default function SskTab({
         fetchVersiList();
       } else if ((d as unknown as { code?: string }).code === 'PENURUNAN_DRASTIS') {
         const ok = await konfirmasiPenurunan(`SSK ${activeSumber} ${versiLabel}`, d as unknown as JawabanPagar);
-        if (ok) { setSaving(false); await saveSsk(true, setujuBulanTertutup); return; }
+        if (ok) { setSaving(false); await saveSsk(true, setujuBulanTertutup, alasanPagu); return; }
+      } else if (paguTerlampaui(d)) {
+        // Ketikan tetap di layar bila dibatalkan — pitanya sudah menyebut sub kegiatan yang lewat.
+        const alasan = await tanyaAlasanPagu(d, 'rko');
+        if (alasan) { setSaving(false); await saveSsk(force, setujuBulanTertutup, alasan); return; }
       } else if ((d as unknown as { code?: string }).code === 'TARGET_BULAN_TERTUTUP') {
         // Peringatan, bukan penolakan: koreksi RKO itu sah, tapi laporan bulan yang
         // realisasinya sudah ditutup ikut bergeser bila versi ini jadi pembanding.
@@ -358,7 +364,7 @@ export default function SskTab({
           cancelLabel:  'Batal',
           variant:      'warning',
         });
-        if (ok) { setSaving(false); await saveSsk(force, true); return; }
+        if (ok) { setSaving(false); await saveSsk(force, true, alasanPagu); return; }
       } else toast.error(d.message || 'Gagal menyimpan');
     } finally { setSaving(false); }
   }

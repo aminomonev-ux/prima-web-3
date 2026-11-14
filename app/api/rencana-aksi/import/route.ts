@@ -18,6 +18,7 @@ import { parseRenaksiFile, type ColOverrides } from '@/lib/renaksi/import-renaks
 import { commitImportRenaksi, dampakTurunanImpor } from '@/lib/renaksi/import-data';
 import { RaPeriodLockedError } from '@/lib/data/rencana-aksi';
 import { RaPaguError } from '@/lib/data/renaksi-pagu';
+import { PaguRenaksiTerlampauiError, detailPaguDitembus, jawabPaguTerlampaui } from '@/lib/data/pagu-renaksi-rko';
 import { guard } from '../_guard';
 
 export const runtime = 'nodejs';
@@ -123,8 +124,14 @@ async function handleCommit(req: NextRequest, session: { userId: number; usernam
   }
 
   try {
-    const { tahun, mode, rows, bawa_turunan } = parsed.data;
-    const result = await commitImportRenaksi(tahun, mode, rows, session.userId, bawa_turunan);
+    const { tahun, mode, rows, bawa_turunan, alasan_pagu_renaksi } = parsed.data;
+    const result = await commitImportRenaksi(tahun, mode, rows, session.userId, bawa_turunan, alasan_pagu_renaksi ?? null);
+    if (result.paguDitembus.length) {
+      await writeAuditLog({
+        req, eventType: 'PAGU_RENAKSI_DITEMBUS', userId: session.userId, username: session.username,
+        detail: `Impor Rencana Aksi ${tahun} mode=${mode}: ${detailPaguDitembus(result.paguDitembus, alasan_pagu_renaksi)}`,
+      });
+    }
     await writeAuditLog({
       req,
       eventType: 'RA_IMPORT_COMMIT',
@@ -149,6 +156,7 @@ async function handleCommit(req: NextRequest, session: { userId: number; usernam
     if (e instanceof RaPaguError) {
       return NextResponse.json({ ok: false, error: e.message, code: e.kode }, { status: e.kode === 'PAGU_TIDAK_SAH' ? 400 : 409 });
     }
+    if (e instanceof PaguRenaksiTerlampauiError) return jawabPaguTerlampaui(e, 'error');
     console.error('[RA IMPORT COMMIT]', e);
     return NextResponse.json({ ok: false, error: 'Gagal menyimpan hasil import.' }, { status: 500 });
   }

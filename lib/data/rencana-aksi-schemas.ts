@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { bulatkanDesimal } from '@/lib/shared/desimal';
 import { BATAS_RINCIAN, PANJANG_SUMBER, rapikanSumber } from '@/lib/renaksi/pagu';
+import { AlasanPaguRenaksiSchema } from './kinerja-schemas';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
@@ -105,6 +106,8 @@ export const UpsertRencanaAksiSchema = z.object({
   // Rincian pagu per sumber dana — hanya level sub-kegiatan. Tidak dikirim (undefined) = jangan
   // sentuh (L87); larik kosong = kosongkan pagu baris ini.
   pagu_rincian: z.array(RincianPaguSchema).max(BATAS_RINCIAN).optional(),
+  // Meneruskan simpanan yang membuat RKO E-Anggaran melampaui pagu sub kegiatan (Tahap D, tercatat di audit).
+  alasan_pagu_renaksi: AlasanPaguRenaksiSchema,
   // Opsi A: 12 target bulanan (sub-kegiatan) → sumber derive q1-q4 target server-side.
   bulan_target: BulanArray.nullable().optional(),
   // Tautan ke baris indikator INDUK (migration-renaksi-induk-indikator). NULL = belum diisi —
@@ -276,6 +279,7 @@ export const ImportCommitSchema = z.object({
   // Ganti nama/pindah lewat berkas ikut dijalarkan ke turunan yang TIDAK ada di berkas (seperti Data
   // Entry). Bawaan ya; layar menanyakannya lebih dulu lewat `step=dampak`.
   bawa_turunan: z.boolean().default(true),
+  alasan_pagu_renaksi: AlasanPaguRenaksiSchema,
 });
 
 export const ExportQuerySchema = z.object({

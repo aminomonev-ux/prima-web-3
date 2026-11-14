@@ -238,6 +238,7 @@ export type AuditEventType =
   | 'RA_DUPLIKASI_TAHUN'      // POST /api/rencana-aksi/duplikasi (salin struktur+target ke tahun kosong)
   | 'RA_KUNCI_PERIODE'        // POST /api/rencana-aksi/lock (kunci/buka realisasi periode)
   | 'RA_PAGU_PERUBAHAN'       // POST /api/rencana-aksi/pagu-perubahan (mulai/batal babak Pagu Perubahan)
+  | 'PAGU_RENAKSI_DITEMBUS'   // simpanan RKO/Rekening/Renaksi yang melampaui pagu Rencana Aksi, diteruskan dengan alasan
   | 'RA_IMPORT_PREVIEW'       // POST /api/rencana-aksi/import?step=preview (parse file, tanpa tulis)
   | 'RA_IMPORT_COMMIT'        // POST /api/rencana-aksi/import?step=commit (tulis hasil preview)
   | 'RA_EXPORT_PDF'           // GET /api/rencana-aksi/export?format=pdf

@@ -143,6 +143,35 @@ export function bandingPaguRenaksi(renaksi: readonly PaguSubRenaksi[], rko: read
 
 export const melampaui = (b: BandingPaguSub): boolean => b.lebihTotal > 0 || b.lebih.length > 0;
 
+// ─── Pagar Simpan (Tahap C/D) ────────────────────────────────────────────────
+
+/** Alasan meneruskan simpanan yang melampaui (keputusan pemilik §2 no. 2 & 4) — tercatat di audit. */
+export const ALASAN_PAGU_MIN = 10;
+export const PANJANG_ALASAN_PAGU = 300;
+export const alasanPaguSah = (s: string | null | undefined): boolean => (s ?? '').trim().length >= ALASAN_PAGU_MIN;
+
+/**
+ * Sub kegiatan yang MENJADI melampaui, atau kelebihannya BERTAMBAH, karena simpanan ini. Yang sudah
+ * melampaui sebelumnya dan tidak memburuk tidak menahan apa pun — kalau tidak, satu sub yang lewat
+ * (mis. pagu Renaksi telat diperbarui) mengunci semua simpanan tab itu walau barisnya tidak disentuh.
+ */
+export function pelanggaranBaru(sebelum: HasilBandingPagu, sesudah: HasilBandingPagu): BandingPaguSub[] {
+  const lama = new Map(sebelum.sub.map(b => [b.kunci, b]));
+  return sesudah.sub.filter(b => {
+    if (!melampaui(b)) return false;
+    const s = lama.get(b.kunci);
+    if (!s || !melampaui(s)) return true;
+    if (b.lebihTotal > s.lebihTotal) return true;
+    return b.lebih.some(l => l.nilai > (s.lebih.find(x => kunciSumber(x.sumber) === kunciSumber(l.sumber))?.nilai ?? 0));
+  });
+}
+
+export interface PelanggaranRingkas { program: string; kegiatan: string; sub_kegiatan: string; kalimat: string }
+
+/** Bentuk yang dikirim ke layar (tanpa rincian rekening). */
+export const ringkasPelanggaran = (p: readonly BandingPaguSub[]): PelanggaranRingkas[] =>
+  p.map(b => ({ program: b.program, kegiatan: b.kegiatan, sub_kegiatan: b.sub_kegiatan, kalimat: kalimatLebih(b) }));
+
 /** "APBD lebih Rp 2.000.000 · total lebih Rp 1.000.000" — satu kalimat untuk pita, dialog, dan 409. */
 export function kalimatLebih(b: BandingPaguSub): string {
   const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;

@@ -90,9 +90,14 @@ export async function bumpBludVersion(
  * Kuncinya per-key, bukan per-aplikasi: mencatat belanja telepon & listrik tidak
  * saling menunggu. Pemanggil WAJIB mengunci dalam urutan key MENAIK (§5.3) —
  * dengan urutan seragam, lingkaran tunggu (deadlock 1213) mustahil terbentuk.
+ *
+ * ODKU, BUKAN `INSERT IGNORE`: pada baris yang sudah ada, INSERT IGNORE mengambil kunci
+ * BERBAGI. Dua transaksi yang antre di belakang pemegang ketiga sama-sama mendapat S saat
+ * ia commit, lalu sama-sama meminta X → 1213 (terbukti test-renaksi-pagu-rko F19). ODKU
+ * langsung meminta X; `version = version` tidak mengubah baris (updated_at tetap).
  */
 export async function acquireBludLock(tx: TxSql, entity: string, keyId: string): Promise<void> {
-  await tx`INSERT IGNORE INTO blud_locks (entity, key_id, version) VALUES (${entity}, ${keyId}, 0)`
+  await tx`INSERT INTO blud_locks (entity, key_id, version) VALUES (${entity}, ${keyId}, 0) ON DUPLICATE KEY UPDATE version = version`
   await tx`SELECT version FROM blud_locks WHERE entity = ${entity} AND key_id = ${keyId} FOR UPDATE`
 }
 

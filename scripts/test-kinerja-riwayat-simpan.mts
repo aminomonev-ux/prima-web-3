@@ -73,10 +73,15 @@ for (const [nama, badan] of [['SSK', F_SSK], ['Realisasi', F_REAL], ['Rekening',
   ok(`${nama}: catatRiwayatSimpan dipanggil`, badan.includes('catatRiwayatSimpan(tx,'));
 }
 
-// Realisasi & Rekening punya `if (rows.length === 0) return;` — snapshot harus di ATASnya.
-for (const [nama, badan] of [['Realisasi', F_REAL], ['Rekening', F_REK]] as const) {
+// Realisasi punya `if (rows.length === 0) return;` — snapshot harus di ATASnya. Rekening sejak
+// pagar pagu Rencana Aksi tidak keluar dini (pagar wajib jalan untuk simpanan kosong) — INSERT
+// dibungkus `if (rows.length > 0) {`, dan snapshot tetap harus mendahului blok itu.
+for (const [nama, badan, keluar] of [
+  ['Realisasi', F_REAL, 'if (rows.length === 0) return;'],
+  ['Rekening', F_REK, 'if (rows.length > 0) {'],
+] as const) {
   const iSnap = badan.indexOf('catatRiwayatSimpan(tx,');
-  const iRet  = badan.indexOf('if (rows.length === 0) return;');
+  const iRet  = badan.indexOf(keluar);
   ok(`${nama}: punya jalan keluar dini yang harus dilewati`, iRet > 0);
   ok(`${nama}: snapshot mendahului return dini`, iSnap > 0 && iRet > 0 && iSnap < iRet,
     `snapshot@${iSnap} return@${iRet}`);

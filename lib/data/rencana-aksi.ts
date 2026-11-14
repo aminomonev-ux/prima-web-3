@@ -10,6 +10,8 @@ import type { RaLevel, UpsertRencanaAksiInput } from './rencana-aksi-schemas';
 import { INDUK_LEVEL, namaEntitas, namaIndukLangsung, type BarisRantai } from '@/lib/renaksi/rantai';
 import type { RincianPagu } from '@/lib/renaksi/pagu';
 import { muatRincianPagu, statusPaguPerubahan, tulisRincianPagu, RaPaguError } from './renaksi-pagu';
+import { pagarPaguRenaksi, potretPaguRenaksi } from './pagu-renaksi-rko';
+import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
 
 /** Tautan indikator induk yang tidak sah — 400, bukan 500: yang salah pilihannya, bukan servernya. */
 export class RaIndukIndikatorError extends Error {
@@ -417,8 +419,12 @@ export async function listGantiNama(tahun: number): Promise<CatatanGantiNama[]> 
 export async function upsertRencanaAksi(
   data: UpsertRencanaAksiInput,
   userId: number,
-  /** Diisi bila simpanan ini mengganti nama entitas — route memakainya untuk menyebut pemakai nama lama. */
-  hasil?: { gantiNama: GantiNama | null },
+  /**
+   * `gantiNama`: diisi bila simpanan ini mengganti nama entitas — route memakainya untuk menyebut
+   * pemakai nama lama. `paguDitembus`: sub kegiatan yang melampaui pagu RKO tapi diteruskan dengan
+   * alasan (docs/CONCEPT-renaksi-pagu-rko.md Tahap D) — route mencatatnya di audit.
+   */
+  hasil?: { gantiNama: GantiNama | null; paguDitembus?: BandingPaguSub[] },
 ): Promise<number> {
   // Opsi A: untuk sub-kegiatan dengan bulanan terisi, q1-q4 target di-derive
   // server-side (otoritatif) dari `bulan_target` per jenis. Level lain / tanpa
@@ -479,9 +485,14 @@ export async function upsertRencanaAksi(
     // dibaca akan menimpa realisasi yang diubah orang lain di sela baca-dan-tulis.
     // Baris yang diedit + seluruh turunannya ada di SATU transaksi: ganti nama yang
     // berhenti di tengah meninggalkan keadaan persis yang fitur ini mau cegah.
+    // Tahap D: pagu sub kegiatan yang turun (atau ganti nama yang menggeser kecocokan dengan RKO)
+    // dinilai terhadap RKO E-Anggaran — aturan & kunci yang sama dengan Simpan RKO.
+    const periksaPagu = lama.level === 'sub-kegiatan' || !!gantiNama;
+    let paguDitembus: BandingPaguSub[] = [];
     await withTransaction(async ({ tx, conn }) => {
       await kunciTahunRenaksi(tx, Number(lama.tahun));
       await assertIndukIndikator(tx, data);
+      const paguSebelum = periksaPagu ? await potretPaguRenaksi(tx, Number(lama.tahun)) : null;
       const res = await tx`
         UPDATE rencana_aksi SET
           kode                 = ${data.kode ?? null},
@@ -524,8 +535,9 @@ export async function upsertRencanaAksi(
         await jalarkanGantiNama(tx, Number(lama.tahun), gantiNama);
         await catatGantiNama(tx, Number(lama.tahun), gantiNama, userId);
       }
+      if (paguSebelum) paguDitembus = await pagarPaguRenaksi(tx, Number(lama.tahun), paguSebelum, data.alasan_pagu_renaksi);
     });
-    if (hasil) hasil.gantiNama = gantiNama;
+    if (hasil) { hasil.gantiNama = gantiNama; hasil.paguDitembus = paguDitembus; }
     return id;
   };
 
@@ -553,6 +565,10 @@ export async function upsertRencanaAksi(
   return await withTransaction(async ({ tx, conn }) => {
     await kunciTahunRenaksi(tx, data.tahun);
     await assertIndukIndikator(tx, data);
+    // Baris baru tak pernah MENURUNKAN pagu sub kegiatan; yang bisa membuatnya "melampaui" hanya
+    // tabrakan (tahun, level, indikator) yang menimpa rincian baris lama lewat ODKU.
+    const paguSebelum = data.level === 'sub-kegiatan' && data.pagu_rincian !== undefined
+      ? await potretPaguRenaksi(tx, data.tahun) : null;
     const res = await tx`
     INSERT INTO rencana_aksi
       (tahun, level, kode, sasaran, tujuan, outcome_program, outcome_kegiatan, outcome_sub_kegiatan,
@@ -597,6 +613,10 @@ export async function upsertRencanaAksi(
     const id = Number(res[0]?.insertId ?? 0);
     if (id && data.level === 'sub-kegiatan' && data.pagu_rincian !== undefined) {
       await tulisRincianPagu(tx, conn, id, data.tahun, data.pagu_rincian);
+    }
+    if (paguSebelum) {
+      const ditembus = await pagarPaguRenaksi(tx, data.tahun, paguSebelum, data.alasan_pagu_renaksi);
+      if (hasil) hasil.paguDitembus = ditembus;
     }
     return id;
   });
@@ -684,7 +704,9 @@ async function kunciSeNama(tx: TxSql, row: RaRow): Promise<void> {
  * daftarnya), atau dengan `lepasTautan` tautannya dilepas jadi NULL di transaksi yang sama (§5).
  * Pagar Kunci Periode & induk terakhir tidak bisa ditembus `lepasTautan`.
  */
-export async function deleteRencanaAksi(row: RaRow, opsi: { lepasTautan?: boolean } = {}): Promise<{ lepas: number }> {
+export async function deleteRencanaAksi(
+  row: RaRow, opsi: { lepasTautan?: boolean; alasanPagu?: string | null } = {},
+): Promise<{ lepas: number; paguDitembus: BandingPaguSub[] }> {
   // T2: menghapus baris = menghapus realisasinya. Ini pintu paling telak untuk
   // menembus Kunci Periode — lebih telak dari sekadar mengubah nilai, karena
   // angkanya tidak berubah melainkan hilang.
@@ -693,7 +715,9 @@ export async function deleteRencanaAksi(row: RaRow, opsi: { lepasTautan?: boolea
     await kunciTahunRenaksi(tx, Number(row.tahun));
     await kunciSeNama(tx, row);
     const [ada] = await tx`SELECT id FROM rencana_aksi WHERE id = ${row.id} FOR UPDATE`;
-    if (!ada) return { lepas: 0 };
+    if (!ada) return { lepas: 0, paguDitembus: [] };
+    // Tahap D: menghapus indikator sub kegiatan ikut membuang pagunya (CASCADE rincian).
+    const paguSebelum = row.level === 'sub-kegiatan' ? await potretPaguRenaksi(tx, Number(row.tahun)) : null;
     await assertTidakPunyaAnak(tx, row);
     const penunjuk = await tx`
       SELECT id, level, program, kegiatan, sub_kegiatan, tujuan, sasaran, indikator, induk_indikator_id
@@ -712,7 +736,8 @@ export async function deleteRencanaAksi(row: RaRow, opsi: { lepasTautan?: boolea
       `;
     }
     await tx`DELETE FROM rencana_aksi WHERE id = ${row.id}`;
-    return { lepas: penunjuk.length };
+    const paguDitembus = paguSebelum ? await pagarPaguRenaksi(tx, Number(row.tahun), paguSebelum, opsi.alasanPagu) : [];
+    return { lepas: penunjuk.length, paguDitembus };
   });
 }
 

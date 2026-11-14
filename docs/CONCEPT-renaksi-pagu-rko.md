@@ -1,6 +1,6 @@
 # Konsep — Pagu sub kegiatan Renaksi sebagai batas pagu RKO E-Anggaran
 
-Status: **Tahap A' & B SELESAI** (2026-11-14, §9–§10). Tahap C–D menyusul. Putaran 1 (2026-11-13) mengira pagu
+Status: **Tahap A', B, C, D SELESAI** (2026-11-14, §9–§11). Putaran 1 (2026-11-13) mengira pagu
 milik sub kegiatan dan mengusulkan "Tahap A" untuk menutup penjumlahan dobel — **itu dibatalkan**, lihat §2.
 
 ---
@@ -116,7 +116,8 @@ Untuk tiap **sub kegiatan × sumber dana**, tahun yang sama:
   suntingan Rekening yang menjalar — sekarang juga **ganti sumber dana rekening**, Edit Master yang memindah
   induk). Kunci: Simpan RKO membaca baris sub kegiatan Renaksi `FOR SHARE` sesudah kunci versinya; simpan
   pagu Renaksi memegang barisnya `FOR UPDATE` lalu membaca Σ RKO. Dibuktikan dengan uji balapan pola
-  `test-renaksi-balapan.mts`.
+  `test-renaksi-balapan.mts`. *(Yang dikerjakan berbeda — satu kunci tahun untuk semua jalur, Edit Master
+  tidak ikut; lihat §11.)*
 - **Tahap D** — arah sebaliknya di Renaksi.
 
 ## 6. Keputusan (putaran 3, 2026-11-14)
@@ -264,3 +265,44 @@ Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-pagu-rko.mts` (28; 
 berasal Renaksi — perubahan yang disengaja). Diverifikasi di peramban pada 2039 (dibersihkan): pita RKO
 merah "APBD lebih Rp 2.000.000" lalu berubah ikut ketikan, dialog Perbarui dari Rencana Aksi mendaftar
 Sumber Anggaran APBD/BLUD dan menuliskannya bertanda Renaksi, "Terpakai di RKO" di Data Entry ikut isian.
+
+## 11. Tahap C & D — yang dikerjakan (2026-11-14, penahanan di server)
+
+- **Satu pagar, dua langkah**, di DALAM transaksi tulis (`lib/data/pagu-renaksi-rko.ts`): `potretPaguRenaksi`
+  sebelum menulis, `pagarPaguRenaksi` sesudahnya (membaca tulisan sendiri, `bandingPaguTahun` — pembanding
+  Tahap B yang sama). Yang menahan hanya **pelanggaran baru atau yang memburuk** (`pelanggaranBaru`,
+  `lib/kinerja/pagu-renaksi.ts`): sub yang sudah melampaui (mis. pagu Renaksi telat diperbarui) tidak
+  mengunci simpanan tab itu selama kelebihannya tidak bertambah, per sumber maupun total.
+- **Ditolak, bisa diteruskan** (§2 no. 2 & 4): galat `PaguRenaksiTerlampauiError` → 409
+  `PAGU_RENAKSI_TERLAMPAUI` (`jawabPaguTerlampaui`, membawa daftar sub + kalimat kelebihan). Layar
+  menanyakan alasan lewat SATU dialog `components/renaksi/alasan-pagu.ts` (`tanyaAlasanPagu`, ≥ 10 huruf,
+  ≤ 300) lalu mengulang dengan `alasan_pagu_renaksi`; yang diteruskan dicatat audit `PAGU_RENAKSI_DITEMBUS`
+  (retensi P) berisi kelebihan + alasan. Alasan hapus lewat BADAN `DELETE`, bukan alamat (log server).
+- **Jalur yang dipagari**: Simpan RKO (termasuk Impor RKO — memakai Simpan yang sama), Simpan Rekening
+  (sumber dana & rantai rekening menentukan ke mana pagu RKO dihitung; simpanan kosong ikut dipagari —
+  `return` dini diganti blok `if`), Simpan Data Entry Renaksi (baris sub kegiatan, atau ganti nama yang
+  memindah pagu), Hapus indikator sub kegiatan, Impor Renaksi (menimpa pagu "tanpa sumber").
+- **Satu kunci tahun untuk semua** (beda dari rancangan §5): `kunciTahunRenaksi` (`RA_TAHUN`) jadi perintah
+  PERTAMA di semua jalur di atas, termasuk Simpan RKO & Rekening — urutan `kunciTahunRenaksi →
+  kunciVersiSsk → gembok lain → baris`, tidak ada jalur yang memegang kunci versi lalu meminta kunci tahun.
+  Pagar ini menilai SEMUA tab setahun, jadi dua tab yang masing-masing lolos tidak boleh berjalan bersamaan.
+- **Temuan saat diuji — deadlock di `acquireBludLock`** (dipakai seluruh modul): `INSERT IGNORE` pada baris
+  kunci yang sudah ada mengambil kunci BERBAGI; dua transaksi yang antre di belakang pemegang ketiga
+  sama-sama mendapat S saat ia commit lalu sama-sama meminta X → 1213, orangnya melihat galat 500. Kini
+  `INSERT … ON DUPLICATE KEY UPDATE version = version` (langsung X, baris tidak berubah). Uji balapan yang
+  menghitung `data_lock_waits` kini menghitung TRANSAKSI (`DISTINCT REQUESTING_ENGINE_TRANSACTION_ID`): satu
+  penunggu atas baris ber-S+X tercatat dua baris.
+- **Sengaja tidak dipagari**: Edit Master yang menjalar & Rapikan Bintang (hanya label — menahannya
+  memblokir penyamaan nama dengan Renaksi; kelebihannya tetap tampil di pita RKO), Duplikasi Tahun
+  (pagu Renaksi tahun tujuan baru lahir; menahannya membuat tahun itu tak bisa dimulai), Mulai/Batal Pagu
+  Perubahan (tidak mengubah angka berlaku).
+
+Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-pagu-rko.mts` (67; E aturan murni, D sambungan,
+F MySQL kotak pasir 2075 termasuk balapan dua tab deterministik), **13 uji mutasi tertangkap** (termasuk
+mengembalikan `INSERT IGNORE`). Pola teks di tes lama disesuaikan: `test-kinerja-simpan-realisasi` (G7, G30,
+I28, I30), `-rekening-menjalar` (C4, C7, C10), `-rekap` (M2), `-riwayat-simpan` (Rekening), `test-renaksi-
+hapus-tautan` (C5, C9, C10), `-balapan` (E3, E6), `test-renaksi-audit` (daftar kompilasi), `test-blud-race-
+perubahan` (hitungan penunggu). Diverifikasi di peramban pada 2039 (dibersihkan): RKO GAJI 9 → 12 jt
+memunculkan dialog "APBD lebih Rp 2.000.000", diteruskan dengan alasan; Data Entry menurunkan pagu 10 → 9 jt
+memunculkan dialog versi Renaksi, Batal mempertahankan isian, diteruskan tersimpan; dua baris audit
+`PAGU_RENAKSI_DITEMBUS` lengkap. Dialog Hapus & Impor diuji lewat suite MySQL, belum lewat peramban.

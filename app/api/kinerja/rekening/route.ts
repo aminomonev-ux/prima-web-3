@@ -6,6 +6,7 @@ import { writeAuditLog } from '@/lib/security/auditlog';
 import { isKinerjaRole, kinerjaRateLimit, KinerjaQuerySchema, RekeningBodySchema, jejakPulihkan } from '@/lib/data/kinerja-schemas';
 import { hasAppAccess } from '@/lib/security/guard';
 import { kinerjaMati } from '../_guard';
+import { PaguRenaksiTerlampauiError, detailPaguDitembus, jawabPaguTerlampaui } from '@/lib/data/pagu-renaksi-rko';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -41,12 +42,13 @@ export async function PUT(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = RekeningBodySchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Data tidak valid: ' + parsed.error.issues[0].message }, { status: 400 });
-  const { tahun, sumber, rows, force, asal_pulihkan, jalarkan } = parsed.data;
+  const { tahun, sumber, rows, force, asal_pulihkan, jalarkan, alasan_pagu_renaksi } = parsed.data;
 
   let hasil: Awaited<ReturnType<typeof saveRekeningBatch>>;
   try {
-    hasil = await saveRekeningBatch(tahun, sumber, rows, session.userId, force ?? false, jalarkan ?? false);
+    hasil = await saveRekeningBatch(tahun, sumber, rows, session.userId, force ?? false, jalarkan ?? false, alasan_pagu_renaksi ?? null);
   } catch (err) {
+    if (err instanceof PaguRenaksiTerlampauiError) return jawabPaguTerlampaui(err, 'message');
     if (err instanceof KinerjaReplaceSafetyError) {
       return NextResponse.json(
         { ok: false, code: 'PENURUNAN_DRASTIS', message: err.message, existing: err.existing, incoming: err.incoming },
@@ -70,6 +72,12 @@ export async function PUT(req: NextRequest) {
     detail:    `Simpan rekening ${sumber} tahun ${tahun}: ${rows.length} baris`
       + jejakJalarRekening(hasil.jalaran) + jejakPulihkan(asal_pulihkan),
   });
+  if (hasil.paguDitembus.length > 0) {
+    await writeAuditLog({
+      req, eventType: 'PAGU_RENAKSI_DITEMBUS', userId: session.userId, username: session.username,
+      detail: `Simpan Rekening ${sumber} ${tahun}: ${detailPaguDitembus(hasil.paguDitembus, alasan_pagu_renaksi)}`,
+    });
+  }
 
   return NextResponse.json({ ok: true, saved: rows.length, rows: hasil.rows, jalaran: hasil.jalaran });
 }

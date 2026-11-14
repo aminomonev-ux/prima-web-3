@@ -117,12 +117,12 @@ ok('C2 rekening lama dibaca FOR UPDATE', /FROM kinerja_rekening\s+WHERE tahun = 
 const iTanya = SIMPAN.indexOf('if (perluKonfirmasiJalar(jalaran) && !jalarkan) throw new KinerjaPerluJalarError(jalaran);')
 ok('C3 konfirmasi ditanya SEBELUM DELETE (tak ada yang tertulis)', iTanya > 0 && iTanya < SIMPAN.indexOf('DELETE FROM kinerja_rekening'))
 ok('C4 tulisan jalar SEBELUM jalan keluar dini (simpanan kosong tetap konsisten)',
-  SIMPAN.indexOf('await tulisJalarRekening(tx, tahun, sumber, rencana, userId);') < SIMPAN.indexOf('if (rows.length === 0) return;'))
+  SIMPAN.indexOf('await tulisJalarRekening(tx, tahun, sumber, rencana, userId);') < SIMPAN.indexOf('if (rows.length > 0) {'))
 const TULIS = badan(KIN, 'async function tulisJalarRekening')
 ok('C5 label saja: updated_at dipertahankan di RKO & Realisasi', (TULIS.match(/updated_at = updated_at/g) ?? []).length === 2)
 ok('C6 angka kunci RKO per versi & Realisasi dinaikkan',
   TULIS.includes("bumpBludVersion(tx, 'kinerja_ssk', `${tahun}:${sumber}:${v}`, userId)") && TULIS.includes('bumpBludVersion(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber), userId)'))
-ok('C7 balasan membawa baris dengan id baru', SIMPAN.includes('return { rows: await getRekeningRows(tahun, sumber), jalaran };'))
+ok('C7 balasan membawa baris dengan id baru', SIMPAN.includes('return { rows: await getRekeningRows(tahun, sumber), jalaran, paguDitembus };'))
 const ROUTE = sumber('app/api/kinerja/rekening/route.ts')
 ok('C8 route: 409 PERLU_KONFIRMASI_JALAR membawa ringkasan, audit menyebut jalaran',
   ROUTE.includes("code: 'PERLU_KONFIRMASI_JALAR', message: err.message, jalaran: err.jalaran") && ROUTE.includes('jejakJalarRekening(hasil.jalaran)'))
@@ -131,7 +131,7 @@ ok('C9 Zod tidak membuang id baris & menerima jalarkan',
   /id:\s+z\.number\(\)\.int\(\)\.nonnegative\(\)\.optional\(\)/.test(badan(SKEMA, 'const RekeningRowSchema')) && /jalarkan: z\.boolean\(\)\.optional\(\)/.test(SKEMA))
 const TAB = tanpaKomentar(sumber('app/(dashboard)/kinerja/_tabs/RekeningTab.tsx'))
 ok('C10 layar: konfirmasi lalu simpan ulang dengan jalarkan; force tidak hilang',
-  TAB.includes("isi.code === 'PERLU_KONFIRMASI_JALAR'") && TAB.includes('await saveRekening(force, true)') && TAB.includes('await saveRekening(true, jalarkan)'))
+  TAB.includes("isi.code === 'PERLU_KONFIRMASI_JALAR'") && TAB.includes('await saveRekening(force, true, alasanPagu)') && TAB.includes('await saveRekening(true, jalarkan, alasanPagu)'))
 ok('C11 layar: id baru dipasang sesudah Simpan', TAB.includes('if (isi.rows) setRekeningRows(isi.rows);'))
 ok('C12 Pulihkan & Impor tetap tanpa id (tidak menjalar)', TAB.includes('.map(r => ({ ...r, id: 0 }))') && TAB.includes('rows.map(r => ({ id: 0, ...r }))'))
 

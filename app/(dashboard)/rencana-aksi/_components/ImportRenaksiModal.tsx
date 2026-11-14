@@ -11,6 +11,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import { pilihDialog } from '@/components/ui/ConfirmDialog';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import { LEVEL_LABELS, type RaLevel } from '../_lib/types';
+import { paguTerlampaui, tanyaAlasanPagu } from '@/components/renaksi/alasan-pagu';
 
 type ColSource = 'header' | 'isi' | 'manual' | 'tidak-ada';
 interface ColReport { field: string; col: number | null; header: string; sample: string; source: ColSource }
@@ -211,11 +212,20 @@ export default function ImportRenaksiModal({ tahun, levelHint = null, onClose, o
         }
       } catch { /* pemeriksaan gagal = bawaan (ikut dijalarkan), sama seperti Data Entry */ }
 
-      const res = await fetch('/api/rencana-aksi/import?step=commit', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tahun, mode, rows, bawa_turunan: bawaTurunan }),
-      });
-      const json = await res.json();
+      const kirim = async (alasanPagu: string | null) => {
+        const res = await fetch('/api/rencana-aksi/import?step=commit', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tahun, mode, rows, bawa_turunan: bawaTurunan, alasan_pagu_renaksi: alasanPagu ?? undefined }),
+        });
+        return res.json();
+      };
+      let json = await kirim(null);
+      // Impor yang menurunkan pagu di bawah RKO E-Anggaran ditahan; bisa diteruskan dengan alasan (Tahap D).
+      if (!json.ok && paguTerlampaui(json)) {
+        const alasan = await tanyaAlasanPagu(json, 'renaksi');
+        if (!alasan) return;
+        json = await kirim(alasan);
+      }
       if (!json.ok) { notify(json.error ?? 'Gagal menyimpan', 'error'); return; }
 
       const pesan = `${json.disimpan} indikator tersimpan (${json.ditambah} baru, ${json.diperbarui} diperbarui`

@@ -34,6 +34,8 @@ import {
   RaTautanAnakError,
 } from '@/lib/data/rencana-aksi';
 import { RaPaguError } from '@/lib/data/renaksi-pagu';
+import { PaguRenaksiTerlampauiError, detailPaguDitembus, jawabPaguTerlampaui } from '@/lib/data/pagu-renaksi-rko';
+import { PANJANG_ALASAN_PAGU, type BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
 import { guard } from './_guard';
 
 export const dynamic = 'force-dynamic';
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const info: { gantiNama: GantiNama | null } = { gantiNama: null };
+    const info: { gantiNama: GantiNama | null; paguDitembus?: BandingPaguSub[] } = { gantiNama: null };
     const id = await upsertRencanaAksi(parsed.data, g.session.userId, info);
     await writeAuditLog({
       req,
@@ -86,6 +88,12 @@ export async function POST(req: NextRequest) {
       username: g.session.username,
       detail: `Rencana Aksi ${parsed.data.tahun}/${parsed.data.level}: ${parsed.data.indikator}`,
     });
+    if (info.paguDitembus?.length) {
+      await writeAuditLog({
+        req, eventType: 'PAGU_RENAKSI_DITEMBUS', userId: g.session.userId, username: g.session.username,
+        detail: `Simpan Rencana Aksi ${parsed.data.tahun} "${parsed.data.indikator}": ${detailPaguDitembus(info.paguDitembus, parsed.data.alasan_pagu_renaksi)}`,
+      });
+    }
     // Tahap F/H renaksi-terhubung: sesudah ganti nama / pindah induk, sebut modul yang masih
     // memegang yang lama. Hanya keterangan — gagal membacanya tidak menggagalkan simpanan.
     const dipakai = info.gantiNama
@@ -112,6 +120,7 @@ export async function POST(req: NextRequest) {
     if (e instanceof RaPaguError) {
       return NextResponse.json({ ok: false, error: e.message, code: e.kode }, { status: e.kode === 'PAGU_TIDAK_SAH' ? 400 : 409 });
     }
+    if (e instanceof PaguRenaksiTerlampauiError) return jawabPaguTerlampaui(e, 'error');
     console.error('[RA POST]', e);
     return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500 });
   }
@@ -133,9 +142,12 @@ export async function DELETE(req: NextRequest) {
   try {
     const row = await getRencanaAksiById(id);
     if (!row) return NextResponse.json({ ok: false, error: 'Tidak ditemukan' }, { status: 404 });
-    // "Lepas tautan & hapus" (§5 tautan-lanjutan): penanda saja, bukan isian — tanpa badan DELETE.
+    // "Lepas tautan & hapus" (§5 tautan-lanjutan): penanda saja, bukan isian.
     const lepasTautan = u.searchParams.get('lepas_tautan') === '1';
-    const { lepas } = await deleteRencanaAksi(row, { lepasTautan });
+    // Alasan meneruskan (Tahap D) lewat BADAN, bukan alamat — alamat masuk log Nginx/PM2.
+    const badan = await req.json().catch(() => null) as { alasan_pagu_renaksi?: unknown } | null;
+    const alasanPagu = typeof badan?.alasan_pagu_renaksi === 'string' ? badan.alasan_pagu_renaksi.trim().slice(0, PANJANG_ALASAN_PAGU) : null;
+    const { lepas, paguDitembus } = await deleteRencanaAksi(row, { lepasTautan, alasanPagu });
     await writeAuditLog({
       req,
       eventType: 'RA_DELETE',
@@ -144,8 +156,15 @@ export async function DELETE(req: NextRequest) {
       detail: `Hapus indikator ${row.tahun}/${row.level}: ${row.indikator}`
         + (lepas ? ` — melepas tautan indikator induk ${lepas} baris` : ''),
     });
+    if (paguDitembus.length) {
+      await writeAuditLog({
+        req, eventType: 'PAGU_RENAKSI_DITEMBUS', userId: g.session.userId, username: g.session.username,
+        detail: `Hapus indikator Rencana Aksi ${row.tahun} "${row.indikator}": ${detailPaguDitembus(paguDitembus, alasanPagu)}`,
+      });
+    }
     return NextResponse.json({ ok: true, lepas });
   } catch (e) {
+    if (e instanceof PaguRenaksiTerlampauiError) return jawabPaguTerlampaui(e, 'error');
     if (e instanceof RaPeriodLockedError) {
       return NextResponse.json({ ok: false, error: e.message, code: 'PERIOD_LOCKED' }, { status: 400 });
     }

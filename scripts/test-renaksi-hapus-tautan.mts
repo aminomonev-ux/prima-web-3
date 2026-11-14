@@ -197,15 +197,15 @@ try {
     && (data.match(/await assertIndukIndikator\(tx, data\);/g) ?? []).length === 2 && !/await assertIndukIndikator\(data\)/.test(data))
   const rute = tanpaKomentar(readFileSync(new URL('../app/api/rencana-aksi/route.ts', import.meta.url), 'utf8'))
   ok('C5 route meneruskan lepas_tautan=1 saja', rute.includes("const lepasTautan = u.searchParams.get('lepas_tautan') === '1';")
-    && rute.includes('await deleteRencanaAksi(row, { lepasTautan })'))
+    && rute.includes('await deleteRencanaAksi(row, { lepasTautan, alasanPagu })'))
   ok('C6 400 MASIH_DITUNJUK membawa jumlah & penunjuk', /code: 'MASIH_DITUNJUK', jumlah: e\.jumlah, penunjuk: e\.penunjuk/.test(rute))
   ok('C7 audit menyebut tautan yang dilepas', rute.includes('melepas tautan indikator induk ${lepas} baris'))
   const api = tanpaKomentar(readFileSync(new URL('../app/(dashboard)/rencana-aksi/_lib/api.ts', import.meta.url), 'utf8'))
   ok('C8 klien menerjemahkan MASIH_DITUNJUK jadi TautanAnakError', /body\.code === 'MASIH_DITUNJUK'[\s\S]{0,80}throw new TautanAnakError/.test(api))
   const de = tanpaKomentar(readFileSync(new URL('../app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx', import.meta.url), 'utf8'))
   const hd = de.slice(de.indexOf('const handleDelete = async'), de.indexOf('return (', de.indexOf('const handleDelete = async')))
-  ok('C9 hapus mencoba tanpa lepas dulu', hd.includes('({ lepas } = await apiDelete(row.id));'))
-  ok('C10 lepas hanya sesudah dialog danger disetujui', /variant: 'danger',\s*\}\);\s*if \(!ok\) return;\s*\(\{ lepas \} = await apiDelete\(row\.id, true\)\);/.test(hd))
+  ok('C9 hapus mencoba tanpa lepas dulu', hd.includes('return await apiDelete(row.id, lepasTautan);') && /const h = await hapus\(false\);\s*if \(!h\) return;/.test(hd))
+  ok('C10 lepas hanya sesudah dialog danger disetujui', /variant: 'danger',\s*\}\);\s*if \(!ok\) return;\s*const h = await hapus\(true\);/.test(hd))
   ok('C11 galat lain tidak ditelan dialog', hd.includes('if (!(err instanceof TautanAnakError)) throw err;'))
 
   // ── D ─────────────────────────────────────────────────────────────────────────
