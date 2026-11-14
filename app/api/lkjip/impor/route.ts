@@ -14,7 +14,7 @@ import {
   type BagianImpor, type HasilImporWord, type Koreksi,
 } from '@/lib/lkjip/impor-word';
 import { uploadBufferToDrive } from '@/lib/services/drive';
-import { folderUnggahan } from '@/lib/security/unggahan-modul';
+import { folderUntuk } from '@/lib/services/drive-tujuan';
 import { bulkInsert } from '@/lib/data/db';
 import { guard } from '../_guard';
 
@@ -63,7 +63,7 @@ async function unggahGambar(hasil: HasilImporWord, sidik: string, userId: number
   const peta = new Map<string, string>();
   const daftar = Object.values(hasil.gambar);
   if (!daftar.length) return { peta, gagal: 0 };
-  const folderId = folderUnggahan('lkjip');
+  const folderId = await folderUntuk('lkjip').catch((e) => { console.error('[LKJIP impor] folder Drive', e); return ''; });
   if (!folderId) return { peta, gagal: daftar.length };
   let gagal = 0;
   for (let i = 0; i < daftar.length; i += 3) {

@@ -12,6 +12,7 @@
 
 import { sql, sqlInt } from '@/lib/data/db'
 import { uploadBufferToDrive } from '@/lib/services/drive'
+import { folderUntuk, tujuanTerkonfigurasi } from '@/lib/services/drive-tujuan'
 import { toDateStr, waktuSekarangWIB } from './tanggal'
 import {
   CADANGAN_FORMAT, namaBerkasCadangan,
@@ -42,10 +43,6 @@ export interface HasilCadangan extends StatusCadangan {
   pesan:    string | null
 }
 
-function folderId(): string {
-  return process.env.GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON?.trim() ?? ''
-}
-
 /**
  * DATETIME dari mysql2 (pool `timezone: '+07:00'`) datang sebagai Date. Diformat
  * balik lewat offset yang sama — `toISOString()` polos menggesernya 7 jam.
@@ -67,7 +64,7 @@ export async function statusCadanganJson(): Promise<StatusCadangan> {
   const total = Number(r.total ?? 0)
   const belum = Number(r.belum ?? 0)
   return {
-    aktif:    !!folderId(),
+    aktif:    tujuanTerkonfigurasi('blud_json'),
     sudah:    total - belum,
     belum,
     terakhir: r.terakhir ? normWaktu(r.terakhir) : null,
@@ -124,12 +121,17 @@ function berkasDari(r: BarisMentah): BerkasCadangan {
 export async function cadangkanJsonBlud(
   opts: { batas?: number } = {},
 ): Promise<HasilCadangan> {
-  const folder = folderId()
+  let folder = ''
+  let galatFolder: string | null = null
+  try { folder = await folderUntuk('blud_json') }
+  catch (e) { galatFolder = e instanceof Error ? e.message : String(e) }
   if (!folder) {
     const status = await statusCadanganJson()
     return {
       ...status, diunggah: 0, gagal: 0,
-      pesan: 'Folder Drive untuk cadangan JSON belum dikonfigurasi (GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON).',
+      pesan: galatFolder
+        ? `Folder Drive untuk cadangan JSON tidak bisa disiapkan: ${galatFolder}`
+        : 'Folder Drive untuk cadangan JSON belum dikonfigurasi (GOOGLE_DRIVE_FOLDER_ID_ROOT atau GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON).',
     }
   }
 

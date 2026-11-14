@@ -13,7 +13,7 @@ const PAR = /<w:p\b[^>]*\/>|<w:p\b[^>]*>[\s\S]*?<\/w:p>/g
 const teks = (raw) => [...raw.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((x) => x[1]).join('')
   .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
 
-let h1 = '', h2 = '', h3 = '', ket = ''
+let h1 = '', h2 = '', h3 = ''
 let n = 0
 const hasil = []
 for (const m of xml.matchAll(PAR)) {
@@ -23,7 +23,6 @@ for (const m of xml.matchAll(PAR)) {
   if (gaya === 'Heading1') h1 = t
   if (gaya === 'Heading2') { h2 = t; h3 = '' }
   if (gaya === 'Heading3') h3 = t
-  if (gaya === 'Caption' && /^Gambar\s/.test(t)) ket = t
   for (const g of raw.matchAll(/r:embed="(rId\d+)"/g)) {
     const target = peta[g[1]] || ''
     if (!target.includes('media/ss-')) continue

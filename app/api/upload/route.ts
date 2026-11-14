@@ -3,14 +3,14 @@
 
 
 import { NextRequest, NextResponse } from 'next/server';
-import { google } from 'googleapis';
-import { PassThrough } from 'stream';
 import { getSession } from '@/lib/security/auth';
 import { checkRateLimit, getClientIp } from '@/lib/security/ratelimit';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { sql } from '@/lib/data/db';
 import { modulMati } from '@/lib/security/guard';
-import { folderUnggahan, kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
+import { kunciSakelarBerkas, modulPengunggah, tujuanUnggahan } from '@/lib/security/unggahan-modul';
+import { uploadBufferToDrive } from '@/lib/services/drive';
+import { folderUntuk } from '@/lib/services/drive-tujuan';
 
 export const runtime = 'nodejs';
 
@@ -57,24 +57,6 @@ function sanitizeFilename(raw: string): string {
     .replace(/^\./, '_')
     .slice(0, 200)
     .trim()) || 'upload';
-}
-
-function getDriveClient() {
-  const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim()     ?? '';
-  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? '';
-  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN?.trim() ?? '';
-
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Konfigurasi Google Drive belum lengkap di .env.local (CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN).');
-  }
-
-  const oauth2 = new google.auth.OAuth2(
-    clientId,
-    clientSecret,
-    'https://developers.google.com/oauthplayground'
-  );
-  oauth2.setCredentials({ refresh_token: refreshToken });
-  return google.drive({ version: 'v3', auth: oauth2 });
 }
 
 export async function POST(req: NextRequest) {
@@ -124,20 +106,10 @@ export async function POST(req: NextRequest) {
     // tapi ditandai sniff_ok=0 → /api/upload/download serve attachment, bukan inline.
     const sniffOk = sniffed !== null;
 
-    const folderId = folderUnggahan(modulAsal);
-    if (!folderId) throw new Error('GOOGLE_DRIVE_FOLDER_ID belum dikonfigurasi di .env');
-    const drive = getDriveClient();
-
-    const stream = new PassThrough();
-    stream.end(buf);
-
-    const uploaded = await drive.files.create({
-      requestBody: { name: sanitizeFilename(file.name), parents: [folderId] },
-      media:       { mimeType: file.type, body: stream },
-      fields:      'id,name',
-    });
-
-    const fileId      = uploaded.data.id!;
+    const folderId = await folderUntuk(tujuanUnggahan(modulAsal));
+    if (!folderId) throw new Error('Folder Drive belum dikonfigurasi di .env (GOOGLE_DRIVE_FOLDER_ID_ROOT atau GOOGLE_DRIVE_FOLDER_ID).');
+    const { fileId } = await uploadBufferToDrive({ buffer: buf, name: sanitizeFilename(file.name), mimeType: file.type, folderId });
+    if (!fileId) throw new Error('Drive tidak mengembalikan id berkas.');
     // L61: catat pemilik file → /api/upload/download bisa authorize per-file
     // (uploader atau role elevated), bukan sekadar "sudah login". Silent-fail
     // (jangan gagalkan upload kalau insert tracking error).

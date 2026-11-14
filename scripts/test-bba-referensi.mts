@@ -107,11 +107,12 @@ ok('C1 BBA terdaftar sebagai modul pengunggah, sakelarnya sendiri', (MODUL_PENGU
   && modulPengunggah('buku_besar_aset') === 'buku_besar_aset' && JSON.stringify(kunciSakelarBerkas('buku_besar_aset')) === JSON.stringify(['app_status_buku_besar_aset']))
 const unduh = tanpaKomentar(sumber('app/api/upload/download/route.ts'))
 const iAdmin = unduh.indexOf('if (!isAdminTier) {')
-const iBba = unduh.indexOf("if (owner.context === 'buku_besar_aset') {")
-const iTolak = unduh.indexOf('if (!isOwner && !bidangAllowed && !bbaAllowed) return await deny();')
+// Cabang ini sejak LKJIP ikut menjadi modul kolaboratif melayani dua context (bukan BBA saja).
+const iBba = unduh.indexOf("if (owner.context === 'buku_besar_aset' || owner.context === 'lkjip') {")
+const iTolak = unduh.indexOf('if (!isOwner && !bidangAllowed && !modulAllowed) return await deny();')
 ok('C2 aturan unduh BBA dikunci pada context BERKAS, di dalam cabang non-admin, sebelum penolakan', iAdmin >= 0 && iBba > iAdmin && iTolak > iBba)
 ok('C3 …app_access dibaca dari DB (bukan JWT) lalu ditimbang isAsetRole',
-  unduh.slice(iBba, iTolak).includes('SELECT app_access FROM users WHERE id = ${session.userId}') && unduh.slice(iBba, iTolak).includes('bbaAllowed = isAsetRole(session.role, akses?.app_access ?? null);'))
+  unduh.slice(iBba, iTolak).includes('SELECT app_access FROM users WHERE id = ${session.userId}') && unduh.slice(iBba, iTolak).includes(': isAsetRole(session.role, akses?.app_access ?? null);'))
 const data = tanpaKomentar(sumber('lib/data/buku-besar-aset.ts'))
 const badanUpdate = data.slice(data.indexOf('export async function updateAset('), data.indexOf('export async function ubahStatusProses('))
 const iCas = badanUpdate.indexOf('assertCas(res);')
@@ -138,13 +139,15 @@ ok('C14 route bukti: tiap handler lewat guard modul lebih dulu', (rBukti.match(/
 const skema = sumber('docs/schema-mysql.sql')
 ok('C15 skema acuan memuat kedua tabel baru', skema.includes('CREATE TABLE IF NOT EXISTS bba_referensi_harga (') && skema.includes('CREATE TABLE IF NOT EXISTS bba_lampiran ('))
 
-const { folderUnggahan } = await import('../lib/security/unggahan-modul')
+const { tujuanUnggahan } = await import('../lib/security/unggahan-modul')
+const { folderDariEnv } = await import('../lib/services/drive-tujuan')
+const folderUnggahan = (m: Parameters<typeof tujuanUnggahan>[0], env: Record<string, string>) => folderDariEnv(tujuanUnggahan(m), env)
 const envUji = { GOOGLE_DRIVE_FOLDER_ID: 'umum', GOOGLE_DRIVE_FOLDER_ID_BBA: ' bba ' }
 ok('C16 unggahan BBA ke folder BBA; modul lain & modul tak dikenal tetap ke folder umum', folderUnggahan('buku_besar_aset', envUji) === 'bba'
   && folderUnggahan('lkjip', envUji) === 'umum' && folderUnggahan('usulan_aset', envUji) === 'umum' && folderUnggahan(null, envUji) === 'umum')
 ok('C17 folder BBA belum disetel/kosong → jatuh ke folder umum (server lama tetap bisa unggah)', folderUnggahan('buku_besar_aset', { GOOGLE_DRIVE_FOLDER_ID: 'umum' }) === 'umum'
   && folderUnggahan('buku_besar_aset', { GOOGLE_DRIVE_FOLDER_ID: 'umum', GOOGLE_DRIVE_FOLDER_ID_BBA: '  ' }) === 'umum')
-ok('C18 route unggah memakai folderUnggahan(modulAsal), bukan env umum langsung', tanpaKomentar(sumber('app/api/upload/route.ts')).includes('const folderId = folderUnggahan(modulAsal);')
+ok('C18 route unggah memakai folderUntuk(tujuanUnggahan(modulAsal)), bukan env umum langsung', tanpaKomentar(sumber('app/api/upload/route.ts')).includes('const folderId = await folderUntuk(tujuanUnggahan(modulAsal));')
   && !tanpaKomentar(sumber('app/api/upload/route.ts')).includes('process.env.GOOGLE_DRIVE_FOLDER_ID'))
 
 const { kodeGalatDrive } = await import('../lib/services/drive')

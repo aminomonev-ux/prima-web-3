@@ -12,7 +12,10 @@
 //        (jadwalkan via Windows Task Scheduler / cron, 1x tiap malam)
 //
 // ENV (.env.local): MYSQL_* (sudah ada), GOOGLE_OAUTH_* (sudah ada),
-//   GOOGLE_DRIVE_FOLDER_ID_BACKUP  — folder Drive privat khusus backup
+//   GOOGLE_DRIVE_FOLDER_ID_ROOT    — folder induk PRIMA; backup masuk subfolder
+//                                    "01 Backup Database" (dibuat sendiri bila belum ada).
+//                                    Terisi = MENGALAHKAN _BACKUP di bawah.
+//   GOOGLE_DRIVE_FOLDER_ID_BACKUP  — folder Drive privat khusus backup (tanpa folder induk)
 //   BACKUP_ENC_PASSWORD            — password enkripsi (min 16 char); TANPA ini
 //                                    backup TIDAK dibuat (fail-closed, jangan
 //                                    kirim dump polos ke cloud)
@@ -113,6 +116,71 @@ async function createEncryptedDump(outFile) {
 }
 
 // ─── Google Drive ────────────────────────────────────────────────────────────
+// Klien & penyiap subfolder di sini SENGAJA salinan `lib/services/drive.ts` +
+// `lib/services/drive-tujuan.ts`: skrip ini CommonJS di luar Next (tanpa alias `@/`).
+// Nama subfolder, kunci app_config, dan kunci `blud_locks` WAJIB sama dengan di sana
+// (dijaga scripts/test-drive-terpusat.mts) — kalau beda, lahir folder kembar.
+const NAMA_SUBFOLDER_BACKUP = '01 Backup Database';
+const KUNCI_PETA_SUBFOLDER = 'drive_subfolder_otomatis';
+const MIME_FOLDER = 'application/vnd.google-apps.folder';
+
+function kutipKueri(s) { return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+function bacaPeta(nilai) {
+  try {
+    const j = JSON.parse(nilai);
+    return j && typeof j.induk === 'string' && j.induk ? { induk: j.induk, folder: (j.folder && typeof j.folder === 'object') ? j.folder : {} } : null;
+  } catch { return null; }
+}
+
+async function cariAtauBuatFolder(drive, induk, nama) {
+  const ada = await drive.files.list({
+    q: `'${kutipKueri(induk)}' in parents and mimeType = '${MIME_FOLDER}' and name = '${kutipKueri(nama)}' and trashed = false`,
+    orderBy: 'createdTime', pageSize: 10, fields: 'files(id,name)',
+  }, { timeout: 30000 });
+  if (ada.data.files && ada.data.files[0]) return ada.data.files[0].id;
+  const baru = await drive.files.create({ requestBody: { name: nama, mimeType: MIME_FOLDER, parents: [induk] }, fields: 'id' }, { timeout: 30000 });
+  if (!baru.data.id) throw new Error(`Drive tidak mengembalikan id folder "${nama}".`);
+  log('FOLDER', `subfolder "${nama}" dibuat di folder induk (${baru.data.id})`);
+  return baru.data.id;
+}
+
+// Folder induk terisi → subfolder backup dari app_config (dicatat aplikasi atau skrip ini),
+// kalau belum ada dicari/dibuat di bawah kunci yang SAMA dengan aplikasi (blud_locks
+// drive_folder:otomatis) lalu dicatat. Tanpa folder induk → env _BACKUP seperti dulu.
+async function folderBackup(drive) {
+  const induk = (process.env.GOOGLE_DRIVE_FOLDER_ID_ROOT ?? '').trim();
+  if (!induk) return requireEnv('GOOGLE_DRIVE_FOLDER_ID_BACKUP');
+  const mysql = require('mysql2/promise');
+  const conn = await mysql.createConnection({
+    host: process.env.MYSQL_HOST ?? 'localhost',
+    port: Number(process.env.MYSQL_PORT ?? 3306),
+    user: requireEnv('MYSQL_USER'),
+    password: process.env.MYSQL_PASSWORD ?? '',
+    database: requireEnv('MYSQL_DATABASE'),
+    ssl: process.env.MYSQL_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+  });
+  try {
+    await conn.beginTransaction();
+    await conn.execute("INSERT INTO blud_locks (entity, key_id, version) VALUES ('drive_folder', 'otomatis', 0) ON DUPLICATE KEY UPDATE version = version");
+    await conn.execute("SELECT version FROM blud_locks WHERE entity = 'drive_folder' AND key_id = 'otomatis' FOR UPDATE");
+    const [rows] = await conn.execute('SELECT value FROM app_config WHERE `key` = ? LIMIT 1', [KUNCI_PETA_SUBFOLDER]);
+    const peta = rows[0] ? bacaPeta(rows[0].value) : null;
+    const tercatat = peta && peta.induk === induk ? peta.folder.backup_db : '';
+    if (tercatat) { await conn.commit(); return tercatat; }
+    const id = await cariAtauBuatFolder(drive, induk, NAMA_SUBFOLDER_BACKUP);
+    const baru = { induk, folder: { ...(peta && peta.induk === induk ? peta.folder : {}), backup_db: id } };
+    await conn.execute('INSERT INTO app_config (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)', [KUNCI_PETA_SUBFOLDER, JSON.stringify(baru)]);
+    await conn.commit();
+    return id;
+  } catch (e) {
+    try { await conn.rollback(); } catch { /* koneksi sudah putus */ }
+    throw e;
+  } finally {
+    await conn.end();
+  }
+}
+
 function getDriveClient() {
   const { google } = require('googleapis');
   const clientId = requireEnv('GOOGLE_OAUTH_CLIENT_ID');
@@ -153,15 +221,20 @@ async function main() {
   const startedAt = Date.now();
   loadEnv();
 
-  const folderId = requireEnv('GOOGLE_DRIVE_FOLDER_ID_BACKUP');
   requireEnv('BACKUP_ENC_PASSWORD', 16);
   const retention = Math.max(3, parseInt(process.env.BACKUP_RETENTION ?? '30', 10) || 30);
 
   fs.mkdirSync(PENDING_DIR, { recursive: true });
   const drive = getDriveClient();
+  // Folder gagal disiapkan (internet mati, induk salah) → dump TETAP dibuat & ditaruh di
+  // backups-pending/, persis seperti unggahan gagal. Backup yang batal karena Drive lebih
+  // buruk daripada backup yang terlambat naik.
+  let folderId = '';
+  try { folderId = await folderBackup(drive); }
+  catch (e) { log('FOLDER-FAIL', `folder backup tidak bisa disiapkan: ${e.message}`); process.exitCode = 1; }
 
   // 1. Coba upload ulang backup pending dari run sebelumnya yang gagal
-  for (const name of fs.readdirSync(PENDING_DIR).filter(n => n.endsWith('.enc'))) {
+  for (const name of folderId ? fs.readdirSync(PENDING_DIR).filter(n => n.endsWith('.enc')) : []) {
     const p = path.join(PENDING_DIR, name);
     try {
       await uploadToDrive(drive, folderId, p);
@@ -182,6 +255,7 @@ async function main() {
 
   // 3. Upload → sukses = hapus lokal; gagal = biarkan di pending utk retry besok
   try {
+    if (!folderId) throw new Error('folder backup belum siap');
     await uploadToDrive(drive, folderId, filePath);
     fs.rmSync(filePath, { force: true });
     log('UPLOAD-OK', `${fileName} → Drive folder backup`);
@@ -190,7 +264,9 @@ async function main() {
     process.exitCode = 1;
   }
 
-  // 4. Rotasi retensi di Drive (best-effort)
+  // 4. Rotasi retensi di Drive (best-effort). Hanya folder yang SEDANG dipakai: backup di
+  //    folder lama (sebelum pindah ke folder induk) tidak ikut dirotasi — hapus manual.
+  if (!folderId) return;
   try {
     const deleted = await rotateOldBackups(drive, folderId, retention);
     log('DONE', `selesai ${((Date.now() - startedAt) / 1000).toFixed(1)}s · retensi ${retention} · rotasi hapus ${deleted}`);

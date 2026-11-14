@@ -10,7 +10,8 @@ Script: `scripts/backup-db.js` (backup) + `scripts/backup-decrypt.js` (restore).
 mysqldump prima_db
    → gzip
    → enkripsi AES-256-GCM (BACKUP_ENC_PASSWORD)
-   → upload Drive folder GOOGLE_DRIVE_FOLDER_ID_BACKUP
+   → upload Drive: subfolder "01 Backup Database" di GOOGLE_DRIVE_FOLDER_ID_ROOT
+     (dibuat sendiri bila belum ada), atau GOOGLE_DRIVE_FOLDER_ID_BACKUP bila tanpa folder induk
    → hapus lokal (sukses) / simpan backups-pending/ (gagal, retry run berikutnya)
    → rotasi: hapus file tertua di Drive melebihi BACKUP_RETENTION (default 30)
    → log: scripts/backup-db.log
@@ -25,9 +26,13 @@ mysqldump prima_db
 
 1. `.env.local` di server harus punya (selain `MYSQL_*` dan `GOOGLE_OAUTH_*` yang sudah ada):
    ```
-   GOOGLE_DRIVE_FOLDER_ID_BACKUP="<id folder Drive privat khusus backup>"
+   GOOGLE_DRIVE_FOLDER_ID_ROOT="<id folder induk PRIMA>"   # atau _BACKUP="<id folder backup>"
    BACKUP_ENC_PASSWORD="<acak min 16 char>"
    ```
+   Dengan folder induk, skrip membaca/menulis `app_config` (kunci
+   `drive_subfolder_otomatis`) lewat `MYSQL_*` yang sama, jadi aplikasi dan skrip
+   memakai subfolder yang SAMA. Rotasi hanya di folder yang sedang dipakai: backup lama di
+   folder sebelumnya tidak ikut dibersihkan — hapus manual sesudah pindah.
 2. ⚠️ **Salin `BACKUP_ENC_PASSWORD` ke tempat aman DI LUAR server** (password
    manager / catatan fisik terkunci). Kalau server mati total dan password ikut
    hilang, seluruh backup di Drive tidak bisa dibuka.
@@ -59,10 +64,11 @@ ini, di repo, atau di tiket.
 
 Aturan serah terima:
 
-1. Kalau **akunnya berganti**: buat folder backup di akun baru, ganti
-   `GOOGLE_DRIVE_FOLDER_ID_BACKUP` + tiga nilai `GOOGLE_OAUTH_*`, jalankan
-   `node scripts/backup-db.js`, pastikan `UPLOAD-OK`, lalu unduh & dekripsi satu berkas.
-   Arsip lama dibiarkan di akun lama sampai retensi habis.
+1. Kalau **akunnya berganti**: ikuti `docs/CONCEPT-drive-terpusat.md` §11.1 — bukan hanya
+   backup yang terdampak. Lampiran usulan, bukti BBA, dan gambar Word LKJIP lama dibaca
+   lewat token yang terpasang; token akun baru TIDAK bisa membacanya kecuali folder lama
+   dibagikan ke akun baru dan token ber-scope `drive` penuh. Jangan menyalin berkas (ID
+   baru = rujukan putus), dan jangan menghapus akun lama.
 2. Kalau **akunnya sama, servernya berganti**: cukup tiga nilai `GOOGLE_OAUTH_*` di
    server baru. Folder ID tidak berubah, jadi tautan dan arsip lama tetap berlaku.
 3. Kalau **pemegangnya pensiun/pindah**: pastikan poin 1 atau 2 sudah dikerjakan

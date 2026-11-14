@@ -4,6 +4,7 @@
 // di luar `dirApi` modul mana pun, jadi gate G tidak memindainya — sakelarnya dipasang
 // tangan, dan daftar modulnya harus satu supaya unggah & unduh tidak berbeda pendapat (L78).
 import { kunciSakelarUntuk } from '@/lib/registry/apps';
+import type { DriveTujuan } from '@/lib/services/drive-tujuan';
 
 export const MODUL_PENGUNGGAH = ['lkjip', 'usulan_aset', 'buku_besar_aset'] as const;
 export type ModulPengunggah = (typeof MODUL_PENGUNGGAH)[number];
@@ -23,15 +24,14 @@ export function kunciSakelarBerkas(modul: ModulPengunggah | null): string[] {
     : [...new Set(MODUL_PENGUNGGAH.flatMap((m) => kunciSakelarUntuk(m)))];
 }
 
-const ENV_FOLDER_KHUSUS: Partial<Record<ModulPengunggah, string>> = {
-  buku_besar_aset: 'GOOGLE_DRIVE_FOLDER_ID_BBA',
+const TUJUAN_MODUL: Record<ModulPengunggah, DriveTujuan> = {
+  lkjip: 'lkjip', usulan_aset: 'usulan', buku_besar_aset: 'bba',
 };
 
 /**
- * Folder Drive tujuan unggahan. Modul berfolder khusus yang env-nya belum diisi jatuh ke
- * folder umum `GOOGLE_DRIVE_FOLDER_ID` — server yang belum menyetelnya tetap bisa mengunggah.
+ * Tujuan Drive unggahan sebuah modul; foldernya dijawab `folderUntuk()` (drive-tujuan.ts).
+ * Modul tak dikenal (tab lama tanpa field `modul`) → lampiran usulan, folder umum yang dulu.
  */
-export function folderUnggahan(modul: ModulPengunggah | null, env: Record<string, string | undefined> = process.env): string {
-  const kunci = modul ? ENV_FOLDER_KHUSUS[modul] : undefined;
-  return (kunci ? env[kunci]?.trim() : '') || (env.GOOGLE_DRIVE_FOLDER_ID?.trim() ?? '');
+export function tujuanUnggahan(modul: ModulPengunggah | null): DriveTujuan {
+  return modul ? TUJUAN_MODUL[modul] : 'usulan';
 }

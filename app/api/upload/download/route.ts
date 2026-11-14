@@ -4,7 +4,6 @@
 // verify session.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { google } from 'googleapis';
 import { getSession } from '@/lib/security/auth';
 import { sql, queryOne } from '@/lib/data/db';
 import { writeAuditLog } from '@/lib/security/auditlog';
@@ -13,21 +12,9 @@ import { modulMati } from '@/lib/security/guard';
 import { kunciSakelarBerkas, modulPengunggah } from '@/lib/security/unggahan-modul';
 import { isAsetRole } from '@/lib/data/buku-besar-aset-schemas';
 import { isLkjipRole } from '@/lib/lkjip/schemas';
-import { kodeGalatDrive } from '@/lib/services/drive';
+import { getDriveClient, kodeGalatDrive } from '@/lib/services/drive';
 
 export const runtime = 'nodejs';
-
-function getDriveClient() {
-  const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim()     ?? '';
-  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? '';
-  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN?.trim() ?? '';
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('Konfigurasi Google Drive belum lengkap.');
-  }
-  const oauth2 = new google.auth.OAuth2(clientId, clientSecret, 'https://developers.google.com/oauthplayground');
-  oauth2.setCredentials({ refresh_token: refreshToken });
-  return google.drive({ version: 'v3', auth: oauth2 });
-}
 
 function safeId(raw: string): string | null {
   // Google Drive fileId = alphanumeric + - _ (max ~44 char). Reject anything else.

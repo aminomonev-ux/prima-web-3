@@ -778,7 +778,7 @@ function CadanganPanel({ bolehCadang }: { bolehCadang: boolean }) {
       {bolehCadang && (
         <PrimaButton variant="success" iconLeft={<UploadCloud size={13} />}
           onClick={cadangkan} disabled={jalan || !!belumSiap}
-          data-tooltip={belumSiap ? 'GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON belum diisi di .env' : 'Unggah simpanan yang belum naik ke Drive'}>
+          data-tooltip={belumSiap ? 'Folder Drive belum diatur di .env (GOOGLE_DRIVE_FOLDER_ID_ROOT atau _BLUD_JSON)' : 'Unggah simpanan yang belum naik ke Drive'}>
           {jalan ? 'Mengunggah…' : 'Cadangkan sekarang'}
         </PrimaButton>
       )}

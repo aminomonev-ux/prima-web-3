@@ -5,6 +5,7 @@ import { VersiSaveSchema, lkjipRateLimit } from '@/lib/lkjip/schemas';
 import { saveVersi, listVersi, setVersiDrive } from '@/lib/lkjip/versi';
 import { generateLkjipDocx } from '@/lib/lkjip/docgen';
 import { uploadBufferToDrive } from '@/lib/services/drive';
+import { folderUntuk, tujuanTerkonfigurasi } from '@/lib/services/drive-tujuan';
 import { LkjipNotFoundError } from '@/lib/lkjip/data';
 import { guard } from '../../_guard';
 
@@ -46,10 +47,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await writeAuditLog({ req, eventType: 'LKJIP_VERSI_SAVE', userId: g.session.userId, username: g.session.username, detail: `LKJIP simpan versi ${saved.versi_no} doc=${id}` });
 
   // Arsip docx ke Drive — best-effort, tidak memblokir simpan versi.
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID_LKJIP?.trim();
+  const driveConfigured = tujuanTerkonfigurasi('lkjip_arsip');
   let driveOk = false;
-  if (folderId) {
+  if (driveConfigured) {
     try {
+      const folderId = await folderUntuk('lkjip_arsip');
       const docx = await generateLkjipDocx(id);
       const name = docx.filename.replace(/\.docx$/i, '') + `-v${saved.versi_no}-${stamp(new Date())}.docx`;
       const up = await uploadBufferToDrive({ buffer: docx.buffer, name, mimeType: DOCX_MIME, folderId });
@@ -62,5 +64,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       console.error('[LKJIP Drive archive]', e); // best-effort
     }
   }
-  return NextResponse.json({ ok: true, id: saved.id, versi_no: saved.versi_no, driveArchived: driveOk, driveConfigured: !!folderId });
+  return NextResponse.json({ ok: true, id: saved.id, versi_no: saved.versi_no, driveArchived: driveOk, driveConfigured });
 }

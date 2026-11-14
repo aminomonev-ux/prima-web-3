@@ -143,18 +143,27 @@ NODE_ENV=production
 # Kalau nanti sudah pakai HTTPS, hapus baris ini.
 COOKIE_SECURE=false
 
-# ── Google Drive (arsip LKJIP & backup) — opsional ──────────
+# ── Google Drive (lampiran, LKJIP, BBA, cadangan BLUD, backup) — opsional ──
 # Kalau dikosongkan, fitur arsip gagal DIAM-DIAM (best-effort, tidak error).
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REFRESH_TOKEN=
+# Cara termudah: SATU folder induk. PRIMA membuat subfolder per modul sendiri
+# (01 Backup Database … 05 Lampiran Usulan) dan mengalahkan semua isian di bawah.
+# Isi ID-nya (ujung URL …/folders/<ID>), atur foldernya "Restricted" di Drive.
+GOOGLE_DRIVE_FOLDER_ID_ROOT=
+# Tanpa folder induk: satu folder per tujuan.
 GOOGLE_DRIVE_FOLDER_ID=
 GOOGLE_DRIVE_FOLDER_ID_LKJIP=
 GOOGLE_DRIVE_FOLDER_ID_BACKUP=
 # Bukti & referensi harga Buku Besar Aset; kosong = ikut GOOGLE_DRIVE_FOLDER_ID
 GOOGLE_DRIVE_FOLDER_ID_BBA=
+# Cadangan JSON BLUD (Pengaturan BLUD → Cadangan); kosong = panel "belum dikonfigurasi"
+GOOGLE_DRIVE_FOLDER_ID_BLUD_JSON=
 
 # ── Backup ────────────────────────────────────────────────
+# Tanpa ini backup TIDAK dibuat (dump polos tidak boleh naik ke cloud). Simpan
+# salinannya di luar server — hilang = seluruh arsip backup tak bisa dibuka.
 BACKUP_ENC_PASSWORD=<acak>
 MYSQLDUMP_PATH=C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe
 ```

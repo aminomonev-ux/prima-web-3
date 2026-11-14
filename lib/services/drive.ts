@@ -1,8 +1,11 @@
-// ═══ PRIMA — Google Drive helper (shared) ═════════════════════════
-// OAuth2 (refresh-token) → Drive v3. Pola sama dengan app/api/upload/route.ts.
-// Dipakai: arsip docx LKJIP ke folder Drive (best-effort).
+// ═══ PRIMA — Google Drive: SATU-SATUNYA pembuat klien Drive di app/ & lib/ ═══
+// Konsep: docs/CONCEPT-drive-terpusat.md §6.1. Satu pengecualian yang disengaja:
+// `scripts/backup-db.js` (CommonJS, jalan di luar Next) punya klien sendiri.
 import { google } from 'googleapis';
 import { PassThrough } from 'stream';
+
+/** Panggilan Drive tanpa batas waktu bisa menggantung selamanya (googleapis tidak membatasi). */
+export const BATAS_WAKTU_DRIVE_MS = 30_000;
 
 /** Build Drive v3 client dari env OAuth. Throw kalau env belum lengkap. */
 export function getDriveClient() {
@@ -32,17 +35,81 @@ export function kodeGalatDrive(err: unknown): number | null {
   return null;
 }
 
-/** Upload buffer ke folder Drive. Return id + nama file. */
+export type JenisGalatDrive = 'quota' | 'permission' | 'notfound' | 'token' | 'jaringan' | 'lain';
+
+function alasanGalat(err: unknown): string[] {
+  const e = err as { errors?: { reason?: unknown }[]; response?: { data?: { error?: unknown; error_description?: unknown } } };
+  const dariErrors = (Array.isArray(e?.errors) ? e.errors : []).map((x) => String(x?.reason ?? ''));
+  const data = e?.response?.data;
+  return [...dariErrors, String(data?.error ?? '')].filter(Boolean);
+}
+
+/**
+ * Golongan galat untuk kalimat operator. `kodeGalatDrive` tetap memulangkan kode HTTP
+ * (dipakai pembanding 404 di route unduh) — fungsi ini di atasnya, bukan penggantinya.
+ */
+export function jenisGalatDrive(err: unknown): JenisGalatDrive {
+  const alasan = alasanGalat(err);
+  if (alasan.includes('invalid_grant') || alasan.includes('unauthorized_client')) return 'token';
+  const kode = kodeGalatDrive(err);
+  if (kode === 401) return 'token';
+  if (kode === 403) return alasan.includes('storageQuotaExceeded') || alasan.includes('quotaExceeded') ? 'quota' : 'permission';
+  if (kode === 404) return 'notfound';
+  if (kode === null) {
+    const c = String((err as { code?: unknown })?.code ?? '');
+    if (/^(ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ECONNABORTED)$/.test(c)) return 'jaringan';
+  }
+  return 'lain';
+}
+
+/** Upload buffer ke folder Drive. `size` dari Drive (null bila tak dilaporkan). */
 export async function uploadBufferToDrive(opts: {
   buffer: Buffer; name: string; mimeType: string; folderId: string;
-}): Promise<{ fileId: string; name: string }> {
+}): Promise<{ fileId: string; name: string; size: number | null }> {
   const drive = getDriveClient();
   const stream = new PassThrough();
   stream.end(opts.buffer);
   const res = await drive.files.create({
     requestBody: { name: opts.name, parents: [opts.folderId] },
     media:       { mimeType: opts.mimeType, body: stream },
-    fields:      'id,name',
+    fields:      'id,name,size',
   });
-  return { fileId: res.data.id ?? '', name: res.data.name ?? opts.name };
+  const size = res.data.size == null ? null : Number(res.data.size);
+  return { fileId: res.data.id ?? '', name: res.data.name ?? opts.name, size: Number.isFinite(size) ? size : null };
+}
+
+const MIME_FOLDER = 'application/vnd.google-apps.folder';
+
+/** Nama di dalam kueri Drive: kutip tunggal & garis miring terbalik wajib di-escape. */
+export function kutipKueriDrive(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+/**
+ * Folder bernama `nama` di dalam `induk` — dicari dulu, dibuat bila tidak ada. Lebih dari
+ * satu (dibuat dua proses bersamaan, atau salah operator) → yang TERTUA, supaya semua
+ * pemanggil berikutnya sepakat pada folder yang sama.
+ *
+ * Token `drive.file` hanya melihat folder buatan aplikasi ini sendiri: subfolder buatan
+ * tangan dengan nama sama tidak ditemukan dan folder kedua dibuat (konsep §7.3).
+ */
+export async function cariAtauBuatFolder(induk: string, nama: string): Promise<{ id: string; dibuat: boolean }> {
+  const drive = getDriveClient();
+  const ada = await drive.files.list({
+    q: `'${kutipKueriDrive(induk)}' in parents and mimeType = '${MIME_FOLDER}' and name = '${kutipKueriDrive(nama)}' and trashed = false`,
+    orderBy: 'createdTime',
+    pageSize: 10,
+    fields: 'files(id,name)',
+  }, { timeout: BATAS_WAKTU_DRIVE_MS });
+  const pertama = ada.data.files?.[0]?.id;
+  if (pertama) {
+    if ((ada.data.files?.length ?? 0) > 1) console.warn(`[drive] folder "${nama}" kembar di induk ${induk} — dipakai yang tertua (${pertama}).`);
+    return { id: pertama, dibuat: false };
+  }
+  const baru = await drive.files.create({
+    requestBody: { name: nama, mimeType: MIME_FOLDER, parents: [induk] },
+    fields: 'id',
+  }, { timeout: BATAS_WAKTU_DRIVE_MS });
+  if (!baru.data.id) throw new Error(`Drive tidak mengembalikan id folder "${nama}".`);
+  return { id: baru.data.id, dibuat: true };
 }
