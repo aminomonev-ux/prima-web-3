@@ -12,6 +12,7 @@ import { buatPenyaringYatim, yatimKosong, himpunanCanonical } from '@/lib/kinerj
 import { buangBintang } from '@/lib/kinerja/master-nama';
 import type { AsalMaster } from '@/lib/kinerja/asal-renaksi';
 import { kunciJalur, lengkapiIndukPilihan } from '@/lib/kinerja/banding-renaksi';
+import { barisRenaksiPembanding } from './renaksi-pagu';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
 import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 import { bandingRealisasi, pelanggaranBulanTertutup, type BarisBanding, type RingkasBulan } from '@/lib/kinerja/banding-realisasi';
@@ -205,6 +206,9 @@ export interface InitRenaksiResult {
   kegiatanSkipped: number;
   subkegiatanInserted: number;
   subkegiatanSkipped: number;
+  /** Sumber dana yang dipakai rincian pagu Renaksi (konsep renaksi-pagu-rko §6a). */
+  sumberInserted: number;
+  sumberSkipped: number;
 }
 
 /**
@@ -218,16 +222,12 @@ export async function initMasterFromRenaksi(
   pilih?: readonly string[],
 ): Promise<InitRenaksiResult> {
   const tahunNum = Number(tahun);
-  const raRows = await sql`
-    SELECT level, program, kegiatan, sub_kegiatan
-    FROM rencana_aksi
-    WHERE tahun = ${tahunNum} AND level IN ('program','kegiatan','sub-kegiatan')
-  ` as { level: string; program: string; kegiatan: string | null; sub_kegiatan: string | null }[];
+  const raRows = await barisRenaksiPembanding(sql, tahunNum);
 
   const existing = await sql`
     SELECT tipe, nama, program_ref, kegiatan_ref
     FROM kinerja_master
-    WHERE tahun = ${tahun} AND tipe IN ('program','kegiatan','subkegiatan')
+    WHERE tahun = ${tahun} AND tipe IN ('program','kegiatan','subkegiatan','sumber_anggaran')
   ` as { tipe: string; nama: string; program_ref: string | null; kegiatan_ref: string | null }[];
 
   // Bintang penanda tingkat dari matriks Renaksi ("PROGRAM X ***") dibuang — dulu ikut
@@ -240,12 +240,15 @@ export async function initMasterFromRenaksi(
   const programSet = new Set<string>();
   const kegiatanMap = new Map<string, { nama: string; program_ref: string }>();
   const subkegMap = new Map<string, { nama: string; program_ref: string; kegiatan_ref: string }>();
+  const sumberMap = new Map<string, string>();
 
   for (const r of raRows) {
     const prog = buangBintang(r.program ?? '');
     const keg = buangBintang(r.kegiatan ?? '');
     const sub = buangBintang(r.sub_kegiatan ?? '');
-    if (r.level === 'program' && prog) {
+    if (r.level === 'sumber' && prog) {
+      if (!sumberMap.has(prog.toLowerCase())) sumberMap.set(prog.toLowerCase(), prog);
+    } else if (r.level === 'program' && prog) {
       programSet.add(prog);
     } else if (r.level === 'kegiatan' && prog && keg) {
       const k = `${keg.toLowerCase()}|${prog.toLowerCase()}`;
@@ -259,16 +262,19 @@ export async function initMasterFromRenaksi(
   let programsToInsert = [...programSet].filter(p => !existSet.has(keyOf('program', p, null, null)));
   let kegiatansToInsert = [...kegiatanMap.values()].filter(k => !existSet.has(keyOf('kegiatan', k.nama, k.program_ref, null)));
   let subkegsToInsert = [...subkegMap.values()].filter(s => !existSet.has(keyOf('subkegiatan', s.nama, s.program_ref, s.kegiatan_ref)));
+  let sumberToInsert = [...sumberMap.values()].filter(n => !existSet.has(keyOf('sumber_anggaran', n, null, null)));
   if (pilih) {
     const kandidat = [
       ...programsToInsert.map(n => ({ tipe: 'program' as const, nama: n, program_ref: null, kegiatan_ref: null })),
       ...kegiatansToInsert.map(x => ({ tipe: 'kegiatan' as const, nama: x.nama, program_ref: x.program_ref, kegiatan_ref: null })),
       ...subkegsToInsert.map(x => ({ tipe: 'subkegiatan' as const, nama: x.nama, program_ref: x.program_ref, kegiatan_ref: x.kegiatan_ref })),
+      ...sumberToInsert.map(n => ({ tipe: 'sumber_anggaran' as const, nama: n, program_ref: null, kegiatan_ref: null })),
     ].map(x => ({ ...x, kunci: kunciJalur(x.tipe, x.nama, x.program_ref, x.kegiatan_ref) }));
     const terpilih = lengkapiIndukPilihan(pilih, kandidat);
     programsToInsert = programsToInsert.filter(n => terpilih.has(kunciJalur('program', n, null, null)));
     kegiatansToInsert = kegiatansToInsert.filter(x => terpilih.has(kunciJalur('kegiatan', x.nama, x.program_ref, null)));
     subkegsToInsert = subkegsToInsert.filter(x => terpilih.has(kunciJalur('subkegiatan', x.nama, x.program_ref, x.kegiatan_ref)));
+    sumberToInsert = sumberToInsert.filter(n => terpilih.has(kunciJalur('sumber_anggaran', n, null, null)));
   }
 
   const result: InitRenaksiResult = {
@@ -279,6 +285,8 @@ export async function initMasterFromRenaksi(
     kegiatanSkipped: kegiatanMap.size - kegiatansToInsert.length,
     subkegiatanInserted: subkegsToInsert.length,
     subkegiatanSkipped: subkegMap.size - subkegsToInsert.length,
+    sumberInserted: sumberToInsert.length,
+    sumberSkipped: sumberMap.size - sumberToInsert.length,
   };
 
   if (dry) return result;
@@ -305,6 +313,12 @@ export async function initMasterFromRenaksi(
     }
     if (subkegsToInsert.length > 0) {
       const rows = subkegsToInsert.map(s => [tahun, 'subkegiatan', null, s.nama, s.program_ref, s.kegiatan_ref, null, ++sStart, userId, 'RENAKSI']);
+      await bulkInsert('kinerja_master', cols, rows, conn);
+    }
+    if (sumberToInsert.length > 0) {
+      const [aUrut] = await tx`SELECT COALESCE(MAX(urut),0) AS m FROM kinerja_master WHERE tahun = ${tahun} AND tipe = 'sumber_anggaran'` as { m: number }[];
+      let aStart = Number(aUrut?.m ?? 0);
+      const rows = sumberToInsert.map(n => [tahun, 'sumber_anggaran', null, n, null, null, null, ++aStart, userId, 'RENAKSI']);
       await bulkInsert('kinerja_master', cols, rows, conn);
     }
   });

@@ -1,6 +1,6 @@
 # Konsep — Pagu sub kegiatan Renaksi sebagai batas pagu RKO E-Anggaran
 
-Status: **Tahap A' SELESAI** (2026-11-14, §9). Tahap B–D menyusul. Putaran 1 (2026-11-13) mengira pagu
+Status: **Tahap A' & B SELESAI** (2026-11-14, §9–§10). Tahap C–D menyusul. Putaran 1 (2026-11-13) mengira pagu
 milik sub kegiatan dan mengusulkan "Tahap A" untuk menutup penjumlahan dobel — **itu dibatalkan**, lihat §2.
 
 ---
@@ -237,3 +237,30 @@ kotak pasir 2075/2076), 14 uji mutasi tertangkap. Tiga temuan dari uji mutasi di
 pembekuan Murni yang mubazir (sudah tercakup syarat jumlah) dan satu baris kode mati di
 `daftarBelumTertaut`. Diverifikasi di peramban pada 2045 (dibersihkan sesudahnya): Data Entry (editor,
 Mulai Perubahan, Simpan), Cetak (angka per indikator, spanduk, kolom Sumber Dana), tema terang.
+
+## 10. Tahap B — yang dikerjakan (2026-11-14, hanya tampilan)
+
+- **Aturan satu tempat** `lib/kinerja/pagu-renaksi.ts` (murni): `versiTerbaruPerTab` (calon versi dari semua
+  baris — A9), `agregatRko` (sumber dana dari rekening lewat kunci Inject `uraian_ssk + uraian` per tab;
+  rekening berkunci sama bersumber berbeda / tanpa rekening = "sumber belum diisi"), `bandingPaguRenaksi`
+  (per sumber hanya bila seluruh pagu Renaksi sub itu sudah bersumber, plus total; Renaksi tanpa pagu =
+  tanpa batas; sub RKO yang tidak ada di Renaksi = "di luar Rencana Aksi"), `kalimatLebih`. Tahap C
+  WAJIB memakai fungsi yang sama.
+- **Pagu sub kegiatan Renaksi** = Σ pagu berlaku indikatornya (`paguSubKegiatan`, `lib/renaksi/pagu.ts`).
+- **Endpoint baca**: `GET /api/kinerja/pagu-renaksi` (penjaga E-Anggaran; bahan mentah supaya layar RKO
+  mengganti tab yang dibuka dengan isi layarnya) dan `GET /api/rencana-aksi/pagu-rko` (penjaga Renaksi;
+  hanya agregat per sub kegiatan × sumber, tanpa rincian rekening). Pemuat satu: `lib/data/pagu-renaksi-rko.ts`.
+- **Layar RKO**: `PaguRenaksiPita` di atas tabel — isi layar dipakai hanya bila versi yang dibuka = versi
+  terbaru dan tidak terkunci. **Data Entry Renaksi**: "Terpakai di RKO" di editor pagu, dinilai terhadap
+  ISI LAYAR.
+- **Sumber dana → Master Rekening (§6a)**: `sumber_anggaran` kini tingkat yang bisa berasal Renaksi
+  (`bisaDariRenaksi`), dibaca lewat SATU pembaca `barisRenaksiPembanding` (`lib/data/renaksi-pagu.ts`,
+  baris `level: 'sumber'`) untuk pembanding, Init, pagar tanda dari form, dan warisan tanda. Init/Perbarui
+  dari Renaksi menulisnya dengan asal RENAKSI; "Jadikan manual" & "Tandai dari Renaksi" berlaku tanpa
+  kode baru. PK tidak menerima entri sumber (daftar sumbernya sendiri).
+
+Regresi: `npx tsx --env-file=.env.local scripts/test-renaksi-pagu-rko.mts` (28; bagian C MySQL kotak pasir
+2075), 12 uji mutasi tertangkap. `test-kinerja-asal-renaksi` A1/B1 disesuaikan (sumber anggaran kini bisa
+berasal Renaksi — perubahan yang disengaja). Diverifikasi di peramban pada 2039 (dibersihkan): pita RKO
+merah "APBD lebih Rp 2.000.000" lalu berubah ikut ketikan, dialog Perbarui dari Rencana Aksi mendaftar
+Sumber Anggaran APBD/BLUD dan menuliskannya bertanda Renaksi, "Terpakai di RKO" di Data Entry ikut isian.

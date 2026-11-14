@@ -17,11 +17,13 @@ import type { RaRow, RaLevel, RaJenis } from '../_lib/types';
 import { usePenanda } from '../_lib/penanda';
 import { outcomeOf, deriveTargetQuarters, BULAN_LABELS, capaianTahunan, tulisRealisasi } from '../_lib/types';
 import {
-  apiUpsert, apiDelete, apiList, apiPaguPerubahan, apiUbahPaguPerubahan, TautanAnakError, VersionConflictError,
+  apiUpsert, apiDelete, apiList, apiPaguPerubahan, apiPaguRko, apiUbahPaguPerubahan, TautanAnakError, VersionConflictError,
+  type AgregatSubRko,
 } from '../_lib/api';
 import {
-  alasanTolakRincian, kunciSumber, paguSendiri, rapikanSumber, totalBerlaku, tulisPerSumber, type RincianPagu,
+  alasanTolakRincian, jumlahPerSumber, kunciSumber, paguSendiri, rapikanSumber, totalBerlaku, tulisPerSumber, type RincianPagu,
 } from '@/lib/renaksi/pagu';
+import { bandingPaguRenaksi, kalimatLebih, kunciSub, melampaui } from '@/lib/kinerja/pagu-renaksi';
 import PaguSumberEditor from './PaguSumberEditor';
 import { kalimatPemakai } from '@/lib/renaksi/pemakai';
 import { INDUK_LEVEL, namaEntitas, indikatorInduk, entitasAnak, indikatorEntitas, denganNilaiTersimpan } from '@/lib/renaksi/rantai';
@@ -71,6 +73,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
   const [paguStatus, setPaguStatus] = useState<{ aktif: boolean; dimulai_pada: string | null }>({ aktif: false, dimulai_pada: null });
   const [sibukPerubahan, setSibukPerubahan] = useState(false);
   const [sumberMaster, setSumberMaster] = useState<string[]>([]);
+  const [paguRko, setPaguRko] = useState<AgregatSubRko[]>([]);
   // R3: null = belum diisi, 0 = nol nyata
   const [bulanTarget, setBulanTarget] = useState<(number | null)[]>(() => Array(12).fill(null));
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -132,6 +135,8 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     void (async () => {
       try { setPaguStatus(await apiPaguPerubahan(selectedYear, ac.signal)); }
       catch (err) { if (!ac.signal.aborted) notify((err as Error).message || 'Gagal memuat status Pagu Perubahan', 'error'); }
+      // Hanya keterangan: gagal memuatnya tidak menghalangi mengisi pagu.
+      try { setPaguRko(await apiPaguRko(selectedYear, ac.signal)); } catch { if (!ac.signal.aborted) setPaguRko([]); }
       try {
         const r = await fetch(`/api/kinerja/master?tahun=${selectedYear}&tipe=sumber_anggaran`, { cache: 'no-store', signal: ac.signal });
         const b = r.ok ? await r.json() as { rows?: Array<{ nama?: string }> } : null;
@@ -396,6 +401,21 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     ? rows.filter(r => r.level === 'sub-kegiatan' && r.id !== editingId
         && r.program === program.trim() && (r.kegiatan ?? '') === kegiatan.trim() && (r.sub_kegiatan ?? '') === subKegiatan.trim())
     : [];
+  // "Terpakai di RKO": RKO sub kegiatan ini dari server, pagunya dari ISI LAYAR — dinilai aturan yang
+  // sama dengan pita RKO & pagar server (lib/kinerja/pagu-renaksi.ts).
+  const terpakaiRko = (() => {
+    if (!isSub || !subKegiatan.trim()) return null;
+    const kunci = kunciSub(program.trim(), kegiatan.trim(), subKegiatan.trim());
+    const ada = paguRko.find(b => b.kunci === kunci);
+    if (!ada || ada.rko.total === 0) return null;
+    const isi = [...paguRincian.filter(r => r.pagu != null || r.pagu_perubahan != null)
+      .map(r => ({ sumber: r.sumber, nilai: r.pagu_perubahan ?? r.pagu ?? 0 })),
+      ...saudaraSub.flatMap(r => paguSendiri(r)?.perSumber ?? [])];
+    const pagu = isi.length ? jumlahPerSumber(isi) : null;
+    const rko = ada.rko.perSumber.map(s => ({ tab: '-', program: ada.program, kegiatan: ada.kegiatan, subkegiatan: ada.sub_kegiatan, sumber: s.sumber, pagu: s.nilai }));
+    const b = bandingPaguRenaksi([{ program: ada.program, kegiatan: ada.kegiatan, sub_kegiatan: ada.sub_kegiatan, pagu }], rko).sub[0];
+    return { rko: ada.rko, lebih: b && melampaui(b) ? kalimatLebih(b) : null };
+  })();
   const totalSubKegiatan = isSub ? (() => {
     const nilai = [totalBerlaku(paguRincian), ...saudaraSub.map(r => paguSendiri(r)?.total ?? null)];
     return {
@@ -1031,6 +1051,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
                 dimulaiPada={paguStatus.dimulai_pada}
                 opsiSumber={opsiSumber}
                 totalSubKegiatan={totalSubKegiatan}
+                terpakaiRko={terpakaiRko}
                 onMulaiPerubahan={() => void ubahBabakPerubahan('mulai')}
                 onBatalPerubahan={() => void ubahBabakPerubahan('batal')}
                 sibukPerubahan={sibukPerubahan}

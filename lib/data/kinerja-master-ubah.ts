@@ -8,7 +8,8 @@
 import { sql, bulkInsert, execWrite, withTransaction, type TxSql, type Penanya } from './db';
 import { listGantiNama } from './rencana-aksi';
 import { bandingRenaksi, type EntriBanding, type HasilBanding } from '@/lib/kinerja/banding-renaksi';
-import { jalurAdaDiRenaksi, tandaWarisan, type AsalMaster, type BarisRenaksi, type EntriBerasal } from '@/lib/kinerja/asal-renaksi';
+import { jalurAdaDiRenaksi, tandaWarisan, type AsalMaster, type EntriBerasal } from '@/lib/kinerja/asal-renaksi';
+import { barisRenaksiPembanding } from './renaksi-pagu';
 import { acquireBludLock, bumpBludVersion } from './locks';
 import { SUMBER_LIST, kunciVersiSsk, KinerjaMasterTidakAdaError, type MasterTipe, type SumberSSK } from './kinerja';
 import { REALISASI_LOCK_ENTITY, realisasiLockKey } from '@/lib/kinerja/tutup-bulan';
@@ -83,10 +84,7 @@ async function wariskanTanda(
   tx: TxSql, tahun: string, r: { lebur: readonly Lebur[]; akhir: readonly EntriMaster[] }, asal: ReadonlyMap<number, AsalMaster>,
 ): Promise<number> {
   if (!r.lebur.some(l => asal.get(l.dari) === 'RENAKSI')) return 0;
-  const renaksi = await tx`
-    SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi
-    WHERE tahun = ${Number(tahun)} AND level IN ('program','kegiatan','sub-kegiatan')
-  ` as BarisRenaksi[];
+  const renaksi = await barisRenaksiPembanding(tx, Number(tahun));
   const ids = tandaWarisan(r.lebur, asal, r.akhir, renaksi);
   if (ids.length > 0) await tx`UPDATE kinerja_master SET asal = 'RENAKSI', updated_at = updated_at WHERE id IN (${ids})`;
   return ids.length;
@@ -337,23 +335,16 @@ export async function lengkapiMasterDariData(tahun: string, opsi: { userId: numb
 export async function bandingMasterRenaksi(tahun: string): Promise<HasilBanding> {
   const master = await sql`
     SELECT id, tipe, nama, program_ref, kegiatan_ref, subkegiatan_ref, asal
-    FROM kinerja_master WHERE tahun = ${tahun} AND tipe IN ('program','kegiatan','subkegiatan') ORDER BY urut, id
+    FROM kinerja_master WHERE tahun = ${tahun} AND tipe IN ('program','kegiatan','subkegiatan','sumber_anggaran') ORDER BY urut, id
   ` as EntriBanding[];
-  const renaksi = await sql`
-    SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi
-    WHERE tahun = ${Number(tahun)} AND level IN ('program','kegiatan','sub-kegiatan')
-  ` as BarisRenaksi[];
+  const renaksi = await barisRenaksiPembanding(sql, Number(tahun));
   const catatan = await listGantiNama(Number(tahun));
   return bandingRenaksi(master.map(m => ({ ...m, id: Number(m.id) })), renaksi, catatan);
 }
 
 /** Jalur entri ada di Renaksi tahun itu? Pagar server untuk tanda RENAKSI dari form (L68). */
 export async function jalurAdaDiRenaksiTahun(tahun: string, entri: EntriBerasal): Promise<boolean> {
-  const renaksi = await sql`
-    SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi
-    WHERE tahun = ${Number(tahun)} AND level IN ('program','kegiatan','sub-kegiatan')
-  ` as BarisRenaksi[];
-  return jalurAdaDiRenaksi(entri, renaksi);
+  return jalurAdaDiRenaksi(entri, await barisRenaksiPembanding(sql, Number(tahun)));
 }
 
 /**

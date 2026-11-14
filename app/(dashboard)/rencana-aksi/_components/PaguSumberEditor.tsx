@@ -7,7 +7,7 @@ import { InputNominal } from '@/components/ui/input-nominal';
 import DeleteButton from '@/components/ui/DeleteButton';
 import PrimaButton from '@/components/ui/PrimaButton';
 import {
-  LABEL_TANPA_SUMBER, alasanTolakRincian, kunciSumber, totalBerlaku, type RincianPagu,
+  LABEL_TANPA_SUMBER, alasanTolakRincian, kunciSumber, totalBerlaku, tulisPerSumber, type Pagu, type RincianPagu,
 } from '@/lib/renaksi/pagu';
 
 const rupiah = (n: number | null) => (n == null ? '—' : `Rp ${n.toLocaleString('id-ID')}`);
@@ -23,13 +23,15 @@ interface Props {
   opsiSumber: string[];
   /** Total berlaku seluruh indikator sub kegiatan ini, dengan isian layar menggantikan baris ini. */
   totalSubKegiatan: { total: number | null; indikator: number } | null;
+  /** RKO E-Anggaran sub kegiatan ini (versi terbaru semua tab) & kalimat kelebihannya bila ada. */
+  terpakaiRko: { rko: Pagu; lebih: string | null } | null;
   onMulaiPerubahan: () => void;
   onBatalPerubahan: () => void;
   sibukPerubahan: boolean;
 }
 
 export default function PaguSumberEditor({
-  tahun, rincian, onChange, lama, perubahanAktif, dimulaiPada, opsiSumber, totalSubKegiatan,
+  tahun, rincian, onChange, lama, perubahanAktif, dimulaiPada, opsiSumber, totalSubKegiatan, terpakaiRko,
   onMulaiPerubahan, onBatalPerubahan, sibukPerubahan,
 }: Props) {
   const ubah = (i: number, isi: Partial<RincianPagu>) => onChange(rincian.map((r, j) => (j === i ? { ...r, ...isi } : r)));
@@ -104,6 +106,14 @@ export default function PaguSumberEditor({
           <div>
             Total sub kegiatan: <b style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{rupiah(totalSubKegiatan.total)}</b>
             {' '}({totalSubKegiatan.indikator} indikator)
+          </div>
+        )}
+        {terpakaiRko && (
+          <div>
+            Terpakai di RKO E-Anggaran (versi terbaru semua tab):{' '}
+            <b style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{rupiah(terpakaiRko.rko.total)}</b>
+            {tulisPerSumber(terpakaiRko.rko) && <> ({tulisPerSumber(terpakaiRko.rko)})</>}
+            {terpakaiRko.lebih && <span className="block font-semibold text-[#E24B4A]">RKO melampaui pagu sub kegiatan ini: {terpakaiRko.lebih}</span>}
           </div>
         )}
         {alasan && <div className="font-semibold text-[#E24B4A]">{alasan}</div>}

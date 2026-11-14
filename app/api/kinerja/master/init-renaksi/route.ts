@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       eventType: 'KINERJA_MASTER_INIT_RENAKSI',
       userId:    session.userId,
       username:  session.username,
-      detail:    `${pilih ? 'Perbarui dari Rencana Aksi (terpilih) ' : 'Init Renaksi '}tahun ${tahun}: +${result.programInserted}P/+${result.kegiatanInserted}K/+${result.subkegiatanInserted}S (skip ${result.programSkipped}/${result.kegiatanSkipped}/${result.subkegiatanSkipped}, total RA=${result.raTotal})`,
+      detail:    `${pilih ? 'Perbarui dari Rencana Aksi (terpilih) ' : 'Init Renaksi '}tahun ${tahun}: +${result.programInserted}P/+${result.kegiatanInserted}K/+${result.subkegiatanInserted}S/+${result.sumberInserted} sumber dana (skip ${result.programSkipped}/${result.kegiatanSkipped}/${result.subkegiatanSkipped}/${result.sumberSkipped}, total RA=${result.raTotal})`,
     });
   }
 

@@ -1,6 +1,9 @@
 import type { RaLevel, RaRow, RaJenis } from './types';
 import type { JenisPerubahan, PemakaiNama } from '@/lib/renaksi/pemakai';
 import type { RincianPagu } from '@/lib/renaksi/pagu';
+import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
+
+export type AgregatSubRko = BandingPaguSub;
 
 export class VersionConflictError extends Error {
   constructor(message: string) { super(message); this.name = 'VersionConflictError'; }
@@ -89,6 +92,13 @@ export async function apiPaguPerubahan(tahun: number, signal?: AbortSignal): Pro
   const r = await fetch(`/api/rencana-aksi/pagu-perubahan?tahun=${tahun}`, { cache: 'no-store', signal });
   const b = await jsonOrThrow<{ ok: true } & StatusPaguPerubahan>(r);
   return { aktif: b.aktif, dimulai_pada: b.dimulai_pada };
+}
+
+/** Agregat RKO E-Anggaran per sub kegiatan (versi terbaru tiap tab) — "Terpakai di RKO". */
+export async function apiPaguRko(tahun: number, signal?: AbortSignal): Promise<AgregatSubRko[]> {
+  const r = await fetch(`/api/rencana-aksi/pagu-rko?tahun=${tahun}`, { cache: 'no-store', signal });
+  const b = await jsonOrThrow<{ ok: true; sub: AgregatSubRko[] }>(r);
+  return b.sub;
 }
 
 export async function apiUbahPaguPerubahan(tahun: number, aksi: 'mulai' | 'batal'): Promise<StatusPaguPerubahan> {

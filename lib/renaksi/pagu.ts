@@ -259,6 +259,35 @@ export function daftarBelumTertaut(rows: readonly BarisPagu[]): PaguBelumTertaut
   return keluar;
 }
 
+export interface PaguSubRenaksi { program: string; kegiatan: string; sub_kegiatan: string; pagu: Pagu | null }
+
+/**
+ * Pagu tiap ENTITAS sub kegiatan = Σ pagu berlaku seluruh baris indikatornya, per sumber (konsep §2
+ * no. 5). Sub kegiatan tanpa pagu tetap ikut (pagu null = tanpa batas, tapi entitasnya ADA di Renaksi
+ * — beda dengan sub kegiatan RKO yang tidak ada di Renaksi sama sekali).
+ */
+export function paguSubKegiatan(rows: readonly BarisPagu[]): PaguSubRenaksi[] {
+  const peta = new Map<string, { r: BarisPagu; k: Kantong; ada: boolean }>();
+  for (const r of rows) {
+    if (r.level !== 'sub-kegiatan') continue;
+    const kunci = kunciEntitas(r);
+    const e = peta.get(kunci) ?? { r, k: new Kantong(), ada: false };
+    peta.set(kunci, e);
+    const p = paguSendiri(r);
+    if (p) { e.k.tambahPagu(p); e.ada = true; }
+  }
+  return [...peta.values()].map(({ r, k, ada }) => ({
+    program: r.program, kegiatan: r.kegiatan ?? '', sub_kegiatan: r.sub_kegiatan ?? '', pagu: ada ? k.hasil() : null,
+  }));
+}
+
+/** Penjumlah per sumber untuk modul lain (RKO) — aturan kunci sumber yang sama. */
+export function jumlahPerSumber(isi: readonly { sumber: string; nilai: number }[]): Pagu {
+  const k = new Kantong();
+  for (const x of isi) k.tambah(x.sumber, x.nilai);
+  return k.hasil();
+}
+
 const rupiah = (n: number) => n.toLocaleString('id-ID');
 
 /** "APBD 10.000.000 · BLUD 5.000.000" — kosong bila hanya satu sumber tanpa nama. */

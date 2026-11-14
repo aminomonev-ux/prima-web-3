@@ -11,6 +11,7 @@
 import type { PoolConnection } from 'mysql2/promise';
 import { bulkInsert, type Penanya } from '@/lib/data/db';
 import { PESAN_MURNI_BEKU, alasanTolakRincian, rapikanSumber, totalBerlaku, type RincianPagu } from '@/lib/renaksi/pagu';
+import type { BarisRenaksi } from '@/lib/kinerja/asal-renaksi';
 
 export class RaPaguError extends Error {
   constructor(pesan: string, public readonly kode: 'PAGU_TIDAK_SAH' | 'PAGU_MURNI_BEKU' | 'PAGU_PERUBAHAN_TERISI') {
@@ -34,6 +35,22 @@ export async function muatRincianPagu(q: Penanya, ids: readonly number[]): Promi
     peta.set(id, [...(peta.get(id) ?? []), { sumber: r.sumber, pagu: angka(r.pagu), pagu_perubahan: angka(r.pagu_perubahan) }]);
   }
   return peta;
+}
+
+/**
+ * Baris Renaksi untuk pembanding Master E-Anggaran: entitas program/kegiatan/sub + satu baris
+ * `level: 'sumber'` per sumber dana yang dipakai rincian pagu tahun itu (konsep §6a). Satu pembaca
+ * untuk pembanding, Init, pagar tanda dari form, dan warisan tanda — beberapa pembaca = beberapa jawaban (L78).
+ */
+export async function barisRenaksiPembanding(q: Penanya, tahun: number): Promise<BarisRenaksi[]> {
+  return await q`
+    SELECT level, program, kegiatan, sub_kegiatan FROM rencana_aksi
+    WHERE tahun = ${tahun} AND level IN ('program','kegiatan','sub-kegiatan')
+    UNION ALL
+    SELECT DISTINCT 'sumber', p.sumber, NULL, NULL FROM rencana_aksi_pagu AS p
+    JOIN rencana_aksi AS r ON r.id = p.rencana_aksi_id
+    WHERE r.tahun = ${tahun} AND p.sumber <> ''
+  ` as BarisRenaksi[];
 }
 
 export interface StatusPaguPerubahan { aktif: boolean; dimulai_pada: string | null }

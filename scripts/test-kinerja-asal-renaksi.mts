@@ -28,9 +28,10 @@ const m = (tipe: EntriBerasal['tipe'], nama: string, asal: 'MANUAL' | 'RENAKSI',
 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('A. Aturan')
-ok('A1 hanya program/kegiatan/subkegiatan yang bisa berasal Renaksi',
+// Sumber anggaran ikut sejak pagu Renaksi dirinci per sumber dana (renaksi-pagu-rko §6a).
+ok('A1 program/kegiatan/subkegiatan/sumber anggaran bisa berasal Renaksi; uraian SSK tidak',
   bisaDariRenaksi('program') && bisaDariRenaksi('kegiatan') && bisaDariRenaksi('subkegiatan')
-  && !bisaDariRenaksi('uraian_ssk') && !bisaDariRenaksi('sumber_anggaran'))
+  && bisaDariRenaksi('sumber_anggaran') && !bisaDariRenaksi('uraian_ssk'))
 ok('A2 dariRenaksi: asal RENAKSI saja; uraian SSK bertanda pun tidak dihitung',
   dariRenaksi(m('program', 'P', 'RENAKSI')) && !dariRenaksi(m('program', 'P', 'MANUAL'))
   && !dariRenaksi({ ...m('program', 'P', 'RENAKSI'), asal: undefined }) && !dariRenaksi(m('uraian_ssk', 'U', 'RENAKSI')))
@@ -96,8 +97,8 @@ ok('A18 yang melebur MANUAL → tidak ada warisan (penerima RENAKSI pun tidak di
 console.log('B. Sambungan kode')
 const KIN = tanpaKomentar(sumber('lib/data/kinerja.ts'))
 const INIT = KIN.slice(KIN.indexOf('export async function initMasterFromRenaksi'), KIN.indexOf('// ─── Rekening'))
-ok('B1 Init Renaksi menulis kolom asal = RENAKSI di ketiga tingkat',
-  INIT.includes("'created_by','asal'") && (INIT.match(/userId, 'RENAKSI'\]\)/g) ?? []).length === 3)
+ok('B1 Init Renaksi menulis kolom asal = RENAKSI di keempat tingkat (termasuk sumber anggaran)',
+  INIT.includes("'created_by','asal'") && (INIT.match(/userId, 'RENAKSI'\]\)/g) ?? []).length === 4)
 ok('B2 getMasterRows membaca asal', /SELECT id, tahun, tipe, sumber, nama, program_ref, kegiatan_ref, subkegiatan_ref, urut, asal\s/.test(KIN))
 ok('B3 skema acuan memuat kolom asal', /asal\s+ENUM\('MANUAL','RENAKSI'\) NOT NULL DEFAULT 'MANUAL'/.test(sumber('docs/schema-mysql.sql')))
 const MT = sumber('app/(dashboard)/kinerja/_tabs/MasterTab.tsx')

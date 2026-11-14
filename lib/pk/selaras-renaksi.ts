@@ -67,7 +67,7 @@ export function terapkanSelarasProgram<T extends BarisProgramPk>(
 ): T[] {
   const out = [...rows];
   const ubah = (i: number, isi: Partial<BarisProgramPk>) => { out[i] = { ...out[i], ...isi }; };
-  const urut = { program: 0, kegiatan: 1, subkegiatan: 2 } as const;
+  const urut = { program: 0, kegiatan: 1, subkegiatan: 2, sumber_anggaran: 3 } as const;
   const gantiP = new Map<string, string>();
   // Kegiatan yang diganti nama / dipindah: lokasi akhirnya (program, nama) — sub-nya mengikuti.
   const gantiK = new Map<string, [string, string]>();
@@ -101,7 +101,9 @@ export function terapkanSelarasProgram<T extends BarisProgramPk>(
     if (r.kegiatan) ejaan.set(`${kunciNamaRenaksi(r.program)}|${kunciNamaRenaksi(r.kegiatan)}`, r.kegiatan);
   }
   const pakaiEjaan = (k: string, v: string) => ejaan.get(k) ?? v;
+  // Master Program PK tidak memuat sumber dana (PK punya daftar sumbernya sendiri).
   for (const b of [...h.baru].filter(x => pilihBaru.has(x.kunci)).sort((a, c) => urut[a.tipe] - urut[c.tipe])) {
+    if (b.tipe === 'sumber_anggaran') continue;
     const p = b.tipe === 'program' ? b.nama : pakaiEjaan(kunciNamaRenaksi(b.program_ref), b.program_ref ?? '');
     const kg = b.tipe === 'kegiatan' ? b.nama
       : b.tipe === 'subkegiatan' ? pakaiEjaan(`${kunciNamaRenaksi(p)}|${kunciNamaRenaksi(b.kegiatan_ref)}`, b.kegiatan_ref ?? '') : null;

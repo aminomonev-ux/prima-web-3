@@ -96,7 +96,7 @@ export function PerbaruiRenaksiModal({ tahun, hasil, isLight, canEdit, onTutup, 
   async function terapkan(pilih: Set<string>) {
     const gagal: string[] = [];
     let ganti = 0, pindah = 0, baru = 0, manual = 0, tanda = 0;
-    const urut = { program: 0, kegiatan: 1, subkegiatan: 2 } as const;
+    const urut = { program: 0, kegiatan: 1, subkegiatan: 2, sumber_anggaran: 3 } as const;
     const daftar = hasil.gantiNama.filter(g => pilih.has(kunciGanti(g.id))).sort((a, b) => urut[a.tipe] - urut[b.tipe]);
     const ubah = async (g: ItemGanti, gabung: boolean) => {
       const d = await fetchJson<unknown>(`/api/kinerja/master/${g.id}`, { method: 'PUT', body: JSON.stringify({ ...badanUbahMaster(g), gabung }) });
@@ -112,8 +112,8 @@ export function PerbaruiRenaksiModal({ tahun, hasil, isLight, canEdit, onTutup, 
     if (pilihBaru.length > 0) {
       const d = await fetchJson<unknown>('/api/kinerja/master/init-renaksi', { method: 'POST', body: JSON.stringify({ tahun, pilih: pilihBaru }) });
       if (d.ok) {
-        const r = d as unknown as { programInserted: number; kegiatanInserted: number; subkegiatanInserted: number };
-        baru = r.programInserted + r.kegiatanInserted + r.subkegiatanInserted;
+        const r = d as unknown as { programInserted: number; kegiatanInserted: number; subkegiatanInserted: number; sumberInserted?: number };
+        baru = r.programInserted + r.kegiatanInserted + r.subkegiatanInserted + (r.sumberInserted ?? 0);
       } else gagal.push(`Entri baru: ${d.message || 'gagal'}`);
     }
     for (const g of daftar.filter(itemPindah)) {

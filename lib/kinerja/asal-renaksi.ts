@@ -11,9 +11,12 @@ import { cocokInduk, type IndukMaster } from './master-nama';
 export const ASAL_MASTER = ['MANUAL', 'RENAKSI'] as const;
 export type AsalMaster = (typeof ASAL_MASTER)[number];
 
-/** Hanya tingkat yang memang ditarik Init Renaksi. Uraian SSK & sumber anggaran selalu manual. */
+/**
+ * Tingkat yang memang ditarik Init Renaksi. Uraian SSK selalu manual. Sumber anggaran ikut sejak pagu
+ * Renaksi dirinci per sumber dana (docs/CONCEPT-renaksi-pagu-rko.md §6a: Renaksi = sumber besar).
+ */
 export function bisaDariRenaksi(tipe: MasterTipe): boolean {
-  return tipe === 'program' || tipe === 'kegiatan' || tipe === 'subkegiatan';
+  return tipe === 'program' || tipe === 'kegiatan' || tipe === 'subkegiatan' || tipe === 'sumber_anggaran';
 }
 
 export interface EntriBerasal extends IndukMaster {
@@ -55,6 +58,10 @@ export function namaBertanda(rows: readonly EntriBerasal[]): Set<string> {
   return new Set(rows.filter(dariRenaksi).map(e => e.nama));
 }
 
+/**
+ * Baris pembanding dari Renaksi. `level: 'sumber'` = satu sumber dana yang dipakai rincian pagu
+ * Renaksi tahun itu, namanya di `program` (`barisSumberRenaksi` di lib/data/kinerja-master-ubah.ts).
+ */
 export interface BarisRenaksi {
   level: string;
   program: string;
@@ -76,6 +83,7 @@ export function jalurAdaDiRenaksi(e: EntriBerasal, renaksi: readonly BarisRenaks
   const nama = kunciNamaRenaksi(e.nama);
   const pas = (ref: string | null, v: string | null) => !ref?.trim() || kunciNamaRenaksi(ref) === kunciNamaRenaksi(v);
   return renaksi.some(r => {
+    if (e.tipe === 'sumber_anggaran') return r.level === 'sumber' && kunciNamaRenaksi(r.program) === nama;
     if (e.tipe === 'program') return r.level === 'program' && kunciNamaRenaksi(r.program) === nama;
     if (e.tipe === 'kegiatan') {
       return r.level === 'kegiatan' && kunciNamaRenaksi(r.kegiatan) === nama && pas(e.program_ref, r.program);

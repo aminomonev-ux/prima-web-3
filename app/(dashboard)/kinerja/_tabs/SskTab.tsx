@@ -28,6 +28,8 @@ import DeleteIcon from '@/components/ui/DeleteIcon';
 import Tip from '@/components/ui/Tip';
 import { Download, Save, Check, Upload, History, Ban, Undo2, Table, Lock, Calculator, GitBranch } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
+import { pickVersiAktif } from '@/lib/kinerja/versi';
+import PaguRenaksiPita from '@/components/kinerja/PaguRenaksiPita';
 
 interface Props {
   sskRows: SskRow[];
@@ -83,6 +85,7 @@ export default function SskTab({
 
   const activeVersiItem = versiItems.find(i => i.versi_tipe === sskVersi.tipe && i.versi_seq === sskVersi.seq);
   const versiLocked     = !!activeVersiItem?.locked_at;
+  const versiTerbaru    = pickVersiAktif(versiItems);
   /** Belum ada versi berbaris sama sekali (mis. tidak dianggarkan di murni) — cermin syarat server. */
   const rkoKosong       = !versiLoading && versiItems.length === 0;
   const versiLabel      = sskVersi.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${sskVersi.seq}`;
@@ -508,6 +511,12 @@ export default function SskTab({
           onPulihkan={pulihkanSsk} onClose={() => setShowRiwayat(false)} />
       )}
 
+
+      {!loadingData && (
+        <PaguRenaksiPita tahun={tahun} tab={activeSumber} rows={sskRows}
+          layarTerbaru={!versiLocked && !!versiTerbaru && versiTerbaru.versi_tipe === sskVersi.tipe && versiTerbaru.versi_seq === sskVersi.seq}
+          muatUlang={sskVersion} isLight={isLight} />
+      )}
 
       {/* Tabel SSK — wide, horizontal scroll */}
       {loadingData ? (

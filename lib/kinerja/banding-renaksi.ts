@@ -29,7 +29,7 @@ export interface CatatanGanti {
   induk_program_baru?: string | null;
 }
 
-type TipeBerasal = Extract<MasterTipe, 'program' | 'kegiatan' | 'subkegiatan'>;
+type TipeBerasal = Extract<MasterTipe, 'program' | 'kegiatan' | 'subkegiatan' | 'sumber_anggaran'>;
 
 export interface ItemEntri {
   id: number;
@@ -196,7 +196,10 @@ export function bandingRenaksi(
     const ada = proyeksi.get(e.id);
     if (ada) return ada;
     let hasil: Proyeksi;
-    if (e.tipe === 'program') {
+    // Sumber dana tidak punya catatan ganti nama: ada di Renaksi atau tidak.
+    if (e.tipe === 'sumber_anggaran') {
+      hasil = { ...e, pindah: false };
+    } else if (e.tipe === 'program') {
       hasil = { ...e, nama: dariRenaksi(e) && !jalurAdaDiRenaksi(e, renaksi) ? peta.program(e.nama) : e.nama, pindah: false };
     } else {
       const ip = programDi(e.program_ref);
@@ -233,7 +236,7 @@ export function bandingRenaksi(
   const gantiNama: ItemGanti[] = [];
   const hilang: ItemEntri[] = [];
   const hilangId = new Set<number>();
-  const urut: TipeBerasal[] = ['program', 'kegiatan', 'subkegiatan'];
+  const urut: TipeBerasal[] = ['program', 'kegiatan', 'subkegiatan', 'sumber_anggaran'];
   for (const tipe of urut) {
     for (const e of master.filter(x => x.tipe === tipe && dariRenaksi(x))) {
       // Jalur yang masih ada di Renaksi diproyeksikan ke dirinya sendiri (lihat `proyek`).
@@ -290,6 +293,7 @@ export function bandingRenaksi(
     if (r.level === 'program' && p) tambahBaru('program', p, null, null);
     else if (r.level === 'kegiatan' && p && kg) tambahBaru('kegiatan', kg, p, null);
     else if (r.level === 'sub-kegiatan' && p && kg && s) tambahBaru('subkegiatan', s, p, kg);
+    else if (r.level === 'sumber' && p) tambahBaru('sumber_anggaran', p, null, null);
   }
 
   const belumBertanda = master
