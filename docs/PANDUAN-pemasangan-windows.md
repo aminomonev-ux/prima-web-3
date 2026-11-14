@@ -551,6 +551,10 @@ error apa pun.**
 | `/api/cron/akses-kedaluwarsa` | Mencabut akses berjangka yang habis + mengingatkan yang tinggal ≤3 hari | harian |
 | `/api/cron/blud-cadangan-json` | Mencadangkan foto simpanan BLUD ke Google Drive | harian |
 
+Backup database harian **bukan** salah satu dari kelimanya — ia skrip Node yang
+dijalankan langsung (`scripts\backup-db.js`), bukan endpoint. Pemasangannya punya
+panduan sendiri: **`docs/PANDUAN-jadwal-backup.md`**.
+
 Kelimanya dijaga `CRON_SECRET` lewat header `Authorization: Bearer <CRON_SECRET>`
 — **satu mekanisme untuk semuanya**, jadi menambah tugas baru tidak pernah berarti
 menambah cara baru; `cron.ps1` di bawah memanggil kelimanya apa adanya, yang beda

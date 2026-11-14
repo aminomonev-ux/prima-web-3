@@ -78,17 +78,16 @@ Aturan serah terima:
 Rincian konsep dan tombol Uji yang diusulkan: `docs/CONCEPT-drive-terpusat.md` §11
 (prosedur pindah akun) dan §11.1 (akun yang masih dipegang perorangan).
 
-## Penjadwalan (Windows Task Scheduler, tiap malam)
+## Penjadwalan (Windows Task Scheduler)
 
-Buat Basic Task (jalankan sebagai user yang sama dengan PM2, "Run whether user
-is logged on or not"):
+Langkah lengkap — pemeriksaan awal, perintah PowerShell, cara klik, pembuktian, kode
+galat — ada di **`docs/PANDUAN-jadwal-backup.md`**. Ringkasnya: satu tugas
+`PRIMA - backup database` sebagai `SYSTEM`, path lengkap `node.exe`, argumen
+`scripts\backup-db.js`, *Start in* folder aplikasi, **harian 12:00** (bukan dini hari:
+server berupa laptop yang dimatikan tiap malam), *jalankan yang terlewat*, dan **boleh
+jalan saat memakai baterai**.
 
-- **Program**: `node`
-- **Arguments**: `scripts\backup-db.js`
-- **Start in**: folder project (mis. `C:\apps\prima-web`)
-- **Trigger**: Daily 01.00
-
-Linux/crontab: `0 1 * * * cd /opt/prima-web && node scripts/backup-db.js`
+Linux/crontab (server yang menyala 24 jam): `0 1 * * * cd /opt/prima-web && node scripts/backup-db.js`
 
 ## Restore
 
