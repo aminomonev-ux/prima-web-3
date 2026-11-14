@@ -62,13 +62,16 @@ CREATE INDEX idx_users_deleted_at     ON users (deleted_at);  -- migration 028 S
 CREATE INDEX idx_users_promotion_lock ON users (promotion_locked_until);  -- migration 037
 CREATE INDEX idx_users_probation_until ON users (probationary_until);     -- migration 037
 
--- ─── SUPER ADMIN default (ganti password setelah setup) ──────────────────────
--- Password default: Admin@Prima2025
+-- ─── SUPER ADMIN awal ────────────────────────────────────────────────────────
+-- Hash di bawah berasal dari sandi acak yang langsung dibuang: tak seorang pun tahu sandinya,
+-- jadi akun ini belum bisa dipakai login. Sesudah skema dijalankan, setel sandinya di server:
+--   node scripts/setel-sandi-superadmin.mjs
+-- (repo ini publik — sandi bawaan yang tertulis di sini dulu bisa dibaca siapa pun.)
 INSERT IGNORE INTO users (username, email, password_hash, nama_lengkap, role, status, email_verified)
 VALUES (
   'superadmin',
   'admin@example.com',
-  '$2b$12$JdkLIuK90kXrde1X3xTmGu05C.vJcOzJDRHuEcnYg6bLMltXjhUta',
+  '$2b$12$RvNmrPipKW.PjiD3/PTRVePO8xANah.aNtxM1gCfJwEsfKu4sL5eG',
   'Super Administrator',
   'SUPER_ADMIN',
   'AKTIF',

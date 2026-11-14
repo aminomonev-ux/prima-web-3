@@ -76,9 +76,10 @@ atau baris perintah:
 mysql -u prima -p prima_db < docs\schema-mysql.sql
 ```
 
-Skema ini sudah membuat akun **`superadmin`** dengan sandi bawaan `Admin@Prima2025`.
-**Ganti sandinya begitu bisa login.** Sandi ini tertulis di berkas skema yang ada di
-repo publik — siapa pun bisa membacanya.
+Skema ini sudah membuat akun **`superadmin`**, tapi **tanpa sandi yang diketahui siapa
+pun** — sandinya disetel di §3, sesudah `.env.local` diisi. (Dulu skema membawa sandi
+bawaan yang tertulis polos di repo publik; server yang dipasang dengan cara lama WAJIB
+menjalankan langkah yang sama untuk menggantinya.)
 
 ### Periksa dua setelan MySQL yang gampang terlewat
 
@@ -175,6 +176,16 @@ npm run build
 
 Kalau `npm run build` gagal karena `JWT_SECRET`, itu **bukan bug** — memang
 disengaja begitu supaya aplikasi tidak pernah jalan dengan kunci kosong.
+
+Setel sandi `superadmin` (membaca `.env.local` yang barusan diisi):
+
+```bash
+node scripts/setel-sandi-superadmin.mjs
+```
+
+Sandinya acak dan dicetak **sekali** di layar — catat sekarang. Skrip yang sama dipakai
+kalau sandi superadmin lupa atau bocor: semua sesinya ikut dikeluarkan dan kunci
+gagal-login dilepas.
 
 ---
 
@@ -836,8 +847,8 @@ Kerjakan berurutan. Berhenti di langkah pertama yang gagal — jangan lanjut.
 
 - [ ] `pm2 status` → `prima` berstatus **online**
 - [ ] Buka alamat aplikasi dari **komputer lain**, bukan dari server → halaman login muncul
-- [ ] Login `superadmin` / `Admin@Prima2025` → masuk dan **tetap masuk** setelah pindah halaman
-      (kalau balik ke halaman login: `COOKIE_SECURE=false` belum diisi) → **langsung ganti sandinya**
+- [ ] Login `superadmin` dengan sandi dari `setel-sandi-superadmin.mjs` → masuk dan **tetap masuk**
+      setelah pindah halaman (kalau balik ke halaman login: `COOKIE_SECURE=false` belum diisi)
 - [ ] Buat satu akun uji, lalu salah sandi 5× → **akun terkunci 15 menit**
       (ini membuktikan pengaman login bekerja)
 - [ ] Buka `/menu` → kartu aplikasi muncul sesuai hak akses
