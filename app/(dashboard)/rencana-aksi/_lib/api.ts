@@ -102,11 +102,31 @@ export async function apiPaguPerubahan(tahun: number, signal?: AbortSignal): Pro
   return { aktif: b.aktif, dimulai_pada: b.dimulai_pada };
 }
 
-/** Agregat RKO E-Anggaran per sub kegiatan (versi terbaru tiap tab) — "Terpakai di RKO". */
-export async function apiPaguRko(tahun: number, signal?: AbortSignal): Promise<AgregatSubRko[]> {
+/**
+ * Agregat RKO E-Anggaran per sub kegiatan — "Terpakai di RKO". `berlaku` = versi terbaru tiap tab,
+ * `murni` = versi murni tiap tab, `ketat` = tab yang sudah perubahan saja
+ * (docs/CONCEPT-renaksi-rko-murni-perubahan.md).
+ */
+export interface PaguRkoTahun {
+  berlaku: AgregatSubRko[];
+  murni: AgregatSubRko[];
+  ketat: AgregatSubRko[];
+  renaksiPerubahan: boolean;
+  tabPerubahan: string[];
+}
+
+export const PAGU_RKO_KOSONG: PaguRkoTahun = { berlaku: [], murni: [], ketat: [], renaksiPerubahan: false, tabPerubahan: [] };
+
+export async function apiPaguRko(tahun: number, signal?: AbortSignal): Promise<PaguRkoTahun> {
   const r = await fetch(`/api/rencana-aksi/pagu-rko?tahun=${tahun}`, { cache: 'no-store', signal });
-  const b = await jsonOrThrow<{ ok: true; sub: AgregatSubRko[] }>(r);
-  return b.sub;
+  const b = await jsonOrThrow<{
+    ok: true; sub: AgregatSubRko[]; murni?: AgregatSubRko[]; ketat?: AgregatSubRko[];
+    renaksi_perubahan?: boolean; tab_perubahan?: string[];
+  }>(r);
+  return {
+    berlaku: b.sub, murni: b.murni ?? b.sub, ketat: b.ketat ?? [],
+    renaksiPerubahan: !!b.renaksi_perubahan, tabPerubahan: b.tab_perubahan ?? [],
+  };
 }
 
 export async function apiUbahPaguPerubahan(tahun: number, aksi: 'mulai' | 'batal'): Promise<StatusPaguPerubahan> {

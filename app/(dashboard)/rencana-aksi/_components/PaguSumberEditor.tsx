@@ -1,5 +1,5 @@
 'use client';
-// Isian pagu baris sub kegiatan per sumber dana (+ kolom Perubahan bila tahunnya berbabak Perubahan).
+// Isian pagu baris sub kegiatan per sumber dana (+ kolom Perubahan bila anggaran perubahan tahun itu sudah dimulai).
 // Aturannya di lib/renaksi/pagu.ts — penolakan di sini kalimat yang SAMA dengan server.
 
 import { Plus } from 'lucide-react';
@@ -9,6 +9,7 @@ import PrimaButton from '@/components/ui/PrimaButton';
 import {
   LABEL_TANPA_SUMBER, alasanTolakRincian, kunciSumber, totalBerlaku, tulisPerSumber, type Pagu, type RincianPagu,
 } from '@/lib/renaksi/pagu';
+import { gabungNama, type TerpakaiRko } from '@/lib/kinerja/pagu-renaksi';
 
 const rupiah = (n: number | null) => (n == null ? '—' : `Rp ${n.toLocaleString('id-ID')}`);
 
@@ -23,8 +24,8 @@ interface Props {
   opsiSumber: string[];
   /** Total berlaku seluruh indikator sub kegiatan ini, dengan isian layar menggantikan baris ini. */
   totalSubKegiatan: { total: number | null; indikator: number } | null;
-  /** RKO E-Anggaran sub kegiatan ini (versi terbaru semua tab) & kalimat kelebihannya bila ada. */
-  terpakaiRko: { rko: Pagu; lebih: string | null } | null;
+  /** RKO E-Anggaran sub kegiatan ini, murni & yang berlaku (lib/kinerja/pagu-renaksi.ts `terpakaiRkoSub`). */
+  terpakaiRko: TerpakaiRko | null;
   onMulaiPerubahan: () => void;
   onBatalPerubahan: () => void;
   sibukPerubahan: boolean;
@@ -48,8 +49,8 @@ export default function PaguSumberEditor({
         </span>
         <span className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
           {perubahanAktif
-            ? <>Babak <b className="text-[#BA7517]">Perubahan</b>{dimulaiPada ? ` sejak ${dimulaiPada}` : ''} — Murni beku</>
-            : <>Babak <b>Murni</b></>}
+            ? <>Anggaran <b className="text-[#BA7517]">perubahan</b>{dimulaiPada ? ` sejak ${dimulaiPada}` : ''}; pagu murni tidak bisa diubah lagi</>
+            : <>Anggaran <b>murni</b></>}
           {perubahanAktif ? (
             <PrimaButton variant="ghost" size="sm" onClick={onBatalPerubahan} disabled={sibukPerubahan}
               data-tooltip="Hanya bisa selama belum ada pagu Perubahan yang terisi">
@@ -57,7 +58,7 @@ export default function PaguSumberEditor({
             </PrimaButton>
           ) : (
             <PrimaButton variant="warning" size="sm" onClick={onMulaiPerubahan} disabled={sibukPerubahan}
-              data-tooltip={`Pagu Murni ${tahun} dibekukan; perubahan anggaran diisi di kolom Perubahan`}>
+              data-tooltip={`Pagu murni ${tahun} tidak bisa diubah lagi; anggaran perubahan diisi di kolom Perubahan`}>
               Mulai Pagu Perubahan {tahun}
             </PrimaButton>
           )}
@@ -73,7 +74,7 @@ export default function PaguSumberEditor({
         </div>
         {rincian.map((r, i) => {
           const kunci = kunciSumber(r.sumber);
-          // Babak Perubahan: Murni tak bisa disunting; nama sumber hanya boleh diisi untuk baris
+          // Anggaran perubahan: Murni tak bisa disunting; nama sumber hanya boleh diisi untuk baris
           // "tanpa sumber" lama (memberi sumber pada pagu lama — jumlah Murni tetap).
           const namaBeku = perubahanAktif && kunci !== '' && (murniLama.get(kunci) ?? null) != null;
           return (
@@ -108,16 +109,70 @@ export default function PaguSumberEditor({
             {' '}({totalSubKegiatan.indikator} indikator)
           </div>
         )}
-        {terpakaiRko && (
-          <div>
-            Terpakai di RKO E-Anggaran (versi terbaru semua tab):{' '}
-            <b style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{rupiah(terpakaiRko.rko.total)}</b>
-            {tulisPerSumber(terpakaiRko.rko) && <> ({tulisPerSumber(terpakaiRko.rko)})</>}
-            {terpakaiRko.lebih && <span className="block font-semibold text-[#E24B4A]">RKO melampaui pagu sub kegiatan ini: {terpakaiRko.lebih}</span>}
-          </div>
-        )}
+        {terpakaiRko && <TerpakaiDiRko t={terpakaiRko} tahun={tahun} perubahanAktif={perubahanAktif} />}
         {alasan && <div className="font-semibold text-[#E24B4A]">{alasan}</div>}
       </div>
     </div>
+  );
+}
+
+const MONO = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' };
+
+function AngkaRko({ judul, rko }: { judul: string; rko: Pagu }) {
+  return (
+    <>
+      {judul}: <b style={MONO}>{rupiah(rko.total)}</b>
+      {tulisPerSumber(rko) && <> ({tulisPerSumber(rko)})</>}
+    </>
+  );
+}
+
+/**
+ * "Terpakai di RKO" — kolom Murni dibandingkan dengan RKO versi murni, kolom Perubahan dengan RKO
+ * yang berlaku sekarang (docs/CONCEPT-renaksi-rko-murni-perubahan.md §4).
+ */
+function TerpakaiDiRko({ t, tahun, perubahanAktif }: { t: TerpakaiRko; tahun: number; perubahanAktif: boolean }) {
+  const merah = 'block font-semibold text-[#E24B4A]';
+  const kuning = 'block text-[#BA7517]';
+  if (t.seragam) {
+    return (
+      <div>
+        <AngkaRko judul="Terpakai di RKO E-Anggaran" rko={t.berlaku.rko} />
+        {t.berlaku.lebih && <span className={merah}>RKO melebihi pagu sub kegiatan ini: {t.berlaku.lebih}</span>}
+      </div>
+    );
+  }
+  const masihMurni = gabungNama(t.tabMasihMurni.map(x => `${x.tab} (${rupiah(x.nilai)})`));
+  const namaMasihMurni = gabungNama(t.tabMasihMurni.map(x => x.tab));
+  return (
+    <>
+      <div>
+        <AngkaRko judul="Terpakai di RKO versi murni" rko={t.murni.rko} />
+        {t.murni.lebih && <span className={merah}>RKO versi murni melebihi pagu murni sub kegiatan ini: {t.murni.lebih}</span>}
+      </div>
+      <div>
+        <AngkaRko judul="Terpakai di RKO yang berlaku sekarang" rko={t.berlaku.rko} />
+        {perubahanAktif ? (
+          t.ketatLebih ? (
+            <span className={merah}>RKO yang sudah versi perubahan melebihi pagu perubahan sub kegiatan ini: {t.ketatLebih}</span>
+          ) : t.berlaku.lebih ? (
+            <span className={kuning}>
+              Lebih dari pagu perubahan ini ({t.berlaku.lebih}) karena RKO {masihMurni} masih versi murni.
+              Sesudah dibuatkan versi perubahan di E-Anggaran, pagunya perlu disesuaikan.
+            </span>
+          ) : t.tabMasihMurni.length > 0 ? (
+            <span className="block text-slate-500">
+              RKO {namaMasihMurni} masih versi murni. Angkanya ikut dihitung di sini sampai dibuatkan versi perubahan di E-Anggaran.
+            </span>
+          ) : null
+        ) : t.berlaku.lebih ? (
+          <span className={merah}>
+            RKO yang berlaku sekarang melebihi pagu sub kegiatan ini: {t.berlaku.lebih}.
+            Sebagian RKO sudah versi perubahan, sedangkan Rencana Aksi {tahun} belum memasuki anggaran perubahan.
+            Kalau pagunya memang naik, mulai anggaran perubahan di sini dan isi pagu barunya.
+          </span>
+        ) : null}
+      </div>
+    </>
   );
 }

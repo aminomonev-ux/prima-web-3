@@ -15,7 +15,7 @@ import { kunciJalur, lengkapiIndukPilihan } from '@/lib/kinerja/banding-renaksi'
 import { barisRenaksiPembanding } from './renaksi-pagu';
 import { kunciTahunRenaksi } from './rencana-aksi';
 import { pagarPaguRenaksi, potretPaguRenaksi } from './pagu-renaksi-rko';
-import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
+import type { PelanggaranPagu } from '@/lib/kinerja/pagu-renaksi';
 import { pilihVersiAgregat } from '@/lib/kinerja/versi';
 import { toDatetimeStr } from '@/lib/shared/waktu-wib';
 import { bandingRealisasi, pelanggaranBulanTertutup, type BarisBanding, type RingkasBulan } from '@/lib/kinerja/banding-realisasi';
@@ -362,9 +362,9 @@ export async function saveRekeningBatch(
   force = false,
   jalarkan = false,
   alasanPaguRenaksi: string | null = null,
-): Promise<{ rows: RekeningRow[]; jalaran: RingkasJalarRekening; paguDitembus: BandingPaguSub[] }> {
+): Promise<{ rows: RekeningRow[]; jalaran: RingkasJalarRekening; paguDitembus: PelanggaranPagu[] }> {
   let jalaran = ringkasJalarRekening(rencanaJalarRekening([], [], [], []), sumber);
-  let paguDitembus: BandingPaguSub[] = [];
+  let paguDitembus: PelanggaranPagu[] = [];
   // PERF-C1: DELETE + bulk INSERT dalam transaction (atomicity + 1 round-trip)
   await withTransaction(async ({ tx, conn }) => {
     // L84: kunci tahun Renaksi (pagar pagu Rencana Aksi, urutan sama dengan Simpan RKO), lalu
@@ -419,7 +419,7 @@ export async function saveRekeningBatch(
       );
     }
     // Sumber dana & sub kegiatan rekening menentukan ke mana pagu RKO-nya dihitung (pagu-renaksi.ts).
-    paguDitembus = await pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi);
+    paguDitembus = await pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi, 'rekening');
   });
   // DELETE + INSERT melahirkan id baru — layar memakai id ini untuk memasangkan suntingan berikutnya.
   return { rows: await getRekeningRows(tahun, sumber), jalaran, paguDitembus };
@@ -844,7 +844,7 @@ export async function saveSskBatch(
   setujuBulanTertutup = false,
   /** Meneruskan simpanan yang melampaui pagu Rencana Aksi (docs/CONCEPT-renaksi-pagu-rko.md Tahap C). */
   alasanPaguRenaksi: string | null = null,
-): Promise<BandingPaguSub[]> {
+): Promise<PelanggaranPagu[]> {
   // PERF-C1: DELETE + bulk INSERT atomic (1 round-trip).
   // Refactor Versi (Checkpoint C): scope DELETE & INSERT per (versi_tipe, versi_seq) — versi
   // lain TIDAK ke-touch. Generate canonical_id baru kalau row tidak punya.
@@ -985,7 +985,8 @@ export async function saveSskBatch(
       versiKe: expectedVersion === undefined ? null : expectedVersion + 1,
       userId,
     });
-    return await pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi);
+    return await pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi,
+      versiTipe === 'PERUBAHAN' ? 'rko-perubahan' : 'rko-murni');
   });
 }
 

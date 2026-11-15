@@ -32,7 +32,7 @@ export function totalBerlaku(rs: readonly RincianPagu[] | null | undefined): num
   return terisi.length ? terisi.reduce((a, r) => a + nilaiBerlaku(r), 0) : null;
 }
 
-export const PESAN_MURNI_BEKU = 'Pagu Murni sudah dibekukan sejak babak Perubahan dimulai — ubah kolom Perubahan, bukan Murni.';
+export const PESAN_MURNI_BEKU = 'Pagu murni tidak bisa diubah lagi sejak anggaran perubahan dimulai. Ubah kolom Perubahan.';
 
 const jumlahMurni = (rs: readonly RincianPagu[]) => rs.reduce((a, r) => a + (r.pagu ?? 0), 0);
 
@@ -58,7 +58,7 @@ export function alasanTolakRincian(
   }
   if (!perubahanAktif) {
     return baru.some(r => r.pagu_perubahan != null)
-      ? 'Pagu Perubahan belum dimulai untuk tahun ini — isi kolom Murni, atau mulai babak Perubahan dulu.'
+      ? 'Anggaran perubahan tahun ini belum dimulai. Isi kolom Murni, atau mulai anggaran perubahan lebih dulu.'
       : null;
   }
   const murniLama = new Map(lama.map(r => [kunciSumber(r.sumber), r.pagu ?? 0]));
@@ -127,14 +127,24 @@ function kunciInduk(r: BarisPagu): string | null {
   return null;
 }
 
+/** 'berlaku' = Perubahan ?? Murni; 'murni' = kolom Murni saja (pasangan RKO versi murni). */
+export type JenisPagu = 'berlaku' | 'murni';
+
 /** Pagu baris sub kegiatan: rinciannya, atau angka lama tanpa rincian sebagai "tanpa sumber". */
-export function paguSendiri(r: BarisPagu): Pagu | null {
+export function paguSendiri(r: BarisPagu, jenis: JenisPagu = 'berlaku'): Pagu | null {
   const k = new Kantong();
   if (r.pagu_rincian?.length) {
+    if (jenis === 'murni') {
+      const murni = r.pagu_rincian.filter(x => x.pagu != null);
+      if (!murni.length) return null;
+      for (const x of murni) k.tambah(x.sumber, x.pagu ?? 0);
+      return k.hasil();
+    }
     if (totalBerlaku(r.pagu_rincian) == null) return null;
     for (const x of r.pagu_rincian) if (x.pagu != null || x.pagu_perubahan != null) k.tambah(x.sumber, nilaiBerlaku(x));
     return k.hasil();
   }
+  // Tanpa rincian = data lama sebelum ada kolom Perubahan: angkanya Murni sekaligus berlaku.
   if (r.anggaran_nominal == null) return null;
   k.tambah('', Number(r.anggaran_nominal));
   return k.hasil();
@@ -266,14 +276,14 @@ export interface PaguSubRenaksi { program: string; kegiatan: string; sub_kegiata
  * no. 5). Sub kegiatan tanpa pagu tetap ikut (pagu null = tanpa batas, tapi entitasnya ADA di Renaksi
  * — beda dengan sub kegiatan RKO yang tidak ada di Renaksi sama sekali).
  */
-export function paguSubKegiatan(rows: readonly BarisPagu[]): PaguSubRenaksi[] {
+export function paguSubKegiatan(rows: readonly BarisPagu[], jenis: JenisPagu = 'berlaku'): PaguSubRenaksi[] {
   const peta = new Map<string, { r: BarisPagu; k: Kantong; ada: boolean }>();
   for (const r of rows) {
     if (r.level !== 'sub-kegiatan') continue;
     const kunci = kunciEntitas(r);
     const e = peta.get(kunci) ?? { r, k: new Kantong(), ada: false };
     peta.set(kunci, e);
-    const p = paguSendiri(r);
+    const p = paguSendiri(r, jenis);
     if (p) { e.k.tambahPagu(p); e.ada = true; }
   }
   return [...peta.values()].map(({ r, k, ada }) => ({

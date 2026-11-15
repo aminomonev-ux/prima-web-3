@@ -11,7 +11,7 @@ import { INDUK_LEVEL, namaEntitas, namaIndukLangsung, type BarisRantai } from '@
 import type { RincianPagu } from '@/lib/renaksi/pagu';
 import { muatRincianPagu, statusPaguPerubahan, tulisRincianPagu, RaPaguError } from './renaksi-pagu';
 import { pagarPaguRenaksi, potretPaguRenaksi } from './pagu-renaksi-rko';
-import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
+import type { PelanggaranPagu } from '@/lib/kinerja/pagu-renaksi';
 
 /** Tautan indikator induk yang tidak sah — 400, bukan 500: yang salah pilihannya, bukan servernya. */
 export class RaIndukIndikatorError extends Error {
@@ -424,7 +424,7 @@ export async function upsertRencanaAksi(
    * pemakai nama lama. `paguDitembus`: sub kegiatan yang melampaui pagu RKO tapi diteruskan dengan
    * alasan (docs/CONCEPT-renaksi-pagu-rko.md Tahap D) — route mencatatnya di audit.
    */
-  hasil?: { gantiNama: GantiNama | null; paguDitembus?: BandingPaguSub[] },
+  hasil?: { gantiNama: GantiNama | null; paguDitembus?: PelanggaranPagu[] },
 ): Promise<number> {
   // Opsi A: untuk sub-kegiatan dengan bulanan terisi, q1-q4 target di-derive
   // server-side (otoritatif) dari `bulan_target` per jenis. Level lain / tanpa
@@ -488,7 +488,7 @@ export async function upsertRencanaAksi(
     // Tahap D: pagu sub kegiatan yang turun (atau ganti nama yang menggeser kecocokan dengan RKO)
     // dinilai terhadap RKO E-Anggaran — aturan & kunci yang sama dengan Simpan RKO.
     const periksaPagu = lama.level === 'sub-kegiatan' || !!gantiNama;
-    let paguDitembus: BandingPaguSub[] = [];
+    let paguDitembus: PelanggaranPagu[] = [];
     await withTransaction(async ({ tx, conn }) => {
       await kunciTahunRenaksi(tx, Number(lama.tahun));
       await assertIndukIndikator(tx, data);
@@ -535,7 +535,7 @@ export async function upsertRencanaAksi(
         await jalarkanGantiNama(tx, Number(lama.tahun), gantiNama);
         await catatGantiNama(tx, Number(lama.tahun), gantiNama, userId);
       }
-      if (paguSebelum) paguDitembus = await pagarPaguRenaksi(tx, Number(lama.tahun), paguSebelum, data.alasan_pagu_renaksi);
+      if (paguSebelum) paguDitembus = await pagarPaguRenaksi(tx, Number(lama.tahun), paguSebelum, data.alasan_pagu_renaksi, 'renaksi');
     });
     if (hasil) { hasil.gantiNama = gantiNama; hasil.paguDitembus = paguDitembus; }
     return id;
@@ -615,7 +615,7 @@ export async function upsertRencanaAksi(
       await tulisRincianPagu(tx, conn, id, data.tahun, data.pagu_rincian);
     }
     if (paguSebelum) {
-      const ditembus = await pagarPaguRenaksi(tx, data.tahun, paguSebelum, data.alasan_pagu_renaksi);
+      const ditembus = await pagarPaguRenaksi(tx, data.tahun, paguSebelum, data.alasan_pagu_renaksi, 'renaksi');
       if (hasil) hasil.paguDitembus = ditembus;
     }
     return id;
@@ -706,7 +706,7 @@ async function kunciSeNama(tx: TxSql, row: RaRow): Promise<void> {
  */
 export async function deleteRencanaAksi(
   row: RaRow, opsi: { lepasTautan?: boolean; alasanPagu?: string | null } = {},
-): Promise<{ lepas: number; paguDitembus: BandingPaguSub[] }> {
+): Promise<{ lepas: number; paguDitembus: PelanggaranPagu[] }> {
   // T2: menghapus baris = menghapus realisasinya. Ini pintu paling telak untuk
   // menembus Kunci Periode — lebih telak dari sekadar mengubah nilai, karena
   // angkanya tidak berubah melainkan hilang.
@@ -736,7 +736,7 @@ export async function deleteRencanaAksi(
       `;
     }
     await tx`DELETE FROM rencana_aksi WHERE id = ${row.id}`;
-    const paguDitembus = paguSebelum ? await pagarPaguRenaksi(tx, Number(row.tahun), paguSebelum, opsi.alasanPagu) : [];
+    const paguDitembus = paguSebelum ? await pagarPaguRenaksi(tx, Number(row.tahun), paguSebelum, opsi.alasanPagu, 'renaksi') : [];
     return { lepas: penunjuk.length, paguDitembus };
   });
 }
@@ -1029,7 +1029,7 @@ export async function ubahPaguPerubahan(
       const terisi = Number(n?.n ?? 0);
       if (terisi > 0) {
         throw new RaPaguError(
-          `Babak Perubahan ${tahun} tidak bisa dibatalkan — ${terisi} rincian sudah berisi pagu Perubahan. Kosongkan dulu kolom Perubahannya.`,
+          `Anggaran perubahan ${tahun} tidak bisa dibatalkan karena ${terisi} rincian sudah berisi pagu perubahan. Kosongkan dulu kolom Perubahannya.`,
           'PAGU_PERUBAHAN_TERISI',
         );
       }

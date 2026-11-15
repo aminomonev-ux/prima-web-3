@@ -29,7 +29,8 @@ import Tip from '@/components/ui/Tip';
 import { Download, Save, Check, Upload, History, Ban, Undo2, Table, Lock, Calculator, GitBranch } from 'lucide-react';
 import { uiTheme } from '@/lib/theme';
 import { pickVersiAktif } from '@/lib/kinerja/versi';
-import PaguRenaksiPita from '@/components/kinerja/PaguRenaksiPita';
+import PaguRenaksiPita, { useBahanPaguRenaksi } from '@/components/kinerja/PaguRenaksiPita';
+import { kalimatBelumPerubahanBuat } from '@/lib/kinerja/pagu-renaksi';
 import { paguTerlampaui, tanyaAlasanPagu } from '@/components/renaksi/alasan-pagu';
 
 interface Props {
@@ -89,6 +90,8 @@ export default function SskTab({
   const versiTerbaru    = pickVersiAktif(versiItems);
   /** Belum ada versi berbaris sama sekali (mis. tidak dianggarkan di murni) — cermin syarat server. */
   const rkoKosong       = !versiLoading && versiItems.length === 0;
+  // Pagu Rencana Aksi pembanding RKO — pita & dialog Buat Perubahan (apakah Renaksi sudah perubahan).
+  const bahanPagu = useBahanPaguRenaksi(tahun, sskVersion);
   const versiLabel      = sskVersi.tipe === 'MURNI' ? 'MURNI' : `PERUBAHAN-${sskVersi.seq}`;
   // Surface/teks dari lib/theme; aksen ungu/pink Kinerja tetap lokal.
   const t = uiTheme(isLight);
@@ -519,9 +522,9 @@ export default function SskTab({
 
 
       {!loadingData && (
-        <PaguRenaksiPita tahun={tahun} tab={activeSumber} rows={sskRows}
+        <PaguRenaksiPita tahun={tahun} tab={activeSumber} rows={sskRows} bahan={bahanPagu} versiTipe={sskVersi.tipe}
           layarTerbaru={!versiLocked && !!versiTerbaru && versiTerbaru.versi_tipe === sskVersi.tipe && versiTerbaru.versi_seq === sskVersi.seq}
-          muatUlang={sskVersion} isLight={isLight} />
+          isLight={isLight} />
       )}
 
       {/* Tabel SSK — wide, horizontal scroll */}
@@ -545,10 +548,15 @@ export default function SskTab({
                 {canEdit && <th rowSpan={2} style={{ ...thStyle, minWidth:'92px', position:'sticky', right:0, background: isLight?'rgba(255,255,255,.95)':'rgba(4,44,83,.95)', zIndex:2 }}>Aksi</th>}
               </tr>
               <tr style={{ background:cTableSubBg }}>
-                {MONTH_SHORT.map(m => [
-                  <th key={`${m}-f`} style={{ ...thSub, borderColor: theme.color }}>Fisik (Rp)</th>,
-                  <th key={`${m}-p`} style={{ ...thSub, borderColor: theme.color, color:cTextSub, background:cPctBg }}>% <span style={{ fontSize:'8px', fontWeight:500 }}>otomatis</span></th>,
-                ])}
+                {/* Garis per sisi, bukan `borderColor` di atas shorthand thSub: campuran itu memicu
+                    peringatan React saat tema berganti dan bisa salah gambar sesudah render ulang. */}
+                {MONTH_SHORT.map(m => {
+                  const garis = { borderBottom: `2px solid ${theme.color}`, borderTop: `1px solid ${theme.color}` };
+                  return [
+                    <th key={`${m}-f`} style={{ ...thSub, ...garis }}>Fisik (Rp)</th>,
+                    <th key={`${m}-p`} style={{ ...thSub, ...garis, color:cTextSub, background:cPctBg }}>% <span style={{ fontSize:'8px', fontWeight:500 }}>otomatis</span></th>,
+                  ];
+                })}
               </tr>
             </thead>
             <tbody>
@@ -689,6 +697,9 @@ export default function SskTab({
                   Realisasinya difoto dan <strong style={{ color:cTextPrimary }}>semua bulan {versiLabel} tertutup</strong> — laporan {versiLabel} tidak bergeser lagi.
                   Di versi Perubahan semua bulan mulai terbuka; tutup lagi di sana bila sudah dilaporkan.
                 </>
+              )}
+              {bahanPagu && !bahanPagu.renaksiPerubahan && (
+                <><br /><br /><span style={{ color:'#BA7517' }}>{kalimatBelumPerubahanBuat(tahun)}</span></>
               )}
               <br /><br />
               Lanjutkan?

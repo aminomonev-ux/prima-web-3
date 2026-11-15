@@ -8,7 +8,7 @@ import { kinerjaMati } from '../_guard';
 import { hitungDinolkan } from '@/lib/kinerja/nol-kan';
 import { KinerjaTargetTertutupError } from '@/lib/kinerja/tutup-bulan';
 import { PaguRenaksiTerlampauiError, detailPaguDitembus, jawabPaguTerlampaui } from '@/lib/data/pagu-renaksi-rko';
-import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
+import type { PelanggaranPagu } from '@/lib/kinerja/pagu-renaksi';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -53,7 +53,7 @@ export async function PUT(req: NextRequest) {
   const versiTipe = versi_tipe ?? 'MURNI';
   const versiSeq  = versi_seq  ?? 0;
 
-  let paguDitembus: BandingPaguSub[] = [];
+  let paguDitembus: PelanggaranPagu[] = [];
   try {
     paguDitembus = await saveSskBatch(tahun, sumber, rows, session.userId, versiTipe, versiSeq, expected_version, force ?? false,
       setuju_bulan_tertutup ?? false, alasan_pagu_renaksi ?? null);

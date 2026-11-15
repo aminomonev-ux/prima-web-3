@@ -8,7 +8,11 @@ import { rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 
 export const KODE_PAGU_TERLAMPAUI = 'PAGU_RENAKSI_TERLAMPAUI';
 
-export interface JawabanPaguTerlampaui { code?: string; tahun?: number; pelanggaran?: PelanggaranRingkas[] }
+export interface JawabanPaguTerlampaui {
+  code?: string; tahun?: number; pelanggaran?: PelanggaranRingkas[];
+  /** Penjelas bila RKO perubahan masih dibatasi pagu murni (Renaksi belum memasuki anggaran perubahan). */
+  catatan?: string | null;
+}
 
 // Boolean biasa, bukan penjaga tipe: `d is …` membuat cabang `else` pemanggil (yang membaca
 // `d.message`) disimpulkan `never`, karena semua kolomnya opsional.
@@ -28,8 +32,9 @@ export function tanyaAlasanPagu(jawaban: unknown, arah: 'rko' | 'renaksi', aksi:
       ? 'Batalkan penghapusan, turunkan RKO di E-Anggaran, atau teruskan dengan alasan.'
       : 'Naikkan lagi pagunya, turunkan RKO di E-Anggaran, atau teruskan dengan alasan.';
   return promptDialog({
-    title: `Melampaui pagu Rencana Aksi ${d.tahun ?? ''}`.trim(),
-    message: `Sesudah ${aksi === 'hapus' ? 'dihapus' : 'disimpan'}, pagu RKO E-Anggaran (versi terbaru semua tab) melebihi pagu sub kegiatan:\n${daftar}${lebih}\n\n${jalan}`,
+    title: `Melebihi pagu Rencana Aksi ${d.tahun ?? ''}`.trim(),
+    message: `Sesudah ${aksi === 'hapus' ? 'dihapus' : 'disimpan'}, pagu RKO E-Anggaran melebihi pagu sub kegiatan Rencana Aksi:\n${daftar}${lebih}`
+      + (d.catatan ? `\n\n${d.catatan}` : '') + `\n\n${jalan}`,
     label: 'Alasan meneruskan',
     placeholder: 'mis. pagu Renaksi belum diperbarui sesudah anggaran perubahan',
     minLength: ALASAN_PAGU_MIN,

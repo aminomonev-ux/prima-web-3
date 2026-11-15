@@ -7,9 +7,11 @@ import { readFileSync } from 'node:fs';
 import {
   agregatRko, bandingPaguRenaksi, kalimatLebih, kunciSub, melampaui, versiTerbaruPerTab,
   pelanggaranBaru, alasanPaguSah, ringkasPelanggaran, ALASAN_PAGU_MIN,
-  type BarisRkoPagu, type RekeningSumberDana, type BandingPaguSub,
+  versiMurniPerTab, tabBerversiPerubahan, bandingDua, seragam, pelanggaranSimpanan, catatanPelanggaran,
+  labelPembanding, terpakaiRkoSub, gabungNama, kalimatBelumPerubahan,
+  type BarisRkoPagu, type RekeningSumberDana, type PelanggaranPagu, type AgregatRko, type JenisSimpananPagu,
 } from '../lib/kinerja/pagu-renaksi';
-import { jumlahPerSumber, paguSubKegiatan, type BarisPagu } from '../lib/renaksi/pagu';
+import { jumlahPerSumber, paguSendiri, paguSubKegiatan, type BarisPagu } from '../lib/renaksi/pagu';
 import { bandingRenaksi } from '../lib/kinerja/banding-renaksi';
 import { jalurAdaDiRenaksi } from '../lib/kinerja/asal-renaksi';
 
@@ -129,7 +131,122 @@ console.log('E. Pelanggaran baru vs yang sudah ada');
     ALASAN_PAGU_MIN === 10 && !alasanPaguSah('  123456789  ') && alasanPaguSah('1234567890') && !alasanPaguSah(null));
   const r = ringkasPelanggaran(pelanggaranBaru(banding(9), banding(12)));
   ok('E9 ringkasan ke layar tanpa rincian rekening', r.length === 1 && Object.keys(r[0]).sort().join() === 'kalimat,kegiatan,program,sub_kegiatan'
-    && r[0].kalimat === 'APBD lebih Rp 2 · total lebih Rp 2', JSON.stringify(r));
+    && r[0].kalimat === 'melebihi pagu Rencana Aksi: APBD lebih Rp 2 · total lebih Rp 2', JSON.stringify(r));
+}
+
+// ── G. Murni dengan murni, perubahan dengan perubahan ─────────────────────────
+// docs/CONCEPT-renaksi-rko-murni-perubahan.md §3 & keputusan §6.
+console.log('G. Dua pembanding (murni & perubahan)');
+{
+  const baris = (id: number, nama: string, rincian: BarisPagu['pagu_rincian'], nominal: number | null = null): BarisPagu => ({
+    id, level: 'sub-kegiatan', program: 'P', kegiatan: 'K', sub_kegiatan: nama, tujuan: null, sasaran: null,
+    induk_indikator_id: null, anggaran_nominal: nominal, pagu_rincian: rincian,
+  });
+  const rows = [
+    baris(1, 'S', [{ sumber: 'APBD', pagu: 2, pagu_perubahan: null }]),
+    baris(2, 'S', [{ sumber: 'APBD', pagu: 1, pagu_perubahan: 3 }, { sumber: 'BLUD', pagu: null, pagu_perubahan: 4 }]),
+    baris(3, 'T', [{ sumber: 'BLUD', pagu: null, pagu_perubahan: 7 }]),
+    baris(4, 'U', [], 6),
+  ];
+  const m2 = paguSendiri(rows[1], 'murni');
+  ok('G1 pagu murni satu baris = kolom Murni saja; sumber yang lahir di Perubahan tidak ikut',
+    m2?.total === 1 && m2.perSumber.length === 1 && paguSendiri(rows[1])?.total === 7, JSON.stringify(m2));
+  const pm = paguSubKegiatan(rows, 'murni');
+  const pb = paguSubKegiatan(rows);
+  const t = (xs: typeof pm, n: string) => xs.find(x => x.sub_kegiatan === n)?.pagu?.total ?? null;
+  ok('G2 pagu sub kegiatan murni vs berlaku; data lama tanpa rincian = murni sekaligus berlaku',
+    t(pm, 'S') === 3 && t(pm, 'T') === null && t(pm, 'U') === 6 && t(pb, 'S') === 9 && t(pb, 'T') === 7 && t(pb, 'U') === 6,
+    JSON.stringify({ pm, pb }));
+
+  const semua = [
+    rko('GAJI', 'R1', 10), rko('GAJI', 'R1', 99, { versi_tipe: 'PERUBAHAN', versi_seq: 1 }),
+    rko('BLUD', 'R2', 5), rko('OBAT', 'R3', 8, { versi_tipe: 'PERUBAHAN', versi_seq: 1 }),
+  ];
+  const vm = versiMurniPerTab(semua);
+  ok('G3 versi murni tiap tab; tab yang hanya punya perubahan tidak menyumbang ke murni',
+    vm.map(r => `${r.tab}:${r.pagu}`).sort().join() === 'BLUD:5,GAJI:10' && tabBerversiPerubahan(semua).join() === 'GAJI,OBAT',
+    JSON.stringify(vm));
+
+  const ag = (tab: string, pagu: number): AgregatRko => ({ tab, program: 'PROG', kegiatan: 'KEG', subkegiatan: 'SUB', sumber: 'APBD', pagu });
+  const dua = (o: { murni: number; berlaku?: number; perubahan?: boolean; rkoMurni: AgregatRko[]; rkoTerbaru: AgregatRko[]; tabPerubahan?: string[] }) =>
+    bandingDua({
+      renaksiMurni: [sub([['APBD', o.murni]])], renaksiBerlaku: [sub([['APBD', o.berlaku ?? o.murni]])],
+      renaksiPerubahan: !!o.perubahan, rkoMurni: o.rkoMurni, rkoTerbaru: o.rkoTerbaru, tabPerubahan: o.tabPerubahan ?? [],
+    });
+  const tahan = (a: ReturnType<typeof dua>, b: ReturnType<typeof dua>, j: JenisSimpananPagu) =>
+    pelanggaranSimpanan(a, b, j).map(p => p.pembanding).join();
+
+  const s0 = dua({ murni: 10, rkoMurni: [ag('GAJI', 9)], rkoTerbaru: [ag('GAJI', 9)] });
+  const s1 = dua({ murni: 10, rkoMurni: [ag('GAJI', 12)], rkoTerbaru: [ag('GAJI', 12)] });
+  const semuaJenis: JenisSimpananPagu[] = ['rko-murni', 'rko-perubahan', 'rekening', 'renaksi'];
+  ok('G4 belum ada yang perubahan: satu pembanding untuk semua jenis simpanan (perilaku lama)',
+    seragam(s1) && semuaJenis.every(j => pelanggaranSimpanan(s0, s1, j).length === 1)
+    && pelanggaranSimpanan(s0, s1, 'rekening')[0].label === 'pagu Rencana Aksi');
+
+  // §6 no. 1 — RKO perubahan saat Renaksi belum perubahan: tetap dibatasi pagu murni, dengan penjelasan.
+  const k1a = dua({ murni: 15, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 14)], tabPerubahan: ['GAJI'] });
+  const k1b = dua({ murni: 15, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 18)], tabPerubahan: ['GAJI'] });
+  const p1 = pelanggaranSimpanan(k1a, k1b, 'rko-perubahan');
+  ok('G5 RKO perubahan melebihi pagu murni saat Renaksi belum perubahan → ditahan & dijelaskan',
+    p1.length === 1 && p1[0].pembanding === 'perubahan' && p1[0].label === 'pagu murni Rencana Aksi, untuk RKO perubahan'
+    && catatanPelanggaran(p1, k1b, 2026) === kalimatBelumPerubahan(2026), JSON.stringify(p1.map(x => x.label)));
+
+  // §6 no. 2 — pagu perubahan Renaksi diturunkan di bawah RKO yang masih murni: hanya diberitahukan.
+  const k2a = dua({ murni: 15, berlaku: 15, perubahan: true, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 14)] });
+  const k2b = dua({ murni: 15, berlaku: 12, perubahan: true, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 14)] });
+  ok('G6 Renaksi perubahan di bawah RKO yang MASIH murni → tidak ditahan (pembanding lengkap tetap mencatatnya)',
+    tahan(k2a, k2b, 'renaksi') === '' && melampaui(k2b.perubahan.sub[0]) && !melampaui(k2b.perubahanKetat.sub[0]));
+  const k2c = dua({ murni: 15, berlaku: 15, perubahan: true, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 14)], tabPerubahan: ['GAJI'] });
+  const k2d = dua({ murni: 15, berlaku: 12, perubahan: true, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 14)], tabPerubahan: ['GAJI'] });
+  const p2 = pelanggaranSimpanan(k2c, k2d, 'renaksi');
+  ok('G7 Renaksi perubahan di bawah RKO yang SUDAH perubahan → ditahan, labelnya pagu perubahan',
+    p2.length === 1 && p2[0].pembanding === 'perubahan' && p2[0].label === 'pagu perubahan Rencana Aksi', JSON.stringify(p2.map(x => x.label)));
+  const k2e = dua({ murni: 15, berlaku: 15, perubahan: true, rkoMurni: [ag('GAJI', 14), ag('BLUD', 3)], rkoTerbaru: [ag('GAJI', 10), ag('BLUD', 3)], tabPerubahan: ['GAJI'] });
+  const k2f = dua({ murni: 15, berlaku: 12, perubahan: true, rkoMurni: [ag('GAJI', 14), ag('BLUD', 3)], rkoTerbaru: [ag('GAJI', 10), ag('BLUD', 3)], tabPerubahan: ['GAJI'] });
+  ok('G7b campuran: tab yang sudah perubahan (10) masih muat di 12, tab murni (3) menyusul → tidak ditahan',
+    tahan(k2e, k2f, 'renaksi') === '');
+
+  // §6 no. 3 — menyunting RKO murni sesudah Renaksi perubahan: dinilai dengan pagu murni saja.
+  const k3 = (gaji: number) => dua({ murni: 15, berlaku: 12, perubahan: true, rkoMurni: [ag('GAJI', gaji)], rkoTerbaru: [ag('GAJI', gaji)] });
+  const p3 = pelanggaranSimpanan(k3(14), k3(16), 'rko-murni');
+  ok('G8 RKO murni dinilai dengan pagu murni: 15 lolos walau pagu perubahan 12; 16 ditahan',
+    tahan(k3(14), k3(15), 'rko-murni') === '' && p3.length === 1 && p3[0].label === 'pagu murni Rencana Aksi');
+
+  // §6 no. 4 — pagu murni Renaksi diturunkan di bawah RKO murni yang sudah dikunci.
+  const k4 = (murni: number) => dua({ murni, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 14)], tabPerubahan: ['GAJI'] });
+  ok('G9 Renaksi murni di bawah RKO murni terkunci → ditahan (pembanding murni ikut)',
+    tahan(k4(15), k4(13), 'renaksi') === 'murni,perubahan');
+
+  const k5a = dua({ murni: 15, berlaku: 20, perubahan: true, rkoMurni: [ag('GAJI', 14)], rkoTerbaru: [ag('GAJI', 18)], tabPerubahan: ['GAJI'] });
+  const k5b = dua({ murni: 15, berlaku: 20, perubahan: true, rkoMurni: [ag('GAJI', 16)], rkoTerbaru: [ag('GAJI', 18)], tabPerubahan: ['GAJI'] });
+  ok('G10 Rekening dinilai dengan kedua pembanding; RKO perubahan hanya dengan pembanding perubahan',
+    tahan(k5a, k5b, 'rekening') === 'murni' && tahan(k5a, k5b, 'rko-perubahan') === '');
+
+  ok('G11 label pembanding', labelPembanding('murni', { renaksiPerubahan: false, tabPerubahan: [] }) === 'pagu Rencana Aksi'
+    && labelPembanding('perubahan', { renaksiPerubahan: true, tabPerubahan: [] }) === 'pagu perubahan Rencana Aksi'
+    && labelPembanding('murni', { renaksiPerubahan: true, tabPerubahan: [] }) === 'pagu murni Rencana Aksi');
+
+  const rb = (xs: AgregatRko[]) => bandingPaguRenaksi([sub(null)], xs).sub[0];
+  const nama = { program: 'PROG', kegiatan: 'KEG', sub_kegiatan: 'SUB' };
+  const jp = (n: number) => jumlahPerSumber([{ sumber: 'APBD', nilai: n }]);
+  const tr = terpakaiRkoSub({
+    sub: nama, layarMurni: jp(20), layarBerlaku: jp(12),
+    rkoMurni: rb([ag('GAJI', 9), ag('BLUD', 3)]), rkoBerlaku: rb([ag('GAJI', 2), ag('BLUD', 14)]), rkoKetat: rb([ag('GAJI', 2)]),
+    renaksiPerubahan: true, tabPerubahan: ['GAJI'],
+  });
+  ok('G12 Terpakai di RKO: lebih karena tab yang masih murni → bukan kelebihan yang menahan',
+    !!tr && !tr.seragam && !tr.murni.lebih && tr.berlaku.lebih === 'APBD lebih Rp 4 · total lebih Rp 4' && tr.ketatLebih === null
+    && JSON.stringify(tr.tabMasihMurni) === '[{"tab":"BLUD","nilai":14}]', JSON.stringify(tr));
+  const tr2 = terpakaiRkoSub({
+    sub: nama, layarMurni: jp(20), layarBerlaku: jp(12),
+    rkoMurni: rb([ag('GAJI', 9)]), rkoBerlaku: rb([ag('GAJI', 13)]), rkoKetat: rb([ag('GAJI', 13)]),
+    renaksiPerubahan: true, tabPerubahan: ['GAJI'],
+  });
+  ok('G13 Terpakai di RKO: tab yang sudah perubahan melebihi → kelebihan yang menahan', tr2?.ketatLebih === 'APBD lebih Rp 1 · total lebih Rp 1');
+  ok('G14 Terpakai di RKO: tanpa RKO sama sekali → tidak tampil',
+    terpakaiRkoSub({ sub: nama, layarMurni: jp(1), layarBerlaku: jp(1), renaksiPerubahan: false, tabPerubahan: [] }) === null);
+  ok('G15 gabungNama', gabungNama(['GAJI']) === 'GAJI' && gabungNama(['GAJI', 'BLUD']) === 'GAJI dan BLUD'
+    && gabungNama(['A', 'B', 'C']) === 'A, B, dan C');
 }
 
 // ── D. Sambungan kode ─────────────────────────────────────────────────────────
@@ -137,11 +254,17 @@ console.log('D. Sambungan kode');
 {
   const kode = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
   const pita = kode('components/kinerja/PaguRenaksiPita.tsx');
-  ok('D1 pita RKO: tab yang dibuka dari isi layar, tab lain dari server, lewat aturan yang sama',
-    /layarTerbaru \? \[\.\.\.bahan\.rko\.filter\(a => a\.tab !== tab\), \.\.\.layar\] : bahan\.rko/.test(pita) && pita.includes('bandingPaguRenaksi(bahan.renaksi, rko)'));
+  ok('D1 pita RKO: tab yang dibuka dari isi layar, tab lain dari server, lewat aturan yang sama (dua pembanding)',
+    pita.includes("rkoMurni: layarTerbaru && versiTipe === 'MURNI' ? ganti(bahan.rkoMurni, tab, layar) : bahan.rkoMurni,")
+    && pita.includes('rkoTerbaru: layarTerbaru ? ganti(bahan.rkoTerbaru, tab, layar) : bahan.rkoTerbaru,')
+    && pita.includes('const h = bandingDua({')
+    && pita.includes("const utama = versiTipe === 'MURNI' && !satu ? h.murni : h.perubahan;"));
   const ssk = kode('app/(dashboard)/kinerja/_tabs/SskTab.tsx');
   ok('D2 isi layar hanya dipakai bila versi yang dibuka = versi terbaru & tidak terkunci',
-    ssk.includes('layarTerbaru={!versiLocked && !!versiTerbaru && versiTerbaru.versi_tipe === sskVersi.tipe && versiTerbaru.versi_seq === sskVersi.seq}'));
+    ssk.includes('layarTerbaru={!versiLocked && !!versiTerbaru && versiTerbaru.versi_tipe === sskVersi.tipe && versiTerbaru.versi_seq === sskVersi.seq}')
+    && ssk.includes('versiTipe={sskVersi.tipe}'));
+  ok('D2b dialog Buat Perubahan menyebut Renaksi yang belum memasuki anggaran perubahan',
+    ssk.includes('{bahanPagu && !bahanPagu.renaksiPerubahan && (') && ssk.includes('kalimatBelumPerubahanBuat(tahun)'));
   const kmu = kode('lib/data/kinerja-master-ubah.ts');
   const kin = kode('lib/data/kinerja.ts');
   ok('D3 pembanding, pagar tanda, warisan tanda, dan Init membaca Renaksi lewat SATU pembaca (dengan baris sumber)',
@@ -154,20 +277,22 @@ console.log('D. Sambungan kode');
   const fSsk = badan(kin, 'export async function saveSskBatch(');
   ok('D4 Simpan RKO: kunci tahun Renaksi → kunciVersiSsk → potret → DELETE → pagar',
     urut(fSsk, 'await kunciTahunRenaksi(tx, Number(tahun));', 'await kunciVersiSsk(tx, tahun, sumber);', 'potretPaguRenaksi(tx, Number(tahun))',
-      'DELETE FROM kinerja_ssk', 'pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi)'));
+      'DELETE FROM kinerja_ssk', 'pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi,')
+    && fSsk.includes("versiTipe === 'PERUBAHAN' ? 'rko-perubahan' : 'rko-murni'"));
   const fRek = badan(kin, 'export async function saveRekeningBatch(');
   ok('D5 Simpan Rekening: urutan sama, pagar juga untuk simpanan kosong (tanpa return dini)',
     urut(fRek, 'await kunciTahunRenaksi(tx, Number(tahun));', 'await kunciVersiSsk(tx, tahun, sumber);', 'potretPaguRenaksi(tx, Number(tahun))',
-      'DELETE FROM kinerja_rekening', 'pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi)')
+      'DELETE FROM kinerja_rekening', "pagarPaguRenaksi(tx, Number(tahun), paguSebelum, alasanPaguRenaksi, 'rekening')")
     && !fRek.includes('if (rows.length === 0) return'));
   const ra = kode('lib/data/rencana-aksi.ts');
   const fHapus = badan(ra, 'export async function deleteRencanaAksi(');
   ok('D6 Hapus Renaksi: kunci tahun pertama, potret sebelum DELETE, pagar sesudahnya',
     urut(fHapus, 'await kunciTahunRenaksi(tx, Number(row.tahun));', 'potretPaguRenaksi(tx, Number(row.tahun))', 'DELETE FROM rencana_aksi WHERE id', 'pagarPaguRenaksi('));
-  ok('D7 Simpan Renaksi (baris ada & baru) dipagari', (ra.match(/pagarPaguRenaksi\(tx, /g) ?? []).length === 3);
+  ok('D7 Simpan Renaksi (baris ada & baru) & Hapus dipagari sebagai simpanan Renaksi',
+    (ra.match(/pagarPaguRenaksi\(tx, /g) ?? []).length === 3 && (ra.match(/alasan(_pagu_renaksi|Pagu), 'renaksi'\)/g) ?? []).length === 3);
   const imp = kode('lib/renaksi/import-data.ts');
   ok('D8 Impor: kunci tahun → potret → siapkanImpor; pagar sebelum hasil dipulangkan',
-    urut(badan(imp, 'export async function commitImportRenaksi('), 'await kunciTahunRenaksi(tx, tahun);', 'potretPaguRenaksi(tx, tahun)', 'siapkanImpor(', 'pagarPaguRenaksi(tx, tahun, paguSebelum, alasanPagu)'));
+    urut(badan(imp, 'export async function commitImportRenaksi('), 'await kunciTahunRenaksi(tx, tahun);', 'potretPaguRenaksi(tx, tahun)', 'siapkanImpor(', "pagarPaguRenaksi(tx, tahun, paguSebelum, alasanPagu, 'renaksi')"));
   const rute = ['app/api/kinerja/ssk/route.ts', 'app/api/kinerja/rekening/route.ts', 'app/api/rencana-aksi/route.ts', 'app/api/rencana-aksi/import/route.ts'].map(kode);
   ok('D9 empat route: 409 lewat jawabPaguTerlampaui & audit PAGU_RENAKSI_DITEMBUS',
     rute.every(s => /instanceof PaguRenaksiTerlampauiError\) return jawabPaguTerlampaui\(/.test(s) && s.includes("eventType: 'PAGU_RENAKSI_DITEMBUS'")));
@@ -189,7 +314,12 @@ const T = 2075;
 const bersih = async () => {
   await sql`DELETE FROM rencana_aksi WHERE tahun = ${T}`;
   await sql`DELETE FROM renaksi_pagu_perubahan WHERE tahun = ${T}`;
+  // Buat Perubahan (bagian H) melahirkan foto realisasi, kunci versi perubahan, dan parent_versi_id.
+  await sql`DELETE FROM kinerja_realisasi_foto WHERE tahun = ${String(T)}`;
+  await sql`UPDATE kinerja_ssk SET parent_versi_id = NULL WHERE tahun = ${String(T)}`;
   await sql`DELETE FROM kinerja_ssk WHERE tahun = ${String(T)}`;
+  await sql`DELETE FROM kinerja_realisasi WHERE tahun = ${String(T)}`;
+  await sql`DELETE FROM kinerja_bulan_tutup WHERE tahun = ${String(T)}`;
   await sql`DELETE FROM kinerja_rekening WHERE tahun = ${String(T)}`;
   await sql`DELETE FROM kinerja_master WHERE tahun = ${String(T)}`;
   await sql`DELETE FROM kinerja_riwayat_simpan WHERE tahun = ${String(T)}`;
@@ -197,7 +327,7 @@ const bersih = async () => {
   await sql`DELETE FROM blud_locks WHERE entity = 'RA_TAHUN' AND key_id = ${String(T)}`;
   for (const s of ['GAJI', 'BLUD']) {
     await sql`DELETE FROM blud_locks WHERE entity IN ('kinerja_versi_ssk', 'kinerja_realisasi') AND key_id = ${`${T}:${s}`}`;
-    await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_ssk' AND key_id = ${`${T}:${s}:MURNI:0`}`;
+    for (const v of ['MURNI:0', 'PERUBAHAN:1']) await sql`DELETE FROM blud_locks WHERE entity = 'kinerja_ssk' AND key_id = ${`${T}:${s}:${v}`}`;
   }
 };
 await bersih();
@@ -218,10 +348,13 @@ try {
     VALUES (${String(T)}, 'GAJI', 'Belanja A', 'SSK UJI', 'APBD', 'PROG UJI', 'KEG UJI', 'SUB UJI'),
            (${String(T)}, 'BLUD', 'Belanja B', 'SSK UJI', 'BLUD', 'PROG UJI', 'KEG UJI', 'SUB UJI')`;
   const h = await bandingPaguTahun(sql, T);
-  const b = h.sub.find(x => x.sub_kegiatan === 'SUB UJI');
+  const b = h.perubahan.sub.find(x => x.sub_kegiatan === 'SUB UJI');
   ok('C1 data sungguhan: GAJI Perubahan-1 (12 jt) dipakai, BLUD dinol-kan tidak dihitung, APBD lebih 2 jt',
     !!b && b.rko.total === 14_000_000 && b.renaksi?.total === 15_000_000 && kalimatLebih(b) === 'APBD lebih Rp 2.000.000',
     JSON.stringify(b));
+  const bm = h.murni.sub.find(x => x.sub_kegiatan === 'SUB UJI');
+  ok('C1b pembanding murni: GAJI murni (9 jt) + BLUD (2 jt) = 11 jt, tidak lebih',
+    !!bm && bm.rko.total === 11_000_000 && !melampaui(bm) && h.tabPerubahan.join() === 'GAJI' && !h.renaksiPerubahan, JSON.stringify(bm));
 
   const hasil = await initMasterFromRenaksi(String(T), uid, false);
   const m = await sql`SELECT nama, asal FROM kinerja_master WHERE tahun = ${String(T)} AND tipe = 'sumber_anggaran' ORDER BY nama` as Array<{ nama: string; asal: string }>;
@@ -263,7 +396,7 @@ try {
   const simpanRko = (tab: 'GAJI' | 'BLUD', baris: ReturnType<typeof rko>[], alasan: string | null = null) =>
     K.saveSskBatch(String(T), tab, baris, uid, 'MURNI', 0, undefined, false, false, alasan);
   const paguRko = async (cid: string) => Number((await queryOne<{ p: number }>(sql`SELECT pagu AS p FROM kinerja_ssk WHERE tahun = ${String(T)} AND canonical_id = ${cid}`))?.p ?? -1);
-  const ubahRenaksi = async (id: number, extra: Record<string, unknown>, hasil?: { gantiNama: null; paguDitembus?: BandingPaguSub[] }) => {
+  const ubahRenaksi = async (id: number, extra: Record<string, unknown>, hasil?: { gantiNama: null; paguDitembus?: PelanggaranPagu[] }) => {
     const r = (await getRencanaAksiById(id))!;
     return upsertRencanaAksi({ ...s(r.sub_kegiatan!), indikator: r.indikator, id, expected_version: r.version, ...extra }, uid, hasil);
   };
@@ -287,10 +420,10 @@ try {
   // Tahap D: dari arah Renaksi.
   ok('F8 menurunkan pagu Renaksi sampai lebih buruk → ditolak, pagu tetap',
     await galat(() => ubahRenaksi(i1, { pagu_rincian: [R('APBD', 8_000_000)] })) === 'PAGU:1' && await totalRenaksi(i1) === 10_000_000);
-  const hNaik: { gantiNama: null; paguDitembus?: BandingPaguSub[] } = { gantiNama: null };
+  const hNaik: { gantiNama: null; paguDitembus?: PelanggaranPagu[] } = { gantiNama: null };
   await ubahRenaksi(i1, { pagu_rincian: [R('APBD', 11_000_000)] }, hNaik);
   ok('F9 menaikkan pagu (masih lebih, tapi membaik) diterima tanpa alasan', await totalRenaksi(i1) === 11_000_000 && (hNaik.paguDitembus ?? []).length === 0);
-  const hTurun: { gantiNama: null; paguDitembus?: BandingPaguSub[] } = { gantiNama: null };
+  const hTurun: { gantiNama: null; paguDitembus?: PelanggaranPagu[] } = { gantiNama: null };
   await ubahRenaksi(i1, { pagu_rincian: [R('APBD', 9_000_000)], alasan_pagu_renaksi: ALASAN }, hTurun);
   ok('F10 menurunkan pagu dengan alasan: tersimpan & ditembus tercatat', await totalRenaksi(i1) === 9_000_000 && (hTurun.paguDitembus ?? []).length === 1);
   await ubahRenaksi(i1, { pagu_rincian: [R('APBD', 12_000_000)] });
@@ -369,6 +502,70 @@ try {
     + (SELECT COUNT(*) FROM kinerja_rekening WHERE tahun = ${String(T)}) + (SELECT COUNT(*) FROM kinerja_riwayat_simpan WHERE tahun = ${String(T)})
     + (SELECT COUNT(*) FROM blud_locks WHERE key_id LIKE ${`${T}%`}) AS n` as Array<{ n: number }>;
   ok('F21 kotak pasir bersih kembali', Number(sisa.n) === 0);
+}
+
+// ── H. Murni & perubahan di MySQL (kotak pasir 2075) ──────────────────────────
+// Contoh docs/CONCEPT-renaksi-rko-murni-perubahan.md §3, dari awal sampai akhir lewat jalur sungguhan.
+console.log('H. Murni & perubahan (kotak pasir 2075)');
+const { ubahPaguPerubahan } = await import('../lib/data/rencana-aksi');
+await bersih();
+try {
+  const uid = Number((await queryOne<{ id: number }>(sql`SELECT id FROM users LIMIT 1`))!.id);
+  const d = { tahun: T, jenis: 'Akumulatif' as const, satuan: '%', target_rpjmd: 1, target_tahunan: 1, q1_target: 0, q2_target: 0, q3_target: 0, q4_target: 1 };
+  const s = { ...d, level: 'sub-kegiatan' as const, program: 'PROG UJI', kegiatan: 'KEG UJI', sub_kegiatan: 'SUB H' };
+  for (const [tab, uraian] of [['GAJI', 'Belanja HA'], ['BLUD', 'Belanja HB']]) {
+    await sql`INSERT INTO kinerja_rekening (tahun, sumber, uraian, uraian_ssk, sumber_anggaran, program, kegiatan, subkegiatan)
+      VALUES (${String(T)}, ${tab}, ${uraian}, 'SSK UJI', 'APBD', 'PROG UJI', 'KEG UJI', 'SUB H')`;
+  }
+  const baris = (cid: string, uraian: string, pagu: number) => ({
+    canonical_id: cid, uraian_ssk: 'SSK UJI', uraian, program: 'PROG UJI', kegiatan: 'KEG UJI', subkegiatan: 'SUB H',
+    pagu, months: K.emptyMonths(), months_pct: K.emptyMonths(), total: 0, total_pct: 0, urut: 0, is_nullified: false,
+  });
+  const gaji = (tipe: 'MURNI' | 'PERUBAHAN', pagu: number) =>
+    K.saveSskBatch(String(T), 'GAJI', [baris('UJIH-A', 'Belanja HA', pagu)], uid, tipe, tipe === 'MURNI' ? 0 : 1);
+  const blud = (pagu: number) => K.saveSskBatch(String(T), 'BLUD', [baris('UJIH-B', 'Belanja HB', pagu)], uid, 'MURNI', 0);
+  const id = await upsertRencanaAksi({ ...s, indikator: 'IH', pagu_rincian: [{ sumber: 'APBD', pagu: 20_000_000, pagu_perubahan: null }] }, uid);
+  const ubah = async (perubahan: number, hasil?: { gantiNama: null; paguDitembus?: PelanggaranPagu[] }) => {
+    const r = (await getRencanaAksiById(id))!;
+    return upsertRencanaAksi({ ...s, indikator: 'IH', id, expected_version: r.version,
+      pagu_rincian: [{ sumber: 'APBD', pagu: 20_000_000, pagu_perubahan: perubahan }] }, uid, hasil);
+  };
+  const tolak = async (fn: () => Promise<unknown>) => {
+    try { await fn(); return null; } catch (e) { if (e instanceof PaguRenaksiTerlampauiError) return e; throw e; }
+  };
+
+  ok('H1 RKO murni GAJI 14 jt + BLUD 4 jt di bawah pagu murni 20 jt', (await gaji('MURNI', 14_000_000)).length === 0 && (await blud(4_000_000)).length === 0);
+  await K.buatVersiPerubahan(String(T), 'GAJI', 'MURNI', 0, uid);
+  const e1 = await tolak(() => gaji('PERUBAHAN', 18_000_000));
+  ok('H2 Renaksi belum perubahan: RKO GAJI perubahan 18 jt (total 22 jt) ditahan dengan penjelasannya',
+    !!e1 && e1.pelanggaran[0]?.pembanding === 'perubahan' && (e1.catatan ?? '').includes('belum memasuki anggaran perubahan')
+    && e1.message.includes('pagu murni Rencana Aksi, untuk RKO perubahan'), e1?.message);
+  await ubahPaguPerubahan(T, 'mulai', uid);
+  const h3: { gantiNama: null; paguDitembus?: PelanggaranPagu[] } = { gantiNama: null };
+  await ubah(24_000_000, h3);
+  ok('H3 Renaksi mulai perubahan, pagu perubahan 24 jt', (h3.paguDitembus ?? []).length === 0);
+  ok('H4 sesudahnya RKO GAJI perubahan 18 jt lolos (18 + BLUD murni 4 = 22 ≤ 24)', (await gaji('PERUBAHAN', 18_000_000)).length === 0);
+  const h5: { gantiNama: null; paguDitembus?: PelanggaranPagu[] } = { gantiNama: null };
+  // 21 jt, bukan 20: pagu berlaku sengaja beda dari pagu murni (20 jt) supaya H8 membedakan keduanya.
+  await ubah(21_000_000, h5);
+  ok('H5 pagu perubahan turun ke 21 jt: tidak ditahan karena yang lewat BLUD yang masih murni',
+    (h5.paguDitembus ?? []).length === 0 && Number((await getRencanaAksiById(id))?.anggaran_nominal) === 21_000_000);
+  const lengkap = (await bandingPaguTahun(sql, T)).perubahan.sub.find(x => x.sub_kegiatan === 'SUB H');
+  ok('H5b pembanding lengkap tetap mencatat kelebihan 1 jt (untuk pemberitahuan di layar)', !!lengkap && lengkap.lebihTotal === 1_000_000);
+  const e6 = await tolak(() => ubah(17_000_000));
+  ok('H6 pagu perubahan 17 jt di bawah GAJI yang sudah perubahan (18 jt) → ditahan',
+    !!e6 && e6.pelanggaran.length === 1 && e6.pelanggaran[0].label === 'pagu perubahan Rencana Aksi', e6?.message);
+  ok('H7 BLUD murni 4 → 5 jt lolos: dinilai dengan pagu murni (14 + 5 = 19 ≤ 20)', (await blud(5_000_000)).length === 0);
+  const e8 = await tolak(() => blud(7_000_000));
+  ok('H8 BLUD murni 7 jt (14 + 7 = 21 > 20) → ditahan dengan pembanding murni',
+    !!e8 && e8.pelanggaran.length === 1 && e8.pelanggaran[0].pembanding === 'murni' && e8.catatan === null, e8?.message);
+} finally {
+  await bersih();
+  const [sisa] = await sql`SELECT (SELECT COUNT(*) FROM rencana_aksi WHERE tahun = ${T}) + (SELECT COUNT(*) FROM kinerja_ssk WHERE tahun = ${String(T)})
+    + (SELECT COUNT(*) FROM kinerja_rekening WHERE tahun = ${String(T)}) + (SELECT COUNT(*) FROM kinerja_realisasi_foto WHERE tahun = ${String(T)})
+    + (SELECT COUNT(*) FROM renaksi_pagu_perubahan WHERE tahun = ${T})
+    + (SELECT COUNT(*) FROM blud_locks WHERE key_id LIKE ${`${T}%`}) AS n` as Array<{ n: number }>;
+  ok('H9 kotak pasir bersih kembali', Number(sisa.n) === 0);
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`);

@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
         req, eventType: 'RA_PAGU_PERUBAHAN',
         userId: g.session.userId, username: g.session.username,
         detail: aksi === 'mulai'
-          ? `Mulai babak Pagu Perubahan Rencana Aksi ${tahun} — pagu Murni dibekukan`
-          : `Batalkan babak Pagu Perubahan Rencana Aksi ${tahun}`,
+          ? `Mulai anggaran perubahan Rencana Aksi ${tahun}; pagu murni tidak bisa diubah lagi`
+          : `Batalkan anggaran perubahan Rencana Aksi ${tahun}`,
       });
     }
     return NextResponse.json({ ok: true, tahun, aktif: hasil.aktif, dimulai_pada: hasil.dimulai_pada });

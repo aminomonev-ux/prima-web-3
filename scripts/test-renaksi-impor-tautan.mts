@@ -81,6 +81,11 @@ console.log('A. Unduhan Excel Data Entry membawa kolom "Indikator Induk", pembac
     hSub.rows.length === 1 && hSub.rows[0].level === 'sub-kegiatan' && hSub.rows[0].induk_program === 'PROGRAM P'
     && hSub.rows[0].induk_kegiatan === 'KEG K' && hSub.rows[0].indikator_induk === 'IND KEG A',
     JSON.stringify(hSub.rows.map(r => [r.level, r.nama, r.induk_program, r.induk_kegiatan, r.indikator_induk])));
+  // Data uji di atas memakai RPJMD = tahunan = 100, jadi kolom mana pun yang terambil hasilnya sama.
+  const beda = { ...subRow, target_rpjmd: 500, target_tahunan: 80 } as RaRow;
+  const hBeda = await parseRenaksiFile(Buffer.from(await (await buatWorkbookList([beda], 'sub-kegiatan', keg)).xlsx.writeBuffer()), 's.xlsx');
+  ok('A9 bolak-balik: "Target RPJMD" (di kiri "Target Tahunan") tidak terbaca sebagai target tahunan',
+    hBeda.rows.length === 1 && hBeda.rows[0].target_tahunan === 80, JSON.stringify(hBeda.rows.map(r => r.target_tahunan)));
 }
 
 // ── B. Aturan murni ───────────────────────────────────────────────────────────

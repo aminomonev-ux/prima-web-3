@@ -23,7 +23,7 @@ import { cocokkanIndukImpor, type BarisRantai } from './rantai';
 import { totalBerlaku, type RincianPagu } from './pagu';
 import { muatRincianPagu, statusPaguPerubahan, tulisRincianPaguBorongan } from '@/lib/data/renaksi-pagu';
 import { pagarPaguRenaksi, potretPaguRenaksi } from '@/lib/data/pagu-renaksi-rko';
-import type { BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
+import type { PelanggaranPagu } from '@/lib/kinerja/pagu-renaksi';
 
 export interface CommitRow {
   level: RaLevel;
@@ -68,7 +68,7 @@ export interface CommitResult {
   /** Indikator yang pagunya sudah dirinci per sumber dana — angka Anggaran berkas tidak ditulis. */
   paguBersumberDilewati: string[];
   /** Sub kegiatan yang RKO-nya melampaui pagu sesudah impor, diteruskan dengan alasan (audit). */
-  paguDitembus: BandingPaguSub[];
+  paguDitembus: PelanggaranPagu[];
 }
 
 /**
@@ -332,7 +332,7 @@ export async function commitImportRenaksi(
     if (mode === 'ganti') { ditambah = akanTulis.length; diperbarui = 0; }
     // Tahap D: impor (terutama mode ganti, atau angka Anggaran berkas yang lebih kecil) bisa
     // menurunkan pagu di bawah RKO — aturan & kunci yang sama dengan Data Entry dan Simpan RKO.
-    const paguDitembus = await pagarPaguRenaksi(tx, tahun, paguSebelum, alasanPagu);
+    const paguDitembus = await pagarPaguRenaksi(tx, tahun, paguSebelum, alasanPagu, 'renaksi');
 
     return {
       paguDitembus,

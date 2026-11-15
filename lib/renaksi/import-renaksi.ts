@@ -154,7 +154,9 @@ const HEADER_ALIAS: Array<{ field: ColField; re: RegExp; not?: RegExp }> = [
   { field: 'satuan',         re: /satuan/i },
   { field: 'jenis',          re: /jenis/i },
   { field: 'anggaran',       re: /^rp$|anggaran|pagu/i },
-  { field: 'target_tahunan', re: /target/i, not: /tw|triwulan|pentahapan/i },
+  // RPJMD dikecualikan: impor tidak punya kolom RPJMD, dan di unduhan Data Entry "Target RPJMD" ada di kiri
+  // "Target Tahunan" — tanpa `not` itu angka RPJMD tersimpan jadi target tahunan.
+  { field: 'target_tahunan', re: /target/i, not: /tw|triwulan|pentahapan|rpjmd/i },
 ];
 
 /** Label kolom sadar-merge: "induk › anak" dari baris header (anak = sel master). */

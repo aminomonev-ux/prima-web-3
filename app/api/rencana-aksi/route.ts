@@ -35,7 +35,7 @@ import {
 } from '@/lib/data/rencana-aksi';
 import { RaPaguError } from '@/lib/data/renaksi-pagu';
 import { PaguRenaksiTerlampauiError, detailPaguDitembus, jawabPaguTerlampaui } from '@/lib/data/pagu-renaksi-rko';
-import { PANJANG_ALASAN_PAGU, type BandingPaguSub } from '@/lib/kinerja/pagu-renaksi';
+import { PANJANG_ALASAN_PAGU, type PelanggaranPagu } from '@/lib/kinerja/pagu-renaksi';
 import { guard } from './_guard';
 
 export const dynamic = 'force-dynamic';
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const info: { gantiNama: GantiNama | null; paguDitembus?: BandingPaguSub[] } = { gantiNama: null };
+    const info: { gantiNama: GantiNama | null; paguDitembus?: PelanggaranPagu[] } = { gantiNama: null };
     const id = await upsertRencanaAksi(parsed.data, g.session.userId, info);
     await writeAuditLog({
       req,
