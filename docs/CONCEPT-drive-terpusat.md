@@ -896,8 +896,11 @@ satu kunci `.lock`. Aturannya:
 - Berkas lokal **tidak terenkripsi** (beda dengan dump database): foldernya jangan dibagikan.
 
 Tujuan baru `salinan_lampiran` ikut tombol Uji (probe + baca salinan lama) dan tabel
-kesehatan. Migrasi `migration-drive-arsip.sql` diperluas (`asal_file_id` + indeks) — belum
-pernah dijalankan di server, jadi tetap satu berkas.
+kesehatan. Migrasi `migration-drive-arsip.sql` diperluas (`asal_file_id` + indeks). Anggapan "belum
+pernah dijalankan di server, jadi tetap satu berkas" ternyata salah — server menjalankan bentuk
+lamanya, dan `CREATE TABLE IF NOT EXISTS` tidak menambah kolom. Susulannya
+`migration-drive-arsip-asal.sql` (`ALTER`). Kolom baru pada migrasi yang sudah terbit = berkas
+`ALTER` baru, jangan menyunting berkas lama.
 
 Dibuktikan di dev (folder induk sungguhan): jalan pertama +2 lokal & +2 Drive, jalan kedua
 +0/+0, salinan lokal yang dihapus diunduh ulang (+1), isi 745 byte = asli; panel menampilkan
