@@ -186,12 +186,26 @@ ok('B34 bertahap: yang sudah punya salinan dilewati (lokal & Drive)', badanSalin
 ok('B35 salinan Drive HANYA bila manifest terbaca (tanpa catatan = menyalin ulang semuanya tiap jalan)',
   badanSalin.includes('if (sudahDisalin && folderId) {') && badanSalin.includes("'salinan_lampiran', ?, ?, ?, NULL, ?, 'salinan', ?, NOW()"))
 ok('B36 unduhan ditulis ke .part lalu diganti nama (berkas setengah jadi tidak dianggap salinan)',
-  skrip.includes("const sementara = tujuan + '.part';") && skrip.includes('fs.renameSync(sementara, tujuan);') && skrip.includes("!f.endsWith('.part')"))
+  skrip.includes("const sementara = tujuan + '.part';") && skrip.includes('fs.renameSync(sementara, tujuan);') && skrip.includes("if (f.endsWith('.part')) continue;"))
 ok('B37 dibatasi waktu (tugas terjadwal 1 jam) & sisanya dilanjutkan', skrip.includes('const BATAS_WAKTU_SALINAN_MS = 40 * 60 * 1000;')
   && badanSalin.includes('if (habisWaktu()) { r.lokal.tertunda++; continue; }') && badanSalin.includes('if (habisWaktu()) { r.drive.tertunda++; continue; }'))
 const iSalin = skrip.indexOf('try { await salinLampiran(drive); }')
 ok('B38 salinan SESUDAH backup database & tidak mengubah kode keluar', iSalin > skrip.indexOf('await rotateOldBackups(drive, folderId, retention)')
   && iSalin > skrip.indexOf("log('UPLOAD-OK'") && !badanSalin.includes('process.exitCode'))
+{
+  // B41: ID Drive memuat/berakhiran `_` — dulu dipotong di `__` pertama → diunduh ulang tiap jalan.
+  const awal = skrip.indexOf('function idSalinanLokal(dir, idDicari) {')
+  const sumber = skrip.slice(awal, skrip.indexOf('\n}\n', awal) + 2)
+  const fsMod = await import('node:fs'), pathMod = await import('node:path'), osMod = await import('node:os')
+  const dir = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'uji-salinan-'))
+  try {
+    fsMod.mkdirSync(pathMod.join(dir, 'lkjip'))
+    for (const n of ['abc____foto.png', 'x__y__dok.docx', 'biasa__a__b.png', 'setengah__c.png.part']) fsMod.writeFileSync(pathMod.join(dir, 'lkjip', n), '')
+    const fungsi = new Function('fs', 'path', `${sumber}; return idSalinanLokal;`)(fsMod, pathMod)
+    const hasil = [...fungsi(dir, new Set(['abc__', 'x__y', 'biasa', 'setengah', 'tak_ada']))].sort().join(',')
+    ok('B41 salinan lokal dikenali walau ID memuat/berakhiran "_"; .part tidak dihitung', awal >= 0 && hasil === 'abc__,biasa,x__y', hasil)
+  } finally { fsMod.rmSync(dir, { recursive: true, force: true }) }
+}
 ok('B39 folder salinan lokal tidak pernah ikut repo', baca('.gitignore').split(/\r?\n/).includes('backups-lampiran/'))
 const kunciRingkas = ['folder', 'ada', 'baru', 'gagal', 'hilang', 'byte', 'tertunda', 'aktif']
 const antarmuka = tanpaKomentar(baca('lib/services/drive-uji.ts'))

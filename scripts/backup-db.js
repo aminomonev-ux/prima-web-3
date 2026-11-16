@@ -376,15 +376,22 @@ async function daftarLampiran() {
   return [...a, ...b].filter((r) => r.id && !lihat.has(r.id) && lihat.add(r.id));
 }
 
-/** ID yang sudah punya salinan lokal: nama berkas `<id>__<nama>` di `<folder>/<modul>/`. */
-function idSalinanLokal(dir) {
+/**
+ * ID yang sudah punya salinan lokal: nama berkas `<id>__<nama>` di `<folder>/<modul>/`.
+ * ID Drive boleh memuat/berakhiran `_` (`abc_` → `abc___foto.png`), jadi memotong di `__`
+ * pertama salah membaca ID dan berkasnya diunduh ulang tiap jalan — tiap posisi `__` dicoba
+ * terhadap daftar ID yang dicari.
+ */
+function idSalinanLokal(dir, idDicari) {
   const ada = new Set();
   if (!fs.existsSync(dir)) return ada;
   for (const modul of fs.readdirSync(dir, { withFileTypes: true })) {
     if (!modul.isDirectory()) continue;
     for (const f of fs.readdirSync(path.join(dir, modul.name))) {
-      const i = f.indexOf('__');
-      if (i > 0 && !f.endsWith('.part')) ada.add(f.slice(0, i));
+      if (f.endsWith('.part')) continue;
+      for (let i = f.indexOf('__'); i > 0; i = f.indexOf('__', i + 1)) {
+        if (idDicari.has(f.slice(0, i))) { ada.add(f.slice(0, i)); break; }
+      }
     }
   }
   return ada;
@@ -413,7 +420,7 @@ async function salinLampiran(drive) {
 
   // 1. Lokal
   fs.mkdirSync(dir, { recursive: true });
-  const adaLokal = idSalinanLokal(dir);
+  const adaLokal = idSalinanLokal(dir, new Set(daftar.map((f) => f.id)));
   for (const f of daftar) {
     if (adaLokal.has(f.id)) { r.lokal.ada++; continue; }
     if (habisWaktu()) { r.lokal.tertunda++; continue; }
