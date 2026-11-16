@@ -771,7 +771,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
               </label>
               <label>Letak nomor halaman
                 <select value={styleForm.nomorPosisi} disabled={!styleForm.pageNumber} onChange={e => setStyleForm({ ...styleForm, nomorPosisi: e.target.value as StyleConfig['nomorPosisi'] })}>
-                  <option value="otomatis">Otomatis (kanan bila ada teks, tengah bila tidak)</option>
+                  <option value="otomatis">Otomatis</option>
                   <option value="tengah">Tengah</option>
                   <option value="kanan">Kanan</option>
                 </select>
@@ -798,7 +798,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                   <option value="1">Ya</option>
                 </select>
               </label>
-              <p className="lk-hint">Header & footer tampil di halaman daftar dan isi; sampul tidak memakai keduanya. Cek hasilnya lewat Pratinjau.</p>
+              <p className="lk-hint">Nomor halaman Otomatis = di kanan bila ada teks footer, di tengah bila tidak. Header & footer tampil di halaman daftar dan isi; sampul tidak memakai keduanya. Cek hasilnya lewat Pratinjau.</p>
               <label>Warna header tabel
                 <select value={styleForm.tableHeaderFill} onChange={e => setStyleForm({ ...styleForm, tableHeaderFill: e.target.value })}>
                   <option value="EDEDED">Abu-abu</option>
