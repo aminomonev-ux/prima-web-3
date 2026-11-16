@@ -73,7 +73,14 @@ export interface NominalUnit {
  */
 export function nominalUntukUnit(rows: readonly AuditPjRow[], labels: readonly string[]): NominalUnit {
   const kunci = (s: string) => rapikanPj(s).toLowerCase()
-  const perKunci = new Map(kelompokPerPj(rows).map(g => [kunci(g.pj), g]))
+  // Kelompok Cetak dibedakan per ejaan persis; di sini "Kabid X" dan "KABID X" satu PJ, jadi
+  // digabung — Map biasa membuat kelompok terakhir menimpa yang pertama (subtotalnya hilang).
+  const perKunci = new Map<string, { subtotal: number; items: ItemPj[] }>()
+  for (const g of kelompokPerPj(rows)) {
+    const ada = perKunci.get(kunci(g.pj))
+    if (ada) { ada.subtotal += g.subtotal; ada.items.push(...g.items) }
+    else perKunci.set(kunci(g.pj), { subtotal: g.subtotal, items: [...g.items] })
+  }
   const dicari = [...new Map(labels.filter(l => adaPj(rapikanPj(l))).map(l => [kunci(l), rapikanPj(l)])).entries()]
   const per = dicari.map(([k, label]) => {
     const grup = perKunci.get(k)

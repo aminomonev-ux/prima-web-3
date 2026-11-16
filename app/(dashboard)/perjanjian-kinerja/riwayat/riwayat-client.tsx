@@ -246,7 +246,13 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
       } catch { /* balasan bukan JSON */ }
       return { ok: false, message }
     }
-    return { ok: true, blob: await res.blob(), dilewati: Number(res.headers.get('X-Dokumen-Dilewati') ?? 0) || 0 }
+    // Hentikan saat badan balasan masih dibaca juga melempar AbortError; tanpa tangkapan ini
+    // ia lolos sebagai penolakan tak tertangani dari jalankanMassal.
+    let blob: Blob
+    try { blob = await res.blob() } catch {
+      return { ok: false, message: signal.aborted ? 'dibatalkan' : 'Unduhan terputus sebelum selesai.' }
+    }
+    return { ok: true, blob, dilewati: Number(res.headers.get('X-Dokumen-Dilewati') ?? 0) || 0 }
   }
 
   /** Gabung beberapa ZIP jadi satu — tiap permintaan hanya membawa sebagian dokumen. */

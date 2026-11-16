@@ -46,6 +46,11 @@ ok('A7 belum ber-PJ = daun tanpa PJ di rantainya; akar tanpa PJ tidak menggandak
 ok('A7b daun tanpa PJ sendiri tapi induknya ber-PJ tidak dihitung',
   nominalUntukUnit([...pohon, b('C2', 'C', 50, null)], ['X']).belumPj.nominal === 100)
 ok('A8 label kembar tidak menggandakan total', nominalUntukUnit(pohon, ['Kasubbag Umum', 'KASUBBAG UMUM']).total === 400)
+{
+  const ejaanBeda = nominalUntukUnit([...pohon, b('E', 'R', 70, 'KASUBBAG UMUM')], ['Kasubbag Umum'])
+  ok('A8b PJ berbeda ejaan di baris (huruf besar) digabung, bukan yang terakhir menimpa',
+    ejaanBeda.per[0].nominal === 470 && ejaanBeda.per[0].items.length === 2, JSON.stringify(ejaanBeda.per[0]))
+}
 const geser = barisRekapPergeseran([{ ...pohon[1], jumlah: 300, pergeseran: 340 } as unknown as PergeseranBaris])
 ok('A9 Pergeseran memakai pagu PASCA-geser', geser[0].jumlah === 340)
 
