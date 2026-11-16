@@ -4,7 +4,7 @@
 // Buat Perubahan menyalin isi TERSIMPAN, jadi suntingan di layar yang belum disimpan
 // tidak ikut tersalin lalu terbuang saat layar pindah ke versi baru — dan versi lamanya
 // sudah terkunci. MURNI — hanya mengimpor modul murni lain.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §4
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §4
 
 import { sen } from './banding-realisasi'
 import { KUNCI_BULAN_SSK } from './bentrok-ssk'

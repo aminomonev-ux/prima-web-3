@@ -15,7 +15,7 @@
 // persen berdiri di atas penyebut yang tidak memuatnya, dan itu justru cacat
 // yang sedang ditutup (§9.1a Beranda BLUD).
 //
-// Konsep: docs/CONCEPT-kinerja-yatim-dan-hapus-ssk.md §4
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-yatim-dan-hapus-ssk.md §4
 
 import type { LaporanYatim } from './rekap';
 

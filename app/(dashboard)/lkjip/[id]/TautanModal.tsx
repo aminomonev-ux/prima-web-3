@@ -1,6 +1,6 @@
 'use client';
 // Modal tabel tertaut LKJIP — sumber + setelan, pemetaan kolom, baris yang tampil, pratinjau.
-// Konsep: docs/CONCEPT-lkjip-tabel-tertaut.md. Berhenti di FORM: modal hanya menyusun payload
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-tertaut.md. Berhenti di FORM: modal hanya menyusun payload
 // baru lewat `onTerapkan`; yang menulis ke server tetap TabelEditor (simpan blok biasa).
 
 import { useEffect, useMemo, useRef, useState } from 'react';

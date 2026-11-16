@@ -1,6 +1,6 @@
 'use client';
 // Spanduk "Rencana Aksi berubah" + dialog bercentang — SATU tampilan untuk semua modul yang
-// menyalin dari Renaksi (E-Anggaran, PK, IKI). Konsep: docs/CONCEPT-renaksi-terhubung.md §5.4.
+// menyalin dari Renaksi (E-Anggaran, PK, IKI). Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.4.
 // Komponen ini hanya menampilkan & mengumpulkan pilihan; yang menulis tetap modulnya sendiri.
 
 import { useEffect, useState, type ReactNode } from 'react';

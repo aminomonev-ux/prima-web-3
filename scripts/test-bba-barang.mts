@@ -1,5 +1,5 @@
 // scripts/test-bba-barang.mts — Buku Besar Aset Tahap 2: Master Barang, status Dalam Proses,
-// tampilan Per Barang (docs/CONCEPT-bba-perencanaan.md §5).
+// tampilan Per Barang (docs/konsep/bba/CONCEPT-bba-perencanaan.md §5).
 //
 //   npx tsx scripts/test-bba-barang.mts
 //

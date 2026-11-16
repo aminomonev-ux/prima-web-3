@@ -1,4 +1,4 @@
-// INTRANET EDITION (D2 · lihat docs/INTRANET-DELTA.md):
+// INTRANET EDITION (D2 · lihat docs/konsep/sistem/INTRANET-DELTA.md):
 // Cloudflare Turnstile DIMATIKAN di v3 — LAN tepercaya tanpa IP publik, tak ada
 // bot internet yang mencapai halaman login. Guard fatal production (V5-AUTH-03)
 // dilonggarkan; verifyTurnstile selalu pass. Lapisan login lain (lockout 5x/15mnt,

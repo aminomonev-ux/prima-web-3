@@ -3,7 +3,7 @@
 // Layout dari lib/iki/layout.ts — WAJIB identik 5 PDF referensi (CONCEPT-iki §5):
 // landscape, header abu-abu + baris penomoran, border thin hitam, rowspan grup,
 // blok ttd per varian (STANDAR 2 ttd / DIREKTUR 1 ttd kanan).
-// CUSTOM (docs/CONCEPT-iki-custom.md §6): judul/Data Pribadi/ttd sama, tabelnya dari `susunKisiCetak`,
+// CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md §6): judul/Data Pribadi/ttd sama, tabelnya dari `susunKisiCetak`,
 // kertas A4 atau F4 mendatar menurut pilihan dokumen.
 import type { jsPDF as JsPdf } from 'jspdf';
 import type { CellDef, CellHookData, RowInput, UserOptions } from 'jspdf-autotable';

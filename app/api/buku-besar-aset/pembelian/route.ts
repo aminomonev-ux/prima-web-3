@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { pembelianSebelumnya } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiLihat } from '../_guard';
 
-// Pembelian sebelumnya barang yang sama (docs/CONCEPT-bba-buku-aset.md §7.7): rencana lama yang sudah
+// Pembelian sebelumnya barang yang sama (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.7): rencana lama yang sudah
 // terealisasi beserta referensi & buktinya, plus register Buku Aset per tahun perolehan. Baca saja.
 const QuerySchema = z.object({ barang: z.coerce.number().int().positive(), kecuali: z.coerce.number().int().positive().optional() });
 

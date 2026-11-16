@@ -1,5 +1,5 @@
 // lib/admin/cabut-kedaluwarsa.ts — pencabutan otomatis akses berjangka (P2, Tahap 10).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
 //
 // SATU aturan yang menentukan seluruh bentuk berkas ini: pencabutan otomatis **memanggil
 // fungsi pencabutan yang sama** dengan pencabutan manual — `simpanBerkasOrang`. BUKAN

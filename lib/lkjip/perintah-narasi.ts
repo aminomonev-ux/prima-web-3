@@ -1,5 +1,5 @@
 // ═══ PRIMA — LKJIP — Perintah editor narasi (ProseMirror, tanpa DOM & React) ═══
-// Konsep `docs/CONCEPT-lkjip-daftar-word.md`. Dipisah dari komponen supaya bisa diuji dgn skema sungguhan di Node.
+// Konsep `docs/konsep/lkjip/CONCEPT-lkjip-daftar-word.md`. Dipisah dari komponen supaya bisa diuji dgn skema sungguhan di Node.
 // Format milik TINGKAT, bukan butir (cara Word): Tab, Shift+Tab, dan galeri selalu menyamakan seluruh pohon
 // daftar dengan susunannya — butir yang naik tingkat ikut berganti nomor tanpa disentuh.
 

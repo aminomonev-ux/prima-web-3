@@ -1,4 +1,4 @@
-// Uji DB DPA Perubahan BLUD (docs/CONCEPT-blud-dpa-perubahan.md, Tahap 1).
+// Uji DB DPA Perubahan BLUD (docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md, Tahap 1).
 //   node scripts/test-blud-dpa-perubahan-db.mjs
 //
 // MENYENTUH DB — hanya di TAHUN KOTAK PASIR 2099, dibersihkan di awal DAN di
@@ -157,7 +157,7 @@ try {
   }
   console.log('\n── 8a. Versi dasar DPA dikunci ──')
   // Isinya HARUS berbeda (A 81): isi yang sama tidak menulis apa pun lagi dan dilewati
-  // sebelum pagar ini (docs/CONCEPT-blud-simpan-identik.md) — yang dijaga pagar ini tulisan.
+  // sebelum pagar ini (docs/konsep/blud/CONCEPT-blud-simpan-identik.md) — yang dijaga pagar ini tulisan.
   periksa('Simpan ulang DPA dasar → VERSI_DASAR', await tangkap(() => simpanDpa(V0, pohonDpa({ A: 81, B: 70, C: 30 }))) === 'BludVersiDasarError')
   periksa('…isi yang sama dilewati tanpa menulis', (await simpanDpa(V0, pohonDpa({ A: 80, B: 70, C: 30 }))).tidakBerubah?.versiBerlaku === V0)
   periksa('Hapus DPA dasar → VERSI_DASAR', await tangkap(() => deleteDpaVersi(TAHUN, V0)) === 'BludVersiDasarError')

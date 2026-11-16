@@ -1,5 +1,5 @@
 // lib/pk/nominal-blud.ts — penolong MURNI dialog "Ambil nominal BLUD" Form PK.
-// Konsep: docs/CONCEPT-pk-nominal-blud-langsung.md.
+// Konsep: docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md.
 
 export type SumberBlud = 'dpa' | 'pergeseran';
 

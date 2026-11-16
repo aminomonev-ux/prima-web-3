@@ -1,5 +1,5 @@
 // app/api/blud/bukti-setor/route.ts — Bukti Setor ke Bank (lembar `setor BPD`).
-// Konsep: docs/CONCEPT-blud-bukti-setor.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-bukti-setor.md
 //
 // GET    ?tahun=&bulan=   daftar slip bulan itu (Total & Cash dihitung server)
 // GET    ?id=             satu slip beserta barisnya

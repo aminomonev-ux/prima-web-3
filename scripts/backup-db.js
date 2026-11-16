@@ -9,7 +9,7 @@
 // dicoba upload ulang di run berikutnya sebelum backup baru dibuat.
 //
 // USAGE: node scripts/backup-db.js
-//        (jadwalkan via Windows Task Scheduler — docs/PANDUAN-jadwal-backup.md)
+//        (jadwalkan via Windows Task Scheduler — docs/panduan/PANDUAN-instalasi-prima.md §14)
 //
 // ENV (.env.local): MYSQL_* (sudah ada), GOOGLE_OAUTH_* (sudah ada),
 //   GOOGLE_DRIVE_FOLDER_ID_ROOT    — folder induk PRIMA; backup masuk subfolder
@@ -24,7 +24,7 @@
 //   MYSQLDUMP_PATH                 — opsional, default 'mysqldump' di PATH
 //
 // Restore: node scripts/backup-decrypt.js <file.enc>  → hasilkan .sql,
-//          lalu import ke MySQL (lihat docs/BACKUP-RESTORE.md).
+//          lalu import ke MySQL (lihat docs/panduan/PANDUAN-instalasi-prima.md §15.3).
 
 const fs = require('fs');
 const path = require('path');

@@ -1,6 +1,6 @@
 -- migration-renaksi-pindah-induk.sql
 -- Catatan `renaksi_ganti_nama` ikut mencatat PINDAH INDUK kegiatan / sub kegiatan.
--- Konsep: docs/CONCEPT-renaksi-terhubung.md Tahap H.
+-- Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md Tahap H.
 --
 -- KENAPA: memindah kegiatan ke program lain (atau sub kegiatan ke kegiatan lain) di Data Entry
 -- Renaksi dulu terbaca di E-Anggaran & PK sebagai "satu tidak ada lagi + satu baru" — Rekening,

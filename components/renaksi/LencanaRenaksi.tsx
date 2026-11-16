@@ -1,6 +1,6 @@
 'use client';
 // Lencana "Renaksi" — entri Master/Rekening yang diambil dari Rencana Aksi.
-// Hanya layar kerja; Cetak, Excel, PDF tidak memuatnya (docs/CONCEPT-renaksi-terhubung.md §5.2).
+// Hanya layar kerja; Cetak, Excel, PDF tidak memuatnya (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.2).
 // Tooltip lewat portal `Tip`: lencana hidup di dalam tabel ber-overflow.
 
 import Tip from '@/components/ui/Tip';

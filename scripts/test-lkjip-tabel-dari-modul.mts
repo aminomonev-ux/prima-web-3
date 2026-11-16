@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-lkjip-tabel-dari-modul.mts — "Salin ke LKJIP" (tabel modul → tempel tertaut di LKJIP),
 // sumber E-Anggaran Cetak Detail, dan ubah bentuk tabel tertaut lewat klik kanan (baris tangan,
-// sembunyikan baris, hapus kolom). Konsep: docs/CONCEPT-lkjip-tabel-dari-modul.md
+// sembunyikan baris, hapus kolom). Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-dari-modul.md
 // Jalankan: npx tsx scripts/test-lkjip-tabel-dari-modul.mts
 import { readFileSync } from 'node:fs'
 import {

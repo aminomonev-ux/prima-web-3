@@ -1,5 +1,5 @@
 'use client';
-// Kisi kepala tabel di modal "Tabel dari Modul" — docs/CONCEPT-lkjip-tabel-excel.md §4.
+// Kisi kepala tabel di modal "Tabel dari Modul" — docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md §4.
 // Kepala disusun langsung di sini (jumlah baris, gabung, pisah, ketik) sampai persis seperti yang
 // akan tercetak. Pilihan sel memakai hook yang SAMA dengan editor tabel; gabung/pisah/sel milik
 // kolom memakai fungsi lib/lkjip/tabel.ts yang sama (E5). Berhenti di FORM: hanya `onUbah`.

@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/gu/route.ts — periode Ganti Uang Persediaan per bulan.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.2, keputusan #31
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.2, keputusan #31
 //
 // GET  ?tahun=&bulan=   daftar rentang GU bulan itu
 // POST                  simpan (replace-all per bulan)

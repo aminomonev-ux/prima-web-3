@@ -1,5 +1,5 @@
 // lib/kinerja/pagu-renaksi.ts — pagu RKO E-Anggaran dibandingkan dengan pagu sub kegiatan Rencana Aksi.
-// MURNI, aman-klien. Konsep: docs/CONCEPT-renaksi-pagu-rko.md §5 (aturan) & Tahap B/C.
+// MURNI, aman-klien. Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md §5 (aturan) & Tahap B/C.
 //
 // Satu aturan untuk endpoint baca (Tahap B: pita di RKO & "Terpakai di RKO" di Data Entry) DAN pagar
 // server Simpan RKO (Tahap C). Dua salinan = layar mengizinkan yang ditolak server (L78).
@@ -154,7 +154,7 @@ export function bandingPaguRenaksi(renaksi: readonly PaguSubRenaksi[], rko: read
 export const melampaui = (b: BandingPaguSub): boolean => b.lebihTotal > 0 || b.lebih.length > 0;
 
 // ─── Murni dengan murni, perubahan dengan perubahan ──────────────────────────
-// docs/CONCEPT-renaksi-rko-murni-perubahan.md. Renaksi mulai perubahan sekali setahun, RKO per tab;
+// docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md. Renaksi mulai perubahan sekali setahun, RKO per tab;
 // keduanya tidak harus bersamaan. Karena itu ada DUA pembanding, dan tiap simpanan dinilai dengan
 // pembanding pasangannya (`pelanggaranSimpanan`).
 

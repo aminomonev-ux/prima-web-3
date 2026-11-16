@@ -4,7 +4,7 @@
 //
 // Rekeningnya dipinjam dari baris layar (`daunMilikPj`, aturan yang sama dgn rekapnya);
 // transaksinya dari `GET /api/blud/realisasi/register?pj=` — pagar & batas laju register.
-// Murni pembacaan. Konsep: docs/CONCEPT-blud-realisasi-pj.md
+// Murni pembacaan. Konsep: docs/konsep/blud/CONCEPT-blud-realisasi-pj.md
 
 import { useEffect, useMemo, useState } from 'react'
 import { X, UserRound } from 'lucide-react'

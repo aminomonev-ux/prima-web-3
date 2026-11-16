@@ -1,6 +1,6 @@
 // Dialog "melampaui pagu Rencana Aksi" — SATU kalimat untuk semua layar yang bisa kena 409
 // PAGU_RENAKSI_TERLAMPAUI (RKO, Rekening, Data Entry & Impor & Hapus Renaksi). Konsep:
-// docs/CONCEPT-renaksi-pagu-rko.md §2 no. 2 & 4 — ditolak, tapi bisa diteruskan dengan alasan.
+// docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md §2 no. 2 & 4 — ditolak, tapi bisa diteruskan dengan alasan.
 
 import { promptDialog } from '@/components/ui/ConfirmDialog';
 import { ALASAN_PAGU_MIN, PANJANG_ALASAN_PAGU, type PelanggaranRingkas } from '@/lib/kinerja/pagu-renaksi';

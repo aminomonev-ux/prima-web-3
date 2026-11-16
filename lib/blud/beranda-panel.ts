@@ -1,5 +1,5 @@
 // lib/blud/beranda-panel.ts — isi dua panel riwayat di Beranda BLUD.
-// Konsep: docs/CONCEPT-blud-beranda-panel-bergerak.md §2, §3, §6
+// Konsep: docs/konsep/blud/CONCEPT-blud-beranda-panel-bergerak.md §2, §3, §6
 //
 // Keduanya dulu berbentuk "5 versi terbaru" dan menjawab pertanyaan yang tidak
 // pernah ditanya siapa pun: Δ Net pergeseran SELALU nol (pergeseran wajib

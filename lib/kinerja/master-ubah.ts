@@ -6,7 +6,7 @@
 // tingkatnya sendiri, karena hierarki disambung teks nama dan Rekening/RKO/Realisasi
 // menyimpan SALINAN teks itu. Mengubah satu entri = jalur lama → jalur baru, untuk
 // entri itu, keturunannya, dan setiap baris data yang jalurnya diawali jalur lama.
-// Konsep: docs/CONCEPT-kinerja-master-menjalar.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-master-menjalar.md
 
 import type { MasterTipe } from '@/lib/data/kinerja';
 import { buangBintang, cocokInduk } from './master-nama';

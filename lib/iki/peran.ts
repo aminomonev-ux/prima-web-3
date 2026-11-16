@@ -1,5 +1,5 @@
 // lib/iki/peran.ts
-// IKI varian CUSTOM — peran kolom (docs/CONCEPT-iki-custom.md §11). Modul MURNI, aman-klien: dipakai
+// IKI varian CUSTOM — peran kolom (docs/konsep/iki/CONCEPT-iki-custom.md §11). Modul MURNI, aman-klien: dipakai
 // editor (panel peran, Ambil dari Renaksi/Atasan, peringatan target), server (kaskade dari atasan CUSTOM), dan uji.
 // Tabel bebas tidak menyatakan kolom mana berisi RHK/target; peran yang menyatakannya.
 

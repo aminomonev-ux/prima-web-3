@@ -1,5 +1,5 @@
 // lib/blud/import-dpa-grid.ts — pembaca mentah berkas DPA (.xlsx) jadi grid sel.
-// Konsep: docs/CONCEPT-export-import-dpa.md §3.2–3.3 lapis 1.
+// Konsep: docs/konsep/blud/CONCEPT-export-import-dpa.md §3.2–3.3 lapis 1.
 //
 // Tugasnya HANYA membaca dan menormalkan. Tidak tahu apa-apa soal hierarki DPA —
 // itu urusan import-dpa.ts. Pemisahan ini disengaja: bentuk berkas berubah tiap

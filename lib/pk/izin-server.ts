@@ -1,5 +1,5 @@
 // lib/pk/izin-server.ts — penyelesai izin menu PK di sisi server.
-// Konsep: docs/CONCEPT-pk-peran.md §7
+// Konsep: docs/konsep/pk/CONCEPT-pk-peran.md §7
 // Satu-satunya tempat yang menggabungkan tiga sumber jawaban:
 //   perkecualian orang  →  aturan peran  →  TABEL di peran.ts
 // SERVER-ONLY. Sengaja dipisah dari `peran.ts` yang wajib tetap modul daun tanpa

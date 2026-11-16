@@ -1,5 +1,5 @@
 'use client';
-// Pengadaan (docs/CONCEPT-bba-buku-aset.md §7.4, §14): hanya rencana yang DIDANAI tahun itu. Pesan →
+// Pengadaan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4, §14): hanya rencana yang DIDANAI tahun itu. Pesan →
 // Dalam Proses; barang datang → catat penerimaan (bertahap, dengan "yang dibeli"). Proses & penerimaan
 // lewat modal yang SAMA dengan halaman Rencana (ModalPengadaan) — satu jalur tulis.
 import { useMemo, useRef, useState } from 'react';

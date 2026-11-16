@@ -534,7 +534,7 @@ export function nilaiKetikan(cell: TabelCell, teks: string): string {
   return String(angkaTeksId(t));
 }
 
-// ═══ Ala Excel — docs/CONCEPT-lkjip-tabel-excel.md ═══════════════════════════
+// ═══ Ala Excel — docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md ═══════════════════════════
 // SATU aturan untuk editor tabel dan kisi kepala di modal (E5): memilih blok, melangkah,
 // sisip/hapus baris & kolom (gabungan dan rumus ikut menyesuaikan), sel milik kolom, gabung kepala.
 

@@ -1,4 +1,4 @@
-// scripts/test-renaksi-hapus-tautan.mts — konsep docs/CONCEPT-renaksi-tautan-lanjutan.md §5, §6, §8.
+// scripts/test-renaksi-hapus-tautan.mts — konsep docs/konsep/renaksi/CONCEPT-renaksi-tautan-lanjutan.md §5, §6, §8.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-renaksi-hapus-tautan.mts   (MySQL kotak pasir 2072)
 //
 // A "Lepas tautan & hapus" (§5): penolakan membawa daftar penunjuk, lepas+hapus satu transaksi, pagar

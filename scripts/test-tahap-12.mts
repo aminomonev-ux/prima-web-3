@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-12.mts — penjaga regresi Tahap 12 (P12 Sakelar seluruh aplikasi).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P12, §17.2 Tahap 12.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P12, §17.2 Tahap 12.
 //
 // Bagian A–B menguji PERILAKU (registry nol-impor, jadi bisa dipanggil sungguhan).
 // C–G statis: lapisan servernya menyeret mysql2, jadi tidak bisa diimpor dari sini.

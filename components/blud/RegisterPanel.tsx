@@ -1,6 +1,6 @@
 'use client'
 // components/blud/RegisterPanel.tsx — isi sheet `register` untuk satu rekening.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.1, §3.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.1, §3.2
 //
 // `register` di Excel adalah keluaran, bukan masukan — karena itu tidak dibuatkan
 // menu sendiri. Ini panel drill-down: klik satu baris di layar Realisasi, muncul

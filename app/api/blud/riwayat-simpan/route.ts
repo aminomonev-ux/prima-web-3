@@ -7,7 +7,7 @@
 // sebabnya seluruh pagar simpan (gembok optimistik, pagarSimpanVersi,
 // periksaJangkar, Sentinel) berlaku otomatis tanpa ditulis ulang.
 //
-// Konsep: docs/CONCEPT-blud-riwayat-simpan.md §3
+// Konsep: docs/konsep/blud/CONCEPT-blud-riwayat-simpan.md §3
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'

@@ -5,7 +5,7 @@
 // menimpa target murni dan perbandingan "Murni vs Perubahan" hilang. Kini tiap bulan punya
 // `target_perubahan` (NULL = belum ada Perubahan). Target berlaku = Perubahan bila ada.
 // Sesudah Perubahan tersimpan, Target Murni final: server menolak perubahannya.
-// Konsep: docs/CONCEPT-kinerja-pendapatan-perubahan.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-pendapatan-perubahan.md
 
 export interface BarisTargetPendapatan {
   keterangan: string;

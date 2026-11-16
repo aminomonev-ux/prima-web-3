@@ -1,7 +1,7 @@
 'use client';
 // components/lkjip/SalinKeLkjip.tsx — tombol "Salin ke LKJIP" di layar modul (Cetak E-Anggaran, Cetak
 // Renaksi, Laporan per Sumber Dana). Menyalin tabel di layar + resepnya; di LKJIP tempelannya jadi
-// tabel tertaut. Konsep: docs/CONCEPT-lkjip-tabel-dari-modul.md
+// tabel tertaut. Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-dari-modul.md
 
 import { ClipboardCopy } from 'lucide-react';
 import { toast } from 'sonner';

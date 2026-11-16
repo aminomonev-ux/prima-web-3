@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-kinerja-pendapatan-perubahan.mts — Target Pendapatan Perubahan (tab Pendapatan & CRR).
-// Konsep: docs/CONCEPT-kinerja-pendapatan-perubahan.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-pendapatan-perubahan.md
 // Jalankan: npx tsx --env-file=.env.local scripts/test-kinerja-pendapatan-perubahan.mts
 // Bagian C memakai MySQL sungguhan (kotak pasir 2095), dibersihkan otomatis — tanpa
 // --env-file bagian itu DILEWATI dan jumlah lulusnya turun.

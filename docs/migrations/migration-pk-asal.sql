@@ -1,6 +1,6 @@
 -- migration-pk-asal.sql
 -- Kolom `asal` di Master Program (`pk_program`) dan Master Sasaran (`pk_sasaran`) PK.
--- Konsep: docs/CONCEPT-renaksi-terhubung.md §6 (Tahap D).
+-- Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6 (Tahap D).
 --
 -- KENAPA: kedua master PK diisi dari Rencana Aksi lewat tombol Import Renaksi, tetapi tidak
 -- mencatat baris mana yang berasal dari sana. Tanpa itu layar tidak bisa memberi tahu

@@ -1,5 +1,5 @@
 // lib/data/pk-blud-nominal.ts — nominal BLUD untuk lampiran anggaran Form PK, dihitung LANGSUNG
-// dari baris DPA / Pergeseran versi yang dipilih. Konsep: docs/CONCEPT-pk-nominal-blud-langsung.md.
+// dari baris DPA / Pergeseran versi yang dipilih. Konsep: docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md.
 //
 // Dulu dibaca dari foto `rekap_pk` yang hanya lahir kalau orang menekan "Simpan Rekap PK" di Cetak
 // DPA — foto basi (DPA Perubahan tak pernah difoto) dan Pergeseran tak pernah bisa dipakai.

@@ -1,5 +1,5 @@
 // app/api/admin/pusat-akses/route.ts — satu orang, satu halaman, satu Simpan.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §4.5 & §16.4 (Tahap 5 / Fase C).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §4.5 & §16.4 (Tahap 5 / Fase C).
 //
 // GET                       → daftar orang (cari, saring status, termasuk yang diarsipkan)
 // GET ?userId=12            → berkas orang: peran, pintu modul + sebabnya, izin menu, kuota

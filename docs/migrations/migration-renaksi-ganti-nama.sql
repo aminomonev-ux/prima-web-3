@@ -1,6 +1,6 @@
 -- migration-renaksi-ganti-nama.sql
 -- Tabel `renaksi_ganti_nama`: jejak ganti nama entitas Rencana Aksi.
--- Konsep: docs/CONCEPT-renaksi-terhubung.md §4 (Tahap A).
+-- Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §4 (Tahap A).
 --
 -- KENAPA: E-Anggaran, PK, dan IKI menyalin nama program/kegiatan/sub kegiatan dari
 -- Renaksi. Entitas Renaksi tidak punya id (hierarkinya disambung teks nama), jadi tanpa

@@ -7,7 +7,7 @@
 // Perubahan, dari dasar apa). Barisnya ditulis jalur Simpan biasa — satu jalur
 // tulis, seluruh pagar lama berlaku otomatis (konsep §5).
 //
-// Konsep: docs/CONCEPT-blud-dpa-perubahan.md §4
+// Konsep: docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §4
 
 import { sql } from '@/lib/data/db'
 import type { TxSql } from '@/lib/data/db'

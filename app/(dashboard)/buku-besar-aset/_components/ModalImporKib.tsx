@@ -1,5 +1,5 @@
 'use client';
-// Impor KIB (docs/CONCEPT-bba-buku-aset.md §7.1): pilih berkas → pratinjau (server membaca &
+// Impor KIB (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.1): pilih berkas → pratinjau (server membaca &
 // membandingkan, tanpa menulis) → Simpan mengunggah berkas yang SAMA sekali lagi; server membaca
 // ulang lalu menulis dalam satu transaksi. Baris tidak pernah dikirim dari layar — hanya pilihan
 // pasangan "nomornya berubah" (§23.1), yang dinilai ulang server dari daftar calonnya sendiri.

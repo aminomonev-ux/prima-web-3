@@ -1,6 +1,6 @@
 // scripts/test-blud-dpa-perubahan.mts — DPA Perubahan BLUD, Tahap 1 (uji statis + fungsi murni).
 //
-// Konsep: docs/CONCEPT-blud-dpa-perubahan.md. Pasangannya yang menyentuh MySQL:
+// Konsep: docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md. Pasangannya yang menyentuh MySQL:
 // scripts/test-blud-dpa-perubahan-db.mjs (11 skenario) dan
 // scripts/test-blud-race-perubahan.mjs (R7, kode sungguhan × 3 varian).
 //

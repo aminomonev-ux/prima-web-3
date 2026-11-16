@@ -1,6 +1,6 @@
 'use client'
 // components/blud/SalinTahunModal.tsx — salin isi DPA tahun lain ke FORM tahun ini.
-// Konsep: docs/CONCEPT-blud-salin-tahun.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-salin-tahun.md
 //
 // Sepadan dengan fitur salin-tahun di Renaksi & Kinerja, tapi berhenti satu
 // langkah lebih awal dengan sengaja: yang dihasilkan cuma isi form di layar,

@@ -1,5 +1,5 @@
 -- migration-audit-target-user.sql
--- Tahap 7 · P8 lapis 1 (menutup T-15). Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P8.
+-- Tahap 7 · P8 lapis 1 (menutup T-15). Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P8.
 --
 -- `audit_log.username` menyimpan PELAKU. Sasarannya — siapa yang dikenai — tenggelam di
 -- `detail` sebagai teks bebas: "Ubah role user id=12". Akibatnya pertanyaan yang paling

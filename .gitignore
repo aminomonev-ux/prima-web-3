@@ -9,6 +9,10 @@
 /docs/*.xls
 /docs/*.xlsx
 /docs/AUDIT-*.md
+# Sejak 2026-11-16 keduanya dikelompokkan: laporan audit → docs/audit/, berkas contoh
+# (data nyata) → docs/referensi/. Pola lama di atas tetap dipasang sebagai jaring.
+/docs/audit/
+/docs/referensi/
 
 # dependencies
 /node_modules
@@ -100,4 +104,3 @@ scripts/backup-db.log
 /docs/Nota Dinas*.docx
 /scripts/ss-konsep/field.log
 /docs/konsep-sistem/
-/docs/panduan-alur-modul-bba.pdf

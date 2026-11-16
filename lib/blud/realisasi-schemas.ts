@@ -1,5 +1,5 @@
 // lib/blud/realisasi-schemas.ts — Zod sentral + guard modul Realisasi BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §4, §5, §7
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4, §5, §7
 //
 // Akses TIDAK diputuskan di berkas ini: sejak pembagian peran, izin lihat/input
 // ditentukan per menu oleh `bolehLihat`/`bolehInput` di

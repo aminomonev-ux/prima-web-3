@@ -1,5 +1,5 @@
 'use client';
-// Buku Aset (docs/CONCEPT-bba-buku-aset.md §5, §7.2–7.3, §14): daftar per golongan, dikelompokkan
+// Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §5, §7.2–7.3, §14): daftar per golongan, dikelompokkan
 // sejenis-setahun-seruangan; data tetap per register. Klik kelompok → register-registernya;
 // klik register → kartu aset. Centang kelompok → catat kondisi / pindah ruangan / tautkan barang.
 import { useEffect, useRef, useState } from 'react';

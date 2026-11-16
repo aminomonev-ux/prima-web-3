@@ -1,5 +1,5 @@
 // lib/bba/kib.ts — definisi kolom KIB A–F persis templat ekspor sistem aset provinsi.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §5.2, §15. MURNI (tanpa impor) — dipakai pembaca impor,
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §5.2, §15. MURNI (tanpa impor) — dipakai pembaca impor,
 // kartu aset, Zod, DAN Excel. Kalau provinsi mengubah templatnya, yang disunting berkas ini saja.
 //
 // Sumber: lembar KIBA…KIBF berkas ekspor provinsi (Rekap Aset 2025). Teks kepala ditulis apa

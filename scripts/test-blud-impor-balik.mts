@@ -1,5 +1,5 @@
 // scripts/test-blud-impor-balik.mts — DPA Perubahan BLUD, Tahap 5: impor-balik Excel
-// unduhan PRIMA ke versi yang sedang terbuka (konsep docs/CONCEPT-blud-dpa-perubahan.md §11.3).
+// unduhan PRIMA ke versi yang sedang terbuka (konsep docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §11.3).
 //
 // Yang dijaga:
 //   A. penanda unduhan — eksporter menulisnya di kolom Jangkar tersembunyi, di luar kop

@@ -1,5 +1,5 @@
 // lib/renaksi/rantai.ts — aturan MURNI rantai pilihan Data Entry Renaksi.
-// Konsep: docs/CONCEPT-renaksi-pilih-indikator.md (§4, §5, §12 Tahap 2).
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pilih-indikator.md (§4, §5, §12 Tahap 2).
 //
 // Tiga pertanyaan, semuanya dijawab dari baris yang sudah dimuat layar:
 //   1. indikator induk mana yang boleh dipilih untuk sebuah entitas anak;

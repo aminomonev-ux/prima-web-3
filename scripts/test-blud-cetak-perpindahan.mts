@@ -1,5 +1,5 @@
 // scripts/test-blud-cetak-perpindahan.mts — Catatan Perpindahan sampai ke berkas.
-// Konsep: docs/CONCEPT-blud-cetak-perpindahan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-cetak-perpindahan.md
 //
 // Tiga hal yang dijaga di sini:
 //

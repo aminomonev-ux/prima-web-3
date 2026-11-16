@@ -3,7 +3,7 @@
 // Aturannya (urutan, kalimat) di `tutup-bulan.ts`; di sini cuma DB + gembok.
 // Tutupan menempel pada (tahun, sumber, VERSI, bulan): menutup Januari di Perubahan tidak
 // menutup Januari Murni, dan sebaliknya. Versi final tertutup semua lewat foto-realisasi.ts.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §5, docs/CONCEPT-kinerja-tutup-per-versi.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §5, docs/konsep/kinerja/CONCEPT-kinerja-tutup-per-versi.md
 
 import { withTransaction } from '@/lib/data/db'
 import type { Penanya, TxSql } from '@/lib/data/db'

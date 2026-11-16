@@ -1,7 +1,7 @@
 // lib/blud/export/spj-excel.ts — satu berkas .xlsx berisi seluruh lembar SPJ bulanan.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.2 (pemetaan sheet), §4.7, Fase 5.
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.2 (pemetaan sheet), §4.7, Fase 5.
 //
-// Bentuk tiap lembar mengikuti berkas asli `docs/06. BKU Juni 2026.xlsx` — kop,
+// Bentuk tiap lembar mengikuti berkas asli `docs/referensi/06. BKU Juni 2026.xlsx` — kop,
 // urutan kolom, penomoran kolom, sampai format baku BEND-12 untuk SPJ & TUTUP KAS.
 // Yang memeriksa di Keuangan/BPKAD membaca BENTUK ini; isi yang benar dengan
 // bentuk yang asing tetap akan dikembalikan.

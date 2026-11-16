@@ -5,7 +5,7 @@
 // itu TIDAK memperpanjang sesi. Penegak sesungguhnya server (`getSession` menolak sesi yang lahir
 // sebelum batas) — komponen ini hanya mengingatkan dan memulangkan tab ke halaman login tepat waktu.
 // Aplikasi tidak menyimpan isian siapa pun: tiap layar punya Simpan + pengaman bentrok sendiri.
-// Konsep: docs/CONCEPT-pemeliharaan-keluar.md
+// Konsep: docs/konsep/sistem/CONCEPT-pemeliharaan-keluar.md
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';

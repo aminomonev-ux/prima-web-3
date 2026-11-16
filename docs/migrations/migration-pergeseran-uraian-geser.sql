@@ -1,6 +1,6 @@
 -- migration-pergeseran-uraian-geser.sql
 -- Kolom `bertambah` + `berkurang` pada pergeseran_dpa.
--- Konsep: docs/CONCEPT-blud-uraian-geser.md
+-- Konsep: docs/konsep/blud/CONCEPT-blud-uraian-geser.md
 --
 -- KENAPA: kolom `bertambah_berkurang` cuma SATU angka bertanda, hasil hitungan
 -- `pergeseran - jumlah`. Rekening yang ditambah DAN dikurangi di dokumen yang

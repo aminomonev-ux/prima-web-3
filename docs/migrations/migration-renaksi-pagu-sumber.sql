@@ -1,6 +1,6 @@
 -- migration-renaksi-pagu-sumber.sql
 -- Pagu Rencana Aksi per sumber dana + babak Perubahan per tahun.
--- Konsep: docs/CONCEPT-renaksi-pagu-rko.md (§3, §4, Tahap A').
+-- Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md (§3, §4, Tahap A').
 --
 -- KENAPA: pagu sub kegiatan dulu satu angka tanpa sumber (`rencana_aksi.anggaran_nominal`).
 -- Satu program bisa didanai APBD dan BLUD sekaligus, dan RKO E-Anggaran mencatat sumber dana

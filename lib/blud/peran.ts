@@ -1,5 +1,5 @@
 // lib/blud/peran.ts — izin dua sumbu modul BLUD: peran × menu.
-// Konsep: docs/CONCEPT-blud-peran.md (keputusan #41)
+// Konsep: docs/konsep/blud/CONCEPT-blud-peran.md (keputusan #41)
 //
 // MODUL DAUN — tidak mengimpor apa pun. Ribbon dan tombol di klien memakainya
 // tanpa ikut menarik `next/server` maupun data layer, pola yang sama dengan

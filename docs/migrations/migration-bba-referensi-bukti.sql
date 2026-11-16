@@ -1,5 +1,5 @@
 -- Migration: Buku Besar Aset — referensi harga + bukti dukung per item (Tahap 1)
--- Konsep: docs/CONCEPT-bba-perencanaan.md §4 (dieksekusi 2026-10-22).
+-- Konsep: docs/konsep/bba/CONCEPT-bba-perencanaan.md §4 (dieksekusi 2026-10-22).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang: daftar BBA membaca kedua
 -- tabel ini untuk kolom Ref & Bukti, jadi tanpa tabelnya layar Buku Besar Aset gagal dimuat.
 -- Aman untuk data lama: item yang sudah ada hanya belum punya referensi/bukti. Tautan

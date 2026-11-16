@@ -1,5 +1,5 @@
 // lib/blud/izin-server.ts — penyelesai izin menu BLUD di sisi server.
-// Konsep: docs/CONCEPT-menu-access-control.md §4.5.2, §4.5.3
+// Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §4.5.2, §4.5.3
 //
 // Satu-satunya tempat yang menggabungkan tiga sumber jawaban:
 //   perkecualian orang  →  aturan peran  →  TABEL di peran.ts

@@ -1,5 +1,5 @@
 // app/(dashboard)/perjanjian-kinerja/_izin.ts — izin per-layar untuk server component PK.
-// Konsep: docs/CONCEPT-pk-peran.md §7
+// Konsep: docs/konsep/pk/CONCEPT-pk-peran.md §7
 //
 // `layout.tsx` sudah menjaga pintu modul (`hasAppAccess`), jadi di sini tinggal
 // satu sumbu lagi: menu ini boleh dibuka atau tidak, dan boleh diubah atau tidak.

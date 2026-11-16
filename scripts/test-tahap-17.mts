@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-17.mts — penjaga regresi Tahap 17 (T9 + K2, T15).
-// Konsep: docs/CONCEPT-perbaikan-audit-akses.md §5 Tahap 17.
+// Konsep: docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md §5 Tahap 17.
 //
 // A–B menguji perilaku penolong registry yang dipakai `/maintenance` DAN halaman login.
 // Sisanya statis: halaman login tidak boleh mendapat endpoint publik baru, font eksternal
@@ -131,7 +131,7 @@ cek('migrasi pelengkap aman diulang (INSERT IGNORE, tak menimpa)', mig.includes(
 // ── F · Panduan pemasangan ──────────────────────────────────────────────────
 console.log('\nF · panduan pemasangan')
 
-const panduan = baca('docs/PANDUAN-pemasangan-windows.md')
+const panduan = baca('docs/panduan/PANDUAN-instalasi-prima.md')
 cek('menyebut cek-tahap-0.mjs', panduan.includes('node scripts/cek-tahap-0.mjs'))
 cek('menyebut sql_mode strict', panduan.includes('STRICT_TRANS_TABLES') && panduan.includes('NO_ZERO_DATE'))
 cek('menyebut kedua migrasi fase ini', panduan.includes('migration-hapus-sakelar-yatim.sql') && panduan.includes('migration-seed-sakelar-lengkap.sql'))

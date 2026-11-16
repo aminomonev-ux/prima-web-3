@@ -106,7 +106,7 @@ export async function acquireBludLock(tx: TxSql, entity: string, keyId: string):
  * jalan bersamaan, tapi semuanya menunggu — dan ditunggu — pemegang eksklusif.
  * Bentuk kunci baca-tulis: transaksi belanja yang hanya MEMBACA "versi mana sumber
  * pagu" tidak perlu saling antre, tapi tidak boleh berselang-seling dengan jalur
- * yang menulis/menghapus versi (R7, docs/CONCEPT-blud-dpa-perubahan.md §10).
+ * yang menulis/menghapus versi (R7, docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §10).
  * INSERT IGNORE dulu — alasan yang sama dengan saudaranya (L69-a).
  */
 export async function acquireBludLockBerbagi(tx: TxSql, entity: string, keyId: string): Promise<void> {

@@ -1,5 +1,5 @@
 -- migration-blud-dpa-perubahan.sql
--- DPA Perubahan BLUD — konsep: docs/CONCEPT-blud-dpa-perubahan.md (§4, §6)
+-- DPA Perubahan BLUD — konsep: docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md (§4, §6)
 --
 -- Perubahan BUKAN tabel baru: versinya ditulis ke `dpa_blud` lewat Simpan biasa,
 -- jadi setiap pembaca "DPA mana yang berlaku" otomatis ikut membacanya (§3).

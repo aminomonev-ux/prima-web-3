@@ -1,6 +1,6 @@
 // lib/kinerja/foto-realisasi-data.ts — baca/tulis foto realisasi versi final
 // (`kinerja_realisasi_foto` + `_baris`). Aturannya di foto-realisasi.ts.
-// Konsep: docs/CONCEPT-kinerja-tutup-per-versi.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-tutup-per-versi.md
 
 import type { Penanya, TxSql } from '@/lib/data/db'
 import type { SumberSSK } from '@/lib/data/kinerja'

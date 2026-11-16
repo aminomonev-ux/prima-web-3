@@ -1,5 +1,5 @@
 // ═══ PRIMA — LKJIP — Impor dari Word (pure, tanpa DB/Drive) ════════════════════
-// Konsep: docs/CONCEPT-lkjip-impor-word.md. Bytes .docx → pohon bab + blok + Kata Pengantar.
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-impor-word.md. Bytes .docx → pohon bab + blok + Kata Pengantar.
 // Route membaca ulang berkas yang SAMA saat "Buat" (sidik dicocokkan di sana), jadi koreksi
 // pemakai menempel pada nomor unsur badan berkas ini — urutan pembacaan harus deterministik.
 // Pembaca XML kecil milik sendiri, bukan dependensi baru (L57: lockfile wajib regen npm 10.8.2).

@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/saldo-awal/route.ts — saldo awal tahun anggaran (R3).
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.6
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.6
 //
 // POST  { tahun_anggaran, saldo_awal_kas, saldo_awal_bank }
 //

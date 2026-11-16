@@ -4,7 +4,7 @@ import { AnggaranSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-schemas
 import { tandaiAnggaran, BbaVersionConflictError, BbaNotFoundError, BbaAnggaranError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from '../_guard';
 
-// Tanda "masuk anggaran" borongan (docs/CONCEPT-bba-buku-aset.md §7.4): Didanai · Tidak didanai · Belum.
+// Tanda "masuk anggaran" borongan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4): Didanai · Tidak didanai · Belum.
 // Ditandai Perencanaan (izin EDIT Rencana); daftar Pengadaan berdiri di atas tanda ini.
 export async function POST(req: NextRequest) {
   const g = await guard();

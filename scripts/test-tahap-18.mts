@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-18.mts — penjaga regresi Tahap 18 (bahasa Admin Panel & sakelar).
-// Konsep: docs/CONCEPT-perbaikan-audit-akses.md §5 Tahap 18.
+// Konsep: docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md §5 Tahap 18.
 //
 // Pemilik aplikasi meminta dua hal: "beku" diganti bahasa Indonesia yang wajar, dan kalimat
 // yang terdengar seperti tulisan mesin di Admin Panel ditulis ulang. Yang dijaga di sini:

@@ -1,6 +1,6 @@
 // lib/pk/selaras-renaksi.ts — Master Program & Master Sasaran PK dibandingkan dengan Rencana Aksi.
 //
-// PURE & aman-klien. Konsep: docs/CONCEPT-renaksi-terhubung.md §6 (Tahap D). Kedua master PK
+// PURE & aman-klien. Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6 (Tahap D). Kedua master PK
 // disimpan replace-all dari layar, jadi pembanding dihitung dari ISI LAYAR dan "Perbarui"
 // berhenti di form (L78): yang menulis tetap tombol Simpan. Dokumen PK tidak disentuh.
 
@@ -145,7 +145,7 @@ export interface RaSasaranSrc {
   satuan: string;
   /** DECIMAL — mysql2 memulangkannya sebagai string. */
   target_tahunan: string | number;
-  /** Tautan indikator induk (docs/CONCEPT-renaksi-pilih-indikator.md). Tanpa keduanya = belum tertaut. */
+  /** Tautan indikator induk (docs/konsep/renaksi/CONCEPT-renaksi-pilih-indikator.md). Tanpa keduanya = belum tertaut. */
   id?: number;
   induk_indikator_id?: number | null;
 }

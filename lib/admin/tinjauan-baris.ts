@@ -1,5 +1,5 @@
 // lib/admin/tinjauan-baris.ts — bentuk & perhitungan satu baris Tinjauan Akses.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P3 & P11 (Tahap 8).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P3 & P11 (Tahap 8).
 //
 // BERKAS DAUN. Ia dibaca komponen `'use client'` (layar Tinjauan menyusun berkas Excel
 // di peramban) DAN oleh `tinjauan.ts` di sisi server. Karena itu ia TIDAK BOLEH

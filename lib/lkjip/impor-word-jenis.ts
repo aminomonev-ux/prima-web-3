@@ -1,6 +1,6 @@
 // ═══ PRIMA — LKJIP — Impor dari Word: bagian aman-klien ════════════════════════
 // Jenis penanda, label, bentuk pratinjau, dan batas berkas — dipakai pembaca (server) DAN modal
-// pratinjau, tanpa menyeret PizZip ke peramban. Konsep: docs/CONCEPT-lkjip-impor-word.md.
+// pratinjau, tanpa menyeret PizZip ke peramban. Konsep: docs/konsep/lkjip/CONCEPT-lkjip-impor-word.md.
 
 // 9,5 MB, bukan 20 MB (konsep §5): proxy.ts hanya meneruskan 10 MB pertama badan permintaan
 // (`proxyClientMaxBodySize` bawaan Next 16) — berkas yang lebih besar tiba terpotong dan rusak.

@@ -1,5 +1,5 @@
 // scripts/test-renaksi-impor-tautan.mts — Excel Renaksi membawa tautan indikator induk, dan impor
-// yang memindah/mengganti nama ikut membawa turunannya (docs/CONCEPT-renaksi-tautan-lanjutan.md §2–§3).
+// yang memindah/mengganti nama ikut membawa turunannya (docs/konsep/renaksi/CONCEPT-renaksi-tautan-lanjutan.md §2–§3).
 // Jalankan: npx tsx --env-file=.env.local scripts/test-renaksi-impor-tautan.mts
 // Bagian C memakai MySQL kotak pasir 2074 (dibersihkan otomatis; tanpa --env-file GAGAL).
 

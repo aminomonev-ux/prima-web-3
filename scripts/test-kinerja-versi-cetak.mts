@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-kinerja-versi-cetak.mts — versi SSK di Cetak per sumber, Buat Perubahan dari RKO
 // yang kosong, pagar Simpan MURNI sesudah ada Perubahan, dropdown Renaksi yang terpotong.
-// Konsep: docs/CONCEPT-kinerja-versi-cetak.md.
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-versi-cetak.md.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-kinerja-versi-cetak.mts
 // Bagian D memakai MySQL sungguhan (kotak pasir 2096), dibersihkan otomatis — tanpa
 // --env-file bagian itu DILEWATI dan jumlah lulusnya turun.

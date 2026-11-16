@@ -1,5 +1,5 @@
 // lib/admin/pintu-akses.ts — aturan "pintu modul terbuka, dan KENAPA".
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §4.5a (Tahap 5 / Fase C).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §4.5a (Tahap 5 / Fase C).
 //
 // BERKAS DAUN. Ia dibaca komponen `'use client'` (Pusat Akses menghitung ulang tiap
 // centang digeser, tanpa menembak server) DAN oleh `pusat-akses.ts` di sisi server.

@@ -2,7 +2,7 @@
 // scripts/test-kinerja-master-menjalar.mts — ganti nama / pindah induk / gabung entri Master
 // yang ikut menjalar ke Rekening, RKO (semua versi), dan Realisasi; Rapikan Bintang; Lengkapi
 // Master; pilihan berantai satu aturan di tab Master & Rekening.
-// Konsep: docs/CONCEPT-kinerja-master-menjalar.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-master-menjalar.md
 // Jalankan: npx tsx --env-file=.env.local scripts/test-kinerja-master-menjalar.mts
 // Bagian G memakai MySQL sungguhan (kotak pasir 2097), dibersihkan otomatis — tanpa
 // --env-file bagian itu DILEWATI dan jumlah lulusnya turun.

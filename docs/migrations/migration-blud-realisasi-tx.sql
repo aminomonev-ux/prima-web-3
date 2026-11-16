@@ -1,6 +1,6 @@
 -- migration-blud-realisasi-tx.sql
 -- Modul Realisasi BLUD — Fase 2: Buku Kas (satu-satunya titik input).
--- Konsep: docs/CONCEPT-blud-realisasi.md §2.2, §4.7, §6.2
+-- Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.2, §4.7, §6.2
 --
 -- Prasyarat: migration-blud-realisasi-anggaran-key.sql sudah jalan.
 --

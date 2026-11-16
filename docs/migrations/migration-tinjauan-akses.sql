@@ -1,5 +1,5 @@
 -- migration-tinjauan-akses.sql
--- Tahap 8 · P3 Tinjauan Akses Berkala. Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P3.
+-- Tahap 8 · P3 Tinjauan Akses Berkala. Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P3.
 --
 -- CLAUDE.md (AUTHZ-02/V5) sudah menyatakan akses harus **direview berkala**. Tidak ada
 -- alatnya, tidak ada catatannya, dan karena itu tidak pernah terjadi. Kalau SPI atau

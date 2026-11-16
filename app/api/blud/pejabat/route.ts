@@ -1,5 +1,5 @@
 // app/api/blud/pejabat/route.ts — pejabat penanda tangan dokumen SPJ BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.1, keputusan #29.
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.1, keputusan #29.
 //
 // GET  ?tahun=[&sumber=pk]  daftar tersimpan · `sumber=pk` = saran dari master PK
 // POST                      simpan (replace-all per tahun)

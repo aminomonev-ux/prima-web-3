@@ -416,7 +416,7 @@ export default function DataEntryForm({ level, rows, selectedYear, onReload, not
     : [];
   // "Terpakai di RKO": RKO sub kegiatan ini dari server, pagunya dari ISI LAYAR — dinilai aturan yang
   // sama dengan pita RKO & pagar server (lib/kinerja/pagu-renaksi.ts). Kolom Murni dipasangkan dengan
-  // RKO versi murni, kolom Perubahan dengan RKO yang berlaku (docs/CONCEPT-renaksi-rko-murni-perubahan.md).
+  // RKO versi murni, kolom Perubahan dengan RKO yang berlaku (docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md).
   const terpakaiRko = (() => {
     if (!isSub || !subKegiatan.trim()) return null;
     const kunci = kunciSub(program.trim(), kegiatan.trim(), subKegiatan.trim());

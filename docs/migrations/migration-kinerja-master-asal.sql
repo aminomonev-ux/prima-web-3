@@ -1,6 +1,6 @@
 -- migration-kinerja-master-asal.sql
 -- Kolom `kinerja_master.asal`: entri Master E-Anggaran yang diambil dari Rencana Aksi.
--- Konsep: docs/CONCEPT-renaksi-terhubung.md §5.1 (Tahap B).
+-- Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.1 (Tahap B).
 --
 -- KENAPA: Master tidak mencatat asal, jadi layar tidak bisa membedakan entri hasil
 -- Init Renaksi dari entri ketikan tangan, dan pemberitahuan "Rencana Aksi berubah"

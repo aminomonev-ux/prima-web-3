@@ -1,6 +1,6 @@
 // app/api/perjanjian-kinerja/blud-nominal/route.ts
 // Nominal BLUD untuk lampiran anggaran Form PK — dihitung langsung dari DPA/Pergeseran versi
-// yang dipilih. Aturan: lib/data/pk-blud-nominal.ts. Konsep: docs/CONCEPT-pk-nominal-blud-langsung.md.
+// yang dipilih. Aturan: lib/data/pk-blud-nominal.ts. Konsep: docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md.
 //
 // GET ?mode=versi&tahun=2026                                        → { ok, versi: VersiBlud[] }
 // GET ?unit=Kabid%20Pelayanan&tahun=2026&sumber=pergeseran&versi=2026-11-10 → { ok, hasil }
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   // Angka BLUD untuk lampiran anggaran Form PK. Sengaja TIDAK ikut memeriksa izin menu
   // BLUD: menambah syarat itu terdengar lebih ketat, tapi ia mengubah SIAPA yang bisa
   // menyusun PK — keputusan proses kerja, bukan keputusan teknis. Dicatat di
-  // docs/CONCEPT-pk-peran.md §6 supaya tidak terbaca sebagai kelalaian. Yang dipulangkan
+  // docs/konsep/pk/CONCEPT-pk-peran.md §6 supaya tidak terbaca sebagai kelalaian. Yang dipulangkan
   // hanya total per label PJ + daftar versi, bukan baris anggaran.
   if (!(await bolehLihatSalahSatu(session.userId, session.role, ['form', 'riwayat']))) return forbidden();
 

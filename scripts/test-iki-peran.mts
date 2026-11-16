@@ -1,4 +1,4 @@
-// scripts/test-iki-peran.mts — IKI CUSTOM Tahap 3: peran kolom (docs/CONCEPT-iki-custom.md §11).
+// scripts/test-iki-peran.mts — IKI CUSTOM Tahap 3: peran kolom (docs/konsep/iki/CONCEPT-iki-custom.md §11).
 //
 //   npx tsx scripts/test-iki-peran.mts
 //

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-iki-banding-renaksi.mts — kartu RHK IKI yang diambil dari Rencana Aksi diberi tahu
-// saat Renaksi berubah. Konsep: docs/CONCEPT-renaksi-terhubung.md §6 (Tahap E).
+// saat Renaksi berubah. Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6 (Tahap E).
 // Jalankan: npx tsx scripts/test-iki-banding-renaksi.mts (murni + pemeriksaan sambungan, tanpa DB).
 import { readFileSync } from 'node:fs'
 import { bandingKartuRenaksi, terapkanBandingKartu, kunciKartu, kalimatSpandukKartu, jumlahPerubahanKartu } from '../app/(dashboard)/iki/_lib/banding-renaksi'

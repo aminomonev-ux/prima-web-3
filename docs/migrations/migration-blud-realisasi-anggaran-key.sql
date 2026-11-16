@@ -1,6 +1,6 @@
 -- migration-blud-realisasi-anggaran-key.sql
 -- Jangkar stabil baris anggaran lintas-versi — fondasi modul Realisasi BLUD.
--- Konsep: docs/CONCEPT-blud-realisasi.md §2.3 & §6.1
+-- Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.3 & §6.1
 --
 -- Sebab: dpa_blud & pergeseran_dpa disimpan replace-all per versi (DELETE + INSERT),
 -- dan row_id unik PER VERSI. Realisasi tidak boleh menempel ke id/row_id — begitu

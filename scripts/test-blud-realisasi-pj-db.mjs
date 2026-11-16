@@ -1,4 +1,4 @@
-// Uji DB Realisasi per Penanggung Jawab (docs/CONCEPT-blud-realisasi-pj.md).
+// Uji DB Realisasi per Penanggung Jawab (docs/konsep/blud/CONCEPT-blud-realisasi-pj.md).
 //   node scripts/test-blud-realisasi-pj-db.mjs
 //
 // MENYENTUH DB — hanya TAHUN KOTAK PASIR 2099, dibersihkan di awal DAN di `finally`.

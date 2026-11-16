@@ -1,6 +1,6 @@
 'use client'
 // components/blud/TransaksiModal.tsx — form satu transaksi Buku Kas BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §2.4, §2.5, §4.1, §4.2 · docs/CONCEPT-blud-potongan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.4, §2.5, §4.1, §4.2 · docs/konsep/blud/CONCEPT-blud-potongan.md
 //
 // Tiga hal yang membedakan form ini dari form biasa:
 //   1. Rekening DIPILIH dari pohon DPA/Pergeseran terbaru, tidak diketik (§2.4).

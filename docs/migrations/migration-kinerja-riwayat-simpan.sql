@@ -25,7 +25,7 @@
 --
 -- Snapshot ini SENGAJA tidak dirujuk siapa pun. Ia catatan, bukan entitas.
 --
--- Referensi: L69, L87, docs/CONCEPT-kinerja-riwayat-simpan.md
+-- Referensi: L69, L87, docs/konsep/kinerja/CONCEPT-kinerja-riwayat-simpan.md
 
 CREATE TABLE IF NOT EXISTS kinerja_riwayat_simpan (
   id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

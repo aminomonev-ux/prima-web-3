@@ -2,7 +2,7 @@
 //
 // SENGAJA tidak memperpanjang sesi (tanpa createToken / last_active): kalau memperpanjang, komputer
 // yang ditinggal dengan tab terbuka tidak akan pernah kena batas idle 60 menit.
-// Konsep: docs/CONCEPT-pemeliharaan-keluar.md
+// Konsep: docs/konsep/sistem/CONCEPT-pemeliharaan-keluar.md
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getSession, COOKIE_NAME } from '@/lib/security/auth';

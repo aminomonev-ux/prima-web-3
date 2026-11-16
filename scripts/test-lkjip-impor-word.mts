@@ -1,4 +1,4 @@
-// scripts/test-lkjip-impor-word.mts — Impor LKJIP dari Word (docs/CONCEPT-lkjip-impor-word.md).
+// scripts/test-lkjip-impor-word.mts — Impor LKJIP dari Word (docs/konsep/lkjip/CONCEPT-lkjip-impor-word.md).
 //
 //   npx tsx --env-file=.env.local scripts/test-lkjip-impor-word.mts [berkas-kalibrasi.docx]
 //

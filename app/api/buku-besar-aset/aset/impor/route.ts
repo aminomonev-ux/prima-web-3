@@ -7,7 +7,7 @@ import { PasanganImporSchema } from '@/lib/data/bba-aset-schemas';
 import type { PasanganImpor } from '@/lib/bba/aset';
 import { guard, tolakKecualiEdit } from '../../_guard';
 
-// Impor KIB dari ekspor sistem aset provinsi (docs/CONCEPT-bba-buku-aset.md §7.1, §16, §23.1).
+// Impor KIB dari ekspor sistem aset provinsi (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.1, §16, §23.1).
 //   ?step=pratinjau — membaca & membandingkan dengan buku aset, TIDAK menulis apa pun.
 //   ?step=simpan    — berkas yang SAMA diunggah ulang; server membaca ulang lalu menulis dalam satu
 //                     transaksi. Baris tidak pernah dikirim balik dari layar, jadi yang tersimpan

@@ -10,7 +10,7 @@
 // ada layar yang terlibat. Route ini juga di luar `app/api/blud`, jadi tidak
 // masuk pemindaian `npm run check:killswitch`.
 //
-// Konsep: docs/CONCEPT-blud-cadangan-json.md §4 Tahap 2
+// Konsep: docs/konsep/blud/CONCEPT-blud-cadangan-json.md §4 Tahap 2
 
 import { NextRequest, NextResponse } from 'next/server'
 import { writeAuditLog } from '@/lib/security/auditlog'

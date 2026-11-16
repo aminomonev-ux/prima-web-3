@@ -1,5 +1,5 @@
 // lib/data/renaksi-pemakai.ts — siapa yang masih memegang nama Renaksi yang barusan diganti.
-// Hanya MEMBACA (sesudah ganti nama ter-commit). Konsep: docs/CONCEPT-renaksi-terhubung.md §6 (Tahap F).
+// Hanya MEMBACA (sesudah ganti nama ter-commit). Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6 (Tahap F).
 //
 // Yang dihitung hanya salinan yang memang bertaut ke Renaksi: entri Master E-Anggaran & Master
 // Program PK ber-asal RENAKSI dengan nama lama (kegiatan/sub dibatasi induknya — senama di induk

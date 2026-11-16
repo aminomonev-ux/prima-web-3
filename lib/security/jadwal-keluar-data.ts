@@ -1,5 +1,5 @@
 // lib/security/jadwal-keluar-data.ts — baca/tulis jadwal "Pemeliharaan & keluar otomatis" (DB).
-// Aturannya di `jadwal-keluar.ts` (MURNI); di sini hanya kueri. Konsep: docs/CONCEPT-pemeliharaan-keluar.md
+// Aturannya di `jadwal-keluar.ts` (MURNI); di sini hanya kueri. Konsep: docs/konsep/sistem/CONCEPT-pemeliharaan-keluar.md
 import { sql, withTransaction, type Penanya, type TxSql } from '@/lib/data/db';
 import { verifyToken } from '@/lib/security/auth';
 import {

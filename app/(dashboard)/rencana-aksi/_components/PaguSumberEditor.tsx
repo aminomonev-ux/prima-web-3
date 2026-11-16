@@ -129,7 +129,7 @@ function AngkaRko({ judul, rko }: { judul: string; rko: Pagu }) {
 
 /**
  * "Terpakai di RKO" — kolom Murni dibandingkan dengan RKO versi murni, kolom Perubahan dengan RKO
- * yang berlaku sekarang (docs/CONCEPT-renaksi-rko-murni-perubahan.md §4).
+ * yang berlaku sekarang (docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md §4).
  */
 function TerpakaiDiRko({ t, tahun, perubahanAktif }: { t: TerpakaiRko; tahun: number; perubahanAktif: boolean }) {
   const merah = 'block font-semibold text-[#E24B4A]';

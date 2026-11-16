@@ -1,4 +1,4 @@
-// Uji regresi resolusi izin menu (docs/CONCEPT-menu-access-control.md §4.5).
+// Uji regresi resolusi izin menu (docs/konsep/sistem/CONCEPT-menu-access-control.md §4.5).
 //   node scripts/test-menu-access.mjs
 // READ-ONLY — tidak menyentuh DB.
 //
@@ -92,7 +92,7 @@ periksa('penimpa ngawur tidak diam-diam jadi EDIT',
   // lewat tulisan langsung ke DB, ia disaring `isIzin` di lib/data/menu-access.ts.
   izinMenu('PROGRAM', 'dpa', null) === E)
 
-// ══ Perjanjian Kinerja — modul kedua (docs/CONCEPT-pk-peran.md) ══════════════════
+// ══ Perjanjian Kinerja — modul kedua (docs/konsep/pk/CONCEPT-pk-peran.md) ══════════════════
 const PERAN_PK = ['SUPER_ADMIN', 'ADMIN', 'ADMIN_KASUBAG', 'ADMIN_KABAG', 'RENBANG', 'PROGRAM']
 
 // Diturunkan dari PK_ALLOWED_ROLES / PK_EDIT_ROLES + dua halaman yang hari ini

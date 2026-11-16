@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/register/route.ts — isi sheet `register` satu rekening.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.1, §3.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.1, §3.2
 //
 // Keluaran murni: daftar transaksi yang membebani satu baris anggaran + saldo
 // anggaran berjalan. Tidak ada menu tersendiri — ini panel drill-down di layar

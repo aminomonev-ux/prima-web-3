@@ -1,6 +1,6 @@
 'use client'
 // components/blud/ImportDpaModal.tsx — pos pabean impor DPA.
-// Konsep: docs/CONCEPT-export-import-dpa.md §3.7.
+// Konsep: docs/konsep/blud/CONCEPT-export-import-dpa.md §3.7.
 //
 // Satu tombol, dua bentuk berkas: formulir manual (kode terpecah 11 kolom,
 // hierarki dari rumus) dan unduhan PRIMA (kolom Level). Bedanya ditangani di

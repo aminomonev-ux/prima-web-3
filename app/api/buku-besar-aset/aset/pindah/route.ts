@@ -6,7 +6,7 @@ import { pindahkanAset, AsetVersiError, AsetTidakAdaError, AsetDitolakError } fr
 import { BbaLokasiTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from '../../_guard';
 
-// Pindah ruangan (docs/CONCEPT-bba-buku-aset.md §7.3): banyak register sekaligus, peralatan & aset
+// Pindah ruangan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.3): banyak register sekaligus, peralatan & aset
 // tetap lainnya saja. Register yang sudah di ruangan tujuan dilewati, tidak dicatat sebagai pindah.
 export async function POST(req: NextRequest) {
   const g = await guard();

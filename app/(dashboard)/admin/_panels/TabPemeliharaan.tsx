@@ -1,7 +1,7 @@
 'use client';
 // app/(dashboard)/admin/_panels/TabPemeliharaan.tsx — "Pemeliharaan & keluar otomatis" (SUPER_ADMIN).
 // Kirim pesan + jeda → semua tab PRIMA menampilkan hitung mundur, lalu sesi lain dikeluarkan server.
-// Konsep: docs/CONCEPT-pemeliharaan-keluar.md
+// Konsep: docs/konsep/sistem/CONCEPT-pemeliharaan-keluar.md
 import { useCallback, useEffect, useState } from 'react';
 import { Wrench, LogIn, Power } from 'lucide-react';
 import { toast } from 'sonner';

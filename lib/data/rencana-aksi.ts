@@ -378,7 +378,7 @@ export async function jalarkanGantiNama(tx: TxSql, tahun: number, g: GantiNama):
 
 /**
  * Jejak ganti nama untuk modul yang MENYALIN nama Renaksi (E-Anggaran, PK, IKI) —
- * docs/CONCEPT-renaksi-terhubung.md §4. Entitas Renaksi tidak punya id, jadi tanpa
+ * docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §4. Entitas Renaksi tidak punya id, jadi tanpa
  * catatan ini ganti nama hanya terbaca "satu hilang + satu baru". Ditulis di transaksi
  * yang sama dengan penjalarannya: ganti nama yang batal tidak boleh meninggalkan catatan.
  * Tanpa status "sudah diterapkan" — pembacanya menilai sendiri apakah masih berlaku.
@@ -422,7 +422,7 @@ export async function upsertRencanaAksi(
   /**
    * `gantiNama`: diisi bila simpanan ini mengganti nama entitas — route memakainya untuk menyebut
    * pemakai nama lama. `paguDitembus`: sub kegiatan yang melampaui pagu RKO tapi diteruskan dengan
-   * alasan (docs/CONCEPT-renaksi-pagu-rko.md Tahap D) — route mencatatnya di audit.
+   * alasan (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md Tahap D) — route mencatatnya di audit.
    */
   hasil?: { gantiNama: GantiNama | null; paguDitembus?: PelanggaranPagu[] },
 ): Promise<number> {
@@ -1003,7 +1003,7 @@ export async function setRaLock(tahun: number, bulan: number): Promise<void> {
   `;
 }
 
-// ─── Babak Pagu Perubahan per tahun (docs/CONCEPT-renaksi-pagu-rko.md §4) ────
+// ─── Babak Pagu Perubahan per tahun (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md §4) ────
 
 /**
  * Mulai / batalkan babak Pagu Perubahan setahun. Di bawah kunci tahun yang SAMA dengan simpan

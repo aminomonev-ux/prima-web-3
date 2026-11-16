@@ -136,7 +136,7 @@ function LampiranPanel({
     setDilepas(new Set())
   }
 
-  // "Milik siapa" — HANYA tampilan (docs/CONCEPT-pk-lampiran-asal-sasaran.md): tidak pernah
+  // "Milik siapa" — HANYA tampilan (docs/konsep/pk/CONCEPT-pk-lampiran-asal-sasaran.md): tidak pernah
   // masuk baris lampiran. Gagal dimuat = keterangannya tidak tampil, form tetap jalan.
   const [asal, setAsal] = useState<{ tahun: string; renaksi: BarisRenaksiAsal[]; lampiran: BarisLampiranLain[] } | null>(null)
   useAbortableEffect(async (signal) => {

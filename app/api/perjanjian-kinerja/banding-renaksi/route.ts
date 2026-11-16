@@ -1,5 +1,5 @@
 // GET /api/perjanjian-kinerja/banding-renaksi?tahun=&menu=program|sasaran — bahan pembanding
-// "Rencana Aksi berubah" Master Program / Master Sasaran (docs/CONCEPT-renaksi-terhubung.md §6).
+// "Rencana Aksi berubah" Master Program / Master Sasaran (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6).
 // Hanya membaca Renaksi; pembandingnya dihitung di layar terhadap ISI LAYAR (master PK disimpan
 // replace-all dari layar, jadi suntingan yang belum disimpan ikut dibandingkan).
 // Pagar = hak MENGUBAH menu itu, sama dengan tombol Import Renaksi yang membaca data yang sama.

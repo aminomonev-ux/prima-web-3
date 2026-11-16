@@ -1,5 +1,5 @@
 -- Migration: Buku Besar Aset — Master Barang + status Dalam Proses (Tahap 2)
--- Konsep: docs/CONCEPT-bba-perencanaan.md §5 (dieksekusi 2026-10-26).
+-- Konsep: docs/konsep/bba/CONCEPT-bba-perencanaan.md §5 (dieksekusi 2026-10-26).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang: daftar BBA membaca
 -- buku_besar_aset.barang_id & tgl_proses dan menulis status DIPROSES, jadi tanpa kolomnya
 -- layar Buku Besar Aset gagal dimuat.

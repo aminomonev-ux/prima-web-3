@@ -1,5 +1,5 @@
 'use client';
-// Cetak & Excel (docs/CONCEPT-bba-buku-aset.md §9, §14): KIB A–F, KIR per ruangan, hasil sensus,
+// Cetak & Excel (docs/konsep/bba/CONCEPT-bba-buku-aset.md §9, §14): KIB A–F, KIR per ruangan, hasil sensus,
 // Rekapitulasi BMD, Buku Inventaris — bentuk ekspor sistem aset provinsi — format kerja PRIMA, dan
 // daftar rencana per tahun (Tahap D). Semua disusun server (`/aset/excel`).
 import { useState } from 'react';

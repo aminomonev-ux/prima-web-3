@@ -1,5 +1,5 @@
 // lib/blud/pagu.ts — Pagu efektif per baris anggaran + serapan realisasi.
-// Konsep: docs/CONCEPT-blud-realisasi.md §2.1
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.1
 //
 // Pagu TIDAK PERNAH disalin ke tabel realisasi. Menyalinnya berarti basi begitu
 // ada pergeseran baru — persis penyakit berkas Excel yang digantikan modul ini.
@@ -269,7 +269,7 @@ export interface PaguCap {
    *
    * `SUM` mentah, sengaja: angka ini TIDAK PERNAH ditampilkan — ia cuma
    * dibandingkan dengan angka sebelumnya. Aturan "jumlahkan baris akar"
-   * (docs/CONCEPT-blud-beranda-serapan.md §9.1) berlaku untuk angka yang dibaca
+   * (docs/konsep/blud/CONCEPT-blud-beranda-serapan.md §9.1) berlaku untuk angka yang dibaca
    * orang; di sini ikut menghitung alokasi yatim justru bagus, sebab perubahan
    * padanya juga perlu memicu muat ulang.
    */

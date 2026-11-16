@@ -1,5 +1,5 @@
 // scripts/test-blud-beranda-digeser.mts — rincian "Rekening yang Digeser" + kartu DPA Perubahan
-// di Beranda BLUD. Konsep: docs/CONCEPT-blud-beranda-panel-bergerak.md §11
+// di Beranda BLUD. Konsep: docs/konsep/blud/CONCEPT-blud-beranda-panel-bergerak.md §11
 //
 // Bagian A–C menguji PERILAKU fungsi murni (lib/blud/rekening-digeser.ts, ringkasPerubahan).
 // Bagian D–G memeriksa sambungannya — komentar dibuang dulu supaya prosa yang menjelaskan

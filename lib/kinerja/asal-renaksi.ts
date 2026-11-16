@@ -1,7 +1,7 @@
 // lib/kinerja/asal-renaksi.ts — tanda "diambil dari Rencana Aksi" pada Master E-Anggaran.
 //
 // PURE & aman-klien: dipakai server (Init Renaksi) DAN layar (Master, Rekening).
-// Konsep: docs/CONCEPT-renaksi-terhubung.md §5.1–5.2. Tanda hanya untuk LAYAR KERJA —
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.1–5.2. Tanda hanya untuk LAYAR KERJA —
 // Cetak, Laporan, Excel, PDF, dan Salin ke LKJIP tidak memuatnya.
 
 import type { MasterTipe } from '@/lib/data/kinerja';
@@ -13,7 +13,7 @@ export type AsalMaster = (typeof ASAL_MASTER)[number];
 
 /**
  * Tingkat yang memang ditarik Init Renaksi. Uraian SSK selalu manual. Sumber anggaran ikut sejak pagu
- * Renaksi dirinci per sumber dana (docs/CONCEPT-renaksi-pagu-rko.md §6a: Renaksi = sumber besar).
+ * Renaksi dirinci per sumber dana (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md §6a: Renaksi = sumber besar).
  */
 export function bisaDariRenaksi(tipe: MasterTipe): boolean {
   return tipe === 'program' || tipe === 'kegiatan' || tipe === 'subkegiatan' || tipe === 'sumber_anggaran';

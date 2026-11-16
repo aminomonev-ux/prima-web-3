@@ -1,6 +1,6 @@
 'use client'
 // components/blud/SalinMasterModal.tsx — salin kode+uraian dari baris DPA ke data induk.
-// Konsep: docs/CONCEPT-export-import-dpa.md §3.8.
+// Konsep: docs/konsep/blud/CONCEPT-export-import-dpa.md §3.8.
 //
 // Menutup lubang "impor duluan, master masih kosong": sesudah impor tabel DPA
 // penuh, tapi combobox rekening belum punya satu pun pilihan karena impor menulis

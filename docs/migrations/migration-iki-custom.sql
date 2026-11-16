@@ -1,5 +1,5 @@
 -- Migration: IKI — varian CUSTOM (tabel bagian II dirancang sendiri) + templat tabel
--- Konsep: docs/CONCEPT-iki-custom.md (keputusan pemilik 2026-10-21).
+-- Konsep: docs/konsep/iki/CONCEPT-iki-custom.md (keputusan pemilik 2026-10-21).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang: tanpa kolom `tabel_custom`
 -- daftar & detail IKI gagal (SELECT menyebutnya), dan Buat IKI varian CUSTOM ditolak MySQL.
 -- Aman untuk data lama: STANDAR/DIREKTUR tidak berubah, `tabel_custom` NULL bagi mereka.

@@ -1,5 +1,5 @@
 // lib/services/drive-uji.ts — tombol UJI & status panel "Drive & Backup" (server).
-// Konsep: docs/CONCEPT-drive-terpusat.md §8 (Uji), §10 (panel), §16.2 (tempat ID berkas lama).
+// Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §8 (Uji), §10 (panel), §16.2 (tempat ID berkas lama).
 import { sql, sqlInt } from '@/lib/data/db';
 import { getDriveClient, infoKuota, jenisGalatDrive, uploadBufferToDrive } from '@/lib/services/drive';
 import { catatKesehatan, ringkasGalat } from '@/lib/services/drive-catatan';

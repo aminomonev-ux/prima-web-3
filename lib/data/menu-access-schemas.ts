@@ -1,5 +1,5 @@
 // lib/data/menu-access-schemas.ts — Zod sentral untuk pengaturan akses menu.
-// Konsep: docs/CONCEPT-menu-access-control.md §4.5, §6
+// Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §4.5, §6
 import { z } from 'zod'
 import { ROLE_LABELS } from '@/lib/constants'
 import { MENU_APPS, MENU_APP_KEYS } from '@/lib/registry/menu-apps'

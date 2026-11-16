@@ -8,7 +8,7 @@
 // Pergeseran, Rekap PJ, dan BBA tetap menunjuk `versi_tanggal`. Begitu snapshot
 // bisa dirujuk, semua alasan di CONCEPT §2 kembali berlaku.
 //
-// Konsep: docs/CONCEPT-blud-riwayat-simpan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-riwayat-simpan.md
 
 import { sql, sqlInt } from '@/lib/data/db'
 import type { TxSql } from '@/lib/data/db'

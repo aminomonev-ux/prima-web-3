@@ -2,7 +2,7 @@
 //
 //   npx tsx --env-file=.env.local scripts/test-pk-sesuai-pdf.mts
 //
-// Konsep: docs/CONCEPT-pk-halaman-2-sesuai-pdf.md. Bagian A–F tidak menyentuh basis data
+// Konsep: docs/konsep/pk/CONCEPT-pk-halaman-2-sesuai-pdf.md. Bagian A–F tidak menyentuh basis data
 // (fungsi murni + dokumen disusun dari templat sungguhan ke buffer). Bagian G menjalankan
 // aturan pisah satuan versi SQL (berkas migrasinya sendiri) di tabel SEMENTARA dan
 // membandingkannya dengan versi TypeScript; tanpa basis data bagian itu GAGAL, bukan dilewati.

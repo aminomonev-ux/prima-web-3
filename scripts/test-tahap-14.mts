@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-14.mts — penjaga regresi Tahap 14 (T1, T12, T13, T14).
-// Konsep: docs/CONCEPT-perbaikan-audit-akses.md §5 Tahap 14.
+// Konsep: docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md §5 Tahap 14.
 //
 // DoD konsep: yang dibandingkan JAWABAN API vs APA YANG LAYAR TAMPILKAN, bukan teks sumber.
 // Karena itu bagian B memutar matriks (global × induk × sub) × tiga keadaan dan menghitung

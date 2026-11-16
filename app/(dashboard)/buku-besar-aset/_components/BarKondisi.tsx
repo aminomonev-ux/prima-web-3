@@ -1,5 +1,5 @@
 'use client';
-// Bar kondisi Baik / Rusak Ringan / Rusak Berat dari register Buku Aset (docs/CONCEPT-bba-buku-aset.md §8).
+// Bar kondisi Baik / Rusak Ringan / Rusak Berat dari register Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §8).
 // Warna = token action-success / action-warning / action-danger, sama dengan warna status BBA.
 
 import type { Kondisi } from '@/lib/bba/kondisi';

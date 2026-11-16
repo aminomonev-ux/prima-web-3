@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-bba-ganti-nomor.mts — Tahap G Buku Aset: nomor diganti provinsi & catatan kembar —
 // pasangkan "aset yang sama, nomornya berubah" di pratinjau impor, gabungkan dengan kembarannya di kartu aset.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §23.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §23.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-bba-ganti-nomor.mts
 // Bagian D memakai MySQL sungguhan (kotak pasir 2078, data berawalan "UJIG"), dibersihkan otomatis.
 import { readFileSync } from 'node:fs'

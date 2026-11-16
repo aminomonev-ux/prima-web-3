@@ -1,5 +1,5 @@
 // lib/bba/peran.ts — izin dua sumbu modul Buku Besar Aset: peran × bagian.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §3.1, §16
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §3.1, §16
 //
 // MODUL DAUN — tidak mengimpor apa pun (pola `lib/pk/peran.ts`). Layar memakainya untuk
 // menyembunyikan tombol, route untuk pagar sungguhannya; keduanya membaca tabel yang sama.

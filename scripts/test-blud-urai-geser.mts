@@ -1,5 +1,5 @@
 // scripts/test-blud-urai-geser.mts — uraian Bertambah/Berkurang di Pergeseran.
-// Konsep: docs/CONCEPT-blud-uraian-geser.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-uraian-geser.md
 //
 // Yang dijaga di sini tujuh keputusan yang masing-masing punya bentuk "benar
 // tapi salah" — jalan tanpa galat, lalu diam-diam melaporkan hal lain:

@@ -1,5 +1,5 @@
 // lib/blud/mutasi.ts — catatan perpindahan: dari rekening mana ke rekening mana.
-// Konsep: docs/CONCEPT-blud-catatan-perpindahan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-catatan-perpindahan.md
 //
 // Kolom `bertambah_berkurang` cuma satu angka bertanda, jadi rekening yang
 // ditambah DAN dikurangi kehilangan separuh ceritanya. Kolom Bertambah/Berkurang

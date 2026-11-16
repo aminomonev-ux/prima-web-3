@@ -1,6 +1,6 @@
 'use client'
 // app/(dashboard)/blud/bukti-setor/bukti-setor-client.tsx — daftar bukti setor ke bank.
-// Konsep: docs/CONCEPT-blud-bukti-setor.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-bukti-setor.md
 //
 // Dipisah dari Buku Kas dengan sengaja. Buku Kas adalah catatan resmi — tiap
 // barisnya fakta, dan semua lembar lain diturunkan darinya. Layar ini merakit

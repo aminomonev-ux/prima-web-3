@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-lkjip-pengingat-modul.mts — LKJIP memeriksa sendiri tabel & angka tertaut saat dokumen
 // dibuka (seperti tabel Google Docs yang bersumber dari Sheets) + kabar "versi lebih baru".
-// Konsep: docs/CONCEPT-lkjip-pengingat-modul.md
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-pengingat-modul.md
 // Jalankan: npx tsx scripts/test-lkjip-pengingat-modul.mts
 import { readFileSync } from 'node:fs'
 import {

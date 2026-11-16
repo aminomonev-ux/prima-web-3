@@ -21,7 +21,7 @@
 //     sementara Laporan & Dashboard menjumlah `pagu` dari `kinerja_ssk` dan
 //     melihatnya. Karena yang hilang cuma dari PENYEBUT, Rekap melaporkan
 //     serapan yang LEBIH TINGGI dari kenyataan.
-//     Konsep: docs/CONCEPT-kinerja-penyebut-rekap.md
+//     Konsep: docs/konsep/kinerja/CONCEPT-kinerja-penyebut-rekap.md
 
 import type { RealRow, SskMonths } from '@/app/(dashboard)/kinerja/_types';
 

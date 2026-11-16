@@ -1,5 +1,5 @@
 // lib/bba/aset.ts — aturan buku aset yang MURNI: dipakai data layer, layar, dan uji.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §5, §7.1.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §5, §7.1.
 import type { Golongan, Kondisi } from './kib'
 import type { AsetBaca, NilaiKib } from './kib-baca'
 import { statusCek } from './kondisi'

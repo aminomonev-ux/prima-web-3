@@ -112,7 +112,7 @@ interface SendEmailOpts {
 export async function sendEmail(opts: SendEmailOpts): Promise<{ ok: boolean; error?: string }> {
   const { to, subject, eventType = 'GENERIC' } = opts;
 
-  // 0. INTRANET EDITION (D1 · docs/INTRANET-DELTA.md): email DIMATIKAN di v3.
+  // 0. INTRANET EDITION (D1 · docs/konsep/sistem/INTRANET-DELTA.md): email DIMATIKAN di v3.
   // No-op sukses-semu + log SKIPPED_NO_PROVIDER, supaya pemanggil (register/promotion/
   // notif) tak error. Registrasi publik & reset/verifikasi email sudah di-retire,
   // jadi tak ada email kritikal yang hilang. Pembuatan akun & reset = admin-driven.
@@ -168,7 +168,7 @@ export async function sendEmail(opts: SendEmailOpts): Promise<{ ok: boolean; err
   // Pintu itu sudah tidak ada. Kalau suatu hari RSJD punya relay SMTP, yang perlu
   // dikerjakan: pasang kembali satu paket dan tulis ulang blok ini. Sisanya —
   // pencatatan, kuota, sakelar per-peristiwa, panel Email di Admin Panel — tetap utuh
-  // dan tidak perlu disentuh. Dicatat juga di docs/INTRANET-DELTA.md.
+  // dan tidak perlu disentuh. Dicatat juga di docs/konsep/sistem/INTRANET-DELTA.md.
   await logEmail(to, subject, eventType, 'SKIPPED_NO_PROVIDER', 'Jalur kirim dibuang (intranet edition)');
   return { ok: false, error: 'Pengiriman email tidak tersedia di edisi intranet.' };
 }

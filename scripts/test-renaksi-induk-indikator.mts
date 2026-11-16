@@ -1,5 +1,5 @@
 // scripts/test-renaksi-induk-indikator.mts — uji jalur tulis kolom `induk_indikator_id`.
-// Konsep: docs/CONCEPT-renaksi-pilih-indikator.md (§6, §8, §12 Tahap 3–4).
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pilih-indikator.md (§6, §8, §12 Tahap 3–4).
 // Jalankan: npx tsx --env-file=.env.local scripts/test-renaksi-induk-indikator.mts
 //
 // Yang dijaga di sini adalah hal-hal yang TIDAK terlihat di layar:

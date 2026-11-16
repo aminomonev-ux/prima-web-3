@@ -1,5 +1,5 @@
 // lib/blud/bukti-setor-data.ts — Data layer Bukti Setor ke Bank (lembar `setor BPD`).
-// Konsep: docs/CONCEPT-blud-bukti-setor.md (keputusan #36)
+// Konsep: docs/konsep/blud/CONCEPT-blud-bukti-setor.md (keputusan #36)
 //
 // Berbeda dari lembar BLUD lain, ini dokumen yang DIRAKIT — sebagian barisnya boleh
 // diketik lepas. Yang membuatnya tetap aman: baris ber-penunjuk dibaca HIDUP dari

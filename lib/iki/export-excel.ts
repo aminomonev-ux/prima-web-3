@@ -3,7 +3,7 @@
 // Grid identik export-pdf.ts — sama-sama dari lib/iki/layout.ts (CONCEPT-iki §5):
 // header abu + baris penomoran, border thin seluruh area tabel, merge rowspan/colspan,
 // blok Data Pribadi & ttd tanpa border, print setup landscape fitToWidth.
-// CUSTOM (docs/CONCEPT-iki-custom.md §6): judul/Data Pribadi/ttd sama, tabelnya dari `susunKisiCetak`.
+// CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md §6): judul/Data Pribadi/ttd sama, tabelnya dari `susunKisiCetak`.
 import type ExcelJS from 'exceljs';
 import { loadExcelJs, sanitizeCell, downloadWorkbook } from '@/lib/shared/excel-export';
 import { perkiraLebarTeks } from '@/lib/lkjip/tabel';

@@ -1,6 +1,6 @@
 'use client';
-// Pita "pagu Rencana Aksi vs RKO" di layar RKO (docs/CONCEPT-renaksi-pagu-rko.md Tahap B,
-// docs/CONCEPT-renaksi-rko-murni-perubahan.md). Hanya menampilkan. Tab yang sedang dibuka dihitung
+// Pita "pagu Rencana Aksi vs RKO" di layar RKO (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md Tahap B,
+// docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md). Hanya menampilkan. Tab yang sedang dibuka dihitung
 // dari ISI LAYAR (ketikan belum tersimpan ikut), tab lain dari server — aturannya satu:
 // lib/kinerja/pagu-renaksi.ts. Versi murni dibandingkan dengan pagu murni Renaksi, versi perubahan
 // dengan pagu yang berlaku.

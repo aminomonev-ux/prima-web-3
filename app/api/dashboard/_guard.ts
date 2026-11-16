@@ -1,5 +1,5 @@
 // app/api/dashboard/_guard.ts — sakelar pemeliharaan modul Dashboard.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 1 (A1), temuan T-1.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 1 (A1), temuan T-1.
 //
 // Dashboard adalah kasus paling telanjang dari T-1: `app_status_dashboard` ada di
 // whitelist `APP_KEYS` dan punya tombol di Admin Panel, tapi tidak dibaca oleh

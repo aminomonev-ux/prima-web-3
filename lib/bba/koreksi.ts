@@ -1,4 +1,4 @@
-// lib/bba/koreksi.ts — koreksi salah input & catatan kembar di Buku Aset (docs/CONCEPT-bba-buku-aset.md §20, §23), MURNI:
+// lib/bba/koreksi.ts — koreksi salah input & catatan kembar di Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §20, §23), MURNI:
 // dipakai server (pagar) DAN tombol kartu aset — tombol mati di layar hanya cerminnya (L82).
 import { lahirDiPrima, namaTampil, type AsetRingan } from './aset'
 

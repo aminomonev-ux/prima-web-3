@@ -1,5 +1,5 @@
 // lib/bba/kib-excel.ts — penulis lembar berbentuk templat ekspor sistem aset provinsi + lembar KIB A–F.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §9. Kolom & kepala dari lib/bba/kib.ts (satu sumber); lembar
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §9. Kolom & kepala dari lib/bba/kib.ts (satu sumber); lembar
 // lain (sensus, KIR, BI, Rekap) di lembar-excel.ts memakai `tulisLembar` yang sama.
 // Bentuk ditiru dari lembar ekspor nyata: kop Arial 14/12 · kepala Calibri 11 + nomor kolom · isi
 // Arial 9 · satu baris pendek sesudah isi (ikut rentang SUM) · baris "Jumlah" · tanda tangan dua blok.

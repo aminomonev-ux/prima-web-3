@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-kinerja-rekening-menjalar.mts — suntingan nama/rantai di tab Rekening yang
 // menjalar ke RKO (semua versi) & Realisasi, dan target bulanan Beranda dari versi acuan.
-// Konsep: docs/CONCEPT-kinerja-rekening-menjalar.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-rekening-menjalar.md
 // Jalankan: npx tsx --env-file=.env.local scripts/test-kinerja-rekening-menjalar.mts
 // Bagian D memakai MySQL sungguhan (kotak pasir 2098), dibersihkan otomatis — tanpa
 // --env-file bagian itu DILEWATI dan jumlah lulusnya turun.

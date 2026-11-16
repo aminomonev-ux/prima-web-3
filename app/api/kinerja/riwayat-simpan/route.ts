@@ -7,7 +7,7 @@
 // sebabnya seluruh pagar simpan (gembok optimistik, pagarReplace, Zod, rate
 // limit) berlaku otomatis tanpa ditulis ulang.
 //
-// Konsep: docs/CONCEPT-kinerja-riwayat-simpan.md §6
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-riwayat-simpan.md §6
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';

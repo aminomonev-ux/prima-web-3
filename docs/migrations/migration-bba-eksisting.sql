@@ -1,5 +1,5 @@
 -- Migration: Buku Besar Aset — kondisi eksisting per barang × lokasi (Tahap 3)
--- Konsep: docs/CONCEPT-bba-perencanaan.md §6 (dieksekusi 2026-10-26).
+-- Konsep: docs/konsep/bba/CONCEPT-bba-perencanaan.md §6 (dieksekusi 2026-10-26).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang, dan SESUDAH
 -- migration-bba-barang-proses.sql (FK ke bba_barang): tampilan Per Barang membaca bba_eksisting.
 -- Aman untuk data lama: tabel baru, kosong. Tiap pendataan = baris baru (riwayat); yang berlaku =

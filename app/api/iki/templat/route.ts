@@ -1,4 +1,4 @@
-// app/api/iki/templat/route.ts — templat tabel varian CUSTOM (docs/CONCEPT-iki-custom.md §4)
+// app/api/iki/templat/route.ts — templat tabel varian CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md §4)
 // GET daftar · POST simpan bentuk tabel jadi templat · PATCH ganti nama · DELETE ?id=
 // Hak = hak modul IKI (keputusan pemilik #2): pagarnya `guard()` yang sama, termasuk sakelar maintenance.
 import { NextRequest, NextResponse } from 'next/server';

@@ -1,5 +1,5 @@
 // lib/admin/pusat-akses.ts — berkas satu orang: peran, pintu modul, izin menu, jejak.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §4.5, §16.4 (Tahap 5 / Fase C).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §4.5, §16.4 (Tahap 5 / Fase C).
 //
 // Sebelum berkas ini ada, mengatur SATU orang berarti: cari di tabel → tombol ATUR →
 // modal centang → tutup → tombol MENU → modal kedua → pilih modul → tutup → tombol ROLE

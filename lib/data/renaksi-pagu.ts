@@ -1,5 +1,5 @@
 // lib/data/renaksi-pagu.ts — rincian pagu Rencana Aksi per sumber dana (DB).
-// Konsep: docs/CONCEPT-renaksi-pagu-rko.md. Aturannya MURNI di lib/renaksi/pagu.ts.
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md. Aturannya MURNI di lib/renaksi/pagu.ts.
 //
 // SATU penulis rincian (`tulisRincianPagu`) untuk Data Entry DAN Impor (L69). Ia juga satu-satunya
 // yang menulis `rencana_aksi.anggaran_nominal` (= Σ pagu berlaku) — kolom itu dibaca Cetak,

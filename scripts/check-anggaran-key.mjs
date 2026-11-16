@@ -1,5 +1,5 @@
 // Pemeriksa jangkar realisasi BLUD — anggaran_key di dpa_blud & pergeseran_dpa.
-// Konsep: docs/CONCEPT-blud-realisasi.md §2.3 · DoD Fase 1
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.3 · DoD Fase 1
 //
 //   node scripts/check-anggaran-key.mjs
 //

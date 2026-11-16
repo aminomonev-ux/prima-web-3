@@ -5,7 +5,7 @@
 // Murni yang "tertutup semua" tetap bergeser angkanya kalau realisasi disunting di Perubahan
 // — kecuali angkanya dibekukan. Buat Perubahan memotret realisasi untuk versi yang dikunci;
 // versi final membaca foto itu, 12 bulannya tertutup, dan tutupan versi lain tidak menyentuhnya.
-// Konsep: docs/CONCEPT-kinerja-tutup-per-versi.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-tutup-per-versi.md
 
 import type { BulanTertutup } from './tutup-bulan'
 

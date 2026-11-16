@@ -1,4 +1,4 @@
--- BBA Tahap F — koreksi salah input di Buku Aset (docs/CONCEPT-bba-buku-aset.md §20).
+-- BBA Tahap F — koreksi salah input di Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §20).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang, SESUDAH migration-bba-penerimaan.sql:
 -- "Batalkan penghapusan" menulis riwayat berjenis BATAL_HAPUS — tanpa nilai ENUM ini simpanannya gagal.
 --

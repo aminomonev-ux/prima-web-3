@@ -1,5 +1,5 @@
 // app/api/akses/permintaan/route.ts — pintu pemohon (P4, Tahap 11).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
 //
 // GET  → permintaan saya + modul yang masih masuk akal saya minta
 // POST → titipkan satu permintaan ke antrean Pusat Akses

@@ -1,6 +1,6 @@
 'use client'
 // components/admin/PilihPeran.tsx — dropdown ubah peran, SATU untuk semua layar.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §5.4 (T-8, Tahap 6 / D1).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §5.4 (T-8, Tahap 6 / D1).
 //
 // T-8: `doChangeRole` di Usulan memanggil endpoint yang SAMA PERSIS dengan Admin Panel
 // (`PATCH /api/admin/users`, `action='ubah-role'`) — langsung pada `onChange` dropdown.

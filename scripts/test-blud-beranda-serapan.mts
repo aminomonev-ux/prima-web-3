@@ -1,5 +1,5 @@
 // scripts/test-blud-beranda-serapan.mts — sisi Realisasi di Beranda BLUD.
-// Konsep: docs/CONCEPT-blud-beranda-serapan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-beranda-serapan.md
 //
 // Yang dijaga di sini bukan "fiturnya tampil", tapi empat keputusan yang kalau
 // salah menghasilkan DUA LAYAR YANG BERBANTAH tentang angka yang sama:

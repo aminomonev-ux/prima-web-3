@@ -1,4 +1,4 @@
-// Ukuran tampil gambar LKJIP. Konsep: docs/CONCEPT-lkjip-ukuran-gambar.md.
+// Ukuran tampil gambar LKJIP. Konsep: docs/konsep/lkjip/CONCEPT-lkjip-ukuran-gambar.md.
 // Satu sumber untuk docgen, impor, dan editor, supaya angka di layar sama dengan angka di Word.
 import { KERTAS, LEBAR_DXA, MARGIN } from './halaman';
 

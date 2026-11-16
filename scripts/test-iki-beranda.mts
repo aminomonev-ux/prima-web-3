@@ -1,4 +1,4 @@
-// scripts/test-iki-beranda.mts — beranda IKI per tahun (docs/CONCEPT-iki-beranda.md, pilihan B).
+// scripts/test-iki-beranda.mts — beranda IKI per tahun (docs/konsep/iki/CONCEPT-iki-beranda.md, pilihan B).
 //
 //   npx tsx scripts/test-iki-beranda.mts
 //

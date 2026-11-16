@@ -1,5 +1,5 @@
 // scripts/test-renaksi-pagu-rko.mts — pagu Rencana Aksi dibandingkan dengan RKO E-Anggaran (tampilan, Tahap B)
-// dan sumber dana Renaksi masuk Master Rekening lewat jalur Init/Perbarui (docs/CONCEPT-renaksi-pagu-rko.md §6a).
+// dan sumber dana Renaksi masuk Master Rekening lewat jalur Init/Perbarui (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md §6a).
 // Jalankan: npx tsx --env-file=.env.local scripts/test-renaksi-pagu-rko.mts
 // Bagian C memakai MySQL kotak pasir 2075 (dibersihkan otomatis; tanpa --env-file GAGAL).
 
@@ -135,7 +135,7 @@ console.log('E. Pelanggaran baru vs yang sudah ada');
 }
 
 // ── G. Murni dengan murni, perubahan dengan perubahan ─────────────────────────
-// docs/CONCEPT-renaksi-rko-murni-perubahan.md §3 & keputusan §6.
+// docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md §3 & keputusan §6.
 console.log('G. Dua pembanding (murni & perubahan)');
 {
   const baris = (id: number, nama: string, rincian: BarisPagu['pagu_rincian'], nominal: number | null = null): BarisPagu => ({
@@ -505,7 +505,7 @@ try {
 }
 
 // ── H. Murni & perubahan di MySQL (kotak pasir 2075) ──────────────────────────
-// Contoh docs/CONCEPT-renaksi-rko-murni-perubahan.md §3, dari awal sampai akhir lewat jalur sungguhan.
+// Contoh docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md §3, dari awal sampai akhir lewat jalur sungguhan.
 console.log('H. Murni & perubahan (kotak pasir 2075)');
 const { ubahPaguPerubahan } = await import('../lib/data/rencana-aksi');
 await bersih();

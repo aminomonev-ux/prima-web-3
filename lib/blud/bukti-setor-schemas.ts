@@ -1,5 +1,5 @@
 // lib/blud/bukti-setor-schemas.ts — Zod sentral + error domain Bukti Setor BLUD.
-// Konsep: docs/CONCEPT-blud-bukti-setor.md (keputusan #36)
+// Konsep: docs/konsep/blud/CONCEPT-blud-bukti-setor.md (keputusan #36)
 //
 // Akses mengikuti Buku Kas persis — peruntukannya sama, jadi TIDAK ada kunci
 // `app_access` baru. Menambah kunci berarti menambah kolom izin yang harus

@@ -1,7 +1,7 @@
 # WORKFLOW — Buku Besar Aset / BBA (`/buku-besar-aset`)
 
 **Fungsi**: register belanja modal lintas-tahun — catat rencana aset (manual atau tarik dari Usulan final), proses pesanan & catat penerimaan barang (realisasi = Σ penerimaan, Tahap E), pantau KPI (Total Rencana/Realisasi/% Terakomodir/backlog/unit). Status 5: DIRENCANAKAN / DIPROSES / REALISASI_PENUH / REALISASI_SEBAGIAN / TIDAK_TEREALISASI. `nilai_rencana` = vol × harga otomatis (server).
-**Role**: masuk modul = SUPER_ADMIN/ADMIN/RUMAH TANGGA/PROGRAM (`peranBawaan` registry) atau grant app_access `'buku_besar_aset'`. Di dalam, izin per bagian (Buku Aset · Rencana · Pengadaan · Master · Cetak) dari `lib/bba/peran.ts` + Admin Panel: "Tarik dari Usulan Kebutuhan" & item = izin EDIT Rencana, Proses & Penerimaan = EDIT Pengadaan (lihat `docs/CONCEPT-bba-buku-aset.md` §3.1).
+**Role**: masuk modul = SUPER_ADMIN/ADMIN/RUMAH TANGGA/PROGRAM (`peranBawaan` registry) atau grant app_access `'buku_besar_aset'`. Di dalam, izin per bagian (Buku Aset · Rencana · Pengadaan · Master · Cetak) dari `lib/bba/peran.ts` + Admin Panel: "Tarik dari Usulan Kebutuhan" & item = izin EDIT Rencana, Proses & Penerimaan = EDIT Pengadaan (lihat `docs/konsep/bba/CONCEPT-bba-buku-aset.md` §3.1).
 **File sumber**: `app/(dashboard)/buku-besar-aset/buku-besar-aset-client.tsx`, `app/api/buku-besar-aset/` (`route.ts`, `proses/route.ts`, `pengadaan/route.ts`, `import-usulan/route.ts`, `_guard.ts`), `lib/data/buku-besar-aset.ts`. Sub-halaman master kategori: `/buku-besar-aset/master`.
 
 ## Flowchart alur end-to-end

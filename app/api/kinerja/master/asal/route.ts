@@ -1,5 +1,5 @@
 // POST /api/kinerja/master/asal — "Jadikan manual" / "Tandai dari Renaksi" dari dialog
-// Perbarui dari Rencana Aksi (docs/CONCEPT-renaksi-terhubung.md §5.5). Hak = hak mengubah
+// Perbarui dari Rencana Aksi (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.5). Hak = hak mengubah
 // Master. Hanya label asal; nama, induk, dan salinannya tidak disentuh.
 
 import { NextRequest, NextResponse } from 'next/server';

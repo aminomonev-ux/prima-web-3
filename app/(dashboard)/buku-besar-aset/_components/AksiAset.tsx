@@ -1,5 +1,5 @@
 'use client';
-// Aksi borongan Buku Aset (docs/CONCEPT-bba-buku-aset.md §7.2–7.3): catat kondisi (opname per ruangan /
+// Aksi borongan Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.2–7.3): catat kondisi (opname per ruangan /
 // gedung, atau register terpilih), pindah ruangan, tautkan barang. Register SELALU dimuat segar dari
 // server saat modal dibuka — angka kuncinya milik muatan itu, bukan milik daftar yang dilihat (L77).
 // Server menulis semua atau tidak sama sekali; 409 = muat ulang angka kunci, pilihan di layar tetap.

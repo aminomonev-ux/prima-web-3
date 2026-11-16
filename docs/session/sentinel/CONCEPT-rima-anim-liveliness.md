@@ -3,7 +3,7 @@
 > Status: **konsep / belum diimplementasi**. Lanjutan dari F4b/F4c (obrolan otomatis
 > proaktif) & drag "Roket Lepas Landas". Tujuan: maskot terasa hidup — melambai saat
 > menyapa, sesekali terbang sendiri, dan benar-benar "rebahan" saat tidur.
-> Induk: [`CONCEPT-sentinel-bot.md`](./CONCEPT-sentinel-bot.md) · drag: [`prototype/HANDOFF-rima-drag.md`](./prototype/HANDOFF-rima-drag.md)
+> Induk: [`CONCEPT-sentinel-bot.md`](CONCEPT-sentinel-bot.md) · drag: [`prototype/HANDOFF-rima-drag.md`](prototype/HANDOFF-rima-drag.md)
 
 ## 0. Prinsip yang DIPERTAHANKAN (jangan dilanggar)
 - **Animasi murni CSS keyframes `.rima-*` di `app/globals.css`** (GPU compositor, CPU idle ~0%). JANGAN inline `<style>` di komponen. (pola `prima-del-top`).

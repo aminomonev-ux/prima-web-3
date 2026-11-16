@@ -1,6 +1,6 @@
 'use client';
 // components/akses/MintaAksesModal.tsx — kotak "Minta akses" di kartu /menu (P4, Tahap 11).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
 //
 // SATU isian, dan itu memang seluruh rancangannya. Alur promosi punya kata sandi ulang,
 // kode rahasia, cooldown, dan probation — sepadan untuk kenaikan tingkat wewenang, tapi

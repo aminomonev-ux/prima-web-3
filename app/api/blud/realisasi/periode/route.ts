@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/periode/route.ts — Tutup Kas (Berita Acara Pemeriksaan Kas).
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.5, §4.7, §7.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.5, §4.7, §7.2
 //
 // GET    ?tahun=&bulan=   neraca dua sisi + daftar penghalang
 // POST                    simpan sisi nyata (tutup=false) / tutup bulan (tutup=true)

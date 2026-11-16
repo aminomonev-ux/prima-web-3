@@ -1,5 +1,5 @@
 // scripts/test-lkjip-tabel-tertaut.mts — tabel LKJIP yang tertaut ke E-Anggaran Rekap & Renaksi Cetak.
-// Konsep: docs/CONCEPT-lkjip-tabel-tertaut.md
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-tertaut.md
 //
 // A–F menguji PERILAKU lib/lkjip/tautan.ts (sel, rumus kolom, gabung otomatis, kepala, Perbarui).
 // G: skema simpan (resep tidak boleh dibuang Zod). H–I: kedua penghubung dengan jawaban API
@@ -409,7 +409,7 @@ ok('J gagal per sumber kini dilaporkan (dulu diam)', bahanGagal.gagal.some(g => 
 // ─── K. Sambungan editor ──────────────────────────────────────────────────────
 console.log('\nK. Sambungan editor & lain-lain')
 const ed = kode('app/(dashboard)/lkjip/[id]/editor-client.tsx')
-// TabelEditor dipisah dari editor-client.tsx (docs/CONCEPT-lkjip-tabel-excel.md §7).
+// TabelEditor dipisah dari editor-client.tsx (docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md §7).
 const tabelEd = kode('components/tabel/TabelEditor.tsx')
 ok('K1 Simpan Tabel menyimpan resep juga — dengan isian tangan terbaru (payloadSekarang)',
   tabelEd.includes('onClick={() => onSave(payloadSekarang())}')

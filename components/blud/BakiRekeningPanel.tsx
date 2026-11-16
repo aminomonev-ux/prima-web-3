@@ -1,6 +1,6 @@
 'use client'
 // components/blud/BakiRekeningPanel.tsx — baki "Perlu Rekening" (§4.2).
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.2, §4.1
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.2, §4.1
 //
 // Transaksi yang diparkir tetap menghitung saldo kas — angka kasnya benar — tapi
 // belum menunjuk baris anggaran mana pun. Baki ini yang membuat kegagalan itu

@@ -13,7 +13,7 @@
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang: GET & Simpan Pendapatan
 -- membaca/menulis kolom ini.
 --
--- Referensi: docs/CONCEPT-kinerja-pendapatan-perubahan.md
+-- Referensi: docs/konsep/kinerja/CONCEPT-kinerja-pendapatan-perubahan.md
 
 ALTER TABLE kinerja_pendapatan_real
   ADD COLUMN target_perubahan DECIMAL(18,2) NULL DEFAULT NULL

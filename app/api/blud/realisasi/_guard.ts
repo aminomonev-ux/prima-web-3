@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/_guard.ts — gerbang akses route Realisasi BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §7.4 · docs/CONCEPT-blud-peran.md §5.4
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §7.4 · docs/konsep/blud/CONCEPT-blud-peran.md §5.4
 //
 // Sejak pembagian peran, izin tidak lagi seragam untuk seluruh modul Realisasi:
 // berkas di bawah folder ini menyentuh EMPAT menu berbeda (buku-kas, tutup-kas,

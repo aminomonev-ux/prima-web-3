@@ -1,4 +1,4 @@
-// app/api/iki/salin-tahun/route.ts — POST "Salin semua dari {tahun lalu}" (docs/CONCEPT-iki-beranda.md §4)
+// app/api/iki/salin-tahun/route.ts — POST "Salin semua dari {tahun lalu}" (docs/konsep/iki/CONCEPT-iki-beranda.md §4)
 import { NextRequest, NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/security/auditlog';
 import { SalinTahunSchema, ikiRateLimit } from '@/lib/data/iki-schemas';

@@ -1,5 +1,5 @@
 // ═══ PRIMA — LKJIP — Gaya daftar: SATU sumber aturan (pure, aman-klien) ═══
-// Konsep `docs/CONCEPT-lkjip-daftar-word.md`. Dipakai pihak yang wajib sepakat: CSS editor, penyaring HTML,
+// Konsep `docs/konsep/lkjip/CONCEPT-lkjip-daftar-word.md`. Dipakai pihak yang wajib sepakat: CSS editor, penyaring HTML,
 // `docgen.ts` (numbering.xml), `lanjut-daftar.ts`, `impor-word.ts`, dan galeri bilah alat. Menambah format =
 // satu baris di sini; kalau aturannya ditulis dua kali, layar dan Word bisa berbeda bunyi tanpa ada yang sadar.
 

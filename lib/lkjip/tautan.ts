@@ -1,5 +1,5 @@
 // lib/lkjip/tautan.ts — tabel LKJIP yang tertaut ke modul (E-Anggaran Rekap, Renaksi Cetak).
-// Konsep: docs/CONCEPT-lkjip-tabel-tertaut.md
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-tertaut.md
 //
 // "Salinan bertaut": blok menyimpan RESEP (`Tautan`) + hasil tarikan terakhir sebagai sel biasa,
 // jadi Word (docgen) tidak perlu tahu apa pun soal tautan. Di sini badan tabel disusun dari baris

@@ -1727,7 +1727,7 @@ seperti `.bk-kode` tetap menang (deklarasi langsung selalu mengalahkan warisan).
 │  Tabel hasil render (atau empty state "Klik Cetak dulu")            │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
-*Tombol "Simpan Rekap PK" DIBUANG 2026-11-12 — Form PK menghitung nominal BLUD langsung (docs/CONCEPT-pk-nominal-blud-langsung.md).
+*Tombol "Simpan Rekap PK" DIBUANG 2026-11-12 — Form PK menghitung nominal BLUD langsung (docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md).
 ```
 
 **View matrix:**

@@ -1,5 +1,5 @@
 // scripts/test-blud-cadangan-json.mts — cadangan JSON BLUD ke Google Drive.
-// Konsep: docs/CONCEPT-blud-cadangan-json.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-cadangan-json.md
 //
 // Bagian A menguji PERILAKU pembaca berkas dengan berkas sungguhan (termasuk
 // yang rusak); bagian B–E statis, menjaga kesepakatan yang tidak bisa dilihat

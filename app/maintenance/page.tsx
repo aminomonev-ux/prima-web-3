@@ -1,5 +1,5 @@
 // app/maintenance/page.tsx — halaman pemeliharaan.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md P6 (Tahap 4).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md P6 (Tahap 4).
 //
 // Dulu halaman ini komponen klien yang menampilkan `?app=` MENTAH. Artinya siapa pun
 // sekantor bisa membuka `/maintenance?app=Sistem%20Kepegawaian` dan memperlihatkan

@@ -1,5 +1,5 @@
 // lib/bba/kib-baca.ts — membaca berkas ekspor KIB provinsi jadi catatan aset. TIDAK menulis DB.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §7.1, §16.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.1, §16.
 // Kolom dikenali dari TEKS kepala tiga baris, bukan letaknya: kolom bergeser tetap terbaca,
 // kolom yang tidak dikenal dilaporkan (tidak disimpan), kolom wajib yang hilang menolak lembarnya.
 import type ExcelJS from 'exceljs'

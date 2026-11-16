@@ -1,5 +1,5 @@
 'use client';
-// Pengaturan BBA (docs/CONCEPT-bba-buku-aset.md §14): kop & penanda tangan Excel format provinsi, jarak opname.
+// Pengaturan BBA (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14): kop & penanda tangan Excel format provinsi, jarak opname.
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import PrimaButton from '@/components/ui/PrimaButton';

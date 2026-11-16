@@ -1,6 +1,6 @@
 // ═══ PRIMA — IKI (Indikator Kinerja Individu) API Schemas ═══════════════════
 // Centralized Zod schemas + role allow-list untuk endpoint app/api/iki/*.
-// Pattern mirror Rencana Aksi + PK. Konsep: docs/CONCEPT-iki.md
+// Pattern mirror Rencana Aksi + PK. Konsep: docs/konsep/iki/CONCEPT-iki.md
 
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
@@ -85,7 +85,7 @@ export const RhkSchema = z.object({
   triwulan: z.array(TriwulanSchema).length(4, 'Wajib 4 baris triwulan'),
 });
 
-// ─── Tabel varian CUSTOM (docs/CONCEPT-iki-custom.md §5) ─────────────────────
+// ─── Tabel varian CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md §5) ─────────────────────
 // Sel = skema sel LKJIP yang SAMA (pabrik `buatCellSchema`), batasnya milik IKI (24 kolom, §9.1).
 // Kunci yang tak terdaftar dibuang Zod diam-diam — kunci baru di `TabelCustom` WAJIB didaftar di sini.
 const BATAS_JSON_TABEL = 2_000_000;

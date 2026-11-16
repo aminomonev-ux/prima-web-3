@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/tx/route.ts — Buku Kas BLUD (transaksi kas/bank).
-// Konsep: docs/CONCEPT-blud-realisasi.md §7.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §7.2
 //
 // GET    ?tahun=&bulan=   daftar transaksi + saldo berjalan
 // POST                    tambah transaksi (nomor kuitansi dari server)

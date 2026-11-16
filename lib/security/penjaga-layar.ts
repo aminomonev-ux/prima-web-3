@@ -1,5 +1,5 @@
 // lib/security/penjaga-layar.ts — penjaga setingkat modul untuk LAYOUT sebuah modul.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P5 (Tahap 9).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P5 (Tahap 9).
 //
 // Dibuat saat menutup sisa Tahap 9: IKI, E-LKJIP, dan Buku Besar Aset tidak memeriksa
 // sakelar maintenance di layar sama sekali. Route API-nya sudah menolak lewat

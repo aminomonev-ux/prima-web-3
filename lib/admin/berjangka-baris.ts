@@ -1,5 +1,5 @@
 // lib/admin/berjangka-baris.ts — aturan murni akses berjangka (P2).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P2 (Tahap 10).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P2 (Tahap 10).
 //
 // BERKAS DAUN. Dibaca panel `'use client'` DAN `akses-berjangka.ts` di sisi server, jadi
 // ia TIDAK BOLEH mengimpor apa pun yang menyeret `next/headers`, mysql2, atau

@@ -1,5 +1,5 @@
 // ═══ PRIMA — Google Drive: SATU-SATUNYA pembuat klien Drive di app/ & lib/ ═══
-// Konsep: docs/CONCEPT-drive-terpusat.md §6.1. Satu pengecualian yang disengaja:
+// Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §6.1. Satu pengecualian yang disengaja:
 // `scripts/backup-db.js` (CommonJS, jalan di luar Next) punya klien sendiri.
 import { google } from 'googleapis';
 import { PassThrough } from 'stream';

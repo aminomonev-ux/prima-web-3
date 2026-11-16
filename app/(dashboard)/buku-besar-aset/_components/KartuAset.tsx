@@ -1,5 +1,5 @@
 'use client';
-// Kartu aset (docs/CONCEPT-bba-buku-aset.md §5.2, §14): kolom KIB apa adanya + tambahan PRIMA
+// Kartu aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §5.2, §14): kolom KIB apa adanya + tambahan PRIMA
 // (nama sehari-hari, barang) + kaitan tanah ↔ bangunan + riwayat. Kolom KIB hanya berubah lewat
 // impor; yang disunting di sini hanya tambahan PRIMA (satu Simpan, angka kunci dari muatan segar — L77).
 // Catat kondisi & pindah ruangan memakai modal yang sama dengan aksi borongan Buku Aset.

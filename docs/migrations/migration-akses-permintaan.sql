@@ -1,5 +1,5 @@
 -- migration-akses-permintaan.sql
--- Tahap 11 · P4 Permintaan Akses Mandiri. Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
+-- Tahap 11 · P4 Permintaan Akses Mandiri. Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
 --
 -- Orang yang butuh akses satu modul mengirim WhatsApp ke admin. Tidak ada antreannya,
 -- alasannya tidak tercatat, tidak ada jejak siapa menyetujui — dan kalau adminnya cuti,

@@ -1,5 +1,5 @@
 // app/api/admin/permintaan-akses/route.ts — antrean permintaan akses (P4, Tahap 11).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
 //
 // GET   → yang sedang menunggu (terlama dulu) + jumlahnya untuk lencana rel
 // PATCH → TOLAK satu permintaan, beserta sebabnya

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-bba-aset.mts — Tahap B Buku Aset: kolom KIB, impor KIB, Excel format provinsi.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §5, §7.1, §9, §15.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §5, §7.1, §9, §15.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-bba-aset.mts [berkas-kib-c.xlsx]
 //   argumen opsional = ekspor KIB C nyata (Bangsal Jiwa) untuk kalibrasi; tidak masuk repo.
 // Bagian F memakai MySQL sungguhan; data uji berkode "UJI." dan dibersihkan otomatis.

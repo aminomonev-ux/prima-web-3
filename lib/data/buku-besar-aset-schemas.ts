@@ -99,7 +99,7 @@ const NamaBarangSchema = z.string().trim().min(1, 'Nama barang wajib').max(PANJA
 const satuBarang = (b: { barang_id?: number | null; barang_baru?: string | null }) => !(b.barang_id && b.barang_baru);
 const PESAN_SATU_BARANG = 'Pilih barang yang ada ATAU buat barang baru, bukan keduanya';
 
-// Tahap D buku aset (docs/CONCEPT-bba-buku-aset.md §7.3). Aset sasaran: `undefined` = jangan sentuh
+// Tahap D buku aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.3). Aset sasaran: `undefined` = jangan sentuh
 // (L87), larik = ganti semua di transaksi Simpan item yang sama.
 export const MAKS_ASET_SASARAN = 200;
 const JenisRencanaSchema = z.enum(JENIS_RENCANA);
@@ -219,7 +219,7 @@ export type BbaProsesInput       = z.infer<typeof BbaProsesSchema>;
 export type BbaQuery             = z.infer<typeof BbaQuerySchema>;
 export type BbaImportUsulanInput = z.infer<typeof BbaImportUsulanSchema>;
 export type ReferensiInput       = z.infer<typeof ReferensiSchema>;
-// ─── Master Ruangan (Tahap C, docs/CONCEPT-bba-buku-aset.md §15) ─────────────
+// ─── Master Ruangan (Tahap C, docs/konsep/bba/CONCEPT-bba-buku-aset.md §15) ─────────────
 const NamaLokasiSchema = z.string().trim().min(1, 'Nama ruangan wajib').max(160);
 export const LokasiCreateSchema = z.object({ nama: NamaLokasiSchema });
 /** Kolom yang tidak dikirim = jangan disentuh; null = kosongkan. */

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-kinerja-asal-renaksi.mts — tanda "diambil dari Rencana Aksi" di Master E-Anggaran.
-// Konsep: docs/CONCEPT-renaksi-terhubung.md §5.1–5.2 (Tahap B).
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.1–5.2 (Tahap B).
 // Jalankan: npx tsx --env-file=.env.local scripts/test-kinerja-asal-renaksi.mts
 // Bagian C memakai MySQL sungguhan (kotak pasir 2094), dibersihkan otomatis — tanpa
 // --env-file bagian itu GAGAL, bukan dilewati.

@@ -1,5 +1,5 @@
 // app/api/blud/_guard.ts — gerbang akses seluruh route BLUD, per menu.
-// Konsep: docs/CONCEPT-blud-peran.md §5.2, §5.4
+// Konsep: docs/konsep/blud/CONCEPT-blud-peran.md §5.2, §5.4
 //
 // DUA LAPIS, dan urutannya penting:
 //   1. `hasAppAccess(..., isBludRole)` — boleh masuk modul? (grant `app_access`)

@@ -1,6 +1,6 @@
 'use client'
 // app/(dashboard)/blud/realisasi/realisasi-client.tsx — layar Realisasi BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3 (menu), §4.3, §4.4, §3.1 (register)
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3 (menu), §4.3, §4.4, §3.1 (register)
 //
 // Layar PANTAU — tidak ada satu pun kotak isian di sini. Semua angkanya turunan
 // dari transaksi Buku Kas; kalau ada yang salah, yang diperbaiki transaksinya.
@@ -108,7 +108,7 @@ export default function RealisasiClient({ bolehDpa, bolehPergeseran, tahunAwal, 
   const [perubahan, setPerubahan] = useState<Perubahan | null>(null)
   const [lihatPerubahan, setLihatPerubahan] = useState(false)
   const [pratinjauBuka, setPratinjauBuka] = useState(false)
-  // Realisasi per Penanggung Jawab (docs/CONCEPT-blud-realisasi-pj.md).
+  // Realisasi per Penanggung Jawab (docs/konsep/blud/CONCEPT-blud-realisasi-pj.md).
   const [tampilan, setTampilan] = useState<'rekening' | 'pj'>('rekening')
   /** Saringan tabel per rekening: `SEMUA_PJ`, label PJ, atau `''` = belum ada PJ. */
   const [saringPj, setSaringPj] = useState<string>(SEMUA_PJ)

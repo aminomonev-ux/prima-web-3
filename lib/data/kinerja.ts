@@ -295,7 +295,7 @@ export async function initMasterFromRenaksi(
   if (dry) return result;
 
   // `asal` RENAKSI: lencana di Master/Rekening + pembanding "Rencana Aksi berubah"
-  // (docs/CONCEPT-renaksi-terhubung.md §5). Entri lama yang dilewati tidak ditandai di sini.
+  // (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5). Entri lama yang dilewati tidak ditandai di sini.
   const cols = ['tahun','tipe','sumber','nama','program_ref','kegiatan_ref','subkegiatan_ref','urut','created_by','asal'];
 
   await withTransaction(async ({ tx, conn }) => {
@@ -570,12 +570,12 @@ export class KinerjaVersiBentrokError extends Error {
  * `copied` 0 = sumber itu belum punya satu baris RKO pun di tahun itu (mis. OBAT yang
  * tidak dianggarkan di murni). Versi baru tidak punya catatan sendiri — ia "ada" begitu
  * punya baris — jadi tidak ada yang disalin maupun dikunci; PERUBAHAN-1 baru tercatat
- * di Simpan pertama. docs/CONCEPT-kinerja-versi-cetak.md §2.
+ * di Simpan pertama. docs/konsep/kinerja/CONCEPT-kinerja-versi-cetak.md §2.
  *
  * A6: SELURUH pembacaan yang menentukan hasil ada DI DALAM transaksi, kunci (tahun,
  * sumber) perintah pertama. Dulu `MAX(versi_seq)` dan baris sumbernya dibaca SEBELUM
  * transaksi, jadi simpanan yang mendarat di sela itu ikut terkunci tapi TIDAK ikut
- * tersalin. Rinciannya: docs/AUDIT-kinerja-2026-09-04.md §A6
+ * tersalin. Rinciannya: docs/audit/AUDIT-kinerja-2026-09-04.md §A6
  */
 export async function buatVersiPerubahan(
   tahun: string, sumber: SumberSSK,
@@ -668,7 +668,7 @@ export async function buatVersiPerubahan(
       );
 
       // Versi asal kini final: realisasinya dipotret supaya laporannya tidak bergeser lagi
-      // saat realisasi disunting di Perubahan (docs/CONCEPT-kinerja-tutup-per-versi.md).
+      // saat realisasi disunting di Perubahan (docs/konsep/kinerja/CONCEPT-kinerja-tutup-per-versi.md).
       // Angka kunci realisasi naik — tab Realisasi yang terbuka memuat ulang acuannya.
       difoto = await potretRealisasi(tx, tahun, sumber, { tipe: fromTipe, seq: fromSeq }, userId);
       await bumpBludVersion(tx, REALISASI_LOCK_ENTITY, realisasiLockKey(tahun, sumber), userId);
@@ -842,7 +842,7 @@ export async function saveSskBatch(
   expectedVersion?: number,
   force = false,
   setujuBulanTertutup = false,
-  /** Meneruskan simpanan yang melampaui pagu Rencana Aksi (docs/CONCEPT-renaksi-pagu-rko.md Tahap C). */
+  /** Meneruskan simpanan yang melampaui pagu Rencana Aksi (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md Tahap C). */
   alasanPaguRenaksi: string | null = null,
 ): Promise<PelanggaranPagu[]> {
   // PERF-C1: DELETE + bulk INSERT atomic (1 round-trip).

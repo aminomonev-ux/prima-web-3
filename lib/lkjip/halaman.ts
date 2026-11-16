@@ -1,5 +1,5 @@
 // ═══ Geometri halaman & indent paragraf LKJIP — SATU sumber angka ═══════════════
-// Dipakai pihak-pihak yang wajib sepakat (konsep `docs/CONCEPT-lkjip-penggaris-narasi.md`):
+// Dipakai pihak-pihak yang wajib sepakat (konsep `docs/konsep/lkjip/CONCEPT-lkjip-penggaris-narasi.md`):
 //   · `docgen.ts`            → `<w:pgSz>`/`<w:pgMar>` dan `<w:ind>` tiap paragraf di Word
 //   · `PenggarisNarasi.tsx`  → garis cm & posisi penanda
 //   · `TiptapNarasi.tsx`     → atribut `data-ind-*` paragraf

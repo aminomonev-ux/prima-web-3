@@ -14,7 +14,7 @@ import { GOLONGAN, type Golongan } from '@/lib/bba/kib';
 import { tanggalHariIniWIB } from '@/lib/shared/waktu-wib';
 import { guard, tolakKecualiLihat } from '../../_guard';
 
-// Unduhan Excel Buku Aset (docs/CONCEPT-bba-buku-aset.md §9): KIB A–F, KIR per ruangan, hasil sensus
+// Unduhan Excel Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §9): KIB A–F, KIR per ruangan, hasil sensus
 // + rekapnya, Rekapitulasi BMD, Buku Inventaris — bentuk ekspor sistem aset provinsi — dan format kerja
 // PRIMA. Disusun di server supaya satu penyusun dipakai semua pintu unduh dan tiap unduhan tercatat.
 export const runtime = 'nodejs';

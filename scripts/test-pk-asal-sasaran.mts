@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-pk-asal-sasaran.mts — keterangan "milik siapa" di lampiran Form PK.
-// Konsep: docs/CONCEPT-pk-lampiran-asal-sasaran.md. Jalankan: npx tsx scripts/test-pk-asal-sasaran.mts
+// Konsep: docs/konsep/pk/CONCEPT-pk-lampiran-asal-sasaran.md. Jalankan: npx tsx scripts/test-pk-asal-sasaran.mts
 import { readFileSync } from 'node:fs'
 import { asalSasaran, dipakaiDi, tulisEntitas, tulisPemakai, type BarisLampiranLain, type BarisRenaksiAsal } from '../lib/pk/asal-sasaran'
 

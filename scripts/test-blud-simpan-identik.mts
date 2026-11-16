@@ -5,7 +5,7 @@
 // sambungannya di server, route, dan KEDUA layar (L69) — komentar dibuang dulu supaya
 // prosa yang menjelaskan cacat lama tidak ikut cocok. Jalur transaksinya diuji di MySQL
 // sungguhan oleh scripts/test-blud-simpan-identik-db.mjs.
-// Konsep: docs/CONCEPT-blud-simpan-identik.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-simpan-identik.md
 
 import { readFileSync } from 'node:fs'
 import { isiDpaSama, isiPergeseranSama, jebakanArsip, kalimatTidakBerubah, dialogJebakanArsip } from '../lib/blud/isi-sama'

@@ -1,5 +1,5 @@
 // ═══ PRIMA — BBA Buku Aset (Tahap B) — Data Layer ═══════════════════
-// Konsep: docs/CONCEPT-bba-buku-aset.md §5, §7.1, §15, §16.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §5, §7.1, §15, §16.
 // Satu baris = satu register KIB. Impor: pratinjau (tanpa menulis) → simpan (satu transaksi,
 // dikunci per modul supaya dua impor tidak berselang-seling — L69-a lewat `blud_locks`).
 import type mysql from 'mysql2/promise';

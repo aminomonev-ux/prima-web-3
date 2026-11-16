@@ -1,4 +1,4 @@
-// lib/bba/rencana.ts — aturan rencana di atas buku aset (docs/CONCEPT-bba-buku-aset.md §7.3, §7.4,
+// lib/bba/rencana.ts — aturan rencana di atas buku aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.3, §7.4,
 // §7.7, §8). MURNI: dipakai Zod, data layer, modal item, daftar Rencana, Excel, dan uji.
 import type { BbaStatus } from './status';
 import type { Dimiliki } from './kondisi';

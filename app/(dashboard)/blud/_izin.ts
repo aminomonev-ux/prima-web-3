@@ -1,5 +1,5 @@
 // app/(dashboard)/blud/_izin.ts — izin per-layar untuk server component BLUD.
-// Konsep: docs/CONCEPT-blud-peran.md §8 Fase C
+// Konsep: docs/konsep/blud/CONCEPT-blud-peran.md §8 Fase C
 //
 // `layout.tsx` sudah menjaga pintu modul (`hasAppAccess`), jadi di sini tinggal
 // satu sumbu lagi: menu ini boleh dibuka atau tidak, dan boleh diubah atau tidak.

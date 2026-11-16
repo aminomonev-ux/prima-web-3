@@ -1,5 +1,5 @@
 // app/(dashboard)/buku-besar-aset/_izin.ts — izin per halaman BBA untuk server component.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §3.1, §16
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §3.1, §16
 // `layout.tsx` + pemeriksaan `isAsetRole` di halaman sudah menjaga pintu modul; di sini sumbu
 // kedua: bagian ini boleh dibuka / diubah? `bolehUbah` hanya menyembunyikan tombol — pagar
 // yang menentukan tetap di route (`app/api/buku-besar-aset/_guard.ts`).

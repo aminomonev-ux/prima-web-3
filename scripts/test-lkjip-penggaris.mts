@@ -1,5 +1,5 @@
 // scripts/test-lkjip-penggaris.mts — penggaris & indent per paragraf LKJIP.
-// Konsep: docs/CONCEPT-lkjip-penggaris-narasi.md
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-penggaris-narasi.md
 //
 // A: geometri halaman (satu sumber angka) · B: membaca & menjepit angka · C: akibat menyeret penanda
 // D: bawaan vs isian sendiri · E: penyaring server · F: Word (`w:ind` tiap paragraf) · G: impor Word

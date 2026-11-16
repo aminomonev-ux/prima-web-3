@@ -6,7 +6,7 @@ import { catatKondisi, AsetVersiError, AsetTidakAdaError, AsetDitolakError } fro
 import { BbaBerkasTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit } from '../../_guard';
 
-// Catat kondisi (docs/CONCEPT-bba-buku-aset.md §7.2): opname ruangan/gedung, laporan rusak, atau
+// Catat kondisi (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.2): opname ruangan/gedung, laporan rusak, atau
 // kartu aset — satu pintu. Semua register yang dikirim ditulis atau tidak sama sekali.
 export async function POST(req: NextRequest) {
   const g = await guard();

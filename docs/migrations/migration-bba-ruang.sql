@@ -1,4 +1,4 @@
--- BBA Tahap C — ruangan berada di gedung mana + data kop KIR (docs/CONCEPT-bba-buku-aset.md §15).
+-- BBA Tahap C — ruangan berada di gedung mana + data kop KIR (docs/konsep/bba/CONCEPT-bba-buku-aset.md §15).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang, SESUDAH migration-bba-aset.sql:
 -- Master Ruangan, opname per gedung, dan KIR membaca kolom-kolom ini.
 --

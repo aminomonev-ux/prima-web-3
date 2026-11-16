@@ -180,7 +180,7 @@ export class BludPaguDibawahRealisasiError extends Error {
   }
 }
 
-// ─── DPA PERUBAHAN (docs/CONCEPT-blud-dpa-perubahan.md) ──────────────────────
+// ─── DPA PERUBAHAN (docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md) ──────────────────────
 
 /**
  * §5.1 — sasaran Perubahan harus versi DPA BARU, sesudah semua versi DPA yang ada.
@@ -1337,7 +1337,7 @@ export async function savePergeseran(
 }
 
 // ─── CATATAN PERPINDAHAN ─────────────────────────────────────────────────────
-// Konsep: docs/CONCEPT-blud-catatan-perpindahan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-catatan-perpindahan.md
 
 const MUTASI_COLUMNS = ['tahun_anggaran', 'versi_tanggal', 'dari_row', 'ke_row', 'nilai', 'keterangan', 'urutan']
 

@@ -1,6 +1,6 @@
 // /api/admin/pemeliharaan — "Pemeliharaan & keluar otomatis" (SUPER_ADMIN saja, sama dengan
 // Broadcast & emergency logout). GET = keadaan jadwal; POST = kirim / batalkan / buka login.
-// Konsep: docs/CONCEPT-pemeliharaan-keluar.md
+// Konsep: docs/konsep/sistem/CONCEPT-pemeliharaan-keluar.md
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSession } from '@/lib/security/auth';

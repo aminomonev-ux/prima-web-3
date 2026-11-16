@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-bba-peran.mts — Tahap A Buku Aset: izin lima bagian + pengaman riwayat.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §3.1, §10 butir 7, §16, §17 Tahap A.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §3.1, §10 butir 7, §16, §17 Tahap A.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-bba-peran.mts
 // Bagian D & E memakai MySQL sungguhan, kotak pasir tahun 2084, bersih otomatis.
 import { readFileSync, readdirSync, statSync } from 'node:fs'

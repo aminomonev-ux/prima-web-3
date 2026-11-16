@@ -7,7 +7,7 @@
 //   set BACKUP_ENC_PASSWORD=xxx && node scripts/backup-decrypt.js file.enc
 //
 // Format file (lihat backup-db.js): MAGIC(8) + salt(16) + iv(12) + ciphertext + authTag(16).
-// Restore hasilnya: mysql -u <user> -p < output.sql  (lihat docs/BACKUP-RESTORE.md)
+// Restore hasilnya: mysql -u <user> -p < output.sql  (lihat docs/panduan/PANDUAN-instalasi-prima.md §15.3)
 
 const fs = require('fs');
 const path = require('path');

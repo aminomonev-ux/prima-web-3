@@ -1,5 +1,5 @@
 // lib/blud/anggaran-key.ts — identitas stabil baris anggaran lintas-versi.
-// Konsep: docs/CONCEPT-blud-realisasi.md §2.3
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.3
 //
 // Realisasi menempel ke anggaran_key, BUKAN ke id/row_id: dpa_blud & pergeseran_dpa
 // disimpan replace-all per versi (DELETE + INSERT) dan row_id dibuat ulang tiap versi,

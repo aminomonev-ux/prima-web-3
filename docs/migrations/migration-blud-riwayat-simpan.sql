@@ -13,12 +13,12 @@
 -- juga MELONGGARKAN pagar VERSI_DIRUJUK menjadi pencocokan per-detik: DPA jam
 -- 09:15 tidak lagi terlindungi oleh pergeseran yang menunjuk 16:40 di hari yang
 -- sama. Lebih banyak versi jadi bisa dihapus — arah yang berlawanan dengan L76.
--- Rinciannya di docs/CONCEPT-blud-riwayat-simpan.md §2.
+-- Rinciannya di docs/konsep/blud/CONCEPT-blud-riwayat-simpan.md §2.
 --
 -- Snapshot ini SENGAJA tidak dirujuk siapa pun. Ia catatan, bukan entitas.
 -- Begitu ia bisa dirujuk, seluruh alasan di atas kembali berlaku.
 --
--- Referensi: L77, docs/CONCEPT-blud-riwayat-simpan.md
+-- Referensi: L77, docs/konsep/blud/CONCEPT-blud-riwayat-simpan.md
 
 CREATE TABLE IF NOT EXISTS blud_riwayat_simpan (
   id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

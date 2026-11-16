@@ -1,12 +1,12 @@
 // lib/iki/layout.ts
-// Layout descriptor bersama export PDF & Excel modul IKI (docs/CONCEPT-iki.md §5).
+// Layout descriptor bersama export PDF & Excel modul IKI (docs/konsep/iki/CONCEPT-iki.md §5).
 // Satu sumber grid (header 3 baris + body ber-rowspan) supaya kedua format
 // selalu identik dengan 5 PDF referensi:
 //   STANDAR  — 11 kolom bernomor (12 kolom fisik; kolom 9 = romawi+nilai)
 //   DIREKTUR — 8 kolom bernomor (10 kolom fisik; kolom 3 & 6 span 2 fisik)
 // Pure module tanpa import server — aman dipakai client component.
 // CUSTOM (tabel dirancang sendiri) tidak lewat buildIkiGrid — kisinya dari `susunKisiCetak` (lib/iki/custom.ts);
-// judul, Data Pribadi, dan tanda tangan tetap dari sini (docs/CONCEPT-iki-custom.md §2).
+// judul, Data Pribadi, dan tanda tangan tetap dari sini (docs/konsep/iki/CONCEPT-iki-custom.md §2).
 
 import { adaIsiBadan, bacaTabelCustom } from './custom';
 import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
@@ -230,7 +230,7 @@ export function stripGolongan(pangkat: string | null | undefined): string {
 }
 
 /**
- * Blok tanda tangan per varian (docs/CONCEPT-iki.md §2.4). CUSTOM (konsep iki-custom §9.2): Nama Atasan
+ * Blok tanda tangan per varian (docs/konsep/iki/CONCEPT-iki.md §2.4). CUSTOM (konsep iki-custom §9.2): Nama Atasan
  * terisi = dua blok seperti STANDAR, kosong = satu blok pegawai — tanpa pilihan terpisah yang bisa
  * berbeda pendapat dengan isiannya. Kecuali CUSTOM bertanda tangan DIREKTUR (§12, bentuk "Seperti DIREKTUR"):
  * blok tunggal "Mengetahui" persis varian DIREKTUR.

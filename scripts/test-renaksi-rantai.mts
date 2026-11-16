@@ -1,5 +1,5 @@
 // scripts/test-renaksi-rantai.mts — uji PURE lib/renaksi/rantai.ts (Tahap 2).
-// Konsep: docs/CONCEPT-renaksi-pilih-indikator.md §5, §12.
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pilih-indikator.md §5, §12.
 // Jalankan: npx tsx scripts/test-renaksi-rantai.mts
 
 import {

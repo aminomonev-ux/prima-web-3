@@ -89,7 +89,7 @@ export default function RealisasiTab({
   realDasar, setRealDasar, bandingReal, realTertutup, setRealTertutup, versiFinal, ambilRealisasi,
   autoOpenImport = false, onImportConsumed,
 }: Props) {
-  // ─── Tutup Bulan & belum tersimpan (docs/CONCEPT-kinerja-simpan-realisasi.md) ──
+  // ─── Tutup Bulan & belum tersimpan (docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md) ──
   const tertutupSet = useMemo(() => new Set(realTertutup.map(b => b.bulan)), [realTertutup]);
   const bulanBelum  = useMemo(() => new Set(bandingReal.perBulan.map(x => x.bulan)), [bandingReal]);
   const bulanIniTertutup = tertutupSet.has(realisasiBulan);

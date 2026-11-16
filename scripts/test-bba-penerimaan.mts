@@ -2,7 +2,7 @@
 // scripts/test-bba-penerimaan.mts — Tahap E Buku Aset: pengadaan & penerimaan — realisasi = Σ penerimaan,
 // "yang dibeli", antrean → tempatkan → belum teregister → isi register / cocok otomatis saat impor KIB,
 // penggantian → siap dihapus, hapus dengan SK, rehab.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §7.4–7.7, §14, §15, §16.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4–7.7, §14, §15, §16.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-bba-penerimaan.mts
 // Bagian D memakai MySQL sungguhan (kotak pasir 2080–2081, data berawalan "UJIE"), dibersihkan otomatis.
 import { readFileSync, existsSync } from 'node:fs'

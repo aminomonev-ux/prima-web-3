@@ -181,7 +181,7 @@ export const SectionDeleteSchema = z.object({ id: z.coerce.number().int().positi
 export const AlignSchema = z.enum(['left', 'center', 'right', 'justify']);
 const VAlignSchema = z.enum(['top', 'middle', 'bottom']);
 // Sel tabel: string (legacy) ATAU objek (merge/format). Selalu dinormalisasi ke objek.
-// Pabrik karena batas colspan = batas kolom pemakainya: LKJIP 12, IKI CUSTOM 24 (docs/CONCEPT-iki-custom.md §9.1).
+// Pabrik karena batas colspan = batas kolom pemakainya: LKJIP 12, IKI CUSTOM 24 (docs/konsep/iki/CONCEPT-iki-custom.md §9.1).
 export const buatCellSchema = (batasKolom: number) => z.union([
   z.string().max(2000),
   z.object({
@@ -240,7 +240,7 @@ export const NarasiPayloadSchema = z.object({
   return { html, continueList: p.continueList === true, angka: resepTerpakai(html, p.angka) };
 });
 
-// Tabel tertaut ke modul (docs/CONCEPT-lkjip-tabel-tertaut.md). WAJIB terdaftar di sini: Zod
+// Tabel tertaut ke modul (docs/konsep/lkjip/CONCEPT-lkjip-tabel-tertaut.md). WAJIB terdaftar di sini: Zod
 // membuang kunci yang tidak dikenalnya, jadi tanpa ini resepnya hilang diam-diam saat Simpan —
 // tabelnya tampak benar, tombol Perbarui lenyap begitu halaman dimuat ulang.
 const KunciBarisSchema = z.string().min(1).max(2000);

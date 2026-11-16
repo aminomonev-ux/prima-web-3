@@ -5,7 +5,7 @@
 // Murni pembacaan — datanya dimuat Beranda bersama panelnya (`VersiPergeseran.semua`),
 // jadi nol endpoint & nol pagar baru. Tautan ke layar Pergeseran hanya bagi yang boleh
 // membuka menu itu (`bolehBuka`), sama dgn kartu KPI-nya.
-// Konsep: docs/CONCEPT-blud-beranda-panel-bergerak.md §11
+// Konsep: docs/konsep/blud/CONCEPT-blud-beranda-panel-bergerak.md §11
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'

@@ -1,7 +1,7 @@
 'use client'
 // Dialog "Ambil nominal BLUD" di panel Anggaran Form PK: pilih DPA / Pergeseran + versinya,
 // lihat rincian per label PJ, baru dipakai. Hanya mengisi isian nominal (berhenti di form, L78).
-// Konsep: docs/CONCEPT-pk-nominal-blud-langsung.md.
+// Konsep: docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md.
 
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Loader2, X } from 'lucide-react'

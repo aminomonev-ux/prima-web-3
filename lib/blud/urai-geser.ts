@@ -1,5 +1,5 @@
 // lib/blud/urai-geser.ts — uraian pergeseran: bagian yang masuk vs yang keluar.
-// Konsep: docs/CONCEPT-blud-uraian-geser.md §3, §4
+// Konsep: docs/konsep/blud/CONCEPT-blud-uraian-geser.md §3, §4
 //
 // `bertambah_berkurang` cuma SATU angka bertanda, jadi rekening yang ditambah
 // DAN dikurangi di dokumen yang sama kehilangan separuh ceritanya: ATK yang
@@ -216,7 +216,7 @@ export function petaDaun(rows: readonly Pick<BarisUrai, 'row_id' | 'parent_id'>[
 }
 
 // ─── TAWARAN "TERAPKAN" ──────────────────────────────────────────────────────
-// Konsep: docs/CONCEPT-blud-terapkan-uraian.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-terapkan-uraian.md
 
 /** Baris yang cukup untuk ditawari Terapkan — `vol_p` yang dipakai membagi. */
 export type BarisTawar = BarisUrai & { vol_p?: number | null }

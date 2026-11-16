@@ -1,4 +1,4 @@
-// scripts/test-iki-custom.mts — IKI varian CUSTOM: tabel bagian II dirancang sendiri (docs/CONCEPT-iki-custom.md).
+// scripts/test-iki-custom.mts — IKI varian CUSTOM: tabel bagian II dirancang sendiri (docs/konsep/iki/CONCEPT-iki-custom.md).
 //
 //   npx tsx scripts/test-iki-custom.mts
 //

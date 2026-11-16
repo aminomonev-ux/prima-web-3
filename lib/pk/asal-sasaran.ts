@@ -1,6 +1,6 @@
 // lib/pk/asal-sasaran.ts — "milik siapa" sasaran & indikator lampiran Form PK.
 //
-// PURE & aman-klien. Konsep: docs/CONCEPT-pk-lampiran-asal-sasaran.md (pilihan (c)).
+// PURE & aman-klien. Konsep: docs/konsep/pk/CONCEPT-pk-lampiran-asal-sasaran.md (pilihan (c)).
 // HANYA untuk tampilan: hasilnya tidak pernah masuk baris lampiran, dokumen, atau Word.
 //   • asal  = program/kegiatan/sub di Rencana Aksi (nama + kode) + indikator induk yang dijabarkan;
 //   • dipakai = dokumen PK lain tahun itu (unit Pihak Pertama, jenis, status) yang lampirannya

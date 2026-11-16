@@ -1,6 +1,6 @@
 'use client'
 // components/blud/SpandukLihat.tsx — pembungkus BLUD untuk `components/ui/SpandukLihat`.
-// Konsep: docs/CONCEPT-blud-peran.md §8 Fase C
+// Konsep: docs/konsep/blud/CONCEPT-blud-peran.md §8 Fase C
 //
 // Bentuknya pindah ke `ui/` saat PK jadi modul kedua; berkas ini sengaja dipertahankan
 // supaya sepuluh pemanggil di BLUD tidak berubah dan nama menu tetap diterjemahkan oleh

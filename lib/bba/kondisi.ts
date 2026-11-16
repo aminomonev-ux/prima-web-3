@@ -1,4 +1,4 @@
-// lib/bba/kondisi.ts — kondisi per register (docs/CONCEPT-bba-buku-aset.md §5.3, §7.2). MURNI:
+// lib/bba/kondisi.ts — kondisi per register (docs/konsep/bba/CONCEPT-bba-buku-aset.md §5.3, §7.2). MURNI:
 // dipakai data layer, layar, Excel, dan uji. Menggantikan hitungan baik/RR/RB per barang × lokasi
 // Tahap 3 (`bba_eksisting`, dipensiunkan di Tahap C).
 import type { Golongan, Kondisi as KodeKondisi } from './kib'

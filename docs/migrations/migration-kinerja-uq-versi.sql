@@ -34,7 +34,7 @@
 --
 --   SHOW INDEX FROM kinerja_ssk WHERE Key_name = 'uq_ks_canonical_versi';
 --
--- Referensi: docs/AUDIT-kinerja-2026-09-04.md §A6, migration-022 langkah 3.
+-- Referensi: docs/audit/AUDIT-kinerja-2026-09-04.md §A6, migration-022 langkah 3.
 
 ALTER TABLE kinerja_ssk
   ADD UNIQUE KEY uq_ks_canonical_versi (tahun, sumber, canonical_id, versi_tipe, versi_seq);

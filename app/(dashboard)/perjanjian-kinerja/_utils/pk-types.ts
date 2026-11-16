@@ -20,7 +20,7 @@ export interface PkSasaranRow {
   target_subkegiatan: string | null;
   satuan_subkegiatan?: string | null;
   tahun?: string;
-  /** RENAKSI = dari Import Renaksi / dialog Perbarui (docs/CONCEPT-renaksi-terhubung.md §6). */
+  /** RENAKSI = dari Import Renaksi / dialog Perbarui (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6). */
   asal?: 'MANUAL' | 'RENAKSI';
   _deleted?: boolean;
   _dirty?: boolean;

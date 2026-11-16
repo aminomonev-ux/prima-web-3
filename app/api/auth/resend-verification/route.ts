@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// INTRANET EDITION (D5-D7 · docs/INTRANET-DELTA.md): endpoint DINONAKTIFKAN.
+// INTRANET EDITION (D5-D7 · docs/konsep/sistem/INTRANET-DELTA.md): endpoint DINONAKTIFKAN.
 // Registrasi publik & alur email (verifikasi/reset password) ditiadakan pada
 // edisi intranet. Pembuatan akun & reset password = admin-driven via Admin Panel.
 export async function POST() {

@@ -1,6 +1,6 @@
 // lib/kinerja/banding-renaksi.ts — Master E-Anggaran dibandingkan dengan Rencana Aksi tahun yang sama.
 //
-// PURE & aman-klien. Konsep: docs/CONCEPT-renaksi-terhubung.md §5.3. Tidak ada status
+// PURE & aman-klien. Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.3. Tidak ada status
 // "sudah dibaca": pemberitahuan muncul selama Master memang berbeda dari Renaksi dan hilang
 // sendiri begitu sudah sama.
 //

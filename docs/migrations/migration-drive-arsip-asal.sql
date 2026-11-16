@@ -1,5 +1,5 @@
 -- migration-drive-arsip-asal.sql — kolom penanda salinan lampiran di drive_arsip.
--- Konsep: docs/CONCEPT-drive-terpusat.md §20.
+-- Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §20.
 --
 -- KENAPA berkas terpisah: kolom ini ditambahkan ke migration-drive-arsip.sql SESUDAH berkas itu
 -- pertama kali terbit. Basis data yang sudah menjalankan bentuk lamanya tidak mendapat kolomnya

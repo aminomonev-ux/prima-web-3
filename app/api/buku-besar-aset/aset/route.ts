@@ -8,7 +8,7 @@ import {
 import { BbaBarangTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../_guard';
 
-// Buku Aset (docs/CONCEPT-bba-buku-aset.md §14): GET daftar berkelompok · ?id= kartu aset ·
+// Buku Aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14): GET daftar berkelompok · ?id= kartu aset ·
 // ?ids= register sebuah kelompok · ?ruang= / ?gedung= register untuk opname (beserta angka kuncinya).
 // PATCH = tambahan PRIMA di kartu aset (nama sehari-hari, barang).
 export async function GET(req: NextRequest) {

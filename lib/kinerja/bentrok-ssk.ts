@@ -16,7 +16,7 @@
 //
 // Label (program/kegiatan/uraian) tidak digabung: layar RKO tidak bisa menyuntingnya,
 // asalnya Master Rekening lewat Inject/Impor. MURNI — hanya mengimpor modul murni lain.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §6
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §6
 
 import { sen } from './banding-realisasi'
 

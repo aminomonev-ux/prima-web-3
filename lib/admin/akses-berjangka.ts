@@ -1,5 +1,5 @@
 // lib/admin/akses-berjangka.ts — tabel `akses_kedaluwarsa` (P2, Tahap 10).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
 //
 // SERVER-ONLY, dan SENGAJA hanya menyentuh tabelnya sendiri. Yang mencabut aksesnya
 // tinggal di `cabut-kedaluwarsa.ts` — kalau orkestrasi itu ditaruh di sini, berkas ini

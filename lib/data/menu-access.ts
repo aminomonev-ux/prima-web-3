@@ -1,5 +1,5 @@
 // lib/data/menu-access.ts — pengaturan izin menu dari Admin Panel.
-// Konsep: docs/CONCEPT-menu-access-control.md §4.5
+// Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §4.5
 //
 // Dua lapis, urutan menang: perkecualian orang > aturan peran > bawaan di kode.
 // Baris yang TIDAK ADA bukan "tidak boleh" melainkan "belum diatur" — jawabannya

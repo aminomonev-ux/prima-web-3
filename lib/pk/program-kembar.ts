@@ -17,7 +17,7 @@ export function kunciProgram(r: BarisProgram): string {
 
 /**
  * Kemunculan pertama dipertahankan, urutan tidak berubah. Tanda RENAKSI kembarannya ikut
- * diwariskan (docs/CONCEPT-renaksi-terhubung.md Tahap G) — kembar = jalur yang sama, jadi
+ * diwariskan (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md Tahap G) — kembar = jalur yang sama, jadi
  * yang dibuang dan yang dipertahankan sama-sama milik Renaksi; tanpa ini menggabungkan
  * "PROGRAM X ***" (RENAKSI) ke "PROGRAM X" (MANUAL) membuang tandanya.
  */

@@ -1,5 +1,5 @@
 'use client';
-// Master Ruangan BBA (docs/CONCEPT-bba-buku-aset.md §15): tempat peralatan berada, di gedung mana
+// Master Ruangan BBA (docs/konsep/bba/CONCEPT-bba-buku-aset.md §15): tempat peralatan berada, di gedung mana
 // (Kode Gedung kop KIR), luasnya, dan penanggung jawab ruangan (tanda tangan kiri KIR). Ruangan yang
 // masih berisi aset tidak bisa dihapus — pindahkan asetnya dulu atau ganti namanya saja.
 

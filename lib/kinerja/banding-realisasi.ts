@@ -7,7 +7,7 @@
 // cepat atau lambat berbeda pendapat.
 //
 // MURNI dan tanpa impor: dipakai `lib/data/kinerja.ts` (server) dan layar `'use client'`.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md
 
 export interface BarisBanding {
   bulan:             number

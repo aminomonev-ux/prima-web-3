@@ -1,7 +1,7 @@
 // lib/lkjip/salinan-modul.ts — "Salin ke LKJIP": tabel layar modul (Cetak E-Anggaran, Cetak Renaksi,
 // Laporan per Sumber Dana) disalin ke papan klip BERSAMA resepnya, lalu ditempel di LKJIP sebagai
 // tabel tertaut — seperti tabel Google Sheets yang ditempel ke Google Docs dengan "tautkan".
-// Konsep: docs/CONCEPT-lkjip-tabel-dari-modul.md
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-dari-modul.md
 //
 // Papan klip membawa tabel HTML biasa (Word/Excel tetap bisa menempelnya) + atribut
 // `data-prima-salinan` berisi resep (sumber, setelan, kolom). Resep itu masukan dari LUAR: dibaca

@@ -1,6 +1,6 @@
 'use client';
 
-// INTRANET EDITION (D3/D8 · docs/INTRANET-DELTA.md): login-only.
+// INTRANET EDITION (D3/D8 · docs/konsep/sistem/INTRANET-DELTA.md): login-only.
 // Turnstile dilepas (D2 verifyTurnstile no-op), registrasi publik dimatikan
 // (D5-D8) → view signup/forgot/resend dibuang. Pembuatan akun & reset password
 // = admin-driven via Admin Panel (D9/D10). Lapisan keamanan login lain (lockout

@@ -1,6 +1,6 @@
 // lib/bba/barang.ts — Master Barang BBA: nama, saran tautan, agregasi per barang. MURNI (tanpa
 // impor server): dipakai data layer, route, DAN layar. Kueri hanya mengambil bahan; semua hitungan
-// "pernah dibeli / dalam proses / direncanakan" lewat sini. Konsep: docs/CONCEPT-bba-perencanaan.md §5.
+// "pernah dibeli / dalam proses / direncanakan" lewat sini. Konsep: docs/konsep/bba/CONCEPT-bba-perencanaan.md §5.
 import type { BbaStatus } from './status';
 import { ringkasHarga, type ReferensiIsian } from './referensi';
 

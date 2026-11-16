@@ -1,5 +1,5 @@
 // lib/blud/cadangan-json.ts — unggah foto per-simpan BLUD ke Google Drive.
-// Konsep: docs/CONCEPT-blud-cadangan-json.md §4 Tahap 1
+// Konsep: docs/konsep/blud/CONCEPT-blud-cadangan-json.md §4 Tahap 1
 //
 // Dipanggil DUA pemicu — cron dan tombol di layar Pengaturan — dan itu sebabnya
 // seluruh logikanya di sini, bukan di salah satu route. Dua salinan aturan yang

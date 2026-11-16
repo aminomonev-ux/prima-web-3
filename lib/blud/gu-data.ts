@@ -1,5 +1,5 @@
 // lib/blud/gu-data.ts — periode Ganti Uang Persediaan (GU) per bulan.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.2, keputusan #31.
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.2, keputusan #31.
 //
 // Berkas Juni 2026 asli punya satu lembar `GU 1-26 Juni 2026` — tanggal 1 s/d 26,
 // bukan sebulan penuh. Bulan lain bisa punya dua atau tiga pengajuan tergantung

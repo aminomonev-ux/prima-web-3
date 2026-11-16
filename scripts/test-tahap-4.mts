@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-4.mts — penjaga regresi Tahap 4 (T-5 · P6 · P10).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 4.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 4.
 //
 // Bagian A–C menguji PERILAKU sungguhan (fungsi murni dipanggil dengan data buatan);
 // bagian D–F statis, untuk hal yang tidak punya bentuk fungsi — bahwa `?app=` sudah

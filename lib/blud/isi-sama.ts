@@ -7,7 +7,7 @@
 // hari ini mengunci Jadikan DPA Perubahan sampai besok (konsep DPA Perubahan §5.1).
 //
 // MURNI, tanpa impor — bisa diuji perilakunya.
-// Konsep: docs/CONCEPT-blud-simpan-identik.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-simpan-identik.md
 
 type Nilai = string | number | null | undefined
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-sesi-dicabut.mts — penjaga regresi Tahap 1 (A1–A7).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 1, temuan T-1..T-7 & T-16.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 1, temuan T-1..T-7 & T-16.
 //
 // Pemeriksaan STATIS (baca berkas), tidak menyentuh DB. Yang dijaga di sini adalah
 // hal-hal yang `tsc` tidak bisa lihat sama sekali: route baru yang lupa menanyakan

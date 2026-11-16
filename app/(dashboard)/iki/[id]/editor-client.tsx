@@ -1,7 +1,7 @@
 'use client';
 /* Editor dokumen IKI — Data Pribadi + grup RHK (4 baris TW per RHK) +
    import Renaksi / IKI Atasan + export PDF/Excel (lib/iki).
-   Varian CUSTOM (docs/CONCEPT-iki-custom.md): bagian II = editor tabel bersama (components/tabel), disimpan
+   Varian CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md): bagian II = editor tabel bersama (components/tabel), disimpan
    bersama Data Pribadi oleh SATU tombol Simpan halaman (§9.4). */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -53,7 +53,7 @@ interface Props {
   beku: InfoBeku;
 }
 
-/** Panel Peran kolom di editor tabel bersama (docs/CONCEPT-iki-custom.md §11). */
+/** Panel Peran kolom di editor tabel bersama (docs/konsep/iki/CONCEPT-iki-custom.md §11). */
 const FITUR_PERAN: FiturPeran = {
   daftar: PILIHAN_PERAN,
   kelompok: KELOMPOK_PERAN,

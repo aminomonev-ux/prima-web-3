@@ -5,7 +5,7 @@ import { listImportCandidates, commitImportUsulan, type BbaImportCandidate } fro
 import { guard, tolakKecualiEdit } from '../_guard';
 
 // Tarik Belanja Modal final (DISETUJUI/DITOLAK/DITOLAK_ADMIN) dari Usulan Kebutuhan ke BBA.
-// Menimbang usulan = pekerjaan Perencanaan (docs/CONCEPT-bba-buku-aset.md §3), jadi pagarnya
+// Menimbang usulan = pekerjaan Perencanaan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §3), jadi pagarnya
 // izin EDIT bagian Rencana — dulu khusus ADMIN/SUPER_ADMIN, yang membuat role PROGRAM tak bisa.
 async function guardImport() {
   const g = await guard();

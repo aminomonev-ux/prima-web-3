@@ -5,7 +5,7 @@ import { GabungKembarSchema, KembarCariSchema } from '@/lib/data/bba-aset-schema
 import { calonKembar, gabungKembar, AsetVersiError, AsetTidakAdaError, AsetDitolakError } from '@/lib/data/bba-aset';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../../_guard';
 
-// Gabungkan dengan kembarannya (docs/CONCEPT-bba-buku-aset.md §23.2): GET ?id= saran kembaran (&register= cari nomor) ·
+// Gabungkan dengan kembarannya (docs/konsep/bba/CONCEPT-bba-buku-aset.md §23.2): GET ?id= saran kembaran (&register= cari nomor) ·
 // POST = catatan yang kartunya dibuka mengambil nomor & kolom KIB kembarannya, kembarannya dibuang.
 export async function GET(req: NextRequest) {
   const g = await guard();

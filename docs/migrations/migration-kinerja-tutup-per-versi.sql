@@ -20,7 +20,7 @@
 -- Penanda /*UJI*/ dipakai scripts/test-kinerja-tutup-per-versi.mts untuk membatasi langkah
 -- 2 dan 5 ke tahun kotak pasir; di server kantor penanda itu hanya komentar.
 --
--- Referensi: docs/CONCEPT-kinerja-tutup-per-versi.md
+-- Referensi: docs/konsep/kinerja/CONCEPT-kinerja-tutup-per-versi.md
 
 -- 1. Kolom versi pada tutupan.
 ALTER TABLE kinerja_bulan_tutup

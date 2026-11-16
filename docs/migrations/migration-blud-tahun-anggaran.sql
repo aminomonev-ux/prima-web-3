@@ -1,6 +1,6 @@
 -- migration-blud-tahun-anggaran.sql
 -- Tambah dimensi Tahun Anggaran ke versi DPA & Pergeseran BLUD.
--- Konsep: docs/CONCEPT-blud-tahun-anggaran.md (Opsi B).
+-- Konsep: docs/konsep/blud/CONCEPT-blud-tahun-anggaran.md (Opsi B).
 -- Versi lama AMAN: backfill tahun_anggaran = YEAR(versi_tanggal).
 -- Identitas versi: (versi_tanggal) -> (tahun_anggaran, versi_tanggal).
 -- MySQL 8.4 — TANPA IF NOT EXISTS pada ADD COLUMN (aturan CLAUDE.md).

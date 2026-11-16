@@ -695,7 +695,7 @@ function Settings_Icon() {
 
 /**
  * Cadangan JSON ke Google Drive — foto per-simpan DPA/Pergeseran.
- * Konsep: docs/CONCEPT-blud-cadangan-json.md §4 Tahap 2
+ * Konsep: docs/konsep/blud/CONCEPT-blud-cadangan-json.md §4 Tahap 2
  *
  * Bagian terpentingnya BUKAN tombolnya, melainkan baris "Terakhir berhasil".
  * Cadangan basis data di server ini berhenti dua bulan tanpa ada yang sadar,

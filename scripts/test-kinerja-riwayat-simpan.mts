@@ -1,7 +1,7 @@
 // scripts/test-kinerja-riwayat-simpan.mts — regresi Tahap 9 (pagar + riwayat simpan).
 // Jalankan: npx tsx scripts/test-kinerja-riwayat-simpan.mts
 //
-// Konsep: docs/CONCEPT-kinerja-riwayat-simpan.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-riwayat-simpan.md
 //
 // Sebagian besar pemeriksaan di sini STATIS (membaca sumber), karena yang dijaga
 // adalah URUTAN pernyataan di dalam transaksi — hal yang tidak bisa dibuktikan

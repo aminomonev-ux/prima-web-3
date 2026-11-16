@@ -1,6 +1,6 @@
 'use client';
 
-// Impor dari Word (docs/CONCEPT-lkjip-impor-word.md §3): pilih berkas → pratinjau + koreksi → Buat.
+// Impor dari Word (docs/konsep/lkjip/CONCEPT-lkjip-impor-word.md §3): pilih berkas → pratinjau + koreksi → Buat.
 // Isi dokumen tidak pernah dikirim dari sini: server membaca ulang berkas yang sama saat Buat,
 // layar hanya mengirim koreksi + sidik berkas yang dipratinjau.
 import { useState } from 'react';

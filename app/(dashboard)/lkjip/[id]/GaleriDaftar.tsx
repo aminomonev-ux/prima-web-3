@@ -1,6 +1,6 @@
 'use client';
 
-// Galeri format daftar — satu komponen untuk popover bilah alat dan sub-menu klik kanan. Konsep `docs/CONCEPT-lkjip-daftar-word.md`.
+// Galeri format daftar — satu komponen untuk popover bilah alat dan sub-menu klik kanan. Konsep `docs/konsep/lkjip/CONCEPT-lkjip-daftar-word.md`.
 // Aksi di onMouseDown: fokus & pilihan teks harus tetap di editor, dan menu klik kanan menutup diri saat mouse ditekan di luar kotaknya.
 
 import { Ban } from 'lucide-react';

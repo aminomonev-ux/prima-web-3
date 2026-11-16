@@ -224,7 +224,7 @@ export const InitRenaksiBodySchema = z.object({
   pilih: z.array(z.string().max(2100)).max(2000).optional(),
 });
 
-/** POST /api/kinerja/master/asal — Jadikan manual / Tandai dari Renaksi (docs/CONCEPT-renaksi-terhubung.md §5.5). */
+/** POST /api/kinerja/master/asal — Jadikan manual / Tandai dari Renaksi (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.5). */
 export const MasterAsalBodySchema = z.object({
   tahun: TahunSchema,
   ids:   z.array(z.number().int().positive()).min(1).max(2000),
@@ -265,7 +265,7 @@ export const SskBodySchema = z.object({
   // Peringatan, bukan pagar — sengaja terpisah dari `force` supaya menjawab satu
   // pertanyaan tidak diam-diam menjawab pertanyaan lain.
   setuju_bulan_tertutup: z.boolean().optional(),
-  // Meneruskan simpanan yang melampaui pagu sub kegiatan Rencana Aksi (docs/CONCEPT-renaksi-pagu-rko.md).
+  // Meneruskan simpanan yang melampaui pagu sub kegiatan Rencana Aksi (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md).
   alasan_pagu_renaksi: AlasanPaguRenaksiSchema,
   rows:       z.array(SskRowSchema).max(5000, 'Maks 5000 baris per batch'),
 });

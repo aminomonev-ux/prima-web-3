@@ -1,6 +1,6 @@
 'use client';
 
-// Penggaris blok narasi — konsep `docs/CONCEPT-lkjip-penggaris-narasi.md`. Seperti Word: menampilkan indent
+// Penggaris blok narasi — konsep `docs/konsep/lkjip/CONCEPT-lkjip-penggaris-narasi.md`. Seperti Word: menampilkan indent
 // PARAGRAF yang kursornya di situ (bukan setelan dokumen), empat penanda bisa diseret, dan selama diseret
 // hanya garis panduan yang bergerak — teks berubah saat dilepas, jadi satu seret = satu langkah Undo.
 // Bidang tulis A4 dalam skala Word: posisi penanda = persentase lebar kolom, sama dengan yang dipakai teks.

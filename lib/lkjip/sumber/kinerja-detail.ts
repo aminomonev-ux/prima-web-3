@@ -1,5 +1,5 @@
 // lib/lkjip/sumber/kinerja-detail.ts — sumber "E-Anggaran · Cetak Detail per Sumber" (satu sumber dana,
-// satu bulan, per rekening + JUMLAH). Konsep: docs/CONCEPT-lkjip-tabel-dari-modul.md
+// satu bulan, per rekening + JUMLAH). Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-dari-modul.md
 //
 // Baris = GET /api/kinerja/realisasi yang dipakai layar Cetak apa adanya (versi final membaca foto
 // beku, hak akses E-Anggaran berlaku), lalu `recalcAllRealisasi` seperti layarnya. JUMLAH =

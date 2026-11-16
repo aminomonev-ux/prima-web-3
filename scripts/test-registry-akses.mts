@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-registry-akses.mts — tabel kebenaran "siapa boleh masuk modul mana".
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 2 (Fase B).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 2 (Fase B).
 //
 // Dipakai DUA kali, dan urutannya yang menentukan gunanya:
 //

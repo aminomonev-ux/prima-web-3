@@ -1,6 +1,6 @@
 // lib/bba/status.ts — status item Buku Besar Aset + transisinya. MURNI (tanpa impor server):
 // dipakai skema Zod, data layer, DAN layar (pilihan status di modal Proses & Realisasi), supaya
-// aturan transisi cuma satu. Konsep: docs/CONCEPT-bba-perencanaan.md §5.2.
+// aturan transisi cuma satu. Konsep: docs/konsep/bba/CONCEPT-bba-perencanaan.md §5.2.
 
 export const BBA_STATUSES = [
   'DIRENCANAKAN', 'DIPROSES', 'REALISASI_PENUH', 'REALISASI_SEBAGIAN', 'TIDAK_TEREALISASI',
@@ -16,7 +16,7 @@ export const LABEL_STATUS: Record<BbaStatus, string> = {
 export const STATUS_BELUM_TEREALISASI: readonly BbaStatus[] = ['DIRENCANAKAN', 'DIPROSES', 'TIDAK_TEREALISASI'];
 
 /**
- * Status yang diubah tangan lewat "Proses" (docs/CONCEPT-bba-buku-aset.md §7.4). Diterima sebagian/penuh
+ * Status yang diubah tangan lewat "Proses" (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4). Diterima sebagian/penuh
  * TIDAK ada di sini: sejak Tahap E keduanya turunan Σ penerimaan (`ringkasPenerimaan`) — satu jalur tulis.
  * DIPROSES → DIRENCANAKAN = pesanan batal, barangnya tetap direncanakan (§5.2).
  */
@@ -40,7 +40,7 @@ export function alasanTolakProses(r: { status: BbaStatus; anggaran: string; usul
 
 /**
  * Sejak barangnya dipesan, survei harga = catatan sejarah ("dulu dibandingkan dengan apa"),
- * bukan draf (docs/CONCEPT-bba-buku-aset.md §7.4, §10 butir 7). Pesanan batal → kembali
+ * bukan draf (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4, §10 butir 7). Pesanan batal → kembali
  * Direncanakan → terbuka lagi.
  */
 export function referensiBeku(status: BbaStatus): boolean {

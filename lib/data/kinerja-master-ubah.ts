@@ -76,7 +76,7 @@ async function muatBahan(q: Penanya, tahun: string, kunci: boolean): Promise<Bah
 }
 
 /**
- * Tahap G (docs/CONCEPT-renaksi-terhubung.md): penerima gabungan mewarisi RENAKSI dari entri yang
+ * Tahap G (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md): penerima gabungan mewarisi RENAKSI dari entri yang
  * melebur kepadanya — aturannya `tandaWarisan`. Renaksi hanya dibaca kalau memang ada entri RENAKSI
  * yang dibuang. `updated_at` tetap: tanda asal bukan suntingan isi.
  */
@@ -329,7 +329,7 @@ export async function lengkapiMasterDariData(tahun: string, opsi: { userId: numb
   });
 }
 
-// ─── Selaras dengan Rencana Aksi (docs/CONCEPT-renaksi-terhubung.md §5.3–5.5) ─────
+// ─── Selaras dengan Rencana Aksi (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.3–5.5) ─────
 
 /** Bahan pembanding Master ↔ Renaksi tahun itu. Hanya membaca. */
 export async function bandingMasterRenaksi(tahun: string): Promise<HasilBanding> {

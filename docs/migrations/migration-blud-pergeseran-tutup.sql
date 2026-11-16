@@ -1,5 +1,5 @@
 -- migration-blud-pergeseran-tutup.sql
--- Tutup Pergeseran — konsep: docs/CONCEPT-blud-tutup-pergeseran.md
+-- Tutup Pergeseran — konsep: docs/konsep/blud/CONCEPT-blud-tutup-pergeseran.md
 --
 -- Menutup satu PUTARAN pergeseran: kolom P disalin ke kolom kiri, sehingga
 -- geseran berikutnya dihitung terhadap hasil putaran ini, bukan terhadap DPA

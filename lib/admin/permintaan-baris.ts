@@ -1,5 +1,5 @@
 // lib/admin/permintaan-baris.ts — aturan murni permintaan akses mandiri (P4).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P4 (Tahap 11).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P4 (Tahap 11).
 //
 // BERKAS DAUN. Dibaca kartu /menu (`'use client'`), panel Pusat Akses (`'use client'`),
 // DAN lapisan servernya — jadi ia TIDAK BOLEH mengimpor apa pun yang menyeret

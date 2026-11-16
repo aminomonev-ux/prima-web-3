@@ -515,7 +515,7 @@ CREATE INDEX idx_krm_tahun ON kinerja_realisasi_map (tahun);
 -- ulang, jadi simpanan sore menghapus hasil pagi tanpa sisa. `versi_tipe`/
 -- `versi_seq` NULL = jenis itu memang tidak berversi (Realisasi & Rekening) —
 -- pemangkasan retensi karena itu WAJIB memakai `<=>`, bukan `=`.
--- Rinciannya di docs/CONCEPT-kinerja-riwayat-simpan.md
+-- Rinciannya di docs/konsep/kinerja/CONCEPT-kinerja-riwayat-simpan.md
 CREATE TABLE IF NOT EXISTS kinerja_riwayat_simpan (
   id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   jenis          ENUM('SSK','REALISASI','REKENING') NOT NULL,
@@ -688,7 +688,7 @@ CREATE OR REPLACE VIEW v_pergeseran_history AS
 -- menyimpan snapshot tiap klik Simpan supaya keduanya tetap ada dan bisa
 -- dipulihkan. `versi_tanggal` SENGAJA tetap DATE — jam hidup di sini saja, dan
 -- baris di tabel ini TIDAK dirujuk siapa pun. Alasan lengkap:
--- docs/CONCEPT-blud-riwayat-simpan.md §2. Migration: migration-blud-riwayat-simpan.sql
+-- docs/konsep/blud/CONCEPT-blud-riwayat-simpan.md §2. Migration: migration-blud-riwayat-simpan.sql
 
 CREATE TABLE IF NOT EXISTS blud_riwayat_simpan (
   id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -716,7 +716,7 @@ CREATE TABLE IF NOT EXISTS blud_riwayat_simpan (
 -- murni. Barisnya ditulis lewat jalur Simpan yang sudah ada; tabel ini hanya
 -- mencatat PERISTIWA penutupannya. PRIMARY KEY-nya yang menjaga "satu versi
 -- hanya bisa ditutup sekali" (L69-a). Nomor putaran tidak disimpan — dihitung
--- dari urutan `versi_ditutup` (L55). Konsep: docs/CONCEPT-blud-tutup-pergeseran.md
+-- dari urutan `versi_ditutup` (L55). Konsep: docs/konsep/blud/CONCEPT-blud-tutup-pergeseran.md
 -- Migration: migration-blud-pergeseran-tutup.sql
 
 CREATE TABLE IF NOT EXISTS blud_pergeseran_tutup (
@@ -737,7 +737,7 @@ CREATE TABLE IF NOT EXISTS blud_pergeseran_tutup (
 -- Penanda babak Perubahan, pola `blud_pergeseran_tutup`. Versi DPA bertanggal
 -- >= `versi_mulai` adalah versi Perubahan; nomor ke-n dihitung dari urutan (L55).
 -- PRIMARY KEY menolak pembuatan ganda (L69-a). Penanda dibuang bersama versi
--- Perubahan terakhir. Konsep: docs/CONCEPT-blud-dpa-perubahan.md §4.
+-- Perubahan terakhir. Konsep: docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §4.
 -- Migration: migration-blud-dpa-perubahan.sql
 
 CREATE TABLE IF NOT EXISTS blud_dpa_perubahan (
@@ -803,7 +803,7 @@ CREATE TABLE IF NOT EXISTS kode_besar (
 -- Pengaturan izin menu dari Admin Panel. Dua lapis: aturan peran + perkecualian
 -- per orang. Baris yang TIDAK ADA berarti "pakai bawaan dari kode"
 -- (lib/blud/peran.ts) — karena itu kedua tabel sah dalam keadaan kosong, dan
--- memang dibuat kosong. Konsep: docs/CONCEPT-menu-access-control.md §4.5.
+-- memang dibuat kosong. Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §4.5.
 -- Migration: migration-menu-access.sql
 CREATE TABLE IF NOT EXISTS menu_role_access (
   app_key    VARCHAR(32)  NOT NULL                COMMENT 'Key modul, mis. "blud"',
@@ -837,7 +837,7 @@ CREATE TABLE IF NOT EXISTS menu_user_access (
 -- ─── BLUD — REKAP PENANGGUNG JAWAB ───────────────────────────────────────────
 -- Snapshot rekap PJ — dulu ditulis tombol "Simpan Rekap PK" di Cetak BLUD (Migration 024).
 -- SEJAK 2026-11-12 TIDAK DITULIS & TIDAK DIBACA lagi: nominal BLUD Form PK dihitung langsung
--- dari DPA/Pergeseran (docs/CONCEPT-pk-nominal-blud-langsung.md). Sengaja tidak di-DROP —
+-- dari DPA/Pergeseran (docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md). Sengaja tidak di-DROP —
 -- isinya riwayat; yang masih menyentuhnya hanya deleteDpaVersi (membuang foto versi terhapus).
 
 CREATE TABLE IF NOT EXISTS rekap_pk (
@@ -1102,7 +1102,7 @@ CREATE TABLE IF NOT EXISTS rencana_aksi (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Rencana Aksi - target & realisasi triwulan per indikator';
 
--- Catatan ganti nama entitas Renaksi (migration-renaksi-ganti-nama.sql) — docs/CONCEPT-renaksi-terhubung.md §4.
+-- Catatan ganti nama entitas Renaksi (migration-renaksi-ganti-nama.sql) — docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §4.
 -- Ditulis upsertRencanaAksi di transaksi yang sama dengan penjalaran nama; dibaca modul penyalin
 -- (E-Anggaran, PK, IKI) untuk mengenali "berganti nama" alih-alih "hilang + baru". Tanpa status.
 CREATE TABLE IF NOT EXISTS renaksi_ganti_nama (
@@ -1123,7 +1123,7 @@ CREATE TABLE IF NOT EXISTS renaksi_ganti_nama (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Jejak ganti nama entitas Rencana Aksi untuk modul yang menyalin namanya';
 
--- Rincian pagu per sumber dana (migration-renaksi-pagu-sumber.sql) — docs/CONCEPT-renaksi-pagu-rko.md.
+-- Rincian pagu per sumber dana (migration-renaksi-pagu-sumber.sql) — docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md.
 -- `rencana_aksi.anggaran_nominal` = Σ pagu berlaku rincian, ditulis hanya oleh server.
 CREATE TABLE IF NOT EXISTS rencana_aksi_pagu (
   id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -1229,7 +1229,7 @@ INSERT IGNORE INTO app_config (`key`, value) VALUES
 -- lock per-row (L48 CAS). Konsep: docs/session/buku-besar-aset/CONCEPT.md.
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- BBA Master Barang (migration-bba-barang-proses.sql, docs/CONCEPT-bba-perencanaan.md §5).
+-- BBA Master Barang (migration-bba-barang-proses.sql, docs/konsep/bba/CONCEPT-bba-perencanaan.md §5).
 -- Jenis barang di tingkat perencanaan ("Laptop", "Kursi Roda") — kunci riwayat beli & eksisting.
 -- Nama dirapikan `rapikanNamaBarang` (lib/bba/barang.ts); kolasi ci menolak kembar beda huruf.
 -- Dibuat SEBELUM buku_besar_aset karena fk_bba_barang menunjuk ke sini.
@@ -1331,7 +1331,7 @@ INSERT IGNORE INTO bba_kategori_aset (nama, urutan) VALUES
   ('ALKES & ALDOK', 6);
 
 -- BBA referensi harga + bukti dukung per item (migration-bba-referensi-bukti.sql,
--- docs/CONCEPT-bba-perencanaan.md §4). Referensi ditulis ulang tiap Simpan item (satu
+-- docs/konsep/bba/CONCEPT-bba-perencanaan.md §4). Referensi ditulis ulang tiap Simpan item (satu
 -- transaksi + CAS item); bukti ditulis per aksi tanpa menaikkan version item. Hapus bukti
 -- = lepas catatan, berkas Drive tetap. Aturan "sah"/kelengkapan di lib/bba/referensi.ts.
 CREATE TABLE IF NOT EXISTS bba_referensi_harga (
@@ -1368,7 +1368,7 @@ CREATE TABLE IF NOT EXISTS bba_lampiran (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='BBA — bukti dukung per item; ditulis per aksi (tambah/hapus), hapus tidak menyentuh Drive';
 
--- BBA kondisi eksisting (migration-bba-eksisting.sql, docs/CONCEPT-bba-perencanaan.md §6).
+-- BBA kondisi eksisting (migration-bba-eksisting.sql, docs/konsep/bba/CONCEPT-bba-perencanaan.md §6).
 -- Tiap pendataan = baris baru; yang berlaku = terbaru per barang × lokasi (lib/bba/eksisting.ts).
 -- Tanggal sama menimpa (uq_be_cek). digabung_* = jejak Gabungkan barang ("perlu didata ulang").
 CREATE TABLE IF NOT EXISTS bba_lokasi (
@@ -1436,7 +1436,7 @@ CREATE TABLE IF NOT EXISTS bba_penerimaan (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   COMMENT='BBA — penerimaan barang per rencana (bertahap); realisasi rencana = Σ baris ini';
 
--- BBA buku aset per register (migration-bba-aset.sql, docs/CONCEPT-bba-buku-aset.md §5/§15).
+-- BBA buku aset per register (migration-bba-aset.sql, docs/konsep/bba/CONCEPT-bba-buku-aset.md §5/§15).
 -- Satu baris = satu register KIB provinsi. Kolom yang disaring/dijumlah berdiri sendiri; sisa
 -- kolom KIB per golongan di JSON `kib` (definisinya lib/bba/kib.ts). Tidak pernah dihapus fisik:
 -- aset yang dihapus berstatus DIHAPUS (§7.6).
@@ -1614,7 +1614,7 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
 CREATE INDEX idx_uploaded_files_user ON uploaded_files (uploaded_by);
 
 -- Drive: catatan unggahan (manifest) + kesehatan per tujuan — migration-drive-arsip.sql,
--- docs/CONCEPT-drive-terpusat.md §5.2–§5.3. Ditulis lib/services/drive-catatan.ts & scripts/backup-db.js.
+-- docs/konsep/sistem/CONCEPT-drive-terpusat.md §5.2–§5.3. Ditulis lib/services/drive-catatan.ts & scripts/backup-db.js.
 CREATE TABLE IF NOT EXISTS drive_arsip (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   tujuan        VARCHAR(40)  NOT NULL,           -- 'backup_db' | 'lkjip' | 'lkjip_arsip' | 'blud_json' | 'bba' | 'usulan' | 'salinan_lampiran'
@@ -1844,7 +1844,7 @@ CREATE TABLE IF NOT EXISTS pk_dokumen_anggaran (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- Modul IKI (Indikator Kinerja Individu) — docs/CONCEPT-iki.md
+-- Modul IKI (Indikator Kinerja Individu) — docs/konsep/iki/CONCEPT-iki.md
 -- migration-iki.sql · varian STANDAR (11 kolom, 2 ttd) / DIREKTUR (8 kolom, 1 ttd)
 -- ═══════════════════════════════════════════════════════════════════════════
 

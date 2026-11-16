@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-5.mts — penjaga regresi Tahap 5 (Pusat Akses · Fase C + P1).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §4.5, §16.4, §17.2 Tahap 5.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §4.5, §16.4, §17.2 Tahap 5.
 //
 // Bagian A menguji PERILAKU sungguhan (aturan pintu dipanggil dengan data buatan);
 // B–G statis, untuk hal yang tidak punya bentuk fungsi — bahwa berkas daunnya tetap

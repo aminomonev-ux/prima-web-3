@@ -1,4 +1,4 @@
-// scripts/test-lkjip-ukuran-gambar.mts — ukuran & pratinjau gambar LKJIP (docs/CONCEPT-lkjip-ukuran-gambar.md).
+// scripts/test-lkjip-ukuran-gambar.mts — ukuran & pratinjau gambar LKJIP (docs/konsep/lkjip/CONCEPT-lkjip-ukuran-gambar.md).
 //
 // A: aturan ukuran    C: impor dari Word    E: editor (kode)
 // B: skema & payload  D: berkas Word        F: izin pratinjau (kode)

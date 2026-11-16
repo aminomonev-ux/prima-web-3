@@ -1,5 +1,5 @@
 'use client';
-// Saran dari rencana tahun lalu yang tidak didanai (docs/CONCEPT-bba-buku-aset.md §14): spanduk di
+// Saran dari rencana tahun lalu yang tidak didanai (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14): spanduk di
 // daftar Rencana tahun T + modal pilih → salin ke T. Salinan membawa jenis, alasan, barang, angka,
 // referensi (tanggal cek lama), dan aset sasaran; tanda anggaran mulai dari "Belum ditandai".
 

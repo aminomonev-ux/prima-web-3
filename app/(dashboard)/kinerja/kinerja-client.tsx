@@ -279,7 +279,7 @@ export default function KinerjaClient({ userId, role, username, themePreference,
 
   const canEdit = ['SUPER_ADMIN','ADMIN','ADMIN_KASUBAG','ADMIN_KABAG','RENBANG','PROGRAM','KEUANGAN'].includes(role);
 
-  // Rencana Aksi berubah? (docs/CONCEPT-renaksi-terhubung.md §5.4) — spanduk di Master &
+  // Rencana Aksi berubah? (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.4) — spanduk di Master &
   // Rekening, angka di sidebar. Dialog dibuka lewat guardPending: sesudah diterapkan, layar
   // Master & Rekening dimuat ulang dari server.
   const banding = useBandingRenaksi(tahun);

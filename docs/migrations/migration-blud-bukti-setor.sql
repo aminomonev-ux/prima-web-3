@@ -1,7 +1,7 @@
 -- migration-blud-bukti-setor.sql
 -- BLUD: lembar "BUKTI SETOR KE BANK BPD" jadi dokumen yang dirakit, bukan
 -- laporan yang diturunkan dari jenis transaksi.
--- Konsep: docs/CONCEPT-blud-bukti-setor.md (keputusan #36)
+-- Konsep: docs/konsep/blud/CONCEPT-blud-bukti-setor.md (keputusan #36)
 --
 -- Penelusuran berkas asli membuktikan lembar itu lembar kerja mandiri: 11 baris
 -- + "Ambil Uang" semuanya angka ketikan, hanya "Total" (=SUM) dan "Cash"

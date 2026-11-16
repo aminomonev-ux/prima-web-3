@@ -1,5 +1,5 @@
 // ═══ PRIMA — Buku Besar Aset: referensi harga & bukti dukung (aturan MURNI) ═══
-// Konsep: docs/CONCEPT-bba-perencanaan.md §4. Dipakai layar DAN server — satu aturan,
+// Konsep: docs/konsep/bba/CONCEPT-bba-perencanaan.md §4. Dipakai layar DAN server — satu aturan,
 // jadi "Ref n/3" di tabel, di modal, dan angka tombol "Lengkapi referensi (n)" tidak bisa
 // berbeda pendapat. Tanpa impor DB: berkas ini dibaca komponen 'use client'.
 import { isSafeHttpUrl } from '@/lib/shared/url';

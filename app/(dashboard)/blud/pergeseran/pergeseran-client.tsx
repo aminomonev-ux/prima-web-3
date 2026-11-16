@@ -1171,7 +1171,7 @@ export default function PergeseranClient({ bolehUbah }: { bolehUbah: boolean }) 
   /** Arsip yang SUDAH sengaja ditulis di layar ini (termasuk basis Tutup) — cermin layar DPA. */
   const arsipDisengajaRef = useRef<string | null>(null)
   // ── Catatan Perpindahan ────────────────────────────────────────────────────
-  // Konsep: docs/CONCEPT-blud-catatan-perpindahan.md. State layar, bukan ref:
+  // Konsep: docs/konsep/blud/CONCEPT-blud-catatan-perpindahan.md. State layar, bukan ref:
   // angkanya ikut menentukan kolom Bertambah/Berkurang, jadi tabelnya harus
   // dirender ulang saat berubah.
   const [mutasi, setMutasi] = useState<MutasiInput[]>([])

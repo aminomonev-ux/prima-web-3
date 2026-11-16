@@ -1,6 +1,6 @@
 -- migration-renaksi-induk-indikator.sql
 -- Tautan baris Renaksi ke baris indikator INDUK yang dijabarkannya.
--- Konsep: docs/CONCEPT-renaksi-pilih-indikator.md (§3, §6, §12 Tahap 1).
+-- Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pilih-indikator.md (§3, §6, §12 Tahap 1).
 --
 -- KENAPA: Data Entry menyusun hierarki lewat TEKS NAMA, dan tiap baris hanya menyimpan nama
 -- induknya — tidak ada yang mencatat "baris ini penjabaran indikator induk yang mana". Akibatnya

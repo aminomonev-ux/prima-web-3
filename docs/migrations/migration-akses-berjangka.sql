@@ -1,5 +1,5 @@
 -- migration-akses-berjangka.sql
--- Tahap 10 · P2 Akses Berjangka. Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
+-- Tahap 10 · P2 Akses Berjangka. Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
 --
 -- Akses sementara (pegawai magang, pengganti selama cuti, tim SPI saat pemeriksaan)
 -- diberikan dengan niat "nanti dicabut", dan tidak pernah dicabut. Yang menumpuk bukan

@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-bba-kondisi.mts — Tahap C Buku Aset: kondisi per register, ruangan & gedung, opname,
 // pindah, tautkan barang, "dimiliki" per barang, lembar Excel KIR / sensus / RKPInv / BI / Rekap BMD.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §7.2–7.3, §8, §9, §15.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.2–7.3, §8, §9, §15.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-bba-kondisi.mts [rekap.xlsx]
 //   argumen opsional = berkas ekspor "Rekap Aset" provinsi (berisi lembar templat KIR, BI, KIBxInv,
 //   RKPInv, Rekap) untuk kalibrasi kepala & gabungan; tidak masuk repo.

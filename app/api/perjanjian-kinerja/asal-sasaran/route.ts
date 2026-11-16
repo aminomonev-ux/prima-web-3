@@ -1,5 +1,5 @@
 // GET /api/perjanjian-kinerja/asal-sasaran?tahun= — bahan keterangan "milik siapa" di panel
-// LAMPIRAN Form PK (docs/CONCEPT-pk-lampiran-asal-sasaran.md). HANYA membaca; pencocokannya di
+// LAMPIRAN Form PK (docs/konsep/pk/CONCEPT-pk-lampiran-asal-sasaran.md). HANYA membaca; pencocokannya di
 // lib/pk/asal-sasaran.ts (dihitung di layar). Tidak diaudit per buka (bacaan pendamping form).
 // Pagar = menu Form PK. Data dokumen lain hanya unit/jenis/status — daftar dokumen PK
 // (`GET dokumen`) sudah terbuka untuk menu Form, jadi tidak ada yang baru terbuka di sini.

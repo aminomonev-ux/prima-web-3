@@ -1,5 +1,5 @@
 // lib/blud/realisasi-data.ts — Data layer Buku Kas BLUD (transaksi + alokasi).
-// Konsep: docs/CONCEPT-blud-realisasi.md §2.2, §4.1, §4.2, §5.2, §5.3, §5.4
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.2, §4.1, §4.2, §5.2, §5.3, §5.4
 //
 // Satu-satunya titik input modul Realisasi. BKU, register, Realisasi BP, pengantar,
 // SPJ, dan Tutup Kas semuanya turunan dari tabel ini — tidak ada ketik ulang.

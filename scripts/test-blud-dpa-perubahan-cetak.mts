@@ -1,6 +1,6 @@
 // scripts/test-blud-dpa-perubahan-cetak.mts — DPA Perubahan BLUD, Tahap 4 (cetak & impor).
 //
-// Konsep: docs/CONCEPT-blud-dpa-perubahan.md §7, §9, §11.1–11.2. Yang dijaga:
+// Konsep: docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §7, §9, §11.1–11.2. Yang dijaga:
 //   A. Excel format Lengkap — workbook SUNGGUHAN (`buatWorkbookDpaPerubahan`), kepala dua
 //      tingkat, rumus tiap sisi, sisi Sebelum mengikuti pohon VERSI DASAR
 //   B. kop penanda — Ringkas (DPA) & acuan (Pergeseran); tanpa Perubahan bunyinya seperti dulu

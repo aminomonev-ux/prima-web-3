@@ -1,5 +1,5 @@
 // lib/blud/segarkan.ts — syarat penyegar otomatis Beranda BLUD.
-// Konsep: docs/CONCEPT-blud-beranda-panel-bergerak.md §5.3–5.4
+// Konsep: docs/konsep/blud/CONCEPT-blud-beranda-panel-bergerak.md §5.3–5.4
 //
 // Dipisah dari berkas layar supaya syaratnya bisa DIUJI. Aturan yang cuma hidup
 // di dalam `useEffect` hanya bisa dicocokkan ke teks sumbernya, dan syarat kedua

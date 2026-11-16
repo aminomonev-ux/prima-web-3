@@ -1,5 +1,5 @@
 'use client';
-// Tabel pohon jabatan beranda IKI (docs/CONCEPT-iki-beranda.md §4). Susunannya dihitung
+// Tabel pohon jabatan beranda IKI (docs/konsep/iki/CONCEPT-iki-beranda.md §4). Susunannya dihitung
 // `susunPohon` (lib/iki/beranda.ts); komponen ini hanya menggambar dan meneruskan klik.
 // Gaya ada di LIST_CSS iki-client.tsx (satu blok <style> per halaman).
 

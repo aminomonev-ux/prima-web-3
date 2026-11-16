@@ -7,7 +7,7 @@
 // Pasangan lama ↔ baru dibaca lewat `id` baris yang dikirim layar; baris tanpa id (baru,
 // impor, pulihan) tidak menjalarkan apa pun. Tautan Rekening ↔ RKO = `uraian_ssk||uraian`
 // per sumber, kunci yang sama dipakai Inject untuk "sudah ada".
-// Konsep: docs/CONCEPT-kinerja-rekening-menjalar.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-rekening-menjalar.md
 
 import { hitungKembar, kalimatJalaran, adaJalaran, type DampakData, type DampakVersiRko } from './master-ubah';
 

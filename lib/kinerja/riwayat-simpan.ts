@@ -7,7 +7,7 @@
 //
 // Baris di sini SENGAJA tidak dirujuk siapa pun. Ia catatan, bukan entitas.
 //
-// Konsep: docs/CONCEPT-kinerja-riwayat-simpan.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-riwayat-simpan.md
 
 import { sql, sqlInt } from '@/lib/data/db'
 import type { Penanya } from '@/lib/data/db'

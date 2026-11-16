@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-bba-rencana.mts — Tahap D Buku Aset: rencana di atas buku aset — jenis, alasan, aset
 // sasaran, tanda anggaran, saran tahun lalu, pembelian sebelumnya, Excel daftar rencana.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §7.3, §7.4, §7.7, §8, §9, §14.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.3, §7.4, §7.7, §8, §9, §14.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-bba-rencana.mts
 // Bagian E memakai MySQL sungguhan (kotak pasir 2082–2083, data berawalan "UJIR"), dibersihkan otomatis.
 import { readFileSync, existsSync } from 'node:fs'

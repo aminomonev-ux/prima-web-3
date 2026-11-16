@@ -1,5 +1,5 @@
 // lib/blud/alokasi-rule.ts — hubungan antara arus kas dan baris anggaran.
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.2, §5.2 · docs/CONCEPT-blud-potongan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.2, §5.2 · docs/konsep/blud/CONCEPT-blud-potongan.md
 //
 // Modul daun: TIDAK mengimpor apa pun (khususnya bukan `next/server` maupun
 // lapisan data), supaya aturan yang sama dipakai Zod, data layer, DAN modal Buku

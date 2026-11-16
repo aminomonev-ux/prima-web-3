@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-pemeliharaan-keluar.mts — "Pemeliharaan & keluar otomatis".
-// Konsep: docs/CONCEPT-pemeliharaan-keluar.md
+// Konsep: docs/konsep/sistem/CONCEPT-pemeliharaan-keluar.md
 // Jalankan: npx tsx --env-file=.env.local scripts/test-pemeliharaan-keluar.mts
 // Bagian C memakai MySQL sungguhan di dalam SATU transaksi yang di-ROLLBACK di akhir — jadwal &
 // sesi uji tidak pernah ter-commit, jadi sesi sungguhan di basis data pengembangan tidak tersentuh.

@@ -1,5 +1,5 @@
 // GET /api/kinerja/master/banding-renaksi?tahun= — Master E-Anggaran dibandingkan dengan
-// Rencana Aksi tahun yang sama (docs/CONCEPT-renaksi-terhubung.md §5.3). Hanya membaca.
+// Rencana Aksi tahun yang sama (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.3). Hanya membaca.
 // Pagar sama dengan Init Renaksi, yang juga membaca Renaksi dengan hak E-Anggaran.
 
 import { NextRequest, NextResponse } from 'next/server';

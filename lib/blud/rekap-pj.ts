@@ -1,6 +1,6 @@
 // lib/blud/rekap-pj.ts — SATU aturan "berapa uang tiap Penanggung Jawab" untuk Cetak Rekap PJ
 // DAN auto-fill nominal BLUD di Form PK. PURE, aman-klien.
-// Konsep: docs/CONCEPT-pk-nominal-blud-langsung.md.
+// Konsep: docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md.
 //
 // Subtotal per PJ sengaja MENTAH (jumlah semua baris ber-PJ itu, apa adanya) — sama dengan
 // layar Cetak yang dipakai orang untuk memeriksa angka PK. PJ dobel dalam satu rantai

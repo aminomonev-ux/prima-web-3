@@ -7,7 +7,7 @@ import { getAsetById, listReferensi, BbaVersionConflictError, BbaNotFoundError }
 import { bolehBatalkanFinal } from '@/lib/constants';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../_guard';
 
-// Pengadaan & penerimaan (docs/CONCEPT-bba-buku-aset.md §7.4, §14). Realisasi rencana = Σ penerimaan,
+// Pengadaan & penerimaan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4, §14). Realisasi rencana = Σ penerimaan,
 // ditulis HANYA lewat POST/DELETE di sini.
 //   GET ?tahun=   → rencana DIDANAI tahun itu + penerimaannya (halaman Pengadaan)
 //   GET ?rencana= → satu rencana + referensi + penerimaannya (modal Proses & Penerimaan)

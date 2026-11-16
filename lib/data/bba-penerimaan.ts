@@ -1,5 +1,5 @@
 // ═══ PRIMA — BBA Pengadaan & penerimaan (Tahap E buku aset) — Data Layer ═══
-// Konsep: docs/CONCEPT-bba-buku-aset.md §7.4–7.6, §15, §16.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4–7.6, §15, §16.
 // Realisasi rencana (vol/nilai/tgl_realisasi + status diterima) = turunan Σ bba_penerimaan dan HANYA ditulis
 // di sini (satu jalur tulis). Barang yang diterima baru jadi aset sesudah ditempatkan Umum Aset; register
 // diisi dari sistem provinsi (manual, atau cocok otomatis saat impor KIB — lib/bba/aset.ts).

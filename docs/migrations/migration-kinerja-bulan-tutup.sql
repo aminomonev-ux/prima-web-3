@@ -19,7 +19,7 @@
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang: tanpa tabel ini GET
 -- dan Simpan Realisasi gagal.
 --
--- Referensi: docs/CONCEPT-kinerja-simpan-realisasi.md §5
+-- Referensi: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §5
 
 CREATE TABLE IF NOT EXISTS kinerja_bulan_tutup (
   tahun         VARCHAR(10)  NOT NULL COMMENT 'Ikut kinerja_* — VARCHAR, bukan SMALLINT',

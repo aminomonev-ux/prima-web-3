@@ -1,5 +1,5 @@
 'use client';
-// Barang diterima → buku aset (docs/CONCEPT-bba-buku-aset.md §7.5–7.6, §15): antrean "diterima, belum
+// Barang diterima → buku aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.5–7.6, §15): antrean "diterima, belum
 // dicatat", tempatkan jadi register "belum teregister", rehab selesai, isi register dari sistem provinsi,
 // hapus dengan SK, dan koreksi salah input (§20). Antrean dihitung server tiap dibuka — tidak disimpan.
 import { useEffect, useState } from 'react';

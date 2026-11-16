@@ -2,7 +2,7 @@
 //
 //   npx tsx scripts/test-renaksi-penanda.mts
 //
-// Konsep: docs/CONCEPT-renaksi-bersihkan-nama.md §12. Tanpa basis data.
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-bersihkan-nama.md §12. Tanpa basis data.
 // Data tersimpan tidak pernah ditulis ulang: yang diuji di sini seluruhnya TAMPILAN —
 // Cetak & unduhan bersih (penanda lewat sakelar), layar kerja berpenanda hasil hitungan,
 // IKI bersih saat ditarik dan saat dicetak.

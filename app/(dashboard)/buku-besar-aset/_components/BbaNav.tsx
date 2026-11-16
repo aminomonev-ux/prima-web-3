@@ -1,5 +1,5 @@
 'use client';
-// Navigasi lima bagian BBA (docs/CONCEPT-bba-buku-aset.md §14) — bilah tab di atas halaman +
+// Navigasi lima bagian BBA (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14) — bilah tab di atas halaman +
 // isi FloatingDock dari daftar yang SAMA, supaya keduanya tidak pernah menawarkan pintu berbeda.
 import Link from 'next/link';
 import type { ReactNode } from 'react';

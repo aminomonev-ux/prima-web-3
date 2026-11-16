@@ -1,6 +1,6 @@
 // scripts/test-blud-sumber-pagu.mts — aturan sumber pagu BLUD tinggal di SATU tempat.
 //
-// Tahap 0 DPA Perubahan (docs/CONCEPT-blud-dpa-perubahan.md §8): enam salinan
+// Tahap 0 DPA Perubahan (docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §8): enam salinan
 // aturan "pagu diambil dari versi mana" disatukan ke lib/blud/sumber-pagu.ts,
 // TANPA mengubah perilaku. Tahap 1 lalu mengubah aturannya sendiri (penanda
 // Perubahan + acuan pergeseran). Dua pembanding menjaga keduanya:

@@ -1,5 +1,5 @@
 // scripts/test-blud-realisasi-pj.mts — Realisasi per Penanggung Jawab + penjaga PJ Pergeseran.
-// Konsep: docs/CONCEPT-blud-realisasi-pj.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi-pj.md
 //
 // A–E menguji PERILAKU fungsi murni lib/blud/realisasi-pj.ts. F–H memeriksa sambungannya
 // (komentar dibuang dulu supaya prosa penjelas tidak ikut cocok — L82c). Jalur DB-nya

@@ -1,5 +1,5 @@
 -- migration-drive-arsip.sql — catatan unggahan Drive (manifest) + kesehatan per tujuan.
--- Konsep: docs/CONCEPT-drive-terpusat.md §5.2, §5.3, Tahap 2.
+-- Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §5.2, §5.3, Tahap 2.
 -- Aman dijalankan sebelum kodenya dipasang dan aman diulang (CREATE TABLE IF NOT EXISTS).
 -- Kode yang sudah terpasang TANPA tabel ini tetap jalan: pencatatan gagal diam-diam,
 -- rotasi backup jatuh ke cara lama (berdasarkan nama berkas).

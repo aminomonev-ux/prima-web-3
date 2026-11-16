@@ -1,7 +1,7 @@
 // lib/renaksi/induk-impor.ts — menyelaraskan baris impor dengan nama yang SUDAH tersimpan.
 //
 // PURE: tidak menyentuh DB. Hierarki `rencana_aksi` disambung TEKS NAMA dan data tersimpan tidak
-// ditulis ulang (penanda matriks dihitung saat ditampilkan — docs/CONCEPT-renaksi-bersihkan-nama.md §12).
+// ditulis ulang (penanda matriks dihitung saat ditampilkan — docs/konsep/renaksi/CONCEPT-renaksi-bersihkan-nama.md §12).
 // Jadi berkas yang bersih diimpor ke tahun yang datanya berbintang harus MENGIKUTI ejaan tersimpan:
 // kalau tidak, induknya dianggap belum ada (§11.2), entitasnya terpecah dua, dan indikatornya kembar.
 

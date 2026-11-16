@@ -1,5 +1,5 @@
 // POST /api/cron/akses-kedaluwarsa — P2 Akses Berjangka (Tahap 10).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P2.
 //
 // Dua pekerjaan, satu jadwal:
 //   (a) mencabut akses yang tenggatnya SUDAH LEWAT;

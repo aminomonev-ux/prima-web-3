@@ -1,6 +1,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- migration-blud-pejabat.sql — Pejabat penanda tangan dokumen SPJ BLUD
--- Konsep: docs/CONCEPT-blud-realisasi.md §3.1, §6, Fase 5
+-- Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.1, §6, Fase 5
 --
 -- Apply:
 --   mysql -u root -p prima_db_3 < docs/migrations/migration-blud-pejabat.sql

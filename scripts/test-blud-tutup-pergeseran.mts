@@ -1,6 +1,6 @@
 // scripts/test-blud-tutup-pergeseran.mts
 // Penjaga regresi "Tutup Pergeseran" — 2026-08-29.
-// Konsep: docs/CONCEPT-blud-tutup-pergeseran.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-tutup-pergeseran.md
 //
 // Yang dijaga, urut dari yang paling mahal kalau rusak:
 //

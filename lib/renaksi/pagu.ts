@@ -1,5 +1,5 @@
 // lib/renaksi/pagu.ts — pagu Rencana Aksi per sumber dana & penjumlahan ke atas. MURNI, aman-klien.
-// Konsep: docs/CONCEPT-renaksi-pagu-rko.md (§3, §4, §6c).
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md (§3, §4, §6c).
 //
 // Pagu milik baris INDIKATOR sub kegiatan (sub kegiatan Rp 5 juta berindikator dua diisi 2,5 + 2,5),
 // dirinci per sumber dana. Naik ke atas mengikuti tautan `induk_indikator_id` — aturan yang sama

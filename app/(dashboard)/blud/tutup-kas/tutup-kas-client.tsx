@@ -1,6 +1,6 @@
 'use client'
 // app/(dashboard)/blud/tutup-kas/tutup-kas-client.tsx — Berita Acara Pemeriksaan Kas.
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.5, §4.7
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.5, §4.7
 //
 // Dua sisi yang wajib bertemu. Sisi kiri DIHITUNG dari transaksi Buku Kas dan
 // tidak punya satu pun kotak isian — kalau angkanya dirasa salah, yang diperbaiki

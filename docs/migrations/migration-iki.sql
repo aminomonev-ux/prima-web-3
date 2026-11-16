@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Migration: Modul IKI (Indikator Kinerja Individu)
--- Konsep: docs/CONCEPT-iki.md
+-- Konsep: docs/konsep/iki/CONCEPT-iki.md
 -- 3 tabel: iki_dokumen → iki_rhk → iki_rhk_triwulan
 -- Varian layout: STANDAR (11 kolom, 2 ttd) / DIREKTUR (8 kolom, ttd tunggal)
 -- ═══════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // app/api/admin/tinjauan/route.ts — Tinjauan Akses Berkala (P3).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P3 (Tahap 8).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P3 (Tahap 8).
 //
 // GET  → satu tabel orang × modul, urut yang paling lama tidak ditinjau lebih dulu
 // POST → tandai satu orang sudah ditinjau

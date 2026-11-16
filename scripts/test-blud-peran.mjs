@@ -1,4 +1,4 @@
-// Uji regresi tabel izin peran × menu BLUD (docs/CONCEPT-blud-peran.md).
+// Uji regresi tabel izin peran × menu BLUD (docs/konsep/blud/CONCEPT-blud-peran.md).
 //   node scripts/test-blud-peran.mjs
 // READ-ONLY — tidak menyentuh DB.
 //

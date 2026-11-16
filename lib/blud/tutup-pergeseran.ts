@@ -1,5 +1,5 @@
 // lib/blud/tutup-pergeseran.ts — aturan "Tutup Pergeseran".
-// Konsep lengkap: docs/CONCEPT-blud-tutup-pergeseran.md
+// Konsep lengkap: docs/konsep/blud/CONCEPT-blud-tutup-pergeseran.md
 //
 // Menutup satu PUTARAN pergeseran: kolom P disalin ke kolom kiri, sehingga
 // geseran berikutnya dihitung terhadap hasil putaran ini — bukan terhadap DPA

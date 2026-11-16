@@ -3,7 +3,7 @@
 // Pengaturan. Kembarannya `app/api/cron/blud-cadangan-json` untuk pemicu
 // terjadwal; keduanya memanggil `cadangkanJsonBlud()` yang sama.
 //
-// Konsep: docs/CONCEPT-blud-cadangan-json.md §4 Tahap 2
+// Konsep: docs/konsep/blud/CONCEPT-blud-cadangan-json.md §4 Tahap 2
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/security/auth'

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-16.mts — penjaga regresi Tahap 16 (T6, T11, T17, T19).
-// Konsep: docs/CONCEPT-perbaikan-audit-akses.md §5 Tahap 16.
+// Konsep: docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md §5 Tahap 16.
 //
 // A & C menguji perilaku fungsi murni. C2 memanggil `simpanBerkasOrang` terhadap basis data
 // pada akun uji ber-grant mubazir (kasus `tesujiakun` yang terukur saat audit), lalu

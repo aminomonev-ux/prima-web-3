@@ -22,7 +22,7 @@
 //                        yang balapan 1B di scripts/test-kinerja-race-versi.mjs
 //                        buktikan merusak.
 //
-// Konsep: docs/AUDIT-kinerja-2026-09-04.md §A7
+// Konsep: docs/audit/AUDIT-kinerja-2026-09-04.md §A7
 
 /**
  * PERUBAHAN mengalahkan MURNI; di antara sesama PERUBAHAN, `versi_seq` tertinggi
@@ -112,7 +112,7 @@ export function pilihVersiAgregat<T extends BarisVersiAgregat>(rows: T[]): {
 // memberi angka yang SAMA di kedua pilihan, jadi pilihannya tidak pernah
 // menyesatkan untuk sumber itu.
 //
-// Konsep: docs/CONCEPT-kinerja-pilih-versi-rekap.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-pilih-versi-rekap.md
 
 export type PilihanVersiRekap = 'berlaku' | 'murni';
 

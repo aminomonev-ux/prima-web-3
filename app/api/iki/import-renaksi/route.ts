@@ -1,7 +1,7 @@
 // app/api/iki/import-renaksi/route.ts
 // Tarik referensi dari aplikasi Rencana Aksi (tabel `rencana_aksi`) untuk prefill
 // grup RHK di editor IKI. Pola sejajar PK import-renaksi (sumber sama).
-// Mapping (docs/CONCEPT-iki.md §4.1):
+// Mapping (docs/konsep/iki/CONCEPT-iki.md §4.1):
 //   RHK diintervensi ← level 'sasaran' · RHK ← outcome_* (fallback nama)
 //   aspek_b ← jenis (enum identik) · Target Tahunan ← fmtTarget(target_tahunan, satuan)
 //   Target TW I-IV ← q1..q4_target
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   const g = await guard();
   if (!g.ok) return g.res;
   // `pantau=1` = editor DRAFT memeriksa "Rencana Aksi berubah" tiap dibuka
-  // (docs/CONCEPT-renaksi-terhubung.md §6): bacaan yang sama, tanpa jejak audit per buka.
+  // (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6): bacaan yang sama, tanpa jejak audit per buka.
   const pantau = new URL(req.url).searchParams.get('pantau') === '1';
   const limited = await ikiRateLimit(g.session.userId, pantau ? 'pantau-renaksi' : 'import-renaksi', pantau ? 60 : 10);
   if (limited) return limited;

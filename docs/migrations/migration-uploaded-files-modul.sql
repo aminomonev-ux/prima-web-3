@@ -1,4 +1,4 @@
--- migration-uploaded-files-modul.sql — Fase F, pertanyaan akhir nomor 5 (docs/CONCEPT-perbaikan-audit-akses.md).
+-- migration-uploaded-files-modul.sql — Fase F, pertanyaan akhir nomor 5 (docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md).
 --
 -- `/api/upload/download` kini tunduk sakelar modul pemilik berkas. Modulnya dibaca dari
 -- `uploaded_files.context`, yang sejak perubahan ini diisi `/api/upload` ('lkjip' |

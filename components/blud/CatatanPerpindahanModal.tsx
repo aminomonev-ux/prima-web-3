@@ -1,7 +1,7 @@
 'use client'
 // components/blud/CatatanPerpindahanModal.tsx — mencatat uang berpindah dari
 // rekening mana ke rekening mana. Aturannya: lib/blud/mutasi.ts
-// Konsep: docs/CONCEPT-blud-catatan-perpindahan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-catatan-perpindahan.md
 //
 // BERHENTI DI FORM, seperti Impor (L78), Salin Versi (L80), dan Tutup Pergeseran
 // (L82): modal ini mengubah isi layar, yang menulis ke basis data tetap tombol

@@ -1,5 +1,5 @@
 // lib/blud/export/dpa-dokumen.ts — unduhan DPA & Pergeseran sebagai DOKUMEN, bukan rekap.
-// Konsep: docs/CONCEPT-export-import-dpa.md §2.
+// Konsep: docs/konsep/blud/CONCEPT-export-import-dpa.md §2.
 //
 // Beda pokok dengan `excel.ts`: kolom Jumlah berisi RUMUS, bukan angka mati.
 // Rumusnya cermin `recalcDpaJumlah()` — daun `ROUND(vol*harga,0)`, induk

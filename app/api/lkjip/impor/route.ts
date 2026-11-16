@@ -1,5 +1,5 @@
 // ═══ PRIMA — LKJIP — Impor dari Word ═══════════════════════════════════════════
-// Konsep: docs/CONCEPT-lkjip-impor-word.md §5. POST multipart, `step=pratinjau|buat`.
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-impor-word.md §5. POST multipart, `step=pratinjau|buat`.
 // pratinjau TIDAK menulis apa pun. buat mengunggah berkas yang SAMA lagi dan server membacanya
 // ulang (pola Impor KIB BBA) — layar hanya mengirim koreksi + sidik, jadi koreksi tidak bisa
 // terpasang ke berkas lain dan isi dokumen tidak pernah datang dari layar.

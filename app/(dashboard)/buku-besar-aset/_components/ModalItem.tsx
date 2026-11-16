@@ -1,6 +1,6 @@
 'use client';
 // Modal item Buku Besar Aset — tiga kolom: daftar item | kartu item | tab Data item / Referensi
-// harga / Bukti dukung. Desain terpilih: docs/CONCEPT-bba-perencanaan.md §4.4.
+// harga / Bukti dukung. Desain terpilih: docs/konsep/bba/CONCEPT-bba-perencanaan.md §4.4.
 // Menggantikan form tambah/edit yang dulu tertanam di buku-besar-aset-client.tsx: satu modal,
 // satu tombol yang menulis Data item + referensi (L78). Bukti ditulis per aksi (§4.2).
 

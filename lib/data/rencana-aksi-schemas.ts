@@ -60,7 +60,7 @@ const AngkaDesimal = z.coerce.number().min(0).transform((v) => bulatkanDesimal(v
 const AngkaAtauKosong = z.number().min(0).nullable().transform((v) => (v == null ? null : bulatkanDesimal(v)));
 const BulanArray = z.array(AngkaAtauKosong).length(12);
 
-// ─── Rincian pagu per sumber dana (docs/CONCEPT-renaksi-pagu-rko.md) ───────
+// ─── Rincian pagu per sumber dana (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md) ───────
 
 const RupiahAtauKosong = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable();
 export const RincianPaguSchema = z.object({

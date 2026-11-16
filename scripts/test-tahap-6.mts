@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-6.mts — penjaga regresi Tahap 6 (D1 · D2 · C4 · R3 · R5).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §5.4, §4.6, §16.5, §17.2 Tahap 6.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §5.4, §4.6, §16.5, §17.2 Tahap 6.
 //
 // Bagian A menguji PERILAKU (fungsi murni dipanggil dengan data buatan); B–E statis,
 // untuk hal yang tidak punya bentuk fungsi — bahwa satu komponen dipakai dua layar,

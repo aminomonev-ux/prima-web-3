@@ -111,7 +111,7 @@ const PASANGAN: Record<string, string> = {
   cek('C6 beforeunload E-Anggaran bertanya lewat penjaga yang sama dengan guardPending',
     urut(badan(shell, 'function handleBeforeUnload'), 'if (alasanTinggalkan())', 'e.preventDefault()'))
   // Sejak 2026-10-12 penjaganya juga menanyakan Realisasi & RKO yang belum tersimpan
-  // (docs/CONCEPT-kinerja-simpan-realisasi.md §4), bukan Master saja.
+  // (docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §4), bukan Master saja.
   const penjaga = badan(shell, 'const alasanTinggalkan = useCallback(')
   cek('C7 penjaga E-Anggaran memuat Master DAN Realisasi/RKO',
     penjaga.includes('pendingMasterRef.current') && penjaga.includes('alasanRef.current'))

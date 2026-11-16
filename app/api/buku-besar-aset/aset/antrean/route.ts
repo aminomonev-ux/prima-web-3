@@ -7,7 +7,7 @@ import { AsetVersiError, AsetTidakAdaError, AsetDitolakError } from '@/lib/data/
 import { BbaNotFoundError, BbaLokasiTidakDikenalError, BbaBerkasTidakDikenalError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../../_guard';
 
-// Antrean "barang diterima, belum dicatat" (docs/CONCEPT-bba-buku-aset.md §7.5, §15): dihitung, tidak
+// Antrean "barang diterima, belum dicatat" (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.5, §15): dihitung, tidak
 // disimpan. POST TEMPATKAN = jadi register "belum teregister"; POST REHAB = rehab selesai, perbarui gedung.
 export async function GET() {
   const g = await guard();

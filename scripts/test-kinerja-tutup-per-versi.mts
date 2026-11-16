@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-kinerja-tutup-per-versi.mts — Tutup Bulan per versi RKO + foto realisasi versi
 // final (Buat Perubahan memotret Murni; Murni tertutup semua; Perubahan mulai terbuka).
-// Konsep: docs/CONCEPT-kinerja-tutup-per-versi.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-tutup-per-versi.md
 // Jalankan: npx tsx --env-file=.env.local scripts/test-kinerja-tutup-per-versi.mts
 // Bagian C memakai MySQL sungguhan (kotak pasir 2095), dibersihkan otomatis — tanpa
 // --env-file bagian itu DILEWATI dan jumlah lulusnya turun.

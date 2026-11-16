@@ -9,7 +9,7 @@ import { guard, tolakKecualiEdit } from '../_guard';
 
 export const dynamic = 'force-dynamic';
 
-// Master Ruangan BBA (docs/CONCEPT-bba-buku-aset.md §15) — ruangan tempat peralatan, berada di gedung
+// Master Ruangan BBA (docs/konsep/bba/CONCEPT-bba-buku-aset.md §15) — ruangan tempat peralatan, berada di gedung
 // mana (kop KIR), luas, dan penanggung jawabnya. Modul kolaboratif seperti Master Barang (AUTHZ-02);
 // jejaknya audit BBA_LOKASI_*. `gedung` = pilihan KIB C aktif untuk isian gedung & opname per gedung.
 export async function GET() {

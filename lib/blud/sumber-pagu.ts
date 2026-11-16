@@ -1,7 +1,7 @@
 // lib/blud/sumber-pagu.ts — SATU jawaban untuk "pagu tahun ini diambil dari versi mana".
 //
 // Aturannya dulu tertulis di enam tempat (pagu.ts ×3, data.ts ×2, realisasi-data.ts
-// ×1). DPA Perubahan mengubah aturan ini (docs/CONCEPT-blud-dpa-perubahan.md §8);
+// ×1). DPA Perubahan mengubah aturan ini (docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §8);
 // mengubah enam salinan satu per satu persis cara L69 lahir.
 //
 // Modul daun: hanya tipe `db` + `tanggal`, supaya `pagu.ts`, `data.ts`, dan

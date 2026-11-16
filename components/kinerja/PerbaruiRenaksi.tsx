@@ -1,6 +1,6 @@
 'use client';
 // Pemberitahuan "Rencana Aksi berubah" + dialog Perbarui di tab Master & Rekening E-Anggaran.
-// Konsep: docs/CONCEPT-renaksi-terhubung.md §5.4–5.5. Pembandingnya murni
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.4–5.5. Pembandingnya murni
 // (lib/kinerja/banding-renaksi.ts); tampilannya komponen bersama components/renaksi/SelarasRenaksi.
 // Yang menulis tetap jalur lama: Edit Master yang menjalar (ganti nama), Init Renaksi (baru),
 // dan route asal (tanda). Tidak ada pintu tulis kedua.

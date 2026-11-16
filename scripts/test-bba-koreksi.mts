@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-bba-koreksi.mts — Tahap F Buku Aset: koreksi salah input — batalkan penempatan, betulkan /
 // kosongkan register, dugaan salah ketik saat impor, betulkan SK, batalkan penghapusan (khusus Admin).
-// Konsep: docs/CONCEPT-bba-buku-aset.md §20.
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §20.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-bba-koreksi.mts
 // Bagian D memakai MySQL sungguhan (kotak pasir 2079, data berawalan "UJIF"), dibersihkan otomatis.
 import { readFileSync } from 'node:fs'

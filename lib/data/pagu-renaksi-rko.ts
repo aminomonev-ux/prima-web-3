@@ -1,5 +1,5 @@
 // lib/data/pagu-renaksi-rko.ts — bahan pembanding pagu Rencana Aksi ↔ RKO E-Anggaran (hanya membaca).
-// Konsep: docs/CONCEPT-renaksi-pagu-rko.md + docs/CONCEPT-renaksi-rko-murni-perubahan.md.
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md + docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md.
 // Aturannya di lib/kinerja/pagu-renaksi.ts.
 
 import type { Penanya } from '@/lib/data/db';

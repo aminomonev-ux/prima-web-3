@@ -3,7 +3,7 @@
 // Hak = hak menyimpan realisasi (keputusan pemilik aplikasi: menutup DAN membuka boleh
 // siapa saja yang boleh menyimpan, "biar mudah"); jejaknya di audit. Gembok yang sama
 // dengan Simpan Realisasi, jadi menutup tidak bisa terselip di tengah sebuah Simpan.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §5
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §5
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';

@@ -1,5 +1,5 @@
 // lib/registry/apps.ts — SATU daftar modul PRIMA.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §4.1 (Fase B / Tahap 2).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §4.1 (Fase B / Tahap 2).
 //
 // Sebelum berkas ini ada, satu fakta — "modul X ada, kuncinya `x`, pintunya `isXRole`,
 // sakelarnya `app_status_x`, route-nya di `app/api/x`" — ditulis di DELAPAN tempat yang

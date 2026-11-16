@@ -55,7 +55,7 @@ export interface BludSummary {
   /**
    * Sisi realisasi. `null` = orang ini tidak berhak membuka menu Realisasi, atau
    * sakelar `app_status_blud_realisasi` sedang mati — bukan "kebetulan nol".
-   * Konsep: docs/CONCEPT-blud-beranda-serapan.md §10
+   * Konsep: docs/konsep/blud/CONCEPT-blud-beranda-serapan.md §10
    */
   serapan: {
     /** Versi pagu ACUAN realisasi — bisa berbeda dari `versi_tanggal` (itu DPA). */

@@ -1,4 +1,4 @@
--- BBA Tahap E — pengadaan & penerimaan (docs/CONCEPT-bba-buku-aset.md §7.4–7.6, §15).
+-- BBA Tahap E — pengadaan & penerimaan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4–7.6, §15).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang, SESUDAH migration-bba-rencana.sql:
 -- halaman Pengadaan, antrean "barang diterima, belum dicatat", dan penghapusan aset membaca tabel/kolom ini.
 --

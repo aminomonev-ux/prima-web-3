@@ -2,7 +2,7 @@
 //
 // MURNI dan aman-klien: dipakai server (pagar) DAN layar (tombol, alasan tombol mati).
 // Akses DB-nya di `tutup-bulan-data.ts`.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md §5, docs/CONCEPT-kinerja-tutup-per-versi.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §5, docs/konsep/kinerja/CONCEPT-kinerja-tutup-per-versi.md
 
 import { NAMA_BULAN, sen, type PelanggaranTertutup } from './banding-realisasi'
 import { KUNCI_BULAN_SSK } from './bentrok-ssk'

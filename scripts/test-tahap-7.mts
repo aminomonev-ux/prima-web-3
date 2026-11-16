@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-7.mts — penjaga regresi Tahap 7 (P8 lapis 1 · P9).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P8/P9, §17.2 Tahap 7.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P8/P9, §17.2 Tahap 7.
 //
 // Pemeriksaan STATIS + fungsi murni. Tidak menyentuh DB: yang dijaga di sini justru
 // hal-hal yang baru terlihat SESUDAH datanya masuk — bahwa sasaran ikut dicatat, bahwa

@@ -53,7 +53,7 @@ export default function IkiClient({ username, role, themePreference, initialRows
     tahun: tahunSekarang, varian: 'STANDAR', jenis: 'MURNI', nama: '', nip: '', jabatan: '', pangkat: '', templat_id: null, bentuk_awal: 'STANDAR',
   });
 
-  // Templat tabel varian Custom (docs/CONCEPT-iki-custom.md §4) — dimuat saat varian itu dipilih.
+  // Templat tabel varian Custom (docs/konsep/iki/CONCEPT-iki-custom.md §4) — dimuat saat varian itu dipilih.
   const [templat, setTemplat] = useState<IkiTemplat[] | null>(null);
   const [gantiNamaTemplat, setGantiNamaTemplat] = useState<string | null>(null);
   const perluTemplat = showCreate && form.varian === 'CUSTOM';

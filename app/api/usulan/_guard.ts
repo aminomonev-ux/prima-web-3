@@ -1,5 +1,5 @@
 // app/api/usulan/_guard.ts — sakelar pemeliharaan modul Usulan Kebutuhan.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 1 (A1), temuan T-1.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §17.2 Tahap 1 (A1), temuan T-1.
 //
 // Kenapa berkas ini baru lahir sekarang: `app_status_usulan_aset` sudah punya baris
 // di `app_config`, sudah punya tombol di Admin Panel, dan sudah membuat kartunya abu

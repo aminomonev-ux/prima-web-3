@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-kinerja-banding-renaksi.mts — pemberitahuan "Rencana Aksi berubah" & Perbarui di
-// Master E-Anggaran. Konsep: docs/CONCEPT-renaksi-terhubung.md §5.3–5.5 (Tahap C).
+// Master E-Anggaran. Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.3–5.5 (Tahap C).
 // Jalankan: npx tsx --env-file=.env.local scripts/test-kinerja-banding-renaksi.mts
 // Bagian C memakai MySQL sungguhan (kotak pasir 2094) lewat fungsi aplikasi yang sama dengan
 // dialog; dibersihkan otomatis. Tanpa --env-file bagian itu GAGAL.

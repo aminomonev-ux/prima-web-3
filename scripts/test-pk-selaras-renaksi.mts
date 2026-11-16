@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-pk-selaras-renaksi.mts — Master Program & Master Sasaran PK mengikuti Rencana Aksi.
-// Konsep: docs/CONCEPT-renaksi-terhubung.md §6 (Tahap D).
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6 (Tahap D).
 // Jalankan: npx tsx --env-file=.env.local scripts/test-pk-selaras-renaksi.mts
 // Bagian D memakai MySQL (kotak pasir 2094) untuk mengadu isi awal migrasi dengan aturan murni;
 // dibersihkan otomatis. Tanpa --env-file bagian itu GAGAL.

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-ganti-password-kuat.mts — penjaga regresi kebijakan password di Ganti Password.
-// Temuan sampingan docs/CONCEPT-perbaikan-audit-akses.md (Susulan, nomor 4).
+// Temuan sampingan docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md (Susulan, nomor 4).
 //
 // `/api/auth/change-password` dulu cuma `min(8)`, jadi password sementara dari Super Admin
 // (yang wajib kuat) bisa diganti "aaaaaaaa" oleh pemiliknya. Yang dijaga:

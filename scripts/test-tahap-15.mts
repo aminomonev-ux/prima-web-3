@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-15.mts — penjaga regresi Tahap 15 (T2, T5, T7, T10).
-// Konsep: docs/CONCEPT-perbaikan-audit-akses.md §5 Tahap 15.
+// Konsep: docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md §5 Tahap 15.
 //
 // A–B statis (route menyeret next/server). C memanggil `simpanBerkasOrang` SUNGGUHAN
 // terhadap basis data: akun SUPER_ADMIN dengan `roleAwal` palsu harus ditolak di dalam

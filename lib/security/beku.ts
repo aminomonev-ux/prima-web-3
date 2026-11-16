@@ -1,5 +1,5 @@
 // lib/security/beku.ts — keterangan mode BACA-SAJA untuk layar (P5).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P5 (Tahap 9).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P5 (Tahap 9).
 //
 // Terpisah dari `guard.ts` karena pertanyaannya berbeda arah. `guard.ts` menjawab
 // "tolak atau lanjut"; berkas ini menjawab "apa yang harus tertulis di layar". Yang

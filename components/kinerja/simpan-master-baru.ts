@@ -2,7 +2,7 @@
 //
 // Tiga pintu membuat entri lewat POST /api/kinerja/master: tombol Simpan tab Master, Import Master
 // (Excel), dan "lengkapi Master" di Import Rekening. Dulu hanya yang pertama menanyakan "pakai dari
-// Rencana Aksi" (docs/CONCEPT-renaksi-terhubung.md §5.1) — dua impor menyimpan entri yang jalurnya
+// Rencana Aksi" (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.1) — dua impor menyimpan entri yang jalurnya
 // ada di Renaksi sebagai MANUAL, dengan ejaan berkas (bintang penanda ikut). Satu fungsi, satu
 // pertanyaan (L78): pintu keempat cukup memanggil ini.
 

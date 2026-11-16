@@ -16,7 +16,7 @@
 // pertanyaan yang sebenarnya ("apa yang akan hilang?"), cuma membuktikan jari
 // yang menekan sudah sengaja.
 //
-// Konsep: docs/CONCEPT-blud-tutup-pergeseran.md §9
+// Konsep: docs/konsep/blud/CONCEPT-blud-tutup-pergeseran.md §9
 
 import type { PergeseranBarisInput } from '@/types'
 

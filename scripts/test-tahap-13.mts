@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-13.mts — penjaga regresi Tahap 13 (T3 + T18).
-// Konsep: docs/CONCEPT-perbaikan-audit-akses.md §5 Tahap 13.
+// Konsep: docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md §5 Tahap 13.
 //
 // A dan C menguji PERILAKU: `fetchJson` dijalankan terhadap `fetch` palsu, dan keadaan
 // kartu /menu dihitung lewat fungsi yang sama dengan yang dipakai layarnya. B dan D

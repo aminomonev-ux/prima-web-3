@@ -8,7 +8,7 @@
 // jalur Simpan biasa, dan itu keputusan pokok konsepnya (§3): satu jalur tulis,
 // satu rumus tanggal, seluruh pagar lama berlaku otomatis.
 //
-// Konsep: docs/CONCEPT-blud-tutup-pergeseran.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-tutup-pergeseran.md
 
 import { sql } from '@/lib/data/db'
 import type { TxSql } from '@/lib/data/db'

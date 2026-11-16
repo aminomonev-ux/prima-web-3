@@ -1,5 +1,5 @@
 // lib/blud/cadangan-berkas.ts — bentuk berkas cadangan JSON BLUD.
-// Konsep: docs/CONCEPT-blud-cadangan-json.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-cadangan-json.md
 //
 // SENGAJA bebas dependensi server: tidak mengimpor mysql2, googleapis, maupun
 // `db.ts`. Berkas ini dipakai DUA arah — jalur unggah di server (Tahap 1) dan

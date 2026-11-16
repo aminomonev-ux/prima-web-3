@@ -1,4 +1,4 @@
--- BBA Tahap D — rencana di atas buku aset (docs/CONCEPT-bba-buku-aset.md §7.3, §7.7, §8, §15).
+-- BBA Tahap D — rencana di atas buku aset (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.3, §7.7, §8, §15).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang, SESUDAH migration-bba-ruang.sql:
 -- daftar Rencana, modal item, dan Excel daftar rencana membaca kolom & tabel ini.
 --

@@ -75,7 +75,7 @@ export async function PUT(req: NextRequest) {
       );
     }
     // Peringatan, bukan penolakan: klien menanyakannya lalu mengulang dengan
-    // `setuju_bulan_tertutup` (docs/CONCEPT-kinerja-simpan-realisasi.md §5).
+    // `setuju_bulan_tertutup` (docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md §5).
     if (err instanceof KinerjaTargetTertutupError) {
       return NextResponse.json(
         { ok: false, code: 'TARGET_BULAN_TERTUTUP', message: err.message, perubahan: err.perubahan.slice(0, 50) },

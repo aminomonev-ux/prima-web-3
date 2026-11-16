@@ -1,6 +1,6 @@
 'use client'
 // components/blud/MuatBerkasButton.tsx — "Pulihkan Cadangan" dari berkas JSON.
-// Konsep: docs/CONCEPT-blud-cadangan-json.md §4 Tahap 3
+// Konsep: docs/konsep/blud/CONCEPT-blud-cadangan-json.md §4 Tahap 3
 //
 // Pintu masuk KEDUA ke jalur yang sudah dipakai tombol Pulihkan di dalam dropdown
 // versi; bedanya cuma sumbernya — berkas di komputer, bukan tabel di server.

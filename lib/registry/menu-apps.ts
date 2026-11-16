@@ -1,5 +1,5 @@
 // lib/registry/menu-apps.ts — daftar modul yang punya pengaturan akses PER MENU.
-// Konsep: docs/CONCEPT-menu-access-control.md §4.1
+// Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §4.1
 //
 // DATA MURNI: tidak mengimpor React, ikon, maupun data layer — supaya bisa dipakai
 // server, klien, dan Zod tanpa efek samping. Yang diimpornya cuma `peran.ts` tiap

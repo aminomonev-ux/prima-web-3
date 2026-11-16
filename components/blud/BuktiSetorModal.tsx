@@ -1,6 +1,6 @@
 'use client'
 // components/blud/BuktiSetorModal.tsx — perakit satu slip "BUKTI SETOR KE BANK BPD".
-// Konsep: docs/CONCEPT-blud-bukti-setor.md (keputusan #36)
+// Konsep: docs/konsep/blud/CONCEPT-blud-bukti-setor.md (keputusan #36)
 //
 // Ini satu-satunya layar di modul BLUD yang menerima baris ketikan lepas. Yang
 // membuatnya tetap aman: setiap baris membawa asalnya, dan jumlah baris ketikan

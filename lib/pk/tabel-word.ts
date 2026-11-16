@@ -2,7 +2,7 @@
 //
 // PURE (tanpa DB, tanpa berkas): `docgen.ts` menyisipkannya lewat `{@lampiran_xml}` dan
 // `{@anggaran_xml}`, `scripts/test-pk-sesuai-pdf.mts` mengujinya langsung.
-// Susunan mengikuti PK Perubahan 2026 (docs/CONCEPT-pk-halaman-2-sesuai-pdf.md §2–§3).
+// Susunan mengikuti PK Perubahan 2026 (docs/konsep/pk/CONCEPT-pk-halaman-2-sesuai-pdf.md §2–§3).
 
 import { rapikanIndikator, rapikanNamaEntitas } from '@/lib/shared/nama-resmi';
 import { pisahTargetSatuan, satuanTarget } from '@/lib/shared/target-renaksi';

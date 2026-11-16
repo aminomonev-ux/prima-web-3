@@ -1,5 +1,5 @@
 // scripts/test-blud-beranda-panel.mts — dua panel bergerak di Beranda BLUD.
-// Konsep: docs/CONCEPT-blud-beranda-panel-bergerak.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-beranda-panel-bergerak.md
 //
 // Yang dijaga di sini enam keputusan yang masing-masing punya bentuk "benar tapi
 // salah" — jalan tanpa galat, dan diam-diam melaporkan hal lain:

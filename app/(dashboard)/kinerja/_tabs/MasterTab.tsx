@@ -312,7 +312,7 @@ export default function MasterTab({
 
   /**
    * Entri ketikan yang jalurnya sudah ada di Rencana Aksi ditanyakan dulu: pakai versi
-   * Renaksi (nama persis + tanda) atau tetap manual (docs/CONCEPT-renaksi-terhubung.md §5.1).
+   * Renaksi (nama persis + tanda) atau tetap manual (docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §5.1).
    * Pemeriksaan gagal dimuat = disimpan seperti biasa, tanpa pertanyaan.
    */
   async function saveAllMaster() {

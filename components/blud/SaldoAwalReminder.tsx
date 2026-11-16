@@ -1,6 +1,6 @@
 'use client'
 // components/blud/SaldoAwalReminder.tsx — pengingat "saldo awal tahun ini belum ditetapkan".
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.6
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.6
 //
 // Kenapa ada: saldo awal Januari ikut menentukan saldo SETIAP bulan di bawahnya
 // (§4.6 — bulan 2–12 diturunkan, tidak disimpan). Kalau lupa diisi, seluruh

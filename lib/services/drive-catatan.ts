@@ -1,5 +1,5 @@
 // lib/services/drive-catatan.ts — satu pintu UNGGAH ke tujuan Drive + catatannya.
-// Konsep: docs/CONCEPT-drive-terpusat.md §5.2–§5.3, §6.3 Tahap 2.
+// Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §5.2–§5.3, §6.3 Tahap 2.
 //
 // `unggahKeTujuan` = folder tujuan (`folderUntuk`) → unggah → manifest `drive_arsip` →
 // kesehatan `drive_health`. Pemanggil baru WAJIB lewat sini, bukan `uploadBufferToDrive`

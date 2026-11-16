@@ -1,5 +1,5 @@
 // lib/blud/tutup-kas.ts — Berita Acara Pemeriksaan Kas (Tutup Kas) BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.5 (kunci periode), §4.6 (saldo awal),
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.5 (kunci periode), §4.6 (saldo awal),
 // §4.7 (dua sisi wajib bertemu).
 //
 // Bentuk bakunya dua sisi yang HARUS sama:
@@ -162,7 +162,7 @@ export interface RingkasTutupKas {
 
 /**
  * Strip 12 bulan + saldo hari ini, untuk panel Beranda BLUD.
- * Konsep: docs/CONCEPT-blud-beranda-serapan.md §4, §9.3
+ * Konsep: docs/konsep/blud/CONCEPT-blud-beranda-serapan.md §4, §9.3
  *
  * Berangkat dari 12 bulan BUKA lalu ditimpa yang TUTUP — bukan dari daftar baris
  * `blud_periode` yang ada. Baris itu dibuat `kunciPeriode()` lewat INSERT IGNORE

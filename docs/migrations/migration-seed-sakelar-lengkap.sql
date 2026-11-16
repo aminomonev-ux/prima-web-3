@@ -1,4 +1,4 @@
--- migration-seed-sakelar-lengkap.sql — Fase F Tahap 17 (T15, docs/CONCEPT-perbaikan-audit-akses.md).
+-- migration-seed-sakelar-lengkap.sql — Fase F Tahap 17 (T15, docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md).
 --
 -- Lima sakelar di registry (`lib/registry/apps.ts` → KUNCI_SAKELAR) tidak pernah diseed di
 -- docs/schema-mysql.sql. Baris yang tidak ada dibaca `online`, jadi tidak ada yang rusak —

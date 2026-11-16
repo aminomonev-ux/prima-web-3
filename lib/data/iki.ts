@@ -1,7 +1,7 @@
 // ═══ PRIMA — IKI Data Layer ══════════════════════════════════════════════════
 // CRUD dokumen IKI + save nested (withTransaction + bulkInsert, CQ-01) +
 // optimistic lock dokumen-level (L48 CAS) + guard DRAFT.
-// Konsep: docs/CONCEPT-iki.md
+// Konsep: docs/konsep/iki/CONCEPT-iki.md
 
 import { sql, sqlInt, queryOne, queryMany, execWrite, withTransaction, bulkInsert } from '@/lib/data/db';
 import type { SaveDokumenInput } from '@/lib/data/iki-schemas';
@@ -20,7 +20,7 @@ export class IkiNotFoundError extends Error {
   constructor() { super('Dokumen IKI tidak ditemukan.'); }
 }
 /**
- * CUSTOM ⇄ STANDAR/DIREKTUR (docs/CONCEPT-iki-custom.md §9.3): simpan itu hapus-lalu-tulis-ulang, jadi
+ * CUSTOM ⇄ STANDAR/DIREKTUR (docs/konsep/iki/CONCEPT-iki-custom.md §9.3): simpan itu hapus-lalu-tulis-ulang, jadi
  * menukar varian membuang seluruh RHK atau seluruh tabel tanpa satu pertanyaan pun. Ditolak di sini — juga
  * menutup pintu lain yang sama (Impor Excel "timpa isi", pulihkan versi).
  */
@@ -667,7 +667,7 @@ export async function restoreVersi(dokumenId: number, versiId: number, userId: n
   return saveDokumen(dokumenId, input, userId);
 }
 
-// ─── Templat tabel CUSTOM (docs/CONCEPT-iki-custom.md §4) ────────────────────
+// ─── Templat tabel CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md §4) ────────────────────
 // Dikelola semua pemegang akses IKI (keputusan #2). Dokumen MENYALIN payload saat dibuat, jadi
 // mengubah/menghapus templat tidak menyentuh dokumen mana pun — `iki_dokumen.templat_id` cuma jejak.
 

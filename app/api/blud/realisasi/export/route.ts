@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/export/route.ts — unduh SPJ Bulanan (.xlsx, 9 lembar).
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.2, §7.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.2, §7.2
 //
 // Dibangun di server, bukan di klien: satu berkas ini menggabungkan BKU, pagu,
 // neraca kas, dan pejabat penanda tangan — mengirim semua bahan itu ke browser

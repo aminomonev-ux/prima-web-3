@@ -1,5 +1,5 @@
 // scripts/test-lkjip-tabel-bc.mts — tabel LKJIP ala Excel Tahap B & C + nomor per BAB/rujukan silang (§12.5).
-// Konsep: docs/CONCEPT-lkjip-tabel-excel.md §15
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md §15
 //
 // A: format baru (miring, garis bawah, warna huruf, Alt+Enter) sampai Word & papan klip · B: TSV ala Excel
 // C: rumus relatif · D: isi-seret · E: bilah status · F: Σ AutoSum · G: kuas format · H: tempel nilai

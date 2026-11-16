@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// INTRANET EDITION (D9 · docs/INTRANET-DELTA.md): pembuatan akun oleh SUPER_ADMIN.
+// INTRANET EDITION (D9 · docs/konsep/sistem/INTRANET-DELTA.md): pembuatan akun oleh SUPER_ADMIN.
 // Registrasi publik dimatikan → ini satu-satunya jalur create. Akun langsung AKTIF
 // + email_verified (tanpa alur email). Kuota role di-enforce (V4D-1/L55 reuse).
 export async function POST(req: NextRequest) {

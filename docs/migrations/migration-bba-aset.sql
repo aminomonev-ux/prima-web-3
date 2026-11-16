@@ -1,4 +1,4 @@
--- BBA Tahap B — buku aset per register (docs/CONCEPT-bba-buku-aset.md §5, §15).
+-- BBA Tahap B — buku aset per register (docs/konsep/bba/CONCEPT-bba-buku-aset.md §5, §15).
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang: halaman Buku Aset, impor KIB,
 -- dan hapus/gabung barang & hapus lokasi membaca tabel ini.
 -- Aman dijalankan ulang (CREATE TABLE IF NOT EXISTS).

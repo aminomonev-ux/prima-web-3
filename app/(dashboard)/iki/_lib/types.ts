@@ -81,7 +81,7 @@ export function labelJumlahIsi(d: Pick<IkiListRow, 'varian' | 'jumlah_rhk'>): st
   return `${d.jumlah_rhk} ${d.varian === 'CUSTOM' ? 'baris' : 'RHK'}`;
 }
 
-/** Baris GET /api/iki/templat — templat tabel varian CUSTOM (docs/CONCEPT-iki-custom.md §4). */
+/** Baris GET /api/iki/templat — templat tabel varian CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md §4). */
 export type IkiTemplat = { id: number; nama: string; ncol: number; nrow: number; updated_at: string };
 
 export type PejabatSuggest = {
@@ -108,7 +108,7 @@ export type RenaksiImportRow = {
 };
 
 export type AtasanRhkRow = {
-  /** Kosong bila atasannya CUSTOM — tabel tidak punya id baris (docs/CONCEPT-iki-custom.md §11.3). */
+  /** Kosong bila atasannya CUSTOM — tabel tidak punya id baris (docs/konsep/iki/CONCEPT-iki-custom.md §11.3). */
   atasan_rhk_id: number | null;
   /** Baris Renaksi sumber RHK atasan (null = diketik / atasan CUSTOM). */
   renaksi_id: number | null;

@@ -1,5 +1,5 @@
 // lib/blud/serapan-ringkas.ts — ringkasan serapan setahun untuk Beranda BLUD & /dashboard.
-// Konsep: docs/CONCEPT-blud-beranda-serapan.md §2, §9
+// Konsep: docs/konsep/blud/CONCEPT-blud-beranda-serapan.md §2, §9
 //
 // SATU fungsi, dua pemakai. Kalau disalin, cepat atau lambat Beranda dan
 // /dashboard berbeda pendapat tentang % serapan tahun yang sama — pola yang

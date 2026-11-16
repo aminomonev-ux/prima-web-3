@@ -1,4 +1,4 @@
-// Uji DB "Simpan yang isinya sama tidak menulis apa pun" BLUD (docs/CONCEPT-blud-simpan-identik.md).
+// Uji DB "Simpan yang isinya sama tidak menulis apa pun" BLUD (docs/konsep/blud/CONCEPT-blud-simpan-identik.md).
 //   node scripts/test-blud-simpan-identik-db.mjs
 //
 // MENYENTUH DB — hanya TAHUN KOTAK PASIR 2099, dibersihkan di awal DAN di `finally`

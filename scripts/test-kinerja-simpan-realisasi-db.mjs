@@ -1,4 +1,4 @@
-// Uji DB Simpan Realisasi & Tutup Bulan E-Anggaran (docs/CONCEPT-kinerja-simpan-realisasi.md).
+// Uji DB Simpan Realisasi & Tutup Bulan E-Anggaran (docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md).
 //   node scripts/test-kinerja-simpan-realisasi-db.mjs
 //
 // MENYENTUH DB — hanya TAHUN KOTAK PASIR 2099, dibersihkan di awal DAN di `finally`:

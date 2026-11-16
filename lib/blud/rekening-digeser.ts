@@ -5,7 +5,7 @@
 // bisa dibuka di layar Pergeseran pada versi itu (`?versi=` + `?fokus=` yang sudah ada).
 //
 // MURNI, tanpa impor — dipakai server (`beranda-panel.ts`), layar Beranda, modalnya, dan
-// layar Pergeseran. Konsep: docs/CONCEPT-blud-beranda-panel-bergerak.md §11
+// layar Pergeseran. Konsep: docs/konsep/blud/CONCEPT-blud-beranda-panel-bergerak.md §11
 
 export interface RekeningGeser {
   /** Jangkar baris — dipakai `?fokus=` layar Pergeseran. Kosong = tidak bisa dituju. */

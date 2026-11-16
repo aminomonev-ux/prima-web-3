@@ -1,5 +1,5 @@
 // lib/admin/permintaan-akses.ts — tabel `akses_permintaan` (P4, Tahap 11).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P4.
 //
 // SERVER-ONLY, dan SENGAJA hanya menyentuh tabelnya sendiri — persis pembagian yang
 // dipakai P2 (`akses-berjangka.ts` memegang tabelnya, `cabut-kedaluwarsa.ts` memegang

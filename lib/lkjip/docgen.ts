@@ -12,7 +12,7 @@ import {
   normalizeRows, buildTableMeta, lebarKolomWord, teksSelWord, bacaAtur, lebarTulisDxa, teksSumber, gayaSel, selBergaya, nomorUlang, tinggiBarisTegak,
   LEBAR_TULIS_DXA, LEBAR_TULIS_MELINTANG_DXA,
 } from './tabel';
-// Geometri halaman SATU sumber dengan penggaris editor (`docs/CONCEPT-lkjip-penggaris-narasi.md` §3).
+// Geometri halaman SATU sumber dengan penggaris editor (`docs/konsep/lkjip/CONCEPT-lkjip-penggaris-narasi.md` §3).
 import { PGSZ, PGSZ_MELINTANG, PGMAR, indentTwips as twipsDariCm, bacaInden, bacaSpasi, spasiBawaan, xmlInden, xmlSpasi, indenBerlaku, type IndenTersimpan, type SpasiTersimpan } from './halaman';
 import { POLA_LANJUT, POLA_MULAI, TINGKAT_DAFTAR, adalahBullet, gantungDxa, gayaDariTagDaftar, susunanPenuh, tagGaya, tulisSusunan, xmlTingkatWord, type KodeGaya } from './gaya-daftar';
 import { POLA_STABILO, STABILO, stabiloSah, szDariGaya } from './format-teks';

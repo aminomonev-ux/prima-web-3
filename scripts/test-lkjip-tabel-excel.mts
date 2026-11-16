@@ -1,5 +1,5 @@
 // scripts/test-lkjip-tabel-excel.mts — tabel LKJIP ala Excel + kepala tabel di modal (Tahap A).
-// Konsep: docs/CONCEPT-lkjip-tabel-excel.md
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md
 //
 // A: T1/T2 angka & rumus gaya Indonesia · B: sel galat (#ERR/#REF!) · C: rumus ikut bergeser (E6)
 // D: sisip/hapus baris & kolom, gabungan menyesuaikan · E: memilih & melangkah

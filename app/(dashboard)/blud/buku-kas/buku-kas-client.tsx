@@ -1,6 +1,6 @@
 'use client'
 // app/(dashboard)/blud/buku-kas/buku-kas-client.tsx — layar Buku Kas BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3 (menu), §4.2 (baki parkir), §2.7 (saldo)
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3 (menu), §4.2 (baki parkir), §2.7 (saldo)
 //
 // Ini SATU-SATUNYA layar input modul Realisasi. BKU, register, Realisasi BP,
 // pengantar, SPJ, dan Tutup Kas semuanya turunan dari data yang diketik di sini.

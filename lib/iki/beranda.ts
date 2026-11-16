@@ -1,5 +1,5 @@
 // lib/iki/beranda.ts
-// Susunan beranda IKI (docs/CONCEPT-iki-beranda.md §4): satu baris per jabatan per tahun,
+// Susunan beranda IKI (docs/konsep/iki/CONCEPT-iki-beranda.md §4): satu baris per jabatan per tahun,
 // menjorok mengikuti tautan atasan, Murni & Perubahan berdampingan, plus jabatan tahun
 // sebelumnya yang belum punya Murni. MURNI tanpa impor server — dipakai layar DAN route
 // salin-tahun, supaya "jabatan mana yang belum ada" cuma punya satu jawaban (L78).

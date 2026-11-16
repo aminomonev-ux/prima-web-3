@@ -16,7 +16,7 @@
 // `target_rp` lalu menghitung persen dan akumulasi dari situ. Hidrasi harus
 // terjadi lebih dulu.
 //
-// Konsep & contoh kasusnya: docs/AUDIT-kinerja-2026-09-04.md §A4
+// Konsep & contoh kasusnya: docs/audit/AUDIT-kinerja-2026-09-04.md §A4
 
 import type { SskMonths } from '@/app/(dashboard)/kinerja/_types';
 

@@ -1,5 +1,5 @@
 // app/api/admin/menu-access/route.ts — pengaturan akses menu dari Admin Panel.
-// Konsep: docs/CONCEPT-menu-access-control.md §4.5, §6
+// Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §4.5, §6
 //
 // GET  ?appKey=blud&userId=12  → izin satu orang: bawaan perannya, perkecualiannya, hasilnya
 // GET  ?appKey=blud&role=KEUANGAN → aturan satu peran: bawaan kode, yang tersimpan, hasilnya

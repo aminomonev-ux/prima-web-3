@@ -1,5 +1,5 @@
 // lib/renaksi/pemakai.ts — kalimat "nama ini dipakai modul …" sesudah ganti nama / pindah induk
-// di Renaksi. PURE & aman-klien. Konsep: docs/CONCEPT-renaksi-terhubung.md §6 (Tahap F, H).
+// di Renaksi. PURE & aman-klien. Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6 (Tahap F, H).
 // Hanya keterangan: modul lain TIDAK ditulis dari Renaksi — masing-masing memperbarui lewat
 // spanduknya sendiri.
 

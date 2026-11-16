@@ -1,4 +1,4 @@
-// lib/bba/rencana-excel.ts — Excel daftar rencana per tahun (docs/CONCEPT-bba-buku-aset.md §9):
+// lib/bba/rencana-excel.ts — Excel daftar rencana per tahun (docs/konsep/bba/CONCEPT-bba-buku-aset.md §9):
 // per jenis rencana (pola RKBMD pengadaan & pemeliharaan) dengan data buku aset tiap barang di
 // sampingnya. Bahan kerja internal, bukan format provinsi — tanpa kop & tanda tangan.
 import type ExcelJS from 'exceljs';

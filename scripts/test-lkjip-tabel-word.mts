@@ -1,5 +1,5 @@
 // scripts/test-lkjip-tabel-word.mts — tabel LKJIP "ala Word" (Tahap W).
-// Konsep: docs/CONCEPT-lkjip-tabel-excel.md §12.2–12.4
+// Konsep: docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md §12.2–12.4
 //
 // A: pengaturan cetak & lebar kertas · B: gaya tabel (format sel menang) · C: kolom No. otomatis
 // D: salin HTML · E: nomor objek editor = cache SEQ · F: XML Word (dibangun sungguhan lewat rakitDocx)

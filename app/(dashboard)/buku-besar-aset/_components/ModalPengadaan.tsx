@@ -1,5 +1,5 @@
 'use client';
-// Proses & Penerimaan satu rencana (docs/CONCEPT-bba-buku-aset.md §7.4) — dipakai halaman Rencana DAN
+// Proses & Penerimaan satu rencana (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4) — dipakai halaman Rencana DAN
 // Pengadaan; satu komponen, satu jalur tulis. Status pesanan (Direncanakan / Dalam Proses / Tidak
 // Terealisasi) lewat PATCH proses; diterima sebagian/penuh = turunan penerimaan (POST/DELETE pengadaan).
 // Rencana + referensi + penerimaan dimuat segar saat modal dibuka — angka kuncinya milik muatan itu (L77).

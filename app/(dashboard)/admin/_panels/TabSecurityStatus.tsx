@@ -10,7 +10,7 @@ import { APP_STATUS_LABELS, type AppStatus } from './_shared';
 import { bacaKeadaan, LABEL_KEADAAN } from '@/lib/registry/apps';
 
 // Edisi intranet mematikan Turnstile, registrasi publik, dan reset kata sandi lewat email
-// (docs/INTRANET-DELTA.md D2, D5–D7) — baris ketiganya dibuang, bukan dibiarkan centang hijau.
+// (docs/konsep/sistem/INTRANET-DELTA.md D2, D5–D7) — baris ketiganya dibuang, bukan dibiarkan centang hijau.
 // Checklist yang mengaku melindungi dengan fitur yang tidak ada lebih buruk daripada tidak ada.
 export const SEC_CHECKS = [
   { label:'Brute-force Lock',     ok:true,  val:'5x → 15 menit' },

@@ -2,7 +2,7 @@
 
 // Modal "Permohonan Upgrade Role" — dipakai dari menu user badge dropdown.
 // Konsep: docs/session/ROLE_PROMOTION_CONCEPT.md §9B.
-// INTRANET EDITION (D4 · docs/INTRANET-DELTA.md): Turnstile dilepas. Field
+// INTRANET EDITION (D4 · docs/konsep/sistem/INTRANET-DELTA.md): Turnstile dilepas. Field
 // turnstileToken tetap dikirim sebagai placeholder konstan agar kontrak schema
 // utuh — server verifyTurnstile sudah no-op pass (D2). Lapisan L1 (re-auth
 // password), L2 (secret code), L4 (rate-lock) tetap aktif.

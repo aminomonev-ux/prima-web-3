@@ -1,5 +1,5 @@
 // lib/bba/izin-server.ts — penyelesai izin bagian BBA di sisi server.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §3.1
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §3.1
 // Satu tempat yang menggabungkan: perkecualian orang → aturan peran → TABEL di peran.ts.
 // SERVER-ONLY; `peran.ts` tetap modul daun supaya layar tidak menyeret data layer.
 import { APP_BBA, getPetaPenimpa } from '@/lib/data/menu-access'

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/cek-tahap-0.mjs - Tahap 0 konsep Pusat Akses (docs/CONCEPT-pusat-akses-satu-pintu.md §17.2).
+// scripts/cek-tahap-0.mjs - Tahap 0 konsep Pusat Akses (docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §17.2).
 //
 // HANYA MEMBACA. Dua SELECT, nol tulis, nol tabel disentuh. Aman dijalankan
 // kapan saja, di mesin mana saja yang `.env.local`-nya menunjuk basis data yang

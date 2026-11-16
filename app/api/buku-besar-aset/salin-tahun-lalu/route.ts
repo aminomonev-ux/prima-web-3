@@ -5,7 +5,7 @@ import { SalinTahunLaluSchema, bbaRateLimit } from '@/lib/data/buku-besar-aset-s
 import { saranTahunLaluList, salinTahunLalu, BbaNotFoundError, BbaSalinError } from '@/lib/data/buku-besar-aset';
 import { guard, tolakKecualiEdit, tolakKecualiLihat } from '../_guard';
 
-// Saran dari rencana tahun lalu yang tidak didanai (docs/CONCEPT-bba-buku-aset.md §14): GET daftar
+// Saran dari rencana tahun lalu yang tidak didanai (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14): GET daftar
 // untuk tahun T, POST menyalin yang dipilih ke T (izin EDIT Rencana).
 const TahunSchema = z.object({ tahun: z.coerce.number().int().min(2020).max(2100) });
 

@@ -30,7 +30,7 @@
 -- (`normDpa`/`normPergeseran` + tipe `DpaBaris`/`PergeseranBaris`), dan query
 -- pembacanya memakai SELECT * — jadi ada atau tidak ada kolomnya, hasilnya sama.
 --
--- Referensi: L75 (catatan sampingan) di docs/AUDIT-LESSONS-LEARNED.md
+-- Referensi: L75 (catatan sampingan) di docs/audit/AUDIT-LESSONS-LEARNED.md
 
 ALTER TABLE dpa_blud       DROP INDEX  idx_versi_latest;
 ALTER TABLE dpa_blud       DROP COLUMN is_latest;

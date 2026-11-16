@@ -1,5 +1,5 @@
 // lib/blud/import-dpa.ts — algoritma deteksi struktur DPA dari grid Excel.
-// Konsep: docs/CONCEPT-export-import-dpa.md §3.3–3.5.
+// Konsep: docs/konsep/blud/CONCEPT-export-import-dpa.md §3.3–3.5.
 //
 // Intinya: hierarki DPA TIDAK ditebak dari nomor rekening. Sudah terbukti di
 // data nyata bahwa jumlah segmen kode tidak sejalan dengan level — dua baris

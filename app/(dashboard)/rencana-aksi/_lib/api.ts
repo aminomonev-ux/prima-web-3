@@ -105,7 +105,7 @@ export async function apiPaguPerubahan(tahun: number, signal?: AbortSignal): Pro
 /**
  * Agregat RKO E-Anggaran per sub kegiatan — "Terpakai di RKO". `berlaku` = versi terbaru tiap tab,
  * `murni` = versi murni tiap tab, `ketat` = tab yang sudah perubahan saja
- * (docs/CONCEPT-renaksi-rko-murni-perubahan.md).
+ * (docs/konsep/renaksi/CONCEPT-renaksi-rko-murni-perubahan.md).
  */
 export interface PaguRkoTahun {
   berlaku: AgregatSubRko[];

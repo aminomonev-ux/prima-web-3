@@ -1,5 +1,5 @@
 // lib/admin/pemeriksaan.ts — P10 Pemeriksaan Mandiri.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P10 (Tahap 4).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P10 (Tahap 4).
 //
 // Tujuh pertanyaan yang hari ini hanya bisa dijawab dengan SQL manual — jadi tidak
 // pernah ditanyakan sampai ada yang salah. Layarnya MELAPORKAN, tidak membereskan:

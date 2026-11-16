@@ -1,6 +1,6 @@
 // lib/bba/pengaturan.ts — pengaturan BBA (kop & penanda tangan Excel, jarak opname).
 // Satu kunci `app_config` = `bba_pengaturan` (JSON), ditulis lewat route BBA berizin Master —
-// bukan panel Config admin (docs/CONCEPT-bba-buku-aset.md §14, §15). MURNI: dipakai Zod,
+// bukan panel Config admin (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14, §15). MURNI: dipakai Zod,
 // layar Master, dan penyusun Excel.
 import { z } from 'zod'
 

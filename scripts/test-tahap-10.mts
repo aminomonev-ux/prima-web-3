@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-10.mts — penjaga regresi Tahap 10 (P2 Akses Berjangka).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P2, §17.2 Tahap 10.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P2, §17.2 Tahap 10.
 //
 // Bagian A menguji PERILAKU (berkas daun murni). B–G statis: lapisan servernya menyeret
 // mysql2 + JWT_SECRET, jadi tidak bisa diimpor dari sini (pelajaran Tahap 5).

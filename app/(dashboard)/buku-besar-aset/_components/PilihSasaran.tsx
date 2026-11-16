@@ -1,5 +1,5 @@
 'use client';
-// Aset sasaran rencana (docs/CONCEPT-bba-buku-aset.md §7.3): yang diganti, diperbaiki, atau direhab.
+// Aset sasaran rencana (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.3): yang diganti, diperbaiki, atau direhab.
 // Hanya mengubah ISIAN — ditulis server saat Simpan item, di transaksi yang sama (L78).
 
 import { useEffect, useRef, useState } from 'react';

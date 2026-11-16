@@ -1,5 +1,5 @@
 -- migration-menu-access.sql — Pengaturan akses menu per peran & per orang.
--- Konsep: docs/CONCEPT-menu-access-control.md §4.5
+-- Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §4.5
 --
 -- Dua tabel, dan keduanya dibuat KOSONG. Itu disengaja, bukan pekerjaan yang belum
 -- selesai: selama sebuah baris tidak ada, jawabannya diambil dari `TABEL` di

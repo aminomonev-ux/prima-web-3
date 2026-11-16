@@ -1,6 +1,6 @@
 'use client';
 // Pilihan sel ala Excel — SATU hook untuk editor tabel dan kisi kepala di modal (E5,
-// docs/CONCEPT-lkjip-tabel-excel.md §5.1). Aturannya (meluaskan ke gabungan, melangkah, melompat)
+// docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md §5.1). Aturannya (meluaskan ke gabungan, melangkah, melompat)
 // ada di lib/lkjip/tabel.ts supaya bisa diuji; hook ini hanya memegang keadaan & seretan tetikus.
 
 import { useEffect, useMemo, useRef, useState } from 'react';

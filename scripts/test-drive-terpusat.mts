@@ -1,5 +1,5 @@
 // scripts/test-drive-terpusat.mts — Drive satu pintu + folder induk otomatis.
-// Konsep: docs/CONCEPT-drive-terpusat.md §6–§7, §14 Tahap 1.
+// Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §6–§7, §14 Tahap 1.
 //
 //   npx tsx scripts/test-drive-terpusat.mts                         (A–C, tanpa DB & Drive)
 //   npx tsx --env-file=.env.local scripts/test-drive-terpusat.mts   (+ D: MySQL, Drive tiruan)

@@ -1,5 +1,5 @@
 // ═══ PRIMA — LKJIP — Cari & Ganti seluruh dokumen (pure, aman-klien) ═══
-// Konsep `docs/CONCEPT-lkjip-daftar-word.md` §11. Layar mencari di sini; server mengganti di sini juga, jadi
+// Konsep `docs/konsep/lkjip/CONCEPT-lkjip-daftar-word.md` §11. Layar mencari di sini; server mengganti di sini juga, jadi
 // yang ditampilkan dan yang ditulis tidak mungkin berbeda aturan.
 // Mencari isi TERSIMPAN: editor blok memegang ketikannya di state lokal, jadi yang belum disimpan tak terlihat.
 import { displayValue, namaKolomDariKepala, nilaiKetikan, normalizeRows, type TabelCell, bacaAtur } from './tabel';

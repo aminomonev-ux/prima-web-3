@@ -1,6 +1,6 @@
 'use client'
 // components/blud/PejabatSpjPanel.tsx — pejabat penanda tangan dokumen SPJ BLUD.
-// Konsep: docs/CONCEPT-blud-realisasi.md §3.1, keputusan #29.
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.1, keputusan #29.
 //
 // Di Excel, nama & NIP pejabat diketik ulang di 5 lembar berbeda. Di sini diisi
 // sekali per tahun.

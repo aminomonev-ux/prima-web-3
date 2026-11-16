@@ -1,5 +1,5 @@
 // scripts/test-renaksi-rantai-mutasi.mts — uji MUTASI aturan "baris NULL tetap tampil".
-// Konsep: docs/CONCEPT-renaksi-pilih-indikator.md §5, §12 Tahap 3.
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-pilih-indikator.md §5, §12 Tahap 3.
 //
 // Uji biasa hanya membuktikan hasilnya sekarang benar. Uji ini membuktikan SEBAB-nya: penjaga
 // `r.induk_indikator_id == null ||` dibuang dari salinan modul, lalu diperiksa bahwa baris lama

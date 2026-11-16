@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-8.mts — penjaga regresi Tahap 8 (P3 Tinjauan · P11 Ekspor).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P3 & P11, §17.2 Tahap 8.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P3 & P11, §17.2 Tahap 8.
 //
 // Bagian A–B menguji PERILAKU (fungsi murni dipanggil dengan data buatan); C–E statis.
 //

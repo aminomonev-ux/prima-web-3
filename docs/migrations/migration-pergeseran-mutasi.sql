@@ -1,6 +1,6 @@
 -- migration-pergeseran-mutasi.sql
 -- Catatan Perpindahan pada Pergeseran BLUD.
--- Konsep: docs/CONCEPT-blud-catatan-perpindahan.md
+-- Konsep: docs/konsep/blud/CONCEPT-blud-catatan-perpindahan.md
 --
 -- Satu baris = satu perpindahan uang dari satu rekening ke rekening lain di
 -- dalam SATU versi pergeseran. Dari situ kolom Bertambah/Berkurang dihitung —

@@ -6,7 +6,7 @@ import { petaIzinBba } from '@/lib/bba/izin-server';
 
 export type { GuardedSession };
 
-// DUA LAPIS (docs/CONCEPT-bba-buku-aset.md §16), urutannya penting:
+// DUA LAPIS (docs/konsep/bba/CONCEPT-bba-buku-aset.md §16), urutannya penting:
 //   1. `guard()` — sakelar maintenance + boleh masuk modul (peran bawaan atau grant app_access).
 //   2. `tolakKecualiEdit` — di dalam modul, bagian ini boleh diubah? (lib/bba/peran.ts)
 // Lapis kedua dipasang di SETIAP handler tulis — tombol mati di layar hanya cerminnya (L82).

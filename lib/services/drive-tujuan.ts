@@ -1,5 +1,5 @@
 // lib/services/drive-tujuan.ts — SATU-SATUNYA penjawab "berkas ini ditaruh di folder Drive mana".
-// Konsep: docs/CONCEPT-drive-terpusat.md §6.2 & §7. Tidak boleh ada `process.env.GOOGLE_DRIVE_FOLDER_ID*`
+// Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §6.2 & §7. Tidak boleh ada `process.env.GOOGLE_DRIVE_FOLDER_ID*`
 // di luar berkas ini dan `scripts/backup-db.js` (dijaga `scripts/test-drive-terpusat.mts`).
 //
 // Dua mode:

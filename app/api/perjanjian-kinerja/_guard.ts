@@ -1,5 +1,5 @@
 // app/api/perjanjian-kinerja/_guard.ts — gerbang akses seluruh route PK, per menu.
-// Konsep: docs/CONCEPT-pk-peran.md §6
+// Konsep: docs/konsep/pk/CONCEPT-pk-peran.md §6
 // DUA LAPIS, dan urutannya penting:
 //   1. `hasAppAccess(..., isPkRole)` — boleh masuk modul? (grant `app_access`)
 //   2. `bolehEdit / bolehBuka` dari tabel peran — di dalam, boleh apa?

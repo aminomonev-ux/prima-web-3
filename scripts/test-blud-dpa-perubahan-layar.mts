@@ -1,6 +1,6 @@
 // scripts/test-blud-dpa-perubahan-layar.mts — DPA Perubahan BLUD, Tahap 2 (layar).
 //
-// Konsep: docs/CONCEPT-blud-dpa-perubahan.md §5, §7, §10, §12. Sisi data (Tahap 1)
+// Konsep: docs/konsep/blud/CONCEPT-blud-dpa-perubahan.md §5, §7, §10, §12. Sisi data (Tahap 1)
 // dijaga test-blud-dpa-perubahan.mts + pasangan DB-nya; di sini yang dijaga:
 //   A. fungsi murni lib/blud/perubahan.ts — diuji SUNGGUHAN, bukan dicocokkan ke teks
 //   B. layar DPA — jejak `asal_perubahan` dilepas di SETIAP jalur pengganti isi (L69),

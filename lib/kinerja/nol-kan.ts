@@ -15,7 +15,7 @@
 // pagar `locked_at` sudah berlaku otomatis. Pola yang sama dengan Pulihkan,
 // Salin Versi, Impor, dan Tutup Pergeseran (L78/L80/L82).
 //
-// Konsep: docs/CONCEPT-kinerja-yatim-dan-hapus-ssk.md §2
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-yatim-dan-hapus-ssk.md §2
 
 import type { SskRow, SskMonths } from '@/app/(dashboard)/kinerja/_types';
 import { hitungTurunanRko } from './gabung-rko';

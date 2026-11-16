@@ -1,4 +1,4 @@
--- Perjanjian Kinerja — satuan jadi kolom sendiri (docs/CONCEPT-pk-halaman-2-sesuai-pdf.md §4).
+-- Perjanjian Kinerja — satuan jadi kolom sendiri (docs/konsep/pk/CONCEPT-pk-halaman-2-sesuai-pdf.md §4).
 --
 -- WAJIB dijalankan di server kantor SEBELUM kodenya dipasang: Master Sasaran, form dokumen,
 -- dan pembuat Word membaca kolom `satuan*`. Tanpa kolomnya, layar-layar itu gagal dimuat.

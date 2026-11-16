@@ -1,5 +1,5 @@
 // scripts/test-bba-referensi.mts — Buku Besar Aset Tahap 1: referensi harga + bukti dukung
-// (docs/CONCEPT-bba-perencanaan.md §4).
+// (docs/konsep/bba/CONCEPT-bba-perencanaan.md §4).
 //
 //   npx tsx scripts/test-bba-referensi.mts
 //
@@ -281,7 +281,7 @@ if (c) {
     const penuh = await coba(() => D.tambahBukti({ aset_id: id, jenis: 'FOTO', nama: 'ke-31', url: 'https://a.id' }, userId))
     ok('D18 batas 30 bukti per item dijaga server', penuh instanceof D.BbaBuktiPenuhError && (await D.listBukti(id)).length === 30)
 
-    // Sejak Tahap A (docs/CONCEPT-bba-buku-aset.md §10 butir 7) item terealisasi tidak bisa dihapus
+    // Sejak Tahap A (docs/konsep/bba/CONCEPT-bba-buku-aset.md §10 butir 7) item terealisasi tidak bisa dihapus
     // dan referensinya beku — CASCADE tinggal berlaku untuk rencana yang belum diproses.
     const hitungRb = async () => {
       const [x] = await k.query('SELECT (SELECT COUNT(*) FROM bba_referensi_harga WHERE aset_id = ?) AS r, (SELECT COUNT(*) FROM bba_lampiran WHERE aset_id = ?) AS b', [id, id]) as [Array<{ r: number; b: number }>, unknown]

@@ -1,5 +1,5 @@
 // scripts/test-blud-terapkan-uraian.mts — tombol Terapkan pada uraian pergeseran.
-// Konsep: docs/CONCEPT-blud-terapkan-uraian.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-terapkan-uraian.md
 //
 // Lima keputusan yang masing-masing punya bentuk "benar tapi salah":
 //

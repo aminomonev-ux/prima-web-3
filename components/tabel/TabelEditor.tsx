@@ -1,6 +1,6 @@
 'use client';
-// Editor tabel ala Excel — docs/CONCEPT-lkjip-tabel-excel.md (Tahap A, B, C). Dipakai blok TABEL LKJIP
-// dan dokumen IKI CUSTOM (docs/CONCEPT-iki-custom.md §3); CSS-nya di ./tabel-css.ts.
+// Editor tabel ala Excel — docs/konsep/lkjip/CONCEPT-lkjip-tabel-excel.md (Tahap A, B, C). Dipakai blok TABEL LKJIP
+// dan dokumen IKI CUSTOM (docs/konsep/iki/CONCEPT-iki-custom.md §3); CSS-nya di ./tabel-css.ts.
 // Memblok (seret, Shift, huruf kolom, nomor baris), papan ketik ala Excel, Delete mengosongkan,
 // sisip/hapus baris & kolom sebanyak yang dipilih (gabungan & rumus ikut), lebar kolom di tiap garis.
 // Tahap B: potong, tempel nilai, isi-seret, miring/garis bawah/warna huruf, kuas format, Alt+Enter,
@@ -114,7 +114,7 @@ export default function TabelEditor({
   payload: unknown;
   readOnly: boolean;
   warnaKepala?: string;
-  /** LKJIP 12 (halaman Word tegak), IKI CUSTOM 24 — docs/CONCEPT-iki-custom.md §9.1. */
+  /** LKJIP 12 (halaman Word tegak), IKI CUSTOM 24 — docs/konsep/iki/CONCEPT-iki-custom.md §9.1. */
   batasKolom?: number;
   /** Lebar bidang tulis (px editor) + namanya. Tanpa ini: kertas Word LKJIP, tegak/melintang menurut pengaturan Cetak. */
   kertas?: { px: number; nama: string };
@@ -135,7 +135,7 @@ export default function TabelEditor({
     const k = pastikanKepalaSel({ kolom: kolom0, rows: sanitizeRows(normalizeRows(p0.rows), kolom0.length), headerRows: p0.headerRows ?? 0 });
     return { p0, kolom0, rows: k.rows, headerRows: k.headerRows ?? 0 };
   });
-  // Tabel tertaut (docs/CONCEPT-lkjip-tabel-tertaut.md): badan diisi dari modul, kepala milik pengguna.
+  // Tabel tertaut (docs/konsep/lkjip/CONCEPT-lkjip-tabel-tertaut.md): badan diisi dari modul, kepala milik pengguna.
   const [tautan, setTautan] = useState<Tautan | undefined>(awal.p0.tautan);
   // Blok baru dari "Tempel dari Modul" lahir dengan modal tautan terbuka berisi salinannya.
   const [modalTaut, setModalTaut] = useState(() => !!lkjip?.salinanAwal);

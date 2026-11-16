@@ -1,7 +1,7 @@
 // scripts/test-kinerja-rekap.mts — regresi pembenahan perhitungan E-Anggaran.
 // Jalankan: npx tsx scripts/test-kinerja-rekap.mts
 //
-// Konsep: docs/CONCEPT-kinerja-perbaikan-perhitungan.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-perbaikan-perhitungan.md
 //
 // Pohon uji SENGAJA memakai pagu yang tidak habis dibagi 12 dan nilai bulanan
 // yang persennya jatuh di batas pembulatan. Tanpa itu, bagian C/F/G/K/L semuanya

@@ -5,7 +5,7 @@ import { PengaturanBbaSchema } from '@/lib/bba/pengaturan';
 import { bacaPengaturanBba, simpanPengaturanBba } from '@/lib/data/bba-aset';
 import { guard, tolakKecualiEdit } from '../_guard';
 
-// Pengaturan BBA: kop & penanda tangan Excel, jarak opname (docs/CONCEPT-bba-buku-aset.md §14).
+// Pengaturan BBA: kop & penanda tangan Excel, jarak opname (docs/konsep/bba/CONCEPT-bba-buku-aset.md §14).
 // Satu kunci app_config `bba_pengaturan`, ditulis di sini dengan izin Master — bukan panel Config admin.
 export async function GET() {
   const g = await guard();

@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-11.mts — penjaga regresi Tahap 11 (P4 Permintaan Akses Mandiri).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P4, §17.2 Tahap 11.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P4, §17.2 Tahap 11.
 //
 // Bagian A menguji PERILAKU (berkas daun murni — ia cuma mengimpor registry yang juga
 // nol-impor). B–H statis: lapisan servernya menyeret mysql2 + JWT_SECRET, jadi tidak

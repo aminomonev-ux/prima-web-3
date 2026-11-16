@@ -4,7 +4,7 @@ Aplikasi web internal RSJD Dr. Amino Gondohutomo Semarang untuk manajemen perenc
 
 > ⚠️ Repositori ini berisi kode aplikasi saja. Konfigurasi rahasia (kredensial DB, JWT secret, token API) **tidak** disertakan — lihat `.env.example` untuk daftar variabel yang harus diisi sendiri.
 
-> 🏢 **Edisi Intranet (LAN-only).** Versi ini dirancang untuk deployment di jaringan lokal kantor tanpa IP publik. Dependensi eksternal yang tidak relevan **dimatikan**: **email (Gmail SMTP)**, **CAPTCHA (Cloudflare Turnstile)**, dan **Upstash Redis cloud**. Konsekuensinya: **registrasi publik nonaktif** — akun dibuat oleh Super Admin lewat Admin Panel, dan reset password juga admin-driven. Detail perbedaan vs edisi penuh ada di [`docs/INTRANET-DELTA.md`](docs/INTRANET-DELTA.md).
+> 🏢 **Edisi Intranet (LAN-only).** Versi ini dirancang untuk deployment di jaringan lokal kantor tanpa IP publik. Dependensi eksternal yang tidak relevan **dimatikan**: **email (Gmail SMTP)**, **CAPTCHA (Cloudflare Turnstile)**, dan **Upstash Redis cloud**. Konsekuensinya: **registrasi publik nonaktif** — akun dibuat oleh Super Admin lewat Admin Panel, dan reset password juga admin-driven. Detail perbedaan vs edisi penuh ada di [`docs/konsep/sistem/INTRANET-DELTA.md`](docs/konsep/sistem/INTRANET-DELTA.md).
 
 ---
 
@@ -66,6 +66,10 @@ lib/constants.ts     # Roles, status, mapping bidang
 
 ## Instalasi & Menjalankan Lokal
 
+> **Memasang di server kantor** (PM2, hidup otomatis, tugas terjadwal, Google Drive, backup,
+> restore, memutakhirkan versi): ikuti **[`docs/panduan/PANDUAN-instalasi-prima.md`](docs/panduan/PANDUAN-instalasi-prima.md)**.
+> Bagian di bawah ini hanya untuk menjalankan di komputer pengembang.
+
 ### 1. Clone & install dependencies
 
 ```bash
@@ -82,7 +86,7 @@ Salin `.env.example` menjadi `.env.local`, lalu isi nilai sebenarnya:
 cp .env.example .env.local
 ```
 
-Variabel wajib: `MYSQL_*`, `JWT_SECRET` (min 32 char), `CRON_SECRET`, `PROMOTION_*`. Rekomendasi: `REDIS_URL` (Redis lokal). Variabel email/Turnstile/Upstash **tidak dipakai** di edisi ini. Selengkapnya ada di `.env.example`.
+Variabel wajib: `MYSQL_*`, `JWT_SECRET` (min 32 char), `CRON_SECRET`, `PROMOTION_*`. `REDIS_URL` sengaja dikosongkan (alasannya di panduan instalasi §11.3). Variabel email/Turnstile/Upstash **tidak dipakai** di edisi ini. Selengkapnya ada di `.env.example`.
 
 ### 3. Setup database
 
@@ -90,7 +94,7 @@ Variabel wajib: `MYSQL_*`, `JWT_SECRET` (min 32 char), `CRON_SECRET`, `PROMOTION
 mysql -u root -p prima_db < docs/schema-mysql.sql
 ```
 
-Lalu jalankan migrasi di `docs/migrations/` sesuai urutan jika diperlukan.
+Database baru cukup skema ini — `docs/schema-mysql.sql` sudah memuat seluruh isi `docs/migrations/`. Migrasi hanya untuk database yang sudah berisi data (panduan instalasi §18).
 
 ### 4. Jalankan development server
 
@@ -127,7 +131,7 @@ Detail mapping role → bidang ada di `lib/constants.ts`. **Pembuatan akun**: Ad
 - CI keamanan otomatis: SAST (Semgrep), npm-audit, secret-scan (Gitleaks), tsc + ESLint
 - **Jangan rename `proxy.ts` ke `middleware.ts`** — konflik fatal di Next.js
 
-> Catatan edisi intranet: CAPTCHA (Turnstile) dimatikan karena LAN tepercaya tanpa IP publik — lapisan login lain (lockout, rate-limit, anti-enumeration) tetap aktif. Lihat [`docs/INTRANET-DELTA.md`](docs/INTRANET-DELTA.md).
+> Catatan edisi intranet: CAPTCHA (Turnstile) dimatikan karena LAN tepercaya tanpa IP publik — lapisan login lain (lockout, rate-limit, anti-enumeration) tetap aktif. Lihat [`docs/konsep/sistem/INTRANET-DELTA.md`](docs/konsep/sistem/INTRANET-DELTA.md).
 
 Menemukan kerentanan? Lihat [`SECURITY.md`](SECURITY.md).
 

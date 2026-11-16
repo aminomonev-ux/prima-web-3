@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-renaksi-pindah-induk.mts — kegiatan / sub kegiatan yang dipindah induknya di Renaksi
 // menjalar di Renaksi, tercatat, dan ditawarkan sebagai "pindah induk" di E-Anggaran & PK.
-// Konsep: docs/CONCEPT-renaksi-terhubung.md Tahap H.
+// Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md Tahap H.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-renaksi-pindah-induk.mts (bagian D MySQL
 // kotak pasir 2076, dibersihkan otomatis; tanpa --env-file GAGAL, tidak melompati).
 import mysql from 'mysql2/promise'

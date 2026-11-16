@@ -1,6 +1,6 @@
 'use client';
 // app/(dashboard)/admin/_panels/TabPusatAkses.tsx — satu orang, satu halaman.
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §4.5 & §16.4 (Tahap 5 / Fase C).
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §4.5 & §16.4 (Tahap 5 / Fase C).
 //
 // Menggantikan alur "cari orang → tombol ATUR → modal → tutup → tombol MENU → modal
 // lain → tombol ROLE → modal ketiga". Tiga penyimpanan terpisah yang bisa berhenti di

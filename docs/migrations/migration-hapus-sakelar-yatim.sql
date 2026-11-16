@@ -1,4 +1,4 @@
--- migration-hapus-sakelar-yatim.sql — Fase F Tahap 0 (docs/CONCEPT-perbaikan-audit-akses.md).
+-- migration-hapus-sakelar-yatim.sql — Fase F Tahap 0 (docs/konsep/sistem/CONCEPT-perbaikan-audit-akses.md).
 --
 -- Tiga kunci sakelar tanpa modul. Tidak ada di registry (`lib/registry/apps-data.mjs`),
 -- tidak dibaca satu berkas kode pun, dan GET /api/admin/app-status menyaringnya lewat

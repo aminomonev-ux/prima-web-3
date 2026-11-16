@@ -1,5 +1,5 @@
 // lib/blud/permintaan-data.ts — permintaan pergeseran / penambahan rekening.
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.1, §4.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.1, §4.2
 //
 // Tabel ini TIDAK PERNAH menyentuh pagu. Ia hanya mencatat "ada yang perlu
 // digeser" supaya permintaan bendahara tidak hilang di percakapan WA, dan supaya

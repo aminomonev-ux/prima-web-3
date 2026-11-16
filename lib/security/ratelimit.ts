@@ -11,7 +11,7 @@ import IORedis from 'ioredis';
 // Yang KETIGA adalah keadaan normal edisi intranet, bukan darurat: PM2 jalan mode
 // fork (1 proses), jadi hitungan in-memory sudah akurat. Redis baru perlu kalau
 // pindah ke cluster — hitungan per-proses tidak lagi mewakili keseluruhan.
-// Keputusan + alasannya: docs/PANDUAN-pemasangan-windows.md §7.
+// Keputusan + alasannya: docs/panduan/PANDUAN-instalasi-prima.md §11.3.
 //
 // Perlu diingat saat membaca warnDegraded() di bawah: dua pengaman terpenting tidak
 // lewat sini sama sekali. Kunci akun 5x salah sandi ada di MySQL (users.locked_until)
@@ -88,7 +88,7 @@ async function localLimit(key: string, maxRequests: number, windowSeconds: numbe
 // DEGRADED sekarang HANYA untuk backend yang seharusnya jalan lalu gagal (2026-09-16).
 // Sebelumnya `backend === 'none'` ikut memakai kalimat ini, padahal kepala berkas di
 // atas sudah menyatakannya keadaan NORMAL edisi intranet. Akibatnya bukan sekadar log
-// berisik: PANDUAN §7 menyuruh operator memakai `findstr DEGRADED` sebagai alat deteksi
+// berisik: panduan instalasi §11.3 menyuruh operator memakai `findstr DEGRADED` sebagai alat deteksi
 // Redis mati, dan alat itu tidak bisa dipakai kalau kalimatnya sudah menyalak tiap 10
 // menit di server yang sehat — keepalive tab staf memanggil checkRateLimit, dan
 // throttle 1×/menit di bawah tidak menolongnya sama sekali. Pesan yang menyalak tiap
@@ -109,7 +109,7 @@ let _sudahCatatMemori = false;
 function catatSekaliModeMemori(): void {
   if (_sudahCatatMemori) return;
   _sudahCatatMemori = true;
-  console.info('[RateLimit] mode memori per-proses (UPSTASH/REDIS_URL kosong). Ini konfigurasi normal edisi intranet: PM2 mode fork, satu proses, jadi hitungannya akurat. Alasan lengkap di PANDUAN §7.');
+  console.info('[RateLimit] mode memori per-proses (UPSTASH/REDIS_URL kosong). Ini konfigurasi normal edisi intranet: PM2 mode fork, satu proses, jadi hitungannya akurat. Alasan lengkap: docs/panduan/PANDUAN-instalasi-prima.md §11.3.');
 }
 
 // V5-AUTH-04: fallback fixed-window IN-MEMORY (per-proses) menggantikan fail-open

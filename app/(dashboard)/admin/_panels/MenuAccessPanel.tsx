@@ -1,6 +1,6 @@
 'use client';
 // app/(dashboard)/admin/_panels/MenuAccessPanel.tsx
-// Pengaturan akses menu — dua lapis, satu daftar. Konsep: docs/CONCEPT-menu-access-control.md §6
+// Pengaturan akses menu — dua lapis, satu daftar. Konsep: docs/konsep/sistem/CONCEPT-menu-access-control.md §6
 //
 // Kotak centang, bukan tiga tombol setara: yang TIDAK dicentang tetap bisa dibuka &
 // diunduh, hanya tidak bisa diubah. Bentuk itu mengikuti sistem yang sudah berjalan —

@@ -9,7 +9,7 @@
 // Memilih satu baris TIDAK menulis apa pun — isinya dipulangkan ke pemanggil,
 // yang menaruhnya di layar. Yang menyimpan tetap tombol Simpan biasa.
 //
-// Konsep: docs/CONCEPT-kinerja-riwayat-simpan.md §7
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-riwayat-simpan.md §7
 
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';

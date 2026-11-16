@@ -1,5 +1,5 @@
 // scripts/test-blud-catatan-perpindahan.mts — catatan perpindahan dari-ke.
-// Konsep: docs/CONCEPT-blud-catatan-perpindahan.md
+// Konsep: docs/konsep/blud/CONCEPT-blud-catatan-perpindahan.md
 //
 // Enam keputusan yang masing-masing punya bentuk "benar tapi salah":
 //

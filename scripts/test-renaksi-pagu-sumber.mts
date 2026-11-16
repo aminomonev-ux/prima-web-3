@@ -1,5 +1,5 @@
 // scripts/test-renaksi-pagu-sumber.mts — pagu Rencana Aksi per sumber dana, babak Perubahan, dan
-// penjumlahan ke atas yang mengikuti tautan indikator (docs/CONCEPT-renaksi-pagu-rko.md Tahap A').
+// penjumlahan ke atas yang mengikuti tautan indikator (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md Tahap A').
 // Jalankan: npx tsx --env-file=.env.local scripts/test-renaksi-pagu-sumber.mts
 // Bagian C memakai MySQL kotak pasir 2075/2076 (dibersihkan otomatis; tanpa --env-file GAGAL).
 

@@ -1,4 +1,4 @@
-// lib/bba/penerimaan.ts — aturan pengadaan & penerimaan (docs/CONCEPT-bba-buku-aset.md §7.4–7.6, §15).
+// lib/bba/penerimaan.ts — aturan pengadaan & penerimaan (docs/konsep/bba/CONCEPT-bba-buku-aset.md §7.4–7.6, §15).
 // MURNI: dipakai data layer, halaman Pengadaan, antrean Buku Aset, dan uji.
 import type { BbaStatus } from './status';
 import type { Anggaran, JenisRencana } from './rencana';

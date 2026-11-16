@@ -1,5 +1,5 @@
 // lib/iki/custom.ts
-// IKI varian CUSTOM — tabel bagian II dirancang sendiri (docs/CONCEPT-iki-custom.md). Modul MURNI,
+// IKI varian CUSTOM — tabel bagian II dirancang sendiri (docs/konsep/iki/CONCEPT-iki-custom.md). Modul MURNI,
 // aman-klien: dipakai editor, server (bentuk awal & templat), dan pengekspor PDF/Excel.
 // Model selnya model tabel LKJIP (`lib/lkjip/tabel.ts`) — satu mesin, dua pemakai (§3).
 

@@ -1,5 +1,5 @@
 // Kartu RHK yang diambil dari Rencana Aksi dibandingkan dengan baris Renaksi-nya sekarang.
-// MURNI, aman-klien. Konsep: docs/CONCEPT-renaksi-terhubung.md §6 (Tahap E).
+// MURNI, aman-klien. Konsep: docs/konsep/renaksi/CONCEPT-renaksi-terhubung.md §6 (Tahap E).
 //
 // Pasangannya lewat `renaksi_id` (id baris rencana_aksi — tetap walau namanya diganti), jadi
 // tidak ada yang ditebak. Yang dibandingkan = yang diisi `isianRenaksi`: RHK, indikator, cara

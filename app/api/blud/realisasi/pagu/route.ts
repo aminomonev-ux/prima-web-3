@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/pagu/route.ts — pohon anggaran + pagu efektif + serapan.
-// Konsep: docs/CONCEPT-blud-realisasi.md §2.1, §7.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §2.1, §7.2
 //
 // Dipakai pemilih baris anggaran di Buku Kas dan layar Realisasi.
 // Semua kolom turunan dihitung di sini, tidak ada yang disimpan.

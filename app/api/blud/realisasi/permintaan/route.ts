@@ -1,5 +1,5 @@
 // app/api/blud/realisasi/permintaan/route.ts — permintaan geser / rekening baru.
-// Konsep: docs/CONCEPT-blud-realisasi.md §4.1, §4.2, §7.2
+// Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §4.1, §4.2, §7.2
 //
 // GET    ?tahun=&status=   daftar permintaan + jumlah yang menunggu
 // POST                     bendahara mengajukan (TIDAK menyentuh pagu)

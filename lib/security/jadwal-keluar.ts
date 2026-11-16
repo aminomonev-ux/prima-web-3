@@ -5,7 +5,7 @@
 // komputer yang tertidur atau putus jaringan tetap sampai di halaman login saat bangun. Login bisa
 // ditahan sementara (hanya SUPER_ADMIN) supaya orang tidak masuk lagi di tengah build.
 // Jadwalnya SATU baris `app_config` berisi JSON — nol migrasi.
-// Konsep: docs/CONCEPT-pemeliharaan-keluar.md
+// Konsep: docs/konsep/sistem/CONCEPT-pemeliharaan-keluar.md
 
 export const KUNCI_JADWAL_KELUAR = 'pemeliharaan_jadwal';
 export const PILIHAN_JEDA_MENIT = [1, 5, 10, 15] as const;

@@ -1,6 +1,6 @@
 // lib/bba/lembar-excel.ts — lembar ekspor selain KIB: hasil sensus per golongan (KIBxInv) + rekap
 // sensus (RKPInv), KIR per ruangan, Buku Inventaris (BI), Rekapitulasi BMD, dan format kerja PRIMA.
-// Konsep: docs/CONCEPT-bba-buku-aset.md §9. Bentuk & letak sel ditiru dari lembar templat yang ikut di
+// Konsep: docs/konsep/bba/CONCEPT-bba-buku-aset.md §9. Bentuk & letak sel ditiru dari lembar templat yang ikut di
 // berkas ekspor sistem aset provinsi; penulisnya `tulisLembar` (kib-excel.ts) supaya kop, kepala,
 // baris Jumlah, dan tanda tangan satu aturan.
 import type ExcelJS from 'exceljs'

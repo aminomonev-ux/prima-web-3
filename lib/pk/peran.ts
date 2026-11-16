@@ -1,5 +1,5 @@
 // lib/pk/peran.ts — izin dua sumbu modul Perjanjian Kinerja: peran × menu.
-// Konsep: docs/CONCEPT-pk-peran.md
+// Konsep: docs/konsep/pk/CONCEPT-pk-peran.md
 //
 // MODUL DAUN — tidak mengimpor apa pun, sama seperti `lib/blud/peran.ts`. Ribbon
 // dan tombol di klien memakainya tanpa ikut menarik `next/server` maupun data
@@ -115,7 +115,7 @@ const TABEL: Record<string, AturanPeran> = {
  * mana pun di luar allow-list yang punya grant `perjanjian_kinerja` — artinya peran
  * sub-bidang ber-grant berwenang LEBIH BESAR daripada ADMIN_KABAG yang sengaja
  * dibuat peninjau. Grant yang dimaksudkan "beri dia akses" ternyata berarti "beri
- * dia akses penuh". Temuan itu ditulis di `docs/CONCEPT-pk-peran.md` §5.2.
+ * dia akses penuh". Temuan itu ditulis di `docs/konsep/pk/CONCEPT-pk-peran.md` §5.2.
  *
  * Yang hilang tidak hilang selamanya: wewenang mengubah dikembalikan dengan
  * mencentang menunya di matriks Admin Panel, per peran atau per orang. Bedanya

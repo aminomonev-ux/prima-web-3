@@ -1,6 +1,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- migration-blud-gu-periode.sql — periode Ganti Uang Persediaan (GU) per bulan
--- Konsep: docs/CONCEPT-blud-realisasi.md §3.2, keputusan #31
+-- Konsep: docs/konsep/blud/CONCEPT-blud-realisasi.md §3.2, keputusan #31
 --
 -- Apply:
 --   mysql -u root -p prima_db_3 < docs/migrations/migration-blud-gu-periode.sql

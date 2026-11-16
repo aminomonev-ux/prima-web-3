@@ -1,5 +1,5 @@
 // GET /api/kinerja/pagu-renaksi?tahun= — pagu sub kegiatan Rencana Aksi + agregat RKO versi terbaru
-// semua tab, untuk pita di layar RKO (docs/CONCEPT-renaksi-pagu-rko.md Tahap B). Hanya membaca.
+// semua tab, untuk pita di layar RKO (docs/konsep/renaksi/CONCEPT-renaksi-pagu-rko.md Tahap B). Hanya membaca.
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/security/auth';
 import { hasAppAccess } from '@/lib/security/guard';
