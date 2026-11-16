@@ -11,6 +11,7 @@ import { checkRateLimit } from '@/lib/security/ratelimit';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { PANJANG_SATUAN } from '@/lib/shared/target-renaksi';
 import { ASAL_MASTER } from '@/lib/kinerja/asal-renaksi';
+import { BATAS_UNDUH_MASSAL, PERMINTAAN_PDF_MASSAL } from '@/lib/pk/unduh-massal';
 
 // ─── Rate Limit ─────────────────────────────────────────────────────────────
 
@@ -259,6 +260,22 @@ export const UnduhDokumenQuerySchema = z.object({
   sumber: z.enum(['dpa', 'pergeseran']).optional(),
   versi: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Versi harus YYYY-MM-DD').optional(),
 }).refine(q => !!q.sumber === !!q.versi, { message: 'Sumber dan versi lampiran harus diisi bersama' });
+
+/**
+ * POST dokumen/bulk-download — banyak dokumen dalam satu ZIP. Batasnya dari
+ * `lib/pk/unduh-massal.ts` supaya layar dan skema memakai angka yang sama.
+ * Lampiran BLUD satu versi untuk seluruh batch → dokumennya wajib satu tahun (dijaga route).
+ */
+export const UnduhMassalBodySchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1, 'Pilih dulu dokumen yang mau diunduh')
+    .max(BATAS_UNDUH_MASSAL, `Maksimal ${BATAS_UNDUH_MASSAL} dokumen sekali unduh`),
+  format: z.enum(['word', 'pdf']).default('word'),
+  sumber: z.enum(['dpa', 'pergeseran']).optional(),
+  versi: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Versi harus YYYY-MM-DD').optional(),
+}).refine(q => !!q.sumber === !!q.versi, { message: 'Sumber dan versi lampiran harus diisi bersama' })
+  .refine(q => q.format !== 'pdf' || q.ids.length <= PERMINTAAN_PDF_MASSAL, {
+    message: `PDF maksimal ${PERMINTAAN_PDF_MASSAL} dokumen per permintaan — LibreOffice mengubahnya satu per satu.`,
+  });
 
 /**
  * POST /api/perjanjian-kinerja/units — save Master Unit Kerja (admin only).

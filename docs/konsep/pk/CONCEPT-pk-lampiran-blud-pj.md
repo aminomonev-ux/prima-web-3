@@ -55,6 +55,17 @@ logo, dan tabel sama.
   `PK_DOKUMEN_DOWNLOAD` menyebut sumber lampiran dan totalnya.
 - Riwayat: tombol Preview, Unduh Word, **Unduh PDF** (baru) → dialog `PilihLampiranBlud`
   (pilihan awal = versi terbaru yang cocok, kalau tidak "Tanpa lampiran").
+- **Unduh massal** (2026-11-16): centang baris (pola Master Sasaran/Program) → toolbar
+  "N dokumen dipilih" → satu dialog versi (`PilihLampiranMassal`) untuk seluruh batch → satu
+  ZIP. `GET`/`POST /api/perjanjian-kinerja/dokumen/bulk-download`: GET = versi BLUD setahun,
+  POST = ZIP (maks 30 dokumen, PDF maks 10 karena LibreOffice satu per satu). Dokumen wajib
+  satu tahun — versi BLUD berlaku per tahun. PK tanpa BLUD tetap ikut tanpa lampiran; versi
+  atau unit yang bermasalah menghentikan seluruh batch (422), bukan diam-diam kehilangan
+  lampiran. Nama berkas kembar diberi " (2)" supaya tidak ada yang tertimpa di ZIP.
+  **PDF dipecah 5 dokumen per permintaan** (`PERMINTAAN_PDF_MASSAL`): 10 konversi dalam satu
+  permintaan bisa menembus `proxy_read_timeout` Nginx (504) setelah LibreOffice bekerja, jadi
+  layar meminta per potongan lalu menggabungkan ZIP-nya di peramban (PizZip, diimpor saat
+  dipakai). Pagar server tetap sama — kepemilikan, lampiran, dan audit per berkas tidak berubah.
 
 ## 6. Pemasangan di server kantor
 
@@ -71,6 +82,9 @@ LibreOffice semuanya tetap jalan kecuali PDF asli.
 
 - Tombol unduh Word di Form PK tetap tanpa lampiran (lampiran hanya dari Riwayat).
 - PDF pertama sesudah server menyala lebih lambat (± 10 detik) karena LibreOffice dimulai.
+
+Regresi unduh massal: `npx tsx scripts/test-pk-unduh-massal.mts` (nama unik, ZIP, batas
+skema, pagar rute).
 
 Regresi: `npx tsx --env-file=.env.local scripts/test-pk-lampiran-blud.mts` (38; bagian D MySQL
 kotak pasir 2073, bagian E LibreOffice sungguhan; `SIMPAN=1` membiarkan data untuk uji layar).

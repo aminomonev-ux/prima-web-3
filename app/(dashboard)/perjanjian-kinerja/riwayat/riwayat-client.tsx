@@ -18,6 +18,8 @@ import { JUDUL_SALIN_DRAFT, pesanSalinDraft, salinDraftBaru } from '../_utils/sa
 import type { Role } from '@/types'
 import type { PilihanLampiran } from '@/lib/data/pk-lampiran-blud'
 import PilihLampiranBlud, { queryLampiran, type AksiUnduh } from './PilihLampiranBlud'
+import PilihLampiranMassal from './PilihLampiranMassal'
+import { BATAS_PDF_MASSAL, BATAS_UNDUH_MASSAL, PERMINTAAN_PDF_MASSAL, namaUnik, potongPer } from '@/lib/pk/unduh-massal'
 
 const alamatUnduh = (id: number, format: 'word' | 'pdf', lampiran: string) =>
   `/api/perjanjian-kinerja/dokumen/${id}/download?format=${format}${lampiran}`
@@ -90,6 +92,13 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
   const [preview, setPreview] = useState<{ id: number; filename: string; lampiran: string } | null>(null)
   const [pilihLampiran, setPilihLampiran] = useState<{ row: RiwayatRow; aksi: AksiUnduh; hasil: PilihanLampiran } | null>(null)
   const [membuatPdf, setMembuatPdf] = useState<number | null>(null)
+  // Unduh massal: pilihan disimpan sebagai ID (bukan properti baris) supaya bertahan saat
+  // daftar dimuat ulang sesudah hapus/salin. Tahunnya ikut disimpan — seleksi tahun lalu tidak
+  // boleh ikut terkirim sesudah pemilih tahun diganti.
+  const [pilihan, setPilihan] = useState<{ tahun: string; ids: number[] }>({ tahun: '', ids: [] })
+  const [pilihMassal, setPilihMassal] = useState<'word' | 'pdf' | null>(null)
+  const [sibukMassal, setSibukMassal] = useState(false)
+  const [progresMassal, setProgresMassal] = useState('')
 
   // Hanya SUPER_ADMIN + ADMIN boleh hapus dokumen FINAL (mirror backend gate).
   const canDeleteFinal = role === 'SUPER_ADMIN' || role === 'ADMIN'
@@ -105,6 +114,7 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
     limit: 20,
     onError: (msg) => showToast('err', msg),
   })
+
 
   function handleDelete(row: RiwayatRow) {
     if (row.status === 'FINAL' && !canDeleteFinal) {
@@ -179,6 +189,111 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
     }
   }
 
+  // ─── Unduh massal (pola centang Master Sasaran/Program) ───────────────────
+  const tahunAktif  = String(tahun)
+  const terpilih    = pilihan.tahun === tahunAktif ? pilihan.ids : []
+  const bisaUnduh   = list.data.filter(r => r.has_file === 1)
+  const semuaTerpilih = bisaUnduh.length > 0 && bisaUnduh.every(r => terpilih.includes(r.id))
+
+  const ubahPilihan = (f: (ids: number[]) => number[]) =>
+    setPilihan(p => ({ tahun: tahunAktif, ids: f(p.tahun === tahunAktif ? p.ids : []) }))
+  const kosongkanPilihan = () => setPilihan({ tahun: tahunAktif, ids: [] })
+
+  function togglePilih(id: number) {
+    ubahPilihan(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+  }
+
+  function toggleSemua() {
+    ubahPilihan(ids => semuaTerpilih
+      ? ids.filter(id => !bisaUnduh.some(r => r.id === id))
+      : [...new Set([...ids, ...bisaUnduh.map(r => r.id)])])
+  }
+
+  function mulaiMassal(format: 'word' | 'pdf') {
+    if (terpilih.length > BATAS_UNDUH_MASSAL) {
+      showToast('err', `Maksimal ${BATAS_UNDUH_MASSAL} dokumen sekali unduh. Kurangi pilihan, lalu coba lagi.`)
+      return
+    }
+    if (format === 'pdf' && terpilih.length > BATAS_PDF_MASSAL) {
+      showToast('err', `PDF maksimal ${BATAS_PDF_MASSAL} dokumen sekali unduh — LibreOffice mengubahnya satu per satu.`)
+      return
+    }
+    setPilihMassal(format)
+  }
+
+  /** Satu permintaan ZIP ke server. PDF dipanggil per potongan, bukan sekaligus. */
+  async function mintaZip(
+    ids: number[], format: 'word' | 'pdf', sumber?: string, versi?: string,
+  ): Promise<{ ok: true; blob: Blob; dilewati: number } | { ok: false; message: string }> {
+    let res: Response
+    try {
+      res = await fetch('/api/perjanjian-kinerja/dokumen/bulk-download', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, format, ...(sumber && versi ? { sumber, versi } : {}) }),
+      })
+    } catch {
+      return { ok: false, message: 'Server tidak terjangkau.' }
+    }
+    if (!res.ok) {
+      let message = `Gagal menyiapkan ZIP (HTTP ${res.status})`
+      try {
+        const d = await res.json() as { message?: string }
+        message = d.message ?? message
+      } catch { /* balasan bukan JSON */ }
+      return { ok: false, message }
+    }
+    return { ok: true, blob: await res.blob(), dilewati: Number(res.headers.get('X-Dokumen-Dilewati') ?? 0) || 0 }
+  }
+
+  /** Gabung beberapa ZIP jadi satu — tiap permintaan hanya membawa sebagian dokumen. */
+  async function gabungZip(blobs: Blob[]): Promise<Blob> {
+    const PizZip = (await import('pizzip')).default
+    const keluar = new PizZip()
+    const dipakai = new Set<string>()
+    for (const b of blobs) {
+      const masuk = new PizZip(await b.arrayBuffer())
+      for (const [nama, f] of Object.entries(masuk.files)) {
+        if (!f || f.dir) continue
+        keluar.file(namaUnik(nama, dipakai), f.asUint8Array())
+      }
+    }
+    return keluar.generate({ type: 'blob' }) as Blob
+  }
+
+  async function jalankanMassal(format: 'word' | 'pdf', kunci: string) {
+    const ids = terpilih.slice()
+    const [sumber, versi] = kunci ? kunci.split('|') : [undefined, undefined]
+    setPilihMassal(null)
+    setSibukMassal(true)
+    try {
+      // PDF dipecah: 10 konversi dalam satu permintaan bisa menembus proxy_read_timeout Nginx
+      // (504) padahal LibreOffice sudah bekerja — hasilnya hilang tanpa jejak di layar.
+      const potongan = format === 'pdf' ? potongPer(ids, PERMINTAAN_PDF_MASSAL) : [ids]
+      const hasil: Blob[] = []
+      let dilewati = 0
+      for (const [i, bagian] of potongan.entries()) {
+        setProgresMassal(format === 'pdf'
+          ? `bagian ${i + 1}/${potongan.length} — ${bagian.length} dokumen…`
+          : 'menyiapkan ZIP…')
+        const r = await mintaZip(bagian, format, sumber, versi)
+        if (!r.ok) { showToast('err', r.message); return }
+        dilewati += r.dilewati
+        hasil.push(r.blob)
+      }
+      simpanBlob(
+        hasil.length === 1 ? hasil[0] : await gabungZip(hasil),
+        `PK-${tahun}-${ids.length - dilewati}-dokumen.zip`,
+      )
+      kosongkanPilihan()
+      showToast('ok', `${ids.length - dilewati} dokumen diunduh dalam satu ZIP.`
+        + (dilewati ? ` ${dilewati} dilewati karena bukan dokumen Anda.` : ''))
+    } finally {
+      setSibukMassal(false)
+      setProgresMassal('')
+    }
+  }
+
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
@@ -224,6 +339,26 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
         </div>
       )}
 
+      {terpilih.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10,
+          padding: '8px 12px', borderRadius: 8,
+          background: 'rgba(239,159,39,.10)', border: '1px solid rgba(239,159,39,.35)',
+        }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#FAC775' }}>{terpilih.length} dokumen dipilih</span>
+          <PrimaButton variant="success" iconLeft={<Download size={14} />} disabled={sibukMassal}
+            onClick={() => mulaiMassal('word')}>Unduh Word</PrimaButton>
+          <PrimaButton variant="primary" iconLeft={<FileDown size={14} />} disabled={sibukMassal}
+            onClick={() => mulaiMassal('pdf')}>Unduh PDF</PrimaButton>
+          <PrimaButton variant="ghost" disabled={sibukMassal} onClick={kosongkanPilihan}>Batalkan pilihan</PrimaButton>
+          {sibukMassal && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#FAC775' }}>
+              <Loader2 size={13} className="pk-spin" /> {progresMassal || 'Menyiapkan ZIP…'}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: '#042C53', border: '1px solid #0C447C', borderRadius: 10, overflow: 'hidden' }}>
         {list.loading ? (
@@ -233,6 +368,11 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
               <thead>
                 <tr style={{ background: 'rgba(12,68,124,.5)' }}>
+                  <th style={{ ...th(36), textAlign: 'center' }}>
+                    <input type="checkbox" checked={semuaTerpilih} onChange={toggleSemua}
+                      disabled={bisaUnduh.length === 0}
+                      aria-label="Pilih semua dokumen yang sudah punya berkas" style={checkboxStyle} />
+                  </th>
                   <th style={th(50)}>#</th>
                   <th style={th(110)}>Tanggal</th>
                   <th style={th(90)}>Jenis</th>
@@ -246,7 +386,7 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
               <tbody>
                 {list.data.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ padding: '40px 16px', textAlign: 'center', color: '#85B7EB', fontSize: 13 }}>
+                    <td colSpan={9} style={{ padding: '40px 16px', textAlign: 'center', color: '#85B7EB', fontSize: 13 }}>
                       Belum ada dokumen PK untuk tahun {tahun}
                       {(statusFilter || jenisFilter) && ' (sesuai filter)'}. Klik <strong>Buat Baru</strong> untuk mulai.
                     </td>
@@ -254,6 +394,14 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
                 )}
                 {list.data.map((r, idx) => (
                   <tr key={r.id} style={{ background: idx % 2 === 0 ? 'transparent' : 'rgba(12,68,124,.15)', transition: 'all .15s' }}>
+                    <td style={{ ...td, width: 36, textAlign: 'center' }}>
+                      <input type="checkbox" checked={terpilih.includes(r.id)} disabled={r.has_file !== 1}
+                        onChange={() => togglePilih(r.id)}
+                        aria-label={r.has_file === 1
+                          ? `Pilih dokumen ${r.id}`
+                          : `Dokumen ${r.id} belum punya berkas — belum bisa diunduh`}
+                        style={{ ...checkboxStyle, cursor: r.has_file === 1 ? 'pointer' : 'not-allowed' }} />
+                    </td>
                     <td style={tdNum}>{(list.page - 1) * 20 + idx + 1}</td>
                     <td style={{ ...td, fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{fmtDateID(r.tanggal_dokumen)}</td>
                     <td style={td}>
@@ -390,6 +538,16 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
             setPilihLampiran(null)
             jalankanUnduh(row, aksi, queryLampiran(kunci))
           }}
+        />
+      )}
+
+      {pilihMassal && (
+        <PilihLampiranMassal
+          tahun={Number(tahun)}
+          jumlah={terpilih.length}
+          format={pilihMassal}
+          onBatal={() => setPilihMassal(null)}
+          onLanjut={kunci => void jalankanMassal(pilihMassal, kunci)}
         />
       )}
 
@@ -750,6 +908,8 @@ function th(minWidth: number): React.CSSProperties {
 }
 const td: React.CSSProperties = { padding: '10px 12px', borderBottom: '1px solid rgba(12,68,124,.5)', verticalAlign: 'middle', color: '#B5D4F4' }
 const tdNum: React.CSSProperties = { ...td, textAlign: 'center', fontFamily: 'JetBrains Mono, ui-monospace, monospace', color: '#85B7EB', fontWeight: 700 }
+
+const checkboxStyle: React.CSSProperties = { width: 15, height: 15, accentColor: '#EF9F27', cursor: 'pointer' }
 
 const selectFilter: React.CSSProperties = {
   background: 'rgba(2,15,28,.45)', border: '1px solid rgba(24,95,165,.4)', borderRadius: 6,

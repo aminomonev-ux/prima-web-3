@@ -41,9 +41,15 @@ export async function pilihanLampiranBlud(dok: DokumenLampiran): Promise<Pilihan
 
 export class LampiranBludError extends Error {}
 
+/**
+ * PK ini tidak memuat anggaran BLUD — unduh massal melewatinya (berkas tetap ikut, tanpa
+ * lampiran), unduh satu dokumen tidak pernah sampai ke sini karena dialognya tak ditawari.
+ */
+export class LampiranTanpaBludError extends LampiranBludError {}
+
 export async function isiLampiranBlud(dok: DokumenLampiran, sumber: SumberBlud, versi: string): Promise<IsiLampiranBlud> {
   const pk = await bludPk(dok.id);
-  if (!pk.ada) throw new LampiranBludError('Perjanjian Kinerja ini tidak memuat anggaran BLUD.');
+  if (!pk.ada) throw new LampiranTanpaBludError('Perjanjian Kinerja ini tidak memuat anggaran BLUD.');
   const h = await nominalBludUnit(dok.unit_pertama, dok.tahun, sumber, versi);
   if (h.status === 'UNIT_TIDAK_DIKENAL') throw new LampiranBludError(`Unit "${dok.unit_pertama}" tidak ada di Master Unit Kerja.`);
   if (h.status === 'BELUM_DIPETAKAN') throw new LampiranBludError(`Unit "${dok.unit_pertama}" belum dipetakan ke penanggung jawab BLUD di Master Unit Kerja.`);
