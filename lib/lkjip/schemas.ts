@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { checkRateLimit } from '@/lib/security/ratelimit';
 import { MAX_DEPTH } from './numbering';
-import { FONT_CHOICES } from './style-constants';
+import { FONT_CHOICES, RATA_HEADER, POSISI_NOMOR } from './style-constants';
 import { bolehMasukModul, peranBawaanModul } from '@/lib/registry/apps';
 import { POLA_ID_ANGKA, BATAS_ANGKA, resepTerpakai } from './angka';
 import { BATAS_BARIS_TANGAN } from './tautan';
@@ -49,8 +49,14 @@ export const StyleConfigSchema = z.object({
   align:        z.enum(['both', 'left']).default('both'),
   spaceAfterPt: z.coerce.number().min(0).max(24).default(6),
   firstLineIndentCm: z.coerce.number().min(0).max(3).default(1.27),   // indent baris pertama paragraf isi (0 = tanpa)
-  pageNumber:   z.boolean().default(true),   // footer + nomor halaman
-  footerText:   z.string().max(120).default(''),
+  pageNumber:   z.boolean().default(true),   // nomor halaman di footer
+  footerText:   z.string().max(120).default(''),   // tampil walau nomor halaman mati (konsep pratinjau-dan-word D5)
+  // Header & tata footer (konsep pratinjau-dan-word §2). Bawaan = keluaran Word lama persis.
+  headerText:   z.string().max(120).default(''),   // kosong = tanpa header
+  headerRata:   z.enum(RATA_HEADER).default('tengah'),
+  headerGaris:  z.boolean().default(false),   // garis tipis di bawah header
+  footerGaris:  z.boolean().default(false),   // garis tipis di atas footer
+  nomorPosisi:  z.enum(POSISI_NOMOR).default('otomatis'),   // otomatis = teks kiri + nomor kanan, tanpa teks nomor di tengah
   romanFront:   z.boolean().default(true),    // cover bebas-nomor, daftar romawi (i,ii), isi arab (1,2)
   tableHeaderFill: z.string().regex(/^[0-9a-fA-F]{6}$/).default('EDEDED'),   // warna latar header tabel (hex tanpa #)
   nomorPerBab:  z.boolean().default(false),   // "Tabel 3.1" (nomor mulai lagi tiap BAB) — konsep tabel-excel §12.5
@@ -63,7 +69,7 @@ export const StyleConfigSchema = z.object({
   ttdNip:            z.string().max(60).default(''),
 }).transform(c => ({ ...c, kataPengantarHtml: sanitizeNarasiHtml(c.kataPengantarHtml) }));
 export type StyleConfig = z.infer<typeof StyleConfigSchema>;
-export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12, lineSpacing: 1.5, align: 'both', spaceAfterPt: 6, firstLineIndentCm: 1.27, pageNumber: true, footerText: '', romanFront: true, tableHeaderFill: 'EDEDED', nomorPerBab: false, kataPengantarHtml: '', ttdTempatTanggal: '', ttdJabatan: '', ttdNama: '', ttdPangkat: '', ttdNip: '' };
+export const DEFAULT_STYLE: StyleConfig = { fontFamily: 'Arial', fontSizePt: 12, lineSpacing: 1.5, align: 'both', spaceAfterPt: 6, firstLineIndentCm: 1.27, pageNumber: true, footerText: '', headerText: '', headerRata: 'tengah', headerGaris: false, footerGaris: false, nomorPosisi: 'otomatis', romanFront: true, tableHeaderFill: 'EDEDED', nomorPerBab: false, kataPengantarHtml: '', ttdTempatTanggal: '', ttdJabatan: '', ttdNama: '', ttdPangkat: '', ttdNip: '' };
 
 // Sanitizer narasi (server-safe, no DOM) — whitelist tag, buang semua atribut.
 // Defense-in-depth: Tiptap re-parse saat load + docgen parse ke OOXML (bukan innerHTML).

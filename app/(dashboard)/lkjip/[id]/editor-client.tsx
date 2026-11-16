@@ -765,9 +765,40 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
                   <option value="0">Arab semua (1, 2, 3)</option>
                 </select>
               </label>
+              {/* Teks footer tetap tampil walau nomor halaman mati (konsep pratinjau-dan-word D5). */}
               <label>Teks footer
-                <input type="text" value={styleForm.footerText} maxLength={120} placeholder="mis. RSJD Dr. Amino Gondohutomo" disabled={!styleForm.pageNumber} onChange={e => setStyleForm({ ...styleForm, footerText: e.target.value })} />
+                <input type="text" value={styleForm.footerText} maxLength={120} placeholder="mis. RSJD Dr. Amino Gondohutomo" onChange={e => setStyleForm({ ...styleForm, footerText: e.target.value })} />
               </label>
+              <label>Letak nomor halaman
+                <select value={styleForm.nomorPosisi} disabled={!styleForm.pageNumber} onChange={e => setStyleForm({ ...styleForm, nomorPosisi: e.target.value as StyleConfig['nomorPosisi'] })}>
+                  <option value="otomatis">Otomatis (kanan bila ada teks, tengah bila tidak)</option>
+                  <option value="tengah">Tengah</option>
+                  <option value="kanan">Kanan</option>
+                </select>
+              </label>
+              <label>Garis di atas footer
+                <select value={styleForm.footerGaris ? '1' : '0'} onChange={e => setStyleForm({ ...styleForm, footerGaris: e.target.value === '1' })}>
+                  <option value="0">Tidak</option>
+                  <option value="1">Ya</option>
+                </select>
+              </label>
+              <label>Teks header
+                <input type="text" value={styleForm.headerText} maxLength={120} placeholder="kosong = tanpa header" onChange={e => setStyleForm({ ...styleForm, headerText: e.target.value })} />
+              </label>
+              <label>Rata header
+                <select value={styleForm.headerRata} disabled={!styleForm.headerText.trim()} onChange={e => setStyleForm({ ...styleForm, headerRata: e.target.value as StyleConfig['headerRata'] })}>
+                  <option value="kiri">Kiri</option>
+                  <option value="tengah">Tengah</option>
+                  <option value="kanan">Kanan</option>
+                </select>
+              </label>
+              <label>Garis di bawah header
+                <select value={styleForm.headerGaris ? '1' : '0'} disabled={!styleForm.headerText.trim()} onChange={e => setStyleForm({ ...styleForm, headerGaris: e.target.value === '1' })}>
+                  <option value="0">Tidak</option>
+                  <option value="1">Ya</option>
+                </select>
+              </label>
+              <p className="lk-hint">Header & footer tampil di halaman daftar dan isi; sampul tidak memakai keduanya. Cek hasilnya lewat Pratinjau.</p>
               <label>Warna header tabel
                 <select value={styleForm.tableHeaderFill} onChange={e => setStyleForm({ ...styleForm, tableHeaderFill: e.target.value })}>
                   <option value="EDEDED">Abu-abu</option>

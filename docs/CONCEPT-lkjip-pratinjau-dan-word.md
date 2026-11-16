@@ -1,6 +1,6 @@
 # Konsep — Pratinjau Cetak, header/footer, huruf, dan gambar LKJIP
 
-Status: **Tahap 1 selesai (2026-11-16)**; Tahap 2–4 berjalan, Tahap 5 ditunda. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
+Status: **Tahap 1 & 2 selesai (2026-11-16)**; Tahap 3–4 menunggu, Tahap 5 ditunda. Daftar keputusan ada di §8 — pemilik menyetujui semua usulan (D1–D10). Yang beda dari rancangan dicatat di §1.8.
 
 Tujuannya satu: yang dilihat di PRIMA sedekat mungkin dengan yang keluar di Word, dan yang sering diatur di Word bisa diatur di PRIMA. Ada lima tahap. Tiap tahap bisa dipasang sendiri dan tidak memerlukan migrasi database: `style_config` dan isi blok sudah berupa JSON. Tahap 1 butuh LibreOffice terpasang di laptop server.
 
@@ -175,6 +175,14 @@ Semua kunci di bawah wajib didaftarkan di `StyleConfigSchema`, karena Zod membua
 - Isi `header*.xml`/`footer*.xml`, rujukan di tiap section, dan kesamaan dengan dokumen lama bila semua kunci bawaan.
 - Dibuka di Microsoft Word (COM): teks header tiap section, nomor halaman tetap bersambung.
 
+### 2.4 Catatan pelaksanaan (2026-11-16)
+
+- **Header satu berkas** (`header.xml`, rId6) dipakai section tegak maupun melintang, karena header tidak memakai tab. Berkas itu hanya ditulis bila teks header terisi. Dokumen tanpa header keluar persis seperti sebelum §2: Word dari kode lama dan baru dibandingkan per berkas pada 6 setelan, dan `document.xml` identik. Yang berbeda hanya `footer.xml` saat nomor halaman mati, berkas yang memang tidak dirujuk halaman mana pun.
+- **Sampul** dipisah section sendiri begitu ada header ATAU footer, bukan lagi hanya bila nomor halaman menyala. Tanpa itu header ikut tampil di sampul.
+- **D5:** di basis data pengembangan 0 dokumen terdampak. Data kantor **belum** dihitung.
+- **Impor Word:** section tanpa rujukan header/footer mewarisi milik section sebelumnya (aturan Word), jadi rujukan dicari mundur. Pada berkas pemilik, footer terbaca "LKJIP RSJD dr. Amino Gondohutomo Tahun 2025". Hasil field (PAGE, DATE) dibuang.
+- **Header & footer tidak ikut Cari-Ganti** (tidak ada di konsep). Bisa ditambahkan kalau dibutuhkan.
+- **Regresi:** `npx tsx scripts/test-lkjip-header-footer.mts` (43; bagian F memakai PDF LibreOffice untuk memeriksa letak header dan nomor di kertas), 23 uji mutasi tertangkap. Satu sempat lolos: rujukan luar yang berkasnya memang tidak ada.
 ---
 
 ## 3. Huruf per kata + daftar huruf

@@ -56,6 +56,8 @@ export interface HasilImporWord {
   indenBawaanCm: number | null;
   /** Spasi paling lazim di berkas → Pengaturan Dokumen; yang lain membawa angkanya sendiri. Null = tak ada paragraf untuk dinilai. */
   spasiBawaan: { lineSpacing: number; spaceAfterPt: number } | null;
+  /** Teks polos header/footer bawaan section isi → headerText/footerText (konsep pratinjau-dan-word §2). '' = tidak ada. */
+  kepalaKaki: { header: string; footer: string };
   bagian: BagianImpor[];
   gambar: Record<string, GambarImpor>;
   baris: BarisPratinjau[];
@@ -1352,5 +1354,36 @@ export function bacaDocxLkjip(data: Uint8Array | ArrayBuffer, koreksi: Koreksi =
   const judulBerkas = rapikan(teksDalam(cariSemua(uraiXml(teksZip(zip, 'docProps/core.xml', 1024 * 1024) ?? ''), 'dc:title')[0] ?? KOSONG)).slice(0, 255);
   const tahunTebakan = tahunDari(baris.flatMap(b => (b.jenis === 'penanda' ? [b.teks] : b.jenis === 'objek' ? [b.judul] : [])));
 
-  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, spasiBawaan: spasiBawaanDok, bagian, gambar, baris, ringkasan: ring, peringatan };
+  const kepalaKaki = teksKepalaKaki(docXml, rels, nama => teksZip(zip, nama));
+  return { judulBerkas, tahunTebakan, kataPengantar, indenBawaanCm, spasiBawaan: spasiBawaanDok, kepalaKaki, bagian, gambar, baris, ringkasan: ring, peringatan };
+}
+
+const BATAS_TEKS_KEPALA_KAKI = 120;   // = StyleConfigSchema.headerText / footerText
+
+/**
+ * Teks polos header & footer BAWAAN (`w:type="default"`) yang berlaku di section TERAKHIR (isi). Section tanpa
+ * rujukan mewarisi milik section sebelumnya (aturan Word), jadi dicari mundur. Hasil field
+ * (PAGE "1", tanggal, dll.) dibuang: nomor halaman diatur pilihan nomor halaman, bukan disalin jadi teks
+ * yang selalu berbunyi "1". Tab & paragraf jadi spasi. Tidak ada / hanya berisi field → ''.
+ */
+export function teksKepalaKaki(docXml: string, rels: Map<string, { target: string; luar: boolean }>, ambil: (nama: string) => string | null): { header: string; footer: string } {
+  const semuaSect = docXml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g) ?? [];
+  const baca = (jenis: 'header' | 'footer'): string => {
+    const ref = new RegExp(`<w:${jenis}Reference\\b[^>]*>`, 'g');
+    let bawaan: string | undefined;
+    for (let i = semuaSect.length - 1; i >= 0 && !bawaan; i--) bawaan = (semuaSect[i].match(ref) ?? []).find(r => /w:type="default"/.test(r));
+    const id = bawaan && /r:id="([^"]+)"/.exec(bawaan)?.[1];
+    const rel = id ? rels.get(id) : undefined;
+    if (!rel || rel.luar) return '';
+    const xml = ambil(rel.target.startsWith('/') ? rel.target.slice(1) : `word/${rel.target}`);
+    if (!xml) return '';
+    const tanpaField = xml
+      .replace(/<w:fldSimple\b[^>]*\/>/g, '')
+      .replace(/<w:fldSimple\b[\s\S]*?<\/w:fldSimple>/g, '')
+      .replace(/<w:fldChar\b[^>]*w:fldCharType="begin"[\s\S]*?<w:fldChar\b[^>]*w:fldCharType="end"[^>]*\/>/g, '');
+    const teks = tanpaField.split(/<\/w:p>/).map(p =>
+      [...p.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<w:tab\/>/g)].map(m => m[1] === undefined ? ' ' : dekode(m[1])).join(''));
+    return teks.join(' ').replace(/\s+/g, ' ').trim().slice(0, BATAS_TEKS_KEPALA_KAKI);
+  };
+  return { header: baca('header'), footer: baca('footer') };
 }

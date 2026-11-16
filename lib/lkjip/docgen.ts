@@ -597,11 +597,17 @@ export function entriDaftar(tree: SectionNode[], nomor: Map<number, NomorObjek>)
 // `PGSZ`/`PGSZ_MELINTANG`/`PGMAR` kini dari `./halaman` — keluarannya WAJIB identik.
 
 // Halaman melintang memakai footer sendiri (rId5): tab kanan teks footer harus di tepi kanan bidang tulisnya.
-function sectProps(opts: { footer: boolean; numFmt?: 'lowerRoman' | 'decimal'; start?: number; melintang?: boolean }): string {
+// Header tanpa tab, jadi satu header.xml (rId6) dipakai tegak maupun melintang.
+function sectProps(opts: { footer: boolean; header?: boolean; numFmt?: 'lowerRoman' | 'decimal'; start?: number; melintang?: boolean }): string {
+  const href = opts.header ? `<w:headerReference r:id="rId6" w:type="default"/>` : '';
   const fref = opts.footer ? `<w:footerReference r:id="${opts.melintang ? 'rId5' : 'rId4'}" w:type="default"/>` : '';
   const pgnum = opts.numFmt ? `<w:pgNumType w:fmt="${opts.numFmt}"${opts.start ? ` w:start="${opts.start}"` : ''}/>` : '';
-  return `${fref}${opts.melintang ? PGSZ_MELINTANG : PGSZ}${PGMAR}${pgnum}`;
+  return `${href}${fref}${opts.melintang ? PGSZ_MELINTANG : PGSZ}${PGMAR}${pgnum}`;
 }
+/** Halaman daftar & isi punya header? (sampul tidak pernah) */
+export const adaKepala = (cfg: StyleConfig) => (cfg.headerText ?? '').trim() !== '';
+/** Halaman daftar & isi punya footer? Teks footer tampil walau nomor halaman mati (konsep pratinjau-dan-word D5). */
+export const adaKaki = (cfg: StyleConfig) => cfg.pageNumber || (cfg.footerText ?? '').trim() !== '';
 const sectBreak = (props: string) => `<w:p><w:pPr><w:sectPr>${props}</w:sectPr></w:pPr></w:p>`;
 // Pemisah section di dalam isi dibuat setipis mungkin: paragrafnya ikut memakan tempat, dan di
 // dasar halaman yang penuh tabel ia sendirian bisa melahirkan halaman kosong.
@@ -620,18 +626,43 @@ export function kelompokSection(potongan: Potongan[]): Potongan[] {
   return seg.length ? seg : [{ melintang: false, xml: '' }];
 }
 
+const garisTipis = (sisi: 'top' | 'bottom') => `<w:pBdr><w:${sisi} w:val="single" w:sz="6" w:space="4" w:color="000000"/></w:pBdr>`;
+
+// Bawaan (nomorPosisi 'otomatis', tanpa garis) WAJIB menghasilkan XML yang sama persis dgn sebelum §2:
+// teks kiri + nomor rata kanan lewat tab, tanpa teks nomor di tengah. pPr: pBdr → tabs → jc (urutan skema).
 export function buildFooterXml(cfg: StyleConfig, lebarTulis = LEBAR_TULIS_DXA): string {
   const font = cfg.fontFamily;
   const sz = Math.max(18, Math.round(cfg.fontSizePt * 2) - 4);
   const pageField = field(' PAGE \\* MERGEFORMAT ', '1');
   const text = (cfg.footerText ?? '').trim();
-  const p = text
-    ? `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="${lebarTulis}"/></w:tabs></w:pPr>` +
-      `<w:r>${rPr(font, sz)}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>` +
-      `<w:r><w:tab/></w:r>${pageField}</w:p>`
-    : `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${pageField}</w:p>`;
+  const nomor = cfg.pageNumber;
+  const posisi = cfg.nomorPosisi ?? 'otomatis';
+  const garis = cfg.footerGaris ? garisTipis('top') : '';
+  const runTeks = `<w:r>${rPr(font, sz)}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+  let p: string;
+  if (text && nomor) {
+    const tab = posisi === 'tengah' ? `<w:tab w:val="center" w:pos="${Math.round(lebarTulis / 2)}"/>` : `<w:tab w:val="right" w:pos="${lebarTulis}"/>`;
+    p = `<w:p><w:pPr>${garis}<w:tabs>${tab}</w:tabs></w:pPr>${runTeks}<w:r><w:tab/></w:r>${pageField}</w:p>`;
+  } else if (text) {
+    p = `<w:p><w:pPr>${garis}<w:jc w:val="left"/></w:pPr>${runTeks}</w:p>`;
+  } else if (nomor) {
+    p = `<w:p><w:pPr>${garis}<w:jc w:val="${posisi === 'kanan' ? 'right' : 'center'}"/></w:pPr>${pageField}</w:p>`;
+  } else {
+    p = `<w:p/>`;
+  }
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${p}</w:ftr>`;
+}
+
+const JC_HEADER = { kiri: 'left', tengah: 'center', kanan: 'right' } as const;
+export function buildHeaderXml(cfg: StyleConfig): string {
+  const font = cfg.fontFamily;
+  const sz = Math.max(18, Math.round(cfg.fontSizePt * 2) - 4);
+  const garis = cfg.headerGaris ? garisTipis('bottom') : '';
+  const p = `<w:p><w:pPr>${garis}<w:jc w:val="${JC_HEADER[cfg.headerRata ?? 'tengah']}"/></w:pPr>` +
+    `<w:r>${rPr(font, sz)}<w:t xml:space="preserve">${escapeXml((cfg.headerText ?? '').trim())}</w:t></w:r></w:p>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${p}</w:hdr>`;
 }
 
 // ── styles.xml dinamis ──
@@ -724,9 +755,11 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
 
   // Nomor halaman isi mulai dari 1 HANYA di section isi pertama; section sesudahnya (melintang,
   // lalu tegak lagi) tanpa `start` supaya nomornya bersambung, bukan kembali ke 1 sesudah tabel melintang.
+  const kepala = adaKepala(cfg);
+  const kaki = adaKaki(cfg);
   const propsIsi = (melintang: boolean, pertama: boolean) => cfg.pageNumber
-    ? sectProps({ footer: true, numFmt: 'decimal', start: pertama ? 1 : undefined, melintang })
-    : sectProps({ footer: false, melintang });
+    ? sectProps({ footer: true, header: kepala, numFmt: 'decimal', start: pertama ? 1 : undefined, melintang })
+    : sectProps({ footer: kaki, header: kepala, melintang });
   const rangkai = (seg: Potongan[]) => seg.map((s, i) => i < seg.length - 1
     ? s.xml + sectBreakRapat(propsIsi(s.melintang, i === 0))
     : `${s.xml}<w:sectPr>${propsIsi(s.melintang, i === 0)}</w:sectPr>`).join('');
@@ -735,11 +768,12 @@ export function buildBody(tree: SectionNode[], cfg: StyleConfig, judul: string, 
   let body: string;
   if (cfg.pageNumber && cfg.romanFront) {
     body = `${cover}${sectBreak(sectProps({ footer: false }))}` +
-      `${daftar}${sectBreak(sectProps({ footer: true, numFmt: 'lowerRoman', start: 1 }))}` + rangkai(isi);
+      `${daftar}${sectBreak(sectProps({ footer: true, header: kepala, numFmt: 'lowerRoman', start: 1 }))}` + rangkai(isi);
   } else {
     // Daftar berbagi section dengan awal isi. Kalau isi dibuka tabel melintang, daftar tetap tegak:
     // section-nya diakhiri sendiri (pemisah section sudah membuka halaman baru, jadi tanpa pageBreak).
-    const awal = cfg.pageNumber ? `${cover}${sectBreak(sectProps({ footer: false }))}` : `${cover}${pageBreak()}`;
+    // Sampul tanpa header/footer: section sendiri bila halaman sesudahnya memakai salah satunya.
+    const awal = kepala || kaki ? `${cover}${sectBreak(sectProps({ footer: false }))}` : `${cover}${pageBreak()}`;
     const seg = isi[0].melintang
       ? [{ melintang: false, xml: daftar }, ...isi]
       : [{ melintang: false, xml: `${daftar}${pageBreak()}${isi[0].xml}` }, ...isi.slice(1)];
@@ -842,9 +876,14 @@ export async function rakitDocx(
   const PizZipMod = await import('pizzip');
   const PizZip = PizZipMod.default;
   const zip = new PizZip();
-  zip.file('[Content_Types].xml', CONTENT_TYPES.replace('</Types>', `${images.ctXml}</Types>`));
+  // header.xml hanya bila dipakai: dokumen tanpa header keluar persis seperti sebelum §2.
+  const kepala = adaKepala(cfg);
+  const ctHeader = kepala ? `<Override PartName="/word/header.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>` : '';
+  const relHeader = kepala ? `<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header.xml"/>` : '';
+  zip.file('[Content_Types].xml', CONTENT_TYPES.replace('</Types>', `${ctHeader}${images.ctXml}</Types>`));
   zip.file('_rels/.rels', ROOT_RELS);
-  zip.file('word/_rels/document.xml.rels', DOC_RELS.replace('</Relationships>', `${images.relsXml}</Relationships>`));
+  zip.file('word/_rels/document.xml.rels', DOC_RELS.replace('</Relationships>', `${relHeader}${images.relsXml}</Relationships>`));
+  if (kepala) zip.file('word/header.xml', buildHeaderXml(cfg));
   const numAlloc = makeNumAlloc();
   const docXml = buildBody(detail.tree, cfg, detail.judul, detail.tahun, images.map, numAlloc); // alokasikan numId dulu
   zip.file('word/styles.xml', buildStyles(cfg));

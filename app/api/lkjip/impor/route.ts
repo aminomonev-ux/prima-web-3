@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
   const ttd = hasil.kataPengantar.ttd;
   const style = StyleConfigSchema.parse({
     ...DEFAULT_STYLE, ...(hasil.spasiBawaan ?? {}), firstLineIndentCm: hasil.indenBawaanCm ?? DEFAULT_STYLE.firstLineIndentCm, kataPengantarHtml: hasil.kataPengantar.html,
+    headerText: hasil.kepalaKaki.header, footerText: hasil.kepalaKaki.footer,
     ttdTempatTanggal: ttd.tempatTanggal, ttdJabatan: ttd.jabatan, ttdNama: ttd.nama, ttdPangkat: ttd.pangkat, ttdNip: ttd.nip,
   });
 
