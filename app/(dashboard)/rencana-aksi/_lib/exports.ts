@@ -3,7 +3,7 @@
 import type { RaRow } from './types';
 import { realisasiAkhirTahun, tulisRealisasi, quartersOf, LEVEL_LABELS, outcomeOf, capaianTahunan, capaianRpjmd, capaianTriwulan } from './types';
 import type { CetakFilter } from './cetak-filter';
-import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, catatanPaguCetak, tulisSelCetak } from './cetak-filter';
+import { DEFAULT_CETAK_FILTER, buildCetakRows, cetakRollupBase, cetakHeader, catatanPaguCetak, lebarKolomPdf, tulisSelCetak } from './cetak-filter';
 import { sanitizeCell, loadExcelJs } from '@/lib/shared/excel-export';
 import { tulisDesimal } from '@/lib/shared/desimal';
 import { polosSelExcel } from '@/lib/shared/excel-sel';
@@ -201,13 +201,25 @@ export async function buildCombinedPdf(allRows: RaRow[], tahun: number, filter: 
       ]
     : [[...hdr.lead, ...hdr.tail].map(c => c.header)];
 
+  const tepi = 10;
+  const huruf = 6;
+  const padding = 1.2;
+  const body = hier.map(h => hdr.flat.map(c => tulisSelCetak(c, c.value(h, rollup))));
+  // Kata terpanjang tiap kolom (isi + judul) di ukuran huruf tabel → batas bawah lebar kolom teks.
+  doc.setFontSize(huruf);
+  const kataTerpanjang = (s: string) => s.split(/\s+/).reduce((m, w) => Math.max(m, w ? doc.getTextWidth(w) : 0), 0);
+  const minKata = hdr.flat.map((c, i) =>
+    Math.max(kataTerpanjang(c.header) * 1.1, ...body.map(r => kataTerpanjang(r[i]))) + 2 * padding + 0.6);
+  const lebar = lebarKolomPdf(hdr.flat, doc.internal.pageSize.getWidth() - 2 * tepi, minKata);
   autoTable(doc, {
     startY: 26,
+    margin: { left: tepi, right: tepi },
+    tableWidth: lebar.reduce((s, v) => s + v, 0),
     head,
-    body: hier.map(h => hdr.flat.map(c => tulisSelCetak(c, c.value(h, rollup)))),
-    styles: { fontSize: 7, cellPadding: 1.5 },
-    headStyles: { fillColor: [124, 92, 252], textColor: 255, fontSize: 7, halign: 'center' },
-    columnStyles: { 0: { cellWidth: 8 } },
+    body,
+    styles: { fontSize: huruf, cellPadding: padding, overflow: 'linebreak', valign: 'top' },
+    headStyles: { fillColor: [124, 92, 252], textColor: 255, fontSize: huruf, halign: 'center', valign: 'middle' },
+    columnStyles: Object.fromEntries(hdr.flat.map((c, i) => [i, { cellWidth: lebar[i], halign: c.align }])),
   });
 
   const catatan = catatanPaguCetak(rollup, filter);

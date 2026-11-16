@@ -239,6 +239,32 @@ export function cetakHeader(f: CetakFilter): CetakHeader {
   return { lead, twQuarters, tail, flat };
 }
 
+// Lebar kolom PDF Gabungan (mm). Dulu hanya kolom No yang diberi lebar dan jsPDF membagi sisanya
+// sendiri: kolom angka TW/Anggaran merebut tempat sehingga Indikator tinggal ± 6 mm dan katanya
+// patah per huruf ("Usi / a H / ara / pan"). Kini tiap kolom paling sempit selebar kata terpanjangnya
+// (`minKata`, diukur pembuat PDF di ukuran huruf tabel); kolom angka berhenti di situ (bobot 0) dan
+// sisa lebar halaman dibagi ke kolom uraian.
+const KOLOM_ANGKA_PDF = new Set(['no', 'rpjmd', 'tahunan', 'akhir', 'capaian', 'anggaran', 'jenis', 'satuan']);
+const BOBOT_TEKS_PDF: Record<string, number> = { indikator: 3, outcome: 2, sumber_anggaran: 1.5 };
+export const LEBAR_MIN_TEKS_PDF = 10;
+const LEBAR_MIN_ANGKA_PDF = 6;
+/** Satu "kata" sepanjang tautan tidak boleh merebut seluruh halaman. */
+export const LEBAR_MAKS_KATA_PDF = 30;
+
+export function lebarKolomPdf(flat: readonly CetakColumn[], lebarTersedia: number, minKata: readonly number[] = []): number[] {
+  const angka = (c: CetakColumn) => KOLOM_ANGKA_PDF.has(c.key) || /^tw\d[tr]$/.test(c.key);
+  const min = flat.map((c, i) => Math.max(angka(c) ? LEBAR_MIN_ANGKA_PDF : LEBAR_MIN_TEKS_PDF,
+    Math.min(minKata[i] ?? 0, LEBAR_MAKS_KATA_PDF)));
+  const bobot = (c: CetakColumn) => (angka(c) ? 0 : BOBOT_TEKS_PDF[c.key] ?? 1);
+  const totalBobot = flat.reduce((s, c) => s + bobot(c), 0);
+  const sisa = lebarTersedia - min.reduce((s, v) => s + v, 0);
+  const lebar = flat.map((c, i) => min[i] + Math.max(0, sisa) * bobot(c) / (totalBobot || 1));
+  // Kolom terlalu banyak untuk satu halaman: seluruh lebar disusutkan sebanding supaya tabel tetap
+  // muat (kata panjang boleh patah, tapi tidak ada kolom yang terpotong di tepi kertas).
+  const jumlah = lebar.reduce((s, v) => s + v, 0);
+  return jumlah > lebarTersedia ? lebar.map(v => v * lebarTersedia / jumlah) : lebar;
+}
+
 export function cetakColumns(f: CetakFilter): CetakColumn[] {
   return cetakHeader(f).flat;
 }

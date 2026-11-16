@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs'
 import type { RaRow } from '../app/(dashboard)/rencana-aksi/_lib/types'
 import { capaianTahunan, capaianRpjmd, capaianTriwulan, hitungCapaianPct, realisasiAkhirTahun } from '../app/(dashboard)/rencana-aksi/_lib/types'
-import { cetakHeader, tulisSelCetak, tulisCapaian, DEFAULT_CETAK_FILTER, type CetakFilter } from '../app/(dashboard)/rencana-aksi/_lib/cetak-filter'
+import { cetakHeader, lebarKolomPdf, tulisSelCetak, tulisCapaian, DEFAULT_CETAK_FILTER, type CetakFilter } from '../app/(dashboard)/rencana-aksi/_lib/cetak-filter'
 import { buatWorkbookGabungan, buildCombinedPdf } from '../app/(dashboard)/rencana-aksi/_lib/exports'
 import { tulisPersen } from '../lib/shared/desimal'
 
@@ -203,6 +203,38 @@ ok('G7 unduhan per indikator: tak ada hitungCapaianPct tersisa', !ekspor.include
 const entri = kode('app/(dashboard)/rencana-aksi/_components/DataEntryForm.tsx')
 ok('G8 dialog ubah jenis lewat capaianTahunan', !entri.includes('hitungCapaianPct(')
   && entri.includes('const sebelum = capaianTahunan(barisAsli)'))
+
+console.log('\nH. Lebar kolom PDF gabungan (kata tidak patah di tengah)')
+{
+  const flat = cetakHeader({ ...DEFAULT_CETAK_FILTER, showSumberAnggaran: true }).flat
+  const idx = (k: string) => flat.findIndex(c => c.key === k)
+  const minKata = flat.map((_, i) => (i === idx('program') ? 24 : 8))
+  const l = lebarKolomPdf(flat, 277, minKata)
+  const jumlah = l.reduce((s, v) => s + v, 0)
+  ok('H1 total lebar tidak melebihi halaman', jumlah <= 277 + 1e-9, String(jumlah))
+  ok('H2 kolom teks tidak di bawah kata terpanjangnya selama muat', l[idx('program')] >= 24, String(l[idx('program')]))
+  ok('H3 kolom angka selebar isinya (tidak ikut dibagi sisa)', l[idx('tw1t')] === Math.max(6, 8) && l[idx('anggaran')] === 8)
+  ok('H4 sisa lebar terbanyak ke Indikator', l[idx('indikator')] > l[idx('outcome')] && l[idx('outcome')] > l[idx('kegiatan')])
+  const sesak = lebarKolomPdf(flat, 100, flat.map(() => 20))
+  ok('H5 kolom terlalu banyak: disusutkan sebanding, tetap muat', Math.abs(sesak.reduce((s, v) => s + v, 0) - 100) < 1e-9)
+  // Tanpa batas, kata 999 mm merebut ± 80% halaman dan kolom lain disusutkan sampai patah.
+  ok('H6 satu kata sepanjang tautan dibatasi', lebarKolomPdf(flat, 300, flat.map((_, i) => (i === idx('indikator') ? 999 : 8)))[idx('indikator')] < 150)
+
+  const panjang = semua.map((r, i) => i === 0 ? { ...r, indikator: 'Penyelenggaraan Pemberdayaan Kemitraan Peningkatan Gondohutomo' } : r)
+  const doc = await buildCombinedPdf(panjang, 2099, { ...DEFAULT_CETAK_FILTER, showSumberAnggaran: true })
+  const t = (doc as unknown as { lastAutoTable: { body: { cells: Record<string, { text: string[]; raw: unknown }> }[] } }).lastAutoTable
+  let patah = 0
+  for (const r of t.body) for (const cell of Object.values(r.cells)) {
+    const asli = String(cell.raw ?? '').replace(/\s+/g, ' ')
+    for (let k = 0; k + 1 < cell.text.length; k++) {
+      const ujung = cell.text[k].trimEnd().split(' ').pop() ?? '', awal = cell.text[k + 1].trimStart().split(' ')[0] ?? ''
+      if (/\p{L}$/u.test(ujung) && /^\p{L}/u.test(awal) && asli.includes(ujung + awal) && !asli.includes(`${ujung} ${awal}`)) patah++
+    }
+  }
+  ok('H7 PDF sungguhan: tidak ada kata yang patah di tengah', patah === 0, `${patah} kata patah`)
+  ok('H8 lebar kolom lewat lebarKolomPdf + minKata', /lebarKolomPdf\(hdr\.flat, .*, minKata\);/.test(ekspor)
+    && /cellWidth: lebar\[i\]/.test(ekspor))
+}
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)
 if (gagal.length) { console.log('GAGAL: ' + gagal.join(', ')); process.exit(1) }
