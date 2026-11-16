@@ -101,6 +101,12 @@ console.log('D. Sambungan rute & layar')
   ok('D14 plafon konversi PDF tidak ikut naik saat permintaan dipecah',
     rute.includes("'unduh-massal-pdf', 6") && rute.includes("'unduh-massal', 10"))
   ok('D15 jumlah dokumen dibatasi sebelum menembak server', layar.includes('terpilih.length > BATAS_UNDUH_MASSAL'))
+  ok('D16 unduhan panjang bisa dihentikan (AbortController + tombol Hentikan)',
+    layar.includes('new AbortController()') && layar.includes('batalMassal.current.abort()')
+    && layar.includes('>Hentikan<'))
+  ok('D17 permintaan ikut dibatalkan, bukan cuma label tombolnya',
+    /credentials: 'include', signal,/.test(layar) && /signal\.aborted\) return[\s\S]*?simpanBlob\(/.test(layar))
+  ok('D18 berhenti = tidak ada berkas yang disimpan', layar.includes('Unduhan dihentikan. Tidak ada berkas yang disimpan.'))
 }
 
 console.log(`\n${lulus} lulus, ${gagal.length} gagal`)

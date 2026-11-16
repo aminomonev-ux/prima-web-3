@@ -66,6 +66,10 @@ logo, dan tabel sama.
   permintaan bisa menembus `proxy_read_timeout` Nginx (504) setelah LibreOffice bekerja, jadi
   layar meminta per potongan lalu menggabungkan ZIP-nya di peramban (PizZip, diimpor saat
   dipakai). Pagar server tetap sama — kepemilikan, lampiran, dan audit per berkas tidak berubah.
+  Selama proses berjalan tombolnya berganti jadi **Hentikan** (AbortController): permintaan yang
+  sedang jalan dibatalkan dan potongan berikutnya tidak dikirim, tanpa ZIP separuh tersimpan.
+  Batas 5 terbukti dari pengukuran mesin ini (2026-11-16): 3,5 detik/dokumen → 5 dokumen ≈ 17,7
+  detik, 10 dokumen ≈ 35 detik; Nginx bawaan memutus di 60 detik.
 
 ## 6. Pemasangan di server kantor
 

@@ -99,6 +99,9 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
   const [pilihMassal, setPilihMassal] = useState<'word' | 'pdf' | null>(null)
   const [sibukMassal, setSibukMassal] = useState(false)
   const [progresMassal, setProgresMassal] = useState('')
+  // Unduh massal PDF bisa puluhan detik; tanpa jalan keluar, satu salah pilih berarti menunggu
+  // sampai selesai. Abort membatalkan permintaan yang sedang jalan dan menghentikan potongan berikutnya.
+  const batalMassal = useRef<AbortController | null>(null)
 
   // Hanya SUPER_ADMIN + ADMIN boleh hapus dokumen FINAL (mirror backend gate).
   const canDeleteFinal = role === 'SUPER_ADMIN' || role === 'ADMIN'
@@ -223,17 +226,17 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
 
   /** Satu permintaan ZIP ke server. PDF dipanggil per potongan, bukan sekaligus. */
   async function mintaZip(
-    ids: number[], format: 'word' | 'pdf', sumber?: string, versi?: string,
+    ids: number[], format: 'word' | 'pdf', sumber: string | undefined, versi: string | undefined, signal: AbortSignal,
   ): Promise<{ ok: true; blob: Blob; dilewati: number } | { ok: false; message: string }> {
     let res: Response
     try {
       res = await fetch('/api/perjanjian-kinerja/dokumen/bulk-download', {
-        method: 'POST', credentials: 'include',
+        method: 'POST', credentials: 'include', signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, format, ...(sumber && versi ? { sumber, versi } : {}) }),
       })
     } catch {
-      return { ok: false, message: 'Server tidak terjangkau.' }
+      return { ok: false, message: signal.aborted ? 'dibatalkan' : 'Server tidak terjangkau.' }
     }
     if (!res.ok) {
       let message = `Gagal menyiapkan ZIP (HTTP ${res.status})`
@@ -266,6 +269,8 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
     const [sumber, versi] = kunci ? kunci.split('|') : [undefined, undefined]
     setPilihMassal(null)
     setSibukMassal(true)
+    const ac = new AbortController()
+    batalMassal.current = ac
     try {
       // PDF dipecah: 10 konversi dalam satu permintaan bisa menembus proxy_read_timeout Nginx
       // (504) padahal LibreOffice sudah bekerja — hasilnya hilang tanpa jejak di layar.
@@ -273,14 +278,18 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
       const hasil: Blob[] = []
       let dilewati = 0
       for (const [i, bagian] of potongan.entries()) {
+        if (ac.signal.aborted) return
         setProgresMassal(format === 'pdf'
           ? `bagian ${i + 1}/${potongan.length} — ${bagian.length} dokumen…`
           : 'menyiapkan ZIP…')
-        const r = await mintaZip(bagian, format, sumber, versi)
+        const r = await mintaZip(bagian, format, sumber, versi, ac.signal)
+        if (ac.signal.aborted) return
         if (!r.ok) { showToast('err', r.message); return }
         dilewati += r.dilewati
         hasil.push(r.blob)
       }
+      // Dihentikan tepat sebelum berkas disimpan: jangan tinggalkan ZIP separuh di unduhan.
+      if (ac.signal.aborted) return
       simpanBlob(
         hasil.length === 1 ? hasil[0] : await gabungZip(hasil),
         `PK-${tahun}-${ids.length - dilewati}-dokumen.zip`,
@@ -289,9 +298,16 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
       showToast('ok', `${ids.length - dilewati} dokumen diunduh dalam satu ZIP.`
         + (dilewati ? ` ${dilewati} dilewati karena bukan dokumen Anda.` : ''))
     } finally {
+      batalMassal.current = null
       setSibukMassal(false)
       setProgresMassal('')
     }
+  }
+
+  function hentikanMassal() {
+    if (!batalMassal.current) return
+    batalMassal.current.abort()
+    showToast('ok', 'Unduhan dihentikan. Tidak ada berkas yang disimpan.')
   }
 
   return (
@@ -350,7 +366,9 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
             onClick={() => mulaiMassal('word')}>Unduh Word</PrimaButton>
           <PrimaButton variant="primary" iconLeft={<FileDown size={14} />} disabled={sibukMassal}
             onClick={() => mulaiMassal('pdf')}>Unduh PDF</PrimaButton>
-          <PrimaButton variant="ghost" disabled={sibukMassal} onClick={kosongkanPilihan}>Batalkan pilihan</PrimaButton>
+          {sibukMassal
+            ? <PrimaButton variant="danger" iconLeft={<X size={14} />} onClick={hentikanMassal}>Hentikan</PrimaButton>
+            : <PrimaButton variant="ghost" onClick={kosongkanPilihan}>Batalkan pilihan</PrimaButton>}
           {sibukMassal && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#FAC775' }}>
               <Loader2 size={13} className="pk-spin" /> {progresMassal || 'Menyiapkan ZIP…'}
