@@ -52,8 +52,12 @@ export const barisRekapPergeseran = (rows: readonly PergeseranBaris[]): AuditPjR
   rows.map(r => ({ ...r, jumlah: r.pergeseran })) as unknown as AuditPjRow[]
 
 export interface NominalUnit {
-  /** Label PJ yang dipetakan ke unit, beserta subtotalnya di versi ini (0 + `ada:false` = tidak ditemukan). */
-  per: Array<{ label: string; nominal: number; ada: boolean }>
+  /**
+   * Label PJ yang dipetakan ke unit, beserta subtotalnya di versi ini (0 + `ada:false` = tidak
+   * ditemukan). `items` = baris yang membentuk subtotal itu, dari pengelompokan yang SAMA —
+   * lampiran PK memakainya sebagai rincian, jadi jumlahnya tidak mungkin berbeda dari subtotal.
+   */
+  per: Array<{ label: string; nominal: number; ada: boolean; items: ItemPj[] }>
   total: number
   /** Baris yang uangnya terhitung di DUA PJ, dan salah satunya PJ milik unit ini. */
   dobel: AuditDoubleEntry[]
@@ -69,9 +73,12 @@ export interface NominalUnit {
  */
 export function nominalUntukUnit(rows: readonly AuditPjRow[], labels: readonly string[]): NominalUnit {
   const kunci = (s: string) => rapikanPj(s).toLowerCase()
-  const perKunci = new Map(kelompokPerPj(rows).map(g => [kunci(g.pj), g.subtotal]))
+  const perKunci = new Map(kelompokPerPj(rows).map(g => [kunci(g.pj), g]))
   const dicari = [...new Map(labels.filter(l => adaPj(rapikanPj(l))).map(l => [kunci(l), rapikanPj(l)])).entries()]
-  const per = dicari.map(([k, label]) => ({ label, nominal: perKunci.get(k) ?? 0, ada: perKunci.has(k) }))
+  const per = dicari.map(([k, label]) => {
+    const grup = perKunci.get(k)
+    return { label, nominal: grup?.subtotal ?? 0, ada: grup !== undefined, items: grup?.items ?? [] }
+  })
   const milik = new Set(dicari.map(([k]) => k))
 
   const audit = auditRekapPJ([...rows])

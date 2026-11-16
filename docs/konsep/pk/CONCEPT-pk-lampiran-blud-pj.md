@@ -14,7 +14,8 @@ anggaran BLUD per penanggung jawab (seperti Cetak → Rekap PJ di BLUD), dan bis
    bukan dibekukan saat finalisasi — tanpa tabel baru, dan PK FINAL lama langsung bisa memakainya.
 2. Versi yang totalnya **tidak sama** dengan nominal BLUD PK **boleh dipilih**; lampiran memuat
    catatan merah "Jumlah ini lebih/kurang Rp … dari nominal BLUD di Perjanjian Kinerja (Rp …)".
-3. Isi **per PJ saja** (nama, subtotal, jumlah) — hanya PJ milik unit pihak pertama.
+3. Isi **per PJ beserta rinciannya** (nama + subtotal tebal, lalu baris uraian pembentuknya) — hanya
+   PJ milik unit pihak pertama (2026-11-16: sebelumnya subtotal saja).
 4. PDF lewat **LibreOffice di server** (pilihan A). Preview lama (docx-preview → foto halaman →
    PDF gambar) tidak pernah bisa sama dengan Word: pemenggalan baris & halaman dihitung peramban.
 
@@ -25,8 +26,10 @@ anggaran BLUD per penanggung jawab (seperti Cetak → Rekap PJ di BLUD), dan bis
   tidak menyimpan bagian BLUD-nya terpisah → kecocokan **tidak diperiksa** dan disebut begitu.
   PK tanpa BLUD sama sekali tidak ditawari lampiran (langsung jalan).
 - **Angka per PJ** = `nominalBludUnit` (`lib/data/pk-blud-nominal.ts`) — aturan yang sama dengan
-  tombol ✎ Form PK dan Cetak Rekap PJ. Pergeseran = pagu PASCA-geser. Label peta yang tidak ada di
-  versi itu ditulis "tidak ditemukan", bukan 0. Baris dobel PJ disebut.
+  tombol ✎ Form PK dan Cetak Rekap PJ. Pergeseran = pagu PASCA-geser. Rincian di bawah tiap PJ =
+  `items` dari `kelompokPerPj` yang sama, jadi jumlahnya tidak mungkin berbeda dari subtotalnya.
+  Label peta yang tidak ada di versi itu ditulis **`-`**, bukan 0 dan bukan kalimat catatan (sebabnya
+  sudah terbaca dari stripnya, dan totalnya memang tidak bertambah). Baris dobel PJ disebut.
 - **Berkas FINAL di database tidak pernah diubah**: lampiran disisipkan ke SALINAN saat diunduh,
   sebelum `<w:sectPr>` badan (mewarisi tata halaman bagian terakhir), diawali pemisah halaman.
 - Kecocokan diperiksa ulang **tiap kali** dibuka — isi versi BLUD bisa berubah (simpan ulang di
@@ -69,5 +72,5 @@ LibreOffice semuanya tetap jalan kecuali PDF asli.
 - Tombol unduh Word di Form PK tetap tanpa lampiran (lampiran hanya dari Riwayat).
 - PDF pertama sesudah server menyala lebih lambat (± 10 detik) karena LibreOffice dimulai.
 
-Regresi: `npx tsx --env-file=.env.local scripts/test-pk-lampiran-blud.mts` (35; bagian D MySQL
+Regresi: `npx tsx --env-file=.env.local scripts/test-pk-lampiran-blud.mts` (38; bagian D MySQL
 kotak pasir 2073, bagian E LibreOffice sungguhan; `SIMPAN=1` membiarkan data untuk uji layar).

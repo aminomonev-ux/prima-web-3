@@ -44,34 +44,33 @@ export function kecocokan(total: number, pk: BludDokumen): Kecocokan {
   return Math.round(total) === Math.round(pk.nominal) ? 'cocok' : 'beda';
 }
 
+export interface BarisRincianPj {
+  uraian: string;
+  jumlah: number;
+}
+
 export interface IsiLampiranBlud {
   unit: string;
   /** "Pergeseran BLUD versi 31 Oktober 2026 · DPA Perubahan ke-1" */
   sumber: string;
-  per: Array<{ label: string; nominal: number; ada: boolean }>;
+  /** `items` = rincian pembentuk subtotal, dari pengelompokan yang sama dengan Cetak Rekap PJ. */
+  per: Array<{ label: string; nominal: number; ada: boolean; items: ReadonlyArray<BarisRincianPj> }>;
   total: number;
   pk: BludDokumen;
   dobel: number;
 }
 
 /** Kalimat catatan di bawah tabel — dipakai Word DAN dialog pemilih (satu bunyi). */
-export function catatanLampiran(isi: Pick<IsiLampiranBlud, 'per' | 'total' | 'pk' | 'dobel'>): Array<{ teks: string; merah: boolean }> {
+export function catatanLampiran(isi: Pick<IsiLampiranBlud, 'total' | 'pk' | 'dobel'>): Array<{ teks: string; merah: boolean }> {
   const out: Array<{ teks: string; merah: boolean }> = [];
-  const hilang = isi.per.filter(p => !p.ada).map(p => p.label);
-  if (hilang.length) out.push({ teks: `Penanggung jawab tidak ditemukan di versi ini: ${hilang.join(', ')}.`, merah: false });
-  const c = kecocokan(isi.total, isi.pk);
-  if (c === 'beda') {
+  // PJ yang tidak ada ditandai '-' di tabel; kalimat sebabnya tidak diulang di kertas.
+  // Baris gabungan ("APBD & BLUD") juga tidak lagi bercatatan — pemeriksaannya memang tidak bisa.
+  if (kecocokan(isi.total, isi.pk) === 'beda') {
     const selisih = isi.total - isi.pk.nominal;
     out.push({
       teks: `Jumlah ini ${selisih > 0 ? 'lebih' : 'kurang'} Rp ${nominalAnggaran(Math.abs(selisih))} dari nominal BLUD `
         + `di Perjanjian Kinerja (Rp ${nominalAnggaran(isi.pk.nominal)}).`,
       merah: true,
-    });
-  } else if (c === 'tak-diperiksa') {
-    out.push({
-      teks: 'Sebagian anggaran Perjanjian Kinerja tercatat gabungan (mis. "APBD & BLUD"), '
-        + 'jadi kecocokan dengan nominal BLUD tidak bisa diperiksa.',
-      merah: false,
     });
   }
   if (isi.dobel > 0) out.push({ teks: `${isi.dobel} baris anggaran tercatat di dua penanggung jawab.`, merah: false });
@@ -98,10 +97,11 @@ const paragraf = (teks: string, o: { tebal?: boolean; rata?: 'left' | 'center'; 
 const GARIS = '<w:tcBorders>' + ['top', 'left', 'bottom', 'right']
   .map(s => `<w:${s} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('') + '</w:tcBorders>';
 
-function sel(teks: string, lebar: number, rata: 'left' | 'center' | 'right', tebal = false, bentang = 0): string {
+function sel(teks: string, lebar: number, rata: 'left' | 'center' | 'right', tebal = false, bentang = 0, menjorok = false): string {
   return `<w:tc><w:tcPr><w:tcW w:w="${lebar}" w:type="dxa"/>${bentang ? `<w:gridSpan w:val="${bentang}"/>` : ''}${GARIS}`
     + '<w:vAlign w:val="center"/></w:tcPr>'
-    + `<w:p><w:pPr><w:spacing w:before="40" w:after="40" w:line="240" w:lineRule="auto"/><w:jc w:val="${rata}"/>${huruf(tebal)}</w:pPr>`
+    + `<w:p><w:pPr><w:spacing w:before="40" w:after="40" w:line="240" w:lineRule="auto"/>`
+    + `${menjorok ? '<w:ind w:left="240"/>' : ''}<w:jc w:val="${rata}"/>${huruf(tebal)}</w:pPr>`
     + (teks ? `<w:r>${huruf(tebal)}<w:t xml:space="preserve">${escapeXml(teks)}</w:t></w:r>` : '')
     + '</w:p></w:tc>';
 }
@@ -115,10 +115,14 @@ export function buildLampiranBludXml(isi: IsiLampiranBlud): string {
   const lebar = kNo + kPj + kRp;
   const kepala = baris(sel('NO', kNo, 'center', true) + sel('Penanggung Jawab', kPj, 'center', true)
     + sel('Anggaran (Rp)', kRp, 'center', true), true);
+  // Satu baris kepala per PJ (tebal + subtotal), lalu baris rincian pembentuknya. PJ yang tidak
+  // ada di versi itu cukup '-': sebabnya tidak dicetak, dan totalnya memang tidak bertambah.
   const badan = isi.per.map((p, i) => baris(
-    sel(String(i + 1), kNo, 'center') + sel(p.label, kPj, 'left')
-    + sel(p.ada ? nominalAnggaran(p.nominal) : 'tidak ditemukan', kRp, 'right'),
-  )).join('');
+    sel(String(i + 1), kNo, 'center') + sel(p.label, kPj, 'left', true)
+    + sel(p.ada ? nominalAnggaran(p.nominal) : '-', kRp, p.ada ? 'right' : 'center', true),
+  ) + (p.ada ? p.items.map(it => baris(
+    sel('', kNo, 'center') + sel(it.uraian, kPj, 'left', false, 0, true) + sel(nominalAnggaran(it.jumlah), kRp, 'right'),
+  )).join('') : '')).join('');
   const jumlah = baris(sel('Jumlah', kNo + kPj, 'center', true, 2) + sel(nominalAnggaran(isi.total), kRp, 'right', true));
   const tabel = '<w:tbl><w:tblPr>'
     + `<w:tblW w:w="${lebar}" w:type="dxa"/><w:jc w:val="center"/><w:tblLayout w:type="fixed"/></w:tblPr>`

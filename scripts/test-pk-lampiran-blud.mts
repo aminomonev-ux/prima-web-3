@@ -36,18 +36,29 @@ ok('A5 kecocokan', kecocokan(400, pk1) === 'cocok' && kecocokan(401, pk1) === 'b
 console.log('B. Halaman lampiran Word')
 const isi: IsiLampiranBlud = {
   unit: 'Kabid <Uji> & Co', sumber: 'Pergeseran BLUD versi 15 Maret 2073',
-  per: [{ label: 'Kasi A', nominal: 1250000, ada: true }, { label: 'Kasi Salah Eja', nominal: 0, ada: false }],
+  per: [
+    { label: 'Kasi A', nominal: 1250000, ada: true, items: [{ uraian: 'Obat', jumlah: 1000000 }, { uraian: 'ATK', jumlah: 250000 }] },
+    { label: 'Kasi Salah Eja', nominal: 0, ada: false, items: [] },
+  ],
   total: 1250000, pk: { ada: true, nominal: 1000000, campuran: false }, dobel: 2,
-}
-const xml = buildLampiranBludXml(isi)
+};
+const xml = buildLampiranBludXml(isi);
 ok('B1 diawali pemisah halaman', xml.startsWith('<w:p><w:r><w:br w:type="page"/></w:r></w:p>'))
 ok('B2 judul, unit (di-escape), sumber', xml.includes('RINCIAN ANGGARAN BLUD PER PENANGGUNG JAWAB') && xml.includes('Kabid &lt;Uji&gt; &amp; Co') && xml.includes('Pergeseran BLUD versi 15 Maret 2073'))
 ok('B3 baris PJ + nominal ribuan bertitik + Jumlah', xml.includes('Kasi A') && xml.includes('1.250.000') && xml.includes('>Jumlah<'))
-ok('B4 PJ yang tidak ada di versi itu tertulis "tidak ditemukan", bukan 0', xml.includes('tidak ditemukan') && /Penanggung jawab tidak ditemukan di versi ini: Kasi Salah Eja/.test(xml))
+ok('B4 PJ yang tidak ada di versi itu cukup "-", tanpa kalimat \'tidak ditemukan\'',
+  xml.includes('>-</w:t>') && !xml.includes('tidak ditemukan') && !/Penanggung jawab tidak ditemukan/.test(xml))
+ok('B4b rincian pembentuk subtotal ikut tercetak, menjorok, urut sesudah kepala PJ-nya',
+  xml.indexOf('Obat') > xml.indexOf('Kasi A') && xml.indexOf('ATK') > xml.indexOf('Obat')
+  && xml.includes('<w:ind w:left="240"/>') && xml.includes('1.000.000') && xml.includes('250.000'))
+const detail = isi.per.filter(p => p.ada).flatMap(p => p.items)
+ok('B4c jumlah rincian = subtotal tiap PJ', isi.per.every(p => p.items.reduce((s, i) => s + i.jumlah, 0) === p.nominal)
+  && detail.reduce((s, i) => s + i.jumlah, 0) === isi.total)
 const cat = catatanLampiran(isi)
 ok('B5 selisih dengan nominal PK ditulis merah', cat.some(c => c.merah && c.teks.includes('lebih Rp 250.000') && c.teks.includes('Rp 1.000.000')) && xml.includes('<w:color w:val="C00000"/>'))
-ok('B6 cocok → tanpa catatan merah', !catatanLampiran({ ...isi, total: 1000000, per: [isi.per[0]], dobel: 0 }).length)
-ok('B7 gabungan → catatan "tidak bisa diperiksa", tidak merah', catatanLampiran({ ...isi, pk: { ...isi.pk, campuran: true } }).some(c => !c.merah && /tidak bisa diperiksa/.test(c.teks)))
+ok('B6 cocok → tanpa catatan', !catatanLampiran({ ...isi, total: 1000000, dobel: 0 }).length)
+ok('B7 gabungan → tanpa catatan apa pun (tidak diperiksa, tapi tidak dicetak)',
+  !catatanLampiran({ ...isi, pk: { ...isi.pk, campuran: true }, dobel: 0 }).length)
 ok('B8 baris dobel disebut', cat.some(c => c.teks.startsWith('2 baris anggaran tercatat di dua')))
 
 // Berkas Word sungguhan dari templat PK (placeholder apa adanya — yang diuji letak sisipan).
@@ -132,6 +143,8 @@ try {
       'pergeseran:2073-03-15:400000000:cocok,dpa:2073-03-01:400000000:cocok,dpa:2073-01-31:300000000:beda', JSON.stringify(p))
   const isiP = await isiLampiranBlud(dok, 'pergeseran', '2073-03-15')
   ok('D2 isi Pergeseran = angka PASCA-geser per PJ', isiP.total === 400000000 && isiP.per.map(x => `${x.label}=${x.nominal}`).join() === 'UJI LB Kasi=120000000,UJI LB PJ Lain=280000000', JSON.stringify(isiP.per))
+  ok('D2b rincian per PJ dari baris yang sama & berjumlah subtotal', isiP.per.every(x => x.items.reduce((s, i) => s + i.jumlah, 0) === x.nominal)
+    && isiP.per[0].items.map(i => `${i.uraian}=${i.jumlah}`).join() === 'Obat=120000000', JSON.stringify(isiP.per.map(x => x.items)))
   ok('D3 sumber menyebut versi bertanggal Indonesia', isiP.sumber === 'Pergeseran BLUD versi 15 Maret 2073', isiP.sumber)
   const isiBeda = await isiLampiranBlud(dok, 'dpa', '2073-01-31')
   ok('D4 versi berbeda → catatan merah "kurang Rp 100.000.000"', catatanLampiran(isiBeda).some(x => x.merah && x.teks.includes('kurang Rp 100.000.000')))
