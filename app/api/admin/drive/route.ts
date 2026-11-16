@@ -1,6 +1,6 @@
 // /api/admin/drive — panel "Drive & Backup" (SUPER_ADMIN saja).
 // GET = status (hanya membaca DB, tidak memanggil Google). POST aksi=uji = tombol UJI;
-// aksi=atur_induk = isi/kosongkan folder induk. Konsep: docs/CONCEPT-drive-terpusat.md §8, §10, §18.
+// aksi=atur_induk = isi/kosongkan folder induk. Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §8, §10, §18.
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSession } from '@/lib/security/auth';
@@ -17,7 +17,7 @@ const BodySchema = z.discriminatedUnion('aksi', [
   z.object({
     aksi: z.literal('atur_induk'),
     // Kosong = hapus isian panel (kembali ke GOOGLE_DRIVE_FOLDER_ID_ROOT di .env.local).
-    folder_id: z.string().trim().max(128).refine((v) => v === '' || POLA_ID_DRIVE.test(v), 'ID folder tidak sah — salin bagian ujung URL …/folders/<ID>, bukan URL-nya.'),
+    folder_id: z.string().trim().max(128).refine((v) => v === '' || POLA_ID_DRIVE.test(v), 'ID folder tidak sah. Salin bagian ujung URL …/folders/<ID>, bukan URL-nya.'),
   }),
 ]);
 

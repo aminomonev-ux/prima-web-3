@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 // scripts/test-tahap-9.mts — penjaga regresi Tahap 9 (P5 Mode BACA-SAJA).
-// Konsep: docs/CONCEPT-pusat-akses-satu-pintu.md §12 P5, §17.2 Tahap 9.
+// Konsep: docs/konsep/sistem/CONCEPT-pusat-akses-satu-pintu.md §12 P5, §17.2 Tahap 9.
 //
 // Bagian A menguji PERILAKU (fungsi murni dari registry). B–F statis: `guard.ts`
 // menyeret mysql2 + `next/headers` + JWT_SECRET, jadi ia tidak bisa diimpor dari sini —
@@ -446,9 +446,16 @@ for (const m of MODUL_BERSAKELAR) {
   }
 
   const perender = semuaBerkas(akar).filter((f) => buangKomentar(baca(f)).includes('<SpandukBeku'))
+  // Kerangka bersama (mis. BbaShell untuk 3 halaman BBA) merender spanduk atas nama klien
+  // yang mengoper `beku={beku}` kepadanya — klien itu ikut terhitung.
+  const kerangka = perender.map((f) => f.split('/').pop()!.replace(/\.tsx$/, ''))
+  const lewatKerangka = semuaBerkas(akar).filter((f) => !perender.includes(f)).filter((f) => {
+    const t = buangKomentar(baca(f))
+    return kerangka.some((k) => new RegExp(`<${k}\\b[^>]*\\bbeku=\\{beku\\}`).test(t))
+  })
   const wajib = Math.max(1, hasil.filter(([, v]) => v === 'sendiri').length)
-  cek(`${m.kunci} benar-benar merender spanduknya`, perender.length >= wajib,
-    `${perender.length} berkas (min ${wajib})`)
+  cek(`${m.kunci} benar-benar merender spanduknya`, perender.length + lewatKerangka.length >= wajib,
+    `${perender.length} berkas + ${lewatKerangka.length} lewat kerangka (min ${wajib})`)
   // Spread, bukan prop satu per satu: `global` ditambahkan P12 dan hanya ikut lewat
   // spread. Mengetik `pesan={…} sampai={…}` melewatkannya tanpa satu galat tipe pun.
   for (const f of perender) {

@@ -1,7 +1,7 @@
 'use client';
 // app/(dashboard)/admin/_panels/TabDriveBackup.tsx — "Drive & Backup" (SUPER_ADMIN).
 // Folder induk, tombol UJI, kesehatan per tujuan, 10 backup terakhir.
-// Konsep: docs/CONCEPT-drive-terpusat.md §8, §10, §18.
+// Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §8, §10, §18.
 import { useCallback, useEffect, useState } from 'react';
 import { HardDrive, PlayCircle, Save } from 'lucide-react';
 import { toast } from 'sonner';
@@ -58,8 +58,8 @@ function SalinanLampiran({ r }: { r: RingkasSalinan | null }) {
   if (!r) {
     return (
       <div style={teks}>
-        Belum ada. Salinan dibuat skrip backup harian (<code>scripts/backup-db.js</code>) sesudah backup database —
-        jalankan sekali di server untuk memulai.
+        Belum ada. Salinan dibuat skrip backup harian (<code>scripts/backup-db.js</code>) sesudah backup database.
+        Jalankan sekali di server untuk memulai.
       </div>
     );
   }
@@ -73,26 +73,26 @@ function SalinanLampiran({ r }: { r: RingkasSalinan | null }) {
     <div style={teks}>
       <div>Terakhir jalan {r.waktu} · {r.total} lampiran tercatat (usulan, BBA, LKJIP, arsip Word LKJIP).</div>
       <div style={{ marginTop: 6 }}>
-        <b>Di laptop server</b> {lencana(lokalLengkap, r.lokal.tertunda)} — {r.lokal.ada} berkas, {ukuranBerkas(r.lokal.byte)}
+        <b>Di laptop server</b> {lencana(lokalLengkap, r.lokal.tertunda)}: {r.lokal.ada} berkas, {ukuranBerkas(r.lokal.byte)}
         {r.lokal.baru ? `, ${r.lokal.baru} baru` : ''}{r.lokal.gagal ? `, ${r.lokal.gagal} gagal` : ''}
         {r.lokal.tertunda ? `, ${r.lokal.tertunda} menunggu jalan berikutnya` : ''}
         <div style={{ fontSize: 11.5, color: 'var(--ap-dim)', fontFamily: "'JetBrains Mono', monospace" }}>{r.lokal.folder}</div>
       </div>
       <div style={{ marginTop: 6 }}>
-        <b>Di Drive</b> {r.drive.aktif ? <>{lencana(driveLengkap, r.drive.tertunda)} — {r.drive.ada} salinan di folder &quot;06 Salinan Lampiran&quot;
+        <b>Di Drive</b> {r.drive.aktif ? <>{lencana(driveLengkap, r.drive.tertunda)}: {r.drive.ada} salinan di folder &quot;06 Salinan Lampiran&quot;
           {r.drive.baru ? `, ${r.drive.baru} baru` : ''}{r.drive.gagal ? `, ${r.drive.gagal} gagal` : ''}
           {r.drive.tertunda ? `, ${r.drive.tertunda} menunggu jalan berikutnya` : ''}</>
           : <span className="ap-badge badge-gray">TIDAK JALAN</span>}
       </div>
       {(r.lokal.hilang > 0 || r.drive.hilang > 0) && (
         <div style={{ marginTop: 6, color: 'var(--ap-warn-fg)' }}>
-          {Math.max(r.lokal.hilang, r.drive.hilang)} lampiran sudah tidak ada di Drive (dihapus sebelum sempat disalin) — tidak bisa disalin lagi.
+          {Math.max(r.lokal.hilang, r.drive.hilang)} lampiran sudah tidak ada di Drive (dihapus sebelum sempat disalin) dan tidak bisa disalin lagi.
         </div>
       )}
       {r.pesan ? <div style={{ marginTop: 6, color: 'var(--ap-dim)' }}>{r.pesan}</div> : null}
       <div style={{ fontSize: 11.5, color: 'var(--ap-dim)', marginTop: 8 }}>
         Salinan di laptop selamat kalau akun Google bermasalah; salinan di Drive selamat kalau berkas aslinya terhapus.
-        Berkas di laptop tidak terenkripsi — folder itu jangan dibagikan. Cadangan JSON BLUD tidak ikut karena isinya sudah ada di backup database.
+        Berkas di laptop tidak terenkripsi, jadi folder itu jangan dibagikan. Cadangan JSON BLUD tidak ikut karena isinya sudah ada di backup database.
       </div>
     </div>
   );
@@ -124,7 +124,7 @@ export function TabDriveBackup() {
       const hasil = (r as unknown as { hasil: HasilUji }).hasil;
       setHasilBaru(hasil);
       const gagal = hasil.tujuan.filter((t) => !t.ok && t.kode !== 'kosong').length;
-      if (gagal) toast.error(`${gagal} tujuan gagal diuji — lihat tabel hasil.`); else toast.success('Semua tujuan yang diatur lulus uji.');
+      if (gagal) toast.error(`${gagal} tujuan gagal diuji. Lihat tabel hasil.`); else toast.success('Semua tujuan yang diatur lulus uji.');
       void muat();
     } finally { setSibuk(null); }
   }
@@ -134,7 +134,7 @@ export function TabDriveBackup() {
     const ok = await confirmDialog({
       title: v ? 'Pakai folder induk ini?' : 'Kosongkan folder induk?',
       message: v
-        ? 'Unggahan & backup BERIKUTNYA masuk subfolder di dalam folder ini (dibuat sendiri). Berkas lama tidak dipindah dan tetap terbuka.\n\nPastikan foldernya "Restricted" di Google Drive — subfolder mewarisi aksesnya.'
+        ? 'Unggahan & backup BERIKUTNYA masuk subfolder di dalam folder ini (dibuat sendiri). Berkas lama tidak dipindah dan tetap terbuka.\n\nPastikan foldernya "Restricted" di Google Drive, karena subfolder mewarisi aksesnya.'
         : 'Isian panel dihapus. PRIMA kembali memakai GOOGLE_DRIVE_FOLDER_ID_ROOT di .env.local, atau folder per tujuan bila itu juga kosong.',
       confirmLabel: v ? 'Pakai' : 'Kosongkan',
     });
@@ -161,13 +161,13 @@ export function TabDriveBackup() {
 
       {!s.tabelAda && (
         <Banner warna="kuning">
-          Tabel catatan Drive belum ada — jalankan <code>docs/migrations/migration-drive-arsip.sql</code> di MySQL server.
+          Tabel catatan Drive belum ada. Jalankan <code>docs/migrations/migration-drive-arsip.sql</code> di MySQL server.
           Sampai itu, unggahan tetap jalan tapi kesehatan & daftar backup di bawah kosong.
         </Banner>
       )}
       {s.backup.tingkat !== 'aman' && (
         <Banner warna={s.backup.tingkat === 'merah' ? 'merah' : s.backup.tingkat === 'kuning' ? 'kuning' : 'info'}>
-          {s.backup.kalimat} Panduan: <code>docs/PANDUAN-jadwal-backup.md</code>.
+          {s.backup.kalimat} Panduan: <code>docs/panduan/PANDUAN-instalasi-prima.md</code> §14.
         </Banner>
       )}
 
@@ -177,8 +177,8 @@ export function TabDriveBackup() {
           {s.induk.id
             ? <>Berlaku: <a href={tautanFolder(s.induk.id)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ap-aksen)' }}>{potongId(s.induk.id)}</a>{' '}
                 <span className="ap-badge badge-cyan">{s.induk.asal === 'panel' ? 'DARI PANEL' : 'DARI .env.local'}</span>
-                {' '}— tiap tujuan memakai subfolder sendiri di dalamnya, mengalahkan GOOGLE_DRIVE_FOLDER_ID_* lainnya.</>
-            : <>Tidak dipakai — tiap tujuan memakai GOOGLE_DRIVE_FOLDER_ID_* di <code>.env.local</code>.</>}
+                {' '}Tiap tujuan memakai subfolder sendiri di dalamnya, mengalahkan GOOGLE_DRIVE_FOLDER_ID_* lainnya.</>
+            : <>Tidak dipakai. Tiap tujuan memakai GOOGLE_DRIVE_FOLDER_ID_* di <code>.env.local</code>.</>}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <input className="ap-input" value={isian} onChange={(e) => setIsian(e.target.value)} placeholder="Tempel URL folder Drive atau ID-nya"
@@ -189,7 +189,7 @@ export function TabDriveBackup() {
           )}
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--ap-dim)', marginTop: 8 }}>
-          Berkas lama tidak dipindah — dibuka lewat ID-nya, jadi tetap terbaca. Atur foldernya &quot;Restricted&quot; di Drive: subfolder mewarisi aksesnya.
+          Berkas lama tidak dipindah: dibuka lewat ID-nya, jadi tetap terbaca. Atur foldernya &quot;Restricted&quot; di Drive: subfolder mewarisi aksesnya.
         </div>
       </div>
 
@@ -270,7 +270,7 @@ export function TabDriveBackup() {
               </table>
             </div>}
         <div style={{ fontSize: 11.5, color: 'var(--ap-dim)', marginTop: 8 }}>
-          Memulihkan: unduh berkasnya dari Drive lalu ikuti <code>docs/BACKUP-RESTORE.md</code> §Restore. Uji restore minimal tiap 6 bulan.
+          Memulihkan: unduh berkasnya dari Drive lalu ikuti <code>docs/panduan/PANDUAN-instalasi-prima.md</code> §15.3. Uji restore minimal tiap 6 bulan.
         </div>
       </div>
     </div>

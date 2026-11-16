@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 // scripts/test-pk-nominal-blud.mts — nominal BLUD lampiran anggaran Form PK dihitung LANGSUNG dari
 // DPA/Pergeseran versi yang dipilih, dengan aturan yang SAMA dengan Cetak Rekap PJ.
-// Konsep: docs/CONCEPT-pk-nominal-blud-langsung.md.
+// Konsep: docs/konsep/pk/CONCEPT-pk-nominal-blud-langsung.md.
 // Jalankan: npx tsx --env-file=.env.local scripts/test-pk-nominal-blud.mts (bagian D MySQL kotak
 // pasir 2077, dibersihkan otomatis; tanpa --env-file GAGAL, tidak melompati).
 import { readFileSync, existsSync } from 'node:fs'
@@ -87,7 +87,7 @@ ok('C6 dialog membuang jawaban milik pilihan lain', DLG.includes('const isi = ha
 ok('C7 tombol Pakai hanya untuk hasil OK', DLG.includes("disabled={!ok}") && DLG.includes("if (!ok || !terpilih) return"))
 const LAMP = tanpaKomentar(sumber('app/(dashboard)/perjanjian-kinerja/form/_components/LampiranAnggaranSplit.tsx'))
 ok('C8 panel Anggaran lewat dialog, tidak menembak nominal langsung', !LAMP.includes('/api/perjanjian-kinerja/blud-nominal') && LAMP.includes('<AmbilNominalBlud'))
-ok('C9 keterangan non-BLUD = menambahkan, bukan menimpa', LAMP.includes("tambahKe={keterangan === 'BLUD' ? null : { nominal: Number(nominal) || 0, keterangan }}")
+ok('C9 keterangan non-BLUD = menambahkan, bukan menimpa', LAMP.includes("tambahKe={keterangan === 'BLUD' ? null : { nominal: Number(nominal) || 0, keterangan: utama || 'Lainnya' }}")
   && DLG.includes('const nominal = (tambahKe?.nominal ?? 0) + ok.total'))
 const CETAK = tanpaKomentar(sumber('app/(dashboard)/blud/cetak/cetak-client.tsx'))
 ok('C10 tombol Simpan Rekap PK dibuang beserta route-nya', !CETAK.includes('Simpan Rekap PK') && !CETAK.includes('/api/blud/rekap-pk')

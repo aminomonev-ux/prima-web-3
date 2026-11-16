@@ -1,13 +1,13 @@
 // lib/services/drive-status.ts — aturan MURNI panel "Drive & Backup" (aman-klien: tanpa DB/Drive).
-// Konsep: docs/CONCEPT-drive-terpusat.md §8, §10, §18.
+// Konsep: docs/konsep/sistem/CONCEPT-drive-terpusat.md §8, §10, §18.
 import type { DriveTujuan } from '@/lib/services/drive-tujuan';
 
 export const LABEL_TUJUAN: Record<DriveTujuan, string> = {
   backup_db:   'Backup database',
-  lkjip:       'LKJIP — gambar & impor Word',
-  lkjip_arsip: 'LKJIP — arsip Simpan Versi',
+  lkjip:       'LKJIP: gambar & impor Word',
+  lkjip_arsip: 'LKJIP: arsip Simpan Versi',
   blud_json:   'Cadangan JSON BLUD',
-  bba:         'Buku Besar Aset — bukti & referensi',
+  bba:         'Buku Besar Aset: bukti & referensi',
   usulan:      'Lampiran usulan',
   salinan_lampiran: 'Salinan kedua lampiran (Drive)',
 };
@@ -16,17 +16,17 @@ export type KodeUji = 'quota' | 'permission' | 'notfound' | 'token' | 'jaringan'
 
 /** Apa yang harus dilakukan operator, per kode. Satu kalimat, menyebut tempat membetulkannya. */
 export const SARAN_KODE: Record<KodeUji, string> = {
-  quota:            'Drive akun ini penuh — kosongkan Drive atau turunkan BACKUP_RETENTION.',
-  permission:       'Akun token tidak boleh menulis ke folder ini — bagikan foldernya sebagai Editor ke akun itu.',
-  notfound:         'Folder tidak ditemukan — ID salah, atau folder sudah dihapus/dipindah ke tempat sampah.',
-  token:            'Refresh token ditolak (dicabut/kedaluwarsa/sandi akun diganti) — buat ulang GOOGLE_OAUTH_REFRESH_TOKEN.',
-  jaringan:         'Server tidak bisa menghubungi Google — periksa internet keluar.',
-  lain:             'Galat tak dikenal — lihat pesan di sampingnya.',
-  kosong:           'Belum diatur — isi folder induk di atas, atau GOOGLE_DRIVE_FOLDER_ID_* di .env.local.',
-  lama_tak_terbaca: 'Berkas lama tidak terbaca akun ini — pindah akun tanpa membagikan folder lama? Lihat konsep §11.',
+  quota:            'Drive akun ini penuh. Kosongkan Drive atau turunkan BACKUP_RETENTION.',
+  permission:       'Akun token tidak boleh menulis ke folder ini. Bagikan foldernya sebagai Editor ke akun itu.',
+  notfound:         'Folder tidak ditemukan: ID salah, atau folder sudah dihapus/dipindah ke tempat sampah.',
+  token:            'Refresh token ditolak (dicabut/kedaluwarsa/sandi akun diganti). Buat ulang GOOGLE_OAUTH_REFRESH_TOKEN.',
+  jaringan:         'Server tidak bisa menghubungi Google. Periksa internet keluar.',
+  lain:             'Galat tak dikenal. Lihat pesan di sampingnya.',
+  kosong:           'Belum diatur. Isi folder induk di atas, atau GOOGLE_DRIVE_FOLDER_ID_* di .env.local.',
+  lama_tak_terbaca: 'Berkas lama tidak terbaca akun ini. Biasanya karena pindah akun tanpa membagikan folder lama; lihat panduan instalasi §20.',
 };
 
-/** Jam jadwal backup harian — sama dengan docs/PANDUAN-jadwal-backup.md. */
+/** Jam jadwal backup harian — sama dengan docs/panduan/PANDUAN-instalasi-prima.md §14. */
 export const JAM_JADWAL_BACKUP = 12;
 const HARI_MERAH = 4;
 const MENIT_HIDUP_MINIMAL = 120;
@@ -56,7 +56,7 @@ export function backupBasi(terakhirOk: string | null, prosesMulai: string, sekar
   const kini = menit(sekarang);
   const selisihHari = (kini - menit(terakhirOk)) / (60 * 24);
   if (selisihHari > HARI_MERAH) {
-    return { tingkat: 'merah', kalimat: `Backup terakhir berhasil ${Math.floor(selisihHari)} hari lalu — periksa tugas terjadwal & scripts\\backup-db.log.` };
+    return { tingkat: 'merah', kalimat: `Backup terakhir berhasil ${Math.floor(selisihHari)} hari lalu. Periksa tugas terjadwal & scripts\\backup-db.log.` };
   }
   const hariIni = sekarang.slice(0, 10);
   const awalHari = menit(`${hariIni} 00:00`);

@@ -6,7 +6,7 @@
 // — komentar dibuang dulu supaya prosa yang menjelaskan cacat lama tidak ikut cocok.
 // Yang hidup di dalam transaksi (gembok, jejak, pagar) diuji di MySQL sungguhan oleh
 // scripts/test-kinerja-simpan-realisasi-db.mjs.
-// Konsep: docs/CONCEPT-kinerja-simpan-realisasi.md
+// Konsep: docs/konsep/kinerja/CONCEPT-kinerja-simpan-realisasi.md
 
 import { readFileSync } from 'node:fs'
 import {
@@ -212,7 +212,7 @@ console.log('\n── G. Sambungan di semua jalur (L69) ────────
     && !simpan.includes('waktuSekarangWIB('))
   ok('G6 …bulan tertutup versi TERBARU dibaca lewat tx (di bawah gembok)',
     simpan.includes('await bulanTertutupSet(tx, tahun, sumber, await versiTerbaruSsk(tx, tahun, sumber))'))
-  const sskF = badan(K, 'alasanPaguRenaksi: string | null = null,\n): Promise<BandingPaguSub[]>')
+  const sskF = badan(K, 'alasanPaguRenaksi: string | null = null,\n): Promise<PelanggaranPagu[]>')
   ok('G7 Simpan RKO: peringatan bulan tertutup SEBELUM DELETE, bisa disetujui', urut(sskF, 'if (!setujuBulanTertutup) {',
     'perubahanTargetTertutup(', 'throw new KinerjaTargetTertutupError(', 'DELETE FROM kinerja_ssk'))
   ok('G7b …bendera nol-kan lama ikut dibaca untuk peringatan', sskF.includes('SELECT canonical_id, uraian, uraian_ssk, pagu, months, is_nullified'))
@@ -432,12 +432,12 @@ console.log('\n── I. Tahap 4 — gabung bentrok RKO ────────
   ok('I27 Route RKO: 409 bentrok menyebut siapa & jam dari gembok versi itu', sRoute.includes("penyimpanTerakhir('kinerja_ssk', `${tahun}:${sumber}:${versiTipe}:${versiSeq}`)")
     && sRoute.includes("code: 'VERSION_CONFLICT', message: err.message, actual: err.actual, oleh, pada"))
   ok('I28 …versi terkunci punya kode sendiri', sRoute.includes('err instanceof KinerjaVersiTerkunciError') && sRoute.includes("code: 'VERSI_TERKUNCI'")
-    && badan(kode('lib/data/kinerja.ts'), 'alasanPaguRenaksi: string | null = null,\n): Promise<BandingPaguSub[]>').includes('throw new KinerjaVersiTerkunciError(versiTipe, versiSeq);'))
+    && badan(kode('lib/data/kinerja.ts'), 'alasanPaguRenaksi: string | null = null,\n): Promise<PelanggaranPagu[]>').includes('throw new KinerjaVersiTerkunciError(versiTipe, versiSeq);'))
   const KC = kode('app/(dashboard)/kinerja/kinerja-client.tsx')
   ok('I29 Shell: SskTab menerima dasar & pemuat tanpa-pasang', KC.includes('sskDasar={sskDasar}') && KC.includes('ambilSsk={ambilSsk}')
     && urut(badan(KC, 'const fetchSsk = useCallback('), 'await ambilSsk(sumber, versiTipe, versiSeq)'))
   // Perilakunya diuji di MySQL (suite -db [8]); di sini urutannya: induk dibaca SEBELUM DELETE.
-  const sskF = badan(kode('lib/data/kinerja.ts'), 'alasanPaguRenaksi: string | null = null,\n): Promise<BandingPaguSub[]>')
+  const sskF = badan(kode('lib/data/kinerja.ts'), 'alasanPaguRenaksi: string | null = null,\n): Promise<PelanggaranPagu[]>')
   ok('I30 Simpan RKO membawa parent_versi_id lama (dibaca sebelum DELETE, bukan dari klien)',
     urut(sskF, 'SELECT canonical_id, parent_versi_id FROM kinerja_ssk', 'DELETE FROM kinerja_ssk', 'canonical, indukPer.get(canonical) ?? null,')
     && !sskF.slice(sskF.indexOf('const values = rows.map('), sskF.indexOf('await bulkInsert(')).includes('r.parent_versi_id'))
