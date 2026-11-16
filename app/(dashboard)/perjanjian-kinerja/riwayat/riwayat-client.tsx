@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Edit2, Download, FileText, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Eye, X, Loader2, CopyPlus } from 'lucide-react'
+import { Edit2, Download, FileDown, FileText, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Eye, X, Loader2, CopyPlus } from 'lucide-react'
 import DeleteIcon from '@/components/ui/DeleteIcon'
 import { fetchJson } from '@/lib/shared/api'
 import { usePaginatedList } from '@/lib/shared/hooks'
@@ -16,6 +16,48 @@ import { usePkYear } from '../_context/PkYearContext'
 import { fmtDateID } from '../_utils/pk-format'
 import { JUDUL_SALIN_DRAFT, pesanSalinDraft, salinDraftBaru } from '../_utils/salin-draft'
 import type { Role } from '@/types'
+import type { PilihanLampiran } from '@/lib/data/pk-lampiran-blud'
+import PilihLampiranBlud, { queryLampiran, type AksiUnduh } from './PilihLampiranBlud'
+
+const alamatUnduh = (id: number, format: 'word' | 'pdf', lampiran: string) =>
+  `/api/perjanjian-kinerja/dokumen/${id}/download?format=${format}${lampiran}`
+
+function namaBerkas(r: { tahun: string; unit_pertama: string; jenis_pk: string }): string {
+  return `PK-${r.tahun}-${r.unit_pertama.replace(/[^\w\s.-]/g, '').replace(/\s+/g, '-').slice(0, 50)}-${r.jenis_pk}.docx`
+}
+
+function unduhWord(id: number, lampiran: string) {
+  window.location.href = alamatUnduh(id, 'word', lampiran)
+}
+
+function simpanBlob(blob: Blob, nama: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nama
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 200)
+}
+
+/** PDF dari server (LibreOffice). `tidakTersedia` = server belum punya LibreOffice. */
+async function ambilPdf(id: number, lampiran: string): Promise<
+  { ok: true; blob: Blob } | { ok: false; message: string; tidakTersedia: boolean }
+> {
+  let res: Response
+  try {
+    res = await fetch(alamatUnduh(id, 'pdf', lampiran), { credentials: 'include' })
+  } catch {
+    return { ok: false, message: 'Server tidak terjangkau.', tidakTersedia: false }
+  }
+  if (res.ok) return { ok: true, blob: await res.blob() }
+  let message = `PDF gagal dibuat (HTTP ${res.status})`, kode = ''
+  try {
+    const d = await res.json() as { message?: string; code?: string }
+    message = d.message ?? message
+    kode = d.code ?? ''
+  } catch { /* balasan bukan JSON */ }
+  return { ok: false, message, tidakTersedia: kode === 'PDF_TIDAK_TERSEDIA' }
+}
 
 type RiwayatRow = {
   id: number
@@ -45,7 +87,9 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
     title: string; message: string; confirmLabel: string
     confirmKind: 'purple' | 'danger'; onConfirm: () => void
   } | null>(null)
-  const [preview, setPreview] = useState<{ id: number; filename: string } | null>(null)
+  const [preview, setPreview] = useState<{ id: number; filename: string; lampiran: string } | null>(null)
+  const [pilihLampiran, setPilihLampiran] = useState<{ row: RiwayatRow; aksi: AksiUnduh; hasil: PilihanLampiran } | null>(null)
+  const [membuatPdf, setMembuatPdf] = useState<number | null>(null)
 
   // Hanya SUPER_ADMIN + ADMIN boleh hapus dokumen FINAL (mirror backend gate).
   const canDeleteFinal = role === 'SUPER_ADMIN' || role === 'ADMIN'
@@ -109,9 +153,30 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
     })
   }
 
-  function handleDownload(id: number) {
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- unduhan berkas: router.push tidak bisa mengunduh
-    window.location.href = `/api/perjanjian-kinerja/dokumen/${id}/download`
+  /** Lampiran BLUD per PJ dipilih dulu bila PK memuat anggaran BLUD; tanpa itu langsung jalan. */
+  async function mulaiUnduh(row: RiwayatRow, aksi: AksiUnduh) {
+    const d = await fetchJson(`/api/perjanjian-kinerja/dokumen/${row.id}/lampiran-blud`)
+    if (!d.ok) { showToast('err', d.message); return }
+    const hasil = d.hasil as PilihanLampiran
+    if (hasil.status === 'TANPA_BLUD') { jalankanUnduh(row, aksi, ''); return }
+    setPilihLampiran({ row, aksi, hasil })
+  }
+
+  function jalankanUnduh(row: RiwayatRow, aksi: AksiUnduh, lampiran: string) {
+    if (aksi === 'preview') setPreview({ id: row.id, filename: namaBerkas(row), lampiran })
+    else if (aksi === 'word') unduhWord(row.id, lampiran)
+    else void unduhPdf(row, lampiran)
+  }
+
+  async function unduhPdf(row: RiwayatRow, lampiran: string) {
+    setMembuatPdf(row.id)
+    try {
+      const hasil = await ambilPdf(row.id, lampiran)
+      if (!hasil.ok) { showToast('err', hasil.message); return }
+      simpanBlob(hasil.blob, namaBerkas(row).replace(/\.docx$/i, '.pdf'))
+    } finally {
+      setMembuatPdf(null)
+    }
   }
 
   return (
@@ -231,20 +296,24 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
                         </button>
                         {r.has_file === 1 && (
                           <>
-                            <button onClick={() => setPreview({
-                              id: r.id,
-                              filename: `PK-${r.tahun}-${r.unit_pertama.replace(/[^\w\s.-]/g,'').replace(/\s+/g,'-').slice(0,50)}-${r.jenis_pk}.docx`,
-                            })}
+                            <button onClick={() => void mulaiUnduh(r, 'preview')}
                               data-tooltip="Preview dokumen"
                               data-tooltip-pos="left"
                               style={btnIcon('#A78BFA')}>
                               <Eye size={12} />
                             </button>
-                            <button onClick={() => handleDownload(r.id)}
+                            <button onClick={() => void mulaiUnduh(r, 'word')}
                               data-tooltip="Unduh Word"
                               data-tooltip-pos="left"
                               style={btnIcon('#10B981')}>
                               <Download size={12} />
+                            </button>
+                            <button onClick={() => void mulaiUnduh(r, 'pdf')}
+                              disabled={membuatPdf === r.id}
+                              data-tooltip={membuatPdf === r.id ? 'PDF sedang dibuat…' : 'Unduh PDF'}
+                              data-tooltip-pos="left"
+                              style={btnIcon('#EF9F27')}>
+                              {membuatPdf === r.id ? <Loader2 size={12} className="pk-spin" /> : <FileDown size={12} />}
                             </button>
                           </>
                         )}
@@ -311,14 +380,29 @@ export default function RiwayatClient({ role, bolehUbah }: Props) {
         />
       )}
 
+      {pilihLampiran && (
+        <PilihLampiranBlud
+          hasil={pilihLampiran.hasil}
+          aksi={pilihLampiran.aksi}
+          onBatal={() => setPilihLampiran(null)}
+          onLanjut={kunci => {
+            const { row, aksi } = pilihLampiran
+            setPilihLampiran(null)
+            jalankanUnduh(row, aksi, queryLampiran(kunci))
+          }}
+        />
+      )}
+
       {preview && (
         <DocxPreviewModal
           docId={preview.id}
           filename={preview.filename}
+          lampiran={preview.lampiran}
           onClose={() => setPreview(null)}
-          onDownload={() => handleDownload(preview.id)}
+          onDownload={() => unduhWord(preview.id, preview.lampiran)}
         />
       )}
+      <style>{`@keyframes pkSpin { from { transform: rotate(0) } to { transform: rotate(360deg) } } .pk-spin { animation: pkSpin 1s linear infinite }`}</style>
     </div>
   )
 }
@@ -376,11 +460,15 @@ const KELAS_PRATINJAU = 'pk-docx-preview'
 // 4. Tampilkan iframe dengan PDF blob URL (sama gaya RA)
 // 5. Tombol download: PDF (amber, baru) + Word (green, existing) + Close (red)
 function DocxPreviewModal({
-  docId, filename, onClose, onDownload,
+  docId, filename, lampiran, onClose, onDownload,
 }: {
   docId: number; filename: string
+  /** Query lampiran BLUD (`&sumber=…&versi=…`) atau ''. */
+  lampiran: string
   onClose: () => void; onDownload: () => void
 }) {
+  /** true = PDF dari server tidak tersedia, yang tampil hasil gambar ulang di peramban. */
+  const [perkiraan, setPerkiraan] = useState(false)
   const offscreenRef = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errMsg, setErrMsg] = useState<string>('')
@@ -392,8 +480,23 @@ function DocxPreviewModal({
     let cancelled = false
     void (async () => {
       try {
+        // 0. PDF asli dari server (LibreOffice) — tata letaknya sama dengan Word.
+        setProgress('Membuat PDF…')
+        const asli = await ambilPdf(docId, lampiran)
+        if (cancelled) return
+        if (asli.ok) {
+          const url = URL.createObjectURL(asli.blob)
+          setPdfBlob(asli.blob)
+          setPdfBlobUrl(url)
+          setStatus('ready')
+          return
+        }
+        if (!asli.tidakTersedia) throw new Error(asli.message)
+        // Server tanpa LibreOffice: gambar ulang di peramban, ditandai "perkiraan tampilan".
+        setPerkiraan(true)
+
         // 1. Fetch DOCX
-        const res = await fetch(`/api/perjanjian-kinerja/dokumen/${docId}/download`, { credentials: 'include' })
+        const res = await fetch(alamatUnduh(docId, 'word', lampiran), { credentials: 'include' })
         if (!res.ok) throw new Error(`Gagal ambil dokumen (HTTP ${res.status})`)
         const blob = await res.blob()
         if (cancelled) return
@@ -513,7 +616,7 @@ function DocxPreviewModal({
       }
     })()
     return () => { cancelled = true }
-  }, [docId])
+  }, [docId, lampiran])
 
   // Cleanup blob URL on unmount
   useEffect(() => {
@@ -527,13 +630,7 @@ function DocxPreviewModal({
   }, [onClose])
 
   const handleDownloadPdf = () => {
-    if (!pdfBlob) return
-    const url = URL.createObjectURL(pdfBlob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename.replace(/\.docx$/i, '.pdf')
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 200)
+    if (pdfBlob) simpanBlob(pdfBlob, filename.replace(/\.docx$/i, '.pdf'))
   }
 
   return (
@@ -560,6 +657,11 @@ function DocxPreviewModal({
             <Eye size={16} color="#A78BFA" />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.2px' }}>Preview Dokumen (PDF)</div>
+              {perkiraan && (
+                <div style={{ fontSize: 11, color: '#FAC775', marginTop: 2 }}>
+                  Perkiraan tampilan — server belum punya LibreOffice, jadi letak baris bisa berbeda dari Word.
+                </div>
+              )}
               <div style={{
                 fontSize: 11, color: '#85B7EB', marginTop: 2,
                 fontFamily: 'JetBrains Mono, ui-monospace, monospace',

@@ -251,6 +251,16 @@ export const BludNominalQuerySchema = z.object({
 });
 
 /**
+ * GET dokumen/[id]/download — Word atau PDF, dengan lampiran rincian BLUD per PJ bila sumber &
+ * versinya dipilih (keduanya, atau tidak sama sekali). Konsep: docs/konsep/pk/CONCEPT-pk-lampiran-blud-pj.md.
+ */
+export const UnduhDokumenQuerySchema = z.object({
+  format: z.enum(['word', 'pdf']).default('word'),
+  sumber: z.enum(['dpa', 'pergeseran']).optional(),
+  versi: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Versi harus YYYY-MM-DD').optional(),
+}).refine(q => !!q.sumber === !!q.versi, { message: 'Sumber dan versi lampiran harus diisi bersama' });
+
+/**
  * POST /api/perjanjian-kinerja/units — save Master Unit Kerja (admin only).
  *
  * Strategy: upsert pattern, tidak hard-delete (FK pejabat ON DELETE RESTRICT).
