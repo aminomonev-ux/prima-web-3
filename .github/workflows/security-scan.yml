@@ -197,8 +197,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Heap bawaan Node ±2 GB sudah tidak cukup (2026-11-16): ±200 rb baris, tsc
+      # butuh ±2,7 GB → OOM "Ineffective mark-compacts", exit 134, tanpa satu galat
+      # tipe pun. Runner ubuntu-latest punya 16 GB RAM.
       - name: TypeScript compile check
         run: npx tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
       # 0 peringatan sejak 2026-10-01 (K3). Peringatan dulu tidak memerahkan CI dan
       # menumpuk sampai 69 — peringatan yang penting tenggelam di antara yang lama.
