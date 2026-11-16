@@ -58,6 +58,7 @@ baru gagal di tengah dengan cara yang membingungkan.
 | **Laragon** (berisi MySQL) | MySQL **8.0.13+**, ideal **8.4** | skema memakai `DEFAULT (expr)` yang baru ada sejak 8.0.13. MySQL Server biasa juga boleh |
 | **PM2** | terbaru | `npm install -g pm2` — **tanpa** `pm2-windows-startup` (§8) |
 | HeidiSQL | bawaan Laragon | untuk menjalankan berkas SQL |
+| **LibreOffice** | terbaru (dipakai: 26.8.3) | mengubah Word → PDF di server untuk tombol PDF Perjanjian Kinerja. Tanpa ini aplikasi tetap jalan, tapi PDF PK ditolak dan pratinjau Riwayat PK jadi "perkiraan tampilan". Cara memasang di §1.1 |
 | Nginx for Windows | opsional | hanya kalau memakai HTTPS (§11) |
 | Redis | — | **dilewati**, alasannya di §11.3 |
 
@@ -78,6 +79,41 @@ npm install -g npm@10.8.2
 
 Installer Node membawa npm-nya sendiri, jadi periksa lagi `npm -v` setiap kali Node
 dinaikkan versinya.
+
+### 1.1 LibreOffice (PDF Perjanjian Kinerja)
+
+Tombol **Unduh PDF** dan pratinjau di Riwayat PK membuat PDF dari berkas Word yang sama
+lewat LibreOffice, jadi letak baris di PDF persis sama dengan Word. Pasang dari PowerShell
+**Administrator**:
+
+```powershell
+winget install --id TheDocumentFoundation.LibreOffice --source winget
+```
+
+Lalu pastikan terpasang di lokasi yang dicari aplikasi:
+
+```powershell
+Test-Path 'C:\Program Files\LibreOffice\program\soffice.com'
+(Get-Item 'C:\Program Files\LibreOffice\program\soffice.exe').VersionInfo.ProductVersion
+```
+
+Baris pertama harus `True`. Kalau LibreOffice terpasang di tempat lain (mis. hanya untuk
+satu akun di `AppData`), isi `LIBREOFFICE_PATH` di `.env.local` (§6) dengan path lengkap
+`soffice.com`. Pakai **`soffice.com`, bukan `soffice.exe`**: `soffice.com` versi konsol
+yang menunggu sampai PDF selesai, dan itu yang dipakai aplikasi di lokasi bawaan.
+
+Hal yang perlu diketahui:
+
+- **Tidak perlu build atau restart.** Aplikasi mencari LibreOffice setiap kali PDF diminta,
+  jadi begitu terpasang tombol PDF langsung bekerja.
+- PDF dibuat **satu per satu** (antrean). Unduh massal PDF banyak dokumen memang lebih lama
+  daripada unduh Word, dan dibatasi jumlahnya sekali unduh.
+- Aplikasi memakai profil LibreOffice sendiri di folder sementara, jadi LibreOffice yang
+  sedang dibuka orang di laptop server tidak mengganggu dan tidak terganggu.
+- Huruf di PDF memakai huruf yang terpasang di Windows. Kalau suatu saat templat Word PK
+  memakai huruf yang tidak ada di server, LibreOffice menggantinya dan baris bisa bergeser.
+- Pembaruan LibreOffice boleh kapan saja (`winget upgrade --id TheDocumentFoundation.LibreOffice`);
+  sesudahnya ulangi pemeriksaan `Test-Path` di atas.
 
 ## §2 Akun & rahasia yang disiapkan
 
@@ -218,6 +254,7 @@ pernah masuk git** dan tidak boleh dikirim lewat WhatsApp/email.
 | `MYSQLDUMP_PATH` | sangat disarankan | path lengkap `mysqldump.exe` (§13.1) |
 | `BACKUP_RETENTION` | tidak | jumlah **berkas** backup yang disimpan di Drive, bawaan `30` |
 | `BACKUP_LAMPIRAN_DIR` | disarankan | folder salinan lampiran di laptop, mis. `D:/backup-prima/lampiran`. Kosong = `<folder aplikasi>\backups-lampiran` |
+| `LIBREOFFICE_PATH` | tidak | kosongkan kalau LibreOffice terpasang di `C:\Program Files\LibreOffice` (§1.1). Diisi path lengkap `soffice.com` hanya kalau terpasang di tempat lain |
 | `REDIS_URL` | **jangan diisi** | §11.3 |
 
 Garis miring biasa (`D:/…`) dan terbalik (`D:\…`) sama-sama boleh untuk path Windows.
@@ -1063,6 +1100,8 @@ Kerjakan berurutan; berhenti di langkah pertama yang gagal.
 - [ ] Sakelar → **BEKU** satu modul: layar terbuka, spanduk tampil, Simpan mati bertooltip.
       Nyalakan lagi
 - [ ] Unduh satu berkas Excel/Word dari modul mana pun
+- [ ] Riwayat PK → satu dokumen FINAL → **Unduh PDF** → PDF terbuka, tanpa tulisan
+      "perkiraan tampilan" di pratinjau (kalau ditolak "LibreOffice belum terpasang": §1.1)
 - [ ] Drive & Backup → **UJI SEKARANG** → semua OK
 - [ ] Lima tugas cron dijalankan dengan tangan → `cron.log` berisi `OK` (§9.3)
 - [ ] Backup lewat penjadwal → log `UPLOAD-OK` (§14.3)
@@ -1100,6 +1139,9 @@ node scripts/check-schema.mjs                         # 4. tabel/kolom/indeks ya
 
 Perubahan yang **hanya** menyentuh `scripts\backup-db.js` atau berkas skrip lain tidak perlu
 build/restart — skrip dibaca ulang setiap kali jalan.
+
+Server yang dipasang sebelum 2026-11-16 belum punya **LibreOffice**. Pasang sekali (§1.1)
+supaya PDF Perjanjian Kinerja bisa dibuat; tidak perlu build ulang untuk itu.
 
 ### 18.2 Migrasi — aturan yang mencegah kesalahan
 
@@ -1141,6 +1183,8 @@ build/restart — skrip dibaca ulang setiap kali jalan.
 | Aplikasi mati tiap pagi | `autostart.log` (§8.2) — biasanya MySQL belum hidup atau akun tugas salah |
 | Lampiran tidak terunggah, tanpa galat | kredensial Google kosong/salah — Drive & Backup → Uji |
 | Galat SQL 1064 menyebut `GOOGLE_DRIVE…` | isian `.env.local` dijalankan di HeidiSQL (§6) |
+| PDF PK ditolak "LibreOffice belum terpasang" / pratinjau Riwayat PK bertulisan "perkiraan tampilan" | LibreOffice belum terpasang atau tidak di `C:\Program Files\LibreOffice` — §1.1, atau isi `LIBREOFFICE_PATH` |
+| PDF PK gagal "selesai tanpa menghasilkan PDF" | periksa `LIBREOFFICE_PATH` menunjuk `soffice.com`, bukan `soffice.exe` (§1.1) |
 
 ### 19.2 Log backup (`scripts\backup-db.log`)
 
