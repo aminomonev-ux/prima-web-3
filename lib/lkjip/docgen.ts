@@ -823,10 +823,12 @@ async function collectImages(tree: SectionNode[]): Promise<{ map: Map<string, Im
  * Generate Word (.docx) untuk dokumen LKJIP. Return Buffer + filename.
  * @throws Error kalau dokumen tidak ada.
  */
-export async function generateLkjipDocx(dokumenId: number): Promise<{ buffer: Buffer; filename: string }> {
+export async function generateLkjipDocx(dokumenId: number): Promise<{ buffer: Buffer; filename: string; huruf: string; judul: string }> {
   const detail = await getDokumenDetail(dokumenId);
   if (!detail) throw new Error(`Dokumen LKJIP id=${dokumenId} tidak ditemukan`);
-  return rakitDocx(detail, await collectImages(detail.tree));
+  const hasil = await rakitDocx(detail, await collectImages(detail.tree));
+  // huruf dokumen: PDF LibreOffice memeriksa apakah huruf ini benar-benar terpasang di server
+  return { ...hasil, huruf: (detail.style_config ?? DEFAULT_STYLE).fontFamily, judul: detail.judul };
 }
 
 type BahanDocx = { tree: SectionNode[]; judul: string; tahun: number; canonical_id: string; style_config?: StyleConfig | null };

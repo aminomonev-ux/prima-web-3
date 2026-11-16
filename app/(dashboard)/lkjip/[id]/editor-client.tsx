@@ -9,7 +9,7 @@ import {
   IndentIncrease, IndentDecrease, Pencil, Save, Table2, Image as ImageIcon, Type, Settings,
   BookText, LayoutGrid, CheckCircle2, History, RotateCcw, Download as DownloadIcon,
   GripVertical, Upload, BarChart3, HelpCircle, MoreVertical, Lock, RefreshCw, ClipboardPaste,
-  Search,
+  Search, Eye, FileText,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
@@ -50,6 +50,7 @@ import { RowMenu, type RowMenuItem } from '@/components/tabel/RowMenu';
 import { TABEL_CSS } from '@/components/tabel/tabel-css';
 
 const CariGantiPanel = dynamic(() => import('./CariGantiPanel'), { ssr: false });
+const PratinjauPdf = dynamic(() => import('./PratinjauPdf'), { ssr: false });
 const TiptapNarasi = dynamic(() => import('./TiptapNarasi'), {
   ssr: false,
   loading: () => <div style={{ color: '#85B7EB', fontSize: 12.5, padding: 10 }}>Memuat editor…</div>,
@@ -65,7 +66,11 @@ interface Props {
   initialDetail: LkjipDetail;
   /** P5 — keterangan pembekuan, diselesaikan di page.tsx. */
   beku: InfoBeku;
+  /** LibreOffice terpasang di server → Pratinjau & Unduh PDF hidup. */
+  pdfTersedia: boolean;
 }
+
+const KALIMAT_PDF_MATI = 'LibreOffice belum terpasang di server, jadi Pratinjau dan PDF belum tersedia. Word tetap bisa diunduh.';
 
 type FlatNode = { node: SectionNode; parentId: number | null; index: number; siblings: SectionNode[] };
 type Tujuan = { parent: number | null; index: number };
@@ -99,7 +104,7 @@ function fmtDate(s: string): string {
   return `${d.getDate()} ${bln[d.getMonth()]} ${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export default function EditorClient({ initialDetail, username, role, themePreference, beku }: Props) {
+export default function EditorClient({ initialDetail, username, role, themePreference, beku, pdfTersedia }: Props) {
   const router = useRouter();
   const [theme, setTheme] = useState<'dark' | 'light'>(themePreference);
   const isLight = theme === 'light';
@@ -465,8 +470,28 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
     await kirimFinal();
   }
 
+  // Pratinjau & PDF memakai isi TERSIMPAN (sama dgn Unduh Word) — tanpa pertanyaan ini orang melihat
+  // hasil lama dan mengira suntingannya hilang.
+  async function bolehPakaiTersimpan(): Promise<boolean> {
+    if (!pdfTersedia) { toast.error(KALIMAT_PDF_MATI); return false; }
+    const n = kotorRef.current.size;
+    if (!n) return true;
+    return confirmDialog({
+      title: 'Ada blok belum disimpan',
+      message: `${n} blok belum disimpan. Pratinjau dan PDF memakai isi yang sudah tersimpan, jadi suntingan itu belum terlihat.`,
+      variant: 'warning', confirmLabel: 'Lanjutkan',
+    });
+  }
+  const [pratinjauBuka, setPratinjauBuka] = useState(false);
+  const pdfMati = pdfTersedia ? undefined : KALIMAT_PDF_MATI;
+  const aksiPdf = [
+    { icon: <Eye size={17} />, label: 'Pratinjau', mati: pdfMati, onClick: () => void bolehPakaiTersimpan().then(ok => { if (ok) setPratinjauBuka(true); }) },
+    { icon: <FileText size={17} />, label: 'Unduh PDF', mati: pdfMati, onClick: () => void bolehPakaiTersimpan().then(async ok => { if (ok) (await import('./PratinjauPdf')).unduhPdf(detail.id); }) },
+  ];
+
   const dockActions = readOnly
     ? [
+        ...aksiPdf,
         { icon: <Download size={17} />, label: 'Unduh Word', onClick: () => window.open(`/api/lkjip/${detail.id}/generate`, '_blank') },
         { icon: <History size={17} />, label: 'Riwayat', onClick: () => void openHistory() },
         { icon: <Search size={17} />, label: 'Cari', onClick: () => setCariBuka(true) },
@@ -478,6 +503,7 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
         ...(semuaTertaut.length ? [{ icon: <RefreshCw size={17} />, label: jumlahBerubah ? `Periksa Data Modul (${jumlahBerubah})` : 'Periksa Data Modul', onClick: () => void bukaPeriksa() }] : []),
         { icon: <Search size={17} />, label: 'Cari & Ganti', onClick: () => setCariBuka(true) },
         { icon: <Settings size={17} />, label: 'Pengaturan', onClick: () => { setStyleForm(detail.style_config); setStyleModal(true); } },
+        ...aksiPdf,
         { icon: <Download size={17} />, label: 'Unduh Word', onClick: () => window.open(`/api/lkjip/${detail.id}/generate`, '_blank') },
         { icon: <CheckCircle2 size={17} />, label: 'Finalisasi', onClick: () => void finalize() },
         { icon: <HelpCircle size={17} />, label: 'Panduan', onClick: () => setPanduanOpen(true) },
@@ -875,6 +901,8 @@ export default function EditorClient({ initialDetail, username, role, themePrefe
           </div>
         </div>
       )}
+
+      {pratinjauBuka && <PratinjauPdf dokumenId={detail.id} judul={detail.judul} onTutup={() => setPratinjauBuka(false)} />}
 
       <FloatingDock isLight={isLight} limelight
         nav={[

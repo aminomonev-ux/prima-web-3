@@ -7,6 +7,7 @@ import { getDokumenDetail } from '@/lib/lkjip/data';
 import EditorClient from './editor-client';
 import { bekuLayarModul } from '@/lib/security/penjaga-layar';
 import { KunciTulisProvider } from '@/components/ui/KunciTulis';
+import { pdfTersedia } from '@/lib/lkjip/pdf';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -40,6 +41,7 @@ export default async function LkjipEditorPage({ params }: { params: Promise<{ id
         themePreference={themePreference}
         initialDetail={detail}
         beku={beku}
+        pdfTersedia={pdfTersedia()}
       />
     </KunciTulisProvider>
   );

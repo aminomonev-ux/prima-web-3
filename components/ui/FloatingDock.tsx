@@ -11,6 +11,8 @@ export interface DockItem {
   label: string;
   onClick: () => void;
   current?: boolean;
+  /** Terisi = tombol mati; isinya ALASAN, tampil di tooltip (tombol mati tanpa sebab = UX buruk). */
+  mati?: string;
 }
 
 interface Props {
@@ -53,10 +55,12 @@ export default function FloatingDock({ nav, actions = [], isLight, limelight = f
   }, [targetIndex, limelight, beamReady]);
 
   const renderItem = (it: DockItem, kind: 'nav' | 'action', idx: number) => (
-    <button key={it.label} onClick={it.onClick} data-tooltip={it.label} data-tooltip-pos="above"
+    // aria-disabled, bukan disabled: tombol disabled menelan hover, jadi alasannya tak pernah terbaca.
+    <button key={it.label} onClick={it.mati ? undefined : it.onClick} aria-disabled={it.mati ? true : undefined}
+      data-tooltip={it.mati ? `${it.label} — ${it.mati}` : it.label} data-tooltip-pos="above"
       ref={el => { navRefs.current[idx] = el; }}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: 54, padding: '6px 0', borderRadius: 12, cursor: 'pointer', border: 'none', background: 'none', transition: 'transform .15s, background .15s', position: 'relative', zIndex: 2 }}
-      onMouseEnter={e => { e.currentTarget.style.background = c.hover; e.currentTarget.style.transform = 'translateY(-3px)'; setHoverIndex(idx); }}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: 54, padding: '6px 0', borderRadius: 12, cursor: it.mati ? 'not-allowed' : 'pointer', opacity: it.mati ? 0.45 : 1, border: 'none', background: 'none', transition: 'transform .15s, background .15s', position: 'relative', zIndex: 2 }}
+      onMouseEnter={e => { if (!it.mati) { e.currentTarget.style.background = c.hover; e.currentTarget.style.transform = 'translateY(-3px)'; } setHoverIndex(idx); }}
       onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.transform = 'none'; setHoverIndex(null); }}>
       <span style={{
         width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center',
