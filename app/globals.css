@@ -139,6 +139,10 @@ select option { background: #042C53; color: #E6F1FB; }
   html {
     font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   }
+  /* Preflight Tailwind v4 memberi tombol kursor panah; tombol yang bisa diklik wajib telunjuk. */
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
 }
 
 /* PRIMA ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â body bg dark navy by default (cegah putih muncul saat horizontal scroll

@@ -5,7 +5,7 @@
 // lib/kinerja/pagu-renaksi.ts. Versi murni dibandingkan dengan pagu murni Renaksi, versi perubahan
 // dengan pagu yang berlaku.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { fetchJson } from '@/lib/shared/api';
 import { uiTheme } from '@/lib/theme';
 import {
@@ -78,62 +78,89 @@ export default function PaguRenaksiPita({ tahun, tab, rows, bahan, versiTipe, la
   if (!hasil || (hasil.sub.length === 0 && hasil.diLuar.length === 0)) return null;
   const lewat = hasil.sub.filter(melampaui).length;
   const murni = versiTipe === 'MURNI';
-  const pembanding = hasil.satu ? 'pagu Rencana Aksi'
-    : murni || !hasil.renaksiPerubahan ? 'pagu murni Rencana Aksi' : 'pagu perubahan Rencana Aksi';
-  const sumberRko = hasil.satu ? 'versi terbaru semua tab' : murni ? 'versi murni semua tab' : 'versi yang berlaku di semua tab';
+  const jenisPagu = hasil.satu ? 'pagu' : murni || !hasil.renaksiPerubahan ? 'pagu murni' : 'pagu perubahan';
+  const versiRko = hasil.satu ? '' : murni ? ' versi murni' : ' versi yang sedang berlaku';
+  const mono = { fontFamily: 'JetBrains Mono, ui-monospace, monospace' } as const;
 
   return (
     <div style={{ background: t.card, border: `1px solid ${lewat ? '#E24B4A' : t.hairline}`, borderRadius: 12, padding: '10px 14px', marginBottom: 12, boxShadow: t.shadow }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>
-        Pagu Rencana Aksi {tahun} per sub kegiatan
-        <span style={{ fontWeight: 400, color: t.textSub }}>
-          {' '}— dibandingkan dengan {pembanding}; RKO dari {sumberRko}{layarTerbaru ? `, tab ${tab} dari isi layar` : ''}
-        </span>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text }}>Batas pagu dari Rencana Aksi {tahun}</div>
+      <div style={{ fontSize: 11.5, color: t.textSub, lineHeight: 1.55, marginTop: 2, marginBottom: 8 }}>
+        Jumlah RKO tiap sub kegiatan tidak boleh melebihi {jenisPagu} yang tercatat di Rencana Aksi.
+        {' '}RKO dijumlahkan dari semua tab{versiRko}
+        {layarTerbaru ? `; untuk tab ${tab} dipakai angka di layar ini, termasuk yang belum disimpan.` : '.'}
       </div>
       {!murni && !hasil.satu && !hasil.renaksiPerubahan && (
-        <div style={{ fontSize: 11, color: '#BA7517', marginBottom: 6, lineHeight: 1.5 }}>{kalimatBelumPerubahan(tahun)}</div>
+        <div style={{ fontSize: 11.5, color: '#BA7517', marginBottom: 8, lineHeight: 1.55 }}>{kalimatBelumPerubahan(tahun)}</div>
       )}
-      <div style={{ display: 'grid', gap: 6 }}>
+      <div style={{ display: 'grid', gap: 10 }}>
         {hasil.sub.map(b => {
           const lebih = melampaui(b);
           const rkoTanpaSumber = b.rko.perSumber.find(s => s.sumber === '')?.nilai ?? 0;
           const info = hasil.infoPerubahan.get(b.kunci);
+          const angka = (label: string, isi: ReactNode) => (
+            <div style={{ minWidth: 150 }}>
+              <div style={{ fontSize: 10.5, color: t.textSub }}>{label}</div>
+              <div style={{ ...mono, fontSize: 12, fontWeight: 600 }}>{isi}</div>
+            </div>
+          );
           return (
-            <div key={b.kunci} style={{ fontSize: 11, color: t.text, lineHeight: 1.5 }}>
-              <b>{rapikanNamaEntitas(b.sub_kegiatan)}</b>
-              <span style={{ color: t.textSub }}> · {rapikanNamaEntitas(b.kegiatan)}</span>
-              <div style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
-                Pagu Renaksi {rp(b.renaksi?.total)} · RKO semua tab {rp(b.rko.total)} · sisa{' '}
-                <b style={{ color: b.sisa == null ? t.textSub : b.sisa < 0 ? '#E24B4A' : '#1D9E75' }}>{b.sisa == null ? 'tanpa batas' : rp(b.sisa)}</b>
+            <div key={b.kunci} style={{ fontSize: 11.5, color: t.text, lineHeight: 1.55 }}>
+              <div>
+                <b>{rapikanNamaEntitas(b.sub_kegiatan)}</b>
+                <span style={{ color: t.textSub }}> — kegiatan {rapikanNamaEntitas(b.kegiatan)}</span>
               </div>
-              {(b.renaksi?.perSumber.some(s => s.sumber) || b.rko.perSumber.some(s => s.sumber)) && (
-                <div style={{ color: t.textSub }}>
-                  Renaksi: {tulisPerSumber(b.renaksi) || '—'} · RKO: {tulisPerSumber(b.rko) || '—'}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', marginTop: 4 }}>
+                {angka('Pagu di Rencana Aksi', b.renaksi ? rp(b.renaksi.total) : <span style={{ color: t.textSub, fontFamily: 'inherit', fontWeight: 400 }}>belum diisi</span>)}
+                {angka('Sudah dipakai RKO', rp(b.rko.total))}
+                {angka('Sisa', (
+                  <span style={b.sisa == null
+                    ? { color: t.textSub, fontFamily: 'inherit', fontWeight: 400 }
+                    : { color: b.sisa < 0 ? '#E24B4A' : '#1D9E75' }}>
+                    {b.sisa == null ? 'tidak diperiksa' : b.sisa < 0 ? `lebih ${rp(-b.sisa)}` : rp(b.sisa)}
+                  </span>
+                ))}
+              </div>
+              {!b.renaksi && (
+                <div style={{ color: t.textSub, marginTop: 2 }}>
+                  Pagu sub kegiatan ini belum diisi di Rencana Aksi, jadi RKO-nya belum bisa diperiksa.
                 </div>
               )}
-              {lebih && <div style={{ color: '#E24B4A', fontWeight: 700 }}>Melebihi {pembanding}: {kalimatLebih(b)}</div>}
+              {b.renaksi && (b.renaksi.perSumber.some(s => s.sumber) || b.rko.perSumber.some(s => s.sumber)) && (
+                <div style={{ color: t.textSub, marginTop: 2 }}>
+                  Per sumber dana — Rencana Aksi: {tulisPerSumber(b.renaksi) || 'belum dirinci'}; RKO: {tulisPerSumber(b.rko) || 'belum dirinci'}
+                </div>
+              )}
+              {lebih && (
+                <div style={{ color: '#E24B4A', fontWeight: 700, marginTop: 2 }}>
+                  RKO melebihi {jenisPagu} Rencana Aksi ({kalimatLebih(b)}).
+                </div>
+              )}
               {info && (
-                <div style={{ color: '#BA7517' }}>
-                  Pagu perubahan Rencana Aksi lebih kecil dari RKO yang berlaku sekarang ({kalimatLebih(info)}).
-                  Buat versi perubahan RKO {tab}, lalu sesuaikan pagunya.
+                <div style={{ color: '#BA7517', marginTop: 2 }}>
+                  Pagu perubahan di Rencana Aksi lebih kecil dari RKO sekarang ({kalimatLebih(info)}).
+                  {' '}Buat versi perubahan RKO {tab}, lalu sesuaikan angkanya.
                 </div>
               )}
               {b.renaksi && !b.cekPerSumber && (
-                <div style={{ color: '#BA7517' }}>
-                  Sebagian pagu Renaksi belum bersumber dana — hanya total yang dibandingkan (atur lewat ✎ di Data Entry Renaksi).
+                <div style={{ color: '#BA7517', marginTop: 2 }}>
+                  Sebagian pagu di Rencana Aksi belum diberi sumber dana, jadi yang dibandingkan hanya totalnya.
+                  {' '}Lengkapi lewat tombol ✎ di Data Entry Rencana Aksi.
                 </div>
               )}
               {b.cekPerSumber && rkoTanpaSumber > 0 && (
-                <div style={{ color: '#BA7517' }}>
-                  {rp(rkoTanpaSumber)} RKO berasal dari rekening yang sumber dananya belum diisi — isi kolom Sumber Anggaran di menu Rekening supaya ikut dibandingkan per sumber.
+                <div style={{ color: '#BA7517', marginTop: 2 }}>
+                  {rp(rkoTanpaSumber)} dari RKO ini berasal dari rekening yang sumber dananya belum diisi.
+                  {' '}Isi kolom Sumber Anggaran di menu Rekening agar ikut dibandingkan per sumber dana.
                 </div>
               )}
             </div>
           );
         })}
         {hasil.diLuar.map(d => (
-          <div key={kunciSub(d.program, d.kegiatan, d.sub_kegiatan)} style={{ fontSize: 11, color: t.textSub }}>
-            <b style={{ color: t.text }}>{rapikanNamaEntitas(d.sub_kegiatan)}</b> — di luar Rencana Aksi {tahun} (tidak diperiksa), RKO {rp(d.rko.total)}
+          <div key={kunciSub(d.program, d.kegiatan, d.sub_kegiatan)} style={{ fontSize: 11.5, color: t.textSub, lineHeight: 1.55 }}>
+            <b style={{ color: t.text }}>{rapikanNamaEntitas(d.sub_kegiatan)}</b> tidak ada di Rencana Aksi {tahun}, jadi tidak diperiksa
+            {' '}(RKO <span style={mono}>{rp(d.rko.total)}</span>).
           </div>
         ))}
       </div>
